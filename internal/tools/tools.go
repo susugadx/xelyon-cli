@@ -29,6 +29,7 @@ var safeCommands = map[string]bool{
 	"ls": true, "cat": true, "pwd": true, "echo": true, "which": true,
 	"head": true, "tail": true, "wc": true, "grep": true, "find": true,
 	"git status": true, "git log": true, "git diff": true, "git branch": true,
+	"git ls-files": true, "git show": true, "git remote": true,
 	"go version": true, "go mod tidy": true,
 	"node -v": true, "npm -v": true, "npm list": true,
 	"python --version": true, "pip list": true,
@@ -295,7 +296,7 @@ func confirm(message string) bool {
 	fmt.Scanln(&response)
 	response = strings.ToLower(strings.TrimSpace(response))
 
-	return response == "y" || response == "yes"
+	return response == "y" || response == "yes" || response == "ｙ" || response == "はい"
 }
 
 // showDiff は差分を表示
