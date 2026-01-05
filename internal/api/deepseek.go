@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"os"
 	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 const deepseekURL = "https://api.deepseek.com/chat/completions"
@@ -86,14 +88,20 @@ func ChatWithTools(systemPrompt string, history []Message, model string) (string
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 
+	// スピナー開始
+	spinner := ui.NewSpinner()
+	spinner.Start("Thinking")
+
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
+		spinner.Stop()
 		return "", err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
+		spinner.Stop()
 		body, _ := io.ReadAll(resp.Body)
 		return "", fmt.Errorf("API error (%d): %s", resp.StatusCode, string(body))
 	}
@@ -101,6 +109,7 @@ func ChatWithTools(systemPrompt string, history []Message, model string) (string
 	// ストリーミング処理
 	var fullResponse strings.Builder
 	scanner := bufio.NewScanner(resp.Body)
+	firstChunk := true
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -117,6 +126,13 @@ func ChatWithTools(systemPrompt string, history []Message, model string) (string
 
 			if len(streamResp.Choices) > 0 {
 				content := streamResp.Choices[0].Delta.Content
+
+				// 最初のコンテンツでスピナー停止
+				if firstChunk && content != "" {
+					spinner.Stop()
+					firstChunk = false
+				}
+
 				fmt.Print(content)
 				fullResponse.WriteString(content)
 			}
@@ -165,20 +181,28 @@ func AskDeepSeekStream(query string, context string, model string) (string, erro
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 
+	// スピナー開始
+	spinner := ui.NewSpinner()
+	spinner.Start("Thinking")
+
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
+		spinner.Stop()
 		return "", err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
+		spinner.Stop()
 		body, _ := io.ReadAll(resp.Body)
 		return "", fmt.Errorf("API error: %s", string(body))
 	}
 
 	var fullResponse strings.Builder
 	scanner := bufio.NewScanner(resp.Body)
+	firstChunk := true
+
 	for scanner.Scan() {
 		line := scanner.Text()
 		if strings.HasPrefix(line, "data: ") {
@@ -194,6 +218,13 @@ func AskDeepSeekStream(query string, context string, model string) (string, erro
 
 			if len(streamResp.Choices) > 0 {
 				content := streamResp.Choices[0].Delta.Content
+
+				// 最初のコンテンツでスピナー停止
+				if firstChunk && content != "" {
+					spinner.Stop()
+					firstChunk = false
+				}
+
 				fmt.Print(content)
 				fullResponse.WriteString(content)
 			}

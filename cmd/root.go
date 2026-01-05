@@ -17,6 +17,7 @@ var (
 	files  []string
 	edit   bool
 	output string
+	resume bool
 )
 
 const projectConfigFile = "XELYON.md"
@@ -75,6 +76,12 @@ Examples:
   xelyon --think "design review"  # Deep thinking mode`,
 	Run: func(cmd *cobra.Command, args []string) {
 		model := getModel(cmd)
+
+		// --resume フラグチェック
+		if resume && len(args) == 0 && len(files) == 0 {
+			agent.RunInteractiveWithResume(model)
+			return
+		}
 
 		// 引数なし & ファイル指定なし → 対話モード
 		if len(args) == 0 && len(files) == 0 {
@@ -179,6 +186,9 @@ func init() {
 	rootCmd.Flags().Bool("coder", false, "Use DeepSeek Coder (code-focused)")
 	rootCmd.Flags().Bool("think", false, "Use DeepSeek R1 (deep reasoning)")
 	rootCmd.Flags().Bool("claude", false, "Use Claude (via Vertex AI)")
+
+	// 新規: --resume フラグ
+	rootCmd.Flags().BoolVar(&resume, "resume", false, "Resume last session")
 }
 
 func Execute() {

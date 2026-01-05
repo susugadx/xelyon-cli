@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/fatih/color"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 var (
@@ -93,59 +94,67 @@ func Execute(tc *ToolCall) string {
 		fmt.Println()
 	}
 
+	// ツール実行
+	var result string
 	switch tc.Tool {
 	case "bash":
-		return executeBash(tc.Args["command"])
+		result = executeBash(tc.Args["command"])
 	case "read_file":
-		return executeReadFile(tc.Args["path"])
+		result = executeReadFile(tc.Args["path"])
 	case "write_file":
-		return executeWriteFile(tc.Args["path"], tc.Args["content"])
+		result = executeWriteFile(tc.Args["path"], tc.Args["content"])
 	case "list_dir":
 		path := tc.Args["path"]
 		if path == "" {
 			path = "."
 		}
-		return executeListDir(path)
+		result = executeListDir(path)
 	case "git_status":
-		return executeGitStatus()
+		result = executeGitStatus()
 	case "git_diff":
 		path := tc.Args["path"]
-		return executeGitDiff(path)
+		result = executeGitDiff(path)
 	case "git_add":
 		path := tc.Args["path"]
 		if path == "" {
 			path = "."
 		}
-		return executeGitAdd(path)
+		result = executeGitAdd(path)
 	case "git_commit":
 		message := tc.Args["message"]
-		return executeGitCommit(message)
+		result = executeGitCommit(message)
 	case "git_push":
-		return executeGitPush()
+		result = executeGitPush()
 	case "git_log":
-		return executeGitLog()
+		result = executeGitLog()
 	case "search_code":
 		pattern := tc.Args["pattern"]
 		path := tc.Args["path"]
 		if path == "" {
 			path = "."
 		}
-		return executeSearchCode(pattern, path)
+		result = executeSearchCode(pattern, path)
 	case "search_file":
 		pattern := tc.Args["pattern"]
 		path := tc.Args["path"]
 		if path == "" {
 			path = "."
 		}
-		return executeSearchFile(pattern, path)
+		result = executeSearchFile(pattern, path)
 	case "str_replace":
 		path := tc.Args["path"]
 		oldStr := tc.Args["old_str"]
 		newStr := tc.Args["new_str"]
-		return executeStrReplace(path, oldStr, newStr)
+		result = executeStrReplace(path, oldStr, newStr)
 	default:
-		return fmt.Sprintf("Unknown tool: %s", tc.Tool)
+		result = fmt.Sprintf("Unknown tool: %s", tc.Tool)
 	}
+
+	// ページング表示
+	pager := ui.NewPager()
+	pager.Display(result)
+
+	return result
 }
 
 // executeBash はシェルコマンドを実行
@@ -194,7 +203,6 @@ func executeBash(command string) string {
 		result = result[:5000] + "\n... (truncated)"
 	}
 
-	fmt.Println(result)
 	return result
 }
 
@@ -304,7 +312,6 @@ func executeListDir(path string) string {
 	}
 
 	result := strings.Join(lines, "\n")
-	fmt.Println(result)
 	return result
 }
 
@@ -396,7 +403,6 @@ func executeGitStatus() string {
     if result == "" {
         result = "✨ Working tree clean"
     }
-    fmt.Println(result)
     return result
 }
 
@@ -419,7 +425,6 @@ func executeGitDiff(path string) string {
     if len(result) > 3000 {
         result = result[:3000] + "\n... (truncated)"
     }
-    fmt.Println(result)
     return result
 }
 
@@ -494,7 +499,6 @@ func executeGitLog() string {
         return fmt.Sprintf("Error: %v\n%s", err, string(output))
     }
     result := string(output)
-    fmt.Println(result)
     return result
 }
 // =====================
@@ -527,7 +531,6 @@ func executeSearchCode(pattern string, path string) string {
         result = strings.Join(lines[:50], "\n") + fmt.Sprintf("\n... (%d more matches)", len(lines)-50)
     }
 
-    fmt.Println(result)
     return result
 }
 
@@ -558,7 +561,6 @@ func executeSearchFile(pattern string, path string) string {
         result = strings.Join(lines[:30], "\n") + fmt.Sprintf("\n... (%d more files)", len(lines)-30)
     }
 
-    fmt.Println(result)
     return result
 }
 

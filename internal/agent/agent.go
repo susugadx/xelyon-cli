@@ -8,6 +8,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
@@ -24,13 +25,23 @@ type Agent struct {
 	Model        string
 	History      []api.Message
 	SystemPrompt string
+	session      *history.Session
+	storage      *history.Storage
 }
 
 // NewAgent は新しいAgentを作成
 func NewAgent(model string) *Agent {
+	storage, err := history.NewStorage()
+	if err != nil {
+		red.Printf("Warning: Failed to initialize history storage: %v\n", err)
+		storage = nil
+	}
+
 	return &Agent{
 		Model:   model,
 		History: []api.Message{},
+		session: history.NewSession(model),
+		storage: storage,
 		SystemPrompt: `You are XELYON, an expert AI coding assistant.
 
 You have access to the following tools:
@@ -123,6 +134,11 @@ func (a *Agent) chat(input string) {
 		Content: input,
 	})
 
+	// セッションに保存
+	if a.session != nil {
+		a.session.AddMessage("user", input, a.Model)
+	}
+
 	// AIに送信（ツール実行ループ）
 	maxIterations := 10 // 無限ループ防止
 	for i := 0; i < maxIterations; i++ {
@@ -160,13 +176,38 @@ func (a *Agent) chat(input string) {
 			Role:    "assistant",
 			Content: response,
 		})
+
+		// セッションに保存
+		if a.session != nil {
+			a.session.AddMessage("assistant", response, a.Model)
+			if a.storage != nil {
+				if err := a.storage.Save(a.session); err != nil {
+					// サイレント失敗（ユーザー体験を妨げない）
+				}
+			}
+		}
+
 		break
 	}
 }
 
 // handleSpecialCommand は特殊コマンドを処理
 func handleSpecialCommand(input string, agent *Agent) bool {
-	switch strings.ToLower(input) {
+	parts := strings.Fields(input)
+	if len(parts) == 0 {
+		return false
+	}
+
+	cmd := strings.ToLower(parts[0])
+	args := parts[1:]
+
+	switch cmd {
+	case "/save":
+		return handleSaveCommand(agent)
+	case "/load":
+		return handleLoadCommand(agent, args)
+	case "/sessions":
+		return handleSessionsCommand(agent)
 	case "/exit", "/quit", "/q":
 		yellow.Println("👋 See you!")
 		os.Exit(0)
@@ -198,6 +239,92 @@ func handleSpecialCommand(input string, agent *Agent) bool {
 	return false
 }
 
+// handleSaveCommand はセッション保存を処理
+func handleSaveCommand(agent *Agent) bool {
+	if agent.storage == nil {
+		red.Println("History storage not available")
+		return true
+	}
+
+	if err := agent.storage.Save(agent.session); err != nil {
+		red.Printf("Failed to save session: %v\n", err)
+		return true
+	}
+
+	green.Printf("💾 Session saved: %s\n", agent.session.ID)
+	return true
+}
+
+// handleLoadCommand はセッション読み込みを処理
+func handleLoadCommand(agent *Agent, args []string) bool {
+	if agent.storage == nil {
+		red.Println("History storage not available")
+		return true
+	}
+
+	sessionID := ""
+	if len(args) > 0 {
+		sessionID = args[0]
+	} else {
+		lastID, err := agent.storage.GetLastSession()
+		if err != nil {
+			red.Printf("No sessions found: %v\n", err)
+			return true
+		}
+		sessionID = lastID
+	}
+
+	session, err := agent.storage.Load(sessionID)
+	if err != nil {
+		red.Printf("Failed to load session: %v\n", err)
+		return true
+	}
+
+	// セッション置き換え
+	agent.session = session
+	agent.History = session.ToAPIMessages()
+
+	green.Printf("📂 Loaded session %s (%d messages)\n", sessionID, len(session.Messages))
+	return true
+}
+
+// handleSessionsCommand はセッション一覧を表示
+func handleSessionsCommand(agent *Agent) bool {
+	if agent.storage == nil {
+		red.Println("History storage not available")
+		return true
+	}
+
+	sessions, err := agent.storage.ListSessions()
+	if err != nil {
+		red.Printf("Failed to list sessions: %v\n", err)
+		return true
+	}
+
+	if len(sessions) == 0 {
+		yellow.Println("No sessions found")
+		return true
+	}
+
+	cyan.Println("\n📚 Recent Sessions:")
+	for i, s := range sessions {
+		if i >= 10 {
+			break
+		}
+
+		timeStr := s.LastModified.Format("2006-01-02 15:04")
+		preview := s.Preview
+		if len(preview) > 60 {
+			preview = preview[:60] + "..."
+		}
+
+		fmt.Printf("  [%s] %s - %s (%d msgs)\n",
+			s.ID, timeStr, preview, s.MessageCount)
+	}
+	fmt.Println()
+	return true
+}
+
 // printHeader はヘッダーを表示
 func printHeader(model string) {
 	cyan.Println("╔═══════════════════════════════════════════╗")
@@ -215,14 +342,18 @@ Commands:
   /exit, /quit, /q  - Exit the CLI
   /clear            - Clear conversation history
   /history          - Show conversation history
+  /save             - Save current session
+  /load [id]        - Load session (or last if no ID)
+  /sessions         - List recent sessions
   /model            - Show current model
   /help             - Show this help
 
 Available tools (AI will use automatically):
-  bash       - Execute shell commands
-  read_file  - Read file contents
-  write_file - Write/create files
-  list_dir   - List directory contents
+  bash        - Execute shell commands
+  read_file   - Read file contents
+  write_file  - Write/create files
+  str_replace - Replace text in file
+  list_dir    - List directory contents
   git_*       - Git operations (status, diff, add, commit, push, log)
   search_code - Search in code files
   search_file - Search for files by name
@@ -265,4 +396,62 @@ func loadProjectConfig() string {
 		dir = parent
 	}
 	return ""
+}
+
+// RunInteractiveWithResume は最後のセッションを復元して起動
+func RunInteractiveWithResume(model string) {
+	storage, err := history.NewStorage()
+	if err != nil {
+		red.Printf("Failed to initialize storage: %v\n", err)
+		RunInteractive(model)
+		return
+	}
+
+	sessionID, err := storage.GetLastSession()
+	if err != nil {
+		yellow.Println("No previous session found, starting new session")
+		RunInteractive(model)
+		return
+	}
+
+	session, err := storage.Load(sessionID)
+	if err != nil {
+		red.Printf("Failed to load session: %v\n", err)
+		RunInteractive(model)
+		return
+	}
+
+	// ロード済みセッションでAgent作成
+	agent := NewAgent(model)
+	agent.session = session
+	agent.History = session.ToAPIMessages()
+
+	printHeader(model)
+	green.Printf("📂 Resumed session %s (%d messages)\n", sessionID, len(session.Messages))
+
+	if config := loadProjectConfig(); config != "" {
+		agent.SystemPrompt += "\n\n## Project Context:\n" + config
+		green.Println("📋 XELYON.md loaded")
+	}
+
+	// REPLループ
+	reader := bufio.NewReader(os.Stdin)
+	for {
+		cyan.Print("\n> ")
+		input, err := reader.ReadString('\n')
+		if err != nil {
+			break
+		}
+
+		input = strings.TrimSpace(input)
+		if input == "" {
+			continue
+		}
+
+		if handleSpecialCommand(input, agent) {
+			continue
+		}
+
+		agent.chat(input)
+	}
 }
