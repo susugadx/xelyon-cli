@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/susugadx/xelyon-cli/internal/agent"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/file"
 )
@@ -41,99 +42,143 @@ func loadProjectConfig() string {
 	return ""
 }
 
+// getModel はフラグからモデルを決定する
+func getModel(cmd *cobra.Command) string {
+	if m, _ := cmd.Flags().GetBool("coder"); m {
+		return "deepseek-coder"
+	}
+	if m, _ := cmd.Flags().GetBool("think"); m {
+		return "deepseek-reasoner"
+	}
+	if m, _ := cmd.Flags().GetBool("claude"); m {
+		return "claude"
+	}
+	return "deepseek-chat" // デフォルト: V3
+}
+
 var rootCmd = &cobra.Command{
 	Use:   "xelyon [query]",
-	Short: "XELYON CLI - AI-powered coding assistant with RAG",
-	Long:  `XELYON CLI is an AI coding assistant that leverages your past knowledge and documents.`,
+	Short: "XELYON CLI - AI-powered coding assistant",
+	Long: `XELYON CLI is an AI coding assistant that helps you with development tasks.
+
+Models:
+  (default)    DeepSeek V3 - Fast & balanced
+  --coder      DeepSeek Coder - Code-focused
+  --think      DeepSeek R1 - Deep reasoning
+  --claude     Claude (Vertex AI) - Most capable
+
+Examples:
+  xelyon                          # Interactive mode
+  xelyon "explain this project"   # One-shot query
+  xelyon --coder                  # Interactive with Coder
+  xelyon -f main.go "add logging" # With file context
+  xelyon --think "design review"  # Deep thinking mode`,
 	Run: func(cmd *cobra.Command, args []string) {
+		model := getModel(cmd)
+
+		// 引数なし & ファイル指定なし → 対話モード
+		if len(args) == 0 && len(files) == 0 {
+			agent.RunInteractive(model)
+			return
+		}
+
+		// 従来のワンショットモード（後方互換）
 		if len(args) > 0 {
-			query := args[0]
-			var contextParts []string
-
-			projectConfig := loadProjectConfig()
-			if projectConfig != "" {
-				fmt.Println("📋 XELYON.md を読み込み")
-				contextParts = append(contextParts, projectConfig)
-			}
-
-			if len(files) > 0 {
-				fmt.Println("📄 ファイル読み込み中...")
-				fileContent, err := file.ReadFiles(files)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "エラー: %v\n", err)
-					os.Exit(1)
-				}
-				contextParts = append(contextParts, fileContent)
-				fmt.Printf("   %d 件のファイルを読み込み\n", len(files))
-			}
-
-			if userID != "" {
-				fmt.Println("🔍 RAG検索中...")
-				results, err := api.SearchRAG(query, userID, 3)
-				if err == nil && results.Count > 0 {
-					var contents []string
-					for _, r := range results.Results {
-						contents = append(contents, fmt.Sprintf("[%s]\n%s", r.DocumentTitle, r.Content))
-					}
-					contextParts = append(contextParts, "## RAG検索結果:\n"+strings.Join(contents, "\n\n"))
-					fmt.Printf("   %d 件のドキュメントを参照\n", results.Count)
-				}
-			}
-
-			fmt.Println("🤖 AI回答:\n")
-			context := strings.Join(contextParts, "\n\n---\n\n")
-			response, err := api.AskDeepSeekStream(query, context)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "\nエラー: %v\n", err)
-				os.Exit(1)
-			}
-
-			if output != "" {
-				code := file.ExtractCodeBlock(response)
-				if code != "" {
-					if file.ConfirmApply(output, code) {
-						err := file.WriteFile(output, code)
-						if err != nil {
-							fmt.Fprintf(os.Stderr, "エラー: %v\n", err)
-							os.Exit(1)
-						}
-						fmt.Println("✅ ファイルを作成しました:", output)
-					} else {
-						fmt.Println("❌ キャンセルしました")
-					}
-				} else {
-					fmt.Println("⚠️  コードブロックが見つかりませんでした")
-				}
-			}
-
-			if edit && len(files) == 1 && output == "" {
-				code := file.ExtractCodeBlock(response)
-				if code != "" {
-					if file.ConfirmApply(files[0], code) {
-						err := file.WriteFile(files[0], code)
-						if err != nil {
-							fmt.Fprintf(os.Stderr, "エラー: %v\n", err)
-							os.Exit(1)
-						}
-						fmt.Println("✅ ファイルを更新しました")
-					} else {
-						fmt.Println("❌ キャンセルしました")
-					}
-				} else {
-					fmt.Println("⚠️  コードブロックが見つかりませんでした")
-				}
-			}
-		} else {
-			cmd.Help()
+			runLegacyMode(args[0], model)
 		}
 	},
 }
 
+// runLegacyMode は従来の1ショットモードを実行
+func runLegacyMode(query string, model string) {
+	var contextParts []string
+
+	projectConfig := loadProjectConfig()
+	if projectConfig != "" {
+		fmt.Println("📋 XELYON.md を読み込み")
+		contextParts = append(contextParts, projectConfig)
+	}
+
+	if len(files) > 0 {
+		fmt.Println("📄 ファイル読み込み中...")
+		fileContent, err := file.ReadFiles(files)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "エラー: %v\n", err)
+			os.Exit(1)
+		}
+		contextParts = append(contextParts, fileContent)
+		fmt.Printf("   %d 件のファイルを読み込み\n", len(files))
+	}
+
+	if userID != "" {
+		fmt.Println("🔍 RAG検索中...")
+		results, err := api.SearchRAG(query, userID, 3)
+		if err == nil && results.Count > 0 {
+			var contents []string
+			for _, r := range results.Results {
+				contents = append(contents, fmt.Sprintf("[%s]\n%s", r.DocumentTitle, r.Content))
+			}
+			contextParts = append(contextParts, "## RAG検索結果:\n"+strings.Join(contents, "\n\n"))
+			fmt.Printf("   %d 件のドキュメントを参照\n", results.Count)
+		}
+	}
+
+	fmt.Println("🤖 AI回答:\n")
+	context := strings.Join(contextParts, "\n\n---\n\n")
+	response, err := api.AskDeepSeekStream(query, context, model)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "\nエラー: %v\n", err)
+		os.Exit(1)
+	}
+
+	if output != "" {
+		code := file.ExtractCodeBlock(response)
+		if code != "" {
+			if file.ConfirmApply(output, code) {
+				err := file.WriteFile(output, code)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "エラー: %v\n", err)
+					os.Exit(1)
+				}
+				fmt.Println("✅ ファイルを作成しました:", output)
+			} else {
+				fmt.Println("❌ キャンセルしました")
+			}
+		} else {
+			fmt.Println("⚠️  コードブロックが見つかりませんでした")
+		}
+	}
+
+	if edit && len(files) == 1 && output == "" {
+		code := file.ExtractCodeBlock(response)
+		if code != "" {
+			if file.ConfirmApply(files[0], code) {
+				err := file.WriteFile(files[0], code)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "エラー: %v\n", err)
+					os.Exit(1)
+				}
+				fmt.Println("✅ ファイルを更新しました")
+			} else {
+				fmt.Println("❌ キャンセルしました")
+			}
+		} else {
+			fmt.Println("⚠️  コードブロックが見つかりませんでした")
+		}
+	}
+}
+
 func init() {
+	// 既存フラグ
 	rootCmd.PersistentFlags().StringVar(&userID, "user", "", "User ID for RAG search")
 	rootCmd.PersistentFlags().StringSliceVarP(&files, "file", "f", []string{}, "Files to include as context")
 	rootCmd.PersistentFlags().BoolVarP(&edit, "edit", "e", false, "Enable edit mode")
 	rootCmd.PersistentFlags().StringVarP(&output, "output", "o", "", "Output file path")
+
+	// 新規: モデル選択フラグ
+	rootCmd.Flags().Bool("coder", false, "Use DeepSeek Coder (code-focused)")
+	rootCmd.Flags().Bool("think", false, "Use DeepSeek R1 (deep reasoning)")
+	rootCmd.Flags().Bool("claude", false, "Use Claude (via Vertex AI)")
 }
 
 func Execute() {
