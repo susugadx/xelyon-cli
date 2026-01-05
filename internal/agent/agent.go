@@ -37,6 +37,7 @@ You have access to the following tools:
 - bash: Execute shell commands. Args: {"command": "..."}
 - read_file: Read file contents. Args: {"path": "..."}
 - write_file: Write content to a file. Args: {"path": "...", "content": "..."}
+- str_replace: Replace text in file. Args: {"path": "...", "old_str": "...", "new_str": "..."}
 - list_dir: List directory contents. Args: {"path": "..."} (optional, defaults to current dir)
 - git_status: Show git status. Args: {}
 - git_diff: Show git diff. Args: {"path": "..."} (optional)
@@ -44,6 +45,8 @@ You have access to the following tools:
 - git_commit: Commit changes. Args: {"message": "..."}
 - git_push: Push to remote. Args: {}
 - git_log: Show recent commits. Args: {}
+- search_code: Search for pattern in code files. Args: {"pattern": "...", "path": "..."} (path optional)
+- search_file: Search for files by name. Args: {"pattern": "...", "path": "..."} (path optional)
 
 When you need to use a tool, respond with ONLY a JSON block like this:
 {"tool": "tool_name", "args": {"arg1": "value1"}}
@@ -54,6 +57,8 @@ Rules:
 3. For file writes, include the COMPLETE file content
 4. After using a tool, analyze the result and decide next steps
 5. When task is complete, give a summary without tool calls
+6. For searching code content, use search_code tool (not bash grep)
+7. For searching files by name, use search_file tool (not bash find)
 
 Respond in the same language as the user (Japanese or English).
 Be concise but helpful.`,
@@ -196,7 +201,7 @@ func handleSpecialCommand(input string, agent *Agent) bool {
 // printHeader はヘッダーを表示
 func printHeader(model string) {
 	cyan.Println("╔═══════════════════════════════════════════╗")
-	cyan.Println("║  🚀 XELYON CLI v0.2.0                     ║")
+	cyan.Println("║  🚀 XELYON CLI v0.3.0                     ║")
 	cyan.Println("║  AI-powered coding assistant              ║")
 	cyan.Println("╚═══════════════════════════════════════════╝")
 	fmt.Printf("Model: %s\n", modelDisplayName(model))
@@ -218,6 +223,9 @@ Available tools (AI will use automatically):
   read_file  - Read file contents
   write_file - Write/create files
   list_dir   - List directory contents
+  git_*       - Git operations (status, diff, add, commit, push, log)
+  search_code - Search in code files
+  search_file - Search for files by name
 
 Tips:
   - Just describe what you want in natural language

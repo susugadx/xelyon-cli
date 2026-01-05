@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -93,24 +94,6 @@ func Execute(tc *ToolCall) string {
 	}
 
 	switch tc.Tool {
-    case "git_status":
-        return executeGitStatus()
-    case "git_diff":
-        path := tc.Args["path"]
-        return executeGitDiff(path)
-    case "git_add":
-        path := tc.Args["path"]
-        if path == "" {
-            path = "."
-        }
-        return executeGitAdd(path)
-    case "git_commit":
-        message := tc.Args["message"]
-        return executeGitCommit(message)
-    case "git_push":
-        return executeGitPush()
-    case "git_log":
-        return executeGitLog()
 	case "bash":
 		return executeBash(tc.Args["command"])
 	case "read_file":
@@ -123,6 +106,43 @@ func Execute(tc *ToolCall) string {
 			path = "."
 		}
 		return executeListDir(path)
+	case "git_status":
+		return executeGitStatus()
+	case "git_diff":
+		path := tc.Args["path"]
+		return executeGitDiff(path)
+	case "git_add":
+		path := tc.Args["path"]
+		if path == "" {
+			path = "."
+		}
+		return executeGitAdd(path)
+	case "git_commit":
+		message := tc.Args["message"]
+		return executeGitCommit(message)
+	case "git_push":
+		return executeGitPush()
+	case "git_log":
+		return executeGitLog()
+	case "search_code":
+		pattern := tc.Args["pattern"]
+		path := tc.Args["path"]
+		if path == "" {
+			path = "."
+		}
+		return executeSearchCode(pattern, path)
+	case "search_file":
+		pattern := tc.Args["pattern"]
+		path := tc.Args["path"]
+		if path == "" {
+			path = "."
+		}
+		return executeSearchFile(pattern, path)
+	case "str_replace":
+		path := tc.Args["path"]
+		oldStr := tc.Args["old_str"]
+		newStr := tc.Args["new_str"]
+		return executeStrReplace(path, oldStr, newStr)
 	default:
 		return fmt.Sprintf("Unknown tool: %s", tc.Tool)
 	}
@@ -292,8 +312,11 @@ func executeListDir(path string) string {
 func confirm(message string) bool {
 	yellow.Printf("%s (y/n): ", message)
 
-	var response string
-	fmt.Scanln(&response)
+	reader := bufio.NewReader(os.Stdin)
+	response, err := reader.ReadString('\n')
+	if err != nil {
+		return false
+	}
 	response = strings.ToLower(strings.TrimSpace(response))
 
 	return response == "y" || response == "yes" || response == "ｙ" || response == "はい"
@@ -473,4 +496,169 @@ func executeGitLog() string {
     result := string(output)
     fmt.Println(result)
     return result
+}
+// =====================
+// 検索系ツール
+// =====================
+
+// executeSearchCode はコード内を検索（grep）
+func executeSearchCode(pattern string, path string) string {
+    if pattern == "" {
+        return "Error: pattern is required"
+    }
+
+    green.Printf("🔍 Searching for '%s' in %s\n", pattern, path)
+
+    // grepで検索（-r: 再帰, -n: 行番号, -I: バイナリ除外）
+    cmd := exec.Command("grep", "-rn", "-I", "--include=*.go", "--include=*.js", "--include=*.ts", "--include=*.py", "--include=*.md", "--include=*.json", "--include=*.yaml", "--include=*.yml", pattern, path)
+    output, err := cmd.CombinedOutput()
+
+    result := string(output)
+    if err != nil {
+        // grepは見つからない時もエラーを返す
+        if result == "" {
+            return fmt.Sprintf("No matches found for '%s'", pattern)
+        }
+    }
+
+    // 結果が長すぎる場合は切り詰め
+    lines := strings.Split(result, "\n")
+    if len(lines) > 50 {
+        result = strings.Join(lines[:50], "\n") + fmt.Sprintf("\n... (%d more matches)", len(lines)-50)
+    }
+
+    fmt.Println(result)
+    return result
+}
+
+// executeSearchFile はファイル名で検索（find）
+func executeSearchFile(pattern string, path string) string {
+    if pattern == "" {
+        return "Error: pattern is required"
+    }
+
+    green.Printf("📁 Searching for files matching '%s' in %s\n", pattern, path)
+
+    // findで検索（.gitは除外）
+    cmd := exec.Command("find", path, "-type", "f", "-name", pattern, "-not", "-path", "*/.git/*")
+    output, err := cmd.CombinedOutput()
+
+    result := string(output)
+    if err != nil {
+        return fmt.Sprintf("Error: %v\n%s", err, result)
+    }
+
+    if strings.TrimSpace(result) == "" {
+        return fmt.Sprintf("No files found matching '%s'", pattern)
+    }
+
+    // 結果が長すぎる場合は切り詰め
+    lines := strings.Split(result, "\n")
+    if len(lines) > 30 {
+        result = strings.Join(lines[:30], "\n") + fmt.Sprintf("\n... (%d more files)", len(lines)-30)
+    }
+
+    fmt.Println(result)
+    return result
+}
+
+// =====================
+// 編集系ツール
+// =====================
+
+// executeStrReplace はファイル内の文字列を置換
+func executeStrReplace(path string, oldStr string, newStr string) string {
+    if path == "" {
+        return "Error: path is required"
+    }
+    if oldStr == "" {
+        return "Error: old_str is required"
+    }
+
+    absPath, err := filepath.Abs(path)
+    if err != nil {
+        return fmt.Sprintf("Error: %v", err)
+    }
+
+    // ファイルを読み込む
+    content, err := os.ReadFile(absPath)
+    if err != nil {
+        return fmt.Sprintf("Error reading file: %v", err)
+    }
+
+    oldContent := string(content)
+
+    // old_strが存在するか確認
+    if !strings.Contains(oldContent, oldStr) {
+        return fmt.Sprintf("Error: old_str not found in %s", path)
+    }
+
+    // old_strが一意か確認（複数マッチはエラー）
+    count := strings.Count(oldContent, oldStr)
+    if count > 1 {
+        return fmt.Sprintf("Error: old_str appears %d times in %s (must be unique)", count, path)
+    }
+
+    // 置換
+    newContent := strings.Replace(oldContent, oldStr, newStr, 1)
+
+    // 差分表示
+    yellow.Printf("🔧 Replace in: %s\n", path)
+    fmt.Println(strings.Repeat("─", 50))
+
+    // 変更箇所を抽出して表示
+    oldLines := strings.Split(oldContent, "\n")
+    newLines := strings.Split(newContent, "\n")
+
+    // 差分を見つけて表示
+    for i := 0; i < len(oldLines) && i < len(newLines); i++ {
+        if oldLines[i] != newLines[i] {
+            // 前後3行のコンテキストを表示
+            start := i - 2
+            if start < 0 {
+                start = 0
+            }
+
+            // 変更前
+            for j := start; j <= i; j++ {
+                if j < len(oldLines) {
+                    if j == i {
+                        red.Printf("- %s\n", oldLines[j])
+                    } else {
+                        fmt.Printf("  %s\n", oldLines[j])
+                    }
+                }
+            }
+
+            // 変更後
+            green.Printf("+ %s\n", newLines[i])
+
+            // 後のコンテキスト
+            end := i + 2
+            if end >= len(newLines) {
+                end = len(newLines) - 1
+            }
+            for j := i + 1; j <= end; j++ {
+                if j < len(newLines) {
+                    fmt.Printf("  %s\n", newLines[j])
+                }
+            }
+            break
+        }
+    }
+
+    fmt.Println(strings.Repeat("─", 50))
+
+    // 確認
+    if !confirm("Apply this replacement?") {
+        return "Cancelled by user"
+    }
+
+    // 保存
+    if err := os.WriteFile(absPath, []byte(newContent), 0644); err != nil {
+        return fmt.Sprintf("Error writing file: %v", err)
+    }
+
+    green.Printf("✅ Replaced in: %s\n", path)
+    return fmt.Sprintf("Successfully replaced text in %s", path)
 }
