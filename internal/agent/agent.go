@@ -11,6 +11,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/version"
 )
 
 // 色定義
@@ -254,6 +255,9 @@ func handleSpecialCommand(input string, agent *Agent) bool {
 		return true
 	case "/model":
 		return handleModelCommand(agent, args)
+	case "/version":
+		cyan.Printf("🚀 XELYON CLI v%s\n", version.GetVersion())
+		return true
 	}
 	return false
 }
@@ -499,7 +503,7 @@ func handleConfigCommand(args []string) bool {
 // printHeader はヘッダーを表示
 func printHeader(model string) {
 	cyan.Println("╔═══════════════════════════════════════════╗")
-	cyan.Println("║  🚀 XELYON CLI v0.3.0                     ║")
+	cyan.Printf("║  🚀 XELYON CLI v%-25s║\n", version.GetVersion())
 	cyan.Println("║  AI-powered coding assistant              ║")
 	cyan.Println("╚═══════════════════════════════════════════╝")
 	fmt.Printf("Model: %s\n", modelDisplayName(model))
@@ -519,6 +523,7 @@ Commands:
   /undo             - Undo last file change (restore from .bak)
   /config           - Show/change configuration (e.g., /config model deepseek-coder)
   /model [name]     - Show current model or switch model without restart
+  /version          - Show version information
   /help             - Show this help
 
 Available tools (AI will use automatically):

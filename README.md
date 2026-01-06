@@ -52,6 +52,7 @@ export DEEPSEEK_API_KEY="your-api-key"
 /undo             - 直前のファイル変更を取り消し
 /config           - 設定の表示・変更（例: /config model deepseek-coder）
 /model [name]     - 現在のモデルを表示、または再起動なしでモデル切り替え
+/version          - バージョン情報を表示
 /clear            - 会話履歴をクリア
 /history          - 会話履歴を表示
 /help             - ヘルプを表示
