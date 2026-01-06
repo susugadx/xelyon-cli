@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 )
 
 const baseURL = "https://xelyon-backend-265806801386.asia-northeast1.run.app"
@@ -45,7 +46,16 @@ func SearchRAG(query string, userID string, topK int) (*RAGResponse, error) {
 		return nil, err
 	}
 
-	resp, err := http.Post(baseURL+"/api/rag/search", "application/json", bytes.NewBuffer(jsonBody))
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+	req, err := http.NewRequest("POST", baseURL+"/api/rag/search", bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}

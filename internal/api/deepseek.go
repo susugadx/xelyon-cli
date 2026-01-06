@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -92,7 +93,9 @@ func ChatWithTools(systemPrompt string, history []Message, model string) (string
 	spinner := ui.NewSpinner()
 	spinner.Start("Thinking")
 
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		spinner.Stop()
@@ -185,7 +188,9 @@ func AskDeepSeekStream(query string, context string, model string) (string, erro
 	spinner := ui.NewSpinner()
 	spinner.Start("Thinking")
 
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		spinner.Stop()
