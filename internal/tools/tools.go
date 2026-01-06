@@ -98,6 +98,11 @@ func ParseToolCall(response string) *ToolCall {
 	return &toolCall
 }
 
+// getCurrentTime は現在時刻を返す（builtin.goから使用）
+func getCurrentTime() time.Time {
+	return time.Now()
+}
+
 // createBackup はファイルの.bakバックアップを作成
 func createBackup(filePath string) (string, error) {
 	// ファイルが存在しない場合はスキップ（新規作成）
@@ -121,7 +126,7 @@ func createBackup(filePath string) (string, error) {
 	return backupPath, nil
 }
 
-// Execute はツールを実行
+// Execute はツールを実行（Registry経由）
 func Execute(tc *ToolCall) (string, *FileChange) {
 	cyan.Printf("🔧 %s", tc.Tool)
 	if len(tc.Args) > 0 {
@@ -130,86 +135,17 @@ func Execute(tc *ToolCall) (string, *FileChange) {
 		fmt.Println()
 	}
 
-	// ツール実行
-	var result string
-	var change *FileChange
-
-	switch tc.Tool {
-	case "bash":
-		result = executeBash(tc.Args["command"])
-	case "read_file":
-		result = executeReadFile(tc.Args["path"])
-	case "write_file":
-		r, backupPath, _ := executeWriteFile(tc.Args["path"], tc.Args["content"])
-		result = r
-		if backupPath != "" {
-			change = &FileChange{
-				FilePath:    tc.Args["path"],
-				BackupPath:  backupPath,
-				Timestamp:   time.Now(),
-				Tool:        "write_file",
-				Description: fmt.Sprintf("Wrote to %s", tc.Args["path"]),
-			}
+	// デフォルト値の設定（Registry実行前）
+	// list_dir, git_add, search_code, search_fileでpathが空の場合"."を設定
+	if tc.Args["path"] == "" {
+		switch tc.Tool {
+		case "list_dir", "git_add", "search_code", "search_file":
+			tc.Args["path"] = "."
 		}
-	case "list_dir":
-		path := tc.Args["path"]
-		if path == "" {
-			path = "."
-		}
-		result = executeListDir(path)
-	case "git_status":
-		result = executeGitStatus()
-	case "git_diff":
-		path := tc.Args["path"]
-		result = executeGitDiff(path)
-	case "git_add":
-		path := tc.Args["path"]
-		if path == "" {
-			path = "."
-		}
-		result = executeGitAdd(path)
-	case "git_commit":
-		message := tc.Args["message"]
-		result = executeGitCommit(message)
-	case "git_push":
-		result = executeGitPush()
-	case "git_log":
-		result = executeGitLog()
-	case "search_code":
-		pattern := tc.Args["pattern"]
-		path := tc.Args["path"]
-		if path == "" {
-			path = "."
-		}
-		result = executeSearchCode(pattern, path)
-	case "search_file":
-		pattern := tc.Args["pattern"]
-		path := tc.Args["path"]
-		if path == "" {
-			path = "."
-		}
-		result = executeSearchFile(pattern, path)
-	case "str_replace":
-		path := tc.Args["path"]
-		oldStr := tc.Args["old_str"]
-		newStr := tc.Args["new_str"]
-		r, backupPath, _ := executeStrReplace(path, oldStr, newStr)
-		result = r
-		if backupPath != "" {
-			change = &FileChange{
-				FilePath:    tc.Args["path"],
-				BackupPath:  backupPath,
-				Timestamp:   time.Now(),
-				Tool:        "str_replace",
-				Description: fmt.Sprintf("Replaced in %s", tc.Args["path"]),
-			}
-		}
-	case "web_search":
-		query := tc.Args["query"]
-		result = executeWebSearch(query)
-	default:
-		result = fmt.Sprintf("Unknown tool: %s", tc.Tool)
 	}
+
+	// Registry経由でツール実行
+	result, change := DefaultRegistry.Execute(tc)
 
 	// ページング表示
 	pager := ui.NewPager()

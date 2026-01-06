@@ -1,0 +1,194 @@
+package tools
+
+// builtin.go - すべての組み込みツールのWrapper実装
+
+// ===== Bash Tool =====
+type BashTool struct{}
+
+func (t *BashTool) Name() string { return "bash" }
+
+func (t *BashTool) Run(args map[string]string) (string, *FileChange, error) {
+	result := executeBash(args["command"])
+	return result, nil, nil
+}
+
+// ===== Read File Tool =====
+type ReadFileTool struct{}
+
+func (t *ReadFileTool) Name() string { return "read_file" }
+
+func (t *ReadFileTool) Run(args map[string]string) (string, *FileChange, error) {
+	result := executeReadFile(args["path"])
+	return result, nil, nil
+}
+
+// ===== Write File Tool =====
+type WriteFileTool struct{}
+
+func (t *WriteFileTool) Name() string { return "write_file" }
+
+func (t *WriteFileTool) Run(args map[string]string) (string, *FileChange, error) {
+	result, backupPath, err := executeWriteFile(args["path"], args["content"])
+	if err != nil {
+		return result, nil, err
+	}
+	var change *FileChange
+	if backupPath != "" {
+		change = &FileChange{
+			FilePath:    args["path"],
+			BackupPath:  backupPath,
+			Timestamp:   getCurrentTime(),
+			Tool:        "write_file",
+			Description: "Wrote file " + args["path"],
+		}
+	}
+	return result, change, nil
+}
+
+// ===== Str Replace Tool =====
+type StrReplaceTool struct{}
+
+func (t *StrReplaceTool) Name() string { return "str_replace" }
+
+func (t *StrReplaceTool) Run(args map[string]string) (string, *FileChange, error) {
+	result, backupPath, err := executeStrReplace(args["path"], args["old_str"], args["new_str"])
+	if err != nil {
+		return result, nil, err
+	}
+	var change *FileChange
+	if backupPath != "" {
+		change = &FileChange{
+			FilePath:    args["path"],
+			BackupPath:  backupPath,
+			Timestamp:   getCurrentTime(),
+			Tool:        "str_replace",
+			Description: "Replaced in " + args["path"],
+		}
+	}
+	return result, change, nil
+}
+
+// ===== List Dir Tool =====
+type ListDirTool struct{}
+
+func (t *ListDirTool) Name() string { return "list_dir" }
+
+func (t *ListDirTool) Run(args map[string]string) (string, *FileChange, error) {
+	result := executeListDir(args["path"])
+	return result, nil, nil
+}
+
+// ===== Git Status Tool =====
+type GitStatusTool struct{}
+
+func (t *GitStatusTool) Name() string { return "git_status" }
+
+func (t *GitStatusTool) Run(args map[string]string) (string, *FileChange, error) {
+	result := executeGitStatus()
+	return result, nil, nil
+}
+
+// ===== Git Diff Tool =====
+type GitDiffTool struct{}
+
+func (t *GitDiffTool) Name() string { return "git_diff" }
+
+func (t *GitDiffTool) Run(args map[string]string) (string, *FileChange, error) {
+	result := executeGitDiff(args["path"])
+	return result, nil, nil
+}
+
+// ===== Git Add Tool =====
+type GitAddTool struct{}
+
+func (t *GitAddTool) Name() string { return "git_add" }
+
+func (t *GitAddTool) Run(args map[string]string) (string, *FileChange, error) {
+	result := executeGitAdd(args["path"])
+	return result, nil, nil
+}
+
+// ===== Git Commit Tool =====
+type GitCommitTool struct{}
+
+func (t *GitCommitTool) Name() string { return "git_commit" }
+
+func (t *GitCommitTool) Run(args map[string]string) (string, *FileChange, error) {
+	result := executeGitCommit(args["message"])
+	return result, nil, nil
+}
+
+// ===== Git Push Tool =====
+type GitPushTool struct{}
+
+func (t *GitPushTool) Name() string { return "git_push" }
+
+func (t *GitPushTool) Run(args map[string]string) (string, *FileChange, error) {
+	result := executeGitPush()
+	return result, nil, nil
+}
+
+// ===== Git Log Tool =====
+type GitLogTool struct{}
+
+func (t *GitLogTool) Name() string { return "git_log" }
+
+func (t *GitLogTool) Run(args map[string]string) (string, *FileChange, error) {
+	result := executeGitLog()
+	return result, nil, nil
+}
+
+// ===== Search Code Tool =====
+type SearchCodeTool struct{}
+
+func (t *SearchCodeTool) Name() string { return "search_code" }
+
+func (t *SearchCodeTool) Run(args map[string]string) (string, *FileChange, error) {
+	result := executeSearchCode(args["pattern"], args["path"])
+	return result, nil, nil
+}
+
+// ===== Search File Tool =====
+type SearchFileTool struct{}
+
+func (t *SearchFileTool) Name() string { return "search_file" }
+
+func (t *SearchFileTool) Run(args map[string]string) (string, *FileChange, error) {
+	result := executeSearchFile(args["pattern"], args["path"])
+	return result, nil, nil
+}
+
+// ===== Web Search Tool =====
+type WebSearchTool struct{}
+
+func (t *WebSearchTool) Name() string { return "web_search" }
+
+func (t *WebSearchTool) Run(args map[string]string) (string, *FileChange, error) {
+	result := executeWebSearch(args["query"])
+	return result, nil, nil
+}
+
+// ===== Registry Registration =====
+
+// RegisterBuiltinTools はすべての組み込みツールを登録
+func RegisterBuiltinTools(r *Registry) {
+	r.Register(&BashTool{})
+	r.Register(&ReadFileTool{})
+	r.Register(&WriteFileTool{})
+	r.Register(&StrReplaceTool{})
+	r.Register(&ListDirTool{})
+	r.Register(&GitStatusTool{})
+	r.Register(&GitDiffTool{})
+	r.Register(&GitAddTool{})
+	r.Register(&GitCommitTool{})
+	r.Register(&GitPushTool{})
+	r.Register(&GitLogTool{})
+	r.Register(&SearchCodeTool{})
+	r.Register(&SearchFileTool{})
+	r.Register(&WebSearchTool{})
+}
+
+// init は自動的にデフォルトレジストリに全ツールを登録
+func init() {
+	RegisterBuiltinTools(DefaultRegistry)
+}

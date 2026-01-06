@@ -233,6 +233,19 @@ MIT
 
 ## バージョン履歴
 
+### v0.10.0 (2026-01-07)
+- 🏗️ **アーキテクチャ改善**: Provider/Tool Registryパターン導入
+  - **Provider Pattern**: 複数LLMプロバイダー対応の基盤
+    - `Provider` interface実装（DeepSeekProvider）
+    - `Client` struct with context対応タイムアウト管理
+    - 環境変数 `XELYON_PROVIDER` で切り替え可能（将来の拡張用）
+  - **Tool Registry Pattern**: 外部ツール統合の基盤
+    - `Tool` interface + `Registry` 実装
+    - 16個の組み込みツールを Registry に登録
+    - MCP等の外部ツール統合準備完了
+  - **後方互換性維持**: 既存の関数・APIは全て維持
+  - **破壊的変更なし**: v0.9.1からのアップグレードは透過的
+
 ### v0.9.1 (2026-01-07)
 - 🔍 **Web検索機能**: Serper APIを使ったリアルタイムWeb検索
   - `web_search`ツール追加（上位5件の検索結果を取得）

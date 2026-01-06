@@ -24,6 +24,38 @@ var (
 
 const projectConfigFile = "XELYON.md"
 
+// getProvider は環境変数からProviderを取得（将来の拡張用）
+// 現在はDeepSeekのみ対応、XELYON_PROVIDER環境変数で切り替え可能な設計
+// 使用例: provider := getProvider()
+// 注: agent.goの改修後に有効化予定
+func getProvider() api.Provider {
+	providerName := os.Getenv("XELYON_PROVIDER")
+	if providerName == "" {
+		providerName = "deepseek" // デフォルト
+	}
+
+	switch providerName {
+	case "deepseek":
+		apiKey := os.Getenv("DEEPSEEK_API_KEY")
+		if apiKey == "" {
+			fmt.Fprintln(os.Stderr, "Error: DEEPSEEK_API_KEY not set")
+			os.Exit(1)
+		}
+		return api.NewDeepSeekProvider(apiKey)
+	case "claude":
+		// TODO: Phase 3以降で実装
+		fmt.Fprintln(os.Stderr, "Error: Claude provider not yet implemented")
+		fmt.Fprintln(os.Stderr, "Set XELYON_PROVIDER=deepseek or remove the variable")
+		os.Exit(1)
+		return nil
+	default:
+		fmt.Fprintf(os.Stderr, "Error: unknown provider '%s'\n", providerName)
+		fmt.Fprintln(os.Stderr, "Supported providers: deepseek")
+		os.Exit(1)
+		return nil
+	}
+}
+
 func loadProjectConfig() string {
 	dir, err := os.Getwd()
 	if err != nil {

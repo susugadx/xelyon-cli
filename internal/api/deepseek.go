@@ -3,6 +3,7 @@ package api
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,10 +17,27 @@ import (
 
 const deepseekURL = "https://api.deepseek.com/chat/completions"
 
-// Message はチャットメッセージ
+// Message はチャットメッセージ（provider.goで定義されているが、ここでも使用）
 type Message struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
+}
+
+// DeepSeekProvider はDeepSeek APIのプロバイダー実装
+type DeepSeekProvider struct {
+	apiKey string
+}
+
+// NewDeepSeekProvider は新しいDeepSeekProviderを作成
+func NewDeepSeekProvider(apiKey string) *DeepSeekProvider {
+	return &DeepSeekProvider{
+		apiKey: apiKey,
+	}
+}
+
+// Name はプロバイダー名を返す
+func (p *DeepSeekProvider) Name() string {
+	return "DeepSeek"
 }
 
 // ChatRequest はAPIリクエスト
@@ -54,13 +72,8 @@ type ChatResponse struct {
 	Choices []Choice `json:"choices"`
 }
 
-// ChatWithTools はツール対応の会話を行う（ストリーミング）
-func ChatWithTools(systemPrompt string, history []Message, model string) (string, error) {
-	apiKey := os.Getenv("DEEPSEEK_API_KEY")
-	if apiKey == "" {
-		return "", fmt.Errorf("DEEPSEEK_API_KEY not set")
-	}
-
+// ChatWithTools は Provider interface の実装（context対応）
+func (p *DeepSeekProvider) ChatWithTools(ctx context.Context, systemPrompt string, history []Message, model string) (string, error) {
 	// メッセージ構築
 	messages := []Message{
 		{Role: "system", Content: systemPrompt},
@@ -81,13 +94,13 @@ func ChatWithTools(systemPrompt string, history []Message, model string) (string
 		return "", err
 	}
 
-	req, err := http.NewRequest("POST", deepseekURL, bytes.NewBuffer(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", deepseekURL, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return "", err
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Authorization", "Bearer "+p.apiKey)
 
 	// スピナー開始
 	spinner := ui.NewSpinner()
@@ -115,6 +128,14 @@ func ChatWithTools(systemPrompt string, history []Message, model string) (string
 	firstChunk := true
 
 	for scanner.Scan() {
+		// contextキャンセルチェック
+		select {
+		case <-ctx.Done():
+			spinner.Stop()
+			return "", ctx.Err()
+		default:
+		}
+
 		line := scanner.Text()
 		if strings.HasPrefix(line, "data: ") {
 			data := strings.TrimPrefix(line, "data: ")
@@ -146,7 +167,22 @@ func ChatWithTools(systemPrompt string, history []Message, model string) (string
 	return fullResponse.String(), nil
 }
 
+// ChatWithTools はツール対応の会話を行う（ストリーミング）
+// Deprecated: 後方互換性のために残されています。NewDeepSeekProvider + Client を使用してください。
+func ChatWithTools(systemPrompt string, history []Message, model string) (string, error) {
+	apiKey := os.Getenv("DEEPSEEK_API_KEY")
+	if apiKey == "" {
+		return "", fmt.Errorf("DEEPSEEK_API_KEY not set")
+	}
+
+	// 新しいProvider経由で実行
+	provider := NewDeepSeekProvider(apiKey)
+	client := NewClient(provider)
+	return client.ChatWithTools(systemPrompt, history, model)
+}
+
 // AskDeepSeekStream は従来のストリーミング質問（後方互換）
+// Deprecated: 後方互換性のために残されています。ChatWithTools を使用してください。
 func AskDeepSeekStream(query string, context string, model string) (string, error) {
 	apiKey := os.Getenv("DEEPSEEK_API_KEY")
 	if apiKey == "" {
@@ -160,84 +196,15 @@ func AskDeepSeekStream(query string, context string, model string) (string, erro
 		userContent = fmt.Sprintf("## Context:\n%s\n\n## Question:\n%s", context, query)
 	}
 
-	actualModel := getActualModel(model)
+	// 新しいProvider経由で実行
+	provider := NewDeepSeekProvider(apiKey)
+	client := NewClient(provider)
 
-	reqBody := ChatRequest{
-		Model: actualModel,
-		Messages: []Message{
-			{Role: "system", Content: systemPrompt},
-			{Role: "user", Content: userContent},
-		},
-		Stream: true,
+	history := []Message{
+		{Role: "user", Content: userContent},
 	}
 
-	jsonBody, err := json.Marshal(reqBody)
-	if err != nil {
-		return "", err
-	}
-
-	req, err := http.NewRequest("POST", deepseekURL, bytes.NewBuffer(jsonBody))
-	if err != nil {
-		return "", err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+apiKey)
-
-	// スピナー開始
-	spinner := ui.NewSpinner()
-	spinner.Start("Thinking")
-
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		spinner.Stop()
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		spinner.Stop()
-		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("API error: %s", string(body))
-	}
-
-	var fullResponse strings.Builder
-	scanner := bufio.NewScanner(resp.Body)
-	firstChunk := true
-
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.HasPrefix(line, "data: ") {
-			data := strings.TrimPrefix(line, "data: ")
-			if data == "[DONE]" {
-				break
-			}
-
-			var streamResp StreamResponse
-			if err := json.Unmarshal([]byte(data), &streamResp); err != nil {
-				continue
-			}
-
-			if len(streamResp.Choices) > 0 {
-				content := streamResp.Choices[0].Delta.Content
-
-				// 最初のコンテンツでスピナー停止
-				if firstChunk && content != "" {
-					spinner.Stop()
-					firstChunk = false
-				}
-
-				fmt.Print(content)
-				fullResponse.WriteString(content)
-			}
-		}
-	}
-
-	fmt.Println()
-	return fullResponse.String(), nil
+	return client.ChatWithTools(systemPrompt, history, model)
 }
 
 // getActualModel はモデル名を実際のAPI用に変換

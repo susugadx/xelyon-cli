@@ -20,13 +20,17 @@ xelyon-cli/
 ├── internal/
 │   ├── agent/             # エージェントロジック
 │   │   └── agent.go       # 対話ループ、コマンド処理、Undo管理
-│   ├── api/               # API クライアント
-│   │   ├── deepseek.go    # DeepSeek API（ストリーミング、スピナー統合）
+│   ├── api/               # API クライアント（Provider Pattern）
+│   │   ├── provider.go    # Provider interface定義
+│   │   ├── client.go      # Client struct（タイムアウト管理）
+│   │   ├── deepseek.go    # DeepSeekProvider実装
 │   │   ├── serper.go      # Serper API（Web検索）
 │   │   └── xelyon.go      # RAG検索API
 │   ├── config/            # 設定管理
 │   │   └── config.go      # 設定ファイル読み書き
-│   ├── tools/             # ツール実行エンジン
+│   ├── tools/             # ツール実行エンジン（Tool Registry Pattern）
+│   │   ├── registry.go    # Tool interface + Registry
+│   │   ├── builtin.go     # 組み込みツールのRegistry登録
 │   │   └── tools.go       # ツール実装、バックアップ管理
 │   ├── ui/                # UI コンポーネント
 │   │   ├── spinner.go     # ローディングスピナー
@@ -325,6 +329,34 @@ go build -o xelyon
 - [ ] ループ検知の回数をカスタマイズ可能に
 - [ ] APIリトライの回数・待機時間をカスタマイズ可能に
 - [ ] 差分表示の省略行数をカスタマイズ可能に
+
+## v0.10.0 アーキテクチャ改善
+
+### Provider Pattern (internal/api/)
+**目的**: 複数のLLMプロバイダー（DeepSeek, Claude, OpenAI等）を統一インターフェースで扱う
+
+**実装**:
+- `Provider` interface: 各プロバイダーの共通インターフェース
+- `Client` struct: タイムアウト管理とcontext対応
+- `DeepSeekProvider`: DeepSeek APIの実装
+- 環境変数 `XELYON_PROVIDER` で切り替え可能（将来の拡張用）
+
+**後方互換性**: 既存の`ChatWithTools`関数は内部でProviderを使用
+
+### Tool Registry Pattern (internal/tools/)
+**目的**: ツールを動的に登録・実行し、外部ツール（MCP等）の統合を容易にする
+
+**実装**:
+- `Tool` interface: 各ツールの共通インターフェース
+- `Registry` struct: ツールの登録・管理
+- `DefaultRegistry`: デフォルトのレジストリ（16個の組み込みツール登録済み）
+- `builtin.go`: 既存ツールのWrapper実装
+
+**後方互換性**: `Execute`関数は内部でDefaultRegistryを使用
+
+**拡張性**:
+- 新しいツールは`Tool` interfaceを実装してRegistryに登録
+- MCP（Model Context Protocol）対応の準備完了
 
 ## v0.8.0 で実装済み
 - [x] ループ検知機能（3回で中断）
