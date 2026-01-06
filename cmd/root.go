@@ -11,6 +11,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/file"
+	"github.com/susugadx/xelyon-cli/internal/version"
 )
 
 var (
@@ -68,8 +69,9 @@ func getModel(cmd *cobra.Command) string {
 }
 
 var rootCmd = &cobra.Command{
-	Use:   "xelyon [query]",
-	Short: "XELYON CLI - AI-powered coding assistant",
+	Use:     "xelyon [query]",
+	Short:   "XELYON CLI - AI-powered coding assistant",
+	Version: version.GetVersion(),
 	Long: `XELYON CLI is an AI coding assistant that helps you with development tasks.
 
 Models:
