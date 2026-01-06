@@ -212,6 +212,7 @@ func (a *Agent) chat(input string) {
 	var lastToolCall *tools.ToolCall
 	var sameCallCount int
 	var loopCount int
+	var normalExit bool // 正常終了フラグ
 
 	for i := 0; i < maxIterations; i++ {
 		loopCount = i + 1 // 実際のループ回数を記録
@@ -306,11 +307,12 @@ func (a *Agent) chat(input string) {
 			}
 		}
 
+		normalExit = true // 正常終了
 		break
 	}
 
-	// maxIterations に到達した場合の警告
-	if loopCount >= maxIterations {
+	// maxIterations に到達した場合の警告（正常終了でない場合のみ）
+	if !normalExit && loopCount >= maxIterations {
 		yellow.Printf("⚠️  Warning: Maximum iterations (%d) reached\n", maxIterations)
 		yellow.Println("The task may be too complex or the AI is stuck in a loop.")
 		yellow.Println("Consider breaking down the task into smaller steps.")
