@@ -661,62 +661,120 @@ func executeStrReplace(path string, oldStr string, newStr string) (string, strin
     // old_strが一意か確認（複数マッチはエラー）
     count := strings.Count(oldContent, oldStr)
     if count > 1 {
-        return fmt.Sprintf("Error: old_str appears %d times in %s (must be unique)", count, path), "", nil
+        // ファイルの先頭50行を取得
+        lines := strings.Split(oldContent, "\n")
+        previewLines := min(50, len(lines))
+        preview := strings.Join(lines[:previewLines], "\n")
+
+        return fmt.Sprintf(`Error: old_str appears %d times in %s (must be unique).
+
+Hint: Include more context (surrounding lines) to make old_str unique.
+For example, include the function signature or class definition.
+
+File preview (first %d lines):
+---
+%s
+---
+
+Please use read_file to see the full content and choose a unique old_str.`,
+            count, path, previewLines, preview), "", nil
     }
 
     // 置換
     newContent := strings.Replace(oldContent, oldStr, newStr, 1)
 
     // 差分表示
-    yellow.Printf("🔧 Replace in: %s\n", path)
-    fmt.Println(strings.Repeat("─", 50))
+    const maxDisplayLines = 10
+    oldStrLines := strings.Split(oldStr, "\n")
+    newStrLines := strings.Split(newStr, "\n")
 
-    // 変更箇所を抽出して表示
-    oldLines := strings.Split(oldContent, "\n")
-    newLines := strings.Split(newContent, "\n")
+    // 10行超えたら省略表示
+    if len(oldStrLines) > maxDisplayLines || len(newStrLines) > maxDisplayLines {
+        yellow.Printf("\n📝 Replacement in: %s\n", path)
+        yellow.Printf("Old content: %d lines (showing first %d)\n", len(oldStrLines), maxDisplayLines)
+        yellow.Printf("New content: %d lines (showing first %d)\n", len(newStrLines), maxDisplayLines)
+        fmt.Println(strings.Repeat("─", 50))
 
-    // 差分を見つけて表示
-    for i := 0; i < len(oldLines) && i < len(newLines); i++ {
-        if oldLines[i] != newLines[i] {
-            // 前後3行のコンテキストを表示
-            start := i - 2
-            if start < 0 {
-                start = 0
-            }
+        // 最初の maxDisplayLines 行のみ表示
+        red.Println("OLD:")
+        for i := 0; i < min(maxDisplayLines, len(oldStrLines)); i++ {
+            red.Printf("- %s\n", oldStrLines[i])
+        }
+        if len(oldStrLines) > maxDisplayLines {
+            red.Printf("  ... (%d lines omitted)\n", len(oldStrLines)-maxDisplayLines)
+        }
 
-            // 変更前
-            for j := start; j <= i; j++ {
-                if j < len(oldLines) {
-                    if j == i {
-                        red.Printf("- %s\n", oldLines[j])
-                    } else {
-                        fmt.Printf("  %s\n", oldLines[j])
+        fmt.Println()
+
+        green.Println("NEW:")
+        for i := 0; i < min(maxDisplayLines, len(newStrLines)); i++ {
+            green.Printf("+ %s\n", newStrLines[i])
+        }
+        if len(newStrLines) > maxDisplayLines {
+            green.Printf("  ... (%d lines omitted)\n", len(newStrLines)-maxDisplayLines)
+        }
+
+        fmt.Println(strings.Repeat("─", 50))
+    } else {
+        // 既存の差分表示ロジック（10行以下の場合）
+        yellow.Printf("🔧 Replace in: %s\n", path)
+        fmt.Println(strings.Repeat("─", 50))
+
+        // 変更箇所を抽出して表示
+        oldLines := strings.Split(oldContent, "\n")
+        newLines := strings.Split(newContent, "\n")
+
+        // 差分を見つけて表示
+        for i := 0; i < len(oldLines) && i < len(newLines); i++ {
+            if oldLines[i] != newLines[i] {
+                // 前後3行のコンテキストを表示
+                start := i - 2
+                if start < 0 {
+                    start = 0
+                }
+
+                // 変更前
+                for j := start; j <= i; j++ {
+                    if j < len(oldLines) {
+                        if j == i {
+                            red.Printf("- %s\n", oldLines[j])
+                        } else {
+                            fmt.Printf("  %s\n", oldLines[j])
+                        }
                     }
                 }
-            }
 
-            // 変更後
-            green.Printf("+ %s\n", newLines[i])
+                // 変更後
+                green.Printf("+ %s\n", newLines[i])
 
-            // 後のコンテキスト
-            end := i + 2
-            if end >= len(newLines) {
-                end = len(newLines) - 1
-            }
-            for j := i + 1; j <= end; j++ {
-                if j < len(newLines) {
-                    fmt.Printf("  %s\n", newLines[j])
+                // 後のコンテキスト
+                end := i + 2
+                if end >= len(newLines) {
+                    end = len(newLines) - 1
                 }
+                for j := i + 1; j <= end; j++ {
+                    if j < len(newLines) {
+                        fmt.Printf("  %s\n", newLines[j])
+                    }
+                }
+                break
             }
-            break
         }
-    }
 
-    fmt.Println(strings.Repeat("─", 50))
+        fmt.Println(strings.Repeat("─", 50))
+    }
 
     // 確認
     if !confirm("Apply this replacement?") {
-        return "Cancelled by user", "", nil
+        yellow.Println("⚠️  User cancelled the replacement")
+        return fmt.Sprintf(`[CANCELLED] User cancelled str_replace for %s.
+
+Hint: The replacement was not applied. If you need to make this change:
+1. Check if the old_str is correct by using read_file
+2. Try a smaller, more specific replacement
+3. Ask the user for clarification
+
+Do not retry the same replacement.`, path), "", nil
     }
 
     // バックアップ作成
@@ -732,4 +790,12 @@ func executeStrReplace(path string, oldStr string, newStr string) (string, strin
 
     green.Printf("✅ Replaced in: %s\n", path)
     return fmt.Sprintf("Successfully replaced text in %s", path), backupPath, nil
+}
+
+// min は2つの整数の小さい方を返す
+func min(a, b int) int {
+    if a < b {
+        return a
+    }
+    return b
 }

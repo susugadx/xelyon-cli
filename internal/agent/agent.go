@@ -2,9 +2,11 @@ package agent
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/api"
@@ -78,6 +80,9 @@ Rules:
 8. For file editing, ALWAYS use str_replace tool (NEVER use bash sed)
 9. Use write_file ONLY for creating new files, NOT for editing existing files
 10. str_replace is safer because it shows diffs and requires confirmation
+11. If old_str matches multiple times, include surrounding context to make it unique
+12. For large file edits, split into multiple str_replace calls (about 10 lines each)
+13. When editing the same file multiple times, use read_file to verify the current state before the next change
 
 Respond in the same language as the user (Japanese or English).
 Be concise but helpful.`,
@@ -134,6 +139,21 @@ func RunOnce(query string, model string) {
 	agent.chat(query)
 }
 
+// isSameToolCall は2つのToolCallが同じかを判定
+func isSameToolCall(tc1, tc2 *tools.ToolCall) bool {
+	if tc1 == nil || tc2 == nil {
+		return false
+	}
+	if tc1.Tool != tc2.Tool {
+		return false
+	}
+
+	// args を JSON 化して比較
+	args1, _ := json.Marshal(tc1.Args)
+	args2, _ := json.Marshal(tc2.Args)
+	return string(args1) == string(args2)
+}
+
 // chat はAIと対話する
 func (a *Agent) chat(input string) {
 	// 履歴に追加
@@ -148,17 +168,59 @@ func (a *Agent) chat(input string) {
 	}
 
 	// AIに送信（ツール実行ループ）
-	maxIterations := 10 // 無限ループ防止
+	const maxIterations = 10 // 無限ループ防止
+	var lastToolCall *tools.ToolCall
+	var sameCallCount int
+	var loopCount int
+
 	for i := 0; i < maxIterations; i++ {
-		response, err := api.ChatWithTools(a.SystemPrompt, a.History, a.CurrentModel)
+		loopCount = i + 1 // 実際のループ回数を記録
+		// API呼び出しのリトライ処理
+		const maxRetries = 2
+		var response string
+		var err error
+
+		for retry := 0; retry < maxRetries; retry++ {
+			response, err = api.ChatWithTools(a.SystemPrompt, a.History, a.CurrentModel)
+			if err == nil {
+				break // 成功
+			}
+
+			if retry < maxRetries-1 {
+				yellow.Printf("⚠️  API error, retrying (%d/%d)...\n", retry+1, maxRetries-1)
+				time.Sleep(time.Second * time.Duration(retry+1)) // 指数バックオフ的な待機
+			}
+		}
+
 		if err != nil {
 			red.Printf("エラー: %v\n", err)
+			yellow.Println("API呼び出しに失敗しました。ネットワーク接続を確認してください。")
 			return
 		}
 
 		// ツール呼び出しをチェック
 		toolCall := tools.ParseToolCall(response)
 		if toolCall != nil {
+			// 同じツール呼び出しをカウント
+			if isSameToolCall(toolCall, lastToolCall) {
+				sameCallCount++
+				if sameCallCount >= 3 {
+					yellow.Printf("⚠️  Warning: Same tool call repeated %d times, stopping to prevent infinite loop\n", sameCallCount)
+					yellow.Printf("   Tool: %s\n", toolCall.Tool)
+
+					// AI に警告メッセージを返す
+					a.History = append(a.History, api.Message{
+						Role:    "user",
+						Content: "[SYSTEM WARNING] The same tool call was repeated 3 times. Please try a different approach or ask the user for clarification.",
+					})
+					continue // 次のイテレーションで AI に考え直させる
+				}
+			} else {
+				// 異なるツール呼び出し → カウンターリセット
+				sameCallCount = 1
+				lastToolCall = toolCall
+			}
+
 			// 結果を履歴に追加
 			a.History = append(a.History, api.Message{
 				Role:    "assistant",
@@ -205,6 +267,13 @@ func (a *Agent) chat(input string) {
 		}
 
 		break
+	}
+
+	// maxIterations に到達した場合の警告
+	if loopCount >= maxIterations {
+		yellow.Printf("⚠️  Warning: Maximum iterations (%d) reached\n", maxIterations)
+		yellow.Println("The task may be too complex or the AI is stuck in a loop.")
+		yellow.Println("Consider breaking down the task into smaller steps.")
 	}
 }
 
