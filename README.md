@@ -9,6 +9,9 @@ AI搭載のコーディングアシスタントCLIツール
 - 📂 **会話履歴管理**: セッションをJSONL形式で保存・復元
 - ⚡ **スピナー表示**: API呼び出し中の視覚的フィードバック
 - 📄 **自動ページング**: 長い出力を読みやすく表示
+- ↩️ **Undo機能**: ファイル変更の取り消し（最大10件）
+- 💾 **自動バックアップ**: 編集時に.bakファイルを自動作成
+- ✏️ **安全な編集**: str_replaceツールでdiff表示と確認プロンプト
 
 ## インストール
 
@@ -46,6 +49,7 @@ export DEEPSEEK_API_KEY="your-api-key"
 /save             - 現在のセッションを保存
 /load [id]        - セッションを読み込み（IDなしで最新）
 /sessions         - 最近のセッション一覧
+/undo             - 直前のファイル変更を取り消し
 /clear            - 会話履歴をクリア
 /history          - 会話履歴を表示
 /model            - 現在のモデルを表示
@@ -57,14 +61,40 @@ export DEEPSEEK_API_KEY="your-api-key"
 
 AIが自動で以下のツールを使用します:
 
-- **bash** - シェルコマンド実行
+- **bash** - シェルコマンド実行（sed/awk等の編集コマンドはブロック）
 - **read_file** - ファイル読み込み
-- **write_file** - ファイル作成・上書き
-- **str_replace** - ファイル内の文字列置換（部分編集）
+- **write_file** - ファイル作成・上書き（.bakバックアップ自動作成）
+- **str_replace** - ファイル内の文字列置換（部分編集、diff表示、.bakバックアップ）
 - **list_dir** - ディレクトリ一覧
 - **git_status, git_diff, git_add, git_commit, git_push, git_log** - Git操作
 - **search_code** - コード内検索（grep）
 - **search_file** - ファイル名検索（find）
+
+### Undo機能の使い方
+
+ファイル編集（`write_file` / `str_replace`）時に自動的に`.bak`バックアップが作成されます。
+
+```bash
+# 編集を実行
+> test.txt の "hello" を "world" に置き換えて
+✅ Replaced in: test.txt
+(test.txt.bak が自動作成される)
+
+# 間違えた場合は取り消し
+> /undo
+Undo last change?
+  File: test.txt
+  Tool: str_replace
+  Time: 2026-01-06 10:00:05
+Continue? (y/n): y
+✅ Undone: Replaced in test.txt
+   Restored from: test.txt.bak
+```
+
+**特徴:**
+- 最大10件の変更履歴を保持（メモリ内）
+- セッション単位でリセット
+- 新規ファイル作成時はバックアップなし
 
 ## プロジェクト設定
 
@@ -144,6 +174,14 @@ go fmt ./...
 MIT
 
 ## バージョン履歴
+
+### v0.5.0 (2026-01-06)
+- ✨ **Undo機能**: `/undo`コマンドでファイル変更を取り消し
+- ✨ **自動バックアップ**: 編集時に`.bak`ファイルを自動作成
+- ✨ **str_replace強制**: sedコマンドをブロックし、安全な`str_replace`ツールを強制
+- ✨ **変更履歴追跡**: 最大10件の変更をメモリ内で追跡
+- 🔒 **安全性向上**: 編集コマンド（sed, awk, perl -i）をブロック
+- 📋 **SystemPrompt改善**: ファイル編集時の明確なルール追加
 
 ### v0.3.0 (2026-01-06)
 - ✨ スピナー表示機能
