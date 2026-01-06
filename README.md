@@ -51,9 +51,9 @@ export DEEPSEEK_API_KEY="your-api-key"
 /sessions         - 最近のセッション一覧
 /undo             - 直前のファイル変更を取り消し
 /config           - 設定の表示・変更（例: /config model deepseek-coder）
+/model [name]     - 現在のモデルを表示、または再起動なしでモデル切り替え
 /clear            - 会話履歴をクリア
 /history          - 会話履歴を表示
-/model            - 現在のモデルを表示
 /help             - ヘルプを表示
 /exit, /quit, /q  - 終了
 ```
@@ -96,6 +96,29 @@ Continue? (y/n): y
 - 最大10件の変更履歴を保持（メモリ内）
 - セッション単位でリセット
 - 新規ファイル作成時はバックアップなし
+
+### モデル切り替え
+
+セッション中に再起動なしでモデルを切り替えることができます。
+
+```bash
+# 現在のモデルを確認
+> /model
+🤖 Current model: DeepSeek Coder (code-focused)
+
+# モデルを切り替え
+> /model deepseek-chat
+✅ Model switched: DeepSeek Coder (code-focused) → DeepSeek V3 (balanced)
+💾 Default model saved to config
+
+# 次の質問から新しいモデルが使われる
+> こんにちは
+```
+
+**特徴:**
+- 再起動不要でモデルを即座に切り替え
+- 設定ファイルにも自動保存
+- 次回起動時も同じモデルが使われる
 
 ### 設定ファイル
 

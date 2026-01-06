@@ -23,7 +23,8 @@ var (
 
 // Agent はCLIエージェント
 type Agent struct {
-	Model        string
+	Model        string // 初期モデル（後方互換性のため保持）
+	CurrentModel string // 現在のモデル（再起動なしで切り替え可能）
 	History      []api.Message
 	SystemPrompt string
 	session      *history.Session
@@ -40,10 +41,11 @@ func NewAgent(model string) *Agent {
 	}
 
 	return &Agent{
-		Model:   model,
-		History: []api.Message{},
-		session: history.NewSession(model),
-		storage: storage,
+		Model:        model,
+		CurrentModel: model, // 初期値としてmodelを設定
+		History:      []api.Message{},
+		session:      history.NewSession(model),
+		storage:      storage,
 		SystemPrompt: `You are XELYON, an expert AI coding assistant.
 
 You have access to the following tools:
@@ -141,13 +143,13 @@ func (a *Agent) chat(input string) {
 
 	// セッションに保存
 	if a.session != nil {
-		a.session.AddMessage("user", input, a.Model)
+		a.session.AddMessage("user", input, a.CurrentModel)
 	}
 
 	// AIに送信（ツール実行ループ）
 	maxIterations := 10 // 無限ループ防止
 	for i := 0; i < maxIterations; i++ {
-		response, err := api.ChatWithTools(a.SystemPrompt, a.History, a.Model)
+		response, err := api.ChatWithTools(a.SystemPrompt, a.History, a.CurrentModel)
 		if err != nil {
 			red.Printf("エラー: %v\n", err)
 			return
@@ -193,7 +195,7 @@ func (a *Agent) chat(input string) {
 
 		// セッションに保存
 		if a.session != nil {
-			a.session.AddMessage("assistant", response, a.Model)
+			a.session.AddMessage("assistant", response, a.CurrentModel)
 			if a.storage != nil {
 				if err := a.storage.Save(a.session); err != nil {
 					// サイレント失敗（ユーザー体験を妨げない）
@@ -251,8 +253,7 @@ func handleSpecialCommand(input string, agent *Agent) bool {
 		printHelp()
 		return true
 	case "/model":
-		fmt.Printf("🤖 Current model: %s\n", modelDisplayName(agent.Model))
-		return true
+		return handleModelCommand(agent, args)
 	}
 	return false
 }
@@ -405,6 +406,52 @@ func handleUndoCommand(agent *Agent) bool {
 	return true
 }
 
+// handleModelCommand はモデルの表示・切り替えを処理
+func handleModelCommand(agent *Agent, args []string) bool {
+	// 引数なし → 現在のモデルを表示
+	if len(args) == 0 {
+		fmt.Printf("🤖 Current model: %s\n", modelDisplayName(agent.CurrentModel))
+		yellow.Println("\nUsage: /model <model-name>")
+		yellow.Println("Models: deepseek-chat, deepseek-coder, deepseek-reasoner, claude")
+		return true
+	}
+
+	// /model <model-name> → モデル切り替え
+	newModel := args[0]
+
+	// モデル名検証
+	if !config.ValidateModel(newModel) {
+		red.Printf("Invalid model: %s\n", newModel)
+		yellow.Println("Valid models: deepseek-chat, deepseek-coder, deepseek-reasoner, claude")
+		return true
+	}
+
+	// モデルを切り替え
+	oldModel := agent.CurrentModel
+	agent.CurrentModel = newModel
+
+	green.Printf("✅ Model switched: %s → %s\n",
+		modelDisplayName(oldModel),
+		modelDisplayName(newModel))
+
+	// 設定ファイルにも保存
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		yellow.Printf("Warning: Failed to load config: %v\n", err)
+		return true
+	}
+
+	cfg.DefaultModel = newModel
+	if err := config.SaveConfig(cfg); err != nil {
+		yellow.Printf("Warning: Failed to save config: %v\n", err)
+		yellow.Println("Model switched for this session only")
+		return true
+	}
+
+	green.Println("💾 Default model saved to config")
+	return true
+}
+
 // handleConfigCommand は設定の表示・変更を処理
 func handleConfigCommand(args []string) bool {
 	cfg, err := config.LoadConfig()
@@ -471,7 +518,7 @@ Commands:
   /sessions         - List recent sessions
   /undo             - Undo last file change (restore from .bak)
   /config           - Show/change configuration (e.g., /config model deepseek-coder)
-  /model            - Show current model
+  /model [name]     - Show current model or switch model without restart
   /help             - Show this help
 
 Available tools (AI will use automatically):
