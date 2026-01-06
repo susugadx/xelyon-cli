@@ -27,6 +27,7 @@ type Agent struct {
 	SystemPrompt string
 	session      *history.Session
 	storage      *history.Storage
+	changeStack  []tools.FileChange
 }
 
 // NewAgent は新しいAgentを作成
@@ -70,6 +71,9 @@ Rules:
 5. When task is complete, give a summary without tool calls
 6. For searching code content, use search_code tool (not bash grep)
 7. For searching files by name, use search_file tool (not bash find)
+8. For file editing, ALWAYS use str_replace tool (NEVER use bash sed)
+9. Use write_file ONLY for creating new files, NOT for editing existing files
+10. str_replace is safer because it shows diffs and requires confirmation
 
 Respond in the same language as the user (Japanese or English).
 Be concise but helpful.`,
@@ -158,7 +162,16 @@ func (a *Agent) chat(input string) {
 			})
 
 			// ツール実行
-			result := tools.Execute(toolCall)
+			result, change := tools.Execute(toolCall)
+
+			// 変更履歴を保存
+			if change != nil {
+				a.changeStack = append(a.changeStack, *change)
+				// 最大10件まで保持
+				if len(a.changeStack) > 10 {
+					a.changeStack = a.changeStack[1:]
+				}
+			}
 
 			// 結果を履歴に追加
 			a.History = append(a.History, api.Message{
@@ -208,6 +221,8 @@ func handleSpecialCommand(input string, agent *Agent) bool {
 		return handleLoadCommand(agent, args)
 	case "/sessions":
 		return handleSessionsCommand(agent)
+	case "/undo":
+		return handleUndoCommand(agent)
 	case "/exit", "/quit", "/q":
 		yellow.Println("👋 See you!")
 		os.Exit(0)
@@ -325,6 +340,68 @@ func handleSessionsCommand(agent *Agent) bool {
 	return true
 }
 
+// handleUndoCommand は直前のファイル変更を取り消す
+func handleUndoCommand(agent *Agent) bool {
+	if len(agent.changeStack) == 0 {
+		yellow.Println("No changes to undo")
+		return true
+	}
+
+	// 最後の変更を取得
+	lastChange := agent.changeStack[len(agent.changeStack)-1]
+
+	// バックアップが存在しない場合
+	if lastChange.BackupPath == "" {
+		red.Println("No backup available for last change")
+		return true
+	}
+
+	// バックアップファイルを確認
+	if _, err := os.Stat(lastChange.BackupPath); os.IsNotExist(err) {
+		red.Printf("Backup file not found: %s\n", lastChange.BackupPath)
+		return true
+	}
+
+	// 確認プロンプト
+	yellow.Printf("Undo last change?\n")
+	fmt.Printf("  File: %s\n", lastChange.FilePath)
+	fmt.Printf("  Tool: %s\n", lastChange.Tool)
+	fmt.Printf("  Time: %s\n", lastChange.Timestamp.Format("2006-01-02 15:04:05"))
+	yellow.Print("Continue? (y/n): ")
+
+	reader := bufio.NewReader(os.Stdin)
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		red.Printf("Failed to read input: %v\n", err)
+		return true
+	}
+
+	input = strings.TrimSpace(strings.ToLower(input))
+	if input != "y" && input != "yes" {
+		yellow.Println("Undo cancelled")
+		return true
+	}
+
+	// バックアップから復元
+	backupContent, err := os.ReadFile(lastChange.BackupPath)
+	if err != nil {
+		red.Printf("Failed to read backup: %v\n", err)
+		return true
+	}
+
+	if err := os.WriteFile(lastChange.FilePath, backupContent, 0644); err != nil {
+		red.Printf("Failed to restore file: %v\n", err)
+		return true
+	}
+
+	// スタックから削除
+	agent.changeStack = agent.changeStack[:len(agent.changeStack)-1]
+
+	green.Printf("✅ Undone: %s\n", lastChange.Description)
+	green.Printf("   Restored from: %s\n", lastChange.BackupPath)
+	return true
+}
+
 // printHeader はヘッダーを表示
 func printHeader(model string) {
 	cyan.Println("╔═══════════════════════════════════════════╗")
@@ -345,14 +422,15 @@ Commands:
   /save             - Save current session
   /load [id]        - Load session (or last if no ID)
   /sessions         - List recent sessions
+  /undo             - Undo last file change (restore from .bak)
   /model            - Show current model
   /help             - Show this help
 
 Available tools (AI will use automatically):
   bash        - Execute shell commands
   read_file   - Read file contents
-  write_file  - Write/create files
-  str_replace - Replace text in file
+  write_file  - Write/create files (creates .bak backup)
+  str_replace - Replace text in file (creates .bak backup)
   list_dir    - List directory contents
   git_*       - Git operations (status, diff, add, commit, push, log)
   search_code - Search in code files
@@ -362,6 +440,7 @@ Tips:
   - Just describe what you want in natural language
   - AI will ask confirmation for dangerous operations
   - Use Ctrl+C to cancel current operation
+  - Use /undo to revert file changes (up to 10 recent changes)
 `)
 }
 

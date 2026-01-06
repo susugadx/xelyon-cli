@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/ui"
@@ -24,6 +25,15 @@ var (
 type ToolCall struct {
 	Tool string            `json:"tool"`
 	Args map[string]string `json:"args"`
+}
+
+// FileChange はファイル変更履歴
+type FileChange struct {
+	FilePath    string
+	BackupPath  string
+	Timestamp   time.Time
+	Tool        string
+	Description string
 }
 
 // 自動実行可能なコマンド（安全なもの）
@@ -44,6 +54,8 @@ var blockedCommands = []string{
 	"chmod 777", "chmod -R 777",
 	"mkfs", "dd if=", ":(){:|:&};:",
 	"> /dev/sda", "mv / ",
+	"sed -i", "sed -e", "sed '",  // ファイル編集系sed
+	"awk -i", "perl -i", "perl -p",  // その他のインライン編集コマンド
 }
 
 // ParseToolCall はレスポンスからツール呼び出しを抽出
@@ -85,8 +97,31 @@ func ParseToolCall(response string) *ToolCall {
 	return &toolCall
 }
 
+// createBackup はファイルの.bakバックアップを作成
+func createBackup(filePath string) (string, error) {
+	// ファイルが存在しない場合はスキップ（新規作成）
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		return "", nil
+	}
+
+	// バックアップパス生成
+	backupPath := filePath + ".bak"
+
+	// 既存の.bakを上書き（常に最新の1つだけ保持）
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read file for backup: %w", err)
+	}
+
+	if err := os.WriteFile(backupPath, content, 0644); err != nil {
+		return "", fmt.Errorf("failed to create backup: %w", err)
+	}
+
+	return backupPath, nil
+}
+
 // Execute はツールを実行
-func Execute(tc *ToolCall) string {
+func Execute(tc *ToolCall) (string, *FileChange) {
 	cyan.Printf("🔧 %s", tc.Tool)
 	if len(tc.Args) > 0 {
 		fmt.Printf(": %v\n", tc.Args)
@@ -96,13 +131,25 @@ func Execute(tc *ToolCall) string {
 
 	// ツール実行
 	var result string
+	var change *FileChange
+
 	switch tc.Tool {
 	case "bash":
 		result = executeBash(tc.Args["command"])
 	case "read_file":
 		result = executeReadFile(tc.Args["path"])
 	case "write_file":
-		result = executeWriteFile(tc.Args["path"], tc.Args["content"])
+		r, backupPath, _ := executeWriteFile(tc.Args["path"], tc.Args["content"])
+		result = r
+		if backupPath != "" {
+			change = &FileChange{
+				FilePath:    tc.Args["path"],
+				BackupPath:  backupPath,
+				Timestamp:   time.Now(),
+				Tool:        "write_file",
+				Description: fmt.Sprintf("Wrote to %s", tc.Args["path"]),
+			}
+		}
 	case "list_dir":
 		path := tc.Args["path"]
 		if path == "" {
@@ -145,7 +192,17 @@ func Execute(tc *ToolCall) string {
 		path := tc.Args["path"]
 		oldStr := tc.Args["old_str"]
 		newStr := tc.Args["new_str"]
-		result = executeStrReplace(path, oldStr, newStr)
+		r, backupPath, _ := executeStrReplace(path, oldStr, newStr)
+		result = r
+		if backupPath != "" {
+			change = &FileChange{
+				FilePath:    tc.Args["path"],
+				BackupPath:  backupPath,
+				Timestamp:   time.Now(),
+				Tool:        "str_replace",
+				Description: fmt.Sprintf("Replaced in %s", tc.Args["path"]),
+			}
+		}
 	default:
 		result = fmt.Sprintf("Unknown tool: %s", tc.Tool)
 	}
@@ -154,7 +211,7 @@ func Execute(tc *ToolCall) string {
 	pager := ui.NewPager()
 	pager.Display(result)
 
-	return result
+	return result, change
 }
 
 // executeBash はシェルコマンドを実行
@@ -234,14 +291,14 @@ func executeReadFile(path string) string {
 }
 
 // executeWriteFile はファイルに書き込む
-func executeWriteFile(path string, content string) string {
+func executeWriteFile(path string, content string) (string, string, error) {
 	if path == "" {
-		return "Error: path is empty"
+		return "Error: path is empty", "", nil
 	}
 
 	absPath, err := filepath.Abs(path)
 	if err != nil {
-		return fmt.Sprintf("Error: %v", err)
+		return fmt.Sprintf("Error: %v", err), "", nil
 	}
 
 	// ファイルが存在するか確認
@@ -265,22 +322,28 @@ func executeWriteFile(path string, content string) string {
 		action = "Overwrite"
 	}
 	if !confirm(fmt.Sprintf("%s this file?", action)) {
-		return "Cancelled by user"
+		return "Cancelled by user", "", nil
+	}
+
+	// バックアップ作成（既存ファイルの場合のみ）
+	backupPath, err := createBackup(absPath)
+	if err != nil {
+		return fmt.Sprintf("Warning: failed to create backup: %v (continuing anyway)", err), "", nil
 	}
 
 	// ディレクトリ作成
 	dir := filepath.Dir(absPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Sprintf("Error creating directory: %v", err)
+		return fmt.Sprintf("Error creating directory: %v", err), "", nil
 	}
 
 	// 書き込み
 	if err := os.WriteFile(absPath, []byte(content), 0644); err != nil {
-		return fmt.Sprintf("Error writing file: %v", err)
+		return fmt.Sprintf("Error writing file: %v", err), "", nil
 	}
 
 	green.Printf("✅ Written: %s\n", path)
-	return fmt.Sprintf("Successfully wrote %d bytes to %s", len(content), path)
+	return fmt.Sprintf("Successfully wrote %d bytes to %s", len(content), path), backupPath, nil
 }
 
 // executeListDir はディレクトリ一覧を取得
@@ -569,36 +632,36 @@ func executeSearchFile(pattern string, path string) string {
 // =====================
 
 // executeStrReplace はファイル内の文字列を置換
-func executeStrReplace(path string, oldStr string, newStr string) string {
+func executeStrReplace(path string, oldStr string, newStr string) (string, string, error) {
     if path == "" {
-        return "Error: path is required"
+        return "Error: path is required", "", nil
     }
     if oldStr == "" {
-        return "Error: old_str is required"
+        return "Error: old_str is required", "", nil
     }
 
     absPath, err := filepath.Abs(path)
     if err != nil {
-        return fmt.Sprintf("Error: %v", err)
+        return fmt.Sprintf("Error: %v", err), "", nil
     }
 
     // ファイルを読み込む
     content, err := os.ReadFile(absPath)
     if err != nil {
-        return fmt.Sprintf("Error reading file: %v", err)
+        return fmt.Sprintf("Error reading file: %v", err), "", nil
     }
 
     oldContent := string(content)
 
     // old_strが存在するか確認
     if !strings.Contains(oldContent, oldStr) {
-        return fmt.Sprintf("Error: old_str not found in %s", path)
+        return fmt.Sprintf("Error: old_str not found in %s", path), "", nil
     }
 
     // old_strが一意か確認（複数マッチはエラー）
     count := strings.Count(oldContent, oldStr)
     if count > 1 {
-        return fmt.Sprintf("Error: old_str appears %d times in %s (must be unique)", count, path)
+        return fmt.Sprintf("Error: old_str appears %d times in %s (must be unique)", count, path), "", nil
     }
 
     // 置換
@@ -653,14 +716,20 @@ func executeStrReplace(path string, oldStr string, newStr string) string {
 
     // 確認
     if !confirm("Apply this replacement?") {
-        return "Cancelled by user"
+        return "Cancelled by user", "", nil
+    }
+
+    // バックアップ作成
+    backupPath, err := createBackup(absPath)
+    if err != nil {
+        return fmt.Sprintf("Warning: failed to create backup: %v (continuing anyway)", err), "", nil
     }
 
     // 保存
     if err := os.WriteFile(absPath, []byte(newContent), 0644); err != nil {
-        return fmt.Sprintf("Error writing file: %v", err)
+        return fmt.Sprintf("Error writing file: %v", err), "", nil
     }
 
     green.Printf("✅ Replaced in: %s\n", path)
-    return fmt.Sprintf("Successfully replaced text in %s", path)
+    return fmt.Sprintf("Successfully replaced text in %s", path), backupPath, nil
 }
