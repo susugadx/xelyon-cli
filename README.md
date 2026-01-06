@@ -50,6 +50,7 @@ export DEEPSEEK_API_KEY="your-api-key"
 /load [id]        - セッションを読み込み（IDなしで最新）
 /sessions         - 最近のセッション一覧
 /undo             - 直前のファイル変更を取り消し
+/config           - 設定の表示・変更（例: /config model deepseek-coder）
 /clear            - 会話履歴をクリア
 /history          - 会話履歴を表示
 /model            - 現在のモデルを表示
@@ -96,20 +97,47 @@ Continue? (y/n): y
 - セッション単位でリセット
 - 新規ファイル作成時はバックアップなし
 
+### 設定ファイル
+
+設定ファイル `~/.xelyon/config.yaml` でデフォルトモデルなどを設定できます。
+
+```yaml
+# XELYON CLI 設定
+# Models: deepseek-chat, deepseek-coder, deepseek-reasoner, claude
+
+default_model: deepseek-coder
+```
+
+**設定の変更:**
+```bash
+# 設定を表示
+> /config
+
+# デフォルトモデルを変更
+> /config model deepseek-coder
+
+# CLIを再起動すると新しいモデルが使用される
+```
+
+**特徴:**
+- 初回起動時に自動作成
+- `/config` コマンドで設定表示・変更
+- CLIフラグ（`--coder`, `--think`）が設定ファイルより優先
+
 ## プロジェクト設定
 
-プロジェクトルートに`XELYON.md`を置くと、自動的にコンテキストとして読み込まれます。
+プロジェクトルートの`XELYON.md`に、プロジェクトの詳細な設定とアーキテクチャが記載されています。
 
-```markdown
-# プロジェクト設定
+### XELYON.mdの内容
+- プロジェクト概要とアーキテクチャ
+- コーディングルールとSystemPromptルール
+- 開発ガイド（ツール追加、コマンド追加、デバッグ方法）
+- トラブルシューティング
+- 既知の制約と今後の拡張案
 
-## 概要
-このプロジェクトは...
+**開発する際は、まずXELYON.mdを読んでプロジェクトの構造を理解してください。**
 
-## コーディングルール
-- エラーハンドリング必須
-- 日本語コメント可
-```
+XELYON.mdは自動的にコンテキストとして読み込まれます。
 
 ## 会話履歴
 
@@ -174,6 +202,12 @@ go fmt ./...
 MIT
 
 ## バージョン履歴
+
+### v0.6.0 (2026-01-06)
+- ✨ **設定ファイル**: `~/.xelyon/config.yaml`でデフォルトモデルを設定
+- ✨ **/configコマンド**: 設定の表示・変更が可能
+- 📄 **XELYON.md拡充**: 開発ガイド、デバッグ方法、既知の制約を追加
+- 📋 **CLAUDE.md簡素化**: XELYON.md参照に統一
 
 ### v0.5.0 (2026-01-06)
 - ✨ **Undo機能**: `/undo`コマンドでファイル変更を取り消し

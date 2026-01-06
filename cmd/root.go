@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/susugadx/xelyon-cli/internal/agent"
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/file"
 )
 
@@ -45,6 +46,7 @@ func loadProjectConfig() string {
 
 // getModel はフラグからモデルを決定する
 func getModel(cmd *cobra.Command) string {
+	// フラグが指定されていればそれを優先
 	if m, _ := cmd.Flags().GetBool("coder"); m {
 		return "deepseek-coder"
 	}
@@ -54,7 +56,15 @@ func getModel(cmd *cobra.Command) string {
 	if m, _ := cmd.Flags().GetBool("claude"); m {
 		return "claude"
 	}
-	return "deepseek-chat" // デフォルト: V3
+
+	// フラグなし → 設定ファイルから読み込み
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		// エラー時はハードコードされたデフォルトを使用
+		return "deepseek-coder"
+	}
+
+	return cfg.DefaultModel
 }
 
 var rootCmd = &cobra.Command{

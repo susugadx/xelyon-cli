@@ -8,6 +8,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
@@ -223,6 +224,8 @@ func handleSpecialCommand(input string, agent *Agent) bool {
 		return handleSessionsCommand(agent)
 	case "/undo":
 		return handleUndoCommand(agent)
+	case "/config":
+		return handleConfigCommand(args)
 	case "/exit", "/quit", "/q":
 		yellow.Println("👋 See you!")
 		os.Exit(0)
@@ -402,6 +405,50 @@ func handleUndoCommand(agent *Agent) bool {
 	return true
 }
 
+// handleConfigCommand は設定の表示・変更を処理
+func handleConfigCommand(args []string) bool {
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		red.Printf("Failed to load config: %v\n", err)
+		return true
+	}
+
+	// 引数なし → 現在の設定を表示
+	if len(args) == 0 {
+		cyan.Println("⚙️  Current Configuration:")
+		fmt.Printf("  default_model: %s\n", cfg.DefaultModel)
+		yellow.Println("\nUsage: /config model <model-name>")
+		yellow.Println("Models: deepseek-chat, deepseek-coder, deepseek-reasoner, claude")
+		return true
+	}
+
+	// /config model <model-name> → モデル変更
+	if len(args) >= 2 && args[0] == "model" {
+		newModel := args[1]
+
+		// モデル名検証
+		if !config.ValidateModel(newModel) {
+			red.Printf("Invalid model: %s\n", newModel)
+			yellow.Println("Valid models: deepseek-chat, deepseek-coder, deepseek-reasoner, claude")
+			return true
+		}
+
+		// 設定更新
+		cfg.DefaultModel = newModel
+		if err := config.SaveConfig(cfg); err != nil {
+			red.Printf("Failed to save config: %v\n", err)
+			return true
+		}
+
+		green.Printf("✅ Default model updated to: %s\n", newModel)
+		yellow.Println("Restart CLI for changes to take effect")
+		return true
+	}
+
+	yellow.Println("Usage: /config [model <model-name>]")
+	return true
+}
+
 // printHeader はヘッダーを表示
 func printHeader(model string) {
 	cyan.Println("╔═══════════════════════════════════════════╗")
@@ -423,6 +470,7 @@ Commands:
   /load [id]        - Load session (or last if no ID)
   /sessions         - List recent sessions
   /undo             - Undo last file change (restore from .bak)
+  /config           - Show/change configuration (e.g., /config model deepseek-coder)
   /model            - Show current model
   /help             - Show this help
 

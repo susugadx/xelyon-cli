@@ -23,6 +23,8 @@ xelyon-cli/
 │   ├── api/               # API クライアント
 │   │   ├── deepseek.go    # DeepSeek API（ストリーミング、スピナー統合）
 │   │   └── xelyon.go      # RAG検索API
+│   ├── config/            # 設定管理
+│   │   └── config.go      # 設定ファイル読み書き
 │   ├── tools/             # ツール実行エンジン
 │   │   └── tools.go       # ツール実装、バックアップ管理
 │   ├── ui/                # UI コンポーネント
@@ -41,7 +43,7 @@ xelyon-cli/
 
 #### 1. エージェントシステム (internal/agent/)
 - **対話ループ**: ユーザー入力 → AI推論 → ツール実行 → 結果表示
-- **コマンド処理**: `/save`, `/load`, `/sessions`, `/undo`, `/clear`, `/history`, `/help`
+- **コマンド処理**: `/save`, `/load`, `/sessions`, `/undo`, `/config`, `/clear`, `/history`, `/help`
 - **変更履歴管理**: 最大10件のファイル変更を追跡、Undo機能
 - **セッション管理**: 会話履歴の自動保存・復元
 
@@ -60,6 +62,12 @@ xelyon-cli/
 - **JSONL形式**: ストリーミング対応、1行1メッセージ
 - **メタデータ分離**: session_id, model, timestamp, preview等
 - **保存先**: `~/.xelyon/history/`
+
+#### 5. 設定管理 (internal/config/)
+- **YAML形式**: `~/.xelyon/config.yaml`
+- **デフォルトモデル**: default_model設定で起動時のモデル指定
+- **自動作成**: 初回起動時にデフォルト設定を自動生成
+- **バリデーション**: 無効なモデル名を拒否
 
 ## コーディングルール
 
@@ -103,6 +111,110 @@ AIエージェントは以下のルールに従う:
 - [ ] ヘルプ更新 → `printHelp()`を更新
 - [ ] README更新 → バージョン履歴に追記
 
+### ツール追加方法
+
+新しいツールを追加する場合の手順:
+
+1. **`internal/tools/tools.go`のExecute関数にcase追加**
+```go
+case "new_tool":
+    result = executeNewTool(tc.Args["arg1"], tc.Args["arg2"])
+```
+
+2. **実装関数を追加**
+```go
+func executeNewTool(arg1, arg2 string) string {
+    // バリデーション
+    if arg1 == "" {
+        return "Error: arg1 is required"
+    }
+
+    // 処理実装
+    result := // ...
+
+    return result
+}
+```
+
+3. **`internal/agent/agent.go`のSystemPromptに追記**
+```
+- new_tool: Description of the tool. Args: {"arg1": "...", "arg2": "..."}
+```
+
+4. **`printHelp()`にも追加**
+
+### コマンド追加方法
+
+新しい対話コマンドを追加する場合:
+
+1. **`internal/agent/agent.go`の`handleSpecialCommand`に追加**
+```go
+case "/newcommand":
+    return handleNewCommand(agent, args)
+```
+
+2. **対応するハンドラーを実装**
+```go
+func handleNewCommand(agent *Agent, args []string) bool {
+    // コマンド処理
+    green.Println("Command executed!")
+    return true
+}
+```
+
+3. **`printHelp()`を更新**
+
+### 会話履歴の構造
+
+**セッションファイル（JSONL）**: `~/.xelyon/history/{session_id}.jsonl`
+```jsonl
+{"timestamp":"2026-01-06T10:00:00Z","role":"user","content":"hello","model":"deepseek-chat"}
+{"timestamp":"2026-01-06T10:00:05Z","role":"assistant","content":"Hi!","model":"deepseek-chat"}
+```
+
+**メタデータファイル（JSON）**: `~/.xelyon/history/metadata/{session_id}.json`
+```json
+{
+  "session_id": "1704567890",
+  "model": "deepseek-chat",
+  "start_time": "2026-01-06T10:00:00Z",
+  "last_modified": "2026-01-06T10:00:05Z",
+  "message_count": 2,
+  "preview": "hello"
+}
+```
+
+### デバッグ方法
+
+**ログ出力**（開発中の一時的なデバッグ）:
+```go
+fmt.Printf("DEBUG: variable = %+v\n", variable)
+```
+
+**エラーメッセージは詳細に**:
+```go
+if err != nil {
+    return fmt.Errorf("failed to process file %s: %w", path, err)
+}
+```
+
+**手動テスト**:
+```bash
+# ビルド
+go build -o xelyon
+
+# 対話モードでテスト
+./xelyon
+
+# ワンショットでテスト
+./xelyon "test query"
+
+# フラグのテスト
+./xelyon --resume
+./xelyon --coder
+./xelyon --think
+```
+
 ### ビルド＆テスト
 ```bash
 # ビルド
@@ -113,6 +225,13 @@ go fmt ./...
 
 # テスト
 go test ./...
+
+# 依存関係の更新
+go mod tidy
+
+# クリーンビルド
+go clean
+go build -o xelyon
 ```
 
 ## トラブルシューティング
@@ -128,6 +247,27 @@ go test ./...
 ### Undoできない
 - `changeStack`が空 → 編集操作をまだ実行していない
 - `.bak`ファイルなし → 新規ファイル作成（バックアップ不要）
+
+### ビルドエラー
+- 依存関係の問題 → `go mod tidy`実行
+- クリーンビルド → `go clean && go build -o xelyon`
+
+### 会話履歴が読めない
+- `~/.xelyon/history/`ディレクトリの権限確認
+- JSONLの妥当性チェック: `cat ~/.xelyon/history/*.jsonl | jq .`
+
+### 設定ファイルが読めない
+- `~/.xelyon/config.yaml`の権限確認
+- YAMLの妥当性チェック: `cat ~/.xelyon/config.yaml`
+- 削除して再起動でデフォルト設定が再作成される
+
+## 既知の制約
+
+1. **ストリーミング**: DeepSeek APIはストリーミングレスポンスのみサポート
+2. **履歴サイズ**: 大きなセッション（1000+メッセージ）は読み込みが遅くなる可能性
+3. **ページング**: AIの応答にはページング適用されない（ツール出力のみ）
+4. **並行実行**: 現在は1つのツールを順次実行（並列実行は未対応）
+5. **バックアップ**: .bakファイルは1世代のみ保持（複数世代バックアップ未対応）
 
 ## 今後の拡張案
 - [ ] タイムスタンプ付き複数世代バックアップ
