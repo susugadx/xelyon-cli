@@ -18,10 +18,10 @@ import (
 
 // 色定義
 var (
-	cyan    = color.New(color.FgCyan, color.Bold)
-	green   = color.New(color.FgGreen)
-	yellow  = color.New(color.FgYellow)
-	red     = color.New(color.FgRed)
+	cyan   = color.New(color.FgCyan, color.Bold)
+	green  = color.New(color.FgGreen)
+	yellow = color.New(color.FgYellow)
+	red    = color.New(color.FgRed)
 )
 
 // Agent はCLIエージェント
@@ -79,6 +79,7 @@ You have access to the following tools:
 - git_log: Show recent commits. Args: {}
 - search_code: Search for pattern in code files. Args: {"pattern": "...", "path": "..."} (path optional)
 - search_file: Search for files by name. Args: {"pattern": "...", "path": "..."} (path optional)
+- web_search: Search the web for information. Args: {"query": "..."}
 
 When you need to use a tool, respond with ONLY a JSON block like this:
 {"tool": "tool_name", "args": {"arg1": "value1"}}
@@ -623,8 +624,7 @@ func printHeader(model string) {
 
 // printHelp はヘルプを表示
 func printHelp() {
-	fmt.Println(`
-Commands:
+	fmt.Println(`Commands:
   /exit, /quit, /q  - Exit the CLI
   /clear            - Clear conversation history
   /history          - Show conversation history
@@ -651,8 +651,7 @@ Tips:
   - Just describe what you want in natural language
   - AI will ask confirmation for dangerous operations
   - Use Ctrl+C to cancel current operation
-  - Use /undo to revert file changes (up to 10 recent changes)
-`)
+  - Use /undo to revert file changes (up to 10 recent changes)`)
 }
 
 // modelDisplayName はモデルの表示名を返す

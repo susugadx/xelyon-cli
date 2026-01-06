@@ -142,7 +142,7 @@ func runLegacyMode(query string, model string) {
 		}
 	}
 
-	fmt.Println("🤖 AI回答:\n")
+	fmt.Println("🤖 AI回答:")
 	context := strings.Join(contextParts, "\n\n---\n\n")
 	response, err := api.AskDeepSeekStream(query, context, model)
 	if err != nil {

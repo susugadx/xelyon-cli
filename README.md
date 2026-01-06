@@ -6,6 +6,7 @@ AI搭載のコーディングアシスタントCLIツール
 
 - 🤖 **複数のAIモデル対応**: DeepSeek V3 / Coder / R1、Claude対応予定
 - 💬 **対話型エージェント**: ツールを使って実際にコード編集・Git操作を実行
+- 🔍 **Web検索機能**: Serper APIを使ったリアルタイムWeb検索（v0.9.1）
 - 🧠 **思考プロセスの可視化**: なぜそのツールを使うのか、理由を説明（v0.9.0）
 - 📋 **段階的実行**: 複雑なタスクは計画→確認→実行→検証のフロー（v0.9.0）
 - ✅ **品質チェック自動化**: コード変更後に`go fmt`, `go test`を自動実行（v0.9.0）
@@ -24,6 +25,7 @@ go build -o xelyon
 
 # 環境変数設定
 export DEEPSEEK_API_KEY="your-api-key"
+export SERPER_API_KEY="your-serper-api-key"  # Web検索用（オプション）
 ```
 
 ## 使い方
@@ -74,6 +76,7 @@ AIが自動で以下のツールを使用します:
 - **git_status, git_diff, git_add, git_commit, git_push, git_log** - Git操作
 - **search_code** - コード内検索（grep）
 - **search_file** - ファイル名検索（find）
+- **web_search** - Web検索（Serper API、上位5件）
 
 ### Undo機能の使い方
 
@@ -229,6 +232,13 @@ go fmt ./...
 MIT
 
 ## バージョン履歴
+
+### v0.9.1 (2026-01-07)
+- 🔍 **Web検索機能**: Serper APIを使ったリアルタイムWeb検索
+  - `web_search`ツール追加（上位5件の検索結果を取得）
+  - 環境変数: `SERPER_API_KEY`
+  - 日本語検索に最適化（地域: jp、言語: ja）
+  - AIが必要に応じて自動的に検索を実行
 
 ### v0.9.0 (2026-01-06)
 - 🧠 **SystemPrompt大幅改善**: 性格定義＋16個の体系化ルール

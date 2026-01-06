@@ -22,6 +22,7 @@ xelyon-cli/
 │   │   └── agent.go       # 対話ループ、コマンド処理、Undo管理
 │   ├── api/               # API クライアント
 │   │   ├── deepseek.go    # DeepSeek API（ストリーミング、スピナー統合）
+│   │   ├── serper.go      # Serper API（Web検索）
 │   │   └── xelyon.go      # RAG検索API
 │   ├── config/            # 設定管理
 │   │   └── config.go      # 設定ファイル読み書き
@@ -50,7 +51,7 @@ xelyon-cli/
 - **APIリトライ**: エラー時に最大2回自動リトライ（指数バックオフ）
 
 #### 2. ツールシステム (internal/tools/)
-- **15種類のツール**: bash, read_file, write_file, str_replace, list_dir, git_*, search_*
+- **16種類のツール**: bash, read_file, write_file, str_replace, list_dir, git_*, search_*, web_search
 - **自動バックアップ**: write_file/str_replaceで.bakファイル作成
 - **安全性**: 危険なコマンド（rm -rf, sed -i等）をブロック
 - **FileChange追跡**: ファイル変更をメタデータと共に記録

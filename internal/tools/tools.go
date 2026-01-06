@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -54,8 +55,8 @@ var blockedCommands = []string{
 	"chmod 777", "chmod -R 777",
 	"mkfs", "dd if=", ":(){:|:&};:",
 	"> /dev/sda", "mv / ",
-	"sed -i", "sed -e", "sed '",  // ファイル編集系sed
-	"awk -i", "perl -i", "perl -p",  // その他のインライン編集コマンド
+	"sed -i", "sed -e", "sed '", // ファイル編集系sed
+	"awk -i", "perl -i", "perl -p", // その他のインライン編集コマンド
 }
 
 // ParseToolCall はレスポンスからツール呼び出しを抽出
@@ -203,6 +204,9 @@ func Execute(tc *ToolCall) (string, *FileChange) {
 				Description: fmt.Sprintf("Replaced in %s", tc.Args["path"]),
 			}
 		}
+	case "web_search":
+		query := tc.Args["query"]
+		result = executeWebSearch(query)
 	default:
 		result = fmt.Sprintf("Unknown tool: %s", tc.Tool)
 	}
@@ -450,181 +454,183 @@ func showPreview(content string) {
 	}
 	fmt.Println(strings.Repeat("─", 50))
 }
+
 // =====================
 // Git系ツール
 // =====================
 
 // executeGitStatus は git status を実行
 func executeGitStatus() string {
-    green.Println("📊 git status")
-    cmd := exec.Command("git", "status", "--short")
-    output, err := cmd.CombinedOutput()
-    if err != nil {
-        return fmt.Sprintf("Error: %v\n%s", err, string(output))
-    }
-    result := string(output)
-    if result == "" {
-        result = "✨ Working tree clean"
-    }
-    return result
+	green.Println("📊 git status")
+	cmd := exec.Command("git", "status", "--short")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Sprintf("Error: %v\n%s", err, string(output))
+	}
+	result := string(output)
+	if result == "" {
+		result = "✨ Working tree clean"
+	}
+	return result
 }
 
 // executeGitDiff は git diff を実行
 func executeGitDiff(path string) string {
-    args := []string{"diff"}
-    if path != "" {
-        args = append(args, path)
-    }
-    green.Printf("📝 git diff %s\n", path)
-    cmd := exec.Command("git", args...)
-    output, err := cmd.CombinedOutput()
-    if err != nil {
-        return fmt.Sprintf("Error: %v\n%s", err, string(output))
-    }
-    result := string(output)
-    if result == "" {
-        result = "No changes"
-    }
-    if len(result) > 3000 {
-        result = result[:3000] + "\n... (truncated)"
-    }
-    return result
+	args := []string{"diff"}
+	if path != "" {
+		args = append(args, path)
+	}
+	green.Printf("📝 git diff %s\n", path)
+	cmd := exec.Command("git", args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Sprintf("Error: %v\n%s", err, string(output))
+	}
+	result := string(output)
+	if result == "" {
+		result = "No changes"
+	}
+	if len(result) > 3000 {
+		result = result[:3000] + "\n... (truncated)"
+	}
+	return result
 }
 
 // executeGitAdd は git add を実行
 func executeGitAdd(path string) string {
-    green.Printf("➕ git add %s\n", path)
+	green.Printf("➕ git add %s\n", path)
 
-    // 確認
-    if !confirm(fmt.Sprintf("Stage '%s'?", path)) {
-        return "Cancelled by user"
-    }
+	// 確認
+	if !confirm(fmt.Sprintf("Stage '%s'?", path)) {
+		return "Cancelled by user"
+	}
 
-    cmd := exec.Command("git", "add", path)
-    output, err := cmd.CombinedOutput()
-    if err != nil {
-        return fmt.Sprintf("Error: %v\n%s", err, string(output))
-    }
-    return fmt.Sprintf("✅ Staged: %s", path)
+	cmd := exec.Command("git", "add", path)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Sprintf("Error: %v\n%s", err, string(output))
+	}
+	return fmt.Sprintf("✅ Staged: %s", path)
 }
 
 // executeGitCommit は git commit を実行
 func executeGitCommit(message string) string {
-    if message == "" {
-        return "Error: commit message is required"
-    }
+	if message == "" {
+		return "Error: commit message is required"
+	}
 
-    yellow.Printf("💾 git commit -m \"%s\"\n", message)
+	yellow.Printf("💾 git commit -m \"%s\"\n", message)
 
-    // 確認
-    if !confirm("Commit with this message?") {
-        return "Cancelled by user"
-    }
+	// 確認
+	if !confirm("Commit with this message?") {
+		return "Cancelled by user"
+	}
 
-    cmd := exec.Command("git", "commit", "-m", message)
-    output, err := cmd.CombinedOutput()
-    if err != nil {
-        return fmt.Sprintf("Error: %v\n%s", err, string(output))
-    }
-    result := string(output)
-    fmt.Println(result)
-    return result
+	cmd := exec.Command("git", "commit", "-m", message)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Sprintf("Error: %v\n%s", err, string(output))
+	}
+	result := string(output)
+	fmt.Println(result)
+	return result
 }
 
 // executeGitPush は git push を実行
 func executeGitPush() string {
-    yellow.Println("🚀 git push")
+	yellow.Println("🚀 git push")
 
-    // 確認
-    if !confirm("Push to remote?") {
-        return "Cancelled by user"
-    }
+	// 確認
+	if !confirm("Push to remote?") {
+		return "Cancelled by user"
+	}
 
-    cmd := exec.Command("git", "push")
-    output, err := cmd.CombinedOutput()
-    if err != nil {
-        return fmt.Sprintf("Error: %v\n%s", err, string(output))
-    }
-    result := string(output)
-    if result == "" {
-        result = "✅ Pushed successfully"
-    }
-    fmt.Println(result)
-    return result
+	cmd := exec.Command("git", "push")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Sprintf("Error: %v\n%s", err, string(output))
+	}
+	result := string(output)
+	if result == "" {
+		result = "✅ Pushed successfully"
+	}
+	fmt.Println(result)
+	return result
 }
 
 // executeGitLog は git log を実行
 func executeGitLog() string {
-    green.Println("📜 git log")
-    cmd := exec.Command("git", "log", "--oneline", "-10")
-    output, err := cmd.CombinedOutput()
-    if err != nil {
-        return fmt.Sprintf("Error: %v\n%s", err, string(output))
-    }
-    result := string(output)
-    return result
+	green.Println("📜 git log")
+	cmd := exec.Command("git", "log", "--oneline", "-10")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Sprintf("Error: %v\n%s", err, string(output))
+	}
+	result := string(output)
+	return result
 }
+
 // =====================
 // 検索系ツール
 // =====================
 
 // executeSearchCode はコード内を検索（grep）
 func executeSearchCode(pattern string, path string) string {
-    if pattern == "" {
-        return "Error: pattern is required"
-    }
+	if pattern == "" {
+		return "Error: pattern is required"
+	}
 
-    green.Printf("🔍 Searching for '%s' in %s\n", pattern, path)
+	green.Printf("🔍 Searching for '%s' in %s\n", pattern, path)
 
-    // grepで検索（-r: 再帰, -n: 行番号, -I: バイナリ除外）
-    cmd := exec.Command("grep", "-rn", "-I", "--include=*.go", "--include=*.js", "--include=*.ts", "--include=*.py", "--include=*.md", "--include=*.json", "--include=*.yaml", "--include=*.yml", pattern, path)
-    output, err := cmd.CombinedOutput()
+	// grepで検索（-r: 再帰, -n: 行番号, -I: バイナリ除外）
+	cmd := exec.Command("grep", "-rn", "-I", "--include=*.go", "--include=*.js", "--include=*.ts", "--include=*.py", "--include=*.md", "--include=*.json", "--include=*.yaml", "--include=*.yml", pattern, path)
+	output, err := cmd.CombinedOutput()
 
-    result := string(output)
-    if err != nil {
-        // grepは見つからない時もエラーを返す
-        if result == "" {
-            return fmt.Sprintf("No matches found for '%s'", pattern)
-        }
-    }
+	result := string(output)
+	if err != nil {
+		// grepは見つからない時もエラーを返す
+		if result == "" {
+			return fmt.Sprintf("No matches found for '%s'", pattern)
+		}
+	}
 
-    // 結果が長すぎる場合は切り詰め
-    lines := strings.Split(result, "\n")
-    if len(lines) > 50 {
-        result = strings.Join(lines[:50], "\n") + fmt.Sprintf("\n... (%d more matches)", len(lines)-50)
-    }
+	// 結果が長すぎる場合は切り詰め
+	lines := strings.Split(result, "\n")
+	if len(lines) > 50 {
+		result = strings.Join(lines[:50], "\n") + fmt.Sprintf("\n... (%d more matches)", len(lines)-50)
+	}
 
-    return result
+	return result
 }
 
 // executeSearchFile はファイル名で検索（find）
 func executeSearchFile(pattern string, path string) string {
-    if pattern == "" {
-        return "Error: pattern is required"
-    }
+	if pattern == "" {
+		return "Error: pattern is required"
+	}
 
-    green.Printf("📁 Searching for files matching '%s' in %s\n", pattern, path)
+	green.Printf("📁 Searching for files matching '%s' in %s\n", pattern, path)
 
-    // findで検索（.gitは除外）
-    cmd := exec.Command("find", path, "-type", "f", "-name", pattern, "-not", "-path", "*/.git/*")
-    output, err := cmd.CombinedOutput()
+	// findで検索（.gitは除外）
+	cmd := exec.Command("find", path, "-type", "f", "-name", pattern, "-not", "-path", "*/.git/*")
+	output, err := cmd.CombinedOutput()
 
-    result := string(output)
-    if err != nil {
-        return fmt.Sprintf("Error: %v\n%s", err, result)
-    }
+	result := string(output)
+	if err != nil {
+		return fmt.Sprintf("Error: %v\n%s", err, result)
+	}
 
-    if strings.TrimSpace(result) == "" {
-        return fmt.Sprintf("No files found matching '%s'", pattern)
-    }
+	if strings.TrimSpace(result) == "" {
+		return fmt.Sprintf("No files found matching '%s'", pattern)
+	}
 
-    // 結果が長すぎる場合は切り詰め
-    lines := strings.Split(result, "\n")
-    if len(lines) > 30 {
-        result = strings.Join(lines[:30], "\n") + fmt.Sprintf("\n... (%d more files)", len(lines)-30)
-    }
+	// 結果が長すぎる場合は切り詰め
+	lines := strings.Split(result, "\n")
+	if len(lines) > 30 {
+		result = strings.Join(lines[:30], "\n") + fmt.Sprintf("\n... (%d more files)", len(lines)-30)
+	}
 
-    return result
+	return result
 }
 
 // =====================
@@ -633,40 +639,40 @@ func executeSearchFile(pattern string, path string) string {
 
 // executeStrReplace はファイル内の文字列を置換
 func executeStrReplace(path string, oldStr string, newStr string) (string, string, error) {
-    if path == "" {
-        return "Error: path is required", "", nil
-    }
-    if oldStr == "" {
-        return "Error: old_str is required", "", nil
-    }
+	if path == "" {
+		return "Error: path is required", "", nil
+	}
+	if oldStr == "" {
+		return "Error: old_str is required", "", nil
+	}
 
-    absPath, err := filepath.Abs(path)
-    if err != nil {
-        return fmt.Sprintf("Error: %v", err), "", nil
-    }
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Sprintf("Error: %v", err), "", nil
+	}
 
-    // ファイルを読み込む
-    content, err := os.ReadFile(absPath)
-    if err != nil {
-        return fmt.Sprintf("Error reading file: %v", err), "", nil
-    }
+	// ファイルを読み込む
+	content, err := os.ReadFile(absPath)
+	if err != nil {
+		return fmt.Sprintf("Error reading file: %v", err), "", nil
+	}
 
-    oldContent := string(content)
+	oldContent := string(content)
 
-    // old_strが存在するか確認
-    if !strings.Contains(oldContent, oldStr) {
-        return fmt.Sprintf("Error: old_str not found in %s", path), "", nil
-    }
+	// old_strが存在するか確認
+	if !strings.Contains(oldContent, oldStr) {
+		return fmt.Sprintf("Error: old_str not found in %s", path), "", nil
+	}
 
-    // old_strが一意か確認（複数マッチはエラー）
-    count := strings.Count(oldContent, oldStr)
-    if count > 1 {
-        // ファイルの先頭50行を取得
-        lines := strings.Split(oldContent, "\n")
-        previewLines := min(50, len(lines))
-        preview := strings.Join(lines[:previewLines], "\n")
+	// old_strが一意か確認（複数マッチはエラー）
+	count := strings.Count(oldContent, oldStr)
+	if count > 1 {
+		// ファイルの先頭50行を取得
+		lines := strings.Split(oldContent, "\n")
+		previewLines := min(50, len(lines))
+		preview := strings.Join(lines[:previewLines], "\n")
 
-        return fmt.Sprintf(`Error: old_str appears %d times in %s (must be unique).
+		return fmt.Sprintf(`Error: old_str appears %d times in %s (must be unique).
 
 Hint: Include more context (surrounding lines) to make old_str unique.
 For example, include the function signature or class definition.
@@ -677,97 +683,97 @@ File preview (first %d lines):
 ---
 
 Please use read_file to see the full content and choose a unique old_str.`,
-            count, path, previewLines, preview), "", nil
-    }
+			count, path, previewLines, preview), "", nil
+	}
 
-    // 置換
-    newContent := strings.Replace(oldContent, oldStr, newStr, 1)
+	// 置換
+	newContent := strings.Replace(oldContent, oldStr, newStr, 1)
 
-    // 差分表示
-    const maxDisplayLines = 10
-    oldStrLines := strings.Split(oldStr, "\n")
-    newStrLines := strings.Split(newStr, "\n")
+	// 差分表示
+	const maxDisplayLines = 10
+	oldStrLines := strings.Split(oldStr, "\n")
+	newStrLines := strings.Split(newStr, "\n")
 
-    // 10行超えたら省略表示
-    if len(oldStrLines) > maxDisplayLines || len(newStrLines) > maxDisplayLines {
-        yellow.Printf("\n📝 Replacement in: %s\n", path)
-        yellow.Printf("Old content: %d lines (showing first %d)\n", len(oldStrLines), maxDisplayLines)
-        yellow.Printf("New content: %d lines (showing first %d)\n", len(newStrLines), maxDisplayLines)
-        fmt.Println(strings.Repeat("─", 50))
+	// 10行超えたら省略表示
+	if len(oldStrLines) > maxDisplayLines || len(newStrLines) > maxDisplayLines {
+		yellow.Printf("\n📝 Replacement in: %s\n", path)
+		yellow.Printf("Old content: %d lines (showing first %d)\n", len(oldStrLines), maxDisplayLines)
+		yellow.Printf("New content: %d lines (showing first %d)\n", len(newStrLines), maxDisplayLines)
+		fmt.Println(strings.Repeat("─", 50))
 
-        // 最初の maxDisplayLines 行のみ表示
-        red.Println("OLD:")
-        for i := 0; i < min(maxDisplayLines, len(oldStrLines)); i++ {
-            red.Printf("- %s\n", oldStrLines[i])
-        }
-        if len(oldStrLines) > maxDisplayLines {
-            red.Printf("  ... (%d lines omitted)\n", len(oldStrLines)-maxDisplayLines)
-        }
+		// 最初の maxDisplayLines 行のみ表示
+		red.Println("OLD:")
+		for i := 0; i < min(maxDisplayLines, len(oldStrLines)); i++ {
+			red.Printf("- %s\n", oldStrLines[i])
+		}
+		if len(oldStrLines) > maxDisplayLines {
+			red.Printf("  ... (%d lines omitted)\n", len(oldStrLines)-maxDisplayLines)
+		}
 
-        fmt.Println()
+		fmt.Println()
 
-        green.Println("NEW:")
-        for i := 0; i < min(maxDisplayLines, len(newStrLines)); i++ {
-            green.Printf("+ %s\n", newStrLines[i])
-        }
-        if len(newStrLines) > maxDisplayLines {
-            green.Printf("  ... (%d lines omitted)\n", len(newStrLines)-maxDisplayLines)
-        }
+		green.Println("NEW:")
+		for i := 0; i < min(maxDisplayLines, len(newStrLines)); i++ {
+			green.Printf("+ %s\n", newStrLines[i])
+		}
+		if len(newStrLines) > maxDisplayLines {
+			green.Printf("  ... (%d lines omitted)\n", len(newStrLines)-maxDisplayLines)
+		}
 
-        fmt.Println(strings.Repeat("─", 50))
-    } else {
-        // 既存の差分表示ロジック（10行以下の場合）
-        yellow.Printf("🔧 Replace in: %s\n", path)
-        fmt.Println(strings.Repeat("─", 50))
+		fmt.Println(strings.Repeat("─", 50))
+	} else {
+		// 既存の差分表示ロジック（10行以下の場合）
+		yellow.Printf("🔧 Replace in: %s\n", path)
+		fmt.Println(strings.Repeat("─", 50))
 
-        // 変更箇所を抽出して表示
-        oldLines := strings.Split(oldContent, "\n")
-        newLines := strings.Split(newContent, "\n")
+		// 変更箇所を抽出して表示
+		oldLines := strings.Split(oldContent, "\n")
+		newLines := strings.Split(newContent, "\n")
 
-        // 差分を見つけて表示
-        for i := 0; i < len(oldLines) && i < len(newLines); i++ {
-            if oldLines[i] != newLines[i] {
-                // 前後3行のコンテキストを表示
-                start := i - 2
-                if start < 0 {
-                    start = 0
-                }
+		// 差分を見つけて表示
+		for i := 0; i < len(oldLines) && i < len(newLines); i++ {
+			if oldLines[i] != newLines[i] {
+				// 前後3行のコンテキストを表示
+				start := i - 2
+				if start < 0 {
+					start = 0
+				}
 
-                // 変更前
-                for j := start; j <= i; j++ {
-                    if j < len(oldLines) {
-                        if j == i {
-                            red.Printf("- %s\n", oldLines[j])
-                        } else {
-                            fmt.Printf("  %s\n", oldLines[j])
-                        }
-                    }
-                }
+				// 変更前
+				for j := start; j <= i; j++ {
+					if j < len(oldLines) {
+						if j == i {
+							red.Printf("- %s\n", oldLines[j])
+						} else {
+							fmt.Printf("  %s\n", oldLines[j])
+						}
+					}
+				}
 
-                // 変更後
-                green.Printf("+ %s\n", newLines[i])
+				// 変更後
+				green.Printf("+ %s\n", newLines[i])
 
-                // 後のコンテキスト
-                end := i + 2
-                if end >= len(newLines) {
-                    end = len(newLines) - 1
-                }
-                for j := i + 1; j <= end; j++ {
-                    if j < len(newLines) {
-                        fmt.Printf("  %s\n", newLines[j])
-                    }
-                }
-                break
-            }
-        }
+				// 後のコンテキスト
+				end := i + 2
+				if end >= len(newLines) {
+					end = len(newLines) - 1
+				}
+				for j := i + 1; j <= end; j++ {
+					if j < len(newLines) {
+						fmt.Printf("  %s\n", newLines[j])
+					}
+				}
+				break
+			}
+		}
 
-        fmt.Println(strings.Repeat("─", 50))
-    }
+		fmt.Println(strings.Repeat("─", 50))
+	}
 
-    // 確認
-    if !confirm("Apply this replacement?") {
-        yellow.Println("⚠️  User cancelled the replacement")
-        return fmt.Sprintf(`[CANCELLED] User cancelled str_replace for %s.
+	// 確認
+	if !confirm("Apply this replacement?") {
+		yellow.Println("⚠️  User cancelled the replacement")
+		return fmt.Sprintf(`[CANCELLED] User cancelled str_replace for %s.
 
 Hint: The replacement was not applied. If you need to make this change:
 1. Check if the old_str is correct by using read_file
@@ -775,27 +781,47 @@ Hint: The replacement was not applied. If you need to make this change:
 3. Ask the user for clarification
 
 Do not retry the same replacement.`, path), "", nil
-    }
+	}
 
-    // バックアップ作成
-    backupPath, err := createBackup(absPath)
-    if err != nil {
-        return fmt.Sprintf("Warning: failed to create backup: %v (continuing anyway)", err), "", nil
-    }
+	// バックアップ作成
+	backupPath, err := createBackup(absPath)
+	if err != nil {
+		return fmt.Sprintf("Warning: failed to create backup: %v (continuing anyway)", err), "", nil
+	}
 
-    // 保存
-    if err := os.WriteFile(absPath, []byte(newContent), 0644); err != nil {
-        return fmt.Sprintf("Error writing file: %v", err), "", nil
-    }
+	// 保存
+	if err := os.WriteFile(absPath, []byte(newContent), 0644); err != nil {
+		return fmt.Sprintf("Error writing file: %v", err), "", nil
+	}
 
-    green.Printf("✅ Replaced in: %s\n", path)
-    return fmt.Sprintf("Successfully replaced text in %s", path), backupPath, nil
+	green.Printf("✅ Replaced in: %s\n", path)
+	return fmt.Sprintf("Successfully replaced text in %s", path), backupPath, nil
 }
 
 // min は2つの整数の小さい方を返す
 func min(a, b int) int {
-    if a < b {
-        return a
-    }
-    return b
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// =====================
+// Web検索ツール
+// =====================
+
+// executeWebSearch は Serper API を使って Web 検索を実行
+func executeWebSearch(query string) string {
+	if query == "" {
+		return "Error: query is required"
+	}
+
+	green.Printf("🔍 Searching the web for: %s\n", query)
+
+	result, err := api.WebSearch(query)
+	if err != nil {
+		return fmt.Sprintf("Error: %v", err)
+	}
+
+	return result
 }
