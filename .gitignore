@@ -1,65 +1,40 @@
-# バイナリ実行ファイル
+# Binaries
+xelyon
+xelyon.exe
+dist/
+
+# Backup files
+*.bak
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+
+# Coverage
+coverage.txt
+*.out
+
+# Build artifacts
 *.exe
 *.exe~
 *.dll
 *.so
 *.dylib
 
-# テスト実行ファイル
+# Test binary
 *.test
 
-# 出力ディレクトリ
-/dist/
-/bin/
-/out/
-
-# 依存関係ディレクトリ
-/vendor/
-
-# Go モジュールファイル
-go.sum
-
-# 環境変数ファイル
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# IDE設定
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS生成ファイル
-.DS_Store
-Thumbs.db
-
-# ログファイル
-*.log
-
-# 一時ファイル
-/tmp/
-/var/tmp/
-
-# カバレッジ出力
-coverage.txt
-coverage.html
-
-# プロジェクト固有の設定（必要に応じてコメント解除）
-# /config/
-# /data/
-# /cache/
-
-# バイナリ実行ファイル
-xelyon
-
-# テストファイル
-/test.txt
-/test.txt.bak
-*.txt.bak
-
-# str_replaceバックアップファイル
-*.bak
+# Go workspace
+go.work
+go.work.sum

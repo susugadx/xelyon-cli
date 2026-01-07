@@ -233,6 +233,17 @@ MIT
 
 ## バージョン履歴
 
+### v0.10.1 (2026-01-07)
+- 📦 **OSS公開準備**: リリース基盤整備
+  - LICENSE追加（MIT）
+  - CONTRIBUTING.md追加（開発ガイドライン）
+  - GitHub Actions CI/CD（.github/workflows/ci.yml）
+  - GoReleaser設定（.goreleaser.yml）
+  - .gitignore追加
+- ✅ **Phase 1完了**: HTTPタイムアウト実装完了
+  - go mod tidy実行
+  - すべてのHTTPクライアントにタイムアウト設定済み
+
 ### v0.10.0 (2026-01-07)
 - 🏗️ **アーキテクチャ改善**: Provider/Tool Registryパターン導入
   - **Provider Pattern**: 複数LLMプロバイダー対応の基盤

@@ -1,7 +1,7 @@
 package version
 
 // Version はXELYON CLIのバージョン
-const Version = "0.10.0"
+const Version = "0.10.1"
 
 // GetVersion はバージョン文字列を返す
 func GetVersion() string {

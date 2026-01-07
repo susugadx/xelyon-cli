@@ -38,10 +38,11 @@ go test ./...
 
 ## 現在のタスクリスト（優先順）
 
-### Phase 1: バグ修正（即座に）
-- [ ] go mod tidy → go.sum生成・コミット
-- [ ] internal/api/deepseek.go: http.Client に Timeout: 30 * time.Second 追加
-- [ ] internal/api/xelyon.go: 同様にTimeout追加
+### Phase 1: バグ修正（即座に）✅
+- [x] go mod tidy → go.sum生成・コミット（v0.10.1で完了）
+- [x] internal/api/deepseek.go: http.Client に Timeout: 30 * time.Second 追加（v0.10.0で完了）
+- [x] internal/api/xelyon.go: 同様にTimeout追加（v0.10.0で完了）
+- [x] internal/api/serper.go: 同様にTimeout追加（v0.9.1で完了）
 
 ### Phase 2: アーキテクチャ改善
 - [ ] internal/api/provider.go 新規作成（Provider interface）
@@ -57,11 +58,12 @@ go test ./...
 - [ ] Goファイル変更後に gofmt + go test を提案
 - [ ] テスト失敗時にrollback提案
 
-### Phase 4: OSS公開準備
-- [ ] LICENSE ファイル追加（MIT）
-- [ ] CONTRIBUTING.md 追加
-- [ ] .github/workflows/ci.yml 追加（build + test）
-- [ ] .goreleaser.yml 追加（バイナリ配布）
+### Phase 4: OSS公開準備✅
+- [x] LICENSE ファイル追加（MIT）（v0.10.1で完了）
+- [x] CONTRIBUTING.md 追加（v0.10.1で完了）
+- [x] .github/workflows/ci.yml 追加（build + test）（v0.10.1で完了）
+- [x] .goreleaser.yml 追加（バイナリ配布）（v0.10.1で完了）
+- [x] .gitignore 追加（v0.10.1で完了）
 
 ### Phase 5: 差別化機能
 - [ ] RAG連携（XELYON Web API）
