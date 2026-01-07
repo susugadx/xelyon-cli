@@ -24,6 +24,11 @@ xelyon-cli/
 │   ├── mcp/               # MCP連携
 │   │   ├── client.go      # MCPサーバー接続・ツール管理
 │   │   └── integration.go # Tool Registry統合
+│   ├── repomap/           # Repo Map（コード構造解析）
+│   │   ├── parser.go      # 言語パーサー管理
+│   │   ├── symbols.go     # シンボル定義
+│   │   ├── extractor.go   # Tree-sitterでシンボル抽出
+│   │   └── repomap.go     # Repo Map生成
 │   ├── api/               # API クライアント（Provider Pattern）
 │   │   ├── provider.go    # Provider interface定義
 │   │   ├── client.go      # Client struct（タイムアウト管理）
@@ -102,6 +107,14 @@ xelyon-cli/
 - **stdioトランスポート**: コマンド実行でサーバー起動
 - **動的SystemPrompt**: MCPツールを自動的にAIに提示
 - **エラーハンドリング**: 接続失敗しても続行、警告表示のみ
+
+#### 9. Repo Map (internal/repomap/)
+- **Tree-sitter解析**: AST解析で正確なシンボル抽出
+- **複数言語対応**: Go, JavaScript, TypeScript, Python
+- **シンボル抽出**: 関数、メソッド、構造体、クラス、インターフェース
+- **トークン制限**: 大規模プロジェクトでも効率的にコンテキスト圧縮
+- **自動生成**: 起動時にプロジェクトをスキャン
+- **除外パターン**: node_modules, .git, vendor等は自動除外
 
 ## コーディングルール
 

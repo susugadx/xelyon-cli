@@ -184,6 +184,36 @@ default_model: deepseek-coder
 - `@modelcontextprotocol/server-git` - Git操作
 - その他、MCP互換のサーバーすべて
 
+### Repo Map（コード構造マップ）
+
+起動時にプロジェクトのコード構造を自動解析し、AIに渡します。
+これにより、AIが「どこに何があるか」を効率的に把握できます。
+
+**対応言語**: Go, JavaScript, TypeScript, Python
+
+```bash
+# 現在のマップを確認
+> /repomap
+```
+
+**出力例**:
+```
+### internal/agent/agent.go
+  39: func NewAgent(model string) *Agent
+  134: func RunInteractive(model string)
+  171: func RunOnce(query string, model string)
+  199: func (a *Agent) chat(input string)
+
+### internal/tools/tools.go
+  62: func ParseToolCall(response string) *ToolCall
+  100: func Execute(tc *ToolCall) (string, *FileChange)
+```
+
+**特徴**:
+- 起動時に自動生成（SystemPromptに追加）
+- トークン制限（デフォルト2000トークン）で大規模プロジェクトにも対応
+- node_modules、.git、vendor等は自動除外
+
 ## プロジェクト設定
 
 プロジェクトルートの`XELYON.md`に、プロジェクトの詳細な設定とアーキテクチャが記載されています。
@@ -262,6 +292,14 @@ go fmt ./...
 MIT
 
 ## バージョン履歴
+
+### v0.13.0 (2026-01-07)
+- 🗺️ **Repo Map機能**: Tree-sitterベースのコード構造解析
+  - Go, JavaScript, TypeScript, Python対応
+  - 関数、メソッド、構造体、クラス、インターフェースを抽出
+  - 起動時に自動生成、SystemPromptに追加
+  - `/repomap` コマンドで確認可能
+  - トークン制限対応（デフォルト2000トークン）
 
 ### v0.12.0 (2026-01-07)
 - 🔌 **MCP対応**: Model Context Protocol クライアント実装

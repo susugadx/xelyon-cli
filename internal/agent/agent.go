@@ -14,6 +14,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/mcp"
+	"github.com/susugadx/xelyon-cli/internal/repomap"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/version"
 )
@@ -176,6 +177,16 @@ func RunInteractive(model string) {
 		green.Println("📋 XELYON.md loaded")
 	}
 
+	// Repo Map 生成
+	cwd, _ := os.Getwd()
+	rm := repomap.NewRepoMap(cwd, 2000) // 最大2000トークン
+	if err := rm.Build(); err == nil && rm.GetSymbolCount() > 0 {
+		repoMapStr := rm.Generate()
+		agent.SystemPrompt += "\n\n" + repoMapStr
+		green.Printf("🗺️  Repo map loaded (%d symbols from %d files)\n",
+			rm.GetSymbolCount(), len(rm.Files))
+	}
+
 	// REPLループ
 	reader := bufio.NewReader(os.Stdin)
 	for {
@@ -207,6 +218,16 @@ func RunOnce(query string, model string) {
 	if config := loadProjectConfig(); config != "" {
 		agent.SystemPrompt += "\n\n## Project Context:\n" + config
 		green.Println("📋 XELYON.md loaded")
+	}
+
+	// Repo Map 生成
+	cwd, _ := os.Getwd()
+	rm := repomap.NewRepoMap(cwd, 2000)
+	if err := rm.Build(); err == nil && rm.GetSymbolCount() > 0 {
+		repoMapStr := rm.Generate()
+		agent.SystemPrompt += "\n\n" + repoMapStr
+		green.Printf("🗺️  Repo map loaded (%d symbols from %d files)\n",
+			rm.GetSymbolCount(), len(rm.Files))
 	}
 
 	fmt.Println()
@@ -408,6 +429,8 @@ func handleSpecialCommand(input string, agent *Agent) bool {
 	case "/version":
 		cyan.Printf("🚀 XELYON CLI v%s\n", version.GetVersion())
 		return true
+	case "/repomap":
+		return handleRepoMapCommand()
 	}
 	return false
 }
@@ -650,6 +673,26 @@ func handleConfigCommand(args []string) bool {
 	return true
 }
 
+// handleRepoMapCommand はRepo Mapを表示
+func handleRepoMapCommand() bool {
+	cwd, _ := os.Getwd()
+	rm := repomap.NewRepoMap(cwd, 0) // 制限なし
+	if err := rm.Build(); err != nil {
+		red.Printf("Failed to build repo map: %v\n", err)
+		return true
+	}
+
+	if rm.GetSymbolCount() == 0 {
+		yellow.Println("No symbols found in current directory")
+		return true
+	}
+
+	cyan.Printf("🗺️  Repository Map (%d symbols from %d files)\n\n",
+		rm.GetSymbolCount(), len(rm.Files))
+	fmt.Println(rm.Generate())
+	return true
+}
+
 // printHeader はヘッダーを表示
 func printHeader(model string) {
 	cyan.Println("╔═══════════════════════════════════════════╗")
@@ -672,6 +715,7 @@ func printHelp() {
   /undo             - Undo last file change (restore from .bak)
   /config           - Show/change configuration (e.g., /config model deepseek-coder)
   /model [name]     - Show current model or switch model without restart
+  /repomap          - Show repository code structure map
   /version          - Show version information
   /help             - Show this help
 
@@ -759,6 +803,16 @@ func RunInteractiveWithResume(model string) {
 	if config := loadProjectConfig(); config != "" {
 		agent.SystemPrompt += "\n\n## Project Context:\n" + config
 		green.Println("📋 XELYON.md loaded")
+	}
+
+	// Repo Map 生成
+	cwd, _ := os.Getwd()
+	rm := repomap.NewRepoMap(cwd, 2000)
+	if err := rm.Build(); err == nil && rm.GetSymbolCount() > 0 {
+		repoMapStr := rm.Generate()
+		agent.SystemPrompt += "\n\n" + repoMapStr
+		green.Printf("🗺️  Repo map loaded (%d symbols from %d files)\n",
+			rm.GetSymbolCount(), len(rm.Files))
 	}
 
 	// REPLループ
