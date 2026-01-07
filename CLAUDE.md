@@ -53,10 +53,10 @@ go test ./...
 - [ ] internal/tools/builtin.go 新規作成（既存ツールをRegistry登録）
 - [ ] tools.go の switch文を Registry.Execute() に置き換え
 
-### Phase 3: 品質向上
-- [ ] internal/agent/verify.go 新規作成（変更後の自動検証）
-- [ ] Goファイル変更後に gofmt + go test を提案
-- [ ] テスト失敗時にrollback提案
+### Phase 3: 品質向上✅
+- [x] internal/agent/verify.go 新規作成（変更後の自動検証）（v0.11.0で完了）
+- [x] Goファイル変更後に gofmt + go test を提案（v0.11.0で完了）
+- [x] テスト失敗時にrollback提案（v0.11.0で完了）
 
 ### Phase 4: OSS公開準備✅
 - [x] LICENSE ファイル追加（MIT）（v0.10.1で完了）

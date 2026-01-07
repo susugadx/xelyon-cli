@@ -19,7 +19,8 @@ xelyon-cli/
 │   └── root.go            # Cobraコマンド定義
 ├── internal/
 │   ├── agent/             # エージェントロジック
-│   │   └── agent.go       # 対話ループ、コマンド処理、Undo管理
+│   │   ├── agent.go       # 対話ループ、コマンド処理、Undo管理
+│   │   └── verify.go      # 自動検証（go fmt, go test, rollback）
 │   ├── api/               # API クライアント（Provider Pattern）
 │   │   ├── provider.go    # Provider interface定義
 │   │   ├── client.go      # Client struct（タイムアウト管理）
@@ -82,6 +83,14 @@ xelyon-cli/
 - **一元管理**: `version.go`でバージョンを定数管理
 - **複数表示**: 起動バナー、`/version`コマンド、`--version`フラグ
 - **自動反映**: Version定数を変更するだけで全体に反映
+
+#### 7. 自動検証システム (internal/agent/verify.go)
+- **対象**: Goファイル（.go）の変更時
+- **go fmt**: コードフォーマット自動実行
+- **go test**: 該当パッケージのテスト実行
+- **rollback提案**: テスト失敗時に変更を取り消すか確認
+- **スキップ可能**: 検証を実行しない選択も可能
+- **プロジェクト検出**: go.mod の存在を確認
 
 ## コーディングルール
 

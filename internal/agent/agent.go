@@ -279,6 +279,11 @@ func (a *Agent) chat(input string) {
 				if len(a.changeStack) > 10 {
 					a.changeStack = a.changeStack[1:]
 				}
+
+				// Goファイル変更時の自動検証提案
+				if verifyResult := ShouldVerify(change.FilePath); verifyResult.NeedsVerify {
+					a.suggestVerification(change.FilePath, verifyResult)
+				}
 			}
 
 			// 結果を履歴に追加
@@ -742,5 +747,104 @@ func RunInteractiveWithResume(model string) {
 		}
 
 		agent.chat(input)
+	}
+}
+
+// suggestVerification はGoファイル変更後の検証を提案・実行
+func (a *Agent) suggestVerification(filePath string, vr *VerifyResult) {
+	if vr.FileType != "go" {
+		return
+	}
+
+	// go.mod存在チェック
+	if !CheckGoModExists() {
+		return // Goプロジェクトじゃない
+	}
+
+	fmt.Println()
+	yellow.Println("🔍 Go file changed. Run verification?")
+	fmt.Printf("   File: %s\n", filePath)
+	yellow.Print("   Run go fmt + go test? (y/n/f=fmt only): ")
+
+	reader := bufio.NewReader(os.Stdin)
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		return
+	}
+
+	input = strings.TrimSpace(strings.ToLower(input))
+
+	switch input {
+	case "y", "yes":
+		a.runVerification(filePath, true, true)
+	case "f", "fmt":
+		a.runVerification(filePath, true, false)
+	default:
+		yellow.Println("   Skipped verification")
+	}
+}
+
+// runVerification は実際に検証を実行
+func (a *Agent) runVerification(filePath string, runFmt, runTest bool) {
+	if runFmt {
+		cyan.Println("\n📝 Running go fmt...")
+		output, err := RunGoFmt(filePath)
+		if err != nil {
+			red.Printf("   go fmt failed: %v\n", err)
+		} else if output == "" {
+			green.Println("   ✅ Already formatted")
+		} else {
+			green.Printf("   ✅ Formatted: %s\n", output)
+		}
+	}
+
+	if runTest {
+		cyan.Println("\n🧪 Running go test...")
+		output, passed, _ := RunGoTest(filePath)
+
+		// 出力が長い場合は省略
+		lines := strings.Split(output, "\n")
+		if len(lines) > 20 {
+			for _, line := range lines[:10] {
+				fmt.Println("   " + line)
+			}
+			yellow.Printf("   ... (%d lines omitted)\n", len(lines)-20)
+			for _, line := range lines[len(lines)-10:] {
+				fmt.Println("   " + line)
+			}
+		} else {
+			for _, line := range lines {
+				if line != "" {
+					fmt.Println("   " + line)
+				}
+			}
+		}
+
+		if passed {
+			green.Println("   ✅ All tests passed")
+		} else {
+			red.Println("   ❌ Tests failed")
+			a.suggestRollback()
+		}
+	}
+}
+
+// suggestRollback はテスト失敗時にrollbackを提案
+func (a *Agent) suggestRollback() {
+	if len(a.changeStack) == 0 {
+		return
+	}
+
+	yellow.Print("\n   Rollback the change? (y/n): ")
+
+	reader := bufio.NewReader(os.Stdin)
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		return
+	}
+
+	input = strings.TrimSpace(strings.ToLower(input))
+	if input == "y" || input == "yes" {
+		handleUndoCommand(a)
 	}
 }
