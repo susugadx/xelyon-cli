@@ -154,6 +154,36 @@ default_model: deepseek-coder
 - `/config` コマンドで設定表示・変更
 - CLIフラグ（`--coder`, `--think`）が設定ファイルより優先
 
+### MCP（外部ツール連携）
+
+`~/.xelyon/mcp.json` を作成して外部MCPサーバーを登録:
+
+```json
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/dir"]
+    },
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "your-token-here"
+      }
+    }
+  }
+}
+```
+
+起動すると自動的に接続され、AIがMCPツールを使えるようになります。
+
+**利用可能なMCPサーバー例**:
+- `@modelcontextprotocol/server-filesystem` - ファイルシステム操作
+- `@modelcontextprotocol/server-github` - GitHub操作
+- `@modelcontextprotocol/server-git` - Git操作
+- その他、MCP互換のサーバーすべて
+
 ## プロジェクト設定
 
 プロジェクトルートの`XELYON.md`に、プロジェクトの詳細な設定とアーキテクチャが記載されています。
@@ -232,6 +262,13 @@ go fmt ./...
 MIT
 
 ## バージョン履歴
+
+### v0.12.0 (2026-01-07)
+- 🔌 **MCP対応**: Model Context Protocol クライアント実装
+  - 外部MCPサーバーのツールをXELYON CLI内で使用可能
+  - `~/.xelyon/mcp.json` で設定
+  - 起動時に自動接続、ツールを動的登録
+  - filesystem, GitHub等の公式MCPサーバーと連携可能
 
 ### v0.11.0 (2026-01-07)
 - 🔍 **自動検証機能**: Goファイル変更後の品質チェック

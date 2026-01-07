@@ -21,6 +21,9 @@ xelyon-cli/
 │   ├── agent/             # エージェントロジック
 │   │   ├── agent.go       # 対話ループ、コマンド処理、Undo管理
 │   │   └── verify.go      # 自動検証（go fmt, go test, rollback）
+│   ├── mcp/               # MCP連携
+│   │   ├── client.go      # MCPサーバー接続・ツール管理
+│   │   └── integration.go # Tool Registry統合
 │   ├── api/               # API クライアント（Provider Pattern）
 │   │   ├── provider.go    # Provider interface定義
 │   │   ├── client.go      # Client struct（タイムアウト管理）
@@ -91,6 +94,14 @@ xelyon-cli/
 - **rollback提案**: テスト失敗時に変更を取り消すか確認
 - **スキップ可能**: 検証を実行しない選択も可能
 - **プロジェクト検出**: go.mod の存在を確認
+
+#### 8. MCP連携 (internal/mcp/)
+- **MCPクライアント**: 外部MCPサーバーに接続
+- **ツール自動登録**: 接続時にツール一覧を取得、Tool Registryに登録
+- **設定ファイル**: `~/.xelyon/mcp.json` でサーバー定義
+- **stdioトランスポート**: コマンド実行でサーバー起動
+- **動的SystemPrompt**: MCPツールを自動的にAIに提示
+- **エラーハンドリング**: 接続失敗しても続行、警告表示のみ
 
 ## コーディングルール
 

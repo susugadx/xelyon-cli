@@ -2,6 +2,7 @@ package agent
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/history"
+	"github.com/susugadx/xelyon-cli/internal/mcp"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/version"
 )
@@ -33,6 +35,7 @@ type Agent struct {
 	session      *history.Session
 	storage      *history.Storage
 	changeStack  []tools.FileChange
+	mcpManager   *mcp.Manager
 }
 
 // NewAgent は新しいAgentを作成
@@ -43,13 +46,23 @@ func NewAgent(model string) *Agent {
 		storage = nil
 	}
 
-	return &Agent{
-		Model:        model,
-		CurrentModel: model, // 初期値としてmodelを設定
-		History:      []api.Message{},
-		session:      history.NewSession(model),
-		storage:      storage,
-		SystemPrompt: `You are XELYON, an expert AI coding assistant with the following core principles:
+	// MCP初期化
+	mcpManager := mcp.NewManager()
+	if err := mcpManager.LoadConfig(); err != nil {
+		yellow.Printf("Warning: Failed to load MCP config: %v\n", err)
+	}
+
+	ctx := context.Background()
+	if err := mcpManager.Connect(ctx); err != nil {
+		yellow.Printf("Warning: MCP connection error: %v\n", err)
+	}
+
+	// MCPツールをTool Registryに登録
+	if len(mcpManager.GetTools()) > 0 {
+		mcpManager.RegisterToToolRegistry(tools.DefaultRegistry)
+	}
+
+	systemPrompt := `You are XELYON, an expert AI coding assistant with the following core principles:
 
 ## Core Identity
 - Honest and truthful: Never fabricate information or make up commands
@@ -126,7 +139,27 @@ When you need to use a tool, respond with ONLY a JSON block like this:
 ### General Guidelines
 14. Respond in the same language as the user (Japanese or English)
 15. Be concise but helpful
-16. Show your thought process when solving complex problems`,
+16. Show your thought process when solving complex problems`
+
+	// MCPツールをSystemPromptに追加
+	if len(mcpManager.GetTools()) > 0 {
+		systemPrompt += "\n\n## MCP Tools (External)\n"
+		systemPrompt += "These tools are provided by external MCP servers:\n"
+		for _, t := range mcpManager.GetTools() {
+			systemPrompt += fmt.Sprintf("- mcp_%s_%s: %s\n",
+				t.ServerName, t.Name, t.Description)
+		}
+	}
+
+	return &Agent{
+		Model:        model,
+		CurrentModel: model,
+		History:      []api.Message{},
+		session:      history.NewSession(model),
+		storage:      storage,
+		changeStack:  []tools.FileChange{},
+		mcpManager:   mcpManager,
+		SystemPrompt: systemPrompt,
 	}
 }
 

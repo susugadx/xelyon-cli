@@ -66,8 +66,8 @@ go test ./...
 - [x] .gitignore 追加（v0.10.1で完了）
 
 ### Phase 5: 差別化機能
-- [ ] RAG連携（XELYON Web API）
-- [ ] MCP対応（ToolRegistryに外部ツール登録）
+- [x] MCP対応（ToolRegistryに外部ツール登録）（v0.12.0で完了）
+- [ ] RAG連携（XELYON Web API）- Web版リリース後
 - [ ] Repo Map実装（go-tree-sitter）
 
 ---
