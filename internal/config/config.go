@@ -24,8 +24,7 @@ type Config struct {
 
 // ProviderModelConfig はプロバイダーごとのモデル設定
 type ProviderModelConfig struct {
-	DefaultModel    string   `yaml:"default_model"`
-	AvailableModels []string `yaml:"available_models,omitempty"`
+	DefaultModel string `yaml:"default_model"`
 }
 
 // CloudConfig はXELYON Cloud連携設定（将来用）
@@ -42,28 +41,22 @@ func DefaultConfig() *Config {
 		DefaultModel:    "deepseek-coder",
 		ProviderModels: map[string]ProviderModelConfig{
 			"deepseek": {
-				DefaultModel:    "deepseek-coder",
-				AvailableModels: []string{"deepseek-chat", "deepseek-coder", "deepseek-reasoner"},
+				DefaultModel: "deepseek-coder",
 			},
 			"openai": {
-				DefaultModel:    "gpt-4o",
-				AvailableModels: []string{"gpt-4o", "gpt-4o-mini", "gpt-4-turbo"},
+				DefaultModel: "gpt-4o",
 			},
 			"gemini": {
-				DefaultModel:    "gemini-2.0-flash-exp",
-				AvailableModels: []string{"gemini-2.0-flash-exp", "gemini-1.5-pro", "gemini-1.5-flash"},
+				DefaultModel: "gemini-2.0-flash-exp",
 			},
 			"claude": {
-				DefaultModel:    "claude-sonnet-4-20250514",
-				AvailableModels: []string{"claude-sonnet-4-20250514", "claude-opus-4", "claude-haiku-3-5-20241022"},
+				DefaultModel: "claude-sonnet-4-20250514",
 			},
 			"ollama": {
-				DefaultModel:    "llama3",
-				AvailableModels: []string{}, // 自動検出されるため空
+				DefaultModel: "llama3",
 			},
 			"groq": {
-				DefaultModel:    "llama3-70b-8192",
-				AvailableModels: []string{"llama3-70b-8192", "llama3-8b-8192", "mixtral-8x7b-32768"},
+				DefaultModel: "llama3-70b-8192",
 			},
 		},
 	}
@@ -163,23 +156,10 @@ func (c *Config) GetModelForProvider(provider string) string {
 	return "" // フォールバック
 }
 
-// ValidateModelForProvider はモデル名がプロバイダーに対応しているか検証
+// ValidateModelForProvider は任意のモデル名を受け付ける（後方互換のため残す）
+// 注: v0.16.0以降、モデル名の検証は行わない
 func (c *Config) ValidateModelForProvider(provider, model string) bool {
-	providerConfig, ok := c.ProviderModels[provider]
-	if !ok {
-		return false // プロバイダー不明
-	}
-
-	// available_modelsが空ならバリデーションスキップ（Ollama等）
-	if len(providerConfig.AvailableModels) == 0 {
-		return true
-	}
-
-	// モデル名がリストに含まれているか確認
-	for _, m := range providerConfig.AvailableModels {
-		if m == model {
-			return true
-		}
-	}
-	return false
+	// プロバイダーが存在するかのみチェック
+	_, ok := c.ProviderModels[provider]
+	return ok
 }
