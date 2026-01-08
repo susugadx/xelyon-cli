@@ -169,16 +169,17 @@ Examples:
   xelyon --think "design review"  # Deep thinking mode`,
 	Run: func(cmd *cobra.Command, args []string) {
 		model := getModel(cmd)
+		provider := getProvider()
 
 		// --resume フラグチェック
 		if resume && len(args) == 0 && len(files) == 0 {
-			agent.RunInteractiveWithResume(model)
+			agent.RunInteractiveWithResume(model, provider)
 			return
 		}
 
 		// 引数なし & ファイル指定なし → 対話モード
 		if len(args) == 0 && len(files) == 0 {
-			agent.RunInteractive(model)
+			agent.RunInteractive(model, provider)
 			return
 		}
 

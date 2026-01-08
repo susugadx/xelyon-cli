@@ -29,18 +29,20 @@ var (
 
 // Agent はCLIエージェント
 type Agent struct {
-	Model        string // 初期モデル（後方互換性のため保持）
-	CurrentModel string // 現在のモデル（再起動なしで切り替え可能）
-	History      []api.Message
-	SystemPrompt string
-	session      *history.Session
-	storage      *history.Storage
-	changeStack  []tools.FileChange
-	mcpManager   *mcp.Manager
+	Model           string // 初期モデル（後方互換性のため保持）
+	CurrentModel    string // 現在のモデル（再起動なしで切り替え可能）
+	CurrentProvider api.Provider
+	ProviderName    string
+	History         []api.Message
+	SystemPrompt    string
+	session         *history.Session
+	storage         *history.Storage
+	changeStack     []tools.FileChange
+	mcpManager      *mcp.Manager
 }
 
 // NewAgent は新しいAgentを作成
-func NewAgent(model string) *Agent {
+func NewAgent(model string, provider api.Provider) *Agent {
 	storage, err := history.NewStorage()
 	if err != nil {
 		red.Printf("Warning: Failed to initialize history storage: %v\n", err)
@@ -153,23 +155,25 @@ When you need to use a tool, respond with ONLY a JSON block like this:
 	}
 
 	return &Agent{
-		Model:        model,
-		CurrentModel: model,
-		History:      []api.Message{},
-		session:      history.NewSession(model),
-		storage:      storage,
-		changeStack:  []tools.FileChange{},
-		mcpManager:   mcpManager,
-		SystemPrompt: systemPrompt,
+		Model:           model,
+		CurrentModel:    model,
+		CurrentProvider: provider,
+		ProviderName:    provider.Name(),
+		History:         []api.Message{},
+		session:         history.NewSession(model),
+		storage:         storage,
+		changeStack:     []tools.FileChange{},
+		mcpManager:      mcpManager,
+		SystemPrompt:    systemPrompt,
 	}
 }
 
 // RunInteractive は対話モードを開始
-func RunInteractive(model string) {
-	agent := NewAgent(model)
+func RunInteractive(model string, provider api.Provider) {
+	agent := NewAgent(model, provider)
 
 	// ヘッダー表示
-	printHeader(model)
+	printHeader(model, provider)
 
 	// XELYON.md読み込み
 	if config := loadProjectConfig(); config != "" {
@@ -211,9 +215,16 @@ func RunInteractive(model string) {
 	}
 }
 
-// RunOnce はワンショットモードを実行
+// RunOnce はワンショットモードを実行（後方互換用、Providerは未使用）
 func RunOnce(query string, model string) {
-	agent := NewAgent(model)
+	// Note: この関数は古いAPI (api.ChatWithTools) を使用
+	// 将来的に削除予定
+	agent := &Agent{
+		Model:        model,
+		CurrentModel: model,
+		History:      []api.Message{},
+		session:      history.NewSession(model),
+	}
 
 	if config := loadProjectConfig(); config != "" {
 		agent.SystemPrompt += "\n\n## Project Context:\n" + config
@@ -277,7 +288,8 @@ func (a *Agent) chat(input string) {
 		var err error
 
 		for retry := 0; retry < maxRetries; retry++ {
-			response, err = api.ChatWithTools(a.SystemPrompt, a.History, a.CurrentModel)
+			ctx := context.Background()
+			response, err = a.CurrentProvider.ChatWithTools(ctx, a.SystemPrompt, a.History, a.CurrentModel)
 			if err == nil {
 				break // 成功
 			}
@@ -694,11 +706,12 @@ func handleRepoMapCommand() bool {
 }
 
 // printHeader はヘッダーを表示
-func printHeader(model string) {
+func printHeader(model string, provider api.Provider) {
 	cyan.Println("╔═══════════════════════════════════════════╗")
 	cyan.Printf("║  🚀 XELYON CLI v%-25s║\n", version.GetVersion())
 	cyan.Println("║  AI-powered coding assistant              ║")
 	cyan.Println("╚═══════════════════════════════════════════╝")
+	green.Printf("🌐 Provider: %s\n", provider.Name())
 	fmt.Printf("Model: %s\n", modelDisplayName(model))
 	yellow.Println("Type /help for commands, /exit to quit")
 }
@@ -770,34 +783,34 @@ func loadProjectConfig() string {
 }
 
 // RunInteractiveWithResume は最後のセッションを復元して起動
-func RunInteractiveWithResume(model string) {
+func RunInteractiveWithResume(model string, provider api.Provider) {
 	storage, err := history.NewStorage()
 	if err != nil {
 		red.Printf("Failed to initialize storage: %v\n", err)
-		RunInteractive(model)
+		RunInteractive(model, provider)
 		return
 	}
 
 	sessionID, err := storage.GetLastSession()
 	if err != nil {
 		yellow.Println("No previous session found, starting new session")
-		RunInteractive(model)
+		RunInteractive(model, provider)
 		return
 	}
 
 	session, err := storage.Load(sessionID)
 	if err != nil {
 		red.Printf("Failed to load session: %v\n", err)
-		RunInteractive(model)
+		RunInteractive(model, provider)
 		return
 	}
 
 	// ロード済みセッションでAgent作成
-	agent := NewAgent(model)
+	agent := NewAgent(model, provider)
 	agent.session = session
 	agent.History = session.ToAPIMessages()
 
-	printHeader(model)
+	printHeader(model, provider)
 	green.Printf("📂 Resumed session %s (%d messages)\n", sessionID, len(session.Messages))
 
 	if config := loadProjectConfig(); config != "" {
