@@ -269,7 +269,7 @@ func (m *Manager) Reconnect(ctx context.Context, serverName string) error {
 
 	// 既存のセッションを閉じる
 	if session, ok := m.sessions[serverName]; ok {
-		session.Close()
+		defer session.Close()
 		delete(m.sessions, serverName)
 	}
 

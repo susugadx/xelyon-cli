@@ -78,8 +78,12 @@ func executeLint(path, autoFixStr string) (string, string, error) {
 		var backupPath string
 		if fileInfo, err := os.Stat(absPath); err == nil && !fileInfo.IsDir() {
 			// パスがファイルの場合のみバックアップ
-			backupPath, _ = createBackup(absPath)
-			if backupPath != "" {
+			var backupErr error
+			backupPath, backupErr = createBackup(absPath)
+			if backupErr != nil {
+				yellow.Printf("Warning: Failed to create backup: %v\n", backupErr)
+				yellow.Println("Continuing without backup (changes may be irreversible)")
+			} else if backupPath != "" {
 				green.Printf("📦 Backup created: %s\n", backupPath)
 			}
 		} else {

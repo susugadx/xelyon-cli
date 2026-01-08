@@ -68,7 +68,12 @@ func executeBash(command string) string {
 	// 実行
 	green.Printf("▶ Running: %s\n", command)
 	cmd := exec.Command("bash", "-c", command)
-	cmd.Dir, _ = os.Getwd()
+	if cwd, err := os.Getwd(); err == nil {
+		cmd.Dir = cwd
+	} else {
+		yellow.Printf("Warning: Could not get current directory: %v\n", err)
+		cmd.Dir = "." // フォールバック
+	}
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {

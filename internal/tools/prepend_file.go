@@ -25,7 +25,12 @@ func executePrependFile(path, content string) (string, string, error) {
 	var oldContent []byte
 	if _, err := os.Stat(absPath); err == nil {
 		exists = true
-		oldContent, _ = os.ReadFile(absPath)
+		var readErr error
+		oldContent, readErr = os.ReadFile(absPath)
+		if readErr != nil && !os.IsNotExist(readErr) {
+			// ファイル不存在以外のエラーは報告
+			return fmt.Sprintf("Error: Failed to read file: %v", readErr), "", nil
+		}
 	}
 
 	backupPath, err := createBackup(absPath)

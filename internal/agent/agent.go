@@ -211,7 +211,11 @@ func RunInteractive(model string, provider api.Provider) {
 	}
 
 	// Repo Map 生成
-	cwd, _ := os.Getwd()
+	cwd, err := os.Getwd()
+	if err != nil {
+		yellow.Printf("Warning: Could not get current directory: %v\n", err)
+		cwd = "." // フォールバック
+	}
 	rm := repomap.NewRepoMap(cwd, 2000) // 最大2000トークン
 	if err := rm.Build(); err == nil && rm.GetSymbolCount() > 0 {
 		repoMapStr := rm.Generate()
@@ -261,7 +265,11 @@ func RunOnce(query string, model string) {
 	}
 
 	// Repo Map 生成
-	cwd, _ := os.Getwd()
+	cwd, err := os.Getwd()
+	if err != nil {
+		yellow.Printf("Warning: Could not get current directory: %v\n", err)
+		cwd = "." // フォールバック
+	}
 	rm := repomap.NewRepoMap(cwd, 2000)
 	if err := rm.Build(); err == nil && rm.GetSymbolCount() > 0 {
 		repoMapStr := rm.Generate()
@@ -717,7 +725,11 @@ func handleConfigCommand(args []string) bool {
 
 // handleRepoMapCommand はRepo Mapを表示
 func handleRepoMapCommand() bool {
-	cwd, _ := os.Getwd()
+	cwd, err := os.Getwd()
+	if err != nil {
+		yellow.Printf("Warning: Could not get current directory: %v\n", err)
+		cwd = "." // フォールバック
+	}
 	rm := repomap.NewRepoMap(cwd, 0) // 制限なし
 	if err := rm.Build(); err != nil {
 		red.Printf("Failed to build repo map: %v\n", err)
@@ -849,7 +861,11 @@ func RunInteractiveWithResume(model string, provider api.Provider) {
 	}
 
 	// Repo Map 生成
-	cwd, _ := os.Getwd()
+	cwd, err := os.Getwd()
+	if err != nil {
+		yellow.Printf("Warning: Could not get current directory: %v\n", err)
+		cwd = "." // フォールバック
+	}
 	rm := repomap.NewRepoMap(cwd, 2000)
 	if err := rm.Build(); err == nil && rm.GetSymbolCount() > 0 {
 		repoMapStr := rm.Generate()
