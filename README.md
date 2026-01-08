@@ -161,17 +161,33 @@ export XELYON_PROVIDER=ollama
 
 ### 利用可能なツール
 
-AIが自動で以下のツールを使用します:
+AIが自動で以下のツールを使用します（全19ツール）:
 
-- **bash** - シェルコマンド実行（sed/awk等の編集コマンドはブロック）
+#### ファイル編集系（5ツール）
 - **read_file** - ファイル読み込み
 - **write_file** - ファイル作成・上書き（.bakバックアップ自動作成）
 - **str_replace** - ファイル内の文字列置換（部分編集、diff表示、.bakバックアップ）
+- **append_file** - ファイル末尾に追加（非破壊的、既存ファイルのみバックアップ）
+- **prepend_file** - ファイル先頭に追加（非破壊的、既存ファイルのみバックアップ）
+
+#### ファイル管理系（2ツール）
 - **list_dir** - ディレクトリ一覧
+- **create_dir** - ディレクトリ作成（親ディレクトリも含む、冪等的）
+
+#### Git操作系（6ツール）
 - **git_status, git_diff, git_add, git_commit, git_push, git_log** - Git操作
+
+#### 開発支援系（2ツール）
+- **run_test** - テストフレームワークを自動検出して実行（Go/npm/pytest/cargo対応）
+- **format** - フォーマッターを自動検出して実行（gofmt/prettier/black/rustfmt対応）
+
+#### 検索系（3ツール）
 - **search_code** - コード内検索（grep）
 - **search_file** - ファイル名検索（find）
 - **web_search** - Web検索（Serper API、上位5件）
+
+#### シェル実行（1ツール）
+- **bash** - シェルコマンド実行（sed/awk等の編集コマンドはブロック）
 
 ### Undo機能の使い方
 
@@ -404,6 +420,21 @@ go fmt ./...
 MIT
 
 ## バージョン履歴
+
+### v0.17.0 Phase 1 (2026-01-09)
+- 🛠️ **5つの新ツール追加**（Phase 1: 低リスク・高価値ツール）
+  - **append_file**: ファイル末尾に追加（非破壊的、プレビュー表示）
+  - **prepend_file**: ファイル先頭に追加（非破壊的、プレビュー表示）
+  - **create_dir**: ディレクトリ作成（親ディレクトリも含む、冪等的）
+  - **run_test**: テストフレームワークを自動検出して実行
+    - 対応: Go (go test), npm/yarn (npm test), pytest, cargo
+    - テスト出力を完全表示（切り詰めなし）
+  - **format**: フォーマッターを自動検出して実行
+    - 対応: gofmt, prettier, black, rustfmt
+    - 複数ファイルの一括フォーマット
+- 📋 **SystemPrompt改善**: ツールをカテゴリ別に整理
+  - File Operations, File Management, Git Operations, Development Tools, Search & Discovery, Shell
+- 🎯 **開発支援強化**: テスト実行とコードフォーマットが1コマンドで可能に
 
 ### v0.15.0 (2026-01-09)
 - 🌐 **マルチプロバイダー対応**: 6種類のLLMプロバイダーに対応
