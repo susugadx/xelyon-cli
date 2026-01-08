@@ -1,0 +1,199 @@
+package api
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/ui"
+)
+
+// OllamaProvider はOllama APIのプロバイダー実装
+type OllamaProvider struct {
+	baseURL string
+}
+
+// NewOllamaProvider は新しいOllamaProviderを作成
+func NewOllamaProvider(baseURL string) *OllamaProvider {
+	if baseURL == "" {
+		baseURL = "http://localhost:11434"
+	}
+	return &OllamaProvider{
+		baseURL: baseURL,
+	}
+}
+
+// Name はプロバイダー名を返す
+func (p *OllamaProvider) Name() string {
+	return "Ollama"
+}
+
+// OllamaRequest はOllama APIリクエスト
+type OllamaRequest struct {
+	Model    string    `json:"model"`
+	Messages []Message `json:"messages"`
+	Stream   bool      `json:"stream"`
+}
+
+// OllamaMessageContent はOllamaのメッセージコンテンツ
+type OllamaMessageContent struct {
+	Content string `json:"content"`
+}
+
+// OllamaStreamResponse はOllamaのストリームレスポンス
+type OllamaStreamResponse struct {
+	Message OllamaMessageContent `json:"message"`
+	Done    bool                 `json:"done"`
+}
+
+// OllamaModel はモデル情報
+type OllamaModel struct {
+	Name string `json:"name"`
+}
+
+// OllamaTagsResponse はモデル一覧のレスポンス
+type OllamaTagsResponse struct {
+	Models []OllamaModel `json:"models"`
+}
+
+// ChatWithTools は Provider interface の実装（context対応）
+func (p *OllamaProvider) ChatWithTools(ctx context.Context, systemPrompt string, history []Message, model string) (string, error) {
+	// モデル名はそのまま使用（ハードコードしない）
+	if model == "" {
+		model = "llama3"
+	}
+
+	// メッセージ構築
+	messages := []Message{
+		{Role: "system", Content: systemPrompt},
+	}
+	messages = append(messages, history...)
+
+	reqBody := OllamaRequest{
+		Model:    model,
+		Messages: messages,
+		Stream:   true,
+	}
+
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", err
+	}
+
+	url := p.baseURL + "/api/chat"
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return "", err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	// スピナー開始
+	spinner := ui.NewSpinner()
+	spinner.Start("Thinking")
+
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		spinner.Stop()
+		// 接続エラー時は親切なメッセージを表示
+		if strings.Contains(err.Error(), "connection refused") {
+			return "", fmt.Errorf("Ollama is not running. Please start it with `ollama serve`")
+		}
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		spinner.Stop()
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("API error (%d): %s", resp.StatusCode, string(body))
+	}
+
+	// Ollamaは常にJSONLストリーム形式
+	return p.handleStreamingResponse(ctx, resp, spinner)
+}
+
+// handleStreamingResponse はストリーミングレスポンスを処理（JSON Lines形式）
+func (p *OllamaProvider) handleStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
+	var fullResponse strings.Builder
+	scanner := bufio.NewScanner(resp.Body)
+	firstChunk := true
+
+	for scanner.Scan() {
+		// contextキャンセルチェック
+		select {
+		case <-ctx.Done():
+			spinner.Stop()
+			return "", ctx.Err()
+		default:
+		}
+
+		line := scanner.Text()
+		if line == "" {
+			continue
+		}
+
+		var streamResp OllamaStreamResponse
+		if err := json.Unmarshal([]byte(line), &streamResp); err != nil {
+			continue
+		}
+
+		// done=trueで終了
+		if streamResp.Done {
+			break
+		}
+
+		content := streamResp.Message.Content
+		if content != "" {
+			// 最初のコンテンツでスピナー停止
+			if firstChunk {
+				spinner.Stop()
+				firstChunk = false
+			}
+
+			fmt.Print(content)
+			fullResponse.WriteString(content)
+		}
+	}
+
+	fmt.Println()
+	return fullResponse.String(), nil
+}
+
+// ListModels はインストール済みモデルを取得
+func (p *OllamaProvider) ListModels() ([]string, error) {
+	url := p.baseURL + "/api/tags"
+	resp, err := http.Get(url)
+	if err != nil {
+		if strings.Contains(err.Error(), "connection refused") {
+			return nil, fmt.Errorf("Ollama is not running. Please start it with `ollama serve`")
+		}
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("API error (%d): %s", resp.StatusCode, string(body))
+	}
+
+	var result OllamaTagsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+
+	var models []string
+	for _, m := range result.Models {
+		models = append(models, m.Name)
+	}
+	return models, nil
+}

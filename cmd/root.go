@@ -15,26 +15,41 @@ import (
 )
 
 var (
-	userID string
-	files  []string
-	edit   bool
-	output string
-	resume bool
+	userID       string
+	files        []string
+	edit         bool
+	output       string
+	resume       bool
+	providerFlag string
+	modelFlag    string
 )
 
 const projectConfigFile = "XELYON.md"
 
-// getProvider は環境変数からProviderを取得（将来の拡張用）
-// 現在はDeepSeekのみ対応、XELYON_PROVIDER環境変数で切り替え可能な設計
-// 使用例: provider := getProvider()
-// 注: agent.goの改修後に有効化予定
+// getProvider は環境変数/設定ファイルからProviderを取得
+// 優先順位: CLI flag > 環境変数 > 設定ファイル > デフォルト
 func getProvider() api.Provider {
-	providerName := os.Getenv("XELYON_PROVIDER")
+	// 優先順位: CLI flag > 環境変数 > 設定ファイル > デフォルト
+	providerName := providerFlag
+	if providerName == "" {
+		providerName = os.Getenv("XELYON_PROVIDER")
+	}
+	if providerName == "" {
+		cfg, _ := config.LoadConfig()
+		if cfg != nil {
+			providerName = cfg.DefaultProvider
+		}
+	}
 	if providerName == "" {
 		providerName = "deepseek" // デフォルト
 	}
 
-	switch providerName {
+	return getProviderByName(providerName)
+}
+
+// getProviderByName はプロバイダー名から Provider インスタンスを生成
+func getProviderByName(providerName string) api.Provider {
+	switch strings.ToLower(providerName) {
 	case "deepseek":
 		apiKey := os.Getenv("DEEPSEEK_API_KEY")
 		if apiKey == "" {
@@ -42,15 +57,49 @@ func getProvider() api.Provider {
 			os.Exit(1)
 		}
 		return api.NewDeepSeekProvider(apiKey)
-	case "claude":
-		// TODO: Phase 3以降で実装
-		fmt.Fprintln(os.Stderr, "Error: Claude provider not yet implemented")
-		fmt.Fprintln(os.Stderr, "Set XELYON_PROVIDER=deepseek or remove the variable")
-		os.Exit(1)
-		return nil
+
+	case "openai":
+		apiKey := os.Getenv("OPENAI_API_KEY")
+		if apiKey == "" {
+			fmt.Fprintln(os.Stderr, "Error: OPENAI_API_KEY not set")
+			os.Exit(1)
+		}
+		return api.NewOpenAIProvider(apiKey)
+
+	case "gemini":
+		apiKey := os.Getenv("GEMINI_API_KEY")
+		if apiKey == "" {
+			fmt.Fprintln(os.Stderr, "Error: GEMINI_API_KEY not set")
+			os.Exit(1)
+		}
+		return api.NewGeminiProvider(apiKey)
+
+	case "claude", "anthropic":
+		apiKey := os.Getenv("ANTHROPIC_API_KEY")
+		if apiKey == "" {
+			fmt.Fprintln(os.Stderr, "Error: ANTHROPIC_API_KEY not set")
+			os.Exit(1)
+		}
+		return api.NewClaudeProvider(apiKey)
+
+	case "ollama":
+		baseURL := os.Getenv("OLLAMA_BASE_URL")
+		if baseURL == "" {
+			baseURL = "http://localhost:11434"
+		}
+		return api.NewOllamaProvider(baseURL)
+
+	case "groq":
+		apiKey := os.Getenv("GROQ_API_KEY")
+		if apiKey == "" {
+			fmt.Fprintln(os.Stderr, "Error: GROQ_API_KEY not set")
+			os.Exit(1)
+		}
+		return api.NewGroqProvider(apiKey)
+
 	default:
-		fmt.Fprintf(os.Stderr, "Error: unknown provider '%s'\n", providerName)
-		fmt.Fprintln(os.Stderr, "Supported providers: deepseek")
+		fmt.Fprintf(os.Stderr, "Error: Unknown provider: %s\n", providerName)
+		fmt.Fprintln(os.Stderr, "Supported providers: deepseek, openai, gemini, claude, ollama, groq")
 		os.Exit(1)
 		return nil
 	}
@@ -226,10 +275,14 @@ func init() {
 	rootCmd.PersistentFlags().BoolVarP(&edit, "edit", "e", false, "Enable edit mode")
 	rootCmd.PersistentFlags().StringVarP(&output, "output", "o", "", "Output file path")
 
-	// 新規: モデル選択フラグ
+	// 新規: モデル選択フラグ（後方互換のため残す）
 	rootCmd.Flags().Bool("coder", false, "Use DeepSeek Coder (code-focused)")
 	rootCmd.Flags().Bool("think", false, "Use DeepSeek R1 (deep reasoning)")
 	rootCmd.Flags().Bool("claude", false, "Use Claude (via Vertex AI)")
+
+	// 新規: プロバイダー/モデル指定フラグ
+	rootCmd.Flags().StringVarP(&providerFlag, "provider", "p", "", "Specify LLM provider (deepseek, openai, gemini, claude, ollama, groq)")
+	rootCmd.Flags().StringVarP(&modelFlag, "model", "m", "", "Specify model name (e.g., gpt-4o, gemini-2.0-flash-exp)")
 
 	// 新規: --resume フラグ
 	rootCmd.Flags().BoolVar(&resume, "resume", false, "Resume last session")

@@ -1,12 +1,13 @@
 # XELYON CLI プロジェクト設定
 
 ## 概要
-Go製のAI搭載コーディングアシスタントCLI。DeepSeek APIを使った対話型エージェントで、ツールを使って実際にコード編集・Git操作を実行します。
+Go製のAI搭載コーディングアシスタントCLI。複数のLLMプロバイダー（DeepSeek, OpenAI, Gemini, Claude, Ollama, Groq）に対応した対話型エージェントで、ツールを使って実際にコード編集・Git操作を実行します。
 
 ## 技術スタック
 - **Go 1.22+**
 - **Cobra** - CLIフレームワーク
-- **DeepSeek API** - AI推論（V3, Coder, R1モデル）
+- **LLM APIs** - DeepSeek, OpenAI, Gemini, Claude (Anthropic), Ollama, Groq
+- **Tree-sitter** - コード構造解析
 - **fatih/color** - ターミナル色付け
 
 ## 開発ルール（必ず守ること）
@@ -67,6 +68,11 @@ xelyon-cli/
 │   │   ├── provider.go    # Provider interface定義
 │   │   ├── client.go      # Client struct（タイムアウト管理）
 │   │   ├── deepseek.go    # DeepSeekProvider実装
+│   │   ├── openai.go      # OpenAIProvider実装
+│   │   ├── gemini.go      # GeminiProvider実装
+│   │   ├── claude.go      # ClaudeProvider実装
+│   │   ├── ollama.go      # OllamaProvider実装
+│   │   ├── groq.go        # GroqProvider実装
 │   │   ├── serper.go      # Serper API（Web検索）
 │   │   └── xelyon.go      # RAG検索API
 │   ├── config/            # 設定管理
@@ -117,18 +123,36 @@ xelyon-cli/
 - **メタデータ分離**: session_id, model, timestamp, preview等
 - **保存先**: `~/.xelyon/history/`
 
-#### 5. 設定管理 (internal/config/)
-- **YAML形式**: `~/.xelyon/config.yaml`
-- **デフォルトモデル**: default_model設定で起動時のモデル指定
-- **自動作成**: 初回起動時にデフォルト設定を自動生成
-- **バリデーション**: 無効なモデル名を拒否
+#### 5. マルチプロバイダーシステム (internal/api/)
+- **Provider Interface**: 統一されたAPI（`ChatWithTools()`）
+- **6種類のプロバイダー**:
+  - **DeepSeek**: deepseek-chat, deepseek-coder, deepseek-reasoner
+  - **OpenAI**: gpt-4o, gpt-4o-mini, gpt-4-turbo
+  - **Gemini**: gemini-2.0-flash-exp, gemini-1.5-pro, gemini-1.5-flash
+  - **Claude**: claude-sonnet-4-20250514, claude-opus-4, claude-haiku-3-5
+  - **Ollama**: llama3, codellama, mistral等（ローカル）
+  - **Groq**: llama3-70b-8192, llama3-8b-8192, mixtral-8x7b
+- **切り替え方法**:
+  - 環境変数 `XELYON_PROVIDER`
+  - CLIフラグ `--provider <name>`
+  - 設定ファイル `default_provider`
+- **ストリーミング対応**: 全プロバイダーでリアルタイム出力
+- **フォールバック実装**: 非ストリーミング時は自動で一括表示
 
-#### 6. バージョン管理 (internal/version/)
+#### 6. 設定管理 (internal/config/)
+- **YAML形式**: `~/.xelyon/config.yaml`
+- **プロバイダー設定**: default_provider, provider_models
+- **デフォルトモデル**: default_model設定で起動時のモデル指定
+- **プロバイダーごとの設定**: 各プロバイダーのデフォルトモデルと利用可能モデル一覧
+- **自動作成**: 初回起動時にデフォルト設定を自動生成
+- **バリデーション**: 無効なプロバイダー/モデル名を拒否
+
+#### 7. バージョン管理 (internal/version/)
 - **一元管理**: `version.go`でバージョンを定数管理
 - **複数表示**: 起動バナー、`/version`コマンド、`--version`フラグ
 - **自動反映**: Version定数を変更するだけで全体に反映
 
-#### 7. 自動検証システム (internal/agent/verify.go)
+#### 8. 自動検証システム (internal/agent/verify.go)
 - **対象**: Goファイル（.go）の変更時
 - **go fmt**: コードフォーマット自動実行
 - **go test**: 該当パッケージのテスト実行
@@ -136,7 +160,7 @@ xelyon-cli/
 - **スキップ可能**: 検証を実行しない選択も可能
 - **プロジェクト検出**: go.mod の存在を確認
 
-#### 8. MCP連携 (internal/mcp/)
+#### 9. MCP連携 (internal/mcp/)
 - **MCPクライアント**: 外部MCPサーバーに接続
 - **ツール自動登録**: 接続時にツール一覧を取得、Tool Registryに登録
 - **設定ファイル**: `~/.xelyon/mcp.json` でサーバー定義
@@ -144,7 +168,7 @@ xelyon-cli/
 - **動的SystemPrompt**: MCPツールを自動的にAIに提示
 - **エラーハンドリング**: 接続失敗しても続行、警告表示のみ
 
-#### 9. Repo Map (internal/repomap/)
+#### 10. Repo Map (internal/repomap/)
 - **Tree-sitter解析**: AST解析で正確なシンボル抽出
 - **複数言語対応**: Go, JavaScript, TypeScript, Python
 - **シンボル抽出**: 関数、メソッド、構造体、クラス、インターフェース

@@ -15,9 +15,17 @@ const (
 
 // Config はXELYON CLIの設定
 type Config struct {
-	DefaultModel string `yaml:"default_model"`
+	DefaultProvider string                         `yaml:"default_provider"`
+	DefaultModel    string                         `yaml:"default_model"`
+	ProviderModels  map[string]ProviderModelConfig `yaml:"provider_models"`
 	// 将来の拡張用
 	// Cloud CloudConfig `yaml:"cloud,omitempty"`
+}
+
+// ProviderModelConfig はプロバイダーごとのモデル設定
+type ProviderModelConfig struct {
+	DefaultModel    string   `yaml:"default_model"`
+	AvailableModels []string `yaml:"available_models,omitempty"`
 }
 
 // CloudConfig はXELYON Cloud連携設定（将来用）
@@ -30,7 +38,34 @@ type Config struct {
 // DefaultConfig はデフォルト設定
 func DefaultConfig() *Config {
 	return &Config{
-		DefaultModel: "deepseek-coder",
+		DefaultProvider: "deepseek",
+		DefaultModel:    "deepseek-coder",
+		ProviderModels: map[string]ProviderModelConfig{
+			"deepseek": {
+				DefaultModel:    "deepseek-coder",
+				AvailableModels: []string{"deepseek-chat", "deepseek-coder", "deepseek-reasoner"},
+			},
+			"openai": {
+				DefaultModel:    "gpt-4o",
+				AvailableModels: []string{"gpt-4o", "gpt-4o-mini", "gpt-4-turbo"},
+			},
+			"gemini": {
+				DefaultModel:    "gemini-2.0-flash-exp",
+				AvailableModels: []string{"gemini-2.0-flash-exp", "gemini-1.5-pro", "gemini-1.5-flash"},
+			},
+			"claude": {
+				DefaultModel:    "claude-sonnet-4-20250514",
+				AvailableModels: []string{"claude-sonnet-4-20250514", "claude-opus-4", "claude-haiku-3-5-20241022"},
+			},
+			"ollama": {
+				DefaultModel:    "llama3",
+				AvailableModels: []string{}, // 自動検出されるため空
+			},
+			"groq": {
+				DefaultModel:    "llama3-70b-8192",
+				AvailableModels: []string{"llama3-70b-8192", "llama3-8b-8192", "mixtral-8x7b-32768"},
+			},
+		},
 	}
 }
 
@@ -62,6 +97,14 @@ func LoadConfig() (*Config, error) {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
 
+	// デフォルト値を適用
+	if cfg.DefaultProvider == "" {
+		cfg.DefaultProvider = "deepseek"
+	}
+	if cfg.ProviderModels == nil {
+		cfg.ProviderModels = DefaultConfig().ProviderModels
+	}
+
 	return &cfg, nil
 }
 
@@ -85,7 +128,7 @@ func SaveConfig(cfg *Config) error {
 	}
 
 	// ヘッダーコメント追加
-	header := "# XELYON CLI 設定\n# Models: deepseek-chat, deepseek-coder, deepseek-reasoner\n\n"
+	header := "# XELYON CLI 設定\n# Providers: deepseek, openai, gemini, claude, ollama, groq\n# 各プロバイダーのモデル設定は provider_models で管理されます\n\n"
 	fullData := []byte(header + string(data))
 
 	if err := os.WriteFile(configPath, fullData, 0644); err != nil {
@@ -105,7 +148,7 @@ func getConfigPath() (string, error) {
 	return filepath.Join(home, configDir, configFile), nil
 }
 
-// ValidateModel はモデル名が有効かチェック
+// ValidateModel はモデル名が有効かチェック（後方互換のため残す）
 func ValidateModel(model string) bool {
 	validModels := map[string]bool{
 		"deepseek-chat":     true,
@@ -114,4 +157,33 @@ func ValidateModel(model string) bool {
 		"claude":            true, // 将来用
 	}
 	return validModels[model]
+}
+
+// GetModelForProvider はプロバイダーに対応するデフォルトモデルを取得
+func (c *Config) GetModelForProvider(provider string) string {
+	if providerConfig, ok := c.ProviderModels[provider]; ok {
+		return providerConfig.DefaultModel
+	}
+	return "" // フォールバック
+}
+
+// ValidateModelForProvider はモデル名がプロバイダーに対応しているか検証
+func (c *Config) ValidateModelForProvider(provider, model string) bool {
+	providerConfig, ok := c.ProviderModels[provider]
+	if !ok {
+		return false // プロバイダー不明
+	}
+
+	// available_modelsが空ならバリデーションスキップ（Ollama等）
+	if len(providerConfig.AvailableModels) == 0 {
+		return true
+	}
+
+	// モデル名がリストに含まれているか確認
+	for _, m := range providerConfig.AvailableModels {
+		if m == model {
+			return true
+		}
+	}
+	return false
 }

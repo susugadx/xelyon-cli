@@ -4,7 +4,8 @@ AI搭載のコーディングアシスタントCLIツール
 
 ## 特徴
 
-- 🤖 **複数のAIモデル対応**: DeepSeek V3 / Coder / R1、Claude対応予定
+- 🌐 **6種類のLLMプロバイダー対応**: DeepSeek, OpenAI, Gemini, Claude, Ollama, Groq
+- 🤖 **複数のAIモデル対応**: 各プロバイダーで複数モデルを選択可能
 - 💬 **対話型エージェント**: ツールを使って実際にコード編集・Git操作を実行
 - 🔍 **Web検索機能**: Serper APIを使ったリアルタイムWeb検索（v0.9.1）
 - 🧠 **思考プロセスの可視化**: なぜそのツールを使うのか、理由を説明（v0.9.0）
@@ -23,10 +24,69 @@ AI搭載のコーディングアシスタントCLIツール
 # ビルド
 go build -o xelyon
 
-# 環境変数設定
-export DEEPSEEK_API_KEY="your-api-key"
+# 環境変数設定（プロバイダーに応じて1つ以上設定）
+export DEEPSEEK_API_KEY="your-api-key"        # DeepSeek (デフォルト)
+export OPENAI_API_KEY="sk-..."                # OpenAI (オプション)
+export GEMINI_API_KEY="..."                   # Google Gemini (オプション)
+export ANTHROPIC_API_KEY="sk-ant-..."         # Claude (オプション)
+export GROQ_API_KEY="gsk_..."                 # Groq (オプション)
+# Ollama: ローカル実行のため不要
+
 export SERPER_API_KEY="your-serper-api-key"  # Web検索用（オプション）
 ```
+
+## サポートされているLLMプロバイダー
+
+XELYON CLIは以下のLLMプロバイダーに対応しています：
+
+| Provider | 環境変数 | 推奨モデル | ストリーミング |
+|----------|---------|-----------|--------------|
+| **DeepSeek** | `DEEPSEEK_API_KEY` | deepseek-coder | ✅ |
+| **OpenAI** | `OPENAI_API_KEY` | gpt-4o | ✅ |
+| **Gemini** | `GEMINI_API_KEY` | gemini-2.0-flash-exp | ✅ |
+| **Claude** | `ANTHROPIC_API_KEY` | claude-sonnet-4-20250514 | ✅ |
+| **Ollama** | (不要) | llama3 | ✅ |
+| **Groq** | `GROQ_API_KEY` | llama3-70b-8192 | ✅ |
+
+### プロバイダーの切り替え方法
+
+#### 1. 環境変数で指定（永続的）
+```bash
+export XELYON_PROVIDER=openai
+export OPENAI_API_KEY="sk-..."
+./xelyon
+```
+
+#### 2. CLIフラグで指定（一時的）
+```bash
+./xelyon --provider gemini --model gemini-2.0-flash-exp
+```
+
+#### 3. 設定ファイルで指定（グローバル設定）
+```yaml
+# ~/.xelyon/config.yaml
+default_provider: claude
+default_model: claude-sonnet-4-20250514
+```
+
+### Ollama（ローカルLLM）の使い方
+
+```bash
+# 1. Ollamaをインストール
+curl -fsSL https://ollama.com/install.sh | sh
+
+# 2. Ollamaサーバーを起動
+ollama serve
+
+# 3. モデルをダウンロード（初回のみ）
+ollama pull llama3
+
+# 4. XELYONでOllamaを使用
+export XELYON_PROVIDER=ollama
+./xelyon --model llama3
+```
+
+インストール済みモデルは自動検出されます。
 
 ## 使い方
 
@@ -271,8 +331,9 @@ xelyon-cli/
 
 - **Go 1.22+**
 - **Cobra** - CLIフレームワーク
-- **DeepSeek API** - AI推論（V3, Coder, R1）
+- **LLM APIs** - DeepSeek, OpenAI, Gemini, Claude (Anthropic), Ollama, Groq
 - **fatih/color** - ターミナル色付け
+- **Tree-sitter** - コード構造解析
 
 ## 開発
 
@@ -292,6 +353,27 @@ go fmt ./...
 MIT
 
 ## バージョン履歴
+
+### v0.15.0 (2026-01-09)
+- 🌐 **マルチプロバイダー対応**: 6種類のLLMプロバイダーに対応
+  - **OpenAI**: GPT-4o, GPT-4o-mini, GPT-4-turbo
+  - **Gemini**: gemini-2.0-flash-exp, gemini-1.5-pro, gemini-1.5-flash
+  - **Claude**: claude-sonnet-4-20250514, claude-opus-4, claude-haiku-3-5
+  - **Ollama**: llama3, codellama, mistral等のローカルLLM
+  - **Groq**: llama3-70b-8192, llama3-8b-8192, mixtral-8x7b
+  - **DeepSeek**: 既存のプロバイダー（後方互換）
+- 🔄 **柔軟なプロバイダー切り替え**:
+  - 環境変数 `XELYON_PROVIDER` で指定
+  - CLIフラグ `--provider openai` で一時的に切り替え
+  - 設定ファイル `~/.xelyon/config.yaml` でデフォルト設定
+- ⚙️ **設定管理拡張**:
+  - プロバイダーごとのデフォルトモデル設定
+  - モデル名のハードコード廃止（設定ファイルで管理）
+  - Ollama自動モデル検出機能
+- 🎯 **使いやすい設計**:
+  - 全プロバイダーでストリーミング対応
+  - 非ストリーミング時の自動フォールバック
+  - 統一されたProvider Interface
 
 ### v0.14.0 (2026-01-08)
 - 🎨 **ツール実行UX改善**
