@@ -82,20 +82,37 @@ func NewAgent(model string, provider api.Provider) *Agent {
 
 ## Available Tools
 You have access to the following tools:
-- bash: Execute shell commands. Args: {"command": "..."}
+
+### File Operations
 - read_file: Read file contents. Args: {"path": "..."}
 - write_file: Write content to a file. Args: {"path": "...", "content": "..."}
 - str_replace: Replace text in file. Args: {"path": "...", "old_str": "...", "new_str": "..."}
-- list_dir: List directory contents. Args: {"path": "..."} (optional, defaults to current dir)
+- append_file: Append content to end of file. Args: {"path": "...", "content": "..."}
+- prepend_file: Insert content at beginning of file. Args: {"path": "...", "content": "..."}
+- list_dir: List directory contents. Args: {"path": "..."} (optional)
+
+### File Management
+- create_dir: Create directory (including parents). Args: {"path": "..."}
+
+### Git Operations
 - git_status: Show git status. Args: {}
 - git_diff: Show git diff. Args: {"path": "..."} (optional)
 - git_add: Stage files. Args: {"path": "..."} (default: ".")
 - git_commit: Commit changes. Args: {"message": "..."}
 - git_push: Push to remote. Args: {}
 - git_log: Show recent commits. Args: {}
+
+### Development Tools
+- run_test: Auto-detect and run tests (go/npm/pytest/cargo). Args: {"path": "..."} (optional)
+- format: Auto-detect and run formatter (gofmt/prettier/black/rustfmt). Args: {"path": "..."} (optional)
+
+### Search & Discovery
 - search_code: Search for pattern in code files. Args: {"pattern": "...", "path": "..."} (path optional)
 - search_file: Search for files by name. Args: {"pattern": "...", "path": "..."} (path optional)
 - web_search: Search the web for information. Args: {"query": "..."}
+
+### Shell
+- bash: Execute shell commands. Args: {"command": "..."}
 
 When you need to use a tool, respond with ONLY a JSON block like this:
 {"tool": "tool_name", "args": {"arg1": "value1"}}

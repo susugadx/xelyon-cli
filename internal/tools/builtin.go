@@ -168,6 +168,95 @@ func (t *WebSearchTool) Run(args map[string]string) (string, *FileChange, error)
 	return result, nil, nil
 }
 
+// ===== Append File Tool =====
+type AppendFileTool struct{}
+
+func (t *AppendFileTool) Name() string { return "append_file" }
+
+func (t *AppendFileTool) Run(args map[string]string) (string, *FileChange, error) {
+	result, backupPath, err := executeAppendFile(args["path"], args["content"])
+	if err != nil {
+		return result, nil, err
+	}
+	var change *FileChange
+	if backupPath != "" {
+		change = &FileChange{
+			FilePath:    args["path"],
+			BackupPath:  backupPath,
+			Timestamp:   getCurrentTime(),
+			Tool:        "append_file",
+			Description: "Appended to file " + args["path"],
+		}
+	}
+	return result, change, nil
+}
+
+// ===== Prepend File Tool =====
+type PrependFileTool struct{}
+
+func (t *PrependFileTool) Name() string { return "prepend_file" }
+
+func (t *PrependFileTool) Run(args map[string]string) (string, *FileChange, error) {
+	result, backupPath, err := executePrependFile(args["path"], args["content"])
+	if err != nil {
+		return result, nil, err
+	}
+	var change *FileChange
+	if backupPath != "" {
+		change = &FileChange{
+			FilePath:    args["path"],
+			BackupPath:  backupPath,
+			Timestamp:   getCurrentTime(),
+			Tool:        "prepend_file",
+			Description: "Prepended to file " + args["path"],
+		}
+	}
+	return result, change, nil
+}
+
+// ===== Create Directory Tool =====
+type CreateDirTool struct{}
+
+func (t *CreateDirTool) Name() string { return "create_dir" }
+
+func (t *CreateDirTool) Run(args map[string]string) (string, *FileChange, error) {
+	result := executeCreateDir(args["path"])
+	return result, nil, nil
+}
+
+// ===== Run Test Tool =====
+type RunTestTool struct{}
+
+func (t *RunTestTool) Name() string { return "run_test" }
+
+func (t *RunTestTool) Run(args map[string]string) (string, *FileChange, error) {
+	result := executeRunTest(args["path"])
+	return result, nil, nil
+}
+
+// ===== Format Tool =====
+type FormatTool struct{}
+
+func (t *FormatTool) Name() string { return "format" }
+
+func (t *FormatTool) Run(args map[string]string) (string, *FileChange, error) {
+	result, backupPath, err := executeFormat(args["path"])
+	if err != nil {
+		return result, nil, err
+	}
+	var change *FileChange
+	if backupPath != "" {
+		change = &FileChange{
+			FilePath:    args["path"],
+			BackupPath:  backupPath,
+			Timestamp:   getCurrentTime(),
+			Tool:        "format",
+			Description: "Formatted file " + args["path"],
+		}
+	}
+	return result, change, nil
+}
+
 // ===== Registry Registration =====
 
 // RegisterBuiltinTools はすべての組み込みツールを登録
@@ -186,6 +275,11 @@ func RegisterBuiltinTools(r *Registry) {
 	r.Register(&SearchCodeTool{})
 	r.Register(&SearchFileTool{})
 	r.Register(&WebSearchTool{})
+	r.Register(&AppendFileTool{})
+	r.Register(&PrependFileTool{})
+	r.Register(&CreateDirTool{})
+	r.Register(&RunTestTool{})
+	r.Register(&FormatTool{})
 }
 
 // init は自動的にデフォルトレジストリに全ツールを登録

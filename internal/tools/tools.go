@@ -334,6 +334,355 @@ func executeWriteFile(path string, content string) (string, string, error) {
 	return fmt.Sprintf("Successfully wrote %d bytes to %s", len(content), path), backupPath, nil
 }
 
+// executeAppendFile はファイル末尾にコンテンツを追加
+func executeAppendFile(path, content string) (string, string, error) {
+	// 引数検証
+	if path == "" {
+		return "Error: path is empty", "", nil
+	}
+	if content == "" {
+		return "Error: content is empty", "", nil
+	}
+
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Sprintf("Error: %v", err), "", nil
+	}
+
+	// ファイルが存在するかチェック
+	exists := false
+	if _, err := os.Stat(absPath); err == nil {
+		exists = true
+	}
+
+	// バックアップ作成（既存ファイルのみ）
+	backupPath, err := createBackup(absPath)
+	if err != nil {
+		return fmt.Sprintf("Error creating backup: %v", err), "", nil
+	}
+
+	// プレビュー表示（確認なし、非破壊的操作）
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	if exists {
+		cyan.Printf("➕ Append to File / ファイルに追記\n")
+	} else {
+		cyan.Printf("➕ Create File with Content / ファイルを作成\n")
+	}
+	cyan.Printf("📂 Path / パス: %s\n", path)
+	contentLines := strings.Split(content, "\n")
+	cyan.Printf("📏 Adding / 追加: %d lines / 行\n", len(contentLines))
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+	// 既存ファイルの最後の部分を表示
+	if exists {
+		oldContent, _ := os.ReadFile(absPath)
+		if len(oldContent) > 0 {
+			oldLines := strings.Split(string(oldContent), "\n")
+			yellow.Println("\nExisting file (last 10 lines) / 既存ファイル（最終10行）:")
+			cyan.Println("┌" + strings.Repeat("─", 60) + "┐")
+			startLine := len(oldLines) - 10
+			if startLine < 0 {
+				startLine = 0
+			}
+			for i := startLine; i < len(oldLines) && i < startLine+10; i++ {
+				fmt.Printf("│ %s\n", oldLines[i])
+			}
+			cyan.Println("└" + strings.Repeat("─", 60) + "┘")
+		}
+	}
+
+	// 追加するコンテンツをプレビュー
+	yellow.Println("\nContent to append / 追記する内容:")
+	cyan.Println("┌" + strings.Repeat("─", 60) + "┐")
+	for i, line := range contentLines {
+		if i >= 10 {
+			yellow.Printf("│ ... (%d more lines / 行省略)\n", len(contentLines)-10)
+			break
+		}
+		green.Printf("│ + %s\n", line)
+	}
+	cyan.Println("└" + strings.Repeat("─", 60) + "┘")
+	fmt.Println()
+
+	// ファイルを開く（追記モード）
+	file, err := os.OpenFile(absPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return fmt.Sprintf("Error opening file: %v", err), "", nil
+	}
+	defer file.Close()
+
+	// コンテンツを追記
+	if _, err := file.WriteString(content); err != nil {
+		return fmt.Sprintf("Error appending to file: %v", err), "", nil
+	}
+
+	green.Printf("✅ Appended: %s\n", path)
+	return fmt.Sprintf("Successfully appended %d bytes to %s", len(content), path), backupPath, nil
+}
+
+// executePrependFile はファイル先頭にコンテンツを追加
+func executePrependFile(path, content string) (string, string, error) {
+	if path == "" {
+		return "Error: path is empty", "", nil
+	}
+	if content == "" {
+		return "Error: content is empty", "", nil
+	}
+
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Sprintf("Error: %v", err), "", nil
+	}
+
+	exists := false
+	var oldContent []byte
+	if _, err := os.Stat(absPath); err == nil {
+		exists = true
+		oldContent, _ = os.ReadFile(absPath)
+	}
+
+	backupPath, err := createBackup(absPath)
+	if err != nil {
+		return fmt.Sprintf("Error creating backup: %v", err), "", nil
+	}
+
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	if exists {
+		cyan.Printf("⬆️  Prepend to File / ファイル先頭に追記\n")
+	} else {
+		cyan.Printf("⬆️  Create File with Content / ファイルを作成\n")
+	}
+	cyan.Printf("📂 Path / パス: %s\n", path)
+	contentLines := strings.Split(content, "\n")
+	cyan.Printf("📏 Adding / 追加: %d lines / 行\n", len(contentLines))
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+	yellow.Println("\nContent to prepend / 先頭に追加する内容:")
+	cyan.Println("┌" + strings.Repeat("─", 60) + "┐")
+	for i, line := range contentLines {
+		if i >= 10 {
+			yellow.Printf("│ ... (%d more lines / 行省略)\n", len(contentLines)-10)
+			break
+		}
+		green.Printf("│ + %s\n", line)
+	}
+	cyan.Println("└" + strings.Repeat("─", 60) + "┘")
+
+	if exists && len(oldContent) > 0 {
+		oldLines := strings.Split(string(oldContent), "\n")
+		yellow.Println("\nExisting file (first 10 lines) / 既存ファイル（最初10行）:")
+		cyan.Println("┌" + strings.Repeat("─", 60) + "┐")
+		for i := 0; i < len(oldLines) && i < 10; i++ {
+			fmt.Printf("│ %s\n", oldLines[i])
+		}
+		cyan.Println("└" + strings.Repeat("─", 60) + "┘")
+	}
+	fmt.Println()
+
+	newContent := content
+	if !strings.HasSuffix(content, "\n") {
+		newContent += "\n"
+	}
+	newContent += string(oldContent)
+
+	if err := os.WriteFile(absPath, []byte(newContent), 0644); err != nil {
+		return fmt.Sprintf("Error writing file: %v", err), "", nil
+	}
+
+	green.Printf("✅ Prepended: %s\n", path)
+	return fmt.Sprintf("Successfully prepended %d bytes to %s", len(content), path), backupPath, nil
+}
+
+// executeCreateDir はディレクトリを作成
+func executeCreateDir(path string) string {
+	if path == "" {
+		return "Error: path is empty"
+	}
+
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Sprintf("Error: %v", err)
+	}
+
+	if stat, err := os.Stat(absPath); err == nil {
+		if stat.IsDir() {
+			green.Printf("✅ Directory already exists: %s\n", path)
+			return fmt.Sprintf("Directory already exists (idempotent): %s", path)
+		}
+		return fmt.Sprintf("Error: path exists but is not a directory: %s", path)
+	}
+
+	if err := os.MkdirAll(absPath, 0755); err != nil {
+		return fmt.Sprintf("Error creating directory: %v", err)
+	}
+
+	green.Printf("✅ Created directory: %s\n", path)
+	return fmt.Sprintf("Successfully created directory: %s", path)
+}
+
+// executeRunTest はテストを自動検出して実行
+func executeRunTest(path string) string {
+	if path == "" {
+		path = "."
+	}
+
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Sprintf("Error: %v", err)
+	}
+
+	framework, command := detectTestFramework(absPath)
+
+	if framework == "" {
+		return `No test framework detected.
+
+Supported frameworks:
+  - Go: go.mod → go test ./...
+  - JavaScript/TypeScript: package.json → npm test
+  - Python: pytest.ini/setup.py → pytest
+  - Rust: Cargo.toml → cargo test
+
+Please ensure your project has the appropriate configuration files.`
+	}
+
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	cyan.Printf("🧪 Running Tests / テスト実行\n")
+	cyan.Printf("📂 Path / パス: %s\n", path)
+	cyan.Printf("🔧 Framework / フレームワーク: %s\n", framework)
+	cyan.Printf("⚙️  Command / コマンド: %s\n", command)
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Println()
+
+	green.Printf("▶ Running: %s\n", command)
+
+	cmd := exec.Command("bash", "-c", command)
+	cmd.Dir = absPath
+	output, err := cmd.CombinedOutput()
+
+	result := string(output)
+
+	exitCode := 0
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			exitCode = exitErr.ExitCode()
+		}
+	}
+
+	if exitCode == 0 {
+		green.Printf("\n✅ Tests passed (exit code: %d)\n", exitCode)
+	} else {
+		red.Printf("\n❌ Tests failed (exit code: %d)\n", exitCode)
+	}
+
+	return fmt.Sprintf("%s\n\nExit code: %d", result, exitCode)
+}
+
+// detectTestFramework はテストフレームワークを検出
+func detectTestFramework(path string) (framework string, command string) {
+	if _, err := os.Stat(filepath.Join(path, "go.mod")); err == nil {
+		return "Go", "go test ./..."
+	}
+
+	if _, err := os.Stat(filepath.Join(path, "package.json")); err == nil {
+		if _, err := os.Stat(filepath.Join(path, "yarn.lock")); err == nil {
+			return "JavaScript (yarn)", "yarn test"
+		}
+		return "JavaScript (npm)", "npm test"
+	}
+
+	if _, err := os.Stat(filepath.Join(path, "pytest.ini")); err == nil {
+		return "Python (pytest)", "pytest"
+	}
+	if _, err := os.Stat(filepath.Join(path, "setup.py")); err == nil {
+		return "Python (pytest)", "pytest"
+	}
+
+	if _, err := os.Stat(filepath.Join(path, "Cargo.toml")); err == nil {
+		return "Rust", "cargo test"
+	}
+
+	return "", ""
+}
+
+// executeFormat はフォーマッターを自動検出して実行
+func executeFormat(path string) (string, string, error) {
+	if path == "" {
+		path = "."
+	}
+
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Sprintf("Error: %v", err), "", nil
+	}
+
+	formatter, command := detectFormatter(absPath)
+
+	if formatter == "" {
+		return `No formatter detected.
+
+Supported formatters:
+  - Go: *.go files → go fmt ./...
+  - JavaScript/TypeScript: .prettierrc → prettier --write .
+  - Python: *.py files → black . or autopep8
+  - Rust: Cargo.toml → cargo fmt
+
+Please ensure your project has the appropriate files or configuration.`, "", nil
+	}
+
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	cyan.Printf("✨ Formatting Code / コード整形\n")
+	cyan.Printf("📂 Path / パス: %s\n", path)
+	cyan.Printf("🔧 Formatter / フォーマッター: %s\n", formatter)
+	cyan.Printf("⚙️  Command / コマンド: %s\n", command)
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Println()
+
+	green.Printf("▶ Running: %s\n", command)
+
+	cmd := exec.Command("bash", "-c", command)
+	cmd.Dir = absPath
+	output, err := cmd.CombinedOutput()
+
+	result := string(output)
+	if len(result) > 2000 {
+		result = result[:2000] + "\n... (truncated)"
+	}
+
+	if err != nil {
+		return fmt.Sprintf("Formatter failed:\n%s\n\nError: %v", result, err), "", nil
+	}
+
+	green.Println("\n✅ Formatting completed")
+
+	return fmt.Sprintf("Successfully formatted code:\n%s", result), "", nil
+}
+
+// detectFormatter はフォーマッターを検出
+func detectFormatter(path string) (formatter string, command string) {
+	if _, err := os.Stat(filepath.Join(path, "go.mod")); err == nil {
+		return "gofmt", "go fmt ./..."
+	}
+
+	prettierConfigs := []string{".prettierrc", ".prettierrc.json", ".prettierrc.js", "prettier.config.js"}
+	for _, config := range prettierConfigs {
+		if _, err := os.Stat(filepath.Join(path, config)); err == nil {
+			return "prettier", "prettier --write ."
+		}
+	}
+
+	if _, err := os.Stat(filepath.Join(path, "pyproject.toml")); err == nil {
+		if exec.Command("which", "black").Run() == nil {
+			return "black", "black ."
+		}
+	}
+
+	if _, err := os.Stat(filepath.Join(path, "Cargo.toml")); err == nil {
+		return "rustfmt", "cargo fmt"
+	}
+
+	return "", ""
+}
+
 // executeListDir はディレクトリ一覧を取得
 func executeListDir(path string) string {
 	absPath, err := filepath.Abs(path)
