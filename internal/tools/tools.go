@@ -128,12 +128,49 @@ func createBackup(filePath string) (string, error) {
 
 // Execute はツールを実行（Registry経由）
 func Execute(tc *ToolCall) (string, *FileChange) {
-	cyan.Printf("🔧 %s", tc.Tool)
-	if len(tc.Args) > 0 {
-		fmt.Printf(": %v\n", tc.Args)
-	} else {
-		fmt.Println()
+	// ツール名のみ表示（詳細は各ツールの確認画面で表示）
+	cyan.Printf("🔧 Tool: %s\n", tc.Tool)
+
+	// 簡潔な引数表示（JSON不使用）
+	switch tc.Tool {
+	case "read_file":
+		fmt.Printf("   File: %s\n", tc.Args["path"])
+	case "write_file":
+		lines := strings.Split(tc.Args["content"], "\n")
+		fmt.Printf("   File: %s (%d lines)\n", tc.Args["path"], len(lines))
+	case "str_replace":
+		fmt.Printf("   File: %s\n", tc.Args["path"])
+	case "bash":
+		fmt.Printf("   Command: %s\n", truncate(tc.Args["command"], 60))
+	case "list_dir":
+		path := tc.Args["path"]
+		if path == "" {
+			path = "."
+		}
+		fmt.Printf("   Directory: %s\n", path)
+	case "git_add", "git_commit", "git_push", "git_status", "git_diff", "git_log":
+		// Git操作は引数を簡潔に表示
+		for k, v := range tc.Args {
+			if v != "" {
+				fmt.Printf("   %s: %s\n", k, truncate(v, 60))
+			}
+		}
+	case "search_code", "search_file":
+		fmt.Printf("   Pattern: %s\n", tc.Args["pattern"])
+		if tc.Args["path"] != "" {
+			fmt.Printf("   Path: %s\n", tc.Args["path"])
+		}
+	case "web_search":
+		fmt.Printf("   Query: %s\n", tc.Args["query"])
+	default:
+		// その他のツール（MCPツール等）
+		if len(tc.Args) > 0 {
+			for k, v := range tc.Args {
+				fmt.Printf("   %s: %s\n", k, truncate(v, 60))
+			}
+		}
 	}
+	fmt.Println()
 
 	// デフォルト値の設定（Registry実行前）
 	// list_dir, git_add, search_code, search_fileでpathが空の場合"."を設定
@@ -179,8 +216,13 @@ func executeBash(command string) string {
 
 	// 確認が必要な場合
 	if needConfirm {
-		yellow.Printf("⚠️  Execute: %s\n", command)
-		if !confirm("Run this command?") {
+		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		cyan.Printf("⚙️  Shell Command / シェルコマンド実行\n")
+		cyan.Printf("📜 Command / コマンド: %s\n", command)
+		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		yellow.Println("⚠️  Warning: This command may modify your system / 警告: システムに変更が加わる可能性があります")
+
+		if !confirm("Run this command? / 実行しますか？") {
 			return "Cancelled by user"
 		}
 	}
@@ -247,21 +289,27 @@ func executeWriteFile(path string, content string) (string, string, error) {
 		exists = true
 	}
 
+	// 確認UI
+	lines := strings.Split(content, "\n")
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	if exists {
+		cyan.Printf("📝 Create/Overwrite File / ファイルの上書き\n")
+	} else {
+		cyan.Printf("📝 Create File / ファイルの新規作成\n")
+	}
+	cyan.Printf("📂 Path / パス: %s\n", path)
+	cyan.Printf("📏 Size / サイズ: %d lines / 行\n", len(lines))
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
 	// diff表示（既存ファイルの場合）
 	if exists {
 		oldContent, _ := os.ReadFile(absPath)
 		showDiff(string(oldContent), content, path)
 	} else {
-		yellow.Printf("📝 New file: %s\n", path)
 		showPreview(content)
 	}
 
-	// 確認
-	action := "Create"
-	if exists {
-		action = "Overwrite"
-	}
-	if !confirm(fmt.Sprintf("%s this file?", action)) {
+	if !confirm("Create/overwrite this file? / このファイルを作成・上書きしますか？") {
 		return "Cancelled by user", "", nil
 	}
 
@@ -330,6 +378,109 @@ func confirm(message string) bool {
 	response = strings.ToLower(strings.TrimSpace(response))
 
 	return response == "y" || response == "yes" || response == "ｙ" || response == "はい"
+}
+
+// truncate は文字列を指定長で切り詰め
+func truncate(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
+}
+
+// normalizeLeadingWhitespace は行頭の空白のみを正規化
+// - タブをスペース4つに変換
+// - 行頭の空白を削除
+// - 行内の空白は保持（安全性重視）
+func normalizeLeadingWhitespace(s string) string {
+	lines := strings.Split(s, "\n")
+	var normalized []string
+	for _, line := range lines {
+		// タブをスペース4つに変換
+		line = strings.ReplaceAll(line, "\t", "    ")
+		// 行頭の空白のみをトリム（行内は保持）
+		trimmed := strings.TrimLeft(line, " ")
+		normalized = append(normalized, trimmed)
+	}
+	return strings.Join(normalized, "\n")
+}
+
+// findWithNormalizedWhitespace は正規化した状態で文字列を検索
+func findWithNormalizedWhitespace(content, pattern string) (found bool, startIdx, endIdx int) {
+	normalizedContent := normalizeLeadingWhitespace(content)
+	normalizedPattern := normalizeLeadingWhitespace(pattern)
+
+	idx := strings.Index(normalizedContent, normalizedPattern)
+	if idx == -1 {
+		return false, -1, -1
+	}
+
+	// 正規化前の位置を計算（簡易実装：行番号ベース）
+	contentLines := strings.Split(content, "\n")
+	normalizedLines := strings.Split(normalizedContent, "\n")
+	patternLines := strings.Split(normalizedPattern, "\n")
+
+	// 正規化後の行番号を特定
+	var currentPos int
+	var lineNum int
+	for i, line := range normalizedLines {
+		if currentPos <= idx && idx < currentPos+len(line)+1 {
+			lineNum = i
+			break
+		}
+		currentPos += len(line) + 1 // +1 for \n
+	}
+
+	// 元のコンテンツから該当部分を抽出
+	startLine := lineNum
+	endLine := lineNum + len(patternLines) - 1
+
+	if endLine >= len(contentLines) {
+		return false, -1, -1
+	}
+
+	// 行単位で元の文字列を再構築
+	var startPos int
+	for i := 0; i < startLine; i++ {
+		startPos += len(contentLines[i]) + 1
+	}
+
+	var endPos = startPos
+	for i := startLine; i <= endLine; i++ {
+		endPos += len(contentLines[i]) + 1
+	}
+
+	return true, startPos, endPos - 1 // -1 to exclude final \n
+}
+
+// showImprovedDiff は改善された差分表示
+func showImprovedDiff(oldStr, newStr string) {
+	oldLines := strings.Split(oldStr, "\n")
+	newLines := strings.Split(newStr, "\n")
+
+	maxLines := 15 // 最大表示行数
+
+	cyan.Println("\nBefore / 変更前:")
+	cyan.Println("┌" + strings.Repeat("─", 60) + "┐")
+	for i, line := range oldLines {
+		if i >= maxLines {
+			yellow.Printf("│ ... (%d lines omitted / 行省略)\n", len(oldLines)-maxLines)
+			break
+		}
+		red.Printf("│ - %s\n", line)
+	}
+	cyan.Println("└" + strings.Repeat("─", 60) + "┘")
+
+	cyan.Println("\nAfter / 変更後:")
+	cyan.Println("┌" + strings.Repeat("─", 60) + "┐")
+	for i, line := range newLines {
+		if i >= maxLines {
+			yellow.Printf("│ ... (%d lines omitted / 行省略)\n", len(newLines)-maxLines)
+			break
+		}
+		green.Printf("│ + %s\n", line)
+	}
+	cyan.Println("└" + strings.Repeat("─", 60) + "┘\n")
 }
 
 // showDiff は差分を表示
@@ -434,10 +585,13 @@ func executeGitDiff(path string) string {
 
 // executeGitAdd は git add を実行
 func executeGitAdd(path string) string {
-	green.Printf("➕ git add %s\n", path)
+	// 確認UI
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	cyan.Printf("➕ Git Stage / Gitステージング\n")
+	cyan.Printf("📂 Path / パス: %s\n", path)
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
-	// 確認
-	if !confirm(fmt.Sprintf("Stage '%s'?", path)) {
+	if !confirm("Stage this file? / このファイルをステージングしますか？") {
 		return "Cancelled by user"
 	}
 
@@ -455,10 +609,13 @@ func executeGitCommit(message string) string {
 		return "Error: commit message is required"
 	}
 
-	yellow.Printf("💾 git commit -m \"%s\"\n", message)
+	// 確認UI
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	cyan.Printf("💾 Git Commit / Gitコミット\n")
+	cyan.Printf("📝 Message / メッセージ:\n%s\n", message)
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
-	// 確認
-	if !confirm("Commit with this message?") {
+	if !confirm("Commit with this message? / この内容でコミットしますか？") {
 		return "Cancelled by user"
 	}
 
@@ -474,10 +631,13 @@ func executeGitCommit(message string) string {
 
 // executeGitPush は git push を実行
 func executeGitPush() string {
-	yellow.Println("🚀 git push")
+	// 確認UI
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	cyan.Printf("🚀 Git Push / リモートへプッシュ\n")
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	yellow.Println("⚠️  Warning: Changes will be published to remote / 警告: リモートリポジトリに変更が公開されます")
 
-	// 確認
-	if !confirm("Push to remote?") {
+	if !confirm("Push to remote? / プッシュしますか？") {
 		return "Cancelled by user"
 	}
 
@@ -594,16 +754,17 @@ func executeStrReplace(path string, oldStr string, newStr string) (string, strin
 	}
 
 	oldContent := string(content)
+	var newContent string
 
-	// old_strが存在するか確認
-	if !strings.Contains(oldContent, oldStr) {
-		return fmt.Sprintf("Error: old_str not found in %s", path), "", nil
-	}
+	// まず完全一致を試行
+	exactMatch := strings.Contains(oldContent, oldStr)
+	exactCount := strings.Count(oldContent, oldStr)
 
-	// old_strが一意か確認（複数マッチはエラー）
-	count := strings.Count(oldContent, oldStr)
-	if count > 1 {
-		// ファイルの先頭50行を取得
+	if exactMatch && exactCount == 1 {
+		// 完全一致が1つ → そのまま使用
+		newContent = strings.Replace(oldContent, oldStr, newStr, 1)
+	} else if exactMatch && exactCount > 1 {
+		// 完全一致が複数 → エラー
 		lines := strings.Split(oldContent, "\n")
 		previewLines := min(50, len(lines))
 		preview := strings.Join(lines[:previewLines], "\n")
@@ -619,95 +780,51 @@ File preview (first %d lines):
 ---
 
 Please use read_file to see the full content and choose a unique old_str.`,
-			count, path, previewLines, preview), "", nil
+			exactCount, path, previewLines, preview), "", nil
+	} else {
+		// 完全一致しない → 正規化マッチを試行
+		yellow.Println("⚠️  Exact match failed, trying normalized whitespace matching...")
+
+		found, startIdx, endIdx := findWithNormalizedWhitespace(oldContent, oldStr)
+
+		if !found {
+			return fmt.Sprintf("Error: old_str not found in %s (tried both exact and normalized matching)", path), "", nil
+		}
+
+		// 正規化マッチで見つかった部分を置換
+		actualOldStr := oldContent[startIdx : endIdx+1]
+		newContent = oldContent[:startIdx] + newStr + oldContent[endIdx+1:]
+
+		yellow.Printf("ℹ️  Matched with normalized whitespace (indentation may differ)\n")
+		yellow.Printf("   Actual match in file:\n")
+		// 実際のマッチ部分をプレビュー表示
+		matchLines := strings.Split(actualOldStr, "\n")
+		for i, line := range matchLines {
+			if i >= 5 {
+				yellow.Printf("   ... (%d more lines)\n", len(matchLines)-5)
+				break
+			}
+			yellow.Printf("   │ %s\n", line)
+		}
+		fmt.Println()
 	}
 
-	// 置換
-	newContent := strings.Replace(oldContent, oldStr, newStr, 1)
-
-	// 差分表示
-	const maxDisplayLines = 10
+	// 確認UI
 	oldStrLines := strings.Split(oldStr, "\n")
 	newStrLines := strings.Split(newStr, "\n")
 
-	// 10行超えたら省略表示
-	if len(oldStrLines) > maxDisplayLines || len(newStrLines) > maxDisplayLines {
-		yellow.Printf("\n📝 Replacement in: %s\n", path)
-		yellow.Printf("Old content: %d lines (showing first %d)\n", len(oldStrLines), maxDisplayLines)
-		yellow.Printf("New content: %d lines (showing first %d)\n", len(newStrLines), maxDisplayLines)
-		fmt.Println(strings.Repeat("─", 50))
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	cyan.Printf("🔧 Text Replacement / テキスト置換\n")
+	cyan.Printf("📂 File / ファイル: %s\n", path)
+	cyan.Printf("📊 Changes / 変更: -%d lines, +%d lines / %d 行削除・%d 行追加\n",
+		len(oldStrLines), len(newStrLines), len(oldStrLines), len(newStrLines))
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
-		// 最初の maxDisplayLines 行のみ表示
-		red.Println("OLD:")
-		for i := 0; i < min(maxDisplayLines, len(oldStrLines)); i++ {
-			red.Printf("- %s\n", oldStrLines[i])
-		}
-		if len(oldStrLines) > maxDisplayLines {
-			red.Printf("  ... (%d lines omitted)\n", len(oldStrLines)-maxDisplayLines)
-		}
-
-		fmt.Println()
-
-		green.Println("NEW:")
-		for i := 0; i < min(maxDisplayLines, len(newStrLines)); i++ {
-			green.Printf("+ %s\n", newStrLines[i])
-		}
-		if len(newStrLines) > maxDisplayLines {
-			green.Printf("  ... (%d lines omitted)\n", len(newStrLines)-maxDisplayLines)
-		}
-
-		fmt.Println(strings.Repeat("─", 50))
-	} else {
-		// 既存の差分表示ロジック（10行以下の場合）
-		yellow.Printf("🔧 Replace in: %s\n", path)
-		fmt.Println(strings.Repeat("─", 50))
-
-		// 変更箇所を抽出して表示
-		oldLines := strings.Split(oldContent, "\n")
-		newLines := strings.Split(newContent, "\n")
-
-		// 差分を見つけて表示
-		for i := 0; i < len(oldLines) && i < len(newLines); i++ {
-			if oldLines[i] != newLines[i] {
-				// 前後3行のコンテキストを表示
-				start := i - 2
-				if start < 0 {
-					start = 0
-				}
-
-				// 変更前
-				for j := start; j <= i; j++ {
-					if j < len(oldLines) {
-						if j == i {
-							red.Printf("- %s\n", oldLines[j])
-						} else {
-							fmt.Printf("  %s\n", oldLines[j])
-						}
-					}
-				}
-
-				// 変更後
-				green.Printf("+ %s\n", newLines[i])
-
-				// 後のコンテキスト
-				end := i + 2
-				if end >= len(newLines) {
-					end = len(newLines) - 1
-				}
-				for j := i + 1; j <= end; j++ {
-					if j < len(newLines) {
-						fmt.Printf("  %s\n", newLines[j])
-					}
-				}
-				break
-			}
-		}
-
-		fmt.Println(strings.Repeat("─", 50))
-	}
+	// 改善された差分表示
+	showImprovedDiff(oldStr, newStr)
 
 	// 確認
-	if !confirm("Apply this replacement?") {
+	if !confirm("Apply this replacement? / この置換を適用しますか？") {
 		yellow.Println("⚠️  User cancelled the replacement")
 		return fmt.Sprintf(`[CANCELLED] User cancelled str_replace for %s.
 

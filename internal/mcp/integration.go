@@ -31,10 +31,10 @@ func (m *Manager) RegisterToToolRegistry(registry *tools.Registry) {
 
 // MCPToolWrapper はMCPツールをTool interfaceにラップ
 type MCPToolWrapper struct {
-	manager    *Manager
-	serverName string
-	toolName   string
-	desc       string
+	manager     *Manager
+	serverName  string
+	toolName    string
+	desc        string
 	inputSchema json.RawMessage // JSONスキーマ情報
 }
 
@@ -47,14 +47,14 @@ func (w *MCPToolWrapper) Name() string {
 		}
 		return '_'
 	}, w.serverName)
-	
+
 	safeTool := strings.Map(func(r rune) rune {
 		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
 			return r
 		}
 		return '_'
 	}, w.toolName)
-	
+
 	return fmt.Sprintf("mcp_%s_%s", safeServer, safeTool)
 }
 
