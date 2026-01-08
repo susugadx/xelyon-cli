@@ -369,6 +369,101 @@ func (t *CopyFileTool) Run(args map[string]string) (string, *FileChange, error) 
 	return result, change, nil
 }
 
+// ===== Phase 4: Destructive/Complex Tools =====
+
+// DeleteLinesTool deletes a range of lines from a file
+type DeleteLinesTool struct{}
+
+func (t *DeleteLinesTool) Name() string { return "delete_lines" }
+
+func (t *DeleteLinesTool) Run(args map[string]string) (string, *FileChange, error) {
+	result, backupPath, err := executeDeleteLines(args["path"], args["start_line"], args["end_line"])
+	if err != nil {
+		return result, nil, err
+	}
+	var change *FileChange
+	if backupPath != "" {
+		change = &FileChange{
+			FilePath:    args["path"],
+			BackupPath:  backupPath,
+			Timestamp:   getCurrentTime(),
+			Tool:        "delete_lines",
+			Description: "Deleted lines " + args["start_line"] + "-" + args["end_line"] + " in " + args["path"],
+		}
+	}
+	return result, change, nil
+}
+
+// DeleteFileTool deletes a file permanently (with backup)
+type DeleteFileTool struct{}
+
+func (t *DeleteFileTool) Name() string { return "delete_file" }
+
+func (t *DeleteFileTool) Run(args map[string]string) (string, *FileChange, error) {
+	result, backupPath, err := executeDeleteFile(args["path"])
+	if err != nil {
+		return result, nil, err
+	}
+	var change *FileChange
+	if backupPath != "" {
+		change = &FileChange{
+			FilePath:    args["path"],
+			BackupPath:  backupPath,
+			Timestamp:   getCurrentTime(),
+			Tool:        "delete_file",
+			Description: "Deleted file " + args["path"],
+		}
+	}
+	return result, change, nil
+}
+
+// MoveFileTool moves/renames a file
+type MoveFileTool struct{}
+
+func (t *MoveFileTool) Name() string { return "move_file" }
+
+func (t *MoveFileTool) Run(args map[string]string) (string, *FileChange, error) {
+	result, backupPath, err := executeMoveFile(args["src"], args["dest"])
+	if err != nil {
+		return result, nil, err
+	}
+	var change *FileChange
+	if backupPath != "" {
+		// 移動先が上書きされた場合のみFileChange作成
+		change = &FileChange{
+			FilePath:    args["dest"], // 移動先を追跡
+			BackupPath:  backupPath,
+			Timestamp:   getCurrentTime(),
+			Tool:        "move_file",
+			Description: "Moved " + args["src"] + " to " + args["dest"],
+		}
+	}
+	return result, change, nil
+}
+
+// LintTool runs linter with optional auto-fix
+type LintTool struct{}
+
+func (t *LintTool) Name() string { return "lint" }
+
+func (t *LintTool) Run(args map[string]string) (string, *FileChange, error) {
+	result, backupPath, err := executeLint(args["path"], args["auto_fix"])
+	if err != nil {
+		return result, nil, err
+	}
+	var change *FileChange
+	if backupPath != "" {
+		change = &FileChange{
+			FilePath:    args["path"],
+			BackupPath:  backupPath,
+			Timestamp:   getCurrentTime(),
+			Tool:        "lint",
+			Description: "Lint auto-fix on " + args["path"],
+		}
+	}
+	return result, change, nil
+}
+
 // ===== Registry Registration =====
 
 // RegisterBuiltinTools はすべての組み込みツールを登録
@@ -398,6 +493,10 @@ func RegisterBuiltinTools(r *Registry) {
 	r.Register(&InsertAfterTool{})  // NEW: Phase 3
 	r.Register(&InsertBeforeTool{}) // NEW: Phase 3
 	r.Register(&CopyFileTool{})     // NEW: Phase 3
+	r.Register(&DeleteLinesTool{})  // NEW: Phase 4
+	r.Register(&DeleteFileTool{})   // NEW: Phase 4
+	r.Register(&MoveFileTool{})     // NEW: Phase 4
+	r.Register(&LintTool{})         // NEW: Phase 4
 }
 
 // init は自動的にデフォルトレジストリに全ツールを登録

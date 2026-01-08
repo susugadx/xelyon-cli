@@ -96,6 +96,12 @@ You have access to the following tools:
 
 ### File Management
 - create_dir: Create directory (including parents). Args: {"path": "..."}
+- delete_lines: Delete line range from file. Args: {"path": "...", "start_line": "N", "end_line": "M"}
+- delete_file: Delete file permanently (with backup). Args: {"path": "..."}
+- move_file: Move/rename file. Args: {"src": "...", "dest": "..."}
+
+### Code Quality
+- lint: Run linter with optional auto-fix. Args: {"path": "...", "auto_fix": "true|false"} (path optional, default: ".")
 
 ### Git Operations
 - git_status: Show git status. Args: {}

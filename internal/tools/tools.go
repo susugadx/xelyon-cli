@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -169,6 +170,23 @@ func Execute(tc *ToolCall) (string, *FileChange) {
 	case "copy_file":
 		fmt.Printf("   Source: %s\n", tc.Args["src"])
 		fmt.Printf("   Destination: %s\n", tc.Args["dest"])
+	case "delete_lines":
+		fmt.Printf("   File: %s\n", tc.Args["path"])
+		fmt.Printf("   Lines: %s-%s\n", tc.Args["start_line"], tc.Args["end_line"])
+	case "delete_file":
+		fmt.Printf("   File: %s\n", tc.Args["path"])
+	case "move_file":
+		fmt.Printf("   Source: %s\n", tc.Args["src"])
+		fmt.Printf("   Destination: %s\n", tc.Args["dest"])
+	case "lint":
+		path := tc.Args["path"]
+		if path == "" {
+			path = "."
+		}
+		fmt.Printf("   Path: %s\n", path)
+		if tc.Args["auto_fix"] == "true" {
+			fmt.Printf("   Auto-fix: enabled\n")
+		}
 	case "web_search":
 		fmt.Printf("   Query: %s\n", tc.Args["query"])
 	default:
@@ -1913,4 +1931,445 @@ func executeCopyFile(src, dest string) (string, string, error) {
 		return fmt.Sprintf("✅ File copied (overwritten): %s → %s", src, dest), destBackupPath, nil
 	}
 	return fmt.Sprintf("✅ File copied: %s → %s", src, dest), "", nil
+}
+
+// ===== Phase 4: Destructive/Complex Tools =====
+
+// executeDeleteLines deletes a range of lines from a file
+func executeDeleteLines(path, startLineStr, endLineStr string) (string, string, error) {
+	// 引数検証と変換
+	startLine, err := strconv.Atoi(startLineStr)
+	if err != nil {
+		return fmt.Sprintf("Error: Invalid start_line: %v", err), "", nil
+	}
+
+	endLine, err := strconv.Atoi(endLineStr)
+	if err != nil {
+		return fmt.Sprintf("Error: Invalid end_line: %v", err), "", nil
+	}
+
+	// 範囲検証
+	if startLine < 1 {
+		return "Error: start_line must be >= 1", "", nil
+	}
+	if endLine < startLine {
+		return "Error: end_line must be >= start_line", "", nil
+	}
+
+	// ファイル読み込み
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Sprintf("Error: Invalid path: %v", err), "", nil
+	}
+
+	content, err := os.ReadFile(absPath)
+	if err != nil {
+		return fmt.Sprintf("Error: Failed to read file: %v", err), "", nil
+	}
+
+	lines := strings.Split(string(content), "\n")
+	if len(lines) == 0 {
+		return "Error: File is empty", "", nil
+	}
+
+	// endLineがファイル長を超える場合はクランプ（ユーザーフレンドリー）
+	if endLine > len(lines) {
+		endLine = len(lines)
+	}
+
+	// 削除される行数
+	deleteCount := endLine - startLine + 1
+
+	// 確認UI表示
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	cyan.Printf("🗑️  Delete Lines / 行削除\n")
+	cyan.Printf("📂 File / ファイル: %s\n", path)
+	cyan.Printf("📏 Lines / 行範囲: %d-%d (%d lines)\n", startLine, endLine, deleteCount)
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	red.Println("⚠️  DESTRUCTIVE: Lines will be permanently deleted!")
+	red.Println("⚠️  破壊的操作: 行が完全に削除されます!")
+
+	// コンテキスト表示（削除行の前後5行）
+	yellow.Println("\nContext / コンテキスト (5 lines before/after):")
+	contextStart := startLine - 5
+	if contextStart < 1 {
+		contextStart = 1
+	}
+	contextEnd := endLine + 5
+	if contextEnd > len(lines) {
+		contextEnd = len(lines)
+	}
+
+	for i := contextStart; i <= contextEnd; i++ {
+		if i >= startLine && i <= endLine {
+			red.Printf("→ %4d: %s\n", i, lines[i-1]) // 削除される行は赤色
+		} else {
+			fmt.Printf("  %4d: %s\n", i, lines[i-1])
+		}
+	}
+
+	if !confirm("Delete these lines? / これらの行を削除しますか？") {
+		return "Cancelled by user", "", nil
+	}
+
+	// バックアップ作成
+	backupPath, err := createBackup(absPath)
+	if err != nil {
+		return fmt.Sprintf("Error: Backup failed: %v", err), "", nil
+	}
+	green.Printf("📦 Backup created: %s\n", backupPath)
+
+	// 新しい内容を構築（削除行を除外）
+	newLines := make([]string, 0, len(lines)-deleteCount)
+	newLines = append(newLines, lines[:startLine-1]...) // 削除前の行
+	newLines = append(newLines, lines[endLine:]...)     // 削除後の行
+
+	newContent := strings.Join(newLines, "\n")
+
+	// ファイル書き込み
+	err = os.WriteFile(absPath, []byte(newContent), 0644)
+	if err != nil {
+		return fmt.Sprintf("Error: Failed to write file: %v", err), "", nil
+	}
+
+	return fmt.Sprintf("✅ Deleted lines %d-%d from %s", startLine, endLine, path), backupPath, nil
+}
+
+// executeDeleteFile deletes a file permanently (with backup for Undo)
+func executeDeleteFile(path string) (string, string, error) {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Sprintf("Error: Invalid path: %v", err), "", nil
+	}
+
+	// ファイル存在確認
+	fileInfo, err := os.Stat(absPath)
+	if os.IsNotExist(err) {
+		return "Error: File not found", "", nil
+	}
+	if err != nil {
+		return fmt.Sprintf("Error: Cannot access file: %v", err), "", nil
+	}
+
+	// ディレクトリでないことを確認
+	if fileInfo.IsDir() {
+		return "Error: Cannot delete directory (path is a directory)", "", nil
+	}
+
+	// ファイル内容読み込み
+	content, err := os.ReadFile(absPath)
+	if err != nil {
+		return fmt.Sprintf("Error: Failed to read file: %v", err), "", nil
+	}
+	lines := strings.Split(string(content), "\n")
+
+	// 確認UI表示（ファイルプレビュー付き）
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	cyan.Printf("🗑️  Delete File / ファイル削除\n")
+	cyan.Printf("📂 Path / パス: %s\n", path)
+	cyan.Printf("📏 Size / サイズ: %d bytes (%d lines)\n", fileInfo.Size(), len(lines))
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	red.Println("⚠️  DESTRUCTIVE: File will be permanently deleted!")
+	red.Println("⚠️  破壊的操作: ファイルは完全に削除されます!")
+
+	// ファイルプレビュー（最初20行）
+	yellow.Println("\nFile preview (first 20 lines) / ファイルプレビュー:")
+	previewLines := 20
+	if len(lines) < previewLines {
+		previewLines = len(lines)
+	}
+	for i := 0; i < previewLines; i++ {
+		fmt.Printf("  %4d: %s\n", i+1, lines[i])
+	}
+	if len(lines) > 20 {
+		yellow.Printf("  ... (%d more lines)\n", len(lines)-20)
+	}
+
+	if !confirm("Delete this file? / このファイルを削除しますか？") {
+		return "Cancelled by user", "", nil
+	}
+
+	// 削除前に必ずバックアップ作成（削除後は不可能）
+	backupPath, err := createBackup(absPath)
+	if err != nil {
+		// バックアップ失敗時は削除を中止（安全第一）
+		return fmt.Sprintf("Error: Backup failed, deletion ABORTED: %v", err), "", nil
+	}
+	green.Printf("📦 Backup created: %s\n", backupPath)
+
+	// ファイル削除
+	if err := os.Remove(absPath); err != nil {
+		return fmt.Sprintf("Error: Failed to delete file: %v", err), "", nil
+	}
+
+	return fmt.Sprintf("✅ Deleted: %s", path), backupPath, nil
+}
+
+// executeMoveFile moves/renames a file atomically
+func executeMoveFile(src, dest string) (string, string, error) {
+	absSrc, err := filepath.Abs(src)
+	if err != nil {
+		return fmt.Sprintf("Error: Invalid source path: %v", err), "", nil
+	}
+
+	absDest, err := filepath.Abs(dest)
+	if err != nil {
+		return fmt.Sprintf("Error: Invalid destination path: %v", err), "", nil
+	}
+
+	// ソースファイル確認
+	srcInfo, err := os.Stat(absSrc)
+	if os.IsNotExist(err) {
+		return "Error: Source file not found", "", nil
+	}
+	if err != nil {
+		return fmt.Sprintf("Error: Cannot access source file: %v", err), "", nil
+	}
+	if srcInfo.IsDir() {
+		return "Error: Source is a directory (file only)", "", nil
+	}
+
+	// 同一ファイルチェック（no-op）
+	if absSrc == absDest {
+		return "No operation: Source and destination are identical", "", nil
+	}
+
+	// 移動先の親ディレクトリ存在確認
+	destDir := filepath.Dir(absDest)
+	if _, err := os.Stat(destDir); os.IsNotExist(err) {
+		return fmt.Sprintf("Error: Destination directory does not exist: %s", destDir), "", nil
+	}
+
+	// 移動先の衝突処理
+	destExists := false
+	var destBackupPath string
+
+	if _, err := os.Stat(absDest); err == nil {
+		destExists = true
+
+		// 確認UI表示
+		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		cyan.Printf("📂 Move File / ファイル移動\n")
+		cyan.Printf("📄 Source / 移動元: %s\n", src)
+		cyan.Printf("📄 Destination / 移動先: %s\n", dest)
+		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		yellow.Println("⚠️  Warning: Destination file already exists")
+		yellow.Println("⚠️  警告: 移動先ファイルが既に存在します")
+
+		if !confirm("Overwrite destination? / 移動先を上書きしますか？") {
+			return "Cancelled by user", "", nil
+		}
+
+		// 移動先のバックアップ作成（移動元ではない！）
+		destBackupPath, err = createBackup(absDest)
+		if err != nil {
+			yellow.Printf("Warning: Failed to create backup: %v\n", err)
+		} else {
+			green.Printf("📦 Backup created: %s\n", destBackupPath)
+		}
+	}
+
+	// アトミック移動（フォールバック付き）
+	err = os.Rename(absSrc, absDest)
+
+	if err != nil {
+		// クロスファイルシステムエラーの場合はコピー+削除にフォールバック
+		if strings.Contains(err.Error(), "cross-device") || strings.Contains(err.Error(), "invalid cross-device link") {
+			yellow.Println("⚠️  Cross-filesystem move detected, using copy+delete fallback")
+
+			// コピー処理
+			srcFile, err := os.Open(absSrc)
+			if err != nil {
+				return fmt.Sprintf("Error: Cannot open source: %v", err), "", nil
+			}
+			defer srcFile.Close()
+
+			destFile, err := os.Create(absDest)
+			if err != nil {
+				return fmt.Sprintf("Error: Cannot create destination: %v", err), "", nil
+			}
+			defer destFile.Close()
+
+			if _, err = io.Copy(destFile, srcFile); err != nil {
+				return fmt.Sprintf("Error: Copy failed: %v", err), "", nil
+			}
+
+			// パーミッション保持
+			if err = os.Chmod(absDest, srcInfo.Mode()); err != nil {
+				yellow.Printf("Warning: Failed to preserve permissions: %v\n", err)
+			}
+
+			// ソースファイル削除
+			if err = os.Remove(absSrc); err != nil {
+				yellow.Printf("⚠️  Warning: Copy succeeded but failed to delete source: %v\n", err)
+				yellow.Printf("   Manual cleanup required: %s\n", absSrc)
+				return fmt.Sprintf("⚠️  Partially completed: Destination created but source remains"), destBackupPath, nil
+			}
+		} else {
+			return fmt.Sprintf("Error: Move failed: %v", err), "", nil
+		}
+	}
+
+	if destExists {
+		return fmt.Sprintf("✅ Moved (overwritten): %s → %s", src, dest), destBackupPath, nil
+	}
+	return fmt.Sprintf("✅ Moved: %s → %s", src, dest), "", nil
+}
+
+// ===== Lint Tool Helper Functions =====
+
+// fileExists checks if a file exists
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+// commandExists checks if a command is available in PATH
+func commandExists(cmd string) bool {
+	_, err := exec.LookPath(cmd)
+	return err == nil
+}
+
+// hasGlobMatches checks if any files match the glob pattern
+func hasGlobMatches(pattern string) bool {
+	matches, _ := filepath.Glob(pattern)
+	return len(matches) > 0
+}
+
+// detectLinter detects available linter for the project
+func detectLinter(basePath string) (linterName, checkCmd, fixCmd string) {
+	// Go: go.mod存在チェック
+	if fileExists(filepath.Join(basePath, "go.mod")) {
+		if commandExists("golangci-lint") {
+			return "golangci-lint", "golangci-lint run", "golangci-lint run --fix"
+		}
+		if commandExists("go") {
+			return "go vet", "go vet ./...", "" // fixコマンドなし
+		}
+	}
+
+	// JavaScript/TypeScript: package.json + ESLint
+	if fileExists(filepath.Join(basePath, "package.json")) {
+		eslintConfigFiles := []string{".eslintrc", ".eslintrc.js", ".eslintrc.json", "eslint.config.js"}
+		for _, configFile := range eslintConfigFiles {
+			if fileExists(filepath.Join(basePath, configFile)) {
+				return "eslint", "eslint .", "eslint . --fix"
+			}
+		}
+	}
+
+	// Python: *.pyファイル存在チェック
+	if hasGlobMatches(filepath.Join(basePath, "*.py")) {
+		if commandExists("ruff") {
+			return "ruff", "ruff check .", "ruff check . --fix"
+		}
+		if commandExists("pylint") {
+			return "pylint", "pylint .", "" // fixコマンドなし
+		}
+	}
+
+	// Rust: Cargo.toml存在チェック
+	if fileExists(filepath.Join(basePath, "Cargo.toml")) {
+		return "clippy", "cargo clippy", "cargo clippy --fix --allow-dirty"
+	}
+
+	return "", "", "" // リンター未検出
+}
+
+// executeLint runs linter with optional auto-fix
+func executeLint(path, autoFixStr string) (string, string, error) {
+	absPath := path
+	if absPath == "" {
+		absPath = "."
+	}
+
+	var err error
+	absPath, err = filepath.Abs(absPath)
+	if err != nil {
+		return fmt.Sprintf("Error: Invalid path: %v", err), "", nil
+	}
+
+	// auto_fix文字列をboolに変換
+	autoFix := (autoFixStr == "true")
+
+	// リンター検出
+	linterName, checkCmd, fixCmd := detectLinter(absPath)
+	if linterName == "" {
+		red.Println("⚠️  No linter detected for this project")
+		yellow.Println("Supported linters:")
+		yellow.Println("  - Go: golangci-lint, go vet")
+		yellow.Println("  - JavaScript/TypeScript: eslint")
+		yellow.Println("  - Python: ruff, pylint")
+		yellow.Println("  - Rust: clippy")
+		return "Error: No linter detected", "", nil
+	}
+
+	green.Printf("🔍 Detected linter: %s\n", linterName)
+
+	// Phase 1: チェック実行（自動修正なし）
+	green.Printf("▶ Running: %s\n", checkCmd)
+	checkCmdExec := exec.Command("bash", "-c", checkCmd)
+	checkCmdExec.Dir = absPath
+	checkOutput, checkErr := checkCmdExec.CombinedOutput()
+
+	// 出力を表示
+	fmt.Println(string(checkOutput))
+
+	// 問題が検出されたか判定
+	hasIssues := (checkErr != nil) || len(checkOutput) > 0
+
+	if !hasIssues {
+		green.Println("✅ No issues found")
+		return "No issues found", "", nil
+	}
+
+	// Phase 2: 自動修正（オプション）
+	if autoFix {
+		if fixCmd == "" {
+			yellow.Printf("⚠️  Auto-fix not supported for %s\n", linterName)
+			return fmt.Sprintf("Issues found (auto-fix not supported)\n%s", string(checkOutput)), "", nil
+		}
+
+		// 確認UI
+		cyan.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		cyan.Printf("🔧 Lint Auto-fix / リント自動修正\n")
+		cyan.Printf("📂 Path / パス: %s\n", path)
+		cyan.Printf("🛠️  Linter / リンター: %s\n", linterName)
+		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		yellow.Println("⚠️  Warning: Auto-fix will modify files")
+		yellow.Println("⚠️  警告: 自動修正でファイルが変更されます")
+
+		if !confirm("Run auto-fix? / 自動修正を実行しますか？") {
+			return "Auto-fix cancelled by user", "", nil
+		}
+
+		// バックアップ作成（制限: 単一パスのみ）
+		var backupPath string
+		if fileInfo, err := os.Stat(absPath); err == nil && !fileInfo.IsDir() {
+			// パスがファイルの場合のみバックアップ
+			backupPath, _ = createBackup(absPath)
+			if backupPath != "" {
+				green.Printf("📦 Backup created: %s\n", backupPath)
+			}
+		} else {
+			// ディレクトリの場合はバックアップなし（制限）
+			yellow.Println("⚠️  Note: Directory-wide auto-fix does not create backup (limitation)")
+		}
+
+		// 自動修正実行
+		green.Printf("▶ Running: %s\n", fixCmd)
+		fixCmdExec := exec.Command("bash", "-c", fixCmd)
+		fixCmdExec.Dir = absPath
+		fixOutput, fixErr := fixCmdExec.CombinedOutput()
+
+		fmt.Println(string(fixOutput))
+
+		if fixErr != nil {
+			return fmt.Sprintf("Auto-fix completed with errors:\n%s", string(fixOutput)), backupPath, nil
+		}
+
+		return fmt.Sprintf("✅ Auto-fix completed successfully"), backupPath, nil
+	}
+
+	return fmt.Sprintf("Issues found (use auto_fix to apply fixes)\n%s", string(checkOutput)), "", nil
 }
