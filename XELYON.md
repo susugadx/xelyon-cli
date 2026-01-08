@@ -105,8 +105,8 @@ xelyon-cli/
 - **APIリトライ**: エラー時に最大2回自動リトライ（指数バックオフ）
 
 #### 2. ツールシステム (internal/tools/)
-- **22種類のツール**:
-  - **ファイル編集**: read_file, write_file, str_replace, append_file, prepend_file
+- **25種類のツール**:
+  - **ファイル編集**: read_file, write_file, str_replace, append_file, prepend_file, insert_after, insert_before, copy_file
   - **ファイル管理**: list_dir, create_dir
   - **Git操作**: git_status, git_diff, git_add, git_commit, git_push, git_log, git_branch, git_checkout, git_stash
   - **開発支援**: run_test, format
@@ -592,6 +592,143 @@ AI: formatツールでsrc/ディレクトリをフォーマットします
 4. **自動検出**: run_test/formatはフレームワークを自動検出
 5. **プレビュー**: append_file/prepend_fileは変更箇所をプレビュー表示
 6. **冪等性**: create_dirはすでに存在しても成功
+
+---
+
+## v0.18.0 Phase 3 ツール詳細リファレンス
+
+### insert_after
+**目的**: パターンマッチした行の後に内容を挿入
+
+**引数**:
+- `path`: ファイルパス（必須）
+- `pattern`: マッチさせる行の内容（必須）
+- `content`: 挿入する内容（必須）
+
+**特徴**:
+- **2段階パターンマッチング**:
+  1. Tier 1: 厳密な文字列マッチ（行全体が完全一致）
+  2. Tier 2: 正規化ホワイトスペースマッチ（タブ→スペース変換、先頭空白除去後に比較）
+- **コンテキスト表示**: マッチした行の前後5行を表示
+- **複数マッチエラー**: パターンが複数行にマッチした場合、全マッチ場所を表示してエラー
+- **パターン未検出エラー**: パターンが見つからない場合、ファイルの最初50行をプレビュー表示
+- **バックアップ作成**: 挿入前に自動的に.bakファイル作成
+- **Undo対応**: FileChange追跡により/undoコマンドで復元可能
+
+**使用例**:
+```go
+// 例: import文の後にコメントを追加
+insert_after {
+  "path": "main.go",
+  "pattern": "import (",
+  "content": "\t// Additional imports"
+}
+```
+
+**リスク評価**: 低（非破壊的、append類似、バックアップあり）
+
+---
+
+### insert_before
+**目的**: パターンマッチした行の前に内容を挿入
+
+**引数**:
+- `path`: ファイルパス（必須）
+- `pattern`: マッチさせる行の内容（必須）
+- `content`: 挿入する内容（必須）
+
+**特徴**:
+- **insert_afterと同じ機能**: 挿入位置のみ異なる（before vs after）
+- **2段階パターンマッチング**: Tier 1 (厳密) → Tier 2 (正規化)
+- **コンテキスト表示**: マッチ行の前後5行表示
+- **複数マッチエラー**: 全マッチ場所を前後2行付きで表示
+- **バックアップ作成**: 挿入前に自動作成
+- **Undo対応**: FileChange追跡
+
+**使用例**:
+```go
+// 例: 関数定義の前にコメントを追加
+insert_before {
+  "path": "handlers.go",
+  "pattern": "func HandleRequest(w http.ResponseWriter, r *http.Request) {",
+  "content": "// HandleRequest processes incoming HTTP requests"
+}
+```
+
+**リスク評価**: 低（非破壊的、prepend類似、バックアップあり）
+
+---
+
+### copy_file
+**目的**: ファイルをコピー（パーミッション保持）
+
+**引数**:
+- `src`: コピー元ファイルパス（必須）
+- `dest`: コピー先ファイルパス（必須）
+
+**特徴**:
+- **効率的コピー**: `io.Copy()`を使用してメモリ効率的にコピー
+- **パーミッション保持**: `os.Chmod()`でソースファイルのパーミッションを保持
+- **条件付き確認**:
+  - コピー先が存在しない → 確認なし、即座にコピー
+  - コピー先が存在する → 確認プロンプト表示、バックアップ作成
+- **ディレクトリ除外**: ソースがディレクトリの場合はエラー（ファイルのみ対応）
+- **Undo対応**: 上書き時のみFileChange追跡（バックアップから復元可能）
+
+**使用例**:
+```go
+// 例: 設定ファイルのバックアップ
+copy_file {
+  "src": "config.yaml",
+  "dest": "config.yaml.backup"
+}
+
+// 例: テンプレートファイルのコピー
+copy_file {
+  "src": "template.go",
+  "dest": "handlers/new_handler.go"
+}
+```
+
+**確認UI（上書き時）**:
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Copy File / ファイルコピー
+📂 Source / コピー元: config.yaml
+📂 Destination / コピー先: config.yaml.backup
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚠️  Warning: Destination file already exists / 警告: コピー先ファイルが既に存在します
+Overwrite? / 上書きしますか？ (y/n):
+```
+
+**リスク評価**: 低（上書き時のみ確認、バックアップあり）
+
+---
+
+### Phase 3 実装の特徴
+
+1. **パターンマッチングの信頼性**:
+   - 2段階マッチング戦略（厳密 → 正規化）により、インデントが多少異なっても検出可能
+   - `normalizeLeadingWhitespace()`を再利用（str_replaceと同じアルゴリズム）
+
+2. **ユーザーフレンドリーなエラー処理**:
+   - パターン未検出: ファイル内容をプレビュー表示（最初50行）
+   - 複数マッチ: すべてのマッチ場所を前後コンテキスト付きで表示
+   - ユーザーがパターンを修正しやすい情報を提供
+
+3. **確認プロンプト戦略**:
+   - insert_after/insert_before: 確認なし（append/prepend類似の非破壊的操作）
+   - copy_file: 上書き時のみ確認（新規作成は即座に実行）
+
+4. **コード再利用**:
+   - `normalizeLeadingWhitespace()`: 既存関数を再利用
+   - `createBackup()`: 既存関数を再利用
+   - パターンマッチロジック: executeInsertAfter/Beforeで共通（DRY原則）
+
+5. **Undo完全対応**:
+   - すべてのツールがFileChange構造体を返す
+   - バックアップパスを追跡
+   - `/undo`コマンドで完全復元可能
 
 ---
 

@@ -89,6 +89,9 @@ You have access to the following tools:
 - str_replace: Replace text in file. Args: {"path": "...", "old_str": "...", "new_str": "..."}
 - append_file: Append content to end of file. Args: {"path": "...", "content": "..."}
 - prepend_file: Insert content at beginning of file. Args: {"path": "...", "content": "..."}
+- insert_after: Insert content after pattern match. Args: {"path": "...", "pattern": "...", "content": "..."}
+- insert_before: Insert content before pattern match. Args: {"path": "...", "pattern": "...", "content": "..."}
+- copy_file: Copy file to destination. Args: {"src": "...", "dest": "..."}
 - list_dir: List directory contents. Args: {"path": "..."} (optional)
 
 ### File Management

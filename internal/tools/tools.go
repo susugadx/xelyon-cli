@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -161,6 +162,13 @@ func Execute(tc *ToolCall) (string, *FileChange) {
 		if tc.Args["path"] != "" {
 			fmt.Printf("   Path: %s\n", tc.Args["path"])
 		}
+	case "insert_after", "insert_before":
+		fmt.Printf("   File: %s\n", tc.Args["path"])
+		fmt.Printf("   Pattern: %s\n", truncate(tc.Args["pattern"], 60))
+		fmt.Printf("   Content: %s\n", truncate(tc.Args["content"], 60))
+	case "copy_file":
+		fmt.Printf("   Source: %s\n", tc.Args["src"])
+		fmt.Printf("   Destination: %s\n", tc.Args["dest"])
 	case "web_search":
 		fmt.Printf("   Query: %s\n", tc.Args["query"])
 	default:
@@ -1603,4 +1611,306 @@ func executeWebSearch(query string) string {
 	}
 
 	return result
+}
+
+// ===== Phase 3: Advanced File Editing Tools =====
+
+// executeInsertAfter はパターンマッチした行の後に内容を挿入
+func executeInsertAfter(path, pattern, content string) (string, string, error) {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Sprintf("Error: Invalid file path: %v", err), "", nil
+	}
+
+	// ファイル読み込み
+	fileContent, err := os.ReadFile(absPath)
+	if err != nil {
+		return fmt.Sprintf("Error: Cannot read file: %v", err), "", nil
+	}
+
+	lines := strings.Split(string(fileContent), "\n")
+
+	// Tier 1: Exact match
+	matchIdx := -1
+	matchCount := 0
+	var matchIndices []int
+
+	for i, line := range lines {
+		if line == pattern {
+			matchIdx = i
+			matchCount++
+			matchIndices = append(matchIndices, i)
+		}
+	}
+
+	// Tier 2: Normalized whitespace match
+	if matchIdx == -1 {
+		normalizedPattern := normalizeLeadingWhitespace(pattern)
+		for i, line := range lines {
+			if normalizeLeadingWhitespace(line) == normalizedPattern {
+				matchIdx = i
+				matchCount++
+				matchIndices = append(matchIndices, i)
+			}
+		}
+	}
+
+	// パターンが見つからない場合
+	if matchIdx == -1 {
+		yellow.Printf("⚠️  Pattern not found / パターンが見つかりません: %s\n\n", pattern)
+		yellow.Println("File preview (first 50 lines) / ファイルプレビュー (最初50行):")
+		for i := 0; i < min(len(lines), 50); i++ {
+			fmt.Printf("%4d: %s\n", i+1, lines[i])
+		}
+		if len(lines) > 50 {
+			yellow.Printf("... (%d more lines)\n", len(lines)-50)
+		}
+		return fmt.Sprintf("Error: Pattern not found in %s", path), "", nil
+	}
+
+	// 複数マッチの場合
+	if matchCount > 1 {
+		red.Printf("⚠️  Error: Pattern matches %d locations (must be unique)\n", matchCount)
+		red.Println("⚠️  エラー: パターンが複数の場所にマッチします（一意である必要があります）\n")
+		yellow.Println("All match locations / すべてのマッチ場所:")
+		for _, idx := range matchIndices {
+			start := max(0, idx-2)
+			end := min(len(lines), idx+3)
+			for i := start; i < end; i++ {
+				prefix := "  "
+				if i == idx {
+					prefix = "→ "
+				}
+				fmt.Printf("%s%4d: %s\n", prefix, i+1, lines[i])
+			}
+			fmt.Println()
+		}
+		return fmt.Sprintf("Error: Pattern matched %d times (must be unique)", matchCount), "", nil
+	}
+
+	// コンテキスト表示（マッチ行の前後5行）
+	green.Printf("✅ Pattern found at line %d / パターンが見つかりました (行 %d)\n\n", matchIdx+1, matchIdx+1)
+	yellow.Println("Context / コンテキスト (5 lines before/after):")
+	start := max(0, matchIdx-5)
+	end := min(len(lines), matchIdx+6)
+	for i := start; i < end; i++ {
+		prefix := "  "
+		if i == matchIdx {
+			prefix = "→ "
+		}
+		fmt.Printf("%s%4d: %s\n", prefix, i+1, lines[i])
+	}
+	cyan.Println("\n━━━━ Content to insert / 挿入する内容 ━━━━")
+	fmt.Println(content)
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+
+	// バックアップ作成
+	backupPath, err := createBackup(absPath)
+	if err != nil {
+		return fmt.Sprintf("Error: Failed to create backup: %v", err), "", nil
+	}
+	green.Printf("📦 Backup created: %s\n", backupPath)
+
+	// 挿入実行
+	newLines := make([]string, 0, len(lines)+1)
+	newLines = append(newLines, lines[:matchIdx+1]...)
+	newLines = append(newLines, content)
+	newLines = append(newLines, lines[matchIdx+1:]...)
+
+	newContent := strings.Join(newLines, "\n")
+	err = os.WriteFile(absPath, []byte(newContent), 0644)
+	if err != nil {
+		return fmt.Sprintf("Error: Failed to write file: %v", err), "", nil
+	}
+
+	return fmt.Sprintf("✅ Inserted after line %d in %s", matchIdx+1, path), backupPath, nil
+}
+
+// executeInsertBefore はパターンマッチした行の前に内容を挿入
+func executeInsertBefore(path, pattern, content string) (string, string, error) {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Sprintf("Error: Invalid file path: %v", err), "", nil
+	}
+
+	// ファイル読み込み
+	fileContent, err := os.ReadFile(absPath)
+	if err != nil {
+		return fmt.Sprintf("Error: Cannot read file: %v", err), "", nil
+	}
+
+	lines := strings.Split(string(fileContent), "\n")
+
+	// Tier 1: Exact match
+	matchIdx := -1
+	matchCount := 0
+	var matchIndices []int
+
+	for i, line := range lines {
+		if line == pattern {
+			matchIdx = i
+			matchCount++
+			matchIndices = append(matchIndices, i)
+		}
+	}
+
+	// Tier 2: Normalized whitespace match
+	if matchIdx == -1 {
+		normalizedPattern := normalizeLeadingWhitespace(pattern)
+		for i, line := range lines {
+			if normalizeLeadingWhitespace(line) == normalizedPattern {
+				matchIdx = i
+				matchCount++
+				matchIndices = append(matchIndices, i)
+			}
+		}
+	}
+
+	// パターンが見つからない場合
+	if matchIdx == -1 {
+		yellow.Printf("⚠️  Pattern not found / パターンが見つかりません: %s\n\n", pattern)
+		yellow.Println("File preview (first 50 lines) / ファイルプレビュー (最初50行):")
+		for i := 0; i < min(len(lines), 50); i++ {
+			fmt.Printf("%4d: %s\n", i+1, lines[i])
+		}
+		if len(lines) > 50 {
+			yellow.Printf("... (%d more lines)\n", len(lines)-50)
+		}
+		return fmt.Sprintf("Error: Pattern not found in %s", path), "", nil
+	}
+
+	// 複数マッチの場合
+	if matchCount > 1 {
+		red.Printf("⚠️  Error: Pattern matches %d locations (must be unique)\n", matchCount)
+		red.Println("⚠️  エラー: パターンが複数の場所にマッチします（一意である必要があります）\n")
+		yellow.Println("All match locations / すべてのマッチ場所:")
+		for _, idx := range matchIndices {
+			start := max(0, idx-2)
+			end := min(len(lines), idx+3)
+			for i := start; i < end; i++ {
+				prefix := "  "
+				if i == idx {
+					prefix = "→ "
+				}
+				fmt.Printf("%s%4d: %s\n", prefix, i+1, lines[i])
+			}
+			fmt.Println()
+		}
+		return fmt.Sprintf("Error: Pattern matched %d times (must be unique)", matchCount), "", nil
+	}
+
+	// コンテキスト表示（マッチ行の前後5行）
+	green.Printf("✅ Pattern found at line %d / パターンが見つかりました (行 %d)\n\n", matchIdx+1, matchIdx+1)
+	yellow.Println("Context / コンテキスト (5 lines before/after):")
+	start := max(0, matchIdx-5)
+	end := min(len(lines), matchIdx+6)
+	for i := start; i < end; i++ {
+		prefix := "  "
+		if i == matchIdx {
+			prefix = "→ "
+		}
+		fmt.Printf("%s%4d: %s\n", prefix, i+1, lines[i])
+	}
+	cyan.Println("\n━━━━ Content to insert / 挿入する内容 ━━━━")
+	fmt.Println(content)
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+
+	// バックアップ作成
+	backupPath, err := createBackup(absPath)
+	if err != nil {
+		return fmt.Sprintf("Error: Failed to create backup: %v", err), "", nil
+	}
+	green.Printf("📦 Backup created: %s\n", backupPath)
+
+	// 挿入実行
+	newLines := make([]string, 0, len(lines)+1)
+	newLines = append(newLines, lines[:matchIdx]...)
+	newLines = append(newLines, content)
+	newLines = append(newLines, lines[matchIdx:]...)
+
+	newContent := strings.Join(newLines, "\n")
+	err = os.WriteFile(absPath, []byte(newContent), 0644)
+	if err != nil {
+		return fmt.Sprintf("Error: Failed to write file: %v", err), "", nil
+	}
+
+	return fmt.Sprintf("✅ Inserted before line %d in %s", matchIdx+1, path), backupPath, nil
+}
+
+// executeCopyFile はファイルをコピー
+func executeCopyFile(src, dest string) (string, string, error) {
+	absSrc, err := filepath.Abs(src)
+	if err != nil {
+		return fmt.Sprintf("Error: Invalid source path: %v", err), "", nil
+	}
+
+	absDest, err := filepath.Abs(dest)
+	if err != nil {
+		return fmt.Sprintf("Error: Invalid destination path: %v", err), "", nil
+	}
+
+	// ソースファイル確認
+	srcInfo, err := os.Stat(absSrc)
+	if err != nil {
+		return fmt.Sprintf("Error: Source file not found: %v", err), "", nil
+	}
+	if srcInfo.IsDir() {
+		return fmt.Sprintf("Error: Source is a directory (use recursive copy for directories): %s", src), "", nil
+	}
+
+	// 送信先が存在するかチェック
+	destExists := false
+	var destBackupPath string
+	if _, err := os.Stat(absDest); err == nil {
+		destExists = true
+
+		// 確認UI表示
+		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		cyan.Printf("📋 Copy File / ファイルコピー\n")
+		cyan.Printf("📂 Source / コピー元: %s\n", src)
+		cyan.Printf("📂 Destination / コピー先: %s\n", dest)
+		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		yellow.Println("⚠️  Warning: Destination file already exists / 警告: コピー先ファイルが既に存在します")
+
+		if !confirm("Overwrite? / 上書きしますか？") {
+			return "Cancelled by user", "", nil
+		}
+
+		// バックアップ作成
+		destBackupPath, err = createBackup(absDest)
+		if err != nil {
+			yellow.Printf("Warning: Failed to create backup: %v\n", err)
+		} else {
+			green.Printf("📦 Backup created: %s\n", destBackupPath)
+		}
+	}
+
+	// ファイルコピー実行
+	srcFile, err := os.Open(absSrc)
+	if err != nil {
+		return fmt.Sprintf("Error: Cannot open source file: %v", err), "", nil
+	}
+	defer srcFile.Close()
+
+	destFile, err := os.Create(absDest)
+	if err != nil {
+		return fmt.Sprintf("Error: Cannot create destination file: %v", err), "", nil
+	}
+	defer destFile.Close()
+
+	_, err = io.Copy(destFile, srcFile)
+	if err != nil {
+		return fmt.Sprintf("Error: Failed to copy file: %v", err), "", nil
+	}
+
+	// パーミッション保持
+	err = os.Chmod(absDest, srcInfo.Mode())
+	if err != nil {
+		yellow.Printf("Warning: Failed to preserve permissions: %v\n", err)
+	}
+
+	if destExists {
+		return fmt.Sprintf("✅ File copied (overwritten): %s → %s", src, dest), destBackupPath, nil
+	}
+	return fmt.Sprintf("✅ File copied: %s → %s", src, dest), "", nil
 }

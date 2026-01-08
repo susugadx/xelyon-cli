@@ -300,6 +300,75 @@ func (t *GitStashTool) Run(args map[string]string) (string, *FileChange, error) 
 	return result, nil, nil
 }
 
+// ===== Insert After Tool =====
+type InsertAfterTool struct{}
+
+func (t *InsertAfterTool) Name() string { return "insert_after" }
+
+func (t *InsertAfterTool) Run(args map[string]string) (string, *FileChange, error) {
+	result, backupPath, err := executeInsertAfter(args["path"], args["pattern"], args["content"])
+	if err != nil {
+		return result, nil, err
+	}
+	var change *FileChange
+	if backupPath != "" {
+		change = &FileChange{
+			FilePath:    args["path"],
+			BackupPath:  backupPath,
+			Timestamp:   getCurrentTime(),
+			Tool:        "insert_after",
+			Description: "Inserted content after pattern in " + args["path"],
+		}
+	}
+	return result, change, nil
+}
+
+// ===== Insert Before Tool =====
+type InsertBeforeTool struct{}
+
+func (t *InsertBeforeTool) Name() string { return "insert_before" }
+
+func (t *InsertBeforeTool) Run(args map[string]string) (string, *FileChange, error) {
+	result, backupPath, err := executeInsertBefore(args["path"], args["pattern"], args["content"])
+	if err != nil {
+		return result, nil, err
+	}
+	var change *FileChange
+	if backupPath != "" {
+		change = &FileChange{
+			FilePath:    args["path"],
+			BackupPath:  backupPath,
+			Timestamp:   getCurrentTime(),
+			Tool:        "insert_before",
+			Description: "Inserted content before pattern in " + args["path"],
+		}
+	}
+	return result, change, nil
+}
+
+// ===== Copy File Tool =====
+type CopyFileTool struct{}
+
+func (t *CopyFileTool) Name() string { return "copy_file" }
+
+func (t *CopyFileTool) Run(args map[string]string) (string, *FileChange, error) {
+	result, backupPath, err := executeCopyFile(args["src"], args["dest"])
+	if err != nil {
+		return result, nil, err
+	}
+	var change *FileChange
+	if backupPath != "" {
+		change = &FileChange{
+			FilePath:    args["dest"],
+			BackupPath:  backupPath,
+			Timestamp:   getCurrentTime(),
+			Tool:        "copy_file",
+			Description: "Copied " + args["src"] + " to " + args["dest"],
+		}
+	}
+	return result, change, nil
+}
+
 // ===== Registry Registration =====
 
 // RegisterBuiltinTools はすべての組み込みツールを登録
@@ -326,6 +395,9 @@ func RegisterBuiltinTools(r *Registry) {
 	r.Register(&CreateDirTool{})
 	r.Register(&RunTestTool{})
 	r.Register(&FormatTool{})
+	r.Register(&InsertAfterTool{})  // NEW: Phase 3
+	r.Register(&InsertBeforeTool{}) // NEW: Phase 3
+	r.Register(&CopyFileTool{})     // NEW: Phase 3
 }
 
 // init は自動的にデフォルトレジストリに全ツールを登録
