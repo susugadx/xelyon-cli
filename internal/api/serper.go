@@ -7,7 +7,8 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 // SerperSearchRequest は Serper API へのリクエスト構造
@@ -60,7 +61,7 @@ func WebSearch(query string) (string, error) {
 	req.Header.Set("X-API-KEY", apiKey)
 
 	// HTTP クライアントで実行
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: config.SerperHTTPTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to execute request: %w", err)

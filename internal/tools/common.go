@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 var (
@@ -179,7 +180,7 @@ func showImprovedDiff(oldStr, newStr string) {
 	oldLines := strings.Split(oldStr, "\n")
 	newLines := strings.Split(newStr, "\n")
 
-	maxLines := 15 // 最大表示行数
+	maxLines := config.MaxDiffDisplayLines // 最大表示行数
 
 	cyan.Println("\nBefore / 変更前:")
 	cyan.Println("┌" + strings.Repeat("─", 60) + "┐")
@@ -219,7 +220,7 @@ func showDiff(old, new, filename string) {
 	}
 
 	diffCount := 0
-	for i := 0; i < maxLines && diffCount < 20; i++ {
+	for i := 0; i < maxLines && diffCount < config.MaxDiffIterations; i++ {
 		oldLine := ""
 		newLine := ""
 		if i < len(oldLines) {
@@ -242,7 +243,7 @@ func showDiff(old, new, filename string) {
 
 	if diffCount == 0 {
 		fmt.Println("(no changes)")
-	} else if diffCount >= 20 {
+	} else if diffCount >= config.MaxDiffIterations {
 		yellow.Println("... (more changes)")
 	}
 

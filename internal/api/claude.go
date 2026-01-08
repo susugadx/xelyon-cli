@@ -9,8 +9,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -114,7 +114,7 @@ func (p *ClaudeProvider) ChatWithTools(ctx context.Context, systemPrompt string,
 	spinner.Start("Thinking")
 
 	client := &http.Client{
-		Timeout: 30 * time.Second,
+		Timeout: config.DefaultHTTPTimeout,
 	}
 	resp, err := client.Do(req)
 	if err != nil {

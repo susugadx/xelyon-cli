@@ -5,6 +5,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 // 自動実行可能なコマンド（安全なもの）
@@ -81,8 +83,8 @@ func executeBash(command string) string {
 	}
 
 	result := string(output)
-	if len(result) > 5000 {
-		result = result[:5000] + "\n... (truncated)"
+	if len(result) > config.OutputTruncateLen {
+		result = result[:config.OutputTruncateLen] + "\n... (truncated)"
 	}
 
 	return result

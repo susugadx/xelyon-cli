@@ -3,6 +3,8 @@ package api
 import (
 	"context"
 	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 // Client はLLM APIクライアント
@@ -15,7 +17,7 @@ type Client struct {
 func NewClient(provider Provider) *Client {
 	return &Client{
 		Provider: provider,
-		Timeout:  30 * time.Second,
+		Timeout:  config.DefaultHTTPTimeout,
 	}
 }
 

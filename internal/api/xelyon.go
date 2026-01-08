@@ -6,7 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 const baseURL = "https://xelyon-backend-265806801386.asia-northeast1.run.app"
@@ -47,7 +48,7 @@ func SearchRAG(query string, userID string, topK int) (*RAGResponse, error) {
 	}
 
 	client := &http.Client{
-		Timeout: 30 * time.Second,
+		Timeout: config.DefaultHTTPTimeout,
 	}
 	req, err := http.NewRequest("POST", baseURL+"/api/rag/search", bytes.NewBuffer(jsonBody))
 	if err != nil {
