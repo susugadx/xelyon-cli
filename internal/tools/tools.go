@@ -148,7 +148,8 @@ func Execute(tc *ToolCall) (string, *FileChange) {
 			path = "."
 		}
 		fmt.Printf("   Directory: %s\n", path)
-	case "git_add", "git_commit", "git_push", "git_status", "git_diff", "git_log":
+	case "git_add", "git_commit", "git_push", "git_status", "git_diff", "git_log",
+		"git_branch", "git_checkout", "git_stash":
 		// Git操作は引数を簡潔に表示
 		for k, v := range tc.Args {
 			if v != "" {
@@ -1013,6 +1014,382 @@ func executeGitLog() string {
 	}
 	result := string(output)
 	return result
+}
+
+// executeGitBranch はブランチ操作（list/create/switch）
+func executeGitBranch(action, branchName string) string {
+	// デフォルトはlist
+	if action == "" {
+		action = "list"
+	}
+
+	// Validation
+	if (action == "create" || action == "switch") && branchName == "" {
+		return fmt.Sprintf("Error: branch_name is required for action '%s'", action)
+	}
+
+	// Action: list
+	if action == "list" {
+		green.Println("📋 git branch")
+		cmd := exec.Command("git", "branch", "-a")
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Sprintf("Error: %v\n%s", err, string(output))
+		}
+		result := string(output)
+		if result == "" {
+			result = "No branches found"
+		}
+		return result
+	}
+
+	// Action: create
+	if action == "create" {
+		green.Printf("🌿 Creating branch: %s\n", branchName)
+		cmd := exec.Command("git", "branch", branchName)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Sprintf("Error: %v\n%s", err, string(output))
+		}
+		return fmt.Sprintf("✅ Created branch: %s", branchName)
+	}
+
+	// Action: switch
+	if action == "switch" {
+		// 未コミット変更チェック
+		statusCmd := exec.Command("git", "status", "--porcelain")
+		statusOutput, _ := statusCmd.CombinedOutput()
+		hasChanges := len(strings.TrimSpace(string(statusOutput))) > 0
+
+		if hasChanges {
+			// 確認UI
+			cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+			cyan.Printf("🔀 Git Branch Switch / ブランチ切り替え\n")
+			cyan.Printf("🌿 Target Branch / 対象ブランチ: %s\n", branchName)
+			cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+			yellow.Println("⚠️  Warning: You have uncommitted changes / 警告: コミットされていない変更があります")
+			fmt.Println("\nUncommitted changes / 未コミットの変更:")
+			fmt.Println(string(statusOutput))
+
+			if !confirm("Switch branch anyway? / それでもブランチを切り替えますか？") {
+				return "Cancelled by user"
+			}
+		} else {
+			green.Printf("🔀 Switching to branch: %s\n", branchName)
+		}
+
+		cmd := exec.Command("git", "checkout", branchName)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Sprintf("Error: %v\n%s", err, string(output))
+		}
+		return fmt.Sprintf("✅ Switched to branch: %s\n%s", branchName, string(output))
+	}
+
+	return fmt.Sprintf("Error: Unknown action '%s' (use 'list', 'create', or 'switch')", action)
+}
+
+// executeGitCheckout はファイル復元またはブランチチェックアウト
+func executeGitCheckout(target string) (string, string, error) {
+	// Validation
+	if target == "" {
+		return "Error: target is required (file path or branch name)", "", nil
+	}
+
+	// ターゲットがファイルかブランチか判定
+	absTarget, _ := filepath.Abs(target)
+	isFile := false
+	if _, err := os.Stat(absTarget); err == nil {
+		isFile = true
+	} else if strings.Contains(target, "/") || strings.Contains(target, ".") {
+		// ファイルっぽいパス（削除されたファイルの復元に対応）
+		isFile = true
+	}
+
+	// ファイル復元（破壊的 - ALWAYS confirm）
+	if isFile {
+		// 現在の内容を読み込み
+		oldContent := "[File does not exist or was deleted]"
+		if content, err := os.ReadFile(absTarget); err == nil {
+			oldContent = string(content)
+		}
+
+		// HEAD内容を取得
+		headCmd := exec.Command("git", "show", "HEAD:"+target)
+		headOutput, headErr := headCmd.CombinedOutput()
+		headContent := ""
+		if headErr == nil {
+			headContent = string(headOutput)
+		} else {
+			headContent = "[Unable to read from HEAD - file may be new/untracked]"
+		}
+
+		// 確認UI
+		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		cyan.Printf("⚠️  Git Checkout File / ファイル復元\n")
+		cyan.Printf("📂 File / ファイル: %s\n", target)
+		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		red.Println("⚠️  DESTRUCTIVE: This will discard all local changes!")
+		red.Println("⚠️  破壊的操作: このファイルのローカル変更はすべて失われます!")
+
+		// Diff簡易表示
+		if oldContent != "[File does not exist or was deleted]" && headContent != "[Unable to read from HEAD - file may be new/untracked]" {
+			yellow.Println("\nChanges that will be lost / 失われる変更:")
+			// 簡易diff: 最初10行と最後10行を表示
+			oldLines := strings.Split(oldContent, "\n")
+			headLines := strings.Split(headContent, "\n")
+			if len(oldLines) > 20 {
+				fmt.Println(strings.Join(oldLines[:10], "\n"))
+				yellow.Printf("... (%d lines omitted) ...\n", len(oldLines)-20)
+				fmt.Println(strings.Join(oldLines[len(oldLines)-10:], "\n"))
+			} else {
+				fmt.Println(oldContent)
+			}
+			yellow.Printf("\nWill be restored to (%d lines from HEAD)\n", len(headLines))
+		} else {
+			fmt.Printf("\nCurrent: %s\n", oldContent)
+			fmt.Printf("HEAD:    %s\n", headContent)
+		}
+
+		if !confirm("Restore from HEAD? / HEADから復元しますか？") {
+			return "Cancelled by user", "", nil
+		}
+
+		// バックアップ作成
+		backupPath := ""
+		if oldContent != "[File does not exist or was deleted]" {
+			var err error
+			backupPath, err = createBackup(absTarget)
+			if err != nil {
+				yellow.Printf("Warning: Failed to create backup: %v (continuing anyway)\n", err)
+			} else {
+				green.Printf("📦 Backup created: %s\n", backupPath)
+			}
+		}
+
+		// Checkout実行
+		cmd := exec.Command("git", "checkout", "HEAD", "--", target)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Sprintf("Error: %v\n%s", err, string(output)), "", nil
+		}
+
+		return fmt.Sprintf("✅ Restored from HEAD: %s", target), backupPath, nil
+	}
+
+	// ブランチチェックアウト
+	green.Printf("🔀 Detected branch target: %s\n", target)
+	yellow.Println("ℹ️  Tip: Use git_branch with action='switch' for more options")
+
+	// 未コミット変更チェック
+	statusCmd := exec.Command("git", "status", "--porcelain")
+	statusOutput, _ := statusCmd.CombinedOutput()
+	hasChanges := len(strings.TrimSpace(string(statusOutput))) > 0
+
+	if hasChanges {
+		// 確認UI
+		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		cyan.Printf("🔀 Git Checkout Branch / ブランチチェックアウト\n")
+		cyan.Printf("🌿 Target / 対象: %s\n", target)
+		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		yellow.Println("⚠️  Warning: You have uncommitted changes / 警告: 未コミットの変更があります")
+		fmt.Println("\nUncommitted changes / 未コミットの変更:")
+		fmt.Println(string(statusOutput))
+
+		if !confirm("Checkout anyway? / それでもチェックアウトしますか？") {
+			return "Cancelled by user", "", nil
+		}
+	}
+
+	cmd := exec.Command("git", "checkout", target)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Sprintf("Error: %v\n%s", err, string(output)), "", nil
+	}
+
+	return fmt.Sprintf("✅ Checked out: %s\n%s", target, string(output)), "", nil
+}
+
+// executeGitStash はスタッシュ操作（save/list/pop/apply/drop）
+func executeGitStash(action, message string) string {
+	// デフォルトはsave
+	if action == "" {
+		action = "save"
+	}
+
+	// Validation
+	validActions := map[string]bool{
+		"save": true, "list": true, "pop": true, "apply": true, "drop": true,
+	}
+	if !validActions[action] {
+		return fmt.Sprintf("Error: Unknown action '%s' (use 'save', 'list', 'pop', 'apply', or 'drop')", action)
+	}
+
+	// Action: save
+	if action == "save" {
+		// 変更があるかチェック
+		statusCmd := exec.Command("git", "status", "--porcelain")
+		statusOutput, _ := statusCmd.CombinedOutput()
+		if len(strings.TrimSpace(string(statusOutput))) == 0 {
+			yellow.Println("⚠️  No changes to stash / スタッシュする変更がありません")
+			return "No changes to stash (working tree clean)"
+		}
+
+		green.Println("📦 Stashing changes / 変更をスタッシュ")
+		yellow.Println("\nChanges to stash / スタッシュする変更:")
+		fmt.Println(string(statusOutput))
+
+		args := []string{"stash", "push"}
+		if message != "" {
+			args = append(args, "-m", message)
+		}
+
+		cmd := exec.Command("git", args...)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Sprintf("Error: %v\n%s", err, string(output))
+		}
+
+		return fmt.Sprintf("✅ Stashed changes\n%s", string(output))
+	}
+
+	// Action: list
+	if action == "list" {
+		green.Println("📋 git stash list")
+		cmd := exec.Command("git", "stash", "list")
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Sprintf("Error: %v\n%s", err, string(output))
+		}
+		result := string(output)
+		if result == "" {
+			result = "No stashes found"
+		}
+		return result
+	}
+
+	// Action: pop
+	if action == "pop" {
+		stashRef := "stash@{0}" // デフォルト: 最新
+		if message != "" {
+			stashRef = "stash@{" + message + "}"
+		}
+
+		// スタッシュプレビュー取得
+		showCmd := exec.Command("git", "stash", "show", "-p", stashRef)
+		showOutput, showErr := showCmd.CombinedOutput()
+
+		// 確認UI
+		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		cyan.Printf("📦 Git Stash Pop / スタッシュ適用・削除\n")
+		cyan.Printf("📋 Stash / スタッシュ: %s\n", stashRef)
+		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		yellow.Println("⚠️  Warning: This may cause merge conflicts / 警告: マージ競合が発生する可能性があります")
+
+		if showErr == nil {
+			yellow.Println("\nStash preview / スタッシュプレビュー (first 20 lines):")
+			lines := strings.Split(string(showOutput), "\n")
+			maxLines := 20
+			if len(lines) < maxLines {
+				maxLines = len(lines)
+			}
+			for i := 0; i < maxLines; i++ {
+				fmt.Println(lines[i])
+			}
+			if len(lines) > 20 {
+				yellow.Printf("... (%d more lines)\n", len(lines)-20)
+			}
+		}
+
+		if !confirm("Pop this stash? / このスタッシュを適用・削除しますか？") {
+			return "Cancelled by user"
+		}
+
+		cmd := exec.Command("git", "stash", "pop", stashRef)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Sprintf("Error (may have conflicts): %v\n%s", err, string(output))
+		}
+
+		return fmt.Sprintf("✅ Popped stash: %s\n%s", stashRef, string(output))
+	}
+
+	// Action: apply
+	if action == "apply" {
+		stashRef := "stash@{0}"
+		if message != "" {
+			stashRef = "stash@{" + message + "}"
+		}
+
+		// スタッシュプレビュー取得
+		showCmd := exec.Command("git", "stash", "show", "-p", stashRef)
+		showOutput, showErr := showCmd.CombinedOutput()
+
+		// 確認UI
+		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		cyan.Printf("📦 Git Stash Apply / スタッシュ適用\n")
+		cyan.Printf("📋 Stash / スタッシュ: %s\n", stashRef)
+		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		yellow.Println("⚠️  Warning: This may cause merge conflicts / 警告: マージ競合が発生する可能性があります")
+		yellow.Println("ℹ️  Note: Stash will be kept after apply / 注意: スタッシュは適用後も保持されます")
+
+		if showErr == nil {
+			yellow.Println("\nStash preview / スタッシュプレビュー (first 20 lines):")
+			lines := strings.Split(string(showOutput), "\n")
+			maxLines := 20
+			if len(lines) < maxLines {
+				maxLines = len(lines)
+			}
+			for i := 0; i < maxLines; i++ {
+				fmt.Println(lines[i])
+			}
+			if len(lines) > 20 {
+				yellow.Printf("... (%d more lines)\n", len(lines)-20)
+			}
+		}
+
+		if !confirm("Apply this stash? / このスタッシュを適用しますか？") {
+			return "Cancelled by user"
+		}
+
+		cmd := exec.Command("git", "stash", "apply", stashRef)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Sprintf("Error (may have conflicts): %v\n%s", err, string(output))
+		}
+
+		return fmt.Sprintf("✅ Applied stash: %s\n%s", stashRef, string(output))
+	}
+
+	// Action: drop
+	if action == "drop" {
+		stashRef := "stash@{0}"
+		if message != "" {
+			stashRef = "stash@{" + message + "}"
+		}
+
+		// 確認UI
+		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		cyan.Printf("🗑️  Git Stash Drop / スタッシュ削除\n")
+		cyan.Printf("📋 Stash / スタッシュ: %s\n", stashRef)
+		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		red.Println("⚠️  DESTRUCTIVE: This stash will be permanently deleted!")
+		red.Println("⚠️  破壊的操作: このスタッシュは完全に削除されます!")
+
+		if !confirm("Delete this stash? / このスタッシュを削除しますか？") {
+			return "Cancelled by user"
+		}
+
+		cmd := exec.Command("git", "stash", "drop", stashRef)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Sprintf("Error: %v\n%s", err, string(output))
+		}
+
+		return fmt.Sprintf("✅ Dropped stash: %s\n%s", stashRef, string(output))
+	}
+
+	return fmt.Sprintf("Error: Unknown action '%s'", action)
 }
 
 // =====================

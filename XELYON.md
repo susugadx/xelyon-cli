@@ -105,10 +105,10 @@ xelyon-cli/
 - **APIリトライ**: エラー時に最大2回自動リトライ（指数バックオフ）
 
 #### 2. ツールシステム (internal/tools/)
-- **19種類のツール**:
+- **22種類のツール**:
   - **ファイル編集**: read_file, write_file, str_replace, append_file, prepend_file
   - **ファイル管理**: list_dir, create_dir
-  - **Git操作**: git_status, git_diff, git_add, git_commit, git_push, git_log
+  - **Git操作**: git_status, git_diff, git_add, git_commit, git_push, git_log, git_branch, git_checkout, git_stash
   - **開発支援**: run_test, format
   - **検索**: search_code, search_file, web_search
   - **シェル**: bash
@@ -592,6 +592,128 @@ AI: formatツールでsrc/ディレクトリをフォーマットします
 4. **自動検出**: run_test/formatはフレームワークを自動検出
 5. **プレビュー**: append_file/prepend_fileは変更箇所をプレビュー表示
 6. **冪等性**: create_dirはすでに存在しても成功
+
+---
+
+## v0.17.0 Phase 2 ツール詳細リファレンス
+
+### git_branch
+**目的**: ブランチ管理（一覧・作成・切り替え）
+
+**引数**:
+- `action`: "list" | "create" | "switch" (デフォルト: "list")
+- `branch_name`: create/switchで必須
+
+**特徴**:
+- **list**: すべてのブランチを表示（`git branch -a`でローカル+リモート）
+- **create**: 新しいブランチを作成（確認なし、非破壊的）
+- **switch**: ブランチ切り替え
+  - 未コミット変更がある場合: 確認プロンプト表示、変更内容をプレビュー
+  - 未コミット変更がない場合: 即座に切り替え
+- エラーハンドリング: Git本体のエラーをそのまま返す
+
+**使用例**:
+```
+ユーザー: "List all branches"
+AI: git_branch { action: "list" }
+
+ユーザー: "Create a new branch called feature/new-tool"
+AI: git_branch { action: "create", branch_name: "feature/new-tool" }
+
+ユーザー: "Switch to main branch"
+AI: git_branch { action: "switch", branch_name: "main" }
+[未コミット変更がある場合は確認UI表示]
+```
+
+---
+
+### git_checkout
+**目的**: ファイル復元（HEADから）またはブランチチェックアウト
+
+**引数**:
+- `target`: ファイルパス or ブランチ名（必須）
+
+**特徴**:
+- **ターゲット判定**: ファイルの存在確認、パスに`/`や`.`が含まれるかで判定
+- **ファイル復元**（破壊的操作）:
+  - HEADから現在の内容を取得してdiff表示
+  - バックアップ自動作成（`.bak`）
+  - 赤色警告メッセージ表示
+  - 確認プロンプト必須
+  - FileChange追跡（Undo可能）
+- **ブランチチェックアウト**:
+  - 未コミット変更がある場合は確認プロンプト
+  - `git_branch`の`switch`と同等の動作
+  - Tip: `git_branch`の使用を推奨メッセージ表示
+
+**使用例**:
+```
+ユーザー: "Discard my changes to main.go"
+AI: git_checkout { target: "main.go" }
+[確認UI + Diff表示]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚠️  Git Checkout File / ファイル復元
+📂 File / ファイル: main.go
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚠️  DESTRUCTIVE: This will discard all local changes!
+Restore from HEAD? (y/n): y
+📦 Backup created: main.go.bak
+✅ Restored from HEAD: main.go
+```
+
+---
+
+### git_stash
+**目的**: 未コミット変更を一時退避・復元・削除
+
+**引数**:
+- `action`: "save" | "list" | "pop" | "apply" | "drop" (デフォルト: "save")
+- `message`: saveで任意メッセージ、pop/apply/dropでスタッシュインデックス（"0", "1"等）
+
+**特徴**:
+- **save**: 変更をスタッシュ
+  - 変更がない場合は警告を表示
+  - メッセージ任意（`git stash push -m "message"`）
+  - 確認なし（非破壊的、復元可能）
+- **list**: スタッシュ一覧表示（`git stash list`）
+- **pop**: スタッシュ適用して削除
+  - スタッシュプレビュー表示（最初20行）
+  - マージコンフリクト警告
+  - 確認プロンプト必須
+- **apply**: スタッシュ適用（削除しない）
+  - popと同様だが、スタッシュは保持される
+  - 「スタッシュは保持されます」メッセージ表示
+- **drop**: スタッシュ削除
+  - 破壊的操作、赤色警告
+  - 確認プロンプト必須
+
+**使用例**:
+```
+ユーザー: "Stash my changes"
+AI: git_stash { action: "save", message: "WIP: testing" }
+📦 Stashing changes
+Changes to stash:
+ M main.go
+✅ Stashed changes
+
+ユーザー: "List stashes"
+AI: git_stash { action: "list" }
+
+ユーザー: "Apply the most recent stash"
+AI: git_stash { action: "apply", message: "0" }
+[確認UI + プレビュー表示]
+```
+
+---
+
+### Phase 2 ツールの設計原則
+
+1. **安全性優先**: 破壊的操作には必ず確認プロンプト
+2. **プレビュー表示**: 変更内容やdiffを事前に表示
+3. **バックアップ**: ファイル復元時は自動的に`.bak`作成
+4. **二言語対応**: すべてのUIで英語/日本語併記
+5. **Git管理**: Gitコマンドのエラーはそのまま返す（ユーザーが理解しやすい）
+6. **FileChange追跡**: git_checkoutのファイル復元はUndo可能
 
 ---
 

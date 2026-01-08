@@ -101,6 +101,9 @@ You have access to the following tools:
 - git_commit: Commit changes. Args: {"message": "..."}
 - git_push: Push to remote. Args: {}
 - git_log: Show recent commits. Args: {}
+- git_branch: Manage branches. Args: {"action": "list|create|switch", "branch_name": "..."} (branch_name required for create/switch)
+- git_checkout: Restore file from HEAD or switch branch. Args: {"target": "file_path or branch_name"}
+- git_stash: Stash changes. Args: {"action": "save|list|pop|apply|drop", "message": "..."} (message optional for save, index for pop/apply/drop)
 
 ### Development Tools
 - run_test: Auto-detect and run tests (go/npm/pytest/cargo). Args: {"path": "..."} (optional)

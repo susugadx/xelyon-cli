@@ -257,6 +257,49 @@ func (t *FormatTool) Run(args map[string]string) (string, *FileChange, error) {
 	return result, change, nil
 }
 
+// ===== Git Branch Tool =====
+type GitBranchTool struct{}
+
+func (t *GitBranchTool) Name() string { return "git_branch" }
+
+func (t *GitBranchTool) Run(args map[string]string) (string, *FileChange, error) {
+	result := executeGitBranch(args["action"], args["branch_name"])
+	return result, nil, nil
+}
+
+// ===== Git Checkout Tool =====
+type GitCheckoutTool struct{}
+
+func (t *GitCheckoutTool) Name() string { return "git_checkout" }
+
+func (t *GitCheckoutTool) Run(args map[string]string) (string, *FileChange, error) {
+	result, backupPath, err := executeGitCheckout(args["target"])
+	if err != nil {
+		return result, nil, err
+	}
+	var change *FileChange
+	if backupPath != "" {
+		change = &FileChange{
+			FilePath:    args["target"],
+			BackupPath:  backupPath,
+			Timestamp:   getCurrentTime(),
+			Tool:        "git_checkout",
+			Description: "Restored from HEAD: " + args["target"],
+		}
+	}
+	return result, change, nil
+}
+
+// ===== Git Stash Tool =====
+type GitStashTool struct{}
+
+func (t *GitStashTool) Name() string { return "git_stash" }
+
+func (t *GitStashTool) Run(args map[string]string) (string, *FileChange, error) {
+	result := executeGitStash(args["action"], args["message"])
+	return result, nil, nil
+}
+
 // ===== Registry Registration =====
 
 // RegisterBuiltinTools はすべての組み込みツールを登録
@@ -272,6 +315,9 @@ func RegisterBuiltinTools(r *Registry) {
 	r.Register(&GitCommitTool{})
 	r.Register(&GitPushTool{})
 	r.Register(&GitLogTool{})
+	r.Register(&GitBranchTool{})   // NEW: Phase 2
+	r.Register(&GitCheckoutTool{}) // NEW: Phase 2
+	r.Register(&GitStashTool{})    // NEW: Phase 2
 	r.Register(&SearchCodeTool{})
 	r.Register(&SearchFileTool{})
 	r.Register(&WebSearchTool{})
