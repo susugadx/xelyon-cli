@@ -24,7 +24,11 @@ AI搭載のコーディングアシスタントCLIツール
 # ビルド
 go build -o xelyon
 
-# 環境変数設定（プロバイダーに応じて1つ以上設定）
+# 環境変数設定（方法1: .envファイル使用 - 推奨）
+cp .env.example .env
+# .envファイルを編集してAPIキーを設定
+
+# 環境変数設定（方法2: exportコマンド）
 export DEEPSEEK_API_KEY="your-api-key"        # DeepSeek (デフォルト)
 export OPENAI_API_KEY="sk-..."                # OpenAI (オプション)
 export GEMINI_API_KEY="..."                   # Google Gemini (オプション)
@@ -34,6 +38,37 @@ export GROQ_API_KEY="gsk_..."                 # Groq (オプション)
 
 export SERPER_API_KEY="your-serper-api-key"  # Web検索用（オプション）
 ```
+
+### .envファイルの使い方
+
+プロジェクトディレクトリに`.env`ファイルを作成することで、環境変数を自動的に読み込むことができます。
+
+```bash
+# 1. サンプルファイルをコピー
+cp .env.example .env
+
+# 2. .envファイルを編集
+vim .env  # または nano, code, etc.
+
+# 3. XELYON CLIを実行（自動的に.envを読み込みます）
+./xelyon
+```
+
+`.env`ファイルの例:
+```bash
+# デフォルトプロバイダーを指定
+XELYON_PROVIDER=openai
+
+# APIキーを設定
+OPENAI_API_KEY=sk-your-key-here
+DEEPSEEK_API_KEY=your-deepseek-key
+GEMINI_API_KEY=your-gemini-key
+```
+
+**メリット**:
+- プロジェクトごとに異なるAPIキーやプロバイダーを使える
+- `.env`ファイルは`.gitignore`に含まれているので、誤ってAPIキーをコミットする心配がない
+- チームメンバーは`.env.example`をコピーして独自の設定を作成できる
 
 ## サポートされているLLMプロバイダー
 
@@ -115,8 +150,8 @@ export XELYON_PROVIDER=ollama
 /load [id]        - セッションを読み込み（IDなしで最新）
 /sessions         - 最近のセッション一覧
 /undo             - 直前のファイル変更を取り消し
-/config           - 設定の表示・変更（例: /config model deepseek-coder）
-/model [name]     - 現在のモデルを表示、または再起動なしでモデル切り替え
+/config           - 設定の表示・変更（例: /config model gpt-4o）
+/model [name]     - 現在のモデルとプロバイダーを表示、または任意のモデルに切り替え
 /version          - バージョン情報を表示
 /clear            - 会話履歴をクリア
 /history          - 会話履歴を表示
@@ -169,21 +204,37 @@ Continue? (y/n): y
 セッション中に再起動なしでモデルを切り替えることができます。
 
 ```bash
-# 現在のモデルを確認
+# 現在のモデルとプロバイダーを確認
 > /model
-🤖 Current model: DeepSeek Coder (code-focused)
+🤖 Current model: gpt-4o
+🌐 Provider: OpenAI
 
-# モデルを切り替え
-> /model deepseek-chat
-✅ Model switched: DeepSeek Coder (code-focused) → DeepSeek V3 (balanced)
+Usage: /model <model-name>
+Enter any model name supported by your provider.
+
+# モデルを切り替え（任意のモデル名を指定可能）
+> /model gpt-4o-mini
+✅ Model switched: gpt-4o → gpt-4o-mini
 💾 Default model saved to config
 
-# 次の質問から新しいモデルが使われる
-> こんにちは
+# Ollamaの場合はインストール済みモデルも表示
+> /model
+🤖 Current model: llama3
+🌐 Provider: ollama
+
+Usage: /model <model-name>
+Enter any model name supported by your provider.
+
+Installed Ollama models:
+  - llama3
+  - codellama
+  - mistral
 ```
 
 **特徴:**
 - 再起動不要でモデルを即座に切り替え
+- 任意のモデル名を指定可能（プロバイダーがサポートしていれば使用可）
+- Ollamaの場合はインストール済みモデル一覧を表示
 - 設定ファイルにも自動保存
 - 次回起動時も同じモデルが使われる
 

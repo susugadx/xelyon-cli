@@ -597,31 +597,38 @@ func handleUndoCommand(agent *Agent) bool {
 
 // handleModelCommand はモデルの表示・切り替えを処理
 func handleModelCommand(agent *Agent, args []string) bool {
-	// 引数なし → 現在のモデルを表示
+	// 引数なし → 現在のモデルとプロバイダーを表示
 	if len(args) == 0 {
-		fmt.Printf("🤖 Current model: %s\n", modelDisplayName(agent.CurrentModel))
+		fmt.Printf("🤖 Current model: %s\n", agent.CurrentModel)
+		fmt.Printf("🌐 Provider: %s\n", agent.ProviderName)
 		yellow.Println("\nUsage: /model <model-name>")
-		yellow.Println("Models: deepseek-chat, deepseek-coder, deepseek-reasoner, claude")
+		yellow.Println("Enter any model name supported by your provider.")
+
+		// Ollamaの場合だけインストール済みモデルを表示
+		if agent.ProviderName == "ollama" {
+			if ollamaProvider, ok := agent.CurrentProvider.(*api.OllamaProvider); ok {
+				models, err := ollamaProvider.ListModels()
+				if err != nil {
+					yellow.Printf("\nWarning: Could not list Ollama models: %v\n", err)
+				} else if len(models) > 0 {
+					yellow.Println("\nInstalled Ollama models:")
+					for _, model := range models {
+						fmt.Printf("  - %s\n", model)
+					}
+				}
+			}
+		}
 		return true
 	}
 
 	// /model <model-name> → モデル切り替え
 	newModel := args[0]
 
-	// モデル名検証
-	if !config.ValidateModel(newModel) {
-		red.Printf("Invalid model: %s\n", newModel)
-		yellow.Println("Valid models: deepseek-chat, deepseek-coder, deepseek-reasoner, claude")
-		return true
-	}
-
 	// モデルを切り替え
 	oldModel := agent.CurrentModel
 	agent.CurrentModel = newModel
 
-	green.Printf("✅ Model switched: %s → %s\n",
-		modelDisplayName(oldModel),
-		modelDisplayName(newModel))
+	green.Printf("✅ Model switched: %s → %s\n", oldModel, newModel)
 
 	// 設定ファイルにも保存
 	cfg, err := config.LoadConfig()
@@ -653,8 +660,9 @@ func handleConfigCommand(args []string) bool {
 	if len(args) == 0 {
 		cyan.Println("⚙️  Current Configuration:")
 		fmt.Printf("  default_model: %s\n", cfg.DefaultModel)
+		fmt.Printf("  default_provider: %s\n", cfg.DefaultProvider)
 		yellow.Println("\nUsage: /config model <model-name>")
-		yellow.Println("Models: deepseek-chat, deepseek-coder, deepseek-reasoner, claude")
+		yellow.Println("Enter any model name supported by your provider.")
 		return true
 	}
 
@@ -662,14 +670,7 @@ func handleConfigCommand(args []string) bool {
 	if len(args) >= 2 && args[0] == "model" {
 		newModel := args[1]
 
-		// モデル名検証
-		if !config.ValidateModel(newModel) {
-			red.Printf("Invalid model: %s\n", newModel)
-			yellow.Println("Valid models: deepseek-chat, deepseek-coder, deepseek-reasoner, claude")
-			return true
-		}
-
-		// 設定更新
+		// 設定更新（バリデーションなし、任意のモデル名を受け付ける）
 		cfg.DefaultModel = newModel
 		if err := config.SaveConfig(cfg); err != nil {
 			red.Printf("Failed to save config: %v\n", err)

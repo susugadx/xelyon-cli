@@ -148,15 +148,11 @@ func getConfigPath() (string, error) {
 	return filepath.Join(home, configDir, configFile), nil
 }
 
-// ValidateModel はモデル名が有効かチェック（後方互換のため残す）
+// ValidateModel は任意のモデル名を受け付ける（後方互換のため残す）
+// 注: v0.16.0以降、モデル名の検証は行わない
 func ValidateModel(model string) bool {
-	validModels := map[string]bool{
-		"deepseek-chat":     true,
-		"deepseek-coder":    true,
-		"deepseek-reasoner": true,
-		"claude":            true, // 将来用
-	}
-	return validModels[model]
+	// 任意のモデル名を許可
+	return true
 }
 
 // GetModelForProvider はプロバイダーに対応するデフォルトモデルを取得
