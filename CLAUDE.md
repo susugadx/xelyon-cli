@@ -44,14 +44,12 @@ go test ./...
 - [x] internal/api/xelyon.go: 同様にTimeout追加（v0.10.0で完了）
 - [x] internal/api/serper.go: 同様にTimeout追加（v0.9.1で完了）
 
-### Phase 2: アーキテクチャ改善
-- [ ] internal/api/provider.go 新規作成（Provider interface）
-- [ ] internal/api/client.go 新規作成（Client struct + タイムアウト管理）
-- [ ] internal/api/deepseek.go を DeepSeekProvider struct に改修
-- [ ] 環境変数 XELYON_PROVIDER で LLM切り替え可能に
-- [ ] internal/tools/registry.go 新規作成（Tool interface + Registry）
-- [ ] internal/tools/builtin.go 新規作成（既存ツールをRegistry登録）
-- [ ] tools.go の switch文を Registry.Execute() に置き換え
+### Phase 2: アーキテクチャ改善✅
+- [x] internal/api/provider.go 新規作成（Provider interface）（v0.15.0で完了）
+- [x] 全プロバイダーをProvider interfaceに統一（v0.15.0で完了）
+- [x] 環境変数 XELYON_PROVIDER で LLM切り替え可能に（v0.15.0で完了）
+- [x] internal/tools/registry.go 新規作成（Tool interface + Registry）（完了）
+- [x] MCP動的ツール登録に対応（v0.12.0で完了）
 
 ### Phase 3: 品質向上✅
 - [x] internal/agent/verify.go 新規作成（変更後の自動検証）（v0.11.0で完了）
@@ -69,6 +67,29 @@ go test ./...
 - [x] MCP対応（ToolRegistryに外部ツール登録）（v0.12.0で完了）
 - [x] Repo Map実装（go-tree-sitter）（v0.13.0で完了）
 - [ ] RAG連携（XELYON Web API）- Web版リリース後
+
+### Phase 6: セキュリティ・品質監査✅（v0.24.0）
+- [x] **Phase 1 CRITICAL**: 5件のセキュリティ脆弱性を修正
+  - コマンドインジェクション防止
+  - パストラバーサル防止
+  - APIキー露出防止
+  - MCP任意コード実行防止
+  - グレースフルシャットダウン実装
+- [x] **Phase 2 HIGH**: 12件の信頼性・パフォーマンス問題を修正
+  - HTTPクライアント再利用（20MB+メモリ節約）
+  - ファイルパーミッション修正（0600）
+  - レート制限ハンドリング
+  - 競合状態修正（Spinner, ToolRegistry）
+  - APIエンドポイント設定可能化
+- [x] **Phase 3 MEDIUM**: 6件のエラーハンドリング・効率化を改善
+  - エラー検出強化（JSON, I/O, セッション保存）
+  - RepoMap文字列連結最適化（O(n²)→O(n)）
+- [x] **Phase 4 LOW**: 3件の保守性向上
+  - Contextタイムアウト設定（3分）
+  - MCPバージョン一元化
+- [x] ドキュメント更新（README.md, XELYON.md）
+
+**合計: 26件の問題を解決**
 
 ---
 
