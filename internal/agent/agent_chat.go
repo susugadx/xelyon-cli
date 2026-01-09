@@ -85,7 +85,7 @@ func (a *Agent) chat(input string) {
 
 // callAPIWithRetry はAPI呼び出しをリトライ付きで実行
 func (a *Agent) callAPIWithRetry() (string, error) {
-	const maxRetries = 2
+	maxRetries := config.MaxAPIRetries
 	var response string
 	var err error
 
@@ -111,14 +111,14 @@ func (a *Agent) callAPIWithRetry() (string, error) {
 func (a *Agent) shouldAbortToolLoop(current, last *tools.ToolCall, count *int) bool {
 	if isSameToolCall(current, last) {
 		*count++
-		if *count >= 3 {
+		if *count >= config.MaxSameToolCallCount {
 			yellow.Printf("⚠️  Warning: Same tool call repeated %d times, stopping to prevent infinite loop\n", *count)
 			yellow.Printf("   Tool: %s\n", current.Tool)
 
 			// AI に警告メッセージを返す
 			a.History = append(a.History, api.Message{
 				Role:    "user",
-				Content: "[SYSTEM WARNING] The same tool call was repeated 3 times. Please try a different approach or ask the user for clarification.",
+				Content: fmt.Sprintf("[SYSTEM WARNING] The same tool call was repeated %d times. Please try a different approach or ask the user for clarification.", config.MaxSameToolCallCount),
 			})
 			return true
 		}

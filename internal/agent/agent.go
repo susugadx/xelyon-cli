@@ -298,7 +298,11 @@ func modelDisplayName(model string) string {
 	}
 }
 func loadProjectConfig() string {
-	dir, _ := os.Getwd()
+	dir, err := os.Getwd()
+	if err != nil {
+		yellow.Printf("Warning: Could not get current directory: %v\n", err)
+		return "" // Cannot locate XELYON.md without working directory
+	}
 	for {
 		path := dir + "/XELYON.md"
 		if content, err := os.ReadFile(path); err == nil {

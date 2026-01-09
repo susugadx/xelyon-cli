@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -142,55 +141,32 @@ func (p *ClaudeProvider) ChatWithTools(ctx context.Context, systemPrompt string,
 
 // handleStreamingResponse はストリーミングレスポンスを処理
 func (p *ClaudeProvider) handleStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
-	var fullResponse strings.Builder
-	scanner := bufio.NewScanner(resp.Body)
-	firstChunk := true
-
-	for scanner.Scan() {
-		// contextキャンセルチェック
-		select {
-		case <-ctx.Done():
-			spinner.Stop()
-			return "", ctx.Err()
-		default:
+	// Claude固有のパース処理
+	parser := func(line string) (string, bool, error) {
+		if !strings.HasPrefix(line, "data: ") {
+			return "", false, nil
 		}
 
-		line := scanner.Text()
-		if line == "" {
-			continue
+		data := strings.TrimPrefix(line, "data: ")
+		var event ClaudeStreamEvent
+		if err := json.Unmarshal([]byte(data), &event); err != nil {
+			return "", false, err
 		}
 
-		if strings.HasPrefix(line, "data: ") {
-			data := strings.TrimPrefix(line, "data: ")
-
-			var event ClaudeStreamEvent
-			if err := json.Unmarshal([]byte(data), &event); err != nil {
-				continue
-			}
-
-			// content_block_delta イベントのみ処理
-			if event.Type == "content_block_delta" && event.Delta.Type == "text_delta" {
-				content := event.Delta.Text
-
-				// 最初のコンテンツでスピナー停止
-				if firstChunk && content != "" {
-					spinner.Stop()
-					firstChunk = false
-				}
-
-				fmt.Print(content)
-				fullResponse.WriteString(content)
-			}
-
-			// message_stop イベントで終了
-			if event.Type == "message_stop" {
-				break
-			}
+		// message_stop イベントで終了
+		if event.Type == "message_stop" {
+			return "", true, nil
 		}
+
+		// content_block_delta イベントのみ処理
+		if event.Type == "content_block_delta" && event.Delta.Type == "text_delta" {
+			return event.Delta.Text, false, nil
+		}
+
+		return "", false, nil
 	}
 
-	fmt.Println()
-	return fullResponse.String(), nil
+	return ParseStreamingResponse(ctx, resp, spinner, parser)
 }
 
 // handleNonStreamingResponse は非ストリーミングレスポンスを処理（フォールバック）

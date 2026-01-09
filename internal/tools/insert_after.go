@@ -63,7 +63,7 @@ func executeInsertAfter(path, pattern, content string) (string, string, error) {
 	// 複数マッチの場合
 	if matchCount > 1 {
 		red.Printf("⚠️  Error: Pattern matches %d locations (must be unique)\n", matchCount)
-		red.Println("⚠️  エラー: パターンが複数の場所にマッチします（一意である必要があります）\n")
+		red.Println("⚠️  エラー: パターンが複数の場所にマッチします（一意である必要があります）")
 		yellow.Println("All match locations / すべてのマッチ場所:")
 		for _, idx := range matchIndices {
 			start := max(0, idx-2)
@@ -94,7 +94,7 @@ func executeInsertAfter(path, pattern, content string) (string, string, error) {
 	}
 	cyan.Println("\n━━━━ Content to insert / 挿入する内容 ━━━━")
 	fmt.Println(content)
-	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
 	// バックアップ作成
 	backupPath, err := createBackup(absPath)

@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -98,48 +97,30 @@ func (p *OpenAIProvider) ChatWithTools(ctx context.Context, systemPrompt string,
 
 // handleStreamingResponse はストリーミングレスポンスを処理
 func (p *OpenAIProvider) handleStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
-	var fullResponse strings.Builder
-	scanner := bufio.NewScanner(resp.Body)
-	firstChunk := true
-
-	for scanner.Scan() {
-		// contextキャンセルチェック
-		select {
-		case <-ctx.Done():
-			spinner.Stop()
-			return "", ctx.Err()
-		default:
+	// OpenAI固有のパース処理
+	parser := func(line string) (string, bool, error) {
+		if !strings.HasPrefix(line, "data: ") {
+			return "", false, nil
 		}
 
-		line := scanner.Text()
-		if strings.HasPrefix(line, "data: ") {
-			data := strings.TrimPrefix(line, "data: ")
-			if data == "[DONE]" {
-				break
-			}
-
-			var streamResp StreamResponse
-			if err := json.Unmarshal([]byte(data), &streamResp); err != nil {
-				continue
-			}
-
-			if len(streamResp.Choices) > 0 {
-				content := streamResp.Choices[0].Delta.Content
-
-				// 最初のコンテンツでスピナー停止
-				if firstChunk && content != "" {
-					spinner.Stop()
-					firstChunk = false
-				}
-
-				fmt.Print(content)
-				fullResponse.WriteString(content)
-			}
+		data := strings.TrimPrefix(line, "data: ")
+		if data == "[DONE]" {
+			return "", true, nil
 		}
+
+		var streamResp StreamResponse
+		if err := json.Unmarshal([]byte(data), &streamResp); err != nil {
+			return "", false, err
+		}
+
+		if len(streamResp.Choices) > 0 {
+			return streamResp.Choices[0].Delta.Content, false, nil
+		}
+
+		return "", false, nil
 	}
 
-	fmt.Println()
-	return fullResponse.String(), nil
+	return ParseStreamingResponse(ctx, resp, spinner, parser)
 }
 
 // handleNonStreamingResponse は非ストリーミングレスポンスを処理（フォールバック）

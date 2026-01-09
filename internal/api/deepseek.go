@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -122,49 +121,30 @@ func (p *DeepSeekProvider) ChatWithTools(ctx context.Context, systemPrompt strin
 		return "", fmt.Errorf("API error (%d): %s", resp.StatusCode, string(body))
 	}
 
-	// ストリーミング処理
-	var fullResponse strings.Builder
-	scanner := bufio.NewScanner(resp.Body)
-	firstChunk := true
-
-	for scanner.Scan() {
-		// contextキャンセルチェック
-		select {
-		case <-ctx.Done():
-			spinner.Stop()
-			return "", ctx.Err()
-		default:
+	// ストリーミング処理（共通パーサー使用）
+	parser := func(line string) (string, bool, error) {
+		if !strings.HasPrefix(line, "data: ") {
+			return "", false, nil
 		}
 
-		line := scanner.Text()
-		if strings.HasPrefix(line, "data: ") {
-			data := strings.TrimPrefix(line, "data: ")
-			if data == "[DONE]" {
-				break
-			}
-
-			var streamResp StreamResponse
-			if err := json.Unmarshal([]byte(data), &streamResp); err != nil {
-				continue
-			}
-
-			if len(streamResp.Choices) > 0 {
-				content := streamResp.Choices[0].Delta.Content
-
-				// 最初のコンテンツでスピナー停止
-				if firstChunk && content != "" {
-					spinner.Stop()
-					firstChunk = false
-				}
-
-				fmt.Print(content)
-				fullResponse.WriteString(content)
-			}
+		data := strings.TrimPrefix(line, "data: ")
+		if data == "[DONE]" {
+			return "", true, nil
 		}
+
+		var streamResp StreamResponse
+		if err := json.Unmarshal([]byte(data), &streamResp); err != nil {
+			return "", false, err
+		}
+
+		if len(streamResp.Choices) > 0 {
+			return streamResp.Choices[0].Delta.Content, false, nil
+		}
+
+		return "", false, nil
 	}
 
-	fmt.Println()
-	return fullResponse.String(), nil
+	return ParseStreamingResponse(ctx, resp, spinner, parser)
 }
 
 // ChatWithTools はツール対応の会話を行う（ストリーミング）
