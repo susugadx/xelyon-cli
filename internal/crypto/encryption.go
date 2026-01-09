@@ -105,7 +105,8 @@ func GetOrCreatePassphrase() (string, error) {
 		return "", err
 	}
 
-	keyFile := homeDir + "/.xelyon/.session_key"
+	xelyonDir := homeDir + "/.xelyon"
+	keyFile := xelyonDir + "/.session_key"
 
 	// 既存ファイルがあれば読み込み
 	if data, err := os.ReadFile(keyFile); err == nil {
@@ -113,6 +114,11 @@ func GetOrCreatePassphrase() (string, error) {
 		if err == nil && len(decoded) == 32 {
 			return string(decoded), nil
 		}
+	}
+
+	// .xelyonディレクトリが存在しない場合は作成
+	if err := os.MkdirAll(xelyonDir, 0700); err != nil {
+		return "", fmt.Errorf("failed to create .xelyon directory: %w", err)
 	}
 
 	// なければ生成

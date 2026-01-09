@@ -286,7 +286,7 @@ func (m *Manager) CallTool(ctx context.Context, serverName, toolName string, arg
 				break
 			}
 		}
-		return "", fmt.Errorf(errMsg)
+		return "", fmt.Errorf("%s", errMsg)
 	}
 
 	// 結果をテキストに変換

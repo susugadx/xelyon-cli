@@ -431,6 +431,30 @@ MIT
 
 ## バージョン履歴
 
+### v0.26.0 テスト実装開始 (2026-01-09)
+- 🧪 **テストインフラ構築**: 包括的なテストスイートの基盤を整備
+  - `internal/testutil/` パッケージ追加（テストヘルパー関数）
+  - `MockConfirm()`, `CreateTempFile()`, `AssertFileExists()`, `SetupTempHome()`
+
+- ✅ **internal/crypto/ テスト完了**: 暗号化機能の完全なテストカバレッジ（81.5%）
+  - 暗号化/復号化ラウンドトリップテスト
+  - ソルト・ノンスのランダム性検証
+  - GCM認証タグ改ざん検出テスト
+  - GetOrCreatePassphrase 動作確認（0600パーミッション検証含む）
+
+- ✅ **internal/audit/ テスト完了**: 監査ログ機能の完全なテストカバレッジ（86.4%）
+  - JSONL形式ログ記録テスト
+  - 機密情報サニタイズ検証（password, token, api_key → [REDACTED]）
+  - 出力切り詰め動作確認（500文字制限）
+  - 並行アクセス安全性テスト（100 goroutines）
+  - ログ記録失敗時の挙動確認（サイレント失敗）
+
+- 🔧 **バグ修正**:
+  - `internal/crypto/encryption.go`: `.xelyon`ディレクトリ自動作成を追加
+  - `internal/mcp/client.go`: non-constant format string エラー修正
+
+- 📊 **現在のカバレッジ**: 全体 2.4%（テスト実装継続中）
+
 ### v0.25.0 Phase 5: LOW優先度機能追加 (2026-01-09)
 - 📝 **監査ログ機能**: ツール実行履歴を記録（`XELYON_AUDIT_LOG=1`で有効化）
   - JSONLフォーマット（`~/.xelyon/audit/audit_YYYYMMDD.jsonl`）
