@@ -3,15 +3,16 @@ package tools
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 )
 
 // executeDeleteFile deletes a file permanently (with backup for Undo)
 func executeDeleteFile(path string) (string, string, error) {
-	absPath, err := filepath.Abs(path)
+	// パストラバーサル防止
+	absPath, err := ValidatePath(path)
 	if err != nil {
-		return fmt.Sprintf("Error: Invalid path: %v", err), "", nil
+		red.Printf("🚫 Security: %v\n", err)
+		return fmt.Sprintf("Error: %v", err), "", nil
 	}
 
 	// ファイル存在確認

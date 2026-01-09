@@ -68,7 +68,7 @@ func SearchRAG(query string, userID string, topK int) (*RAGResponse, error) {
 	}
 
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("API error: %s", string(body))
+		return nil, sanitizeErrorMessage(body, resp.StatusCode)
 	}
 
 	var ragResp RAGResponse

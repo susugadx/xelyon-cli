@@ -5,7 +5,9 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/api"
@@ -193,8 +195,33 @@ When you need to use a tool, respond with ONLY a JSON block like this:
 		SystemPrompt:    systemPrompt,
 	}
 }
+
+// Cleanup はエージェントのリソースをクリーンアップ
+func (a *Agent) Cleanup() {
+	if a.mcpManager != nil {
+		a.mcpManager.Close()
+	}
+	// セッション保存
+	if a.storage != nil && a.session != nil {
+		if err := a.storage.Save(a.session); err != nil {
+			yellow.Printf("Warning: Failed to save session: %v\n", err)
+		}
+	}
+}
+
 func RunInteractive(model string, provider api.Provider) {
 	agent := NewAgent(model, provider)
+	defer agent.Cleanup() // グレースフルシャットダウン
+
+	// シグナルハンドリング（Ctrl+C, SIGTERM対応）
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		fmt.Println("\n\n👋 Gracefully shutting down...")
+		agent.Cleanup()
+		os.Exit(0)
+	}()
 
 	// ヘッダー表示
 	printHeader(model, provider)

@@ -3,7 +3,6 @@ package tools
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 )
 
@@ -17,8 +16,10 @@ func executeAppendFile(path, content string) (string, string, error) {
 		return "Error: content is empty", "", nil
 	}
 
-	absPath, err := filepath.Abs(path)
+	// パストラバーサル防止
+	absPath, err := ValidatePath(path)
 	if err != nil {
+		red.Printf("🚫 Security: %v\n", err)
 		return fmt.Sprintf("Error: %v", err), "", nil
 	}
 

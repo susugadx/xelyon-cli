@@ -124,8 +124,11 @@ func (p *ClaudeProvider) ChatWithTools(ctx context.Context, systemPrompt string,
 
 	if resp.StatusCode != 200 {
 		spinner.Stop()
-		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("API error (%d): %s", resp.StatusCode, string(body))
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return "", fmt.Errorf("API error (%d): unable to read response", resp.StatusCode)
+		}
+		return "", sanitizeErrorMessage(body, resp.StatusCode)
 	}
 
 	// Content-Typeでストリーミング対応を判定

@@ -31,6 +31,11 @@ var blockedCommands = []string{
 	"awk -i", "perl -i", "perl -p", // その他のインライン編集コマンド
 }
 
+// コマンド連結文字（インジェクション攻撃防止）
+var commandSeparators = []string{
+	";", "&&", "||", "|", "`", "$(", ">", ">>", "<",
+}
+
 // executeBash はシェルコマンドを実行
 func executeBash(command string) string {
 	if command == "" {
@@ -45,17 +50,27 @@ func executeBash(command string) string {
 		}
 	}
 
-	// 安全なコマンドか確認
-	needConfirm := true
+	// コマンド連結攻撃の検知（safeCommands以外）
+	isSafe := false
 	for safe := range safeCommands {
 		if strings.HasPrefix(command, safe) {
-			needConfirm = false
+			isSafe = true
 			break
 		}
 	}
+	if !isSafe {
+		for _, sep := range commandSeparators {
+			if strings.Contains(command, sep) {
+				red.Printf("🚫 Blocked command injection attempt: %s\n", command)
+				yellow.Println("⚠️  Command contains potentially dangerous separator characters.")
+				yellow.Println("   If you need to run multiple commands, execute them separately.")
+				return "Error: Command injection attempt detected (separator found)"
+			}
+		}
+	}
 
-	// 確認が必要な場合
-	if needConfirm {
+	// 確認が必要な場合（安全なコマンド以外）
+	if !isSafe {
 		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 		cyan.Printf("⚙️  Shell Command / シェルコマンド実行\n")
 		cyan.Printf("📜 Command / コマンド: %s\n", command)

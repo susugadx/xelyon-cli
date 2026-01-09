@@ -3,7 +3,6 @@ package tools
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 )
 
 // executeReadFile はファイルを読み込む
@@ -12,8 +11,10 @@ func executeReadFile(path string) string {
 		return "Error: path is empty"
 	}
 
-	absPath, err := filepath.Abs(path)
+	// パストラバーサル防止
+	absPath, err := ValidatePath(path)
 	if err != nil {
+		red.Printf("🚫 Security: %v\n", err)
 		return fmt.Sprintf("Error: %v", err)
 	}
 

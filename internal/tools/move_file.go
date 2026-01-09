@@ -10,14 +10,17 @@ import (
 
 // executeMoveFile moves/renames a file atomically
 func executeMoveFile(src, dest string) (string, string, error) {
-	absSrc, err := filepath.Abs(src)
+	// パストラバーサル防止
+	absSrc, err := ValidatePath(src)
 	if err != nil {
-		return fmt.Sprintf("Error: Invalid source path: %v", err), "", nil
+		red.Printf("🚫 Security (source): %v\n", err)
+		return fmt.Sprintf("Error: %v", err), "", nil
 	}
 
-	absDest, err := filepath.Abs(dest)
+	absDest, err := ValidatePath(dest)
 	if err != nil {
-		return fmt.Sprintf("Error: Invalid destination path: %v", err), "", nil
+		red.Printf("🚫 Security (destination): %v\n", err)
+		return fmt.Sprintf("Error: %v", err), "", nil
 	}
 
 	// ソースファイル確認

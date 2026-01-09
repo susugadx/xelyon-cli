@@ -102,7 +102,7 @@ func (p *GeminiProvider) ChatWithTools(ctx context.Context, systemPrompt string,
 	}
 
 	// Gemini API endpoint（ストリーミング）
-	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:streamGenerateContent?key=%s", model, p.apiKey)
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:streamGenerateContent", model)
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
 	if err != nil {
@@ -110,6 +110,7 @@ func (p *GeminiProvider) ChatWithTools(ctx context.Context, systemPrompt string,
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-goog-api-key", p.apiKey) // APIキーはヘッダーで送信（セキュリティ向上）
 
 	// スピナー開始
 	spinner := ui.NewSpinner()
@@ -127,8 +128,11 @@ func (p *GeminiProvider) ChatWithTools(ctx context.Context, systemPrompt string,
 
 	if resp.StatusCode != 200 {
 		spinner.Stop()
-		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("API error (%d): %s", resp.StatusCode, string(body))
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return "", fmt.Errorf("API error (%d): unable to read response", resp.StatusCode)
+		}
+		return "", sanitizeErrorMessage(body, resp.StatusCode)
 	}
 
 	// Content-Typeでストリーミング対応を判定
