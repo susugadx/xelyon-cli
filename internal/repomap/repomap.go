@@ -110,12 +110,14 @@ func (rm *RepoMap) Generate() string {
 			relPath = file.Path
 		}
 
-		fileSection := fmt.Sprintf("### %s\n", relPath)
+		// 文字列連結効率化（strings.Builder使用）
+		var fileSB strings.Builder
+		fileSB.WriteString(fmt.Sprintf("### %s\n", relPath))
 		for _, sym := range file.Symbols {
-			line := fmt.Sprintf("  %d: %s\n", sym.Line, sym.Signature)
-			fileSection += line
+			fileSB.WriteString(fmt.Sprintf("  %d: %s\n", sym.Line, sym.Signature))
 		}
-		fileSection += "\n"
+		fileSB.WriteString("\n")
+		fileSection := fileSB.String()
 
 		// トークン制限チェック
 		sectionTokens := int(float64(len(fileSection)) * estimatedTokensPerChar)

@@ -1,6 +1,9 @@
 package tools
 
-import "fmt"
+import (
+	"fmt"
+	"sync"
+)
 
 // Tool はツールの共通インターフェース
 type Tool interface {
@@ -16,6 +19,7 @@ type Tool interface {
 
 // Registry はツールの登録・管理を行う
 type Registry struct {
+	mu    sync.RWMutex    // 並行アクセス保護（MCP動的登録対応）
 	tools map[string]Tool
 }
 
@@ -26,14 +30,19 @@ func NewRegistry() *Registry {
 	}
 }
 
-// Register はツールを登録
+// Register はツールを登録（スレッドセーフ）
 func (r *Registry) Register(tool Tool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.tools[tool.Name()] = tool
 }
 
-// Execute はツール呼び出しを実行
+// Execute はツール呼び出しを実行（スレッドセーフ）
 func (r *Registry) Execute(tc *ToolCall) (string, *FileChange) {
+	r.mu.RLock()
 	tool, ok := r.tools[tc.Tool]
+	r.mu.RUnlock()
+
 	if !ok {
 		return fmt.Sprintf("Unknown tool: %s", tc.Tool), nil
 	}

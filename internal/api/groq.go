@@ -139,6 +139,8 @@ func (p *GroqProvider) handleStreamingResponse(ctx context.Context, resp *http.R
 
 			var streamResp StreamResponse
 			if err := json.Unmarshal([]byte(data), &streamResp); err != nil {
+				// JSONパースエラーを警告（データ損失を防ぐため記録）
+				fmt.Fprintf(os.Stderr, "⚠️  Warning: failed to parse streaming response: %v\n", err)
 				continue
 			}
 
@@ -155,6 +157,11 @@ func (p *GroqProvider) handleStreamingResponse(ctx context.Context, resp *http.R
 				fullResponse.WriteString(content)
 			}
 		}
+	}
+
+	// スキャナーのI/Oエラーチェック
+	if err := scanner.Err(); err != nil {
+		return "", fmt.Errorf("stream reading error: %w", err)
 	}
 
 	fmt.Println()

@@ -204,6 +204,11 @@ func (p *GeminiProvider) handleStreamingResponse(ctx context.Context, resp *http
 		}
 	}
 
+	// スキャナーのI/Oエラーチェック
+	if err := scanner.Err(); err != nil {
+		return "", fmt.Errorf("stream reading error: %w", err)
+	}
+
 	fmt.Println()
 	return fullResponse.String(), nil
 }

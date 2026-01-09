@@ -173,7 +173,8 @@ func (a *Agent) handleNormalResponse(response string) {
 		a.session.AddMessage("assistant", response, a.CurrentModel)
 		if a.storage != nil {
 			if err := a.storage.Save(a.session); err != nil {
-				// サイレント失敗（ユーザー体験を妨げない）
+				// セッション保存失敗を警告（データ損失の可能性を通知）
+				yellow.Printf("⚠️  Warning: Failed to save session: %v\n", err)
 			}
 		}
 	}

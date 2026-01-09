@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
@@ -154,6 +155,8 @@ func (p *OllamaProvider) handleStreamingResponse(ctx context.Context, resp *http
 
 		var streamResp OllamaStreamResponse
 		if err := json.Unmarshal([]byte(line), &streamResp); err != nil {
+			// JSONパースエラーを警告（データ損失を防ぐため記録）
+			fmt.Fprintf(os.Stderr, "⚠️  Warning: failed to parse streaming response: %v\n", err)
 			continue
 		}
 
@@ -173,6 +176,11 @@ func (p *OllamaProvider) handleStreamingResponse(ctx context.Context, resp *http
 			fmt.Print(content)
 			fullResponse.WriteString(content)
 		}
+	}
+
+	// スキャナーのI/Oエラーチェック
+	if err := scanner.Err(); err != nil {
+		return "", fmt.Errorf("stream reading error: %w", err)
 	}
 
 	fmt.Println()
