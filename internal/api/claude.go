@@ -1,6 +1,7 @@
 package api
 
 import (
+	"os"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -13,18 +14,26 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
-const claudeURL = "https://api.anthropic.com/v1/messages"
+const defaultClaudeURL = "https://api.anthropic.com/v1/messages"
 
 // ClaudeProvider はClaude (Anthropic) APIのプロバイダー実装
 type ClaudeProvider struct {
 	apiKey     string
+	apiURL     string
 	httpClient *http.Client
 }
 
 // NewClaudeProvider は新しいClaudeProviderを作成
 func NewClaudeProvider(apiKey string) *ClaudeProvider {
+	// 環境変数からURLをオーバーライド可能
+	apiURL := os.Getenv("ANTHROPIC_API_URL")
+	if apiURL == "" {
+		apiURL = defaultClaudeURL
+	}
+
 	return &ClaudeProvider{
 		apiKey: apiKey,
+		apiURL: apiURL,
 		httpClient: &http.Client{
 			Timeout: config.DefaultHTTPTimeout,
 		},
@@ -103,7 +112,7 @@ func (p *ClaudeProvider) ChatWithTools(ctx context.Context, systemPrompt string,
 		return "", err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", claudeURL, bytes.NewBuffer(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", p.apiURL, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return "", err
 	}
@@ -126,6 +135,11 @@ func (p *ClaudeProvider) ChatWithTools(ctx context.Context, systemPrompt string,
 
 	if resp.StatusCode != 200 {
 		spinner.Stop()
+
+		// レート制限チェック
+		if rateLimitErr := handleRateLimit(resp); rateLimitErr != nil {
+			return "", rateLimitErr
+		}
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return "", fmt.Errorf("API error (%d): unable to read response", resp.StatusCode)

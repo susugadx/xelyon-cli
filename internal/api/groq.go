@@ -1,6 +1,7 @@
 package api
 
 import (
+	"os"
 	"bufio"
 	"bytes"
 	"context"
@@ -14,18 +15,26 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
-const groqURL = "https://api.groq.com/openai/v1/chat/completions"
+const defaultGroqURL = "https://api.groq.com/openai/v1/chat/completions"
 
 // GroqProvider はGroq APIのプロバイダー実装（OpenAI互換）
 type GroqProvider struct {
 	apiKey     string
+	apiURL     string
 	httpClient *http.Client
 }
 
 // NewGroqProvider は新しいGroqProviderを作成
 func NewGroqProvider(apiKey string) *GroqProvider {
+	// 環境変数からURLをオーバーライド可能
+	apiURL := os.Getenv("GROQ_API_URL")
+	if apiURL == "" {
+		apiURL = defaultGroqURL
+	}
+
 	return &GroqProvider{
 		apiKey: apiKey,
+		apiURL: apiURL,
 		httpClient: &http.Client{
 			Timeout: config.DefaultHTTPTimeout,
 		},
@@ -61,7 +70,7 @@ func (p *GroqProvider) ChatWithTools(ctx context.Context, systemPrompt string, h
 		return "", err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", groqURL, bytes.NewBuffer(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", p.apiURL, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return "", err
 	}
@@ -83,6 +92,11 @@ func (p *GroqProvider) ChatWithTools(ctx context.Context, systemPrompt string, h
 
 	if resp.StatusCode != 200 {
 		spinner.Stop()
+
+		// レート制限チェック
+		if rateLimitErr := handleRateLimit(resp); rateLimitErr != nil {
+			return "", rateLimitErr
+		}
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return "", fmt.Errorf("API error (%d): unable to read response", resp.StatusCode)

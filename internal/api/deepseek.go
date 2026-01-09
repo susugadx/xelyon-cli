@@ -14,7 +14,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
-const deepseekURL = "https://api.deepseek.com/chat/completions"
+const defaultDeepSeekURL = "https://api.deepseek.com/chat/completions"
 
 // Message はチャットメッセージ（provider.goで定義されているが、ここでも使用）
 type Message struct {
@@ -25,13 +25,21 @@ type Message struct {
 // DeepSeekProvider はDeepSeek APIのプロバイダー実装
 type DeepSeekProvider struct {
 	apiKey     string
+	apiURL     string
 	httpClient *http.Client
 }
 
 // NewDeepSeekProvider は新しいDeepSeekProviderを作成
 func NewDeepSeekProvider(apiKey string) *DeepSeekProvider {
+	// 環境変数からURLをオーバーライド可能
+	apiURL := os.Getenv("DEEPSEEK_API_URL")
+	if apiURL == "" {
+		apiURL = defaultDeepSeekURL
+	}
+
 	return &DeepSeekProvider{
 		apiKey: apiKey,
+		apiURL: apiURL,
 		httpClient: &http.Client{
 			Timeout: config.DefaultHTTPTimeout,
 		},
@@ -97,7 +105,7 @@ func (p *DeepSeekProvider) ChatWithTools(ctx context.Context, systemPrompt strin
 		return "", err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", deepseekURL, bytes.NewBuffer(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", p.apiURL, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return "", err
 	}
@@ -119,6 +127,12 @@ func (p *DeepSeekProvider) ChatWithTools(ctx context.Context, systemPrompt strin
 
 	if resp.StatusCode != 200 {
 		spinner.Stop()
+
+		// レート制限チェック
+		if rateLimitErr := handleRateLimit(resp); rateLimitErr != nil {
+			return "", rateLimitErr
+		}
+
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return "", fmt.Errorf("API error (%d): unable to read response", resp.StatusCode)

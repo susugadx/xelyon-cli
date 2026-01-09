@@ -116,6 +116,11 @@ func (p *OllamaProvider) ChatWithTools(ctx context.Context, systemPrompt string,
 
 	if resp.StatusCode != 200 {
 		spinner.Stop()
+
+		// レート制限チェック
+		if rateLimitErr := handleRateLimit(resp); rateLimitErr != nil {
+			return "", rateLimitErr
+		}
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return "", fmt.Errorf("API error (%d): unable to read response", resp.StatusCode)
@@ -187,6 +192,11 @@ func (p *OllamaProvider) ListModels() ([]string, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
+		// レート制限チェック
+		if rateLimitErr := handleRateLimit(resp); rateLimitErr != nil {
+			return nil, rateLimitErr
+		}
+
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return nil, fmt.Errorf("API error (%d): unable to read response", resp.StatusCode)

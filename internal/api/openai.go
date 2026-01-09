@@ -1,6 +1,7 @@
 package api
 
 import (
+	"os"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -13,18 +14,26 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
-const openaiURL = "https://api.openai.com/v1/chat/completions"
+const defaultOpenAIURL = "https://api.openai.com/v1/chat/completions"
 
 // OpenAIProvider はOpenAI APIのプロバイダー実装
 type OpenAIProvider struct {
 	apiKey     string
+	apiURL     string
 	httpClient *http.Client
 }
 
 // NewOpenAIProvider は新しいOpenAIProviderを作成
 func NewOpenAIProvider(apiKey string) *OpenAIProvider {
+	// 環境変数からURLをオーバーライド可能
+	apiURL := os.Getenv("OPENAI_API_URL")
+	if apiURL == "" {
+		apiURL = defaultOpenAIURL
+	}
+
 	return &OpenAIProvider{
 		apiKey: apiKey,
+		apiURL: apiURL,
 		httpClient: &http.Client{
 			Timeout: config.DefaultHTTPTimeout,
 		},
@@ -60,7 +69,7 @@ func (p *OpenAIProvider) ChatWithTools(ctx context.Context, systemPrompt string,
 		return "", err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", openaiURL, bytes.NewBuffer(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", p.apiURL, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return "", err
 	}
@@ -82,6 +91,11 @@ func (p *OpenAIProvider) ChatWithTools(ctx context.Context, systemPrompt string,
 
 	if resp.StatusCode != 200 {
 		spinner.Stop()
+
+		// レート制限チェック
+		if rateLimitErr := handleRateLimit(resp); rateLimitErr != nil {
+			return "", rateLimitErr
+		}
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return "", fmt.Errorf("API error (%d): unable to read response", resp.StatusCode)

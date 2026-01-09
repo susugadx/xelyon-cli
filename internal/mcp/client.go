@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -41,6 +42,16 @@ type Manager struct {
 	healthCheck map[string]time.Time // サーバーごとの最終正常接続時刻
 }
 
+// 安全なMCPコマンドのホワイトリスト
+var allowedMCPCommands = map[string]bool{
+	"npx":     true,
+	"node":    true,
+	"python":  true,
+	"python3": true,
+	"uvx":     true,
+	"docker":  true,
+}
+
 // NewManager は新しいManagerを作成
 func NewManager() *Manager {
 	return &Manager{
@@ -48,6 +59,62 @@ func NewManager() *Manager {
 		tools:       []MCPTool{},
 		healthCheck: make(map[string]time.Time),
 	}
+}
+
+// validateMCPCommand はMCPコマンドの安全性を検証
+func validateMCPCommand(command string) error {
+	if command == "" {
+		return fmt.Errorf("empty command")
+	}
+
+	// ホワイトリストチェック
+	if !allowedMCPCommands[command] {
+		return fmt.Errorf("command '%s' is not in the allowed list. Allowed: npx, node, python, python3, uvx, docker", command)
+	}
+
+	// パストラバーサルチェック
+	if strings.Contains(command, "..") || strings.Contains(command, "/") {
+		return fmt.Errorf("command contains path traversal characters")
+	}
+
+	return nil
+}
+
+// sanitizeEnv は環境変数を安全なもののみに制限
+func sanitizeEnv(customEnv map[string]string) []string {
+	// 安全な環境変数のホワイトリスト
+	safeEnvKeys := map[string]bool{
+		"PATH":         true,
+		"HOME":         true,
+		"USER":         true,
+		"LANG":         true,
+		"LC_ALL":       true,
+		"NODE_OPTIONS": true,
+		"PYTHONPATH":   true,
+	}
+
+	env := []string{}
+
+	// システム環境変数から安全なもののみコピー
+	for _, e := range os.Environ() {
+		parts := strings.SplitN(e, "=", 2)
+		if len(parts) == 2 && safeEnvKeys[parts[0]] {
+			env = append(env, e)
+		}
+	}
+
+	// カスタム環境変数を追加（APIキー系は除外）
+	for k, v := range customEnv {
+		// APIキー系の環境変数は除外
+		if strings.Contains(strings.ToUpper(k), "KEY") ||
+			strings.Contains(strings.ToUpper(k), "TOKEN") ||
+			strings.Contains(strings.ToUpper(k), "SECRET") {
+			continue
+		}
+		env = append(env, fmt.Sprintf("%s=%s", k, v))
+	}
+
+	return env
 }
 
 // LoadConfig は ~/.xelyon/mcp.json を読み込む
@@ -121,15 +188,16 @@ func (m *Manager) Connect(ctx context.Context) error {
 	}, nil)
 
 	for name, serverConfig := range m.config.MCPServers {
+		// コマンドの安全性を検証
+		if err := validateMCPCommand(serverConfig.Command); err != nil {
+			fmt.Printf("⚠️  MCP server '%s' blocked: %v\n", name, err)
+			continue
+		}
+
 		cmd := exec.Command(serverConfig.Command, serverConfig.Args...)
 
-		// 環境変数を設定
-		if len(serverConfig.Env) > 0 {
-			cmd.Env = os.Environ()
-			for k, v := range serverConfig.Env {
-				cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
-			}
-		}
+		// 環境変数を安全なもののみに制限
+		cmd.Env = sanitizeEnv(serverConfig.Env)
 
 		transport := &mcp.CommandTransport{Command: cmd}
 		session, err := client.Connect(ctx, transport, nil)

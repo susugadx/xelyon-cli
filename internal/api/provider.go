@@ -3,7 +3,10 @@ package api
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"regexp"
+	"strconv"
+	"time"
 )
 
 // Provider はLLMプロバイダーの共通インターフェース
@@ -45,4 +48,34 @@ func sanitizeErrorMessage(body []byte, statusCode int) error {
 	}
 
 	return fmt.Errorf("API error (%d): %s", statusCode, message)
+}
+
+// handleRateLimit はレート制限エラーを処理
+func handleRateLimit(resp *http.Response) error {
+	if resp.StatusCode != 429 {
+		return nil // レート制限エラーではない
+	}
+
+	// Retry-Afterヘッダーをチェック
+	retryAfter := resp.Header.Get("Retry-After")
+	if retryAfter == "" {
+		// ヘッダーがない場合はデフォルト待機時間
+		return fmt.Errorf("rate limit exceeded (429). Please retry after 60 seconds")
+	}
+
+	// Retry-Afterは秒数またはHTTP-date形式
+	// まず秒数として解釈を試みる
+	if seconds, err := strconv.Atoi(retryAfter); err == nil {
+		return fmt.Errorf("rate limit exceeded (429). Please retry after %d seconds", seconds)
+	}
+
+	// HTTP-date形式の場合
+	if retryTime, err := http.ParseTime(retryAfter); err == nil {
+		waitDuration := time.Until(retryTime)
+		if waitDuration > 0 {
+			return fmt.Errorf("rate limit exceeded (429). Please retry after %v", waitDuration.Round(time.Second))
+		}
+	}
+
+	return fmt.Errorf("rate limit exceeded (429). Please retry later")
 }
