@@ -105,13 +105,17 @@ func (w *MCPToolWrapper) validateArgs(args map[string]string) error {
 	}
 
 	// 必須パラメータのチェック（簡易実装）
-	if properties, ok := schema["properties"].(map[string]any); ok {
+	if properties, ok := schema["properties"].(map[string]any); ok && properties != nil {
 		for propName, propInfo := range properties {
-			if propMap, ok := propInfo.(map[string]any); ok {
-				if required, ok := propMap["required"].(bool); ok && required {
-					if _, hasArg := args[propName]; !hasArg {
-						return fmt.Errorf("required argument '%s' is missing", propName)
-					}
+			propMap, ok := propInfo.(map[string]any)
+			if !ok || propMap == nil {
+				// プロパティスキーマが不正な場合は警告してスキップ
+				fmt.Printf("⚠️  Warning: Invalid property schema for %s in tool %s\n", propName, w.toolName)
+				continue
+			}
+			if required, ok := propMap["required"].(bool); ok && required {
+				if _, hasArg := args[propName]; !hasArg {
+					return fmt.Errorf("required argument '%s' is missing", propName)
 				}
 			}
 		}
