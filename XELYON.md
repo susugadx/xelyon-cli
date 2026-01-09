@@ -216,6 +216,97 @@ type FileChange struct {
 // /undo: スタックからpop → .bakから復元
 ```
 
+---
+
+## セキュリティ対策（v0.24.0）
+
+### Phase 1: CRITICAL対策（完了）
+
+#### コマンドインジェクション防止
+- **対象**: `internal/tools/bash.go`
+- **実装**: コマンド連結文字の検出（`;`, `&&`, `||`, `|`, `` ` ``, `$(`, `>`, `>>`, `<`）
+- **動作**: safeCommands以外でセパレータ検出時にブロック＋警告表示
+
+#### パストラバーサル防止
+- **対象**: 全ファイル操作ツール（read_file, write_file, delete_file, etc.）
+- **実装**: `internal/tools/validation.go`の`ValidatePath()`
+- **動作**: カレントディレクトリ外へのアクセスを検出・拒否
+
+#### APIキー露出防止
+- **Gemini**: URLパラメータ→`x-goog-api-key`ヘッダーに変更
+- **エラーサニタイズ**: `internal/api/provider.go`の`sanitizeErrorMessage()`
+  - 正規表現でAPIキーパターンを`[REDACTED]`に置換
+  - OpenAI (`sk-...`)、Google (`AIza...`)、AWS (`AKIA...`)対応
+
+#### MCP任意コード実行防止
+- **対象**: `internal/mcp/client.go`
+- **実装**:
+  - コマンドホワイトリスト: `npx`, `node`, `python`, `python3`, `uvx`, `docker`
+  - パストラバーサル検出: コマンドに`..`や`/`を含む場合拒否
+  - 環境変数サニタイズ: `KEY`, `TOKEN`, `SECRET`を含む変数を除外
+  - 安全な環境変数のみ継承: `PATH`, `HOME`, `USER`, etc.
+
+#### グレースフルシャットダウン
+- **対象**: `internal/agent/agent.go`
+- **実装**: SIGINT/SIGTERM シグナルハンドラ
+- **動作**:
+  - Ctrl+C時に`agent.Cleanup()`呼び出し
+  - MCPサーバー自動クローズ
+  - セッション自動保存
+
+### Phase 2: HIGH対策（完了）
+
+#### HTTPクライアント再利用
+- **対象**: 全6プロバイダー（DeepSeek, OpenAI, Claude, Groq, Gemini, Ollama）
+- **効果**: 20MB+メモリ節約（100リクエストあたり）、コネクションプーリング有効化
+
+#### ファイルパーミッション修正
+- **対象**: セッション履歴、設定ファイル、バックアップ
+- **変更**: `0644` → `0600`（ユーザーのみ読み書き可能）
+
+#### レート制限ハンドリング
+- **対象**: `internal/api/provider.go`の`handleRateLimit()`
+- **実装**: HTTP 429検出＋`Retry-After`ヘッダー解析（秒数/HTTP-date両対応）
+
+#### 競合状態修正
+- **Spinner**: `internal/ui/spinner.go`
+  - `stopChan`のnil check追加
+  - ローカル変数コピーで競合回避
+- **ToolRegistry**: `internal/tools/registry.go`
+  - `sync.RWMutex`追加
+  - Register（書き込みロック）、Execute（読み取りロック）
+
+#### APIエンドポイント設定可能化
+- **実装**: 環境変数でURLオーバーライド
+- **対応変数**: `DEEPSEEK_API_URL`, `OPENAI_API_URL`, `ANTHROPIC_API_URL`, `GROQ_API_URL`
+- **用途**: テスト環境、プロキシ経由、企業内API
+
+### Phase 3: MEDIUM対策（完了）
+
+#### エラー検出強化
+- **JSONパースエラー**: Groq/Ollamaでストリーミング中のパースエラーを警告表示
+- **I/Oエラー**: Gemini/Ollama/Groqで`scanner.Err()`チェック追加
+- **セッション保存エラー**: `internal/agent/agent_chat.go`で保存失敗時に警告表示
+
+#### RepoMap文字列連結最適化
+- **対象**: `internal/repomap/repomap.go`
+- **変更**: `+=` → `strings.Builder`
+- **効果**: O(n²) → O(n)改善
+
+### Phase 4: LOW対策（完了）
+
+#### Contextタイムアウト設定
+- **対象**: `internal/agent/agent_chat.go`
+- **実装**: `context.WithTimeout(context.Background(), 3*time.Minute)`
+- **効果**: API呼び出しの無限待機防止、リソースリーク対策
+
+#### MCPバージョン一元化
+- **対象**: `internal/mcp/client.go`
+- **変更**: `"0.12.0"` → `version.Version`
+- **効果**: バージョン更新時の修正漏れ防止
+
+---
+
 ### SystemPromptルール（重要）
 **v0.9.0で大幅改善**: 性格定義 + 16個の体系化ルール（4フェーズ構成）
 
