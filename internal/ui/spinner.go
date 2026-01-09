@@ -50,7 +50,12 @@ func (s *Spinner) Stop() {
 	}
 
 	s.active = false
-	close(s.stopChan)
+
+	// stopChanがnilでないことを確認してからclose（競合対策）
+	if s.stopChan != nil {
+		close(s.stopChan)
+		s.stopChan = nil
+	}
 
 	// スピナーの行をクリア
 	fmt.Fprintf(s.writer, "\r\033[K")
@@ -61,10 +66,19 @@ func (s *Spinner) spin(message string) {
 	ticker := time.NewTicker(80 * time.Millisecond)
 	defer ticker.Stop()
 
+	// stopChanをローカルに保存（競合対策）
+	s.mu.Lock()
+	stopChan := s.stopChan
+	s.mu.Unlock()
+
+	if stopChan == nil {
+		return
+	}
+
 	i := 0
 	for {
 		select {
-		case <-s.stopChan:
+		case <-stopChan:
 			return
 		case <-ticker.C:
 			frame := s.frames[i%len(s.frames)]

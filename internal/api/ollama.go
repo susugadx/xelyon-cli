@@ -16,7 +16,8 @@ import (
 
 // OllamaProvider はOllama APIのプロバイダー実装
 type OllamaProvider struct {
-	baseURL string
+	baseURL    string
+	httpClient *http.Client
 }
 
 // NewOllamaProvider は新しいOllamaProviderを作成
@@ -26,6 +27,9 @@ func NewOllamaProvider(baseURL string) *OllamaProvider {
 	}
 	return &OllamaProvider{
 		baseURL: baseURL,
+		httpClient: &http.Client{
+			Timeout: config.DefaultHTTPTimeout,
+		},
 	}
 }
 
@@ -98,10 +102,8 @@ func (p *OllamaProvider) ChatWithTools(ctx context.Context, systemPrompt string,
 	spinner := ui.NewSpinner()
 	spinner.Start("Thinking")
 
-	client := &http.Client{
-		Timeout: config.DefaultHTTPTimeout,
-	}
-	resp, err := client.Do(req)
+	// 再利用可能なHTTPクライアントを使用
+	resp, err := p.httpClient.Do(req)
 	if err != nil {
 		spinner.Stop()
 		// 接続エラー時は親切なメッセージを表示
@@ -175,7 +177,7 @@ func (p *OllamaProvider) handleStreamingResponse(ctx context.Context, resp *http
 // ListModels はインストール済みモデルを取得
 func (p *OllamaProvider) ListModels() ([]string, error) {
 	url := p.baseURL + "/api/tags"
-	resp, err := http.Get(url)
+	resp, err := p.httpClient.Get(url)
 	if err != nil {
 		if strings.Contains(err.Error(), "connection refused") {
 			return nil, fmt.Errorf("Ollama is not running. Please start it with `ollama serve`")

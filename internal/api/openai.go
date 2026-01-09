@@ -17,13 +17,17 @@ const openaiURL = "https://api.openai.com/v1/chat/completions"
 
 // OpenAIProvider はOpenAI APIのプロバイダー実装
 type OpenAIProvider struct {
-	apiKey string
+	apiKey     string
+	httpClient *http.Client
 }
 
 // NewOpenAIProvider は新しいOpenAIProviderを作成
 func NewOpenAIProvider(apiKey string) *OpenAIProvider {
 	return &OpenAIProvider{
 		apiKey: apiKey,
+		httpClient: &http.Client{
+			Timeout: config.DefaultHTTPTimeout,
+		},
 	}
 }
 
@@ -68,10 +72,8 @@ func (p *OpenAIProvider) ChatWithTools(ctx context.Context, systemPrompt string,
 	spinner := ui.NewSpinner()
 	spinner.Start("Thinking")
 
-	client := &http.Client{
-		Timeout: config.DefaultHTTPTimeout,
-	}
-	resp, err := client.Do(req)
+	// 再利用可能なHTTPクライアントを使用
+	resp, err := p.httpClient.Do(req)
 	if err != nil {
 		spinner.Stop()
 		return "", err

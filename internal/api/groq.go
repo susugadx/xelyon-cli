@@ -18,13 +18,17 @@ const groqURL = "https://api.groq.com/openai/v1/chat/completions"
 
 // GroqProvider はGroq APIのプロバイダー実装（OpenAI互換）
 type GroqProvider struct {
-	apiKey string
+	apiKey     string
+	httpClient *http.Client
 }
 
 // NewGroqProvider は新しいGroqProviderを作成
 func NewGroqProvider(apiKey string) *GroqProvider {
 	return &GroqProvider{
 		apiKey: apiKey,
+		httpClient: &http.Client{
+			Timeout: config.DefaultHTTPTimeout,
+		},
 	}
 }
 
@@ -69,10 +73,8 @@ func (p *GroqProvider) ChatWithTools(ctx context.Context, systemPrompt string, h
 	spinner := ui.NewSpinner()
 	spinner.Start("Thinking")
 
-	client := &http.Client{
-		Timeout: config.DefaultHTTPTimeout,
-	}
-	resp, err := client.Do(req)
+	// 再利用可能なHTTPクライアントを使用
+	resp, err := p.httpClient.Do(req)
 	if err != nil {
 		spinner.Stop()
 		return "", err

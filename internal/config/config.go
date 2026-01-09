@@ -124,7 +124,7 @@ func SaveConfig(cfg *Config) error {
 	header := "# XELYON CLI 設定\n# Providers: deepseek, openai, gemini, claude, ollama, groq\n# 各プロバイダーのモデル設定は provider_models で管理されます\n\n"
 	fullData := []byte(header + string(data))
 
-	if err := os.WriteFile(configPath, fullData, 0644); err != nil {
+	if err := os.WriteFile(configPath, fullData, 0600); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)
 	}
 

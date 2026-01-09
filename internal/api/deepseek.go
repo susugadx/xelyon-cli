@@ -24,13 +24,17 @@ type Message struct {
 
 // DeepSeekProvider はDeepSeek APIのプロバイダー実装
 type DeepSeekProvider struct {
-	apiKey string
+	apiKey     string
+	httpClient *http.Client
 }
 
 // NewDeepSeekProvider は新しいDeepSeekProviderを作成
 func NewDeepSeekProvider(apiKey string) *DeepSeekProvider {
 	return &DeepSeekProvider{
 		apiKey: apiKey,
+		httpClient: &http.Client{
+			Timeout: config.DefaultHTTPTimeout,
+		},
 	}
 }
 
@@ -105,10 +109,8 @@ func (p *DeepSeekProvider) ChatWithTools(ctx context.Context, systemPrompt strin
 	spinner := ui.NewSpinner()
 	spinner.Start("Thinking")
 
-	client := &http.Client{
-		Timeout: config.DefaultHTTPTimeout,
-	}
-	resp, err := client.Do(req)
+	// 再利用可能なHTTPクライアントを使用
+	resp, err := p.httpClient.Do(req)
 	if err != nil {
 		spinner.Stop()
 		return "", err

@@ -43,7 +43,7 @@ func (st *Storage) Save(session *Session) error {
 	filePath := st.sessionPath(session.ID)
 
 	// 追記モードでオープン
-	f, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 	if err != nil {
 		return fmt.Errorf("failed to open history file: %w", err)
 	}
@@ -192,7 +192,7 @@ func (st *Storage) saveMetadata(session *Session) error {
 	}
 
 	path := st.metadataPath(session.ID)
-	if err := os.WriteFile(path, data, 0644); err != nil {
+	if err := os.WriteFile(path, data, 0600); err != nil {
 		return fmt.Errorf("failed to write metadata: %w", err)
 	}
 

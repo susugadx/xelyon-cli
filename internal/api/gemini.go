@@ -16,13 +16,17 @@ import (
 
 // GeminiProvider はGemini APIのプロバイダー実装
 type GeminiProvider struct {
-	apiKey string
+	apiKey     string
+	httpClient *http.Client
 }
 
 // NewGeminiProvider は新しいGeminiProviderを作成
 func NewGeminiProvider(apiKey string) *GeminiProvider {
 	return &GeminiProvider{
 		apiKey: apiKey,
+		httpClient: &http.Client{
+			Timeout: config.DefaultHTTPTimeout,
+		},
 	}
 }
 
@@ -116,10 +120,8 @@ func (p *GeminiProvider) ChatWithTools(ctx context.Context, systemPrompt string,
 	spinner := ui.NewSpinner()
 	spinner.Start("Thinking")
 
-	client := &http.Client{
-		Timeout: config.DefaultHTTPTimeout,
-	}
-	resp, err := client.Do(req)
+	// 再利用可能なHTTPクライアントを使用
+	resp, err := p.httpClient.Do(req)
 	if err != nil {
 		spinner.Stop()
 		return "", err

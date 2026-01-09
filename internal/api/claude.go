@@ -17,13 +17,17 @@ const claudeURL = "https://api.anthropic.com/v1/messages"
 
 // ClaudeProvider はClaude (Anthropic) APIのプロバイダー実装
 type ClaudeProvider struct {
-	apiKey string
+	apiKey     string
+	httpClient *http.Client
 }
 
 // NewClaudeProvider は新しいClaudeProviderを作成
 func NewClaudeProvider(apiKey string) *ClaudeProvider {
 	return &ClaudeProvider{
 		apiKey: apiKey,
+		httpClient: &http.Client{
+			Timeout: config.DefaultHTTPTimeout,
+		},
 	}
 }
 
@@ -112,10 +116,8 @@ func (p *ClaudeProvider) ChatWithTools(ctx context.Context, systemPrompt string,
 	spinner := ui.NewSpinner()
 	spinner.Start("Thinking")
 
-	client := &http.Client{
-		Timeout: config.DefaultHTTPTimeout,
-	}
-	resp, err := client.Do(req)
+	// 再利用可能なHTTPクライアントを使用
+	resp, err := p.httpClient.Do(req)
 	if err != nil {
 		spinner.Stop()
 		return "", err
