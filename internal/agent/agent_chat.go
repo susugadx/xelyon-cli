@@ -90,8 +90,10 @@ func (a *Agent) callAPIWithRetry() (string, error) {
 	var err error
 
 	for retry := 0; retry < maxRetries; retry++ {
-		ctx := context.Background()
+		// API呼び出しタイムアウト設定（3分）
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		response, err = a.CurrentProvider.ChatWithTools(ctx, a.SystemPrompt, a.History, a.CurrentModel)
+		cancel() // リソースリーク防止
 		if err == nil {
 			return response, nil
 		}

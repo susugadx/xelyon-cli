@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/susugadx/xelyon-cli/internal/version"
 )
 
 // ServerConfig はMCPサーバーの設定
@@ -184,7 +185,7 @@ func (m *Manager) Connect(ctx context.Context) error {
 
 	client := mcp.NewClient(&mcp.Implementation{
 		Name:    "xelyon-cli",
-		Version: "0.12.0",
+		Version: version.Version,
 	}, nil)
 
 	for name, serverConfig := range m.config.MCPServers {
@@ -353,7 +354,7 @@ func (m *Manager) Reconnect(ctx context.Context, serverName string) error {
 	// 再接続
 	client := mcp.NewClient(&mcp.Implementation{
 		Name:    "xelyon-cli",
-		Version: "0.12.0",
+		Version: version.Version,
 	}, nil)
 
 	cmd := exec.Command(serverConfig.Command, serverConfig.Args...)
