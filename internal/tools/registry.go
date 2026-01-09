@@ -3,6 +3,8 @@ package tools
 import (
 	"fmt"
 	"sync"
+
+	"github.com/susugadx/xelyon-cli/internal/audit"
 )
 
 // Tool はツールの共通インターフェース
@@ -19,7 +21,7 @@ type Tool interface {
 
 // Registry はツールの登録・管理を行う
 type Registry struct {
-	mu    sync.RWMutex    // 並行アクセス保護（MCP動的登録対応）
+	mu    sync.RWMutex // 並行アクセス保護（MCP動的登録対応）
 	tools map[string]Tool
 }
 
@@ -37,7 +39,7 @@ func (r *Registry) Register(tool Tool) {
 	r.tools[tool.Name()] = tool
 }
 
-// Execute はツール呼び出しを実行（スレッドセーフ）
+// Execute はツール呼び出しを実行（スレッドセーフ + 監査ログ記録）
 func (r *Registry) Execute(tc *ToolCall) (string, *FileChange) {
 	r.mu.RLock()
 	tool, ok := r.tools[tc.Tool]
@@ -48,6 +50,11 @@ func (r *Registry) Execute(tc *ToolCall) (string, *FileChange) {
 	}
 
 	output, change, err := tool.Run(tc.Args)
+
+	// 監査ログ記録（失敗しても処理続行）
+	logger := audit.GetLogger()
+	logger.LogToolExecution(tc.Tool, tc.Args, output, err, change != nil)
+
 	if err != nil {
 		return fmt.Sprintf("Error: %v", err), change
 	}

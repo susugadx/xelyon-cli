@@ -1,7 +1,6 @@
 package api
 
 import (
-	"os"
 	"bufio"
 	"bytes"
 	"context"
@@ -9,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/config"

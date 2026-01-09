@@ -1168,3 +1168,141 @@ AI: git_stash { action: "apply", message: "0" }
 - [x] `/model`コマンドで再起動なしに切り替え
 - [x] `/version`コマンド
 - [x] `--version`フラグ
+
+---
+
+## セキュリティ機能（v0.24.0-v0.25.0で実装）
+
+### 1. 監査ログ機能（v0.25.0）
+
+**目的**: ツール実行履歴を記録し、セキュリティ監査やトラブルシューティングを支援
+
+**有効化方法**:
+```bash
+export XELYON_AUDIT_LOG=1
+./xelyon
+```
+
+**ログフォーマット（JSONL）**:
+```json
+{"timestamp":"2026-01-09T15:04:05Z","tool":"read_file","args":{"path":"main.go"},"output":"package main...(truncated)","success":true,"file_changed":false}
+```
+
+**保存場所**: `~/.xelyon/audit/audit_YYYYMMDD.jsonl`
+
+**機密情報保護**:
+- `password`, `token`, `api_key`, `secret` フィールドは自動的に `[REDACTED]` に置換
+- 出力は最初の500文字のみ記録（ログサイズ削減）
+
+**実装ファイル**:
+- `internal/audit/logger.go` - ロガー本体
+- `internal/tools/registry.go` - Execute()メソッドでログ記録
+
+---
+
+### 2. セッション履歴の暗号化（v0.25.0）
+
+**目的**: 会話履歴に含まれる機密情報（APIキー、パスワード、プロジェクトコード）を保護
+
+**有効化方法**:
+```bash
+export XELYON_ENCRYPT_HISTORY=1
+./xelyon
+```
+
+**暗号化方式**:
+- **アルゴリズム**: AES-256-GCM（認証付き暗号）
+- **鍵導出**: PBKDF2（100,000回イテレーション、SHA-256）
+- **ソルト**: 128-bit ランダム生成（ファイルごとに異なる）
+- **ノンス**: 96-bit ランダム生成（暗号化ごとに異なる）
+
+**暗号化キー管理**:
+- キーファイル: `~/.xelyon/.session_key`
+- パーミッション: `0600`（ユーザーのみ読み取り可能）
+- 初回実行時に自動生成、以降は再利用
+
+**互換性**:
+- 既存の非暗号化セッションとの互換性を保持
+- 復号化失敗時は該当行をスキップ（エラーで停止しない）
+
+**実装ファイル**:
+- `internal/crypto/encryption.go` - 暗号化/復号化ロジック
+- `internal/history/storage.go` - Save()/Load()で暗号化統合
+
+**セキュリティ考慮事項**:
+- 暗号化キーは平文で保存（ユーザーのホームディレクトリに限定）
+- より高度な保護が必要な場合は、OS のキーチェーン（Keychain/SecretService）統合を検討
+
+---
+
+### 3. APIレスポンス検証（v0.25.0）
+
+**目的**: 不正なAPIレスポンスによる予期しない動作を防止
+
+**実装機能**:
+1. **ストリーミングレスポンス検証** (`ValidateStreamResponse`)
+   - `choices`配列の存在チェック
+   - `delta`または`message`フィールドの検証
+   - 各choiceがオブジェクトであることを確認
+
+2. **通常レスポンス検証** (`ValidateChatResponse`)
+   - `choices[].message.content`の存在チェック
+
+3. **ツール呼び出し検証** (`ValidateToolCall`)
+   - `function.name`と`function.arguments`の必須フィールドチェック
+
+4. **エラーレスポンス安全パース** (`ValidateErrorResponse`)
+   - `error.message`の抽出
+   - JSONパース失敗時のフォールバック
+
+**実装ファイル**:
+- `internal/api/validator.go` - 検証ロジック
+- `internal/api/deepseek.go` - DeepSeekプロバイダーで適用（サンプル）
+
+**拡張性**:
+- 他のプロバイダー（OpenAI, Claude等）にも同じパターンで適用可能
+
+---
+
+### 4. セキュリティ対策一覧（v0.24.0で実装）
+
+| 対策 | 実装内容 | ファイル |
+|------|---------|---------|
+| **コマンドインジェクション防止** | 連結文字（`;`, `&&`, `||`等）検出＋ブロック | `internal/tools/bash.go` |
+| **パストラバーサル防止** | `ValidatePath()`でプロジェクト外アクセス禁止 | `internal/tools/validation.go` |
+| **APIキー露出防止** | エラーメッセージから正規表現でAPIキーを削除 | `internal/api/provider.go` |
+| **MCP環境変数サニタイズ** | KEY/TOKEN/SECRET変数をMCPサーバーに渡さない | `internal/mcp/client.go` |
+| **グレースフルシャットダウン** | SIGINT/SIGTERM対応、MCPサーバー自動クローズ | `internal/agent/agent.go` |
+| **ファイルパーミッション** | 機密ファイル（セッション、設定）を0600に変更 | `internal/history/storage.go`, `internal/config/config.go` |
+| **レート制限ハンドリング** | HTTP 429検出＋Retry-Afterヘッダー解析 | `internal/api/provider.go` |
+| **HTTPクライアント再利用** | コネクションプーリング、メモリ効率向上 | 全APIプロバイダー |
+
+---
+
+### 5. セキュリティ設定の推奨事項
+
+**本番環境での推奨設定**:
+```bash
+# 監査ログを有効化
+export XELYON_AUDIT_LOG=1
+
+# セッション履歴を暗号化
+export XELYON_ENCRYPT_HISTORY=1
+
+# APIエンドポイントをプロキシ経由に設定（必要に応じて）
+export DEEPSEEK_API_URL="https://proxy.example.com/v1/chat/completions"
+
+# XELYON CLIを実行
+./xelyon --provider deepseek
+```
+
+**監査ログローテーション**:
+- ログファイルは日付ごとに分割（`audit_20260109.jsonl`）
+- 古いログは定期的に削除または別ストレージに移動を推奨
+
+**暗号化キーバックアップ**:
+- `~/.xelyon/.session_key`を安全な場所にバックアップ
+- キー紛失時は既存の暗号化セッションを復号化できない
+
+---
+

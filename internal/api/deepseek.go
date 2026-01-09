@@ -151,6 +151,11 @@ func (p *DeepSeekProvider) ChatWithTools(ctx context.Context, systemPrompt strin
 			return "", true, nil
 		}
 
+		// レスポンス構造を検証
+		if err := ValidateStreamResponse([]byte(data)); err != nil {
+			return "", false, fmt.Errorf("invalid response structure: %w", err)
+		}
+
 		var streamResp StreamResponse
 		if err := json.Unmarshal([]byte(data), &streamResp); err != nil {
 			return "", false, err

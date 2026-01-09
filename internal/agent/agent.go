@@ -11,6 +11,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/audit"
 	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/mcp"
 	"github.com/susugadx/xelyon-cli/internal/repomap"
@@ -210,6 +211,15 @@ func (a *Agent) Cleanup() {
 }
 
 func RunInteractive(model string, provider api.Provider) {
+	// 監査ログ初期化（環境変数で制御: XELYON_AUDIT_LOG=1 で有効化）
+	auditEnabled := os.Getenv("XELYON_AUDIT_LOG") == "1"
+	if err := audit.Init(auditEnabled); err != nil {
+		yellow.Printf("Warning: Failed to initialize audit log: %v\n", err)
+	}
+	if auditEnabled {
+		green.Println("📝 Audit logging enabled")
+	}
+
 	agent := NewAgent(model, provider)
 	defer agent.Cleanup() // グレースフルシャットダウン
 

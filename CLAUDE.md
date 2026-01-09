@@ -87,6 +87,21 @@ go test ./...
 - [x] **Phase 4 LOW**: 3件の保守性向上
   - Contextタイムアウト設定（3分）
   - MCPバージョン一元化
+
+### Phase 7: LOW優先度機能追加✅（v0.25.0）
+- [x] **監査ログ機能**: ツール実行履歴をJSONL形式で記録
+  - `XELYON_AUDIT_LOG=1`で有効化
+  - 機密情報（password, token, api_key）は自動的に[REDACTED]化
+  - 保存場所: `~/.xelyon/audit/audit_YYYYMMDD.jsonl`
+- [x] **セッション履歴の暗号化**: AES-256-GCM暗号化
+  - `XELYON_ENCRYPT_HISTORY=1`で有効化
+  - PBKDF2鍵導出（100,000回イテレーション）
+  - 暗号化キー: `~/.xelyon/.session_key`（0600パーミッション）
+- [x] **APIレスポンス検証**: 不正なレスポンス構造を検出
+  - ストリーミングレスポンス検証（choices配列、delta/messageフィールド）
+  - エラーレスポンスの安全なパース
+  - DeepSeekプロバイダーで実装
+- [x] **非推奨関数レビュー**: 破壊的変更を避けるため保持
 - [x] ドキュメント更新（README.md, XELYON.md）
 
 **合計: 26件の問題を解決**

@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/crypto"
 )
 
 const (
@@ -16,7 +18,9 @@ const (
 
 // Storage は履歴の永続化を管理
 type Storage struct {
-	baseDir string
+	baseDir    string
+	encryption bool   // 暗号化有効フラグ
+	passphrase string // 暗号化キー
 }
 
 // NewStorage はストレージインスタンスを作成
@@ -27,11 +31,25 @@ func NewStorage() (*Storage, error) {
 	}
 
 	historyDir := filepath.Join(home, defaultHistoryDir)
-	if err := os.MkdirAll(historyDir, 0755); err != nil {
+	if err := os.MkdirAll(historyDir, 0700); err != nil {
 		return nil, fmt.Errorf("failed to create history dir: %w", err)
 	}
 
-	return &Storage{baseDir: historyDir}, nil
+	// 暗号化設定（環境変数: XELYON_ENCRYPT_HISTORY=1 で有効化）
+	encryptionEnabled := os.Getenv("XELYON_ENCRYPT_HISTORY") == "1"
+	var passphrase string
+	if encryptionEnabled {
+		passphrase, err = crypto.GetOrCreatePassphrase()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get encryption key: %w", err)
+		}
+	}
+
+	return &Storage{
+		baseDir:    historyDir,
+		encryption: encryptionEnabled,
+		passphrase: passphrase,
+	}, nil
 }
 
 // Save はメッセージをJSONLファイルに追記
@@ -54,6 +72,15 @@ func (st *Storage) Save(session *Session) error {
 	data, err := json.Marshal(lastMsg)
 	if err != nil {
 		return fmt.Errorf("failed to marshal message: %w", err)
+	}
+
+	// 暗号化が有効な場合は暗号化
+	if st.encryption {
+		encrypted, err := crypto.EncryptSession(data, st.passphrase)
+		if err != nil {
+			return fmt.Errorf("failed to encrypt message: %w", err)
+		}
+		data = encrypted
 	}
 
 	if _, err := f.Write(append(data, '\n')); err != nil {
@@ -90,8 +117,20 @@ func (st *Storage) Load(sessionID string) (*Session, error) {
 
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
+		data := scanner.Bytes()
+
+		// 暗号化が有効な場合は復号化
+		if st.encryption && len(data) > 0 {
+			decrypted, err := crypto.DecryptSession(data, st.passphrase)
+			if err != nil {
+				// 復号化失敗はスキップ（古い非暗号化データかもしれない）
+				continue
+			}
+			data = decrypted
+		}
+
 		var msg MessageEntry
-		if err := json.Unmarshal(scanner.Bytes(), &msg); err != nil {
+		if err := json.Unmarshal(data, &msg); err != nil {
 			// 不正な行はスキップ
 			continue
 		}
