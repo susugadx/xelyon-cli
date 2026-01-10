@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -187,43 +186,38 @@ func (p *GeminiProvider) ChatWithTools(ctx context.Context, systemPrompt string,
 // handleStreamingResponse はストリーミングレスポンスを処理
 func (p *GeminiProvider) handleStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
 	var fullResponse strings.Builder
-	scanner := bufio.NewScanner(resp.Body)
+
+	// 全レスポンスを読み込み
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		spinner.Stop()
+		return "", fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	// JSON配列としてパース
+	var responses []GeminiResponse
+	if err := json.Unmarshal(body, &responses); err != nil {
+		spinner.Stop()
+
+		// 配列でない場合は単一オブジェクトとして試す
+		var singleResp GeminiResponse
+		if err := json.Unmarshal(body, &singleResp); err != nil {
+			return "", fmt.Errorf("failed to parse response: %w", err)
+		}
+		responses = []GeminiResponse{singleResp}
+	}
+
+	spinner.Stop()
+
+	// 各レスポンスからテキストを抽出
 	firstChunk := true
-
-	for scanner.Scan() {
-		// contextキャンセルチェック
-		select {
-		case <-ctx.Done():
-			spinner.Stop()
-			return "", ctx.Err()
-		default:
-		}
-
-		line := scanner.Text()
-		if line == "" {
-			continue
-		}
-
-		// Geminiはdata:プレフィックスなしでJSONを返す場合がある
-		line = strings.TrimPrefix(line, "data: ")
-
-		if line == "[DONE]" {
-			break
-		}
-
-		var geminiResp GeminiResponse
-		if err := json.Unmarshal([]byte(line), &geminiResp); err != nil {
-			continue
-		}
-
+	for _, geminiResp := range responses {
 		if len(geminiResp.Candidates) > 0 {
 			candidate := geminiResp.Candidates[0]
 			if len(candidate.Content.Parts) > 0 {
 				content := candidate.Content.Parts[0].Text
 
-				// 最初のコンテンツでスピナー停止
 				if firstChunk && content != "" {
-					spinner.Stop()
 					firstChunk = false
 				}
 
@@ -231,11 +225,6 @@ func (p *GeminiProvider) handleStreamingResponse(ctx context.Context, resp *http
 				fullResponse.WriteString(content)
 			}
 		}
-	}
-
-	// スキャナーのI/Oエラーチェック
-	if err := scanner.Err(); err != nil {
-		return "", fmt.Errorf("stream reading error: %w", err)
 	}
 
 	fmt.Println()
