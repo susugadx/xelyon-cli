@@ -181,10 +181,7 @@ func LoadConfig() (*Config, error) {
 	if cfg.Compression.ThresholdTokens == 0 {
 		cfg.Compression = defaults.Compression
 	}
-	if cfg.Diff.ContextLines == 0 {
-		// Diff.ContextLines は0が有効値なので、-1で未設定を判定
-		// ただし、現在の実装では0も有効なので、この条件は使わない
-	}
+	// Note: Diff.ContextLines は0が有効値なので、デフォルト適用は行わない
 
 	return &cfg, nil
 }
