@@ -39,6 +39,7 @@ type Agent struct {
 	storage         *history.Storage
 	changeStack     []tools.FileChange
 	mcpManager      *mcp.Manager
+	AutoApprove     bool // --auto-approve フラグ
 }
 
 // NewAgent は新しいAgentを作成
@@ -210,7 +211,7 @@ func (a *Agent) Cleanup() {
 	}
 }
 
-func RunInteractive(model string, provider api.Provider) {
+func RunInteractive(model string, provider api.Provider, autoApprove bool) {
 	// 監査ログ初期化（環境変数で制御: XELYON_AUDIT_LOG=1 で有効化）
 	auditEnabled := os.Getenv("XELYON_AUDIT_LOG") == "1"
 	if err := audit.Init(auditEnabled); err != nil {
@@ -221,6 +222,8 @@ func RunInteractive(model string, provider api.Provider) {
 	}
 
 	agent := NewAgent(model, provider)
+	agent.AutoApprove = autoApprove
+	tools.SetAutoApprove(autoApprove) // ツールに --auto-approve 設定を伝える
 	defer agent.Cleanup() // グレースフルシャットダウン
 
 	// シグナルハンドリング（Ctrl+C, SIGTERM対応）
@@ -353,30 +356,32 @@ func loadProjectConfig() string {
 	}
 	return ""
 }
-func RunInteractiveWithResume(model string, provider api.Provider) {
+func RunInteractiveWithResume(model string, provider api.Provider, autoApprove bool) {
 	storage, err := history.NewStorage()
 	if err != nil {
 		red.Printf("Failed to initialize storage: %v\n", err)
-		RunInteractive(model, provider)
+		RunInteractive(model, provider, autoApprove)
 		return
 	}
 
 	sessionID, err := storage.GetLastSession()
 	if err != nil {
 		yellow.Println("No previous session found, starting new session")
-		RunInteractive(model, provider)
+		RunInteractive(model, provider, autoApprove)
 		return
 	}
 
 	session, err := storage.Load(sessionID)
 	if err != nil {
 		red.Printf("Failed to load session: %v\n", err)
-		RunInteractive(model, provider)
+		RunInteractive(model, provider, autoApprove)
 		return
 	}
 
 	// ロード済みセッションでAgent作成
 	agent := NewAgent(model, provider)
+	agent.AutoApprove = autoApprove
+	tools.SetAutoApprove(autoApprove) // ツールに --auto-approve 設定を伝える
 	agent.session = session
 	agent.History = session.ToAPIMessages()
 

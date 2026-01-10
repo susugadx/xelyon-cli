@@ -22,6 +22,7 @@ var (
 	resume       bool
 	providerFlag string
 	modelFlag    string
+	autoApprove  bool
 )
 
 const projectConfigFile = "XELYON.md"
@@ -173,13 +174,13 @@ Examples:
 
 		// --resume フラグチェック
 		if resume && len(args) == 0 && len(files) == 0 {
-			agent.RunInteractiveWithResume(model, provider)
+			agent.RunInteractiveWithResume(model, provider, autoApprove)
 			return
 		}
 
 		// 引数なし & ファイル指定なし → 対話モード
 		if len(args) == 0 && len(files) == 0 {
-			agent.RunInteractive(model, provider)
+			agent.RunInteractive(model, provider, autoApprove)
 			return
 		}
 
@@ -290,6 +291,9 @@ func init() {
 
 	// 新規: --resume フラグ
 	rootCmd.Flags().BoolVar(&resume, "resume", false, "Resume last session")
+
+	// 新規: --auto-approve/-y フラグ
+	rootCmd.Flags().BoolVarP(&autoApprove, "auto-approve", "y", false, "Automatically approve safe/medium operations (destructive ops still require confirmation)")
 }
 
 func Execute() {

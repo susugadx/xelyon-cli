@@ -13,7 +13,7 @@ func executeGitPush() string {
 	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	yellow.Println("⚠️  Warning: Changes will be published to remote / 警告: リモートリポジトリに変更が公開されます")
 
-	if !confirm("Push to remote? / プッシュしますか？") {
+	if !confirmWithAutoApprove("git_push", "Push to remote? / プッシュしますか？") {
 		return "Cancelled by user"
 	}
 

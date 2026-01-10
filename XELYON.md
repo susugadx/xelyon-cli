@@ -528,10 +528,48 @@ go build -o xelyon
 - APIリトライのカスタマイズ → [Issue #17](https://github.com/susugadx/xelyon-cli/issues/17)
 - 差分表示のカスタマイズ → [Issue #18](https://github.com/susugadx/xelyon-cli/issues/18)
 
-## v0.28.0 対話的修正機能（Phase 1）
+## v0.28.0 機能拡張
 
-### 概要
-Issue #1「Plan Mode + 対話的修正機能」のPhase 1として、ツール実行前の確認プロンプトを拡張しました。
+### --auto-approve フラグ (Issue #3)
+
+**概要**: 安全・中レベルの操作を自動承認する `-y` / `--auto-approve` フラグを実装。
+
+#### 実装ファイル
+- `internal/tools/safety.go`: ツール危険度分類（SafetyHigh/Medium/Low）
+- `internal/tools/common.go`: `confirmWithAutoApprove()` 関数
+- `cmd/root.go`: `-y` / `--auto-approve` フラグ
+- `internal/agent/agent.go`: AutoApprove フィールド
+
+#### 危険度分類
+```go
+// SafetyHigh: 読み取り専用（常に自動承認OK）
+read_file, list_dir, git_status, git_log, lint, test, web_search
+
+// SafetyMedium: 書き込み（--auto-approve で承認）
+write_file, str_replace, append_file, prepend_file, insert_after, insert_before,
+copy_file, create_dir, git_add, git_commit
+
+// SafetyLow: 破壊的操作（常に確認必須）
+delete_file, delete_lines, move_file, bash,
+git_push, git_checkout, git_branch, git_stash
+```
+
+#### 動作
+1. `--auto-approve` なし: 全て確認プロンプト表示
+2. `--auto-approve` あり:
+   - SafetyHigh / SafetyMedium → 自動承認（"✓ Auto-approved" 表示）
+   - SafetyLow → 確認プロンプト表示（安全性重視）
+
+#### テスト
+- `internal/tools/safety_test.go`: 危険度分類・自動承認ロジックのテスト
+
+詳細は [Issue #3](https://github.com/susugadx/xelyon-cli/issues/3) を参照。
+
+---
+
+### 対話的修正機能 Phase 1 (Issue #1)
+
+**概要**: ツール実行前の確認プロンプトを拡張しました。
 
 ### 実装詳細
 

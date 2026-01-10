@@ -58,7 +58,7 @@ func executeDeleteFile(path string) (string, string, error) {
 		yellow.Printf("  ... (%d more lines)\n", len(lines)-20)
 	}
 
-	if !confirm("Delete this file? / このファイルを削除しますか？") {
+	if !confirmWithAutoApprove("delete_file", "Delete this file? / このファイルを削除しますか？") {
 		return "Cancelled by user", "", nil
 	}
 

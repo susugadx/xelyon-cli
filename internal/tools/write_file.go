@@ -46,7 +46,7 @@ func executeWriteFile(path string, content string) (string, string, error) {
 		showPreview(content)
 	}
 
-	if !confirm("Create/overwrite this file? / このファイルを作成・上書きしますか？") {
+	if !confirmWithAutoApprove("write_file", "Create/overwrite this file? / このファイルを作成・上書きしますか？") {
 		return "Cancelled by user", "", nil
 	}
 

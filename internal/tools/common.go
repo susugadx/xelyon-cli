@@ -88,6 +88,15 @@ func createBackup(filePath string) (string, error) {
 	return backupPath, nil
 }
 
+// globalAutoApprove は --auto-approve フラグの状態を保持
+// Agent から SetAutoApprove() で設定される
+var globalAutoApprove = false
+
+// SetAutoApprove は --auto-approve フラグを設定
+func SetAutoApprove(enabled bool) {
+	globalAutoApprove = enabled
+}
+
 // confirm はユーザーに確認を求める（テスト用にグローバル変数として定義）
 var confirm = func(message string) bool {
 	yellow.Printf("%s (y/n): ", message)
@@ -100,6 +109,21 @@ var confirm = func(message string) bool {
 	response = strings.ToLower(strings.TrimSpace(response))
 
 	return response == "y" || response == "yes" || response == "ｙ" || response == "はい"
+}
+
+// confirmWithAutoApprove は危険度を考慮した確認プロンプト
+// toolName: 実行するツール名
+// message: 確認メッセージ
+func confirmWithAutoApprove(toolName, message string) bool {
+	// --auto-approve が有効 かつ ツールが自動承認可能な場合
+	if IsAutoApprovable(toolName, globalAutoApprove) {
+		safety := GetToolSafety(toolName)
+		green.Printf("✓ Auto-approved (%s): %s\n", GetSafetyDescription(safety), toolName)
+		return true
+	}
+
+	// それ以外は通常の確認プロンプト
+	return confirm(message)
 }
 
 // truncate は文字列を指定長で切り詰め

@@ -134,10 +134,36 @@ export XELYON_PROVIDER=ollama
 # 前回のセッションを復元
 ./xelyon --resume
 
+# 自動承認モード（安全・中レベルの操作を自動承認）
+./xelyon -y         # または --auto-approve
+./xelyon -y --coder # 組み合わせ可能
+
 # モデル選択
 ./xelyon --coder    # コード特化
 ./xelyon --think    # 深い推論
 ./xelyon --claude   # Claude (予定)
+```
+
+### --auto-approve フラグ
+
+`-y` または `--auto-approve` フラグで安全・中レベルの操作を自動承認できます:
+
+**自動承認される操作** (SafetyHigh / SafetyMedium):
+- 読み取り専用: read_file, list_dir, git_status, git_log, lint, test
+- 書き込み（リカバリ可能）: write_file, str_replace, append_file, git_add, git_commit
+
+**常に確認が必要な操作** (SafetyLow):
+- 破壊的操作: delete_file, delete_lines, move_file, bash
+- リスクの高いGit操作: git_push, git_checkout, git_branch
+
+```bash
+# 例: 安全な操作のみ自動承認
+./xelyon -y "README.mdを読んでプロジェクト説明を作成"
+# → read_fileは自動承認、write_fileも自動承認
+
+# 破壊的操作は常に確認
+./xelyon -y "不要なファイルを削除"
+# → delete_fileは確認プロンプトが表示される
 ```
 
 ### 対話コマンド
