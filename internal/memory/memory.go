@@ -79,6 +79,10 @@ func NewMemoryStore() (*MemoryStore, error) {
 		memories:    []Memory{},
 	}
 
+	// デバッグ: パスを出力
+	fmt.Printf("DEBUG: GlobalPath=%s\n", globalPath)
+	fmt.Printf("DEBUG: ProjectPath=%s\n", projectPath)
+
 	// メモリを読み込み
 	if err := store.Load(); err != nil {
 		// ファイルが存在しない場合はエラーにしない
@@ -87,32 +91,41 @@ func NewMemoryStore() (*MemoryStore, error) {
 		}
 	}
 
+	// デバッグ: 読み込んだメモリ数を出力
+	fmt.Printf("DEBUG: Loaded %d memories\n", len(store.memories))
+
 	return store, nil
 }
 
 // Load はメモリを読み込み（プロジェクト別 → グローバルの順）
 func (ms *MemoryStore) Load() error {
 	ms.memories = []Memory{}
+	fmt.Printf("DEBUG Load: Starting load. ProjectPath=%s, GlobalPath=%s\n", ms.ProjectPath, ms.GlobalPath)
 
 	// プロジェクト別メモリを優先
 	if ms.ProjectPath != "" {
+		fmt.Printf("DEBUG Load: Loading project memory from %s\n", ms.ProjectPath)
 		if err := ms.loadFromFile(ms.ProjectPath, true); err != nil && !os.IsNotExist(err) {
 			return err
 		}
 	}
 
 	// グローバルメモリを読み込み
+	fmt.Printf("DEBUG Load: Loading global memory from %s\n", ms.GlobalPath)
 	if err := ms.loadFromFile(ms.GlobalPath, false); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 
+	fmt.Printf("DEBUG Load: Total memories loaded: %d\n", len(ms.memories))
 	return nil
 }
 
 // loadFromFile はファイルからメモリを読み込み
 func (ms *MemoryStore) loadFromFile(path string, isProject bool) error {
+	fmt.Printf("DEBUG loadFromFile: path=%s, isProject=%v\n", path, isProject)
 	data, err := os.ReadFile(path)
 	if err != nil {
+		fmt.Printf("DEBUG loadFromFile: ReadFile error: %v\n", err)
 		return err
 	}
 
@@ -120,6 +133,7 @@ func (ms *MemoryStore) loadFromFile(path string, isProject bool) error {
 	if err := json.Unmarshal(data, &memories); err != nil {
 		return fmt.Errorf("failed to parse memory file %s: %w", path, err)
 	}
+	fmt.Printf("DEBUG loadFromFile: Parsed %d memories from %s\n", len(memories), path)
 
 	// プロジェクト別メモリの場合、Projectフィールドを設定
 	if isProject {
@@ -127,9 +141,11 @@ func (ms *MemoryStore) loadFromFile(path string, isProject bool) error {
 		for i := range memories {
 			memories[i].Project = projectName
 		}
+		fmt.Printf("DEBUG loadFromFile: Set project name to %s\n", projectName)
 	}
 
 	ms.memories = append(ms.memories, memories...)
+	fmt.Printf("DEBUG loadFromFile: Total memories now: %d\n", len(ms.memories))
 	return nil
 }
 
