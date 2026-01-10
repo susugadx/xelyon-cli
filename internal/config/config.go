@@ -94,19 +94,19 @@ func DefaultConfig() *Config {
 				DefaultModel: "deepseek-coder",
 			},
 			"openai": {
-				DefaultModel: "gpt-4o",
+				DefaultModel: "gpt-5.2",
 			},
 			"gemini": {
-				DefaultModel: "gemini-2.0-flash-exp",
+				DefaultModel: "gemini-2.5-flash",
 			},
 			"claude": {
-				DefaultModel: "claude-sonnet-4-20250514",
+				DefaultModel: "claude-sonnet-4-5-20250514",
 			},
 			"ollama": {
-				DefaultModel: "llama3",
+				DefaultModel: "qwen2.5-coder:7b",
 			},
 			"groq": {
-				DefaultModel: "llama3-70b-8192",
+				DefaultModel: "meta-llama/llama-4-scout-17b-16e-instruct",
 			},
 		},
 		Compression: CompressionConfig{

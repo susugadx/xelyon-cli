@@ -73,14 +73,30 @@ export SERPER_API_KEY="your-serper-api-key"  # Web検索用（オプション）
 
 XELYON CLIは以下のLLMプロバイダーに対応しています：
 
-| Provider | 環境変数 | 推奨モデル | ストリーミング |
-|----------|---------|-----------|--------------|
-| **DeepSeek** | `DEEPSEEK_API_KEY` | deepseek-coder | ✅ |
-| **OpenAI** | `OPENAI_API_KEY` | gpt-4o | ✅ |
-| **Gemini** | `GEMINI_API_KEY` | gemini-2.0-flash-exp | ✅ |
-| **Claude** | `ANTHROPIC_API_KEY` | claude-sonnet-4-20250514 | ✅ |
-| **Ollama** | (不要) | llama3 | ✅ |
-| **Groq** | `GROQ_API_KEY` | llama3-70b-8192 | ✅ |
+| Provider | 環境変数 | デフォルトモデル | 公式サイト |
+|----------|---------|----------------|-----------|
+| **DeepSeek** | `DEEPSEEK_API_KEY` | `deepseek-coder` | [DeepSeek](https://platform.deepseek.com/) |
+| **OpenAI** | `OPENAI_API_KEY` | `gpt-5.2` | [OpenAI](https://platform.openai.com/) |
+| **Gemini** | `GEMINI_API_KEY` | `gemini-2.5-flash` | [Google AI Studio](https://aistudio.google.com/) |
+| **Claude** | `ANTHROPIC_API_KEY` | `claude-sonnet-4-5-20250514` | [Anthropic](https://console.anthropic.com/) |
+| **Ollama** | (不要) | `qwen2.5-coder:7b` | [Ollama](https://ollama.ai/) |
+| **Groq** | `GROQ_API_KEY` | `meta-llama/llama-4-scout-17b-16e-instruct` | [Groq](https://console.groq.com/) |
+
+**モデル変更方法**:
+```bash
+# 対話中にモデルを変更
+> /model gpt-4o
+
+# または起動時に指定
+./xelyon --model gemini-2.0-flash-exp
+
+# 設定ファイルでデフォルトを変更
+# ~/.xelyon/config.yaml
+default_model: "gpt-4o"
+provider_models:
+  openai:
+    default_model: "gpt-4o"
+```
 
 ### プロバイダーの切り替え方法
 
