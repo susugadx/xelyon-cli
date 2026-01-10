@@ -528,6 +528,93 @@ go build -o xelyon
 - APIリトライのカスタマイズ → [Issue #17](https://github.com/susugadx/xelyon-cli/issues/17)
 - 差分表示のカスタマイズ → [Issue #18](https://github.com/susugadx/xelyon-cli/issues/18)
 
+## v0.30.0 機能追加
+
+### /copy コマンド (Issue #5)
+
+**概要**: 最後のAI出力をクリップボードにコピーする `/copy` コマンドを実装。
+
+#### 実装ファイル
+- `internal/agent/agent.go`: Agent構造体に `lastOutputs []string` フィールド追加
+- `internal/agent/agent_chat.go`: `handleNormalResponse()` で出力を記録
+- `internal/agent/agent_commands.go`: `handleCopyCommand()` と `extractCodeBlocks()` 関数
+
+#### 依存パッケージ
+```bash
+go get github.com/atotto/clipboard
+```
+
+- クロスプラットフォーム対応（Windows/macOS/Linux）
+- Linux では `xclip` または `xsel` が必要
+
+#### 使用例
+
+```bash
+# 基本的な使い方
+> /copy              # 最後の出力全体
+> /copy code         # コードブロックのみ
+> /copy -n 2         # 2つ前の出力
+> /copy code -n 3    # 3つ前のコードブロック
+```
+
+#### 機能詳細
+
+1. **出力履歴管理**
+   - 最後の10件のAI出力を `lastOutputs` に保持
+   - `handleNormalResponse()` で自動記録
+   - リングバッファ形式（古い出力から削除）
+
+2. **コードブロック抽出**
+   - 正規表現: `(?s)` + "```\\w*\\n(.*?)```"
+   - Markdown コードブロック（\`\`\`language\n...\`\`\`）を検出
+   - 複数ブロックは空行2つで区切って連結
+
+3. **引数解析**
+   - `code`: コードブロックのみ抽出
+   - `-n N`: N番目前の出力を指定（1-indexed）
+   - 組み合わせ可能: `/copy code -n 2`
+
+4. **エラーハンドリング**
+   - Linux環境で xclip/xsel 未インストールの場合、インストール方法を案内
+   - 出力履歴が空の場合: "No AI output to copy yet"
+   - コードブロックなしの場合: "No code blocks found in output"
+
+#### コードブロック抽出ロジック
+
+```go
+func extractCodeBlocks(text string) []string {
+	// 正規表現: ```language\n...```
+	re := regexp.MustCompile("(?s)```\\w*\\n(.*?)```")
+	matches := re.FindAllStringSubmatch(text, -1)
+
+	blocks := make([]string, 0, len(matches))
+	for _, match := range matches {
+		if len(match) > 1 {
+			blocks = append(blocks, strings.TrimSpace(match[1]))
+		}
+	}
+
+	return blocks
+}
+```
+
+#### Linux環境のセットアップ
+
+```bash
+# Ubuntu/Debian
+sudo apt-get install xclip
+
+# Fedora/RHEL
+sudo dnf install xclip
+
+# Arch Linux
+sudo pacman -S xclip
+```
+
+詳細は [Issue #5](https://github.com/susugadx/xelyon-cli/issues/5) を参照。
+
+---
+
 ## v0.29.0 機能追加
 
 ### /stats コマンド (Issue #4)

@@ -169,20 +169,54 @@ export XELYON_PROVIDER=ollama
 ### 対話コマンド
 
 ```
-/save             - 現在のセッションを保存
-/load [id]        - セッションを読み込み（IDなしで最新）
-/sessions         - 最近のセッション一覧
-/undo             - 直前のファイル変更を取り消し
-/stats            - セッション統計情報を表示（時間、メッセージ数、ツール実行、コスト）
-/config           - 設定の表示・変更（例: /config model gpt-4o）
-/model [name]     - 現在のモデルとプロバイダーを表示、または任意のモデルに切り替え
-/repomap          - リポジトリのコード構造マップを表示
-/version          - バージョン情報を表示
-/clear            - 会話履歴をクリア
-/history          - 会話履歴を表示
-/help             - ヘルプを表示
-/exit, /quit, /q  - 終了
+/save               - 現在のセッションを保存
+/load [id]          - セッションを読み込み（IDなしで最新）
+/sessions           - 最近のセッション一覧
+/undo               - 直前のファイル変更を取り消し
+/stats              - セッション統計情報を表示（時間、メッセージ数、ツール実行、コスト）
+/copy [code] [-n N] - 最後のAI出力をクリップボードにコピー
+/config             - 設定の表示・変更（例: /config model gpt-4o）
+/model [name]       - 現在のモデルとプロバイダーを表示、または任意のモデルに切り替え
+/repomap            - リポジトリのコード構造マップを表示
+/version            - バージョン情報を表示
+/clear              - 会話履歴をクリア
+/history            - 会話履歴を表示
+/help               - ヘルプを表示
+/exit, /quit, /q    - 終了
 ```
+
+### /copy コマンド
+
+最後のAI出力をクリップボードにコピーします:
+
+```bash
+> /copy              # 最後の出力全体をコピー
+✅ Copied to clipboard (45 lines, 1234 chars)
+
+> /copy code         # コードブロック（```で囲まれた部分）のみコピー
+✅ Copied to clipboard (20 lines, 567 chars, code blocks only)
+
+> /copy -n 2         # 2つ前の出力をコピー
+✅ Copied to clipboard (30 lines, 890 chars)
+
+> /copy code -n 3    # 3つ前の出力からコードブロックのみコピー
+✅ Copied to clipboard (15 lines, 345 chars, code blocks only)
+```
+
+**使い方**:
+- `/copy`: 最後のAI出力全体をクリップボードにコピー
+- `/copy code`: コードブロックのみ抽出してコピー（複数のコードブロックは空行2つで区切られる）
+- `/copy -n N`: N番目前の出力をコピー（最大10件保持）
+- `/copy code -n 2`: 組み合わせ可能
+
+**Linux環境**:
+- `xclip` または `xsel` が必要です
+- インストール: `sudo apt-get install xclip` (Ubuntu/Debian)
+
+**活用例**:
+- AIが生成したコードをすぐにエディタに貼り付け
+- 長いコマンドやスクリプトをターミナルで実行
+- AIの説明をドキュメントに転記
 
 ### /stats コマンド
 

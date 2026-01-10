@@ -4,8 +4,11 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 
+	"github.com/atotto/clipboard"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/repomap"
@@ -35,6 +38,8 @@ func handleSpecialCommand(input string, agent *Agent) bool {
 		return handleConfigCommand(args)
 	case "/stats":
 		return handleStatsCommand(agent)
+	case "/copy":
+		return handleCopyCommand(agent, args)
 	case "/exit", "/quit", "/q":
 		yellow.Println("👋 See you!")
 		os.Exit(0)
@@ -407,6 +412,99 @@ func formatNumber(n int) string {
 	return fmt.Sprintf("%s,%03d", formatNumber(n/1000), n%1000)
 }
 
+// handleCopyCommand は最後のAI出力をクリップボードにコピー
+func handleCopyCommand(agent *Agent, args []string) bool {
+	if len(agent.lastOutputs) == 0 {
+		yellow.Println("No AI output to copy yet")
+		return true
+	}
+
+	// デフォルト: 最後の出力
+	outputIndex := len(agent.lastOutputs) - 1
+	codeOnly := false
+
+	// 引数解析
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch arg {
+		case "code":
+			codeOnly = true
+		case "-n":
+			if i+1 < len(args) {
+				n, err := strconv.Atoi(args[i+1])
+				if err != nil {
+					red.Printf("Invalid number: %s\n", args[i+1])
+					return true
+				}
+				if n < 1 || n > len(agent.lastOutputs) {
+					red.Printf("Index out of range (1-%d): %d\n", len(agent.lastOutputs), n)
+					return true
+				}
+				outputIndex = len(agent.lastOutputs) - n
+				i++ // skip next arg
+			} else {
+				red.Println("Missing value for -n flag")
+				return true
+			}
+		default:
+			yellow.Printf("Unknown argument: %s\n", arg)
+			yellow.Println("Usage: /copy [code] [-n <number>]")
+			return true
+		}
+	}
+
+	output := agent.lastOutputs[outputIndex]
+
+	// コードブロックのみ抽出
+	if codeOnly {
+		codeBlocks := extractCodeBlocks(output)
+		if len(codeBlocks) == 0 {
+			yellow.Println("No code blocks found in output")
+			return true
+		}
+		output = strings.Join(codeBlocks, "\n\n")
+	}
+
+	// クリップボードにコピー
+	if err := clipboard.WriteAll(output); err != nil {
+		red.Printf("Failed to copy to clipboard: %v\n", err)
+		if strings.Contains(err.Error(), "xclip") || strings.Contains(err.Error(), "xsel") {
+			yellow.Println("\nLinux requires xclip or xsel:")
+			yellow.Println("  Ubuntu/Debian: sudo apt-get install xclip")
+			yellow.Println("  Fedora/RHEL:   sudo dnf install xclip")
+			yellow.Println("  Arch:          sudo pacman -S xclip")
+		}
+		return true
+	}
+
+	// 成功メッセージ
+	lines := strings.Count(output, "\n") + 1
+	chars := len(output)
+	green.Printf("✅ Copied to clipboard (%d lines, %d chars", lines, chars)
+	if codeOnly {
+		fmt.Printf(", code blocks only")
+	}
+	fmt.Println(")")
+
+	return true
+}
+
+// extractCodeBlocks は ```で囲まれたコードブロックを抽出
+func extractCodeBlocks(text string) []string {
+	// 正規表現: ```language\n...```
+	re := regexp.MustCompile("(?s)```\\w*\\n(.*?)```")
+	matches := re.FindAllStringSubmatch(text, -1)
+
+	blocks := make([]string, 0, len(matches))
+	for _, match := range matches {
+		if len(match) > 1 {
+			blocks = append(blocks, strings.TrimSpace(match[1]))
+		}
+	}
+
+	return blocks
+}
+
 // handleRepoMapCommand はRepo Mapを表示
 func handleRepoMapCommand() bool {
 	cwd, err := os.Getwd()
@@ -442,6 +540,7 @@ func printHelp() {
   /sessions         - List recent sessions
   /undo             - Undo last file change (restore from .bak)
   /stats            - Show session statistics (time, messages, tokens, cost)
+  /copy [code] [-n N] - Copy last AI output to clipboard (code=code blocks only, -n=N-th last output)
   /config           - Show/change configuration (e.g., /config model deepseek-coder)
   /model [name]     - Show current model or switch model without restart
   /repomap          - Show repository code structure map

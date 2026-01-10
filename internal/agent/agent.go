@@ -41,6 +41,7 @@ type Agent struct {
 	mcpManager      *mcp.Manager
 	AutoApprove     bool          // --auto-approve フラグ
 	Stats           *SessionStats // セッション統計情報
+	lastOutputs     []string      // 最後のAI出力履歴（最大10件）
 }
 
 // NewAgent は新しいAgentを作成
@@ -197,6 +198,7 @@ When you need to use a tool, respond with ONLY a JSON block like this:
 		mcpManager:      mcpManager,
 		SystemPrompt:    systemPrompt,
 		Stats:           NewSessionStats(provider.Name()),
+		lastOutputs:     []string{},
 	}
 }
 

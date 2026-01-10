@@ -186,6 +186,12 @@ func (a *Agent) handleNormalResponse(response string) {
 		a.Stats.AssistantMessages++
 	}
 
+	// 最後の出力を記録（最大10件）
+	a.lastOutputs = append(a.lastOutputs, response)
+	if len(a.lastOutputs) > 10 {
+		a.lastOutputs = a.lastOutputs[1:]
+	}
+
 	// セッションに保存
 	if a.session != nil {
 		a.session.AddMessage("assistant", response, a.CurrentModel)
