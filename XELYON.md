@@ -517,14 +517,80 @@ go build -o xelyon
 7. **APIリトライ**: 最大2回までリトライ（v0.8.0で追加）
 
 ## 今後の拡張案
-- [ ] タイムスタンプ付き複数世代バックアップ
-- [ ] `/undo all` - セッション中の全変更を一括取り消し
-- [ ] `/changes` - 変更履歴一覧表示
-- [ ] 永続的Undo - セッション終了後も復元可能
-- [ ] .gitignoreへの.bak自動追加
-- [ ] ループ検知の回数をカスタマイズ可能に
-- [ ] APIリトライの回数・待機時間をカスタマイズ可能に
-- [ ] 差分表示の省略行数をカスタマイズ可能に
+
+以下の機能拡張は GitHub Issues に移行されました:
+- タイムスタンプ付き複数世代バックアップ → [Issue #11](https://github.com/susugadx/xelyon-cli/issues/11)
+- `/undo all` コマンド → [Issue #12](https://github.com/susugadx/xelyon-cli/issues/12)
+- `/changes` コマンド → [Issue #13](https://github.com/susugadx/xelyon-cli/issues/13)
+- 永続的Undo機能 → [Issue #14](https://github.com/susugadx/xelyon-cli/issues/14)
+- .gitignoreへの.bak自動追加 → [Issue #15](https://github.com/susugadx/xelyon-cli/issues/15)
+- ループ検知のカスタマイズ → [Issue #16](https://github.com/susugadx/xelyon-cli/issues/16)
+- APIリトライのカスタマイズ → [Issue #17](https://github.com/susugadx/xelyon-cli/issues/17)
+- 差分表示のカスタマイズ → [Issue #18](https://github.com/susugadx/xelyon-cli/issues/18)
+
+## v0.28.0 対話的修正機能（Phase 1）
+
+### 概要
+Issue #1「Plan Mode + 対話的修正機能」のPhase 1として、ツール実行前の確認プロンプトを拡張しました。
+
+### 実装詳細
+
+#### 1. 拡張確認プロンプト (y/n/c)
+**ファイル**: `internal/tools/confirm_interactive.go`
+
+従来の `y/n` 確認を `y/n/c` に拡張:
+- `y` (yes) - ツールを実行
+- `n` (no) - キャンセル
+- `c` (comment) - コメント（修正指示）
+
+#### 2. 複数行コメント入力
+`c` を選択すると複数行コメント入力モードに切り替わります:
+```
+💬 Enter your comment (press Enter twice to finish):
+> この実装だとエラーハンドリングがない
+> もっと堅牢にして
+>
+```
+
+空行2回で入力終了。
+
+#### 3. 修正ループアーキテクチャ
+**ファイル**: `internal/agent/interactive_confirm.go`
+
+```go
+// executeToolCallInteractive はツール実行を対話的確認付きで実行
+// 最大3回まで修正可能（無限ループ防止）
+func (a *Agent) executeToolCallInteractive(response string, toolCall *tools.ToolCall)
+```
+
+**フロー**:
+1. ツール実行前に確認プロンプト表示
+2. ユーザーが `c` でコメント入力
+3. コメントをAIに送信
+4. AIが修正案を返す
+5. 再度確認プロンプト（最大3回まで）
+
+#### 4. データ構造
+```go
+// ConfirmResult は確認結果
+type ConfirmResult struct {
+	Action  string // "yes", "no", "comment"
+	Comment string // "comment" の場合のコメント内容
+}
+```
+
+### 制限事項（Phase 1）
+- Phase 1では基本機能のみ実装
+- 画像入力対応は Phase 2 で実装予定
+- マルチモーダルAPI対応が必要（Claude 3, GPT-4o等）
+
+### 今後の拡張（Phase 2, 3）
+- Phase 2: 画像入力対応（`c image:/path/to/screenshot.png`）
+- Phase 3: コメント履歴表示、修正前後の差分表示
+
+詳細は [Issue #1](https://github.com/susugadx/xelyon-cli/issues/1) を参照。
+
+---
 
 ## v0.10.0 アーキテクチャ改善
 

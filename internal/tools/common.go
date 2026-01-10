@@ -169,10 +169,13 @@ func findWithNormalizedWhitespace(content, pattern string) (found bool, startIdx
 
 	var endPos = startPos
 	for i := startLine; i <= endLine; i++ {
-		endPos += len(contentLines[i]) + 1
+		endPos += len(contentLines[i])
+		if i < endLine {
+			endPos += 1 // +1 for \n between lines
+		}
 	}
 
-	return true, startPos, endPos - 1 // -1 to exclude final \n
+	return true, startPos, endPos - 1 // -1 because endIdx is inclusive
 }
 
 // showImprovedDiff は改善された差分表示

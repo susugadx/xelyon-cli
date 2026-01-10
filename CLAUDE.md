@@ -66,7 +66,7 @@ go test ./...
 ### Phase 5: 差別化機能✅
 - [x] MCP対応（ToolRegistryに外部ツール登録）（v0.12.0で完了）
 - [x] Repo Map実装（go-tree-sitter）（v0.13.0で完了）
-- [ ] RAG連携（XELYON Web API）- Web版リリース後
+- RAG連携（XELYON Web API）は [Issue #10](https://github.com/susugadx/xelyon-cli/issues/10) に移行
 
 ### Phase 6: セキュリティ・品質監査✅（v0.24.0）
 - [x] **Phase 1 CRITICAL**: 5件のセキュリティ脆弱性を修正

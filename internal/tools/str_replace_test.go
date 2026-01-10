@@ -193,7 +193,6 @@ func TestExecuteStrReplace_MultilineReplacement(t *testing.T) {
 }
 
 func TestExecuteStrReplace_WhitespaceNormalization(t *testing.T) {
-	t.Skip("Skipping: findWithNormalizedWhitespace has known bugs with edge cases")
 	setupTestConfirm(t, true)
 
 	tmpDir := t.TempDir()
