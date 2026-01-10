@@ -15,11 +15,11 @@ type Plan struct {
 type PlanStep struct {
 	ID          int      `json:"id"`
 	Description string   `json:"description"`
-	Tools       []string `json:"tools"`       // 使用予定ツール
-	DependsOn   []int    `json:"depends_on"`  // 依存するステップID
-	Parallel    bool     `json:"parallel"`    // 並列実行可能か
-	Status      string   `json:"status"`      // "pending", "running", "completed", "failed"
-	Result      string   `json:"result"`      // 実行結果
+	Tools       []string `json:"tools"`      // 使用予定ツール
+	DependsOn   []int    `json:"depends_on"` // 依存するステップID
+	Parallel    bool     `json:"parallel"`   // 並列実行可能か
+	Status      string   `json:"status"`     // "pending", "running", "completed", "failed"
+	Result      string   `json:"result"`     // 実行結果
 }
 
 // ParsePlan はJSON文字列からPlanを解析

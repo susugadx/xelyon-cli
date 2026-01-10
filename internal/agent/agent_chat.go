@@ -28,6 +28,15 @@ func isSameToolCall(tc1, tc2 *tools.ToolCall) bool {
 
 // chat はAIと対話する
 func (a *Agent) chat(input string) {
+	// Plan Mode が有効な場合、RunPlanMode を呼ぶ
+	if a.PlanMode {
+		ctx := context.Background()
+		if err := a.RunPlanMode(ctx, input); err != nil {
+			red.Printf("Plan execution failed: %v\n", err)
+		}
+		return
+	}
+
 	// 履歴に追加
 	a.History = append(a.History, api.Message{
 		Role:    "user",

@@ -144,6 +144,21 @@ When you need to use a tool, respond with ONLY a JSON block like this:
 3. Explain your reasoning: Why this tool? Why this approach?
 4. Ask for user confirmation when making significant changes
 
+### Plan Mode (if enabled)
+When Plan Mode is enabled, follow this workflow:
+1. Analyze the user's request and break it down into steps
+2. Output a JSON plan in this exact format:
+   {"steps": [
+     {"id": 1, "description": "Step description", "tools": ["tool1", "tool2"], "depends_on": [], "parallel": true},
+     {"id": 2, "description": "Next step", "tools": ["tool3"], "depends_on": [1], "parallel": false}
+   ]}
+3. Wait for user approval (y/n/c)
+4. After approval, execute steps autonomously:
+   - Execute steps with depends_on=[] first
+   - Parallel steps can run simultaneously
+   - Sequential steps run one by one
+   - Only ask for confirmation on SafetyLow operations (delete_file, bash, git_push, etc.)
+
 ### Phase 2: Execution
 5. Use the right tool for each task:
    - search_code: Search code content (NOT bash grep)
@@ -295,7 +310,7 @@ func RunInteractive(model string, provider api.Provider, autoApprove, planMode b
 
 	agent := NewAgent(model, provider)
 	agent.AutoApprove = autoApprove
-	agent.PlanMode = planMode // Plan Modeフラグを設定
+	agent.PlanMode = planMode         // Plan Modeフラグを設定
 	tools.SetAutoApprove(autoApprove) // ツールに --auto-approve 設定を伝える
 	defer agent.Cleanup()             // グレースフルシャットダウン
 

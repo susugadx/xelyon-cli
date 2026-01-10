@@ -56,6 +56,9 @@ xelyon-cli/
 ├── internal/
 │   ├── agent/             # エージェントロジック
 │   │   ├── agent.go       # 対話ループ、コマンド処理、Undo管理
+│   │   ├── agent_plan.go  # Plan Mode実装（計画生成→承認→自律実行）
+│   │   ├── parallel.go    # 並列実行エンジン（errgroup使用）
+│   │   ├── plan.go        # 実行計画の構造体と依存関係解決
 │   │   └── verify.go      # 自動検証（go fmt, go test, rollback）
 │   ├── mcp/               # MCP連携
 │   │   ├── client.go      # MCPサーバー接続・ツール管理
@@ -98,7 +101,18 @@ xelyon-cli/
 
 #### 1. エージェントシステム (internal/agent/)
 - **対話ループ**: ユーザー入力 → AI推論 → ツール実行 → 結果表示
-- **コマンド処理**: `/save`, `/load`, `/sessions`, `/undo`, `/config`, `/model`, `/version`, `/clear`, `/history`, `/help`
+- **Plan Mode**: 自律実行 + 並列処理（v0.31.0）
+  - **agent_plan.go**: `RunPlanMode()` - 計画生成→承認→自律実行
+  - **parallel.go**: `ParallelExecutor` - golang.org/x/sync/errgroupで並列実行
+  - **plan.go**: `Plan`, `PlanStep` - 実行計画のデータ構造と依存関係解決
+  - **ワークフロー**:
+    1. AI が JSON形式で実行計画を生成
+    2. 計画を表示（ステップ、ツール、依存関係、並列実行可否）
+    3. y/n/c で承認・拒否・フィードバック
+    4. 承認後、依存関係順に自律実行（並列ステップは同時実行）
+    5. SafetyLow 操作のみ個別確認
+  - **起動方法**: `--plan` フラグ、または `/plan on` コマンド
+- **コマンド処理**: `/save`, `/load`, `/sessions`, `/undo`, `/config`, `/model`, `/plan`, `/version`, `/clear`, `/history`, `/help`
 - **変更履歴管理**: 最大10件のファイル変更を追跡、Undo機能
 - **セッション管理**: 会話履歴の自動保存・復元
 - **ループ検知**: 同じツール呼び出しが3回繰り返されると自動中断

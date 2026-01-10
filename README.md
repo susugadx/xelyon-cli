@@ -168,6 +168,49 @@ export XELYON_PROVIDER=ollama
 # → delete_fileは確認プロンプトが表示される
 ```
 
+### Plan Mode（自律実行 + 並列処理）
+
+Plan Modeを有効にすると、AIがタスクを自動的に分析し、実行計画を生成します。計画を承認後、AIが自律的にステップを実行します。
+
+```bash
+# Plan Modeで起動
+./xelyon --plan "バグ修正とテストを実行"
+
+# または、対話モードで切り替え
+> /plan on
+> バグを修正してテスト実行して
+```
+
+**ワークフロー**:
+1. **計画生成**: AIがタスクを分析し、実行計画をJSON形式で生成
+2. **計画表示**: ステップ、使用ツール、依存関係、並列実行可否を表示
+3. **承認確認**: y/n/c (comment) で計画を承認・拒否・フィードバック
+4. **自律実行**: 承認後、AIが自動的にステップを実行
+   - 依存関係に従って順次実行
+   - 並列実行可能なステップは同時実行
+   - SafetyLow操作のみ個別確認
+
+**計画例**:
+```
+📋 Plan:
+  1. [順次] main.goを読み込み
+     Tools: read_file
+  2. [並列] テストファイルを作成
+     Tools: write_file
+     Depends on: [1]
+  3. [並列] ドキュメント更新
+     Tools: str_replace
+     Depends on: [1]
+  4. [順次] テストを実行
+     Tools: bash
+     Depends on: [2, 3]
+```
+
+**コマンド**:
+- `/plan` - Plan Modeの状態を表示
+- `/plan on` - Plan Mode有効化
+- `/plan off` - Plan Mode無効化
+
 ### Headlessモード（JSON出力）
 
 `--headless` または `--output-format json` フラグでUIなしのJSON出力モードを利用できます:
@@ -253,6 +296,7 @@ fi
 /providers          - 利用可能なプロバイダー一覧とAPIキーステータスを表示
 /config             - 設定の表示・変更（例: /config model gpt-4o）
 /model [name]       - 現在のモデルとプロバイダーを表示、または任意のモデルに切り替え
+/plan [on|off]      - Plan Modeの有効化・無効化（自律実行 + 並列処理）
 /repomap            - リポジトリのコード構造マップを表示
 /version            - バージョン情報を表示
 /clear              - 会話履歴をクリア
@@ -1012,6 +1056,22 @@ go fmt ./...
 MIT
 
 ## バージョン履歴
+
+### v0.31.0 Plan Mode実装 (2026-01-11)
+- 📋 **Plan Mode**: 自律実行 + 並列処理（Issue #2 Phase 2）
+  - AIがタスクを分析し、実行計画をJSON形式で生成
+  - 計画表示：ステップ、使用ツール、依存関係、並列実行可否
+  - 承認確認：y/n/c (comment) で計画を承認・拒否・フィードバック
+  - 自律実行：承認後、AIが自動的にステップを実行
+    - 依存関係に従って順次実行
+    - 並列実行可能なステップは同時実行（golang.org/x/sync/errgroup使用）
+    - SafetyLow操作のみ個別確認
+- 🚀 **起動フラグ**: `--plan` でPlan Mode起動
+- 🎛️ **対話コマンド**: `/plan`, `/plan on`, `/plan off`
+- 📦 **新規ファイル**:
+  - `internal/agent/agent_plan.go`: RunPlanMode実装
+  - `internal/agent/parallel.go`: 並列実行エンジン
+- 📝 **SystemPrompt拡張**: Plan Mode用の指示追加
 
 ### v0.30.0 Headlessモード実装 (2026-01-11)
 - 🖥️ **Headlessモード**: UIなしのJSON出力モード実装（Issue #9）
