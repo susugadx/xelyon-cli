@@ -171,6 +171,14 @@ func (a *Agent) executeToolCall(response string, toolCall *tools.ToolCall) {
 			a.changeStack = a.changeStack[1:]
 		}
 
+		// 永続的変更履歴に保存
+		if a.changeStorage != nil && a.session != nil {
+			if err := a.changeStorage.AppendChange(a.session.ID, *change); err != nil {
+				// エラーログは出すが実行は継続
+				yellow.Printf("Warning: Failed to persist change: %v\n", err)
+			}
+		}
+
 		// Goファイル変更時の自動検証提案
 		if verifyResult := ShouldVerify(change.FilePath); verifyResult.NeedsVerify {
 			a.suggestVerification(change.FilePath, verifyResult)

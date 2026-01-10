@@ -175,7 +175,13 @@ export XELYON_PROVIDER=ollama
 /load [id]          - セッションを読み込み（IDなしで最新）
 /sessions           - 最近のセッション一覧
 /undo [all]         - 直前のファイル変更を取り消し、または全変更を取り消し
+/undo history       - 過去セッションの変更履歴を表示
+/undo session <id>  - 指定セッションの全変更を取り消し
 /changes            - ファイル変更履歴を表示（Undoステータス付き）
+/memory <text>      - 重要な情報を記憶（セッション間で永続化）
+/memory list        - 記憶の一覧を表示
+/memory delete <id> - 記憶を削除
+/memory clear       - 全記憶を削除
 /stats              - セッション統計情報を表示（時間、メッセージ数、ツール実行、コスト）
 /copy [code] [-n N] - 最後のAI出力をクリップボードにコピー
 /compress [N]       - 会話履歴を圧縮（最新N件を保持、デフォルト10件）
@@ -190,6 +196,106 @@ export XELYON_PROVIDER=ollama
 /help               - ヘルプを表示
 /exit, /quit, /q    - 終了
 ```
+
+### /memory コマンド（NEW）
+
+重要な情報をセッション間で永続的に記憶します。AIが自動的にこの情報を参照します。
+
+```bash
+# グローバル記憶を追加（全プロジェクトで共有）
+> /memory プロジェクトではTypeScriptとReactを使う
+✅ Memory added (ID: abc123de)
+   Scope: Global
+   Content: プロジェクトではTypeScriptとReactを使う
+
+# プロジェクト別記憶を追加（.xelyon/memory.jsonに保存）
+> /memory project テストはJestで書く
+✅ Memory added (ID: def456gh)
+   Scope: Project (xelyon-cli)
+   Content: テストはJestで書く
+
+# 記憶の一覧表示
+> /memory list
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🧠 Memories / 記憶 (2 件)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  [abc123de] プロジェクトではTypeScriptとReactを使う
+      Global | 2026-01-11 10:30
+
+  [def456gh] テストはJestで書く
+      Project: xelyon-cli | 2026-01-11 10:35
+
+# 記憶を削除
+> /memory delete abc123de
+✅ Memory deleted (ID: abc123de)
+
+# 全記憶を削除
+> /memory clear
+⚠️  Warning: すべての記憶が削除されます（復元不可）
+Continue? (y/n): y
+✅ All memories cleared
+```
+
+**保存場所**:
+- グローバル記憶: `~/.xelyon/memory.json`
+- プロジェクト別記憶: `.xelyon/memory.json` (プロジェクトルート)
+
+**活用例**:
+- コーディングスタイル・規約を記憶: "命名はcamelCaseを使う"
+- プロジェクト固有の情報: "認証はJWTトークンを使用"
+- よく使う依存関係: "HTTPクライアントはaxiosを使う"
+
+### /undo history & /undo session（NEW）
+
+過去のセッションで行った変更を取り消すことができます。
+
+```bash
+# 過去セッションの変更履歴を表示
+> /undo history
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📜 Past Session Changes / 過去セッションの変更履歴
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  [abc-123-def] 2026-01-11 09:15
+      Changes: 5 | Files: 3
+      - internal/agent/agent.go (2 changes)
+      - README.md (2 changes)
+      - main.go (1 changes)
+
+  [ghi-456-jkl] 2026-01-10 18:30
+      Changes: 12 | Files: 7
+      ... and 5 more files
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# 指定セッションの変更を取り消し
+> /undo session abc-123-def
+Session ID: abc-123-def
+取り消す変更数: 5 件
+⚠️  Warning: すべての変更がバックアップから復元されます
+
+Continue? (y/n): y
+
+Restoring files...
+  ✅ [1/5] internal/agent/agent.go
+  ✅ [2/5] internal/agent/agent.go
+  ✅ [3/5] README.md
+  ✅ [4/5] README.md
+  ✅ [5/5] main.go
+
+✅ 成功: 5 件
+```
+
+**仕組み**:
+- すべてのファイル変更が `~/.xelyon/changes/changes_<session_id>.jsonl` に永続化されます
+- バックアップファイル(`.bak`)が存在する限り、過去のセッションの変更も取り消せます
+- 30日以上前の変更履歴は自動クリーンアップされます
+
+**活用例**:
+- 昨日の変更をまとめてロールバック
+- 特定のセッションで行った実験的変更を取り消し
+- チーム開発で他人のセッション結果を確認・復元
 
 ### /copy コマンド
 

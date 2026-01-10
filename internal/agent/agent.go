@@ -14,6 +14,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/audit"
 	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/mcp"
+	"github.com/susugadx/xelyon-cli/internal/memory"
 	"github.com/susugadx/xelyon-cli/internal/repomap"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/version"
@@ -38,6 +39,7 @@ type Agent struct {
 	session         *history.Session
 	storage         *history.Storage
 	changeStack     []tools.FileChange
+	changeStorage   *history.ChangeStorage // 永続的変更履歴
 	mcpManager      *mcp.Manager
 	AutoApprove     bool          // --auto-approve フラグ
 	Stats           *SessionStats // セッション統計情報
@@ -186,6 +188,22 @@ When you need to use a tool, respond with ONLY a JSON block like this:
 		}
 	}
 
+	// メモリをSystemPromptに追加
+	memoryStore, err := memory.NewMemoryStore()
+	if err == nil {
+		memoriesText := memoryStore.GetMemoriesAsText()
+		if memoriesText != "" {
+			systemPrompt += memoriesText
+		}
+	}
+
+	// 変更履歴ストレージ初期化
+	changeStorage, err := history.NewChangeStorage()
+	if err != nil {
+		yellow.Printf("Warning: Failed to initialize change storage: %v\n", err)
+		changeStorage = nil
+	}
+
 	return &Agent{
 		Model:           model,
 		CurrentModel:    model,
@@ -195,6 +213,7 @@ When you need to use a tool, respond with ONLY a JSON block like this:
 		session:         history.NewSession(model),
 		storage:         storage,
 		changeStack:     []tools.FileChange{},
+		changeStorage:   changeStorage,
 		mcpManager:      mcpManager,
 		SystemPrompt:    systemPrompt,
 		Stats:           NewSessionStats(provider.Name()),

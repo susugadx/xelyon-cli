@@ -11,6 +11,7 @@ import (
 	"github.com/atotto/clipboard"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/memory"
 	"github.com/susugadx/xelyon-cli/internal/repomap"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/version"
@@ -80,6 +81,8 @@ func handleSpecialCommand(input string, agent *Agent) bool {
 		return true
 	case "/repomap":
 		return handleRepoMapCommand()
+	case "/memory":
+		return handleMemoryCommand(args)
 	}
 	return false
 }
@@ -172,8 +175,23 @@ func handleSessionsCommand(agent *Agent) bool {
 
 // handleUndoCommand は直前のファイル変更を取り消す（またはすべて取り消す）
 func handleUndoCommand(agent *Agent, args []string) bool {
+	// /undo history → 過去セッションの変更履歴を表示
+	if len(args) > 0 && args[0] == "history" {
+		return handleUndoHistory(agent)
+	}
+
+	// /undo session <session_id> → 指定セッションの変更を取り消す
+	if len(args) > 0 && args[0] == "session" {
+		if len(args) < 2 {
+			red.Println("Usage: /undo session <session_id>")
+			return true
+		}
+		return handleUndoSession(agent, args[1])
+	}
+
 	if len(agent.changeStack) == 0 {
-		yellow.Println("No changes to undo")
+		yellow.Println("No changes to undo in current session")
+		yellow.Println("Hint: Use /undo history to see past sessions")
 		return true
 	}
 
@@ -307,6 +325,146 @@ func handleUndoAll(agent *Agent) bool {
 
 	// スタックをクリア
 	agent.changeStack = []tools.FileChange{}
+
+	// 結果表示
+	fmt.Println()
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	green.Printf("✅ 成功: %d 件\n", successCount)
+	if failCount > 0 {
+		yellow.Printf("⚠️  失敗/スキップ: %d 件\n", failCount)
+	}
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+	return true
+}
+
+// handleUndoHistory は過去セッションの変更履歴を表示
+func handleUndoHistory(agent *Agent) bool {
+	if agent.changeStorage == nil {
+		red.Println("Change storage not available")
+		return true
+	}
+
+	sessions, err := agent.changeStorage.ListSessions()
+	if err != nil {
+		red.Printf("Failed to list sessions: %v\n", err)
+		return true
+	}
+
+	if len(sessions) == 0 {
+		yellow.Println("No past session changes found")
+		return true
+	}
+
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	cyan.Printf("📜 Past Session Changes / 過去セッションの変更履歴\n")
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Println()
+
+	// 最新10セッションのみ表示
+	displayCount := 10
+	if len(sessions) < displayCount {
+		displayCount = len(sessions)
+	}
+
+	for i := 0; i < displayCount; i++ {
+		session := sessions[i]
+
+		// タイムスタンプ
+		timeStr := session.LastChange.Format("2006-01-02 15:04")
+
+		// セッション情報表示
+		fmt.Printf("  [%s] %s\n", session.SessionID, timeStr)
+		fmt.Printf("      Changes: %d | Files: %d\n", session.ChangeCount, len(session.FilesChanged))
+
+		// 変更されたファイル一覧（最大5件）
+		fileCount := 0
+		for filePath, count := range session.FilesChanged {
+			if fileCount >= 5 {
+				remaining := len(session.FilesChanged) - 5
+				fmt.Printf("      ... and %d more files\n", remaining)
+				break
+			}
+			fmt.Printf("      - %s (%d changes)\n", filePath, count)
+			fileCount++
+		}
+
+		if i < displayCount-1 {
+			fmt.Println()
+		}
+	}
+
+	fmt.Println()
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	yellow.Println("使い方:")
+	yellow.Println("  /undo session <session_id>  - セッションの変更を取り消し")
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+	return true
+}
+
+// handleUndoSession は指定セッションの変更を取り消す
+func handleUndoSession(agent *Agent, sessionID string) bool {
+	if agent.changeStorage == nil {
+		red.Println("Change storage not available")
+		return true
+	}
+
+	// セッションの変更履歴を読み込み
+	changes, err := agent.changeStorage.LoadSessionChanges(sessionID)
+	if err != nil {
+		red.Printf("Failed to load session changes: %v\n", err)
+		return true
+	}
+
+	if len(changes) == 0 {
+		yellow.Printf("No changes found for session: %s\n", sessionID)
+		return true
+	}
+
+	// 確認プロンプト
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	cyan.Printf("⚠️  Undo Session Changes / セッションの変更を取り消し\n")
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Printf("Session ID: %s\n", sessionID)
+	fmt.Printf("取り消す変更数: %d 件\n", len(changes))
+	yellow.Println("\n⚠️  Warning: すべての変更がバックアップから復元されます")
+
+	// 確認
+	fmt.Print("\nContinue? (y/n): ")
+	reader := bufio.NewReader(os.Stdin)
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		red.Printf("Failed to read input: %v\n", err)
+		return true
+	}
+
+	input = strings.TrimSpace(strings.ToLower(input))
+	if input != "y" && input != "yes" {
+		yellow.Println("Cancelled")
+		return true
+	}
+
+	// 逆順で処理（新しい変更から古い変更へ）
+	successCount := 0
+	failCount := 0
+
+	fmt.Println()
+	cyan.Println("Restoring files...")
+
+	for i := len(changes) - 1; i >= 0; i-- {
+		change := changes[i]
+
+		// バックアップから復元
+		if err := agent.changeStorage.UndoSessionChange(change); err != nil {
+			red.Printf("  ❌ [%d/%d] %s - %v\n", len(changes)-i, len(changes), change.FilePath, err)
+			failCount++
+			continue
+		}
+
+		green.Printf("  ✅ [%d/%d] %s\n", len(changes)-i, len(changes), change.FilePath)
+		successCount++
+	}
 
 	// 結果表示
 	fmt.Println()
@@ -856,6 +1014,173 @@ func handleRepoMapCommand() bool {
 	return true
 }
 
+// handleMemoryCommand は記憶の管理を処理
+func handleMemoryCommand(args []string) bool {
+	store, err := memory.NewMemoryStore()
+	if err != nil {
+		red.Printf("Failed to initialize memory store: %v\n", err)
+		return true
+	}
+
+	// 引数なし、または "list" → 一覧表示
+	if len(args) == 0 || (len(args) == 1 && args[0] == "list") {
+		memories := store.List()
+		if len(memories) == 0 {
+			yellow.Println("No memories stored")
+			yellow.Println("\nUsage: /memory <text>  または  /memory add <text>")
+			return true
+		}
+
+		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		cyan.Printf("🧠 Memories / 記憶 (%d 件)\n", len(memories))
+		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println()
+
+		for i, m := range memories {
+			// プロジェクト別かグローバルかを表示
+			scope := "Global"
+			if m.Project != "" {
+				scope = fmt.Sprintf("Project: %s", m.Project)
+			}
+
+			// タイムスタンプ
+			timeStr := m.CreatedAt.Format("2006-01-02 15:04")
+
+			fmt.Printf("  [%s] %s\n", m.ID, m.Content)
+			fmt.Printf("      %s | %s\n", scope, timeStr)
+
+			if i < len(memories)-1 {
+				fmt.Println()
+			}
+		}
+
+		fmt.Println()
+		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		yellow.Println("使い方:")
+		yellow.Println("  /memory <text>         - 記憶を追加（グローバル）")
+		yellow.Println("  /memory add <text>     - 記憶を追加（グローバル）")
+		yellow.Println("  /memory project <text> - 記憶を追加（プロジェクト別）")
+		yellow.Println("  /memory list           - 記憶一覧")
+		yellow.Println("  /memory delete <id>    - 記憶削除")
+		yellow.Println("  /memory clear          - 全記憶削除")
+		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+		return true
+	}
+
+	subcommand := args[0]
+
+	// /memory add <text> → グローバル記憶追加
+	if subcommand == "add" {
+		if len(args) < 2 {
+			red.Println("Usage: /memory add <text>")
+			return true
+		}
+
+		content := strings.Join(args[1:], " ")
+		m, err := store.Add(content, false)
+		if err != nil {
+			red.Printf("Failed to add memory: %v\n", err)
+			return true
+		}
+
+		green.Printf("✅ Memory added (ID: %s)\n", m.ID)
+		green.Printf("   Scope: Global\n")
+		green.Printf("   Content: %s\n", m.Content)
+		return true
+	}
+
+	// /memory project <text> → プロジェクト別記憶追加
+	if subcommand == "project" {
+		if len(args) < 2 {
+			red.Println("Usage: /memory project <text>")
+			return true
+		}
+
+		if store.ProjectPath == "" {
+			red.Println("Not in a project directory (.xelyon not found)")
+			yellow.Println("Hint: Create .xelyon directory in project root, or use /memory add for global memory")
+			return true
+		}
+
+		content := strings.Join(args[1:], " ")
+		m, err := store.Add(content, true)
+		if err != nil {
+			red.Printf("Failed to add memory: %v\n", err)
+			return true
+		}
+
+		green.Printf("✅ Memory added (ID: %s)\n", m.ID)
+		green.Printf("   Scope: Project (%s)\n", m.Project)
+		green.Printf("   Content: %s\n", m.Content)
+		return true
+	}
+
+	// /memory delete <id> → 記憶削除
+	if subcommand == "delete" {
+		if len(args) < 2 {
+			red.Println("Usage: /memory delete <id>")
+			return true
+		}
+
+		id := args[1]
+		if err := store.Delete(id); err != nil {
+			red.Printf("Failed to delete memory: %v\n", err)
+			return true
+		}
+
+		green.Printf("✅ Memory deleted (ID: %s)\n", id)
+		return true
+	}
+
+	// /memory clear → 全記憶削除
+	if subcommand == "clear" {
+		// 確認プロンプト
+		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		cyan.Printf("⚠️  Clear All Memories / 全記憶削除\n")
+		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Printf("削除する記憶数: %d 件\n", len(store.List()))
+		yellow.Println("\n⚠️  Warning: すべての記憶が削除されます（復元不可）")
+
+		// 確認
+		fmt.Print("\nContinue? (y/n): ")
+		reader := bufio.NewReader(os.Stdin)
+		input, err := reader.ReadString('\n')
+		if err != nil {
+			red.Printf("Failed to read input: %v\n", err)
+			return true
+		}
+
+		input = strings.TrimSpace(strings.ToLower(input))
+		if input != "y" && input != "yes" {
+			yellow.Println("Cancelled")
+			return true
+		}
+
+		// 全削除実行
+		if err := store.Clear(false); err != nil {
+			red.Printf("Failed to clear memories: %v\n", err)
+			return true
+		}
+
+		green.Println("✅ All memories cleared")
+		return true
+	}
+
+	// /memory <text> → グローバル記憶追加（ショートカット）
+	content := strings.Join(args, " ")
+	m, err := store.Add(content, false)
+	if err != nil {
+		red.Printf("Failed to add memory: %v\n", err)
+		return true
+	}
+
+	green.Printf("✅ Memory added (ID: %s)\n", m.ID)
+	green.Printf("   Scope: Global\n")
+	green.Printf("   Content: %s\n", m.Content)
+	return true
+}
+
 // printHelp はヘルプを表示
 func printHelp() {
 	fmt.Println(`Commands:
@@ -866,7 +1191,14 @@ func printHelp() {
   /load [id]          - Load session (or last if no ID)
   /sessions           - List recent sessions
   /undo [all]         - Undo last file change (restore from .bak) or undo all changes
+  /undo history       - Show past session changes
+  /undo session <id>  - Undo all changes from specific session
   /changes            - Show file change history with undo status
+  /memory [cmd]       - Manage persistent memories across sessions
+                        /memory <text> - Add global memory
+                        /memory list - List all memories
+                        /memory delete <id> - Delete memory
+                        /memory clear - Clear all memories
   /stats              - Show session statistics (time, messages, tokens, cost)
   /copy [code] [-n N] - Copy last AI output to clipboard (code=code blocks only, -n=N-th last output)
   /compress [N]       - Compress history (keep recent N messages, default: 10)
