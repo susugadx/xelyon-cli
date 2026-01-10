@@ -33,6 +33,8 @@ func handleSpecialCommand(input string, agent *Agent) bool {
 		return handleUndoCommand(agent)
 	case "/config":
 		return handleConfigCommand(args)
+	case "/stats":
+		return handleStatsCommand(agent)
 	case "/exit", "/quit", "/q":
 		yellow.Println("👋 See you!")
 		os.Exit(0)
@@ -307,6 +309,104 @@ func handleConfigCommand(args []string) bool {
 	return true
 }
 
+// handleStatsCommand はセッション統計情報を表示
+func handleStatsCommand(agent *Agent) bool {
+	if agent.Stats == nil {
+		yellow.Println("Statistics not available")
+		return true
+	}
+
+	stats := agent.Stats
+
+	// セッションファイルパスとサイズを取得
+	sessionPath := ""
+	sessionSize := int64(0)
+	if agent.session != nil {
+		sessionPath = fmt.Sprintf("~/.xelyon/sessions/%s.json", agent.session.ID)
+		if agent.storage != nil {
+			// セッションファイルの実際のパスを構築
+			homeDir, err := os.UserHomeDir()
+			if err == nil {
+				fullPath := fmt.Sprintf("%s/.xelyon/sessions/%s.json", homeDir, agent.session.ID)
+				if size, err := GetSessionFileSize(fullPath); err == nil {
+					sessionSize = size
+				}
+			}
+		}
+	}
+
+	// 統計情報を表示
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	cyan.Printf("📊 Session Statistics / セッション統計\n")
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+	fmt.Println()
+	green.Println("⏱️  Time / 経過時間")
+	fmt.Printf("  Elapsed: %s\n", stats.FormatElapsedTime())
+
+	fmt.Println()
+	green.Println("💬 Messages / メッセージ数")
+	fmt.Printf("  User:      %d\n", stats.UserMessages)
+	fmt.Printf("  Assistant: %d\n", stats.AssistantMessages)
+	fmt.Printf("  Total:     %d\n", stats.TotalMessages())
+
+	fmt.Println()
+	green.Println("🔧 Tool Executions / ツール実行回数")
+	if stats.TotalToolExecutions() > 0 {
+		fmt.Printf("  Total: %d\n", stats.TotalToolExecutions())
+		fmt.Println("  Breakdown:")
+		for tool, count := range stats.ToolExecutions {
+			fmt.Printf("    - %-15s: %d\n", tool, count)
+		}
+	} else {
+		fmt.Println("  No tools executed yet")
+	}
+
+	fmt.Println()
+	green.Println("🤖 Provider / プロバイダー")
+	fmt.Printf("  Name: %s\n", stats.Provider)
+	fmt.Printf("  Model: %s\n", agent.CurrentModel)
+
+	fmt.Println()
+	green.Println("💰 Token Usage & Cost / トークン使用量とコスト")
+	if stats.TotalTokens() > 0 {
+		fmt.Printf("  Input:  %s tokens\n", formatNumber(stats.InputTokens))
+		fmt.Printf("  Output: %s tokens\n", formatNumber(stats.OutputTokens))
+		fmt.Printf("  Total:  %s tokens\n", formatNumber(stats.TotalTokens()))
+		cost := stats.EstimatedCost()
+		if cost > 0 {
+			fmt.Printf("  Estimated Cost: $%.4f USD\n", cost)
+		} else {
+			fmt.Println("  Cost: Free (local model)")
+		}
+	} else {
+		yellow.Println("  No token usage data available")
+		yellow.Println("  (Token tracking requires API support)")
+	}
+
+	fmt.Println()
+	green.Println("📁 Session File / セッションファイル")
+	if sessionPath != "" {
+		fmt.Printf("  Path: %s\n", sessionPath)
+		if sessionSize > 0 {
+			fmt.Printf("  Size: %s\n", FormatFileSize(sessionSize))
+		}
+	} else {
+		yellow.Println("  No session file")
+	}
+
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	return true
+}
+
+// formatNumber はカンマ区切りの数値を返す
+func formatNumber(n int) string {
+	if n < 1000 {
+		return fmt.Sprintf("%d", n)
+	}
+	return fmt.Sprintf("%s,%03d", formatNumber(n/1000), n%1000)
+}
+
 // handleRepoMapCommand はRepo Mapを表示
 func handleRepoMapCommand() bool {
 	cwd, err := os.Getwd()
@@ -341,6 +441,7 @@ func printHelp() {
   /load [id]        - Load session (or last if no ID)
   /sessions         - List recent sessions
   /undo             - Undo last file change (restore from .bak)
+  /stats            - Show session statistics (time, messages, tokens, cost)
   /config           - Show/change configuration (e.g., /config model deepseek-coder)
   /model [name]     - Show current model or switch model without restart
   /repomap          - Show repository code structure map

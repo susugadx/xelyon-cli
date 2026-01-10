@@ -42,17 +42,17 @@ var toolSafetyLevels = map[string]ToolSafety{
 	"git_reset_soft": SafetyMedium,
 
 	// SafetyLow: 破壊的操作（常に確認必須）
-	"delete_file":     SafetyLow,
-	"delete_lines":    SafetyLow,
-	"move_file":       SafetyLow,
-	"git_push":        SafetyLow,
-	"git_checkout":    SafetyLow,
-	"git_branch":      SafetyLow,
-	"git_stash":       SafetyLow,
-	"git_reset_hard":  SafetyLow,
-	"git_force_push":  SafetyLow,
-	"bash":            SafetyLow,
-	"command":         SafetyLow,
+	"delete_file":    SafetyLow,
+	"delete_lines":   SafetyLow,
+	"move_file":      SafetyLow,
+	"git_push":       SafetyLow,
+	"git_checkout":   SafetyLow,
+	"git_branch":     SafetyLow,
+	"git_stash":      SafetyLow,
+	"git_reset_hard": SafetyLow,
+	"git_force_push": SafetyLow,
+	"bash":           SafetyLow,
+	"command":        SafetyLow,
 }
 
 // GetToolSafety は指定されたツールの安全性レベルを返す

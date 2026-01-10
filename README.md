@@ -173,14 +173,76 @@ export XELYON_PROVIDER=ollama
 /load [id]        - セッションを読み込み（IDなしで最新）
 /sessions         - 最近のセッション一覧
 /undo             - 直前のファイル変更を取り消し
+/stats            - セッション統計情報を表示（時間、メッセージ数、ツール実行、コスト）
 /config           - 設定の表示・変更（例: /config model gpt-4o）
 /model [name]     - 現在のモデルとプロバイダーを表示、または任意のモデルに切り替え
+/repomap          - リポジトリのコード構造マップを表示
 /version          - バージョン情報を表示
 /clear            - 会話履歴をクリア
 /history          - 会話履歴を表示
 /help             - ヘルプを表示
 /exit, /quit, /q  - 終了
 ```
+
+### /stats コマンド
+
+セッションの統計情報を表示します:
+
+```
+> /stats
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 Session Statistics / セッション統計
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⏱️  Time / 経過時間
+  Elapsed: 15m 30s
+
+💬 Messages / メッセージ数
+  User:      10
+  Assistant: 12
+  Total:     22
+
+🔧 Tool Executions / ツール実行回数
+  Total: 25
+  Breakdown:
+    - read_file    : 8
+    - write_file   : 5
+    - git_commit   : 2
+    - ...
+
+🤖 Provider / プロバイダー
+  Name: DeepSeek
+  Model: deepseek-coder
+
+💰 Token Usage & Cost / トークン使用量とコスト
+  Input:  12,500 tokens
+  Output: 3,200 tokens
+  Total:  15,700 tokens
+  Estimated Cost: $0.0032 USD
+
+📁 Session File / セッションファイル
+  Path: ~/.xelyon/sessions/abc123.json
+  Size: 45.2 KB
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+**表示内容**:
+- 経過時間（セッション開始からの時間）
+- メッセージ数（User/Assistant別）
+- ツール実行回数とツール別内訳
+- プロバイダーとモデル情報
+- トークン使用量と推定コスト（プロバイダー別料金表で計算）
+- セッションファイルのパスとサイズ
+
+**コスト計算**（$/1M tokens）:
+- DeepSeek: input $0.14, output $0.28
+- OpenAI GPT-4o: input $2.50, output $10.00
+- Claude Sonnet: input $3.00, output $15.00
+- Gemini Flash: input $0.075, output $0.30
+- Ollama: ローカル実行（$0）
+
+**注**: トークン数はAPI対応が必要です。現在は手動で追加できます（将来のバージョンで自動取得予定）。
 
 ### 対話的修正機能（実験的）
 

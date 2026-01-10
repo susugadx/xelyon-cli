@@ -1,3 +1,4 @@
+//go:build norepomap
 // +build norepomap
 
 package repomap

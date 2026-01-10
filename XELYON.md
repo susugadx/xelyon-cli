@@ -528,6 +528,107 @@ go build -o xelyon
 - APIリトライのカスタマイズ → [Issue #17](https://github.com/susugadx/xelyon-cli/issues/17)
 - 差分表示のカスタマイズ → [Issue #18](https://github.com/susugadx/xelyon-cli/issues/18)
 
+## v0.29.0 機能追加
+
+### /stats コマンド (Issue #4)
+
+**概要**: セッション統計情報を表示する `/stats` コマンドを実装。
+
+#### 実装ファイル
+- `internal/agent/stats.go`: SessionStats構造体とコスト計算ロジック
+- `internal/agent/agent.go`: Agent構造体にStatsフィールド追加
+- `internal/agent/agent_chat.go`: メッセージ・ツール実行のカウント処理
+- `internal/agent/agent_commands.go`: handleStatsCommand関数
+
+#### 表示内容
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 Session Statistics / セッション統計
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⏱️  Time / 経過時間
+  Elapsed: 15m 30s
+
+💬 Messages / メッセージ数
+  User:      10
+  Assistant: 12
+  Total:     22
+
+🔧 Tool Executions / ツール実行回数
+  Total: 25
+  Breakdown:
+    - read_file    : 8
+    - write_file   : 5
+    - git_commit   : 2
+
+🤖 Provider / プロバイダー
+  Name: DeepSeek
+  Model: deepseek-coder
+
+💰 Token Usage & Cost / トークン使用量とコスト
+  Input:  12,500 tokens
+  Output: 3,200 tokens
+  Total:  15,700 tokens
+  Estimated Cost: $0.0032 USD
+
+📁 Session File / セッションファイル
+  Path: ~/.xelyon/sessions/abc123.json
+  Size: 45.2 KB
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+#### SessionStats構造体
+```go
+type SessionStats struct {
+	StartTime         time.Time
+	UserMessages      int
+	AssistantMessages int
+	ToolExecutions    map[string]int // ツール名 -> 実行回数
+	InputTokens       int
+	OutputTokens      int
+	Provider          string
+}
+```
+
+#### コスト計算（$/1M tokens）
+```go
+switch s.Provider {
+case "deepseek":
+	inputCost = 0.14
+	outputCost = 0.28
+case "openai":
+	inputCost = 2.50
+	outputCost = 10.00
+case "claude":
+	inputCost = 3.00
+	outputCost = 15.00
+case "gemini":
+	inputCost = 0.075
+	outputCost = 0.30
+case "groq":
+	inputCost = 0.10
+	outputCost = 0.10
+case "ollama":
+	return 0.0 // ローカル実行
+}
+```
+
+#### 統計情報の記録タイミング
+1. **セッション開始時**: `NewAgent()` で `SessionStats` 初期化、StartTimeを記録
+2. **Userメッセージ送信時**: `chat()` 関数で `Stats.UserMessages++`
+3. **Assistantレスポンス時**: `executeToolCall()` / `handleNormalResponse()` で `Stats.AssistantMessages++`
+4. **ツール実行時**: `executeToolCall()` で `Stats.AddToolExecution(toolName)`
+5. **トークン使用時**: 将来の実装（APIレスポンスから取得）
+
+#### 今後の拡張
+- トークン数の自動取得（API usage フィールド対応）
+- セッションごとのコスト累計グラフ
+- プロバイダー間のコスト比較機能
+
+詳細は [Issue #4](https://github.com/susugadx/xelyon-cli/issues/4) を参照。
+
+---
+
 ## v0.28.0 機能拡張
 
 ### --auto-approve フラグ (Issue #3)

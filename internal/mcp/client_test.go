@@ -102,12 +102,12 @@ func TestSanitizeEnv(t *testing.T) {
 	os.Setenv("LANG", "en_US.UTF-8")
 
 	customEnv := map[string]string{
-		"PYTHONPATH":     "/custom/path",
-		"API_KEY":        "should-be-filtered",
-		"CUSTOM_TOKEN":   "should-be-filtered",
-		"MY_SECRET":      "should-be-filtered",
-		"SAFE_VAR":       "should-be-filtered-too", // not in whitelist
-		"NODE_OPTIONS":   "--max-old-space-size=4096",
+		"PYTHONPATH":   "/custom/path",
+		"API_KEY":      "should-be-filtered",
+		"CUSTOM_TOKEN": "should-be-filtered",
+		"MY_SECRET":    "should-be-filtered",
+		"SAFE_VAR":     "should-be-filtered-too", // not in whitelist
+		"NODE_OPTIONS": "--max-old-space-size=4096",
 	}
 
 	result := sanitizeEnv(customEnv)

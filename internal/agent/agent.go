@@ -39,7 +39,8 @@ type Agent struct {
 	storage         *history.Storage
 	changeStack     []tools.FileChange
 	mcpManager      *mcp.Manager
-	AutoApprove     bool // --auto-approve フラグ
+	AutoApprove     bool          // --auto-approve フラグ
+	Stats           *SessionStats // セッション統計情報
 }
 
 // NewAgent は新しいAgentを作成
@@ -195,6 +196,7 @@ When you need to use a tool, respond with ONLY a JSON block like this:
 		changeStack:     []tools.FileChange{},
 		mcpManager:      mcpManager,
 		SystemPrompt:    systemPrompt,
+		Stats:           NewSessionStats(provider.Name()),
 	}
 }
 
@@ -224,7 +226,7 @@ func RunInteractive(model string, provider api.Provider, autoApprove bool) {
 	agent := NewAgent(model, provider)
 	agent.AutoApprove = autoApprove
 	tools.SetAutoApprove(autoApprove) // ツールに --auto-approve 設定を伝える
-	defer agent.Cleanup() // グレースフルシャットダウン
+	defer agent.Cleanup()             // グレースフルシャットダウン
 
 	// シグナルハンドリング（Ctrl+C, SIGTERM対応）
 	sigChan := make(chan os.Signal, 1)

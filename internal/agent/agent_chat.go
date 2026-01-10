@@ -39,6 +39,11 @@ func (a *Agent) chat(input string) {
 		a.session.AddMessage("user", input, a.CurrentModel)
 	}
 
+	// 統計情報更新: Userメッセージ数をカウント
+	if a.Stats != nil {
+		a.Stats.UserMessages++
+	}
+
 	// AIに送信（ツール実行ループ）
 	maxIterations := config.MaxToolIterations
 	var lastToolCall *tools.ToolCall
@@ -138,6 +143,12 @@ func (a *Agent) executeToolCall(response string, toolCall *tools.ToolCall) {
 		Content: response,
 	})
 
+	// 統計情報更新: Assistantメッセージ数とツール実行回数をカウント
+	if a.Stats != nil {
+		a.Stats.AssistantMessages++
+		a.Stats.AddToolExecution(toolCall.Tool)
+	}
+
 	// ツール実行
 	result, change := tools.Execute(toolCall)
 
@@ -169,6 +180,11 @@ func (a *Agent) handleNormalResponse(response string) {
 		Role:    "assistant",
 		Content: response,
 	})
+
+	// 統計情報更新: Assistantメッセージ数をカウント
+	if a.Stats != nil {
+		a.Stats.AssistantMessages++
+	}
 
 	// セッションに保存
 	if a.session != nil {
