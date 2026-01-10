@@ -10,9 +10,12 @@ import (
 	"os"
 	"strings"
 
+	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
+
+var yellow = color.New(color.FgYellow)
 
 const defaultDeepSeekURL = "https://api.deepseek.com/chat/completions"
 
@@ -228,4 +231,14 @@ func getActualModel(model string) string {
 	default:
 		return "deepseek-chat"
 	}
+}
+
+// ChatWithImage は画像付きメッセージで会話を行う（非対応：テキストのみ送信）
+func (p *DeepSeekProvider) ChatWithImage(ctx context.Context, systemPrompt string, history []Message, userMessage string, image *ImageData, model string) (string, error) {
+	// DeepSeekは画像非対応なので警告を出してテキストのみ送信
+	if image != nil && image.Base64 != "" {
+		yellow.Println("Warning: DeepSeek does not support image input. The image will be ignored.")
+	}
+	history = append(history, Message{Role: "user", Content: userMessage})
+	return p.ChatWithTools(ctx, systemPrompt, history, model)
 }

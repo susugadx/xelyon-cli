@@ -83,6 +83,35 @@ type ClaudeContent struct {
 	Text string `json:"text"`
 }
 
+// ClaudeContentPart はマルチモーダルコンテンツのパート
+type ClaudeContentPart struct {
+	Type   string             `json:"type"`             // "text" or "image"
+	Text   string             `json:"text,omitempty"`   // type="text"の場合
+	Source *ClaudeImageSource `json:"source,omitempty"` // type="image"の場合
+}
+
+// ClaudeImageSource は画像ソース
+type ClaudeImageSource struct {
+	Type      string `json:"type"`       // "base64"
+	MediaType string `json:"media_type"` // "image/png", "image/jpeg" etc
+	Data      string `json:"data"`       // Base64エンコードされたデータ
+}
+
+// ClaudeMultimodalMessage はマルチモーダルメッセージ（画像含む）
+type ClaudeMultimodalMessage struct {
+	Role    string              `json:"role"`
+	Content []ClaudeContentPart `json:"content"`
+}
+
+// ClaudeMultimodalRequest はマルチモーダルAPIリクエスト
+type ClaudeMultimodalRequest struct {
+	Model     string        `json:"model"`
+	Messages  []interface{} `json:"messages"` // ClaudeMessage or ClaudeMultimodalMessage
+	System    string        `json:"system,omitempty"`
+	MaxTokens int           `json:"max_tokens"`
+	Stream    bool          `json:"stream"`
+}
+
 // ClaudeResponse は通常レスポンス
 type ClaudeResponse struct {
 	Content []ClaudeContent `json:"content"`
@@ -207,4 +236,100 @@ func (p *ClaudeProvider) handleNonStreamingResponse(resp *http.Response, spinner
 	content := result.Content[0].Text
 	fmt.Println(content)
 	return content, nil
+}
+
+// ChatWithImage は画像付きメッセージで会話を行う
+func (p *ClaudeProvider) ChatWithImage(ctx context.Context, systemPrompt string, history []Message, userMessage string, image *ImageData, model string) (string, error) {
+	// 画像がない場合は通常のChatWithToolsを使用
+	if image == nil || image.Base64 == "" {
+		history = append(history, Message{Role: "user", Content: userMessage})
+		return p.ChatWithTools(ctx, systemPrompt, history, model)
+	}
+
+	// モデル名の設定
+	if model == "" {
+		model = "claude-sonnet-4-20250514"
+	}
+
+	// 履歴をメッセージ配列に変換（テキストのみ）
+	var messages []interface{}
+	for _, msg := range history {
+		messages = append(messages, ClaudeMessage(msg))
+	}
+
+	// 画像付きユーザーメッセージを追加
+	multimodalMessage := ClaudeMultimodalMessage{
+		Role: "user",
+		Content: []ClaudeContentPart{
+			{
+				Type: "image",
+				Source: &ClaudeImageSource{
+					Type:      "base64",
+					MediaType: image.MediaType,
+					Data:      image.Base64,
+				},
+			},
+			{
+				Type: "text",
+				Text: userMessage,
+			},
+		},
+	}
+	messages = append(messages, multimodalMessage)
+
+	reqBody := ClaudeMultimodalRequest{
+		Model:     model,
+		Messages:  messages,
+		System:    systemPrompt,
+		MaxTokens: 4096,
+		Stream:    true,
+	}
+
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", p.apiURL, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return "", err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-api-key", p.apiKey)
+	req.Header.Set("anthropic-version", "2023-06-01")
+
+	// スピナー開始
+	spinner := ui.NewSpinner()
+	spinner.Start("Analyzing image")
+
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		spinner.Stop()
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		spinner.Stop()
+
+		if rateLimitErr := handleRateLimit(resp); rateLimitErr != nil {
+			return "", rateLimitErr
+		}
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return "", fmt.Errorf("API error (%d): unable to read response", resp.StatusCode)
+		}
+		return "", sanitizeErrorMessage(body, resp.StatusCode)
+	}
+
+	// ストリーミング処理
+	contentType := resp.Header.Get("Content-Type")
+	isStreaming := strings.Contains(contentType, "text/event-stream")
+
+	if isStreaming {
+		return p.handleStreamingResponse(ctx, resp, spinner)
+	} else {
+		return p.handleNonStreamingResponse(resp, spinner)
+	}
 }

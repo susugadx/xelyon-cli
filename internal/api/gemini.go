@@ -40,9 +40,32 @@ func (p *GeminiProvider) SupportsImages() bool {
 	return true
 }
 
-// GeminiPart はGeminiの parts 構造
+// GeminiPart はGeminiの parts 構造（テキストのみ）
 type GeminiPart struct {
 	Text string `json:"text"`
+}
+
+// GeminiMultimodalPart はマルチモーダル対応のparts構造
+type GeminiMultimodalPart struct {
+	Text       string            `json:"text,omitempty"`
+	InlineData *GeminiInlineData `json:"inline_data,omitempty"`
+}
+
+// GeminiInlineData は画像データ
+type GeminiInlineData struct {
+	MimeType string `json:"mime_type"` // "image/png", "image/jpeg" etc
+	Data     string `json:"data"`      // Base64エンコードされたデータ
+}
+
+// GeminiMultimodalContent はマルチモーダル対応のcontents構造
+type GeminiMultimodalContent struct {
+	Parts []GeminiMultimodalPart `json:"parts"`
+	Role  string                 `json:"role,omitempty"` // "user" or "model"
+}
+
+// GeminiMultimodalRequest はマルチモーダルAPIリクエスト
+type GeminiMultimodalRequest struct {
+	Contents []interface{} `json:"contents"` // GeminiContent or GeminiMultimodalContent
 }
 
 // GeminiContent はGeminiの contents 構造
@@ -233,4 +256,117 @@ func (p *GeminiProvider) handleNonStreamingResponse(resp *http.Response, spinner
 	content := result.Candidates[0].Content.Parts[0].Text
 	fmt.Println(content)
 	return content, nil
+}
+
+// ChatWithImage は画像付きメッセージで会話を行う
+func (p *GeminiProvider) ChatWithImage(ctx context.Context, systemPrompt string, history []Message, userMessage string, image *ImageData, model string) (string, error) {
+	// 画像がない場合は通常のChatWithToolsを使用
+	if image == nil || image.Base64 == "" {
+		history = append(history, Message{Role: "user", Content: userMessage})
+		return p.ChatWithTools(ctx, systemPrompt, history, model)
+	}
+
+	// モデル名の設定
+	if model == "" {
+		model = "gemini-2.0-flash-exp"
+	}
+
+	// contentsを構築
+	var contents []interface{}
+
+	// System promptを最初のユーザーメッセージとして追加
+	if systemPrompt != "" {
+		contents = append(contents, GeminiContent{
+			Parts: []GeminiPart{{Text: systemPrompt}},
+			Role:  "user",
+		})
+		// ダミーのモデル応答を追加（Geminiは交互のroleを期待）
+		contents = append(contents, GeminiContent{
+			Parts: []GeminiPart{{Text: "Understood. I'll follow these instructions."}},
+			Role:  "model",
+		})
+	}
+
+	// 会話履歴を変換（テキストのみ）
+	for _, msg := range history {
+		role := "user"
+		if msg.Role == "assistant" {
+			role = "model"
+		}
+		contents = append(contents, GeminiContent{
+			Parts: []GeminiPart{{Text: msg.Content}},
+			Role:  role,
+		})
+	}
+
+	// 画像付きユーザーメッセージを追加
+	multimodalContent := GeminiMultimodalContent{
+		Role: "user",
+		Parts: []GeminiMultimodalPart{
+			{
+				InlineData: &GeminiInlineData{
+					MimeType: image.MediaType,
+					Data:     image.Base64,
+				},
+			},
+			{
+				Text: userMessage,
+			},
+		},
+	}
+	contents = append(contents, multimodalContent)
+
+	reqBody := GeminiMultimodalRequest{
+		Contents: contents,
+	}
+
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", err
+	}
+
+	// Gemini API endpoint（ストリーミング）
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:streamGenerateContent", model)
+
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return "", err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-goog-api-key", p.apiKey)
+
+	// スピナー開始
+	spinner := ui.NewSpinner()
+	spinner.Start("Analyzing image")
+
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		spinner.Stop()
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		spinner.Stop()
+
+		if rateLimitErr := handleRateLimit(resp); rateLimitErr != nil {
+			return "", rateLimitErr
+		}
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return "", fmt.Errorf("API error (%d): unable to read response", resp.StatusCode)
+		}
+		return "", sanitizeErrorMessage(body, resp.StatusCode)
+	}
+
+	// ストリーミング処理
+	contentType := resp.Header.Get("Content-Type")
+	isStreaming := strings.Contains(contentType, "application/json")
+
+	if isStreaming {
+		return p.handleStreamingResponse(ctx, resp, spinner)
+	} else {
+		return p.handleNonStreamingResponse(resp, spinner)
+	}
 }

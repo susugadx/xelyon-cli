@@ -348,10 +348,61 @@ func RunInteractive(model string, provider api.Provider, autoApprove bool) {
 			continue
 		}
 
+		// 画像入力チェック: image:/path/to/file.png 形式を検出
+		if strings.Contains(input, "image:") {
+			textPart, image := parseImageInput(input)
+			if image != nil {
+				agent.chatWithImage(textPart, image)
+				continue
+			}
+		}
+
 		// AIに送信
 		agent.chat(input)
 	}
 }
+
+// parseImageInput は入力から画像パスを抽出
+// 形式: "image:/path/to/file.png こんにちは" または "こんにちは image:/path/to/file.png"
+func parseImageInput(input string) (text string, image *api.ImageData) {
+	// image:プレフィックスを探す
+	imagePrefix := "image:"
+
+	// 正規表現的な簡易パース
+	parts := strings.Fields(input)
+	var textParts []string
+	var imagePath string
+
+	for _, part := range parts {
+		if strings.HasPrefix(part, imagePrefix) {
+			imagePath = strings.TrimPrefix(part, imagePrefix)
+		} else {
+			textParts = append(textParts, part)
+		}
+	}
+
+	// 画像パスがない場合
+	if imagePath == "" {
+		return input, nil
+	}
+
+	// テキスト部分を結合
+	text = strings.Join(textParts, " ")
+	if text == "" {
+		text = "Please analyze this image." // デフォルトメッセージ
+	}
+
+	// 画像読み込み
+	img, err := api.LoadImage(imagePath)
+	if err != nil {
+		red.Printf("Failed to load image: %v\n", err)
+		return input, nil
+	}
+
+	green.Printf("🖼️  Image loaded: %s (%s)\n", img.Path, api.FormatImageSize(img.Size))
+	return text, img
+}
+
 func RunOnce(query string, model string) {
 	// Note: この関数は古いAPI (api.ChatWithTools) を使用
 	// 将来的に削除予定

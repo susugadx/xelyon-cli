@@ -223,3 +223,46 @@ func (a *Agent) handleNormalResponse(response string) {
 		}
 	}
 }
+
+// chatWithImage は画像付きメッセージでAIと対話する
+func (a *Agent) chatWithImage(input string, image *api.ImageData) {
+	// プロバイダーが画像対応かチェック
+	if !a.CurrentProvider.SupportsImages() {
+		yellow.Printf("Warning: %s does not support images. The image will be ignored.\n", a.CurrentProvider.Name())
+		a.chat(input)
+		return
+	}
+
+	// 画像情報をログ
+	green.Printf("🖼️  Sending image: %s (%s)\n", image.Path, api.FormatImageSize(image.Size))
+
+	// 履歴に追加（テキストのみ - 画像はセッションに保存しない）
+	a.History = append(a.History, api.Message{
+		Role:    "user",
+		Content: input,
+	})
+
+	// セッションに保存（テキストのみ）
+	if a.session != nil {
+		a.session.AddMessage("user", input, a.CurrentModel)
+	}
+
+	// 統計情報更新
+	if a.Stats != nil {
+		a.Stats.UserMessages++
+	}
+
+	// 画像付きAPI呼び出し
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+
+	response, err := a.CurrentProvider.ChatWithImage(ctx, a.SystemPrompt, a.History[:len(a.History)-1], input, image, a.CurrentModel)
+	if err != nil {
+		red.Printf("エラー: %v\n", err)
+		yellow.Println("API呼び出しに失敗しました。ネットワーク接続を確認してください。")
+		return
+	}
+
+	// 通常の回答処理
+	a.handleNormalResponse(response)
+}

@@ -653,7 +653,7 @@ Execute this tool? [y/n/c]: c
 - `n` - キャンセル
 - `c` - コメント（修正指示）
 
-**画像入力（開発中）**:
+**画像入力**:
 コメント入力時に `image:` プレフィックスで画像を添付できます:
 
 ```
@@ -666,19 +666,16 @@ Execute this tool? [y/n/c]: c
 > このエラーを修正して
 >
 
-⚠️  Note: Image input is currently under development
-   Images will be supported in a future update
+🤖 AI: スクリーンショットを確認しました。エラーを修正します...
 ```
 
 **サポート形式**: png, jpg, jpeg, gif, webp (最大10MB)
-**対応プロバイダー**: Claude, OpenAI, Gemini（実装予定）
-**非対応プロバイダー**: DeepSeek, Ollama, Groq
+**対応プロバイダー**: Claude, OpenAI, Gemini（マルチモーダルAPI対応）
+**非対応プロバイダー**: DeepSeek, Ollama, Groq（警告表示後、テキストのみで処理）
 
 **制限事項**:
 - 最大3回まで修正可能（無限ループ防止）
-- 画像入力は基礎実装のみ（Phase 2で本格実装予定）
-
-詳細は [Issue #1](https://github.com/susugadx/xelyon-cli/issues/1) を参照。
+- 画像はセッションに保存されません（一時的なもの）
 
 ### 利用可能なツール
 
@@ -951,6 +948,21 @@ go fmt ./...
 MIT
 
 ## バージョン履歴
+
+### v0.29.0 画像API送信対応 (2026-01-11)
+- 🖼️ **マルチモーダルAPI対応**: 画像をLLM APIに送信可能
+  - **Claude**: content配列にimage/text部分を含むマルチパートメッセージ
+  - **OpenAI**: data URI形式でGPT-4V/GPT-4oに画像送信
+  - **Gemini**: inline_dataによる画像埋め込み
+  - **非対応プロバイダー**: DeepSeek, Ollama, Groqは警告表示後テキストのみ処理
+- 📸 **対話的確認での画像入力**: ツール実行前のコメント（`c`）で画像添付可能
+  - `image:/path/to/file.png` 構文で画像指定
+  - png, jpg, jpeg, gif, webp形式対応（最大10MB）
+  - AIがスクリーンショット等を参照して修正提案可能
+- 🔄 **後方互換性維持**:
+  - 画像はセッションに保存しない（`json:"-"`タグ）
+  - 既存の`ChatWithTools()`メソッドは変更なし
+  - 非対応プロバイダーでも動作継続（テキストのみ）
 
 ### v0.28.3 Homebrew Tap自動更新対応 (2026-01-10)
 - 🍺 **Homebrew Tap トークン設定**: `HOMEBREW_TAP_TOKEN` 環境変数でFormula自動更新

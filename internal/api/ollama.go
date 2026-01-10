@@ -228,3 +228,13 @@ func (p *OllamaProvider) ListModels() ([]string, error) {
 	}
 	return models, nil
 }
+
+// ChatWithImage は画像付きメッセージで会話を行う（非対応：テキストのみ送信）
+func (p *OllamaProvider) ChatWithImage(ctx context.Context, systemPrompt string, history []Message, userMessage string, image *ImageData, model string) (string, error) {
+	// Ollamaは画像非対応なので警告を出してテキストのみ送信
+	if image != nil && image.Base64 != "" {
+		yellow.Println("Warning: Ollama does not support image input. The image will be ignored.")
+	}
+	history = append(history, Message{Role: "user", Content: userMessage})
+	return p.ChatWithTools(ctx, systemPrompt, history, model)
+}

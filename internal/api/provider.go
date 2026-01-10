@@ -21,6 +21,10 @@ type Provider interface {
 
 	// SupportsImages はプロバイダーが画像入力に対応しているかを返す
 	SupportsImages() bool
+
+	// ChatWithImage は画像付きメッセージで会話を行う
+	// imageがnilまたはプロバイダーが画像非対応の場合、テキストのみで会話する
+	ChatWithImage(ctx context.Context, systemPrompt string, history []Message, userMessage string, image *ImageData, model string) (string, error)
 }
 
 // SupportsImages はプロバイダー名から画像対応を判定

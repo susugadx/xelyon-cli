@@ -24,11 +24,6 @@ func ConfirmWithFeedback(message string) (approved bool, comment string, image *
 		return true, "", nil
 	case "comment":
 		// コメント = 修正要求 = 実行しない
-		// 画像が添付されている場合は警告を表示
-		if result.Image != nil {
-			yellow.Println("⚠️  Note: Image input is currently under development")
-			yellow.Println("   Images will be supported in a future update")
-		}
 		return false, result.Comment, result.Image
 	default: // "no"
 		return false, "", nil

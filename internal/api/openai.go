@@ -50,6 +50,31 @@ func (p *OpenAIProvider) SupportsImages() bool {
 	return true
 }
 
+// OpenAIContentPart はマルチモーダルコンテンツのパート
+type OpenAIContentPart struct {
+	Type     string          `json:"type"`                // "text" or "image_url"
+	Text     string          `json:"text,omitempty"`      // type="text"の場合
+	ImageURL *OpenAIImageURL `json:"image_url,omitempty"` // type="image_url"の場合
+}
+
+// OpenAIImageURL は画像URL
+type OpenAIImageURL struct {
+	URL string `json:"url"` // "data:image/png;base64,..." 形式
+}
+
+// OpenAIMultimodalMessage はマルチモーダルメッセージ
+type OpenAIMultimodalMessage struct {
+	Role    string              `json:"role"`
+	Content []OpenAIContentPart `json:"content"`
+}
+
+// OpenAIMultimodalRequest はマルチモーダルAPIリクエスト
+type OpenAIMultimodalRequest struct {
+	Model    string        `json:"model"`
+	Messages []interface{} `json:"messages"` // Message or OpenAIMultimodalMessage
+	Stream   bool          `json:"stream"`
+}
+
 // ChatWithTools は Provider interface の実装（context対応）
 func (p *OpenAIProvider) ChatWithTools(ctx context.Context, systemPrompt string, history []Message, model string) (string, error) {
 	// メッセージ構築
@@ -164,4 +189,101 @@ func (p *OpenAIProvider) handleNonStreamingResponse(resp *http.Response, spinner
 	content := result.Choices[0].Message.Content
 	fmt.Println(content)
 	return content, nil
+}
+
+// ChatWithImage は画像付きメッセージで会話を行う
+func (p *OpenAIProvider) ChatWithImage(ctx context.Context, systemPrompt string, history []Message, userMessage string, image *ImageData, model string) (string, error) {
+	// 画像がない場合は通常のChatWithToolsを使用
+	if image == nil || image.Base64 == "" {
+		history = append(history, Message{Role: "user", Content: userMessage})
+		return p.ChatWithTools(ctx, systemPrompt, history, model)
+	}
+
+	// モデル名の設定（GPT-4V以降が必要）
+	if model == "" {
+		model = "gpt-4o"
+	}
+
+	// システムプロンプトを最初のメッセージとして追加
+	var messages []interface{}
+	messages = append(messages, Message{Role: "system", Content: systemPrompt})
+
+	// 履歴をメッセージ配列に追加（テキストのみ）
+	for _, msg := range history {
+		messages = append(messages, msg)
+	}
+
+	// Data URL形式で画像を埋め込む
+	dataURL := fmt.Sprintf("data:%s;base64,%s", image.MediaType, image.Base64)
+
+	// 画像付きユーザーメッセージを追加
+	multimodalMessage := OpenAIMultimodalMessage{
+		Role: "user",
+		Content: []OpenAIContentPart{
+			{
+				Type: "image_url",
+				ImageURL: &OpenAIImageURL{
+					URL: dataURL,
+				},
+			},
+			{
+				Type: "text",
+				Text: userMessage,
+			},
+		},
+	}
+	messages = append(messages, multimodalMessage)
+
+	reqBody := OpenAIMultimodalRequest{
+		Model:    model,
+		Messages: messages,
+		Stream:   true,
+	}
+
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", p.apiURL, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return "", err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+p.apiKey)
+
+	// スピナー開始
+	spinner := ui.NewSpinner()
+	spinner.Start("Analyzing image")
+
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		spinner.Stop()
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		spinner.Stop()
+
+		if rateLimitErr := handleRateLimit(resp); rateLimitErr != nil {
+			return "", rateLimitErr
+		}
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return "", fmt.Errorf("API error (%d): unable to read response", resp.StatusCode)
+		}
+		return "", sanitizeErrorMessage(body, resp.StatusCode)
+	}
+
+	// ストリーミング処理
+	contentType := resp.Header.Get("Content-Type")
+	isStreaming := strings.Contains(contentType, "text/event-stream")
+
+	if isStreaming {
+		return p.handleStreamingResponse(ctx, resp, spinner)
+	} else {
+		return p.handleNonStreamingResponse(resp, spinner)
+	}
 }
