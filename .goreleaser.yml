@@ -106,6 +106,7 @@ brews:
     repository:
       owner: susugadx
       name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     homepage: https://github.com/susugadx/xelyon-cli
     description: "高速・軽量なLLMコーディングアシスタント"
     license: MIT
