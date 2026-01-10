@@ -82,3 +82,10 @@ func ReadFile(t *testing.T, path string) (string, error) {
 	content, err := os.ReadFile(path)
 	return string(content), err
 }
+
+// FileExists はファイルが存在するかチェック（boolを返す）
+func FileExists(t *testing.T, path string) bool {
+	t.Helper()
+	_, err := os.Stat(path)
+	return err == nil
+}

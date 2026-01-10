@@ -160,13 +160,15 @@ func TestExecuteDeleteFile_BackupCreated(t *testing.T) {
 		t.Errorf("Expected success message, got: %s", output)
 	}
 
-	// バックアップが.bak拡張子であることを確認
-	expectedBackupPath := testFile + ".bak"
-	if backupPath != expectedBackupPath {
-		t.Errorf("Backup path mismatch: got %s, expected %s", backupPath, expectedBackupPath)
+	// バックアップがタイムスタンプ付き.bak形式であることを確認
+	if !strings.HasPrefix(backupPath, testFile+".bak.") {
+		t.Errorf("Backup path should start with %s.bak., got: %s", testFile, backupPath)
 	}
 
-	// バックアップ内容が元ファイルと同じであることを確認
+	// バックアップが存在し、内容が元ファイルと同じであることを確認
+	if !testutil.FileExists(t, backupPath) {
+		t.Fatalf("Backup file does not exist: %s", backupPath)
+	}
 	testutil.AssertFileContent(t, backupPath, testContent)
 }
 
