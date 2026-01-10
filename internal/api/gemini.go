@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
@@ -165,8 +166,13 @@ func (p *GeminiProvider) ChatWithTools(ctx context.Context, systemPrompt string,
 		}
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return "", fmt.Errorf("API error (%d): unable to read response", resp.StatusCode)
+			return "", fmt.Errorf("Gemini API error (status %d): unable to read response body - %v", resp.StatusCode, err)
 		}
+		if len(body) == 0 {
+			return "", fmt.Errorf("Gemini API error (status %d): empty response body. Check API key and model name '%s'", resp.StatusCode, model)
+		}
+		// デバッグ: エラーボディをログ出力
+		fmt.Fprintf(os.Stderr, "\n[DEBUG] Gemini API Error Response:\n%s\n", string(body))
 		return "", sanitizeErrorMessage(body, resp.StatusCode)
 	}
 
@@ -355,8 +361,13 @@ func (p *GeminiProvider) ChatWithImage(ctx context.Context, systemPrompt string,
 		}
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return "", fmt.Errorf("API error (%d): unable to read response", resp.StatusCode)
+			return "", fmt.Errorf("Gemini API error (status %d): unable to read response body - %v", resp.StatusCode, err)
 		}
+		if len(body) == 0 {
+			return "", fmt.Errorf("Gemini API error (status %d): empty response body. Check API key and model name '%s'", resp.StatusCode, model)
+		}
+		// デバッグ: エラーボディをログ出力
+		fmt.Fprintf(os.Stderr, "\n[DEBUG] Gemini API Error Response (with image):\n%s\n", string(body))
 		return "", sanitizeErrorMessage(body, resp.StatusCode)
 	}
 

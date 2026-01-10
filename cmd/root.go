@@ -137,18 +137,12 @@ func loadProjectConfig() string {
 
 // getModel はフラグからモデルを決定する
 func getModel(cmd *cobra.Command) string {
-	// フラグが指定されていればそれを優先
-	if m, _ := cmd.Flags().GetBool("coder"); m {
-		return "deepseek-coder"
-	}
-	if m, _ := cmd.Flags().GetBool("think"); m {
-		return "deepseek-reasoner"
-	}
-	if m, _ := cmd.Flags().GetBool("claude"); m {
-		return "claude"
+	// --model フラグが指定されていればそれを優先
+	if modelFlag != "" {
+		return modelFlag
 	}
 
-	// フラグなし → 設定ファイルから読み込み
+	// 設定ファイルから読み込み
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		// エラー時はハードコードされたデフォルトを使用
@@ -164,18 +158,13 @@ var rootCmd = &cobra.Command{
 	Version: version.GetVersion(),
 	Long: `XELYON CLI is an AI coding assistant that helps you with development tasks.
 
-Models:
-  (default)    DeepSeek V3 - Fast & balanced
-  --coder      DeepSeek Coder - Code-focused
-  --think      DeepSeek R1 - Deep reasoning
-  --claude     Claude (Vertex AI) - Most capable
-
 Examples:
-  xelyon                          # Interactive mode
-  xelyon "explain this project"   # One-shot query
-  xelyon --coder                  # Interactive with Coder
-  xelyon -f main.go "add logging" # With file context
-  xelyon --think "design review"  # Deep thinking mode`,
+  xelyon                                           # Interactive mode (DeepSeek Coder)
+  xelyon "explain this project"                    # One-shot query
+  xelyon --provider gemini --model gemini-2.5-flash # Use Gemini
+  xelyon --provider openai --model gpt-5.2         # Use OpenAI GPT-5.2
+  xelyon -p deepseek -m deepseek-coder             # Short flags
+  xelyon -f main.go "add logging"                  # With file context`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// --headless は --output-format json のエイリアス
 		if headless {
@@ -336,11 +325,6 @@ func init() {
 	rootCmd.PersistentFlags().StringSliceVarP(&files, "file", "f", []string{}, "Files to include as context")
 	rootCmd.PersistentFlags().BoolVarP(&edit, "edit", "e", false, "Enable edit mode")
 	rootCmd.PersistentFlags().StringVarP(&output, "output", "o", "", "Output file path")
-
-	// 新規: モデル選択フラグ（後方互換のため残す）
-	rootCmd.Flags().Bool("coder", false, "Use DeepSeek Coder (code-focused)")
-	rootCmd.Flags().Bool("think", false, "Use DeepSeek R1 (deep reasoning)")
-	rootCmd.Flags().Bool("claude", false, "Use Claude (via Vertex AI)")
 
 	// 新規: プロバイダー/モデル指定フラグ
 	rootCmd.Flags().StringVarP(&providerFlag, "provider", "p", "", "Specify LLM provider (deepseek, openai, gemini, claude, ollama, groq)")
