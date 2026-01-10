@@ -5,6 +5,7 @@ before:
   hooks:
     - go mod tidy
     - go fmt ./...
+    - go test ./...
 
 builds:
   - id: xelyon
@@ -21,10 +22,12 @@ builds:
       - arm64
     ignore:
       - goos: windows
-        goarch: arm64
+        goarch: arm64  # Windows ARM64は現状サポート外
     ldflags:
       - -s -w
       - -X github.com/susugadx/xelyon-cli/internal/version.Version={{.Version}}
+      - -X github.com/susugadx/xelyon-cli/internal/version.Commit={{.Commit}}
+      - -X github.com/susugadx/xelyon-cli/internal/version.Date={{.Date}}
 
 archives:
   - id: xelyon
@@ -52,6 +55,15 @@ changelog:
       - '^test:'
       - '^chore:'
       - 'README'
+  groups:
+    - title: Features
+      regexp: '^feat:'
+      order: 0
+    - title: Bug Fixes
+      regexp: '^fix:'
+      order: 1
+    - title: Others
+      order: 999
 
 release:
   github:
@@ -59,3 +71,42 @@ release:
     name: xelyon-cli
   draft: false
   prerelease: auto
+  name_template: "XELYON CLI v{{.Version}}"
+  header: |
+    ## XELYON CLI v{{.Version}}
+
+    高速・軽量なLLMコーディングアシスタント
+
+    ### インストール方法
+    ```bash
+    # macOS (Homebrew)
+    brew install susugadx/tap/xelyon
+
+    # 手動インストール（全OS対応）
+    # 1. 下記のAssetsから環境に合ったファイルをダウンロード
+    # 2. 解凍してPATHに配置
+    ```
+
+    ### サポート環境
+    - **Linux**: amd64, arm64
+    - **macOS**: amd64 (Intel), arm64 (Apple Silicon)
+    - **Windows**: amd64
+
+  footer: |
+    **Full Changelog**: https://github.com/susugadx/xelyon-cli/compare/{{.PreviousTag}}...{{.Tag}}
+
+    **Documentation**: https://github.com/susugadx/xelyon-cli#readme
+
+# Homebrew Tap configuration
+brews:
+  - name: xelyon
+    repository:
+      owner: susugadx
+      name: homebrew-tap
+    homepage: https://github.com/susugadx/xelyon-cli
+    description: "高速・軽量なLLMコーディングアシスタント"
+    license: MIT
+    install: |
+      bin.install "xelyon"
+    test: |
+      system "#{bin}/xelyon", "--version"

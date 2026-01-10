@@ -270,6 +270,9 @@ func runLegacyMode(query string, model string) {
 }
 
 func init() {
+	// バージョン表示のカスタマイズ
+	rootCmd.SetVersionTemplate(version.GetFullVersion() + "\n")
+
 	// 既存フラグ
 	rootCmd.PersistentFlags().StringVar(&userID, "user", "", "User ID for RAG search")
 	rootCmd.PersistentFlags().StringSliceVarP(&files, "file", "f", []string{}, "Files to include as context")

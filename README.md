@@ -20,10 +20,38 @@ AI搭載のコーディングアシスタントCLIツール
 
 ## インストール
 
-```bash
-# ビルド
-go build -o xelyon
+### 方法1: ビルド済みバイナリ（推奨）
 
+[GitHub Releases](https://github.com/susugadx/xelyon-cli/releases)から環境に合ったバイナリをダウンロード:
+
+- **Linux**: `xelyon_*_linux_amd64.tar.gz` または `xelyon_*_linux_arm64.tar.gz`
+- **macOS**: `xelyon_*_darwin_amd64.tar.gz` (Intel) または `xelyon_*_darwin_arm64.tar.gz` (Apple Silicon)
+- **Windows**: `xelyon_*_windows_amd64.zip`
+
+```bash
+# ダウンロード・展開例（Linux/macOS）
+wget https://github.com/susugadx/xelyon-cli/releases/download/v0.27.0/xelyon_0.27.0_linux_amd64.tar.gz
+tar -xzf xelyon_0.27.0_linux_amd64.tar.gz
+sudo mv xelyon /usr/local/bin/
+```
+
+### 方法2: Homebrew（macOS）
+
+```bash
+brew install susugadx/tap/xelyon
+```
+
+### 方法3: ソースからビルド
+
+```bash
+git clone https://github.com/susugadx/xelyon-cli.git
+cd xelyon-cli
+go build -o xelyon
+```
+
+### 環境変数設定
+
+```bash
 # 環境変数設定（方法1: .envファイル使用 - 推奨）
 cp .env.example .env
 # .envファイルを編集してAPIキーを設定
@@ -38,38 +66,6 @@ export GROQ_API_KEY="gsk_..."                 # Groq (オプション)
 
 export SERPER_API_KEY="your-serper-api-key"  # Web検索用（オプション）
 ```
-
-### .envファイルの使い方
-
-プロジェクトディレクトリに`.env`ファイルを作成することで、環境変数を自動的に読み込むことができます。
-
-```bash
-# 1. サンプルファイルをコピー
-cp .env.example .env
-
-# 2. .envファイルを編集
-vim .env  # または nano, code, etc.
-
-# 3. XELYON CLIを実行（自動的に.envを読み込みます）
-./xelyon
-```
-
-`.env`ファイルの例:
-```bash
-# デフォルトプロバイダーを指定
-XELYON_PROVIDER=openai
-
-# APIキーを設定
-OPENAI_API_KEY=sk-your-key-here
-DEEPSEEK_API_KEY=your-deepseek-key
-GEMINI_API_KEY=your-gemini-key
-```
-
-**メリット**:
-- プロジェクトごとに異なるAPIキーやプロバイダーを使える
-- `.env`ファイルは`.gitignore`に含まれているので、誤ってAPIキーをコミットする心配がない
-- チームメンバーは`.env.example`をコピーして独自の設定を作成できる
-
 ## サポートされているLLMプロバイダー
 
 XELYON CLIは以下のLLMプロバイダーに対応しています：
