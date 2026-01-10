@@ -49,6 +49,17 @@ func NewMemoryStore() (*MemoryStore, error) {
 		for {
 			candidatePath := filepath.Join(dir, projectMemoryDir, memoryFile)
 			parentDir := filepath.Dir(candidatePath)
+
+			// グローバルパスと同じ場合はスキップ（ホームディレクトリでの重複を防止）
+			if candidatePath == globalPath {
+				parent := filepath.Dir(dir)
+				if parent == dir {
+					break
+				}
+				dir = parent
+				continue
+			}
+
 			if info, err := os.Stat(parentDir); err == nil && info.IsDir() {
 				projectPath = candidatePath
 				break
