@@ -88,8 +88,8 @@ func createBackup(filePath string) (string, error) {
 	return backupPath, nil
 }
 
-// confirm はユーザーに確認を求める
-func confirm(message string) bool {
+// confirm はユーザーに確認を求める（テスト用にグローバル変数として定義）
+var confirm = func(message string) bool {
 	yellow.Printf("%s (y/n): ", message)
 
 	reader := bufio.NewReader(os.Stdin)

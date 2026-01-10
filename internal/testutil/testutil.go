@@ -75,3 +75,10 @@ func SetupTempHome(t *testing.T) string {
 
 	return tmpDir
 }
+
+// ReadFile はファイルを読み込むヘルパー
+func ReadFile(t *testing.T, path string) (string, error) {
+	t.Helper()
+	content, err := os.ReadFile(path)
+	return string(content), err
+}

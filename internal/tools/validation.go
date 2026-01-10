@@ -7,8 +7,8 @@ import (
 	"strings"
 )
 
-// ValidatePath はパストラバーサル攻撃を防ぐためにパスを検証
-func ValidatePath(path string) (string, error) {
+// validatePathImpl はパストラバーサル攻撃を防ぐためにパスを検証（実装）
+func validatePathImpl(path string) (string, error) {
 	if path == "" {
 		return "", fmt.Errorf("path is empty")
 	}
@@ -46,6 +46,9 @@ func ValidatePath(path string) (string, error) {
 
 	return cleanPath, nil
 }
+
+// ValidatePath はパストラバーサル攻撃を防ぐためにパスを検証（テスト用にグローバル変数として定義）
+var ValidatePath = validatePathImpl
 
 // ValidatePathAllowParent は親ディレクトリへのアクセスを許可
 // （特定の用途でのみ使用）
