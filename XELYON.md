@@ -528,6 +528,49 @@ go build -o xelyon
 - APIリトライのカスタマイズ → [Issue #17](https://github.com/susugadx/xelyon-cli/issues/17)
 - 差分表示のカスタマイズ → [Issue #18](https://github.com/susugadx/xelyon-cli/issues/18)
 
+## v0.31.0 機能追加
+
+### /compress コマンド (Issue #6)
+
+**概要**: 会話履歴をLLMでサマリー化してトークン数を削減する `/compress` コマンドを実装。
+
+#### 実装ファイル
+- `internal/agent/compress.go`: 圧縮ロジックとサマリー生成
+- `internal/agent/agent_commands.go`: `handleCompressCommand()` 関数
+- `internal/config/config.go`: `CompressionConfig` 構造体追加
+
+#### 圧縮ロジック
+
+1. **保持対象の選択**: 最新N件（デフォルト10件）を保持、それ以前を圧縮
+2. **サマリー生成**: LLMに圧縮対象を送信、箇条書きで5-10項目にサマリー化
+3. **履歴再構築**: サマリーを先頭に挿入、元メッセージを削除
+
+#### トークン数計算
+
+```go
+func estimateTokens(messages []api.Message) int {
+	totalChars := 0
+	for _, msg := range messages {
+		totalChars += len(msg.Content)
+	}
+	// 簡易計算: 平均3文字/token
+	return totalChars / 3
+}
+```
+
+#### 設定 (config.yaml)
+
+```yaml
+compression:
+  auto_compress: false      # 自動圧縮（将来実装）
+  threshold_tokens: 40000   # 自動圧縮閾値
+  keep_recent: 10           # 保持メッセージ数
+```
+
+詳細は [Issue #6](https://github.com/susugadx/xelyon-cli/issues/6) を参照。
+
+---
+
 ## v0.30.0 機能追加
 
 ### /copy コマンド (Issue #5)

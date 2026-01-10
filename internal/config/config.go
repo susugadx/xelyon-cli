@@ -18,8 +18,16 @@ type Config struct {
 	DefaultProvider string                         `yaml:"default_provider"`
 	DefaultModel    string                         `yaml:"default_model"`
 	ProviderModels  map[string]ProviderModelConfig `yaml:"provider_models"`
+	Compression     CompressionConfig              `yaml:"compression,omitempty"`
 	// 将来の拡張用
 	// Cloud CloudConfig `yaml:"cloud,omitempty"`
+}
+
+// CompressionConfig は会話履歴圧縮の設定
+type CompressionConfig struct {
+	AutoCompress    bool `yaml:"auto_compress"`    // 自動圧縮を有効化
+	ThresholdTokens int  `yaml:"threshold_tokens"` // 自動圧縮のトークン閾値
+	KeepRecent      int  `yaml:"keep_recent"`      // 保持する最新メッセージ数
 }
 
 // ProviderModelConfig はプロバイダーごとのモデル設定
@@ -58,6 +66,11 @@ func DefaultConfig() *Config {
 			"groq": {
 				DefaultModel: "llama3-70b-8192",
 			},
+		},
+		Compression: CompressionConfig{
+			AutoCompress:    false, // デフォルトは手動圧縮のみ
+			ThresholdTokens: 40000,
+			KeepRecent:      10,
 		},
 	}
 }

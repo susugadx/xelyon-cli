@@ -40,6 +40,8 @@ func handleSpecialCommand(input string, agent *Agent) bool {
 		return handleStatsCommand(agent)
 	case "/copy":
 		return handleCopyCommand(agent, args)
+	case "/compress":
+		return handleCompressCommand(agent, args)
 	case "/exit", "/quit", "/q":
 		yellow.Println("👋 See you!")
 		os.Exit(0)
@@ -505,6 +507,59 @@ func extractCodeBlocks(text string) []string {
 	return blocks
 }
 
+// handleCompressCommand は会話履歴を圧縮
+func handleCompressCommand(agent *Agent, args []string) bool {
+	// デフォルト: 最新10件を保持
+	keepRecent := 10
+
+	// 引数解析
+	if len(args) > 0 {
+		n, err := strconv.Atoi(args[0])
+		if err != nil {
+			red.Printf("Invalid number: %s\n", args[0])
+			yellow.Println("Usage: /compress [keep_recent]")
+			return true
+		}
+		if n < 1 {
+			red.Println("keep_recent must be at least 1")
+			return true
+		}
+		keepRecent = n
+	}
+
+	// 確認プロンプト
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	cyan.Printf("🗜️  Compress History / 会話履歴を圧縮\n")
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Printf("現在の履歴: %d messages\n", len(agent.History))
+	fmt.Printf("保持する最新件数: %d messages\n", keepRecent)
+	fmt.Printf("圧縮対象: %d messages\n", len(agent.History)-keepRecent)
+	yellow.Println("\n⚠️  Warning: 圧縮後、古いメッセージはサマリーに置き換わります")
+
+	// 確認
+	fmt.Print("\nContinue? (y/n): ")
+	reader := bufio.NewReader(os.Stdin)
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		red.Printf("Failed to read input: %v\n", err)
+		return true
+	}
+
+	input = strings.TrimSpace(strings.ToLower(input))
+	if input != "y" && input != "yes" {
+		yellow.Println("Cancelled")
+		return true
+	}
+
+	// 圧縮実行
+	if err := agent.CompressHistory(keepRecent); err != nil {
+		red.Printf("圧縮に失敗しました: %v\n", err)
+		return true
+	}
+
+	return true
+}
+
 // handleRepoMapCommand はRepo Mapを表示
 func handleRepoMapCommand() bool {
 	cwd, err := os.Getwd()
@@ -532,20 +587,21 @@ func handleRepoMapCommand() bool {
 // printHelp はヘルプを表示
 func printHelp() {
 	fmt.Println(`Commands:
-  /exit, /quit, /q  - Exit the CLI
-  /clear            - Clear conversation history
-  /history          - Show conversation history
-  /save             - Save current session
-  /load [id]        - Load session (or last if no ID)
-  /sessions         - List recent sessions
-  /undo             - Undo last file change (restore from .bak)
-  /stats            - Show session statistics (time, messages, tokens, cost)
+  /exit, /quit, /q    - Exit the CLI
+  /clear              - Clear conversation history
+  /history            - Show conversation history
+  /save               - Save current session
+  /load [id]          - Load session (or last if no ID)
+  /sessions           - List recent sessions
+  /undo               - Undo last file change (restore from .bak)
+  /stats              - Show session statistics (time, messages, tokens, cost)
   /copy [code] [-n N] - Copy last AI output to clipboard (code=code blocks only, -n=N-th last output)
-  /config           - Show/change configuration (e.g., /config model deepseek-coder)
-  /model [name]     - Show current model or switch model without restart
-  /repomap          - Show repository code structure map
-  /version          - Show version information
-  /help             - Show this help
+  /compress [N]       - Compress history (keep recent N messages, default: 10)
+  /config             - Show/change configuration (e.g., /config model deepseek-coder)
+  /model [name]       - Show current model or switch model without restart
+  /repomap            - Show repository code structure map
+  /version            - Show version information
+  /help               - Show this help
 
 Available tools (AI will use automatically):
   bash        - Execute shell commands
