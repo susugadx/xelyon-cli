@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -27,6 +28,8 @@ var (
 	apiRetry      int
 	apiRetryDelay int
 	diffLines     int
+	outputFormat  string
+	headless      bool
 )
 
 const projectConfigFile = "XELYON.md"
@@ -173,6 +176,11 @@ Examples:
   xelyon -f main.go "add logging" # With file context
   xelyon --think "design review"  # Deep thinking mode`,
 	Run: func(cmd *cobra.Command, args []string) {
+		// --headless は --output-format json のエイリアス
+		if headless {
+			outputFormat = "json"
+		}
+
 		// 設定を読み込み
 		cfg, err := config.LoadConfig()
 		if err != nil {
@@ -204,6 +212,21 @@ Examples:
 
 		model := getModel(cmd)
 		provider := getProvider()
+
+		// Headlessモードチェック（クエリ必須）
+		if outputFormat == "json" {
+			if len(args) == 0 {
+				fmt.Fprintln(os.Stderr, "Error: Query argument is required in headless mode")
+				os.Exit(1)
+			}
+			result := agent.RunHeadless(args[0], model, provider)
+			jsonBytes, _ := json.MarshalIndent(result, "", "  ")
+			fmt.Println(string(jsonBytes))
+			if result.Status == "error" {
+				os.Exit(1)
+			}
+			os.Exit(0)
+		}
 
 		// --resume フラグチェック
 		if resume && len(args) == 0 && len(files) == 0 {
@@ -333,6 +356,10 @@ func init() {
 
 	// 新規: --auto-approve/-y フラグ
 	rootCmd.Flags().BoolVarP(&autoApprove, "auto-approve", "y", false, "Automatically approve safe/medium operations (destructive ops still require confirmation)")
+
+	// 新規: --output-format/--headless フラグ
+	rootCmd.Flags().StringVar(&outputFormat, "output-format", "text", "Output format: text or json")
+	rootCmd.Flags().BoolVar(&headless, "headless", false, "Run in headless mode (JSON output, no UI)")
 }
 
 func Execute() {

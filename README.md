@@ -168,6 +168,70 @@ export XELYON_PROVIDER=ollama
 # → delete_fileは確認プロンプトが表示される
 ```
 
+### Headlessモード（JSON出力）
+
+`--headless` または `--output-format json` フラグでUIなしのJSON出力モードを利用できます:
+
+```bash
+# 基本的な使い方
+./xelyon --headless "main.goを分析して"
+
+# jqでパース
+./xelyon --output-format json "テスト実行して" | jq '.response'
+
+# スクリプト連携
+result=$(./xelyon --headless "コードレビューして")
+status=$(echo $result | jq -r '.status')
+if [ "$status" = "success" ]; then
+    echo "Success!"
+fi
+
+# CI/CDパイプライン
+./xelyon --headless "未使用の依存関係を検出" > report.json
+```
+
+**JSON出力形式**:
+```json
+{
+  "status": "success",
+  "provider": "DeepSeek",
+  "model": "deepseek-coder",
+  "response": "AIの回答テキスト",
+  "tool_calls": [
+    {
+      "tool": "read_file",
+      "args": {"path": "main.go"},
+      "output": "ファイル内容...",
+      "success": true
+    }
+  ],
+  "duration_ms": 1250,
+  "timestamp": "2026-01-11T10:30:00Z"
+}
+```
+
+**エラー時の出力**:
+```json
+{
+  "status": "error",
+  "provider": "DeepSeek",
+  "model": "deepseek-coder",
+  "response": "",
+  "duration_ms": 500,
+  "timestamp": "2026-01-11T10:30:00Z",
+  "error": {
+    "type": "api_error",
+    "message": "API key not set"
+  }
+}
+```
+
+**特徴**:
+- Exit code: 成功=0, エラー=1
+- 色付き出力・スピナー・確認プロンプトなし
+- ツール実行は自動承認（SafetyLow以外）
+- スクリプト・CI/CDからの利用を想定
+
 ### 対話コマンド
 
 ```
@@ -948,6 +1012,18 @@ go fmt ./...
 MIT
 
 ## バージョン履歴
+
+### v0.30.0 Headlessモード実装 (2026-01-11)
+- 🖥️ **Headlessモード**: UIなしのJSON出力モード実装（Issue #9）
+  - `--headless` / `--output-format json` フラグ追加
+  - スクリプト・CI/CDからの利用を想定
+  - Exit code: 成功=0, エラー=1
+- 📊 **JSON出力構造**:
+  - status, provider, model, response, tool_calls, duration_ms, timestamp
+  - エラー情報（type, message, code）
+  - トークン使用量（将来対応）
+- 🔧 **自動承認**: Headlessモードではツール実行を自動承認（SafetyLow以外）
+- 📦 **CI/CD統合**: jqと組み合わせてパイプライン処理可能
 
 ### v0.29.0 画像API送信対応 (2026-01-11)
 - 🖼️ **マルチモーダルAPI対応**: 画像をLLM APIに送信可能

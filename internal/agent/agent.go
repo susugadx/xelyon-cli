@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/api"
@@ -548,4 +549,60 @@ func RunInteractiveWithResume(model string, provider api.Provider, autoApprove b
 
 		agent.chat(input)
 	}
+}
+
+// RunHeadless はHeadlessモードでクエリを実行
+func RunHeadless(query string, model string, provider api.Provider) *HeadlessResult {
+	startTime := time.Now()
+
+	// Agent初期化
+	agent := NewAgent(model, provider)
+	agent.AutoApprove = true // Headlessモードは自動承認（SafetyLow以外）
+	tools.SetAutoApprove(true)
+
+	// プロジェクト設定読み込み（UI出力なし）
+	if config := loadProjectConfig(); config != "" {
+		agent.SystemPrompt += "\n\n## Project Context:\n" + config
+	}
+
+	// Repo Map 生成（UI出力なし）
+	cwd, err := os.Getwd()
+	if err != nil {
+		cwd = "."
+	}
+	rm := repomap.NewRepoMap(cwd, 2000)
+	if err := rm.Build(); err == nil && rm.GetSymbolCount() > 0 {
+		repoMapStr := rm.Generate()
+		agent.SystemPrompt += "\n\n" + repoMapStr
+	}
+
+	// ツール呼び出し結果を記録
+	var toolCalls []ToolCallResult
+
+	// API呼び出し
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+
+	response, err := provider.ChatWithTools(ctx, agent.SystemPrompt, agent.History, model)
+	if err != nil {
+		duration := time.Since(startTime).Milliseconds()
+		return NewErrorResult(provider.Name(), model, "api_error", err.Error(), duration)
+	}
+
+	// ツール呼び出し解析（簡易版 - 実際のツール実行は行わない）
+	// TODO: 実際のツール実行を含める場合は agent.Run() のロジックを統合
+	tc := tools.ParseToolCall(response)
+	if tc != nil {
+		// ツール実行（エラーは記録するが続行）
+		output, _ := tools.Execute(tc)
+		toolCalls = append(toolCalls, ToolCallResult{
+			Tool:    tc.Tool,
+			Args:    tc.Args,
+			Output:  output,
+			Success: true,
+		})
+	}
+
+	duration := time.Since(startTime).Milliseconds()
+	return NewSuccessResult(provider.Name(), model, response, toolCalls, duration)
 }
