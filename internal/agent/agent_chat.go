@@ -4,18 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
-
-// debugLog はデバッグログを出力（エラーは無視）
-func debugLog(format string, args ...interface{}) {
-	_, _ = fmt.Fprintf(os.Stderr, format, args...)
-}
 
 // isSameToolCall は2つのToolCallが同じかを判定
 func isSameToolCall(tc1, tc2 *tools.ToolCall) bool {
@@ -34,15 +28,8 @@ func isSameToolCall(tc1, tc2 *tools.ToolCall) bool {
 
 // chat はAIと対話する
 func (a *Agent) chat(input string) {
-	// デバッグ: chat()関数の入力
-	debugLog("\n[DEBUG] chat() called\n")
-	debugLog("  Input length: %d chars\n", len(input))
-	debugLog("  Plan Mode: %v\n", a.PlanMode)
-	debugLog("  History length: %d messages\n", len(a.History))
-
 	// Plan Mode が有効な場合、RunPlanMode を呼ぶ
 	if a.PlanMode {
-		debugLog("[DEBUG] Entering Plan Mode\n")
 		ctx := context.Background()
 		if err := a.RunPlanMode(ctx, input); err != nil {
 			red.Printf("Plan execution failed: %v\n", err)
@@ -117,30 +104,18 @@ func (a *Agent) callAPIWithRetry() (string, error) {
 	initialDelay := cfg.APIRetry.InitialDelay
 	maxDelay := cfg.APIRetry.MaxDelay
 
-	// デバッグ: API呼び出し前の情報
-	debugLog("[DEBUG] callAPIWithRetry() started\n")
-	debugLog("  Provider: %s\n", a.CurrentProvider.Name())
-	debugLog("  Model: %s\n", a.CurrentModel)
-	debugLog("  Max retries: %d\n", maxRetries)
-
 	var response string
 	var err error
 
 	for retry := 0; retry < maxRetries; retry++ {
-		debugLog("[DEBUG] API call attempt %d/%d\n", retry+1, maxRetries)
-
 		// API呼び出しタイムアウト設定（3分）
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		response, err = a.CurrentProvider.ChatWithTools(ctx, a.SystemPrompt, a.History, a.CurrentModel)
 		cancel() // リソースリーク防止
 
 		if err == nil {
-			debugLog("[DEBUG] API call succeeded\n")
-			debugLog("  Response length: %d chars\n", len(response))
 			return response, nil
 		}
-
-		debugLog("[DEBUG] API call failed: %v\n", err)
 
 		if retry < maxRetries-1 {
 			// 待機時間計算：initialDelay * (retry + 1) だが、maxDelay を超えない
@@ -261,11 +236,6 @@ func (a *Agent) handleNormalResponse(response string) {
 
 // chatWithImage は画像付きメッセージでAIと対話する
 func (a *Agent) chatWithImage(input string, image *api.ImageData) {
-	// デバッグ: chatWithImage()関数の入力
-	debugLog("\n[DEBUG] chatWithImage() called\n")
-	debugLog("  Image path: %s\n", image.Path)
-	debugLog("  Image size: %d bytes\n", image.Size)
-
 	// プロバイダーが画像対応かチェック
 	if !a.CurrentProvider.SupportsImages() {
 		yellow.Printf("Warning: %s does not support images. The image will be ignored.\n", a.CurrentProvider.Name())
@@ -293,20 +263,15 @@ func (a *Agent) chatWithImage(input string, image *api.ImageData) {
 	}
 
 	// 画像付きAPI呼び出し
-	debugLog("[DEBUG] Calling ChatWithImage API...\n")
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 
 	response, err := a.CurrentProvider.ChatWithImage(ctx, a.SystemPrompt, a.History[:len(a.History)-1], input, image, a.CurrentModel)
 	if err != nil {
-		debugLog("[DEBUG] ChatWithImage failed: %v\n", err)
 		red.Printf("エラー: %v\n", err)
 		yellow.Println("API呼び出しに失敗しました。ネットワーク接続を確認してください。")
 		return
 	}
-
-	debugLog("[DEBUG] ChatWithImage succeeded\n")
-	debugLog("  Response length: %d chars\n", len(response))
 
 	// 通常の回答処理
 	a.handleNormalResponse(response)

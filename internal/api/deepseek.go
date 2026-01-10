@@ -113,12 +113,6 @@ func (p *DeepSeekProvider) ChatWithTools(ctx context.Context, systemPrompt strin
 		return "", fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	// デバッグ: リクエスト情報
-	_, _ = fmt.Fprintf(os.Stderr, "\n[DEBUG] DeepSeek API Request:\n")
-	_, _ = fmt.Fprintf(os.Stderr, "  URL: %s\n", p.apiURL)
-	_, _ = fmt.Fprintf(os.Stderr, "  Model: %s\n", actualModel)
-	_, _ = fmt.Fprintf(os.Stderr, "  Messages: %d\n", len(messages))
-
 	req, err := http.NewRequestWithContext(ctx, "POST", p.apiURL, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
@@ -135,13 +129,9 @@ func (p *DeepSeekProvider) ChatWithTools(ctx context.Context, systemPrompt strin
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
 		spinner.Stop()
-		_, _ = fmt.Fprintf(os.Stderr, "[DEBUG] HTTP request failed: %v\n", err)
 		return "", fmt.Errorf("DeepSeek API request failed: %w", err)
 	}
 	defer resp.Body.Close()
-
-	// デバッグ: レスポンス情報
-	_, _ = fmt.Fprintf(os.Stderr, "[DEBUG] Response Status: %d\n", resp.StatusCode)
 
 	if resp.StatusCode != 200 {
 		spinner.Stop()
@@ -153,7 +143,6 @@ func (p *DeepSeekProvider) ChatWithTools(ctx context.Context, systemPrompt strin
 
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "[DEBUG] Failed to read error response body: %v\n", err)
 			return "", fmt.Errorf("DeepSeek API error (status %d): unable to read response body - %v", resp.StatusCode, err)
 		}
 
@@ -161,8 +150,6 @@ func (p *DeepSeekProvider) ChatWithTools(ctx context.Context, systemPrompt strin
 			return "", fmt.Errorf("DeepSeek API error (status %d): empty response body. Check API key and model name '%s'", resp.StatusCode, actualModel)
 		}
 
-		// デバッグ: エラーレスポンス
-		_, _ = fmt.Fprintf(os.Stderr, "[DEBUG] Error Response Body:\n%s\n", string(body))
 		return "", sanitizeErrorMessage(body, resp.StatusCode)
 	}
 
