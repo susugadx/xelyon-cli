@@ -74,7 +74,10 @@ func (a *Agent) confirmPlan() (approved bool, feedback string) {
 	yellow.Print("\nApprove this plan? [y/n/c(omment)]: ")
 
 	var input string
-	fmt.Scanln(&input)
+	if _, err := fmt.Scanln(&input); err != nil {
+		red.Printf("Failed to read input: %v\n", err)
+		return false, ""
+	}
 	input = strings.ToLower(strings.TrimSpace(input))
 
 	switch input {
@@ -85,7 +88,10 @@ func (a *Agent) confirmPlan() (approved bool, feedback string) {
 	case "c", "comment":
 		yellow.Print("Enter your feedback: ")
 		var comment string
-		fmt.Scanln(&comment)
+		if _, err := fmt.Scanln(&comment); err != nil {
+			red.Printf("Failed to read input: %v\n", err)
+			return false, ""
+		}
 		return false, strings.TrimSpace(comment)
 	default:
 		yellow.Println("Invalid input. Please enter y/n/c.")
