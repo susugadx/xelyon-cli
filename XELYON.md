@@ -1306,3 +1306,292 @@ export DEEPSEEK_API_URL="https://proxy.example.com/v1/chat/completions"
 
 ---
 
+
+## テスト実装（v0.26.0-v0.27.0）
+
+### 1. テストアーキテクチャ
+
+**テストヘルパー**: `internal/testutil/testutil.go`
+- `CreateTempFile()` - 一時ファイル作成
+- `AssertFileExists()` - ファイル存在確認
+- `AssertFileContent()` - ファイル内容検証
+- `SetupTempHome()` - HOME環境変数モック
+- `ReadFile()` - ファイル読み込み
+
+**モックパターン**:
+```go
+// confirm関数のモック
+func setupTestConfirm(t *testing.T, result bool) {
+    original := confirm
+    confirm = func(prompt string) bool {
+        return result
+    }
+    t.Cleanup(func() {
+        confirm = original
+    })
+}
+
+// ValidatePath関数のモック
+func setupTestMocks(t *testing.T) {
+    originalValidate := ValidatePath
+    ValidatePath = func(path string) (string, error) {
+        return filepath.Abs(path)
+    }
+    t.Cleanup(func() {
+        ValidatePath = originalValidate
+    })
+}
+```
+
+---
+
+### 2. テストカバレッジ（v0.27.0時点）
+
+| パッケージ | テスト数 | カバレッジ | 状態 |
+|-----------|---------|-----------|------|
+| **internal/crypto** | 8 | 81.5% | ✅ 優秀 |
+| **internal/audit** | 7 | 86.4% | ✅ 優秀 |
+| **internal/tools** | 50 | 23.1% | ⚠️ 対象関数は95%+ |
+| **internal/api** | 33 | 13.0% | ⚠️ 対象関数は95%+ |
+| **プロジェクト全体** | 95 | 14.7% | - |
+
+**注**: 全体カバレッジが低いのは、`cmd/`, `internal/agent/`, `internal/ui/` 等が未テストのため。テストした関数のカバレッジは平均95%以上。
+
+---
+
+### 3. テスト項目詳細
+
+#### 3.1 暗号化テスト（internal/crypto）
+- ✅ AES-256-GCM 暗号化/復号化ラウンドトリップ
+- ✅ ソルト・ノンスのランダム性検証
+- ✅ 認証タグ改ざん検出
+- ✅ PBKDF2 鍵導出の一貫性
+- ✅ パスフレーズファイル作成（0600パーミッション）
+
+#### 3.2 監査ログテスト（internal/audit）
+- ✅ JSONL形式記録
+- ✅ 機密情報サニタイズ（password, token, api_key → [REDACTED]）
+- ✅ 長い値の切り詰め（200文字, 500文字制限）
+- ✅ 並行アクセス安全性（100 goroutines）
+- ✅ ログ記録失敗時のサイレント動作
+
+#### 3.3 ファイル操作テスト（internal/tools）
+- ✅ read_file: ファイル読み込み、長いファイル切り詰め（100% coverage）
+- ✅ write_file: 新規作成、上書き、ディレクトリ自動作成（90.9% coverage）
+- ✅ str_replace: 厳密マッチ、複数マッチエラー、バックアップ作成（72.2% coverage）
+- ✅ delete_file: 削除前バックアップ、Undo機能
+- ✅ delete_lines: 行範囲削除、範囲外クランプ
+- ✅ move_file: ファイル移動、上書き確認、クロスファイルシステム対応
+
+#### 3.4 API検証テスト（internal/api）
+- ✅ ValidateStreamResponse: choices配列、delta/messageフィールド検証（100% coverage）
+- ✅ ValidateChatResponse: message.content検証（100% coverage）
+- ✅ ValidateToolCall: function.name/arguments検証（100% coverage）
+- ✅ sanitizeErrorMessage: APIキー削除（OpenAI, Google, Bearer token）（100% coverage）
+- ✅ handleRateLimit: Retry-Afterヘッダー解析（100% coverage）
+
+---
+
+### 4. テスト実行方法
+
+```bash
+# 全テスト実行
+go test ./...
+
+# カバレッジ付き
+go test ./... -coverprofile=coverage.out
+go tool cover -html=coverage.out
+
+# 特定パッケージのみ
+go test ./internal/crypto/ -v
+go test ./internal/audit/ -v
+go test ./internal/tools/ -v
+go test ./internal/api/ -v
+
+# レースコンディション検出
+go test ./... -race
+```
+
+---
+
+## リリース自動化（v0.28.0-v0.28.3）
+
+### 1. GoReleaser設定（.goreleaser.yml）
+
+**基本設定**:
+```yaml
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+    - go fmt ./...
+    - go test ./...
+```
+
+**ビルド設定**:
+```yaml
+builds:
+  - id: xelyon
+    binary: xelyon
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    tags: [norepomap]  # tree-sitter依存を除外
+    ldflags:
+      - -s -w
+      - -X github.com/susugadx/xelyon-cli/internal/version.Version={{.Version}}
+      - -X github.com/susugadx/xelyon-cli/internal/version.Commit={{.Commit}}
+      - -X github.com/susugadx/xelyon-cli/internal/version.Date={{.Date}}
+```
+
+**アーカイブ設定**:
+```yaml
+archives:
+  - format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+    files: [LICENSE, README.md, XELYON.md]
+```
+
+**Changelog設定**:
+```yaml
+changelog:
+  groups:
+    - title: Features
+      regexp: '^feat:'
+    - title: Bug Fixes
+      regexp: '^fix:'
+```
+
+**Homebrew Tap設定**:
+```yaml
+brews:
+  - name: xelyon
+    repository:
+      owner: susugadx
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    install: |
+      bin.install "xelyon"
+```
+
+---
+
+### 2. GitHub Actions設定（.github/workflows/release.yml）
+
+```yaml
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.22'
+
+    - name: Run tests
+      run: go test -v ./...
+
+    - name: Run GoReleaser
+      uses: goreleaser/goreleaser-action@v6
+      with:
+        version: '~> v2'
+        args: release --clean
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+```
+
+---
+
+### 3. CGO不要ビルド（v0.28.2）
+
+**問題**: go-tree-sitterがCGOを必要とし、クロスコンパイルが複雑化
+
+**解決策**: ビルドタグによる条件付きコンパイル
+
+**実装**:
+1. **既存ファイルにタグ追加**: `// +build !norepomap`
+   - `internal/repomap/repomap.go`
+   - `internal/repomap/parser.go`
+   - `internal/repomap/extractor.go`
+   - `internal/repomap/symbols.go`
+
+2. **スタブ実装**: `internal/repomap/stub.go` (`// +build norepomap`)
+   ```go
+   type RepoMap struct {
+       RootPath  string
+       Files     []*FileSymbols
+       MaxTokens int
+   }
+   
+   func (rm *RepoMap) Generate() string {
+       return "⚠️ Repo Map feature is disabled (requires CGO)"
+   }
+   ```
+
+**ビルドパターン**:
+```bash
+# 開発用（CGO有効・Repo Map完全動作）
+go build -o xelyon
+
+# リリース用（CGO無効・Repo Map無効化）
+go build -tags norepomap -o xelyon
+```
+
+---
+
+### 4. リリース手順
+
+```bash
+# 1. バージョンタグ作成
+git tag v0.28.3
+
+# 2. GitHubにpush
+git push origin main
+git push origin v0.28.3
+
+# 3. GitHub Actionsが自動実行
+# ✅ go test ./...
+# ✅ クロスコンパイル（Linux/macOS/Windows）
+# ✅ GitHub Releasesにアップロード
+# ✅ Homebrew Tap更新
+```
+
+**生成されるファイル**:
+- `xelyon_0.28.3_linux_amd64.tar.gz`
+- `xelyon_0.28.3_linux_arm64.tar.gz`
+- `xelyon_0.28.3_darwin_amd64.tar.gz`
+- `xelyon_0.28.3_darwin_arm64.tar.gz`
+- `xelyon_0.28.3_windows_amd64.zip`
+- `checksums.txt`
+
+---
+
+### 5. サポート環境
+
+| OS | アーキテクチャ | 状態 |
+|----|--------------|------|
+| **Linux** | amd64 | ✅ |
+| **Linux** | arm64 | ✅ |
+| **macOS** | amd64 (Intel) | ✅ |
+| **macOS** | arm64 (Apple Silicon) | ✅ |
+| **Windows** | amd64 | ✅ |
+| **Windows** | arm64 | ❌ 現状サポート外 |
+
+---
