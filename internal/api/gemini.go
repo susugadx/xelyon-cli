@@ -174,9 +174,7 @@ func (p *GeminiProvider) handleStreamingResponse(ctx context.Context, resp *http
 		}
 
 		// Geminiはdata:プレフィックスなしでJSONを返す場合がある
-		if strings.HasPrefix(line, "data: ") {
-			line = strings.TrimPrefix(line, "data: ")
-		}
+		line = strings.TrimPrefix(line, "data: ")
 
 		if line == "[DONE]" {
 			break

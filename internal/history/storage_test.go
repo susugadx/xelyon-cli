@@ -260,14 +260,18 @@ func TestStorage_GetLastSession(t *testing.T) {
 	// セッション作成
 	session1 := NewSession("model-1")
 	session1.AddMessage("user", "Old session", "model-1")
-	storage.Save(session1)
+	if err := storage.Save(session1); err != nil {
+		t.Fatalf("Failed to save session1: %v", err)
+	}
 
 	// 1秒待って異なるSession IDを生成
 	time.Sleep(1100 * time.Millisecond)
 
 	session2 := NewSession("model-2")
 	session2.AddMessage("user", "New session", "model-2")
-	storage.Save(session2)
+	if err := storage.Save(session2); err != nil {
+		t.Fatalf("Failed to save session2: %v", err)
+	}
 
 	// 最新セッション取得
 	lastID, err := storage.GetLastSession()
@@ -436,7 +440,9 @@ func TestStorage_Load_CorruptedData(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to open file: %v", err)
 	}
-	f.WriteString("CORRUPTED LINE\n")
+	if _, err := f.WriteString("CORRUPTED LINE\n"); err != nil {
+		t.Fatalf("Failed to write corrupted line: %v", err)
+	}
 	f.Close()
 
 	// 読み込み（不正な行はスキップされるべき）

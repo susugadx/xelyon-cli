@@ -108,8 +108,12 @@ func (l *Logger) LogToolExecution(tool string, args map[string]string, output st
 		return
 	}
 
-	file.Write(data)
-	file.WriteString("\n")
+	if _, err := file.Write(data); err != nil {
+		return
+	}
+	if _, err := file.WriteString("\n"); err != nil {
+		return
+	}
 }
 
 // sanitizeArgs は機密情報を含む可能性のある引数をサニタイズ

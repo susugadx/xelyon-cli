@@ -109,7 +109,7 @@ func executeMoveFile(src, dest string) (string, string, error) {
 			if err = os.Remove(absSrc); err != nil {
 				yellow.Printf("⚠️  Warning: Copy succeeded but failed to delete source: %v\n", err)
 				yellow.Printf("   Manual cleanup required: %s\n", absSrc)
-				return fmt.Sprintf("⚠️  Partially completed: Destination created but source remains"), destBackupPath, nil
+				return "⚠️  Partially completed: Destination created but source remains", destBackupPath, nil
 			}
 		} else {
 			return fmt.Sprintf("Error: Move failed: %v", err), "", nil

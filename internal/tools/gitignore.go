@@ -10,7 +10,6 @@ import (
 )
 
 var (
-	gitignoreChecked     = false                 // .gitignore確認済みフラグ
 	gitignoreCheckedLock sync.Mutex              // スレッドセーフ
 	gitignoreAddedFlag   = make(map[string]bool) // ディレクトリごとの追加済みフラグ
 )

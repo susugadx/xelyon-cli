@@ -109,7 +109,9 @@ func TestLogToolExecution_WithError(t *testing.T) {
 	defer resetGlobalLogger()
 
 	testutil.SetupTempHome(t)
-	Init(true)
+	if err := Init(true); err != nil {
+		t.Fatalf("Failed to initialize logger: %v", err)
+	}
 	logger := GetLogger()
 
 	// エラー付きでログ記録
@@ -127,7 +129,9 @@ func TestLogToolExecution_WithError(t *testing.T) {
 	data, _ := os.ReadFile(logFiles[0])
 
 	var entry LogEntry
-	json.Unmarshal(data, &entry)
+	if err := json.Unmarshal(data, &entry); err != nil {
+		t.Fatalf("Failed to unmarshal log entry: %v", err)
+	}
 
 	if entry.Success {
 		t.Error("Success should be false on error")
@@ -207,7 +211,9 @@ func TestLogToolExecution_OutputTruncation(t *testing.T) {
 	defer resetGlobalLogger()
 
 	testutil.SetupTempHome(t)
-	Init(true)
+	if err := Init(true); err != nil {
+		t.Fatalf("Failed to initialize logger: %v", err)
+	}
 	logger := GetLogger()
 
 	// 長い出力（500文字超）
@@ -225,7 +231,9 @@ func TestLogToolExecution_OutputTruncation(t *testing.T) {
 	data, _ := os.ReadFile(logFiles[0])
 
 	var entry LogEntry
-	json.Unmarshal(data, &entry)
+	if err := json.Unmarshal(data, &entry); err != nil {
+		t.Fatalf("Failed to unmarshal log entry: %v", err)
+	}
 
 	// 500文字に切り詰められていることを確認
 	expectedOutput := strings.Repeat("x", 500) + "... (truncated)"
@@ -238,7 +246,9 @@ func TestLogToolExecution_Concurrent(t *testing.T) {
 	defer resetGlobalLogger()
 
 	tmpHome := testutil.SetupTempHome(t)
-	Init(true)
+	if err := Init(true); err != nil {
+		t.Fatalf("Failed to initialize logger: %v", err)
+	}
 	logger := GetLogger()
 
 	// 並行でログ記録（100 goroutines）
@@ -290,7 +300,9 @@ func TestLogToolExecution_Disabled(t *testing.T) {
 	logDir := filepath.Join(tmpHome, ".xelyon", "audit")
 
 	// 無効状態で初期化
-	Init(false)
+	if err := Init(false); err != nil {
+		t.Fatalf("Failed to initialize logger: %v", err)
+	}
 	logger := GetLogger()
 
 	logger.LogToolExecution(

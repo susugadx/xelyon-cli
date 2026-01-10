@@ -93,10 +93,7 @@ func (p *ClaudeProvider) ChatWithTools(ctx context.Context, systemPrompt string,
 	// Claudeのメッセージ構造に変換
 	var messages []ClaudeMessage
 	for _, msg := range history {
-		messages = append(messages, ClaudeMessage{
-			Role:    msg.Role,
-			Content: msg.Content,
-		})
+		messages = append(messages, ClaudeMessage(msg))
 	}
 
 	reqBody := ClaudeRequest{

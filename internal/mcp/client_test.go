@@ -230,7 +230,9 @@ func TestManager_LoadConfig_ExistingFile(t *testing.T) {
 
 	// カスタム設定を作成
 	configDir := tmpDir + "/.xelyon"
-	os.MkdirAll(configDir, 0755)
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatalf("Failed to create config dir: %v", err)
+	}
 
 	customConfig := Config{
 		MCPServers: map[string]ServerConfig{
@@ -243,7 +245,9 @@ func TestManager_LoadConfig_ExistingFile(t *testing.T) {
 	}
 
 	data, _ := json.MarshalIndent(customConfig, "", "  ")
-	os.WriteFile(configDir+"/mcp.json", data, 0644)
+	if err := os.WriteFile(configDir+"/mcp.json", data, 0644); err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
 
 	manager := NewManager()
 	err := manager.LoadConfig()

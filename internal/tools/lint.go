@@ -103,7 +103,7 @@ func executeLint(path, autoFixStr string) (string, string, error) {
 			return fmt.Sprintf("Auto-fix completed with errors:\n%s", string(fixOutput)), backupPath, nil
 		}
 
-		return fmt.Sprintf("✅ Auto-fix completed successfully"), backupPath, nil
+		return "✅ Auto-fix completed successfully", backupPath, nil
 	}
 
 	return fmt.Sprintf("Issues found (use auto_fix to apply fixes)\n%s", string(checkOutput)), "", nil
