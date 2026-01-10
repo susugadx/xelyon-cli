@@ -42,6 +42,10 @@ func handleSpecialCommand(input string, agent *Agent) bool {
 		return handleCopyCommand(agent, args)
 	case "/compress":
 		return handleCompressCommand(agent, args)
+	case "/use":
+		return handleUseCommand(agent, args)
+	case "/providers":
+		return handleProvidersCommand(agent)
 	case "/exit", "/quit", "/q":
 		yellow.Println("👋 See you!")
 		os.Exit(0)
@@ -560,6 +564,115 @@ func handleCompressCommand(agent *Agent, args []string) bool {
 	return true
 }
 
+// handleUseCommand はプロバイダーを切り替える
+func handleUseCommand(agent *Agent, args []string) bool {
+	if len(args) == 0 {
+		yellow.Println("Usage: /use <provider>")
+		yellow.Println("Available providers: deepseek, claude, openai, gemini, groq, ollama")
+		return true
+	}
+
+	providerName := args[0]
+
+	// サポートされているプロバイダーかチェック
+	validProviders := map[string]bool{
+		"deepseek": true,
+		"claude":   true,
+		"openai":   true,
+		"gemini":   true,
+		"groq":     true,
+		"ollama":   true,
+	}
+
+	if !validProviders[providerName] {
+		red.Printf("Unknown provider: %s\n", providerName)
+		yellow.Println("Available providers: deepseek, claude, openai, gemini, groq, ollama")
+		return true
+	}
+
+	// 既に同じプロバイダーの場合
+	if agent.ProviderName == providerName {
+		yellow.Printf("Already using %s\n", providerName)
+		return true
+	}
+
+	// プロバイダー切り替え実行
+	if err := agent.SwitchProvider(providerName); err != nil {
+		red.Printf("❌ %v\n", err)
+
+		// API キー設定方法を表示
+		switch providerName {
+		case "deepseek":
+			yellow.Println("\n設定方法:")
+			yellow.Println("  export DEEPSEEK_API_KEY=your-api-key")
+		case "openai":
+			yellow.Println("\n設定方法:")
+			yellow.Println("  export OPENAI_API_KEY=your-api-key")
+		case "claude":
+			yellow.Println("\n設定方法:")
+			yellow.Println("  export ANTHROPIC_API_KEY=your-api-key")
+		case "gemini":
+			yellow.Println("\n設定方法:")
+			yellow.Println("  export GEMINI_API_KEY=your-api-key")
+		case "groq":
+			yellow.Println("\n設定方法:")
+			yellow.Println("  export GROQ_API_KEY=your-api-key")
+		}
+		return true
+	}
+
+	return true
+}
+
+// handleProvidersCommand は利用可能なプロバイダー一覧を表示
+func handleProvidersCommand(agent *Agent) bool {
+	providers := []string{"deepseek", "claude", "openai", "gemini", "groq", "ollama"}
+
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	cyan.Println("📡 利用可能なプロバイダー / Available Providers")
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Println()
+
+	for _, provider := range providers {
+		// 現在使用中かチェック
+		isCurrent := agent.ProviderName == provider
+		hasAPIKey := IsAPIKeyAvailable(provider)
+
+		// アイコン
+		icon := "  "
+		if isCurrent {
+			icon = "✓ "
+		}
+
+		// ステータス
+		status := ""
+		if provider == "ollama" {
+			status = "(ローカル)"
+		} else if hasAPIKey {
+			status = "(API key設定済み)"
+		} else {
+			status = "(API key未設定)"
+		}
+
+		// 色付け
+		if isCurrent {
+			green.Printf("%s%-12s %s\n", icon, provider, status)
+		} else if hasAPIKey {
+			fmt.Printf("%s%-12s %s\n", icon, provider, status)
+		} else {
+			// API key未設定は薄く表示
+			fmt.Printf("%s%-12s %s\n", icon, provider, status)
+		}
+	}
+
+	fmt.Println()
+	cyan.Println("使い方: /use <provider>")
+	cyan.Println("例: /use claude")
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+	return true
+}
+
 // handleRepoMapCommand はRepo Mapを表示
 func handleRepoMapCommand() bool {
 	cwd, err := os.Getwd()
@@ -597,6 +710,8 @@ func printHelp() {
   /stats              - Show session statistics (time, messages, tokens, cost)
   /copy [code] [-n N] - Copy last AI output to clipboard (code=code blocks only, -n=N-th last output)
   /compress [N]       - Compress history (keep recent N messages, default: 10)
+  /use <provider>     - Switch provider (deepseek, claude, openai, gemini, groq, ollama)
+  /providers          - List available providers and their API key status
   /config             - Show/change configuration (e.g., /config model deepseek-coder)
   /model [name]       - Show current model or switch model without restart
   /repomap            - Show repository code structure map

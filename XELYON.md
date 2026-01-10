@@ -528,6 +528,138 @@ go build -o xelyon
 - APIリトライのカスタマイズ → [Issue #17](https://github.com/susugadx/xelyon-cli/issues/17)
 - 差分表示のカスタマイズ → [Issue #18](https://github.com/susugadx/xelyon-cli/issues/18)
 
+## v0.32.0 機能追加
+
+### /use と /providers コマンド (Issue #8)
+
+**概要**: 会話中にLLMプロバイダーを切り替える `/use` コマンドと、利用可能なプロバイダー一覧を表示する `/providers` コマンドを実装。
+
+#### 実装ファイル
+- `internal/agent/agent.go`: `SwitchProvider()` メソッドと `IsAPIKeyAvailable()` 関数
+- `internal/agent/agent_commands.go`: `handleUseCommand()` と `handleProvidersCommand()` 関数
+
+#### 主要機能
+
+##### 1. プロバイダー切り替え (`/use <provider>`)
+
+```go
+func (a *Agent) SwitchProvider(providerName string) error {
+	// API キー存在チェック
+	if !IsAPIKeyAvailable(providerName) {
+		return fmt.Errorf("%s のAPIキーが設定されていません", providerName)
+	}
+
+	// プロバイダーインスタンス作成
+	provider, err := api.NewProvider(providerName)
+	if err != nil {
+		return fmt.Errorf("プロバイダーの初期化に失敗しました: %w", err)
+	}
+
+	// プロバイダー切り替え
+	oldProvider := a.ProviderName
+	a.CurrentProvider = provider
+	a.ProviderName = providerName
+
+	// 統計情報のプロバイダー名も更新
+	if a.Stats != nil {
+		a.Stats.Provider = providerName
+	}
+
+	green.Printf("✅ Provider: %s → %s\n", oldProvider, providerName)
+	return nil
+}
+```
+
+**ポイント**:
+- 会話履歴 (`a.History`) はそのまま保持 → プロバイダー切り替え後も会話継続可能
+- 統計情報 (`a.Stats`) のプロバイダー名も自動更新
+- APIキー未設定の場合はエラーメッセージと設定方法を表示
+
+##### 2. APIキー存在チェック
+
+```go
+func IsAPIKeyAvailable(provider string) bool {
+	switch provider {
+	case "deepseek":
+		return os.Getenv("DEEPSEEK_API_KEY") != ""
+	case "openai":
+		return os.Getenv("OPENAI_API_KEY") != ""
+	case "claude":
+		return os.Getenv("ANTHROPIC_API_KEY") != ""
+	case "gemini":
+		return os.Getenv("GEMINI_API_KEY") != ""
+	case "groq":
+		return os.Getenv("GROQ_API_KEY") != ""
+	case "ollama":
+		return true // Ollama はローカルなのでキー不要
+	default:
+		return false
+	}
+}
+```
+
+##### 3. プロバイダー一覧表示 (`/providers`)
+
+```go
+func handleProvidersCommand(agent *Agent) bool {
+	providers := []string{"deepseek", "claude", "openai", "gemini", "groq", "ollama"}
+
+	for _, provider := range providers {
+		isCurrent := agent.ProviderName == provider
+		hasAPIKey := IsAPIKeyAvailable(provider)
+
+		icon := "  "
+		if isCurrent {
+			icon = "✓ "
+		}
+
+		status := ""
+		if provider == "ollama" {
+			status = "(ローカル)"
+		} else if hasAPIKey {
+			status = "(API key設定済み)"
+		} else {
+			status = "(API key未設定)"
+		}
+
+		// 色付け表示
+		if isCurrent {
+			green.Printf("%s%-12s %s\n", icon, provider, status)
+		} else {
+			fmt.Printf("%s%-12s %s\n", icon, provider, status)
+		}
+	}
+}
+```
+
+**表示例**:
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📡 利用可能なプロバイダー / Available Providers
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✓ deepseek     (現在使用中)
+✓ claude       (API key設定済み)
+  openai       (API key未設定)
+✓ gemini       (API key設定済み)
+✓ ollama       (ローカル)
+  groq         (API key未設定)
+
+使い方: /use <provider>
+例: /use claude
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+#### 活用シーン
+- 推論タスクで Claude に切り替え
+- コスト節約でローカル Ollama に切り替え
+- 異なるLLMの出力を比較
+- APIレート制限に達したら別プロバイダーに切り替え
+
+詳細は [Issue #8](https://github.com/susugadx/xelyon-cli/issues/8) を参照。
+
+---
+
 ## v0.31.0 機能追加
 
 ### /compress コマンド (Issue #6)

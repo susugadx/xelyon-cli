@@ -215,6 +215,53 @@ func (a *Agent) Cleanup() {
 	}
 }
 
+// SwitchProvider はプロバイダーを切り替える
+func (a *Agent) SwitchProvider(providerName string) error {
+	// API キー存在チェック
+	if !IsAPIKeyAvailable(providerName) {
+		return fmt.Errorf("%s のAPIキーが設定されていません", providerName)
+	}
+
+	// プロバイダーインスタンス作成
+	provider, err := api.NewProvider(providerName)
+	if err != nil {
+		return fmt.Errorf("プロバイダーの初期化に失敗しました: %w", err)
+	}
+
+	// プロバイダー切り替え
+	oldProvider := a.ProviderName
+	a.CurrentProvider = provider
+	a.ProviderName = providerName
+
+	// 統計情報のプロバイダー名も更新
+	if a.Stats != nil {
+		a.Stats.Provider = providerName
+	}
+
+	green.Printf("✅ Provider: %s → %s\n", oldProvider, providerName)
+	return nil
+}
+
+// IsAPIKeyAvailable は指定されたプロバイダーのAPIキーが利用可能かチェック
+func IsAPIKeyAvailable(provider string) bool {
+	switch provider {
+	case "deepseek":
+		return os.Getenv("DEEPSEEK_API_KEY") != ""
+	case "openai":
+		return os.Getenv("OPENAI_API_KEY") != ""
+	case "claude":
+		return os.Getenv("ANTHROPIC_API_KEY") != ""
+	case "gemini":
+		return os.Getenv("GEMINI_API_KEY") != ""
+	case "groq":
+		return os.Getenv("GROQ_API_KEY") != ""
+	case "ollama":
+		return true // Ollama はローカルなのでキー不要
+	default:
+		return false
+	}
+}
+
 func RunInteractive(model string, provider api.Provider, autoApprove bool) {
 	// 監査ログ初期化（環境変数で制御: XELYON_AUDIT_LOG=1 で有効化）
 	auditEnabled := os.Getenv("XELYON_AUDIT_LOG") == "1"

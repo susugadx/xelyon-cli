@@ -176,6 +176,8 @@ export XELYON_PROVIDER=ollama
 /stats              - セッション統計情報を表示（時間、メッセージ数、ツール実行、コスト）
 /copy [code] [-n N] - 最後のAI出力をクリップボードにコピー
 /compress [N]       - 会話履歴を圧縮（最新N件を保持、デフォルト10件）
+/use <provider>     - プロバイダーを切り替え（deepseek, claude, openai, gemini, groq, ollama）
+/providers          - 利用可能なプロバイダー一覧とAPIキーステータスを表示
 /config             - 設定の表示・変更（例: /config model gpt-4o）
 /model [name]       - 現在のモデルとプロバイダーを表示、または任意のモデルに切り替え
 /repomap            - リポジトリのコード構造マップを表示
@@ -264,6 +266,53 @@ compression:
 - 圧縮は不可逆です（元メッセージは削除されます）
 - サマリー生成にLLM APIを1回呼び出します
 - 圧縮前に確認プロンプトが表示されます
+
+### /use と /providers コマンド
+
+会話中にプロバイダーを切り替えることができます:
+
+```bash
+> /providers
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📡 利用可能なプロバイダー / Available Providers
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✓ deepseek     (現在使用中)
+✓ claude       (API key設定済み)
+  openai       (API key未設定)
+✓ gemini       (API key設定済み)
+✓ ollama       (ローカル)
+  groq         (API key未設定)
+
+使い方: /use <provider>
+例: /use claude
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+> /use claude
+✅ Provider: deepseek → claude
+
+> /use openai
+❌ openai のAPIキーが設定されていません
+
+設定方法:
+  export OPENAI_API_KEY=your-api-key
+```
+
+**使い方**:
+- `/providers`: 利用可能なプロバイダー一覧とAPIキーステータスを表示
+- `/use <provider>`: プロバイダーを切り替え（deepseek, claude, openai, gemini, groq, ollama）
+
+**特徴**:
+- 会話履歴はそのまま保持（プロバイダーを切り替えても会話継続可能）
+- APIキー未設定の場合はエラーメッセージと設定方法を表示
+- 現在使用中のプロバイダーには ✓ マークが表示される
+- 統計情報（/stats）のプロバイダー名も自動更新
+
+**活用シーン**:
+- 推論タスクでClaudeに切り替え
+- コスト節約でローカルOllamaに切り替え
+- 異なるLLMの出力を比較
+- APIレート制限に達したら別プロバイダーに切り替え
 
 ### /stats コマンド
 

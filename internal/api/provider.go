@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -78,4 +80,54 @@ func handleRateLimit(resp *http.Response) error {
 	}
 
 	return fmt.Errorf("rate limit exceeded (429). Please retry later")
+}
+
+// NewProvider はプロバイダー名から Provider インスタンスを生成
+func NewProvider(providerName string) (Provider, error) {
+	switch strings.ToLower(providerName) {
+	case "deepseek":
+		apiKey := os.Getenv("DEEPSEEK_API_KEY")
+		if apiKey == "" {
+			return nil, fmt.Errorf("DEEPSEEK_API_KEY not set")
+		}
+		return NewDeepSeekProvider(apiKey), nil
+
+	case "openai":
+		apiKey := os.Getenv("OPENAI_API_KEY")
+		if apiKey == "" {
+			return nil, fmt.Errorf("OPENAI_API_KEY not set")
+		}
+		return NewOpenAIProvider(apiKey), nil
+
+	case "gemini":
+		apiKey := os.Getenv("GEMINI_API_KEY")
+		if apiKey == "" {
+			return nil, fmt.Errorf("GEMINI_API_KEY not set")
+		}
+		return NewGeminiProvider(apiKey), nil
+
+	case "claude", "anthropic":
+		apiKey := os.Getenv("ANTHROPIC_API_KEY")
+		if apiKey == "" {
+			return nil, fmt.Errorf("ANTHROPIC_API_KEY not set")
+		}
+		return NewClaudeProvider(apiKey), nil
+
+	case "ollama":
+		baseURL := os.Getenv("OLLAMA_BASE_URL")
+		if baseURL == "" {
+			baseURL = "http://localhost:11434"
+		}
+		return NewOllamaProvider(baseURL), nil
+
+	case "groq":
+		apiKey := os.Getenv("GROQ_API_KEY")
+		if apiKey == "" {
+			return nil, fmt.Errorf("GROQ_API_KEY not set")
+		}
+		return NewGroqProvider(apiKey), nil
+
+	default:
+		return nil, fmt.Errorf("unknown provider: %s", providerName)
+	}
 }
