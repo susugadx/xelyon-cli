@@ -1,3 +1,5 @@
+// +build !norepomap
+
 package repomap
 
 import (

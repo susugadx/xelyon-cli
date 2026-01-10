@@ -1,3 +1,5 @@
+// +build !norepomap
+
 package repomap
 
 // Symbol はコード内のシンボル（関数、クラス、構造体等）
