@@ -90,8 +90,14 @@ func TestMemoryStore_Delete(t *testing.T) {
 		memories:    []Memory{},
 	}
 
-	m1, _ := store.Add("Memory 1", false)
-	m2, _ := store.Add("Memory 2", false)
+	m1, err := store.Add("Memory 1", false)
+	if err != nil {
+		t.Fatalf("Failed to add memory 1: %v", err)
+	}
+	m2, err := store.Add("Memory 2", false)
+	if err != nil {
+		t.Fatalf("Failed to add memory 2: %v", err)
+	}
 
 	// m1を削除
 	if err := store.Delete(m1.ID); err != nil {
@@ -122,9 +128,18 @@ func TestMemoryStore_Clear(t *testing.T) {
 		memories:    []Memory{},
 	}
 
-	store.Add("Memory 1", false)
-	store.Add("Memory 2", false)
-	store.Add("Memory 3", false)
+	_, err := store.Add("Memory 1", false)
+	if err != nil {
+		t.Fatalf("Failed to add memory: %v", err)
+	}
+	_, err = store.Add("Memory 2", false)
+	if err != nil {
+		t.Fatalf("Failed to add memory: %v", err)
+	}
+	_, err = store.Add("Memory 3", false)
+	if err != nil {
+		t.Fatalf("Failed to add memory: %v", err)
+	}
 
 	// 全クリア
 	if err := store.Clear(false); err != nil {
@@ -149,7 +164,10 @@ func TestMemoryStore_ProjectMemory(t *testing.T) {
 	}
 
 	// グローバルメモリ追加
-	store.Add("Global memory", false)
+	_, err := store.Add("Global memory", false)
+	if err != nil {
+		t.Fatalf("Failed to add global memory: %v", err)
+	}
 
 	// プロジェクト別メモリ追加
 	pm, err := store.Add("Project memory", true)
@@ -191,7 +209,10 @@ func TestMemoryStore_GetMemoriesAsText(t *testing.T) {
 	}
 
 	// メモリ追加後
-	store.Add("Test memory", false)
+	_, err := store.Add("Test memory", false)
+	if err != nil {
+		t.Fatalf("Failed to add memory: %v", err)
+	}
 	text = store.GetMemoriesAsText()
 	if text == "" {
 		t.Error("Expected non-empty text after adding memory")
@@ -213,7 +234,10 @@ func TestMemoryStore_NoDuplicateLoad(t *testing.T) {
 		ProjectPath: "",
 		memories:    []Memory{},
 	}
-	store1.Add("Single memory", false)
+	_, err := store1.Add("Single memory", false)
+	if err != nil {
+		t.Fatalf("Failed to add memory: %v", err)
+	}
 
 	// ProjectPathとGlobalPathが同じストアを作成（本来は発生しないが念のため）
 	store2 := &MemoryStore{
