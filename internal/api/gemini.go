@@ -172,7 +172,7 @@ func (p *GeminiProvider) ChatWithTools(ctx context.Context, systemPrompt string,
 			return "", fmt.Errorf("Gemini API error (status %d): empty response body. Check API key and model name '%s'", resp.StatusCode, model)
 		}
 		// デバッグ: エラーボディをログ出力
-		fmt.Fprintf(os.Stderr, "\n[DEBUG] Gemini API Error Response:\n%s\n", string(body))
+		_, _ = fmt.Fprintf(os.Stderr, "\n[DEBUG] Gemini API Error Response:\n%s\n", string(body))
 		return "", sanitizeErrorMessage(body, resp.StatusCode)
 	}
 
@@ -367,7 +367,7 @@ func (p *GeminiProvider) ChatWithImage(ctx context.Context, systemPrompt string,
 			return "", fmt.Errorf("Gemini API error (status %d): empty response body. Check API key and model name '%s'", resp.StatusCode, model)
 		}
 		// デバッグ: エラーボディをログ出力
-		fmt.Fprintf(os.Stderr, "\n[DEBUG] Gemini API Error Response (with image):\n%s\n", string(body))
+		_, _ = fmt.Fprintf(os.Stderr, "\n[DEBUG] Gemini API Error Response (with image):\n%s\n", string(body))
 		return "", sanitizeErrorMessage(body, resp.StatusCode)
 	}
 
