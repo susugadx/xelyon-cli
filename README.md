@@ -427,6 +427,30 @@ MIT
 
 ## バージョン履歴
 
+### v0.28.3 Homebrew Tap自動更新対応 (2026-01-10)
+- 🍺 **Homebrew Tap トークン設定**: `HOMEBREW_TAP_TOKEN` 環境変数でFormula自動更新
+- 📦 **homebrew-tap README更新**: インストール・アップデート・アンインストール方法を明記
+
+### v0.28.2 CGO不要ビルド対応 (2026-01-10)
+- 🏗️ **ビルドタグ実装**: `norepomap` タグでtree-sitter依存を除外
+- 🌍 **クロスコンパイル対応**: CGO無効でLinux/macOS/Windows向けビルド可能
+- 📝 **スタブ実装**: Repo Map機能を無効化（CGO無効時はメッセージ表示）
+
+### v0.28.1 GoReleaser v6対応 (2026-01-10)
+- 🔧 **GitHub Actions修正**: goreleaser-action v5 → v6（version: 2対応）
+
+### v0.28.0 リリース自動化完了 (2026-01-10)
+- 🚀 **GoReleaser設定強化**: version: 2 対応、Changelogグループ化
+- 📦 **バイナリ情報埋め込み**: Version, Commit, Date をldflags経由で設定
+- 🍺 **Homebrew Tap自動更新**: リリース時に `susugadx/homebrew-tap` へFormula自動push
+- 📄 **GitHub Releases自動化**: タグpush時に全プラットフォーム向けバイナリを自動生成・アップロード
+
+### v0.27.0 Phase 2テスト実装完了 (2026-01-10)
+- ✅ **internal/tools/ テスト追加**: read_file (100%), write_file (90.9%), str_replace (72.2%)
+- ✅ **internal/api/ テスト追加**: validator (84-100%), provider (100%)
+- 🧪 **テスト結果**: 95 tests passing, 14.7% overall coverage（対象パッケージは95%+）
+- 🛠️ **テストヘルパー拡張**: `ReadFile()` 追加、confirm/ValidatePath モック対応
+
 ### v0.26.0 テスト実装開始 (2026-01-09)
 - 🧪 **テストインフラ構築**: 包括的なテストスイートの基盤を整備
   - `internal/testutil/` パッケージ追加（テストヘルパー関数）
