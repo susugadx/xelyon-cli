@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
@@ -28,8 +29,15 @@ func isSameToolCall(tc1, tc2 *tools.ToolCall) bool {
 
 // chat はAIと対話する
 func (a *Agent) chat(input string) {
+	// デバッグ: chat()関数の入力
+	fmt.Fprintf(os.Stderr, "\n[DEBUG] chat() called\n")
+	fmt.Fprintf(os.Stderr, "  Input length: %d chars\n", len(input))
+	fmt.Fprintf(os.Stderr, "  Plan Mode: %v\n", a.PlanMode)
+	fmt.Fprintf(os.Stderr, "  History length: %d messages\n", len(a.History))
+
 	// Plan Mode が有効な場合、RunPlanMode を呼ぶ
 	if a.PlanMode {
+		fmt.Fprintf(os.Stderr, "[DEBUG] Entering Plan Mode\n")
 		ctx := context.Background()
 		if err := a.RunPlanMode(ctx, input); err != nil {
 			red.Printf("Plan execution failed: %v\n", err)
@@ -104,17 +112,30 @@ func (a *Agent) callAPIWithRetry() (string, error) {
 	initialDelay := cfg.APIRetry.InitialDelay
 	maxDelay := cfg.APIRetry.MaxDelay
 
+	// デバッグ: API呼び出し前の情報
+	fmt.Fprintf(os.Stderr, "[DEBUG] callAPIWithRetry() started\n")
+	fmt.Fprintf(os.Stderr, "  Provider: %s\n", a.CurrentProvider.Name())
+	fmt.Fprintf(os.Stderr, "  Model: %s\n", a.CurrentModel)
+	fmt.Fprintf(os.Stderr, "  Max retries: %d\n", maxRetries)
+
 	var response string
 	var err error
 
 	for retry := 0; retry < maxRetries; retry++ {
+		fmt.Fprintf(os.Stderr, "[DEBUG] API call attempt %d/%d\n", retry+1, maxRetries)
+
 		// API呼び出しタイムアウト設定（3分）
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		response, err = a.CurrentProvider.ChatWithTools(ctx, a.SystemPrompt, a.History, a.CurrentModel)
 		cancel() // リソースリーク防止
+
 		if err == nil {
+			fmt.Fprintf(os.Stderr, "[DEBUG] API call succeeded\n")
+			fmt.Fprintf(os.Stderr, "  Response length: %d chars\n", len(response))
 			return response, nil
 		}
+
+		fmt.Fprintf(os.Stderr, "[DEBUG] API call failed: %v\n", err)
 
 		if retry < maxRetries-1 {
 			// 待機時間計算：initialDelay * (retry + 1) だが、maxDelay を超えない
@@ -235,6 +256,11 @@ func (a *Agent) handleNormalResponse(response string) {
 
 // chatWithImage は画像付きメッセージでAIと対話する
 func (a *Agent) chatWithImage(input string, image *api.ImageData) {
+	// デバッグ: chatWithImage()関数の入力
+	fmt.Fprintf(os.Stderr, "\n[DEBUG] chatWithImage() called\n")
+	fmt.Fprintf(os.Stderr, "  Image path: %s\n", image.Path)
+	fmt.Fprintf(os.Stderr, "  Image size: %d bytes\n", image.Size)
+
 	// プロバイダーが画像対応かチェック
 	if !a.CurrentProvider.SupportsImages() {
 		yellow.Printf("Warning: %s does not support images. The image will be ignored.\n", a.CurrentProvider.Name())
@@ -262,15 +288,20 @@ func (a *Agent) chatWithImage(input string, image *api.ImageData) {
 	}
 
 	// 画像付きAPI呼び出し
+	fmt.Fprintf(os.Stderr, "[DEBUG] Calling ChatWithImage API...\n")
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 
 	response, err := a.CurrentProvider.ChatWithImage(ctx, a.SystemPrompt, a.History[:len(a.History)-1], input, image, a.CurrentModel)
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "[DEBUG] ChatWithImage failed: %v\n", err)
 		red.Printf("エラー: %v\n", err)
 		yellow.Println("API呼び出しに失敗しました。ネットワーク接続を確認してください。")
 		return
 	}
+
+	fmt.Fprintf(os.Stderr, "[DEBUG] ChatWithImage succeeded\n")
+	fmt.Fprintf(os.Stderr, "  Response length: %d chars\n", len(response))
 
 	// 通常の回答処理
 	a.handleNormalResponse(response)
