@@ -43,6 +43,7 @@ type Agent struct {
 	changeStorage   *history.ChangeStorage // 永続的変更履歴
 	mcpManager      *mcp.Manager
 	AutoApprove     bool          // --auto-approve フラグ
+	PlanMode        bool          // --plan フラグ（Plan Mode有効化）
 	Stats           *SessionStats // セッション統計情報
 	lastOutputs     []string      // 最後のAI出力履歴（最大10件）
 }
@@ -282,7 +283,7 @@ func IsAPIKeyAvailable(provider string) bool {
 	}
 }
 
-func RunInteractive(model string, provider api.Provider, autoApprove bool) {
+func RunInteractive(model string, provider api.Provider, autoApprove, planMode bool) {
 	// 監査ログ初期化（環境変数で制御: XELYON_AUDIT_LOG=1 で有効化）
 	auditEnabled := os.Getenv("XELYON_AUDIT_LOG") == "1"
 	if err := audit.Init(auditEnabled); err != nil {
@@ -294,6 +295,7 @@ func RunInteractive(model string, provider api.Provider, autoApprove bool) {
 
 	agent := NewAgent(model, provider)
 	agent.AutoApprove = autoApprove
+	agent.PlanMode = planMode // Plan Modeフラグを設定
 	tools.SetAutoApprove(autoApprove) // ツールに --auto-approve 設定を伝える
 	defer agent.Cleanup()             // グレースフルシャットダウン
 
@@ -478,31 +480,32 @@ func loadProjectConfig() string {
 	}
 	return ""
 }
-func RunInteractiveWithResume(model string, provider api.Provider, autoApprove bool) {
+func RunInteractiveWithResume(model string, provider api.Provider, autoApprove, planMode bool) {
 	storage, err := history.NewStorage()
 	if err != nil {
 		red.Printf("Failed to initialize storage: %v\n", err)
-		RunInteractive(model, provider, autoApprove)
+		RunInteractive(model, provider, autoApprove, planMode)
 		return
 	}
 
 	sessionID, err := storage.GetLastSession()
 	if err != nil {
 		yellow.Println("No previous session found, starting new session")
-		RunInteractive(model, provider, autoApprove)
+		RunInteractive(model, provider, autoApprove, planMode)
 		return
 	}
 
 	session, err := storage.Load(sessionID)
 	if err != nil {
 		red.Printf("Failed to load session: %v\n", err)
-		RunInteractive(model, provider, autoApprove)
+		RunInteractive(model, provider, autoApprove, planMode)
 		return
 	}
 
 	// ロード済みセッションでAgent作成
 	agent := NewAgent(model, provider)
 	agent.AutoApprove = autoApprove
+	agent.PlanMode = planMode
 	tools.SetAutoApprove(autoApprove) // ツールに --auto-approve 設定を伝える
 	agent.session = session
 	agent.History = session.ToAPIMessages()

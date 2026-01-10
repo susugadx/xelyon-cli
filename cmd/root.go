@@ -30,6 +30,7 @@ var (
 	diffLines     int
 	outputFormat  string
 	headless      bool
+	planMode      bool
 )
 
 const projectConfigFile = "XELYON.md"
@@ -230,13 +231,13 @@ Examples:
 
 		// --resume フラグチェック
 		if resume && len(args) == 0 && len(files) == 0 {
-			agent.RunInteractiveWithResume(model, provider, autoApprove)
+			agent.RunInteractiveWithResume(model, provider, autoApprove, planMode)
 			return
 		}
 
 		// 引数なし & ファイル指定なし → 対話モード
 		if len(args) == 0 && len(files) == 0 {
-			agent.RunInteractive(model, provider, autoApprove)
+			agent.RunInteractive(model, provider, autoApprove, planMode)
 			return
 		}
 
@@ -360,6 +361,9 @@ func init() {
 	// 新規: --output-format/--headless フラグ
 	rootCmd.Flags().StringVar(&outputFormat, "output-format", "text", "Output format: text or json")
 	rootCmd.Flags().BoolVar(&headless, "headless", false, "Run in headless mode (JSON output, no UI)")
+
+	// 新規: --plan フラグ
+	rootCmd.Flags().BoolVar(&planMode, "plan", false, "Enable plan mode (autonomous execution with approval)")
 }
 
 func Execute() {
