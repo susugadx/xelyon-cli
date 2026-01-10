@@ -528,6 +528,275 @@ go build -o xelyon
 - APIリトライのカスタマイズ → [Issue #17](https://github.com/susugadx/xelyon-cli/issues/17)
 - 差分表示のカスタマイズ → [Issue #18](https://github.com/susugadx/xelyon-cli/issues/18)
 
+## v0.34.0 機能追加
+
+### タイムスタンプ付きバックアップ & .gitignore自動管理 (Issue #11, #15)
+
+**概要**: バックアップファイルにタイムスタンプを付与し、複数世代を保持する機能を実装。また、初回バックアップ作成時に `.gitignore` へ `*.bak*` パターンを自動追加する機能を実装。
+
+#### 実装ファイル
+- `internal/config/config.go`: `BackupConfig` 構造体追加
+- `internal/tools/common.go`: `createBackup()`, `cleanupOldBackups()` 関数を修正/追加
+- `internal/tools/gitignore.go`: `.gitignore` 管理機能（新規作成）
+
+#### 主要機能
+
+##### 1. タイムスタンプ付きバックアップ
+
+**バックアップ形式**:
+```
+元ファイル: config.yaml
+バックアップ: config.yaml.bak.20260110_153045
+```
+
+**実装** (`internal/tools/common.go`):
+```go
+func createBackup(filePath string) (string, error) {
+	// ファイルが存在しない場合はスキップ（新規作成）
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		return "", nil
+	}
+
+	// .gitignore自動追加（初回のみ）
+	if err := ensureGitignore(filepath.Dir(filePath)); err != nil {
+		yellow.Printf("Warning: Failed to update .gitignore: %v\n", err)
+	}
+
+	// タイムスタンプ付きバックアップパス生成
+	timestamp := time.Now().Format("20060102_150405")
+	backupPath := fmt.Sprintf("%s.bak.%s", filePath, timestamp)
+
+	// バックアップ作成
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read file for backup: %w", err)
+	}
+
+	if err := os.WriteFile(backupPath, content, 0644); err != nil {
+		return "", fmt.Errorf("failed to create backup: %w", err)
+	}
+
+	// 古いバックアップを削除（maxGenerationsを超えたもの）
+	if err := cleanupOldBackups(filePath); err != nil {
+		yellow.Printf("Warning: Failed to cleanup old backups: %v\n", err)
+	}
+
+	return backupPath, nil
+}
+```
+
+**ポイント**:
+- タイムスタンプ形式: `YYYYMMdd_HHmmss`
+- ファイル名のソートで古い順に並ぶ
+- 既存の `.bak` 形式から完全移行
+
+##### 2. 古いバックアップの自動削除
+
+**実装** (`internal/tools/common.go`):
+```go
+func cleanupOldBackups(filePath string) error {
+	// 設定から最大世代数を取得
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		return err
+	}
+	maxGenerations := cfg.Backup.MaxGenerations
+	if maxGenerations <= 0 {
+		maxGenerations = 5 // デフォルト
+	}
+
+	// 同じファイルのバックアップを検索
+	dir := filepath.Dir(filePath)
+	baseName := filepath.Base(filePath)
+	pattern := fmt.Sprintf("%s.bak.*", baseName)
+
+	matches, err := filepath.Glob(filepath.Join(dir, pattern))
+	if err != nil {
+		return err
+	}
+
+	// バックアップが最大世代数以下なら削除不要
+	if len(matches) <= maxGenerations {
+		return nil
+	}
+
+	// タイムスタンプでソート（古い順）
+	sort.Strings(matches)
+
+	// 古いものから削除
+	deleteCount := len(matches) - maxGenerations
+	for i := 0; i < deleteCount; i++ {
+		if err := os.Remove(matches[i]); err != nil {
+			yellow.Printf("Warning: Failed to delete old backup %s: %v\n", matches[i], err)
+		}
+	}
+
+	return nil
+}
+```
+
+**ポイント**:
+- `filepath.Glob()` で同じファイルのバックアップのみ検索
+- `sort.Strings()` でタイムスタンプ順にソート
+- 最大世代数を超えた古いファイルを削除
+- 個別の削除失敗は続行
+
+##### 3. .gitignore自動管理
+
+**実装** (`internal/tools/gitignore.go`):
+```go
+func ensureGitignore(dir string) error {
+	gitignoreCheckedLock.Lock()
+	defer gitignoreCheckedLock.Unlock()
+
+	// すでにこのディレクトリで確認済みの場合はスキップ
+	if gitignoreAddedFlag[dir] {
+		return nil
+	}
+
+	// .gitignore のパスを決定（リポジトリルートまたはカレントディレクトリ）
+	gitignorePath := findGitignorePath(dir)
+	if gitignorePath == "" {
+		gitignoreAddedFlag[dir] = true
+		return nil
+	}
+
+	// .gitignore にすでに *.bak* パターンが含まれているかチェック
+	exists, _ := fileExists(gitignorePath)
+	if exists {
+		hasPattern, _ := gitignoreHasBackupPattern(gitignorePath)
+		if hasPattern {
+			gitignoreAddedFlag[dir] = true
+			return nil
+		}
+	}
+
+	// ユーザーに確認
+	yellow.Printf("📝 .gitignore にバックアップファイルを追加\n")
+	yellow.Print("Add to .gitignore? (y/n): ")
+
+	reader := bufio.NewReader(os.Stdin)
+	input, _ := reader.ReadString('\n')
+	input = strings.TrimSpace(strings.ToLower(input))
+
+	if input != "y" && input != "yes" {
+		yellow.Println("Skipped")
+		gitignoreAddedFlag[dir] = true
+		return nil
+	}
+
+	// .gitignore に追加
+	if err := addBackupPatternsToGitignore(gitignorePath); err != nil {
+		return err
+	}
+
+	green.Printf("✅ .gitignore に *.bak* パターンを追加しました\n")
+	gitignoreAddedFlag[dir] = true
+	return nil
+}
+```
+
+**追加内容** (`.gitignore`):
+```
+# XELYON CLI backup files
+*.bak
+*.bak.*
+```
+
+**ポイント**:
+- **初回のみ確認**: `gitignoreAddedFlag` でディレクトリごとに追加済みフラグを管理
+- **リポジトリルート検出**: `.git` ディレクトリを探してルートの `.gitignore` を使用
+- **既存パターンチェック**: すでに `*.bak` パターンがあれば追加しない
+- **スレッドセーフ**: `sync.Mutex` で並行アクセスを保護
+
+##### 4. 設定ファイル拡張
+
+**Config構造体** (`internal/config/config.go`):
+```go
+type Config struct {
+	DefaultProvider string
+	DefaultModel    string
+	ProviderModels  map[string]ProviderModelConfig
+	Compression     CompressionConfig
+	Backup          BackupConfig  // 追加
+}
+
+type BackupConfig struct {
+	MaxGenerations int `yaml:"max_generations"` // 保持する世代数（デフォルト5）
+}
+```
+
+**デフォルト設定**:
+```go
+Backup: BackupConfig{
+	MaxGenerations: 5,
+}
+```
+
+**設定例** (`~/.xelyon/config.yaml`):
+```yaml
+backup:
+  max_generations: 10  # 10世代保持
+```
+
+#### 技術的詳細
+
+**バックアップ作成タイミング**:
+- `write_file`: 既存ファイルの上書き時
+- `str_replace`: ファイル編集時
+- `append_file`, `prepend_file`, `insert_after`, `insert_before`: ファイル追加時
+- `delete_file`: ファイル削除前
+- `move_file`: ファイル移動前
+- `delete_lines`: 行削除前
+
+**削除ロジック**:
+1. 同じファイルのバックアップを検索 (`*.bak.*` パターン)
+2. タイムスタンプでソート（ファイル名の辞書順 = 時系列順）
+3. 最大世代数を超えた古いファイルを削除
+
+**Undo機能との互換性**:
+- `/undo` コマンドは最新のバックアップ (`FileChange.BackupPath`) を使用
+- タイムスタンプ付きバックアップなので、複数世代が保持される
+- 手動で古い世代に戻すことも可能
+
+#### 使用例
+
+##### バックアップ作成の流れ
+```
+# 1回目の編集（初回）
+> "config.yaml を編集して"
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📝 .gitignore にバックアップファイルを追加
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+バックアップファイル (*.bak*) を .gitignore に追加しますか？
+場所: /path/to/project/.gitignore
+
+Add to .gitignore? (y/n): y
+✅ .gitignore に *.bak* パターンを追加しました
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+→ config.yaml.bak.20260110_143000 作成
+
+# 2回目の編集
+> "config.yaml を再編集"
+→ config.yaml.bak.20260110_143500 作成
+
+# 6回目の編集（最大世代数5を超える）
+> "config.yaml を修正"
+→ config.yaml.bak.20260110_145000 作成
+→ 最も古いバックアップ (config.yaml.bak.20260110_143000) を自動削除
+```
+
+#### 活用シーン
+- 複数世代のバックアップから過去の状態に戻したい
+- Git管理外にバックアップを置いてコミット履歴を汚さない
+- 手動で古い世代を確認・復元したい
+- バックアップファイルのディスク使用量を制限したい
+
+詳細は [Issue #11](https://github.com/susugadx/xelyon-cli/issues/11), [Issue #15](https://github.com/susugadx/xelyon-cli/issues/15) を参照。
+
+---
+
 ## v0.33.0 機能追加
 
 ### /changes と /undo all コマンド (Issue #12, #13)

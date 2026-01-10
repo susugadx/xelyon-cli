@@ -19,6 +19,7 @@ type Config struct {
 	DefaultModel    string                         `yaml:"default_model"`
 	ProviderModels  map[string]ProviderModelConfig `yaml:"provider_models"`
 	Compression     CompressionConfig              `yaml:"compression,omitempty"`
+	Backup          BackupConfig                   `yaml:"backup,omitempty"`
 	// 将来の拡張用
 	// Cloud CloudConfig `yaml:"cloud,omitempty"`
 }
@@ -28,6 +29,11 @@ type CompressionConfig struct {
 	AutoCompress    bool `yaml:"auto_compress"`    // 自動圧縮を有効化
 	ThresholdTokens int  `yaml:"threshold_tokens"` // 自動圧縮のトークン閾値
 	KeepRecent      int  `yaml:"keep_recent"`      // 保持する最新メッセージ数
+}
+
+// BackupConfig はバックアップファイルの設定
+type BackupConfig struct {
+	MaxGenerations int `yaml:"max_generations"` // 保持する世代数（デフォルト5）
 }
 
 // ProviderModelConfig はプロバイダーごとのモデル設定
@@ -71,6 +77,9 @@ func DefaultConfig() *Config {
 			AutoCompress:    false, // デフォルトは手動圧縮のみ
 			ThresholdTokens: 40000,
 			KeepRecent:      10,
+		},
+		Backup: BackupConfig{
+			MaxGenerations: 5, // デフォルトは5世代保持
 		},
 	}
 }
