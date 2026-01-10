@@ -12,6 +12,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/repomap"
+	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/version"
 )
 
@@ -33,7 +34,9 @@ func handleSpecialCommand(input string, agent *Agent) bool {
 	case "/sessions":
 		return handleSessionsCommand(agent)
 	case "/undo":
-		return handleUndoCommand(agent)
+		return handleUndoCommand(agent, args)
+	case "/changes":
+		return handleChangesCommand(agent)
 	case "/config":
 		return handleConfigCommand(args)
 	case "/stats":
@@ -167,11 +170,16 @@ func handleSessionsCommand(agent *Agent) bool {
 	return true
 }
 
-// handleUndoCommand は直前のファイル変更を取り消す
-func handleUndoCommand(agent *Agent) bool {
+// handleUndoCommand は直前のファイル変更を取り消す（またはすべて取り消す）
+func handleUndoCommand(agent *Agent, args []string) bool {
 	if len(agent.changeStack) == 0 {
 		yellow.Println("No changes to undo")
 		return true
+	}
+
+	// /undo all の場合
+	if len(args) > 0 && args[0] == "all" {
+		return handleUndoAll(agent)
 	}
 
 	// 最後の変更を取得
@@ -227,6 +235,157 @@ func handleUndoCommand(agent *Agent) bool {
 	green.Printf("✅ Undone: %s\n", lastChange.Description)
 	green.Printf("   Restored from: %s\n", lastChange.BackupPath)
 	return true
+}
+
+// handleUndoAll はすべてのファイル変更を取り消す
+func handleUndoAll(agent *Agent) bool {
+	totalChanges := len(agent.changeStack)
+
+	// 確認プロンプト
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	cyan.Printf("⚠️  Undo All Changes / すべての変更を取り消し\n")
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Printf("取り消す変更数: %d 件\n", totalChanges)
+	yellow.Println("\n⚠️  Warning: すべてのファイルがバックアップから復元されます")
+
+	// 確認
+	fmt.Printf("\nContinue? (y/n): ")
+	reader := bufio.NewReader(os.Stdin)
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		red.Printf("Failed to read input: %v\n", err)
+		return true
+	}
+
+	input = strings.TrimSpace(strings.ToLower(input))
+	if input != "y" && input != "yes" {
+		yellow.Println("Cancelled")
+		return true
+	}
+
+	// 逆順で処理（新しい変更から古い変更へ）
+	successCount := 0
+	failCount := 0
+
+	fmt.Println()
+	cyan.Println("Restoring files...")
+
+	for i := len(agent.changeStack) - 1; i >= 0; i-- {
+		change := agent.changeStack[i]
+
+		// バックアップがない場合
+		if change.BackupPath == "" {
+			yellow.Printf("  ⚠️  [%d/%d] %s - バックアップなし\n", totalChanges-i, totalChanges, change.FilePath)
+			failCount++
+			continue
+		}
+
+		// バックアップファイルを確認
+		if _, err := os.Stat(change.BackupPath); os.IsNotExist(err) {
+			yellow.Printf("  ⚠️  [%d/%d] %s - バックアップファイルが見つかりません\n", totalChanges-i, totalChanges, change.FilePath)
+			failCount++
+			continue
+		}
+
+		// バックアップから復元
+		backupContent, err := os.ReadFile(change.BackupPath)
+		if err != nil {
+			red.Printf("  ❌ [%d/%d] %s - バックアップ読み込み失敗: %v\n", totalChanges-i, totalChanges, change.FilePath, err)
+			failCount++
+			continue
+		}
+
+		if err := os.WriteFile(change.FilePath, backupContent, 0644); err != nil {
+			red.Printf("  ❌ [%d/%d] %s - 復元失敗: %v\n", totalChanges-i, totalChanges, change.FilePath, err)
+			failCount++
+			continue
+		}
+
+		green.Printf("  ✅ [%d/%d] %s\n", totalChanges-i, totalChanges, change.FilePath)
+		successCount++
+	}
+
+	// スタックをクリア
+	agent.changeStack = []tools.FileChange{}
+
+	// 結果表示
+	fmt.Println()
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	green.Printf("✅ 成功: %d 件\n", successCount)
+	if failCount > 0 {
+		yellow.Printf("⚠️  失敗/スキップ: %d 件\n", failCount)
+	}
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+	return true
+}
+
+// handleChangesCommand は変更履歴を表示
+func handleChangesCommand(agent *Agent) bool {
+	if len(agent.changeStack) == 0 {
+		yellow.Println("変更履歴はありません")
+		return true
+	}
+
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	cyan.Printf("📝 Change History / 変更履歴 (%d 件)\n", len(agent.changeStack))
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Println()
+
+	for i, change := range agent.changeStack {
+		// 変更種別を日本語で表示
+		changeType := getChangeTypeJP(change.Tool)
+
+		// タイムスタンプ
+		timeStr := change.Timestamp.Format("15:04:05")
+
+		// Undo可能かチェック（バックアップファイルの存在確認）
+		canUndo := "❌"
+		if change.BackupPath != "" {
+			if _, err := os.Stat(change.BackupPath); err == nil {
+				canUndo = "✅"
+			}
+		}
+
+		// 表示
+		fmt.Printf("  [%d] %s %s\n", i+1, changeType, change.FilePath)
+		fmt.Printf("      時刻: %s | ツール: %s | Undo: %s\n", timeStr, change.Tool, canUndo)
+
+		// 説明がある場合は表示
+		if change.Description != "" {
+			fmt.Printf("      説明: %s\n", change.Description)
+		}
+
+		fmt.Println()
+	}
+
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	yellow.Println("使い方:")
+	yellow.Println("  /undo           - 最後の変更を取り消し")
+	yellow.Println("  /undo all       - すべての変更を取り消し")
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+	return true
+}
+
+// getChangeTypeJP は変更種別を日本語で返す
+func getChangeTypeJP(tool string) string {
+	switch tool {
+	case "write_file":
+		return "📝 作成"
+	case "str_replace", "append_file", "prepend_file", "insert_after", "insert_before":
+		return "✏️  編集"
+	case "delete_file":
+		return "🗑️  削除"
+	case "move_file":
+		return "📦 移動"
+	case "copy_file":
+		return "📋 コピー"
+	case "delete_lines":
+		return "✂️  行削除"
+	default:
+		return "🔧 変更"
+	}
 }
 
 // handleModelCommand はモデルの表示・切り替えを処理
@@ -706,7 +865,8 @@ func printHelp() {
   /save               - Save current session
   /load [id]          - Load session (or last if no ID)
   /sessions           - List recent sessions
-  /undo               - Undo last file change (restore from .bak)
+  /undo [all]         - Undo last file change (restore from .bak) or undo all changes
+  /changes            - Show file change history with undo status
   /stats              - Show session statistics (time, messages, tokens, cost)
   /copy [code] [-n N] - Copy last AI output to clipboard (code=code blocks only, -n=N-th last output)
   /compress [N]       - Compress history (keep recent N messages, default: 10)

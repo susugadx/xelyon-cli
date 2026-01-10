@@ -528,6 +528,203 @@ go build -o xelyon
 - APIリトライのカスタマイズ → [Issue #17](https://github.com/susugadx/xelyon-cli/issues/17)
 - 差分表示のカスタマイズ → [Issue #18](https://github.com/susugadx/xelyon-cli/issues/18)
 
+## v0.33.0 機能追加
+
+### /changes と /undo all コマンド (Issue #12, #13)
+
+**概要**: セッション中のファイル変更履歴を表示する `/changes` コマンドと、すべての変更を一括で取り消す `/undo all` コマンドを実装。
+
+#### 実装ファイル
+- `internal/agent/agent_commands.go`: `handleChangesCommand()`, `handleUndoAll()`, `getChangeTypeJP()` 関数
+- `internal/tools/types.go`: `FileChange` 構造体（既存）
+
+#### 主要機能
+
+##### 1. 変更履歴の表示 (`/changes`)
+
+```go
+func handleChangesCommand(agent *Agent) bool {
+	if len(agent.changeStack) == 0 {
+		yellow.Println("変更履歴はありません")
+		return true
+	}
+
+	for i, change := range agent.changeStack {
+		// 変更種別を日本語で表示
+		changeType := getChangeTypeJP(change.Tool)
+
+		// Undo可能かチェック（バックアップファイルの存在確認）
+		canUndo := "❌"
+		if change.BackupPath != "" {
+			if _, err := os.Stat(change.BackupPath); err == nil {
+				canUndo = "✅"
+			}
+		}
+
+		// 表示
+		fmt.Printf("  [%d] %s %s\n", i+1, changeType, change.FilePath)
+		fmt.Printf("      時刻: %s | ツール: %s | Undo: %s\n",
+			change.Timestamp.Format("15:04:05"), change.Tool, canUndo)
+	}
+}
+```
+
+**変更種別アイコン**:
+- 📝 作成 (write_file)
+- ✏️  編集 (str_replace, append_file, prepend_file, insert_after, insert_before)
+- 🗑️  削除 (delete_file)
+- 📦 移動 (move_file)
+- 📋 コピー (copy_file)
+- ✂️  行削除 (delete_lines)
+
+**ポイント**:
+- バックアップファイルの存在を自動確認
+- Undoステータスを視覚的に表示（✅/❌）
+- タイムスタンプと説明を含む詳細情報
+
+##### 2. すべての変更を取り消し (`/undo all`)
+
+```go
+func handleUndoAll(agent *Agent) bool {
+	totalChanges := len(agent.changeStack)
+
+	// 確認プロンプト
+	fmt.Printf("取り消す変更数: %d 件\n", totalChanges)
+	yellow.Println("\n⚠️  Warning: すべてのファイルがバックアップから復元されます")
+
+	// ユーザー確認
+	if !confirmAction() {
+		yellow.Println("Cancelled")
+		return true
+	}
+
+	// 逆順で処理（新しい変更から古い変更へ）
+	successCount := 0
+	failCount := 0
+
+	for i := len(agent.changeStack) - 1; i >= 0; i-- {
+		change := agent.changeStack[i]
+
+		// バックアップから復元
+		if err := restoreFromBackup(change); err != nil {
+			red.Printf("  ❌ [%d/%d] %s - 復元失敗: %v\n",
+				totalChanges-i, totalChanges, change.FilePath, err)
+			failCount++
+			continue
+		}
+
+		green.Printf("  ✅ [%d/%d] %s\n", totalChanges-i, totalChanges, change.FilePath)
+		successCount++
+	}
+
+	// スタックをクリア
+	agent.changeStack = []tools.FileChange{}
+
+	// 結果表示
+	green.Printf("✅ 成功: %d 件\n", successCount)
+	if failCount > 0 {
+		yellow.Printf("⚠️  失敗/スキップ: %d 件\n", failCount)
+	}
+}
+```
+
+**ポイント**:
+- **逆順処理**: 新しい変更から古い変更へ復元（依存関係を考慮）
+- **エラーハンドリング**: 個別のファイル復元が失敗しても処理を継続
+- **確認プロンプト**: 実行前に変更数を表示して確認
+- **詳細な進捗表示**: `[1/5]` 形式で進捗状況を表示
+- **結果サマリー**: 成功/失敗の件数を最後に表示
+
+##### 3. /undo コマンドの拡張
+
+```go
+func handleUndoCommand(agent *Agent, args []string) bool {
+	// /undo all の場合
+	if len(args) > 0 && args[0] == "all" {
+		return handleUndoAll(agent)
+	}
+
+	// 既存の単一undo処理
+	// ...
+}
+```
+
+**変更点**:
+- 引数 `args []string` を追加
+- `args[0] == "all"` の場合は `handleUndoAll()` を呼び出し
+- 既存の単一undo機能はそのまま維持
+
+#### 使用例
+
+##### 変更履歴の確認
+```
+> /changes
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📝 Change History / 変更履歴 (5 件)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  [1] 📝 作成 internal/api/new_feature.go
+      時刻: 14:23:15 | ツール: write_file | Undo: ✅
+
+  [2] ✏️  編集 internal/api/client.go
+      時刻: 14:25:30 | ツール: str_replace | Undo: ✅
+      説明: タイムアウト設定を30秒に変更
+
+  [3] 🗑️  削除 tmp/old_file.go
+      時刻: 14:27:10 | ツール: delete_file | Undo: ✅
+```
+
+##### すべての変更を取り消し
+```
+> /undo all
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚠️  Undo All Changes / すべての変更を取り消し
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+取り消す変更数: 4 件
+
+⚠️  Warning: すべてのファイルがバックアップから復元されます
+
+Continue? (y/n): y
+
+Restoring files...
+  ✅ [1/4] internal/api/utils.go
+  ✅ [2/4] tmp/old_file.go
+  ✅ [3/4] internal/api/client.go
+  ✅ [4/4] internal/api/new_feature.go
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ 成功: 4 件
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+#### 活用シーン
+- AIが意図しない変更を加えた場合のロールバック
+- 試行錯誤の結果、変更前の状態に戻したい場合
+- セッション終了前に変更内容を確認したい場合
+- 複数の変更を一度にロールバックしたい場合
+
+#### 技術的詳細
+
+**FileChange構造体** (internal/tools/types.go):
+```go
+type FileChange struct {
+	FilePath    string
+	BackupPath  string    // .bakファイルのパス
+	Timestamp   time.Time
+	Tool        string    // ツール名（write_file, str_replace, etc.）
+	Description string    // 変更の説明
+}
+```
+
+**changeStack管理**:
+- `agent.changeStack []tools.FileChange` に変更履歴を格納
+- 最大10件まで保持（`MaxChangeStackSize = 10`）
+- 新しい変更は末尾に追加（LIFO: Last In, First Out）
+
+詳細は [Issue #12](https://github.com/susugadx/xelyon-cli/issues/12), [Issue #13](https://github.com/susugadx/xelyon-cli/issues/13) を参照。
+
+---
+
 ## v0.32.0 機能追加
 
 ### /use と /providers コマンド (Issue #8)

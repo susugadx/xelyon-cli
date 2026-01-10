@@ -156,6 +156,6 @@ func (a *Agent) suggestRollback() {
 
 	input = strings.TrimSpace(strings.ToLower(input))
 	if input == "y" || input == "yes" {
-		handleUndoCommand(a)
+		handleUndoCommand(a, []string{})
 	}
 }
