@@ -39,13 +39,39 @@ func ParsePlan(jsonStr string) (*Plan, error) {
 
 // ExtractPlanJSON はレスポンスからPlan JSONを抽出
 func ExtractPlanJSON(response string) (string, error) {
-	// ``` json で囲まれたJSON、またはJSONオブジェクトを抽出
-	start := strings.Index(response, "{\"steps\":")
-	if start == -1 {
-		start = strings.Index(response, "```json")
+	// 方法1: ```json ブロック内のJSONを探す
+	if idx := strings.Index(response, "```json"); idx != -1 {
+		start := strings.Index(response[idx:], "{")
 		if start != -1 {
-			start = strings.Index(response[start:], "{") + start
+			start += idx
+			end := findClosingBrace(response, start)
+			if end != -1 {
+				return response[start:end], nil
+			}
 		}
+	}
+
+	// 方法2: "steps" キーを含むJSONオブジェクトを探す（空白を無視）
+	// {"steps" または { "steps" または {\n"steps" などに対応
+	stepsPattern := []string{
+		"{\"steps\":",
+		"{ \"steps\":",
+		"{\n\"steps\":",
+		"{\n \"steps\":",
+		"{\n  \"steps\":",
+	}
+
+	start := -1
+	for _, pattern := range stepsPattern {
+		if idx := strings.Index(response, pattern); idx != -1 {
+			start = idx
+			break
+		}
+	}
+
+	// 方法3: 単純に最初の { を探す（最終手段）
+	if start == -1 {
+		start = strings.Index(response, "{")
 	}
 
 	if start == -1 {
@@ -53,26 +79,56 @@ func ExtractPlanJSON(response string) (string, error) {
 	}
 
 	// 対応する閉じ括弧を探す
-	depth := 0
-	end := -1
-	for i := start; i < len(response); i++ {
-		switch response[i] {
-		case '{':
-			depth++
-		case '}':
-			depth--
-			if depth == 0 {
-				end = i + 1
-				break
-			}
-		}
-	}
-
+	end := findClosingBrace(response, start)
 	if end == -1 {
 		return "", fmt.Errorf("incomplete plan JSON")
 	}
 
 	return response[start:end], nil
+}
+
+// findClosingBrace は対応する閉じ括弧の位置を探す
+func findClosingBrace(response string, start int) int {
+	depth := 0
+	inString := false
+	escaped := false
+
+	for i := start; i < len(response); i++ {
+		ch := response[i]
+
+		// エスケープ処理
+		if escaped {
+			escaped = false
+			continue
+		}
+		if ch == '\\' {
+			escaped = true
+			continue
+		}
+
+		// 文字列内チェック
+		if ch == '"' {
+			inString = !inString
+			continue
+		}
+
+		if inString {
+			continue
+		}
+
+		// 括弧の深さチェック
+		switch ch {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return i + 1
+			}
+		}
+	}
+
+	return -1
 }
 
 // FormatPlan は計画を見やすく整形
