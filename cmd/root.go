@@ -15,14 +15,18 @@ import (
 )
 
 var (
-	userID       string
-	files        []string
-	edit         bool
-	output       string
-	resume       bool
-	providerFlag string
-	modelFlag    string
-	autoApprove  bool
+	userID         string
+	files          []string
+	edit           bool
+	output         string
+	resume         bool
+	providerFlag   string
+	modelFlag      string
+	autoApprove    bool
+	loopThreshold  int
+	apiRetry       int
+	apiRetryDelay  int
+	diffLines      int
 )
 
 const projectConfigFile = "XELYON.md"
@@ -169,6 +173,35 @@ Examples:
   xelyon -f main.go "add logging" # With file context
   xelyon --think "design review"  # Deep thinking mode`,
 	Run: func(cmd *cobra.Command, args []string) {
+		// 設定を読み込み
+		cfg, err := config.LoadConfig()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: Failed to load config: %v\n", err)
+			cfg = config.DefaultConfig()
+		}
+
+		// 環境変数で上書き
+		cfg.ApplyEnvironmentOverrides()
+
+		// CLIフラグで上書き（0や-1の場合は設定しない）
+		var loopPtr, retryPtr, delayPtr, diffPtr *int
+		if loopThreshold > 0 {
+			loopPtr = &loopThreshold
+		}
+		if apiRetry > 0 {
+			retryPtr = &apiRetry
+		}
+		if apiRetryDelay > 0 {
+			delayPtr = &apiRetryDelay
+		}
+		if diffLines >= 0 {
+			diffPtr = &diffLines
+		}
+		cfg.ApplyFlagOverrides(loopPtr, retryPtr, delayPtr, diffPtr)
+
+		// グローバル設定として保存（agent側で参照できるように）
+		config.SetGlobalConfig(cfg)
+
 		model := getModel(cmd)
 		provider := getProvider()
 
@@ -291,6 +324,12 @@ func init() {
 
 	// 新規: --resume フラグ
 	rootCmd.Flags().BoolVar(&resume, "resume", false, "Resume last session")
+
+	// 新規: 設定カスタマイズフラグ
+	rootCmd.Flags().IntVar(&loopThreshold, "loop-threshold", 0, "Loop detection threshold (default: 3)")
+	rootCmd.Flags().IntVar(&apiRetry, "api-retry", 0, "API retry count (default: 3)")
+	rootCmd.Flags().IntVar(&apiRetryDelay, "api-retry-delay", 0, "API initial retry delay in seconds (default: 1)")
+	rootCmd.Flags().IntVar(&diffLines, "diff-lines", -1, "Diff context lines (default: 10, 0=no truncation)")
 
 	// 新規: --auto-approve/-y フラグ
 	rootCmd.Flags().BoolVarP(&autoApprove, "auto-approve", "y", false, "Automatically approve safe/medium operations (destructive ops still require confirmation)")

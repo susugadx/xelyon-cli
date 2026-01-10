@@ -263,12 +263,13 @@ func showImprovedDiff(oldStr, newStr string) {
 	oldLines := strings.Split(oldStr, "\n")
 	newLines := strings.Split(newStr, "\n")
 
-	maxLines := config.MaxDiffDisplayLines // 最大表示行数
+	cfg := config.GetGlobalConfig()
+	maxLines := cfg.Diff.ContextLines // 最大表示行数（0なら全行表示）
 
 	cyan.Println("\nBefore / 変更前:")
 	cyan.Println("┌" + strings.Repeat("─", 60) + "┐")
 	for i, line := range oldLines {
-		if i >= maxLines {
+		if maxLines > 0 && i >= maxLines {
 			yellow.Printf("│ ... (%d lines omitted / 行省略)\n", len(oldLines)-maxLines)
 			break
 		}
@@ -279,7 +280,7 @@ func showImprovedDiff(oldStr, newStr string) {
 	cyan.Println("\nAfter / 変更後:")
 	cyan.Println("┌" + strings.Repeat("─", 60) + "┐")
 	for i, line := range newLines {
-		if i >= maxLines {
+		if maxLines > 0 && i >= maxLines {
 			yellow.Printf("│ ... (%d lines omitted / 行省略)\n", len(newLines)-maxLines)
 			break
 		}
@@ -302,8 +303,11 @@ func showDiff(old, new, filename string) {
 		maxLines = len(newLines)
 	}
 
+	cfg := config.GetGlobalConfig()
+	contextLines := cfg.Diff.ContextLines // 0なら全行表示
+
 	diffCount := 0
-	for i := 0; i < maxLines && diffCount < config.MaxDiffIterations; i++ {
+	for i := 0; i < maxLines && (contextLines == 0 || diffCount < contextLines); i++ {
 		oldLine := ""
 		newLine := ""
 		if i < len(oldLines) {
@@ -326,7 +330,7 @@ func showDiff(old, new, filename string) {
 
 	if diffCount == 0 {
 		fmt.Println("(no changes)")
-	} else if diffCount >= config.MaxDiffIterations {
+	} else if contextLines > 0 && diffCount >= contextLines {
 		yellow.Println("... (more changes)")
 	}
 
