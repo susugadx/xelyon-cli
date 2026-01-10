@@ -167,6 +167,25 @@ func LoadConfig() (*Config, error) {
 		cfg.ProviderModels = DefaultConfig().ProviderModels
 	}
 
+	// ネストされた構造体のデフォルト値を適用（YAMLで省略された場合）
+	defaults := DefaultConfig()
+	if cfg.LoopDetection.Threshold == 0 {
+		cfg.LoopDetection = defaults.LoopDetection
+	}
+	if cfg.APIRetry.Count == 0 {
+		cfg.APIRetry = defaults.APIRetry
+	}
+	if cfg.Backup.MaxGenerations == 0 {
+		cfg.Backup = defaults.Backup
+	}
+	if cfg.Compression.ThresholdTokens == 0 {
+		cfg.Compression = defaults.Compression
+	}
+	if cfg.Diff.ContextLines == 0 {
+		// Diff.ContextLines は0が有効値なので、-1で未設定を判定
+		// ただし、現在の実装では0も有効なので、この条件は使わない
+	}
+
 	return &cfg, nil
 }
 
