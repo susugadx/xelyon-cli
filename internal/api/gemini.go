@@ -35,6 +35,11 @@ func (p *GeminiProvider) Name() string {
 	return "Gemini"
 }
 
+// SupportsImages は画像入力対応を返す
+func (p *GeminiProvider) SupportsImages() bool {
+	return true
+}
+
 // GeminiPart はGeminiの parts 構造
 type GeminiPart struct {
 	Text string `json:"text"`

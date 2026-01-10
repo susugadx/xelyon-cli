@@ -10,22 +10,27 @@ func IsInteractiveModeEnabled() bool {
 
 // ConfirmWithFeedback は対話的確認を行う
 // interactiveMode=true の場合は y/n/c、false の場合は従来の y/n
-func ConfirmWithFeedback(message string) (approved bool, comment string) {
+func ConfirmWithFeedback(message string) (approved bool, comment string, image *ImageData) {
 	if !IsInteractiveModeEnabled() {
 		// 従来の confirm() を使用
 		approved = confirm(message)
-		return approved, ""
+		return approved, "", nil
 	}
 
 	// 対話的確認モード
 	result := ConfirmInteractive(message)
 	switch result.Action {
 	case "yes":
-		return true, ""
+		return true, "", nil
 	case "comment":
 		// コメント = 修正要求 = 実行しない
-		return false, result.Comment
+		// 画像が添付されている場合は警告を表示
+		if result.Image != nil {
+			yellow.Println("⚠️  Note: Image input is currently under development")
+			yellow.Println("   Images will be supported in a future update")
+		}
+		return false, result.Comment, result.Image
 	default: // "no"
-		return false, ""
+		return false, "", nil
 	}
 }

@@ -18,6 +18,21 @@ type Provider interface {
 
 	// ChatWithTools はツール対応の会話を行う（ストリーミング）
 	ChatWithTools(ctx context.Context, systemPrompt string, history []Message, model string) (string, error)
+
+	// SupportsImages はプロバイダーが画像入力に対応しているかを返す
+	SupportsImages() bool
+}
+
+// SupportsImages はプロバイダー名から画像対応を判定
+func SupportsImages(providerName string) bool {
+	switch strings.ToLower(providerName) {
+	case "claude", "anthropic", "openai", "gemini":
+		return true
+	case "deepseek", "ollama", "groq":
+		return false
+	default:
+		return false
+	}
 }
 
 // sanitizeErrorMessage はエラーメッセージから機密情報を削除

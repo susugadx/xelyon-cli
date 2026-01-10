@@ -39,6 +39,11 @@ func (p *OllamaProvider) Name() string {
 	return "Ollama"
 }
 
+// SupportsImages は画像入力対応を返す
+func (p *OllamaProvider) SupportsImages() bool {
+	return false
+}
+
 // OllamaRequest はOllama APIリクエスト
 type OllamaRequest struct {
 	Model    string    `json:"model"`

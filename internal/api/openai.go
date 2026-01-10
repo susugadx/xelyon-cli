@@ -45,6 +45,11 @@ func (p *OpenAIProvider) Name() string {
 	return "OpenAI"
 }
 
+// SupportsImages は画像入力対応を返す
+func (p *OpenAIProvider) SupportsImages() bool {
+	return true
+}
+
 // ChatWithTools は Provider interface の実装（context対応）
 func (p *OpenAIProvider) ChatWithTools(ctx context.Context, systemPrompt string, history []Message, model string) (string, error) {
 	// メッセージ構築

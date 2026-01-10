@@ -51,6 +51,11 @@ func (p *DeepSeekProvider) Name() string {
 	return "DeepSeek"
 }
 
+// SupportsImages は画像入力対応を返す
+func (p *DeepSeekProvider) SupportsImages() bool {
+	return false
+}
+
 // ChatRequest はAPIリクエスト
 type ChatRequest struct {
 	Model    string    `json:"model"`

@@ -45,6 +45,11 @@ func (p *ClaudeProvider) Name() string {
 	return "Claude"
 }
 
+// SupportsImages は画像入力対応を返す
+func (p *ClaudeProvider) SupportsImages() bool {
+	return true
+}
+
 // ClaudeMessage はClaudeのメッセージ構造
 type ClaudeMessage struct {
 	Role    string `json:"role"`

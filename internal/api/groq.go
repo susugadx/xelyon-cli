@@ -46,6 +46,11 @@ func (p *GroqProvider) Name() string {
 	return "Groq"
 }
 
+// SupportsImages は画像入力対応を返す
+func (p *GroqProvider) SupportsImages() bool {
+	return false
+}
+
 // ChatWithTools は Provider interface の実装（context対応）
 func (p *GroqProvider) ChatWithTools(ctx context.Context, systemPrompt string, history []Message, model string) (string, error) {
 	// メッセージ構築

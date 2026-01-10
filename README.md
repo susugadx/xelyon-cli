@@ -653,9 +653,30 @@ Execute this tool? [y/n/c]: c
 - `n` - キャンセル
 - `c` - コメント（修正指示）
 
+**画像入力（開発中）**:
+コメント入力時に `image:` プレフィックスで画像を添付できます:
+
+```
+Execute this tool? [y/n/c]: c
+
+💬 Enter your comment (press Enter twice to finish):
+   Tip: Use 'image:/path/to/file.png' to attach an image
+> image:./error_screenshot.png
+🖼️  Image loaded: error_screenshot.png (245.2 KB)
+> このエラーを修正して
+>
+
+⚠️  Note: Image input is currently under development
+   Images will be supported in a future update
+```
+
+**サポート形式**: png, jpg, jpeg, gif, webp (最大10MB)
+**対応プロバイダー**: Claude, OpenAI, Gemini（実装予定）
+**非対応プロバイダー**: DeepSeek, Ollama, Groq
+
 **制限事項**:
 - 最大3回まで修正可能（無限ループ防止）
-- 現在は実験的機能（今後Phase 2で画像入力対応予定）
+- 画像入力は基礎実装のみ（Phase 2で本格実装予定）
 
 詳細は [Issue #1](https://github.com/susugadx/xelyon-cli/issues/1) を参照。
 
