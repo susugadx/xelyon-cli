@@ -103,6 +103,7 @@ xelyon --provider gemini --model gemini-2.0-flash-exp
 
 ```bash
 /help       # コマンド一覧
+/init       # XELYON.md生成（プロジェクト設定ファイル）
 /memory add プロジェクトではReactを使う  # 記憶を追加
 /plan on    # Plan Mode有効化
 /use gemini # プロバイダー切り替え

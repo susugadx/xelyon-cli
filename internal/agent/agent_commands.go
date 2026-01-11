@@ -85,6 +85,8 @@ func handleSpecialCommand(input string, agent *Agent) bool {
 		return handleMemoryCommand(args)
 	case "/plan":
 		return handlePlanCommand(agent, args)
+	case "/init":
+		return handleInitCommand(agent)
 	}
 	return false
 }
@@ -1256,6 +1258,7 @@ func printHelp() {
   /model [name]       - Show current model or switch model without restart
   /plan [on|off]      - Toggle Plan Mode (autonomous execution with planning)
   /repomap            - Show repository code structure map
+  /init               - Generate XELYON.md (project config) from codebase analysis
   /version            - Show version information
   /help               - Show this help
 
