@@ -17,7 +17,7 @@ type MultilineReader struct {
 // NewMultilineReader creates a new multiline reader
 func NewMultilineReader(r io.Reader) *MultilineReader {
 	return &MultilineReader{
-		reader:                bufio.NewReader(r),
+		reader:                bufio.NewReaderSize(r, 1024*1024), // 1MB buffer
 		bracketedPasteEnabled: false,
 	}
 }
