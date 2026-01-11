@@ -8,11 +8,13 @@ AI搭載のコーディングアシスタントCLIツール
 ## 特徴
 
 - 🌐 **6種類のLLMプロバイダー対応**: DeepSeek, OpenAI, Gemini, Claude, Ollama, Groq
-- 💬 **対話型エージェント**: ツールを使って実際にコード編集・Git操作を実行
-- 📋 **Plan Mode**: AIが実装計画を立てて、承認後に自動実行
+- 💬 **対話型エージェント**: 29種類のツールで実際にコード編集・Git操作を実行
+- 📋 **Plan Mode**: AIが実装計画を立てて、承認後に自動実行（並列処理対応）
+- 🤖 **Headlessモード**: JSON出力で他のツールから呼び出し可能
 - ↩️ **Undo機能**: ファイル変更の取り消し（バックアップから復元）
 - 🧠 **メモリ機能**: プロジェクト別・グローバル記憶の永続化
 - 📂 **会話履歴管理**: セッションをJSONL形式で保存・復元
+- 🗺️ **Repo Map**: Tree-sitterでコード構造を自動解析
 - 🔌 **MCP対応**: Model Context Protocol による外部ツール連携
 
 ## インストール
@@ -149,9 +151,10 @@ xelyon --plan "バグ修正とテストを実行"
 
 ## ドキュメント
 
-- [コマンド一覧](docs/commands.md) - 全コマンドと使用例
+- [コマンド一覧](docs/commands.md) - 全コマンド、29ツール、使用例
 - [プロバイダー設定](docs/providers.md) - DeepSeek, OpenAI, Gemini, Claude, Groq, Ollamaの設定方法
 - [設定リファレンス](docs/config.md) - config.yamlと環境変数
+- [MCP連携](docs/mcp.md) - Model Context Protocolで外部ツール追加
 
 ## 技術スタック
 

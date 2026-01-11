@@ -169,6 +169,13 @@ xelyon --no-compress
 
 # ページャーを無効化
 xelyon --no-pager
+
+# Headlessモード（JSON出力、対話なし）
+xelyon --headless "main.goを読んで説明して"
+xelyon --output-format json "バグを修正して"
+
+# Plan Mode起動
+xelyon --plan "ユーザー認証機能を追加"
 ```
 
 ## 環境変数
@@ -234,3 +241,150 @@ xelyon
 > /changes      # 変更履歴確認
 > /undo         # 最後の変更を取り消し
 ```
+
+## 利用可能なツール
+
+AIが自動で以下のツールを使用します。ユーザーが直接呼び出す必要はありません。
+
+### ファイル操作
+
+| ツール名 | 説明 | 主な引数 |
+|---------|------|---------|
+| `read_file` | ファイル内容を読み込む | `path` |
+| `write_file` | ファイルを新規作成・上書き | `path`, `content` |
+| `str_replace` | 文字列置換でファイル編集 | `path`, `old_str`, `new_str` |
+| `append_file` | ファイル末尾に追記 | `path`, `content` |
+| `prepend_file` | ファイル先頭に追記 | `path`, `content` |
+| `insert_after` | パターンの後に挿入 | `path`, `pattern`, `content` |
+| `insert_before` | パターンの前に挿入 | `path`, `pattern`, `content` |
+| `copy_file` | ファイルをコピー | `src`, `dest` |
+| `move_file` | ファイルを移動 | `src`, `dest` |
+| `delete_file` | ファイルを削除 | `path` |
+| `delete_lines` | 指定行を削除 | `path`, `start_line`, `end_line` |
+| `list_dir` | ディレクトリ一覧取得 | `path` |
+| `create_dir` | ディレクトリ作成 | `path` |
+
+### Git操作
+
+| ツール名 | 説明 | 主な引数 |
+|---------|------|---------|
+| `git_status` | 現在の変更状況を表示 | - |
+| `git_diff` | 差分を表示 | `path` (オプション) |
+| `git_add` | ステージに追加 | `path` |
+| `git_commit` | コミット作成 | `message` |
+| `git_push` | リモートにプッシュ | - |
+| `git_log` | コミット履歴を表示 | - |
+| `git_branch` | ブランチ一覧表示 | - |
+| `git_checkout` | ブランチ切り替え | `branch` |
+| `git_stash` | 変更を一時退避 | `action` (save/pop/list) |
+
+### 検索
+
+| ツール名 | 説明 | 主な引数 |
+|---------|------|---------|
+| `search_code` | コード内を正規表現検索 | `pattern`, `path` |
+| `search_file` | ファイル名検索 | `pattern`, `path` |
+| `web_search` | Web検索（Serper API） | `query` |
+
+### 開発支援
+
+| ツール名 | 説明 | 主な引数 |
+|---------|------|---------|
+| `bash` | シェルコマンド実行 | `command` |
+| `run_test` | テスト実行 | `path` |
+| `format` | コードフォーマット | `path` |
+| `lint` | Lint実行 | `path`, `auto_fix` |
+
+### 使用例
+
+AIは自然言語の指示に基づいてツールを自動選択します。
+
+```bash
+> main.goを読んで
+# → read_file が実行される
+
+> バグを修正して
+# → read_file → str_replace → write_file が実行される
+
+> git statusを見せて
+# → git_status が実行される
+
+> テストを実行して
+# → run_test が実行される
+
+> search_codeで"TODO"を探して
+# → search_code が実行される
+```
+
+### MCP対応ツール
+
+XELYONはMCP（Model Context Protocol）に対応しており、`~/.xelyon/mcp.json`で外部ツールを追加できます。
+
+詳細は [MCP連携ガイド](mcp.md) を参照してください。
+
+## 高度な機能
+
+### Headlessモード
+
+対話なしでJSON形式で結果を出力します。他のツールやスクリプトから呼び出す際に便利です。
+
+```bash
+# JSON出力
+xelyon --headless "main.goを読んで概要を説明して"
+
+# 出力例
+{
+  "query": "main.goを読んで概要を説明して",
+  "response": "このファイルは...",
+  "success": true
+}
+
+# jqと組み合わせて
+xelyon --headless "バグを修正して" | jq -r '.response'
+
+# CI/CDパイプラインで使用
+xelyon --output-format json "テストを実行して" | jq '.success'
+```
+
+### Repo Map（コード構造解析）
+
+Tree-sitterを使ってプロジェクトのコード構造を自動解析します。
+
+**対応言語**: Go, JavaScript, TypeScript, Python
+
+**抽出される情報**:
+- 関数、メソッド
+- 構造体、クラス、インターフェース
+- 型定義
+
+**自動生成**: 起動時にプロジェクトをスキャンし、AIに提示されます。
+
+**除外パターン**: `node_modules`, `.git`, `vendor`, `dist`, `build` などは自動除外。
+
+```bash
+# Repo Mapを確認
+xelyon
+> このプロジェクトの構造を教えて
+
+# AIがRepo Mapを使って構造を説明
+```
+
+### 対話的確認モード
+
+ツール実行前に毎回確認プロンプトを表示します（デバッグ・学習用）。
+
+```bash
+export XELYON_INTERACTIVE_CONFIRM=1
+xelyon
+
+> main.goを編集して
+
+# 各ツール実行前に確認
+# [y] 実行 / [n] スキップ / [c] フィードバック付き / [s] 終了
+```
+
+## 関連ドキュメント
+
+- [プロバイダー設定](providers.md)
+- [設定リファレンス](config.md)
+- [MCP連携](mcp.md)
