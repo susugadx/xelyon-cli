@@ -161,7 +161,7 @@ func parseVersion(v string) [3]int {
 	// Split by dots
 	components := strings.Split(v, ".")
 	for i := 0; i < len(components) && i < 3; i++ {
-		fmt.Sscanf(components[i], "%d", &parts[i])
+		_, _ = fmt.Sscanf(components[i], "%d", &parts[i])
 	}
 
 	return parts

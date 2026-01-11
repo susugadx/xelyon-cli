@@ -10,14 +10,14 @@ import (
 
 // MultilineReader handles multiline input with bracketed paste mode and ``` markers
 type MultilineReader struct {
-	reader          *bufio.Reader
+	reader                *bufio.Reader
 	bracketedPasteEnabled bool
 }
 
 // NewMultilineReader creates a new multiline reader
 func NewMultilineReader(r io.Reader) *MultilineReader {
 	return &MultilineReader{
-		reader:          bufio.NewReader(r),
+		reader:                bufio.NewReader(r),
 		bracketedPasteEnabled: false,
 	}
 }

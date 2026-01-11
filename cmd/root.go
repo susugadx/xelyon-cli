@@ -16,22 +16,22 @@ import (
 )
 
 var (
-	userID          string
-	files           []string
-	edit            bool
-	output          string
-	resume          bool
-	providerFlag    string
-	modelFlag       string
-	autoApprove     bool
-	loopThreshold   int
-	apiRetry        int
-	apiRetryDelay   int
-	diffLines       int
-	outputFormat    string
-	headless        bool
-	planMode        bool
-	noUpdateCheck   bool
+	userID        string
+	files         []string
+	edit          bool
+	output        string
+	resume        bool
+	providerFlag  string
+	modelFlag     string
+	autoApprove   bool
+	loopThreshold int
+	apiRetry      int
+	apiRetryDelay int
+	diffLines     int
+	outputFormat  string
+	headless      bool
+	planMode      bool
+	noUpdateCheck bool
 )
 
 const projectConfigFile = "XELYON.md"
