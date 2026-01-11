@@ -39,7 +39,7 @@ func TestDeepSeekProvider_ChatWithTools_Integration(t *testing.T) {
 				"total_tokens": 15
 			}
 		}`
-		w.Write([]byte(response))
+		_, _ = w.Write([]byte(response))
 	}))
 	defer server.Close()
 
@@ -87,7 +87,7 @@ func TestDeepSeekProvider_ChatWithTools_APIError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(`{"error": {"message": "Invalid request"}}`))
+		_, _ = w.Write([]byte(`{"error": {"message": "Invalid request"}}`))
 	}))
 	defer server.Close()
 
@@ -113,7 +113,7 @@ func TestDeepSeekProvider_ChatWithTools_RateLimit(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Retry-After", "30")
 		w.WriteHeader(http.StatusTooManyRequests)
-		w.Write([]byte(`{"error": {"message": "Rate limit exceeded"}}`))
+		_, _ = w.Write([]byte(`{"error": {"message": "Rate limit exceeded"}}`))
 	}))
 	defer server.Close()
 

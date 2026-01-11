@@ -19,13 +19,13 @@ func setupGitRepo(t *testing.T) string {
 	}
 
 	// git config
-	exec.Command("git", "config", "user.name", "Test User").Run()
-	exec.Command("git", "config", "user.email", "test@example.com").Run()
+	_ = exec.Command("git", "config", "user.name", "Test User").Run()
+	_ = exec.Command("git", "config", "user.email", "test@example.com").Run()
 
 	// Change to tmpDir
 	oldDir, _ := os.Getwd()
-	os.Chdir(tmpDir)
-	t.Cleanup(func() { os.Chdir(oldDir) })
+	_ = os.Chdir(tmpDir)
+	t.Cleanup(func() { _ = os.Chdir(oldDir) })
 
 	return tmpDir
 }
@@ -68,7 +68,7 @@ func TestExecuteGitAdd_All(t *testing.T) {
 	// Create multiple test files
 	for i := 1; i <= 3; i++ {
 		testFile := filepath.Join(tmpDir, "file"+string(rune('0'+i))+".txt")
-		os.WriteFile(testFile, []byte("content"), 0644)
+		_ = os.WriteFile(testFile, []byte("content"), 0644)
 	}
 
 	output := executeGitAdd(".")
