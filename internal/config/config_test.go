@@ -366,9 +366,9 @@ func TestValidateModel(t *testing.T) {
 
 func TestApplyEnvironmentOverrides(t *testing.T) {
 	tests := []struct {
-		name     string
-		envVars  map[string]string
-		checkFn  func(*testing.T, *Config)
+		name    string
+		envVars map[string]string
+		checkFn func(*testing.T, *Config)
 	}{
 		{
 			name: "LoopThreshold",
@@ -434,12 +434,12 @@ func TestApplyEnvironmentOverrides(t *testing.T) {
 
 func TestApplyFlagOverrides(t *testing.T) {
 	tests := []struct {
-		name           string
-		loopThreshold  *int
-		apiRetry       *int
-		apiRetryDelay  *int
-		diffLines      *int
-		checkFn        func(*testing.T, *Config)
+		name          string
+		loopThreshold *int
+		apiRetry      *int
+		apiRetryDelay *int
+		diffLines     *int
+		checkFn       func(*testing.T, *Config)
 	}{
 		{
 			name:          "nil pointers",

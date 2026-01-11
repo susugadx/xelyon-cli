@@ -232,7 +232,7 @@ func TestAgent_SwitchProvider_NoAPIKey_ChatTest(t *testing.T) {
 
 func TestPrintHeader_ChatTest(t *testing.T) {
 	provider := &mockProvider{name: "Test Provider"}
-	
+
 	// printHeaderはprovider.Name()を呼び出すのでpanicしないことを確認
 	printHeader("test-model", provider)
 }

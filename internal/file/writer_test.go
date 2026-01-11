@@ -210,24 +210,24 @@ func TestExtractCodeBlock_Valid(t *testing.T) {
 		want     string
 	}{
 		{
-			name: "simple code block",
+			name:     "simple code block",
 			response: "Here is some code:\n```\nfunc main() {\n    fmt.Println(\"Hello\")\n}\n```\nThat's it!",
-			want: "func main() {\n    fmt.Println(\"Hello\")\n}",
+			want:     "func main() {\n    fmt.Println(\"Hello\")\n}",
 		},
 		{
-			name: "code block with language",
+			name:     "code block with language",
 			response: "```go\nfunc test() {\n    return true\n}\n```",
-			want: "func test() {\n    return true\n}",
+			want:     "func test() {\n    return true\n}",
 		},
 		{
-			name: "code block at start",
+			name:     "code block at start",
 			response: "```\ncode here\n```",
-			want: "code here",
+			want:     "code here",
 		},
 		{
-			name: "code block at end",
+			name:     "code block at end",
 			response: "Some text\n```\ncode here\n```",
-			want: "code here",
+			want:     "code here",
 		},
 	}
 

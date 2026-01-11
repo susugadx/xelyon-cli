@@ -236,7 +236,7 @@ func TestMCPToolWrapper_ValidateArgs_ValidSchema(t *testing.T) {
 
 func TestManager_RegisterToToolRegistry(t *testing.T) {
 	manager := NewManager()
-	
+
 	// モックツールを追加
 	manager.tools = []MCPTool{
 		{
@@ -265,7 +265,7 @@ func TestManager_RegisterToToolRegistry(t *testing.T) {
 
 func TestMCPToolWrapper_Run_ValidationError(t *testing.T) {
 	manager := NewManager()
-	
+
 	schema := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
@@ -303,7 +303,7 @@ func TestMCPToolWrapper_Run_ValidationError(t *testing.T) {
 
 func TestMCPToolWrapper_Run_CallToolError(t *testing.T) {
 	manager := NewManager()
-	
+
 	wrapper := &MCPToolWrapper{
 		manager:     manager,
 		serverName:  "nonexistent-server",

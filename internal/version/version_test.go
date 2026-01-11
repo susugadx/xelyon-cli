@@ -29,32 +29,32 @@ func TestGetVersion(t *testing.T) {
 
 func TestGetFullVersion(t *testing.T) {
 	tests := []struct {
-		name     string
-		version  string
-		commit   string
-		date     string
-		wantFmt  string
+		name    string
+		version string
+		commit  string
+		date    string
+		wantFmt string
 	}{
 		{
-			name:     "default values",
-			version:  "0.31.0-dev",
-			commit:   "unknown",
-			date:     "unknown",
-			wantFmt:  "0.31.0-dev (commit: unknown, built: unknown)",
+			name:    "default values",
+			version: "0.31.0-dev",
+			commit:  "unknown",
+			date:    "unknown",
+			wantFmt: "0.31.0-dev (commit: unknown, built: unknown)",
 		},
 		{
-			name:     "custom values",
-			version:  "1.0.0",
-			commit:   "abc123",
-			date:     "2024-01-01",
-			wantFmt:  "1.0.0 (commit: abc123, built: 2024-01-01)",
+			name:    "custom values",
+			version: "1.0.0",
+			commit:  "abc123",
+			date:    "2024-01-01",
+			wantFmt: "1.0.0 (commit: abc123, built: 2024-01-01)",
 		},
 		{
-			name:     "with hyphen in version",
-			version:  "0.15.0-beta",
-			commit:   "def456",
-			date:     "2024-06-15",
-			wantFmt:  "0.15.0-beta (commit: def456, built: 2024-06-15)",
+			name:    "with hyphen in version",
+			version: "0.15.0-beta",
+			commit:  "def456",
+			date:    "2024-06-15",
+			wantFmt: "0.15.0-beta (commit: def456, built: 2024-06-15)",
 		},
 	}
 

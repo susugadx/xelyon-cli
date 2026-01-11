@@ -27,8 +27,8 @@ func TestEstimateTokens(t *testing.T) {
 		{
 			name: "multiple messages",
 			messages: []api.Message{
-				{Role: "user", Content: "Hello"},      // 5 chars
-				{Role: "assistant", Content: "Hi!"},   // 3 chars
+				{Role: "user", Content: "Hello"},       // 5 chars
+				{Role: "assistant", Content: "Hi!"},    // 3 chars
 				{Role: "user", Content: "How are you"}, // 11 chars
 			},
 			want: 6, // (5+3+11) / 3 = 6.3 → 6

@@ -446,7 +446,7 @@ func TestValidateMCPCommand_CaseInsensitive(t *testing.T) {
 		wantErr bool
 	}{
 		{"npx", false},
-		{"NPX", true}, // 大文字は許可されない（厳密マッチ）
+		{"NPX", true},  // 大文字は許可されない（厳密マッチ）
 		{"Node", true}, // 大文字は許可されない
 	}
 
