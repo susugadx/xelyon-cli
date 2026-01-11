@@ -166,6 +166,50 @@ export GROQ_API_KEY=gsk_...
 # Ollama（環境変数不要・ローカル実行）
 ```
 
+### Web検索（Serper API）
+
+**オプション機能**: `web_search`ツールを使用する場合のみ必要です。
+
+```bash
+# Serper API キー
+export SERPER_API_KEY=your_serper_api_key_here
+```
+
+#### Serper APIとは
+
+[Serper](https://serper.dev)は、Google検索結果を取得できるAPIサービスです。
+
+**特徴**:
+- Google検索結果を高速に取得
+- 無料枠: 2,500クエリ/月
+- 有料プラン: $50/月〜（100,000クエリ）
+
+#### APIキーの取得方法
+
+1. [https://serper.dev](https://serper.dev)にアクセス
+2. GitHubアカウントでサインアップ
+3. ダッシュボードからAPIキーを取得
+4. `.env`ファイルまたは環境変数に設定
+
+```bash
+# .envファイルに追加
+echo "SERPER_API_KEY=your_api_key_here" >> .env
+
+# または環境変数で設定
+export SERPER_API_KEY=your_api_key_here
+```
+
+#### 使用例
+
+```bash
+xelyon
+> 最新のGo言語の情報を検索して
+
+# AIがweb_searchツールを使って検索結果を取得
+```
+
+**注意**: APIキーが未設定の場合、`web_search`ツールは使用できませんが、他のツールは正常に動作します。
+
 ### プロバイダー・モデル指定
 
 ```bash

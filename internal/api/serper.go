@@ -35,7 +35,7 @@ func WebSearch(query string) (string, error) {
 	// 環境変数から API キーを取得
 	apiKey := os.Getenv("SERPER_API_KEY")
 	if apiKey == "" {
-		return "", fmt.Errorf("SERPER_API_KEY environment variable is not set")
+		return "", fmt.Errorf("SERPER_API_KEY environment variable is not set.\n\nTo use web search, get your free API key at https://serper.dev (2,500 queries/month free)\nThen set it in your environment:\n  export SERPER_API_KEY=your_api_key_here\n\nOr add it to your .env file:\n  echo \"SERPER_API_KEY=your_api_key_here\" >> .env\n\nFor more details, see: https://github.com/susugadx/xelyon-cli/blob/main/docs/config.md#web検索serper-api")
 	}
 
 	// リクエストボディを作成

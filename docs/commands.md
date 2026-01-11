@@ -284,7 +284,9 @@ AIが自動で以下のツールを使用します。ユーザーが直接呼び
 |---------|------|---------|
 | `search_code` | コード内を正規表現検索 | `pattern`, `path` |
 | `search_file` | ファイル名検索 | `pattern`, `path` |
-| `web_search` | Web検索（Serper API） | `query` |
+| `web_search` | Web検索（Serper API、要APIキー） | `query` |
+
+**注意**: `web_search`を使用するには`SERPER_API_KEY`環境変数の設定が必要です。詳細は[config.md - Web検索（Serper API）](config.md#web検索serper-api)を参照してください。
 
 ### 開発支援
 
