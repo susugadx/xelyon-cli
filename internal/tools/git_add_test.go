@@ -18,9 +18,13 @@ func setupGitRepo(t *testing.T) string {
 		t.Fatalf("Failed to initialize git repo: %v", err)
 	}
 
-	// git config
-	_ = exec.Command("git", "config", "user.name", "Test User").Run()
-	_ = exec.Command("git", "config", "user.email", "test@example.com").Run()
+	// git config (must run in tmpDir for local config)
+	configName := exec.Command("git", "config", "user.name", "Test User")
+	configName.Dir = tmpDir
+	_ = configName.Run()
+	configEmail := exec.Command("git", "config", "user.email", "test@example.com")
+	configEmail.Dir = tmpDir
+	_ = configEmail.Run()
 
 	// Change to tmpDir
 	oldDir, _ := os.Getwd()
