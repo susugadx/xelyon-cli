@@ -101,6 +101,23 @@ xelyon --provider gemini --model gemini-2.0-flash-exp
 
 ### 対話コマンド
 
+#### コマンドエイリアス（ショートカット）
+
+一部の対話コマンドはショートカット（エイリアス）で呼び出せます。
+
+- `/h` → `/help`
+- `/m` → `/memory`
+
+また、`~/.xelyon/config.yaml` の `command_aliases` で追加/上書きできます。
+
+```yaml
+command_aliases:
+  /h: /help
+  /m: /memory
+  /hh: /help
+```
+
+
 ```bash
 /help       # コマンド一覧
 /init       # XELYON.md生成（プロジェクト設定ファイル）

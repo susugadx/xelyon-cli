@@ -39,6 +39,7 @@ type Config struct {
 	LoopDetection   LoopDetectionConfig            `yaml:"loop_detection,omitempty"`
 	APIRetry        APIRetryConfig                 `yaml:"api_retry,omitempty"`
 	Diff            DiffConfig                     `yaml:"diff,omitempty"`
+	CommandAliases  map[string]string              `yaml:"command_aliases,omitempty"` // コマンドエイリアス
 	// 将来の拡張用
 	// Cloud CloudConfig `yaml:"cloud,omitempty"`
 }

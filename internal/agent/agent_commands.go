@@ -24,7 +24,7 @@ func handleSpecialCommand(input string, agent *Agent) bool {
 		return false
 	}
 
-	cmd := strings.ToLower(parts[0])
+	cmd := resolveCommandAlias(parts[0])
 	args := parts[1:]
 
 	switch cmd {
@@ -888,8 +888,9 @@ func handleCompressCommand(agent *Agent, args []string) bool {
 // handleUseCommand はプロバイダーを切り替える
 func handleUseCommand(agent *Agent, args []string) bool {
 	if len(args) == 0 {
-		yellow.Println("Usage: /use <provider>")
+		yellow.Println("Usage: /use <provider> [model]")
 		yellow.Println("Available providers: deepseek, claude, openai, gemini, groq, ollama")
+		yellow.Println("Example: /use gemini gemini-2.0-flash-exp")
 		return true
 	}
 
@@ -911,9 +912,10 @@ func handleUseCommand(agent *Agent, args []string) bool {
 		return true
 	}
 
-	// 既に同じプロバイダーの場合
-	if agent.ProviderName == providerName {
-		yellow.Printf("Already using %s\n", providerName)
+	// 既に同じプロバイダーの場合でも、モデルが指定されていれば切り替え
+	if agent.ProviderName == providerName && len(args) < 2 {
+		yellow.Printf("Already using %s (model: %s)\n", providerName, agent.CurrentModel)
+		yellow.Println("Hint: Use '/use <provider> <model>' to change model")
 		return true
 	}
 
@@ -940,6 +942,14 @@ func handleUseCommand(agent *Agent, args []string) bool {
 			yellow.Println("  export GROQ_API_KEY=your-api-key")
 		}
 		return true
+	}
+
+	// モデル指定がある場合は追加でモデルを切り替え
+	if len(args) >= 2 {
+		newModel := args[1]
+		oldModel := agent.CurrentModel
+		agent.CurrentModel = newModel
+		green.Printf("✅ Model: %s → %s\n", oldModel, newModel)
 	}
 
 	return true
@@ -1252,7 +1262,7 @@ func printHelp() {
   /stats              - Show session statistics (time, messages, tokens, cost)
   /copy [code] [-n N] - Copy last AI output to clipboard (code=code blocks only, -n=N-th last output)
   /compress [N]       - Compress history (keep recent N messages, default: 10)
-  /use <provider>     - Switch provider (deepseek, claude, openai, gemini, groq, ollama)
+  /use <provider> [model] - Switch provider and optionally model (e.g., /use gemini gemini-2.0-flash-exp)
   /providers          - List available providers and their API key status
   /config             - Show/change configuration (e.g., /config model deepseek-coder)
   /model [name]       - Show current model or switch model without restart

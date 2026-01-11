@@ -13,6 +13,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/audit"
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/mcp"
 	"github.com/susugadx/xelyon-cli/internal/memory"
@@ -265,10 +266,39 @@ func (a *Agent) SwitchProvider(providerName string) error {
 		return fmt.Errorf("プロバイダーの初期化に失敗しました: %w", err)
 	}
 
+	// 設定ファイルから新しいプロバイダーのデフォルトモデルを取得
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		yellow.Printf("Warning: Failed to load config: %v\n", err)
+		cfg = config.DefaultConfig()
+	}
+	newModel := cfg.GetModelForProvider(providerName)
+	if newModel == "" {
+		// フォールバック: プロバイダー別のハードコードされたデフォルト
+		switch providerName {
+		case "deepseek":
+			newModel = "deepseek-coder"
+		case "openai":
+			newModel = "gpt-5.2"
+		case "gemini":
+			newModel = "gemini-2.5-flash"
+		case "claude":
+			newModel = "claude-sonnet-4-5-20250514"
+		case "ollama":
+			newModel = "qwen2.5-coder:7b"
+		case "groq":
+			newModel = "meta-llama/llama-4-scout-17b-16e-instruct"
+		default:
+			newModel = "default-model"
+		}
+	}
+
 	// プロバイダー切り替え
 	oldProvider := a.ProviderName
+	oldModel := a.CurrentModel
 	a.CurrentProvider = provider
 	a.ProviderName = providerName
+	a.CurrentModel = newModel
 
 	// 統計情報のプロバイダー名も更新
 	if a.Stats != nil {
@@ -276,6 +306,7 @@ func (a *Agent) SwitchProvider(providerName string) error {
 	}
 
 	green.Printf("✅ Provider: %s → %s\n", oldProvider, providerName)
+	green.Printf("✅ Model: %s → %s\n", oldModel, newModel)
 	return nil
 }
 

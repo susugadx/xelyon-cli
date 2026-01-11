@@ -552,6 +552,35 @@ go build -o xelyon
 
 ## v0.34.0 機能追加
 
+## v0.35.0 機能追加（Issue #39）
+
+### コマンドエイリアス（ショートカット）
+
+**概要**: 対話コマンドにエイリアス（ショートカット）を追加しました。例: `/h` → `/help`, `/m` → `/memory`。
+
+#### 設定（config.yaml）
+
+`~/.xelyon/config.yaml` に `command_aliases` を追加することで、エイリアスの追加・上書きができます。
+
+```yaml
+command_aliases:
+  /h: /help
+  /m: /memory
+  /hh: /help
+```
+
+#### 仕様
+- エイリアスはコマンド解釈の入口で解決されます（`handleSpecialCommand`）。
+- `command_aliases` は組み込みエイリアスより優先されます。
+- 多段エイリアス（例: `/a`→`/b`→`/help`）に対応。
+- 循環参照（例: `/a`→`/b`→`/a`）は無限ループ防止のため途中で停止し、元のコマンドを採用します。
+
+#### 実装ファイル
+- `internal/agent/command_aliases.go`
+- `internal/agent/agent_commands.go`（入口に解決を追加）
+- `internal/agent/command_aliases_test.go`
+
+
 ### タイムスタンプ付きバックアップ & .gitignore自動管理 (Issue #11, #15)
 
 **概要**: バックアップファイルにタイムスタンプを付与し、複数世代を保持する機能を実装。また、初回バックアップ作成時に `.gitignore` へ `*.bak*` パターンを自動追加する機能を実装。
