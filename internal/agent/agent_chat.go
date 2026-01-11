@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
@@ -133,6 +134,66 @@ func (a *Agent) callAPIWithRetry() (string, error) {
 	return "", err
 }
 
+// extractExplanationAndTool はレスポンスから説明部分とツールJSONを分離
+// NOTE: agent_plan.goでも使用されるため、パッケージレベルの関数として定義
+func extractExplanationAndTool(response string) (explanation, toolJSON string) {
+	// ツール呼び出しのJSON部分を探す
+	toolStartIdx := -1
+	patterns := []string{"{\"tool\"", "{ \"tool\"", "{\"tool\":", "{ \"tool\":"}
+	for _, pattern := range patterns {
+		idx := strings.Index(response, pattern)
+		if idx != -1 && (toolStartIdx == -1 || idx < toolStartIdx) {
+			toolStartIdx = idx
+		}
+	}
+
+	if toolStartIdx == -1 {
+		// ツール呼び出しなし
+		return response, ""
+	}
+
+	// ツール呼び出しより前の部分が説明
+	explanation = strings.TrimSpace(response[:toolStartIdx])
+
+	// ツール呼び出しのJSON部分を抽出
+	depth := 0
+	inString := false
+	escaped := false
+	for i := toolStartIdx; i < len(response); i++ {
+		ch := response[i]
+
+		if escaped {
+			escaped = false
+			continue
+		}
+		if ch == '\\' {
+			escaped = true
+			continue
+		}
+		if ch == '"' {
+			inString = !inString
+			continue
+		}
+		if inString {
+			continue
+		}
+
+		switch ch {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				toolJSON = response[toolStartIdx : i+1]
+				return explanation, toolJSON
+			}
+		}
+	}
+
+	// 閉じ括弧が見つからない場合は全体をツールJSONとみなす
+	return explanation, response[toolStartIdx:]
+}
+
 // shouldAbortToolLoop は同じツール呼び出しの繰り返しを検知
 func (a *Agent) shouldAbortToolLoop(current, last *tools.ToolCall, count *int) bool {
 	cfg := config.GetGlobalConfig()
@@ -159,6 +220,16 @@ func (a *Agent) shouldAbortToolLoop(current, last *tools.ToolCall, count *int) b
 
 // executeToolCall はツールを実行して結果を履歴に追加
 func (a *Agent) executeToolCall(response string, toolCall *tools.ToolCall) {
+	// レスポンスから説明部分とツール呼び出しを分離
+	explanation, _ := extractExplanationAndTool(response)
+
+	// 説明部分を先に表示
+	if explanation != "" {
+		cyan.Println("\n💭 AI Explanation:")
+		fmt.Println(explanation)
+		fmt.Println()
+	}
+
 	// 結果を履歴に追加
 	a.History = append(a.History, api.Message{
 		Role:    "assistant",
@@ -169,6 +240,18 @@ func (a *Agent) executeToolCall(response string, toolCall *tools.ToolCall) {
 	if a.Stats != nil {
 		a.Stats.AssistantMessages++
 		a.Stats.AddToolExecution(toolCall.Tool)
+	}
+
+	// Dry Run Mode: ツールを実行せず、結果だけをシミュレート
+	if a.DryRunMode {
+		result := "[Dry Run] Tool execution simulated"
+		// 結果を履歴に追加
+		a.History = append(a.History, api.Message{
+			Role:    "user",
+			Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, result),
+		})
+		fmt.Println()
+		return
 	}
 
 	// ツール実行

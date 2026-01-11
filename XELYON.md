@@ -1419,6 +1419,9 @@ case "ollama":
 - `internal/tools/common.go`: `confirmWithAutoApprove()` 関数
 - `cmd/root.go`: `-y` / `--auto-approve` フラグ
 - `internal/agent/agent.go`: AutoApprove フィールド
+- `internal/agent/agent.go`: DryRunMode フィールド
+- `internal/agent/agent_chat.go`: executeToolCall() で Dry Run 分岐（tools.Execute() を呼ばずに結果をシミュレート）
+
 
 #### 危険度分類
 ```go

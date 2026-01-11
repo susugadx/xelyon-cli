@@ -99,6 +99,21 @@ xelyon --provider gemini --model gemini-2.0-flash-exp
 
 ## 基本的な使い方
 
+### Dry Run（安全な試行: ツール実行をシミュレート）
+
+`--dry-run` を有効にすると、AIがツールを呼び出しても実際には実行せず、結果だけをシミュレートします。
+ファイル編集やGit操作を伴う提案を「まずは安全に確認したい」場合に使えます。
+
+- ツール実行は行われません（`tools.Execute()` を呼びません）
+- 変更履歴（Undo対象）も作られません
+- 履歴には `"[Dry Run] Tool execution simulated"` がツール結果として記録されます
+
+例:
+```bash
+xelyon --dry-run
+```
+
+
 ### 対話コマンド
 
 #### コマンドエイリアス（ショートカット）
@@ -121,6 +136,7 @@ command_aliases:
 ```bash
 /help       # コマンド一覧
 /init       # XELYON.md生成（プロジェクト設定ファイル）
+/sync       # XELYON.mdを現在のコードと同期
 /memory add プロジェクトではReactを使う  # 記憶を追加
 /plan on    # Plan Mode有効化
 /use gemini # プロバイダー切り替え
