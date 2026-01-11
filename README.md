@@ -69,8 +69,11 @@ APIキーの取得方法: [プロバイダー設定ガイド](docs/providers.md)
 ### 2. 起動して対話
 
 ```bash
-# 対話モード
+# インストール後（Homebrew または /usr/local/bin/ に配置）
 xelyon
+
+# ローカルビルド（プロジェクトディレクトリから）
+./xelyon
 
 > main.goを読んで、バグがあれば修正して
 ```
@@ -78,8 +81,11 @@ xelyon
 ### 3. プロバイダー切り替え
 
 ```bash
-# コマンドライン指定
+# コマンドライン指定（インストール後）
 xelyon --provider gemini --model gemini-2.0-flash-exp
+
+# ローカルビルド
+./xelyon --provider gemini --model gemini-2.0-flash-exp
 
 # セッション中に切り替え
 > /use openai gpt-4
@@ -116,8 +122,11 @@ AIが自動で以下のツールを使用します:
 AIが実装計画を立てて、承認後に自動実行します。
 
 ```bash
-# Plan Modeで起動
+# Plan Modeで起動（インストール後）
 xelyon --plan "バグ修正とテストを実行"
+
+# ローカルビルド
+./xelyon --plan "バグ修正とテストを実行"
 
 # セッション中に切り替え
 > /plan on
