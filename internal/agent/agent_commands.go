@@ -87,6 +87,8 @@ func handleSpecialCommand(input string, agent *Agent) bool {
 		return handlePlanCommand(agent, args)
 	case "/init":
 		return handleInitCommand(agent)
+	case "/sync":
+		return handleSyncCommand(agent)
 	}
 	return false
 }
@@ -1269,6 +1271,7 @@ func printHelp() {
   /plan [on|off]      - Toggle Plan Mode (autonomous execution with planning)
   /repomap            - Show repository code structure map
   /init               - Generate XELYON.md (project config) from codebase analysis
+  /sync               - Sync XELYON.md with current codebase (detect new/deleted files, tech changes)
   /version            - Show version information
   /help               - Show this help
 
@@ -1287,4 +1290,36 @@ Tips:
   - AI will ask confirmation for dangerous operations
   - Use Ctrl+C to cancel current operation
   - Use /undo to revert file changes (up to 10 recent changes)`)
+}
+
+// handleDryRunCommand handles the /dryrun command to toggle dry-run mode
+func handleDryRunCommand(agent *Agent, args []string) bool {
+	if len(args) > 0 {
+		switch args[0] {
+		case "on":
+			agent.DryRunMode = true
+			green.Println("✅ Dry-Run Mode enabled. Tool executions will be simulated.")
+			return true
+		case "off":
+			agent.DryRunMode = false
+			green.Println("✅ Dry-Run Mode disabled. Tools will be executed normally.")
+			return true
+		case "status":
+			status := "disabled"
+			if agent.DryRunMode {
+				status = "enabled"
+			}
+			cyan.Printf("Dry-Run Mode is currently %s\n", status)
+			return true
+		}
+	}
+
+	// Toggle if no args
+	agent.DryRunMode = !agent.DryRunMode
+	status := "disabled"
+	if agent.DryRunMode {
+		status = "enabled"
+	}
+	green.Printf("✅ Dry-Run Mode %s\n", status)
+	return true
 }
