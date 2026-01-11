@@ -18,6 +18,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/memory"
 	"github.com/susugadx/xelyon-cli/internal/repomap"
 	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 	"github.com/susugadx/xelyon-cli/internal/version"
 )
 
@@ -347,11 +348,10 @@ func RunInteractive(model string, provider api.Provider, autoApprove, planMode b
 			rm.GetSymbolCount(), len(rm.Files))
 	}
 
-	// REPLループ
-	reader := bufio.NewReader(os.Stdin)
+	// REPLループ（複数行入力対応）
+	mlReader := ui.NewMultilineReader(os.Stdin)
 	for {
-		cyan.Print("\n> ")
-		input, err := reader.ReadString('\n')
+		input, err := mlReader.ReadInput("\n> ")
 		if err != nil {
 			break
 		}

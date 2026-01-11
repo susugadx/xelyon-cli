@@ -139,6 +139,10 @@ xelyon-cli/
 - **スピナー**: API呼び出し中のローディング表示（80ms更新）
 - **ページング**: 100行を超える出力を自動的に分割表示
 - **色付け**: cyan/green/yellow/redで情報を視覚的に区別
+- **複数行入力** (v0.32.0):
+  - **Bracketed Paste Mode**: ターミナルペースト時に自動検出（ESC[200~...ESC[201~）
+  - **``` マーカー**: 明示的な複数行モード（行番号付きエディタ表示）
+  - **multiline.go**: `MultilineReader.ReadInput()` で両方式を統一処理
 
 #### 4. 履歴管理 (internal/history/)
 - **JSONL形式**: ストリーミング対応、1行1メッセージ

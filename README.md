@@ -108,6 +108,28 @@ xelyon --provider gemini --model gemini-2.0-flash-exp
 
 全コマンド: [コマンドリファレンス](docs/commands.md)
 
+### 複数行入力
+
+プロンプトやコードを複数行で入力できます。
+
+**方法1: ``` マーカー**
+```bash
+> ```
+📝 Multiline input mode (end with ``` on a new line)
+  1 | 以下のコードをレビューして
+  2 |
+  3 | func main() {
+  4 |     fmt.Println("Hello")
+  5 | }
+  6 | ```
+✅ Captured 5 lines
+```
+
+**方法2: ペースト（Bracketed Paste Mode）**
+- コードエディタやブラウザから複数行をコピー＆ペースト
+- 自動的に複数行として認識され、途中で実行されません
+- `📋 Pasted N lines` と表示されます
+
 ### ツール例
 
 AIが自動で以下のツールを使用します:
