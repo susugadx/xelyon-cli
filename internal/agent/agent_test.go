@@ -259,9 +259,9 @@ func TestLoadProjectConfig_NoFile(t *testing.T) {
 	// XELYON.mdが存在しないディレクトリで実行
 	tmpDir := t.TempDir()
 	originalDir, _ := os.Getwd()
-	defer os.Chdir(originalDir)
+	defer func() { _ = os.Chdir(originalDir) }()
 
-	os.Chdir(tmpDir)
+	_ = os.Chdir(tmpDir)
 
 	config := loadProjectConfig()
 	if config != "" {
@@ -272,13 +272,13 @@ func TestLoadProjectConfig_NoFile(t *testing.T) {
 func TestLoadProjectConfig_WithFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	originalDir, _ := os.Getwd()
-	defer os.Chdir(originalDir)
+	defer func() { _ = os.Chdir(originalDir) }()
 
 	// XELYON.mdを作成
 	content := "# Test Project Config\nThis is a test."
-	os.WriteFile(tmpDir+"/XELYON.md", []byte(content), 0644)
+	_ = os.WriteFile(tmpDir+"/XELYON.md", []byte(content), 0644)
 
-	os.Chdir(tmpDir)
+	_ = os.Chdir(tmpDir)
 
 	config := loadProjectConfig()
 	if config != content {
