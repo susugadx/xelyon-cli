@@ -233,3 +233,97 @@ func TestMCPToolWrapper_ValidateArgs_ValidSchema(t *testing.T) {
 		})
 	}
 }
+
+func TestManager_RegisterToToolRegistry(t *testing.T) {
+	manager := NewManager()
+	
+	// モックツールを追加
+	manager.tools = []MCPTool{
+		{
+			ServerName:  "test-server",
+			Name:        "test-tool",
+			Description: "A test tool",
+			InputSchema: json.RawMessage(`{"type": "object"}`),
+		},
+	}
+
+	// RegisterToToolRegistry を直接テストするのは難しいので、
+	// ツールが正しくフォーマットされることを確認
+	wrapper := &MCPToolWrapper{
+		manager:     manager,
+		serverName:  "test-server",
+		toolName:    "test-tool",
+		desc:        "A test tool",
+		inputSchema: json.RawMessage(`{"type": "object"}`),
+	}
+
+	expectedName := "mcp_test_server_test_tool"
+	if wrapper.Name() != expectedName {
+		t.Errorf("Wrapper name = %q, want %q", wrapper.Name(), expectedName)
+	}
+}
+
+func TestMCPToolWrapper_Run_ValidationError(t *testing.T) {
+	manager := NewManager()
+	
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"required_param": map[string]any{
+				"type":     "string",
+				"required": true,
+			},
+		},
+	}
+	schemaBytes, _ := json.Marshal(schema)
+
+	wrapper := &MCPToolWrapper{
+		manager:     manager,
+		serverName:  "test-server",
+		toolName:    "test-tool",
+		desc:        "A test tool",
+		inputSchema: schemaBytes,
+	}
+
+	// 必須パラメータなしで実行
+	result, change, err := wrapper.Run(map[string]string{})
+
+	if err == nil {
+		t.Error("Run() should return error for missing required parameter")
+	}
+
+	if change != nil {
+		t.Error("Run() should not return FileChange on validation error")
+	}
+
+	if !strings.Contains(result, "Validation Error") {
+		t.Errorf("Result should contain 'Validation Error', got: %s", result)
+	}
+}
+
+func TestMCPToolWrapper_Run_CallToolError(t *testing.T) {
+	manager := NewManager()
+	
+	wrapper := &MCPToolWrapper{
+		manager:     manager,
+		serverName:  "nonexistent-server",
+		toolName:    "test-tool",
+		desc:        "A test tool",
+		inputSchema: nil,
+	}
+
+	// 接続していないサーバーに対して実行
+	result, change, err := wrapper.Run(map[string]string{})
+
+	if err == nil {
+		t.Error("Run() should return error for non-connected server")
+	}
+
+	if change != nil {
+		t.Error("Run() should not return FileChange on error")
+	}
+
+	if !strings.Contains(result, "Error:") {
+		t.Errorf("Result should contain 'Error:', got: %s", result)
+	}
+}

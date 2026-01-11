@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestValidateMCPCommand(t *testing.T) {
@@ -307,4 +308,202 @@ func TestManager_Close(t *testing.T) {
 
 	// Close should not panic even with no sessions
 	manager.Close()
+}
+
+func TestManager_CallTool_ServerNotConnected(t *testing.T) {
+	manager := NewManager()
+	ctx := context.Background()
+
+	_, err := manager.CallTool(ctx, "nonexistent-server", "some-tool", nil)
+
+	if err == nil {
+		t.Error("CallTool should return error for non-connected server")
+	}
+
+	if !strings.Contains(err.Error(), "not connected") {
+		t.Errorf("Expected 'not connected' error, got: %v", err)
+	}
+}
+
+func TestManager_Close_WithoutSessions(t *testing.T) {
+	manager := NewManager()
+
+	// Should not panic
+	manager.Close()
+}
+
+func TestManager_HealthStatus_WithMockedHealth(t *testing.T) {
+	manager := NewManager()
+
+	// 手動でヘルスチェック情報を設定
+	manager.healthCheck["test-server"] = time.Now().Add(-5 * time.Minute)
+
+	status := manager.HealthStatus()
+
+	if len(status) != 1 {
+		t.Errorf("Expected 1 health status entry, got %d", len(status))
+	}
+
+	if _, ok := status["test-server"]; !ok {
+		t.Error("Expected test-server in health status")
+	}
+
+	// 接続していないので❌が含まれるはず
+	if !strings.Contains(status["test-server"], "❌") {
+		t.Errorf("Expected ❌ for disconnected server, got: %s", status["test-server"])
+	}
+}
+
+func TestManager_Connect_InvalidCommand(t *testing.T) {
+	tmpDir := t.TempDir()
+	os.Setenv("HOME", tmpDir)
+	defer os.Unsetenv("HOME")
+
+	manager := NewManager()
+
+	// ブロックされたコマンドを含む設定
+	manager.config = &Config{
+		MCPServers: map[string]ServerConfig{
+			"blocked-server": {
+				Command: "rm", // ブロックされたコマンド
+				Args:    []string{"-rf", "/"},
+			},
+		},
+	}
+
+	ctx := context.Background()
+	err := manager.Connect(ctx)
+
+	// エラーにならない（ブロックされた接続は警告のみ）
+	if err != nil {
+		t.Errorf("Connect should not error for blocked commands, got: %v", err)
+	}
+
+	// セッションが作成されていないことを確認
+	if len(manager.sessions) != 0 {
+		t.Errorf("Expected no sessions for blocked command, got %d", len(manager.sessions))
+	}
+}
+
+func TestSanitizeEnv_EmptyInput(t *testing.T) {
+	result := sanitizeEnv(map[string]string{})
+
+	// 最低限の環境変数（PATH, HOME, LANG等）が含まれるべき
+	resultMap := make(map[string]string)
+	for _, e := range result {
+		parts := strings.SplitN(e, "=", 2)
+		if len(parts) == 2 {
+			resultMap[parts[0]] = parts[1]
+		}
+	}
+
+	// PATH は常に含まれるべき
+	if _, ok := resultMap["PATH"]; !ok {
+		t.Error("Expected PATH in sanitized env even with empty input")
+	}
+}
+
+func TestSanitizeEnv_FilterSensitiveKeys(t *testing.T) {
+	customEnv := map[string]string{
+		"AWS_SECRET_ACCESS_KEY": "sensitive", // SECRET含む
+		"API_KEY":               "sensitive", // KEY含む
+		"GITHUB_TOKEN":          "sensitive", // TOKEN含む
+		"SAFE_VALUE":            "not-sensitive",
+	}
+
+	result := sanitizeEnv(customEnv)
+
+	resultMap := make(map[string]string)
+	for _, e := range result {
+		parts := strings.SplitN(e, "=", 2)
+		if len(parts) == 2 {
+			resultMap[parts[0]] = parts[1]
+		}
+	}
+
+	// センシティブなキーは除外されるべき（KEY, TOKEN, SECRETを含むもの）
+	if _, ok := resultMap["AWS_SECRET_ACCESS_KEY"]; ok {
+		t.Error("AWS_SECRET_ACCESS_KEY should be filtered out")
+	}
+
+	if _, ok := resultMap["API_KEY"]; ok {
+		t.Error("API_KEY should be filtered out")
+	}
+
+	if _, ok := resultMap["GITHUB_TOKEN"]; ok {
+		t.Error("GITHUB_TOKEN should be filtered out")
+	}
+
+	// 安全な値は含まれるべき
+	if _, ok := resultMap["SAFE_VALUE"]; !ok {
+		t.Error("SAFE_VALUE should be included")
+	}
+}
+
+func TestValidateMCPCommand_CaseInsensitive(t *testing.T) {
+	tests := []struct {
+		command string
+		wantErr bool
+	}{
+		{"npx", false},
+		{"NPX", true}, // 大文字は許可されない（厳密マッチ）
+		{"Node", true}, // 大文字は許可されない
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.command, func(t *testing.T) {
+			err := validateMCPCommand(tt.command)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validateMCPCommand(%q) error = %v, wantErr %v", tt.command, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestManager_LoadConfig_InvalidJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+	os.Setenv("HOME", tmpDir)
+	defer os.Unsetenv("HOME")
+
+	configDir := tmpDir + "/.xelyon"
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatalf("Failed to create config dir: %v", err)
+	}
+
+	// 不正なJSONを書き込む
+	invalidJSON := `{"mcpServers": {invalid json`
+	if err := os.WriteFile(configDir+"/mcp.json", []byte(invalidJSON), 0644); err != nil {
+		t.Fatalf("Failed to write invalid config: %v", err)
+	}
+
+	manager := NewManager()
+	err := manager.LoadConfig()
+
+	// エラーが返るべき
+	if err == nil {
+		t.Error("LoadConfig should return error for invalid JSON")
+	}
+}
+
+func TestManager_GetTools_AfterConnect(t *testing.T) {
+	manager := NewManager()
+
+	// 手動でツールを追加（実際の接続はスキップ）
+	manager.tools = []MCPTool{
+		{
+			ServerName:  "test-server",
+			Name:        "test-tool",
+			Description: "A test tool",
+		},
+	}
+
+	tools := manager.GetTools()
+
+	if len(tools) != 1 {
+		t.Errorf("Expected 1 tool, got %d", len(tools))
+	}
+
+	if tools[0].Name != "test-tool" {
+		t.Errorf("Expected tool name 'test-tool', got %q", tools[0].Name)
+	}
 }

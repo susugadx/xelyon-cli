@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"os"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/tools"
@@ -144,4 +145,143 @@ func TestModelDisplayName(t *testing.T) {
 // These are better tested via integration tests.
 func TestNewAgent(t *testing.T) {
 	t.Skip("NewAgent requires a valid provider and performs I/O operations")
+}
+
+func TestIsAPIKeyAvailable(t *testing.T) {
+	tests := []struct {
+		name     string
+		provider string
+		setup    func()
+		cleanup  func()
+		want     bool
+	}{
+		{
+			name:     "Claude with API key",
+			provider: "claude",
+			setup: func() {
+				os.Setenv("ANTHROPIC_API_KEY", "test-key")
+			},
+			cleanup: func() {
+				os.Unsetenv("ANTHROPIC_API_KEY")
+			},
+			want: true,
+		},
+		{
+			name:     "Claude without API key",
+			provider: "claude",
+			setup:    func() {},
+			cleanup:  func() {},
+			want:     false,
+		},
+		{
+			name:     "OpenAI with API key",
+			provider: "openai",
+			setup: func() {
+				os.Setenv("OPENAI_API_KEY", "test-key")
+			},
+			cleanup: func() {
+				os.Unsetenv("OPENAI_API_KEY")
+			},
+			want: true,
+		},
+		{
+			name:     "DeepSeek with API key",
+			provider: "deepseek",
+			setup: func() {
+				os.Setenv("DEEPSEEK_API_KEY", "test-key")
+			},
+			cleanup: func() {
+				os.Unsetenv("DEEPSEEK_API_KEY")
+			},
+			want: true,
+		},
+		{
+			name:     "Unknown provider",
+			provider: "unknown",
+			setup:    func() {},
+			cleanup:  func() {},
+			want:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.setup()
+			defer tt.cleanup()
+
+			got := IsAPIKeyAvailable(tt.provider)
+
+			if got != tt.want {
+				t.Errorf("IsAPIKeyAvailable() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseImageInput_NoImage(t *testing.T) {
+	input := "Hello world"
+	text, image := parseImageInput(input)
+
+	if text != input {
+		t.Errorf("parseImageInput() text = %q, want %q", text, input)
+	}
+
+	if image != nil {
+		t.Error("parseImageInput() should return nil image when no image: prefix")
+	}
+}
+
+func TestParseImageInput_ImagePrefixWithoutFile(t *testing.T) {
+	input := "image:/nonexistent/file.png analyze this"
+	text, image := parseImageInput(input)
+
+	if text != input {
+		t.Errorf("parseImageInput() text = %q, want %q", text, input)
+	}
+
+	if image != nil {
+		t.Error("parseImageInput() should return nil image when file doesn't exist")
+	}
+}
+
+func TestParseImageInput_EmptyTextWithImage(t *testing.T) {
+	// image:だけでテキストがない場合のテスト
+	// 実際のファイルが必要なのでスキップ
+	t.Skip("Requires actual image file")
+}
+
+func TestAgent_SwitchProvider_NoAPIKey(t *testing.T) {
+	// APIキーが設定されていない場合はスキップ
+	t.Skip("Requires mock provider setup")
+}
+
+func TestLoadProjectConfig_NoFile(t *testing.T) {
+	// XELYON.mdが存在しないディレクトリで実行
+	tmpDir := t.TempDir()
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	os.Chdir(tmpDir)
+
+	config := loadProjectConfig()
+	if config != "" {
+		t.Errorf("loadProjectConfig() should return empty string when no XELYON.md, got %q", config)
+	}
+}
+
+func TestLoadProjectConfig_WithFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+
+	// XELYON.mdを作成
+	content := "# Test Project Config\nThis is a test."
+	os.WriteFile(tmpDir+"/XELYON.md", []byte(content), 0644)
+
+	os.Chdir(tmpDir)
+
+	config := loadProjectConfig()
+	if config != content {
+		t.Errorf("loadProjectConfig() = %q, want %q", config, content)
+	}
 }
