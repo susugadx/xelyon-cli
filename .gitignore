@@ -4,6 +4,8 @@ xelyon.exe
 dist/
 
 # Backup files
+*.bak.*
+
 *.bak
 
 # IDE
