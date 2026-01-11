@@ -16,21 +16,22 @@ import (
 )
 
 var (
-	userID        string
-	files         []string
-	edit          bool
-	output        string
-	resume        bool
-	providerFlag  string
-	modelFlag     string
-	autoApprove   bool
-	loopThreshold int
-	apiRetry      int
-	apiRetryDelay int
-	diffLines     int
-	outputFormat  string
-	headless      bool
-	planMode      bool
+	userID          string
+	files           []string
+	edit            bool
+	output          string
+	resume          bool
+	providerFlag    string
+	modelFlag       string
+	autoApprove     bool
+	loopThreshold   int
+	apiRetry        int
+	apiRetryDelay   int
+	diffLines       int
+	outputFormat    string
+	headless        bool
+	planMode        bool
+	noUpdateCheck   bool
 )
 
 const projectConfigFile = "XELYON.md"
@@ -166,6 +167,14 @@ Examples:
   xelyon -p deepseek -m deepseek-coder             # Short flags
   xelyon -f main.go "add logging"                  # With file context`,
 	Run: func(cmd *cobra.Command, args []string) {
+		// バージョンチェック（--no-update-check または --headless でない場合）
+		if !noUpdateCheck && !headless && outputFormat != "json" {
+			configDir := filepath.Join(os.Getenv("HOME"), ".xelyon")
+			if result, _ := version.CheckForUpdates(configDir); result != nil {
+				fmt.Print(version.FormatUpdateNotification(result))
+			}
+		}
+
 		// --headless は --output-format json のエイリアス
 		if headless {
 			outputFormat = "json"
@@ -348,6 +357,9 @@ func init() {
 
 	// 新規: --plan フラグ
 	rootCmd.Flags().BoolVar(&planMode, "plan", false, "Enable plan mode (autonomous execution with approval)")
+
+	// 新規: --no-update-check フラグ
+	rootCmd.Flags().BoolVar(&noUpdateCheck, "no-update-check", false, "Disable automatic version check")
 }
 
 func Execute() {
