@@ -1,5 +1,9 @@
 # XELYON CLI
 
+> ⚠️ **このプロジェクトは開発中です / This project is under development**
+>
+> 一部の機能は不安定な場合があります。フィードバックは [Issues](https://github.com/susugadx/xelyon-cli/issues) へお願いします。
+
 AI搭載のコーディングアシスタントCLIツール
 
 [![CI](https://github.com/susugadx/xelyon-cli/workflows/CI/badge.svg)](https://github.com/susugadx/xelyon-cli/actions)

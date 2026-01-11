@@ -38,3 +38,4 @@ coverage.txt
 # Go workspace
 go.work
 go.work.sum
+CLAUDE.md
