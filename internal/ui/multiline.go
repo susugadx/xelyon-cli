@@ -4,18 +4,39 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 )
 
 // MultilineReader handles multiline input with bracketed paste mode and ``` markers
 type MultilineReader struct {
-	reader *bufio.Reader
+	reader          *bufio.Reader
+	bracketedPasteEnabled bool
 }
 
 // NewMultilineReader creates a new multiline reader
 func NewMultilineReader(r io.Reader) *MultilineReader {
 	return &MultilineReader{
-		reader: bufio.NewReader(r),
+		reader:          bufio.NewReader(r),
+		bracketedPasteEnabled: false,
+	}
+}
+
+// EnableBracketedPaste enables bracketed paste mode (call once at start)
+func (m *MultilineReader) EnableBracketedPaste() {
+	if !m.bracketedPasteEnabled && isTerminal() {
+		// CSI ? 2004 h - Enable bracketed paste mode
+		fmt.Print("\x1b[?2004h")
+		m.bracketedPasteEnabled = true
+	}
+}
+
+// DisableBracketedPaste disables bracketed paste mode (call at cleanup)
+func (m *MultilineReader) DisableBracketedPaste() {
+	if m.bracketedPasteEnabled {
+		// CSI ? 2004 l - Disable bracketed paste mode
+		fmt.Print("\x1b[?2004l")
+		m.bracketedPasteEnabled = false
 	}
 }
 
@@ -24,10 +45,6 @@ func NewMultilineReader(r io.Reader) *MultilineReader {
 // 2. ``` markers for explicit multiline mode
 // 3. Single line input (default)
 func (m *MultilineReader) ReadInput(prompt string) (string, error) {
-	// Enable bracketed paste mode
-	enableBracketedPaste()
-	defer disableBracketedPaste()
-
 	fmt.Print(prompt)
 
 	// Read first line
@@ -39,7 +56,8 @@ func (m *MultilineReader) ReadInput(prompt string) (string, error) {
 	line = strings.TrimRight(line, "\n\r")
 
 	// Case 1: Bracketed paste detected
-	if strings.HasPrefix(line, "\x1b[200~") {
+	// Check for both \x1b[200~ (ESC [ 2 0 0 ~) and ^[[200~ (visual representation)
+	if strings.HasPrefix(line, "\x1b[200~") || strings.Contains(line, "\x1b[200~") {
 		return m.readBracketedPaste(line)
 	}
 
@@ -135,16 +153,13 @@ func (m *MultilineReader) readMultilineWithMarker() (string, error) {
 	return result, nil
 }
 
-// enableBracketedPaste enables bracketed paste mode in the terminal
-func enableBracketedPaste() {
-	// CSI ? 2004 h - Enable bracketed paste mode
-	fmt.Print("\x1b[?2004h")
-}
-
-// disableBracketedPaste disables bracketed paste mode in the terminal
-func disableBracketedPaste() {
-	// CSI ? 2004 l - Disable bracketed paste mode
-	fmt.Print("\x1b[?2004l")
+// isTerminal checks if stdout is a terminal
+func isTerminal() bool {
+	fileInfo, err := os.Stdout.Stat()
+	if err != nil {
+		return false
+	}
+	return (fileInfo.Mode() & os.ModeCharDevice) != 0
 }
 
 // IsMultilineMarker checks if the input is a multiline marker

@@ -129,6 +129,9 @@ xelyon --provider gemini --model gemini-2.0-flash-exp
 - コードエディタやブラウザから複数行をコピー＆ペースト
 - 自動的に複数行として認識され、途中で実行されません
 - `📋 Pasted N lines` と表示されます
+- ターミナルエミュレータがBracketed Paste Modeをサポートしている必要があります（大半の現代的なターミナルは対応済み）
+  - 対応: iTerm2, Terminal.app, GNOME Terminal, Konsole, Windows Terminal, tmux, screen
+  - 非対応の場合は**方法1の ``` マーカー**を使用してください
 
 ### ツール例
 

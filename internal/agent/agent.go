@@ -350,6 +350,9 @@ func RunInteractive(model string, provider api.Provider, autoApprove, planMode b
 
 	// REPLループ（複数行入力対応）
 	mlReader := ui.NewMultilineReader(os.Stdin)
+	mlReader.EnableBracketedPaste()
+	defer mlReader.DisableBracketedPaste()
+
 	for {
 		input, err := mlReader.ReadInput("\n> ")
 		if err != nil {

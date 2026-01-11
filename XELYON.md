@@ -141,8 +141,12 @@ xelyon-cli/
 - **色付け**: cyan/green/yellow/redで情報を視覚的に区別
 - **複数行入力** (v0.32.0):
   - **Bracketed Paste Mode**: ターミナルペースト時に自動検出（ESC[200~...ESC[201~）
+    - `EnableBracketedPaste()` でターミナルにモード有効化シーケンスを送信
+    - `isTerminal()` でターミナル判定（テスト環境では無効化）
+    - 対応ターミナル: iTerm2, GNOME Terminal, Konsole, Windows Terminal, tmux等
   - **``` マーカー**: 明示的な複数行モード（行番号付きエディタ表示）
   - **multiline.go**: `MultilineReader.ReadInput()` で両方式を統一処理
+  - **agent.go**: 起動時に `EnableBracketedPaste()`, 終了時に `DisableBracketedPaste()`
 
 #### 4. 履歴管理 (internal/history/)
 - **JSONL形式**: ストリーミング対応、1行1メッセージ
