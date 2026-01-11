@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -65,11 +66,8 @@ func (w *MCPToolWrapper) Run(args map[string]string) (string, *tools.FileChange,
 		return fmt.Sprintf("Validation Error: %v", err), nil, err
 	}
 
-	// string map を any map に変換
-	anyArgs := make(map[string]any)
-	for k, v := range args {
-		anyArgs[k] = v
-	}
+	// スキーマに基づいて型変換（string → number/integer/boolean）
+	anyArgs := w.convertArgsWithSchema(args)
 
 	// タイムアウト付きコンテキスト（30秒）
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -87,6 +85,66 @@ func (w *MCPToolWrapper) Run(args map[string]string) (string, *tools.FileChange,
 	// 結果をフォーマット
 	formattedResult := w.formatResult(result)
 	return formattedResult, nil, nil
+}
+
+// convertArgsWithSchema はスキーマに基づいて引数の型を変換する
+func (w *MCPToolWrapper) convertArgsWithSchema(args map[string]string) map[string]any {
+	anyArgs := make(map[string]any)
+
+	// スキーマが空の場合は文字列のまま返す
+	if len(w.inputSchema) == 0 || string(w.inputSchema) == "null" {
+		for k, v := range args {
+			anyArgs[k] = v
+		}
+		return anyArgs
+	}
+
+	// JSONスキーマをパース
+	var schema map[string]any
+	if err := json.Unmarshal(w.inputSchema, &schema); err != nil {
+		// パースエラーの場合は文字列のまま返す
+		for k, v := range args {
+			anyArgs[k] = v
+		}
+		return anyArgs
+	}
+
+	// プロパティ情報を取得
+	properties, _ := schema["properties"].(map[string]any)
+
+	for k, v := range args {
+		converted := false
+		// スキーマに型情報があれば変換
+		if properties != nil {
+			if propInfo, ok := properties[k].(map[string]any); ok {
+				if propType, ok := propInfo["type"].(string); ok {
+					switch propType {
+					case "integer":
+						if intVal, err := strconv.ParseInt(v, 10, 64); err == nil {
+							anyArgs[k] = intVal
+							converted = true
+						}
+					case "number":
+						if floatVal, err := strconv.ParseFloat(v, 64); err == nil {
+							anyArgs[k] = floatVal
+							converted = true
+						}
+					case "boolean":
+						if boolVal, err := strconv.ParseBool(v); err == nil {
+							anyArgs[k] = boolVal
+							converted = true
+						}
+					}
+				}
+			}
+		}
+		// 変換できない場合は文字列のまま
+		if !converted {
+			anyArgs[k] = v
+		}
+	}
+
+	return anyArgs
 }
 
 // validateArgs は引数を検証する（簡易版）

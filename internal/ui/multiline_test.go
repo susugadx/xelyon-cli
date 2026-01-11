@@ -64,9 +64,9 @@ func TestMultilineReader_MarkerMode_EmptyLines(t *testing.T) {
 	}
 }
 
-func TestMultilineReader_BracketedPaste(t *testing.T) {
-	// Bracketed paste format: ESC[200~...content...ESC[201~
-	input := "\x1b[200~line 1\nline 2\nline 3\x1b[201~\n"
+func TestMultilineReader_BracketedPaste_ESC(t *testing.T) {
+	// Bracketed paste format: ESC[200~...content...ESC[201~ (single line, markers stripped)
+	input := "\x1b[200~hello world\x1b[201~\n"
 	reader := NewMultilineReader(strings.NewReader(input))
 
 	result, err := reader.ReadInput("> ")
@@ -74,15 +74,15 @@ func TestMultilineReader_BracketedPaste(t *testing.T) {
 		t.Fatalf("ReadInput() error = %v", err)
 	}
 
-	expected := "line 1\nline 2\nline 3"
+	expected := "hello world"
 	if result != expected {
 		t.Errorf("ReadInput() = %q, want %q", result, expected)
 	}
 }
 
-func TestMultilineReader_BracketedPaste_MultipleLines(t *testing.T) {
-	// Simulate bracketed paste with multiple lines
-	input := "\x1b[200~first line\nsecond line\nthird line\n\x1b[201~\n"
+func TestMultilineReader_BracketedPaste_Literal(t *testing.T) {
+	// Literal form: ^[[200~...content...^[[201~ (stripped)
+	input := "^[[200~hello world^[[201~\n"
 	reader := NewMultilineReader(strings.NewReader(input))
 
 	result, err := reader.ReadInput("> ")
@@ -90,20 +90,25 @@ func TestMultilineReader_BracketedPaste_MultipleLines(t *testing.T) {
 		t.Fatalf("ReadInput() error = %v", err)
 	}
 
-	lines := strings.Split(result, "\n")
-	// Expected: "first line", "second line", "third line" (3 lines)
-	if len(lines) != 3 {
-		t.Errorf("Expected 3 lines, got %d: %#v", len(lines), lines)
+	expected := "hello world"
+	if result != expected {
+		t.Errorf("ReadInput() = %q, want %q", result, expected)
+	}
+}
+
+func TestMultilineReader_BracketedPaste_PartialMarkers(t *testing.T) {
+	// Only start marker present (literal form)
+	input := "^[[200~hello world\n"
+	reader := NewMultilineReader(strings.NewReader(input))
+
+	result, err := reader.ReadInput("> ")
+	if err != nil {
+		t.Fatalf("ReadInput() error = %v", err)
 	}
 
-	if lines[0] != "first line" {
-		t.Errorf("Line 0 = %q, want %q", lines[0], "first line")
-	}
-	if lines[1] != "second line" {
-		t.Errorf("Line 1 = %q, want %q", lines[1], "second line")
-	}
-	if lines[2] != "third line" {
-		t.Errorf("Line 2 = %q, want %q", lines[2], "third line")
+	expected := "hello world"
+	if result != expected {
+		t.Errorf("ReadInput() = %q, want %q", result, expected)
 	}
 }
 
@@ -187,18 +192,51 @@ func TestMultilineReader_MarkerMode_OnlyMarkers(t *testing.T) {
 	}
 }
 
-func TestMultilineReader_BracketedPaste_SingleLine(t *testing.T) {
-	input := "\x1b[200~single line\x1b[201~\n"
-	reader := NewMultilineReader(strings.NewReader(input))
-
-	result, err := reader.ReadInput("> ")
-	if err != nil {
-		t.Fatalf("ReadInput() error = %v", err)
+func TestStripAllBracketedPasteMarkers(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "ESC markers",
+			input: "\x1b[200~hello\x1b[201~",
+			want:  "hello",
+		},
+		{
+			name:  "literal markers",
+			input: "^[[200~hello^[[201~",
+			want:  "hello",
+		},
+		{
+			name:  "mixed markers",
+			input: "\x1b[200~hello^[[201~",
+			want:  "hello",
+		},
+		{
+			name:  "multiple markers",
+			input: "^[[200~a^[[200~b^[[201~c^[[201~",
+			want:  "abc",
+		},
+		{
+			name:  "no markers",
+			input: "hello world",
+			want:  "hello world",
+		},
+		{
+			name:  "empty",
+			input: "",
+			want:  "",
+		},
 	}
 
-	expected := "single line"
-	if result != expected {
-		t.Errorf("ReadInput() = %q, want %q", result, expected)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := stripAllBracketedPasteMarkers(tt.input)
+			if got != tt.want {
+				t.Errorf("stripAllBracketedPasteMarkers() = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 

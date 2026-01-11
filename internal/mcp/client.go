@@ -83,6 +83,7 @@ func validateMCPCommand(command string) error {
 
 // sanitizeEnv は環境変数を構築する
 // システム環境変数から安全なものをコピーし、customEnvの値をすべて追加する
+// customEnvの値は ${VAR} 形式で環境変数を参照できる
 func sanitizeEnv(customEnv map[string]string) []string {
 	// 安全な環境変数のホワイトリスト
 	safeEnvKeys := map[string]bool{
@@ -105,9 +106,10 @@ func sanitizeEnv(customEnv map[string]string) []string {
 		}
 	}
 
-	// カスタム環境変数をすべて追加
+	// カスタム環境変数をすべて追加（${VAR} を展開）
 	for k, v := range customEnv {
-		env = append(env, fmt.Sprintf("%s=%s", k, v))
+		expandedValue := os.ExpandEnv(v)
+		env = append(env, fmt.Sprintf("%s=%s", k, expandedValue))
 	}
 
 	return env

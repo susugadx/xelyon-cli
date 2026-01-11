@@ -24,10 +24,20 @@ var (
 
 // ParseToolCall はレスポンスからツール呼び出しを抽出
 func ParseToolCall(response string) *ToolCall {
-	// JSONブロックを探す
-	start := strings.Index(response, "{\"tool\"")
-	if start == -1 {
-		start = strings.Index(response, "{ \"tool\"")
+	// JSONブロックを探す（複数パターン対応）
+	patterns := []string{
+		"{\"tool\"",   // {"tool"
+		"{ \"tool\"",  // { "tool"
+		"{\"tool\":",  // {"tool":
+		"{ \"tool\":", // { "tool":
+	}
+
+	start := -1
+	for _, pattern := range patterns {
+		idx := strings.Index(response, pattern)
+		if idx != -1 && (start == -1 || idx < start) {
+			start = idx
+		}
 	}
 	if start == -1 {
 		return nil
@@ -57,6 +67,9 @@ func ParseToolCall(response string) *ToolCall {
 	if err := json.Unmarshal([]byte(jsonStr), &toolCall); err != nil {
 		return nil
 	}
+
+	// RawArgs（any型）をArgs（string型）に変換
+	toolCall.NormalizeArgs()
 
 	return &toolCall
 }
