@@ -81,7 +81,8 @@ func validateMCPCommand(command string) error {
 	return nil
 }
 
-// sanitizeEnv は環境変数を安全なもののみに制限
+// sanitizeEnv は環境変数を構築する
+// システム環境変数から安全なものをコピーし、customEnvの値をすべて追加する
 func sanitizeEnv(customEnv map[string]string) []string {
 	// 安全な環境変数のホワイトリスト
 	safeEnvKeys := map[string]bool{
@@ -104,14 +105,8 @@ func sanitizeEnv(customEnv map[string]string) []string {
 		}
 	}
 
-	// カスタム環境変数を追加（APIキー系は除外）
+	// カスタム環境変数をすべて追加
 	for k, v := range customEnv {
-		// APIキー系の環境変数は除外
-		if strings.Contains(strings.ToUpper(k), "KEY") ||
-			strings.Contains(strings.ToUpper(k), "TOKEN") ||
-			strings.Contains(strings.ToUpper(k), "SECRET") {
-			continue
-		}
 		env = append(env, fmt.Sprintf("%s=%s", k, v))
 	}
 

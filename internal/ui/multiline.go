@@ -40,6 +40,14 @@ func (m *MultilineReader) DisableBracketedPaste() {
 	}
 }
 
+// Bracketed paste markers - both ESC sequence and literal ^[ forms
+const (
+	bracketedPasteStart    = "\x1b[200~"
+	bracketedPasteEnd      = "\x1b[201~"
+	bracketedPasteStartAlt = "^[[200~" // Literal form (some terminals)
+	bracketedPasteEndAlt   = "^[[201~" // Literal form (some terminals)
+)
+
 // ReadInput reads user input, supporting:
 // 1. Bracketed paste mode (automatic detection)
 // 2. ``` markers for explicit multiline mode
@@ -55,9 +63,8 @@ func (m *MultilineReader) ReadInput(prompt string) (string, error) {
 
 	line = strings.TrimRight(line, "\n\r")
 
-	// Case 1: Bracketed paste detected
-	// Check for both \x1b[200~ (ESC [ 2 0 0 ~) and ^[[200~ (visual representation)
-	if strings.HasPrefix(line, "\x1b[200~") || strings.Contains(line, "\x1b[200~") {
+	// Case 1: Bracketed paste detected (check both ESC and literal ^[ forms)
+	if hasBracketedPasteStart(line) {
 		return m.readBracketedPaste(line)
 	}
 
@@ -70,14 +77,40 @@ func (m *MultilineReader) ReadInput(prompt string) (string, error) {
 	return line, nil
 }
 
+// hasBracketedPasteStart checks if line contains bracketed paste start marker
+func hasBracketedPasteStart(line string) bool {
+	return strings.Contains(line, bracketedPasteStart) ||
+		strings.Contains(line, bracketedPasteStartAlt)
+}
+
+// hasBracketedPasteEnd checks if line contains bracketed paste end marker
+func hasBracketedPasteEnd(line string) bool {
+	return strings.Contains(line, bracketedPasteEnd) ||
+		strings.Contains(line, bracketedPasteEndAlt)
+}
+
+// removeBracketedPasteStart removes the start marker from the line
+func removeBracketedPasteStart(line string) string {
+	line = strings.Replace(line, bracketedPasteStart, "", 1)
+	line = strings.Replace(line, bracketedPasteStartAlt, "", 1)
+	return line
+}
+
+// removeBracketedPasteEnd removes the end marker from the line
+func removeBracketedPasteEnd(line string) string {
+	line = strings.Replace(line, bracketedPasteEnd, "", 1)
+	line = strings.Replace(line, bracketedPasteEndAlt, "", 1)
+	return line
+}
+
 // readBracketedPaste handles bracketed paste mode input
 func (m *MultilineReader) readBracketedPaste(firstLine string) (string, error) {
-	// Remove bracketed paste start marker
-	content := strings.TrimPrefix(firstLine, "\x1b[200~")
+	// Remove bracketed paste start marker (both ESC and literal forms)
+	content := removeBracketedPasteStart(firstLine)
 
 	// Check if end marker is already in the first line (single-line paste)
-	if strings.Contains(content, "\x1b[201~") {
-		result := strings.TrimSuffix(content, "\x1b[201~")
+	if hasBracketedPasteEnd(content) {
+		result := removeBracketedPasteEnd(content)
 		lineCount := strings.Count(result, "\n") + 1
 		if result == "" {
 			lineCount = 0
@@ -103,9 +136,9 @@ func (m *MultilineReader) readBracketedPaste(firstLine string) (string, error) {
 
 		line = strings.TrimRight(line, "\n\r")
 
-		// Check for end marker
-		if strings.Contains(line, "\x1b[201~") {
-			line = strings.TrimSuffix(line, "\x1b[201~")
+		// Check for end marker (both ESC and literal forms)
+		if hasBracketedPasteEnd(line) {
+			line = removeBracketedPasteEnd(line)
 			if line != "" {
 				lines = append(lines, line)
 			}
@@ -167,9 +200,9 @@ func IsMultilineMarker(input string) bool {
 	return input == "```"
 }
 
-// TrimBracketedPasteMarkers removes bracketed paste markers from input
+// TrimBracketedPasteMarkers removes bracketed paste markers from input (both forms)
 func TrimBracketedPasteMarkers(input string) string {
-	input = strings.TrimPrefix(input, "\x1b[200~")
-	input = strings.TrimSuffix(input, "\x1b[201~")
+	input = removeBracketedPasteStart(input)
+	input = removeBracketedPasteEnd(input)
 	return input
 }

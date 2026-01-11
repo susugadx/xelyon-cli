@@ -104,10 +104,10 @@ func TestSanitizeEnv(t *testing.T) {
 
 	customEnv := map[string]string{
 		"PYTHONPATH":   "/custom/path",
-		"API_KEY":      "should-be-filtered",
-		"CUSTOM_TOKEN": "should-be-filtered",
-		"MY_SECRET":    "should-be-filtered",
-		"SAFE_VAR":     "should-be-filtered-too", // not in whitelist
+		"API_KEY":      "my-api-key",
+		"CUSTOM_TOKEN": "my-token",
+		"MY_SECRET":    "my-secret",
+		"SAFE_VAR":     "safe-value",
 		"NODE_OPTIONS": "--max-old-space-size=4096",
 	}
 
@@ -140,31 +140,26 @@ func TestSanitizeEnv(t *testing.T) {
 		t.Errorf("Expected NODE_OPTIONS='--max-old-space-size=4096', got %q", val)
 	}
 
-	// 危険な環境変数が除外されているべき
-	if _, ok := resultMap["SECRET_KEY"]; ok {
-		t.Error("SECRET_KEY should not be in sanitized env")
+	// customEnvの値はすべて追加されるべき
+	if val, ok := resultMap["API_KEY"]; !ok || val != "my-api-key" {
+		t.Errorf("Expected API_KEY='my-api-key', got %q", val)
 	}
 
-	if _, ok := resultMap["API_KEY"]; ok {
-		t.Error("API_KEY should not be in sanitized env")
+	if val, ok := resultMap["CUSTOM_TOKEN"]; !ok || val != "my-token" {
+		t.Errorf("Expected CUSTOM_TOKEN='my-token', got %q", val)
 	}
 
-	if _, ok := resultMap["CUSTOM_TOKEN"]; ok {
-		t.Error("CUSTOM_TOKEN should not be in sanitized env")
+	if val, ok := resultMap["MY_SECRET"]; !ok || val != "my-secret" {
+		t.Errorf("Expected MY_SECRET='my-secret', got %q", val)
 	}
 
-	if _, ok := resultMap["MY_SECRET"]; ok {
-		t.Error("MY_SECRET should not be in sanitized env")
-	}
-
-	// SAFE_VARは KEY/TOKEN/SECRET を含まないので含まれるべき
-	if _, ok := resultMap["SAFE_VAR"]; !ok {
-		t.Error("SAFE_VAR should be in sanitized env (doesn't contain KEY/TOKEN/SECRET)")
+	if val, ok := resultMap["SAFE_VAR"]; !ok || val != "safe-value" {
+		t.Errorf("Expected SAFE_VAR='safe-value', got %q", val)
 	}
 
 	// PYTHONPATHも含まれるべき
-	if _, ok := resultMap["PYTHONPATH"]; !ok {
-		t.Error("PYTHONPATH should be in sanitized env")
+	if val, ok := resultMap["PYTHONPATH"]; !ok || val != "/custom/path" {
+		t.Errorf("Expected PYTHONPATH='/custom/path', got %q", val)
 	}
 }
 
@@ -403,11 +398,12 @@ func TestSanitizeEnv_EmptyInput(t *testing.T) {
 	}
 }
 
-func TestSanitizeEnv_FilterSensitiveKeys(t *testing.T) {
+func TestSanitizeEnv_AllCustomEnvIncluded(t *testing.T) {
+	// customEnvの値はすべて追加されるべき（フィルタリングなし）
 	customEnv := map[string]string{
-		"AWS_SECRET_ACCESS_KEY": "sensitive", // SECRET含む
-		"API_KEY":               "sensitive", // KEY含む
-		"GITHUB_TOKEN":          "sensitive", // TOKEN含む
+		"AWS_SECRET_ACCESS_KEY": "sensitive",
+		"API_KEY":               "my-api-key",
+		"GITHUB_TOKEN":          "my-token",
 		"SAFE_VALUE":            "not-sensitive",
 	}
 
@@ -421,22 +417,21 @@ func TestSanitizeEnv_FilterSensitiveKeys(t *testing.T) {
 		}
 	}
 
-	// センシティブなキーは除外されるべき（KEY, TOKEN, SECRETを含むもの）
-	if _, ok := resultMap["AWS_SECRET_ACCESS_KEY"]; ok {
-		t.Error("AWS_SECRET_ACCESS_KEY should be filtered out")
+	// すべてのcustomEnv値が含まれるべき
+	if val, ok := resultMap["AWS_SECRET_ACCESS_KEY"]; !ok || val != "sensitive" {
+		t.Errorf("Expected AWS_SECRET_ACCESS_KEY='sensitive', got %q", val)
 	}
 
-	if _, ok := resultMap["API_KEY"]; ok {
-		t.Error("API_KEY should be filtered out")
+	if val, ok := resultMap["API_KEY"]; !ok || val != "my-api-key" {
+		t.Errorf("Expected API_KEY='my-api-key', got %q", val)
 	}
 
-	if _, ok := resultMap["GITHUB_TOKEN"]; ok {
-		t.Error("GITHUB_TOKEN should be filtered out")
+	if val, ok := resultMap["GITHUB_TOKEN"]; !ok || val != "my-token" {
+		t.Errorf("Expected GITHUB_TOKEN='my-token', got %q", val)
 	}
 
-	// 安全な値は含まれるべき
-	if _, ok := resultMap["SAFE_VALUE"]; !ok {
-		t.Error("SAFE_VALUE should be included")
+	if val, ok := resultMap["SAFE_VALUE"]; !ok || val != "not-sensitive" {
+		t.Errorf("Expected SAFE_VALUE='not-sensitive', got %q", val)
 	}
 }
 
