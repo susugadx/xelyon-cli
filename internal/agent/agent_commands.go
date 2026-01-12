@@ -102,6 +102,8 @@ func handleSpecialCommand(input string, agent *Agent) bool {
 		return handleInitCommand(agent)
 	case "/sync":
 		return handleSyncCommand(agent)
+	case "/paste":
+		return handlePasteCommand(agent, args)
 	}
 	return false
 }
@@ -1285,6 +1287,7 @@ func printHelp() {
   /repomap            - Show repository code structure map
   /init               - Generate XELYON.md (project config) from codebase analysis
   /sync               - Sync XELYON.md with current codebase (detect new/deleted files, tech changes)
+  /paste, /p          - Paste mode for long text (end with empty line x2, END, or Ctrl+D)
   /version            - Show version information
   /help               - Show this help
 

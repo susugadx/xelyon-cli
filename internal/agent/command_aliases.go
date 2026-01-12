@@ -11,6 +11,7 @@ import (
 var defaultCommandAliases = map[string]string{
 	"/h": "/help",
 	"/m": "/memory",
+	"/p": "/paste",
 }
 
 // resolveCommandAlias は / で始まるコマンドをエイリアス解決して返す。

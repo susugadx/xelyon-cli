@@ -123,6 +123,7 @@ xelyon --dry-run
 
 - `/h` → `/help`
 - `/m` → `/memory`
+- `/p` → `/paste`
 
 また、`~/.xelyon/config.yaml` の `command_aliases` で追加/上書きできます。
 
@@ -170,7 +171,24 @@ command_aliases:
 - `📋 Pasted N lines` と表示されます
 - ターミナルエミュレータがBracketed Paste Modeをサポートしている必要があります（大半の現代的なターミナルは対応済み）
   - 対応: iTerm2, Terminal.app, GNOME Terminal, Konsole, Windows Terminal, tmux, screen
-  - 非対応の場合は**方法1の ``` マーカー**を使用してください
+  - 非対応の場合は**方法1の ``` マーカー**または**方法3の /paste コマンド**を使用してください
+
+**方法3: /paste コマンド（WSL等のBracketed Paste非対応環境向け）**
+```bash
+> /paste
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📝 Paste Mode / ペーストモード
+   End: empty line x2, 'END', /end, Ctrl+D
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[長文をペースト]
+[空行]
+[空行]
+✅ Captured N lines (X.X KB)
+```
+- 終了方法: 空行2回、`END`、`/end`、Ctrl+D
+- エイリアス: `/p`
+- 設定: `~/.xelyon/config.yaml` で `paste.max_lines`, `paste.timeout_seconds` 等を変更可能
 
 ### ツール例
 

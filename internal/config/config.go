@@ -42,6 +42,7 @@ type Config struct {
 	ToolConfirm     ToolConfirmConfig              `yaml:"tool_confirm,omitempty"`
 	CommandAliases  map[string]string              `yaml:"command_aliases,omitempty"` // コマンドエイリアス
 	PromptCache     PromptCacheConfig              `yaml:"prompt_cache,omitempty"`
+	Paste           PasteConfig                    `yaml:"paste,omitempty"`
 	// 将来の拡張用
 	// Cloud CloudConfig `yaml:"cloud,omitempty"`
 }
@@ -89,6 +90,13 @@ type PromptCacheConfig struct {
 	Enabled    bool `yaml:"enabled"`
 	MaxEntries int  `yaml:"max_entries"` // 0以下の場合はデフォルト適用
 	TTLSeconds int  `yaml:"ttl_seconds"` // 0の場合はデフォルト適用（デフォルトTTL）
+}
+
+// PasteConfig はペーストモードの設定
+type PasteConfig struct {
+	MaxLines       int `yaml:"max_lines"`       // 最大行数（デフォルト10000）
+	MaxBytes       int `yaml:"max_bytes"`       // 最大バイト数（デフォルト1MB）
+	TimeoutSeconds int `yaml:"timeout_seconds"` // タイムアウト秒（デフォルト60）
 }
 
 // ProviderModelConfig はプロバイダーごとのモデル設定
@@ -151,6 +159,11 @@ func DefaultConfig() *Config {
 		ToolConfirm: ToolConfirmConfig{
 			AutoApproveSafe: true, // SafetyHigh（read_file等）は確認なしで実行
 		},
+		Paste: PasteConfig{
+			MaxLines:       10000,   // デフォルト10000行
+			MaxBytes:       1048576, // デフォルト1MB
+			TimeoutSeconds: 60,      // デフォルト60秒
+		},
 	}
 }
 
@@ -207,6 +220,16 @@ func LoadConfig() (*Config, error) {
 	}
 	if cfg.Compression.ThresholdTokens == 0 {
 		cfg.Compression = defaults.Compression
+	}
+	// Paste設定のデフォルト適用
+	if cfg.Paste.MaxLines == 0 {
+		cfg.Paste.MaxLines = defaults.Paste.MaxLines
+	}
+	if cfg.Paste.MaxBytes == 0 {
+		cfg.Paste.MaxBytes = defaults.Paste.MaxBytes
+	}
+	if cfg.Paste.TimeoutSeconds == 0 {
+		cfg.Paste.TimeoutSeconds = defaults.Paste.TimeoutSeconds
 	}
 	// Note: Diff.ContextLines は0が有効値なので、デフォルト適用は行わない
 
