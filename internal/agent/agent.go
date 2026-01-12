@@ -16,7 +16,6 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/mcp"
 	"github.com/susugadx/xelyon-cli/internal/memory"
-	"github.com/susugadx/xelyon-cli/internal/repomap"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 	"github.com/susugadx/xelyon-cli/internal/version"
@@ -365,18 +364,20 @@ func RunInteractive(model string, provider api.Provider, autoApprove, planMode b
 		green.Println("📋 XELYON.md loaded")
 	}
 
-	// Repo Map 生成
+	// Repo Map 生成（キャッシュあり）
 	cwd, err := os.Getwd()
 	if err != nil {
 		yellow.Printf("Warning: Could not get current directory: %v\n", err)
 		cwd = "." // フォールバック
 	}
-	rm := repomap.NewRepoMap(cwd, 2000) // 最大2000トークン
-	if err := rm.Build(); err == nil && rm.GetSymbolCount() > 0 {
-		repoMapStr := rm.Generate()
+	repoMapStr, symbols, files, fromCache := loadRepoMapForProject(cwd, 2000)
+	if repoMapStr != "" {
 		agent.SystemPrompt += "\n\n" + repoMapStr
-		green.Printf("🗺️  Repo map loaded (%d symbols from %d files)\n",
-			rm.GetSymbolCount(), len(rm.Files))
+		if fromCache {
+			green.Println("🗺️  Repo map loaded (cache)")
+		} else {
+			green.Printf("🗺️  Repo map loaded (%d symbols from %d files)\n", symbols, files)
+		}
 	}
 
 	// REPLループ（複数行入力対応）
@@ -473,18 +474,20 @@ func RunOnce(query string, model string) {
 		green.Println("📋 XELYON.md loaded")
 	}
 
-	// Repo Map 生成
+	// Repo Map 生成（キャッシュあり）
 	cwd, err := os.Getwd()
 	if err != nil {
 		yellow.Printf("Warning: Could not get current directory: %v\n", err)
 		cwd = "." // フォールバック
 	}
-	rm := repomap.NewRepoMap(cwd, 2000)
-	if err := rm.Build(); err == nil && rm.GetSymbolCount() > 0 {
-		repoMapStr := rm.Generate()
+	repoMapStr, symbols, files, fromCache := loadRepoMapForProject(cwd, 2000)
+	if repoMapStr != "" {
 		agent.SystemPrompt += "\n\n" + repoMapStr
-		green.Printf("🗺️  Repo map loaded (%d symbols from %d files)\n",
-			rm.GetSymbolCount(), len(rm.Files))
+		if fromCache {
+			green.Println("🗺️  Repo map loaded (cache)")
+		} else {
+			green.Printf("🗺️  Repo map loaded (%d symbols from %d files)\n", symbols, files)
+		}
 	}
 
 	fmt.Println()
@@ -570,18 +573,20 @@ func RunInteractiveWithResume(model string, provider api.Provider, autoApprove, 
 		green.Println("📋 XELYON.md loaded")
 	}
 
-	// Repo Map 生成
+	// Repo Map 生成（キャッシュあり）
 	cwd, err := os.Getwd()
 	if err != nil {
 		yellow.Printf("Warning: Could not get current directory: %v\n", err)
 		cwd = "." // フォールバック
 	}
-	rm := repomap.NewRepoMap(cwd, 2000)
-	if err := rm.Build(); err == nil && rm.GetSymbolCount() > 0 {
-		repoMapStr := rm.Generate()
+	repoMapStr, symbols, files, fromCache := loadRepoMapForProject(cwd, 2000)
+	if repoMapStr != "" {
 		agent.SystemPrompt += "\n\n" + repoMapStr
-		green.Printf("🗺️  Repo map loaded (%d symbols from %d files)\n",
-			rm.GetSymbolCount(), len(rm.Files))
+		if fromCache {
+			green.Println("🗺️  Repo map loaded (cache)")
+		} else {
+			green.Printf("🗺️  Repo map loaded (%d symbols from %d files)\n", symbols, files)
+		}
 	}
 
 	// REPLループ（複数行入力対応）
@@ -634,14 +639,13 @@ func RunHeadless(query string, model string, provider api.Provider) *HeadlessRes
 		agent.SystemPrompt += "\n\n## Project Context:\n" + config
 	}
 
-	// Repo Map 生成（UI出力なし）
+	// Repo Map 生成（キャッシュあり / UI出力なし）
 	cwd, err := os.Getwd()
 	if err != nil {
 		cwd = "."
 	}
-	rm := repomap.NewRepoMap(cwd, 2000)
-	if err := rm.Build(); err == nil && rm.GetSymbolCount() > 0 {
-		repoMapStr := rm.Generate()
+	repoMapStr, _, _, _ := loadRepoMapForProject(cwd, 2000)
+	if repoMapStr != "" {
 		agent.SystemPrompt += "\n\n" + repoMapStr
 	}
 

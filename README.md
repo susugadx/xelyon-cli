@@ -18,7 +18,7 @@ AI搭載のコーディングアシスタントCLIツール
 - ↩️ **Undo機能**: ファイル変更の取り消し（バックアップから復元）
 - 🧠 **メモリ機能**: プロジェクト別・グローバル記憶の永続化
 - 📂 **会話履歴管理**: セッションをJSONL形式で保存・復元
-- 🗺️ **Repo Map**: Tree-sitterでコード構造を自動解析
+- 🗺️ **Repo Map**: Tree-sitterでコード構造を自動解析（RepoMapは永続キャッシュにより2回目以降の起動を高速化）
 - 🗃️ **プロンプトキャッシュ**: 基盤（in-memory TTL付きLRU + `prompt_cache` 設定） + Claudeは `cache_control` 対応（OpenAI/Geminiは将来対応）
 - 🔌 **MCP対応**: Model Context Protocol による外部ツール連携
 

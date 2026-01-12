@@ -224,6 +224,16 @@ xelyon-cli/
 - **エラーハンドリング**: 接続失敗しても続行、警告表示のみ
 
 #### 10. Repo Map (internal/repomap/)
+
+- **起動高速化（永続キャッシュ）**:
+  - Repo Map の生成結果（`rm.Generate()`）は、プロジェクトパスをキーとして **ディスクに永続キャッシュ**されます。
+  - **無効化条件**: プロジェクト配下のファイル更新（fingerprint=max modTime）が検知されるとキャッシュは無効化され、再生成されます。
+  - **保存先**: `~/.xelyon/cache/repomap/<sha256(projectPath)>.json`
+  - **除外ディレクトリ**: `.git`, `node_modules`, `vendor`, `.xelyon`, `.idea`, `.vscode`
+  - **実装**:
+    - `internal/cache/repomap_persist.go`（fingerprint計算 + load/save）
+    - `internal/agent/repomap_cache.go`（agent起動時の統合）
+
 - **Tree-sitter解析**: AST解析で正確なシンボル抽出
 - **複数言語対応**: Go, JavaScript, TypeScript, Python
 - **シンボル抽出**: 関数、メソッド、構造体、クラス、インターフェース
