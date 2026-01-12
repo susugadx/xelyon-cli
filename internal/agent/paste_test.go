@@ -222,3 +222,146 @@ func TestCommandAliasP(t *testing.T) {
 		t.Errorf("Expected /p to resolve to /paste, got %s", resolved)
 	}
 }
+
+// TestParsePasteInputCancel は /cancel と /c でキャンセルされることをテスト
+func TestParsePasteInputCancel(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       string
+		shouldAbort bool
+		expected    []string
+	}{
+		{
+			name:        "/cancel でキャンセル",
+			input:       "line1\nline2\n/cancel\nline3\n\n\n",
+			shouldAbort: true,
+			expected:    []string{"line1", "line2"},
+		},
+		{
+			name:        "/c でキャンセル",
+			input:       "line1\n/c\nline2\n\n\n",
+			shouldAbort: true,
+			expected:    []string{"line1"},
+		},
+		{
+			name:        "最初の行で /cancel",
+			input:       "/cancel\nline1\n\n\n",
+			shouldAbort: true,
+			expected:    []string{},
+		},
+		{
+			name:        "/cancel を含む文字列は通常行として扱う",
+			input:       "line with /cancel in it\n\n\n",
+			shouldAbort: false,
+			expected:    []string{"line with /cancel in it"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lines, cancelled := parsePasteInputWithCancel(strings.NewReader(tt.input), 10000, 1048576, 5*time.Second)
+
+			if cancelled != tt.shouldAbort {
+				t.Errorf("Expected cancelled=%v, got %v", tt.shouldAbort, cancelled)
+			}
+
+			if len(lines) != len(tt.expected) {
+				t.Errorf("Expected %d lines, got %d", len(tt.expected), len(lines))
+				t.Errorf("Lines: %v", lines)
+				return
+			}
+
+			for i, expected := range tt.expected {
+				if lines[i] != expected {
+					t.Errorf("Line %d: expected %q, got %q", i, expected, lines[i])
+				}
+			}
+		})
+	}
+}
+
+// parsePasteInputWithCancel は /cancel と /c をサポートするパース関数（テスト用）
+func parsePasteInputWithCancel(r io.Reader, maxLines, maxBytes int, timeout time.Duration) ([]string, bool) {
+	var lines []string
+	emptyCount := 0
+	totalBytes := 0
+	cancelled := false
+
+	var currentLine bytes.Buffer
+	buf := make([]byte, 1)
+
+	startTime := time.Now()
+
+	for {
+		if time.Since(startTime) > timeout {
+			break
+		}
+
+		n, err := r.Read(buf)
+		if err == io.EOF {
+			if currentLine.Len() > 0 {
+				line := currentLine.String()
+				if line == "END" || line == "/end" {
+					break
+				}
+				if line == "/cancel" || line == "/c" {
+					cancelled = true
+					break
+				}
+				lines = append(lines, line)
+			}
+			break
+		}
+		if err != nil {
+			break
+		}
+		if n == 0 {
+			continue
+		}
+
+		if buf[0] == '\n' {
+			line := strings.TrimRight(currentLine.String(), "\r")
+			currentLine.Reset()
+
+			if line == "" {
+				emptyCount++
+				if emptyCount >= 2 {
+					break
+				}
+				lines = append(lines, line)
+				totalBytes += 1
+				continue
+			}
+
+			if line == "END" || line == "/end" {
+				break
+			}
+
+			// キャンセルコマンド
+			if line == "/cancel" || line == "/c" {
+				cancelled = true
+				break
+			}
+
+			emptyCount = 0
+			lines = append(lines, line)
+			totalBytes += len(line) + 1
+
+			if len(lines) >= maxLines {
+				break
+			}
+			if totalBytes >= maxBytes {
+				break
+			}
+		} else {
+			currentLine.WriteByte(buf[0])
+		}
+	}
+
+	// 末尾の空行を削除
+	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
+		lines = lines[:len(lines)-1]
+	}
+
+	return lines, cancelled
+}

@@ -22,6 +22,7 @@ func handlePasteCommand(agent *Agent, args []string) bool {
 	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	cyan.Println("📝 Paste Mode / ペーストモード")
 	cyan.Println("   End: empty line x2, 'END', /end, Ctrl+D")
+	cyan.Println("   Cancel: /cancel, /c")
 	cyan.Println("   終了: 空行2回, END, /end, Ctrl+D")
 	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	fmt.Println()
@@ -73,6 +74,12 @@ func handlePasteCommand(agent *Agent, args []string) bool {
 			// 明示的終了コマンド
 			if line == "END" || line == "/end" {
 				goto done
+			}
+
+			// キャンセル
+			if line == "/cancel" || line == "/c" {
+				yellow.Println("❌ Cancelled - input discarded")
+				return true
 			}
 
 			emptyCount = 0

@@ -316,7 +316,8 @@ type FileChange struct {
 - **対象**: `internal/agent/agent.go`
 - **実装**: SIGINT/SIGTERM シグナルハンドラ
 - **動作**:
-  - Ctrl+C時に`agent.Cleanup()`呼び出し
+  - Ctrl+C 1回目: AI応答中断（`context.Cancel`経由）、メッセージ表示
+  - Ctrl+C 2回目（3秒以内）: `agent.Cleanup()`呼び出し後アプリ終了
   - MCPサーバー自動クローズ
   - セッション自動保存
 

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -42,11 +43,12 @@ type Agent struct {
 	changeStack     []tools.FileChange
 	changeStorage   *history.ChangeStorage // 永続的変更履歴
 	mcpManager      *mcp.Manager
-	AutoApprove     bool          // --auto-approve フラグ
-	DryRunMode      bool          // --dry-run フラグ
-	PlanMode        bool          // --plan フラグ（Plan Mode有効化）
-	Stats           *SessionStats // セッション統計情報
-	lastOutputs     []string      // 最後のAI出力履歴（最大10件）
+	AutoApprove     bool               // --auto-approve フラグ
+	DryRunMode      bool               // --dry-run フラグ
+	PlanMode        bool               // --plan フラグ（Plan Mode有効化）
+	Stats           *SessionStats      // セッション統計情報
+	lastOutputs     []string           // 最後のAI出力履歴（最大10件）
+	cancelFunc      context.CancelFunc // 現在のAPI呼び出しをキャンセルするための関数
 }
 
 // NewAgent は新しいAgentを作成
@@ -239,6 +241,39 @@ When Plan Mode is enabled, follow this workflow:
 	}
 }
 
+// setupSignalHandler はCtrl+C 2回で終了するシグナルハンドラを設定
+func setupSignalHandler(agent *Agent) {
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	var lastInterrupt time.Time
+	var interruptMu sync.Mutex
+	go func() {
+		for range sigChan {
+			interruptMu.Lock()
+			now := time.Now()
+
+			if now.Sub(lastInterrupt) < 3*time.Second {
+				// 2回目（3秒以内）: アプリ終了
+				interruptMu.Unlock()
+				fmt.Println("\n\n👋 Gracefully shutting down...")
+				agent.Cleanup()
+				os.Exit(0)
+			}
+
+			lastInterrupt = now
+			interruptMu.Unlock()
+
+			// 1回目: 中断メッセージ
+			fmt.Println("\n\n⚠️  Interrupted. Press Ctrl+C again within 3 seconds to exit.")
+
+			// 現在のAPI呼び出しをキャンセル
+			if agent.cancelFunc != nil {
+				agent.cancelFunc()
+			}
+		}
+	}()
+}
+
 // Cleanup はエージェントのリソースをクリーンアップ
 func (a *Agent) Cleanup() {
 	if a.mcpManager != nil {
@@ -345,15 +380,8 @@ func RunInteractive(model string, provider api.Provider, autoApprove, planMode b
 	tools.SetAutoApprove(autoApprove) // ツールに --auto-approve 設定を伝える
 	defer agent.Cleanup()             // グレースフルシャットダウン
 
-	// シグナルハンドリング（Ctrl+C, SIGTERM対応）
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-sigChan
-		fmt.Println("\n\n👋 Gracefully shutting down...")
-		agent.Cleanup()
-		os.Exit(0)
-	}()
+	// シグナルハンドリング（Ctrl+C 2回で終了、1回目はAI応答中断）
+	setupSignalHandler(agent)
 
 	// ヘッダー表示
 	printHeader(model, provider)
@@ -564,6 +592,10 @@ func RunInteractiveWithResume(model string, provider api.Provider, autoApprove, 
 	tools.SetAutoApprove(autoApprove) // ツールに --auto-approve 設定を伝える
 	agent.session = session
 	agent.History = session.ToAPIMessages()
+	defer agent.Cleanup() // グレースフルシャットダウン
+
+	// シグナルハンドリング（Ctrl+C 2回で終了、1回目はAI応答中断）
+	setupSignalHandler(agent)
 
 	printHeader(model, provider)
 	green.Printf("📂 Resumed session %s (%d messages)\n", sessionID, len(session.Messages))

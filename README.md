@@ -179,6 +179,7 @@ command_aliases:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📝 Paste Mode / ペーストモード
    End: empty line x2, 'END', /end, Ctrl+D
+   Cancel: /cancel, /c
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 [長文をペースト]
@@ -187,8 +188,15 @@ command_aliases:
 ✅ Captured N lines (X.X KB)
 ```
 - 終了方法: 空行2回、`END`、`/end`、Ctrl+D
+- キャンセル: `/cancel`、`/c`（入力破棄してプロンプトに戻る）
 - エイリアス: `/p`
 - 設定: `~/.xelyon/config.yaml` で `paste.max_lines`, `paste.timeout_seconds` 等を変更可能
+
+### キャンセル操作（Ctrl+C）
+
+- **AI応答中**: Ctrl+Cで応答を中断し、プロンプトに戻る
+- **アプリ終了**: Ctrl+Cを3秒以内に2回押すと終了
+- 1回目のCtrl+Cでは「⚠️ Interrupted. Press Ctrl+C again within 3 seconds to exit.」と表示
 
 ### ツール例
 

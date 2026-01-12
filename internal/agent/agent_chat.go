@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -67,6 +68,8 @@ func (a *Agent) chat(input string) {
 		// API呼び出し（リトライあり）
 		response, err := a.callAPIWithRetry()
 		if err != nil {
+			// context.Canceled の場合は中断: ループを抜けてプロンプトに戻る
+			// その他のエラーも同様にループを抜ける
 			return
 		}
 
@@ -112,11 +115,21 @@ func (a *Agent) callAPIWithRetry() (string, error) {
 	for retry := 0; retry < maxRetries; retry++ {
 		// API呼び出しタイムアウト設定（設定から取得、デフォルト5分）
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		a.cancelFunc = cancel // Agentに保存（Ctrl+Cでキャンセル可能に）
+
 		response, err = a.CurrentProvider.ChatWithTools(ctx, a.SystemPrompt, a.History, a.CurrentModel)
-		cancel() // リソースリーク防止
+
+		a.cancelFunc = nil // 完了後にクリア
+		cancel()           // リソースリーク防止
 
 		if err == nil {
 			return response, nil
+		}
+
+		// context.Canceled の場合は中断メッセージを表示してリトライしない
+		if errors.Is(err, context.Canceled) {
+			yellow.Println("\n⚠️  Response interrupted")
+			return "", err
 		}
 
 		if retry < maxRetries-1 {
