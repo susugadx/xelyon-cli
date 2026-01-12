@@ -104,13 +104,14 @@ func (a *Agent) callAPIWithRetry() (string, error) {
 	maxRetries := cfg.APIRetry.Count
 	initialDelay := cfg.APIRetry.InitialDelay
 	maxDelay := cfg.APIRetry.MaxDelay
+	timeout := time.Duration(cfg.APIRetry.Timeout) * time.Second
 
 	var response string
 	var err error
 
 	for retry := 0; retry < maxRetries; retry++ {
-		// API呼び出しタイムアウト設定（3分）
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+		// API呼び出しタイムアウト設定（設定から取得、デフォルト5分）
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		response, err = a.CurrentProvider.ChatWithTools(ctx, a.SystemPrompt, a.History, a.CurrentModel)
 		cancel() // リソースリーク防止
 
@@ -345,8 +346,10 @@ func (a *Agent) chatWithImage(input string, image *api.ImageData) {
 		a.Stats.UserMessages++
 	}
 
-	// 画像付きAPI呼び出し
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	// 画像付きAPI呼び出し（設定からタイムアウト取得）
+	cfg := config.GetGlobalConfig()
+	timeout := time.Duration(cfg.APIRetry.Timeout) * time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	response, err := a.CurrentProvider.ChatWithImage(ctx, a.SystemPrompt, a.History[:len(a.History)-1], input, image, a.CurrentModel)

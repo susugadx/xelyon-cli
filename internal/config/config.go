@@ -66,6 +66,7 @@ type APIRetryConfig struct {
 	Count        int `yaml:"count"`         // リトライ回数（デフォルト3）
 	InitialDelay int `yaml:"initial_delay"` // 初回待機秒数（デフォルト1）
 	MaxDelay     int `yaml:"max_delay"`     // 最大待機秒数（デフォルト30）
+	Timeout      int `yaml:"timeout"`       // APIタイムアウト秒数（デフォルト300=5分）
 }
 
 // DiffConfig は差分表示の設定
@@ -122,9 +123,10 @@ func DefaultConfig() *Config {
 			Threshold: 3, // デフォルトは3回
 		},
 		APIRetry: APIRetryConfig{
-			Count:        3,  // デフォルトは3回
-			InitialDelay: 1,  // デフォルトは1秒
-			MaxDelay:     30, // デフォルトは30秒
+			Count:        3,   // デフォルトは3回
+			InitialDelay: 1,   // デフォルトは1秒
+			MaxDelay:     30,  // デフォルトは30秒
+			Timeout:      300, // デフォルトは5分（300秒）
 		},
 		Diff: DiffConfig{
 			ContextLines: 10, // デフォルトは10行
@@ -175,6 +177,10 @@ func LoadConfig() (*Config, error) {
 	}
 	if cfg.APIRetry.Count == 0 {
 		cfg.APIRetry = defaults.APIRetry
+	}
+	// Timeoutだけ0の場合もデフォルト適用
+	if cfg.APIRetry.Timeout == 0 {
+		cfg.APIRetry.Timeout = defaults.APIRetry.Timeout
 	}
 	if cfg.Backup.MaxGenerations == 0 {
 		cfg.Backup = defaults.Backup
