@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 )
 
@@ -106,15 +105,6 @@ func (m *MultilineReader) readMultilineWithMarker() (string, error) {
 	return result, nil
 }
 
-// isTerminal checks if stdout is a terminal
-func isTerminal() bool {
-	fileInfo, err := os.Stdout.Stat()
-	if err != nil {
-		return false
-	}
-	return (fileInfo.Mode() & os.ModeCharDevice) != 0
-}
-
 // IsMultilineMarker checks if the input is a multiline marker
 func IsMultilineMarker(input string) bool {
 	return input == "```"
@@ -129,5 +119,8 @@ func TrimBracketedPasteMarkers(input string) string {
 // This should be called after AI output completes to ignore keypresses during output
 func (m *MultilineReader) FlushInput() {
 	// Discard all buffered data
-	m.reader.Discard(m.reader.Buffered())
+	if _, err := m.reader.Discard(m.reader.Buffered()); err != nil {
+		// Best-effort: ignore flush errors to avoid breaking interactive UX
+		return
+	}
 }

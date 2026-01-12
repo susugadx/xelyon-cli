@@ -96,6 +96,8 @@ func handleSpecialCommand(input string, agent *Agent) bool {
 		return handleMemoryCommand(args)
 	case "/plan":
 		return handlePlanCommand(agent, args)
+	case "/dryrun":
+		return handleDryRunCommand(agent, args)
 	case "/init":
 		return handleInitCommand(agent)
 	case "/sync":
