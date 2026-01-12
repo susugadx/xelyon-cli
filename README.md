@@ -141,7 +141,7 @@ command_aliases:
 /plan on    # Plan Mode有効化
 /use gemini # プロバイダー切り替え
 /undo       # 最後の変更を取り消し
-/exit       # 終了
+/exit       # 終了（終了時に会話からルール抽出→XELYON.mdへ追記提案）
 ```
 
 全コマンド: [コマンドリファレンス](docs/commands.md)

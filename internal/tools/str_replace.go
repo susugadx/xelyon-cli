@@ -97,8 +97,8 @@ Please use read_file to see the full content and choose a unique old_str.`,
 	// 改善された差分表示
 	showImprovedDiff(oldStr, newStr)
 
-	// 確認
-	if !confirm("Apply this replacement? / この置換を適用しますか？") {
+	// 確認（--auto-approve対応）
+	if !confirmWithAutoApprove("str_replace", "Apply this replacement? / この置換を適用しますか？") {
 		yellow.Println("⚠️  User cancelled the replacement")
 		return fmt.Sprintf(`[CANCELLED] User cancelled str_replace for %s.
 

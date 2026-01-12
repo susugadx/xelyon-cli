@@ -2,6 +2,7 @@ package agent
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"regexp"
@@ -51,6 +52,16 @@ func handleSpecialCommand(input string, agent *Agent) bool {
 	case "/providers":
 		return handleProvidersCommand(agent)
 	case "/exit", "/quit", "/q":
+		// Phase 3: Conversation learning (提案ベース)
+		// セッション終了時に会話から「今後も守るべきルール」を抽出して XELYON.md に追記提案する
+		if agent != nil {
+			extractor := &LLMExtractor{Provider: agent.CurrentProvider, SystemPrompt: agent.SystemPrompt}
+			ctx := context.Background()
+			if _, _, err := agent.ProposeAndApplyLearning(ctx, extractor, "XELYON.md"); err != nil {
+				// 失敗しても終了は継続
+				yellow.Printf("Warning: Learning proposal failed: %v\n", err)
+			}
+		}
 		yellow.Println("👋 See you!")
 		os.Exit(0)
 	case "/clear":

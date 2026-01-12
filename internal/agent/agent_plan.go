@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
 // RunPlanMode はPlan Modeで計画を生成・承認・実行
@@ -16,10 +18,36 @@ func (a *Agent) RunPlanMode(ctx context.Context, userRequest string) error {
 	// ユーザーリクエストを履歴に追加
 	planMessage := api.Message{
 		Role: "user",
-		Content: fmt.Sprintf(`%s
+		Content: fmt.Sprintf(`USER REQUEST: %s
 
-Please analyze this request and create a detailed execution plan in JSON format.
-Output the plan following the Plan Mode instructions in your system prompt.`, userRequest),
+IMPORTANT: You are in Plan Mode. Do NOT execute any tools yet.
+
+Your task is to:
+1. Analyze the user's request above
+2. Break it down into a sequence of concrete steps
+3. Output ONLY a JSON plan in this exact format (no other text):
+
+{"steps": [
+  {"id": 1, "description": "First step description", "tools": ["tool1", "tool2"], "depends_on": [], "parallel": false},
+  {"id": 2, "description": "Second step description", "tools": ["tool3"], "depends_on": [1], "parallel": false}
+]}
+
+Rules:
+- Start with id=1 and increment sequentially
+- "description": Brief description of what this step does
+- "tools": List of tool names to use (can be empty if no tools needed)
+- "depends_on": List of step IDs that must complete before this step (empty array [] if no dependencies)
+- "parallel": true if this step can run in parallel with other steps with same dependencies
+
+Example plan:
+{"steps": [
+  {"id": 1, "description": "Read current Agent struct definition", "tools": ["read_file"], "depends_on": [], "parallel": false},
+  {"id": 2, "description": "Add DryRunMode field to Agent struct", "tools": ["str_replace"], "depends_on": [1], "parallel": false},
+  {"id": 3, "description": "Implement /dryrun command handler", "tools": ["write_file"], "depends_on": [1], "parallel": false},
+  {"id": 4, "description": "Write tests for dry run functionality", "tools": ["write_file"], "depends_on": [2, 3], "parallel": false}
+]}
+
+Output the JSON plan now:`, userRequest),
 	}
 	historyWithRequest := append(a.History, planMessage)
 
@@ -34,16 +62,29 @@ Output the plan following the Plan Mode instructions in your system prompt.`, us
 		return fmt.Errorf("failed to generate plan: %w", err)
 	}
 
+	// デバッグ: レスポンスを表示（開発用）
+	// fmt.Printf("DEBUG: AI response:\n%s\n", response)
+
 	// Step 2: レスポンスからPlan JSONを抽出
 	planJSON, err := ExtractPlanJSON(response)
 	if err != nil {
-		return fmt.Errorf("failed to extract plan JSON: %w", err)
+		red.Printf("❌ Failed to extract plan JSON from AI response\n")
+		yellow.Printf("AI Response:\n%s\n", response)
+		return fmt.Errorf("failed to extract plan JSON: %w (AI may have returned a tool call instead of a plan)", err)
 	}
 
 	// Step 3: Planをパース
 	plan, err := ParsePlan(planJSON)
 	if err != nil {
+		red.Printf("❌ Failed to parse plan JSON\n")
+		yellow.Printf("Extracted JSON:\n%s\n", planJSON)
 		return fmt.Errorf("failed to parse plan: %w", err)
+	}
+
+	// 空の計画チェック
+	if len(plan.Steps) == 0 {
+		red.Println("❌ Generated plan has no steps")
+		return fmt.Errorf("empty plan generated")
 	}
 
 	// Step 4: 計画を表示
@@ -175,8 +216,80 @@ Execute this step autonomously. Only ask for confirmation if you need to perform
 	// レスポンスを履歴に追加
 	a.History = append(a.History, api.Message{Role: "assistant", Content: response})
 
-	// ツール呼び出しを処理（agent.goのRun()と同様のロジックを使用）
-	// TODO: ツール実行ロジックをここに統合
+	// 統計情報更新
+	if a.Stats != nil {
+		a.Stats.AssistantMessages++
+	}
+
+	// ツール呼び出しを処理
+	// ループ: レスポンスにツール呼び出しが含まれている限り実行
+	maxToolCalls := 10 // 無限ループ防止
+	for i := 0; i < maxToolCalls; i++ {
+		toolCall := tools.ParseToolCall(response)
+		if toolCall == nil {
+			// ツール呼び出しなし → ステップ完了
+			break
+		}
+
+		// レスポンスから説明部分とツール呼び出しを分離
+		explanation, _ := extractExplanationAndTool(response)
+
+		// 説明部分を先に表示
+		if explanation != "" {
+			cyan.Println("\n💭 AI Explanation:")
+			fmt.Println(explanation)
+			fmt.Println()
+		}
+
+		// 統計情報更新: ツール実行回数
+		if a.Stats != nil {
+			a.Stats.AddToolExecution(toolCall.Tool)
+		}
+
+		// ツール実行
+		result, change := tools.Execute(toolCall)
+
+		// 変更履歴を保存
+		if change != nil {
+			a.changeStack = append(a.changeStack, *change)
+			if len(a.changeStack) > config.MaxChangeStack {
+				a.changeStack = a.changeStack[1:]
+			}
+
+			// 永続的変更履歴に保存
+			if a.changeStorage != nil && a.session != nil {
+				if err := a.changeStorage.AppendChange(a.session.ID, *change); err != nil {
+					yellow.Printf("Warning: Failed to persist change: %v\n", err)
+				}
+			}
+		}
+
+		// 結果を履歴に追加
+		a.History = append(a.History, api.Message{
+			Role:    "user",
+			Content: fmt.Sprintf("[Tool Result]\n%s", result),
+		})
+
+		// 次のAI応答を取得
+		response, err = a.CurrentProvider.ChatWithTools(
+			ctx,
+			a.SystemPrompt,
+			a.History,
+			a.CurrentModel,
+		)
+		if err != nil {
+			plan.UpdateStatus(step.ID, "failed", fmt.Sprintf("Error: %v", err))
+			return fmt.Errorf("step %d failed: %w", step.ID, err)
+		}
+
+		// レスポンスを履歴に追加
+		a.History = append(a.History, api.Message{Role: "assistant", Content: response})
+
+		// 統計情報更新
+		if a.Stats != nil {
+			a.Stats.AssistantMessages++
+		}
+	}
 
 	// ステップ完了
 	plan.UpdateStatus(step.ID, "completed", "Success")

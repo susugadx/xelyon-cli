@@ -1,7 +1,6 @@
 package agent
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"os"
@@ -386,6 +385,9 @@ func RunInteractive(model string, provider api.Provider, autoApprove, planMode b
 	defer mlReader.DisableBracketedPaste()
 
 	for {
+		// AI出力後に溜まった入力をクリア（出力中のEnter押下を無視）
+		mlReader.FlushInput()
+
 		input, err := mlReader.ReadInput("\n> ")
 		if err != nil {
 			break
@@ -582,11 +584,16 @@ func RunInteractiveWithResume(model string, provider api.Provider, autoApprove, 
 			rm.GetSymbolCount(), len(rm.Files))
 	}
 
-	// REPLループ
-	reader := bufio.NewReader(os.Stdin)
+	// REPLループ（複数行入力対応）
+	mlReader := ui.NewMultilineReader(os.Stdin)
+	mlReader.EnableBracketedPaste()
+	defer mlReader.DisableBracketedPaste()
+
 	for {
-		cyan.Print("\n> ")
-		input, err := reader.ReadString('\n')
+		// AI出力後に溜まった入力をクリア（出力中のEnter押下を無視）
+		mlReader.FlushInput()
+
+		input, err := mlReader.ReadInput("\n> ")
 		if err != nil {
 			break
 		}
@@ -598,6 +605,15 @@ func RunInteractiveWithResume(model string, provider api.Provider, autoApprove, 
 
 		if handleSpecialCommand(input, agent) {
 			continue
+		}
+
+		// 画像入力チェック
+		if strings.Contains(input, "image:") {
+			textPart, image := parseImageInput(input)
+			if image != nil {
+				agent.chatWithImage(textPart, image)
+				continue
+			}
 		}
 
 		agent.chat(input)

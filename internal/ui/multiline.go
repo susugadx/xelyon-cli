@@ -124,3 +124,10 @@ func IsMultilineMarker(input string) bool {
 func TrimBracketedPasteMarkers(input string) string {
 	return stripAllBracketedPasteMarkers(input)
 }
+
+// FlushInput discards any buffered input data
+// This should be called after AI output completes to ignore keypresses during output
+func (m *MultilineReader) FlushInput() {
+	// Discard all buffered data
+	m.reader.Discard(m.reader.Buffered())
+}

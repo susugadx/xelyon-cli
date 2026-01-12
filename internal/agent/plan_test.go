@@ -169,7 +169,7 @@ func TestPlan_GetParallelSteps(t *testing.T) {
 	}
 
 	// Step 2 と 3 が並列実行可能
-	if !contains(parallelSteps, 2) || !contains(parallelSteps, 3) {
+	if !containsInt(parallelSteps, 2) || !containsInt(parallelSteps, 3) {
 		t.Errorf("Expected steps 2 and 3 to be parallel, got %v", parallelSteps)
 	}
 }
@@ -322,7 +322,7 @@ func TestFindClosingBrace(t *testing.T) {
 }
 
 // Helper function
-func contains(slice []int, val int) bool {
+func containsInt(slice []int, val int) bool {
 	for _, v := range slice {
 		if v == val {
 			return true
