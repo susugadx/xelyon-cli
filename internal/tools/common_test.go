@@ -337,6 +337,89 @@ func TestDetectTestFramework(t *testing.T) {
 	}
 }
 
+func TestDetectTestFramework_ParentDirectory(t *testing.T) {
+	// Test that framework detection works when config file is in parent directory
+	tmpDir := t.TempDir()
+
+	// Create go.mod in root
+	goModPath := filepath.Join(tmpDir, "go.mod")
+	if err := os.WriteFile(goModPath, []byte("module test"), 0644); err != nil {
+		t.Fatalf("Failed to create go.mod: %v", err)
+	}
+
+	// Create subdirectory
+	subDir := filepath.Join(tmpDir, "internal", "cache")
+	if err := os.MkdirAll(subDir, 0755); err != nil {
+		t.Fatalf("Failed to create subdirectory: %v", err)
+	}
+
+	// Test from subdirectory - should find go.mod in parent
+	framework, command := detectTestFramework(subDir)
+	if framework != "Go" {
+		t.Errorf("detectTestFramework() from subdir: framework = %v, want Go", framework)
+	}
+	if command != "go test ./..." {
+		t.Errorf("detectTestFramework() from subdir: command = %v, want 'go test ./...'", command)
+	}
+}
+
+func TestFindProjectRoot(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create go.mod in root
+	goModPath := filepath.Join(tmpDir, "go.mod")
+	if err := os.WriteFile(goModPath, []byte("module test"), 0644); err != nil {
+		t.Fatalf("Failed to create go.mod: %v", err)
+	}
+
+	// Create nested subdirectory
+	deepDir := filepath.Join(tmpDir, "internal", "tools", "helpers")
+	if err := os.MkdirAll(deepDir, 0755); err != nil {
+		t.Fatalf("Failed to create deep subdirectory: %v", err)
+	}
+
+	tests := []struct {
+		name       string
+		startPath  string
+		configFile string
+		wantRoot   string
+	}{
+		{
+			name:       "find from root",
+			startPath:  tmpDir,
+			configFile: "go.mod",
+			wantRoot:   tmpDir,
+		},
+		{
+			name:       "find from subdirectory",
+			startPath:  filepath.Join(tmpDir, "internal"),
+			configFile: "go.mod",
+			wantRoot:   tmpDir,
+		},
+		{
+			name:       "find from deep subdirectory",
+			startPath:  deepDir,
+			configFile: "go.mod",
+			wantRoot:   tmpDir,
+		},
+		{
+			name:       "not found",
+			startPath:  deepDir,
+			configFile: "nonexistent.file",
+			wantRoot:   "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := findProjectRoot(tt.startPath, tt.configFile)
+			if got != tt.wantRoot {
+				t.Errorf("findProjectRoot() = %v, want %v", got, tt.wantRoot)
+			}
+		})
+	}
+}
+
 func TestDetectFormatter(t *testing.T) {
 	tests := []struct {
 		name          string

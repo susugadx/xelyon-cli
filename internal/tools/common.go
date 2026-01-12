@@ -380,27 +380,56 @@ func max(a, b int) int {
 	return b
 }
 
+// findProjectRoot searches for a project root file (e.g., go.mod) in the given path
+// and its parent directories. Returns the directory containing the file, or "" if not found.
+func findProjectRoot(startPath string, configFile string) string {
+	absPath, err := filepath.Abs(startPath)
+	if err != nil {
+		return ""
+	}
+
+	// Check current directory and parent directories
+	for {
+		if _, err := os.Stat(filepath.Join(absPath, configFile)); err == nil {
+			return absPath
+		}
+
+		parent := filepath.Dir(absPath)
+		if parent == absPath {
+			// Reached root directory
+			break
+		}
+		absPath = parent
+	}
+	return ""
+}
+
 // detectTestFramework detects available test framework
+// It searches the given path and parent directories for project config files
 func detectTestFramework(path string) (framework string, command string) {
-	if _, err := os.Stat(filepath.Join(path, "go.mod")); err == nil {
+	// Go: search for go.mod in path and parent directories
+	if goRoot := findProjectRoot(path, "go.mod"); goRoot != "" {
 		return "Go", "go test ./..."
 	}
 
-	if _, err := os.Stat(filepath.Join(path, "package.json")); err == nil {
-		if _, err := os.Stat(filepath.Join(path, "yarn.lock")); err == nil {
+	// JavaScript/TypeScript: search for package.json
+	if jsRoot := findProjectRoot(path, "package.json"); jsRoot != "" {
+		if _, err := os.Stat(filepath.Join(jsRoot, "yarn.lock")); err == nil {
 			return "JavaScript (yarn)", "yarn test"
 		}
 		return "JavaScript (npm)", "npm test"
 	}
 
-	if _, err := os.Stat(filepath.Join(path, "pytest.ini")); err == nil {
+	// Python: search for pytest.ini or setup.py
+	if findProjectRoot(path, "pytest.ini") != "" {
 		return "Python (pytest)", "pytest"
 	}
-	if _, err := os.Stat(filepath.Join(path, "setup.py")); err == nil {
+	if findProjectRoot(path, "setup.py") != "" {
 		return "Python (pytest)", "pytest"
 	}
 
-	if _, err := os.Stat(filepath.Join(path, "Cargo.toml")); err == nil {
+	// Rust: search for Cargo.toml
+	if findProjectRoot(path, "Cargo.toml") != "" {
 		return "Rust", "cargo test"
 	}
 
@@ -408,25 +437,30 @@ func detectTestFramework(path string) (framework string, command string) {
 }
 
 // detectFormatter detects available formatter
+// It searches the given path and parent directories for project config files
 func detectFormatter(path string) (formatter string, command string) {
-	if _, err := os.Stat(filepath.Join(path, "go.mod")); err == nil {
+	// Go: search for go.mod
+	if findProjectRoot(path, "go.mod") != "" {
 		return "gofmt", "go fmt ./..."
 	}
 
+	// Prettier: search for config files
 	prettierConfigs := []string{".prettierrc", ".prettierrc.json", ".prettierrc.js", "prettier.config.js"}
 	for _, config := range prettierConfigs {
-		if _, err := os.Stat(filepath.Join(path, config)); err == nil {
+		if findProjectRoot(path, config) != "" {
 			return "prettier", "prettier --write ."
 		}
 	}
 
-	if _, err := os.Stat(filepath.Join(path, "pyproject.toml")); err == nil {
+	// Python: search for pyproject.toml
+	if findProjectRoot(path, "pyproject.toml") != "" {
 		if exec.Command("which", "black").Run() == nil {
 			return "black", "black ."
 		}
 	}
 
-	if _, err := os.Stat(filepath.Join(path, "Cargo.toml")); err == nil {
+	// Rust: search for Cargo.toml
+	if findProjectRoot(path, "Cargo.toml") != "" {
 		return "rustfmt", "cargo fmt"
 	}
 
