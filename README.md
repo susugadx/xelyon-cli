@@ -19,6 +19,7 @@ AI搭載のコーディングアシスタントCLIツール
 - 🧠 **メモリ機能**: プロジェクト別・グローバル記憶の永続化
 - 📂 **会話履歴管理**: セッションをJSONL形式で保存・復元
 - 🗺️ **Repo Map**: Tree-sitterでコード構造を自動解析
+- 🗃️ **プロンプトキャッシュ基盤**: in-memoryのTTL付きLRUキャッシュ（設定: `prompt_cache`）
 - 🔌 **MCP対応**: Model Context Protocol による外部ツール連携
 
 ## インストール
@@ -216,7 +217,7 @@ xelyon --plan "バグ修正とテストを実行"
 
 - [コマンド一覧](docs/commands.md) - 全コマンド、29ツール、使用例
 - [プロバイダー設定](docs/providers.md) - DeepSeek, OpenAI, Gemini, Claude, Groq, Ollamaの設定方法
-- [設定リファレンス](docs/config.md) - config.yamlと環境変数
+- [設定リファレンス](docs/config.md) - config.yamlと環境変数（`prompt_cache` 含む）
 - [MCP連携](docs/mcp.md) - Model Context Protocolで外部ツール追加
 
 ## 技術スタック

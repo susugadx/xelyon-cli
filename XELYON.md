@@ -176,10 +176,26 @@ xelyon-cli/
 - **プロバイダーごとの設定**: 各プロバイダーのデフォルトモデルと利用可能モデル一覧
 - **自動作成**: 初回起動時にデフォルト設定を自動生成
 - **バリデーション**: 無効なプロバイダー/モデル名を拒否
+- **プロンプトキャッシュ設定**: `prompt_cache`（enabled / max_entries / ttl_seconds）
 - **.env自動読み込み**: `godotenv`でプロジェクトディレクトリの`.env`を自動読み込み
   - 起動時に`main.go`で実行（ファイルが存在しなくてもエラーにならない）
   - プロジェクトごとに異なるAPIキーやプロバイダーを設定可能
   - `.env.example`でサンプルファイルを提供
+
+#### 7. プロンプトキャッシュ基盤 (internal/cache/)
+- **目的**: system prompt / Repo Map など生成コストが高い文字列を再利用できるようにするためのキャッシュ基盤。
+- **実装**: `internal/cache/cache.go`
+  - in-memory の **TTL付き LRU**（最大エントリ数で追い出し）
+  - **スレッドセーフ**（Mutexで保護）
+  - **Clock抽象化**（テストで時間を制御）
+  - 無効化時は no-op（Getは not found）
+  - 最小メトリクス（hit/miss）
+- **設定**: `prompt_cache`（`internal/config/config.go`）
+  - `enabled`: 有効化
+  - `max_entries`: 最大エントリ数
+  - `ttl_seconds`: デフォルトTTL（秒）
+- **注意**: Claude の `cache_control` 付与や OpenAI Prompt Caching API への統合は、別途 provider 実装側での対応が必要（この変更では基盤と設定のみ）。
+
 
 #### 7. バージョン管理 (internal/version/)
 - **一元管理**: `version.go`でバージョンを定数管理

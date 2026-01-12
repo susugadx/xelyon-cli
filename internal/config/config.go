@@ -40,6 +40,7 @@ type Config struct {
 	APIRetry        APIRetryConfig                 `yaml:"api_retry,omitempty"`
 	Diff            DiffConfig                     `yaml:"diff,omitempty"`
 	CommandAliases  map[string]string              `yaml:"command_aliases,omitempty"` // コマンドエイリアス
+	PromptCache     PromptCacheConfig              `yaml:"prompt_cache,omitempty"`
 	// 将来の拡張用
 	// Cloud CloudConfig `yaml:"cloud,omitempty"`
 }
@@ -72,6 +73,16 @@ type APIRetryConfig struct {
 // DiffConfig は差分表示の設定
 type DiffConfig struct {
 	ContextLines int `yaml:"context_lines"` // 差分表示行数（デフォルト10、0で省略なし）
+}
+
+// PromptCacheConfig はプロンプトキャッシュの設定
+//
+// 目的: system prompt / repo map 等の生成コストを削減するためのキャッシュ。
+// 現時点では in-memory キャッシュを想定（永続化なし）。
+type PromptCacheConfig struct {
+	Enabled    bool `yaml:"enabled"`
+	MaxEntries int  `yaml:"max_entries"` // 0以下の場合はデフォルト適用
+	TTLSeconds int  `yaml:"ttl_seconds"` // 0の場合はデフォルト適用（デフォルトTTL）
 }
 
 // ProviderModelConfig はプロバイダーごとのモデル設定
