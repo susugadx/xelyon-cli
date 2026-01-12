@@ -57,12 +57,57 @@ type ClaudeMessage struct {
 }
 
 // ClaudeRequest はClaude APIリクエスト
+
+// ClaudeCacheControl enables prompt caching for a content block.
+//
+// This is gated by config.PromptCache.Enabled and disabled by default.
+// If the upstream schema changes, requests may fail; keep the feature optional.
+type ClaudeCacheControl struct {
+	Type string `json:"type"` // e.g. "ephemeral"
+}
+
+// ClaudeSystemBlock represents a system prompt content block.
+//
+// When prompt caching is enabled, we send system as an array of blocks instead of a string.
+type ClaudeSystemBlock struct {
+	Type         string              `json:"type"` // "text"
+	Text         string              `json:"text"`
+	CacheControl *ClaudeCacheControl `json:"cache_control,omitempty"`
+}
+
 type ClaudeRequest struct {
-	Model     string          `json:"model"`
-	Messages  []ClaudeMessage `json:"messages"`
-	System    string          `json:"system,omitempty"`
-	MaxTokens int             `json:"max_tokens"`
-	Stream    bool            `json:"stream"`
+	Model    string          `json:"model"`
+	Messages []ClaudeMessage `json:"messages"`
+	// System can be either string (legacy) or []ClaudeSystemBlock (prompt caching).
+	System    interface{} `json:"system,omitempty"`
+	MaxTokens int         `json:"max_tokens"`
+	Stream    bool        `json:"stream"`
+}
+
+// buildClaudeSystemField builds the request "system" field.
+//
+// When prompt caching is enabled in config, it converts the system prompt into a single
+// text block with cache_control to let Anthropic cache the prefix.
+func buildClaudeSystemField(systemPrompt string) interface{} {
+	cfg := config.GetGlobalConfig()
+	if cfg == nil {
+		return systemPrompt
+	}
+	if !cfg.PromptCache.Enabled {
+		return systemPrompt
+	}
+
+	// NOTE: The cache_control schema is based on Anthropic prompt caching examples.
+	// We keep it minimal here.
+	return []ClaudeSystemBlock{
+		{
+			Type: "text",
+			Text: systemPrompt,
+			CacheControl: &ClaudeCacheControl{
+				Type: "ephemeral",
+			},
+		},
+	}
 }
 
 // ClaudeDelta はストリームの差分
@@ -105,11 +150,12 @@ type ClaudeMultimodalMessage struct {
 
 // ClaudeMultimodalRequest はマルチモーダルAPIリクエスト
 type ClaudeMultimodalRequest struct {
-	Model     string        `json:"model"`
-	Messages  []interface{} `json:"messages"` // ClaudeMessage or ClaudeMultimodalMessage
-	System    string        `json:"system,omitempty"`
-	MaxTokens int           `json:"max_tokens"`
-	Stream    bool          `json:"stream"`
+	Model    string        `json:"model"`
+	Messages []interface{} `json:"messages"` // ClaudeMessage or ClaudeMultimodalMessage
+	// System can be either string (legacy) or []ClaudeSystemBlock (prompt caching).
+	System    interface{} `json:"system,omitempty"`
+	MaxTokens int         `json:"max_tokens"`
+	Stream    bool        `json:"stream"`
 }
 
 // ClaudeResponse は通常レスポンス
@@ -133,7 +179,7 @@ func (p *ClaudeProvider) ChatWithTools(ctx context.Context, systemPrompt string,
 	reqBody := ClaudeRequest{
 		Model:     model,
 		Messages:  messages,
-		System:    systemPrompt,
+		System:    buildClaudeSystemField(systemPrompt),
 		MaxTokens: 4096,
 		Stream:    true,
 	}
@@ -280,7 +326,7 @@ func (p *ClaudeProvider) ChatWithImage(ctx context.Context, systemPrompt string,
 	reqBody := ClaudeMultimodalRequest{
 		Model:     model,
 		Messages:  messages,
-		System:    systemPrompt,
+		System:    buildClaudeSystemField(systemPrompt),
 		MaxTokens: 4096,
 		Stream:    true,
 	}

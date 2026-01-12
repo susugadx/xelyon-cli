@@ -19,7 +19,7 @@ AI搭載のコーディングアシスタントCLIツール
 - 🧠 **メモリ機能**: プロジェクト別・グローバル記憶の永続化
 - 📂 **会話履歴管理**: セッションをJSONL形式で保存・復元
 - 🗺️ **Repo Map**: Tree-sitterでコード構造を自動解析
-- 🗃️ **プロンプトキャッシュ基盤**: in-memoryのTTL付きLRUキャッシュ（設定: `prompt_cache`）
+- 🗃️ **プロンプトキャッシュ**: 基盤（in-memory TTL付きLRU + `prompt_cache` 設定） + Claudeは `cache_control` 対応（OpenAI/Geminiは将来対応）
 - 🔌 **MCP対応**: Model Context Protocol による外部ツール連携
 
 ## インストール

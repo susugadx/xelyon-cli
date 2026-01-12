@@ -195,6 +195,11 @@ xelyon-cli/
   - `max_entries`: 最大エントリ数
   - `ttl_seconds`: デフォルトTTL（秒）
 - **注意**: Claude の `cache_control` 付与や OpenAI Prompt Caching API への統合は、別途 provider 実装側での対応が必要（この変更では基盤と設定のみ）。
+- **Provider統合状況**:
+  - **Claude**: `prompt_cache.enabled` のとき、Messages API の `system` を content blocks に変換し `cache_control` を付与（Prompt Caching 用）
+  - **OpenAI**: 現状の `/v1/chat/completions` 実装は維持（API側 Prompt Caching は将来対応）
+  - **Gemini**: Context Caching は別API（cached content 管理）が必要なため将来対応
+
 
 
 #### 7. バージョン管理 (internal/version/)
