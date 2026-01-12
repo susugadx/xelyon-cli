@@ -41,3 +41,4 @@ coverage.txt
 go.work
 go.work.sum
 CLAUDE.md
+temp_config.yaml
