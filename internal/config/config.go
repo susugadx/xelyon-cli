@@ -39,6 +39,7 @@ type Config struct {
 	LoopDetection   LoopDetectionConfig            `yaml:"loop_detection,omitempty"`
 	APIRetry        APIRetryConfig                 `yaml:"api_retry,omitempty"`
 	Diff            DiffConfig                     `yaml:"diff,omitempty"`
+	ToolConfirm     ToolConfirmConfig              `yaml:"tool_confirm,omitempty"`
 	CommandAliases  map[string]string              `yaml:"command_aliases,omitempty"` // コマンドエイリアス
 	PromptCache     PromptCacheConfig              `yaml:"prompt_cache,omitempty"`
 	// 将来の拡張用
@@ -73,6 +74,11 @@ type APIRetryConfig struct {
 // DiffConfig は差分表示の設定
 type DiffConfig struct {
 	ContextLines int `yaml:"context_lines"` // 差分表示行数（デフォルト10、0で省略なし）
+}
+
+// ToolConfirmConfig はツール実行確認の設定
+type ToolConfirmConfig struct {
+	AutoApproveSafe bool `yaml:"auto_approve_safe"` // SafetyHigh（read_file等）を確認なしで実行（デフォルトtrue）
 }
 
 // PromptCacheConfig はプロンプトキャッシュの設定
@@ -141,6 +147,9 @@ func DefaultConfig() *Config {
 		},
 		Diff: DiffConfig{
 			ContextLines: 10, // デフォルトは10行
+		},
+		ToolConfirm: ToolConfirmConfig{
+			AutoApproveSafe: true, // SafetyHigh（read_file等）は確認なしで実行
 		},
 	}
 }

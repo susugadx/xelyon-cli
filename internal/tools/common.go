@@ -191,6 +191,13 @@ func confirmWithAutoApprove(toolName, message string) bool {
 		return true
 	}
 
+	// SafetyHigh ツールの自動承認（設定で有効な場合）
+	cfg := config.GetGlobalConfig()
+	if cfg.ToolConfirm.AutoApproveSafe && IsSafeToolAutoApprovable(toolName) {
+		green.Printf("✓ Auto-approved (Safe read-only): %s\n", toolName)
+		return true
+	}
+
 	// それ以外は通常の確認プロンプト
 	return confirm(message)
 }

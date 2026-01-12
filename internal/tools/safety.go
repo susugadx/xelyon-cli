@@ -77,6 +77,13 @@ func IsAutoApprovable(toolName string, autoApprove bool) bool {
 	return safety == SafetyHigh || safety == SafetyMedium
 }
 
+// IsSafeToolAutoApprovable は SafetyHigh ツールを設定に基づいて自動承認するか判定
+// config.tool_confirm.auto_approve_safe が true の場合、SafetyHigh ツールは確認なしで実行
+func IsSafeToolAutoApprovable(toolName string) bool {
+	safety := GetToolSafety(toolName)
+	return safety == SafetyHigh
+}
+
 // GetSafetyDescription は安全性レベルの説明を返す
 func GetSafetyDescription(safety ToolSafety) string {
 	switch safety {

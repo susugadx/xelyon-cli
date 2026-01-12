@@ -26,23 +26,36 @@ func executeWriteFile(path string, content string) (string, string, error) {
 		exists = true
 	}
 
-	// 確認UI
-	lines := strings.Split(content, "\n")
-	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	// 確認UI - 変更サマリーを明確に表示
+	newLines := strings.Split(content, "\n")
+
+	cyan.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	if exists {
-		cyan.Printf("📝 Create/Overwrite File / ファイルの上書き\n")
+		cyan.Printf("📝 write_file (overwrite): %s\n", path)
 	} else {
-		cyan.Printf("📝 Create File / ファイルの新規作成\n")
+		cyan.Printf("📝 write_file (create): %s\n", path)
 	}
-	cyan.Printf("📂 Path / パス: %s\n", path)
-	cyan.Printf("📏 Size / サイズ: %d lines / 行\n", len(lines))
 	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
-	// diff表示（既存ファイルの場合）
+	// 変更サマリー
+	yellow.Println("\n📊 Summary / 変更サマリー:")
 	if exists {
 		oldContent, _ := os.ReadFile(absPath)
+		oldLines := strings.Split(string(oldContent), "\n")
+		lineDiff := len(newLines) - len(oldLines)
+		fmt.Printf("   • Before: %d lines / 変更前: %d行\n", len(oldLines), len(oldLines))
+		fmt.Printf("   • After: %d lines / 変更後: %d行\n", len(newLines), len(newLines))
+		if lineDiff > 0 {
+			green.Printf("   • Net: +%d lines\n", lineDiff)
+		} else if lineDiff < 0 {
+			red.Printf("   • Net: %d lines\n", lineDiff)
+		} else {
+			fmt.Printf("   • Net: 0 lines (same size)\n")
+		}
 		showDiff(string(oldContent), content, path)
 	} else {
+		fmt.Printf("   • New file: %d lines / 新規: %d行\n", len(newLines), len(newLines))
+		fmt.Printf("   • Size: %d bytes\n", len(content))
 		showPreview(content)
 	}
 

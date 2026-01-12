@@ -83,16 +83,26 @@ Please use read_file to see the full content and choose a unique old_str.`,
 		fmt.Println()
 	}
 
-	// 確認UI
+	// 確認UI - 変更サマリーを明確に表示
 	oldStrLines := strings.Split(oldStr, "\n")
 	newStrLines := strings.Split(newStr, "\n")
+	lineDiff := len(newStrLines) - len(oldStrLines)
 
+	cyan.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	cyan.Printf("🔧 str_replace: %s\n", path)
 	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	cyan.Printf("🔧 Text Replacement / テキスト置換\n")
-	cyan.Printf("📂 File / ファイル: %s\n", path)
-	cyan.Printf("📊 Changes / 変更: -%d lines, +%d lines / %d 行削除・%d 行追加\n",
-		len(oldStrLines), len(newStrLines), len(oldStrLines), len(newStrLines))
-	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+	// 変更サマリー
+	yellow.Println("\n📊 Summary / 変更サマリー:")
+	fmt.Printf("   • Remove %d lines / %d行削除\n", len(oldStrLines), len(oldStrLines))
+	fmt.Printf("   • Add %d lines / %d行追加\n", len(newStrLines), len(newStrLines))
+	if lineDiff > 0 {
+		green.Printf("   • Net: +%d lines\n", lineDiff)
+	} else if lineDiff < 0 {
+		red.Printf("   • Net: %d lines\n", lineDiff)
+	} else {
+		fmt.Printf("   • Net: 0 lines (same size)\n")
+	}
 
 	// 改善された差分表示
 	showImprovedDiff(oldStr, newStr)
