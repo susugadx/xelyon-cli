@@ -68,6 +68,13 @@ xelyon-cli/
 │   │   ├── symbols.go     # シンボル定義
 │   │   ├── extractor.go   # Tree-sitterでシンボル抽出
 │   │   └── repomap.go     # Repo Map生成
+│   ├── review/            # コードレビュー機能
+│   │   ├── types.go       # 共通型定義（Target, Issue, Severity等）
+│   │   ├── review.go      # Orchestrator（レビューパイプライン）
+│   │   ├── scanner.go     # ファイル変更スキャン（changeStack/git diff）
+│   │   ├── analyzer.go    # ルールベース解析（セキュリティ/一般/テスト）
+│   │   ├── fixer.go       # 修正提案生成（suggestion-only）
+│   │   └── reporter.go    # Markdownレポート出力
 │   ├── api/               # API クライアント（Provider Pattern）
 │   │   ├── provider.go    # Provider interface定義
 │   │   ├── client.go      # Client struct（タイムアウト管理）
@@ -241,6 +248,31 @@ xelyon-cli/
 - **トークン制限**: 大規模プロジェクトでも効率的にコンテキスト圧縮
 - **自動生成**: 起動時にプロジェクトをスキャン
 - **除外パターン**: node_modules, .git, vendor等は自動除外
+
+#### 11. コードレビュー (internal/review/)
+
+- **`/review` コマンド**: セッション中の変更をルールベースでレビュー
+- **パイプライン**: Scanner → Analyzer → Fixer → Reporter
+- **検出ルール**:
+  | カテゴリ | ルールID | 説明 | 重大度 |
+  |---------|----------|------|--------|
+  | General | large-diff | 500行以上の追加 | warning |
+  | General | todo-added | TODO/FIXME追加検出 | info |
+  | General | go-export-missing-doc | エクスポート関数のドキュメント不足 | info |
+  | General | sensitive-file | 機密ファイル変更 | warning |
+  | Security | cmd-injection | コマンドインジェクション | error |
+  | Security | weak-crypto | 弱い暗号化 | warning |
+  | Security | http-no-timeout | HTTPタイムアウト未設定 | warning |
+  | Security | path-traversal | パストラバーサル | error |
+  | Test | test-coverage | 新規ファイルのテスト不足 | info |
+  | Test | assertion-missing | テスト関数のアサーション不足 | warning |
+- **フラグ**:
+  - `--all, -a`: セッションではなくgit diff全体をレビュー
+  - `--security, -s`: セキュリティルールを有効化
+  - `--test, -t`: テストルールを有効化
+  - `--fix, -f`: 修正提案を生成（suggestion-only、ファイル変更なし）
+  - `--yes, -y`: 確認プロンプトをスキップ
+- **出力**: Markdownレポート（`~/.xelyon/reviews/YYYYMMDD_HHMMSS.md`）
 
 ## コーディングルール
 

@@ -14,6 +14,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/memory"
 	"github.com/susugadx/xelyon-cli/internal/repomap"
+	"github.com/susugadx/xelyon-cli/internal/review"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/version"
 )
@@ -104,6 +105,8 @@ func handleSpecialCommand(input string, agent *Agent) bool {
 		return handleSyncCommand(agent)
 	case "/paste":
 		return handlePasteCommand(agent, args)
+	case "/review":
+		return handleReviewCommand(agent, args)
 	}
 	return false
 }
@@ -1301,6 +1304,14 @@ Available tools (AI will use automatically):
   search_code - Search in code files
   search_file - Search for files by name
 
+  /review [flags]     - AI code review for recent changes
+                        --all, -a: Review all git changes (not just session)
+                        --security, -s: Focus on security issues
+                        --test, -t: Focus on test coverage
+                        --fix, -f: Generate fix proposals
+                        --yes, -y: Skip confirmation prompt
+                        --max-issues N: Limit displayed issues
+
 Tips:
   - Just describe what you want in natural language
   - AI will ask confirmation for dangerous operations
@@ -1337,5 +1348,162 @@ func handleDryRunCommand(agent *Agent, args []string) bool {
 		status = "enabled"
 	}
 	green.Printf("✅ Dry-Run Mode %s\n", status)
+	return true
+}
+
+// handleReviewCommand handles the /review command for AI code review
+// Flags: --all, --security, --test, --fix, --yes
+func handleReviewCommand(agent *Agent, args []string) bool {
+	// Parse flags
+	opt := review.Options{
+		Provider: agent.CurrentProvider.Name(),
+		Model:    agent.CurrentModel,
+	}
+
+	autoApprove := false
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--all", "-a":
+			opt.All = true
+		case "--security", "-s":
+			opt.Focus.Security = true
+		case "--test", "-t":
+			opt.Focus.Test = true
+		case "--fix", "-f":
+			opt.Fix = true
+		case "--yes", "-y":
+			autoApprove = true
+		case "--max-issues":
+			if i+1 < len(args) {
+				i++
+				if n, err := strconv.Atoi(args[i]); err == nil {
+					opt.MaxIssues = n
+				}
+			}
+		}
+	}
+
+	// Check for changes
+	if !opt.All && len(agent.changeStack) == 0 {
+		yellow.Println("⚠️  No changes to review. Use --all to review all git changes.")
+		return true
+	}
+
+	// Confirm before running
+	if !autoApprove {
+		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		cyan.Println("🔍 Code Review")
+		if opt.All {
+			cyan.Println("   Target: All git changes")
+		} else {
+			cyan.Printf("   Target: %d changed files\n", len(agent.changeStack))
+		}
+		if opt.Focus.Security {
+			cyan.Println("   Focus: Security")
+		}
+		if opt.Focus.Test {
+			cyan.Println("   Focus: Test coverage")
+		}
+		if opt.Fix {
+			cyan.Println("   Fix proposals: Enabled")
+		}
+		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Print("Run review? [y/N]: ")
+
+		reader := bufio.NewReader(os.Stdin)
+		input, _ := reader.ReadString('\n')
+		input = strings.TrimSpace(strings.ToLower(input))
+		if input != "y" && input != "yes" {
+			yellow.Println("❌ Review cancelled")
+			return true
+		}
+	}
+
+	// Run review
+	ctx := context.Background()
+	orchestrator := review.NewOrchestrator()
+
+	// Convert changeStack to []tools.FileChange
+	var changes []tools.FileChange
+	for _, c := range agent.changeStack {
+		changes = append(changes, c)
+	}
+
+	report, outPath, err := orchestrator.Run(ctx, changes, opt)
+	if err != nil {
+		red.Printf("Review failed: %v\n", err)
+		return true
+	}
+
+	// Summary
+	green.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	green.Println("✅ Review Complete")
+	green.Printf("   Files: %d\n", len(report.Targets))
+	green.Printf("   Issues: %d\n", len(report.Issues))
+	if opt.Fix {
+		green.Printf("   Fix proposals: %d\n", len(report.Fixes))
+	}
+	if outPath != "" {
+		green.Printf("   Report: %s\n", outPath)
+	}
+	green.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+	// Print issues summary
+	if len(report.Issues) > 0 {
+		fmt.Println("\n📋 Issues:")
+		errorCount := 0
+		warningCount := 0
+		infoCount := 0
+		for _, issue := range report.Issues {
+			switch issue.Severity {
+			case review.SeverityError:
+				errorCount++
+			case review.SeverityWarning:
+				warningCount++
+			case review.SeverityInfo:
+				infoCount++
+			}
+		}
+		if errorCount > 0 {
+			red.Printf("   🔴 Errors: %d\n", errorCount)
+		}
+		if warningCount > 0 {
+			yellow.Printf("   🟡 Warnings: %d\n", warningCount)
+		}
+		if infoCount > 0 {
+			cyan.Printf("   🔵 Info: %d\n", infoCount)
+		}
+
+		// Show first few issues
+		maxShow := 5
+		if len(report.Issues) < maxShow {
+			maxShow = len(report.Issues)
+		}
+		fmt.Println()
+		for i := 0; i < maxShow; i++ {
+			issue := report.Issues[i]
+			var icon string
+			switch issue.Severity {
+			case review.SeverityError:
+				icon = "🔴"
+			case review.SeverityWarning:
+				icon = "🟡"
+			default:
+				icon = "🔵"
+			}
+			fmt.Printf("   %s [%s] %s\n", icon, issue.ID, issue.Title)
+			if issue.Path != "" {
+				fmt.Printf("      %s", issue.Path)
+				if issue.LineStart > 0 {
+					fmt.Printf(":%d", issue.LineStart)
+				}
+				fmt.Println()
+			}
+		}
+		if len(report.Issues) > maxShow {
+			fmt.Printf("   ... and %d more (see report)\n", len(report.Issues)-maxShow)
+		}
+	}
+
 	return true
 }
