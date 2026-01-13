@@ -66,16 +66,16 @@ func grepCodebase(pattern, searchPath string) (files []string, lines []int, cont
 	// ripgrepを試す（高速）
 	cmd := exec.Command("rg", "-n", "--no-heading", "-e", pattern, searchPath,
 		"--type", "go", "--type", "ts", "--type", "js", "--type", "py", "--type", "rust")
-	output, cmdErr := cmd.Output()
+	output, err := cmd.Output()
 
 	// ripgrepがない場合はgrepを使用
-	if cmdErr != nil && strings.Contains(cmdErr.Error(), "executable file not found") {
+	if err != nil && strings.Contains(err.Error(), "executable file not found") {
 		cmd = exec.Command("grep", "-rn", "-E", pattern, searchPath,
 			"--include=*.go", "--include=*.ts", "--include=*.js", "--include=*.py", "--include=*.rs")
-		output, cmdErr = cmd.Output()
+		output, err = cmd.Output()
 	}
 
-	// マッチなしの場合はexit 1を返すので、出力がない場合は空結果
+	// rg/grep は「マッチなし」で exit code 1 を返すことがあるため、出力が空なら空結果扱い
 	if len(output) == 0 {
 		return nil, nil, "", nil
 	}
@@ -88,7 +88,9 @@ func grepCodebase(pattern, searchPath string) (files []string, lines []int, cont
 		if len(parts) >= 3 {
 			files = append(files, parts[0])
 			lineNum := 0
-			fmt.Sscanf(parts[1], "%d", &lineNum)
+			if _, scanErr := fmt.Sscanf(parts[1], "%d", &lineNum); scanErr != nil {
+				lineNum = 0
+			}
 			lines = append(lines, lineNum)
 			if context == "" {
 				context = parts[2]

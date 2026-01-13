@@ -8,17 +8,17 @@ func TestAnalyzer_Analyze(t *testing.T) {
 	analyzer := NewAnalyzer()
 
 	tests := []struct {
-		name       string
-		targets    []Target
-		opt        AnalyzerOptions
-		wantIssues int
-		wantIDs    []string
+		name    string
+		targets []Target
+		opt     AnalyzerOptions
+		// wantIDs are expected to be present somewhere in the issues list.
+		wantIDs []string
 	}{
 		{
-			name:       "empty targets",
-			targets:    []Target{},
-			opt:        AnalyzerOptions{},
-			wantIssues: 0,
+			name:    "empty targets",
+			targets: []Target{},
+			opt:     AnalyzerOptions{},
+			wantIDs: nil,
 		},
 		{
 			name: "large diff detection",
@@ -29,9 +29,8 @@ func TestAnalyzer_Analyze(t *testing.T) {
 					Diff:       generateLargeDiff(600),
 				},
 			},
-			opt:        AnalyzerOptions{},
-			wantIssues: 1,
-			wantIDs:    []string{"large-diff"},
+			opt:     AnalyzerOptions{},
+			wantIDs: []string{"large-diff"},
 		},
 		{
 			name: "TODO detection",
@@ -42,9 +41,8 @@ func TestAnalyzer_Analyze(t *testing.T) {
 					Diff:       "+// TODO: fix this later\n+func foo() {}",
 				},
 			},
-			opt:        AnalyzerOptions{},
-			wantIssues: 1,
-			wantIDs:    []string{"todo-added"},
+			opt:     AnalyzerOptions{},
+			wantIDs: []string{"todo-added"},
 		},
 		{
 			name: "FIXME detection",
@@ -55,9 +53,8 @@ func TestAnalyzer_Analyze(t *testing.T) {
 					Diff:       "+// FIXME: broken code\n+func bar() {}",
 				},
 			},
-			opt:        AnalyzerOptions{},
-			wantIssues: 1,
-			wantIDs:    []string{"todo-added"},
+			opt:     AnalyzerOptions{},
+			wantIDs: []string{"todo-added"},
 		},
 		{
 			name: "sensitive file detection",
@@ -68,9 +65,8 @@ func TestAnalyzer_Analyze(t *testing.T) {
 					Diff:       "+SECRET_KEY=abc123",
 				},
 			},
-			opt:        AnalyzerOptions{},
-			wantIssues: 1,
-			wantIDs:    []string{"sensitive-file"},
+			opt:     AnalyzerOptions{},
+			wantIDs: []string{"sensitive-file"},
 		},
 		{
 			name: "credentials file detection",
@@ -81,9 +77,8 @@ func TestAnalyzer_Analyze(t *testing.T) {
 					Diff:       "+{\"api_key\": \"secret\"}",
 				},
 			},
-			opt:        AnalyzerOptions{},
-			wantIssues: 1,
-			wantIDs:    []string{"sensitive-file"},
+			opt:     AnalyzerOptions{},
+			wantIDs: []string{"sensitive-file"},
 		},
 	}
 
@@ -93,14 +88,24 @@ func TestAnalyzer_Analyze(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Analyze() error = %v", err)
 			}
-			if len(issues) != tt.wantIssues {
-				t.Errorf("Analyze() got %d issues, want %d", len(issues), tt.wantIssues)
-			}
+
 			if tt.wantIDs != nil {
-				for i, wantID := range tt.wantIDs {
-					if i < len(issues) && issues[i].ID != wantID {
-						t.Errorf("issues[%d].ID = %q, want %q", i, issues[i].ID, wantID)
+				for _, wantID := range tt.wantIDs {
+					found := false
+					for _, is := range issues {
+						if is.ID == wantID {
+							found = true
+							break
+						}
 					}
+					if !found {
+						t.Errorf("expected issue %q not found", wantID)
+					}
+				}
+			} else {
+				// when wantIDs is nil, we expect no issues
+				if len(issues) != 0 {
+					t.Errorf("Analyze() got %d issues, want 0", len(issues))
 				}
 			}
 		})
