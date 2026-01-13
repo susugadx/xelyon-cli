@@ -39,6 +39,13 @@ func (a *Agent) chat(input string) {
 		return
 	}
 
+	// 実装前チェック：既存定義の重複を警告
+	if warning := CheckBeforeImplementation(input); warning != "" {
+		yellow.Println(warning)
+		// AIにも警告を伝える
+		input = input + "\n\n[SYSTEM NOTE: " + warning + "]"
+	}
+
 	// 履歴に追加
 	a.History = append(a.History, api.Message{
 		Role:    "user",

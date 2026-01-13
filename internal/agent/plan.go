@@ -13,13 +13,14 @@ type Plan struct {
 
 // PlanStep は計画の1ステップを表す
 type PlanStep struct {
-	ID          int      `json:"id"`
-	Description string   `json:"description"`
-	Tools       []string `json:"tools"`      // 使用予定ツール
-	DependsOn   []int    `json:"depends_on"` // 依存するステップID
-	Parallel    bool     `json:"parallel"`   // 並列実行可能か
-	Status      string   `json:"status"`     // "pending", "running", "completed", "failed"
-	Result      string   `json:"result"`     // 実行結果
+	ID            int      `json:"id"`
+	Description   string   `json:"description"`
+	Tools         []string `json:"tools"`      // 使用予定ツール
+	DependsOn     []int    `json:"depends_on"` // 依存するステップID
+	Parallel      bool     `json:"parallel"`   // 並列実行可能か
+	Status        string   `json:"status"`     // "pending", "running", "completed", "failed"
+	Result        string   `json:"result"`     // 実行結果
+	ToolsExecuted int      `json:"-"`          // 実際に実行されたツール数
 }
 
 // ParsePlan はJSON文字列からPlanを解析
@@ -212,6 +213,23 @@ func (p *Plan) UpdateStatus(stepID int, status, result string) {
 		step.Status = status
 		step.Result = result
 	}
+}
+
+// IncrementToolsExecuted は実行ツール数をインクリメント
+func (p *Plan) IncrementToolsExecuted(stepID int) {
+	step := p.GetStep(stepID)
+	if step != nil {
+		step.ToolsExecuted++
+	}
+}
+
+// GetToolsExecuted は実行ツール数を取得
+func (p *Plan) GetToolsExecuted(stepID int) int {
+	step := p.GetStep(stepID)
+	if step != nil {
+		return step.ToolsExecuted
+	}
+	return 0
 }
 
 // IsCompleted はすべてのステップが完了したかチェック

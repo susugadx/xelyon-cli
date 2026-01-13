@@ -12,6 +12,13 @@ import (
 
 // RunPlanMode はPlan Modeで計画を生成・承認・実行
 func (a *Agent) RunPlanMode(ctx context.Context, userRequest string) error {
+	// 実装前チェック：既存定義の重複を警告
+	if warning := CheckBeforeImplementation(userRequest); warning != "" {
+		yellow.Println(warning)
+		// AIにも警告を伝える（計画生成時に考慮させる）
+		userRequest = userRequest + "\n\n[SYSTEM NOTE: " + warning + " Please check existing code before creating new definitions.]"
+	}
+
 	// Step 1: 計画生成をAIに依頼
 	cyan.Println("\n📋 Generating execution plan...")
 
@@ -148,11 +155,13 @@ func (a *Agent) executePlan(ctx context.Context, plan *Plan) error {
 		if nextStepID == -1 {
 			// すべて完了 or ブロック中
 			if plan.IsCompleted() {
-				green.Println("\n✓ All steps completed successfully!")
+				// 実行統計を表示
+				a.showPlanSummary(plan)
 				return nil
 			}
 			if plan.HasFailed() {
 				red.Println("\n✗ Plan execution failed.")
+				a.showPlanSummary(plan)
 				return fmt.Errorf("plan execution failed")
 			}
 			// ブロック中（依存関係未解決）
@@ -181,6 +190,94 @@ func (a *Agent) executePlan(ctx context.Context, plan *Plan) error {
 	}
 }
 
+// showPlanSummary は計画実行のサマリーを表示
+func (a *Agent) showPlanSummary(plan *Plan) {
+	fmt.Println()
+	cyan.Println("📊 Plan Execution Summary:")
+	cyan.Println(strings.Repeat("─", 50))
+
+	totalTools := 0
+	completedSteps := 0
+	failedSteps := 0
+	warningSteps := 0
+
+	for _, step := range plan.Steps {
+		statusIcon := "✓"
+		statusColor := green
+
+		switch step.Status {
+		case "completed":
+			completedSteps++
+			if strings.Contains(step.Result, "Warning") {
+				statusIcon = "⚠"
+				statusColor = yellow
+				warningSteps++
+			}
+		case "failed":
+			statusIcon = "✗"
+			statusColor = red
+			failedSteps++
+		default:
+			statusIcon = "○"
+			statusColor = yellow
+		}
+
+		statusColor.Printf("  %s Step %d: %s\n", statusIcon, step.ID, step.Description)
+		if step.ToolsExecuted > 0 {
+			fmt.Printf("      Tools executed: %d\n", step.ToolsExecuted)
+		}
+		totalTools += step.ToolsExecuted
+	}
+
+	cyan.Println(strings.Repeat("─", 50))
+
+	// 最終結果
+	if failedSteps == 0 && warningSteps == 0 {
+		green.Printf("✓ All %d steps completed successfully!\n", len(plan.Steps))
+	} else if failedSteps == 0 {
+		yellow.Printf("⚠ %d steps completed with %d warnings\n", completedSteps, warningSteps)
+	} else {
+		red.Printf("✗ %d steps failed, %d completed\n", failedSteps, completedSteps)
+	}
+
+	fmt.Printf("  Total tools executed: %d\n", totalTools)
+}
+
+// isAIQuestion はAIの応答が質問/確認を含むか検知
+func isAIQuestion(response string) bool {
+	// ツール呼び出しがある場合は質問とみなさない
+	if tools.ParseToolCall(response) != nil {
+		return false
+	}
+
+	// 質問パターンの検出
+	questionPatterns := []string{
+		"続行しますか",
+		"よろしいですか",
+		"確認してください",
+		"どうしますか",
+		"選択してください",
+		"指定してください",
+		"教えてください",
+		"Should I",
+		"Do you want",
+		"Would you like",
+		"Shall I",
+		"Can you confirm",
+		"Please confirm",
+		"proceed?",
+		"continue?",
+	}
+
+	lowered := strings.ToLower(response)
+	for _, pattern := range questionPatterns {
+		if strings.Contains(lowered, strings.ToLower(pattern)) {
+			return true
+		}
+	}
+	return false
+}
+
 // executeStep は単一ステップを実行
 func (a *Agent) executeStep(ctx context.Context, plan *Plan, step *PlanStep) error {
 	cyan.Printf("\n[%d/%d] %s\n", step.ID, len(plan.Steps), step.Description)
@@ -188,15 +285,24 @@ func (a *Agent) executeStep(ctx context.Context, plan *Plan, step *PlanStep) err
 	// ステータスを実行中に更新
 	plan.UpdateStatus(step.ID, "running", "")
 
+	// 期待するツールがある場合、明示的に指示
+	toolsHint := ""
+	if len(step.Tools) > 0 {
+		toolsHint = fmt.Sprintf("\n\nYou MUST use the following tools to complete this step: %s\nDo NOT ask for confirmation - execute the tools directly.", strings.Join(step.Tools, ", "))
+	}
+
 	// AIにステップ実行を依頼
 	stepPrompt := fmt.Sprintf(`Execute this step from the plan:
 Step %d: %s
-Tools to use: %s
 
-Execute this step autonomously. Only ask for confirmation if you need to perform SafetyLow operations (delete_file, bash with dangerous commands, git_push to main, etc.).`,
+IMPORTANT INSTRUCTIONS:
+1. Execute this step autonomously without asking questions
+2. Use tools directly - do NOT ask "Should I proceed?" or "Do you want me to..."
+3. If you need to create/modify files, use write_file or str_replace directly
+4. Only stop for SafetyLow operations (delete_file, dangerous bash commands)%s`,
 		step.ID,
 		step.Description,
-		strings.Join(step.Tools, ", "),
+		toolsHint,
 	)
 
 	// 履歴に追加してAI実行
@@ -222,12 +328,46 @@ Execute this step autonomously. Only ask for confirmation if you need to perform
 	}
 
 	// ツール呼び出しを処理
-	// ループ: レスポンスにツール呼び出しが含まれている限り実行
 	maxToolCalls := 10 // 無限ループ防止
+	maxContinues := 3  // 質問への自動続行回数制限
+	continueCount := 0
+
 	for i := 0; i < maxToolCalls; i++ {
 		toolCall := tools.ParseToolCall(response)
 		if toolCall == nil {
-			// ツール呼び出しなし → ステップ完了
+			// ツール呼び出しなし
+
+			// AIが質問している場合、自動続行を試みる
+			if isAIQuestion(response) && continueCount < maxContinues {
+				continueCount++
+				yellow.Printf("⚠️  AI asked a question, auto-continuing (%d/%d)...\n", continueCount, maxContinues)
+
+				// 続行を指示
+				a.History = append(a.History, api.Message{
+					Role:    "user",
+					Content: "[AUTO-CONTINUE] Yes, proceed with the step. Execute the required tools directly without asking for confirmation.",
+				})
+
+				// 次のAI応答を取得
+				response, err = a.CurrentProvider.ChatWithTools(
+					ctx,
+					a.SystemPrompt,
+					a.History,
+					a.CurrentModel,
+				)
+				if err != nil {
+					plan.UpdateStatus(step.ID, "failed", fmt.Sprintf("Error: %v", err))
+					return fmt.Errorf("step %d failed: %w", step.ID, err)
+				}
+
+				a.History = append(a.History, api.Message{Role: "assistant", Content: response})
+				if a.Stats != nil {
+					a.Stats.AssistantMessages++
+				}
+				continue
+			}
+
+			// ステップ完了
 			break
 		}
 
@@ -245,6 +385,9 @@ Execute this step autonomously. Only ask for confirmation if you need to perform
 		if a.Stats != nil {
 			a.Stats.AddToolExecution(toolCall.Tool)
 		}
+
+		// ツール実行数をインクリメント
+		plan.IncrementToolsExecuted(step.ID)
 
 		// ツール実行
 		result, change := tools.Execute(toolCall)
@@ -291,9 +434,19 @@ Execute this step autonomously. Only ask for confirmation if you need to perform
 		}
 	}
 
-	// ステップ完了
-	plan.UpdateStatus(step.ID, "completed", "Success")
-	green.Printf("✓ Step %d completed\n", step.ID)
+	// 完了判定の厳密化
+	toolsExecuted := plan.GetToolsExecuted(step.ID)
+	expectedTools := len(step.Tools)
+
+	if expectedTools > 0 && toolsExecuted == 0 {
+		// 期待されたツールが1つも実行されなかった
+		yellow.Printf("⚠️  Warning: Step %d expected %d tools but executed %d\n", step.ID, expectedTools, toolsExecuted)
+		plan.UpdateStatus(step.ID, "completed", fmt.Sprintf("Warning: No tools executed (expected: %d)", expectedTools))
+	} else {
+		plan.UpdateStatus(step.ID, "completed", fmt.Sprintf("Success (tools: %d)", toolsExecuted))
+	}
+
+	green.Printf("✓ Step %d completed (tools executed: %d)\n", step.ID, toolsExecuted)
 
 	return nil
 }
