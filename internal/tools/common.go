@@ -167,17 +167,26 @@ func SetAutoApprove(enabled bool) {
 }
 
 // confirm はユーザーに確認を求める（テスト用にグローバル変数として定義）
+// 空入力は無視してリトライする（AI実行中のEnter押下対策）
 var confirm = func(message string) bool {
-	yellow.Printf("%s (y/n): ", message)
-
 	reader := bufio.NewReader(os.Stdin)
-	response, err := reader.ReadString('\n')
-	if err != nil {
-		return false
-	}
-	response = strings.ToLower(strings.TrimSpace(response))
 
-	return response == "y" || response == "yes" || response == "ｙ" || response == "はい"
+	for {
+		yellow.Printf("%s (y/n): ", message)
+
+		response, err := reader.ReadString('\n')
+		if err != nil {
+			return false
+		}
+		response = strings.ToLower(strings.TrimSpace(response))
+
+		// 空入力は無視してリトライ
+		if response == "" {
+			continue
+		}
+
+		return response == "y" || response == "yes" || response == "ｙ" || response == "はい"
+	}
 }
 
 // confirmWithAutoApprove は危険度を考慮した確認プロンプト

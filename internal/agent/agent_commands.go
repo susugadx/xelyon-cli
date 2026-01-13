@@ -19,6 +19,28 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/version"
 )
 
+// promptConfirm はユーザーに確認を求める（空入力は無視してリトライ）
+// AI実行中のEnter押下による誤操作を防ぐ
+func promptConfirm(prompt string) bool {
+	reader := bufio.NewReader(os.Stdin)
+
+	for {
+		fmt.Print(prompt)
+		input, err := reader.ReadString('\n')
+		if err != nil {
+			return false
+		}
+		input = strings.TrimSpace(strings.ToLower(input))
+
+		// 空入力は無視してリトライ
+		if input == "" {
+			continue
+		}
+
+		return input == "y" || input == "yes" || input == "ｙ" || input == "はい"
+	}
+}
+
 // handleSpecialCommand は特殊コマンドを処理
 func handleSpecialCommand(input string, agent *Agent) bool {
 	parts := strings.Fields(input)
@@ -244,17 +266,8 @@ func handleUndoCommand(agent *Agent, args []string) bool {
 	fmt.Printf("  File: %s\n", lastChange.FilePath)
 	fmt.Printf("  Tool: %s\n", lastChange.Tool)
 	fmt.Printf("  Time: %s\n", lastChange.Timestamp.Format("2006-01-02 15:04:05"))
-	yellow.Print("Continue? (y/n): ")
 
-	reader := bufio.NewReader(os.Stdin)
-	input, err := reader.ReadString('\n')
-	if err != nil {
-		red.Printf("Failed to read input: %v\n", err)
-		return true
-	}
-
-	input = strings.TrimSpace(strings.ToLower(input))
-	if input != "y" && input != "yes" {
+	if !promptConfirm("Continue? (y/n): ") {
 		yellow.Println("Undo cancelled")
 		return true
 	}
@@ -291,16 +304,7 @@ func handleUndoAll(agent *Agent) bool {
 	yellow.Println("\n⚠️  Warning: すべてのファイルがバックアップから復元されます")
 
 	// 確認
-	fmt.Printf("\nContinue? (y/n): ")
-	reader := bufio.NewReader(os.Stdin)
-	input, err := reader.ReadString('\n')
-	if err != nil {
-		red.Printf("Failed to read input: %v\n", err)
-		return true
-	}
-
-	input = strings.TrimSpace(strings.ToLower(input))
-	if input != "y" && input != "yes" {
+	if !promptConfirm("\nContinue? (y/n): ") {
 		yellow.Println("Cancelled")
 		return true
 	}
@@ -455,16 +459,7 @@ func handleUndoSession(agent *Agent, sessionID string) bool {
 	yellow.Println("\n⚠️  Warning: すべての変更がバックアップから復元されます")
 
 	// 確認
-	fmt.Print("\nContinue? (y/n): ")
-	reader := bufio.NewReader(os.Stdin)
-	input, err := reader.ReadString('\n')
-	if err != nil {
-		red.Printf("Failed to read input: %v\n", err)
-		return true
-	}
-
-	input = strings.TrimSpace(strings.ToLower(input))
-	if input != "y" && input != "yes" {
+	if !promptConfirm("\nContinue? (y/n): ") {
 		yellow.Println("Cancelled")
 		return true
 	}
@@ -882,16 +877,7 @@ func handleCompressCommand(agent *Agent, args []string) bool {
 	yellow.Println("\n⚠️  Warning: 圧縮後、古いメッセージはサマリーに置き換わります")
 
 	// 確認
-	fmt.Print("\nContinue? (y/n): ")
-	reader := bufio.NewReader(os.Stdin)
-	input, err := reader.ReadString('\n')
-	if err != nil {
-		red.Printf("Failed to read input: %v\n", err)
-		return true
-	}
-
-	input = strings.TrimSpace(strings.ToLower(input))
-	if input != "y" && input != "yes" {
+	if !promptConfirm("\nContinue? (y/n): ") {
 		yellow.Println("Cancelled")
 		return true
 	}
@@ -1177,16 +1163,7 @@ func handleMemoryCommand(args []string) bool {
 		yellow.Println("\n⚠️  Warning: すべての記憶が削除されます（復元不可）")
 
 		// 確認
-		fmt.Print("\nContinue? (y/n): ")
-		reader := bufio.NewReader(os.Stdin)
-		input, err := reader.ReadString('\n')
-		if err != nil {
-			red.Printf("Failed to read input: %v\n", err)
-			return true
-		}
-
-		input = strings.TrimSpace(strings.ToLower(input))
-		if input != "y" && input != "yes" {
+		if !promptConfirm("\nContinue? (y/n): ") {
 			yellow.Println("Cancelled")
 			return true
 		}
@@ -1408,12 +1385,8 @@ func handleReviewCommand(agent *Agent, args []string) bool {
 			cyan.Println("   Fix proposals: Enabled")
 		}
 		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		fmt.Print("Run review? [y/N]: ")
 
-		reader := bufio.NewReader(os.Stdin)
-		input, _ := reader.ReadString('\n')
-		input = strings.TrimSpace(strings.ToLower(input))
-		if input != "y" && input != "yes" {
+		if !promptConfirm("Run review? [y/N]: ") {
 			yellow.Println("❌ Review cancelled")
 			return true
 		}
