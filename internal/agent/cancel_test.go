@@ -67,10 +67,10 @@ func (e *wrappedError) Unwrap() error {
 // TestInterruptTimeoutLogic は3秒以内の2回Ctrl+Cで終了するロジックをテスト
 func TestInterruptTimeoutLogic(t *testing.T) {
 	tests := []struct {
-		name          string
-		firstTime     time.Time
-		secondTime    time.Time
-		shouldExit    bool
+		name       string
+		firstTime  time.Time
+		secondTime time.Time
+		shouldExit bool
 	}{
 		{
 			name:       "2秒以内に2回",

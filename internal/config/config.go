@@ -43,6 +43,7 @@ type Config struct {
 	CommandAliases  map[string]string              `yaml:"command_aliases,omitempty"` // コマンドエイリアス
 	PromptCache     PromptCacheConfig              `yaml:"prompt_cache,omitempty"`
 	Paste           PasteConfig                    `yaml:"paste,omitempty"`
+	Streaming       StreamingConfig                `yaml:"streaming,omitempty"`
 	// 将来の拡張用
 	// Cloud CloudConfig `yaml:"cloud,omitempty"`
 }
@@ -97,6 +98,11 @@ type PasteConfig struct {
 	MaxLines       int `yaml:"max_lines"`       // 最大行数（デフォルト10000）
 	MaxBytes       int `yaml:"max_bytes"`       // 最大バイト数（デフォルト1MB）
 	TimeoutSeconds int `yaml:"timeout_seconds"` // タイムアウト秒（デフォルト60）
+}
+
+// StreamingConfig はストリーミングレスポンスの設定
+type StreamingConfig struct {
+	IdleTimeoutSeconds int `yaml:"idle_timeout_seconds"` // アイドルタイムアウト秒（デフォルト30）
 }
 
 // ProviderModelConfig はプロバイダーごとのモデル設定
@@ -164,6 +170,9 @@ func DefaultConfig() *Config {
 			MaxBytes:       1048576, // デフォルト1MB
 			TimeoutSeconds: 60,      // デフォルト60秒
 		},
+		Streaming: StreamingConfig{
+			IdleTimeoutSeconds: 30, // デフォルト30秒
+		},
 	}
 }
 
@@ -230,6 +239,10 @@ func LoadConfig() (*Config, error) {
 	}
 	if cfg.Paste.TimeoutSeconds == 0 {
 		cfg.Paste.TimeoutSeconds = defaults.Paste.TimeoutSeconds
+	}
+	// Streaming設定のデフォルト適用
+	if cfg.Streaming.IdleTimeoutSeconds == 0 {
+		cfg.Streaming.IdleTimeoutSeconds = defaults.Streaming.IdleTimeoutSeconds
 	}
 	// Note: Diff.ContextLines は0が有効値なので、デフォルト適用は行わない
 
