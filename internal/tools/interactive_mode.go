@@ -8,24 +8,18 @@ func IsInteractiveModeEnabled() bool {
 	return os.Getenv("XELYON_INTERACTIVE_CONFIRM") == "1"
 }
 
-// ConfirmWithFeedback は対話的確認を行う
+// ConfirmWithFeedback は対話的確認を行う（互換ラッパー）
 // interactiveMode=true の場合は y/n/c、false の場合は従来の y/n
+//
+// NOTE: 新コードでは Confirm() / ConfirmDecision の利用を推奨。
 func ConfirmWithFeedback(message string) (approved bool, comment string, image *ImageData) {
-	if !IsInteractiveModeEnabled() {
-		// 従来の confirm() を使用
-		approved = confirm(message)
-		return approved, "", nil
-	}
-
-	// 対話的確認モード
-	result := ConfirmInteractive(message)
-	switch result.Action {
-	case "yes":
+	dec := Confirm(message)
+	switch dec.Action {
+	case ConfirmYes:
 		return true, "", nil
-	case "comment":
-		// コメント = 修正要求 = 実行しない
-		return false, result.Comment, result.Image
-	default: // "no"
+	case ConfirmComment:
+		return false, dec.Comment, dec.Image
+	default:
 		return false, "", nil
 	}
 }

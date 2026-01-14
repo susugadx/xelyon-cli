@@ -207,8 +207,8 @@ func confirmWithAutoApprove(toolName, message string) bool {
 		return true
 	}
 
-	// それ以外は通常の確認プロンプト
-	return confirm(message)
+	// それ以外は通常の確認プロンプト（対話モード時は y/n/c）
+	return ConfirmApproved(message)
 }
 
 // truncate は文字列を指定長で切り詰め
