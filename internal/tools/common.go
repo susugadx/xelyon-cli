@@ -102,7 +102,12 @@ func createBackup(filePath string) (string, error) {
 		return "", fmt.Errorf("failed to read file for backup: %w", err)
 	}
 
-	if err := os.WriteFile(backupPath, content, 0644); err != nil {
+	// 元ファイルのパーミッションを引き継ぐ（少なくとも Perm() 部分）
+	perm := os.FileMode(0644)
+	if info, statErr := os.Stat(filePath); statErr == nil {
+		perm = info.Mode().Perm()
+	}
+	if err := os.WriteFile(backupPath, content, perm); err != nil {
 		return "", fmt.Errorf("failed to create backup: %w", err)
 	}
 

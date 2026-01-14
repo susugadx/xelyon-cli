@@ -146,16 +146,11 @@ func (a *Agent) suggestRollback() {
 		return
 	}
 
-	yellow.Print("\n   Rollback the change? (y/n): ")
-
-	reader := bufio.NewReader(os.Stdin)
-	input, err := reader.ReadString('\n')
-	if err != nil {
+	yes, handled := confirmOrCommentToAI(a, "Rollback the change?", "go test failed")
+	if handled {
 		return
 	}
-
-	input = strings.TrimSpace(strings.ToLower(input))
-	if input == "y" || input == "yes" {
+	if yes {
 		handleUndoCommand(a, []string{})
 	}
 }

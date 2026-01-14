@@ -20,10 +20,12 @@ func executeWriteFile(path string, content string) (string, string, error) {
 		return fmt.Sprintf("Error: %v", err), "", nil
 	}
 
-	// ファイルが存在するか確認
+	// ファイルが存在するか確認 + 元のパーミッション取得
 	exists := false
-	if _, err := os.Stat(absPath); err == nil {
+	perm := os.FileMode(0644)
+	if info, err := os.Stat(absPath); err == nil {
 		exists = true
+		perm = info.Mode().Perm()
 	}
 
 	// 確認UI - 変更サマリーを明確に表示
@@ -75,8 +77,8 @@ func executeWriteFile(path string, content string) (string, string, error) {
 		return fmt.Sprintf("Error creating directory: %v", err), "", nil
 	}
 
-	// 書き込み
-	if err := os.WriteFile(absPath, []byte(content), 0644); err != nil {
+	// 書き込み（既存ファイルがある場合は元のパーミッションを維持）
+	if err := os.WriteFile(absPath, []byte(content), perm); err != nil {
 		return fmt.Sprintf("Error writing file: %v", err), "", nil
 	}
 
