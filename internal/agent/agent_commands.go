@@ -1398,9 +1398,7 @@ func handleReviewCommand(agent *Agent, args []string) bool {
 
 	// Convert changeStack to []tools.FileChange
 	var changes []tools.FileChange
-	for _, c := range agent.changeStack {
-		changes = append(changes, c)
-	}
+	changes = append(changes, agent.changeStack...)
 
 	report, outPath, err := orchestrator.Run(ctx, changes, opt)
 	if err != nil {

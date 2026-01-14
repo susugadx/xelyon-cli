@@ -83,12 +83,6 @@ func (r *Reporter) WriteMarkdown(rep Report, opt ReporterOptions) (string, error
 
 func buildMarkdown(rep Report, opt ReporterOptions) string {
 	includeDiff := opt.IncludeDiff
-	// default true
-	if !opt.IncludeDiff {
-		includeDiff = false
-	} else {
-		includeDiff = true
-	}
 
 	gen := rep.GeneratedAt
 	if gen.IsZero() {

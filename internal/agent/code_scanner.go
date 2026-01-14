@@ -66,13 +66,13 @@ func grepCodebase(pattern, searchPath string) (files []string, lines []int, cont
 	// ripgrepを試す（高速）
 	cmd := exec.Command("rg", "-n", "--no-heading", "-e", pattern, searchPath,
 		"--type", "go", "--type", "ts", "--type", "js", "--type", "py", "--type", "rust")
-	output, err := cmd.Output()
+	output, cmdErr := cmd.Output()
 
 	// ripgrepがない場合はgrepを使用
-	if err != nil && strings.Contains(err.Error(), "executable file not found") {
+	if cmdErr != nil && strings.Contains(cmdErr.Error(), "executable file not found") {
 		cmd = exec.Command("grep", "-rn", "-E", pattern, searchPath,
 			"--include=*.go", "--include=*.ts", "--include=*.js", "--include=*.py", "--include=*.rs")
-		output, err = cmd.Output()
+		output, _ = cmd.Output()
 	}
 
 	// rg/grep は「マッチなし」で exit code 1 を返すことがあるため、出力が空なら空結果扱い
