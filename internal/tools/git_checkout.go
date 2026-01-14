@@ -70,7 +70,22 @@ func executeGitCheckout(target string) (string, string, error) {
 			fmt.Printf("HEAD:    %s\n", headContent)
 		}
 
-		if !confirm("Restore from HEAD? / HEADから復元しますか？") {
+		dec := Confirm("Restore from HEAD? / HEADから復元しますか？")
+		switch dec.Action {
+		case ConfirmYes:
+			// continue
+		case ConfirmComment:
+			return fmt.Sprintf(`[COMMENT] User provided feedback for git_checkout (file restore).
+
+Comment:
+%s
+
+Next actions:
+- Confirm the correct target file and whether restoring from HEAD is intended.
+- Consider stashing changes before restoring.
+
+IMPORTANT: Do NOT discard local changes until the user approves.`, strings.TrimSpace(dec.Comment)), "", nil
+		default:
 			return "Cancelled by user", "", nil
 		}
 
@@ -115,7 +130,22 @@ func executeGitCheckout(target string) (string, string, error) {
 		fmt.Println("\nUncommitted changes / 未コミットの変更:")
 		fmt.Println(string(statusOutput))
 
-		if !confirm("Checkout anyway? / それでもチェックアウトしますか？") {
+		dec := Confirm("Checkout anyway? / それでもチェックアウトしますか？")
+		switch dec.Action {
+		case ConfirmYes:
+			// continue
+		case ConfirmComment:
+			return fmt.Sprintf(`[COMMENT] User provided feedback for git_checkout (branch switch).
+
+Comment:
+%s
+
+Next actions:
+- Consider using git_stash to save changes before switching.
+- Or commit changes before switching.
+
+IMPORTANT: Do NOT switch branches until the user approves.`, strings.TrimSpace(dec.Comment)), "", nil
+		default:
 			return "Cancelled by user", "", nil
 		}
 	}

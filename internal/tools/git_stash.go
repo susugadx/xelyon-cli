@@ -97,7 +97,22 @@ func executeGitStash(action, message string) string {
 			}
 		}
 
-		if !confirm("Pop this stash? / このスタッシュを適用・削除しますか？") {
+		dec := Confirm("Pop this stash? / このスタッシュを適用・削除しますか？")
+		switch dec.Action {
+		case ConfirmYes:
+			// continue
+		case ConfirmComment:
+			return fmt.Sprintf(`[COMMENT] User provided feedback for git_stash pop.
+
+Comment:
+%s
+
+Next actions:
+- Verify which stash index to use.
+- Consider using apply instead of pop if you want to keep the stash.
+
+IMPORTANT: Do NOT apply/pop the stash until the user approves.`, strings.TrimSpace(dec.Comment))
+		default:
 			return "Cancelled by user"
 		}
 
@@ -144,7 +159,22 @@ func executeGitStash(action, message string) string {
 			}
 		}
 
-		if !confirm("Apply this stash? / このスタッシュを適用しますか？") {
+		dec := Confirm("Apply this stash? / このスタッシュを適用しますか？")
+		switch dec.Action {
+		case ConfirmYes:
+			// continue
+		case ConfirmComment:
+			return fmt.Sprintf(`[COMMENT] User provided feedback for git_stash apply.
+
+Comment:
+%s
+
+Next actions:
+- Verify which stash index to apply.
+- Review the stash diff preview before applying.
+
+IMPORTANT: Do NOT apply the stash until the user approves.`, strings.TrimSpace(dec.Comment))
+		default:
 			return "Cancelled by user"
 		}
 
@@ -172,7 +202,22 @@ func executeGitStash(action, message string) string {
 		red.Println("⚠️  DESTRUCTIVE: This stash will be permanently deleted!")
 		red.Println("⚠️  破壊的操作: このスタッシュは完全に削除されます!")
 
-		if !confirm("Delete this stash? / このスタッシュを削除しますか？") {
+		dec := Confirm("Delete this stash? / このスタッシュを削除しますか？")
+		switch dec.Action {
+		case ConfirmYes:
+			// continue
+		case ConfirmComment:
+			return fmt.Sprintf(`[COMMENT] User provided feedback for git_stash drop.
+
+Comment:
+%s
+
+Next actions:
+- Double-check the stash index.
+- Consider keeping the stash and using apply/pop instead.
+
+IMPORTANT: Do NOT delete the stash until the user approves.`, strings.TrimSpace(dec.Comment))
+		default:
 			return "Cancelled by user"
 		}
 

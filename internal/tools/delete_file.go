@@ -58,7 +58,22 @@ func executeDeleteFile(path string) (string, string, error) {
 		yellow.Printf("  ... (%d more lines)\n", len(lines)-20)
 	}
 
-	if !confirmWithAutoApprove("delete_file", "Delete this file? / このファイルを削除しますか？") {
+	dec := confirmWithAutoApproveDecision("delete_file", "Delete this file? / このファイルを削除しますか？")
+	switch dec.Action {
+	case ConfirmYes:
+		// continue
+	case ConfirmComment:
+		return fmt.Sprintf(`[COMMENT] User provided feedback for delete_file.
+
+Comment:
+%s
+
+Next actions:
+- Use read_file to confirm the correct target.
+- Consider delete_lines or move_file if appropriate.
+
+IMPORTANT: Do NOT delete the file until the user approves.`, strings.TrimSpace(dec.Comment)), "", nil
+	default:
 		return "Cancelled by user", "", nil
 	}
 

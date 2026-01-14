@@ -81,7 +81,22 @@ func executeDeleteLines(path, startLineStr, endLineStr string) (string, string, 
 		}
 	}
 
-	if !confirm("Delete these lines? / これらの行を削除しますか？") {
+	dec := Confirm("Delete these lines? / これらの行を削除しますか？")
+	switch dec.Action {
+	case ConfirmYes:
+		// continue
+	case ConfirmComment:
+		return fmt.Sprintf(`[COMMENT] User provided feedback for delete_lines.
+
+Comment:
+%s
+
+Next actions:
+- Re-check the line range (start_line/end_line).
+- If the range is wrong, adjust the numbers and propose again.
+
+IMPORTANT: Do NOT delete lines until the user approves.`, strings.TrimSpace(dec.Comment)), "", nil
+	default:
 		return "Cancelled by user", "", nil
 	}
 
