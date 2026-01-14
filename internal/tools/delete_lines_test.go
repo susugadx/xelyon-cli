@@ -9,8 +9,24 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/testutil"
 )
 
-func TestExecuteDeleteLines_Normal(t *testing.T) {
+func chdirTempWorkspace(t *testing.T) string {
+	t.Helper()
 	tmpDir := t.TempDir()
+
+	oldWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to getwd: %v", err)
+	}
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("failed to chdir to temp workspace: %v", err)
+	}
+
+	t.Cleanup(func() { _ = os.Chdir(oldWD) })
+	return tmpDir
+}
+
+func TestExecuteDeleteLines_Normal(t *testing.T) {
+	tmpDir := chdirTempWorkspace(t)
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testContent := "line1\nline2\nline3\nline4\nline5"
 
@@ -40,7 +56,7 @@ func TestExecuteDeleteLines_Normal(t *testing.T) {
 }
 
 func TestExecuteDeleteLines_SingleLine(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir := chdirTempWorkspace(t)
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testContent := "line1\nline2\nline3"
 
@@ -68,7 +84,7 @@ func TestExecuteDeleteLines_SingleLine(t *testing.T) {
 }
 
 func TestExecuteDeleteLines_OutOfBoundsClamping(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir := chdirTempWorkspace(t)
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testContent := "line1\nline2\nline3"
 
@@ -103,7 +119,7 @@ func TestExecuteDeleteLines_OutOfBoundsClamping(t *testing.T) {
 }
 
 func TestExecuteDeleteLines_InvalidStartLine(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir := chdirTempWorkspace(t)
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testContent := "line1\nline2\nline3"
 
@@ -128,7 +144,7 @@ func TestExecuteDeleteLines_InvalidStartLine(t *testing.T) {
 }
 
 func TestExecuteDeleteLines_InvalidEndLine(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir := chdirTempWorkspace(t)
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testContent := "line1\nline2\nline3"
 
@@ -153,7 +169,7 @@ func TestExecuteDeleteLines_InvalidEndLine(t *testing.T) {
 }
 
 func TestExecuteDeleteLines_InvalidRange(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir := chdirTempWorkspace(t)
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testContent := "line1\nline2\nline3\nline4\nline5"
 
@@ -206,7 +222,7 @@ func TestExecuteDeleteLines_InvalidRange(t *testing.T) {
 }
 
 func TestExecuteDeleteLines_UserCancelled(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir := chdirTempWorkspace(t)
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testContent := "line1\nline2\nline3"
 
@@ -236,7 +252,7 @@ func TestExecuteDeleteLines_UserCancelled(t *testing.T) {
 }
 
 func TestExecuteDeleteLines_EmptyFile(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir := chdirTempWorkspace(t)
 	testFile := filepath.Join(tmpDir, "empty.txt")
 
 	testutil.CreateTempFile(t, tmpDir, "empty.txt", "")
@@ -258,7 +274,7 @@ func TestExecuteDeleteLines_EmptyFile(t *testing.T) {
 }
 
 func TestExecuteDeleteLines_FirstLines(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir := chdirTempWorkspace(t)
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testContent := "line1\nline2\nline3\nline4\nline5"
 
@@ -286,7 +302,7 @@ func TestExecuteDeleteLines_FirstLines(t *testing.T) {
 }
 
 func TestExecuteDeleteLines_LastLines(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir := chdirTempWorkspace(t)
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testContent := "line1\nline2\nline3\nline4\nline5"
 
