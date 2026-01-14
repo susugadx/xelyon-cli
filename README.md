@@ -208,7 +208,7 @@ command_aliases:
 
 AIが自動で以下のツールを使用します:
 
-- **ファイル編集**: `read_file`, `write_file`, `str_replace`
+- **ファイル編集**: `read_file`, `write_file`, `str_replace`（old_strの文字列置換に加え、old_str空+start_line/end_line指定で行レンジ置換も可能）
 - **Git操作**: `git_status`, `git_diff`, `git_add`, `git_commit`, `git_push`
 - **開発支援**: `run_test`, `format`, `lint`
 

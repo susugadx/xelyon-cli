@@ -18,7 +18,7 @@ func TestExecuteStrReplace_ExactMatch(t *testing.T) {
 	testutil.CreateTempFile(t, tmpDir, "test.txt", originalContent)
 
 	// 文字列置換（完全一致）
-	output, backupPath, err := executeStrReplace(testFile, "line2", "REPLACED")
+	output, backupPath, err := executeStrReplace(testFile, "line2", "REPLACED", "", "")
 
 	// 検証
 	if err != nil {
@@ -51,7 +51,7 @@ func TestExecuteStrReplace_MultipleMatches(t *testing.T) {
 	testutil.CreateTempFile(t, tmpDir, "test.txt", originalContent)
 
 	// 複数マッチする文字列を置換しようとする
-	output, _, err := executeStrReplace(testFile, "foo", "REPLACED")
+	output, _, err := executeStrReplace(testFile, "foo", "REPLACED", "", "")
 
 	// 検証
 	if err != nil {
@@ -61,6 +61,20 @@ func TestExecuteStrReplace_MultipleMatches(t *testing.T) {
 	// エラーメッセージ確認（2回出現する）
 	if !strings.Contains(output, "Error: old_str appears 2 times") {
 		t.Errorf("Expected multiple matches error, got: %s", output)
+	}
+
+	// 追加要件: Candidates/lines/Next actions/IMPORTANT
+	if !strings.Contains(output, "Candidates") {
+		t.Errorf("Expected Candidates section, got: %s", output)
+	}
+	if !strings.Contains(output, "lines") {
+		t.Errorf("Expected line ranges in error message, got: %s", output)
+	}
+	if !strings.Contains(output, "Next actions") {
+		t.Errorf("Expected Next actions section, got: %s", output)
+	}
+	if !strings.Contains(output, "IMPORTANT") {
+		t.Errorf("Expected IMPORTANT notice, got: %s", output)
 	}
 
 	// ファイルは変更されていないべき
@@ -77,7 +91,7 @@ func TestExecuteStrReplace_NotFound(t *testing.T) {
 	testutil.CreateTempFile(t, tmpDir, "test.txt", originalContent)
 
 	// 存在しない文字列を置換しようとする
-	output, _, err := executeStrReplace(testFile, "nonexistent", "REPLACED")
+	output, _, err := executeStrReplace(testFile, "nonexistent", "REPLACED", "", "")
 
 	// 検証
 	if err != nil {
@@ -102,7 +116,7 @@ func TestExecuteStrReplace_UserCancelled(t *testing.T) {
 	testutil.CreateTempFile(t, tmpDir, "test.txt", originalContent)
 
 	// 置換実行（キャンセル）
-	output, backupPath, err := executeStrReplace(testFile, "line2", "REPLACED")
+	output, backupPath, err := executeStrReplace(testFile, "line2", "REPLACED", "", "")
 
 	// 検証
 	if err != nil {
@@ -126,7 +140,7 @@ func TestExecuteStrReplace_EmptyPath(t *testing.T) {
 	setupTestConfirm(t, true)
 
 	// 空パス
-	output, _, err := executeStrReplace("", "old", "new")
+	output, _, err := executeStrReplace("", "old", "new", "", "")
 
 	// 検証
 	if err != nil {
@@ -146,8 +160,8 @@ func TestExecuteStrReplace_EmptyOldStr(t *testing.T) {
 
 	testutil.CreateTempFile(t, tmpDir, "test.txt", "content")
 
-	// 空のold_str
-	output, _, err := executeStrReplace(testFile, "", "new")
+	// 空のold_str（レンジ指定なし）
+	output, _, err := executeStrReplace(testFile, "", "new", "", "")
 
 	// 検証
 	if err != nil {
@@ -172,7 +186,7 @@ func TestExecuteStrReplace_MultilineReplacement(t *testing.T) {
 	oldStr := "function foo() {\n  return 42;\n}"
 	newStr := "function foo() {\n  return 100;\n}"
 
-	output, backupPath, err := executeStrReplace(testFile, oldStr, newStr)
+	output, backupPath, err := executeStrReplace(testFile, oldStr, newStr, "", "")
 
 	// 検証
 	if err != nil {
@@ -206,7 +220,7 @@ func TestExecuteStrReplace_WhitespaceNormalization(t *testing.T) {
 	oldStr := "function test() {\n    return true;\n}"
 	newStr := "function test() {\n    return false;\n}"
 
-	output, _, err := executeStrReplace(testFile, oldStr, newStr)
+	output, _, err := executeStrReplace(testFile, oldStr, newStr, "", "")
 
 	// 検証
 	if err != nil {
@@ -223,6 +237,35 @@ func TestExecuteStrReplace_WhitespaceNormalization(t *testing.T) {
 	if content == originalContent {
 		t.Error("File should be modified by str_replace")
 	}
+}
+
+func TestExecuteStrReplace_LineRangeReplacement_Success(t *testing.T) {
+	setupTestConfirm(t, true)
+
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test.txt")
+	originalContent := "a\nb\nc\nd\ne"
+	testutil.CreateTempFile(t, tmpDir, "test.txt", originalContent)
+
+	// 2-4行目を2行に置換
+	newStr := "X\nY"
+	output, backupPath, err := executeStrReplace(testFile, "", newStr, "2", "4")
+	if err != nil {
+		t.Fatalf("executeStrReplace failed: %v", err)
+	}
+
+	if !strings.Contains(output, "Successfully replaced lines 2-4") {
+		t.Errorf("Expected line-range success message, got: %s", output)
+	}
+
+	expected := "a\nX\nY\ne"
+	testutil.AssertFileContent(t, testFile, expected)
+
+	if backupPath == "" {
+		t.Fatal("Backup path should not be empty")
+	}
+	testutil.AssertFileExists(t, backupPath)
+	testutil.AssertFileContent(t, backupPath, originalContent)
 }
 
 func TestExecuteStrReplace_LargeFile(t *testing.T) {
@@ -245,7 +288,7 @@ func TestExecuteStrReplace_LargeFile(t *testing.T) {
 	testutil.CreateTempFile(t, tmpDir, "large.txt", originalContent)
 
 	// 50行目を置換
-	output, _, err := executeStrReplace(testFile, "TARGET_LINE", "REPLACED_LINE")
+	output, _, err := executeStrReplace(testFile, "TARGET_LINE", "REPLACED_LINE", "", "")
 
 	// 検証
 	if err != nil {

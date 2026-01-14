@@ -300,7 +300,7 @@ AIが自動で以下のツールを使用します。ユーザーが直接呼び
 |---------|------|---------|
 | `read_file` | ファイル内容を読み込む | `path` |
 | `write_file` | ファイルを新規作成・上書き | `path`, `content` |
-| `str_replace` | 文字列置換でファイル編集 | `path`, `old_str`, `new_str` |
+| `str_replace` | 文字列置換でファイル編集（old_str優先。old_str空+start_line/end_line指定で行レンジ置換も可） | `path`, `old_str`, `new_str`, `start_line`, `end_line` |
 | `append_file` | ファイル末尾に追記 | `path`, `content` |
 | `prepend_file` | ファイル先頭に追記 | `path`, `content` |
 | `insert_after` | パターンの後に挿入 | `path`, `pattern`, `content` |
@@ -356,6 +356,9 @@ AIは自然言語の指示に基づいてツールを自動選択します。
 > バグを修正して
 # → read_file → str_replace → write_file が実行される
 
+> 10-20行目を指定の内容に置き換えて
+# → str_replace（old_str を空にして start_line/end_line を指定） が実行される
+
 > git statusを見せて
 # → git_status が実行される
 
@@ -365,6 +368,10 @@ AIは自然言語の指示に基づいてツールを自動選択します。
 > search_codeで"TODO"を探して
 # → search_code が実行される
 ```
+
+**str_replace の補足**
+- `old_str` が非空のときは従来どおり文字列置換を行い、`start_line`/`end_line` は無視されます
+- 行レンジ置換は `old_str: ""` かつ `start_line` と `end_line` を両方指定した場合のみ有効です（1-indexed, inclusive）
 
 ### MCP対応ツール
 

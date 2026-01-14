@@ -51,7 +51,7 @@ type StrReplaceTool struct{}
 func (t *StrReplaceTool) Name() string { return "str_replace" }
 
 func (t *StrReplaceTool) Run(args map[string]string) (string, *FileChange, error) {
-	result, backupPath, err := executeStrReplace(args["path"], args["old_str"], args["new_str"])
+	result, backupPath, err := executeStrReplace(args["path"], args["old_str"], args["new_str"], args["start_line"], args["end_line"])
 	if err != nil {
 		return result, nil, err
 	}

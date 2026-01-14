@@ -137,9 +137,10 @@ xelyon-cli/
 - **安全性**: 危険なコマンド（rm -rf, sed -i等）をブロック
 - **FileChange追跡**: ファイル変更をメタデータと共に記録
 - **空白正規化**: str_replaceで行頭インデント違いを吸収（完全一致優先、フォールバック）
+- **行レンジ置換**: old_str が空 かつ start_line/end_line 指定時に、1-indexed inclusive の行レンジ置換モードで編集可能
 - **確認UI改善**: 英語/日本語併記、ボックス囲みの見やすい差分表示
 - **簡潔な表示**: ツール呼び出し時のJSON表示を廃止、人間が読める形式に
-- **エラーヒント**: 複数マッチ時にファイルプレビュー（先頭50行）を表示
+- **エラーヒント**: 複数マッチ時にファイルプレビュー（先頭50行）を表示（Candidates/Next actions/IMPORTANTも含む）
 - **フレームワーク自動検出**: run_test/formatが言語・ツールを自動検出
 
 #### 3. UI/UX (internal/ui/)
@@ -437,6 +438,10 @@ type FileChange struct {
 5. 適切なツールを使用（search_code, search_file, str_replace, write_file）
 6. write_fileは完全なファイル内容を含む
 7. str_replace安全ルール:
+   - old_str が非空の場合は「文字列置換モード」。start_line/end_line が指定されていても無視される
+   - 行レンジ置換は old_str を空にし、start_line と end_line を両方指定した場合のみ有効（1-indexed inclusive）
+   - 行レンジ置換では start_line/end_line の片方欠落、数値変換不可、start > end、範囲外は明確なエラー（old_strへのフォールバック無し）
+   - old_str が複数回マッチする場合は失敗し、Candidates（最大5件）+ 前後2行スニペット + Next actions + IMPORTANT を提示する
    - 複数マッチ時はコンテキスト含む
    - 長い編集は分割（~10行ずつ）
    - 連続編集時はread_fileで確認
