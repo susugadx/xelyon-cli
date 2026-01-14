@@ -3,7 +3,6 @@ package tools
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -29,10 +28,11 @@ func executeDeleteLines(path, startLineStr, endLineStr string) (string, string, 
 		return "Error: end_line must be >= start_line", "", nil
 	}
 
-	// ファイル読み込み
-	absPath, err := filepath.Abs(path)
+	// パストラバーサル防止
+	absPath, err := ValidatePath(path)
 	if err != nil {
-		return fmt.Sprintf("Error: Invalid path: %v", err), "", nil
+		red.Printf("🚫 Security: %v\n", err)
+		return fmt.Sprintf("Error: %v", err), "", nil
 	}
 
 	content, err := os.ReadFile(absPath)
