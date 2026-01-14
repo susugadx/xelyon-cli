@@ -21,34 +21,41 @@ type ConfirmResult struct {
 // c (comment) を選択すると複数行コメントを入力できる
 // 外部パッケージからも使用可能なようにエクスポート
 var ConfirmInteractive = func(message string) ConfirmResult {
-	yellow.Printf("%s [y/n/c]: ", message)
-
 	reader := bufio.NewReader(os.Stdin)
-	response, err := reader.ReadString('\n')
-	if err != nil {
-		return ConfirmResult{Action: "no"}
-	}
-	response = strings.ToLower(strings.TrimSpace(response))
 
-	// y/yes/はい → 実行
-	if response == "y" || response == "yes" || response == "ｙ" || response == "はい" {
-		return ConfirmResult{Action: "yes"}
-	}
+	for {
+		yellow.Printf("%s [y/n/c]: ", message)
 
-	// n/no/いいえ → キャンセル
-	if response == "n" || response == "no" || response == "ｎ" || response == "いいえ" {
-		return ConfirmResult{Action: "no"}
-	}
+		response, err := reader.ReadString('\n')
+		if err != nil {
+			return ConfirmResult{Action: "no"}
+		}
+		response = strings.ToLower(strings.TrimSpace(response))
 
-	// c/comment → コメント入力モード
-	if response == "c" || response == "comment" || response == "コメント" {
-		comment, image := readMultiLineComment(reader)
-		return ConfirmResult{Action: "comment", Comment: comment, Image: image}
-	}
+		// 空入力は無視してリトライ（誤Enter防止）
+		if response == "" {
+			continue
+		}
 
-	// その他 → デフォルトはキャンセル
-	yellow.Println("Invalid input. Assuming 'no'.")
-	return ConfirmResult{Action: "no"}
+		// y/yes/はい → 実行
+		if response == "y" || response == "yes" || response == "ｙ" || response == "はい" {
+			return ConfirmResult{Action: "yes"}
+		}
+
+		// n/no/いいえ → キャンセル
+		if response == "n" || response == "no" || response == "ｎ" || response == "いいえ" {
+			return ConfirmResult{Action: "no"}
+		}
+
+		// c/comment → コメント入力モード
+		if response == "c" || response == "comment" || response == "コメント" {
+			comment, image := readMultiLineComment(reader)
+			return ConfirmResult{Action: "comment", Comment: comment, Image: image}
+		}
+
+		// その他 → リトライ
+		yellow.Println("Invalid input. Please enter y/n/c.")
+	}
 }
 
 // readMultiLineComment は複数行コメントを読み取る
