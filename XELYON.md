@@ -225,6 +225,16 @@ xelyon-cli/
 - **自動反映**: Version定数を変更するだけで全体に反映
 
 #### 8. 自動検証システム (internal/agent/verify.go)
+
+- **ロールバック確認の改善**:
+  - `go test` 失敗時の "Rollback the change?" 確認は `y/n/c`（comment）に対応
+  - `c` の場合は、コメントを `internal/agent/confirm.go` の `confirmOrCommentToAI()` 経由で AI に送り、次の提案（修正案）を生成して継続
+  - ロールバックはユーザーが `y` で明示承認した場合のみ実行
+
+- **実装**:
+  - `internal/agent/agent_verify.go`: rollback提案フロー
+  - `internal/agent/confirm.go`: agent側確認（y/n/c）+ コメント時のAI再提案
+
 - **対象**: Goファイル（.go）の変更時
 - **go fmt**: コードフォーマット自動実行
 - **go test**: 該当パッケージのテスト実行
