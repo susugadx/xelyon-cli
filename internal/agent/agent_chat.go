@@ -278,6 +278,52 @@ func (a *Agent) executeToolCall(response string, toolCall *tools.ToolCall) {
 	// ツール実行
 	result, change := tools.Execute(toolCall)
 
+	// comment 継続フロー: ツール側が [COMMENT] シグナルを返した場合、コメントを履歴に入れて再提案を依頼
+	// - これにより SafetyLow の確認で "comment" を選んでも作業を中断せず継続できる
+	if strings.Contains(result, "[COMMENT]") {
+		// ループ防止（同一コメントの連続は抑止）
+		cfg := config.GetGlobalConfig()
+		maxFeedback := cfg.LoopDetection.Threshold
+		if maxFeedback < 3 {
+			maxFeedback = 3
+		}
+
+		// フィードバック回数はこのツール結果メッセージ数で近似（簡易）
+		feedbackCount := 0
+		for _, msg := range a.History {
+			if msg.Role == "user" && strings.Contains(msg.Content, "[COMMENT]") {
+				feedbackCount++
+			}
+		}
+		if feedbackCount >= maxFeedback {
+			yellow.Printf("⚠️  Feedback loop detected (%d), stopping comment retry\n", feedbackCount)
+		} else {
+			// 結果を履歴に先に入れてから、AIへ再提案を要求
+			a.History = append(a.History, api.Message{
+				Role:    "user",
+				Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, result),
+			})
+
+			// AIに「コメントを反映して別案を提示」するよう促す
+			a.History = append(a.History, api.Message{
+				Role: "user",
+				Content: fmt.Sprintf(`[USER FEEDBACK]
+The previous tool execution was NOT performed because the user selected comment in the confirmation UI.
+
+%s
+
+IMPORTANT:
+- Revise your approach/tool call based on this feedback.
+- Do NOT repeat the exact same tool call.
+- If you need to ask the user a question, ask it explicitly instead of calling tools.`, result),
+			})
+
+			// 次ループで callAPIWithRetry() が走るようにする
+			fmt.Println()
+			return
+		}
+	}
+
 	// 変更履歴を保存
 	if change != nil {
 		a.changeStack = append(a.changeStack, *change)

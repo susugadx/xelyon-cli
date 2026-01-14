@@ -77,7 +77,22 @@ func executeBash(command string) string {
 		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 		yellow.Println("⚠️  Warning: This command may modify your system / 警告: システムに変更が加わる可能性があります")
 
-		if !confirm("Run this command? / 実行しますか？") {
+		dec := Confirm("Run this command? / 実行しますか？")
+		switch dec.Action {
+		case ConfirmYes:
+			// continue
+		case ConfirmComment:
+			return fmt.Sprintf(`[COMMENT] User provided feedback for bash.
+
+Comment:
+%s
+
+Next actions:
+- Revise the command to be safer/smaller and propose again.
+- Or split into multiple safe commands.
+
+IMPORTANT: Do NOT execute the previous command as-is.`, strings.TrimSpace(dec.Comment))
+		default: // ConfirmNo
 			return "Cancelled by user"
 		}
 	}
