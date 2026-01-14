@@ -1,5 +1,7 @@
 package tools
 
+import "strings"
+
 // ToolSafety はツールの安全性レベル
 type ToolSafety int
 
@@ -58,6 +60,13 @@ var toolSafetyLevels = map[string]ToolSafety{
 // GetToolSafety は指定されたツールの安全性レベルを返す
 // 定義されていないツールは SafetyMedium（中レベル）として扱う
 func GetToolSafety(toolName string) ToolSafety {
+	// MCP tools are registered dynamically with names like "mcp_<server>_<tool>".
+	// Treat them as SafetyLow by default so they are never auto-approved.
+	// NOTE: This only affects call sites that consult GetToolSafety (e.g. confirmWithAutoApproveDecision).
+	if strings.HasPrefix(toolName, "mcp_") {
+		return SafetyLow
+	}
+
 	if level, ok := toolSafetyLevels[toolName]; ok {
 		return level
 	}
