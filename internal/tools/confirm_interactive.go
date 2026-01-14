@@ -4,6 +4,10 @@ import (
 	"bufio"
 	"os"
 	"strings"
+	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // ConfirmResult は確認結果
@@ -50,58 +54,135 @@ var ConfirmInteractive = func(message string) ConfirmResult {
 // readMultiLineComment は複数行コメントを読み取る
 // 空行2回で入力終了
 // image:プレフィックスで画像を指定可能
+// /paste（または /p）で Paste Mode を起動して長文を挿入可能
 func readMultiLineComment(reader *bufio.Reader) (string, *ImageData) {
 	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	cyan.Println("💬 Enter your comment (press Enter twice to finish):")
 	cyan.Println("   Tip: Use 'image:/path/to/file.png' to attach an image")
+	cyan.Println("   Tip: Use '/paste' (or /p) to enter Paste Mode and insert long text")
 	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+	cfg := config.GetGlobalConfig()
+	maxLines := cfg.Paste.MaxLines
+	maxBytes := cfg.Paste.MaxBytes
+	timeout := time.Duration(cfg.Paste.TimeoutSeconds) * time.Second
 
 	var lines []string
 	var imageData *ImageData
 	emptyLineCount := 0
+	totalBytes := 0
+
+	type readResult struct {
+		line string
+		err  error
+	}
+	inputChan := make(chan readResult, 1)
 
 	for {
 		yellow.Print("> ")
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			break
-		}
 
-		line = strings.TrimRight(line, "\r\n")
+		go func() {
+			line, err := reader.ReadString('\n')
+			inputChan <- readResult{line: line, err: err}
+		}()
 
-		// 空行チェック
-		if strings.TrimSpace(line) == "" {
-			emptyLineCount++
-			if emptyLineCount >= 2 {
-				// 空行2回で終了
-				break
+		select {
+		case result := <-inputChan:
+			if result.err != nil {
+				goto done
 			}
-			// 最初の空行は保持
-			lines = append(lines, line)
-		} else {
+
+			line := strings.TrimRight(result.line, "\r\n")
+			trimmed := strings.TrimSpace(line)
+
+			// /paste: enter paste mode and insert captured content
+			if trimmed == "/p" || trimmed == "/paste" {
+				pm := ui.NewPasteMode(cfg.Paste)
+				content, cancelled, err := pm.Capture(os.Stdin, os.Stdout)
+				if err != nil {
+					red.Printf("⚠️  Paste Mode error: %v\n", err)
+					continue
+				}
+				if cancelled {
+					yellow.Println("❌ Cancelled - input discarded")
+					continue
+				}
+
+				content = strings.ReplaceAll(content, "\r\n", "\n")
+				content = strings.TrimRight(content, "\n")
+				if content == "" {
+					yellow.Println("⚠️ No content captured")
+					continue
+				}
+
+				pastedLines := strings.Split(content, "\n")
+				for _, pl := range pastedLines {
+					lines = append(lines, pl)
+					totalBytes += len(pl) + 1
+				}
+				emptyLineCount = 0
+
+				if len(lines) >= maxLines {
+					yellow.Printf("⚠️ Max lines (%d) reached\n", maxLines)
+					goto done
+				}
+				if totalBytes >= maxBytes {
+					yellow.Printf("⚠️ Max size (%d bytes) reached\n", maxBytes)
+					goto done
+				}
+
+				green.Printf("✅ Inserted %d lines from Paste Mode into comment\n", len(pastedLines))
+				cyan.Println("💬 Back to comment input (finish with empty line x2)")
+				continue
+			}
+
+			// 空行チェック（Enter 2回で終了）
+			if trimmed == "" {
+				emptyLineCount++
+				if emptyLineCount >= 2 {
+					goto done
+				}
+				lines = append(lines, line)
+				totalBytes += len(line) + 1
+				continue
+			}
+
 			emptyLineCount = 0
 
 			// image: プレフィックスを検出
-			if strings.HasPrefix(strings.TrimSpace(line), "image:") {
-				imagePath := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "image:"))
+			if strings.HasPrefix(trimmed, "image:") {
+				imagePath := strings.TrimSpace(strings.TrimPrefix(trimmed, "image:"))
 
-				// 画像を読み込み
 				img, err := LoadImage(imagePath)
 				if err != nil {
 					red.Printf("⚠️  Failed to load image: %v\n", err)
-					// エラーでも続行（テキストとして残す）
 					lines = append(lines, line)
+					totalBytes += len(line) + 1
 				} else {
 					imageData = img
 					green.Printf("🖼️  Image loaded: %s (%s)\n", img.Path, FormatSize(img.Size))
-					// image:行はコメントには含めない
 				}
 			} else {
 				lines = append(lines, line)
+				totalBytes += len(line) + 1
 			}
+
+			if len(lines) >= maxLines {
+				yellow.Printf("⚠️ Max lines (%d) reached\n", maxLines)
+				goto done
+			}
+			if totalBytes >= maxBytes {
+				yellow.Printf("⚠️ Max size (%d bytes) reached\n", maxBytes)
+				goto done
+			}
+
+		case <-time.After(timeout):
+			yellow.Printf("⚠️ Timeout - no input for %d seconds\n", int(timeout.Seconds()))
+			goto done
 		}
 	}
 
+done:
 	// 末尾の空行を削除
 	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
 		lines = lines[:len(lines)-1]

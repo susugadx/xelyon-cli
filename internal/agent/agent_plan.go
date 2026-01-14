@@ -119,31 +119,17 @@ Output the JSON plan now:`, userRequest),
 
 // confirmPlan は計画の承認確認
 func (a *Agent) confirmPlan() (approved bool, feedback string) {
-	yellow.Print("\nApprove this plan? [y/n/c(omment)]: ")
+	result := tools.ConfirmInteractive("Approve this plan? [y/n/c(omment)]:")
 
-	var input string
-	if _, err := fmt.Scanln(&input); err != nil {
-		red.Printf("Failed to read input: %v\n", err)
-		return false, ""
-	}
-	input = strings.ToLower(strings.TrimSpace(input))
-
-	switch input {
-	case "y", "yes":
+	switch result.Action {
+	case "yes":
 		return true, ""
-	case "n", "no":
+	case "no":
 		return false, ""
-	case "c", "comment":
-		yellow.Print("Enter your feedback: ")
-		var comment string
-		if _, err := fmt.Scanln(&comment); err != nil {
-			red.Printf("Failed to read input: %v\n", err)
-			return false, ""
-		}
-		return false, strings.TrimSpace(comment)
+	case "comment":
+		return false, strings.TrimSpace(result.Comment)
 	default:
-		yellow.Println("Invalid input. Please enter y/n/c.")
-		return a.confirmPlan() // 再帰的に再確認
+		return false, ""
 	}
 }
 

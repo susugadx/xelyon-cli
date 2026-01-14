@@ -19,8 +19,17 @@ type Spinner struct {
 
 // NewSpinner は新しいSpinnerを作成
 func NewSpinner() *Spinner {
+	return NewSpinnerWithWriter(os.Stdout)
+}
+
+// NewSpinnerWithWriter は出力先を指定してSpinnerを作成
+// run_test などで stdout 出力（コマンド結果）と混ざらないよう、stderr を指定する用途を想定。
+func NewSpinnerWithWriter(w io.Writer) *Spinner {
+	if w == nil {
+		w = os.Stdout
+	}
 	return &Spinner{
-		writer: os.Stdout,
+		writer: w,
 		frames: []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"},
 	}
 }

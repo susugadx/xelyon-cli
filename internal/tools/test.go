@@ -2,8 +2,11 @@ package tools
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
+
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // executeRunTest はテストを自動検出して実行
@@ -40,6 +43,10 @@ Please ensure your project has the appropriate configuration files.`
 	fmt.Println()
 
 	green.Printf("▶ Running: %s\n", command)
+
+	spinner := ui.NewSpinnerWithWriter(os.Stderr)
+	spinner.Start("Running tests...")
+	defer spinner.Stop()
 
 	cmd := exec.Command("bash", "-c", command)
 	cmd.Dir = absPath

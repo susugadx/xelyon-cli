@@ -144,6 +144,8 @@ xelyon-cli/
 
 #### 3. UI/UX (internal/ui/)
 - **スピナー**: API呼び出し中のローディング表示（80ms更新）
+  - `run_test` 等の長時間実行ツールでも、実行中に stderr へスピナー表示して「停止して見える」問題を軽減
+
 - **ページング**: 100行を超える出力を自動的に分割表示
 - **色付け**: cyan/green/yellow/redで情報を視覚的に区別
 - **複数行入力** (v0.32.0):
@@ -154,6 +156,12 @@ xelyon-cli/
   - **``` マーカー**: 明示的な複数行モード（行番号付きエディタ表示）
   - **multiline.go**: `MultilineReader.ReadInput()` で両方式を統一処理
   - **agent.go**: 起動時に `EnableBracketedPaste()`, 終了時に `DisableBracketedPaste()`
+
+  - **Paste Mode**（WSL等のBracketed Paste非対応環境向け）:
+    - `internal/ui/paste_mode.go`: `PasteMode.Capture()` で「空行2回」等のルールで複数行入力を安全に取り込み
+    - `/paste` コマンド（`internal/agent/paste.go`）と、確認プロンプトのコメント入力（`internal/tools/confirm_interactive.go` / Plan承認の `confirmPlan`）から共通利用
+    - コメント入力中に `/paste`（エイリアス: `/p`）を入力すると Paste Mode を起動し、終了後の内容をコメントに挿入
+
 
 #### 4. 履歴管理 (internal/history/)
 - **JSONL形式**: ストリーミング対応、1行1メッセージ

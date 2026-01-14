@@ -192,6 +192,12 @@ command_aliases:
 - エイリアス: `/p`
 - 設定: `~/.xelyon/config.yaml` で `paste.max_lines`, `paste.timeout_seconds` 等を変更可能
 
+
+**補足: 確認プロンプトのコメント入力でも /paste が使えます**
+- Plan Mode の `Approve this plan? [y/n/c]` で `c` を選んだ後のコメント入力中や、ツール実行前確認で `c` を選んだ後のコメント入力中に、`/paste`（エイリアス: `/p`）を入力すると Paste Mode を起動できます。
+- Paste Mode 終了後、入力した内容がそのままコメントとして挿入されます。
+
+
 ### キャンセル操作（Ctrl+C）
 
 - **AI応答中**: Ctrl+Cで応答を中断し、プロンプトに戻る
@@ -205,6 +211,9 @@ AIが自動で以下のツールを使用します:
 - **ファイル編集**: `read_file`, `write_file`, `str_replace`
 - **Git操作**: `git_status`, `git_diff`, `git_add`, `git_commit`, `git_push`
 - **開発支援**: `run_test`, `format`, `lint`
+
+  - `run_test` 実行中はスピナーを表示し、長時間のテストでも「動作中」であることが分かるようにしています
+
 - **検索**: `search_code`, `search_file`, `web_search`
 
 全ツール: [コマンドリファレンス](docs/commands.md#利用可能なツール)
