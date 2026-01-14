@@ -62,7 +62,22 @@ func executeMoveFile(src, dest string) (string, string, error) {
 		yellow.Println("⚠️  Warning: Destination file already exists")
 		yellow.Println("⚠️  警告: 移動先ファイルが既に存在します")
 
-		if !confirm("Overwrite destination? / 移動先を上書きしますか？") {
+		dec := Confirm("Overwrite destination? / 移動先を上書きしますか？")
+		switch dec.Action {
+		case ConfirmYes:
+			// continue
+		case ConfirmComment:
+			return fmt.Sprintf(`[COMMENT] User provided feedback for move_file overwrite.
+
+Comment:
+%s
+
+Next actions:
+- Confirm the correct destination path.
+- Consider renaming the destination or moving to a different directory.
+
+IMPORTANT: Do NOT overwrite the destination until the user approves.`, strings.TrimSpace(dec.Comment)), "", nil
+		default:
 			return "Cancelled by user", "", nil
 		}
 

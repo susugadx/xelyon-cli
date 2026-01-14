@@ -3,6 +3,7 @@ package tools
 import (
 	"fmt"
 	"os/exec"
+	"strings"
 )
 
 // executeGitCommit は git commit を実行
@@ -17,7 +18,22 @@ func executeGitCommit(message string) string {
 	cyan.Printf("📝 Message / メッセージ:\n%s\n", message)
 	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
-	if !confirm("Commit with this message? / この内容でコミットしますか？") {
+	dec := Confirm("Commit with this message? / この内容でコミットしますか？")
+	switch dec.Action {
+	case ConfirmYes:
+		// continue
+	case ConfirmComment:
+		return fmt.Sprintf(`[COMMENT] User provided feedback for git_commit.
+
+Comment:
+%s
+
+Next actions:
+- Revise the commit message if needed.
+- Or stage different files before committing.
+
+IMPORTANT: Do NOT create a commit until the user approves.`, strings.TrimSpace(dec.Comment))
+	default:
 		return "Cancelled by user"
 	}
 

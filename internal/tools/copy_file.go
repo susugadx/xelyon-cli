@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 )
 
 // executeCopyFile はファイルをコピー
@@ -44,7 +45,22 @@ func executeCopyFile(src, dest string) (string, string, error) {
 		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 		yellow.Println("⚠️  Warning: Destination file already exists / 警告: コピー先ファイルが既に存在します")
 
-		if !confirm("Overwrite? / 上書きしますか？") {
+		dec := Confirm("Overwrite? / 上書きしますか？")
+		switch dec.Action {
+		case ConfirmYes:
+			// continue
+		case ConfirmComment:
+			return fmt.Sprintf(`[COMMENT] User provided feedback for copy_file overwrite.
+
+Comment:
+%s
+
+Next actions:
+- Confirm the destination path.
+- Consider choosing a different destination name.
+
+IMPORTANT: Do NOT overwrite the destination until the user approves.`, strings.TrimSpace(dec.Comment)), "", nil
+		default:
 			return "Cancelled by user", "", nil
 		}
 

@@ -61,7 +61,22 @@ func executeGitBranch(action, branchName string) string {
 			fmt.Println("\nUncommitted changes / 未コミットの変更:")
 			fmt.Println(string(statusOutput))
 
-			if !confirm("Switch branch anyway? / それでもブランチを切り替えますか？") {
+			dec := Confirm("Switch branch anyway? / それでもブランチを切り替えますか？")
+			switch dec.Action {
+			case ConfirmYes:
+				// continue
+			case ConfirmComment:
+				return fmt.Sprintf(`[COMMENT] User provided feedback for git_branch switch.
+
+Comment:
+%s
+
+Next actions:
+- Consider stashing or committing changes before switching.
+- Or switch to a different branch.
+
+IMPORTANT: Do NOT switch branches until the user approves.`, strings.TrimSpace(dec.Comment))
+			default:
 				return "Cancelled by user"
 			}
 		} else {

@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 // executeLint runs linter with optional auto-fix
@@ -70,7 +71,22 @@ func executeLint(path, autoFixStr string) (string, string, error) {
 		yellow.Println("⚠️  Warning: Auto-fix will modify files")
 		yellow.Println("⚠️  警告: 自動修正でファイルが変更されます")
 
-		if !confirm("Run auto-fix? / 自動修正を実行しますか？") {
+		dec := Confirm("Run auto-fix? / 自動修正を実行しますか？")
+		switch dec.Action {
+		case ConfirmYes:
+			// continue
+		case ConfirmComment:
+			return fmt.Sprintf(`[COMMENT] User provided feedback for lint auto-fix.
+
+Comment:
+%s
+
+Next actions:
+- Consider running lint without auto-fix first.
+- Or apply fixes selectively.
+
+IMPORTANT: Do NOT run auto-fix until the user approves.`, strings.TrimSpace(dec.Comment)), "", nil
+		default:
 			return "Auto-fix cancelled by user", "", nil
 		}
 

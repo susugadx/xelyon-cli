@@ -1555,6 +1555,11 @@ git_push, git_checkout, git_branch, git_stash
 - `n` (no) - キャンセル
 - `c` (comment) - コメント（修正指示）
 
+**内部実装（ConfirmDecision API）**
+- `internal/tools/confirm_interactive.go` の `Confirm()` が `ConfirmDecision`（`ConfirmYes`/`ConfirmNo`/`ConfirmComment`）を返します
+- ツール側で `ConfirmComment` が選ばれた場合は、ツールは処理を実行せずに `[COMMENT] ...` 形式のメッセージを返し、エージェントがコメントをコンテキストにして再提案します
+- 適用例: `copy_file`（上書き）, `git_add`, `git_branch`（未コミット変更ありの切り替え）, `git_commit`, `lint`（auto-fix）, `move_file`（上書き）
+
 #### 2. 複数行コメント入力
 `c` を選択すると複数行コメント入力モードに切り替わります:
 ```
