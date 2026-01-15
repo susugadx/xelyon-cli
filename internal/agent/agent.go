@@ -417,6 +417,9 @@ func RunInteractive(model string, provider api.Provider, autoApprove, planMode b
 		// AI出力後に溜まった入力をクリア（出力中のEnter押下を無視）
 		mlReader.FlushInput()
 
+		// Status / 状態表示（常にプロンプト直前に表示）
+		agent.PrintStatusFooter()
+
 		input, err := mlReader.ReadInput("\n> ")
 		if err != nil {
 			break
@@ -627,8 +630,8 @@ func RunInteractiveWithResume(model string, provider api.Provider, autoApprove, 
 	defer mlReader.DisableBracketedPaste()
 
 	for {
-		// AI出力後に溜まった入力をクリア（出力中のEnter押下を無視）
-		mlReader.FlushInput()
+		// Status / 状態表示（常にプロンプト直前に表示）
+		agent.PrintStatusFooter()
 
 		input, err := mlReader.ReadInput("\n> ")
 		if err != nil {

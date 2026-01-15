@@ -214,6 +214,19 @@ command_aliases:
 
 ### キャンセル操作（Ctrl+C）
 
+### 状態表示（Status）
+
+XELYON は各ターンの最後（入力プロンプトの直前）に、現在の状態を **英語/日本語併記** で表示します。
+長いログやJSON出力の後でも「止まったのか？入力待ちなのか？」が分かるようにするためです。
+
+- `running` : 実行中 / Running
+- `waiting_input` : 入力待ち / Waiting for input
+- `waiting_approval` : 承認待ち（Plan Modeなど）/ Waiting for approval
+- `aborted` : 中断（ループ検知、最大反復到達、APIエラーなど）/ Aborted
+
+Plan Mode/通常モードを問わず、同じ形式で表示されます。
+
+
 - **AI応答中**: Ctrl+Cで応答を中断し、プロンプトに戻る
 - **アプリ終了**: Ctrl+Cを3秒以内に2回押すと終了
 - 1回目のCtrl+Cでは「⚠️ Interrupted. Press Ctrl+C again within 3 seconds to exit.」と表示

@@ -20,6 +20,7 @@ func (a *Agent) RunPlanMode(ctx context.Context, userRequest string) error {
 	}
 
 	// Step 1: 計画生成をAIに依頼
+	a.SetStatus(StateRunning, "Generating plan", "計画生成中", "Wait for plan output", "計画の出力を待ってください")
 	cyan.Println("\n📋 Generating execution plan...")
 
 	// ユーザーリクエストを履歴に追加
@@ -100,6 +101,7 @@ Output the JSON plan now:`, userRequest),
 	fmt.Println()
 
 	// Step 5: ユーザー承認
+	a.SetStatus(StateWaitingApproval, "Waiting for plan approval", "計画の承認待ち", "Answer y/n/c", "y/n/c で回答")
 	approved, feedback := a.confirmPlan()
 	if !approved {
 		if feedback != "" {
@@ -112,9 +114,17 @@ Output the JSON plan now:`, userRequest),
 	}
 
 	green.Println("✓ Plan approved. Starting execution...")
+	a.SetStatus(StateRunning, "Executing plan", "計画を実行中", "Wait for completion", "完了を待ってください")
 
 	// Step 6: 自律実行
-	return a.executePlan(ctx, plan)
+	err = a.executePlan(ctx, plan)
+	if err != nil {
+		a.SetStatus(StateAborted, "Plan execution failed", "計画の実行に失敗", "Review errors and retry", "エラーを確認して再試行")
+		return err
+	}
+
+	a.SetStatus(StateWaitingInput, "Ready for input", "入力待ち", "Type your request or /help", "リクエスト、または /help を入力")
+	return nil
 }
 
 // confirmPlan は計画の承認確認

@@ -32,12 +32,18 @@ func isSameToolCall(tc1, tc2 *tools.ToolCall) bool {
 func (a *Agent) chat(input string) {
 	// Plan Mode が有効な場合、RunPlanMode を呼ぶ
 	if a.PlanMode {
+		a.SetStatus(StateRunning, "Plan Mode running", "Plan Mode 実行中", "Wait for plan / approval prompts", "計画/承認プロンプトを待ってください")
 		ctx := context.Background()
 		if err := a.RunPlanMode(ctx, input); err != nil {
+			a.SetStatus(StateAborted, "Plan Mode failed", "Plan Mode 失敗", "Review the error and retry", "エラー内容を確認して再試行してください")
 			red.Printf("Plan execution failed: %v\n", err)
+		} else {
+			a.SetStatus(StateWaitingInput, "Ready for input", "入力待ち", "Type your request or /help", "リクエスト、または /help を入力")
 		}
 		return
 	}
+
+	a.SetStatus(StateRunning, "Processing request", "処理中", "Wait for response", "応答を待ってください")
 
 	// 実装前チェック：既存定義の重複を警告
 	if warning := CheckBeforeImplementation(input); warning != "" {
@@ -77,6 +83,7 @@ func (a *Agent) chat(input string) {
 		if err != nil {
 			// context.Canceled の場合は中断: ループを抜けてプロンプトに戻る
 			// その他のエラーも同様にループを抜ける
+			a.SetStatus(StateAborted, "API call failed", "API呼び出し失敗", "Try again with smaller context/logs", "ログ/コンテキストを短くして再試行")
 			return
 		}
 
@@ -85,6 +92,7 @@ func (a *Agent) chat(input string) {
 		if toolCall != nil {
 			// ループ検知
 			if a.shouldAbortToolLoop(toolCall, lastToolCall, &sameCallCount) {
+				a.SetStatus(StateAborted, "Tool loop detected", "ツールループ検知", "Refine your request or provide more constraints", "指示を具体化する/制約を追加する")
 				continue
 			}
 			lastToolCall = toolCall
@@ -96,12 +104,14 @@ func (a *Agent) chat(input string) {
 
 		// 通常の回答
 		a.handleNormalResponse(response)
+		a.SetStatus(StateWaitingInput, "Ready for input", "入力待ち", "Type your request or /help", "リクエスト、または /help を入力")
 		normalExit = true
 		break
 	}
 
 	// 最大イテレーション警告
 	if !normalExit && loopCount >= maxIterations {
+		a.SetStatus(StateAborted, "Max iterations reached", "最大反復回数に到達", "Break the task down and try again", "タスクを分割して再試行")
 		yellow.Printf("⚠️  Warning: Maximum iterations (%d) reached\n", maxIterations)
 		yellow.Println("The task may be too complex or the AI is stuck in a loop.")
 		yellow.Println("Consider breaking down the task into smaller steps.")

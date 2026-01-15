@@ -146,6 +146,14 @@ xelyon-cli/
 - **フレームワーク自動検出**: run_test/formatが言語・ツールを自動検出
 
 #### 3. UI/UX (internal/ui/)
+
+- **状態表示（Status Footer）**:
+  - 各ターンの最後（入力プロンプト `> ` の直前）に、現在の状態を **英語/日本語併記** で表示し、
+    「ループして止まったのか」「入力待ちなのか」「Plan承認待ちなのか」を明確化します。
+  - 状態は全モード（通常/Plan/Resume）で統一されます。
+  - 例: `running`, `waiting_input`, `waiting_approval`, `aborted`
+  - 実装: `internal/agent/status.go` + `Agent.SetStatus()` / `Agent.PrintStatusFooter()`
+
 - **スピナー**: API呼び出し中のローディング表示（80ms更新）
   - `run_test` 等の長時間実行ツールでも、実行中に stderr へスピナー表示して「停止して見える」問題を軽減
 
