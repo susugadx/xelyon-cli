@@ -651,7 +651,7 @@ go build -o xelyon
 1. **ストリーミング**: DeepSeek APIはストリーミングレスポンスのみサポート
 2. **履歴サイズ**: 大きなセッション（1000+メッセージ）は読み込みが遅くなる可能性
 3. **ページング**: AIの応答にはページング適用されない（ツール出力のみ）
-4. **並行実行**: 現在は1つのツールを順次実行（並列実行は未対応）
+4. **並行実行**: 複数ツールを順次実行可能（ParseToolCalls対応済み）、Plan Modeでは並列実行もサポート
 5. **バックアップ**: .bakファイルは1世代のみ保持（複数世代バックアップ未対応）
 6. **ループ検知**: 3回同じツール呼び出しで中断（v0.8.0で追加）
 7. **APIリトライ**: 最大2回までリトライ（v0.8.0で追加）
@@ -1565,6 +1565,61 @@ git_push, git_checkout, git_branch, git_stash
 - `internal/tools/safety_test.go`: 危険度分類・自動承認ロジックのテスト
 
 詳細は [Issue #3](https://github.com/susugadx/xelyon-cli/issues/3) を参照。
+
+---
+
+### 複数ツール呼び出し対応（ParseToolCalls）
+
+**概要**: AIレスポンスから複数のツール呼び出しを抽出し、順次実行する機能を実装。
+
+#### 実装ファイル
+- `internal/tools/common.go`: `ParseToolCalls()`, `findCodeBlockRanges()`, `isInCodeBlock()`
+- `internal/agent/agent_chat.go`: 複数ツール順次実行
+- `internal/agent/agent_plan.go`: Plan Mode での複数ツール実行（結果集約）
+- `internal/agent/agent.go`: `RunWithContext()` での複数ツール対応
+
+#### 主要機能
+
+##### 1. ParseToolCalls 関数
+```go
+// ParseToolCalls はレスポンスから全てのツール呼び出しを抽出
+// Markdownコードブロック内のJSONは除外する
+func ParseToolCalls(response string) []*ToolCall
+```
+
+**特徴**:
+- 正規表現 `\{"tool"\s*:\s*"[^"]+"` でJSON検出
+- Markdownコードブロック（` ``` `）内のJSONは自動除外
+- 後方互換: `ParseToolCall()` は `ParseToolCalls()[0]` を返す
+
+##### 2. コードブロック除外ロジック
+```go
+func findCodeBlockRanges(text string) [][2]int  // コードブロック範囲を検出
+func isInCodeBlock(pos int, ranges [][2]int) bool  // 位置がコードブロック内か判定
+```
+
+**例**: 以下のレスポンスから正しいツールのみ抽出
+```
+解説用コードブロック:
+```json
+{"tool": "example", "args": {...}}  // これは除外される
+```
+
+実際のツール呼び出し:
+{"tool": "read_file", "args": {"path": "..."}}  // これは抽出される
+{"tool": "write_file", "args": {"path": "..."}}  // これも抽出される
+```
+
+##### 3. 順次実行とループ検知
+- 複数ツールは順次実行（並列ではない）
+- 各ツール実行前に `shouldAbortToolLoop()` でループ検知
+- 同一ツール3回連続でエラー中断
+
+#### テスト
+- `internal/tools/common_test.go`:
+  - `TestParseToolCalls_Multiple`: 複数ツール抽出テスト
+  - `TestParseToolCalls_CodeBlockExclusion`: コードブロック除外テスト
+  - `TestFindCodeBlockRanges`: コードブロック範囲検出テスト
 
 ---
 
