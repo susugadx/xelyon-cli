@@ -3,9 +3,19 @@ package tools
 import "os"
 
 // IsInteractiveModeEnabled は対話的確認モードが有効かチェック
-// 環境変数 XELYON_INTERACTIVE_CONFIRM=1 で有効化
+// デフォルトは有効。
+//
+// 無効化したい場合は以下のいずれかを設定:
+//   - XELYON_INTERACTIVE_CONFIRM=0
+//   - XELYON_INTERACTIVE_CONFIRM=false
 func IsInteractiveModeEnabled() bool {
-	return os.Getenv("XELYON_INTERACTIVE_CONFIRM") == "1"
+	v := os.Getenv("XELYON_INTERACTIVE_CONFIRM")
+	switch v {
+	case "0", "false", "FALSE":
+		return false
+	default:
+		return true
+	}
 }
 
 // ConfirmWithFeedback は対話的確認を行う（互換ラッパー）

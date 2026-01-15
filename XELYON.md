@@ -1560,6 +1560,11 @@ git_push, git_checkout, git_branch, git_stash
 ### 実装詳細
 
 #### 1. 拡張確認プロンプト (y/n/c)
+
+**有効/無効**:
+- デフォルトで有効（`y/n/c`）
+- 無効化したい場合は `XELYON_INTERACTIVE_CONFIRM=0`（または `false`）を設定
+
 **ファイル**: `internal/tools/confirm_interactive.go`
 
 従来の `y/n` 確認を `y/n/c` に拡張:

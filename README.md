@@ -200,6 +200,9 @@ command_aliases:
 - Paste Mode 終了後、入力した内容がそのままコメントとして挿入されます。
 
 **確認UI（y/n/c）とコメント継続**
+
+- デフォルトで有効です（`y/n/c`）。無効化したい場合は `XELYON_INTERACTIVE_CONFIRM=0`（または `false`）を設定してください。
+
 - すべての確認プロンプトは `y/n/c`（yes/no/comment）をサポートします
 - `c` を選ぶと、コメント（複数行可）を入力でき、AIがそのコメントを元に提案を修正して作業を継続します
 - 対象例: `copy_file`（上書き）, `git_add`, `git_branch`（未コミット変更ありの切り替え）, `git_commit`, `lint`（auto-fix）, `move_file`（上書き） など
