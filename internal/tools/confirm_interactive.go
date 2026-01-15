@@ -20,6 +20,7 @@ type ConfirmResult struct {
 // ConfirmInteractive は拡張確認プロンプト (y/n/c)
 // c (comment) を選択すると複数行コメントを入力できる
 // 外部パッケージからも使用可能なようにエクスポート
+// NOTE: テスト時は setupTestConfirmInteractive() でモックされる
 var ConfirmInteractive = func(message string) ConfirmResult {
 	reader := bufio.NewReader(os.Stdin)
 
@@ -28,6 +29,7 @@ var ConfirmInteractive = func(message string) ConfirmResult {
 
 		response, err := reader.ReadString('\n')
 		if err != nil {
+			// EOF時はnoを返して終了
 			return ConfirmResult{Action: "no"}
 		}
 		response = strings.ToLower(strings.TrimSpace(response))

@@ -26,13 +26,12 @@ func chdirTempWorkspace(t *testing.T) string {
 }
 
 func TestExecuteDeleteLines_Normal(t *testing.T) {
+	setupTestMocks(t)
 	tmpDir := chdirTempWorkspace(t)
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testContent := "line1\nline2\nline3\nline4\nline5"
 
 	testutil.CreateTempFile(t, tmpDir, "test.txt", testContent)
-
-	setupTestConfirm(t, true)
 
 	// 2-4行目を削除
 	output, backupPath, err := executeDeleteLines(testFile, "2", "4")
@@ -56,13 +55,12 @@ func TestExecuteDeleteLines_Normal(t *testing.T) {
 }
 
 func TestExecuteDeleteLines_SingleLine(t *testing.T) {
+	setupTestMocks(t)
 	tmpDir := chdirTempWorkspace(t)
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testContent := "line1\nline2\nline3"
 
 	testutil.CreateTempFile(t, tmpDir, "test.txt", testContent)
-
-	setupTestConfirm(t, true)
 
 	// 2行目のみ削除
 	output, backupPath, err := executeDeleteLines(testFile, "2", "2")
@@ -84,13 +82,12 @@ func TestExecuteDeleteLines_SingleLine(t *testing.T) {
 }
 
 func TestExecuteDeleteLines_OutOfBoundsClamping(t *testing.T) {
+	setupTestMocks(t)
 	tmpDir := chdirTempWorkspace(t)
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testContent := "line1\nline2\nline3"
 
 	testutil.CreateTempFile(t, tmpDir, "test.txt", testContent)
-
-	setupTestConfirm(t, true)
 
 	// 1-999行目を削除（範囲外は自動クランプ）
 	output, backupPath, err := executeDeleteLines(testFile, "1", "999")
@@ -119,13 +116,12 @@ func TestExecuteDeleteLines_OutOfBoundsClamping(t *testing.T) {
 }
 
 func TestExecuteDeleteLines_InvalidStartLine(t *testing.T) {
+	setupTestMocks(t)
 	tmpDir := chdirTempWorkspace(t)
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testContent := "line1\nline2\nline3"
 
 	testutil.CreateTempFile(t, tmpDir, "test.txt", testContent)
-
-	setupTestConfirm(t, true)
 
 	// 不正な開始行（文字列）
 	output, _, err := executeDeleteLines(testFile, "abc", "3")
@@ -144,13 +140,12 @@ func TestExecuteDeleteLines_InvalidStartLine(t *testing.T) {
 }
 
 func TestExecuteDeleteLines_InvalidEndLine(t *testing.T) {
+	setupTestMocks(t)
 	tmpDir := chdirTempWorkspace(t)
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testContent := "line1\nline2\nline3"
 
 	testutil.CreateTempFile(t, tmpDir, "test.txt", testContent)
-
-	setupTestConfirm(t, true)
 
 	// 不正な終了行（文字列）
 	output, _, err := executeDeleteLines(testFile, "1", "xyz")
@@ -169,13 +164,12 @@ func TestExecuteDeleteLines_InvalidEndLine(t *testing.T) {
 }
 
 func TestExecuteDeleteLines_InvalidRange(t *testing.T) {
+	setupTestMocks(t)
 	tmpDir := chdirTempWorkspace(t)
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testContent := "line1\nline2\nline3\nline4\nline5"
 
 	testutil.CreateTempFile(t, tmpDir, "test.txt", testContent)
-
-	setupTestConfirm(t, true)
 
 	tests := []struct {
 		name      string
@@ -222,13 +216,13 @@ func TestExecuteDeleteLines_InvalidRange(t *testing.T) {
 }
 
 func TestExecuteDeleteLines_UserCancelled(t *testing.T) {
+	setupTestMocks(t)
+	setupTestConfirm(t, false)
 	tmpDir := chdirTempWorkspace(t)
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testContent := "line1\nline2\nline3"
 
 	testutil.CreateTempFile(t, tmpDir, "test.txt", testContent)
-
-	setupTestConfirm(t, false)
 
 	// 削除実行（キャンセル）
 	output, backupPath, err := executeDeleteLines(testFile, "1", "2")
@@ -252,12 +246,11 @@ func TestExecuteDeleteLines_UserCancelled(t *testing.T) {
 }
 
 func TestExecuteDeleteLines_EmptyFile(t *testing.T) {
+	setupTestMocks(t)
 	tmpDir := chdirTempWorkspace(t)
 	testFile := filepath.Join(tmpDir, "empty.txt")
 
 	testutil.CreateTempFile(t, tmpDir, "empty.txt", "")
-
-	setupTestConfirm(t, true)
 
 	// 空ファイルから行削除を試みる
 	output, _, err := executeDeleteLines(testFile, "1", "1")
@@ -274,13 +267,12 @@ func TestExecuteDeleteLines_EmptyFile(t *testing.T) {
 }
 
 func TestExecuteDeleteLines_FirstLines(t *testing.T) {
+	setupTestMocks(t)
 	tmpDir := chdirTempWorkspace(t)
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testContent := "line1\nline2\nline3\nline4\nline5"
 
 	testutil.CreateTempFile(t, tmpDir, "test.txt", testContent)
-
-	setupTestConfirm(t, true)
 
 	// 最初の3行を削除
 	output, backupPath, err := executeDeleteLines(testFile, "1", "3")
@@ -302,13 +294,12 @@ func TestExecuteDeleteLines_FirstLines(t *testing.T) {
 }
 
 func TestExecuteDeleteLines_LastLines(t *testing.T) {
+	setupTestMocks(t)
 	tmpDir := chdirTempWorkspace(t)
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testContent := "line1\nline2\nline3\nline4\nline5"
 
 	testutil.CreateTempFile(t, tmpDir, "test.txt", testContent)
-
-	setupTestConfirm(t, true)
 
 	// 最後の2行を削除
 	output, backupPath, err := executeDeleteLines(testFile, "4", "5")

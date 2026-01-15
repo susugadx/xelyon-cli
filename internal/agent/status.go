@@ -64,9 +64,15 @@ func defaultStatus() AgentStatus {
 	}
 }
 
+// globalAgentStatus は Agent からアクセスされる共有ステータス
+// Agent 構造体を変更せずに利用するための簡易実装
+var globalAgentStatus = statusHolder{
+	status: defaultStatus(),
+}
+
 // SetStatus updates the current agent status.
 func (a *Agent) SetStatus(state AgentState, reasonEN, reasonJP, nextEN, nextJP string) {
-	holderFor(a).setStatus(AgentStatus{
+	globalAgentStatus.setStatus(AgentStatus{
 		State:    state,
 		ReasonEN: reasonEN,
 		ReasonJP: reasonJP,
@@ -78,7 +84,7 @@ func (a *Agent) SetStatus(state AgentState, reasonEN, reasonJP, nextEN, nextJP s
 // PrintStatusFooter prints a short, bilingual status line.
 // This should be called right before showing the input prompt.
 func (a *Agent) PrintStatusFooter() {
-	s := a.status.getStatus()
+	s := globalAgentStatus.getStatus()
 
 	// Compact 2-line footer (EN/JP) to make state obvious even after long outputs.
 	label := "Status"

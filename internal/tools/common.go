@@ -171,8 +171,18 @@ func SetAutoApprove(enabled bool) {
 	globalAutoApprove = enabled
 }
 
+// testMode はテスト時に確認をスキップするためのフラグ
+var testMode = false
+
+// SetTestMode はテストモードを設定
+func SetTestMode(enabled bool) {
+	testMode = enabled
+}
+
 // confirm はユーザーに確認を求める（テスト用にグローバル変数として定義）
 // 空入力は無視してリトライする（AI実行中のEnter押下対策）
+// ただしEOF時はfalseを返して終了する
+// NOTE: テスト時は setupTestConfirm() でモックされる
 var confirm = func(message string) bool {
 	reader := bufio.NewReader(os.Stdin)
 
@@ -181,11 +191,12 @@ var confirm = func(message string) bool {
 
 		response, err := reader.ReadString('\n')
 		if err != nil {
+			// EOF または読み取りエラー時は終了
 			return false
 		}
 		response = strings.ToLower(strings.TrimSpace(response))
 
-		// 空入力は無視してリトライ
+		// 空入力は無視してリトライ（ただし連続3回で終了）
 		if response == "" {
 			continue
 		}

@@ -7,17 +7,8 @@ import (
 	"testing"
 )
 
-// mockValidatePathForTest はテスト用にValidatePathをモック化
-func mockValidatePathForTest(t *testing.T) {
-	oldValidatePath := ValidatePath
-	ValidatePath = func(path string) (string, error) {
-		return filepath.Abs(path)
-	}
-	t.Cleanup(func() { ValidatePath = oldValidatePath })
-}
-
 func TestExecuteAppendFile_NewFile(t *testing.T) {
-	mockValidatePathForTest(t)
+	setupTestMocks(t)
 
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "new.txt")
@@ -55,7 +46,7 @@ func TestExecuteAppendFile_NewFile(t *testing.T) {
 }
 
 func TestExecuteAppendFile_ExistingFile(t *testing.T) {
-	mockValidatePathForTest(t)
+	setupTestMocks(t)
 
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "existing.txt")
@@ -152,7 +143,7 @@ func TestExecuteAppendFile_PathTraversal(t *testing.T) {
 }
 
 func TestExecuteAppendFile_MultipleAppends(t *testing.T) {
-	mockValidatePathForTest(t)
+	setupTestMocks(t)
 
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
@@ -200,7 +191,7 @@ func TestExecuteAppendFile_MultipleAppends(t *testing.T) {
 }
 
 func TestExecuteAppendFile_LargeContent(t *testing.T) {
-	mockValidatePathForTest(t)
+	setupTestMocks(t)
 
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "large.txt")
@@ -235,7 +226,7 @@ func TestExecuteAppendFile_LargeContent(t *testing.T) {
 }
 
 func TestExecuteAppendFile_SpecialCharacters(t *testing.T) {
-	mockValidatePathForTest(t)
+	setupTestMocks(t)
 
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "special.txt")
@@ -269,7 +260,7 @@ func TestExecuteAppendFile_SpecialCharacters(t *testing.T) {
 }
 
 func TestExecuteAppendFile_NoNewlineAtEnd(t *testing.T) {
-	mockValidatePathForTest(t)
+	setupTestMocks(t)
 
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")

@@ -18,8 +18,6 @@ func TestExecuteMoveFile_Normal(t *testing.T) {
 
 	testutil.CreateTempFile(t, tmpDir, "source.txt", testContent)
 
-	setupTestConfirm(t, true)
-
 	// ファイル移動
 	output, backupPath, err := executeMoveFile(srcFile, destFile)
 
@@ -55,8 +53,6 @@ func TestExecuteMoveFile_Overwrite(t *testing.T) {
 
 	testutil.CreateTempFile(t, tmpDir, "source.txt", srcContent)
 	testutil.CreateTempFile(t, tmpDir, "destination.txt", destContent)
-
-	setupTestConfirm(t, true)
 
 	// ファイル移動（上書き）
 	output, backupPath, err := executeMoveFile(srcFile, destFile)
@@ -128,8 +124,6 @@ func TestExecuteMoveFile_SourceNotFound(t *testing.T) {
 	srcFile := filepath.Join(tmpDir, "nonexistent.txt")
 	destFile := filepath.Join(tmpDir, "destination.txt")
 
-	setupTestConfirm(t, true)
-
 	// 存在しないファイルを移動しようとする
 	output, _, err := executeMoveFile(srcFile, destFile)
 
@@ -157,8 +151,6 @@ func TestExecuteMoveFile_SourceIsDirectory(t *testing.T) {
 		t.Fatalf("Failed to create directory: %v", err)
 	}
 
-	setupTestConfirm(t, true)
-
 	// ディレクトリを移動しようとする
 	output, _, err := executeMoveFile(srcDir, destFile)
 
@@ -179,8 +171,6 @@ func TestExecuteMoveFile_SameFile(t *testing.T) {
 	testContent := "same file content"
 
 	testutil.CreateTempFile(t, tmpDir, "same.txt", testContent)
-
-	setupTestConfirm(t, true)
 
 	// 同じファイルに移動しようとする
 	output, backupPath, err := executeMoveFile(testFile, testFile)
@@ -213,8 +203,6 @@ func TestExecuteMoveFile_DestinationDirNotExist(t *testing.T) {
 
 	testutil.CreateTempFile(t, tmpDir, "source.txt", testContent)
 
-	setupTestConfirm(t, true)
-
 	// 存在しないディレクトリに移動しようとする
 	output, _, err := executeMoveFile(srcFile, destFile)
 
@@ -233,14 +221,16 @@ func TestExecuteMoveFile_DestinationDirNotExist(t *testing.T) {
 }
 
 func TestExecuteMoveFile_PathTraversal(t *testing.T) {
-	setupTestMocks(t)
+	// 対話モードのみ無効化（ValidatePathはモックしない - 実際のセキュリティを確認）
+	os.Setenv("XELYON_INTERACTIVE_CONFIRM", "0")
+	t.Cleanup(func() { os.Unsetenv("XELYON_INTERACTIVE_CONFIRM") })
+	setupTestConfirm(t, true)
+
 	tmpDir := t.TempDir()
 	srcFile := filepath.Join(tmpDir, "source.txt")
 	maliciousDest := "../../../etc/passwd"
 
 	testutil.CreateTempFile(t, tmpDir, "source.txt", "test content")
-
-	setupTestConfirm(t, true)
 
 	// パストラバーサル攻撃を試みる（移動先）
 	output, _, err := executeMoveFile(srcFile, maliciousDest)
@@ -274,8 +264,6 @@ func TestExecuteMoveFile_Subdirectory(t *testing.T) {
 		t.Fatalf("Failed to create subdirectory: %v", err)
 	}
 
-	setupTestConfirm(t, true)
-
 	// サブディレクトリに移動
 	output, _, err := executeMoveFile(srcFile, destFile)
 
@@ -304,8 +292,6 @@ func TestExecuteMoveFile_Rename(t *testing.T) {
 	testContent := "rename test"
 
 	testutil.CreateTempFile(t, tmpDir, "old_name.txt", testContent)
-
-	setupTestConfirm(t, true)
 
 	// 同じディレクトリ内でリネーム
 	output, _, err := executeMoveFile(srcFile, destFile)

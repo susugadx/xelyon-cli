@@ -9,7 +9,7 @@ import (
 )
 
 func TestExecuteStrReplace_ExactMatch(t *testing.T) {
-	setupTestConfirm(t, true)
+	setupTestMocks(t)
 
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
@@ -42,7 +42,7 @@ func TestExecuteStrReplace_ExactMatch(t *testing.T) {
 }
 
 func TestExecuteStrReplace_MultipleMatches(t *testing.T) {
-	setupTestConfirm(t, true)
+	setupTestMocks(t)
 
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
@@ -82,7 +82,7 @@ func TestExecuteStrReplace_MultipleMatches(t *testing.T) {
 }
 
 func TestExecuteStrReplace_NotFound(t *testing.T) {
-	setupTestConfirm(t, true)
+	setupTestMocks(t)
 
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
@@ -107,6 +107,7 @@ func TestExecuteStrReplace_NotFound(t *testing.T) {
 }
 
 func TestExecuteStrReplace_UserCancelled(t *testing.T) {
+	setupTestMocks(t)
 	setupTestConfirm(t, false)
 
 	tmpDir := t.TempDir()
@@ -137,7 +138,7 @@ func TestExecuteStrReplace_UserCancelled(t *testing.T) {
 }
 
 func TestExecuteStrReplace_EmptyPath(t *testing.T) {
-	setupTestConfirm(t, true)
+	setupTestMocks(t)
 
 	// 空パス
 	output, _, err := executeStrReplace("", "old", "new", "", "")
@@ -153,7 +154,7 @@ func TestExecuteStrReplace_EmptyPath(t *testing.T) {
 }
 
 func TestExecuteStrReplace_EmptyOldStr(t *testing.T) {
-	setupTestConfirm(t, true)
+	setupTestMocks(t)
 
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
@@ -174,7 +175,7 @@ func TestExecuteStrReplace_EmptyOldStr(t *testing.T) {
 }
 
 func TestExecuteStrReplace_MultilineReplacement(t *testing.T) {
-	setupTestConfirm(t, true)
+	setupTestMocks(t)
 
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
@@ -207,7 +208,7 @@ func TestExecuteStrReplace_MultilineReplacement(t *testing.T) {
 }
 
 func TestExecuteStrReplace_WhitespaceNormalization(t *testing.T) {
-	setupTestConfirm(t, true)
+	setupTestMocks(t)
 
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
@@ -240,7 +241,7 @@ func TestExecuteStrReplace_WhitespaceNormalization(t *testing.T) {
 }
 
 func TestExecuteStrReplace_LineRangeReplacement_Success(t *testing.T) {
-	setupTestConfirm(t, true)
+	setupTestMocks(t)
 
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
@@ -269,7 +270,7 @@ func TestExecuteStrReplace_LineRangeReplacement_Success(t *testing.T) {
 }
 
 func TestExecuteStrReplace_LargeFile(t *testing.T) {
-	setupTestConfirm(t, true)
+	setupTestMocks(t)
 
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "large.txt")

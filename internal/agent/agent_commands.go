@@ -1,7 +1,6 @@
 package agent
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"os"
@@ -21,24 +20,11 @@ import (
 
 // promptConfirm はユーザーに確認を求める（空入力は無視してリトライ）
 // AI実行中のEnter押下による誤操作を防ぐ
+// テストモード時は自動承認
 func promptConfirm(prompt string) bool {
-	reader := bufio.NewReader(os.Stdin)
-
-	for {
-		fmt.Print(prompt)
-		input, err := reader.ReadString('\n')
-		if err != nil {
-			return false
-		}
-		input = strings.TrimSpace(strings.ToLower(input))
-
-		// 空入力は無視してリトライ
-		if input == "" {
-			continue
-		}
-
-		return input == "y" || input == "yes" || input == "ｙ" || input == "はい"
-	}
+	// tools.ConfirmInteractive を使用してテストモード対応
+	result := tools.ConfirmInteractive(prompt)
+	return result.Action == "yes"
 }
 
 // handleSpecialCommand は特殊コマンドを処理

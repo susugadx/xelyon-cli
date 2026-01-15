@@ -9,10 +9,7 @@ import (
 )
 
 func TestExecuteGitCommit_Success(t *testing.T) {
-	// confirmをモック化
-	oldConfirm := confirm
-	confirm = func(message string) bool { return true }
-	t.Cleanup(func() { confirm = oldConfirm })
+	setupTestMocks(t)
 
 	tmpDir := setupGitRepo(t)
 

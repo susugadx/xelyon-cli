@@ -8,12 +8,7 @@ import (
 )
 
 func TestExecutePrependFile_NewFile(t *testing.T) {
-	// ValidatePathをモック化
-	oldValidatePath := ValidatePath
-	ValidatePath = func(path string) (string, error) {
-		return filepath.Abs(path)
-	}
-	t.Cleanup(func() { ValidatePath = oldValidatePath })
+	setupTestMocks(t)
 
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "new.txt")
@@ -52,12 +47,7 @@ func TestExecutePrependFile_NewFile(t *testing.T) {
 }
 
 func TestExecutePrependFile_ExistingFile(t *testing.T) {
-	// ValidatePathをモック化
-	oldValidatePath := ValidatePath
-	ValidatePath = func(path string) (string, error) {
-		return filepath.Abs(path)
-	}
-	t.Cleanup(func() { ValidatePath = oldValidatePath })
+	setupTestMocks(t)
 
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "existing.txt")
@@ -135,12 +125,7 @@ func TestExecutePrependFile_EmptyContent(t *testing.T) {
 }
 
 func TestExecutePrependFile_ContentWithTrailingNewline(t *testing.T) {
-	// ValidatePathをモック化
-	oldValidatePath := ValidatePath
-	ValidatePath = func(path string) (string, error) {
-		return filepath.Abs(path)
-	}
-	t.Cleanup(func() { ValidatePath = oldValidatePath })
+	setupTestMocks(t)
 
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
@@ -171,12 +156,7 @@ func TestExecutePrependFile_ContentWithTrailingNewline(t *testing.T) {
 }
 
 func TestExecutePrependFile_MultipleOperations(t *testing.T) {
-	// ValidatePathをモック化
-	oldValidatePath := ValidatePath
-	ValidatePath = func(path string) (string, error) {
-		return filepath.Abs(path)
-	}
-	t.Cleanup(func() { ValidatePath = oldValidatePath })
+	setupTestMocks(t)
 
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
@@ -218,12 +198,7 @@ func TestExecutePrependFile_MultipleOperations(t *testing.T) {
 }
 
 func TestExecutePrependFile_LargeContent(t *testing.T) {
-	// ValidatePathをモック化
-	oldValidatePath := ValidatePath
-	ValidatePath = func(path string) (string, error) {
-		return filepath.Abs(path)
-	}
-	t.Cleanup(func() { ValidatePath = oldValidatePath })
+	setupTestMocks(t)
 
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "large.txt")
@@ -271,12 +246,7 @@ func TestExecutePrependFile_LargeContent(t *testing.T) {
 }
 
 func TestExecutePrependFile_SpecialCharacters(t *testing.T) {
-	// ValidatePathをモック化
-	oldValidatePath := ValidatePath
-	ValidatePath = func(path string) (string, error) {
-		return filepath.Abs(path)
-	}
-	t.Cleanup(func() { ValidatePath = oldValidatePath })
+	setupTestMocks(t)
 
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "special.txt")

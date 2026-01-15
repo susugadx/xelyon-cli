@@ -11,7 +11,6 @@ import (
 
 func TestExecuteWriteFile_NewFile(t *testing.T) {
 	setupTestMocks(t)
-	setupTestConfirm(t, true)
 
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "new.txt")
@@ -41,7 +40,6 @@ func TestExecuteWriteFile_NewFile(t *testing.T) {
 
 func TestExecuteWriteFile_Overwrite(t *testing.T) {
 	setupTestMocks(t)
-	setupTestConfirm(t, true)
 
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "existing.txt")
@@ -105,7 +103,6 @@ func TestExecuteWriteFile_UserCancelled(t *testing.T) {
 
 func TestExecuteWriteFile_EmptyPath(t *testing.T) {
 	setupTestMocks(t)
-	setupTestConfirm(t, true)
 
 	// 空パス
 	output, _, err := executeWriteFile("", "content")
@@ -121,6 +118,9 @@ func TestExecuteWriteFile_EmptyPath(t *testing.T) {
 }
 
 func TestExecuteWriteFile_PathTraversal(t *testing.T) {
+	// 対話モードのみ無効化（ValidatePathはモックしない - 実際のセキュリティを確認）
+	os.Setenv("XELYON_INTERACTIVE_CONFIRM", "0")
+	t.Cleanup(func() { os.Unsetenv("XELYON_INTERACTIVE_CONFIRM") })
 	setupTestConfirm(t, true)
 
 	// パストラバーサル攻撃を試みる
@@ -142,7 +142,6 @@ func TestExecuteWriteFile_PathTraversal(t *testing.T) {
 
 func TestExecuteWriteFile_CreateDirectory(t *testing.T) {
 	setupTestMocks(t)
-	setupTestConfirm(t, true)
 
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "subdir", "nested", "file.txt")
@@ -173,7 +172,6 @@ func TestExecuteWriteFile_CreateDirectory(t *testing.T) {
 
 func TestExecuteWriteFile_MultilineContent(t *testing.T) {
 	setupTestMocks(t)
-	setupTestConfirm(t, true)
 
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "multiline.txt")
@@ -197,7 +195,6 @@ func TestExecuteWriteFile_MultilineContent(t *testing.T) {
 
 func TestExecuteWriteFile_FilePermissions(t *testing.T) {
 	setupTestMocks(t)
-	setupTestConfirm(t, true)
 
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "perms.txt")

@@ -84,17 +84,7 @@ func TestWriteFileTool_Name(t *testing.T) {
 }
 
 func TestWriteFileTool_Run_NewFile(t *testing.T) {
-	// ValidatePathをモック化
-	oldValidatePath := ValidatePath
-	ValidatePath = func(path string) (string, error) {
-		return filepath.Abs(path)
-	}
-	t.Cleanup(func() { ValidatePath = oldValidatePath })
-
-	// confirmをモック化
-	oldConfirm := confirm
-	confirm = func(message string) bool { return true }
-	t.Cleanup(func() { confirm = oldConfirm })
+	setupTestMocks(t)
 
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "new.txt")
@@ -123,17 +113,7 @@ func TestWriteFileTool_Run_NewFile(t *testing.T) {
 }
 
 func TestWriteFileTool_Run_ExistingFile(t *testing.T) {
-	// ValidatePathをモック化
-	oldValidatePath := ValidatePath
-	ValidatePath = func(path string) (string, error) {
-		return filepath.Abs(path)
-	}
-	t.Cleanup(func() { ValidatePath = oldValidatePath })
-
-	// confirmをモック化
-	oldConfirm := confirm
-	confirm = func(message string) bool { return true }
-	t.Cleanup(func() { confirm = oldConfirm })
+	setupTestMocks(t)
 
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "existing.txt")
@@ -181,17 +161,7 @@ func TestStrReplaceTool_Name(t *testing.T) {
 }
 
 func TestStrReplaceTool_Run(t *testing.T) {
-	// ValidatePathをモック化
-	oldValidatePath := ValidatePath
-	ValidatePath = func(path string) (string, error) {
-		return filepath.Abs(path)
-	}
-	t.Cleanup(func() { ValidatePath = oldValidatePath })
-
-	// confirmをモック化
-	oldConfirm := confirm
-	confirm = func(message string) bool { return true }
-	t.Cleanup(func() { confirm = oldConfirm })
+	setupTestMocks(t)
 
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "replace.txt")

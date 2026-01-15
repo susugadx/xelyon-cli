@@ -51,10 +51,9 @@ func TestExecuteGitAdd_Success(t *testing.T) {
 }
 
 func TestExecuteGitAdd_EmptyPath(t *testing.T) {
+	setupTestMocks(t)
 	// confirmをモック化（拒否）
-	oldConfirm := confirm
-	confirm = func(message string) bool { return false }
-	t.Cleanup(func() { confirm = oldConfirm })
+	setupTestConfirm(t, false)
 
 	setupGitRepo(t)
 

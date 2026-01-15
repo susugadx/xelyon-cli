@@ -188,12 +188,8 @@ func TestExecuteBash_GitSafeCommands(t *testing.T) {
 }
 
 func TestExecuteBash_UnsafeCommandWithConfirmation(t *testing.T) {
-	// confirmをモック化（拒否）
-	oldConfirm := confirm
-	confirm = func(message string) bool {
-		return false
-	}
-	t.Cleanup(func() { confirm = oldConfirm })
+	setupTestMocks(t)
+	setupTestConfirm(t, false) // 拒否
 
 	// 安全でないコマンド
 	command := "mkdir /tmp/test123"
@@ -222,12 +218,7 @@ func TestExecuteBash_CommandOutput(t *testing.T) {
 }
 
 func TestExecuteBash_CommandError(t *testing.T) {
-	// confirmをモック化（承認）
-	oldConfirm := confirm
-	confirm = func(message string) bool {
-		return true
-	}
-	t.Cleanup(func() { confirm = oldConfirm })
+	setupTestMocks(t)
 
 	// 存在しないコマンド
 	command := "nonexistentcommand12345"

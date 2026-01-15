@@ -8,12 +8,7 @@ import (
 )
 
 func TestExecuteCopyFile_Success(t *testing.T) {
-	// ValidatePathをモック化
-	oldValidatePath := ValidatePath
-	ValidatePath = func(path string) (string, error) {
-		return filepath.Abs(path)
-	}
-	t.Cleanup(func() { ValidatePath = oldValidatePath })
+	setupTestMocks(t)
 
 	tmpDir := t.TempDir()
 	srcFile := filepath.Join(tmpDir, "source.txt")
@@ -57,19 +52,7 @@ func TestExecuteCopyFile_Success(t *testing.T) {
 }
 
 func TestExecuteCopyFile_Overwrite(t *testing.T) {
-	// ValidatePathをモック化
-	oldValidatePath := ValidatePath
-	ValidatePath = func(path string) (string, error) {
-		return filepath.Abs(path)
-	}
-	t.Cleanup(func() { ValidatePath = oldValidatePath })
-
-	// confirmをモック化（自動承認）
-	oldConfirm := confirm
-	confirm = func(message string) bool {
-		return true
-	}
-	t.Cleanup(func() { confirm = oldConfirm })
+	setupTestMocks(t)
 
 	tmpDir := t.TempDir()
 	srcFile := filepath.Join(tmpDir, "source.txt")
@@ -112,12 +95,7 @@ func TestExecuteCopyFile_Overwrite(t *testing.T) {
 }
 
 func TestExecuteCopyFile_SourceNotFound(t *testing.T) {
-	// ValidatePathをモック化
-	oldValidatePath := ValidatePath
-	ValidatePath = func(path string) (string, error) {
-		return filepath.Abs(path)
-	}
-	t.Cleanup(func() { ValidatePath = oldValidatePath })
+	setupTestMocks(t)
 
 	tmpDir := t.TempDir()
 	srcFile := filepath.Join(tmpDir, "notexist.txt")
@@ -138,12 +116,7 @@ func TestExecuteCopyFile_SourceNotFound(t *testing.T) {
 }
 
 func TestExecuteCopyFile_SourceIsDirectory(t *testing.T) {
-	// ValidatePathをモック化
-	oldValidatePath := ValidatePath
-	ValidatePath = func(path string) (string, error) {
-		return filepath.Abs(path)
-	}
-	t.Cleanup(func() { ValidatePath = oldValidatePath })
+	setupTestMocks(t)
 
 	tmpDir := t.TempDir()
 	srcDir := filepath.Join(tmpDir, "source_dir")
@@ -169,12 +142,7 @@ func TestExecuteCopyFile_SourceIsDirectory(t *testing.T) {
 }
 
 func TestExecuteCopyFile_PreservePermissions(t *testing.T) {
-	// ValidatePathをモック化
-	oldValidatePath := ValidatePath
-	ValidatePath = func(path string) (string, error) {
-		return filepath.Abs(path)
-	}
-	t.Cleanup(func() { ValidatePath = oldValidatePath })
+	setupTestMocks(t)
 
 	tmpDir := t.TempDir()
 	srcFile := filepath.Join(tmpDir, "source.txt")
@@ -208,19 +176,9 @@ func TestExecuteCopyFile_PreservePermissions(t *testing.T) {
 }
 
 func TestExecuteCopyFile_CancelledByUser(t *testing.T) {
-	// ValidatePathをモック化
-	oldValidatePath := ValidatePath
-	ValidatePath = func(path string) (string, error) {
-		return filepath.Abs(path)
-	}
-	t.Cleanup(func() { ValidatePath = oldValidatePath })
-
+	setupTestMocks(t)
 	// confirmをモック化（拒否）
-	oldConfirm := confirm
-	confirm = func(message string) bool {
-		return false
-	}
-	t.Cleanup(func() { confirm = oldConfirm })
+	setupTestConfirm(t, false)
 
 	tmpDir := t.TempDir()
 	srcFile := filepath.Join(tmpDir, "source.txt")

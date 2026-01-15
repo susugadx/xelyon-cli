@@ -11,7 +11,6 @@ import (
 
 func TestExecuteDeleteFile_Normal(t *testing.T) {
 	setupTestMocks(t)
-	setupTestConfirm(t, true)
 
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
@@ -75,7 +74,6 @@ func TestExecuteDeleteFile_UserCancelled(t *testing.T) {
 
 func TestExecuteDeleteFile_NonExistentFile(t *testing.T) {
 	setupTestMocks(t)
-	setupTestConfirm(t, true)
 
 	tmpDir := t.TempDir()
 	nonExistentFile := filepath.Join(tmpDir, "nonexistent.txt")
@@ -95,7 +93,6 @@ func TestExecuteDeleteFile_NonExistentFile(t *testing.T) {
 
 func TestExecuteDeleteFile_Directory(t *testing.T) {
 	setupTestMocks(t)
-	setupTestConfirm(t, true)
 
 	tmpDir := t.TempDir()
 
@@ -140,7 +137,6 @@ func TestExecuteDeleteFile_PathTraversal(t *testing.T) {
 
 func TestExecuteDeleteFile_BackupCreated(t *testing.T) {
 	setupTestMocks(t)
-	setupTestConfirm(t, true)
 
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "important.txt")
@@ -174,7 +170,6 @@ func TestExecuteDeleteFile_BackupCreated(t *testing.T) {
 
 func TestExecuteDeleteFile_LargeFile(t *testing.T) {
 	setupTestMocks(t)
-	setupTestConfirm(t, true)
 
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "large.txt")
