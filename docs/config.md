@@ -155,6 +155,71 @@ streaming:
 - **説明**: ストリーミングレスポンスのアイドルタイムアウト秒数
 - **補足**: データ受信がこの秒数続くとタイムアウト。データが来続けている間はタイムアウトしない
 
+### bashツール設定 (`bash`)
+
+bashコマンドの安全性制限を設定します。
+
+```yaml
+bash:
+  # 安全性レベル: strict, moderate, permissive
+  safety_level: moderate
+
+  # 追加の安全コマンド（確認なしで実行）
+  safe_commands:
+    - "npm run"
+    - "npm test"
+    - "cargo build"
+    - "make"
+
+  # パイプを許可（moderate以上でデフォルト有効）
+  allow_pipe: true
+
+  # リダイレクトを許可
+  allow_redirect: false
+
+  # sed -i等のインライン編集を許可
+  allow_inline_edit: false
+```
+
+#### `safety_level`
+- **型**: string
+- **デフォルト**: `moderate`
+- **選択肢**: `strict`, `moderate`, `permissive`
+
+| レベル | パイプ `\|` | リダイレクト `>` | sed -i | sudo |
+|--------|-------------|------------------|--------|------|
+| strict | ❌ | ❌ | ❌ | ❌ |
+| moderate | ✅ | ❌ | ❌ | ❌ |
+| permissive | ✅ | ✅ | 設定次第 | ❌ |
+
+#### `safe_commands`
+- **型**: string[]
+- **デフォルト**: `[]`
+- **説明**: 確認なしで実行できるコマンドを追加
+
+#### `allow_pipe`
+- **型**: boolean
+- **デフォルト**: `true`
+- **説明**: パイプ (`|`) の使用を許可
+
+#### `allow_redirect`
+- **型**: boolean
+- **デフォルト**: `false`
+- **説明**: リダイレクト (`>`, `>>`, `<`) の使用を許可
+
+#### `allow_inline_edit`
+- **型**: boolean
+- **デフォルト**: `false`
+- **説明**: `sed -i`, `perl -i` 等のインライン編集を許可
+
+**危険なパイプは常にブロック**:
+```bash
+# 以下のパターンはどのレベルでもブロック
+curl ... | sh
+cat script.sh | bash
+echo password | sudo -S ...
+```
+
 ## 環境変数
 
 ### API キー

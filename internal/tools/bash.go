@@ -10,7 +10,7 @@ import (
 )
 
 // 自動実行可能なコマンド（安全なもの）
-var safeCommands = map[string]bool{
+var defaultSafeCommands = map[string]bool{
 	"ls": true, "cat": true, "pwd": true, "echo": true, "which": true,
 	"head": true, "tail": true, "wc": true, "grep": true, "find": true,
 	"git status": true, "git log": true, "git diff": true, "git branch": true,
@@ -20,20 +20,35 @@ var safeCommands = map[string]bool{
 	"python --version": true, "pip list": true,
 }
 
-// ブロックするコマンド（危険すぎ）
-var blockedCommands = []string{
+// 絶対にブロックするコマンド（どのレベルでも禁止）
+var alwaysBlockedCommands = []string{
 	"rm -rf /", "rm -rf ~", "rm -rf *",
 	"sudo rm", "sudo chmod", "sudo chown",
 	"chmod 777", "chmod -R 777",
 	"mkfs", "dd if=", ":(){:|:&};:",
 	"> /dev/sda", "mv / ",
-	"sed -i", "sed -e", "sed '", // ファイル編集系sed
-	"awk -i", "perl -i", "perl -p", // その他のインライン編集コマンド
 }
 
-// コマンド連結文字（インジェクション攻撃防止）
-var commandSeparators = []string{
+// インライン編集コマンド（permissive以外でブロック）
+var inlineEditCommands = []string{
+	"sed -i", "sed -e", "sed '",
+	"awk -i", "perl -i", "perl -p",
+}
+
+// 危険なパイプパターン
+var dangerousPipePatterns = []string{
+	"| sh", "| bash", "| sudo", "| rm ",
+	"| xargs rm", "| xargs sudo",
+}
+
+// コマンド連結文字（strict モードでブロック）
+var strictSeparators = []string{
 	";", "&&", "||", "|", "`", "$(", ">", ">>", "<",
+}
+
+// moderate モードでもブロックする連結文字
+var moderateSeparators = []string{
+	";", "&&", "||", "`", "$(", // パイプ | とリダイレクト >, >>, < は除外
 }
 
 // executeBash はシェルコマンドを実行
@@ -42,32 +57,23 @@ func executeBash(command string) string {
 		return "Error: command is empty"
 	}
 
-	// ブロックチェック
-	for _, blocked := range blockedCommands {
+	cfg := config.GetGlobalConfig().Bash
+
+	// 絶対にブロックするコマンド（どのレベルでも）
+	for _, blocked := range alwaysBlockedCommands {
 		if strings.Contains(command, blocked) {
 			red.Printf("🚫 Blocked dangerous command: %s\n", command)
 			return "Error: This command is blocked for safety"
 		}
 	}
 
-	// コマンド連結攻撃の検知（safeCommands以外）
-	isSafe := false
-	for safe := range safeCommands {
-		if strings.HasPrefix(command, safe) {
-			isSafe = true
-			break
-		}
+	// 安全性レベルに応じたチェック
+	if err := checkBashSafety(command, cfg); err != "" {
+		return err
 	}
-	if !isSafe {
-		for _, sep := range commandSeparators {
-			if strings.Contains(command, sep) {
-				red.Printf("🚫 Blocked command injection attempt: %s\n", command)
-				yellow.Println("⚠️  Command contains potentially dangerous separator characters.")
-				yellow.Println("   If you need to run multiple commands, execute them separately.")
-				return "Error: Command injection attempt detected (separator found)"
-			}
-		}
-	}
+
+	// 安全なコマンドかどうかを判定
+	isSafe := isSafeCommand(command, cfg)
 
 	// 確認が必要な場合（安全なコマンド以外）
 	if !isSafe {
@@ -118,4 +124,116 @@ IMPORTANT: Do NOT execute the previous command as-is.`, strings.TrimSpace(dec.Co
 	}
 
 	return result
+}
+
+// checkBashSafety は安全性レベルに応じたチェックを行う
+// エラーがあればエラーメッセージを返す、なければ空文字列
+func checkBashSafety(command string, cfg config.BashConfig) string {
+	level := cfg.SafetyLevel
+	if level == "" {
+		level = "moderate" // デフォルト
+	}
+
+	switch level {
+	case "permissive":
+		// 最小限のチェックのみ（alwaysBlockedCommandsは既にチェック済み）
+		// インライン編集の許可を確認
+		if !cfg.AllowInlineEdit {
+			for _, inline := range inlineEditCommands {
+				if strings.Contains(command, inline) {
+					red.Printf("🚫 Inline edit not allowed: %s\n", command)
+					yellow.Println("💡 Tip: Set bash.allow_inline_edit: true in config.yaml to enable")
+					return "Error: Inline edit commands are not allowed"
+				}
+			}
+		}
+		// 危険なパイプパターンのみチェック
+		for _, pattern := range dangerousPipePatterns {
+			if strings.Contains(command, pattern) {
+				red.Printf("🚫 Dangerous pipe pattern: %s\n", command)
+				return "Error: Dangerous pipe pattern detected"
+			}
+		}
+		return ""
+
+	case "moderate":
+		// インライン編集をブロック
+		if !cfg.AllowInlineEdit {
+			for _, inline := range inlineEditCommands {
+				if strings.Contains(command, inline) {
+					red.Printf("🚫 Inline edit not allowed: %s\n", command)
+					yellow.Println("💡 Tip: Set bash.allow_inline_edit: true in config.yaml to enable")
+					return "Error: Inline edit commands are not allowed"
+				}
+			}
+		}
+		// 危険なパイプパターンをチェック
+		for _, pattern := range dangerousPipePatterns {
+			if strings.Contains(command, pattern) {
+				red.Printf("🚫 Dangerous pipe pattern: %s\n", command)
+				return "Error: Dangerous pipe pattern detected"
+			}
+		}
+		// moderate でブロックする連結文字をチェック（安全コマンド以外）
+		if !isSafeCommand(command, cfg) {
+			for _, sep := range moderateSeparators {
+				if strings.Contains(command, sep) {
+					red.Printf("🚫 Blocked command injection attempt: %s\n", command)
+					yellow.Println("⚠️  Command contains potentially dangerous separator characters.")
+					yellow.Println("   Allowed separators in moderate mode: | > >> <")
+					return "Error: Command injection attempt detected (separator found)"
+				}
+			}
+			// リダイレクトのチェック
+			if !cfg.AllowRedirect {
+				for _, redir := range []string{">", ">>", "<"} {
+					if strings.Contains(command, redir) {
+						red.Printf("🚫 Redirect not allowed: %s\n", command)
+						yellow.Println("💡 Tip: Set bash.allow_redirect: true in config.yaml to enable")
+						return "Error: Redirect is not allowed"
+					}
+				}
+			}
+		}
+		return ""
+
+	default: // strict
+		// インライン編集をブロック
+		for _, inline := range inlineEditCommands {
+			if strings.Contains(command, inline) {
+				red.Printf("🚫 Inline edit not allowed: %s\n", command)
+				yellow.Println("💡 Tip: Set bash.safety_level: moderate in config.yaml")
+				return "Error: Inline edit commands are not allowed"
+			}
+		}
+		// すべての連結文字をブロック（安全コマンド以外）
+		if !isSafeCommand(command, cfg) {
+			for _, sep := range strictSeparators {
+				if strings.Contains(command, sep) {
+					red.Printf("🚫 Blocked command injection attempt: %s\n", command)
+					yellow.Println("⚠️  Command contains potentially dangerous separator characters.")
+					yellow.Println("💡 Tip: Set bash.safety_level: moderate in config.yaml to allow pipes")
+					return "Error: Command injection attempt detected (separator found)"
+				}
+			}
+		}
+		return ""
+	}
+}
+
+// isSafeCommand は安全なコマンドかどうかを判定
+func isSafeCommand(command string, cfg config.BashConfig) bool {
+	// デフォルトの安全コマンドをチェック
+	for safe := range defaultSafeCommands {
+		if strings.HasPrefix(command, safe) {
+			return true
+		}
+	}
+	// 設定で追加された安全コマンドをチェック
+	for _, safe := range cfg.SafeCommands {
+		if strings.HasPrefix(command, safe) {
+			return true
+		}
+	}
+	return false
 }

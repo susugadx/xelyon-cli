@@ -2765,3 +2765,63 @@ git push origin v0.28.3
 | **Windows** | arm64 | ❌ 現状サポート外 |
 
 ---
+
+## bash安全性設定（Issue #51）
+
+### 概要
+
+bashツールの安全性制限を設定ファイルで変更可能に。デフォルトは`moderate`でパイプ（`|`）が使用可能。
+
+### 安全性レベル
+
+| レベル | パイプ | リダイレクト | sed -i | 用途 |
+|--------|--------|--------------|--------|------|
+| strict | ❌ | ❌ | ❌ | 最大限の安全性 |
+| moderate | ✅ | ❌ | ❌ | **デフォルト** - 日常的な開発作業 |
+| permissive | ✅ | ✅ | 設定次第 | 上級ユーザー向け |
+
+### 実装ファイル
+
+- `internal/config/config.go`: `BashConfig` 構造体
+- `internal/tools/bash.go`: `checkBashSafety()`, `isSafeCommand()` 関数
+- `internal/tools/bash_test.go`: 安全性レベルのテスト
+
+### 設定例
+
+```yaml
+# ~/.xelyon/config.yaml
+bash:
+  safety_level: moderate      # strict, moderate, permissive
+  safe_commands:              # 追加の安全コマンド
+    - "npm run"
+    - "cargo build"
+  allow_pipe: true            # パイプ許可
+  allow_redirect: false       # リダイレクト不許可
+  allow_inline_edit: false    # sed -i 不許可
+```
+
+### 常にブロックされるコマンド
+
+以下のコマンドはどのレベルでもブロック:
+
+```go
+var alwaysBlockedCommands = []string{
+    "rm -rf /", "rm -rf ~", "rm -rf *",
+    "sudo rm", "sudo chmod", "sudo chown",
+    "chmod 777", "chmod -R 777",
+    "mkfs", "dd if=", ":(){:|:&};:",
+}
+```
+
+### 危険なパイプパターン
+
+以下のパターンはどのレベルでもブロック:
+
+```go
+var dangerousPipePatterns = []string{
+    "| sh", "| bash", "| sudo", "| rm ",
+    "| xargs rm", "| xargs sudo",
+}
+```
+
+---

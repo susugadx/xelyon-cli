@@ -44,6 +44,7 @@ type Config struct {
 	PromptCache     PromptCacheConfig              `yaml:"prompt_cache,omitempty"`
 	Paste           PasteConfig                    `yaml:"paste,omitempty"`
 	Streaming       StreamingConfig                `yaml:"streaming,omitempty"`
+	Bash            BashConfig                     `yaml:"bash,omitempty"`
 	// 将来の拡張用
 	// Cloud CloudConfig `yaml:"cloud,omitempty"`
 }
@@ -103,6 +104,15 @@ type PasteConfig struct {
 // StreamingConfig はストリーミングレスポンスの設定
 type StreamingConfig struct {
 	IdleTimeoutSeconds int `yaml:"idle_timeout_seconds"` // アイドルタイムアウト秒（デフォルト30）
+}
+
+// BashConfig はbashツールの設定
+type BashConfig struct {
+	SafetyLevel     string   `yaml:"safety_level"`      // strict, moderate, permissive（デフォルト: moderate）
+	SafeCommands    []string `yaml:"safe_commands"`     // 追加の安全コマンド
+	AllowPipe       bool     `yaml:"allow_pipe"`        // パイプを許可（デフォルト: true - moderateで有効）
+	AllowRedirect   bool     `yaml:"allow_redirect"`    // リダイレクトを許可（デフォルト: false）
+	AllowInlineEdit bool     `yaml:"allow_inline_edit"` // sed -i等を許可（デフォルト: false）
 }
 
 // ProviderModelConfig はプロバイダーごとのモデル設定
@@ -172,6 +182,13 @@ func DefaultConfig() *Config {
 		},
 		Streaming: StreamingConfig{
 			IdleTimeoutSeconds: 30, // デフォルト30秒
+		},
+		Bash: BashConfig{
+			SafetyLevel:     "moderate", // デフォルトはmoderate（パイプOK）
+			SafeCommands:    []string{}, // 追加の安全コマンドなし
+			AllowPipe:       true,       // パイプを許可
+			AllowRedirect:   false,      // リダイレクトは不許可
+			AllowInlineEdit: false,      // sed -i等は不許可
 		},
 	}
 }

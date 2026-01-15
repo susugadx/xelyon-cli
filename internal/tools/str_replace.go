@@ -227,6 +227,18 @@ Do not retry the same replacement.`, path), "", nil
 		fmt.Printf("   • Net: 0 lines (same size)\n")
 	}
 
+	// 大規模変更警告
+	absLineDiff := lineDiff
+	if absLineDiff < 0 {
+		absLineDiff = -absLineDiff
+	}
+	if absLineDiff > 100 || len(oldStrLines) > 100 || len(newStrLines) > 100 {
+		red.Println("\n🚨 VERY LARGE CHANGE DETECTED!")
+		red.Println("   非常に大きな変更が検出されました。")
+		yellow.Println("💡 Consider splitting into multiple smaller str_replace calls.")
+		yellow.Println("   複数の小さな str_replace に分割することを検討してください。")
+	}
+
 	showImprovedDiff(oldStr, newStr)
 
 	dec2 := confirmWithAutoApproveDecision("str_replace", "Apply this replacement? / この置換を適用しますか？")

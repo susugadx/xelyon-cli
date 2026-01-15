@@ -54,6 +54,20 @@ func executeWriteFile(path string, content string) (string, string, error) {
 		} else {
 			fmt.Printf("   • Net: 0 lines (same size)\n")
 		}
+
+		// 既存ファイルの全体上書き警告
+		// 行数の変化が少ないのに大きなファイルを全体上書きしようとしている場合
+		absLineDiff := lineDiff
+		if absLineDiff < 0 {
+			absLineDiff = -absLineDiff
+		}
+		if absLineDiff < 10 && len(oldLines) > 50 {
+			red.Println("\n🚨 WARNING: Large file overwrite with minimal changes!")
+			red.Println("   あなたは大きなファイルを少ない変更で全体上書きしようとしています。")
+			yellow.Println("💡 Consider using str_replace for partial edits instead.")
+			yellow.Println("   部分的な編集には str_replace の使用を検討してください。")
+		}
+
 		showDiff(string(oldContent), content, path)
 	} else {
 		fmt.Printf("   • New file: %d lines / 新規: %d行\n", len(newLines), len(newLines))

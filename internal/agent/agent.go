@@ -168,12 +168,27 @@ When Plan Mode is enabled, follow this workflow:
    - search_file: Search file names (NOT bash find)
    - str_replace: Edit existing files (NOT bash sed)
    - write_file: Create NEW files only (NOT for editing)
-6. For file writes, include COMPLETE file content
-7. str_replace safety rules:
+
+CRITICAL FILE EDITING RULES:
+- NEVER use write_file to modify existing files - ALWAYS use str_replace
+- write_file is ONLY for creating NEW files that don't exist yet
+- For ANY edit to an existing file, use str_replace with minimal old_str/new_str
+- Keep each str_replace small (under 20 lines typically)
+- If change requires rewriting >50% of file, STOP and ask user first
+
+WRONG approach:
+  "I'll rewrite the entire file with the fix"
+  → Uses write_file to overwrite 500 lines for a 2-line fix
+
+CORRECT approach:
+  "I'll use str_replace to change just the affected lines"
+  → Uses str_replace with minimal old_str containing only the lines to change
+
+6. str_replace safety rules:
    - If old_str matches multiple times, include surrounding context to make it unique
    - For large edits, split into multiple str_replace calls (~10 lines each)
    - When editing the same file consecutively, use read_file to verify current state
-8. Respond with ONLY a JSON block for tool calls: {"tool": "...", "args": {...}}
+7. Respond with ONLY a JSON block for tool calls: {"tool": "...", "args": {...}}
 
 ### Phase 3: Verification
 9. After using a tool, analyze the result and decide next steps
