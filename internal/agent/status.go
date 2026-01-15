@@ -66,7 +66,7 @@ func defaultStatus() AgentStatus {
 
 // SetStatus updates the current agent status.
 func (a *Agent) SetStatus(state AgentState, reasonEN, reasonJP, nextEN, nextJP string) {
-	a.status.setStatus(AgentStatus{
+	holderFor(a).setStatus(AgentStatus{
 		State:    state,
 		ReasonEN: reasonEN,
 		ReasonJP: reasonJP,
