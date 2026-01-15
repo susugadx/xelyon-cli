@@ -69,12 +69,13 @@ xelyon-cli/
 │   │   ├── extractor.go   # Tree-sitterでシンボル抽出
 │   │   └── repomap.go     # Repo Map生成
 │   ├── review/            # コードレビュー機能
-│   │   ├── types.go       # 共通型定義（Target, Issue, FixProposal等）
+│   │   ├── types.go       # 共通型定義（Target, Issue, FixProposal, MultiFileChange等）
 │   │   ├── review.go      # Orchestrator（レビューパイプライン）
 │   │   ├── scanner.go     # ファイル変更スキャン（changeStack/git diff）
 │   │   ├── analyzer.go    # ルールベース解析（セキュリティ/一般/テスト）
 │   │   ├── fixer.go       # 修正提案生成（Actionable Fix対応）
-│   │   ├── interactive.go # インタラクティブFix確認（y/n/a/q）
+│   │   ├── interactive.go # インタラクティブFix確認（y/n/a/q、複数ファイル対応）
+│   │   ├── multi_file.go  # 複数ファイル変更（Apply/Validate/Backup/Rollback）
 │   │   └── reporter.go    # Markdownレポート出力
 │   ├── api/               # API クライアント（Provider Pattern）
 │   │   ├── provider.go    # Provider interface定義

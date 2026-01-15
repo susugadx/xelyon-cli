@@ -91,6 +91,34 @@ type FixProposal struct {
 	NewCode string
 }
 
+// ---- Multi-file change domain ----
+
+// Patch represents a single code replacement within a file.
+type Patch struct {
+	// StartLine is 1-indexed inclusive start line (0 means use OldCode matching).
+	StartLine int
+	// EndLine is 1-indexed inclusive end line (0 means use OldCode matching).
+	EndLine int
+	// OldCode is the code to be replaced (used when StartLine/EndLine are 0).
+	OldCode string
+	// NewCode is the replacement code.
+	NewCode string
+}
+
+// FileChange represents changes to a single file.
+type FileChange struct {
+	FilePath   string
+	Patches    []Patch
+	BackupPath string // Set after backup is created
+}
+
+// MultiFileChange represents a coordinated change across multiple files.
+type MultiFileChange struct {
+	ID          string
+	Description string
+	Changes     []FileChange
+}
+
 // ---- Reporter domain ----
 
 type Report struct {

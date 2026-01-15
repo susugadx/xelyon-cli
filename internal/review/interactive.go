@@ -194,3 +194,154 @@ func truncateCode(code string, maxLen int) string {
 	}
 	return code[:maxLen-3] + "..."
 }
+
+// MultiFixChoice represents a user's choice for multi-file fixes.
+type MultiFixChoice string
+
+const (
+	MultiFixChoiceApply    MultiFixChoice = "a" // Apply all changes
+	MultiFixChoicePreview  MultiFixChoice = "p" // Preview changes
+	MultiFixChoiceSkip     MultiFixChoice = "s" // Skip this batch
+	MultiFixChoiceQuit     MultiFixChoice = "q" // Quit
+	MultiFixChoiceRollback MultiFixChoice = "r" // Rollback after apply
+)
+
+// MultiFixResult represents the result of a multi-file fix session.
+type MultiFixResult struct {
+	Applied    int
+	Skipped    int
+	Failed     int
+	RolledBack bool
+	Quit       bool
+}
+
+// PromptMultiFileConfirm displays multi-file change information and prompts for user choice.
+func (f *InteractiveFixer) PromptMultiFileConfirm(change *MultiFileChange) MultiFixChoice {
+	if f.AutoAll {
+		return MultiFixChoiceApply
+	}
+
+	fmt.Println()
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Printf("📦 Multi-file Change: %s\n", change.Description)
+	fmt.Printf("   ID: %s\n", change.ID)
+	fmt.Printf("   Files: %d\n", len(change.Changes))
+	fmt.Println()
+
+	// Show file list
+	for _, fc := range change.Changes {
+		fmt.Printf("   • %s (%d patch(es))\n", fc.FilePath, len(fc.Patches))
+	}
+	fmt.Println()
+
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Print("[a]pply / [p]review / [s]kip / [q]uit: ")
+
+	input, err := f.Reader.ReadString('\n')
+	if err != nil {
+		return MultiFixChoiceSkip
+	}
+
+	input = strings.TrimSpace(strings.ToLower(input))
+	switch input {
+	case "a", "apply":
+		return MultiFixChoiceApply
+	case "p", "preview":
+		return MultiFixChoicePreview
+	case "s", "skip", "":
+		return MultiFixChoiceSkip
+	case "q", "quit":
+		return MultiFixChoiceQuit
+	default:
+		return MultiFixChoiceSkip
+	}
+}
+
+// PreviewMultiFileChange displays detailed preview of all changes.
+func PreviewMultiFileChange(change *MultiFileChange) {
+	fmt.Println()
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Printf("📋 Preview: %s\n", change.Description)
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+	for _, fc := range change.Changes {
+		fmt.Printf("\n📄 %s\n", fc.FilePath)
+		for i, patch := range fc.Patches {
+			fmt.Printf("   Patch %d:\n", i+1)
+			if patch.StartLine > 0 {
+				fmt.Printf("   Lines %d-%d:\n", patch.StartLine, patch.EndLine)
+			}
+			if patch.OldCode != "" {
+				fmt.Printf("   - %s\n", truncateCode(patch.OldCode, 60))
+			}
+			fmt.Printf("   + %s\n", truncateCode(patch.NewCode, 60))
+		}
+	}
+	fmt.Println()
+}
+
+// RunInteractiveMultiFixes runs an interactive session for multi-file changes.
+func RunInteractiveMultiFixes(changes []*MultiFileChange, autoApprove bool) MultiFixResult {
+	fixer := NewInteractiveFixer()
+	fixer.AutoAll = autoApprove
+	applier := NewMultiFileApplier()
+
+	result := MultiFixResult{}
+
+	for _, change := range changes {
+		if len(change.Changes) == 0 {
+			continue
+		}
+
+	promptLoop:
+		for {
+			choice := fixer.PromptMultiFileConfirm(change)
+
+			switch choice {
+			case MultiFixChoiceApply:
+				if err := applier.ApplyMultiFileChange(change); err != nil {
+					fmt.Printf("❌ Failed to apply: %v\n", err)
+					result.Failed++
+				} else {
+					fmt.Printf("✅ Applied %d file(s)\n", len(change.Changes))
+					result.Applied += len(change.Changes)
+
+					// Offer rollback option
+					if !fixer.AutoAll {
+						fmt.Print("   [r]ollback / [Enter] to continue: ")
+						input, _ := fixer.Reader.ReadString('\n')
+						if strings.TrimSpace(strings.ToLower(input)) == "r" {
+							if err := applier.RollbackMultiFileChange(change); err != nil {
+								fmt.Printf("❌ Rollback failed: %v\n", err)
+							} else {
+								fmt.Println("↩️  Rolled back")
+								result.Applied -= len(change.Changes)
+								result.RolledBack = true
+							}
+						} else {
+							// Cleanup backups on success
+							applier.CleanupBackups(change)
+						}
+					} else {
+						applier.CleanupBackups(change)
+					}
+				}
+				break promptLoop
+
+			case MultiFixChoicePreview:
+				PreviewMultiFileChange(change)
+				// Loop back to prompt
+
+			case MultiFixChoiceSkip:
+				result.Skipped += len(change.Changes)
+				break promptLoop
+
+			case MultiFixChoiceQuit:
+				result.Quit = true
+				return result
+			}
+		}
+	}
+
+	return result
+}
