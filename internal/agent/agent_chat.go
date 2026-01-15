@@ -124,13 +124,33 @@ func (a *Agent) callAPIWithRetry() (string, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		a.cancelFunc = cancel // Agentに保存（Ctrl+Cでキャンセル可能に）
 
-		response, err = a.CurrentProvider.ChatWithTools(ctx, a.SystemPrompt, a.History, a.CurrentModel)
+		// Phase 1 token/context guard: truncate huge tool outputs before sending.
+		sendHistory := trimToolOutputsForSend(a.History, defaultToolOutputTailLines)
+
+		response, err = a.CurrentProvider.ChatWithTools(ctx, a.SystemPrompt, sendHistory, a.CurrentModel)
 
 		a.cancelFunc = nil // 完了後にクリア
 		cancel()           // リソースリーク防止
 
 		if err == nil {
 			return response, nil
+		}
+
+		// Token limit errors (400 invalid_request) will never succeed if we resend the same payload.
+		// Try once more with a more aggressive truncation, then stop retrying.
+		if isTokenLimitError(err) {
+			if retry < maxRetries-1 {
+				yellow.Println("⚠️  Context limit exceeded. Retrying with more aggressive tool output truncation...")
+
+				aggressiveHistory := trimToolOutputsForSend(a.History, defaultToolOutputTailLines/2)
+				response, err2 := a.CurrentProvider.ChatWithTools(ctx, a.SystemPrompt, aggressiveHistory, a.CurrentModel)
+				if err2 == nil {
+					return response, nil
+				}
+				// Replace err with the aggressive attempt error for better diagnostics.
+				err = err2
+			}
+			return "", err
 		}
 
 		// context.Canceled の場合は中断メッセージを表示してリトライしない
