@@ -1534,7 +1534,7 @@ case "ollama":
 
 #### 実装ファイル
 - `internal/tools/safety.go`: ツール危険度分類（SafetyHigh/Medium/Low）
-- `internal/tools/common.go`: `confirmWithAutoApprove()` 関数
+- `internal/tools/common.go`: `confirmWithAutoApproveDecision()` 関数
 - `cmd/root.go`: `-y` / `--auto-approve` フラグ
 - `internal/agent/agent.go`: AutoApprove フィールド
 - `internal/agent/agent.go`: DryRunMode フィールド

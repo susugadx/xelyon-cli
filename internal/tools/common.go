@@ -282,14 +282,9 @@ var confirm = func(message string) bool {
 	}
 }
 
-// confirmWithAutoApprove は危険度を考慮した確認プロンプト（互換: bool）
+// confirmWithAutoApproveDecision は危険度を考慮した確認プロンプト
 // toolName: 実行するツール名
 // message: 確認メッセージ
-func confirmWithAutoApprove(toolName, message string) bool {
-	return confirmWithAutoApproveDecision(toolName, message).Action == ConfirmYes
-}
-
-// confirmWithAutoApproveDecision は危険度を考慮した確認プロンプト（新API: ConfirmDecision）
 // - auto-approve の場合は yes を返す
 // - それ以外は Confirm(message) を呼び、y/n/c の結果を返す
 func confirmWithAutoApproveDecision(toolName, message string) ConfirmDecision {
