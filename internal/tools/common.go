@@ -171,14 +171,6 @@ func SetAutoApprove(enabled bool) {
 	globalAutoApprove = enabled
 }
 
-// testMode はテスト時に確認をスキップするためのフラグ
-var testMode = false
-
-// SetTestMode はテストモードを設定
-func SetTestMode(enabled bool) {
-	testMode = enabled
-}
-
 // confirm はユーザーに確認を求める（テスト用にグローバル変数として定義）
 // 空入力は無視してリトライする（AI実行中のEnter押下対策）
 // ただしEOF時はfalseを返して終了する

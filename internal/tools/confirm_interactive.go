@@ -20,7 +20,7 @@ type ConfirmResult struct {
 // ConfirmInteractive は拡張確認プロンプト (y/n/c)
 // c (comment) を選択すると複数行コメントを入力できる
 // 外部パッケージからも使用可能なようにエクスポート
-// NOTE: テスト時は setupTestConfirmInteractive() でモックされる
+// NOTE: テスト時は環境変数 XELYON_INTERACTIVE_CONFIRM=0 で無効化される
 var ConfirmInteractive = func(message string) ConfirmResult {
 	reader := bufio.NewReader(os.Stdin)
 

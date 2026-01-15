@@ -37,15 +37,3 @@ func setupTestConfirm(t *testing.T, result bool) {
 		confirm = originalConfirm
 	})
 }
-
-// setupTestConfirmInteractive はConfirmInteractive関数をモック
-// action: "yes", "no", "comment"
-func setupTestConfirmInteractive(t *testing.T, action string) {
-	originalConfirmInteractive := ConfirmInteractive
-	ConfirmInteractive = func(msg string) ConfirmResult {
-		return ConfirmResult{Action: action}
-	}
-	t.Cleanup(func() {
-		ConfirmInteractive = originalConfirmInteractive
-	})
-}
