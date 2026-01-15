@@ -407,6 +407,93 @@ func TestParseDiffGitHeader(t *testing.T) {
 	}
 }
 
+func TestContainsGlob(t *testing.T) {
+	tests := []struct {
+		pattern string
+		want    bool
+	}{
+		{"file.go", false},
+		{"*.go", true},
+		{"**/*.go", true},
+		{"src/?.go", true},
+		{"src/[abc].go", true},
+		{"internal/api/", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.pattern, func(t *testing.T) {
+			got := containsGlob(tt.pattern)
+			if got != tt.want {
+				t.Errorf("containsGlob(%q) = %v, want %v", tt.pattern, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestExpandPaths_NonExistent(t *testing.T) {
+	ctx := context.Background()
+
+	_, err := expandPaths(ctx, []string{"/nonexistent/path/that/does/not/exist"})
+	if err == nil {
+		t.Error("expandPaths() should return error for non-existent path")
+	}
+}
+
+func TestExpandPaths_EmptyInput(t *testing.T) {
+	ctx := context.Background()
+
+	// Empty paths should return empty result, not error
+	result, err := expandPaths(ctx, []string{})
+	if err != nil {
+		t.Errorf("expandPaths() error = %v", err)
+	}
+	if len(result) != 0 {
+		t.Errorf("expandPaths() returned %d results, want 0", len(result))
+	}
+}
+
+func TestScanFromPaths_EmptyPaths(t *testing.T) {
+	scanner := NewScanner()
+	ctx := context.Background()
+
+	_, err := scanner.ScanFromPaths(ctx, []string{}, ScanOptions{})
+	if err == nil {
+		t.Error("ScanFromPaths() should return error for empty paths")
+	}
+}
+
+func TestScanFromPaths_ExistingFile(t *testing.T) {
+	scanner := NewScanner()
+	ctx := context.Background()
+
+	// Test with go.mod which should exist in the project root
+	targets, err := scanner.ScanFromPaths(ctx, []string{"go.mod"}, ScanOptions{})
+	if err != nil {
+		t.Skipf("Skipping test: %v (go.mod may not exist)", err)
+	}
+
+	if len(targets) != 1 {
+		t.Errorf("ScanFromPaths() returned %d targets, want 1", len(targets))
+	}
+
+	if len(targets) > 0 && targets[0].Path != "go.mod" {
+		t.Errorf("targets[0].Path = %q, want %q", targets[0].Path, "go.mod")
+	}
+}
+
+func TestGuessChangeTypeFromGit(t *testing.T) {
+	ctx := context.Background()
+
+	// Test with a file that likely has no changes
+	ct := guessChangeTypeFromGit(ctx, "go.mod")
+
+	// Should return one of the valid change types
+	validTypes := map[string]bool{"A": true, "D": true, "M": true, "R": true}
+	if !validTypes[ct] {
+		t.Errorf("guessChangeTypeFromGit() = %q, want one of A/D/M/R", ct)
+	}
+}
+
 // Helper functions
 
 func splitLines(s string) []string {

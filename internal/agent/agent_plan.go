@@ -242,7 +242,7 @@ func (a *Agent) showPlanSummary(plan *Plan) {
 // isAIQuestion はAIの応答が質問/確認を含むか検知
 func isAIQuestion(response string) bool {
 	// ツール呼び出しがある場合は質問とみなさない
-	if tools.ParseToolCall(response) != nil {
+	if len(tools.ParseToolCalls(response)) > 0 {
 		return false
 	}
 
@@ -329,8 +329,8 @@ IMPORTANT INSTRUCTIONS:
 	continueCount := 0
 
 	for i := 0; i < maxToolCalls; i++ {
-		toolCall := tools.ParseToolCall(response)
-		if toolCall == nil {
+		toolCalls := tools.ParseToolCalls(response)
+		if len(toolCalls) == 0 {
 			// ツール呼び出しなし
 
 			// AIが質問している場合、自動続行を試みる
@@ -377,28 +377,38 @@ IMPORTANT INSTRUCTIONS:
 			fmt.Println()
 		}
 
-		// 統計情報更新: ツール実行回数
-		if a.Stats != nil {
-			a.Stats.AddToolExecution(toolCall.Tool)
-		}
-
-		// ツール実行数をインクリメント
-		plan.IncrementToolsExecuted(step.ID)
-
-		// ツール実行
-		result, change := tools.Execute(toolCall)
-
-		// 変更履歴を保存
-		if change != nil {
-			a.changeStack = append(a.changeStack, *change)
-			if len(a.changeStack) > config.MaxChangeStack {
-				a.changeStack = a.changeStack[1:]
+		// 複数ツールを順次実行
+		var allResults []string
+		for idx, toolCall := range toolCalls {
+			// 複数ツールの場合は番号を表示
+			if len(toolCalls) > 1 {
+				cyan.Printf("🔧 Tool %d/%d: %s\n", idx+1, len(toolCalls), toolCall.Tool)
 			}
 
-			// 永続的変更履歴に保存
-			if a.changeStorage != nil && a.session != nil {
-				if err := a.changeStorage.AppendChange(a.session.ID, *change); err != nil {
-					yellow.Printf("Warning: Failed to persist change: %v\n", err)
+			// 統計情報更新: ツール実行回数
+			if a.Stats != nil {
+				a.Stats.AddToolExecution(toolCall.Tool)
+			}
+
+			// ツール実行数をインクリメント
+			plan.IncrementToolsExecuted(step.ID)
+
+			// ツール実行
+			result, change := tools.Execute(toolCall)
+			allResults = append(allResults, fmt.Sprintf("[%s]\n%s", toolCall.Tool, result))
+
+			// 変更履歴を保存
+			if change != nil {
+				a.changeStack = append(a.changeStack, *change)
+				if len(a.changeStack) > config.MaxChangeStack {
+					a.changeStack = a.changeStack[1:]
+				}
+
+				// 永続的変更履歴に保存
+				if a.changeStorage != nil && a.session != nil {
+					if err := a.changeStorage.AppendChange(a.session.ID, *change); err != nil {
+						yellow.Printf("Warning: Failed to persist change: %v\n", err)
+					}
 				}
 			}
 		}
@@ -406,7 +416,7 @@ IMPORTANT INSTRUCTIONS:
 		// 結果を履歴に追加
 		a.History = append(a.History, api.Message{
 			Role:    "user",
-			Content: fmt.Sprintf("[Tool Result]\n%s", result),
+			Content: fmt.Sprintf("[Tool Results]\n%s", strings.Join(allResults, "\n\n")),
 		})
 
 		// 次のAI応答を取得

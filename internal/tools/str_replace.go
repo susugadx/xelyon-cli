@@ -102,7 +102,22 @@ func executeStrReplace(path, oldStr, newStr, startLineStr, endLineStr string) (s
 		beforeStr := strings.Join(lines[startLine-1:endLine], "\n")
 		showImprovedDiff(beforeStr, newStr)
 
-		if !confirmWithAutoApprove("str_replace", "Apply this replacement? / この置換を適用しますか？") {
+		dec := confirmWithAutoApproveDecision("str_replace", "Apply this replacement? / この置換を適用しますか？")
+		switch dec.Action {
+		case ConfirmYes:
+			// continue
+		case ConfirmComment:
+			return fmt.Sprintf(`[COMMENT] User provided feedback for str_replace (line range).
+
+Comment:
+%s
+
+Next actions:
+- Use read_file to verify the correct range.
+- Consider using string-based old_str for more precise matching.
+
+IMPORTANT: Do NOT apply the replacement until the user approves.`, strings.TrimSpace(dec.Comment)), "", nil
+		default:
 			yellow.Println("⚠️  User cancelled the replacement")
 			return fmt.Sprintf(`[CANCELLED] User cancelled str_replace for %s.
 
@@ -214,7 +229,22 @@ Do not retry the same replacement.`, path), "", nil
 
 	showImprovedDiff(oldStr, newStr)
 
-	if !confirmWithAutoApprove("str_replace", "Apply this replacement? / この置換を適用しますか？") {
+	dec2 := confirmWithAutoApproveDecision("str_replace", "Apply this replacement? / この置換を適用しますか？")
+	switch dec2.Action {
+	case ConfirmYes:
+		// continue
+	case ConfirmComment:
+		return fmt.Sprintf(`[COMMENT] User provided feedback for str_replace.
+
+Comment:
+%s
+
+Next actions:
+- Use read_file to confirm the old_str location.
+- Consider using line-range mode (start_line/end_line) for block replacement.
+
+IMPORTANT: Do NOT apply the replacement until the user approves.`, strings.TrimSpace(dec2.Comment)), "", nil
+	default:
 		yellow.Println("⚠️  User cancelled the replacement")
 		return fmt.Sprintf(`[CANCELLED] User cancelled str_replace for %s.
 

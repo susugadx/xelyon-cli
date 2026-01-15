@@ -282,6 +282,13 @@ xelyon-cli/
 
 - **`/review` コマンド**: セッション中の変更をルールベースでレビュー
 - **パイプライン**: Scanner → Analyzer → Fixer → Reporter
+- **スキャンモード**:
+  - **changes**: セッション中の変更（changeStack）をスキャン（デフォルト）
+  - **paths**: 指定パス（ファイル、ディレクトリ、globパターン）をスキャン
+  - **diff**: git diff全体をスキャン（`--all`フラグ）
+- **パス指定**: ファイル、ディレクトリ、globパターン（`**/*.go`等）に対応
+  - `.gitignore`を尊重（`git ls-files`使用）
+  - 例: `/review internal/api/`, `/review **/*.go --security`
 - **検出ルール**:
   | カテゴリ | ルールID | 説明 | 重大度 |
   |---------|----------|------|--------|

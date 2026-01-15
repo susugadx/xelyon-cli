@@ -84,6 +84,140 @@ func TestParseToolCall_Invalid(t *testing.T) {
 	}
 }
 
+func TestParseToolCalls_Multiple(t *testing.T) {
+	tests := []struct {
+		name      string
+		response  string
+		wantCount int
+		wantTools []string
+	}{
+		{
+			name:      "single tool",
+			response:  `{"tool": "read_file", "args": {"path": "test.txt"}}`,
+			wantCount: 1,
+			wantTools: []string{"read_file"},
+		},
+		{
+			name: "two tools",
+			response: `First I'll read the file {"tool": "read_file", "args": {"path": "a.txt"}}
+then write {"tool": "write_file", "args": {"path": "b.txt", "content": "hello"}}`,
+			wantCount: 2,
+			wantTools: []string{"read_file", "write_file"},
+		},
+		{
+			name: "three tools",
+			response: `{"tool": "bash", "args": {"command": "ls"}}
+{"tool": "read_file", "args": {"path": "a.txt"}}
+{"tool": "delete_file", "args": {"path": "old.txt"}}`,
+			wantCount: 3,
+			wantTools: []string{"bash", "read_file", "delete_file"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ParseToolCalls(tt.response)
+			if len(got) != tt.wantCount {
+				t.Fatalf("ParseToolCalls() returned %d tools, want %d", len(got), tt.wantCount)
+			}
+			for i, tc := range got {
+				if tc.Tool != tt.wantTools[i] {
+					t.Errorf("ParseToolCalls()[%d].Tool = %v, want %v", i, tc.Tool, tt.wantTools[i])
+				}
+			}
+		})
+	}
+}
+
+func TestParseToolCalls_CodeBlockExclusion(t *testing.T) {
+	tests := []struct {
+		name      string
+		response  string
+		wantCount int
+		wantTools []string
+	}{
+		{
+			name: "tool in code block should be excluded",
+			response: "Here's an example:\n```json\n{\"tool\": \"read_file\", \"args\": {}}\n```\n" +
+				"But this is real: {\"tool\": \"write_file\", \"args\": {\"path\": \"out.txt\"}}",
+			wantCount: 1,
+			wantTools: []string{"write_file"},
+		},
+		{
+			name: "multiple code blocks",
+			response: "```\n{\"tool\": \"a\"}\n```\n```\n{\"tool\": \"b\"}\n```\n" +
+				"{\"tool\": \"real\", \"args\": {}}",
+			wantCount: 1,
+			wantTools: []string{"real"},
+		},
+		{
+			name:      "all in code block",
+			response:  "```\n{\"tool\": \"read_file\", \"args\": {}}\n```",
+			wantCount: 0,
+			wantTools: []string{},
+		},
+		{
+			name: "code block with language specifier",
+			response: "```javascript\n{\"tool\": \"fake\"}\n```\n" +
+				"{\"tool\": \"actual\", \"args\": {}}",
+			wantCount: 1,
+			wantTools: []string{"actual"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ParseToolCalls(tt.response)
+			if len(got) != tt.wantCount {
+				t.Fatalf("ParseToolCalls() returned %d tools, want %d", len(got), tt.wantCount)
+			}
+			for i, tc := range got {
+				if tc.Tool != tt.wantTools[i] {
+					t.Errorf("ParseToolCalls()[%d].Tool = %v, want %v", i, tc.Tool, tt.wantTools[i])
+				}
+			}
+		})
+	}
+}
+
+func TestFindCodeBlockRanges(t *testing.T) {
+	tests := []struct {
+		name       string
+		text       string
+		wantRanges int
+	}{
+		{
+			name:       "no code blocks",
+			text:       "plain text without code blocks",
+			wantRanges: 0,
+		},
+		{
+			name:       "single code block",
+			text:       "text ```code``` more",
+			wantRanges: 1,
+		},
+		{
+			name:       "two code blocks",
+			text:       "```a``` middle ```b```",
+			wantRanges: 2,
+		},
+		{
+			name:       "unclosed code block",
+			text:       "```start of code block",
+			wantRanges: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := findCodeBlockRanges(tt.text)
+			if len(got) != tt.wantRanges {
+				t.Errorf("findCodeBlockRanges() returned %d ranges, want %d", len(got), tt.wantRanges)
+			}
+		})
+	}
+}
+
 func TestCreateBackup_NewFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "new.txt")

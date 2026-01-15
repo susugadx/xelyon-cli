@@ -87,18 +87,26 @@ func (a *Agent) chat(input string) {
 			return
 		}
 
-		// ツール呼び出しチェック
-		toolCall := tools.ParseToolCall(response)
-		if toolCall != nil {
-			// ループ検知
-			if a.shouldAbortToolLoop(toolCall, lastToolCall, &sameCallCount) {
-				a.SetStatus(StateAborted, "Tool loop detected", "ツールループ検知", "Refine your request or provide more constraints", "指示を具体化する/制約を追加する")
-				continue
-			}
-			lastToolCall = toolCall
+		// ツール呼び出しチェック（複数対応）
+		toolCalls := tools.ParseToolCalls(response)
+		if len(toolCalls) > 0 {
+			// 複数ツールを順次実行
+			for idx, toolCall := range toolCalls {
+				// ループ検知
+				if a.shouldAbortToolLoop(toolCall, lastToolCall, &sameCallCount) {
+					a.SetStatus(StateAborted, "Tool loop detected", "ツールループ検知", "Refine your request or provide more constraints", "指示を具体化する/制約を追加する")
+					break
+				}
+				lastToolCall = toolCall
 
-			// ツール実行
-			a.executeToolCall(response, toolCall)
+				// 複数ツールの場合は番号を表示
+				if len(toolCalls) > 1 {
+					cyan.Printf("🔧 Tool %d/%d: %s\n", idx+1, len(toolCalls), toolCall.Tool)
+				}
+
+				// ツール実行
+				a.executeToolCall(response, toolCall)
+			}
 			continue
 		}
 

@@ -73,7 +73,14 @@ func (o *Orchestrator) Run(ctx context.Context, changeStack []tools.FileChange, 
 		err     error
 	)
 
-	if opt.All {
+	if len(opt.Paths) > 0 && !opt.All {
+		// Path-based scan (new mode)
+		opt.Mode = "paths"
+		targets, err = o.Scanner.ScanFromPaths(ctx, opt.Paths, ScanOptions{
+			Paths:           opt.Paths,
+			MaxSnippetLines: opt.MaxSnippetLines,
+		})
+	} else if opt.All {
 		opt.Mode = "diff"
 		targets, err = o.Scanner.ScanAllFromGitDiff(ctx, ScanOptions{
 			All:             true,

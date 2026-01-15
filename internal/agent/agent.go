@@ -697,10 +697,10 @@ func RunHeadless(query string, model string, provider api.Provider) *HeadlessRes
 		return NewErrorResult(provider.Name(), model, "api_error", err.Error(), duration)
 	}
 
-	// ツール呼び出し解析（簡易版 - 実際のツール実行は行わない）
+	// ツール呼び出し解析（複数対応）
 	// TODO: 実際のツール実行を含める場合は agent.Run() のロジックを統合
-	tc := tools.ParseToolCall(response)
-	if tc != nil {
+	parsedCalls := tools.ParseToolCalls(response)
+	for _, tc := range parsedCalls {
 		// ツール実行（エラーは記録するが続行）
 		output, _ := tools.Execute(tc)
 		toolCalls = append(toolCalls, ToolCallResult{

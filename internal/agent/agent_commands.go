@@ -21,9 +21,15 @@ import (
 // promptConfirm はユーザーに確認を求める（空入力は無視してリトライ）
 // AI実行中のEnter押下による誤操作を防ぐ
 // テストモード時は自動承認
+// NOTE: ユーザーコマンド用の確認のため、コメント入力は「キャンセル」として扱う
 func promptConfirm(prompt string) bool {
 	// tools.ConfirmInteractive を使用してテストモード対応
 	result := tools.ConfirmInteractive(prompt)
+	if result.Action == "comment" {
+		// ユーザーコマンドではコメントは使用しない旨を表示
+		yellow.Println("⚠️  Comment mode is for AI tool confirmations only. Treating as cancel.")
+		return false
+	}
 	return result.Action == "yes"
 }
 
@@ -1267,13 +1273,19 @@ Available tools (AI will use automatically):
   search_code - Search in code files
   search_file - Search for files by name
 
-  /review [flags]     - AI code review for recent changes
+  /review [flags] [paths...]
+                      - AI code review for recent changes
+                        paths: Files, directories, or glob patterns (e.g., **/*.go)
                         --all, -a: Review all git changes (not just session)
                         --security, -s: Focus on security issues
                         --test, -t: Focus on test coverage
                         --fix, -f: Generate fix proposals
                         --yes, -y: Skip confirmation prompt
                         --max-issues N: Limit displayed issues
+                        Examples:
+                          /review internal/api/
+                          /review **/*.go --security
+                          /review src/ cmd/ --fix
 
 Tips:
   - Just describe what you want in natural language
@@ -1316,39 +1328,61 @@ func handleDryRunCommand(agent *Agent, args []string) bool {
 
 // handleReviewCommand handles the /review command for AI code review
 // Flags: --all, --security, --test, --fix, --yes
+// Usage: /review [flags] [paths...]
+//
+//	paths can be files, directories, or glob patterns (e.g., **/*.go)
 func handleReviewCommand(agent *Agent, args []string) bool {
-	// Parse flags
+	// Parse flags and paths
 	opt := review.Options{
 		Provider: agent.CurrentProvider.Name(),
 		Model:    agent.CurrentModel,
 	}
 
 	autoApprove := false
+	var paths []string
+
 	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "--all", "-a":
-			opt.All = true
-		case "--security", "-s":
-			opt.Focus.Security = true
-		case "--test", "-t":
-			opt.Focus.Test = true
-		case "--fix", "-f":
-			opt.Fix = true
-		case "--yes", "-y":
-			autoApprove = true
-		case "--max-issues":
-			if i+1 < len(args) {
-				i++
-				if n, err := strconv.Atoi(args[i]); err == nil {
-					opt.MaxIssues = n
+		arg := args[i]
+
+		// Check if it's a flag
+		if strings.HasPrefix(arg, "-") {
+			switch arg {
+			case "--all", "-a":
+				opt.All = true
+			case "--security", "-s":
+				opt.Focus.Security = true
+			case "--test", "-t":
+				opt.Focus.Test = true
+			case "--fix", "-f":
+				opt.Fix = true
+			case "--yes", "-y":
+				autoApprove = true
+			case "--max-issues":
+				if i+1 < len(args) {
+					i++
+					if n, err := strconv.Atoi(args[i]); err == nil {
+						opt.MaxIssues = n
+					}
 				}
+			default:
+				yellow.Printf("Unknown flag: %s\n", arg)
 			}
+		} else {
+			// It's a path argument
+			paths = append(paths, arg)
 		}
 	}
 
-	// Check for changes
-	if !opt.All && len(agent.changeStack) == 0 {
-		yellow.Println("⚠️  No changes to review. Use --all to review all git changes.")
+	opt.Paths = paths
+
+	// Check for changes or paths
+	if !opt.All && len(paths) == 0 && len(agent.changeStack) == 0 {
+		yellow.Println("⚠️  No changes to review.")
+		yellow.Println("Usage:")
+		yellow.Println("  /review                      - Review session changes")
+		yellow.Println("  /review <path>               - Review specific file/directory")
+		yellow.Println("  /review **/*.go              - Review files matching pattern")
+		yellow.Println("  /review --all                - Review all git changes")
 		return true
 	}
 
@@ -1356,7 +1390,12 @@ func handleReviewCommand(agent *Agent, args []string) bool {
 	if !autoApprove {
 		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 		cyan.Println("🔍 Code Review")
-		if opt.All {
+		if len(paths) > 0 {
+			cyan.Printf("   Target: %d path(s)\n", len(paths))
+			for _, p := range paths {
+				cyan.Printf("     - %s\n", p)
+			}
+		} else if opt.All {
 			cyan.Println("   Target: All git changes")
 		} else {
 			cyan.Printf("   Target: %d changed files\n", len(agent.changeStack))

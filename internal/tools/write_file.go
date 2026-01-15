@@ -61,7 +61,22 @@ func executeWriteFile(path string, content string) (string, string, error) {
 		showPreview(content)
 	}
 
-	if !confirmWithAutoApprove("write_file", "Create/overwrite this file? / このファイルを作成・上書きしますか？") {
+	dec := confirmWithAutoApproveDecision("write_file", "Create/overwrite this file? / このファイルを作成・上書きしますか？")
+	switch dec.Action {
+	case ConfirmYes:
+		// continue
+	case ConfirmComment:
+		return fmt.Sprintf(`[COMMENT] User provided feedback for write_file.
+
+Comment:
+%s
+
+Next actions:
+- Use read_file to verify current file contents.
+- Consider using str_replace for partial modifications.
+
+IMPORTANT: Do NOT write the file until the user approves.`, strings.TrimSpace(dec.Comment)), "", nil
+	default:
 		return "Cancelled by user", "", nil
 	}
 

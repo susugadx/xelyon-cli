@@ -271,6 +271,14 @@ xelyon --plan "バグ修正とテストを実行"
 # セッション中の変更をレビュー
 > /review
 
+# 特定のファイル/ディレクトリをレビュー
+> /review internal/api/
+> /review src/ cmd/
+
+# globパターンでレビュー
+> /review **/*.go
+> /review internal/**/*.go --security
+
 # すべてのgit変更をレビュー
 > /review --all
 
