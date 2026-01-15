@@ -45,6 +45,9 @@ func (a *Agent) chat(input string) {
 
 	a.SetStatus(StateRunning, "Processing request", "処理中", "Wait for response", "応答を待ってください")
 
+	// GitHub MCP ヒントを追加（GitHub関連リクエストの場合）
+	input = a.AddGitHubHint(input)
+
 	// 実装前チェック：既存定義の重複を警告
 	if warning := CheckBeforeImplementation(input); warning != "" {
 		yellow.Println(warning)

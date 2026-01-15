@@ -212,6 +212,52 @@ xelyon
 # AIがPostgreSQLに接続してクエリ実行
 ```
 
+### 4. GitHubサーバー（GitHub連携）
+
+GitHub MCPサーバーを使用すると、AIがGitHub操作を直接実行できます。
+
+```json
+{
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_xxxxxxxxxxxx"
+      }
+    }
+  }
+}
+```
+
+**対応操作**:
+- Issue作成・取得・一覧
+- Pull Request作成・一覧
+- GitHub Actions ワークフロー確認
+- ファイル内容取得
+- コード検索
+
+```bash
+xelyon
+> このバグのIssueを作成して
+
+# AIがmcp_github_create_issueツールを使用
+
+xelyon
+> CIの状態を確認して
+
+# AIがmcp_github_get_workflow_runsツールを使用
+
+xelyon
+> Issue #123の内容を見せて
+
+# AIがmcp_github_get_issueツールを使用
+```
+
+**特徴**: GitHub MCPサーバーが接続されている場合、XELYONは以下の機能を提供します：
+- ユーザーの質問にGitHub関連キーワード（issue, PR, CI等）が含まれる場合、AIに自動でMCPツール使用を促すヒントを付加
+- 「GitHubにアクセスできません」「Web UIから行ってください」といった回避的回答を防止
+
 ## カスタムMCPサーバーの作成
 
 ### Node.jsでの実装例

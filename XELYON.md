@@ -259,6 +259,11 @@ xelyon-cli/
 - **stdioトランスポート**: コマンド実行でサーバー起動
 - **動的SystemPrompt**: MCPツールを自動的にAIに提示
 - **エラーハンドリング**: 接続失敗しても続行、警告表示のみ
+- **GitHub MCP統合** (Issue #50):
+  - GitHub MCPサーバーが接続されている場合、専用の使用ガイドをシステムプロンプトに追加
+  - ユーザー入力にGitHub関連キーワード（issue, PR, actions等）が含まれる場合、自動でヒントを付加
+  - AIがMCPツールを積極的に使用するよう誘導（「GitHubにアクセスできません」と言わせない）
+  - 対応キーワード: `issue`, `PR`, `pull request`, `actions`, `CI`, `workflow`, `github`, `repo`
 
 #### 10. Repo Map (internal/repomap/)
 
