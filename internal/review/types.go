@@ -76,6 +76,19 @@ type FixProposal struct {
 
 	// Safety notes and constraints.
 	Notes []string
+
+	// Actionable indicates whether this fix can be automatically applied.
+	// If false, this is a suggestion-only proposal.
+	Actionable bool
+
+	// FilePath is the target file for actionable fixes.
+	FilePath string
+
+	// OldCode is the code to be replaced (for str_replace style fixes).
+	OldCode string
+
+	// NewCode is the replacement code.
+	NewCode string
 }
 
 // ---- Reporter domain ----

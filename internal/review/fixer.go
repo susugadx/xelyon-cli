@@ -144,7 +144,7 @@ if _, err := rand.Read(b); err != nil { /* handle */ }`),
 		}
 
 	case "sec-http-timeout":
-		return FixProposal{
+		proposal := FixProposal{
 			IssueID:   is.ID,
 			Title:     "Set HTTP client timeout",
 			Rationale: "Timeouts prevent hangs and reduce risk of resource exhaustion.",
@@ -154,9 +154,16 @@ if _, err := rand.Read(b); err != nil { /* handle */ }`),
 
 req, err := http.NewRequestWithContext(ctx, method, url, body)
 // ...`),
-			Notes: []string{"Also consider per-request context deadlines", "Align timeout with expected API behavior"},
-			Patch: "", // rule-based patching requires full file context; omitted in MVP
+			Notes:    []string{"Also consider per-request context deadlines", "Align timeout with expected API behavior"},
+			FilePath: is.Path,
 		}
+		// Try to generate actionable fix for &http.Client{} -> &http.Client{Timeout: 30*time.Second}
+		if oldCode, newCode := generateHTTPTimeoutFix(is.Snippet); oldCode != "" {
+			proposal.Actionable = true
+			proposal.OldCode = oldCode
+			proposal.NewCode = newCode
+		}
+		return proposal
 
 	case "sec-path-traversal":
 		return FixProposal{
@@ -219,6 +226,32 @@ func guessGoExportedSymbolFromDiff(snippet string) string {
 		return m[2]
 	}
 	return ""
+}
+
+// generateHTTPTimeoutFix generates an actionable fix for &http.Client{} patterns.
+// Returns (oldCode, newCode) if a fix can be generated, empty strings otherwise.
+func generateHTTPTimeoutFix(snippet string) (string, string) {
+	// Match patterns like:
+	// &http.Client{}
+	// http.Client{}
+	// &http.Client{Transport: ...} (no Timeout field)
+	lines := strings.Split(snippet, "\n")
+	for _, line := range lines {
+		// Remove diff prefix (+/-)
+		clean := strings.TrimPrefix(strings.TrimPrefix(line, "+"), "-")
+		clean = strings.TrimSpace(clean)
+
+		// Pattern 1: &http.Client{} or http.Client{}
+		if strings.Contains(clean, "http.Client{}") {
+			oldCode := "http.Client{}"
+			newCode := "http.Client{Timeout: 30 * time.Second}"
+			return oldCode, newCode
+		}
+
+		// Pattern 2: &http.Client{...} without Timeout
+		// This is more complex and we skip for now to avoid breaking existing code
+	}
+	return "", ""
 }
 
 func hasTag(tags []string, want string) bool {

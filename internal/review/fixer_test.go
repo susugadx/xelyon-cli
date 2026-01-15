@@ -305,3 +305,123 @@ func TestMin(t *testing.T) {
 		}
 	}
 }
+
+func TestGenerateHTTPTimeoutFix(t *testing.T) {
+	tests := []struct {
+		name        string
+		snippet     string
+		wantOld     string
+		wantNew     string
+		wantSuccess bool
+	}{
+		{
+			name:        "empty http.Client",
+			snippet:     "+client := &http.Client{}",
+			wantOld:     "http.Client{}",
+			wantNew:     "http.Client{Timeout: 30 * time.Second}",
+			wantSuccess: true,
+		},
+		{
+			name:        "http.Client without pointer",
+			snippet:     "+var client = http.Client{}",
+			wantOld:     "http.Client{}",
+			wantNew:     "http.Client{Timeout: 30 * time.Second}",
+			wantSuccess: true,
+		},
+		{
+			name:        "http.Client with fields (no match)",
+			snippet:     "+client := &http.Client{Transport: myTransport}",
+			wantOld:     "",
+			wantNew:     "",
+			wantSuccess: false,
+		},
+		{
+			name:        "no http.Client",
+			snippet:     "+client := NewClient()",
+			wantOld:     "",
+			wantNew:     "",
+			wantSuccess: false,
+		},
+		{
+			name:        "empty snippet",
+			snippet:     "",
+			wantOld:     "",
+			wantNew:     "",
+			wantSuccess: false,
+		},
+		{
+			name:        "multiline with http.Client",
+			snippet:     "+func foo() {\n+\tclient := &http.Client{}\n+}",
+			wantOld:     "http.Client{}",
+			wantNew:     "http.Client{Timeout: 30 * time.Second}",
+			wantSuccess: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotOld, gotNew := generateHTTPTimeoutFix(tt.snippet)
+
+			if tt.wantSuccess {
+				if gotOld != tt.wantOld {
+					t.Errorf("oldCode = %q, want %q", gotOld, tt.wantOld)
+				}
+				if gotNew != tt.wantNew {
+					t.Errorf("newCode = %q, want %q", gotNew, tt.wantNew)
+				}
+			} else {
+				if gotOld != "" || gotNew != "" {
+					t.Errorf("expected no fix, got oldCode=%q, newCode=%q", gotOld, gotNew)
+				}
+			}
+		})
+	}
+}
+
+func TestSecHTTPTimeoutActionable(t *testing.T) {
+	issue := Issue{
+		ID:      "sec-http-timeout",
+		Title:   "HTTP client without timeout",
+		Path:    "/tmp/test.go",
+		Snippet: "+client := &http.Client{}",
+	}
+
+	proposal := proposeForIssue(issue)
+
+	if !proposal.Actionable {
+		t.Error("expected proposal to be actionable")
+	}
+
+	if proposal.FilePath != "/tmp/test.go" {
+		t.Errorf("FilePath = %q, want %q", proposal.FilePath, "/tmp/test.go")
+	}
+
+	if proposal.OldCode != "http.Client{}" {
+		t.Errorf("OldCode = %q, want %q", proposal.OldCode, "http.Client{}")
+	}
+
+	if proposal.NewCode != "http.Client{Timeout: 30 * time.Second}" {
+		t.Errorf("NewCode = %q, want %q", proposal.NewCode, "http.Client{Timeout: 30 * time.Second}")
+	}
+}
+
+func TestSecHTTPTimeoutNotActionable(t *testing.T) {
+	// When snippet doesn't have a simple pattern, it should not be actionable
+	issue := Issue{
+		ID:      "sec-http-timeout",
+		Title:   "HTTP client without timeout",
+		Path:    "/tmp/test.go",
+		Snippet: "+client := &http.Client{Transport: myTransport}",
+	}
+
+	proposal := proposeForIssue(issue)
+
+	if proposal.Actionable {
+		t.Error("expected proposal to NOT be actionable for complex patterns")
+	}
+
+	// But it should still have the suggestion
+	if proposal.Title != "Set HTTP client timeout" {
+		t.Errorf("Title = %q, want %q", proposal.Title, "Set HTTP client timeout")
+	}
+}

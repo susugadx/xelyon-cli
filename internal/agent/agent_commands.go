@@ -1501,5 +1501,49 @@ func handleReviewCommand(agent *Agent, args []string) bool {
 		}
 	}
 
+	// Interactive fix application
+	if opt.Fix && len(report.Fixes) > 0 {
+		// Count actionable fixes
+		actionableCount := 0
+		for _, fix := range report.Fixes {
+			if fix.Actionable {
+				actionableCount++
+			}
+		}
+
+		if actionableCount > 0 {
+			fmt.Println()
+			cyan.Printf("🔧 %d actionable fix(es) available\n", actionableCount)
+
+			if !autoApprove {
+				fmt.Println("   Press Enter to start interactive fix session, or 'n' to skip:")
+				if !promptConfirm("") {
+					yellow.Println("   Skipped fix application")
+					return true
+				}
+			}
+
+			result := review.RunInteractiveFixes(report.Issues, report.Fixes, autoApprove)
+
+			fmt.Println()
+			green.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+			green.Println("🔧 Fix Summary")
+			green.Printf("   Applied: %d\n", result.Applied)
+			if result.Skipped > 0 {
+				yellow.Printf("   Skipped: %d\n", result.Skipped)
+			}
+			if result.Failed > 0 {
+				red.Printf("   Failed: %d\n", result.Failed)
+			}
+			if result.Quit {
+				yellow.Println("   (Session ended early)")
+			}
+			green.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		} else {
+			fmt.Println()
+			yellow.Println("ℹ️  No actionable fixes available (all suggestions require manual review)")
+		}
+	}
+
 	return true
 }
