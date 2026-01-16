@@ -4,21 +4,16 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/signal"
 	"strings"
-	"sync"
-	"syscall"
 	"time"
 
 	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/audit"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/mcp"
 	"github.com/susugadx/xelyon-cli/internal/memory"
 	"github.com/susugadx/xelyon-cli/internal/tools"
-	"github.com/susugadx/xelyon-cli/internal/ui"
 	"github.com/susugadx/xelyon-cli/internal/version"
 )
 
@@ -251,39 +246,6 @@ CORRECT approach:
 	}
 }
 
-// setupSignalHandler はCtrl+C 2回で終了するシグナルハンドラを設定
-func setupSignalHandler(agent *Agent) {
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-	var lastInterrupt time.Time
-	var interruptMu sync.Mutex
-	go func() {
-		for range sigChan {
-			interruptMu.Lock()
-			now := time.Now()
-
-			if now.Sub(lastInterrupt) < 3*time.Second {
-				// 2回目（3秒以内）: アプリ終了
-				interruptMu.Unlock()
-				fmt.Println("\n\n👋 Gracefully shutting down...")
-				agent.Cleanup()
-				os.Exit(0)
-			}
-
-			lastInterrupt = now
-			interruptMu.Unlock()
-
-			// 1回目: 中断メッセージ
-			fmt.Println("\n\n⚠️  Interrupted. Press Ctrl+C again within 3 seconds to exit.")
-
-			// 現在のAPI呼び出しをキャンセル
-			if agent.cancelFunc != nil {
-				agent.cancelFunc()
-			}
-		}
-	}()
-}
-
 // Cleanup はエージェントのリソースをクリーンアップ
 func (a *Agent) Cleanup() {
 	if a.mcpManager != nil {
@@ -374,91 +336,6 @@ func IsAPIKeyAvailable(provider string) bool {
 	}
 }
 
-func RunInteractive(model string, provider api.Provider, autoApprove, planMode bool) {
-	// 監査ログ初期化（環境変数で制御: XELYON_AUDIT_LOG=1 で有効化）
-	auditEnabled := os.Getenv("XELYON_AUDIT_LOG") == "1"
-	if err := audit.Init(auditEnabled); err != nil {
-		yellow.Printf("Warning: Failed to initialize audit log: %v\n", err)
-	}
-	if auditEnabled {
-		green.Println("📝 Audit logging enabled")
-	}
-
-	agent := NewAgent(model, provider)
-	agent.AutoApprove = autoApprove
-	agent.PlanMode = planMode         // Plan Modeフラグを設定
-	tools.SetAutoApprove(autoApprove) // ツールに --auto-approve 設定を伝える
-	defer agent.Cleanup()             // グレースフルシャットダウン
-
-	// シグナルハンドリング（Ctrl+C 2回で終了、1回目はAI応答中断）
-	setupSignalHandler(agent)
-
-	// ヘッダー表示
-	printHeader(model, provider)
-
-	// XELYON.md読み込み
-	if config := loadProjectConfig(); config != "" {
-		agent.SystemPrompt += "\n\n## Project Context:\n" + config
-		green.Println("📋 XELYON.md loaded")
-	}
-
-	// Repo Map 生成（キャッシュあり）
-	cwd, err := os.Getwd()
-	if err != nil {
-		yellow.Printf("Warning: Could not get current directory: %v\n", err)
-		cwd = "." // フォールバック
-	}
-	repoMapStr, symbols, files, fromCache := loadRepoMapForProject(cwd, 2000)
-	if repoMapStr != "" {
-		agent.SystemPrompt += "\n\n" + repoMapStr
-		if fromCache {
-			green.Println("🗺️  Repo map loaded (cache)")
-		} else {
-			green.Printf("🗺️  Repo map loaded (%d symbols from %d files)\n", symbols, files)
-		}
-	}
-
-	// REPLループ（複数行入力対応）
-	mlReader := ui.NewMultilineReader(os.Stdin)
-	mlReader.EnableBracketedPaste()
-	defer mlReader.DisableBracketedPaste()
-
-	for {
-		// AI出力後に溜まった入力をクリア（出力中のEnter押下を無視）
-		mlReader.FlushInput()
-
-		// Status / 状態表示（常にプロンプト直前に表示）
-		agent.PrintStatusFooter()
-
-		input, err := mlReader.ReadInput("\n> ")
-		if err != nil {
-			break
-		}
-
-		input = strings.TrimSpace(input)
-		if input == "" {
-			continue
-		}
-
-		// 特殊コマンド
-		if handleSpecialCommand(input, agent) {
-			continue
-		}
-
-		// 画像入力チェック: image:/path/to/file.png 形式を検出
-		if strings.Contains(input, "image:") {
-			textPart, image := parseImageInput(input)
-			if image != nil {
-				agent.chatWithImage(textPart, image)
-				continue
-			}
-		}
-
-		// AIに送信
-		agent.chat(input)
-	}
-}
-
 // parseImageInput は入力から画像パスを抽出
 // 形式: "image:/path/to/file.png こんにちは" または "こんにちは image:/path/to/file.png"
 func parseImageInput(input string) (text string, image *api.ImageData) {
@@ -500,6 +377,7 @@ func parseImageInput(input string) (text string, image *api.ImageData) {
 	return text, img
 }
 
+// RunOnce は単一のクエリを実行（レガシーAPI）
 func RunOnce(query string, model string) {
 	// Note: この関数は古いAPI (api.ChatWithTools) を使用
 	// 将来的に削除予定
@@ -533,141 +411,6 @@ func RunOnce(query string, model string) {
 
 	fmt.Println()
 	agent.chat(query)
-}
-func printHeader(model string, provider api.Provider) {
-	cyan.Println("╔═══════════════════════════════════════════╗")
-	cyan.Printf("║  🚀 XELYON CLI v%-25s║\n", version.GetVersion())
-	cyan.Println("║  AI-powered coding assistant              ║")
-	cyan.Println("╚═══════════════════════════════════════════╝")
-	green.Printf("🌐 Provider: %s\n", provider.Name())
-	fmt.Printf("Model: %s\n", modelDisplayName(model))
-	yellow.Println("Type /help for commands, /exit to quit")
-}
-func modelDisplayName(model string) string {
-	switch model {
-	case "deepseek-chat":
-		return "DeepSeek V3 (balanced)"
-	case "deepseek-coder":
-		return "DeepSeek Coder (code-focused)"
-	case "deepseek-reasoner":
-		return "DeepSeek R1 (reasoning)"
-	case "claude":
-		return "Claude (Vertex AI)"
-	default:
-		return model
-	}
-}
-func loadProjectConfig() string {
-	dir, err := os.Getwd()
-	if err != nil {
-		yellow.Printf("Warning: Could not get current directory: %v\n", err)
-		return "" // Cannot locate XELYON.md without working directory
-	}
-	for {
-		path := dir + "/XELYON.md"
-		if content, err := os.ReadFile(path); err == nil {
-			return string(content)
-		}
-		parent := dir[:strings.LastIndex(dir, "/")]
-		if parent == dir || parent == "" {
-			break
-		}
-		dir = parent
-	}
-	return ""
-}
-func RunInteractiveWithResume(model string, provider api.Provider, autoApprove, planMode bool) {
-	storage, err := history.NewStorage()
-	if err != nil {
-		red.Printf("Failed to initialize storage: %v\n", err)
-		RunInteractive(model, provider, autoApprove, planMode)
-		return
-	}
-
-	sessionID, err := storage.GetLastSession()
-	if err != nil {
-		yellow.Println("No previous session found, starting new session")
-		RunInteractive(model, provider, autoApprove, planMode)
-		return
-	}
-
-	session, err := storage.Load(sessionID)
-	if err != nil {
-		red.Printf("Failed to load session: %v\n", err)
-		RunInteractive(model, provider, autoApprove, planMode)
-		return
-	}
-
-	// ロード済みセッションでAgent作成
-	agent := NewAgent(model, provider)
-	agent.AutoApprove = autoApprove
-	agent.PlanMode = planMode
-	tools.SetAutoApprove(autoApprove) // ツールに --auto-approve 設定を伝える
-	agent.session = session
-	agent.History = session.ToAPIMessages()
-	defer agent.Cleanup() // グレースフルシャットダウン
-
-	// シグナルハンドリング（Ctrl+C 2回で終了、1回目はAI応答中断）
-	setupSignalHandler(agent)
-
-	printHeader(model, provider)
-	green.Printf("📂 Resumed session %s (%d messages)\n", sessionID, len(session.Messages))
-
-	if config := loadProjectConfig(); config != "" {
-		agent.SystemPrompt += "\n\n## Project Context:\n" + config
-		green.Println("📋 XELYON.md loaded")
-	}
-
-	// Repo Map 生成（キャッシュあり）
-	cwd, err := os.Getwd()
-	if err != nil {
-		yellow.Printf("Warning: Could not get current directory: %v\n", err)
-		cwd = "." // フォールバック
-	}
-	repoMapStr, symbols, files, fromCache := loadRepoMapForProject(cwd, 2000)
-	if repoMapStr != "" {
-		agent.SystemPrompt += "\n\n" + repoMapStr
-		if fromCache {
-			green.Println("🗺️  Repo map loaded (cache)")
-		} else {
-			green.Printf("🗺️  Repo map loaded (%d symbols from %d files)\n", symbols, files)
-		}
-	}
-
-	// REPLループ（複数行入力対応）
-	mlReader := ui.NewMultilineReader(os.Stdin)
-	mlReader.EnableBracketedPaste()
-	defer mlReader.DisableBracketedPaste()
-
-	for {
-		// Status / 状態表示（常にプロンプト直前に表示）
-		agent.PrintStatusFooter()
-
-		input, err := mlReader.ReadInput("\n> ")
-		if err != nil {
-			break
-		}
-
-		input = strings.TrimSpace(input)
-		if input == "" {
-			continue
-		}
-
-		if handleSpecialCommand(input, agent) {
-			continue
-		}
-
-		// 画像入力チェック
-		if strings.Contains(input, "image:") {
-			textPart, image := parseImageInput(input)
-			if image != nil {
-				agent.chatWithImage(textPart, image)
-				continue
-			}
-		}
-
-		agent.chat(input)
-	}
 }
 
 // RunHeadless はHeadlessモードでクエリを実行
@@ -725,125 +468,50 @@ func RunHeadless(query string, model string, provider api.Provider) *HeadlessRes
 	return NewSuccessResult(provider.Name(), model, response, toolCalls, duration)
 }
 
-// buildMCPToolsPrompt はMCPツール用のシステムプロンプトを構築する
-func buildMCPToolsPrompt(mcpManager *mcp.Manager) string {
-	mcpTools := mcpManager.GetTools()
-	if len(mcpTools) == 0 {
-		return ""
+// printHeader はセッション開始時のヘッダーを表示
+func printHeader(model string, provider api.Provider) {
+	cyan.Println("╔═══════════════════════════════════════════╗")
+	cyan.Printf("║  🚀 XELYON CLI v%-25s║\n", version.GetVersion())
+	cyan.Println("║  AI-powered coding assistant              ║")
+	cyan.Println("╚═══════════════════════════════════════════╝")
+	green.Printf("🌐 Provider: %s\n", provider.Name())
+	fmt.Printf("Model: %s\n", modelDisplayName(model))
+	yellow.Println("Type /help for commands, /exit to quit")
+}
+
+// modelDisplayName はモデル名を表示用にフォーマット
+func modelDisplayName(model string) string {
+	switch model {
+	case "deepseek-chat":
+		return "DeepSeek V3 (balanced)"
+	case "deepseek-coder":
+		return "DeepSeek Coder (code-focused)"
+	case "deepseek-reasoner":
+		return "DeepSeek R1 (reasoning)"
+	case "claude":
+		return "Claude (Vertex AI)"
+	default:
+		return model
 	}
+}
 
-	var sb strings.Builder
-	sb.WriteString("\n\n## MCP Tools (External Integrations)\n")
-	sb.WriteString("These tools connect to external services. **USE THEM when the user's request matches their capabilities.**\n")
-	sb.WriteString("Do NOT say \"I cannot access this service\" - you CAN via these MCP tools.\n\n")
-
-	// サーバーごとにグループ化
-	serverTools := make(map[string][]mcp.MCPTool)
-	for _, t := range mcpTools {
-		serverTools[t.ServerName] = append(serverTools[t.ServerName], t)
+// loadProjectConfig はXELYON.mdをロード
+func loadProjectConfig() string {
+	dir, err := os.Getwd()
+	if err != nil {
+		yellow.Printf("Warning: Could not get current directory: %v\n", err)
+		return "" // Cannot locate XELYON.md without working directory
 	}
-
-	// GitHub MCPツールがあるかチェック
-	hasGitHub := false
-	for serverName := range serverTools {
-		if strings.Contains(strings.ToLower(serverName), "github") {
-			hasGitHub = true
+	for {
+		path := dir + "/XELYON.md"
+		if content, err := os.ReadFile(path); err == nil {
+			return string(content)
+		}
+		parent := dir[:strings.LastIndex(dir, "/")]
+		if parent == dir || parent == "" {
 			break
 		}
+		dir = parent
 	}
-
-	// 各サーバーのツールを列挙
-	for serverName, tools := range serverTools {
-		sb.WriteString(fmt.Sprintf("### %s Server\n", serverName))
-		for _, t := range tools {
-			toolName := fmt.Sprintf("mcp_%s_%s", sanitizeToolName(serverName), sanitizeToolName(t.Name))
-			sb.WriteString(fmt.Sprintf("- **%s**: %s\n", toolName, t.Description))
-		}
-		sb.WriteString("\n")
-	}
-
-	// GitHub専用ガイドを追加
-	if hasGitHub {
-		sb.WriteString(buildGitHubMCPGuide())
-	}
-
-	return sb.String()
-}
-
-// sanitizeToolName はツール名から特殊文字を除去する
-func sanitizeToolName(name string) string {
-	return strings.Map(func(r rune) rune {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
-			return r
-		}
-		return '_'
-	}, name)
-}
-
-// buildGitHubMCPGuide はGitHub MCP専用の使用ガイドを生成する
-func buildGitHubMCPGuide() string {
-	return `### GitHub MCP Usage Guide (IMPORTANT)
-When the user asks about GitHub operations, you MUST use the appropriate MCP tool:
-
-| User Request | Tool to Use |
-|-------------|-------------|
-| "Create an issue" / "イシュー作成" | mcp_github_create_issue |
-| "List issues" / "イシュー一覧" | mcp_github_list_issues |
-| "Get issue #N" / "イシュー#N見せて" | mcp_github_get_issue |
-| "Create a PR" / "PR作成" | mcp_github_create_pull_request |
-| "List PRs" / "PR一覧" | mcp_github_list_pull_requests |
-| "Check CI/Actions status" / "CI確認" | mcp_github_get_workflow_runs |
-| "List repos" / "リポジトリ一覧" | mcp_github_list_repos |
-| "Get file contents" / "ファイル内容取得" | mcp_github_get_file_contents |
-| "Search code" / "コード検索" | mcp_github_search_code |
-
-**CRITICAL RULES:**
-1. ALWAYS use MCP tools for GitHub operations - you have direct access
-2. Do NOT say "I can't access GitHub" or "Please use the GitHub web UI"
-3. Do NOT suggest manual steps when an MCP tool can do it directly
-4. If a tool fails, report the error and suggest alternatives
-
-`
-}
-
-// detectGitHubIntent はユーザー入力にGitHub関連キーワードがあるか検出する
-func detectGitHubIntent(input string) bool {
-	keywords := []string{
-		"issue", "イシュー", "issues",
-		"pull request", "pr", "プルリクエスト", "プルリク",
-		"actions", "アクション", "ci", "workflow", "ワークフロー",
-		"github", "ギットハブ", "gh",
-		"repository", "リポジトリ", "repo",
-	}
-	lower := strings.ToLower(input)
-	for _, kw := range keywords {
-		if strings.Contains(lower, strings.ToLower(kw)) {
-			return true
-		}
-	}
-	return false
-}
-
-// HasGitHubMCP はGitHub MCPサーバーが接続されているか確認する
-func (a *Agent) HasGitHubMCP() bool {
-	if a.mcpManager == nil {
-		return false
-	}
-	for _, t := range a.mcpManager.GetTools() {
-		if strings.Contains(strings.ToLower(t.ServerName), "github") {
-			return true
-		}
-	}
-	return false
-}
-
-// AddGitHubHint はGitHub関連リクエストにシステムヒントを追加する
-func (a *Agent) AddGitHubHint(input string) string {
-	if !a.HasGitHubMCP() {
-		return input
-	}
-	if detectGitHubIntent(input) {
-		return input + "\n\n[SYSTEM HINT: Use MCP GitHub tools for this request. Do NOT suggest using the web UI.]"
-	}
-	return input
+	return ""
 }
