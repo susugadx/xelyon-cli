@@ -57,10 +57,11 @@ func TestRepoMapDiskCache_Load_MissOnFingerprintMismatch(t *testing.T) {
 		t.Fatalf("SaveRepoMapToDisk: %v", err)
 	}
 
-	// Advance modTime by rewriting file.
-	time.Sleep(1 * time.Millisecond)
-	if err := os.WriteFile(p, []byte("b"), 0644); err != nil {
-		t.Fatalf("rewrite file: %v", err)
+	// Advance modTime by explicitly setting a future time.
+	// Using os.Chtimes ensures the modTime changes regardless of filesystem precision.
+	futureTime := time.Now().Add(1 * time.Second)
+	if err := os.Chtimes(p, futureTime, futureTime); err != nil {
+		t.Fatalf("chtimes: %v", err)
 	}
 
 	fp2, err := ComputeProjectFingerprint(projectDir)
