@@ -2,9 +2,11 @@ package review
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"strings"
+	"time"
 )
 
 // FixChoice represents a user's choice for fixing an issue.
@@ -27,14 +29,29 @@ type FixResult struct {
 
 // InteractiveFixer handles interactive fix confirmation and application.
 type InteractiveFixer struct {
-	Reader  *bufio.Reader
-	AutoAll bool // Skip prompts and apply all
+	Reader   *bufio.Reader
+	AutoAll  bool // Skip prompts and apply all
+	Parallel bool // Enable parallel execution
+	Workers  int  // Number of parallel workers (default 4)
 }
 
 // NewInteractiveFixer creates a new interactive fixer.
 func NewInteractiveFixer() *InteractiveFixer {
 	return &InteractiveFixer{
-		Reader: bufio.NewReader(os.Stdin),
+		Reader:  bufio.NewReader(os.Stdin),
+		Workers: 4, // Default workers
+	}
+}
+
+// NewParallelInteractiveFixer creates an interactive fixer with parallel execution enabled.
+func NewParallelInteractiveFixer(workers int) *InteractiveFixer {
+	if workers <= 0 {
+		workers = 4
+	}
+	return &InteractiveFixer{
+		Reader:   bufio.NewReader(os.Stdin),
+		Parallel: true,
+		Workers:  workers,
 	}
 }
 
@@ -342,6 +359,99 @@ func RunInteractiveMultiFixes(changes []*MultiFileChange, autoApprove bool) Mult
 			}
 		}
 	}
+
+	return result
+}
+
+// RunParallelFixes runs fixes in parallel for faster execution.
+// autoApprove: if true, skip all prompts and apply all fixes
+// workers: number of parallel workers (0 = default 4)
+func RunParallelFixes(issues []Issue, proposals []FixProposal, autoApprove bool, workers int) FixResult {
+	if workers <= 0 {
+		workers = 4
+	}
+
+	result := FixResult{}
+
+	// Filter actionable proposals
+	actionable := make([]FixProposal, 0)
+	for _, p := range proposals {
+		if p.Actionable {
+			actionable = append(actionable, p)
+		}
+	}
+
+	if len(actionable) == 0 {
+		return result
+	}
+
+	// Confirmation prompt for parallel mode
+	if !autoApprove {
+		fmt.Println()
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Printf("🚀 Parallel Fix Mode: %d fixes to apply\n", len(actionable))
+		fmt.Printf("   Workers: %d\n", workers)
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+		// Show file summary
+		fileCount := make(map[string]int)
+		for _, p := range actionable {
+			fileCount[p.FilePath]++
+		}
+		fmt.Println()
+		fmt.Println("📁 Files to modify:")
+		for path, count := range fileCount {
+			fmt.Printf("   • %s (%d fix(es))\n", path, count)
+		}
+		fmt.Println()
+
+		fmt.Print("[a]pply all / [q]uit: ")
+		reader := bufio.NewReader(os.Stdin)
+		input, err := reader.ReadString('\n')
+		if err != nil || strings.TrimSpace(strings.ToLower(input)) != "a" {
+			result.Quit = true
+			return result
+		}
+	}
+
+	// Group by file
+	groups := GroupByFile(actionable)
+
+	// Create parallel executor
+	executor := NewParallelExecutor(workers)
+
+	// Apply function
+	applyFn := func(ctx context.Context, proposal FixProposal) error {
+		return ApplyFix(proposal)
+	}
+
+	// Execute in parallel
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	start := time.Now()
+	parallelResults := executor.Execute(ctx, groups, applyFn)
+	duration := time.Since(start)
+
+	// Convert results
+	for _, r := range parallelResults {
+		if r.Success {
+			result.Applied++
+		} else {
+			result.Failed++
+		}
+	}
+
+	// Show summary
+	fmt.Println()
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Println("📊 Parallel Execution Summary")
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Printf("   ✅ Applied: %d\n", result.Applied)
+	fmt.Printf("   ❌ Failed: %d\n", result.Failed)
+	fmt.Printf("   ⏱️  Duration: %v\n", duration.Round(time.Millisecond))
+	fmt.Printf("   👷 Workers: %d\n", workers)
+	fmt.Println()
 
 	return result
 }

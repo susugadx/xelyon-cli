@@ -12,6 +12,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/memory"
+	"github.com/susugadx/xelyon-cli/internal/refactor"
 	"github.com/susugadx/xelyon-cli/internal/repomap"
 	"github.com/susugadx/xelyon-cli/internal/review"
 	"github.com/susugadx/xelyon-cli/internal/tools"
@@ -137,6 +138,8 @@ func handleSpecialCommand(input string, agent *Agent) bool {
 		return handlePasteCommand(agent, args)
 	case "/review":
 		return handleReviewCommand(agent, args)
+	case "/refactor":
+		return handleRefactorCommand(agent, args)
 	}
 	return false
 }
@@ -1343,7 +1346,7 @@ func handleDryRunCommand(agent *Agent, args []string) bool {
 }
 
 // handleReviewCommand handles the /review command for AI code review
-// Flags: --all, --security, --test, --fix, --yes, --ai
+// Flags: --all, --security, --test, --fix, --yes, --ai, --parallel, --workers
 // Usage: /review [flags] [paths...]
 //
 //	paths can be files, directories, or glob patterns (e.g., **/*.go)
@@ -1355,6 +1358,8 @@ func handleReviewCommand(agent *Agent, args []string) bool {
 	}
 
 	autoApprove := false
+	parallelMode := false
+	workers := 4
 	var paths []string
 
 	for i := 0; i < len(args); i++ {
@@ -1375,6 +1380,15 @@ func handleReviewCommand(agent *Agent, args []string) bool {
 				autoApprove = true
 			case "--ai":
 				opt.UseAI = true
+			case "--parallel", "-p":
+				parallelMode = true
+			case "--workers", "-w":
+				if i+1 < len(args) {
+					i++
+					if n, err := strconv.Atoi(args[i]); err == nil && n > 0 {
+						workers = n
+					}
+				}
 			case "--max-issues":
 				if i+1 < len(args) {
 					i++
@@ -1383,7 +1397,14 @@ func handleReviewCommand(agent *Agent, args []string) bool {
 					}
 				}
 			default:
-				yellow.Printf("Unknown flag: %s\n", arg)
+				// Check for --workers=N format
+				if strings.HasPrefix(arg, "--workers=") {
+					if n, err := strconv.Atoi(strings.TrimPrefix(arg, "--workers=")); err == nil && n > 0 {
+						workers = n
+					}
+				} else {
+					yellow.Printf("Unknown flag: %s\n", arg)
+				}
 			}
 		} else {
 			// It's a path argument
@@ -1426,6 +1447,9 @@ func handleReviewCommand(agent *Agent, args []string) bool {
 		}
 		if opt.Fix {
 			cyan.Println("   Fix proposals: Enabled")
+			if parallelMode {
+				cyan.Printf("   Parallel mode: Enabled (%d workers)\n", workers)
+			}
 		}
 		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
@@ -1543,15 +1567,22 @@ func handleReviewCommand(agent *Agent, args []string) bool {
 			fmt.Println()
 			cyan.Printf("🔧 %d actionable fix(es) available\n", actionableCount)
 
-			if !autoApprove {
-				fmt.Println("   Press Enter to start interactive fix session, or 'n' to skip:")
-				if !promptConfirm("") {
-					yellow.Println("   Skipped fix application")
-					return true
-				}
-			}
+			var result review.FixResult
 
-			result := review.RunInteractiveFixes(report.Issues, report.Fixes, autoApprove)
+			if parallelMode {
+				// Parallel mode
+				result = review.RunParallelFixes(report.Issues, report.Fixes, autoApprove, workers)
+			} else {
+				// Interactive mode
+				if !autoApprove {
+					fmt.Println("   Press Enter to start interactive fix session, or 'n' to skip:")
+					if !promptConfirm("") {
+						yellow.Println("   Skipped fix application")
+						return true
+					}
+				}
+				result = review.RunInteractiveFixes(report.Issues, report.Fixes, autoApprove)
+			}
 
 			fmt.Println()
 			green.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
@@ -1574,4 +1605,217 @@ func handleReviewCommand(agent *Agent, args []string) bool {
 	}
 
 	return true
+}
+
+// handleRefactorCommand handles the /refactor command for code refactoring analysis.
+// Flags: --fix, --yes, --type, --ai, --max-file-lines, --max-func-lines
+// Usage: /refactor [flags] [paths...]
+func handleRefactorCommand(agent *Agent, args []string) bool {
+	opt := refactor.RefactorOptions{
+		Config: refactor.DefaultConfig(),
+	}
+
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+
+		if strings.HasPrefix(arg, "-") {
+			switch arg {
+			case "--fix", "-f":
+				opt.Fix = true
+			case "--yes", "-y":
+				opt.AutoApprove = true
+			case "--ai":
+				opt.Config.UseAI = true
+			case "--type", "-t":
+				if i+1 < len(args) {
+					i++
+					opt.TypeFilter = refactor.RefactorType(args[i])
+				}
+			case "--max-file-lines":
+				if i+1 < len(args) {
+					i++
+					if n, err := strconv.Atoi(args[i]); err == nil {
+						opt.Config.MaxFileLines = n
+					}
+				}
+			case "--max-func-lines":
+				if i+1 < len(args) {
+					i++
+					if n, err := strconv.Atoi(args[i]); err == nil {
+						opt.Config.MaxFunctionLines = n
+					}
+				}
+			default:
+				yellow.Printf("Unknown flag: %s\n", arg)
+			}
+		} else {
+			opt.Paths = append(opt.Paths, arg)
+		}
+	}
+
+	// Default to current directory if no paths specified
+	if len(opt.Paths) == 0 {
+		opt.Paths = []string{"."}
+	}
+
+	// Confirm before running
+	if !opt.AutoApprove {
+		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		cyan.Println("🔧 Code Refactoring Analysis")
+		cyan.Printf("   Paths: %s\n", strings.Join(opt.Paths, ", "))
+		cyan.Printf("   Max file lines: %d\n", opt.Config.MaxFileLines)
+		cyan.Printf("   Max function lines: %d\n", opt.Config.MaxFunctionLines)
+		if opt.TypeFilter != "" {
+			cyan.Printf("   Filter: %s\n", opt.TypeFilter)
+		}
+		if opt.Config.UseAI {
+			cyan.Println("   AI analysis: enabled")
+		}
+		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+		if !promptConfirm("Run refactoring analysis? [y/N]: ") {
+			yellow.Println("❌ Analysis cancelled")
+			return true
+		}
+	}
+
+	// Create refactorer
+	r := refactor.NewRefactorerWithConfig(opt.Config)
+
+	// Set up LLM client if AI is enabled
+	if opt.Config.UseAI {
+		r.LLM = &providerLLMAdapter{
+			provider:     agent.CurrentProvider,
+			model:        agent.CurrentModel,
+			systemPrompt: "You are a code refactoring assistant. Analyze code for improvement opportunities. Always respond in valid JSON format.",
+		}
+		cyan.Println("🤖 AI analysis enabled")
+	}
+
+	// Run analysis
+	report, err := r.Analyze(opt.Paths)
+	if err != nil {
+		red.Printf("Analysis failed: %v\n", err)
+		return true
+	}
+
+	// Filter by type if specified
+	if opt.TypeFilter != "" {
+		report.Proposals = refactor.FilterByType(report.Proposals, opt.TypeFilter)
+	}
+
+	// Display results
+	green.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	green.Println("✅ Refactoring Analysis Complete")
+	green.Printf("   Files analyzed: %d\n", report.Stats.FilesAnalyzed)
+	green.Printf("   Total proposals: %d\n", len(report.Proposals))
+	green.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+	// Show stats by category
+	if report.Stats.LargeFiles > 0 {
+		yellow.Printf("   📦 Large files: %d\n", report.Stats.LargeFiles)
+	}
+	if report.Stats.LongFunctions > 0 {
+		yellow.Printf("   📏 Long functions: %d\n", report.Stats.LongFunctions)
+	}
+	if report.Stats.DuplicateBlocks > 0 {
+		yellow.Printf("   🔄 Duplicate blocks: %d\n", report.Stats.DuplicateBlocks)
+	}
+	if report.Stats.NamingIssues > 0 {
+		yellow.Printf("   📝 Naming issues: %d\n", report.Stats.NamingIssues)
+	}
+
+	// Show proposals
+	if len(report.Proposals) > 0 {
+		fmt.Println("\n📋 Proposals:")
+		maxShow := 10
+		if len(report.Proposals) < maxShow {
+			maxShow = len(report.Proposals)
+		}
+
+		for i := 0; i < maxShow; i++ {
+			p := report.Proposals[i]
+			icon := getRefactorIcon(p.Type)
+			confidence := fmt.Sprintf("%.0f%%", p.Confidence*100)
+
+			fmt.Printf("\n   %s [%s] %s (%s)\n", icon, p.Type, p.Description, confidence)
+			if p.FilePath != "" {
+				fmt.Printf("      📄 %s", p.FilePath)
+				if p.LineStart > 0 {
+					fmt.Printf(":%d", p.LineStart)
+					if p.LineEnd > 0 && p.LineEnd != p.LineStart {
+						fmt.Printf("-%d", p.LineEnd)
+					}
+				}
+				fmt.Println()
+			}
+			if p.FunctionName != "" {
+				fmt.Printf("      🔹 Function: %s\n", p.FunctionName)
+			}
+		}
+
+		if len(report.Proposals) > maxShow {
+			fmt.Printf("\n   ... and %d more proposals\n", len(report.Proposals)-maxShow)
+		}
+	} else {
+		green.Println("\n✨ No refactoring suggestions - code looks good!")
+	}
+
+	// Interactive fix application
+	if opt.Fix && report.Stats.ActionableCount > 0 {
+		fmt.Println()
+		cyan.Printf("🔧 %d actionable fix(es) available\n", report.Stats.ActionableCount)
+
+		changes := refactor.ConvertToMultiFileChanges(report.Proposals)
+		if len(changes) > 0 {
+			if !opt.AutoApprove {
+				fmt.Println("   Press Enter to start interactive fix session, or 'n' to skip:")
+				if !promptConfirm("") {
+					yellow.Println("   Skipped fix application")
+					return true
+				}
+			}
+
+			result := review.RunInteractiveMultiFixes(changes, opt.AutoApprove)
+			fmt.Println()
+			green.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+			green.Println("📊 Refactoring Results:")
+			green.Printf("   Applied: %d\n", result.Applied)
+			if result.Skipped > 0 {
+				yellow.Printf("   Skipped: %d\n", result.Skipped)
+			}
+			if result.Failed > 0 {
+				red.Printf("   Failed: %d\n", result.Failed)
+			}
+			if result.RolledBack {
+				yellow.Println("   (Some changes were rolled back)")
+			}
+			if result.Quit {
+				yellow.Println("   (Session ended early)")
+			}
+			green.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		}
+	} else if opt.Fix && len(report.Proposals) > 0 {
+		fmt.Println()
+		yellow.Println("ℹ️  No actionable fixes available (proposals require manual refactoring or AI assistance)")
+		yellow.Println("   Try: /refactor --ai --fix to enable AI-powered refactoring")
+	}
+
+	return true
+}
+
+// getRefactorIcon returns an icon for the refactor type.
+func getRefactorIcon(t refactor.RefactorType) string {
+	switch t {
+	case refactor.RefactorSplitFile:
+		return "📦"
+	case refactor.RefactorExtractMethod:
+		return "📏"
+	case refactor.RefactorDRY:
+		return "🔄"
+	case refactor.RefactorRename:
+		return "📝"
+	default:
+		return "🔧"
+	}
 }

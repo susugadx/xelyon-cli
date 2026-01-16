@@ -212,6 +212,37 @@ Plan Modeのオン/オフを切り替えます。Plan Modeでは、AIが実装�
 - ターミナルにサマリー表示
 - `~/.xelyon/reviews/` にMarkdownレポート保存
 
+### `/refactor`
+
+コードリファクタリング分析を実行します。大きすぎるファイル、長い関数、重複コード、命名の問題を検出し、改善を提案します。
+
+```
+> /refactor                       # カレントディレクトリを分析
+> /refactor path/to/dir           # 特定ディレクトリを分析
+> /refactor **/*.go               # globパターンで分析
+```
+
+**フラグ:**
+- `--fix`, `-f`: 修正を適用（インタラクティブ確認）
+- `--yes`, `-y`: 確認をスキップ（自動適用）
+- `--ai`: AI分析を有効化（LLMがリファクタリングコードを生成）
+- `--type`, `-t`: 特定タイプのみ検出（split-file, extract-method, dry, rename）
+- `--max-file-lines <n>`: 大きいファイルの閾値（デフォルト: 300行）
+- `--max-func-lines <n>`: 長い関数の閾値（デフォルト: 50行）
+
+**検出タイプ:**
+- `split-file`: 大きすぎるファイル（分割を提案）
+- `extract-method`: 長すぎる関数（メソッド抽出を提案）
+- `dry`: 重複コード（共通化を提案）
+- `rename`: 命名の問題（より説明的な名前を提案）
+
+**使用例:**
+```
+> /refactor --type split-file     # 大きいファイルのみ検出
+> /refactor --ai --fix **/*.go    # AI分析 + 修正適用
+> /refactor --max-file-lines 500  # カスタム閾値
+```
+
 ### `/exit`
 
 セッションを終了します。`Ctrl+D`、`Ctrl+C`、または `exit` でも終了できます。
