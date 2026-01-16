@@ -111,7 +111,9 @@ func TestRefactorer_Analyze_Directory(t *testing.T) {
 	files := []string{"a.go", "b.go", "c.py"}
 	for _, f := range files {
 		path := filepath.Join(tmpDir, f)
-		os.WriteFile(path, []byte("package main\nfunc main() {}\n"), 0644)
+		if err := os.WriteFile(path, []byte("package main\nfunc main() {}\n"), 0644); err != nil {
+			t.Fatalf("failed to create %s: %v", f, err)
+		}
 	}
 
 	r := NewRefactorer()
@@ -131,9 +133,15 @@ func TestRefactorer_Analyze_GlobPattern(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create test files
-	os.WriteFile(filepath.Join(tmpDir, "a.go"), []byte("package a"), 0644)
-	os.WriteFile(filepath.Join(tmpDir, "b.go"), []byte("package b"), 0644)
-	os.WriteFile(filepath.Join(tmpDir, "c.txt"), []byte("not source"), 0644)
+	if err := os.WriteFile(filepath.Join(tmpDir, "a.go"), []byte("package a"), 0644); err != nil {
+		t.Fatalf("failed to create a.go: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "b.go"), []byte("package b"), 0644); err != nil {
+		t.Fatalf("failed to create b.go: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "c.txt"), []byte("not source"), 0644); err != nil {
+		t.Fatalf("failed to create c.txt: %v", err)
+	}
 
 	r := NewRefactorer()
 	report, err := r.Analyze([]string{filepath.Join(tmpDir, "*.go")})

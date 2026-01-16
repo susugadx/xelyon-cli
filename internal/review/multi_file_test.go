@@ -175,8 +175,12 @@ func main() {
 		file1 := filepath.Join(tmpDir, "multi1.go")
 		file2 := filepath.Join(tmpDir, "multi2.go")
 
-		os.WriteFile(file1, []byte("package a\nfunc F1() {}"), 0644)
-		os.WriteFile(file2, []byte("package b\nfunc F2() {}"), 0644)
+		if err := os.WriteFile(file1, []byte("package a\nfunc F1() {}"), 0644); err != nil {
+			t.Fatalf("failed to create file1: %v", err)
+		}
+		if err := os.WriteFile(file2, []byte("package b\nfunc F2() {}"), 0644); err != nil {
+			t.Fatalf("failed to create file2: %v", err)
+		}
 
 		change := &MultiFileChange{
 			ID: "multi",
@@ -260,7 +264,9 @@ line3
 line4
 line5
 `
-	os.WriteFile(testFile, []byte(content), 0644)
+	if err := os.WriteFile(testFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
 
 	change := &MultiFileChange{
 		ID: "line1",
@@ -391,7 +397,9 @@ func TestMultiFileApplier_CleanupBackups(t *testing.T) {
 
 	// Create test file
 	testFile := filepath.Join(tmpDir, "cleanup_test.go")
-	os.WriteFile(testFile, []byte("content"), 0644)
+	if err := os.WriteFile(testFile, []byte("content"), 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
 
 	change := &MultiFileChange{
 		ID: "cleanup1",
@@ -400,7 +408,9 @@ func TestMultiFileApplier_CleanupBackups(t *testing.T) {
 		},
 	}
 
-	applier.ApplyMultiFileChange(change)
+	if err := applier.ApplyMultiFileChange(change); err != nil {
+		t.Fatalf("failed to apply change: %v", err)
+	}
 
 	backupPath := change.Changes[0].BackupPath
 	if _, err := os.Stat(backupPath); os.IsNotExist(err) {

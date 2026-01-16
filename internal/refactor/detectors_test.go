@@ -26,7 +26,9 @@ func TestDetectLargeFiles(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			testFile := filepath.Join(tmpDir, tt.name+".go")
 			content := "package main\n" + strings.Repeat("// line\n", tt.lines-1)
-			os.WriteFile(testFile, []byte(content), 0644)
+			if err := os.WriteFile(testFile, []byte(content), 0644); err != nil {
+				t.Fatalf("failed to create test file: %v", err)
+			}
 
 			proposals := DetectLargeFiles([]string{testFile}, tt.maxLines)
 
@@ -56,7 +58,9 @@ func TestDetectLongFunctions_Go(t *testing.T) {
 	}
 	content.WriteString("}\n")
 
-	os.WriteFile(testFile, []byte(content.String()), 0644)
+	if err := os.WriteFile(testFile, []byte(content.String()), 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
 
 	proposals := DetectLongFunctions([]string{testFile}, 50)
 
@@ -92,7 +96,9 @@ func TestDetectLongFunctions_Python(t *testing.T) {
 		content.WriteString("    print('line')\n")
 	}
 
-	os.WriteFile(testFile, []byte(content.String()), 0644)
+	if err := os.WriteFile(testFile, []byte(content.String()), 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
 
 	proposals := DetectLongFunctions([]string{testFile}, 50)
 
@@ -123,8 +129,12 @@ func doSomething() {
 	file1 := filepath.Join(tmpDir, "file1.go")
 	file2 := filepath.Join(tmpDir, "file2.go")
 
-	os.WriteFile(file1, []byte("package a\n"+duplicateCode), 0644)
-	os.WriteFile(file2, []byte("package b\n"+duplicateCode), 0644)
+	if err := os.WriteFile(file1, []byte("package a\n"+duplicateCode), 0644); err != nil {
+		t.Fatalf("failed to create file1.go: %v", err)
+	}
+	if err := os.WriteFile(file2, []byte("package b\n"+duplicateCode), 0644); err != nil {
+		t.Fatalf("failed to create file2.go: %v", err)
+	}
 
 	proposals := DetectDuplicateCode([]string{file1, file2}, 10)
 
@@ -149,7 +159,9 @@ func process() {
 	}
 }
 `
-	os.WriteFile(testFile, []byte(content), 0644)
+	if err := os.WriteFile(testFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
 
 	proposals := DetectPoorNaming([]string{testFile})
 
@@ -179,7 +191,9 @@ func process() {
 	return result
 }
 `
-	os.WriteFile(testFile, []byte(content), 0644)
+	if err := os.WriteFile(testFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
 
 	proposals := DetectPoorNaming([]string{testFile})
 
@@ -208,7 +222,9 @@ func main() {
 	properName := 1
 }
 `
-	os.WriteFile(testFile, []byte(content), 0644)
+	if err := os.WriteFile(testFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
 
 	proposals := DetectPoorNaming([]string{testFile})
 
