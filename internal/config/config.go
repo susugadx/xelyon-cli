@@ -44,7 +44,8 @@ type Config struct {
 	PromptCache     PromptCacheConfig              `yaml:"prompt_cache,omitempty"`
 	Paste           PasteConfig                    `yaml:"paste,omitempty"`
 	Streaming       StreamingConfig                `yaml:"streaming,omitempty"`
-	Bash            BashConfig                     `yaml:"bash,omitempty"`
+	Bash       BashConfig       `yaml:"bash,omitempty"`
+	CodeHealth CodeHealthConfig `yaml:"code_health,omitempty"`
 	// 将来の拡張用
 	// Cloud CloudConfig `yaml:"cloud,omitempty"`
 }
@@ -113,6 +114,15 @@ type BashConfig struct {
 	AllowPipe       bool     `yaml:"allow_pipe"`        // パイプを許可（デフォルト: true - moderateで有効）
 	AllowRedirect   bool     `yaml:"allow_redirect"`    // リダイレクトを許可（デフォルト: false）
 	AllowInlineEdit bool     `yaml:"allow_inline_edit"` // sed -i等を許可（デフォルト: false）
+}
+
+// CodeHealthConfig はコード健全性チェックの設定
+type CodeHealthConfig struct {
+	Enabled          bool     `yaml:"enabled"`            // コード健全性チェックを有効化（デフォルト: true）
+	MaxFileLines     int      `yaml:"max_file_lines"`     // ファイル行数上限（デフォルト: 300）
+	MaxFunctionLines int      `yaml:"max_function_lines"` // 関数行数上限（デフォルト: 50）
+	AutoSuggest      bool     `yaml:"auto_suggest"`       // 閾値超過時に自動で提案（デフォルト: true）
+	OnChange         []string `yaml:"on_change"`          // 変更時チェック項目（check_file_size, check_function_size, check_duplication）
 }
 
 // ProviderModelConfig はプロバイダーごとのモデル設定
@@ -189,6 +199,13 @@ func DefaultConfig() *Config {
 			AllowPipe:       true,       // パイプを許可
 			AllowRedirect:   false,      // リダイレクトは不許可
 			AllowInlineEdit: false,      // sed -i等は不許可
+		},
+		CodeHealth: CodeHealthConfig{
+			Enabled:          true, // デフォルトは有効
+			MaxFileLines:     300,  // デフォルトは300行
+			MaxFunctionLines: 50,   // デフォルトは50行
+			AutoSuggest:      true, // デフォルトは自動提案有効
+			OnChange:         []string{"check_file_size", "check_function_size"},
 		},
 	}
 }

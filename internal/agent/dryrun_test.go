@@ -48,12 +48,7 @@ func TestAgent_DryRunMode(t *testing.T) {
 
 	// Check content contains Dry Run indicator
 	expectedContent := "[Dry Run] Tool execution simulated"
-	if !containsString(lastMsg.Content, expectedContent) {
+	if !strings.Contains(lastMsg.Content, expectedContent) {
 		t.Errorf("Expected history to contain '%s', got '%s'", expectedContent, lastMsg.Content)
 	}
-}
-
-// Helper to check string containment
-func containsString(s, substr string) bool {
-	return strings.Contains(s, substr)
 }

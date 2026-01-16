@@ -384,6 +384,9 @@ IMPORTANT:
 		if verifyResult := ShouldVerify(change.FilePath); verifyResult.NeedsVerify {
 			a.suggestVerification(change.FilePath, verifyResult)
 		}
+
+		// コード健全性チェック（on_changeフック）
+		a.checkCodeHealthOnChange(change.FilePath)
 	}
 
 	// 結果を履歴に追加

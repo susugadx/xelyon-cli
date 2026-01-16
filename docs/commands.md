@@ -250,6 +250,25 @@ Plan Modeのオン/オフを切り替えます。Plan Modeでは、AIが実装�
 
 `--fix`と組み合わせると、生成されたコードをインタラクティブに適用できます。
 
+**テスト検証:**
+`--fix`で変更を適用した後、Goファイルの場合は自動的にテスト実行を提案します。
+テストが失敗した場合は、`/undo`でロールバックを提案します。
+
+**自動コード健全性チェック（on_change）:**
+ファイル変更時に自動的にコード健全性をチェックし、閾値超過時に警告を表示します。
+設定は`~/.xelyon/config.yaml`の`code_health`セクションで管理できます。
+
+```yaml
+code_health:
+  enabled: true           # 健全性チェックを有効化
+  max_file_lines: 300     # ファイル行数上限
+  max_function_lines: 50  # 関数行数上限
+  auto_suggest: true      # 閾値超過時に自動で提案
+  on_change:              # 変更時チェック項目
+    - check_file_size
+    - check_function_size
+```
+
 ### `/exit`
 
 セッションを終了します。`Ctrl+D`、`Ctrl+C`、または `exit` でも終了できます。

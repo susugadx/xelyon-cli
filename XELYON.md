@@ -80,9 +80,10 @@ xelyon-cli/
 │   │   └── reporter.go    # Markdownレポート出力
 │   ├── refactor/          # リファクタリング機能
 │   │   ├── types.go       # RefactorType, RefactorProposal, RefactorReport
-│   │   ├── refactor.go    # Refactorer（分析パイプライン）
+│   │   ├── refactor.go    # Refactorer（分析パイプライン、makeProposalActionable）
 │   │   ├── detectors.go   # 検出器（LargeFile, LongFunction, Duplicate, Naming）
-│   │   └── ai_refactor.go # AI分析（GenerateSplitFilePlan, GenerateExtractMethodCode）
+│   │   ├── ai_refactor.go # AI分析（GenerateSplitFilePlan, GenerateExtractMethodCode）
+│   │   └── health_check.go # コード健全性チェック（on_changeフック）
 │   ├── api/               # API クライアント（Provider Pattern）
 │   │   ├── provider.go    # Provider interface定義
 │   │   ├── client.go      # Client struct（タイムアウト管理）

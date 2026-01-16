@@ -1,9 +1,11 @@
 package agent
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -1794,6 +1796,11 @@ func handleRefactorCommand(agent *Agent, args []string) bool {
 				yellow.Println("   (Session ended early)")
 			}
 			green.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+			// Run tests if changes were applied
+			if result.Applied > 0 {
+				runRefactorVerification(agent, changes)
+			}
 		}
 	} else if opt.Fix && len(report.Proposals) > 0 {
 		fmt.Println()
@@ -1802,6 +1809,81 @@ func handleRefactorCommand(agent *Agent, args []string) bool {
 	}
 
 	return true
+}
+
+// runRefactorVerification runs tests after refactoring changes are applied.
+func runRefactorVerification(agent *Agent, changes []*review.MultiFileChange) {
+	// Collect changed Go files
+	var goFiles []string
+	seenDirs := make(map[string]bool)
+
+	for _, change := range changes {
+		for _, fc := range change.Changes {
+			if strings.HasSuffix(fc.FilePath, ".go") {
+				dir := filepath.Dir(fc.FilePath)
+				if !seenDirs[dir] {
+					goFiles = append(goFiles, fc.FilePath)
+					seenDirs[dir] = true
+				}
+			}
+		}
+	}
+
+	if len(goFiles) == 0 {
+		return // No Go files changed
+	}
+
+	// Check if this is a Go project
+	if !CheckGoModExists() {
+		return
+	}
+
+	fmt.Println()
+	cyan.Println("🧪 Run tests to verify refactoring?")
+	fmt.Printf("   Changed Go packages: %d\n", len(seenDirs))
+	yellow.Print("   Run go test? [y/N]: ")
+
+	reader := bufio.NewReader(os.Stdin)
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		return
+	}
+
+	input = strings.TrimSpace(strings.ToLower(input))
+	if input != "y" && input != "yes" {
+		yellow.Println("   Skipped test verification")
+		return
+	}
+
+	// Run tests for each directory
+	allPassed := true
+	for dir := range seenDirs {
+		cyan.Printf("\n   Testing %s...\n", dir)
+		output, passed, _ := RunGoTest(dir + "/test.go") // Use any file in dir
+
+		// Show summary
+		lines := strings.Split(output, "\n")
+		for _, line := range lines {
+			if strings.Contains(line, "PASS") || strings.Contains(line, "ok") {
+				green.Println("      " + line)
+			} else if strings.Contains(line, "FAIL") {
+				red.Println("      " + line)
+			}
+		}
+
+		if !passed {
+			allPassed = false
+		}
+	}
+
+	fmt.Println()
+	if allPassed {
+		green.Println("✅ All tests passed - refactoring verified!")
+	} else {
+		red.Println("❌ Some tests failed")
+		yellow.Println("   Consider using /undo to rollback changes")
+		agent.suggestRollback()
+	}
 }
 
 // getRefactorIcon returns an icon for the refactor type.
