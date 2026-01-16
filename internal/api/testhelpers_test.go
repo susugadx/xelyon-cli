@@ -17,7 +17,6 @@ func mockAPIServer(t *testing.T, handler http.HandlerFunc) *httptest.Server {
 	return server
 }
 
-
 // errorHandler returns an HTTP handler that responds with an error
 func errorHandler(statusCode int, message string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

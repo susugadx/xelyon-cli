@@ -28,7 +28,7 @@ func TestWebSearch_Success(t *testing.T) {
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	})
 
 	// Set environment variables
@@ -93,7 +93,7 @@ func TestWebSearch_EmptyResults(t *testing.T) {
 			Organic: []SerperSearchResult{},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	})
 
 	// Set environment variables
@@ -192,7 +192,7 @@ func TestWebSearch_LessThan5Results(t *testing.T) {
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	})
 
 	// Set environment variables

@@ -147,7 +147,7 @@ func TestOllamaProvider_ListModels_Success(t *testing.T) {
 				{Name: "mistral:latest"},
 			},
 		}
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	})
 
 	p := NewOllamaProvider(server.URL)

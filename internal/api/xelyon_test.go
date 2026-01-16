@@ -43,7 +43,7 @@ func TestSearchRAG_Success(t *testing.T) {
 			Count: 2,
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	})
 
 	// Set environment variable
@@ -94,7 +94,7 @@ func TestSearchRAG_EmptyResults(t *testing.T) {
 			Count:   0,
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	})
 
 	// Set environment variable
@@ -190,7 +190,7 @@ func TestSearchRAG_RequestBody(t *testing.T) {
 		// Return success response
 		response := RAGResponse{Results: []RAGResult{}, Query: "test", Count: 0}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	})
 
 	// Set environment variable

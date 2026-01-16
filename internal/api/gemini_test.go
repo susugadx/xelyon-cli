@@ -75,7 +75,7 @@ func TestGeminiProvider_ChatWithTools_JSONArray(t *testing.T) {
 		responses := []GeminiResponse{
 			{Candidates: []GeminiCandidate{{Content: GeminiContent{Parts: []GeminiPart{{Text: "Hello from Gemini"}}}}}},
 		}
-		json.NewEncoder(w).Encode(responses)
+		_ = json.NewEncoder(w).Encode(responses)
 	})
 
 	originalURL := os.Getenv("GEMINI_API_URL")
@@ -103,7 +103,7 @@ func TestGeminiProvider_ChatWithTools_SingleObject(t *testing.T) {
 				{Content: GeminiContent{Parts: []GeminiPart{{Text: "Single response"}}}},
 			},
 		}
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	})
 
 	originalURL := os.Getenv("GEMINI_API_URL")
@@ -160,7 +160,7 @@ func TestGeminiProvider_ChatWithImage_NoImage(t *testing.T) {
 		responses := []GeminiResponse{
 			{Candidates: []GeminiCandidate{{Content: GeminiContent{Parts: []GeminiPart{{Text: "No image response"}}}}}},
 		}
-		json.NewEncoder(w).Encode(responses)
+		_ = json.NewEncoder(w).Encode(responses)
 	})
 
 	originalURL := os.Getenv("GEMINI_API_URL")
@@ -190,7 +190,7 @@ func TestGeminiProvider_ChatWithImage_WithImage(t *testing.T) {
 		responses := []GeminiResponse{
 			{Candidates: []GeminiCandidate{{Content: GeminiContent{Parts: []GeminiPart{{Text: "Image analysis complete"}}}}}},
 		}
-		json.NewEncoder(w).Encode(responses)
+		_ = json.NewEncoder(w).Encode(responses)
 	})
 
 	originalURL := os.Getenv("GEMINI_API_URL")

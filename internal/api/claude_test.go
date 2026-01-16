@@ -108,7 +108,7 @@ func TestClaudeProvider_ChatWithTools_NonStreaming(t *testing.T) {
 		resp := ClaudeResponse{
 			Content: []ClaudeContent{{Type: "text", Text: "Test response from Claude"}},
 		}
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	})
 
 	originalURL := os.Getenv("ANTHROPIC_API_URL")
@@ -184,7 +184,7 @@ func TestClaudeProvider_ChatWithImage_NoImage(t *testing.T) {
 		resp := ClaudeResponse{
 			Content: []ClaudeContent{{Type: "text", Text: "No image response"}},
 		}
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	})
 
 	originalURL := os.Getenv("ANTHROPIC_API_URL")
@@ -214,7 +214,7 @@ func TestClaudeProvider_ChatWithImage_WithImage(t *testing.T) {
 		resp := ClaudeResponse{
 			Content: []ClaudeContent{{Type: "text", Text: "Image analysis complete"}},
 		}
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	})
 
 	originalURL := os.Getenv("ANTHROPIC_API_URL")

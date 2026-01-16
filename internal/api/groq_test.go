@@ -77,7 +77,7 @@ func TestGroqProvider_ChatWithTools_NonStreaming(t *testing.T) {
 				{Message: Message{Content: "Test response from Groq"}},
 			},
 		}
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	})
 
 	originalURL := os.Getenv("GROQ_API_URL")
@@ -160,7 +160,7 @@ func TestGroqProvider_ChatWithImage(t *testing.T) {
 				{Message: Message{Content: "Image ignored"}},
 			},
 		}
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	})
 
 	originalURL := os.Getenv("GROQ_API_URL")

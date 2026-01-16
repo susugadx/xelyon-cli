@@ -77,7 +77,7 @@ func TestOpenAIProvider_ChatWithTools_NonStreaming(t *testing.T) {
 				{Message: Message{Content: "Test response from OpenAI"}},
 			},
 		}
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	})
 
 	originalURL := os.Getenv("OPENAI_API_URL")
@@ -160,7 +160,7 @@ func TestOpenAIProvider_ChatWithImage_NoImage(t *testing.T) {
 				{Message: Message{Content: "No image response"}},
 			},
 		}
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	})
 
 	originalURL := os.Getenv("OPENAI_API_URL")
@@ -195,7 +195,7 @@ func TestOpenAIProvider_ChatWithImage_WithImage(t *testing.T) {
 				{Message: Message{Content: "Image analysis complete"}},
 			},
 		}
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	})
 
 	originalURL := os.Getenv("OPENAI_API_URL")
