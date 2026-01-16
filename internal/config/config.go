@@ -44,8 +44,8 @@ type Config struct {
 	PromptCache     PromptCacheConfig              `yaml:"prompt_cache,omitempty"`
 	Paste           PasteConfig                    `yaml:"paste,omitempty"`
 	Streaming       StreamingConfig                `yaml:"streaming,omitempty"`
-	Bash       BashConfig       `yaml:"bash,omitempty"`
-	CodeHealth CodeHealthConfig `yaml:"code_health,omitempty"`
+	Bash            BashConfig                     `yaml:"bash,omitempty"`
+	CodeHealth      CodeHealthConfig               `yaml:"code_health,omitempty"`
 	// 将来の拡張用
 	// Cloud CloudConfig `yaml:"cloud,omitempty"`
 }
