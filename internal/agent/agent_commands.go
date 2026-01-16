@@ -18,6 +18,22 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/version"
 )
 
+// providerLLMAdapter adapts api.Provider to review.LLMClient interface
+type providerLLMAdapter struct {
+	provider     api.Provider
+	model        string
+	systemPrompt string
+}
+
+// Chat implements review.LLMClient interface
+func (a *providerLLMAdapter) Chat(prompt string) (string, error) {
+	ctx := context.Background()
+	history := []api.Message{
+		{Role: "user", Content: prompt},
+	}
+	return a.provider.ChatWithTools(ctx, a.systemPrompt, history, a.model)
+}
+
 // promptConfirm はユーザーに確認を求める（空入力は無視してリトライ）
 // AI実行中のEnter押下による誤操作を防ぐ
 // テストモード時は自動承認
@@ -1327,7 +1343,7 @@ func handleDryRunCommand(agent *Agent, args []string) bool {
 }
 
 // handleReviewCommand handles the /review command for AI code review
-// Flags: --all, --security, --test, --fix, --yes
+// Flags: --all, --security, --test, --fix, --yes, --ai
 // Usage: /review [flags] [paths...]
 //
 //	paths can be files, directories, or glob patterns (e.g., **/*.go)
@@ -1357,6 +1373,8 @@ func handleReviewCommand(agent *Agent, args []string) bool {
 				opt.Fix = true
 			case "--yes", "-y":
 				autoApprove = true
+			case "--ai":
+				opt.UseAI = true
 			case "--max-issues":
 				if i+1 < len(args) {
 					i++
@@ -1420,6 +1438,16 @@ func handleReviewCommand(agent *Agent, args []string) bool {
 	// Run review
 	ctx := context.Background()
 	orchestrator := review.NewOrchestrator()
+
+	// Set up LLM client if AI analysis is enabled
+	if opt.UseAI {
+		opt.LLMClient = &providerLLMAdapter{
+			provider:     agent.CurrentProvider,
+			model:        agent.CurrentModel,
+			systemPrompt: "You are a code analysis assistant. Analyze code for issues and generate fixes. Always respond in valid JSON format.",
+		}
+		cyan.Println("🤖 AI analysis enabled")
+	}
 
 	// Convert changeStack to []tools.FileChange
 	var changes []tools.FileChange

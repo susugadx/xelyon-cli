@@ -3,6 +3,7 @@ package review
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/tools"
@@ -33,13 +34,18 @@ type Options struct {
 
 	MaxIssues       int
 	MaxSnippetLines int
+
+	// AI analysis options
+	UseAI     bool      // Enable AI-powered analysis
+	LLMClient LLMClient // LLM client for AI analysis (optional)
 }
 
 type Orchestrator struct {
-	Scanner  *Scanner
-	Analyzer *Analyzer
-	Fixer    *Fixer
-	Reporter *Reporter
+	Scanner    *Scanner
+	Analyzer   *Analyzer
+	Fixer      *Fixer
+	AIAnalyzer *AIAnalyzer
+	Reporter   *Reporter
 
 	Now func() time.Time
 }
@@ -108,12 +114,45 @@ func (o *Orchestrator) Run(ctx context.Context, changeStack []tools.FileChange, 
 		return Report{}, "", fmt.Errorf("analyze failed: %w", err)
 	}
 
+	// AI analysis (if enabled)
+	var fileContents map[string]string
+	if opt.UseAI && opt.LLMClient != nil {
+		if o.AIAnalyzer == nil {
+			o.AIAnalyzer = NewAIAnalyzer(opt.LLMClient)
+		} else {
+			o.AIAnalyzer.LLM = opt.LLMClient
+		}
+
+		// Read file contents for AI analysis
+		fileContents = make(map[string]string)
+		for _, t := range targets {
+			content, readErr := readFileContent(t.Path)
+			if readErr == nil {
+				fileContents[t.Path] = content
+
+				// AI analysis per file
+				insights, aiErr := o.AIAnalyzer.AnalyzeWithAI(content, t.Path)
+				if aiErr == nil {
+					aiIssues := ConvertInsightsToIssues(insights, t.Path)
+					issues = append(issues, aiIssues...)
+				}
+			}
+		}
+	}
+
 	var fixes []FixProposal
 	if opt.Fix {
 		if o.Fixer == nil {
 			return Report{}, "", fmt.Errorf("--fix requested but fixer is not configured")
 		}
-		fixes, err = o.Fixer.Propose(issues, FixOptions{})
+
+		// Use AI fixer if AI is enabled
+		if opt.UseAI && opt.LLMClient != nil {
+			aiFixer := NewAIFixer(opt.LLMClient)
+			fixes, err = aiFixer.ProposeWithAI(issues, fileContents, FixOptions{})
+		} else {
+			fixes, err = o.Fixer.Propose(issues, FixOptions{})
+		}
 		if err != nil {
 			return Report{}, "", fmt.Errorf("fix proposals failed: %w", err)
 		}
@@ -135,4 +174,13 @@ func (o *Orchestrator) Run(ctx context.Context, changeStack []tools.FileChange, 
 		return rep, "", fmt.Errorf("write report failed: %w", err)
 	}
 	return rep, outPath, nil
+}
+
+// readFileContent reads file content for AI analysis.
+func readFileContent(path string) (string, error) {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	return string(content), nil
 }

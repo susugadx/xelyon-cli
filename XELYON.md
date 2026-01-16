@@ -73,7 +73,8 @@ xelyon-cli/
 │   │   ├── review.go      # Orchestrator（レビューパイプライン）
 │   │   ├── scanner.go     # ファイル変更スキャン（changeStack/git diff）
 │   │   ├── analyzer.go    # ルールベース解析（セキュリティ/一般/テスト）
-│   │   ├── fixer.go       # 修正提案生成（Actionable Fix対応）
+│   │   ├── ai_analyzer.go # AI分析（LLMClient, AIInsight, AnalyzeWithAI, GenerateAIFix）
+│   │   ├── fixer.go       # 修正提案生成（Actionable Fix、AIFixer対応）
 │   │   ├── interactive.go # インタラクティブFix確認（y/n/a/q、複数ファイル対応）
 │   │   ├── multi_file.go  # 複数ファイル変更（Apply/Validate/Backup/Rollback）
 │   │   └── reporter.go    # Markdownレポート出力

@@ -276,3 +276,67 @@ func min(a, b int) int {
 	}
 	return b
 }
+
+// AIFixer extends Fixer with AI-powered fix generation.
+type AIFixer struct {
+	*Fixer
+	AIAnalyzer *AIAnalyzer
+}
+
+// NewAIFixer creates a new AI-powered fixer.
+func NewAIFixer(llm LLMClient) *AIFixer {
+	return &AIFixer{
+		Fixer:      NewFixer(),
+		AIAnalyzer: NewAIAnalyzer(llm),
+	}
+}
+
+// ProposeWithAI generates fix proposals, using AI for issues that
+// don't have static rule-based fixes.
+func (f *AIFixer) ProposeWithAI(issues []Issue, fileContents map[string]string, opt FixOptions) ([]FixProposal, error) {
+	maxFixes := opt.MaxFixes
+	if maxFixes <= 0 {
+		maxFixes = 50
+	}
+
+	proposals := make([]FixProposal, 0, min(len(issues), maxFixes))
+
+	for _, is := range issues {
+		if len(proposals) >= maxFixes {
+			break
+		}
+
+		// First try static rule-based fix
+		p := proposeForIssue(is)
+		if p.IssueID != "" {
+			proposals = append(proposals, p)
+			continue
+		}
+
+		// If static fix not available and AI is configured, try AI fix
+		if f.AIAnalyzer != nil && f.AIAnalyzer.LLM != nil {
+			code, ok := fileContents[is.Path]
+			if !ok {
+				continue
+			}
+
+			aiProposal, err := f.AIAnalyzer.GenerateAIFix(is, code)
+			if err != nil {
+				// AI fix failed, skip this issue
+				continue
+			}
+
+			proposals = append(proposals, *aiProposal)
+		}
+	}
+
+	// Sort by IssueID for deterministic order
+	sort.Slice(proposals, func(i, j int) bool {
+		if proposals[i].IssueID != proposals[j].IssueID {
+			return proposals[i].IssueID < proposals[j].IssueID
+		}
+		return proposals[i].Title < proposals[j].Title
+	})
+
+	return proposals, nil
+}
