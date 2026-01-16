@@ -3,6 +3,7 @@ package refactor
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -238,5 +239,102 @@ func TestDefaultConfig(t *testing.T) {
 	}
 	if config.UseAI != false {
 		t.Error("UseAI should be false by default")
+	}
+}
+
+func TestExtractFunctionCode(t *testing.T) {
+	tests := []struct {
+		name       string
+		content    string
+		filePath   string
+		funcName   string
+		lineStart  int
+		lineEnd    int
+		wantEmpty  bool
+		wantSubstr string
+	}{
+		{
+			name: "Go function by name",
+			content: `package main
+
+func main() {
+	println("hello")
+}
+
+func helper() {
+	println("helper")
+}`,
+			filePath:   "test.go",
+			funcName:   "helper",
+			lineStart:  0,
+			lineEnd:    0,
+			wantEmpty:  false,
+			wantSubstr: "helper",
+		},
+		{
+			name: "Go function by line range",
+			content: `package main
+
+func main() {
+	println("hello")
+}`,
+			filePath:   "test.go",
+			funcName:   "",
+			lineStart:  3,
+			lineEnd:    5,
+			wantEmpty:  false,
+			wantSubstr: "println",
+		},
+		{
+			name: "Python function",
+			content: `def helper():
+    print("helper")
+
+def main():
+    print("main")`,
+			filePath:   "test.py",
+			funcName:   "helper",
+			lineStart:  0,
+			lineEnd:    0,
+			wantEmpty:  false,
+			wantSubstr: "helper",
+		},
+		{
+			name:      "Unknown language",
+			content:   "some content",
+			filePath:  "test.unknown",
+			funcName:  "func",
+			lineStart: 0,
+			lineEnd:   0,
+			wantEmpty: true,
+		},
+		{
+			name: "Function not found",
+			content: `package main
+
+func main() {
+	println("hello")
+}`,
+			filePath:  "test.go",
+			funcName:  "notexist",
+			lineStart: 0,
+			lineEnd:   0,
+			wantEmpty: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractFunctionCode(tt.content, tt.filePath, tt.funcName, tt.lineStart, tt.lineEnd)
+			if tt.wantEmpty && got != "" {
+				t.Errorf("expected empty result, got %q", got)
+			}
+			if !tt.wantEmpty && got == "" {
+				t.Error("expected non-empty result")
+			}
+			if tt.wantSubstr != "" && !strings.Contains(got, tt.wantSubstr) {
+				t.Errorf("expected result to contain %q, got %q", tt.wantSubstr, got)
+			}
+		})
 	}
 }

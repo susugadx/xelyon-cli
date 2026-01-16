@@ -69,6 +69,9 @@ func (r *Refactorer) Analyze(paths []string) (*RefactorReport, error) {
 	if r.Config.UseAI && r.LLM != nil {
 		aiProposals := r.analyzeWithAI(files)
 		report.Proposals = append(report.Proposals, aiProposals...)
+
+		// Also make static detection proposals actionable using AI
+		r.makeStaticProposalsActionable(report.Proposals, files)
 	}
 
 	// Update stats
@@ -153,6 +156,38 @@ func isSourceFile(path string) bool {
 	}
 }
 
+// makeStaticProposalsActionable uses AI to generate fixes for static detection proposals.
+func (r *Refactorer) makeStaticProposalsActionable(proposals []RefactorProposal, files []string) {
+	if r.LLM == nil {
+		return
+	}
+
+	// Build file content cache
+	fileContents := make(map[string]string)
+	for _, file := range files {
+		content, err := os.ReadFile(file)
+		if err != nil {
+			continue
+		}
+		fileContents[file] = string(content)
+	}
+
+	// Process proposals that aren't already actionable
+	for i := range proposals {
+		p := &proposals[i]
+		if p.Actionable {
+			continue
+		}
+
+		content, ok := fileContents[p.FilePath]
+		if !ok {
+			continue
+		}
+
+		r.makeProposalActionable(p, content)
+	}
+}
+
 // analyzeWithAI uses LLM to find additional refactoring opportunities.
 func (r *Refactorer) analyzeWithAI(files []string) []RefactorProposal {
 	if r.LLM == nil {
@@ -178,10 +213,98 @@ func (r *Refactorer) analyzeWithAI(files []string) []RefactorProposal {
 			continue
 		}
 
+		// Generate actionable changes for each proposal
+		for i := range aiProposals {
+			p := &aiProposals[i]
+			r.makeProposalActionable(p, string(content))
+		}
+
 		proposals = append(proposals, aiProposals...)
 	}
 
 	return proposals
+}
+
+// makeProposalActionable generates actual code changes for a proposal.
+func (r *Refactorer) makeProposalActionable(p *RefactorProposal, fileContent string) {
+	if r.LLM == nil {
+		return
+	}
+
+	switch p.Type {
+	case RefactorSplitFile:
+		change, err := GenerateSplitFilePlan(fileContent, p.FilePath, r.LLM)
+		if err == nil && change != nil && len(change.Changes) > 0 {
+			p.Change = change
+			p.Actionable = true
+		}
+
+	case RefactorExtractMethod:
+		if p.FunctionName == "" {
+			return
+		}
+		// Extract the function code from the file
+		funcCode := extractFunctionCode(fileContent, p.FilePath, p.FunctionName, p.LineStart, p.LineEnd)
+		if funcCode == "" {
+			return
+		}
+		change, err := GenerateExtractMethodCode(funcCode, p.FunctionName, p.FilePath, r.LLM)
+		if err == nil && change != nil && len(change.Changes) > 0 {
+			p.Change = change
+			p.Actionable = true
+		}
+	}
+}
+
+// extractFunctionCode extracts function code from file content.
+func extractFunctionCode(content string, filePath string, funcName string, lineStart, lineEnd int) string {
+	lines := strings.Split(content, "\n")
+
+	// Use line range if provided
+	if lineStart > 0 && lineEnd > 0 && lineEnd <= len(lines) {
+		return strings.Join(lines[lineStart-1:lineEnd], "\n")
+	}
+
+	// Otherwise try to find the function by name
+	ext := strings.ToLower(filepath.Ext(filePath))
+	var funcPattern string
+	switch ext {
+	case ".go":
+		funcPattern = "func " + funcName
+	case ".py":
+		funcPattern = "def " + funcName
+	case ".js", ".ts", ".jsx", ".tsx":
+		funcPattern = "function " + funcName
+	default:
+		return ""
+	}
+
+	// Find function start
+	start := -1
+	for i, line := range lines {
+		if strings.Contains(line, funcPattern) {
+			start = i
+			break
+		}
+	}
+	if start == -1 {
+		return ""
+	}
+
+	// Find function end (brace counting)
+	depth := 0
+	end := start
+	for i := start; i < len(lines); i++ {
+		line := lines[i]
+		depth += strings.Count(line, "{") - strings.Count(line, "}")
+		if depth == 0 && i > start {
+			end = i
+			break
+		}
+		end = i
+	}
+
+	return strings.Join(lines[start:end+1], "\n")
 }
 
 // Apply applies a refactoring proposal using the multi-file applier.
