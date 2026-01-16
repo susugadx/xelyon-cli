@@ -17,18 +17,6 @@ func mockAPIServer(t *testing.T, handler http.HandlerFunc) *httptest.Server {
 	return server
 }
 
-// jsonHandler returns an HTTP handler that responds with JSON
-func jsonHandler(statusCode int, body interface{}) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(statusCode)
-		if body != nil {
-			if err := json.NewEncoder(w).Encode(body); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-			}
-		}
-	}
-}
 
 // errorHandler returns an HTTP handler that responds with an error
 func errorHandler(statusCode int, message string) http.HandlerFunc {
@@ -40,7 +28,7 @@ func errorHandler(statusCode int, message string) http.HandlerFunc {
 				"message": message,
 			},
 		}
-		json.NewEncoder(w).Encode(errResp)
+		_ = json.NewEncoder(w).Encode(errResp)
 	}
 }
 
@@ -77,21 +65,7 @@ func rateLimitHandler(retryAfter string) http.HandlerFunc {
 				"message": "Rate limit exceeded",
 			},
 		}
-		json.NewEncoder(w).Encode(errResp)
-	}
-}
-
-// delayHandler returns an HTTP handler that delays before responding
-// Useful for testing timeout scenarios
-func delayHandler(delayDuration int, statusCode int) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		select {
-		case <-r.Context().Done():
-			return
-		default:
-			// Simulate delay by blocking (in real tests, use time.Sleep)
-			w.WriteHeader(statusCode)
-		}
+		_ = json.NewEncoder(w).Encode(errResp)
 	}
 }
 

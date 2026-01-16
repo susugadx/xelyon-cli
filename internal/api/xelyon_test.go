@@ -128,7 +128,7 @@ func TestSearchRAG_APIError(t *testing.T) {
 	// Create mock server returning error
 	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(`{"error": "Internal server error"}`))
+		_, _ = w.Write([]byte(`{"error": "Internal server error"}`))
 	})
 
 	// Set environment variable
@@ -155,7 +155,7 @@ func TestSearchRAG_InvalidJSON(t *testing.T) {
 	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`invalid json`))
+		_, _ = w.Write([]byte(`invalid json`))
 	})
 
 	// Set environment variable

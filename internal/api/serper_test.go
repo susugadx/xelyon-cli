@@ -121,7 +121,7 @@ func TestWebSearch_APIError(t *testing.T) {
 	// Create mock server returning error
 	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(`{"error": "Internal server error"}`))
+		_, _ = w.Write([]byte(`{"error": "Internal server error"}`))
 	})
 
 	// Set environment variables
@@ -153,7 +153,7 @@ func TestWebSearch_InvalidJSON(t *testing.T) {
 	// Create mock server returning invalid JSON
 	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`invalid json`))
+		_, _ = w.Write([]byte(`invalid json`))
 	})
 
 	// Set environment variables

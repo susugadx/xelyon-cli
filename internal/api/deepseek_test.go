@@ -138,10 +138,10 @@ func TestDeepSeekProvider_ChatWithTools_RequestValidation(t *testing.T) {
 			`{"choices":[{"delta":{"content":" response"}}]}`,
 		}
 		for _, chunk := range chunks {
-			w.Write([]byte("data: " + chunk + "\n\n"))
+			_, _ = w.Write([]byte("data: " + chunk + "\n\n"))
 			flusher.Flush()
 		}
-		w.Write([]byte("data: [DONE]\n\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
 		flusher.Flush()
 	})
 
