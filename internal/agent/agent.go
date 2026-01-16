@@ -27,23 +27,24 @@ var (
 
 // Agent はCLIエージェント
 type Agent struct {
-	Model           string // 初期モデル（後方互換性のため保持）
-	CurrentModel    string // 現在のモデル（再起動なしで切り替え可能）
-	CurrentProvider api.Provider
-	ProviderName    string
-	History         []api.Message
-	SystemPrompt    string
-	session         *history.Session
-	storage         *history.Storage
-	changeStack     []tools.FileChange
-	changeStorage   *history.ChangeStorage // 永続的変更履歴
-	mcpManager      *mcp.Manager
-	AutoApprove     bool               // --auto-approve フラグ
-	DryRunMode      bool               // --dry-run フラグ
-	PlanMode        bool               // --plan フラグ（Plan Mode有効化）
-	Stats           *SessionStats      // セッション統計情報
-	lastOutputs     []string           // 最後のAI出力履歴（最大10件）
-	cancelFunc      context.CancelFunc // 現在のAPI呼び出しをキャンセルするための関数
+	Model                string // 初期モデル（後方互換性のため保持）
+	CurrentModel         string // 現在のモデル（再起動なしで切り替え可能）
+	CurrentProvider      api.Provider
+	ProviderName         string
+	History              []api.Message
+	SystemPrompt         string
+	session              *history.Session
+	storage              *history.Storage
+	changeStack          []tools.FileChange
+	changeStorage        *history.ChangeStorage // 永続的変更履歴
+	mcpManager           *mcp.Manager
+	AutoApprove          bool               // --auto-approve フラグ
+	DryRunMode           bool               // --dry-run フラグ
+	PlanMode             bool               // --plan フラグ（Plan Mode有効化）
+	Stats                *SessionStats      // セッション統計情報
+	lastOutputs          []string           // 最後のAI出力履歴（最大10件）
+	cancelFunc           context.CancelFunc // 現在のAPI呼び出しをキャンセルするための関数
+	strReplaceErrorCount int                // str_replace連続エラーカウント（old_str not found）
 }
 
 // NewAgent は新しいAgentを作成

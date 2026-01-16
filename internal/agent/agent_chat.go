@@ -319,6 +319,55 @@ func (a *Agent) executeToolCall(response string, toolCall *tools.ToolCall) {
 	// ツール実行
 	result, change := tools.Execute(toolCall)
 
+	// str_replace の「old_str not found」エラー連続検知（Issue #45）
+	if toolCall.Tool == "str_replace" {
+		if strings.Contains(result, "Error: old_str not found") ||
+			strings.Contains(result, "Error: old_str appears") {
+			a.strReplaceErrorCount++
+			cfg := config.GetGlobalConfig()
+			threshold := cfg.LoopDetection.Threshold
+			if threshold < 2 {
+				threshold = 2
+			}
+			if a.strReplaceErrorCount >= threshold {
+				yellow.Printf("⚠️  str_replace failed %d times consecutively. Stopping to prevent loop.\n", a.strReplaceErrorCount)
+				yellow.Println("💡 Suggested alternatives / 代替案:")
+				fmt.Println("   1. Use read_file to verify the exact content of the target file")
+				fmt.Println("   2. Use search_code to find the correct string pattern")
+				fmt.Println("   3. Ask the user for clarification on what to change")
+				fmt.Println("   4. Try delete_lines + insert_before/insert_after for line-based edits")
+				fmt.Println()
+
+				// AIに警告を送信
+				a.History = append(a.History, api.Message{
+					Role:    "user",
+					Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, result),
+				})
+				a.History = append(a.History, api.Message{
+					Role: "user",
+					Content: `[SYSTEM WARNING] str_replace has failed multiple times. The old_str pattern was not found in the file.
+
+Suggested next steps:
+1. Use read_file to see the actual file contents
+2. Use search_code to find the correct pattern
+3. Ask the user for clarification
+4. Try a different approach (delete_lines + insert_before/insert_after)
+
+IMPORTANT: Do NOT retry str_replace with the same or similar old_str pattern. Take a different approach.`,
+				})
+				a.strReplaceErrorCount = 0 // リセット
+				fmt.Println()
+				return
+			}
+		} else if strings.Contains(result, "Successfully replaced") {
+			// 成功したらカウンターをリセット
+			a.strReplaceErrorCount = 0
+		}
+	} else {
+		// 他のツールが呼ばれたらカウンターをリセット
+		a.strReplaceErrorCount = 0
+	}
+
 	// comment 継続フロー: ツール側が [COMMENT] シグナルを返した場合、コメントを履歴に入れて再提案を依頼
 	// - これにより SafetyLow の確認で "comment" を選んでも作業を中断せず継続できる
 	if strings.Contains(result, "[COMMENT]") {
