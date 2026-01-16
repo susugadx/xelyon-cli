@@ -30,6 +30,14 @@ type SerperResponse struct {
 	Organic []SerperSearchResult `json:"organic"`
 }
 
+// getSerperURL returns the Serper API URL (allows override for testing)
+func getSerperURL() string {
+	if url := os.Getenv("SERPER_API_URL"); url != "" {
+		return url
+	}
+	return "https://google.serper.dev/search"
+}
+
 // WebSearch は Serper API を使って Web 検索を実行し、上位5件の結果を返す
 func WebSearch(query string) (string, error) {
 	// 環境変数から API キーを取得
@@ -51,7 +59,7 @@ func WebSearch(query string) (string, error) {
 	}
 
 	// HTTP リクエストを作成
-	req, err := http.NewRequest("POST", "https://google.serper.dev/search", bytes.NewBuffer(jsonData))
+	req, err := http.NewRequest("POST", getSerperURL(), bytes.NewBuffer(jsonData))
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}

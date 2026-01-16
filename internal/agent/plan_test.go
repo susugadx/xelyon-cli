@@ -330,3 +330,309 @@ func containsInt(slice []int, val int) bool {
 	}
 	return false
 }
+
+// containsFailure tests
+
+func TestContainsFailure_GoTestFail(t *testing.T) {
+	tests := []struct {
+		name   string
+		result string
+		want   bool
+	}{
+		{
+			name:   "Go test FAIL pattern",
+			result: "--- FAIL: TestSomething (0.00s)\n    main_test.go:10: expected true, got false",
+			want:   true,
+		},
+		{
+			name:   "Go test FAIL tab pattern",
+			result: "FAIL\tgithub.com/example/pkg\t0.010s",
+			want:   true,
+		},
+		{
+			name:   "Go test pass",
+			result: "ok  \tgithub.com/example/pkg\t0.010s",
+			want:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			failed, _ := containsFailure(tt.result)
+			if failed != tt.want {
+				t.Errorf("containsFailure() = %v, want %v", failed, tt.want)
+			}
+		})
+	}
+}
+
+func TestContainsFailure_Panic(t *testing.T) {
+	result := `goroutine 1 [running]:
+panic: runtime error: index out of range [1] with length 1
+
+goroutine 1 [running]:
+main.main()
+	/home/user/project/main.go:10 +0x45`
+
+	failed, reason := containsFailure(result)
+	if !failed {
+		t.Error("containsFailure() should detect panic")
+	}
+	if reason != "Panic detected" {
+		t.Errorf("containsFailure() reason = %q, want 'Panic detected'", reason)
+	}
+}
+
+func TestContainsFailure_NpmError(t *testing.T) {
+	result := `npm ERR! code ENOENT
+npm ERR! syscall open
+npm ERR! path /home/user/project/package.json
+npm ERR! errno -2
+npm ERR! enoent ENOENT: no such file or directory`
+
+	failed, reason := containsFailure(result)
+	if !failed {
+		t.Error("containsFailure() should detect npm error")
+	}
+	if reason != "npm error" {
+		t.Errorf("containsFailure() reason = %q, want 'npm error'", reason)
+	}
+}
+
+func TestContainsFailure_ExitStatus(t *testing.T) {
+	tests := []struct {
+		name   string
+		result string
+		want   bool
+	}{
+		{
+			name:   "exit status 1",
+			result: "Command failed with exit status 1",
+			want:   true,
+		},
+		{
+			name:   "exit status 2",
+			result: "Process exited with exit status 2",
+			want:   true,
+		},
+		{
+			name:   "exit status 0 (success)",
+			result: "Command completed with exit status 0",
+			want:   true, // The pattern matches "exit status" regardless of code
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			failed, _ := containsFailure(tt.result)
+			if failed != tt.want {
+				t.Errorf("containsFailure() = %v, want %v", failed, tt.want)
+			}
+		})
+	}
+}
+
+func TestContainsFailure_NoFailure(t *testing.T) {
+	tests := []struct {
+		name   string
+		result string
+	}{
+		{
+			name:   "success output",
+			result: "Build successful\nAll tests passed",
+		},
+		{
+			name:   "empty output",
+			result: "",
+		},
+		{
+			name:   "normal command output",
+			result: "total 16\ndrwxr-xr-x 5 user user 4096 Jan 15 10:00 .",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			failed, _ := containsFailure(tt.result)
+			if failed {
+				t.Errorf("containsFailure() should not detect failure for %q", tt.name)
+			}
+		})
+	}
+}
+
+func TestContainsFailure_BuildAndCompileErrors(t *testing.T) {
+	tests := []struct {
+		name   string
+		result string
+		want   bool
+	}{
+		{
+			name:   "build failed",
+			result: "go build: build failed: exit status 1",
+			want:   true,
+		},
+		{
+			name:   "compile error",
+			result: "compile error: undefined: someFunction",
+			want:   true,
+		},
+		{
+			name:   "SyntaxError",
+			result: "SyntaxError: Unexpected token",
+			want:   true,
+		},
+		{
+			name:   "TypeError",
+			result: "TypeError: Cannot read property 'x' of undefined",
+			want:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			failed, _ := containsFailure(tt.result)
+			if failed != tt.want {
+				t.Errorf("containsFailure() = %v, want %v", failed, tt.want)
+			}
+		})
+	}
+}
+
+// isAIQuestion tests
+
+func TestIsAIQuestion_JapanesePatterns(t *testing.T) {
+	tests := []struct {
+		name     string
+		response string
+		want     bool
+	}{
+		{
+			name:     "続行しますか",
+			response: "この変更を適用してもよろしいでしょうか？続行しますか？",
+			want:     true,
+		},
+		{
+			name:     "よろしいですか",
+			response: "ファイルを削除してもよろしいですか？",
+			want:     true,
+		},
+		{
+			name:     "確認してください",
+			response: "設定を確認してください。",
+			want:     true,
+		},
+		{
+			name:     "どうしますか",
+			response: "エラーが発生しました。どうしますか？",
+			want:     true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isAIQuestion(tt.response)
+			if got != tt.want {
+				t.Errorf("isAIQuestion() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsAIQuestion_EnglishPatterns(t *testing.T) {
+	tests := []struct {
+		name     string
+		response string
+		want     bool
+	}{
+		{
+			name:     "Should I",
+			response: "Should I proceed with the changes?",
+			want:     true,
+		},
+		{
+			name:     "Do you want",
+			response: "Do you want me to create the file?",
+			want:     true,
+		},
+		{
+			name:     "Would you like",
+			response: "Would you like me to run the tests?",
+			want:     true,
+		},
+		{
+			name:     "Shall I",
+			response: "Shall I continue?",
+			want:     true,
+		},
+		{
+			name:     "Can you confirm",
+			response: "Can you confirm this is correct?",
+			want:     true,
+		},
+		{
+			name:     "proceed?",
+			response: "The changes are ready. Proceed?",
+			want:     true,
+		},
+		{
+			name:     "continue?",
+			response: "File saved successfully. Continue?",
+			want:     true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isAIQuestion(tt.response)
+			if got != tt.want {
+				t.Errorf("isAIQuestion() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsAIQuestion_NotQuestion(t *testing.T) {
+	tests := []struct {
+		name     string
+		response string
+	}{
+		{
+			name:     "simple statement",
+			response: "I have read the file successfully.",
+		},
+		{
+			name:     "action report",
+			response: "The function has been added to the file.",
+		},
+		{
+			name:     "empty response",
+			response: "",
+		},
+		{
+			name:     "code only",
+			response: "```go\nfunc main() {}\n```",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isAIQuestion(tt.response)
+			if got {
+				t.Errorf("isAIQuestion() = true, want false for %q", tt.name)
+			}
+		})
+	}
+}
+
+func TestIsAIQuestion_WithToolCall(t *testing.T) {
+	// Even if the response contains question patterns, tool calls take precedence
+	response := `Should I proceed with reading the file?
+
+{"tool": "read_file", "args": {"path": "/test.txt"}}`
+
+	got := isAIQuestion(response)
+	if got {
+		t.Error("isAIQuestion() should return false when tool call is present")
+	}
+}

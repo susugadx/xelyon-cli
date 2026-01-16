@@ -6,11 +6,20 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
-const baseURL = "https://xelyon-backend-265806801386.asia-northeast1.run.app"
+const defaultXelyonURL = "https://xelyon-backend-265806801386.asia-northeast1.run.app"
+
+// getXelyonURL returns the XELYON API URL (allows override for testing)
+func getXelyonURL() string {
+	if url := os.Getenv("XELYON_API_URL"); url != "" {
+		return url
+	}
+	return defaultXelyonURL
+}
 
 type RAGRequest struct {
 	Query  string `json:"query"`
@@ -50,7 +59,7 @@ func SearchRAG(query string, userID string, topK int) (*RAGResponse, error) {
 	client := &http.Client{
 		Timeout: config.DefaultHTTPTimeout,
 	}
-	req, err := http.NewRequest("POST", baseURL+"/api/rag/search", bytes.NewBuffer(jsonBody))
+	req, err := http.NewRequest("POST", getXelyonURL()+"/api/rag/search", bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}

@@ -7,11 +7,23 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
+
+const defaultGeminiURLTemplate = "https://generativelanguage.googleapis.com/v1beta/models/%s:streamGenerateContent"
+
+// getGeminiURL は環境変数またはデフォルトのURLテンプレートを使用してURLを生成
+func getGeminiURL(model string) string {
+	if baseURL := os.Getenv("GEMINI_API_URL"); baseURL != "" {
+		// 環境変数が設定されている場合はそのまま使用（テスト用）
+		return baseURL
+	}
+	return fmt.Sprintf(defaultGeminiURLTemplate, model)
+}
 
 // GeminiProvider はGemini APIのプロバイダー実装
 type GeminiProvider struct {
@@ -133,7 +145,7 @@ func (p *GeminiProvider) ChatWithTools(ctx context.Context, systemPrompt string,
 	}
 
 	// Gemini API endpoint（ストリーミング）
-	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:streamGenerateContent", model)
+	url := getGeminiURL(model)
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
 	if err != nil {
@@ -318,7 +330,7 @@ func (p *GeminiProvider) ChatWithImage(ctx context.Context, systemPrompt string,
 	}
 
 	// Gemini API endpoint（ストリーミング）
-	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:streamGenerateContent", model)
+	url := getGeminiURL(model)
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
 	if err != nil {
