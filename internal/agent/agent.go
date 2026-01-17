@@ -129,6 +129,9 @@ You have access to the following tools:
 ### Search & Discovery
 - search_code: Search for pattern in code files. Args: {"pattern": "...", "path": "..."} (path optional)
 - search_file: Search for files by name. Args: {"pattern": "...", "path": "..."} (path optional)
+- ast_grep: Structural code search using Tree-sitter AST patterns. Args: {"pattern": "...", "lang": "...", "path": "..."} (lang/path optional)
+  Examples: 'func $NAME($ARGS)' matches Go functions, 'async function $NAME' matches JS async functions
+  Metavariables: $NAME (single node), $$$ (zero or more nodes), $_ (any single node)
 - web_search: Search the web for information. Args: {"query": "..."}
 
 ### Shell

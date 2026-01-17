@@ -137,12 +137,12 @@ xelyon-cli/
 
 
 #### 2. ツールシステム (internal/tools/)
-- **25種類のツール**:
+- **26種類のツール**:
   - **ファイル編集**: read_file, write_file, str_replace, append_file, prepend_file, insert_after, insert_before, copy_file
   - **ファイル管理**: list_dir, create_dir
   - **Git操作**: git_status, git_diff, git_add, git_commit, git_push, git_log, git_branch, git_checkout, git_stash
   - **開発支援**: run_test, format
-  - **検索**: search_code, search_file, web_search
+  - **検索**: search_code, search_file, ast_grep（構造的コード検索）, web_search
   - **シェル**: bash
 - **自動バックアップ**: write_file/str_replace/append_file/prepend_fileで.bakファイル作成
 - **安全性**: 危険なコマンド（rm -rf, sed -i等）をブロック

@@ -464,6 +464,18 @@ func (t *LintTool) Run(args map[string]string) (string, *FileChange, error) {
 	return result, change, nil
 }
 
+// ===== Ast Grep Tool =====
+
+// AstGrepTool provides structural code search using ast-grep (Tree-sitter based)
+type AstGrepTool struct{}
+
+func (t *AstGrepTool) Name() string { return "ast_grep" }
+
+func (t *AstGrepTool) Run(args map[string]string) (string, *FileChange, error) {
+	result := executeAstGrep(args["pattern"], args["lang"], args["path"])
+	return result, nil, nil
+}
+
 // ===== Registry Registration =====
 
 // RegisterBuiltinTools はすべての組み込みツールを登録
@@ -497,6 +509,7 @@ func RegisterBuiltinTools(r *Registry) {
 	r.Register(&DeleteFileTool{})   // NEW: Phase 4
 	r.Register(&MoveFileTool{})     // NEW: Phase 4
 	r.Register(&LintTool{})         // NEW: Phase 4
+	r.Register(&AstGrepTool{})      // NEW: Issue #55 - ast-grep structural search
 }
 
 // init は自動的にデフォルトレジストリに全ツールを登録

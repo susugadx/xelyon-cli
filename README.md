@@ -260,7 +260,7 @@ AIが自動で以下のツールを使用します:
 
   - `run_test` 実行中はスピナーを表示し、長時間のテストでも「動作中」であることが分かるようにしています
 
-- **検索**: `search_code`, `search_file`, `web_search`
+- **検索**: `search_code`, `search_file`, `ast_grep`（構造的コード検索）, `web_search`
 
 全ツール: [コマンドリファレンス](docs/commands.md#利用可能なツール)
 
