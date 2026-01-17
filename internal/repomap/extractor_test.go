@@ -986,3 +986,202 @@ CMD ["/main"]
 		t.Errorf("Expected at least 1 CMD instruction, got %d", kindCounts["cmd"])
 	}
 }
+
+// ================== Issue #62: Arrow Function Components / Hooks Tests ==================
+
+func TestExtractArrowFunctionComponent(t *testing.T) {
+	// Note: JSX構文はTypeScriptパーサーで正しく解析されないため、
+	// JSXなしの形式でテスト
+	content := `const Header = () => {
+    return null;
+};
+
+const Button: React.FC<Props> = ({ onClick }) => {
+    return null;
+};
+
+const App = () => {
+    return "Hello";
+};
+`
+	tmpDir := t.TempDir()
+	testutil.CreateTempFile(t, tmpDir, "components.ts", content)
+	testFile := filepath.Join(tmpDir, "components.ts")
+
+	fileSymbols, err := ExtractSymbols(testFile)
+	if err != nil {
+		t.Fatalf("ExtractSymbols failed: %v", err)
+	}
+	if fileSymbols == nil {
+		t.Fatal("Expected fileSymbols, got nil")
+	}
+
+	// コンポーネントを探す
+	components := make(map[string]Symbol)
+	for _, sym := range fileSymbols.Symbols {
+		if sym.Kind == "component" {
+			components[sym.Name] = sym
+		}
+	}
+
+	// Header コンポーネント
+	if _, ok := components["Header"]; !ok {
+		t.Error("Expected to find 'Header' component")
+	}
+
+	// Button コンポーネント（型注釈付き）
+	button, ok := components["Button"]
+	if !ok {
+		t.Error("Expected to find 'Button' component")
+	} else {
+		if !strings.Contains(button.Signature, "React.FC<Props>") {
+			t.Errorf("Expected Button signature to contain 'React.FC<Props>', got '%s'", button.Signature)
+		}
+	}
+
+	// App コンポーネント
+	if _, ok := components["App"]; !ok {
+		t.Error("Expected to find 'App' component")
+	}
+}
+
+func TestExtractArrowFunctionHook(t *testing.T) {
+	content := `const useAuth = () => {
+    const [user, setUser] = useState(null);
+    return { user, setUser };
+};
+
+const useCounter = (initial: number) => {
+    const [count, setCount] = useState(initial);
+    return { count, increment: () => setCount(c => c + 1) };
+};
+`
+	tmpDir := t.TempDir()
+	testutil.CreateTempFile(t, tmpDir, "hooks.tsx", content)
+	testFile := filepath.Join(tmpDir, "hooks.tsx")
+
+	fileSymbols, err := ExtractSymbols(testFile)
+	if err != nil {
+		t.Fatalf("ExtractSymbols failed: %v", err)
+	}
+	if fileSymbols == nil {
+		t.Fatal("Expected fileSymbols, got nil")
+	}
+
+	// Hookを探す
+	hooks := make(map[string]Symbol)
+	for _, sym := range fileSymbols.Symbols {
+		if sym.Kind == "hook" {
+			hooks[sym.Name] = sym
+		}
+	}
+
+	// useAuth Hook
+	if _, ok := hooks["useAuth"]; !ok {
+		t.Error("Expected to find 'useAuth' hook")
+	}
+
+	// useCounter Hook
+	useCounter, ok := hooks["useCounter"]
+	if !ok {
+		t.Error("Expected to find 'useCounter' hook")
+	} else {
+		if !strings.Contains(useCounter.Signature, "(initial: number)") {
+			t.Errorf("Expected useCounter signature to contain '(initial: number)', got '%s'", useCounter.Signature)
+		}
+	}
+}
+
+func TestExtractFunctionDeclarationHook(t *testing.T) {
+	content := `function useAuth() {
+    const [user, setUser] = useState(null);
+    return { user, setUser };
+}
+
+function useCounter(initial) {
+    const [count, setCount] = useState(initial);
+    return { count };
+}
+
+function App() {
+    return <div>Hello</div>;
+}
+`
+	tmpDir := t.TempDir()
+	testutil.CreateTempFile(t, tmpDir, "hooks.js", content)
+	testFile := filepath.Join(tmpDir, "hooks.js")
+
+	fileSymbols, err := ExtractSymbols(testFile)
+	if err != nil {
+		t.Fatalf("ExtractSymbols failed: %v", err)
+	}
+	if fileSymbols == nil {
+		t.Fatal("Expected fileSymbols, got nil")
+	}
+
+	// シンボルのKindを確認
+	kindMap := make(map[string]string)
+	for _, sym := range fileSymbols.Symbols {
+		kindMap[sym.Name] = sym.Kind
+	}
+
+	// useAuth は hook
+	if kindMap["useAuth"] != "hook" {
+		t.Errorf("Expected useAuth to be 'hook', got '%s'", kindMap["useAuth"])
+	}
+
+	// useCounter は hook
+	if kindMap["useCounter"] != "hook" {
+		t.Errorf("Expected useCounter to be 'hook', got '%s'", kindMap["useCounter"])
+	}
+
+	// App は function（PascalCaseだがfunction宣言なのでfunctionのまま）
+	if kindMap["App"] != "function" {
+		t.Errorf("Expected App to be 'function', got '%s'", kindMap["App"])
+	}
+}
+
+func TestArrowFunctionSkipsRegularVariables(t *testing.T) {
+	content := `const handler = () => {
+    console.log("clicked");
+};
+
+const callback = (x) => x * 2;
+
+const Header = () => {
+    return null;
+};
+`
+	tmpDir := t.TempDir()
+	testutil.CreateTempFile(t, tmpDir, "mixed.ts", content)
+	testFile := filepath.Join(tmpDir, "mixed.ts")
+
+	fileSymbols, err := ExtractSymbols(testFile)
+	if err != nil {
+		t.Fatalf("ExtractSymbols failed: %v", err)
+	}
+	if fileSymbols == nil {
+		t.Fatal("Expected fileSymbols, got nil")
+	}
+
+	// 名前でシンボルをマップ
+	symbolMap := make(map[string]Symbol)
+	for _, sym := range fileSymbols.Symbols {
+		symbolMap[sym.Name] = sym
+	}
+
+	// handler と callback はスキップされるべき（小文字始まり、hookでもない）
+	if _, ok := symbolMap["handler"]; ok {
+		t.Error("Expected 'handler' to be skipped (not a component or hook)")
+	}
+	if _, ok := symbolMap["callback"]; ok {
+		t.Error("Expected 'callback' to be skipped (not a component or hook)")
+	}
+
+	// Header はコンポーネントとして抽出される
+	if sym, ok := symbolMap["Header"]; !ok {
+		t.Error("Expected to find 'Header' component")
+	} else if sym.Kind != "component" {
+		t.Errorf("Expected Header kind to be 'component', got '%s'", sym.Kind)
+	}
+}

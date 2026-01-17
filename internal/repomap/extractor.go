@@ -55,6 +55,33 @@ func isCFamily(ext string) bool {
 	return ext == ".c" || ext == ".h" || ext == ".cpp" || ext == ".hpp" || ext == ".cc"
 }
 
+// isJSFamily は JavaScript/TypeScript系言語かどうかを判定
+func isJSFamily(ext string) bool {
+	return ext == ".js" || ext == ".jsx" || ext == ".ts" || ext == ".tsx" || ext == ".mjs"
+}
+
+// isPascalCase は PascalCase かどうかを判定（Reactコンポーネント規約）
+func isPascalCase(name string) bool {
+	if len(name) == 0 {
+		return false
+	}
+	r := rune(name[0])
+	return r >= 'A' && r <= 'Z'
+}
+
+// isHookName は React Hook 命名規約（useXxx）かどうかを判定
+func isHookName(name string) bool {
+	if len(name) < 4 {
+		return false
+	}
+	if !strings.HasPrefix(name, "use") {
+		return false
+	}
+	// use の後の文字が大文字であること（useAuth, useCounter など）
+	r := rune(name[3])
+	return r >= 'A' && r <= 'Z'
+}
+
 // extractFromNode はノードからシンボルを再帰的に抽出
 func extractFromNode(node *sitter.Node, content []byte, filePath string) []Symbol {
 	var symbols []Symbol
@@ -96,6 +123,14 @@ func extractFromNode(node *sitter.Node, content []byte, filePath string) []Symbo
 		// ChildCount > 0 の場合のみ処理（キーワードノードではなく関数式ノード）
 		if node.ChildCount() > 0 {
 			symbols = append(symbols, extractJSFunction(node, content, filePath))
+		}
+
+	// Issue #62: Arrow Function Components / Hooks
+	case "lexical_declaration", "variable_declaration":
+		if isJSFamily(ext) {
+			if sym := extractArrowFunctionOrHook(node, content, filePath); sym != nil {
+				symbols = append(symbols, *sym)
+			}
 		}
 
 	case "class_declaration":
@@ -452,9 +487,15 @@ func extractJSFunction(node *sitter.Node, content []byte, filePath string) Symbo
 		sig += ": " + typeContent
 	}
 
+	// Issue #62: Hook判定（useXxx パターン）
+	kind := "function"
+	if isHookName(name) {
+		kind = "hook"
+	}
+
 	return Symbol{
 		Name:      name,
-		Kind:      "function",
+		Kind:      kind,
 		Signature: sig,
 		FilePath:  filePath,
 		Line:      int(node.StartPoint().Row) + 1,
@@ -1747,4 +1788,113 @@ func extractConfigFileSymbols(filePath string) (*FileSymbols, error) {
 		Path:    filePath,
 		Symbols: symbols,
 	}, nil
+}
+
+// ================== Issue #62: Arrow Function Components / Hooks ==================
+
+// extractArrowFunctionOrHook は Arrow Function Component または Hook を抽出
+// const Header = () => {} → component
+// const useAuth = () => {} → hook
+func extractArrowFunctionOrHook(node *sitter.Node, content []byte, filePath string) *Symbol {
+	// lexical_declaration / variable_declaration の子ノードを探索
+	// 構造: lexical_declaration -> variable_declarator -> (name, arrow_function)
+	var declarator *sitter.Node
+
+	for i := 0; i < int(node.ChildCount()); i++ {
+		child := node.Child(i)
+		if child == nil {
+			continue
+		}
+		if child.Type() == "variable_declarator" {
+			declarator = child
+			break
+		}
+	}
+
+	if declarator == nil {
+		return nil
+	}
+
+	// variable_declarator から name と value を取得
+	var nameNode, valueNode, typeAnnotation *sitter.Node
+
+	for i := 0; i < int(declarator.ChildCount()); i++ {
+		child := declarator.Child(i)
+		if child == nil {
+			continue
+		}
+		switch child.Type() {
+		case "identifier":
+			nameNode = child
+		case "arrow_function":
+			valueNode = child
+		case "type_annotation":
+			typeAnnotation = child
+		}
+	}
+
+	// Arrow Function でなければスキップ
+	if valueNode == nil {
+		return nil
+	}
+
+	name := ""
+	if nameNode != nil {
+		name = nameNode.Content(content)
+	}
+
+	// 名前がなければスキップ
+	if name == "" {
+		return nil
+	}
+
+	// Kind を判定
+	kind := "function"
+	if isHookName(name) {
+		kind = "hook"
+	} else if isPascalCase(name) {
+		kind = "component"
+	} else {
+		// 通常の変数（小文字始まり、hookでもない）はスキップ
+		// 例: const handler = () => {} はスキップ
+		return nil
+	}
+
+	// シグネチャを構築
+	// const Header: React.FC<Props> = () => ...
+	declKeyword := "const"
+	if node.Type() == "variable_declaration" {
+		// var を使用している場合
+		for i := 0; i < int(node.ChildCount()); i++ {
+			child := node.Child(i)
+			if child != nil && child.Type() == "var" {
+				declKeyword = "var"
+				break
+			}
+		}
+	}
+
+	// パラメータを取得
+	params := "()"
+	for i := 0; i < int(valueNode.ChildCount()); i++ {
+		child := valueNode.Child(i)
+		if child != nil && (child.Type() == "formal_parameters" || child.Type() == "parameters") {
+			params = extractTSParams(child, content)
+			break
+		}
+	}
+
+	sig := declKeyword + " " + name
+	if typeAnnotation != nil {
+		sig += typeAnnotation.Content(content)
+	}
+	sig += " = " + params + " => ..."
+
+	return &Symbol{
+		Name:      name,
+		Kind:      kind,
+		Signature: sig,
+		FilePath:  filePath,
+		Line:      int(node.StartPoint().Row) + 1,
+	}
 }
