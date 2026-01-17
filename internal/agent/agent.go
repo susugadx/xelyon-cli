@@ -107,6 +107,8 @@ You have access to the following tools:
 - delete_lines: Delete line range from file. Args: {"path": "...", "start_line": "N", "end_line": "M"}
 - delete_file: Delete file permanently (with backup). Args: {"path": "..."}
 - move_file: Move/rename file. Args: {"src": "...", "dest": "..."}
+- restore_backup: Restore file from backup. Args: {"path": "...", "backup_path": "..."} (backup_path optional, uses latest if omitted)
+- list_backups: List available backups for a file. Args: {"path": "..."}
 
 ### Code Quality
 - lint: Run linter with optional auto-fix. Args: {"path": "...", "auto_fix": "true|false"} (path optional, default: ".")

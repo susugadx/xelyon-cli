@@ -459,6 +459,8 @@ AIが自動で以下のツールを使用します。ユーザーが直接呼び
 | `delete_lines` | 指定行を削除 | `path`, `start_line`, `end_line` |
 | `list_dir` | ディレクトリ一覧取得 | `path` |
 | `create_dir` | ディレクトリ作成 | `path` |
+| `restore_backup` | バックアップから復元 | `path`, `backup_path` (オプション) |
+| `list_backups` | バックアップ一覧表示 | `path` |
 
 ### Git操作
 

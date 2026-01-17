@@ -1,5 +1,7 @@
 package tools
 
+import "fmt"
+
 // builtin.go - すべての組み込みツールのWrapper実装
 
 // ===== Bash Tool =====
@@ -476,6 +478,33 @@ func (t *AstGrepTool) Run(args map[string]string) (string, *FileChange, error) {
 	return result, nil, nil
 }
 
+// ===== Restore Backup Tool =====
+
+// RestoreBackupTool restores a file from its backup
+type RestoreBackupTool struct{}
+
+func (t *RestoreBackupTool) Name() string { return "restore_backup" }
+
+func (t *RestoreBackupTool) Run(args map[string]string) (string, *FileChange, error) {
+	result, err := executeRestoreBackup(args["path"], args["backup_path"])
+	if err != nil {
+		return fmt.Sprintf("Error: %v", err), nil, err
+	}
+	return result, nil, nil
+}
+
+// ===== List Backups Tool =====
+
+// ListBackupsTool lists available backups for a file
+type ListBackupsTool struct{}
+
+func (t *ListBackupsTool) Name() string { return "list_backups" }
+
+func (t *ListBackupsTool) Run(args map[string]string) (string, *FileChange, error) {
+	result := executeListBackups(args["path"])
+	return result, nil, nil
+}
+
 // ===== Registry Registration =====
 
 // RegisterBuiltinTools はすべての組み込みツールを登録
@@ -502,14 +531,16 @@ func RegisterBuiltinTools(r *Registry) {
 	r.Register(&CreateDirTool{})
 	r.Register(&RunTestTool{})
 	r.Register(&FormatTool{})
-	r.Register(&InsertAfterTool{})  // NEW: Phase 3
-	r.Register(&InsertBeforeTool{}) // NEW: Phase 3
-	r.Register(&CopyFileTool{})     // NEW: Phase 3
-	r.Register(&DeleteLinesTool{})  // NEW: Phase 4
-	r.Register(&DeleteFileTool{})   // NEW: Phase 4
-	r.Register(&MoveFileTool{})     // NEW: Phase 4
-	r.Register(&LintTool{})         // NEW: Phase 4
-	r.Register(&AstGrepTool{})      // NEW: Issue #55 - ast-grep structural search
+	r.Register(&InsertAfterTool{})   // NEW: Phase 3
+	r.Register(&InsertBeforeTool{})  // NEW: Phase 3
+	r.Register(&CopyFileTool{})      // NEW: Phase 3
+	r.Register(&DeleteLinesTool{})   // NEW: Phase 4
+	r.Register(&DeleteFileTool{})    // NEW: Phase 4
+	r.Register(&MoveFileTool{})      // NEW: Phase 4
+	r.Register(&LintTool{})          // NEW: Phase 4
+	r.Register(&AstGrepTool{})       // NEW: Issue #55 - ast-grep structural search
+	r.Register(&RestoreBackupTool{}) // NEW: restore file from backup
+	r.Register(&ListBackupsTool{})   // NEW: list available backups
 }
 
 // init は自動的にデフォルトレジストリに全ツールを登録
