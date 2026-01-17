@@ -413,6 +413,73 @@ $ xelyon
 
 詳細: [コマンドリファレンス - メモリ](docs/commands.md#memory-コマンドnew)
 
+### 効果的なワークフロー例
+
+#### 1. 新機能実装（Plan Mode）
+
+```bash
+> /plan on
+> ユーザー認証機能を追加して
+
+📋 Generating execution plan...
+# → 計画が表示される → y で承認 → 自動実行
+
+> /review --fix    # 実装後にレビュー＆修正
+> /exit            # 終了時にルール学習を提案
+```
+
+#### 2. コードレビュー + 自動修正
+
+```bash
+# セキュリティ重視でレビュー＆修正
+> /review --security --fix
+
+# 並列モードで高速修正（大規模変更時）
+> /review --fix --parallel --workers 8
+
+# 特定ディレクトリのみ
+> /review internal/api/ --fix
+```
+
+#### 3. リファクタリング分析
+
+```bash
+# AI分析付きリファクタリング提案
+> /refactor --ai
+
+# 自動修正まで実行
+> /refactor --ai --fix --yes
+
+# 閾値カスタマイズ（300行超ファイル、50行超関数を検出）
+> /refactor --max-file-lines 300 --max-func-lines 50
+```
+
+#### 4. 日常的な開発フロー
+
+```bash
+$ xelyon
+> バグ #123 を修正して
+# → AIが修正
+
+> /review           # 変更をレビュー
+> /undo             # 問題があれば戻す
+> /review --fix     # 修正を適用
+
+> git_add & commit  # AIにコミットを依頼
+> /exit             # ルール学習を提案
+```
+
+#### 5. コマンド組み合わせ早見表
+
+| やりたいこと | コマンド |
+|------------|---------|
+| 計画を立てて実装 | `/plan on` → リクエスト |
+| セキュリティチェック | `/review --security` |
+| 自動修正（高速） | `/review --fix --parallel` |
+| AIリファクタリング | `/refactor --ai --fix` |
+| ルールを記憶 | `/memory add <ルール>` |
+| 設定確認 | `/config show` |
+
 ## ドキュメント
 
 - [コマンド一覧](docs/commands.md) - 全コマンド、29ツール、使用例
