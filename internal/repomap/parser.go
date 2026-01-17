@@ -74,6 +74,9 @@ var SupportedLanguages = map[string]*sitter.Language{
 	"Makefile":    nil, // Makefileは正規表現ベースで処理
 	".mk":         nil, // Makefileの.mk拡張子
 	"Jenkinsfile": nil, // Jenkinsfileは正規表現ベースで処理
+	// Issue #63: Vue/Svelte SFC（ハイブリッド方式で処理）
+	".vue":    nil,
+	".svelte": nil,
 }
 
 // GetLanguage はファイル拡張子から言語を取得
@@ -112,4 +115,10 @@ func IsConfigFile(filePath string) bool {
 		return true
 	}
 	return false
+}
+
+// IsSFCFile は Vue/Svelte SFC ファイルかどうか（Issue #63）
+func IsSFCFile(filePath string) bool {
+	ext := strings.ToLower(filepath.Ext(filePath))
+	return ext == ".vue" || ext == ".svelte"
 }
