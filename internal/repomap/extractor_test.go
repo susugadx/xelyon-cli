@@ -2062,3 +2062,397 @@ func TestExtractTailwindConfigEmptyPlugins(t *testing.T) {
 		t.Error("Expected to find 'content' config")
 	}
 }
+
+// ================== Elixir Tests ==================
+
+func TestExtractElixirModule(t *testing.T) {
+	content := `defmodule MyApp.Users do
+  @moduledoc "User management"
+
+  def get_user(id) do
+    Repo.get(User, id)
+  end
+
+  defp validate(user) do
+    User.changeset(user)
+  end
+end
+`
+	tmpDir := t.TempDir()
+	testutil.CreateTempFile(t, tmpDir, "users.ex", content)
+	testFile := filepath.Join(tmpDir, "users.ex")
+
+	fileSymbols, err := ExtractSymbols(testFile)
+	if err != nil {
+		t.Fatalf("ExtractSymbols failed: %v", err)
+	}
+	if fileSymbols == nil {
+		t.Fatal("Expected fileSymbols, got nil")
+	}
+
+	// シンボルをマップに集約
+	symbolMap := make(map[string]Symbol)
+	for _, sym := range fileSymbols.Symbols {
+		symbolMap[sym.Name] = sym
+	}
+
+	// defmodule MyApp.Users
+	if sym, ok := symbolMap["MyApp.Users"]; !ok {
+		t.Error("Expected to find 'MyApp.Users' module")
+	} else {
+		if sym.Kind != "module" {
+			t.Errorf("Expected kind 'module', got '%s'", sym.Kind)
+		}
+		if !strings.Contains(sym.Signature, "defmodule") {
+			t.Errorf("Expected signature to contain 'defmodule', got '%s'", sym.Signature)
+		}
+	}
+
+	// def get_user
+	if sym, ok := symbolMap["get_user"]; !ok {
+		t.Error("Expected to find 'get_user' function")
+	} else {
+		if sym.Kind != "function" {
+			t.Errorf("Expected kind 'function', got '%s'", sym.Kind)
+		}
+		if !strings.Contains(sym.Signature, "def get_user") {
+			t.Errorf("Expected signature to contain 'def get_user', got '%s'", sym.Signature)
+		}
+	}
+
+	// defp validate（プライベート関数）
+	if sym, ok := symbolMap["validate"]; !ok {
+		t.Error("Expected to find 'validate' private function")
+	} else {
+		if sym.Kind != "private_function" {
+			t.Errorf("Expected kind 'private_function', got '%s'", sym.Kind)
+		}
+		if !strings.Contains(sym.Signature, "defp") {
+			t.Errorf("Expected signature to contain 'defp', got '%s'", sym.Signature)
+		}
+	}
+}
+
+func TestExtractElixirPhoenixController(t *testing.T) {
+	content := `defmodule MyAppWeb.UserController do
+  use MyAppWeb, :controller
+
+  def index(conn, _params) do
+    users = Users.list_users()
+    render(conn, "index.html", users: users)
+  end
+
+  def show(conn, %{"id" => id}) do
+    user = Users.get_user!(id)
+    render(conn, "show.html", user: user)
+  end
+
+  def create(conn, %{"user" => user_params}) do
+    case Users.create_user(user_params) do
+      {:ok, user} ->
+        redirect(conn, to: Routes.user_path(conn, :show, user))
+      {:error, changeset} ->
+        render(conn, "new.html", changeset: changeset)
+    end
+  end
+end
+`
+	tmpDir := t.TempDir()
+	testutil.CreateTempFile(t, tmpDir, "user_controller.ex", content)
+	testFile := filepath.Join(tmpDir, "user_controller.ex")
+
+	fileSymbols, err := ExtractSymbols(testFile)
+	if err != nil {
+		t.Fatalf("ExtractSymbols failed: %v", err)
+	}
+	if fileSymbols == nil {
+		t.Fatal("Expected fileSymbols, got nil")
+	}
+
+	// 関数を探す
+	functions := make(map[string]Symbol)
+	for _, sym := range fileSymbols.Symbols {
+		if sym.Kind == "function" {
+			functions[sym.Name] = sym
+		}
+	}
+
+	// index, show, create が抽出されるか
+	expectedFuncs := []string{"index", "show", "create"}
+	for _, name := range expectedFuncs {
+		if _, ok := functions[name]; !ok {
+			t.Errorf("Expected to find '%s' function", name)
+		}
+	}
+}
+
+func TestExtractElixirExsScript(t *testing.T) {
+	content := `defmodule Mix.Tasks.MyTask do
+  use Mix.Task
+
+  def run(args) do
+    IO.puts("Running task with args: #{inspect(args)}")
+  end
+end
+`
+	tmpDir := t.TempDir()
+	testutil.CreateTempFile(t, tmpDir, "my_task.exs", content)
+	testFile := filepath.Join(tmpDir, "my_task.exs")
+
+	fileSymbols, err := ExtractSymbols(testFile)
+	if err != nil {
+		t.Fatalf("ExtractSymbols failed: %v", err)
+	}
+	if fileSymbols == nil {
+		t.Fatal("Expected fileSymbols, got nil")
+	}
+
+	// .exs ファイルでもモジュールと関数が抽出されるか
+	var foundModule, foundFunc bool
+	for _, sym := range fileSymbols.Symbols {
+		if sym.Name == "Mix.Tasks.MyTask" && sym.Kind == "module" {
+			foundModule = true
+		}
+		if sym.Name == "run" && sym.Kind == "function" {
+			foundFunc = true
+		}
+	}
+
+	if !foundModule {
+		t.Error("Expected to find 'Mix.Tasks.MyTask' module in .exs file")
+	}
+	if !foundFunc {
+		t.Error("Expected to find 'run' function in .exs file")
+	}
+}
+
+func TestElixirIsSupportedFile(t *testing.T) {
+	tests := []struct {
+		path     string
+		expected bool
+	}{
+		{"lib/my_app.ex", true},
+		{"test/my_app_test.exs", true},
+		{"mix.exs", true},
+		{"config/config.exs", true},
+		{"main.js", true},   // JSはサポート
+		{"test.txt", false}, // txtはサポート外
+	}
+
+	for _, tt := range tests {
+		result := IsSupportedFile(tt.path)
+		if result != tt.expected {
+			t.Errorf("IsSupportedFile(%s) = %v, expected %v", tt.path, result, tt.expected)
+		}
+	}
+}
+
+// ================== Lua Tests ==================
+
+func TestExtractLuaLocalFunction(t *testing.T) {
+	content := `local function greet(name)
+    print("Hello, " .. name)
+end
+
+local function add(a, b)
+    return a + b
+end
+`
+	tmpDir := t.TempDir()
+	testutil.CreateTempFile(t, tmpDir, "utils.lua", content)
+	testFile := filepath.Join(tmpDir, "utils.lua")
+
+	fileSymbols, err := ExtractSymbols(testFile)
+	if err != nil {
+		t.Fatalf("ExtractSymbols failed: %v", err)
+	}
+	if fileSymbols == nil {
+		t.Fatal("Expected fileSymbols, got nil")
+	}
+
+	// シンボルをマップに集約
+	symbolMap := make(map[string]Symbol)
+	for _, sym := range fileSymbols.Symbols {
+		symbolMap[sym.Name] = sym
+	}
+
+	// local function greet
+	if sym, ok := symbolMap["greet"]; !ok {
+		t.Error("Expected to find 'greet' function")
+	} else {
+		if sym.Kind != "function" {
+			t.Errorf("Expected kind 'function', got '%s'", sym.Kind)
+		}
+		if !strings.Contains(sym.Signature, "local") {
+			t.Errorf("Expected signature to contain 'local', got '%s'", sym.Signature)
+		}
+		if !strings.Contains(sym.Signature, "(name)") {
+			t.Errorf("Expected signature to contain '(name)', got '%s'", sym.Signature)
+		}
+	}
+
+	// local function add
+	if sym, ok := symbolMap["add"]; !ok {
+		t.Error("Expected to find 'add' function")
+	} else {
+		if !strings.Contains(sym.Signature, "(a, b)") {
+			t.Errorf("Expected signature to contain '(a, b)', got '%s'", sym.Signature)
+		}
+	}
+}
+
+func TestExtractLuaGlobalFunction(t *testing.T) {
+	content := `function globalFunc()
+    return 42
+end
+
+function calculate(x, y, z)
+    return x + y + z
+end
+`
+	tmpDir := t.TempDir()
+	testutil.CreateTempFile(t, tmpDir, "global.lua", content)
+	testFile := filepath.Join(tmpDir, "global.lua")
+
+	fileSymbols, err := ExtractSymbols(testFile)
+	if err != nil {
+		t.Fatalf("ExtractSymbols failed: %v", err)
+	}
+	if fileSymbols == nil {
+		t.Fatal("Expected fileSymbols, got nil")
+	}
+
+	// シンボルをマップに集約
+	symbolMap := make(map[string]Symbol)
+	for _, sym := range fileSymbols.Symbols {
+		symbolMap[sym.Name] = sym
+	}
+
+	// function globalFunc（localなし）
+	if sym, ok := symbolMap["globalFunc"]; !ok {
+		t.Error("Expected to find 'globalFunc' function")
+	} else {
+		// globalなのでlocalが含まれない
+		if strings.Contains(sym.Signature, "local") {
+			t.Errorf("Expected signature NOT to contain 'local', got '%s'", sym.Signature)
+		}
+	}
+
+	// function calculate
+	if _, ok := symbolMap["calculate"]; !ok {
+		t.Error("Expected to find 'calculate' function")
+	}
+}
+
+func TestExtractLuaModuleFunction(t *testing.T) {
+	content := `local M = {}
+
+function M.init()
+    M.data = {}
+end
+
+function M.add(item)
+    table.insert(M.data, item)
+end
+
+function M.get(index)
+    return M.data[index]
+end
+
+return M
+`
+	tmpDir := t.TempDir()
+	testutil.CreateTempFile(t, tmpDir, "module.lua", content)
+	testFile := filepath.Join(tmpDir, "module.lua")
+
+	fileSymbols, err := ExtractSymbols(testFile)
+	if err != nil {
+		t.Fatalf("ExtractSymbols failed: %v", err)
+	}
+	if fileSymbols == nil {
+		t.Fatal("Expected fileSymbols, got nil")
+	}
+
+	// モジュール関数を探す
+	moduleFuncs := make(map[string]Symbol)
+	for _, sym := range fileSymbols.Symbols {
+		if strings.HasPrefix(sym.Name, "M.") {
+			moduleFuncs[sym.Name] = sym
+		}
+	}
+
+	// M.init, M.add, M.get が抽出されるか
+	expectedFuncs := []string{"M.init", "M.add", "M.get"}
+	for _, name := range expectedFuncs {
+		if _, ok := moduleFuncs[name]; !ok {
+			t.Errorf("Expected to find '%s' module function", name)
+		}
+	}
+}
+
+func TestExtractLuaNeovimConfig(t *testing.T) {
+	// Neovim設定ファイルのパターン
+	content := `local opts = { noremap = true, silent = true }
+
+local function map(mode, lhs, rhs)
+    vim.keymap.set(mode, lhs, rhs, opts)
+end
+
+function Setup()
+    map('n', '<leader>ff', '<cmd>Telescope find_files<cr>')
+    map('n', '<leader>fg', '<cmd>Telescope live_grep<cr>')
+end
+
+return {
+    setup = Setup,
+    map = map,
+}
+`
+	tmpDir := t.TempDir()
+	testutil.CreateTempFile(t, tmpDir, "keymaps.lua", content)
+	testFile := filepath.Join(tmpDir, "keymaps.lua")
+
+	fileSymbols, err := ExtractSymbols(testFile)
+	if err != nil {
+		t.Fatalf("ExtractSymbols failed: %v", err)
+	}
+	if fileSymbols == nil {
+		t.Fatal("Expected fileSymbols, got nil")
+	}
+
+	// 関数を探す
+	functions := make(map[string]Symbol)
+	for _, sym := range fileSymbols.Symbols {
+		if sym.Kind == "function" {
+			functions[sym.Name] = sym
+		}
+	}
+
+	// map（local）とSetup（global）が抽出されるか
+	if _, ok := functions["map"]; !ok {
+		t.Error("Expected to find 'map' function")
+	}
+	if _, ok := functions["Setup"]; !ok {
+		t.Error("Expected to find 'Setup' function")
+	}
+}
+
+func TestLuaIsSupportedFile(t *testing.T) {
+	tests := []struct {
+		path     string
+		expected bool
+	}{
+		{"init.lua", true},
+		{"config/keymaps.lua", true},
+		{"plugin.lua", true},
+		{"main.js", true},   // JSはサポート
+		{"test.txt", false}, // txtはサポート外
+	}
+
+	for _, tt := range tests {
+		result := IsSupportedFile(tt.path)
+		if result != tt.expected {
+			t.Errorf("IsSupportedFile(%s) = %v, expected %v", tt.path, result, tt.expected)
+		}
+	}
+}

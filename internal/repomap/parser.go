@@ -14,11 +14,13 @@ import (
 	"github.com/smacker/go-tree-sitter/csharp"
 	"github.com/smacker/go-tree-sitter/css"
 	"github.com/smacker/go-tree-sitter/dockerfile"
+	"github.com/smacker/go-tree-sitter/elixir"
 	"github.com/smacker/go-tree-sitter/golang"
 	"github.com/smacker/go-tree-sitter/html"
 	"github.com/smacker/go-tree-sitter/java"
 	"github.com/smacker/go-tree-sitter/javascript"
 	"github.com/smacker/go-tree-sitter/kotlin"
+	"github.com/smacker/go-tree-sitter/lua"
 	markdown "github.com/smacker/go-tree-sitter/markdown/tree-sitter-markdown"
 	"github.com/smacker/go-tree-sitter/php"
 	"github.com/smacker/go-tree-sitter/python"
@@ -58,6 +60,10 @@ var SupportedLanguages = map[string]*sitter.Language{
 	".cs":    csharp.GetLanguage(),
 	".scala": scala.GetLanguage(),
 	".php":   php.GetLanguage(),
+	// Tier 2.5: Elixir/Lua（Neovim/Phoenix人気）
+	".ex":  elixir.GetLanguage(),
+	".exs": elixir.GetLanguage(),
+	".lua": lua.GetLanguage(),
 	// Tier 3: CSS/SCSS/フロントエンド (#59)
 	".css":  css.GetLanguage(),
 	".scss": css.GetLanguage(), // SCSSはCSSパーサーで基本構文を抽出
