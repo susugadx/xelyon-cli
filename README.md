@@ -103,22 +103,17 @@ xelyon --provider gemini --model gemini-2.0-flash-exp
 > /use openai gpt-4
 ```
 
-### 4. 画像入力（マルチモーダル）
-
-画像ファイルを指定して、画像を見ながらコード生成・分析ができます。
+### 4. 設定を確認・変更
 
 ```bash
-# ワイヤーフレームからReactコンポーネントを生成
-xelyon -i wireframe.png "この画面をReactで実装して"
+# CLI内で全設定を確認（デフォルトとの差分を ⚡ で表示）
+> /config show
 
-# エラースクリーンショットから原因を分析
-xelyon --image error.png --provider gemini "このエラーを修正して"
-
-# 対話モード中にも使用可能（image:プレフィックス）
-> image:screenshot.png このUIの問題点を教えて
+# 設定ファイルを直接編集
+vi ~/.xelyon/config.yaml
 ```
 
-**対応プロバイダー**: Gemini, Claude, OpenAI（DeepSeek, Ollama, Groqは非対応）
+📖 **設定リファレンス**: [docs/config.md](docs/config.md) - 全設定項目と環境変数の一覧
 
 ## 基本的な使い方
 
@@ -266,6 +261,23 @@ AIが自動で以下のツールを使用します:
 - **検索**: `search_code`, `search_file`, `ast_grep`（構造的コード検索）, `web_search`
 
 全ツール: [コマンドリファレンス](docs/commands.md#利用可能なツール)
+
+### 画像入力（マルチモーダル）
+
+画像ファイルを指定して、画像を見ながらコード生成・分析ができます。
+
+```bash
+# ワイヤーフレームからReactコンポーネントを生成
+xelyon -i wireframe.png "この画面をReactで実装して"
+
+# エラースクリーンショットから原因を分析
+xelyon --image error.png --provider gemini "このエラーを修正して"
+
+# 対話モード中にも使用可能（image:プレフィックス）
+> image:screenshot.png このUIの問題点を教えて
+```
+
+**対応プロバイダー**: Gemini, Claude, OpenAI（DeepSeek, Ollama, Groqは非対応）
 
 ### Plan Mode
 
