@@ -33,6 +33,10 @@ DeepSeek, OpenAI, Gemini, Claude, Ollama, Groq をシームレスに切り替え
 画像ファイルを指定してUIデザインからコード生成。
 エラースクリーンショットから原因分析も可能。
 
+### 🗺️ Repo Map（30言語対応）
+Tree-sitterによる高精度なコード構造解析。
+Go, TypeScript, Python, Rust, Java, C/C++, Ruby, Kotlin, Swift, C#, Scala, PHP, Elixir, Lua, CSS/SCSS, HTML, Vue, Svelte, YAML, TOML, SQL, Bash, Markdown, Dockerfile等に対応。
+
 ### 📝 プロジェクト設定（XELYON.md）
 プロジェクトごとのルールをAIが学習。
 終了時に会話から抽出したルールを自動提案。

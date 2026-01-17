@@ -326,12 +326,21 @@ ast-grep scan --rule rule.yml
     - `internal/agent/repomap_cache.go`（agent起動時の統合）
 
 - **Tree-sitter解析**: AST解析で正確なシンボル抽出
-- **14言語対応**:
-  - **Tier 0（既存）**: Go, JavaScript/JSX, TypeScript/TSX, Python
+- **30言語対応**:
+  - **Tier 0（コア）**: Go, JavaScript/JSX, TypeScript/TSX, Python
   - **Tier 1（高優先度）**: Rust, Java, C/C++, Ruby
   - **Tier 2（中優先度）**: Kotlin, Swift, C#, Scala, PHP
+  - **Tier 2.5（Neovim/Phoenix人気）**: Elixir (.ex, .exs), Lua (.lua)
+  - **Tier 3（フロントエンド）**: CSS/SCSS, HTML (.html, .htm), Vue (.vue), Svelte (.svelte), Tailwind CSS config
+  - **Tier 4（設定/マークアップ）**: YAML, TOML, SQL, Bash/Zsh, Markdown, Dockerfile, Makefile, Jenkinsfile
 - **シンボル抽出**: 関数、メソッド、構造体、クラス、インターフェース、トレイト、enum、モジュール
-- **シグネチャ改善**: JS/Pythonで引数情報・戻り値型を含む完全なシグネチャ抽出
+- **シグネチャ改善**: JS/TS/Pythonで引数情報・戻り値型・async/awaitを含む完全なシグネチャ抽出
+- **特殊ファイル対応**:
+  - **Vue/Svelte SFC**: `<script>`, `<style>`セクションを個別解析（行番号オフセット対応）
+  - **HTML**: id/class属性、セマンティック要素（header, nav, main, article, footer）抽出
+  - **Tailwind CSS**: theme.extend.*, plugins, content設定を抽出
+  - **Elixir**: defmodule, def, defp（プライベート関数）抽出
+  - **Lua**: local/global関数、M.func形式のモジュール関数抽出
 - **トークン制限**: 大規模プロジェクトでも効率的にコンテキスト圧縮
 - **自動生成**: 起動時にプロジェクトをスキャン
 - **除外パターン**: node_modules, .git, vendor等は自動除外
