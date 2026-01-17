@@ -15,6 +15,7 @@ import (
 	"github.com/smacker/go-tree-sitter/css"
 	"github.com/smacker/go-tree-sitter/dockerfile"
 	"github.com/smacker/go-tree-sitter/golang"
+	"github.com/smacker/go-tree-sitter/html"
 	"github.com/smacker/go-tree-sitter/java"
 	"github.com/smacker/go-tree-sitter/javascript"
 	"github.com/smacker/go-tree-sitter/kotlin"
@@ -60,6 +61,9 @@ var SupportedLanguages = map[string]*sitter.Language{
 	// Tier 3: CSS/SCSS/フロントエンド (#59)
 	".css":  css.GetLanguage(),
 	".scss": css.GetLanguage(), // SCSSはCSSパーサーで基本構文を抽出
+	// Issue #64: HTML id/class属性抽出
+	".html": html.GetLanguage(),
+	".htm":  html.GetLanguage(),
 	// Tier 4: 設定/マークアップ言語 (#60)
 	".yaml":       yaml.GetLanguage(),
 	".yml":        yaml.GetLanguage(),
