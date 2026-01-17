@@ -83,8 +83,13 @@ func extractFromNode(node *sitter.Node, content []byte, filePath string) []Symbo
 		symbols = append(symbols, extractGoType(node, content, filePath)...)
 
 	// JavaScript/TypeScript
+	// "function" ノードは匿名関数式 (function expression)
+	// 注意: "function" キーワードノードではない（それは ChildCount=0）
 	case "function":
-		symbols = append(symbols, extractJSFunction(node, content, filePath))
+		// ChildCount > 0 の場合のみ処理（キーワードノードではなく関数式ノード）
+		if node.ChildCount() > 0 {
+			symbols = append(symbols, extractJSFunction(node, content, filePath))
+		}
 
 	case "class_declaration":
 		if ext == ".java" {
@@ -300,29 +305,49 @@ func extractGoType(node *sitter.Node, content []byte, filePath string) []Symbol 
 	return symbols
 }
 
-// JS/Python用の抽出関数（シグネチャ改善版）
+// JS/TS用の抽出関数（TypeScript型注釈対応版）
 func extractJSFunction(node *sitter.Node, content []byte, filePath string) Symbol {
-	nameNode := node.ChildByFieldName("name")
-	paramsNode := node.ChildByFieldName("parameters")
+	// 子ノードを直接探索（TypeScriptパーサーではフィールド名が異なる場合がある）
+	var nameNode, paramsNode, returnTypeNode *sitter.Node
+	isAsync := false
+
+	for i := 0; i < int(node.ChildCount()); i++ {
+		child := node.Child(i)
+		if child == nil {
+			continue
+		}
+		switch child.Type() {
+		case "identifier":
+			nameNode = child
+		case "formal_parameters", "parameters":
+			paramsNode = child
+		case "type_annotation":
+			returnTypeNode = child
+		case "async":
+			isAsync = true
+		}
+	}
+
+	// フィールド名でも試す（一部のパーサー用）
+	if nameNode == nil {
+		nameNode = node.ChildByFieldName("name")
+	}
+	if paramsNode == nil {
+		paramsNode = node.ChildByFieldName("parameters")
+	}
+	if returnTypeNode == nil {
+		returnTypeNode = node.ChildByFieldName("return_type")
+	}
 
 	name := ""
 	if nameNode != nil {
 		name = nameNode.Content(content)
 	}
 
+	// TypeScript: パラメータの型注釈を含む完全なシグネチャを構築
 	params := "()"
 	if paramsNode != nil {
-		params = paramsNode.Content(content)
-	}
-
-	// async チェック
-	isAsync := false
-	for i := 0; i < int(node.ChildCount()); i++ {
-		child := node.Child(i)
-		if child != nil && child.Type() == "async" {
-			isAsync = true
-			break
-		}
+		params = extractTSParams(paramsNode, content)
 	}
 
 	prefix := "function"
@@ -330,13 +355,37 @@ func extractJSFunction(node *sitter.Node, content []byte, filePath string) Symbo
 		prefix = "async function"
 	}
 
+	sig := prefix + " " + name + params
+
+	// TypeScript: 戻り値型注釈（type_annotationノードは ": Type" 形式）
+	if returnTypeNode != nil {
+		typeContent := returnTypeNode.Content(content)
+		// 先頭の ":" を除去
+		typeContent = strings.TrimSpace(strings.TrimPrefix(typeContent, ":"))
+		sig += ": " + typeContent
+	}
+
 	return Symbol{
 		Name:      name,
 		Kind:      "function",
-		Signature: prefix + " " + name + params,
+		Signature: sig,
 		FilePath:  filePath,
 		Line:      int(node.StartPoint().Row) + 1,
 	}
+}
+
+// extractTSParams はTypeScriptパラメータから型注釈を含むシグネチャを抽出
+func extractTSParams(paramsNode *sitter.Node, content []byte) string {
+	// パラメータノードをそのまま使う（型注釈を含む）
+	params := paramsNode.Content(content)
+	// 改行を除去してコンパクトに
+	params = strings.ReplaceAll(params, "\n", " ")
+	params = strings.ReplaceAll(params, "\t", "")
+	// 連続スペースを単一に
+	for strings.Contains(params, "  ") {
+		params = strings.ReplaceAll(params, "  ", " ")
+	}
+	return params
 }
 
 func extractJSClass(node *sitter.Node, content []byte, filePath string) Symbol {
@@ -356,32 +405,61 @@ func extractJSClass(node *sitter.Node, content []byte, filePath string) Symbol {
 }
 
 func extractJSMethod(node *sitter.Node, content []byte, filePath string) Symbol {
-	nameNode := node.ChildByFieldName("name")
-	paramsNode := node.ChildByFieldName("parameters")
+	// 子ノードを直接探索（TypeScriptパーサー対応）
+	var nameNode, paramsNode, returnTypeNode *sitter.Node
+	isAsync := false
+
+	for i := 0; i < int(node.ChildCount()); i++ {
+		child := node.Child(i)
+		if child == nil {
+			continue
+		}
+		switch child.Type() {
+		case "property_identifier", "identifier":
+			if nameNode == nil { // 最初のidentifierを名前として使用
+				nameNode = child
+			}
+		case "formal_parameters", "parameters":
+			paramsNode = child
+		case "type_annotation":
+			returnTypeNode = child
+		case "async":
+			isAsync = true
+		}
+	}
+
+	// フィールド名でも試す
+	if nameNode == nil {
+		nameNode = node.ChildByFieldName("name")
+	}
+	if paramsNode == nil {
+		paramsNode = node.ChildByFieldName("parameters")
+	}
+	if returnTypeNode == nil {
+		returnTypeNode = node.ChildByFieldName("return_type")
+	}
 
 	name := ""
 	if nameNode != nil {
 		name = nameNode.Content(content)
 	}
 
+	// TypeScript: パラメータの型注釈を含む
 	params := "()"
 	if paramsNode != nil {
-		params = paramsNode.Content(content)
-	}
-
-	// async チェック
-	isAsync := false
-	for i := 0; i < int(node.ChildCount()); i++ {
-		child := node.Child(i)
-		if child != nil && child.Type() == "async" {
-			isAsync = true
-			break
-		}
+		params = extractTSParams(paramsNode, content)
 	}
 
 	sig := name + params
 	if isAsync {
 		sig = "async " + sig
+	}
+
+	// TypeScript: 戻り値型注釈
+	if returnTypeNode != nil {
+		typeContent := returnTypeNode.Content(content)
+		typeContent = strings.TrimSpace(strings.TrimPrefix(typeContent, ":"))
+		sig += ": " + typeContent
 	}
 
 	return Symbol{
@@ -403,12 +481,21 @@ func extractPyFunction(node *sitter.Node, content []byte, filePath string) Symbo
 		name = nameNode.Content(content)
 	}
 
+	// パラメータから型注釈を含むシグネチャを抽出
 	params := "()"
 	if paramsNode != nil {
-		params = paramsNode.Content(content)
+		params = extractPyParams(paramsNode, content)
 	}
 
-	sig := "def " + name + params
+	// async def 検出: 親ノードまたは前の兄弟ノードをチェック
+	isAsync := isPythonAsyncFunction(node)
+
+	prefix := "def"
+	if isAsync {
+		prefix = "async def"
+	}
+
+	sig := prefix + " " + name + params
 	if returnTypeNode != nil {
 		sig += " -> " + returnTypeNode.Content(content)
 	}
@@ -420,6 +507,50 @@ func extractPyFunction(node *sitter.Node, content []byte, filePath string) Symbo
 		FilePath:  filePath,
 		Line:      int(node.StartPoint().Row) + 1,
 	}
+}
+
+// isPythonAsyncFunction はPython関数がasyncかどうかを判定
+func isPythonAsyncFunction(node *sitter.Node) bool {
+	// function_definition の前の兄弟ノードをチェック
+	parent := node.Parent()
+	if parent != nil {
+		for i := 0; i < int(parent.ChildCount()); i++ {
+			child := parent.Child(i)
+			if child == node {
+				// 自分自身の前をチェック
+				if i > 0 {
+					prev := parent.Child(i - 1)
+					if prev != nil && prev.Type() == "async" {
+						return true
+					}
+				}
+				break
+			}
+		}
+	}
+
+	// ノード自身の子ノードをチェック（一部のパーサーバージョン用）
+	for i := 0; i < int(node.ChildCount()); i++ {
+		child := node.Child(i)
+		if child != nil && child.Type() == "async" {
+			return true
+		}
+	}
+
+	return false
+}
+
+// extractPyParams はPythonパラメータから型注釈を含むシグネチャを抽出
+func extractPyParams(paramsNode *sitter.Node, content []byte) string {
+	params := paramsNode.Content(content)
+	// 改行を除去してコンパクトに
+	params = strings.ReplaceAll(params, "\n", " ")
+	params = strings.ReplaceAll(params, "\t", "")
+	// 連続スペースを単一に
+	for strings.Contains(params, "  ") {
+		params = strings.ReplaceAll(params, "  ", " ")
+	}
+	return params
 }
 
 func extractPyClass(node *sitter.Node, content []byte, filePath string) Symbol {

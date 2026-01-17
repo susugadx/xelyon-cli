@@ -436,6 +436,195 @@ func TestExtractUnsupportedLanguage(t *testing.T) {
 	}
 }
 
+// Issue #58: TypeScript型注釈抽出テスト
+func TestExtractTypeScriptFunction(t *testing.T) {
+	content := `function fetchUser(userId: string, options?: RequestOptions): Promise<User> {
+	return api.get('/users/' + userId);
+}
+
+async function createUser(name: string, age: number): Promise<User> {
+	return api.post('/users', { name, age });
+}
+`
+	tmpDir := t.TempDir()
+	testutil.CreateTempFile(t, tmpDir, "test.ts", content)
+	testFile := filepath.Join(tmpDir, "test.ts")
+
+	fileSymbols, err := ExtractSymbols(testFile)
+	if err != nil {
+		t.Fatalf("ExtractSymbols failed: %v", err)
+	}
+	if fileSymbols == nil {
+		t.Fatal("Expected fileSymbols, got nil")
+	}
+
+	// 関数シンボルを探す
+	var functions []Symbol
+	for _, s := range fileSymbols.Symbols {
+		if s.Kind == "function" {
+			functions = append(functions, s)
+		}
+	}
+
+	if len(functions) < 2 {
+		t.Fatalf("Expected at least 2 function symbols, got %d", len(functions))
+	}
+
+	// fetchUser関数: 型注釈が含まれているか
+	fetchUser := functions[0]
+	if fetchUser.Name != "fetchUser" {
+		t.Errorf("Expected 'fetchUser', got '%s'", fetchUser.Name)
+	}
+	// パラメータ型注釈
+	if !strings.Contains(fetchUser.Signature, "string") {
+		t.Errorf("Expected signature to contain type 'string', got '%s'", fetchUser.Signature)
+	}
+	// 戻り値型注釈
+	if !strings.Contains(fetchUser.Signature, "Promise<User>") {
+		t.Errorf("Expected signature to contain return type 'Promise<User>', got '%s'", fetchUser.Signature)
+	}
+
+	// createUser関数: async + 型注釈
+	createUser := functions[1]
+	if createUser.Name != "createUser" {
+		t.Errorf("Expected 'createUser', got '%s'", createUser.Name)
+	}
+	// async キーワード
+	if !strings.Contains(createUser.Signature, "async") {
+		t.Errorf("Expected signature to contain 'async', got '%s'", createUser.Signature)
+	}
+}
+
+// Issue #58: TypeScriptメソッド型注釈テスト
+func TestExtractTypeScriptMethod(t *testing.T) {
+	content := `class UserService {
+	async getUser(id: string): Promise<User> {
+		return this.api.get(id);
+	}
+
+	updateUser(id: string, data: UserData): User {
+		return this.api.put(id, data);
+	}
+}
+`
+	tmpDir := t.TempDir()
+	testutil.CreateTempFile(t, tmpDir, "service.ts", content)
+	testFile := filepath.Join(tmpDir, "service.ts")
+
+	fileSymbols, err := ExtractSymbols(testFile)
+	if err != nil {
+		t.Fatalf("ExtractSymbols failed: %v", err)
+	}
+	if fileSymbols == nil {
+		t.Fatal("Expected fileSymbols, got nil")
+	}
+
+	// メソッドシンボルを探す
+	var methods []Symbol
+	for _, s := range fileSymbols.Symbols {
+		if s.Kind == "method" {
+			methods = append(methods, s)
+		}
+	}
+
+	if len(methods) < 2 {
+		t.Fatalf("Expected at least 2 method symbols, got %d", len(methods))
+	}
+
+	// getUser: async + 型注釈
+	getUser := methods[0]
+	if getUser.Name != "getUser" {
+		t.Errorf("Expected 'getUser', got '%s'", getUser.Name)
+	}
+	if !strings.Contains(getUser.Signature, "async") {
+		t.Errorf("Expected signature to contain 'async', got '%s'", getUser.Signature)
+	}
+	if !strings.Contains(getUser.Signature, "string") {
+		t.Errorf("Expected signature to contain 'string', got '%s'", getUser.Signature)
+	}
+}
+
+// Issue #58: Python async def検出テスト
+func TestExtractPythonAsyncFunction(t *testing.T) {
+	content := `async def fetch_user(user_id: str) -> User:
+    return await api.get(f'/users/{user_id}')
+
+async def create_user(name: str, age: int) -> User:
+    return await api.post('/users', {'name': name, 'age': age})
+
+def sync_function(x: int) -> int:
+    return x * 2
+`
+	tmpDir := t.TempDir()
+	testutil.CreateTempFile(t, tmpDir, "async_test.py", content)
+	testFile := filepath.Join(tmpDir, "async_test.py")
+
+	fileSymbols, err := ExtractSymbols(testFile)
+	if err != nil {
+		t.Fatalf("ExtractSymbols failed: %v", err)
+	}
+	if fileSymbols == nil {
+		t.Fatal("Expected fileSymbols, got nil")
+	}
+
+	if len(fileSymbols.Symbols) < 3 {
+		t.Fatalf("Expected at least 3 symbols, got %d", len(fileSymbols.Symbols))
+	}
+
+	// fetch_user: async def
+	fetchUser := fileSymbols.Symbols[0]
+	if fetchUser.Name != "fetch_user" {
+		t.Errorf("Expected 'fetch_user', got '%s'", fetchUser.Name)
+	}
+	if !strings.Contains(fetchUser.Signature, "async def") {
+		t.Errorf("Expected signature to contain 'async def', got '%s'", fetchUser.Signature)
+	}
+
+	// sync_function: 通常の def
+	syncFunc := fileSymbols.Symbols[2]
+	if syncFunc.Name != "sync_function" {
+		t.Errorf("Expected 'sync_function', got '%s'", syncFunc.Name)
+	}
+	if strings.Contains(syncFunc.Signature, "async") {
+		t.Errorf("Expected signature NOT to contain 'async', got '%s'", syncFunc.Signature)
+	}
+	if !strings.HasPrefix(syncFunc.Signature, "def ") {
+		t.Errorf("Expected signature to start with 'def ', got '%s'", syncFunc.Signature)
+	}
+}
+
+// Issue #58: Python型注釈抽出テスト
+func TestExtractPythonTypeAnnotations(t *testing.T) {
+	content := `def process_data(items: list[str], options: dict[str, Any] = None) -> list[Result]:
+    return [process(item) for item in items]
+`
+	tmpDir := t.TempDir()
+	testutil.CreateTempFile(t, tmpDir, "types.py", content)
+	testFile := filepath.Join(tmpDir, "types.py")
+
+	fileSymbols, err := ExtractSymbols(testFile)
+	if err != nil {
+		t.Fatalf("ExtractSymbols failed: %v", err)
+	}
+	if fileSymbols == nil {
+		t.Fatal("Expected fileSymbols, got nil")
+	}
+
+	if len(fileSymbols.Symbols) < 1 {
+		t.Fatalf("Expected at least 1 symbol, got %d", len(fileSymbols.Symbols))
+	}
+
+	processData := fileSymbols.Symbols[0]
+	// パラメータ型注釈
+	if !strings.Contains(processData.Signature, "list[str]") {
+		t.Errorf("Expected signature to contain 'list[str]', got '%s'", processData.Signature)
+	}
+	// 戻り値型注釈
+	if !strings.Contains(processData.Signature, "-> list[Result]") {
+		t.Errorf("Expected signature to contain '-> list[Result]', got '%s'", processData.Signature)
+	}
+}
+
 func TestIsSupportedFile(t *testing.T) {
 	tests := []struct {
 		path     string
