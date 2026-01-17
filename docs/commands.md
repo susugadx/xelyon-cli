@@ -331,6 +331,20 @@ xelyon -m gemini-2.0-flash-exp
 xelyon "main.goを読んで説明して"
 ```
 
+### 画像入力（マルチモーダル）
+
+```bash
+# 画像ファイルを指定して起動
+xelyon -i wireframe.png "この画面をReactで実装して"
+xelyon --image error.png "このエラーを修正して"
+
+# プロバイダー指定と組み合わせ
+xelyon --image screenshot.png --provider gemini "このUIの問題点を教えて"
+```
+
+**対応フォーマット**: PNG, JPEG, GIF, WebP
+**対応プロバイダー**: Gemini, Claude, OpenAI（DeepSeek, Ollama, Groqは非対応）
+
 ### その他のオプション
 
 ```bash

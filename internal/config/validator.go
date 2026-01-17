@@ -38,8 +38,6 @@ type ValidationResult struct {
 
 var (
 	yellow = color.New(color.FgYellow)
-	red    = color.New(color.FgRed)
-	green  = color.New(color.FgGreen)
 	cyan   = color.New(color.FgCyan)
 )
 

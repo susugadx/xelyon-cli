@@ -100,6 +100,23 @@ xelyon --provider gemini --model gemini-2.0-flash-exp
 > /use openai gpt-4
 ```
 
+### 4. 画像入力（マルチモーダル）
+
+画像ファイルを指定して、画像を見ながらコード生成・分析ができます。
+
+```bash
+# ワイヤーフレームからReactコンポーネントを生成
+xelyon -i wireframe.png "この画面をReactで実装して"
+
+# エラースクリーンショットから原因を分析
+xelyon --image error.png --provider gemini "このエラーを修正して"
+
+# 対話モード中にも使用可能（image:プレフィックス）
+> image:screenshot.png このUIの問題点を教えて
+```
+
+**対応プロバイダー**: Gemini, Claude, OpenAI（DeepSeek, Ollama, Groqは非対応）
+
 ## 基本的な使い方
 
 ### Dry Run（安全な試行: ツール実行をシミュレート）
