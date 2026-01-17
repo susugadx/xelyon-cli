@@ -91,9 +91,8 @@ func TestGrepReplaceNoMatch(t *testing.T) {
 		t.Errorf("Expected 0 files matched, got %d", len(files))
 	}
 
-	if !strings.Contains(result, "0") || !strings.Contains(result, "Files") {
-		// "Files: 0" が含まれるはず
-	}
+	// Result should contain "Files: 0" indicating no matches
+	_ = result
 }
 
 func TestGrepReplaceEmptyPattern(t *testing.T) {

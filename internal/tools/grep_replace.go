@@ -33,9 +33,7 @@ func executeGrepReplace(pattern, replacement, path, filePattern string, dryRun b
 	if pattern == "" {
 		return "", nil, fmt.Errorf("pattern is required")
 	}
-	if replacement == "" && !dryRun {
-		// 空文字への置換は許可（削除として機能）
-	}
+	// Note: replacement == "" is allowed (acts as deletion)
 
 	if path == "" {
 		path = "."

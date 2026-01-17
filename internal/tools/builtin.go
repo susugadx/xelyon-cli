@@ -1,6 +1,14 @@
 package tools
 
-import "fmt"
+import (
+	"fmt"
+	"strconv"
+)
+
+// parseInt は文字列を整数に変換するヘルパー関数
+func parseInt(s string) (int, error) {
+	return strconv.Atoi(s)
+}
 
 // builtin.go - すべての組み込みツールのWrapper実装
 
@@ -505,6 +513,48 @@ func (t *ListBackupsTool) Run(args map[string]string) (string, *FileChange, erro
 	return result, nil, nil
 }
 
+// ===== Diff Files Tool =====
+
+// DiffFilesTool compares two files and shows differences
+type DiffFilesTool struct{}
+
+func (t *DiffFilesTool) Name() string { return "diff_files" }
+
+func (t *DiffFilesTool) Run(args map[string]string) (string, *FileChange, error) {
+	contextLines := 3
+	if args["context"] != "" {
+		if n, err := parseInt(args["context"]); err == nil && n > 0 {
+			contextLines = n
+		}
+	}
+	result, err := executeDiffFiles(args["file1"], args["file2"], contextLines)
+	if err != nil {
+		return fmt.Sprintf("Error: %v", err), nil, err
+	}
+	return result, nil, nil
+}
+
+// ===== HTTP Request Tool =====
+
+// HTTPRequestTool executes HTTP requests
+type HTTPRequestTool struct{}
+
+func (t *HTTPRequestTool) Name() string { return "http_request" }
+
+func (t *HTTPRequestTool) Run(args map[string]string) (string, *FileChange, error) {
+	timeout := 30
+	if args["timeout"] != "" {
+		if n, err := parseInt(args["timeout"]); err == nil && n > 0 {
+			timeout = n
+		}
+	}
+	result, err := executeHTTPRequest(args["method"], args["url"], args["headers"], args["body"], timeout)
+	if err != nil {
+		return fmt.Sprintf("Error: %v", err), nil, err
+	}
+	return result, nil, nil
+}
+
 // ===== Grep Replace Tool =====
 
 // GrepReplaceTool performs bulk find-and-replace across multiple files
@@ -582,6 +632,8 @@ func RegisterBuiltinTools(r *Registry) {
 	r.Register(&RestoreBackupTool{}) // NEW: restore file from backup
 	r.Register(&ListBackupsTool{})   // NEW: list available backups
 	r.Register(&GrepReplaceTool{})   // NEW: bulk find-and-replace
+	r.Register(&DiffFilesTool{})     // NEW: compare two files
+	r.Register(&HTTPRequestTool{})   // NEW: HTTP requests
 }
 
 // init は自動的にデフォルトレジストリに全ツールを登録

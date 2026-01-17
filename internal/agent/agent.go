@@ -157,6 +157,17 @@ You have access to the following tools:
   - $_: matches any single node (unnamed/don't care)
 - web_search: Search the web for information. Args: {"query": "..."}
 
+### File Comparison
+- diff_files: Compare two files and show differences. Args: {"file1": "...", "file2": "...", "context": "3"} (context optional, default 3 lines)
+  Use this for git-untracked files or comparing any two files side by side
+
+### HTTP Client
+- http_request: Execute HTTP requests for API testing. Args: {"method": "GET|POST|PUT|DELETE|PATCH", "url": "...", "headers": "{}", "body": "...", "timeout": "30"}
+  Examples:
+  - GET: {"method": "GET", "url": "https://api.example.com/users"}
+  - POST with JSON: {"method": "POST", "url": "https://api.example.com/users", "body": "{\"name\": \"test\"}", "headers": "{\"Authorization\": \"Bearer token\"}"}
+  Headers must be valid JSON object. Body can be JSON or plain text.
+
 ### Shell
 - bash: Execute shell commands. Args: {"command": "..."}
 

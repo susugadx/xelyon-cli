@@ -462,6 +462,22 @@ AIが自動で以下のツールを使用します。ユーザーが直接呼び
 | `restore_backup` | バックアップから復元 | `path`, `backup_path` (オプション) |
 | `list_backups` | バックアップ一覧表示 | `path` |
 | `grep_replace` | 複数ファイルで一括置換 | `pattern`, `replacement`, `path`, `file_pattern`, `dry_run` |
+| `diff_files` | 2つのファイルの差分を表示 | `file1`, `file2`, `context` (オプション) |
+
+### HTTP Client
+
+| ツール名 | 説明 | 主な引数 |
+|---------|------|---------|
+| `http_request` | HTTPリクエストを実行 | `method`, `url`, `headers`, `body`, `timeout` |
+
+**使用例:**
+```
+# GET リクエスト
+{"tool": "http_request", "args": {"method": "GET", "url": "https://api.example.com/users"}}
+
+# POST リクエスト（JSON）
+{"tool": "http_request", "args": {"method": "POST", "url": "https://api.example.com/users", "body": "{\"name\": \"test\"}", "headers": "{\"Authorization\": \"Bearer token\"}"}}
+```
 
 ### Git操作
 
