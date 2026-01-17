@@ -292,6 +292,18 @@ func LoadConfig() (*Config, error) {
 	return &cfg, nil
 }
 
+// LoadConfigWithValidation は設定ファイルを読み込み、バリデーションを実行
+// バリデーションエラーがあっても設定は返す（警告のみ）
+func LoadConfigWithValidation() (*Config, ValidationResult, error) {
+	cfg, err := LoadConfig()
+	if err != nil {
+		return nil, ValidationResult{}, err
+	}
+
+	result := ValidateConfig(cfg)
+	return cfg, result, nil
+}
+
 // SaveConfig は設定ファイルを保存
 func SaveConfig(cfg *Config) error {
 	configPath, err := getConfigPath()
