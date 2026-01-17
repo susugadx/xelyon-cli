@@ -126,3 +126,10 @@ func IsSFCFile(filePath string) bool {
 	ext := strings.ToLower(filepath.Ext(filePath))
 	return ext == ".vue" || ext == ".svelte"
 }
+
+// IsTailwindConfigFile は Tailwind CSS 設定ファイルかどうか（Issue #65）
+func IsTailwindConfigFile(filePath string) bool {
+	baseName := filepath.Base(filePath)
+	// tailwind.config.js, tailwind.config.ts, tailwind.config.mjs, tailwind.config.cjs
+	return strings.HasPrefix(baseName, "tailwind.config.")
+}
