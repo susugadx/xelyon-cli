@@ -55,6 +55,9 @@ cd xelyon-cli
 go build -o xelyon
 ```
 
+> **Note**: ソースビルドは開発者向けです。通常利用には [Homebrew](#homebrew（macos）) や [バイナリダウンロード](#バイナリダウンロード) を推奨します。
+> リポジトリに含まれる `XELYON.md` は xelyon-cli 開発用です。あなたのプロジェクトで使う場合は削除して `/init` で新規作成してください。
+
 ## クイックスタート
 
 ### 1. APIキーを設定
