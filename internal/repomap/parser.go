@@ -8,20 +8,27 @@ import (
 	"strings"
 
 	sitter "github.com/smacker/go-tree-sitter"
+	"github.com/smacker/go-tree-sitter/bash"
 	"github.com/smacker/go-tree-sitter/c"
 	"github.com/smacker/go-tree-sitter/cpp"
 	"github.com/smacker/go-tree-sitter/csharp"
+	"github.com/smacker/go-tree-sitter/css"
+	"github.com/smacker/go-tree-sitter/dockerfile"
 	"github.com/smacker/go-tree-sitter/golang"
 	"github.com/smacker/go-tree-sitter/java"
 	"github.com/smacker/go-tree-sitter/javascript"
 	"github.com/smacker/go-tree-sitter/kotlin"
+	markdown "github.com/smacker/go-tree-sitter/markdown/tree-sitter-markdown"
 	"github.com/smacker/go-tree-sitter/php"
 	"github.com/smacker/go-tree-sitter/python"
 	"github.com/smacker/go-tree-sitter/ruby"
 	"github.com/smacker/go-tree-sitter/rust"
 	"github.com/smacker/go-tree-sitter/scala"
+	"github.com/smacker/go-tree-sitter/sql"
 	"github.com/smacker/go-tree-sitter/swift"
+	"github.com/smacker/go-tree-sitter/toml"
 	"github.com/smacker/go-tree-sitter/typescript/typescript"
+	"github.com/smacker/go-tree-sitter/yaml"
 )
 
 // SupportedLanguages は対応言語のマップ
@@ -50,15 +57,59 @@ var SupportedLanguages = map[string]*sitter.Language{
 	".cs":    csharp.GetLanguage(),
 	".scala": scala.GetLanguage(),
 	".php":   php.GetLanguage(),
+	// Tier 3: CSS/SCSS/フロントエンド (#59)
+	".css":  css.GetLanguage(),
+	".scss": css.GetLanguage(), // SCSSはCSSパーサーで基本構文を抽出
+	// Tier 4: 設定/マークアップ言語 (#60)
+	".yaml":       yaml.GetLanguage(),
+	".yml":        yaml.GetLanguage(),
+	".toml":       toml.GetLanguage(),
+	".sql":        sql.GetLanguage(),
+	".sh":         bash.GetLanguage(),
+	".bash":       bash.GetLanguage(),
+	".zsh":        bash.GetLanguage(), // ZshはBashパーサーで基本構文を抽出
+	".md":         markdown.GetLanguage(),
+	".markdown":   markdown.GetLanguage(),
+	"Dockerfile":  dockerfile.GetLanguage(),
+	"Makefile":    nil, // Makefileは正規表現ベースで処理
+	".mk":         nil, // Makefileの.mk拡張子
+	"Jenkinsfile": nil, // Jenkinsfileは正規表現ベースで処理
 }
 
 // GetLanguage はファイル拡張子から言語を取得
 func GetLanguage(filePath string) *sitter.Language {
 	ext := strings.ToLower(filepath.Ext(filePath))
-	return SupportedLanguages[ext]
+	if lang, ok := SupportedLanguages[ext]; ok {
+		return lang
+	}
+	// 拡張子がない場合はファイル名で判定（Dockerfile, Makefile等）
+	baseName := filepath.Base(filePath)
+	return SupportedLanguages[baseName]
 }
 
 // IsSupportedFile はサポートされているファイルかどうか
 func IsSupportedFile(filePath string) bool {
-	return GetLanguage(filePath) != nil
+	ext := strings.ToLower(filepath.Ext(filePath))
+	if _, ok := SupportedLanguages[ext]; ok {
+		return true
+	}
+	// 拡張子がない場合はファイル名で判定
+	baseName := filepath.Base(filePath)
+	_, ok := SupportedLanguages[baseName]
+	return ok
+}
+
+// IsConfigFile は設定ファイル系言語かどうか（正規表現ベース抽出用）
+func IsConfigFile(filePath string) bool {
+	baseName := filepath.Base(filePath)
+	switch baseName {
+	case "Makefile", "Jenkinsfile":
+		return true
+	}
+	ext := strings.ToLower(filepath.Ext(filePath))
+	switch ext {
+	case ".mk":
+		return true
+	}
+	return false
 }
