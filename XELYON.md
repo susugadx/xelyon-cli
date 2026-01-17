@@ -286,8 +286,12 @@ xelyon-cli/
     - `internal/agent/repomap_cache.go`（agent起動時の統合）
 
 - **Tree-sitter解析**: AST解析で正確なシンボル抽出
-- **複数言語対応**: Go, JavaScript, TypeScript, Python
-- **シンボル抽出**: 関数、メソッド、構造体、クラス、インターフェース
+- **14言語対応**:
+  - **Tier 0（既存）**: Go, JavaScript/JSX, TypeScript/TSX, Python
+  - **Tier 1（高優先度）**: Rust, Java, C/C++, Ruby
+  - **Tier 2（中優先度）**: Kotlin, Swift, C#, Scala, PHP
+- **シンボル抽出**: 関数、メソッド、構造体、クラス、インターフェース、トレイト、enum、モジュール
+- **シグネチャ改善**: JS/Pythonで引数情報・戻り値型を含む完全なシグネチャ抽出
 - **トークン制限**: 大規模プロジェクトでも効率的にコンテキスト圧縮
 - **自動生成**: 起動時にプロジェクトをスキャン
 - **除外パターン**: node_modules, .git, vendor等は自動除外

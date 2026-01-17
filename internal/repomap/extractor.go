@@ -43,39 +43,147 @@ func ExtractSymbols(filePath string) (*FileSymbols, error) {
 	}, nil
 }
 
+// isCFamily は C系言語かどうかを判定
+func isCFamily(ext string) bool {
+	return ext == ".c" || ext == ".h" || ext == ".cpp" || ext == ".hpp" || ext == ".cc"
+}
+
 // extractFromNode はノードからシンボルを再帰的に抽出
 func extractFromNode(node *sitter.Node, content []byte, filePath string) []Symbol {
 	var symbols []Symbol
 
 	// ノードタイプに応じてシンボルを抽出
 	// 拡張子で言語を判定
-	ext := filepath.Ext(filePath)
-	switch node.Type() {
+	ext := strings.ToLower(filepath.Ext(filePath))
+	nodeType := node.Type()
+
+	switch nodeType {
 	// Go
 	case "function_declaration":
 		if ext == ".go" {
 			symbols = append(symbols, extractGoFunction(node, content, filePath))
+		} else if ext == ".kt" || ext == ".kts" {
+			symbols = append(symbols, extractKotlinFunction(node, content, filePath))
+		} else if ext == ".swift" {
+			symbols = append(symbols, extractSwiftFunction(node, content, filePath))
 		} else {
 			symbols = append(symbols, extractJSFunction(node, content, filePath))
 		}
+
 	case "method_declaration":
-		symbols = append(symbols, extractGoMethod(node, content, filePath))
+		if ext == ".go" {
+			symbols = append(symbols, extractGoMethod(node, content, filePath))
+		} else if ext == ".java" {
+			symbols = append(symbols, extractJavaMethod(node, content, filePath))
+		} else if ext == ".cs" {
+			symbols = append(symbols, extractCSharpMethod(node, content, filePath))
+		}
+
 	case "type_declaration":
 		symbols = append(symbols, extractGoType(node, content, filePath)...)
 
 	// JavaScript/TypeScript
 	case "function":
 		symbols = append(symbols, extractJSFunction(node, content, filePath))
+
 	case "class_declaration":
-		symbols = append(symbols, extractJSClass(node, content, filePath))
+		if ext == ".java" {
+			symbols = append(symbols, extractJavaClass(node, content, filePath))
+		} else if ext == ".kt" || ext == ".kts" {
+			symbols = append(symbols, extractKotlinClass(node, content, filePath))
+		} else if ext == ".scala" {
+			symbols = append(symbols, extractScalaClass(node, content, filePath))
+		} else if ext == ".php" {
+			symbols = append(symbols, extractPHPClass(node, content, filePath))
+		} else if ext == ".cs" {
+			symbols = append(symbols, extractCSharpClass(node, content, filePath))
+		} else {
+			symbols = append(symbols, extractJSClass(node, content, filePath))
+		}
+
 	case "method_definition":
 		symbols = append(symbols, extractJSMethod(node, content, filePath))
 
-	// Python
+	// Python / C / PHP
 	case "function_definition":
-		symbols = append(symbols, extractPyFunction(node, content, filePath))
+		if isCFamily(ext) {
+			symbols = append(symbols, extractCFunction(node, content, filePath))
+		} else if ext == ".php" {
+			symbols = append(symbols, extractPHPFunction(node, content, filePath))
+		} else if ext == ".scala" {
+			symbols = append(symbols, extractScalaFunction(node, content, filePath))
+		} else {
+			symbols = append(symbols, extractPyFunction(node, content, filePath))
+		}
+
 	case "class_definition":
-		symbols = append(symbols, extractPyClass(node, content, filePath))
+		if ext == ".swift" {
+			symbols = append(symbols, extractSwiftClass(node, content, filePath))
+		} else {
+			symbols = append(symbols, extractPyClass(node, content, filePath))
+		}
+
+	// Rust
+	case "function_item":
+		symbols = append(symbols, extractRustFunction(node, content, filePath))
+	case "struct_item":
+		symbols = append(symbols, extractRustStruct(node, content, filePath))
+	case "impl_item":
+		symbols = append(symbols, extractRustImpl(node, content, filePath)...)
+	case "trait_item":
+		symbols = append(symbols, extractRustTrait(node, content, filePath))
+	case "enum_item":
+		symbols = append(symbols, extractRustEnum(node, content, filePath))
+
+	// Java / C#
+	case "interface_declaration":
+		if ext == ".java" {
+			symbols = append(symbols, extractJavaInterface(node, content, filePath))
+		} else if ext == ".cs" {
+			symbols = append(symbols, extractCSharpInterface(node, content, filePath))
+		}
+
+	// Ruby
+	case "method":
+		if ext == ".rb" {
+			symbols = append(symbols, extractRubyMethod(node, content, filePath))
+		}
+	case "class":
+		if ext == ".rb" {
+			symbols = append(symbols, extractRubyClass(node, content, filePath))
+		}
+	case "module":
+		if ext == ".rb" {
+			symbols = append(symbols, extractRubyModule(node, content, filePath))
+		}
+
+	// Kotlin
+	case "object_declaration":
+		if ext == ".kt" || ext == ".kts" {
+			symbols = append(symbols, extractKotlinObject(node, content, filePath))
+		}
+
+	// Swift
+	case "struct_declaration":
+		if ext == ".swift" {
+			symbols = append(symbols, extractSwiftStruct(node, content, filePath))
+		} else if ext == ".cs" {
+			symbols = append(symbols, extractCSharpStruct(node, content, filePath))
+		}
+	case "protocol_declaration":
+		if ext == ".swift" {
+			symbols = append(symbols, extractSwiftProtocol(node, content, filePath))
+		}
+
+	// Scala
+	case "object_definition":
+		if ext == ".scala" {
+			symbols = append(symbols, extractScalaObject(node, content, filePath))
+		}
+	case "trait_definition":
+		if ext == ".scala" {
+			symbols = append(symbols, extractScalaTrait(node, content, filePath))
+		}
 	}
 
 	// 子ノードを再帰的に処理
@@ -192,18 +300,40 @@ func extractGoType(node *sitter.Node, content []byte, filePath string) []Symbol 
 	return symbols
 }
 
-// JS/Python用の抽出関数も同様に実装
+// JS/Python用の抽出関数（シグネチャ改善版）
 func extractJSFunction(node *sitter.Node, content []byte, filePath string) Symbol {
 	nameNode := node.ChildByFieldName("name")
+	paramsNode := node.ChildByFieldName("parameters")
+
 	name := ""
 	if nameNode != nil {
 		name = nameNode.Content(content)
 	}
 
+	params := "()"
+	if paramsNode != nil {
+		params = paramsNode.Content(content)
+	}
+
+	// async チェック
+	isAsync := false
+	for i := 0; i < int(node.ChildCount()); i++ {
+		child := node.Child(i)
+		if child != nil && child.Type() == "async" {
+			isAsync = true
+			break
+		}
+	}
+
+	prefix := "function"
+	if isAsync {
+		prefix = "async function"
+	}
+
 	return Symbol{
 		Name:      name,
 		Kind:      "function",
-		Signature: "function " + name + "(...)",
+		Signature: prefix + " " + name + params,
 		FilePath:  filePath,
 		Line:      int(node.StartPoint().Row) + 1,
 	}
@@ -227,15 +357,37 @@ func extractJSClass(node *sitter.Node, content []byte, filePath string) Symbol {
 
 func extractJSMethod(node *sitter.Node, content []byte, filePath string) Symbol {
 	nameNode := node.ChildByFieldName("name")
+	paramsNode := node.ChildByFieldName("parameters")
+
 	name := ""
 	if nameNode != nil {
 		name = nameNode.Content(content)
 	}
 
+	params := "()"
+	if paramsNode != nil {
+		params = paramsNode.Content(content)
+	}
+
+	// async チェック
+	isAsync := false
+	for i := 0; i < int(node.ChildCount()); i++ {
+		child := node.Child(i)
+		if child != nil && child.Type() == "async" {
+			isAsync = true
+			break
+		}
+	}
+
+	sig := name + params
+	if isAsync {
+		sig = "async " + sig
+	}
+
 	return Symbol{
 		Name:      name,
 		Kind:      "method",
-		Signature: name + "(...)",
+		Signature: sig,
 		FilePath:  filePath,
 		Line:      int(node.StartPoint().Row) + 1,
 	}
@@ -243,15 +395,28 @@ func extractJSMethod(node *sitter.Node, content []byte, filePath string) Symbol 
 
 func extractPyFunction(node *sitter.Node, content []byte, filePath string) Symbol {
 	nameNode := node.ChildByFieldName("name")
+	paramsNode := node.ChildByFieldName("parameters")
+	returnTypeNode := node.ChildByFieldName("return_type")
+
 	name := ""
 	if nameNode != nil {
 		name = nameNode.Content(content)
 	}
 
+	params := "()"
+	if paramsNode != nil {
+		params = paramsNode.Content(content)
+	}
+
+	sig := "def " + name + params
+	if returnTypeNode != nil {
+		sig += " -> " + returnTypeNode.Content(content)
+	}
+
 	return Symbol{
 		Name:      name,
 		Kind:      "function",
-		Signature: "def " + name + "(...)",
+		Signature: sig,
 		FilePath:  filePath,
 		Line:      int(node.StartPoint().Row) + 1,
 	}
@@ -268,6 +433,635 @@ func extractPyClass(node *sitter.Node, content []byte, filePath string) Symbol {
 		Name:      name,
 		Kind:      "class",
 		Signature: "class " + name,
+		FilePath:  filePath,
+		Line:      int(node.StartPoint().Row) + 1,
+	}
+}
+
+// ================== Rust ==================
+
+func extractRustFunction(node *sitter.Node, content []byte, filePath string) Symbol {
+	nameNode := node.ChildByFieldName("name")
+	name := ""
+	if nameNode != nil {
+		name = nameNode.Content(content)
+	}
+
+	// シグネチャは関数定義行全体（最初の { まで）
+	startByte := node.StartByte()
+	sig := ""
+	for i := startByte; i < node.EndByte(); i++ {
+		if content[i] == '{' {
+			sig = strings.TrimSpace(string(content[startByte:i]))
+			break
+		}
+	}
+	if sig == "" {
+		sig = "fn " + name + "(...)"
+	}
+
+	return Symbol{
+		Name:      name,
+		Kind:      "function",
+		Signature: sig,
+		FilePath:  filePath,
+		Line:      int(node.StartPoint().Row) + 1,
+	}
+}
+
+func extractRustStruct(node *sitter.Node, content []byte, filePath string) Symbol {
+	nameNode := node.ChildByFieldName("name")
+	name := ""
+	if nameNode != nil {
+		name = nameNode.Content(content)
+	}
+
+	return Symbol{
+		Name:      name,
+		Kind:      "struct",
+		Signature: "struct " + name,
+		FilePath:  filePath,
+		Line:      int(node.StartPoint().Row) + 1,
+	}
+}
+
+func extractRustImpl(node *sitter.Node, content []byte, filePath string) []Symbol {
+	var symbols []Symbol
+
+	// impl対象の型名を取得
+	typeNode := node.ChildByFieldName("type")
+	typeName := ""
+	if typeNode != nil {
+		typeName = typeNode.Content(content)
+	}
+
+	// impl ブロック内のメソッドを抽出
+	for i := 0; i < int(node.ChildCount()); i++ {
+		child := node.Child(i)
+		if child.Type() == "declaration_list" {
+			for j := 0; j < int(child.ChildCount()); j++ {
+				item := child.Child(j)
+				if item.Type() == "function_item" {
+					nameNode := item.ChildByFieldName("name")
+					name := ""
+					if nameNode != nil {
+						name = nameNode.Content(content)
+					}
+
+					startByte := item.StartByte()
+					sig := ""
+					for k := startByte; k < item.EndByte(); k++ {
+						if content[k] == '{' {
+							sig = strings.TrimSpace(string(content[startByte:k]))
+							break
+						}
+					}
+					if sig == "" {
+						sig = "fn " + name + "(...)"
+					}
+
+					symbols = append(symbols, Symbol{
+						Name:      typeName + "::" + name,
+						Kind:      "method",
+						Signature: sig,
+						FilePath:  filePath,
+						Line:      int(item.StartPoint().Row) + 1,
+					})
+				}
+			}
+		}
+	}
+
+	return symbols
+}
+
+func extractRustTrait(node *sitter.Node, content []byte, filePath string) Symbol {
+	nameNode := node.ChildByFieldName("name")
+	name := ""
+	if nameNode != nil {
+		name = nameNode.Content(content)
+	}
+
+	return Symbol{
+		Name:      name,
+		Kind:      "trait",
+		Signature: "trait " + name,
+		FilePath:  filePath,
+		Line:      int(node.StartPoint().Row) + 1,
+	}
+}
+
+func extractRustEnum(node *sitter.Node, content []byte, filePath string) Symbol {
+	nameNode := node.ChildByFieldName("name")
+	name := ""
+	if nameNode != nil {
+		name = nameNode.Content(content)
+	}
+
+	return Symbol{
+		Name:      name,
+		Kind:      "enum",
+		Signature: "enum " + name,
+		FilePath:  filePath,
+		Line:      int(node.StartPoint().Row) + 1,
+	}
+}
+
+// ================== Java ==================
+
+func extractJavaClass(node *sitter.Node, content []byte, filePath string) Symbol {
+	nameNode := node.ChildByFieldName("name")
+	name := ""
+	if nameNode != nil {
+		name = nameNode.Content(content)
+	}
+
+	return Symbol{
+		Name:      name,
+		Kind:      "class",
+		Signature: "class " + name,
+		FilePath:  filePath,
+		Line:      int(node.StartPoint().Row) + 1,
+	}
+}
+
+func extractJavaMethod(node *sitter.Node, content []byte, filePath string) Symbol {
+	nameNode := node.ChildByFieldName("name")
+	name := ""
+	if nameNode != nil {
+		name = nameNode.Content(content)
+	}
+
+	// シグネチャ抽出（最初の { まで）
+	startByte := node.StartByte()
+	sig := ""
+	for i := startByte; i < node.EndByte(); i++ {
+		if content[i] == '{' {
+			sig = strings.TrimSpace(string(content[startByte:i]))
+			break
+		}
+	}
+	if sig == "" {
+		sig = name + "(...)"
+	}
+
+	return Symbol{
+		Name:      name,
+		Kind:      "method",
+		Signature: sig,
+		FilePath:  filePath,
+		Line:      int(node.StartPoint().Row) + 1,
+	}
+}
+
+func extractJavaInterface(node *sitter.Node, content []byte, filePath string) Symbol {
+	nameNode := node.ChildByFieldName("name")
+	name := ""
+	if nameNode != nil {
+		name = nameNode.Content(content)
+	}
+
+	return Symbol{
+		Name:      name,
+		Kind:      "interface",
+		Signature: "interface " + name,
+		FilePath:  filePath,
+		Line:      int(node.StartPoint().Row) + 1,
+	}
+}
+
+// ================== C/C++ ==================
+
+func extractCFunction(node *sitter.Node, content []byte, filePath string) Symbol {
+	// C/C++では declarator から関数名を取得
+	declaratorNode := node.ChildByFieldName("declarator")
+	name := ""
+	if declaratorNode != nil {
+		// function_declarator の場合
+		if declaratorNode.Type() == "function_declarator" {
+			nameNode := declaratorNode.ChildByFieldName("declarator")
+			if nameNode != nil {
+				name = nameNode.Content(content)
+			}
+		} else {
+			name = declaratorNode.Content(content)
+		}
+	}
+
+	// シグネチャ抽出（最初の { まで）
+	startByte := node.StartByte()
+	sig := ""
+	for i := startByte; i < node.EndByte(); i++ {
+		if content[i] == '{' {
+			sig = strings.TrimSpace(string(content[startByte:i]))
+			break
+		}
+	}
+	if sig == "" {
+		sig = name + "(...)"
+	}
+
+	return Symbol{
+		Name:      name,
+		Kind:      "function",
+		Signature: sig,
+		FilePath:  filePath,
+		Line:      int(node.StartPoint().Row) + 1,
+	}
+}
+
+// ================== Ruby ==================
+
+func extractRubyMethod(node *sitter.Node, content []byte, filePath string) Symbol {
+	nameNode := node.ChildByFieldName("name")
+	name := ""
+	if nameNode != nil {
+		name = nameNode.Content(content)
+	}
+
+	return Symbol{
+		Name:      name,
+		Kind:      "method",
+		Signature: "def " + name,
+		FilePath:  filePath,
+		Line:      int(node.StartPoint().Row) + 1,
+	}
+}
+
+func extractRubyClass(node *sitter.Node, content []byte, filePath string) Symbol {
+	nameNode := node.ChildByFieldName("name")
+	name := ""
+	if nameNode != nil {
+		name = nameNode.Content(content)
+	}
+
+	return Symbol{
+		Name:      name,
+		Kind:      "class",
+		Signature: "class " + name,
+		FilePath:  filePath,
+		Line:      int(node.StartPoint().Row) + 1,
+	}
+}
+
+func extractRubyModule(node *sitter.Node, content []byte, filePath string) Symbol {
+	nameNode := node.ChildByFieldName("name")
+	name := ""
+	if nameNode != nil {
+		name = nameNode.Content(content)
+	}
+
+	return Symbol{
+		Name:      name,
+		Kind:      "module",
+		Signature: "module " + name,
+		FilePath:  filePath,
+		Line:      int(node.StartPoint().Row) + 1,
+	}
+}
+
+// ================== Kotlin ==================
+
+func extractKotlinFunction(node *sitter.Node, content []byte, filePath string) Symbol {
+	nameNode := node.ChildByFieldName("name")
+	name := ""
+	if nameNode != nil {
+		name = nameNode.Content(content)
+	}
+
+	// シグネチャ抽出
+	startByte := node.StartByte()
+	sig := ""
+	for i := startByte; i < node.EndByte(); i++ {
+		if content[i] == '{' || content[i] == '=' {
+			sig = strings.TrimSpace(string(content[startByte:i]))
+			break
+		}
+	}
+	if sig == "" {
+		sig = "fun " + name + "(...)"
+	}
+
+	return Symbol{
+		Name:      name,
+		Kind:      "function",
+		Signature: sig,
+		FilePath:  filePath,
+		Line:      int(node.StartPoint().Row) + 1,
+	}
+}
+
+func extractKotlinClass(node *sitter.Node, content []byte, filePath string) Symbol {
+	nameNode := node.ChildByFieldName("name")
+	name := ""
+	if nameNode != nil {
+		name = nameNode.Content(content)
+	}
+
+	return Symbol{
+		Name:      name,
+		Kind:      "class",
+		Signature: "class " + name,
+		FilePath:  filePath,
+		Line:      int(node.StartPoint().Row) + 1,
+	}
+}
+
+func extractKotlinObject(node *sitter.Node, content []byte, filePath string) Symbol {
+	nameNode := node.ChildByFieldName("name")
+	name := ""
+	if nameNode != nil {
+		name = nameNode.Content(content)
+	}
+
+	return Symbol{
+		Name:      name,
+		Kind:      "object",
+		Signature: "object " + name,
+		FilePath:  filePath,
+		Line:      int(node.StartPoint().Row) + 1,
+	}
+}
+
+// ================== Swift ==================
+
+func extractSwiftFunction(node *sitter.Node, content []byte, filePath string) Symbol {
+	nameNode := node.ChildByFieldName("name")
+	name := ""
+	if nameNode != nil {
+		name = nameNode.Content(content)
+	}
+
+	// シグネチャ抽出
+	startByte := node.StartByte()
+	sig := ""
+	for i := startByte; i < node.EndByte(); i++ {
+		if content[i] == '{' {
+			sig = strings.TrimSpace(string(content[startByte:i]))
+			break
+		}
+	}
+	if sig == "" {
+		sig = "func " + name + "(...)"
+	}
+
+	return Symbol{
+		Name:      name,
+		Kind:      "function",
+		Signature: sig,
+		FilePath:  filePath,
+		Line:      int(node.StartPoint().Row) + 1,
+	}
+}
+
+func extractSwiftClass(node *sitter.Node, content []byte, filePath string) Symbol {
+	nameNode := node.ChildByFieldName("name")
+	name := ""
+	if nameNode != nil {
+		name = nameNode.Content(content)
+	}
+
+	return Symbol{
+		Name:      name,
+		Kind:      "class",
+		Signature: "class " + name,
+		FilePath:  filePath,
+		Line:      int(node.StartPoint().Row) + 1,
+	}
+}
+
+func extractSwiftStruct(node *sitter.Node, content []byte, filePath string) Symbol {
+	nameNode := node.ChildByFieldName("name")
+	name := ""
+	if nameNode != nil {
+		name = nameNode.Content(content)
+	}
+
+	return Symbol{
+		Name:      name,
+		Kind:      "struct",
+		Signature: "struct " + name,
+		FilePath:  filePath,
+		Line:      int(node.StartPoint().Row) + 1,
+	}
+}
+
+func extractSwiftProtocol(node *sitter.Node, content []byte, filePath string) Symbol {
+	nameNode := node.ChildByFieldName("name")
+	name := ""
+	if nameNode != nil {
+		name = nameNode.Content(content)
+	}
+
+	return Symbol{
+		Name:      name,
+		Kind:      "protocol",
+		Signature: "protocol " + name,
+		FilePath:  filePath,
+		Line:      int(node.StartPoint().Row) + 1,
+	}
+}
+
+// ================== C# ==================
+
+func extractCSharpClass(node *sitter.Node, content []byte, filePath string) Symbol {
+	nameNode := node.ChildByFieldName("name")
+	name := ""
+	if nameNode != nil {
+		name = nameNode.Content(content)
+	}
+
+	return Symbol{
+		Name:      name,
+		Kind:      "class",
+		Signature: "class " + name,
+		FilePath:  filePath,
+		Line:      int(node.StartPoint().Row) + 1,
+	}
+}
+
+func extractCSharpMethod(node *sitter.Node, content []byte, filePath string) Symbol {
+	nameNode := node.ChildByFieldName("name")
+	name := ""
+	if nameNode != nil {
+		name = nameNode.Content(content)
+	}
+
+	// シグネチャ抽出
+	startByte := node.StartByte()
+	sig := ""
+	for i := startByte; i < node.EndByte(); i++ {
+		if content[i] == '{' {
+			sig = strings.TrimSpace(string(content[startByte:i]))
+			break
+		}
+	}
+	if sig == "" {
+		sig = name + "(...)"
+	}
+
+	return Symbol{
+		Name:      name,
+		Kind:      "method",
+		Signature: sig,
+		FilePath:  filePath,
+		Line:      int(node.StartPoint().Row) + 1,
+	}
+}
+
+func extractCSharpInterface(node *sitter.Node, content []byte, filePath string) Symbol {
+	nameNode := node.ChildByFieldName("name")
+	name := ""
+	if nameNode != nil {
+		name = nameNode.Content(content)
+	}
+
+	return Symbol{
+		Name:      name,
+		Kind:      "interface",
+		Signature: "interface " + name,
+		FilePath:  filePath,
+		Line:      int(node.StartPoint().Row) + 1,
+	}
+}
+
+func extractCSharpStruct(node *sitter.Node, content []byte, filePath string) Symbol {
+	nameNode := node.ChildByFieldName("name")
+	name := ""
+	if nameNode != nil {
+		name = nameNode.Content(content)
+	}
+
+	return Symbol{
+		Name:      name,
+		Kind:      "struct",
+		Signature: "struct " + name,
+		FilePath:  filePath,
+		Line:      int(node.StartPoint().Row) + 1,
+	}
+}
+
+// ================== Scala ==================
+
+func extractScalaClass(node *sitter.Node, content []byte, filePath string) Symbol {
+	nameNode := node.ChildByFieldName("name")
+	name := ""
+	if nameNode != nil {
+		name = nameNode.Content(content)
+	}
+
+	return Symbol{
+		Name:      name,
+		Kind:      "class",
+		Signature: "class " + name,
+		FilePath:  filePath,
+		Line:      int(node.StartPoint().Row) + 1,
+	}
+}
+
+func extractScalaFunction(node *sitter.Node, content []byte, filePath string) Symbol {
+	nameNode := node.ChildByFieldName("name")
+	name := ""
+	if nameNode != nil {
+		name = nameNode.Content(content)
+	}
+
+	// シグネチャ抽出
+	startByte := node.StartByte()
+	sig := ""
+	for i := startByte; i < node.EndByte(); i++ {
+		if content[i] == '{' || content[i] == '=' {
+			sig = strings.TrimSpace(string(content[startByte:i]))
+			break
+		}
+	}
+	if sig == "" {
+		sig = "def " + name + "(...)"
+	}
+
+	return Symbol{
+		Name:      name,
+		Kind:      "function",
+		Signature: sig,
+		FilePath:  filePath,
+		Line:      int(node.StartPoint().Row) + 1,
+	}
+}
+
+func extractScalaObject(node *sitter.Node, content []byte, filePath string) Symbol {
+	nameNode := node.ChildByFieldName("name")
+	name := ""
+	if nameNode != nil {
+		name = nameNode.Content(content)
+	}
+
+	return Symbol{
+		Name:      name,
+		Kind:      "object",
+		Signature: "object " + name,
+		FilePath:  filePath,
+		Line:      int(node.StartPoint().Row) + 1,
+	}
+}
+
+func extractScalaTrait(node *sitter.Node, content []byte, filePath string) Symbol {
+	nameNode := node.ChildByFieldName("name")
+	name := ""
+	if nameNode != nil {
+		name = nameNode.Content(content)
+	}
+
+	return Symbol{
+		Name:      name,
+		Kind:      "trait",
+		Signature: "trait " + name,
+		FilePath:  filePath,
+		Line:      int(node.StartPoint().Row) + 1,
+	}
+}
+
+// ================== PHP ==================
+
+func extractPHPClass(node *sitter.Node, content []byte, filePath string) Symbol {
+	nameNode := node.ChildByFieldName("name")
+	name := ""
+	if nameNode != nil {
+		name = nameNode.Content(content)
+	}
+
+	return Symbol{
+		Name:      name,
+		Kind:      "class",
+		Signature: "class " + name,
+		FilePath:  filePath,
+		Line:      int(node.StartPoint().Row) + 1,
+	}
+}
+
+func extractPHPFunction(node *sitter.Node, content []byte, filePath string) Symbol {
+	nameNode := node.ChildByFieldName("name")
+	name := ""
+	if nameNode != nil {
+		name = nameNode.Content(content)
+	}
+
+	// シグネチャ抽出
+	startByte := node.StartByte()
+	sig := ""
+	for i := startByte; i < node.EndByte(); i++ {
+		if content[i] == '{' {
+			sig = strings.TrimSpace(string(content[startByte:i]))
+			break
+		}
+	}
+	if sig == "" {
+		sig = "function " + name + "(...)"
+	}
+
+	return Symbol{
+		Name:      name,
+		Kind:      "function",
+		Signature: sig,
 		FilePath:  filePath,
 		Line:      int(node.StartPoint().Row) + 1,
 	}

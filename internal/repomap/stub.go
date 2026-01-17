@@ -3,15 +3,28 @@
 
 package repomap
 
+// Symbol はコード内のシンボル（スタブ実装）
+type Symbol struct {
+	Name       string
+	Kind       string
+	Signature  string
+	FilePath   string
+	Line       int
+	References int
+}
+
+// FileSymbols はファイル内のシンボル一覧（スタブ実装）
+type FileSymbols struct {
+	Path    string
+	Symbols []Symbol
+}
+
 // RepoMap はリポジトリのコード構造マップ（スタブ実装）
 type RepoMap struct {
 	RootPath  string
 	Files     []*FileSymbols
 	MaxTokens int
 }
-
-// FileSymbols はファイルのシンボル情報（スタブ実装）
-type FileSymbols struct{}
 
 // NewRepoMap は新しいRepoMapを作成（スタブ実装）
 func NewRepoMap(rootPath string, maxTokens int) *RepoMap {

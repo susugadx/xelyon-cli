@@ -18,7 +18,7 @@ AI搭載のコーディングアシスタントCLIツール
 - ↩️ **Undo機能**: ファイル変更の取り消し（バックアップから復元）
 - 🧠 **メモリ機能**: プロジェクト別・グローバル記憶の永続化
 - 📂 **会話履歴管理**: セッションをJSONL形式で保存・復元
-- 🗺️ **Repo Map**: Tree-sitterでコード構造を自動解析（RepoMapは永続キャッシュにより2回目以降の起動を高速化）
+- 🗺️ **Repo Map**: Tree-sitterでコード構造を自動解析（14言語対応: Go, JS/TS, Python, Rust, Java, C/C++, Ruby, Kotlin, Swift, C#, Scala, PHP）
 - 🗃️ **プロンプトキャッシュ**: 基盤（in-memory TTL付きLRU + `prompt_cache` 設定） + Claudeは `cache_control` 対応（OpenAI/Geminiは将来対応）
 - 🧯 **コンテキスト肥大化対策**: `go test` 等の長いツール出力は送信前に自動で末尾N行に切り詰め、トークン上限超過(400)で同じ巨大入力を再送して失敗し続ける問題を回避
 
