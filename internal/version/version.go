@@ -3,7 +3,7 @@ package version
 import "fmt"
 
 // Version はXELYON CLIのバージョン（GoReleaserでビルド時に上書きされる）
-var Version = "0.29.0"
+var Version = "0.35.0"
 
 // Commit はGitコミットハッシュ（GoReleaserでビルド時に設定される）
 var Commit = "unknown"
