@@ -86,6 +86,22 @@ code_health:
   max_function_lines: 50    # 関数行数上限
   auto_suggest: true        # 自動提案
 
+# bashツール設定
+bash:
+  safety_level: moderate      # strict, moderate, permissive
+  safe_commands:              # 追加の安全コマンド
+    - "npm run"
+    - "npm test"
+    - "cargo build"
+    - "make"
+  allow_pipe: true            # パイプを許可
+  allow_redirect: false       # リダイレクトを許可
+  allow_inline_edit: false    # sed -i等を許可
+
+# git_add設定
+git_stage:
+  batch_confirm: true         # 複数ファイルのバッチ確認UI
+
 # コマンドエイリアス
 command_aliases:
   t: test

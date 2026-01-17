@@ -381,7 +381,9 @@ func printHelp() {
   /compress [N]       - Compress history (keep recent N messages, default: 10)
   /use <provider> [model] - Switch provider and optionally model (e.g., /use gemini gemini-2.0-flash-exp)
   /providers          - List available providers and their API key status
-  /config             - Show/change configuration (e.g., /config model deepseek-coder)
+  /config             - Show/change configuration
+                        /config show - Show all settings with diff from defaults
+                        /config model <name> - Change default model
   /model [name]       - Show current model or switch model without restart
   /plan [on|off]      - Toggle Plan Mode (autonomous execution with planning)
   /repomap            - Show repository code structure map

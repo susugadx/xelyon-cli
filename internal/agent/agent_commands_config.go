@@ -68,13 +68,20 @@ func handleConfigCommand(args []string) bool {
 		return true
 	}
 
-	// 引数なし → 現在の設定を表示
+	// 引数なし → 簡易表示
 	if len(args) == 0 {
 		cyan.Println("⚙️  Current Configuration:")
 		fmt.Printf("  default_model: %s\n", cfg.DefaultModel)
 		fmt.Printf("  default_provider: %s\n", cfg.DefaultProvider)
-		yellow.Println("\nUsage: /config model <model-name>")
-		yellow.Println("Enter any model name supported by your provider.")
+		yellow.Println("\nUsage:")
+		yellow.Println("  /config show               - Show all settings with diff from defaults")
+		yellow.Println("  /config model <model-name> - Change default model")
+		return true
+	}
+
+	// /config show → 全設定をデフォルトとの差分付きで表示
+	if args[0] == "show" {
+		fmt.Print(config.ShowConfig(cfg))
 		return true
 	}
 
@@ -94,7 +101,9 @@ func handleConfigCommand(args []string) bool {
 		return true
 	}
 
-	yellow.Println("Usage: /config [model <model-name>]")
+	yellow.Println("Usage:")
+	yellow.Println("  /config show               - Show all settings with diff from defaults")
+	yellow.Println("  /config model <model-name> - Change default model")
 	return true
 }
 
