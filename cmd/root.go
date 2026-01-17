@@ -32,6 +32,7 @@ var (
 	headless      bool
 	planMode      bool
 	noUpdateCheck bool
+	imageFlag     string
 )
 
 const projectConfigFile = "XELYON.md"
@@ -233,9 +234,19 @@ Examples:
 			return
 		}
 
-		// 引数なし & ファイル指定なし → 対話モード
-		if len(args) == 0 && len(files) == 0 {
+		// 引数なし & ファイル指定なし & 画像指定なし → 対話モード
+		if len(args) == 0 && len(files) == 0 && imageFlag == "" {
 			agent.RunInteractive(model, provider, autoApprove, planMode)
+			return
+		}
+
+		// 画像フラグが指定された場合 → ワンショットモード（画像付き）
+		if imageFlag != "" {
+			query := ""
+			if len(args) > 0 {
+				query = args[0]
+			}
+			agent.RunOnceWithImage(query, model, provider, imageFlag, autoApprove, planMode)
 			return
 		}
 
@@ -360,6 +371,9 @@ func init() {
 
 	// 新規: --no-update-check フラグ
 	rootCmd.Flags().BoolVar(&noUpdateCheck, "no-update-check", false, "Disable automatic version check")
+
+	// 新規: -i/--image フラグ（画像入力）
+	rootCmd.Flags().StringVarP(&imageFlag, "image", "i", "", "Image file to include (for multimodal models: gemini, claude, openai)")
 }
 
 func Execute() {

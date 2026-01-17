@@ -9,11 +9,13 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/audit"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/mcp"
 	"github.com/susugadx/xelyon-cli/internal/memory"
 	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 	"github.com/susugadx/xelyon-cli/internal/version"
 )
 
@@ -515,4 +517,97 @@ func loadProjectConfig() string {
 		dir = parent
 	}
 	return ""
+}
+
+// RunOnceWithImage は画像付きの単一クエリを実行（CLIフラグ -i/--image 用）
+func RunOnceWithImage(query string, model string, provider api.Provider, imagePath string, autoApprove, planMode bool) {
+	// 監査ログ初期化（環境変数で制御: XELYON_AUDIT_LOG=1 で有効化）
+	auditEnabled := os.Getenv("XELYON_AUDIT_LOG") == "1"
+	if err := audit.Init(auditEnabled); err != nil {
+		yellow.Printf("Warning: Failed to initialize audit log: %v\n", err)
+	}
+
+	agent := NewAgent(model, provider)
+	agent.AutoApprove = autoApprove
+	agent.PlanMode = planMode
+	tools.SetAutoApprove(autoApprove)
+	defer agent.Cleanup()
+
+	// ヘッダー表示
+	printHeader(model, provider)
+
+	// プロバイダーが画像対応かチェック
+	if !api.SupportsImages(provider.Name()) {
+		red.Printf("❌ Provider '%s' does not support image input\n", provider.Name())
+		fmt.Println("Supported providers for image input: gemini, claude, openai")
+		return
+	}
+
+	// 画像読み込み
+	image, err := api.LoadImage(imagePath)
+	if err != nil {
+		red.Printf("❌ Failed to load image: %v\n", err)
+		return
+	}
+	green.Printf("🖼️  Image loaded: %s (%s)\n", image.Path, api.FormatImageSize(image.Size))
+
+	// XELYON.md読み込み
+	if config := loadProjectConfig(); config != "" {
+		agent.SystemPrompt += "\n\n## Project Context:\n" + config
+		green.Println("📋 XELYON.md loaded")
+	}
+
+	// Repo Map 生成（キャッシュあり）
+	cwd, err := os.Getwd()
+	if err != nil {
+		yellow.Printf("Warning: Could not get current directory: %v\n", err)
+		cwd = "."
+	}
+	repoMapStr, symbols, files, fromCache := loadRepoMapForProject(cwd, 2000)
+	if repoMapStr != "" {
+		agent.SystemPrompt += "\n\n" + repoMapStr
+		if fromCache {
+			green.Println("🗺️  Repo map loaded (cache)")
+		} else {
+			green.Printf("🗺️  Repo map loaded (%d symbols from %d files)\n", symbols, files)
+		}
+	}
+
+	fmt.Println()
+
+	// デフォルトメッセージ
+	if query == "" {
+		query = "Please analyze this image."
+	}
+
+	// 画像付きで会話
+	agent.chatWithImage(query, image)
+
+	// 対話ループに入る
+	mlReader := ui.NewMultilineReader(os.Stdin)
+	mlReader.EnableBracketedPaste()
+	defer mlReader.DisableBracketedPaste()
+
+	for {
+		mlReader.FlushInput()
+		agent.PrintStatusFooter()
+
+		input, err := mlReader.ReadInput("\n> ")
+		if err != nil {
+			break
+		}
+
+		input = strings.TrimSpace(input)
+		if input == "" {
+			continue
+		}
+
+		// 特殊コマンド
+		if handleSpecialCommand(input, agent) {
+			continue
+		}
+
+		// 通常の会話
+		agent.chat(input)
+	}
 }
