@@ -14,6 +14,8 @@ AI搭載のコーディングアシスタントCLI
 - 「リファクタリングして」
 - 「git commitして」
 
+**差分を見せて確認してから実行（編集・bash・gitなど）**
+
 ### 🌐 6種類のLLMプロバイダー
 DeepSeek, OpenAI, Gemini, Claude, Ollama, Groq をシームレスに切り替え。
 ローカルLLM（Ollama）も対応で、オフラインでも使用可能。
