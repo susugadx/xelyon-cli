@@ -1881,7 +1881,7 @@ func extractArrowFunctionOrHook(node *sitter.Node, content []byte, filePath stri
 	}
 
 	// Kind を判定
-	kind := "function"
+	var kind string
 	if isHookName(name) {
 		kind = "hook"
 	} else if isPascalCase(name) {
