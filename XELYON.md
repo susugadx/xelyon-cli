@@ -154,6 +154,41 @@ xelyon-cli/
 - **エラーヒント**: 複数マッチ時にファイルプレビュー（先頭50行）を表示（Candidates/Next actions/IMPORTANTも含む）
 - **フレームワーク自動検出**: run_test/formatが言語・ツールを自動検出
 
+##### ast_grep ツール詳細
+
+構造的コード検索ツール（Tree-sitter AST ベース）。
+
+**基本パターン例:**
+| 言語 | パターン | 説明 |
+|------|----------|------|
+| Go | `func $NAME($ARGS)` | 関数定義 |
+| Go | `if err != nil { $$$ }` | エラーハンドリング |
+| Go | `func $NAME($ARGS) error` | error返却関数 |
+| JS/TS | `async function $NAME($ARGS)` | async関数 |
+| JS/TS | `console.log($ARG)` | console.log呼び出し |
+| JS/TS | `useState($INIT)` | React useState |
+| Python | `def $NAME($ARGS):` | 関数定義 |
+| Rust | `fn $NAME($ARGS) -> Result<$T, $E>` | Result返却関数 |
+
+**メタ変数:**
+- `$NAME` - 単一ノード（識別子、式など）
+- `$$$` - 0個以上のノード（本体、複数文）
+- `$_` - 任意の単一ノード（無名）
+
+**高度な使い方（bashツール経由）:**
+```bash
+# パターンデバッグ
+ast-grep --pattern '$ROOT' --debug-query=ast
+
+# 複合検索（パターンAを含みBを含まない）
+ast-grep --pattern 'async function $NAME' | xargs grep -L 'try'
+
+# YAMLルールで複雑な検索
+ast-grep scan --rule rule.yml
+```
+
+**言語コード:** go, js, ts, tsx, py, rs, java, rb, c, cpp, kt, swift, cs, scala, php
+
 #### 3. UI/UX (internal/ui/)
 
 - **状態表示（Status Footer）**:
