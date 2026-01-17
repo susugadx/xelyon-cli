@@ -142,7 +142,7 @@ xelyon-cli/
   - **ファイル管理**: list_dir, create_dir
   - **Git操作**: git_status, git_diff, git_add, git_commit, git_push, git_log, git_branch, git_checkout, git_stash
   - **開発支援**: run_test, format
-  - **検索**: search_code, search_file, ast_grep（構造的コード検索）, web_search
+  - **検索**: search_code, search_file, ast_grep（構造的コード検索、LLM自動パターン変換）, web_search
   - **シェル**: bash
 - **自動バックアップ**: write_file/str_replace/append_file/prepend_fileで.bakファイル作成
 - **安全性**: 危険なコマンド（rm -rf, sed -i等）をブロック

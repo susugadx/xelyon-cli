@@ -130,8 +130,27 @@ You have access to the following tools:
 - search_code: Search for pattern in code files. Args: {"pattern": "...", "path": "..."} (path optional)
 - search_file: Search for files by name. Args: {"pattern": "...", "path": "..."} (path optional)
 - ast_grep: Structural code search using Tree-sitter AST patterns. Args: {"pattern": "...", "lang": "...", "path": "..."} (lang/path optional)
-  Examples: 'func $NAME($ARGS)' matches Go functions, 'async function $NAME' matches JS async functions
-  Metavariables: $NAME (single node), $$$ (zero or more nodes), $_ (any single node)
+
+  IMPORTANT: When user requests structural code search in natural language, convert to ast-grep pattern:
+
+  Pattern conversion examples:
+  | User request (natural language)              | ast-grep pattern                        | lang |
+  |----------------------------------------------|-----------------------------------------|------|
+  | "Find all Go functions"                      | func $NAME($ARGS)                       | go   |
+  | "Find async functions in JavaScript"         | async function $NAME($ARGS)             | js   |
+  | "Find error handling in Go"                  | if err != nil { $$$ }                   | go   |
+  | "Find console.log calls"                     | console.log($ARG)                       | js   |
+  | "Find Python functions"                      | def $NAME($ARGS):                       | py   |
+  | "Find React useState hooks"                  | useState($INIT)                         | tsx  |
+  | "Find try-catch blocks"                      | try { $$$ } catch ($E) { $$$ }          | js   |
+  | "Find functions returning error"             | func $NAME($ARGS) error                 | go   |
+  | "Find Rust functions with Result"            | fn $NAME($ARGS) -> Result<$T, $E>       | rs   |
+  | "Find class definitions"                     | class $NAME { $$$ }                     | js   |
+
+  Metavariables:
+  - $NAME: matches single AST node (identifier, expression)
+  - $$$: matches zero or more nodes (use for body, multiple statements)
+  - $_: matches any single node (unnamed/don't care)
 - web_search: Search the web for information. Args: {"query": "..."}
 
 ### Shell

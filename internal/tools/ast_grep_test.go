@@ -99,3 +99,110 @@ func TestAstGrepToolRun(t *testing.T) {
 		t.Errorf("Expected error result, got: %s", result)
 	}
 }
+
+// Phase 2: Pattern Suggestion Tests
+
+func TestGetPatternSuggestionGo(t *testing.T) {
+	tests := []struct {
+		query           string
+		expectedPattern string
+		expectedLang    string
+	}{
+		{"Find Go functions", "func $NAME($ARGS)", "go"},
+		{"golang error handling", "if err != nil { $$$ }", "go"},
+		{"go functions returning error", "func $NAME($ARGS) error", "go"},
+		{"go struct definitions", "type $NAME struct { $$$ }", "go"},
+		{"go interface", "type $NAME interface { $$$ }", "go"},
+		{"go method", "func ($R $TYPE) $NAME($ARGS)", "go"},
+	}
+
+	for _, tt := range tests {
+		suggestion := GetPatternSuggestion(tt.query)
+		if suggestion.Pattern != tt.expectedPattern {
+			t.Errorf("Query '%s': expected pattern '%s', got '%s'", tt.query, tt.expectedPattern, suggestion.Pattern)
+		}
+		if suggestion.Lang != tt.expectedLang {
+			t.Errorf("Query '%s': expected lang '%s', got '%s'", tt.query, tt.expectedLang, suggestion.Lang)
+		}
+	}
+}
+
+func TestGetPatternSuggestionJS(t *testing.T) {
+	tests := []struct {
+		query           string
+		expectedPattern string
+		expectedLang    string
+	}{
+		{"javascript async functions", "async function $NAME($ARGS)", "js"},
+		{"js console.log", "console.log($ARG)", "js"},
+		{"react useState hook", "useState($INIT)", "tsx"},
+		{"typescript try catch", "try { $$$ } catch ($E) { $$$ }", "js"},
+		{"js class definition", "class $NAME { $$$ }", "js"},
+		{"javascript function", "function $NAME($ARGS)", "js"},
+	}
+
+	for _, tt := range tests {
+		suggestion := GetPatternSuggestion(tt.query)
+		if suggestion.Pattern != tt.expectedPattern {
+			t.Errorf("Query '%s': expected pattern '%s', got '%s'", tt.query, tt.expectedPattern, suggestion.Pattern)
+		}
+		if suggestion.Lang != tt.expectedLang {
+			t.Errorf("Query '%s': expected lang '%s', got '%s'", tt.query, tt.expectedLang, suggestion.Lang)
+		}
+	}
+}
+
+func TestGetPatternSuggestionPython(t *testing.T) {
+	tests := []struct {
+		query           string
+		expectedPattern string
+		expectedLang    string
+	}{
+		{"python function", "def $NAME($ARGS):", "py"},
+		{"python async function", "async def $NAME($ARGS):", "py"},
+		{"py class", "class $NAME:", "py"},
+	}
+
+	for _, tt := range tests {
+		suggestion := GetPatternSuggestion(tt.query)
+		if suggestion.Pattern != tt.expectedPattern {
+			t.Errorf("Query '%s': expected pattern '%s', got '%s'", tt.query, tt.expectedPattern, suggestion.Pattern)
+		}
+		if suggestion.Lang != tt.expectedLang {
+			t.Errorf("Query '%s': expected lang '%s', got '%s'", tt.query, tt.expectedLang, suggestion.Lang)
+		}
+	}
+}
+
+func TestGetPatternSuggestionRust(t *testing.T) {
+	tests := []struct {
+		query           string
+		expectedPattern string
+		expectedLang    string
+	}{
+		{"rust function", "fn $NAME($ARGS)", "rs"},
+		{"rust result", "fn $NAME($ARGS) -> Result<$T, $E>", "rs"},
+		{"rust struct", "struct $NAME { $$$ }", "rs"},
+		{"rust impl", "impl $TYPE { $$$ }", "rs"},
+	}
+
+	for _, tt := range tests {
+		suggestion := GetPatternSuggestion(tt.query)
+		if suggestion.Pattern != tt.expectedPattern {
+			t.Errorf("Query '%s': expected pattern '%s', got '%s'", tt.query, tt.expectedPattern, suggestion.Pattern)
+		}
+		if suggestion.Lang != tt.expectedLang {
+			t.Errorf("Query '%s': expected lang '%s', got '%s'", tt.query, tt.expectedLang, suggestion.Lang)
+		}
+	}
+}
+
+func TestGetPatternSuggestionUnknown(t *testing.T) {
+	suggestion := GetPatternSuggestion("something random")
+	if suggestion.Pattern != "" {
+		t.Errorf("Expected empty pattern for unknown query, got '%s'", suggestion.Pattern)
+	}
+	if suggestion.Hint == "" {
+		t.Error("Expected hint for unknown query")
+	}
+}
