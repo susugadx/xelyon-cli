@@ -2,7 +2,8 @@
 
 > ⚠️ **注意**: このファイルは **xelyon-cli 自体の開発用** です。
 >
-> あなた自身のプロジェクトで XELYON を使う場合は、このファイルを削除して `/init` コマンドで新しい XELYON.md を生成してください。
+> xelyon-cli の開発に参加する場合はこのまま使用してください。
+> 単に XELYON を使いたい場合は [バイナリをダウンロード](https://github.com/susugadx/xelyon-cli/releases) してください。
 
 ## 概要
 Go製のAI搭載コーディングアシスタントCLI。複数のLLMプロバイダー（DeepSeek, OpenAI, Gemini, Claude, Ollama, Groq）に対応した対話型エージェントで、ツールを使って実際にコード編集・Git操作を実行します。
