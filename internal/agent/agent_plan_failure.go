@@ -1,12 +1,13 @@
 package agent
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
 // containsFailure はツール結果に失敗パターンが含まれるか検出
@@ -101,25 +102,39 @@ func promptFailureAction(step *PlanStep, result string, reason string) FailureAc
 	yellow.Println("  [a]bort  - Stop plan execution")
 	fmt.Println()
 
-	// 入力を受け付け
-	result2 := tools.ConfirmInteractive("Choose action [r/s/a]:")
+	// r/s/a 専用の入力を受け付け
+	return promptFailureActionInput()
+}
 
-	switch result2.Action {
-	case "yes":
-		// y を押した場合は retry として扱う
-		return FailureActionRetry
-	case "no":
-		// n を押した場合は abort として扱う
-		return FailureActionAbort
-	case "comment":
-		// コメントがある場合は AIに伝えてretry
-		if strings.TrimSpace(result2.Comment) != "" {
-			yellow.Printf("📝 Comment received: %s\n", result2.Comment)
-			yellow.Println("   (Comment will be passed to AI for retry)")
+// promptFailureActionInput は r/s/a 専用の入力プロンプト
+func promptFailureActionInput() FailureAction {
+	reader := bufio.NewReader(os.Stdin)
+
+	for {
+		yellow.Print("Choose action [r/s/a]: ")
+
+		response, err := reader.ReadString('\n')
+		if err != nil {
+			// EOF時はabortを返して終了
+			return FailureActionAbort
 		}
-		return FailureActionRetry
-	default:
-		return FailureActionAbort
+		response = strings.ToLower(strings.TrimSpace(response))
+
+		// 空入力は無視してリトライ
+		if response == "" {
+			continue
+		}
+
+		switch response {
+		case "r", "retry":
+			return FailureActionRetry
+		case "s", "skip":
+			return FailureActionSkip
+		case "a", "abort":
+			return FailureActionAbort
+		default:
+			yellow.Println("Invalid input. Please enter r/s/a.")
+		}
 	}
 }
 
