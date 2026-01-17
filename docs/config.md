@@ -73,6 +73,12 @@ streaming:
 tool_confirm:
   auto_approve_safe: true   # 安全なツールは確認なしで実行
 
+# プロンプトキャッシュ
+prompt_cache:
+  enabled: true             # キャッシュを有効化（推奨）
+  max_entries: 100          # 最大エントリ数
+  ttl_seconds: 300          # TTL（秒）
+
 # ペーストモード
 paste:
   max_lines: 10000          # 最大行数
