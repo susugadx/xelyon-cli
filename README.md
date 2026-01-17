@@ -11,7 +11,7 @@ AI搭載のコーディングアシスタントCLI
 DeepSeek, OpenAI, Gemini, Claude, Ollama, Groq をシームレスに切り替え。
 ローカルLLM（Ollama）も対応で、オフラインでも使用可能。
 
-### 🛠️ 31種類の組み込みツール
+### 🛠️ 32種類の組み込みツール
 - **ファイル操作**: 読み書き、編集、コピー、移動、削除、バックアップ復元
 - **Git操作**: status, diff, add, commit, push, branch, stash
 - **コード検索**: grep検索、ファイル検索、ast-grep（構造的検索）

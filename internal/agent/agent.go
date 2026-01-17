@@ -131,6 +131,8 @@ You have access to the following tools:
 ### Search & Discovery
 - search_code: Search for pattern in code files. Args: {"pattern": "...", "path": "..."} (path optional)
 - search_file: Search for files by name. Args: {"pattern": "...", "path": "..."} (path optional)
+- grep_replace: Bulk find-and-replace across multiple files. Args: {"pattern": "regex", "replacement": "...", "path": "...", "file_pattern": "*.go", "dry_run": "true|false"} (path/file_pattern/dry_run optional)
+  Use dry_run=true first to preview changes before applying
 - ast_grep: Structural code search using Tree-sitter AST patterns. Args: {"pattern": "...", "lang": "...", "path": "..."} (lang/path optional)
 
   IMPORTANT: When user requests structural code search in natural language, convert to ast-grep pattern:

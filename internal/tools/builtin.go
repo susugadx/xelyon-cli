@@ -505,6 +505,46 @@ func (t *ListBackupsTool) Run(args map[string]string) (string, *FileChange, erro
 	return result, nil, nil
 }
 
+// ===== Grep Replace Tool =====
+
+// GrepReplaceTool performs bulk find-and-replace across multiple files
+type GrepReplaceTool struct{}
+
+func (t *GrepReplaceTool) Name() string { return "grep_replace" }
+
+func (t *GrepReplaceTool) Run(args map[string]string) (string, *FileChange, error) {
+	dryRun := args["dry_run"] == "true"
+
+	// 確認プロンプト（dry_runでない場合）
+	if !dryRun {
+		yellow.Printf("🔄 Bulk replace across files\n")
+		fmt.Printf("  Pattern: %s\n", args["pattern"])
+		fmt.Printf("  Replacement: %s\n", args["replacement"])
+		fmt.Printf("  Path: %s\n", args["path"])
+		fmt.Printf("  File pattern: %s\n", args["file_pattern"])
+
+		decision := Confirm("Execute replacement? ")
+		if decision.Action == ConfirmNo {
+			return "Replacement cancelled by user", nil, nil
+		}
+		if decision.Action == ConfirmComment {
+			return fmt.Sprintf("Replacement cancelled with comment: %s", decision.Comment), nil, nil
+		}
+	}
+
+	result, _, err := executeGrepReplace(
+		args["pattern"],
+		args["replacement"],
+		args["path"],
+		args["file_pattern"],
+		dryRun,
+	)
+	if err != nil {
+		return fmt.Sprintf("Error: %v", err), nil, err
+	}
+	return result, nil, nil
+}
+
 // ===== Registry Registration =====
 
 // RegisterBuiltinTools はすべての組み込みツールを登録
@@ -541,6 +581,7 @@ func RegisterBuiltinTools(r *Registry) {
 	r.Register(&AstGrepTool{})       // NEW: Issue #55 - ast-grep structural search
 	r.Register(&RestoreBackupTool{}) // NEW: restore file from backup
 	r.Register(&ListBackupsTool{})   // NEW: list available backups
+	r.Register(&GrepReplaceTool{})   // NEW: bulk find-and-replace
 }
 
 // init は自動的にデフォルトレジストリに全ツールを登録

@@ -461,6 +461,7 @@ AIが自動で以下のツールを使用します。ユーザーが直接呼び
 | `create_dir` | ディレクトリ作成 | `path` |
 | `restore_backup` | バックアップから復元 | `path`, `backup_path` (オプション) |
 | `list_backups` | バックアップ一覧表示 | `path` |
+| `grep_replace` | 複数ファイルで一括置換 | `pattern`, `replacement`, `path`, `file_pattern`, `dry_run` |
 
 ### Git操作
 
