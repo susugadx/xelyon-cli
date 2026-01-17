@@ -46,6 +46,7 @@ type Config struct {
 	Streaming       StreamingConfig                `yaml:"streaming,omitempty"`
 	Bash            BashConfig                     `yaml:"bash,omitempty"`
 	CodeHealth      CodeHealthConfig               `yaml:"code_health,omitempty"`
+	GitStage        GitStageConfig                 `yaml:"git_stage,omitempty"`
 	// 将来の拡張用
 	// Cloud CloudConfig `yaml:"cloud,omitempty"`
 }
@@ -123,6 +124,11 @@ type CodeHealthConfig struct {
 	MaxFunctionLines int      `yaml:"max_function_lines"` // 関数行数上限（デフォルト: 50）
 	AutoSuggest      bool     `yaml:"auto_suggest"`       // 閾値超過時に自動で提案（デフォルト: true）
 	OnChange         []string `yaml:"on_change"`          // 変更時チェック項目（check_file_size, check_function_size, check_duplication）
+}
+
+// GitStageConfig はgit_addツールの設定
+type GitStageConfig struct {
+	BatchConfirm bool `yaml:"batch_confirm"` // 複数ファイルのバッチ確認UI（デフォルト: true）
 }
 
 // ProviderModelConfig はプロバイダーごとのモデル設定
@@ -206,6 +212,9 @@ func DefaultConfig() *Config {
 			MaxFunctionLines: 50,   // デフォルトは50行
 			AutoSuggest:      true, // デフォルトは自動提案有効
 			OnChange:         []string{"check_file_size", "check_function_size"},
+		},
+		GitStage: GitStageConfig{
+			BatchConfirm: true, // デフォルトは有効
 		},
 	}
 }

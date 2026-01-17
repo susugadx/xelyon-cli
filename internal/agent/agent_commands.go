@@ -388,6 +388,7 @@ func printHelp() {
   /init               - Generate XELYON.md (project config) from codebase analysis
   /sync               - Sync XELYON.md with current codebase (detect new/deleted files, tech changes)
   /paste, /p          - Paste mode for long text (end with empty line x2, END, or Ctrl+D)
+  /dryrun [on|off]    - Toggle Dry Run mode (simulate tool execution)
   /version            - Show version information
   /help               - Show this help
 

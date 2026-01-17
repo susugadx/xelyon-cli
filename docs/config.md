@@ -220,6 +220,37 @@ cat script.sh | bash
 echo password | sudo -S ...
 ```
 
+### git_stage
+
+git_addツールの動作を設定します。
+
+```yaml
+git_stage:
+  # 複数ファイルのバッチ確認UIを有効化
+  batch_confirm: true
+```
+
+#### `batch_confirm`
+- **型**: boolean
+- **デフォルト**: `true`
+- **説明**: 複数ファイルをステージングする際のバッチ確認UIを有効化
+
+**バッチ確認UI**:
+```
+📦 Git Stage Batch / Gitバッチステージング
+   3 files / 3ファイル
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  - file1.go
+  - file2.go
+  - file3.go
+
+Stage all? (y/n/s=select) / 全てステージング？ (y/n/s=個別選択):
+```
+
+- `y`: 全ファイルをステージング
+- `n`: キャンセル
+- `s`: 個別選択モード（1ファイルずつ確認）
+
 ## 環境変数
 
 ### API キー

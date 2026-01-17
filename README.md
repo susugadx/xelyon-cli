@@ -145,6 +145,8 @@ command_aliases:
 /plan on    # Plan Mode有効化
 /use gemini # プロバイダー切り替え
 /undo       # 最後の変更を取り消し
+/dryrun     # Dry Runモード切り替え（on/off/status）
+/version    # バージョン情報表示
 /exit       # 終了（終了時に会話からルール抽出→XELYON.mdへ追記提案）
 ```
 
