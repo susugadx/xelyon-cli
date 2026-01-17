@@ -483,12 +483,34 @@ export XELYON_PROVIDER=deepseek
 export XELYON_MODEL=deepseek-coder
 ```
 
-### デバッグ・動作設定
+### セキュリティ・監査設定
 
 ```bash
-# デバッグモード
-export XELYON_DEBUG=1
+# 監査ログを有効化
+export XELYON_AUDIT_LOG=1
+```
 
+ツール実行履歴をJSONL形式で記録します。
+
+- **保存場所**: `~/.xelyon/audit/audit_YYYYMMDD.jsonl`
+- **記録内容**: タイムスタンプ、ツール名、引数、出力、成功/失敗
+- **セキュリティ**: 機密情報（password, token, api_key, secret）は自動的に`[REDACTED]`化
+
+```bash
+# セッション履歴の暗号化を有効化
+export XELYON_ENCRYPT_HISTORY=1
+```
+
+セッション履歴をAES-256-GCMで暗号化します。
+
+- **暗号化方式**: AES-256-GCM
+- **鍵導出**: PBKDF2（100,000回イテレーション、SHA-256）
+- **暗号化キー保存場所**: `~/.xelyon/.session_key`（0600パーミッション）
+- **注意**: 暗号化キーを紛失すると過去のセッションは復元できません
+
+### 動作設定
+
+```bash
 # 対話的確認モード（ツール実行前に確認）
 export XELYON_INTERACTIVE_CONFIRM=1
 
@@ -508,10 +530,28 @@ export XELYON_API_RETRY_MAX_DELAY=60
 export XELYON_DIFF_CONTEXT_LINES=20
 ```
 
-### DeepSeek API URL（カスタムエンドポイント）
+### カスタムAPIエンドポイント
+
+プロキシやセルフホスト環境で使用する場合に設定します。
 
 ```bash
-export DEEPSEEK_API_URL=https://your-custom-endpoint.com/chat/completions
+# DeepSeek
+export DEEPSEEK_API_URL=https://your-proxy.com/v1/chat/completions
+
+# OpenAI
+export OPENAI_API_URL=https://your-proxy.com/v1/chat/completions
+
+# Claude (Anthropic)
+export ANTHROPIC_API_URL=https://your-proxy.com/v1/messages
+
+# Gemini
+export GEMINI_API_URL=https://your-proxy.com/v1beta/models
+
+# Groq
+export GROQ_API_URL=https://your-proxy.com/openai/v1/chat/completions
+
+# Serper (Web検索)
+export SERPER_API_URL=https://your-proxy.com/search
 ```
 
 ## 設定ファイルの編集

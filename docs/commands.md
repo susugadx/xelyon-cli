@@ -470,9 +470,6 @@ export GEMINI_API_KEY=...
 export ANTHROPIC_API_KEY=sk-ant-...
 export GROQ_API_KEY=gsk_...
 
-# デバッグモード
-export XELYON_DEBUG=1
-
 # 対話的確認モード（ツール実行前に確認）
 export XELYON_INTERACTIVE_CONFIRM=1
 ```
