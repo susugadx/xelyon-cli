@@ -22,6 +22,73 @@ XELYON CLIで使用できる全コマンドのリファレンスです。
 > /stats
 ```
 
+### `/save`
+
+現在のセッションを保存します。
+
+```
+> /save
+```
+
+### `/load`
+
+保存されたセッションを読み込みます。引数なしで最後のセッションを読み込みます。
+
+```
+> /load              # 最後のセッションを読み込み
+> /load <session-id> # 指定したセッションを読み込み
+```
+
+### `/sessions`
+
+保存されたセッション一覧を表示します（最新10件）。
+
+```
+> /sessions
+```
+
+### `/clear`
+
+会話履歴をクリアします。
+
+```
+> /clear
+```
+
+### `/history`
+
+現在の会話履歴を表示します。
+
+```
+> /history
+```
+
+### `/model`
+
+現在のモデルを表示、または切り替えます。
+
+```
+> /model              # 現在のモデルを表示
+> /model <model-name> # モデルを切り替え
+```
+
+例:
+```
+> /model gpt-4o
+> /model claude-sonnet-4-5-20250514
+> /model gemini-2.0-flash-exp
+```
+
+### `/paste`
+
+ペーストモードを開始します。WSLなどBracketed Paste Modeが動作しない環境で複数行入力を行う際に使用します。
+
+```
+> /paste
+```
+
+入力が完了したら空行を2回入力（Enter2回）で終了します。
+
 ### `/memory`
 
 ユーザーメモリ機能を管理します。
@@ -97,6 +164,23 @@ Plan Modeのオン/オフを切り替えます。Plan Modeでは、AIが実装�
 
 ```
 > /providers
+```
+
+### `/config`
+
+設定を確認・変更します。
+
+```
+> /config show              # 全設定を表示（デフォルトとの差分を ⚡ で表示）
+> /config set <key> <value> # 設定を変更
+> /config reset <key>       # 設定をデフォルトに戻す
+```
+
+例:
+```
+> /config show
+> /config set tool_confirm.auto_approve_safe false
+> /config reset tool_confirm.auto_approve_safe
 ```
 
 ### `/changes`
