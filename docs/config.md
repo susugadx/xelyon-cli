@@ -59,6 +59,7 @@ api_retry:
   count: 3                  # リトライ回数
   initial_delay: 1          # 初回待機秒数
   max_delay: 30             # 最大待機秒数
+  timeout: 300              # タイムアウト秒（5分）
 
 # 差分表示
 diff:
@@ -67,6 +68,28 @@ diff:
 # ストリーミング設定
 streaming:
   idle_timeout_seconds: 30  # アイドルタイムアウト秒（データ受信がない場合）
+
+# ツール確認
+tool_confirm:
+  auto_approve_safe: true   # 安全なツールは確認なしで実行
+
+# ペーストモード
+paste:
+  max_lines: 10000          # 最大行数
+  max_bytes: 1048576        # 最大バイト数（1MB）
+  timeout_seconds: 60       # タイムアウト秒
+
+# コード健全性チェック
+code_health:
+  enabled: true             # 有効化
+  max_file_lines: 300       # ファイル行数上限
+  max_function_lines: 50    # 関数行数上限
+  auto_suggest: true        # 自動提案
+
+# コマンドエイリアス
+command_aliases:
+  t: test
+  r: review
 ```
 
 ## 設定項目詳細
@@ -138,6 +161,12 @@ streaming:
 - **デフォルト**: `30`
 - **説明**: リトライ時の最大待機秒数
 - **補足**: Exponential Backoff（指数バックオフ）方式
+
+#### `timeout`
+- **型**: integer
+- **デフォルト**: `300`（5分）
+- **説明**: API呼び出しのタイムアウト秒数
+- **補足**: 長時間のレスポンスが必要な場合は増やす（例: 7200 = 2時間）
 
 ### 差分表示設定 (`diff`)
 
@@ -250,6 +279,116 @@ Stage all? (y/n/s=select) / 全てステージング？ (y/n/s=個別選択):
 - `y`: 全ファイルをステージング
 - `n`: キャンセル
 - `s`: 個別選択モード（1ファイルずつ確認）
+
+### ツール確認設定 (`tool_confirm`)
+
+```yaml
+tool_confirm:
+  auto_approve_safe: true  # SafetyHigh（read_file等）を確認なしで実行
+```
+
+#### `auto_approve_safe`
+- **型**: boolean
+- **デフォルト**: `true`
+- **説明**: 安全なツール（read_file, search_file等）を確認なしで実行
+
+### プロンプトキャッシュ設定 (`prompt_cache`)
+
+```yaml
+prompt_cache:
+  enabled: false        # キャッシュを有効化
+  max_entries: 100      # 最大エントリ数
+  ttl_seconds: 300      # TTL（秒）
+```
+
+#### `enabled`
+- **型**: boolean
+- **デフォルト**: `false`
+- **説明**: System PromptやRepo Mapのキャッシュを有効化
+
+#### `max_entries`
+- **型**: integer
+- **デフォルト**: `100`
+- **説明**: キャッシュの最大エントリ数（LRU方式）
+
+#### `ttl_seconds`
+- **型**: integer
+- **デフォルト**: `300`（5分）
+- **説明**: キャッシュのTTL（有効期限）
+
+### ペーストモード設定 (`paste`)
+
+```yaml
+paste:
+  max_lines: 10000       # 最大行数
+  max_bytes: 1048576     # 最大バイト数（1MB）
+  timeout_seconds: 60    # タイムアウト秒
+```
+
+#### `max_lines`
+- **型**: integer
+- **デフォルト**: `10000`
+- **説明**: ペーストモードで受け付ける最大行数
+
+#### `max_bytes`
+- **型**: integer
+- **デフォルト**: `1048576`（1MB）
+- **説明**: ペーストモードで受け付ける最大バイト数
+
+#### `timeout_seconds`
+- **型**: integer
+- **デフォルト**: `60`
+- **説明**: ペーストモードのタイムアウト秒数
+
+### コード健全性チェック設定 (`code_health`)
+
+```yaml
+code_health:
+  enabled: true           # 健全性チェックを有効化
+  max_file_lines: 300     # ファイル行数上限
+  max_function_lines: 50  # 関数行数上限
+  auto_suggest: true      # 閾値超過時に自動提案
+  on_change:              # 変更時チェック項目
+    - check_file_size
+    - check_function_size
+```
+
+#### `enabled`
+- **型**: boolean
+- **デフォルト**: `true`
+- **説明**: コード健全性チェックを有効化
+
+#### `max_file_lines`
+- **型**: integer
+- **デフォルト**: `300`
+- **説明**: ファイル行数の上限（超過時に警告）
+
+#### `max_function_lines`
+- **型**: integer
+- **デフォルト**: `50`
+- **説明**: 関数行数の上限（超過時に警告）
+
+#### `auto_suggest`
+- **型**: boolean
+- **デフォルト**: `true`
+- **説明**: 閾値超過時に自動でリファクタリングを提案
+
+#### `on_change`
+- **型**: string[]
+- **デフォルト**: `["check_file_size", "check_function_size"]`
+- **説明**: ファイル変更時に実行するチェック項目
+
+### コマンドエイリアス設定 (`command_aliases`)
+
+よく使うコマンドにエイリアスを設定できます。
+
+```yaml
+command_aliases:
+  t: test        # /t → /test
+  r: review      # /r → /review
+  c: commit      # /c → /commit
+  u: use         # /u → /use
+```
 
 ## 環境変数
 
