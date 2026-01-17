@@ -18,7 +18,7 @@ AI搭載のコーディングアシスタントCLI
 DeepSeek, OpenAI, Gemini, Claude, Ollama, Groq をシームレスに切り替え。
 ローカルLLM（Ollama）も対応で、オフラインでも使用可能。
 
-### 🛠️ 34種類の組み込みツール
+### 🛠️ 35種類の組み込みツール
 - **ファイル操作**: 読み書き、編集、コピー、移動、削除、バックアップ復元
 - **Git操作**: status, diff, add, commit, push, branch, stash
 - **コード検索**: grep検索、ファイル検索、ast-grep（構造的検索）
@@ -134,7 +134,7 @@ xelyon --auto-approve
 
 | ドキュメント | 内容 |
 |------------|------|
-| [コマンド一覧](docs/commands.md) | 全コマンド、29ツール、使用例 |
+| [コマンド一覧](docs/commands.md) | 全コマンド、35ツール、使用例 |
 | [プロバイダー設定](docs/providers.md) | 各プロバイダーのAPIキー取得方法 |
 | [設定リファレンス](docs/config.md) | config.yaml と環境変数 |
 | [MCP連携](docs/mcp.md) | 外部ツール追加 |

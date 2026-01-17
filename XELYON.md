@@ -42,7 +42,7 @@ xelyon-cli/
 ├── internal/
 │   ├── agent/           # エージェント（対話ループ、Plan Mode、検証）
 │   ├── api/             # LLMプロバイダー（Provider Pattern）
-│   ├── tools/           # ツール（Registry方式、34種類）
+│   ├── tools/           # ツール（Registry方式、35種類）
 │   ├── mcp/             # MCP連携（外部ツール統合）
 │   ├── repomap/         # Repo Map（Tree-sitter、30言語対応）
 │   ├── review/          # コードレビュー機能
