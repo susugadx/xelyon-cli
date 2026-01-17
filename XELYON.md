@@ -270,11 +270,11 @@ ast-grep scan --rule rule.yml
   - `enabled`: 有効化
   - `max_entries`: 最大エントリ数
   - `ttl_seconds`: デフォルトTTL（秒）
-- **注意**: Claude の `cache_control` 付与や OpenAI Prompt Caching API への統合は、別途 provider 実装側での対応が必要（この変更では基盤と設定のみ）。
 - **Provider統合状況**:
-  - **Claude**: `prompt_cache.enabled` のとき、Messages API の `system` を content blocks に変換し `cache_control` を付与（Prompt Caching 用）
-  - **OpenAI**: 現状の `/v1/chat/completions` 実装は維持（API側 Prompt Caching は将来対応）
-  - **Gemini**: Context Caching は別API（cached content 管理）が必要なため将来対応
+  - **Claude**: `prompt_cache.enabled` のとき、Messages API の `system` を content blocks に変換し `cache_control` を付与（Prompt Caching 用）✅
+  - **OpenAI/DeepSeek**: API側で自動キャッシュ（Automatic Prompt Caching）が適用されるため、クライアント側の対応不要 ✅
+  - **Gemini**: Implicit Caching（自動）が2025年5月から有効。クライアント側の対応不要 ✅
+- **注意**: OpenAI/Geminiの自動キャッシュを最大限活用するには、システムプロンプトやRepoMapなど固定コンテンツをプロンプトの先頭に配置すること
 
 
 
