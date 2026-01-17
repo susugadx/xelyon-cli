@@ -140,7 +140,9 @@ xelyon --auto-approve
 | [MCP連携](docs/mcp.md) | 外部ツール追加 |
 | [使い方詳細](docs/usage.md) | 複数行入力、画像入力、レビュー機能など |
 
-## 開発
+## 開発に参加する
+
+xelyon-cli の開発に参加したい方向け：
 
 ```bash
 git clone https://github.com/susugadx/xelyon-cli.git
@@ -149,7 +151,7 @@ go build -o xelyon
 ./xelyon
 ```
 
-> ⚠️ リポジトリの `XELYON.md` は開発用です。あなたのプロジェクトでは `/init` で新規作成してください。
+> ⚠️ このリポジトリの `XELYON.md` は xelyon-cli 開発用です。
 
 ## ライセンス
 
