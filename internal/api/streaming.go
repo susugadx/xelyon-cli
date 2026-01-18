@@ -82,7 +82,9 @@ func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *u
 		case result, ok := <-lineCh:
 			if !ok {
 				// チャンネルクローズ（予期しない終了）
-				fmt.Println()
+				if !firstChunk {
+					fmt.Println()
+				}
 				return fullResponse.String(), nil
 			}
 
@@ -101,7 +103,9 @@ func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *u
 					spinner.Stop()
 					return fullResponse.String(), fmt.Errorf("scanner error: %w", result.err)
 				}
-				fmt.Println()
+				if !firstChunk {
+					fmt.Println()
+				}
 				return fullResponse.String(), nil
 			}
 
@@ -118,7 +122,9 @@ func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *u
 			}
 
 			if done {
-				fmt.Println()
+				if !firstChunk {
+					fmt.Println()
+				}
 				return fullResponse.String(), nil
 			}
 
