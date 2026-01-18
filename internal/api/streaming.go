@@ -36,8 +36,8 @@ func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *u
 	var fullResponse strings.Builder
 	var displayBuffer strings.Builder // 表示用バッファ
 	firstChunk := true
-	inToolJSON := false  // ツールJSON内にいるか
-	jsonDepth := 0       // JSONのネスト深度
+	inToolJSON := false // ツールJSON内にいるか
+	jsonDepth := 0      // JSONのネスト深度
 
 	// チャンネル経由でスキャン結果を受け取る
 	type scanResult struct {
