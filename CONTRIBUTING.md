@@ -5,7 +5,7 @@ XELYON CLIへの貢献ありがとうございます！
 ## 開発環境セットアップ
 
 ### 必要なもの
-- Go 1.22以上
+- Go 1.23以上
 - Git
 
 ### セットアップ手順
@@ -112,4 +112,3 @@ golangci-lint run
 
 ## 参考資料
 - [XELYON.md](XELYON.md): プロジェクト詳細設計
-- [CLAUDE.md](CLAUDE.md): Claude Code用設定

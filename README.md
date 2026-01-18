@@ -158,6 +158,10 @@ go build -o xelyon
 
 > ⚠️ このリポジトリの `XELYON.md` は xelyon-cli 開発用です。
 
+## コントリビュート
+
+PRやIssue歓迎です！詳細は [CONTRIBUTING.md](CONTRIBUTING.md) を参照してください。
+
 ## ライセンス
 
 MIT
