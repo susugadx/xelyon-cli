@@ -129,7 +129,7 @@ Output the JSON plan now:`, userRequest),
 
 // confirmPlan は計画の承認確認
 func (a *Agent) confirmPlan() (approved bool, feedback string) {
-	result := tools.ConfirmInteractive("Approve this plan? [y/n/c(omment)]:")
+	result := tools.ConfirmInteractive("Approve this plan?")
 
 	switch result.Action {
 	case "yes":
