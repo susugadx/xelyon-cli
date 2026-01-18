@@ -82,7 +82,7 @@ func NewAgent(model string, provider api.Provider) *Agent {
 ## Available Tools
 
 ### File Operations
-- read_file: {"path": "..."}
+- read_file: {"path": "...", "start_line": "N", "end_line": "M"} - start_line/end_line optional
 - write_file: {"path": "...", "content": "..."} - NEW files only
 - str_replace: {"path": "...", "old_str": "...", "new_str": "..."} - Edit existing files
 - append_file, prepend_file: {"path": "...", "content": "..."}

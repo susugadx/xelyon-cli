@@ -120,10 +120,9 @@ func (a *Agent) chat(input string) {
 
 	// 最大イテレーション警告
 	if !normalExit && loopCount >= maxIterations {
-		a.SetStatus(StateAborted, "Max iterations reached", "最大反復回数に到達", "Break the task down and try again", "タスクを分割して再試行")
-		yellow.Printf("⚠️  Warning: Maximum iterations (%d) reached\n", maxIterations)
-		yellow.Println("The task may be too complex or the AI is stuck in a loop.")
-		yellow.Println("Consider breaking down the task into smaller steps.")
+		a.SetStatus(StateAborted, "Max iterations reached", "最大反復回数に到達", "Continue or break down the task", "続行またはタスクを分割")
+		yellow.Printf("⚠️  %d回のツール実行に達しました\n", maxIterations)
+		yellow.Println("タスクが完了していない場合は、続けて指示してください。")
 	}
 }
 

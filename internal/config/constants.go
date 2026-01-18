@@ -13,7 +13,7 @@ const (
 
 // Tool Execution Limits
 const (
-	MaxToolIterations    = 10 // ツールループ最大回数
+	MaxToolIterations    = 25 // ツールループ最大回数（複雑なタスクに対応）
 	MaxChangeStack       = 10 // Undo履歴最大保存数
 	MaxAPIRetries        = 2  // API呼び出し最大リトライ回数
 	MaxSameToolCallCount = 3  // 同じツール呼び出しの最大繰り返し回数（ループ検知）

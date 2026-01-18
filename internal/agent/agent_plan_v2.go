@@ -205,7 +205,7 @@ Output your plan now in this JSON format:
 		}
 	}
 
-	yellow.Printf("⚠️  Investigation phase reached max iterations (%d)\n", maxIterations)
+	yellow.Printf("⚠️  調査フェーズが%d回のツール実行に達しました。続けて指示してください。\n", maxIterations)
 	return "", nil
 }
 

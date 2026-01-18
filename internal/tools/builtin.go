@@ -28,7 +28,19 @@ type ReadFileTool struct{}
 func (t *ReadFileTool) Name() string { return "read_file" }
 
 func (t *ReadFileTool) Run(args map[string]string) (string, *FileChange, error) {
-	result := executeReadFile(args["path"])
+	startLine := 0
+	endLine := 0
+	if args["start_line"] != "" {
+		if n, err := parseInt(args["start_line"]); err == nil {
+			startLine = n
+		}
+	}
+	if args["end_line"] != "" {
+		if n, err := parseInt(args["end_line"]); err == nil {
+			endLine = n
+		}
+	}
+	result := executeReadFile(args["path"], startLine, endLine)
 	return result, nil, nil
 }
 
