@@ -30,11 +30,13 @@ func isSameToolCall(tc1, tc2 *tools.ToolCall) bool {
 
 // chat はAIと対話する
 func (a *Agent) chat(input string) {
-	// Plan Mode が有効な場合、RunPlanMode を呼ぶ
+	// Plan Mode が有効な場合、RunPlanModeV2 を呼ぶ（Claude Code風）
+	// - SafetyHigh ツールは調査フェーズで即座に実行
+	// - SafetyMedium/Low ツールを使う前に計画を生成・承認
 	if a.PlanMode {
-		a.SetStatus(StateRunning, "Plan Mode running", "Plan Mode 実行中", "Wait for plan / approval prompts", "計画/承認プロンプトを待ってください")
+		a.SetStatus(StateRunning, "Plan Mode running", "Plan Mode 実行中", "Wait for investigation / plan approval", "調査/計画承認を待ってください")
 		ctx := context.Background()
-		if err := a.RunPlanMode(ctx, input); err != nil {
+		if err := a.RunPlanModeV2(ctx, input); err != nil {
 			a.SetStatus(StateAborted, "Plan Mode failed", "Plan Mode 失敗", "Review the error and retry", "エラー内容を確認して再試行してください")
 			red.Printf("Plan execution failed: %v\n", err)
 		} else {

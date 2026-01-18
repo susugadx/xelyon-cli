@@ -33,8 +33,9 @@ DeepSeek, OpenAI, Gemini, Claude, Ollama, Groq をシームレスに切り替え
 - 危険なツール（ファイル編集、bash等）は毎回確認
 
 **Plan Mode**（`/plan on`で有効化）
-- AIが計画を立案 → 承認後は全ステップ自動実行
-- 複雑なタスクを一気に完了
+- 調査ツール（ファイル読み取り、検索等）は即座に実行
+- 実装ツール（ファイル編集等）を使う前に計画を表示
+- 承認後、実装ステップを自動実行（Claude Code風）
 
 ### 🔍 コードレビュー & リファクタリング
 `/review` でセキュリティ・テストカバレッジをチェック。
@@ -103,12 +104,14 @@ xelyon --provider gemini --model gemini-2.0-flash-exp
 > /use claude
 ```
 
-### Plan Mode（自動実装）
+### Plan Mode（Claude Code風）
 
 ```bash
 > /plan on
 > ユーザー認証機能を追加して
-# → 計画表示 → y で承認 → 全ステップ自動実行
+# → 調査フェーズ（read_file, search_code等を自動実行）
+# → 実装計画を表示
+# → y で承認 → 実装ステップを自動実行
 ```
 
 ### 確認動作のカスタマイズ
