@@ -41,17 +41,43 @@ const projectConfigFile = "XELYON.md"
 func getProvider() api.Provider {
 	// 優先順位: CLI flag > 環境変数 > 設定ファイル > デフォルト
 	providerName := providerFlag
+	debug := os.Getenv("XELYON_DEBUG") == "1"
+
+	if debug {
+		fmt.Fprintf(os.Stderr, "[DEBUG getProvider] providerFlag=%q\n", providerFlag)
+	}
+
 	if providerName == "" {
 		providerName = os.Getenv("XELYON_PROVIDER")
+		if debug {
+			fmt.Fprintf(os.Stderr, "[DEBUG getProvider] XELYON_PROVIDER=%q\n", providerName)
+		}
 	}
 	if providerName == "" {
-		cfg, _ := config.LoadConfig()
+		cfg, err := config.LoadConfig()
+		if err != nil {
+			if debug {
+				fmt.Fprintf(os.Stderr, "[DEBUG getProvider] config.LoadConfig() error: %v\n", err)
+			}
+		}
 		if cfg != nil {
 			providerName = cfg.DefaultProvider
+			if debug {
+				fmt.Fprintf(os.Stderr, "[DEBUG getProvider] config.DefaultProvider=%q\n", providerName)
+			}
+		} else if debug {
+			fmt.Fprintf(os.Stderr, "[DEBUG getProvider] config is nil\n")
 		}
 	}
 	if providerName == "" {
 		providerName = "deepseek" // デフォルト
+		if debug {
+			fmt.Fprintf(os.Stderr, "[DEBUG getProvider] using default provider: %s\n", providerName)
+		}
+	}
+
+	if debug {
+		fmt.Fprintf(os.Stderr, "[DEBUG getProvider] final provider: %s\n", providerName)
 	}
 
 	return getProviderByName(providerName)
