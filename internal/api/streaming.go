@@ -12,6 +12,12 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
+// toolJSONPatterns はツールJSON開始パターン
+var toolJSONPatterns = []string{
+	`{"tool"`,
+	`{ "tool"`,
+}
+
 // StreamParser はストリーミングレスポンスの1行をパースする関数型
 // 戻り値: (content string, done bool, err error)
 //   - content: この行から抽出されたテキストコンテンツ
@@ -22,12 +28,16 @@ type StreamParser func(line string) (content string, done bool, err error)
 // ParseStreamingResponse は共通のストリーミングレスポンス処理
 // コンテキストキャンセル、スピナー制御、エラーハンドリングを統一的に処理
 // アイドルタイムアウト方式: データ受信がない状態がN秒続くとタイムアウト
+// ツールJSON部分は内部で記録するが表示しない
 func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner, parser StreamParser) (string, error) {
 	cfg := config.GetGlobalConfig()
 	idleTimeout := time.Duration(cfg.Streaming.IdleTimeoutSeconds) * time.Second
 
 	var fullResponse strings.Builder
+	var displayBuffer strings.Builder // 表示用バッファ
 	firstChunk := true
+	inToolJSON := false  // ツールJSON内にいるか
+	jsonDepth := 0       // JSONのネスト深度
 
 	// チャンネル経由でスキャン結果を受け取る
 	type scanResult struct {
@@ -110,15 +120,72 @@ func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *u
 			}
 
 			if content != "" {
-				// 最初のコンテンツでスピナー停止
-				if firstChunk {
-					spinner.Stop()
-					firstChunk = false
-				}
-
-				fmt.Print(content)
+				// fullResponseには常に追加（内部処理用）
 				fullResponse.WriteString(content)
+
+				// ツールJSON検出・非表示処理
+				displayContent := filterToolJSON(content, &displayBuffer, &inToolJSON, &jsonDepth)
+
+				if displayContent != "" {
+					// 最初のコンテンツでスピナー停止
+					if firstChunk {
+						spinner.Stop()
+						firstChunk = false
+					}
+					fmt.Print(displayContent)
+				}
 			}
 		}
 	}
+}
+
+// filterToolJSON はストリーミング中のツールJSONを検知して非表示にする
+// displayBufferにコンテンツを蓄積し、ツールJSON開始パターンを検知したら
+// それ以降のJSON部分を非表示にする
+func filterToolJSON(content string, displayBuffer *strings.Builder, inToolJSON *bool, jsonDepth *int) string {
+	var result strings.Builder
+
+	for _, ch := range content {
+		displayBuffer.WriteRune(ch)
+		bufStr := displayBuffer.String()
+
+		// ツールJSON開始パターンを検知
+		if !*inToolJSON {
+			for _, pattern := range toolJSONPatterns {
+				if strings.HasSuffix(bufStr, pattern) {
+					*inToolJSON = true
+					*jsonDepth = 1 // 最初の { をカウント
+					// パターン部分を結果から除去
+					resultStr := result.String()
+					if len(resultStr) >= len(pattern)-1 {
+						result.Reset()
+						result.WriteString(resultStr[:len(resultStr)-(len(pattern)-1)])
+					}
+					displayBuffer.Reset()
+					break
+				}
+			}
+		}
+
+		if *inToolJSON {
+			// JSON内ではネスト深度を追跡
+			if ch == '{' {
+				*jsonDepth++
+			} else if ch == '}' {
+				*jsonDepth--
+				if *jsonDepth == 0 {
+					// JSON終了
+					*inToolJSON = false
+					displayBuffer.Reset()
+				}
+			}
+			// ツールJSON内は表示しない
+			continue
+		}
+
+		// 通常のコンテンツは結果に追加
+		result.WriteRune(ch)
+	}
+
+	return result.String()
 }
