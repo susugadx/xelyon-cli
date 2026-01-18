@@ -65,25 +65,36 @@ func sanitizeToolName(name string) string {
 // buildGitHubMCPGuide はGitHub MCP専用の使用ガイドを生成する
 func buildGitHubMCPGuide() string {
 	return `### GitHub MCP Usage Guide (IMPORTANT)
-When the user asks about GitHub operations, you MUST use the appropriate MCP tool:
 
-| User Request | Tool to Use |
-|-------------|-------------|
-| "Create an issue" / "イシュー作成" | mcp_github_create_issue |
-| "List issues" / "イシュー一覧" | mcp_github_list_issues |
-| "Get issue #N" / "イシュー#N見せて" | mcp_github_get_issue |
-| "Create a PR" / "PR作成" | mcp_github_create_pull_request |
-| "List PRs" / "PR一覧" | mcp_github_list_pull_requests |
-| "Check CI/Actions status" / "CI確認" | mcp_github_get_workflow_runs |
-| "List repos" / "リポジトリ一覧" | mcp_github_list_repos |
-| "Get file contents" / "ファイル内容取得" | mcp_github_get_file_contents |
-| "Search code" / "コード検索" | mcp_github_search_code |
+**Tool Call Format:**
+` + "```" + `
+{"tool": "mcp_github_<action>", "args": {"owner": "...", "repo": "...", ...}}
+` + "```" + `
+
+**Common Tools & Arguments:**
+
+| Tool | Required Args | Description |
+|------|---------------|-------------|
+| mcp_github_get_issue | owner, repo, issue_number | Get issue details |
+| mcp_github_list_issues | owner, repo | List all issues |
+| mcp_github_create_issue | owner, repo, title, body | Create new issue |
+| mcp_github_get_file_contents | owner, repo, path, branch(opt) | Get file content |
+| mcp_github_list_pull_requests | owner, repo | List all PRs |
+| mcp_github_create_pull_request | owner, repo, title, body, head, base | Create PR |
+| mcp_github_search_code | q | Search code (q="keyword repo:owner/repo") |
+| mcp_github_get_workflow_runs | owner, repo | Check CI status |
+
+**Example:**
+` + "```" + `
+{"tool": "mcp_github_get_issue", "args": {"owner": "susugadx", "repo": "xelyon-cli", "issue_number": "72"}}
+` + "```" + `
 
 **CRITICAL RULES:**
 1. ALWAYS use MCP tools for GitHub operations - you have direct access
 2. Do NOT say "I can't access GitHub" or "Please use the GitHub web UI"
-3. Do NOT suggest manual steps when an MCP tool can do it directly
-4. If a tool fails, report the error and suggest alternatives
+3. **INFORMATION-ONLY requests**: When user asks to "get", "show", "list", or "fetch" something, ONLY display the result. Do NOT automatically start implementing/fixing based on the fetched content
+4. **Wait for explicit instruction**: After showing fetched information, wait for user to tell you what to do next
+5. If a tool fails, report the error and suggest alternatives
 
 `
 }
