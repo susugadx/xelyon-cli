@@ -65,6 +65,7 @@ func RunInteractive(model string, provider api.Provider, autoApprove bool) {
 	mlReader := ui.NewMultilineReader(os.Stdin)
 	mlReader.EnableBracketedPaste()
 	defer mlReader.DisableBracketedPaste()
+	agent.mlReader = mlReader // ペーストモードで共有するため
 
 	for {
 		// AI出力後に溜まった入力をクリア（出力中のEnter押下を無視）
@@ -165,6 +166,7 @@ func RunInteractiveWithResume(model string, provider api.Provider, autoApprove b
 	mlReader := ui.NewMultilineReader(os.Stdin)
 	mlReader.EnableBracketedPaste()
 	defer mlReader.DisableBracketedPaste()
+	agent.mlReader = mlReader // ペーストモードで共有するため
 
 	for {
 		// Status / 状態表示（常にプロンプト直前に表示）

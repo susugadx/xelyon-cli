@@ -15,7 +15,16 @@ func handlePasteCommand(agent *Agent, args []string) bool {
 	cfg := config.GetGlobalConfig()
 
 	pm := ui.NewPasteMode(cfg.Paste)
-	content, cancelled, err := pm.Capture(os.Stdin, os.Stdout)
+
+	// 共有リーダーを使用（バッファ競合を回避）
+	var content string
+	var cancelled bool
+	var err error
+	if agent.mlReader != nil {
+		content, cancelled, err = pm.CaptureWithReader(agent.mlReader.Reader(), os.Stdout)
+	} else {
+		content, cancelled, err = pm.Capture(os.Stdin, os.Stdout)
+	}
 	if err != nil {
 		red.Printf("Read error: %v\n", err)
 		return true

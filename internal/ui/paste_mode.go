@@ -36,7 +36,15 @@ func NewPasteMode(cfg config.PasteConfig) *PasteMode {
 
 // Capture reads multiline input from in and writes prompts/help to out.
 // Returns captured content, cancelled=true when user cancelled, and error when I/O fails.
+// Deprecated: Use CaptureWithReader for better buffer sharing.
 func (p *PasteMode) Capture(in io.Reader, out io.Writer) (content string, cancelled bool, err error) {
+	return p.CaptureWithReader(bufio.NewReader(in), out)
+}
+
+// CaptureWithReader reads multiline input using an existing bufio.Reader.
+// This avoids buffer conflicts when sharing stdin with other readers.
+// Returns captured content, cancelled=true when user cancelled, and error when I/O fails.
+func (p *PasteMode) CaptureWithReader(reader *bufio.Reader, out io.Writer) (content string, cancelled bool, err error) {
 	maxLines := p.cfg.MaxLines
 	maxBytes := p.cfg.MaxBytes
 	timeout := time.Duration(p.cfg.TimeoutSeconds) * time.Second
@@ -48,8 +56,6 @@ func (p *PasteMode) Capture(in io.Reader, out io.Writer) (content string, cancel
 	fmt.Fprintln(out, "   終了: 空行2回, END, /end, Ctrl+D")
 	fmt.Fprintln(out, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	fmt.Fprintln(out)
-
-	reader := bufio.NewReader(in)
 
 	var lines []string
 	emptyCount := 0

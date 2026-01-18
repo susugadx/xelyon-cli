@@ -124,3 +124,8 @@ func (m *MultilineReader) FlushInput() {
 		return
 	}
 }
+
+// Reader returns the underlying bufio.Reader for sharing with other input handlers
+func (m *MultilineReader) Reader() *bufio.Reader {
+	return m.reader
+}
