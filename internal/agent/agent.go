@@ -132,8 +132,8 @@ Tool call format: {"tool": "tool_name", "args": {"arg1": "value1"}}
 - str_replace for edits (NOT bash sed)
 
 ### 4. Verify Changes
-- Run "go fmt" for Go code
-- Run tests if they exist
+- Run formatter if available (format tool auto-detects language)
+- Run tests if they exist (run_test tool auto-detects framework)
 - Check for errors/warnings
 
 ### 5. Error Handling
