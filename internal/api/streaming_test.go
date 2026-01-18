@@ -282,3 +282,206 @@ func TestStreamingConfigDefault(t *testing.T) {
 		t.Errorf("Expected default IdleTimeoutSeconds=30, got %d", cfg.Streaming.IdleTimeoutSeconds)
 	}
 }
+
+// filterToolJSON tests
+
+func testFilterToolJSON(chunks []string) string {
+	var displayBuffer strings.Builder
+	inToolJSON := false
+	jsonDepth := 0
+
+	var output strings.Builder
+	for _, chunk := range chunks {
+		result := filterToolJSON(chunk, &displayBuffer, &inToolJSON, &jsonDepth)
+		output.WriteString(result)
+	}
+
+	// バッファに残っている分を出力（ストリーム終了時）
+	if displayBuffer.Len() > 0 && !inToolJSON {
+		output.WriteString(displayBuffer.String())
+	}
+
+	return output.String()
+}
+
+func TestFilterToolJSON_SingleChunk(t *testing.T) {
+	tests := []struct {
+		name     string
+		chunks   []string
+		expected string
+	}{
+		{
+			name:     "no tool JSON",
+			chunks:   []string{"Hello World"},
+			expected: "Hello World",
+		},
+		{
+			name:     "tool JSON only",
+			chunks:   []string{`{"tool": "read_file", "args": {}}`},
+			expected: "",
+		},
+		{
+			name:     "text before tool JSON",
+			chunks:   []string{`Hello {"tool": "read_file", "args": {}}`},
+			expected: "Hello ",
+		},
+		{
+			name:     "text after tool JSON",
+			chunks:   []string{`{"tool": "read_file"} World`},
+			expected: " World",
+		},
+		{
+			name:     "text around tool JSON",
+			chunks:   []string{`Hello {"tool": "read_file"} World`},
+			expected: "Hello  World",
+		},
+		{
+			name:     "multiple tool JSONs",
+			chunks:   []string{`First {"tool": "a"} Second {"tool": "b"} Third`},
+			expected: "First  Second  Third",
+		},
+		{
+			name:     "space in pattern",
+			chunks:   []string{`Hello { "tool": "read_file"}`},
+			expected: "Hello ",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := testFilterToolJSON(tt.chunks)
+			if result != tt.expected {
+				t.Errorf("filterToolJSON(%v) = %q, want %q", tt.chunks, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestFilterToolJSON_ChunkBoundary(t *testing.T) {
+	tests := []struct {
+		name     string
+		chunks   []string
+		expected string
+	}{
+		{
+			name:     "split at {",
+			chunks:   []string{`Hello {`, `"tool": "read_file"}`},
+			expected: "Hello ",
+		},
+		{
+			name:     "split at {\"",
+			chunks:   []string{`Hello {"`, `tool": "read_file"}`},
+			expected: "Hello ",
+		},
+		{
+			name:     "split at {\"t",
+			chunks:   []string{`Hello {"t`, `ool": "read_file"}`},
+			expected: "Hello ",
+		},
+		{
+			name:     "split at {\"to",
+			chunks:   []string{`Hello {"to`, `ol": "read_file"}`},
+			expected: "Hello ",
+		},
+		{
+			name:     "split at {\"too",
+			chunks:   []string{`Hello {"too`, `l": "read_file"}`},
+			expected: "Hello ",
+		},
+		{
+			name:     "split at {\"tool",
+			chunks:   []string{`Hello {"tool`, `": "read_file"}`},
+			expected: "Hello ",
+		},
+		{
+			name:     "split with space pattern at { ",
+			chunks:   []string{`Hello { `, `"tool": "read_file"}`},
+			expected: "Hello ",
+		},
+		{
+			name:     "split with space pattern at { \"",
+			chunks:   []string{`Hello { "`, `tool": "read_file"}`},
+			expected: "Hello ",
+		},
+		{
+			name:     "three chunks",
+			chunks:   []string{`Hello {`, `"to`, `ol": "read_file"}`},
+			expected: "Hello ",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := testFilterToolJSON(tt.chunks)
+			if result != tt.expected {
+				t.Errorf("filterToolJSON(%v) = %q, want %q", tt.chunks, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestFilterToolJSON_NestedJSON(t *testing.T) {
+	tests := []struct {
+		name     string
+		chunks   []string
+		expected string
+	}{
+		{
+			name:     "nested object",
+			chunks:   []string{`{"tool": "a", "args": {"nested": "value"}}`},
+			expected: "",
+		},
+		{
+			name:     "deeply nested",
+			chunks:   []string{`{"tool": "a", "args": {"level1": {"level2": {"level3": true}}}}`},
+			expected: "",
+		},
+		{
+			name:     "nested across chunks",
+			chunks:   []string{`{"tool": "a", "args": {`, `"nested": {"deep": true}}}`},
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := testFilterToolJSON(tt.chunks)
+			if result != tt.expected {
+				t.Errorf("filterToolJSON(%v) = %q, want %q", tt.chunks, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestFilterToolJSON_NonToolJSON(t *testing.T) {
+	tests := []struct {
+		name     string
+		chunks   []string
+		expected string
+	}{
+		{
+			name:     "other JSON key",
+			chunks:   []string{`{"other": "value"}`},
+			expected: `{"other": "value"}`,
+		},
+		{
+			name:     "brace in text",
+			chunks:   []string{`Hello {world}`},
+			expected: `Hello {world}`,
+		},
+		{
+			name:     "partial pattern not matching",
+			chunks:   []string{`Hello {"to`, `pic": "value"}`},
+			expected: `Hello {"topic": "value"}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := testFilterToolJSON(tt.chunks)
+			if result != tt.expected {
+				t.Errorf("filterToolJSON(%v) = %q, want %q", tt.chunks, result, tt.expected)
+			}
+		})
+	}
+}
