@@ -40,13 +40,13 @@ type Agent struct {
 	changeStack          []tools.FileChange
 	changeStorage        *history.ChangeStorage // 永続的変更履歴
 	mcpManager           *mcp.Manager
-	AutoApprove          bool                   // --auto-approve フラグ
-	DryRunMode           bool                   // --dry-run フラグ
-	Stats                *SessionStats          // セッション統計情報
-	lastOutputs          []string               // 最後のAI出力履歴（最大10件）
-	cancelFunc           context.CancelFunc     // 現在のAPI呼び出しをキャンセルするための関数
-	strReplaceErrorCount int                    // str_replace連続エラーカウント（old_str not found）
-	mlReader             *ui.MultilineReader    // 共有入力リーダー（ペーストモードでも使用）
+	AutoApprove          bool                // --auto-approve フラグ
+	DryRunMode           bool                // --dry-run フラグ
+	Stats                *SessionStats       // セッション統計情報
+	lastOutputs          []string            // 最後のAI出力履歴（最大10件）
+	cancelFunc           context.CancelFunc  // 現在のAPI呼び出しをキャンセルするための関数
+	strReplaceErrorCount int                 // str_replace連続エラーカウント（old_str not found）
+	mlReader             *ui.MultilineReader // 共有入力リーダー（ペーストモードでも使用）
 }
 
 // NewAgent は新しいAgentを作成

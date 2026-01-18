@@ -28,30 +28,17 @@ func isSameToolCall(tc1, tc2 *tools.ToolCall) bool {
 	return string(args1) == string(args2)
 }
 
-// chat はAIと対話する
+// chat はAIと対話する（Plan Mode 経由で処理）
+// Issue #82: すべてのリクエストを RunPlanMode() で処理するように統一
 func (a *Agent) chat(input string) {
 	a.SetStatus(StateRunning, "Processing request", "処理中", "Wait for response", "応答を待ってください")
-
-	// Plan Mode自動起動は無効化（/plan コマンドで明示的に使用）
-	// TODO: Issue #81 - Plan Mode統合後に再検討
 
 	// GitHub MCP ヒントを追加（GitHub関連リクエストの場合）
 	input = a.AddGitHubHint(input)
 
-	// 実装前チェック：既存定義の重複を警告
-	if warning := CheckBeforeImplementation(input); warning != "" {
-		yellow.Println(warning)
-		// AIにも警告を伝える
-		input = input + "\n\n[SYSTEM NOTE: " + warning + "]"
-	}
-
-	// 履歴に追加
-	a.History = append(a.History, api.Message{
-		Role:    "user",
-		Content: input,
-	})
-
 	// セッションに保存
+	// NOTE: 履歴への追加は RunPlanMode() 内の investigationPrompt で行われるため、
+	//       ここでは a.History への追加は行わない（重複防止）
 	if a.session != nil {
 		a.session.AddMessage("user", input, a.CurrentModel)
 	}
@@ -61,72 +48,27 @@ func (a *Agent) chat(input string) {
 		a.Stats.UserMessages++
 	}
 
-	// AIに送信（ツール実行ループ）
-	maxIterations := config.MaxToolIterations
-	var lastToolCall *tools.ToolCall
-	var sameCallCount int
-	var loopCount int
-	var normalExit bool
+	// タイムアウト付きコンテキスト作成
+	cfg := config.GetGlobalConfig()
+	timeout := time.Duration(cfg.APIRetry.Timeout) * time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	a.cancelFunc = cancel
 
-	for i := 0; i < maxIterations; i++ {
-		loopCount = i + 1
-
-		// API呼び出し（リトライあり）
-		response, err := a.callAPIWithRetry()
-		if err != nil {
-			// context.Canceled の場合は中断: ループを抜けてプロンプトに戻る
-			// その他のエラーも同様にループを抜ける
-			a.SetStatus(StateAborted, "API call failed", "API呼び出し失敗", "Try again with smaller context/logs", "ログ/コンテキストを短くして再試行")
-			return
+	// すべてのリクエストを Plan Mode で処理
+	// - 単純な Q&A: 調査フェーズで直接回答して終了
+	// - ツール使用: 調査 → 計画 → 実装 のフロー
+	if err := a.RunPlanMode(ctx, input); err != nil {
+		if errors.Is(err, context.Canceled) {
+			yellow.Println("\n⚠️  Response interrupted")
+		} else {
+			red.Printf("Error: %v\n", err)
 		}
-
-		// ツール呼び出しチェック（複数対応）
-		toolCalls := tools.ParseToolCalls(response)
-		if len(toolCalls) > 0 {
-			// 複数ツールを順次実行
-			for idx, toolCall := range toolCalls {
-				// ループ検知
-				if a.shouldAbortToolLoop(toolCall, lastToolCall, &sameCallCount) {
-					a.SetStatus(StateAborted, "Tool loop detected", "ツールループ検知", "Refine your request or provide more constraints", "指示を具体化する/制約を追加する")
-					break
-				}
-				lastToolCall = toolCall
-
-				// 複数ツールの場合は番号を表示
-				if len(toolCalls) > 1 {
-					cyan.Printf("🔧 Tool %d/%d: %s\n", idx+1, len(toolCalls), toolCall.Tool)
-				}
-
-				// ツール実行
-				a.executeToolCall(response, toolCall)
-			}
-			continue
-		}
-
-		// 通常の回答
-		// AIが「続けて〜します」と言っている場合はもう一度API呼び出し
-		if shouldContinueExecution(response) {
-			a.handleNormalResponse(response)
-			// 履歴に継続指示を追加してループ継続
-			a.History = append(a.History, api.Message{
-				Role:    "user",
-				Content: "[SYSTEM] Please continue with the next step.",
-			})
-			continue
-		}
-
-		a.handleNormalResponse(response)
-		a.SetStatus(StateWaitingInput, "Ready for input", "入力待ち", "Type your request or /help", "リクエスト、または /help を入力")
-		normalExit = true
-		break
+		a.SetStatus(StateAborted, "Request failed", "リクエスト失敗", "Try again", "再試行してください")
+		return
 	}
 
-	// 最大イテレーション警告
-	if !normalExit && loopCount >= maxIterations {
-		a.SetStatus(StateAborted, "Max iterations reached", "最大反復回数に到達", "Continue or break down the task", "続行またはタスクを分割")
-		yellow.Printf("⚠️  %d回のツール実行に達しました\n", maxIterations)
-		yellow.Println("タスクが完了していない場合は、続けて指示してください。")
-	}
+	a.SetStatus(StateWaitingInput, "Ready for input", "入力待ち", "Type your request or /help", "リクエスト、または /help を入力")
 }
 
 // callAPIWithRetry はAPI呼び出しをリトライ付きで実行
@@ -254,28 +196,6 @@ func extractExplanationAndTool(response string) (explanation, toolJSON string) {
 
 	// 閉じ括弧が見つからない場合は全体をツールJSONとみなす
 	return explanation, response[toolStartIdx:]
-}
-
-// shouldContinueExecution はAIの応答が継続を示しているか検知
-// AIが「続けて〜します」「次に〜」などと言っている場合はtrueを返す
-func shouldContinueExecution(response string) bool {
-	// 継続パターン（日本語・英語）
-	continuationPatterns := []string{
-		// 日本語
-		"続けて", "次に", "続いて", "引き続き", "それでは",
-		"まず", "次のステップ", "続きます", "進めます",
-		// 英語
-		"Next,", "Now I'll", "Now I will", "Let me continue",
-		"I'll now", "I will now", "Continuing", "Moving on",
-		"Next step", "Then I'll", "Then I will",
-	}
-
-	for _, pattern := range continuationPatterns {
-		if strings.Contains(response, pattern) {
-			return true
-		}
-	}
-	return false
 }
 
 // shouldAbortToolLoop は同じツール呼び出しの繰り返しを検知
@@ -542,29 +462,4 @@ func (a *Agent) chatWithImage(input string, image *api.ImageData) {
 
 	// 通常の回答処理
 	a.handleNormalResponse(response)
-}
-
-// shouldEnterPlanMode は複雑なタスクかどうかを判定
-// 明確に大規模タスクを示すキーワードのみを検出（誤検知防止）
-func (a *Agent) shouldEnterPlanMode(input string) bool {
-	// 厳選されたキーワード（複合フレーズ・明確な大規模タスク）
-	keywords := []string{
-		// 英語（複合フレーズ）
-		"implement feature", "new feature", "refactor the", "restructure",
-		"code review", "review the code", "quality audit", "security audit",
-		"migration", "integrate with",
-		// 日本語（明確に大きなタスク）
-		"機能を実装", "新機能", "リファクタリング", "アーキテクチャ",
-		"システム全体", "大規模", "全面的に",
-		"コードレビュー", "品質改善", "セキュリティ監査",
-		"マイグレーション", "統合して",
-	}
-
-	inputLower := strings.ToLower(input)
-	for _, kw := range keywords {
-		if strings.Contains(inputLower, strings.ToLower(kw)) {
-			return true
-		}
-	}
-	return false
 }
