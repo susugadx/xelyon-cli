@@ -24,8 +24,11 @@ type ConfirmResult struct {
 var ConfirmInteractive = func(message string) ConfirmResult {
 	reader := bufio.NewReader(os.Stdin)
 
+	// ボックス形式の確認UI
+	ui.ConfirmPromptBox(message)
+
 	for {
-		yellow.Printf("%s [y/n/c]: ", message)
+		yellow.Print("Choice: ")
 
 		response, err := reader.ReadString('\n')
 		if err != nil {

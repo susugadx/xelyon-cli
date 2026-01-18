@@ -5,13 +5,9 @@ import (
 	"fmt"
 	"os"
 	"strings"
-
-	"github.com/fatih/color"
 )
 
 const defaultPageSize = 100
-
-var yellow = color.New(color.FgYellow)
 
 // Pager は長い出力をページング表示
 type Pager struct {
@@ -58,7 +54,7 @@ func (p *Pager) Display(content string) {
 
 // promptContinue は継続確認プロンプトを表示
 func (p *Pager) promptContinue() bool {
-	yellow.Print("--more-- (Press Enter to continue, q to quit): ")
+	Yellow.Print("--more-- (Press Enter to continue, q to quit): ")
 
 	reader := bufio.NewReader(os.Stdin)
 	input, err := reader.ReadString('\n')

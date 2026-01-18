@@ -38,6 +38,7 @@ func RunInteractive(model string, provider api.Provider, autoApprove, planMode b
 
 	// ヘッダー表示
 	printHeader(model, provider)
+	printModeInfo(planMode, autoApprove, false)
 
 	// XELYON.md読み込み
 	if config := loadProjectConfig(); config != "" {
@@ -138,6 +139,7 @@ func RunInteractiveWithResume(model string, provider api.Provider, autoApprove, 
 	setupSignalHandler(agent)
 
 	printHeader(model, provider)
+	printModeInfo(planMode, autoApprove, false)
 	green.Printf("📂 Resumed session %s (%d messages)\n", sessionID, len(session.Messages))
 
 	if config := loadProjectConfig(); config != "" {

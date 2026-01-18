@@ -515,7 +515,28 @@ func printHeader(model string, provider api.Provider) {
 	cyan.Println("║  AI-powered coding assistant              ║")
 	cyan.Println("╚═══════════════════════════════════════════╝")
 	green.Printf("🌐 Provider: %s\n", provider.Name())
-	fmt.Printf("Model: %s\n", modelDisplayName(model))
+	fmt.Printf("   Model: %s\n", modelDisplayName(model))
+}
+
+// printModeInfo はモード情報を表示
+func printModeInfo(planMode, autoApprove, dryRun bool) {
+	var modes []string
+	if planMode {
+		modes = append(modes, "Plan")
+	}
+	if autoApprove {
+		modes = append(modes, "Auto-approve")
+	}
+	if dryRun {
+		modes = append(modes, "Dry-run")
+	}
+
+	if len(modes) > 0 {
+		yellow.Printf("   Mode: %s\n", strings.Join(modes, ", "))
+	} else {
+		fmt.Println("   Mode: Normal")
+	}
+	cyan.Println("───────────────────────────────────────────")
 	yellow.Println("Type /help for commands, /exit to quit")
 }
 
@@ -572,6 +593,7 @@ func RunOnceWithImage(query string, model string, provider api.Provider, imagePa
 
 	// ヘッダー表示
 	printHeader(model, provider)
+	printModeInfo(planMode, autoApprove, false)
 
 	// プロバイダーが画像対応かチェック
 	if !api.SupportsImages(provider.Name()) {
