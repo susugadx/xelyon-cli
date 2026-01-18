@@ -93,6 +93,13 @@ func IsSafeToolAutoApprovable(toolName string) bool {
 	return safety == SafetyHigh
 }
 
+// IsMediumToolAutoApprovable は SafetyMedium ツールを設定に基づいて自動承認するか判定
+// config.tool_confirm.auto_approve_medium が true の場合、SafetyMedium ツールは確認なしで実行
+func IsMediumToolAutoApprovable(toolName string) bool {
+	safety := GetToolSafety(toolName)
+	return safety == SafetyMedium
+}
+
 // GetSafetyDescription は安全性レベルの説明を返す
 func GetSafetyDescription(safety ToolSafety) string {
 	switch safety {

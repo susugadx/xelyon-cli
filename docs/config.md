@@ -71,7 +71,8 @@ streaming:
 
 # ツール確認
 tool_confirm:
-  auto_approve_safe: true   # 安全なツールは確認なしで実行
+  auto_approve_safe: true    # SafetyHigh（読み取り）は確認なしで実行
+  auto_approve_medium: false # SafetyMedium（書き込み）は確認必要（デフォルト）
 
 # プロンプトキャッシュ
 prompt_cache:
@@ -306,13 +307,27 @@ Stage all? (y/n/s=select) / 全てステージング？ (y/n/s=個別選択):
 
 ```yaml
 tool_confirm:
-  auto_approve_safe: true  # SafetyHigh（read_file等）を確認なしで実行
+  auto_approve_safe: true    # SafetyHigh（read_file等）を確認なしで実行
+  auto_approve_medium: false # SafetyMedium（str_replace等）を確認なしで実行
 ```
 
 #### `auto_approve_safe`
 - **型**: boolean
 - **デフォルト**: `true`
-- **説明**: 安全なツール（read_file, search_file等）を確認なしで実行
+- **説明**: SafetyHigh ツール（read_file, list_dir, search_file, search_code, git_status, git_log, git_diff 等）を確認なしで実行
+
+#### `auto_approve_medium`
+- **型**: boolean
+- **デフォルト**: `false`
+- **説明**: SafetyMedium ツール（str_replace, write_file, append_file, copy_file, git_add, git_commit 等）を確認なしで実行
+
+**安全性レベル一覧:**
+
+| レベル | ツール例 | 説明 |
+|--------|---------|------|
+| SafetyHigh | read_file, list_dir, search_* | 読み取り専用 |
+| SafetyMedium | str_replace, write_file, git_commit | 書き込み（リカバリ可能） |
+| SafetyLow | delete_file, bash, git_push | 破壊的操作（常に確認必須） |
 
 ### プロンプトキャッシュ設定 (`prompt_cache`)
 

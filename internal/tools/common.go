@@ -169,6 +169,12 @@ func confirmWithAutoApproveDecision(toolName, message string) ConfirmDecision {
 		return ConfirmDecision{Action: ConfirmYes}
 	}
 
+	// SafetyMedium ツールの自動承認（設定で有効な場合）
+	if cfg.ToolConfirm.AutoApproveMedium && IsMediumToolAutoApprovable(toolName) {
+		green.Printf("✓ Auto-approved (Medium write): %s\n", toolName)
+		return ConfirmDecision{Action: ConfirmYes}
+	}
+
 	// それ以外は通常の確認プロンプト（対話モード時は y/n/c）
 	return Confirm(message)
 }

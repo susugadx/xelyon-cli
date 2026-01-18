@@ -83,7 +83,8 @@ type DiffConfig struct {
 
 // ToolConfirmConfig はツール実行確認の設定
 type ToolConfirmConfig struct {
-	AutoApproveSafe bool `yaml:"auto_approve_safe"` // SafetyHigh（read_file等）を確認なしで実行（デフォルトtrue）
+	AutoApproveSafe   bool `yaml:"auto_approve_safe"`   // SafetyHigh（read_file等）を確認なしで実行（デフォルトtrue）
+	AutoApproveMedium bool `yaml:"auto_approve_medium"` // SafetyMedium（str_replace等）を確認なしで実行（デフォルトfalse）
 }
 
 // PromptCacheConfig はプロンプトキャッシュの設定
@@ -189,7 +190,8 @@ func DefaultConfig() *Config {
 			ContextLines: 10, // デフォルトは10行
 		},
 		ToolConfirm: ToolConfirmConfig{
-			AutoApproveSafe: true, // SafetyHigh（read_file等）は確認なしで実行
+			AutoApproveSafe:   true,  // SafetyHigh（read_file等）は確認なしで実行
+			AutoApproveMedium: false, // SafetyMedium（str_replace等）は確認必要（デフォルト）
 		},
 		Paste: PasteConfig{
 			MaxLines:       10000,   // デフォルト10000行

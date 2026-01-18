@@ -101,14 +101,18 @@ xelyon --provider gemini --model gemini-2.0-flash-exp
 
 ```yaml
 # ~/.xelyon/config.yaml
-
-# 安全なツールも毎回確認したい場合
 tool_confirm:
-  auto_approve_safe: false
+  auto_approve_safe: true    # SafetyHigh（読み取り）自動承認（デフォルト: true）
+  auto_approve_medium: true  # SafetyMedium（書き込み）自動承認（デフォルト: false）
 ```
 
+| 設定 | 対象ツール | デフォルト |
+|------|-----------|-----------|
+| `auto_approve_safe` | read_file, list_dir, search_* 等 | true |
+| `auto_approve_medium` | str_replace, write_file 等 | false |
+
 ```bash
-# 全ツール自動承認（信頼できる環境向け）
+# 全ツール自動承認（信頼できる環境向け、SafetyLow含む）
 xelyon --auto-approve
 ```
 

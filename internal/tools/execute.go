@@ -3,8 +3,6 @@ package tools
 import (
 	"fmt"
 	"strings"
-
-	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // Execute はツールを実行（Registry経由）
@@ -90,10 +88,7 @@ func Execute(tc *ToolCall) (string, *FileChange) {
 	// Registry経由でツール実行
 	result, change := DefaultRegistry.Execute(tc)
 
-	// ページング表示
-	pager := ui.NewPager()
-	pager.Display(result)
-
+	// ツール結果はAIに渡すのみ（各ツールが出す要約表示で十分）
 	return result, change
 }
 
