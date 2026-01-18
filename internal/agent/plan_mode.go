@@ -149,9 +149,40 @@ func (a *Agent) runInvestigationPhase(ctx context.Context) (string, error) {
 			return planJSON, nil
 		}
 
+		// デバッグモード: レスポンスの診断情報を出力
+		if os.Getenv("XELYON_DEBUG_PARSE") == "1" {
+			fmt.Fprintf(os.Stderr, "[DEBUG runInvestigationPhase] response length: %d\n", len(response))
+			// ツールパターンの存在チェック
+			if idx := strings.Index(response, `{"tool"`); idx != -1 {
+				fmt.Fprintf(os.Stderr, "[DEBUG runInvestigationPhase] found {\"tool\" at index %d\n", idx)
+			}
+			if idx := strings.Index(response, `{ "tool"`); idx != -1 {
+				fmt.Fprintf(os.Stderr, "[DEBUG runInvestigationPhase] found { \"tool\" at index %d\n", idx)
+			}
+			// コードブロックの数をチェック
+			codeBlockOpens := strings.Count(response, "```")
+			fmt.Fprintf(os.Stderr, "[DEBUG runInvestigationPhase] code block markers (```): %d (odd = unclosed)\n", codeBlockOpens)
+			// 閉じていないJSONの可能性をチェック
+			openBraces := strings.Count(response, "{")
+			closeBraces := strings.Count(response, "}")
+			fmt.Fprintf(os.Stderr, "[DEBUG runInvestigationPhase] braces: { = %d, } = %d (mismatch = incomplete JSON)\n", openBraces, closeBraces)
+		}
+
 		// ツール呼び出しチェック
 		toolCalls := tools.ParseToolCalls(response)
 		if len(toolCalls) == 0 {
+			// デバッグ: なぜ0件なのか追加診断
+			if os.Getenv("XELYON_DEBUG_PARSE") == "1" {
+				fmt.Fprintf(os.Stderr, "[DEBUG runInvestigationPhase] ParseToolCalls returned 0 tools\n")
+				// ツールパターンがあるのに0件の場合、原因を調査
+				if strings.Contains(response, `{"tool"`) || strings.Contains(response, `{ "tool"`) {
+					fmt.Fprintf(os.Stderr, "[DEBUG runInvestigationPhase] WARNING: tool pattern exists but not parsed!\n")
+					// 最後の200文字を表示
+					if len(response) > 200 {
+						fmt.Fprintf(os.Stderr, "[DEBUG runInvestigationPhase] tail: ...%s\n", response[len(response)-200:])
+					}
+				}
+			}
 			// ツール呼び出しも計画もない場合は終了
 			// AIが調査を終えて単に説明しているか、質問している場合
 			fmt.Println(response)

@@ -2,6 +2,8 @@ package tools
 
 import (
 	"encoding/json"
+	"fmt"
+	"os"
 	"strings"
 )
 
@@ -17,6 +19,27 @@ func ParseToolCall(response string) *ToolCall {
 // ParseToolCalls はレスポンスから全てのツール呼び出しを抽出
 // Markdownコードブロック内のJSONは除外する
 func ParseToolCalls(response string) []*ToolCall {
+	// デバッグモード
+	debug := os.Getenv("XELYON_DEBUG_PARSE") == "1"
+	if debug {
+		fmt.Fprintf(os.Stderr, "[DEBUG ParseToolCalls] response length: %d\n", len(response))
+		// ツールパターンの存在をチェック
+		for _, p := range []string{`{"tool"`, `{ "tool"`} {
+			if idx := strings.Index(response, p); idx != -1 {
+				fmt.Fprintf(os.Stderr, "[DEBUG ParseToolCalls] found pattern %q at index %d\n", p, idx)
+				// 周辺100文字を表示
+				start := idx
+				if start > 50 {
+					start = idx - 50
+				}
+				end := idx + 100
+				if end > len(response) {
+					end = len(response)
+				}
+				fmt.Fprintf(os.Stderr, "[DEBUG ParseToolCalls] context: ...%s...\n", response[start:end])
+			}
+		}
+	}
 	// Markdownコードブロック（```...```）の位置を記録
 	codeBlockRanges := findCodeBlockRanges(response)
 
@@ -49,6 +72,9 @@ func ParseToolCalls(response string) []*ToolCall {
 
 		// コードブロック内の場合はスキップ
 		if isInCodeBlock(start, codeBlockRanges) {
+			if debug {
+				fmt.Fprintf(os.Stderr, "[DEBUG ParseToolCalls] skipping: in code block at %d\n", start)
+			}
 			searchFrom = start + 1
 			continue
 		}
@@ -69,19 +95,37 @@ func ParseToolCalls(response string) []*ToolCall {
 		}
 
 		if end == -1 {
+			if debug {
+				fmt.Fprintf(os.Stderr, "[DEBUG ParseToolCalls] incomplete JSON: no closing brace found from index %d\n", start)
+				// 末尾100文字を表示
+				showStart := start
+				if len(response)-showStart > 200 {
+					showStart = len(response) - 200
+				}
+				fmt.Fprintf(os.Stderr, "[DEBUG ParseToolCalls] tail: ...%s\n", response[showStart:])
+			}
 			break
 		}
 
 		jsonStr := response[start:end]
+		if debug {
+			fmt.Fprintf(os.Stderr, "[DEBUG ParseToolCalls] extracted JSON (%d bytes): %s\n", len(jsonStr), truncateDebug(jsonStr, 200))
+		}
 		var toolCall ToolCall
 		if err := json.Unmarshal([]byte(jsonStr), &toolCall); err != nil {
 			// パースエラーの場合はスキップして次を探す
+			if debug {
+				fmt.Fprintf(os.Stderr, "[DEBUG ParseToolCalls] JSON parse error: %v\n", err)
+			}
 			searchFrom = end
 			continue
 		}
 
 		// tool フィールドが空の場合はスキップ
 		if toolCall.Tool == "" {
+			if debug {
+				fmt.Fprintf(os.Stderr, "[DEBUG ParseToolCalls] skipping: empty tool field\n")
+			}
 			searchFrom = end
 			continue
 		}
@@ -140,4 +184,12 @@ func isInCodeBlock(pos int, ranges [][2]int) bool {
 		}
 	}
 	return false
+}
+
+// truncateDebug はデバッグ表示用に文字列を切り詰める
+func truncateDebug(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }
