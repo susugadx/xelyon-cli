@@ -41,6 +41,8 @@ func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *u
 	firstChunk := true
 	inToolJSON := false // ツールJSON内にいるか
 	jsonDepth := 0      // JSONのネスト深度
+	inString := false   // JSON文字列リテラル内にいるか
+	var prevChar rune   // 前の文字（エスケープ検出用）
 
 	// チャンネル経由でスキャン結果を受け取る
 	type scanResult struct {
@@ -133,7 +135,7 @@ func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *u
 				fullResponse.WriteString(content)
 
 				// ツールJSON検出・非表示処理
-				displayContent := filterToolJSON(content, &displayBuffer, &inToolJSON, &jsonDepth)
+				displayContent := filterToolJSON(content, &displayBuffer, &inToolJSON, &jsonDepth, &inString, &prevChar)
 
 				if displayContent != "" {
 					// 最初のコンテンツでスピナー停止
@@ -154,22 +156,32 @@ func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *u
 // - displayBuffer: パターンの途中かもしれない文字を保留するバッファ
 // - パターンが確定するまで表示を保留し、ツールJSONでないと確定したら出力
 // - チャンク境界をまたいでもパターンを正しく検出できる
-func filterToolJSON(content string, displayBuffer *strings.Builder, inToolJSON *bool, jsonDepth *int) string {
+// - inString: JSON文字列リテラル内かどうかを追跡（文字列内の{}を無視するため）
+// - prevChar: エスケープシーケンス検出用（\"を無視するため）
+func filterToolJSON(content string, displayBuffer *strings.Builder, inToolJSON *bool, jsonDepth *int, inString *bool, prevChar *rune) string {
 	var result strings.Builder
 
 	for _, ch := range content {
 		if *inToolJSON {
-			// ツールJSON内: ネスト深度を追跡、表示しない
-			if ch == '{' {
-				*jsonDepth++
-			} else if ch == '}' {
-				*jsonDepth--
-				if *jsonDepth == 0 {
-					// JSON終了
-					*inToolJSON = false
-					displayBuffer.Reset()
+			// ツールJSON内: 文字列リテラルとネスト深度を追跡、表示しない
+			if ch == '"' && *prevChar != '\\' {
+				// エスケープされていない " で文字列の開始/終了を切り替え
+				*inString = !*inString
+			} else if !*inString {
+				// 文字列外でのみ {} をカウント
+				if ch == '{' {
+					*jsonDepth++
+				} else if ch == '}' {
+					*jsonDepth--
+					if *jsonDepth == 0 {
+						// JSON終了
+						*inToolJSON = false
+						*inString = false
+						displayBuffer.Reset()
+					}
 				}
 			}
+			*prevChar = ch
 			continue
 		}
 

@@ -65,7 +65,7 @@ Start your investigation now. Use read_file, search_code, list_dir etc. to under
 	}
 
 	// Step 2: 計画をパースして表示
-	plan, err := ParsePlanV2(planJSON)
+	plan, err := ParsePlan(planJSON)
 	if err != nil {
 		red.Printf("❌ Failed to parse plan: %v\n", err)
 		yellow.Printf("Plan JSON:\n%s\n", planJSON)

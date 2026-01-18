@@ -289,10 +289,12 @@ func testFilterToolJSON(chunks []string) string {
 	var displayBuffer strings.Builder
 	inToolJSON := false
 	jsonDepth := 0
+	inString := false
+	var prevChar rune
 
 	var output strings.Builder
 	for _, chunk := range chunks {
-		result := filterToolJSON(chunk, &displayBuffer, &inToolJSON, &jsonDepth)
+		result := filterToolJSON(chunk, &displayBuffer, &inToolJSON, &jsonDepth, &inString, &prevChar)
 		output.WriteString(result)
 	}
 
@@ -439,6 +441,26 @@ func TestFilterToolJSON_NestedJSON(t *testing.T) {
 		{
 			name:     "nested across chunks",
 			chunks:   []string{`{"tool": "a", "args": {`, `"nested": {"deep": true}}}`},
+			expected: "",
+		},
+		{
+			name:     "braces in string value",
+			chunks:   []string{`{"tool": "bash", "args": {"command": "echo }"}}`},
+			expected: "",
+		},
+		{
+			name:     "multiple braces in string",
+			chunks:   []string{`{"tool": "bash", "args": {"command": "echo {{}}}"}}`},
+			expected: "",
+		},
+		{
+			name:     "escaped quote in string",
+			chunks:   []string{`{"tool": "bash", "args": {"command": "echo \"}\"}}`},
+			expected: "",
+		},
+		{
+			name:     "braces in string across chunks",
+			chunks:   []string{`{"tool": "bash", "args": {"command": "echo `, `}"}}`},
 			expected: "",
 		},
 	}
