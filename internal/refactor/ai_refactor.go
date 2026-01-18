@@ -258,8 +258,16 @@ func parseSplitPlan(response string, filePath string, originalCode string) (*rev
 		if f.LinesStart <= 0 || f.LinesEnd <= 0 || f.LinesStart > f.LinesEnd {
 			continue
 		}
+		// Clamp to valid range
+		if f.LinesStart > len(lines) {
+			continue // Skip if start is beyond file
+		}
 		if f.LinesEnd > len(lines) {
 			f.LinesEnd = len(lines)
+		}
+		// Double-check after clamping
+		if f.LinesStart-1 >= f.LinesEnd {
+			continue
 		}
 
 		newContent := strings.Join(lines[f.LinesStart-1:f.LinesEnd], "\n")

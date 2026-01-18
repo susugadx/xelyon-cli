@@ -13,7 +13,7 @@ import (
 )
 
 // handleRefactorCommand handles the /refactor command for code refactoring analysis.
-// Flags: --fix, --yes, --type, --ai, --max-file-lines, --max-func-lines
+// Flags: --fix, --yes, --type, --ai, --max-file-lines, --max-func-lines, --max-ai-files
 // Usage: /refactor [flags] [paths...]
 func handleRefactorCommand(agent *Agent, args []string) bool {
 	opt := refactor.RefactorOptions{
@@ -50,6 +50,13 @@ func handleRefactorCommand(agent *Agent, args []string) bool {
 						opt.Config.MaxFunctionLines = n
 					}
 				}
+			case "--max-ai-files":
+				if i+1 < len(args) {
+					i++
+					if n, err := strconv.Atoi(args[i]); err == nil {
+						opt.Config.MaxAIFiles = n
+					}
+				}
 			default:
 				yellow.Printf("Unknown flag: %s\n", arg)
 			}
@@ -63,21 +70,29 @@ func handleRefactorCommand(agent *Agent, args []string) bool {
 		opt.Paths = []string{"."}
 	}
 
-	// Confirm before running
-	if !opt.AutoApprove {
-		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		cyan.Println("🔧 Code Refactoring Analysis")
-		cyan.Printf("   Paths: %s\n", strings.Join(opt.Paths, ", "))
-		cyan.Printf("   Max file lines: %d\n", opt.Config.MaxFileLines)
-		cyan.Printf("   Max function lines: %d\n", opt.Config.MaxFunctionLines)
-		if opt.TypeFilter != "" {
-			cyan.Printf("   Filter: %s\n", opt.TypeFilter)
-		}
-		if opt.Config.UseAI {
-			cyan.Println("   AI analysis: enabled")
-		}
-		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	// Show info and confirm before running
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	cyan.Println("🔧 Code Refactoring Analysis")
+	cyan.Printf("   Paths: %s\n", strings.Join(opt.Paths, ", "))
+	cyan.Printf("   Max file lines: %d\n", opt.Config.MaxFileLines)
+	cyan.Printf("   Max function lines: %d\n", opt.Config.MaxFunctionLines)
+	if opt.TypeFilter != "" {
+		cyan.Printf("   Filter: %s\n", opt.TypeFilter)
+	}
+	if opt.Config.UseAI {
+		cyan.Println("   AI analysis: enabled")
+		yellow.Printf("   Max AI files: %d (use --max-ai-files to change)\n", opt.Config.MaxAIFiles)
+		yellow.Println("   ⚠️  AI analysis will incur API costs!")
+	}
+	if opt.Fix {
+		yellow.Println("   Auto-fix: enabled")
+	}
+	if opt.AutoApprove {
+		yellow.Println("   Auto-approve: enabled (--yes)")
+	}
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
+	if !opt.AutoApprove {
 		if !promptConfirm("Run refactoring analysis? [y/N]: ") {
 			yellow.Println("❌ Analysis cancelled")
 			return true
@@ -94,8 +109,10 @@ func handleRefactorCommand(agent *Agent, args []string) bool {
 			model:        agent.CurrentModel,
 			systemPrompt: "You are a code refactoring assistant. Analyze code for improvement opportunities. Always respond in valid JSON format.",
 		}
-		cyan.Println("🤖 AI analysis enabled")
 	}
+
+	// Show progress
+	cyan.Println("\n🔍 Scanning files...")
 
 	// Run analysis
 	report, err := r.Analyze(opt.Paths)

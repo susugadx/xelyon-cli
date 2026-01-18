@@ -60,6 +60,7 @@ type RefactorConfig struct {
 	MaxFunctionLines  int  // Default: 50
 	MinDuplicateLines int  // Default: 10
 	UseAI             bool // Enable AI-powered analysis
+	MaxAIFiles        int  // Default: 20, max files for AI analysis (0=unlimited)
 }
 
 // DefaultConfig returns the default refactoring configuration.
@@ -69,6 +70,7 @@ func DefaultConfig() RefactorConfig {
 		MaxFunctionLines:  50,
 		MinDuplicateLines: 10,
 		UseAI:             false,
+		MaxAIFiles:        20, // Limit API calls
 	}
 }
 
