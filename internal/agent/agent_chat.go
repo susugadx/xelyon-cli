@@ -32,18 +32,8 @@ func isSameToolCall(tc1, tc2 *tools.ToolCall) bool {
 func (a *Agent) chat(input string) {
 	a.SetStatus(StateRunning, "Processing request", "処理中", "Wait for response", "応答を待ってください")
 
-	// 複雑なタスクはPlan Modeで実行
-	if a.shouldEnterPlanMode(input) {
-		cyan.Println("\n📋 複雑なタスクを検出。Plan Modeで実行します...")
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-		defer cancel()
-		a.cancelFunc = cancel
-		if err := a.RunPlanMode(ctx, input); err != nil {
-			red.Printf("Plan Mode failed: %v\n", err)
-		}
-		a.SetStatus(StateWaitingInput, "Ready for input", "入力待ち", "Type your request or /help", "リクエスト、または /help を入力")
-		return
-	}
+	// Plan Mode自動起動は無効化（/plan コマンドで明示的に使用）
+	// TODO: Issue #81 - Plan Mode統合後に再検討
 
 	// GitHub MCP ヒントを追加（GitHub関連リクエストの場合）
 	input = a.AddGitHubHint(input)
@@ -555,17 +545,19 @@ func (a *Agent) chatWithImage(input string, image *api.ImageData) {
 }
 
 // shouldEnterPlanMode は複雑なタスクかどうかを判定
-// 実装・機能追加・リファクタリングなどのキーワードを検出
+// 明確に大規模タスクを示すキーワードのみを検出（誤検知防止）
 func (a *Agent) shouldEnterPlanMode(input string) bool {
-	// Plan Mode のキーワード（日本語・英語）
+	// 厳選されたキーワード（複合フレーズ・明確な大規模タスク）
 	keywords := []string{
-		// 英語
-		"implement", "add feature", "refactor", "create new",
-		"build", "design", "architect", "restructure",
-		// 日本語
-		"実装", "機能追加", "リファクタリング", "新規作成",
-		"設計", "構築", "追加して", "作成して", "作って",
-		"大きな変更", "全体的に", "システム全体",
+		// 英語（複合フレーズ）
+		"implement feature", "new feature", "refactor the", "restructure",
+		"code review", "review the code", "quality audit", "security audit",
+		"migration", "integrate with",
+		// 日本語（明確に大きなタスク）
+		"機能を実装", "新機能", "リファクタリング", "アーキテクチャ",
+		"システム全体", "大規模", "全面的に",
+		"コードレビュー", "品質改善", "セキュリティ監査",
+		"マイグレーション", "統合して",
 	}
 
 	inputLower := strings.ToLower(input)

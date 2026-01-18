@@ -367,6 +367,7 @@ func TestExtractExplanationAndTool_UnclosedBrace(t *testing.T) {
 }
 
 // shouldEnterPlanMode tests
+// テストは厳選されたキーワード（複合フレーズ・明確な大規模タスク）に合わせて更新
 
 func TestShouldEnterPlanMode_EnglishKeywords(t *testing.T) {
 	provider := &mockProvider{name: "test"}
@@ -378,33 +379,53 @@ func TestShouldEnterPlanMode_EnglishKeywords(t *testing.T) {
 		want  bool
 	}{
 		{
-			name:  "implement keyword",
-			input: "implement a new feature for user authentication",
+			name:  "implement feature phrase",
+			input: "implement feature for user authentication",
 			want:  true,
 		},
 		{
-			name:  "add feature keyword",
-			input: "add feature for dark mode",
+			name:  "new feature phrase",
+			input: "add a new feature for dark mode",
 			want:  true,
 		},
 		{
-			name:  "refactor keyword",
+			name:  "refactor the phrase",
 			input: "refactor the database layer",
 			want:  true,
 		},
 		{
-			name:  "create new keyword",
-			input: "create new component for dashboard",
+			name:  "restructure keyword",
+			input: "restructure the entire project",
 			want:  true,
 		},
 		{
-			name:  "build keyword",
-			input: "build a REST API",
+			name:  "code review phrase",
+			input: "please do a code review of the changes",
 			want:  true,
 		},
 		{
-			name:  "design keyword",
-			input: "design the system architecture",
+			name:  "review the code phrase",
+			input: "review the code for security issues",
+			want:  true,
+		},
+		{
+			name:  "quality audit phrase",
+			input: "perform a quality audit on this module",
+			want:  true,
+		},
+		{
+			name:  "security audit phrase",
+			input: "run a security audit on the API",
+			want:  true,
+		},
+		{
+			name:  "migration keyword",
+			input: "database migration to PostgreSQL",
+			want:  true,
+		},
+		{
+			name:  "integrate with phrase",
+			input: "integrate with Stripe payment API",
 			want:  true,
 		},
 	}
@@ -429,13 +450,13 @@ func TestShouldEnterPlanMode_JapaneseKeywords(t *testing.T) {
 		want  bool
 	}{
 		{
-			name:  "実装 keyword",
-			input: "ユーザー認証を実装してください",
+			name:  "機能を実装 phrase",
+			input: "ユーザー認証機能を実装してください",
 			want:  true,
 		},
 		{
-			name:  "機能追加 keyword",
-			input: "ダークモード機能追加お願いします",
+			name:  "新機能 keyword",
+			input: "ダークモードの新機能をお願いします",
 			want:  true,
 		},
 		{
@@ -444,33 +465,48 @@ func TestShouldEnterPlanMode_JapaneseKeywords(t *testing.T) {
 			want:  true,
 		},
 		{
-			name:  "新規作成 keyword",
-			input: "ダッシュボードコンポーネントを新規作成",
+			name:  "アーキテクチャ keyword",
+			input: "システムのアーキテクチャを見直して",
 			want:  true,
 		},
 		{
-			name:  "設計 keyword",
-			input: "システムアーキテクチャを設計して",
+			name:  "システム全体 phrase",
+			input: "システム全体を改善して",
 			want:  true,
 		},
 		{
-			name:  "構築 keyword",
-			input: "REST APIを構築してください",
+			name:  "大規模 keyword",
+			input: "大規模な変更が必要です",
 			want:  true,
 		},
 		{
-			name:  "追加して keyword",
-			input: "新しい機能を追加して",
+			name:  "全面的に keyword",
+			input: "全面的に書き直して",
 			want:  true,
 		},
 		{
-			name:  "作成して keyword",
-			input: "テストファイルを作成して",
+			name:  "コードレビュー keyword",
+			input: "このPRのコードレビューをして",
 			want:  true,
 		},
 		{
-			name:  "作って keyword",
-			input: "新しいコンポーネント作って",
+			name:  "品質改善 keyword",
+			input: "コードの品質改善をお願い",
+			want:  true,
+		},
+		{
+			name:  "セキュリティ監査 keyword",
+			input: "セキュリティ監査を実施して",
+			want:  true,
+		},
+		{
+			name:  "マイグレーション keyword",
+			input: "データベースのマイグレーションを行って",
+			want:  true,
+		},
+		{
+			name:  "統合して keyword",
+			input: "外部APIと統合してください",
 			want:  true,
 		},
 	}
@@ -517,6 +553,35 @@ func TestShouldEnterPlanMode_NoMatch(t *testing.T) {
 			name:  "Japanese question",
 			input: "この関数は何をしていますか？",
 		},
+		// 以下は旧キーワードでマッチしていたが、厳選後はマッチしないケース
+		{
+			name:  "simple implement without feature",
+			input: "implement this fix",
+		},
+		{
+			name:  "simple build command",
+			input: "build the project",
+		},
+		{
+			name:  "simple design question",
+			input: "what is the design pattern here?",
+		},
+		{
+			name:  "simple 追加して",
+			input: "この行を追加して",
+		},
+		{
+			name:  "simple 作成して",
+			input: "テストファイルを作成して",
+		},
+		{
+			name:  "simple 作って",
+			input: "新しいファイル作って",
+		},
+		{
+			name:  "simple refactor without the",
+			input: "refactor this function",
+		},
 	}
 
 	for _, tt := range tests {
@@ -539,18 +604,23 @@ func TestShouldEnterPlanMode_CaseInsensitive(t *testing.T) {
 		want  bool
 	}{
 		{
-			name:  "IMPLEMENT uppercase",
-			input: "IMPLEMENT a new feature",
+			name:  "IMPLEMENT FEATURE uppercase",
+			input: "IMPLEMENT FEATURE for login",
 			want:  true,
 		},
 		{
-			name:  "Implement mixed case",
-			input: "Implement the login system",
+			name:  "New Feature mixed case",
+			input: "Add a New Feature for users",
 			want:  true,
 		},
 		{
-			name:  "REFACTOR uppercase",
-			input: "REFACTOR the codebase",
+			name:  "REFACTOR THE uppercase",
+			input: "REFACTOR THE codebase",
+			want:  true,
+		},
+		{
+			name:  "Code Review mixed case",
+			input: "Please do a Code Review",
 			want:  true,
 		},
 	}

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -277,13 +278,13 @@ Examples:
 
 		// 従来のワンショットモード（後方互換）
 		if len(args) > 0 {
-			runLegacyMode(args[0], model)
+			runLegacyMode(args[0], model, provider)
 		}
 	},
 }
 
 // runLegacyMode は従来の1ショットモードを実行
-func runLegacyMode(query string, model string) {
+func runLegacyMode(query string, model string, provider api.Provider) {
 	var contextParts []string
 
 	projectConfig := loadProjectConfig()
@@ -317,8 +318,10 @@ func runLegacyMode(query string, model string) {
 	}
 
 	fmt.Println("🤖 AI回答:")
-	context := strings.Join(contextParts, "\n\n---\n\n")
-	response, err := api.AskDeepSeekStream(query, context, model)
+	systemPrompt := strings.Join(contextParts, "\n\n---\n\n")
+	history := []api.Message{{Role: "user", Content: query}}
+	ctx := context.Background()
+	response, err := provider.ChatWithTools(ctx, systemPrompt, history, model)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "\nエラー: %v\n", err)
 		os.Exit(1)
