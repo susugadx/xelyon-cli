@@ -183,17 +183,11 @@ func (w *MCPToolWrapper) validateArgs(args map[string]string) error {
 }
 
 // formatResult は結果をフォーマットする
+// NOTE: 出力の切り詰めはtoken_guard.goで一元管理するため、ここでは行わない
 func (w *MCPToolWrapper) formatResult(result string) string {
 	// 結果が空の場合
 	if result == "" {
 		return "Tool executed successfully (no output)"
-	}
-
-	// 長い出力の場合は省略
-	lines := strings.Split(result, "\n")
-	if len(lines) > 20 {
-		truncated := strings.Join(lines[:20], "\n")
-		return fmt.Sprintf("%s\n... (output truncated, %d more lines)", truncated, len(lines)-20)
 	}
 
 	return result

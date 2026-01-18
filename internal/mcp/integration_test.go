@@ -97,12 +97,13 @@ func TestMCPToolWrapper_FormatResult(t *testing.T) {
 	}
 }
 
-func TestMCPToolWrapper_FormatResult_Truncation(t *testing.T) {
+func TestMCPToolWrapper_FormatResult_NoTruncation(t *testing.T) {
 	wrapper := &MCPToolWrapper{
 		toolName: "test_tool",
 	}
 
-	// 25行の出力を生成（limitは20行）
+	// 25行の出力を生成
+	// NOTE: MCP出力の切り詰めはtoken_guard.goで一元管理するため、ここでは行わない
 	var lines []string
 	for i := 1; i <= 25; i++ {
 		lines = append(lines, "line")
@@ -117,14 +118,14 @@ func TestMCPToolWrapper_FormatResult_Truncation(t *testing.T) {
 
 	result := wrapper.formatResult(input)
 
-	// "output truncated"が含まれているべき
-	if !strings.Contains(result, "output truncated") {
-		t.Errorf("Expected result to contain 'output truncated', got: %s", result)
+	// truncationされていないこと（全行が含まれる）
+	if result != input {
+		t.Errorf("Expected result to equal input (no truncation), got different output")
 	}
 
-	// "5 more lines"が含まれているべき (25 - 20 = 5)
-	if !strings.Contains(result, "5 more lines") {
-		t.Errorf("Expected result to mention '5 more lines', got: %s", result)
+	// "output truncated"が含まれていないこと
+	if strings.Contains(result, "output truncated") {
+		t.Errorf("Expected result to NOT contain 'output truncated'")
 	}
 }
 
