@@ -147,69 +147,6 @@ func isSourceFile(path string) bool {
 	}
 }
 
-// makeStaticProposalsActionable uses AI to generate fixes for static detection proposals.
-func (r *Refactorer) makeStaticProposalsActionable(proposals []RefactorProposal, files []string) {
-	if r.LLM == nil {
-		return
-	}
-
-	// Build file content cache
-	fileContents := make(map[string]string)
-	for _, file := range files {
-		content, err := os.ReadFile(file)
-		if err != nil {
-			continue
-		}
-		fileContents[file] = string(content)
-	}
-
-	// Process proposals that aren't already actionable
-	for i := range proposals {
-		p := &proposals[i]
-		if p.Actionable {
-			continue
-		}
-
-		content, ok := fileContents[p.FilePath]
-		if !ok {
-			continue
-		}
-
-		r.makeProposalActionable(p, content)
-	}
-}
-
-// makeProposalActionable generates actual code changes for a proposal.
-func (r *Refactorer) makeProposalActionable(p *RefactorProposal, fileContent string) {
-	if r.LLM == nil {
-		return
-	}
-
-	switch p.Type {
-	case RefactorSplitFile:
-		change, err := GenerateSplitFilePlan(fileContent, p.FilePath, r.LLM)
-		if err == nil && change != nil && len(change.Changes) > 0 {
-			p.Change = change
-			p.Actionable = true
-		}
-
-	case RefactorExtractMethod:
-		if p.FunctionName == "" {
-			return
-		}
-		// Extract the function code from the file
-		funcCode := extractFunctionCode(fileContent, p.FilePath, p.FunctionName, p.LineStart, p.LineEnd)
-		if funcCode == "" {
-			return
-		}
-		change, err := GenerateExtractMethodCode(funcCode, p.FunctionName, p.FilePath, r.LLM)
-		if err == nil && change != nil && len(change.Changes) > 0 {
-			p.Change = change
-			p.Actionable = true
-		}
-	}
-}
-
 // extractFunctionCode extracts function code from file content.
 func extractFunctionCode(content string, filePath string, funcName string, lineStart, lineEnd int) string {
 	lines := strings.Split(content, "\n")

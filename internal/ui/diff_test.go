@@ -37,7 +37,7 @@ func captureOutput(f func()) string {
 	color.Output = oldColorOutput
 
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	return stripANSI(buf.String())
 }
 
