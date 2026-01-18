@@ -65,15 +65,6 @@ func (r *Refactorer) Analyze(paths []string) (*RefactorReport, error) {
 	report.Proposals = append(report.Proposals, namingProposals...)
 	report.Stats.NamingIssues = len(namingProposals)
 
-	// AI analysis if enabled
-	if r.Config.UseAI && r.LLM != nil {
-		aiProposals := r.analyzeWithAI(files)
-		report.Proposals = append(report.Proposals, aiProposals...)
-
-		// Also make static detection proposals actionable using AI
-		r.makeStaticProposalsActionable(report.Proposals, files)
-	}
-
 	// Update stats
 	report.Stats.TotalProposals = len(report.Proposals)
 	for _, p := range report.Proposals {
@@ -186,65 +177,6 @@ func (r *Refactorer) makeStaticProposalsActionable(proposals []RefactorProposal,
 
 		r.makeProposalActionable(p, content)
 	}
-}
-
-// analyzeWithAI uses LLM to find additional refactoring opportunities.
-func (r *Refactorer) analyzeWithAI(files []string) []RefactorProposal {
-	if r.LLM == nil {
-		return nil
-	}
-
-	var proposals []RefactorProposal
-
-	// Filter files suitable for AI analysis (< 500 lines)
-	var aiTargets []string
-	for _, file := range files {
-		content, err := os.ReadFile(file)
-		if err != nil {
-			continue
-		}
-		lines := strings.Count(string(content), "\n")
-		if lines <= 500 {
-			aiTargets = append(aiTargets, file)
-		}
-	}
-
-	// Apply MaxAIFiles limit
-	if r.Config.MaxAIFiles > 0 && len(aiTargets) > r.Config.MaxAIFiles {
-		fmt.Printf("⚠️  AI analysis limited to %d files (found %d eligible files)\n", r.Config.MaxAIFiles, len(aiTargets))
-		fmt.Printf("   Use --max-ai-files to change the limit\n")
-		aiTargets = aiTargets[:r.Config.MaxAIFiles]
-	}
-
-	// Show progress for AI analysis
-	if len(aiTargets) > 0 {
-		fmt.Printf("🤖 Analyzing %d file(s) with AI (this may incur API costs)...\n", len(aiTargets))
-	}
-
-	for i, file := range aiTargets {
-		content, err := os.ReadFile(file)
-		if err != nil {
-			continue
-		}
-
-		// Show progress
-		fmt.Printf("   [%d/%d] %s\n", i+1, len(aiTargets), file)
-
-		aiProposals, err := AnalyzeWithAI(string(content), file, r.LLM)
-		if err != nil {
-			continue
-		}
-
-		// Generate actionable changes for each proposal
-		for j := range aiProposals {
-			p := &aiProposals[j]
-			r.makeProposalActionable(p, string(content))
-		}
-
-		proposals = append(proposals, aiProposals...)
-	}
-
-	return proposals
 }
 
 // makeProposalActionable generates actual code changes for a proposal.

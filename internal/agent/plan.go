@@ -17,7 +17,6 @@ type PlanStep struct {
 	Description   string   `json:"description"`
 	Tools         []string `json:"tools"`      // 使用予定ツール
 	DependsOn     []int    `json:"depends_on"` // 依存するステップID
-	Parallel      bool     `json:"parallel"`   // 並列実行可能か
 	Status        string   `json:"status"`     // "pending", "running", "completed", "failed"
 	Result        string   `json:"result"`     // 実行結果
 	ToolsExecuted int      `json:"-"`          // 実際に実行されたツール数
@@ -138,12 +137,7 @@ func FormatPlan(plan *Plan) string {
 	sb.WriteString("📋 Plan:\n")
 
 	for _, step := range plan.Steps {
-		parallelTag := "[順次]"
-		if step.Parallel {
-			parallelTag = "[並列]"
-		}
-
-		sb.WriteString(fmt.Sprintf("  %d. %s %s\n", step.ID, parallelTag, step.Description))
+		sb.WriteString(fmt.Sprintf("  %d. %s\n", step.ID, step.Description))
 
 		if len(step.Tools) > 0 {
 			sb.WriteString(fmt.Sprintf("     Tools: %s\n", strings.Join(step.Tools, ", ")))
@@ -186,14 +180,54 @@ func (p *Plan) GetStep(id int) *PlanStep {
 }
 
 // GetParallelSteps は並列実行可能なステップを取得
+// depends_on が同じステップは並列実行可能と判定
 func (p *Plan) GetParallelSteps() []int {
-	var ids []int
-	for _, step := range p.Steps {
-		if step.Parallel && p.CanExecute(step.ID) {
-			ids = append(ids, step.ID)
+	// 実行可能なステップを収集
+	var executableSteps []*PlanStep
+	for i := range p.Steps {
+		if p.CanExecute(p.Steps[i].ID) {
+			executableSteps = append(executableSteps, &p.Steps[i])
 		}
 	}
-	return ids
+
+	if len(executableSteps) <= 1 {
+		// 1つ以下なら並列実行の必要なし
+		return nil
+	}
+
+	// depends_on が同じステップをグループ化
+	// 最初の実行可能ステップの depends_on と同じものを収集
+	firstDeps := executableSteps[0].DependsOn
+	var parallelIDs []int
+
+	for _, step := range executableSteps {
+		if sameDependencies(step.DependsOn, firstDeps) {
+			parallelIDs = append(parallelIDs, step.ID)
+		}
+	}
+
+	if len(parallelIDs) <= 1 {
+		return nil
+	}
+
+	return parallelIDs
+}
+
+// sameDependencies は2つの依存リストが同じかチェック
+func sameDependencies(a, b []int) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	aSet := make(map[int]bool)
+	for _, id := range a {
+		aSet[id] = true
+	}
+	for _, id := range b {
+		if !aSet[id] {
+			return false
+		}
+	}
+	return true
 }
 
 // GetNextStep は次に実行すべきステップIDを取得

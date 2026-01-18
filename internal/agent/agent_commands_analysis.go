@@ -31,52 +31,6 @@ func handleRepoMapCommand() bool {
 	return true
 }
 
-// handlePlanCommand はPlan Modeの切り替えを処理
-func handlePlanCommand(agent *Agent, args []string) bool {
-	// 引数なし → 現在の状態を表示
-	if len(args) == 0 {
-		if agent.PlanMode {
-			green.Println("📋 Plan Mode: ON")
-			yellow.Println("   AI will generate execution plans for your requests.")
-			yellow.Println("   Use '/plan off' to disable.")
-		} else {
-			yellow.Println("📋 Plan Mode: OFF")
-			yellow.Println("   AI will execute tasks directly without planning.")
-			yellow.Println("   Use '/plan on' to enable.")
-		}
-		return true
-	}
-
-	// /plan on → 有効化
-	if args[0] == "on" {
-		if agent.PlanMode {
-			yellow.Println("Plan Mode is already enabled")
-			return true
-		}
-		agent.PlanMode = true
-		green.Println("✅ Plan Mode enabled")
-		cyan.Println("   AI will now generate execution plans for your requests.")
-		cyan.Println("   You can review and approve each plan before execution.")
-		return true
-	}
-
-	// /plan off → 無効化
-	if args[0] == "off" {
-		if !agent.PlanMode {
-			yellow.Println("Plan Mode is already disabled")
-			return true
-		}
-		agent.PlanMode = false
-		green.Println("✅ Plan Mode disabled")
-		cyan.Println("   AI will now execute tasks directly without planning.")
-		return true
-	}
-
-	// 不正な引数
-	yellow.Println("Usage: /plan [on|off]")
-	return true
-}
-
 // handleDryRunCommand handles the /dryrun command to toggle dry-run mode
 func handleDryRunCommand(agent *Agent, args []string) bool {
 	if len(args) > 0 {

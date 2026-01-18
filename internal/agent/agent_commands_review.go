@@ -6,29 +6,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/review"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
-// providerLLMAdapter adapts api.Provider to review.LLMClient interface
-type providerLLMAdapter struct {
-	provider     api.Provider
-	model        string
-	systemPrompt string
-}
-
-// Chat implements review.LLMClient interface
-func (a *providerLLMAdapter) Chat(prompt string) (string, error) {
-	ctx := context.Background()
-	history := []api.Message{
-		{Role: "user", Content: prompt},
-	}
-	return a.provider.ChatWithTools(ctx, a.systemPrompt, history, a.model)
-}
-
-// handleReviewCommand handles the /review command for AI code review
-// Flags: --all, --security, --test, --fix, --yes, --ai, --parallel, --workers
+// handleReviewCommand handles the /review command for code review (static analysis only)
+// Flags: --all, --security, --test, --max-issues
 // Usage: /review [flags] [paths...]
 //
 //	paths can be files, directories, or glob patterns (e.g., **/*.go)
@@ -39,9 +22,6 @@ func handleReviewCommand(agent *Agent, args []string) bool {
 		Model:    agent.CurrentModel,
 	}
 
-	autoApprove := false
-	parallelMode := false
-	workers := 4
 	var paths []string
 
 	for i := 0; i < len(args); i++ {
@@ -56,21 +36,6 @@ func handleReviewCommand(agent *Agent, args []string) bool {
 				opt.Focus.Security = true
 			case "--test", "-t":
 				opt.Focus.Test = true
-			case "--fix", "-f":
-				opt.Fix = true
-			case "--yes", "-y":
-				autoApprove = true
-			case "--ai":
-				opt.UseAI = true
-			case "--parallel", "-p":
-				parallelMode = true
-			case "--workers", "-w":
-				if i+1 < len(args) {
-					i++
-					if n, err := strconv.Atoi(args[i]); err == nil && n > 0 {
-						workers = n
-					}
-				}
 			case "--max-issues":
 				if i+1 < len(args) {
 					i++
@@ -79,14 +44,7 @@ func handleReviewCommand(agent *Agent, args []string) bool {
 					}
 				}
 			default:
-				// Check for --workers=N format
-				if strings.HasPrefix(arg, "--workers=") {
-					if n, err := strconv.Atoi(strings.TrimPrefix(arg, "--workers=")); err == nil && n > 0 {
-						workers = n
-					}
-				} else {
-					yellow.Printf("Unknown flag: %s\n", arg)
-				}
+				yellow.Printf("Unknown flag: %s\n", arg)
 			}
 		} else {
 			// It's a path argument
@@ -108,52 +66,34 @@ func handleReviewCommand(agent *Agent, args []string) bool {
 	}
 
 	// Confirm before running
-	if !autoApprove {
-		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		cyan.Println("🔍 Code Review")
-		if len(paths) > 0 {
-			cyan.Printf("   Target: %d path(s)\n", len(paths))
-			for _, p := range paths {
-				cyan.Printf("     - %s\n", p)
-			}
-		} else if opt.All {
-			cyan.Println("   Target: All git changes")
-		} else {
-			cyan.Printf("   Target: %d changed files\n", len(agent.changeStack))
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	cyan.Println("🔍 Code Review (Static Analysis)")
+	if len(paths) > 0 {
+		cyan.Printf("   Target: %d path(s)\n", len(paths))
+		for _, p := range paths {
+			cyan.Printf("     - %s\n", p)
 		}
-		if opt.Focus.Security {
-			cyan.Println("   Focus: Security")
-		}
-		if opt.Focus.Test {
-			cyan.Println("   Focus: Test coverage")
-		}
-		if opt.Fix {
-			cyan.Println("   Fix proposals: Enabled")
-			if parallelMode {
-				cyan.Printf("   Parallel mode: Enabled (%d workers)\n", workers)
-			}
-		}
-		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	} else if opt.All {
+		cyan.Println("   Target: All git changes")
+	} else {
+		cyan.Printf("   Target: %d changed files\n", len(agent.changeStack))
+	}
+	if opt.Focus.Security {
+		cyan.Println("   Focus: Security")
+	}
+	if opt.Focus.Test {
+		cyan.Println("   Focus: Test coverage")
+	}
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
-		if !promptConfirm("Run review? [y/N]: ") {
-			yellow.Println("❌ Review cancelled")
-			return true
-		}
+	if !promptConfirm("Run review? [y/N]: ") {
+		yellow.Println("❌ Review cancelled")
+		return true
 	}
 
 	// Run review
 	ctx := context.Background()
 	orchestrator := review.NewOrchestrator()
-
-	// Set up LLM client if AI analysis is enabled
-	if opt.UseAI {
-		opt.LLMClient = &providerLLMAdapter{
-			provider:     agent.CurrentProvider,
-			model:        agent.CurrentModel,
-			systemPrompt: "You are a code analysis assistant. Analyze code for issues and generate fixes. Always respond in valid JSON format.",
-		}
-		cyan.Println("🤖 AI analysis enabled")
-	}
 
 	// Convert changeStack to []tools.FileChange
 	var changes []tools.FileChange
@@ -170,9 +110,6 @@ func handleReviewCommand(agent *Agent, args []string) bool {
 	green.Println("✅ Review Complete")
 	green.Printf("   Files: %d\n", len(report.Targets))
 	green.Printf("   Issues: %d\n", len(report.Issues))
-	if opt.Fix {
-		green.Printf("   Fix proposals: %d\n", len(report.Fixes))
-	}
 	if outPath != "" {
 		green.Printf("   Report: %s\n", outPath)
 	}
@@ -232,57 +169,6 @@ func handleReviewCommand(agent *Agent, args []string) bool {
 		}
 		if len(report.Issues) > maxShow {
 			fmt.Printf("   ... and %d more (see report)\n", len(report.Issues)-maxShow)
-		}
-	}
-
-	// Interactive fix application
-	if opt.Fix && len(report.Fixes) > 0 {
-		// Count actionable fixes
-		actionableCount := 0
-		for _, fix := range report.Fixes {
-			if fix.Actionable {
-				actionableCount++
-			}
-		}
-
-		if actionableCount > 0 {
-			fmt.Println()
-			cyan.Printf("🔧 %d actionable fix(es) available\n", actionableCount)
-
-			var result review.FixResult
-
-			if parallelMode {
-				// Parallel mode
-				result = review.RunParallelFixes(report.Issues, report.Fixes, autoApprove, workers)
-			} else {
-				// Interactive mode
-				if !autoApprove {
-					fmt.Println("   Press Enter to start interactive fix session, or 'n' to skip:")
-					if !promptConfirm("") {
-						yellow.Println("   Skipped fix application")
-						return true
-					}
-				}
-				result = review.RunInteractiveFixes(report.Issues, report.Fixes, autoApprove)
-			}
-
-			fmt.Println()
-			green.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-			green.Println("🔧 Fix Summary")
-			green.Printf("   Applied: %d\n", result.Applied)
-			if result.Skipped > 0 {
-				yellow.Printf("   Skipped: %d\n", result.Skipped)
-			}
-			if result.Failed > 0 {
-				red.Printf("   Failed: %d\n", result.Failed)
-			}
-			if result.Quit {
-				yellow.Println("   (Session ended early)")
-			}
-			green.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		} else {
-			fmt.Println()
-			yellow.Println("ℹ️  No actionable fixes available (all suggestions require manual review)")
 		}
 	}
 

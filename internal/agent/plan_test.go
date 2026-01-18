@@ -12,15 +12,13 @@ func TestParsePlan(t *testing.T) {
 				"id": 1,
 				"description": "Read main.go",
 				"tools": ["read_file"],
-				"depends_on": [],
-				"parallel": false
+				"depends_on": []
 			},
 			{
 				"id": 2,
 				"description": "Run tests",
 				"tools": ["bash"],
-				"depends_on": [1],
-				"parallel": false
+				"depends_on": [1]
 			}
 		]
 	}`
@@ -64,8 +62,7 @@ func TestExtractPlanJSON_WithCodeBlock(t *testing.T) {
       "id": 1,
       "description": "Test step",
       "tools": ["bash"],
-      "depends_on": [],
-      "parallel": false
+      "depends_on": []
     }
   ]
 }
@@ -95,8 +92,7 @@ func TestExtractPlanJSON_WithNewlines(t *testing.T) {
       "id": 1,
       "description": "Step with newlines",
       "tools": ["read_file"],
-      "depends_on": [],
-      "parallel": true
+      "depends_on": []
     }
   ]
 }
@@ -156,10 +152,10 @@ func TestPlan_CanExecute(t *testing.T) {
 func TestPlan_GetParallelSteps(t *testing.T) {
 	plan := &Plan{
 		Steps: []PlanStep{
-			{ID: 1, Status: "completed", DependsOn: []int{}, Parallel: false},
-			{ID: 2, Status: "pending", DependsOn: []int{1}, Parallel: true},
-			{ID: 3, Status: "pending", DependsOn: []int{1}, Parallel: true},
-			{ID: 4, Status: "pending", DependsOn: []int{2, 3}, Parallel: false},
+			{ID: 1, Status: "completed", DependsOn: []int{}},
+			{ID: 2, Status: "pending", DependsOn: []int{1}},
+			{ID: 3, Status: "pending", DependsOn: []int{1}},
+			{ID: 4, Status: "pending", DependsOn: []int{2, 3}},
 		},
 	}
 
@@ -168,9 +164,52 @@ func TestPlan_GetParallelSteps(t *testing.T) {
 		t.Errorf("Expected 2 parallel steps, got %d", len(parallelSteps))
 	}
 
-	// Step 2 と 3 が並列実行可能
+	// Step 2 と 3 は同じ depends_on を持つので並列実行可能
 	if !containsInt(parallelSteps, 2) || !containsInt(parallelSteps, 3) {
 		t.Errorf("Expected steps 2 and 3 to be parallel, got %v", parallelSteps)
+	}
+}
+
+func TestPlan_GetParallelSteps_DifferentDeps(t *testing.T) {
+	// 異なる depends_on を持つステップは並列実行されない
+	plan := &Plan{
+		Steps: []PlanStep{
+			{ID: 1, Status: "completed", DependsOn: []int{}},
+			{ID: 2, Status: "completed", DependsOn: []int{}},
+			{ID: 3, Status: "pending", DependsOn: []int{1}},
+			{ID: 4, Status: "pending", DependsOn: []int{2}},
+		},
+	}
+
+	parallelSteps := plan.GetParallelSteps()
+	// Step 3 と 4 は異なる depends_on を持つので nil
+	if parallelSteps != nil {
+		t.Errorf("Expected nil for steps with different depends_on, got %v", parallelSteps)
+	}
+}
+
+func TestSameDependencies(t *testing.T) {
+	tests := []struct {
+		name string
+		a    []int
+		b    []int
+		want bool
+	}{
+		{"both empty", []int{}, []int{}, true},
+		{"same single", []int{1}, []int{1}, true},
+		{"same multiple", []int{1, 2}, []int{2, 1}, true},
+		{"different length", []int{1}, []int{1, 2}, false},
+		{"different values", []int{1}, []int{2}, false},
+		{"nil and empty", nil, []int{}, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := sameDependencies(tt.a, tt.b)
+			if got != tt.want {
+				t.Errorf("sameDependencies(%v, %v) = %v, want %v", tt.a, tt.b, got, tt.want)
+			}
+		})
 	}
 }
 
@@ -245,14 +284,12 @@ func TestFormatPlan(t *testing.T) {
 				Description: "Read file",
 				Tools:       []string{"read_file"},
 				DependsOn:   []int{},
-				Parallel:    false,
 			},
 			{
 				ID:          2,
 				Description: "Write file",
 				Tools:       []string{"write_file"},
 				DependsOn:   []int{1},
-				Parallel:    true,
 			},
 		},
 	}
@@ -264,11 +301,8 @@ func TestFormatPlan(t *testing.T) {
 	if !strings.Contains(formatted, "Read file") {
 		t.Error("Expected formatted plan to contain step description")
 	}
-	if !strings.Contains(formatted, "[順次]") {
-		t.Error("Expected formatted plan to contain sequential tag")
-	}
-	if !strings.Contains(formatted, "[並列]") {
-		t.Error("Expected formatted plan to contain parallel tag")
+	if !strings.Contains(formatted, "Depends on:") {
+		t.Error("Expected formatted plan to contain depends_on info")
 	}
 }
 

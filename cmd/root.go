@@ -30,7 +30,6 @@ var (
 	diffLines     int
 	outputFormat  string
 	headless      bool
-	planMode      bool
 	noUpdateCheck bool
 	imageFlag     string
 )
@@ -230,13 +229,13 @@ Examples:
 
 		// --resume フラグチェック
 		if resume && len(args) == 0 && len(files) == 0 {
-			agent.RunInteractiveWithResume(model, provider, autoApprove, planMode)
+			agent.RunInteractiveWithResume(model, provider, autoApprove)
 			return
 		}
 
 		// 引数なし & ファイル指定なし & 画像指定なし → 対話モード
 		if len(args) == 0 && len(files) == 0 && imageFlag == "" {
-			agent.RunInteractive(model, provider, autoApprove, planMode)
+			agent.RunInteractive(model, provider, autoApprove)
 			return
 		}
 
@@ -246,7 +245,7 @@ Examples:
 			if len(args) > 0 {
 				query = args[0]
 			}
-			agent.RunOnceWithImage(query, model, provider, imageFlag, autoApprove, planMode)
+			agent.RunOnceWithImage(query, model, provider, imageFlag, autoApprove)
 			return
 		}
 
@@ -365,9 +364,6 @@ func init() {
 	// 新規: --output-format/--headless フラグ
 	rootCmd.Flags().StringVar(&outputFormat, "output-format", "text", "Output format: text or json")
 	rootCmd.Flags().BoolVar(&headless, "headless", false, "Run in headless mode (JSON output, no UI)")
-
-	// 新規: --plan フラグ
-	rootCmd.Flags().BoolVar(&planMode, "plan", false, "Enable plan mode (autonomous execution with approval)")
 
 	// 新規: --no-update-check フラグ
 	rootCmd.Flags().BoolVar(&noUpdateCheck, "no-update-check", false, "Disable automatic version check")

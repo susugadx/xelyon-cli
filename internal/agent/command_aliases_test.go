@@ -14,9 +14,9 @@ func TestResolveCommandAlias_Default(t *testing.T) {
 		t.Fatalf("resolveCommandAlias(/h) = %q, want /help", got)
 	}
 
-	got = resolveCommandAlias("/m")
-	if got != "/memory" {
-		t.Fatalf("resolveCommandAlias(/m) = %q, want /memory", got)
+	got = resolveCommandAlias("/p")
+	if got != "/paste" {
+		t.Fatalf("resolveCommandAlias(/p) = %q, want /paste", got)
 	}
 }
 

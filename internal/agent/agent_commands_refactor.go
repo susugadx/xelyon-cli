@@ -1,19 +1,15 @@
 package agent
 
 import (
-	"bufio"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/refactor"
-	"github.com/susugadx/xelyon-cli/internal/review"
 )
 
 // handleRefactorCommand handles the /refactor command for code refactoring analysis.
-// Flags: --fix, --yes, --type, --ai, --max-file-lines, --max-func-lines, --max-ai-files
+// Flags: --type, --max-file-lines, --max-func-lines
 // Usage: /refactor [flags] [paths...]
 func handleRefactorCommand(agent *Agent, args []string) bool {
 	opt := refactor.RefactorOptions{
@@ -25,12 +21,6 @@ func handleRefactorCommand(agent *Agent, args []string) bool {
 
 		if strings.HasPrefix(arg, "-") {
 			switch arg {
-			case "--fix", "-f":
-				opt.Fix = true
-			case "--yes", "-y":
-				opt.AutoApprove = true
-			case "--ai":
-				opt.Config.UseAI = true
 			case "--type", "-t":
 				if i+1 < len(args) {
 					i++
@@ -48,13 +38,6 @@ func handleRefactorCommand(agent *Agent, args []string) bool {
 					i++
 					if n, err := strconv.Atoi(args[i]); err == nil {
 						opt.Config.MaxFunctionLines = n
-					}
-				}
-			case "--max-ai-files":
-				if i+1 < len(args) {
-					i++
-					if n, err := strconv.Atoi(args[i]); err == nil {
-						opt.Config.MaxAIFiles = n
 					}
 				}
 			default:
@@ -79,37 +62,15 @@ func handleRefactorCommand(agent *Agent, args []string) bool {
 	if opt.TypeFilter != "" {
 		cyan.Printf("   Filter: %s\n", opt.TypeFilter)
 	}
-	if opt.Config.UseAI {
-		cyan.Println("   AI analysis: enabled")
-		yellow.Printf("   Max AI files: %d (use --max-ai-files to change)\n", opt.Config.MaxAIFiles)
-		yellow.Println("   ⚠️  AI analysis will incur API costs!")
-	}
-	if opt.Fix {
-		yellow.Println("   Auto-fix: enabled")
-	}
-	if opt.AutoApprove {
-		yellow.Println("   Auto-approve: enabled (--yes)")
-	}
 	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
-	if !opt.AutoApprove {
-		if !promptConfirm("Run refactoring analysis? [y/N]: ") {
-			yellow.Println("❌ Analysis cancelled")
-			return true
-		}
+	if !promptConfirm("Run refactoring analysis? [y/N]: ") {
+		yellow.Println("❌ Analysis cancelled")
+		return true
 	}
 
 	// Create refactorer
 	r := refactor.NewRefactorerWithConfig(opt.Config)
-
-	// Set up LLM client if AI is enabled
-	if opt.Config.UseAI {
-		r.LLM = &providerLLMAdapter{
-			provider:     agent.CurrentProvider,
-			model:        agent.CurrentModel,
-			systemPrompt: "You are a code refactoring assistant. Analyze code for improvement opportunities. Always respond in valid JSON format.",
-		}
-	}
 
 	// Show progress
 	cyan.Println("\n🔍 Scanning files...")
@@ -183,127 +144,7 @@ func handleRefactorCommand(agent *Agent, args []string) bool {
 		green.Println("\n✨ No refactoring suggestions - code looks good!")
 	}
 
-	// Interactive fix application
-	if opt.Fix && report.Stats.ActionableCount > 0 {
-		fmt.Println()
-		cyan.Printf("🔧 %d actionable fix(es) available\n", report.Stats.ActionableCount)
-
-		changes := refactor.ConvertToMultiFileChanges(report.Proposals)
-		if len(changes) > 0 {
-			if !opt.AutoApprove {
-				fmt.Println("   Press Enter to start interactive fix session, or 'n' to skip:")
-				if !promptConfirm("") {
-					yellow.Println("   Skipped fix application")
-					return true
-				}
-			}
-
-			result := review.RunInteractiveMultiFixes(changes, opt.AutoApprove)
-			fmt.Println()
-			green.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-			green.Println("📊 Refactoring Results:")
-			green.Printf("   Applied: %d\n", result.Applied)
-			if result.Skipped > 0 {
-				yellow.Printf("   Skipped: %d\n", result.Skipped)
-			}
-			if result.Failed > 0 {
-				red.Printf("   Failed: %d\n", result.Failed)
-			}
-			if result.RolledBack {
-				yellow.Println("   (Some changes were rolled back)")
-			}
-			if result.Quit {
-				yellow.Println("   (Session ended early)")
-			}
-			green.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-
-			// Run tests if changes were applied
-			if result.Applied > 0 {
-				runRefactorVerification(agent, changes)
-			}
-		}
-	} else if opt.Fix && len(report.Proposals) > 0 {
-		fmt.Println()
-		yellow.Println("ℹ️  No actionable fixes available (proposals require manual refactoring or AI assistance)")
-		yellow.Println("   Try: /refactor --ai --fix to enable AI-powered refactoring")
-	}
-
 	return true
-}
-
-// runRefactorVerification runs tests after refactoring changes are applied.
-func runRefactorVerification(agent *Agent, changes []*review.MultiFileChange) {
-	// Collect changed Go files
-	var goFiles []string
-	seenDirs := make(map[string]bool)
-
-	for _, change := range changes {
-		for _, fc := range change.Changes {
-			if strings.HasSuffix(fc.FilePath, ".go") {
-				dir := filepath.Dir(fc.FilePath)
-				if !seenDirs[dir] {
-					goFiles = append(goFiles, fc.FilePath)
-					seenDirs[dir] = true
-				}
-			}
-		}
-	}
-
-	if len(goFiles) == 0 {
-		return // No Go files changed
-	}
-
-	// Check if this is a Go project
-	if !CheckGoModExists() {
-		return
-	}
-
-	fmt.Println()
-	cyan.Println("🧪 Run tests to verify refactoring?")
-	fmt.Printf("   Changed Go packages: %d\n", len(seenDirs))
-	yellow.Print("   Run go test? [y/N]: ")
-
-	reader := bufio.NewReader(os.Stdin)
-	input, err := reader.ReadString('\n')
-	if err != nil {
-		return
-	}
-
-	input = strings.TrimSpace(strings.ToLower(input))
-	if input != "y" && input != "yes" {
-		yellow.Println("   Skipped test verification")
-		return
-	}
-
-	// Run tests for each directory
-	allPassed := true
-	for dir := range seenDirs {
-		cyan.Printf("\n   Testing %s...\n", dir)
-		output, passed, _ := RunGoTest(dir + "/test.go") // Use any file in dir
-
-		// Show summary
-		lines := strings.Split(output, "\n")
-		for _, line := range lines {
-			if strings.Contains(line, "PASS") || strings.Contains(line, "ok") {
-				green.Println("      " + line)
-			} else if strings.Contains(line, "FAIL") {
-				red.Println("      " + line)
-			}
-		}
-
-		if !passed {
-			allPassed = false
-		}
-	}
-
-	fmt.Println()
-	if allPassed {
-		green.Println("✅ All tests passed - refactoring verified!")
-	} else {
-		red.Println("❌ Some tests failed")
-		yellow.Println("   Consider using /undo to rollback changes")
-		agent.suggestRollback()
-	}
 }
 
 // getRefactorIcon returns an icon for the refactor type.

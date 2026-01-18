@@ -133,12 +133,6 @@ xelyon --image error.png --provider gemini "このエラーを修正して"
 
 # globパターン
 > /review **/*.go --security
-
-# 修正提案を生成
-> /review --fix
-
-# 並列モードで高速修正
-> /review --fix --parallel
 ```
 
 ### フラグ一覧
@@ -148,10 +142,7 @@ xelyon --image error.png --provider gemini "このエラーを修正して"
 | `--all` | `-a` | すべてのgit変更をレビュー |
 | `--security` | `-s` | セキュリティフォーカス |
 | `--test` | `-t` | テストカバレッジフォーカス |
-| `--fix` | `-f` | 修正提案を生成 |
-| `--yes` | `-y` | 確認をスキップ |
-| `--parallel` | `-p` | 並列モードで修正を適用 |
-| `--workers N` | `-w N` | 並列ワーカー数（デフォルト: 4） |
+| `--max-issues N` | | 表示する最大Issue数 |
 
 ### 検出ルール
 
@@ -165,17 +156,14 @@ xelyon --image error.png --provider gemini "このエラーを修正して"
 
 ## リファクタリング
 
-`/refactor` コマンドでコードのリファクタリング分析を行います。
+`/refactor` コマンドでコードのリファクタリング分析を行います（静的解析のみ）。
 
 ```bash
 # 基本分析
 > /refactor
 
-# AI分析付き
-> /refactor --ai
-
-# 自動修正まで実行
-> /refactor --ai --fix --yes
+# 特定タイプのみ
+> /refactor --type split-file
 
 # 閾値カスタマイズ
 > /refactor --max-file-lines 300 --max-func-lines 50
@@ -185,10 +173,7 @@ xelyon --image error.png --provider gemini "このエラーを修正して"
 
 | フラグ | 説明 |
 |--------|------|
-| `--ai` | AI分析を有効化 |
-| `--fix` | 修正を適用 |
-| `--yes` | 確認をスキップ |
-| `--type` | フィルタ（long_file, long_function等） |
+| `--type` | フィルタ（split-file, extract-method, dry, rename） |
 | `--max-file-lines N` | ファイル行数上限 |
 | `--max-func-lines N` | 関数行数上限 |
 
@@ -220,7 +205,7 @@ xelyon --image error.png --provider gemini "このエラーを修正して"
 
 - `running`: 実行中
 - `waiting_input`: 入力待ち
-- `waiting_approval`: 承認待ち（Plan Mode）
+- `waiting_approval`: 承認待ち
 - `aborted`: 中断
 
 ---
@@ -243,23 +228,20 @@ xelyon --dry-run
 
 ## ワークフロー例
 
-### 新機能実装（Plan Mode）
+### 新機能実装
 
 ```bash
-> /plan on
 > ユーザー認証機能を追加して
-# → 調査フェーズ: 既存コードを自動で読み取り
-# → 計画表示: 実装ステップを提示
-# → y で承認 → 実装を自動実行
-> /review --fix
+# → 自然言語で指示するだけでAIが実装
+# → ファイル編集前には差分を表示して確認
 > /exit
 ```
 
-### コードレビュー + 自動修正
+### コードレビュー（静的解析）
 
 ```bash
-> /review --security --fix
-> /review --fix --parallel --workers 8
+> /review --security
+> /review **/*.go --test
 ```
 
 ### 日常的な開発

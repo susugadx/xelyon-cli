@@ -237,9 +237,6 @@ func TestDefaultConfig(t *testing.T) {
 	if config.MinDuplicateLines != 10 {
 		t.Errorf("MinDuplicateLines = %d, want 10", config.MinDuplicateLines)
 	}
-	if config.UseAI != false {
-		t.Error("UseAI should be false by default")
-	}
 }
 
 func TestExtractFunctionCode(t *testing.T) {

@@ -40,7 +40,7 @@ xelyon-cli/
 ├── main.go              # エントリーポイント
 ├── cmd/root.go          # Cobraコマンド定義
 ├── internal/
-│   ├── agent/           # エージェント（対話ループ、Plan Mode、検証）
+│   ├── agent/           # エージェント（対話ループ、検証）
 │   ├── api/             # LLMプロバイダー（Provider Pattern）
 │   ├── tools/           # ツール（Registry方式、35種類）
 │   ├── mcp/             # MCP連携（外部ツール統合）

@@ -36,8 +36,8 @@ Your task is to:
 3. Output ONLY a JSON plan in this exact format (no other text):
 
 {"steps": [
-  {"id": 1, "description": "First step description", "tools": ["tool1", "tool2"], "depends_on": [], "parallel": false},
-  {"id": 2, "description": "Second step description", "tools": ["tool3"], "depends_on": [1], "parallel": false}
+  {"id": 1, "description": "First step description", "tools": ["tool1", "tool2"], "depends_on": []},
+  {"id": 2, "description": "Second step description", "tools": ["tool3"], "depends_on": [1]}
 ]}
 
 Rules:
@@ -45,15 +45,17 @@ Rules:
 - "description": Brief description of what this step does
 - "tools": List of tool names to use (can be empty if no tools needed)
 - "depends_on": List of step IDs that must complete before this step (empty array [] if no dependencies)
-- "parallel": true if this step can run in parallel with other steps with same dependencies
+- Steps with the same depends_on will be executed in parallel automatically
 
 Example plan:
 {"steps": [
-  {"id": 1, "description": "Read current Agent struct definition", "tools": ["read_file"], "depends_on": [], "parallel": false},
-  {"id": 2, "description": "Add DryRunMode field to Agent struct", "tools": ["str_replace"], "depends_on": [1], "parallel": false},
-  {"id": 3, "description": "Implement /dryrun command handler", "tools": ["write_file"], "depends_on": [1], "parallel": false},
-  {"id": 4, "description": "Write tests for dry run functionality", "tools": ["write_file"], "depends_on": [2, 3], "parallel": false}
+  {"id": 1, "description": "Read current Agent struct definition", "tools": ["read_file"], "depends_on": []},
+  {"id": 2, "description": "Add DryRunMode field to Agent struct", "tools": ["str_replace"], "depends_on": [1]},
+  {"id": 3, "description": "Implement /dryrun command handler", "tools": ["write_file"], "depends_on": [1]},
+  {"id": 4, "description": "Write tests for dry run functionality", "tools": ["write_file"], "depends_on": [2, 3]}
 ]}
+
+Note: Steps 2 and 3 have the same depends_on ([1]), so they will run in parallel after step 1 completes.
 
 Output the JSON plan now:`, userRequest),
 	}
@@ -500,19 +502,6 @@ IMPORTANT INSTRUCTIONS:
 
 // executeParallelSteps は複数ステップを並列実行
 func (a *Agent) executeParallelSteps(ctx context.Context, plan *Plan, stepIDs []int) error {
-	cyan.Printf("\n🔀 Executing %d steps in parallel...\n", len(stepIDs))
-
-	// 並列実行用のゴルーチンを起動
-	// TODO: internal/agent/parallel.go で実装
-	for _, stepID := range stepIDs {
-		step := plan.GetStep(stepID)
-		if step == nil {
-			continue
-		}
-		if err := a.executeStep(ctx, plan, step); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	executor := NewParallelExecutor(a, plan)
+	return executor.ExecuteSteps(ctx, stepIDs)
 }

@@ -128,7 +128,6 @@ func TestReportStruct(t *testing.T) {
 		Model:       "deepseek-chat",
 		Targets:     []Target{{Path: "test.go"}},
 		Issues:      []Issue{{ID: "issue-1"}},
-		Fixes:       []FixProposal{{IssueID: "issue-1"}},
 		Summary:     "Test summary",
 	}
 
@@ -149,9 +148,6 @@ func TestReportStruct(t *testing.T) {
 	}
 	if len(report.Issues) != 1 {
 		t.Errorf("Issues length = %d, want %d", len(report.Issues), 1)
-	}
-	if len(report.Fixes) != 1 {
-		t.Errorf("Fixes length = %d, want %d", len(report.Fixes), 1)
 	}
 	if report.Summary != "Test summary" {
 		t.Errorf("Summary = %q, want %q", report.Summary, "Test summary")

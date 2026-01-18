@@ -92,31 +92,6 @@ func TestOrchestrator_Run_ModeChanges(t *testing.T) {
 	}
 }
 
-func TestOrchestrator_Run_WithFix(t *testing.T) {
-	o := NewOrchestrator()
-	ctx := context.Background()
-
-	// Create a file with TODO to trigger an issue
-	changes := []tools.FileChange{
-		{FilePath: "todo.go", Tool: "write_file"},
-	}
-
-	opt := Options{
-		All: false,
-		Fix: true,
-	}
-
-	report, _, err := o.Run(ctx, changes, opt)
-	if err != nil {
-		t.Fatalf("Run() error = %v", err)
-	}
-
-	// Fixes should be generated (may be empty if no matching issues)
-	if report.Fixes == nil {
-		t.Error("Fixes should not be nil when --fix is enabled")
-	}
-}
-
 func TestOrchestrator_Run_FocusSecurity(t *testing.T) {
 	o := NewOrchestrator()
 	ctx := context.Background()
@@ -166,9 +141,6 @@ func TestOptions_Defaults(t *testing.T) {
 
 	if opt.All != false {
 		t.Error("All should default to false")
-	}
-	if opt.Fix != false {
-		t.Error("Fix should default to false")
 	}
 	if opt.Focus.Security != false {
 		t.Error("Focus.Security should default to false")

@@ -58,26 +58,6 @@ func TestReporter_WriteMarkdown(t *testing.T) {
 			},
 			wantErr: false,
 		},
-		{
-			name: "report with fixes",
-			report: Report{
-				GeneratedAt: time.Now(),
-				Fixes: []FixProposal{
-					{
-						IssueID:   "test-fix",
-						Title:     "Fix Title",
-						Rationale: "Fix Rationale",
-						Example:   "Example code",
-						Notes:     []string{"Note 1", "Note 2"},
-					},
-				},
-			},
-			opt: ReporterOptions{
-				OutputDir: tmpDir,
-				FileName:  "fix_report.md",
-			},
-			wantErr: false,
-		},
 	}
 
 	for _, tt := range tests {
@@ -216,41 +196,6 @@ func TestBuildMarkdown(t *testing.T) {
 	// Check appendix
 	if !strings.Contains(md, "## Appendix") {
 		t.Error("missing appendix")
-	}
-}
-
-func TestBuildMarkdown_WithFixes(t *testing.T) {
-	report := Report{
-		GeneratedAt: time.Now(),
-		Fixes: []FixProposal{
-			{
-				IssueID:   "fix-1",
-				Title:     "Fix Title",
-				Rationale: "Rationale text",
-				Example:   "Example code",
-				Patch:     "diff patch",
-				Notes:     []string{"Note 1"},
-			},
-		},
-	}
-
-	opt := ReporterOptions{}
-	md := buildMarkdown(report, opt)
-
-	if !strings.Contains(md, "## Fix Proposals") {
-		t.Error("missing fix proposals section")
-	}
-	if !strings.Contains(md, "Fix Title") {
-		t.Error("missing fix title")
-	}
-	if !strings.Contains(md, "Rationale text") {
-		t.Error("missing rationale")
-	}
-	if !strings.Contains(md, "Example code") {
-		t.Error("missing example")
-	}
-	if !strings.Contains(md, "diff patch") {
-		t.Error("missing patch")
 	}
 }
 

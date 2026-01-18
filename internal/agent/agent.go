@@ -42,7 +42,6 @@ type Agent struct {
 	mcpManager           *mcp.Manager
 	AutoApprove          bool               // --auto-approve フラグ
 	DryRunMode           bool               // --dry-run フラグ
-	PlanMode             bool               // --plan フラグ（Plan Mode有効化）
 	Stats                *SessionStats      // セッション統計情報
 	lastOutputs          []string           // 最後のAI出力履歴（最大10件）
 	cancelFunc           context.CancelFunc // 現在のAPI呼び出しをキャンセルするための関数
@@ -181,21 +180,6 @@ When you need to use a tool, respond with ONLY a JSON block like this:
 2. For complex tasks, create a plan BEFORE execution
 3. Explain your reasoning: Why this tool? Why this approach?
 4. Ask for user confirmation when making significant changes
-
-### Plan Mode (if enabled)
-When Plan Mode is enabled, follow this workflow:
-1. Analyze the user's request and break it down into steps
-2. Output a JSON plan in this exact format:
-   {"steps": [
-     {"id": 1, "description": "Step description", "tools": ["tool1", "tool2"], "depends_on": [], "parallel": true},
-     {"id": 2, "description": "Next step", "tools": ["tool3"], "depends_on": [1], "parallel": false}
-   ]}
-3. Wait for user approval (y/n/c)
-4. After approval, execute steps autonomously:
-   - Execute steps with depends_on=[] first
-   - Parallel steps can run simultaneously
-   - Sequential steps run one by one
-   - Only ask for confirmation on SafetyLow operations (delete_file, bash, git_push, etc.)
 
 ### Phase 2: Execution
 5. Use the right tool for each task:
@@ -519,11 +503,8 @@ func printHeader(model string, provider api.Provider) {
 }
 
 // printModeInfo はモード情報を表示
-func printModeInfo(planMode, autoApprove, dryRun bool) {
+func printModeInfo(autoApprove, dryRun bool) {
 	var modes []string
-	if planMode {
-		modes = append(modes, "Plan")
-	}
 	if autoApprove {
 		modes = append(modes, "Auto-approve")
 	}
@@ -578,7 +559,7 @@ func loadProjectConfig() string {
 }
 
 // RunOnceWithImage は画像付きの単一クエリを実行（CLIフラグ -i/--image 用）
-func RunOnceWithImage(query string, model string, provider api.Provider, imagePath string, autoApprove, planMode bool) {
+func RunOnceWithImage(query string, model string, provider api.Provider, imagePath string, autoApprove bool) {
 	// 監査ログ初期化（環境変数で制御: XELYON_AUDIT_LOG=1 で有効化）
 	auditEnabled := os.Getenv("XELYON_AUDIT_LOG") == "1"
 	if err := audit.Init(auditEnabled); err != nil {
@@ -587,13 +568,12 @@ func RunOnceWithImage(query string, model string, provider api.Provider, imagePa
 
 	agent := NewAgent(model, provider)
 	agent.AutoApprove = autoApprove
-	agent.PlanMode = planMode
 	tools.SetAutoApprove(autoApprove)
 	defer agent.Cleanup()
 
 	// ヘッダー表示
 	printHeader(model, provider)
-	printModeInfo(planMode, autoApprove, false)
+	printModeInfo(autoApprove, false)
 
 	// プロバイダーが画像対応かチェック
 	if !api.SupportsImages(provider.Name()) {

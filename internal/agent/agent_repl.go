@@ -17,7 +17,7 @@ import (
 )
 
 // RunInteractive はインタラクティブモードでエージェントを実行
-func RunInteractive(model string, provider api.Provider, autoApprove, planMode bool) {
+func RunInteractive(model string, provider api.Provider, autoApprove bool) {
 	// 監査ログ初期化（環境変数で制御: XELYON_AUDIT_LOG=1 で有効化）
 	auditEnabled := os.Getenv("XELYON_AUDIT_LOG") == "1"
 	if err := audit.Init(auditEnabled); err != nil {
@@ -29,7 +29,6 @@ func RunInteractive(model string, provider api.Provider, autoApprove, planMode b
 
 	agent := NewAgent(model, provider)
 	agent.AutoApprove = autoApprove
-	agent.PlanMode = planMode         // Plan Modeフラグを設定
 	tools.SetAutoApprove(autoApprove) // ツールに --auto-approve 設定を伝える
 	defer agent.Cleanup()             // グレースフルシャットダウン
 
@@ -38,7 +37,7 @@ func RunInteractive(model string, provider api.Provider, autoApprove, planMode b
 
 	// ヘッダー表示
 	printHeader(model, provider)
-	printModeInfo(planMode, autoApprove, false)
+	printModeInfo(autoApprove, false)
 
 	// XELYON.md読み込み
 	if config := loadProjectConfig(); config != "" {
@@ -104,32 +103,31 @@ func RunInteractive(model string, provider api.Provider, autoApprove, planMode b
 }
 
 // RunInteractiveWithResume は前回のセッションを再開してインタラクティブモードを実行
-func RunInteractiveWithResume(model string, provider api.Provider, autoApprove, planMode bool) {
+func RunInteractiveWithResume(model string, provider api.Provider, autoApprove bool) {
 	storage, err := history.NewStorage()
 	if err != nil {
 		red.Printf("Failed to initialize storage: %v\n", err)
-		RunInteractive(model, provider, autoApprove, planMode)
+		RunInteractive(model, provider, autoApprove)
 		return
 	}
 
 	sessionID, err := storage.GetLastSession()
 	if err != nil {
 		yellow.Println("No previous session found, starting new session")
-		RunInteractive(model, provider, autoApprove, planMode)
+		RunInteractive(model, provider, autoApprove)
 		return
 	}
 
 	session, err := storage.Load(sessionID)
 	if err != nil {
 		red.Printf("Failed to load session: %v\n", err)
-		RunInteractive(model, provider, autoApprove, planMode)
+		RunInteractive(model, provider, autoApprove)
 		return
 	}
 
 	// ロード済みセッションでAgent作成
 	agent := NewAgent(model, provider)
 	agent.AutoApprove = autoApprove
-	agent.PlanMode = planMode
 	tools.SetAutoApprove(autoApprove) // ツールに --auto-approve 設定を伝える
 	agent.session = session
 	agent.History = session.ToAPIMessages()
@@ -139,7 +137,7 @@ func RunInteractiveWithResume(model string, provider api.Provider, autoApprove, 
 	setupSignalHandler(agent)
 
 	printHeader(model, provider)
-	printModeInfo(planMode, autoApprove, false)
+	printModeInfo(autoApprove, false)
 	green.Printf("📂 Resumed session %s (%d messages)\n", sessionID, len(session.Messages))
 
 	if config := loadProjectConfig(); config != "" {

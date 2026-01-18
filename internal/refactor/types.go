@@ -1,3 +1,4 @@
+
 package refactor
 
 import (
@@ -56,11 +57,9 @@ type RefactorReport struct {
 
 // RefactorConfig holds configuration for refactoring analysis.
 type RefactorConfig struct {
-	MaxFileLines      int  // Default: 300
-	MaxFunctionLines  int  // Default: 50
-	MinDuplicateLines int  // Default: 10
-	UseAI             bool // Enable AI-powered analysis
-	MaxAIFiles        int  // Default: 20, max files for AI analysis (0=unlimited)
+	MaxFileLines      int // Default: 300
+	MaxFunctionLines  int // Default: 50
+	MinDuplicateLines int // Default: 10
 }
 
 // DefaultConfig returns the default refactoring configuration.
@@ -69,16 +68,12 @@ func DefaultConfig() RefactorConfig {
 		MaxFileLines:      300,
 		MaxFunctionLines:  50,
 		MinDuplicateLines: 10,
-		UseAI:             false,
-		MaxAIFiles:        20, // Limit API calls
 	}
 }
 
 // RefactorOptions holds options for the /refactor command.
 type RefactorOptions struct {
-	Paths       []string
-	Config      RefactorConfig
-	TypeFilter  RefactorType // Empty means all types
-	Fix         bool         // Apply fixes interactively
-	AutoApprove bool         // Auto-approve all fixes
+	Paths      []string
+	Config     RefactorConfig
+	TypeFilter RefactorType // Empty means all types
 }

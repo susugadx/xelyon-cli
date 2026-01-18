@@ -10,7 +10,6 @@ import (
 // config.yaml の command_aliases で上書き・追加できる。
 var defaultCommandAliases = map[string]string{
 	"/h": "/help",
-	"/m": "/memory",
 	"/p": "/paste",
 }
 

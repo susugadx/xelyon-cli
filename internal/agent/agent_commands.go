@@ -103,10 +103,6 @@ func handleSpecialCommand(input string, agent *Agent) bool {
 		return true
 	case "/repomap":
 		return handleRepoMapCommand()
-	case "/memory":
-		return handleMemoryCommand(args)
-	case "/plan":
-		return handlePlanCommand(agent, args)
 	case "/dryrun":
 		return handleDryRunCommand(agent, args)
 	case "/init":
@@ -371,11 +367,6 @@ func printHelp() {
   /undo history       - Show past session changes
   /undo session <id>  - Undo all changes from specific session
   /changes            - Show file change history with undo status
-  /memory [cmd]       - Manage persistent memories across sessions
-                        /memory <text> - Add global memory
-                        /memory list - List all memories
-                        /memory delete <id> - Delete memory
-                        /memory clear - Clear all memories
   /stats              - Show session statistics (time, messages, tokens, cost)
   /copy [code] [-n N] - Copy last AI output to clipboard (code=code blocks only, -n=N-th last output)
   /compress [N]       - Compress history (keep recent N messages, default: 10)
@@ -385,7 +376,6 @@ func printHelp() {
                         /config show - Show all settings with diff from defaults
                         /config model <name> - Change default model
   /model [name]       - Show current model or switch model without restart
-  /plan [on|off]      - Toggle Plan Mode (autonomous execution with planning)
   /repomap            - Show repository code structure map
   /init               - Generate XELYON.md (project config) from codebase analysis
   /sync               - Sync XELYON.md with current codebase (detect new/deleted files, tech changes)

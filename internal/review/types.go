@@ -129,7 +129,6 @@ type Report struct {
 
 	Targets []Target
 	Issues  []Issue
-	Fixes   []FixProposal
 
 	Summary string
 }
