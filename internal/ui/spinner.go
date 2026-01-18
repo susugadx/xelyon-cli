@@ -10,11 +10,12 @@ import (
 
 // Spinner はターミナルでアニメーションを表示
 type Spinner struct {
-	mu       sync.Mutex
-	active   bool
-	stopChan chan struct{}
-	writer   io.Writer
-	frames   []string
+	mu        sync.Mutex
+	active    bool
+	stopChan  chan struct{}
+	writer    io.Writer
+	frames    []string
+	startTime time.Time // 開始時刻（経過時間表示用）
 }
 
 // NewSpinner は新しいSpinnerを作成
@@ -45,6 +46,7 @@ func (s *Spinner) Start(message string) {
 
 	s.active = true
 	s.stopChan = make(chan struct{})
+	s.startTime = time.Now()
 
 	go s.spin(message)
 }
@@ -75,9 +77,10 @@ func (s *Spinner) spin(message string) {
 	ticker := time.NewTicker(80 * time.Millisecond)
 	defer ticker.Stop()
 
-	// stopChanをローカルに保存（競合対策）
+	// stopChanとstartTimeをローカルに保存（競合対策）
 	s.mu.Lock()
 	stopChan := s.stopChan
+	startTime := s.startTime
 	s.mu.Unlock()
 
 	if stopChan == nil {
@@ -91,8 +94,22 @@ func (s *Spinner) spin(message string) {
 			return
 		case <-ticker.C:
 			frame := s.frames[i%len(s.frames)]
-			fmt.Fprintf(s.writer, "\r%s %s", frame, message)
+			elapsed := formatElapsed(time.Since(startTime))
+			if elapsed != "" {
+				fmt.Fprintf(s.writer, "\r%s %s %s", frame, message, elapsed)
+			} else {
+				fmt.Fprintf(s.writer, "\r%s %s", frame, message)
+			}
 			i++
 		}
 	}
+}
+
+// formatElapsed は経過時間を読みやすい形式でフォーマット
+func formatElapsed(d time.Duration) string {
+	seconds := int(d.Seconds())
+	if seconds < 1 {
+		return ""
+	}
+	return fmt.Sprintf("(%ds)", seconds)
 }

@@ -18,9 +18,6 @@ var toolJSONPatterns = []string{
 	`{ "tool"`,
 }
 
-// maxPatternLen は最長パターンの長さ
-var maxPatternLen = 8 // `{ "tool"` の長さ
-
 // StreamParser はストリーミングレスポンスの1行をパースする関数型
 // 戻り値: (content string, done bool, err error)
 //   - content: この行から抽出されたテキストコンテンツ
@@ -37,7 +34,6 @@ func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *u
 	idleTimeout := time.Duration(cfg.Streaming.IdleTimeoutSeconds) * time.Second
 
 	var fullResponse strings.Builder
-	var displayBuffer strings.Builder // 表示用バッファ
 	firstChunk := true
 	inToolJSON := false // ツールJSON内にいるか
 	jsonDepth := 0      // JSONのネスト深度
@@ -135,7 +131,7 @@ func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *u
 				fullResponse.WriteString(content)
 
 				// ツールJSON検出・非表示処理
-				displayContent := filterToolJSON(content, &displayBuffer, &inToolJSON, &jsonDepth, &inString, &prevChar)
+				displayContent := filterToolJSON(content, &inToolJSON, &jsonDepth, &inString, &prevChar)
 
 				if displayContent != "" {
 					// 最初のコンテンツでスピナー停止
@@ -152,96 +148,71 @@ func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *u
 
 // filterToolJSON はストリーミング中のツールJSONを検知して非表示にする
 //
-// 設計:
-// - displayBuffer: パターンの途中かもしれない文字を保留するバッファ
-// - パターンが確定するまで表示を保留し、ツールJSONでないと確定したら出力
-// - チャンク境界をまたいでもパターンを正しく検出できる
+// 設計（簡略化版）:
+// - inToolJSON が true の間は全て非表示
+// - strings.Index でパターンを検出（チャンク単位でシンプルに判定）
 // - inString: JSON文字列リテラル内かどうかを追跡（文字列内の{}を無視するため）
 // - prevChar: エスケープシーケンス検出用（\"を無視するため）
-func filterToolJSON(content string, displayBuffer *strings.Builder, inToolJSON *bool, jsonDepth *int, inString *bool, prevChar *rune) string {
+func filterToolJSON(content string, inToolJSON *bool, jsonDepth *int, inString *bool, prevChar *rune) string {
 	var result strings.Builder
+	remaining := content
 
-	for _, ch := range content {
+	for len(remaining) > 0 {
 		if *inToolJSON {
-			// ツールJSON内: 文字列リテラルとネスト深度を追跡、表示しない
-			if ch == '"' && *prevChar != '\\' {
-				// エスケープされていない " で文字列の開始/終了を切り替え
-				*inString = !*inString
-			} else if !*inString {
-				// 文字列外でのみ {} をカウント
-				if ch == '{' {
-					*jsonDepth++
-				} else if ch == '}' {
-					*jsonDepth--
-					if *jsonDepth == 0 {
-						// JSON終了
-						*inToolJSON = false
-						*inString = false
-						displayBuffer.Reset()
+			// ツールJSON内: 終了位置を探しながら非表示
+			endIdx := -1
+			for i, ch := range remaining {
+				if ch == '"' && *prevChar != '\\' {
+					*inString = !*inString
+				} else if !*inString {
+					if ch == '{' {
+						*jsonDepth++
+					} else if ch == '}' {
+						*jsonDepth--
+						if *jsonDepth == 0 {
+							*inToolJSON = false
+							*inString = false
+							endIdx = i + 1 // '}' の次の位置
+							*prevChar = ch
+							break
+						}
 					}
 				}
+				*prevChar = ch
 			}
-			*prevChar = ch
+
+			if endIdx == -1 {
+				// JSON終了なし → 残り全て非表示
+				return result.String()
+			}
+			// JSON終了 → 残りを継続処理
+			remaining = remaining[endIdx:]
 			continue
 		}
 
-		// 通常モード: バッファに追加してパターンチェック
-		displayBuffer.WriteRune(ch)
-		bufStr := displayBuffer.String()
-
-		// パターン完全一致をチェック
-		matched := false
+		// パターン検出
+		foundIdx := -1
 		for _, pattern := range toolJSONPatterns {
-			if strings.HasSuffix(bufStr, pattern) {
-				// パターン一致 → ツールJSON開始
-				*inToolJSON = true
-				*jsonDepth = 1 // 最初の { をカウント
-				// バッファからパターン部分を除いた分を出力
-				if len(bufStr) > len(pattern) {
-					result.WriteString(bufStr[:len(bufStr)-len(pattern)])
+			if idx := strings.Index(remaining, pattern); idx != -1 {
+				if foundIdx == -1 || idx < foundIdx {
+					foundIdx = idx
 				}
-				displayBuffer.Reset()
-				matched = true
-				break
-			}
-		}
-		if matched {
-			continue
-		}
-
-		// パターンの途中かもしれないかチェック
-		// いずれかのパターンのプレフィックスと一致するか
-		isPotentialMatch := false
-		for _, pattern := range toolJSONPatterns {
-			// バッファがパターンのプレフィックスになっているか
-			if len(bufStr) < len(pattern) {
-				if strings.HasPrefix(pattern, bufStr) {
-					isPotentialMatch = true
-					break
-				}
-			}
-			// バッファの末尾がパターンのプレフィックスになっているか
-			for prefixLen := 1; prefixLen < len(pattern) && prefixLen <= len(bufStr); prefixLen++ {
-				suffix := bufStr[len(bufStr)-prefixLen:]
-				prefix := pattern[:prefixLen]
-				if suffix == prefix {
-					isPotentialMatch = true
-					break
-				}
-			}
-			if isPotentialMatch {
-				break
 			}
 		}
 
-		if isPotentialMatch {
-			// パターンの途中かもしれない → 保留を継続
-			continue
+		if foundIdx == -1 {
+			// パターンなし → 残り全て表示
+			result.WriteString(remaining)
+			return result.String()
 		}
 
-		// パターンではないと確定 → バッファの内容を出力
-		result.WriteString(bufStr)
-		displayBuffer.Reset()
+		// パターン前の部分を出力
+		result.WriteString(remaining[:foundIdx])
+		remaining = remaining[foundIdx:]
+
+		// パターン以降を処理開始
+		*inToolJSON = true
+		*jsonDepth = 0
 	}
 
 	return result.String()
