@@ -87,6 +87,34 @@ type Tool interface {
 | SafetyMedium | 変更あり、確認推奨 | write_file, str_replace |
 | SafetyLow | 危険、必ず確認 | bash, git_push, delete_file |
 
+## Plan Mode
+
+### 概要
+複雑なタスク（実装、機能追加、リファクタリング等）を自動検出し、計画ベースで実行。
+
+### トリガーキーワード
+- 英語: `implement`, `add feature`, `refactor`, `create new`, `build`, `design`
+- 日本語: `実装`, `機能追加`, `リファクタリング`, `新規作成`, `設計`, `構築`, `追加して`, `作成して`, `作って`
+
+### フェーズ
+1. **調査フェーズ** (`runInvestigationPhase`)
+   - SafetyHighツール（read_file, search_code等）を自由に実行
+   - コードベースを理解
+
+2. **計画生成フェーズ** (`runPlanningPhase`)
+   - AIに計画JSONを出力させる
+   - ユーザーが承認/拒否/フィードバック
+
+3. **実行フェーズ** (`runImplementationPhase`)
+   - 各ステップを順次実行
+   - 失敗検知 (`containsFailure`)
+   - リトライUI (`promptFailureAction`: retry/skip/abort)
+
+### 関連ファイル
+- `internal/agent/plan_mode.go` - メイン実装
+- `internal/agent/agent_chat.go` - `shouldEnterPlanMode()` でトリガー
+- `internal/agent/plan.go` - 計画構造体（V1互換用）
+
 ## SystemPromptルール
 
 AIの振る舞いを定義（`internal/agent/prompts.go`）：

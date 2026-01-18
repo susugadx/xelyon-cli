@@ -365,3 +365,202 @@ func TestExtractExplanationAndTool_UnclosedBrace(t *testing.T) {
 		t.Error("extractExplanationAndTool() should return partial JSON when unclosed")
 	}
 }
+
+// shouldEnterPlanMode tests
+
+func TestShouldEnterPlanMode_EnglishKeywords(t *testing.T) {
+	provider := &mockProvider{name: "test"}
+	agent := NewAgent("test-model", provider)
+
+	tests := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		{
+			name:  "implement keyword",
+			input: "implement a new feature for user authentication",
+			want:  true,
+		},
+		{
+			name:  "add feature keyword",
+			input: "add feature for dark mode",
+			want:  true,
+		},
+		{
+			name:  "refactor keyword",
+			input: "refactor the database layer",
+			want:  true,
+		},
+		{
+			name:  "create new keyword",
+			input: "create new component for dashboard",
+			want:  true,
+		},
+		{
+			name:  "build keyword",
+			input: "build a REST API",
+			want:  true,
+		},
+		{
+			name:  "design keyword",
+			input: "design the system architecture",
+			want:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := agent.shouldEnterPlanMode(tt.input)
+			if got != tt.want {
+				t.Errorf("shouldEnterPlanMode(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestShouldEnterPlanMode_JapaneseKeywords(t *testing.T) {
+	provider := &mockProvider{name: "test"}
+	agent := NewAgent("test-model", provider)
+
+	tests := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		{
+			name:  "実装 keyword",
+			input: "ユーザー認証を実装してください",
+			want:  true,
+		},
+		{
+			name:  "機能追加 keyword",
+			input: "ダークモード機能追加お願いします",
+			want:  true,
+		},
+		{
+			name:  "リファクタリング keyword",
+			input: "データベース層のリファクタリングをして",
+			want:  true,
+		},
+		{
+			name:  "新規作成 keyword",
+			input: "ダッシュボードコンポーネントを新規作成",
+			want:  true,
+		},
+		{
+			name:  "設計 keyword",
+			input: "システムアーキテクチャを設計して",
+			want:  true,
+		},
+		{
+			name:  "構築 keyword",
+			input: "REST APIを構築してください",
+			want:  true,
+		},
+		{
+			name:  "追加して keyword",
+			input: "新しい機能を追加して",
+			want:  true,
+		},
+		{
+			name:  "作成して keyword",
+			input: "テストファイルを作成して",
+			want:  true,
+		},
+		{
+			name:  "作って keyword",
+			input: "新しいコンポーネント作って",
+			want:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := agent.shouldEnterPlanMode(tt.input)
+			if got != tt.want {
+				t.Errorf("shouldEnterPlanMode(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestShouldEnterPlanMode_NoMatch(t *testing.T) {
+	provider := &mockProvider{name: "test"}
+	agent := NewAgent("test-model", provider)
+
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{
+			name:  "simple read request",
+			input: "read the file main.go",
+		},
+		{
+			name:  "simple question",
+			input: "what is this function doing?",
+		},
+		{
+			name:  "status check",
+			input: "show git status",
+		},
+		{
+			name:  "fix typo",
+			input: "fix the typo in line 10",
+		},
+		{
+			name:  "simple Japanese request",
+			input: "このファイルを読んで",
+		},
+		{
+			name:  "Japanese question",
+			input: "この関数は何をしていますか？",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := agent.shouldEnterPlanMode(tt.input)
+			if got {
+				t.Errorf("shouldEnterPlanMode(%q) = true, want false", tt.input)
+			}
+		})
+	}
+}
+
+func TestShouldEnterPlanMode_CaseInsensitive(t *testing.T) {
+	provider := &mockProvider{name: "test"}
+	agent := NewAgent("test-model", provider)
+
+	tests := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		{
+			name:  "IMPLEMENT uppercase",
+			input: "IMPLEMENT a new feature",
+			want:  true,
+		},
+		{
+			name:  "Implement mixed case",
+			input: "Implement the login system",
+			want:  true,
+		},
+		{
+			name:  "REFACTOR uppercase",
+			input: "REFACTOR the codebase",
+			want:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := agent.shouldEnterPlanMode(tt.input)
+			if got != tt.want {
+				t.Errorf("shouldEnterPlanMode(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
