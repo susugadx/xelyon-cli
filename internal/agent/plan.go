@@ -8,7 +8,8 @@ import (
 
 // Plan は実行計画を表す
 type Plan struct {
-	Steps []PlanStep `json:"steps"`
+	Summary string     `json:"summary"`
+	Steps   []PlanStep `json:"steps"`
 }
 
 // PlanStep は計画の1ステップを表す

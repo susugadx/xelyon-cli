@@ -212,7 +212,7 @@ Output your plan now in this JSON format:
 }
 
 // runImplementationPhase は実装フェーズを実行（失敗検知・リトライ対応）
-func (a *Agent) runImplementationPhase(ctx context.Context, plan *PlanV2) error {
+func (a *Agent) runImplementationPhase(ctx context.Context, plan *Plan) error {
 	for idx, step := range plan.Steps {
 		cyan.Printf("\n[%d/%d] %s\n", idx+1, len(plan.Steps), step.Description)
 
@@ -227,7 +227,7 @@ func (a *Agent) runImplementationPhase(ctx context.Context, plan *PlanV2) error 
 }
 
 // executeStepV2 は単一ステップを実行（失敗検知・リトライ対応）
-func (a *Agent) executeStepV2(ctx context.Context, plan *PlanV2, step *PlanStepV2, idx int, retryCount int) error {
+func (a *Agent) executeStepV2(ctx context.Context, plan *Plan, step *PlanStep, idx int, retryCount int) error {
 	maxRetries := 3
 
 	if retryCount > 0 {
@@ -416,19 +416,6 @@ func (a *Agent) confirmPlan() (approved bool, feedback string) {
 	}
 }
 
-// PlanV2 は新しい計画フォーマット
-type PlanV2 struct {
-	Summary string       `json:"summary"`
-	Steps   []PlanStepV2 `json:"steps"`
-}
-
-// PlanStepV2 は計画のステップ
-type PlanStepV2 struct {
-	ID          int      `json:"id"`
-	Description string   `json:"description"`
-	Tools       []string `json:"tools"`
-}
-
 // ExtractPlanV2JSON はレスポンスから計画JSONを抽出
 func ExtractPlanV2JSON(response string) string {
 	// {"plan": ... } パターンを探す
@@ -460,11 +447,11 @@ func ExtractPlanV2JSON(response string) string {
 	return ""
 }
 
-// ParsePlanV2 は計画JSONをパース
-func ParsePlanV2(jsonStr string) (*PlanV2, error) {
+// ParsePlanV2 は計画JSONをパース (V2形式: {"plan": {...}})
+func ParsePlanV2(jsonStr string) (*Plan, error) {
 	// {"plan": {...}} の形式から plan 部分を抽出
 	type wrapper struct {
-		Plan PlanV2 `json:"plan"`
+		Plan Plan `json:"plan"`
 	}
 
 	var w wrapper
@@ -477,24 +464,38 @@ func ParsePlanV2(jsonStr string) (*PlanV2, error) {
 
 // containsFailure はツール結果に失敗パターンが含まれるか検出
 // 失敗を検出した場合、(true, 理由) を返す
+//
+// NOTE: "error:" や "Error:" のような汎用パターンは使用しない。
+// コード検索結果（例: t.Errorf）やログ出力に含まれる "Error" 文字列で
+// 誤検知してしまうため。実際のコマンド失敗を示す具体的なパターンのみ使用。
 func containsFailure(result string) (bool, string) {
 	failPatterns := map[string]string{
-		"--- FAIL:":      "Go test failed",
-		"FAIL\t":         "Go test failed",
-		"exit status 1":  "Command failed with exit code 1",
-		"exit status":    "Command failed",
-		"panic:":         "Panic detected",
-		"fatal error:":   "Fatal error",
-		"AssertionError": "Assertion failed",
-		"FAILED":         "Test failed",
-		"npm ERR!":       "npm error",
-		"SyntaxError":    "Syntax error",
-		"TypeError":      "Type error",
-		"ReferenceError": "Reference error",
+		// Go test failures
+		"--- FAIL:": "Go test failed",
+		"FAIL\t":    "Go test failed",
+		// Command failures (exit code)
+		"exit status 1": "Command failed with exit code 1",
+		// Panics and fatal errors
+		"panic:":       "Panic detected",
+		"fatal error:": "Fatal error",
+		// Build/compile errors
 		"compile error":  "Compilation error",
 		"build failed":   "Build failed",
-		"error: ":        "Error occurred",
-		"Error: ":        "Error occurred",
+		"cannot find":    "Build error",
+		"undefined:":     "Undefined symbol",
+		"undeclared":     "Undeclared identifier",
+		"does not exist": "File or module not found",
+		// npm/node errors
+		"npm ERR!": "npm error",
+		// JavaScript runtime errors (specific patterns)
+		"SyntaxError:":    "Syntax error",
+		"TypeError:":      "Type error",
+		"ReferenceError:": "Reference error",
+		// Python errors
+		"Traceback (most recent call last):": "Python exception",
+		"AssertionError:":                    "Assertion failed",
+		// Rust errors
+		"error[E": "Rust compilation error",
 	}
 
 	// パターンの優先度順にチェック（より具体的なものを先に）
@@ -503,18 +504,20 @@ func containsFailure(result string) (bool, string) {
 		"FAIL\t",
 		"panic:",
 		"fatal error:",
-		"build failed",
+		"Traceback (most recent call last):",
+		"error[E",
 		"compile error",
-		"AssertionError",
+		"build failed",
+		"undefined:",
+		"undeclared",
+		"cannot find",
+		"does not exist",
 		"npm ERR!",
-		"SyntaxError",
-		"TypeError",
-		"ReferenceError",
-		"FAILED",
+		"SyntaxError:",
+		"TypeError:",
+		"ReferenceError:",
+		"AssertionError:",
 		"exit status 1",
-		"exit status",
-		"error: ",
-		"Error: ",
 	}
 
 	for _, pattern := range priorityPatterns {
@@ -535,7 +538,7 @@ const (
 )
 
 // promptFailureAction は失敗時のユーザー選択UIを表示
-func promptFailureAction(step *PlanStepV2, result string, reason string) FailureAction {
+func promptFailureAction(step *PlanStep, result string, reason string) FailureAction {
 	fmt.Println()
 	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	red.Printf("❌ Step %d Failed: %s\n", step.ID, step.Description)

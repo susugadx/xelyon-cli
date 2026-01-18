@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestExtractPlanV2JSON(t *testing.T) {
+func TestExtractPlanJSON(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
@@ -53,7 +53,7 @@ func TestParsePlanV2(t *testing.T) {
 		wantErr     bool
 	}{
 		{
-			name:        "valid plan",
+			name:        "valid plan with wrapper",
 			input:       `{"plan": {"summary": "Add feature X", "steps": [{"id": 1, "description": "Step 1", "tools": ["write_file"]}, {"id": 2, "description": "Step 2", "tools": ["str_replace"]}]}}`,
 			wantSummary: "Add feature X",
 			wantSteps:   2,
@@ -103,7 +103,7 @@ func TestParsePlanV2(t *testing.T) {
 	}
 }
 
-func TestPlanStepV2_Tools(t *testing.T) {
+func TestPlanStep_Tools(t *testing.T) {
 	input := `{"plan": {"summary": "Test", "steps": [{"id": 1, "description": "Write file", "tools": ["write_file", "str_replace"]}]}}`
 	plan, err := ParsePlanV2(input)
 	if err != nil {

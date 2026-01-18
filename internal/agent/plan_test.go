@@ -445,14 +445,9 @@ func TestContainsFailure_ExitStatus(t *testing.T) {
 			want:   true,
 		},
 		{
-			name:   "exit status 2",
-			result: "Process exited with exit status 2",
-			want:   true,
-		},
-		{
 			name:   "exit status 0 (success)",
 			result: "Command completed with exit status 0",
-			want:   true, // The pattern matches "exit status" regardless of code
+			want:   false, // exit status 0 is success, should not be detected as failure
 		},
 	}
 
@@ -512,12 +507,12 @@ func TestContainsFailure_BuildAndCompileErrors(t *testing.T) {
 			want:   true,
 		},
 		{
-			name:   "SyntaxError",
+			name:   "SyntaxError with colon",
 			result: "SyntaxError: Unexpected token",
 			want:   true,
 		},
 		{
-			name:   "TypeError",
+			name:   "TypeError with colon",
 			result: "TypeError: Cannot read property 'x' of undefined",
 			want:   true,
 		},
@@ -528,6 +523,57 @@ func TestContainsFailure_BuildAndCompileErrors(t *testing.T) {
 			failed, _ := containsFailure(tt.result)
 			if failed != tt.want {
 				t.Errorf("containsFailure() = %v, want %v", failed, tt.want)
+			}
+		})
+	}
+}
+
+// TestContainsFailure_FalsePositives は誤検知を起こさないことをテスト
+// コード検索結果やログ出力に "Error" 文字列が含まれていても失敗と判定しない
+func TestContainsFailure_FalsePositives(t *testing.T) {
+	tests := []struct {
+		name   string
+		result string
+		want   bool
+	}{
+		{
+			name: "t.Errorf in test code",
+			result: `internal/agent/plan_test.go:397:	t.Errorf("containsFailure() = %v, want %v", failed, tt.want)
+internal/agent/plan_test.go:485:	t.Errorf("containsFailure() should not detect failure for %q", tt.name)`,
+			want: false, // コード検索結果は失敗ではない
+		},
+		{
+			name:   "ErrorHandler function name",
+			result: "func ErrorHandler(err error) {\n    log.Printf(\"Error: %v\", err)\n}",
+			want:   false, // 関数定義は失敗ではない
+		},
+		{
+			name:   "fmt.Errorf in code",
+			result: `return fmt.Errorf("failed to parse: %w", err)`,
+			want:   false, // コード内のfmt.Errorfは失敗ではない
+		},
+		{
+			name:   "log with error message",
+			result: "2024-01-15 10:00:00 INFO: Processing completed\n2024-01-15 10:00:01 DEBUG: Error count: 0",
+			want:   false, // ログ出力（エラーカウント0）は失敗ではない
+		},
+		{
+			name:   "grep result with Error string",
+			result: "search_code result:\ninternal/api/client.go:50: type ErrorResponse struct {\ninternal/api/client.go:51:     Error string `json:\"error\"`",
+			want:   false, // コード検索結果は失敗ではない
+		},
+		{
+			name:   "markdown documentation",
+			result: "## Error Handling\nThis section describes how errors are handled.\n\n### ErrorTypes\n- ValidationError\n- NetworkError",
+			want:   false, // ドキュメントは失敗ではない
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			failed, reason := containsFailure(tt.result)
+			if failed != tt.want {
+				t.Errorf("containsFailure() = %v (reason: %s), want %v", failed, reason, tt.want)
 			}
 		})
 	}
