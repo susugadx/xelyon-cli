@@ -114,6 +114,17 @@ func (a *Agent) chat(input string) {
 		}
 
 		// 通常の回答
+		// AIが「続けて〜します」と言っている場合はもう一度API呼び出し
+		if shouldContinueExecution(response) {
+			a.handleNormalResponse(response)
+			// 履歴に継続指示を追加してループ継続
+			a.History = append(a.History, api.Message{
+				Role:    "user",
+				Content: "[SYSTEM] Please continue with the next step.",
+			})
+			continue
+		}
+
 		a.handleNormalResponse(response)
 		a.SetStatus(StateWaitingInput, "Ready for input", "入力待ち", "Type your request or /help", "リクエスト、または /help を入力")
 		normalExit = true
@@ -254,6 +265,28 @@ func extractExplanationAndTool(response string) (explanation, toolJSON string) {
 
 	// 閉じ括弧が見つからない場合は全体をツールJSONとみなす
 	return explanation, response[toolStartIdx:]
+}
+
+// shouldContinueExecution はAIの応答が継続を示しているか検知
+// AIが「続けて〜します」「次に〜」などと言っている場合はtrueを返す
+func shouldContinueExecution(response string) bool {
+	// 継続パターン（日本語・英語）
+	continuationPatterns := []string{
+		// 日本語
+		"続けて", "次に", "続いて", "引き続き", "それでは",
+		"まず", "次のステップ", "続きます", "進めます",
+		// 英語
+		"Next,", "Now I'll", "Now I will", "Let me continue",
+		"I'll now", "I will now", "Continuing", "Moving on",
+		"Next step", "Then I'll", "Then I will",
+	}
+
+	for _, pattern := range continuationPatterns {
+		if strings.Contains(response, pattern) {
+			return true
+		}
+	}
+	return false
 }
 
 // shouldAbortToolLoop は同じツール呼び出しの繰り返しを検知
