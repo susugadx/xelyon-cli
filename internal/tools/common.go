@@ -11,14 +11,20 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
+// 色定義: ui パッケージの共通色を使用
+// 後方互換性のためエイリアスを維持
 var (
-	yellow = color.New(color.FgYellow)
-	green  = color.New(color.FgGreen)
-	red    = color.New(color.FgRed)
-	cyan   = color.New(color.FgCyan)
+	yellow = ui.Yellow
+	green  = ui.Green
+	red    = ui.Red
+	cyan   = ui.Cyan
 )
+
+// color パッケージは他の場所で直接使われる可能性があるため保持
+var _ = color.New
 
 // getCurrentTime は現在時刻を返す（builtin.goから使用）
 func getCurrentTime() time.Time {
@@ -244,82 +250,39 @@ func findWithNormalizedWhitespace(content, pattern string) (found bool, startIdx
 }
 
 // showImprovedDiff は改善された差分表示
+// ui.ShowColoredDiff を使用してインライン形式で表示
 func showImprovedDiff(oldStr, newStr string) {
-	oldLines := strings.Split(oldStr, "\n")
-	newLines := strings.Split(newStr, "\n")
-
 	cfg := config.GetGlobalConfig()
-	maxLines := cfg.Diff.ContextLines // 最大表示行数（0なら全行表示）
 
-	cyan.Println("\nBefore / 変更前:")
-	cyan.Println("┌" + strings.Repeat("─", 60) + "┐")
-	for i, line := range oldLines {
-		if maxLines > 0 && i >= maxLines {
-			yellow.Printf("│ ... (%d lines omitted / 行省略)\n", len(oldLines)-maxLines)
-			break
-		}
-		red.Printf("│ - %s\n", line)
+	opts := &ui.DiffOptions{
+		ContextLines:  cfg.Diff.ContextLines,
+		ShowLineNums:  true,
+		InlineMode:    true,
+		MaxTotalLines: 50,
 	}
-	cyan.Println("└" + strings.Repeat("─", 60) + "┘")
+	if opts.ContextLines == 0 {
+		opts.MaxTotalLines = 0 // 無制限
+	}
 
-	cyan.Println("\nAfter / 変更後:")
-	cyan.Println("┌" + strings.Repeat("─", 60) + "┐")
-	for i, line := range newLines {
-		if maxLines > 0 && i >= maxLines {
-			yellow.Printf("│ ... (%d lines omitted / 行省略)\n", len(newLines)-maxLines)
-			break
-		}
-		green.Printf("│ + %s\n", line)
-	}
-	cyan.Println("└" + strings.Repeat("─", 60) + "┘\n")
+	ui.ShowColoredDiff(oldStr, newStr, opts)
 }
 
 // showDiff は差分を表示
 func showDiff(old, new, filename string) {
 	yellow.Printf("📝 Changes to: %s\n", filename)
-	fmt.Println(strings.Repeat("─", 50))
-
-	oldLines := strings.Split(old, "\n")
-	newLines := strings.Split(new, "\n")
-
-	// 簡易diff（行数が違う部分を表示）
-	maxLines := len(oldLines)
-	if len(newLines) > maxLines {
-		maxLines = len(newLines)
-	}
-
 	cfg := config.GetGlobalConfig()
-	contextLines := cfg.Diff.ContextLines // 0なら全行表示
 
-	diffCount := 0
-	for i := 0; i < maxLines && (contextLines == 0 || diffCount < contextLines); i++ {
-		oldLine := ""
-		newLine := ""
-		if i < len(oldLines) {
-			oldLine = oldLines[i]
-		}
-		if i < len(newLines) {
-			newLine = newLines[i]
-		}
-
-		if oldLine != newLine {
-			diffCount++
-			if oldLine != "" {
-				red.Printf("- %s\n", oldLine)
-			}
-			if newLine != "" {
-				green.Printf("+ %s\n", newLine)
-			}
-		}
+	opts := &ui.DiffOptions{
+		ContextLines:  cfg.Diff.ContextLines,
+		ShowLineNums:  true,
+		InlineMode:    true,
+		MaxTotalLines: 50,
+	}
+	if opts.ContextLines == 0 {
+		opts.MaxTotalLines = 0
 	}
 
-	if diffCount == 0 {
-		fmt.Println("(no changes)")
-	} else if contextLines > 0 && diffCount >= contextLines {
-		yellow.Println("... (more changes)")
-	}
-
-	fmt.Println(strings.Repeat("─", 50))
+	ui.ShowColoredDiff(old, new, opts)
 }
 
 // showPreview は新規ファイルのプレビューを表示
