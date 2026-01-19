@@ -3,14 +3,16 @@ package agent
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
+	"sync"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
+	"golang.org/x/sync/errgroup"
 )
 
 // RunPlanMode は Claude Code 風の Plan Mode を実行
@@ -127,6 +129,8 @@ func (a *Agent) runInvestigationPhase(ctx context.Context) (string, error) {
 	maxIterations := config.MaxToolIterations
 	var lastToolCall *tools.ToolCall
 	var sameCallCount int
+	var lastToolCallsHash string // 並列実行時のループ検知用
+	var sameSetCount int         // 並列実行時の同一セットカウント
 
 	for i := 0; i < maxIterations; i++ {
 		response, err := a.CurrentProvider.ChatWithTools(
@@ -145,7 +149,7 @@ func (a *Agent) runInvestigationPhase(ctx context.Context) (string, error) {
 		}
 
 		// 計画JSONを検出
-		if planJSON := ExtractPlanV2JSON(response); planJSON != "" {
+		if planJSON := ExtractPlanJSON(response); planJSON != "" {
 			return planJSON, nil
 		}
 
@@ -189,24 +193,28 @@ func (a *Agent) runInvestigationPhase(ctx context.Context) (string, error) {
 			return "", nil
 		}
 
-		// ツールを実行
+		// ツールを分類
+		var safetyHighTools []*tools.ToolCall
+		var otherTools []*tools.ToolCall
+
 		for _, toolCall := range toolCalls {
-			// ループ検知
-			if a.shouldAbortToolLoop(toolCall, lastToolCall, &sameCallCount) {
-				return "", fmt.Errorf("tool loop detected during investigation")
-			}
-			lastToolCall = toolCall
-
 			safety := tools.GetToolSafety(toolCall.Tool)
-			if safety != tools.SafetyHigh {
-				// SafetyMedium/Low ツールが呼ばれた = 調査フェーズ終了、計画生成を要求
-				cyan.Printf("\n⚡ Implementation tool detected: %s\n", toolCall.Tool)
-				cyan.Println("   Requesting implementation plan...")
+			if safety == tools.SafetyHigh {
+				safetyHighTools = append(safetyHighTools, toolCall)
+			} else {
+				otherTools = append(otherTools, toolCall)
+			}
+		}
 
-				// AIに計画生成を要求
-				a.History = append(a.History, api.Message{
-					Role: "user",
-					Content: fmt.Sprintf(`[SYSTEM] You tried to use a modification tool (%s) during the investigation phase.
+		// SafetyMedium/Low がある場合は計画生成を要求（従来通り）
+		if len(otherTools) > 0 {
+			tc := otherTools[0]
+			cyan.Printf("\n⚡ Implementation tool detected: %s\n", tc.Tool)
+			cyan.Println("   Requesting implementation plan...")
+
+			a.History = append(a.History, api.Message{
+				Role: "user",
+				Content: fmt.Sprintf(`[SYSTEM] You tried to use a modification tool (%s) during the investigation phase.
 
 Before using modification tools, you must output an implementation plan.
 Output your plan now in this JSON format:
@@ -217,39 +225,100 @@ Output your plan now in this JSON format:
     {"id": 1, "description": "Step description", "tools": ["tool1"]},
     {"id": 2, "description": "Step description", "tools": ["tool2"]}
   ]
-}}`, toolCall.Tool),
-				})
-
-				// 次のイテレーションで計画を取得
-				continue
-			}
-
-			// SafetyHighツールを実行
-			if a.Stats != nil {
-				a.Stats.AddToolExecution(toolCall.Tool)
-			}
-
-			result, _ := tools.Execute(toolCall)
-
-			a.History = append(a.History, api.Message{
-				Role:    "user",
-				Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, result),
+}}`, tc.Tool),
 			})
+			continue
 		}
+
+		// SafetyHigh ツールがない場合（ツールなし）= 調査完了
+		if len(safetyHighTools) == 0 {
+			fmt.Println(response)
+			return "", nil
+		}
+
+		// SafetyHigh ツールを実行
+		var allResults []string
+		if len(safetyHighTools) > 1 {
+			// 並列実行時のループ検知
+			currentHash := hashToolCalls(safetyHighTools)
+			if currentHash == lastToolCallsHash {
+				sameSetCount++
+				if sameSetCount >= 3 {
+					return "", fmt.Errorf("tool loop detected: same tool set repeated %d times", sameSetCount)
+				}
+			} else {
+				sameSetCount = 0
+			}
+			lastToolCallsHash = currentHash
+
+			// 並列実行
+			cyan.Printf("⚡ Executing %d investigation tools in parallel...\n", len(safetyHighTools))
+			allResults = a.executeInvestigationToolsParallel(ctx, safetyHighTools)
+		} else {
+			// 単一ツールは直列実行
+			tc := safetyHighTools[0]
+
+			// ループ検知
+			if a.shouldAbortToolLoop(tc, lastToolCall, &sameCallCount) {
+				return "", fmt.Errorf("tool loop detected during investigation")
+			}
+			lastToolCall = tc
+
+			if a.Stats != nil {
+				a.Stats.AddToolExecution(tc.Tool)
+			}
+			result, _ := tools.Execute(tc)
+			allResults = []string{fmt.Sprintf("[Tool Result for %s]\n%s", tc.Tool, result)}
+		}
+
+		// 結果を履歴に追加
+		a.History = append(a.History, api.Message{
+			Role:    "user",
+			Content: strings.Join(allResults, "\n\n"),
+		})
 	}
 
 	yellow.Printf("⚠️  調査フェーズが%d回のツール実行に達しました。続けて指示してください。\n", maxIterations)
 	return "", nil
 }
 
-// runImplementationPhase は実装フェーズを実行（失敗検知・リトライ対応）
+// runImplementationPhase は実装フェーズを実行（並列実行対応）
 func (a *Agent) runImplementationPhase(ctx context.Context, plan *Plan) error {
-	for idx, step := range plan.Steps {
-		cyan.Printf("\n[%d/%d] %s\n", idx+1, len(plan.Steps), step.Description)
+	for {
+		// 並列実行可能なステップを取得
+		parallelSteps := plan.GetParallelSteps()
 
-		// ステップ実行（リトライ対応）
-		if err := a.executeStepV2(ctx, plan, &step, idx, 0); err != nil {
-			return err
+		if len(parallelSteps) > 1 {
+			// 並列実行
+			cyan.Printf("\n⚡ Executing %d steps in parallel...\n", len(parallelSteps))
+			if err := a.executeStepsParallel(ctx, plan, parallelSteps); err != nil {
+				return err
+			}
+			// 完了したステップをマーク
+			for _, id := range parallelSteps {
+				plan.UpdateStatus(id, "completed", "")
+			}
+		} else {
+			// 直列実行
+			nextID := plan.GetNextStep()
+			if nextID == -1 {
+				break // 全て完了
+			}
+			step := plan.GetStep(nextID)
+			if step == nil {
+				break
+			}
+
+			cyan.Printf("\n[%d/%d] %s\n", nextID, len(plan.Steps), step.Description)
+			if err := a.executeStepV2(ctx, plan, step, nextID-1, 0, false); err != nil {
+				return err
+			}
+			plan.UpdateStatus(nextID, "completed", "")
+		}
+
+		// 全て完了したか確認
+		if plan.IsCompleted() {
+			break
 		}
 	}
 
@@ -257,8 +326,96 @@ func (a *Agent) runImplementationPhase(ctx context.Context, plan *Plan) error {
 	return nil
 }
 
+// executeStepsParallel は複数ステップを並列実行
+func (a *Agent) executeStepsParallel(ctx context.Context, plan *Plan, stepIDs []int) error {
+	cfg := config.GetGlobalConfig()
+	maxWorkers := cfg.PlanMode.MaxParallelSteps
+	if maxWorkers <= 0 {
+		maxWorkers = 3
+	}
+
+	// セマフォでワーカー数を制限
+	sem := make(chan struct{}, maxWorkers)
+	g, ctx := errgroup.WithContext(ctx)
+
+	for _, stepID := range stepIDs {
+		stepID := stepID // capture
+		step := plan.GetStep(stepID)
+		if step == nil {
+			continue
+		}
+
+		g.Go(func() error {
+			// セマフォ取得
+			select {
+			case sem <- struct{}{}:
+				defer func() { <-sem }()
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+
+			cyan.Printf("\n[Parallel] Step %d: %s\n", step.ID, step.Description)
+			return a.executeStepV2(ctx, plan, step, step.ID-1, 0, true)
+		})
+	}
+
+	return g.Wait()
+}
+
+// hashToolCalls は toolCalls セットのハッシュを生成（ループ検知用）
+func hashToolCalls(toolCalls []*tools.ToolCall) string {
+	var parts []string
+	for _, tc := range toolCalls {
+		argsStr := fmt.Sprintf("%v", tc.Args)
+		parts = append(parts, tc.Tool+":"+argsStr)
+	}
+	sort.Strings(parts) // 順序に依存しないようソート
+	return strings.Join(parts, "|")
+}
+
+// executeInvestigationToolsParallel は SafetyHigh ツールを並列実行
+// 結果は toolCall 順で返す（順序保持）
+func (a *Agent) executeInvestigationToolsParallel(ctx context.Context, toolCalls []*tools.ToolCall) []string {
+	cfg := config.GetGlobalConfig()
+	maxWorkers := cfg.PlanMode.MaxParallelSteps
+	if maxWorkers <= 0 {
+		maxWorkers = 3
+	}
+
+	results := make([]string, len(toolCalls))
+	sem := make(chan struct{}, maxWorkers)
+	var wg sync.WaitGroup
+
+	for i, tc := range toolCalls {
+		wg.Add(1)
+		go func(idx int, toolCall *tools.ToolCall) {
+			defer wg.Done()
+
+			// セマフォ取得
+			select {
+			case sem <- struct{}{}:
+				defer func() { <-sem }()
+			case <-ctx.Done():
+				results[idx] = fmt.Sprintf("[%s]\nError: context cancelled", toolCall.Tool)
+				return
+			}
+
+			// Stats 更新（スレッドセーフ）
+			a.incrementToolExecution(toolCall.Tool)
+
+			// ツール実行
+			result, _ := tools.Execute(toolCall)
+			results[idx] = fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, result)
+		}(i, tc)
+	}
+
+	wg.Wait()
+	return results
+}
+
 // executeStepV2 は単一ステップを実行（失敗検知・リトライ対応）
-func (a *Agent) executeStepV2(ctx context.Context, plan *Plan, step *PlanStep, idx int, retryCount int) error {
+// parallel=true の場合はスレッドセーフなメソッドを使用し、ユーザー入力が必要な処理はスキップ
+func (a *Agent) executeStepV2(ctx context.Context, plan *Plan, step *PlanStep, idx int, retryCount int, parallel bool) error {
 	maxRetries := 3
 
 	if retryCount > 0 {
@@ -283,7 +440,11 @@ IMPORTANT INSTRUCTIONS:
 
 	// リトライ時は履歴に追加しない
 	if retryCount == 0 {
-		a.History = append(a.History, api.Message{Role: "user", Content: stepPrompt})
+		if parallel {
+			a.appendHistory(api.Message{Role: "user", Content: stepPrompt})
+		} else {
+			a.History = append(a.History, api.Message{Role: "user", Content: stepPrompt})
+		}
 	}
 
 	// ステップ内のツール実行ループ
@@ -304,9 +465,14 @@ IMPORTANT INSTRUCTIONS:
 			return fmt.Errorf("step %d failed: %w", step.ID, err)
 		}
 
-		a.History = append(a.History, api.Message{Role: "assistant", Content: response})
-		if a.Stats != nil {
-			a.Stats.AssistantMessages++
+		if parallel {
+			a.appendHistory(api.Message{Role: "assistant", Content: response})
+			a.incrementAssistantMessages()
+		} else {
+			a.History = append(a.History, api.Message{Role: "assistant", Content: response})
+			if a.Stats != nil {
+				a.Stats.AssistantMessages++
+			}
 		}
 
 		// ツール呼び出しチェック
@@ -317,10 +483,15 @@ IMPORTANT INSTRUCTIONS:
 				continueCount++
 				yellow.Printf("⚠️  AI asked a question, auto-continuing (%d/%d)...\n", continueCount, maxContinues)
 
-				a.History = append(a.History, api.Message{
+				msg := api.Message{
 					Role:    "user",
 					Content: "[AUTO-CONTINUE] Yes, proceed with the step. Execute the required tools directly without asking for confirmation.",
-				})
+				}
+				if parallel {
+					a.appendHistory(msg)
+				} else {
+					a.History = append(a.History, msg)
+				}
 				continue
 			}
 
@@ -332,8 +503,12 @@ IMPORTANT INSTRUCTIONS:
 		// ツールを実行
 		var allResults []string
 		for _, toolCall := range toolCalls {
-			if a.Stats != nil {
-				a.Stats.AddToolExecution(toolCall.Tool)
+			if parallel {
+				a.incrementToolExecution(toolCall.Tool)
+			} else {
+				if a.Stats != nil {
+					a.Stats.AddToolExecution(toolCall.Tool)
+				}
 			}
 
 			result, change := tools.Execute(toolCall)
@@ -347,9 +522,13 @@ IMPORTANT INSTRUCTIONS:
 
 			// 変更履歴を保存
 			if change != nil {
-				a.changeStack = append(a.changeStack, *change)
-				if len(a.changeStack) > config.MaxChangeStack {
-					a.changeStack = a.changeStack[1:]
+				if parallel {
+					a.appendChange(*change)
+				} else {
+					a.changeStack = append(a.changeStack, *change)
+					if len(a.changeStack) > config.MaxChangeStack {
+						a.changeStack = a.changeStack[1:]
+					}
 				}
 
 				if a.changeStorage != nil && a.session != nil {
@@ -362,6 +541,11 @@ IMPORTANT INSTRUCTIONS:
 
 		// 失敗検出時の処理
 		if lastFailedResult != "" {
+			if parallel {
+				// 並列実行時はユーザー入力不可、即座にエラーを返す
+				return fmt.Errorf("step %d failed during parallel execution: %s", step.ID, lastFailReason)
+			}
+
 			a.SetStatus(StateWaitingApproval, "Step failed - waiting for action", "ステップ失敗 - アクション待ち", "Choose r/c/s/a", "r/c/s/a を選択")
 
 			action := promptFailureAction(step, lastFailedResult, lastFailReason)
@@ -387,7 +571,7 @@ Please:
 
 Do NOT skip this step. The issue must be resolved before proceeding.`, lastFailedResult),
 				})
-				return a.executeStepV2(ctx, plan, step, idx, retryCount+1)
+				return a.executeStepV2(ctx, plan, step, idx, retryCount+1, false)
 			case FailureActionComment:
 				if retryCount >= maxRetries {
 					red.Printf("⚠️  Max retries (%d) reached for step %d\n", maxRetries, step.ID)
@@ -405,7 +589,7 @@ Error that occurred:
 
 Please follow these instructions to fix the issue and retry the step.`, failureComment, lastFailedResult),
 				})
-				return a.executeStepV2(ctx, plan, step, idx, retryCount+1)
+				return a.executeStepV2(ctx, plan, step, idx, retryCount+1, false)
 			case FailureActionSkip:
 				yellow.Printf("⏭️  Step %d skipped by user\n", step.ID)
 				return nil
@@ -416,10 +600,15 @@ Please follow these instructions to fix the issue and retry the step.`, failureC
 		}
 
 		// 結果を履歴に追加
-		a.History = append(a.History, api.Message{
+		msg := api.Message{
 			Role:    "user",
 			Content: fmt.Sprintf("[Tool Results]\n%s", strings.Join(allResults, "\n\n")),
-		})
+		}
+		if parallel {
+			a.appendHistory(msg)
+		} else {
+			a.History = append(a.History, msg)
+		}
 	}
 
 	green.Printf("✓ Step %d completed\n", step.ID)
@@ -465,51 +654,6 @@ func (a *Agent) confirmPlan() (approved bool, feedback string) {
 	}
 }
 
-// ExtractPlanV2JSON はレスポンスから計画JSONを抽出
-func ExtractPlanV2JSON(response string) string {
-	// {"plan": ... } パターンを探す
-	patterns := []string{
-		`{"plan"`,
-		`{ "plan"`,
-	}
-
-	for _, pattern := range patterns {
-		idx := strings.Index(response, pattern)
-		if idx == -1 {
-			continue
-		}
-
-		// 対応する閉じ括弧を探す
-		depth := 0
-		for i := idx; i < len(response); i++ {
-			if response[i] == '{' {
-				depth++
-			} else if response[i] == '}' {
-				depth--
-				if depth == 0 {
-					return response[idx : i+1]
-				}
-			}
-		}
-	}
-
-	return ""
-}
-
-// ParsePlanV2 は計画JSONをパース (V2形式: {"plan": {...}})
-func ParsePlanV2(jsonStr string) (*Plan, error) {
-	// {"plan": {...}} の形式から plan 部分を抽出
-	type wrapper struct {
-		Plan Plan `json:"plan"`
-	}
-
-	var w wrapper
-	if err := json.Unmarshal([]byte(jsonStr), &w); err != nil {
-		return nil, fmt.Errorf("failed to parse plan: %w", err)
-	}
-
-	return &w.Plan, nil
-}
 
 // containsFailure はツール結果に失敗パターンが含まれるか検出
 // 失敗を検出した場合、(true, 理由) を返す

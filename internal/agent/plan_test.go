@@ -70,9 +70,9 @@ func TestExtractPlanJSON_WithCodeBlock(t *testing.T) {
 
 This is the execution plan.`
 
-	jsonStr, err := ExtractPlanJSON(response)
-	if err != nil {
-		t.Fatalf("Failed to extract JSON: %v", err)
+	jsonStr := ExtractPlanJSON(response)
+	if jsonStr == "" {
+		t.Fatal("Failed to extract JSON: got empty string")
 	}
 
 	if !strings.Contains(jsonStr, `"steps"`) {
@@ -99,9 +99,9 @@ func TestExtractPlanJSON_WithNewlines(t *testing.T) {
 
 Done!`
 
-	jsonStr, err := ExtractPlanJSON(response)
-	if err != nil {
-		t.Fatalf("Failed to extract JSON with newlines: %v", err)
+	jsonStr := ExtractPlanJSON(response)
+	if jsonStr == "" {
+		t.Fatal("Failed to extract JSON with newlines: got empty string")
 	}
 
 	if !strings.Contains(jsonStr, `"steps"`) {
@@ -112,9 +112,9 @@ Done!`
 func TestExtractPlanJSON_NoJSON(t *testing.T) {
 	response := "This response contains no JSON at all."
 
-	_, err := ExtractPlanJSON(response)
-	if err == nil {
-		t.Error("Expected error for response without JSON, but got nil")
+	jsonStr := ExtractPlanJSON(response)
+	if jsonStr != "" {
+		t.Errorf("Expected empty string for response without JSON, but got: %s", jsonStr)
 	}
 }
 

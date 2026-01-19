@@ -47,6 +47,7 @@ type Config struct {
 	Bash            BashConfig                     `yaml:"bash,omitempty"`
 	CodeHealth      CodeHealthConfig               `yaml:"code_health,omitempty"`
 	GitStage        GitStageConfig                 `yaml:"git_stage,omitempty"`
+	PlanMode        PlanModeConfig                 `yaml:"plan_mode,omitempty"`
 	// 将来の拡張用
 	// Cloud CloudConfig `yaml:"cloud,omitempty"`
 }
@@ -130,6 +131,11 @@ type CodeHealthConfig struct {
 // GitStageConfig はgit_addツールの設定
 type GitStageConfig struct {
 	BatchConfirm bool `yaml:"batch_confirm"` // 複数ファイルのバッチ確認UI（デフォルト: true）
+}
+
+// PlanModeConfig は Plan Mode の設定
+type PlanModeConfig struct {
+	MaxParallelSteps int `yaml:"max_parallel_steps"` // 並列実行数（デフォルト: 3）
 }
 
 // ProviderModelConfig はプロバイダーごとのモデル設定
@@ -218,6 +224,9 @@ func DefaultConfig() *Config {
 		GitStage: GitStageConfig{
 			BatchConfirm: true, // デフォルトは有効
 		},
+		PlanMode: PlanModeConfig{
+			MaxParallelSteps: 3, // デフォルトは3並列
+		},
 	}
 }
 
@@ -288,6 +297,10 @@ func LoadConfig() (*Config, error) {
 	// Streaming設定のデフォルト適用
 	if cfg.Streaming.IdleTimeoutSeconds == 0 {
 		cfg.Streaming.IdleTimeoutSeconds = defaults.Streaming.IdleTimeoutSeconds
+	}
+	// PlanMode設定のデフォルト適用
+	if cfg.PlanMode.MaxParallelSteps == 0 {
+		cfg.PlanMode.MaxParallelSteps = defaults.PlanMode.MaxParallelSteps
 	}
 	// Note: Diff.ContextLines は0が有効値なので、デフォルト適用は行わない
 

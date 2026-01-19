@@ -111,6 +111,7 @@ v0.30.0 より、Plan Mode はオプショナルになりました（Issue #83�
    - SafetyHighツール（read_file, search_code等）を自由に実行
    - コードベースを理解
    - **単純な Q&A**: 調査のみで回答可能な場合はそのまま終了
+   - **バッチ処理・並列実行**: 複数の SafetyHigh ツールが返された場合、バッチでまとめて並列実行（Issue #84）
 
 2. **計画生成フェーズ**
    - 実装が必要な場合、AIに計画JSONを出力させる
@@ -118,8 +119,16 @@ v0.30.0 より、Plan Mode はオプショナルになりました（Issue #83�
 
 3. **実行フェーズ** (`runImplementationPhase`)
    - 各ステップを順次実行
+   - **バッチ処理・並列実行**: `depends_on` が同じステップはバッチでまとめて並列実行（Issue #84）
    - 失敗検知 (`containsFailure`)
    - リトライUI (`promptFailureAction`: retry/comment/skip/abort)
+
+### バッチ処理・並列実行設定
+```yaml
+# ~/.xelyon/config.yaml
+plan_mode:
+  max_parallel_steps: 3  # バッチ並列実行数（デフォルト: 3）
+```
 
 ### 関連ファイル
 - `internal/agent/plan_mode.go` - Plan Mode 実装

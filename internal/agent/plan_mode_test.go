@@ -2,6 +2,8 @@ package agent
 
 import (
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
 func TestExtractPlanJSON(t *testing.T) {
@@ -36,15 +38,15 @@ func TestExtractPlanJSON(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := ExtractPlanV2JSON(tt.input)
+			result := ExtractPlanJSON(tt.input)
 			if result != tt.expected {
-				t.Errorf("ExtractPlanV2JSON() = %q, want %q", result, tt.expected)
+				t.Errorf("ExtractPlanJSON() = %q, want %q", result, tt.expected)
 			}
 		})
 	}
 }
 
-func TestParsePlanV2(t *testing.T) {
+func TestParsePlan_V2Format(t *testing.T) {
 	tests := []struct {
 		name        string
 		input       string
@@ -82,22 +84,22 @@ func TestParsePlanV2(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			plan, err := ParsePlanV2(tt.input)
+			plan, err := ParsePlan(tt.input)
 			if tt.wantErr {
 				if err == nil {
-					t.Errorf("ParsePlanV2() expected error, got nil")
+					t.Errorf("ParsePlan() expected error, got nil")
 				}
 				return
 			}
 			if err != nil {
-				t.Errorf("ParsePlanV2() unexpected error: %v", err)
+				t.Errorf("ParsePlan() unexpected error: %v", err)
 				return
 			}
 			if plan.Summary != tt.wantSummary {
-				t.Errorf("ParsePlanV2() summary = %q, want %q", plan.Summary, tt.wantSummary)
+				t.Errorf("ParsePlan() summary = %q, want %q", plan.Summary, tt.wantSummary)
 			}
 			if len(plan.Steps) != tt.wantSteps {
-				t.Errorf("ParsePlanV2() steps count = %d, want %d", len(plan.Steps), tt.wantSteps)
+				t.Errorf("ParsePlan() steps count = %d, want %d", len(plan.Steps), tt.wantSteps)
 			}
 		})
 	}
@@ -105,9 +107,9 @@ func TestParsePlanV2(t *testing.T) {
 
 func TestPlanStep_Tools(t *testing.T) {
 	input := `{"plan": {"summary": "Test", "steps": [{"id": 1, "description": "Write file", "tools": ["write_file", "str_replace"]}]}}`
-	plan, err := ParsePlanV2(input)
+	plan, err := ParsePlan(input)
 	if err != nil {
-		t.Fatalf("ParsePlanV2() error: %v", err)
+		t.Fatalf("ParsePlan() error: %v", err)
 	}
 
 	if len(plan.Steps) != 1 {
@@ -126,5 +128,70 @@ func TestPlanStep_Tools(t *testing.T) {
 	}
 	if step.Tools[0] != "write_file" || step.Tools[1] != "str_replace" {
 		t.Errorf("Step Tools = %v, want [write_file, str_replace]", step.Tools)
+	}
+}
+
+func TestHashToolCalls(t *testing.T) {
+	tests := []struct {
+		name      string
+		toolCalls []*tools.ToolCall
+		want      string
+	}{
+		{
+			name:      "empty",
+			toolCalls: []*tools.ToolCall{},
+			want:      "",
+		},
+		{
+			name: "single tool",
+			toolCalls: []*tools.ToolCall{
+				{Tool: "read_file", Args: map[string]string{"path": "/test.go"}},
+			},
+			want: "read_file:map[path:/test.go]",
+		},
+		{
+			name: "multiple tools sorted",
+			toolCalls: []*tools.ToolCall{
+				{Tool: "read_file", Args: map[string]string{"path": "/b.go"}},
+				{Tool: "read_file", Args: map[string]string{"path": "/a.go"}},
+			},
+			want: "read_file:map[path:/a.go]|read_file:map[path:/b.go]",
+		},
+		{
+			name: "different tools",
+			toolCalls: []*tools.ToolCall{
+				{Tool: "search_code", Args: map[string]string{"pattern": "func"}},
+				{Tool: "read_file", Args: map[string]string{"path": "/test.go"}},
+			},
+			want: "read_file:map[path:/test.go]|search_code:map[pattern:func]",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := hashToolCalls(tt.toolCalls)
+			if got != tt.want {
+				t.Errorf("hashToolCalls() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestHashToolCalls_OrderIndependent(t *testing.T) {
+	// 同じツールセットは順序に関係なく同じハッシュを返す
+	calls1 := []*tools.ToolCall{
+		{Tool: "read_file", Args: map[string]string{"path": "/a.go"}},
+		{Tool: "read_file", Args: map[string]string{"path": "/b.go"}},
+	}
+	calls2 := []*tools.ToolCall{
+		{Tool: "read_file", Args: map[string]string{"path": "/b.go"}},
+		{Tool: "read_file", Args: map[string]string{"path": "/a.go"}},
+	}
+
+	hash1 := hashToolCalls(calls1)
+	hash2 := hashToolCalls(calls2)
+
+	if hash1 != hash2 {
+		t.Errorf("hashToolCalls() should be order-independent: %q != %q", hash1, hash2)
 	}
 }

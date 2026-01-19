@@ -109,6 +109,10 @@ bash:
 git_stage:
   batch_confirm: true         # 複数ファイルのバッチ確認UI
 
+# Plan Mode設定
+plan_mode:
+  max_parallel_steps: 3       # 並列実行数（デフォルト: 3）
+
 # コマンドエイリアス
 command_aliases:
   t: test
@@ -302,6 +306,23 @@ Stage all? (y/n/s=select) / 全てステージング？ (y/n/s=個別選択):
 - `y`: 全ファイルをステージング
 - `n`: キャンセル
 - `s`: 個別選択モード（1ファイルずつ確認）
+
+### Plan Mode設定 (`plan_mode`)
+
+```yaml
+plan_mode:
+  max_parallel_steps: 3  # バッチ並列実行数（デフォルト: 3）
+```
+
+#### `max_parallel_steps`
+- **型**: integer
+- **デフォルト**: `3`
+- **説明**: Plan Mode の調査・実装フェーズでバッチ処理として並列実行するツール/ステップの最大数
+
+**バッチ処理・並列実行の動作:**
+- **調査フェーズ**: AI が複数の SafetyHigh ツール（read_file 等）を返した場合、バッチでまとめて並列実行
+- **実装フェーズ**: `depends_on` が同じステップ（依存関係のないステップ）をバッチでまとめて並列実行
+- ループ検知: 同じツールセットが3回連続で返された場合はエラー終了
 
 ### ツール確認設定 (`tool_confirm`)
 

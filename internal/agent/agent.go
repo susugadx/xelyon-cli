@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/fatih/color"
@@ -47,6 +48,11 @@ type Agent struct {
 	strReplaceErrorCount int                 // str_replace連続エラーカウント（old_str not found）
 	mlReader             *ui.MultilineReader // 共有入力リーダー（ペーストモードでも使用）
 	PlanModeEnabled      bool                // Plan Mode ON/OFF（デフォルト: false）
+
+	// 並列実行用ミューテックス
+	historyMu     sync.Mutex
+	changeStackMu sync.Mutex
+	statsMu       sync.Mutex
 }
 
 // NewAgent は新しいAgentを作成
@@ -192,6 +198,41 @@ func (a *Agent) Cleanup() {
 		if err := a.storage.Save(a.session); err != nil {
 			yellow.Printf("Warning: Failed to save session: %v\n", err)
 		}
+	}
+}
+
+// appendHistory は History へスレッドセーフに追加（並列実行時用）
+func (a *Agent) appendHistory(msg api.Message) {
+	a.historyMu.Lock()
+	defer a.historyMu.Unlock()
+	a.History = append(a.History, msg)
+}
+
+// appendChange は changeStack へスレッドセーフに追加（並列実行時用）
+func (a *Agent) appendChange(change tools.FileChange) {
+	a.changeStackMu.Lock()
+	defer a.changeStackMu.Unlock()
+	a.changeStack = append(a.changeStack, change)
+	if len(a.changeStack) > config.MaxChangeStack {
+		a.changeStack = a.changeStack[1:]
+	}
+}
+
+// incrementToolExecution は Stats をスレッドセーフに更新（並列実行時用）
+func (a *Agent) incrementToolExecution(toolName string) {
+	a.statsMu.Lock()
+	defer a.statsMu.Unlock()
+	if a.Stats != nil {
+		a.Stats.AddToolExecution(toolName)
+	}
+}
+
+// incrementAssistantMessages は Stats をスレッドセーフに更新（並列実行時用）
+func (a *Agent) incrementAssistantMessages() {
+	a.statsMu.Lock()
+	defer a.statsMu.Unlock()
+	if a.Stats != nil {
+		a.Stats.AssistantMessages++
 	}
 }
 

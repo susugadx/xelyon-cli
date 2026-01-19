@@ -56,20 +56,37 @@ func ParsePlan(jsonStr string) (*Plan, error) {
 }
 
 // ExtractPlanJSON はレスポンスからPlan JSONを抽出
-func ExtractPlanJSON(response string) (string, error) {
-	// 方法1: ```json ブロック内のJSONを探す
+// 見つからない場合は空文字列を返す
+func ExtractPlanJSON(response string) string {
+	// 方法1: {"plan": ... } パターンを探す（V2形式）
+	planPatterns := []string{
+		`{"plan"`,
+		`{ "plan"`,
+	}
+
+	for _, pattern := range planPatterns {
+		idx := strings.Index(response, pattern)
+		if idx != -1 {
+			end := findClosingBrace(response, idx)
+			if end != -1 {
+				return response[idx:end]
+			}
+		}
+	}
+
+	// 方法2: ```json ブロック内のJSONを探す
 	if idx := strings.Index(response, "```json"); idx != -1 {
 		start := strings.Index(response[idx:], "{")
 		if start != -1 {
 			start += idx
 			end := findClosingBrace(response, start)
 			if end != -1 {
-				return response[start:end], nil
+				return response[start:end]
 			}
 		}
 	}
 
-	// 方法2: "steps" キーを含むJSONオブジェクトを探す（空白を無視）
+	// 方法3: "steps" キーを含むJSONオブジェクトを探す（空白を無視）
 	// {"steps" または { "steps" または {\n"steps" などに対応
 	stepsPattern := []string{
 		"{\"steps\":",
@@ -87,22 +104,22 @@ func ExtractPlanJSON(response string) (string, error) {
 		}
 	}
 
-	// 方法3: 単純に最初の { を探す（最終手段）
+	// 方法4: 単純に最初の { を探す（最終手段）
 	if start == -1 {
 		start = strings.Index(response, "{")
 	}
 
 	if start == -1 {
-		return "", fmt.Errorf("plan JSON not found in response")
+		return ""
 	}
 
 	// 対応する閉じ括弧を探す
 	end := findClosingBrace(response, start)
 	if end == -1 {
-		return "", fmt.Errorf("incomplete plan JSON")
+		return ""
 	}
 
-	return response[start:end], nil
+	return response[start:end]
 }
 
 // findClosingBrace は対応する閉じ括弧の位置を探す

@@ -108,7 +108,7 @@ You are in NORMAL MODE (not Plan Mode).
 		}
 
 		// Plan JSON を検出した場合、ツール実行を促す
-		if planJSON := ExtractPlanV2JSON(response); planJSON != "" {
+		if planJSON := ExtractPlanJSON(response); planJSON != "" {
 			yellow.Println("⚠️  Plan JSON detected in normal mode, requesting direct tool execution...")
 			a.History = append(a.History, api.Message{Role: "assistant", Content: response})
 			a.History = append(a.History, api.Message{
