@@ -662,4 +662,3 @@ func promptFailureActionInput() FailureAction {
 		}
 	}
 }
-
