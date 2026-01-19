@@ -54,7 +54,7 @@ var ConfirmInteractive = func(message string) ConfirmResult {
 
 		// c/comment → コメント入力モード
 		if response == "c" || response == "comment" || response == "コメント" {
-			comment, image := readMultiLineComment(reader)
+			comment, image := ReadMultiLineComment(reader)
 			return ConfirmResult{Action: "comment", Comment: comment, Image: image}
 		}
 
@@ -63,11 +63,11 @@ var ConfirmInteractive = func(message string) ConfirmResult {
 	}
 }
 
-// readMultiLineComment は複数行コメントを読み取る
+// ReadMultiLineComment は複数行コメントを読み取る
 // 空行2回で入力終了
 // image:プレフィックスで画像を指定可能
 // /paste（または /p）で Paste Mode を起動して長文を挿入可能
-func readMultiLineComment(reader *bufio.Reader) (string, *ImageData) {
+func ReadMultiLineComment(reader *bufio.Reader) (string, *ImageData) {
 	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	cyan.Println("💬 Enter your comment (press Enter twice to finish):")
 	cyan.Println("   Tip: Use 'image:/path/to/file.png' to attach an image")

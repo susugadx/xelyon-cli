@@ -128,9 +128,10 @@ Tool call format: {"tool": "tool_name", "args": {"arg1": "value1"}}
 - If change requires >50% rewrite, ask user first
 
 ### 3. Use the Right Tool
-- search_code for content search (NOT bash grep)
-- search_file for file names (NOT bash find)
-- str_replace for edits (NOT bash sed)
+- Specialized tools (search_code, str_replace, etc.) offer safety features like diff preview and auto-backup
+- bash is available for any command: git, npm, pip, make, sed, grep, etc.
+- Dangerous commands (rm -rf /, sudo, curl | sh) are blocked automatically
+- Choose based on needs: safety (specialized tools) vs flexibility (bash)
 
 ### 4. Verify Changes
 - Run formatter if available (format tool auto-detects language)

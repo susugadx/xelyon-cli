@@ -362,7 +362,7 @@ IMPORTANT INSTRUCTIONS:
 
 		// 失敗検出時の処理
 		if lastFailedResult != "" {
-			a.SetStatus(StateWaitingApproval, "Step failed - waiting for action", "ステップ失敗 - アクション待ち", "Choose r/s/a", "r/s/a を選択")
+			a.SetStatus(StateWaitingApproval, "Step failed - waiting for action", "ステップ失敗 - アクション待ち", "Choose r/c/s/a", "r/c/s/a を選択")
 
 			action := promptFailureAction(step, lastFailedResult, lastFailReason)
 
@@ -386,6 +386,24 @@ Please:
 4. Re-run the step to verify the fix
 
 Do NOT skip this step. The issue must be resolved before proceeding.`, lastFailedResult),
+				})
+				return a.executeStepV2(ctx, plan, step, idx, retryCount+1)
+			case FailureActionComment:
+				if retryCount >= maxRetries {
+					red.Printf("⚠️  Max retries (%d) reached for step %d\n", maxRetries, step.ID)
+					return fmt.Errorf("step %d failed after %d retries", step.ID, maxRetries)
+				}
+				// ユーザーの指示付きリトライ
+				a.History = append(a.History, api.Message{
+					Role: "user",
+					Content: fmt.Sprintf(`The previous step FAILED. Here are the user's instructions for fixing it:
+
+%s
+
+Error that occurred:
+%s
+
+Please follow these instructions to fix the issue and retry the step.`, failureComment, lastFailedResult),
 				})
 				return a.executeStepV2(ctx, plan, step, idx, retryCount+1)
 			case FailureActionSkip:
@@ -563,10 +581,14 @@ func containsFailure(result string) (bool, string) {
 type FailureAction string
 
 const (
-	FailureActionRetry FailureAction = "retry"
-	FailureActionSkip  FailureAction = "skip"
-	FailureActionAbort FailureAction = "abort"
+	FailureActionRetry   FailureAction = "retry"
+	FailureActionComment FailureAction = "comment"
+	FailureActionSkip    FailureAction = "skip"
+	FailureActionAbort   FailureAction = "abort"
 )
+
+// failureComment はコメントアクション時のユーザー入力を保持
+var failureComment string
 
 // promptFailureAction は失敗時のユーザー選択UIを表示
 func promptFailureAction(step *PlanStep, result string, reason string) FailureAction {
@@ -596,21 +618,22 @@ func promptFailureAction(step *PlanStep, result string, reason string) FailureAc
 
 	fmt.Println()
 	yellow.Println("Options:")
-	yellow.Println("  [r]etry  - AI will analyze the error and try to fix it")
-	yellow.Println("  [s]kip   - Mark as skipped and continue to next step")
-	yellow.Println("  [a]bort  - Stop plan execution")
+	yellow.Println("  [r]etry   - AI will analyze the error and try to fix it")
+	yellow.Println("  [c]omment - Give instructions for how to fix it")
+	yellow.Println("  [s]kip    - Mark as skipped and continue to next step")
+	yellow.Println("  [a]bort   - Stop plan execution")
 	fmt.Println()
 
-	// r/s/a 専用の入力を受け付け
+	// r/c/s/a 専用の入力を受け付け
 	return promptFailureActionInput()
 }
 
-// promptFailureActionInput は r/s/a 専用の入力プロンプト
+// promptFailureActionInput は r/c/s/a 専用の入力プロンプト
 func promptFailureActionInput() FailureAction {
 	reader := bufio.NewReader(os.Stdin)
 
 	for {
-		yellow.Print("Choose action [r/s/a]: ")
+		yellow.Print("Choose action [r/c/s/a]: ")
 
 		response, err := reader.ReadString('\n')
 		if err != nil {
@@ -627,12 +650,16 @@ func promptFailureActionInput() FailureAction {
 		switch response {
 		case "r", "retry":
 			return FailureActionRetry
+		case "c", "comment":
+			failureComment, _ = tools.ReadMultiLineComment(reader)
+			return FailureActionComment
 		case "s", "skip":
 			return FailureActionSkip
 		case "a", "abort":
 			return FailureActionAbort
 		default:
-			yellow.Println("Invalid input. Please enter r/s/a.")
+			yellow.Println("Invalid input. Please enter r/c/s/a.")
 		}
 	}
 }
+
