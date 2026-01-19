@@ -28,8 +28,8 @@ func isSameToolCall(tc1, tc2 *tools.ToolCall) bool {
 	return string(args1) == string(args2)
 }
 
-// chat はAIと対話する（Plan Mode 経由で処理）
-// Issue #82: すべてのリクエストを RunPlanMode() で処理するように統一
+// chat はAIと対話する
+// PlanModeEnabled に応じて Plan Mode または通常モードで処理
 func (a *Agent) chat(input string) {
 	a.SetStatus(StateRunning, "Processing request", "処理中", "Wait for response", "応答を待ってください")
 
@@ -37,8 +37,6 @@ func (a *Agent) chat(input string) {
 	input = a.AddGitHubHint(input)
 
 	// セッションに保存
-	// NOTE: 履歴への追加は RunPlanMode() 内の investigationPrompt で行われるため、
-	//       ここでは a.History への追加は行わない（重複防止）
 	if a.session != nil {
 		a.session.AddMessage("user", input, a.CurrentModel)
 	}
@@ -55,10 +53,16 @@ func (a *Agent) chat(input string) {
 	defer cancel()
 	a.cancelFunc = cancel
 
-	// すべてのリクエストを Plan Mode で処理
-	// - 単純な Q&A: 調査フェーズで直接回答して終了
-	// - ツール使用: 調査 → 計画 → 実装 のフロー
-	if err := a.RunPlanMode(ctx, input); err != nil {
+	var err error
+	if a.PlanModeEnabled {
+		// Plan Mode: 調査 → 計画 → 承認 → 実行
+		err = a.RunPlanMode(ctx, input)
+	} else {
+		// 通常モード: ツール実行ループ
+		err = a.runNormalMode(ctx, input)
+	}
+
+	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			yellow.Println("\n⚠️  Response interrupted")
 		} else {
@@ -69,6 +73,75 @@ func (a *Agent) chat(input string) {
 	}
 
 	a.SetStatus(StateWaitingInput, "Ready for input", "入力待ち", "Type your request or /help", "リクエスト、または /help を入力")
+}
+
+// runNormalMode は通常モードでの処理（Plan Mode OFF 時）
+// ツールを個別に確認しながら実行するループ
+func (a *Agent) runNormalMode(ctx context.Context, input string) error {
+	// 通常モード用の指示を追加（Plan JSON を出さないように）
+	normalModeInput := input + `
+
+[SYSTEM INSTRUCTION]
+You are in NORMAL MODE (not Plan Mode).
+- Execute tools DIRECTLY without outputting {"plan": ...} JSON
+- Do NOT ask for permission or output implementation plans
+- Just use the appropriate tool calls to complete the task
+- If you need to modify files, use str_replace or write_file directly`
+
+	// 履歴に追加
+	a.History = append(a.History, api.Message{Role: "user", Content: normalModeInput})
+
+	maxIterations := config.MaxToolIterations
+	var lastToolCall *tools.ToolCall
+	var sameCallCount int
+
+	for i := 0; i < maxIterations; i++ {
+		// API呼び出し
+		response, err := a.CurrentProvider.ChatWithTools(
+			ctx,
+			a.SystemPrompt,
+			a.History,
+			a.CurrentModel,
+		)
+		if err != nil {
+			return fmt.Errorf("API call failed: %w", err)
+		}
+
+		// Plan JSON を検出した場合、ツール実行を促す
+		if planJSON := ExtractPlanV2JSON(response); planJSON != "" {
+			yellow.Println("⚠️  Plan JSON detected in normal mode, requesting direct tool execution...")
+			a.History = append(a.History, api.Message{Role: "assistant", Content: response})
+			a.History = append(a.History, api.Message{
+				Role:    "user",
+				Content: "[SYSTEM] You are in NORMAL MODE. Do NOT output plan JSON. Execute the tools DIRECTLY now.",
+			})
+			continue
+		}
+
+		// ツール呼び出しをパース
+		toolCalls := tools.ParseToolCalls(response)
+
+		// ツール呼び出しなし = 通常の回答
+		if len(toolCalls) == 0 {
+			a.handleNormalResponse(response)
+			return nil
+		}
+
+		// ツールを実行
+		for _, toolCall := range toolCalls {
+			// ループ検知
+			if a.shouldAbortToolLoop(toolCall, lastToolCall, &sameCallCount) {
+				return fmt.Errorf("tool loop detected")
+			}
+			lastToolCall = toolCall
+
+			// ツール実行（executeToolCall は確認UIを含む）
+			a.executeToolCall(response, toolCall)
+		}
+	}
+
+	yellow.Printf("⚠️  Tool loop limit reached (%d iterations)\n", maxIterations)
+	return nil
 }
 
 // extractExplanationAndTool はレスポンスから説明部分とツールJSONを分離
@@ -177,18 +250,6 @@ func (a *Agent) executeToolCall(response string, toolCall *tools.ToolCall) {
 	if a.Stats != nil {
 		a.Stats.AssistantMessages++
 		a.Stats.AddToolExecution(toolCall.Tool)
-	}
-
-	// Dry Run Mode: ツールを実行せず、結果だけをシミュレート
-	if a.DryRunMode {
-		result := "[Dry Run] Tool execution simulated"
-		// 結果を履歴に追加
-		a.History = append(a.History, api.Message{
-			Role:    "user",
-			Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, result),
-		})
-		fmt.Println()
-		return
 	}
 
 	// ツール実行

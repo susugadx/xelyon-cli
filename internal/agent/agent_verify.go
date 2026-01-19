@@ -12,6 +12,8 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/refactor"
 )
 
+// NOTE: bufio is still used by suggestVerification
+
 // VerifyResult は検証結果
 type VerifyResult struct {
 	NeedsVerify  bool     // 検証が必要か
@@ -199,25 +201,6 @@ func (a *Agent) checkCodeHealthOnChange(filePath string) {
 	// 警告表示
 	warning := refactor.FormatHealthWarning(result)
 	yellow.Print(warning)
-
-	// 提案アクション
-	cyan.Print("\n   Run /refactor --fix to apply suggestions? [y/n/later]: ")
-	reader := bufio.NewReader(os.Stdin)
-	input, err := reader.ReadString('\n')
-	if err != nil {
-		return
-	}
-
-	input = strings.TrimSpace(strings.ToLower(input))
-	switch input {
-	case "y", "yes":
-		handleRefactorCommand(a, []string{filePath, "--fix"})
-	case "later":
-		yellow.Println("   Added to session todo list")
-		// 将来的にTODOリストに追加する機能
-	default:
-		yellow.Println("   Skipped")
-	}
 }
 
 // containsString はスライスに文字列が含まれるかチェック

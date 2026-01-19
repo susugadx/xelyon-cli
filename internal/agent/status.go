@@ -90,6 +90,12 @@ func (a *Agent) PrintStatusFooter() {
 	label := "Status"
 	stateText := string(s.State)
 
+	// Mode 表示を追加
+	modeText := "Normal"
+	if a.PlanModeEnabled {
+		modeText = "📋 Plan"
+	}
+
 	printer := statusCyan
 	switch s.State {
 	case StateWaitingInput, StateCompleted:
@@ -102,7 +108,7 @@ func (a *Agent) PrintStatusFooter() {
 		printer = statusCyan
 	}
 
-	printer.Printf("\n[%s] %s | %s / %s\n", label, stateText, s.ReasonEN, s.ReasonJP)
+	printer.Printf("\n[%s] %s | Mode: %s | %s / %s\n", label, stateText, modeText, s.ReasonEN, s.ReasonJP)
 	if s.NextEN != "" || s.NextJP != "" {
 		fmt.Printf("  Next: %s / %s\n", s.NextEN, s.NextJP)
 	}

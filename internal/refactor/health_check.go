@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -129,4 +130,92 @@ func FormatHealthWarning(result *HealthCheckResult) string {
 // ShouldCheckHealth はファイルが健全性チェック対象かを判定
 func ShouldCheckHealth(filePath string) bool {
 	return isSourceFile(filePath)
+}
+
+// isSourceFile はソースファイルかどうかを判定
+func isSourceFile(filePath string) bool {
+	ext := strings.ToLower(filepath.Ext(filePath))
+	sourceExts := map[string]bool{
+		".go": true, ".py": true, ".js": true, ".ts": true,
+		".jsx": true, ".tsx": true, ".java": true, ".rs": true,
+		".c": true, ".cpp": true, ".h": true, ".hpp": true,
+	}
+	return sourceExts[ext]
+}
+
+// funcInfo holds information about a function.
+type funcInfo struct {
+	name      string
+	lineStart int
+	lineEnd   int
+	lines     int
+}
+
+// extractFunctions extracts function information from source code.
+func extractFunctions(content string, ext string) []funcInfo {
+	var funcs []funcInfo
+	lines := strings.Split(content, "\n")
+
+	var funcPattern *regexp.Regexp
+	switch ext {
+	case ".go":
+		funcPattern = regexp.MustCompile(`^func\s+(?:\([^)]+\)\s+)?(\w+)\s*\(`)
+	case ".js", ".ts", ".jsx", ".tsx":
+		funcPattern = regexp.MustCompile(`(?:function\s+(\w+)|(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?(?:function|\([^)]*\)\s*=>|\w+\s*=>))`)
+	case ".py":
+		funcPattern = regexp.MustCompile(`^def\s+(\w+)\s*\(`)
+	case ".java":
+		funcPattern = regexp.MustCompile(`(?:public|private|protected)?\s*(?:static\s+)?(?:\w+\s+)?(\w+)\s*\([^)]*\)\s*(?:throws\s+\w+)?\s*\{`)
+	case ".rs":
+		funcPattern = regexp.MustCompile(`^(?:pub\s+)?fn\s+(\w+)`)
+	default:
+		return nil
+	}
+
+	braceCount := 0
+	inFunc := false
+	var currentFunc funcInfo
+
+	for i, line := range lines {
+		lineNum := i + 1
+
+		if !inFunc {
+			matches := funcPattern.FindStringSubmatch(line)
+			if len(matches) > 1 {
+				// Find the first non-empty capture group
+				name := ""
+				for _, m := range matches[1:] {
+					if m != "" {
+						name = m
+						break
+					}
+				}
+				if name != "" {
+					currentFunc = funcInfo{
+						name:      name,
+						lineStart: lineNum,
+					}
+					inFunc = true
+					braceCount = strings.Count(line, "{") - strings.Count(line, "}")
+					if braceCount <= 0 && strings.Contains(line, "{") {
+						// Single-line function
+						currentFunc.lineEnd = lineNum
+						currentFunc.lines = 1
+						funcs = append(funcs, currentFunc)
+						inFunc = false
+					}
+				}
+			}
+		} else {
+			braceCount += strings.Count(line, "{") - strings.Count(line, "}")
+			if braceCount <= 0 {
+				currentFunc.lineEnd = lineNum
+				currentFunc.lines = currentFunc.lineEnd - currentFunc.lineStart + 1
+				funcs = append(funcs, currentFunc)
+				inFunc = false
+			}
+		}
+	}
+
+	return funcs
 }

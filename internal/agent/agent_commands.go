@@ -101,20 +101,14 @@ func handleSpecialCommand(input string, agent *Agent) bool {
 	case "/version":
 		cyan.Printf("🚀 XELYON CLI v%s\n", version.GetVersion())
 		return true
-	case "/repomap":
-		return handleRepoMapCommand()
-	case "/dryrun":
-		return handleDryRunCommand(agent, args)
+	case "/plan":
+		return handlePlanCommand(agent, args)
 	case "/init":
 		return handleInitCommand(agent)
 	case "/sync":
 		return handleSyncCommand(agent)
 	case "/paste":
 		return handlePasteCommand(agent, args)
-	case "/review":
-		return handleReviewCommand(agent, args)
-	case "/refactor":
-		return handleRefactorCommand(agent, args)
 	}
 	return false
 }
@@ -376,11 +370,10 @@ func printHelp() {
                         /config show - Show all settings with diff from defaults
                         /config model <name> - Change default model
   /model [name]       - Show current model or switch model without restart
-  /repomap            - Show repository code structure map
   /init               - Generate XELYON.md (project config) from codebase analysis
   /sync               - Sync XELYON.md with current codebase (detect new/deleted files, tech changes)
   /paste, /p          - Paste mode for long text (end with empty line x2, END, or Ctrl+D)
-  /dryrun [on|off]    - Toggle Dry Run mode (simulate tool execution)
+  /plan [on|off]      - Toggle Plan Mode (investigation → plan → approval → execution)
   /version            - Show version information
   /help               - Show this help
 
@@ -394,23 +387,44 @@ Available tools (AI will use automatically):
   search_code - Search in code files
   search_file - Search for files by name
 
-  /review [flags] [paths...]
-                      - AI code review for recent changes
-                        paths: Files, directories, or glob patterns (e.g., **/*.go)
-                        --all, -a: Review all git changes (not just session)
-                        --security, -s: Focus on security issues
-                        --test, -t: Focus on test coverage
-                        --fix, -f: Generate fix proposals
-                        --yes, -y: Skip confirmation prompt
-                        --max-issues N: Limit displayed issues
-                        Examples:
-                          /review internal/api/
-                          /review **/*.go --security
-                          /review src/ cmd/ --fix
-
 Tips:
   - Just describe what you want in natural language
   - AI will ask confirmation for dangerous operations
   - Use Ctrl+C to cancel current operation
   - Use /undo to revert file changes (up to 10 recent changes)`)
+}
+
+// handlePlanCommand は Plan Mode の切り替え
+func handlePlanCommand(agent *Agent, args []string) bool {
+	if len(args) > 0 {
+		switch args[0] {
+		case "on":
+			agent.PlanModeEnabled = true
+			green.Println("✅ Plan Mode ON - 調査→計画→承認→実行")
+			return true
+		case "off":
+			agent.PlanModeEnabled = false
+			green.Println("✅ Plan Mode OFF - 通常モード")
+			return true
+		case "status":
+			if agent.PlanModeEnabled {
+				cyan.Println("📋 Plan Mode: ON")
+				fmt.Println("   調査 → 計画 → 承認 → 実行 のフローで処理")
+			} else {
+				cyan.Println("📋 Plan Mode: OFF")
+				fmt.Println("   通常モード（ツール個別確認）")
+			}
+			return true
+		}
+	}
+
+	// 引数なし：現在のステータスを表示
+	if agent.PlanModeEnabled {
+		cyan.Println("📋 Plan Mode: ON")
+		fmt.Println("   調査 → 計画 → 承認 → 実行 のフローで処理")
+	} else {
+		cyan.Println("📋 Plan Mode: OFF")
+		fmt.Println("   通常モード（ツール個別確認）")
+	}
+	return true
 }

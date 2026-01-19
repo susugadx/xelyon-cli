@@ -199,96 +199,35 @@ XELYON CLIで使用できる全コマンドのリファレンスです。
 3. 差分を表示
 4. 確認後に更新
 
-### `/repomap`
+### `/plan`
 
-リポジトリのコード構造マップを表示します。Tree-sitterで関数、クラス、構造体などのシンボルを抽出します。
-
-```
-> /repomap
-```
-
-### `/review`
-
-コードレビューを実行します。セッション中の変更、git diff、または指定したファイルを静的解析してセキュリティ・品質の問題を検出します。
+Plan Modeを切り替えます。有効にすると、リクエストが「調査→計画→承認→実行」のフローで処理されます。
 
 ```
-> /review                      # セッション中の変更をレビュー
-> /review --all                # git diff の全変更をレビュー
-> /review path/to/file.go      # 特定ファイルをレビュー
-> /review **/*.go              # globパターンでレビュー
+> /plan           # 現在のモード表示
+> /plan on        # Plan Mode 有効化
+> /plan off       # 通常モードに戻る
+> /plan status    # ステータス表示
 ```
 
-**フラグ:**
-- `--all`, `-a`: git diff の全変更をレビュー
-- `--security`, `-s`: セキュリティ問題に焦点
-- `--test`, `-t`: テストカバレッジに焦点
-- `--max-issues <n>`: 表示する最大Issue数
+**デフォルト:** OFF（通常モード）
 
-**検出ルール:**
-- セキュリティ: コマンドインジェクション、弱い暗号、HTTPタイムアウト未設定、パストラバーサル
-- 一般: 大きすぎるdiff、TODO/FIXME追加、エクスポート関数のドキュメント欠落
-- テスト: テストファイル欠落、アサーション欠落
+**通常モード（OFF）:**
+- ツールを個別に確認しながら実行
+- 軽いタスクにはオーバーヘッドなく即座に応答
+- `tool_confirm` 設定に従ってツール確認
 
-**出力:**
-- ターミナルにサマリー表示
-- `~/.xelyon/reviews/` にMarkdownレポート保存
+**Plan Mode（ON）:**
+1. **調査フェーズ**: SafetyHighツール（read_file, search_code等）を自由に実行
+2. **計画生成**: 実装が必要な場合、ステップをJSONで出力
+3. **承認**: ユーザーが計画を確認・承認
+4. **実行**: ステップごとに失敗検知・リトライ付きで実行
 
-### `/refactor`
-
-コードリファクタリング分析を実行します。大きすぎるファイル、長い関数、重複コード、命名の問題を検出し、改善を提案します。
-
+**ステータス表示:**
 ```
-> /refactor                       # カレントディレクトリを分析
-> /refactor path/to/dir           # 特定ディレクトリを分析
-> /refactor **/*.go               # globパターンで分析
+[Status] waiting_input | Mode: Normal | Ready / 入力待ち
+[Status] waiting_input | Mode: 📋 Plan | Ready / 入力待ち
 ```
-
-**フラグ:**
-- `--type`, `-t`: 特定タイプのみ検出（split-file, extract-method, dry, rename）
-- `--max-file-lines <n>`: 大きいファイルの閾値（デフォルト: 300行）
-- `--max-func-lines <n>`: 長い関数の閾値（デフォルト: 50行）
-
-**検出タイプ:**
-- `split-file`: 大きすぎるファイル（分割を提案）
-- `extract-method`: 長すぎる関数（メソッド抽出を提案）
-- `dry`: 重複コード（共通化を提案）
-- `rename`: 命名の問題（より説明的な名前を提案）
-
-**使用例:**
-```
-> /refactor --type split-file     # 大きいファイルのみ検出
-> /refactor --max-file-lines 500  # カスタム閾値
-```
-
-**自動コード健全性チェック（on_change）:**
-ファイル変更時に自動的にコード健全性をチェックし、閾値超過時に警告を表示します。
-設定は`~/.xelyon/config.yaml`の`code_health`セクションで管理できます。
-
-```yaml
-code_health:
-  enabled: true           # 健全性チェックを有効化
-  max_file_lines: 300     # ファイル行数上限
-  max_function_lines: 50  # 関数行数上限
-  auto_suggest: true      # 閾値超過時に自動で提案
-  on_change:              # 変更時チェック項目
-    - check_file_size
-    - check_function_size
-```
-
-### `/dryrun`
-
-Dry Runモードを切り替えます。有効にすると、AIがツールを呼び出しても実際には実行せず、シミュレート結果を返します。ファイル編集やGit操作を伴う提案を安全に確認したい場合に使用します。
-
-```
-> /dryrun         # 現在のステータス表示 + トグル
-> /dryrun on      # 明示的にオン
-> /dryrun off     # 明示的にオフ
-```
-
-**動作:**
-- ツール実行は行われません（`tools.Execute()` を呼びません）
-- 変更履歴（Undo対象）も作られません
-- 履歴には `"[Dry Run] Tool execution simulated"` がツール結果として記録されます
 
 ### `/version`
 

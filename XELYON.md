@@ -87,13 +87,26 @@ type Tool interface {
 | SafetyMedium | 変更あり、確認推奨 | write_file, str_replace |
 | SafetyLow | 危険、必ず確認 | bash, git_push, delete_file |
 
-## Plan Mode（常時有効）
+## Plan Mode（オプショナル）
 
 ### 概要
-v0.29.0 より、すべてのリクエストが Plan Mode 経由で処理されます（Issue #82）。
-単純な Q&A から複雑な実装タスクまで、一貫したフローで処理。
+v0.30.0 より、Plan Mode はオプショナルになりました（Issue #83）。
+デフォルトは通常モード（ツール個別確認）で、`/plan on` で Plan Mode を有効化できます。
 
-### フェーズ
+### 切り替え
+```
+/plan         # 現在のモード表示
+/plan on      # Plan Mode 有効化
+/plan off     # 通常モードに戻る
+/plan status  # ステータス表示
+```
+
+### 通常モード（デフォルト）
+- `runNormalMode()` でツール実行ループ
+- ツールは `tool_confirm` 設定に従って個別確認
+- 軽いタスクにはオーバーヘッドなく即座に応答
+
+### Plan Mode（`/plan on`）
 1. **調査フェーズ** (`runInvestigationPhase`)
    - SafetyHighツール（read_file, search_code等）を自由に実行
    - コードベースを理解
@@ -106,12 +119,13 @@ v0.29.0 より、すべてのリクエストが Plan Mode 経由で処理され�
 3. **実行フェーズ** (`runImplementationPhase`)
    - 各ステップを順次実行
    - 失敗検知 (`containsFailure`)
-   - リトライUI (`promptFailureAction`: retry/skip/abort)
+   - リトライUI (`promptFailureAction`: retry/comment/skip/abort)
 
 ### 関連ファイル
-- `internal/agent/plan_mode.go` - メイン実装
-- `internal/agent/agent_chat.go` - `chat()` が `RunPlanMode()` を呼び出し
+- `internal/agent/plan_mode.go` - Plan Mode 実装
+- `internal/agent/agent_chat.go` - `chat()` が `PlanModeEnabled` に応じて分岐
 - `internal/agent/plan.go` - 計画構造体
+- `internal/agent/agent_commands.go` - `/plan` コマンド実装
 
 ## SystemPromptルール
 
