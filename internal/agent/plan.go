@@ -57,6 +57,7 @@ func ParsePlan(jsonStr string) (*Plan, error) {
 
 // ExtractPlanJSON はレスポンスからPlan JSONを抽出
 // 見つからない場合は空文字列を返す
+// NOTE: ツール呼び出し JSON ({"tool": ...}) は plan ではないので除外する
 func ExtractPlanJSON(response string) string {
 	// 方法1: {"plan": ... } パターンを探す（V2形式）
 	planPatterns := []string{
@@ -74,14 +75,18 @@ func ExtractPlanJSON(response string) string {
 		}
 	}
 
-	// 方法2: ```json ブロック内のJSONを探す
+	// 方法2: ```json ブロック内のJSONを探す（plan関連の内容のみ）
 	if idx := strings.Index(response, "```json"); idx != -1 {
 		start := strings.Index(response[idx:], "{")
 		if start != -1 {
 			start += idx
 			end := findClosingBrace(response, start)
 			if end != -1 {
-				return response[start:end]
+				jsonStr := response[start:end]
+				// ツール呼び出しは plan ではない
+				if !isToolCallJSON(jsonStr) {
+					return jsonStr
+				}
 			}
 		}
 	}
@@ -96,30 +101,34 @@ func ExtractPlanJSON(response string) string {
 		"{\n  \"steps\":",
 	}
 
-	start := -1
 	for _, pattern := range stepsPattern {
 		if idx := strings.Index(response, pattern); idx != -1 {
-			start = idx
-			break
+			end := findClosingBrace(response, idx)
+			if end != -1 {
+				return response[idx:end]
+			}
 		}
 	}
 
-	// 方法4: 単純に最初の { を探す（最終手段）
-	if start == -1 {
-		start = strings.Index(response, "{")
-	}
+	// 方法4は削除: 単純な { 検出は誤検出が多いため
+	// ツール呼び出し JSON ({"tool": ...}) を plan として誤検出していた
 
-	if start == -1 {
-		return ""
-	}
+	return ""
+}
 
-	// 対応する閉じ括弧を探す
-	end := findClosingBrace(response, start)
-	if end == -1 {
-		return ""
+// isToolCallJSON はJSONがツール呼び出しかどうかを判定
+func isToolCallJSON(jsonStr string) bool {
+	// ツール呼び出しのパターン
+	toolPatterns := []string{
+		`"tool"`,
+		`"tool":`,
 	}
-
-	return response[start:end]
+	for _, pattern := range toolPatterns {
+		if strings.Contains(jsonStr, pattern) {
+			return true
+		}
+	}
+	return false
 }
 
 // findClosingBrace は対応する閉じ括弧の位置を探す

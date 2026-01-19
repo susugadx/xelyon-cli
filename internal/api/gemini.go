@@ -140,15 +140,29 @@ type GeminiRequestWithTools struct {
 // ChatWithTools は Provider interface の実装（context対応）
 // MCP有効時またはGEMINI_FUNCTION_CALLING=0の場合はテキストモードを使用
 func (p *GeminiProvider) ChatWithTools(ctx context.Context, systemPrompt string, history []Message, model string) (string, error) {
+	// デバッグモード
+	debug := os.Getenv("XELYON_DEBUG_GEMINI") == "1"
+
 	// MCP有効時はテキストモードにフォールバック
 	if p.mcpEnabled {
+		if debug {
+			fmt.Println("[DEBUG Gemini] Mode: TextMode (MCP enabled)")
+		}
 		return p.chatWithTextMode(ctx, systemPrompt, history, model)
 	}
 
 	// 環境変数でFunction Callingを制御（デフォルト: 有効）
 	useFunctionCalling := os.Getenv("GEMINI_FUNCTION_CALLING") != "0"
 
+	if debug {
+		fmt.Printf("[DEBUG Gemini] mcpEnabled=%v, GEMINI_FUNCTION_CALLING=%q, useFunctionCalling=%v\n",
+			p.mcpEnabled, os.Getenv("GEMINI_FUNCTION_CALLING"), useFunctionCalling)
+	}
+
 	if useFunctionCalling {
+		if debug {
+			fmt.Println("[DEBUG Gemini] Mode: Function Calling")
+		}
 		result, err := p.chatWithFunctionCalling(ctx, systemPrompt, history, model)
 		if err != nil {
 			// Function Calling失敗時はテキストモードにフォールバック
@@ -158,6 +172,9 @@ func (p *GeminiProvider) ChatWithTools(ctx context.Context, systemPrompt string,
 		return result, nil
 	}
 
+	if debug {
+		fmt.Println("[DEBUG Gemini] Mode: TextMode (GEMINI_FUNCTION_CALLING=0)")
+	}
 	return p.chatWithTextMode(ctx, systemPrompt, history, model)
 }
 
@@ -361,13 +378,17 @@ func (p *GeminiProvider) handleFunctionCallingResponse(body []byte, spinner *ui.
 		// 配列でない場合は単一オブジェクトとして試す
 		var singleResponse GeminiFunctionResponse
 		if err := json.Unmarshal(body, &singleResponse); err != nil {
-			spinner.Stop()
+			if spinner != nil {
+				spinner.Stop()
+			}
 			return "", fmt.Errorf("failed to parse Function Calling response: %w", err)
 		}
 		responses = []GeminiFunctionResponse{singleResponse}
 	}
 
-	spinner.Stop()
+	if spinner != nil {
+		spinner.Stop()
+	}
 
 	var fullResponse strings.Builder
 

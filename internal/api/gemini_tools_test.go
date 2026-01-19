@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -112,6 +113,36 @@ func TestConvertFunctionCallToToolJSON(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestConvertFunctionCallToToolJSON_KeyOrder(t *testing.T) {
+	// JSON出力で "tool" が "args" より前に来ることを確認
+	// ParseToolCalls は {"tool" パターンで検索するため重要
+	fc := &GeminiFunctionCall{
+		Name: "write_file",
+		Args: map[string]any{"path": "test.txt", "content": "hello"},
+	}
+
+	result := convertFunctionCallToToolJSON(fc)
+
+	// "tool" が "args" より前に来ていることを確認
+	toolIdx := strings.Index(result, `"tool"`)
+	argsIdx := strings.Index(result, `"args"`)
+
+	if toolIdx == -1 {
+		t.Fatal("\"tool\" key not found in JSON output")
+	}
+	if argsIdx == -1 {
+		t.Fatal("\"args\" key not found in JSON output")
+	}
+	if toolIdx >= argsIdx {
+		t.Errorf("\"tool\" should come before \"args\" in JSON output. Got: %s", result)
+	}
+
+	// {"tool" で始まることを確認（ParseToolCallsのパターンマッチに必要）
+	if !strings.HasPrefix(result, `{"tool"`) {
+		t.Errorf("JSON should start with {\"tool\", got: %s", result)
 	}
 }
 

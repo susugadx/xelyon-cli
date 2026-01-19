@@ -463,12 +463,20 @@ type GeminiFunctionCall struct {
 	Args map[string]any `json:"args"`
 }
 
+// internalToolCall は内部ツール呼び出し形式（JSON出力順序を保証）
+type internalToolCall struct {
+	Tool string         `json:"tool"`
+	Args map[string]any `json:"args"`
+}
+
 // convertFunctionCallToToolJSON converts Gemini FunctionCall to internal tool JSON format
 // Returns: {"tool": "read_file", "args": {"path": "/path/to/file"}}
+// NOTE: 構造体を使用して "tool" が "args" より前に来ることを保証
+// ParseToolCalls は {"tool" パターンで検索するため、この順序が重要
 func convertFunctionCallToToolJSON(fc *GeminiFunctionCall) string {
-	toolCall := map[string]any{
-		"tool": fc.Name,
-		"args": fc.Args,
+	toolCall := internalToolCall{
+		Tool: fc.Name,
+		Args: fc.Args,
 	}
 	jsonBytes, _ := json.Marshal(toolCall)
 	return string(jsonBytes)

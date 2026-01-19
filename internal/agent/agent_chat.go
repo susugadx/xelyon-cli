@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -120,6 +121,19 @@ You are in NORMAL MODE (not Plan Mode).
 
 		// ツール呼び出しをパース
 		toolCalls := tools.ParseToolCalls(response)
+
+		// デバッグログ
+		if os.Getenv("XELYON_DEBUG_TOOLS") == "1" {
+			fmt.Printf("[DEBUG Tools] Response length: %d, ToolCalls found: %d\n", len(response), len(toolCalls))
+			if len(response) < 500 {
+				fmt.Printf("[DEBUG Tools] Response: %s\n", response)
+			} else {
+				fmt.Printf("[DEBUG Tools] Response (first 500): %s...\n", response[:500])
+			}
+			for i, tc := range toolCalls {
+				fmt.Printf("[DEBUG Tools] ToolCall[%d]: tool=%s, args=%v\n", i, tc.Tool, tc.Args)
+			}
+		}
 
 		// ツール呼び出しなし = 通常の回答
 		if len(toolCalls) == 0 {
