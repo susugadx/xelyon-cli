@@ -171,6 +171,13 @@ Tool call format: {"tool": "tool_name", "args": {"arg1": "value1"}}
 		changeStorage = nil
 	}
 
+	// MCP有効時はGeminiのFunction CallingをOFFにする
+	if len(mcpManager.GetTools()) > 0 {
+		if gemini, ok := provider.(*api.GeminiProvider); ok {
+			gemini.SetMCPEnabled(true)
+		}
+	}
+
 	return &Agent{
 		Model:           model,
 		CurrentModel:    model,

@@ -29,6 +29,7 @@ func getGeminiURL(model string) string {
 type GeminiProvider struct {
 	apiKey     string
 	httpClient *http.Client
+	mcpEnabled bool // MCP有効時はテキストモードにフォールバック
 }
 
 // NewGeminiProvider は新しいGeminiProviderを作成
@@ -44,6 +45,12 @@ func NewGeminiProvider(apiKey string) *GeminiProvider {
 // Name はプロバイダー名を返す
 func (p *GeminiProvider) Name() string {
 	return "Gemini"
+}
+
+// SetMCPEnabled はMCPが有効かどうかを設定する
+// MCP有効時はFunction Callingではなくテキストモードにフォールバック
+func (p *GeminiProvider) SetMCPEnabled(enabled bool) {
+	p.mcpEnabled = enabled
 }
 
 // SupportsImages は画像入力対応を返す
@@ -100,8 +107,62 @@ type GeminiResponse struct {
 	Candidates []GeminiCandidate `json:"candidates"`
 }
 
+// ===== Function Calling API structures =====
+
+// GeminiFunctionPart はtext または functionCall を含むパート
+type GeminiFunctionPart struct {
+	Text         string              `json:"text,omitempty"`
+	FunctionCall *GeminiFunctionCall `json:"functionCall,omitempty"`
+}
+
+// GeminiFunctionContent はFunction Calling対応のコンテンツ
+type GeminiFunctionContent struct {
+	Parts []GeminiFunctionPart `json:"parts"`
+	Role  string               `json:"role,omitempty"`
+}
+
+// GeminiFunctionCandidate はFunction Calling対応の候補
+type GeminiFunctionCandidate struct {
+	Content GeminiFunctionContent `json:"content"`
+}
+
+// GeminiFunctionResponse はFunction Calling対応のレスポンス
+type GeminiFunctionResponse struct {
+	Candidates []GeminiFunctionCandidate `json:"candidates"`
+}
+
+// GeminiRequestWithTools はtools を含むリクエスト
+type GeminiRequestWithTools struct {
+	Contents []interface{}      `json:"contents"`
+	Tools    []GeminiToolConfig `json:"tools,omitempty"`
+}
+
 // ChatWithTools は Provider interface の実装（context対応）
+// MCP有効時またはGEMINI_FUNCTION_CALLING=0の場合はテキストモードを使用
 func (p *GeminiProvider) ChatWithTools(ctx context.Context, systemPrompt string, history []Message, model string) (string, error) {
+	// MCP有効時はテキストモードにフォールバック
+	if p.mcpEnabled {
+		return p.chatWithTextMode(ctx, systemPrompt, history, model)
+	}
+
+	// 環境変数でFunction Callingを制御（デフォルト: 有効）
+	useFunctionCalling := os.Getenv("GEMINI_FUNCTION_CALLING") != "0"
+
+	if useFunctionCalling {
+		result, err := p.chatWithFunctionCalling(ctx, systemPrompt, history, model)
+		if err != nil {
+			// Function Calling失敗時はテキストモードにフォールバック
+			fmt.Printf("Warning: Function Calling failed, falling back to text mode: %v\n", err)
+			return p.chatWithTextMode(ctx, systemPrompt, history, model)
+		}
+		return result, nil
+	}
+
+	return p.chatWithTextMode(ctx, systemPrompt, history, model)
+}
+
+// chatWithTextMode はテキストベースのツール呼び出しモード（従来の実装）
+func (p *GeminiProvider) chatWithTextMode(ctx context.Context, systemPrompt string, history []Message, model string) (string, error) {
 	// モデル名はそのまま使用（ハードコードしない）
 	if model == "" {
 		model = "gemini-2.0-flash-exp"
@@ -193,6 +254,152 @@ func (p *GeminiProvider) ChatWithTools(ctx context.Context, systemPrompt string,
 	} else {
 		return p.handleNonStreamingResponse(resp, spinner)
 	}
+}
+
+// getGeminiFunctionCallingURL は Function Calling 用の URL を生成（非ストリーミング）
+func getGeminiFunctionCallingURL(model string) string {
+	if baseURL := os.Getenv("GEMINI_API_URL"); baseURL != "" {
+		return baseURL
+	}
+	return fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent", model)
+}
+
+// chatWithFunctionCalling は Function Calling API を使用してツールを呼び出す
+func (p *GeminiProvider) chatWithFunctionCalling(ctx context.Context, systemPrompt string, history []Message, model string) (string, error) {
+	if model == "" {
+		model = "gemini-2.0-flash-exp"
+	}
+
+	// メッセージを interface{} スライスに変換（Function Calling リクエスト用）
+	var contents []interface{}
+
+	// System prompt を最初のユーザーメッセージとして追加
+	if systemPrompt != "" {
+		contents = append(contents, GeminiContent{
+			Parts: []GeminiPart{{Text: systemPrompt}},
+			Role:  "user",
+		})
+		contents = append(contents, GeminiContent{
+			Parts: []GeminiPart{{Text: "Understood. I'll follow these instructions."}},
+			Role:  "model",
+		})
+	}
+
+	// 会話履歴を変換
+	for _, msg := range history {
+		role := "user"
+		if msg.Role == "assistant" {
+			role = "model"
+		}
+		contents = append(contents, GeminiContent{
+			Parts: []GeminiPart{{Text: msg.Content}},
+			Role:  role,
+		})
+	}
+
+	// Function Calling 用リクエストを構築
+	reqBody := GeminiRequestWithTools{
+		Contents: contents,
+		Tools:    GetGeminiToolDefinitions(),
+	}
+
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", err
+	}
+
+	// Function Calling エンドポイント（非ストリーミング）
+	url := getGeminiFunctionCallingURL(model)
+
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return "", err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-goog-api-key", p.apiKey)
+
+	// スピナー開始
+	spinner := ui.NewSpinner()
+	spinner.Start("Thinking (Function Calling)")
+
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		spinner.Stop()
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	// レスポンスボディを読み込み
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		spinner.Stop()
+		return "", fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if resp.StatusCode != 200 {
+		spinner.Stop()
+		if rateLimitErr := handleRateLimit(resp); rateLimitErr != nil {
+			return "", rateLimitErr
+		}
+		if len(body) == 0 {
+			return "", fmt.Errorf("Gemini API error (status %d): empty response body", resp.StatusCode)
+		}
+		return "", sanitizeErrorMessage(body, resp.StatusCode)
+	}
+
+	// Function Calling レスポンスを処理
+	return p.handleFunctionCallingResponse(body, spinner)
+}
+
+// handleFunctionCallingResponse は Function Calling レスポンスを処理
+func (p *GeminiProvider) handleFunctionCallingResponse(body []byte, spinner *ui.Spinner) (string, error) {
+	var responses []GeminiFunctionResponse
+
+	// まず配列としてパースを試みる（ストリーミングレスポンス）
+	if err := json.Unmarshal(body, &responses); err != nil {
+		// 配列でない場合は単一オブジェクトとして試す
+		var singleResponse GeminiFunctionResponse
+		if err := json.Unmarshal(body, &singleResponse); err != nil {
+			spinner.Stop()
+			return "", fmt.Errorf("failed to parse Function Calling response: %w", err)
+		}
+		responses = []GeminiFunctionResponse{singleResponse}
+	}
+
+	spinner.Stop()
+
+	var fullResponse strings.Builder
+
+	for _, response := range responses {
+		if len(response.Candidates) == 0 {
+			continue
+		}
+
+		candidate := response.Candidates[0]
+
+		for _, part := range candidate.Content.Parts {
+			// テキストパートを処理
+			if part.Text != "" {
+				fmt.Print(part.Text)
+				fullResponse.WriteString(part.Text)
+			}
+
+			// Function Call パートを処理
+			if part.FunctionCall != nil {
+				toolJSON := convertFunctionCallToToolJSON(part.FunctionCall)
+				fmt.Printf("\n%s", toolJSON)
+				fullResponse.WriteString(toolJSON)
+			}
+		}
+	}
+
+	if fullResponse.Len() == 0 {
+		return "", fmt.Errorf("no content in Function Calling response")
+	}
+
+	fmt.Println()
+	return fullResponse.String(), nil
 }
 
 // handleStreamingResponse はストリーミングレスポンスを処理
