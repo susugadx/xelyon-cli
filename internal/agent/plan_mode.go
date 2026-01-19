@@ -654,7 +654,6 @@ func (a *Agent) confirmPlan() (approved bool, feedback string) {
 	}
 }
 
-
 // containsFailure はツール結果に失敗パターンが含まれるか検出
 // 失敗を検出した場合、(true, 理由) を返す
 //
