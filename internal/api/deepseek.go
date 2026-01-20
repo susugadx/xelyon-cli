@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -134,23 +133,7 @@ func (p *DeepSeekProvider) ChatWithTools(ctx context.Context, systemPrompt strin
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		spinner.Stop()
-
-		// レート制限チェック
-		if rateLimitErr := handleRateLimit(resp); rateLimitErr != nil {
-			return "", rateLimitErr
-		}
-
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return "", fmt.Errorf("DeepSeek API error (status %d): unable to read response body - %v", resp.StatusCode, err)
-		}
-
-		if len(body) == 0 {
-			return "", fmt.Errorf("DeepSeek API error (status %d): empty response body. Check API key and model name '%s'", resp.StatusCode, actualModel)
-		}
-
-		return "", sanitizeErrorMessage(body, resp.StatusCode)
+		return "", HandleHTTPError(resp, spinner, p.Name())
 	}
 
 	// ストリーミング処理（共通パーサー使用）

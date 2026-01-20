@@ -3,7 +3,6 @@ package tools
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -34,11 +33,10 @@ func executeGitCheckout(target string) (string, string, error) {
 		}
 
 		// HEAD内容を取得
-		headCmd := exec.Command("git", "show", "HEAD:"+target)
-		headOutput, headErr := headCmd.CombinedOutput()
+		headOutput, headErr := ExecuteGitCommand("show", "HEAD:"+target)
 		headContent := ""
 		if headErr == nil {
-			headContent = string(headOutput)
+			headContent = headOutput
 		} else {
 			headContent = "[Unable to read from HEAD - file may be new/untracked]"
 		}
@@ -102,10 +100,9 @@ IMPORTANT: Do NOT discard local changes until the user approves.`, strings.TrimS
 		}
 
 		// Checkout実行
-		cmd := exec.Command("git", "checkout", "HEAD", "--", target)
-		output, err := cmd.CombinedOutput()
+		output, err := ExecuteGitCommand("checkout", "HEAD", "--", target)
 		if err != nil {
-			return fmt.Sprintf("Error: %v\n%s", err, string(output)), "", nil
+			return FormatGitError(err, output), "", nil
 		}
 
 		return fmt.Sprintf("✅ Restored from HEAD: %s", target), backupPath, nil
@@ -116,19 +113,16 @@ IMPORTANT: Do NOT discard local changes until the user approves.`, strings.TrimS
 	yellow.Println("ℹ️  Tip: Use git_branch with action='switch' for more options")
 
 	// 未コミット変更チェック
-	statusCmd := exec.Command("git", "status", "--porcelain")
-	statusOutput, _ := statusCmd.CombinedOutput()
-	hasChanges := len(strings.TrimSpace(string(statusOutput))) > 0
+	status, hasChanges, _ := CheckUncommittedChanges()
 
 	if hasChanges {
 		// 確認UI
-		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		cyan.Printf("🔀 Git Checkout Branch / ブランチチェックアウト\n")
-		cyan.Printf("🌿 Target / 対象: %s\n", target)
-		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		yellow.Println("⚠️  Warning: You have uncommitted changes / 警告: 未コミットの変更があります")
-		fmt.Println("\nUncommitted changes / 未コミットの変更:")
-		fmt.Println(string(statusOutput))
+		DisplayGitConfirmHeader(
+			"🔀 Git Checkout Branch / ブランチチェックアウト",
+			"🌿 Target / 対象",
+			target,
+		)
+		DisplayUncommittedChangesWarning(status)
 
 		dec := Confirm("Checkout anyway? / それでもチェックアウトしますか？")
 		switch dec.Action {
@@ -150,11 +144,10 @@ IMPORTANT: Do NOT switch branches until the user approves.`, strings.TrimSpace(d
 		}
 	}
 
-	cmd := exec.Command("git", "checkout", target)
-	output, err := cmd.CombinedOutput()
+	output, err := ExecuteGitCommand("checkout", target)
 	if err != nil {
-		return fmt.Sprintf("Error: %v\n%s", err, string(output)), "", nil
+		return FormatGitError(err, output), "", nil
 	}
 
-	return fmt.Sprintf("✅ Checked out: %s\n%s", target, string(output)), "", nil
+	return fmt.Sprintf("✅ Checked out: %s\n%s", target, output), "", nil
 }

@@ -62,5 +62,13 @@ func (r *Registry) Execute(tc *ToolCall) (string, *FileChange) {
 	return output, change
 }
 
+// GetTool は登録されたツールを取得（スレッドセーフ）
+// 主にテスト用途
+func (r *Registry) GetTool(name string) Tool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.tools[name]
+}
+
 // DefaultRegistry はデフォルトのツールレジストリ
 var DefaultRegistry = NewRegistry()

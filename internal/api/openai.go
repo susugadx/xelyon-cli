@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -120,17 +119,7 @@ func (p *OpenAIProvider) ChatWithTools(ctx context.Context, systemPrompt string,
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		spinner.Stop()
-
-		// レート制限チェック
-		if rateLimitErr := handleRateLimit(resp); rateLimitErr != nil {
-			return "", rateLimitErr
-		}
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return "", fmt.Errorf("API error (%d): unable to read response", resp.StatusCode)
-		}
-		return "", sanitizeErrorMessage(body, resp.StatusCode)
+		return "", HandleHTTPError(resp, spinner, p.Name())
 	}
 
 	// Content-Typeでストリーミング対応を判定
@@ -174,21 +163,7 @@ func (p *OpenAIProvider) handleStreamingResponse(ctx context.Context, resp *http
 
 // handleNonStreamingResponse は非ストリーミングレスポンスを処理（フォールバック）
 func (p *OpenAIProvider) handleNonStreamingResponse(resp *http.Response, spinner *ui.Spinner) (string, error) {
-	var result ChatResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		spinner.Stop()
-		return "", err
-	}
-
-	spinner.Stop()
-
-	if len(result.Choices) == 0 {
-		return "", fmt.Errorf("no response from API")
-	}
-
-	content := result.Choices[0].Message.Content
-	fmt.Println(content)
-	return content, nil
+	return HandleNonStreamingResponse(resp, spinner)
 }
 
 // ChatWithImage は画像付きメッセージで会話を行う
@@ -265,16 +240,7 @@ func (p *OpenAIProvider) ChatWithImage(ctx context.Context, systemPrompt string,
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		spinner.Stop()
-
-		if rateLimitErr := handleRateLimit(resp); rateLimitErr != nil {
-			return "", rateLimitErr
-		}
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return "", fmt.Errorf("API error (%d): unable to read response", resp.StatusCode)
-		}
-		return "", sanitizeErrorMessage(body, resp.StatusCode)
+		return "", HandleHTTPError(resp, spinner, p.Name())
 	}
 
 	// ストリーミング処理

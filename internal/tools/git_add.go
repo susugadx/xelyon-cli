@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
@@ -44,10 +43,11 @@ func splitPaths(path string) []string {
 // executeGitAddSingle は単一ファイルの git add を実行（従来の動作）
 func executeGitAddSingle(path string) string {
 	// 確認UI
-	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	cyan.Printf("➕ Git Stage / Gitステージング\n")
-	cyan.Printf("📂 Path / パス: %s\n", path)
-	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	DisplayGitConfirmHeader(
+		"➕ Git Stage / Gitステージング",
+		"📂 Path / パス",
+		path,
+	)
 
 	dec := Confirm("Stage this file? / このファイルをステージングしますか？")
 	switch dec.Action {
@@ -68,12 +68,11 @@ IMPORTANT: Do NOT stage files until the user approves.`, strings.TrimSpace(dec.C
 		return "Cancelled by user"
 	}
 
-	cmd := exec.Command("git", "add", path)
-	output, err := cmd.CombinedOutput()
+	output, err := ExecuteGitCommand("add", path)
 	if err != nil {
-		return fmt.Sprintf("Error: %v\n%s", err, string(output))
+		return FormatGitError(err, output)
 	}
-	return fmt.Sprintf("✅ Staged: %s", path)
+	return FormatGitSuccess("Staged", path)
 }
 
 // executeGitAddBatch は複数ファイルのバッチ確認UIを表示
@@ -136,10 +135,9 @@ func executeGitAddBatch(paths []string) string {
 // stageAllFiles は全ファイルを一括ステージング
 func stageAllFiles(paths []string) string {
 	args := append([]string{"add"}, paths...)
-	cmd := exec.Command("git", args...)
-	output, err := cmd.CombinedOutput()
+	output, err := ExecuteGitCommand(args...)
 	if err != nil {
-		return fmt.Sprintf("Error: %v\n%s", err, string(output))
+		return FormatGitError(err, output)
 	}
 
 	green.Printf("✅ Staged %d files:\n", len(paths))
@@ -166,10 +164,9 @@ func stageFilesSelectively(paths []string) string {
 		response = strings.ToLower(strings.TrimSpace(response))
 
 		if response == "y" || response == "yes" {
-			cmd := exec.Command("git", "add", p)
-			output, err := cmd.CombinedOutput()
+			output, err := ExecuteGitCommand("add", p)
 			if err != nil {
-				red.Printf("Error staging %s: %v\n%s\n", p, err, string(output))
+				red.Printf("Error staging %s: %v\n%s\n", p, err, output)
 				skipped = append(skipped, p)
 			} else {
 				green.Printf("✅ Staged: %s\n", p)

@@ -78,14 +78,20 @@ func TestAstGrepHelpContent(t *testing.T) {
 
 func TestAstGrepToolRegistration(t *testing.T) {
 	// ツールが正しく登録されているか確認
-	tool := &AstGrepTool{}
+	tool := DefaultRegistry.GetTool("ast_grep")
+	if tool == nil {
+		t.Fatal("ast_grep tool not found in registry")
+	}
 	if tool.Name() != "ast_grep" {
 		t.Errorf("Expected tool name 'ast_grep', got '%s'", tool.Name())
 	}
 }
 
 func TestAstGrepToolRun(t *testing.T) {
-	tool := &AstGrepTool{}
+	tool := DefaultRegistry.GetTool("ast_grep")
+	if tool == nil {
+		t.Fatal("ast_grep tool not found in registry")
+	}
 
 	// 空パターンでのエラー確認
 	result, change, err := tool.Run(map[string]string{"pattern": ""})

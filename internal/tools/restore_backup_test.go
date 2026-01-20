@@ -289,7 +289,10 @@ func TestListBackupsTool(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tool := &ListBackupsTool{}
+	tool := DefaultRegistry.GetTool("list_backups")
+	if tool == nil {
+		t.Fatal("list_backups tool not found in registry")
+	}
 
 	if tool.Name() != "list_backups" {
 		t.Errorf("Expected tool name 'list_backups', got '%s'", tool.Name())
