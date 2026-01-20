@@ -171,10 +171,25 @@ Tool call format: {"tool": "tool_name", "args": {"arg1": "value1"}}
 		changeStorage = nil
 	}
 
-	// MCP有効時はGeminiのFunction CallingをOFFにする
+	// GeminiプロバイダーにMCPツールを設定（Function Calling経由で呼び出し可能にする）
 	if len(mcpManager.GetTools()) > 0 {
 		if gemini, ok := provider.(*api.GeminiProvider); ok {
-			gemini.SetMCPEnabled(true)
+			debug := os.Getenv("XELYON_DEBUG_GEMINI") == "1"
+			var mcpDeclarations []api.GeminiFunctionDeclaration
+			for _, t := range mcpManager.GetTools() {
+				// ツール名: mcp_{serverName}_{toolName}
+				// sanitizeToolName は agent_mcp.go に定義済み
+				// MCPToolWrapper.Name() と同じロジックで名前の一貫性を保証
+				name := fmt.Sprintf("mcp_%s_%s", sanitizeToolName(t.ServerName), sanitizeToolName(t.Name))
+				decl := api.ConvertMCPToolToGeminiDeclaration(name, t.Description, t.InputSchema)
+				mcpDeclarations = append(mcpDeclarations, decl)
+
+				// デバッグログ
+				if debug {
+					fmt.Fprintf(os.Stderr, "[DEBUG Gemini] MCP tool registered: %s\n", name)
+				}
+			}
+			gemini.SetMCPTools(mcpDeclarations)
 		}
 	}
 
@@ -293,6 +308,25 @@ func (a *Agent) SwitchProvider(providerName string) error {
 	// 統計情報のプロバイダー名も更新
 	if a.Stats != nil {
 		a.Stats.Provider = providerName
+	}
+
+	// GeminiプロバイダーにMCPツールを設定
+	if gemini, ok := provider.(*api.GeminiProvider); ok && a.mcpManager != nil {
+		mcpTools := a.mcpManager.GetTools()
+		if len(mcpTools) > 0 {
+			debug := os.Getenv("XELYON_DEBUG_GEMINI") == "1"
+			var mcpDeclarations []api.GeminiFunctionDeclaration
+			for _, t := range mcpTools {
+				name := fmt.Sprintf("mcp_%s_%s", sanitizeToolName(t.ServerName), sanitizeToolName(t.Name))
+				decl := api.ConvertMCPToolToGeminiDeclaration(name, t.Description, t.InputSchema)
+				mcpDeclarations = append(mcpDeclarations, decl)
+
+				if debug {
+					fmt.Fprintf(os.Stderr, "[DEBUG Gemini] MCP tool registered: %s\n", name)
+				}
+			}
+			gemini.SetMCPTools(mcpDeclarations)
+		}
 	}
 
 	green.Printf("✅ Provider: %s → %s\n", oldProvider, providerName)

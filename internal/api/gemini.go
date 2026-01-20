@@ -29,7 +29,8 @@ func getGeminiURL(model string) string {
 type GeminiProvider struct {
 	apiKey     string
 	httpClient *http.Client
-	mcpEnabled bool // MCP有効時はテキストモードにフォールバック
+	mcpEnabled bool                        // MCP有効時はテキストモードにフォールバック（レガシー）
+	mcpTools   []GeminiFunctionDeclaration // MCPツールの定義
 }
 
 // NewGeminiProvider は新しいGeminiProviderを作成
@@ -48,9 +49,16 @@ func (p *GeminiProvider) Name() string {
 }
 
 // SetMCPEnabled はMCPが有効かどうかを設定する
-// MCP有効時はFunction Callingではなくテキストモードにフォールバック
+// レガシー: 現在はMCPツールもFunction Calling経由で呼び出すため、この設定は無視される
+// 互換性のために残している
 func (p *GeminiProvider) SetMCPEnabled(enabled bool) {
 	p.mcpEnabled = enabled
+}
+
+// SetMCPTools はMCPツールの定義を設定する
+// MCPツールはFunction Calling APIで組み込みツールと一緒に送信される
+func (p *GeminiProvider) SetMCPTools(tools []GeminiFunctionDeclaration) {
+	p.mcpTools = tools
 }
 
 // SupportsImages は画像入力対応を返す
@@ -138,30 +146,23 @@ type GeminiRequestWithTools struct {
 }
 
 // ChatWithTools は Provider interface の実装（context対応）
-// MCP有効時またはGEMINI_FUNCTION_CALLING=0の場合はテキストモードを使用
+// GEMINI_FUNCTION_CALLING=0の場合のみテキストモードを使用
+// MCPツールもFunction Calling経由で呼び出される
 func (p *GeminiProvider) ChatWithTools(ctx context.Context, systemPrompt string, history []Message, model string) (string, error) {
 	// デバッグモード
 	debug := os.Getenv("XELYON_DEBUG_GEMINI") == "1"
-
-	// MCP有効時はテキストモードにフォールバック
-	if p.mcpEnabled {
-		if debug {
-			fmt.Println("[DEBUG Gemini] Mode: TextMode (MCP enabled)")
-		}
-		return p.chatWithTextMode(ctx, systemPrompt, history, model)
-	}
 
 	// 環境変数でFunction Callingを制御（デフォルト: 有効）
 	useFunctionCalling := os.Getenv("GEMINI_FUNCTION_CALLING") != "0"
 
 	if debug {
-		fmt.Printf("[DEBUG Gemini] mcpEnabled=%v, GEMINI_FUNCTION_CALLING=%q, useFunctionCalling=%v\n",
-			p.mcpEnabled, os.Getenv("GEMINI_FUNCTION_CALLING"), useFunctionCalling)
+		fmt.Fprintf(os.Stderr, "[DEBUG Gemini] GEMINI_FUNCTION_CALLING=%q, useFunctionCalling=%v, mcpTools=%d\n",
+			os.Getenv("GEMINI_FUNCTION_CALLING"), useFunctionCalling, len(p.mcpTools))
 	}
 
 	if useFunctionCalling {
 		if debug {
-			fmt.Println("[DEBUG Gemini] Mode: Function Calling")
+			fmt.Fprintln(os.Stderr, "[DEBUG Gemini] Mode: Function Calling")
 		}
 		result, err := p.chatWithFunctionCalling(ctx, systemPrompt, history, model)
 		if err != nil {
@@ -173,7 +174,7 @@ func (p *GeminiProvider) ChatWithTools(ctx context.Context, systemPrompt string,
 	}
 
 	if debug {
-		fmt.Println("[DEBUG Gemini] Mode: TextMode (GEMINI_FUNCTION_CALLING=0)")
+		fmt.Fprintln(os.Stderr, "[DEBUG Gemini] Mode: TextMode (GEMINI_FUNCTION_CALLING=0)")
 	}
 	return p.chatWithTextMode(ctx, systemPrompt, history, model)
 }
@@ -316,10 +317,10 @@ func (p *GeminiProvider) chatWithFunctionCalling(ctx context.Context, systemProm
 		})
 	}
 
-	// Function Calling 用リクエストを構築
+	// Function Calling 用リクエストを構築（MCPツールを含める）
 	reqBody := GeminiRequestWithTools{
 		Contents: contents,
-		Tools:    GetGeminiToolDefinitions(),
+		Tools:    GetCombinedToolDefinitions(p.mcpTools),
 	}
 
 	jsonBody, err := json.Marshal(reqBody)

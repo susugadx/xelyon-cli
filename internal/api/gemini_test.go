@@ -332,24 +332,48 @@ func TestGeminiProvider_ChatWithTools_FunctionCallingDisabled(t *testing.T) {
 	}
 }
 
-func TestGeminiProvider_ChatWithTools_MCPEnabled(t *testing.T) {
-	// MCP有効時はテキストモードにフォールバック
+func TestGeminiProvider_ChatWithTools_WithMCPTools(t *testing.T) {
+	// MCPツールが設定されている場合、Function Callingに含まれることを確認
 	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
-		// MCP有効時は tools が含まれない
-		var req map[string]any
+		// リクエストに tools が含まれていることを確認
+		var req GeminiRequestWithTools
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Fatalf("Failed to decode request: %v", err)
 		}
 
-		if _, hasTools := req["tools"]; hasTools {
-			t.Error("Request should NOT include tools when MCP is enabled")
+		if len(req.Tools) == 0 {
+			t.Error("Request should include tools for Function Calling")
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		responses := []GeminiResponse{
-			{Candidates: []GeminiCandidate{{Content: GeminiContent{Parts: []GeminiPart{{Text: "MCP text mode"}}}}}},
+		// MCPツールが含まれていることを確認
+		foundMCPTool := false
+		for _, decl := range req.Tools[0].FunctionDeclarations {
+			if decl.Name == "mcp_github_get_issue" {
+				foundMCPTool = true
+				break
+			}
 		}
-		_ = json.NewEncoder(w).Encode(responses)
+		if !foundMCPTool {
+			t.Error("MCP tool 'mcp_github_get_issue' should be included in tools")
+		}
+
+		// レスポンス（MCPツール呼び出し）
+		w.Header().Set("Content-Type", "application/json")
+		resp := GeminiFunctionResponse{
+			Candidates: []GeminiFunctionCandidate{
+				{
+					Content: GeminiFunctionContent{
+						Parts: []GeminiFunctionPart{
+							{FunctionCall: &GeminiFunctionCall{
+								Name: "mcp_github_get_issue",
+								Args: map[string]any{"owner": "susugadx", "repo": "xelyon-cli", "issue_number": "89"},
+							}},
+						},
+					},
+				},
+			},
+		}
+		_ = json.NewEncoder(w).Encode(resp)
 	})
 
 	originalURL := os.Getenv("GEMINI_API_URL")
@@ -362,16 +386,35 @@ func TestGeminiProvider_ChatWithTools_MCPEnabled(t *testing.T) {
 	os.Unsetenv("GEMINI_FUNCTION_CALLING") // デフォルト: 有効
 
 	p := NewGeminiProvider("test-key")
-	p.SetMCPEnabled(true) // MCP有効化
 
-	history := []Message{{Role: "user", Content: "Hello"}}
+	// MCPツールを設定
+	mcpTools := []GeminiFunctionDeclaration{
+		{
+			Name:        "mcp_github_get_issue",
+			Description: "Get issue details from GitHub",
+			Parameters: &GeminiParameterSchema{
+				Type: "object",
+				Properties: map[string]GeminiPropertyDef{
+					"owner":        {Type: "string", Description: "Repository owner"},
+					"repo":         {Type: "string", Description: "Repository name"},
+					"issue_number": {Type: "string", Description: "Issue number"},
+				},
+				Required: []string{"owner", "repo", "issue_number"},
+			},
+		},
+	}
+	p.SetMCPTools(mcpTools)
+
+	history := []Message{{Role: "user", Content: "Get issue #89 from xelyon-cli"}}
 
 	result, err := p.ChatWithTools(context.Background(), "System", history, "")
 	if err != nil {
 		t.Fatalf("ChatWithTools() error = %v", err)
 	}
-	if result != "MCP text mode" {
-		t.Errorf("ChatWithTools() = %q, want 'MCP text mode'", result)
+
+	// MCPツール呼び出しが結果に含まれていることを確認
+	if result == "" {
+		t.Error("ChatWithTools() should return non-empty result")
 	}
 }
 
