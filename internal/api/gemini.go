@@ -273,7 +273,9 @@ func (p *GeminiProvider) chatWithTextMode(ctx context.Context, systemPrompt stri
 	}
 }
 
-// getGeminiFunctionCallingURL は Function Calling 用の URL を生成（非ストリーミング）
+// getGeminiFunctionCallingURL は Function Calling 用の URL を生成
+// NOTE: Gemini APIはPretty-printed JSONを返すため、行単位ストリーミングは不可能
+// 非ストリーミング（generateContent）エンドポイントを使用
 func getGeminiFunctionCallingURL(model string) string {
 	if baseURL := os.Getenv("GEMINI_API_URL"); baseURL != "" {
 		return baseURL
@@ -347,15 +349,13 @@ func (p *GeminiProvider) chatWithFunctionCalling(ctx context.Context, systemProm
 	}
 	defer resp.Body.Close()
 
-	// レスポンスボディを読み込み
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		spinner.Stop()
-		return "", fmt.Errorf("failed to read response body: %w", err)
-	}
-
 	if resp.StatusCode != 200 {
 		spinner.Stop()
+		// エラー時はボディを読み込む
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return "", fmt.Errorf("Gemini API error (status %d): unable to read response body - %v", resp.StatusCode, err)
+		}
 		if rateLimitErr := handleRateLimit(resp); rateLimitErr != nil {
 			return "", rateLimitErr
 		}
@@ -365,12 +365,21 @@ func (p *GeminiProvider) chatWithFunctionCalling(ctx context.Context, systemProm
 		return "", sanitizeErrorMessage(body, resp.StatusCode)
 	}
 
-	// Function Calling レスポンスを処理
+	// レスポンスボディを読み込み
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		spinner.Stop()
+		return "", fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	// Function Calling レスポンスを処理（非ストリーミング）
 	return p.handleFunctionCallingResponse(body, spinner)
 }
 
 // handleFunctionCallingResponse は Function Calling レスポンスを処理
 func (p *GeminiProvider) handleFunctionCallingResponse(body []byte, spinner *ui.Spinner) (string, error) {
+	debug := os.Getenv("XELYON_DEBUG_GEMINI") == "1"
+
 	var responses []GeminiFunctionResponse
 
 	// まず配列としてパースを試みる（ストリーミングレスポンス）
@@ -390,32 +399,78 @@ func (p *GeminiProvider) handleFunctionCallingResponse(body []byte, spinner *ui.
 		spinner.Stop()
 	}
 
-	var fullResponse strings.Builder
+	if debug {
+		fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Parsed %d responses\n", len(responses))
+	}
 
-	for _, response := range responses {
+	var fullResponse strings.Builder
+	var functionCalls []*GeminiFunctionCall // FunctionCall を収集
+	var textParts []string                  // テキストパートを収集
+
+	for i, response := range responses {
 		if len(response.Candidates) == 0 {
+			if debug {
+				fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Response %d: no candidates\n", i)
+			}
 			continue
 		}
 
 		candidate := response.Candidates[0]
 
 		for _, part := range candidate.Content.Parts {
-			// テキストパートを処理
-			if part.Text != "" {
-				fmt.Print(part.Text)
-				fullResponse.WriteString(part.Text)
+			// Function Call パートを収集
+			if part.FunctionCall != nil {
+				if debug {
+					fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Found FunctionCall: %s\n", part.FunctionCall.Name)
+				}
+				functionCalls = append(functionCalls, part.FunctionCall)
 			}
 
-			// Function Call パートを処理
-			if part.FunctionCall != nil {
-				toolJSON := convertFunctionCallToToolJSON(part.FunctionCall)
-				fmt.Printf("\n%s", toolJSON)
-				fullResponse.WriteString(toolJSON)
+			// テキストパートを収集
+			if part.Text != "" {
+				if debug {
+					fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Text part: %q\n", part.Text[:min(len(part.Text), 100)])
+				}
+				textParts = append(textParts, part.Text)
 			}
 		}
 	}
 
-	if fullResponse.Len() == 0 {
+	// テキストパートを出力（ツール呼び出しJSONは除外）
+	for _, text := range textParts {
+		// テキストがツール呼び出しJSONの場合はスキップ
+		trimmed := strings.TrimSpace(text)
+		if strings.HasPrefix(trimmed, "{\"tool\"") || strings.HasPrefix(trimmed, "{ \"tool\"") {
+			if debug {
+				fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Skipping text (tool JSON): %s\n", trimmed[:min(len(trimmed), 50)])
+			}
+			continue
+		}
+		fmt.Print(text)
+		fullResponse.WriteString(text)
+	}
+
+	// FunctionCall を出力（重複排除）
+	seenTools := make(map[string]bool)
+	for _, fc := range functionCalls {
+		toolJSON := convertFunctionCallToToolJSON(fc)
+		if seenTools[toolJSON] {
+			if debug {
+				fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Skipping duplicate: %s\n", toolJSON)
+			}
+			continue
+		}
+		seenTools[toolJSON] = true
+		fmt.Printf("\n%s", toolJSON)
+		fullResponse.WriteString(toolJSON)
+	}
+
+	// テキストもFunctionCallもない場合のみエラー
+	if fullResponse.Len() == 0 && len(functionCalls) == 0 {
+		if debug {
+			fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] No content: textParts=%d, functionCalls=%d\n",
+				len(textParts), len(functionCalls))
+		}
 		return "", fmt.Errorf("no content in Function Calling response")
 	}
 

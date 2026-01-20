@@ -382,6 +382,8 @@ func TestGetGeminiFunctionCallingURL(t *testing.T) {
 	t.Run("DefaultURL", func(t *testing.T) {
 		os.Unsetenv("GEMINI_API_URL")
 		url := getGeminiFunctionCallingURL("gemini-2.0-flash-exp")
+		// 非ストリーミング（generateContent）を使用
+		// NOTE: Gemini APIはPretty-printed JSONを返すため、行単位ストリーミングは不可能
 		expected := "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent"
 		if url != expected {
 			t.Errorf("getGeminiFunctionCallingURL() = %q, want %q", url, expected)
