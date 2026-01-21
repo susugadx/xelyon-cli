@@ -46,6 +46,7 @@ compression:
   threshold_percent: 80     # 自動圧縮の使用率閾値（%）
   threshold_tokens: 0       # トークン閾値（0 = 使用率ベース）
   keep_recent: 10           # 保持する最新メッセージ数
+  prefer_compact_api: true  # OpenAI Compact API を優先（デフォルト: ON）
 
 # バックアップファイル
 backup:
@@ -165,6 +166,14 @@ Context Window（コンテキストウィンドウ）を管理し、トークン
 - **型**: integer
 - **デフォルト**: `10`
 - **説明**: 圧縮時に保持する最新メッセージ数
+
+#### `prefer_compact_api`
+- **型**: boolean
+- **デフォルト**: `true`
+- **説明**: OpenAI Compact API を優先的に使用
+- **補足**: OpenAI Responses API 対応モデル使用時のみ有効
+- **動作**: 自動圧縮時に `/responses/compact` エンドポイントを呼び出し
+- **フォールバック**: Compact API 失敗時は LLM サマリーに自動フォールバック
 
 **自動圧縮の動作:**
 1. API呼び出し成功後にトークン使用率をチェック
@@ -346,6 +355,40 @@ plan_mode:
 - **調査フェーズ**: AI が複数の SafetyHigh ツール（read_file 等）を返した場合、バッチでまとめて並列実行
 - **実装フェーズ**: `depends_on` が同じステップ（依存関係のないステップ）をバッチでまとめて並列実行
 - ループ検知: 同じツールセットが3回連続で返された場合はエラー終了
+
+### Extended Thinking設定 (`thinking`)
+
+> **重要**: この機能は対応モデルでのみ動作します。
+> - **Claude**: Sonnet 4 以降
+> - **OpenAI**: gpt-5.2 系
+> - **Gemini**: 2.5 Pro 系（Flash は非対応）
+> - **DeepSeek**: 自動で reasoner モデルに切り替わります
+
+```yaml
+thinking:
+  enabled: false    # デフォルト OFF
+  level: medium     # low/medium/high/xhigh
+```
+
+#### `enabled`
+- **型**: boolean
+- **デフォルト**: `false`
+- **説明**: Extended Thinking を有効化
+
+#### `level`
+- **型**: string
+- **デフォルト**: `medium`
+- **選択肢**: `low`, `medium`, `high`, `xhigh`
+- **説明**: 推論の深さレベル
+
+**レベル別パラメータ:**
+
+| Level | Claude (budget_tokens) | OpenAI (effort) | Gemini (budget) |
+|-------|------------------------|-----------------|-----------------|
+| low | 5,000 | low | 5,000 |
+| medium | 10,000 | medium | 10,000 |
+| high | 20,000 | high | 20,000 |
+| xhigh | 40,000 | high | 40,000 |
 
 ### ツール確認設定 (`tool_confirm`)
 

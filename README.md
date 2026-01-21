@@ -81,6 +81,7 @@ Language Server Protocol (LSP) を活用してIDE並みのコード理解を実�
 - **`/tokens`**: 現在のトークン使用量と上限を確認
 - **自動圧縮**: 80%到達で自動的に履歴を圧縮（デフォルトON）
 - **手動圧縮**: `/compress [N]` で履歴を圧縮（最新N件を保持）
+- **OpenAI Compact API**: `/compress --compact` でOpenAI独自の圧縮（ユーザーメッセージ保持）
 - **80%/90%警告**: 上限接近時に自動で警告表示
 - **トークン上限エラー時の提案**: エラー発生時に `/compress` または `/clear` を案内
 
@@ -120,6 +121,7 @@ xelyon
 /help        # ヘルプ
 /undo        # 変更取り消し
 /use gemini  # プロバイダー切り替え
+/think high  # Extended Thinking 有効化
 /lsp status  # LSPサーバー状態確認
 /lsp detect  # プロジェクト内の言語を検出
 /lsp install # LSPサーバーをインストール

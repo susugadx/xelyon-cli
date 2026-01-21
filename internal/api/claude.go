@@ -75,13 +75,20 @@ type ClaudeSystemBlock struct {
 	CacheControl *ClaudeCacheControl `json:"cache_control,omitempty"`
 }
 
+// ClaudeThinkingConfig は Extended Thinking の設定
+type ClaudeThinkingConfig struct {
+	Type         string `json:"type"`          // "enabled"
+	BudgetTokens int    `json:"budget_tokens"` // min 1024
+}
+
 type ClaudeRequest struct {
 	Model    string          `json:"model"`
 	Messages []ClaudeMessage `json:"messages"`
 	// System can be either string (legacy) or []ClaudeSystemBlock (prompt caching).
-	System    interface{} `json:"system,omitempty"`
-	MaxTokens int         `json:"max_tokens"`
-	Stream    bool        `json:"stream"`
+	System    interface{}           `json:"system,omitempty"`
+	MaxTokens int                   `json:"max_tokens"`
+	Stream    bool                  `json:"stream"`
+	Thinking  *ClaudeThinkingConfig `json:"thinking,omitempty"`
 }
 
 // buildClaudeSystemField builds the request "system" field.
@@ -107,6 +114,22 @@ func buildClaudeSystemField(systemPrompt string) interface{} {
 				Type: "ephemeral",
 			},
 		},
+	}
+}
+
+// levelToBudgetTokens は Thinking Level を budget_tokens に変換
+func levelToBudgetTokens(level string) int {
+	switch level {
+	case "low":
+		return 5000
+	case "medium":
+		return 10000
+	case "high":
+		return 20000
+	case "xhigh":
+		return 40000
+	default:
+		return 10000
 	}
 }
 
@@ -153,9 +176,10 @@ type ClaudeMultimodalRequest struct {
 	Model    string        `json:"model"`
 	Messages []interface{} `json:"messages"` // ClaudeMessage or ClaudeMultimodalMessage
 	// System can be either string (legacy) or []ClaudeSystemBlock (prompt caching).
-	System    interface{} `json:"system,omitempty"`
-	MaxTokens int         `json:"max_tokens"`
-	Stream    bool        `json:"stream"`
+	System    interface{}           `json:"system,omitempty"`
+	MaxTokens int                   `json:"max_tokens"`
+	Stream    bool                  `json:"stream"`
+	Thinking  *ClaudeThinkingConfig `json:"thinking,omitempty"`
 }
 
 // ClaudeResponse は通常レスポンス
@@ -176,12 +200,22 @@ func (p *ClaudeProvider) ChatWithTools(ctx context.Context, systemPrompt string,
 		messages = append(messages, ClaudeMessage(msg))
 	}
 
+	cfg := config.GetGlobalConfig()
+
 	reqBody := ClaudeRequest{
 		Model:     model,
 		Messages:  messages,
 		System:    buildClaudeSystemField(systemPrompt),
 		MaxTokens: 4096,
 		Stream:    true,
+	}
+
+	// Extended Thinking 適用
+	if cfg.Thinking.Enabled {
+		reqBody.Thinking = &ClaudeThinkingConfig{
+			Type:         "enabled",
+			BudgetTokens: levelToBudgetTokens(cfg.Thinking.Level),
+		}
 	}
 
 	jsonBody, err := json.Marshal(reqBody)
@@ -200,7 +234,11 @@ func (p *ClaudeProvider) ChatWithTools(ctx context.Context, systemPrompt string,
 
 	// スピナー開始
 	spinner := ui.NewSpinner()
-	spinner.Start("Thinking")
+	spinnerMsg := "Thinking"
+	if cfg.Thinking.Enabled {
+		spinnerMsg = "Deep thinking"
+	}
+	spinner.Start(spinnerMsg)
 
 	// 再利用可能なHTTPクライアントを使用
 	resp, err := p.httpClient.Do(req)
@@ -323,12 +361,22 @@ func (p *ClaudeProvider) ChatWithImage(ctx context.Context, systemPrompt string,
 	}
 	messages = append(messages, multimodalMessage)
 
+	cfg := config.GetGlobalConfig()
+
 	reqBody := ClaudeMultimodalRequest{
 		Model:     model,
 		Messages:  messages,
 		System:    buildClaudeSystemField(systemPrompt),
 		MaxTokens: 4096,
 		Stream:    true,
+	}
+
+	// Extended Thinking 適用
+	if cfg.Thinking.Enabled {
+		reqBody.Thinking = &ClaudeThinkingConfig{
+			Type:         "enabled",
+			BudgetTokens: levelToBudgetTokens(cfg.Thinking.Level),
+		}
 	}
 
 	jsonBody, err := json.Marshal(reqBody)
@@ -347,7 +395,11 @@ func (p *ClaudeProvider) ChatWithImage(ctx context.Context, systemPrompt string,
 
 	// スピナー開始
 	spinner := ui.NewSpinner()
-	spinner.Start("Analyzing image")
+	spinnerMsg := "Analyzing image"
+	if cfg.Thinking.Enabled {
+		spinnerMsg = "Deep thinking (image)"
+	}
+	spinner.Start(spinnerMsg)
 
 	resp, err := p.httpClient.Do(req)
 	if err != nil {

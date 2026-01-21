@@ -52,6 +52,12 @@ func (p *GroqProvider) SupportsImages() bool {
 
 // ChatWithTools は Provider interface の実装（context対応）
 func (p *GroqProvider) ChatWithTools(ctx context.Context, systemPrompt string, history []Message, model string) (string, error) {
+	// Extended Thinking 非対応警告
+	cfg := config.GetGlobalConfig()
+	if cfg.Thinking.Enabled {
+		yellow.Println("⚠️  Warning: Groq does not support Extended Thinking. Proceeding without it.")
+	}
+
 	// メッセージ構築
 	messages := []Message{
 		{Role: "system", Content: systemPrompt},

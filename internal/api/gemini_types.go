@@ -75,8 +75,19 @@ type GeminiFunctionResponse struct {
 	Candidates []GeminiFunctionCandidate `json:"candidates"`
 }
 
+// GeminiThinkingConfig は Extended Thinking の設定
+type GeminiThinkingConfig struct {
+	ThinkingBudget int `json:"thinkingBudget,omitempty"`
+}
+
+// GeminiGenerationConfig は生成設定
+type GeminiGenerationConfig struct {
+	ThinkingConfig *GeminiThinkingConfig `json:"thinkingConfig,omitempty"`
+}
+
 // GeminiRequestWithTools はtools を含むリクエスト
 type GeminiRequestWithTools struct {
-	Contents []interface{}      `json:"contents"`
-	Tools    []GeminiToolConfig `json:"tools,omitempty"`
+	Contents         []interface{}           `json:"contents"`
+	Tools            []GeminiToolConfig      `json:"tools,omitempty"`
+	GenerationConfig *GeminiGenerationConfig `json:"generationConfig,omitempty"`
 }

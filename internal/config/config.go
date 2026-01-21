@@ -59,6 +59,7 @@ func DefaultConfig() *Config {
 			ThresholdTokens:  0,    // 0 = 使用率ベース
 			ThresholdPercent: 80,   // 80%で自動圧縮
 			KeepRecent:       10,
+			PreferCompactAPI: true, // OpenAI Compact API 優先
 		},
 		Backup: BackupConfig{
 			MaxGenerations: 5,
@@ -220,6 +221,10 @@ func DefaultConfig() *Config {
 				"gpt-5-codex",
 			},
 		},
+		Thinking: ThinkingConfig{
+			Enabled: false,
+			Level:   "medium",
+		},
 	}
 }
 
@@ -307,6 +312,10 @@ func applyDefaults(cfg *Config) {
 		cfg.LSP = defaults.LSP
 	}
 	// Note: Diff.ContextLines は0が有効値なので、デフォルト適用は行わない
+	// Thinking: Level が空の場合はデフォルト適用
+	if cfg.Thinking.Level == "" {
+		cfg.Thinking.Level = defaults.Thinking.Level
+	}
 }
 
 // LoadConfigWithValidation は設定ファイルを読み込み、バリデーションを実行

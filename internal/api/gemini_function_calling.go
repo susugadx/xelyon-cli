@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -55,10 +56,21 @@ func (p *GeminiProvider) chatWithFunctionCalling(ctx context.Context, systemProm
 		})
 	}
 
+	cfg := config.GetGlobalConfig()
+
 	// Function Calling 用リクエストを構築（MCPツールを含める）
 	reqBody := GeminiRequestWithTools{
 		Contents: contents,
 		Tools:    GetCombinedToolDefinitions(p.mcpTools),
+	}
+
+	// Extended Thinking 適用
+	if cfg.Thinking.Enabled {
+		reqBody.GenerationConfig = &GeminiGenerationConfig{
+			ThinkingConfig: &GeminiThinkingConfig{
+				ThinkingBudget: levelToBudgetTokens(cfg.Thinking.Level),
+			},
+		}
 	}
 
 	jsonBody, err := json.Marshal(reqBody)
@@ -79,7 +91,11 @@ func (p *GeminiProvider) chatWithFunctionCalling(ctx context.Context, systemProm
 
 	// スピナー開始
 	spinner := ui.NewSpinner()
-	spinner.Start("Thinking (Function Calling)")
+	spinnerMsg := "Thinking (Function Calling)"
+	if cfg.Thinking.Enabled {
+		spinnerMsg = "Deep thinking (Function Calling)"
+	}
+	spinner.Start(spinnerMsg)
 
 	resp, err := p.httpClient.Do(req)
 	if err != nil {

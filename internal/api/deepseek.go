@@ -60,9 +60,10 @@ func (p *DeepSeekProvider) SupportsImages() bool {
 
 // ChatRequest はAPIリクエスト
 type ChatRequest struct {
-	Model    string    `json:"model"`
-	Messages []Message `json:"messages"`
-	Stream   bool      `json:"stream"`
+	Model           string    `json:"model"`
+	Messages        []Message `json:"messages"`
+	Stream          bool      `json:"stream"`
+	ReasoningEffort string    `json:"reasoning_effort,omitempty"` // OpenAI Extended Thinking用
 }
 
 // Delta はストリームレスポンスの差分
@@ -98,6 +99,12 @@ func (p *DeepSeekProvider) ChatWithTools(ctx context.Context, systemPrompt strin
 	}
 	messages = append(messages, history...)
 
+	// Extended Thinking 有効時は deepseek-reasoner に切り替え
+	cfg := config.GetGlobalConfig()
+	if cfg.Thinking.Enabled {
+		model = "deepseek-reasoner"
+	}
+
 	// モデル名マッピング
 	actualModel := getActualModel(model)
 
@@ -122,7 +129,11 @@ func (p *DeepSeekProvider) ChatWithTools(ctx context.Context, systemPrompt strin
 
 	// スピナー開始
 	spinner := ui.NewSpinner()
-	spinner.Start("Thinking")
+	spinnerMsg := "Thinking"
+	if cfg.Thinking.Enabled {
+		spinnerMsg = "Deep thinking (Reasoner)"
+	}
+	spinner.Start(spinnerMsg)
 
 	// 再利用可能なHTTPクライアントを使用
 	resp, err := p.httpClient.Do(req)

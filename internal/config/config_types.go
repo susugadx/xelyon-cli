@@ -21,16 +21,18 @@ type Config struct {
 	PlanMode        PlanModeConfig                 `yaml:"plan_mode,omitempty"`
 	LSP             LSPConfig                      `yaml:"lsp,omitempty"`
 	OpenAI          OpenAIConfig                   `yaml:"openai,omitempty"`
+	Thinking        ThinkingConfig                 `yaml:"thinking,omitempty"`
 	// 将来の拡張用
 	// Cloud CloudConfig `yaml:"cloud,omitempty"`
 }
 
 // CompressionConfig は会話履歴圧縮の設定
 type CompressionConfig struct {
-	AutoCompress     bool `yaml:"auto_compress"`     // 自動圧縮を有効化（デフォルト: true）
-	ThresholdTokens  int  `yaml:"threshold_tokens"`  // 自動圧縮のトークン閾値（0 = 使用率ベース）
-	ThresholdPercent int  `yaml:"threshold_percent"` // 自動圧縮の使用率閾値（デフォルト: 80%）
-	KeepRecent       int  `yaml:"keep_recent"`       // 保持する最新メッセージ数
+	AutoCompress     bool `yaml:"auto_compress"`      // 自動圧縮を有効化（デフォルト: true）
+	ThresholdTokens  int  `yaml:"threshold_tokens"`   // 自動圧縮のトークン閾値（0 = 使用率ベース）
+	ThresholdPercent int  `yaml:"threshold_percent"`  // 自動圧縮の使用率閾値（デフォルト: 80%）
+	KeepRecent       int  `yaml:"keep_recent"`        // 保持する最新メッセージ数
+	PreferCompactAPI bool `yaml:"prefer_compact_api"` // OpenAI Compact API を優先（デフォルト: true）
 }
 
 // BackupConfig はバックアップファイルの設定
@@ -115,6 +117,12 @@ type PlanModeConfig struct {
 // OpenAIConfig は OpenAI プロバイダーの設定
 type OpenAIConfig struct {
 	ResponsesAPIModels []string `yaml:"responses_api_models"` // Responses API を使用するモデル
+}
+
+// ThinkingConfig は Extended Thinking の設定
+type ThinkingConfig struct {
+	Enabled bool   `yaml:"enabled"` // デフォルト: false
+	Level   string `yaml:"level"`   // low/medium/high/xhigh（デフォルト: medium）
 }
 
 // LSPConfig は LSP (Language Server Protocol) 連携の設定

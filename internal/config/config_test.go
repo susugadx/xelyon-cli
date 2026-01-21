@@ -50,6 +50,9 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Compression.KeepRecent != 10 {
 		t.Errorf("Compression.KeepRecent = %d, want 10", cfg.Compression.KeepRecent)
 	}
+	if cfg.Compression.PreferCompactAPI != true {
+		t.Error("Compression.PreferCompactAPI should default to true")
+	}
 
 	// Backup
 	if cfg.Backup.MaxGenerations != 5 {

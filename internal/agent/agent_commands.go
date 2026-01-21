@@ -115,6 +115,8 @@ func handleSpecialCommand(input string, agent *Agent) bool {
 		return handleLSPCommand(agent, args)
 	case "/tokens":
 		return handleTokensCommand(agent)
+	case "/think":
+		return handleThinkCommand(agent, args)
 	}
 	return false
 }
@@ -312,15 +314,30 @@ func extractCodeBlocks(text string) []string {
 
 // handleCompressCommand は会話履歴を圧縮
 func handleCompressCommand(agent *Agent, args []string) bool {
-	// デフォルト: 最新10件を保持
-	keepRecent := 10
+	// フラグ解析
+	useCompactAPI := false
+	keepRecent := 10 // デフォルト: 最新10件を保持
+
+	remainingArgs := []string{}
+	for _, arg := range args {
+		if arg == "--compact" || arg == "-c" {
+			useCompactAPI = true
+		} else {
+			remainingArgs = append(remainingArgs, arg)
+		}
+	}
+
+	// Compact API モード
+	if useCompactAPI {
+		return handleCompactAPICompress(agent)
+	}
 
 	// 引数解析
-	if len(args) > 0 {
-		n, err := strconv.Atoi(args[0])
+	if len(remainingArgs) > 0 {
+		n, err := strconv.Atoi(remainingArgs[0])
 		if err != nil {
-			red.Printf("Invalid number: %s\n", args[0])
-			yellow.Println("Usage: /compress [keep_recent]")
+			red.Printf("Invalid number: %s\n", remainingArgs[0])
+			yellow.Println("Usage: /compress [keep_recent] [--compact|-c]")
 			return true
 		}
 		if n < 1 {
@@ -354,6 +371,47 @@ func handleCompressCommand(agent *Agent, args []string) bool {
 	return true
 }
 
+// handleCompactAPICompress は OpenAI Compact API で圧縮
+func handleCompactAPICompress(agent *Agent) bool {
+	// Compact API 対応チェック
+	compactProvider, ok := agent.CurrentProvider.(api.CompactCapable)
+	if !ok {
+		red.Println("❌ Current provider does not support Compact API")
+		yellow.Println("💡 Compact API is only available for OpenAI Responses API models")
+		return true
+	}
+
+	if !compactProvider.SupportsCompact() {
+		red.Println("❌ Current model does not support Compact API")
+		return true
+	}
+
+	// 確認プロンプト
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	cyan.Printf("📦 Compress with OpenAI Compact API\n")
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Printf("現在の履歴: %d messages\n", len(agent.History))
+	yellow.Println("\n💡 Compact API uses OpenAI's lossy compression")
+	yellow.Println("   User messages are preserved verbatim")
+	yellow.Println("   Assistant responses are replaced with encrypted data")
+
+	// 確認
+	if !promptConfirm("\nContinue? (y/n): ") {
+		yellow.Println("Cancelled")
+		return true
+	}
+
+	// Compact API 実行
+	ctx := context.Background()
+	if err := agent.CompressWithCompactAPI(ctx); err != nil {
+		red.Printf("❌ Compact API failed: %v\n", err)
+		return true
+	}
+
+	green.Println("✅ History compressed with Compact API")
+	return true
+}
+
 // printHelp はヘルプを表示
 func printHelp() {
 	fmt.Println(`Commands:
@@ -370,7 +428,7 @@ func printHelp() {
   /stats              - Show session statistics (time, messages, tokens, cost)
   /tokens             - Show token usage and context window status
   /copy [code] [-n N] - Copy last AI output to clipboard (code=code blocks only, -n=N-th last output)
-  /compress [N]       - Compress history (keep recent N messages, default: 10)
+  /compress [N] [-c]  - Compress history (keep recent N, -c: use OpenAI Compact API)
   /use <provider> [model] - Switch provider and optionally model (e.g., /use gemini gemini-2.0-flash-exp)
   /providers          - List available providers and their API key status
   /config             - Show/change configuration
@@ -381,6 +439,7 @@ func printHelp() {
   /sync               - Sync XELYON.md with current codebase (detect new/deleted files, tech changes)
   /paste, /p          - Paste mode for long text (end with empty line x2, END, or Ctrl+D)
   /plan [on|off]      - Toggle Plan Mode (investigation → plan → approval → execution)
+  /think [on|off|level] - Toggle Extended Thinking mode (level: low/medium/high/xhigh)
   /lsp [status]       - Show LSP server status (running/not started/disabled)
   /version            - Show version information
   /help               - Show this help
@@ -767,5 +826,36 @@ func handleTokensCommand(agent *Agent) bool {
 	}
 
 	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	return true
+}
+
+// handleThinkCommand は Extended Thinking モードの切り替え
+func handleThinkCommand(agent *Agent, args []string) bool {
+	cfg := config.GetGlobalConfig()
+
+	if len(args) == 0 {
+		// 現在の状態を表示
+		status := "OFF"
+		if cfg.Thinking.Enabled {
+			status = fmt.Sprintf("ON (level: %s)", cfg.Thinking.Level)
+		}
+		fmt.Printf("🧠 Thinking Mode: %s\n", status)
+		return true
+	}
+
+	switch args[0] {
+	case "on":
+		cfg.Thinking.Enabled = true
+		green.Printf("🧠 Thinking Mode: ON (level: %s)\n", cfg.Thinking.Level)
+	case "off":
+		cfg.Thinking.Enabled = false
+		green.Println("🧠 Thinking Mode: OFF")
+	case "low", "medium", "high", "xhigh":
+		cfg.Thinking.Enabled = true
+		cfg.Thinking.Level = args[0]
+		green.Printf("🧠 Thinking Mode: ON (level: %s)\n", args[0])
+	default:
+		yellow.Println("Usage: /think [on|off|low|medium|high|xhigh]")
+	}
 	return true
 }

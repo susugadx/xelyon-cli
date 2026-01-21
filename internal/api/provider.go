@@ -27,6 +27,16 @@ type Provider interface {
 	ChatWithImage(ctx context.Context, systemPrompt string, history []Message, userMessage string, image *ImageData, model string) (string, error)
 }
 
+// CompactCapable は圧縮対応プロバイダーのオプショナルインターフェース
+// 現時点では OpenAIProvider のみが実装
+type CompactCapable interface {
+	// CompactHistory は会話履歴を圧縮する
+	CompactHistory(ctx context.Context, input []InputItem, model, instructions string) (*CompactResponse, error)
+
+	// SupportsCompact は Compact API 対応を返す
+	SupportsCompact() bool
+}
+
 // SupportsImages はプロバイダー名から画像対応を判定
 func SupportsImages(providerName string) bool {
 	switch strings.ToLower(providerName) {

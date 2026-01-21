@@ -16,19 +16,33 @@ import (
 const defaultOpenAIURL = "https://api.openai.com/v1/chat/completions"
 const defaultOpenAIResponsesURL = "https://api.openai.com/v1/responses"
 
-// ResponsesRequest は Responses API リクエスト
-type ResponsesRequest struct {
-	Model        string      `json:"model"`
-	Input        interface{} `json:"input"`                  // string or []InputItem
-	Instructions string      `json:"instructions,omitempty"` // システムプロンプト
-	Stream       bool        `json:"stream,omitempty"`
+// ReasoningConfig は OpenAI Extended Thinking の設定
+type ReasoningConfig struct {
+	Effort string `json:"effort,omitempty"` // low, medium, high
 }
 
-// InputItem は Responses API の入力アイテム
+// ResponsesRequest は Responses API リクエスト
+type ResponsesRequest struct {
+	Model        string           `json:"model"`
+	Input        interface{}      `json:"input"`                  // string or []InputItem
+	Instructions string           `json:"instructions,omitempty"` // システムプロンプト
+	Stream       bool             `json:"stream,omitempty"`
+	Reasoning    *ReasoningConfig `json:"reasoning,omitempty"` // Extended Thinking
+}
+
+// InputItem は Responses API の入力アイテム（Compact API対応拡張版）
+// ユーザーメッセージ、アシスタント応答、圧縮済みアイテムを表現
 type InputItem struct {
-	Type    string      `json:"type"`              // "message"
+	Type    string      `json:"type"`              // "message" or "compacted"
 	Role    string      `json:"role,omitempty"`    // "user", "assistant"
 	Content interface{} `json:"content,omitempty"` // string or []InputContentPart
+
+	// アシスタント応答の完全情報（Compact API用）
+	ID     string `json:"id,omitempty"`     // "msg_xxx" (アシスタント応答のID)
+	Status string `json:"status,omitempty"` // "completed"
+
+	// 圧縮済みアイテム用
+	Data string `json:"data,omitempty"` // 暗号化データ（type="compacted"の場合）
 }
 
 // InputContentPart は Responses API のコンテンツパート（画像対応）
@@ -38,10 +52,18 @@ type InputContentPart struct {
 	ImageURL string `json:"image_url,omitempty"` // type="input_image"の場合（data:image/...形式）
 }
 
+// ResponseMetadata はレスポンスメタデータ（response.created イベント用）
+type ResponseMetadata struct {
+	ID     string `json:"id"`               // "resp_xxx..."
+	Status string `json:"status,omitempty"` // "in_progress", "completed"
+	Model  string `json:"model,omitempty"`
+}
+
 // ResponsesStreamChunk は Responses API ストリーミングチャンク
 type ResponsesStreamChunk struct {
-	Type  string `json:"type"`            // "response.output_text.delta", "response.output_text.done", etc.
-	Delta string `json:"delta,omitempty"` // テキスト差分
+	Type     string            `json:"type"`               // "response.output_text.delta", "response.created", etc.
+	Delta    string            `json:"delta,omitempty"`    // テキスト差分
+	Response *ResponseMetadata `json:"response,omitempty"` // response.created で取得
 }
 
 // OpenAIProvider はOpenAI APIのプロバイダー実装
@@ -98,9 +120,24 @@ type OpenAIMultimodalMessage struct {
 
 // OpenAIMultimodalRequest はマルチモーダルAPIリクエスト
 type OpenAIMultimodalRequest struct {
-	Model    string        `json:"model"`
-	Messages []interface{} `json:"messages"` // Message or OpenAIMultimodalMessage
-	Stream   bool          `json:"stream"`
+	Model           string        `json:"model"`
+	Messages        []interface{} `json:"messages"` // Message or OpenAIMultimodalMessage
+	Stream          bool          `json:"stream"`
+	ReasoningEffort string        `json:"reasoning_effort,omitempty"` // low/medium/high
+}
+
+// levelToReasoningEffort は Thinking Level を OpenAI reasoning_effort に変換
+func levelToReasoningEffort(level string) string {
+	switch level {
+	case "low":
+		return "low"
+	case "medium":
+		return "medium"
+	case "high", "xhigh":
+		return "high"
+	default:
+		return "medium"
+	}
 }
 
 // ChatWithTools は Provider interface の実装（context対応）
@@ -119,6 +156,8 @@ func (p *OpenAIProvider) ChatWithTools(ctx context.Context, systemPrompt string,
 
 // chatWithCompletions は Chat Completions API でチャット（既存実装）
 func (p *OpenAIProvider) chatWithCompletions(ctx context.Context, systemPrompt string, history []Message, model string) (string, error) {
+	cfg := config.GetGlobalConfig()
+
 	// メッセージ構築
 	messages := []Message{
 		{Role: "system", Content: systemPrompt},
@@ -129,6 +168,11 @@ func (p *OpenAIProvider) chatWithCompletions(ctx context.Context, systemPrompt s
 		Model:    model,
 		Messages: messages,
 		Stream:   true,
+	}
+
+	// Extended Thinking 適用
+	if cfg.Thinking.Enabled {
+		reqBody.ReasoningEffort = levelToReasoningEffort(cfg.Thinking.Level)
 	}
 
 	jsonBody, err := json.Marshal(reqBody)
@@ -146,7 +190,11 @@ func (p *OpenAIProvider) chatWithCompletions(ctx context.Context, systemPrompt s
 
 	// スピナー開始
 	spinner := ui.NewSpinner()
-	spinner.Start("Thinking")
+	spinnerMsg := "Thinking"
+	if cfg.Thinking.Enabled {
+		spinnerMsg = "Deep thinking"
+	}
+	spinner.Start(spinnerMsg)
 
 	// 再利用可能なHTTPクライアントを使用
 	resp, err := p.httpClient.Do(req)
@@ -259,6 +307,11 @@ func (p *OpenAIProvider) ChatWithImage(ctx context.Context, systemPrompt string,
 		Stream:   true,
 	}
 
+	// Extended Thinking 適用
+	if cfg.Thinking.Enabled {
+		reqBody.ReasoningEffort = levelToReasoningEffort(cfg.Thinking.Level)
+	}
+
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {
 		return "", err
@@ -274,7 +327,11 @@ func (p *OpenAIProvider) ChatWithImage(ctx context.Context, systemPrompt string,
 
 	// スピナー開始
 	spinner := ui.NewSpinner()
-	spinner.Start("Analyzing image")
+	spinnerMsg := "Analyzing image"
+	if cfg.Thinking.Enabled {
+		spinnerMsg = "Deep thinking (image)"
+	}
+	spinner.Start(spinnerMsg)
 
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
@@ -300,6 +357,8 @@ func (p *OpenAIProvider) ChatWithImage(ctx context.Context, systemPrompt string,
 
 // chatWithResponses は Responses API でチャット
 func (p *OpenAIProvider) chatWithResponses(ctx context.Context, systemPrompt string, history []Message, model string) (string, error) {
+	cfg := config.GetGlobalConfig()
+
 	// Responses API URL
 	apiURL := os.Getenv("OPENAI_RESPONSES_URL")
 	if apiURL == "" {
@@ -323,6 +382,13 @@ func (p *OpenAIProvider) chatWithResponses(ctx context.Context, systemPrompt str
 		Stream:       true,
 	}
 
+	// Extended Thinking 適用
+	if cfg.Thinking.Enabled {
+		reqBody.Reasoning = &ReasoningConfig{
+			Effort: levelToReasoningEffort(cfg.Thinking.Level),
+		}
+	}
+
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal request: %w", err)
@@ -338,7 +404,11 @@ func (p *OpenAIProvider) chatWithResponses(ctx context.Context, systemPrompt str
 
 	// スピナー開始
 	spinner := ui.NewSpinner()
-	spinner.Start("Thinking")
+	spinnerMsg := "Thinking"
+	if cfg.Thinking.Enabled {
+		spinnerMsg = "Deep thinking"
+	}
+	spinner.Start(spinnerMsg)
 
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
@@ -354,8 +424,17 @@ func (p *OpenAIProvider) chatWithResponses(ctx context.Context, systemPrompt str
 	return p.handleResponsesStreaming(ctx, resp, spinner)
 }
 
+// ResponsesResult は Responses API のレスポンス結果（ID付き）
+type ResponsesResult struct {
+	Content    string // テキストコンテンツ
+	ResponseID string // レスポンスID（response.created から取得）
+}
+
 // handleResponsesStreaming は Responses API のストリーミングを処理
+// Response ID も抽出して返却
 func (p *OpenAIProvider) handleResponsesStreaming(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
+	var responseID string // response.created イベントから抽出
+
 	parser := func(line string) (string, bool, error) {
 		// SSE形式: "event: xxx" と "data: {...}" の組み合わせ
 		if !strings.HasPrefix(line, "data: ") {
@@ -371,6 +450,11 @@ func (p *OpenAIProvider) handleResponsesStreaming(ctx context.Context, resp *htt
 			return "", false, nil // パースエラーはスキップ
 		}
 
+		// response.created イベントから Response ID を抽出
+		if chunk.Type == "response.created" && chunk.Response != nil {
+			responseID = chunk.Response.ID
+		}
+
 		// response.output_text.delta でテキスト差分を取得
 		if chunk.Type == "response.output_text.delta" {
 			return chunk.Delta, false, nil
@@ -384,11 +468,16 @@ func (p *OpenAIProvider) handleResponsesStreaming(ctx context.Context, resp *htt
 		return "", false, nil
 	}
 
-	return ParseStreamingResponse(ctx, resp, spinner, parser)
+	content, err := ParseStreamingResponse(ctx, resp, spinner, parser)
+	// NOTE: responseID は現在使用されていないが、将来の Compact API 統合で使用予定
+	_ = responseID
+	return content, err
 }
 
 // chatWithImageResponses は Responses API で画像付きメッセージを処理
 func (p *OpenAIProvider) chatWithImageResponses(ctx context.Context, systemPrompt string, history []Message, userMessage string, image *ImageData, model string) (string, error) {
+	cfg := config.GetGlobalConfig()
+
 	// Responses API URL
 	apiURL := os.Getenv("OPENAI_RESPONSES_URL")
 	if apiURL == "" {
@@ -432,6 +521,13 @@ func (p *OpenAIProvider) chatWithImageResponses(ctx context.Context, systemPromp
 		Stream:       true,
 	}
 
+	// Extended Thinking 適用
+	if cfg.Thinking.Enabled {
+		reqBody.Reasoning = &ReasoningConfig{
+			Effort: levelToReasoningEffort(cfg.Thinking.Level),
+		}
+	}
+
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal request: %w", err)
@@ -447,7 +543,11 @@ func (p *OpenAIProvider) chatWithImageResponses(ctx context.Context, systemPromp
 
 	// スピナー開始
 	spinner := ui.NewSpinner()
-	spinner.Start("Analyzing image")
+	spinnerMsg := "Analyzing image"
+	if cfg.Thinking.Enabled {
+		spinnerMsg = "Deep thinking (image)"
+	}
+	spinner.Start(spinnerMsg)
 
 	resp, err := p.httpClient.Do(req)
 	if err != nil {

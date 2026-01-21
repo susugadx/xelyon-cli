@@ -178,8 +178,21 @@ plan_mode:
 1. **`/tokens` コマンド**: 現在のトークン使用量を表示
 2. **自動圧縮（デフォルトON）**: 80%到達で自動的に履歴を圧縮
 3. **手動圧縮**: `/compress [N]` で履歴を圧縮（最新N件を保持）
-4. **80%/90%警告**: 上限接近時に警告表示
-5. **トークン上限エラー時の提案**: `/compress` または `/clear` を案内
+4. **OpenAI Compact API**: `/compress --compact` でOpenAI独自の圧縮
+5. **80%/90%警告**: 上限接近時に警告表示
+6. **トークン上限エラー時の提案**: `/compress` または `/clear` を案内
+
+### OpenAI Compact API
+OpenAI Responses API の `/responses/compact` エンドポイントを使用した圧縮機能。
+
+**特徴**:
+- ユーザーメッセージは**そのまま保持（verbatim）**
+- アシスタント応答は暗号化された圧縮データに置換
+- ZDR（Zero Data Retention）対応
+
+**使用条件**:
+- OpenAI プロバイダーかつ Responses API 対応モデル（gpt-5.2-codex 等）
+- 自動圧縮時に `prefer_compact_api: true` で優先使用
 
 ### 設定
 ```yaml
@@ -189,13 +202,73 @@ compression:
   threshold_percent: 80      # 自動圧縮の閾値（デフォルト: 80%）
   threshold_tokens: 0        # トークン数ベースの閾値（0 = 使用率ベース）
   keep_recent: 10            # 圧縮時に保持する最新メッセージ数
+  prefer_compact_api: true   # OpenAI Compact API を優先（デフォルト: true）
 ```
 
 ### 関連ファイル
 - `internal/agent/token_limits.go` - モデル別トークン上限
 - `internal/agent/auto_compress.go` - 自動圧縮ロジック
-- `internal/agent/compress.go` - 圧縮処理
+- `internal/agent/compress.go` - 圧縮処理（LLMサマリー）
+- `internal/agent/compress_compact.go` - OpenAI Compact API 圧縮
+- `internal/api/openai_compact.go` - Compact API クライアント
 - `internal/agent/token_guard.go` - トークン上限エラー検出
+
+## Extended Thinking
+
+### 概要
+複雑なタスクでより深い推論を行うための Extended Thinking（推論モード）に対応。
+`/think` コマンドで有効化。
+
+### 対応プロバイダー
+| プロバイダー | 対応 | 実装 |
+|-------------|------|------|
+| Claude | ✅ | `thinking.type` + `thinking.budget_tokens` |
+| OpenAI | ✅ | `reasoning_effort` (Chat) / `reasoning.effort` (Responses) |
+| Gemini | ✅ | `generationConfig.thinkingConfig.thinkingBudget` |
+| DeepSeek | ✅ | モデル自動切替 → `deepseek-reasoner` |
+| Groq | ❌ | 警告表示（非対応） |
+| Ollama | ⚠️ | モデル依存（R1/QwQ推奨） |
+
+### 対応モデル
+- **Claude**: Sonnet 4 以降
+- **OpenAI**: gpt-5.2 系
+- **Gemini**: 2.5 Pro 系（Flash は非対応）
+- **DeepSeek**: 自動で reasoner モデルに切り替わります
+
+### レベル別パラメータ
+| Level | Claude (budget_tokens) | OpenAI (effort) | Gemini (budget) |
+|-------|------------------------|-----------------|-----------------|
+| low | 5,000 | low | 5,000 |
+| medium | 10,000 | medium | 10,000 |
+| high | 20,000 | high | 20,000 |
+| xhigh | 40,000 | high | 40,000 |
+
+### 設定
+```yaml
+# ~/.xelyon/config.yaml
+thinking:
+  enabled: false    # デフォルト OFF
+  level: medium     # low/medium/high/xhigh
+```
+
+### コマンド
+```
+/think              # 現在の状態表示
+/think on           # 有効化（現在のレベルで）
+/think off          # 無効化
+/think low          # 低レベルで有効化
+/think medium       # 中レベルで有効化（デフォルト）
+/think high         # 高レベルで有効化
+/think xhigh        # 最高レベルで有効化
+```
+
+### 関連ファイル
+- `internal/config/config_types.go` - ThinkingConfig 構造体
+- `internal/agent/agent_commands.go` - `/think` コマンド実装
+- `internal/api/claude.go` - ClaudeThinkingConfig
+- `internal/api/openai.go` - ReasoningConfig
+- `internal/api/gemini_types.go` - GeminiThinkingConfig
+- `internal/api/deepseek.go` - モデル切替ロジック
 
 ## SystemPromptルール
 

@@ -139,16 +139,25 @@ XELYON CLIで使用できる全コマンドのリファレンスです。
 会話履歴を圧縮してトークン数を削減します。
 
 ```
-> /compress
-> /compress 20  # 最新20件を保持して圧縮
+> /compress           # LLMサマリーで圧縮（最新10件保持）
+> /compress 20        # 最新20件を保持して圧縮
+> /compress --compact # OpenAI Compact API で圧縮
+> /compress -c        # 同上（短縮形）
 ```
 
-**動作:**
+**動作（デフォルト）:**
 1. 古いメッセージをAIで要約
 2. 要約を先頭に配置
 3. 最新N件のメッセージを保持（デフォルト: 10件）
 
+**Compact API モード (`--compact` / `-c`):**
+- OpenAI Responses API の `/responses/compact` エンドポイントを使用
+- ユーザーメッセージはそのまま保持（verbatim）
+- アシスタント応答は暗号化された圧縮データに置換
+- **制限**: OpenAI プロバイダーかつ Responses API 対応モデルのみ
+
 **自動圧縮:** デフォルトで有効（80%到達時に自動実行）
+- `prefer_compact_api: true` の場合、Compact API を優先使用
 
 ### `/use <provider> [model]`
 
@@ -273,6 +282,39 @@ Plan Modeを切り替えます。有効にすると、リクエストが「調�
 [Status] waiting_input | Mode: Normal | Ready / 入力待ち
 [Status] waiting_input | Mode: 📋 Plan | Ready / 入力待ち
 ```
+
+### `/think`
+
+Extended Thinking（推論モード）を切り替えます。複雑なタスクでより深い推論を行う際に使用します。
+
+```
+> /think              # 現在の状態表示
+> /think on           # 有効化（現在のレベルで）
+> /think off          # 無効化
+> /think low          # 低レベルで有効化
+> /think medium       # 中レベルで有効化（デフォルト）
+> /think high         # 高レベルで有効化
+> /think xhigh        # 最高レベルで有効化
+```
+
+**対応プロバイダー:**
+
+| プロバイダー | 対応 | 動作 |
+|-------------|------|------|
+| Claude | ✅ | thinking.budget_tokens パラメータ |
+| OpenAI | ✅ | reasoning_effort パラメータ |
+| Gemini | ✅ | thinkingConfig.thinkingBudget |
+| DeepSeek | ✅ | deepseek-reasoner モデルに切り替え |
+| Groq | ❌ | 警告表示（非対応） |
+| Ollama | ⚠️ | モデル依存（R1/QwQ推奨） |
+
+**対応モデル:**
+- **Claude**: Sonnet 4 以降
+- **OpenAI**: gpt-5.2 系
+- **Gemini**: 2.5 Pro 系（Flash は非対応）
+- **DeepSeek**: 自動で reasoner モデルに切り替わります
+
+**注意**: Extended Thinking はトークン消費量が増加します。
 
 ### `/version`
 

@@ -9,19 +9,33 @@ import (
 
 // Session は会話セッションを表す
 type Session struct {
-	ID           string
-	Model        string
-	StartTime    time.Time
-	LastModified time.Time
-	Messages     []MessageEntry
+	ID              string
+	Model           string
+	StartTime       time.Time
+	LastModified    time.Time
+	Messages        []MessageEntry
+	CompactedItems  []CompactedItem `json:"compacted_items,omitempty"`   // Compact API 圧縮済みアイテム
+	IsCompactedMode bool            `json:"is_compacted_mode,omitempty"` // 圧縮モードフラグ
+}
+
+// CompactedItem は Compact API の圧縮済みアイテム（セッション保存用）
+// api.InputItem と同一構造
+type CompactedItem struct {
+	Type    string      `json:"type"`              // "message" or "compacted"
+	Role    string      `json:"role,omitempty"`    // "user", "assistant"
+	Content interface{} `json:"content,omitempty"` // string or structured content
+	ID      string      `json:"id,omitempty"`      // アシスタント応答のID
+	Status  string      `json:"status,omitempty"`  // "completed"
+	Data    string      `json:"data,omitempty"`    // 暗号化データ（type="compacted"の場合）
 }
 
 // MessageEntry はタイムスタンプ付きメッセージ
 type MessageEntry struct {
-	Timestamp time.Time `json:"timestamp"`
-	Role      string    `json:"role"`
-	Content   string    `json:"content"`
-	Model     string    `json:"model,omitempty"`
+	Timestamp  time.Time `json:"timestamp"`
+	Role       string    `json:"role"`
+	Content    string    `json:"content"`
+	Model      string    `json:"model,omitempty"`
+	ResponseID string    `json:"response_id,omitempty"` // OpenAI Responses API の ID
 }
 
 // SessionMetadata はセッション一覧用のメタデータ

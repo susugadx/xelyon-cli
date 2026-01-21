@@ -47,6 +47,11 @@ type Agent struct {
 	mlReader             *ui.MultilineReader // 共有入力リーダー（ペーストモードでも使用）
 	PlanModeEnabled      bool                // Plan Mode ON/OFF（デフォルト: false）
 
+	// OpenAI Compact API 関連
+	lastResponseID  string          // 最新のレスポンス ID（Responses API用）
+	compactedItems  []api.InputItem // 圧縮済みアイテム
+	isCompactedMode bool            // 圧縮モードフラグ
+
 	// 並列実行用ミューテックス
 	historyMu     sync.Mutex
 	changeStackMu sync.Mutex

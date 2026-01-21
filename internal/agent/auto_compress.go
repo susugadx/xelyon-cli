@@ -1,8 +1,10 @@
 package agent
 
 import (
+	"context"
 	"fmt"
 
+	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
@@ -37,6 +39,22 @@ func (a *Agent) maybeAutoCompress() bool {
 
 	// 圧縮実行（通知付き）
 	cyan.Printf("\n🗜️ Auto-compressing history (%.0f%% threshold reached)...\n", percentage)
+
+	// Compact API を優先的に使用するか確認
+	if cfg.Compression.PreferCompactAPI {
+		if compactProvider, ok := a.CurrentProvider.(api.CompactCapable); ok {
+			if compactProvider.SupportsCompact() {
+				ctx := context.Background()
+				if err := a.CompressWithCompactAPI(ctx); err == nil {
+					fmt.Println("   💡 Disable with: xelyon config set compression.auto_compress false")
+					fmt.Println()
+					return true
+				}
+				// Compact API 失敗時はLLMサマリーにフォールバック
+				yellow.Printf("   ⚠️ Compact API failed, falling back to LLM summary...\n")
+			}
+		}
+	}
 
 	keepRecent := cfg.Compression.KeepRecent
 	if keepRecent == 0 {

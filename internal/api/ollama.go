@@ -74,6 +74,12 @@ type OllamaTagsResponse struct {
 
 // ChatWithTools は Provider interface の実装（context対応）
 func (p *OllamaProvider) ChatWithTools(ctx context.Context, systemPrompt string, history []Message, model string) (string, error) {
+	// Extended Thinking 注意メッセージ（モデル依存）
+	cfg := config.GetGlobalConfig()
+	if cfg.Thinking.Enabled {
+		yellow.Println("⚠️  Note: Extended Thinking depends on your model (use R1/QwQ for best results).")
+	}
+
 	// モデル名はそのまま使用（ハードコードしない）
 	if model == "" {
 		model = "llama3"
