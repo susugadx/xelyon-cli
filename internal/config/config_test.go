@@ -38,11 +38,14 @@ func TestDefaultConfig(t *testing.T) {
 	}
 
 	// Compression
-	if cfg.Compression.AutoCompress != false {
-		t.Error("Compression.AutoCompress should default to false")
+	if cfg.Compression.AutoCompress != true {
+		t.Error("Compression.AutoCompress should default to true")
 	}
-	if cfg.Compression.ThresholdTokens != 40000 {
-		t.Errorf("Compression.ThresholdTokens = %d, want 40000", cfg.Compression.ThresholdTokens)
+	if cfg.Compression.ThresholdTokens != 0 {
+		t.Errorf("Compression.ThresholdTokens = %d, want 0 (percentage-based)", cfg.Compression.ThresholdTokens)
+	}
+	if cfg.Compression.ThresholdPercent != 80 {
+		t.Errorf("Compression.ThresholdPercent = %d, want 80", cfg.Compression.ThresholdPercent)
 	}
 	if cfg.Compression.KeepRecent != 10 {
 		t.Errorf("Compression.KeepRecent = %d, want 10", cfg.Compression.KeepRecent)
