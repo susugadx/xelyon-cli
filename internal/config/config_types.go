@@ -20,6 +20,7 @@ type Config struct {
 	GitStage        GitStageConfig                 `yaml:"git_stage,omitempty"`
 	PlanMode        PlanModeConfig                 `yaml:"plan_mode,omitempty"`
 	LSP             LSPConfig                      `yaml:"lsp,omitempty"`
+	OpenAI          OpenAIConfig                   `yaml:"openai,omitempty"`
 	// 将来の拡張用
 	// Cloud CloudConfig `yaml:"cloud,omitempty"`
 }
@@ -111,6 +112,11 @@ type PlanModeConfig struct {
 	MaxParallelSteps int `yaml:"max_parallel_steps"` // 並列実行数（デフォルト: 3）
 }
 
+// OpenAIConfig は OpenAI プロバイダーの設定
+type OpenAIConfig struct {
+	ResponsesAPIModels []string `yaml:"responses_api_models"` // Responses API を使用するモデル
+}
+
 // LSPConfig は LSP (Language Server Protocol) 連携の設定
 type LSPConfig struct {
 	Enabled           bool                       `yaml:"enabled"`                       // LSP機能を有効化（デフォルト: true）
@@ -151,4 +157,14 @@ func (c *Config) ValidateModelForProvider(provider, model string) bool {
 	// プロバイダーが存在するかのみチェック
 	_, ok := c.ProviderModels[provider]
 	return ok
+}
+
+// IsResponsesAPIModel はモデルが OpenAI Responses API を使用するか判定
+func (c *Config) IsResponsesAPIModel(model string) bool {
+	for _, m := range c.OpenAI.ResponsesAPIModels {
+		if m == model {
+			return true
+		}
+	}
+	return false
 }

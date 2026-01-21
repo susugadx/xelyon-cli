@@ -538,3 +538,46 @@ func TestGlobalConfig_NilFallback(t *testing.T) {
 		t.Errorf("GetGlobalConfig() with nil should return default, got %v", got.DefaultProvider)
 	}
 }
+
+func TestIsResponsesAPIModel(t *testing.T) {
+	cfg := DefaultConfig()
+
+	tests := []struct {
+		model    string
+		expected bool
+	}{
+		// デフォルトで Responses API を使用するモデル
+		{"gpt-5.2-codex", true},
+		{"gpt-5.1-codex", true},
+		{"gpt-5.1-codex-max", true},
+		{"gpt-5-codex", true},
+		// Chat Completions API を使用するモデル
+		{"gpt-5.2", false},
+		{"gpt-4o", false},
+		{"gpt-4o-mini", false},
+		{"gpt-3.5-turbo", false},
+		// 存在しないモデル
+		{"unknown-model", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			got := cfg.IsResponsesAPIModel(tt.model)
+			if got != tt.expected {
+				t.Errorf("IsResponsesAPIModel(%q) = %v, want %v", tt.model, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestIsResponsesAPIModel_CustomModels(t *testing.T) {
+	cfg := DefaultConfig()
+
+	// カスタムモデルを追加
+	cfg.OpenAI.ResponsesAPIModels = append(cfg.OpenAI.ResponsesAPIModels, "custom-codex-model")
+
+	// カスタムモデルが認識されることを確認
+	if !cfg.IsResponsesAPIModel("custom-codex-model") {
+		t.Error("IsResponsesAPIModel() should return true for custom model")
+	}
+}

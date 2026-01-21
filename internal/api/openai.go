@@ -14,6 +14,35 @@ import (
 )
 
 const defaultOpenAIURL = "https://api.openai.com/v1/chat/completions"
+const defaultOpenAIResponsesURL = "https://api.openai.com/v1/responses"
+
+// ResponsesRequest は Responses API リクエスト
+type ResponsesRequest struct {
+	Model        string      `json:"model"`
+	Input        interface{} `json:"input"`                  // string or []InputItem
+	Instructions string      `json:"instructions,omitempty"` // システムプロンプト
+	Stream       bool        `json:"stream,omitempty"`
+}
+
+// InputItem は Responses API の入力アイテム
+type InputItem struct {
+	Type    string      `json:"type"`              // "message"
+	Role    string      `json:"role,omitempty"`    // "user", "assistant"
+	Content interface{} `json:"content,omitempty"` // string or []InputContentPart
+}
+
+// InputContentPart は Responses API のコンテンツパート（画像対応）
+type InputContentPart struct {
+	Type     string `json:"type"`                // "input_text" or "input_image"
+	Text     string `json:"text,omitempty"`      // type="input_text"の場合
+	ImageURL string `json:"image_url,omitempty"` // type="input_image"の場合（data:image/...形式）
+}
+
+// ResponsesStreamChunk は Responses API ストリーミングチャンク
+type ResponsesStreamChunk struct {
+	Type  string `json:"type"`            // "response.output_text.delta", "response.output_text.done", etc.
+	Delta string `json:"delta,omitempty"` // テキスト差分
+}
 
 // OpenAIProvider はOpenAI APIのプロバイダー実装
 type OpenAIProvider struct {
@@ -76,16 +105,25 @@ type OpenAIMultimodalRequest struct {
 
 // ChatWithTools は Provider interface の実装（context対応）
 func (p *OpenAIProvider) ChatWithTools(ctx context.Context, systemPrompt string, history []Message, model string) (string, error) {
+	if model == "" {
+		model = "gpt-4o"
+	}
+
+	// モデルに応じて API を自動選択
+	cfg := config.GetGlobalConfig()
+	if cfg.IsResponsesAPIModel(model) {
+		return p.chatWithResponses(ctx, systemPrompt, history, model)
+	}
+	return p.chatWithCompletions(ctx, systemPrompt, history, model)
+}
+
+// chatWithCompletions は Chat Completions API でチャット（既存実装）
+func (p *OpenAIProvider) chatWithCompletions(ctx context.Context, systemPrompt string, history []Message, model string) (string, error) {
 	// メッセージ構築
 	messages := []Message{
 		{Role: "system", Content: systemPrompt},
 	}
 	messages = append(messages, history...)
-
-	// モデル名はそのまま使用（ハードコードしない）
-	if model == "" {
-		model = "gpt-4o"
-	}
 
 	reqBody := ChatRequest{
 		Model:    model,
@@ -179,6 +217,12 @@ func (p *OpenAIProvider) ChatWithImage(ctx context.Context, systemPrompt string,
 		model = "gpt-4o"
 	}
 
+	// Responses API モデルの場合は専用の画像処理
+	cfg := config.GetGlobalConfig()
+	if cfg.IsResponsesAPIModel(model) {
+		return p.chatWithImageResponses(ctx, systemPrompt, history, userMessage, image, model)
+	}
+
 	// システムプロンプトを最初のメッセージとして追加
 	var messages []interface{}
 	messages = append(messages, Message{Role: "system", Content: systemPrompt})
@@ -252,4 +296,169 @@ func (p *OpenAIProvider) ChatWithImage(ctx context.Context, systemPrompt string,
 	} else {
 		return p.handleNonStreamingResponse(resp, spinner)
 	}
+}
+
+// chatWithResponses は Responses API でチャット
+func (p *OpenAIProvider) chatWithResponses(ctx context.Context, systemPrompt string, history []Message, model string) (string, error) {
+	// Responses API URL
+	apiURL := os.Getenv("OPENAI_RESPONSES_URL")
+	if apiURL == "" {
+		apiURL = defaultOpenAIResponsesURL
+	}
+
+	// 入力を構築
+	var input []InputItem
+	for _, msg := range history {
+		input = append(input, InputItem{
+			Type:    "message",
+			Role:    msg.Role,
+			Content: msg.Content,
+		})
+	}
+
+	reqBody := ResponsesRequest{
+		Model:        model,
+		Input:        input,
+		Instructions: systemPrompt,
+		Stream:       true,
+	}
+
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+p.apiKey)
+
+	// スピナー開始
+	spinner := ui.NewSpinner()
+	spinner.Start("Thinking")
+
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		spinner.Stop()
+		return "", fmt.Errorf("API request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", HandleHTTPError(resp, spinner, p.Name())
+	}
+
+	return p.handleResponsesStreaming(ctx, resp, spinner)
+}
+
+// handleResponsesStreaming は Responses API のストリーミングを処理
+func (p *OpenAIProvider) handleResponsesStreaming(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
+	parser := func(line string) (string, bool, error) {
+		// SSE形式: "event: xxx" と "data: {...}" の組み合わせ
+		if !strings.HasPrefix(line, "data: ") {
+			return "", false, nil
+		}
+		data := strings.TrimPrefix(line, "data: ")
+		if data == "[DONE]" {
+			return "", true, nil
+		}
+
+		var chunk ResponsesStreamChunk
+		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+			return "", false, nil // パースエラーはスキップ
+		}
+
+		// response.output_text.delta でテキスト差分を取得
+		if chunk.Type == "response.output_text.delta" {
+			return chunk.Delta, false, nil
+		}
+
+		// response.completed または response.done で終了
+		if chunk.Type == "response.completed" || chunk.Type == "response.done" {
+			return "", true, nil
+		}
+
+		return "", false, nil
+	}
+
+	return ParseStreamingResponse(ctx, resp, spinner, parser)
+}
+
+// chatWithImageResponses は Responses API で画像付きメッセージを処理
+func (p *OpenAIProvider) chatWithImageResponses(ctx context.Context, systemPrompt string, history []Message, userMessage string, image *ImageData, model string) (string, error) {
+	// Responses API URL
+	apiURL := os.Getenv("OPENAI_RESPONSES_URL")
+	if apiURL == "" {
+		apiURL = defaultOpenAIResponsesURL
+	}
+
+	// 入力を構築
+	var input []InputItem
+
+	// 履歴を追加
+	for _, msg := range history {
+		input = append(input, InputItem{
+			Type:    "message",
+			Role:    msg.Role,
+			Content: msg.Content,
+		})
+	}
+
+	// 画像付きユーザーメッセージを追加
+	dataURL := fmt.Sprintf("data:%s;base64,%s", image.MediaType, image.Base64)
+	imageMessage := InputItem{
+		Type: "message",
+		Role: "user",
+		Content: []InputContentPart{
+			{
+				Type:     "input_image",
+				ImageURL: dataURL,
+			},
+			{
+				Type: "input_text",
+				Text: userMessage,
+			},
+		},
+	}
+	input = append(input, imageMessage)
+
+	reqBody := ResponsesRequest{
+		Model:        model,
+		Input:        input,
+		Instructions: systemPrompt,
+		Stream:       true,
+	}
+
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+p.apiKey)
+
+	// スピナー開始
+	spinner := ui.NewSpinner()
+	spinner.Start("Analyzing image")
+
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		spinner.Stop()
+		return "", fmt.Errorf("API request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", HandleHTTPError(resp, spinner, p.Name())
+	}
+
+	return p.handleResponsesStreaming(ctx, resp, spinner)
 }

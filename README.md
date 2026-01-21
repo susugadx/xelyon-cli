@@ -20,6 +20,8 @@ AI搭載のコーディングアシスタントCLI
 DeepSeek, OpenAI, Gemini, Claude, Ollama, Groq をシームレスに切り替え。
 ローカルLLM（Ollama）も対応で、オフラインでも使用可能。
 
+**OpenAI Responses API 対応**: `gpt-5.2-codex` などの Codex モデルを自動検出し、最適なAPIを選択。
+
 ### 🛠️ 38種類の組み込みツール
 - **ファイル操作**: 読み書き、編集、コピー、移動、削除、バックアップ復元
 - **Git操作**: status, diff, add, commit, push, branch, stash

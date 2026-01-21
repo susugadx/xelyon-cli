@@ -69,6 +69,20 @@ type Provider interface {
 }
 ```
 
+### OpenAI Responses API
+OpenAI の `gpt-5.2-codex` などのモデルは Responses API を使用。
+モデル名で自動判定し、適切な API を選択。
+
+```yaml
+# ~/.xelyon/config.yaml
+openai:
+  responses_api_models:
+    - gpt-5.2-codex
+    - gpt-5.1-codex
+    - gpt-5.1-codex-max
+    - gpt-5-codex
+```
+
 ### Tool（ツール）
 ```go
 type Tool interface {

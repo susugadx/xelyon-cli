@@ -213,3 +213,118 @@ func TestOpenAIProvider_ChatWithImage_WithImage(t *testing.T) {
 		t.Errorf("ChatWithImage() = %q, want 'Image analysis complete'", result)
 	}
 }
+
+// --- Responses API テスト ---
+
+func TestOpenAIProvider_ResponsesAPI_Streaming(t *testing.T) {
+	// Responses API ストリーミング形式のチャンク
+	chunks := []string{
+		`{"type":"response.output_text.delta","delta":"Hello"}`,
+		`{"type":"response.output_text.delta","delta":" from"}`,
+		`{"type":"response.output_text.delta","delta":" Codex"}`,
+		`{"type":"response.completed"}`,
+	}
+	server := mockAPIServer(t, streamingHandler(chunks))
+
+	originalURL := os.Getenv("OPENAI_RESPONSES_URL")
+	defer os.Setenv("OPENAI_RESPONSES_URL", originalURL)
+	os.Setenv("OPENAI_RESPONSES_URL", server.URL)
+
+	p := NewOpenAIProvider("test-key")
+	history := []Message{{Role: "user", Content: "Hi"}}
+
+	result, err := p.chatWithResponses(context.Background(), "System", history, "gpt-5.2-codex")
+	if err != nil {
+		t.Fatalf("chatWithResponses() error = %v", err)
+	}
+	if result != "Hello from Codex" {
+		t.Errorf("chatWithResponses() = %q, want 'Hello from Codex'", result)
+	}
+}
+
+func TestOpenAIProvider_ResponsesAPI_RequestFormat(t *testing.T) {
+	var receivedReq ResponsesRequest
+
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		assertRequestMethod(t, r, "POST")
+		assertJSONContentType(t, r)
+
+		if err := json.NewDecoder(r.Body).Decode(&receivedReq); err != nil {
+			t.Fatalf("Failed to decode request: %v", err)
+		}
+
+		// 非ストリーミングレスポンス
+		w.Header().Set("Content-Type", "application/json")
+		resp := map[string]interface{}{
+			"output": []map[string]interface{}{
+				{
+					"type": "message",
+					"content": []map[string]interface{}{
+						{"type": "output_text", "text": "Response"},
+					},
+				},
+			},
+		}
+		_ = json.NewEncoder(w).Encode(resp)
+	})
+
+	originalURL := os.Getenv("OPENAI_RESPONSES_URL")
+	defer os.Setenv("OPENAI_RESPONSES_URL", originalURL)
+	os.Setenv("OPENAI_RESPONSES_URL", server.URL)
+
+	p := NewOpenAIProvider("test-key")
+	history := []Message{
+		{Role: "user", Content: "Hello"},
+		{Role: "assistant", Content: "Hi there"},
+	}
+
+	_, _ = p.chatWithResponses(context.Background(), "You are helpful", history, "gpt-5.2-codex")
+
+	// リクエスト形式を確認
+	if receivedReq.Model != "gpt-5.2-codex" {
+		t.Errorf("Model = %q, want 'gpt-5.2-codex'", receivedReq.Model)
+	}
+	if receivedReq.Instructions != "You are helpful" {
+		t.Errorf("Instructions = %q, want 'You are helpful'", receivedReq.Instructions)
+	}
+	if !receivedReq.Stream {
+		t.Error("Stream should be true")
+	}
+}
+
+func TestResponsesStreamChunk_Parse(t *testing.T) {
+	tests := []struct {
+		name     string
+		json     string
+		wantType string
+		wantText string
+	}{
+		{
+			name:     "delta",
+			json:     `{"type":"response.output_text.delta","delta":"Hello"}`,
+			wantType: "response.output_text.delta",
+			wantText: "Hello",
+		},
+		{
+			name:     "completed",
+			json:     `{"type":"response.completed"}`,
+			wantType: "response.completed",
+			wantText: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var chunk ResponsesStreamChunk
+			if err := json.Unmarshal([]byte(tt.json), &chunk); err != nil {
+				t.Fatalf("Failed to unmarshal: %v", err)
+			}
+			if chunk.Type != tt.wantType {
+				t.Errorf("Type = %q, want %q", chunk.Type, tt.wantType)
+			}
+			if chunk.Delta != tt.wantText {
+				t.Errorf("Delta = %q, want %q", chunk.Delta, tt.wantText)
+			}
+		})
+	}
+}
