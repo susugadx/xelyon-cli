@@ -112,8 +112,9 @@ type PlanModeConfig struct {
 
 // LSPConfig は LSP (Language Server Protocol) 連携の設定
 type LSPConfig struct {
-	Enabled bool                       `yaml:"enabled"` // LSP機能を有効化（デフォルト: true）
-	Servers map[string]LSPServerConfig `yaml:"servers,omitempty"`
+	Enabled           bool                       `yaml:"enabled"`                       // LSP機能を有効化（デフォルト: true）
+	SkipInstallPrompt bool                       `yaml:"skip_install_prompt,omitempty"` // インストール提案をスキップ
+	Servers           map[string]LSPServerConfig `yaml:"servers,omitempty"`
 }
 
 // LSPServerConfig は個別のLSPサーバー設定

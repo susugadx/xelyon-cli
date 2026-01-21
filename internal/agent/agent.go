@@ -244,6 +244,8 @@ func buildLSPToolsPrompt() string {
 - lsp_references: {"path": "...", "line": N, "character": N} - Find all references to symbol
 - lsp_definition: {"path": "...", "line": N, "character": N} - Go to definition
 - lsp_hover: {"path": "...", "line": N, "character": N} - Get type info and documentation
+- lsp_diagnostics: {"path": "..."} - Get errors and warnings for a file
+- lsp_rename: {"path": "...", "line": N, "character": N, "new_name": "..."} - Preview rename changes
 
 Note: LSP tools require the corresponding language server to be installed (e.g., gopls for Go).
 Line and character are 1-indexed (as shown in read_file output).

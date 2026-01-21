@@ -63,7 +63,16 @@ Language Server Protocol (LSP) を活用してIDE並みのコード理解を実�
 - **参照検索**: シンボルのすべての参照箇所を検索
 - **定義ジャンプ**: 関数や型の定義位置を特定
 - **ホバー情報**: 型情報やドキュメントを取得
-- **対応言語サーバー**: gopls (Go), vtsls (TypeScript/JavaScript), pyright (Python), rust-analyzer (Rust)
+- **診断情報**: ファイルのエラー・警告を取得（`lsp_diagnostics`）
+- **リネームプレビュー**: シンボルのリネーム変更箇所をプレビュー（`lsp_rename`）
+- **削除時参照チェック**: ファイル削除前に外部参照を自動検出し警告
+- **自動検出**: プロジェクト内の言語を自動検出し、未インストールのLSPサーバーを提案
+- **ワンクリックインストール**: `/lsp install <言語>` でLSPサーバーをインストール
+- **23言語対応**:
+  - **メイン**: Go, TypeScript/JavaScript (React/JSX), Python, Rust
+  - **バックエンド**: Java, C/C++, Ruby, Kotlin, Swift, C#, Scala, PHP, Elixir, Lua
+  - **フロントエンド**: CSS/SCSS, HTML, Vue, Svelte
+  - **設定/スクリプト**: YAML, TOML, SQL, Bash, Markdown
 
 ### 📝 プロジェクト設定（XELYON.md）
 プロジェクトごとのルールをAIが学習。
@@ -98,11 +107,13 @@ xelyon
 ### 3. 基本コマンド
 
 ```bash
-/help       # ヘルプ
-/undo       # 変更取り消し
-/use gemini # プロバイダー切り替え
-/lsp status # LSPサーバー状態確認
-/exit       # 終了
+/help        # ヘルプ
+/undo        # 変更取り消し
+/use gemini  # プロバイダー切り替え
+/lsp status  # LSPサーバー状態確認
+/lsp detect  # プロジェクト内の言語を検出
+/lsp install # LSPサーバーをインストール
+/exit        # 終了
 ```
 
 ## よく使う機能

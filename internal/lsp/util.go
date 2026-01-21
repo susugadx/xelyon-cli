@@ -49,6 +49,7 @@ func URIToFile(uri string) string {
 func DetectLanguage(path string) string {
 	ext := strings.ToLower(filepath.Ext(path))
 	switch ext {
+	// ===== Existing (4 languages) =====
 	case ".go":
 		return "go"
 	case ".ts":
@@ -63,11 +64,12 @@ func DetectLanguage(path string) string {
 		return "python"
 	case ".rs":
 		return "rust"
+	// ===== Tier 1: Backend languages (11 languages) =====
 	case ".java":
 		return "java"
 	case ".c", ".h":
 		return "c"
-	case ".cpp", ".hpp", ".cc", ".cxx":
+	case ".cpp", ".hpp", ".cc", ".cxx", ".hxx":
 		return "cpp"
 	case ".cs":
 		return "csharp"
@@ -81,6 +83,30 @@ func DetectLanguage(path string) string {
 		return "swift"
 	case ".scala":
 		return "scala"
+	case ".ex", ".exs":
+		return "elixir"
+	case ".lua":
+		return "lua"
+	// ===== Tier 2: Frontend languages (4 languages) =====
+	case ".css", ".scss", ".sass", ".less":
+		return "css"
+	case ".html", ".htm":
+		return "html"
+	case ".vue":
+		return "vue"
+	case ".svelte":
+		return "svelte"
+	// ===== Tier 3: Config/Script languages (5 languages) =====
+	case ".yaml", ".yml":
+		return "yaml"
+	case ".toml":
+		return "toml"
+	case ".sql":
+		return "sql"
+	case ".sh", ".bash", ".zsh":
+		return "bash"
+	case ".md", ".markdown":
+		return "markdown"
 	default:
 		return ""
 	}
@@ -91,7 +117,10 @@ func DetectLanguage(path string) string {
 func LanguageServerKey(language string) string {
 	switch language {
 	case "typescript", "typescriptreact", "javascript", "javascriptreact":
-		return "typescript" // Both JS and TS use the same server
+		return "typescript" // Both JS and TS use the same server (vtsls)
+	case "c", "cpp":
+		// C and C++ both use clangd, but are separate configs for flexibility
+		return language
 	default:
 		return language
 	}

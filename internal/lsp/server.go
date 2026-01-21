@@ -28,6 +28,10 @@ type Server struct {
 	pending     map[int]chan *Response
 	initialized bool
 
+	// Diagnostics storage (URI -> diagnostics)
+	diagMu      sync.RWMutex
+	diagnostics map[string][]Diagnostic
+
 	// Graceful shutdown
 	done      chan struct{}
 	closeOnce sync.Once
@@ -36,9 +40,10 @@ type Server struct {
 // NewServer creates a new LSP server instance (does not start yet)
 func NewServer(name string) *Server {
 	return &Server{
-		name:    name,
-		pending: make(map[int]chan *Response),
-		done:    make(chan struct{}),
+		name:        name,
+		pending:     make(map[int]chan *Response),
+		diagnostics: make(map[string][]Diagnostic),
+		done:        make(chan struct{}),
 	}
 }
 
@@ -176,6 +181,7 @@ func (s *Server) readResponses() {
 			var msg struct {
 				ID     *int            `json:"id"`
 				Method string          `json:"method"`
+				Params json.RawMessage `json:"params"`
 				Result json.RawMessage `json:"result"`
 				Error  *ResponseError  `json:"error"`
 			}
@@ -199,8 +205,10 @@ func (s *Server) readResponses() {
 					delete(s.pending, *msg.ID)
 				}
 				s.mu.Unlock()
+			} else {
+				// Handle notifications
+				s.handleNotification(msg.Method, msg.Params)
 			}
-			// Notifications (no ID) are ignored for now
 		}
 	}
 }
@@ -391,4 +399,34 @@ func (s *Server) IsRunning() bool {
 // Name returns the server name
 func (s *Server) Name() string {
 	return s.name
+}
+
+// handleNotification processes LSP notifications from the server
+func (s *Server) handleNotification(method string, params json.RawMessage) {
+	if method == "textDocument/publishDiagnostics" {
+		var diagParams PublishDiagnosticsParams
+		if err := json.Unmarshal(params, &diagParams); err != nil {
+			return
+		}
+
+		s.diagMu.Lock()
+		s.diagnostics[diagParams.URI] = diagParams.Diagnostics
+		s.diagMu.Unlock()
+	}
+}
+
+// GetLastDiagnostics returns the last received diagnostics for a file
+func (s *Server) GetLastDiagnostics(filePath string) []Diagnostic {
+	uri := FileToURI(filePath)
+	s.diagMu.RLock()
+	defer s.diagMu.RUnlock()
+	return s.diagnostics[uri]
+}
+
+// ClearDiagnostics clears diagnostics for a file
+func (s *Server) ClearDiagnostics(filePath string) {
+	uri := FileToURI(filePath)
+	s.diagMu.Lock()
+	defer s.diagMu.Unlock()
+	delete(s.diagnostics, uri)
 }

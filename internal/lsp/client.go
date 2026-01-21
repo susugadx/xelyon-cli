@@ -329,3 +329,76 @@ func (c *Client) GetHover(ctx context.Context, filePath string, line, character 
 
 	return &hover, nil
 }
+
+// GetDiagnostics gets diagnostics (errors, warnings) for a file
+func (c *Client) GetDiagnostics(ctx context.Context, filePath string) ([]Diagnostic, error) {
+	server, err := c.GetServerForFile(ctx, filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Read file content and open document
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file: %w", err)
+	}
+
+	language := DetectLanguage(filePath)
+	if err := server.OpenDocument(filePath, language, string(content)); err != nil {
+		return nil, fmt.Errorf("failed to open document: %w", err)
+	}
+
+	// Wait for the server to analyze and publish diagnostics
+	// Diagnostics are sent as notifications, so we wait a bit
+	time.Sleep(500 * time.Millisecond)
+
+	// Get diagnostics from server's cache
+	return server.GetLastDiagnostics(filePath), nil
+}
+
+// Rename renames a symbol at the given position to a new name
+func (c *Client) Rename(ctx context.Context, filePath string, line, character int, newName string) (*WorkspaceEdit, error) {
+	server, err := c.GetServerForFile(ctx, filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Read file content and open document
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file: %w", err)
+	}
+
+	language := DetectLanguage(filePath)
+	if err := server.OpenDocument(filePath, language, string(content)); err != nil {
+		return nil, fmt.Errorf("failed to open document: %w", err)
+	}
+
+	time.Sleep(100 * time.Millisecond)
+
+	params := RenameParams{
+		TextDocument: TextDocumentIdentifier{URI: FileToURI(filePath)},
+		Position:     Position{Line: line - 1, Character: character - 1},
+		NewName:      newName,
+	}
+
+	resp, err := server.Call(ctx, "textDocument/rename", params)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.Error != nil {
+		return nil, fmt.Errorf("LSP error: %s", resp.Error.Message)
+	}
+
+	if resp.Result == nil || string(resp.Result) == "null" {
+		return nil, fmt.Errorf("rename not supported or symbol not found")
+	}
+
+	var edit WorkspaceEdit
+	if err := json.Unmarshal(resp.Result, &edit); err != nil {
+		return nil, fmt.Errorf("failed to parse rename result: %w", err)
+	}
+
+	return &edit, nil
+}

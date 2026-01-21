@@ -169,3 +169,50 @@ type DidOpenTextDocumentParams struct {
 type DidCloseTextDocumentParams struct {
 	TextDocument TextDocumentIdentifier `json:"textDocument"`
 }
+
+// ===== textDocument/publishDiagnostics =====
+
+// DiagnosticSeverity represents the severity of a diagnostic
+type DiagnosticSeverity int
+
+const (
+	DiagnosticSeverityError       DiagnosticSeverity = 1
+	DiagnosticSeverityWarning     DiagnosticSeverity = 2
+	DiagnosticSeverityInformation DiagnosticSeverity = 3
+	DiagnosticSeverityHint        DiagnosticSeverity = 4
+)
+
+// Diagnostic represents a diagnostic (error, warning, info, hint)
+type Diagnostic struct {
+	Range    Range              `json:"range"`
+	Severity DiagnosticSeverity `json:"severity,omitempty"`
+	Code     interface{}        `json:"code,omitempty"` // string or number
+	Source   string             `json:"source,omitempty"`
+	Message  string             `json:"message"`
+}
+
+// PublishDiagnosticsParams are the parameters for the publishDiagnostics notification
+type PublishDiagnosticsParams struct {
+	URI         string       `json:"uri"`
+	Diagnostics []Diagnostic `json:"diagnostics"`
+}
+
+// ===== textDocument/rename =====
+
+// RenameParams are the parameters for the rename request
+type RenameParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Position     Position               `json:"position"`
+	NewName      string                 `json:"newName"`
+}
+
+// WorkspaceEdit represents changes to many resources managed in the workspace
+type WorkspaceEdit struct {
+	Changes map[string][]TextEdit `json:"changes,omitempty"`
+}
+
+// TextEdit represents a textual edit applicable to a text document
+type TextEdit struct {
+	Range   Range  `json:"range"`
+	NewText string `json:"newText"`
+}

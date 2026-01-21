@@ -94,6 +94,7 @@ func (c *Client) GetServerForFile(ctx, filePath) (*Server, error)  // 遅延起�
 func (c *Client) FindReferences(ctx, file, line, char) ([]Location, error)
 func (c *Client) GoToDefinition(ctx, file, line, char) ([]Location, error)
 func (c *Client) GetHover(ctx, file, line, char) (*HoverResult, error)
+func (c *Client) GetDiagnostics(ctx, filePath) ([]Diagnostic, error)  // エラー・警告取得
 func (c *Client) Status() map[string]string
 ```
 
@@ -174,11 +175,17 @@ AIがコードの参照、定義、型情報を正確に取得できる。
 ### アーキテクチャ
 ```
 internal/lsp/
-├── protocol.go    # JSON-RPC 2.0 & LSP型定義
+├── protocol.go    # JSON-RPC 2.0 & LSP型定義（Diagnostic含む）
 ├── util.go        # URI変換、言語検出ヘルパー
-├── server.go      # 単一LSPサーバープロセス管理
+├── server.go      # 単一LSPサーバープロセス管理（diagnostics通知処理）
 ├── client.go      # 複数サーバー管理（遅延起動）
-└── client_test.go # ユニットテスト
+├── detect.go      # プロジェクト言語自動検出
+├── install.go     # LSPサーバーインストール
+└── *_test.go      # ユニットテスト
+
+internal/tools/
+├── lsp_tools.go   # LSPツール実装（references, definition, hover, diagnostics）
+└── lsp_safety.go  # 削除時参照チェック（シンボル抽出、外部参照検出）
 ```
 
 ### 遅延起動
@@ -212,15 +219,87 @@ lsp:
 | `lsp_references` | シンボルの参照箇所検索 | path, line, character |
 | `lsp_definition` | 定義位置へジャンプ | path, line, character |
 | `lsp_hover` | 型情報・ドキュメント取得 | path, line, character |
+| `lsp_diagnostics` | ファイルのエラー・警告取得 | path |
+| `lsp_rename` | リネーム変更箇所をプレビュー | path, line, character, new_name |
+
+### 削除時参照チェック
+ファイル削除（`delete_file`）時にLSPが有効なら、自動的に外部参照をチェック。
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🗑️  Delete File / ファイル削除
+📂 Path / パス: internal/api/handler.go
+📏 Size / サイズ: 1234 bytes (45 lines)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚠️  LSP Warning: This file contains 3 external references!
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   HandleUser (2 references):
+      - main.go:45
+      - routes/api.go:123
+   UserHandler (1 references):
+      - main.go:67
+```
+
+シンボル抽出は正規表現ベース（Go, TypeScript, Python, Rust対応）。
 
 ### コマンド
 ```
-/lsp         # LSPステータス表示
-/lsp status  # 同上
+/lsp                      # LSPステータス表示（未インストールサーバーの提案付き）
+/lsp status               # 同上
+/lsp detect               # プロジェクト内の言語を検出して表示
+/lsp install <言語>       # 指定言語のLSPサーバーをインストール
+/lsp install all          # 未インストールの全サーバーをインストール
 ```
 
+### 言語自動検出
+プロジェクト内のファイル拡張子からサポート言語を自動検出。
+- 検出対象: `.go`, `.ts`, `.tsx`, `.js`, `.jsx`, `.py`, `.rs`
+- 除外ディレクトリ: `.git`, `node_modules`, `vendor`, `__pycache__`, `dist`, `build`, `target`
+
+### LSPサーバーインストール
+
+#### メイン言語（4言語）
+| 言語 | パッケージ | インストールコマンド |
+|------|----------|-------------------|
+| Go | gopls | `go install golang.org/x/tools/gopls@latest` |
+| TypeScript/JavaScript | vtsls | `npm i -g @vtsls/language-server typescript` |
+| Python | pyright | `pip install pyright` または `npm i -g pyright` |
+| Rust | rust-analyzer | `rustup component add rust-analyzer` |
+
+#### バックエンド言語（11言語）
+| 言語 | パッケージ | インストールコマンド |
+|------|----------|-------------------|
+| Java | jdtls | `brew install jdtls` |
+| C/C++ | clangd | `brew install llvm` または `apt install clangd` |
+| Ruby | solargraph | `gem install solargraph` |
+| Kotlin | kotlin-language-server | `brew install kotlin-language-server` |
+| Swift | sourcekit-lsp | Xcode/Swift toolchain に含まれる |
+| C# | csharp-ls | `dotnet tool install --global csharp-ls` |
+| Scala | metals | `brew install coursier/formulas/coursier && cs install metals` |
+| PHP | intelephense | `npm i -g intelephense` |
+| Elixir | elixir-ls | `brew install elixir-ls` |
+| Lua | lua-language-server | `brew install lua-language-server` |
+
+#### フロントエンド言語（4言語）
+| 言語 | パッケージ | インストールコマンド |
+|------|----------|-------------------|
+| CSS/SCSS | vscode-css-language-server | `npm i -g vscode-langservers-extracted` |
+| HTML | vscode-html-language-server | `npm i -g vscode-langservers-extracted` |
+| Vue | @vue/language-server | `npm i -g @vue/language-server` |
+| Svelte | svelte-language-server | `npm i -g svelte-language-server` |
+
+#### 設定/スクリプト言語（5言語）
+| 言語 | パッケージ | インストールコマンド |
+|------|----------|-------------------|
+| YAML | yaml-language-server | `npm i -g yaml-language-server` |
+| TOML | taplo | `cargo install taplo-cli --locked` |
+| SQL | sqls | `go install github.com/lighttiger2505/sqls@latest` |
+| Bash | bash-language-server | `npm i -g bash-language-server` |
+| Markdown | marksman | `brew install marksman` |
+
 ### エラーハンドリング
-- **サーバー未インストール**: フォールバックメッセージを返す
+- **サーバー未インストール**: フォールバックメッセージを返す + インストール提案
 - **タイムアウト**: 30秒でタイムアウト
 - **サーバークラッシュ**: 次回使用時に再起動
 - **未対応言語**: 言語検出できない場合はエラー

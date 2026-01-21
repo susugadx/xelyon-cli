@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/lsp"
 )
 
 // executeDeleteFile deletes a file permanently (with backup for Undo)
@@ -36,6 +38,21 @@ func executeDeleteFile(path string) (string, string, error) {
 	}
 	lines := strings.Split(string(content), "\n")
 
+	// LSP参照チェック（LSPクライアントが有効な場合のみ）
+	var externalRefs []ReferenceInfo
+	if LSPClient != nil {
+		language := lsp.DetectLanguage(absPath)
+		if language != "" {
+			symbols := ExtractSymbolsFromContent(string(content), language)
+			if len(symbols) > 0 {
+				refs, hasExternal, _ := CheckReferencesBeforeDelete(absPath, symbols)
+				if hasExternal {
+					externalRefs = GetExternalReferences(refs)
+				}
+			}
+		}
+	}
+
 	// 確認UI表示（ファイルプレビュー付き）
 	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	cyan.Printf("🗑️  Delete File / ファイル削除\n")
@@ -56,6 +73,35 @@ func executeDeleteFile(path string) (string, string, error) {
 	}
 	if len(lines) > 20 {
 		yellow.Printf("  ... (%d more lines)\n", len(lines)-20)
+	}
+
+	// 外部参照の警告表示
+	if len(externalRefs) > 0 {
+		fmt.Println()
+		yellow.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		yellow.Printf("⚠️  LSP Warning: This file contains %d external references!\n", len(externalRefs))
+		yellow.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+		// シンボルごとにグループ化して表示
+		symbolRefs := make(map[string][]ReferenceInfo)
+		for _, ref := range externalRefs {
+			symbolRefs[ref.Symbol] = append(symbolRefs[ref.Symbol], ref)
+		}
+
+		for symbol, refs := range symbolRefs {
+			yellow.Printf("   %s (%d references):\n", symbol, len(refs))
+			shown := 0
+			for _, ref := range refs {
+				if shown >= 3 {
+					yellow.Printf("      ... and %d more\n", len(refs)-3)
+					break
+				}
+				fmt.Printf("      - %s:%d\n", ref.FilePath, ref.Line)
+				shown++
+			}
+		}
+		fmt.Println()
+		red.Println("⚠️  Deleting this file may break the code that references these symbols!")
 	}
 
 	dec := confirmWithAutoApproveDecision("delete_file", "Delete this file? / このファイルを削除しますか？")

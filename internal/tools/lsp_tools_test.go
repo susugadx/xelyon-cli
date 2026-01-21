@@ -213,12 +213,144 @@ func TestLSPHoverTool_MissingPath(t *testing.T) {
 	}
 }
 
+func TestLSPDiagnosticsTool_Name(t *testing.T) {
+	tool := &LSPDiagnosticsTool{}
+	if got := tool.Name(); got != "lsp_diagnostics" {
+		t.Errorf("Name() = %q, want %q", got, "lsp_diagnostics")
+	}
+}
+
+func TestLSPDiagnosticsTool_NoClient(t *testing.T) {
+	originalClient := LSPClient
+	LSPClient = nil
+	defer func() { LSPClient = originalClient }()
+
+	tool := &LSPDiagnosticsTool{}
+	output, change, err := tool.Run(map[string]string{
+		"path": "test.go",
+	})
+
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if change != nil {
+		t.Errorf("expected nil change, got %v", change)
+	}
+	if !contains(output, "LSP not available") {
+		t.Errorf("output should mention LSP not available, got: %s", output)
+	}
+}
+
+func TestLSPDiagnosticsTool_MissingPath(t *testing.T) {
+	LSPClient = lsp.NewClient("/tmp")
+	defer func() { LSPClient = nil }()
+
+	tool := &LSPDiagnosticsTool{}
+	output, _, err := tool.Run(map[string]string{})
+
+	if err == nil {
+		t.Error("expected error for missing path")
+	}
+	if !contains(output, "path is required") {
+		t.Errorf("output should mention path is required, got: %s", output)
+	}
+}
+
+func TestLSPRenameTool_Name(t *testing.T) {
+	tool := &LSPRenameTool{}
+	if got := tool.Name(); got != "lsp_rename" {
+		t.Errorf("Name() = %q, want %q", got, "lsp_rename")
+	}
+}
+
+func TestLSPRenameTool_NoClient(t *testing.T) {
+	originalClient := LSPClient
+	LSPClient = nil
+	defer func() { LSPClient = originalClient }()
+
+	tool := &LSPRenameTool{}
+	output, change, err := tool.Run(map[string]string{
+		"path":      "test.go",
+		"line":      "1",
+		"character": "1",
+		"new_name":  "newName",
+	})
+
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if change != nil {
+		t.Errorf("expected nil change, got %v", change)
+	}
+	if !contains(output, "LSP not available") {
+		t.Errorf("output should mention LSP not available, got: %s", output)
+	}
+}
+
+func TestLSPRenameTool_MissingPath(t *testing.T) {
+	LSPClient = lsp.NewClient("/tmp")
+	defer func() { LSPClient = nil }()
+
+	tool := &LSPRenameTool{}
+	output, _, err := tool.Run(map[string]string{
+		"line":      "1",
+		"character": "1",
+		"new_name":  "newName",
+	})
+
+	if err == nil {
+		t.Error("expected error for missing path")
+	}
+	if !contains(output, "path is required") {
+		t.Errorf("output should mention path is required, got: %s", output)
+	}
+}
+
+func TestLSPRenameTool_MissingNewName(t *testing.T) {
+	LSPClient = lsp.NewClient("/tmp")
+	defer func() { LSPClient = nil }()
+
+	tool := &LSPRenameTool{}
+	output, _, err := tool.Run(map[string]string{
+		"path":      "test.go",
+		"line":      "1",
+		"character": "1",
+	})
+
+	if err == nil {
+		t.Error("expected error for missing new_name")
+	}
+	if !contains(output, "new_name is required") {
+		t.Errorf("output should mention new_name is required, got: %s", output)
+	}
+}
+
+func TestLSPRenameTool_InvalidLine(t *testing.T) {
+	LSPClient = lsp.NewClient("/tmp")
+	defer func() { LSPClient = nil }()
+
+	tool := &LSPRenameTool{}
+	output, _, err := tool.Run(map[string]string{
+		"path":      "test.go",
+		"line":      "abc",
+		"character": "1",
+		"new_name":  "newName",
+	})
+
+	if err == nil {
+		t.Error("expected error for invalid line")
+	}
+	if !contains(output, "line must be a positive number") {
+		t.Errorf("output should mention line must be positive, got: %s", output)
+	}
+}
+
 func TestRegisterLSPTools(t *testing.T) {
 	registry := NewRegistry()
 	RegisterLSPTools(registry)
 
-	// 3つのLSPツールが登録されていることを確認
-	tools := []string{"lsp_references", "lsp_definition", "lsp_hover"}
+	// 5つのLSPツールが登録されていることを確認
+	tools := []string{"lsp_references", "lsp_definition", "lsp_hover", "lsp_diagnostics", "lsp_rename"}
 	for _, name := range tools {
 		if tool := registry.GetTool(name); tool == nil {
 			t.Errorf("tool %q not registered", name)
@@ -228,7 +360,7 @@ func TestRegisterLSPTools(t *testing.T) {
 
 func TestLSPToolsSafetyLevel(t *testing.T) {
 	// LSPツールはすべてSafetyHigh（読み取り専用）であることを確認
-	tools := []string{"lsp_references", "lsp_definition", "lsp_hover"}
+	tools := []string{"lsp_references", "lsp_definition", "lsp_hover", "lsp_diagnostics", "lsp_rename"}
 	for _, name := range tools {
 		safety := GetToolSafety(name)
 		if safety != SafetyHigh {

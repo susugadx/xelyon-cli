@@ -188,6 +188,179 @@ func (t *LSPHoverTool) Run(args map[string]string) (string, *FileChange, error) 
 	return hover.Contents.Value, nil, nil
 }
 
+// ===== lsp_diagnostics Tool =====
+
+// LSPDiagnosticsTool gets errors and warnings for a file
+type LSPDiagnosticsTool struct{}
+
+func (t *LSPDiagnosticsTool) Name() string { return "lsp_diagnostics" }
+
+func (t *LSPDiagnosticsTool) Run(args map[string]string) (string, *FileChange, error) {
+	if LSPClient == nil {
+		return "LSP not available. Please configure LSP servers in ~/.xelyon/config.yaml", nil, nil
+	}
+
+	path := args["path"]
+	if path == "" {
+		return "Error: path is required", nil, fmt.Errorf("path is required")
+	}
+
+	absPath, err := ValidatePath(path)
+	if err != nil {
+		return fmt.Sprintf("Error: %v", err), nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), LSPToolTimeout)
+	defer cancel()
+
+	diagnostics, err := LSPClient.GetDiagnostics(ctx, absPath)
+	if err != nil {
+		return fmt.Sprintf("LSP diagnostics not available: %v", err), nil, nil
+	}
+
+	if len(diagnostics) == 0 {
+		green.Println("✅ No errors or warnings found")
+		return "No diagnostics found. Code looks good!", nil, nil
+	}
+
+	// Categorize diagnostics
+	var errors, warnings, infos, hints []lsp.Diagnostic
+	for _, d := range diagnostics {
+		switch d.Severity {
+		case lsp.DiagnosticSeverityError:
+			errors = append(errors, d)
+		case lsp.DiagnosticSeverityWarning:
+			warnings = append(warnings, d)
+		case lsp.DiagnosticSeverityInformation:
+			infos = append(infos, d)
+		case lsp.DiagnosticSeverityHint:
+			hints = append(hints, d)
+		default:
+			// Treat unknown severity as warning
+			warnings = append(warnings, d)
+		}
+	}
+
+	// Format output
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("Found %d errors, %d warnings", len(errors), len(warnings)))
+	if len(infos) > 0 || len(hints) > 0 {
+		sb.WriteString(fmt.Sprintf(", %d info, %d hints", len(infos), len(hints)))
+	}
+	sb.WriteString(":\n\n")
+
+	// Print errors first
+	for _, d := range errors {
+		sb.WriteString(fmt.Sprintf("❌ Error [%d:%d]: %s\n",
+			d.Range.Start.Line+1, d.Range.Start.Character+1, d.Message))
+	}
+
+	// Then warnings
+	for _, d := range warnings {
+		sb.WriteString(fmt.Sprintf("⚠️ Warning [%d:%d]: %s\n",
+			d.Range.Start.Line+1, d.Range.Start.Character+1, d.Message))
+	}
+
+	// Then info
+	for _, d := range infos {
+		sb.WriteString(fmt.Sprintf("ℹ️ Info [%d:%d]: %s\n",
+			d.Range.Start.Line+1, d.Range.Start.Character+1, d.Message))
+	}
+
+	// Then hints
+	for _, d := range hints {
+		sb.WriteString(fmt.Sprintf("💡 Hint [%d:%d]: %s\n",
+			d.Range.Start.Line+1, d.Range.Start.Character+1, d.Message))
+	}
+
+	// Print summary to console
+	if len(errors) > 0 {
+		red.Printf("📋 LSP: Found %d errors, %d warnings\n", len(errors), len(warnings))
+	} else if len(warnings) > 0 {
+		yellow.Printf("📋 LSP: Found %d warnings\n", len(warnings))
+	} else {
+		cyan.Printf("📋 LSP: Found %d info/hints\n", len(infos)+len(hints))
+	}
+
+	return sb.String(), nil, nil
+}
+
+// ===== lsp_rename Tool =====
+
+// LSPRenameTool renames a symbol at the given position
+type LSPRenameTool struct{}
+
+func (t *LSPRenameTool) Name() string { return "lsp_rename" }
+
+func (t *LSPRenameTool) Run(args map[string]string) (string, *FileChange, error) {
+	if LSPClient == nil {
+		return "LSP not available. Please configure LSP servers in ~/.xelyon/config.yaml", nil, nil
+	}
+
+	path := args["path"]
+	if path == "" {
+		return "Error: path is required", nil, fmt.Errorf("path is required")
+	}
+
+	line, err := strconv.Atoi(args["line"])
+	if err != nil || line < 1 {
+		return "Error: line must be a positive number (1-indexed)", nil, fmt.Errorf("line must be a positive number")
+	}
+
+	character, err := strconv.Atoi(args["character"])
+	if err != nil || character < 1 {
+		return "Error: character must be a positive number (1-indexed)", nil, fmt.Errorf("character must be a positive number")
+	}
+
+	newName := args["new_name"]
+	if newName == "" {
+		return "Error: new_name is required", nil, fmt.Errorf("new_name is required")
+	}
+
+	absPath, err := ValidatePath(path)
+	if err != nil {
+		return fmt.Sprintf("Error: %v", err), nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), LSPToolTimeout)
+	defer cancel()
+
+	edit, err := LSPClient.Rename(ctx, absPath, line, character, newName)
+	if err != nil {
+		return fmt.Sprintf("LSP rename not available: %v\nTip: Use str_replace_editor to manually rename.", err), nil, nil
+	}
+
+	if edit == nil || len(edit.Changes) == 0 {
+		return "No changes needed or rename not supported for this symbol", nil, nil
+	}
+
+	// Format output - list all changes
+	var sb strings.Builder
+	totalEdits := 0
+	for _, edits := range edit.Changes {
+		totalEdits += len(edits)
+	}
+
+	sb.WriteString(fmt.Sprintf("Rename '%s' will affect %d location(s) in %d file(s):\n\n", newName, totalEdits, len(edit.Changes)))
+
+	for uri, edits := range edit.Changes {
+		filePath := lsp.URIToFile(uri)
+		sb.WriteString(fmt.Sprintf("📄 %s:\n", filePath))
+		for _, e := range edits {
+			sb.WriteString(fmt.Sprintf("   [%d:%d-%d:%d] → \"%s\"\n",
+				e.Range.Start.Line+1, e.Range.Start.Character+1,
+				e.Range.End.Line+1, e.Range.End.Character+1,
+				e.NewText))
+		}
+		sb.WriteString("\n")
+	}
+
+	sb.WriteString("⚠️ Note: This is a preview. Use str_replace_editor to apply changes.")
+
+	green.Printf("🔄 LSP: Rename preview - %d edits in %d files\n", totalEdits, len(edit.Changes))
+	return sb.String(), nil, nil
+}
+
 // ===== Registration =====
 
 // RegisterLSPTools registers all LSP tools to the registry
@@ -195,4 +368,6 @@ func RegisterLSPTools(r *Registry) {
 	r.Register(&LSPReferencesTool{})
 	r.Register(&LSPDefinitionTool{})
 	r.Register(&LSPHoverTool{})
+	r.Register(&LSPDiagnosticsTool{})
+	r.Register(&LSPRenameTool{})
 }
