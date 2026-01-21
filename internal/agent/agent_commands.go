@@ -10,6 +10,7 @@ import (
 
 	"github.com/atotto/clipboard"
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/lsp"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/version"
@@ -112,6 +113,8 @@ func handleSpecialCommand(input string, agent *Agent) bool {
 		return handlePasteCommand(agent, args)
 	case "/lsp":
 		return handleLSPCommand(agent, args)
+	case "/tokens":
+		return handleTokensCommand(agent)
 	}
 	return false
 }
@@ -365,6 +368,7 @@ func printHelp() {
   /undo session <id>  - Undo all changes from specific session
   /changes            - Show file change history with undo status
   /stats              - Show session statistics (time, messages, tokens, cost)
+  /tokens             - Show token usage and context window status
   /copy [code] [-n N] - Copy last AI output to clipboard (code=code blocks only, -n=N-th last output)
   /compress [N]       - Compress history (keep recent N messages, default: 10)
   /use <provider> [model] - Switch provider and optionally model (e.g., /use gemini gemini-2.0-flash-exp)
@@ -690,5 +694,78 @@ func handlePlanCommand(agent *Agent, args []string) bool {
 		cyan.Println("📋 Plan Mode: OFF")
 		fmt.Println("   通常モード（ツール個別確認）")
 	}
+	return true
+}
+
+// handleTokensCommand はトークン使用量を表示
+func handleTokensCommand(agent *Agent) bool {
+	cfg := config.GetGlobalConfig()
+
+	// トークン推定
+	totalTokens := agent.EstimateTokens()
+	systemTokens := agent.EstimateSystemPromptTokens()
+	historyTokens := agent.EstimateHistoryTokens()
+	limit := GetModelTokenLimit(agent.CurrentModel)
+	percentage := float64(totalTokens) / float64(limit) * 100
+
+	// 表示
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	cyan.Println("📊 Token Usage / トークン使用量")
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Println()
+
+	// 使用量バー表示
+	barWidth := 30
+	filled := int(percentage / 100 * float64(barWidth))
+	if filled > barWidth {
+		filled = barWidth
+	}
+	bar := strings.Repeat("█", filled) + strings.Repeat("░", barWidth-filled)
+
+	// 色分け
+	if percentage > 90 {
+		red.Printf("  [%s] %.1f%%\n", bar, percentage)
+	} else if percentage > 80 {
+		yellow.Printf("  [%s] %.1f%%\n", bar, percentage)
+	} else {
+		green.Printf("  [%s] %.1f%%\n", bar, percentage)
+	}
+
+	fmt.Println()
+	fmt.Printf("  Current: %s / %s tokens\n", formatNumber(totalTokens), formatNumber(limit))
+
+	fmt.Println()
+	green.Println("📋 Breakdown:")
+	fmt.Printf("    System Prompt: %s tokens (%.1f%%)\n",
+		formatNumber(systemTokens), float64(systemTokens)/float64(limit)*100)
+	fmt.Printf("    History:       %s tokens (%.1f%%)  [%d messages]\n",
+		formatNumber(historyTokens), float64(historyTokens)/float64(limit)*100, len(agent.History))
+
+	fmt.Println()
+	green.Println("🤖 Model:")
+	fmt.Printf("    %s (context: %s tokens)\n", agent.CurrentModel, formatNumber(limit))
+
+	fmt.Println()
+	green.Println("⚙️  Auto-compress:")
+	if cfg.Compression.AutoCompress {
+		threshold := cfg.Compression.ThresholdPercent
+		if threshold == 0 {
+			threshold = 80
+		}
+		fmt.Printf("    ON (threshold: %d%%)\n", threshold)
+	} else {
+		fmt.Println("    OFF")
+	}
+
+	// 警告
+	if percentage > 90 {
+		fmt.Println()
+		red.Println("⚠️  Token usage is very high! Consider using /compress")
+	} else if percentage > 80 {
+		fmt.Println()
+		yellow.Println("💡 Token usage is high. /compress available if needed")
+	}
+
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	return true
 }

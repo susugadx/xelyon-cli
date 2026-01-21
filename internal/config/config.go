@@ -55,9 +55,10 @@ func DefaultConfig() *Config {
 			},
 		},
 		Compression: CompressionConfig{
-			AutoCompress:    false,
-			ThresholdTokens: 40000,
-			KeepRecent:      10,
+			AutoCompress:     true, // デフォルトON - コスト削減のため
+			ThresholdTokens:  0,    // 0 = 使用率ベース
+			ThresholdPercent: 80,   // 80%で自動圧縮
+			KeepRecent:       10,
 		},
 		Backup: BackupConfig{
 			MaxGenerations: 5,
@@ -271,7 +272,9 @@ func applyDefaults(cfg *Config) {
 	if cfg.Backup.MaxGenerations == 0 {
 		cfg.Backup = defaults.Backup
 	}
-	if cfg.Compression.ThresholdTokens == 0 {
+	// Compression: ThresholdTokens=0 かつ ThresholdPercent=0 の場合のみデフォルト適用
+	// （ThresholdTokens=0 は「使用率ベース」を意味するため）
+	if cfg.Compression.ThresholdTokens == 0 && cfg.Compression.ThresholdPercent == 0 {
 		cfg.Compression = defaults.Compression
 	}
 	if cfg.Paste.MaxLines == 0 {

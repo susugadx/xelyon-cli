@@ -26,9 +26,10 @@ type Config struct {
 
 // CompressionConfig は会話履歴圧縮の設定
 type CompressionConfig struct {
-	AutoCompress    bool `yaml:"auto_compress"`    // 自動圧縮を有効化
-	ThresholdTokens int  `yaml:"threshold_tokens"` // 自動圧縮のトークン閾値
-	KeepRecent      int  `yaml:"keep_recent"`      // 保持する最新メッセージ数
+	AutoCompress     bool `yaml:"auto_compress"`     // 自動圧縮を有効化（デフォルト: true）
+	ThresholdTokens  int  `yaml:"threshold_tokens"`  // 自動圧縮のトークン閾値（0 = 使用率ベース）
+	ThresholdPercent int  `yaml:"threshold_percent"` // 自動圧縮の使用率閾値（デフォルト: 80%）
+	KeepRecent       int  `yaml:"keep_recent"`       // 保持する最新メッセージ数
 }
 
 // BackupConfig はバックアップファイルの設定

@@ -155,6 +155,34 @@ plan_mode:
 - `internal/agent/plan.go` - 計画構造体
 - `internal/agent/agent_commands.go` - `/plan` コマンド実装
 
+## Context Window 管理
+
+### 概要
+長時間の会話でトークン上限に達した時の対策を自動化。
+
+### 機能
+1. **`/tokens` コマンド**: 現在のトークン使用量を表示
+2. **自動圧縮（デフォルトON）**: 80%到達で自動的に履歴を圧縮
+3. **手動圧縮**: `/compress [N]` で履歴を圧縮（最新N件を保持）
+4. **80%/90%警告**: 上限接近時に警告表示
+5. **トークン上限エラー時の提案**: `/compress` または `/clear` を案内
+
+### 設定
+```yaml
+# ~/.xelyon/config.yaml
+compression:
+  auto_compress: true        # 自動圧縮を有効化（デフォルト: true）
+  threshold_percent: 80      # 自動圧縮の閾値（デフォルト: 80%）
+  threshold_tokens: 0        # トークン数ベースの閾値（0 = 使用率ベース）
+  keep_recent: 10            # 圧縮時に保持する最新メッセージ数
+```
+
+### 関連ファイル
+- `internal/agent/token_limits.go` - モデル別トークン上限
+- `internal/agent/auto_compress.go` - 自動圧縮ロジック
+- `internal/agent/compress.go` - 圧縮処理
+- `internal/agent/token_guard.go` - トークン上限エラー検出
+
 ## SystemPromptルール
 
 AIの振る舞いを定義（`internal/agent/prompts.go`）：

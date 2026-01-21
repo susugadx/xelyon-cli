@@ -40,10 +40,11 @@ provider_models:
   groq:
     default_model: meta-llama/llama-4-scout-17b-16e-instruct
 
-# 会話履歴圧縮
+# 会話履歴圧縮（Context Window管理）
 compression:
-  auto_compress: false      # 自動圧縮を有効化
-  threshold_tokens: 40000   # 自動圧縮のトークン閾値
+  auto_compress: true       # 自動圧縮を有効化（デフォルト: ON）
+  threshold_percent: 80     # 自動圧縮の使用率閾値（%）
+  threshold_tokens: 0       # トークン閾値（0 = 使用率ベース）
   keep_recent: 10           # 保持する最新メッセージ数
 
 # バックアップファイル
@@ -140,20 +141,42 @@ command_aliases:
 
 ### 会話履歴圧縮設定 (`compression`)
 
+Context Window（コンテキストウィンドウ）を管理し、トークン上限エラーを防ぎます。
+
 #### `auto_compress`
 - **型**: boolean
-- **デフォルト**: `false`
-- **説明**: トークン数が閾値を超えた際に自動圧縮を実行
+- **デフォルト**: `true`
+- **説明**: トークン使用率が閾値を超えた際に自動圧縮を実行
+- **補足**: コスト削減・エラー防止のためデフォルトON
+
+#### `threshold_percent`
+- **型**: integer
+- **デフォルト**: `80`
+- **説明**: 自動圧縮を実行する使用率閾値（%）
+- **補足**: モデルのコンテキストウィンドウに対する使用率
 
 #### `threshold_tokens`
 - **型**: integer
-- **デフォルト**: `40000`
-- **説明**: 自動圧縮を実行するトークン閾値
+- **デフォルト**: `0`
+- **説明**: 自動圧縮を実行するトークン閾値（絶対値）
+- **補足**: `0` = 使用率ベース（`threshold_percent`を使用）
 
 #### `keep_recent`
 - **型**: integer
 - **デフォルト**: `10`
 - **説明**: 圧縮時に保持する最新メッセージ数
+
+**自動圧縮の動作:**
+1. API呼び出し成功後にトークン使用率をチェック
+2. `threshold_percent`（デフォルト80%）を超えた場合に圧縮実行
+3. 圧縮時に通知を表示（無言で実行しない）
+4. 無効化方法も案内
+
+```
+🗜️ Auto-compressing history (82% threshold reached)...
+   Before: 162,000 tokens → After: 45,000 tokens
+   💡 Disable with: xelyon config set compression.auto_compress false
+```
 
 ### バックアップ設定 (`backup`)
 
@@ -619,13 +642,25 @@ xelyon  # 次回起動時にデフォルト設定が再作成される
 
 ## 使用例
 
-### 1. 自動圧縮を有効化
+### 1. 自動圧縮の閾値を変更
 
 ```yaml
 compression:
-  auto_compress: true
-  threshold_tokens: 30000
-  keep_recent: 15
+  auto_compress: true       # デフォルトON
+  threshold_percent: 70     # 70%で圧縮（デフォルト: 80%）
+  keep_recent: 15           # 最新15件を保持（デフォルト: 10）
+```
+
+### 1b. 自動圧縮を無効化
+
+```yaml
+compression:
+  auto_compress: false      # 手動で /compress を使用
+```
+
+または:
+```bash
+xelyon config set compression.auto_compress false
 ```
 
 ### 2. APIリトライを増やす

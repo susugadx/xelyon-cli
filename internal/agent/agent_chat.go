@@ -37,6 +37,9 @@ func (a *Agent) chat(input string) {
 	defer cancel()
 	a.cancelFunc = cancel
 
+	// トークン使用量の警告チェック（API呼び出し前）
+	a.checkTokenWarning()
+
 	var err error
 	if a.PlanModeEnabled {
 		// Plan Mode: 調査 → 計画 → 承認 → 実行
@@ -50,11 +53,16 @@ func (a *Agent) chat(input string) {
 		if errors.Is(err, context.Canceled) {
 			yellow.Println("\n⚠️  Response interrupted")
 		} else {
+			// トークン上限エラーの場合は提案を表示
+			handleTokenLimitError(err)
 			red.Printf("Error: %v\n", err)
 		}
 		a.SetStatus(StateAborted, "Request failed", "リクエスト失敗", "Try again", "再試行してください")
 		return
 	}
+
+	// 自動圧縮チェック（成功時）
+	a.maybeAutoCompress()
 
 	a.SetStatus(StateWaitingInput, "Ready for input", "入力待ち", "Type your request or /help", "リクエスト、または /help を入力")
 }
