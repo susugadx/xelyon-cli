@@ -109,6 +109,8 @@ func handleSpecialCommand(input string, agent *Agent) bool {
 		return handleSyncCommand(agent)
 	case "/paste":
 		return handlePasteCommand(agent, args)
+	case "/lsp":
+		return handleLSPCommand(agent, args)
 	}
 	return false
 }
@@ -374,6 +376,7 @@ func printHelp() {
   /sync               - Sync XELYON.md with current codebase (detect new/deleted files, tech changes)
   /paste, /p          - Paste mode for long text (end with empty line x2, END, or Ctrl+D)
   /plan [on|off]      - Toggle Plan Mode (investigation → plan → approval → execution)
+  /lsp [status]       - Show LSP server status (running/not started/disabled)
   /version            - Show version information
   /help               - Show this help
 
@@ -392,6 +395,59 @@ Tips:
   - AI will ask confirmation for dangerous operations
   - Use Ctrl+C to cancel current operation
   - Use /undo to revert file changes (up to 10 recent changes)`)
+}
+
+// handleLSPCommand は LSP サーバーの状態を表示
+func handleLSPCommand(agent *Agent, args []string) bool {
+	lspClient := agent.GetLSPClient()
+	if lspClient == nil {
+		yellow.Println("LSP is not enabled.")
+		yellow.Println("To enable, set 'lsp.enabled: true' in ~/.xelyon/config.yaml")
+		return true
+	}
+
+	// サブコマンド処理（デフォルトはstatus）
+	subCmd := "status"
+	if len(args) > 0 {
+		subCmd = args[0]
+	}
+
+	switch subCmd {
+	case "status":
+		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		cyan.Println("🔌 LSP Server Status")
+		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+		status := lspClient.Status()
+		if len(status) == 0 {
+			yellow.Println("  No LSP servers configured")
+			return true
+		}
+
+		for lang, state := range status {
+			var icon string
+			switch {
+			case state == "running":
+				icon = "🟢"
+			case state == "disabled":
+				icon = "🔴"
+			case strings.HasPrefix(state, "not installed"):
+				icon = "⚠️ "
+			default:
+				icon = "⚪"
+			}
+			fmt.Printf("  %s %-12s : %s\n", icon, lang, state)
+		}
+
+		fmt.Println()
+		yellow.Println("Tip: LSP servers start lazily when first used.")
+		return true
+
+	default:
+		yellow.Printf("Unknown subcommand: %s\n", subCmd)
+		yellow.Println("Usage: /lsp [status]")
+		return true
+	}
 }
 
 // handlePlanCommand は Plan Mode の切り替え

@@ -19,6 +19,7 @@ type Config struct {
 	CodeHealth      CodeHealthConfig               `yaml:"code_health,omitempty"`
 	GitStage        GitStageConfig                 `yaml:"git_stage,omitempty"`
 	PlanMode        PlanModeConfig                 `yaml:"plan_mode,omitempty"`
+	LSP             LSPConfig                      `yaml:"lsp,omitempty"`
 	// 将来の拡張用
 	// Cloud CloudConfig `yaml:"cloud,omitempty"`
 }
@@ -107,6 +108,19 @@ type GitStageConfig struct {
 // PlanModeConfig は Plan Mode の設定
 type PlanModeConfig struct {
 	MaxParallelSteps int `yaml:"max_parallel_steps"` // 並列実行数（デフォルト: 3）
+}
+
+// LSPConfig は LSP (Language Server Protocol) 連携の設定
+type LSPConfig struct {
+	Enabled bool                       `yaml:"enabled"` // LSP機能を有効化（デフォルト: true）
+	Servers map[string]LSPServerConfig `yaml:"servers,omitempty"`
+}
+
+// LSPServerConfig は個別のLSPサーバー設定
+type LSPServerConfig struct {
+	Command  string   `yaml:"command"`            // サーバーコマンド（例: gopls, vtsls）
+	Args     []string `yaml:"args,omitempty"`     // コマンド引数
+	Disabled bool     `yaml:"disabled,omitempty"` // このサーバーを無効化
 }
 
 // ProviderModelConfig はプロバイダーごとのモデル設定

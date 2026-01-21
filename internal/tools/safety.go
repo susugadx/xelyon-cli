@@ -17,18 +17,21 @@ const (
 // toolSafetyLevels は各ツールの安全性レベルを定義
 var toolSafetyLevels = map[string]ToolSafety{
 	// SafetyHigh: 読み取り専用操作
-	"read_file":    SafetyHigh,
-	"search_file":  SafetyHigh,
-	"search_code":  SafetyHigh,
-	"list_dir":     SafetyHigh,
-	"git_status":   SafetyHigh,
-	"git_log":      SafetyHigh,
-	"git_diff":     SafetyHigh,
-	"lint":         SafetyHigh,
-	"test":         SafetyHigh,
-	"web_search":   SafetyHigh,
-	"ask_question": SafetyHigh,
-	"serper":       SafetyHigh, // Web検索
+	"read_file":      SafetyHigh,
+	"search_file":    SafetyHigh,
+	"search_code":    SafetyHigh,
+	"list_dir":       SafetyHigh,
+	"git_status":     SafetyHigh,
+	"git_log":        SafetyHigh,
+	"git_diff":       SafetyHigh,
+	"lint":           SafetyHigh,
+	"test":           SafetyHigh,
+	"web_search":     SafetyHigh,
+	"ask_question":   SafetyHigh,
+	"serper":         SafetyHigh, // Web検索
+	"lsp_references": SafetyHigh, // LSP: 参照検索（読み取り専用）
+	"lsp_definition": SafetyHigh, // LSP: 定義ジャンプ（読み取り専用）
+	"lsp_hover":      SafetyHigh, // LSP: 型情報取得（読み取り専用）
 
 	// SafetyMedium: 書き込み操作（リカバリ可能）
 	"write_file":     SafetyMedium,

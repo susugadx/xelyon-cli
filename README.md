@@ -20,11 +20,12 @@ AI搭載のコーディングアシスタントCLI
 DeepSeek, OpenAI, Gemini, Claude, Ollama, Groq をシームレスに切り替え。
 ローカルLLM（Ollama）も対応で、オフラインでも使用可能。
 
-### 🛠️ 35種類の組み込みツール
+### 🛠️ 38種類の組み込みツール
 - **ファイル操作**: 読み書き、編集、コピー、移動、削除、バックアップ復元
 - **Git操作**: status, diff, add, commit, push, branch, stash
 - **コード検索**: grep検索、ファイル検索、ast-grep（構造的検索）
 - **開発支援**: テスト実行、フォーマット、リント
+- **LSP連携**: 参照検索、定義ジャンプ、ホバー情報
 
 ### 📋 確認ベースの安全設計
 - 安全なツール（ファイル読み取り等）は自動実行
@@ -56,6 +57,13 @@ DeepSeek, OpenAI, Gemini, Claude, Ollama, Groq をシームレスに切り替え
 ### 🗺️ Repo Map（30言語対応）
 Tree-sitterによる高精度なコード構造解析。
 Go, TypeScript, Python, Rust, Java, C/C++, Ruby, Kotlin, Swift, C#, Scala, PHP, Elixir, Lua, CSS/SCSS, HTML, Vue, Svelte, YAML, TOML, SQL, Bash, Markdown, Dockerfile等に対応。
+
+### 🔌 LSP連携（IDE並みのコード理解）
+Language Server Protocol (LSP) を活用してIDE並みのコード理解を実現。
+- **参照検索**: シンボルのすべての参照箇所を検索
+- **定義ジャンプ**: 関数や型の定義位置を特定
+- **ホバー情報**: 型情報やドキュメントを取得
+- **対応言語サーバー**: gopls (Go), vtsls (TypeScript/JavaScript), pyright (Python), rust-analyzer (Rust)
 
 ### 📝 プロジェクト設定（XELYON.md）
 プロジェクトごとのルールをAIが学習。
@@ -93,6 +101,7 @@ xelyon
 /help       # ヘルプ
 /undo       # 変更取り消し
 /use gemini # プロバイダー切り替え
+/lsp status # LSPサーバー状態確認
 /exit       # 終了
 ```
 

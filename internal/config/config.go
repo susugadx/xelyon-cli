@@ -106,6 +106,28 @@ func DefaultConfig() *Config {
 		PlanMode: PlanModeConfig{
 			MaxParallelSteps: 3,
 		},
+		LSP: LSPConfig{
+			Enabled: true,
+			Servers: map[string]LSPServerConfig{
+				"go": {
+					Command: "gopls",
+					Args:    []string{},
+				},
+				"typescript": {
+					Command: "vtsls",
+					Args:    []string{"--stdio"},
+				},
+				"python": {
+					Command: "pyright-langserver",
+					Args:    []string{"--stdio"},
+				},
+				"rust": {
+					Command:  "rust-analyzer",
+					Args:     []string{},
+					Disabled: true, // デフォルト無効
+				},
+			},
+		},
 	}
 }
 
@@ -183,6 +205,12 @@ func applyDefaults(cfg *Config) {
 	}
 	if cfg.PlanMode.MaxParallelSteps == 0 {
 		cfg.PlanMode.MaxParallelSteps = defaults.PlanMode.MaxParallelSteps
+	}
+	// LSP設定のデフォルト適用
+	// 注: cfg.LSP.Enabled が false の場合と、設定ファイルに LSP セクションがない場合を区別するため
+	// Servers が nil の場合のみデフォルトを適用する
+	if cfg.LSP.Servers == nil {
+		cfg.LSP = defaults.LSP
 	}
 	// Note: Diff.ContextLines は0が有効値なので、デフォルト適用は行わない
 }

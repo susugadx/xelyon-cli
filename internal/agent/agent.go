@@ -10,6 +10,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/history"
+	"github.com/susugadx/xelyon-cli/internal/lsp"
 	"github.com/susugadx/xelyon-cli/internal/mcp"
 	"github.com/susugadx/xelyon-cli/internal/memory"
 	"github.com/susugadx/xelyon-cli/internal/tools"
@@ -37,6 +38,7 @@ type Agent struct {
 	changeStack          []tools.FileChange
 	changeStorage        *history.ChangeStorage // 永続的変更履歴
 	mcpManager           *mcp.Manager
+	lspClient            *lsp.Client         // LSPクライアント
 	AutoApprove          bool                // --auto-approve フラグ
 	Stats                *SessionStats       // セッション統計情報
 	lastOutputs          []string            // 最後のAI出力履歴（最大10件）
@@ -167,6 +169,33 @@ Tool call format: {"tool": "tool_name", "args": {"arg1": "value1"}}
 		changeStorage = nil
 	}
 
+	// LSP初期化
+	var lspClient *lsp.Client
+	cfg := config.GetGlobalConfig()
+	if cfg.LSP.Enabled {
+		cwd, err := os.Getwd()
+		if err == nil {
+			lspClient = lsp.NewClient(cwd)
+			// Config形式からLSP形式に変換
+			servers := make(map[string]lsp.ServerConfig)
+			for lang, serverCfg := range cfg.LSP.Servers {
+				servers[lang] = lsp.ServerConfig{
+					Command:  serverCfg.Command,
+					Args:     serverCfg.Args,
+					Disabled: serverCfg.Disabled,
+				}
+			}
+			lspClient.SetConfigs(servers)
+			tools.LSPClient = lspClient
+
+			// LSPツールを登録
+			tools.RegisterLSPTools(tools.DefaultRegistry)
+
+			// SystemPromptにLSPツール説明を追加
+			systemPrompt += buildLSPToolsPrompt()
+		}
+	}
+
 	// GeminiプロバイダーにMCPツールを設定（Function Calling経由で呼び出し可能にする）
 	if len(mcpManager.GetTools()) > 0 {
 		if gemini, ok := provider.(*api.GeminiProvider); ok {
@@ -200,10 +229,25 @@ Tool call format: {"tool": "tool_name", "args": {"arg1": "value1"}}
 		changeStack:     []tools.FileChange{},
 		changeStorage:   changeStorage,
 		mcpManager:      mcpManager,
+		lspClient:       lspClient,
 		SystemPrompt:    systemPrompt,
 		Stats:           NewSessionStats(provider.Name()),
 		lastOutputs:     []string{},
 	}
+}
+
+// buildLSPToolsPrompt はLSPツールのSystemPrompt説明を生成
+func buildLSPToolsPrompt() string {
+	return `
+
+### LSP Tools (Code Intelligence)
+- lsp_references: {"path": "...", "line": N, "character": N} - Find all references to symbol
+- lsp_definition: {"path": "...", "line": N, "character": N} - Go to definition
+- lsp_hover: {"path": "...", "line": N, "character": N} - Get type info and documentation
+
+Note: LSP tools require the corresponding language server to be installed (e.g., gopls for Go).
+Line and character are 1-indexed (as shown in read_file output).
+`
 }
 
 // Cleanup はエージェントのリソースをクリーンアップ
@@ -211,12 +255,21 @@ func (a *Agent) Cleanup() {
 	if a.mcpManager != nil {
 		a.mcpManager.Close()
 	}
+	// LSPクリーンアップ
+	if a.lspClient != nil {
+		a.lspClient.Close()
+	}
 	// セッション保存
 	if a.storage != nil && a.session != nil {
 		if err := a.storage.Save(a.session); err != nil {
 			yellow.Printf("Warning: Failed to save session: %v\n", err)
 		}
 	}
+}
+
+// GetLSPClient はLSPクライアントを返す（コマンド用）
+func (a *Agent) GetLSPClient() *lsp.Client {
+	return a.lspClient
 }
 
 // appendHistory は History へスレッドセーフに追加（並列実行時用）

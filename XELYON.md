@@ -42,8 +42,9 @@ xelyon-cli/
 ├── internal/
 │   ├── agent/           # エージェント（対話ループ、検証）
 │   ├── api/             # LLMプロバイダー（Provider Pattern）
-│   ├── tools/           # ツール（Registry方式、35種類）
+│   ├── tools/           # ツール（Registry方式、38種類）
 │   ├── mcp/             # MCP連携（外部ツール統合）
+│   ├── lsp/             # LSP連携（言語サーバー統合）
 │   ├── repomap/         # Repo Map（Tree-sitter、30言語対応）
 │   ├── review/          # コードレビュー機能
 │   ├── refactor/        # リファクタリング機能
@@ -79,11 +80,28 @@ type Tool interface {
 }
 ```
 
+### LSP Client
+```go
+// internal/lsp/client.go
+type Client struct {
+    servers map[string]*Server      // 言語キー → サーバー
+    configs map[string]ServerConfig // 言語キー → 設定
+    rootURI string
+}
+
+// 主要メソッド
+func (c *Client) GetServerForFile(ctx, filePath) (*Server, error)  // 遅延起動
+func (c *Client) FindReferences(ctx, file, line, char) ([]Location, error)
+func (c *Client) GoToDefinition(ctx, file, line, char) ([]Location, error)
+func (c *Client) GetHover(ctx, file, line, char) (*HoverResult, error)
+func (c *Client) Status() map[string]string
+```
+
 ## ツール安全レベル
 
 | レベル | 説明 | 例 |
 |-------|------|---|
-| SafetyHigh | 読み取りのみ、自動承認可 | read_file, grep, list_files |
+| SafetyHigh | 読み取りのみ、自動承認可 | read_file, grep, list_files, lsp_* |
 | SafetyMedium | 変更あり、確認推奨 | write_file, str_replace |
 | SafetyLow | 危険、必ず確認 | bash, git_push, delete_file |
 
@@ -146,6 +164,66 @@ AIの振る舞いを定義（`internal/agent/prompts.go`）：
 4. bash実行には細心の注意
 5. エラー時は3回まで自動リトライ
 6. ユーザーの確認なしに危険な操作をしない
+
+## LSP連携
+
+### 概要
+Language Server Protocol (LSP) を活用して、IDE並みのコード理解を実現。
+AIがコードの参照、定義、型情報を正確に取得できる。
+
+### アーキテクチャ
+```
+internal/lsp/
+├── protocol.go    # JSON-RPC 2.0 & LSP型定義
+├── util.go        # URI変換、言語検出ヘルパー
+├── server.go      # 単一LSPサーバープロセス管理
+├── client.go      # 複数サーバー管理（遅延起動）
+└── client_test.go # ユニットテスト
+```
+
+### 遅延起動
+サーバーは初回使用時に起動（Agent初期化時には起動しない）。
+- `GetServerForFile()` 呼び出し時に言語を検出
+- 該当言語のサーバーがなければ起動
+- 起動済みサーバーは再利用
+
+### 設定
+```yaml
+# ~/.xelyon/config.yaml
+lsp:
+  enabled: true  # LSP連携の有効/無効
+  servers:
+    go:
+      command: gopls
+    typescript:
+      command: vtsls
+      args: ["--stdio"]
+    python:
+      command: pyright-langserver
+      args: ["--stdio"]
+    rust:
+      command: rust-analyzer
+      disabled: true  # 個別サーバーの無効化
+```
+
+### LSPツール
+| ツール | 説明 | パラメータ |
+|-------|------|----------|
+| `lsp_references` | シンボルの参照箇所検索 | path, line, character |
+| `lsp_definition` | 定義位置へジャンプ | path, line, character |
+| `lsp_hover` | 型情報・ドキュメント取得 | path, line, character |
+
+### コマンド
+```
+/lsp         # LSPステータス表示
+/lsp status  # 同上
+```
+
+### エラーハンドリング
+- **サーバー未インストール**: フォールバックメッセージを返す
+- **タイムアウト**: 30秒でタイムアウト
+- **サーバークラッシュ**: 次回使用時に再起動
+- **未対応言語**: 言語検出できない場合はエラー
 
 ## プロンプトキャッシュ
 
