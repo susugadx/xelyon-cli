@@ -142,7 +142,7 @@ func (s *Server) initialize(ctx context.Context) error {
 	}
 
 	// Send initialized notification
-	s.notify("initialized", struct{}{})
+	_ = s.notify("initialized", struct{}{})
 
 	return nil
 }
@@ -355,11 +355,11 @@ func (s *Server) Close() error {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		// Try to send shutdown request
-		s.Call(ctx, "shutdown", nil)
+		// Try to send shutdown request (ignore error during cleanup)
+		_, _ = s.Call(ctx, "shutdown", nil)
 
-		// Send exit notification
-		s.notify("exit", nil)
+		// Send exit notification (ignore error during cleanup)
+		_ = s.notify("exit", nil)
 
 		s.mu.Lock()
 		s.cleanupLocked()
@@ -373,7 +373,7 @@ func (s *Server) Close() error {
 			select {
 			case <-done:
 			case <-time.After(3 * time.Second):
-				s.cmd.Process.Kill()
+				_ = s.cmd.Process.Kill()
 			}
 		}
 	})

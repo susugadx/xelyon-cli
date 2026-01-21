@@ -73,11 +73,8 @@ func TestExtractFilesFromStep(t *testing.T) {
 				}
 			}
 
-			// If no reads expected, check gotReads is empty or only contains duplicates
-			if len(tt.wantReadFiles) == 0 && len(gotReads) > 0 {
-				// Allow false positives from regex matching partial paths
-				// as long as they're not actual valid file paths we care about
-			}
+			// Note: If no reads expected but gotReads has items, we allow false positives
+			// from regex matching partial paths as long as they're not actual valid file paths
 		})
 	}
 }
