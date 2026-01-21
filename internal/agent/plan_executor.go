@@ -13,19 +13,45 @@ import (
 
 // runImplementationPhase は実装フェーズを実行（並列実行対応）
 func (a *Agent) runImplementationPhase(ctx context.Context, plan *Plan) error {
+	// 依存関係解析器を初期化
+	analyzer := NewDependencyAnalyzer(nil) // LSP連携は将来の拡張
+	_ = analyzer.Analyze(plan.Steps)       // ファイルアクセスマップを構築
+
 	for {
 		// 並列実行可能なステップを取得
 		parallelSteps := plan.GetParallelSteps()
 
 		if len(parallelSteps) > 1 {
-			// 並列実行
-			cyan.Printf("\n⚡ Executing %d steps in parallel...\n", len(parallelSteps))
-			if err := a.executeStepsParallel(ctx, plan, parallelSteps); err != nil {
-				return err
-			}
-			// 完了したステップをマーク
-			for _, id := range parallelSteps {
-				plan.UpdateStatus(id, "completed", "")
+			// 並列実行前に競合チェック
+			conflicts := analyzer.DetectConflicts(parallelSteps, plan.Steps)
+			if len(conflicts) > 0 {
+				// 競合検出時は直列実行にフォールバック
+				yellow.Printf("\n⚠️  Conflict detected, falling back to sequential execution:\n")
+				for _, c := range conflicts {
+					yellow.Printf("   - %s (files: %v)\n", c.Message, c.Files)
+				}
+				// 直列実行
+				for _, id := range parallelSteps {
+					step := plan.GetStep(id)
+					if step == nil {
+						continue
+					}
+					cyan.Printf("\n[%d/%d] %s\n", id, len(plan.Steps), step.Description)
+					if err := a.executeStepV2(ctx, plan, step, id-1, 0, false); err != nil {
+						return err
+					}
+					plan.UpdateStatus(id, "completed", "")
+				}
+			} else {
+				// 競合なし - 並列実行
+				cyan.Printf("\n⚡ Executing %d steps in parallel...\n", len(parallelSteps))
+				if err := a.executeStepsParallel(ctx, plan, parallelSteps); err != nil {
+					return err
+				}
+				// 完了したステップをマーク
+				for _, id := range parallelSteps {
+					plan.UpdateStatus(id, "completed", "")
+				}
 			}
 		} else {
 			// 直列実行
