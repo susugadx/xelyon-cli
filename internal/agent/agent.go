@@ -48,7 +48,6 @@ type Agent struct {
 	PlanModeEnabled      bool                // Plan Mode ON/OFF（デフォルト: false）
 
 	// OpenAI Compact API 関連
-	lastResponseID  string          // 最新のレスポンス ID（Responses API用）
 	compactedItems  []api.InputItem // 圧縮済みアイテム
 	isCompactedMode bool            // 圧縮モードフラグ
 

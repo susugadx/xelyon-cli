@@ -12,7 +12,7 @@ func TestLoadProjectConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chdir(originalDir)
+	defer func() { _ = os.Chdir(originalDir) }()
 
 	t.Run("XELYON.md exists in current directory", func(t *testing.T) {
 		tmpDir := t.TempDir()
