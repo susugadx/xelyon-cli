@@ -2,18 +2,18 @@
 # https://golangci-lint.run/usage/configuration/
 
 run:
-  timeout: 5m
-  go: "1.23"
+  timeout: 5m # 5分でタイムアウト
+  go: "1.23" # Goのバージョン指定
 
 linters:
   enable:
-    - errcheck
-    - gosimple
-    - govet
-    - ineffassign
-    - staticcheck
-    - unused
+    - errcheck # エラーを無視してないかチェック
+    - gosimple # もっとシンプルに書けるところを指摘
+    - govet # Go公式の静的解析ツール
+    - ineffassign # 使われない代入を検出
+    - staticcheck # バグっぽいコードを検出
+    - unused # 未使用の変数・関数を検出
 
 issues:
   exclude-dirs:
-    - vendor
+    - vendor # vendorフォルダは無視

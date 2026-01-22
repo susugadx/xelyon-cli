@@ -1,18 +1,14 @@
 package cmd
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/susugadx/xelyon-cli/internal/agent"
-	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/file"
 	"github.com/susugadx/xelyon-cli/internal/version"
 )
 
@@ -36,111 +32,6 @@ var (
 )
 
 const projectConfigFile = "XELYON.md"
-
-// getProvider は環境変数/設定ファイルからProviderを取得
-// 優先順位: CLI flag > 環境変数 > 設定ファイル > デフォルト
-func getProvider() api.Provider {
-	// 優先順位: CLI flag > 環境変数 > 設定ファイル > デフォルト
-	providerName := providerFlag
-	debug := os.Getenv("XELYON_DEBUG") == "1"
-
-	if debug {
-		fmt.Fprintf(os.Stderr, "[DEBUG getProvider] providerFlag=%q\n", providerFlag)
-	}
-
-	if providerName == "" {
-		providerName = os.Getenv("XELYON_PROVIDER")
-		if debug {
-			fmt.Fprintf(os.Stderr, "[DEBUG getProvider] XELYON_PROVIDER=%q\n", providerName)
-		}
-	}
-	if providerName == "" {
-		cfg, err := config.LoadConfig()
-		if err != nil {
-			if debug {
-				fmt.Fprintf(os.Stderr, "[DEBUG getProvider] config.LoadConfig() error: %v\n", err)
-			}
-		}
-		if cfg != nil {
-			providerName = cfg.DefaultProvider
-			if debug {
-				fmt.Fprintf(os.Stderr, "[DEBUG getProvider] config.DefaultProvider=%q\n", providerName)
-			}
-		} else if debug {
-			fmt.Fprintf(os.Stderr, "[DEBUG getProvider] config is nil\n")
-		}
-	}
-	if providerName == "" {
-		providerName = "deepseek" // デフォルト
-		if debug {
-			fmt.Fprintf(os.Stderr, "[DEBUG getProvider] using default provider: %s\n", providerName)
-		}
-	}
-
-	if debug {
-		fmt.Fprintf(os.Stderr, "[DEBUG getProvider] final provider: %s\n", providerName)
-	}
-
-	return getProviderByName(providerName)
-}
-
-// getProviderByName はプロバイダー名から Provider インスタンスを生成
-func getProviderByName(providerName string) api.Provider {
-	switch strings.ToLower(providerName) {
-	case "deepseek":
-		apiKey := os.Getenv("DEEPSEEK_API_KEY")
-		if apiKey == "" {
-			fmt.Fprintln(os.Stderr, "Error: DEEPSEEK_API_KEY not set")
-			os.Exit(1)
-		}
-		return api.NewDeepSeekProvider(apiKey)
-
-	case "openai":
-		apiKey := os.Getenv("OPENAI_API_KEY")
-		if apiKey == "" {
-			fmt.Fprintln(os.Stderr, "Error: OPENAI_API_KEY not set")
-			os.Exit(1)
-		}
-		return api.NewOpenAIProvider(apiKey)
-
-	case "gemini":
-		apiKey := os.Getenv("GEMINI_API_KEY")
-		if apiKey == "" {
-			fmt.Fprintln(os.Stderr, "Error: GEMINI_API_KEY not set")
-			os.Exit(1)
-		}
-		return api.NewGeminiProvider(apiKey)
-
-	case "claude", "anthropic":
-		apiKey := os.Getenv("ANTHROPIC_API_KEY")
-		if apiKey == "" {
-			fmt.Fprintln(os.Stderr, "Error: ANTHROPIC_API_KEY not set")
-			os.Exit(1)
-		}
-		return api.NewClaudeProvider(apiKey)
-
-	case "ollama":
-		baseURL := os.Getenv("OLLAMA_BASE_URL")
-		if baseURL == "" {
-			baseURL = "http://localhost:11434"
-		}
-		return api.NewOllamaProvider(baseURL)
-
-	case "groq":
-		apiKey := os.Getenv("GROQ_API_KEY")
-		if apiKey == "" {
-			fmt.Fprintln(os.Stderr, "Error: GROQ_API_KEY not set")
-			os.Exit(1)
-		}
-		return api.NewGroqProvider(apiKey)
-
-	default:
-		fmt.Fprintf(os.Stderr, "Error: Unknown provider: %s\n", providerName)
-		fmt.Fprintln(os.Stderr, "Supported providers: deepseek, openai, gemini, claude, ollama, groq")
-		os.Exit(1)
-		return nil
-	}
-}
 
 func loadProjectConfig() string {
 	dir, err := os.Getwd()
@@ -281,87 +172,6 @@ Examples:
 			runLegacyMode(args[0], model, provider)
 		}
 	},
-}
-
-// runLegacyMode は従来の1ショットモードを実行
-func runLegacyMode(query string, model string, provider api.Provider) {
-	var contextParts []string
-
-	projectConfig := loadProjectConfig()
-	if projectConfig != "" {
-		fmt.Println("📋 XELYON.md を読み込み")
-		contextParts = append(contextParts, projectConfig)
-	}
-
-	if len(files) > 0 {
-		fmt.Println("📄 ファイル読み込み中...")
-		fileContent, err := file.ReadFiles(files)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "エラー: %v\n", err)
-			os.Exit(1)
-		}
-		contextParts = append(contextParts, fileContent)
-		fmt.Printf("   %d 件のファイルを読み込み\n", len(files))
-	}
-
-	if userID != "" {
-		fmt.Println("🔍 RAG検索中...")
-		results, err := api.SearchRAG(query, userID, 3)
-		if err == nil && results.Count > 0 {
-			var contents []string
-			for _, r := range results.Results {
-				contents = append(contents, fmt.Sprintf("[%s]\n%s", r.DocumentTitle, r.Content))
-			}
-			contextParts = append(contextParts, "## RAG検索結果:\n"+strings.Join(contents, "\n\n"))
-			fmt.Printf("   %d 件のドキュメントを参照\n", results.Count)
-		}
-	}
-
-	fmt.Println("🤖 AI回答:")
-	systemPrompt := strings.Join(contextParts, "\n\n---\n\n")
-	history := []api.Message{{Role: "user", Content: query}}
-	ctx := context.Background()
-	response, err := provider.ChatWithTools(ctx, systemPrompt, history, model)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "\nエラー: %v\n", err)
-		os.Exit(1)
-	}
-
-	if output != "" {
-		code := file.ExtractCodeBlock(response)
-		if code != "" {
-			if file.ConfirmApply(output, code) {
-				err := file.WriteFile(output, code)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "エラー: %v\n", err)
-					os.Exit(1)
-				}
-				fmt.Println("✅ ファイルを作成しました:", output)
-			} else {
-				fmt.Println("❌ キャンセルしました")
-			}
-		} else {
-			fmt.Println("⚠️  コードブロックが見つかりませんでした")
-		}
-	}
-
-	if edit && len(files) == 1 && output == "" {
-		code := file.ExtractCodeBlock(response)
-		if code != "" {
-			if file.ConfirmApply(files[0], code) {
-				err := file.WriteFile(files[0], code)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "エラー: %v\n", err)
-					os.Exit(1)
-				}
-				fmt.Println("✅ ファイルを更新しました")
-			} else {
-				fmt.Println("❌ キャンセルしました")
-			}
-		} else {
-			fmt.Println("⚠️  コードブロックが見つかりませんでした")
-		}
-	}
 }
 
 func init() {

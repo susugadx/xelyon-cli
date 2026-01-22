@@ -37,6 +37,10 @@ coverage.txt
 # Test binary
 *.test
 
+# Temporary test files
+test.js
+test.txt
+
 # Go workspace
 go.work
 go.work.sum
