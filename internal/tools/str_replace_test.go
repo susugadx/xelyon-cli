@@ -234,7 +234,7 @@ func TestExecuteStrReplace_WhitespaceNormalization(t *testing.T) {
 	}
 
 	// ファイルが変更されていることを確認
-	content, _ := testutil.ReadFile(t, testFile)
+	content := testutil.ReadFile(t, testFile)
 	if content == originalContent {
 		t.Error("File should be modified by str_replace")
 	}
@@ -301,7 +301,7 @@ func TestExecuteStrReplace_LargeFile(t *testing.T) {
 	}
 
 	// 置換されていることを確認
-	content, _ := testutil.ReadFile(t, testFile)
+	content := testutil.ReadFile(t, testFile)
 	if !strings.Contains(content, "REPLACED_LINE") {
 		t.Error("File should contain REPLACED_LINE")
 	}

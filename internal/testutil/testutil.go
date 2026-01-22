@@ -77,10 +77,14 @@ func SetupTempHome(t *testing.T) string {
 }
 
 // ReadFile はファイルを読み込むヘルパー
-func ReadFile(t *testing.T, path string) (string, error) {
+// エラー時は t.Fatalf() でテストを失敗させる
+func ReadFile(t *testing.T, path string) string {
 	t.Helper()
 	content, err := os.ReadFile(path)
-	return string(content), err
+	if err != nil {
+		t.Fatalf("Failed to read file %s: %v", path, err)
+	}
+	return string(content)
 }
 
 // FileExists はファイルが存在するかチェック（boolを返す）

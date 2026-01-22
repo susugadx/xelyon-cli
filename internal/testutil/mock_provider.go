@@ -6,7 +6,12 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 )
 
-// MockProvider implements api.Provider for testing purposes
+// Compile-time interface verification
+var _ api.Provider = (*MockProvider)(nil)
+
+// MockProvider implements api.Provider for testing purposes.
+// It provides configurable behavior through function fields and tracks
+// method calls for test assertions.
 type MockProvider struct {
 	// NameFunc allows customizing the Name() return value
 	NameFunc func() string
