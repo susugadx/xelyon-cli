@@ -42,12 +42,35 @@ export OPENAI_API_KEY=sk-...
 xelyon --provider openai --model gpt-4
 xelyon --provider openai --model gpt-4-turbo
 xelyon --provider openai --model gpt-5.2
+xelyon --provider openai --model gpt-5.2-codex
 ```
 
 **特徴:**
 - 高品質な回答
 - GPT-4Vで画像入力対応
 - 豊富なモデルラインナップ
+
+#### Responses API / Codex モデル
+
+`gpt-5.2-codex` などの Codex モデルは自動的に Responses API を使用します。
+
+**対応モデル:**
+- `gpt-5.2-codex`
+- `gpt-5.1-codex`
+- `gpt-5.1-codex-max`
+- `gpt-5-codex`
+
+モデル名で自動判定されるため、追加設定は不要です。
+
+**Responses API の特徴:**
+- 会話コンテキストをサーバー側で管理
+- Compact API による効率的な履歴圧縮
+- ZDR（Zero Data Retention）対応
+
+**使用例:**
+```bash
+xelyon --provider openai --model gpt-5.2-codex
+```
 
 ### 3. Gemini
 
@@ -235,3 +258,5 @@ APIプロバイダーのダッシュボードで使用状況とレート制限�
 
 - [コマンド一覧](commands.md)
 - [設定リファレンス](config.md)
+- [LSP連携](lsp.md)
+- [MCP連携](mcp.md)

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 // CompressHistory は会話履歴を圧縮する
@@ -96,8 +97,8 @@ func buildSummaryPrompt(messages []api.Message) string {
 
 		// 長いメッセージは省略
 		content := msg.Content
-		if len(content) > 500 {
-			content = content[:500] + "... (省略)"
+		if len(content) > config.MessageTruncateLen {
+			content = content[:config.MessageTruncateLen] + "... (省略)"
 		}
 
 		sb.WriteString(fmt.Sprintf("[%s]\n%s\n\n", role, content))

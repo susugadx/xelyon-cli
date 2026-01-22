@@ -1,0 +1,153 @@
+# XELYON CLI 設定例
+# このファイルは DefaultConfig() から自動生成されました
+# 生成コマンド: go run scripts/gen-config-example.go
+#
+# 設定ファイルの場所: ~/.xelyon/config.yaml
+# 初回起動時に自動的に作成されます
+#
+# 詳細は docs/config.md を参照してください
+
+default_provider: deepseek
+default_model: deepseek-coder
+provider_models:
+    claude:
+        default_model: claude-sonnet-4-5-20250514
+    deepseek:
+        default_model: deepseek-coder
+    gemini:
+        default_model: gemini-2.5-flash
+    groq:
+        default_model: meta-llama/llama-4-scout-17b-16e-instruct
+    ollama:
+        default_model: qwen2.5-coder:7b
+    openai:
+        default_model: gpt-5.2
+compression:
+    auto_compress: true
+    threshold_tokens: 0
+    threshold_percent: 80
+    keep_recent: 10
+    prefer_compact_api: true
+backup:
+    max_generations: 5
+loop_detection:
+    threshold: 3
+api_retry:
+    count: 3
+    initial_delay: 1
+    max_delay: 30
+    timeout: 300
+diff:
+    context_lines: 10
+tool_confirm:
+    auto_approve_safe: true
+    auto_approve_medium: false
+paste:
+    max_lines: 10000
+    max_bytes: 1048576
+    timeout_seconds: 60
+streaming:
+    idle_timeout_seconds: 30
+bash:
+    safety_level: moderate
+    safe_commands: []
+    allow_pipe: true
+    allow_redirect: false
+    allow_inline_edit: false
+code_health:
+    enabled: true
+    max_file_lines: 300
+    max_function_lines: 50
+    auto_suggest: true
+    on_change:
+        - check_file_size
+        - check_function_size
+git_stage:
+    batch_confirm: true
+plan_mode:
+    max_parallel_steps: 3
+lsp:
+    enabled: true
+    servers:
+        bash:
+            command: bash-language-server
+            args:
+                - start
+        c:
+            command: clangd
+        cpp:
+            command: clangd
+        csharp:
+            command: csharp-ls
+        css:
+            command: vscode-css-language-server
+            args:
+                - --stdio
+        elixir:
+            command: elixir-ls
+        go:
+            command: gopls
+        html:
+            command: vscode-html-language-server
+            args:
+                - --stdio
+        java:
+            command: jdtls
+        kotlin:
+            command: kotlin-language-server
+        lua:
+            command: lua-language-server
+        markdown:
+            command: marksman
+            args:
+                - server
+        php:
+            command: intelephense
+            args:
+                - --stdio
+        python:
+            command: pyright-langserver
+            args:
+                - --stdio
+        ruby:
+            command: solargraph
+            args:
+                - stdio
+        rust:
+            command: rust-analyzer
+        scala:
+            command: metals
+        sql:
+            command: sqls
+        svelte:
+            command: svelteserver
+            args:
+                - --stdio
+        swift:
+            command: sourcekit-lsp
+        toml:
+            command: taplo
+            args:
+                - lsp
+                - stdio
+        typescript:
+            command: vtsls
+            args:
+                - --stdio
+        vue:
+            command: vue-language-server
+            args:
+                - --stdio
+        yaml:
+            command: yaml-language-server
+            args:
+                - --stdio
+openai:
+    responses_api_models:
+        - gpt-5.2-codex
+        - gpt-5.1-codex
+        - gpt-5.1-codex-max
+        - gpt-5-codex
+thinking:
+    enabled: false
+    level: medium

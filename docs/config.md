@@ -21,105 +21,157 @@ XELYON CLIの設定方法と全オプションのリファレンスです。
 
 ### 完全な設定例
 
+以下は全ての設定項目とデフォルト値を含む完全な設定例です。
+この内容は `DefaultConfig()` から自動生成されています（`make gen-all` で更新）。
+
+<!-- CONFIG-EXAMPLE-START -->
 ```yaml
-# プロバイダー・モデル設定
 default_provider: deepseek
 default_model: deepseek-coder
-
 provider_models:
-  deepseek:
-    default_model: deepseek-coder
-  openai:
-    default_model: gpt-5.2
-  gemini:
-    default_model: gemini-2.5-flash
-  claude:
-    default_model: claude-sonnet-4-5-20250514
-  ollama:
-    default_model: qwen2.5-coder:7b
-  groq:
-    default_model: meta-llama/llama-4-scout-17b-16e-instruct
-
-# 会話履歴圧縮（Context Window管理）
+    claude:
+        default_model: claude-sonnet-4-5-20250514
+    deepseek:
+        default_model: deepseek-coder
+    gemini:
+        default_model: gemini-2.5-flash
+    groq:
+        default_model: meta-llama/llama-4-scout-17b-16e-instruct
+    ollama:
+        default_model: qwen2.5-coder:7b
+    openai:
+        default_model: gpt-5.2
 compression:
-  auto_compress: true       # 自動圧縮を有効化（デフォルト: ON）
-  threshold_percent: 80     # 自動圧縮の使用率閾値（%）
-  threshold_tokens: 0       # トークン閾値（0 = 使用率ベース）
-  keep_recent: 10           # 保持する最新メッセージ数
-  prefer_compact_api: true  # OpenAI Compact API を優先（デフォルト: ON）
-
-# バックアップファイル
+    auto_compress: true
+    threshold_tokens: 0
+    threshold_percent: 80
+    keep_recent: 10
+    prefer_compact_api: true
 backup:
-  max_generations: 5        # 保持する世代数
-
-# ループ検知
+    max_generations: 5
 loop_detection:
-  threshold: 3              # 同じツール呼び出しの許容回数
-
-# APIリトライ
+    threshold: 3
 api_retry:
-  count: 3                  # リトライ回数
-  initial_delay: 1          # 初回待機秒数
-  max_delay: 30             # 最大待機秒数
-  timeout: 300              # タイムアウト秒（5分）
-
-# 差分表示
+    count: 3
+    initial_delay: 1
+    max_delay: 30
+    timeout: 300
 diff:
-  context_lines: 10         # 差分表示行数（0で省略なし）
-
-# ストリーミング設定
-streaming:
-  idle_timeout_seconds: 30  # アイドルタイムアウト秒（データ受信がない場合）
-
-# ツール確認
+    context_lines: 10
 tool_confirm:
-  auto_approve_safe: true    # SafetyHigh（読み取り）は確認なしで実行
-  auto_approve_medium: false # SafetyMedium（書き込み）は確認必要（デフォルト）
-
-# プロンプトキャッシュ
-prompt_cache:
-  enabled: true             # キャッシュを有効化（推奨）
-  max_entries: 100          # 最大エントリ数
-  ttl_seconds: 300          # TTL（秒）
-
-# ペーストモード
+    auto_approve_safe: true
+    auto_approve_medium: false
 paste:
-  max_lines: 10000          # 最大行数
-  max_bytes: 1048576        # 最大バイト数（1MB）
-  timeout_seconds: 60       # タイムアウト秒
-
-# コード健全性チェック
-code_health:
-  enabled: true             # 有効化
-  max_file_lines: 300       # ファイル行数上限
-  max_function_lines: 50    # 関数行数上限
-  auto_suggest: true        # 自動提案
-
-# bashツール設定
+    max_lines: 10000
+    max_bytes: 1048576
+    timeout_seconds: 60
+streaming:
+    idle_timeout_seconds: 30
 bash:
-  safety_level: moderate      # strict, moderate, permissive
-  safe_commands:              # 追加の安全コマンド
-    - "npm run"
-    - "npm test"
-    - "cargo build"
-    - "make"
-  allow_pipe: true            # パイプを許可
-  allow_redirect: false       # リダイレクトを許可
-  allow_inline_edit: false    # sed -i等を許可
-
-# git_add設定
+    safety_level: moderate
+    safe_commands: []
+    allow_pipe: true
+    allow_redirect: false
+    allow_inline_edit: false
+code_health:
+    enabled: true
+    max_file_lines: 300
+    max_function_lines: 50
+    auto_suggest: true
+    on_change:
+        - check_file_size
+        - check_function_size
 git_stage:
-  batch_confirm: true         # 複数ファイルのバッチ確認UI
-
-# Plan Mode設定
+    batch_confirm: true
 plan_mode:
-  max_parallel_steps: 3       # 並列実行数（デフォルト: 3）
-
-# コマンドエイリアス
-command_aliases:
-  t: test
-  r: review
+    max_parallel_steps: 3
+lsp:
+    enabled: true
+    servers:
+        bash:
+            command: bash-language-server
+            args:
+                - start
+        c:
+            command: clangd
+        cpp:
+            command: clangd
+        csharp:
+            command: csharp-ls
+        css:
+            command: vscode-css-language-server
+            args:
+                - --stdio
+        elixir:
+            command: elixir-ls
+        go:
+            command: gopls
+        html:
+            command: vscode-html-language-server
+            args:
+                - --stdio
+        java:
+            command: jdtls
+        kotlin:
+            command: kotlin-language-server
+        lua:
+            command: lua-language-server
+        markdown:
+            command: marksman
+            args:
+                - server
+        php:
+            command: intelephense
+            args:
+                - --stdio
+        python:
+            command: pyright-langserver
+            args:
+                - --stdio
+        ruby:
+            command: solargraph
+            args:
+                - stdio
+        rust:
+            command: rust-analyzer
+        scala:
+            command: metals
+        sql:
+            command: sqls
+        svelte:
+            command: svelteserver
+            args:
+                - --stdio
+        swift:
+            command: sourcekit-lsp
+        toml:
+            command: taplo
+            args:
+                - lsp
+                - stdio
+        typescript:
+            command: vtsls
+            args:
+                - --stdio
+        vue:
+            command: vue-language-server
+            args:
+                - --stdio
+        yaml:
+            command: yaml-language-server
+            args:
+                - --stdio
+openai:
+    responses_api_models:
+        - gpt-5.2-codex
+        - gpt-5.1-codex
+        - gpt-5.1-codex-max
+        - gpt-5-codex
+thinking:
+    enabled: false
+    level: medium
 ```
+<!-- CONFIG-EXAMPLE-END -->
 
 ## 設定項目詳細
 
@@ -355,6 +407,78 @@ plan_mode:
 - **調査フェーズ**: AI が複数の SafetyHigh ツール（read_file 等）を返した場合、バッチでまとめて並列実行
 - **実装フェーズ**: `depends_on` が同じステップ（依存関係のないステップ）をバッチでまとめて並列実行
 - ループ検知: 同じツールセットが3回連続で返された場合はエラー終了
+
+### OpenAI設定 (`openai`)
+
+OpenAI固有の設定を行います。
+
+```yaml
+openai:
+  responses_api_models:
+    - gpt-5.2-codex
+    - gpt-5.1-codex
+    - gpt-5.1-codex-max
+    - gpt-5-codex
+```
+
+#### `responses_api_models`
+- **型**: string[]
+- **デフォルト**: `["gpt-5.2-codex", "gpt-5.1-codex", "gpt-5.1-codex-max", "gpt-5-codex"]`
+- **説明**: Responses API を使用するモデルのリスト
+
+**動作:**
+- リストに含まれるモデル名が指定された場合、自動的に Responses API (`/v1/responses`) を使用
+- それ以外のモデルは従来の Chat Completions API (`/v1/chat/completions`) を使用
+- モデル名の一部一致で判定（`gpt-5.2-codex-max` も対象になる）
+
+**Responses API の特徴:**
+- 会話コンテキストをサーバー側で管理
+- Compact API による効率的な圧縮
+- ZDR（Zero Data Retention）対応
+
+### LSP連携設定 (`lsp`)
+
+Language Server Protocol (LSP) を使用したコード解析の設定を行います。
+
+詳細は [LSP連携ガイド](lsp.md) を参照してください。
+
+```yaml
+lsp:
+  enabled: true
+  servers:
+    go:
+      command: gopls
+    typescript:
+      command: vtsls
+      args: ["--stdio"]
+    python:
+      command: pyright-langserver
+      args: ["--stdio"]
+    rust:
+      command: rust-analyzer
+      disabled: true
+```
+
+#### `enabled`
+- **型**: boolean
+- **デフォルト**: `true`
+- **説明**: LSP連携の有効/無効
+
+#### `servers`
+- **型**: map
+- **説明**: 言語ごとのLSPサーバー設定
+
+**サーバー設定項目:**
+
+| 項目 | 型 | 説明 |
+|-----|---|------|
+| `command` | string | LSPサーバーのコマンド |
+| `args` | string[] | コマンドに渡す引数（オプション） |
+| `disabled` | boolean | このサーバーを無効化（オプション） |
+
+**対応言語:** Go, TypeScript/JavaScript, Python, Rust, Java, C/C++, Ruby, Kotlin, Swift, C#, Scala, PHP, Elixir, Lua, CSS/SCSS, HTML, Vue, Svelte, YAML, TOML, SQL, Bash, Markdown（23言語）
+
+**遅延起動:** LSPサーバーは初回使用時に起動します（XELYON起動時には起動しません）。
 
 ### Extended Thinking設定 (`thinking`)
 
@@ -781,3 +905,5 @@ api_retry:
 
 - [コマンド一覧](commands.md)
 - [プロバイダー設定](providers.md)
+- [LSP連携](lsp.md)
+- [MCP連携](mcp.md)

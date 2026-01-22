@@ -275,6 +275,15 @@ func (a *Agent) appendHistory(msg api.Message) {
 	a.History = append(a.History, msg)
 }
 
+// getHistorySnapshot は History のスナップショットをスレッドセーフに取得（並列実行時用）
+func (a *Agent) getHistorySnapshot() []api.Message {
+	a.historyMu.Lock()
+	defer a.historyMu.Unlock()
+	snapshot := make([]api.Message, len(a.History))
+	copy(snapshot, a.History)
+	return snapshot
+}
+
 // appendChange は changeStack へスレッドセーフに追加（並列実行時用）
 func (a *Agent) appendChange(change tools.FileChange) {
 	a.changeStackMu.Lock()

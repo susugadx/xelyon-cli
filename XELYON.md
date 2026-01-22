@@ -456,6 +456,38 @@ go test -cover ./...
 golangci-lint run
 ```
 
+## ドキュメント自動生成
+
+設定を追加・変更した場合は、以下のコマンドでドキュメントを更新してください。
+
+```bash
+# 設定例とドキュメントを全て自動生成
+make gen-all
+
+# 個別に実行
+make gen-config  # config.yaml.example を更新
+make gen-docs    # docs/config.md の設定例を更新
+```
+
+### 仕組み
+
+| コマンド | 入力 | 出力 |
+|---------|------|------|
+| `make gen-config` | `DefaultConfig()` | `config.yaml.example` |
+| `make gen-docs` | `config.yaml.example` | `docs/config.md` の設定例セクション |
+
+`docs/config.md` はマーカーベースの自動更新:
+- `<!-- CONFIG-EXAMPLE-START -->` ... `<!-- CONFIG-EXAMPLE-END -->` 間が自動更新
+- 詳細説明部分は手動のまま保持
+
+### 設定追加時の手順
+
+1. `internal/config/config_types.go` にフィールド追加（コメント付き）
+2. `internal/config/config.go` の `DefaultConfig()` にデフォルト値追加
+3. `make gen-all` 実行
+4. `docs/config.md` の設定例が自動更新される
+5. 詳細説明セクションに新しい設定の説明を追加（手動）
+
 ## リリース
 
 ```bash

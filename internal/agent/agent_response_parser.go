@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
@@ -95,9 +96,9 @@ func (a *Agent) handleNormalResponse(response string) {
 		a.Stats.AssistantMessages++
 	}
 
-	// 最後の出力を記録（最大10件）
+	// 最後の出力を記録（最大保存数: config.MaxLastOutputs）
 	a.lastOutputs = append(a.lastOutputs, response)
-	if len(a.lastOutputs) > 10 {
+	if len(a.lastOutputs) > config.MaxLastOutputs {
 		a.lastOutputs = a.lastOutputs[1:]
 	}
 

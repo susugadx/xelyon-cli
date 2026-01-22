@@ -316,6 +316,41 @@ Extended Thinking（推論モード）を切り替えます。複雑なタスク
 
 **注意**: Extended Thinking はトークン消費量が増加します。
 
+### `/lsp`
+
+LSPサーバーのステータスを表示・管理します。
+
+```
+> /lsp              # ステータス表示
+> /lsp status       # 同上
+> /lsp detect       # プロジェクト内の言語を検出
+> /lsp install go   # 指定言語のLSPサーバーをインストール
+> /lsp install all  # 未インストールの全サーバーをインストール
+```
+
+**出力例:**
+```
+LSP Server Status / LSPサーバー状態
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ✅ Go: gopls (running)
+  ✅ TypeScript: vtsls (running)
+  ⏸️ Python: pyright (installed, idle)
+  ❌ Rust: rust-analyzer (not installed)
+```
+
+**サブコマンド:**
+
+| コマンド | 説明 |
+|---------|------|
+| `/lsp` または `/lsp status` | 現在のLSPサーバー状態を表示 |
+| `/lsp detect` | プロジェクト内の言語を検出して表示 |
+| `/lsp install <言語>` | 指定言語のLSPサーバーをインストール |
+| `/lsp install all` | 未インストールの全サーバーをインストール |
+
+**対応言語:** Go, TypeScript/JavaScript, Python, Rust, Java, C/C++, Ruby, Kotlin, Swift, C#, Scala, PHP, Elixir, Lua, CSS/SCSS, HTML, Vue, Svelte, YAML, TOML, SQL, Bash, Markdown（23言語）
+
+詳細は [LSP連携ガイド](lsp.md) を参照してください。
+
 ### `/version`
 
 XELYONのバージョン情報を表示します。
@@ -523,6 +558,34 @@ AIが自動で以下のツールを使用します。ユーザーが直接呼び
 | `format` | コードフォーマット | `path` |
 | `lint` | Lint実行 | `path`, `auto_fix` |
 
+### LSP（言語サーバー）
+
+Language Server Protocol を使用したコード解析ツールです。
+
+| ツール名 | 説明 | 主な引数 |
+|---------|------|---------|
+| `lsp_references` | シンボルの参照箇所検索 | `path`, `line`, `character` |
+| `lsp_definition` | 定義位置へジャンプ | `path`, `line`, `character` |
+| `lsp_hover` | 型情報・ドキュメント取得 | `path`, `line`, `character` |
+| `lsp_diagnostics` | ファイルのエラー・警告取得 | `path` |
+| `lsp_rename` | リネーム変更箇所プレビュー | `path`, `line`, `character`, `new_name` |
+
+**使用例:**
+```bash
+> handleUserの参照箇所を探して
+# → lsp_references が実行される
+
+> UserServiceの定義を見せて
+# → lsp_definition が実行される
+
+> main.goのエラーを確認して
+# → lsp_diagnostics が実行される
+```
+
+**注意**: LSPツールを使用するには対応するLSPサーバーがインストールされている必要があります。`/lsp detect` で未インストールのサーバーを確認し、`/lsp install <言語>` でインストールしてください。
+
+詳細は [LSP連携ガイド](lsp.md) を参照してください。
+
 ### 使用例
 
 AIは自然言語の指示に基づいてツールを自動選択します。
@@ -622,4 +685,5 @@ xelyon
 
 - [プロバイダー設定](providers.md)
 - [設定リファレンス](config.md)
+- [LSP連携](lsp.md)
 - [MCP連携](mcp.md)

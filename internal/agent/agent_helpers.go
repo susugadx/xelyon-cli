@@ -3,6 +3,7 @@ package agent
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
@@ -103,12 +104,12 @@ func loadProjectConfig() string {
 		return "" // Cannot locate XELYON.md without working directory
 	}
 	for {
-		path := dir + "/XELYON.md"
+		path := filepath.Join(dir, "XELYON.md")
 		if content, err := os.ReadFile(path); err == nil {
 			return string(content)
 		}
-		parent := dir[:strings.LastIndex(dir, "/")]
-		if parent == dir || parent == "" {
+		parent := filepath.Dir(dir)
+		if parent == dir {
 			break
 		}
 		dir = parent

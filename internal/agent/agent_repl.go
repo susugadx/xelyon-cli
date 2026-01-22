@@ -67,40 +67,7 @@ func RunInteractive(model string, provider api.Provider, autoApprove bool) {
 	defer mlReader.DisableBracketedPaste()
 	agent.mlReader = mlReader // ペーストモードで共有するため
 
-	for {
-		// AI出力後に溜まった入力をクリア（出力中のEnter押下を無視）
-		mlReader.FlushInput()
-
-		// Status / 状態表示（常にプロンプト直前に表示）
-		agent.PrintStatusFooter()
-
-		input, err := mlReader.ReadInput("\n> ")
-		if err != nil {
-			break
-		}
-
-		input = strings.TrimSpace(input)
-		if input == "" {
-			continue
-		}
-
-		// 特殊コマンド
-		if handleSpecialCommand(input, agent) {
-			continue
-		}
-
-		// 画像入力チェック: image:/path/to/file.png 形式を検出
-		if strings.Contains(input, "image:") {
-			textPart, image := parseImageInput(input)
-			if image != nil {
-				agent.chatWithImage(textPart, image)
-				continue
-			}
-		}
-
-		// AIに送信
-		agent.chat(input)
-	}
+	runREPLLoop(agent, mlReader)
 }
 
 // RunInteractiveWithResume は前回のセッションを再開してインタラクティブモードを実行
@@ -168,7 +135,15 @@ func RunInteractiveWithResume(model string, provider api.Provider, autoApprove b
 	defer mlReader.DisableBracketedPaste()
 	agent.mlReader = mlReader // ペーストモードで共有するため
 
+	runREPLLoop(agent, mlReader)
+}
+
+// runREPLLoop は共通のREPLループを実行（RunInteractive/RunInteractiveWithResumeで共用）
+func runREPLLoop(agent *Agent, mlReader *ui.MultilineReader) {
 	for {
+		// AI出力後に溜まった入力をクリア（出力中のEnter押下を無視）
+		mlReader.FlushInput()
+
 		// Status / 状態表示（常にプロンプト直前に表示）
 		agent.PrintStatusFooter()
 
@@ -182,11 +157,12 @@ func RunInteractiveWithResume(model string, provider api.Provider, autoApprove b
 			continue
 		}
 
+		// 特殊コマンド
 		if handleSpecialCommand(input, agent) {
 			continue
 		}
 
-		// 画像入力チェック
+		// 画像入力チェック: image:/path/to/file.png 形式を検出
 		if strings.Contains(input, "image:") {
 			textPart, image := parseImageInput(input)
 			if image != nil {
@@ -195,6 +171,7 @@ func RunInteractiveWithResume(model string, provider api.Provider, autoApprove b
 			}
 		}
 
+		// AIに送信
 		agent.chat(input)
 	}
 }
