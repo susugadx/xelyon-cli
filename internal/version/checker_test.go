@@ -75,27 +75,27 @@ func TestParseVersion(t *testing.T) {
 	tests := []struct {
 		name string
 		v    string
-		want [3]int
+		want [versionParts]int
 	}{
 		{
 			name: "standard version",
 			v:    "0.31.0",
-			want: [3]int{0, 31, 0},
+			want: [versionParts]int{0, 31, 0},
 		},
 		{
 			name: "version with dev suffix",
 			v:    "0.31.0-dev",
-			want: [3]int{0, 31, 0},
+			want: [versionParts]int{0, 31, 0},
 		},
 		{
 			name: "version with build metadata",
 			v:    "1.2.3+20130313144700",
-			want: [3]int{1, 2, 3},
+			want: [versionParts]int{1, 2, 3},
 		},
 		{
 			name: "two-part version",
 			v:    "1.0",
-			want: [3]int{1, 0, 0},
+			want: [versionParts]int{1, 0, 0},
 		},
 	}
 
@@ -130,19 +130,70 @@ func TestFetchLatestVersion(t *testing.T) {
 
 		// Temporarily override the API URL
 		oldURL := githubAPIURL
+		githubAPIURL = server.URL
 		defer func() {
-			// Restore (note: this won't work due to const, but demonstrates intent)
-			_ = oldURL
+			githubAPIURL = oldURL
 		}()
 
-		// For testing, we need to modify the function to accept URL as parameter
-		// For now, test with the real implementation
-		t.Skip("Skipping as githubAPIURL is const - need to refactor for testability")
+		version, err := fetchLatestVersion()
+		if err != nil {
+			t.Fatalf("fetchLatestVersion() error = %v", err)
+		}
+		if version != "v0.32.0" {
+			t.Errorf("fetchLatestVersion() = %q, want %q", version, "v0.32.0")
+		}
 	})
 
 	t.Run("network error", func(t *testing.T) {
 		// Override with invalid URL
-		t.Skip("Skipping as githubAPIURL is const - need to refactor for testability")
+		oldURL := githubAPIURL
+		githubAPIURL = "http://localhost:1" // Invalid port
+		defer func() {
+			githubAPIURL = oldURL
+		}()
+
+		_, err := fetchLatestVersion()
+		if err == nil {
+			t.Error("fetchLatestVersion() expected error for invalid URL")
+		}
+	})
+
+	t.Run("non-200 status code", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer server.Close()
+
+		oldURL := githubAPIURL
+		githubAPIURL = server.URL
+		defer func() {
+			githubAPIURL = oldURL
+		}()
+
+		_, err := fetchLatestVersion()
+		if err == nil {
+			t.Error("fetchLatestVersion() expected error for non-200 status")
+		}
+	})
+
+	t.Run("invalid JSON response", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("invalid json"))
+		}))
+		defer server.Close()
+
+		oldURL := githubAPIURL
+		githubAPIURL = server.URL
+		defer func() {
+			githubAPIURL = oldURL
+		}()
+
+		_, err := fetchLatestVersion()
+		if err == nil {
+			t.Error("fetchLatestVersion() expected error for invalid JSON")
+		}
 	})
 }
 
@@ -185,31 +236,59 @@ func TestShouldCheck(t *testing.T) {
 }
 
 func TestUpdateLastCheckTime(t *testing.T) {
-	tmpDir := t.TempDir()
-	checkFile := filepath.Join(tmpDir, versionCheckFile)
+	t.Run("successful update", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		checkFile := filepath.Join(tmpDir, versionCheckFile)
 
-	updateLastCheckTime(tmpDir)
+		err := updateLastCheckTime(tmpDir)
+		if err != nil {
+			t.Fatalf("updateLastCheckTime() error = %v", err)
+		}
 
-	// Check if file was created
-	if _, err := os.Stat(checkFile); os.IsNotExist(err) {
-		t.Error("updateLastCheckTime() did not create check file")
+		// Check if file was created
+		if _, err := os.Stat(checkFile); os.IsNotExist(err) {
+			t.Error("updateLastCheckTime() did not create check file")
+		}
+
+		// Check if file contains timestamp
+		content, err := os.ReadFile(checkFile)
+		if err != nil {
+			t.Fatalf("Failed to read check file: %v", err)
+		}
+
+		if len(content) == 0 {
+			t.Error("updateLastCheckTime() created empty check file")
+		}
+
+		// Verify it's a valid RFC3339 timestamp
+		_, err = time.Parse(time.RFC3339, string(content))
+		if err != nil {
+			t.Errorf("updateLastCheckTime() wrote invalid timestamp: %v", err)
+		}
+	})
+
+	t.Run("creates parent directory", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		nestedDir := filepath.Join(tmpDir, "nested", "dir")
+
+		err := updateLastCheckTime(nestedDir)
+		if err != nil {
+			t.Fatalf("updateLastCheckTime() error = %v", err)
+		}
+
+		checkFile := filepath.Join(nestedDir, versionCheckFile)
+		if _, err := os.Stat(checkFile); os.IsNotExist(err) {
+			t.Error("updateLastCheckTime() did not create nested directory structure")
+		}
+	})
+}
+
+func TestGetUpdateCommand(t *testing.T) {
+	cmd := getUpdateCommand()
+	if cmd == "" {
+		t.Error("getUpdateCommand() returned empty string")
 	}
-
-	// Check if file contains timestamp
-	content, err := os.ReadFile(checkFile)
-	if err != nil {
-		t.Fatalf("Failed to read check file: %v", err)
-	}
-
-	if len(content) == 0 {
-		t.Error("updateLastCheckTime() created empty check file")
-	}
-
-	// Verify it's a valid RFC3339 timestamp
-	_, err = time.Parse(time.RFC3339, string(content))
-	if err != nil {
-		t.Errorf("updateLastCheckTime() wrote invalid timestamp: %v", err)
-	}
+	// The actual value depends on runtime.GOOS, so just verify it's not empty
 }
 
 func TestFormatUpdateNotification(t *testing.T) {

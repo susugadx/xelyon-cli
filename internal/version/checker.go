@@ -6,15 +6,19 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 )
 
 const (
-	githubAPIURL      = "https://api.github.com/repos/susugadx/xelyon-cli/releases/latest"
 	versionCheckFile  = "version_check"
 	checkCooldownDays = 1
+	versionParts      = 3 // major, minor, patch
 )
+
+// githubAPIURL is a var to allow overriding in tests
+var githubAPIURL = "https://api.github.com/repos/susugadx/xelyon-cli/releases/latest"
 
 // GitHubRelease represents the GitHub API response for a release
 type GitHubRelease struct {
@@ -44,15 +48,15 @@ func CheckForUpdates(configDir string) (*VersionCheckResult, error) {
 		return nil, nil
 	}
 
-	// Update last check time
-	updateLastCheckTime(configDir)
+	// Update last check time (error is intentionally ignored to maintain existing behavior)
+	_ = updateLastCheckTime(configDir)
 
 	// Compare versions
 	currentVersion := GetVersion()
 	result := &VersionCheckResult{
 		CurrentVersion: currentVersion,
 		LatestVersion:  latestVersion,
-		UpdateCommand:  "brew upgrade xelyon",
+		UpdateCommand:  getUpdateCommand(),
 	}
 
 	// Remove 'v' prefix for comparison if present
@@ -83,18 +87,20 @@ func shouldCheck(configDir string) bool {
 }
 
 // updateLastCheckTime updates the version check file timestamp
-func updateLastCheckTime(configDir string) {
+func updateLastCheckTime(configDir string) error {
 	checkFile := filepath.Join(configDir, versionCheckFile)
 
 	// Create parent directory if it doesn't exist
 	if err := os.MkdirAll(configDir, 0755); err != nil {
-		return
+		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
 	// Touch the file to update timestamp
 	if err := os.WriteFile(checkFile, []byte(time.Now().Format(time.RFC3339)), 0644); err != nil {
-		return
+		return fmt.Errorf("failed to write version check file: %w", err)
 	}
+
+	return nil
 }
 
 // fetchLatestVersion fetches the latest version from GitHub Releases API
@@ -129,6 +135,16 @@ func fetchLatestVersion() (string, error) {
 	return release.TagName, nil
 }
 
+// getUpdateCommand returns the appropriate update command for the current OS
+func getUpdateCommand() string {
+	switch runtime.GOOS {
+	case "darwin":
+		return "brew upgrade xelyon"
+	default:
+		return "https://github.com/susugadx/xelyon-cli/releases からダウンロード"
+	}
+}
+
 // compareVersions compares two semantic version strings
 // Returns: -1 if v1 < v2, 0 if v1 == v2, 1 if v1 > v2
 func compareVersions(v1, v2 string) int {
@@ -137,7 +153,7 @@ func compareVersions(v1, v2 string) int {
 	parts2 := parseVersion(v2)
 
 	// Compare each part
-	for i := 0; i < 3; i++ {
+	for i := 0; i < versionParts; i++ {
 		if parts1[i] < parts2[i] {
 			return -1
 		}
@@ -150,8 +166,8 @@ func compareVersions(v1, v2 string) int {
 }
 
 // parseVersion extracts major, minor, patch from version string
-func parseVersion(v string) [3]int {
-	var parts [3]int
+func parseVersion(v string) [versionParts]int {
+	var parts [versionParts]int
 
 	// Remove any suffix (e.g., "-dev", "-beta")
 	if idx := strings.IndexAny(v, "-+"); idx != -1 {
@@ -160,7 +176,7 @@ func parseVersion(v string) [3]int {
 
 	// Split by dots
 	components := strings.Split(v, ".")
-	for i := 0; i < len(components) && i < 3; i++ {
+	for i := 0; i < len(components) && i < versionParts; i++ {
 		_, _ = fmt.Sscanf(components[i], "%d", &parts[i])
 	}
 
