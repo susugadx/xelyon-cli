@@ -1,5 +1,7 @@
-# golangci-lint configuration
+# golangci-lint configuration (v2)
 # https://golangci-lint.run/usage/configuration/
+
+version: "2"
 
 run:
   timeout: 5m # 5分でタイムアウト
@@ -13,7 +15,6 @@ linters:
     - ineffassign # 使われない代入を検出
     - staticcheck # バグっぽいコードを検出
     - unused # 未使用の変数・関数を検出
-
-issues:
-  exclude-dirs:
-    - vendor # vendorフォルダは無視
+  exclusions:
+    paths:
+      - vendor # vendorフォルダは無視
