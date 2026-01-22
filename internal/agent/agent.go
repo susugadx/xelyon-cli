@@ -12,7 +12,6 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/lsp"
 	"github.com/susugadx/xelyon-cli/internal/mcp"
-	"github.com/susugadx/xelyon-cli/internal/memory"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -155,15 +154,6 @@ Tool call format: {"tool": "tool_name", "args": {"arg1": "value1"}}
 	// MCPツールをSystemPromptに追加
 	if len(mcpManager.GetTools()) > 0 {
 		systemPrompt += buildMCPToolsPrompt(mcpManager)
-	}
-
-	// メモリをSystemPromptに追加
-	memoryStore, err := memory.NewMemoryStore()
-	if err == nil {
-		memoriesText := memoryStore.GetMemoriesAsText()
-		if memoriesText != "" {
-			systemPrompt += memoriesText
-		}
 	}
 
 	// 変更履歴ストレージ初期化
