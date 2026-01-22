@@ -87,7 +87,7 @@ func TestOpenAIProvider_ChatWithTools_NonStreaming(t *testing.T) {
 	p := NewOpenAIProvider("test-key")
 	history := []Message{{Role: "user", Content: "Hello"}}
 
-	result, err := p.ChatWithTools(context.Background(), "System prompt", history, "")
+	result, err := p.ChatWithTools(context.Background(), "System prompt", history, "gpt-4o")
 	if err != nil {
 		t.Fatalf("ChatWithTools() error = %v", err)
 	}

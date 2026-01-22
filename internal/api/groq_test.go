@@ -87,7 +87,7 @@ func TestGroqProvider_ChatWithTools_NonStreaming(t *testing.T) {
 	p := NewGroqProvider("test-key")
 	history := []Message{{Role: "user", Content: "Hello"}}
 
-	result, err := p.ChatWithTools(context.Background(), "System prompt", history, "")
+	result, err := p.ChatWithTools(context.Background(), "System prompt", history, "llama3-70b-8192")
 	if err != nil {
 		t.Fatalf("ChatWithTools() error = %v", err)
 	}

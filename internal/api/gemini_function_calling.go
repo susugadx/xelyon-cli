@@ -10,7 +10,6 @@ import (
 	"os"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // getGeminiFunctionCallingURL は Function Calling 用の URL を生成
@@ -25,9 +24,8 @@ func getGeminiFunctionCallingURL(model string) string {
 
 // chatWithFunctionCalling は Function Calling API を使用してツールを呼び出す
 func (p *GeminiProvider) chatWithFunctionCalling(ctx context.Context, systemPrompt string, history []Message, model string) (string, error) {
-	if model == "" {
-		model = "gemini-2.0-flash-exp"
-	}
+	// モデル名を設定（config優先、フォールバックはgemini-2.0-flash）
+	model = GetDefaultModel(model, "gemini", "gemini-2.0-flash")
 
 	// メッセージを interface{} スライスに変換（Function Calling リクエスト用）
 	var contents []interface{}
@@ -90,12 +88,7 @@ func (p *GeminiProvider) chatWithFunctionCalling(ctx context.Context, systemProm
 	req.Header.Set("x-goog-api-key", p.apiKey)
 
 	// スピナー開始
-	spinner := ui.NewSpinner()
-	spinnerMsg := "Thinking (Function Calling)"
-	if cfg.Thinking.Enabled {
-		spinnerMsg = "Deep thinking (Function Calling)"
-	}
-	spinner.Start(spinnerMsg)
+	spinner := StartThinkingSpinner(false, "Function Calling")
 
 	resp, err := p.httpClient.Do(req)
 	if err != nil {

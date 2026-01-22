@@ -7,16 +7,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-
-	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // chatWithTextMode はテキストベースのツール呼び出しモード（従来の実装）
 func (p *GeminiProvider) chatWithTextMode(ctx context.Context, systemPrompt string, history []Message, model string) (string, error) {
-	// モデル名はそのまま使用（ハードコードしない）
-	if model == "" {
-		model = "gemini-2.0-flash-exp"
-	}
+	// モデル名を設定（config優先、フォールバックはgemini-2.0-flash）
+	model = GetDefaultModel(model, "gemini", "gemini-2.0-flash")
 
 	// Geminiのメッセージ構造に変換
 	var contents []GeminiContent
@@ -67,8 +63,7 @@ func (p *GeminiProvider) chatWithTextMode(ctx context.Context, systemPrompt stri
 	req.Header.Set("x-goog-api-key", p.apiKey) // APIキーはヘッダーで送信（セキュリティ向上）
 
 	// スピナー開始
-	spinner := ui.NewSpinner()
-	spinner.Start("Thinking")
+	spinner := StartThinkingSpinner(false, "")
 
 	// 再利用可能なHTTPクライアントを使用
 	resp, err := p.httpClient.Do(req)
@@ -115,10 +110,8 @@ func (p *GeminiProvider) ChatWithImage(ctx context.Context, systemPrompt string,
 		return p.ChatWithTools(ctx, systemPrompt, history, model)
 	}
 
-	// モデル名の設定
-	if model == "" {
-		model = "gemini-2.0-flash-exp"
-	}
+	// モデル名を設定（config優先、フォールバックはgemini-2.0-flash）
+	model = GetDefaultModel(model, "gemini", "gemini-2.0-flash")
 
 	// contentsを構築
 	var contents []interface{}
@@ -186,8 +179,7 @@ func (p *GeminiProvider) ChatWithImage(ctx context.Context, systemPrompt string,
 	req.Header.Set("x-goog-api-key", p.apiKey)
 
 	// スピナー開始
-	spinner := ui.NewSpinner()
-	spinner.Start("Analyzing image")
+	spinner := StartThinkingSpinner(true, "")
 
 	resp, err := p.httpClient.Do(req)
 	if err != nil {

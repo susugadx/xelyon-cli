@@ -135,3 +135,51 @@ func StopSpinner(spinner *ui.Spinner) {
 		spinner.Stop()
 	}
 }
+
+// GetDefaultModel returns the model to use, checking config first, then falling back.
+// providerName must match the config key (e.g., "openai", "claude", "deepseek")
+func GetDefaultModel(model, providerName, fallback string) string {
+	if model != "" {
+		return model
+	}
+	cfg := config.GetGlobalConfig()
+	if pm, ok := cfg.ProviderModels[providerName]; ok && pm.DefaultModel != "" {
+		return pm.DefaultModel
+	}
+	return fallback
+}
+
+// StartThinkingSpinner creates and starts a spinner with appropriate message.
+// It checks config for thinking mode and adjusts the message accordingly.
+// Parameters:
+//   - isImage: true for image analysis, false for normal chat
+//   - customSuffix: optional suffix like "Function Calling" or "Reasoner"
+//
+// Returns the started spinner (caller must call Stop()).
+func StartThinkingSpinner(isImage bool, customSuffix string) *ui.Spinner {
+	cfg := config.GetGlobalConfig()
+	spinner := ui.NewSpinner()
+
+	var msg string
+	if isImage {
+		if cfg.Thinking.Enabled {
+			msg = "Deep thinking (image)"
+		} else {
+			msg = "Analyzing image"
+		}
+	} else {
+		if cfg.Thinking.Enabled {
+			msg = "Deep thinking"
+		} else {
+			msg = "Thinking"
+		}
+	}
+
+	// Append custom suffix if provided
+	if customSuffix != "" {
+		msg = msg + " (" + customSuffix + ")"
+	}
+
+	spinner.Start(msg)
+	return spinner
+}

@@ -118,7 +118,7 @@ func TestClaudeProvider_ChatWithTools_NonStreaming(t *testing.T) {
 	p := NewClaudeProvider("test-key")
 	history := []Message{{Role: "user", Content: "Hello"}}
 
-	result, err := p.ChatWithTools(context.Background(), "System prompt", history, "")
+	result, err := p.ChatWithTools(context.Background(), "System prompt", history, "claude-sonnet-4-20250514")
 	if err != nil {
 		t.Fatalf("ChatWithTools() error = %v", err)
 	}

@@ -64,10 +64,8 @@ func (p *GroqProvider) ChatWithTools(ctx context.Context, systemPrompt string, h
 	}
 	messages = append(messages, history...)
 
-	// モデル名はそのまま使用（ハードコードしない）
-	if model == "" {
-		model = "llama3-70b-8192"
-	}
+	// モデル名を設定（config優先、フォールバックはllama-3.3-70b-versatile）
+	model = GetDefaultModel(model, "groq", "llama-3.3-70b-versatile")
 
 	reqBody := ChatRequest{
 		Model:    model,
@@ -89,8 +87,7 @@ func (p *GroqProvider) ChatWithTools(ctx context.Context, systemPrompt string, h
 	req.Header.Set("Authorization", "Bearer "+p.apiKey)
 
 	// スピナー開始
-	spinner := ui.NewSpinner()
-	spinner.Start("Thinking")
+	spinner := StartThinkingSpinner(false, "")
 
 	// 再利用可能なHTTPクライアントを使用
 	resp, err := p.httpClient.Do(req)

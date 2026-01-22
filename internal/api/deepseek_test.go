@@ -153,7 +153,7 @@ func TestDeepSeekProvider_ChatWithTools_RequestValidation(t *testing.T) {
 	p := NewDeepSeekProvider("test-key")
 	history := []Message{{Role: "user", Content: "Hello"}}
 
-	result, err := p.ChatWithTools(context.Background(), "System prompt", history, "")
+	result, err := p.ChatWithTools(context.Background(), "System prompt", history, "deepseek-chat")
 	if err != nil {
 		t.Fatalf("ChatWithTools() error = %v", err)
 	}

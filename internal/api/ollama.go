@@ -80,10 +80,8 @@ func (p *OllamaProvider) ChatWithTools(ctx context.Context, systemPrompt string,
 		yellow.Println("⚠️  Note: Extended Thinking depends on your model (use R1/QwQ for best results).")
 	}
 
-	// モデル名はそのまま使用（ハードコードしない）
-	if model == "" {
-		model = "llama3"
-	}
+	// モデル名を設定（config優先、フォールバックはllama3）
+	model = GetDefaultModel(model, "ollama", "llama3")
 
 	// メッセージ構築
 	messages := []Message{
@@ -111,8 +109,7 @@ func (p *OllamaProvider) ChatWithTools(ctx context.Context, systemPrompt string,
 	req.Header.Set("Content-Type", "application/json")
 
 	// スピナー開始
-	spinner := ui.NewSpinner()
-	spinner.Start("Thinking")
+	spinner := StartThinkingSpinner(false, "")
 
 	// 再利用可能なHTTPクライアントを使用
 	resp, err := p.httpClient.Do(req)

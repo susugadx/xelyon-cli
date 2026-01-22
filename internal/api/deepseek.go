@@ -11,7 +11,6 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 var yellow = color.New(color.FgYellow)
@@ -99,6 +98,9 @@ func (p *DeepSeekProvider) ChatWithTools(ctx context.Context, systemPrompt strin
 	}
 	messages = append(messages, history...)
 
+	// モデル名を設定（config優先、フォールバックはdeepseek-chat）
+	model = GetDefaultModel(model, "deepseek", "deepseek-chat")
+
 	// Extended Thinking 有効時は deepseek-reasoner に切り替え
 	cfg := config.GetGlobalConfig()
 	if cfg.Thinking.Enabled {
@@ -128,12 +130,11 @@ func (p *DeepSeekProvider) ChatWithTools(ctx context.Context, systemPrompt strin
 	req.Header.Set("Authorization", "Bearer "+p.apiKey)
 
 	// スピナー開始
-	spinner := ui.NewSpinner()
-	spinnerMsg := "Thinking"
+	spinnerSuffix := ""
 	if cfg.Thinking.Enabled {
-		spinnerMsg = "Deep thinking (Reasoner)"
+		spinnerSuffix = "Reasoner"
 	}
-	spinner.Start(spinnerMsg)
+	spinner := StartThinkingSpinner(false, spinnerSuffix)
 
 	// 再利用可能なHTTPクライアントを使用
 	resp, err := p.httpClient.Do(req)

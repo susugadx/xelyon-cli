@@ -189,10 +189,8 @@ type ClaudeResponse struct {
 
 // ChatWithTools は Provider interface の実装（context対応）
 func (p *ClaudeProvider) ChatWithTools(ctx context.Context, systemPrompt string, history []Message, model string) (string, error) {
-	// モデル名はそのまま使用（ハードコードしない）
-	if model == "" {
-		model = "claude-sonnet-4-20250514"
-	}
+	// モデル名を設定（config優先、フォールバックはclaude-sonnet-4-20250514）
+	model = GetDefaultModel(model, "claude", "claude-sonnet-4-20250514")
 
 	// Claudeのメッセージ構造に変換
 	var messages []ClaudeMessage
@@ -233,12 +231,7 @@ func (p *ClaudeProvider) ChatWithTools(ctx context.Context, systemPrompt string,
 	req.Header.Set("anthropic-version", "2023-06-01")
 
 	// スピナー開始
-	spinner := ui.NewSpinner()
-	spinnerMsg := "Thinking"
-	if cfg.Thinking.Enabled {
-		spinnerMsg = "Deep thinking"
-	}
-	spinner.Start(spinnerMsg)
+	spinner := StartThinkingSpinner(false, "")
 
 	// 再利用可能なHTTPクライアントを使用
 	resp, err := p.httpClient.Do(req)
@@ -330,10 +323,8 @@ func (p *ClaudeProvider) ChatWithImage(ctx context.Context, systemPrompt string,
 		return p.ChatWithTools(ctx, systemPrompt, history, model)
 	}
 
-	// モデル名の設定
-	if model == "" {
-		model = "claude-sonnet-4-20250514"
-	}
+	// モデル名を設定（config優先、フォールバックはclaude-sonnet-4-20250514）
+	model = GetDefaultModel(model, "claude", "claude-sonnet-4-20250514")
 
 	// 履歴をメッセージ配列に変換（テキストのみ）
 	var messages []interface{}
@@ -394,12 +385,7 @@ func (p *ClaudeProvider) ChatWithImage(ctx context.Context, systemPrompt string,
 	req.Header.Set("anthropic-version", "2023-06-01")
 
 	// スピナー開始
-	spinner := ui.NewSpinner()
-	spinnerMsg := "Analyzing image"
-	if cfg.Thinking.Enabled {
-		spinnerMsg = "Deep thinking (image)"
-	}
-	spinner.Start(spinnerMsg)
+	spinner := StartThinkingSpinner(true, "")
 
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
