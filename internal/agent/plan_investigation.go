@@ -132,7 +132,7 @@ Output your plan now in this JSON format:
 			currentHash := hashToolCalls(safetyHighTools)
 			if currentHash == lastToolCallsHash {
 				sameSetCount++
-				if sameSetCount >= 3 {
+				if sameSetCount >= config.LoopDetectionThreshold {
 					return "", fmt.Errorf("tool loop detected: same tool set repeated %d times", sameSetCount)
 				}
 			} else {
@@ -177,7 +177,7 @@ func (a *Agent) executeInvestigationToolsParallel(ctx context.Context, toolCalls
 	cfg := config.GetGlobalConfig()
 	maxWorkers := cfg.PlanMode.MaxParallelSteps
 	if maxWorkers <= 0 {
-		maxWorkers = 3
+		maxWorkers = config.DefaultParallelWorkers
 	}
 
 	results := make([]string, len(toolCalls))

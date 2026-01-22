@@ -187,6 +187,65 @@ type ClaudeResponse struct {
 	Content []ClaudeContent `json:"content"`
 }
 
+// claudeRequestResult はexecuteClaudeRequestの結果を格納
+type claudeRequestResult struct {
+	Response *http.Response
+	Spinner  *ui.Spinner
+}
+
+// executeClaudeRequest はClaude API呼び出しの共通処理
+// withImage: 画像付きリクエストの場合はtrue（スピナー表示に影響）
+func (p *ClaudeProvider) executeClaudeRequest(ctx context.Context, reqBody interface{}, withImage bool) (*claudeRequestResult, error) {
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", p.apiURL, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-api-key", p.apiKey)
+	req.Header.Set("anthropic-version", "2023-06-01")
+
+	spinner := StartThinkingSpinner(withImage, "")
+
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		spinner.Stop()
+		return nil, err
+	}
+
+	if resp.StatusCode != 200 {
+		spinner.Stop()
+		defer resp.Body.Close()
+
+		if rateLimitErr := handleRateLimit(resp); rateLimitErr != nil {
+			return nil, rateLimitErr
+		}
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("API error (%d): unable to read response", resp.StatusCode)
+		}
+		return nil, sanitizeErrorMessage(body, resp.StatusCode)
+	}
+
+	return &claudeRequestResult{Response: resp, Spinner: spinner}, nil
+}
+
+// processClaudeResponse はレスポンス処理（ストリーミング/非ストリーミング）
+func (p *ClaudeProvider) processClaudeResponse(ctx context.Context, result *claudeRequestResult) (string, error) {
+	defer result.Response.Body.Close()
+
+	contentType := result.Response.Header.Get("Content-Type")
+	if strings.Contains(contentType, "text/event-stream") {
+		return p.handleStreamingResponse(ctx, result.Response, result.Spinner)
+	}
+	return p.handleNonStreamingResponse(result.Response, result.Spinner)
+}
+
 // ChatWithTools は Provider interface の実装（context対応）
 func (p *ClaudeProvider) ChatWithTools(ctx context.Context, systemPrompt string, history []Message, model string) (string, error) {
 	// モデル名を設定（config優先、フォールバックはclaude-sonnet-4-20250514）
@@ -216,54 +275,12 @@ func (p *ClaudeProvider) ChatWithTools(ctx context.Context, systemPrompt string,
 		}
 	}
 
-	jsonBody, err := json.Marshal(reqBody)
+	result, err := p.executeClaudeRequest(ctx, reqBody, false)
 	if err != nil {
 		return "", err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", p.apiURL, bytes.NewBuffer(jsonBody))
-	if err != nil {
-		return "", err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", p.apiKey)
-	req.Header.Set("anthropic-version", "2023-06-01")
-
-	// スピナー開始
-	spinner := StartThinkingSpinner(false, "")
-
-	// 再利用可能なHTTPクライアントを使用
-	resp, err := p.httpClient.Do(req)
-	if err != nil {
-		spinner.Stop()
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		spinner.Stop()
-
-		// レート制限チェック
-		if rateLimitErr := handleRateLimit(resp); rateLimitErr != nil {
-			return "", rateLimitErr
-		}
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return "", fmt.Errorf("API error (%d): unable to read response", resp.StatusCode)
-		}
-		return "", sanitizeErrorMessage(body, resp.StatusCode)
-	}
-
-	// Content-Typeでストリーミング対応を判定
-	contentType := resp.Header.Get("Content-Type")
-	isStreaming := strings.Contains(contentType, "text/event-stream")
-
-	if isStreaming {
-		return p.handleStreamingResponse(ctx, resp, spinner)
-	} else {
-		return p.handleNonStreamingResponse(resp, spinner)
-	}
+	return p.processClaudeResponse(ctx, result)
 }
 
 // handleStreamingResponse はストリーミングレスポンスを処理
@@ -370,50 +387,10 @@ func (p *ClaudeProvider) ChatWithImage(ctx context.Context, systemPrompt string,
 		}
 	}
 
-	jsonBody, err := json.Marshal(reqBody)
+	result, err := p.executeClaudeRequest(ctx, reqBody, true)
 	if err != nil {
 		return "", err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", p.apiURL, bytes.NewBuffer(jsonBody))
-	if err != nil {
-		return "", err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", p.apiKey)
-	req.Header.Set("anthropic-version", "2023-06-01")
-
-	// スピナー開始
-	spinner := StartThinkingSpinner(true, "")
-
-	resp, err := p.httpClient.Do(req)
-	if err != nil {
-		spinner.Stop()
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		spinner.Stop()
-
-		if rateLimitErr := handleRateLimit(resp); rateLimitErr != nil {
-			return "", rateLimitErr
-		}
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return "", fmt.Errorf("API error (%d): unable to read response", resp.StatusCode)
-		}
-		return "", sanitizeErrorMessage(body, resp.StatusCode)
-	}
-
-	// ストリーミング処理
-	contentType := resp.Header.Get("Content-Type")
-	isStreaming := strings.Contains(contentType, "text/event-stream")
-
-	if isStreaming {
-		return p.handleStreamingResponse(ctx, resp, spinner)
-	} else {
-		return p.handleNonStreamingResponse(resp, spinner)
-	}
+	return p.processClaudeResponse(ctx, result)
 }

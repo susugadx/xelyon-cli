@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/repomap"
 )
 
@@ -164,7 +165,7 @@ func parseXELYONMD(path string) (*SyncState, error) {
 	lines := strings.Split(string(content), "\n")
 	currentSection := ""
 
-	for i, line := range lines {
+	for _, line := range lines {
 		// プロジェクト名（最初の # タイトル）
 		if strings.HasPrefix(line, "# ") && state.ProjectName == "" {
 			// "# xxx プロジェクト設定" から xxx を抽出
@@ -213,8 +214,6 @@ func parseXELYONMD(path string) (*SyncState, error) {
 			filePath := strings.TrimPrefix(line, "### ")
 			state.CodeMapFiles = append(state.CodeMapFiles, filePath)
 		}
-
-		_ = i // unused
 	}
 
 	return state, nil
@@ -299,8 +298,8 @@ func displayDiff(diff *SyncDiff) {
 		}
 	}
 
-	// ファイル変更は最大10件まで表示
-	maxDisplay := 10
+	// ファイル変更は最大件数まで表示
+	maxDisplay := config.SyncFileChangesMax
 
 	if len(diff.AddedFiles) > 0 {
 		green.Printf("   + Files added: %d\n", len(diff.AddedFiles))

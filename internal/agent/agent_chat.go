@@ -116,10 +116,10 @@ You are in NORMAL MODE (not Plan Mode).
 		// デバッグログ
 		if os.Getenv("XELYON_DEBUG_TOOLS") == "1" {
 			fmt.Printf("[DEBUG Tools] Response length: %d, ToolCalls found: %d\n", len(response), len(toolCalls))
-			if len(response) < 500 {
+			if len(response) < config.DebugPreviewLen {
 				fmt.Printf("[DEBUG Tools] Response: %s\n", response)
 			} else {
-				fmt.Printf("[DEBUG Tools] Response (first 500): %s...\n", response[:500])
+				fmt.Printf("[DEBUG Tools] Response (first %d): %s...\n", config.DebugPreviewLen, response[:config.DebugPreviewLen])
 			}
 			for i, tc := range toolCalls {
 				fmt.Printf("[DEBUG Tools] ToolCall[%d]: tool=%s, args=%v\n", i, tc.Tool, tc.Args)

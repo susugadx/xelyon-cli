@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/repomap"
 )
 
@@ -282,8 +283,8 @@ func generateCodeMap(rm *repomap.RepoMap) string {
 		return files[i].Path < files[j].Path
 	})
 
-	// 最大20ファイルまで表示
-	maxFiles := 20
+	// 最大表示ファイル数
+	maxFiles := config.RepoMapMaxFiles
 	count := 0
 
 	for _, file := range files {
@@ -295,8 +296,8 @@ func generateCodeMap(rm *repomap.RepoMap) string {
 		relPath, _ := filepath.Rel(rm.RootPath, file.Path)
 		sb.WriteString(fmt.Sprintf("### %s\n", relPath))
 
-		// 各ファイルから最大10シンボルまで
-		maxSymbols := 10
+		// 各ファイルから最大シンボル数まで
+		maxSymbols := config.RepoMapMaxSymbols
 		for i, sym := range file.Symbols {
 			if i >= maxSymbols {
 				sb.WriteString(fmt.Sprintf("  ... and %d more symbols\n", len(file.Symbols)-maxSymbols))

@@ -86,7 +86,7 @@ func (a *Agent) executeStepsParallel(ctx context.Context, plan *Plan, stepIDs []
 	cfg := config.GetGlobalConfig()
 	maxWorkers := cfg.PlanMode.MaxParallelSteps
 	if maxWorkers <= 0 {
-		maxWorkers = 3
+		maxWorkers = config.DefaultParallelWorkers
 	}
 
 	// セマフォでワーカー数を制限
@@ -120,7 +120,7 @@ func (a *Agent) executeStepsParallel(ctx context.Context, plan *Plan, stepIDs []
 // executeStepV2 は単一ステップを実行（失敗検知・リトライ対応）
 // parallel=true の場合はスレッドセーフなメソッドを使用し、ユーザー入力が必要な処理はスキップ
 func (a *Agent) executeStepV2(ctx context.Context, plan *Plan, step *PlanStep, idx int, retryCount int, parallel bool) error {
-	maxRetries := 3
+	maxRetries := config.PlanMaxRetries
 
 	if retryCount > 0 {
 		yellow.Printf("🔄 Retry attempt %d/%d for step %d...\n", retryCount, maxRetries, step.ID)
@@ -152,17 +152,24 @@ IMPORTANT INSTRUCTIONS:
 	}
 
 	// ステップ内のツール実行ループ
-	maxStepIterations := 10
-	maxContinues := 3
+	maxStepIterations := config.PlanMaxIterations
+	maxContinues := config.PlanMaxAutoContinues
 	continueCount := 0
 	var lastFailedResult string
 	var lastFailReason string
 
 	for j := 0; j < maxStepIterations; j++ {
+		// 並列実行時はスナップショットを使用してレースコンディションを防止
+		var history []api.Message
+		if parallel {
+			history = a.getHistorySnapshot()
+		} else {
+			history = a.History
+		}
 		response, err := a.CurrentProvider.ChatWithTools(
 			ctx,
 			a.SystemPrompt,
-			a.History,
+			history,
 			a.CurrentModel,
 		)
 		if err != nil {
@@ -252,7 +259,7 @@ IMPORTANT INSTRUCTIONS:
 
 			a.SetStatus(StateWaitingApproval, "Step failed - waiting for action", "ステップ失敗 - アクション待ち", "Choose r/c/s/a", "r/c/s/a を選択")
 
-			action := promptFailureAction(step, lastFailedResult, lastFailReason)
+			action, comment := promptFailureAction(step, lastFailedResult, lastFailReason)
 
 			switch action {
 			case FailureActionRetry:
@@ -291,7 +298,7 @@ Do NOT skip this step. The issue must be resolved before proceeding.`, lastFaile
 Error that occurred:
 %s
 
-Please follow these instructions to fix the issue and retry the step.`, failureComment, lastFailedResult),
+Please follow these instructions to fix the issue and retry the step.`, comment, lastFailedResult),
 				})
 				return a.executeStepV2(ctx, plan, step, idx, retryCount+1, false)
 			case FailureActionSkip:

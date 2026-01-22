@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/version"
 )
@@ -155,8 +156,8 @@ func handleHistoryCommand(agent *Agent) {
 			role = "🤖"
 		}
 		preview := msg.Content
-		if len(preview) > 50 {
-			preview = preview[:50] + "..."
+		if len(preview) > config.HistoryPreviewLen {
+			preview = preview[:config.HistoryPreviewLen] + "..."
 		}
 		fmt.Printf("  %d. %s %s\n", i+1, role, preview)
 	}

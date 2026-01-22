@@ -2,6 +2,8 @@ package agent
 
 import (
 	"fmt"
+
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 // handleSaveCommand はセッション保存を処理
@@ -73,14 +75,14 @@ func handleSessionsCommand(agent *Agent) bool {
 
 	cyan.Println("\n📚 Recent Sessions:")
 	for i, s := range sessions {
-		if i >= 10 {
+		if i >= config.SessionListMaxDisplay {
 			break
 		}
 
 		timeStr := s.LastModified.Format("2006-01-02 15:04")
 		preview := s.Preview
-		if len(preview) > 60 {
-			preview = preview[:60] + "..."
+		if len(preview) > config.SessionPreviewLen {
+			preview = preview[:config.SessionPreviewLen] + "..."
 		}
 
 		fmt.Printf("  [%s] %s - %s (%d msgs)\n",

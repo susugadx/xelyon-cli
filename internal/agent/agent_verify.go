@@ -120,12 +120,14 @@ func (a *Agent) runVerification(filePath string, runFmt, runTest bool) {
 
 		// 出力が長い場合は省略
 		lines := strings.Split(output, "\n")
-		if len(lines) > 20 {
-			for _, line := range lines[:10] {
+		maxLines := config.TestOutputMaxLines
+		if len(lines) > maxLines {
+			halfLines := maxLines / 2
+			for _, line := range lines[:halfLines] {
 				fmt.Println("   " + line)
 			}
-			yellow.Printf("   ... (%d lines omitted)\n", len(lines)-20)
-			for _, line := range lines[len(lines)-10:] {
+			yellow.Printf("   ... (%d lines omitted)\n", len(lines)-maxLines)
+			for _, line := range lines[len(lines)-halfLines:] {
 				fmt.Println("   " + line)
 			}
 		} else {

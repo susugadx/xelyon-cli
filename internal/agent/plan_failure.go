@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
@@ -18,9 +19,6 @@ const (
 	FailureActionSkip    FailureAction = "skip"
 	FailureActionAbort   FailureAction = "abort"
 )
-
-// failureComment はコメントアクション時のユーザー入力を保持
-var failureComment string
 
 // containsFailure はツール結果に失敗パターンが含まれるか検出
 // 失敗を検出した場合、(true, 理由) を返す
@@ -89,19 +87,20 @@ func containsFailure(result string) (bool, string) {
 }
 
 // promptFailureAction は失敗時のユーザー選択UIを表示
-func promptFailureAction(step *PlanStep, result string, reason string) FailureAction {
+// 戻り値: (アクション, コメント文字列) - コメントアクション時のみ第2引数が非空
+func promptFailureAction(step *PlanStep, result string, reason string) (FailureAction, string) {
 	fmt.Println()
 	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	red.Printf("❌ Step %d Failed: %s\n", step.ID, step.Description)
 	red.Printf("   Reason: %s\n", reason)
 	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
-	// エラー内容を表示（最大20行）
+	// エラー内容を表示
 	lines := strings.Split(result, "\n")
-	maxShow := 20
+	maxShow := config.ErrorOutputMaxLines
 	if len(lines) > maxShow {
 		fmt.Println()
-		yellow.Println("Error output (last 20 lines):")
+		yellow.Printf("Error output (last %d lines):\n", maxShow)
 		for _, line := range lines[len(lines)-maxShow:] {
 			fmt.Printf("  %s\n", line)
 		}
@@ -127,7 +126,8 @@ func promptFailureAction(step *PlanStep, result string, reason string) FailureAc
 }
 
 // promptFailureActionInput は r/c/s/a 専用の入力プロンプト
-func promptFailureActionInput() FailureAction {
+// 戻り値: (アクション, コメント文字列) - コメントアクション時のみ第2引数が非空
+func promptFailureActionInput() (FailureAction, string) {
 	reader := bufio.NewReader(os.Stdin)
 
 	for {
@@ -136,7 +136,7 @@ func promptFailureActionInput() FailureAction {
 		response, err := reader.ReadString('\n')
 		if err != nil {
 			// EOF時はabortを返して終了
-			return FailureActionAbort
+			return FailureActionAbort, ""
 		}
 		response = strings.ToLower(strings.TrimSpace(response))
 
@@ -147,14 +147,14 @@ func promptFailureActionInput() FailureAction {
 
 		switch response {
 		case "r", "retry":
-			return FailureActionRetry
+			return FailureActionRetry, ""
 		case "c", "comment":
-			failureComment, _ = tools.ReadMultiLineComment(reader)
-			return FailureActionComment
+			comment, _ := tools.ReadMultiLineComment(reader)
+			return FailureActionComment, comment
 		case "s", "skip":
-			return FailureActionSkip
+			return FailureActionSkip, ""
 		case "a", "abort":
-			return FailureActionAbort
+			return FailureActionAbort, ""
 		default:
 			yellow.Println("Invalid input. Please enter r/c/s/a.")
 		}

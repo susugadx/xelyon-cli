@@ -25,3 +25,43 @@ const (
 	MaxDiffDisplayLines = 15   // diff表示最大行数
 	MaxDiffIterations   = 20   // diff比較最大イテレーション
 )
+
+// Plan Execution Limits
+const (
+	PlanMaxRetries       = 3  // ステップ失敗時の最大リトライ回数
+	PlanMaxIterations    = 10 // ステップ内ツール実行の最大イテレーション数
+	PlanMaxAutoContinues = 3  // AI質問時の自動続行最大回数
+)
+
+// Message Processing Limits
+const (
+	MessageTruncateLen = 500 // サマリー生成時のメッセージ切り詰め長
+	MaxLastOutputs     = 10  // 最後の出力履歴最大保存数
+)
+
+// UI Display Limits
+const (
+	HistoryPreviewLen     = 50  // /history コマンドのプレビュー切り詰め長
+	SessionPreviewLen     = 60  // /sessions コマンドのプレビュー切り詰め長
+	SessionListMaxDisplay = 10  // /sessions の最大表示数
+	ErrorOutputMaxLines   = 20  // Plan失敗時のエラー出力最大行数
+	SyncFileChangesMax    = 10  // /sync のファイル変更最大表示数
+	DebugPreviewLen       = 500 // デバッグログのプレビュー長
+)
+
+// RepoMap Display Limits
+const (
+	RepoMapMaxFiles   = 20 // RepoMapの最大ファイル数
+	RepoMapMaxSymbols = 10 // RepoMapのファイル毎最大シンボル数
+)
+
+// Test/Verification Limits
+const (
+	TestOutputMaxLines = 20 // テスト出力の最大行数
+)
+
+// Parallel Execution Defaults
+const (
+	DefaultParallelWorkers = 3 // Plan実行のデフォルト並列ワーカー数
+	LoopDetectionThreshold = 3 // ループ検知の閾値
+)
