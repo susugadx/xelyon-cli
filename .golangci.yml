@@ -10,7 +10,6 @@ run:
 linters:
   enable:
     - errcheck # エラーを無視してないかチェック
-    - gosimple # もっとシンプルに書けるところを指摘
     - govet # Go公式の静的解析ツール
     - ineffassign # 使われない代入を検出
     - staticcheck # バグっぽいコードを検出
