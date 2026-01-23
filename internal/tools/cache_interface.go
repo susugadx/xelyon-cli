@@ -30,6 +30,18 @@ type ToolCacheInterface interface {
 
 	// Clear は全キャッシュをクリア
 	Clear()
+
+	// GetSearch は検索結果のキャッシュを取得
+	// キャッシュヒット時は (result, true) を返す
+	// キャッシュミス時は ("", false) を返す
+	GetSearch(pattern, path string) (string, bool)
+
+	// SetSearch は検索結果をキャッシュに保存
+	SetSearch(pattern, path, result string)
+
+	// ClearSearchCache は検索キャッシュをクリア
+	// ファイル変更系ツール実行時に呼ばれる
+	ClearSearchCache()
 }
 
 // GlobalToolCache はグローバルなツールキャッシュ

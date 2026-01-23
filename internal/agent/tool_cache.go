@@ -9,11 +9,12 @@ import (
 )
 
 // ToolCache はツール結果のキャッシュ
-// read_file, list_dir の結果をキャッシュしてトークン消費を削減
+// read_file, list_dir, search_code, search_file の結果をキャッシュしてトークン消費を削減
 type ToolCache struct {
-	files map[string]cacheEntry
-	dirs  map[string]cacheEntry
-	mu    sync.RWMutex
+	files    map[string]cacheEntry
+	dirs     map[string]cacheEntry
+	searches map[string]cacheEntry
+	mu       sync.RWMutex
 }
 
 // cacheEntry はキャッシュエントリ
@@ -28,8 +29,9 @@ const MaxFileCacheSize = 1024 * 1024
 // NewToolCache は新しい ToolCache を作成
 func NewToolCache() *ToolCache {
 	return &ToolCache{
-		files: make(map[string]cacheEntry),
-		dirs:  make(map[string]cacheEntry),
+		files:    make(map[string]cacheEntry),
+		dirs:     make(map[string]cacheEntry),
+		searches: make(map[string]cacheEntry),
 	}
 }
 
@@ -145,13 +147,55 @@ func (c *ToolCache) Clear() {
 	defer c.mu.Unlock()
 	c.files = make(map[string]cacheEntry)
 	c.dirs = make(map[string]cacheEntry)
+	c.searches = make(map[string]cacheEntry)
+}
+
+// searchCacheKey は検索キャッシュのキーを生成
+func searchCacheKey(pattern, path string) string {
+	return pattern + "::" + path
+}
+
+// GetSearch は検索結果のキャッシュを取得
+func (c *ToolCache) GetSearch(pattern, path string) (string, bool) {
+	key := searchCacheKey(pattern, path)
+
+	c.mu.RLock()
+	entry, exists := c.searches[key]
+	c.mu.RUnlock()
+
+	if !exists {
+		return "", false
+	}
+
+	green.Printf("📦 Cache hit: search(%s, %s)\n", pattern, path)
+	return entry.Content, true
+}
+
+// SetSearch は検索結果をキャッシュに保存
+func (c *ToolCache) SetSearch(pattern, path, result string) {
+	key := searchCacheKey(pattern, path)
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.searches[key] = cacheEntry{
+		Content: result,
+		// 検索キャッシュはmtimeチェック不要（全クリア方式）
+	}
+}
+
+// ClearSearchCache は検索キャッシュをクリア
+func (c *ToolCache) ClearSearchCache() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.searches = make(map[string]cacheEntry)
 }
 
 // Stats はキャッシュの統計情報を返す
-func (c *ToolCache) Stats() (files, dirs int) {
+func (c *ToolCache) Stats() (files, dirs, searches int) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return len(c.files), len(c.dirs)
+	return len(c.files), len(c.dirs), len(c.searches)
 }
 
 // インターフェース実装の確認

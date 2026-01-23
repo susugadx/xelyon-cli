@@ -127,11 +127,12 @@ func TestToolCache_Clear(t *testing.T) {
 	// キャッシュに保存
 	cache.SetFile(testFile, "test")
 	cache.SetDir(tmpDir, "dir result")
+	cache.SetSearch("pattern", ".", "search result")
 
 	// 全クリア
 	cache.Clear()
 
-	// 両方キャッシュミス
+	// 全てキャッシュミス
 	_, hit := cache.GetFile(testFile)
 	if hit {
 		t.Error("Expected file cache miss after clear")
@@ -139,6 +140,10 @@ func TestToolCache_Clear(t *testing.T) {
 	_, hit = cache.GetDir(tmpDir)
 	if hit {
 		t.Error("Expected dir cache miss after clear")
+	}
+	_, hit = cache.GetSearch("pattern", ".")
+	if hit {
+		t.Error("Expected search cache miss after clear")
 	}
 }
 
@@ -174,17 +179,97 @@ func TestToolCache_Stats(t *testing.T) {
 	}
 
 	// 初期状態
-	files, dirs := cache.Stats()
-	if files != 0 || dirs != 0 {
-		t.Errorf("Expected (0, 0), got (%d, %d)", files, dirs)
+	files, dirs, searches := cache.Stats()
+	if files != 0 || dirs != 0 || searches != 0 {
+		t.Errorf("Expected (0, 0, 0), got (%d, %d, %d)", files, dirs, searches)
 	}
 
 	// キャッシュ追加後
 	cache.SetFile(testFile, "test")
 	cache.SetDir(tmpDir, "dir")
+	cache.SetSearch("pattern", ".", "search result")
 
-	files, dirs = cache.Stats()
-	if files != 1 || dirs != 1 {
-		t.Errorf("Expected (1, 1), got (%d, %d)", files, dirs)
+	files, dirs, searches = cache.Stats()
+	if files != 1 || dirs != 1 || searches != 1 {
+		t.Errorf("Expected (1, 1, 1), got (%d, %d, %d)", files, dirs, searches)
+	}
+}
+
+func TestToolCache_SearchCache(t *testing.T) {
+	cache := NewToolCache()
+
+	pattern := "func main"
+	path := "."
+	result := "main.go:10: func main() {"
+
+	// キャッシュミス
+	_, hit := cache.GetSearch(pattern, path)
+	if hit {
+		t.Error("Expected cache miss, got hit")
+	}
+
+	// キャッシュに保存
+	cache.SetSearch(pattern, path, result)
+
+	// キャッシュヒット
+	cached, hit := cache.GetSearch(pattern, path)
+	if !hit {
+		t.Error("Expected cache hit, got miss")
+	}
+	if cached != result {
+		t.Errorf("Expected %q, got %q", result, cached)
+	}
+
+	// 異なるパターンはキャッシュミス
+	_, hit = cache.GetSearch("different pattern", path)
+	if hit {
+		t.Error("Expected cache miss for different pattern")
+	}
+
+	// 異なるパスはキャッシュミス
+	_, hit = cache.GetSearch(pattern, "/different/path")
+	if hit {
+		t.Error("Expected cache miss for different path")
+	}
+}
+
+func TestToolCache_ClearSearchCache(t *testing.T) {
+	cache := NewToolCache()
+
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test.txt")
+	if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	// 各種キャッシュを保存
+	cache.SetFile(testFile, "file content")
+	cache.SetDir(tmpDir, "dir result")
+	cache.SetSearch("pattern1", ".", "search result 1")
+	cache.SetSearch("pattern2", "/path", "search result 2")
+
+	// 検索キャッシュだけクリア
+	cache.ClearSearchCache()
+
+	// ファイルキャッシュはヒット
+	_, hit := cache.GetFile(testFile)
+	if !hit {
+		t.Error("Expected file cache hit after ClearSearchCache")
+	}
+
+	// ディレクトリキャッシュはヒット
+	_, hit = cache.GetDir(tmpDir)
+	if !hit {
+		t.Error("Expected dir cache hit after ClearSearchCache")
+	}
+
+	// 検索キャッシュはミス
+	_, hit = cache.GetSearch("pattern1", ".")
+	if hit {
+		t.Error("Expected search cache miss after ClearSearchCache")
+	}
+	_, hit = cache.GetSearch("pattern2", "/path")
+	if hit {
+		t.Error("Expected search cache miss after ClearSearchCache")
 	}
 }

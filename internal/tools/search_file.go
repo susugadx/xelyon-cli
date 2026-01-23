@@ -12,6 +12,13 @@ func executeSearchFile(pattern string, path string) string {
 		return "Error: pattern is required"
 	}
 
+	// キャッシュチェック
+	if GlobalToolCache != nil {
+		if cached, ok := GlobalToolCache.GetSearch(pattern, path); ok {
+			return cached
+		}
+	}
+
 	green.Printf("📁 Searching for files matching '%s' in %s\n", pattern, path)
 
 	// findで検索（.gitは除外）
@@ -24,7 +31,11 @@ func executeSearchFile(pattern string, path string) string {
 	}
 
 	if strings.TrimSpace(result) == "" {
-		return fmt.Sprintf("No files found matching '%s'", pattern)
+		noMatchResult := fmt.Sprintf("No files found matching '%s'", pattern)
+		if GlobalToolCache != nil {
+			GlobalToolCache.SetSearch(pattern, path, noMatchResult)
+		}
+		return noMatchResult
 	}
 
 	// 結果が長すぎる場合は切り詰め
@@ -33,5 +44,8 @@ func executeSearchFile(pattern string, path string) string {
 		result = strings.Join(lines[:30], "\n") + fmt.Sprintf("\n... (%d more files)", len(lines)-30)
 	}
 
+	if GlobalToolCache != nil {
+		GlobalToolCache.SetSearch(pattern, path, result)
+	}
 	return result
 }

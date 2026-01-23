@@ -12,6 +12,13 @@ func executeSearchCode(pattern string, path string) string {
 		return "Error: pattern is required"
 	}
 
+	// キャッシュチェック
+	if GlobalToolCache != nil {
+		if cached, ok := GlobalToolCache.GetSearch(pattern, path); ok {
+			return cached
+		}
+	}
+
 	green.Printf("🔍 Searching for '%s' in %s\n", pattern, path)
 
 	// grepで検索（-r: 再帰, -n: 行番号, -I: バイナリ除外）
@@ -22,7 +29,11 @@ func executeSearchCode(pattern string, path string) string {
 	if err != nil {
 		// grepは見つからない時もエラーを返す
 		if result == "" {
-			return fmt.Sprintf("No matches found for '%s'", pattern)
+			noMatchResult := fmt.Sprintf("No matches found for '%s'", pattern)
+			if GlobalToolCache != nil {
+				GlobalToolCache.SetSearch(pattern, path, noMatchResult)
+			}
+			return noMatchResult
 		}
 	}
 
@@ -32,5 +43,8 @@ func executeSearchCode(pattern string, path string) string {
 		result = strings.Join(lines[:50], "\n") + fmt.Sprintf("\n... (%d more matches)", len(lines)-50)
 	}
 
+	if GlobalToolCache != nil {
+		GlobalToolCache.SetSearch(pattern, path, result)
+	}
 	return result
 }
