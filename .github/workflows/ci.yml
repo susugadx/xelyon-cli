@@ -30,7 +30,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.23"
+          go-version: "1.24"
 
       # Go modules をキャッシュして CI を高速化
       # go.sum が変わらなければキャッシュを再利用
@@ -113,7 +113,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.23"
+          go-version: "1.24"
 
       # golangci-lint で静的解析
       # 様々な lint ツールをまとめて実行
@@ -138,7 +138,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.23"
+          go-version: "1.24"
 
       # gosec: Go コードのセキュリティ問題を検出
       # - ハードコードされた認証情報
@@ -182,7 +182,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.23"
+          go-version: "1.24"
 
       # ベンチマーク実行
       # -bench=.: 全てのベンチマークを実行
