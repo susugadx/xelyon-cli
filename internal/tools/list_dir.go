@@ -14,6 +14,13 @@ func executeListDir(path string) string {
 		return fmt.Sprintf("Error: %v", err)
 	}
 
+	// キャッシュチェック
+	if GlobalToolCache != nil {
+		if cached, hit := GlobalToolCache.GetDir(absPath); hit {
+			return cached
+		}
+	}
+
 	entries, err := os.ReadDir(absPath)
 	if err != nil {
 		return fmt.Sprintf("Error reading directory: %v", err)
@@ -36,5 +43,11 @@ func executeListDir(path string) string {
 	}
 
 	result := strings.Join(lines, "\n")
+
+	// キャッシュに保存
+	if GlobalToolCache != nil {
+		GlobalToolCache.SetDir(absPath, result)
+	}
+
 	return result
 }

@@ -2,6 +2,7 @@ package tools
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 )
 
@@ -90,8 +91,75 @@ func Execute(tc *ToolCall) (string, *FileChange) {
 	// Registry経由でツール実行
 	result, change := DefaultRegistry.Execute(tc)
 
+	// ファイル変更系ツールの場合、キャッシュを無効化
+	invalidateToolCache(tc)
+
 	// ツール結果はAIに渡すのみ（各ツールが出す要約表示で十分）
 	return result, change
+}
+
+// invalidateToolCache はファイル変更系ツール実行後にキャッシュを無効化
+func invalidateToolCache(tc *ToolCall) {
+	if GlobalToolCache == nil {
+		return
+	}
+
+	switch tc.Tool {
+	// ファイル内容を変更するツール → ファイルキャッシュ無効化
+	case "write_file", "str_replace", "append_file", "prepend_file",
+		"insert_after", "insert_before", "delete_lines", "format", "lint":
+		if path := tc.Args["path"]; path != "" {
+			if absPath, err := filepath.Abs(path); err == nil {
+				GlobalToolCache.InvalidateFile(absPath)
+			}
+		}
+
+	// ファイルを削除/移動するツール → ファイル＆ディレクトリキャッシュ無効化
+	case "delete_file", "move_file":
+		if path := tc.Args["path"]; path != "" {
+			if absPath, err := filepath.Abs(path); err == nil {
+				GlobalToolCache.InvalidateFile(absPath)
+				GlobalToolCache.InvalidateDir(filepath.Dir(absPath))
+			}
+		}
+		if src := tc.Args["src"]; src != "" {
+			if absPath, err := filepath.Abs(src); err == nil {
+				GlobalToolCache.InvalidateFile(absPath)
+				GlobalToolCache.InvalidateDir(filepath.Dir(absPath))
+			}
+		}
+		if dest := tc.Args["dest"]; dest != "" {
+			if absPath, err := filepath.Abs(dest); err == nil {
+				GlobalToolCache.InvalidateFile(absPath)
+				GlobalToolCache.InvalidateDir(filepath.Dir(absPath))
+			}
+		}
+
+	// コピーはコピー先のディレクトリキャッシュを無効化
+	case "copy_file":
+		if dest := tc.Args["dest"]; dest != "" {
+			if absPath, err := filepath.Abs(dest); err == nil {
+				GlobalToolCache.InvalidateDir(filepath.Dir(absPath))
+			}
+		}
+
+	// ディレクトリ作成
+	case "create_dir":
+		if path := tc.Args["path"]; path != "" {
+			if absPath, err := filepath.Abs(path); err == nil {
+				GlobalToolCache.InvalidateDir(filepath.Dir(absPath))
+			}
+		}
+
+	// git checkout でファイルが復元される可能性
+	case "git_checkout":
+		// 全キャッシュクリア（どのファイルが変更されるか分からない）
+		GlobalToolCache.Clear()
+
+	// bash は何が起こるか分からないので全クリア
+	case "bash":
+		GlobalToolCache.Clear()
+	}
 }
 
 // PreviewToolCall displays tool information without executing it

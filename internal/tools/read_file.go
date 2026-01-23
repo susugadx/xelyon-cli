@@ -24,12 +24,30 @@ func executeReadFile(path string, startLine, endLine int) string {
 		return fmt.Sprintf("Error: %v", err)
 	}
 
-	content, err := os.ReadFile(absPath)
-	if err != nil {
-		return fmt.Sprintf("Error reading file: %v", err)
+	var contentStr string
+
+	// キャッシュチェック（行範囲指定なしの場合のみ）
+	if startLine == 0 && endLine == 0 && GlobalToolCache != nil {
+		if cached, hit := GlobalToolCache.GetFile(absPath); hit {
+			contentStr = cached
+		}
 	}
 
-	lines := strings.Split(string(content), "\n")
+	// キャッシュミスまたは行範囲指定ありの場合はファイルを読む
+	if contentStr == "" {
+		content, err := os.ReadFile(absPath)
+		if err != nil {
+			return fmt.Sprintf("Error reading file: %v", err)
+		}
+		contentStr = string(content)
+
+		// キャッシュに保存（行範囲指定なしの場合のみ）
+		if startLine == 0 && endLine == 0 && GlobalToolCache != nil {
+			GlobalToolCache.SetFile(absPath, contentStr)
+		}
+	}
+
+	lines := strings.Split(contentStr, "\n")
 	totalLines := len(lines)
 
 	// 行範囲が指定されている場合

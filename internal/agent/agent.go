@@ -45,6 +45,7 @@ type Agent struct {
 	strReplaceErrorCount int                 // str_replace連続エラーカウント（old_str not found）
 	mlReader             *ui.MultilineReader // 共有入力リーダー（ペーストモードでも使用）
 	PlanModeEnabled      bool                // Plan Mode ON/OFF（デフォルト: false）
+	ToolCache            *ToolCache          // ツール結果キャッシュ（read_file, list_dir）
 
 	// OpenAI Compact API 関連
 	compactedItems  []api.InputItem // 圧縮済みアイテム
@@ -212,6 +213,10 @@ Tool call format: {"tool": "tool_name", "args": {"arg1": "value1"}}
 		}
 	}
 
+	// ToolCache 初期化
+	toolCache := NewToolCache()
+	tools.GlobalToolCache = toolCache
+
 	return &Agent{
 		Model:           model,
 		CurrentModel:    model,
@@ -227,6 +232,7 @@ Tool call format: {"tool": "tool_name", "args": {"arg1": "value1"}}
 		SystemPrompt:    systemPrompt,
 		Stats:           NewSessionStats(provider.Name()),
 		lastOutputs:     []string{},
+		ToolCache:       toolCache,
 	}
 }
 
