@@ -82,10 +82,10 @@ func (p *GeminiProvider) chatWithTextMode(ctx context.Context, systemPrompt stri
 		}
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return "", fmt.Errorf("Gemini API error (status %d): unable to read response body - %v", resp.StatusCode, err)
+			return "", fmt.Errorf("gemini API error (status %d): unable to read response body - %v", resp.StatusCode, err)
 		}
 		if len(body) == 0 {
-			return "", fmt.Errorf("Gemini API error (status %d): empty response body. Check API key and model name '%s'", resp.StatusCode, model)
+			return "", fmt.Errorf("gemini API error (status %d): empty response body. Check API key and model name '%s'", resp.StatusCode, model)
 		}
 		return "", sanitizeErrorMessage(body, resp.StatusCode)
 	}
@@ -196,10 +196,10 @@ func (p *GeminiProvider) ChatWithImage(ctx context.Context, systemPrompt string,
 		}
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return "", fmt.Errorf("Gemini API error (status %d): unable to read response body - %v", resp.StatusCode, err)
+			return "", fmt.Errorf("gemini API error (status %d): unable to read response body - %v", resp.StatusCode, err)
 		}
 		if len(body) == 0 {
-			return "", fmt.Errorf("Gemini API error (status %d): empty response body. Check API key and model name '%s'", resp.StatusCode, model)
+			return "", fmt.Errorf("gemini API error (status %d): empty response body. Check API key and model name '%s'", resp.StatusCode, model)
 		}
 		return "", sanitizeErrorMessage(body, resp.StatusCode)
 	}

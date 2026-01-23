@@ -88,11 +88,14 @@ func buildSummaryPrompt(messages []api.Message) string {
 	sb.WriteString("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
 
 	for _, msg := range messages {
-		role := "User"
-		if msg.Role == "assistant" {
+		var role string
+		switch msg.Role {
+		case "assistant":
 			role = "Assistant"
-		} else if msg.Role == "system" {
+		case "system":
 			role = "System"
+		default:
+			role = "User"
 		}
 
 		// 長いメッセージは省略

@@ -70,22 +70,24 @@ func extractFromNode(node *sitter.Node, content []byte, filePath string) []Symbo
 	switch nodeType {
 	// Go
 	case "function_declaration":
-		if ext == ".go" {
+		switch ext {
+		case ".go":
 			symbols = append(symbols, extractGoFunction(node, content, filePath))
-		} else if ext == ".kt" || ext == ".kts" {
+		case ".kt", ".kts":
 			symbols = append(symbols, extractKotlinFunction(node, content, filePath))
-		} else if ext == ".swift" {
+		case ".swift":
 			symbols = append(symbols, extractSwiftFunction(node, content, filePath))
-		} else {
+		default:
 			symbols = append(symbols, extractJSFunction(node, content, filePath))
 		}
 
 	case "method_declaration":
-		if ext == ".go" {
+		switch ext {
+		case ".go":
 			symbols = append(symbols, extractGoMethod(node, content, filePath))
-		} else if ext == ".java" {
+		case ".java":
 			symbols = append(symbols, extractJavaMethod(node, content, filePath))
-		} else if ext == ".cs" {
+		case ".cs":
 			symbols = append(symbols, extractCSharpMethod(node, content, filePath))
 		}
 
@@ -110,17 +112,18 @@ func extractFromNode(node *sitter.Node, content []byte, filePath string) []Symbo
 		}
 
 	case "class_declaration":
-		if ext == ".java" {
+		switch ext {
+		case ".java":
 			symbols = append(symbols, extractJavaClass(node, content, filePath))
-		} else if ext == ".kt" || ext == ".kts" {
+		case ".kt", ".kts":
 			symbols = append(symbols, extractKotlinClass(node, content, filePath))
-		} else if ext == ".scala" {
+		case ".scala":
 			symbols = append(symbols, extractScalaClass(node, content, filePath))
-		} else if ext == ".php" {
+		case ".php":
 			symbols = append(symbols, extractPHPClass(node, content, filePath))
-		} else if ext == ".cs" {
+		case ".cs":
 			symbols = append(symbols, extractCSharpClass(node, content, filePath))
-		} else {
+		default:
 			symbols = append(symbols, extractJSClass(node, content, filePath))
 		}
 
@@ -162,9 +165,10 @@ func extractFromNode(node *sitter.Node, content []byte, filePath string) []Symbo
 
 	// Java / C#
 	case "interface_declaration":
-		if ext == ".java" {
+		switch ext {
+		case ".java":
 			symbols = append(symbols, extractJavaInterface(node, content, filePath))
-		} else if ext == ".cs" {
+		case ".cs":
 			symbols = append(symbols, extractCSharpInterface(node, content, filePath))
 		}
 
@@ -190,9 +194,10 @@ func extractFromNode(node *sitter.Node, content []byte, filePath string) []Symbo
 
 	// Swift
 	case "struct_declaration":
-		if ext == ".swift" {
+		switch ext {
+		case ".swift":
 			symbols = append(symbols, extractSwiftStruct(node, content, filePath))
-		} else if ext == ".cs" {
+		case ".cs":
 			symbols = append(symbols, extractCSharpStruct(node, content, filePath))
 		}
 	case "protocol_declaration":

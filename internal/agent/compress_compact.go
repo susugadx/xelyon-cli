@@ -17,7 +17,7 @@ func (a *Agent) CompressWithCompactAPI(ctx context.Context) error {
 	}
 
 	if !compactProvider.SupportsCompact() {
-		return fmt.Errorf("Compact API is not supported for this model")
+		return fmt.Errorf("compact API is not supported for this model")
 	}
 
 	// 履歴が空の場合はスキップ
@@ -31,7 +31,7 @@ func (a *Agent) CompressWithCompactAPI(ctx context.Context) error {
 	// Compact API 呼び出し
 	result, err := compactProvider.CompactHistory(ctx, input, a.CurrentModel, a.SystemPrompt)
 	if err != nil {
-		return fmt.Errorf("Compact API failed: %w", err)
+		return fmt.Errorf("compact API failed: %w", err)
 	}
 
 	// 圧縮結果を保存

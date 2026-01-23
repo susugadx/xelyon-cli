@@ -50,10 +50,7 @@ func (t *LSPReferencesTool) Run(args map[string]string) (string, *FileChange, er
 	}
 
 	// Include declaration by default
-	includeDecl := true
-	if args["include_declaration"] == "false" {
-		includeDecl = false
-	}
+	includeDecl := args["include_declaration"] != "false"
 
 	ctx, cancel := context.WithTimeout(context.Background(), LSPToolTimeout)
 	defer cancel()

@@ -148,12 +148,7 @@ func parsePasteInput(r io.Reader, maxLines, maxBytes int, timeout time.Duration)
 
 	startTime := time.Now()
 
-	for {
-		// タイムアウトチェック
-		if time.Since(startTime) > timeout {
-			break
-		}
-
+	for time.Since(startTime) <= timeout {
 		n, err := r.Read(buf)
 		if err == io.EOF {
 			// 残りの行を処理
@@ -292,11 +287,7 @@ func parsePasteInputWithCancel(r io.Reader, maxLines, maxBytes int, timeout time
 
 	startTime := time.Now()
 
-	for {
-		if time.Since(startTime) > timeout {
-			break
-		}
-
+	for time.Since(startTime) <= timeout {
 		n, err := r.Read(buf)
 		if err == io.EOF {
 			if currentLine.Len() > 0 {

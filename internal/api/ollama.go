@@ -117,7 +117,7 @@ func (p *OllamaProvider) ChatWithTools(ctx context.Context, systemPrompt string,
 		spinner.Stop()
 		// 接続エラー時は親切なメッセージを表示
 		if strings.Contains(err.Error(), "connection refused") {
-			return "", fmt.Errorf("Ollama is not running. Please start it with `ollama serve`")
+			return "", fmt.Errorf("ollama is not running. Please start it with `ollama serve`")
 		}
 		return "", err
 	}
@@ -201,7 +201,7 @@ func (p *OllamaProvider) ListModels() ([]string, error) {
 	resp, err := p.httpClient.Get(url)
 	if err != nil {
 		if strings.Contains(err.Error(), "connection refused") {
-			return nil, fmt.Errorf("Ollama is not running. Please start it with `ollama serve`")
+			return nil, fmt.Errorf("ollama is not running. Please start it with `ollama serve`")
 		}
 		return nil, err
 	}

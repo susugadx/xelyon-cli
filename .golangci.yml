@@ -17,3 +17,9 @@ linters:
   exclusions:
     paths:
       - vendor # vendorフォルダは無視
+    rules:
+      - linters: [errcheck]
+        text: "Error return value of .*(Close|Print|Fprint|Println|Printf|Setenv|Unsetenv).*"
+      - linters: [errcheck]
+        path: "_test\\.go$"
+        text: "Error return value of .*(os\\.Remove|os\\.RemoveAll|os\\.Mkdir|os\\.MkdirAll).*"

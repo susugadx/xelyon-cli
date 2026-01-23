@@ -289,11 +289,11 @@ type lineRange struct {
 func parseLineRange(startStr, endStr string) (start, end int, _ error) {
 	start64, err := strconv.ParseInt(strings.TrimSpace(startStr), 10, 0)
 	if err != nil {
-		return 0, 0, fmt.Errorf("Invalid start_line: %w", err)
+		return 0, 0, fmt.Errorf("invalid start_line: %w", err)
 	}
 	end64, err := strconv.ParseInt(strings.TrimSpace(endStr), 10, 0)
 	if err != nil {
-		return 0, 0, fmt.Errorf("Invalid end_line: %w", err)
+		return 0, 0, fmt.Errorf("invalid end_line: %w", err)
 	}
 	start = int(start64)
 	end = int(end64)

@@ -102,13 +102,13 @@ func (p *GeminiProvider) chatWithFunctionCalling(ctx context.Context, systemProm
 		// エラー時はボディを読み込む
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return "", fmt.Errorf("Gemini API error (status %d): unable to read response body - %v", resp.StatusCode, err)
+			return "", fmt.Errorf("gemini API error (status %d): unable to read response body - %v", resp.StatusCode, err)
 		}
 		if rateLimitErr := handleRateLimit(resp); rateLimitErr != nil {
 			return "", rateLimitErr
 		}
 		if len(body) == 0 {
-			return "", fmt.Errorf("Gemini API error (status %d): empty response body", resp.StatusCode)
+			return "", fmt.Errorf("gemini API error (status %d): empty response body", resp.StatusCode)
 		}
 		return "", sanitizeErrorMessage(body, resp.StatusCode)
 	}

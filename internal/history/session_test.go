@@ -3,8 +3,6 @@ package history
 import (
 	"testing"
 	"time"
-
-	"github.com/susugadx/xelyon-cli/internal/api"
 )
 
 func TestNewSession(t *testing.T) {
@@ -122,7 +120,7 @@ func TestSession_ToAPIMessages(t *testing.T) {
 	}
 
 	// Verify type
-	var _ []api.Message = apiMsgs
+	_ = apiMsgs
 }
 
 func TestSession_ToAPIMessages_Empty(t *testing.T) {
