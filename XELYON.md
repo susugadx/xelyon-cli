@@ -13,7 +13,7 @@ Go 製 AI コーディングアシスタント CLI。6 LLM プロバイダー対
 
 ## 技術スタック
 
-- Go 1.22+
+- Go 1.24+
 - Cobra（CLI）
 - Tree-sitter（コード解析）
 

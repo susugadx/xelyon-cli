@@ -266,7 +266,8 @@ func (m *Manager) CallTool(ctx context.Context, serverName, toolName string, arg
 				errMsg = "tool returned error"
 			}
 			fmt.Printf("⚠️  MCP tool '%s' call attempt %d failed: %s (retrying...)\n", toolName, attempt, errMsg)
-			time.Sleep(time.Duration(1<<uint(attempt-1)) * time.Second)
+			shift := min(attempt-1, 30)
+			time.Sleep(time.Duration(1<<uint(shift)) * time.Second)
 		}
 	}
 
