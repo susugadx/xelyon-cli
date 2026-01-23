@@ -309,3 +309,184 @@ func TestExecuteStrReplace_LargeFile(t *testing.T) {
 		t.Error("File should not contain TARGET_LINE")
 	}
 }
+
+
+func TestParseLineRange(t *testing.T) {
+	tests := []struct {
+		name      string
+		startStr  string
+		endStr    string
+		wantStart int
+		wantEnd   int
+		wantErr   bool
+		errMsg    string
+	}{
+		{
+			name:      "valid range 1-5",
+			startStr:  "1",
+			endStr:    "5",
+			wantStart: 1,
+			wantEnd:   5,
+			wantErr:   false,
+		},
+		{
+			name:      "valid range 10-20",
+			startStr:  "10",
+			endStr:    "20",
+			wantStart: 10,
+			wantEnd:   20,
+			wantErr:   false,
+		},
+		{
+			name:      "valid single line",
+			startStr:  "5",
+			endStr:    "5",
+			wantStart: 5,
+			wantEnd:   5,
+			wantErr:   false,
+		},
+		{
+			name:      "whitespace in start",
+			startStr:  "  3  ",
+			endStr:    "7",
+			wantStart: 3,
+			wantEnd:   7,
+			wantErr:   false,
+		},
+		{
+			name:      "whitespace in end",
+			startStr:  "1",
+			endStr:    "  10  ",
+			wantStart: 1,
+			wantEnd:   10,
+			wantErr:   false,
+		},
+		{
+			name:     "invalid start not a number",
+			startStr: "abc",
+			endStr:   "5",
+			wantErr:  true,
+			errMsg:   "Invalid start_line",
+		},
+		{
+			name:     "invalid end not a number",
+			startStr: "1",
+			endStr:   "xyz",
+			wantErr:  true,
+			errMsg:   "Invalid end_line",
+		},
+		{
+			name:     "start line zero",
+			startStr: "0",
+			endStr:   "5",
+			wantErr:  true,
+			errMsg:   "start_line must be >= 1",
+		},
+		{
+			name:     "start line negative",
+			startStr: "-1",
+			endStr:   "5",
+			wantErr:  true,
+			errMsg:   "start_line must be >= 1",
+		},
+		{
+			name:     "end less than start",
+			startStr: "10",
+			endStr:   "5",
+			wantErr:  true,
+			errMsg:   "end_line must be >= start_line",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			start, end, err := parseLineRange(tt.startStr, tt.endStr)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("parseLineRange(%q, %q) expected error containing %q, got nil", tt.startStr, tt.endStr, tt.errMsg)
+					return
+				}
+				if !strings.Contains(err.Error(), tt.errMsg) {
+					t.Errorf("parseLineRange(%q, %q) error = %q, want error containing %q", tt.startStr, tt.endStr, err.Error(), tt.errMsg)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("parseLineRange(%q, %q) unexpected error: %v", tt.startStr, tt.endStr, err)
+					return
+				}
+				if start != tt.wantStart || end != tt.wantEnd {
+					t.Errorf("parseLineRange(%q, %q) = (%d, %d), want (%d, %d)", tt.startStr, tt.endStr, start, end, tt.wantStart, tt.wantEnd)
+				}
+			}
+		})
+	}
+}
+
+func TestFindAllOccurrencesLineRanges(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		needle  string
+		max     int
+		want    int // expected number of occurrences
+	}{
+		{
+			name:    "empty needle",
+			content: "line1\nline2\nline3",
+			needle:  "",
+			max:     10,
+			want:    0,
+		},
+		{
+			name:    "max zero",
+			content: "line1\nline2\nline3",
+			needle:  "line",
+			max:     0,
+			want:    0,
+		},
+		{
+			name:    "single occurrence",
+			content: "foo\nbar\nbaz",
+			needle:  "bar",
+			max:     10,
+			want:    1,
+		},
+		{
+			name:    "multiple occurrences",
+			content: "foo\nbar\nfoo\nbaz\nfoo",
+			needle:  "foo",
+			max:     10,
+			want:    3,
+		},
+		{
+			name:    "limited by max",
+			content: "foo\nbar\nfoo\nbaz\nfoo",
+			needle:  "foo",
+			max:     2,
+			want:    2,
+		},
+		{
+			name:    "no occurrence",
+			content: "foo\nbar\nbaz",
+			needle:  "xyz",
+			max:     10,
+			want:    0,
+		},
+		{
+			name:    "multiline needle",
+			content: "line1\nline2\nline3\nline2\nline3",
+			needle:  "line2\nline3",
+			max:     10,
+			want:    2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := findAllOccurrencesLineRanges(tt.content, tt.needle, tt.max)
+			if len(result) != tt.want {
+				t.Errorf("findAllOccurrencesLineRanges() returned %d occurrences, want %d", len(result), tt.want)
+			}
+		})
+	}
+}

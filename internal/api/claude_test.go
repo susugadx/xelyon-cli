@@ -232,3 +232,27 @@ func TestClaudeProvider_ChatWithImage_WithImage(t *testing.T) {
 		t.Errorf("ChatWithImage() = %q, want 'Image analysis complete'", result)
 	}
 }
+
+func TestLevelToBudgetTokens(t *testing.T) {
+	tests := []struct {
+		level string
+		want  int
+	}{
+		{"low", 5000},
+		{"medium", 10000},
+		{"high", 20000},
+		{"xhigh", 40000},
+		{"unknown", 10000},  // default
+		{"", 10000},         // default
+		{"invalid", 10000},  // default
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.level, func(t *testing.T) {
+			got := levelToBudgetTokens(tt.level)
+			if got != tt.want {
+				t.Errorf("levelToBudgetTokens(%q) = %d, want %d", tt.level, got, tt.want)
+			}
+		})
+	}
+}

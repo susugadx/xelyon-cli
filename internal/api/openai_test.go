@@ -328,3 +328,27 @@ func TestResponsesStreamChunk_Parse(t *testing.T) {
 		})
 	}
 }
+
+func TestLevelToReasoningEffort(t *testing.T) {
+	tests := []struct {
+		level string
+		want  string
+	}{
+		{"low", "low"},
+		{"medium", "medium"},
+		{"high", "high"},
+		{"xhigh", "high"},     // xhigh maps to high
+		{"unknown", "medium"}, // default
+		{"", "medium"},        // default
+		{"invalid", "medium"}, // default
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.level, func(t *testing.T) {
+			got := levelToReasoningEffort(tt.level)
+			if got != tt.want {
+				t.Errorf("levelToReasoningEffort(%q) = %q, want %q", tt.level, got, tt.want)
+			}
+		})
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/history"
 )
 
 func TestEstimateTokens(t *testing.T) {
@@ -172,4 +173,146 @@ func stringIndexOf(s, substr string) int {
 		}
 	}
 	return -1
+}
+
+func TestConvertToHistoryCompactedItems(t *testing.T) {
+	tests := []struct {
+		name  string
+		items []api.InputItem
+	}{
+		{
+			name:  "empty items",
+			items: []api.InputItem{},
+		},
+		{
+			name: "single item",
+			items: []api.InputItem{
+				{Type: "message", Role: "user", Content: "Hello"},
+			},
+		},
+		{
+			name: "multiple items with all fields",
+			items: []api.InputItem{
+				{Type: "message", Role: "user", Content: "Hello", ID: "1", Status: "active", Data: ""},
+				{Type: "message", Role: "assistant", Content: "Hi there", ID: "2", Status: "complete", Data: ""},
+				{Type: "tool_result", Role: "", Content: "result data", ID: "3", Status: "", Data: ""},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := convertToHistoryCompactedItems(tt.items)
+
+			if len(result) != len(tt.items) {
+				t.Errorf("convertToHistoryCompactedItems() length = %d, want %d", len(result), len(tt.items))
+				return
+			}
+
+			for i, item := range tt.items {
+				if result[i].Type != item.Type {
+					t.Errorf("item[%d].Type = %q, want %q", i, result[i].Type, item.Type)
+				}
+				if result[i].Role != item.Role {
+					t.Errorf("item[%d].Role = %q, want %q", i, result[i].Role, item.Role)
+				}
+				if result[i].Content != item.Content {
+					t.Errorf("item[%d].Content = %q, want %q", i, result[i].Content, item.Content)
+				}
+				if result[i].ID != item.ID {
+					t.Errorf("item[%d].ID = %q, want %q", i, result[i].ID, item.ID)
+				}
+				if result[i].Status != item.Status {
+					t.Errorf("item[%d].Status = %q, want %q", i, result[i].Status, item.Status)
+				}
+			}
+		})
+	}
+}
+
+func TestConvertFromHistoryCompactedItems(t *testing.T) {
+	tests := []struct {
+		name  string
+		items []history.CompactedItem
+	}{
+		{
+			name:  "empty items",
+			items: []history.CompactedItem{},
+		},
+		{
+			name: "single item",
+			items: []history.CompactedItem{
+				{Type: "message", Role: "user", Content: "Hello"},
+			},
+		},
+		{
+			name: "multiple items with all fields",
+			items: []history.CompactedItem{
+				{Type: "message", Role: "user", Content: "Hello", ID: "1", Status: "active", Data: ""},
+				{Type: "message", Role: "assistant", Content: "Hi there", ID: "2", Status: "complete", Data: ""},
+				{Type: "tool_result", Role: "", Content: "result data", ID: "3", Status: "", Data: ""},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := convertFromHistoryCompactedItems(tt.items)
+
+			if len(result) != len(tt.items) {
+				t.Errorf("convertFromHistoryCompactedItems() length = %d, want %d", len(result), len(tt.items))
+				return
+			}
+
+			for i, item := range tt.items {
+				if result[i].Type != item.Type {
+					t.Errorf("item[%d].Type = %q, want %q", i, result[i].Type, item.Type)
+				}
+				if result[i].Role != item.Role {
+					t.Errorf("item[%d].Role = %q, want %q", i, result[i].Role, item.Role)
+				}
+				if result[i].Content != item.Content {
+					t.Errorf("item[%d].Content = %q, want %q", i, result[i].Content, item.Content)
+				}
+				if result[i].ID != item.ID {
+					t.Errorf("item[%d].ID = %q, want %q", i, result[i].ID, item.ID)
+				}
+				if result[i].Status != item.Status {
+					t.Errorf("item[%d].Status = %q, want %q", i, result[i].Status, item.Status)
+				}
+			}
+		})
+	}
+}
+
+func TestConvertRoundTrip(t *testing.T) {
+	original := []api.InputItem{
+		{Type: "message", Role: "user", Content: "Hello world", ID: "msg1", Status: "active"},
+		{Type: "message", Role: "assistant", Content: "Hi!", ID: "msg2", Status: "complete"},
+	}
+
+	historyItems := convertToHistoryCompactedItems(original)
+	result := convertFromHistoryCompactedItems(historyItems)
+
+	if len(result) != len(original) {
+		t.Fatalf("Round trip failed: length mismatch %d != %d", len(result), len(original))
+	}
+
+	for i := range original {
+		if result[i].Type != original[i].Type {
+			t.Errorf("Round trip item[%d].Type = %q, want %q", i, result[i].Type, original[i].Type)
+		}
+		if result[i].Role != original[i].Role {
+			t.Errorf("Round trip item[%d].Role = %q, want %q", i, result[i].Role, original[i].Role)
+		}
+		if result[i].Content != original[i].Content {
+			t.Errorf("Round trip item[%d].Content = %q, want %q", i, result[i].Content, original[i].Content)
+		}
+		if result[i].ID != original[i].ID {
+			t.Errorf("Round trip item[%d].ID = %q, want %q", i, result[i].ID, original[i].ID)
+		}
+		if result[i].Status != original[i].Status {
+			t.Errorf("Round trip item[%d].Status = %q, want %q", i, result[i].Status, original[i].Status)
+		}
+	}
 }

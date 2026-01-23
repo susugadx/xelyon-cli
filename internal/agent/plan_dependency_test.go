@@ -355,3 +355,51 @@ func TestFormatIntSlice(t *testing.T) {
 		}
 	}
 }
+
+func TestFormatConflictWarning(t *testing.T) {
+	tests := []struct {
+		name     string
+		conflict Conflict
+		want     string
+	}{
+		{
+			name: "single file write-write conflict",
+			conflict: Conflict{
+				StepIDs:      []int{1, 2},
+				ConflictType: "write-write",
+				Files:        []string{"main.go"},
+				Message:      "Both steps modify the same file",
+			},
+			want: "Conflict detected: Both steps modify the same file (steps: 1, 2, files: main.go)",
+		},
+		{
+			name: "multiple files read-write conflict",
+			conflict: Conflict{
+				StepIDs:      []int{3, 5, 7},
+				ConflictType: "read-write",
+				Files:        []string{"config.yaml", "settings.json"},
+				Message:      "Read after write dependency",
+			},
+			want: "Conflict detected: Read after write dependency (steps: 3, 5, 7, files: config.yaml, settings.json)",
+		},
+		{
+			name: "empty files",
+			conflict: Conflict{
+				StepIDs:      []int{1},
+				ConflictType: "write-read",
+				Files:        []string{},
+				Message:      "Potential conflict",
+			},
+			want: "Conflict detected: Potential conflict (steps: 1, files: )",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := formatConflictWarning(tt.conflict)
+			if got != tt.want {
+				t.Errorf("formatConflictWarning() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

@@ -193,3 +193,150 @@ func TestMaxMin(t *testing.T) {
 		t.Error("min(5, 3) should be 3")
 	}
 }
+
+func TestShowColoredDiff_MaxTotalLines(t *testing.T) {
+	// Create content that exceeds MaxTotalLines
+	var oldLines, newLines []string
+	for i := 0; i < 100; i++ {
+		oldLines = append(oldLines, "old line")
+		newLines = append(newLines, "new line")
+	}
+	old := strings.Join(oldLines, "\n")
+	new := strings.Join(newLines, "\n")
+
+	opts := &DiffOptions{
+		ContextLines:  1,
+		ShowLineNums:  true,
+		InlineMode:    true,
+		MaxTotalLines: 10, // Limit to 10 lines
+	}
+
+	output := captureOutput(func() {
+		ShowColoredDiff(old, new, opts)
+	})
+
+	// Should contain truncation message
+	if !strings.Contains(output, "more lines") {
+		t.Errorf("Expected truncation message, got: %s", output)
+	}
+}
+
+func TestShowColoredDiff_SideBySide_MaxTotalLines(t *testing.T) {
+	// Create content that exceeds MaxTotalLines
+	var oldLines, newLines []string
+	for i := 0; i < 50; i++ {
+		oldLines = append(oldLines, "old line content here")
+		newLines = append(newLines, "new line content here")
+	}
+	old := strings.Join(oldLines, "\n")
+	new := strings.Join(newLines, "\n")
+
+	opts := &DiffOptions{
+		ContextLines:  1,
+		ShowLineNums:  true,
+		InlineMode:    false, // Side by side mode
+		MaxTotalLines: 10,    // Limit to 10 lines
+	}
+
+	output := captureOutput(func() {
+		ShowColoredDiff(old, new, opts)
+	})
+
+	// Should contain truncation message
+	if !strings.Contains(output, "omitted") {
+		t.Errorf("Expected 'omitted' truncation message in side-by-side mode, got: %s", output)
+	}
+}
+
+func TestShowColoredDiff_NoLineNumbers(t *testing.T) {
+	old := "line1\nline2"
+	new := "line1\nmodified"
+
+	opts := &DiffOptions{
+		ContextLines:  3,
+		ShowLineNums:  false, // Disable line numbers
+		InlineMode:    true,
+		MaxTotalLines: 50,
+	}
+
+	output := captureOutput(func() {
+		ShowColoredDiff(old, new, opts)
+	})
+
+	// Should not contain line numbers like "   1 "
+	if strings.Contains(output, "   1 -") || strings.Contains(output, "   1 +") {
+		t.Errorf("Expected no line numbers when ShowLineNums=false, got: %s", output)
+	}
+}
+
+func TestShowColoredDiff_LargeDeletion(t *testing.T) {
+	// Test case where old is much longer than new
+	old := "line1\nline2\nline3\nline4\nline5\nline6\nline7"
+	new := "line1"
+
+	output := captureOutput(func() {
+		ShowColoredDiff(old, new, nil)
+	})
+
+	// Should show net negative
+	if !strings.Contains(output, "net:") {
+		t.Errorf("Expected net summary, got: %s", output)
+	}
+}
+
+func TestShowColoredDiff_LargeAddition(t *testing.T) {
+	// Test case where new is much longer than old
+	old := "line1"
+	new := "line1\nline2\nline3\nline4\nline5\nline6\nline7"
+
+	output := captureOutput(func() {
+		ShowColoredDiff(old, new, nil)
+	})
+
+	// Should show net positive
+	if !strings.Contains(output, "net: +") {
+		t.Errorf("Expected positive net summary, got: %s", output)
+	}
+}
+
+func TestShowUnifiedDiff_EmptyLines(t *testing.T) {
+	diffOutput := `--- a/file.txt
++++ b/file.txt
+@@ -1,3 +1,3 @@
+
+-old
++new
+
+ context`
+
+	output := captureOutput(func() {
+		ShowUnifiedDiff(diffOutput)
+	})
+
+	// Should process empty lines without error
+	if !strings.Contains(output, "old") {
+		t.Errorf("Expected content in output, got: %s", output)
+	}
+}
+
+func TestShowInlineDiff_SkipContext(t *testing.T) {
+	// Test the gap/skip logic with many unchanged lines between changes
+	old := "change1\nunchanged1\nunchanged2\nunchanged3\nunchanged4\nunchanged5\nunchanged6\nunchanged7\nunchanged8\nchange2"
+	new := "modified1\nunchanged1\nunchanged2\nunchanged3\nunchanged4\nunchanged5\nunchanged6\nunchanged7\nunchanged8\nmodified2"
+
+	opts := &DiffOptions{
+		ContextLines:  1, // Only show 1 line of context
+		ShowLineNums:  true,
+		InlineMode:    true,
+		MaxTotalLines: 100,
+	}
+
+	output := captureOutput(func() {
+		ShowColoredDiff(old, new, opts)
+	})
+
+	// Should show "..." for skipped sections
+	if !strings.Contains(output, "...") {
+		t.Errorf("Expected '...' for skipped context, got: %s", output)
+	}
+}

@@ -328,3 +328,280 @@ func TestMCPToolWrapper_Run_CallToolError(t *testing.T) {
 		t.Errorf("Result should contain 'Error:', got: %s", result)
 	}
 }
+
+func TestMCPToolWrapper_ConvertArgsWithSchema_EmptySchema(t *testing.T) {
+	wrapper := &MCPToolWrapper{
+		toolName:    "test_tool",
+		inputSchema: nil,
+	}
+
+	args := map[string]string{
+		"param1": "value1",
+		"param2": "123",
+	}
+
+	result := wrapper.convertArgsWithSchema(args)
+
+	if result["param1"] != "value1" {
+		t.Errorf("Expected param1='value1', got %v", result["param1"])
+	}
+	if result["param2"] != "123" {
+		t.Errorf("Expected param2='123' (string), got %v", result["param2"])
+	}
+}
+
+func TestMCPToolWrapper_ConvertArgsWithSchema_NullSchema(t *testing.T) {
+	wrapper := &MCPToolWrapper{
+		toolName:    "test_tool",
+		inputSchema: json.RawMessage("null"),
+	}
+
+	args := map[string]string{
+		"param1": "value1",
+	}
+
+	result := wrapper.convertArgsWithSchema(args)
+
+	if result["param1"] != "value1" {
+		t.Errorf("Expected param1='value1', got %v", result["param1"])
+	}
+}
+
+func TestMCPToolWrapper_ConvertArgsWithSchema_InvalidJSON(t *testing.T) {
+	wrapper := &MCPToolWrapper{
+		toolName:    "test_tool",
+		inputSchema: json.RawMessage("{invalid json"),
+	}
+
+	args := map[string]string{
+		"param1": "value1",
+	}
+
+	result := wrapper.convertArgsWithSchema(args)
+
+	// Invalid JSON should fall back to string values
+	if result["param1"] != "value1" {
+		t.Errorf("Expected param1='value1', got %v", result["param1"])
+	}
+}
+
+func TestMCPToolWrapper_ConvertArgsWithSchema_IntegerType(t *testing.T) {
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"count": map[string]any{
+				"type": "integer",
+			},
+		},
+	}
+	schemaBytes, _ := json.Marshal(schema)
+
+	wrapper := &MCPToolWrapper{
+		toolName:    "test_tool",
+		inputSchema: schemaBytes,
+	}
+
+	args := map[string]string{
+		"count": "42",
+	}
+
+	result := wrapper.convertArgsWithSchema(args)
+
+	if val, ok := result["count"].(int64); !ok || val != 42 {
+		t.Errorf("Expected count=42 (int64), got %T %v", result["count"], result["count"])
+	}
+}
+
+func TestMCPToolWrapper_ConvertArgsWithSchema_NumberType(t *testing.T) {
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"price": map[string]any{
+				"type": "number",
+			},
+		},
+	}
+	schemaBytes, _ := json.Marshal(schema)
+
+	wrapper := &MCPToolWrapper{
+		toolName:    "test_tool",
+		inputSchema: schemaBytes,
+	}
+
+	args := map[string]string{
+		"price": "19.99",
+	}
+
+	result := wrapper.convertArgsWithSchema(args)
+
+	if val, ok := result["price"].(float64); !ok || val != 19.99 {
+		t.Errorf("Expected price=19.99 (float64), got %T %v", result["price"], result["price"])
+	}
+}
+
+func TestMCPToolWrapper_ConvertArgsWithSchema_BooleanType(t *testing.T) {
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"enabled": map[string]any{
+				"type": "boolean",
+			},
+		},
+	}
+	schemaBytes, _ := json.Marshal(schema)
+
+	wrapper := &MCPToolWrapper{
+		toolName:    "test_tool",
+		inputSchema: schemaBytes,
+	}
+
+	tests := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		{"true", "true", true},
+		{"false", "false", false},
+		{"1", "1", true},
+		{"0", "0", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			args := map[string]string{
+				"enabled": tt.input,
+			}
+			result := wrapper.convertArgsWithSchema(args)
+
+			if val, ok := result["enabled"].(bool); !ok || val != tt.want {
+				t.Errorf("Expected enabled=%v (bool), got %T %v", tt.want, result["enabled"], result["enabled"])
+			}
+		})
+	}
+}
+
+func TestMCPToolWrapper_ConvertArgsWithSchema_StringType(t *testing.T) {
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"name": map[string]any{
+				"type": "string",
+			},
+		},
+	}
+	schemaBytes, _ := json.Marshal(schema)
+
+	wrapper := &MCPToolWrapper{
+		toolName:    "test_tool",
+		inputSchema: schemaBytes,
+	}
+
+	args := map[string]string{
+		"name": "test-value",
+	}
+
+	result := wrapper.convertArgsWithSchema(args)
+
+	// String type should remain as string
+	if result["name"] != "test-value" {
+		t.Errorf("Expected name='test-value', got %v", result["name"])
+	}
+}
+
+func TestMCPToolWrapper_ConvertArgsWithSchema_MixedTypes(t *testing.T) {
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"name": map[string]any{
+				"type": "string",
+			},
+			"count": map[string]any{
+				"type": "integer",
+			},
+			"enabled": map[string]any{
+				"type": "boolean",
+			},
+		},
+	}
+	schemaBytes, _ := json.Marshal(schema)
+
+	wrapper := &MCPToolWrapper{
+		toolName:    "test_tool",
+		inputSchema: schemaBytes,
+	}
+
+	args := map[string]string{
+		"name":    "test",
+		"count":   "10",
+		"enabled": "true",
+	}
+
+	result := wrapper.convertArgsWithSchema(args)
+
+	if result["name"] != "test" {
+		t.Errorf("Expected name='test', got %v", result["name"])
+	}
+	if val, ok := result["count"].(int64); !ok || val != 10 {
+		t.Errorf("Expected count=10 (int64), got %T %v", result["count"], result["count"])
+	}
+	if val, ok := result["enabled"].(bool); !ok || val != true {
+		t.Errorf("Expected enabled=true (bool), got %T %v", result["enabled"], result["enabled"])
+	}
+}
+
+func TestMCPToolWrapper_ConvertArgsWithSchema_InvalidValue(t *testing.T) {
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"count": map[string]any{
+				"type": "integer",
+			},
+		},
+	}
+	schemaBytes, _ := json.Marshal(schema)
+
+	wrapper := &MCPToolWrapper{
+		toolName:    "test_tool",
+		inputSchema: schemaBytes,
+	}
+
+	args := map[string]string{
+		"count": "not-a-number",
+	}
+
+	result := wrapper.convertArgsWithSchema(args)
+
+	// Invalid value should remain as string
+	if result["count"] != "not-a-number" {
+		t.Errorf("Expected count='not-a-number' (string fallback), got %T %v", result["count"], result["count"])
+	}
+}
+
+func TestMCPToolWrapper_ConvertArgsWithSchema_UnknownProperty(t *testing.T) {
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"known": map[string]any{
+				"type": "string",
+			},
+		},
+	}
+	schemaBytes, _ := json.Marshal(schema)
+
+	wrapper := &MCPToolWrapper{
+		toolName:    "test_tool",
+		inputSchema: schemaBytes,
+	}
+
+	args := map[string]string{
+		"known":   "value",
+		"unknown": "123",
+	}
+
+	result := wrapper.convertArgsWithSchema(args)
+
+	// Unknown property should remain as string
+	if result["unknown"] != "123" {
+		t.Errorf("Expected unknown='123' (string), got %v", result["unknown"])
+	}
+}

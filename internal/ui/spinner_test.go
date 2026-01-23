@@ -296,3 +296,66 @@ func TestSpinner_WriterOutput(t *testing.T) {
 		t.Error("Stop() should output ANSI clear sequence")
 	}
 }
+
+func TestFormatElapsed(t *testing.T) {
+	tests := []struct {
+		name     string
+		duration time.Duration
+		want     string
+	}{
+		{
+			name:     "less than 1 second",
+			duration: 500 * time.Millisecond,
+			want:     "",
+		},
+		{
+			name:     "exactly 0",
+			duration: 0,
+			want:     "",
+		},
+		{
+			name:     "1 second",
+			duration: 1 * time.Second,
+			want:     "(1s)",
+		},
+		{
+			name:     "5 seconds",
+			duration: 5 * time.Second,
+			want:     "(5s)",
+		},
+		{
+			name:     "10 seconds",
+			duration: 10 * time.Second,
+			want:     "(10s)",
+		},
+		{
+			name:     "60 seconds",
+			duration: 60 * time.Second,
+			want:     "(60s)",
+		},
+		{
+			name:     "90 seconds",
+			duration: 90 * time.Second,
+			want:     "(90s)",
+		},
+		{
+			name:     "1.5 seconds (rounds down)",
+			duration: 1500 * time.Millisecond,
+			want:     "(1s)",
+		},
+		{
+			name:     "999 milliseconds",
+			duration: 999 * time.Millisecond,
+			want:     "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := formatElapsed(tt.duration)
+			if got != tt.want {
+				t.Errorf("formatElapsed(%v) = %q, want %q", tt.duration, got, tt.want)
+			}
+		})
+	}
+}

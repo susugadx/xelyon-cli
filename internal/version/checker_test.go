@@ -336,6 +336,110 @@ func TestFormatUpdateNotification(t *testing.T) {
 	}
 }
 
+func TestCheckForUpdates(t *testing.T) {
+	t.Run("update available", func(t *testing.T) {
+		// Create mock server
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			release := GitHubRelease{
+				TagName: "v99.99.99", // Higher than any current version
+				HTMLURL: "https://github.com/susugadx/xelyon-cli/releases/tag/v99.99.99",
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(release)
+		}))
+		defer server.Close()
+
+		// Temporarily override the API URL
+		oldURL := githubAPIURL
+		githubAPIURL = server.URL
+		defer func() {
+			githubAPIURL = oldURL
+		}()
+
+		tmpDir := t.TempDir()
+		result, err := CheckForUpdates(tmpDir)
+		if err != nil {
+			t.Fatalf("CheckForUpdates() error = %v", err)
+		}
+		if result == nil {
+			t.Fatal("CheckForUpdates() returned nil result")
+		}
+		if !result.HasUpdate {
+			t.Error("CheckForUpdates() HasUpdate = false, want true")
+		}
+		if result.LatestVersion != "v99.99.99" {
+			t.Errorf("CheckForUpdates() LatestVersion = %q, want %q", result.LatestVersion, "v99.99.99")
+		}
+	})
+
+	t.Run("no update available", func(t *testing.T) {
+		// Create mock server returning current version
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			release := GitHubRelease{
+				TagName: GetVersion(), // Same as current version
+				HTMLURL: "https://github.com/susugadx/xelyon-cli/releases/tag/" + GetVersion(),
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(release)
+		}))
+		defer server.Close()
+
+		oldURL := githubAPIURL
+		githubAPIURL = server.URL
+		defer func() {
+			githubAPIURL = oldURL
+		}()
+
+		tmpDir := t.TempDir()
+		result, err := CheckForUpdates(tmpDir)
+		if err != nil {
+			t.Fatalf("CheckForUpdates() error = %v", err)
+		}
+		if result == nil {
+			t.Fatal("CheckForUpdates() returned nil result")
+		}
+		if result.HasUpdate {
+			t.Error("CheckForUpdates() HasUpdate = true, want false")
+		}
+	})
+
+	t.Run("cooldown period active", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		checkFile := filepath.Join(tmpDir, versionCheckFile)
+
+		// Create recent check file
+		_ = os.WriteFile(checkFile, []byte(time.Now().Format(time.RFC3339)), 0644)
+
+		// Should return nil due to cooldown
+		result, err := CheckForUpdates(tmpDir)
+		if err != nil {
+			t.Fatalf("CheckForUpdates() error = %v", err)
+		}
+		if result != nil {
+			t.Error("CheckForUpdates() should return nil during cooldown period")
+		}
+	})
+
+	t.Run("network error returns nil", func(t *testing.T) {
+		oldURL := githubAPIURL
+		githubAPIURL = "http://localhost:1" // Invalid port
+		defer func() {
+			githubAPIURL = oldURL
+		}()
+
+		tmpDir := t.TempDir()
+		result, err := CheckForUpdates(tmpDir)
+		if err != nil {
+			t.Fatalf("CheckForUpdates() error = %v, expected nil", err)
+		}
+		if result != nil {
+			t.Error("CheckForUpdates() should return nil on network error")
+		}
+	})
+}
+
 func TestCheckForUpdates_Integration(t *testing.T) {
 	// This is an integration test that requires network access
 	t.Skip("Skipping integration test - requires network and may hit rate limits")

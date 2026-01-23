@@ -206,3 +206,112 @@ func TestKeyBuilder_Deterministic(t *testing.T) {
 		t.Fatalf("expected deterministic key, got %q vs %q", k1, k2)
 	}
 }
+
+func TestRealClock_Now(t *testing.T) {
+	clk := RealClock{}
+	before := time.Now()
+	now := clk.Now()
+	after := time.Now()
+
+	if now.Before(before) || now.After(after) {
+		t.Errorf("RealClock.Now() = %v, expected between %v and %v", now, before, after)
+	}
+}
+
+func TestCache_Enabled(t *testing.T) {
+	tests := []struct {
+		name     string
+		cfg      Config
+		expected bool
+	}{
+		{
+			name:     "enabled with positive capacity",
+			cfg:      Config{Enabled: true, Capacity: 10},
+			expected: true,
+		},
+		{
+			name:     "disabled by config",
+			cfg:      Config{Enabled: false, Capacity: 10},
+			expected: false,
+		},
+		{
+			name:     "disabled by zero capacity",
+			cfg:      Config{Enabled: true, Capacity: 0},
+			expected: false,
+		},
+		{
+			name:     "disabled by negative capacity",
+			cfg:      Config{Enabled: true, Capacity: -1},
+			expected: false,
+		},
+		{
+			name:     "both disabled",
+			cfg:      Config{Enabled: false, Capacity: 0},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := New(tt.cfg, nil)
+			if got := c.Enabled(); got != tt.expected {
+				t.Errorf("Enabled() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestNew_WithNilClock(t *testing.T) {
+	c := New(Config{Enabled: true, Capacity: 10}, nil)
+	if c == nil {
+		t.Fatal("New() returned nil")
+	}
+	// Should use RealClock internally
+	if c.clock == nil {
+		t.Error("clock should not be nil")
+	}
+}
+
+func TestNew_WithNegativeCapacity(t *testing.T) {
+	c := New(Config{Enabled: true, Capacity: -5}, nil)
+	if c.cfg.Capacity != 0 {
+		t.Errorf("Expected capacity to be normalized to 0, got %d", c.cfg.Capacity)
+	}
+	if c.Enabled() {
+		t.Error("Cache with 0 capacity should not be enabled")
+	}
+}
+
+func TestCache_Delete_NotEnabled(t *testing.T) {
+	c := New(Config{Enabled: false, Capacity: 0}, nil)
+	c.Delete("anykey") // Should not panic
+}
+
+func TestCache_CloneBytes(t *testing.T) {
+	c := New(Config{Enabled: true, Capacity: 10}, nil)
+	
+	original := []byte("hello")
+	c.Set("key", original, 0)
+	
+	// Modify original after setting
+	original[0] = 'X'
+	
+	// Get should return the original value, not the modified one
+	got, err := c.Get("key")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	
+	if string(got) != "hello" {
+		t.Errorf("Expected 'hello', got %q (original was modified)", string(got))
+	}
+	
+	// Modify returned value
+	got[0] = 'Y'
+	
+	// Get again should still return original
+	got2, _ := c.Get("key")
+	if string(got2) != "hello" {
+		t.Errorf("Expected 'hello', got %q (returned value was modified)", string(got2))
+	}
+}

@@ -111,3 +111,71 @@ func TestProposeAndApplyLearning_FiltersExistingBeforePrompt(t *testing.T) {
 		t.Fatalf("expected original extracted rules returned, got %#v", gotRules)
 	}
 }
+
+func TestExtractFirstJSONObject(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "simple object",
+			input:    `{"key": "value"}`,
+			expected: `{"key": "value"}`,
+		},
+		{
+			name:     "object with prefix text",
+			input:    `Some text before {"key": "value"} and after`,
+			expected: `{"key": "value"}`,
+		},
+		{
+			name:     "nested object",
+			input:    `{"outer": {"inner": "value"}}`,
+			expected: `{"outer": {"inner": "value"}}`,
+		},
+		{
+			name:     "object with string containing brace",
+			input:    `{"key": "value with { brace"}`,
+			expected: `{"key": "value with { brace"}`,
+		},
+		{
+			name:     "object with escaped quote",
+			input:    `{"key": "value with \" quote"}`,
+			expected: `{"key": "value with \" quote"}`,
+		},
+		{
+			name:     "no object",
+			input:    "just plain text",
+			expected: "",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "object with array",
+			input:    `{"items": [1, 2, 3]}`,
+			expected: `{"items": [1, 2, 3]}`,
+		},
+		{
+			name:     "multiple objects",
+			input:    `{"first": 1} {"second": 2}`,
+			expected: `{"first": 1}`,
+		},
+		{
+			name:     "object with newlines",
+			input:    "{\n  \"key\": \"value\"\n}",
+			expected: "{\n  \"key\": \"value\"\n}",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractFirstJSONObject(tt.input)
+			if got != tt.expected {
+				t.Errorf("extractFirstJSONObject() = %q, want %q", got, tt.expected)
+			}
+		})
+	}
+}

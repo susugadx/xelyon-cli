@@ -1,6 +1,10 @@
 package agent
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/api"
+)
 
 func TestGetModelTokenLimit(t *testing.T) {
 	tests := []struct {
@@ -55,5 +59,85 @@ func TestEstimateTokenCount(t *testing.T) {
 					tt.text, got, tt.minToken, tt.maxToken)
 			}
 		})
+	}
+}
+
+func TestAgent_EstimateTokens(t *testing.T) {
+	agent := &Agent{
+		SystemPrompt: "You are a helpful assistant.",
+		History: []api.Message{
+			{Role: "user", Content: "Hello"},
+			{Role: "assistant", Content: "Hi there! How can I help you?"},
+		},
+	}
+
+	tokens := agent.EstimateTokens()
+	if tokens <= 0 {
+		t.Errorf("EstimateTokens() = %d, want > 0", tokens)
+	}
+}
+
+func TestAgent_EstimateSystemPromptTokens(t *testing.T) {
+	agent := &Agent{
+		SystemPrompt: "You are a helpful assistant.",
+	}
+
+	tokens := agent.EstimateSystemPromptTokens()
+	if tokens <= 0 {
+		t.Errorf("EstimateSystemPromptTokens() = %d, want > 0", tokens)
+	}
+}
+
+func TestAgent_EstimateHistoryTokens(t *testing.T) {
+	agent := &Agent{
+		History: []api.Message{
+			{Role: "user", Content: "Hello"},
+			{Role: "assistant", Content: "Hi there!"},
+		},
+	}
+
+	tokens := agent.EstimateHistoryTokens()
+	if tokens <= 0 {
+		t.Errorf("EstimateHistoryTokens() = %d, want > 0", tokens)
+	}
+}
+
+func TestAgent_EstimateHistoryTokens_Empty(t *testing.T) {
+	agent := &Agent{
+		History: []api.Message{},
+	}
+
+	tokens := agent.EstimateHistoryTokens()
+	if tokens != 0 {
+		t.Errorf("EstimateHistoryTokens() = %d, want 0 for empty history", tokens)
+	}
+}
+
+func TestAgent_GetTokenUsagePercentage(t *testing.T) {
+	agent := &Agent{
+		SystemPrompt: "You are a helpful assistant.",
+		CurrentModel: "claude-sonnet-4-20250514",
+		History: []api.Message{
+			{Role: "user", Content: "Hello"},
+		},
+	}
+
+	percentage := agent.GetTokenUsagePercentage()
+	if percentage <= 0 || percentage >= 100 {
+		t.Errorf("GetTokenUsagePercentage() = %f, want between 0 and 100", percentage)
+	}
+}
+
+func TestAgent_GetTokenUsagePercentage_ZeroLimit(t *testing.T) {
+	agent := &Agent{
+		SystemPrompt: "Test",
+		CurrentModel: "", // Will use default
+		History:      []api.Message{},
+	}
+
+	// With unknown model, should use default limit and return a small percentage
+	percentage := agent.GetTokenUsagePercentage()
+	if percentage < 0 {
+		t.Errorf("GetTokenUsagePercentage() = %f, should not be negative", percentage)
 	}
 }

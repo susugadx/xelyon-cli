@@ -575,3 +575,94 @@ func TestCopyFileTool_Run(t *testing.T) {
 		t.Errorf("copy_file.Run() copied content = %v, want %v", string(gotContent), content)
 	}
 }
+
+// ===== parseInt Tests =====
+
+func TestParseInt(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		want    int
+		wantErr bool
+	}{
+		{
+			name:    "positive integer",
+			input:   "42",
+			want:    42,
+			wantErr: false,
+		},
+		{
+			name:    "zero",
+			input:   "0",
+			want:    0,
+			wantErr: false,
+		},
+		{
+			name:    "negative integer",
+			input:   "-10",
+			want:    -10,
+			wantErr: false,
+		},
+		{
+			name:    "large positive",
+			input:   "999999",
+			want:    999999,
+			wantErr: false,
+		},
+		{
+			name:    "large negative",
+			input:   "-123456",
+			want:    -123456,
+			wantErr: false,
+		},
+		{
+			name:    "empty string",
+			input:   "",
+			want:    0,
+			wantErr: true,
+		},
+		{
+			name:    "non-numeric string",
+			input:   "abc",
+			want:    0,
+			wantErr: true,
+		},
+		{
+			name:    "float string",
+			input:   "3.14",
+			want:    0,
+			wantErr: true,
+		},
+		{
+			name:    "string with spaces",
+			input:   " 10",
+			want:    0,
+			wantErr: true,
+		},
+		{
+			name:    "mixed alphanumeric",
+			input:   "123abc",
+			want:    0,
+			wantErr: true,
+		},
+		{
+			name:    "plus sign prefix",
+			input:   "+5",
+			want:    5,
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseInt(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("parseInt(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("parseInt(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}

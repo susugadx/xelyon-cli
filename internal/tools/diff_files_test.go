@@ -126,6 +126,69 @@ func TestDiffFilesEmptyArgs(t *testing.T) {
 	}
 }
 
+func TestDiffFilesFirstNotExist(t *testing.T) {
+	dir := t.TempDir()
+
+	file1 := filepath.Join(dir, "nonexistent1.txt")
+	file2 := filepath.Join(dir, "file2.txt")
+
+	if err := os.WriteFile(file2, []byte("content"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := executeDiffFiles(file1, file2, 3)
+	if err == nil {
+		t.Error("Expected error for non-existent first file")
+	}
+}
+
+func TestDiffFilesEmptyFiles(t *testing.T) {
+	dir := t.TempDir()
+
+	file1 := filepath.Join(dir, "empty1.txt")
+	file2 := filepath.Join(dir, "empty2.txt")
+
+	if err := os.WriteFile(file1, []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(file2, []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := executeDiffFiles(file1, file2, 3)
+	if err != nil {
+		t.Fatalf("executeDiffFiles failed: %v", err)
+	}
+
+	if !strings.Contains(result, "identical") {
+		t.Errorf("Expected 'identical' for empty files, got: %s", result)
+	}
+}
+
+func TestDiffFilesOneEmpty(t *testing.T) {
+	dir := t.TempDir()
+
+	file1 := filepath.Join(dir, "empty.txt")
+	file2 := filepath.Join(dir, "content.txt")
+
+	if err := os.WriteFile(file1, []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(file2, []byte("line1\nline2\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := executeDiffFiles(file1, file2, 3)
+	if err != nil {
+		t.Fatalf("executeDiffFiles failed: %v", err)
+	}
+
+	// 差分が表示されるべき
+	if !strings.Contains(result, "+") {
+		t.Errorf("Expected '+' for added lines, got: %s", result)
+	}
+}
+
 func TestDiffFilesTool(t *testing.T) {
 	dir := t.TempDir()
 

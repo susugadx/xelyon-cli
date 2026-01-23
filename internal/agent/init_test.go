@@ -108,19 +108,50 @@ func TestExtToLanguage(t *testing.T) {
 		ext      string
 		expected string
 	}{
+		// Go
 		{".go", "Go"},
+		// JavaScript variants
 		{".js", "JavaScript"},
+		{".mjs", "JavaScript"},
+		{".cjs", "JavaScript"},
+		// TypeScript
 		{".ts", "TypeScript"},
 		{".tsx", "TypeScript"},
+		// JSX
+		{".jsx", "React/JSX"},
+		// Python
 		{".py", "Python"},
+		// Rust
 		{".rs", "Rust"},
+		// Java
 		{".java", "Java"},
+		// Kotlin
+		{".kt", "Kotlin"},
+		{".kts", "Kotlin"},
+		// Ruby
 		{".rb", "Ruby"},
+		// PHP
 		{".php", "PHP"},
+		// C
+		{".c", "C"},
+		{".h", "C"},
+		// C++
+		{".cpp", "C++"},
+		{".hpp", "C++"},
+		{".cc", "C++"},
+		{".cxx", "C++"},
+		// C#
+		{".cs", "C#"},
+		// Swift
+		{".swift", "Swift"},
+		// Vue
 		{".vue", "Vue"},
+		// Svelte
 		{".svelte", "Svelte"},
+		// Unknown
 		{".unknown", ""},
 		{"", ""},
+		{".xyz", ""},
 	}
 
 	for _, tt := range tests {

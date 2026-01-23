@@ -716,3 +716,56 @@ func TestIsAIQuestion_WithToolCall(t *testing.T) {
 		t.Error("isAIQuestion() should return false when tool call is present")
 	}
 }
+
+func TestIsToolCallJSON(t *testing.T) {
+	tests := []struct {
+		name     string
+		jsonStr  string
+		expected bool
+	}{
+		{
+			name:     "valid tool call with tool key",
+			jsonStr:  `{"tool": "read_file", "args": {"path": "/test.txt"}}`,
+			expected: true,
+		},
+		{
+			name:     "valid tool call with tool: pattern",
+			jsonStr:  `{"tool":"bash","args":{"command":"ls"}}`,
+			expected: true,
+		},
+		{
+			name:     "not a tool call - regular JSON",
+			jsonStr:  `{"name": "John", "age": 30}`,
+			expected: false,
+		},
+		{
+			name:     "not a tool call - array",
+			jsonStr:  `[1, 2, 3]`,
+			expected: false,
+		},
+		{
+			name:     "empty object",
+			jsonStr:  `{}`,
+			expected: false,
+		},
+		{
+			name:     "plan JSON (not tool call)",
+			jsonStr:  `{"steps": [{"id": 1}]}`,
+			expected: false,
+		},
+		{
+			name:     "tool call with extra fields",
+			jsonStr:  `{"tool": "write_file", "args": {"path": "/test.txt"}, "extra": true}`,
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isToolCallJSON(tt.jsonStr)
+			if got != tt.expected {
+				t.Errorf("isToolCallJSON(%q) = %v, want %v", tt.jsonStr, got, tt.expected)
+			}
+		})
+	}
+}

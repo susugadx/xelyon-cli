@@ -124,6 +124,17 @@ func TestSessionStats_EstimatedCost_Gemini(t *testing.T) {
 	}
 }
 
+func TestSessionStats_EstimatedCost_Groq(t *testing.T) {
+	stats := NewSessionStats("groq")
+	stats.AddTokens(1000000, 1000000)
+
+	cost := stats.EstimatedCost()
+	expected := 0.10 + 0.10
+	if cost != expected {
+		t.Errorf("EstimatedCost() for groq = %f, want %f", cost, expected)
+	}
+}
+
 func TestSessionStats_EstimatedCost_UnknownProvider(t *testing.T) {
 	stats := NewSessionStats("unknown")
 	stats.AddTokens(1000000, 1000000)

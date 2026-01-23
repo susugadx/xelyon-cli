@@ -4,6 +4,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
@@ -202,6 +203,49 @@ func TestIsAPIKeyAvailable(t *testing.T) {
 			cleanup:  func() {},
 			want:     false,
 		},
+		{
+			name:     "Gemini with API key",
+			provider: "gemini",
+			setup: func() {
+				os.Setenv("GEMINI_API_KEY", "test-key")
+			},
+			cleanup: func() {
+				os.Unsetenv("GEMINI_API_KEY")
+			},
+			want: true,
+		},
+		{
+			name:     "Gemini without API key",
+			provider: "gemini",
+			setup:    func() {},
+			cleanup:  func() {},
+			want:     false,
+		},
+		{
+			name:     "Groq with API key",
+			provider: "groq",
+			setup: func() {
+				os.Setenv("GROQ_API_KEY", "test-key")
+			},
+			cleanup: func() {
+				os.Unsetenv("GROQ_API_KEY")
+			},
+			want: true,
+		},
+		{
+			name:     "Groq without API key",
+			provider: "groq",
+			setup:    func() {},
+			cleanup:  func() {},
+			want:     false,
+		},
+		{
+			name:     "Ollama always available",
+			provider: "ollama",
+			setup:    func() {},
+			cleanup:  func() {},
+			want:     true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -283,5 +327,106 @@ func TestLoadProjectConfig_WithFile(t *testing.T) {
 	config := loadProjectConfig()
 	if config != content {
 		t.Errorf("loadProjectConfig() = %q, want %q", config, content)
+	}
+}
+
+func TestAgent_AppendHistory(t *testing.T) {
+	agent := &Agent{
+		History: []api.Message{},
+	}
+
+	msg := api.Message{Role: "user", Content: "Hello"}
+	agent.appendHistory(msg)
+
+	if len(agent.History) != 1 {
+		t.Errorf("appendHistory() history length = %d, want 1", len(agent.History))
+	}
+	if agent.History[0].Content != "Hello" {
+		t.Errorf("appendHistory() content = %q, want %q", agent.History[0].Content, "Hello")
+	}
+}
+
+func TestAgent_GetHistorySnapshot(t *testing.T) {
+	agent := &Agent{
+		History: []api.Message{
+			{Role: "user", Content: "Hello"},
+			{Role: "assistant", Content: "Hi there"},
+		},
+	}
+
+	snapshot := agent.getHistorySnapshot()
+
+	if len(snapshot) != 2 {
+		t.Errorf("getHistorySnapshot() length = %d, want 2", len(snapshot))
+	}
+
+	// Verify it's a copy
+	snapshot[0].Content = "Modified"
+	if agent.History[0].Content == "Modified" {
+		t.Error("getHistorySnapshot() should return a copy, not a reference")
+	}
+}
+
+func TestAgent_IncrementToolExecution(t *testing.T) {
+	agent := &Agent{
+		Stats: NewSessionStats("test"),
+	}
+
+	agent.incrementToolExecution("read_file")
+	agent.incrementToolExecution("write_file")
+	agent.incrementToolExecution("read_file")
+
+	if agent.Stats.TotalToolExecutions() != 3 {
+		t.Errorf("incrementToolExecution() total = %d, want 3", agent.Stats.TotalToolExecutions())
+	}
+}
+
+func TestAgent_IncrementToolExecution_NilStats(t *testing.T) {
+	agent := &Agent{
+		Stats: nil,
+	}
+
+	// Should not panic
+	agent.incrementToolExecution("read_file")
+}
+
+func TestAgent_IncrementAssistantMessages(t *testing.T) {
+	agent := &Agent{
+		Stats: NewSessionStats("test"),
+	}
+
+	agent.incrementAssistantMessages()
+	agent.incrementAssistantMessages()
+
+	if agent.Stats.AssistantMessages != 2 {
+		t.Errorf("incrementAssistantMessages() count = %d, want 2", agent.Stats.AssistantMessages)
+	}
+}
+
+func TestAgent_IncrementAssistantMessages_NilStats(t *testing.T) {
+	agent := &Agent{
+		Stats: nil,
+	}
+
+	// Should not panic
+	agent.incrementAssistantMessages()
+}
+
+func TestAgent_AppendChange(t *testing.T) {
+	agent := &Agent{
+		changeStack: []tools.FileChange{},
+	}
+
+	change := tools.FileChange{
+		FilePath: "/test/file.txt",
+		Tool:     "write_file",
+	}
+	agent.appendChange(change)
+
+	if len(agent.changeStack) != 1 {
+		t.Errorf("appendChange() stack length = %d, want 1", len(agent.changeStack))
+	}
+	if agent.changeStack[0].FilePath != "/test/file.txt" {
+		t.Errorf("appendChange() path = %q, want %q", agent.changeStack[0].FilePath, "/test/file.txt")
 	}
 }
