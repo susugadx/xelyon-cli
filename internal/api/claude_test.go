@@ -242,9 +242,9 @@ func TestLevelToBudgetTokens(t *testing.T) {
 		{"medium", 10000},
 		{"high", 20000},
 		{"xhigh", 40000},
-		{"unknown", 10000},  // default
-		{"", 10000},         // default
-		{"invalid", 10000},  // default
+		{"unknown", 10000}, // default
+		{"", 10000},        // default
+		{"invalid", 10000}, // default
 	}
 
 	for _, tt := range tests {

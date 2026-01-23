@@ -310,7 +310,6 @@ func TestExecuteStrReplace_LargeFile(t *testing.T) {
 	}
 }
 
-
 func TestParseLineRange(t *testing.T) {
 	tests := []struct {
 		name      string

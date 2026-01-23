@@ -6,10 +6,10 @@ import (
 
 func TestGetMediaType(t *testing.T) {
 	tests := []struct {
-		name     string
-		path     string
-		want     string
-		wantErr  bool
+		name    string
+		path    string
+		want    string
+		wantErr bool
 	}{
 		{
 			name:    "PNG file",

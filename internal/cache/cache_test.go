@@ -289,26 +289,26 @@ func TestCache_Delete_NotEnabled(t *testing.T) {
 
 func TestCache_CloneBytes(t *testing.T) {
 	c := New(Config{Enabled: true, Capacity: 10}, nil)
-	
+
 	original := []byte("hello")
 	c.Set("key", original, 0)
-	
+
 	// Modify original after setting
 	original[0] = 'X'
-	
+
 	// Get should return the original value, not the modified one
 	got, err := c.Get("key")
 	if err != nil {
 		t.Fatalf("Get() error = %v", err)
 	}
-	
+
 	if string(got) != "hello" {
 		t.Errorf("Expected 'hello', got %q (original was modified)", string(got))
 	}
-	
+
 	// Modify returned value
 	got[0] = 'Y'
-	
+
 	// Get again should still return original
 	got2, _ := c.Get("key")
 	if string(got2) != "hello" {
