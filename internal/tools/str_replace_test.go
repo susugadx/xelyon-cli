@@ -365,14 +365,14 @@ func TestParseLineRange(t *testing.T) {
 			startStr: "abc",
 			endStr:   "5",
 			wantErr:  true,
-			errMsg:   "Invalid start_line",
+			errMsg:   "invalid start_line",
 		},
 		{
 			name:     "invalid end not a number",
 			startStr: "1",
 			endStr:   "xyz",
 			wantErr:  true,
-			errMsg:   "Invalid end_line",
+			errMsg:   "invalid end_line",
 		},
 		{
 			name:     "start line zero",

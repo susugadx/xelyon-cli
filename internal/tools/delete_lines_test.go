@@ -131,7 +131,7 @@ func TestExecuteDeleteLines_InvalidStartLine(t *testing.T) {
 		t.Fatalf("executeDeleteLines should not return error: %v", err)
 	}
 
-	if !strings.Contains(output, "Error: Invalid start_line") {
+	if !strings.Contains(output, "Error: invalid start_line") {
 		t.Errorf("Expected invalid start_line error, got: %s", output)
 	}
 
@@ -155,7 +155,7 @@ func TestExecuteDeleteLines_InvalidEndLine(t *testing.T) {
 		t.Fatalf("executeDeleteLines should not return error: %v", err)
 	}
 
-	if !strings.Contains(output, "Error: Invalid end_line") {
+	if !strings.Contains(output, "Error: invalid end_line") {
 		t.Errorf("Expected invalid end_line error, got: %s", output)
 	}
 

@@ -12,12 +12,12 @@ func executeDeleteLines(path, startLineStr, endLineStr string) (string, string, 
 	// 引数検証と変換
 	startLine, err := strconv.Atoi(startLineStr)
 	if err != nil {
-		return fmt.Sprintf("Error: Invalid start_line: %v", err), "", nil
+		return fmt.Sprintf("Error: invalid start_line: %v", err), "", nil
 	}
 
 	endLine, err := strconv.Atoi(endLineStr)
 	if err != nil {
-		return fmt.Sprintf("Error: Invalid end_line: %v", err), "", nil
+		return fmt.Sprintf("Error: invalid end_line: %v", err), "", nil
 	}
 
 	// 範囲検証
