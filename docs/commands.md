@@ -494,20 +494,13 @@ AIが自動で以下のツールを使用します。ユーザーが直接呼び
 | `read_file` | ファイル内容を読み込む | `path` |
 | `write_file` | ファイルを新規作成・上書き | `path`, `content` |
 | `str_replace` | 文字列置換でファイル編集（old_str優先。old_str空+start_line/end_line指定で行レンジ置換も可） | `path`, `old_str`, `new_str`, `start_line`, `end_line` |
-| `append_file` | ファイル末尾に追記 | `path`, `content` |
-| `prepend_file` | ファイル先頭に追記 | `path`, `content` |
-| `insert_after` | パターンの後に挿入 | `path`, `pattern`, `content` |
-| `insert_before` | パターンの前に挿入 | `path`, `pattern`, `content` |
-| `copy_file` | ファイルをコピー | `src`, `dest` |
-| `move_file` | ファイルを移動 | `src`, `dest` |
 | `delete_file` | ファイルを削除 | `path` |
-| `delete_lines` | 指定行を削除 | `path`, `start_line`, `end_line` |
 | `list_dir` | ディレクトリ一覧取得 | `path` |
-| `create_dir` | ディレクトリ作成 | `path` |
 | `restore_backup` | バックアップから復元 | `path`, `backup_path` (オプション) |
 | `list_backups` | バックアップ一覧表示 | `path` |
 | `grep_replace` | 複数ファイルで一括置換 | `pattern`, `replacement`, `path`, `file_pattern`, `dry_run` |
-| `diff_files` | 2つのファイルの差分を表示 | `file1`, `file2`, `context` (オプション) |
+
+**Note**: ファイル操作（mkdir, cp, mv, diff等）は `bash` ツールで実行可能です。
 
 ### HTTP Client
 
@@ -528,15 +521,10 @@ AIが自動で以下のツールを使用します。ユーザーが直接呼び
 
 | ツール名 | 説明 | 主な引数 |
 |---------|------|---------|
-| `git_status` | 現在の変更状況を表示 | - |
-| `git_diff` | 差分を表示 | `path` (オプション) |
-| `git_add` | ステージに追加（複数ファイルはバッチ確認UI） | `path`（スペース/カンマ区切りで複数可） |
 | `git_commit` | コミット作成 | `message` |
-| `git_push` | リモートにプッシュ | - |
-| `git_log` | コミット履歴を表示 | - |
-| `git_branch` | ブランチ一覧表示 | - |
-| `git_checkout` | ブランチ切り替え | `branch` |
-| `git_stash` | 変更を一時退避 | `action` (save/pop/list) |
+| `git_checkout` | ブランチ切り替え/ファイル復元 | `target` |
+
+**Note**: Git操作（status, diff, log, add, push, branch, stash等）は `bash` ツールで実行可能です。
 
 ### 検索
 
@@ -601,7 +589,7 @@ AIは自然言語の指示に基づいてツールを自動選択します。
 # → str_replace（old_str を空にして start_line/end_line を指定） が実行される
 
 > git statusを見せて
-# → git_status が実行される
+# → bash で git status が実行される
 
 > テストを実行して
 # → run_test が実行される

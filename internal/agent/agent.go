@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/fatih/color"
@@ -94,18 +95,16 @@ func NewAgent(model string, provider api.Provider) *Agent {
 - read_file: {"path": "...", "start_line": "N", "end_line": "M"} - start_line/end_line optional
 - write_file: {"path": "...", "content": "..."} - NEW files only
 - str_replace: {"path": "...", "old_str": "...", "new_str": "..."} - Edit existing files
-- append_file, prepend_file: {"path": "...", "content": "..."}
-- insert_after, insert_before: {"path": "...", "pattern": "...", "content": "..."}
-- copy_file, move_file: {"src": "...", "dest": "..."}
-- delete_file, delete_lines: {"path": "..."}
-- list_dir, create_dir: {"path": "..."}
+- delete_file: {"path": "..."}
+- list_dir: {"path": "..."}
 - restore_backup, list_backups: {"path": "..."}
 
 ### Git Operations
-- git_status, git_diff, git_log, git_add, git_commit, git_push
-- git_branch: {"action": "list|create|switch", "branch_name": "..."}
-- git_checkout: {"target": "..."}
-- git_stash: {"action": "save|list|pop|apply|drop"}
+- git_commit: {"message": "..."} - Create commits
+- git_checkout: {"target": "..."} - Switch branches or restore files
+
+**Note**: For git operations (status, diff, log, add, push, branch, stash), use bash.
+For file operations (mkdir, cp, mv, diff), use bash.
 
 ### Search & Discovery
 - search_code: {"pattern": "...", "path": "..."} - Search code content
@@ -116,9 +115,8 @@ func NewAgent(model string, provider api.Provider) *Agent {
 
 ### Development Tools
 - run_test, format, lint: {"path": "..."}
-- diff_files: {"file1": "...", "file2": "..."}
 - http_request: {"method": "GET|POST|PUT|DELETE", "url": "...", "headers": "{}", "body": "..."}
-- bash: {"command": "..."} - Shell commands
+- bash: {"command": "..."} - Shell commands (git status, mkdir, cp, mv, diff, etc.)
 
 Tool call format: {"tool": "tool_name", "args": {"arg1": "value1"}}
 
@@ -191,6 +189,12 @@ Tool call format: {"tool": "tool_name", "args": {"arg1": "value1"}}
 		}
 	}
 
+	// Gemini は Function Calling で詳細なツール定義を送信するため、
+	// System Prompt からツール説明を除去（重複回避、トークン節約）
+	if provider.Name() == "Gemini" {
+		systemPrompt = removeToolsSection(systemPrompt)
+	}
+
 	// GeminiプロバイダーにMCPツールを設定（Function Calling経由で呼び出し可能にする）
 	if len(mcpManager.GetTools()) > 0 {
 		if gemini, ok := provider.(*api.GeminiProvider); ok {
@@ -250,6 +254,27 @@ func buildLSPToolsPrompt() string {
 Note: LSP tools require the corresponding language server to be installed (e.g., gopls for Go).
 Line and character are 1-indexed (as shown in read_file output).
 `
+}
+
+// removeToolsSection は System Prompt から ## Available Tools セクションを除去
+// Gemini は Function Calling で詳細なツール定義を受け取るため、重複を避ける
+// ## Workflow Rules 以降は保持（動作指針として重要）
+func removeToolsSection(prompt string) string {
+	const toolsStart = "## Available Tools"
+	const toolsEnd = "## Workflow Rules"
+
+	startIdx := strings.Index(prompt, toolsStart)
+	if startIdx == -1 {
+		return prompt
+	}
+
+	endIdx := strings.Index(prompt, toolsEnd)
+	if endIdx == -1 {
+		return prompt
+	}
+
+	// toolsStart から toolsEnd の直前までを削除
+	return prompt[:startIdx] + prompt[endIdx:]
 }
 
 // Cleanup はエージェントのリソースをクリーンアップ

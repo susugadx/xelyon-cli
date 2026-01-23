@@ -121,25 +121,6 @@ func (t *HTTPRequestTool) Run(args map[string]string) (string, *FileChange, erro
 	return result, nil, nil
 }
 
-// DiffFilesTool needs special handling for context lines
-type DiffFilesTool struct{}
-
-func (t *DiffFilesTool) Name() string { return "diff_files" }
-
-func (t *DiffFilesTool) Run(args map[string]string) (string, *FileChange, error) {
-	contextLines := 3
-	if args["context"] != "" {
-		if n, err := parseInt(args["context"]); err == nil && n > 0 {
-			contextLines = n
-		}
-	}
-	result, err := executeDiffFiles(args["file1"], args["file2"], contextLines)
-	if err != nil {
-		return fmt.Sprintf("Error: %v", err), nil, err
-	}
-	return result, nil, nil
-}
-
 // RestoreBackupTool needs special error handling
 type RestoreBackupTool struct{}
 
@@ -164,18 +145,10 @@ func RegisterBuiltinTools(r *Registry) {
 	}{
 		{"bash", func(args map[string]string) string { return executeBash(args["command"]) }},
 		{"list_dir", func(args map[string]string) string { return executeListDir(args["path"]) }},
-		{"git_status", func(args map[string]string) string { return executeGitStatus() }},
-		{"git_diff", func(args map[string]string) string { return executeGitDiff(args["path"]) }},
-		{"git_add", func(args map[string]string) string { return executeGitAdd(args["path"]) }},
 		{"git_commit", func(args map[string]string) string { return executeGitCommit(args["message"]) }},
-		{"git_push", func(args map[string]string) string { return executeGitPush() }},
-		{"git_log", func(args map[string]string) string { return executeGitLog() }},
-		{"git_branch", func(args map[string]string) string { return executeGitBranch(args["action"], args["branch_name"]) }},
-		{"git_stash", func(args map[string]string) string { return executeGitStash(args["action"], args["message"]) }},
 		{"search_code", func(args map[string]string) string { return executeSearchCode(args["pattern"], args["path"]) }},
 		{"search_file", func(args map[string]string) string { return executeSearchFile(args["pattern"], args["path"]) }},
 		{"web_search", func(args map[string]string) string { return executeWebSearch(args["query"]) }},
-		{"create_dir", func(args map[string]string) string { return executeCreateDir(args["path"]) }},
 		{"run_test", func(args map[string]string) string { return executeRunTest(args["path"]) }},
 		{"ast_grep", func(args map[string]string) string {
 			return executeAstGrep(args["pattern"], args["lang"], args["path"])
@@ -210,22 +183,6 @@ func RegisterBuiltinTools(r *Registry) {
 			getFilePath: func(args map[string]string) string { return args["path"] },
 		},
 		{
-			name: "append_file",
-			execute: func(args map[string]string) (string, string, error) {
-				return executeAppendFile(args["path"], args["content"])
-			},
-			description: func(args map[string]string) string { return "Appended to file " + args["path"] },
-			getFilePath: func(args map[string]string) string { return args["path"] },
-		},
-		{
-			name: "prepend_file",
-			execute: func(args map[string]string) (string, string, error) {
-				return executePrependFile(args["path"], args["content"])
-			},
-			description: func(args map[string]string) string { return "Prepended to file " + args["path"] },
-			getFilePath: func(args map[string]string) string { return args["path"] },
-		},
-		{
 			name:        "format",
 			execute:     func(args map[string]string) (string, string, error) { return executeFormat(args["path"]) },
 			description: func(args map[string]string) string { return "Formatted file " + args["path"] },
@@ -238,52 +195,10 @@ func RegisterBuiltinTools(r *Registry) {
 			getFilePath: func(args map[string]string) string { return args["target"] },
 		},
 		{
-			name: "insert_after",
-			execute: func(args map[string]string) (string, string, error) {
-				return executeInsertAfter(args["path"], args["pattern"], args["content"])
-			},
-			description: func(args map[string]string) string { return "Inserted content after pattern in " + args["path"] },
-			getFilePath: func(args map[string]string) string { return args["path"] },
-		},
-		{
-			name: "insert_before",
-			execute: func(args map[string]string) (string, string, error) {
-				return executeInsertBefore(args["path"], args["pattern"], args["content"])
-			},
-			description: func(args map[string]string) string { return "Inserted content before pattern in " + args["path"] },
-			getFilePath: func(args map[string]string) string { return args["path"] },
-		},
-		{
-			name: "copy_file",
-			execute: func(args map[string]string) (string, string, error) {
-				return executeCopyFile(args["src"], args["dest"])
-			},
-			description: func(args map[string]string) string { return "Copied " + args["src"] + " to " + args["dest"] },
-			getFilePath: func(args map[string]string) string { return args["dest"] },
-		},
-		{
-			name: "delete_lines",
-			execute: func(args map[string]string) (string, string, error) {
-				return executeDeleteLines(args["path"], args["start_line"], args["end_line"])
-			},
-			description: func(args map[string]string) string {
-				return "Deleted lines " + args["start_line"] + "-" + args["end_line"] + " in " + args["path"]
-			},
-			getFilePath: func(args map[string]string) string { return args["path"] },
-		},
-		{
 			name:        "delete_file",
 			execute:     func(args map[string]string) (string, string, error) { return executeDeleteFile(args["path"]) },
 			description: func(args map[string]string) string { return "Deleted file " + args["path"] },
 			getFilePath: func(args map[string]string) string { return args["path"] },
-		},
-		{
-			name: "move_file",
-			execute: func(args map[string]string) (string, string, error) {
-				return executeMoveFile(args["src"], args["dest"])
-			},
-			description: func(args map[string]string) string { return "Moved " + args["src"] + " to " + args["dest"] },
-			getFilePath: func(args map[string]string) string { return args["dest"] },
 		},
 		{
 			name: "lint",
@@ -307,7 +222,6 @@ func RegisterBuiltinTools(r *Registry) {
 	r.Register(&ReadFileTool{})
 	r.Register(&GrepReplaceTool{})
 	r.Register(&HTTPRequestTool{})
-	r.Register(&DiffFilesTool{})
 	r.Register(&RestoreBackupTool{})
 }
 

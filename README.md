@@ -22,11 +22,11 @@ DeepSeek, OpenAI, Gemini, Claude, Ollama, Groq をシームレスに切り替え
 
 **OpenAI Responses API 対応**: `gpt-5.2-codex` などの Codex モデルを自動検出し、最適なAPIを選択。
 
-### 🛠️ 38種類の組み込みツール
-- **ファイル操作**: 読み書き、編集、コピー、移動、削除、バックアップ復元
-- **Git操作**: status, diff, add, commit, push, branch, stash
+### 🛠️ 24種類の組み込みツール
+- **ファイル操作**: 読み書き、編集、削除、バックアップ復元
+- **Git操作**: commit, checkout（status/diff/add等はbashで）
 - **コード検索**: grep検索、ファイル検索、ast-grep（構造的検索）
-- **開発支援**: テスト実行、フォーマット、リント
+- **開発支援**: テスト実行、フォーマット、リント、bash
 - **LSP連携**: 参照検索、定義ジャンプ、ホバー情報
 
 ### 📋 確認ベースの安全設計
@@ -168,7 +168,7 @@ xelyon --auto-approve
 
 | ドキュメント | 内容 |
 |------------|------|
-| [コマンド一覧](docs/commands.md) | 全コマンド、38ツール、使用例 |
+| [コマンド一覧](docs/commands.md) | 全コマンド、24ツール、使用例 |
 | [プロバイダー設定](docs/providers.md) | 各プロバイダーのAPIキー取得方法 |
 | [設定リファレンス](docs/config.md) | config.yaml と環境変数 |
 | [MCP連携](docs/mcp.md) | 外部ツール追加 |

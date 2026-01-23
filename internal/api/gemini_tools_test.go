@@ -18,8 +18,8 @@ func TestGetGeminiToolDefinitions(t *testing.T) {
 		t.Error("Expected at least one function declaration")
 	}
 
-	// 35ツールが定義されていることを確認
-	expectedCount := 35
+	// 19ツールが定義されていることを確認（16ツールを削除: bash/str_replaceで代用可能）
+	expectedCount := 24
 	if len(declarations) != expectedCount {
 		t.Errorf("Expected %d tool definitions, got %d", expectedCount, len(declarations))
 	}
@@ -76,14 +76,14 @@ func TestConvertFunctionCallToToolJSON(t *testing.T) {
 			},
 		},
 		{
-			name: "git_status with no args",
+			name: "bash with command",
 			input: &GeminiFunctionCall{
-				Name: "git_status",
-				Args: map[string]any{},
+				Name: "bash",
+				Args: map[string]any{"command": "git status"},
 			},
 			expected: map[string]any{
-				"tool": "git_status",
-				"args": map[string]any{},
+				"tool": "bash",
+				"args": map[string]any{"command": "git status"},
 			},
 		},
 	}
@@ -147,19 +147,20 @@ func TestConvertFunctionCallToToolJSON_KeyOrder(t *testing.T) {
 }
 
 func TestAllBuiltinToolsHaveDefinitions(t *testing.T) {
-	// 期待されるツール名のリスト
+	// 期待されるツール名のリスト（24ツール）
+	// 注: 16ツールはbash/str_replaceで代用可能なため削除済み
 	expectedTools := []string{
-		// File Operations
-		"read_file", "write_file", "str_replace", "append_file", "prepend_file",
-		"insert_after", "insert_before", "copy_file", "move_file", "delete_file",
-		"delete_lines", "list_dir", "create_dir", "restore_backup", "list_backups",
-		// Git Operations
-		"git_status", "git_diff", "git_log", "git_add", "git_commit",
-		"git_push", "git_branch", "git_checkout", "git_stash",
-		// Search Operations
+		// File Operations (7)
+		"read_file", "write_file", "str_replace", "delete_file",
+		"list_dir", "restore_backup", "list_backups",
+		// Git Operations (2)
+		"git_commit", "git_checkout",
+		// Search Operations (5)
 		"search_code", "search_file", "web_search", "ast_grep", "grep_replace",
-		// Development Operations
-		"run_test", "format", "lint", "diff_files", "http_request", "bash",
+		// Development Operations (5)
+		"run_test", "format", "lint", "http_request", "bash",
+		// LSP Tools (5)
+		"lsp_references", "lsp_definition", "lsp_hover", "lsp_diagnostics", "lsp_rename",
 	}
 
 	definedNames := GetToolDefinitionNames()
@@ -481,8 +482,8 @@ func TestGetCombinedToolDefinitions(t *testing.T) {
 			t.Fatalf("Expected 1 tool config, got %d", len(tools))
 		}
 
-		// 組み込みツール35個のみ
-		expectedCount := 35
+		// 組み込みツール19個のみ（16ツールはbash/str_replaceで代用可能なため削除済み）
+		expectedCount := 24
 		if len(tools[0].FunctionDeclarations) != expectedCount {
 			t.Errorf("Expected %d declarations, got %d", expectedCount, len(tools[0].FunctionDeclarations))
 		}
@@ -501,8 +502,8 @@ func TestGetCombinedToolDefinitions(t *testing.T) {
 			t.Fatalf("Expected 1 tool config, got %d", len(tools))
 		}
 
-		// 組み込み35 + MCP2
-		expectedCount := 35 + 2
+		// 組み込み24 + MCP2
+		expectedCount := 24 + 2
 		if len(tools[0].FunctionDeclarations) != expectedCount {
 			t.Errorf("Expected %d declarations, got %d", expectedCount, len(tools[0].FunctionDeclarations))
 		}

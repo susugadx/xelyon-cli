@@ -8,6 +8,47 @@ import (
 	"testing"
 )
 
+// setupGitRepo creates a temporary git repository for testing
+func setupGitRepo(t *testing.T) string {
+	t.Helper()
+
+	tmpDir := t.TempDir()
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get current directory: %v", err)
+	}
+
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("Failed to change to temp directory: %v", err)
+	}
+
+	t.Cleanup(func() {
+		_ = os.Chdir(originalDir)
+	})
+
+	// Initialize git repo
+	cmd := exec.Command("git", "init")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to init git repo: %v", err)
+	}
+
+	// Configure git user for commits
+	cmd = exec.Command("git", "config", "user.email", "test@example.com")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to configure git email: %v", err)
+	}
+
+	cmd = exec.Command("git", "config", "user.name", "Test User")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to configure git name: %v", err)
+	}
+
+	return tmpDir
+}
+
 func TestExecuteGitCommit_Success(t *testing.T) {
 	setupTestMocks(t)
 

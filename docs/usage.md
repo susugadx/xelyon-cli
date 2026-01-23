@@ -189,8 +189,8 @@ xelyon --image error.png --provider gemini "このエラーを修正して"
 
 ### 対象例
 
-- ファイル上書き（`copy_file`, `move_file`）
-- Git操作（`git_add`, `git_commit`）
+- ファイル変更（`write_file`, `str_replace`）
+- Git操作（`git_commit`）
 - テスト失敗時のロールバック
 
 ### 設定

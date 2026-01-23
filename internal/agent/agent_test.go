@@ -430,3 +430,69 @@ func TestAgent_AppendChange(t *testing.T) {
 		t.Errorf("appendChange() path = %q, want %q", agent.changeStack[0].FilePath, "/test/file.txt")
 	}
 }
+
+func TestRemoveToolsSection(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name: "removes tools section",
+			input: `## Core Identity
+Some identity text.
+
+## Available Tools
+- tool1
+- tool2
+
+## Workflow Rules
+Some rules.`,
+			want: `## Core Identity
+Some identity text.
+
+## Workflow Rules
+Some rules.`,
+		},
+		{
+			name: "no tools section",
+			input: `## Core Identity
+Some identity text.
+
+## Workflow Rules
+Some rules.`,
+			want: `## Core Identity
+Some identity text.
+
+## Workflow Rules
+Some rules.`,
+		},
+		{
+			name: "no workflow rules",
+			input: `## Core Identity
+Some identity text.
+
+## Available Tools
+- tool1`,
+			want: `## Core Identity
+Some identity text.
+
+## Available Tools
+- tool1`,
+		},
+		{
+			name:  "empty string",
+			input: "",
+			want:  "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := removeToolsSection(tt.input)
+			if got != tt.want {
+				t.Errorf("removeToolsSection() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

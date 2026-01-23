@@ -15,15 +15,17 @@ func getToolFromRegistry(name string) Tool {
 // ===== Registry-based Tool Tests =====
 
 func TestRegisteredTools(t *testing.T) {
+	// 19ツール（16ツールはbash/str_replaceで代用可能なため削除済み）
 	expectedTools := []string{
-		"bash", "read_file", "write_file", "str_replace", "list_dir",
-		"git_status", "git_diff", "git_add", "git_commit", "git_push",
-		"git_log", "git_branch", "git_stash", "git_checkout",
-		"search_code", "search_file", "web_search", "create_dir", "run_test",
-		"append_file", "prepend_file", "format", "insert_after", "insert_before",
-		"copy_file", "delete_lines", "delete_file", "move_file", "lint",
-		"grep_replace", "http_request", "diff_files", "restore_backup",
-		"list_backups", "ast_grep",
+		// File Operations (7)
+		"read_file", "write_file", "str_replace", "delete_file",
+		"list_dir", "restore_backup", "list_backups",
+		// Git Operations (2)
+		"git_commit", "git_checkout",
+		// Search Operations (5)
+		"search_code", "search_file", "web_search", "ast_grep", "grep_replace",
+		// Development Operations (5)
+		"bash", "run_test", "format", "lint", "http_request",
 	}
 
 	for _, name := range expectedTools {
@@ -243,69 +245,6 @@ func TestListDirTool_Run(t *testing.T) {
 	}
 }
 
-// ===== Git Status Tool Tests =====
-
-func TestGitStatusTool_Run(t *testing.T) {
-	tool := getToolFromRegistry("git_status")
-	if tool == nil {
-		t.Fatal("git_status tool not found in registry")
-	}
-
-	args := map[string]string{}
-	output, change, err := tool.Run(args)
-
-	if err != nil {
-		t.Errorf("git_status.Run() error = %v", err)
-	}
-	if change != nil {
-		t.Errorf("git_status.Run() change should be nil")
-	}
-	// 出力は空またはgit statusの結果
-	_ = output
-}
-
-// ===== Git Diff Tool Tests =====
-
-func TestGitDiffTool_Run(t *testing.T) {
-	tool := getToolFromRegistry("git_diff")
-	if tool == nil {
-		t.Fatal("git_diff tool not found in registry")
-	}
-
-	args := map[string]string{"path": "."}
-	output, change, err := tool.Run(args)
-
-	if err != nil {
-		t.Errorf("git_diff.Run() error = %v", err)
-	}
-	if change != nil {
-		t.Errorf("git_diff.Run() change should be nil")
-	}
-	// 出力は空またはgit diffの結果
-	_ = output
-}
-
-// ===== Git Log Tool Tests =====
-
-func TestGitLogTool_Run(t *testing.T) {
-	tool := getToolFromRegistry("git_log")
-	if tool == nil {
-		t.Fatal("git_log tool not found in registry")
-	}
-
-	args := map[string]string{}
-	output, change, err := tool.Run(args)
-
-	if err != nil {
-		t.Errorf("git_log.Run() error = %v", err)
-	}
-	if change != nil {
-		t.Errorf("git_log.Run() change should be nil")
-	}
-	// 出力は空またはgit logの結果
-	_ = output
-}
-
 // ===== Search Code Tool Tests =====
 
 func TestSearchCodeTool_Run(t *testing.T) {
@@ -362,217 +301,6 @@ func TestSearchFileTool_Run(t *testing.T) {
 	}
 	if !strings.Contains(output, "test.go") {
 		t.Errorf("search_file.Run() output = %v, should contain 'test.go'", output)
-	}
-}
-
-// ===== Append File Tool Tests =====
-
-func TestAppendFileTool_Run(t *testing.T) {
-	setupTestMocks(t)
-
-	tmpDir := t.TempDir()
-	testFile := filepath.Join(tmpDir, "append.txt")
-	content := "appended content"
-
-	tool := getToolFromRegistry("append_file")
-	if tool == nil {
-		t.Fatal("append_file tool not found in registry")
-	}
-
-	args := map[string]string{"path": testFile, "content": content}
-	output, change, err := tool.Run(args)
-
-	if err != nil {
-		t.Errorf("append_file.Run() error = %v", err)
-	}
-	// 新規ファイルの場合はchangeはnil
-	if change != nil {
-		t.Errorf("append_file.Run() change should be nil for new file")
-	}
-	if !strings.Contains(output, "Successfully appended") {
-		t.Errorf("append_file.Run() output = %v", output)
-	}
-}
-
-// ===== Prepend File Tool Tests =====
-
-func TestPrependFileTool_Run(t *testing.T) {
-	setupTestMocks(t)
-
-	tmpDir := t.TempDir()
-	testFile := filepath.Join(tmpDir, "prepend.txt")
-	content := "prepended content"
-
-	tool := getToolFromRegistry("prepend_file")
-	if tool == nil {
-		t.Fatal("prepend_file tool not found in registry")
-	}
-
-	args := map[string]string{"path": testFile, "content": content}
-	output, change, err := tool.Run(args)
-
-	if err != nil {
-		t.Errorf("prepend_file.Run() error = %v", err)
-	}
-	// 新規ファイルの場合はchangeはnil
-	if change != nil {
-		t.Errorf("prepend_file.Run() change should be nil for new file")
-	}
-	if !strings.Contains(output, "Successfully prepended") {
-		t.Errorf("prepend_file.Run() output = %v", output)
-	}
-}
-
-// ===== Create Dir Tool Tests =====
-
-func TestCreateDirTool_Run(t *testing.T) {
-	tmpDir := t.TempDir()
-	newDir := filepath.Join(tmpDir, "newdir")
-
-	tool := getToolFromRegistry("create_dir")
-	if tool == nil {
-		t.Fatal("create_dir tool not found in registry")
-	}
-
-	args := map[string]string{"path": newDir}
-	output, change, err := tool.Run(args)
-
-	if err != nil {
-		t.Errorf("create_dir.Run() error = %v", err)
-	}
-	if change != nil {
-		t.Errorf("create_dir.Run() change should be nil")
-	}
-	if !strings.Contains(output, "Successfully created") {
-		t.Errorf("create_dir.Run() output = %v", output)
-	}
-
-	// ディレクトリ存在確認
-	if _, err := os.Stat(newDir); os.IsNotExist(err) {
-		t.Error("create_dir.Run() did not create directory")
-	}
-}
-
-// ===== Insert After Tool Tests =====
-
-func TestInsertAfterTool_Run(t *testing.T) {
-	setupTestMocks(t)
-
-	tmpDir := t.TempDir()
-	testFile := filepath.Join(tmpDir, "insert.txt")
-	content := "Line 1\nLine 2\nLine 3"
-
-	if err := os.WriteFile(testFile, []byte(content), 0644); err != nil {
-		t.Fatalf("Failed to create test file: %v", err)
-	}
-
-	tool := getToolFromRegistry("insert_after")
-	if tool == nil {
-		t.Fatal("insert_after tool not found in registry")
-	}
-
-	args := map[string]string{
-		"path":    testFile,
-		"pattern": "Line 2",
-		"content": "Inserted",
-	}
-
-	output, change, err := tool.Run(args)
-
-	if err != nil {
-		t.Errorf("insert_after.Run() error = %v", err)
-	}
-	if change == nil {
-		t.Error("insert_after.Run() change should not be nil")
-	}
-	if !strings.Contains(output, "Inserted after") {
-		t.Errorf("insert_after.Run() output = %v", output)
-	}
-}
-
-// ===== Insert Before Tool Tests =====
-
-func TestInsertBeforeTool_Run(t *testing.T) {
-	setupTestMocks(t)
-
-	tmpDir := t.TempDir()
-	testFile := filepath.Join(tmpDir, "insert.txt")
-	content := "Line 1\nLine 2\nLine 3"
-
-	if err := os.WriteFile(testFile, []byte(content), 0644); err != nil {
-		t.Fatalf("Failed to create test file: %v", err)
-	}
-
-	tool := getToolFromRegistry("insert_before")
-	if tool == nil {
-		t.Fatal("insert_before tool not found in registry")
-	}
-
-	args := map[string]string{
-		"path":    testFile,
-		"pattern": "Line 2",
-		"content": "Inserted",
-	}
-
-	output, change, err := tool.Run(args)
-
-	if err != nil {
-		t.Errorf("insert_before.Run() error = %v", err)
-	}
-	if change == nil {
-		t.Error("insert_before.Run() change should not be nil")
-	}
-	if !strings.Contains(output, "Inserted before") {
-		t.Errorf("insert_before.Run() output = %v", output)
-	}
-}
-
-// ===== Copy File Tool Tests =====
-
-func TestCopyFileTool_Run(t *testing.T) {
-	setupTestMocks(t)
-
-	// confirmをモック化
-	oldConfirm := confirm
-	confirm = func(message string) bool { return true }
-	t.Cleanup(func() { confirm = oldConfirm })
-
-	tmpDir := t.TempDir()
-	srcFile := filepath.Join(tmpDir, "source.txt")
-	destFile := filepath.Join(tmpDir, "dest.txt")
-	content := "source content"
-
-	if err := os.WriteFile(srcFile, []byte(content), 0644); err != nil {
-		t.Fatalf("Failed to create source file: %v", err)
-	}
-
-	tool := getToolFromRegistry("copy_file")
-	if tool == nil {
-		t.Fatal("copy_file tool not found in registry")
-	}
-
-	args := map[string]string{
-		"src":  srcFile,
-		"dest": destFile,
-	}
-
-	output, change, err := tool.Run(args)
-
-	if err != nil {
-		t.Errorf("copy_file.Run() error = %v", err)
-	}
-	// 新規コピーの場合はchangeはnil
-	if change != nil {
-		t.Errorf("copy_file.Run() change should be nil for new copy")
-	}
-	if !strings.Contains(output, "copied") {
-		t.Errorf("copy_file.Run() output = %v", output)
-	}
-
-	// コピー先の内容確認
-	gotContent, _ := os.ReadFile(destFile)
-	if string(gotContent) != content {
-		t.Errorf("copy_file.Run() copied content = %v, want %v", string(gotContent), content)
 	}
 }
 

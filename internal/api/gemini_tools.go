@@ -76,80 +76,6 @@ var toolDefinitions = map[string]GeminiFunctionDeclaration{
 			Required: []string{"path", "old_str", "new_str"},
 		},
 	},
-	"append_file": {
-		Name:        "append_file",
-		Description: "Appends content to the end of an existing file.",
-		Parameters: &GeminiParameterSchema{
-			Type: "object",
-			Properties: map[string]GeminiPropertyDef{
-				"path":    {Type: "string", Description: "File path to append to"},
-				"content": {Type: "string", Description: "Content to append"},
-			},
-			Required: []string{"path", "content"},
-		},
-	},
-	"prepend_file": {
-		Name:        "prepend_file",
-		Description: "Inserts content at the beginning of an existing file.",
-		Parameters: &GeminiParameterSchema{
-			Type: "object",
-			Properties: map[string]GeminiPropertyDef{
-				"path":    {Type: "string", Description: "File path to prepend to"},
-				"content": {Type: "string", Description: "Content to insert at the beginning"},
-			},
-			Required: []string{"path", "content"},
-		},
-	},
-	"insert_after": {
-		Name:        "insert_after",
-		Description: "Inserts content after the first line matching a pattern.",
-		Parameters: &GeminiParameterSchema{
-			Type: "object",
-			Properties: map[string]GeminiPropertyDef{
-				"path":    {Type: "string", Description: "File path to edit"},
-				"pattern": {Type: "string", Description: "Pattern to find (first match)"},
-				"content": {Type: "string", Description: "Content to insert after the matched line"},
-			},
-			Required: []string{"path", "pattern", "content"},
-		},
-	},
-	"insert_before": {
-		Name:        "insert_before",
-		Description: "Inserts content before the first line matching a pattern.",
-		Parameters: &GeminiParameterSchema{
-			Type: "object",
-			Properties: map[string]GeminiPropertyDef{
-				"path":    {Type: "string", Description: "File path to edit"},
-				"pattern": {Type: "string", Description: "Pattern to find (first match)"},
-				"content": {Type: "string", Description: "Content to insert before the matched line"},
-			},
-			Required: []string{"path", "pattern", "content"},
-		},
-	},
-	"copy_file": {
-		Name:        "copy_file",
-		Description: "Copies a file from source to destination.",
-		Parameters: &GeminiParameterSchema{
-			Type: "object",
-			Properties: map[string]GeminiPropertyDef{
-				"src":  {Type: "string", Description: "Source file path"},
-				"dest": {Type: "string", Description: "Destination file path"},
-			},
-			Required: []string{"src", "dest"},
-		},
-	},
-	"move_file": {
-		Name:        "move_file",
-		Description: "Moves or renames a file.",
-		Parameters: &GeminiParameterSchema{
-			Type: "object",
-			Properties: map[string]GeminiPropertyDef{
-				"src":  {Type: "string", Description: "Source file path"},
-				"dest": {Type: "string", Description: "Destination file path"},
-			},
-			Required: []string{"src", "dest"},
-		},
-	},
 	"delete_file": {
 		Name:        "delete_file",
 		Description: "Deletes a file permanently. Creates a backup before deletion.",
@@ -161,19 +87,6 @@ var toolDefinitions = map[string]GeminiFunctionDeclaration{
 			Required: []string{"path"},
 		},
 	},
-	"delete_lines": {
-		Name:        "delete_lines",
-		Description: "Deletes a range of lines from a file.",
-		Parameters: &GeminiParameterSchema{
-			Type: "object",
-			Properties: map[string]GeminiPropertyDef{
-				"path":       {Type: "string", Description: "File path to edit"},
-				"start_line": {Type: "string", Description: "Start line number (1-indexed)"},
-				"end_line":   {Type: "string", Description: "End line number (1-indexed)"},
-			},
-			Required: []string{"path", "start_line", "end_line"},
-		},
-	},
 	"list_dir": {
 		Name:        "list_dir",
 		Description: "Lists files and directories in the specified path.",
@@ -181,17 +94,6 @@ var toolDefinitions = map[string]GeminiFunctionDeclaration{
 			Type: "object",
 			Properties: map[string]GeminiPropertyDef{
 				"path": {Type: "string", Description: "Directory path to list"},
-			},
-			Required: []string{"path"},
-		},
-	},
-	"create_dir": {
-		Name:        "create_dir",
-		Description: "Creates a new directory (including parent directories if needed).",
-		Parameters: &GeminiParameterSchema{
-			Type: "object",
-			Properties: map[string]GeminiPropertyDef{
-				"path": {Type: "string", Description: "Directory path to create"},
 			},
 			Required: []string{"path"},
 		},
@@ -221,37 +123,6 @@ var toolDefinitions = map[string]GeminiFunctionDeclaration{
 	},
 
 	// ===== Git Operations =====
-	"git_status": {
-		Name:        "git_status",
-		Description: "Shows the current git status including staged, unstaged, and untracked files.",
-		Parameters:  nil,
-	},
-	"git_diff": {
-		Name:        "git_diff",
-		Description: "Shows git diff for a specific file or all files.",
-		Parameters: &GeminiParameterSchema{
-			Type: "object",
-			Properties: map[string]GeminiPropertyDef{
-				"path": {Type: "string", Description: "File path to diff (optional, shows all if empty)"},
-			},
-		},
-	},
-	"git_log": {
-		Name:        "git_log",
-		Description: "Shows recent git commit history.",
-		Parameters:  nil,
-	},
-	"git_add": {
-		Name:        "git_add",
-		Description: "Stages files for commit.",
-		Parameters: &GeminiParameterSchema{
-			Type: "object",
-			Properties: map[string]GeminiPropertyDef{
-				"path": {Type: "string", Description: "File path to stage (use '.' for all)"},
-			},
-			Required: []string{"path"},
-		},
-	},
 	"git_commit": {
 		Name:        "git_commit",
 		Description: "Creates a git commit with the specified message.",
@@ -263,23 +134,6 @@ var toolDefinitions = map[string]GeminiFunctionDeclaration{
 			Required: []string{"message"},
 		},
 	},
-	"git_push": {
-		Name:        "git_push",
-		Description: "Pushes commits to the remote repository.",
-		Parameters:  nil,
-	},
-	"git_branch": {
-		Name:        "git_branch",
-		Description: "Manages git branches (list, create, delete).",
-		Parameters: &GeminiParameterSchema{
-			Type: "object",
-			Properties: map[string]GeminiPropertyDef{
-				"action":      {Type: "string", Description: "Action: list, create, delete", Enum: []string{"list", "create", "delete"}},
-				"branch_name": {Type: "string", Description: "Branch name (required for create/delete)"},
-			},
-			Required: []string{"action"},
-		},
-	},
 	"git_checkout": {
 		Name:        "git_checkout",
 		Description: "Switches branches or restores files.",
@@ -289,18 +143,6 @@ var toolDefinitions = map[string]GeminiFunctionDeclaration{
 				"target": {Type: "string", Description: "Branch name or file path to checkout"},
 			},
 			Required: []string{"target"},
-		},
-	},
-	"git_stash": {
-		Name:        "git_stash",
-		Description: "Manages git stash (save, list, pop, apply, drop).",
-		Parameters: &GeminiParameterSchema{
-			Type: "object",
-			Properties: map[string]GeminiPropertyDef{
-				"action":  {Type: "string", Description: "Action: save, list, pop, apply, drop", Enum: []string{"save", "list", "pop", "apply", "drop"}},
-				"message": {Type: "string", Description: "Stash message (for save action)"},
-			},
-			Required: []string{"action"},
 		},
 	},
 
@@ -403,19 +245,6 @@ var toolDefinitions = map[string]GeminiFunctionDeclaration{
 			Required: []string{"path"},
 		},
 	},
-	"diff_files": {
-		Name:        "diff_files",
-		Description: "Compares two files and shows differences.",
-		Parameters: &GeminiParameterSchema{
-			Type: "object",
-			Properties: map[string]GeminiPropertyDef{
-				"file1":   {Type: "string", Description: "First file path"},
-				"file2":   {Type: "string", Description: "Second file path"},
-				"context": {Type: "string", Description: "Number of context lines (default: 3)"},
-			},
-			Required: []string{"file1", "file2"},
-		},
-	},
 	"http_request": {
 		Name:        "http_request",
 		Description: "Executes HTTP requests to external APIs.",
@@ -440,6 +269,72 @@ var toolDefinitions = map[string]GeminiFunctionDeclaration{
 				"command": {Type: "string", Description: "Shell command to execute"},
 			},
 			Required: []string{"command"},
+		},
+	},
+
+	// ===== LSP Tools (Code Intelligence) =====
+	"lsp_references": {
+		Name:        "lsp_references",
+		Description: "Find all references to a symbol at the specified position. Requires LSP server installed (e.g., gopls for Go).",
+		Parameters: &GeminiParameterSchema{
+			Type: "object",
+			Properties: map[string]GeminiPropertyDef{
+				"path":      {Type: "string", Description: "File path"},
+				"line":      {Type: "integer", Description: "Line number (1-indexed)"},
+				"character": {Type: "integer", Description: "Character position (1-indexed)"},
+			},
+			Required: []string{"path", "line", "character"},
+		},
+	},
+	"lsp_definition": {
+		Name:        "lsp_definition",
+		Description: "Go to the definition of a symbol at the specified position. Requires LSP server installed.",
+		Parameters: &GeminiParameterSchema{
+			Type: "object",
+			Properties: map[string]GeminiPropertyDef{
+				"path":      {Type: "string", Description: "File path"},
+				"line":      {Type: "integer", Description: "Line number (1-indexed)"},
+				"character": {Type: "integer", Description: "Character position (1-indexed)"},
+			},
+			Required: []string{"path", "line", "character"},
+		},
+	},
+	"lsp_hover": {
+		Name:        "lsp_hover",
+		Description: "Get type information and documentation for a symbol at the specified position. Requires LSP server installed.",
+		Parameters: &GeminiParameterSchema{
+			Type: "object",
+			Properties: map[string]GeminiPropertyDef{
+				"path":      {Type: "string", Description: "File path"},
+				"line":      {Type: "integer", Description: "Line number (1-indexed)"},
+				"character": {Type: "integer", Description: "Character position (1-indexed)"},
+			},
+			Required: []string{"path", "line", "character"},
+		},
+	},
+	"lsp_diagnostics": {
+		Name:        "lsp_diagnostics",
+		Description: "Get errors and warnings for a file from the LSP server. Requires LSP server installed.",
+		Parameters: &GeminiParameterSchema{
+			Type: "object",
+			Properties: map[string]GeminiPropertyDef{
+				"path": {Type: "string", Description: "File path to get diagnostics for"},
+			},
+			Required: []string{"path"},
+		},
+	},
+	"lsp_rename": {
+		Name:        "lsp_rename",
+		Description: "Preview rename changes for a symbol at the specified position. Requires LSP server installed.",
+		Parameters: &GeminiParameterSchema{
+			Type: "object",
+			Properties: map[string]GeminiPropertyDef{
+				"path":      {Type: "string", Description: "File path"},
+				"line":      {Type: "integer", Description: "Line number (1-indexed)"},
+				"character": {Type: "integer", Description: "Character position (1-indexed)"},
+				"new_name":  {Type: "string", Description: "New name for the symbol"},
+			},
+			Required: []string{"path", "line", "character", "new_name"},
 		},
 	},
 }
