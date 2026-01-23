@@ -118,7 +118,7 @@ jobs:
       # golangci-lint で静的解析
       # 様々な lint ツールをまとめて実行
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v4
+        uses: golangci/golangci-lint-action@v7
         with:
           version: v2.0.2
           # 問題があってもレポートを出力
