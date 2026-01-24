@@ -1,6 +1,6 @@
 # Binaries
-xelyon
-xelyon.exe
+/xelyon
+/xelyon.exe
 dist/
 
 # Backup files

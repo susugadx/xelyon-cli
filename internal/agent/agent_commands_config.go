@@ -16,17 +16,15 @@ func handleModelCommand(agent *Agent, args []string) bool {
 		yellow.Println("\nUsage: /model <model-name>")
 		yellow.Println("Enter any model name supported by your provider.")
 
-		// Ollamaの場合だけインストール済みモデルを表示
-		if agent.ProviderName == "ollama" {
-			if ollamaProvider, ok := agent.CurrentProvider.(*api.OllamaProvider); ok {
-				models, err := ollamaProvider.ListModels()
-				if err != nil {
-					yellow.Printf("\nWarning: Could not list Ollama models: %v\n", err)
-				} else if len(models) > 0 {
-					yellow.Println("\nInstalled Ollama models:")
-					for _, model := range models {
-						fmt.Printf("  - %s\n", model)
-					}
+		// ModelLister対応プロバイダーの場合、インストール済みモデルを表示
+		if modelLister, ok := agent.CurrentProvider.(api.ModelLister); ok {
+			models, err := modelLister.ListModels()
+			if err != nil {
+				yellow.Printf("\nWarning: Could not list models: %v\n", err)
+			} else if len(models) > 0 {
+				yellow.Println("\nInstalled models:")
+				for _, model := range models {
+					fmt.Printf("  - %s\n", model)
 				}
 			}
 		}

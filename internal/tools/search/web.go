@@ -3,7 +3,7 @@ package search
 import (
 	"fmt"
 
-	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/api/providers/serper"
 )
 
 // ExecuteWebSearch executes web search using Serper API
@@ -14,7 +14,7 @@ func ExecuteWebSearch(query string) string {
 
 	green.Printf("🔍 Searching the web for: %s\n", query)
 
-	result, err := api.WebSearch(query)
+	result, err := serper.WebSearch(query)
 	if err != nil {
 		return fmt.Sprintf("Error: %v", err)
 	}

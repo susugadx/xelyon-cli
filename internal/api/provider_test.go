@@ -50,7 +50,7 @@ func TestSanitizeErrorMessage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := sanitizeErrorMessage([]byte(tt.body), tt.statusCode)
+			err := SanitizeErrorMessage([]byte(tt.body), tt.statusCode)
 
 			if err == nil {
 				t.Fatal("Expected error, got nil")
@@ -84,7 +84,7 @@ func TestSanitizeErrorMessage(t *testing.T) {
 }
 
 func TestSanitizeErrorMessage_EmptyBody(t *testing.T) {
-	err := sanitizeErrorMessage([]byte{}, 500)
+	err := SanitizeErrorMessage([]byte{}, 500)
 
 	if err == nil {
 		t.Fatal("Expected error, got nil")
@@ -101,7 +101,7 @@ func TestHandleRateLimit_NotRateLimit(t *testing.T) {
 		StatusCode: 200,
 	}
 
-	err := handleRateLimit(resp)
+	err := HandleRateLimit(resp)
 	if err != nil {
 		t.Errorf("Expected nil for non-429 status, got: %v", err)
 	}
@@ -115,7 +115,7 @@ func TestHandleRateLimit_WithRetryAfterSeconds(t *testing.T) {
 		},
 	}
 
-	err := handleRateLimit(resp)
+	err := HandleRateLimit(resp)
 
 	if err == nil {
 		t.Fatal("Expected error, got nil")
@@ -142,7 +142,7 @@ func TestHandleRateLimit_WithRetryAfterHTTPDate(t *testing.T) {
 		},
 	}
 
-	err := handleRateLimit(resp)
+	err := HandleRateLimit(resp)
 
 	if err == nil {
 		t.Fatal("Expected error, got nil")
@@ -165,7 +165,7 @@ func TestHandleRateLimit_NoRetryAfterHeader(t *testing.T) {
 		Header:     http.Header{},
 	}
 
-	err := handleRateLimit(resp)
+	err := HandleRateLimit(resp)
 
 	if err == nil {
 		t.Fatal("Expected error, got nil")
@@ -184,7 +184,7 @@ func TestHandleRateLimit_InvalidRetryAfter(t *testing.T) {
 		},
 	}
 
-	err := handleRateLimit(resp)
+	err := HandleRateLimit(resp)
 
 	if err == nil {
 		t.Fatal("Expected error, got nil")
@@ -217,7 +217,7 @@ func TestSanitizeErrorMessage_Integration(t *testing.T) {
 	body = body[:n]
 
 	// サニタイズ
-	sanitizedErr := sanitizeErrorMessage(body, resp.StatusCode)
+	sanitizedErr := SanitizeErrorMessage(body, resp.StatusCode)
 
 	if sanitizedErr == nil {
 		t.Fatal("Expected error, got nil")

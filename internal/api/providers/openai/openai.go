@@ -1,0 +1,103 @@
+package openai
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"os"
+
+	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
+)
+
+func init() {
+	api.RegisterProvider("openai", func(apiKey string) (api.Provider, error) {
+		if apiKey == "" {
+			return nil, fmt.Errorf("OPENAI_API_KEY not set")
+		}
+		return New(apiKey), nil
+	})
+}
+
+const defaultOpenAIURL = "https://api.openai.com/v1/chat/completions"
+
+// Provider はOpenAI APIのプロバイダー実装
+type Provider struct {
+	apiKey     string
+	apiURL     string
+	httpClient *http.Client
+}
+
+// New は新しいProviderを作成
+func New(apiKey string) *Provider {
+	// 環境変数からURLをオーバーライド可能
+	apiURL := os.Getenv("OPENAI_API_URL")
+	if apiURL == "" {
+		apiURL = defaultOpenAIURL
+	}
+
+	return &Provider{
+		apiKey: apiKey,
+		apiURL: apiURL,
+		httpClient: &http.Client{
+			Timeout: config.DefaultHTTPTimeout,
+		},
+	}
+}
+
+// Name はプロバイダー名を返す
+func (p *Provider) Name() string {
+	return "OpenAI"
+}
+
+// SupportsImages は画像入力対応を返す
+func (p *Provider) SupportsImages() bool {
+	return true
+}
+
+// LevelToReasoningEffort は Thinking Level を OpenAI reasoning_effort に変換
+func LevelToReasoningEffort(level string) string {
+	switch level {
+	case "low":
+		return "low"
+	case "medium":
+		return "medium"
+	case "high", "xhigh":
+		return "high"
+	default:
+		return "medium"
+	}
+}
+
+// ChatWithTools は Provider interface の実装（context対応）
+func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
+	// モデル名を設定（config優先、フォールバックはgpt-4o）
+	model = api.GetDefaultModel(model, "openai", "gpt-4o")
+
+	// モデルに応じて API を自動選択
+	cfg := config.GetGlobalConfig()
+	if cfg.IsResponsesAPIModel(model) {
+		return p.chatWithResponses(ctx, systemPrompt, history, model)
+	}
+	return p.chatWithCompletions(ctx, systemPrompt, history, model)
+}
+
+// ChatWithImage は画像付きメッセージで会話を行う
+func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {
+	// 画像がない場合は通常のChatWithToolsを使用
+	if image == nil || image.Base64 == "" {
+		history = append(history, api.Message{Role: "user", Content: userMessage})
+		return p.ChatWithTools(ctx, systemPrompt, history, model)
+	}
+
+	// モデル名を設定（config優先、フォールバックはgpt-4o）
+	model = api.GetDefaultModel(model, "openai", "gpt-4o")
+
+	// Responses API モデルの場合は専用の画像処理
+	cfg := config.GetGlobalConfig()
+	if cfg.IsResponsesAPIModel(model) {
+		return p.chatWithImageResponses(ctx, systemPrompt, history, userMessage, image, model)
+	}
+
+	return p.chatWithImageCompletions(ctx, systemPrompt, history, userMessage, image, model)
+}

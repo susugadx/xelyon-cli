@@ -60,8 +60,8 @@ func (a *Agent) SwitchProvider(providerName string) error {
 		a.Stats.Provider = providerName
 	}
 
-	// GeminiプロバイダーにMCPツールを設定
-	if gemini, ok := provider.(*api.GeminiProvider); ok && a.mcpManager != nil {
+	// MCPToolProviderインターフェースを実装するプロバイダーにMCPツールを設定
+	if mcpProvider, ok := provider.(api.MCPToolProvider); ok && a.mcpManager != nil {
 		mcpTools := a.mcpManager.GetTools()
 		if len(mcpTools) > 0 {
 			debug := os.Getenv("XELYON_DEBUG_GEMINI") == "1"
@@ -75,7 +75,7 @@ func (a *Agent) SwitchProvider(providerName string) error {
 					fmt.Fprintf(os.Stderr, "[DEBUG Gemini] MCP tool registered: %s\n", name)
 				}
 			}
-			gemini.SetMCPTools(mcpDeclarations)
+			mcpProvider.SetMCPTools(mcpDeclarations)
 		}
 	}
 

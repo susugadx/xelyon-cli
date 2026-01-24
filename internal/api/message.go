@@ -1,5 +1,11 @@
 package api
 
+// Message はチャットメッセージ
+type Message struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
 // MultimodalMessage は画像を含むメッセージ
 type MultimodalMessage struct {
 	Role    string     `json:"role"`

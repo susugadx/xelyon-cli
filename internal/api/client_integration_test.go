@@ -1,4 +1,4 @@
-package api
+package api_test
 
 import (
 	"context"
@@ -7,6 +7,9 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/api"
+	_ "github.com/susugadx/xelyon-cli/internal/api/providers/deepseek"
 )
 
 func TestDeepSeekProvider_ChatWithTools_Integration(t *testing.T) {
@@ -47,9 +50,9 @@ func TestDeepSeekProvider_ChatWithTools_Integration(t *testing.T) {
 	os.Setenv("DEEPSEEK_API_URL", server.URL)
 	defer os.Unsetenv("DEEPSEEK_API_URL")
 
-	provider := NewDeepSeekProvider("test-api-key")
+	provider := api.NewDeepSeekProvider("test-api-key")
 
-	history := []Message{
+	history := []api.Message{
 		{Role: "user", Content: "Hello"},
 	}
 
@@ -69,9 +72,9 @@ func TestDeepSeekProvider_ChatWithTools_NetworkError(t *testing.T) {
 	os.Setenv("DEEPSEEK_API_URL", "http://invalid-host-that-does-not-exist:99999")
 	defer os.Unsetenv("DEEPSEEK_API_URL")
 
-	provider := NewDeepSeekProvider("test-api-key")
+	provider := api.NewDeepSeekProvider("test-api-key")
 
-	history := []Message{
+	history := []api.Message{
 		{Role: "user", Content: "Hello"},
 	}
 
@@ -94,9 +97,9 @@ func TestDeepSeekProvider_ChatWithTools_APIError(t *testing.T) {
 	os.Setenv("DEEPSEEK_API_URL", server.URL)
 	defer os.Unsetenv("DEEPSEEK_API_URL")
 
-	provider := NewDeepSeekProvider("test-api-key")
+	provider := api.NewDeepSeekProvider("test-api-key")
 
-	history := []Message{
+	history := []api.Message{
 		{Role: "user", Content: "Hello"},
 	}
 
@@ -120,9 +123,9 @@ func TestDeepSeekProvider_ChatWithTools_RateLimit(t *testing.T) {
 	os.Setenv("DEEPSEEK_API_URL", server.URL)
 	defer os.Unsetenv("DEEPSEEK_API_URL")
 
-	provider := NewDeepSeekProvider("test-api-key")
+	provider := api.NewDeepSeekProvider("test-api-key")
 
-	history := []Message{
+	history := []api.Message{
 		{Role: "user", Content: "Hello"},
 	}
 
@@ -139,13 +142,13 @@ func TestDeepSeekProvider_ChatWithTools_RateLimit(t *testing.T) {
 func TestDeepSeekProvider_ChatWithImage_NotSupported(t *testing.T) {
 	t.Skip("ChatWithImage calls real API, needs mock server")
 	// 画像非対応プロバイダー（DeepSeek）
-	provider := NewDeepSeekProvider("test-api-key")
+	provider := api.NewDeepSeekProvider("test-api-key")
 
-	history := []Message{
+	history := []api.Message{
 		{Role: "user", Content: "Hello"},
 	}
 
-	imageData := &ImageData{
+	imageData := &api.ImageData{
 		Base64:    "fake-image-data",
 		MediaType: "image/png",
 	}

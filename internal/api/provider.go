@@ -8,8 +8,58 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
+
+// ProviderFactory はプロバイダーを生成するファクトリ関数
+type ProviderFactory func(apiKey string) (Provider, error)
+
+var (
+	providerRegistry   = make(map[string]ProviderFactory)
+	providerRegistryMu sync.RWMutex
+)
+
+// RegisterProvider はプロバイダーを登録する（init()から呼ばれる）
+func RegisterProvider(name string, factory ProviderFactory) {
+	providerRegistryMu.Lock()
+	defer providerRegistryMu.Unlock()
+	providerRegistry[strings.ToLower(name)] = factory
+}
+
+// getRegisteredProvider は登録済みプロバイダーを取得
+func getRegisteredProvider(name string) (ProviderFactory, bool) {
+	providerRegistryMu.RLock()
+	defer providerRegistryMu.RUnlock()
+	factory, ok := providerRegistry[strings.ToLower(name)]
+	return factory, ok
+}
+
+// getAPIKeyForProvider はプロバイダー名から環境変数のAPIキーを取得
+func getAPIKeyForProvider(providerName string) string {
+	switch strings.ToLower(providerName) {
+	case "deepseek":
+		return os.Getenv("DEEPSEEK_API_KEY")
+	case "openai":
+		return os.Getenv("OPENAI_API_KEY")
+	case "gemini":
+		return os.Getenv("GEMINI_API_KEY")
+	case "claude", "anthropic":
+		return os.Getenv("ANTHROPIC_API_KEY")
+	case "ollama":
+		baseURL := os.Getenv("OLLAMA_BASE_URL")
+		if baseURL == "" {
+			return "http://localhost:11434"
+		}
+		return baseURL
+	case "groq":
+		return os.Getenv("GROQ_API_KEY")
+	case "serper":
+		return os.Getenv("SERPER_API_KEY")
+	default:
+		return ""
+	}
+}
 
 // Provider はLLMプロバイダーの共通インターフェース
 type Provider interface {
@@ -37,6 +87,23 @@ type CompactCapable interface {
 	SupportsCompact() bool
 }
 
+// ModelLister はモデル一覧取得に対応するプロバイダーのオプショナルインターフェース
+// 現時点では OllamaProvider のみが実装
+type ModelLister interface {
+	// ListModels はインストール済み/利用可能なモデルの一覧を取得
+	ListModels() ([]string, error)
+}
+
+// MCPToolProvider はMCPツール設定に対応するプロバイダーのオプショナルインターフェース
+// 現時点では GeminiProvider のみが実装
+type MCPToolProvider interface {
+	// SetMCPEnabled はMCPが有効かどうかを設定する（レガシー、互換性のため）
+	SetMCPEnabled(enabled bool)
+
+	// SetMCPTools はMCPツールの定義を設定する
+	SetMCPTools(tools []GeminiFunctionDeclaration)
+}
+
 // SupportsImages はプロバイダー名から画像対応を判定
 func SupportsImages(providerName string) bool {
 	switch strings.ToLower(providerName) {
@@ -49,8 +116,8 @@ func SupportsImages(providerName string) bool {
 	}
 }
 
-// sanitizeErrorMessage はエラーメッセージから機密情報を削除
-func sanitizeErrorMessage(body []byte, statusCode int) error {
+// SanitizeErrorMessage はエラーメッセージから機密情報を削除
+func SanitizeErrorMessage(body []byte, statusCode int) error {
 	const maxLen = 200 // エラーメッセージの最大長
 
 	if len(body) == 0 {
@@ -81,8 +148,8 @@ func sanitizeErrorMessage(body []byte, statusCode int) error {
 	return fmt.Errorf("API error (%d): %s", statusCode, message)
 }
 
-// handleRateLimit はレート制限エラーを処理
-func handleRateLimit(resp *http.Response) error {
+// HandleRateLimit はレート制限エラーを処理
+func HandleRateLimit(resp *http.Response) error {
 	if resp.StatusCode != 429 {
 		return nil // レート制限エラーではない
 	}
@@ -111,8 +178,31 @@ func handleRateLimit(resp *http.Response) error {
 	return fmt.Errorf("rate limit exceeded (429). Please retry later")
 }
 
+// LevelToBudgetTokens は Thinking Level を budget_tokens に変換（Claude/Gemini共通）
+func LevelToBudgetTokens(level string) int {
+	switch level {
+	case "low":
+		return 5000
+	case "medium":
+		return 10000
+	case "high":
+		return 20000
+	case "xhigh":
+		return 40000
+	default:
+		return 10000
+	}
+}
+
 // NewProvider はプロバイダー名から Provider インスタンスを生成
 func NewProvider(providerName string) (Provider, error) {
+	// まず登録済みプロバイダーをチェック
+	if factory, ok := getRegisteredProvider(providerName); ok {
+		apiKey := getAPIKeyForProvider(providerName)
+		return factory(apiKey)
+	}
+
+	// フォールバック: 移行中の互換性のため既存switchも維持
 	switch strings.ToLower(providerName) {
 	case "deepseek":
 		apiKey := os.Getenv("DEEPSEEK_API_KEY")

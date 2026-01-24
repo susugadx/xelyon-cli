@@ -201,9 +201,10 @@ Tool call format: {"tool": "tool_name", "args": {"arg1": "value1"}}
 		systemPrompt = removeToolsSection(systemPrompt)
 	}
 
-	// GeminiプロバイダーにMCPツールを設定（Function Calling経由で呼び出し可能にする）
+	// MCPToolProviderインターフェースを実装するプロバイダーにMCPツールを設定
+	// （Function Calling経由で呼び出し可能にする）
 	if len(mcpManager.GetTools()) > 0 {
-		if gemini, ok := provider.(*api.GeminiProvider); ok {
+		if mcpProvider, ok := provider.(api.MCPToolProvider); ok {
 			debug := os.Getenv("XELYON_DEBUG_GEMINI") == "1"
 			var mcpDeclarations []api.GeminiFunctionDeclaration
 			for _, t := range mcpManager.GetTools() {
@@ -219,7 +220,7 @@ Tool call format: {"tool": "tool_name", "args": {"arg1": "value1"}}
 					fmt.Fprintf(os.Stderr, "[DEBUG Gemini] MCP tool registered: %s\n", name)
 				}
 			}
-			gemini.SetMCPTools(mcpDeclarations)
+			mcpProvider.SetMCPTools(mcpDeclarations)
 		}
 	}
 

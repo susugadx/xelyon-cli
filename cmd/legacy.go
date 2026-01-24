@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/api/xelyon"
 	"github.com/susugadx/xelyon-cli/internal/file"
 )
 
@@ -33,7 +34,7 @@ func runLegacyMode(query string, model string, provider api.Provider) {
 
 	if userID != "" {
 		fmt.Println("🔍 RAG検索中...")
-		results, err := api.SearchRAG(query, userID, 3)
+		results, err := xelyon.SearchRAG(query, userID, 3)
 		if err == nil && results.Count > 0 {
 			var contents []string
 			for _, r := range results.Results {
