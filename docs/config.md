@@ -67,6 +67,9 @@ paste:
     timeout_seconds: 60
 streaming:
     idle_timeout_seconds: 30
+    show_file_info: true
+    show_search_progress: true
+    stream_bash_output: true
 bash:
     safety_level: moderate
     safe_commands: []
@@ -170,8 +173,6 @@ openai:
 thinking:
     enabled: false
     level: medium
-repomap:
-    max_tokens: 0  # 0 = 自動計算
 ```
 <!-- CONFIG-EXAMPLE-END -->
 
@@ -291,11 +292,37 @@ Context Window（コンテキストウィンドウ）を管理し、トークン
 
 ### ストリーミング設定 (`streaming`)
 
+```yaml
+streaming:
+  idle_timeout_seconds: 30
+  show_file_info: true
+  show_search_progress: true
+  stream_bash_output: true
+```
+
 #### `idle_timeout_seconds`
 - **型**: integer
 - **デフォルト**: `30`
 - **説明**: ストリーミングレスポンスのアイドルタイムアウト秒数
 - **補足**: データ受信がこの秒数続くとタイムアウト。データが来続けている間はタイムアウトしない
+
+#### `show_file_info`
+- **型**: boolean
+- **デフォルト**: `true`
+- **説明**: ファイル読み込み時にサイズと行数を表示
+- **例**: `📖 Reading main.go (2.3KB, 150 lines)`
+
+#### `show_search_progress`
+- **型**: boolean
+- **デフォルト**: `true`
+- **説明**: 検索中にリアルタイムで進捗を表示
+- **例**: `🔍 Searching... 42 matches found`
+
+#### `stream_bash_output`
+- **型**: boolean
+- **デフォルト**: `true`
+- **説明**: bashコマンドの出力をリアルタイムでストリーミング表示
+- **補足**: `false` の場合、コマンド完了後に一括表示
 
 ### bashツール設定 (`bash`)
 
