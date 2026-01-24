@@ -170,6 +170,8 @@ openai:
 thinking:
     enabled: false
     level: medium
+repomap:
+    max_tokens: 0  # 0 = 自動計算
 ```
 <!-- CONFIG-EXAMPLE-END -->
 
@@ -513,6 +515,33 @@ thinking:
 | medium | 10,000 | medium | 10,000 |
 | high | 20,000 | high | 20,000 |
 | xhigh | 40,000 | high | 40,000 |
+
+### RepoMap設定 (`repomap`)
+
+RepoMapはプロジェクトのコード構造（シンボル、関数、クラス等）をLLMに提供する機能です。
+
+```yaml
+repomap:
+  max_tokens: 0  # 0 = 自動計算（デフォルト）
+```
+
+#### `max_tokens`
+- **型**: integer
+- **デフォルト**: `0`（自動計算）
+- **説明**: RepoMapに割り当てる最大トークン数
+
+**自動計算の基準:**
+
+| ファイル数 | max_tokens |
+|-----------|-----------|
+| ~50       | 1,000     |
+| 50~100    | 2,000     |
+| 100~200   | 4,000     |
+| 200~400   | 6,000     |
+| 400+      | 8,000     |
+| 自動上限   | 10,000    |
+
+手動設定時は上限なし（例: `max_tokens: 15000`）。
 
 ### ツール確認設定 (`tool_confirm`)
 

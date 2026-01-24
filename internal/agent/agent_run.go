@@ -36,7 +36,7 @@ func RunOnce(query string, model string) {
 		yellow.Printf("Warning: Could not get current directory: %v\n", err)
 		cwd = "." // フォールバック
 	}
-	repoMapStr, symbols, files, fromCache := loadRepoMapForProject(cwd, 2000)
+	repoMapStr, symbols, files, fromCache := loadRepoMapForProject(cwd, getMaxTokens(cwd))
 	if repoMapStr != "" {
 		agent.SystemPrompt += "\n\n" + repoMapStr
 		if fromCache {
@@ -69,7 +69,7 @@ func RunHeadless(query string, model string, provider api.Provider) *HeadlessRes
 	if err != nil {
 		cwd = "."
 	}
-	repoMapStr, _, _, _ := loadRepoMapForProject(cwd, 2000)
+	repoMapStr, _, _, _ := loadRepoMapForProject(cwd, getMaxTokens(cwd))
 	if repoMapStr != "" {
 		agent.SystemPrompt += "\n\n" + repoMapStr
 	}
@@ -149,7 +149,7 @@ func RunOnceWithImage(query string, model string, provider api.Provider, imagePa
 		yellow.Printf("Warning: Could not get current directory: %v\n", err)
 		cwd = "."
 	}
-	repoMapStr, symbols, files, fromCache := loadRepoMapForProject(cwd, 2000)
+	repoMapStr, symbols, files, fromCache := loadRepoMapForProject(cwd, getMaxTokens(cwd))
 	if repoMapStr != "" {
 		agent.SystemPrompt += "\n\n" + repoMapStr
 		if fromCache {

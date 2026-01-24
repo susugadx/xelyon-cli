@@ -22,6 +22,7 @@ type Config struct {
 	LSP             LSPConfig                      `yaml:"lsp,omitempty"`
 	OpenAI          OpenAIConfig                   `yaml:"openai,omitempty"`
 	Thinking        ThinkingConfig                 `yaml:"thinking,omitempty"`
+	RepoMap         RepoMapConfig                  `yaml:"repomap,omitempty"`
 	// 将来の拡張用
 	// Cloud CloudConfig `yaml:"cloud,omitempty"`
 }
@@ -123,6 +124,11 @@ type OpenAIConfig struct {
 type ThinkingConfig struct {
 	Enabled bool   `yaml:"enabled"` // デフォルト: false
 	Level   string `yaml:"level"`   // low/medium/high/xhigh（デフォルト: medium）
+}
+
+// RepoMapConfig は RepoMap の設定
+type RepoMapConfig struct {
+	MaxTokens int `yaml:"max_tokens,omitempty"` // 0 = 自動計算（ファイル数ベース）
 }
 
 // LSPConfig は LSP (Language Server Protocol) 連携の設定

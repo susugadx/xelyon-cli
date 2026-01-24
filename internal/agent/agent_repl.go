@@ -51,7 +51,7 @@ func RunInteractive(model string, provider api.Provider, autoApprove bool) {
 		yellow.Printf("Warning: Could not get current directory: %v\n", err)
 		cwd = "." // フォールバック
 	}
-	repoMapStr, symbols, files, fromCache := loadRepoMapForProject(cwd, 2000)
+	repoMapStr, symbols, files, fromCache := loadRepoMapForProject(cwd, getMaxTokens(cwd))
 	if repoMapStr != "" {
 		agent.SystemPrompt += "\n\n" + repoMapStr
 		if fromCache {
@@ -119,7 +119,7 @@ func RunInteractiveWithResume(model string, provider api.Provider, autoApprove b
 		yellow.Printf("Warning: Could not get current directory: %v\n", err)
 		cwd = "." // フォールバック
 	}
-	repoMapStr, symbols, files, fromCache := loadRepoMapForProject(cwd, 2000)
+	repoMapStr, symbols, files, fromCache := loadRepoMapForProject(cwd, getMaxTokens(cwd))
 	if repoMapStr != "" {
 		agent.SystemPrompt += "\n\n" + repoMapStr
 		if fromCache {
