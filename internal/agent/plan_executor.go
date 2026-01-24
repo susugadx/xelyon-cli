@@ -16,7 +16,7 @@ import (
 // runImplementationPhase は実装フェーズを実行（並列実行対応）
 func (a *Agent) runImplementationPhase(ctx context.Context, p *plan.Plan) error {
 	// 依存関係解析器を初期化
-	analyzer := plan.NewDependencyAnalyzer(nil) // LSP連携は将来の拡張
+	analyzer := plan.NewDependencyAnalyzer(a.lspClient) // LSP有効時は参照ベースの依存関係検出
 	_ = analyzer.Analyze(p.Steps)               // ファイルアクセスマップを構築
 
 	for {
