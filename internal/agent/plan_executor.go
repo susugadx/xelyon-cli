@@ -9,6 +9,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -82,13 +83,26 @@ func (a *Agent) runImplementationPhase(ctx context.Context, p *plan.Plan) error 
 	return nil
 }
 
-// executeStepsParallel は複数ステップを並列実行
+// executeStepsParallel は複数ステップを並列実行（進捗表示付き）
 func (a *Agent) executeStepsParallel(ctx context.Context, p *plan.Plan, stepIDs []int) error {
 	cfg := config.GetGlobalConfig()
 	maxWorkers := cfg.PlanMode.MaxParallelSteps
 	if maxWorkers <= 0 {
 		maxWorkers = config.DefaultParallelWorkers
 	}
+
+	// MultiProgress を初期化
+	mp := ui.NewMultiProgress()
+	for _, stepID := range stepIDs {
+		step := p.GetStep(stepID)
+		if step != nil {
+			mp.AddTask(stepID, step.Description)
+		}
+	}
+
+	// バックグラウンドで進捗表示を開始
+	mp.StartRendering()
+	defer mp.StopRendering()
 
 	// セマフォでワーカー数を制限
 	sem := make(chan struct{}, maxWorkers)
@@ -107,11 +121,24 @@ func (a *Agent) executeStepsParallel(ctx context.Context, p *plan.Plan, stepIDs 
 			case sem <- struct{}{}:
 				defer func() { <-sem }()
 			case <-ctx.Done():
+				mp.Fail(stepID, "cancelled")
 				return ctx.Err()
 			}
 
-			cyan.Printf("\n[Parallel] Step %d: %s\n", step.ID, step.Description)
-			return a.executeStepV2(ctx, p, step, step.ID-1, 0, true)
+			// ステップ開始
+			mp.Start(stepID)
+
+			// ステップ実行
+			err := a.executeStepV2(ctx, p, step, step.ID-1, 0, true)
+
+			if err != nil {
+				mp.Fail(stepID, err.Error())
+				return err
+			}
+
+			// ステップ完了
+			mp.Done(stepID)
+			return nil
 		})
 	}
 
