@@ -9,46 +9,9 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/audit"
-	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
-
-// RunOnce は単一のクエリを実行（レガシーAPI）
-func RunOnce(query string, model string) {
-	// Note: この関数は古いAPI (api.ChatWithTools) を使用
-	// 将来的に削除予定
-	agent := &Agent{
-		Model:        model,
-		CurrentModel: model,
-		History:      []api.Message{},
-		session:      history.NewSession(model),
-	}
-
-	if config := loadProjectConfig(); config != "" {
-		agent.SystemPrompt += "\n\n## Project Context:\n" + config
-		green.Println("📋 XELYON.md loaded")
-	}
-
-	// Repo Map 生成（キャッシュあり）
-	cwd, err := os.Getwd()
-	if err != nil {
-		yellow.Printf("Warning: Could not get current directory: %v\n", err)
-		cwd = "." // フォールバック
-	}
-	repoMapStr, symbols, files, fromCache := loadRepoMapForProject(cwd, getMaxTokens(cwd))
-	if repoMapStr != "" {
-		agent.SystemPrompt += "\n\n" + repoMapStr
-		if fromCache {
-			green.Println("🗺️  Repo map loaded (cache)")
-		} else {
-			green.Printf("🗺️  Repo map loaded (%d symbols from %d files)\n", symbols, files)
-		}
-	}
-
-	fmt.Println()
-	agent.chat(query)
-}
 
 // RunHeadless はHeadlessモードでクエリを実行（マルチターンツール実行対応）
 func RunHeadless(query string, model string, provider api.Provider) *HeadlessResult {
