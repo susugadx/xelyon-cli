@@ -16,6 +16,7 @@ type Spinner struct {
 	writer    io.Writer
 	frames    []string
 	startTime time.Time // 開始時刻（経過時間表示用）
+	status    string    // 追加のステータスメッセージ
 }
 
 // NewSpinner は新しいSpinnerを作成
@@ -61,6 +62,7 @@ func (s *Spinner) Stop() {
 	}
 
 	s.active = false
+	s.status = "" // ステータスもクリア
 
 	// stopChanがnilでないことを確認してからclose（競合対策）
 	if s.stopChan != nil {
@@ -70,6 +72,28 @@ func (s *Spinner) Stop() {
 
 	// スピナーの行をクリア
 	fmt.Fprintf(s.writer, "\r\033[K")
+}
+
+// SetStatus はスピナーに追加のステータスメッセージを設定
+// 例: "⠋ Thinking (5s) - Analyzing main.go"
+func (s *Spinner) SetStatus(status string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.status = status
+}
+
+// ClearStatus はステータスメッセージをクリア
+func (s *Spinner) ClearStatus() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.status = ""
+}
+
+// GetStatus は現在のステータスメッセージを取得
+func (s *Spinner) GetStatus() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.status
 }
 
 // spin はアニメーションループ（goroutine内で実行）
@@ -95,11 +119,21 @@ func (s *Spinner) spin(message string) {
 		case <-ticker.C:
 			frame := s.frames[i%len(s.frames)]
 			elapsed := formatElapsed(time.Since(startTime))
+			status := s.GetStatus()
+
+			// 出力フォーマット: "⠋ Message (Ns) - Status"
+			var output string
 			if elapsed != "" {
-				fmt.Fprintf(s.writer, "\r%s %s %s", frame, message, elapsed)
+				output = fmt.Sprintf("\r%s %s %s", frame, message, elapsed)
 			} else {
-				fmt.Fprintf(s.writer, "\r%s %s", frame, message)
+				output = fmt.Sprintf("\r%s %s", frame, message)
 			}
+			if status != "" {
+				output += fmt.Sprintf(" - %s", status)
+			}
+			// 行末の残りをクリア（前の出力が長い場合用）
+			output += "\033[K"
+			fmt.Fprint(s.writer, output)
 			i++
 		}
 	}
