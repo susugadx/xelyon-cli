@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
 // FailureAction は失敗時のユーザー選択
@@ -149,7 +149,7 @@ func promptFailureActionInput() (FailureAction, string) {
 		case "r", "retry":
 			return FailureActionRetry, ""
 		case "c", "comment":
-			comment, _ := tools.ReadMultiLineComment(reader)
+			comment, _ := common.ReadMultiLineComment(reader)
 			return FailureActionComment, comment
 		case "s", "skip":
 			return FailureActionSkip, ""

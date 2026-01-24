@@ -15,6 +15,13 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/mcp"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/ui"
+
+	// Subpackage imports - trigger init() for tool registration
+	_ "github.com/susugadx/xelyon-cli/internal/tools/dev"
+	_ "github.com/susugadx/xelyon-cli/internal/tools/file"
+	_ "github.com/susugadx/xelyon-cli/internal/tools/git"
+	toolslsp "github.com/susugadx/xelyon-cli/internal/tools/lsp"
+	_ "github.com/susugadx/xelyon-cli/internal/tools/search"
 )
 
 // 色定義
@@ -179,10 +186,9 @@ Tool call format: {"tool": "tool_name", "args": {"arg1": "value1"}}
 				}
 			}
 			lspClient.SetConfigs(servers)
-			tools.LSPClient = lspClient
+			toolslsp.LSPClient = lspClient
 
-			// LSPツールを登録
-			tools.RegisterLSPTools(tools.DefaultRegistry)
+			// LSPツールはinit()で自動登録済み
 
 			// SystemPromptにLSPツール説明を追加
 			systemPrompt += buildLSPToolsPrompt()
