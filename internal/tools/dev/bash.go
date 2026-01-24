@@ -1,10 +1,13 @@
 package dev
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
@@ -122,17 +125,92 @@ IMPORTANT: Do NOT execute the previous command as-is.`, strings.TrimSpace(dec.Co
 		cmd.Dir = "." // fallback
 	}
 
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Sprintf("Error: %v\nOutput: %s", err, string(output))
+	// ストリーミング設定を確認
+	globalCfg, _ := config.LoadConfig()
+	streamOutput := globalCfg != nil && globalCfg.Streaming.StreamBashOutput
+
+	var result string
+	var cmdErr error
+
+	if streamOutput {
+		// ストリーミングモード: リアルタイム出力
+		result, cmdErr = executeBashWithStreaming(cmd)
+	} else {
+		// 従来モード: バッファリング出力
+		output, err := cmd.CombinedOutput()
+		result = string(output)
+		cmdErr = err
 	}
 
-	result := string(output)
+	if cmdErr != nil {
+		return fmt.Sprintf("Error: %v\nOutput: %s", cmdErr, result)
+	}
+
 	if len(result) > config.OutputTruncateLen {
 		result = result[:config.OutputTruncateLen] + "\n... (truncated)"
 	}
 
 	return result
+}
+
+// executeBashWithStreaming はコマンド出力をリアルタイムでストリーミング
+func executeBashWithStreaming(cmd *exec.Cmd) (string, error) {
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return "", fmt.Errorf("failed to get stdout pipe: %w", err)
+	}
+
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return "", fmt.Errorf("failed to get stderr pipe: %w", err)
+	}
+
+	if err := cmd.Start(); err != nil {
+		return "", fmt.Errorf("failed to start command: %w", err)
+	}
+
+	var outputBuf strings.Builder
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
+	// stdout ストリーミング
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		streamOutput(stdout, &outputBuf, &mu, false)
+	}()
+
+	// stderr ストリーミング (赤色で表示)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		streamOutput(stderr, &outputBuf, &mu, true)
+	}()
+
+	wg.Wait()
+	err = cmd.Wait()
+
+	return outputBuf.String(), err
+}
+
+// streamOutput はパイプからの出力をリアルタイムで表示しバッファに保存
+func streamOutput(pipe io.Reader, buf *strings.Builder, mu *sync.Mutex, isStderr bool) {
+	scanner := bufio.NewScanner(pipe)
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		// リアルタイム表示
+		if isStderr {
+			red.Println(line)
+		} else {
+			fmt.Println(line)
+		}
+
+		// バッファに保存
+		mu.Lock()
+		buf.WriteString(line + "\n")
+		mu.Unlock()
+	}
 }
 
 // CheckBashSafety performs safety level checks

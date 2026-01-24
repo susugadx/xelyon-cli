@@ -87,6 +87,9 @@ func DefaultConfig() *Config {
 		},
 		Streaming: StreamingConfig{
 			IdleTimeoutSeconds: 30,
+			ShowFileInfo:       true,
+			ShowSearchProgress: true,
+			StreamBashOutput:   true,
 		},
 		Bash: BashConfig{
 			SafetyLevel:     "moderate",

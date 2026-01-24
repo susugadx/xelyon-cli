@@ -5,9 +5,24 @@ import (
 	"os"
 	"strings"
 
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
+
+// formatFileSize はバイト数を人間が読みやすい形式に変換
+func formatFileSize(bytes int64) string {
+	const unit = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
+	}
+	div, exp := int64(unit), 0
+	for n := bytes / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
 
 // MaxReadLines はデフォルトの最大読み込み行数
 const MaxReadLines = 200
@@ -25,6 +40,18 @@ func ExecuteReadFile(path string, startLine, endLine int) string {
 	if err != nil {
 		common.Red.Printf("🚫 Security: %v\n", err)
 		return fmt.Sprintf("Error: %v", err)
+	}
+
+	// 設定読み込み（ファイル情報表示用）
+	cfg, _ := config.LoadConfig()
+	showFileInfo := cfg != nil && cfg.Streaming.ShowFileInfo
+
+	// ファイル情報を取得（サイズ表示用）
+	var fileSize int64
+	if showFileInfo {
+		if info, err := os.Stat(absPath); err == nil {
+			fileSize = info.Size()
+		}
 	}
 
 	var contentStr string
@@ -69,7 +96,11 @@ func ExecuteReadFile(path string, startLine, endLine int) string {
 		// 1-indexed to 0-indexed
 		selectedLines := lines[startLine-1 : endLine]
 		result := formatLinesWithNumbers(selectedLines, startLine)
-		common.Green.Printf("📄 Read: %s (lines %d-%d of %d)\n", path, startLine, endLine, totalLines)
+		if showFileInfo && fileSize > 0 {
+			common.Green.Printf("📄 Read: %s (%s, lines %d-%d of %d)\n", path, formatFileSize(fileSize), startLine, endLine, totalLines)
+		} else {
+			common.Green.Printf("📄 Read: %s (lines %d-%d of %d)\n", path, startLine, endLine, totalLines)
+		}
 		return result
 	}
 
@@ -77,7 +108,11 @@ func ExecuteReadFile(path string, startLine, endLine int) string {
 	if totalLines <= MaxReadLines {
 		// 全行表示
 		result := formatLinesWithNumbers(lines, 1)
-		common.Green.Printf("📄 Read: %s (%d lines)\n", path, totalLines)
+		if showFileInfo && fileSize > 0 {
+			common.Green.Printf("📄 Read: %s (%s, %d lines)\n", path, formatFileSize(fileSize), totalLines)
+		} else {
+			common.Green.Printf("📄 Read: %s (%d lines)\n", path, totalLines)
+		}
 		return result
 	}
 
@@ -86,7 +121,11 @@ func ExecuteReadFile(path string, startLine, endLine int) string {
 	result := formatLinesWithNumbers(selectedLines, 1)
 	remaining := totalLines - MaxReadLines
 	result += fmt.Sprintf("\n... (truncated, %d lines remaining)\nUse start_line/end_line to read specific sections.", remaining)
-	common.Green.Printf("📄 Read: %s (showing first %d of %d lines)\n", path, MaxReadLines, totalLines)
+	if showFileInfo && fileSize > 0 {
+		common.Green.Printf("📄 Read: %s (%s, showing first %d of %d lines)\n", path, formatFileSize(fileSize), MaxReadLines, totalLines)
+	} else {
+		common.Green.Printf("📄 Read: %s (showing first %d of %d lines)\n", path, MaxReadLines, totalLines)
+	}
 	return result
 }
 
