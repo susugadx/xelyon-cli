@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
@@ -104,7 +105,7 @@ func (a *Agent) checkTokenWarning() {
 
 // handleTokenLimitError はトークン上限エラー時の提案を表示
 func handleTokenLimitError(err error) {
-	if !isTokenLimitError(err) {
+	if !token.IsTokenLimitError(err) {
 		return
 	}
 

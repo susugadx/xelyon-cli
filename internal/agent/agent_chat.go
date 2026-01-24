@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/susugadx/xelyon-cli/internal/agent/plan"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
@@ -100,7 +101,7 @@ You are in NORMAL MODE (not Plan Mode).
 		}
 
 		// Plan JSON を検出した場合、ツール実行を促す
-		if planJSON := ExtractPlanJSON(response); planJSON != "" {
+		if planJSON := plan.ExtractPlanJSON(response); planJSON != "" {
 			yellow.Println("⚠️  Plan JSON detected in normal mode, requesting direct tool execution...")
 			a.History = append(a.History, api.Message{Role: "assistant", Content: response})
 			a.History = append(a.History, api.Message{

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/susugadx/xelyon-cli/internal/agent/plan"
 	"github.com/susugadx/xelyon-cli/internal/api"
 )
 
@@ -60,14 +61,14 @@ Start your investigation now. Use read_file, search_code, list_dir etc. to under
 	}
 
 	// Step 2: 計画をパースして表示
-	plan, err := ParsePlan(planJSON)
+	p, err := plan.ParsePlan(planJSON)
 	if err != nil {
 		red.Printf("❌ Failed to parse plan: %v\n", err)
 		yellow.Printf("Plan JSON:\n%s\n", planJSON)
 		return err
 	}
 
-	if len(plan.Steps) == 0 {
+	if len(p.Steps) == 0 {
 		green.Println("\n✓ Investigation complete. No implementation steps needed.")
 		a.SetStatus(StateWaitingInput, "Ready for input", "入力待ち", "Type your request or /help", "リクエスト、または /help を入力")
 		return nil
@@ -77,10 +78,10 @@ Start your investigation now. Use read_file, search_code, list_dir etc. to under
 	fmt.Println()
 	cyan.Println("📋 Implementation Plan:")
 	cyan.Println(strings.Repeat("─", 50))
-	if plan.Summary != "" {
-		fmt.Printf("Summary: %s\n\n", plan.Summary)
+	if p.Summary != "" {
+		fmt.Printf("Summary: %s\n\n", p.Summary)
 	}
-	for _, step := range plan.Steps {
+	for _, step := range p.Steps {
 		fmt.Printf("  %d. %s\n", step.ID, step.Description)
 		if len(step.Tools) > 0 {
 			fmt.Printf("     Tools: %s\n", strings.Join(step.Tools, ", "))
@@ -106,7 +107,7 @@ Start your investigation now. Use read_file, search_code, list_dir etc. to under
 	a.SetStatus(StateRunning, "Implementing", "実装中", "Wait for completion", "完了を待ってください")
 
 	// Step 4: 実装フェーズ
-	err = a.runImplementationPhase(ctx, plan)
+	err = a.runImplementationPhase(ctx, p)
 	if err != nil {
 		a.SetStatus(StateAborted, "Implementation failed", "実装に失敗", "Review errors and retry", "エラーを確認して再試行")
 		return err

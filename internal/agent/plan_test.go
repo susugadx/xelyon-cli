@@ -3,6 +3,8 @@ package agent
 import (
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/agent/plan"
 )
 
 func TestParsePlan(t *testing.T) {
@@ -23,16 +25,16 @@ func TestParsePlan(t *testing.T) {
 		]
 	}`
 
-	plan, err := ParsePlan(jsonStr)
+	p, err := plan.ParsePlan(jsonStr)
 	if err != nil {
 		t.Fatalf("Failed to parse plan: %v", err)
 	}
 
-	if len(plan.Steps) != 2 {
-		t.Errorf("Expected 2 steps, got %d", len(plan.Steps))
+	if len(p.Steps) != 2 {
+		t.Errorf("Expected 2 steps, got %d", len(p.Steps))
 	}
 
-	step1 := plan.Steps[0]
+	step1 := p.Steps[0]
 	if step1.ID != 1 {
 		t.Errorf("Expected step ID 1, got %d", step1.ID)
 	}
@@ -46,7 +48,7 @@ func TestParsePlan(t *testing.T) {
 		t.Errorf("Expected tools ['read_file'], got %v", step1.Tools)
 	}
 
-	step2 := plan.Steps[1]
+	step2 := p.Steps[1]
 	if len(step2.DependsOn) != 1 || step2.DependsOn[0] != 1 {
 		t.Errorf("Expected depends_on [1], got %v", step2.DependsOn)
 	}
@@ -70,7 +72,7 @@ func TestExtractPlanJSON_WithCodeBlock(t *testing.T) {
 
 This is the execution plan.`
 
-	jsonStr := ExtractPlanJSON(response)
+	jsonStr := plan.ExtractPlanJSON(response)
 	if jsonStr == "" {
 		t.Fatal("Failed to extract JSON: got empty string")
 	}
@@ -99,7 +101,7 @@ func TestExtractPlanJSON_WithNewlines(t *testing.T) {
 
 Done!`
 
-	jsonStr := ExtractPlanJSON(response)
+	jsonStr := plan.ExtractPlanJSON(response)
 	if jsonStr == "" {
 		t.Fatal("Failed to extract JSON with newlines: got empty string")
 	}
@@ -112,15 +114,15 @@ Done!`
 func TestExtractPlanJSON_NoJSON(t *testing.T) {
 	response := "This response contains no JSON at all."
 
-	jsonStr := ExtractPlanJSON(response)
+	jsonStr := plan.ExtractPlanJSON(response)
 	if jsonStr != "" {
 		t.Errorf("Expected empty string for response without JSON, but got: %s", jsonStr)
 	}
 }
 
 func TestPlan_CanExecute(t *testing.T) {
-	plan := &Plan{
-		Steps: []PlanStep{
+	p := &plan.Plan{
+		Steps: []plan.PlanStep{
 			{ID: 1, Status: "pending", DependsOn: []int{}},
 			{ID: 2, Status: "pending", DependsOn: []int{1}},
 			{ID: 3, Status: "pending", DependsOn: []int{1}},
@@ -128,30 +130,30 @@ func TestPlan_CanExecute(t *testing.T) {
 	}
 
 	// Step 1 は依存なしで実行可能
-	if !plan.CanExecute(1) {
+	if !p.CanExecute(1) {
 		t.Error("Expected step 1 to be executable")
 	}
 
 	// Step 2 は Step 1 が pending なので実行不可
-	if plan.CanExecute(2) {
+	if p.CanExecute(2) {
 		t.Error("Expected step 2 to be not executable (depends on step 1)")
 	}
 
 	// Step 1 を完了にする
-	plan.UpdateStatus(1, "completed", "Success")
+	p.UpdateStatus(1, "completed", "Success")
 
 	// Step 2, 3 が実行可能になる
-	if !plan.CanExecute(2) {
+	if !p.CanExecute(2) {
 		t.Error("Expected step 2 to be executable after step 1 completed")
 	}
-	if !plan.CanExecute(3) {
+	if !p.CanExecute(3) {
 		t.Error("Expected step 3 to be executable after step 1 completed")
 	}
 }
 
 func TestPlan_GetParallelSteps(t *testing.T) {
-	plan := &Plan{
-		Steps: []PlanStep{
+	p := &plan.Plan{
+		Steps: []plan.PlanStep{
 			{ID: 1, Status: "completed", DependsOn: []int{}},
 			{ID: 2, Status: "pending", DependsOn: []int{1}},
 			{ID: 3, Status: "pending", DependsOn: []int{1}},
@@ -159,7 +161,7 @@ func TestPlan_GetParallelSteps(t *testing.T) {
 		},
 	}
 
-	parallelSteps := plan.GetParallelSteps()
+	parallelSteps := p.GetParallelSteps()
 	if len(parallelSteps) != 2 {
 		t.Errorf("Expected 2 parallel steps, got %d", len(parallelSteps))
 	}
@@ -172,8 +174,8 @@ func TestPlan_GetParallelSteps(t *testing.T) {
 
 func TestPlan_GetParallelSteps_DifferentDeps(t *testing.T) {
 	// 異なる depends_on を持つステップは並列実行されない
-	plan := &Plan{
-		Steps: []PlanStep{
+	p := &plan.Plan{
+		Steps: []plan.PlanStep{
 			{ID: 1, Status: "completed", DependsOn: []int{}},
 			{ID: 2, Status: "completed", DependsOn: []int{}},
 			{ID: 3, Status: "pending", DependsOn: []int{1}},
@@ -181,104 +183,79 @@ func TestPlan_GetParallelSteps_DifferentDeps(t *testing.T) {
 		},
 	}
 
-	parallelSteps := plan.GetParallelSteps()
+	parallelSteps := p.GetParallelSteps()
 	// Step 3 と 4 は異なる depends_on を持つので nil
 	if parallelSteps != nil {
 		t.Errorf("Expected nil for steps with different depends_on, got %v", parallelSteps)
 	}
 }
 
-func TestSameDependencies(t *testing.T) {
-	tests := []struct {
-		name string
-		a    []int
-		b    []int
-		want bool
-	}{
-		{"both empty", []int{}, []int{}, true},
-		{"same single", []int{1}, []int{1}, true},
-		{"same multiple", []int{1, 2}, []int{2, 1}, true},
-		{"different length", []int{1}, []int{1, 2}, false},
-		{"different values", []int{1}, []int{2}, false},
-		{"nil and empty", nil, []int{}, true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := sameDependencies(tt.a, tt.b)
-			if got != tt.want {
-				t.Errorf("sameDependencies(%v, %v) = %v, want %v", tt.a, tt.b, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestPlan_GetNextStep(t *testing.T) {
-	plan := &Plan{
-		Steps: []PlanStep{
+	p := &plan.Plan{
+		Steps: []plan.PlanStep{
 			{ID: 1, Status: "completed", DependsOn: []int{}},
 			{ID: 2, Status: "pending", DependsOn: []int{1}},
 			{ID: 3, Status: "pending", DependsOn: []int{2}},
 		},
 	}
 
-	nextStep := plan.GetNextStep()
+	nextStep := p.GetNextStep()
 	if nextStep != 2 {
 		t.Errorf("Expected next step to be 2, got %d", nextStep)
 	}
 
-	plan.UpdateStatus(2, "completed", "Success")
-	nextStep = plan.GetNextStep()
+	p.UpdateStatus(2, "completed", "Success")
+	nextStep = p.GetNextStep()
 	if nextStep != 3 {
 		t.Errorf("Expected next step to be 3, got %d", nextStep)
 	}
 
-	plan.UpdateStatus(3, "completed", "Success")
-	nextStep = plan.GetNextStep()
+	p.UpdateStatus(3, "completed", "Success")
+	nextStep = p.GetNextStep()
 	if nextStep != -1 {
 		t.Errorf("Expected next step to be -1 (all completed), got %d", nextStep)
 	}
 }
 
 func TestPlan_IsCompleted(t *testing.T) {
-	plan := &Plan{
-		Steps: []PlanStep{
+	p := &plan.Plan{
+		Steps: []plan.PlanStep{
 			{ID: 1, Status: "completed"},
 			{ID: 2, Status: "pending"},
 		},
 	}
 
-	if plan.IsCompleted() {
+	if p.IsCompleted() {
 		t.Error("Expected plan to be not completed")
 	}
 
-	plan.UpdateStatus(2, "completed", "Success")
-	if !plan.IsCompleted() {
+	p.UpdateStatus(2, "completed", "Success")
+	if !p.IsCompleted() {
 		t.Error("Expected plan to be completed")
 	}
 }
 
 func TestPlan_HasFailed(t *testing.T) {
-	plan := &Plan{
-		Steps: []PlanStep{
+	p := &plan.Plan{
+		Steps: []plan.PlanStep{
 			{ID: 1, Status: "completed"},
 			{ID: 2, Status: "pending"},
 		},
 	}
 
-	if plan.HasFailed() {
+	if p.HasFailed() {
 		t.Error("Expected plan to have no failures")
 	}
 
-	plan.UpdateStatus(2, "failed", "Error occurred")
-	if !plan.HasFailed() {
+	p.UpdateStatus(2, "failed", "Error occurred")
+	if !p.HasFailed() {
 		t.Error("Expected plan to have failed")
 	}
 }
 
 func TestFormatPlan(t *testing.T) {
-	plan := &Plan{
-		Steps: []PlanStep{
+	p := &plan.Plan{
+		Steps: []plan.PlanStep{
 			{
 				ID:          1,
 				Description: "Read file",
@@ -294,8 +271,8 @@ func TestFormatPlan(t *testing.T) {
 		},
 	}
 
-	formatted := FormatPlan(plan)
-	if !strings.Contains(formatted, "📋 Plan:") {
+	formatted := plan.FormatPlan(p)
+	if !strings.Contains(formatted, "Plan:") {
 		t.Error("Expected formatted plan to contain header")
 	}
 	if !strings.Contains(formatted, "Read file") {
@@ -303,55 +280,6 @@ func TestFormatPlan(t *testing.T) {
 	}
 	if !strings.Contains(formatted, "Depends on:") {
 		t.Error("Expected formatted plan to contain depends_on info")
-	}
-}
-
-func TestFindClosingBrace(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		start    int
-		expected int
-	}{
-		{
-			name:     "simple object",
-			input:    `{"key": "value"}`,
-			start:    0,
-			expected: 16,
-		},
-		{
-			name:     "nested object",
-			input:    `{"outer": {"inner": "value"}}`,
-			start:    0,
-			expected: 29, // closing brace at index 28, +1 = 29
-		},
-		{
-			name:     "with string containing brace",
-			input:    `{"key": "value with } brace"}`,
-			start:    0,
-			expected: 29, // closing brace at index 28, +1 = 29
-		},
-		{
-			name:     "with escaped quote",
-			input:    `{"key": "value with \" quote"}`,
-			start:    0,
-			expected: 30, // closing brace at index 29, +1 = 30
-		},
-		{
-			name:     "incomplete object",
-			input:    `{"key": "value"`,
-			start:    0,
-			expected: -1,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := findClosingBrace(tt.input, tt.start)
-			if result != tt.expected {
-				t.Errorf("Expected %d, got %d for input: %s", tt.expected, result, tt.input)
-			}
-		})
 	}
 }
 
@@ -392,9 +320,9 @@ func TestContainsFailure_GoTestFail(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			failed, _ := containsFailure(tt.result)
+			failed, _ := plan.ContainsFailure(tt.result)
 			if failed != tt.want {
-				t.Errorf("containsFailure() = %v, want %v", failed, tt.want)
+				t.Errorf("ContainsFailure() = %v, want %v", failed, tt.want)
 			}
 		})
 	}
@@ -408,12 +336,12 @@ goroutine 1 [running]:
 main.main()
 	/home/user/project/main.go:10 +0x45`
 
-	failed, reason := containsFailure(result)
+	failed, reason := plan.ContainsFailure(result)
 	if !failed {
-		t.Error("containsFailure() should detect panic")
+		t.Error("ContainsFailure() should detect panic")
 	}
 	if reason != "Panic detected" {
-		t.Errorf("containsFailure() reason = %q, want 'Panic detected'", reason)
+		t.Errorf("ContainsFailure() reason = %q, want 'Panic detected'", reason)
 	}
 }
 
@@ -424,12 +352,12 @@ npm ERR! path /home/user/project/package.json
 npm ERR! errno -2
 npm ERR! enoent ENOENT: no such file or directory`
 
-	failed, reason := containsFailure(result)
+	failed, reason := plan.ContainsFailure(result)
 	if !failed {
-		t.Error("containsFailure() should detect npm error")
+		t.Error("ContainsFailure() should detect npm error")
 	}
 	if reason != "npm error" {
-		t.Errorf("containsFailure() reason = %q, want 'npm error'", reason)
+		t.Errorf("ContainsFailure() reason = %q, want 'npm error'", reason)
 	}
 }
 
@@ -453,9 +381,9 @@ func TestContainsFailure_ExitStatus(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			failed, _ := containsFailure(tt.result)
+			failed, _ := plan.ContainsFailure(tt.result)
 			if failed != tt.want {
-				t.Errorf("containsFailure() = %v, want %v", failed, tt.want)
+				t.Errorf("ContainsFailure() = %v, want %v", failed, tt.want)
 			}
 		})
 	}
@@ -482,9 +410,9 @@ func TestContainsFailure_NoFailure(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			failed, _ := containsFailure(tt.result)
+			failed, _ := plan.ContainsFailure(tt.result)
 			if failed {
-				t.Errorf("containsFailure() should not detect failure for %q", tt.name)
+				t.Errorf("ContainsFailure() should not detect failure for %q", tt.name)
 			}
 		})
 	}
@@ -520,9 +448,9 @@ func TestContainsFailure_BuildAndCompileErrors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			failed, _ := containsFailure(tt.result)
+			failed, _ := plan.ContainsFailure(tt.result)
 			if failed != tt.want {
-				t.Errorf("containsFailure() = %v, want %v", failed, tt.want)
+				t.Errorf("ContainsFailure() = %v, want %v", failed, tt.want)
 			}
 		})
 	}
@@ -538,8 +466,8 @@ func TestContainsFailure_FalsePositives(t *testing.T) {
 	}{
 		{
 			name: "t.Errorf in test code",
-			result: `internal/agent/plan_test.go:397:	t.Errorf("containsFailure() = %v, want %v", failed, tt.want)
-internal/agent/plan_test.go:485:	t.Errorf("containsFailure() should not detect failure for %q", tt.name)`,
+			result: `internal/agent/plan_test.go:397:	t.Errorf("ContainsFailure() = %v, want %v", failed, tt.want)
+internal/agent/plan_test.go:485:	t.Errorf("ContainsFailure() should not detect failure for %q", tt.name)`,
 			want: false, // コード検索結果は失敗ではない
 		},
 		{
@@ -571,9 +499,9 @@ internal/agent/plan_test.go:485:	t.Errorf("containsFailure() should not detect f
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			failed, reason := containsFailure(tt.result)
+			failed, reason := plan.ContainsFailure(tt.result)
 			if failed != tt.want {
-				t.Errorf("containsFailure() = %v (reason: %s), want %v", failed, reason, tt.want)
+				t.Errorf("ContainsFailure() = %v (reason: %s), want %v", failed, reason, tt.want)
 			}
 		})
 	}
@@ -714,58 +642,5 @@ func TestIsAIQuestion_WithToolCall(t *testing.T) {
 	got := isAIQuestion(response)
 	if got {
 		t.Error("isAIQuestion() should return false when tool call is present")
-	}
-}
-
-func TestIsToolCallJSON(t *testing.T) {
-	tests := []struct {
-		name     string
-		jsonStr  string
-		expected bool
-	}{
-		{
-			name:     "valid tool call with tool key",
-			jsonStr:  `{"tool": "read_file", "args": {"path": "/test.txt"}}`,
-			expected: true,
-		},
-		{
-			name:     "valid tool call with tool: pattern",
-			jsonStr:  `{"tool":"bash","args":{"command":"ls"}}`,
-			expected: true,
-		},
-		{
-			name:     "not a tool call - regular JSON",
-			jsonStr:  `{"name": "John", "age": 30}`,
-			expected: false,
-		},
-		{
-			name:     "not a tool call - array",
-			jsonStr:  `[1, 2, 3]`,
-			expected: false,
-		},
-		{
-			name:     "empty object",
-			jsonStr:  `{}`,
-			expected: false,
-		},
-		{
-			name:     "plan JSON (not tool call)",
-			jsonStr:  `{"steps": [{"id": 1}]}`,
-			expected: false,
-		},
-		{
-			name:     "tool call with extra fields",
-			jsonStr:  `{"tool": "write_file", "args": {"path": "/test.txt"}, "extra": true}`,
-			expected: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := isToolCallJSON(tt.jsonStr)
-			if got != tt.expected {
-				t.Errorf("isToolCallJSON(%q) = %v, want %v", tt.jsonStr, got, tt.expected)
-			}
-		})
 	}
 }

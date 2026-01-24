@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/susugadx/xelyon-cli/internal/agent/plan"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
@@ -12,18 +13,18 @@ import (
 )
 
 // runImplementationPhase は実装フェーズを実行（並列実行対応）
-func (a *Agent) runImplementationPhase(ctx context.Context, plan *Plan) error {
+func (a *Agent) runImplementationPhase(ctx context.Context, p *plan.Plan) error {
 	// 依存関係解析器を初期化
-	analyzer := NewDependencyAnalyzer(nil) // LSP連携は将来の拡張
-	_ = analyzer.Analyze(plan.Steps)       // ファイルアクセスマップを構築
+	analyzer := plan.NewDependencyAnalyzer(nil) // LSP連携は将来の拡張
+	_ = analyzer.Analyze(p.Steps)               // ファイルアクセスマップを構築
 
 	for {
 		// 並列実行可能なステップを取得
-		parallelSteps := plan.GetParallelSteps()
+		parallelSteps := p.GetParallelSteps()
 
 		if len(parallelSteps) > 1 {
 			// 並列実行前に競合チェック
-			conflicts := analyzer.DetectConflicts(parallelSteps, plan.Steps)
+			conflicts := analyzer.DetectConflicts(parallelSteps, p.Steps)
 			if len(conflicts) > 0 {
 				// 競合検出時は直列実行にフォールバック
 				yellow.Printf("\n⚠️  Conflict detected, falling back to sequential execution:\n")
@@ -32,57 +33,57 @@ func (a *Agent) runImplementationPhase(ctx context.Context, plan *Plan) error {
 				}
 				// 直列実行
 				for _, id := range parallelSteps {
-					step := plan.GetStep(id)
+					step := p.GetStep(id)
 					if step == nil {
 						continue
 					}
-					cyan.Printf("\n[%d/%d] %s\n", id, len(plan.Steps), step.Description)
-					if err := a.executeStepV2(ctx, plan, step, id-1, 0, false); err != nil {
+					cyan.Printf("\n[%d/%d] %s\n", id, len(p.Steps), step.Description)
+					if err := a.executeStepV2(ctx, p, step, id-1, 0, false); err != nil {
 						return err
 					}
-					plan.UpdateStatus(id, "completed", "")
+					p.UpdateStatus(id, "completed", "")
 				}
 			} else {
 				// 競合なし - 並列実行
 				cyan.Printf("\n⚡ Executing %d steps in parallel...\n", len(parallelSteps))
-				if err := a.executeStepsParallel(ctx, plan, parallelSteps); err != nil {
+				if err := a.executeStepsParallel(ctx, p, parallelSteps); err != nil {
 					return err
 				}
 				// 完了したステップをマーク
 				for _, id := range parallelSteps {
-					plan.UpdateStatus(id, "completed", "")
+					p.UpdateStatus(id, "completed", "")
 				}
 			}
 		} else {
 			// 直列実行
-			nextID := plan.GetNextStep()
+			nextID := p.GetNextStep()
 			if nextID == -1 {
 				break // 全て完了
 			}
-			step := plan.GetStep(nextID)
+			step := p.GetStep(nextID)
 			if step == nil {
 				break
 			}
 
-			cyan.Printf("\n[%d/%d] %s\n", nextID, len(plan.Steps), step.Description)
-			if err := a.executeStepV2(ctx, plan, step, nextID-1, 0, false); err != nil {
+			cyan.Printf("\n[%d/%d] %s\n", nextID, len(p.Steps), step.Description)
+			if err := a.executeStepV2(ctx, p, step, nextID-1, 0, false); err != nil {
 				return err
 			}
-			plan.UpdateStatus(nextID, "completed", "")
+			p.UpdateStatus(nextID, "completed", "")
 		}
 
 		// 全て完了したか確認
-		if plan.IsCompleted() {
+		if p.IsCompleted() {
 			break
 		}
 	}
 
-	green.Printf("\n✓ All %d steps completed!\n", len(plan.Steps))
+	green.Printf("\n✓ All %d steps completed!\n", len(p.Steps))
 	return nil
 }
 
 // executeStepsParallel は複数ステップを並列実行
-func (a *Agent) executeStepsParallel(ctx context.Context, plan *Plan, stepIDs []int) error {
+func (a *Agent) executeStepsParallel(ctx context.Context, p *plan.Plan, stepIDs []int) error {
 	cfg := config.GetGlobalConfig()
 	maxWorkers := cfg.PlanMode.MaxParallelSteps
 	if maxWorkers <= 0 {
@@ -95,7 +96,7 @@ func (a *Agent) executeStepsParallel(ctx context.Context, plan *Plan, stepIDs []
 
 	for _, stepID := range stepIDs {
 		stepID := stepID // capture
-		step := plan.GetStep(stepID)
+		step := p.GetStep(stepID)
 		if step == nil {
 			continue
 		}
@@ -110,7 +111,7 @@ func (a *Agent) executeStepsParallel(ctx context.Context, plan *Plan, stepIDs []
 			}
 
 			cyan.Printf("\n[Parallel] Step %d: %s\n", step.ID, step.Description)
-			return a.executeStepV2(ctx, plan, step, step.ID-1, 0, true)
+			return a.executeStepV2(ctx, p, step, step.ID-1, 0, true)
 		})
 	}
 
@@ -119,7 +120,7 @@ func (a *Agent) executeStepsParallel(ctx context.Context, plan *Plan, stepIDs []
 
 // executeStepV2 は単一ステップを実行（失敗検知・リトライ対応）
 // parallel=true の場合はスレッドセーフなメソッドを使用し、ユーザー入力が必要な処理はスキップ
-func (a *Agent) executeStepV2(ctx context.Context, plan *Plan, step *PlanStep, idx int, retryCount int, parallel bool) error {
+func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.PlanStep, idx int, retryCount int, parallel bool) error {
 	maxRetries := config.PlanMaxRetries
 
 	if retryCount > 0 {
@@ -226,7 +227,7 @@ IMPORTANT INSTRUCTIONS:
 			allResults = append(allResults, fmt.Sprintf("[%s]\n%s", toolCall.Tool, result))
 
 			// 失敗パターンをチェック
-			if failed, reason := containsFailure(result); failed {
+			if failed, reason := plan.ContainsFailure(result); failed {
 				lastFailedResult = result
 				lastFailReason = reason
 			}
@@ -262,7 +263,7 @@ IMPORTANT INSTRUCTIONS:
 			action, comment := promptFailureAction(step, lastFailedResult, lastFailReason)
 
 			switch action {
-			case FailureActionRetry:
+			case plan.FailureActionRetry:
 				if retryCount >= maxRetries {
 					red.Printf("⚠️  Max retries (%d) reached for step %d\n", maxRetries, step.ID)
 					return fmt.Errorf("step %d failed after %d retries", step.ID, maxRetries)
@@ -282,8 +283,8 @@ Please:
 
 Do NOT skip this step. The issue must be resolved before proceeding.`, lastFailedResult),
 				})
-				return a.executeStepV2(ctx, plan, step, idx, retryCount+1, false)
-			case FailureActionComment:
+				return a.executeStepV2(ctx, p, step, idx, retryCount+1, false)
+			case plan.FailureActionComment:
 				if retryCount >= maxRetries {
 					red.Printf("⚠️  Max retries (%d) reached for step %d\n", maxRetries, step.ID)
 					return fmt.Errorf("step %d failed after %d retries", step.ID, maxRetries)
@@ -300,11 +301,11 @@ Error that occurred:
 
 Please follow these instructions to fix the issue and retry the step.`, comment, lastFailedResult),
 				})
-				return a.executeStepV2(ctx, plan, step, idx, retryCount+1, false)
-			case FailureActionSkip:
+				return a.executeStepV2(ctx, p, step, idx, retryCount+1, false)
+			case plan.FailureActionSkip:
 				yellow.Printf("⏭️  Step %d skipped by user\n", step.ID)
 				return nil
-			case FailureActionAbort:
+			case plan.FailureActionAbort:
 				red.Printf("🛑 Step %d aborted by user\n", step.ID)
 				return fmt.Errorf("step %d aborted by user: %s", step.ID, lastFailReason)
 			}

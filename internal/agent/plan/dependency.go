@@ -1,4 +1,4 @@
-package agent
+package plan
 
 import (
 	"fmt"
@@ -369,15 +369,15 @@ func (da *DependencyAnalyzer) AnalyzeAndWarn(steps []PlanStep, parallelStepIDs [
 	if len(parallelStepIDs) > 1 {
 		conflicts := da.DetectConflicts(parallelStepIDs, result.Steps)
 		for _, c := range conflicts {
-			warnings = append(warnings, formatConflictWarning(c))
+			warnings = append(warnings, FormatConflictWarning(c))
 		}
 	}
 
 	return result.Steps, warnings
 }
 
-// formatConflictWarning は競合情報を警告文字列に整形
-func formatConflictWarning(c Conflict) string {
+// FormatConflictWarning は競合情報を警告文字列に整形
+func FormatConflictWarning(c Conflict) string {
 	return "Conflict detected: " + c.Message +
 		" (steps: " + formatIntSlice(c.StepIDs) +
 		", files: " + strings.Join(c.Files, ", ") + ")"

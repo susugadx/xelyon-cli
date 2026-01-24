@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/susugadx/xelyon-cli/internal/agent/plan"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
@@ -38,7 +39,7 @@ func (a *Agent) runInvestigationPhase(ctx context.Context) (string, error) {
 		}
 
 		// 計画JSONを検出
-		if planJSON := ExtractPlanJSON(response); planJSON != "" {
+		if planJSON := plan.ExtractPlanJSON(response); planJSON != "" {
 			return planJSON, nil
 		}
 
@@ -129,7 +130,7 @@ Output your plan now in this JSON format:
 		var allResults []string
 		if len(safetyHighTools) > 1 {
 			// 並列実行時のループ検知
-			currentHash := hashToolCalls(safetyHighTools)
+			currentHash := plan.HashToolCalls(safetyHighTools)
 			if currentHash == lastToolCallsHash {
 				sameSetCount++
 				if sameSetCount >= config.LoopDetectionThreshold {

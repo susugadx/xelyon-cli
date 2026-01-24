@@ -3,10 +3,11 @@ package agent
 import (
 	"testing"
 
+	"github.com/susugadx/xelyon-cli/internal/agent/plan"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
-func TestExtractPlanJSON(t *testing.T) {
+func TestExtractPlanJSON_Mode(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
@@ -38,7 +39,7 @@ func TestExtractPlanJSON(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := ExtractPlanJSON(tt.input)
+			result := plan.ExtractPlanJSON(tt.input)
 			if result != tt.expected {
 				t.Errorf("ExtractPlanJSON() = %q, want %q", result, tt.expected)
 			}
@@ -84,7 +85,7 @@ func TestParsePlan_V2Format(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			plan, err := ParsePlan(tt.input)
+			p, err := plan.ParsePlan(tt.input)
 			if tt.wantErr {
 				if err == nil {
 					t.Errorf("ParsePlan() expected error, got nil")
@@ -95,11 +96,11 @@ func TestParsePlan_V2Format(t *testing.T) {
 				t.Errorf("ParsePlan() unexpected error: %v", err)
 				return
 			}
-			if plan.Summary != tt.wantSummary {
-				t.Errorf("ParsePlan() summary = %q, want %q", plan.Summary, tt.wantSummary)
+			if p.Summary != tt.wantSummary {
+				t.Errorf("ParsePlan() summary = %q, want %q", p.Summary, tt.wantSummary)
 			}
-			if len(plan.Steps) != tt.wantSteps {
-				t.Errorf("ParsePlan() steps count = %d, want %d", len(plan.Steps), tt.wantSteps)
+			if len(p.Steps) != tt.wantSteps {
+				t.Errorf("ParsePlan() steps count = %d, want %d", len(p.Steps), tt.wantSteps)
 			}
 		})
 	}
@@ -107,16 +108,16 @@ func TestParsePlan_V2Format(t *testing.T) {
 
 func TestPlanStep_Tools(t *testing.T) {
 	input := `{"plan": {"summary": "Test", "steps": [{"id": 1, "description": "Write file", "tools": ["write_file", "str_replace"]}]}}`
-	plan, err := ParsePlan(input)
+	p, err := plan.ParsePlan(input)
 	if err != nil {
 		t.Fatalf("ParsePlan() error: %v", err)
 	}
 
-	if len(plan.Steps) != 1 {
-		t.Fatalf("Expected 1 step, got %d", len(plan.Steps))
+	if len(p.Steps) != 1 {
+		t.Fatalf("Expected 1 step, got %d", len(p.Steps))
 	}
 
-	step := plan.Steps[0]
+	step := p.Steps[0]
 	if step.ID != 1 {
 		t.Errorf("Step ID = %d, want 1", step.ID)
 	}
@@ -169,9 +170,9 @@ func TestHashToolCalls(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := hashToolCalls(tt.toolCalls)
+			got := plan.HashToolCalls(tt.toolCalls)
 			if got != tt.want {
-				t.Errorf("hashToolCalls() = %q, want %q", got, tt.want)
+				t.Errorf("HashToolCalls() = %q, want %q", got, tt.want)
 			}
 		})
 	}
@@ -188,10 +189,10 @@ func TestHashToolCalls_OrderIndependent(t *testing.T) {
 		{Tool: "read_file", Args: map[string]string{"path": "/a.go"}},
 	}
 
-	hash1 := hashToolCalls(calls1)
-	hash2 := hashToolCalls(calls2)
+	hash1 := plan.HashToolCalls(calls1)
+	hash2 := plan.HashToolCalls(calls2)
 
 	if hash1 != hash2 {
-		t.Errorf("hashToolCalls() should be order-independent: %q != %q", hash1, hash2)
+		t.Errorf("HashToolCalls() should be order-independent: %q != %q", hash1, hash2)
 	}
 }

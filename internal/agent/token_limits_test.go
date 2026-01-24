@@ -3,6 +3,7 @@ package agent
 import (
 	"testing"
 
+	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
 )
 
@@ -29,9 +30,9 @@ func TestGetModelTokenLimit(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.model, func(t *testing.T) {
-			got := GetModelTokenLimit(tt.model)
+			got := token.GetModelTokenLimit(tt.model)
 			if got != tt.expected {
-				t.Errorf("GetModelTokenLimit(%q) = %d, want %d", tt.model, got, tt.expected)
+				t.Errorf("token.GetModelTokenLimit(%q) = %d, want %d", tt.model, got, tt.expected)
 			}
 		})
 	}
@@ -53,9 +54,9 @@ func TestEstimateTokenCount(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := estimateTokenCount(tt.text)
+			got := token.EstimateTokenCount(tt.text)
 			if got < tt.minToken || got > tt.maxToken {
-				t.Errorf("estimateTokenCount(%q) = %d, want between %d and %d",
+				t.Errorf("token.EstimateTokenCount(%q) = %d, want between %d and %d",
 					tt.text, got, tt.minToken, tt.maxToken)
 			}
 		})

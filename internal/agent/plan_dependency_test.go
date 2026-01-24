@@ -2,20 +2,22 @@ package agent
 
 import (
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/agent/plan"
 )
 
 func TestExtractFilesFromStep(t *testing.T) {
-	da := NewDependencyAnalyzer(nil)
+	da := plan.NewDependencyAnalyzer(nil)
 
 	tests := []struct {
 		name           string
-		step           PlanStep
+		step           plan.PlanStep
 		wantReadFiles  []string // expected files that should be in reads
 		wantWriteFiles []string // expected files that should be in writes
 	}{
 		{
 			name: "read_file tool with quoted path",
-			step: PlanStep{
+			step: plan.PlanStep{
 				ID:          1,
 				Description: `Read the file "internal/agent/plan.go" to understand the structure`,
 				Tools:       []string{"read_file"},
@@ -25,7 +27,7 @@ func TestExtractFilesFromStep(t *testing.T) {
 		},
 		{
 			name: "write_file tool",
-			step: PlanStep{
+			step: plan.PlanStep{
 				ID:          2,
 				Description: `Create new file internal/agent/plan_dependency.go`,
 				Tools:       []string{"write_file"},
@@ -35,7 +37,7 @@ func TestExtractFilesFromStep(t *testing.T) {
 		},
 		{
 			name: "str_replace tool",
-			step: PlanStep{
+			step: plan.PlanStep{
 				ID:          3,
 				Description: `Update internal/agent/plan.go to add new function`,
 				Tools:       []string{"str_replace"},
@@ -45,7 +47,7 @@ func TestExtractFilesFromStep(t *testing.T) {
 		},
 		{
 			name: "multiple tools",
-			step: PlanStep{
+			step: plan.PlanStep{
 				ID:          4,
 				Description: `Read main.go and update config.go`,
 				Tools:       []string{"read_file", "str_replace"},
@@ -89,112 +91,10 @@ func containsFile(files []string, target string) bool {
 	return false
 }
 
-func TestInferDependencies_RAW(t *testing.T) {
-	// RAW: Read After Write - BがAの書き込みファイルを読む
-	da := NewDependencyAnalyzer(nil)
-
-	steps := []PlanStep{
-		{
-			ID:          1,
-			Description: `Create config.go`,
-			Tools:       []string{"write_file"},
-			DependsOn:   nil,
-		},
-		{
-			ID:          2,
-			Description: `Read config.go to verify`,
-			Tools:       []string{"read_file"},
-			DependsOn:   nil,
-		},
-	}
-
-	// ファイル抽出
-	for i := range steps {
-		readFiles, writeFiles := da.ExtractFilesFromStep(&steps[i])
-		steps[i].ReadFiles = readFiles
-		steps[i].WriteFiles = writeFiles
-
-		for _, f := range readFiles {
-			da.fileReaders[f] = append(da.fileReaders[f], steps[i].ID)
-		}
-		for _, f := range writeFiles {
-			da.fileWriters[f] = append(da.fileWriters[f], steps[i].ID)
-		}
-	}
-
-	// 依存関係推論
-	result := da.InferDependencies(steps)
-
-	// Step 2 should depend on Step 1
-	if len(result[1].DependsOn) == 0 {
-		t.Error("Expected step 2 to depend on step 1 (RAW hazard)")
-	}
-
-	found := false
-	for _, depID := range result[1].DependsOn {
-		if depID == 1 {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Error("Expected step 2 to depend on step 1 (RAW hazard)")
-	}
-}
-
-func TestInferDependencies_WAW(t *testing.T) {
-	// WAW: Write After Write - 両方が同じファイルに書く
-	da := NewDependencyAnalyzer(nil)
-
-	steps := []PlanStep{
-		{
-			ID:          1,
-			Description: `Write to output.txt`,
-			Tools:       []string{"write_file"},
-			DependsOn:   nil,
-		},
-		{
-			ID:          2,
-			Description: `Append to output.txt`,
-			Tools:       []string{"append_file"},
-			DependsOn:   nil,
-		},
-	}
-
-	// ファイル抽出
-	for i := range steps {
-		readFiles, writeFiles := da.ExtractFilesFromStep(&steps[i])
-		steps[i].ReadFiles = readFiles
-		steps[i].WriteFiles = writeFiles
-
-		for _, f := range readFiles {
-			da.fileReaders[f] = append(da.fileReaders[f], steps[i].ID)
-		}
-		for _, f := range writeFiles {
-			da.fileWriters[f] = append(da.fileWriters[f], steps[i].ID)
-		}
-	}
-
-	// 依存関係推論
-	result := da.InferDependencies(steps)
-
-	// Step 2 should depend on Step 1
-	found := false
-	for _, depID := range result[1].DependsOn {
-		if depID == 1 {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Error("Expected step 2 to depend on step 1 (WAW hazard)")
-	}
-}
-
 func TestDetectConflicts_WriteWrite(t *testing.T) {
-	da := NewDependencyAnalyzer(nil)
+	da := plan.NewDependencyAnalyzer(nil)
 
-	steps := []PlanStep{
+	steps := []plan.PlanStep{
 		{
 			ID:         1,
 			WriteFiles: []string{"shared.go"},
@@ -218,9 +118,9 @@ func TestDetectConflicts_WriteWrite(t *testing.T) {
 }
 
 func TestDetectConflicts_ReadWrite(t *testing.T) {
-	da := NewDependencyAnalyzer(nil)
+	da := plan.NewDependencyAnalyzer(nil)
 
-	steps := []PlanStep{
+	steps := []plan.PlanStep{
 		{
 			ID:        1,
 			ReadFiles: []string{"data.go"},
@@ -244,9 +144,9 @@ func TestDetectConflicts_ReadWrite(t *testing.T) {
 }
 
 func TestDetectConflicts_NoConflict(t *testing.T) {
-	da := NewDependencyAnalyzer(nil)
+	da := plan.NewDependencyAnalyzer(nil)
 
-	steps := []PlanStep{
+	steps := []plan.PlanStep{
 		{
 			ID:         1,
 			WriteFiles: []string{"file1.go"},
@@ -266,9 +166,9 @@ func TestDetectConflicts_NoConflict(t *testing.T) {
 }
 
 func TestAnalyze_IntegrationTest(t *testing.T) {
-	da := NewDependencyAnalyzer(nil)
+	da := plan.NewDependencyAnalyzer(nil)
 
-	steps := []PlanStep{
+	steps := []plan.PlanStep{
 		{
 			ID:          1,
 			Description: `Read internal/agent/plan.go to understand structure`,
@@ -299,9 +199,9 @@ func TestAnalyze_IntegrationTest(t *testing.T) {
 }
 
 func TestEnhanceWithLSP_WithoutClient(t *testing.T) {
-	da := NewDependencyAnalyzer(nil)
+	da := plan.NewDependencyAnalyzer(nil)
 
-	steps := []PlanStep{
+	steps := []plan.PlanStep{
 		{ID: 1, Description: "Test step"},
 	}
 
@@ -313,58 +213,15 @@ func TestEnhanceWithLSP_WithoutClient(t *testing.T) {
 	}
 }
 
-func TestIsValidFilePath(t *testing.T) {
-	tests := []struct {
-		path  string
-		valid bool
-	}{
-		{"internal/agent/plan.go", true},
-		{"main.go", true},
-		{"/absolute/path/to/file.go", true},
-		{"", false},
-		{"http://example.com", false},
-		{"https://github.com/repo", false},
-		{"directory", false}, // no extension
-		{"example.com", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.path, func(t *testing.T) {
-			if got := isValidFilePath(tt.path); got != tt.valid {
-				t.Errorf("isValidFilePath(%q) = %v, want %v", tt.path, got, tt.valid)
-			}
-		})
-	}
-}
-
-func TestFormatIntSlice(t *testing.T) {
-	tests := []struct {
-		input    []int
-		expected string
-	}{
-		{[]int{1, 2, 3}, "1, 2, 3"},
-		{[]int{10, 20}, "10, 20"},
-		{[]int{1}, "1"},
-		{[]int{}, ""},
-	}
-
-	for _, tt := range tests {
-		result := formatIntSlice(tt.input)
-		if result != tt.expected {
-			t.Errorf("formatIntSlice(%v) = %q, want %q", tt.input, result, tt.expected)
-		}
-	}
-}
-
 func TestFormatConflictWarning(t *testing.T) {
 	tests := []struct {
 		name     string
-		conflict Conflict
+		conflict plan.Conflict
 		want     string
 	}{
 		{
 			name: "single file write-write conflict",
-			conflict: Conflict{
+			conflict: plan.Conflict{
 				StepIDs:      []int{1, 2},
 				ConflictType: "write-write",
 				Files:        []string{"main.go"},
@@ -374,7 +231,7 @@ func TestFormatConflictWarning(t *testing.T) {
 		},
 		{
 			name: "multiple files read-write conflict",
-			conflict: Conflict{
+			conflict: plan.Conflict{
 				StepIDs:      []int{3, 5, 7},
 				ConflictType: "read-write",
 				Files:        []string{"config.yaml", "settings.json"},
@@ -384,7 +241,7 @@ func TestFormatConflictWarning(t *testing.T) {
 		},
 		{
 			name: "empty files",
-			conflict: Conflict{
+			conflict: plan.Conflict{
 				StepIDs:      []int{1},
 				ConflictType: "write-read",
 				Files:        []string{},
@@ -396,9 +253,9 @@ func TestFormatConflictWarning(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := formatConflictWarning(tt.conflict)
+			got := plan.FormatConflictWarning(tt.conflict)
 			if got != tt.want {
-				t.Errorf("formatConflictWarning() = %q, want %q", got, tt.want)
+				t.Errorf("FormatConflictWarning() = %q, want %q", got, tt.want)
 			}
 		})
 	}

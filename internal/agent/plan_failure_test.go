@@ -2,6 +2,8 @@ package agent
 
 import (
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/agent/plan"
 )
 
 func TestContainsFailure(t *testing.T) {
@@ -163,12 +165,12 @@ func TestContainsFailure(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotFailed, gotReason := containsFailure(tt.result)
+			gotFailed, gotReason := plan.ContainsFailure(tt.result)
 			if gotFailed != tt.wantFailed {
-				t.Errorf("containsFailure() failed = %v, want %v", gotFailed, tt.wantFailed)
+				t.Errorf("ContainsFailure() failed = %v, want %v", gotFailed, tt.wantFailed)
 			}
 			if gotReason != tt.wantReason {
-				t.Errorf("containsFailure() reason = %q, want %q", gotReason, tt.wantReason)
+				t.Errorf("ContainsFailure() reason = %q, want %q", gotReason, tt.wantReason)
 			}
 		})
 	}

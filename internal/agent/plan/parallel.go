@@ -1,4 +1,4 @@
-package agent
+package plan
 
 import (
 	"fmt"
@@ -8,8 +8,8 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
-// hashToolCalls は toolCalls セットのハッシュを生成（ループ検知用）
-func hashToolCalls(toolCalls []*tools.ToolCall) string {
+// HashToolCalls は toolCalls セットのハッシュを生成（ループ検知用）
+func HashToolCalls(toolCalls []*tools.ToolCall) string {
 	var parts []string
 	for _, tc := range toolCalls {
 		argsStr := fmt.Sprintf("%v", tc.Args)

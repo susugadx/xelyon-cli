@@ -6,89 +6,14 @@ import (
 	"os"
 	"strings"
 
+	"github.com/susugadx/xelyon-cli/internal/agent/plan"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
-// FailureAction は失敗時のユーザー選択
-type FailureAction string
-
-const (
-	FailureActionRetry   FailureAction = "retry"
-	FailureActionComment FailureAction = "comment"
-	FailureActionSkip    FailureAction = "skip"
-	FailureActionAbort   FailureAction = "abort"
-)
-
-// containsFailure はツール結果に失敗パターンが含まれるか検出
-// 失敗を検出した場合、(true, 理由) を返す
-//
-// NOTE: "error:" や "Error:" のような汎用パターンは使用しない。
-// コード検索結果（例: t.Errorf）やログ出力に含まれる "Error" 文字列で
-// 誤検知してしまうため。実際のコマンド失敗を示す具体的なパターンのみ使用。
-func containsFailure(result string) (bool, string) {
-	failPatterns := map[string]string{
-		// Go test failures
-		"--- FAIL:": "Go test failed",
-		"FAIL\t":    "Go test failed",
-		// Command failures (exit code)
-		"exit status 1": "Command failed with exit code 1",
-		// Panics and fatal errors
-		"panic:":       "Panic detected",
-		"fatal error:": "Fatal error",
-		// Build/compile errors
-		"compile error":  "Compilation error",
-		"build failed":   "Build failed",
-		"cannot find":    "Build error",
-		"undefined:":     "Undefined symbol",
-		"undeclared":     "Undeclared identifier",
-		"does not exist": "File or module not found",
-		// npm/node errors
-		"npm ERR!": "npm error",
-		// JavaScript runtime errors (specific patterns)
-		"SyntaxError:":    "Syntax error",
-		"TypeError:":      "Type error",
-		"ReferenceError:": "Reference error",
-		// Python errors
-		"Traceback (most recent call last):": "Python exception",
-		"AssertionError:":                    "Assertion failed",
-		// Rust errors
-		"error[E": "Rust compilation error",
-	}
-
-	// パターンの優先度順にチェック（より具体的なものを先に）
-	priorityPatterns := []string{
-		"--- FAIL:",
-		"FAIL\t",
-		"panic:",
-		"fatal error:",
-		"Traceback (most recent call last):",
-		"error[E",
-		"compile error",
-		"build failed",
-		"undefined:",
-		"undeclared",
-		"cannot find",
-		"does not exist",
-		"npm ERR!",
-		"SyntaxError:",
-		"TypeError:",
-		"ReferenceError:",
-		"AssertionError:",
-		"exit status 1",
-	}
-
-	for _, pattern := range priorityPatterns {
-		if strings.Contains(result, pattern) {
-			return true, failPatterns[pattern]
-		}
-	}
-	return false, ""
-}
-
 // promptFailureAction は失敗時のユーザー選択UIを表示
 // 戻り値: (アクション, コメント文字列) - コメントアクション時のみ第2引数が非空
-func promptFailureAction(step *PlanStep, result string, reason string) (FailureAction, string) {
+func promptFailureAction(step *plan.PlanStep, result string, reason string) (plan.FailureAction, string) {
 	fmt.Println()
 	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	red.Printf("❌ Step %d Failed: %s\n", step.ID, step.Description)
@@ -127,7 +52,7 @@ func promptFailureAction(step *PlanStep, result string, reason string) (FailureA
 
 // promptFailureActionInput は r/c/s/a 専用の入力プロンプト
 // 戻り値: (アクション, コメント文字列) - コメントアクション時のみ第2引数が非空
-func promptFailureActionInput() (FailureAction, string) {
+func promptFailureActionInput() (plan.FailureAction, string) {
 	reader := bufio.NewReader(os.Stdin)
 
 	for {
@@ -136,7 +61,7 @@ func promptFailureActionInput() (FailureAction, string) {
 		response, err := reader.ReadString('\n')
 		if err != nil {
 			// EOF時はabortを返して終了
-			return FailureActionAbort, ""
+			return plan.FailureActionAbort, ""
 		}
 		response = strings.ToLower(strings.TrimSpace(response))
 
@@ -147,14 +72,14 @@ func promptFailureActionInput() (FailureAction, string) {
 
 		switch response {
 		case "r", "retry":
-			return FailureActionRetry, ""
+			return plan.FailureActionRetry, ""
 		case "c", "comment":
 			comment, _ := common.ReadMultiLineComment(reader)
-			return FailureActionComment, comment
+			return plan.FailureActionComment, comment
 		case "s", "skip":
-			return FailureActionSkip, ""
+			return plan.FailureActionSkip, ""
 		case "a", "abort":
-			return FailureActionAbort, ""
+			return plan.FailureActionAbort, ""
 		default:
 			yellow.Println("Invalid input. Please enter r/c/s/a.")
 		}

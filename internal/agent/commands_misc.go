@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/atotto/clipboard"
+	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
@@ -311,7 +312,7 @@ func handleTokensCommand(agent *Agent) bool {
 	totalTokens := agent.EstimateTokens()
 	systemTokens := agent.EstimateSystemPromptTokens()
 	historyTokens := agent.EstimateHistoryTokens()
-	limit := GetModelTokenLimit(agent.CurrentModel)
+	limit := token.GetModelTokenLimit(agent.CurrentModel)
 	percentage := float64(totalTokens) / float64(limit) * 100
 
 	// 表示

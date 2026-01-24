@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
 )
 
@@ -39,7 +40,7 @@ func trimToolOutputsForSend(history []api.Message, tailLines int) []api.Message 
 			continue
 		}
 
-		trimmed, changed := truncateToLastLines(msg.Content, tailLines)
+		trimmed, changed := token.TruncateToLastLines(msg.Content, tailLines)
 		if changed {
 			trimmed = fmt.Sprintf("%s\n\n[SYSTEM NOTE] Tool output was truncated to the last %d lines to fit context limits.", trimmed, tailLines)
 		}
@@ -47,33 +48,4 @@ func trimToolOutputsForSend(history []api.Message, tailLines int) []api.Message 
 		out = append(out, api.Message{Role: msg.Role, Content: trimmed})
 	}
 	return out
-}
-
-func truncateToLastLines(text string, lastN int) (string, bool) {
-	if lastN <= 0 {
-		return text, false
-	}
-	lines := strings.Split(text, "\n")
-	if len(lines) <= lastN {
-		return text, false
-	}
-	start := len(lines) - lastN
-	truncated := strings.Join(lines[start:], "\n")
-	return truncated, true
-}
-
-func isTokenLimitError(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := strings.ToLower(err.Error())
-	// OpenAI
-	if strings.Contains(msg, "input tokens exceed") {
-		return true
-	}
-	// Generic patterns (best-effort)
-	if strings.Contains(msg, "context length") || strings.Contains(msg, "maximum context") {
-		return true
-	}
-	return false
 }

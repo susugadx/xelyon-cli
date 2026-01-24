@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
 )
 
@@ -157,14 +158,14 @@ func TestTruncateToLastLines_BelowLimit(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, changed := truncateToLastLines(tt.text, tt.lastN)
+			result, changed := token.TruncateToLastLines(tt.text, tt.lastN)
 
 			if changed != tt.change {
-				t.Errorf("truncateToLastLines() changed = %v, want %v", changed, tt.change)
+				t.Errorf("token.TruncateToLastLines() changed = %v, want %v", changed, tt.change)
 			}
 
 			if result != tt.text {
-				t.Errorf("truncateToLastLines() result = %q, want %q", result, tt.text)
+				t.Errorf("token.TruncateToLastLines() result = %q, want %q", result, tt.text)
 			}
 		})
 	}
@@ -173,7 +174,7 @@ func TestTruncateToLastLines_BelowLimit(t *testing.T) {
 func TestTruncateToLastLines_AboveLimit(t *testing.T) {
 	text := "line1\nline2\nline3\nline4\nline5"
 
-	result, changed := truncateToLastLines(text, 3)
+	result, changed := token.TruncateToLastLines(text, 3)
 
 	if !changed {
 		t.Error("Expected changed to be true")
@@ -181,35 +182,35 @@ func TestTruncateToLastLines_AboveLimit(t *testing.T) {
 
 	expected := "line3\nline4\nline5"
 	if result != expected {
-		t.Errorf("truncateToLastLines() = %q, want %q", result, expected)
+		t.Errorf("token.TruncateToLastLines() = %q, want %q", result, expected)
 	}
 }
 
 func TestTruncateToLastLines_ZeroLimit(t *testing.T) {
 	text := "line1\nline2\nline3"
 
-	result, changed := truncateToLastLines(text, 0)
+	result, changed := token.TruncateToLastLines(text, 0)
 
 	if changed {
 		t.Error("Expected changed to be false for zero limit")
 	}
 
 	if result != text {
-		t.Errorf("truncateToLastLines() = %q, want %q", result, text)
+		t.Errorf("token.TruncateToLastLines() = %q, want %q", result, text)
 	}
 }
 
 func TestTruncateToLastLines_NegativeLimit(t *testing.T) {
 	text := "line1\nline2\nline3"
 
-	result, changed := truncateToLastLines(text, -5)
+	result, changed := token.TruncateToLastLines(text, -5)
 
 	if changed {
 		t.Error("Expected changed to be false for negative limit")
 	}
 
 	if result != text {
-		t.Errorf("truncateToLastLines() = %q, want %q", result, text)
+		t.Errorf("token.TruncateToLastLines() = %q, want %q", result, text)
 	}
 }
 
@@ -263,9 +264,9 @@ func TestIsTokenLimitError_Patterns(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := isTokenLimitError(tt.err)
+			got := token.IsTokenLimitError(tt.err)
 			if got != tt.want {
-				t.Errorf("isTokenLimitError() = %v, want %v", got, tt.want)
+				t.Errorf("token.IsTokenLimitError() = %v, want %v", got, tt.want)
 			}
 		})
 	}
