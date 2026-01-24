@@ -118,7 +118,7 @@ func executeFileSearchWithProgress(cmd *exec.Cmd) string {
 	}()
 
 	wg.Wait()
-	cmd.Wait()
+	_ = cmd.Wait() // エラーは無視（プロセス終了済み）
 	progress.stop()
 
 	return strings.Join(outputLines, "\n")

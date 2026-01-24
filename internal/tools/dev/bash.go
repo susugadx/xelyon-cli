@@ -241,7 +241,7 @@ IMPORTANT: Do NOT execute the previous command as-is.`, strings.TrimSpace(dec.Co
 		yellow.Println("\n⚠️  Command interrupted. Partial output returned.")
 		// プロセスグループ全体を終了
 		if cmd.Process != nil {
-			syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) // best effort
 		}
 		return fmt.Sprintf("Command interrupted.\nPartial output:\n%s", result)
 	}
@@ -302,7 +302,7 @@ func executeBashWithStreamingAndContext(ctx context.Context, cmd *exec.Cmd) (str
 	case <-ctx.Done():
 		// コンテキストキャンセル - プロセスグループを終了
 		if cmd.Process != nil {
-			syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) // best effort
 		}
 		return outputBuf.String(), ctx.Err()
 	case <-doneCh:

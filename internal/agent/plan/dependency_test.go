@@ -85,15 +85,15 @@ func TestIsValidFilePath(t *testing.T) {
 		{"main.go", true},
 		{"internal/config/config.go", true},
 		{"/absolute/path/file.txt", true},
-		{"", false},                     // empty
-		{"https://example.com", false},  // URL
-		{"http://example.com", false},   // URL
-		{"noextension", false},          // no extension
-		{"example.com", false},          // domain-like
-		{"github.io", false},            // domain-like
-		{"test.org", false},             // domain-like
-		{"internal/api/test.go", true},  // valid nested path
-		{"README.md", true},             // valid file
+		{"", false},                    // empty
+		{"https://example.com", false}, // URL
+		{"http://example.com", false},  // URL
+		{"noextension", false},         // no extension
+		{"example.com", false},         // domain-like
+		{"github.io", false},           // domain-like
+		{"test.org", false},            // domain-like
+		{"internal/api/test.go", true}, // valid nested path
+		{"README.md", true},            // valid file
 	}
 
 	for _, tt := range tests {
