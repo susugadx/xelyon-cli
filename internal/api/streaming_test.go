@@ -120,9 +120,14 @@ func TestParseStreamingResponse_ContextCanceled(t *testing.T) {
 		return line + " ", false, nil
 	}
 
-	_, err := ParseStreamingResponse(ctx, resp, spinner, parser)
-	if err != context.Canceled {
-		t.Errorf("ParseStreamingResponse() error = %v, want context.Canceled", err)
+	result, err := ParseStreamingResponse(ctx, resp, spinner, parser)
+	// 部分結果がある場合はエラーなしで部分結果を返す（Streaming UX Phase 3）
+	if err != nil {
+		t.Errorf("ParseStreamingResponse() error = %v, want nil (partial result)", err)
+	}
+	// 部分結果が含まれていることを確認
+	if result == "" {
+		t.Error("ParseStreamingResponse() expected partial result, got empty string")
 	}
 }
 

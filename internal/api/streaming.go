@@ -8,9 +8,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
+
+// 警告表示用の色
+var yellow = color.New(color.FgYellow)
 
 // toolJSONPatterns はツールJSON開始パターン
 var toolJSONPatterns = []string{
@@ -70,6 +74,15 @@ func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *u
 		select {
 		case <-ctx.Done():
 			spinner.Stop()
+			partialResponse := fullResponse.String()
+			if partialResponse != "" {
+				// 部分結果がある場合は警告と共に返す
+				if !firstChunk {
+					fmt.Println() // 改行
+				}
+				yellow.Println("\n⚠️  Response interrupted. Partial result returned.")
+				return partialResponse, nil // エラーではなく部分結果を返す
+			}
 			return "", ctx.Err()
 
 		case <-idleTimer.C:

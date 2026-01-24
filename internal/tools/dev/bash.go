@@ -2,12 +2,14 @@ package dev
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"strings"
 	"sync"
+	"syscall"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
@@ -151,6 +153,186 @@ IMPORTANT: Do NOT execute the previous command as-is.`, strings.TrimSpace(dec.Co
 	}
 
 	return result
+}
+
+// ExecuteBashWithContext はContext対応でシェルコマンドを実行
+// コンテキストがキャンセルされた場合、部分結果を返す
+func ExecuteBashWithContext(ctx context.Context, command string) string {
+	if command == "" {
+		return "Error: command is empty"
+	}
+
+	cfg := config.GetGlobalConfig().Bash
+
+	// Always blocked commands (at all levels)
+	for _, blocked := range alwaysBlockedCommands {
+		if strings.Contains(command, blocked) {
+			red.Printf("🚫 Blocked dangerous command: %s\n", command)
+			return "Error: This command is blocked for safety"
+		}
+	}
+
+	// Safety level checks
+	if err := CheckBashSafety(command, cfg); err != "" {
+		return err
+	}
+
+	// Determine if command is safe
+	isSafe := IsSafeCommand(command, cfg)
+
+	// Require confirmation for non-safe commands
+	if !isSafe {
+		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		cyan.Printf("⚙️  Shell Command / シェルコマンド実行\n")
+		cyan.Printf("📜 Command / コマンド: %s\n", command)
+		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		yellow.Println("⚠️  Warning: This command may modify your system / 警告: システムに変更が加わる可能性があります")
+
+		dec := common.Confirm("Run this command? / 実行しますか？")
+		switch dec.Action {
+		case common.ConfirmYes:
+			// continue
+		case common.ConfirmComment:
+			return fmt.Sprintf(`[COMMENT] User provided feedback for bash.
+
+Comment:
+%s
+
+Next actions:
+- Revise the command to be safer/smaller and propose again.
+- Or split into multiple safe commands.
+
+IMPORTANT: Do NOT execute the previous command as-is.`, strings.TrimSpace(dec.Comment))
+		default: // ConfirmNo
+			return "Cancelled by user"
+		}
+	}
+
+	// Execute with context
+	green.Printf("▶ Running: %s\n", command)
+	cmd := exec.CommandContext(ctx, "bash", "-c", command)
+	if cwd, err := os.Getwd(); err == nil {
+		cmd.Dir = cwd
+	} else {
+		yellow.Printf("Warning: Could not get current directory: %v\n", err)
+		cmd.Dir = "."
+	}
+
+	// プロセスグループを設定（子プロセスも一緒に終了させるため）
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+
+	// ストリーミング設定を確認
+	globalCfg, _ := config.LoadConfig()
+	streamOutput := globalCfg != nil && globalCfg.Streaming.StreamBashOutput
+
+	var result string
+	var cmdErr error
+
+	if streamOutput {
+		result, cmdErr = executeBashWithStreamingAndContext(ctx, cmd)
+	} else {
+		output, err := cmd.CombinedOutput()
+		result = string(output)
+		cmdErr = err
+	}
+
+	// コンテキストキャンセルの場合は部分結果を返す
+	if ctx.Err() != nil {
+		yellow.Println("\n⚠️  Command interrupted. Partial output returned.")
+		// プロセスグループ全体を終了
+		if cmd.Process != nil {
+			syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		}
+		return fmt.Sprintf("Command interrupted.\nPartial output:\n%s", result)
+	}
+
+	if cmdErr != nil {
+		return fmt.Sprintf("Error: %v\nOutput: %s", cmdErr, result)
+	}
+
+	if len(result) > config.OutputTruncateLen {
+		result = result[:config.OutputTruncateLen] + "\n... (truncated)"
+	}
+
+	return result
+}
+
+// executeBashWithStreamingAndContext はContext対応でストリーミング出力
+func executeBashWithStreamingAndContext(ctx context.Context, cmd *exec.Cmd) (string, error) {
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return "", fmt.Errorf("failed to get stdout pipe: %w", err)
+	}
+
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return "", fmt.Errorf("failed to get stderr pipe: %w", err)
+	}
+
+	if err := cmd.Start(); err != nil {
+		return "", fmt.Errorf("failed to start command: %w", err)
+	}
+
+	var outputBuf strings.Builder
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	doneCh := make(chan struct{})
+
+	// stdout ストリーミング
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		streamOutputWithContext(ctx, stdout, &outputBuf, &mu, false)
+	}()
+
+	// stderr ストリーミング
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		streamOutputWithContext(ctx, stderr, &outputBuf, &mu, true)
+	}()
+
+	// 完了を待機
+	go func() {
+		wg.Wait()
+		close(doneCh)
+	}()
+
+	select {
+	case <-ctx.Done():
+		// コンテキストキャンセル - プロセスグループを終了
+		if cmd.Process != nil {
+			syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		}
+		return outputBuf.String(), ctx.Err()
+	case <-doneCh:
+		err := cmd.Wait()
+		return outputBuf.String(), err
+	}
+}
+
+// streamOutputWithContext はContext対応でストリーミング出力
+func streamOutputWithContext(ctx context.Context, pipe io.Reader, buf *strings.Builder, mu *sync.Mutex, isStderr bool) {
+	scanner := bufio.NewScanner(pipe)
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		line := scanner.Text()
+
+		if isStderr {
+			red.Println(line)
+		} else {
+			fmt.Println(line)
+		}
+
+		mu.Lock()
+		buf.WriteString(line + "\n")
+		mu.Unlock()
+	}
 }
 
 // executeBashWithStreaming はコマンド出力をリアルタイムでストリーミング
