@@ -430,3 +430,46 @@ func (s *Server) ClearDiagnostics(filePath string) {
 	defer s.diagMu.Unlock()
 	delete(s.diagnostics, uri)
 }
+
+// WaitForDocumentReady polls for diagnostics readiness with timeout.
+// It returns early if diagnostics are already available.
+// Never returns an error on timeout - diagnostics may simply not exist for all files.
+func (s *Server) WaitForDocumentReady(ctx context.Context, uri string, maxWait time.Duration) {
+	// Check if diagnostics already available
+	s.diagMu.RLock()
+	if _, exists := s.diagnostics[uri]; exists {
+		s.diagMu.RUnlock()
+		return
+	}
+	s.diagMu.RUnlock()
+
+	// Initial wait
+	initialWait := 10 * time.Millisecond
+	timer := time.NewTimer(initialWait)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return
+	case <-timer.C:
+	}
+
+	// Poll until timeout
+	deadline := time.Now().Add(maxWait - initialWait)
+	ticker := time.NewTicker(20 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			s.diagMu.RLock()
+			_, exists := s.diagnostics[uri]
+			s.diagMu.RUnlock()
+			if exists || time.Now().After(deadline) {
+				return
+			}
+		}
+	}
+}

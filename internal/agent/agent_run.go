@@ -50,7 +50,7 @@ func RunOnce(query string, model string) {
 	agent.chat(query)
 }
 
-// RunHeadless はHeadlessモードでクエリを実行
+// RunHeadless はHeadlessモードでクエリを実行（マルチターンツール実行対応）
 func RunHeadless(query string, model string, provider api.Provider) *HeadlessResult {
 	startTime := time.Now()
 
@@ -75,34 +75,80 @@ func RunHeadless(query string, model string, provider api.Provider) *HeadlessRes
 	}
 
 	// ツール呼び出し結果を記録
-	var toolCalls []ToolCallResult
+	var allToolCalls []ToolCallResult
 
-	// API呼び出し
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
-	defer cancel()
+	// 初期ユーザーメッセージをHistoryに追加
+	agent.History = append(agent.History, api.Message{
+		Role:    "user",
+		Content: query,
+	})
 
-	response, err := provider.ChatWithTools(ctx, agent.SystemPrompt, agent.History, model)
-	if err != nil {
-		duration := time.Since(startTime).Milliseconds()
-		return NewErrorResult(provider.Name(), model, "api_error", err.Error(), duration)
-	}
+	// イテレーションループ（最大10回で無限ループ防止）
+	const maxIterations = 10
+	var finalResponse string
 
-	// ツール呼び出し解析（複数対応）
-	// TODO: 実際のツール実行を含める場合は agent.Run() のロジックを統合
-	parsedCalls := tools.ParseToolCalls(response)
-	for _, tc := range parsedCalls {
-		// ツール実行（エラーは記録するが続行）
-		output, _ := tools.Execute(tc)
-		toolCalls = append(toolCalls, ToolCallResult{
-			Tool:    tc.Tool,
-			Args:    tc.Args,
-			Output:  output,
-			Success: true,
+	for iteration := 0; iteration < maxIterations; iteration++ {
+		// API呼び出し
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+
+		response, err := provider.ChatWithTools(ctx, agent.SystemPrompt, agent.History, model)
+		cancel()
+
+		if err != nil {
+			duration := time.Since(startTime).Milliseconds()
+			return NewErrorResult(provider.Name(), model, "api_error", err.Error(), duration)
+		}
+
+		// ツール呼び出し解析
+		parsedCalls := tools.ParseToolCalls(response)
+
+		// ツール呼び出しがなければ最終レスポンスとして終了
+		if len(parsedCalls) == 0 {
+			finalResponse = response
+			break
+		}
+
+		// ツール実行と結果収集
+		var toolOutputs []string
+		for _, tc := range parsedCalls {
+			output, change := tools.Execute(tc)
+
+			// 成功判定（"Error:"を含むかどうかで簡易判定）
+			success := !strings.Contains(output, "Error:")
+
+			allToolCalls = append(allToolCalls, ToolCallResult{
+				Tool:    tc.Tool,
+				Args:    tc.Args,
+				Output:  output,
+				Success: success,
+			})
+
+			toolOutputs = append(toolOutputs, fmt.Sprintf("[%s result]\n%s", tc.Tool, output))
+
+			// ファイル変更履歴を記録
+			if change != nil {
+				agent.changeStack = append(agent.changeStack, *change)
+			}
+		}
+
+		// アシスタントメッセージをHistoryに追加
+		agent.History = append(agent.History, api.Message{
+			Role:    "assistant",
+			Content: response,
 		})
+
+		// ツール結果をユーザーメッセージとしてHistoryに追加
+		toolResultsMsg := strings.Join(toolOutputs, "\n\n")
+		agent.History = append(agent.History, api.Message{
+			Role:    "user",
+			Content: toolResultsMsg,
+		})
+
+		finalResponse = response // 最大イテレーション到達時のフォールバック
 	}
 
 	duration := time.Since(startTime).Milliseconds()
-	return NewSuccessResult(provider.Name(), model, response, toolCalls, duration)
+	return NewSuccessResult(provider.Name(), model, finalResponse, allToolCalls, duration)
 }
 
 // RunOnceWithImage は画像付きの単一クエリを実行（CLIフラグ -i/--image 用）

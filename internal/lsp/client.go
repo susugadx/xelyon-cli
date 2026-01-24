@@ -159,8 +159,8 @@ func (c *Client) FindReferences(ctx context.Context, filePath string, line, char
 		return nil, fmt.Errorf("failed to open document: %w", err)
 	}
 
-	// Give the server a moment to process
-	time.Sleep(100 * time.Millisecond)
+	// Wait for server to process the document
+	server.WaitForDocumentReady(ctx, FileToURI(filePath), 100*time.Millisecond)
 
 	params := ReferenceParams{
 		TextDocument: TextDocumentIdentifier{URI: FileToURI(filePath)},
@@ -207,7 +207,8 @@ func (c *Client) GoToDefinition(ctx context.Context, filePath string, line, char
 		return nil, fmt.Errorf("failed to open document: %w", err)
 	}
 
-	time.Sleep(100 * time.Millisecond)
+	// Wait for server to process the document
+	server.WaitForDocumentReady(ctx, FileToURI(filePath), 100*time.Millisecond)
 
 	params := TextDocumentPositionParams{
 		TextDocument: TextDocumentIdentifier{URI: FileToURI(filePath)},
@@ -260,7 +261,8 @@ func (c *Client) GetHover(ctx context.Context, filePath string, line, character 
 		return nil, fmt.Errorf("failed to open document: %w", err)
 	}
 
-	time.Sleep(100 * time.Millisecond)
+	// Wait for server to process the document
+	server.WaitForDocumentReady(ctx, FileToURI(filePath), 100*time.Millisecond)
 
 	params := HoverParams{
 		TextDocument: TextDocumentIdentifier{URI: FileToURI(filePath)},
@@ -349,8 +351,7 @@ func (c *Client) GetDiagnostics(ctx context.Context, filePath string) ([]Diagnos
 	}
 
 	// Wait for the server to analyze and publish diagnostics
-	// Diagnostics are sent as notifications, so we wait a bit
-	time.Sleep(500 * time.Millisecond)
+	server.WaitForDocumentReady(ctx, FileToURI(filePath), 500*time.Millisecond)
 
 	// Get diagnostics from server's cache
 	return server.GetLastDiagnostics(filePath), nil
@@ -374,7 +375,8 @@ func (c *Client) Rename(ctx context.Context, filePath string, line, character in
 		return nil, fmt.Errorf("failed to open document: %w", err)
 	}
 
-	time.Sleep(100 * time.Millisecond)
+	// Wait for server to process the document
+	server.WaitForDocumentReady(ctx, FileToURI(filePath), 100*time.Millisecond)
 
 	params := RenameParams{
 		TextDocument: TextDocumentIdentifier{URI: FileToURI(filePath)},
