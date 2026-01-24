@@ -1,21 +1,14 @@
 # XELYON CLI 設定例
-# このファイルは DefaultConfig() から自動生成されました
-# 生成コマンド: go run scripts/gen-config-example.go
-#
 # 設定ファイルの場所: ~/.xelyon/config.yaml
 # 初回起動時に自動的に作成されます
-#
 # 詳細は docs/config.md を参照してください
 
 # ============================================================
 # プロバイダー設定
 # ============================================================
-# デフォルトで使用するLLMプロバイダー
 default_provider: deepseek
-
 # デフォルトで使用するモデル
 default_model: deepseek-coder
-
 # プロバイダーごとのモデル設定
 provider_models:
     claude:
@@ -35,7 +28,7 @@ provider_models:
 # 会話履歴圧縮設定
 # ============================================================
 compression:
-    # トークン使用率が閾値を超えたら自動圧縮（true/false）
+    # トークン使用率が閾値を超えたら自動圧縮
     auto_compress: true
     # トークン数の閾値（0 = 使用しない）
     threshold_tokens: 0
@@ -104,7 +97,7 @@ paste:
 # ストリーミング設定
 # ============================================================
 streaming:
-    # アイドルタイムアウト（秒）- データ受信がない場合のタイムアウト
+    # アイドルタイムアウト（秒）
     idle_timeout_seconds: 30
     # ファイル読み込み時にサイズ・行数を表示
     show_file_info: true
@@ -117,7 +110,7 @@ streaming:
 # bashツール設定
 # ============================================================
 bash:
-    # 安全レベル: strict（厳格）/ moderate（中程度）/ permissive（許容）
+    # 安全レベル: strict / moderate / permissive
     safety_level: moderate
     # 追加の安全コマンドリスト
     safe_commands: []
@@ -140,7 +133,6 @@ code_health:
     max_function_lines: 50
     # 変更時に自動提案
     auto_suggest: true
-    # 変更時のチェック項目
     on_change:
         - check_file_size
         - check_function_size
@@ -165,13 +157,13 @@ plan_mode:
 # 23言語のデフォルト設定が内蔵済み。通常は変更不要です。
 # 詳細: docs/config.md の「LSP連携設定」セクション
 lsp:
+    # LSP連携の有効/無効
     enabled: true
 
 # ============================================================
 # OpenAI設定
 # ============================================================
 openai:
-    # Responses APIを使用するモデル
     responses_api_models:
         - gpt-5.2-codex
         - gpt-5.1-codex
