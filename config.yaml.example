@@ -7,8 +7,16 @@
 #
 # 詳細は docs/config.md を参照してください
 
+# ============================================================
+# プロバイダー設定
+# ============================================================
+# デフォルトで使用するLLMプロバイダー
 default_provider: deepseek
+
+# デフォルトで使用するモデル
 default_model: deepseek-coder
+
+# プロバイダーごとのモデル設定
 provider_models:
     claude:
         default_model: claude-sonnet-4-5-20250514
@@ -22,132 +30,159 @@ provider_models:
         default_model: qwen2.5-coder:7b
     openai:
         default_model: gpt-5.2
+
+# ============================================================
+# 会話履歴圧縮設定
+# ============================================================
 compression:
+    # トークン使用率が閾値を超えたら自動圧縮（true/false）
     auto_compress: true
+    # トークン数の閾値（0 = 使用しない）
     threshold_tokens: 0
+    # トークン使用率の閾値（%）
     threshold_percent: 80
+    # 圧縮時に保持する直近メッセージ数
     keep_recent: 10
+    # プロバイダーのCompact APIを優先使用
     prefer_compact_api: true
+
+# ============================================================
+# バックアップ設定
+# ============================================================
 backup:
+    # 保持する世代数
     max_generations: 5
+
+# ============================================================
+# ループ検知設定
+# ============================================================
 loop_detection:
+    # 同じツール呼び出しの繰り返し回数でループと判定
     threshold: 3
+
+# ============================================================
+# APIリトライ設定
+# ============================================================
 api_retry:
+    # リトライ回数
     count: 3
+    # 初回リトライ待機時間（秒）
     initial_delay: 1
+    # 最大待機時間（秒）
     max_delay: 30
+    # タイムアウト（秒）
     timeout: 300
+
+# ============================================================
+# 差分表示設定
+# ============================================================
 diff:
+    # 差分表示時のコンテキスト行数
     context_lines: 10
+
+# ============================================================
+# ツール確認設定
+# ============================================================
 tool_confirm:
+    # 安全なツール（read_file等）を自動承認
     auto_approve_safe: true
+    # 中程度のツール（write_file等）を自動承認
     auto_approve_medium: false
+
+# ============================================================
+# ペーストモード設定
+# ============================================================
 paste:
+    # 最大行数
     max_lines: 10000
+    # 最大バイト数
     max_bytes: 1048576
+    # タイムアウト（秒）
     timeout_seconds: 60
+
+# ============================================================
+# ストリーミング設定
+# ============================================================
 streaming:
+    # アイドルタイムアウト（秒）- データ受信がない場合のタイムアウト
     idle_timeout_seconds: 30
+    # ファイル読み込み時にサイズ・行数を表示
+    show_file_info: true
+    # 検索時に進捗を表示
+    show_search_progress: true
+    # bashコマンドの出力をリアルタイム表示
+    stream_bash_output: true
+
+# ============================================================
+# bashツール設定
+# ============================================================
 bash:
+    # 安全レベル: strict（厳格）/ moderate（中程度）/ permissive（許容）
     safety_level: moderate
+    # 追加の安全コマンドリスト
     safe_commands: []
+    # パイプを許可
     allow_pipe: true
+    # リダイレクトを許可
     allow_redirect: false
+    # インライン編集を許可（sed -i 等）
     allow_inline_edit: false
+
+# ============================================================
+# コード健全性チェック設定
+# ============================================================
 code_health:
+    # 有効化
     enabled: true
+    # ファイルの最大行数警告
     max_file_lines: 300
+    # 関数の最大行数警告
     max_function_lines: 50
+    # 変更時に自動提案
     auto_suggest: true
+    # 変更時のチェック項目
     on_change:
         - check_file_size
         - check_function_size
+
+# ============================================================
+# git_add設定
+# ============================================================
 git_stage:
+    # 複数ファイルをまとめて確認
     batch_confirm: true
+
+# ============================================================
+# Plan Mode設定
+# ============================================================
 plan_mode:
+    # 並列実行する最大ステップ数
     max_parallel_steps: 3
+
+# ============================================================
+# LSP連携設定
+# ============================================================
+# 23言語のデフォルト設定が内蔵済み。通常は変更不要です。
+# 詳細: docs/config.md の「LSP連携設定」セクション
 lsp:
     enabled: true
-    servers:
-        bash:
-            command: bash-language-server
-            args:
-                - start
-        c:
-            command: clangd
-        cpp:
-            command: clangd
-        csharp:
-            command: csharp-ls
-        css:
-            command: vscode-css-language-server
-            args:
-                - --stdio
-        elixir:
-            command: elixir-ls
-        go:
-            command: gopls
-        html:
-            command: vscode-html-language-server
-            args:
-                - --stdio
-        java:
-            command: jdtls
-        kotlin:
-            command: kotlin-language-server
-        lua:
-            command: lua-language-server
-        markdown:
-            command: marksman
-            args:
-                - server
-        php:
-            command: intelephense
-            args:
-                - --stdio
-        python:
-            command: pyright-langserver
-            args:
-                - --stdio
-        ruby:
-            command: solargraph
-            args:
-                - stdio
-        rust:
-            command: rust-analyzer
-        scala:
-            command: metals
-        sql:
-            command: sqls
-        svelte:
-            command: svelteserver
-            args:
-                - --stdio
-        swift:
-            command: sourcekit-lsp
-        toml:
-            command: taplo
-            args:
-                - lsp
-                - stdio
-        typescript:
-            command: vtsls
-            args:
-                - --stdio
-        vue:
-            command: vue-language-server
-            args:
-                - --stdio
-        yaml:
-            command: yaml-language-server
-            args:
-                - --stdio
+
+# ============================================================
+# OpenAI設定
+# ============================================================
 openai:
+    # Responses APIを使用するモデル
     responses_api_models:
         - gpt-5.2-codex
         - gpt-5.1-codex
         - gpt-5.1-codex-max
         - gpt-5-codex
+
+# ============================================================
+# Extended Thinking設定
+# ============================================================
 thinking:
+    # 有効化
     enabled: false
+    # レベル: low / medium / high
     level: medium
