@@ -47,7 +47,7 @@ func streamingHandler(chunks []string) http.HandlerFunc {
 func errorHandler(statusCode int, message string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(statusCode)
-		w.Write([]byte(fmt.Sprintf(`{"error":{"message":"%s"}}`, message)))
+		_, _ = fmt.Fprintf(w, `{"error":{"message":"%s"}}`, message)
 	}
 }
 
@@ -56,7 +56,7 @@ func rateLimitHandler(retryAfter string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Retry-After", retryAfter)
 		w.WriteHeader(429)
-		w.Write([]byte(`{"error":{"message":"rate limit exceeded"}}`))
+		_, _ = w.Write([]byte(`{"error":{"message":"rate limit exceeded"}}`))
 	}
 }
 

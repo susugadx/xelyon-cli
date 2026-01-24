@@ -44,7 +44,7 @@ func assertRequestHeader(t *testing.T, r *http.Request, key, expected string) {
 func errorHandler(status int, message string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(status)
-		w.Write([]byte(message))
+		_, _ = w.Write([]byte(message))
 	}
 }
 
@@ -52,7 +52,7 @@ func rateLimitHandler(retryAfter string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Retry-After", retryAfter)
 		w.WriteHeader(429)
-		w.Write([]byte("Rate limited"))
+		_, _ = w.Write([]byte("Rate limited"))
 	}
 }
 

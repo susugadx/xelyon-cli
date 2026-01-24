@@ -1,12 +1,7 @@
 package api
 
-import "github.com/fatih/color"
-
 // このファイルは OpenAI互換 Chat API で使用される共通型を定義します。
 // DeepSeek, Groq, Ollama などの OpenAI互換プロバイダーで共有されます。
-
-// 共有カラー定義（複数プロバイダーで使用）
-var yellow = color.New(color.FgYellow)
 
 // ChatRequest はAPIリクエスト（OpenAI互換形式）
 type ChatRequest struct {
