@@ -22,7 +22,6 @@ XELYON CLIの設定方法と全オプションのリファレンスです。
 ### 完全な設定例
 
 以下は全ての設定項目とデフォルト値を含む完全な設定例です。
-この内容は `DefaultConfig()` から自動生成されています（`make gen-all` で更新）。
 
 <!-- CONFIG-EXAMPLE-START -->
 ```yaml
