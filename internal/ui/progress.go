@@ -16,6 +16,7 @@ type Progress struct {
 	message  string
 	active   bool
 	stopChan chan struct{}
+	doneChan chan struct{} // render goroutine終了シグナル
 	writer   io.Writer
 	width    int // プログレスバーの幅（文字数）
 }
@@ -51,28 +52,46 @@ func (p *Progress) Start() {
 
 	p.active = true
 	p.stopChan = make(chan struct{})
+	p.doneChan = make(chan struct{})
 
-	go p.render()
+	// goroutine内で参照するためにキャプチャ
+	doneChan := p.doneChan
+	go func() {
+		p.render()
+		close(doneChan)
+	}()
 }
 
 // Stop はプログレスバーを停止して行をクリア
 func (p *Progress) Stop() {
 	p.mu.Lock()
-	defer p.mu.Unlock()
 
 	if !p.active {
+		p.mu.Unlock()
 		return
 	}
 
 	p.active = false
 
-	if p.stopChan != nil {
-		close(p.stopChan)
-		p.stopChan = nil
+	stopChan := p.stopChan
+	doneChan := p.doneChan
+	p.stopChan = nil
+	p.doneChan = nil
+	writer := p.writer
+	p.mu.Unlock()
+
+	// render goroutine に停止を通知
+	if stopChan != nil {
+		close(stopChan)
 	}
 
-	// 行をクリア
-	fmt.Fprintf(p.writer, "\r\033[K")
+	// render goroutine の終了を待つ
+	if doneChan != nil {
+		<-doneChan
+	}
+
+	// 行をクリア（render goroutine が終了してから）
+	fmt.Fprintf(writer, "\r\033[K")
 }
 
 // Update は現在の進捗を設定
