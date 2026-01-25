@@ -216,7 +216,6 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 					},
 				}
 				if toolJSON, err := openai.ConvertToolCallToToolJSON(tc); err == nil {
-					fmt.Printf("\n%s", toolJSON)
 					toolCallsOutput.WriteString(toolJSON)
 				}
 			}

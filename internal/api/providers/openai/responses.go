@@ -284,7 +284,6 @@ func (p *Provider) handleResponsesStreaming(ctx context.Context, resp *http.Resp
 					},
 				}
 				if toolJSON, err := ConvertToolCallToToolJSON(tc); err == nil {
-					fmt.Printf("\n%s", toolJSON)
 					toolCallsOutput.WriteString(toolJSON)
 				}
 			}

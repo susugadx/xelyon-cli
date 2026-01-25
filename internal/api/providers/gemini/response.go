@@ -98,7 +98,6 @@ func (p *Provider) handleFunctionCallingResponse(body []byte, spinner *ui.Spinne
 			continue
 		}
 		seenTools[toolJSON] = true
-		fmt.Printf("\n%s", toolJSON)
 		fullResponse.WriteString(toolJSON)
 	}
 
