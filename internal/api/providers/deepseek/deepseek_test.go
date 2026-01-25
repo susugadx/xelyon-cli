@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/api/providers/openai"
 )
 
 func TestNew(t *testing.T) {
@@ -320,4 +321,388 @@ func TestProvider_ChatWithImage_WithImage(t *testing.T) {
 	if result != "Image ignored response" {
 		t.Errorf("ChatWithImage() = %q, want 'Image ignored response'", result)
 	}
+}
+
+// ============================================
+// Function Calling Tests
+// ============================================
+
+// TestHandleStreamingResponse_ToolCalls は tool_calls を含むストリーミングレスポンスをテスト
+func TestHandleStreamingResponse_ToolCalls(t *testing.T) {
+	// tool_calls を含むストリーミングチャンク（分割パターン）
+	chunks := []string{
+		// tool_call の開始（id と name）
+		`{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_abc123","type":"function","function":{"name":"read_file","arguments":""}}]}}]}`,
+		// arguments の分割送信
+		`{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"pa"}}]}}]}`,
+		`{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"th\":\"/te"}}]}}]}`,
+		`{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"st.txt\"}"}}]}}]}`,
+		// finish_reason で完了
+		`{"choices":[{"delta":{},"finish_reason":"tool_calls"}]}`,
+	}
+	server := mockAPIServer(t, streamingHandler(chunks))
+
+	originalURL := os.Getenv("DEEPSEEK_API_URL")
+	defer os.Setenv("DEEPSEEK_API_URL", originalURL)
+	os.Setenv("DEEPSEEK_API_URL", server.URL)
+
+	p := New("test-key")
+	history := []api.Message{{Role: "user", Content: "Read test.txt"}}
+
+	result, err := p.ChatWithTools(context.Background(), "System", history, "deepseek-chat")
+	if err != nil {
+		t.Fatalf("ChatWithTools() error = %v", err)
+	}
+
+	// 結果に tool call JSON が含まれることを確認
+	if result == "" {
+		t.Error("ChatWithTools() returned empty string, expected tool call JSON")
+	}
+
+	// tool 名が含まれていることを確認
+	if !containsString(result, "read_file") {
+		t.Errorf("Result should contain tool name 'read_file': %s", result)
+	}
+
+	// call_id が含まれていることを確認
+	if !containsString(result, "call_abc123") {
+		t.Errorf("Result should contain call_id 'call_abc123': %s", result)
+	}
+
+	// path 引数が含まれていることを確認
+	if !containsString(result, "/test.txt") {
+		t.Errorf("Result should contain path '/test.txt': %s", result)
+	}
+}
+
+// TestHandleStreamingResponse_MultipleToolCalls は複数の tool_calls を含むレスポンスをテスト
+func TestHandleStreamingResponse_MultipleToolCalls(t *testing.T) {
+	chunks := []string{
+		// 2つの tool_call を同時に開始
+		`{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_001","type":"function","function":{"name":"read_file","arguments":""}},{"index":1,"id":"call_002","type":"function","function":{"name":"list_dir","arguments":""}}]}}]}`,
+		// 各 tool_call の arguments
+		`{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"path\":\"file1.txt\"}"}}]}}]}`,
+		`{"choices":[{"delta":{"tool_calls":[{"index":1,"function":{"arguments":"{\"path\":\".\"}"}}]}}]}`,
+		// 完了
+		`{"choices":[{"delta":{},"finish_reason":"tool_calls"}]}`,
+	}
+	server := mockAPIServer(t, streamingHandler(chunks))
+
+	originalURL := os.Getenv("DEEPSEEK_API_URL")
+	defer os.Setenv("DEEPSEEK_API_URL", originalURL)
+	os.Setenv("DEEPSEEK_API_URL", server.URL)
+
+	p := New("test-key")
+	history := []api.Message{{Role: "user", Content: "List files and read file1.txt"}}
+
+	result, err := p.ChatWithTools(context.Background(), "System", history, "deepseek-chat")
+	if err != nil {
+		t.Fatalf("ChatWithTools() error = %v", err)
+	}
+
+	// 両方のツール名が含まれていることを確認
+	if !containsString(result, "read_file") {
+		t.Errorf("Result should contain 'read_file': %s", result)
+	}
+	if !containsString(result, "list_dir") {
+		t.Errorf("Result should contain 'list_dir': %s", result)
+	}
+
+	// 両方の call_id が含まれていることを確認
+	if !containsString(result, "call_001") {
+		t.Errorf("Result should contain 'call_001': %s", result)
+	}
+	if !containsString(result, "call_002") {
+		t.Errorf("Result should contain 'call_002': %s", result)
+	}
+}
+
+// TestHandleStreamingResponse_TextOnly は通常のテキスト応答（tool_calls なし）をテスト
+func TestHandleStreamingResponse_TextOnly(t *testing.T) {
+	chunks := []string{
+		`{"choices":[{"delta":{"content":"Hello"}}]}`,
+		`{"choices":[{"delta":{"content":" World"}}]}`,
+		`{"choices":[{"delta":{},"finish_reason":"stop"}]}`,
+	}
+	server := mockAPIServer(t, streamingHandler(chunks))
+
+	originalURL := os.Getenv("DEEPSEEK_API_URL")
+	defer os.Setenv("DEEPSEEK_API_URL", originalURL)
+	os.Setenv("DEEPSEEK_API_URL", server.URL)
+
+	p := New("test-key")
+	history := []api.Message{{Role: "user", Content: "Say hello"}}
+
+	result, err := p.ChatWithTools(context.Background(), "System", history, "deepseek-chat")
+	if err != nil {
+		t.Fatalf("ChatWithTools() error = %v", err)
+	}
+
+	if result != "Hello World" {
+		t.Errorf("ChatWithTools() = %q, want 'Hello World'", result)
+	}
+}
+
+// TestHandleStreamingResponse_TextWithToolCalls はテキストと tool_calls が混在するレスポンスをテスト
+func TestHandleStreamingResponse_TextWithToolCalls(t *testing.T) {
+	chunks := []string{
+		// まずテキストを出力
+		`{"choices":[{"delta":{"content":"Let me read that file."}}]}`,
+		// 次に tool_call
+		`{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_mixed","type":"function","function":{"name":"read_file","arguments":"{\"path\":\"test.go\"}"}}]}}]}`,
+		`{"choices":[{"delta":{},"finish_reason":"tool_calls"}]}`,
+	}
+	server := mockAPIServer(t, streamingHandler(chunks))
+
+	originalURL := os.Getenv("DEEPSEEK_API_URL")
+	defer os.Setenv("DEEPSEEK_API_URL", originalURL)
+	os.Setenv("DEEPSEEK_API_URL", server.URL)
+
+	p := New("test-key")
+	history := []api.Message{{Role: "user", Content: "Read test.go"}}
+
+	result, err := p.ChatWithTools(context.Background(), "System", history, "deepseek-chat")
+	if err != nil {
+		t.Fatalf("ChatWithTools() error = %v", err)
+	}
+
+	// テキストと tool_call の両方が含まれていることを確認
+	if !containsString(result, "Let me read that file.") {
+		t.Errorf("Result should contain text content: %s", result)
+	}
+	if !containsString(result, "read_file") {
+		t.Errorf("Result should contain tool call: %s", result)
+	}
+}
+
+// TestSetMCPTools は MCP ツールの設定をテスト
+func TestSetMCPTools(t *testing.T) {
+	p := New("test-key")
+
+	// 初期状態では mcpTools は nil
+	if p.mcpTools != nil {
+		t.Error("Initial mcpTools should be nil")
+	}
+
+	// MCP ツールを設定
+	mcpTools := []api.OpenAIToolFunction{
+		{
+			Name:        "mcp_tool_1",
+			Description: "First MCP tool",
+			Parameters: map[string]interface{}{
+				"type":       "object",
+				"properties": map[string]interface{}{},
+			},
+		},
+		{
+			Name:        "mcp_tool_2",
+			Description: "Second MCP tool",
+			Parameters: map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"param1": map[string]interface{}{"type": "string"},
+				},
+			},
+		},
+	}
+
+	p.SetMCPTools(mcpTools)
+
+	// 設定されたことを確認
+	if len(p.mcpTools) != 2 {
+		t.Errorf("mcpTools length = %d, want 2", len(p.mcpTools))
+	}
+
+	if p.mcpTools[0].Name != "mcp_tool_1" {
+		t.Errorf("mcpTools[0].Name = %q, want 'mcp_tool_1'", p.mcpTools[0].Name)
+	}
+
+	if p.mcpTools[1].Name != "mcp_tool_2" {
+		t.Errorf("mcpTools[1].Name = %q, want 'mcp_tool_2'", p.mcpTools[1].Name)
+	}
+}
+
+// TestSetMCPTools_Empty は空の MCP ツールリストの設定をテスト
+func TestSetMCPTools_Empty(t *testing.T) {
+	p := New("test-key")
+
+	p.SetMCPTools([]api.OpenAIToolFunction{})
+
+	if p.mcpTools == nil {
+		t.Error("mcpTools should not be nil after setting empty slice")
+	}
+	if len(p.mcpTools) != 0 {
+		t.Errorf("mcpTools length = %d, want 0", len(p.mcpTools))
+	}
+}
+
+// TestGetCombinedTools は組み込みツールと MCP ツールの結合をテスト
+func TestGetCombinedTools(t *testing.T) {
+	// openai.GetCombinedOpenAITools を使用して確認
+	// （deepseek は openai パッケージの関数を流用）
+
+	// MCP ツールなし
+	toolsNoMCP := openai.GetCombinedOpenAITools(nil)
+	builtinCount := len(toolsNoMCP)
+
+	if builtinCount == 0 {
+		t.Error("Built-in tools count should be > 0")
+	}
+
+	// MCP ツールあり
+	mcpTools := []api.OpenAIToolFunction{
+		{
+			Name:        "custom_mcp_tool",
+			Description: "A custom tool",
+			Parameters:  map[string]interface{}{"type": "object"},
+		},
+	}
+
+	toolsWithMCP := openai.GetCombinedOpenAITools(mcpTools)
+
+	expectedCount := builtinCount + 1
+	if len(toolsWithMCP) != expectedCount {
+		t.Errorf("Combined tools count = %d, want %d", len(toolsWithMCP), expectedCount)
+	}
+
+	// MCP ツールが含まれていることを確認
+	found := false
+	for _, tool := range toolsWithMCP {
+		if tool.Function != nil && tool.Function.Name == "custom_mcp_tool" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("MCP tool 'custom_mcp_tool' not found in combined tools")
+	}
+}
+
+// TestGetCombinedTools_BuiltinToolsPresent は組み込みツールが含まれていることを確認
+func TestGetCombinedTools_BuiltinToolsPresent(t *testing.T) {
+	tools := openai.GetCombinedOpenAITools(nil)
+
+	// 必須の組み込みツールが含まれていることを確認
+	requiredTools := []string{
+		"read_file",
+		"write_file",
+		"str_replace",
+		"bash",
+		"search_code",
+		"list_dir",
+	}
+
+	toolNames := make(map[string]bool)
+	for _, tool := range tools {
+		if tool.Function != nil {
+			toolNames[tool.Function.Name] = true
+		}
+	}
+
+	for _, required := range requiredTools {
+		if !toolNames[required] {
+			t.Errorf("Required built-in tool %q not found", required)
+		}
+	}
+}
+
+// TestFunctionCalling_RequestFormat は Function Calling 有効時のリクエスト形式をテスト
+func TestFunctionCalling_RequestFormat(t *testing.T) {
+	var capturedRequest api.ChatRequest
+
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&capturedRequest); err != nil {
+			t.Fatalf("Failed to decode request: %v", err)
+		}
+
+		// ストリーミングレスポンス
+		streamingHandler([]string{
+			`{"choices":[{"delta":{"content":"OK"}}]}`,
+		})(w, r)
+	})
+
+	originalURL := os.Getenv("DEEPSEEK_API_URL")
+	originalFC := os.Getenv("DEEPSEEK_FUNCTION_CALLING")
+	defer func() {
+		os.Setenv("DEEPSEEK_API_URL", originalURL)
+		os.Setenv("DEEPSEEK_FUNCTION_CALLING", originalFC)
+	}()
+
+	os.Setenv("DEEPSEEK_API_URL", server.URL)
+	os.Unsetenv("DEEPSEEK_FUNCTION_CALLING") // デフォルト（有効）
+
+	p := New("test-key")
+	history := []api.Message{{Role: "user", Content: "Hello"}}
+
+	_, err := p.ChatWithTools(context.Background(), "System", history, "deepseek-chat")
+	if err != nil {
+		t.Fatalf("ChatWithTools() error = %v", err)
+	}
+
+	// Tools が設定されていることを確認
+	if len(capturedRequest.Tools) == 0 {
+		t.Error("Request should contain tools when Function Calling is enabled")
+	}
+
+	// ToolChoice が "auto" であることを確認
+	if capturedRequest.ToolChoice != "auto" {
+		t.Errorf("ToolChoice = %q, want 'auto'", capturedRequest.ToolChoice)
+	}
+}
+
+// TestFunctionCalling_Disabled は DEEPSEEK_FUNCTION_CALLING=0 でツールが含まれないことを確認
+func TestFunctionCalling_Disabled(t *testing.T) {
+	var capturedRequest api.ChatRequest
+
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&capturedRequest); err != nil {
+			t.Fatalf("Failed to decode request: %v", err)
+		}
+
+		streamingHandler([]string{
+			`{"choices":[{"delta":{"content":"OK"}}]}`,
+		})(w, r)
+	})
+
+	originalURL := os.Getenv("DEEPSEEK_API_URL")
+	originalFC := os.Getenv("DEEPSEEK_FUNCTION_CALLING")
+	defer func() {
+		os.Setenv("DEEPSEEK_API_URL", originalURL)
+		if originalFC != "" {
+			os.Setenv("DEEPSEEK_FUNCTION_CALLING", originalFC)
+		} else {
+			os.Unsetenv("DEEPSEEK_FUNCTION_CALLING")
+		}
+	}()
+
+	os.Setenv("DEEPSEEK_API_URL", server.URL)
+	os.Setenv("DEEPSEEK_FUNCTION_CALLING", "0") // 無効化
+
+	p := New("test-key")
+	history := []api.Message{{Role: "user", Content: "Hello"}}
+
+	_, err := p.ChatWithTools(context.Background(), "System", history, "deepseek-chat")
+	if err != nil {
+		t.Fatalf("ChatWithTools() error = %v", err)
+	}
+
+	// Tools が設定されていないことを確認
+	if len(capturedRequest.Tools) != 0 {
+		t.Errorf("Request should not contain tools when Function Calling is disabled, got %d tools", len(capturedRequest.Tools))
+	}
+
+	// ToolChoice も空であることを確認
+	if capturedRequest.ToolChoice != "" {
+		t.Errorf("ToolChoice should be empty when disabled, got %q", capturedRequest.ToolChoice)
+	}
+}
+
+// containsString は文字列に部分文字列が含まれるかチェック
+func containsString(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }

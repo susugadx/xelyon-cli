@@ -472,12 +472,12 @@ func TestResponsesAPIInputFormat(t *testing.T) {
 
 	// 期待される順序と type を確認
 	expectedTypes := []string{
-		"message",            // user: Hello
-		"message",            // assistant: Hi there!
-		"message",            // user: Can you read a file?
-		"function_call",      // assistant tool call
+		"message",              // user: Hello
+		"message",              // assistant: Hi there!
+		"message",              // user: Can you read a file?
+		"function_call",        // assistant tool call
 		"function_call_output", // tool result
-		"message",            // assistant: The file contains...
+		"message",              // assistant: The file contains...
 	}
 
 	if len(input) != len(expectedTypes) {
