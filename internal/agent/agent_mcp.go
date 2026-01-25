@@ -66,6 +66,11 @@ func sanitizeToolName(name string) string {
 func buildGitHubMCPGuide() string {
 	return `### GitHub MCP Usage Guide (IMPORTANT)
 
+**CONTEXT INFERENCE (NEVER ask "which repository?"):**
+- Infer owner/repo from: git remote, XELYON.md, directory name
+- Current repository context is always available - use it
+- Only ask if genuinely ambiguous (e.g., cross-repo operations)
+
 **Tool Call Format:**
 ` + "```" + `
 {"tool": "mcp_github_<action>", "args": {"owner": "...", "repo": "...", ...}}
@@ -73,21 +78,31 @@ func buildGitHubMCPGuide() string {
 
 **Common Tools & Arguments:**
 
-| Tool | Required Args | Description |
-|------|---------------|-------------|
-| mcp_github_get_issue | owner, repo, issue_number | Get issue details |
-| mcp_github_list_issues | owner, repo | List all issues |
-| mcp_github_create_issue | owner, repo, title, body | Create new issue |
-| mcp_github_get_file_contents | owner, repo, path, branch(opt) | Get file content |
-| mcp_github_list_pull_requests | owner, repo | List all PRs |
-| mcp_github_create_pull_request | owner, repo, title, body, head, base | Create PR |
-| mcp_github_search_code | q | Search code (q="keyword repo:owner/repo") |
-| mcp_github_get_workflow_runs | owner, repo | Check CI status |
+| Tool | Required Args | Array Args (use [] not string) |
+|------|---------------|--------------------------------|
+| mcp_github_get_issue | owner, repo, issue_number | - |
+| mcp_github_list_issues | owner, repo | labels: ["bug"] |
+| mcp_github_create_issue | owner, repo, title, body | labels: ["enhancement"], assignees: ["user"] |
+| mcp_github_update_issue | owner, repo, issue_number | labels: [], assignees: [] |
+| mcp_github_get_file_contents | owner, repo, path | - |
+| mcp_github_list_pull_requests | owner, repo | - |
+| mcp_github_create_pull_request | owner, repo, title, body, head, base | - |
+| mcp_github_search_code | q | - |
+| mcp_github_get_workflow_runs | owner, repo | - |
 
-**Example:**
+**Array Argument Examples:**
+` + "```" + `json
+// ✅ CORRECT - labels/assignees must be arrays
+{"tool": "mcp_github_create_issue", "args": {"owner": "o", "repo": "r", "title": "Bug", "body": "...", "labels": ["bug", "priority"], "assignees": ["user"]}}
+
+// ❌ WRONG - labels must be array, not string
+{"tool": "mcp_github_create_issue", "args": {"labels": "bug"}}
 ` + "```" + `
-{"tool": "mcp_github_get_issue", "args": {"owner": "susugadx", "repo": "xelyon-cli", "issue_number": "72"}}
-` + "```" + `
+
+**RESPONSE STYLE:**
+- Be helpful and proactive, not transactional
+- Summarize results concisely but informatively (not just raw JSON)
+- Suggest relevant follow-up actions when appropriate
 
 **CRITICAL RULES:**
 1. ALWAYS use MCP tools for GitHub operations - you have direct access

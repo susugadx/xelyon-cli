@@ -152,6 +152,11 @@ func TestBuildGitHubMCPGuide(t *testing.T) {
 		"mcp_github_get_issue",
 		"CRITICAL RULES",
 		"Do NOT say",
+		// 新しい改善項目
+		"CONTEXT INFERENCE",
+		"NEVER ask",
+		"Array Args",
+		"RESPONSE STYLE",
 	}
 
 	for _, kw := range keywords {
