@@ -56,6 +56,9 @@ func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *u
 	go func() {
 		defer close(lineCh)
 		scanner := bufio.NewScanner(resp.Body)
+		// バッファサイズを10MBに拡張（Function Callingの長いレスポンス対応）
+		buf := make([]byte, 0, 10*1024*1024)
+		scanner.Buffer(buf, 10*1024*1024)
 		for scanner.Scan() {
 			lineCh <- scanResult{line: scanner.Text()}
 		}
@@ -93,6 +96,7 @@ func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *u
 		case result, ok := <-lineCh:
 			if !ok {
 				// チャンネルクローズ（予期しない終了）
+				spinner.Stop()
 				if !firstChunk {
 					fmt.Println()
 				}
@@ -110,8 +114,8 @@ func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *u
 
 			if result.done {
 				// スキャン完了
+				spinner.Stop()
 				if result.err != nil {
-					spinner.Stop()
 					return fullResponse.String(), fmt.Errorf("scanner error: %w", result.err)
 				}
 				if !firstChunk {
@@ -133,6 +137,7 @@ func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *u
 			}
 
 			if done {
+				spinner.Stop()
 				if !firstChunk {
 					fmt.Println()
 				}

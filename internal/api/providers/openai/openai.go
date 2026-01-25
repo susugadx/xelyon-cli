@@ -26,7 +26,8 @@ type Provider struct {
 	apiKey         string
 	apiURL         string
 	httpClient     *http.Client
-	lastResponseID string // Responses API の最新レスポンスID（キャッシュ用）
+	lastResponseID string                   // Responses API の最新レスポンスID（キャッシュ用）
+	mcpTools       []api.OpenAIToolFunction // MCP ツール定義（Function Calling用）
 }
 
 // New は新しいProviderを作成
@@ -91,6 +92,11 @@ func (p *Provider) HasCachedResponseID() bool {
 // ClearResponseID は responseID をクリアする（圧縮後などに使用）
 func (p *Provider) ClearResponseID() {
 	p.lastResponseID = ""
+}
+
+// SetMCPTools は MCP ツール定義を設定する（Function Calling用）
+func (p *Provider) SetMCPTools(tools []api.OpenAIToolFunction) {
+	p.mcpTools = tools
 }
 
 // ChatWithImage は画像付きメッセージで会話を行う

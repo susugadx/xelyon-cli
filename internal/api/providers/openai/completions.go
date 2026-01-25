@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
@@ -55,6 +56,12 @@ func (p *Provider) chatWithCompletions(ctx context.Context, systemPrompt string,
 		Stream:   true,
 	}
 
+	// Function Calling: ツール定義を追加（環境変数で無効化可能）
+	if os.Getenv("OPENAI_FUNCTION_CALLING") != "0" {
+		reqBody.Tools = GetCombinedOpenAITools(p.mcpTools)
+		reqBody.ToolChoice = "auto"
+	}
+
 	// Extended Thinking 適用
 	if cfg.Thinking.Enabled {
 		reqBody.ReasoningEffort = LevelToReasoningEffort(cfg.Thinking.Level)
@@ -99,8 +106,19 @@ func (p *Provider) chatWithCompletions(ctx context.Context, systemPrompt string,
 	}
 }
 
-// handleStreamingResponse はストリーミングレスポンスを処理
+// toolCallAccumulator は分割された tool_calls を累積するための構造体
+type toolCallAccumulator struct {
+	ID        string
+	Name      string
+	Arguments strings.Builder
+}
+
+// handleStreamingResponse はストリーミングレスポンスを処理（tool_calls対応）
 func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
+	// ストリーミングで分割されて送られてくる tool_calls を累積
+	toolCalls := make(map[int]*toolCallAccumulator)
+	var toolCallsOutput strings.Builder
+
 	// OpenAI固有のパース処理
 	parser := func(line string) (string, bool, error) {
 		if !strings.HasPrefix(line, "data: ") {
@@ -112,19 +130,85 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 			return "", true, nil
 		}
 
-		var streamResp api.StreamResponse
+		// 拡張した StreamResponse（tool_calls, finish_reason を含む）
+		var streamResp struct {
+			Choices []struct {
+				Delta struct {
+					Content   string               `json:"content,omitempty"`
+					ToolCalls []api.OpenAIToolCall `json:"tool_calls,omitempty"`
+				} `json:"delta"`
+				FinishReason string `json:"finish_reason,omitempty"`
+			} `json:"choices"`
+		}
 		if err := json.Unmarshal([]byte(data), &streamResp); err != nil {
 			return "", false, err
 		}
 
-		if len(streamResp.Choices) > 0 {
-			return streamResp.Choices[0].Delta.Content, false, nil
+		if len(streamResp.Choices) == 0 {
+			return "", false, nil
 		}
 
-		return "", false, nil
+		choice := streamResp.Choices[0]
+
+		// tool_calls の累積処理
+		for _, tc := range choice.Delta.ToolCalls {
+			acc, exists := toolCalls[tc.Index]
+			if !exists {
+				acc = &toolCallAccumulator{}
+				toolCalls[tc.Index] = acc
+			}
+			if tc.ID != "" {
+				acc.ID = tc.ID
+			}
+			if tc.Function.Name != "" {
+				acc.Name = tc.Function.Name
+			}
+			if tc.Function.Arguments != "" {
+				acc.Arguments.WriteString(tc.Function.Arguments)
+			}
+		}
+
+		// finish_reason == "tool_calls" で完了
+		if choice.FinishReason == "tool_calls" {
+			// 累積した tool_calls を内部JSON形式に変換
+			for i := 0; i < len(toolCalls); i++ {
+				acc := toolCalls[i]
+				if acc == nil {
+					continue
+				}
+				tc := &api.OpenAIToolCall{
+					ID:   acc.ID,
+					Type: "function",
+					Function: api.OpenAIToolCallFunction{
+						Name:      acc.Name,
+						Arguments: acc.Arguments.String(),
+					},
+				}
+				if toolJSON, err := ConvertToolCallToToolJSON(tc); err == nil {
+					fmt.Printf("\n%s", toolJSON)
+					toolCallsOutput.WriteString(toolJSON)
+				}
+			}
+			return "", true, nil
+		}
+
+		// テキストコンテンツ
+		return choice.Delta.Content, false, nil
 	}
 
-	return api.ParseStreamingResponse(ctx, resp, spinner, parser)
+	content, err := api.ParseStreamingResponse(ctx, resp, spinner, parser)
+	if err != nil {
+		return "", err
+	}
+
+	// tool_calls がある場合はそれを返す
+	if toolCallsOutput.Len() > 0 {
+		if content != "" {
+			return content + toolCallsOutput.String(), nil
+		}
+		return toolCallsOutput.String(), nil
+	}
+	return content, nil
 }
 
 // handleNonStreamingResponse は非ストリーミングレスポンスを処理（フォールバック）

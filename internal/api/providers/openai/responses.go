@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -20,6 +21,12 @@ const defaultOpenAIResponsesURL = "https://api.openai.com/v1/responses"
 // Codex モデルは reasoning が必須（"none" 非サポート）
 func isCodexModel(model string) bool {
 	return strings.Contains(strings.ToLower(model), "codex")
+}
+
+// convertHistoryToResponsesInput は api.ConvertHistoryToInputItems のラッパー
+// Responses API 用の InputItem 形式に変換
+func convertHistoryToResponsesInput(history []api.Message) []InputItem {
+	return api.ConvertHistoryToInputItems(history)
 }
 
 // ReasoningConfig は OpenAI Extended Thinking の設定
@@ -66,6 +73,15 @@ type ResponsesStreamChunk struct {
 	Type     string            `json:"type"`               // "response.output_text.delta", "response.created", etc.
 	Delta    string            `json:"delta,omitempty"`    // テキスト差分
 	Response *ResponseMetadata `json:"response,omitempty"` // response.created で取得
+	Item     *ResponsesItem    `json:"item,omitempty"`     // response.output_item.added で取得（function_call用）
+}
+
+// ResponsesItem は output_item のデータ（function_call 等）
+type ResponsesItem struct {
+	Type      string `json:"type,omitempty"`      // "function_call"
+	Name      string `json:"name,omitempty"`      // ツール名
+	CallID    string `json:"call_id,omitempty"`   // 呼び出しID
+	Arguments string `json:"arguments,omitempty"` // 完了時の引数（response.function_call_arguments.done）
 }
 
 // ResponsesResult は Responses API のレスポンス結果（ID付き）
@@ -89,29 +105,30 @@ func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, h
 		Model:        model,
 		Instructions: systemPrompt,
 		Stream:       true,
+		Tools:        GetResponsesToolDefinitions(p.mcpTools), // Function Calling
 	}
 
 	// previous_response_id がある場合はキャッシュを活用
+	// ただし、Function Calling 結果の場合は full history を送信（function_call との対応が必要）
 	if p.lastResponseID != "" && len(history) > 0 {
-		// 最新のユーザーメッセージのみ送信
 		lastMsg := history[len(history)-1]
-		reqBody.PreviousResponseID = p.lastResponseID
-		reqBody.Input = []InputItem{{
-			Type:    "message",
-			Role:    lastMsg.Role,
-			Content: lastMsg.Content,
-		}}
+
+		if lastMsg.Role == "tool" {
+			// Function Calling 結果: previous_response_id を使わず full history
+			// （function_call + function_call_output の対応が必要）
+			reqBody.Input = convertHistoryToResponsesInput(history)
+		} else {
+			// 通常メッセージ: previous_response_id で最新メッセージのみ
+			reqBody.PreviousResponseID = p.lastResponseID
+			reqBody.Input = []InputItem{{
+				Type:    "message",
+				Role:    lastMsg.Role,
+				Content: lastMsg.Content,
+			}}
+		}
 	} else {
 		// 初回または responseID がない場合は履歴全体を送信
-		var input []InputItem
-		for _, msg := range history {
-			input = append(input, InputItem{
-				Type:    "message",
-				Role:    msg.Role,
-				Content: msg.Content,
-			})
-		}
-		reqBody.Input = input
+		reqBody.Input = convertHistoryToResponsesInput(history)
 	}
 
 	// Extended Thinking 適用
@@ -154,12 +171,13 @@ func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, h
 	if resp.StatusCode == http.StatusBadRequest && p.lastResponseID != "" {
 		// responseID をクリアしてリトライ
 		p.lastResponseID = ""
-		resp.Body.Close()
 		return p.chatWithResponses(ctx, systemPrompt, history, model)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", api.HandleHTTPError(resp, spinner, p.Name())
+		body, _ := io.ReadAll(resp.Body)
+		spinner.Stop()
+		return "", fmt.Errorf("API error %d: %s", resp.StatusCode, string(body))
 	}
 
 	content, responseID, err := p.handleResponsesStreaming(ctx, resp, spinner)
@@ -169,10 +187,21 @@ func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, h
 	return content, err
 }
 
+// responsesFunctionCallAccumulator は Responses API の function_call を累積
+type responsesFunctionCallAccumulator struct {
+	CallID    string
+	Name      string
+	Arguments strings.Builder
+}
+
 // handleResponsesStreaming は Responses API のストリーミングを処理
 // Response ID も抽出して返却（content, responseID, error）
 func (p *Provider) handleResponsesStreaming(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, string, error) {
 	var responseID string // response.created イベントから抽出
+
+	// Function Calling: 累積用
+	functionCalls := make(map[string]*responsesFunctionCallAccumulator) // call_id -> accumulator
+	var toolCallsOutput strings.Builder
 
 	parser := func(line string) (string, bool, error) {
 		// SSE形式: "event: xxx" と "data: {...}" の組み合わせ
@@ -194,6 +223,42 @@ func (p *Provider) handleResponsesStreaming(ctx context.Context, resp *http.Resp
 			responseID = chunk.Response.ID
 		}
 
+		// response.output_item.added: function_call 開始
+		if chunk.Type == "response.output_item.added" && chunk.Item != nil && chunk.Item.Type == "function_call" {
+			acc := &responsesFunctionCallAccumulator{
+				CallID: chunk.Item.CallID,
+				Name:   chunk.Item.Name,
+			}
+			functionCalls[chunk.Item.CallID] = acc
+		}
+
+		// response.function_call_arguments.delta: 引数の差分
+		if chunk.Type == "response.function_call_arguments.delta" {
+			// call_id を取得するために item もパース
+			if chunk.Item != nil && chunk.Item.CallID != "" {
+				if acc, ok := functionCalls[chunk.Item.CallID]; ok {
+					acc.Arguments.WriteString(chunk.Delta)
+				}
+			} else {
+				// call_id がない場合は最初のアキュムレータに追加
+				for _, acc := range functionCalls {
+					acc.Arguments.WriteString(chunk.Delta)
+					break
+				}
+			}
+		}
+
+		// response.function_call_arguments.done: 引数完了
+		if chunk.Type == "response.function_call_arguments.done" && chunk.Item != nil {
+			if acc, ok := functionCalls[chunk.Item.CallID]; ok {
+				// 完了した引数で上書き（doneイベントには完全な引数が含まれる）
+				if chunk.Item.Arguments != "" {
+					acc.Arguments.Reset()
+					acc.Arguments.WriteString(chunk.Item.Arguments)
+				}
+			}
+		}
+
 		// response.output_text.delta でテキスト差分を取得
 		if chunk.Type == "response.output_text.delta" {
 			return chunk.Delta, false, nil
@@ -201,6 +266,21 @@ func (p *Provider) handleResponsesStreaming(ctx context.Context, resp *http.Resp
 
 		// response.completed または response.done で終了
 		if chunk.Type == "response.completed" || chunk.Type == "response.done" {
+			// Function Calling: 累積した呼び出しを内部形式に変換
+			for _, acc := range functionCalls {
+				tc := &api.OpenAIToolCall{
+					ID:   acc.CallID,
+					Type: "function",
+					Function: api.OpenAIToolCallFunction{
+						Name:      acc.Name,
+						Arguments: acc.Arguments.String(),
+					},
+				}
+				if toolJSON, err := ConvertToolCallToToolJSON(tc); err == nil {
+					fmt.Printf("\n%s", toolJSON)
+					toolCallsOutput.WriteString(toolJSON)
+				}
+			}
 			return "", true, nil
 		}
 
@@ -208,7 +288,18 @@ func (p *Provider) handleResponsesStreaming(ctx context.Context, resp *http.Resp
 	}
 
 	content, err := api.ParseStreamingResponse(ctx, resp, spinner, parser)
-	return content, responseID, err
+	if err != nil {
+		return "", responseID, err
+	}
+
+	// tool_calls がある場合はそれを返す
+	if toolCallsOutput.Len() > 0 {
+		if content != "" {
+			return content + toolCallsOutput.String(), responseID, nil
+		}
+		return toolCallsOutput.String(), responseID, nil
+	}
+	return content, responseID, nil
 }
 
 // chatWithImageResponses は Responses API で画像付きメッセージを処理
@@ -222,17 +313,8 @@ func (p *Provider) chatWithImageResponses(ctx context.Context, systemPrompt stri
 		apiURL = defaultOpenAIResponsesURL
 	}
 
-	// 入力を構築
-	var input []InputItem
-
-	// 履歴を追加
-	for _, msg := range history {
-		input = append(input, InputItem{
-			Type:    "message",
-			Role:    msg.Role,
-			Content: msg.Content,
-		})
-	}
+	// 入力を構築（履歴を変換）
+	input := convertHistoryToResponsesInput(history)
 
 	// 画像付きユーザーメッセージを追加
 	dataURL := fmt.Sprintf("data:%s;base64,%s", image.MediaType, image.Base64)
@@ -257,6 +339,7 @@ func (p *Provider) chatWithImageResponses(ctx context.Context, systemPrompt stri
 		Input:        input,
 		Instructions: systemPrompt,
 		Stream:       true,
+		Tools:        GetResponsesToolDefinitions(p.mcpTools), // Function Calling
 	}
 
 	// Extended Thinking 適用

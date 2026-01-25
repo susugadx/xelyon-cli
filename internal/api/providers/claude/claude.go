@@ -257,10 +257,10 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	// モデル名を設定（config優先、フォールバックはclaude-sonnet-4-20250514）
 	model = api.GetDefaultModel(model, "claude", "claude-sonnet-4-20250514")
 
-	// Claudeのメッセージ構造に変換
+	// Claudeのメッセージ構造に変換（api.Message から必要なフィールドのみコピー）
 	var messages []Message
 	for _, msg := range history {
-		messages = append(messages, Message(msg))
+		messages = append(messages, Message{Role: msg.Role, Content: msg.Content})
 	}
 
 	cfg := config.GetGlobalConfig()
@@ -352,7 +352,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	// 履歴をメッセージ配列に変換（テキストのみ）
 	var messages []interface{}
 	for _, msg := range history {
-		messages = append(messages, Message(msg))
+		messages = append(messages, Message{Role: msg.Role, Content: msg.Content})
 	}
 
 	// 画像付きユーザーメッセージを追加

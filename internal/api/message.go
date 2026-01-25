@@ -2,8 +2,10 @@ package api
 
 // Message はチャットメッセージ
 type Message struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role       string           `json:"role"`
+	Content    string           `json:"content"`
+	ToolCallID string           `json:"tool_call_id,omitempty"` // Function Calling: ツール結果用
+	ToolCalls  []OpenAIToolCall `json:"tool_calls,omitempty"`   // Function Calling: assistant の tool_calls
 }
 
 // MultimodalMessage は画像を含むメッセージ

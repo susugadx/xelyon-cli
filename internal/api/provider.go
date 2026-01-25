@@ -104,6 +104,13 @@ type MCPToolProvider interface {
 	SetMCPTools(tools []GeminiFunctionDeclaration)
 }
 
+// OpenAIMCPToolProvider はOpenAI用のMCPツール設定インターフェース
+// OpenAI Chat Completions / Responses API の Function Calling で使用
+type OpenAIMCPToolProvider interface {
+	// SetMCPTools はMCPツールの定義を設定する
+	SetMCPTools(tools []OpenAIToolFunction)
+}
+
 // SupportsImages はプロバイダー名から画像対応を判定
 func SupportsImages(providerName string) bool {
 	switch strings.ToLower(providerName) {

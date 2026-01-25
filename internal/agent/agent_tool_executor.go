@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -8,6 +9,18 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
+
+// argsToJSON は RawArgs を JSON 文字列に変換
+func argsToJSON(args map[string]any) string {
+	if len(args) == 0 {
+		return "{}"
+	}
+	b, err := json.Marshal(args)
+	if err != nil {
+		return "{}"
+	}
+	return string(b)
+}
 
 // shouldAbortToolLoop は同じツール呼び出しの繰り返しを検知
 func (a *Agent) shouldAbortToolLoop(current, last *tools.ToolCall, count *int) bool {
@@ -45,11 +58,29 @@ func (a *Agent) executeToolCall(response string, toolCall *tools.ToolCall) {
 		fmt.Println()
 	}
 
-	// 結果を履歴に追加
-	a.History = append(a.History, api.Message{
-		Role:    "assistant",
-		Content: response,
-	})
+	// Function Calling: tool_call_id がある場合は OpenAI 形式で履歴に追加
+	isFunctionCalling := toolCall.ID != ""
+	if isFunctionCalling {
+		// assistant メッセージに tool_calls を含める
+		a.History = append(a.History, api.Message{
+			Role:    "assistant",
+			Content: explanation, // 説明部分のみ（ツール呼び出しは ToolCalls に）
+			ToolCalls: []api.OpenAIToolCall{{
+				ID:   toolCall.ID,
+				Type: "function",
+				Function: api.OpenAIToolCallFunction{
+					Name:      toolCall.Tool,
+					Arguments: argsToJSON(toolCall.RawArgs),
+				},
+			}},
+		})
+	} else {
+		// テキストベースのツール呼び出し（従来方式）
+		a.History = append(a.History, api.Message{
+			Role:    "assistant",
+			Content: response,
+		})
+	}
 
 	// 統計情報更新: Assistantメッセージ数とツール実行回数をカウント
 	if a.Stats != nil {
@@ -74,10 +105,20 @@ func (a *Agent) executeToolCall(response string, toolCall *tools.ToolCall) {
 	a.handleFileChange(change)
 
 	// 結果を履歴に追加
-	a.History = append(a.History, api.Message{
-		Role:    "user",
-		Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, result),
-	})
+	if isFunctionCalling {
+		// Function Calling: role="tool" で tool_call_id 付きで送信
+		a.History = append(a.History, api.Message{
+			Role:       "tool",
+			Content:    result,
+			ToolCallID: toolCall.ID,
+		})
+	} else {
+		// テキストベース: role="user" で送信（従来方式）
+		a.History = append(a.History, api.Message{
+			Role:    "user",
+			Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, result),
+		})
+	}
 
 	fmt.Println()
 }

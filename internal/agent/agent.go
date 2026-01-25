@@ -211,15 +211,16 @@ Tool call format: {"tool": "tool_name", "args": {"arg1": "value1"}}
 		}
 	}
 
-	// Gemini は Function Calling で詳細なツール定義を送信するため、
+	// Function Calling 対応プロバイダーは詳細なツール定義を送信するため、
 	// System Prompt からツール説明を除去（重複回避、トークン節約）
-	if provider.Name() == "Gemini" {
+	if provider.Name() == "Gemini" || provider.Name() == "OpenAI" {
 		systemPrompt = removeToolsSection(systemPrompt)
 	}
 
 	// MCPToolProviderインターフェースを実装するプロバイダーにMCPツールを設定
 	// （Function Calling経由で呼び出し可能にする）
 	if len(mcpManager.GetTools()) > 0 {
+		// Gemini MCP ツール設定
 		if mcpProvider, ok := provider.(api.MCPToolProvider); ok {
 			debug := os.Getenv("XELYON_DEBUG_GEMINI") == "1"
 			var mcpDeclarations []api.GeminiFunctionDeclaration
@@ -237,6 +238,23 @@ Tool call format: {"tool": "tool_name", "args": {"arg1": "value1"}}
 				}
 			}
 			mcpProvider.SetMCPTools(mcpDeclarations)
+		}
+
+		// OpenAI MCP ツール設定
+		if openaiMCPProvider, ok := provider.(api.OpenAIMCPToolProvider); ok {
+			debug := os.Getenv("XELYON_DEBUG_OPENAI") == "1"
+			var mcpFunctions []api.OpenAIToolFunction
+			for _, t := range mcpManager.GetTools() {
+				name := fmt.Sprintf("mcp_%s_%s", sanitizeToolName(t.ServerName), sanitizeToolName(t.Name))
+				fn := api.ConvertMCPToolToOpenAIFunction(name, t.Description, t.InputSchema)
+				mcpFunctions = append(mcpFunctions, fn)
+
+				// デバッグログ
+				if debug {
+					fmt.Fprintf(os.Stderr, "[DEBUG OpenAI] MCP tool registered: %s\n", name)
+				}
+			}
+			openaiMCPProvider.SetMCPTools(mcpFunctions)
 		}
 	}
 

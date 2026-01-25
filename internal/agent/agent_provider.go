@@ -61,21 +61,40 @@ func (a *Agent) SwitchProvider(providerName string) error {
 	}
 
 	// MCPToolProviderインターフェースを実装するプロバイダーにMCPツールを設定
-	if mcpProvider, ok := provider.(api.MCPToolProvider); ok && a.mcpManager != nil {
+	if a.mcpManager != nil {
 		mcpTools := a.mcpManager.GetTools()
 		if len(mcpTools) > 0 {
-			debug := os.Getenv("XELYON_DEBUG_GEMINI") == "1"
-			var mcpDeclarations []api.GeminiFunctionDeclaration
-			for _, t := range mcpTools {
-				name := fmt.Sprintf("mcp_%s_%s", sanitizeToolName(t.ServerName), sanitizeToolName(t.Name))
-				decl := api.ConvertMCPToolToGeminiDeclaration(name, t.Description, t.InputSchema)
-				mcpDeclarations = append(mcpDeclarations, decl)
+			// Gemini MCP ツール設定
+			if mcpProvider, ok := provider.(api.MCPToolProvider); ok {
+				debug := os.Getenv("XELYON_DEBUG_GEMINI") == "1"
+				var mcpDeclarations []api.GeminiFunctionDeclaration
+				for _, t := range mcpTools {
+					name := fmt.Sprintf("mcp_%s_%s", sanitizeToolName(t.ServerName), sanitizeToolName(t.Name))
+					decl := api.ConvertMCPToolToGeminiDeclaration(name, t.Description, t.InputSchema)
+					mcpDeclarations = append(mcpDeclarations, decl)
 
-				if debug {
-					fmt.Fprintf(os.Stderr, "[DEBUG Gemini] MCP tool registered: %s\n", name)
+					if debug {
+						fmt.Fprintf(os.Stderr, "[DEBUG Gemini] MCP tool registered: %s\n", name)
+					}
 				}
+				mcpProvider.SetMCPTools(mcpDeclarations)
 			}
-			mcpProvider.SetMCPTools(mcpDeclarations)
+
+			// OpenAI MCP ツール設定
+			if openaiMCPProvider, ok := provider.(api.OpenAIMCPToolProvider); ok {
+				debug := os.Getenv("XELYON_DEBUG_OPENAI") == "1"
+				var mcpFunctions []api.OpenAIToolFunction
+				for _, t := range mcpTools {
+					name := fmt.Sprintf("mcp_%s_%s", sanitizeToolName(t.ServerName), sanitizeToolName(t.Name))
+					fn := api.ConvertMCPToolToOpenAIFunction(name, t.Description, t.InputSchema)
+					mcpFunctions = append(mcpFunctions, fn)
+
+					if debug {
+						fmt.Fprintf(os.Stderr, "[DEBUG OpenAI] MCP tool registered: %s\n", name)
+					}
+				}
+				openaiMCPProvider.SetMCPTools(mcpFunctions)
+			}
 		}
 	}
 

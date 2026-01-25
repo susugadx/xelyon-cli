@@ -5,15 +5,18 @@ package api
 
 // ChatRequest はAPIリクエスト（OpenAI互換形式）
 type ChatRequest struct {
-	Model           string    `json:"model"`
-	Messages        []Message `json:"messages"`
-	Stream          bool      `json:"stream"`
-	ReasoningEffort string    `json:"reasoning_effort,omitempty"` // OpenAI Extended Thinking用
+	Model           string       `json:"model"`
+	Messages        []Message    `json:"messages"`
+	Stream          bool         `json:"stream"`
+	ReasoningEffort string       `json:"reasoning_effort,omitempty"` // OpenAI Extended Thinking用
+	Tools           []OpenAITool `json:"tools,omitempty"`            // Function Calling用
+	ToolChoice      string       `json:"tool_choice,omitempty"`      // "auto", "none", "required"
 }
 
 // Delta はストリームレスポンスの差分
 type Delta struct {
-	Content string `json:"content"`
+	Content   string           `json:"content,omitempty"`
+	ToolCalls []OpenAIToolCall `json:"tool_calls,omitempty"` // Function Calling用
 }
 
 // StreamChoice はストリームの選択肢

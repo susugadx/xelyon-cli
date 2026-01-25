@@ -44,7 +44,10 @@ func ParseToolCalls(response string) []*ToolCall {
 	codeBlockRanges := findCodeBlockRanges(response)
 
 	// JSONブロックを探す（複数パターン対応）
+	// Function Calling では {"id": "...", "tool": "..."} 形式
 	patterns := []string{
+		"{\"id\"",     // {"id" (Function Calling)
+		"{ \"id\"",    // { "id" (Function Calling)
 		"{\"tool\"",   // {"tool"
 		"{ \"tool\"",  // { "tool"
 		"{\"tool\":",  // {"tool":
