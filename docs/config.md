@@ -588,6 +588,20 @@ thinking:
 | high | 20,000 | high | 20,000 |
 | xhigh | 40,000 | high | 40,000 |
 
+**コマンドで切り替え:**
+
+```
+/think          # 現在の状態を表示
+/think on       # 有効化（現在のレベルで）
+/think off      # 無効化
+/think low      # low レベルで有効化
+/think medium   # medium レベルで有効化
+/think high     # high レベルで有効化
+/think xhigh    # xhigh レベルで有効化
+```
+
+設定ファイルを変更せずに、セッション中にリアルタイムで切り替えられます。
+
 ### RepoMap設定 (`repomap`)
 
 RepoMapはプロジェクトのコード構造（シンボル、関数、クラス等）をLLMに提供する機能です。
