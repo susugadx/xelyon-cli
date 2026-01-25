@@ -129,6 +129,12 @@ Tool call format: {"tool": "tool_name", "args": {"arg1": "value1"}}
 
 ## Workflow Rules
 
+### 0. Context First (Critical)
+- **RepoMap**: Before any file operation, check the project structure at the end of this prompt
+- **LSP**: Before rename/refactor, use lsp_references to find all usages
+- **LSP**: Use lsp_definition to jump to implementations
+- Never guess file paths - verify with RepoMap, list_dir, or search_file first
+
 ### 1. Understand First
 - Before any action, understand the context (read_file, search_code, list_dir)
 - Explain your reasoning before making changes
