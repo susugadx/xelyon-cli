@@ -18,7 +18,17 @@ const defaultOpenAIResponsesURL = "https://api.openai.com/v1/responses"
 
 // ReasoningConfig は OpenAI Extended Thinking の設定
 type ReasoningConfig struct {
-	Effort string `json:"effort,omitempty"` // low, medium, high
+	Effort string `json:"effort"` // none, low, medium, high（omitempty削除で明示的に送信）
+}
+
+// ResponsesTool は Responses API 用のツール定義
+// Chat Completions API と異なり、"function" キーのネストが不要
+type ResponsesTool struct {
+	Type        string                 `json:"type"`                  // "function"
+	Name        string                 `json:"name"`                  // ツール名
+	Description string                 `json:"description,omitempty"` // ツールの説明
+	Parameters  map[string]interface{} `json:"parameters,omitempty"`  // JSON Schema
+	Strict      bool                   `json:"strict,omitempty"`      // Structured Output
 }
 
 // ResponsesRequest は Responses API リクエスト
@@ -29,6 +39,7 @@ type ResponsesRequest struct {
 	Instructions       string           `json:"instructions,omitempty"`         // システムプロンプト
 	Stream             bool             `json:"stream,omitempty"`
 	Reasoning          *ReasoningConfig `json:"reasoning,omitempty"` // Extended Thinking
+	Tools              []ResponsesTool  `json:"tools,omitempty"`     // ツール定義
 }
 
 // InputItem は api.InputItem のエイリアス（api packageで定義）
@@ -97,10 +108,15 @@ func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, h
 		reqBody.Input = input
 	}
 
-	// Extended Thinking 適用
+	// Extended Thinking 適用（明示的に設定）
 	if cfg.Thinking.Enabled {
 		reqBody.Reasoning = &ReasoningConfig{
 			Effort: LevelToReasoningEffort(cfg.Thinking.Level),
+		}
+	} else {
+		// 明示的に無効化（GPT-5.2でもreasoningが勝手に有効になる問題を回避）
+		reqBody.Reasoning = &ReasoningConfig{
+			Effort: "none",
 		}
 	}
 
@@ -236,10 +252,15 @@ func (p *Provider) chatWithImageResponses(ctx context.Context, systemPrompt stri
 		Stream:       true,
 	}
 
-	// Extended Thinking 適用
+	// Extended Thinking 適用（明示的に設定）
 	if cfg.Thinking.Enabled {
 		reqBody.Reasoning = &ReasoningConfig{
 			Effort: LevelToReasoningEffort(cfg.Thinking.Level),
+		}
+	} else {
+		// 明示的に無効化
+		reqBody.Reasoning = &ReasoningConfig{
+			Effort: "none",
 		}
 	}
 
