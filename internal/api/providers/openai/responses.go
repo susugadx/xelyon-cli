@@ -24,9 +24,9 @@ type ReasoningConfig struct {
 // ResponsesRequest は Responses API リクエスト
 type ResponsesRequest struct {
 	Model              string           `json:"model"`
-	Input              interface{}      `json:"input,omitempty"`                 // string or []InputItem（previous_response_id使用時は省略可）
-	PreviousResponseID string           `json:"previous_response_id,omitempty"`  // 前回のレスポンスID（キャッシュ用）
-	Instructions       string           `json:"instructions,omitempty"`          // システムプロンプト
+	Input              interface{}      `json:"input,omitempty"`                // string or []InputItem（previous_response_id使用時は省略可）
+	PreviousResponseID string           `json:"previous_response_id,omitempty"` // 前回のレスポンスID（キャッシュ用）
+	Instructions       string           `json:"instructions,omitempty"`         // システムプロンプト
 	Stream             bool             `json:"stream,omitempty"`
 	Reasoning          *ReasoningConfig `json:"reasoning,omitempty"` // Extended Thinking
 }

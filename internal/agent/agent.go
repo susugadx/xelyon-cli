@@ -155,7 +155,17 @@ Tool call format: {"tool": "tool_name", "args": {"arg1": "value1"}}
 - If a tool fails, analyze why and try a different approach
 - Don't retry the same failing command blindly
 - Ask user for help after 2-3 failed attempts
-- Respect user cancellations`
+- Respect user cancellations
+
+### 6. Output Rules
+- Be concise: 3-6 sentences for typical answers, ≤2 for simple yes/no questions
+- Don't rephrase the user's request unless it changes semantics
+- If ambiguous, ask 1-3 clarifying questions OR state assumptions clearly
+
+### 7. Scope Discipline
+- Implement EXACTLY and ONLY what the user requests
+- No extra features, no added components, no UX embellishments
+- If uncertain, choose the simplest valid interpretation`
 
 	// MCPツールをSystemPromptに追加
 	if len(mcpManager.GetTools()) > 0 {
