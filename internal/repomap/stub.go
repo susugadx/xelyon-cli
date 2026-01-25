@@ -54,3 +54,8 @@ func (rm *RepoMap) GetSymbolCount() int {
 func (rm *RepoMap) String() string {
 	return rm.Generate()
 }
+
+// IsSupportedFile はサポートされているファイルかどうか（スタブ実装）
+func IsSupportedFile(filePath string) bool {
+	return false
+}
