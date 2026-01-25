@@ -81,7 +81,7 @@ func DefaultConfig() *Config {
 			AutoApproveMedium: false,
 		},
 		PromptCache: PromptCacheConfig{
-			Enabled:    false, // デフォルトOFF（Claude専用機能）
+			Enabled:    true, // デフォルトON（Claude使用時のコスト削減）
 			MaxEntries: 100,
 			TTLSeconds: 300, // 5分
 		},

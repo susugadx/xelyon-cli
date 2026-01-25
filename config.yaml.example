@@ -87,7 +87,7 @@ tool_confirm:
 # ============================================================
 prompt_cache:
     # 有効化
-    enabled: false
+    enabled: true
     # 最大エントリ数
     max_entries: 100
     # キャッシュTTL（秒）
