@@ -9,12 +9,26 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
+// ResponseIDCapable は Responses API のキャッシュ機能を持つプロバイダー
+type ResponseIDCapable interface {
+	HasCachedResponseID() bool
+}
+
 // maybeAutoCompress は閾値を超えた場合に自動圧縮を実行
 // 圧縮した場合は true を返す
 func (a *Agent) maybeAutoCompress() bool {
 	cfg := config.GetGlobalConfig()
 	if !cfg.Compression.AutoCompress {
 		return false
+	}
+
+	// Responses API で responseID がキャッシュされている場合は自動圧縮をスキップ
+	// （サーバー側でコンテキスト管理、cached_tokens として課金）
+	if ridProvider, ok := a.CurrentProvider.(ResponseIDCapable); ok {
+		if ridProvider.HasCachedResponseID() {
+			// キャッシュが効いているので圧縮不要
+			return false
+		}
 	}
 
 	percentage := a.GetTokenUsagePercentage()

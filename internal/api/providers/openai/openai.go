@@ -23,9 +23,10 @@ const defaultOpenAIURL = "https://api.openai.com/v1/chat/completions"
 
 // Provider はOpenAI APIのプロバイダー実装
 type Provider struct {
-	apiKey     string
-	apiURL     string
-	httpClient *http.Client
+	apiKey         string
+	apiURL         string
+	httpClient     *http.Client
+	lastResponseID string // Responses API の最新レスポンスID（キャッシュ用）
 }
 
 // New は新しいProviderを作成
@@ -80,6 +81,16 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		return p.chatWithResponses(ctx, systemPrompt, history, model)
 	}
 	return p.chatWithCompletions(ctx, systemPrompt, history, model)
+}
+
+// HasCachedResponseID は Responses API のキャッシュ済み responseID があるか返す
+func (p *Provider) HasCachedResponseID() bool {
+	return p.lastResponseID != ""
+}
+
+// ClearResponseID は responseID をクリアする（圧縮後などに使用）
+func (p *Provider) ClearResponseID() {
+	p.lastResponseID = ""
 }
 
 // ChatWithImage は画像付きメッセージで会話を行う

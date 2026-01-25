@@ -23,11 +23,12 @@ type ReasoningConfig struct {
 
 // ResponsesRequest は Responses API リクエスト
 type ResponsesRequest struct {
-	Model        string           `json:"model"`
-	Input        interface{}      `json:"input"`                  // string or []InputItem
-	Instructions string           `json:"instructions,omitempty"` // システムプロンプト
-	Stream       bool             `json:"stream,omitempty"`
-	Reasoning    *ReasoningConfig `json:"reasoning,omitempty"` // Extended Thinking
+	Model              string           `json:"model"`
+	Input              interface{}      `json:"input,omitempty"`                 // string or []InputItem（previous_response_id使用時は省略可）
+	PreviousResponseID string           `json:"previous_response_id,omitempty"`  // 前回のレスポンスID（キャッシュ用）
+	Instructions       string           `json:"instructions,omitempty"`          // システムプロンプト
+	Stream             bool             `json:"stream,omitempty"`
+	Reasoning          *ReasoningConfig `json:"reasoning,omitempty"` // Extended Thinking
 }
 
 // InputItem は api.InputItem のエイリアス（api packageで定義）
@@ -57,6 +58,7 @@ type ResponsesResult struct {
 }
 
 // chatWithResponses は Responses API でチャット
+// previous_response_id を使用してキャッシュを活用
 func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
 	cfg := config.GetGlobalConfig()
 
@@ -66,21 +68,33 @@ func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, h
 		apiURL = defaultOpenAIResponsesURL
 	}
 
-	// 入力を構築
-	var input []InputItem
-	for _, msg := range history {
-		input = append(input, InputItem{
-			Type:    "message",
-			Role:    msg.Role,
-			Content: msg.Content,
-		})
-	}
-
 	reqBody := ResponsesRequest{
 		Model:        model,
-		Input:        input,
 		Instructions: systemPrompt,
 		Stream:       true,
+	}
+
+	// previous_response_id がある場合はキャッシュを活用
+	if p.lastResponseID != "" && len(history) > 0 {
+		// 最新のユーザーメッセージのみ送信
+		lastMsg := history[len(history)-1]
+		reqBody.PreviousResponseID = p.lastResponseID
+		reqBody.Input = []InputItem{{
+			Type:    "message",
+			Role:    lastMsg.Role,
+			Content: lastMsg.Content,
+		}}
+	} else {
+		// 初回または responseID がない場合は履歴全体を送信
+		var input []InputItem
+		for _, msg := range history {
+			input = append(input, InputItem{
+				Type:    "message",
+				Role:    msg.Role,
+				Content: msg.Content,
+			})
+		}
+		reqBody.Input = input
 	}
 
 	// Extended Thinking 適用
@@ -113,16 +127,28 @@ func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, h
 	}
 	defer resp.Body.Close()
 
+	// previous_response_id が無効な場合のフォールバック
+	if resp.StatusCode == http.StatusBadRequest && p.lastResponseID != "" {
+		// responseID をクリアしてリトライ
+		p.lastResponseID = ""
+		resp.Body.Close()
+		return p.chatWithResponses(ctx, systemPrompt, history, model)
+	}
+
 	if resp.StatusCode != http.StatusOK {
 		return "", api.HandleHTTPError(resp, spinner, p.Name())
 	}
 
-	return p.handleResponsesStreaming(ctx, resp, spinner)
+	content, responseID, err := p.handleResponsesStreaming(ctx, resp, spinner)
+	if err == nil && responseID != "" {
+		p.lastResponseID = responseID
+	}
+	return content, err
 }
 
 // handleResponsesStreaming は Responses API のストリーミングを処理
-// Response ID も抽出して返却
-func (p *Provider) handleResponsesStreaming(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
+// Response ID も抽出して返却（content, responseID, error）
+func (p *Provider) handleResponsesStreaming(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, string, error) {
 	var responseID string // response.created イベントから抽出
 
 	parser := func(line string) (string, bool, error) {
@@ -159,12 +185,11 @@ func (p *Provider) handleResponsesStreaming(ctx context.Context, resp *http.Resp
 	}
 
 	content, err := api.ParseStreamingResponse(ctx, resp, spinner, parser)
-	// NOTE: responseID は現在使用されていないが、将来の Compact API 統合で使用予定
-	_ = responseID
-	return content, err
+	return content, responseID, err
 }
 
 // chatWithImageResponses は Responses API で画像付きメッセージを処理
+// NOTE: 画像付きの場合は previous_response_id を使用しない（キャッシュ動作が不明瞭なため）
 func (p *Provider) chatWithImageResponses(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {
 	cfg := config.GetGlobalConfig()
 
@@ -245,5 +270,10 @@ func (p *Provider) chatWithImageResponses(ctx context.Context, systemPrompt stri
 		return "", api.HandleHTTPError(resp, spinner, p.Name())
 	}
 
-	return p.handleResponsesStreaming(ctx, resp, spinner)
+	content, responseID, err := p.handleResponsesStreaming(ctx, resp, spinner)
+	if err == nil && responseID != "" {
+		// 画像メッセージ後も responseID を保存（次回テキストのみの場合に使用可能）
+		p.lastResponseID = responseID
+	}
+	return content, err
 }
