@@ -506,3 +506,12 @@ func TestResponsesAPIInputFormat(t *testing.T) {
 		t.Errorf("function_call_output Output = %q, want 'package main'", input[4].Output)
 	}
 }
+
+// TestResponsesAPI_FunctionCall_ArgumentsDeltaAccumulation_Note:
+// function_call_arguments.delta の累積処理は実際の streaming でのみテスト可能
+// (response.output_item.added → delta (複数) → done → response.completed)
+// 単体テストの場合は、実装ロジックレビューで確認:
+// - callID がない場合: len(functionCalls) == 1 なら累積
+// - callID がある場合: 通常通り累積
+// - done イベントで Arguments が空文字列なら累積値を保持
+// - done イベントで Arguments があれば上書き

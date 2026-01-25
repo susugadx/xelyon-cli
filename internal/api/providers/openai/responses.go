@@ -233,28 +233,43 @@ func (p *Provider) handleResponsesStreaming(ctx context.Context, resp *http.Resp
 		}
 
 		// response.function_call_arguments.delta: 引数の差分
-		if chunk.Type == "response.function_call_arguments.delta" {
-			// call_id を取得するために item もパース
-			if chunk.Item != nil && chunk.Item.CallID != "" {
-				if acc, ok := functionCalls[chunk.Item.CallID]; ok {
-					acc.Arguments.WriteString(chunk.Delta)
-				}
-			} else {
-				// call_id がない場合は最初のアキュムレータに追加
+		if chunk.Type == "response.function_call_arguments.delta" && chunk.Item != nil {
+			callID := chunk.Item.CallID
+
+			// callID がない場合の処理
+			if callID == "" && len(functionCalls) == 1 {
+				// 単一の function_call の場合は call_id がなくてもOK
 				for _, acc := range functionCalls {
 					acc.Arguments.WriteString(chunk.Delta)
+					fmt.Fprintf(os.Stderr, "[DEBUG] delta: appended %d chars (total: %d), callID: %q\n",
+						len(chunk.Delta), acc.Arguments.Len(), acc.CallID)
 					break
+				}
+			} else if callID != "" {
+				// call_id がある場合は通常の処理
+				if acc, ok := functionCalls[callID]; ok {
+					acc.Arguments.WriteString(chunk.Delta)
+					fmt.Fprintf(os.Stderr, "[DEBUG] delta: appended %d chars (total: %d), callID: %q\n",
+						len(chunk.Delta), acc.Arguments.Len(), callID)
 				}
 			}
 		}
 
 		// response.function_call_arguments.done: 引数完了
 		if chunk.Type == "response.function_call_arguments.done" && chunk.Item != nil {
-			if acc, ok := functionCalls[chunk.Item.CallID]; ok {
+			callID := chunk.Item.CallID
+			if acc, ok := functionCalls[callID]; ok {
 				// 完了した引数で上書き（doneイベントには完全な引数が含まれる）
 				if chunk.Item.Arguments != "" {
+					oldLen := acc.Arguments.Len()
 					acc.Arguments.Reset()
 					acc.Arguments.WriteString(chunk.Item.Arguments)
+					fmt.Fprintf(os.Stderr, "[DEBUG] done: replaced %d chars with %d chars, callID: %q\n",
+						oldLen, len(chunk.Item.Arguments), callID)
+				} else {
+					// Arguments が空の場合は累積値をそのまま使用
+					fmt.Fprintf(os.Stderr, "[DEBUG] done: keeping accumulated args (%d chars), callID: %q\n",
+						acc.Arguments.Len(), callID)
 				}
 			}
 		}
