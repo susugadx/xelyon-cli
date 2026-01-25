@@ -82,6 +82,14 @@ var sections = map[string]sectionInfo{
 			"auto_approve_medium": "中程度のツール（write_file等）を自動承認",
 		},
 	},
+	"prompt_cache": {
+		title: "プロンプトキャッシュ設定（Claude専用）",
+		fields: map[string]string{
+			"enabled":     "有効化",
+			"max_entries": "最大エントリ数",
+			"ttl_seconds": "キャッシュTTL（秒）",
+		},
+	},
 	"paste": {
 		title: "ペーストモード設定",
 		fields: map[string]string{
@@ -166,6 +174,7 @@ var sectionOrder = []string{
 	"api_retry",
 	"diff",
 	"tool_confirm",
+	"prompt_cache",
 	"paste",
 	"streaming",
 	"bash",

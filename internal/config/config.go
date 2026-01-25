@@ -80,6 +80,11 @@ func DefaultConfig() *Config {
 			AutoApproveSafe:   true,
 			AutoApproveMedium: false,
 		},
+		PromptCache: PromptCacheConfig{
+			Enabled:    false, // デフォルトOFF（Claude専用機能）
+			MaxEntries: 100,
+			TTLSeconds: 300, // 5分
+		},
 		Paste: PasteConfig{
 			MaxLines:       10000,
 			MaxBytes:       1048576,
