@@ -3,6 +3,8 @@ package lsp
 import (
 	"context"
 	"fmt"
+	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -323,6 +325,8 @@ func (t *LSPRenameTool) Run(args map[string]string) (string, *tools.FileChange, 
 		return "Error: new_name is required", nil, fmt.Errorf("new_name is required")
 	}
 
+	apply := args["apply"] == "true"
+
 	absPath, err := common.ValidatePath(path)
 	if err != nil {
 		return fmt.Sprintf("Error: %v", err), nil, err
@@ -347,7 +351,7 @@ func (t *LSPRenameTool) Run(args map[string]string) (string, *tools.FileChange, 
 		totalEdits += len(edits)
 	}
 
-	sb.WriteString(fmt.Sprintf("Rename '%s' will affect %d location(s) in %d file(s):\n\n", newName, totalEdits, len(edit.Changes)))
+	sb.WriteString(fmt.Sprintf("Rename to '%s' will affect %d location(s) in %d file(s):\n\n", newName, totalEdits, len(edit.Changes)))
 
 	for uri, edits := range edit.Changes {
 		filePath := lsplib.URIToFile(uri)
@@ -361,8 +365,114 @@ func (t *LSPRenameTool) Run(args map[string]string) (string, *tools.FileChange, 
 		sb.WriteString("\n")
 	}
 
-	sb.WriteString("⚠️ Note: This is a preview. Use str_replace_editor to apply changes.")
+	// Preview mode (default)
+	if !apply {
+		sb.WriteString("💡 Tip: Use apply=\"true\" to apply changes.")
+		green.Printf("🔄 LSP: Rename preview - %d edits in %d files\n", totalEdits, len(edit.Changes))
+		return sb.String(), nil, nil
+	}
 
-	green.Printf("🔄 LSP: Rename preview - %d edits in %d files\n", totalEdits, len(edit.Changes))
-	return sb.String(), nil, nil
+	// Apply mode
+	fmt.Print(sb.String())
+
+	// User confirmation
+	dec := common.ConfirmWithAutoApproveDecision("lsp_rename", "Apply rename?")
+	if dec.Action != common.ConfirmYes {
+		if dec.Action == common.ConfirmComment {
+			return fmt.Sprintf("Cancelled with comment: %s", dec.Comment), nil, nil
+		}
+		return "Rename cancelled", nil, nil
+	}
+
+	// Apply changes to each file
+	filesModified := 0
+	for uri, edits := range edit.Changes {
+		filePath := lsplib.URIToFile(uri)
+
+		// Create backup
+		if _, backupErr := common.CreateBackup(filePath); backupErr != nil {
+			common.Yellow.Printf("Warning: Failed to create backup for %s: %v\n", filePath, backupErr)
+		}
+
+		// Apply TextEdits
+		if applyErr := applyTextEdits(filePath, edits); applyErr != nil {
+			return fmt.Sprintf("Error applying edits to %s: %v", filePath, applyErr), nil, fmt.Errorf("failed to apply edits: %w", applyErr)
+		}
+		filesModified++
+	}
+
+	green.Printf("✅ Renamed to '%s' - %d edits in %d files\n", newName, totalEdits, filesModified)
+	return fmt.Sprintf("Successfully renamed to '%s' in %d file(s)", newName, filesModified), nil, nil
+}
+
+// applyTextEdits applies TextEdits to a file
+// Edits are applied in reverse order (bottom-up) to prevent position shifts
+func applyTextEdits(filePath string, edits []lsplib.TextEdit) error {
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to read file: %w", err)
+	}
+
+	lines := strings.Split(string(content), "\n")
+
+	// Sort edits in reverse order (by line descending, then character descending)
+	sortedEdits := make([]lsplib.TextEdit, len(edits))
+	copy(sortedEdits, edits)
+	sort.Slice(sortedEdits, func(i, j int) bool {
+		if sortedEdits[i].Range.Start.Line != sortedEdits[j].Range.Start.Line {
+			return sortedEdits[i].Range.Start.Line > sortedEdits[j].Range.Start.Line
+		}
+		return sortedEdits[i].Range.Start.Character > sortedEdits[j].Range.Start.Character
+	})
+
+	// Apply each edit
+	for _, edit := range sortedEdits {
+		startLine := edit.Range.Start.Line
+		startChar := edit.Range.Start.Character
+		endLine := edit.Range.End.Line
+		endChar := edit.Range.End.Character
+
+		// Bounds check
+		if startLine < 0 || startLine >= len(lines) || endLine < 0 || endLine >= len(lines) {
+			return fmt.Errorf("edit range out of bounds: line %d-%d (file has %d lines)", startLine+1, endLine+1, len(lines))
+		}
+
+		// Single line edit
+		if startLine == endLine {
+			line := lines[startLine]
+			if startChar > len(line) {
+				startChar = len(line)
+			}
+			if endChar > len(line) {
+				endChar = len(line)
+			}
+			lines[startLine] = line[:startChar] + edit.NewText + line[endChar:]
+		} else {
+			// Multi-line edit
+			startLineContent := lines[startLine]
+			endLineContent := lines[endLine]
+
+			if startChar > len(startLineContent) {
+				startChar = len(startLineContent)
+			}
+			if endChar > len(endLineContent) {
+				endChar = len(endLineContent)
+			}
+
+			// Combine: start of first line + new text + end of last line
+			newContent := startLineContent[:startChar] + edit.NewText + endLineContent[endChar:]
+
+			// Replace the affected lines with new content
+			newLines := strings.Split(newContent, "\n")
+			lines = append(lines[:startLine], append(newLines, lines[endLine+1:]...)...)
+		}
+	}
+
+	// Write back
+	newContent := strings.Join(lines, "\n")
+	if err := os.WriteFile(filePath, []byte(newContent), 0644); err != nil {
+		return fmt.Errorf("failed to write file: %w", err)
+	}
+
+	return nil
 }
