@@ -7,6 +7,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/agent/plan"
 	"github.com/susugadx/xelyon-cli/internal/api"
+	promptplan "github.com/susugadx/xelyon-cli/internal/prompt/plan"
 )
 
 // RunPlanMode は Claude Code 風の Plan Mode を実行
@@ -24,26 +25,7 @@ func (a *Agent) RunPlanMode(ctx context.Context, userRequest string) error {
 	a.SetStatus(StateRunning, "Investigating", "調査中", "Wait for investigation", "調査完了を待ってください")
 
 	// ユーザーリクエストを履歴に追加
-	investigationPrompt := fmt.Sprintf(`USER REQUEST: %s
-
-You are in PLAN MODE (Investigation Phase).
-
-IMPORTANT RULES:
-1. First, investigate the codebase to understand what needs to be done
-2. You CAN use read-only tools freely: read_file, search_file, search_code, list_dir, git_status, git_log, git_diff, lint, test, web_search
-3. Do NOT use any modification tools yet (write_file, str_replace, delete_file, bash, etc.)
-4. When you have gathered enough information, output a plan for the implementation
-
-After investigation, output your plan in this JSON format:
-{"plan": {
-  "summary": "Brief summary of what will be done",
-  "steps": [
-    {"id": 1, "description": "Step description", "tools": ["tool1"]},
-    {"id": 2, "description": "Step description", "tools": ["tool2"]}
-  ]
-}}
-
-Start your investigation now. Use read_file, search_code, list_dir etc. to understand the codebase.`, userRequest)
+	investigationPrompt := promptplan.BuildInvestigationPrompt(userRequest)
 
 	a.History = append(a.History, api.Message{Role: "user", Content: investigationPrompt})
 

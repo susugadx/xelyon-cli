@@ -3,11 +3,11 @@ package agent
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/prompt"
 )
 
 // CompressHistory は会話履歴を圧縮する
@@ -25,7 +25,12 @@ func (a *Agent) CompressHistory(keepRecent int) error {
 	toKeep := a.History[len(a.History)-keepRecent:]
 
 	// サマリー生成プロンプト
-	summaryPrompt := buildSummaryPrompt(toCompress)
+	// api.Message を prompt.Message に変換
+	promptMessages := make([]prompt.Message, len(toCompress))
+	for i, m := range toCompress {
+		promptMessages[i] = prompt.Message{Role: m.Role, Content: m.Content}
+	}
+	summaryPrompt := prompt.BuildSummaryPrompt(promptMessages, config.MessageTruncateLen)
 
 	// LLMにサマリーを依頼
 	yellow.Println("🗜️  会話を圧縮中...")
@@ -75,42 +80,6 @@ func (a *Agent) CompressHistory(keepRecent int) error {
 	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
 	return nil
-}
-
-// buildSummaryPrompt はサマリー生成用のプロンプトを構築
-func buildSummaryPrompt(messages []api.Message) string {
-	var sb strings.Builder
-
-	sb.WriteString("以下の会話履歴を簡潔なサマリーにまとめてください。\n")
-	sb.WriteString("重要な決定事項、作成/編集したファイル、残タスクを含めてください。\n")
-	sb.WriteString("箇条書きで5-10項目程度にまとめてください。\n\n")
-	sb.WriteString("会話履歴:\n")
-	sb.WriteString("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
-
-	for _, msg := range messages {
-		var role string
-		switch msg.Role {
-		case "assistant":
-			role = "Assistant"
-		case "system":
-			role = "System"
-		default:
-			role = "User"
-		}
-
-		// 長いメッセージは省略
-		content := msg.Content
-		if len(content) > config.MessageTruncateLen {
-			content = content[:config.MessageTruncateLen] + "... (省略)"
-		}
-
-		sb.WriteString(fmt.Sprintf("[%s]\n%s\n\n", role, content))
-	}
-
-	sb.WriteString("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
-	sb.WriteString("上記の会話を要約してください。日本語で回答してください。")
-
-	return sb.String()
 }
 
 // estimateTokens は概算トークン数を計算（英語: 4文字/token、日本語: 2文字/token）

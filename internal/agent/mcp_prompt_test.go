@@ -3,6 +3,8 @@ package agent
 import (
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/prompt"
 )
 
 func TestDetectGitHubIntent(t *testing.T) {
@@ -137,11 +139,11 @@ func TestSanitizeToolName(t *testing.T) {
 }
 
 func TestBuildGitHubMCPGuide(t *testing.T) {
-	guide := buildGitHubMCPGuide()
+	guide := prompt.BuildGitHubMCPGuide()
 
 	// ガイドが空でないことを確認
 	if guide == "" {
-		t.Error("buildGitHubMCPGuide() returned empty string")
+		t.Error("BuildGitHubMCPGuide() returned empty string")
 	}
 
 	// 必要なキーワードが含まれていることを確認
@@ -161,7 +163,7 @@ func TestBuildGitHubMCPGuide(t *testing.T) {
 
 	for _, kw := range keywords {
 		if !strings.Contains(guide, kw) {
-			t.Errorf("buildGitHubMCPGuide() missing keyword: %q", kw)
+			t.Errorf("BuildGitHubMCPGuide() missing keyword: %q", kw)
 		}
 	}
 }

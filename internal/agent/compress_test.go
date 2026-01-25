@@ -4,7 +4,9 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/history"
+	"github.com/susugadx/xelyon-cli/internal/prompt"
 )
 
 func TestEstimateTokens(t *testing.T) {
@@ -54,32 +56,32 @@ func TestEstimateTokens(t *testing.T) {
 }
 
 func TestBuildSummaryPrompt(t *testing.T) {
-	messages := []api.Message{
+	messages := []prompt.Message{
 		{Role: "user", Content: "Hello"},
 		{Role: "assistant", Content: "Hi there!"},
 		{Role: "user", Content: "Can you help me?"},
 	}
 
-	prompt := buildSummaryPrompt(messages)
+	result := prompt.BuildSummaryPrompt(messages, config.MessageTruncateLen)
 
 	// プロンプトに必要な要素が含まれているか確認
-	if prompt == "" {
-		t.Error("buildSummaryPrompt() returned empty string")
+	if result == "" {
+		t.Error("BuildSummaryPrompt() returned empty string")
 	}
 
 	// ユーザーメッセージが含まれているか
-	if !stringContains(prompt, "Hello") {
-		t.Error("buildSummaryPrompt() should contain user message 'Hello'")
+	if !stringContains(result, "Hello") {
+		t.Error("BuildSummaryPrompt() should contain user message 'Hello'")
 	}
 
 	// アシスタントメッセージが含まれているか
-	if !stringContains(prompt, "Hi there!") {
-		t.Error("buildSummaryPrompt() should contain assistant message 'Hi there!'")
+	if !stringContains(result, "Hi there!") {
+		t.Error("BuildSummaryPrompt() should contain assistant message 'Hi there!'")
 	}
 
 	// 指示文が含まれているか
-	if !stringContains(prompt, "要約") && !stringContains(prompt, "サマリー") {
-		t.Error("buildSummaryPrompt() should contain instruction keywords")
+	if !stringContains(result, "要約") && !stringContains(result, "サマリー") {
+		t.Error("BuildSummaryPrompt() should contain instruction keywords")
 	}
 }
 
@@ -89,15 +91,15 @@ func TestBuildSummaryPrompt_LongMessage(t *testing.T) {
 		longContent += "a"
 	}
 
-	messages := []api.Message{
+	messages := []prompt.Message{
 		{Role: "user", Content: longContent},
 	}
 
-	prompt := buildSummaryPrompt(messages)
+	result := prompt.BuildSummaryPrompt(messages, config.MessageTruncateLen)
 
 	// 長いメッセージは500文字で省略される
-	if !stringContains(prompt, "省略") {
-		t.Error("buildSummaryPrompt() should truncate long messages and show '省略'")
+	if !stringContains(result, "省略") {
+		t.Error("BuildSummaryPrompt() should truncate long messages and show '省略'")
 	}
 }
 

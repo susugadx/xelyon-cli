@@ -10,6 +10,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/agent/plan"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	promptplan "github.com/susugadx/xelyon-cli/internal/prompt/plan"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
@@ -103,19 +104,8 @@ func (a *Agent) runInvestigationPhase(ctx context.Context) (string, error) {
 			cyan.Println("   Requesting implementation plan...")
 
 			a.History = append(a.History, api.Message{
-				Role: "user",
-				Content: fmt.Sprintf(`[SYSTEM] You tried to use a modification tool (%s) during the investigation phase.
-
-Before using modification tools, you must output an implementation plan.
-Output your plan now in this JSON format:
-
-{"plan": {
-  "summary": "Brief summary of what will be done",
-  "steps": [
-    {"id": 1, "description": "Step description", "tools": ["tool1"]},
-    {"id": 2, "description": "Step description", "tools": ["tool2"]}
-  ]
-}}`, tc.Tool),
+				Role:    "user",
+				Content: promptplan.BuildPlanRequestMessage(tc.Tool),
 			})
 			continue
 		}

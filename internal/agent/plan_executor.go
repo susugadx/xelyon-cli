@@ -8,6 +8,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/agent/plan"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	promptplan "github.com/susugadx/xelyon-cli/internal/prompt/plan"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 	"golang.org/x/sync/errgroup"
@@ -154,21 +155,8 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 		yellow.Printf("🔄 Retry attempt %d/%d for step %d...\n", retryCount, maxRetries, step.ID)
 	}
 
-	// 期待するツールがある場合、明示的に指示
-	toolsHint := ""
-	if len(step.Tools) > 0 {
-		toolsHint = fmt.Sprintf("\n\nYou MUST use the following tools to complete this step: %s\nDo NOT ask for confirmation - execute the tools directly.", strings.Join(step.Tools, ", "))
-	}
-
 	// ステップ実行を指示
-	stepPrompt := fmt.Sprintf(`Execute step %d of the implementation plan:
-%s
-
-IMPORTANT INSTRUCTIONS:
-1. Execute this step autonomously without asking questions
-2. Use tools directly - do NOT ask "Should I proceed?" or "Do you want me to..."
-3. If you need to create/modify files, use write_file or str_replace directly
-4. Only stop for SafetyLow operations (delete_file, dangerous bash commands)%s`, step.ID, step.Description, toolsHint)
+	stepPrompt := promptplan.BuildStepPrompt(step.ID, step.Description, step.Tools)
 
 	// リトライ時は履歴に追加しない
 	if retryCount == 0 {
