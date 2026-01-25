@@ -80,6 +80,10 @@ func DefaultConfig() *Config {
 			AutoApproveSafe:   true,
 			AutoApproveMedium: false,
 		},
+		CommandAliases: map[string]string{
+			"t": "test",
+			"r": "review",
+		},
 		PromptCache: PromptCacheConfig{
 			Enabled:    true, // デフォルトON（Claude使用時のコスト削減）
 			MaxEntries: 100,

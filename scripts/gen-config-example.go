@@ -82,6 +82,13 @@ var sections = map[string]sectionInfo{
 			"auto_approve_medium": "中程度のツール（write_file等）を自動承認",
 		},
 	},
+	"command_aliases": {
+		title: "コマンドエイリアス設定",
+		comments: []string{
+			"スラッシュコマンドの短縮名を定義",
+			"例: t → /test, r → /review",
+		},
+	},
 	"prompt_cache": {
 		title: "プロンプトキャッシュ設定（Claude専用）",
 		fields: map[string]string{
@@ -174,6 +181,7 @@ var sectionOrder = []string{
 	"api_retry",
 	"diff",
 	"tool_confirm",
+	"command_aliases",
 	"prompt_cache",
 	"paste",
 	"streaming",
