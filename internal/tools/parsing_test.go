@@ -109,6 +109,59 @@ func TestParseToolCalls_SingleTool(t *testing.T) {
 			wantLen:  1,
 			wantTool: "str_replace",
 		},
+		// write_file with code content
+		{
+			name:     "write_file with Go code",
+			input:    `{"id":"call_write","tool":"write_file","args":{"path":"main.go","content":"package main\n\nfunc main() {\n\tfmt.Println(\"hello\")\n}"}}`,
+			wantLen:  1,
+			wantTool: "write_file",
+		},
+		{
+			name:     "write_file with nested braces",
+			input:    `{"id":"call_w2","tool":"write_file","args":{"path":"test.go","content":"type Config struct {\n\tData map[string]interface{}\n}"}}`,
+			wantLen:  1,
+			wantTool: "write_file",
+		},
+		// bash with complex commands
+		{
+			name:     "bash with echo containing braces",
+			input:    `{"id":"call_bash","tool":"bash","args":{"command":"echo \"func foo() { return 1 }\""}}`,
+			wantLen:  1,
+			wantTool: "bash",
+		},
+		{
+			name:     "bash with JSON output",
+			input:    `{"id":"call_b2","tool":"bash","args":{"command":"curl -s api.example.com | jq '{\"key\": .value}'"}}`,
+			wantLen:  1,
+			wantTool: "bash",
+		},
+		// grep_replace with regex patterns
+		{
+			name:     "grep_replace with brace pattern",
+			input:    `{"id":"call_grep","tool":"grep_replace","args":{"pattern":"func\\s+\\w+\\s*\\(","replacement":"func newName(","path":"."}}`,
+			wantLen:  1,
+			wantTool: "grep_replace",
+		},
+		// ast_grep with code pattern
+		{
+			name:     "ast_grep with struct pattern",
+			input:    `{"id":"call_ast","tool":"ast_grep","args":{"pattern":"type $NAME struct { $$$FIELDS }","lang":"go","path":"."}}`,
+			wantLen:  1,
+			wantTool: "ast_grep",
+		},
+		// http_request with JSON body
+		{
+			name:     "http_request with JSON body",
+			input:    `{"id":"call_http","tool":"http_request","args":{"method":"POST","url":"https://api.example.com","body":"{\"nested\":{\"key\":\"value\"}}"}}`,
+			wantLen:  1,
+			wantTool: "http_request",
+		},
+		{
+			name:     "http_request with headers JSON",
+			input:    `{"id":"call_h2","tool":"http_request","args":{"method":"GET","url":"https://api.example.com","headers":"{\"Authorization\":\"Bearer token\"}"}}`,
+			wantLen:  1,
+			wantTool: "http_request",
+		},
 	}
 
 	for _, tt := range tests {
