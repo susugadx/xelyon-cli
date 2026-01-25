@@ -29,7 +29,7 @@ func isSameToolCall(tc1, tc2 *tools.ToolCall) bool {
 func extractExplanationAndTool(response string) (explanation, toolJSON string) {
 	// ツール呼び出しのJSON部分を探す
 	toolStartIdx := -1
-	patterns := []string{"{\"tool\"", "{ \"tool\"", "{\"tool\":", "{ \"tool\":"}
+	patterns := []string{"{\"tool\"", "{ \"tool\"", "{\"tool\":", "{ \"tool\":", "{\"id\"", "{ \"id\""}
 	for _, pattern := range patterns {
 		idx := strings.Index(response, pattern)
 		if idx != -1 && (toolStartIdx == -1 || idx < toolStartIdx) {
