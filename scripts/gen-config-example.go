@@ -86,7 +86,7 @@ var sections = map[string]sectionInfo{
 		title: "コマンドエイリアス設定",
 		comments: []string{
 			"スラッシュコマンドの短縮名を定義",
-			"例: t → /test, r → /review",
+			"例: c → /compress, u → /use, h → /history",
 		},
 	},
 	"prompt_cache": {

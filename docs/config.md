@@ -105,10 +105,11 @@ tool_confirm:
 # コマンドエイリアス設定
 # ============================================================
 # スラッシュコマンドの短縮名を定義
-# 例: t → /test, r → /review
+# 例: c → /compress, u → /use, h → /history
 command_aliases:
-    r: review
-    t: test
+    c: compress
+    h: history
+    u: use
 
 # ============================================================
 # プロンプトキャッシュ設定（Claude専用）
@@ -732,10 +733,10 @@ code_health:
 
 ```yaml
 command_aliases:
-  t: test        # /t → /test
-  r: review      # /r → /review
-  c: commit      # /c → /commit
+  c: compress    # /c → /compress
   u: use         # /u → /use
+  h: history     # /h → /history
+  p: plan        # /p → /plan
 ```
 
 ## 環境変数

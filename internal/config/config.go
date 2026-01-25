@@ -81,8 +81,9 @@ func DefaultConfig() *Config {
 			AutoApproveMedium: false,
 		},
 		CommandAliases: map[string]string{
-			"t": "test",
-			"r": "review",
+			"c": "compress",
+			"u": "use",
+			"h": "history",
 		},
 		PromptCache: PromptCacheConfig{
 			Enabled:    true, // デフォルトON（Claude使用時のコスト削減）
