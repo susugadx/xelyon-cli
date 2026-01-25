@@ -82,13 +82,36 @@ func ParseToolCalls(response string) []*ToolCall {
 			continue
 		}
 
-		// 対応する閉じ括弧を探す
+		// 対応する閉じ括弧を探す（JSON文字列内の括弧は無視）
 		depth := 0
 		end := -1
+		inString := false
+		escaped := false
 		for i := start; i < len(response); i++ {
-			if response[i] == '{' {
+			ch := response[i]
+
+			if escaped {
+				escaped = false
+				continue
+			}
+
+			if ch == '\\' && inString {
+				escaped = true
+				continue
+			}
+
+			if ch == '"' {
+				inString = !inString
+				continue
+			}
+
+			if inString {
+				continue // 文字列リテラル内の括弧は無視
+			}
+
+			if ch == '{' {
 				depth++
-			} else if response[i] == '}' {
+			} else if ch == '}' {
 				depth--
 				if depth == 0 {
 					end = i + 1

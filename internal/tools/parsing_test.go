@@ -91,6 +91,24 @@ func TestParseToolCalls_SingleTool(t *testing.T) {
 			wantLen:  1,
 			wantTool: "read_file",
 		},
+		{
+			name:     "str_replace with braces in content",
+			input:    `{"id":"call_abc","tool":"str_replace","args":{"path":"main.go","old_str":"func foo() {","new_str":"func bar() {"}}`,
+			wantLen:  1,
+			wantTool: "str_replace",
+		},
+		{
+			name:     "str_replace with complex code",
+			input:    `{"id":"call_xyz","tool":"str_replace","args":{"path":"test.go","old_str":"if err != nil {\n\treturn err\n}","new_str":"if err != nil {\n\treturn fmt.Errorf(\"failed: %w\", err)\n}"}}`,
+			wantLen:  1,
+			wantTool: "str_replace",
+		},
+		{
+			name:     "str_replace with escaped quotes",
+			input:    `{"id":"call_123","tool":"str_replace","args":{"path":"main.go","old_str":"fmt.Println(\"hello\")","new_str":"fmt.Println(\"world\")"}}`,
+			wantLen:  1,
+			wantTool: "str_replace",
+		},
 	}
 
 	for _, tt := range tests {
