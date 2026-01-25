@@ -16,7 +16,7 @@ type PlanStep struct {
 	Result        string   `json:"result"`     // 実行結果
 	ToolsExecuted int      `json:"-"`          // 実際に実行されたツール数
 
-	// 将来の依存関係解析用（現時点では未使用）
+	// ファイルアクセス情報（依存関係解析で使用）
 	TargetFiles []string `json:"-"` // 操作対象ファイル（推論結果）
 	ReadFiles   []string `json:"-"` // 読み取りファイル
 	WriteFiles  []string `json:"-"` // 書き込みファイル

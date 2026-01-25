@@ -38,44 +38,6 @@ func ParsePlan(jsonStr string) (*Plan, error) {
 	return &plan, nil
 }
 
-// ParsePlanWithDependencyAnalysis はPlanを解析し、依存関係を自動推論
-// lspClient が nil の場合もファイルベースの依存関係推論は動作する
-func ParsePlanWithDependencyAnalysis(jsonStr string, lspClient interface{}) (*Plan, []string, error) {
-	plan, err := ParsePlan(jsonStr)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// 依存関係解析
-	var warnings []string
-	plan, warnings = AnalyzePlanDependencies(plan, lspClient)
-
-	return plan, warnings, nil
-}
-
-// AnalyzePlanDependencies はプランの依存関係を解析・補完
-func AnalyzePlanDependencies(plan *Plan, lspClient interface{}) (*Plan, []string) {
-	if plan == nil || len(plan.Steps) == 0 {
-		return plan, nil
-	}
-
-	// LSPクライアントの型アサーション
-	var typedLSPClient interface {
-		// 必要なメソッドがあればここに定義
-	}
-	if lspClient != nil {
-		typedLSPClient = lspClient
-	}
-	_ = typedLSPClient // 将来の LSP 強化用
-
-	// DependencyAnalyzer を使用（LSPクライアントはnilでも動作）
-	analyzer := NewDependencyAnalyzer(nil) // LSP統合は後で実装
-	result := analyzer.Analyze(plan.Steps)
-
-	plan.Steps = result.Steps
-	return plan, result.Warnings
-}
-
 // ExtractPlanJSON はレスポンスからPlan JSONを抽出
 // 見つからない場合は空文字列を返す
 // NOTE: ツール呼び出し JSON ({"tool": ...}) は plan ではないので除外する

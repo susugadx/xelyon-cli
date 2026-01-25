@@ -252,54 +252,6 @@ func TestFormatPlan(t *testing.T) {
 	}
 }
 
-func TestParsePlanWithDependencyAnalysis(t *testing.T) {
-	jsonStr := `{
-		"summary": "Test",
-		"steps": [
-			{"id": 1, "description": "Write config.go", "tools": ["write_file"]},
-			{"id": 2, "description": "Read config.go", "tools": ["read_file"]}
-		]
-	}`
-
-	plan, warnings, err := ParsePlanWithDependencyAnalysis(jsonStr, nil)
-	if err != nil {
-		t.Fatalf("ParsePlanWithDependencyAnalysis failed: %v", err)
-	}
-
-	if plan == nil {
-		t.Fatal("Plan is nil")
-	}
-	// Warnings may or may not be present depending on dependency analysis
-	_ = warnings
-}
-
-func TestAnalyzePlanDependencies_NilPlan(t *testing.T) {
-	plan, warnings := AnalyzePlanDependencies(nil, nil)
-
-	if plan != nil {
-		t.Error("Expected nil plan for nil input")
-	}
-	if warnings != nil {
-		t.Error("Expected nil warnings for nil input")
-	}
-}
-
-func TestAnalyzePlanDependencies_EmptySteps(t *testing.T) {
-	plan := &Plan{
-		Summary: "Empty",
-		Steps:   []PlanStep{},
-	}
-
-	result, warnings := AnalyzePlanDependencies(plan, nil)
-
-	if result != plan {
-		t.Error("Should return same plan for empty steps")
-	}
-	if len(warnings) != 0 {
-		t.Errorf("Expected no warnings for empty plan, got: %v", warnings)
-	}
-}
-
 func containsSubstring(s, substr string) bool {
 	for i := 0; i <= len(s)-len(substr); i++ {
 		if s[i:i+len(substr)] == substr {
