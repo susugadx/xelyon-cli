@@ -375,15 +375,24 @@ func handleTokensCommand(agent *Agent) bool {
 	return true
 }
 
+// isCodexModel は Codex モデルかどうかを判定
+// Codex モデルは reasoning が必須（"none" 非サポート）
+func isCodexModel(model string) bool {
+	return strings.Contains(strings.ToLower(model), "codex")
+}
+
 // handleThinkCommand は Extended Thinking モードの切り替え
 func handleThinkCommand(agent *Agent, args []string) bool {
 	cfg := config.GetGlobalConfig()
+	isCodex := agent != nil && isCodexModel(agent.CurrentModel)
 
 	if len(args) == 0 {
 		// 現在の状態を表示
 		status := "OFF"
 		if cfg.Thinking.Enabled {
 			status = fmt.Sprintf("ON (level: %s)", cfg.Thinking.Level)
+		} else if isCodex {
+			status = "low (Codex minimum)"
 		}
 		fmt.Printf("🧠 Thinking Mode: %s\n", status)
 		return true
@@ -394,8 +403,16 @@ func handleThinkCommand(agent *Agent, args []string) bool {
 		cfg.Thinking.Enabled = true
 		green.Printf("🧠 Thinking Mode: ON (level: %s)\n", cfg.Thinking.Level)
 	case "off":
-		cfg.Thinking.Enabled = false
-		green.Println("🧠 Thinking Mode: OFF")
+		if isCodex {
+			// Codexモデルは reasoning 必須のため "low" にフォールバック
+			cfg.Thinking.Enabled = false
+			cfg.Thinking.Level = "low"
+			yellow.Println("⚠️  Codexモデルは reasoning 必須のため low に設定しました")
+			green.Println("🧠 Thinking Mode: low (Codex minimum)")
+		} else {
+			cfg.Thinking.Enabled = false
+			green.Println("🧠 Thinking Mode: OFF")
+		}
 	case "low", "medium", "high", "xhigh":
 		cfg.Thinking.Enabled = true
 		cfg.Thinking.Level = args[0]

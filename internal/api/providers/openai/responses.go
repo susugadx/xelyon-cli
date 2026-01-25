@@ -16,6 +16,12 @@ import (
 
 const defaultOpenAIResponsesURL = "https://api.openai.com/v1/responses"
 
+// isCodexModel は Codex モデルかどうかを判定
+// Codex モデルは reasoning が必須（"none" 非サポート）
+func isCodexModel(model string) bool {
+	return strings.Contains(strings.ToLower(model), "codex")
+}
+
 // ReasoningConfig は OpenAI Extended Thinking の設定
 type ReasoningConfig struct {
 	Effort string `json:"effort"` // none, low, medium, high（omitempty削除で明示的に送信）
@@ -108,17 +114,18 @@ func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, h
 		reqBody.Input = input
 	}
 
-	// Extended Thinking 適用（明示的に設定）
+	// Extended Thinking 適用
 	if cfg.Thinking.Enabled {
 		reqBody.Reasoning = &ReasoningConfig{
 			Effort: LevelToReasoningEffort(cfg.Thinking.Level),
 		}
-	} else {
-		// 明示的に無効化（GPT-5.2でもreasoningが勝手に有効になる問題を回避）
+	} else if isCodexModel(model) {
+		// Codexモデルは reasoning 必須のため "low" にフォールバック
 		reqBody.Reasoning = &ReasoningConfig{
-			Effort: "none",
+			Effort: "low",
 		}
 	}
+	// 非Codexモデルでthinking無効の場合はreasoningフィールドを送信しない（nil）
 
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {
@@ -134,7 +141,7 @@ func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, h
 	req.Header.Set("Authorization", "Bearer "+p.apiKey)
 
 	// スピナー開始
-	spinner := api.StartThinkingSpinner(false, "")
+	spinner := api.StartThinkingSpinner(isCodexModel(model) && cfg.Thinking.Enabled, "")
 
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
@@ -252,17 +259,18 @@ func (p *Provider) chatWithImageResponses(ctx context.Context, systemPrompt stri
 		Stream:       true,
 	}
 
-	// Extended Thinking 適用（明示的に設定）
+	// Extended Thinking 適用
 	if cfg.Thinking.Enabled {
 		reqBody.Reasoning = &ReasoningConfig{
 			Effort: LevelToReasoningEffort(cfg.Thinking.Level),
 		}
-	} else {
-		// 明示的に無効化
+	} else if isCodexModel(model) {
+		// Codexモデルは reasoning 必須のため "low" にフォールバック
 		reqBody.Reasoning = &ReasoningConfig{
-			Effort: "none",
+			Effort: "low",
 		}
 	}
+	// 非Codexモデルでthinking無効の場合はreasoningフィールドを送信しない（nil）
 
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {
@@ -278,7 +286,7 @@ func (p *Provider) chatWithImageResponses(ctx context.Context, systemPrompt stri
 	req.Header.Set("Authorization", "Bearer "+p.apiKey)
 
 	// スピナー開始
-	spinner := api.StartThinkingSpinner(true, "")
+	spinner := api.StartThinkingSpinner(isCodexModel(model) && cfg.Thinking.Enabled, "")
 
 	resp, err := p.httpClient.Do(req)
 	if err != nil {

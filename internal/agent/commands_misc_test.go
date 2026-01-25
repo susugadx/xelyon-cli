@@ -4,6 +4,33 @@ import (
 	"testing"
 )
 
+func TestIsCodexModel(t *testing.T) {
+	tests := []struct {
+		model string
+		want  bool
+	}{
+		{"gpt-5.2-codex", true},
+		{"gpt-5.1-codex", true},
+		{"gpt-5.1-codex-max", true},
+		{"gpt-5-codex", true},
+		{"GPT-5.2-CODEX", true}, // case insensitive
+		{"gpt-5.2-Codex", true}, // mixed case
+		{"gpt-4o", false},
+		{"gpt-5.2", false},
+		{"claude-3-opus", false},
+		{"", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			got := isCodexModel(tt.model)
+			if got != tt.want {
+				t.Errorf("isCodexModel(%q) = %v, want %v", tt.model, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestExtractCodeBlocks(t *testing.T) {
 	tests := []struct {
 		name string

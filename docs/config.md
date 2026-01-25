@@ -602,6 +602,13 @@ thinking:
 
 設定ファイルを変更せずに、セッション中にリアルタイムで切り替えられます。
 
+**Codex モデルの制限:**
+
+OpenAI Codex モデル（`gpt-5.2-codex`, `gpt-5.1-codex` 等）は reasoning が必須のため、`/think off` を実行しても完全に無効化されません：
+
+- `/think off` → `low` レベルにフォールバック（警告メッセージ表示）
+- Codex 以外のモデルでは通常通り無効化されます
+
 ### RepoMap設定 (`repomap`)
 
 RepoMapはプロジェクトのコード構造（シンボル、関数、クラス等）をLLMに提供する機能です。
