@@ -133,7 +133,7 @@ streaming:
 bash:
     # 安全レベル: strict / moderate / permissive
     safety_level: moderate
-    # 追加の安全コマンドリスト
+    # 追加の安全コマンド（例: - "npm run"）
     safe_commands: []
     # パイプを許可
     allow_pipe: true

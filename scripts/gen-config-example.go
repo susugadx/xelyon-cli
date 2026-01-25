@@ -118,7 +118,7 @@ var sections = map[string]sectionInfo{
 		title: "bashツール設定",
 		fields: map[string]string{
 			"safety_level":      "安全レベル: strict / moderate / permissive",
-			"safe_commands":     "追加の安全コマンドリスト",
+			"safe_commands":     "追加の安全コマンド（例: - \"npm run\"）",
 			"allow_pipe":        "パイプを許可",
 			"allow_redirect":    "リダイレクトを許可",
 			"allow_inline_edit": "インライン編集を許可（sed -i 等）",
