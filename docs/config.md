@@ -644,15 +644,15 @@ tool_confirm:
 
 ```yaml
 prompt_cache:
-  enabled: false        # キャッシュを有効化
+  enabled: true         # キャッシュを有効化
   max_entries: 100      # 最大エントリ数
   ttl_seconds: 300      # TTL（秒）
 ```
 
 #### `enabled`
 - **型**: boolean
-- **デフォルト**: `false`
-- **説明**: System PromptやRepo Mapのキャッシュを有効化
+- **デフォルト**: `true`
+- **説明**: System PromptやRepo Mapのキャッシュを有効化（Claude使用時のコスト削減）
 
 #### `max_entries`
 - **型**: integer
