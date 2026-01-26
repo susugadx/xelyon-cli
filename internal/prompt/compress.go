@@ -12,24 +12,30 @@ type Message struct {
 	Content string
 }
 
-// BuildSummaryPrompt generates the prompt for summarizing conversation history.
-// truncateLen specifies the maximum length of each message before truncation.
+// BuildSummaryPrompt はサマリー生成用のプロンプトを構築する。
+// truncateLen は各メッセージの最大長（超過分は省略）。
 func BuildSummaryPrompt(messages []Message, truncateLen int) string {
 	var sb strings.Builder
 
-	sb.WriteString("以下の会話履歴を簡潔なサマリーにまとめてください。\n")
-	sb.WriteString("重要な決定事項、作成/編集したファイル、残タスクを含めてください。\n")
-	sb.WriteString("箇条書きで5-10項目程度にまとめてください。\n\n")
-	sb.WriteString("会話履歴:\n")
-	sb.WriteString("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
+	sb.WriteString("Summarize this conversation history into a concise summary.\n\n")
+	sb.WriteString("Include:\n")
+	sb.WriteString("- Key decisions made\n")
+	sb.WriteString("- Files created/modified\n")
+	sb.WriteString("- Remaining tasks (if any)\n\n")
+	sb.WriteString("Output as bullet points (5-8 items max).\n")
+	sb.WriteString("Respond in the same language as the conversation.\n\n")
+	sb.WriteString("---\n\n")
 
 	for _, msg := range messages {
+		// systemメッセージはスキップ
+		if msg.Role == "system" {
+			continue
+		}
+
 		var role string
 		switch msg.Role {
 		case "assistant":
 			role = "Assistant"
-		case "system":
-			role = "System"
 		default:
 			role = "User"
 		}
@@ -37,14 +43,14 @@ func BuildSummaryPrompt(messages []Message, truncateLen int) string {
 		// 長いメッセージは省略
 		content := msg.Content
 		if len(content) > truncateLen {
-			content = content[:truncateLen] + "... (省略)"
+			content = content[:truncateLen] + "..."
 		}
 
 		sb.WriteString(fmt.Sprintf("[%s]\n%s\n\n", role, content))
 	}
 
-	sb.WriteString("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
-	sb.WriteString("上記の会話を要約してください。日本語で回答してください。")
+	sb.WriteString("---\n\n")
+	sb.WriteString("Now provide the summary.")
 
 	return sb.String()
 }

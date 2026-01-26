@@ -80,8 +80,8 @@ func TestBuildSummaryPrompt(t *testing.T) {
 	}
 
 	// 指示文が含まれているか
-	if !stringContains(result, "要約") && !stringContains(result, "サマリー") {
-		t.Error("BuildSummaryPrompt() should contain instruction keywords")
+	if !stringContains(result, "Summarize") {
+		t.Error("BuildSummaryPrompt() should contain 'Summarize' instruction")
 	}
 }
 
@@ -97,9 +97,9 @@ func TestBuildSummaryPrompt_LongMessage(t *testing.T) {
 
 	result := prompt.BuildSummaryPrompt(messages, config.MessageTruncateLen)
 
-	// 長いメッセージは500文字で省略される
-	if !stringContains(result, "省略") {
-		t.Error("BuildSummaryPrompt() should truncate long messages and show '省略'")
+	// 長いメッセージは省略される（"..."で終わる）
+	if !stringContains(result, "...") {
+		t.Error("BuildSummaryPrompt() should truncate long messages with '...'")
 	}
 }
 

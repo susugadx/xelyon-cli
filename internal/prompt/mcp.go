@@ -112,9 +112,8 @@ func BuildGitHubMCPGuide() string {
 **CRITICAL RULES:**
 1. ALWAYS use MCP tools for GitHub operations - you have direct access
 2. Do NOT say "I can't access GitHub" or "Please use the GitHub web UI"
-3. **INFORMATION-ONLY requests**: When user asks to "get", "show", "list", or "fetch" something, ONLY display the result. Do NOT automatically start implementing/fixing based on the fetched content
-4. **Wait for explicit instruction**: After showing fetched information, wait for user to tell you what to do next
-5. If a tool fails, report the error and suggest alternatives
+3. **INFORMATION-ONLY requests**: When user asks to "get", "show", "list", or "fetch", display the result and wait for explicit instruction. Do NOT automatically start implementing or fixing
+4. If a tool fails, report the error and suggest alternatives
 
 `
 }
