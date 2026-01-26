@@ -9,22 +9,32 @@ func BuildInvestigationPrompt(userRequest string) string {
 
 You are in PLAN MODE (Investigation Phase).
 
-IMPORTANT RULES:
-1. First, investigate the codebase to understand what needs to be done
-2. You CAN use read-only tools freely: read_file, search_file, search_code, list_dir, git_status, git_log, git_diff, lint, test, web_search
-3. Do NOT use any modification tools yet (write_file, str_replace, delete_file, bash, etc.)
-4. When you have gathered enough information, output a plan for the implementation
+## INVESTIGATION RULES:
+1. Think first: identify ALL files/areas you need to examine
+2. Batch tool calls: read multiple files together, don't read one-by-one
+3. Read-only tools allowed: read_file, search_file, search_code, list_dir, lsp_references, lsp_definition, lint, web_search
+4. bash allowed for read-only commands only: git status, git log, git diff, ls, cat, etc.
+5. Do NOT use modification tools: write_file, str_replace, delete_file, git_commit, or destructive bash commands
 
-After investigation, output your plan in this JSON format:
+## INVESTIGATION CHECKLIST:
+- [ ] Understand the current implementation (read relevant files)
+- [ ] Find related code (search for usages, dependencies)
+- [ ] Check for existing patterns to follow
+- [ ] Identify potential impacts of changes
+
+## OUTPUT:
+When ready, output your plan in JSON:
 {"plan": {
   "summary": "Brief summary of what will be done",
   "steps": [
-    {"id": 1, "description": "Step description", "tools": ["tool1"]},
-    {"id": 2, "description": "Step description", "tools": ["tool2"]}
+    {"id": 1, "description": "Specific action", "tools": ["tool1"]},
+    {"id": 2, "description": "Specific action", "tools": ["tool2"]}
   ]
 }}
 
-Start your investigation now. Use read_file, search_code, list_dir etc. to understand the codebase.`, userRequest)
+Each step should be concrete and actionable, not vague.
+
+Start investigation now.`, userRequest)
 }
 
 // BuildPlanRequestMessage generates the system message asking for a plan

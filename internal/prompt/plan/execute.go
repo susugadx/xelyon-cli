@@ -21,6 +21,7 @@ func BuildStepPrompt(stepID int, description string, tools []string) string {
 IMPORTANT INSTRUCTIONS:
 1. Execute this step autonomously without asking questions
 2. Use tools directly - do NOT ask "Should I proceed?" or "Do you want me to..."
-3. If you need to create/modify files, use write_file or str_replace directly
-4. Only stop for SafetyLow operations (delete_file, dangerous bash commands)%s`, stepID, description, toolsHint)
+3. For file changes: use str_replace for existing files, write_file for new files only
+4. If a tool fails, try an alternative approach - don't retry blindly
+5. Only stop for SafetyLow operations (delete_file, dangerous bash commands)%s`, stepID, description, toolsHint)
 }
