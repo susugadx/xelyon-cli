@@ -33,50 +33,27 @@ func IsInteractiveModeEnabled() bool {
 	}
 }
 
-// ConfirmInteractive は拡張確認プロンプト (y/n/c)
-// c (comment) を選択すると複数行コメントを入力できる
+// ConfirmInteractive は拡張確認プロンプト (矢印キー選択UI)
+// Yes/No/Comment を矢印キーで選択、Enterで確定
+// y/n/c のショートカットキーも引き続きサポート
 // 外部パッケージからも使用可能なようにエクスポート
 // NOTE: テスト時は環境変数 XELYON_INTERACTIVE_CONFIRM=0 で無効化される
 var ConfirmInteractive = func(message string) ConfirmResult {
-	reader := bufio.NewReader(os.Stdin)
-
-	// ボックス形式の確認UI
-	ui.ConfirmPromptBox(message)
-
-	for {
-		Yellow.Print("Choice: ")
-
-		response, err := reader.ReadString('\n')
-		if err != nil {
-			// EOF時はnoを返して終了
-			return ConfirmResult{Action: "no"}
-		}
-		response = strings.ToLower(strings.TrimSpace(response))
-
-		// 空入力は無視してリトライ（誤Enter防止）
-		if response == "" {
-			continue
-		}
-
-		// y/yes/はい → 実行
-		if response == "y" || response == "yes" || response == "ｙ" || response == "はい" {
-			return ConfirmResult{Action: "yes"}
-		}
-
-		// n/no/いいえ → キャンセル
-		if response == "n" || response == "no" || response == "ｎ" || response == "いいえ" {
-			return ConfirmResult{Action: "no"}
-		}
-
-		// c/comment → コメント入力モード
-		if response == "c" || response == "comment" || response == "コメント" {
-			comment, image := ReadMultiLineComment(reader)
-			return ConfirmResult{Action: "comment", Comment: comment, Image: image}
-		}
-
-		// その他 → リトライ
-		Yellow.Println("Invalid input. Please enter y/n/c.")
+	// 矢印キー選択UIを使用
+	result, err := ui.ConfirmSelector(message)
+	if err != nil {
+		// キャンセルまたはエラー時はnoを返す
+		return ConfirmResult{Action: "no"}
 	}
+
+	// comment選択時はコメント入力モードへ
+	if result == "comment" {
+		reader := bufio.NewReader(os.Stdin)
+		comment, image := ReadMultiLineComment(reader)
+		return ConfirmResult{Action: "comment", Comment: comment, Image: image}
+	}
+
+	return ConfirmResult{Action: result}
 }
 
 // ReadMultiLineComment は複数行コメントを読み取る
