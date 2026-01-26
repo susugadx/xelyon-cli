@@ -372,6 +372,59 @@ func TrimBracketedPasteMarkers(input string) string {
 	return stripAllBracketedPasteMarkers(input)
 }
 
+// globalReader is the shared MultilineReader for the application
+var globalReader *MultilineReader
+
+// SetGlobalReader sets the global MultilineReader for shared access
+func SetGlobalReader(r *MultilineReader) {
+	globalReader = r
+}
+
+// GetGlobalReader returns the global MultilineReader
+func GetGlobalReader() *MultilineReader {
+	return globalReader
+}
+
+// ReadSimpleLine reads a line without raw mode (for simple prompts like selector)
+// This temporarily disables bracketed paste mode to avoid goroutine conflicts
+func (m *MultilineReader) ReadSimpleLine() (string, error) {
+	// If raw mode goroutine is running, read from channel
+	if m.rawModeInit && m.byteChan != nil {
+		return m.readLineFromChannel()
+	}
+
+	// Otherwise use standard bufio reading
+	line, err := m.reader.ReadString('\n')
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimRight(line, "\n\r"), nil
+}
+
+// readLineFromChannel reads a line from the byte channel (when goroutine is active)
+func (m *MultilineReader) readLineFromChannel() (string, error) {
+	var buf []byte
+	for {
+		select {
+		case b := <-m.byteChan:
+			if b == '\n' {
+				return string(buf), nil
+			}
+			if b == '\r' {
+				continue
+			}
+			// Echo the character
+			fmt.Print(string(b))
+			buf = append(buf, b)
+		case err := <-m.errChan:
+			if len(buf) > 0 {
+				return string(buf), nil
+			}
+			return "", err
+		}
+	}
+}
+
 // FlushInput discards any buffered input data
 // This should be called after AI output completes to ignore keypresses during output
 func (m *MultilineReader) FlushInput() {

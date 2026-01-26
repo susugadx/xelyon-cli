@@ -33,6 +33,7 @@ func RunInteractive(model string, provider api.Provider, autoApprove bool) {
 		mlReader.EnableBracketedPaste()
 		defer mlReader.DisableBracketedPaste()
 	}
+	ui.SetGlobalReader(mlReader) // セレクターで共有するため
 
 	// 監査ログ初期化（環境変数で制御: XELYON_AUDIT_LOG=1 で有効化）
 	auditEnabled := os.Getenv("XELYON_AUDIT_LOG") == "1"
@@ -96,6 +97,7 @@ func RunInteractiveWithResume(model string, provider api.Provider, autoApprove b
 		mlReader.EnableBracketedPaste()
 		defer mlReader.DisableBracketedPaste()
 	}
+	ui.SetGlobalReader(mlReader) // セレクターで共有するため
 
 	storage, err := history.NewStorage()
 	if err != nil {

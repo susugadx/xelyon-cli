@@ -183,6 +183,7 @@ func RunOnceWithImage(query string, model string, provider api.Provider, imagePa
 	mlReader.EnableBracketedPaste()
 	defer mlReader.DisableBracketedPaste()
 	agent.mlReader = mlReader // ペーストモードで共有するため
+	ui.SetGlobalReader(mlReader) // セレクターで共有するため
 
 	for {
 		mlReader.FlushInput()

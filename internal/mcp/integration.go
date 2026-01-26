@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
 // RegisterToToolRegistry はMCPツールをTool Registryに登録
@@ -94,6 +95,35 @@ func (w *MCPToolWrapper) Run(args map[string]string) (string, *tools.FileChange,
 	// 引数バリデーション（簡易版）
 	if err := w.validateArgs(args); err != nil {
 		return fmt.Sprintf("Validation Error: %v", err), nil, err
+	}
+
+	// MCP ツールは常に確認を要求（外部プロセス実行のため）
+	toolName := w.Name()
+	message := fmt.Sprintf("Execute MCP tool: %s (server: %s)", w.toolName, w.serverName)
+
+	// 引数がある場合は表示
+	if len(args) > 0 {
+		argsDisplay := make([]string, 0, len(args))
+		for k, v := range args {
+			// 値が長い場合は省略
+			displayVal := v
+			if len(displayVal) > 50 {
+				displayVal = displayVal[:47] + "..."
+			}
+			argsDisplay = append(argsDisplay, fmt.Sprintf("%s=%q", k, displayVal))
+		}
+		message = fmt.Sprintf("Execute MCP tool: %s\n  Server: %s\n  Args: %s",
+			w.toolName, w.serverName, strings.Join(argsDisplay, ", "))
+	}
+
+	decision := common.ConfirmWithAutoApproveDecision(toolName, message)
+	switch decision.Action {
+	case common.ConfirmNo:
+		return "User rejected MCP tool execution", nil, nil
+	case common.ConfirmComment:
+		// コメントがある場合はフィードバックとして返す
+		feedback := "User provided feedback: " + decision.Comment
+		return feedback, nil, nil
 	}
 
 	// スキーマに基づいて型変換（string → number/integer/boolean）
