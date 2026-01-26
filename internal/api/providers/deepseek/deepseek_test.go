@@ -10,6 +10,13 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/api/providers/openai"
+
+	// ツール登録のための blank import
+	_ "github.com/susugadx/xelyon-cli/internal/tools/dev"
+	_ "github.com/susugadx/xelyon-cli/internal/tools/file"
+	_ "github.com/susugadx/xelyon-cli/internal/tools/git"
+	_ "github.com/susugadx/xelyon-cli/internal/tools/lsp"
+	_ "github.com/susugadx/xelyon-cli/internal/tools/search"
 )
 
 func TestNew(t *testing.T) {

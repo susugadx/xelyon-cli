@@ -4,6 +4,14 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	toolsreg "github.com/susugadx/xelyon-cli/internal/tools"
+
+	// ツール登録のための blank import
+	_ "github.com/susugadx/xelyon-cli/internal/tools/dev"
+	_ "github.com/susugadx/xelyon-cli/internal/tools/file"
+	_ "github.com/susugadx/xelyon-cli/internal/tools/git"
+	_ "github.com/susugadx/xelyon-cli/internal/tools/lsp"
+	_ "github.com/susugadx/xelyon-cli/internal/tools/search"
 )
 
 // TestConvertHistoryToResponsesInput は History を Responses API 形式に変換するテスト
@@ -223,8 +231,8 @@ func TestGetResponsesToolDefinitions(t *testing.T) {
 	// MCPツールなし
 	tools := GetResponsesToolDefinitions(nil)
 
-	// ツール数の確認（toolDefinitions に定義されている数）
-	expectedCount := len(toolDefinitions)
+	// ツール数の確認（Registry に登録されている数）
+	expectedCount := len(toolsreg.DefaultRegistry.GetToolDefinitions())
 	if len(tools) != expectedCount {
 		t.Errorf("GetResponsesToolDefinitions() returned %d tools, want %d", len(tools), expectedCount)
 	}
@@ -274,7 +282,7 @@ func TestGetResponsesToolDefinitions_WithMCPTools(t *testing.T) {
 
 	tools := GetResponsesToolDefinitions(mcpTools)
 
-	expectedCount := len(toolDefinitions) + 1
+	expectedCount := len(toolsreg.DefaultRegistry.GetToolDefinitions()) + 1
 	if len(tools) != expectedCount {
 		t.Errorf("GetResponsesToolDefinitions() with MCP returned %d tools, want %d", len(tools), expectedCount)
 	}
