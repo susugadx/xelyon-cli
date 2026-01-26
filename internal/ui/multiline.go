@@ -86,7 +86,7 @@ func (m *MultilineReader) EnableBracketedPaste() {
 
 	if m.fd >= 0 && term.IsTerminal(m.fd) {
 		// Use WriteString for immediate, unbuffered output
-		os.Stdout.WriteString(bracketedPasteEnable)
+		_, _ = os.Stdout.WriteString(bracketedPasteEnable)
 		m.bracketedPasteEnabled = true
 		if debug {
 			fmt.Fprintf(os.Stderr, "[DEBUG] Sent: \\x1b[?2004h (bracketed paste enable)\n")
@@ -100,7 +100,7 @@ func (m *MultilineReader) EnableBracketedPaste() {
 // This sends the escape sequence to the terminal to disable the mode
 func (m *MultilineReader) DisableBracketedPaste() {
 	if m.bracketedPasteEnabled {
-		os.Stdout.WriteString(bracketedPasteDisable)
+		_, _ = os.Stdout.WriteString(bracketedPasteDisable)
 		m.bracketedPasteEnabled = false
 	}
 }
@@ -170,10 +170,10 @@ func (m *MultilineReader) readWithBracketedPaste() (string, error) {
 		}
 		return m.readLine()
 	}
-	defer term.Restore(m.fd, oldState)
+	defer func() { _ = term.Restore(m.fd, oldState) }()
 
 	if debug {
-		os.Stderr.WriteString("[DEBUG] Raw mode OK\r\n")
+		_, _ = os.Stderr.WriteString("[DEBUG] Raw mode OK\r\n")
 	}
 
 	var buf bytes.Buffer
@@ -198,7 +198,7 @@ func (m *MultilineReader) readWithBracketedPaste() (string, error) {
 		case b := <-m.byteChan:
 			// Ctrl+C - always handle first (even in paste mode)
 			if b == 0x03 {
-				term.Restore(m.fd, oldState)
+				_ = term.Restore(m.fd, oldState)
 				fmt.Print("^C\r\n")
 				return "", ErrInterrupted
 			}
@@ -220,7 +220,7 @@ func (m *MultilineReader) readWithBracketedPaste() (string, error) {
 					}
 					// Check for Ctrl+C even inside escape sequence detection
 					if nb == 0x03 {
-						term.Restore(m.fd, oldState)
+						_ = term.Restore(m.fd, oldState)
 						fmt.Print("^C\r\n")
 						return "", ErrInterrupted
 					}
@@ -234,7 +234,7 @@ func (m *MultilineReader) readWithBracketedPaste() (string, error) {
 							inPaste = true
 							pasteContent.Reset()
 							if debug {
-								os.Stderr.WriteString("[DEBUG] Paste START\r\n")
+								_, _ = os.Stderr.WriteString("[DEBUG] Paste START\r\n")
 							}
 						}
 						// If already in paste mode, ignore duplicate start marker
@@ -297,7 +297,7 @@ func (m *MultilineReader) readWithBracketedPaste() (string, error) {
 				content := buf.String()
 				content = stripAllBracketedPasteMarkers(content)
 				if content == "```" {
-					term.Restore(m.fd, oldState)
+					_ = term.Restore(m.fd, oldState)
 					return m.readMultilineWithMarker()
 				}
 				return content, nil
