@@ -12,6 +12,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/api/providers/openai"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -29,11 +30,19 @@ var yellow = color.New(color.FgYellow)
 
 const defaultGroqURL = "https://api.groq.com/openai/v1/chat/completions"
 
+// toolCallAccumulator はストリーミング中のtool_callを蓄積する
+type toolCallAccumulator struct {
+	ID        string
+	Name      string
+	Arguments strings.Builder
+}
+
 // Provider はGroq APIのプロバイダー実装（OpenAI互換）
 type Provider struct {
 	apiKey     string
 	apiURL     string
 	httpClient *http.Client
+	mcpTools   []api.OpenAIToolFunction // MCP ツール定義（Function Calling用）
 }
 
 // New は新しいProviderを作成
@@ -86,6 +95,12 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		Stream:   true,
 	}
 
+	// Function Calling: ツール定義を追加（環境変数で無効化可能）
+	if os.Getenv("GROQ_FUNCTION_CALLING") != "0" {
+		reqBody.Tools = openai.GetCombinedOpenAITools(p.mcpTools)
+		reqBody.ToolChoice = "auto"
+	}
+
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {
 		return "", err
@@ -128,6 +143,8 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 // handleStreamingResponse はストリーミングレスポンスを処理
 func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
 	var fullResponse strings.Builder
+	var toolCallsOutput strings.Builder
+	toolCalls := make(map[int]*toolCallAccumulator)
 	scanner := bufio.NewScanner(resp.Body)
 	firstChunk := true
 
@@ -155,7 +172,49 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 			}
 
 			if len(streamResp.Choices) > 0 {
-				content := streamResp.Choices[0].Delta.Content
+				choice := streamResp.Choices[0]
+
+				// Function Calling: tool_calls を蓄積
+				for _, tc := range choice.Delta.ToolCalls {
+					acc, exists := toolCalls[tc.Index]
+					if !exists {
+						acc = &toolCallAccumulator{}
+						toolCalls[tc.Index] = acc
+					}
+					if tc.ID != "" {
+						acc.ID = tc.ID
+					}
+					if tc.Function.Name != "" {
+						acc.Name = tc.Function.Name
+					}
+					if tc.Function.Arguments != "" {
+						acc.Arguments.WriteString(tc.Function.Arguments)
+					}
+				}
+
+				// Function Calling: finish_reason == "tool_calls" で完了
+				if choice.FinishReason == "tool_calls" {
+					// tool_calls を内部JSON形式に変換
+					for i := 0; i < len(toolCalls); i++ {
+						acc := toolCalls[i]
+						if acc == nil {
+							continue
+						}
+						tc := &api.OpenAIToolCall{
+							ID:   acc.ID,
+							Type: "function",
+							Function: api.OpenAIToolCallFunction{
+								Name:      acc.Name,
+								Arguments: acc.Arguments.String(),
+							},
+						}
+						if toolJSON, err := openai.ConvertToolCallToToolJSON(tc); err == nil {
+							toolCallsOutput.WriteString(toolJSON)
+						}
+					}
+				}
+
+				content := choice.Delta.Content
 
 				// 最初のコンテンツでスピナー停止
 				if firstChunk && content != "" {
@@ -172,6 +231,16 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 	// スキャナーのI/Oエラーチェック
 	if err := scanner.Err(); err != nil {
 		return "", fmt.Errorf("stream reading error: %w", err)
+	}
+
+	// tool_calls がある場合はそれを返す
+	if toolCallsOutput.Len() > 0 {
+		spinner.Stop()
+		if fullResponse.Len() > 0 {
+			fmt.Println()
+			return fullResponse.String() + toolCallsOutput.String(), nil
+		}
+		return toolCallsOutput.String(), nil
 	}
 
 	fmt.Println()
@@ -196,4 +265,9 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 // APIURL はテスト用にAPIURLを公開
 func (p *Provider) APIURL() string {
 	return p.apiURL
+}
+
+// SetMCPTools は MCP ツール定義を設定する（Function Calling用）
+func (p *Provider) SetMCPTools(tools []api.OpenAIToolFunction) {
+	p.mcpTools = tools
 }

@@ -21,7 +21,8 @@ type Delta struct {
 
 // StreamChoice はストリームの選択肢
 type StreamChoice struct {
-	Delta Delta `json:"delta"`
+	Delta        Delta  `json:"delta"`
+	FinishReason string `json:"finish_reason,omitempty"` // "stop", "tool_calls" など
 }
 
 // StreamResponse はストリームレスポンス

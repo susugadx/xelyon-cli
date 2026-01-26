@@ -230,3 +230,222 @@ func TestProvider_ChatWithImage(t *testing.T) {
 		t.Errorf("ChatWithImage() = %q, want 'Image ignored'", result)
 	}
 }
+
+// Function Calling Tests
+
+func TestProvider_ChatWithTools_ToolCalls(t *testing.T) {
+	// Disable function calling env var for this test setup
+	originalEnv := os.Getenv("GROQ_FUNCTION_CALLING")
+	defer os.Setenv("GROQ_FUNCTION_CALLING", originalEnv)
+	os.Unsetenv("GROQ_FUNCTION_CALLING")
+
+	chunks := []string{
+		`{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_123","type":"function","function":{"name":"read_file","arguments":""}}]}}]}`,
+		`{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"pa"}}]}}]}`,
+		`{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"th\":\"/te"}}]}}]}`,
+		`{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"st.txt\"}"}}]}}]}`,
+		`{"choices":[{"delta":{},"finish_reason":"tool_calls"}]}`,
+	}
+	server := mockAPIServer(t, streamingHandler(chunks))
+
+	originalURL := os.Getenv("GROQ_API_URL")
+	defer os.Setenv("GROQ_API_URL", originalURL)
+	os.Setenv("GROQ_API_URL", server.URL)
+
+	p := New("test-key")
+	history := []api.Message{{Role: "user", Content: "Read test.txt"}}
+
+	result, err := p.ChatWithTools(context.Background(), "System", history, "llama3-70b-8192")
+	if err != nil {
+		t.Fatalf("ChatWithTools() error = %v", err)
+	}
+
+	// Should contain tool JSON
+	if result == "" {
+		t.Error("ChatWithTools() returned empty result, expected tool JSON")
+	}
+	// Check for expected tool call format
+	if !contains(result, "read_file") {
+		t.Errorf("ChatWithTools() = %q, expected to contain 'read_file'", result)
+	}
+	if !contains(result, "call_123") {
+		t.Errorf("ChatWithTools() = %q, expected to contain 'call_123'", result)
+	}
+}
+
+func TestProvider_ChatWithTools_MultipleToolCalls(t *testing.T) {
+	originalEnv := os.Getenv("GROQ_FUNCTION_CALLING")
+	defer os.Setenv("GROQ_FUNCTION_CALLING", originalEnv)
+	os.Unsetenv("GROQ_FUNCTION_CALLING")
+
+	chunks := []string{
+		`{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"read_file","arguments":""}}]}}]}`,
+		`{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"path\":\"/a.txt\"}"}}]}}]}`,
+		`{"choices":[{"delta":{"tool_calls":[{"index":1,"id":"call_2","type":"function","function":{"name":"read_file","arguments":""}}]}}]}`,
+		`{"choices":[{"delta":{"tool_calls":[{"index":1,"function":{"arguments":"{\"path\":\"/b.txt\"}"}}]}}]}`,
+		`{"choices":[{"delta":{},"finish_reason":"tool_calls"}]}`,
+	}
+	server := mockAPIServer(t, streamingHandler(chunks))
+
+	originalURL := os.Getenv("GROQ_API_URL")
+	defer os.Setenv("GROQ_API_URL", originalURL)
+	os.Setenv("GROQ_API_URL", server.URL)
+
+	p := New("test-key")
+	history := []api.Message{{Role: "user", Content: "Read both files"}}
+
+	result, err := p.ChatWithTools(context.Background(), "System", history, "llama3-70b-8192")
+	if err != nil {
+		t.Fatalf("ChatWithTools() error = %v", err)
+	}
+
+	// Should contain both tool calls
+	if !contains(result, "call_1") {
+		t.Errorf("ChatWithTools() = %q, expected to contain 'call_1'", result)
+	}
+	if !contains(result, "call_2") {
+		t.Errorf("ChatWithTools() = %q, expected to contain 'call_2'", result)
+	}
+}
+
+func TestProvider_ChatWithTools_TextWithToolCalls(t *testing.T) {
+	originalEnv := os.Getenv("GROQ_FUNCTION_CALLING")
+	defer os.Setenv("GROQ_FUNCTION_CALLING", originalEnv)
+	os.Unsetenv("GROQ_FUNCTION_CALLING")
+
+	chunks := []string{
+		`{"choices":[{"delta":{"content":"Let me read that file"}}]}`,
+		`{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_abc","type":"function","function":{"name":"read_file","arguments":"{\"path\":\"/test.txt\"}"}}]}}]}`,
+		`{"choices":[{"delta":{},"finish_reason":"tool_calls"}]}`,
+	}
+	server := mockAPIServer(t, streamingHandler(chunks))
+
+	originalURL := os.Getenv("GROQ_API_URL")
+	defer os.Setenv("GROQ_API_URL", originalURL)
+	os.Setenv("GROQ_API_URL", server.URL)
+
+	p := New("test-key")
+	history := []api.Message{{Role: "user", Content: "Read test.txt"}}
+
+	result, err := p.ChatWithTools(context.Background(), "System", history, "llama3-70b-8192")
+	if err != nil {
+		t.Fatalf("ChatWithTools() error = %v", err)
+	}
+
+	// Should contain both text and tool call
+	if !contains(result, "Let me read that file") {
+		t.Errorf("ChatWithTools() = %q, expected to contain text", result)
+	}
+	if !contains(result, "read_file") {
+		t.Errorf("ChatWithTools() = %q, expected to contain 'read_file'", result)
+	}
+}
+
+func TestSetMCPTools(t *testing.T) {
+	p := New("test-key")
+
+	tools := []api.OpenAIToolFunction{
+		{Name: "custom_tool", Description: "A custom tool"},
+	}
+	p.SetMCPTools(tools)
+
+	if len(p.mcpTools) != 1 {
+		t.Errorf("mcpTools length = %d, want 1", len(p.mcpTools))
+	}
+	if p.mcpTools[0].Name != "custom_tool" {
+		t.Errorf("mcpTools[0].Name = %q, want 'custom_tool'", p.mcpTools[0].Name)
+	}
+}
+
+func TestProvider_ChatWithTools_FunctionCallingDisabled(t *testing.T) {
+	originalEnv := os.Getenv("GROQ_FUNCTION_CALLING")
+	defer os.Setenv("GROQ_FUNCTION_CALLING", originalEnv)
+	os.Setenv("GROQ_FUNCTION_CALLING", "0")
+
+	var requestBody api.ChatRequest
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+			t.Fatalf("Failed to decode request: %v", err)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		resp := api.ChatResponse{
+			Choices: []api.Choice{
+				{Message: api.Message{Content: "No tools"}},
+			},
+		}
+		_ = json.NewEncoder(w).Encode(resp)
+	})
+
+	originalURL := os.Getenv("GROQ_API_URL")
+	defer os.Setenv("GROQ_API_URL", originalURL)
+	os.Setenv("GROQ_API_URL", server.URL)
+
+	p := New("test-key")
+	history := []api.Message{{Role: "user", Content: "Hello"}}
+
+	_, err := p.ChatWithTools(context.Background(), "System", history, "llama3-70b-8192")
+	if err != nil {
+		t.Fatalf("ChatWithTools() error = %v", err)
+	}
+
+	// When GROQ_FUNCTION_CALLING=0, Tools should not be included
+	if len(requestBody.Tools) > 0 {
+		t.Errorf("Tools should be empty when GROQ_FUNCTION_CALLING=0, got %d tools", len(requestBody.Tools))
+	}
+}
+
+func TestProvider_ChatWithTools_FunctionCallingEnabled(t *testing.T) {
+	originalEnv := os.Getenv("GROQ_FUNCTION_CALLING")
+	defer os.Setenv("GROQ_FUNCTION_CALLING", originalEnv)
+	os.Unsetenv("GROQ_FUNCTION_CALLING")
+
+	var requestBody api.ChatRequest
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+			t.Fatalf("Failed to decode request: %v", err)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		resp := api.ChatResponse{
+			Choices: []api.Choice{
+				{Message: api.Message{Content: "With tools"}},
+			},
+		}
+		_ = json.NewEncoder(w).Encode(resp)
+	})
+
+	originalURL := os.Getenv("GROQ_API_URL")
+	defer os.Setenv("GROQ_API_URL", originalURL)
+	os.Setenv("GROQ_API_URL", server.URL)
+
+	p := New("test-key")
+	history := []api.Message{{Role: "user", Content: "Hello"}}
+
+	_, err := p.ChatWithTools(context.Background(), "System", history, "llama3-70b-8192")
+	if err != nil {
+		t.Fatalf("ChatWithTools() error = %v", err)
+	}
+
+	// When GROQ_FUNCTION_CALLING is not "0", Tools should be included
+	if len(requestBody.Tools) == 0 {
+		t.Error("Tools should not be empty when GROQ_FUNCTION_CALLING is not disabled")
+	}
+	if requestBody.ToolChoice != "auto" {
+		t.Errorf("ToolChoice = %q, want 'auto'", requestBody.ToolChoice)
+	}
+}
+
+// Helper function for string contains
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
+}
+
+func containsHelper(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}

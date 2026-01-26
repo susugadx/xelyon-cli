@@ -884,6 +884,47 @@ export XELYON_API_RETRY_MAX_DELAY=60
 export XELYON_DIFF_CONTEXT_LINES=20
 ```
 
+### Function Calling（ツール呼び出し）
+
+各プロバイダーのFunction Calling（ツール呼び出し）機能を無効化できます。
+モデルがFunction Callingに対応していない場合や、テキストベースのツール呼び出しに戻したい場合に使用します。
+
+```bash
+# OpenAI Function Calling 無効化
+export OPENAI_FUNCTION_CALLING=0
+
+# DeepSeek Function Calling 無効化
+export DEEPSEEK_FUNCTION_CALLING=0
+
+# Gemini Function Calling 無効化
+export GEMINI_FUNCTION_CALLING=0
+
+# Groq Function Calling 無効化
+export GROQ_FUNCTION_CALLING=0
+
+# Claude Tool Use 無効化
+export CLAUDE_FUNCTION_CALLING=0
+
+# Ollama Function Calling 無効化
+export OLLAMA_FUNCTION_CALLING=0
+```
+
+| 環境変数 | デフォルト | 説明 |
+|---------|-----------|------|
+| `OPENAI_FUNCTION_CALLING` | `1`（有効） | `0` で無効化 |
+| `DEEPSEEK_FUNCTION_CALLING` | `1`（有効） | `0` で無効化 |
+| `GEMINI_FUNCTION_CALLING` | `1`（有効） | `0` で無効化 |
+| `GROQ_FUNCTION_CALLING` | `1`（有効） | `0` で無効化 |
+| `CLAUDE_FUNCTION_CALLING` | `1`（有効） | `0` で無効化 |
+| `OLLAMA_FUNCTION_CALLING` | `1`（有効） | `0` で無効化 |
+
+**使用例:**
+```bash
+# Ollama で Function Calling 非対応モデルを使用する場合
+export OLLAMA_FUNCTION_CALLING=0
+xelyon --provider ollama --model phi3
+```
+
 ### カスタムAPIエンドポイント
 
 プロキシやセルフホスト環境で使用する場合に設定します。

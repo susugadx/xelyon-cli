@@ -38,6 +38,7 @@ type Provider struct {
 	apiKey     string
 	apiURL     string
 	httpClient *http.Client
+	mcpTools   []api.OpenAIToolFunction // MCP ツール定義（Tool Use用）
 }
 
 // New は新しいProviderを作成
@@ -106,6 +107,7 @@ type Request struct {
 	MaxTokens int             `json:"max_tokens"`
 	Stream    bool            `json:"stream"`
 	Thinking  *ThinkingConfig `json:"thinking,omitempty"`
+	Tools     []ClaudeTool    `json:"tools,omitempty"` // Tool Use用
 }
 
 // buildSystemField builds the request "system" field.
@@ -141,20 +143,43 @@ func LevelToBudgetTokens(level string) int {
 
 // Delta はストリームの差分
 type Delta struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
+	Type        string `json:"type"`
+	Text        string `json:"text,omitempty"`
+	PartialJSON string `json:"partial_json,omitempty"` // tool_use の input (input_json_delta)
+	StopReason  string `json:"stop_reason,omitempty"`  // message_delta 用
+}
+
+// ContentBlock はストリーミングのコンテンツブロック (content_block_start 用)
+type ContentBlock struct {
+	Type  string                 `json:"type"`            // "text" or "tool_use"
+	ID    string                 `json:"id,omitempty"`    // tool_use 用
+	Name  string                 `json:"name,omitempty"`  // tool_use 用
+	Text  string                 `json:"text,omitempty"`  // text 用
+	Input map[string]interface{} `json:"input,omitempty"` // tool_use 用（非ストリーミング）
 }
 
 // StreamEvent はストリームイベント
 type StreamEvent struct {
-	Type  string `json:"type"`
-	Delta Delta  `json:"delta"`
+	Type         string        `json:"type"`
+	Index        int           `json:"index,omitempty"`
+	ContentBlock *ContentBlock `json:"content_block,omitempty"` // content_block_start 用
+	Delta        *Delta        `json:"delta,omitempty"`
+}
+
+// toolUseAccumulator はストリーミング中の tool_use を蓄積する
+type toolUseAccumulator struct {
+	ID    string
+	Name  string
+	Input strings.Builder // JSON文字列を蓄積
 }
 
 // Content はレスポンスのコンテンツ
 type Content struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
+	Type  string                 `json:"type"`            // "text" or "tool_use"
+	Text  string                 `json:"text,omitempty"`  // text 用
+	ID    string                 `json:"id,omitempty"`    // tool_use 用
+	Name  string                 `json:"name,omitempty"`  // tool_use 用
+	Input map[string]interface{} `json:"input,omitempty"` // tool_use 用
 }
 
 // ContentPart はマルチモーダルコンテンツのパート
@@ -186,11 +211,13 @@ type MultimodalRequest struct {
 	MaxTokens int             `json:"max_tokens"`
 	Stream    bool            `json:"stream"`
 	Thinking  *ThinkingConfig `json:"thinking,omitempty"`
+	Tools     []ClaudeTool    `json:"tools,omitempty"` // Tool Use用
 }
 
 // Response は通常レスポンス
 type Response struct {
-	Content []Content `json:"content"`
+	Content    []Content `json:"content"`
+	StopReason string    `json:"stop_reason,omitempty"` // "end_turn", "tool_use" など
 }
 
 // requestResult はexecuteRequestの結果を格納
@@ -281,6 +308,11 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		}
 	}
 
+	// Tool Use: ツール定義を追加（環境変数で無効化可能）
+	if os.Getenv("CLAUDE_FUNCTION_CALLING") != "0" {
+		reqBody.Tools = GetCombinedClaudeTools(p.mcpTools)
+	}
+
 	result, err := p.executeRequest(ctx, reqBody, false)
 	if err != nil {
 		return "", err
@@ -291,6 +323,10 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 
 // handleStreamingResponse はストリーミングレスポンスを処理
 func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
+	// Tool Use の蓄積用
+	toolUses := make(map[int]*toolUseAccumulator)
+	var toolCallsOutput strings.Builder
+
 	// Claude固有のパース処理
 	parser := func(line string) (string, bool, error) {
 		if !strings.HasPrefix(line, "data: ") {
@@ -303,20 +339,69 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 			return "", false, err
 		}
 
-		// message_stop イベントで終了
-		if event.Type == "message_stop" {
+		switch event.Type {
+		case "message_stop":
 			return "", true, nil
-		}
 
-		// content_block_delta イベントのみ処理
-		if event.Type == "content_block_delta" && event.Delta.Type == "text_delta" {
-			return event.Delta.Text, false, nil
+		case "content_block_start":
+			// tool_use ブロックの開始
+			if event.ContentBlock != nil && event.ContentBlock.Type == "tool_use" {
+				toolUses[event.Index] = &toolUseAccumulator{
+					ID:   event.ContentBlock.ID,
+					Name: event.ContentBlock.Name,
+				}
+			}
+			return "", false, nil
+
+		case "content_block_delta":
+			if event.Delta == nil {
+				return "", false, nil
+			}
+			// テキストデルタ
+			if event.Delta.Type == "text_delta" {
+				return event.Delta.Text, false, nil
+			}
+			// Tool Use の input を蓄積
+			if event.Delta.Type == "input_json_delta" {
+				if acc := toolUses[event.Index]; acc != nil {
+					acc.Input.WriteString(event.Delta.PartialJSON)
+				}
+			}
+			return "", false, nil
+
+		case "content_block_stop":
+			// tool_use ブロックの完了 - この時点で変換
+			if acc := toolUses[event.Index]; acc != nil {
+				var input map[string]interface{}
+				if err := json.Unmarshal([]byte(acc.Input.String()), &input); err == nil {
+					if toolJSON, err := ConvertToolUseToToolJSON(acc.ID, acc.Name, input); err == nil {
+						toolCallsOutput.WriteString(toolJSON)
+					}
+				}
+			}
+			return "", false, nil
+
+		case "message_delta":
+			// stop_reason の通知（tool_use の場合は処理済み）
+			return "", false, nil
 		}
 
 		return "", false, nil
 	}
 
-	return api.ParseStreamingResponse(ctx, resp, spinner, parser)
+	content, err := api.ParseStreamingResponse(ctx, resp, spinner, parser)
+	if err != nil {
+		return "", err
+	}
+
+	// Tool Use がある場合はそれを追加して返す
+	if toolCallsOutput.Len() > 0 {
+		if content != "" {
+			return content + toolCallsOutput.String(), nil
+		}
+		return toolCallsOutput.String(), nil
+	}
+	return content, nil
 }
 
 // handleNonStreamingResponse は非ストリーミングレスポンスを処理（フォールバック）
@@ -333,8 +418,33 @@ func (p *Provider) handleNonStreamingResponse(resp *http.Response, spinner *ui.S
 		return "", fmt.Errorf("no response from API")
 	}
 
-	content := result.Content[0].Text
-	fmt.Println(content)
+	// テキストと Tool Use を収集
+	var textContent strings.Builder
+	var toolCallsOutput strings.Builder
+
+	for _, c := range result.Content {
+		switch c.Type {
+		case "text":
+			textContent.WriteString(c.Text)
+		case "tool_use":
+			if toolJSON, err := ConvertToolUseToToolJSON(c.ID, c.Name, c.Input); err == nil {
+				toolCallsOutput.WriteString(toolJSON)
+			}
+		}
+	}
+
+	content := textContent.String()
+	if content != "" {
+		fmt.Println(content)
+	}
+
+	// Tool Use がある場合は追加
+	if toolCallsOutput.Len() > 0 {
+		if content != "" {
+			return content + toolCallsOutput.String(), nil
+		}
+		return toolCallsOutput.String(), nil
+	}
 	return content, nil
 }
 
@@ -393,10 +503,20 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 		}
 	}
 
+	// Tool Use: ツール定義を追加（環境変数で無効化可能）
+	if os.Getenv("CLAUDE_FUNCTION_CALLING") != "0" {
+		reqBody.Tools = GetCombinedClaudeTools(p.mcpTools)
+	}
+
 	result, err := p.executeRequest(ctx, reqBody, true)
 	if err != nil {
 		return "", err
 	}
 
 	return p.processResponse(ctx, result)
+}
+
+// SetMCPTools は MCP ツール定義を設定する（Tool Use用）
+func (p *Provider) SetMCPTools(tools []api.OpenAIToolFunction) {
+	p.mcpTools = tools
 }

@@ -85,7 +85,7 @@ func claudeStreamingHandler(texts []string) http.HandlerFunc {
 		for _, text := range texts {
 			event := StreamEvent{
 				Type:  "content_block_delta",
-				Delta: Delta{Type: "text_delta", Text: text},
+				Delta: &Delta{Type: "text_delta", Text: text},
 			}
 			data, _ := json.Marshal(event)
 			fmt.Fprintf(w, "data: %s\n\n", data)
@@ -95,6 +95,71 @@ func claudeStreamingHandler(texts []string) http.HandlerFunc {
 		// 終了イベント
 		stopEvent := StreamEvent{Type: "message_stop"}
 		data, _ := json.Marshal(stopEvent)
+		fmt.Fprintf(w, "data: %s\n\n", data)
+		flusher.Flush()
+	}
+}
+
+// claudeToolUseStreamingHandler は Tool Use を含むストリーミングハンドラー
+func claudeToolUseStreamingHandler(toolID, toolName string, inputChunks []string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
+			return
+		}
+
+		// content_block_start (tool_use)
+		startEvent := StreamEvent{
+			Type:  "content_block_start",
+			Index: 0,
+			ContentBlock: &ContentBlock{
+				Type: "tool_use",
+				ID:   toolID,
+				Name: toolName,
+			},
+		}
+		data, _ := json.Marshal(startEvent)
+		fmt.Fprintf(w, "data: %s\n\n", data)
+		flusher.Flush()
+
+		// content_block_delta (input_json_delta)
+		for _, chunk := range inputChunks {
+			deltaEvent := StreamEvent{
+				Type:  "content_block_delta",
+				Index: 0,
+				Delta: &Delta{Type: "input_json_delta", PartialJSON: chunk},
+			}
+			data, _ := json.Marshal(deltaEvent)
+			fmt.Fprintf(w, "data: %s\n\n", data)
+			flusher.Flush()
+		}
+
+		// content_block_stop
+		stopBlockEvent := StreamEvent{
+			Type:  "content_block_stop",
+			Index: 0,
+		}
+		data, _ = json.Marshal(stopBlockEvent)
+		fmt.Fprintf(w, "data: %s\n\n", data)
+		flusher.Flush()
+
+		// message_delta (stop_reason)
+		msgDeltaEvent := StreamEvent{
+			Type:  "message_delta",
+			Delta: &Delta{StopReason: "tool_use"},
+		}
+		data, _ = json.Marshal(msgDeltaEvent)
+		fmt.Fprintf(w, "data: %s\n\n", data)
+		flusher.Flush()
+
+		// message_stop
+		stopEvent := StreamEvent{Type: "message_stop"}
+		data, _ = json.Marshal(stopEvent)
 		fmt.Fprintf(w, "data: %s\n\n", data)
 		flusher.Flush()
 	}
@@ -288,4 +353,287 @@ func TestLevelToBudgetTokens(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Tool Use Tests
+
+func TestClaudeProvider_ChatWithTools_ToolUse(t *testing.T) {
+	// Disable function calling env var for consistent testing
+	originalEnv := os.Getenv("CLAUDE_FUNCTION_CALLING")
+	defer os.Setenv("CLAUDE_FUNCTION_CALLING", originalEnv)
+	os.Unsetenv("CLAUDE_FUNCTION_CALLING")
+
+	inputChunks := []string{
+		`{"pa`,
+		`th":"`,
+		`/test.txt"`,
+		`}`,
+	}
+	server := mockAPIServer(t, claudeToolUseStreamingHandler("toolu_01ABC123", "read_file", inputChunks))
+
+	originalURL := os.Getenv("ANTHROPIC_API_URL")
+	defer os.Setenv("ANTHROPIC_API_URL", originalURL)
+	os.Setenv("ANTHROPIC_API_URL", server.URL)
+
+	p := New("test-key")
+	history := []api.Message{{Role: "user", Content: "Read test.txt"}}
+
+	result, err := p.ChatWithTools(context.Background(), "System", history, "claude-sonnet-4-20250514")
+	if err != nil {
+		t.Fatalf("ChatWithTools() error = %v", err)
+	}
+
+	// Should contain tool JSON
+	if result == "" {
+		t.Error("ChatWithTools() returned empty result, expected tool JSON")
+	}
+	if !contains(result, "read_file") {
+		t.Errorf("ChatWithTools() = %q, expected to contain 'read_file'", result)
+	}
+	if !contains(result, "toolu_01ABC123") {
+		t.Errorf("ChatWithTools() = %q, expected to contain 'toolu_01ABC123'", result)
+	}
+}
+
+func TestClaudeProvider_ChatWithTools_NonStreaming_ToolUse(t *testing.T) {
+	originalEnv := os.Getenv("CLAUDE_FUNCTION_CALLING")
+	defer os.Setenv("CLAUDE_FUNCTION_CALLING", originalEnv)
+	os.Unsetenv("CLAUDE_FUNCTION_CALLING")
+
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		resp := Response{
+			Content: []Content{
+				{Type: "text", Text: "I'll read that file."},
+				{
+					Type:  "tool_use",
+					ID:    "toolu_01XYZ789",
+					Name:  "read_file",
+					Input: map[string]interface{}{"path": "/readme.md"},
+				},
+			},
+			StopReason: "tool_use",
+		}
+		_ = json.NewEncoder(w).Encode(resp)
+	})
+
+	originalURL := os.Getenv("ANTHROPIC_API_URL")
+	defer os.Setenv("ANTHROPIC_API_URL", originalURL)
+	os.Setenv("ANTHROPIC_API_URL", server.URL)
+
+	p := New("test-key")
+	history := []api.Message{{Role: "user", Content: "Read readme.md"}}
+
+	result, err := p.ChatWithTools(context.Background(), "System", history, "claude-sonnet-4-20250514")
+	if err != nil {
+		t.Fatalf("ChatWithTools() error = %v", err)
+	}
+
+	if !contains(result, "I'll read that file.") {
+		t.Errorf("ChatWithTools() = %q, expected to contain text", result)
+	}
+	if !contains(result, "read_file") {
+		t.Errorf("ChatWithTools() = %q, expected to contain 'read_file'", result)
+	}
+	if !contains(result, "toolu_01XYZ789") {
+		t.Errorf("ChatWithTools() = %q, expected to contain 'toolu_01XYZ789'", result)
+	}
+}
+
+func TestSetMCPTools(t *testing.T) {
+	p := New("test-key")
+
+	tools := []api.OpenAIToolFunction{
+		{Name: "custom_tool", Description: "A custom tool"},
+	}
+	p.SetMCPTools(tools)
+
+	if len(p.mcpTools) != 1 {
+		t.Errorf("mcpTools length = %d, want 1", len(p.mcpTools))
+	}
+	if p.mcpTools[0].Name != "custom_tool" {
+		t.Errorf("mcpTools[0].Name = %q, want 'custom_tool'", p.mcpTools[0].Name)
+	}
+}
+
+func TestClaudeProvider_ChatWithTools_FunctionCallingDisabled(t *testing.T) {
+	originalEnv := os.Getenv("CLAUDE_FUNCTION_CALLING")
+	defer os.Setenv("CLAUDE_FUNCTION_CALLING", originalEnv)
+	os.Setenv("CLAUDE_FUNCTION_CALLING", "0")
+
+	var requestBody Request
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+			t.Fatalf("Failed to decode request: %v", err)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		resp := Response{
+			Content: []Content{{Type: "text", Text: "No tools"}},
+		}
+		_ = json.NewEncoder(w).Encode(resp)
+	})
+
+	originalURL := os.Getenv("ANTHROPIC_API_URL")
+	defer os.Setenv("ANTHROPIC_API_URL", originalURL)
+	os.Setenv("ANTHROPIC_API_URL", server.URL)
+
+	p := New("test-key")
+	history := []api.Message{{Role: "user", Content: "Hello"}}
+
+	_, err := p.ChatWithTools(context.Background(), "System", history, "claude-sonnet-4-20250514")
+	if err != nil {
+		t.Fatalf("ChatWithTools() error = %v", err)
+	}
+
+	// When CLAUDE_FUNCTION_CALLING=0, Tools should not be included
+	if len(requestBody.Tools) > 0 {
+		t.Errorf("Tools should be empty when CLAUDE_FUNCTION_CALLING=0, got %d tools", len(requestBody.Tools))
+	}
+}
+
+func TestClaudeProvider_ChatWithTools_FunctionCallingEnabled(t *testing.T) {
+	originalEnv := os.Getenv("CLAUDE_FUNCTION_CALLING")
+	defer os.Setenv("CLAUDE_FUNCTION_CALLING", originalEnv)
+	os.Unsetenv("CLAUDE_FUNCTION_CALLING")
+
+	var requestBody Request
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+			t.Fatalf("Failed to decode request: %v", err)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		resp := Response{
+			Content: []Content{{Type: "text", Text: "With tools"}},
+		}
+		_ = json.NewEncoder(w).Encode(resp)
+	})
+
+	originalURL := os.Getenv("ANTHROPIC_API_URL")
+	defer os.Setenv("ANTHROPIC_API_URL", originalURL)
+	os.Setenv("ANTHROPIC_API_URL", server.URL)
+
+	p := New("test-key")
+	history := []api.Message{{Role: "user", Content: "Hello"}}
+
+	_, err := p.ChatWithTools(context.Background(), "System", history, "claude-sonnet-4-20250514")
+	if err != nil {
+		t.Fatalf("ChatWithTools() error = %v", err)
+	}
+
+	// When CLAUDE_FUNCTION_CALLING is not "0", Tools should be included
+	if len(requestBody.Tools) == 0 {
+		t.Error("Tools should not be empty when CLAUDE_FUNCTION_CALLING is not disabled")
+	}
+}
+
+func TestGetClaudeToolDefinitions(t *testing.T) {
+	tools := GetClaudeToolDefinitions()
+
+	if len(tools) == 0 {
+		t.Error("GetClaudeToolDefinitions() returned empty slice")
+	}
+
+	// read_file ツールが含まれていることを確認
+	found := false
+	for _, tool := range tools {
+		if tool.Name == "read_file" {
+			found = true
+			if tool.InputSchema == nil {
+				t.Error("read_file tool should have InputSchema")
+			}
+			break
+		}
+	}
+	if !found {
+		t.Error("GetClaudeToolDefinitions() should contain 'read_file' tool")
+	}
+}
+
+func TestConvertOpenAIToolToClaude(t *testing.T) {
+	openaiTool := api.OpenAIToolFunction{
+		Name:        "test_tool",
+		Description: "A test tool",
+		Parameters: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"arg1": map[string]interface{}{"type": "string"},
+			},
+		},
+	}
+
+	claudeTool := ConvertOpenAIToolToClaude(openaiTool)
+
+	if claudeTool.Name != "test_tool" {
+		t.Errorf("Name = %q, want 'test_tool'", claudeTool.Name)
+	}
+	if claudeTool.Description != "A test tool" {
+		t.Errorf("Description = %q, want 'A test tool'", claudeTool.Description)
+	}
+	if claudeTool.InputSchema == nil {
+		t.Error("InputSchema should not be nil")
+	}
+}
+
+func TestConvertToolUseToToolJSON(t *testing.T) {
+	input := map[string]interface{}{
+		"path": "/test.txt",
+	}
+
+	result, err := ConvertToolUseToToolJSON("toolu_01ABC", "read_file", input)
+	if err != nil {
+		t.Fatalf("ConvertToolUseToToolJSON() error = %v", err)
+	}
+
+	if !contains(result, "toolu_01ABC") {
+		t.Errorf("result = %q, expected to contain 'toolu_01ABC'", result)
+	}
+	if !contains(result, "read_file") {
+		t.Errorf("result = %q, expected to contain 'read_file'", result)
+	}
+	if !contains(result, "/test.txt") {
+		t.Errorf("result = %q, expected to contain '/test.txt'", result)
+	}
+}
+
+func TestGetCombinedClaudeTools(t *testing.T) {
+	mcpTools := []api.OpenAIToolFunction{
+		{Name: "mcp_tool_1", Description: "MCP Tool 1"},
+		{Name: "mcp_tool_2", Description: "MCP Tool 2"},
+	}
+
+	combined := GetCombinedClaudeTools(mcpTools)
+
+	builtInCount := len(GetClaudeToolDefinitions())
+	expectedCount := builtInCount + 2
+
+	if len(combined) != expectedCount {
+		t.Errorf("GetCombinedClaudeTools() returned %d tools, want %d", len(combined), expectedCount)
+	}
+
+	// MCP ツールが含まれていることを確認
+	found := 0
+	for _, tool := range combined {
+		if tool.Name == "mcp_tool_1" || tool.Name == "mcp_tool_2" {
+			found++
+		}
+	}
+	if found != 2 {
+		t.Errorf("Expected 2 MCP tools in combined list, found %d", found)
+	}
+}
+
+// Helper function for string contains
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
+}
+
+func containsHelper(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }

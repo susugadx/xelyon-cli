@@ -13,6 +13,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/api/providers/openai"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -25,10 +26,18 @@ func init() {
 
 var yellow = color.New(color.FgYellow)
 
+// toolCallAccumulator はストリーミング中のtool_callを蓄積する
+type toolCallAccumulator struct {
+	ID        string
+	Name      string
+	Arguments strings.Builder
+}
+
 // Provider はOllama APIのプロバイダー実装
 type Provider struct {
 	baseURL    string
 	httpClient *http.Client
+	mcpTools   []api.OpenAIToolFunction // MCP ツール定義（Function Calling用）
 }
 
 // New は新しいProviderを作成
@@ -56,14 +65,17 @@ func (p *Provider) SupportsImages() bool {
 
 // OllamaRequest はOllama APIリクエスト
 type OllamaRequest struct {
-	Model    string        `json:"model"`
-	Messages []api.Message `json:"messages"`
-	Stream   bool          `json:"stream"`
+	Model      string           `json:"model"`
+	Messages   []api.Message    `json:"messages"`
+	Stream     bool             `json:"stream"`
+	Tools      []api.OpenAITool `json:"tools,omitempty"`       // Function Calling用
+	ToolChoice string           `json:"tool_choice,omitempty"` // "auto", "none"
 }
 
 // OllamaMessageContent はOllamaのメッセージコンテンツ
 type OllamaMessageContent struct {
-	Content string `json:"content"`
+	Content   string               `json:"content"`
+	ToolCalls []api.OpenAIToolCall `json:"tool_calls,omitempty"` // Function Calling用
 }
 
 // OllamaStreamResponse はOllamaのストリームレスポンス
@@ -103,6 +115,12 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		Model:    model,
 		Messages: messages,
 		Stream:   true,
+	}
+
+	// Function Calling: ツール定義を追加（環境変数で無効化可能）
+	if os.Getenv("OLLAMA_FUNCTION_CALLING") != "0" {
+		reqBody.Tools = openai.GetCombinedOpenAITools(p.mcpTools)
+		reqBody.ToolChoice = "auto"
 	}
 
 	jsonBody, err := json.Marshal(reqBody)
@@ -154,6 +172,8 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 // handleStreamingResponse はストリーミングレスポンスを処理（JSON Lines形式）
 func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
 	var fullResponse strings.Builder
+	var toolCallsOutput strings.Builder
+	toolCalls := make(map[int]*toolCallAccumulator)
 	scanner := bufio.NewScanner(resp.Body)
 	firstChunk := true
 
@@ -178,8 +198,47 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 			continue
 		}
 
+		// Function Calling: tool_calls を蓄積
+		for idx, tc := range streamResp.Message.ToolCalls {
+			acc, exists := toolCalls[idx]
+			if !exists {
+				acc = &toolCallAccumulator{}
+				toolCalls[idx] = acc
+			}
+			if tc.ID != "" {
+				acc.ID = tc.ID
+			}
+			if tc.Function.Name != "" {
+				acc.Name = tc.Function.Name
+			}
+			if tc.Function.Arguments != "" {
+				acc.Arguments.Reset() // Ollama は累積ではなく完全な引数を送る
+				acc.Arguments.WriteString(tc.Function.Arguments)
+			}
+		}
+
 		// done=trueで終了
 		if streamResp.Done {
+			// tool_calls がある場合は変換
+			if len(toolCalls) > 0 {
+				for i := 0; i < len(toolCalls); i++ {
+					acc := toolCalls[i]
+					if acc == nil {
+						continue
+					}
+					tc := &api.OpenAIToolCall{
+						ID:   acc.ID,
+						Type: "function",
+						Function: api.OpenAIToolCallFunction{
+							Name:      acc.Name,
+							Arguments: acc.Arguments.String(),
+						},
+					}
+					if toolJSON, err := openai.ConvertToolCallToToolJSON(tc); err == nil {
+						toolCallsOutput.WriteString(toolJSON)
+					}
+				}
+			}
 			break
 		}
 
@@ -199,6 +258,16 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 	// スキャナーのI/Oエラーチェック
 	if err := scanner.Err(); err != nil {
 		return "", fmt.Errorf("stream reading error: %w", err)
+	}
+
+	// tool_calls がある場合はそれを返す
+	if toolCallsOutput.Len() > 0 {
+		spinner.Stop()
+		if fullResponse.Len() > 0 {
+			fmt.Println()
+			return fullResponse.String() + toolCallsOutput.String(), nil
+		}
+		return toolCallsOutput.String(), nil
 	}
 
 	fmt.Println()
@@ -255,4 +324,9 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 // BaseURL はテスト用にbaseURLを公開
 func (p *Provider) BaseURL() string {
 	return p.baseURL
+}
+
+// SetMCPTools は MCP ツール定義を設定する（Function Calling用）
+func (p *Provider) SetMCPTools(tools []api.OpenAIToolFunction) {
+	p.mcpTools = tools
 }

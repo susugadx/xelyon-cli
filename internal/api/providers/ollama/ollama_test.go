@@ -197,3 +197,241 @@ func TestProvider_ListModels_APIError(t *testing.T) {
 		t.Error("ListModels() should return error for 500 status")
 	}
 }
+
+// ===== Function Calling Tests =====
+
+func TestSetMCPTools(t *testing.T) {
+	p := New("http://localhost:11434")
+
+	tools := []api.OpenAIToolFunction{
+		{
+			Name:        "test_tool",
+			Description: "A test tool",
+			Parameters: map[string]interface{}{
+				"type":       "object",
+				"properties": map[string]interface{}{},
+			},
+		},
+	}
+
+	p.SetMCPTools(tools)
+
+	if len(p.mcpTools) != 1 {
+		t.Errorf("mcpTools length = %d, want 1", len(p.mcpTools))
+	}
+	if p.mcpTools[0].Name != "test_tool" {
+		t.Errorf("mcpTools[0].Name = %q, want 'test_tool'", p.mcpTools[0].Name)
+	}
+}
+
+func TestFunctionCalling_Disabled(t *testing.T) {
+	// 環境変数で無効化
+	t.Setenv("OLLAMA_FUNCTION_CALLING", "0")
+
+	var receivedRequest OllamaRequest
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&receivedRequest)
+
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		resp := OllamaStreamResponse{Done: true}
+		data, _ := json.Marshal(resp)
+		fmt.Fprintln(w, string(data))
+	})
+
+	p := New(server.URL)
+	history := []api.Message{{Role: "user", Content: "Hi"}}
+
+	_, _ = p.ChatWithTools(context.Background(), "System", history, "llama3")
+
+	// Tools が設定されていないことを確認
+	if len(receivedRequest.Tools) != 0 {
+		t.Errorf("Tools should be empty when disabled, got %d tools", len(receivedRequest.Tools))
+	}
+}
+
+// ollamaToolCallsHandler はtool_callsを含むOllama形式のストリーミングハンドラー
+func ollamaToolCallsHandler(toolCalls []api.OpenAIToolCall) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-ndjson")
+
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
+			return
+		}
+
+		// tool_calls を含むレスポンス
+		resp := OllamaStreamResponse{
+			Message: OllamaMessageContent{ToolCalls: toolCalls},
+			Done:    false,
+		}
+		data, _ := json.Marshal(resp)
+		fmt.Fprintln(w, string(data))
+		flusher.Flush()
+
+		// 終了レスポンス
+		doneResp := OllamaStreamResponse{Done: true}
+		data, _ = json.Marshal(doneResp)
+		fmt.Fprintln(w, string(data))
+		flusher.Flush()
+	}
+}
+
+func TestProvider_ChatWithTools_ToolCalls(t *testing.T) {
+	toolCalls := []api.OpenAIToolCall{
+		{
+			ID:   "call_123",
+			Type: "function",
+			Function: api.OpenAIToolCallFunction{
+				Name:      "read_file",
+				Arguments: `{"path":"README.md"}`,
+			},
+		},
+	}
+
+	server := mockAPIServer(t, ollamaToolCallsHandler(toolCalls))
+
+	p := New(server.URL)
+	history := []api.Message{{Role: "user", Content: "Read README.md"}}
+
+	result, err := p.ChatWithTools(context.Background(), "System", history, "llama3")
+	if err != nil {
+		t.Fatalf("ChatWithTools() error = %v", err)
+	}
+
+	// tool_callsがJSON形式で返される
+	if result == "" {
+		t.Error("ChatWithTools() returned empty result")
+	}
+
+	// read_file ツール呼び出しが含まれる
+	if !contains(result, "read_file") {
+		t.Errorf("result should contain 'read_file', got %q", result)
+	}
+	if !contains(result, "call_123") {
+		t.Errorf("result should contain 'call_123', got %q", result)
+	}
+}
+
+func TestProvider_ChatWithTools_MultipleToolCalls(t *testing.T) {
+	toolCalls := []api.OpenAIToolCall{
+		{
+			ID:   "call_1",
+			Type: "function",
+			Function: api.OpenAIToolCallFunction{
+				Name:      "read_file",
+				Arguments: `{"path":"file1.txt"}`,
+			},
+		},
+		{
+			ID:   "call_2",
+			Type: "function",
+			Function: api.OpenAIToolCallFunction{
+				Name:      "read_file",
+				Arguments: `{"path":"file2.txt"}`,
+			},
+		},
+	}
+
+	server := mockAPIServer(t, ollamaToolCallsHandler(toolCalls))
+
+	p := New(server.URL)
+	history := []api.Message{{Role: "user", Content: "Read files"}}
+
+	result, err := p.ChatWithTools(context.Background(), "System", history, "llama3")
+	if err != nil {
+		t.Fatalf("ChatWithTools() error = %v", err)
+	}
+
+	// 両方のtool_callsが含まれる
+	if !contains(result, "call_1") {
+		t.Errorf("result should contain 'call_1', got %q", result)
+	}
+	if !contains(result, "call_2") {
+		t.Errorf("result should contain 'call_2', got %q", result)
+	}
+}
+
+// ollamaTextAndToolCallsHandler はテキストとtool_callsを含むハンドラー
+func ollamaTextAndToolCallsHandler(texts []string, toolCalls []api.OpenAIToolCall) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-ndjson")
+
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
+			return
+		}
+
+		// テキストコンテンツ
+		for _, text := range texts {
+			resp := OllamaStreamResponse{
+				Message: OllamaMessageContent{Content: text},
+				Done:    false,
+			}
+			data, _ := json.Marshal(resp)
+			fmt.Fprintln(w, string(data))
+			flusher.Flush()
+		}
+
+		// tool_calls を含むレスポンス
+		resp := OllamaStreamResponse{
+			Message: OllamaMessageContent{ToolCalls: toolCalls},
+			Done:    false,
+		}
+		data, _ := json.Marshal(resp)
+		fmt.Fprintln(w, string(data))
+		flusher.Flush()
+
+		// 終了レスポンス
+		doneResp := OllamaStreamResponse{Done: true}
+		data, _ = json.Marshal(doneResp)
+		fmt.Fprintln(w, string(data))
+		flusher.Flush()
+	}
+}
+
+func TestProvider_ChatWithTools_TextAndToolCalls(t *testing.T) {
+	toolCalls := []api.OpenAIToolCall{
+		{
+			ID:   "call_abc",
+			Type: "function",
+			Function: api.OpenAIToolCallFunction{
+				Name:      "search_code",
+				Arguments: `{"pattern":"TODO"}`,
+			},
+		},
+	}
+
+	server := mockAPIServer(t, ollamaTextAndToolCallsHandler([]string{"I'll search", " for TODOs"}, toolCalls))
+
+	p := New(server.URL)
+	history := []api.Message{{Role: "user", Content: "Find TODOs"}}
+
+	result, err := p.ChatWithTools(context.Background(), "System", history, "llama3")
+	if err != nil {
+		t.Fatalf("ChatWithTools() error = %v", err)
+	}
+
+	// テキストとtool_calls両方が含まれる
+	if !contains(result, "I'll search for TODOs") {
+		t.Errorf("result should contain text content, got %q", result)
+	}
+	if !contains(result, "search_code") {
+		t.Errorf("result should contain 'search_code', got %q", result)
+	}
+}
+
+// contains はsがsubstrを含むか確認するヘルパー
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
+}
+
+func containsHelper(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
