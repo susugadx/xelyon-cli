@@ -12,11 +12,24 @@ type Tool interface {
 	// Name はツール名を返す
 	Name() string
 
+	// Description はツールの説明を返す
+	Description() string
+
+	// Parameters はツールのパラメータ定義を返す（OpenAI形式）
+	Parameters() map[string]interface{}
+
 	// Run はツールを実行
 	// output: ツールの実行結果
 	// change: ファイル変更情報（変更がない場合はnil）
 	// err: エラー（エラーがない場合はnil）
 	Run(args map[string]string) (output string, change *FileChange, err error)
+}
+
+// ToolDefinition はツール定義（プロバイダー変換用）
+type ToolDefinition struct {
+	Name        string
+	Description string
+	Parameters  map[string]interface{}
 }
 
 // Registry はツールの登録・管理を行う
@@ -68,6 +81,22 @@ func (r *Registry) GetTool(name string) Tool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.tools[name]
+}
+
+// GetToolDefinitions は登録済み全ツールの定義を返す
+func (r *Registry) GetToolDefinitions() []ToolDefinition {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	defs := make([]ToolDefinition, 0, len(r.tools))
+	for _, tool := range r.tools {
+		defs = append(defs, ToolDefinition{
+			Name:        tool.Name(),
+			Description: tool.Description(),
+			Parameters:  tool.Parameters(),
+		})
+	}
+	return defs
 }
 
 // DefaultRegistry はデフォルトのツールレジストリ

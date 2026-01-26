@@ -34,6 +34,23 @@ type LSPReferencesTool struct{}
 
 func (t *LSPReferencesTool) Name() string { return "lsp_references" }
 
+func (t *LSPReferencesTool) Description() string {
+	return "Find all references to a symbol at the specified position. Requires LSP server installed (e.g., gopls for Go)."
+}
+
+func (t *LSPReferencesTool) Parameters() map[string]interface{} {
+	return map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"path":      map[string]interface{}{"type": "string", "description": "File path"},
+			"line":      map[string]interface{}{"type": "integer", "description": "Line number (1-indexed)"},
+			"character": map[string]interface{}{"type": "integer", "description": "Character position (1-indexed)"},
+		},
+		"required":             []string{"path", "line", "character"},
+		"additionalProperties": false,
+	}
+}
+
 func (t *LSPReferencesTool) Run(args map[string]string) (string, *tools.FileChange, error) {
 	if LSPClient == nil {
 		return "LSP not available. Please configure LSP servers in ~/.xelyon/config.yaml", nil, nil
@@ -99,6 +116,23 @@ type LSPDefinitionTool struct{}
 
 func (t *LSPDefinitionTool) Name() string { return "lsp_definition" }
 
+func (t *LSPDefinitionTool) Description() string {
+	return "Go to the definition of a symbol at the specified position. Requires LSP server installed."
+}
+
+func (t *LSPDefinitionTool) Parameters() map[string]interface{} {
+	return map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"path":      map[string]interface{}{"type": "string", "description": "File path"},
+			"line":      map[string]interface{}{"type": "integer", "description": "Line number (1-indexed)"},
+			"character": map[string]interface{}{"type": "integer", "description": "Character position (1-indexed)"},
+		},
+		"required":             []string{"path", "line", "character"},
+		"additionalProperties": false,
+	}
+}
+
 func (t *LSPDefinitionTool) Run(args map[string]string) (string, *tools.FileChange, error) {
 	if LSPClient == nil {
 		return "LSP not available. Please configure LSP servers in ~/.xelyon/config.yaml", nil, nil
@@ -155,6 +189,23 @@ type LSPHoverTool struct{}
 
 func (t *LSPHoverTool) Name() string { return "lsp_hover" }
 
+func (t *LSPHoverTool) Description() string {
+	return "Get type information and documentation for a symbol at the specified position. Requires LSP server installed."
+}
+
+func (t *LSPHoverTool) Parameters() map[string]interface{} {
+	return map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"path":      map[string]interface{}{"type": "string", "description": "File path"},
+			"line":      map[string]interface{}{"type": "integer", "description": "Line number (1-indexed)"},
+			"character": map[string]interface{}{"type": "integer", "description": "Character position (1-indexed)"},
+		},
+		"required":             []string{"path", "line", "character"},
+		"additionalProperties": false,
+	}
+}
+
 func (t *LSPHoverTool) Run(args map[string]string) (string, *tools.FileChange, error) {
 	if LSPClient == nil {
 		return "LSP not available. Please configure LSP servers in ~/.xelyon/config.yaml", nil, nil
@@ -202,6 +253,21 @@ func (t *LSPHoverTool) Run(args map[string]string) (string, *tools.FileChange, e
 type LSPDiagnosticsTool struct{}
 
 func (t *LSPDiagnosticsTool) Name() string { return "lsp_diagnostics" }
+
+func (t *LSPDiagnosticsTool) Description() string {
+	return "Get errors and warnings for a file from the LSP server. Requires LSP server installed."
+}
+
+func (t *LSPDiagnosticsTool) Parameters() map[string]interface{} {
+	return map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"path": map[string]interface{}{"type": "string", "description": "File path to get diagnostics for"},
+		},
+		"required":             []string{"path"},
+		"additionalProperties": false,
+	}
+}
 
 func (t *LSPDiagnosticsTool) Run(args map[string]string) (string, *tools.FileChange, error) {
 	if LSPClient == nil {
@@ -299,6 +365,24 @@ func (t *LSPDiagnosticsTool) Run(args map[string]string) (string, *tools.FileCha
 type LSPRenameTool struct{}
 
 func (t *LSPRenameTool) Name() string { return "lsp_rename" }
+
+func (t *LSPRenameTool) Description() string {
+	return "Preview rename changes for a symbol at the specified position. Requires LSP server installed."
+}
+
+func (t *LSPRenameTool) Parameters() map[string]interface{} {
+	return map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"path":      map[string]interface{}{"type": "string", "description": "File path"},
+			"line":      map[string]interface{}{"type": "integer", "description": "Line number (1-indexed)"},
+			"character": map[string]interface{}{"type": "integer", "description": "Character position (1-indexed)"},
+			"new_name":  map[string]interface{}{"type": "string", "description": "New name for the symbol"},
+		},
+		"required":             []string{"path", "line", "character", "new_name"},
+		"additionalProperties": false,
+	}
+}
 
 func (t *LSPRenameTool) Run(args map[string]string) (string, *tools.FileChange, error) {
 	if LSPClient == nil {

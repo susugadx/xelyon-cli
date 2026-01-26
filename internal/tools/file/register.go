@@ -12,6 +12,23 @@ type ReadFileTool struct{}
 
 func (t *ReadFileTool) Name() string { return "read_file" }
 
+func (t *ReadFileTool) Description() string {
+	return "Reads file contents from the filesystem. Use this to examine source code, configuration files, or any text files."
+}
+
+func (t *ReadFileTool) Parameters() map[string]interface{} {
+	return map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"path":       map[string]interface{}{"type": "string", "description": "Absolute or relative file path to read"},
+			"start_line": map[string]interface{}{"type": "integer", "description": "Start line number (1-indexed, optional)"},
+			"end_line":   map[string]interface{}{"type": "integer", "description": "End line number (1-indexed, optional)"},
+		},
+		"required":             []string{"path"},
+		"additionalProperties": false,
+	}
+}
+
 func (t *ReadFileTool) Run(args map[string]string) (string, *tools.FileChange, error) {
 	startLine, endLine := 0, 0
 	if args["start_line"] != "" {
@@ -31,6 +48,22 @@ func (t *ReadFileTool) Run(args map[string]string) (string, *tools.FileChange, e
 type WriteFileTool struct{}
 
 func (t *WriteFileTool) Name() string { return "write_file" }
+
+func (t *WriteFileTool) Description() string {
+	return "Creates a new file or overwrites an existing file with the provided content. Automatically creates a backup (.bak) of existing files."
+}
+
+func (t *WriteFileTool) Parameters() map[string]interface{} {
+	return map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"path":    map[string]interface{}{"type": "string", "description": "File path to write to"},
+			"content": map[string]interface{}{"type": "string", "description": "Content to write to the file"},
+		},
+		"required":             []string{"path", "content"},
+		"additionalProperties": false,
+	}
+}
 
 func (t *WriteFileTool) Run(args map[string]string) (string, *tools.FileChange, error) {
 	result, backupPath, err := ExecuteWriteFile(args["path"], args["content"])
@@ -54,6 +87,25 @@ type StrReplaceTool struct{}
 
 func (t *StrReplaceTool) Name() string { return "str_replace" }
 
+func (t *StrReplaceTool) Description() string {
+	return "Replaces a specific string in a file with new content. Use this for precise edits when you know the exact text to replace."
+}
+
+func (t *StrReplaceTool) Parameters() map[string]interface{} {
+	return map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"path":       map[string]interface{}{"type": "string", "description": "File path to edit"},
+			"old_str":    map[string]interface{}{"type": "string", "description": "Exact string to find and replace"},
+			"new_str":    map[string]interface{}{"type": "string", "description": "New string to replace with"},
+			"start_line": map[string]interface{}{"type": "string", "description": "Start line number to limit search scope (optional)"},
+			"end_line":   map[string]interface{}{"type": "string", "description": "End line number to limit search scope (optional)"},
+		},
+		"required":             []string{"path", "old_str", "new_str"},
+		"additionalProperties": false,
+	}
+}
+
 func (t *StrReplaceTool) Run(args map[string]string) (string, *tools.FileChange, error) {
 	result, backupPath, err := ExecuteStrReplace(args["path"], args["old_str"], args["new_str"], args["start_line"], args["end_line"])
 	if err != nil {
@@ -75,6 +127,21 @@ func (t *StrReplaceTool) Run(args map[string]string) (string, *tools.FileChange,
 type DeleteFileTool struct{}
 
 func (t *DeleteFileTool) Name() string { return "delete_file" }
+
+func (t *DeleteFileTool) Description() string {
+	return "Deletes a file permanently. Creates a backup before deletion."
+}
+
+func (t *DeleteFileTool) Parameters() map[string]interface{} {
+	return map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"path": map[string]interface{}{"type": "string", "description": "File path to delete"},
+		},
+		"required":             []string{"path"},
+		"additionalProperties": false,
+	}
+}
 
 func (t *DeleteFileTool) Run(args map[string]string) (string, *tools.FileChange, error) {
 	result, backupPath, err := ExecuteDeleteFile(args["path"])
@@ -98,6 +165,21 @@ type ListDirTool struct{}
 
 func (t *ListDirTool) Name() string { return "list_dir" }
 
+func (t *ListDirTool) Description() string {
+	return "Lists files and directories in the specified path."
+}
+
+func (t *ListDirTool) Parameters() map[string]interface{} {
+	return map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"path": map[string]interface{}{"type": "string", "description": "Directory path to list"},
+		},
+		"required":             []string{"path"},
+		"additionalProperties": false,
+	}
+}
+
 func (t *ListDirTool) Run(args map[string]string) (string, *tools.FileChange, error) {
 	return ExecuteListDir(args["path"]), nil, nil
 }
@@ -106,6 +188,22 @@ func (t *ListDirTool) Run(args map[string]string) (string, *tools.FileChange, er
 type RestoreBackupTool struct{}
 
 func (t *RestoreBackupTool) Name() string { return "restore_backup" }
+
+func (t *RestoreBackupTool) Description() string {
+	return "Restores a file from its backup."
+}
+
+func (t *RestoreBackupTool) Parameters() map[string]interface{} {
+	return map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"path":        map[string]interface{}{"type": "string", "description": "Original file path"},
+			"backup_path": map[string]interface{}{"type": "string", "description": "Backup file path to restore from"},
+		},
+		"required":             []string{"path", "backup_path"},
+		"additionalProperties": false,
+	}
+}
 
 func (t *RestoreBackupTool) Run(args map[string]string) (string, *tools.FileChange, error) {
 	result, err := ExecuteRestoreBackup(args["path"], args["backup_path"])
@@ -119,6 +217,21 @@ func (t *RestoreBackupTool) Run(args map[string]string) (string, *tools.FileChan
 type ListBackupsTool struct{}
 
 func (t *ListBackupsTool) Name() string { return "list_backups" }
+
+func (t *ListBackupsTool) Description() string {
+	return "Lists available backup files for a given file."
+}
+
+func (t *ListBackupsTool) Parameters() map[string]interface{} {
+	return map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"path": map[string]interface{}{"type": "string", "description": "File path to find backups for"},
+		},
+		"required":             []string{"path"},
+		"additionalProperties": false,
+	}
+}
 
 func (t *ListBackupsTool) Run(args map[string]string) (string, *tools.FileChange, error) {
 	return ExecuteListBackups(args["path"]), nil, nil

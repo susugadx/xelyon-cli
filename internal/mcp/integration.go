@@ -59,6 +59,36 @@ func (w *MCPToolWrapper) Name() string {
 	return fmt.Sprintf("mcp_%s_%s", safeServer, safeTool)
 }
 
+// Description はツールの説明を返す
+func (w *MCPToolWrapper) Description() string {
+	if w.desc != "" {
+		return w.desc
+	}
+	return fmt.Sprintf("MCP tool: %s from server %s", w.toolName, w.serverName)
+}
+
+// Parameters はツールのパラメータ定義を返す
+func (w *MCPToolWrapper) Parameters() map[string]interface{} {
+	// inputSchemaをそのままmap[string]interface{}に変換
+	if len(w.inputSchema) == 0 || string(w.inputSchema) == "null" {
+		return map[string]interface{}{
+			"type":                 "object",
+			"properties":           map[string]interface{}{},
+			"additionalProperties": false,
+		}
+	}
+
+	var params map[string]interface{}
+	if err := json.Unmarshal(w.inputSchema, &params); err != nil {
+		return map[string]interface{}{
+			"type":                 "object",
+			"properties":           map[string]interface{}{},
+			"additionalProperties": false,
+		}
+	}
+	return params
+}
+
 // Run はツールを実行
 func (w *MCPToolWrapper) Run(args map[string]string) (string, *tools.FileChange, error) {
 	// 引数バリデーション（簡易版）

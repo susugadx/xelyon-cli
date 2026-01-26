@@ -151,6 +151,55 @@ type mockTool struct {
 
 func (m *mockTool) Name() string { return m.name }
 
+func (m *mockTool) Description() string { return "Mock tool for testing" }
+
+func (m *mockTool) Parameters() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"properties":           map[string]interface{}{},
+		"additionalProperties": false,
+	}
+}
+
 func (m *mockTool) Run(args map[string]string) (string, *FileChange, error) {
 	return "mock output", nil, nil
 }
+
+// ===== GetToolDefinitions Tests =====
+
+func TestRegistry_GetToolDefinitions(t *testing.T) {
+	r := NewRegistry()
+
+	mock1 := &mockTool{name: "tool_a"}
+	mock2 := &mockTool{name: "tool_b"}
+	r.Register(mock1)
+	r.Register(mock2)
+
+	defs := r.GetToolDefinitions()
+
+	if len(defs) != 2 {
+		t.Errorf("GetToolDefinitions() returned %d definitions, want 2", len(defs))
+	}
+
+	// Check that definitions contain expected fields
+	names := make(map[string]bool)
+	for _, def := range defs {
+		names[def.Name] = true
+		if def.Description == "" {
+			t.Errorf("Definition for %s has empty Description", def.Name)
+		}
+		if def.Parameters == nil {
+			t.Errorf("Definition for %s has nil Parameters", def.Name)
+		}
+	}
+
+	if !names["tool_a"] {
+		t.Error("GetToolDefinitions() missing tool_a")
+	}
+	if !names["tool_b"] {
+		t.Error("GetToolDefinitions() missing tool_b")
+	}
+}
+
+// Note: DefaultRegistry tests for all tools are in the integration test
+// because tools package doesn't import subpackages (file, git, etc.)
