@@ -218,6 +218,14 @@ thinking:
     enabled: false
     # レベル: low / medium / high
     level: medium
+
+# ============================================================
+# ツール出力表示設定
+# ============================================================
+output:
+    # 折りたたみ前の最大表示行数（デフォルト: 5）
+    # 環境変数 XELYON_OUTPUT_MAX_LINES でも設定可能
+    max_lines: 5
 ```
 <!-- CONFIG-EXAMPLE-END -->
 
@@ -1063,6 +1071,38 @@ source ~/.zshrc  # または ~/.bashrc
 api_retry:
   count: 3  # 0 以外を指定
 ```
+
+### ツール出力表示設定 (`output`)
+
+ツール出力の折りたたみ表示を設定します。長い出力を省略して見やすくします。
+
+```yaml
+output:
+  max_lines: 5  # 折りたたみ前の最大表示行数
+```
+
+#### `max_lines`
+- **型**: integer
+- **デフォルト**: `5`
+- **環境変数**: `XELYON_OUTPUT_MAX_LINES`
+- **説明**: ツール出力の折りたたみ前に表示する最大行数
+
+**表示例:**
+
+```
+🔧 Tool: bash
+   Command: git status
+⎿  ブランチ main
+   Your branch is up to date with 'origin/main'.
+   Changes not staged for commit:
+   ... +20 lines
+```
+
+**適用対象:**
+- `bash` コマンド出力
+- `list_dir` ディレクトリ一覧
+- `search_code` / `search_file` 検索結果
+- その他の長い出力を返すツール
 
 ## 関連ドキュメント
 

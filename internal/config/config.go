@@ -239,6 +239,9 @@ func DefaultConfig() *Config {
 			Enabled: false,
 			Level:   "medium",
 		},
+		Output: OutputConfig{
+			MaxLines: 5, // デフォルト5行で折りたたみ
+		},
 	}
 }
 

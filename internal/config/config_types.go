@@ -23,8 +23,14 @@ type Config struct {
 	OpenAI          OpenAIConfig                   `yaml:"openai,omitempty"`
 	Thinking        ThinkingConfig                 `yaml:"thinking,omitempty"`
 	RepoMap         RepoMapConfig                  `yaml:"repomap,omitempty"`
+	Output          OutputConfig                   `yaml:"output,omitempty"`
 	// 将来の拡張用
 	// Cloud CloudConfig `yaml:"cloud,omitempty"`
+}
+
+// OutputConfig はツール出力表示の設定
+type OutputConfig struct {
+	MaxLines int `yaml:"max_lines"` // 折りたたみ前の最大表示行数（デフォルト: 5）
 }
 
 // CompressionConfig は会話履歴圧縮の設定

@@ -21,10 +21,10 @@ type Selector struct {
 
 // ANSI escape codes
 const (
-	colorCyan   = "\033[36m"
-	colorGreen  = "\033[32m"
-	colorDim    = "\033[2m"
-	colorReset  = "\033[0m"
+	colorCyan  = "\033[36m"
+	colorGreen = "\033[32m"
+	colorDim   = "\033[2m"
+	colorReset = "\033[0m"
 )
 
 // NewSelector は新しいSelectorを作成
