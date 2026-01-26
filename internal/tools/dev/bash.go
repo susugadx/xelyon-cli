@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
-	"syscall"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
@@ -219,7 +218,7 @@ IMPORTANT: Do NOT execute the previous command as-is.`, strings.TrimSpace(dec.Co
 	}
 
 	// プロセスグループを設定（子プロセスも一緒に終了させるため）
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	setSysProcAttr(cmd)
 
 	// ストリーミング設定を確認
 	globalCfg, _ := config.LoadConfig()
@@ -240,9 +239,7 @@ IMPORTANT: Do NOT execute the previous command as-is.`, strings.TrimSpace(dec.Co
 	if ctx.Err() != nil {
 		yellow.Println("\n⚠️  Command interrupted. Partial output returned.")
 		// プロセスグループ全体を終了
-		if cmd.Process != nil {
-			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) // best effort
-		}
+		killProcessGroup(cmd)
 		return fmt.Sprintf("Command interrupted.\nPartial output:\n%s", result)
 	}
 
@@ -301,9 +298,7 @@ func executeBashWithStreamingAndContext(ctx context.Context, cmd *exec.Cmd) (str
 	select {
 	case <-ctx.Done():
 		// コンテキストキャンセル - プロセスグループを終了
-		if cmd.Process != nil {
-			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) // best effort
-		}
+		killProcessGroup(cmd)
 		return outputBuf.String(), ctx.Err()
 	case <-doneCh:
 		err := cmd.Wait()
