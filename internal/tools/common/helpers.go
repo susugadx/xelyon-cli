@@ -14,6 +14,7 @@ var (
 	Green  = ui.Green
 	Red    = ui.Red
 	Cyan   = ui.Cyan
+	Dim    = ui.Dim
 )
 
 // GetCurrentTime returns the current time

@@ -63,3 +63,4 @@ var FormatSize = common.FormatSize
 
 // 色エイリアス
 var cyan = common.Cyan
+var dim = common.Dim

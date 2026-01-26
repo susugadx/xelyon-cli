@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // printToolArgs はツールの引数を簡潔に表示する（Execute/PreviewToolCallで共通使用）
@@ -94,7 +96,11 @@ func Execute(tc *ToolCall) (string, *FileChange) {
 	// ファイル変更系ツールの場合、キャッシュを無効化
 	invalidateToolCache(tc)
 
-	// ツール結果はAIに渡すのみ（各ツールが出す要約表示で十分）
+	// ツール出力の折りたたみ表示（bashはストリーミング表示済みなので除外）
+	if !isStreamingTool(tc.Tool) && result != "" {
+		displayCollapsedOutput(result)
+	}
+
 	return result, change
 }
 
@@ -170,4 +176,35 @@ func invalidateToolCache(tc *ToolCall) {
 func PreviewToolCall(tc *ToolCall) {
 	cyan.Printf("🔧 Tool: %s (Dry Run)\n", tc.Tool)
 	printToolArgs(tc)
+}
+
+// isStreamingTool はストリーミング出力を行うツールか判定
+// これらのツールは実行中にリアルタイム出力するため、折りたたみ表示は不要
+func isStreamingTool(toolName string) bool {
+	switch toolName {
+	case "bash":
+		// bashはストリーミング設定時にリアルタイム出力
+		return true
+	default:
+		return false
+	}
+}
+
+// displayCollapsedOutput はツール出力を折りたたみ表示
+func displayCollapsedOutput(output string) {
+	// エラー出力や短い成功メッセージはそのまま表示
+	if strings.HasPrefix(output, "Error:") ||
+		strings.HasPrefix(output, "Successfully") ||
+		strings.HasPrefix(output, "Cancelled") ||
+		strings.HasPrefix(output, "No ") {
+		// 1行メッセージはそのまま
+		if !strings.Contains(output, "\n") {
+			dim.Printf("⎿  %s\n", output)
+			return
+		}
+	}
+
+	// 折りたたみ表示
+	formatted := ui.FormatToolOutput(output, ui.GetMaxVisibleLines())
+	fmt.Print(formatted)
 }
