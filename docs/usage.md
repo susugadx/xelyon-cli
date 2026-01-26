@@ -19,7 +19,32 @@
 
 プロンプトやコードを複数行で入力できます。
 
-### 方法1: ``` マーカー
+### 方法1: 直接ペースト（推奨）
+
+**Bracketed Paste Mode** が有効な場合、複数行のテキストをそのままペーストできます。
+
+```bash
+> func main() {
+      fmt.Println("Hello")
+  }
+# → 複数行が1つの入力として認識される
+```
+
+- コードエディタやブラウザから複数行をコピー＆ペースト
+- 自動的に複数行として認識される
+- 対応: iTerm2, Terminal.app, GNOME Terminal, Windows Terminal, tmux, kitty
+
+**WSL環境での問題**: WSL等でエスケープシーケンスが文字として表示される場合は、以下で無効化できます：
+```bash
+# 環境変数で無効化
+export XELYON_BRACKETED_PASTE=0
+
+# または config.yaml で
+paste:
+  bracketed_paste: false
+```
+
+### 方法2: ``` マーカー
 
 ```bash
 > ```
@@ -33,15 +58,9 @@
 ✅ Captured 5 lines
 ```
 
-### 方法2: ペースト（Bracketed Paste Mode）
-
-- コードエディタやブラウザから複数行をコピー＆ペースト
-- 自動的に複数行として認識される
-- 対応: iTerm2, Terminal.app, GNOME Terminal, Windows Terminal, tmux
-
 ### 方法3: /paste コマンド
 
-WSL等のBracketed Paste非対応環境向け。
+Bracketed Paste非対応環境向け。
 
 ```bash
 > /paste

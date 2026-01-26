@@ -77,9 +77,10 @@ type PromptCacheConfig struct {
 
 // PasteConfig はペーストモードの設定
 type PasteConfig struct {
-	MaxLines       int `yaml:"max_lines"`       // 最大行数（デフォルト10000）
-	MaxBytes       int `yaml:"max_bytes"`       // 最大バイト数（デフォルト1MB）
-	TimeoutSeconds int `yaml:"timeout_seconds"` // タイムアウト秒（デフォルト60）
+	BracketedPaste bool `yaml:"bracketed_paste"` // Bracketed Paste Mode を有効化（デフォルト: true）
+	MaxLines       int  `yaml:"max_lines"`       // 最大行数（デフォルト10000）
+	MaxBytes       int  `yaml:"max_bytes"`       // 最大バイト数（デフォルト1MB）
+	TimeoutSeconds int  `yaml:"timeout_seconds"` // タイムアウト秒（デフォルト60）
 }
 
 // StreamingConfig はストリーミングレスポンスの設定

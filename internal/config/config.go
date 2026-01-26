@@ -91,6 +91,7 @@ func DefaultConfig() *Config {
 			TTLSeconds: 300, // 5分
 		},
 		Paste: PasteConfig{
+			BracketedPaste: true, // デフォルトON - 複数行ペースト対応
 			MaxLines:       10000,
 			MaxBytes:       1048576,
 			TimeoutSeconds: 60,
@@ -264,15 +265,17 @@ func LoadConfig() (*Config, error) {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 
-	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+	// デフォルト値で初期化してからYAMLをマージ
+	// これにより、YAMLで明示的に設定されたフィールドのみが上書きされる
+	cfg := DefaultConfig()
+	if err := yaml.Unmarshal(data, cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
 
-	// デフォルト値を適用
-	applyDefaults(&cfg)
+	// 追加のデフォルト値を適用（ネストされた構造体用）
+	applyDefaults(cfg)
 
-	return &cfg, nil
+	return cfg, nil
 }
 
 // applyDefaults はデフォルト値を適用
@@ -303,14 +306,25 @@ func applyDefaults(cfg *Config) {
 	if cfg.Compression.ThresholdTokens == 0 && cfg.Compression.ThresholdPercent == 0 {
 		cfg.Compression = defaults.Compression
 	}
-	if cfg.Paste.MaxLines == 0 {
-		cfg.Paste.MaxLines = defaults.Paste.MaxLines
-	}
-	if cfg.Paste.MaxBytes == 0 {
-		cfg.Paste.MaxBytes = defaults.Paste.MaxBytes
-	}
-	if cfg.Paste.TimeoutSeconds == 0 {
-		cfg.Paste.TimeoutSeconds = defaults.Paste.TimeoutSeconds
+	// Paste: 他のフィールドがすべてデフォルト値の場合、BracketedPaste もデフォルト適用
+	// （既存の設定ファイルに bracketed_paste がない場合に true にするため）
+	if cfg.Paste.MaxLines == 0 && cfg.Paste.MaxBytes == 0 && cfg.Paste.TimeoutSeconds == 0 {
+		// Paste セクションが未設定 → 全てデフォルト適用
+		cfg.Paste = defaults.Paste
+	} else {
+		// 個別フィールドのデフォルト適用
+		if cfg.Paste.MaxLines == 0 {
+			cfg.Paste.MaxLines = defaults.Paste.MaxLines
+		}
+		if cfg.Paste.MaxBytes == 0 {
+			cfg.Paste.MaxBytes = defaults.Paste.MaxBytes
+		}
+		if cfg.Paste.TimeoutSeconds == 0 {
+			cfg.Paste.TimeoutSeconds = defaults.Paste.TimeoutSeconds
+		}
+		// BracketedPaste: 明示的に false に設定されていない限り、デフォルト (true) を適用
+		// 注: YAML で bracketed_paste: false を明示的に設定した場合のみ false になる
+		// 既存の設定ファイル（フィールドがない）では true にする
 	}
 	if cfg.Streaming.IdleTimeoutSeconds == 0 {
 		cfg.Streaming.IdleTimeoutSeconds = defaults.Streaming.IdleTimeoutSeconds
@@ -391,6 +405,10 @@ func ValidateModel(model string) bool {
 
 // ApplyEnvironmentOverrides は環境変数で設定を上書き
 func (c *Config) ApplyEnvironmentOverrides() {
+	// Bracketed Paste Mode の制御（XELYON_BRACKETED_PASTE=0 で無効化）
+	if val := os.Getenv("XELYON_BRACKETED_PASTE"); val == "0" || val == "false" {
+		c.Paste.BracketedPaste = false
+	}
 	if val := os.Getenv("XELYON_LOOP_THRESHOLD"); val != "" {
 		if n, err := strconv.Atoi(val); err == nil && n > 0 {
 			c.LoopDetection.Threshold = n

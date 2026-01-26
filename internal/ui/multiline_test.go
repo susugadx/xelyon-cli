@@ -254,3 +254,28 @@ func TestMultilineReader_MarkerMode_WithCode(t *testing.T) {
 		t.Errorf("ReadInput() = %q, want %q", result, expected)
 	}
 }
+
+func TestMultilineReader_IsBracketedPasteEnabled(t *testing.T) {
+	reader := NewMultilineReader(strings.NewReader("test\n"))
+
+	// Initially disabled (not a terminal)
+	if reader.IsBracketedPasteEnabled() {
+		t.Error("IsBracketedPasteEnabled() should be false initially for non-terminal")
+	}
+
+	// EnableBracketedPaste should not enable for non-terminal
+	reader.EnableBracketedPaste()
+	if reader.IsBracketedPasteEnabled() {
+		t.Error("IsBracketedPasteEnabled() should remain false for non-terminal")
+	}
+}
+
+func TestMultilineReader_DisableBracketedPaste(t *testing.T) {
+	reader := NewMultilineReader(strings.NewReader("test\n"))
+
+	// DisableBracketedPaste should be safe to call even when not enabled
+	reader.DisableBracketedPaste()
+	if reader.IsBracketedPasteEnabled() {
+		t.Error("IsBracketedPasteEnabled() should be false after disable")
+	}
+}

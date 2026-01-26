@@ -11,6 +11,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/audit"
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/ui"
@@ -18,6 +19,21 @@ import (
 
 // RunInteractive はインタラクティブモードでエージェントを実行
 func RunInteractive(model string, provider api.Provider, autoApprove bool) {
+	// Bracketed Paste Mode を最初に有効化（Windows Terminal の警告回避のため）
+	// 他の出力より前に送信する必要がある
+	mlReader := ui.NewMultilineReader(os.Stdin)
+	cfg := config.GetGlobalConfig()
+
+	// Debug: XELYON_DEBUG_PASTE=1 で詳細表示
+	if os.Getenv("XELYON_DEBUG_PASTE") == "1" {
+		fmt.Fprintf(os.Stderr, "[DEBUG] cfg.Paste.BracketedPaste = %v\n", cfg.Paste.BracketedPaste)
+	}
+
+	if cfg.Paste.BracketedPaste {
+		mlReader.EnableBracketedPaste()
+		defer mlReader.DisableBracketedPaste()
+	}
+
 	// 監査ログ初期化（環境変数で制御: XELYON_AUDIT_LOG=1 で有効化）
 	auditEnabled := os.Getenv("XELYON_AUDIT_LOG") == "1"
 	if err := audit.Init(auditEnabled); err != nil {
@@ -61,17 +77,26 @@ func RunInteractive(model string, provider api.Provider, autoApprove bool) {
 		}
 	}
 
-	// REPLループ（複数行入力対応）
-	mlReader := ui.NewMultilineReader(os.Stdin)
-	mlReader.EnableBracketedPaste()
-	defer mlReader.DisableBracketedPaste()
+	// REPLループ開始
 	agent.mlReader = mlReader // ペーストモードで共有するため
-
 	runREPLLoop(agent, mlReader)
 }
 
 // RunInteractiveWithResume は前回のセッションを再開してインタラクティブモードを実行
 func RunInteractiveWithResume(model string, provider api.Provider, autoApprove bool) {
+	// Bracketed Paste Mode を最初に有効化（Windows Terminal の警告回避のため）
+	mlReader := ui.NewMultilineReader(os.Stdin)
+	cfg := config.GetGlobalConfig()
+
+	if os.Getenv("XELYON_DEBUG_PASTE") == "1" {
+		fmt.Fprintf(os.Stderr, "[DEBUG] cfg.Paste.BracketedPaste = %v\n", cfg.Paste.BracketedPaste)
+	}
+
+	if cfg.Paste.BracketedPaste {
+		mlReader.EnableBracketedPaste()
+		defer mlReader.DisableBracketedPaste()
+	}
+
 	storage, err := history.NewStorage()
 	if err != nil {
 		red.Printf("Failed to initialize storage: %v\n", err)
@@ -129,17 +154,15 @@ func RunInteractiveWithResume(model string, provider api.Provider, autoApprove b
 		}
 	}
 
-	// REPLループ（複数行入力対応）
-	mlReader := ui.NewMultilineReader(os.Stdin)
-	mlReader.EnableBracketedPaste()
-	defer mlReader.DisableBracketedPaste()
-	agent.mlReader = mlReader // ペーストモードで共有するため
-
+	// REPLループ開始
+	agent.mlReader = mlReader
 	runREPLLoop(agent, mlReader)
 }
 
 // runREPLLoop は共通のREPLループを実行（RunInteractive/RunInteractiveWithResumeで共用）
 func runREPLLoop(agent *Agent, mlReader *ui.MultilineReader) {
+	var lastInterrupt time.Time
+
 	for {
 		// AI出力後に溜まった入力をクリア（出力中のEnter押下を無視）
 		mlReader.FlushInput()
@@ -149,6 +172,20 @@ func runREPLLoop(agent *Agent, mlReader *ui.MultilineReader) {
 
 		input, err := mlReader.ReadInput("\n> ")
 		if err != nil {
+			// Handle Ctrl+C (ErrInterrupted)
+			if err == ui.ErrInterrupted {
+				now := time.Now()
+				if now.Sub(lastInterrupt) < 3*time.Second {
+					// 2回目（3秒以内）: アプリ終了
+					fmt.Println("\n👋 Gracefully shutting down...")
+					agent.Cleanup()
+					os.Exit(0)
+				}
+				lastInterrupt = now
+				fmt.Println("⚠️  Interrupted. Press Ctrl+C again within 3 seconds to exit.")
+				continue
+			}
+			// Other errors (like EOF): exit loop
 			break
 		}
 

@@ -107,6 +107,9 @@ prompt_cache:
 # ペーストモード設定
 # ============================================================
 paste:
+    # Bracketed Paste Mode を有効化（複数行ペースト対応）
+    # WSL等で問題がある場合は false に設定、または XELYON_BRACKETED_PASTE=0 で無効化
+    bracketed_paste: true
     # 最大行数
     max_lines: 10000
     # 最大バイト数

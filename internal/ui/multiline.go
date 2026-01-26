@@ -2,35 +2,107 @@ package ui
 
 import (
 	"bufio"
+	"bytes"
+	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
+	"time"
+
+	"golang.org/x/term"
+)
+
+// ErrInterrupted is returned when user presses Ctrl+C
+var ErrInterrupted = errors.New("interrupted")
+
+// Bracketed Paste Mode escape sequences
+const (
+	bracketedPasteEnable  = "\x1b[?2004h" // Enable bracketed paste mode
+	bracketedPasteDisable = "\x1b[?2004l" // Disable bracketed paste mode
+	pasteStart            = "\x1b[200~"   // Paste start marker
+	pasteEnd              = "\x1b[201~"   // Paste end marker
 )
 
 // MultilineReader handles multiline input with bracketed paste mode and ``` markers
 type MultilineReader struct {
 	reader                *bufio.Reader
 	bracketedPasteEnabled bool
+	fd                    int // file descriptor for stdin (for raw mode)
+	// Raw mode channels (initialized lazily, reused across calls)
+	byteChan    chan byte
+	errChan     chan error
+	rawModeInit bool
 }
 
 // NewMultilineReader creates a new multiline reader
 func NewMultilineReader(r io.Reader) *MultilineReader {
+	fd := -1
+	if f, ok := r.(*os.File); ok {
+		fd = int(f.Fd())
+	}
 	return &MultilineReader{
 		reader:                bufio.NewReaderSize(r, 1024*1024), // 1MB buffer
 		bracketedPasteEnabled: false,
+		fd:                    fd,
+		byteChan:              nil,
+		errChan:               nil,
+		rawModeInit:           false,
 	}
 }
 
-// EnableBracketedPaste is a no-op (kept for API compatibility)
-// Note: We don't enable bracketed paste mode because some terminals (WSL/Ubuntu)
-// display the escape sequences as literal text. Instead, we just strip markers.
-func (m *MultilineReader) EnableBracketedPaste() {
-	// Intentionally disabled - markers are stripped in ReadInput
+// initRawModeChannels initializes the raw mode channels and goroutine (once)
+func (m *MultilineReader) initRawModeChannels() {
+	if m.rawModeInit {
+		return
+	}
+	m.byteChan = make(chan byte, 4096)
+	m.errChan = make(chan error, 1)
+	m.rawModeInit = true
+
+	go func() {
+		b := make([]byte, 1)
+		for {
+			_, err := os.Stdin.Read(b)
+			if err != nil {
+				m.errChan <- err
+				return
+			}
+			m.byteChan <- b[0]
+		}
+	}()
 }
 
-// DisableBracketedPaste is a no-op (kept for API compatibility)
+// EnableBracketedPaste enables bracketed paste mode
+// This sends the escape sequence to the terminal to enable the mode
+// Windows Terminal skips multiline paste warning when this mode is active
+func (m *MultilineReader) EnableBracketedPaste() {
+	// Debug: XELYON_DEBUG_PASTE=1 で詳細表示
+	debug := os.Getenv("XELYON_DEBUG_PASTE") == "1"
+
+	if debug {
+		fmt.Fprintf(os.Stderr, "[DEBUG] EnableBracketedPaste: fd=%d, IsTerminal=%v\n", m.fd, m.fd >= 0 && term.IsTerminal(m.fd))
+	}
+
+	if m.fd >= 0 && term.IsTerminal(m.fd) {
+		// Use WriteString for immediate, unbuffered output
+		os.Stdout.WriteString(bracketedPasteEnable)
+		m.bracketedPasteEnabled = true
+		if debug {
+			fmt.Fprintf(os.Stderr, "[DEBUG] Sent: \\x1b[?2004h (bracketed paste enable)\n")
+		}
+	} else if debug {
+		fmt.Fprintf(os.Stderr, "[DEBUG] Skipped: not a terminal\n")
+	}
+}
+
+// DisableBracketedPaste disables bracketed paste mode
+// This sends the escape sequence to the terminal to disable the mode
 func (m *MultilineReader) DisableBracketedPaste() {
-	// Intentionally disabled
+	if m.bracketedPasteEnabled {
+		os.Stdout.WriteString(bracketedPasteDisable)
+		m.bracketedPasteEnabled = false
+	}
 }
 
 // stripAllBracketedPasteMarkers removes all bracketed paste markers from input
@@ -46,13 +118,24 @@ func stripAllBracketedPasteMarkers(input string) string {
 }
 
 // ReadInput reads user input, supporting:
-// 1. ``` markers for explicit multiline mode
-// 2. Single line input (default)
+// 1. Bracketed paste mode (multiline paste detection)
+// 2. ``` markers for explicit multiline mode
+// 3. Single line input (default)
 // All bracketed paste markers are automatically stripped from input
 func (m *MultilineReader) ReadInput(prompt string) (string, error) {
 	fmt.Print(prompt)
 
-	// Read first line
+	// If bracketed paste mode is enabled and we're in a terminal, use raw mode
+	if m.bracketedPasteEnabled && m.fd >= 0 && term.IsTerminal(m.fd) {
+		return m.readWithBracketedPaste()
+	}
+
+	// Fallback: standard line-by-line reading
+	return m.readLine()
+}
+
+// readLine reads a single line (standard mode)
+func (m *MultilineReader) readLine() (string, error) {
 	line, err := m.reader.ReadString('\n')
 	if err != nil {
 		return "", err
@@ -60,7 +143,7 @@ func (m *MultilineReader) ReadInput(prompt string) (string, error) {
 
 	line = strings.TrimRight(line, "\n\r")
 
-	// Always strip bracketed paste markers
+	// Always strip bracketed paste markers (in case terminal sends them without raw mode)
 	line = stripAllBracketedPasteMarkers(line)
 
 	// Case 1: ``` marker detected - explicit multiline mode
@@ -70,6 +153,180 @@ func (m *MultilineReader) ReadInput(prompt string) (string, error) {
 
 	// Case 2: Single line input
 	return line, nil
+}
+
+// readWithBracketedPaste reads input using raw mode with paste marker detection
+func (m *MultilineReader) readWithBracketedPaste() (string, error) {
+	debug := os.Getenv("XELYON_DEBUG_PASTE") == "1"
+
+	if debug {
+		fmt.Fprintf(os.Stderr, "[DEBUG] Entering raw mode...\n")
+	}
+
+	oldState, err := term.MakeRaw(m.fd)
+	if err != nil {
+		if debug {
+			fmt.Fprintf(os.Stderr, "[DEBUG] MakeRaw FAILED: %v\n", err)
+		}
+		return m.readLine()
+	}
+	defer term.Restore(m.fd, oldState)
+
+	if debug {
+		os.Stderr.WriteString("[DEBUG] Raw mode OK\r\n")
+	}
+
+	var buf bytes.Buffer
+	var pasteContent bytes.Buffer
+	inPaste := false
+
+	// Initialize raw mode channels (once, reused across calls)
+	m.initRawModeChannels()
+
+	// Helper to read next byte with timeout
+	readByteTimeout := func(timeout time.Duration) (byte, bool) {
+		select {
+		case b := <-m.byteChan:
+			return b, true
+		case <-time.After(timeout):
+			return 0, false
+		}
+	}
+
+	for {
+		select {
+		case b := <-m.byteChan:
+			// Ctrl+C - always handle first (even in paste mode)
+			if b == 0x03 {
+				term.Restore(m.fd, oldState)
+				fmt.Print("^C\r\n")
+				return "", ErrInterrupted
+			}
+
+			// ESC or '[' - check for paste marker
+			// Some terminals send \x1b[200~, others send [200~ without ESC
+			if b == 0x1b || b == '[' {
+				// Try to read paste marker: [200~ or [201~ (or with ESC prefix)
+				escBuf := []byte{b}
+				maxRead := 5
+				if b == 0x1b {
+					maxRead = 6 // ESC + [200~ = 6 bytes total
+				}
+				markerDetected := false
+				for i := 0; i < maxRead; i++ {
+					nb, ok := readByteTimeout(10 * time.Millisecond)
+					if !ok {
+						break
+					}
+					// Check for Ctrl+C even inside escape sequence detection
+					if nb == 0x03 {
+						term.Restore(m.fd, oldState)
+						fmt.Print("^C\r\n")
+						return "", ErrInterrupted
+					}
+					escBuf = append(escBuf, nb)
+
+					escStr := string(escBuf)
+					// Check both with and without ESC prefix
+					if escStr == pasteStart || escStr == "[200~" { // \x1b[200~ or [200~
+						// Only start paste mode if not already in paste mode
+						if !inPaste {
+							inPaste = true
+							pasteContent.Reset()
+							if debug {
+								os.Stderr.WriteString("[DEBUG] Paste START\r\n")
+							}
+						}
+						// If already in paste mode, ignore duplicate start marker
+						escBuf = nil
+						markerDetected = true
+						break
+					}
+					if escStr == pasteEnd || escStr == "[201~" { // \x1b[201~ or [201~
+						inPaste = false
+						content := pasteContent.String()
+						if debug {
+							fmt.Fprintf(os.Stderr, "[DEBUG] Paste END, %d bytes\r\n", len(content))
+						}
+						// Normalize line endings: \r\n -> \n, standalone \r -> \n
+						content = strings.ReplaceAll(content, "\r\n", "\n")
+						content = strings.ReplaceAll(content, "\r", "\n")
+						// Remove trailing newlines
+						content = strings.TrimRight(content, "\n")
+						// Add pasted content to buffer (don't return yet - wait for Enter)
+						buf.WriteString(content)
+						// Echo pasted content to terminal so user can see it
+						// In raw mode, need \r\n for proper line breaks
+						displayContent := strings.ReplaceAll(content, "\n", "\r\n")
+						fmt.Print(displayContent)
+						pasteContent.Reset()
+						escBuf = nil
+						markerDetected = true
+						break
+					}
+				}
+				// Not a paste marker - add to buffer
+				if !markerDetected && len(escBuf) > 0 {
+					if inPaste {
+						pasteContent.Write(escBuf)
+					} else {
+						buf.Write(escBuf)
+					}
+				}
+				continue
+			}
+
+			// In paste mode - collect everything
+			if inPaste {
+				pasteContent.WriteByte(b)
+				continue
+			}
+
+			// Ctrl+D
+			if b == 0x04 {
+				if buf.Len() == 0 {
+					return "", io.EOF
+				}
+				fmt.Print("\r\n")
+				return buf.String(), nil
+			}
+
+			// Enter
+			if b == '\r' || b == '\n' {
+				fmt.Print("\r\n")
+				content := buf.String()
+				content = stripAllBracketedPasteMarkers(content)
+				if content == "```" {
+					term.Restore(m.fd, oldState)
+					return m.readMultilineWithMarker()
+				}
+				return content, nil
+			}
+
+			// Backspace
+			if b == 0x7f || b == 0x08 {
+				if buf.Len() > 0 {
+					data := buf.Bytes()
+					buf.Reset()
+					buf.Write(data[:len(data)-1])
+					fmt.Print("\b \b")
+				}
+				continue
+			}
+
+			// Regular character
+			buf.WriteByte(b)
+			if b >= 0x20 && b < 0x7f {
+				fmt.Print(string(b))
+			}
+
+		case err := <-m.errChan:
+			if err == io.EOF {
+				return buf.String(), nil
+			}
+			return "", err
+		}
+	}
 }
 
 // readMultilineWithMarker handles explicit multiline mode with ``` markers
@@ -128,4 +385,9 @@ func (m *MultilineReader) FlushInput() {
 // Reader returns the underlying bufio.Reader for sharing with other input handlers
 func (m *MultilineReader) Reader() *bufio.Reader {
 	return m.reader
+}
+
+// IsBracketedPasteEnabled returns whether bracketed paste mode is enabled
+func (m *MultilineReader) IsBracketedPasteEnabled() bool {
+	return m.bracketedPasteEnabled
 }
