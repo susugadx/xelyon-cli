@@ -31,6 +31,7 @@ var (
 	green  = color.New(color.FgGreen)
 	yellow = color.New(color.FgYellow)
 	red    = color.New(color.FgRed)
+	dim    = color.New(color.Faint)
 )
 
 // Agent はCLIエージェント

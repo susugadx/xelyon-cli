@@ -12,6 +12,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 const (
@@ -34,7 +35,6 @@ func handleStatsCommand(agent *Agent) bool {
 	if agent.session != nil {
 		sessionPath = fmt.Sprintf("~/.xelyon/sessions/%s.json", agent.session.ID)
 		if agent.storage != nil {
-			// セッションファイルの実際のパスを構築
 			homeDir, err := os.UserHomeDir()
 			if err == nil {
 				fullPath := fmt.Sprintf("%s/.xelyon/sessions/%s.json", homeDir, agent.session.ID)
@@ -47,63 +47,73 @@ func handleStatsCommand(agent *Agent) bool {
 
 	// 統計情報を表示
 	printCommandHeader("Session Statistics / セッション統計")
-
 	fmt.Println()
-	green.Println("⏱️  Time / 経過時間")
-	fmt.Printf("  Elapsed: %s\n", stats.FormatElapsedTime())
 
-	fmt.Println()
-	green.Println("💬 Messages / メッセージ数")
-	fmt.Printf("  User:      %d\n", stats.UserMessages)
-	fmt.Printf("  Assistant: %d\n", stats.AssistantMessages)
-	fmt.Printf("  Total:     %d\n", stats.TotalMessages())
+	// 基本情報テーブル
+	basicTable := ui.NewTable().
+		AddRow("⏱️  Elapsed", stats.FormatElapsedTime()).
+		AddRow("🤖 Provider", stats.Provider).
+		AddRow("📦 Model", agent.CurrentModel)
+	fmt.Print(basicTable.Render())
 
+	// メッセージ数テーブル
 	fmt.Println()
-	green.Println("🔧 Tool Executions / ツール実行回数")
+	green.Println("💬 Messages")
+	msgTable := ui.NewTable().
+		AddRow("User", fmt.Sprintf("%d", stats.UserMessages)).
+		AddRow("Assistant", fmt.Sprintf("%d", stats.AssistantMessages)).
+		AddRow("Total", fmt.Sprintf("%d", stats.TotalMessages()))
+	fmt.Print(msgTable.RenderCompact())
+
+	// ツール実行テーブル
+	fmt.Println()
+	green.Println("🔧 Tool Executions")
 	if stats.TotalToolExecutions() > 0 {
-		fmt.Printf("  Total: %d\n", stats.TotalToolExecutions())
-		fmt.Println("  Breakdown:")
+		toolTable := ui.NewTable()
 		for tool, count := range stats.ToolExecutions {
-			fmt.Printf("    - %-15s: %d\n", tool, count)
+			toolTable.AddRow(tool, fmt.Sprintf("%d", count))
 		}
+		toolTable.AddRow("Total", fmt.Sprintf("%d", stats.TotalToolExecutions()))
+		fmt.Print(toolTable.RenderCompact())
 	} else {
-		fmt.Println("  No tools executed yet")
+		dim.Println("  No tools executed yet")
 	}
 
+	// トークン使用量テーブル
 	fmt.Println()
-	green.Println("🤖 Provider / プロバイダー")
-	fmt.Printf("  Name: %s\n", stats.Provider)
-	fmt.Printf("  Model: %s\n", agent.CurrentModel)
-
-	fmt.Println()
-	green.Println("💰 Token Usage & Cost / トークン使用量とコスト")
+	green.Println("💰 Token Usage & Cost")
 	if stats.TotalTokens() > 0 {
-		fmt.Printf("  Input:  %s tokens\n", formatNumber(stats.InputTokens))
-		fmt.Printf("  Output: %s tokens\n", formatNumber(stats.OutputTokens))
-		fmt.Printf("  Total:  %s tokens\n", formatNumber(stats.TotalTokens()))
+		tokenTable := ui.NewTable().
+			AddRow("Input", formatNumber(stats.InputTokens)+" tokens").
+			AddRow("Output", formatNumber(stats.OutputTokens)+" tokens").
+			AddRow("Total", formatNumber(stats.TotalTokens())+" tokens")
+
 		cost := stats.EstimatedCost()
 		if cost > 0 {
-			fmt.Printf("  Estimated Cost: $%.4f USD\n", cost)
+			tokenTable.AddRow("Cost", fmt.Sprintf("$%.4f USD", cost))
 		} else {
-			fmt.Println("  Cost: Free (local model)")
+			tokenTable.AddRow("Cost", "Free (local)")
 		}
+		fmt.Print(tokenTable.RenderCompact())
 	} else {
-		yellow.Println("  No token usage data available")
-		yellow.Println("  (Token tracking requires API support)")
+		dim.Println("  No token usage data available")
+	}
+
+	// セッションファイル情報
+	fmt.Println()
+	green.Println("📁 Session File")
+	if sessionPath != "" {
+		sessionTable := ui.NewTable().
+			AddRow("Path", sessionPath)
+		if sessionSize > 0 {
+			sessionTable.AddRow("Size", FormatFileSize(sessionSize))
+		}
+		fmt.Print(sessionTable.RenderCompact())
+	} else {
+		dim.Println("  No session file")
 	}
 
 	fmt.Println()
-	green.Println("📁 Session File / セッションファイル")
-	if sessionPath != "" {
-		fmt.Printf("  Path: %s\n", sessionPath)
-		if sessionSize > 0 {
-			fmt.Printf("  Size: %s\n", FormatFileSize(sessionSize))
-		}
-	} else {
-		yellow.Println("  No session file")
-	}
-
-	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	return true
 }
 
