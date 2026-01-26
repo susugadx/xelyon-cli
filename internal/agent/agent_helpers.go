@@ -51,14 +51,46 @@ func parseImageInput(input string) (text string, image *api.ImageData) {
 	return text, img
 }
 
+// ANSI color codes for gradient (blue -> cyan)
+const (
+	colorBlue1 = "\033[38;5;27m" // Deep blue
+	colorBlue2 = "\033[38;5;33m" // Blue
+	colorCyan1 = "\033[38;5;39m" // Light blue
+	colorCyan2 = "\033[38;5;45m" // Cyan
+	colorCyan3 = "\033[38;5;51m" // Bright cyan
+	colorReset = "\033[0m"
+	colorDim   = "\033[2m"
+)
+
 // printHeader はセッション開始時のヘッダーを表示
 func printHeader(model string, provider api.Provider) {
-	cyan.Println("╔═══════════════════════════════════════════╗")
-	cyan.Printf("║  🚀 XELYON CLI v%-25s║\n", version.GetVersion())
-	cyan.Println("║  AI-powered coding assistant              ║")
-	cyan.Println("╚═══════════════════════════════════════════╝")
-	green.Printf("🌐 Provider: %s\n", provider.Name())
-	fmt.Printf("   Model: %s\n", modelDisplayName(model))
+	// ASCII logo with info on the right side
+	// Logo lines paired with info text
+	type lineInfo struct {
+		color string
+		logo  string
+		info  string
+	}
+
+	lines := []lineInfo{
+		{colorBlue1, `██╗  ██╗`, ""},
+		{colorBlue1, `╚██╗██╔╝`, fmt.Sprintf("%sXELYON%s v%s", colorCyan2, colorReset, version.GetVersion())},
+		{colorBlue2, ` ╚███╔╝ `, fmt.Sprintf("%sAI-powered coding assistant%s", colorDim, colorReset)},
+		{colorCyan1, ` ██╔██╗ `, ""},
+		{colorCyan2, `██╔╝ ██╗`, fmt.Sprintf("Provider: %s", provider.Name())},
+		{colorCyan3, `╚═╝  ╚═╝`, fmt.Sprintf("Model: %s", modelDisplayName(model))},
+	}
+
+	// Print logo with info
+	fmt.Println()
+	for _, l := range lines {
+		if l.info == "" {
+			fmt.Printf("  %s%s%s\n", l.color, l.logo, colorReset)
+		} else {
+			fmt.Printf("  %s%s%s   %s\n", l.color, l.logo, colorReset, l.info)
+		}
+	}
+	fmt.Println()
 }
 
 // printModeInfo はモード情報を表示
@@ -71,13 +103,13 @@ func printModeInfo(autoApprove, dryRun bool) {
 		modes = append(modes, "Dry-run")
 	}
 
+	// 特殊モードのときだけ表示
 	if len(modes) > 0 {
-		yellow.Printf("   Mode: %s\n", strings.Join(modes, ", "))
-	} else {
-		fmt.Println("   Mode: Normal")
+		yellow.Printf("  Mode: %s\n\n", strings.Join(modes, ", "))
 	}
-	cyan.Println("───────────────────────────────────────────")
-	yellow.Println("Type /help for commands, /exit to quit")
+
+	cyan.Println("  ─────────────────────────────────────────")
+	yellow.Println("  Type /help for commands, /exit to quit")
 }
 
 // modelDisplayName はモデル名を表示用にフォーマット
