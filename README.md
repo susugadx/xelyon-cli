@@ -44,6 +44,14 @@ DeepSeek, OpenAI, Gemini, Claude, Ollama, Groq をシームレスに切り替え
 
 デフォルトは通常モード（ツール個別確認）。軽いタスクにはオーバーヘッドなく即座に応答。
 
+### 🔄 自動リトライ機能
+ツール実行が失敗した場合、自動的にリトライして成功するまで試行します。
+- **デフォルト10回**のリトライ（`plan_mode.auto_retry: 10`で設定可能）
+- Plan Mode と通常モード両方で有効
+- リトライ中: `❌ Failed (retry 1/10)` → `🔄 Retrying...`
+- 成功時: `✅ Succeeded (on retry 3)`
+- 上限到達時: Selector UI で継続/中止を選択（Plan Mode のみ）
+
 ### 🔍 コードレビュー & リファクタリング
 `/review` でセキュリティ・テストカバレッジをチェック。
 `/refactor` で静的解析ベースのリファクタリング提案。

@@ -79,6 +79,14 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Diff.ContextLines != 10 {
 		t.Errorf("Diff.ContextLines = %d, want 10", cfg.Diff.ContextLines)
 	}
+
+	// PlanMode
+	if cfg.PlanMode.MaxParallelSteps != 3 {
+		t.Errorf("PlanMode.MaxParallelSteps = %d, want 3", cfg.PlanMode.MaxParallelSteps)
+	}
+	if cfg.PlanMode.AutoRetry != 10 {
+		t.Errorf("PlanMode.AutoRetry = %d, want 10", cfg.PlanMode.AutoRetry)
+	}
 }
 
 func TestLoadConfig_NotExists(t *testing.T) {

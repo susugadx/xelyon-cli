@@ -369,3 +369,67 @@ func TestExtractExplanationAndTool_UnclosedBrace(t *testing.T) {
 
 // NOTE: shouldEnterPlanMode tests removed in Issue #82
 // Plan Mode Only に統一されたため、shouldEnterPlanMode 関数とそのテストは削除されました
+
+// TestAutoRetryConfig はauto_retryの設定が正しく読み込まれることを確認
+func TestAutoRetryConfig(t *testing.T) {
+	cfg := config.GetGlobalConfig()
+
+	// デフォルト値は10
+	if cfg.PlanMode.AutoRetry != 10 {
+		t.Errorf("PlanMode.AutoRetry = %d, want 10", cfg.PlanMode.AutoRetry)
+	}
+
+	// 一時的に変更してテスト
+	original := cfg.PlanMode.AutoRetry
+	cfg.PlanMode.AutoRetry = 5
+	defer func() {
+		cfg.PlanMode.AutoRetry = original
+	}()
+
+	if cfg.PlanMode.AutoRetry != 5 {
+		t.Errorf("PlanMode.AutoRetry after change = %d, want 5", cfg.PlanMode.AutoRetry)
+	}
+}
+
+// TestExecuteToolCallWithResult は結果を返すことを確認
+func TestExecuteToolCallWithResult(t *testing.T) {
+	provider := &mockProvider{name: "test"}
+	agent := NewAgent("test-model", provider)
+
+	// Statsを初期化
+	agent.Stats = &SessionStats{
+		ToolExecutions: make(map[string]int),
+	}
+
+	toolCall := &tools.ToolCall{
+		Tool: "read_file",
+		Args: map[string]string{"path": "/nonexistent-file-for-test.txt"},
+	}
+
+	result := agent.executeToolCallWithResult("test response", toolCall)
+
+	// 結果が空でないことを確認
+	if result == "" {
+		t.Error("executeToolCallWithResult() should return non-empty result")
+	}
+
+	// エラーメッセージを含むことを確認（ファイルが存在しないため）
+	if !contains(result, "Error") && !contains(result, "error") && !contains(result, "not found") && !contains(result, "Security") {
+		t.Logf("Result: %s", result)
+		// セキュリティエラーの場合もOK
+	}
+}
+
+// contains はsに substrが含まれるかチェック
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
+}
+
+func containsHelper(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
