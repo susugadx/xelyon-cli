@@ -38,22 +38,6 @@ func TestPlanDisplay_AddStep(t *testing.T) {
 	}
 }
 
-func TestPlanDisplay_SetStepStatus(t *testing.T) {
-	p := NewPlanDisplay("Test").
-		AddStep(1, "Step 1", nil, nil).
-		AddStep(2, "Step 2", nil, nil)
-
-	p.SetStepStatus(1, "completed")
-	p.SetStepStatus(2, "running")
-
-	if p.Steps[0].Status != "completed" {
-		t.Errorf("Expected status 'completed', got %q", p.Steps[0].Status)
-	}
-	if p.Steps[1].Status != "running" {
-		t.Errorf("Expected status 'running', got %q", p.Steps[1].Status)
-	}
-}
-
 func TestPlanDisplay_Render(t *testing.T) {
 	p := NewPlanDisplay("Bracketed Paste Mode 対応").
 		SetSummary("複数行ペーストを直接受け付けられるように実装").
@@ -85,46 +69,6 @@ func TestPlanDisplay_Render(t *testing.T) {
 	// 罫線が含まれているか
 	if !strings.Contains(result, "╌") {
 		t.Error("Missing border in output")
-	}
-}
-
-func TestPlanDisplay_RenderProgress(t *testing.T) {
-	p := NewPlanDisplay("Test").
-		AddStep(1, "Step 1", nil, nil).
-		AddStep(2, "Step 2", nil, nil).
-		AddStep(3, "Step 3", nil, nil)
-
-	p.SetStepStatus(1, "completed")
-	p.SetStepStatus(2, "running")
-
-	result := p.RenderProgress()
-
-	if !strings.Contains(result, "✅") {
-		t.Error("Missing completed icon")
-	}
-	if !strings.Contains(result, "⏳") {
-		t.Error("Missing running icon")
-	}
-	if !strings.Contains(result, "⬜") {
-		t.Error("Missing pending icon")
-	}
-}
-
-func TestPlanDisplay_RenderCompact(t *testing.T) {
-	p := NewPlanDisplay("Quick Task").
-		AddStep(1, "Do something", nil, nil)
-
-	result := p.RenderCompact()
-
-	if !strings.Contains(result, "Quick Task") {
-		t.Error("Missing title")
-	}
-	if !strings.Contains(result, "Do something") {
-		t.Error("Missing step")
-	}
-	// コンパクト形式は短い罫線
-	if !strings.Contains(result, "─") {
-		t.Error("Missing compact border")
 	}
 }
 

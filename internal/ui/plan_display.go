@@ -47,16 +47,6 @@ func (p *PlanDisplay) AddStep(id int, description string, tools []string, files 
 	return p
 }
 
-// SetStepStatus はステップのステータスを設定
-func (p *PlanDisplay) SetStepStatus(id int, status string) {
-	for i := range p.Steps {
-		if p.Steps[i].ID == id {
-			p.Steps[i].Status = status
-			return
-		}
-	}
-}
-
 // Render は計画を整形して表示
 func (p *PlanDisplay) Render() string {
 	var sb strings.Builder
@@ -106,41 +96,6 @@ func (p *PlanDisplay) Render() string {
 
 	// 下部罫線
 	sb.WriteString(strings.Repeat("╌", 50))
-	sb.WriteString("\n")
-
-	return sb.String()
-}
-
-// RenderProgress は進捗表示を出力
-func (p *PlanDisplay) RenderProgress() string {
-	var sb strings.Builder
-
-	sb.WriteString("Progress:\n")
-	for _, step := range p.Steps {
-		icon := getStepStatusIcon(step.Status)
-		sb.WriteString(fmt.Sprintf("  %s Step %d: %s\n", icon, step.ID, step.Description))
-	}
-
-	return sb.String()
-}
-
-// RenderCompact はコンパクト形式で表示
-func (p *PlanDisplay) RenderCompact() string {
-	var sb strings.Builder
-
-	sb.WriteString(strings.Repeat("─", 40))
-	sb.WriteString("\n")
-
-	if p.Title != "" {
-		sb.WriteString(fmt.Sprintf("📋 %s\n", p.Title))
-	}
-
-	for _, step := range p.Steps {
-		icon := getStepStatusIcon(step.Status)
-		sb.WriteString(fmt.Sprintf("%s %d. %s\n", icon, step.ID, step.Description))
-	}
-
-	sb.WriteString(strings.Repeat("─", 40))
 	sb.WriteString("\n")
 
 	return sb.String()
@@ -234,9 +189,6 @@ func inferActionFromDescription(desc string) string {
 	if strings.Contains(descLower, "create") || strings.Contains(descLower, "add") ||
 		strings.Contains(descLower, "新規") || strings.Contains(descLower, "作成") {
 		return "新規作成"
-	}
-	if strings.Contains(descLower, "test") || strings.Contains(descLower, "テスト") {
-		return "テスト追加"
 	}
 
 	return "変更"
