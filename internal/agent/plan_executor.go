@@ -39,7 +39,7 @@ func (a *Agent) runImplementationPhase(ctx context.Context, p *plan.Plan) error 
 					if step == nil {
 						continue
 					}
-					cyan.Printf("\n[%d/%d] %s\n", id, len(p.Steps), step.Description)
+					fmt.Printf("\n%s\n", ui.FormatStepProgress(id, len(p.Steps), step.Description, "running"))
 					if err := a.executeStepV2(ctx, p, step, id-1, 0, false); err != nil {
 						return err
 					}
@@ -67,7 +67,7 @@ func (a *Agent) runImplementationPhase(ctx context.Context, p *plan.Plan) error 
 				break
 			}
 
-			cyan.Printf("\n[%d/%d] %s\n", nextID, len(p.Steps), step.Description)
+			fmt.Printf("\n%s\n", ui.FormatStepProgress(nextID, len(p.Steps), step.Description, "running"))
 			if err := a.executeStepV2(ctx, p, step, nextID-1, 0, false); err != nil {
 				return err
 			}

@@ -3,11 +3,11 @@ package agent
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/agent/plan"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	promptplan "github.com/susugadx/xelyon-cli/internal/prompt/plan"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // RunPlanMode は Claude Code 風の Plan Mode を実行
@@ -56,21 +56,16 @@ func (a *Agent) RunPlanMode(ctx context.Context, userRequest string) error {
 		return nil
 	}
 
-	// 計画を表示
-	fmt.Println()
-	cyan.Println("📋 Implementation Plan:")
-	cyan.Println(strings.Repeat("─", 50))
-	if p.Summary != "" {
-		fmt.Printf("Summary: %s\n\n", p.Summary)
-	}
+	// 計画を構造化表示
+	planDisplay := ui.NewPlanDisplay("Implementation Plan").
+		SetSummary(p.Summary)
+
 	for _, step := range p.Steps {
-		fmt.Printf("  %d. %s\n", step.ID, step.Description)
-		if len(step.Tools) > 0 {
-			fmt.Printf("     Tools: %s\n", strings.Join(step.Tools, ", "))
-		}
+		planDisplay.AddStep(step.ID, step.Description, step.Tools, step.TargetFiles)
 	}
-	cyan.Println(strings.Repeat("─", 50))
+
 	fmt.Println()
+	fmt.Print(planDisplay.Render())
 
 	// Step 3: ユーザー承認
 	a.SetStatus(StateWaitingApproval, "Waiting for plan approval", "計画の承認待ち", "Answer y/n/c", "y/n/c で回答")
