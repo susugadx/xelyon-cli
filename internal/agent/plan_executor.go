@@ -273,16 +273,14 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 				return fmt.Errorf("step %d failed during parallel execution: %s", step.ID, lastFailReason)
 			}
 
-			a.SetStatus(StateWaitingApproval, "Step failed - waiting for action", "ステップ失敗 - アクション待ち", "Choose r/c/s/a", "r/c/s/a を選択")
+			cfg := config.GetGlobalConfig()
+			autoRetryMax := cfg.PlanMode.AutoRetry
 
-			action, comment := promptFailureAction(step, lastFailedResult, lastFailReason)
+			// 自動リトライが有効で、まだ上限に達していない場合
+			if autoRetryMax > 0 && retryCount < autoRetryMax {
+				red.Printf("❌ Step %d Failed (auto-retry %d/%d)\n", step.ID, retryCount+1, autoRetryMax)
+				yellow.Printf("🔄 Retrying...\n")
 
-			switch action {
-			case plan.FailureActionRetry:
-				if retryCount >= maxRetries {
-					red.Printf("⚠️  Max retries (%d) reached for step %d\n", maxRetries, step.ID)
-					return fmt.Errorf("step %d failed after %d retries", step.ID, maxRetries)
-				}
 				// リトライ用プロンプトを追加
 				a.History = append(a.History, api.Message{
 					Role: "user",
@@ -299,12 +297,41 @@ Please:
 Do NOT skip this step. The issue must be resolved before proceeding.`, lastFailedResult),
 				})
 				return a.executeStepV2(ctx, p, step, idx, retryCount+1, false)
+			}
+
+			// 自動リトライが exhausted または無効 → Selector UI で確認
+			a.SetStatus(StateWaitingApproval, "Step failed - waiting for action", "ステップ失敗 - アクション待ち", "Choose action", "アクションを選択")
+
+			action, comment := promptFailureActionWithSelector(step, lastFailedResult, lastFailReason, autoRetryMax)
+
+			switch action {
+			case plan.FailureActionRetry:
+				if retryCount >= maxRetries {
+					red.Printf("⚠️  Max retries (%d) reached for step %d\n", maxRetries, step.ID)
+					return fmt.Errorf("step %d failed after %d retries", step.ID, maxRetries)
+				}
+				// 手動リトライ: リトライカウンターをリセットして新しいシーケンスを開始
+				a.History = append(a.History, api.Message{
+					Role: "user",
+					Content: fmt.Sprintf(`The previous step FAILED with the following error:
+
+%s
+
+Please:
+1. Analyze the error carefully
+2. Identify the root cause
+3. Fix the code or configuration
+4. Re-run the step to verify the fix
+
+Do NOT skip this step. The issue must be resolved before proceeding.`, lastFailedResult),
+				})
+				return a.executeStepV2(ctx, p, step, idx, 0, false) // リセット: retryCount=0
 			case plan.FailureActionComment:
 				if retryCount >= maxRetries {
 					red.Printf("⚠️  Max retries (%d) reached for step %d\n", maxRetries, step.ID)
 					return fmt.Errorf("step %d failed after %d retries", step.ID, maxRetries)
 				}
-				// ユーザーの指示付きリトライ
+				// ユーザーの指示付きリトライ: リトライカウンターをリセット
 				a.History = append(a.History, api.Message{
 					Role: "user",
 					Content: fmt.Sprintf(`The previous step FAILED. Here are the user's instructions for fixing it:
@@ -316,7 +343,7 @@ Error that occurred:
 
 Please follow these instructions to fix the issue and retry the step.`, comment, lastFailedResult),
 				})
-				return a.executeStepV2(ctx, p, step, idx, retryCount+1, false)
+				return a.executeStepV2(ctx, p, step, idx, 0, false) // リセット: retryCount=0
 			case plan.FailureActionSkip:
 				yellow.Printf("⏭️  Step %d skipped by user\n", step.ID)
 				return nil

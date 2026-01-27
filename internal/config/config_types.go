@@ -123,6 +123,7 @@ type GitStageConfig struct {
 // PlanModeConfig は Plan Mode の設定
 type PlanModeConfig struct {
 	MaxParallelSteps int `yaml:"max_parallel_steps"` // 並列実行数（デフォルト: 3）
+	AutoRetry        int `yaml:"auto_retry"`         // 自動リトライ回数（デフォルト: 3, 0で無効）
 }
 
 // OpenAIConfig は OpenAI プロバイダーの設定

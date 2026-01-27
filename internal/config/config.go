@@ -121,6 +121,7 @@ func DefaultConfig() *Config {
 		},
 		PlanMode: PlanModeConfig{
 			MaxParallelSteps: 3,
+			AutoRetry:        3,
 		},
 		LSP: LSPConfig{
 			Enabled: true,

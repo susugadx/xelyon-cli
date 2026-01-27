@@ -162,8 +162,8 @@ func TestInferActionFromDescription(t *testing.T) {
 		{"Update configuration", "更新"},
 		{"Fix bug in handler", "更新"},
 		{"Refactor the module", "リファクタリング"},
-		{"Add test coverage", "テスト追加"},   // testが優先される
-		{"Run tests", "テスト追加"},           // testが優先される
+		{"Add test coverage", "テスト追加"}, // testが優先される
+		{"Run tests", "テスト追加"},         // testが優先される
 		{"新規ファイル作成", "新規作成"},
 		{"設定を更新", "更新"},
 		{"Some generic task", "変更"},
