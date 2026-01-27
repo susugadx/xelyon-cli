@@ -90,6 +90,9 @@ func (a *Agent) RunPlanMode(ctx context.Context, userRequest string) error {
 		return err
 	}
 
+	// タスク完了サマリーを表示
+	a.showTaskSummary()
+
 	a.SetStatus(StateWaitingInput, "Ready for input", "入力待ち", "Type your request or /help", "リクエスト、または /help を入力")
 	return nil
 }

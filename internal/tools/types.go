@@ -39,9 +39,11 @@ func (tc *ToolCall) NormalizeArgs() {
 
 // FileChange はファイル変更履歴
 type FileChange struct {
-	FilePath    string
-	BackupPath  string
-	Timestamp   time.Time
-	Tool        string
-	Description string
+	FilePath     string
+	BackupPath   string
+	Timestamp    time.Time
+	Tool         string
+	Description  string
+	LinesAdded   int // 追加行数
+	LinesRemoved int // 削除行数
 }

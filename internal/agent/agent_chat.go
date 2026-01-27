@@ -10,7 +10,9 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/agent/plan"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	promptnormal "github.com/susugadx/xelyon-cli/internal/prompt/normal"
 	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // chat はAIと対話する
@@ -71,15 +73,8 @@ func (a *Agent) chat(input string) {
 // runNormalMode は通常モードでの処理（Plan Mode OFF 時）
 // ツールを個別に確認しながら実行するループ（自動リトライ対応）
 func (a *Agent) runNormalMode(ctx context.Context, input string) error {
-	// 通常モード用の指示を追加（Plan JSON を出さないように）
-	normalModeInput := input + `
-
-[SYSTEM INSTRUCTION]
-You are in NORMAL MODE (not Plan Mode).
-- Execute tools DIRECTLY without outputting {"plan": ...} JSON
-- Do NOT ask for permission or output implementation plans
-- Just use the appropriate tool calls to complete the task
-- If you need to modify files, use str_replace or write_file directly`
+	// 通常モード用の指示を追加（prompt パッケージから取得）
+	normalModeInput := input + promptnormal.NormalModePrompt
 
 	// 履歴に追加
 	a.History = append(a.History, api.Message{Role: "user", Content: normalModeInput})
@@ -135,6 +130,7 @@ You are in NORMAL MODE (not Plan Mode).
 		// ツール呼び出しなし = 通常の回答
 		if len(toolCalls) == 0 {
 			a.handleNormalResponse(response)
+			a.showTaskSummary()
 			return nil
 		}
 
@@ -195,7 +191,23 @@ Do NOT give up. Try again with a different approach.`, lastFailedResult),
 	}
 
 	yellow.Printf("⚠️  Tool loop limit reached (%d iterations)\n", maxIterations)
+	a.showTaskSummary()
 	return nil
+}
+
+// showTaskSummary は changeStack からサマリーを生成して表示
+func (a *Agent) showTaskSummary() {
+	if len(a.changeStack) == 0 {
+		return
+	}
+
+	ts := ui.NewTaskSummary()
+	for _, change := range a.changeStack {
+		action := ui.InferAction(change.Tool)
+		ts.AddChange(change.FilePath, action, change.LinesAdded, change.LinesRemoved)
+	}
+
+	fmt.Print(ts.Render())
 }
 
 // chatWithImage は画像付きメッセージでAIと対話する
