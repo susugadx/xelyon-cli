@@ -46,8 +46,19 @@ func (a *Agent) shouldAbortToolLoop(current, last *tools.ToolCall, count *int) b
 	return false
 }
 
-// executeToolCall はツールを実行して結果を履歴に追加
+// executeToolCallWithResult はツールを実行して結果を履歴に追加し、結果を返す
+func (a *Agent) executeToolCallWithResult(response string, toolCall *tools.ToolCall) string {
+	result := a.executeToolCallInternal(response, toolCall)
+	return result
+}
+
+// executeToolCall はツールを実行して結果を履歴に追加（後方互換性のため維持）
 func (a *Agent) executeToolCall(response string, toolCall *tools.ToolCall) {
+	a.executeToolCallInternal(response, toolCall)
+}
+
+// executeToolCallInternal はツールを実行して結果を履歴に追加（内部実装）
+func (a *Agent) executeToolCallInternal(response string, toolCall *tools.ToolCall) string {
 	// レスポンスから説明部分とツール呼び出しを分離
 	explanation, _ := extractExplanationAndTool(response)
 
@@ -93,12 +104,12 @@ func (a *Agent) executeToolCall(response string, toolCall *tools.ToolCall) {
 
 	// str_replace エラー処理
 	if a.handleStrReplaceErrors(toolCall, result) {
-		return
+		return result
 	}
 
 	// comment 継続フロー処理
 	if a.handleCommentFlow(toolCall, result) {
-		return
+		return result
 	}
 
 	// 変更履歴を保存
@@ -121,6 +132,7 @@ func (a *Agent) executeToolCall(response string, toolCall *tools.ToolCall) {
 	}
 
 	fmt.Println()
+	return result
 }
 
 // handleStrReplaceErrors は str_replace の「old_str not found」エラー連続検知を処理（Issue #45）

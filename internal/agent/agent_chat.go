@@ -69,7 +69,7 @@ func (a *Agent) chat(input string) {
 }
 
 // runNormalMode は通常モードでの処理（Plan Mode OFF 時）
-// ツールを個別に確認しながら実行するループ
+// ツールを個別に確認しながら実行するループ（自動リトライ対応）
 func (a *Agent) runNormalMode(ctx context.Context, input string) error {
 	// 通常モード用の指示を追加（Plan JSON を出さないように）
 	normalModeInput := input + `
@@ -87,6 +87,11 @@ You are in NORMAL MODE (not Plan Mode).
 	maxIterations := config.MaxToolIterations
 	var lastToolCall *tools.ToolCall
 	var sameCallCount int
+
+	// 自動リトライ設定
+	cfg := config.GetGlobalConfig()
+	autoRetryMax := cfg.PlanMode.AutoRetry
+	retryCount := 0
 
 	for i := 0; i < maxIterations; i++ {
 		// API呼び出し
@@ -133,7 +138,8 @@ You are in NORMAL MODE (not Plan Mode).
 			return nil
 		}
 
-		// ツールを実行
+		// ツールを実行し、失敗を検出
+		var lastFailedResult string
 		for _, toolCall := range toolCalls {
 			// ループ検知
 			if a.shouldAbortToolLoop(toolCall, lastToolCall, &sameCallCount) {
@@ -141,8 +147,50 @@ You are in NORMAL MODE (not Plan Mode).
 			}
 			lastToolCall = toolCall
 
-			// ツール実行（executeToolCall は確認UIを含む）
-			a.executeToolCall(response, toolCall)
+			// ツール実行（executeToolCallWithResult で結果も取得）
+			result := a.executeToolCallWithResult(response, toolCall)
+
+			// 失敗パターンをチェック
+			if failed, _ := plan.ContainsFailure(result); failed {
+				lastFailedResult = result
+			}
+		}
+
+		// 失敗検出時の自動リトライ処理
+		if lastFailedResult != "" {
+			if autoRetryMax > 0 && retryCount < autoRetryMax {
+				retryCount++
+				red.Printf("❌ Failed (retry %d/%d)\n", retryCount, autoRetryMax)
+				yellow.Printf("🔄 Retrying...\n")
+
+				// リトライ用プロンプトを追加
+				a.History = append(a.History, api.Message{
+					Role: "user",
+					Content: fmt.Sprintf(`The previous tool execution FAILED with the following error:
+
+%s
+
+Please:
+1. Analyze the error carefully
+2. Identify the root cause
+3. Try a different approach to fix this
+
+Do NOT give up. Try again with a different approach.`, lastFailedResult),
+				})
+				continue
+			}
+
+			// 自動リトライが exhausted
+			if autoRetryMax > 0 {
+				red.Printf("❌ Failed (%d retries exhausted)\n", autoRetryMax)
+				yellow.Println("Could not complete the task automatically. Letting AI respond...")
+			}
+			// AI に任せて続行（リトライカウンターをリセット）
+			retryCount = 0
+		} else if retryCount > 0 {
+			// 成功した場合（リトライ後）
+			green.Printf("✅ Succeeded (on retry %d)\n", retryCount)
+			retryCount = 0
 		}
 	}
 
