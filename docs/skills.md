@@ -11,6 +11,25 @@ XELYON はタスクに応じて関連スキルを自動ロードします。
 🔧 Tool: bash
    Command: gh run list --limit 5
 ```
+## スキルズの役割
+
+スキルズは AI にコマンドを教えるだけでなく、**どのツールを優先すべきか**を指示します。
+
+### 例: CI ログ確認
+
+**スキルなしの場合:**
+- AI は MCP で GitHub API を使おうとする
+- しかし MCP では Actions のログは取得できない
+
+**スキルありの場合:**
+- 「GitHub Actions のログは gh CLI でしか取得できない」と指示
+- AI は `gh run list` → `gh run view --log-failed` を使う
+
+### スキルズに書くべきこと
+
+1. **優先度** - 「MCP じゃなく gh CLI を使え」
+2. **手順** - 「まず list → 次に view --log-failed」
+3. **トラブルシュート** - 「このエラーはこう対処」
 
 ## 組み込みスキル
 
