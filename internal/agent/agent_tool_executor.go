@@ -217,19 +217,19 @@ func (a *Agent) handleCommentFlow(toolCall *tools.ToolCall, result string) bool 
 	}
 
 	// 結果を履歴に追加（Function Calling形式を考慮）
-    isFunctionCalling := toolCall.ID != ""
-    if isFunctionCalling {
-        a.History = append(a.History, api.Message{
-            Role:       "tool",
-            Content:    result,
-            ToolCallID: toolCall.ID,
-        })
-    } else {
-        a.History = append(a.History, api.Message{
-            Role:    "user",
-            Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, result),
-        })
-    }
+	isFunctionCalling := toolCall.ID != ""
+	if isFunctionCalling {
+		a.History = append(a.History, api.Message{
+			Role:       "tool",
+			Content:    result,
+			ToolCallID: toolCall.ID,
+		})
+	} else {
+		a.History = append(a.History, api.Message{
+			Role:    "user",
+			Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, result),
+		})
+	}
 
 	// AIに「コメントを反映して別案を提示」するよう促す
 	a.History = append(a.History, api.Message{
@@ -267,11 +267,6 @@ func (a *Agent) handleFileChange(change *tools.FileChange) {
 			// エラーログは出すが実行は継続
 			yellow.Printf("Warning: Failed to persist change: %v\n", err)
 		}
-	}
-
-	// Goファイル変更時の自動検証提案
-	if verifyResult := ShouldVerify(change.FilePath); verifyResult.NeedsVerify {
-		a.suggestVerification(change.FilePath, verifyResult)
 	}
 
 	// コード健全性チェック（on_changeフック）

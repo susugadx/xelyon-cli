@@ -8,7 +8,7 @@ import (
 func TestNewTaskSummary(t *testing.T) {
 	ts := NewTaskSummary()
 	if ts == nil {
-		t.Error("NewTaskSummary() should not return nil")
+		t.Fatal("NewTaskSummary() should not return nil")
 	}
 	if len(ts.Changes) != 0 {
 		t.Error("Changes should be empty initially")

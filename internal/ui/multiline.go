@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"golang.org/x/term"
 )
@@ -316,8 +317,35 @@ func (m *MultilineReader) readWithBracketedPaste() (string, error) {
 
 			// Regular character
 			buf.WriteByte(b)
-			if b >= 0x20 && b < 0x7f {
-				fmt.Print(string(b))
+
+			// UTF-8対応エコー
+			if b < 0x80 {
+				// ASCII: 印字可能文字のみエコー
+				if b >= 0x20 && b != 0x7f {
+					fmt.Print(string(b))
+				}
+			} else if b >= 0xC0 {
+				// UTF-8マルチバイトの先頭: 何もしない（継続バイトを待つ）
+			} else {
+				// 継続バイト (0x80-0xBF): 文字が完成したかチェック
+				data := buf.Bytes()
+				n := len(data)
+				if n >= 2 && utf8.Valid(data[n-2:]) {
+					r, _ := utf8.DecodeLastRune(data)
+					if r != utf8.RuneError {
+						fmt.Print(string(r))
+					}
+				} else if n >= 3 && utf8.Valid(data[n-3:]) {
+					r, _ := utf8.DecodeLastRune(data)
+					if r != utf8.RuneError {
+						fmt.Print(string(r))
+					}
+				} else if n >= 4 && utf8.Valid(data[n-4:]) {
+					r, _ := utf8.DecodeLastRune(data)
+					if r != utf8.RuneError {
+						fmt.Print(string(r))
+					}
+				}
 			}
 
 		case err := <-m.errChan:
@@ -387,7 +415,7 @@ func GetGlobalReader() *MultilineReader {
 
 // GetBufioReader returns the internal bufio.Reader for direct access
 func (m *MultilineReader) GetBufioReader() *bufio.Reader {
-    return m.reader
+	return m.reader
 }
 
 // ReadSimpleLine reads a line without raw mode (for simple prompts like selector)
@@ -412,15 +440,41 @@ func (m *MultilineReader) readLineFromChannel() (string, error) {
 	for {
 		select {
 		case b := <-m.byteChan:
-			if b == '\n' {
+			// Enter (raw mode では '\r' が来る)
+			if b == '\n' || b == '\r' {
+				fmt.Print("\r\n") // 改行をエコー
 				return string(buf), nil
 			}
-			if b == '\r' {
-				continue
-			}
-			// Echo the character
-			fmt.Print(string(b))
+
 			buf = append(buf, b)
+
+			// UTF-8対応エコー
+			if b < 0x80 {
+				if b >= 0x20 && b != 0x7f {
+					fmt.Print(string(b))
+				}
+			} else if b >= 0xC0 {
+				// UTF-8マルチバイトの先頭: 何もしない
+			} else {
+				// 継続バイト: 文字が完成したかチェック
+				n := len(buf)
+				if n >= 2 && utf8.Valid(buf[n-2:]) {
+					r, _ := utf8.DecodeLastRune(buf)
+					if r != utf8.RuneError {
+						fmt.Print(string(r))
+					}
+				} else if n >= 3 && utf8.Valid(buf[n-3:]) {
+					r, _ := utf8.DecodeLastRune(buf)
+					if r != utf8.RuneError {
+						fmt.Print(string(r))
+					}
+				} else if n >= 4 && utf8.Valid(buf[n-4:]) {
+					r, _ := utf8.DecodeLastRune(buf)
+					if r != utf8.RuneError {
+						fmt.Print(string(r))
+					}
+				}
+			}
 		case err := <-m.errChan:
 			if len(buf) > 0 {
 				return string(buf), nil

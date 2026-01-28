@@ -58,17 +58,17 @@ func (s *Selector) Run() (string, error) {
 	fmt.Printf("\n%s  (Enter=Yes, 2/n=No, 3/c=Comment)%s\n", colorDim, colorReset)
 	fmt.Printf("%sChoice [1]:%s ", colorCyan, colorReset)
 
-    // selector.go
-    input := ""
-    if reader := GetGlobalReader(); reader != nil {
-        line, err := reader.ReadSimpleLine()
-        if err == nil {
-            input = line
-        }
-    } else {
-        input = readLineFromStdin()
-    }
-    input = strings.TrimSpace(strings.ToLower(input))
+	// selector.go
+	input := ""
+	if reader := GetGlobalReader(); reader != nil {
+		line, err := reader.ReadSimpleLine()
+		if err == nil {
+			input = line
+		}
+	} else {
+		input = readLineFromStdin()
+	}
+	input = strings.TrimSpace(strings.ToLower(input))
 	// 入力を解釈
 	switch input {
 	case "", "1", "y", "yes":
