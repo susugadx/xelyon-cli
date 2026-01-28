@@ -385,6 +385,11 @@ func GetGlobalReader() *MultilineReader {
 	return globalReader
 }
 
+// GetBufioReader returns the internal bufio.Reader for direct access
+func (m *MultilineReader) GetBufioReader() *bufio.Reader {
+    return m.reader
+}
+
 // ReadSimpleLine reads a line without raw mode (for simple prompts like selector)
 // This temporarily disables bracketed paste mode to avoid goroutine conflicts
 func (m *MultilineReader) ReadSimpleLine() (string, error) {

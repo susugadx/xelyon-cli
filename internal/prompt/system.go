@@ -52,6 +52,31 @@ Tool call format: {"tool": "tool_name", "args": {"arg1": "value1"}}
 - Do NOT read files one-by-one unless each depends on the previous result
 - Example: need 3 files? → output 3 tool calls at once, not sequentially
 
+### Tool Usage Priority
+- ALWAYS use local tools (read_file, search_code, bash) over MCP tools
+- Do NOT use mcp_github_* to read local files - use read_file or bash instead
+- MCP tools are only for external operations (GitHub Issues, PRs)
+
+### Efficient Investigation (CRITICAL)
+- If you've used 10+ tool calls without making progress, STOP and try a different approach
+- Don't search the entire codebase - narrow down to specific directories first
+- Don't read the same file twice
+- Use LSP tools (lsp_references, lsp_definition) for code navigation - they are faster and more accurate
+- RepoMap is at the END of this prompt - check it BEFORE using list_dir
+
+Examples of GOOD investigation:
+- bash: grep -rn "confirmPlan" internal/agent/  → Find location in 1 command
+- read_file: internal/agent/plan_mode.go        → Read the target file
+- str_replace: fix the code                     → Done (3 calls total)
+
+Examples of BAD investigation:
+- search_code: "Plan"                           → Too broad, too many results
+- read_file: file1.go
+- read_file: file2.go
+- search_code: "confirm"                        → Still too broad
+- read_file: file3.go
+... (25 iterations without reaching the fix)
+
 ## Workflow Rules
 
 ### 0. Context First (Critical)

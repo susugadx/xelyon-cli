@@ -37,6 +37,9 @@ func NewSelector(message string, options []SelectOption) *Selector {
 
 // Run は選択UIを表示し、選択結果を返す
 func (s *Selector) Run() (string, error) {
+	// カーソルを表示（スピナー停止）
+	StopGlobalSpinner()
+	fmt.Print("\033[?25h")
 	// メッセージを表示
 	fmt.Printf("\n%s?%s %s\n\n", colorCyan, colorReset, s.Message)
 
@@ -55,22 +58,17 @@ func (s *Selector) Run() (string, error) {
 	fmt.Printf("\n%s  (Enter=Yes, 2/n=No, 3/c=Comment)%s\n", colorDim, colorReset)
 	fmt.Printf("%sChoice [1]:%s ", colorCyan, colorReset)
 
-	// グローバルReaderがあればそれを使用（goroutineと競合しない）
-	var input string
-	var err error
-
-	if reader := GetGlobalReader(); reader != nil {
-		input, err = reader.ReadSimpleLine()
-		if err != nil {
-			return "", err
-		}
-	} else {
-		// フォールバック: 直接読み取り
-		input = readLineFromStdin()
-	}
-
-	input = strings.TrimSpace(strings.ToLower(input))
-
+    // selector.go
+    input := ""
+    if reader := GetGlobalReader(); reader != nil {
+        line, err := reader.ReadSimpleLine()
+        if err == nil {
+            input = line
+        }
+    } else {
+        input = readLineFromStdin()
+    }
+    input = strings.TrimSpace(strings.ToLower(input))
 	// 入力を解釈
 	switch input {
 	case "", "1", "y", "yes":

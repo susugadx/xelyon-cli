@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/ui"
@@ -48,11 +47,16 @@ var ConfirmInteractive = func(message string) ConfirmResult {
 
 	// comment選択時はコメント入力モードへ
 	if result == "comment" {
-		reader := bufio.NewReader(os.Stdin)
+		var reader *bufio.Reader
+		if globalReader := ui.GetGlobalReader(); globalReader != nil {
+			// globalReader.FlushInput()
+			reader = globalReader.GetBufioReader()
+		} else {
+			reader = bufio.NewReader(os.Stdin)
+		}
 		comment, image := ReadMultiLineComment(reader)
 		return ConfirmResult{Action: "comment", Comment: comment, Image: image}
 	}
-
 	return ConfirmResult{Action: result}
 }
 
@@ -70,107 +74,57 @@ func ReadMultiLineComment(reader *bufio.Reader) (string, *ImageData) {
 	cfg := config.GetGlobalConfig()
 	maxLines := cfg.Paste.MaxLines
 	maxBytes := cfg.Paste.MaxBytes
-	timeout := time.Duration(cfg.Paste.TimeoutSeconds) * time.Second
 
 	var lines []string
 	var imageData *ImageData
 	emptyLineCount := 0
 	totalBytes := 0
 
-	type readResult struct {
-		line string
-		err  error
-	}
-	inputChan := make(chan readResult, 1)
-
 	for {
 		Yellow.Print("> ")
 
-		go func() {
-			line, err := reader.ReadString('\n')
-			inputChan <- readResult{line: line, err: err}
-		}()
-
-		select {
-		case result := <-inputChan:
-			if result.err != nil {
-				goto done
+		var line string
+		var err error
+		if globalReader := ui.GetGlobalReader(); globalReader != nil {
+			line, err = globalReader.ReadSimpleLine()
+		} else {
+			line, err = reader.ReadString('\n')
+			if err == nil {
+				line = strings.TrimRight(line, "\r\n")
 			}
+		}
+		if err != nil {
+			goto done
+		}
 
-			line := strings.TrimRight(result.line, "\r\n")
-			trimmed := strings.TrimSpace(line)
+		trimmed := strings.TrimSpace(line)
 
-			// /paste: enter paste mode and insert captured content
-			if trimmed == "/p" || trimmed == "/paste" {
-				pm := ui.NewPasteMode(cfg.Paste)
-				content, cancelled, err := pm.Capture(os.Stdin, os.Stdout)
-				if err != nil {
-					Red.Printf("Paste Mode error: %v\n", err)
-					continue
-				}
-				if cancelled {
-					Yellow.Println("Cancelled - input discarded")
-					continue
-				}
-
-				content = strings.ReplaceAll(content, "\r\n", "\n")
-				content = strings.TrimRight(content, "\n")
-				if content == "" {
-					Yellow.Println("No content captured")
-					continue
-				}
-
-				pastedLines := strings.Split(content, "\n")
-				for _, pl := range pastedLines {
-					lines = append(lines, pl)
-					totalBytes += len(pl) + 1
-				}
-				emptyLineCount = 0
-
-				if len(lines) >= maxLines {
-					Yellow.Printf("Max lines (%d) reached\n", maxLines)
-					goto done
-				}
-				if totalBytes >= maxBytes {
-					Yellow.Printf("Max size (%d bytes) reached\n", maxBytes)
-					goto done
-				}
-
-				Green.Printf("Inserted %d lines from Paste Mode into comment\n", len(pastedLines))
-				Cyan.Println("Back to comment input (finish with empty line x2)")
+		// /paste: enter paste mode and insert captured content
+		if trimmed == "/p" || trimmed == "/paste" {
+			pm := ui.NewPasteMode(cfg.Paste)
+			content, cancelled, err := pm.Capture(os.Stdin, os.Stdout)
+			if err != nil {
+				Red.Printf("Paste Mode error: %v\n", err)
+				continue
+			}
+			if cancelled {
+				Yellow.Println("Cancelled - input discarded")
 				continue
 			}
 
-			// 空行チェック（Enter 2回で終了）
-			if trimmed == "" {
-				emptyLineCount++
-				if emptyLineCount >= 2 {
-					goto done
-				}
-				lines = append(lines, line)
-				totalBytes += len(line) + 1
+			content = strings.ReplaceAll(content, "\r\n", "\n")
+			content = strings.TrimRight(content, "\n")
+			if content == "" {
+				Yellow.Println("No content captured")
 				continue
 			}
 
+			pastedLines := strings.Split(content, "\n")
+			for _, pl := range pastedLines {
+				lines = append(lines, pl)
+				totalBytes += len(pl) + 1
+			}
 			emptyLineCount = 0
-
-			// image: プレフィックスを検出
-			if strings.HasPrefix(trimmed, "image:") {
-				imagePath := strings.TrimSpace(strings.TrimPrefix(trimmed, "image:"))
-
-				img, err := LoadImage(imagePath)
-				if err != nil {
-					Red.Printf("Failed to load image: %v\n", err)
-					lines = append(lines, line)
-					totalBytes += len(line) + 1
-				} else {
-					imageData = img
-					Green.Printf("Image loaded: %s (%s)\n", img.Path, FormatSize(img.Size))
-				}
-			} else {
-				lines = append(lines, line)
-				totalBytes += len(line) + 1
-			}
 
 			if len(lines) >= maxLines {
 				Yellow.Printf("Max lines (%d) reached\n", maxLines)
@@ -181,8 +135,48 @@ func ReadMultiLineComment(reader *bufio.Reader) (string, *ImageData) {
 				goto done
 			}
 
-		case <-time.After(timeout):
-			Yellow.Printf("Timeout - no input for %d seconds\n", int(timeout.Seconds()))
+			Green.Printf("Inserted %d lines from Paste Mode into comment\n", len(pastedLines))
+			Cyan.Println("Back to comment input (finish with empty line x2)")
+			continue
+		}
+
+		// 空行チェック（Enter 2回で終了）
+		if trimmed == "" {
+			emptyLineCount++
+			if emptyLineCount >= 2 {
+				goto done
+			}
+			lines = append(lines, line)
+			totalBytes += len(line) + 1
+			continue
+		}
+
+		emptyLineCount = 0
+
+		// image: プレフィックスを検出
+		if strings.HasPrefix(trimmed, "image:") {
+			imagePath := strings.TrimSpace(strings.TrimPrefix(trimmed, "image:"))
+
+			img, err := LoadImage(imagePath)
+			if err != nil {
+				Red.Printf("Failed to load image: %v\n", err)
+				lines = append(lines, line)
+				totalBytes += len(line) + 1
+			} else {
+				imageData = img
+				Green.Printf("Image loaded: %s (%s)\n", img.Path, FormatSize(img.Size))
+			}
+		} else {
+			lines = append(lines, line)
+			totalBytes += len(line) + 1
+		}
+
+		if len(lines) >= maxLines {
+			Yellow.Printf("Max lines (%d) reached\n", maxLines)
+			goto done
+		}
+		if totalBytes >= maxBytes {
+			Yellow.Printf("Max size (%d bytes) reached\n", maxBytes)
 			goto done
 		}
 	}

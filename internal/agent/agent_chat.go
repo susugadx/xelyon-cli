@@ -60,6 +60,7 @@ func (a *Agent) chat(input string) {
 			handleTokenLimitError(err)
 			red.Printf("Error: %v\n", err)
 		}
+		ui.StopGlobalSpinner()
 		a.SetStatus(StateAborted, "Request failed", "リクエスト失敗", "Try again", "再試行してください")
 		return
 	}
@@ -97,6 +98,7 @@ func (a *Agent) runNormalMode(ctx context.Context, input string) error {
 			a.CurrentModel,
 		)
 		if err != nil {
+			ui.StopGlobalSpinner()
 			return fmt.Errorf("API call failed: %w", err)
 		}
 
@@ -156,6 +158,7 @@ func (a *Agent) runNormalMode(ctx context.Context, input string) error {
 		if lastFailedResult != "" {
 			if autoRetryMax > 0 && retryCount < autoRetryMax {
 				retryCount++
+				fmt.Print("\033[?25h") // カーソルを表示（スピナー停止）
 				red.Printf("❌ Failed (retry %d/%d)\n", retryCount, autoRetryMax)
 				yellow.Printf("🔄 Retrying...\n")
 
@@ -178,6 +181,7 @@ Do NOT give up. Try again with a different approach.`, lastFailedResult),
 
 			// 自動リトライが exhausted
 			if autoRetryMax > 0 {
+				fmt.Print("\033[?25h") // カーソルを表示（スピナー停止）
 				red.Printf("❌ Failed (%d retries exhausted)\n", autoRetryMax)
 				yellow.Println("Could not complete the task automatically. Letting AI respond...")
 			}

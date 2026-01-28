@@ -152,6 +152,7 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 	maxRetries := config.PlanMaxRetries
 
 	if retryCount > 0 {
+		ui.StopGlobalSpinner()
 		yellow.Printf("🔄 Retry attempt %d/%d for step %d...\n", retryCount, maxRetries, step.ID)
 	}
 
@@ -189,6 +190,7 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 			a.CurrentModel,
 		)
 		if err != nil {
+			ui.StopGlobalSpinner()
 			return fmt.Errorf("step %d failed: %w", step.ID, err)
 		}
 
@@ -278,6 +280,7 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 
 			// 自動リトライが有効で、まだ上限に達していない場合
 			if autoRetryMax > 0 && retryCount < autoRetryMax {
+				ui.StopGlobalSpinner()
 				red.Printf("❌ Step %d Failed (auto-retry %d/%d)\n", step.ID, retryCount+1, autoRetryMax)
 				yellow.Printf("🔄 Retrying...\n")
 
@@ -301,6 +304,7 @@ Do NOT skip this step. The issue must be resolved before proceeding.`, lastFaile
 
 			// 自動リトライが exhausted または無効 → Selector UI で確認
 			a.SetStatus(StateWaitingApproval, "Step failed - waiting for action", "ステップ失敗 - アクション待ち", "Choose action", "アクションを選択")
+			ui.StopGlobalSpinner()
 
 			action, comment := promptFailureActionWithSelector(step, lastFailedResult, lastFailReason, autoRetryMax)
 

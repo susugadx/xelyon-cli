@@ -147,3 +147,27 @@ func formatElapsed(d time.Duration) string {
 	}
 	return fmt.Sprintf("(%ds)", seconds)
 }
+
+// グローバルスピナー（どこからでも停止可能）
+var globalSpinner *Spinner
+var globalSpinnerMu sync.Mutex
+
+// SetGlobalSpinner はグローバルスピナーを設定
+func SetGlobalSpinner(s *Spinner) {
+	globalSpinnerMu.Lock()
+	defer globalSpinnerMu.Unlock()
+	// 既存のスピナーを先に停止
+	if globalSpinner != nil {
+		globalSpinner.Stop()
+	}
+	globalSpinner = s
+}
+
+// StopGlobalSpinner はグローバルスピナーを停止
+func StopGlobalSpinner() {
+	globalSpinnerMu.Lock()
+	defer globalSpinnerMu.Unlock()
+	if globalSpinner != nil {
+		globalSpinner.Stop()
+	}
+}

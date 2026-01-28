@@ -181,5 +181,6 @@ func StartThinkingSpinner(isImage bool, customSuffix string) *ui.Spinner {
 	}
 
 	spinner.Start(msg)
+	ui.SetGlobalSpinner(spinner)
 	return spinner
 }

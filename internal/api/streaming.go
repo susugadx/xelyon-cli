@@ -151,12 +151,12 @@ func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *u
 				// ツールJSON検出・非表示処理
 				displayContent := filterToolJSON(content, &inToolJSON, &jsonDepth, &inString, &prevChar)
 
+				// 最初のコンテンツでスピナー停止
+				if firstChunk {
+					spinner.Stop()
+					firstChunk = false
+				}
 				if displayContent != "" {
-					// 最初のコンテンツでスピナー停止
-					if firstChunk {
-						spinner.Stop()
-						firstChunk = false
-					}
 					fmt.Print(displayContent)
 				}
 			}
