@@ -216,11 +216,20 @@ func (a *Agent) handleCommentFlow(toolCall *tools.ToolCall, result string) bool 
 		return false
 	}
 
-	// 結果を履歴に先に入れてから、AIへ再提案を要求
-	a.History = append(a.History, api.Message{
-		Role:    "user",
-		Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, result),
-	})
+	// 結果を履歴に追加（Function Calling形式を考慮）
+    isFunctionCalling := toolCall.ID != ""
+    if isFunctionCalling {
+        a.History = append(a.History, api.Message{
+            Role:       "tool",
+            Content:    result,
+            ToolCallID: toolCall.ID,
+        })
+    } else {
+        a.History = append(a.History, api.Message{
+            Role:    "user",
+            Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, result),
+        })
+    }
 
 	// AIに「コメントを反映して別案を提示」するよう促す
 	a.History = append(a.History, api.Message{
