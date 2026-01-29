@@ -81,9 +81,9 @@ func getModel(cmd *cobra.Command) string {
 
 var rootCmd = &cobra.Command{
 	Use:     "xelyon [query]",
-	Short:   "XELYON CLI - AI-powered coding assistant",
+	Short:   "XELYON CLI - AI-powered coding agent",
 	Version: version.GetVersion(),
-	Long: `XELYON CLI is an AI coding assistant that helps you with development tasks.
+	Long: `XELYON CLI is an AI coding agent that helps you with development tasks.
 
 Examples:
   xelyon                                           # Interactive mode (DeepSeek Coder)

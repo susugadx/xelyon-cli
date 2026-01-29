@@ -75,7 +75,7 @@ func printHeader(model string, provider api.Provider) {
 	lines := []lineInfo{
 		{colorBlue1, `██╗  ██╗`, ""},
 		{colorBlue1, `╚██╗██╔╝`, fmt.Sprintf("%sXELYON%s v%s", colorCyan2, colorReset, version.GetVersion())},
-		{colorBlue2, ` ╚███╔╝ `, fmt.Sprintf("%sAI-powered coding assistant%s", colorDim, colorReset)},
+		{colorBlue2, ` ╚███╔╝ `, fmt.Sprintf("%sAI-powered coding agent%s", colorDim, colorReset)},
 		{colorCyan1, ` ██╔██╗ `, ""},
 		{colorCyan2, `██╔╝ ██╗`, fmt.Sprintf("Provider: %s", provider.Name())},
 		{colorCyan3, `╚═╝  ╚═╝`, fmt.Sprintf("Model: %s", modelDisplayName(model))},
