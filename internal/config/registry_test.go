@@ -147,9 +147,9 @@ func TestSelectOptions(t *testing.T) {
 		path    string
 		minOpts int
 	}{
-		{"default_provider", 6},     // deepseek, claude, openai, gemini, groq, ollama
-		{"bash.safety_level", 3},    // strict, moderate, permissive
-		{"thinking.level", 4},       // low, medium, high, xhigh
+		{"default_provider", 6},  // deepseek, claude, openai, gemini, groq, ollama
+		{"bash.safety_level", 3}, // strict, moderate, permissive
+		{"thinking.level", 4},    // low, medium, high, xhigh
 	}
 
 	for _, tt := range tests {

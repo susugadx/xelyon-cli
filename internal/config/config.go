@@ -105,8 +105,8 @@ func DefaultConfig() *Config {
 			SafetyLevel:     "permissive", // 確認出るので安全、利便性向上
 			SafeCommands:    []string{},
 			AllowPipe:       true,
-			AllowRedirect:   true,  // 利便性向上
-			AllowInlineEdit: true,  // 利便性向上
+			AllowRedirect:   true, // 利便性向上
+			AllowInlineEdit: true, // 利便性向上
 		},
 		CodeHealth: CodeHealthConfig{
 			Enabled:          true,
