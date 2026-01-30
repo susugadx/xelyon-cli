@@ -37,7 +37,7 @@ func TestWebSearchWithCache_CacheHit(t *testing.T) {
 		callCount++
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"organic":[{"title":"Test","link":"https://test.com","snippet":"Test snippet"}]}`))
+		_, _ = w.Write([]byte(`{"organic":[{"title":"Test","link":"https://test.com","snippet":"Test snippet"}]}`))
 	}))
 	defer server.Close()
 
@@ -92,7 +92,7 @@ func TestWebSearchWithCache_CacheNormalization(t *testing.T) {
 		callCount++
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"organic":[{"title":"Go Test","link":"https://go.dev","snippet":"Go programming"}]}`))
+		_, _ = w.Write([]byte(`{"organic":[{"title":"Go Test","link":"https://go.dev","snippet":"Go programming"}]}`))
 	}))
 	defer server.Close()
 
@@ -150,7 +150,7 @@ func TestWebSearchWithCache_CacheDisabled(t *testing.T) {
 		callCount++
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"organic":[{"title":"Test","link":"https://test.com","snippet":"Test"}]}`))
+		_, _ = w.Write([]byte(`{"organic":[{"title":"Test","link":"https://test.com","snippet":"Test"}]}`))
 	}))
 	defer server.Close()
 
