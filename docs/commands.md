@@ -79,12 +79,13 @@ XELYON CLIで使用できる全コマンドのリファレンスです。
 > /model gemini-2.0-flash-exp
 ```
 
-### `/paste`
+### `/paste`, `/p`
 
 ペーストモードを開始します。WSLなどBracketed Paste Modeが動作しない環境で複数行入力を行う際に使用します。
 
 ```
 > /paste
+> /p  # 短縮形
 ```
 
 入力が完了したら空行を2回入力（Enter2回）で終了します。
@@ -395,12 +396,14 @@ XELYONのバージョン情報を表示します。
 XELYON CLI v0.28.3
 ```
 
-### `/exit`
+### `/exit`, `/quit`, `/q`
 
 セッションを終了します。`Ctrl+D`、`Ctrl+C`、または `exit` でも終了できます。
 
 ```
 > /exit
+> /quit  # エイリアス
+> /q     # 短縮形
 ```
 
 ## CLIフラグ
