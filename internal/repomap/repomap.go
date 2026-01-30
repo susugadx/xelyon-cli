@@ -7,8 +7,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 )
 
 // RepoMap はリポジトリのコード構造マップ
@@ -27,9 +30,21 @@ func NewRepoMap(rootPath string, maxTokens int) *RepoMap {
 	}
 }
 
-// Build はリポジトリをスキャンしてマップを構築
+// Build はリポジトリをスキャンしてマップを構築（並列処理 + キャッシュ対応）
 func (rm *RepoMap) Build() error {
-	return filepath.Walk(rm.RootPath, func(path string, info os.FileInfo, err error) error {
+	// キャッシュ読み込み（失敗しても続行）
+	cache, _ := LoadCache(rm.RootPath)
+	cachedFiles := make(map[string]*CachedFile)
+	if cache != nil {
+		cachedFiles = cache.Files
+	}
+
+	// git status で変更ファイル取得（オプション）
+	gitChanged := getGitChangedFiles(rm.RootPath)
+
+	// ファイル一覧を収集
+	var files []string
+	err := filepath.Walk(rm.RootPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil // エラーはスキップ
 		}
@@ -47,21 +62,96 @@ func (rm *RepoMap) Build() error {
 		}
 
 		// サポートされているファイルのみ処理
-		if !IsSupportedFile(path) {
-			return nil
-		}
-
-		fileSymbols, err := ExtractSymbols(path)
-		if err != nil || fileSymbols == nil {
-			return nil
-		}
-
-		if len(fileSymbols.Symbols) > 0 {
-			rm.Files = append(rm.Files, fileSymbols)
+		if IsSupportedFile(path) {
+			files = append(files, path)
 		}
 
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+
+	// 並列処理
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	results := make([]*FileSymbols, 0, len(files))
+	newCache := &RepoMapCache{
+		RootPath:  rm.RootPath,
+		UpdatedAt: time.Now(),
+		Files:     make(map[string]*CachedFile),
+	}
+
+	// ワーカー数 = CPU数（最大16）
+	numWorkers := runtime.NumCPU()
+	if numWorkers > 16 {
+		numWorkers = 16
+	}
+	sem := make(chan struct{}, numWorkers)
+
+	for _, file := range files {
+		wg.Add(1)
+		sem <- struct{}{}
+
+		go func(f string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+
+			info, err := os.Stat(f)
+			if err != nil {
+				return // ファイルが存在しない（削除された）
+			}
+			modTime := info.ModTime()
+
+			var symbols []Symbol
+			needReparse := true
+
+			// キャッシュヒット判定
+			if cached, ok := cachedFiles[f]; ok {
+				// git status がある場合: 変更ファイルリストに含まれてなければキャッシュ使用
+				if gitChanged != nil {
+					if !gitChanged[f] && cached.ModTime.Equal(modTime) {
+						symbols = cached.Symbols
+						needReparse = false
+					}
+				} else {
+					// git なし: ModTime のみで判定
+					if cached.ModTime.Equal(modTime) {
+						symbols = cached.Symbols
+						needReparse = false
+					}
+				}
+			}
+
+			// キャッシュミス: 再解析
+			if needReparse {
+				fileSymbols, err := ExtractSymbols(f)
+				if err != nil || fileSymbols == nil {
+					return
+				}
+				symbols = fileSymbols.Symbols
+			}
+
+			if len(symbols) > 0 {
+				mu.Lock()
+				results = append(results, &FileSymbols{Path: f, Symbols: symbols})
+				newCache.Files[f] = &CachedFile{
+					Path:    f,
+					ModTime: modTime,
+					Symbols: symbols,
+				}
+				mu.Unlock()
+			}
+		}(file)
+	}
+
+	wg.Wait()
+	rm.Files = results
+
+	// キャッシュ保存（失敗しても続行）
+	_ = SaveCache(newCache)
+
+	return nil
 }
 
 // shouldIgnore は除外すべきパスかどうか
