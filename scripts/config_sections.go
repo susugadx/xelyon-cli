@@ -304,6 +304,23 @@ var Sections = map[string]SectionInfo{
 			"max_tokens": "int",
 		},
 	},
+	"web_search": {
+		Title: "Web検索設定",
+		Icon:  "🔍",
+		Comments: []string{
+			"Serper API Web検索のキャッシュ設定",
+		},
+		Fields: map[string]string{
+			"cache_enabled": "キャッシュを有効化（デフォルト: true）",
+			"cache_ttl":     "キャッシュTTL秒数（デフォルト: 1800 = 30分）",
+			"cache_size":    "最大キャッシュ数（デフォルト: 100）",
+		},
+		FieldTypes: map[string]string{
+			"cache_enabled": "bool",
+			"cache_ttl":     "int",
+			"cache_size":    "int",
+		},
+	},
 }
 
 // SectionOrder はセクションの表示順序
@@ -330,6 +347,7 @@ var SectionOrder = []string{
 	"thinking",
 	"output",
 	"repomap",
+	"web_search",
 }
 
 // CategoryOrder はカテゴリの表示順序（UIでのグループ化用）
@@ -355,6 +373,7 @@ var CategoryOrder = []string{
 	"thinking",
 	"output",
 	"repomap",
+	"web_search",
 }
 
 // SectionToCategory はセクション名をカテゴリ名にマップ
@@ -381,6 +400,7 @@ var SectionToCategory = map[string]string{
 	"thinking":         "thinking",
 	"output":           "output",
 	"repomap":          "repomap",
+	"web_search":       "web_search",
 }
 
 // CategoryInfo はカテゴリの表示情報
@@ -491,5 +511,10 @@ var Categories = map[string]CategoryInfo{
 		DisplayName: "RepoMap",
 		Icon:        "🗺️",
 		Sections:    []string{"repomap"},
+	},
+	"web_search": {
+		DisplayName: "Web Search",
+		Icon:        "🔍",
+		Sections:    []string{"web_search"},
 	},
 }

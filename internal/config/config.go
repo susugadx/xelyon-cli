@@ -242,6 +242,11 @@ func DefaultConfig() *Config {
 		Output: OutputConfig{
 			MaxLines: 5, // デフォルト5行で折りたたみ
 		},
+		WebSearch: WebSearchConfig{
+			CacheEnabled: true,
+			CacheTTL:     1800, // 30分
+			CacheSize:    100,
+		},
 	}
 }
 
@@ -345,6 +350,10 @@ func applyDefaults(cfg *Config) {
 	// Thinking: Level が空の場合はデフォルト適用
 	if cfg.Thinking.Level == "" {
 		cfg.Thinking.Level = defaults.Thinking.Level
+	}
+	// WebSearch: 全てゼロ値の場合のみデフォルト適用
+	if !cfg.WebSearch.CacheEnabled && cfg.WebSearch.CacheTTL == 0 && cfg.WebSearch.CacheSize == 0 {
+		cfg.WebSearch = defaults.WebSearch
 	}
 }
 

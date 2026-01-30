@@ -24,6 +24,7 @@ type Config struct {
 	Thinking        ThinkingConfig                 `yaml:"thinking,omitempty"`
 	RepoMap         RepoMapConfig                  `yaml:"repomap,omitempty"`
 	Output          OutputConfig                   `yaml:"output,omitempty"`
+	WebSearch       WebSearchConfig                `yaml:"web_search,omitempty"`
 	// 将来の拡張用
 	// Cloud CloudConfig `yaml:"cloud,omitempty"`
 }
@@ -140,6 +141,13 @@ type ThinkingConfig struct {
 // RepoMapConfig は RepoMap の設定
 type RepoMapConfig struct {
 	MaxTokens int `yaml:"max_tokens,omitempty"` // 0 = 自動計算（ファイル数ベース）
+}
+
+// WebSearchConfig はWeb検索キャッシュの設定
+type WebSearchConfig struct {
+	CacheEnabled bool `yaml:"cache_enabled"` // キャッシュを有効化（デフォルト: true）
+	CacheTTL     int  `yaml:"cache_ttl"`     // キャッシュTTL秒数（デフォルト: 1800 = 30分）
+	CacheSize    int  `yaml:"cache_size"`    // 最大キャッシュ数（デフォルト: 100）
 }
 
 // LSPConfig は LSP (Language Server Protocol) 連携の設定

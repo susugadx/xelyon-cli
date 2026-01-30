@@ -7,9 +7,63 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
+	"sync"
+	"time"
 
+	"github.com/susugadx/xelyon-cli/internal/cache"
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
+
+var (
+	webSearchCache *cache.Cache
+	cacheOnce      sync.Once
+)
+
+// initCache はキャッシュを遅延初期化
+func initCache() {
+	cfg := config.GetGlobalConfig()
+	if cfg.WebSearch.CacheEnabled && cfg.WebSearch.CacheSize > 0 {
+		webSearchCache = cache.New(cache.Config{
+			Enabled:    true,
+			Capacity:   cfg.WebSearch.CacheSize,
+			DefaultTTL: time.Duration(cfg.WebSearch.CacheTTL) * time.Second,
+		}, nil)
+	}
+}
+
+// WebSearchWithCache はキャッシュ対応のWeb検索
+// 戻り値: (result, cached, error)
+func WebSearchWithCache(query string) (string, bool, error) {
+	cacheOnce.Do(initCache)
+
+	key := normalizeQuery(query)
+
+	// キャッシュチェック
+	if webSearchCache != nil {
+		if cached, err := webSearchCache.Get(key); err == nil {
+			return string(cached), true, nil
+		}
+	}
+
+	// API呼び出し（既存のWebSearch関数）
+	result, err := WebSearch(query)
+	if err != nil {
+		return "", false, err
+	}
+
+	// キャッシュに保存
+	if webSearchCache != nil {
+		webSearchCache.Set(key, []byte(result), 0)
+	}
+
+	return result, false, nil
+}
+
+// normalizeQuery はクエリを正規化（大文字小文字、空白の統一）
+func normalizeQuery(query string) string {
+	return strings.ToLower(strings.TrimSpace(query))
+}
 
 // SearchRequest は Serper API へのリクエスト構造
 type SearchRequest struct {
