@@ -34,6 +34,10 @@ gen-registry:
 gen-help:
 	go run scripts/commands.go scripts/gen-help.go
 
+# コマンドドキュメントの骨格を追加（不足分のみ）
+gen-commands-docs:
+	go run scripts/commands.go scripts/gen-commands-docs.go
+
 # 設定関連を全て自動生成
 gen-all: gen-config gen-docs gen-registry gen-help
 
