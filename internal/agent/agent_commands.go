@@ -165,49 +165,5 @@ func handleHistoryCommand(agent *Agent) {
 
 // printHelp はヘルプを表示
 func printHelp() {
-	fmt.Println(`Commands:
-  /exit, /quit, /q    - Exit the CLI
-  /clear              - Clear conversation history
-  /history            - Show conversation history
-  /save               - Save current session
-  /load [id]          - Load session (or last if no ID)
-  /sessions           - List recent sessions
-  /undo [all]         - Undo last file change (restore from .bak) or undo all changes
-  /undo history       - Show past session changes
-  /undo session <id>  - Undo all changes from specific session
-  /changes            - Show file change history with undo status
-  /stats              - Show session statistics (time, messages, tokens, cost)
-  /tokens             - Show token usage and context window status
-  /copy [code] [-n N] - Copy last AI output to clipboard (code=code blocks only, -n=N-th last output)
-  /compress [N] [-c]  - Compress history (keep recent N, -c: use OpenAI Compact API)
-  /use <provider> [model] - Switch provider and optionally model (e.g., /use gemini gemini-2.0-flash-exp)
-  /providers          - List available providers and their API key status
-  /config             - Show/change configuration
-                        /config show - Show all settings with diff from defaults
-                        /config model <name> - Change default model
-  /model [name]       - Show current model or switch model without restart
-  /init               - Generate XELYON.md (project config) from codebase analysis
-  /sync               - Sync XELYON.md with current codebase (detect new/deleted files, tech changes)
-  /paste, /p          - Paste mode for long text (end with empty line x2, END, or Ctrl+D)
-  /plan [on|off]      - Toggle Plan Mode (investigation → plan → approval → execution)
-  /think [on|off|level] - Toggle Extended Thinking mode (level: low/medium/high/xhigh)
-  /lsp [status]       - Show LSP server status (running/not started/disabled)
-  /version            - Show version information
-  /help               - Show this help
-
-Available tools (AI will use automatically):
-  bash        - Execute shell commands
-  read_file   - Read file contents
-  write_file  - Write/create files (creates .bak backup)
-  str_replace - Replace text in file (creates .bak backup)
-  list_dir    - List directory contents
-  git_*       - Git operations (status, diff, add, commit, push, log)
-  search_code - Search in code files
-  search_file - Search for files by name
-
-Tips:
-  - Just describe what you want in natural language
-  - AI will ask confirmation for dangerous operations
-  - Use Ctrl+C to cancel current operation
-  - Use /undo to revert file changes (up to 10 recent changes)`)
+	fmt.Print(GeneratedHelpText)
 }
