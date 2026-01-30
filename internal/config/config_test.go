@@ -47,8 +47,8 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Compression.ThresholdPercent != 80 {
 		t.Errorf("Compression.ThresholdPercent = %d, want 80", cfg.Compression.ThresholdPercent)
 	}
-	if cfg.Compression.KeepRecent != 10 {
-		t.Errorf("Compression.KeepRecent = %d, want 10", cfg.Compression.KeepRecent)
+	if cfg.Compression.KeepRecent != 20 {
+		t.Errorf("Compression.KeepRecent = %d, want 20", cfg.Compression.KeepRecent)
 	}
 	if cfg.Compression.PreferCompactAPI != true {
 		t.Error("Compression.PreferCompactAPI should default to true")

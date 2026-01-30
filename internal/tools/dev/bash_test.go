@@ -312,6 +312,15 @@ func TestExecuteBash_DangerousPipeBlocked(t *testing.T) {
 
 func TestExecuteBash_InlineEditBlocked_Moderate(t *testing.T) {
 	// moderate モードでは sed -i がブロックされる
+	// テスト用に moderate モードを明示的に設定
+	cfg := config.DefaultConfig()
+	cfg.Bash.SafetyLevel = "moderate"
+	cfg.Bash.AllowInlineEdit = false
+	config.SetGlobalConfig(cfg)
+	t.Cleanup(func() {
+		config.SetGlobalConfig(config.DefaultConfig())
+	})
+
 	tests := []struct {
 		name    string
 		command string
