@@ -5,6 +5,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // handleModelCommand はモデルの表示・切り替えを処理
@@ -66,19 +67,8 @@ func handleConfigCommand(args []string) bool {
 		return true
 	}
 
-	// 引数なし → 簡易表示
-	if len(args) == 0 {
-		cyan.Println("⚙️  Current Configuration:")
-		fmt.Printf("  default_model: %s\n", cfg.DefaultModel)
-		fmt.Printf("  default_provider: %s\n", cfg.DefaultProvider)
-		yellow.Println("\nUsage:")
-		yellow.Println("  /config show               - Show all settings with diff from defaults")
-		yellow.Println("  /config model <model-name> - Change default model")
-		return true
-	}
-
 	// /config show → 全設定をデフォルトとの差分付きで表示
-	if args[0] == "show" {
+	if len(args) > 0 && args[0] == "show" {
 		fmt.Print(config.ShowConfig(cfg))
 		return true
 	}
@@ -99,10 +89,87 @@ func handleConfigCommand(args []string) bool {
 		return true
 	}
 
-	yellow.Println("Usage:")
-	yellow.Println("  /config show               - Show all settings with diff from defaults")
-	yellow.Println("  /config model <model-name> - Change default model")
+	// 引数なし → 対話式メニュー
+	runInteractiveConfig(cfg)
 	return true
+}
+
+// runInteractiveConfig は対話式設定メニューを実行
+func runInteractiveConfig(cfg *config.Config) {
+	categories := config.BuildConfigRegistry(cfg)
+	menu := ui.NewConfigMenu(cfg, categories)
+
+	for {
+		// カテゴリ選択
+		selectedCategory, err := menu.Run()
+		if err != nil || selectedCategory == nil {
+			return // 'q' でキャンセル
+		}
+
+		// フィールド選択ループ
+		for {
+			selectedField, err := menu.ShowFieldList(selectedCategory)
+			if err != nil {
+				break // 'b' で戻る
+			}
+
+			// フィールド編集
+			newValue, changed, err := menu.EditField(selectedField)
+			if err != nil {
+				red.Printf("Error: %v\n", err)
+				continue
+			}
+
+			if !changed {
+				continue
+			}
+
+			// StructMap型は直接Configを編集するので、保存のみ
+			if selectedField.FieldType == config.FieldTypeStructMap {
+				if err := config.SaveConfig(cfg); err != nil {
+					red.Printf("Error saving: %v\n", err)
+				} else {
+					green.Printf("✓ Saved: %s\n", selectedField.Path)
+				}
+				// カテゴリを再構築
+				categories = config.BuildConfigRegistry(cfg)
+				menu = ui.NewConfigMenu(cfg, categories)
+				// 現在のカテゴリを更新
+				for i := range categories {
+					if categories[i].Name == selectedCategory.Name {
+						selectedCategory = &categories[i]
+						break
+					}
+				}
+				continue
+			}
+
+			// 値を設定
+			if err := config.SetFieldValue(cfg, selectedField.Path, newValue); err != nil {
+				red.Printf("Error setting value: %v\n", err)
+				continue
+			}
+
+			// 保存
+			if err := config.SaveConfig(cfg); err != nil {
+				red.Printf("Error saving: %v\n", err)
+				continue
+			}
+
+			green.Printf("✓ Saved: %s = %v\n", selectedField.Path, newValue)
+
+			// カテゴリを再構築して現在値を更新
+			categories = config.BuildConfigRegistry(cfg)
+			menu = ui.NewConfigMenu(cfg, categories)
+			// 現在のカテゴリを更新
+			for i := range categories {
+				if categories[i].Name == selectedCategory.Name {
+					selectedCategory = &categories[i]
+					break
+				}
+			}
+		}
+	}
 }
 
 // handleUseCommand はプロバイダーを切り替える

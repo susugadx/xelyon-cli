@@ -8,6 +8,37 @@ XELYON CLIの設定方法と全オプションのリファレンスです。
 
 初回起動時に自動的にデフォルト設定ファイルが作成されます。
 
+## 設定方法
+
+### 対話式メニュー（推奨）
+
+セッション中に `/config` コマンドで対話式設定メニューを起動できます：
+
+```
+> /config
+```
+
+20カテゴリ、50以上の設定項目をカテゴリ別に管理できます。変更は即座に `~/.xelyon/config.yaml` に保存されます。
+
+**サポートする設定型:**
+- bool（y/n で切り替え）
+- int（数値入力）
+- string（テキスト入力）
+- select（番号選択）
+- []string（項目追加/削除）
+- map[string]string（エントリ追加/編集/削除）
+- map[string]struct（サブメニューで編集）
+
+詳細は [コマンド一覧: /config](commands.md#config) を参照してください。
+
+### 直接編集
+
+設定ファイルを直接編集することもできます：
+
+```bash
+vi ~/.xelyon/config.yaml
+```
+
 ## 設定優先順位
 
 設定は以下の優先順位で適用されます（上が優先）:
@@ -54,7 +85,7 @@ compression:
     # トークン使用率の閾値（%）
     threshold_percent: 80
     # 圧縮時に保持する直近メッセージ数
-    keep_recent: 10
+    keep_recent: 20
     # プロバイダーのCompact APIを優先使用
     prefer_compact_api: true
 
@@ -83,7 +114,7 @@ api_retry:
     # 最大待機時間（秒）
     max_delay: 30
     # タイムアウト（秒）
-    timeout: 300
+    timeout: 3600
 
 # ============================================================
 # 差分表示設定
@@ -107,8 +138,7 @@ tool_confirm:
 # スラッシュコマンドの短縮名を定義
 # 例: c → /compress, u → /use, h → /history
 command_aliases:
-    c: compress
-    h: history
+    c: config
     u: use
 
 # ============================================================
@@ -126,6 +156,8 @@ prompt_cache:
 # ペーストモード設定
 # ============================================================
 paste:
+    # Bracketed Paste Mode を有効化（複数行ペースト対応）
+    bracketed_paste: true
     # 最大行数
     max_lines: 10000
     # 最大バイト数
@@ -138,7 +170,7 @@ paste:
 # ============================================================
 streaming:
     # アイドルタイムアウト（秒）
-    idle_timeout_seconds: 30
+    idle_timeout_seconds: 3600
     # ファイル読み込み時にサイズ・行数を表示
     show_file_info: true
     # 検索時に進捗を表示
@@ -151,15 +183,15 @@ streaming:
 # ============================================================
 bash:
     # 安全レベル: strict / moderate / permissive
-    safety_level: moderate
+    safety_level: permissive
     # 追加の安全コマンド（例: - "npm run"）
     safe_commands: []
     # パイプを許可
     allow_pipe: true
     # リダイレクトを許可
-    allow_redirect: false
+    allow_redirect: true
     # インライン編集を許可（sed -i 等）
-    allow_inline_edit: false
+    allow_inline_edit: true
 
 # ============================================================
 # コード健全性チェック設定
@@ -190,6 +222,8 @@ git_stage:
 plan_mode:
     # 並列実行する最大ステップ数
     max_parallel_steps: 3
+    # 自動リトライ回数（ツール失敗時にユーザー入力なしで自動リトライ）
+    auto_retry: 10
 
 # ============================================================
 # LSP連携設定
@@ -216,15 +250,14 @@ openai:
 thinking:
     # 有効化
     enabled: false
-    # レベル: low / medium / high
+    # レベル: low / medium / high / xhigh
     level: medium
 
 # ============================================================
 # ツール出力表示設定
 # ============================================================
 output:
-    # 折りたたみ前の最大表示行数（デフォルト: 5）
-    # 環境変数 XELYON_OUTPUT_MAX_LINES でも設定可能
+    # 折りたたみ前の最大表示行数
     max_lines: 5
 ```
 <!-- CONFIG-EXAMPLE-END -->
@@ -384,28 +417,26 @@ bashコマンドの安全性制限を設定します。
 ```yaml
 bash:
   # 安全性レベル: strict, moderate, permissive
-  safety_level: moderate
+  safety_level: permissive
 
   # 追加の安全コマンド（確認なしで実行）
-  safe_commands:
-    - "npm run"
-    - "npm test"
-    - "cargo build"
-    - "make"
+  safe_commands: []
 
-  # パイプを許可（moderate以上でデフォルト有効）
+  # パイプを許可
   allow_pipe: true
 
   # リダイレクトを許可
-  allow_redirect: false
+  allow_redirect: true
 
   # sed -i等のインライン編集を許可
-  allow_inline_edit: false
+  allow_inline_edit: true
 ```
+
+> **Note**: デフォルトは `permissive` ですが、**すべてのコマンドは実行前に確認プロンプトが表示されます**。`sudo` など危険なコマンドは常にブロックされます。より厳格な制限が必要な場合は `moderate` または `strict` に変更してください。
 
 #### `safety_level`
 - **型**: string
-- **デフォルト**: `moderate`
+- **デフォルト**: `permissive`
 - **選択肢**: `strict`, `moderate`, `permissive`
 
 | レベル | パイプ `\|` | リダイレクト `>` | sed -i | sudo |
@@ -426,12 +457,12 @@ bash:
 
 #### `allow_redirect`
 - **型**: boolean
-- **デフォルト**: `false`
+- **デフォルト**: `true`
 - **説明**: リダイレクト (`>`, `>>`, `<`) の使用を許可
 
 #### `allow_inline_edit`
 - **型**: boolean
-- **デフォルト**: `false`
+- **デフォルト**: `true`
 - **説明**: `sed -i`, `perl -i` 等のインライン編集を許可
 
 **危険なパイプは常にブロック**:

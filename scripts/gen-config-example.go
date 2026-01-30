@@ -4,7 +4,7 @@
 //
 // 使用方法:
 //
-//	go run scripts/gen-config-example.go
+//	go run scripts/config_sections.go scripts/gen-config-example.go
 //	make gen-config
 package main
 
@@ -17,182 +17,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// セクション情報
-type sectionInfo struct {
-	title    string   // セクションタイトル
-	comments []string // セクション説明コメント
-	fields   map[string]string // フィールド名 -> コメント
-}
-
-// セクション定義
-var sections = map[string]sectionInfo{
-	"default_provider": {
-		title: "プロバイダー設定",
-		fields: map[string]string{
-			"default_provider": "デフォルトで使用するLLMプロバイダー",
-			"default_model":    "デフォルトで使用するモデル",
-		},
-	},
-	"provider_models": {
-		fields: map[string]string{
-			"provider_models": "プロバイダーごとのモデル設定",
-		},
-	},
-	"compression": {
-		title: "会話履歴圧縮設定",
-		fields: map[string]string{
-			"auto_compress":     "トークン使用率が閾値を超えたら自動圧縮",
-			"threshold_tokens":  "トークン数の閾値（0 = 使用しない）",
-			"threshold_percent": "トークン使用率の閾値（%）",
-			"keep_recent":       "圧縮時に保持する直近メッセージ数",
-			"prefer_compact_api": "プロバイダーのCompact APIを優先使用",
-		},
-	},
-	"backup": {
-		title: "バックアップ設定",
-		fields: map[string]string{
-			"max_generations": "保持する世代数",
-		},
-	},
-	"loop_detection": {
-		title: "ループ検知設定",
-		fields: map[string]string{
-			"threshold": "同じツール呼び出しの繰り返し回数でループと判定",
-		},
-	},
-	"api_retry": {
-		title: "APIリトライ設定",
-		fields: map[string]string{
-			"count":         "リトライ回数",
-			"initial_delay": "初回リトライ待機時間（秒）",
-			"max_delay":     "最大待機時間（秒）",
-			"timeout":       "タイムアウト（秒）",
-		},
-	},
-	"diff": {
-		title: "差分表示設定",
-		fields: map[string]string{
-			"context_lines": "差分表示時のコンテキスト行数",
-		},
-	},
-	"tool_confirm": {
-		title: "ツール確認設定",
-		fields: map[string]string{
-			"auto_approve_safe":   "安全なツール（read_file等）を自動承認",
-			"auto_approve_medium": "中程度のツール（write_file等）を自動承認",
-		},
-	},
-	"command_aliases": {
-		title: "コマンドエイリアス設定",
-		comments: []string{
-			"スラッシュコマンドの短縮名を定義",
-			"例: c → /compress, u → /use, h → /history",
-		},
-	},
-	"prompt_cache": {
-		title: "プロンプトキャッシュ設定（Claude専用）",
-		fields: map[string]string{
-			"enabled":     "有効化",
-			"max_entries": "最大エントリ数",
-			"ttl_seconds": "キャッシュTTL（秒）",
-		},
-	},
-	"paste": {
-		title: "ペーストモード設定",
-		fields: map[string]string{
-			"max_lines":       "最大行数",
-			"max_bytes":       "最大バイト数",
-			"timeout_seconds": "タイムアウト（秒）",
-		},
-	},
-	"streaming": {
-		title: "ストリーミング設定",
-		fields: map[string]string{
-			"idle_timeout_seconds":  "アイドルタイムアウト（秒）",
-			"show_file_info":        "ファイル読み込み時にサイズ・行数を表示",
-			"show_search_progress":  "検索時に進捗を表示",
-			"stream_bash_output":    "bashコマンドの出力をリアルタイム表示",
-		},
-	},
-	"bash": {
-		title: "bashツール設定",
-		fields: map[string]string{
-			"safety_level":      "安全レベル: strict / moderate / permissive",
-			"safe_commands":     "追加の安全コマンド（例: - \"npm run\"）",
-			"allow_pipe":        "パイプを許可",
-			"allow_redirect":    "リダイレクトを許可",
-			"allow_inline_edit": "インライン編集を許可（sed -i 等）",
-		},
-	},
-	"code_health": {
-		title: "コード健全性チェック設定",
-		fields: map[string]string{
-			"enabled":            "有効化",
-			"max_file_lines":     "ファイルの最大行数警告",
-			"max_function_lines": "関数の最大行数警告",
-			"auto_suggest":       "変更時に自動提案",
-			"on_change":          "変更時のチェック項目",
-		},
-	},
-	"git_stage": {
-		title: "git_add設定",
-		fields: map[string]string{
-			"batch_confirm": "複数ファイルをまとめて確認",
-		},
-	},
-	"plan_mode": {
-		title: "Plan Mode設定",
-		fields: map[string]string{
-			"max_parallel_steps": "並列実行する最大ステップ数",
-		},
-	},
-	"lsp": {
-		title: "LSP連携設定",
-		comments: []string{
-			"23言語のデフォルト設定が内蔵済み。通常は変更不要です。",
-			"詳細: docs/config.md の「LSP連携設定」セクション",
-		},
-		fields: map[string]string{
-			"enabled": "LSP連携の有効/無効",
-		},
-	},
-	"openai": {
-		title: "OpenAI設定",
-		fields: map[string]string{
-			"responses_api_models": "Responses APIを使用するモデル",
-		},
-	},
-	"thinking": {
-		title: "Extended Thinking設定",
-		fields: map[string]string{
-			"enabled": "有効化",
-			"level":   "レベル: low / medium / high",
-		},
-	},
-}
-
-// セクション順序
-var sectionOrder = []string{
-	"default_provider",
-	"provider_models",
-	"compression",
-	"backup",
-	"loop_detection",
-	"api_retry",
-	"diff",
-	"tool_confirm",
-	"command_aliases",
-	"prompt_cache",
-	"paste",
-	"streaming",
-	"bash",
-	"code_health",
-	"git_stage",
-	"plan_mode",
-	"lsp",
-	"openai",
-	"thinking",
-}
+// sections と sectionOrder は config_sections.go で定義
+// go run scripts/config_sections.go scripts/gen-config-example.go で両方を読み込む
 
 func main() {
 	cfg := config.DefaultConfig()
@@ -251,20 +77,20 @@ func addComments(yamlStr string) string {
 		if !strings.HasPrefix(line, " ") && !strings.HasPrefix(line, "\t") && strings.Contains(line, ":") {
 			key := strings.Split(trimmed, ":")[0]
 
-			// セクション情報を取得
-			if info, ok := sections[key]; ok {
+			// セクション情報を取得（Sections は config_sections.go で定義）
+			if info, ok := Sections[key]; ok {
 				// セクション区切りとタイトル
-				if info.title != "" {
+				if info.Title != "" {
 					if len(result) > 0 {
 						result = append(result, "")
 					}
 					result = append(result, "# ============================================================")
-					result = append(result, fmt.Sprintf("# %s", info.title))
+					result = append(result, fmt.Sprintf("# %s", info.Title))
 					result = append(result, "# ============================================================")
 				}
 
 				// セクション説明コメント
-				for _, comment := range info.comments {
+				for _, comment := range info.Comments {
 					result = append(result, fmt.Sprintf("# %s", comment))
 				}
 
@@ -274,19 +100,19 @@ func addComments(yamlStr string) string {
 
 		// フィールドコメントを追加
 		if currentSection != "" {
-			info := sections[currentSection]
+			info := Sections[currentSection]
 			fieldKey := strings.TrimSpace(strings.Split(trimmed, ":")[0])
 
 			// ネストされたセクション（provider_models内のclaude:等）はスキップ
 			indent := len(line) - len(strings.TrimLeft(line, " \t"))
 			if indent == 4 && !strings.HasSuffix(trimmed, ":") {
 				// 4スペースインデントのフィールド（セクション内のフィールド）
-				if comment, ok := info.fields[fieldKey]; ok {
+				if comment, ok := info.Fields[fieldKey]; ok {
 					result = append(result, fmt.Sprintf("    # %s", comment))
 				}
 			} else if indent == 0 {
 				// トップレベルフィールド
-				if comment, ok := info.fields[fieldKey]; ok && i > 0 {
+				if comment, ok := info.Fields[fieldKey]; ok && i > 0 {
 					result = append(result, fmt.Sprintf("# %s", comment))
 				}
 			}

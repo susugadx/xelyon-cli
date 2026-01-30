@@ -1,6 +1,6 @@
 # XELYON CLI Makefile
 
-.PHONY: build test fmt lint gen-config clean
+.PHONY: build test fmt lint gen-config gen-docs gen-registry gen-all clean
 
 # ビルド
 build:
@@ -20,14 +20,18 @@ lint:
 
 # 設定例を自動生成
 gen-config:
-	go run scripts/gen-config-example.go
+	go run scripts/config_sections.go scripts/gen-config-example.go
 
 # 設定ドキュメントを自動生成
 gen-docs:
-	go run scripts/gen-config-docs.go
+	go run scripts/config_sections.go scripts/gen-config-docs.go
+
+# 設定レジストリを自動生成
+gen-registry:
+	go run scripts/config_sections.go scripts/gen-config-registry.go
 
 # 設定関連を全て自動生成
-gen-all: gen-config gen-docs
+gen-all: gen-config gen-docs gen-registry
 
 # クリーン
 clean:

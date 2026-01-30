@@ -182,20 +182,51 @@ XELYON CLIで使用できる全コマンドのリファレンスです。
 
 ### `/config`
 
-設定を確認・変更します。
+設定を確認・変更します。対話式メニューで50以上の設定項目をカテゴリ別に管理できます。
 
 ```
-> /config show              # 全設定を表示（デフォルトとの差分を ⚡ で表示）
-> /config set <key> <value> # 設定を変更
-> /config reset <key>       # 設定をデフォルトに戻す
+> /config               # 対話式設定メニューを起動
+> /config show          # 全設定を表示（デフォルトとの差分を ⚡ で表示）
+> /config model <name>  # デフォルトモデルを変更
 ```
 
-例:
+**対話式メニュー:**
+
+`/config` を引数なしで実行すると、以下のような対話式メニューが表示されます：
+
 ```
-> /config show
-> /config set tool_confirm.auto_approve_safe false
-> /config reset tool_confirm.auto_approve_safe
+┌─ Configuration (1/2) ─────────────────────┐
+│ [1] 🤖 Provider & Model                   │
+│ [2] 📦 Compression                        │
+│ [3] 💾 Backup                             │
+│ [4] 🔄 Loop Detection                     │
+│ [5] 🌐 API Settings                       │
+│ [6] 📝 Diff Display                       │
+│ [7] ✅ Tool Confirm                       │
+│ [8] 🔗 Command Aliases                    │
+│ [9] 💨 Prompt Cache                       │
+│ [0] 📋 Paste Mode                         │
+│                                           │
+│ [n] Next page                             │
+│ [q] Cancel                                │
+└───────────────────────────────────────────┘
 ```
+
+**サポートする設定型:**
+
+| 型 | 編集方法 | 例 |
+|----|----------|-----|
+| bool | y/n で切り替え | `thinking.enabled` |
+| int | 数値入力 | `api_retry.count` |
+| string | テキスト入力 | `default_model` |
+| select | 番号選択 | `default_provider` (deepseek/claude/openai/...) |
+| []string | 項目追加/削除 | `bash.safe_commands` |
+| map[string]string | エントリ追加/編集/削除 | `command_aliases` |
+| map[string]struct | サブメニューで編集 | `provider_models`, `lsp.servers` |
+
+**20カテゴリ:** Provider & Model, Compression, Backup, Loop Detection, API Settings, Diff Display, Tool Confirm, Command Aliases, Prompt Cache, Paste Mode, Streaming, Bash Safety, Code Health, Git Settings, Plan Mode, LSP Servers, OpenAI, Thinking, Output, RepoMap
+
+**変更は即座に保存:** `~/.xelyon/config.yaml` に自動保存されます。
 
 ### `/changes`
 

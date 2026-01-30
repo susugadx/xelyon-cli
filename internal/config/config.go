@@ -58,7 +58,7 @@ func DefaultConfig() *Config {
 			AutoCompress:     true, // デフォルトON - コスト削減のため
 			ThresholdTokens:  0,    // 0 = 使用率ベース
 			ThresholdPercent: 80,   // 80%で自動圧縮
-			KeepRecent:       10,
+			KeepRecent:       20,   // 履歴を多めに保持
 			PreferCompactAPI: true, // OpenAI Compact API 優先
 		},
 		Backup: BackupConfig{
@@ -71,7 +71,7 @@ func DefaultConfig() *Config {
 			Count:        3,
 			InitialDelay: 1,
 			MaxDelay:     30,
-			Timeout:      300,
+			Timeout:      3600, // xhigh thinking 対応（1時間）
 		},
 		Diff: DiffConfig{
 			ContextLines: 10,
@@ -81,9 +81,8 @@ func DefaultConfig() *Config {
 			AutoApproveMedium: false,
 		},
 		CommandAliases: map[string]string{
-			"c": "compress",
+			"c": "config",
 			"u": "use",
-			"h": "history",
 		},
 		PromptCache: PromptCacheConfig{
 			Enabled:    true, // デフォルトON（Claude使用時のコスト削減）
@@ -97,17 +96,17 @@ func DefaultConfig() *Config {
 			TimeoutSeconds: 60,
 		},
 		Streaming: StreamingConfig{
-			IdleTimeoutSeconds: 30,
+			IdleTimeoutSeconds: 3600, // xhigh thinking 対応（1時間）
 			ShowFileInfo:       true,
 			ShowSearchProgress: true,
 			StreamBashOutput:   true,
 		},
 		Bash: BashConfig{
-			SafetyLevel:     "moderate",
+			SafetyLevel:     "permissive", // 確認出るので安全、利便性向上
 			SafeCommands:    []string{},
 			AllowPipe:       true,
-			AllowRedirect:   false,
-			AllowInlineEdit: false,
+			AllowRedirect:   true,  // 利便性向上
+			AllowInlineEdit: true,  // 利便性向上
 		},
 		CodeHealth: CodeHealthConfig{
 			Enabled:          true,

@@ -35,7 +35,7 @@ compression:
     # トークン使用率の閾値（%）
     threshold_percent: 80
     # 圧縮時に保持する直近メッセージ数
-    keep_recent: 10
+    keep_recent: 20
     # プロバイダーのCompact APIを優先使用
     prefer_compact_api: true
 
@@ -64,7 +64,7 @@ api_retry:
     # 最大待機時間（秒）
     max_delay: 30
     # タイムアウト（秒）
-    timeout: 300
+    timeout: 3600
 
 # ============================================================
 # 差分表示設定
@@ -88,8 +88,7 @@ tool_confirm:
 # スラッシュコマンドの短縮名を定義
 # 例: c → /compress, u → /use, h → /history
 command_aliases:
-    c: compress
-    h: history
+    c: config
     u: use
 
 # ============================================================
@@ -108,7 +107,6 @@ prompt_cache:
 # ============================================================
 paste:
     # Bracketed Paste Mode を有効化（複数行ペースト対応）
-    # WSL等で問題がある場合は false に設定、または XELYON_BRACKETED_PASTE=0 で無効化
     bracketed_paste: true
     # 最大行数
     max_lines: 10000
@@ -122,7 +120,7 @@ paste:
 # ============================================================
 streaming:
     # アイドルタイムアウト（秒）
-    idle_timeout_seconds: 30
+    idle_timeout_seconds: 3600
     # ファイル読み込み時にサイズ・行数を表示
     show_file_info: true
     # 検索時に進捗を表示
@@ -135,15 +133,15 @@ streaming:
 # ============================================================
 bash:
     # 安全レベル: strict / moderate / permissive
-    safety_level: moderate
+    safety_level: permissive
     # 追加の安全コマンド（例: - "npm run"）
     safe_commands: []
     # パイプを許可
     allow_pipe: true
     # リダイレクトを許可
-    allow_redirect: false
+    allow_redirect: true
     # インライン編集を許可（sed -i 等）
-    allow_inline_edit: false
+    allow_inline_edit: true
 
 # ============================================================
 # コード健全性チェック設定
@@ -175,8 +173,6 @@ plan_mode:
     # 並列実行する最大ステップ数
     max_parallel_steps: 3
     # 自動リトライ回数（ツール失敗時にユーザー入力なしで自動リトライ）
-    # Plan Mode と通常モード両方で有効
-    # 0 で無効化（常にユーザーに確認）
     auto_retry: 10
 
 # ============================================================
@@ -204,13 +200,12 @@ openai:
 thinking:
     # 有効化
     enabled: false
-    # レベル: low / medium / high
+    # レベル: low / medium / high / xhigh
     level: medium
 
 # ============================================================
 # ツール出力表示設定
 # ============================================================
 output:
-    # 折りたたみ前の最大表示行数（デフォルト: 5）
-    # 環境変数 XELYON_OUTPUT_MAX_LINES でも設定可能
+    # 折りたたみ前の最大表示行数
     max_lines: 5

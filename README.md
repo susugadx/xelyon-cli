@@ -178,11 +178,16 @@ tool_confirm:
 xelyon --auto-approve
 ```
 
-### 設定確認
+### 設定管理
 
 ```bash
+> /config         # 対話式設定メニュー（50+設定項目を編集可能）
 > /config show    # 全設定を表示（デフォルトとの差分を ⚡ で表示）
 ```
+
+対話式メニューでは20カテゴリ、50以上の設定項目を編集可能:
+- Provider & Model, Compression, Tool Confirm
+- Bash Safety, LSP Servers, Plan Mode など
 
 ## ドキュメント
 
