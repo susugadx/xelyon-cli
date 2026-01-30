@@ -123,13 +123,8 @@ var Commands = []CommandInfo{
 	},
 	{
 		Name:          "/init",
-		Description:   "Generate XELYON.md (project config) from codebase analysis",
-		DescriptionJP: "XELYON.mdを生成",
-	},
-	{
-		Name:          "/sync",
-		Description:   "Sync XELYON.md with current codebase (detect new/deleted files, tech changes)",
-		DescriptionJP: "XELYON.mdを同期",
+		Description:   "Create XELYON.md template (project config)",
+		DescriptionJP: "XELYON.mdテンプレートを作成",
 	},
 	{
 		Name:          "/paste",

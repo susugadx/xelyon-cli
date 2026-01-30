@@ -45,7 +45,6 @@ const (
 	SessionPreviewLen     = 60  // /sessions コマンドのプレビュー切り詰め長
 	SessionListMaxDisplay = 10  // /sessions の最大表示数
 	ErrorOutputMaxLines   = 20  // Plan失敗時のエラー出力最大行数
-	SyncFileChangesMax    = 10  // /sync のファイル変更最大表示数
 	DebugPreviewLen       = 500 // デバッグログのプレビュー長
 )
 

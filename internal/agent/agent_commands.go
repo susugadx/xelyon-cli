@@ -1,7 +1,6 @@
 package agent
 
 import (
-	"context"
 	"fmt"
 	"os"
 
@@ -87,8 +86,6 @@ func handleSpecialCommand(input string, agent *Agent) bool {
 		return handlePlanCommand(agent, args)
 	case "/init":
 		return handleInitCommand(agent)
-	case "/sync":
-		return handleSyncCommand(agent)
 	case "/paste":
 		return handlePasteCommand(agent, args)
 	case "/lsp":
@@ -133,16 +130,6 @@ func splitCommand(input string) []string {
 
 // handleExitCommand は終了処理を行う
 func handleExitCommand(agent *Agent) {
-	// Phase 3: Conversation learning (提案ベース)
-	// セッション終了時に会話から「今後も守るべきルール」を抽出して XELYON.md に追記提案する
-	if agent != nil {
-		extractor := &LLMExtractor{Provider: agent.CurrentProvider, SystemPrompt: agent.SystemPrompt}
-		ctx := context.Background()
-		if _, _, err := agent.ProposeAndApplyLearning(ctx, extractor, "XELYON.md"); err != nil {
-			// 失敗しても終了は継続
-			yellow.Printf("Warning: Learning proposal failed: %v\n", err)
-		}
-	}
 	yellow.Println("👋 See you!")
 	os.Exit(0)
 }
