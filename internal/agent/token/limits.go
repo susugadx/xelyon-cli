@@ -1,5 +1,7 @@
 package token
 
+import "strings"
+
 // modelTokenLimits はモデルごとのコンテキストウィンドウサイズ（トークン数）
 // 注: 出力トークンを考慮して、実際の上限より少なめに設定
 var modelTokenLimits = map[string]int{
@@ -116,4 +118,21 @@ func EstimateTokenCount(text string) int {
 	}
 	// 概算: 2.5文字 = 1トークン
 	return (len(text)*10 + 24) / 25 // 四捨五入相当
+}
+
+// IsTokenLimitError はエラーがトークン上限エラーかどうかを判定
+func IsTokenLimitError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	// OpenAI
+	if strings.Contains(msg, "input tokens exceed") {
+		return true
+	}
+	// Generic patterns (best-effort)
+	if strings.Contains(msg, "context length") || strings.Contains(msg, "maximum context") {
+		return true
+	}
+	return false
 }

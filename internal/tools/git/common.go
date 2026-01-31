@@ -45,16 +45,6 @@ func CheckUncommittedChanges() (status string, hasChanges bool, err error) {
 	return output, len(strings.TrimSpace(output)) > 0, nil
 }
 
-// TruncateOutput truncates output to specified number of lines
-func TruncateOutput(output string, maxLines int) string {
-	lines := strings.Split(output, "\n")
-	if len(lines) <= maxLines {
-		return output
-	}
-	result := strings.Join(lines[:maxLines], "\n")
-	return fmt.Sprintf("%s\n... (%d more lines)", result, len(lines)-maxLines)
-}
-
 // DisplayGitConfirmHeader displays the confirm UI header
 func DisplayGitConfirmHeader(title, subtitle, target string) {
 	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
