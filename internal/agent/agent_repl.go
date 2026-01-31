@@ -14,7 +14,6 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/audit"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/history"
-	"github.com/susugadx/xelyon-cli/internal/prompt"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -81,7 +80,7 @@ func RunInteractive(model string, provider api.Provider, autoApprove bool) {
 	}
 
 	// コンテキストサイズ表示（ツリー形式）
-	printContextSize(repoMapStr, symbols, files)
+	printContextSize(agent.SystemPrompt, repoMapStr, symbols, files)
 
 	// REPLループ開始
 	agent.mlReader = mlReader // ペーストモードで共有するため
@@ -162,7 +161,7 @@ func RunInteractiveWithResume(model string, provider api.Provider, autoApprove b
 	}
 
 	// コンテキストサイズ表示（ツリー形式）
-	printContextSize(repoMapStr, symbols, files)
+	printContextSize(agent.SystemPrompt, repoMapStr, symbols, files)
 
 	// REPLループ開始
 	agent.mlReader = mlReader
@@ -259,9 +258,8 @@ func setupSignalHandler(agent *Agent) {
 }
 
 // printContextSize はコンテキストサイズをツリー形式で表示
-func printContextSize(repoMapStr string, repomapSymbols, repomapFiles int) {
+func printContextSize(systemPrompt, repoMapStr string, repomapSymbols, repomapFiles int) {
 	// SystemPrompt からツールセクションを分離して推定
-	systemPrompt := prompt.SystemPrompt
 	const toolsStart = "## Available Tools"
 	const toolsEnd = "## Workflow Rules"
 

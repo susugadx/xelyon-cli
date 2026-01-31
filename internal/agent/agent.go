@@ -105,6 +105,13 @@ func NewAgent(model string, provider api.Provider) *Agent {
 		changeStorage = nil
 	}
 
+	// Function Calling 対応プロバイダーは詳細なツール定義を送信するため、
+	// System Prompt からツール説明を除去（重複回避、トークン節約）
+	// 注: LSP/MCP プロンプト追加より先に実行（後から追加する内容は削除されない）
+	if provider.Name() == "Gemini" || provider.Name() == "OpenAI" {
+		systemPrompt = removeToolsSection(systemPrompt)
+	}
+
 	// LSP初期化
 	var lspClient *lsp.Client
 	cfg := config.GetGlobalConfig()
@@ -126,15 +133,9 @@ func NewAgent(model string, provider api.Provider) *Agent {
 
 			// LSPツールはinit()で自動登録済み
 
-			// SystemPromptにLSPツール説明を追加
+			// SystemPromptにLSPツール説明を追加（removeToolsSectionの後なので削除されない）
 			systemPrompt += prompt.BuildLSPToolsPrompt()
 		}
-	}
-
-	// Function Calling 対応プロバイダーは詳細なツール定義を送信するため、
-	// System Prompt からツール説明を除去（重複回避、トークン節約）
-	if provider.Name() == "Gemini" || provider.Name() == "OpenAI" {
-		systemPrompt = removeToolsSection(systemPrompt)
 	}
 
 	// MCPToolProviderインターフェースを実装するプロバイダーにMCPツールを設定
@@ -215,8 +216,14 @@ func NewAgent(model string, provider api.Provider) *Agent {
 }
 
 // removeToolsSection は System Prompt から ## Available Tools セクションを除去
-// Gemini は Function Calling で詳細なツール定義を受け取るため、重複を避ける
-// ## Workflow Rules 以降は保持（動作指針として重要）
+//
+// 削除範囲: "## Available Tools" 〜 "## Workflow Rules" の直前まで
+// Gemini/OpenAI は Function Calling で詳細なツール定義を受け取るため、重複を避ける
+//
+// 注意: この範囲に「使い方」の説明を書くと消える！
+// - ツール定義（File Operations, Git Operations など）→ ここに書く（削除 OK）
+// - 使い方（Tool Usage Priority, Efficient Investigation）→ Workflow Rules に書く
+// - LSP/MCP プロンプト → 別ファイル（lsp.go, mcp.go）で後から追加
 func removeToolsSection(prompt string) string {
 	const toolsStart = "## Available Tools"
 	const toolsEnd = "## Workflow Rules"
