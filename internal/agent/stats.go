@@ -156,7 +156,8 @@ func FormatNumber(n int) string {
 	if n < 1000 {
 		return fmt.Sprintf("%d", n)
 	}
-	return fmt.Sprintf("%d,%03d", n/1000, n%1000)
+	// 再帰的にカンマを追加（10000以上も対応）
+	return FormatNumber(n/1000) + fmt.Sprintf(",%03d", n%1000)
 }
 
 // CalculateRequestCost は単一リクエストのコストを計算

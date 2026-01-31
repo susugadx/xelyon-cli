@@ -280,18 +280,20 @@ func (a *Agent) printLastUsage() {
 	total := usage.InputTokens + usage.OutputTokens
 	cost := CalculateRequestCost(a.ProviderName, usage.InputTokens, usage.OutputTokens)
 
-	// Ollama の場合はコスト非表示
+	// ✓ を緑色で表示、残りはdimまたは通常色
+	green.Print("✓ ")
 	if strings.ToLower(a.ProviderName) == "ollama" {
-		dim.Printf("✓ In: %s + Out: %s = %s tok\n",
+		// Ollama の場合はコスト非表示
+		fmt.Printf("In: %s + Out: %s = %s tok\n",
 			FormatNumber(usage.InputTokens),
 			FormatNumber(usage.OutputTokens),
 			FormatNumber(total))
 	} else {
-		dim.Printf("✓ In: %s + Out: %s = %s tok (~$%.4f)\n",
+		fmt.Printf("In: %s + Out: %s = %s tok ",
 			FormatNumber(usage.InputTokens),
 			FormatNumber(usage.OutputTokens),
-			FormatNumber(total),
-			cost)
+			FormatNumber(total))
+		dim.Printf("(~$%.4f)\n", cost)
 	}
 }
 

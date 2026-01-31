@@ -277,3 +277,53 @@ func TestFormatFileSize(t *testing.T) {
 		})
 	}
 }
+
+func TestFormatTokens(t *testing.T) {
+	tests := []struct {
+		input    int
+		expected string
+	}{
+		{0, "0"},
+		{500, "500"},
+		{999, "999"},
+		{1000, "1.0k"},
+		{1500, "1.5k"},
+		{12345, "12.3k"},
+		{999999, "1000.0k"},
+		{1000000, "1.0M"},
+		{1500000, "1.5M"},
+		{12345678, "12.3M"},
+	}
+
+	for _, tt := range tests {
+		result := FormatTokens(tt.input)
+		if result != tt.expected {
+			t.Errorf("FormatTokens(%d) = %s, want %s", tt.input, result, tt.expected)
+		}
+	}
+}
+
+func TestCalculateRequestCost(t *testing.T) {
+	tests := []struct {
+		provider string
+		input    int
+		output   int
+		expected float64
+	}{
+		// Ollama: 常に0
+		{"ollama", 1000000, 1000000, 0.0},
+		// DeepSeek: 0.14/1M input, 0.28/1M output
+		{"deepseek", 1000000, 1000000, 0.42},
+		// Unknown: DeepSeek料金と同じ
+		{"unknown", 1000000, 1000000, 0.42},
+	}
+
+	for _, tt := range tests {
+		result := CalculateRequestCost(tt.provider, tt.input, tt.output)
+		// 浮動小数点の比較は許容誤差を設ける
+		if result < tt.expected-0.001 || result > tt.expected+0.001 {
+			t.Errorf("CalculateRequestCost(%s, %d, %d) = %f, want %f",
+				tt.provider, tt.input, tt.output, result, tt.expected)
+		}
+	}
+}
