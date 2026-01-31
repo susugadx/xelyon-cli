@@ -6,8 +6,6 @@ import (
 	"sync"
 
 	"github.com/fatih/color"
-	"github.com/susugadx/xelyon-cli/internal/agent/token"
-	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 // AgentState represents the current interaction state.
@@ -33,11 +31,9 @@ type AgentStatus struct {
 }
 
 var (
-	statusCyan   = color.New(color.FgCyan)
-	statusGreen  = color.New(color.FgGreen)
-	statusYellow = color.New(color.FgYellow)
-	statusRed    = color.New(color.FgRed)
-	statusDim    = color.New(color.Faint)
+	statusCyan  = color.New(color.FgCyan)
+	statusGreen = color.New(color.FgGreen)
+	statusDim   = color.New(color.Faint)
 )
 
 // statusHolder is embedded into Agent to keep state + mutex.
@@ -86,7 +82,7 @@ func (a *Agent) SetStatus(state AgentState, reasonEN, reasonJP, nextEN, nextJP s
 }
 
 // PrintStatusFooter prints a status bar with divider lines.
-// Format: ● model │ Mode │ tokens/limit │ ~$cost
+// Format: ● model │ Mode │ tokens │ ~$cost
 // This should be called right before showing the input prompt.
 func (a *Agent) PrintStatusFooter() {
 	const dividerLine = "────────────────────────────────────────────"
@@ -97,12 +93,9 @@ func (a *Agent) PrintStatusFooter() {
 		modeText = "Plan"
 	}
 
-	// トークン使用量（API実測値）
+	// トークン使用量（API実測値・累計のみ）
 	tokens := a.Stats.TotalTokens()
-	limit := token.GetModelTokenLimit(a.CurrentModel)
 	tokenStr := FormatTokens(tokens)
-	limitStr := FormatTokens(limit)
-	percentage := float64(tokens) / float64(limit) * 100
 
 	// コスト
 	cost := a.Stats.EstimatedCost()
@@ -110,36 +103,15 @@ func (a *Agent) PrintStatusFooter() {
 	// セパレータ（dim色）
 	sep := statusDim.Sprint("│")
 
-	// 警告閾値を config から取得
-	cfg := config.GetGlobalConfig()
-	threshold := float64(cfg.Compression.ThresholdPercent)
-	if threshold == 0 {
-		threshold = 80 // デフォルト値
-	}
-
-	// 色分け（緑 < threshold < 黄 < 100% < 赤）
-	var indicator string
-	var tokenDisplay string
-	if percentage >= 100 {
-		// 上限超過: 赤で警告
-		indicator = statusRed.Sprint("●")
-		tokenDisplay = statusRed.Sprintf("%s/%s ⚠️", tokenStr, limitStr)
-	} else if percentage > threshold {
-		// 警告閾値超過: 黄色
-		indicator = statusYellow.Sprint("●")
-		tokenDisplay = statusYellow.Sprintf("%s/%s", tokenStr, limitStr)
-	} else {
-		// 正常: 緑
-		indicator = statusGreen.Sprint("●")
-		tokenDisplay = fmt.Sprintf("%s/%s", tokenStr, limitStr)
-	}
+	// インジケーター（常に緑）
+	indicator := statusGreen.Sprint("●")
 
 	// 区切り線（dim色）
 	fmt.Println()
 	statusDim.Println(dividerLine)
 
-	// ステータス行: ● model │ Mode │ tokens/limit │ ~$cost
-	// Ollama の場合はコスト非表示（strings.ToLower で判定）
+	// ステータス行: ● model │ Mode │ tokens │ ~$cost
+	// Ollama の場合はコスト非表示
 	providerLower := strings.ToLower(a.ProviderName)
 	if providerLower == "ollama" {
 		fmt.Printf("%s %s %s %s %s %s\n",
@@ -148,7 +120,7 @@ func (a *Agent) PrintStatusFooter() {
 			sep,
 			modeText,
 			sep,
-			tokenDisplay)
+			tokenStr)
 	} else {
 		fmt.Printf("%s %s %s %s %s %s %s ~$%.3f\n",
 			indicator,
@@ -156,7 +128,7 @@ func (a *Agent) PrintStatusFooter() {
 			sep,
 			modeText,
 			sep,
-			tokenDisplay,
+			tokenStr,
 			sep,
 			cost)
 	}

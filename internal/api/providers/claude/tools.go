@@ -40,9 +40,22 @@ func ConvertOpenAIToolToClaude(tool api.OpenAIToolFunction) ClaudeTool {
 }
 
 // GetCombinedClaudeTools は組み込みツール + MCPツールを返す
+// 重複するツール名がある場合は最初に登録されたものを優先
 func GetCombinedClaudeTools(mcpTools []api.OpenAIToolFunction) []ClaudeTool {
 	result := GetClaudeToolDefinitions()
+	seen := make(map[string]bool)
+
+	// 組み込みツールの名前を記録
+	for _, tool := range result {
+		seen[tool.Name] = true
+	}
+
+	// MCPツール（重複チェック）
 	for _, mcp := range mcpTools {
+		if seen[mcp.Name] {
+			continue
+		}
+		seen[mcp.Name] = true
 		result = append(result, ConvertOpenAIToolToClaude(mcp))
 	}
 	return result

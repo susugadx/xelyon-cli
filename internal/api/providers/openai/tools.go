@@ -26,9 +26,24 @@ func GetOpenAIToolDefinitions() []api.OpenAITool {
 }
 
 // GetCombinedOpenAITools は組み込みツール + MCPツールを返す
+// 重複するツール名がある場合は最初に登録されたものを優先
 func GetCombinedOpenAITools(mcpTools []api.OpenAIToolFunction) []api.OpenAITool {
 	result := GetOpenAIToolDefinitions()
+	seen := make(map[string]bool)
+
+	// 組み込みツールの名前を記録
+	for _, tool := range result {
+		if tool.Function != nil {
+			seen[tool.Function.Name] = true
+		}
+	}
+
+	// MCPツール（重複チェック）
 	for _, mcp := range mcpTools {
+		if seen[mcp.Name] {
+			continue
+		}
+		seen[mcp.Name] = true
 		mcpCopy := mcp // ループ変数のコピー
 		result = append(result, api.OpenAITool{
 			Type:     "function",
@@ -40,12 +55,18 @@ func GetCombinedOpenAITools(mcpTools []api.OpenAIToolFunction) []api.OpenAITool 
 
 // GetResponsesToolDefinitions は Responses API 用のツール定義を返す
 // Responses API は Chat Completions と異なりフラットな形式
+// 重複するツール名がある場合は最初に登録されたものを優先
 func GetResponsesToolDefinitions(mcpTools []api.OpenAIToolFunction) []ResponsesTool {
 	defs := tools.DefaultRegistry.GetToolDefinitions()
 	result := make([]ResponsesTool, 0, len(defs)+len(mcpTools))
+	seen := make(map[string]bool)
 
 	// 組み込みツール（Registry から生成）
 	for _, def := range defs {
+		if seen[def.Name] {
+			continue
+		}
+		seen[def.Name] = true
 		result = append(result, ResponsesTool{
 			Type:        "function",
 			Name:        def.Name,
@@ -54,8 +75,12 @@ func GetResponsesToolDefinitions(mcpTools []api.OpenAIToolFunction) []ResponsesT
 		})
 	}
 
-	// MCPツール
+	// MCPツール（重複チェック）
 	for _, mcp := range mcpTools {
+		if seen[mcp.Name] {
+			continue
+		}
+		seen[mcp.Name] = true
 		result = append(result, ResponsesTool{
 			Type:        "function",
 			Name:        mcp.Name,

@@ -67,6 +67,16 @@ func convertToGeminiSchema(params map[string]interface{}) *api.GeminiParameterSc
 						propDef.Enum = enumStrings
 					}
 				}
+				// array 型の場合は items を設定（Gemini API では必須）
+				if propDef.Type == "array" {
+					if itemsVal, ok := propMap["items"].(map[string]interface{}); ok {
+						itemDef := convertPropertyItems(itemsVal)
+						propDef.Items = &itemDef
+					} else {
+						// items が指定されていない場合はデフォルトで string 型
+						propDef.Items = &api.GeminiPropertyDef{Type: "string"}
+					}
+				}
 
 				schema.Properties[name] = propDef
 			}
@@ -90,6 +100,38 @@ func convertToGeminiSchema(params map[string]interface{}) *api.GeminiParameterSc
 	}
 
 	return schema
+}
+
+// convertPropertyItems は items の map を GeminiPropertyDef に変換する
+func convertPropertyItems(itemsMap map[string]interface{}) api.GeminiPropertyDef {
+	itemDef := api.GeminiPropertyDef{}
+
+	if t, ok := itemsMap["type"].(string); ok {
+		itemDef.Type = t
+	} else {
+		// type が指定されていない場合はデフォルトで string
+		itemDef.Type = "string"
+	}
+	if desc, ok := itemsMap["description"].(string); ok {
+		itemDef.Description = desc
+	}
+	// enum 対応
+	if enumVal, ok := itemsMap["enum"]; ok {
+		switch e := enumVal.(type) {
+		case []string:
+			itemDef.Enum = e
+		case []interface{}:
+			enumStrings := make([]string, 0, len(e))
+			for _, v := range e {
+				if s, ok := v.(string); ok {
+					enumStrings = append(enumStrings, s)
+				}
+			}
+			itemDef.Enum = enumStrings
+		}
+	}
+
+	return itemDef
 }
 
 // GetToolDefinitionNames returns all defined tool names for testing
@@ -122,12 +164,18 @@ func convertFunctionCallToToolJSON(fc *api.GeminiFunctionCall) string {
 }
 
 // GetCombinedToolDefinitions は組み込みツール + MCPツールの定義を返す
+// 重複するツール名がある場合は最初に登録されたものを優先
 func GetCombinedToolDefinitions(mcpTools []api.GeminiFunctionDeclaration) []api.GeminiToolConfig {
 	defs := tools.DefaultRegistry.GetToolDefinitions()
 	declarations := make([]api.GeminiFunctionDeclaration, 0, len(defs)+len(mcpTools))
+	seen := make(map[string]bool)
 
 	// 組み込みツール（Registry から生成）
 	for _, def := range defs {
+		if seen[def.Name] {
+			continue
+		}
+		seen[def.Name] = true
 		declarations = append(declarations, api.GeminiFunctionDeclaration{
 			Name:        def.Name,
 			Description: def.Description,
@@ -135,8 +183,14 @@ func GetCombinedToolDefinitions(mcpTools []api.GeminiFunctionDeclaration) []api.
 		})
 	}
 
-	// MCPツール
-	declarations = append(declarations, mcpTools...)
+	// MCPツール（重複チェック）
+	for _, mcp := range mcpTools {
+		if seen[mcp.Name] {
+			continue
+		}
+		seen[mcp.Name] = true
+		declarations = append(declarations, mcp)
+	}
 
 	return []api.GeminiToolConfig{{FunctionDeclarations: declarations}}
 }

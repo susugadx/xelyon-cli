@@ -482,6 +482,157 @@ func TestConvertMCPToolToGeminiDeclaration_ArrayWithEmptyItemsType(t *testing.T)
 	}
 }
 
+// ===== convertToGeminiSchema テスト（組み込みツールの変換） =====
+
+func TestConvertToGeminiSchema_ArrayType(t *testing.T) {
+	// array型のプロパティが正しく変換されることを確認
+	params := map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"files": map[string]interface{}{
+				"type":        "array",
+				"description": "List of files",
+				"items": map[string]interface{}{
+					"type":        "string",
+					"description": "File path",
+				},
+			},
+			"numbers": map[string]interface{}{
+				"type":        "array",
+				"description": "List of numbers",
+				"items": map[string]interface{}{
+					"type": "integer",
+				},
+			},
+		},
+		"required": []interface{}{"files"},
+	}
+
+	schema := convertToGeminiSchema(params)
+
+	if schema == nil {
+		t.Fatal("Expected schema to be set")
+	}
+
+	// filesプロパティの確認
+	filesProp, ok := schema.Properties["files"]
+	if !ok {
+		t.Fatal("Expected 'files' property to exist")
+	}
+	if filesProp.Type != "array" {
+		t.Errorf("Expected files.type=array, got %s", filesProp.Type)
+	}
+	if filesProp.Items == nil {
+		t.Fatal("Expected files.items to be set")
+	}
+	if filesProp.Items.Type != "string" {
+		t.Errorf("Expected files.items.type=string, got %s", filesProp.Items.Type)
+	}
+	if filesProp.Items.Description != "File path" {
+		t.Errorf("Expected files.items.description='File path', got '%s'", filesProp.Items.Description)
+	}
+
+	// numbersプロパティの確認
+	numbersProp, ok := schema.Properties["numbers"]
+	if !ok {
+		t.Fatal("Expected 'numbers' property to exist")
+	}
+	if numbersProp.Items == nil {
+		t.Fatal("Expected numbers.items to be set")
+	}
+	if numbersProp.Items.Type != "integer" {
+		t.Errorf("Expected numbers.items.type=integer, got %s", numbersProp.Items.Type)
+	}
+}
+
+func TestConvertToGeminiSchema_ArrayWithoutItems(t *testing.T) {
+	// array型でitemsが指定されていない場合、デフォルトでstring型を設定
+	params := map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"tags": map[string]interface{}{
+				"type":        "array",
+				"description": "List of tags",
+			},
+		},
+	}
+
+	schema := convertToGeminiSchema(params)
+
+	tagsProp, ok := schema.Properties["tags"]
+	if !ok {
+		t.Fatal("Expected 'tags' property to exist")
+	}
+	if tagsProp.Items == nil {
+		t.Fatal("Expected tags.items to be set (default)")
+	}
+	if tagsProp.Items.Type != "string" {
+		t.Errorf("Expected tags.items.type=string (default), got %s", tagsProp.Items.Type)
+	}
+}
+
+func TestConvertToGeminiSchema_ArrayWithEnum(t *testing.T) {
+	// array型のitemsにenumがある場合
+	params := map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"statuses": map[string]interface{}{
+				"type":        "array",
+				"description": "List of statuses",
+				"items": map[string]interface{}{
+					"type": "string",
+					"enum": []interface{}{"open", "closed", "pending"},
+				},
+			},
+		},
+	}
+
+	schema := convertToGeminiSchema(params)
+
+	statusesProp := schema.Properties["statuses"]
+	if statusesProp.Items == nil {
+		t.Fatal("Expected statuses.items to be set")
+	}
+	if statusesProp.Items.Type != "string" {
+		t.Errorf("Expected statuses.items.type=string, got %s", statusesProp.Items.Type)
+	}
+	if len(statusesProp.Items.Enum) != 3 {
+		t.Errorf("Expected 3 enum values, got %d", len(statusesProp.Items.Enum))
+	}
+}
+
+func TestConvertToGeminiSchema_JSONSerializable(t *testing.T) {
+	// array型を含むスキーマがJSONにシリアライズできることを確認
+	params := map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"assignees": map[string]interface{}{
+				"type":        "array",
+				"description": "List of assignees",
+				"items": map[string]interface{}{
+					"type": "string",
+				},
+			},
+		},
+		"required": []interface{}{"assignees"},
+	}
+
+	schema := convertToGeminiSchema(params)
+
+	jsonData, err := json.Marshal(schema)
+	if err != nil {
+		t.Fatalf("Failed to marshal schema: %v", err)
+	}
+
+	jsonStr := string(jsonData)
+	if !strings.Contains(jsonStr, `"items"`) {
+		t.Errorf("Expected JSON to contain 'items', got: %s", jsonStr)
+	}
+	if !strings.Contains(jsonStr, `"type":"string"`) {
+		t.Errorf("Expected JSON to contain items type, got: %s", jsonStr)
+	}
+}
+
 func TestGetCombinedToolDefinitions(t *testing.T) {
 	// MCPツールなしの場合
 	t.Run("no MCP tools", func(t *testing.T) {
@@ -526,6 +677,38 @@ func TestGetCombinedToolDefinitions(t *testing.T) {
 		}
 		if foundMCP != 2 {
 			t.Errorf("Expected 2 MCP tools, found %d", foundMCP)
+		}
+	})
+
+	// 重複するMCPツールがある場合（最初のものが優先される）
+	t.Run("with duplicate MCP tools", func(t *testing.T) {
+		mcpTools := []api.GeminiFunctionDeclaration{
+			{Name: "mcp_github_create_or_update_file", Description: "First description"},
+			{Name: "mcp_github_create_or_update_file", Description: "Second description (duplicate)"},
+			{Name: "mcp_github_list_repos", Description: "List repos"},
+		}
+
+		tools := GetCombinedToolDefinitions(mcpTools)
+
+		// 重複が除去されて 24 + 2 になる
+		expectedCount := 24 + 2
+		if len(tools[0].FunctionDeclarations) != expectedCount {
+			t.Errorf("Expected %d declarations (duplicates removed), got %d", expectedCount, len(tools[0].FunctionDeclarations))
+		}
+
+		// 重複ツールが1つだけ含まれていることを確認
+		count := 0
+		for _, d := range tools[0].FunctionDeclarations {
+			if d.Name == "mcp_github_create_or_update_file" {
+				count++
+				// 最初の description が使われる
+				if d.Description != "First description" {
+					t.Errorf("Expected first description to be kept, got %q", d.Description)
+				}
+			}
+		}
+		if count != 1 {
+			t.Errorf("Expected exactly 1 mcp_github_create_or_update_file, found %d", count)
 		}
 	})
 }
