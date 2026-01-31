@@ -36,7 +36,6 @@ var (
 	statusCyan   = color.New(color.FgCyan)
 	statusGreen  = color.New(color.FgGreen)
 	statusYellow = color.New(color.FgYellow)
-	statusRed    = color.New(color.FgRed)
 	statusDim    = color.New(color.Faint)
 )
 
