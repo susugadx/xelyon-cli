@@ -69,6 +69,9 @@ func (a *Agent) chat(input string) {
 		return
 	}
 
+	// リクエスト完了時の usage 表示
+	a.printLastUsage()
+
 	// 自動圧縮チェック（成功時）
 	a.maybeAutoCompress()
 
@@ -261,6 +264,35 @@ func (a *Agent) chatWithImage(input string, image *api.ImageData) {
 
 	// 通常の回答処理
 	a.handleNormalResponse(response)
+}
+
+// printLastUsage はリクエスト完了時の usage を表示
+func (a *Agent) printLastUsage() {
+	a.statsMu.Lock()
+	usage := a.Stats.LastUsage
+	a.Stats.LastUsage = nil // 表示後クリア
+	a.statsMu.Unlock()
+
+	if usage == nil {
+		return
+	}
+
+	total := usage.InputTokens + usage.OutputTokens
+	cost := CalculateRequestCost(a.ProviderName, usage.InputTokens, usage.OutputTokens)
+
+	// Ollama の場合はコスト非表示
+	if strings.ToLower(a.ProviderName) == "ollama" {
+		dim.Printf("✓ In: %s + Out: %s = %s tok\n",
+			FormatNumber(usage.InputTokens),
+			FormatNumber(usage.OutputTokens),
+			FormatNumber(total))
+	} else {
+		dim.Printf("✓ In: %s + Out: %s = %s tok (~$%.4f)\n",
+			FormatNumber(usage.InputTokens),
+			FormatNumber(usage.OutputTokens),
+			FormatNumber(total),
+			cost)
+	}
 }
 
 // loadDetectedSkills は入力からスキルを検出してシステムプロンプトに追加

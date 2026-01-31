@@ -48,9 +48,16 @@ type GeminiCandidate struct {
 	Content GeminiContent `json:"content"`
 }
 
+// GeminiUsageMetadata はトークン使用量
+type GeminiUsageMetadata struct {
+	PromptTokenCount     int `json:"promptTokenCount"`
+	CandidatesTokenCount int `json:"candidatesTokenCount"`
+}
+
 // GeminiResponse はGeminiレスポンス
 type GeminiResponse struct {
-	Candidates []GeminiCandidate `json:"candidates"`
+	Candidates    []GeminiCandidate    `json:"candidates"`
+	UsageMetadata *GeminiUsageMetadata `json:"usageMetadata,omitempty"`
 }
 
 // ===== Function Calling API structures =====
@@ -74,7 +81,8 @@ type GeminiFunctionCandidate struct {
 
 // GeminiFunctionResponse はFunction Calling対応のレスポンス
 type GeminiFunctionResponse struct {
-	Candidates []GeminiFunctionCandidate `json:"candidates"`
+	Candidates    []GeminiFunctionCandidate `json:"candidates"`
+	UsageMetadata *GeminiUsageMetadata      `json:"usageMetadata,omitempty"`
 }
 
 // GeminiThinkingConfig は Extended Thinking の設定

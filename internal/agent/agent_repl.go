@@ -9,10 +9,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/audit"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/history"
+	"github.com/susugadx/xelyon-cli/internal/prompt"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -77,6 +79,9 @@ func RunInteractive(model string, provider api.Provider, autoApprove bool) {
 			green.Printf("🗺️  Repo map loaded (%d symbols from %d files)\n", symbols, files)
 		}
 	}
+
+	// コンテキストサイズ表示（ツリー形式）
+	printContextSize(repoMapStr, symbols, files)
 
 	// REPLループ開始
 	agent.mlReader = mlReader // ペーストモードで共有するため
@@ -156,6 +161,9 @@ func RunInteractiveWithResume(model string, provider api.Provider, autoApprove b
 		}
 	}
 
+	// コンテキストサイズ表示（ツリー形式）
+	printContextSize(repoMapStr, symbols, files)
+
 	// REPLループ開始
 	agent.mlReader = mlReader
 	runREPLLoop(agent, mlReader)
@@ -172,7 +180,9 @@ func runREPLLoop(agent *Agent, mlReader *ui.MultilineReader) {
 		// Status / 状態表示（常にプロンプト直前に表示）
 		agent.PrintStatusFooter()
 
-		input, err := mlReader.ReadInput("\n> ")
+		// 緑色のプロンプト
+		greenPrompt := green.Sprint(">")
+		input, err := mlReader.ReadInput("\n" + greenPrompt + " ")
 		if err != nil {
 			// Handle Ctrl+C (ErrInterrupted)
 			if err == ui.ErrInterrupted {
@@ -246,4 +256,53 @@ func setupSignalHandler(agent *Agent) {
 			}
 		}
 	}()
+}
+
+// printContextSize はコンテキストサイズをツリー形式で表示
+func printContextSize(repoMapStr string, repomapSymbols, repomapFiles int) {
+	// SystemPrompt からツールセクションを分離して推定
+	systemPrompt := prompt.SystemPrompt
+	const toolsStart = "## Available Tools"
+	const toolsEnd = "## Workflow Rules"
+
+	basePromptTokens := 0
+	toolsTokens := 0
+
+	startIdx := strings.Index(systemPrompt, toolsStart)
+	endIdx := strings.Index(systemPrompt, toolsEnd)
+
+	if startIdx != -1 && endIdx != -1 && startIdx < endIdx {
+		// ツールセクション以外（ベースプロンプト）
+		basePrompt := systemPrompt[:startIdx] + systemPrompt[endIdx:]
+		basePromptTokens = token.EstimateTokenCount(basePrompt)
+
+		// ツールセクション
+		toolsSection := systemPrompt[startIdx:endIdx]
+		toolsTokens = token.EstimateTokenCount(toolsSection)
+	} else {
+		// 分離できない場合は全体をベースプロンプトとして扱う
+		basePromptTokens = token.EstimateTokenCount(systemPrompt)
+	}
+
+	// XELYON.md のトークン数
+	xelyonContent := loadProjectConfig()
+	xelyonTokens := token.EstimateTokenCount(xelyonContent)
+
+	// Repo Map のトークン数
+	repomapTokens := token.EstimateTokenCount(repoMapStr)
+
+	// 合計
+	total := basePromptTokens + toolsTokens + xelyonTokens + repomapTokens
+
+	// ツリー形式で表示
+	dim.Printf("📋 Context size: ~%s tok\n", FormatTokens(total))
+	dim.Printf("   ├── Base prompt: ~%s\n", FormatTokens(basePromptTokens))
+	dim.Printf("   ├── Tools: ~%s\n", FormatTokens(toolsTokens))
+	dim.Printf("   ├── XELYON.md: ~%s\n", FormatTokens(xelyonTokens))
+	if repomapSymbols > 0 {
+		dim.Printf("   └── Repo Map: ~%s (%d symbols, %d files)\n",
+			FormatTokens(repomapTokens), repomapSymbols, repomapFiles)
+	} else {
+		dim.Printf("   └── Repo Map: ~%s\n", FormatTokens(repomapTokens))
+	}
 }

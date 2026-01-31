@@ -2,9 +2,11 @@ package agent
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/fatih/color"
+	"github.com/susugadx/xelyon-cli/internal/agent/token"
 )
 
 // AgentState represents the current interaction state.
@@ -34,6 +36,7 @@ var (
 	statusGreen  = color.New(color.FgGreen)
 	statusYellow = color.New(color.FgYellow)
 	statusRed    = color.New(color.FgRed)
+	statusDim    = color.New(color.Faint)
 )
 
 // statusHolder is embedded into Agent to keep state + mutex.
@@ -81,35 +84,69 @@ func (a *Agent) SetStatus(state AgentState, reasonEN, reasonJP, nextEN, nextJP s
 	})
 }
 
-// PrintStatusFooter prints a short, bilingual status line.
+// PrintStatusFooter prints a status bar with divider lines.
+// Format: ● model │ Mode │ tokens/limit │ ~$cost
 // This should be called right before showing the input prompt.
 func (a *Agent) PrintStatusFooter() {
-	s := globalAgentStatus.getStatus()
+	const dividerLine = "────────────────────────────────────────────"
 
-	// Compact 2-line footer (EN/JP) to make state obvious even after long outputs.
-	label := "Status"
-	stateText := string(s.State)
-
-	// Mode 表示を追加
+	// Mode 表示
 	modeText := "Normal"
 	if a.PlanModeEnabled {
-		modeText = "📋 Plan"
+		modeText = "Plan"
 	}
 
-	printer := statusCyan
-	switch s.State {
-	case StateWaitingInput, StateCompleted:
-		printer = statusGreen
-	case StateWaitingApproval:
-		printer = statusYellow
-	case StateAborted:
-		printer = statusRed
-	case StateRunning:
-		printer = statusCyan
+	// トークン使用量（API実測値）
+	tokens := a.Stats.TotalTokens()
+	limit := token.GetModelTokenLimit(a.CurrentModel)
+	tokenStr := FormatTokens(tokens)
+	limitStr := FormatTokens(limit)
+	percentage := float64(tokens) / float64(limit) * 100
+
+	// コスト
+	cost := a.Stats.EstimatedCost()
+
+	// セパレータ（dim色）
+	sep := statusDim.Sprint("│")
+
+	// 色分け
+	var indicator string
+	var tokenDisplay string
+	if percentage > 80 {
+		indicator = statusYellow.Sprint("●")
+		tokenDisplay = statusYellow.Sprintf("%s/%s", tokenStr, limitStr)
+	} else {
+		indicator = statusGreen.Sprint("●")
+		tokenDisplay = fmt.Sprintf("%s/%s", tokenStr, limitStr)
 	}
 
-	printer.Printf("\n[%s] %s | Mode: %s | %s / %s\n", label, stateText, modeText, s.ReasonEN, s.ReasonJP)
-	if s.NextEN != "" || s.NextJP != "" {
-		fmt.Printf("  Next: %s / %s\n", s.NextEN, s.NextJP)
+	// 区切り線（dim色）
+	fmt.Println()
+	statusDim.Println(dividerLine)
+
+	// ステータス行: ● model │ Mode │ tokens/limit │ ~$cost
+	// Ollama の場合はコスト非表示（strings.ToLower で判定）
+	providerLower := strings.ToLower(a.ProviderName)
+	if providerLower == "ollama" {
+		fmt.Printf("%s %s %s %s %s %s\n",
+			indicator,
+			statusCyan.Sprint(a.CurrentModel),
+			sep,
+			modeText,
+			sep,
+			tokenDisplay)
+	} else {
+		fmt.Printf("%s %s %s %s %s %s %s ~$%.3f\n",
+			indicator,
+			statusCyan.Sprint(a.CurrentModel),
+			sep,
+			modeText,
+			sep,
+			tokenDisplay,
+			sep,
+			cost)
 	}
+
+	// 下の区切り線
+	statusDim.Println(dividerLine)
 }

@@ -28,6 +28,7 @@ type Provider struct {
 	httpClient     *http.Client
 	lastResponseID string                   // Responses API の最新レスポンスID（キャッシュ用）
 	mcpTools       []api.OpenAIToolFunction // MCP ツール定義（Function Calling用）
+	usageCallback  api.UsageCallback        // トークン使用量コールバック
 }
 
 // New は新しいProviderを作成
@@ -97,6 +98,11 @@ func (p *Provider) ClearResponseID() {
 // SetMCPTools は MCP ツール定義を設定する（Function Calling用）
 func (p *Provider) SetMCPTools(tools []api.OpenAIToolFunction) {
 	p.mcpTools = tools
+}
+
+// SetUsageCallback は使用量レポートのコールバックを設定する
+func (p *Provider) SetUsageCallback(callback api.UsageCallback) {
+	p.usageCallback = callback
 }
 
 // ChatWithImage は画像付きメッセージで会話を行う

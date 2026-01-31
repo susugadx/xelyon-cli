@@ -39,10 +39,11 @@ type toolCallAccumulator struct {
 
 // Provider はGroq APIのプロバイダー実装（OpenAI互換）
 type Provider struct {
-	apiKey     string
-	apiURL     string
-	httpClient *http.Client
-	mcpTools   []api.OpenAIToolFunction // MCP ツール定義（Function Calling用）
+	apiKey        string
+	apiURL        string
+	httpClient    *http.Client
+	mcpTools      []api.OpenAIToolFunction // MCP ツール定義（Function Calling用）
+	usageCallback api.UsageCallback        // トークン使用量コールバック
 }
 
 // New は新しいProviderを作成
@@ -147,6 +148,7 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 	toolCalls := make(map[int]*toolCallAccumulator)
 	scanner := bufio.NewScanner(resp.Body)
 	firstChunk := true
+	var lastUsage *api.Usage
 
 	for scanner.Scan() {
 		// contextキャンセルチェック
@@ -169,6 +171,14 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 				// JSONパースエラーを警告（データ損失を防ぐため記録）
 				fmt.Fprintf(os.Stderr, "⚠️  Warning: failed to parse streaming response: %v\n", err)
 				continue
+			}
+
+			// Usage情報を追跡（最終チャンクに含まれる）
+			if streamResp.Usage != nil {
+				lastUsage = &api.Usage{
+					InputTokens:  streamResp.Usage.PromptTokens,
+					OutputTokens: streamResp.Usage.CompletionTokens,
+				}
 			}
 
 			if len(streamResp.Choices) > 0 {
@@ -233,6 +243,11 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 		return "", fmt.Errorf("stream reading error: %w", err)
 	}
 
+	// Usage callback
+	if p.usageCallback != nil && lastUsage != nil {
+		p.usageCallback(*lastUsage)
+	}
+
 	// tool_calls がある場合はそれを返す
 	if toolCallsOutput.Len() > 0 {
 		spinner.Stop()
@@ -270,4 +285,9 @@ func (p *Provider) APIURL() string {
 // SetMCPTools は MCP ツール定義を設定する（Function Calling用）
 func (p *Provider) SetMCPTools(tools []api.OpenAIToolFunction) {
 	p.mcpTools = tools
+}
+
+// SetUsageCallback は使用量レポートのコールバックを設定する
+func (p *Provider) SetUsageCallback(callback api.UsageCallback) {
+	p.usageCallback = callback
 }

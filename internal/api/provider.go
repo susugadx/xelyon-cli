@@ -111,6 +111,12 @@ type OpenAIMCPToolProvider interface {
 	SetMCPTools(tools []OpenAIToolFunction)
 }
 
+// UsageReporter はトークン使用量レポートに対応するプロバイダーのオプショナルインターフェース
+type UsageReporter interface {
+	// SetUsageCallback は使用量レポートのコールバックを設定する
+	SetUsageCallback(callback UsageCallback)
+}
+
 // SupportsImages はプロバイダー名から画像対応を判定
 func SupportsImages(providerName string) bool {
 	switch strings.ToLower(providerName) {

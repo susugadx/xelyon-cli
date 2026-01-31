@@ -32,10 +32,11 @@ func getGeminiURL(model string) string {
 
 // Provider はGemini APIのプロバイダー実装
 type Provider struct {
-	apiKey     string
-	httpClient *http.Client
-	mcpEnabled bool                            // MCP有効時はテキストモードにフォールバック（レガシー）
-	mcpTools   []api.GeminiFunctionDeclaration // MCPツールの定義
+	apiKey        string
+	httpClient    *http.Client
+	mcpEnabled    bool                            // MCP有効時はテキストモードにフォールバック（レガシー）
+	mcpTools      []api.GeminiFunctionDeclaration // MCPツールの定義
+	usageCallback api.UsageCallback               // トークン使用量コールバック
 }
 
 // New は新しいGeminiProviderを作成
@@ -69,6 +70,11 @@ func (p *Provider) SetMCPTools(tools []api.GeminiFunctionDeclaration) {
 // SupportsImages は画像入力対応を返す
 func (p *Provider) SupportsImages() bool {
 	return true
+}
+
+// SetUsageCallback は使用量レポートのコールバックを設定する
+func (p *Provider) SetUsageCallback(callback api.UsageCallback) {
+	p.usageCallback = callback
 }
 
 // ChatWithTools は Provider interface の実装（context対応）

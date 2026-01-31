@@ -25,9 +25,16 @@ type StreamChoice struct {
 	FinishReason string `json:"finish_reason,omitempty"` // "stop", "tool_calls" など
 }
 
+// StreamUsageInfo はストリーミングレスポンスの使用量情報
+type StreamUsageInfo struct {
+	PromptTokens     int `json:"prompt_tokens"`
+	CompletionTokens int `json:"completion_tokens"`
+}
+
 // StreamResponse はストリームレスポンス
 type StreamResponse struct {
-	Choices []StreamChoice `json:"choices"`
+	Choices []StreamChoice   `json:"choices"`
+	Usage   *StreamUsageInfo `json:"usage,omitempty"` // 最終チャンクに含まれる
 }
 
 // Choice は通常レスポンスの選択肢

@@ -182,7 +182,8 @@ func NewAgent(model string, provider api.Provider) *Agent {
 	toolCache := NewToolCache()
 	tools.GlobalToolCache = toolCache
 
-	return &Agent{
+	// Agent を作成
+	agent := &Agent{
 		Model:           model,
 		CurrentModel:    model,
 		CurrentProvider: provider,
@@ -199,6 +200,18 @@ func NewAgent(model string, provider api.Provider) *Agent {
 		lastOutputs:     []string{},
 		ToolCache:       toolCache,
 	}
+
+	// Usage callback を設定（プロバイダーがサポートしている場合）
+	if reporter, ok := provider.(api.UsageReporter); ok {
+		reporter.SetUsageCallback(func(u api.Usage) {
+			agent.statsMu.Lock()
+			defer agent.statsMu.Unlock()
+			agent.Stats.AddTokens(u.InputTokens, u.OutputTokens)
+			agent.Stats.LastUsage = &u
+		})
+	}
+
+	return agent
 }
 
 // removeToolsSection は System Prompt から ## Available Tools セクションを除去

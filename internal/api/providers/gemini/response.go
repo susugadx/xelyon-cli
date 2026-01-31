@@ -110,6 +110,17 @@ func (p *Provider) handleFunctionCallingResponse(body []byte, spinner *ui.Spinne
 		return "", fmt.Errorf("no content in Function Calling response")
 	}
 
+	// Usage callback: 最後のレスポンスからusage情報を取得
+	if p.usageCallback != nil && len(responses) > 0 {
+		lastResp := responses[len(responses)-1]
+		if lastResp.UsageMetadata != nil {
+			p.usageCallback(api.Usage{
+				InputTokens:  lastResp.UsageMetadata.PromptTokenCount,
+				OutputTokens: lastResp.UsageMetadata.CandidatesTokenCount,
+			})
+		}
+	}
+
 	fmt.Println()
 	return fullResponse.String(), nil
 }
@@ -158,6 +169,17 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 		}
 	}
 
+	// Usage callback: 最後のレスポンスからusage情報を取得
+	if p.usageCallback != nil && len(responses) > 0 {
+		lastResp := responses[len(responses)-1]
+		if lastResp.UsageMetadata != nil {
+			p.usageCallback(api.Usage{
+				InputTokens:  lastResp.UsageMetadata.PromptTokenCount,
+				OutputTokens: lastResp.UsageMetadata.CandidatesTokenCount,
+			})
+		}
+	}
+
 	fmt.Println()
 	return fullResponse.String(), nil
 }
@@ -174,6 +196,14 @@ func (p *Provider) handleNonStreamingResponse(resp *http.Response, spinner *ui.S
 
 	if len(result.Candidates) == 0 || len(result.Candidates[0].Content.Parts) == 0 {
 		return "", fmt.Errorf("no response from API")
+	}
+
+	// Usage callback
+	if p.usageCallback != nil && result.UsageMetadata != nil {
+		p.usageCallback(api.Usage{
+			InputTokens:  result.UsageMetadata.PromptTokenCount,
+			OutputTokens: result.UsageMetadata.CandidatesTokenCount,
+		})
 	}
 
 	content := result.Candidates[0].Content.Parts[0].Text

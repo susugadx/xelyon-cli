@@ -35,10 +35,11 @@ const defaultClaudeURL = "https://api.anthropic.com/v1/messages"
 
 // Provider はClaude (Anthropic) APIのプロバイダー実装
 type Provider struct {
-	apiKey     string
-	apiURL     string
-	httpClient *http.Client
-	mcpTools   []api.OpenAIToolFunction // MCP ツール定義（Tool Use用）
+	apiKey        string
+	apiURL        string
+	httpClient    *http.Client
+	mcpTools      []api.OpenAIToolFunction // MCP ツール定義（Tool Use用）
+	usageCallback api.UsageCallback        // トークン使用量コールバック
 }
 
 // New は新しいProviderを作成
@@ -158,12 +159,19 @@ type ContentBlock struct {
 	Input map[string]interface{} `json:"input,omitempty"` // tool_use 用（非ストリーミング）
 }
 
+// StreamUsage は Claude のトークン使用量
+type StreamUsage struct {
+	InputTokens  int `json:"input_tokens"`
+	OutputTokens int `json:"output_tokens"`
+}
+
 // StreamEvent はストリームイベント
 type StreamEvent struct {
 	Type         string        `json:"type"`
 	Index        int           `json:"index,omitempty"`
 	ContentBlock *ContentBlock `json:"content_block,omitempty"` // content_block_start 用
 	Delta        *Delta        `json:"delta,omitempty"`
+	Usage        *StreamUsage  `json:"usage,omitempty"` // message_delta 用
 }
 
 // toolUseAccumulator はストリーミング中の tool_use を蓄積する
@@ -327,6 +335,9 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 	toolUses := make(map[int]*toolUseAccumulator)
 	var toolCallsOutput strings.Builder
 
+	// usage 情報を追跡
+	var lastUsage *api.Usage
+
 	// Claude固有のパース処理
 	parser := func(line string) (string, bool, error) {
 		if !strings.HasPrefix(line, "data: ") {
@@ -382,7 +393,13 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 			return "", false, nil
 
 		case "message_delta":
-			// stop_reason の通知（tool_use の場合は処理済み）
+			// usage 情報を記録
+			if event.Usage != nil {
+				lastUsage = &api.Usage{
+					InputTokens:  event.Usage.InputTokens,
+					OutputTokens: event.Usage.OutputTokens,
+				}
+			}
 			return "", false, nil
 		}
 
@@ -392,6 +409,11 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 	content, err := api.ParseStreamingResponse(ctx, resp, spinner, parser)
 	if err != nil {
 		return "", err
+	}
+
+	// usage コールバックを呼び出し
+	if lastUsage != nil && p.usageCallback != nil {
+		p.usageCallback(*lastUsage)
 	}
 
 	// Tool Use がある場合はそれを追加して返す
@@ -519,4 +541,9 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 // SetMCPTools は MCP ツール定義を設定する（Tool Use用）
 func (p *Provider) SetMCPTools(tools []api.OpenAIToolFunction) {
 	p.mcpTools = tools
+}
+
+// SetUsageCallback は使用量レポートのコールバックを設定する
+func (p *Provider) SetUsageCallback(callback api.UsageCallback) {
+	p.usageCallback = callback
 }

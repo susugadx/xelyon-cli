@@ -119,6 +119,9 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 	toolCalls := make(map[int]*toolCallAccumulator)
 	var toolCallsOutput strings.Builder
 
+	// usage 情報を追跡
+	var lastUsage *api.Usage
+
 	// OpenAI固有のパース処理
 	parser := func(line string) (string, bool, error) {
 		if !strings.HasPrefix(line, "data: ") {
@@ -130,7 +133,7 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 			return "", true, nil
 		}
 
-		// 拡張した StreamResponse（tool_calls, finish_reason を含む）
+		// 拡張した StreamResponse（tool_calls, finish_reason, usage を含む）
 		var streamResp struct {
 			Choices []struct {
 				Delta struct {
@@ -139,9 +142,21 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 				} `json:"delta"`
 				FinishReason string `json:"finish_reason,omitempty"`
 			} `json:"choices"`
+			Usage *struct {
+				PromptTokens     int `json:"prompt_tokens"`
+				CompletionTokens int `json:"completion_tokens"`
+			} `json:"usage,omitempty"`
 		}
 		if err := json.Unmarshal([]byte(data), &streamResp); err != nil {
 			return "", false, err
+		}
+
+		// usage 情報を記録
+		if streamResp.Usage != nil {
+			lastUsage = &api.Usage{
+				InputTokens:  streamResp.Usage.PromptTokens,
+				OutputTokens: streamResp.Usage.CompletionTokens,
+			}
 		}
 
 		if len(streamResp.Choices) == 0 {
@@ -198,6 +213,11 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 	content, err := api.ParseStreamingResponse(ctx, resp, spinner, parser)
 	if err != nil {
 		return "", err
+	}
+
+	// usage コールバックを呼び出し
+	if lastUsage != nil && p.usageCallback != nil {
+		p.usageCallback(*lastUsage)
 	}
 
 	// tool_calls がある場合はそれを返す

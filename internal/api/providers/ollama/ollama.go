@@ -35,9 +35,10 @@ type toolCallAccumulator struct {
 
 // Provider はOllama APIのプロバイダー実装
 type Provider struct {
-	baseURL    string
-	httpClient *http.Client
-	mcpTools   []api.OpenAIToolFunction // MCP ツール定義（Function Calling用）
+	baseURL       string
+	httpClient    *http.Client
+	mcpTools      []api.OpenAIToolFunction // MCP ツール定義（Function Calling用）
+	usageCallback api.UsageCallback        // トークン使用量コールバック
 }
 
 // New は新しいProviderを作成
@@ -80,8 +81,10 @@ type OllamaMessageContent struct {
 
 // OllamaStreamResponse はOllamaのストリームレスポンス
 type OllamaStreamResponse struct {
-	Message OllamaMessageContent `json:"message"`
-	Done    bool                 `json:"done"`
+	Message         OllamaMessageContent `json:"message"`
+	Done            bool                 `json:"done"`
+	PromptEvalCount int                  `json:"prompt_eval_count,omitempty"` // 入力トークン数（done=true時）
+	EvalCount       int                  `json:"eval_count,omitempty"`        // 出力トークン数（done=true時）
 }
 
 // OllamaModel はモデル情報
@@ -219,6 +222,14 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 
 		// done=trueで終了
 		if streamResp.Done {
+			// Usage callback（Ollamaはdone=true時にトークン数を返す）
+			if p.usageCallback != nil && (streamResp.PromptEvalCount > 0 || streamResp.EvalCount > 0) {
+				p.usageCallback(api.Usage{
+					InputTokens:  streamResp.PromptEvalCount,
+					OutputTokens: streamResp.EvalCount,
+				})
+			}
+
 			// tool_calls がある場合は変換
 			if len(toolCalls) > 0 {
 				for i := 0; i < len(toolCalls); i++ {
@@ -329,4 +340,9 @@ func (p *Provider) BaseURL() string {
 // SetMCPTools は MCP ツール定義を設定する（Function Calling用）
 func (p *Provider) SetMCPTools(tools []api.OpenAIToolFunction) {
 	p.mcpTools = tools
+}
+
+// SetUsageCallback は使用量レポートのコールバックを設定する
+func (p *Provider) SetUsageCallback(callback api.UsageCallback) {
+	p.usageCallback = callback
 }

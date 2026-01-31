@@ -68,12 +68,19 @@ type ResponseMetadata struct {
 	Model  string `json:"model,omitempty"`
 }
 
+// ResponsesUsage は Responses API の usage 情報
+type ResponsesUsage struct {
+	InputTokens  int `json:"input_tokens"`
+	OutputTokens int `json:"output_tokens"`
+}
+
 // ResponsesStreamChunk は Responses API ストリーミングチャンク
 type ResponsesStreamChunk struct {
 	Type     string            `json:"type"`               // "response.output_text.delta", "response.created", etc.
 	Delta    string            `json:"delta,omitempty"`    // テキスト差分
 	Response *ResponseMetadata `json:"response,omitempty"` // response.created で取得
 	Item     *ResponsesItem    `json:"item,omitempty"`     // response.output_item.added で取得（function_call用）
+	Usage    *ResponsesUsage   `json:"usage,omitempty"`    // response.completed で取得
 }
 
 // ResponsesItem は output_item のデータ（function_call 等）
@@ -203,6 +210,9 @@ func (p *Provider) handleResponsesStreaming(ctx context.Context, resp *http.Resp
 	functionCalls := make(map[string]*responsesFunctionCallAccumulator) // call_id -> accumulator
 	var toolCallsOutput strings.Builder
 
+	// usage 情報を追跡
+	var lastUsage *api.Usage
+
 	parser := func(line string) (string, bool, error) {
 		// SSE形式: "event: xxx" と "data: {...}" の組み合わせ
 		if !strings.HasPrefix(line, "data: ") {
@@ -273,6 +283,14 @@ func (p *Provider) handleResponsesStreaming(ctx context.Context, resp *http.Resp
 
 		// response.completed または response.done で終了
 		if chunk.Type == "response.completed" || chunk.Type == "response.done" {
+			// usage 情報を抽出
+			if chunk.Usage != nil {
+				lastUsage = &api.Usage{
+					InputTokens:  chunk.Usage.InputTokens,
+					OutputTokens: chunk.Usage.OutputTokens,
+				}
+			}
+
 			// Function Calling: 累積した呼び出しを内部形式に変換
 			for _, acc := range functionCalls {
 				tc := &api.OpenAIToolCall{
@@ -296,6 +314,11 @@ func (p *Provider) handleResponsesStreaming(ctx context.Context, resp *http.Resp
 	content, err := api.ParseStreamingResponse(ctx, resp, spinner, parser)
 	if err != nil {
 		return "", responseID, err
+	}
+
+	// usage コールバックを呼び出し
+	if lastUsage != nil && p.usageCallback != nil {
+		p.usageCallback(*lastUsage)
 	}
 
 	// tool_calls がある場合はそれを返す

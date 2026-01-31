@@ -31,10 +31,11 @@ const defaultDeepSeekURL = "https://api.deepseek.com/chat/completions"
 
 // Provider はDeepSeek APIのプロバイダー実装
 type Provider struct {
-	apiKey     string
-	apiURL     string
-	httpClient *http.Client
-	mcpTools   []api.OpenAIToolFunction // MCP ツール定義（Function Calling用）
+	apiKey        string
+	apiURL        string
+	httpClient    *http.Client
+	mcpTools      []api.OpenAIToolFunction // MCP ツール定義（Function Calling用）
+	usageCallback api.UsageCallback        // トークン使用量コールバック
 }
 
 // New は新しいProviderを作成
@@ -145,6 +146,9 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 	toolCalls := make(map[int]*toolCallAccumulator)
 	var toolCallsOutput strings.Builder
 
+	// usage 情報を追跡
+	var lastUsage *api.Usage
+
 	// DeepSeek固有のパース処理（OpenAI互換形式）
 	parser := func(line string) (string, bool, error) {
 		if !strings.HasPrefix(line, "data: ") {
@@ -161,7 +165,7 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 			return "", false, fmt.Errorf("invalid response structure: %w", err)
 		}
 
-		// 拡張した StreamResponse（tool_calls, finish_reason を含む）
+		// 拡張した StreamResponse（tool_calls, finish_reason, usage を含む）
 		var streamResp struct {
 			Choices []struct {
 				Delta struct {
@@ -170,9 +174,21 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 				} `json:"delta"`
 				FinishReason string `json:"finish_reason,omitempty"`
 			} `json:"choices"`
+			Usage *struct {
+				PromptTokens     int `json:"prompt_tokens"`
+				CompletionTokens int `json:"completion_tokens"`
+			} `json:"usage,omitempty"`
 		}
 		if err := json.Unmarshal([]byte(data), &streamResp); err != nil {
 			return "", false, err
+		}
+
+		// usage 情報を記録
+		if streamResp.Usage != nil {
+			lastUsage = &api.Usage{
+				InputTokens:  streamResp.Usage.PromptTokens,
+				OutputTokens: streamResp.Usage.CompletionTokens,
+			}
 		}
 
 		if len(streamResp.Choices) == 0 {
@@ -231,6 +247,11 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 		return "", err
 	}
 
+	// usage コールバックを呼び出し
+	if lastUsage != nil && p.usageCallback != nil {
+		p.usageCallback(*lastUsage)
+	}
+
 	// tool_calls がある場合はそれを返す
 	if toolCallsOutput.Len() > 0 {
 		if content != "" {
@@ -273,4 +294,9 @@ func (p *Provider) APIURL() string {
 // SetMCPTools は MCP ツール定義を設定する（Function Calling用）
 func (p *Provider) SetMCPTools(tools []api.OpenAIToolFunction) {
 	p.mcpTools = tools
+}
+
+// SetUsageCallback は使用量レポートのコールバックを設定する
+func (p *Provider) SetUsageCallback(callback api.UsageCallback) {
+	p.usageCallback = callback
 }
