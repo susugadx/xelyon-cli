@@ -51,9 +51,10 @@ func (p *Provider) chatWithCompletions(ctx context.Context, systemPrompt string,
 	messages = append(messages, history...)
 
 	reqBody := api.ChatRequest{
-		Model:    model,
-		Messages: messages,
-		Stream:   true,
+		Model:         model,
+		Messages:      messages,
+		Stream:        true,
+		StreamOptions: &api.StreamOptions{IncludeUsage: true},
 	}
 
 	// Function Calling: ツール定義を追加（環境変数で無効化可能）
@@ -156,6 +157,10 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 			lastUsage = &api.Usage{
 				InputTokens:  streamResp.Usage.PromptTokens,
 				OutputTokens: streamResp.Usage.CompletionTokens,
+			}
+			if os.Getenv("XELYON_DEBUG_OPENAI") == "1" {
+				fmt.Fprintf(os.Stderr, "[DEBUG OpenAI] usage received: input=%d, output=%d\n",
+					streamResp.Usage.PromptTokens, streamResp.Usage.CompletionTokens)
 			}
 		}
 

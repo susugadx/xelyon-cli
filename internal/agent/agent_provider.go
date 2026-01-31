@@ -55,9 +55,24 @@ func (a *Agent) SwitchProvider(providerName string) error {
 	a.ProviderName = providerName
 	a.CurrentModel = newModel
 
-	// 統計情報のプロバイダー名も更新
+	// 統計情報をリセット（プロバイダー切り替え時）
 	if a.Stats != nil {
+		a.statsMu.Lock()
 		a.Stats.Provider = providerName
+		a.Stats.InputTokens = 0
+		a.Stats.OutputTokens = 0
+		a.Stats.LastUsage = nil
+		a.statsMu.Unlock()
+	}
+
+	// Usage callback を設定（プロバイダーがサポートしている場合）
+	if reporter, ok := provider.(api.UsageReporter); ok {
+		reporter.SetUsageCallback(func(u api.Usage) {
+			a.statsMu.Lock()
+			defer a.statsMu.Unlock()
+			a.Stats.AddTokens(u.InputTokens, u.OutputTokens)
+			a.Stats.LastUsage = &u
+		})
 	}
 
 	// MCPToolProviderインターフェースを実装するプロバイダーにMCPツールを設定

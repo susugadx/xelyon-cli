@@ -22,6 +22,10 @@ func TestValidateStreamResponse_Valid(t *testing.T) {
 			name: "multiple choices",
 			json: `{"choices": [{"delta": {"content": "a"}}, {"delta": {"content": "b"}}]}`,
 		},
+		{
+			name: "usage chunk with empty choices",
+			json: `{"choices": [], "usage": {"prompt_tokens": 100, "completion_tokens": 50}}`,
+		},
 	}
 
 	for _, tt := range tests {
@@ -58,7 +62,7 @@ func TestValidateStreamResponse_Invalid(t *testing.T) {
 		{
 			name:      "choices not array",
 			json:      `{"choices": "not an array"}`,
-			wantError: "choices must be a non-empty array",
+			wantError: "choices must be an array",
 		},
 		{
 			name:      "choice without delta or message",

@@ -84,7 +84,11 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 
 	// モデルに応じて API を自動選択
 	cfg := config.GetGlobalConfig()
-	if cfg.IsResponsesAPIModel(model) {
+	isResponses := cfg.IsResponsesAPIModel(model)
+	if os.Getenv("XELYON_DEBUG_OPENAI") == "1" {
+		fmt.Printf("[DEBUG OpenAI] ChatWithTools model=%s, isResponsesAPI=%v\n", model, isResponses)
+	}
+	if isResponses {
 		return p.chatWithResponses(ctx, systemPrompt, history, model)
 	}
 	return p.chatWithCompletions(ctx, systemPrompt, history, model)

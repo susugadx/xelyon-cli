@@ -61,11 +61,12 @@ type InputItem = api.InputItem
 // InputContentPart は api.InputContentPart のエイリアス（api packageで定義）
 type InputContentPart = api.InputContentPart
 
-// ResponseMetadata はレスポンスメタデータ（response.created イベント用）
+// ResponseMetadata はレスポンスメタデータ（response.created / response.completed イベント用）
 type ResponseMetadata struct {
-	ID     string `json:"id"`               // "resp_xxx..."
-	Status string `json:"status,omitempty"` // "in_progress", "completed"
-	Model  string `json:"model,omitempty"`
+	ID     string          `json:"id"`               // "resp_xxx..."
+	Status string          `json:"status,omitempty"` // "in_progress", "completed"
+	Model  string          `json:"model,omitempty"`
+	Usage  *ResponsesUsage `json:"usage,omitempty"` // response.completed で取得
 }
 
 // ResponsesUsage は Responses API の usage 情報
@@ -100,6 +101,9 @@ type ResponsesResult struct {
 // chatWithResponses は Responses API でチャット
 // previous_response_id を使用してキャッシュを活用
 func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
+	if os.Getenv("XELYON_DEBUG_OPENAI") == "1" {
+		fmt.Fprintf(os.Stderr, "[DEBUG OpenAI] chatWithResponses called, model=%s\n", model)
+	}
 	cfg := config.GetGlobalConfig()
 
 	// Responses API URL
@@ -228,6 +232,15 @@ func (p *Provider) handleResponsesStreaming(ctx context.Context, resp *http.Resp
 			return "", false, nil // パースエラーはスキップ
 		}
 
+		// デバッグログ: イベントタイプを表示
+		if os.Getenv("XELYON_DEBUG_OPENAI") == "1" {
+			fmt.Fprintf(os.Stderr, "[DEBUG OpenAI Responses] event: %s\n", chunk.Type)
+			// response.completed の生データを表示
+			if chunk.Type == "response.completed" {
+				fmt.Fprintf(os.Stderr, "[DEBUG OpenAI Responses] raw data: %s\n", data)
+			}
+		}
+
 		// response.created イベントから Response ID を抽出
 		if chunk.Type == "response.created" && chunk.Response != nil {
 			responseID = chunk.Response.ID
@@ -283,12 +296,26 @@ func (p *Provider) handleResponsesStreaming(ctx context.Context, resp *http.Resp
 
 		// response.completed または response.done で終了
 		if chunk.Type == "response.completed" || chunk.Type == "response.done" {
-			// usage 情報を抽出
-			if chunk.Usage != nil {
+			// usage 情報を抽出（response.completed では response.usage にネストされている）
+			var usage *ResponsesUsage
+			if chunk.Response != nil && chunk.Response.Usage != nil {
+				usage = chunk.Response.Usage
+			} else if chunk.Usage != nil {
+				// フォールバック: トップレベルの usage もチェック
+				usage = chunk.Usage
+			}
+
+			if usage != nil {
 				lastUsage = &api.Usage{
-					InputTokens:  chunk.Usage.InputTokens,
-					OutputTokens: chunk.Usage.OutputTokens,
+					InputTokens:  usage.InputTokens,
+					OutputTokens: usage.OutputTokens,
 				}
+				if os.Getenv("XELYON_DEBUG_OPENAI") == "1" {
+					fmt.Fprintf(os.Stderr, "[DEBUG OpenAI Responses] usage received: input=%d, output=%d\n",
+						usage.InputTokens, usage.OutputTokens)
+				}
+			} else if os.Getenv("XELYON_DEBUG_OPENAI") == "1" {
+				fmt.Fprintf(os.Stderr, "[DEBUG OpenAI Responses] %s event but usage is nil\n", chunk.Type)
 			}
 
 			// Function Calling: 累積した呼び出しを内部形式に変換

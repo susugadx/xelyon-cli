@@ -36,6 +36,7 @@ var (
 	statusCyan   = color.New(color.FgCyan)
 	statusGreen  = color.New(color.FgGreen)
 	statusYellow = color.New(color.FgYellow)
+	statusRed    = color.New(color.FgRed)
 	statusDim    = color.New(color.Faint)
 )
 
@@ -116,13 +117,19 @@ func (a *Agent) PrintStatusFooter() {
 		threshold = 80 // デフォルト値
 	}
 
-	// 色分け
+	// 色分け（緑 < threshold < 黄 < 100% < 赤）
 	var indicator string
 	var tokenDisplay string
-	if percentage > threshold {
+	if percentage >= 100 {
+		// 上限超過: 赤で警告
+		indicator = statusRed.Sprint("●")
+		tokenDisplay = statusRed.Sprintf("%s/%s ⚠️", tokenStr, limitStr)
+	} else if percentage > threshold {
+		// 警告閾値超過: 黄色
 		indicator = statusYellow.Sprint("●")
 		tokenDisplay = statusYellow.Sprintf("%s/%s", tokenStr, limitStr)
 	} else {
+		// 正常: 緑
 		indicator = statusGreen.Sprint("●")
 		tokenDisplay = fmt.Sprintf("%s/%s", tokenStr, limitStr)
 	}

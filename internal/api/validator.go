@@ -19,8 +19,17 @@ func ValidateStreamResponse(data []byte) error {
 	}
 
 	choicesArray, ok := choices.([]interface{})
-	if !ok || len(choicesArray) == 0 {
-		return fmt.Errorf("choices must be a non-empty array")
+	if !ok {
+		return fmt.Errorf("choices must be an array")
+	}
+
+	// usage チャンクは空の choices を持つことがある（stream_options.include_usage=true の場合）
+	// usage フィールドがあれば空の choices を許容
+	if len(choicesArray) == 0 {
+		if _, hasUsage := rawMap["usage"]; hasUsage {
+			return nil // usage チャンクは有効
+		}
+		return fmt.Errorf("choices must be a non-empty array (or usage chunk)")
 	}
 
 	// 各choiceの構造検証

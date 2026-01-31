@@ -97,9 +97,10 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	model = api.GetDefaultModel(model, "groq", "llama-3.3-70b-versatile")
 
 	reqBody := api.ChatRequest{
-		Model:    model,
-		Messages: messages,
-		Stream:   true,
+		Model:         model,
+		Messages:      messages,
+		Stream:        true,
+		StreamOptions: &api.StreamOptions{IncludeUsage: true},
 	}
 
 	// Function Calling: ツール定義を追加（環境変数で無効化可能）

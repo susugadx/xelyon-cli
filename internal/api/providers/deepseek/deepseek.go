@@ -92,9 +92,10 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	actualModel := getActualModel(model)
 
 	reqBody := api.ChatRequest{
-		Model:    actualModel,
-		Messages: messages,
-		Stream:   true,
+		Model:         actualModel,
+		Messages:      messages,
+		Stream:        true,
+		StreamOptions: &api.StreamOptions{IncludeUsage: true},
 	}
 
 	// Function Calling: ツール定義を追加（環境変数で無効化可能）
@@ -194,6 +195,10 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 			lastUsage = &api.Usage{
 				InputTokens:  streamResp.Usage.PromptTokens,
 				OutputTokens: streamResp.Usage.CompletionTokens,
+			}
+			if os.Getenv("XELYON_DEBUG_DEEPSEEK") == "1" {
+				fmt.Fprintf(os.Stderr, "[DEBUG DeepSeek] usage received: input=%d, output=%d\n",
+					streamResp.Usage.PromptTokens, streamResp.Usage.CompletionTokens)
 			}
 		}
 
