@@ -50,8 +50,9 @@ type GeminiCandidate struct {
 
 // GeminiUsageMetadata はトークン使用量
 type GeminiUsageMetadata struct {
-	PromptTokenCount     int `json:"promptTokenCount"`
-	CandidatesTokenCount int `json:"candidatesTokenCount"`
+	PromptTokenCount        int `json:"promptTokenCount"`
+	CandidatesTokenCount    int `json:"candidatesTokenCount"`
+	CachedContentTokenCount int `json:"cachedContentTokenCount,omitempty"`
 }
 
 // GeminiResponse はGeminiレスポンス

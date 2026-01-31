@@ -166,8 +166,10 @@ type ContentBlock struct {
 
 // StreamUsage は Claude のトークン使用量
 type StreamUsage struct {
-	InputTokens  int `json:"input_tokens"`
-	OutputTokens int `json:"output_tokens"`
+	InputTokens              int `json:"input_tokens"`
+	OutputTokens             int `json:"output_tokens"`
+	CacheReadInputTokens     int `json:"cache_read_input_tokens,omitempty"`
+	CacheCreationInputTokens int `json:"cache_creation_input_tokens,omitempty"`
 }
 
 // StreamEvent はストリームイベント
@@ -401,8 +403,10 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 			// usage 情報を記録
 			if event.Usage != nil {
 				lastUsage = &api.Usage{
-					InputTokens:  event.Usage.InputTokens,
-					OutputTokens: event.Usage.OutputTokens,
+					InputTokens:         event.Usage.InputTokens,
+					OutputTokens:        event.Usage.OutputTokens,
+					CachedInputTokens:   event.Usage.CacheReadInputTokens,
+					CacheCreationTokens: event.Usage.CacheCreationInputTokens,
 				}
 			}
 			return "", false, nil

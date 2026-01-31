@@ -144,8 +144,11 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 				FinishReason string `json:"finish_reason,omitempty"`
 			} `json:"choices"`
 			Usage *struct {
-				PromptTokens     int `json:"prompt_tokens"`
-				CompletionTokens int `json:"completion_tokens"`
+				PromptTokens        int `json:"prompt_tokens"`
+				CompletionTokens    int `json:"completion_tokens"`
+				PromptTokensDetails *struct {
+					CachedTokens int `json:"cached_tokens,omitempty"`
+				} `json:"prompt_tokens_details,omitempty"`
 			} `json:"usage,omitempty"`
 		}
 		if err := json.Unmarshal([]byte(data), &streamResp); err != nil {
@@ -154,13 +157,18 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 
 		// usage 情報を記録
 		if streamResp.Usage != nil {
+			cachedTokens := 0
+			if streamResp.Usage.PromptTokensDetails != nil {
+				cachedTokens = streamResp.Usage.PromptTokensDetails.CachedTokens
+			}
 			lastUsage = &api.Usage{
-				InputTokens:  streamResp.Usage.PromptTokens,
-				OutputTokens: streamResp.Usage.CompletionTokens,
+				InputTokens:       streamResp.Usage.PromptTokens,
+				OutputTokens:      streamResp.Usage.CompletionTokens,
+				CachedInputTokens: cachedTokens,
 			}
 			if os.Getenv("XELYON_DEBUG_OPENAI") == "1" {
-				fmt.Fprintf(os.Stderr, "[DEBUG OpenAI] usage received: input=%d, output=%d\n",
-					streamResp.Usage.PromptTokens, streamResp.Usage.CompletionTokens)
+				fmt.Fprintf(os.Stderr, "[DEBUG OpenAI] usage received: input=%d, output=%d, cached=%d\n",
+					streamResp.Usage.PromptTokens, streamResp.Usage.CompletionTokens, cachedTokens)
 			}
 		}
 

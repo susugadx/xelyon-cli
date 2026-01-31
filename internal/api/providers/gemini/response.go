@@ -115,8 +115,9 @@ func (p *Provider) handleFunctionCallingResponse(body []byte, spinner *ui.Spinne
 		lastResp := responses[len(responses)-1]
 		if lastResp.UsageMetadata != nil {
 			p.usageCallback(api.Usage{
-				InputTokens:  lastResp.UsageMetadata.PromptTokenCount,
-				OutputTokens: lastResp.UsageMetadata.CandidatesTokenCount,
+				InputTokens:       lastResp.UsageMetadata.PromptTokenCount,
+				OutputTokens:      lastResp.UsageMetadata.CandidatesTokenCount,
+				CachedInputTokens: lastResp.UsageMetadata.CachedContentTokenCount,
 			})
 		}
 	}
@@ -174,8 +175,9 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 		lastResp := responses[len(responses)-1]
 		if lastResp.UsageMetadata != nil {
 			p.usageCallback(api.Usage{
-				InputTokens:  lastResp.UsageMetadata.PromptTokenCount,
-				OutputTokens: lastResp.UsageMetadata.CandidatesTokenCount,
+				InputTokens:       lastResp.UsageMetadata.PromptTokenCount,
+				OutputTokens:      lastResp.UsageMetadata.CandidatesTokenCount,
+				CachedInputTokens: lastResp.UsageMetadata.CachedContentTokenCount,
 			})
 		}
 	}
@@ -201,8 +203,9 @@ func (p *Provider) handleNonStreamingResponse(resp *http.Response, spinner *ui.S
 	// Usage callback
 	if p.usageCallback != nil && result.UsageMetadata != nil {
 		p.usageCallback(api.Usage{
-			InputTokens:  result.UsageMetadata.PromptTokenCount,
-			OutputTokens: result.UsageMetadata.CandidatesTokenCount,
+			InputTokens:       result.UsageMetadata.PromptTokenCount,
+			OutputTokens:      result.UsageMetadata.CandidatesTokenCount,
+			CachedInputTokens: result.UsageMetadata.CachedContentTokenCount,
 		})
 	}
 

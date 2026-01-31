@@ -182,8 +182,10 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 				FinishReason string `json:"finish_reason,omitempty"`
 			} `json:"choices"`
 			Usage *struct {
-				PromptTokens     int `json:"prompt_tokens"`
-				CompletionTokens int `json:"completion_tokens"`
+				PromptTokens          int `json:"prompt_tokens"`
+				CompletionTokens      int `json:"completion_tokens"`
+				PromptCacheHitTokens  int `json:"prompt_cache_hit_tokens,omitempty"`
+				PromptCacheMissTokens int `json:"prompt_cache_miss_tokens,omitempty"`
 			} `json:"usage,omitempty"`
 		}
 		if err := json.Unmarshal([]byte(data), &streamResp); err != nil {
@@ -193,12 +195,13 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 		// usage 情報を記録
 		if streamResp.Usage != nil {
 			lastUsage = &api.Usage{
-				InputTokens:  streamResp.Usage.PromptTokens,
-				OutputTokens: streamResp.Usage.CompletionTokens,
+				InputTokens:       streamResp.Usage.PromptTokens,
+				OutputTokens:      streamResp.Usage.CompletionTokens,
+				CachedInputTokens: streamResp.Usage.PromptCacheHitTokens,
 			}
 			if os.Getenv("XELYON_DEBUG_DEEPSEEK") == "1" {
-				fmt.Fprintf(os.Stderr, "[DEBUG DeepSeek] usage received: input=%d, output=%d\n",
-					streamResp.Usage.PromptTokens, streamResp.Usage.CompletionTokens)
+				fmt.Fprintf(os.Stderr, "[DEBUG DeepSeek] usage received: input=%d, output=%d, cached=%d\n",
+					streamResp.Usage.PromptTokens, streamResp.Usage.CompletionTokens, streamResp.Usage.PromptCacheHitTokens)
 			}
 		}
 

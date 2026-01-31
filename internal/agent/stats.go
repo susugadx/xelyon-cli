@@ -10,14 +10,16 @@ import (
 
 // SessionStats はセッション統計情報
 type SessionStats struct {
-	StartTime         time.Time
-	UserMessages      int
-	AssistantMessages int
-	ToolExecutions    map[string]int // ツール名 -> 実行回数
-	InputTokens       int
-	OutputTokens      int
-	Provider          string     // "deepseek", "openai", "claude", "gemini", "groq", "ollama"
-	LastUsage         *api.Usage // 直近のリクエストの使用量
+	StartTime           time.Time
+	UserMessages        int
+	AssistantMessages   int
+	ToolExecutions      map[string]int // ツール名 -> 実行回数
+	InputTokens         int
+	OutputTokens        int
+	CachedInputTokens   int        // キャッシュヒットトークン数（累計）
+	CacheCreationTokens int        // キャッシュ作成トークン数（累計、Claude用）
+	Provider            string     // "deepseek", "openai", "claude", "gemini", "groq", "ollama"
+	LastUsage           *api.Usage // 直近のリクエストの使用量
 }
 
 // NewSessionStats は新しいSessionStatsを作成
@@ -40,47 +42,112 @@ func (s *SessionStats) AddTokens(input, output int) {
 	s.OutputTokens += output
 }
 
+// AddUsage は api.Usage からトークン使用量を追加
+func (s *SessionStats) AddUsage(usage api.Usage) {
+	s.InputTokens += usage.InputTokens
+	s.OutputTokens += usage.OutputTokens
+	s.CachedInputTokens += usage.CachedInputTokens
+	s.CacheCreationTokens += usage.CacheCreationTokens
+	s.LastUsage = &usage
+}
+
 // TotalTokens は合計トークン数を返す
 func (s *SessionStats) TotalTokens() int {
 	return s.InputTokens + s.OutputTokens
 }
 
+// PricingInfo はプロバイダー別の料金情報（$/1M tokens）
+type PricingInfo struct {
+	InputCostPerM         float64 // 通常入力トークン
+	OutputCostPerM        float64 // 出力トークン
+	CachedInputCostPerM   float64 // キャッシュヒット入力（割引後）
+	CacheCreationCostPerM float64 // キャッシュ作成（Claude: 1.25x）
+}
+
+// GetPricingInfo はプロバイダー別の料金情報を返す
+func GetPricingInfo(provider string) PricingInfo {
+	switch provider {
+	case "deepseek":
+		// DeepSeek: キャッシュヒット90%割引 ($0.14 → $0.014)
+		return PricingInfo{
+			InputCostPerM:         0.14,
+			OutputCostPerM:        0.28,
+			CachedInputCostPerM:   0.014, // 90% off
+			CacheCreationCostPerM: 0.14,  // 通常料金
+		}
+	case "openai":
+		// OpenAI: キャッシュヒット50%割引 ($2.50 → $1.25)
+		return PricingInfo{
+			InputCostPerM:         2.50,
+			OutputCostPerM:        10.00,
+			CachedInputCostPerM:   1.25, // 50% off
+			CacheCreationCostPerM: 2.50, // 通常料金
+		}
+	case "claude":
+		// Claude: キャッシュヒット90%割引 ($3.00 → $0.30), キャッシュ作成25%増 ($3.00 → $3.75)
+		return PricingInfo{
+			InputCostPerM:         3.00,
+			OutputCostPerM:        15.00,
+			CachedInputCostPerM:   0.30, // 90% off
+			CacheCreationCostPerM: 3.75, // 25% premium
+		}
+	case "gemini":
+		// Gemini: キャッシュヒット90%割引 ($0.075 → $0.0075)
+		return PricingInfo{
+			InputCostPerM:         0.075,
+			OutputCostPerM:        0.30,
+			CachedInputCostPerM:   0.0075, // 90% off
+			CacheCreationCostPerM: 0.075,  // 通常料金
+		}
+	case "groq":
+		return PricingInfo{
+			InputCostPerM:         0.10,
+			OutputCostPerM:        0.10,
+			CachedInputCostPerM:   0.10, // キャッシュなし
+			CacheCreationCostPerM: 0.10,
+		}
+	case "ollama":
+		return PricingInfo{} // ローカル実行は無料
+	default:
+		// 不明なプロバイダーはDeepSeek料金で概算
+		return PricingInfo{
+			InputCostPerM:         0.14,
+			OutputCostPerM:        0.28,
+			CachedInputCostPerM:   0.014,
+			CacheCreationCostPerM: 0.14,
+		}
+	}
+}
+
 // EstimatedCost は推定コストを計算（USD）
+// キャッシュヒットとキャッシュ作成の割引/割増を反映
 func (s *SessionStats) EstimatedCost() float64 {
 	if s.Provider == "ollama" {
 		return 0.0 // ローカル実行
 	}
 
-	// 1M tokens あたりの料金（USD）
-	var inputCost, outputCost float64
-	switch s.Provider {
-	case "deepseek":
-		inputCost = 0.14
-		outputCost = 0.28
-	case "openai":
-		inputCost = 2.50
-		outputCost = 10.00
-	case "claude":
-		inputCost = 3.00
-		outputCost = 15.00
-	case "gemini":
-		inputCost = 0.075
-		outputCost = 0.30
-	case "groq":
-		// Groqは無料枠があるが、有料プランの料金で計算
-		inputCost = 0.10
-		outputCost = 0.10
-	default:
-		// 不明なプロバイダーはDeepSeek料金で概算
-		inputCost = 0.14
-		outputCost = 0.28
+	pricing := GetPricingInfo(s.Provider)
+
+	// 入力トークンのコスト計算
+	// - CachedInputTokens: キャッシュヒット（割引適用）
+	// - CacheCreationTokens: キャッシュ作成（Claude: 割増）
+	// - 残り: 通常入力トークン
+	cachedInputCost := float64(s.CachedInputTokens) / 1_000_000.0 * pricing.CachedInputCostPerM
+	cacheCreationCost := float64(s.CacheCreationTokens) / 1_000_000.0 * pricing.CacheCreationCostPerM
+
+	// 通常入力トークン = 全入力 - キャッシュヒット - キャッシュ作成
+	// 注: InputTokens は API から返される総入力トークン数
+	// キャッシュの場合、InputTokens = CachedInputTokens + CacheCreationTokens + 通常入力 となる
+	uncachedInput := s.InputTokens - s.CachedInputTokens - s.CacheCreationTokens
+	if uncachedInput < 0 {
+		uncachedInput = 0
 	}
+	uncachedInputCost := float64(uncachedInput) / 1_000_000.0 * pricing.InputCostPerM
 
-	// コスト計算: (tokens / 1,000,000) * price
-	inputCostUSD := (float64(s.InputTokens) / 1_000_000.0) * inputCost
-	outputCostUSD := (float64(s.OutputTokens) / 1_000_000.0) * outputCost
+	// 出力トークンのコスト
+	outputCost := float64(s.OutputTokens) / 1_000_000.0 * pricing.OutputCostPerM
 
-	return inputCostUSD + outputCostUSD
+	return cachedInputCost + cacheCreationCost + uncachedInputCost + outputCost
 }
 
 // ElapsedTime はセッション開始からの経過時間を返す
@@ -160,38 +227,39 @@ func FormatNumber(n int) string {
 	return FormatNumber(n/1000) + fmt.Sprintf(",%03d", n%1000)
 }
 
-// CalculateRequestCost は単一リクエストのコストを計算
+// CalculateRequestCost は単一リクエストのコストを計算（キャッシュなし想定）
 func CalculateRequestCost(provider string, input, output int) float64 {
 	if provider == "ollama" {
 		return 0.0 // ローカル実行
 	}
 
-	// 1M tokens あたりの料金（USD）
-	var inputCost, outputCost float64
-	switch provider {
-	case "deepseek":
-		inputCost = 0.14
-		outputCost = 0.28
-	case "openai":
-		inputCost = 2.50
-		outputCost = 10.00
-	case "claude":
-		inputCost = 3.00
-		outputCost = 15.00
-	case "gemini":
-		inputCost = 0.075
-		outputCost = 0.30
-	case "groq":
-		inputCost = 0.10
-		outputCost = 0.10
-	default:
-		inputCost = 0.14
-		outputCost = 0.28
-	}
+	pricing := GetPricingInfo(provider)
 
 	// コスト計算: (tokens / 1,000,000) * price
-	inputCostUSD := (float64(input) / 1_000_000.0) * inputCost
-	outputCostUSD := (float64(output) / 1_000_000.0) * outputCost
+	inputCostUSD := (float64(input) / 1_000_000.0) * pricing.InputCostPerM
+	outputCostUSD := (float64(output) / 1_000_000.0) * pricing.OutputCostPerM
 
 	return inputCostUSD + outputCostUSD
+}
+
+// CalculateRequestCostWithCache は単一リクエストのコストを計算（キャッシュ対応）
+func CalculateRequestCostWithCache(provider string, usage api.Usage) float64 {
+	if provider == "ollama" {
+		return 0.0
+	}
+
+	pricing := GetPricingInfo(provider)
+
+	cachedInputCost := float64(usage.CachedInputTokens) / 1_000_000.0 * pricing.CachedInputCostPerM
+	cacheCreationCost := float64(usage.CacheCreationTokens) / 1_000_000.0 * pricing.CacheCreationCostPerM
+
+	uncachedInput := usage.InputTokens - usage.CachedInputTokens - usage.CacheCreationTokens
+	if uncachedInput < 0 {
+		uncachedInput = 0
+	}
+	uncachedInputCost := float64(uncachedInput) / 1_000_000.0 * pricing.InputCostPerM
+
+	outputCost := float64(usage.OutputTokens) / 1_000_000.0 * pricing.OutputCostPerM
+
+	return cachedInputCost + cacheCreationCost + uncachedInputCost + outputCost
 }

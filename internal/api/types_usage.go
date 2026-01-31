@@ -4,6 +4,10 @@ package api
 type Usage struct {
 	InputTokens  int
 	OutputTokens int
+
+	// キャッシュ関連（プロバイダーにより対応状況が異なる）
+	CachedInputTokens   int // キャッシュから読み取ったトークン数（割引対象）
+	CacheCreationTokens int // キャッシュ作成に使用したトークン数（Claude: 1.25x課金）
 }
 
 // UsageCallback は usage 受信時に呼ばれるコールバック
