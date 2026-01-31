@@ -7,6 +7,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/agent/token"
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 // AgentState represents the current interaction state.
@@ -109,10 +110,17 @@ func (a *Agent) PrintStatusFooter() {
 	// セパレータ（dim色）
 	sep := statusDim.Sprint("│")
 
+	// 警告閾値を config から取得
+	cfg := config.GetGlobalConfig()
+	threshold := float64(cfg.Compression.ThresholdPercent)
+	if threshold == 0 {
+		threshold = 80 // デフォルト値
+	}
+
 	// 色分け
 	var indicator string
 	var tokenDisplay string
-	if percentage > 80 {
+	if percentage > threshold {
 		indicator = statusYellow.Sprint("●")
 		tokenDisplay = statusYellow.Sprintf("%s/%s", tokenStr, limitStr)
 	} else {
