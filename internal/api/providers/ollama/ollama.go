@@ -64,6 +64,12 @@ func (p *Provider) SupportsImages() bool {
 	return false
 }
 
+// IsFunctionCallingEnabled は Function Calling が有効かを返す
+// OLLAMA_FUNCTION_CALLING=0 で無効化可能
+func (p *Provider) IsFunctionCallingEnabled() bool {
+	return os.Getenv("OLLAMA_FUNCTION_CALLING") != "0"
+}
+
 // OllamaRequest はOllama APIリクエスト
 type OllamaRequest struct {
 	Model      string           `json:"model"`

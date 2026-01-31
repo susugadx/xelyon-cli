@@ -69,6 +69,11 @@ func (p *Provider) SupportsImages() bool {
 	return true
 }
 
+// IsFunctionCallingEnabled は Function Calling が有効かを返す
+func (p *Provider) IsFunctionCallingEnabled() bool {
+	return true
+}
+
 // Message はClaudeのメッセージ構造
 type Message struct {
 	Role    string `json:"role"`

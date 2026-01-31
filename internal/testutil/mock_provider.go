@@ -68,6 +68,11 @@ func (m *MockProvider) SupportsImages() bool {
 	return false
 }
 
+// IsFunctionCallingEnabled returns whether function calling is enabled
+func (m *MockProvider) IsFunctionCallingEnabled() bool {
+	return true
+}
+
 // ChatWithTools sends a chat request with tool support
 func (m *MockProvider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
 	m.CallCount.ChatWithTools++

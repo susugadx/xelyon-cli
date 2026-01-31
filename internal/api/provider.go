@@ -75,6 +75,10 @@ type Provider interface {
 	// ChatWithImage は画像付きメッセージで会話を行う
 	// imageがnilまたはプロバイダーが画像非対応の場合、テキストのみで会話する
 	ChatWithImage(ctx context.Context, systemPrompt string, history []Message, userMessage string, image *ImageData, model string) (string, error)
+
+	// IsFunctionCallingEnabled は Function Calling が有効かを返す
+	// true の場合、System Prompt からツール定義を削除して重複を避ける
+	IsFunctionCallingEnabled() bool
 }
 
 // CompactCapable は圧縮対応プロバイダーのオプショナルインターフェース

@@ -24,6 +24,10 @@ func (m *mockProvider) SupportsImages() bool {
 	return false
 }
 
+func (m *mockProvider) IsFunctionCallingEnabled() bool {
+	return true
+}
+
 func (m *mockProvider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
 	return "mock response", nil
 }

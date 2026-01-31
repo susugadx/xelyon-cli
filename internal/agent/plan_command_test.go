@@ -15,6 +15,10 @@ func (m *mockPlanProvider) Name() string {
 	return "mock"
 }
 
+func (m *mockPlanProvider) IsFunctionCallingEnabled() bool {
+	return true
+}
+
 func TestHandlePlanCommand_On(t *testing.T) {
 	agent := NewAgent("test-model", &mockPlanProvider{})
 	agent.PlanModeEnabled = false

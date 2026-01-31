@@ -58,6 +58,11 @@ func (p *Provider) SupportsImages() bool {
 	return true
 }
 
+// IsFunctionCallingEnabled は Function Calling が有効かを返す
+func (p *Provider) IsFunctionCallingEnabled() bool {
+	return true
+}
+
 // LevelToReasoningEffort は Thinking Level を OpenAI reasoning_effort に変換
 func LevelToReasoningEffort(level string) string {
 	switch level {

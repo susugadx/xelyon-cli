@@ -108,7 +108,7 @@ func NewAgent(model string, provider api.Provider) *Agent {
 	// Function Calling 対応プロバイダーは詳細なツール定義を送信するため、
 	// System Prompt からツール説明を除去（重複回避、トークン節約）
 	// 注: LSP/MCP プロンプト追加より先に実行（後から追加する内容は削除されない）
-	if provider.Name() == "Gemini" || provider.Name() == "OpenAI" {
+	if provider.IsFunctionCallingEnabled() {
 		systemPrompt = removeToolsSection(systemPrompt)
 	}
 
@@ -132,9 +132,7 @@ func NewAgent(model string, provider api.Provider) *Agent {
 			toolslsp.LSPClient = lspClient
 
 			// LSPツールはinit()で自動登録済み
-
-			// SystemPromptにLSPツール説明を追加（removeToolsSectionの後なので削除されない）
-			systemPrompt += prompt.BuildLSPToolsPrompt()
+			// LSPドキュメントはSystemPromptのWorkflow Rulesに統合済み
 		}
 	}
 

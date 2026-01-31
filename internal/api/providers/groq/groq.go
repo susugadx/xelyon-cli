@@ -73,6 +73,12 @@ func (p *Provider) SupportsImages() bool {
 	return false
 }
 
+// IsFunctionCallingEnabled は Function Calling が有効かを返す
+// GROQ_FUNCTION_CALLING=0 で無効化可能
+func (p *Provider) IsFunctionCallingEnabled() bool {
+	return os.Getenv("GROQ_FUNCTION_CALLING") != "0"
+}
+
 // ChatWithTools は Provider interface の実装（context対応）
 func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
 	// Extended Thinking 非対応警告

@@ -72,6 +72,12 @@ func (p *Provider) SupportsImages() bool {
 	return true
 }
 
+// IsFunctionCallingEnabled は Function Calling が有効かを返す
+// GEMINI_FUNCTION_CALLING=0 で無効化可能
+func (p *Provider) IsFunctionCallingEnabled() bool {
+	return os.Getenv("GEMINI_FUNCTION_CALLING") != "0"
+}
+
 // SetUsageCallback は使用量レポートのコールバックを設定する
 func (p *Provider) SetUsageCallback(callback api.UsageCallback) {
 	p.usageCallback = callback
