@@ -39,40 +39,18 @@ IMPORTANT: Include "depends_on" for each step to specify dependencies:
 - Step that reads file A depends on any step that writes to file A
 - Steps with no dependencies can be executed IN PARALLEL
 
-Return JSON:
-{
-  "plan": {
-    "summary": "Brief description of the plan",
-    "steps": [
-      {
-        "id": 1,
-        "description": "Step description",
-        "tools": ["tool1", "tool2"],
-        "depends_on": []
-      },
-      {
-        "id": 2,
-        "description": "Step description",
-        "tools": ["tool1"],
-        "depends_on": [1]
-      },
-      {
-        "id": 3,
-        "description": "Step description (can run parallel with step 2)",
-        "tools": ["tool1"],
-        "depends_on": [1]
-      }
-    ]
-  }
-}
+Use the create_plan tool with:
+- title: Brief title for the plan
+- summary: Brief description of what will be done
+- steps: Array of step objects, each with:
+  - id: Step number (1, 2, 3...)
+  - description: What this step does
+  - tools: Array of tool names to use
+  - depends_on: Array of step IDs this step depends on
 
 Steps with the SAME depends_on values can be executed in parallel.
 
-If the investigation reveals that no implementation is needed (e.g., simple question answered, no code changes required), return an empty plan:
-{
-  "plan": {
-    "summary": "Investigation complete - no implementation needed",
-    "steps": []
-  }
-}`, userRequest, investigationResults)
+If no implementation is needed, use create_plan with an empty steps array and summary explaining why.
+
+Do NOT output JSON directly. Always use the create_plan tool.`, userRequest, investigationResults)
 }

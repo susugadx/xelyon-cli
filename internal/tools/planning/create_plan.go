@@ -13,7 +13,8 @@ import (
 
 // CreatePlanTool は計画を作成・保存するツール
 type CreatePlanTool struct {
-	storage *plan.PlanStorage
+	storage  *plan.PlanStorage
+	lastPlan *plan.Plan
 }
 
 // NewCreatePlanTool は CreatePlanTool を作成
@@ -125,5 +126,18 @@ func (t *CreatePlanTool) Run(args map[string]string) (string, *tools.FileChange,
 		return "", nil, fmt.Errorf("failed to save plan: %w", err)
 	}
 
+	// 作成した Plan を保持
+	t.lastPlan = p
+
 	return fmt.Sprintf("%s\nPlan ID: %s\nFilename: %s", i18n.T("plan.created", title), p.ID, filename), nil, nil
+}
+
+// LastPlan は最後に作成した Plan を返す
+func (t *CreatePlanTool) LastPlan() *plan.Plan {
+	return t.lastPlan
+}
+
+// ClearLastPlan は lastPlan をクリアする
+func (t *CreatePlanTool) ClearLastPlan() {
+	t.lastPlan = nil
 }

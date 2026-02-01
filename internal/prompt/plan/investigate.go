@@ -11,10 +11,9 @@ You are in PLAN MODE (Investigation Phase).
 
 ## INVESTIGATION RULES:
 1. Think first: identify ALL files/areas you need to examine
-2. Batch tool calls: read multiple files together, don't read one-by-one
-3. Read-only tools allowed: read_file, search_file, search_code, list_dir, lsp_references, lsp_definition, lint, web_search
-4. bash allowed for read-only commands only: git status, git log, git diff, ls, cat, etc.
-5. Do NOT use modification tools: write_file, str_replace, delete_file, git_commit, or destructive bash commands
+2. Read-only tools allowed: read_file, search_file, search_code, list_dir, lsp_references, lsp_definition, lint, web_search
+3. bash allowed for read-only commands only: git status, git log, git diff, ls, cat, etc.
+4. Do NOT use modification tools: write_file, str_replace, delete_file, git_commit
 
 ## INVESTIGATION CHECKLIST:
 - [ ] Understand the current implementation (read relevant files)
@@ -22,17 +21,15 @@ You are in PLAN MODE (Investigation Phase).
 - [ ] Check for existing patterns to follow
 - [ ] Identify potential impacts of changes
 
-## OUTPUT:
-When ready, output your plan in JSON:
-{"plan": {
-  "summary": "Brief summary of what will be done",
-  "steps": [
-    {"id": 1, "description": "Specific action", "tools": ["tool1"]},
-    {"id": 2, "description": "Specific action", "tools": ["tool2"]}
-  ]
-}}
+## AFTER INVESTIGATION:
+When you have gathered enough information:
+1. If you need clarification from the user, use the ask_user_question tool
+2. When ready to create a plan, use the create_plan tool with:
+   - title: Brief title for the plan
+   - summary: What will be done
+   - steps: Array of step objects with id, description, tools
 
-Each step should be concrete and actionable, not vague.
+Do NOT output JSON directly. Always use the create_plan tool.
 
 Start investigation now.`, userRequest)
 }
@@ -43,14 +40,8 @@ Start investigation now.`, userRequest)
 func BuildPlanRequestMessage(toolName string) string {
 	return fmt.Sprintf(`[SYSTEM] You tried to use a modification tool (%s) during the investigation phase.
 
-Before using modification tools, you must output an implementation plan.
-Output your plan now in this JSON format:
+Before using modification tools, you must create an implementation plan.
+Use the create_plan tool now to create your plan.
 
-{"plan": {
-  "summary": "Brief summary of what will be done",
-  "steps": [
-    {"id": 1, "description": "Step description", "tools": ["tool1"]},
-    {"id": 2, "description": "Step description", "tools": ["tool2"]}
-  ]
-}}`, toolName)
+Do NOT output JSON directly.`, toolName)
 }

@@ -11,68 +11,26 @@ import (
 	promptplan "github.com/susugadx/xelyon-cli/internal/prompt/plan"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/ui"
-	"golang.org/x/sync/errgroup"
 )
 
-// runImplementationPhase は実装フェーズを実行（並列実行対応）
+// runImplementationPhase は実装フェーズを実行（順次実行）
 func (a *Agent) runImplementationPhase(ctx context.Context, p *plan.Plan) error {
-	// 依存関係解析器を初期化
-	analyzer := plan.NewDependencyAnalyzer(a.lspClient) // LSP有効時は参照ベースの依存関係検出
-	_ = analyzer.Analyze(p.Steps)                       // ファイルアクセスマップを構築
-
 	for {
-		// 並列実行可能なステップを取得
-		parallelSteps := p.GetParallelSteps()
-
-		if len(parallelSteps) > 1 {
-			// 並列実行前に競合チェック
-			conflicts := analyzer.DetectConflicts(parallelSteps, p.Steps)
-			if len(conflicts) > 0 {
-				// 競合検出時は直列実行にフォールバック
-				yellow.Printf("\n⚠️  Conflict detected, falling back to sequential execution:\n")
-				for _, c := range conflicts {
-					yellow.Printf("   - %s (files: %v)\n", c.Message, c.Files)
-				}
-				// 直列実行
-				for _, id := range parallelSteps {
-					step := p.GetStep(id)
-					if step == nil {
-						continue
-					}
-					fmt.Printf("\n%s\n", ui.FormatStepProgress(id, len(p.Steps), step.Description, "running"))
-					if err := a.executeStepV2(ctx, p, step, id-1, 0, false); err != nil {
-						return err
-					}
-					p.UpdateStatus(id, "completed", "")
-				}
-			} else {
-				// 競合なし - 並列実行
-				cyan.Printf("\n⚡ Executing %d steps in parallel...\n", len(parallelSteps))
-				if err := a.executeStepsParallel(ctx, p, parallelSteps); err != nil {
-					return err
-				}
-				// 完了したステップをマーク
-				for _, id := range parallelSteps {
-					p.UpdateStatus(id, "completed", "")
-				}
-			}
-		} else {
-			// 直列実行
-			nextID := p.GetNextStep()
-			if nextID == -1 {
-				break // 全て完了
-			}
-			step := p.GetStep(nextID)
-			if step == nil {
-				break
-			}
-
-			fmt.Printf("\n%s\n", ui.FormatStepProgress(nextID, len(p.Steps), step.Description, "running"))
-			if err := a.executeStepV2(ctx, p, step, nextID-1, 0, false); err != nil {
-				return err
-			}
-			p.UpdateStatus(nextID, "completed", "")
+		// 次のステップを取得
+		nextID := p.GetNextStep()
+		if nextID == -1 {
+			break // 全て完了
 		}
+		step := p.GetStep(nextID)
+		if step == nil {
+			break
+		}
+
+		fmt.Printf("\n%s\n", ui.FormatStepProgress(nextID, len(p.Steps), step.Description, "running"))
+		if err := a.executeStepV2(ctx, p, step, nextID-1, 0); err != nil {
+			return err
+		}
+		p.UpdateStatus(nextID, "completed", "")
 
 		// 全て完了したか確認
 		if p.IsCompleted() {
@@ -84,71 +42,8 @@ func (a *Agent) runImplementationPhase(ctx context.Context, p *plan.Plan) error 
 	return nil
 }
 
-// executeStepsParallel は複数ステップを並列実行（進捗表示付き）
-func (a *Agent) executeStepsParallel(ctx context.Context, p *plan.Plan, stepIDs []int) error {
-	cfg := config.GetGlobalConfig()
-	maxWorkers := cfg.PlanMode.MaxParallelSteps
-	if maxWorkers <= 0 {
-		maxWorkers = config.DefaultParallelWorkers
-	}
-
-	// MultiProgress を初期化
-	mp := ui.NewMultiProgress()
-	for _, stepID := range stepIDs {
-		step := p.GetStep(stepID)
-		if step != nil {
-			mp.AddTask(stepID, step.Description)
-		}
-	}
-
-	// バックグラウンドで進捗表示を開始
-	mp.StartRendering()
-	defer mp.StopRendering()
-
-	// セマフォでワーカー数を制限
-	sem := make(chan struct{}, maxWorkers)
-	g, ctx := errgroup.WithContext(ctx)
-
-	for _, stepID := range stepIDs {
-		stepID := stepID // capture
-		step := p.GetStep(stepID)
-		if step == nil {
-			continue
-		}
-
-		g.Go(func() error {
-			// セマフォ取得
-			select {
-			case sem <- struct{}{}:
-				defer func() { <-sem }()
-			case <-ctx.Done():
-				mp.Fail(stepID, "cancelled")
-				return ctx.Err()
-			}
-
-			// ステップ開始
-			mp.Start(stepID)
-
-			// ステップ実行
-			err := a.executeStepV2(ctx, p, step, step.ID-1, 0, true)
-
-			if err != nil {
-				mp.Fail(stepID, err.Error())
-				return err
-			}
-
-			// ステップ完了
-			mp.Done(stepID)
-			return nil
-		})
-	}
-
-	return g.Wait()
-}
-
 // executeStepV2 は単一ステップを実行（失敗検知・リトライ対応）
-// parallel=true の場合はスレッドセーフなメソッドを使用し、ユーザー入力が必要な処理はスキップ
-func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.PlanStep, idx int, retryCount int, parallel bool) error {
+func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.PlanStep, idx int, retryCount int) error {
 	maxRetries := config.PlanMaxRetries
 
 	if retryCount > 0 {
@@ -161,11 +56,7 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 
 	// リトライ時は履歴に追加しない
 	if retryCount == 0 {
-		if parallel {
-			a.appendHistory(api.Message{Role: "user", Content: stepPrompt})
-		} else {
-			a.History = append(a.History, api.Message{Role: "user", Content: stepPrompt})
-		}
+		a.History = append(a.History, api.Message{Role: "user", Content: stepPrompt})
 	}
 
 	// ステップ内のツール実行ループ
@@ -176,17 +67,10 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 	var lastFailReason string
 
 	for j := 0; j < maxStepIterations; j++ {
-		// 並列実行時はスナップショットを使用してレースコンディションを防止
-		var history []api.Message
-		if parallel {
-			history = a.getHistorySnapshot()
-		} else {
-			history = a.History
-		}
 		response, err := a.CurrentProvider.ChatWithTools(
 			ctx,
 			a.SystemPrompt,
-			history,
+			a.History,
 			a.CurrentModel,
 		)
 		if err != nil {
@@ -194,14 +78,9 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 			return fmt.Errorf("step %d failed: %w", step.ID, err)
 		}
 
-		if parallel {
-			a.appendHistory(api.Message{Role: "assistant", Content: response})
-			a.incrementAssistantMessages()
-		} else {
-			a.History = append(a.History, api.Message{Role: "assistant", Content: response})
-			if a.Stats != nil {
-				a.Stats.AssistantMessages++
-			}
+		a.History = append(a.History, api.Message{Role: "assistant", Content: response})
+		if a.Stats != nil {
+			a.Stats.AssistantMessages++
 		}
 
 		// ツール呼び出しチェック
@@ -212,15 +91,10 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 				continueCount++
 				yellow.Printf("⚠️  AI asked a question, auto-continuing (%d/%d)...\n", continueCount, maxContinues)
 
-				msg := api.Message{
+				a.History = append(a.History, api.Message{
 					Role:    "user",
 					Content: "[AUTO-CONTINUE] Yes, proceed with the step. Execute the required tools directly without asking for confirmation.",
-				}
-				if parallel {
-					a.appendHistory(msg)
-				} else {
-					a.History = append(a.History, msg)
-				}
+				})
 				continue
 			}
 
@@ -232,12 +106,8 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 		// ツールを実行
 		var allResults []string
 		for _, toolCall := range toolCalls {
-			if parallel {
-				a.incrementToolExecution(toolCall.Tool)
-			} else {
-				if a.Stats != nil {
-					a.Stats.AddToolExecution(toolCall.Tool)
-				}
+			if a.Stats != nil {
+				a.Stats.AddToolExecution(toolCall.Tool)
 			}
 
 			result, change := tools.Execute(toolCall)
@@ -251,13 +121,9 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 
 			// 変更履歴を保存
 			if change != nil {
-				if parallel {
-					a.appendChange(*change)
-				} else {
-					a.changeStack = append(a.changeStack, *change)
-					if len(a.changeStack) > config.MaxChangeStack {
-						a.changeStack = a.changeStack[1:]
-					}
+				a.changeStack = append(a.changeStack, *change)
+				if len(a.changeStack) > config.MaxChangeStack {
+					a.changeStack = a.changeStack[1:]
 				}
 
 				if a.changeStorage != nil && a.session != nil {
@@ -270,11 +136,6 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 
 		// 失敗検出時の処理
 		if lastFailedResult != "" {
-			if parallel {
-				// 並列実行時はユーザー入力不可、即座にエラーを返す
-				return fmt.Errorf("step %d failed during parallel execution: %s", step.ID, lastFailReason)
-			}
-
 			cfg := config.GetGlobalConfig()
 			autoRetryMax := cfg.PlanMode.AutoRetry
 
@@ -299,7 +160,7 @@ Please:
 
 Do NOT skip this step. The issue must be resolved before proceeding.`, lastFailedResult),
 				})
-				return a.executeStepV2(ctx, p, step, idx, retryCount+1, false)
+				return a.executeStepV2(ctx, p, step, idx, retryCount+1)
 			}
 
 			// 自動リトライが exhausted または無効 → Selector UI で確認
@@ -329,7 +190,7 @@ Please:
 
 Do NOT skip this step. The issue must be resolved before proceeding.`, lastFailedResult),
 				})
-				return a.executeStepV2(ctx, p, step, idx, 0, false) // リセット: retryCount=0
+				return a.executeStepV2(ctx, p, step, idx, 0) // リセット: retryCount=0
 			case plan.FailureActionComment:
 				if retryCount >= maxRetries {
 					red.Printf("⚠️  Max retries (%d) reached for step %d\n", maxRetries, step.ID)
@@ -347,7 +208,7 @@ Error that occurred:
 
 Please follow these instructions to fix the issue and retry the step.`, comment, lastFailedResult),
 				})
-				return a.executeStepV2(ctx, p, step, idx, 0, false) // リセット: retryCount=0
+				return a.executeStepV2(ctx, p, step, idx, 0) // リセット: retryCount=0
 			case plan.FailureActionSkip:
 				yellow.Printf("⏭️  Step %d skipped by user\n", step.ID)
 				return nil
@@ -358,15 +219,10 @@ Please follow these instructions to fix the issue and retry the step.`, comment,
 		}
 
 		// 結果を履歴に追加
-		msg := api.Message{
+		a.History = append(a.History, api.Message{
 			Role:    "user",
 			Content: fmt.Sprintf("[Tool Results]\n%s", strings.Join(allResults, "\n\n")),
-		}
-		if parallel {
-			a.appendHistory(msg)
-		} else {
-			a.History = append(a.History, msg)
-		}
+		})
 	}
 
 	green.Printf("✓ Step %d completed\n", step.ID)

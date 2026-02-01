@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/agent/plan"
-	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
 func TestExtractPlanJSON_Mode(t *testing.T) {
@@ -132,67 +131,3 @@ func TestPlanStep_Tools(t *testing.T) {
 	}
 }
 
-func TestHashToolCalls(t *testing.T) {
-	tests := []struct {
-		name      string
-		toolCalls []*tools.ToolCall
-		want      string
-	}{
-		{
-			name:      "empty",
-			toolCalls: []*tools.ToolCall{},
-			want:      "",
-		},
-		{
-			name: "single tool",
-			toolCalls: []*tools.ToolCall{
-				{Tool: "read_file", Args: map[string]string{"path": "/test.go"}},
-			},
-			want: "read_file:map[path:/test.go]",
-		},
-		{
-			name: "multiple tools sorted",
-			toolCalls: []*tools.ToolCall{
-				{Tool: "read_file", Args: map[string]string{"path": "/b.go"}},
-				{Tool: "read_file", Args: map[string]string{"path": "/a.go"}},
-			},
-			want: "read_file:map[path:/a.go]|read_file:map[path:/b.go]",
-		},
-		{
-			name: "different tools",
-			toolCalls: []*tools.ToolCall{
-				{Tool: "search_code", Args: map[string]string{"pattern": "func"}},
-				{Tool: "read_file", Args: map[string]string{"path": "/test.go"}},
-			},
-			want: "read_file:map[path:/test.go]|search_code:map[pattern:func]",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := plan.HashToolCalls(tt.toolCalls)
-			if got != tt.want {
-				t.Errorf("HashToolCalls() = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestHashToolCalls_OrderIndependent(t *testing.T) {
-	// 同じツールセットは順序に関係なく同じハッシュを返す
-	calls1 := []*tools.ToolCall{
-		{Tool: "read_file", Args: map[string]string{"path": "/a.go"}},
-		{Tool: "read_file", Args: map[string]string{"path": "/b.go"}},
-	}
-	calls2 := []*tools.ToolCall{
-		{Tool: "read_file", Args: map[string]string{"path": "/b.go"}},
-		{Tool: "read_file", Args: map[string]string{"path": "/a.go"}},
-	}
-
-	hash1 := plan.HashToolCalls(calls1)
-	hash2 := plan.HashToolCalls(calls2)
-
-	if hash1 != hash2 {
-		t.Errorf("HashToolCalls() should be order-independent: %q != %q", hash1, hash2)
-	}
-}

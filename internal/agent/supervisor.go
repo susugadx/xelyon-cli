@@ -11,6 +11,8 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	promptplan "github.com/susugadx/xelyon-cli/internal/prompt/plan"
+	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/tools/planning"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -151,21 +153,14 @@ func inferProviderFromModel(model string) string {
 func (s *Supervisor) Run(ctx context.Context, userRequest string) error {
 	// 1. 調査フェーズ
 	cyan.Println("\n🔍 Investigation Phase (parallel)")
-	planJSON, err := s.runInvestigation(ctx, userRequest)
+	p, err := s.runInvestigation(ctx, userRequest)
 	if err != nil {
 		return err
 	}
 
-	if planJSON == "" {
+	if p == nil {
 		green.Println("\n✓ Investigation complete. No implementation needed.")
 		return nil
-	}
-
-	// 2. 計画パース・表示・承認
-	p, err := plan.ParsePlan(planJSON)
-	if err != nil {
-		red.Printf("❌ Failed to parse plan: %v\n", err)
-		return err
 	}
 
 	if len(p.Steps) == 0 {
@@ -202,7 +197,7 @@ func (s *Supervisor) Run(ctx context.Context, userRequest string) error {
 }
 
 // runInvestigation は調査フェーズを実行
-func (s *Supervisor) runInvestigation(ctx context.Context, userRequest string) (string, error) {
+func (s *Supervisor) runInvestigation(ctx context.Context, userRequest string) (*plan.Plan, error) {
 	// Supervisor が調査クエリを生成
 	queries, err := s.generateInvestigationQueries(ctx, userRequest)
 	if err != nil {
@@ -284,23 +279,79 @@ func (s *Supervisor) aggregateInvestigationResults(results []WorkerResult) strin
 	return builder.String()
 }
 
-// generatePlan は Supervisor が計画を生成
-func (s *Supervisor) generatePlan(ctx context.Context, userRequest, investigationResults string) (string, error) {
+// generatePlan は Supervisor が計画を生成（create_plan ツールを使用）
+func (s *Supervisor) generatePlan(ctx context.Context, userRequest, investigationResults string) (*plan.Plan, error) {
 	prompt := promptplan.BuildPlanGenerationPrompt(userRequest, investigationResults)
 
-	response, err := s.supervisorProvider.ChatWithTools(
-		ctx,
-		s.agent.SystemPrompt,
-		[]api.Message{{Role: "user", Content: prompt}},
-		s.supervisorModel,
-	)
-	if err != nil {
-		return "", err
+	// create_plan ツールを取得
+	createPlanTool := s.getCreatePlanTool()
+	if createPlanTool != nil {
+		createPlanTool.ClearLastPlan()
 	}
 
-	// 計画 JSON を抽出
-	planJSON := plan.ExtractPlanJSON(response)
-	return planJSON, nil
+	// 計画生成をループ（create_plan ツールが呼ばれるまで）
+	history := []api.Message{{Role: "user", Content: prompt}}
+	maxIterations := 5
+
+	for i := 0; i < maxIterations; i++ {
+		response, err := s.supervisorProvider.ChatWithTools(
+			ctx,
+			s.agent.SystemPrompt,
+			history,
+			s.supervisorModel,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		history = append(history, api.Message{Role: "assistant", Content: response})
+
+		// ツール呼び出しをパース
+		toolCalls := tools.ParseToolCalls(response)
+
+		// ツールがない場合は終了（計画なし）
+		if len(toolCalls) == 0 {
+			return nil, nil
+		}
+
+		// ツールを実行
+		var allResults []string
+		for _, tc := range toolCalls {
+			if tc.Tool == "create_plan" {
+				result, _ := tools.Execute(tc)
+				allResults = append(allResults, fmt.Sprintf("[%s]\n%s", tc.Tool, result))
+
+				// create_plan ツールから Plan を取得
+				if createPlanTool != nil {
+					if p := createPlanTool.LastPlan(); p != nil {
+						return p, nil
+					}
+				}
+			}
+		}
+
+		// 結果を履歴に追加
+		if len(allResults) > 0 {
+			history = append(history, api.Message{
+				Role:    "user",
+				Content: strings.Join(allResults, "\n\n"),
+			})
+		}
+	}
+
+	return nil, nil
+}
+
+// getCreatePlanTool は ToolRegistry から create_plan ツールを取得
+func (s *Supervisor) getCreatePlanTool() *planning.CreatePlanTool {
+	tool := tools.DefaultRegistry.GetTool("create_plan")
+	if tool == nil {
+		return nil
+	}
+	if createPlanTool, ok := tool.(*planning.CreatePlanTool); ok {
+		return createPlanTool
+	}
+	return nil
 }
 
 // runExecution は実装フェーズを実行

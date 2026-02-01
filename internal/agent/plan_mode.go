@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/susugadx/xelyon-cli/internal/agent/plan"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	promptplan "github.com/susugadx/xelyon-cli/internal/prompt/plan"
@@ -45,25 +44,17 @@ func (a *Agent) RunPlanMode(ctx context.Context, userRequest string) error {
 
 	a.History = append(a.History, api.Message{Role: "user", Content: investigationPrompt})
 
-	// 調査フェーズ: SafetyHighツールを実行
-	planJSON, err := a.runInvestigationPhase(ctx)
+	// 調査フェーズ: SafetyHighツールを実行し、create_plan ツールで Plan を作成
+	p, err := a.runInvestigationPhase(ctx)
 	if err != nil {
 		return err
 	}
 
 	// 計画が空の場合（調査のみで完了、または実装不要）
-	if planJSON == "" {
+	if p == nil {
 		green.Println("\n✓ Investigation complete. No implementation needed.")
 		a.SetStatus(StateWaitingInput, "Ready for input", "入力待ち", "Type your request or /help", "リクエスト、または /help を入力")
 		return nil
-	}
-
-	// Step 2: 計画をパースして表示
-	p, err := plan.ParsePlan(planJSON)
-	if err != nil {
-		red.Printf("❌ Failed to parse plan: %v\n", err)
-		yellow.Printf("Plan JSON:\n%s\n", planJSON)
-		return err
 	}
 
 	if len(p.Steps) == 0 {

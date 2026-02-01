@@ -38,6 +38,11 @@ func ParsePlan(jsonStr string) (*Plan, error) {
 	return &plan, nil
 }
 
+// ContainsPlanJSON はレスポンスに Plan JSON が含まれるかを判定
+func ContainsPlanJSON(response string) bool {
+	return ExtractPlanJSON(response) != ""
+}
+
 // ExtractPlanJSON はレスポンスからPlan JSONを抽出
 // 見つからない場合は空文字列を返す
 // NOTE: ツール呼び出し JSON ({"tool": ...}) は plan ではないので除外する

@@ -109,13 +109,13 @@ func (a *Agent) runNormalMode(ctx context.Context, input string) error {
 			return fmt.Errorf("API call failed: %w", err)
 		}
 
-		// Plan JSON を検出した場合、ツール実行を促す
-		if planJSON := plan.ExtractPlanJSON(response); planJSON != "" {
-			yellow.Println("⚠️  Plan JSON detected in normal mode, requesting direct tool execution...")
+		// Plan JSON が検出された場合、ツール使用を促す
+		if plan.ContainsPlanJSON(response) {
+			yellow.Println("⚠️  Plan JSON detected in normal mode. Use create_plan tool instead.")
 			a.History = append(a.History, api.Message{Role: "assistant", Content: response})
 			a.History = append(a.History, api.Message{
 				Role:    "user",
-				Content: "[SYSTEM] You are in NORMAL MODE. Do NOT output plan JSON. Execute the tools DIRECTLY now.",
+				Content: "[SYSTEM] You are in NORMAL MODE. Do NOT output JSON directly. Use create_plan tool or execute tools DIRECTLY.",
 			})
 			continue
 		}
