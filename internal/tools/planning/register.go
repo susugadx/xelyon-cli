@@ -9,9 +9,18 @@ func init() {
 	// AskUserQuestion ツールを登録
 	tools.DefaultRegistry.Register(&AskUserQuestionTool{})
 
-	// CreatePlan ツールを登録（Storage が必要）
+	// Storage を必要とするツールを登録
 	storage, err := plan.NewPlanStorage()
-	if err == nil {
-		tools.DefaultRegistry.Register(NewCreatePlanTool(storage))
+	if err != nil {
+		return
 	}
+
+	// Phase 1
+	tools.DefaultRegistry.Register(NewCreatePlanTool(storage))
+
+	// Phase 2
+	tools.DefaultRegistry.Register(NewGetPlanTool(storage))
+	tools.DefaultRegistry.Register(NewListPlansTool(storage))
+	tools.DefaultRegistry.Register(NewUpdatePlanTool(storage))
+	tools.DefaultRegistry.Register(NewDeletePlanTool(storage))
 }

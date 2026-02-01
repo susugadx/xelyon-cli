@@ -118,6 +118,23 @@ func (s *PlanStorage) Delete(filename string) error {
 	return nil
 }
 
+// LoadByID は ID で計画を検索して読み込み
+func (s *PlanStorage) LoadByID(id string) (*Plan, string, error) {
+	plans, err := s.List()
+	if err != nil {
+		return nil, "", err
+	}
+
+	for _, meta := range plans {
+		if meta.ID == id {
+			plan, err := s.Load(meta.Filename)
+			return plan, meta.Filename, err
+		}
+	}
+
+	return nil, "", fmt.Errorf("plan not found: %s", id)
+}
+
 // generateFilename はタイトルからファイル名を生成
 func (s *PlanStorage) generateFilename(title string) string {
 	date := time.Now().Format("20060102")

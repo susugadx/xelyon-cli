@@ -55,6 +55,10 @@ var messages = map[string]map[string]string{
 		"plan.created":    "計画を作成しました: %s",
 		"plan.saved":      "計画を保存しました: %s",
 		"plan.load_error": "計画の読み込みに失敗しました: %v",
+		"plan.not_found":  "計画が見つかりません: %s",
+		"plan.deleted":    "計画を削除しました: %s",
+		"plan.updated":    "計画を更新しました: %s",
+		"plan.list_empty": "保存された計画はありません",
 
 		// Questionnaire
 		"q.header":        "いくつか確認させてください：",
@@ -73,6 +77,10 @@ var messages = map[string]map[string]string{
 		"plan.created":    "Plan created: %s",
 		"plan.saved":      "Plan saved: %s",
 		"plan.load_error": "Failed to load plan: %v",
+		"plan.not_found":  "Plan not found: %s",
+		"plan.deleted":    "Plan deleted: %s",
+		"plan.updated":    "Plan updated: %s",
+		"plan.list_empty": "No saved plans",
 
 		// Questionnaire
 		"q.header":        "A few questions:",
