@@ -6,6 +6,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/agent/plan"
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
 	promptplan "github.com/susugadx/xelyon-cli/internal/prompt/plan"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -19,6 +20,21 @@ func (a *Agent) RunPlanMode(ctx context.Context, userRequest string) error {
 		yellow.Println(warning)
 		userRequest = userRequest + "\n\n[SYSTEM NOTE: " + warning + " Please check existing code before creating new definitions.]"
 	}
+
+	// 並列モードが有効な場合は Supervisor に委譲
+	cfg := config.GetGlobalConfig()
+	config.MigratePlanModeConfig(&cfg.PlanMode)
+
+	if cfg.PlanMode.Parallel {
+		supervisor, err := NewSupervisor(a, &cfg.PlanMode)
+		if err != nil {
+			red.Printf("❌ Failed to create supervisor: %v\n", err)
+			return err
+		}
+		return supervisor.Run(ctx, userRequest)
+	}
+
+	// 以下は順次実行モード（従来の処理）
 
 	// Step 1: 調査フェーズ（SafetyHighツールを自由に実行）
 	cyan.Println("\n🔍 Investigation phase - researching the codebase...")

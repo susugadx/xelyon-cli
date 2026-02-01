@@ -129,8 +129,25 @@ type GitStageConfig struct {
 
 // PlanModeConfig は Plan Mode の設定
 type PlanModeConfig struct {
-	MaxParallelSteps int `yaml:"max_parallel_steps"` // 並列実行数（デフォルト: 3）
-	AutoRetry        int `yaml:"auto_retry"`         // 自動リトライ回数（デフォルト: 3, 0で無効）
+	// 旧設定（後方互換性のため残す）
+	MaxParallelSteps int `yaml:"max_parallel_steps,omitempty"` // 非推奨: max_workers を使用
+	AutoRetry        int `yaml:"auto_retry,omitempty"`         // 非推奨: max_retry を使用
+
+	// 並列実行設定（Phase 3）
+	Parallel   bool `yaml:"parallel"`    // 並列モード有効化（デフォルト: false）
+	MaxWorkers int  `yaml:"max_workers"` // 並列ワーカー数（デフォルト: 3）
+
+	// モデル設定（Phase 3）
+	SupervisorModel string `yaml:"supervisor_model"` // Supervisor用モデル（空=メインモデル）
+	LightModel      string `yaml:"light_model"`      // Worker用軽量モデル（空=メインモデル）
+	HeavyModel      string `yaml:"heavy_model"`      // エスカレーション用モデル（空=無効）
+
+	// リトライ・タイムアウト（Phase 3）
+	MaxRetry    int `yaml:"max_retry"`    // 自動リトライ回数（デフォルト: 10）
+	StepTimeout int `yaml:"step_timeout"` // ステップタイムアウト秒（デフォルト: 600）
+
+	// 確認レベル（Phase 3）
+	ConfirmLevel string `yaml:"confirm_level"` // all / dangerous / none（デフォルト: dangerous）
 }
 
 // OpenAIConfig は OpenAI プロバイダーの設定
