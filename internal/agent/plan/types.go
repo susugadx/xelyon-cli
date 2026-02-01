@@ -1,9 +1,64 @@
 package plan
 
+import "time"
+
+// PlanStatus は計画の全体ステータス
+type PlanStatus string
+
+const (
+	PlanStatusDraft     PlanStatus = "draft"
+	PlanStatusPending   PlanStatus = "pending"
+	PlanStatusApproved  PlanStatus = "approved"
+	PlanStatusRunning   PlanStatus = "running"
+	PlanStatusCompleted PlanStatus = "completed"
+	PlanStatusFailed    PlanStatus = "failed"
+	PlanStatusCancelled PlanStatus = "cancelled"
+)
+
+// Clarification はユーザーへの質問と回答
+type Clarification struct {
+	Question     string    `json:"question"`
+	QuestionType string    `json:"question_type"` // single_choice, multi_choice, free_text
+	Options      []string  `json:"options,omitempty"`
+	Answer       string    `json:"answer,omitempty"`
+	Answers      []string  `json:"answers,omitempty"`
+	AskedAt      time.Time `json:"asked_at"`
+}
+
+// StepLog はステップ実行の詳細ログ
+type StepLog struct {
+	StepID     int               `json:"step_id"`
+	ToolName   string            `json:"tool_name"`
+	ToolArgs   map[string]string `json:"tool_args,omitempty"`
+	Result     string            `json:"result,omitempty"`
+	Error      string            `json:"error,omitempty"`
+	ExecutedAt time.Time         `json:"executed_at"`
+	DurationMs int64             `json:"duration_ms"`
+}
+
 // Plan は実行計画を表す
 type Plan struct {
+	// 既存フィールド
 	Summary string     `json:"summary"`
 	Steps   []PlanStep `json:"steps"`
+
+	// メタデータ（新規）
+	ID             string          `json:"id,omitempty"`
+	Title          string          `json:"title,omitempty"`
+	CreatedAt      time.Time       `json:"created_at,omitempty"`
+	UpdatedAt      time.Time       `json:"updated_at,omitempty"`
+	Status         PlanStatus      `json:"status,omitempty"`
+	Model          string          `json:"model,omitempty"`
+	Provider       string          `json:"provider,omitempty"`
+	UserRequest    string          `json:"user_request,omitempty"`
+	Clarifications []Clarification `json:"clarifications,omitempty"`
+	ExecutionLog   []StepLog       `json:"execution_log,omitempty"`
+}
+
+// AddLog は実行ログを追加
+func (p *Plan) AddLog(log StepLog) {
+	p.ExecutionLog = append(p.ExecutionLog, log)
+	p.UpdatedAt = time.Now()
 }
 
 // PlanStep は計画の1ステップを表す
@@ -20,6 +75,11 @@ type PlanStep struct {
 	TargetFiles []string `json:"-"` // 操作対象ファイル（推論結果）
 	ReadFiles   []string `json:"-"` // 読み取りファイル
 	WriteFiles  []string `json:"-"` // 書き込みファイル
+
+	// 追加フィールド（Phase 1）
+	Files       []string   `json:"files,omitempty"`        // 関連ファイル
+	StartedAt   *time.Time `json:"started_at,omitempty"`   // 開始時刻
+	CompletedAt *time.Time `json:"completed_at,omitempty"` // 完了時刻
 }
 
 // CanExecute はステップが実行可能かチェック

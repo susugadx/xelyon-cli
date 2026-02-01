@@ -5,6 +5,7 @@ type Config struct {
 	DefaultProvider string                         `yaml:"default_provider"`
 	DefaultModel    string                         `yaml:"default_model"`
 	ProviderModels  map[string]ProviderModelConfig `yaml:"provider_models"`
+	General         GeneralConfig                  `yaml:"general,omitempty"`
 	Compression     CompressionConfig              `yaml:"compression,omitempty"`
 	Backup          BackupConfig                   `yaml:"backup,omitempty"`
 	LoopDetection   LoopDetectionConfig            `yaml:"loop_detection,omitempty"`
@@ -32,6 +33,11 @@ type Config struct {
 // OutputConfig はツール出力表示の設定
 type OutputConfig struct {
 	MaxLines int `yaml:"max_lines"` // 折りたたみ前の最大表示行数（デフォルト: 5）
+}
+
+// GeneralConfig は一般設定
+type GeneralConfig struct {
+	Language string `yaml:"language"` // 表示言語（ja, en）デフォルト: ja
 }
 
 // CompressionConfig は会話履歴圧縮の設定

@@ -17,11 +17,14 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 
+	"github.com/susugadx/xelyon-cli/internal/i18n"
+
 	// Subpackage imports - trigger init() for tool registration
 	_ "github.com/susugadx/xelyon-cli/internal/tools/dev"
 	_ "github.com/susugadx/xelyon-cli/internal/tools/file"
 	_ "github.com/susugadx/xelyon-cli/internal/tools/git"
 	toolslsp "github.com/susugadx/xelyon-cli/internal/tools/lsp"
+	_ "github.com/susugadx/xelyon-cli/internal/tools/planning"
 	_ "github.com/susugadx/xelyon-cli/internal/tools/search"
 )
 
@@ -69,6 +72,12 @@ type Agent struct {
 
 // NewAgent は新しいAgentを作成
 func NewAgent(model string, provider api.Provider) *Agent {
+	// 言語設定を適用
+	cfg := config.GetGlobalConfig()
+	if cfg.General.Language != "" {
+		i18n.SetLang(cfg.General.Language)
+	}
+
 	storage, err := history.NewStorage()
 	if err != nil {
 		red.Printf("Warning: Failed to initialize history storage: %v\n", err)
@@ -114,7 +123,7 @@ func NewAgent(model string, provider api.Provider) *Agent {
 
 	// LSP初期化
 	var lspClient *lsp.Client
-	cfg := config.GetGlobalConfig()
+	cfg = config.GetGlobalConfig()
 	if cfg.LSP.Enabled {
 		cwd, err := os.Getwd()
 		if err == nil {

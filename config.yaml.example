@@ -23,6 +23,8 @@ provider_models:
         default_model: qwen2.5-coder:7b
     openai:
         default_model: gpt-5.2
+general:
+    language: ja
 
 # ============================================================
 # 会話履歴圧縮設定
