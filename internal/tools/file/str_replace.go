@@ -79,6 +79,14 @@ func ExecuteStrReplace(path, oldStr, newStr, startLineStr, endLineStr string) (s
 		newLines = append(newLines, lines[endLine:]...)
 		newContent = strings.Join(newLines, "\n")
 
+		if newStr != "" {
+			prefixContent := strings.Join(lines[:startLine-1], "\n")
+			suffixContent := strings.Join(lines[endLine:], "\n")
+			if strings.Contains(prefixContent, newStr) || strings.Contains(suffixContent, newStr) {
+				common.Yellow.Println("⚠️  Warning: new_str already exists outside the target range (possible duplication)")
+			}
+		}
+
 		// 確認UI - 変更サマリーを明確に表示
 		removed := endLine - startLine + 1
 		added := len(newStrLines)
@@ -242,6 +250,11 @@ Do not retry the same replacement.`, path), "", nil
 	}
 
 	common.ShowImprovedDiff(oldStr, newStr)
+
+	// 事前チェック（重複警告）
+	if newStr != "" && strings.Contains(oldContent, newStr) {
+		common.Yellow.Println("⚠️  Warning: new_str already exists in file (possible duplication)")
+	}
 
 	dec2 := common.ConfirmWithAutoApproveDecision("str_replace", "Apply this replacement? / この置換を適用しますか？")
 	switch dec2.Action {

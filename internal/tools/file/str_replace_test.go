@@ -1,10 +1,13 @@
 package file
 
 import (
+	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/testutil"
 )
 
@@ -113,6 +116,8 @@ func TestExecuteStrReplace_EmptyOldStr(t *testing.T) {
 
 func TestExecuteStrReplace_LineRangeReplacement_Success(t *testing.T) {
 	setupTestMocks(t)
+	setupTestConfirm(t, true)
+
 	tmpDir := t.TempDir()
 	testutil.CreateTempFile(t, tmpDir, "test.txt", "a\nb\nc\nd\ne")
 
@@ -128,6 +133,140 @@ func TestExecuteStrReplace_LineRangeReplacement_Success(t *testing.T) {
 	if backupPath == "" {
 		t.Fatal("Backup path should not be empty")
 	}
+}
+
+func TestExecuteStrReplace_StringReplace_WarnsOnDuplicateNewStr(t *testing.T) {
+	setupTestMocks(t)
+	setupTestConfirm(t, true)
+
+	// fatih/color の global writer を差し替えて、警告文が出力されたかを検証する
+	var buf strings.Builder
+	oldOut := color.Output
+	color.Output = &buf
+	t.Cleanup(func() {
+		color.Output = oldOut
+	})
+
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test.txt")
+	testutil.CreateTempFile(t, tmpDir, "test.txt", "alpha\nEXISTING\nomega")
+
+	replaceOutput, _, err := ExecuteStrReplace(testFile, "alpha", "EXISTING", "", "")
+
+	if err != nil {
+		t.Fatalf("ExecuteStrReplace failed: %v", err)
+	}
+	if !strings.Contains(buf.String(), "Warning: new_str already exists in file") {
+		t.Errorf("Expected warning output, got: %s", buf.String())
+	}
+	if !strings.Contains(replaceOutput, "Successfully replaced") {
+		t.Errorf("Expected success message, got: %s", replaceOutput)
+	}
+	testutil.AssertFileContent(t, testFile, "EXISTING\nEXISTING\nomega")
+}
+
+func TestExecuteStrReplace_StringReplace_NoWarningWhenUnique(t *testing.T) {
+	setupTestMocks(t)
+	setupTestConfirm(t, true)
+
+	// fatih/color はデフォルトで stderr に出すため、stderr を捕捉する
+	var output strings.Builder
+	originalStderr := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("Failed to create pipe: %v", err)
+	}
+	os.Stderr = w
+	t.Cleanup(func() {
+		os.Stderr = originalStderr
+	})
+
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test.txt")
+	testutil.CreateTempFile(t, tmpDir, "test.txt", "alpha\nEXISTING\nomega")
+
+	replaceOutput, _, err := ExecuteStrReplace(testFile, "alpha", "NEWVALUE", "", "")
+
+	w.Close()
+	_, _ = io.Copy(&output, r)
+
+	if err != nil {
+		t.Fatalf("ExecuteStrReplace failed: %v", err)
+	}
+	if strings.Contains(output.String(), "Warning: new_str already exists in file") {
+		t.Errorf("Did not expect warning output, got: %s", output.String())
+	}
+	if !strings.Contains(replaceOutput, "Successfully replaced") {
+		t.Errorf("Expected success message, got: %s", replaceOutput)
+	}
+	testutil.AssertFileContent(t, testFile, "NEWVALUE\nEXISTING\nomega")
+}
+
+func TestExecuteStrReplace_LineRange_WarnsOnDuplicateOutsideRange(t *testing.T) {
+	setupTestMocks(t)
+	setupTestConfirm(t, true)
+
+	// fatih/color の global writer を差し替えて、警告文が出力されたかを検証する
+	var buf strings.Builder
+	oldOut := color.Output
+	color.Output = &buf
+	t.Cleanup(func() {
+		color.Output = oldOut
+	})
+
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test.txt")
+	testutil.CreateTempFile(t, tmpDir, "test.txt", "keep\nold\nold\nkeep")
+
+	replaceOutput, _, err := ExecuteStrReplace(testFile, "", "keep", "2", "3")
+
+	if err != nil {
+		t.Fatalf("ExecuteStrReplace failed: %v", err)
+	}
+	if !strings.Contains(buf.String(), "Warning: new_str already exists outside the target range") {
+		t.Errorf("Expected warning output, got: %s", buf.String())
+	}
+	if !strings.Contains(replaceOutput, "Successfully replaced lines 2-3") {
+		t.Errorf("Expected success message, got: %s", replaceOutput)
+	}
+	testutil.AssertFileContent(t, testFile, "keep\nkeep\nkeep")
+}
+
+func TestExecuteStrReplace_LineRange_NoWarningWhenUniqueOutsideRange(t *testing.T) {
+	setupTestMocks(t)
+	setupTestConfirm(t, true)
+
+	// fatih/color はデフォルトで stderr に出すため、stderr を捕捉する
+	var output strings.Builder
+	originalStderr := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("Failed to create pipe: %v", err)
+	}
+	os.Stderr = w
+	t.Cleanup(func() {
+		os.Stderr = originalStderr
+	})
+
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test.txt")
+	testutil.CreateTempFile(t, tmpDir, "test.txt", "keep\nold\nold\nkeep")
+
+	replaceOutput, _, err := ExecuteStrReplace(testFile, "", "NEWLINE", "2", "3")
+
+	w.Close()
+	_, _ = io.Copy(&output, r)
+
+	if err != nil {
+		t.Fatalf("ExecuteStrReplace failed: %v", err)
+	}
+	if strings.Contains(output.String(), "Warning: new_str already exists outside the target range") {
+		t.Errorf("Did not expect warning output, got: %s", output.String())
+	}
+	if !strings.Contains(replaceOutput, "Successfully replaced lines 2-3") {
+		t.Errorf("Expected success message, got: %s", replaceOutput)
+	}
+	testutil.AssertFileContent(t, testFile, "keep\nNEWLINE\nkeep")
 }
 
 func TestParseLineRange(t *testing.T) {

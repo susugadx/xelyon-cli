@@ -48,7 +48,12 @@ func EnsureGitignore(dir string) error {
 		}
 	}
 
-	// ユーザーに確認
+	// CI/テスト実行では .gitignore 追記の対話プロンプトを出さない
+	if v := strings.TrimSpace(os.Getenv("XELYON_SKIP_GITIGNORE_PROMPT")); v != "" && v != "0" {
+		gitignoreAddedFlag[dir] = true
+		return nil
+	}
+
 	fmt.Println()
 	Yellow.Println("--------------------------------------------")
 	Yellow.Printf("Add backup files to .gitignore\n")

@@ -84,6 +84,11 @@ Tool call format: {"tool": "tool_name", "args": {"arg1": "value1"}}
 
 ## Workflow Rules
 
+### 0. Project Context (XELYON.md)
+- **ALWAYS read Project Context section first** if present
+- It contains project-specific rules, conventions, and constraints
+- Follow these rules strictly - they override general guidelines
+
 ### 1. Context First (Critical)
 
 **RepoMap** is at the END of this prompt. It contains:
