@@ -59,6 +59,14 @@ For file operations (mkdir, cp, mv, diff), use bash.
 - http_request: {"method": "GET|POST|PUT|DELETE", "url": "...", "headers": "{}", "body": "..."}
 - bash: {"command": "..."} - Shell commands (git status, mkdir, cp, mv, diff, etc.)
 
+### Planning Tools
+- ask_user_question: {"question": "...", "question_type": "single_choice|multi_choice|free_text", "options": [...]} - Ask user before planning (use only when needed)
+- create_plan: {"title": "...", "summary": "...", "steps": [...]} - Create and save a plan
+- get_plan: {"id": "..."} or {"filename": "..."} - Get a saved plan
+- list_plans: {"status": "...", "limit": N} - List saved plans (filters optional)
+- update_plan: {"id": "...", "action": "set_status|add_step|remove_step|update_step|set_title|set_summary", ...} - Update a plan
+- delete_plan: {"id": "..."} or {"filename": "..."} - Delete a plan
+
 Tool call format: {"tool": "tool_name", "args": {"arg1": "value1"}}
 
 ## Workflow Rules
