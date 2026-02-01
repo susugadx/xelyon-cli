@@ -225,8 +225,9 @@ func (w *Worker) executeInvestigation(ctx context.Context, query string) WorkerR
 	defer cancel()
 
 	// 調査用の履歴を構築
+	prompt := promptplan.BuildInvestigationExecutionPrompt(query)
 	history := []api.Message{
-		{Role: "user", Content: fmt.Sprintf("Investigation query: %s\n\nUse read-only tools (read_file, search_code, search_file, list_dir) to investigate.", query)},
+		{Role: "user", Content: prompt},
 	}
 
 	// ツール実行ループ（最大20回）
@@ -308,19 +309,11 @@ func (w *Worker) executeInvestigation(ctx context.Context, query string) WorkerR
 
 // buildWorkerHistory は Worker 用の履歴を構築
 func (w *Worker) buildWorkerHistory(step *plan.PlanStep, contextInfo string) []api.Message {
-	// ステップ実行プロンプトを構築
-	stepPrompt := promptplan.BuildStepPrompt(step.ID, step.Description, step.Tools)
-
-	// 依存ステップのコンテキストがある場合は追加
-	var userContent string
-	if contextInfo != "" {
-		userContent = fmt.Sprintf("Previous step results:\n%s\n\n%s", contextInfo, stepPrompt)
-	} else {
-		userContent = stepPrompt
-	}
+	// BuildStepExecutionPrompt は context を含むプロンプトを生成
+	stepPrompt := promptplan.BuildStepExecutionPrompt(step, contextInfo)
 
 	return []api.Message{
-		{Role: "user", Content: userContent},
+		{Role: "user", Content: stepPrompt},
 	}
 }
 
