@@ -24,10 +24,13 @@ You are in PLAN MODE (Investigation Phase).
 ## AFTER INVESTIGATION:
 When you have gathered enough information:
 1. If you need clarification from the user, use the ask_user_question tool
-2. When ready to create a plan, use the create_plan tool with:
-   - title: Brief title for the plan
-   - summary: What will be done
-   - steps: Array of step objects with id, description, tools
+2. When ready, use the create_plan tool to create your implementation plan
+
+IMPORTANT:
+- The plan should contain IMPLEMENTATION steps, not investigation steps
+- Do NOT create a plan that says "investigate X" or "read file Y"
+- Each step should be an ACTION that modifies the codebase (write_file, str_replace, etc.)
+- If you still need to investigate, continue using read-only tools first
 
 Do NOT output JSON directly. Always use the create_plan tool.
 

@@ -33,6 +33,10 @@ func BuildInvestigationExecutionPrompt(query string) string {
 %s
 
 Execute this investigation using read-only tools:
+- lsp_references: Find all references to a symbol
+- lsp_definition: Go to definition
+- lsp_hover: Get hover information
+- lsp_diagnostics: Get diagnostics for a file
 - read_file: Read file contents
 - search_code: Search for code patterns
 - search_file: Find files by name

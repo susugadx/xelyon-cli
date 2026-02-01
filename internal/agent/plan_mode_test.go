@@ -130,4 +130,3 @@ func TestPlanStep_Tools(t *testing.T) {
 		t.Errorf("Step Tools = %v, want [write_file, str_replace]", step.Tools)
 	}
 }
-

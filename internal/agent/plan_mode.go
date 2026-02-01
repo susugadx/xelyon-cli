@@ -3,9 +3,11 @@ package agent
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/prompt"
 	promptplan "github.com/susugadx/xelyon-cli/internal/prompt/plan"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -14,6 +16,12 @@ import (
 // - 調査ツール(SafetyHigh)は即座に実行
 // - 実装ツール(SafetyMedium/Low)の前に計画を生成・承認
 func (a *Agent) RunPlanMode(ctx context.Context, userRequest string) error {
+	// Plan Mode 用のプロンプトを SystemPrompt に追加（一度だけ）
+	planningPrompt := promptplan.BuildPlanningPrompt()
+	if !strings.Contains(a.SystemPrompt, planningPrompt) {
+		a.SystemPrompt = prompt.BuildSystemPrompt(a.SystemPrompt, true)
+	}
+
 	// 実装前チェック：既存定義の重複を警告
 	if warning := CheckBeforeImplementation(userRequest); warning != "" {
 		yellow.Println(warning)

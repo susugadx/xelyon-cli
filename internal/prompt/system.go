@@ -1,5 +1,18 @@
 package prompt
 
+import (
+	promptplan "github.com/susugadx/xelyon-cli/internal/prompt/plan"
+)
+
+// BuildSystemPrompt はシステムプロンプトを構築
+// planModeEnabled が true の場合、Planning Tools のガイドラインを追加
+func BuildSystemPrompt(basePrompt string, planModeEnabled bool) string {
+	if !planModeEnabled {
+		return basePrompt
+	}
+	return basePrompt + "\n\n" + promptplan.BuildPlanningPrompt()
+}
+
 // SystemPrompt is the main system prompt for XELYON agent.
 //
 // 構造:

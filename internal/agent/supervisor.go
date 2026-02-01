@@ -225,7 +225,7 @@ func (s *Supervisor) runInvestigation(ctx context.Context, userRequest string) (
 
 // generateInvestigationQueries は Supervisor が調査クエリを生成
 func (s *Supervisor) generateInvestigationQueries(ctx context.Context, userRequest string) ([]string, error) {
-	prompt := promptplan.BuildInvestigationQueryPrompt(userRequest)
+	prompt := promptplan.BuildInvestigationQueryPrompt(userRequest, s.maxWorkers)
 
 	response, err := s.supervisorProvider.ChatWithTools(
 		ctx,
