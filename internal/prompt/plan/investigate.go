@@ -10,10 +10,20 @@ func BuildInvestigationPrompt(userRequest string) string {
 You are in PLAN MODE (Investigation Phase).
 
 ## INVESTIGATION RULES:
-1. Think first: identify ALL files/areas you need to examine
-2. Read-only tools allowed: read_file, search_file, search_code, list_dir, lsp_references, lsp_definition, lint, web_search
-3. bash allowed for read-only commands only: git status, git log, git diff, ls, cat, etc.
-4. Do NOT use modification tools: write_file, str_replace, delete_file, git_commit
+## INVESTIGATION RULES:
+1. **Check RepoMap first**: RepoMap at the end of system prompt contains all file paths and function names with line numbers
+  - Find the file/function in RepoMap before searching
+  - Example: "plan_executor.go:18: func runImplementationPhase" → read_file directly
+
+2. **PREFER LSP tools**: Use lsp_definition and lsp_references FIRST for code navigation
+  - lsp_definition: Find where functions/types are defined (1 call, exact location)
+  - lsp_references: Find all usages of a symbol (accurate, ignores comments)
+  - lsp_hover: Get type information
+  - Only use search_code when LSP doesn't work or for keyword search (TODO, error messages)
+
+3. Read-only tools allowed: read_file, search_file, search_code, list_dir, lsp_references, lsp_definition, lint, web_search
+4. bash allowed for read-only commands only: git status, git log, git diff, ls, cat, etc.
+5. Do NOT use modification tools: write_file, str_replace, delete_file, git_commit
 
 ## INVESTIGATION CHECKLIST:
 - [ ] Understand the current implementation (read relevant files)
