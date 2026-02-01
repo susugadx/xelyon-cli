@@ -147,6 +147,10 @@ IMPORTANT: Do NOT execute the previous command as-is.`, strings.TrimSpace(dec.Co
 		return fmt.Sprintf("Error: %v\nOutput: %s", cmdErr, result)
 	}
 
+	if strings.TrimSpace(result) == "" {
+		result = "(no output)"
+	}
+
 	if len(result) > config.OutputTruncateLen {
 		result = result[:config.OutputTruncateLen] + "\n... (truncated)"
 	}
@@ -245,6 +249,10 @@ IMPORTANT: Do NOT execute the previous command as-is.`, strings.TrimSpace(dec.Co
 
 	if cmdErr != nil {
 		return fmt.Sprintf("Error: %v\nOutput: %s", cmdErr, result)
+	}
+
+	if strings.TrimSpace(result) == "" {
+		result = "(no output)"
 	}
 
 	if len(result) > config.OutputTruncateLen {

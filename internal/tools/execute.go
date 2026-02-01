@@ -96,6 +96,11 @@ func Execute(tc *ToolCall) (string, *FileChange) {
 	// ファイル変更系ツールの場合、キャッシュを無効化
 	invalidateToolCache(tc)
 
+	// ツール出力が空の場合は補完
+	if strings.TrimSpace(result) == "" {
+		result = "(no output)"
+	}
+
 	// ツール出力の折りたたみ表示（bashはストリーミング表示済みなので除外）
 	if !isStreamingTool(tc.Tool) && result != "" {
 		displayCollapsedOutput(result)

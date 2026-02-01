@@ -1,5 +1,7 @@
 package api
 
+import "strings"
+
 // このファイルは OpenAI Compact API / Responses API で使用される型を定義します。
 // CompactCapable インターフェースで使用されるため、api パッケージに配置されています。
 
@@ -24,6 +26,14 @@ type InputItem struct {
 
 	// Function Calling 結果用（type="function_call_output"の場合）
 	Output string `json:"output,omitempty"` // ツール実行結果
+}
+
+// NormalizeInputItemOutput は空のツール出力を補完する
+func NormalizeInputItemOutput(item InputItem) InputItem {
+	if item.Type == "function_call_output" && strings.TrimSpace(item.Output) == "" {
+		item.Output = "(no output)"
+	}
+	return item
 }
 
 // InputContentPart は Responses API のコンテンツパート（画像対応）
@@ -55,11 +65,11 @@ func ConvertHistoryToInputItems(history []Message) []InputItem {
 	for _, msg := range history {
 		if msg.Role == "tool" {
 			// Function Calling 結果は function_call_output 形式
-			items = append(items, InputItem{
+			items = append(items, NormalizeInputItemOutput(InputItem{
 				Type:   "function_call_output",
 				CallID: msg.ToolCallID,
 				Output: msg.Content,
-			})
+			}))
 		} else if msg.Role == "assistant" && len(msg.ToolCalls) > 0 {
 			// AIのfunction_call → type: "function_call" として各ツール呼び出しを追加
 			for _, tc := range msg.ToolCalls {
