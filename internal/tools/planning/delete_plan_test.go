@@ -11,8 +11,8 @@ import (
 func TestDeletePlanTool_Run(t *testing.T) {
 	tmpDir := t.TempDir()
 	oldDir, _ := os.Getwd()
-	os.Chdir(tmpDir)
-	defer os.Chdir(oldDir)
+	_ = os.Chdir(tmpDir)
+	defer func() { _ = os.Chdir(oldDir) }()
 
 	storage, _ := plan.NewPlanStorage()
 	tool := NewDeletePlanTool(storage)

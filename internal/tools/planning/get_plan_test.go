@@ -12,8 +12,8 @@ func TestGetPlanTool_Run(t *testing.T) {
 	// テスト用の一時ディレクトリ
 	tmpDir := t.TempDir()
 	oldDir, _ := os.Getwd()
-	os.Chdir(tmpDir)
-	defer os.Chdir(oldDir)
+	_ = os.Chdir(tmpDir)
+	defer func() { _ = os.Chdir(oldDir) }()
 
 	storage, _ := plan.NewPlanStorage()
 	tool := NewGetPlanTool(storage)

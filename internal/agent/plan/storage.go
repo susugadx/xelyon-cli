@@ -228,13 +228,16 @@ func (s *PlanStorage) formatMarkdown(p *Plan) string {
 	// Steps
 	sb.WriteString("## Steps\n\n")
 	for _, step := range p.Steps {
-		checkbox := "[ ]"
-		if step.Status == "completed" {
+		var checkbox string
+		switch step.Status {
+		case "completed":
 			checkbox = "[x]"
-		} else if step.Status == "running" {
+		case "running":
 			checkbox = "[~]"
-		} else if step.Status == "failed" {
+		case "failed":
 			checkbox = "[!]"
+		default:
+			checkbox = "[ ]"
 		}
 
 		sb.WriteString(fmt.Sprintf("- %s **Step %d**: %s\n", checkbox, step.ID, step.Description))

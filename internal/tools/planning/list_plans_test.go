@@ -11,8 +11,8 @@ import (
 func TestListPlansTool_Run(t *testing.T) {
 	tmpDir := t.TempDir()
 	oldDir, _ := os.Getwd()
-	os.Chdir(tmpDir)
-	defer os.Chdir(oldDir)
+	_ = os.Chdir(tmpDir)
+	defer func() { _ = os.Chdir(oldDir) }()
 
 	storage, _ := plan.NewPlanStorage()
 	tool := NewListPlansTool(storage)
@@ -24,7 +24,7 @@ func TestListPlansTool_Run(t *testing.T) {
 		{ID: "uuid-3", Title: "Plan 3", Status: plan.PlanStatusPending, CreatedAt: time.Now(), UpdatedAt: time.Now()},
 	}
 	for _, p := range plans {
-		storage.Save(p)
+		_, _ = storage.Save(p)
 	}
 
 	tests := []struct {

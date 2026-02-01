@@ -11,8 +11,8 @@ import (
 func TestUpdatePlanTool_Run(t *testing.T) {
 	tmpDir := t.TempDir()
 	oldDir, _ := os.Getwd()
-	os.Chdir(tmpDir)
-	defer os.Chdir(oldDir)
+	_ = os.Chdir(tmpDir)
+	defer func() { _ = os.Chdir(oldDir) }()
 
 	storage, _ := plan.NewPlanStorage()
 	tool := NewUpdatePlanTool(storage)
@@ -29,7 +29,7 @@ func TestUpdatePlanTool_Run(t *testing.T) {
 			{ID: 1, Description: "Step 1", Status: "pending"},
 		},
 	}
-	storage.Save(p)
+	_, _ = storage.Save(p)
 
 	tests := []struct {
 		name    string
@@ -94,8 +94,8 @@ func TestUpdatePlanTool_Run(t *testing.T) {
 func TestUpdatePlanTool_TitleChangeDeletesOldFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	oldDir, _ := os.Getwd()
-	os.Chdir(tmpDir)
-	defer os.Chdir(oldDir)
+	_ = os.Chdir(tmpDir)
+	defer func() { _ = os.Chdir(oldDir) }()
 
 	storage, _ := plan.NewPlanStorage()
 	tool := NewUpdatePlanTool(storage)

@@ -9,8 +9,8 @@ import (
 func TestPlanStorage_LoadByID(t *testing.T) {
 	tmpDir := t.TempDir()
 	oldDir, _ := os.Getwd()
-	os.Chdir(tmpDir)
-	defer os.Chdir(oldDir)
+	_ = os.Chdir(tmpDir)
+	defer func() { _ = os.Chdir(oldDir) }()
 
 	storage, err := NewPlanStorage()
 	if err != nil {
@@ -67,8 +67,8 @@ func TestPlanStorage_LoadByID(t *testing.T) {
 func TestPlanStorage_SaveAndLoad(t *testing.T) {
 	tmpDir := t.TempDir()
 	oldDir, _ := os.Getwd()
-	os.Chdir(tmpDir)
-	defer os.Chdir(oldDir)
+	_ = os.Chdir(tmpDir)
+	defer func() { _ = os.Chdir(oldDir) }()
 
 	storage, err := NewPlanStorage()
 	if err != nil {
@@ -120,8 +120,8 @@ func TestPlanStorage_SaveAndLoad(t *testing.T) {
 func TestPlanStorage_List(t *testing.T) {
 	tmpDir := t.TempDir()
 	oldDir, _ := os.Getwd()
-	os.Chdir(tmpDir)
-	defer os.Chdir(oldDir)
+	_ = os.Chdir(tmpDir)
+	defer func() { _ = os.Chdir(oldDir) }()
 
 	storage, err := NewPlanStorage()
 	if err != nil {
@@ -146,7 +146,7 @@ func TestPlanStorage_List(t *testing.T) {
 			CreatedAt: time.Now(),
 			UpdatedAt: time.Now(),
 		}
-		storage.Save(p)
+		_, _ = storage.Save(p)
 	}
 
 	// リスト取得
@@ -162,8 +162,8 @@ func TestPlanStorage_List(t *testing.T) {
 func TestPlanStorage_Delete(t *testing.T) {
 	tmpDir := t.TempDir()
 	oldDir, _ := os.Getwd()
-	os.Chdir(tmpDir)
-	defer os.Chdir(oldDir)
+	_ = os.Chdir(tmpDir)
+	defer func() { _ = os.Chdir(oldDir) }()
 
 	storage, err := NewPlanStorage()
 	if err != nil {
