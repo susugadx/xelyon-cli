@@ -11,6 +11,7 @@ type DiffOptions struct {
 	ShowLineNums  bool // 行番号を表示するか
 	InlineMode    bool // インラインモード（追加・削除を連続表示）
 	MaxTotalLines int  // 最大表示行数（0=無制限）
+	LineNumOffset int  // 表示する行番号のオフセット（0なら従来どおり1-indexed）
 }
 
 // DefaultDiffOptions はデフォルトの差分表示オプション
@@ -187,7 +188,8 @@ func showInlineDiff(oldLines, newLines []string, opts *DiffOptions) {
 		// 行を表示
 		lineNumStr := ""
 		if opts.ShowLineNums {
-			lineNumStr = fmt.Sprintf("%4d ", d.lineNum)
+			lineNum := d.lineNum + opts.LineNumOffset
+			lineNumStr = fmt.Sprintf("L%-4d ", lineNum)
 		}
 
 		switch d.typ {
@@ -214,9 +216,12 @@ func showSideBySideDiff(oldLines, newLines []string, opts *DiffOptions) {
 		}
 		lineNumStr := ""
 		if opts.ShowLineNums {
-			lineNumStr = fmt.Sprintf("%4d ", i+1)
+			lineNum := (i + 1) + opts.LineNumOffset
+			lineNumStr = fmt.Sprintf("L%-4d ", lineNum)
 		}
-		Red.Printf("│ %s- %s\n", lineNumStr, truncateLine(line, 50))
+
+		text := truncateLine(line, 50)
+		Cyan.Printf("│ %s%-50s │\n", lineNumStr, text)
 	}
 	Cyan.Println("└" + strings.Repeat("─", 58) + "┘")
 
@@ -230,9 +235,12 @@ func showSideBySideDiff(oldLines, newLines []string, opts *DiffOptions) {
 		}
 		lineNumStr := ""
 		if opts.ShowLineNums {
-			lineNumStr = fmt.Sprintf("%4d ", i+1)
+			lineNum := (i + 1) + opts.LineNumOffset
+			lineNumStr = fmt.Sprintf("L%-4d ", lineNum)
 		}
-		Green.Printf("│ %s+ %s\n", lineNumStr, truncateLine(line, 50))
+
+		text := truncateLine(line, 50)
+		Cyan.Printf("│ %s%-50s │\n", lineNumStr, text)
 	}
 	Cyan.Println("└" + strings.Repeat("─", 58) + "┘")
 }

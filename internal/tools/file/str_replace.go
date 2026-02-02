@@ -7,7 +7,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // ExecuteStrReplace はファイル内の文字列を置換
@@ -110,7 +112,21 @@ func ExecuteStrReplace(path, oldStr, newStr, startLineStr, endLineStr string) (s
 
 		// Before/After（レンジ部分のみを表示）
 		beforeStr := strings.Join(lines[startLine-1:endLine], "\n")
-		common.ShowImprovedDiff(beforeStr, newStr)
+		{
+			offset := startLine - 1
+			cfg := config.GetGlobalConfig()
+			opts := &ui.DiffOptions{
+				ContextLines:  cfg.Diff.ContextLines,
+				ShowLineNums:  true,
+				InlineMode:    true,
+				MaxTotalLines: 50,
+				LineNumOffset: offset,
+			}
+			if opts.ContextLines == 0 {
+				opts.MaxTotalLines = 0
+			}
+			ui.ShowColoredDiff(beforeStr, newStr, opts)
+		}
 
 		dec := common.ConfirmWithAutoApproveDecision("str_replace", "Apply this replacement? / この置換を適用しますか？")
 		switch dec.Action {
@@ -196,13 +212,13 @@ Do not retry the same replacement.`, path), "", nil
 		// 完全一致しない → 正規化マッチを試行（従来挙動）
 		common.Yellow.Println("⚠️  Exact match failed, trying normalized whitespace matching...")
 
-		found, startIdx, endIdx := common.FindWithNormalizedWhitespace(oldContent, oldStr)
+		found, startIdxNormalized, endIdx := common.FindWithNormalizedWhitespace(oldContent, oldStr)
 		if !found {
 			return fmt.Sprintf("Error: old_str not found in %s (tried both exact and normalized matching)", path), "", nil
 		}
 
-		actualOldStr := oldContent[startIdx : endIdx+1]
-		newContent = oldContent[:startIdx] + newStr + oldContent[endIdx+1:]
+		actualOldStr := oldContent[startIdxNormalized : endIdx+1]
+		newContent = oldContent[:startIdxNormalized] + newStr + oldContent[endIdx+1:]
 
 		common.Yellow.Printf("ℹ️  Matched with normalized whitespace (indentation may differ)\n")
 		common.Yellow.Printf("   Actual match in file:\n")
@@ -249,9 +265,28 @@ Do not retry the same replacement.`, path), "", nil
 		common.Yellow.Println("   複数の小さな str_replace に分割することを検討してください。")
 	}
 
-	common.ShowImprovedDiff(oldStr, newStr)
+	// diff表示用に、old_str の実ファイル開始行（1-indexed）を算出
+	startLineForDisplay := 1
+	if idx := strings.Index(oldContent, oldStr); idx >= 0 {
+		// 完全一致（または偶然一致）できる場合は、その位置を採用
+		startLineForDisplay = strings.Count(oldContent[:idx], "\n") + 1
+	}
 
-	// 事前チェック（重複警告）
+	{
+		offset := startLineForDisplay - 1
+		cfg := config.GetGlobalConfig()
+		opts := &ui.DiffOptions{
+			ContextLines:  cfg.Diff.ContextLines,
+			ShowLineNums:  true,
+			InlineMode:    true,
+			MaxTotalLines: 50,
+			LineNumOffset: offset,
+		}
+		if opts.ContextLines == 0 {
+			opts.MaxTotalLines = 0
+		}
+		ui.ShowColoredDiff(oldStr, newStr, opts)
+	}
 	if newStr != "" && strings.Contains(oldContent, newStr) {
 		common.Yellow.Println("⚠️  Warning: new_str already exists in file (possible duplication)")
 	}
