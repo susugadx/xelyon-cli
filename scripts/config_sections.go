@@ -234,32 +234,24 @@ var Sections = map[string]SectionInfo{
 		Title: "Plan Mode設定",
 		Icon:  "📋",
 		Fields: map[string]string{
-			// 旧設定（後方互換性）
-			"max_parallel_steps": "【非推奨】max_workers を使用してください",
-			"auto_retry":         "【非推奨】max_retry を使用してください",
-			// 新設定（Phase 3）
 			"parallel":         "並列モード有効化",
 			"max_workers":      "並列ワーカー数",
-			"supervisor_model": "Supervisor用モデル（空=メインモデル）",
-			"light_model":      "Worker用軽量モデル（空=メインモデル）",
-			"heavy_model":      "エスカレーション用モデル（空=無効）",
 			"max_retry":        "最大リトライ回数",
 			"step_timeout":     "ステップタイムアウト（秒）",
 			"confirm_level":    "確認レベル: all / dangerous / none",
+			"supervisor_model": "Supervisor用モデル（空=メインモデル）",
+			"light_model":      "Worker用軽量モデル（空=メインモデル）",
+			"heavy_model":      "エスカレーション用モデル（空=無効）",
 		},
 		FieldTypes: map[string]string{
-			// 旧設定
-			"max_parallel_steps": "int",
-			"auto_retry":         "int",
-			// 新設定
 			"parallel":         "bool",
 			"max_workers":      "int",
-			"supervisor_model": "string",
-			"light_model":      "string",
-			"heavy_model":      "string",
 			"max_retry":        "int",
 			"step_timeout":     "int",
 			"confirm_level":    "select",
+			"supervisor_model": "string",
+			"light_model":      "string",
+			"heavy_model":      "string",
 		},
 		SelectOpts: map[string][]string{
 			"confirm_level": {"all", "dangerous", "none"},

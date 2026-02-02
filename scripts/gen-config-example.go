@@ -26,6 +26,10 @@ func main() {
 	// LSPのserversを空にする（デフォルト内蔵のため）
 	cfg.LSP.Servers = nil
 
+	// 旧キーはomitemptyなので example には出さない
+	cfg.PlanMode.MaxParallelSteps = 0
+	cfg.PlanMode.AutoRetry = 0
+
 	// YAML形式で出力
 	data, err := yaml.Marshal(cfg)
 	if err != nil {

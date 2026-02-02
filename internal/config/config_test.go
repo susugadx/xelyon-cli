@@ -81,11 +81,17 @@ func TestDefaultConfig(t *testing.T) {
 	}
 
 	// PlanMode
-	if cfg.PlanMode.MaxParallelSteps != 3 {
-		t.Errorf("PlanMode.MaxParallelSteps = %d, want 3", cfg.PlanMode.MaxParallelSteps)
+	if cfg.PlanMode.MaxWorkers != 3 {
+		t.Errorf("PlanMode.MaxWorkers = %d, want 3", cfg.PlanMode.MaxWorkers)
 	}
-	if cfg.PlanMode.AutoRetry != 10 {
-		t.Errorf("PlanMode.AutoRetry = %d, want 10", cfg.PlanMode.AutoRetry)
+	if cfg.PlanMode.MaxRetry != 10 {
+		t.Errorf("PlanMode.MaxRetry = %d, want 10", cfg.PlanMode.MaxRetry)
+	}
+	if cfg.PlanMode.StepTimeout != 600 {
+		t.Errorf("PlanMode.StepTimeout = %d, want 600", cfg.PlanMode.StepTimeout)
+	}
+	if cfg.PlanMode.ConfirmLevel != "dangerous" {
+		t.Errorf("PlanMode.ConfirmLevel = %q, want dangerous", cfg.PlanMode.ConfirmLevel)
 	}
 }
 

@@ -172,10 +172,6 @@ git_stage:
 # Plan Mode設定
 # ============================================================
 plan_mode:
-    # 【非推奨】max_workers を使用してください
-    max_parallel_steps: 3
-    # 【非推奨】max_retry を使用してください
-    auto_retry: 10
     # 並列モード有効化
     parallel: false
     # 並列ワーカー数
