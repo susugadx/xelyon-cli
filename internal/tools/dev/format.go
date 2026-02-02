@@ -4,7 +4,30 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
+
+func resolveFormatPath(path string) (string, error) {
+	if path == "" {
+		path = "."
+	}
+
+	if strings.Contains(path, "...") {
+		basePath := strings.Split(path, "...")[0]
+		if basePath == "" {
+			basePath = "."
+		}
+		cleanedBase := filepath.Clean(basePath)
+		if cleanedBase == "." {
+			if root := findProjectRoot(basePath, "go.mod"); root != "" {
+				return root, nil
+			}
+		}
+		return filepath.Abs(basePath)
+	}
+
+	return filepath.Abs(path)
+}
 
 // ExecuteFormat runs formatter with auto-detection
 func ExecuteFormat(path string) (string, string, error) {
@@ -12,7 +35,7 @@ func ExecuteFormat(path string) (string, string, error) {
 		path = "."
 	}
 
-	absPath, err := filepath.Abs(path)
+	absPath, err := resolveFormatPath(path)
 	if err != nil {
 		return fmt.Sprintf("Error: %v", err), "", nil
 	}
