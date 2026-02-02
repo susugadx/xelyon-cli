@@ -17,11 +17,8 @@ func resolveFormatPath(path string) (string, error) {
 		if basePath == "" {
 			basePath = "."
 		}
-		cleanedBase := filepath.Clean(basePath)
-		if cleanedBase == "." {
-			if root := findProjectRoot(basePath, "go.mod"); root != "" {
-				return root, nil
-			}
+		if root := findProjectRoot(basePath, "go.mod"); root != "" {
+			return root, nil
 		}
 		return filepath.Abs(basePath)
 	}

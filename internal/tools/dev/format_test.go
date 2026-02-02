@@ -49,8 +49,8 @@ func TestResolveFormatPath_SubdirGlob(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolveFormatPath returned error: %v", err)
 	}
-	if !strings.HasSuffix(path, "internal") {
-		t.Fatalf("resolveFormatPath should resolve to internal directory, got %s", path)
+	if !strings.HasSuffix(path, "xelyon-cli") {
+		t.Fatalf("resolveFormatPath should resolve to project root, got %s", path)
 	}
 }
 
