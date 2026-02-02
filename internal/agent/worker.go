@@ -17,6 +17,10 @@ import (
 
 // Worker は並列実行用のワーカー
 // UI 操作なし、Supervisor への報告のみ
+//
+// 自律実行（依存解決で自動開始）を行う場合は、Worker 自身が SharedContext の Pub/Sub を購読し、
+// 依存関係が満たされたステップを自動で実行する。
+// 重複実行を防ぐため、inFlightSteps（実行中）を Worker 内で管理する。
 type Worker struct {
 	id            int
 	provider      api.Provider
@@ -33,6 +37,13 @@ type Worker struct {
 	status      WorkerStatus
 	currentStep *plan.PlanStep
 	mu          sync.Mutex
+
+	// 自律実行用状態
+	inFlightSteps map[int]bool
+	knownSteps    map[int]*plan.PlanStep
+
+	// 実行関数（テスト用に差し替え可能）
+	executeStepFunc func(ctx context.Context, step *plan.PlanStep, confirmLevel string) WorkerResult
 }
 
 // NewWorker は新しい Worker を作成
@@ -46,7 +57,7 @@ func NewWorker(
 	commands chan WorkerCommand,
 	results chan WorkerResult,
 ) *Worker {
-	return &Worker{
+	w := &Worker{
 		id:            id,
 		provider:      provider,
 		model:         model,
@@ -56,16 +67,99 @@ func NewWorker(
 		commands:      commands,
 		results:       results,
 		status:        WorkerIdle,
+		inFlightSteps: make(map[int]bool),
+		knownSteps:    make(map[int]*plan.PlanStep),
 	}
+	w.executeStepFunc = w.executeStep
+	return w
+}
+
+// RegisterSteps は Worker の自律実行対象ステップ一覧を登録する。
+//
+// 自律ループは RegisterSteps で渡されたステップ集合を対象に、
+// SharedContext の完了通知（step_completed）をトリガーに依存関係を解決し、
+// 実行可能になったステップを自動実行する。
+func (w *Worker) RegisterSteps(steps []*plan.PlanStep) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	for _, s := range steps {
+		if s == nil {
+			continue
+		}
+		w.knownSteps[s.ID] = s
+	}
+}
+
+// tryStartStepIfReady は依存関係が満たされたステップを自動開始する。
+//
+// 重複実行を避けるため、inFlightSteps と SharedContext の完了状態でガードする。
+func (w *Worker) tryStartStepIfReady(ctx context.Context, step *plan.PlanStep) {
+	if step == nil {
+		return
+	}
+
+	w.mu.Lock()
+	// 既に完了している/実行中ならスキップ
+	if w.sharedContext.IsStepCompleted(step.ID) || w.inFlightSteps[step.ID] {
+		w.mu.Unlock()
+		return
+	}
+	// 依存が未完了なら開始しない
+	for _, depID := range step.DependsOn {
+		if !w.sharedContext.IsStepCompleted(depID) {
+			w.mu.Unlock()
+			return
+		}
+	}
+	w.inFlightSteps[step.ID] = true
+	w.mu.Unlock()
+
+	// 自律実行: 直接 executeStep を呼んで結果を results へ返す
+	go func() {
+		// confirmLevel は Supervisor と同等の設定値を使う
+		result := w.executeStepFunc(ctx, step, config.GetGlobalConfig().PlanMode.ConfirmLevel)
+		w.mu.Lock()
+		delete(w.inFlightSteps, step.ID)
+		w.mu.Unlock()
+		w.results <- result
+	}()
 }
 
 // Run は Worker のメインループ（goroutine で実行）
 func (w *Worker) Run(ctx context.Context) {
+	// Pub/Sub: ステップ完了/失敗通知を監視して、自律的に次ステップを起動する。
+	stepCompletedCh := w.sharedContext.Subscribe("step_completed", 100)
+	stepFailedCh := w.sharedContext.Subscribe("step_failed", 100)
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
+
+		case <-stepCompletedCh:
+			// 完了通知を受けたら、全ステップを走査して実行可能になったものを起動
+			w.mu.Lock()
+			steps := make([]*plan.PlanStep, 0, len(w.knownSteps))
+			for _, s := range w.knownSteps {
+				steps = append(steps, s)
+			}
+			w.mu.Unlock()
+			for _, s := range steps {
+				w.tryStartStepIfReady(ctx, s)
+			}
+
+		case <-stepFailedCh:
+			// 失敗通知自体では自動リトライしない（Supervisor が判断）。
+			// ここではループ継続のみ。
+
 		case cmd := <-w.commands:
+			// Supervisor からの明示コマンドは従来どおり処理
+			if cmd.Type == CmdExecuteStep && cmd.Step != nil {
+				w.mu.Lock()
+				w.knownSteps[cmd.Step.ID] = cmd.Step
+				w.mu.Unlock()
+			}
 			result := w.executeCommand(ctx, cmd)
 			w.results <- result
 		}
@@ -120,11 +214,18 @@ func (w *Worker) executeStep(ctx context.Context, step *plan.PlanStep, confirmLe
 	for i := 0; i < maxIterations; i++ {
 		// タイムアウトチェック
 		if timeoutCtx.Err() == context.DeadlineExceeded {
+			err := &StepTimeout{StepID: step.ID, Timeout: w.stepTimeout}
+			w.sharedContext.Publish(WorkerMessage{
+				FromWorker: w.id,
+				Topic:      "step_failed",
+				Content:    err.Error(),
+				StepID:     step.ID,
+			})
 			return WorkerResult{
 				WorkerID:      w.id,
 				StepID:        step.ID,
 				Success:       false,
-				Error:         &StepTimeout{StepID: step.ID, Timeout: w.stepTimeout},
+				Error:         err,
 				ToolsExecuted: toolsExecuted,
 				Duration:      time.Since(startTime),
 			}
@@ -133,6 +234,12 @@ func (w *Worker) executeStep(ctx context.Context, step *plan.PlanStep, confirmLe
 		response, err := w.provider.ChatWithTools(timeoutCtx, w.agent.SystemPrompt, history, w.model)
 		if err != nil {
 			// API エラー → 即座に報告
+			w.sharedContext.Publish(WorkerMessage{
+				FromWorker: w.id,
+				Topic:      "step_failed",
+				Content:    err.Error(),
+				StepID:     step.ID,
+			})
 			return WorkerResult{
 				WorkerID:      w.id,
 				StepID:        step.ID,
@@ -149,6 +256,13 @@ func (w *Worker) executeStep(ctx context.Context, step *plan.PlanStep, confirmLe
 		if len(toolCalls) == 0 {
 			// ツール呼び出しなし = ステップ完了
 			w.sharedContext.AddStepResult(step.ID, response)
+			w.sharedContext.MarkStepCompleted(step.ID)
+			w.sharedContext.Publish(WorkerMessage{
+				FromWorker: w.id,
+				Topic:      "step_completed",
+				Content:    response,
+				StepID:     step.ID,
+			})
 			return WorkerResult{
 				WorkerID:      w.id,
 				StepID:        step.ID,
@@ -165,6 +279,12 @@ func (w *Worker) executeStep(ctx context.Context, step *plan.PlanStep, confirmLe
 			// confirm_level チェック
 			if ShouldConfirmTool(tc.Tool, confirmLevel) {
 				// 並列時は確認不可 → エスカレーション要求
+				w.sharedContext.Publish(WorkerMessage{
+					FromWorker: w.id,
+					Topic:      "step_failed",
+					Content:    fmt.Sprintf("tool %s requires confirmation", tc.Tool),
+					StepID:     step.ID,
+				})
 				return WorkerResult{
 					WorkerID:         w.id,
 					StepID:           step.ID,
@@ -187,11 +307,18 @@ func (w *Worker) executeStep(ctx context.Context, step *plan.PlanStep, confirmLe
 
 			// 失敗検出 → 即座に報告（リトライは Supervisor が判断）
 			if failed, reason := plan.ContainsFailure(result); failed {
+				err := &StepFailure{StepID: step.ID, Reason: reason}
+				w.sharedContext.Publish(WorkerMessage{
+					FromWorker: w.id,
+					Topic:      "step_failed",
+					Content:    err.Error(),
+					StepID:     step.ID,
+				})
 				return WorkerResult{
 					WorkerID:      w.id,
 					StepID:        step.ID,
 					Success:       false,
-					Error:         &StepFailure{StepID: step.ID, Reason: reason},
+					Error:         err,
 					ToolsExecuted: toolsExecuted,
 					Duration:      time.Since(startTime),
 				}
@@ -206,11 +333,18 @@ func (w *Worker) executeStep(ctx context.Context, step *plan.PlanStep, confirmLe
 	}
 
 	// イテレーション上限到達
+	err := errors.New("max iterations reached")
+	w.sharedContext.Publish(WorkerMessage{
+		FromWorker: w.id,
+		Topic:      "step_failed",
+		Content:    err.Error(),
+		StepID:     step.ID,
+	})
 	return WorkerResult{
 		WorkerID:      w.id,
 		StepID:        step.ID,
 		Success:       false,
-		Error:         errors.New("max iterations reached"),
+		Error:         err,
 		ToolsExecuted: toolsExecuted,
 		Duration:      time.Since(startTime),
 	}

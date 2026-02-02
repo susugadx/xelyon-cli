@@ -45,6 +45,10 @@ type Supervisor struct {
 
 	// リトライ回数追跡
 	retryCount map[int]int
+
+	// 監視モード用状態
+	completedByStep map[int]WorkerMessage
+	failedByStep    map[int]WorkerMessage
 }
 
 // NewSupervisor は新しい Supervisor を作成
@@ -60,6 +64,8 @@ func NewSupervisor(agent *Agent, cfg *config.PlanModeConfig) (*Supervisor, error
 		lightModel:      cfg.LightModel,
 		heavyModel:      cfg.HeavyModel,
 		retryCount:      make(map[int]int),
+		completedByStep: make(map[int]WorkerMessage),
+		failedByStep:    make(map[int]WorkerMessage),
 	}
 
 	// プロバイダー初期化
@@ -361,6 +367,11 @@ func (s *Supervisor) runExecution(ctx context.Context, p *plan.Plan) error {
 	s.workerPool.Start(ctx)
 	defer s.workerPool.Stop()
 
+	// 監視モード: Worker の完了/失敗通知を購読
+	monitorCtx, monitorCancel := context.WithCancel(ctx)
+	defer monitorCancel()
+	go s.runMonitor(monitorCtx, p)
+
 	for {
 		// 実行可能なステップを取得（依存関係解決）
 		executableSteps := s.getExecutableSteps(p)
@@ -393,6 +404,97 @@ func (s *Supervisor) runExecution(ctx context.Context, p *plan.Plan) error {
 
 	green.Printf("\n✓ All %d steps completed!\n", len(p.Steps))
 	return nil
+}
+
+// runMonitor は SharedContext の Pub/Sub を購読し、Worker の状態を監視する。
+//
+// 競合検出例:
+// - 同一 StepID の多重完了（重複通知）
+// - 依存未完了にも関わらず step_completed が流れてきた
+//
+// 競合検出時は警告を出し、必要に応じて当該ステップを再実行キューへ戻す。
+// エスカレーション/ユーザー確認は既存の handleResult/escalate/promptUser を利用する。
+func (s *Supervisor) runMonitor(ctx context.Context, p *plan.Plan) {
+	completedCh := s.sharedContext.Subscribe("step_completed", s.maxWorkers*100)
+	failedCh := s.sharedContext.Subscribe("step_failed", s.maxWorkers*100)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+
+		case msg, ok := <-completedCh:
+			if !ok {
+				return
+			}
+			if msg.StepID == 0 {
+				continue
+			}
+
+			// 重複完了（競合）
+			if prev, ok := s.completedByStep[msg.StepID]; ok {
+				yellow.Printf("[monitor] conflict: step %d completed twice (worker %d then %d)\n", msg.StepID, prev.FromWorker, msg.FromWorker)
+				// 進行不能や不整合を避けるため、再実行キューへ戻す（Supervisor が最終判断）
+				if s.workerPool != nil {
+					if step := p.GetStep(msg.StepID); step != nil {
+						s.workerPool.SubmitStep(step, s.confirmLevel)
+					}
+				}
+				continue
+			}
+
+			// 依存未完了での完了通知（競合）
+			step := p.GetStep(msg.StepID)
+			if step != nil {
+				depOK := true
+				for _, depID := range step.DependsOn {
+					if !s.sharedContext.IsStepCompleted(depID) {
+						depOK = false
+						break
+					}
+				}
+				if !depOK {
+					yellow.Printf("[monitor] conflict: step %d reported completed but dependencies not completed\n", msg.StepID)
+					// 依存が揃うまで待つべきなので、一旦再実行キューへ戻す
+					if s.workerPool != nil {
+						s.workerPool.SubmitStep(step, s.confirmLevel)
+					}
+					continue
+				}
+			}
+
+			s.completedByStep[msg.StepID] = msg
+
+		case msg, ok := <-failedCh:
+			if !ok {
+				return
+			}
+			if msg.StepID == 0 {
+				continue
+			}
+			// 失敗通知を記録
+			s.failedByStep[msg.StepID] = msg
+
+			// 監視側介入: 失敗通知を受けたら、対象ステップがまだ完了扱いでない場合に限り再実行/エスカレーション等を検討
+			step := p.GetStep(msg.StepID)
+			if step == nil {
+				continue
+			}
+			// 既に plan 上完了なら無視
+			if step.Status == "completed" {
+				continue
+			}
+
+			// WorkerResult 互換の形で既存ロジックに流す
+			result := WorkerResult{
+				WorkerID: msg.FromWorker,
+				StepID:   msg.StepID,
+				Success:  false,
+				Error:    errors.New(msg.Content),
+			}
+			_ = s.handleResult(ctx, result, step, p)
+		}
+	}
 }
 
 // getExecutableSteps は実行可能なステップを取得
