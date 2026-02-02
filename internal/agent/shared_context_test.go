@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/agent/plan"
 	"github.com/susugadx/xelyon-cli/internal/tools"
@@ -247,5 +248,116 @@ func TestSharedContext_ImmutableReturns(t *testing.T) {
 	original, _ := sc.GetInvestigationResult("query")
 	if original != "original" {
 		t.Error("original data should not be modified")
+	}
+}
+
+func TestSubscribe(t *testing.T) {
+	sc := NewSharedContext()
+	ch := sc.Subscribe("step_completed", 10)
+	if ch == nil {
+		t.Fatal("Subscribe returned nil channel")
+	}
+}
+
+func TestPublish(t *testing.T) {
+	sc := NewSharedContext()
+
+	topic := "step_completed"
+	raw := sc.Subscribe(topic, 10)
+
+	msg := WorkerMessage{
+		FromWorker: 1,
+		Topic:      topic,
+		Content:    "done",
+		StepID:     42,
+		Timestamp:  time.Now(),
+	}
+	sc.Publish(msg)
+
+	select {
+	case got := <-raw:
+		if got.Content != msg.Content || got.StepID != msg.StepID || got.Topic != msg.Topic {
+			t.Fatalf("unexpected message: %+v", got)
+		}
+	case <-time.After(1 * time.Second):
+		t.Fatal("timed out waiting for message")
+	}
+}
+
+func TestPublishWithHistory(t *testing.T) {
+	sc := NewSharedContext()
+
+	topic := "file_changed"
+	sc.Publish(WorkerMessage{FromWorker: 1, Topic: topic, Content: "a", Timestamp: time.Now()})
+	sc.Publish(WorkerMessage{FromWorker: 2, Topic: topic, Content: "b", Timestamp: time.Now()})
+
+	msgs := sc.GetMessages(topic)
+	if len(msgs) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(msgs))
+	}
+	if msgs[0].Content != "a" || msgs[1].Content != "b" {
+		t.Fatalf("unexpected history: %+v", msgs)
+	}
+}
+
+func TestGetMessages(t *testing.T) {
+	sc := NewSharedContext()
+
+	topic := "escalation"
+	sc.Publish(WorkerMessage{FromWorker: 1, Topic: topic, Content: "x", Timestamp: time.Now()})
+
+	msgs := sc.GetMessages(topic)
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(msgs))
+	}
+	if msgs[0].Content != "x" {
+		t.Fatalf("unexpected message: %+v", msgs[0])
+	}
+
+	// 返り値が不変（コピー）であること
+	msgs[0].Content = "modified"
+	msgs2 := sc.GetMessages(topic)
+	if msgs2[0].Content != "x" {
+		t.Fatal("GetMessages should return a copy")
+	}
+}
+
+func TestUnsubscribe(t *testing.T) {
+	sc := NewSharedContext()
+
+	topic := "step_failed"
+
+	// Subscribe は <-chan を返すため、Unsubscribe 用に元の chan を直接登録する
+	ch := make(chan WorkerMessage, 1)
+	sc.subMu.Lock()
+	sc.subscribers[topic] = append(sc.subscribers[topic], ch)
+	sc.subMu.Unlock()
+
+	sc.Unsubscribe(topic, ch)
+
+	select {
+	case _, ok := <-ch:
+		if ok {
+			t.Fatal("expected channel to be closed")
+		}
+	case <-time.After(1 * time.Second):
+		t.Fatal("timed out waiting for channel close")
+	}
+}
+
+func TestPublishNoBlock(t *testing.T) {
+	sc := NewSharedContext()
+	topic := "step_completed"
+
+	// バッファ 1 にして、読まずに Publish を大量に行う
+	recv := sc.Subscribe(topic, 1)
+	_ = recv
+
+	start := time.Now()
+	for i := 0; i < 1000; i++ {
+		sc.Publish(WorkerMessage{FromWorker: 1, Topic: topic, Content: "x", StepID: i})
+	}
+	if time.Since(start) > 500*time.Millisecond {
+		t.Fatal("Publish appears to block when subscriber buffer is full")
 	}
 }

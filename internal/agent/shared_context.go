@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/agent/plan"
 	"github.com/susugadx/xelyon-cli/internal/tools"
@@ -28,6 +29,21 @@ type SharedContext struct {
 
 	// エラーログ
 	errors []WorkerError
+
+	// Pub/Sub 用
+	messages    map[string][]WorkerMessage      // topic -> messages（履歴保存）
+	subscribers map[string][]chan WorkerMessage // topic -> channels
+	subMu       sync.RWMutex                    // subscribers 用の別ロック
+}
+
+// WorkerMessage は Worker 間のメッセージ
+type WorkerMessage struct {
+	FromWorker int
+	Topic      string // "step_completed", "step_failed", "file_changed", "escalation"
+	Content    string
+	StepID     int
+	FilePath   string
+	Timestamp  time.Time
 }
 
 // WorkerError は Worker エラー
@@ -45,6 +61,8 @@ func NewSharedContext() *SharedContext {
 		fileChanges:          make(map[int][]tools.FileChange),
 		completedSteps:       make(map[int]bool),
 		errors:               []WorkerError{},
+		messages:             make(map[string][]WorkerMessage),
+		subscribers:          make(map[string][]chan WorkerMessage),
 	}
 }
 
@@ -178,6 +196,83 @@ func (sc *SharedContext) GetErrors() []WorkerError {
 	return errors
 }
 
+// GetMessages はトピックの過去メッセージを取得
+func (sc *SharedContext) GetMessages(topic string) []WorkerMessage {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+
+	msgs := sc.messages[topic]
+	copied := make([]WorkerMessage, len(msgs))
+	copy(copied, msgs)
+	return copied
+}
+
+// Subscribe はトピックを購読し、メッセージを受け取るチャンネルを返す
+// バッファサイズは maxWorkers * 100
+func (sc *SharedContext) Subscribe(topic string, bufferSize int) <-chan WorkerMessage {
+	if bufferSize <= 0 {
+		bufferSize = 1
+	}
+	ch := make(chan WorkerMessage, bufferSize)
+
+	sc.subMu.Lock()
+	sc.subscribers[topic] = append(sc.subscribers[topic], ch)
+	sc.subMu.Unlock()
+
+	return ch
+}
+
+// Publish はメッセージを発行（履歴に保存 + 購読者に配信）
+func (sc *SharedContext) Publish(msg WorkerMessage) {
+	if msg.Timestamp.IsZero() {
+		msg.Timestamp = time.Now()
+	}
+
+	// 履歴保存
+	sc.mu.Lock()
+	sc.messages[msg.Topic] = append(sc.messages[msg.Topic], msg)
+	sc.mu.Unlock()
+
+	// 配信（購読者スライスをコピーしてから送る）
+	sc.subMu.RLock()
+	subs := sc.subscribers[msg.Topic]
+	copied := make([]chan WorkerMessage, len(subs))
+	copy(copied, subs)
+	sc.subMu.RUnlock()
+
+	for _, ch := range copied {
+		// ブロックしないように送信（バッファ溢れはドロップ）
+		select {
+		case ch <- msg:
+		default:
+		}
+	}
+}
+
+// Unsubscribe は購読を解除
+func (sc *SharedContext) Unsubscribe(topic string, ch chan WorkerMessage) {
+	sc.subMu.Lock()
+	defer sc.subMu.Unlock()
+
+	subs := sc.subscribers[topic]
+	for i := range subs {
+		if subs[i] == ch {
+			// remove
+			subs[i] = subs[len(subs)-1]
+			subs = subs[:len(subs)-1]
+			break
+		}
+	}
+	if len(subs) == 0 {
+		delete(sc.subscribers, topic)
+	} else {
+		sc.subscribers[topic] = subs
+	}
+
+	// 解除時にチャンネルを閉じる
+	close(ch)
+}
+
 // Clear はコンテキストをクリア
 func (sc *SharedContext) Clear() {
 	sc.mu.Lock()
@@ -187,4 +282,15 @@ func (sc *SharedContext) Clear() {
 	sc.fileChanges = make(map[int][]tools.FileChange)
 	sc.completedSteps = make(map[int]bool)
 	sc.errors = []WorkerError{}
+	sc.messages = make(map[string][]WorkerMessage)
+
+	// subscribers は別ロックでクリア
+	sc.subMu.Lock()
+	defer sc.subMu.Unlock()
+	for _, subs := range sc.subscribers {
+		for _, ch := range subs {
+			close(ch)
+		}
+	}
+	sc.subscribers = make(map[string][]chan WorkerMessage)
 }
