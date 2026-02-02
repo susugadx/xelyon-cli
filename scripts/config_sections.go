@@ -169,16 +169,16 @@ var Sections = map[string]SectionInfo{
 		Title: "ストリーミング設定",
 		Icon:  "📺",
 		Fields: map[string]string{
-			"idle_timeout_seconds":  "アイドルタイムアウト（秒）",
-			"show_file_info":        "ファイル読み込み時にサイズ・行数を表示",
-			"show_search_progress":  "検索時に進捗を表示",
-			"stream_bash_output":    "bashコマンドの出力をリアルタイム表示",
+			"idle_timeout_seconds": "アイドルタイムアウト（秒）",
+			"show_file_info":       "ファイル読み込み時にサイズ・行数を表示",
+			"show_search_progress": "検索時に進捗を表示",
+			"stream_bash_output":   "bashコマンドの出力をリアルタイム表示",
 		},
 		FieldTypes: map[string]string{
-			"idle_timeout_seconds":  "int",
-			"show_file_info":        "bool",
-			"show_search_progress":  "bool",
-			"stream_bash_output":    "bool",
+			"idle_timeout_seconds": "int",
+			"show_file_info":       "bool",
+			"show_search_progress": "bool",
+			"stream_bash_output":   "bool",
 		},
 	},
 	"bash": {
@@ -376,7 +376,7 @@ var SectionOrder = []string{
 // CategoryOrder はカテゴリの表示順序（UIでのグループ化用）
 // default_provider と provider_models は同じ "provider" カテゴリにまとめる
 var CategoryOrder = []string{
-	"provider",      // default_provider, provider_models
+	"provider", // default_provider, provider_models
 	"compression",
 	"backup",
 	"loop_detection",

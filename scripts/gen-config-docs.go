@@ -3,12 +3,14 @@
 // gen-config-docs.go は config_types.go のコメントから docs/config.md を自動更新するスクリプト
 //
 // 使用方法:
-//   go run scripts/gen-config-docs.go
-//   make gen-docs
+//
+//	go run scripts/gen-config-docs.go
+//	make gen-docs
 //
 // docs/config.md 内の以下のマーカー間を自動更新:
-//   <!-- CONFIG-EXAMPLE-START --> ... <!-- CONFIG-EXAMPLE-END -->
-//   <!-- CONFIG-DETAILS-START --> ... <!-- CONFIG-DETAILS-END -->
+//
+//	<!-- CONFIG-EXAMPLE-START --> ... <!-- CONFIG-EXAMPLE-END -->
+//	<!-- CONFIG-DETAILS-START --> ... <!-- CONFIG-DETAILS-END -->
 package main
 
 import (
