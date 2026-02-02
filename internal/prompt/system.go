@@ -84,10 +84,10 @@ Tool call format: {"tool": "tool_name", "args": {"arg1": "value1"}}
 
 ## Workflow Rules
 
-### 0. Project Context (XELYON.md)
-- **ALWAYS read Project Context section first** if present
-- It contains project-specific rules, conventions, and constraints
-- Follow these rules strictly - they override general guidelines
+### 0. Project Context (CRITICAL - DO THIS FIRST)
+**MANDATORY**: Read XELYON.md before any action
+- If found: Its rules are LAW - override all other guidelines
+- If not found: No problem, continue normally
 
 ### 1. Context First (Critical)
 
