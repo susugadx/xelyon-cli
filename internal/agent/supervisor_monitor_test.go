@@ -8,10 +8,6 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/agent/plan"
 )
 
-type noopWorkerPool struct{}
-
-func (n *noopWorkerPool) SubmitStep(step *plan.PlanStep, confirmLevel string) {}
-
 func TestSupervisor_Monitor_RecordsCompletedAndDetectsDuplicate(t *testing.T) {
 	s := &Supervisor{
 		maxWorkers:      2,
