@@ -39,12 +39,18 @@ func TestSupervisor_Monitor_RecordsCompletedAndDetectsDuplicate(t *testing.T) {
 
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if _, ok := s.completedByStep[1]; ok {
+		s.monitorMu.RLock()
+		_, ok := s.completedByStep[1]
+		s.monitorMu.RUnlock()
+		if ok {
 			break
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	if _, ok := s.completedByStep[1]; !ok {
+	s.monitorMu.RLock()
+	_, ok := s.completedByStep[1]
+	s.monitorMu.RUnlock()
+	if !ok {
 		t.Fatal("expected completedByStep to be updated")
 	}
 
@@ -53,7 +59,9 @@ func TestSupervisor_Monitor_RecordsCompletedAndDetectsDuplicate(t *testing.T) {
 
 	// 競合検出自体はログ出力なので、ここでは状態が壊れないことを確認
 	time.Sleep(50 * time.Millisecond)
+	s.monitorMu.RLock()
 	got := s.completedByStep[1]
+	s.monitorMu.RUnlock()
 	if got.FromWorker != 1 {
 		t.Fatalf("expected first completion to remain recorded, got worker %d", got.FromWorker)
 	}
@@ -73,22 +81,36 @@ func TestSupervisor_Monitor_RecordsFailed(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	ready := make(chan struct{})
+
+	// runMonitor 側が Subscribe を完了するまで待つ（goroutine開始直後は取りこぼしうる）
 	go func() {
-		close(ready)
 		s.runMonitor(ctx, p)
 	}()
-	<-ready
+	deadlineSubs := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadlineSubs) {
+		s.sharedContext.subMu.RLock()
+		subs := s.sharedContext.subscribers["step_failed"]
+		ok := len(subs) > 0
+		s.sharedContext.subMu.RUnlock()
+		if ok {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
 
 	s.sharedContext.Publish(WorkerMessage{FromWorker: 1, Topic: "step_failed", StepID: 1, Content: "boom"})
 
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if _, ok := s.failedByStep[1]; ok {
+		s.monitorMu.RLock()
+		_, ok := s.failedByStep[1]
+		s.monitorMu.RUnlock()
+		if ok {
 			break
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+	// 最終確認
 	if _, ok := s.failedByStep[1]; !ok {
 		t.Fatal("expected failedByStep to be updated")
 	}

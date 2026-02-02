@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/susugadx/xelyon-cli/internal/agent/plan"
 	"github.com/susugadx/xelyon-cli/internal/api"
@@ -49,6 +50,7 @@ type Supervisor struct {
 	// 監視モード用状態
 	completedByStep map[int]WorkerMessage
 	failedByStep    map[int]WorkerMessage
+	monitorMu       sync.RWMutex
 }
 
 // NewSupervisor は新しい Supervisor を作成
@@ -431,8 +433,10 @@ func (s *Supervisor) runMonitor(ctx context.Context, p *plan.Plan) {
 				continue
 			}
 
+			s.monitorMu.Lock()
 			// 重複完了（競合）
 			if prev, ok := s.completedByStep[msg.StepID]; ok {
+				s.monitorMu.Unlock()
 				yellow.Printf("[monitor] conflict: step %d completed twice (worker %d then %d)\n", msg.StepID, prev.FromWorker, msg.FromWorker)
 				// 進行不能や不整合を避けるため、再実行キューへ戻す（Supervisor が最終判断）
 				if s.workerPool != nil {
@@ -454,6 +458,7 @@ func (s *Supervisor) runMonitor(ctx context.Context, p *plan.Plan) {
 					}
 				}
 				if !depOK {
+					s.monitorMu.Unlock()
 					yellow.Printf("[monitor] conflict: step %d reported completed but dependencies not completed\n", msg.StepID)
 					// 依存が揃うまで待つべきなので、一旦再実行キューへ戻す
 					if s.workerPool != nil {
@@ -464,6 +469,7 @@ func (s *Supervisor) runMonitor(ctx context.Context, p *plan.Plan) {
 			}
 
 			s.completedByStep[msg.StepID] = msg
+			s.monitorMu.Unlock()
 
 		case msg, ok := <-failedCh:
 			if !ok {
@@ -473,7 +479,9 @@ func (s *Supervisor) runMonitor(ctx context.Context, p *plan.Plan) {
 				continue
 			}
 			// 失敗通知を記録
+			s.monitorMu.Lock()
 			s.failedByStep[msg.StepID] = msg
+			s.monitorMu.Unlock()
 
 			// 監視側介入: 失敗通知を受けたら、対象ステップがまだ完了扱いでない場合に限り再実行/エスカレーション等を検討
 			step := p.GetStep(msg.StepID)

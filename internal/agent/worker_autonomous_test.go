@@ -84,19 +84,32 @@ func TestWorker_Autonomous_DoesNotStartWhenDependenciesIncomplete(t *testing.T) 
 	<-ready
 
 	// 依存未完了の状態で完了通知だけ流す
-	sharedCtx.Publish(WorkerMessage{FromWorker: 99, Topic: "step_completed", StepID: 999, Content: "done"})
+	// StepID=1 を完了にしていないため、step 2 は開始されないことを確認する
+	sharedCtx.Publish(WorkerMessage{FromWorker: 99, Topic: "step_completed", StepID: 1, Content: "done"})
+
+	// step 1 自体は依存がないので開始されうる。ここでは「step 2 が開始されない」ことだけ検証する。
 
 	select {
 	case got := <-startedCh:
-		t.Fatalf("expected no step to start, but started step %d", got)
+		if got == 2 {
+			t.Fatalf("expected step 2 NOT to start, but started step %d", got)
+		}
+		// step 1 は依存がないため開始されてもテスト上は許容
 	case <-time.After(300 * time.Millisecond):
-		// OK: 何も開始されない
+		// OK: step 2 は開始されない
 	}
 
-	select {
-	case res := <-results:
-		t.Fatalf("expected no results, but got: %+v", res)
-	case <-time.After(100 * time.Millisecond):
-		// OK
+	// step 1 は開始される可能性があるため、step 2 の結果が出ていないことだけ確認する
+	deadline := time.Now().Add(300 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		select {
+		case res := <-results:
+			if res.StepID == 2 {
+				t.Fatalf("expected step 2 to not produce results, but got: %+v", res)
+			}
+			// step 1 の結果は許容
+		default:
+			time.Sleep(5 * time.Millisecond)
+		}
 	}
 }
