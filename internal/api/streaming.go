@@ -232,7 +232,7 @@ func filterToolJSON(content string, inToolJSON *bool, jsonDepth *int, inString *
 
 		// パターン以降を処理開始
 		*inToolJSON = true
-		*jsonDepth = 1 // 先頭の '{' を既に読んだ扱いにする（0だと最初の'}'で即終了して漏れる）
+		*jsonDepth = 0 // 先頭の '{' を既に読んだ扱いにする（0だと最初の'}'で即終了して漏れる）
 		*inString = false
 		*prevChar = 0
 	}

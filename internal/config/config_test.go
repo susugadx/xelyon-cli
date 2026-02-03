@@ -21,8 +21,8 @@ func TestDefaultConfig(t *testing.T) {
 		t.Errorf("DefaultProvider = %v, want deepseek", cfg.DefaultProvider)
 	}
 
-	if cfg.DefaultModel != "deepseek-coder" {
-		t.Errorf("DefaultModel = %v, want deepseek-coder", cfg.DefaultModel)
+	if cfg.DefaultModel != "deepseek-chat" {
+		t.Errorf("DefaultModel = %v, want deepseek-chat", cfg.DefaultModel)
 	}
 
 	// Provider models
@@ -339,7 +339,7 @@ func TestGetModelForProvider(t *testing.T) {
 		provider string
 		want     string
 	}{
-		{name: "deepseek", provider: "deepseek", want: "deepseek-coder"},
+		{name: "deepseek", provider: "deepseek", want: "deepseek-chat"},
 		{name: "openai", provider: "openai", want: "gpt-5.2"},
 		{name: "gemini", provider: "gemini", want: "gemini-2.5-flash"},
 		{name: "claude", provider: "claude", want: "claude-sonnet-4-5-20250514"},
