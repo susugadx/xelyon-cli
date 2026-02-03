@@ -171,6 +171,12 @@ Do not retry the same replacement.`, path), "", nil
 	// 2) String replace mode
 	// ========================
 	// old_str が非空なら従来どおり（レンジ指定は無視し、互換性を維持）
+
+	// old_str と new_str が同一なら変更不要
+	if oldStr == newStr {
+		return fmt.Sprintf("Error: old_str and new_str are identical in %s (no change needed)", path), "", nil
+	}
+
 	// まず完全一致を試行
 	exactMatch := strings.Contains(oldContent, oldStr)
 	exactCount := strings.Count(oldContent, oldStr)
