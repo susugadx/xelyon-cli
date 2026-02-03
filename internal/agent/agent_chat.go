@@ -147,7 +147,7 @@ func (a *Agent) runNormalMode(ctx context.Context, input string) error {
 		var lastFailedResult string
 		for _, toolCall := range toolCalls {
 			// ループ検知
-			if a.shouldAbortToolLoop(toolCall, lastToolCall, &sameCallCount) {
+			if a.shouldAbortToolLoopWithResponse(response, toolCall, lastToolCall, &sameCallCount) {
 				return fmt.Errorf("tool loop detected")
 			}
 			lastToolCall = toolCall

@@ -22,8 +22,50 @@ func argsToJSON(args map[string]any) string {
 	return string(b)
 }
 
-// shouldAbortToolLoop は同じツール呼び出しの繰り返しを検知
+// addToolCallToHistory はツール呼び出しを会話履歴に追加する
+func (a *Agent) addToolCallToHistory(response string, toolCall *tools.ToolCall) {
+	// レスポンスから説明部分とツール呼び出しを分離
+	explanation, _ := extractExplanationAndTool(response)
+
+	// Function Calling: tool_call_id がある場合は OpenAI 形式で履歴に追加
+	isFunctionCalling := toolCall.ID != ""
+	if isFunctionCalling {
+		// assistant メッセージに tool_calls を含める
+		a.History = append(a.History, api.Message{
+			Role:    "assistant",
+			Content: explanation, // 説明部分のみ（ツール呼び出しは ToolCalls に）
+			ToolCalls: []api.OpenAIToolCall{{
+				ID:   toolCall.ID,
+				Type: "function",
+				Function: api.OpenAIToolCallFunction{
+					Name:      toolCall.Tool,
+					Arguments: argsToJSON(toolCall.RawArgs),
+				},
+			}},
+		})
+	} else {
+		// テキストベースのツール呼び出し（従来方式）
+		a.History = append(a.History, api.Message{
+			Role:    "assistant",
+			Content: response,
+		})
+	}
+
+	// 統計情報更新: Assistantメッセージ数とツール実行回数をカウント
+	if a.Stats != nil {
+		a.Stats.AssistantMessages++
+		a.Stats.AddToolExecution(toolCall.Tool)
+	}
+}
+
+// shouldAbortToolLoop は同じツール呼び出しの繰り返しを検知（後方互換性のため）
 func (a *Agent) shouldAbortToolLoop(current, last *tools.ToolCall, count *int) bool {
+	// 空のレスポンスで shouldAbortToolLoopWithResponse を呼び出す
+	return a.shouldAbortToolLoopWithResponse("", current, last, count)
+}
+
+// shouldAbortToolLoopWithResponse は同じツール呼び出しの繰り返しを検知（response パラメータ付き）
+func (a *Agent) shouldAbortToolLoopWithResponse(response string, current, last *tools.ToolCall, count *int) bool {
 	cfg := config.GetGlobalConfig()
 	threshold := cfg.LoopDetection.Threshold
 
@@ -33,11 +75,27 @@ func (a *Agent) shouldAbortToolLoop(current, last *tools.ToolCall, count *int) b
 			yellow.Printf("⚠️  Warning: Same tool call repeated %d times, stopping to prevent infinite loop\n", *count)
 			yellow.Printf("   Tool: %s\n", current.Tool)
 
-			// AI に警告メッセージを返す
-			a.History = append(a.History, api.Message{
-				Role:    "user",
-				Content: fmt.Sprintf("[SYSTEM WARNING] The same tool call was repeated %d times. Please try a different approach or ask the user for clarification.", threshold),
-			})
+			// ツール呼び出しを履歴に追加（response がある場合のみ）
+			if response != "" {
+				a.addToolCallToHistory(response, current)
+			}
+
+			// ツール呼び出しに対する応答を追加（OpenAI API の要件を満たすため）
+			// Function Calling 形式かテキストベースかで処理を分ける
+			if current.ID != "" {
+				// Function Calling 形式: role="tool" で tool_call_id 付き
+				a.History = append(a.History, api.Message{
+					Role:       "tool",
+					Content:    fmt.Sprintf("[SYSTEM] Tool loop detected: %s was called %d times. Stopping to prevent infinite loop.", current.Tool, threshold),
+					ToolCallID: current.ID,
+				})
+			} else {
+				// テキストベース: role="user" で送信
+				a.History = append(a.History, api.Message{
+					Role:    "user",
+					Content: fmt.Sprintf("[SYSTEM WARNING] The same tool call was repeated %d times. Please try a different approach or ask the user for clarification.", threshold),
+				})
+			}
 			return true
 		}
 	} else {
@@ -69,35 +127,8 @@ func (a *Agent) executeToolCallInternal(response string, toolCall *tools.ToolCal
 		fmt.Println()
 	}
 
-	// Function Calling: tool_call_id がある場合は OpenAI 形式で履歴に追加
-	isFunctionCalling := toolCall.ID != ""
-	if isFunctionCalling {
-		// assistant メッセージに tool_calls を含める
-		a.History = append(a.History, api.Message{
-			Role:    "assistant",
-			Content: explanation, // 説明部分のみ（ツール呼び出しは ToolCalls に）
-			ToolCalls: []api.OpenAIToolCall{{
-				ID:   toolCall.ID,
-				Type: "function",
-				Function: api.OpenAIToolCallFunction{
-					Name:      toolCall.Tool,
-					Arguments: argsToJSON(toolCall.RawArgs),
-				},
-			}},
-		})
-	} else {
-		// テキストベースのツール呼び出し（従来方式）
-		a.History = append(a.History, api.Message{
-			Role:    "assistant",
-			Content: response,
-		})
-	}
-
-	// 統計情報更新: Assistantメッセージ数とツール実行回数をカウント
-	if a.Stats != nil {
-		a.Stats.AssistantMessages++
-		a.Stats.AddToolExecution(toolCall.Tool)
-	}
+	// ツール呼び出しを履歴に追加
+	a.addToolCallToHistory(response, toolCall)
 
 	// ツール実行
 	result, change := tools.Execute(toolCall)
@@ -116,7 +147,7 @@ func (a *Agent) executeToolCallInternal(response string, toolCall *tools.ToolCal
 	a.handleFileChange(change)
 
 	// 結果を履歴に追加
-	if isFunctionCalling {
+	if toolCall.ID != "" {
 		// Function Calling: role="tool" で tool_call_id 付きで送信
 		a.History = append(a.History, api.Message{
 			Role:       "tool",
@@ -162,10 +193,20 @@ func (a *Agent) handleStrReplaceErrors(toolCall *tools.ToolCall, result string) 
 			fmt.Println()
 
 			// AIに警告を送信
-			a.History = append(a.History, api.Message{
-				Role:    "user",
-				Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, result),
-			})
+			if toolCall.ID != "" {
+				// Function Calling 形式: role="tool" で tool_call_id 付き
+				a.History = append(a.History, api.Message{
+					Role:       "tool",
+					Content:    fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, result),
+					ToolCallID: toolCall.ID,
+				})
+			} else {
+				// テキストベース: role="user" で送信
+				a.History = append(a.History, api.Message{
+					Role:    "user",
+					Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, result),
+				})
+			}
 			a.History = append(a.History, api.Message{
 				Role: "user",
 				Content: `[SYSTEM WARNING] str_replace has failed multiple times. The old_str pattern was not found in the file.

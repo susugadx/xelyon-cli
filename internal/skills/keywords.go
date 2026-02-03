@@ -1,9 +1,5 @@
 package skills
 
-import (
-	"strings"
-)
-
 // skillKeywords maps skill names to trigger keywords.
 var skillKeywords = map[string][]string{
 	"ci": {
@@ -35,22 +31,10 @@ var skillKeywords = map[string][]string{
 }
 
 // DetectSkills detects required skills from user input.
+// NOTE: Auto-detection is disabled to prevent false positives.
+// Use /skill command for manual skill loading.
 func DetectSkills(input string) []string {
-	inputLower := strings.ToLower(input)
-	detected := make(map[string]bool)
-
-	for skill, keywords := range skillKeywords {
-		for _, kw := range keywords {
-			if strings.Contains(inputLower, strings.ToLower(kw)) {
-				detected[skill] = true
-				break
-			}
-		}
-	}
-
-	result := make([]string, 0, len(detected))
-	for skill := range detected {
-		result = append(result, skill)
-	}
-	return result
+	// Auto-detection disabled - always return empty array
+	// to prevent false positives (e.g., "test" in bug reports)
+	return []string{}
 }
