@@ -22,7 +22,7 @@ XELYON CLIは複数のLLMプロバイダーに対応しています。
 export DEEPSEEK_API_KEY=sk-...
 
 # 使用例
-xelyon --provider deepseek --model deepseek-coder
+xelyon --provider deepseek --model deepseek-chat
 xelyon --provider deepseek --model deepseek-chat
 xelyon --provider deepseek --model deepseek-reasoner
 ```
@@ -153,7 +153,7 @@ xelyon --provider openai --model gpt-4
 
 ```bash
 export XELYON_PROVIDER=deepseek
-export XELYON_MODEL=deepseek-coder
+export XELYON_MODEL=deepseek-chat
 xelyon
 ```
 
@@ -161,11 +161,11 @@ xelyon
 
 ```yaml
 default_provider: deepseek
-default_model: deepseek-coder
+default_model: deepseek-chat
 
 provider_models:
   deepseek:
-    default_model: deepseek-coder
+    default_model: deepseek-chat
   openai:
     default_model: gpt-4
   gemini:

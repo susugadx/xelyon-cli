@@ -73,7 +73,7 @@ func getModel(cmd *cobra.Command) string {
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		// エラー時はハードコードされたデフォルトを使用
-		return "deepseek-coder"
+		return "deepseek-chat"
 	}
 
 	return cfg.DefaultModel
@@ -86,11 +86,11 @@ var rootCmd = &cobra.Command{
 	Long: `XELYON CLI is an AI coding agent that helps you with development tasks.
 
 Examples:
-  xelyon                                           # Interactive mode (DeepSeek Coder)
+  xelyon                                           # Interactive mode (DeepSeek Chat)
   xelyon "explain this project"                    # One-shot query
   xelyon --provider gemini --model gemini-2.5-flash # Use Gemini
   xelyon --provider openai --model gpt-5.2         # Use OpenAI GPT-5.2
-  xelyon -p deepseek -m deepseek-coder             # Short flags
+  xelyon -p deepseek -m deepseek-chat             # Short flags
   xelyon -f main.go "add logging"                  # With file context`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// バージョンチェック（--no-update-check または --headless でない場合）

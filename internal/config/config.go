@@ -33,13 +33,13 @@ func GetGlobalConfig() *Config {
 func DefaultConfig() *Config {
 	return &Config{
 		DefaultProvider: "deepseek",
-		DefaultModel:    "deepseek-coder",
+		DefaultModel:    "deepseek-chat",
 		General: GeneralConfig{
 			Language: "ja", // デフォルト: 日本語
 		},
 		ProviderModels: map[string]ProviderModelConfig{
 			"deepseek": {
-				DefaultModel: "deepseek-coder",
+				DefaultModel: "deepseek-chat",
 			},
 			"openai": {
 				DefaultModel: "gpt-5.2",

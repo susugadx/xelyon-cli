@@ -58,13 +58,13 @@ vi ~/.xelyon/config.yaml
 ```yaml
 default_provider: deepseek
 # デフォルトで使用するモデル
-default_model: deepseek-coder
+default_model: deepseek-chat
 # プロバイダーごとのモデル設定
 provider_models:
     claude:
         default_model: claude-sonnet-4-5-20250514
     deepseek:
-        default_model: deepseek-coder
+        default_model: deepseek-chat
     gemini:
         default_model: gemini-2.5-flash
     groq:
@@ -300,7 +300,7 @@ web_search:
 
 #### `default_model`
 - **型**: string
-- **デフォルト**: `deepseek-coder`
+- **デフォルト**: `deepseek-chat`
 - **説明**: デフォルトで使用するモデル
 
 #### `provider_models`
@@ -1038,7 +1038,7 @@ xelyon
 export XELYON_PROVIDER=deepseek
 
 # モデル指定
-export XELYON_MODEL=deepseek-coder
+export XELYON_MODEL=deepseek-chat
 ```
 
 ### セキュリティ・監査設定

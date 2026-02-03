@@ -32,7 +32,7 @@ func (a *Agent) SwitchProvider(providerName string) error {
 		// フォールバック: プロバイダー別のハードコードされたデフォルト
 		switch providerName {
 		case "deepseek":
-			newModel = "deepseek-coder"
+			newModel = "deepseek-chat"
 		case "openai":
 			newModel = "gpt-5.2"
 		case "gemini":
