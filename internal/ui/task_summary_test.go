@@ -64,6 +64,32 @@ func TestTaskSummary_Calculate(t *testing.T) {
 	}
 }
 
+func TestTaskSummary_Calculate_Dedup(t *testing.T) {
+	ts := NewTaskSummary().
+		AddChange("file1.go", "modified", 1, 0).
+		AddChange("file1.go", "modified", 2, 3).
+		AddChange("file2.go", "created", 10, 0).
+		AddChange("file2.go", "deleted", 0, 10).
+		Calculate()
+
+	if ts.Stats.FilesChanged != 2 {
+		t.Errorf("Expected 2 unique files, got %d", ts.Stats.FilesChanged)
+	}
+	if ts.Stats.TotalLinesAdded != 13 {
+		t.Errorf("Expected 13 lines added, got %d", ts.Stats.TotalLinesAdded)
+	}
+	if ts.Stats.TotalLinesRemoved != 13 {
+		t.Errorf("Expected 13 lines removed, got %d", ts.Stats.TotalLinesRemoved)
+	}
+
+	// file2 は created+deleted の場合、action は deleted が優先される
+	for _, c := range ts.Changes {
+		if c.FilePath == "file2.go" && c.Action != "deleted" {
+			t.Errorf("Expected file2.go action 'deleted', got %q", c.Action)
+		}
+	}
+}
+
 func TestTaskSummary_Render_Empty(t *testing.T) {
 	ts := NewTaskSummary()
 	result := ts.Render()

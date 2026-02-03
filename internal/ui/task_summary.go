@@ -55,6 +55,26 @@ func (ts *TaskSummary) SetTestResult(passed bool) *TaskSummary {
 
 // Calculate は統計情報を計算
 func (ts *TaskSummary) Calculate() *TaskSummary {
+	// ファイル単位でユニーク化して統計を集計
+	unique := make(map[string]*FileChangeSummary)
+	for _, c := range ts.Changes {
+		if existing, ok := unique[c.FilePath]; ok {
+			// action は最も強いものを残す（deleted > created > moved > modified）
+			existing.Action = mergeAction(existing.Action, c.Action)
+			existing.LinesAdded += c.LinesAdded
+			existing.LinesRemoved += c.LinesRemoved
+			continue
+		}
+		copy := c
+		unique[c.FilePath] = &copy
+	}
+
+	// Changes をユニーク化したものに置き換え（表示も重複しない）
+	ts.Changes = make([]FileChangeSummary, 0, len(unique))
+	for _, v := range unique {
+		ts.Changes = append(ts.Changes, *v)
+	}
+
 	ts.Stats.FilesChanged = len(ts.Changes)
 	ts.Stats.TotalLinesAdded = 0
 	ts.Stats.TotalLinesRemoved = 0
@@ -70,6 +90,27 @@ func (ts *TaskSummary) Calculate() *TaskSummary {
 	}
 
 	return ts
+}
+
+// mergeAction は2つの action をマージして、より優先度の高いものを返す。
+// 優先度: deleted > created > moved > modified
+func mergeAction(a, b string) string {
+	rank := func(s string) int {
+		switch s {
+		case "deleted":
+			return 4
+		case "created":
+			return 3
+		case "moved":
+			return 2
+		default:
+			return 1 // modified/unknown
+		}
+	}
+	if rank(b) > rank(a) {
+		return b
+	}
+	return a
 }
 
 // Render はサマリーを表示用文字列に変換

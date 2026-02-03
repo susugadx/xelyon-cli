@@ -74,11 +74,13 @@ func (t *WriteFileTool) Run(args map[string]string) (string, *tools.FileChange, 
 		return result, nil, nil
 	}
 	return result, &tools.FileChange{
-		FilePath:    args["path"],
-		BackupPath:  backupPath,
-		Timestamp:   common.GetCurrentTime(),
-		Tool:        "write_file",
-		Description: "Wrote file " + args["path"],
+		FilePath:     args["path"],
+		BackupPath:   backupPath,
+		Timestamp:    common.GetCurrentTime(),
+		Tool:         "write_file",
+		Description:  "Wrote file " + args["path"],
+		LinesAdded:   countLines(args["content"]),
+		LinesRemoved: 0,
 	}, nil
 }
 
@@ -115,11 +117,13 @@ func (t *StrReplaceTool) Run(args map[string]string) (string, *tools.FileChange,
 		return result, nil, nil
 	}
 	return result, &tools.FileChange{
-		FilePath:    args["path"],
-		BackupPath:  backupPath,
-		Timestamp:   common.GetCurrentTime(),
-		Tool:        "str_replace",
-		Description: "Replaced in " + args["path"],
+		FilePath:     args["path"],
+		BackupPath:   backupPath,
+		Timestamp:    common.GetCurrentTime(),
+		Tool:         "str_replace",
+		Description:  "Replaced in " + args["path"],
+		LinesAdded:   countLines(args["new_str"]),
+		LinesRemoved: countLines(args["old_str"]),
 	}, nil
 }
 

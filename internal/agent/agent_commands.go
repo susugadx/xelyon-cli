@@ -54,7 +54,7 @@ func handleSpecialCommand(input string, agent *Agent) bool {
 	case "/changes":
 		return handleChangesCommand(agent)
 	case "/config":
-		return handleConfigCommand(args)
+		return handleConfigCommand(agent, args)
 	case "/stats":
 		return handleStatsCommand(agent)
 	case "/copy":

@@ -20,6 +20,8 @@ var yellow = color.New(color.FgYellow)
 var toolJSONPatterns = []string{
 	`{"tool"`,
 	`{ "tool"`,
+	`{"id"`,
+	`{ "id"`,
 }
 
 // StreamParser はストリーミングレスポンスの1行をパースする関数型
@@ -230,7 +232,9 @@ func filterToolJSON(content string, inToolJSON *bool, jsonDepth *int, inString *
 
 		// パターン以降を処理開始
 		*inToolJSON = true
-		*jsonDepth = 0
+		*jsonDepth = 1 // 先頭の '{' を既に読んだ扱いにする（0だと最初の'}'で即終了して漏れる）
+		*inString = false
+		*prevChar = 0
 	}
 
 	return result.String()

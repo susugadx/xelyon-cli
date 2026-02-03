@@ -60,7 +60,7 @@ func handleModelCommand(agent *Agent, args []string) bool {
 }
 
 // handleConfigCommand は設定の表示・変更を処理
-func handleConfigCommand(args []string) bool {
+func handleConfigCommand(agent *Agent, args []string) bool {
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		red.Printf("Failed to load config: %v\n", err)
@@ -84,18 +84,24 @@ func handleConfigCommand(args []string) bool {
 			return true
 		}
 
+		// グローバル設定を更新（このプロセス内で即反映させる）
+		config.SetGlobalConfig(cfg)
+		// Agent にも同期（フッター/次回API呼び出し）
+		if agent != nil {
+			agent.SyncWithGlobalConfig()
+		}
+
 		green.Printf("✅ Default model updated to: %s\n", newModel)
-		yellow.Println("Restart CLI for changes to take effect")
 		return true
 	}
 
 	// 引数なし → 対話式メニュー
-	runInteractiveConfig(cfg)
+	runInteractiveConfig(agent, cfg)
 	return true
 }
 
 // runInteractiveConfig は対話式設定メニューを実行
-func runInteractiveConfig(cfg *config.Config) {
+func runInteractiveConfig(agent *Agent, cfg *config.Config) {
 	categories := config.BuildConfigRegistry(cfg)
 	menu := ui.NewConfigMenu(cfg, categories)
 
@@ -130,6 +136,11 @@ func runInteractiveConfig(cfg *config.Config) {
 					red.Printf("Error saving: %v\n", err)
 				} else {
 					green.Printf("✓ Saved: %s\n", selectedField.Path)
+					// グローバル設定/Agent を同期（即反映）
+					config.SetGlobalConfig(cfg)
+					if agent != nil {
+						agent.SyncWithGlobalConfig()
+					}
 				}
 				// カテゴリを再構築
 				categories = config.BuildConfigRegistry(cfg)
@@ -157,6 +168,12 @@ func runInteractiveConfig(cfg *config.Config) {
 			}
 
 			green.Printf("✓ Saved: %s = %v\n", selectedField.Path, newValue)
+
+			// グローバル設定/Agent を同期（即反映）
+			config.SetGlobalConfig(cfg)
+			if agent != nil {
+				agent.SyncWithGlobalConfig()
+			}
 
 			// カテゴリを再構築して現在値を更新
 			categories = config.BuildConfigRegistry(cfg)
