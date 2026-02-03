@@ -397,7 +397,7 @@ func LoadConfigWithValidation() (*Config, ValidationResult, error) {
 	return cfg, result, nil
 }
 
-// SaveConfig は設定ファイルを保存
+// SaveConfig は設定ファイルを保存し、グローバル設定を更新
 func SaveConfig(cfg *Config) error {
 	configPath, err := getConfigPath()
 	if err != nil {
@@ -423,6 +423,9 @@ func SaveConfig(cfg *Config) error {
 	if err := os.WriteFile(configPath, fullData, 0600); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)
 	}
+
+	// グローバル設定を更新
+	SetGlobalConfig(cfg)
 
 	return nil
 }
