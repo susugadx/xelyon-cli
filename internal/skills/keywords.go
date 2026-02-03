@@ -1,5 +1,6 @@
 package skills
 
+var _ = skillKeywords // lint: reserved for future /skill command
 // skillKeywords maps skill names to trigger keywords.
 var skillKeywords = map[string][]string{
 	"ci": {
