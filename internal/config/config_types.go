@@ -163,7 +163,8 @@ type ThinkingConfig struct {
 
 // RepoMapConfig は RepoMap の設定
 type RepoMapConfig struct {
-	MaxTokens int `yaml:"max_tokens,omitempty"` // 0 = 自動計算（ファイル数ベース）
+	Enabled   bool `yaml:"enabled"`              // RepoMapを有効化（デフォルト: true）
+	MaxTokens int  `yaml:"max_tokens,omitempty"` // 0 = 自動計算（ファイル数ベース）
 }
 
 // WebSearchConfig はWeb検索キャッシュの設定

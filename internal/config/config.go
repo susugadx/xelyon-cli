@@ -246,7 +246,12 @@ func DefaultConfig() *Config {
 				"gpt-5.1-codex",
 				"gpt-5.1-codex-max",
 				"gpt-5-codex",
+				"gpt-5.2",
 			},
+		},
+		RepoMap: RepoMapConfig{
+			Enabled:   true, // デフォルトON
+			MaxTokens: 0,    // 0 = 自動計算
 		},
 		Thinking: ThinkingConfig{
 			Enabled: false,

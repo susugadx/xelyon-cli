@@ -313,9 +313,11 @@ var Sections = map[string]SectionInfo{
 		Title: "RepoMap設定",
 		Icon:  "🗺️",
 		Fields: map[string]string{
+			"enabled":    "RepoMapを有効化（デフォルト: true）",
 			"max_tokens": "最大トークン数（0 = 自動計算）",
 		},
 		FieldTypes: map[string]string{
+			"enabled":    "bool",
 			"max_tokens": "int",
 		},
 	},

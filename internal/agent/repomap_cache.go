@@ -16,6 +16,12 @@ import (
 //
 // This is best-effort. On any cache error, it falls back to generating repo map.
 func loadRepoMapForProject(projectPath string, maxTokens int) (repoMapStr string, symbols int, files int, fromCache bool) {
+	// RepoMapが無効な場合は空を返す
+	cfg := config.GetGlobalConfig()
+	if !cfg.RepoMap.Enabled {
+		return "", 0, 0, false
+	}
+
 	fingerprint, err := cache.ComputeProjectFingerprint(projectPath)
 	if err == nil {
 		if cached, err := cache.LoadRepoMapFromDisk(projectPath, fingerprint); err == nil {

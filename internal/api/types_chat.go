@@ -10,13 +10,15 @@ type StreamOptions struct {
 
 // ChatRequest はAPIリクエスト（OpenAI互換形式）
 type ChatRequest struct {
-	Model           string         `json:"model"`
-	Messages        []Message      `json:"messages"`
-	Stream          bool           `json:"stream"`
-	StreamOptions   *StreamOptions `json:"stream_options,omitempty"`   // ストリーミング時のオプション
-	ReasoningEffort string         `json:"reasoning_effort,omitempty"` // OpenAI Extended Thinking用
-	Tools           []OpenAITool   `json:"tools,omitempty"`            // Function Calling用
-	ToolChoice      string         `json:"tool_choice,omitempty"`      // "auto", "none", "required"
+	Model                string         `json:"model"`
+	Messages             []Message      `json:"messages"`
+	Stream               bool           `json:"stream"`
+	StreamOptions        *StreamOptions `json:"stream_options,omitempty"`         // ストリーミング時のオプション
+	ReasoningEffort      string         `json:"reasoning_effort,omitempty"`       // OpenAI Extended Thinking用
+	Tools                []OpenAITool   `json:"tools,omitempty"`                  // Function Calling用
+	ToolChoice           string         `json:"tool_choice,omitempty"`            // "auto", "none", "required"
+	PromptCacheKey       string         `json:"prompt_cache_key,omitempty"`       // プロンプトキャッシュのルーティングキー
+	PromptCacheRetention string         `json:"prompt_cache_retention,omitempty"` // キャッシュ保持期間（"24h"でextended cache）
 }
 
 // Delta はストリームレスポンスの差分

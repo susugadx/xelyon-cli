@@ -34,10 +34,12 @@ type MultimodalMessage struct {
 
 // MultimodalRequest はマルチモーダルAPIリクエスト
 type MultimodalRequest struct {
-	Model           string        `json:"model"`
-	Messages        []interface{} `json:"messages"` // Message or MultimodalMessage
-	Stream          bool          `json:"stream"`
-	ReasoningEffort string        `json:"reasoning_effort,omitempty"` // low/medium/high
+	Model                string        `json:"model"`
+	Messages             []interface{} `json:"messages"` // Message or MultimodalMessage
+	Stream               bool          `json:"stream"`
+	ReasoningEffort      string        `json:"reasoning_effort,omitempty"`       // low/medium/high
+	PromptCacheKey       string        `json:"prompt_cache_key,omitempty"`       // プロンプトキャッシュのルーティングキー
+	PromptCacheRetention string        `json:"prompt_cache_retention,omitempty"` // キャッシュ保持期間（"24h"でextended cache）
 }
 
 // chatWithCompletions は Chat Completions API でチャット
@@ -51,10 +53,12 @@ func (p *Provider) chatWithCompletions(ctx context.Context, systemPrompt string,
 	messages = append(messages, history...)
 
 	reqBody := api.ChatRequest{
-		Model:         model,
-		Messages:      messages,
-		Stream:        true,
-		StreamOptions: &api.StreamOptions{IncludeUsage: true},
+		Model:                model,
+		Messages:             messages,
+		Stream:               true,
+		StreamOptions:        &api.StreamOptions{IncludeUsage: true},
+		PromptCacheKey:       "xelyon",
+		PromptCacheRetention: "24h",
 	}
 
 	// Function Calling: ツール定義を追加（環境変数で無効化可能）
@@ -283,9 +287,11 @@ func (p *Provider) chatWithImageCompletions(ctx context.Context, systemPrompt st
 	messages = append(messages, multimodalMessage)
 
 	reqBody := MultimodalRequest{
-		Model:    model,
-		Messages: messages,
-		Stream:   true,
+		Model:                model,
+		Messages:             messages,
+		Stream:               true,
+		PromptCacheKey:       "xelyon",
+		PromptCacheRetention: "24h",
 	}
 
 	// Extended Thinking 適用

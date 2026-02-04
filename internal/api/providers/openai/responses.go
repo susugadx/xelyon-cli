@@ -46,13 +46,15 @@ type ResponsesTool struct {
 
 // ResponsesRequest は Responses API リクエスト
 type ResponsesRequest struct {
-	Model              string           `json:"model"`
-	Input              interface{}      `json:"input,omitempty"`                // string or []InputItem（previous_response_id使用時は省略可）
-	PreviousResponseID string           `json:"previous_response_id,omitempty"` // 前回のレスポンスID（キャッシュ用）
-	Instructions       string           `json:"instructions,omitempty"`         // システムプロンプト
-	Stream             bool             `json:"stream,omitempty"`
-	Reasoning          *ReasoningConfig `json:"reasoning,omitempty"` // Extended Thinking
-	Tools              []ResponsesTool  `json:"tools,omitempty"`     // ツール定義
+	Model                string           `json:"model"`
+	Input                interface{}      `json:"input,omitempty"`                // string or []InputItem（previous_response_id使用時は省略可）
+	PreviousResponseID   string           `json:"previous_response_id,omitempty"` // 前回のレスポンスID（キャッシュ用）
+	Instructions         string           `json:"instructions,omitempty"`         // システムプロンプト
+	Stream               bool             `json:"stream,omitempty"`
+	Reasoning            *ReasoningConfig `json:"reasoning,omitempty"`              // Extended Thinking
+	Tools                []ResponsesTool  `json:"tools,omitempty"`                  // ツール定義
+	PromptCacheKey       string           `json:"prompt_cache_key,omitempty"`       // プロンプトキャッシュのルーティングキー
+	PromptCacheRetention string           `json:"prompt_cache_retention,omitempty"` // キャッシュ保持期間（"24h"でextended cache）
 }
 
 // InputItem は api.InputItem のエイリアス（api packageで定義）
@@ -75,6 +77,13 @@ type ResponsesUsage struct {
 	OutputTokens int `json:"output_tokens"`
 }
 
+// ResponsesError は Responses API のエラー情報
+type ResponsesError struct {
+	Type    string `json:"type"`              // "insufficient_quota", "rate_limit_exceeded" 等
+	Code    string `json:"code"`              // エラーコード
+	Message string `json:"message,omitempty"` // エラーメッセージ
+}
+
 // ResponsesStreamChunk は Responses API ストリーミングチャンク
 type ResponsesStreamChunk struct {
 	Type     string            `json:"type"`               // "response.output_text.delta", "response.created", etc.
@@ -82,6 +91,7 @@ type ResponsesStreamChunk struct {
 	Response *ResponseMetadata `json:"response,omitempty"` // response.created で取得
 	Item     *ResponsesItem    `json:"item,omitempty"`     // response.output_item.added で取得（function_call用）
 	Usage    *ResponsesUsage   `json:"usage,omitempty"`    // response.completed で取得
+	Error    *ResponsesError   `json:"error,omitempty"`    // error イベントで取得
 }
 
 // ResponsesItem は output_item のデータ（function_call 等）
@@ -113,10 +123,12 @@ func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, h
 	}
 
 	reqBody := ResponsesRequest{
-		Model:        model,
-		Instructions: systemPrompt,
-		Stream:       true,
-		Tools:        GetResponsesToolDefinitions(p.mcpTools), // Function Calling
+		Model:                model,
+		Instructions:         systemPrompt,
+		Stream:               true,
+		Tools:                GetResponsesToolDefinitions(p.mcpTools), // Function Calling
+		PromptCacheKey:       "xelyon",
+		PromptCacheRetention: "24h",
 	}
 
 	// previous_response_id がある場合はキャッシュを活用
@@ -158,6 +170,11 @@ func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, h
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	// デバッグ: リクエストボディを出力
+	if os.Getenv("XELYON_DEBUG_OPENAI") == "1" {
+		fmt.Fprintf(os.Stderr, "[DEBUG OpenAI Responses] Request body:\n%s\n", string(jsonBody))
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewBuffer(jsonBody))
@@ -218,6 +235,11 @@ func (p *Provider) handleResponsesStreaming(ctx context.Context, resp *http.Resp
 	var lastUsage *api.Usage
 
 	parser := func(line string) (string, bool, error) {
+		// デバッグ: 全SSE行を出力
+		if os.Getenv("XELYON_DEBUG_OPENAI") == "1" && line != "" {
+			fmt.Fprintf(os.Stderr, "[DEBUG OpenAI Responses] SSE line: %s\n", line)
+		}
+
 		// SSE形式: "event: xxx" と "data: {...}" の組み合わせ
 		if !strings.HasPrefix(line, "data: ") {
 			return "", false, nil
@@ -244,6 +266,24 @@ func (p *Provider) handleResponsesStreaming(ctx context.Context, resp *http.Resp
 		// response.created イベントから Response ID を抽出
 		if chunk.Type == "response.created" && chunk.Response != nil {
 			responseID = chunk.Response.ID
+		}
+
+		// error イベント: API エラー（quota超過、レート制限など）
+		if chunk.Type == "error" {
+			errMsg := "OpenAI API error"
+			if chunk.Error != nil {
+				if chunk.Error.Message != "" {
+					errMsg = chunk.Error.Message
+				} else if chunk.Error.Code != "" {
+					errMsg = fmt.Sprintf("OpenAI API error: %s", chunk.Error.Code)
+				}
+			}
+			return "", true, fmt.Errorf("%s", errMsg)
+		}
+
+		// response.failed イベント: リクエスト失敗（error イベントのフォールバック）
+		if chunk.Type == "response.failed" {
+			return "", true, fmt.Errorf("OpenAI Responses API request failed")
 		}
 
 		// response.output_item.added: function_call 開始
@@ -391,11 +431,13 @@ func (p *Provider) chatWithImageResponses(ctx context.Context, systemPrompt stri
 	input = append(input, imageMessage)
 
 	reqBody := ResponsesRequest{
-		Model:        model,
-		Input:        input,
-		Instructions: systemPrompt,
-		Stream:       true,
-		Tools:        GetResponsesToolDefinitions(p.mcpTools), // Function Calling
+		Model:                model,
+		Input:                input,
+		Instructions:         systemPrompt,
+		Stream:               true,
+		Tools:                GetResponsesToolDefinitions(p.mcpTools), // Function Calling
+		PromptCacheKey:       "xelyon",
+		PromptCacheRetention: "24h",
 	}
 
 	// Extended Thinking 適用
@@ -414,6 +456,11 @@ func (p *Provider) chatWithImageResponses(ctx context.Context, systemPrompt stri
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	// デバッグ: リクエストボディを出力
+	if os.Getenv("XELYON_DEBUG_OPENAI") == "1" {
+		fmt.Fprintf(os.Stderr, "[DEBUG OpenAI Responses] Request body:\n%s\n", string(jsonBody))
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewBuffer(jsonBody))
