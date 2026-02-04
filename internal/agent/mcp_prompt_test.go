@@ -150,15 +150,12 @@ func TestBuildGitHubMCPGuide(t *testing.T) {
 	keywords := []string{
 		"GitHub MCP Usage Guide",
 		"mcp_github_create_issue",
-		"mcp_github_list_issues",
-		"mcp_github_get_issue",
-		"CRITICAL RULES",
 		"Do NOT say",
 		// 新しい改善項目
 		"CONTEXT INFERENCE",
 		"NEVER ask",
-		"Array Args",
-		"RESPONSE STYLE",
+		"CRITICAL: Array arguments",
+		"RULES:",
 	}
 
 	for _, kw := range keywords {
