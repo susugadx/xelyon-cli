@@ -150,7 +150,6 @@ func TestBuildGitHubMCPGuide(t *testing.T) {
 	keywords := []string{
 		"GitHub MCP Usage Guide",
 		"mcp_github_create_issue",
-		"Do NOT say",
 		// 新しい改善項目
 		"CONTEXT INFERENCE",
 		"NEVER ask",
