@@ -69,51 +69,21 @@ func BuildMCPToolsPrompt(tools []MCPTool) string {
 
 // BuildGitHubMCPGuide generates the GitHub MCP usage guide.
 func BuildGitHubMCPGuide() string {
-	return `### GitHub MCP Usage Guide (IMPORTANT)
+	return `### GitHub MCP Usage Guide
 
-**CONTEXT INFERENCE (NEVER ask "which repository?"):**
-- Infer owner/repo from: git remote, XELYON.md, directory name
-- Current repository context is always available - use it
-- Only ask if genuinely ambiguous (e.g., cross-repo operations)
+**CONTEXT INFERENCE:** Infer owner/repo from git remote, XELYON.md, or directory name. NEVER ask "which repository?"
 
-**Tool Call Format:**
-` + "```" + `
-{"tool": "mcp_github_<action>", "args": {"owner": "...", "repo": "...", ...}}
-` + "```" + `
-
-**Common Tools & Arguments:**
-
-| Tool | Required Args | Array Args (use [] not string) |
-|------|---------------|--------------------------------|
-| mcp_github_get_issue | owner, repo, issue_number | - |
-| mcp_github_list_issues | owner, repo | labels: ["bug"] |
-| mcp_github_create_issue | owner, repo, title, body | labels: ["enhancement"], assignees: ["user"] |
-| mcp_github_update_issue | owner, repo, issue_number | labels: [], assignees: [] |
-| mcp_github_get_file_contents | owner, repo, path | - |
-| mcp_github_list_pull_requests | owner, repo | - |
-| mcp_github_create_pull_request | owner, repo, title, body, head, base | - |
-| mcp_github_search_code | q | - |
-| mcp_github_get_workflow_runs | owner, repo | - |
-
-**Array Argument Examples:**
+**CRITICAL: Array arguments (labels, assignees) must be [] not string:**
 ` + "```" + `json
-// ✅ CORRECT - labels/assignees must be arrays
-{"tool": "mcp_github_create_issue", "args": {"owner": "o", "repo": "r", "title": "Bug", "body": "...", "labels": ["bug", "priority"], "assignees": ["user"]}}
-
-// ❌ WRONG - labels must be array, not string
+// ✅ CORRECT
+{"tool": "mcp_github_create_issue", "args": {"owner": "o", "repo": "r", "title": "Bug", "body": "...", "labels": ["bug"], "assignees": ["user"]}}
+// ❌ WRONG
 {"tool": "mcp_github_create_issue", "args": {"labels": "bug"}}
 ` + "```" + `
 
-**RESPONSE STYLE:**
-- Be helpful and proactive, not transactional
-- Summarize results concisely but informatively (not just raw JSON)
-- Suggest relevant follow-up actions when appropriate
-
-**CRITICAL RULES:**
-1. ALWAYS use MCP tools for GitHub operations - you have direct access
-2. Do NOT say "I can't access GitHub" or "Please use the GitHub web UI"
-3. **INFORMATION-ONLY requests**: When user asks to "get", "show", "list", or "fetch", display the result and wait for explicit instruction. Do NOT automatically start implementing or fixing
-4. If a tool fails, report the error and suggest alternatives
-
+**RULES:**
+- ALWAYS use MCP tools for GitHub operations - never say "use GitHub web UI"
+- Information-only requests (get, show, list): display result and STOP. Do NOT start implementing
+- If a tool fails, report the error and suggest alternatives
 `
 }

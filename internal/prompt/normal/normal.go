@@ -15,9 +15,4 @@ STEP 2: Execute with comments
 STEP 3: Summary at the end
 - List all changes made
 
-[CODE NAVIGATION - ALWAYS USE]
-1. RepoMap → find file/function location
-2. LSP tools → lsp_definition, lsp_references
-3. search_code → only for keywords
-
 DO NOT skip these steps.`
