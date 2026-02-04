@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -197,15 +196,14 @@ func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, h
 
 	// previous_response_id が無効な場合のフォールバック
 	if resp.StatusCode == http.StatusBadRequest && p.lastResponseID != "" {
+		spinner.Stop()
 		// responseID をクリアしてリトライ
 		p.lastResponseID = ""
 		return p.chatWithResponses(ctx, systemPrompt, history, model)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		spinner.Stop()
-		return "", fmt.Errorf("API error %d: %s", resp.StatusCode, string(body))
+		return "", api.HandleHTTPError(resp, spinner, p.Name())
 	}
 
 	content, responseID, err := p.handleResponsesStreaming(ctx, resp, spinner)

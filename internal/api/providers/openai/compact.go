@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 
@@ -69,8 +68,7 @@ func (p *Provider) CompactHistory(ctx context.Context, input []api.InputItem, mo
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, api.SanitizeErrorMessage(body, resp.StatusCode)
+		return nil, api.HandleHTTPError(resp, nil, p.Name())
 	}
 
 	var compactResp CompactResponse

@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/cache"
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
@@ -138,7 +139,10 @@ func WebSearch(query string) (string, error) {
 
 	// ステータスコードチェック
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
+		if rateLimitErr := api.HandleRateLimit(resp); rateLimitErr != nil {
+			return "", rateLimitErr
+		}
+		return "", api.SanitizeErrorMessage(body, resp.StatusCode)
 	}
 
 	// JSON をパース
