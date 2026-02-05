@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -55,6 +56,12 @@ func DefaultConfig() *Config {
 			},
 			"groq": {
 				DefaultModel: "meta-llama/llama-4-scout-17b-16e-instruct",
+			},
+			"openrouter": {
+				DefaultModel: "anthropic/claude-opus-4.5",
+			},
+			"bedrock": {
+				DefaultModel: "global.anthropic.claude-opus-4-5-20251101-v1:0",
 			},
 		},
 		Compression: CompressionConfig{
@@ -422,7 +429,7 @@ func SaveConfig(cfg *Config) error {
 	}
 
 	// ヘッダーコメント追加
-	header := "# XELYON CLI 設定\n# Providers: deepseek, openai, gemini, claude, ollama, groq\n# 各プロバイダーのモデル設定は provider_models で管理されます\n\n"
+	header := fmt.Sprintf("# XELYON CLI 設定\n# Providers: %s\n# 各プロバイダーのモデル設定は provider_models で管理されます\n\n", strings.Join(GetDisplayProviders(), ", "))
 	fullData := []byte(header + string(data))
 
 	if err := os.WriteFile(configPath, fullData, 0600); err != nil {

@@ -88,6 +88,28 @@ func NewGeminiProvider(apiKey string) Provider {
 	return provider
 }
 
+// NewOpenRouterProvider は新しい OpenRouter Provider を作成（後方互換）
+func NewOpenRouterProvider(apiKey string) Provider {
+	factory, ok := getRegisteredProvider("openrouter")
+	if !ok {
+		return nil
+	}
+	provider, err := factory(apiKey)
+	if err != nil {
+		return nil
+	}
+	return provider
+}
+
+// NewBedrockProvider は新しい Bedrock Provider を作成（後方互換）
+func NewBedrockProvider() (Provider, error) {
+	factory, ok := getRegisteredProvider("bedrock")
+	if !ok {
+		return nil, fmt.Errorf("bedrock provider not registered")
+	}
+	return factory("")
+}
+
 // ChatWithTools はツール対応の会話を行う（ストリーミング）
 // Deprecated: 後方互換性のために残されています。Provider + Client を使用してください。
 func ChatWithTools(systemPrompt string, history []Message, model string) (string, error) {

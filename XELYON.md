@@ -9,7 +9,7 @@
 
 ## 概要
 
-Go 製 AI コーディングアシスタント CLI。6 LLM プロバイダー対応（DeepSeek, OpenAI, Gemini, Claude, Ollama, Groq）。
+Go 製 AI コーディングアシスタント CLI。8 LLM プロバイダー対応（DeepSeek, OpenAI, Gemini, Claude, Ollama, Groq, OpenRouter, Bedrock）。
 
 ## 技術スタック
 

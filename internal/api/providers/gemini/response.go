@@ -79,8 +79,10 @@ func (p *Provider) handleFunctionCallingResponse(body []byte, spinner *ui.Spinne
 		trimmed := strings.TrimSpace(text)
 		if strings.HasPrefix(trimmed, "{\"tool\"") || strings.HasPrefix(trimmed, "{ \"tool\"") {
 			if debug {
-				fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Skipping text (tool JSON): %s\n", trimmed[:min(len(trimmed), 50)])
+				fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Found tool JSON in text part: %s\n", trimmed[:min(len(trimmed), 50)])
 			}
+			// テキストモードで返ってきたJSONもフルレスポンスに含める（後の工程でパースされる）
+			fullResponse.WriteString(text)
 			continue
 		}
 		fmt.Print(text)
@@ -101,8 +103,9 @@ func (p *Provider) handleFunctionCallingResponse(body []byte, spinner *ui.Spinne
 		fullResponse.WriteString(toolJSON)
 	}
 
-	// テキストもFunctionCallもない場合のみエラー
-	if fullResponse.Len() == 0 && len(functionCalls) == 0 {
+	// コンテンツが全くない場合のみエラー
+	// fullResponse に text か tool JSON が書き込まれていればOK
+	if fullResponse.Len() == 0 {
 		if debug {
 			fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] No content: textParts=%d, functionCalls=%d\n",
 				len(textParts), len(functionCalls))

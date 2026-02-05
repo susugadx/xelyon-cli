@@ -84,16 +84,25 @@ func createProvider(providerName string) (api.Provider, error) {
 
 	cfg, ok := providerConfigs[name]
 	if !ok {
-		return nil, fmt.Errorf("unknown provider: %s (supported: deepseek, openai, gemini, claude, ollama, groq)", providerName)
+		// レジストリベースのプロバイダー（bedrock, openrouter等）にフォールバック
+		// 各プロバイダーのファクトリ関数が認証チェックを行う
+		debugLog("createProvider: %s not in providerConfigs, falling back to api.NewProvider", name)
+		return api.NewProvider(name)
 	}
 
-	// APIキーが不要なプロバイダー（Ollama）
+	// APIキーが不要なプロバイダー（Ollama, Bedrock）
 	if cfg.envKey == "" {
-		value := os.Getenv("OLLAMA_BASE_URL")
-		if value == "" {
-			value = cfg.defaultValue
+		value := cfg.defaultValue
+		if name == "ollama" {
+			if envURL := os.Getenv("OLLAMA_BASE_URL"); envURL != "" {
+				value = envURL
+			}
 		}
-		return cfg.constructor(value), nil
+		provider := cfg.constructor(value)
+		if provider == nil {
+			return nil, fmt.Errorf("failed to create %s provider", providerName)
+		}
+		return provider, nil
 	}
 
 	// APIキーが必要なプロバイダー
@@ -134,7 +143,7 @@ func getProviderByName(providerName string) api.Provider {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		if strings.Contains(err.Error(), "unknown provider") {
-			fmt.Fprintln(os.Stderr, "Supported providers: deepseek, openai, gemini, claude, ollama, groq")
+			fmt.Fprintf(os.Stderr, "Supported providers: %s\n", strings.Join(config.GetDisplayProviders(), ", "))
 		}
 		os.Exit(1)
 	}

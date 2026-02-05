@@ -15,6 +15,13 @@ var modelTokenLimits = map[string]int{
 	"claude-3-sonnet-20240229":   200000,
 	"claude-3-haiku-20240307":    200000,
 
+	// === Bedrock (Claude models) ===
+	"global.anthropic.claude-opus-4-5-20251101-v1:0":   200000,
+	"us.anthropic.claude-sonnet-4-20250514-v1:0":       200000,
+	"us.anthropic.claude-haiku-4-5-20251001-v1:0":      200000,
+	"anthropic.claude-opus-4-20250514-v1:0":            200000,
+	"global.anthropic.claude-sonnet-4-5-20250929-v1:0": 200000,
+
 	// === OpenAI ===
 	"gpt-4o":              128000,
 	"gpt-4o-mini":         128000,
@@ -81,6 +88,9 @@ func GetModelTokenLimit(model string) int {
 		prefix string
 		limit  int
 	}{
+		{"us.anthropic.claude", 200000},
+		{"anthropic.claude", 200000},
+		{"global.anthropic.claude", 200000},
 		{"claude-", 200000},
 		{"gpt-4o", 128000},
 		{"gpt-4", 8192},

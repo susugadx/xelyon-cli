@@ -27,7 +27,7 @@ var Sections = map[string]SectionInfo{
 			"default_provider": "select",
 		},
 		SelectOpts: map[string][]string{
-			"default_provider": {"deepseek", "claude", "openai", "gemini", "groq", "ollama"},
+			"default_provider": {"deepseek", "claude", "openai", "gemini", "groq", "ollama", "openrouter", "bedrock"},
 		},
 	},
 	"default_model": {

@@ -17,6 +17,20 @@ var ValidProviders = []string{
 	"anthropic", // claudeのエイリアス
 	"ollama",
 	"groq",
+	"openrouter",
+	"bedrock",
+}
+
+// GetDisplayProviders は表示用のプロバイダーリスト（エイリアスを除く）を返す
+func GetDisplayProviders() []string {
+	var display []string
+	for _, p := range ValidProviders {
+		if p == "anthropic" {
+			continue
+		}
+		display = append(display, p)
+	}
+	return display
 }
 
 // ValidationIssue はバリデーション問題を表す
@@ -184,6 +198,8 @@ func suggestProvider(invalid string) string {
 		"llama":     "ollama",
 		"mistral":   "ollama",
 		"qwen":      "ollama",
+		"aws":       "bedrock",
+		"amazon":    "bedrock",
 	}
 	if suggestion, ok := typoMap[lower]; ok {
 		return suggestion

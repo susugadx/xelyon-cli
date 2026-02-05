@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/susugadx/xelyon-cli/internal/agent"
@@ -18,6 +19,9 @@ import (
 	_ "github.com/susugadx/xelyon-cli/internal/api/providers/groq"
 	_ "github.com/susugadx/xelyon-cli/internal/api/providers/ollama"
 	_ "github.com/susugadx/xelyon-cli/internal/api/providers/openai"
+
+	_ "github.com/susugadx/xelyon-cli/internal/api/providers/bedrock"
+	_ "github.com/susugadx/xelyon-cli/internal/api/providers/openrouter"
 )
 
 var (
@@ -193,7 +197,8 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&output, "output", "o", "", "Output file path")
 
 	// 新規: プロバイダー/モデル指定フラグ
-	rootCmd.Flags().StringVarP(&providerFlag, "provider", "p", "", "Specify LLM provider (deepseek, openai, gemini, claude, ollama, groq)")
+	providerHelp := fmt.Sprintf("Specify LLM provider (%s)", strings.Join(config.GetDisplayProviders(), ", "))
+	rootCmd.Flags().StringVarP(&providerFlag, "provider", "p", "", providerHelp)
 	rootCmd.Flags().StringVarP(&modelFlag, "model", "m", "", "Specify model name (e.g., gpt-4o, gemini-2.0-flash-exp)")
 
 	// 新規: --resume フラグ

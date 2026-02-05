@@ -123,11 +123,18 @@ func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, h
 
 	reqBody := ResponsesRequest{
 		Model:                model,
-		Instructions:         systemPrompt,
 		Stream:               true,
 		Tools:                GetResponsesToolDefinitions(p.mcpTools), // Function Calling
 		PromptCacheKey:       "xelyon",
 		PromptCacheRetention: "24h",
+	}
+
+	// システムプロンプトを developer メッセージとして Input の先頭に追加
+	// （Instructions フィールドだと Prompt Cache が効かないため）
+	developerMsg := InputItem{
+		Type:    "message",
+		Role:    "developer",
+		Content: systemPrompt,
 	}
 
 	// previous_response_id がある場合はキャッシュを活用
@@ -138,9 +145,11 @@ func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, h
 		if lastMsg.Role == "tool" {
 			// Function Calling 結果: previous_response_id を使わず full history
 			// （function_call + function_call_output の対応が必要）
-			reqBody.Input = convertHistoryToResponsesInput(history)
+			historyInput := convertHistoryToResponsesInput(history)
+			reqBody.Input = append([]InputItem{developerMsg}, historyInput...)
 		} else {
 			// 通常メッセージ: previous_response_id で最新メッセージのみ
+			// NOTE: previous_response_id 使用時は developer メッセージ不要（前回と同じなので）
 			reqBody.PreviousResponseID = p.lastResponseID
 			reqBody.Input = []InputItem{{
 				Type:    "message",
@@ -150,7 +159,8 @@ func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, h
 		}
 	} else {
 		// 初回または responseID がない場合は履歴全体を送信
-		reqBody.Input = convertHistoryToResponsesInput(history)
+		historyInput := convertHistoryToResponsesInput(history)
+		reqBody.Input = append([]InputItem{developerMsg}, historyInput...)
 	}
 
 	// Extended Thinking 適用
@@ -407,8 +417,16 @@ func (p *Provider) chatWithImageResponses(ctx context.Context, systemPrompt stri
 		apiURL = defaultOpenAIResponsesURL
 	}
 
-	// 入力を構築（履歴を変換）
-	input := convertHistoryToResponsesInput(history)
+	// システムプロンプトを developer メッセージとして Input の先頭に追加
+	// （Instructions フィールドだと Prompt Cache が効かないため）
+	developerMsg := InputItem{
+		Type:    "message",
+		Role:    "developer",
+		Content: systemPrompt,
+	}
+
+	// 入力を構築（developer + 履歴）
+	input := append([]InputItem{developerMsg}, convertHistoryToResponsesInput(history)...)
 
 	// 画像付きユーザーメッセージを追加
 	dataURL := fmt.Sprintf("data:%s;base64,%s", image.MediaType, image.Base64)
@@ -431,7 +449,6 @@ func (p *Provider) chatWithImageResponses(ctx context.Context, systemPrompt stri
 	reqBody := ResponsesRequest{
 		Model:                model,
 		Input:                input,
-		Instructions:         systemPrompt,
 		Stream:               true,
 		Tools:                GetResponsesToolDefinitions(p.mcpTools), // Function Calling
 		PromptCacheKey:       "xelyon",

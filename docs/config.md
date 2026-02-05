@@ -61,6 +61,8 @@ default_provider: deepseek
 default_model: deepseek-chat
 # プロバイダーごとのモデル設定
 provider_models:
+    bedrock:
+        default_model: global.anthropic.claude-opus-4-5-20251101-v1:0
     claude:
         default_model: claude-sonnet-4-5-20250514
     deepseek:
@@ -73,6 +75,8 @@ provider_models:
         default_model: qwen2.5-coder:7b
     openai:
         default_model: gpt-5.2
+    openrouter:
+        default_model: anthropic/claude-opus-4.5
 general:
     language: ja
 

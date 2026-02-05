@@ -12,6 +12,8 @@ import (
 	_ "github.com/susugadx/xelyon-cli/internal/api/providers/groq"
 	_ "github.com/susugadx/xelyon-cli/internal/api/providers/ollama"
 	_ "github.com/susugadx/xelyon-cli/internal/api/providers/openai"
+
+	_ "github.com/susugadx/xelyon-cli/internal/api/providers/bedrock"
 )
 
 func TestNewProvider_MissingAPIKey(t *testing.T) {

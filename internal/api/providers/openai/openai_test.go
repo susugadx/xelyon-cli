@@ -358,11 +358,27 @@ func TestOpenAIProvider_ResponsesAPI_RequestFormat(t *testing.T) {
 	if receivedReq.Model != "gpt-5.2-codex" {
 		t.Errorf("Model = %q, want 'gpt-5.2-codex'", receivedReq.Model)
 	}
-	if receivedReq.Instructions != "You are helpful" {
-		t.Errorf("Instructions = %q, want 'You are helpful'", receivedReq.Instructions)
+	// Instructions は空（developer メッセージとして Input に含まれる）
+	if receivedReq.Instructions != "" {
+		t.Errorf("Instructions = %q, want empty (should be in Input as developer message)", receivedReq.Instructions)
 	}
 	if !receivedReq.Stream {
 		t.Error("Stream should be true")
+	}
+	// Input の先頭が developer メッセージであることを確認
+	inputItems, ok := receivedReq.Input.([]interface{})
+	if !ok || len(inputItems) == 0 {
+		t.Fatal("Input should be non-empty array")
+	}
+	firstItem, ok := inputItems[0].(map[string]interface{})
+	if !ok {
+		t.Fatal("First input item should be a map")
+	}
+	if firstItem["role"] != "developer" {
+		t.Errorf("First input item role = %q, want 'developer'", firstItem["role"])
+	}
+	if firstItem["content"] != "You are helpful" {
+		t.Errorf("First input item content = %q, want 'You are helpful'", firstItem["content"])
 	}
 }
 

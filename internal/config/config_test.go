@@ -30,7 +30,7 @@ func TestDefaultConfig(t *testing.T) {
 		t.Fatal("ProviderModels is nil")
 	}
 
-	expectedProviders := []string{"deepseek", "openai", "gemini", "claude", "ollama", "groq"}
+	expectedProviders := []string{"deepseek", "openai", "gemini", "claude", "ollama", "groq", "openrouter", "bedrock"}
 	for _, provider := range expectedProviders {
 		if _, ok := cfg.ProviderModels[provider]; !ok {
 			t.Errorf("ProviderModels missing provider: %s", provider)

@@ -12,6 +12,8 @@ XELYON CLIは複数のLLMプロバイダーに対応しています。
 | Claude | ✅ | `ANTHROPIC_API_KEY` | https://console.anthropic.com |
 | Groq | ❌ | `GROQ_API_KEY` | https://console.groq.com |
 | Ollama | ❌ | - | https://ollama.com |
+| OpenRouter | ✅ | `OPENROUTER_API_KEY` | https://openrouter.ai |
+| Bedrock | ✅ | `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` | https://aws.amazon.com/bedrock |
 
 ## セットアップ
 
@@ -141,6 +143,55 @@ xelyon --provider ollama --model llama3.1:8b
 - 無料
 - 画像入力非対応
 
+### 7. OpenRouter
+
+```bash
+# API キー取得: https://openrouter.ai
+export OPENROUTER_API_KEY=sk-or-...
+
+# 使用例
+xelyon --provider openrouter --model anthropic/claude-opus-4.5
+```
+
+**特徴:**
+- 複数プロバイダーのモデルを1つのAPIキーで利用可能
+- OpenAI互換API
+- 画像入力対応（モデルによる）
+
+### 8. Bedrock (AWS)
+
+```bash
+# AWS 認証情報を設定（以下のいずれか）
+# 方法1: 環境変数
+export AWS_ACCESS_KEY_ID=AKIA...
+export AWS_SECRET_ACCESS_KEY=...
+export AWS_REGION=us-east-1
+
+# 方法2: AWS CLI プロファイル（~/.aws/credentials）
+aws configure
+
+# 方法3: IAM ロール（EC2/ECS上で自動）
+
+# 使用例
+xelyon --provider bedrock --model global.anthropic.claude-opus-4-5-20251101-v1:0
+xelyon --provider bedrock --model us.anthropic.claude-sonnet-4-20250514-v1:0
+xelyon --provider bedrock --model us.anthropic.claude-haiku-4-5-20251001-v1:0
+```
+
+**特徴:**
+- AWS フルマネージドサービス（中間マージンなし）
+- Anthropic ネイティブのプロンプトキャッシュ対応
+- IAM ロールによるセキュアな認証
+- Extended Thinking 対応
+- 画像入力対応
+
+**利用可能なモデル ID:**
+| モデル | Bedrock モデル ID |
+|--------|------------------|
+| Claude Opus 4.5 | `global.anthropic.claude-opus-4-5-20251101-v1:0` |
+| Claude Sonnet 4 | `us.anthropic.claude-sonnet-4-20250514-v1:0` |
+| Claude Haiku 4.5 | `us.anthropic.claude-haiku-4-5-20251001-v1:0` |
+
 ## モデル指定方法
 
 ### 1. コマンドラインフラグ（最優先）
@@ -176,6 +227,10 @@ provider_models:
     default_model: qwen2.5-coder:7b
   groq:
     default_model: meta-llama/llama-4-scout-17b-16e-instruct
+  openrouter:
+    default_model: anthropic/claude-opus-4.5
+  bedrock:
+    default_model: global.anthropic.claude-opus-4-5-20251101-v1:0
 ```
 
 ### 4. セッション中の切り替え（`/use`コマンド）
@@ -206,6 +261,9 @@ xelyon
 - **GPT-4V**: 高品質な画像理解
 - **Gemini**: マルチモーダル対応
 - **Claude**: 画像+長文の組み合わせ
+
+### AWS インフラとの統合
+- **Bedrock**: IAMロール認証、プロンプトキャッシュ、中間マージンなし
 
 ### プライバシー重視
 - **Ollama**: 完全ローカル実行

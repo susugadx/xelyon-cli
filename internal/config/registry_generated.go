@@ -115,7 +115,7 @@ var FieldTypeMap = map[string]ConfigFieldType{
 // SelectOptions は選択型フィールドの選択肢
 var SelectOptions = map[string][]string{
 	"bash.safety_level":       {"strict", "moderate", "permissive"},
-	"default_provider":        {"deepseek", "claude", "openai", "gemini", "groq", "ollama"},
+	"default_provider":        {"deepseek", "claude", "openai", "gemini", "groq", "ollama", "openrouter", "bedrock"},
 	"plan_mode.confirm_level": {"all", "dangerous", "none"},
 	"thinking.level":          {"low", "medium", "high", "xhigh"},
 }

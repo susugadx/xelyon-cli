@@ -54,6 +54,11 @@ func getAPIKeyForProvider(providerName string) string {
 		return baseURL
 	case "groq":
 		return os.Getenv("GROQ_API_KEY")
+	case "openrouter":
+		return os.Getenv("OPENROUTER_API_KEY")
+	case "bedrock":
+		// Bedrock は AWS 認証チェーンを使用するため、常にダミー値を返す
+		return "aws-credentials"
 	case "serper":
 		return os.Getenv("SERPER_API_KEY")
 	default:
@@ -124,7 +129,7 @@ type UsageReporter interface {
 // SupportsImages はプロバイダー名から画像対応を判定
 func SupportsImages(providerName string) bool {
 	switch strings.ToLower(providerName) {
-	case "claude", "anthropic", "openai", "gemini":
+	case "claude", "anthropic", "openai", "gemini", "bedrock":
 		return true
 	case "deepseek", "ollama", "groq":
 		return false

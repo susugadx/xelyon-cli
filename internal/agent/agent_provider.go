@@ -43,6 +43,10 @@ func (a *Agent) SwitchProvider(providerName string) error {
 			newModel = "qwen2.5-coder:7b"
 		case "groq":
 			newModel = "meta-llama/llama-4-scout-17b-16e-instruct"
+		case "openrouter":
+			newModel = "anthropic/claude-opus-4.5"
+		case "bedrock":
+			newModel = "global.anthropic.claude-opus-4-5-20251101-v1:0"
 		default:
 			newModel = "default-model"
 		}
@@ -131,8 +135,12 @@ func IsAPIKeyAvailable(provider string) bool {
 		return os.Getenv("GEMINI_API_KEY") != ""
 	case "groq":
 		return os.Getenv("GROQ_API_KEY") != ""
+	case "openrouter":
+		return os.Getenv("OPENROUTER_API_KEY") != ""
 	case "ollama":
 		return true // Ollama はローカルなのでキー不要
+	case "bedrock":
+		return true // AWS 認証チェーン（IAM ロール等）を許可
 	default:
 		return false
 	}
