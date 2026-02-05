@@ -136,6 +136,7 @@ xelyon --provider groq --model meta-llama/llama-4-scout-17b-16e-instruct
 - 超高速推論
 - Llama系モデル
 - 画像入力非対応
+- プロンプトキャッシュ対応（自動、50% OFF、一部モデルのみ）
 
 ### 6. Ollama
 
@@ -268,7 +269,7 @@ xelyon
 | **DeepSeek** | 自動 | 安定 | 読み取り割引あり | 設定不要 |
 | **Gemini** | 自動（暗黙的） | 安定 | - | Gemini 2.5 系で対応 |
 | **OpenRouter** | プロバイダー依存 | - | - | Anthropic モデル: 手動 `cache_control` 必要 |
-| **Groq** | - | - | - | 未対応 |
+| **Groq** | 自動（プレフィックス） | 安定 | 読み取り 50% OFF | 一部モデルのみ（GPT-OSS, Kimi K2） |
 | **Ollama** | - | - | - | ローカル実行のため不要 |
 
 ### コスト効率の良い選択肢

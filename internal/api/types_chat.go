@@ -33,10 +33,16 @@ type StreamChoice struct {
 	FinishReason string `json:"finish_reason,omitempty"` // "stop", "tool_calls" など
 }
 
+// PromptTokensDetails はプロンプトトークンの詳細情報（キャッシュ等）
+type PromptTokensDetails struct {
+	CachedTokens int `json:"cached_tokens,omitempty"` // キャッシュから読み取ったトークン数
+}
+
 // StreamUsageInfo はストリーミングレスポンスの使用量情報
 type StreamUsageInfo struct {
-	PromptTokens     int `json:"prompt_tokens"`
-	CompletionTokens int `json:"completion_tokens"`
+	PromptTokens        int                  `json:"prompt_tokens"`
+	CompletionTokens    int                  `json:"completion_tokens"`
+	PromptTokensDetails *PromptTokensDetails `json:"prompt_tokens_details,omitempty"` // キャッシュ詳細（Groq, OpenAI等）
 }
 
 // StreamResponse はストリームレスポンス

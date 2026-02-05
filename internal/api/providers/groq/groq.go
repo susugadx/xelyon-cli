@@ -182,9 +182,14 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 
 			// Usage情報を追跡（最終チャンクに含まれる）
 			if streamResp.Usage != nil {
+				cachedTokens := 0
+				if streamResp.Usage.PromptTokensDetails != nil {
+					cachedTokens = streamResp.Usage.PromptTokensDetails.CachedTokens
+				}
 				lastUsage = &api.Usage{
-					InputTokens:  streamResp.Usage.PromptTokens,
-					OutputTokens: streamResp.Usage.CompletionTokens,
+					InputTokens:       streamResp.Usage.PromptTokens,
+					OutputTokens:      streamResp.Usage.CompletionTokens,
+					CachedInputTokens: cachedTokens,
 				}
 			}
 
