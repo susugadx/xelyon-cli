@@ -51,6 +51,21 @@ xelyon --provider openai --model gpt-5.2-codex
 - 高品質な回答
 - GPT-4Vで画像入力対応
 - 豊富なモデルラインナップ
+- **注意: 高コスト**（GPT-5.2: 入力 $1.75/1M, 出力 $14/1M）
+
+#### プロンプトキャッシュに関する注意
+
+XELYON は Responses API の `prompt_cache_key`（ルーティングヒント）と `prompt_cache_retention: "24h"` を送信していますが、GPT-5 系モデルではキャッシュが**不安定**です。
+
+- **GPT-5-nano / GPT-5-mini**: ほぼ機能せず（`cached_tokens=0` が頻発）
+- **GPT-5 / GPT-5.1 / GPT-5.2**: 不安定（ヒット率が低い場合あり）
+- **GPT-4o / o3-mini**: 正常動作
+
+`prompt_cache_key` はキャッシュ制御ではなく、同じ GPU にルーティングするための**ヒント**です。キャッシュ自体は OpenAI 側で自動的にプレフィックスマッチング（1024 トークン以上）で行われます。
+
+キャッシュヒット時は入力トークン 90% 割引ですが、現時点では GPT-5 系での効果は限定的です。コスト重視の場合は DeepSeek や Bedrock（Claude）の利用を推奨します。
+
+> 参考: [OpenAI Community - Caching is borked for GPT-5 models](https://community.openai.com/t/caching-is-borked-for-gpt-5-models/1359574)
 
 #### Responses API / Codex モデル
 
@@ -242,6 +257,28 @@ xelyon
 > /use deepseek
 > 質問2
 ```
+
+## プロンプトキャッシュ対応状況
+
+| プロバイダー | 方式 | 状態 | 割引率 | 備考 |
+|------------|------|------|-------|------|
+| **Claude** | 明示的（`cache_control`） | 安定 | 読み取り 90% OFF | `prompt_cache.enabled: true` で有効 |
+| **Bedrock** | 明示的（`cache_control`） | 安定 | 読み取り 90% OFF | Claude と同じ仕組み |
+| **OpenAI** | 自動（プレフィックス） | **不安定**（GPT-5系） | 読み取り 90% OFF | `prompt_cache_key` はルーティングヒントのみ |
+| **DeepSeek** | 自動 | 安定 | 読み取り割引あり | 設定不要 |
+| **Gemini** | 自動（暗黙的） | 安定 | - | Gemini 2.5 系で対応 |
+| **OpenRouter** | プロバイダー依存 | - | - | Anthropic モデル: 手動 `cache_control` 必要 |
+| **Groq** | - | - | - | 未対応 |
+| **Ollama** | - | - | - | ローカル実行のため不要 |
+
+### コスト効率の良い選択肢
+
+長い会話でのコスト効率を重視する場合:
+
+1. **DeepSeek** - 元々低コスト + キャッシュ安定
+2. **Bedrock（Claude）** - プロンプトキャッシュが確実に効く + AWS 直接契約で中間マージンなし
+3. **Claude（直接）** - プロンプトキャッシュが確実に効く
+4. **OpenAI** - 高コスト + キャッシュ不安定のため、コスト重視なら非推奨
 
 ## プロバイダー選択のヒント
 
