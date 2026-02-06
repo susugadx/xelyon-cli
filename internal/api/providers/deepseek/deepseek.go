@@ -1,7 +1,6 @@
 package deepseek
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -31,33 +30,26 @@ const defaultDeepSeekURL = "https://api.deepseek.com/chat/completions"
 
 // Provider はDeepSeek APIのプロバイダー実装
 type Provider struct {
-	apiKey        string
-	apiURL        string
-	httpClient    *http.Client
+	api.BaseProvider
 	mcpTools      []api.OpenAIToolFunction // MCP ツール定義（Function Calling用）
 	usageCallback api.UsageCallback        // トークン使用量コールバック
 }
 
 // New は新しいProviderを作成
 func New(apiKey string) *Provider {
-	// 環境変数からURLをオーバーライド可能
-	apiURL := os.Getenv("DEEPSEEK_API_URL")
-	if apiURL == "" {
-		apiURL = defaultDeepSeekURL
-	}
-
 	return &Provider{
-		apiKey: apiKey,
-		apiURL: apiURL,
-		httpClient: &http.Client{
-			Timeout: config.DefaultHTTPTimeout,
-		},
+		BaseProvider: api.NewBaseProvider("DeepSeek", apiKey, defaultDeepSeekURL, "DEEPSEEK_API_URL"),
 	}
 }
 
 // Name はプロバイダー名を返す
 func (p *Provider) Name() string {
 	return "DeepSeek"
+}
+
+// APIURL はAPIのURLを返す
+func (p *Provider) APIURL() string {
+	return p.BaseProvider.APIURL
 }
 
 // SupportsImages は画像入力対応を返す
@@ -105,18 +97,11 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		reqBody.ToolChoice = "auto"
 	}
 
-	jsonBody, err := json.Marshal(reqBody)
+	req, err := p.CreateAPIRequest(ctx, reqBody)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal request: %w", err)
+		return "", err
 	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", p.apiURL, bytes.NewBuffer(jsonBody))
-	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+p.apiKey)
+	p.SetBearerAuth(req)
 
 	// スピナー開始
 	spinnerSuffix := ""
@@ -126,7 +111,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	spinner := api.StartThinkingSpinner(false, spinnerSuffix)
 
 	// 再利用可能なHTTPクライアントを使用
-	resp, err := p.httpClient.Do(req)
+	resp, err := p.ExecuteRequest(req)
 	if err != nil {
 		spinner.Stop()
 		return "", fmt.Errorf("DeepSeek API request failed: %w", err)
@@ -299,11 +284,6 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	}
 	history = append(history, api.Message{Role: "user", Content: userMessage})
 	return p.ChatWithTools(ctx, systemPrompt, history, model)
-}
-
-// APIURL はテスト用にAPIURLを公開
-func (p *Provider) APIURL() string {
-	return p.apiURL
 }
 
 // SetMCPTools は MCP ツール定義を設定する（Function Calling用）
