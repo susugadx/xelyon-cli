@@ -27,12 +27,22 @@ func TestSupervisor_Monitor_RecordsCompletedAndDetectsDuplicate(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	ready := make(chan struct{})
 	go func() {
-		close(ready)
 		s.runMonitor(ctx, p)
 	}()
-	<-ready
+
+	// runMonitor が Subscribe を完了するまで待つ
+	deadlineSubs := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadlineSubs) {
+		s.sharedContext.subMu.RLock()
+		subs := s.sharedContext.subscribers["step_completed"]
+		ok := len(subs) > 0
+		s.sharedContext.subMu.RUnlock()
+		if ok {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
 
 	s.sharedContext.MarkStepCompleted(1)
 	s.sharedContext.Publish(WorkerMessage{FromWorker: 1, Topic: "step_completed", StepID: 1, Content: "done"})
