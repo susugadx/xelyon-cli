@@ -207,13 +207,13 @@ func TestProvider_ChatWithTools_RateLimit(t *testing.T) {
 
 func TestProvider_ChatWithImage_NoImage(t *testing.T) {
 	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "text/event-stream")
-			resp := GeminiFunctionResponse{
-				Candidates: []GeminiFunctionCandidate{{Content: GeminiFunctionContent{Parts: []GeminiFunctionPart{{Text: "No image response"}}}}},
-			}
-			jsonBytes, _ := json.Marshal(resp)
-			fmt.Fprintf(w, "data: %s\n\n", string(jsonBytes))
-		})
+		w.Header().Set("Content-Type", "text/event-stream")
+		resp := GeminiFunctionResponse{
+			Candidates: []GeminiFunctionCandidate{{Content: GeminiFunctionContent{Parts: []GeminiFunctionPart{{Text: "No image response"}}}}},
+		}
+		jsonBytes, _ := json.Marshal(resp)
+		fmt.Fprintf(w, "data: %s\n\n", string(jsonBytes))
+	})
 
 	originalURL := os.Getenv("GEMINI_API_URL")
 	defer os.Setenv("GEMINI_API_URL", originalURL)
@@ -238,13 +238,13 @@ func TestProvider_ChatWithImage_WithImage(t *testing.T) {
 			t.Fatalf("Failed to decode request: %v", err)
 		}
 
-			w.Header().Set("Content-Type", "text/event-stream")
-			resp := GeminiFunctionResponse{
-				Candidates: []GeminiFunctionCandidate{{Content: GeminiFunctionContent{Parts: []GeminiFunctionPart{{Text: "Image analysis complete"}}}}},
-			}
-			jsonBytes, _ := json.Marshal(resp)
-			fmt.Fprintf(w, "data: %s\n\n", string(jsonBytes))
-		})
+		w.Header().Set("Content-Type", "text/event-stream")
+		resp := GeminiFunctionResponse{
+			Candidates: []GeminiFunctionCandidate{{Content: GeminiFunctionContent{Parts: []GeminiFunctionPart{{Text: "Image analysis complete"}}}}},
+		}
+		jsonBytes, _ := json.Marshal(resp)
+		fmt.Fprintf(w, "data: %s\n\n", string(jsonBytes))
+	})
 
 	originalURL := os.Getenv("GEMINI_API_URL")
 	defer os.Setenv("GEMINI_API_URL", originalURL)
