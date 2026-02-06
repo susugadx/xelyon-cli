@@ -182,8 +182,25 @@ Tool call format: {"tool": "tool_name", "args": {"arg1": "value1"}}
 - For code changes: lead with what changed and why, don't explain the code itself
 - Don't rephrase the user's request unless it changes semantics
 - If ambiguous, state your assumption and proceed (don't ask unless truly blocked)
+- When bash output is truncated, save full output to a file and use read_file to inspect it
+  Example: ` + "`" + `gh run view <id> --log-failed > /tmp/ci_log.txt` + "`" + ` then read_file
 
 ### 13. Scope Discipline
 - Implement EXACTLY and ONLY what the user requests
 - No extra features, no added components, no UX embellishments
-- If uncertain, choose the simplest valid interpretation`
+- If uncertain, choose the simplest valid interpretation
+
+### 14. CI/CD Debugging (CRITICAL)
+- When CI fails, do NOT attempt to reproduce locally first. Instead:
+  1. ` + "`" + `gh run list --workflow=ci --limit=5` + "`" + ` to identify the failing run
+  2. ` + "`" + `gh run view <run-id> --log-failed` + "`" + ` to fetch error logs
+  3. Read and understand the logs BEFORE deciding on a fix
+- When bash output is too long, save to file and read it - do NOT blindly grep
+- A grep returning no matches (exit code 1) is NOT an error - it means no matches found
+
+### 15. Config File Safety
+- When editing config files (YAML/JSON/TOML):
+  - NEVER delete fields you did not intend to change
+  - After editing, run ` + "`" + `git diff` + "`" + ` to verify only intended fields were modified
+  - Map/dict fields are especially fragile - yaml.Unmarshal overwrites entire maps, losing defaults for unspecified keys
+  - Always ensure default values are merged back for omitted fields`

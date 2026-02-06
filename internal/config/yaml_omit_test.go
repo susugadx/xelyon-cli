@@ -69,6 +69,67 @@ func TestYamlMarshalRepoMapEnabledFalse(t *testing.T) {
 	}
 }
 
+func TestApplyDefaults_MaxOutputTokensMerge(t *testing.T) {
+	// YAML に max_output_tokens がない場合でも、applyDefaults でデフォルト値が適用されること
+	yamlData := `
+provider_models:
+  claude:
+    default_model: claude-sonnet-4-5-20250514
+  bedrock:
+    default_model: global.anthropic.claude-opus-4-5-20251101-v1:0
+  gemini:
+    default_model: gemini-2.5-flash
+`
+	cfg := DefaultConfig()
+	if err := yaml.Unmarshal([]byte(yamlData), cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	// Unmarshal 直後は map が上書きされ、MaxOutputTokens が 0 になっている
+	if cfg.ProviderModels["claude"].MaxOutputTokens != 0 {
+		t.Error("before applyDefaults, MaxOutputTokens should be 0")
+	}
+
+	applyDefaults(cfg)
+
+	// applyDefaults 後はデフォルト値が復元されている
+	defaults := DefaultConfig()
+	tests := []struct {
+		provider string
+		expected int
+	}{
+		{"claude", defaults.ProviderModels["claude"].MaxOutputTokens},
+		{"bedrock", defaults.ProviderModels["bedrock"].MaxOutputTokens},
+		{"gemini", defaults.ProviderModels["gemini"].MaxOutputTokens},
+	}
+	for _, tt := range tests {
+		got := cfg.ProviderModels[tt.provider].MaxOutputTokens
+		if got != tt.expected {
+			t.Errorf("ProviderModels[%q].MaxOutputTokens = %d, want %d", tt.provider, got, tt.expected)
+		}
+	}
+}
+
+func TestApplyDefaults_MaxOutputTokensPreserved(t *testing.T) {
+	// YAML で明示的に max_output_tokens を設定した場合は上書きされないこと
+	yamlData := `
+provider_models:
+  claude:
+    default_model: claude-sonnet-4-5-20250514
+    max_output_tokens: 99999
+`
+	cfg := DefaultConfig()
+	if err := yaml.Unmarshal([]byte(yamlData), cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	applyDefaults(cfg)
+
+	if cfg.ProviderModels["claude"].MaxOutputTokens != 99999 {
+		t.Errorf("explicitly set MaxOutputTokens should be preserved, got %d", cfg.ProviderModels["claude"].MaxOutputTokens)
+	}
+}
+
 func TestYamlRoundTripPreservesFalse(t *testing.T) {
 	// false に設定して Save → Load しても false のままであること
 	cfg := DefaultConfig()

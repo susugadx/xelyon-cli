@@ -156,10 +156,8 @@ func ExecuteHTTPRequest(method, url, headers, body string, timeoutSec int) (stri
 		}
 	}
 
-	// ボディが長すぎる場合は切り詰め
-	if len(bodyStr) > 5000 {
-		bodyStr = bodyStr[:5000] + "\n... (truncated, total " + fmt.Sprint(len(result.Body)) + " bytes)"
-	}
+	// ボディが長すぎる場合は切り詰め（ファイル保存方式）
+	bodyStr = TruncateWithFile(bodyStr)
 
 	sb.WriteString(bodyStr)
 

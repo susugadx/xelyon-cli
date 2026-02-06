@@ -41,7 +41,7 @@ func DefaultConfig() *Config {
 		ProviderModels: map[string]ProviderModelConfig{
 			"deepseek": {
 				DefaultModel:    "deepseek-chat",
-				MaxOutputTokens: 8192,
+				MaxOutputTokens: 16384,
 			},
 			"openai": {
 				DefaultModel:    "gpt-5.2",
@@ -65,7 +65,7 @@ func DefaultConfig() *Config {
 			},
 			"openrouter": {
 				DefaultModel:    "anthropic/claude-opus-4.5",
-				MaxOutputTokens: 16384,
+				MaxOutputTokens: 32768,
 			},
 			"bedrock": {
 				DefaultModel:    "global.anthropic.claude-opus-4-5-20251101-v1:0",
@@ -321,15 +321,27 @@ func LoadConfig() (*Config, error) {
 
 // applyDefaults はデフォルト値を適用
 func applyDefaults(cfg *Config) {
+	defaults := DefaultConfig()
+
 	if cfg.DefaultProvider == "" {
 		cfg.DefaultProvider = "deepseek"
 	}
 	if cfg.ProviderModels == nil {
-		cfg.ProviderModels = DefaultConfig().ProviderModels
+		cfg.ProviderModels = defaults.ProviderModels
+	} else {
+		// ProviderModels の MaxOutputTokens が 0（未設定）の場合、デフォルト値を適用
+		// YAML で provider_models を設定すると map が上書きされ MaxOutputTokens が消えるため
+		for name, pm := range cfg.ProviderModels {
+			if pm.MaxOutputTokens == 0 {
+				if defaultPM, ok := defaults.ProviderModels[name]; ok {
+					pm.MaxOutputTokens = defaultPM.MaxOutputTokens
+					cfg.ProviderModels[name] = pm
+				}
+			}
+		}
 	}
 
 	// ネストされた構造体のデフォルト値を適用（YAMLで省略された場合）
-	defaults := DefaultConfig()
 	if cfg.LoopDetection.Threshold == 0 {
 		cfg.LoopDetection = defaults.LoopDetection
 	}

@@ -19,7 +19,7 @@ provider_models:
         max_output_tokens: 16384
     deepseek:
         default_model: deepseek-chat
-        max_output_tokens: 8192
+        max_output_tokens: 16384
     gemini:
         default_model: gemini-2.5-flash
         max_output_tokens: 65536
@@ -34,7 +34,7 @@ provider_models:
         max_output_tokens: 16384
     openrouter:
         default_model: anthropic/claude-opus-4.5
-        max_output_tokens: 16384
+        max_output_tokens: 32768
 general:
     language: ja
 

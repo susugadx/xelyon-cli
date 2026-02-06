@@ -151,9 +151,7 @@ IMPORTANT: Do NOT execute the previous command as-is.`, strings.TrimSpace(dec.Co
 		result = "(no output)"
 	}
 
-	if len(result) > config.OutputTruncateLen {
-		result = result[:config.OutputTruncateLen] + "\n... (truncated)"
-	}
+	result = TruncateWithFile(result)
 
 	return result
 }
@@ -255,9 +253,7 @@ IMPORTANT: Do NOT execute the previous command as-is.`, strings.TrimSpace(dec.Co
 		result = "(no output)"
 	}
 
-	if len(result) > config.OutputTruncateLen {
-		result = result[:config.OutputTruncateLen] + "\n... (truncated)"
-	}
+	result = TruncateWithFile(result)
 
 	return result
 }

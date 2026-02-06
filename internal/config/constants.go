@@ -21,9 +21,9 @@ const (
 
 // Output Display Limits
 const (
-	OutputTruncateLen   = 5000 // bash出力切り詰め長
-	MaxDiffDisplayLines = 15   // diff表示最大行数
-	MaxDiffIterations   = 20   // diff比較最大イテレーション
+	OutputTruncateLen   = 20000 // bash出力切り詰め長
+	MaxDiffDisplayLines = 15    // diff表示最大行数
+	MaxDiffIterations   = 20    // diff比較最大イテレーション
 )
 
 // Plan Execution Limits
