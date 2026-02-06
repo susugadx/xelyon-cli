@@ -38,6 +38,8 @@ var modelTokenLimits = map[string]int{
 	"gpt-5.2":             200000,
 
 	// === Gemini ===
+	"gemini-3-pro-preview":   1000000,
+	"gemini-3-flash-preview": 1000000,
 	"gemini-2.0-flash":       1000000,
 	"gemini-2.0-flash-exp":   1000000,
 	"gemini-2.5-flash":       1000000,
@@ -98,6 +100,7 @@ func GetModelTokenLimit(model string) int {
 		{"gpt-5", 200000},
 		{"o1", 200000},
 		{"o3", 200000},
+		{"gemini-3", 1000000},
 		{"gemini-2", 1000000},
 		{"gemini-1.5", 1000000},
 		{"gemini-pro", 32768},

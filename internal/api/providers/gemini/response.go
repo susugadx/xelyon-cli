@@ -54,7 +54,20 @@ func (p *Provider) handleFunctionCallingResponse(body []byte, spinner *ui.Spinne
 
 		candidate := response.Candidates[0]
 
-		for _, part := range candidate.Content.Parts {
+		for j, part := range candidate.Content.Parts {
+			// Gemini 3: thinking summary パートはスキップ（ユーザーに表示しない）
+			if part.Thought {
+				if debug {
+					fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Part %d: thinking summary (skipped)\n", j)
+				}
+				continue
+			}
+
+			// Gemini 3: thoughtSignature のデバッグログ
+			if part.ThoughtSignature != "" && debug {
+				fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Part %d: thoughtSignature found (%d chars)\n", j, len(part.ThoughtSignature))
+			}
+
 			// Function Call パートを収集
 			if part.FunctionCall != nil {
 				if debug {

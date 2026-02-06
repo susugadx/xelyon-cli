@@ -8,9 +8,11 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // getGeminiFunctionCallingURL は Function Calling 用の URL を生成
@@ -25,6 +27,8 @@ func getGeminiFunctionCallingURL(model string) string {
 
 // chatWithFunctionCalling は Function Calling API を使用してツールを呼び出す
 func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
+	debug := os.Getenv("XELYON_DEBUG_GEMINI") == "1"
+
 	// モデル名を設定（config優先、フォールバックはgemini-2.0-flash）
 	model = api.GetDefaultModel(model, "gemini", "gemini-2.0-flash")
 
@@ -63,12 +67,15 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 		Tools:    GetCombinedToolDefinitions(p.mcpTools),
 	}
 
-	// Extended Thinking 適用
-	if cfg.Thinking.Enabled {
-		reqBody.GenerationConfig = &GeminiGenerationConfig{
-			ThinkingConfig: &GeminiThinkingConfig{
-				ThinkingBudget: api.LevelToBudgetTokens(cfg.Thinking.Level),
-			},
+	// Thinking 設定（Gemini 3 vs 2.5 で自動分岐）
+	reqBody.GenerationConfig = getThinkingConfigForModel(model, cfg)
+
+	if debug && reqBody.GenerationConfig != nil && reqBody.GenerationConfig.ThinkingConfig != nil {
+		tc := reqBody.GenerationConfig.ThinkingConfig
+		if tc.ThinkingLevel != "" {
+			fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] thinkingLevel=%q (Gemini 3)\n", tc.ThinkingLevel)
+		} else {
+			fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] thinkingBudget=%d (Gemini 2.5)\n", tc.ThinkingBudget)
 		}
 	}
 
@@ -89,7 +96,22 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 	req.Header.Set("x-goog-api-key", p.apiKey)
 
 	// スピナー開始
-	spinner := api.StartThinkingSpinner(false, "Function Calling")
+	// Gemini 3 Flash (minimal) は "Thinking"、Pro または thinking.enabled=true は "Deep thinking"
+	var spinner *ui.Spinner
+	if isGemini3Model(model) {
+		isFlash := strings.Contains(model, "flash")
+		var msg string
+		if isFlash && !cfg.Thinking.Enabled {
+			msg = "Thinking"
+		} else {
+			msg = "Deep thinking"
+		}
+		spinner = ui.NewSpinner()
+		spinner.Start(msg)
+		ui.SetGlobalSpinner(spinner)
+	} else {
+		spinner = api.StartThinkingSpinner(false, "")
+	}
 
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
@@ -98,12 +120,21 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 	}
 	defer resp.Body.Close()
 
+	// レスポンスボディを読み込み（エラー/成功共通）
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		spinner.Stop()
+		return "", fmt.Errorf("gemini API error (status %d): unable to read response body - %v", resp.StatusCode, err)
+	}
+
 	if resp.StatusCode != 200 {
 		spinner.Stop()
-		// エラー時はボディを読み込む
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return "", fmt.Errorf("gemini API error (status %d): unable to read response body - %v", resp.StatusCode, err)
+		if debug {
+			bodyStr := string(body)
+			if len(bodyStr) > 500 {
+				bodyStr = bodyStr[:500] + "..."
+			}
+			fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Error response (status %d): %s\n", resp.StatusCode, bodyStr)
 		}
 		if rateLimitErr := api.HandleRateLimit(resp); rateLimitErr != nil {
 			return "", rateLimitErr
@@ -114,11 +145,12 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 		return "", api.SanitizeErrorMessage(body, resp.StatusCode)
 	}
 
-	// レスポンスボディを読み込み
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		spinner.Stop()
-		return "", fmt.Errorf("failed to read response body: %w", err)
+	if debug {
+		bodyStr := string(body)
+		if len(bodyStr) > 1000 {
+			bodyStr = bodyStr[:1000] + "..."
+		}
+		fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Response body (%d bytes): %s\n", len(body), bodyStr)
 	}
 
 	// Function Calling レスポンスを処理（非ストリーミング）

@@ -179,7 +179,7 @@ xelyon
 ### プロバイダー切り替え
 
 ```bash
-xelyon --provider gemini --model gemini-2.0-flash-exp
+xelyon --provider gemini --model gemini-2.5-flash
 
 # または対話中に
 > /use claude

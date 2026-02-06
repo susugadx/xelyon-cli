@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
@@ -81,6 +82,69 @@ func (p *Provider) IsFunctionCallingEnabled() bool {
 // SetUsageCallback は使用量レポートのコールバックを設定する
 func (p *Provider) SetUsageCallback(callback api.UsageCallback) {
 	p.usageCallback = callback
+}
+
+// isGemini3Model は Gemini 3 モデルかどうかを判定
+func isGemini3Model(model string) bool {
+	return strings.Contains(model, "gemini-3")
+}
+
+// getThinkingConfigForModel はモデルに応じた ThinkingConfig を返す
+// Gemini 3: thinkingLevel（常時ON、デフォルトは Flash="minimal", Pro="low" でlatency最小化）
+// Gemini 2.5: thinkingBudget（thinking.enabled=true のときのみ）
+func getThinkingConfigForModel(model string, cfg *config.Config) *GeminiGenerationConfig {
+	if isGemini3Model(model) {
+		// Gemini 3: thinking は無効化不可
+		// Flash は "minimal" が使える（最も latency が低い）
+		// Pro は "low" が最小
+		isFlash := strings.Contains(model, "flash")
+		var thinkingLevel string
+		if cfg.Thinking.Enabled {
+			thinkingLevel = levelToThinkingLevel(cfg.Thinking.Level, model)
+		} else {
+			if isFlash {
+				thinkingLevel = "minimal"
+			} else {
+				thinkingLevel = "low"
+			}
+		}
+		return &GeminiGenerationConfig{
+			ThinkingConfig: &GeminiThinkingConfig{
+				ThinkingLevel: thinkingLevel,
+			},
+		}
+	}
+
+	// Gemini 2.5 以前: thinking.enabled=true のときのみ thinkingBudget を送信
+	if cfg.Thinking.Enabled {
+		return &GeminiGenerationConfig{
+			ThinkingConfig: &GeminiThinkingConfig{
+				ThinkingBudget: api.LevelToBudgetTokens(cfg.Thinking.Level),
+			},
+		}
+	}
+
+	return nil
+}
+
+// levelToThinkingLevel は thinking level を Gemini 3 の thinkingLevel 文字列に変換
+// Gemini 3 Pro:   "low", "high" のみ
+// Gemini 3 Flash: "minimal", "low", "medium", "high"
+func levelToThinkingLevel(level string, model string) string {
+	isFlash := strings.Contains(model, "flash")
+	switch level {
+	case "low":
+		return "low"
+	case "medium":
+		if isFlash {
+			return "medium"
+		}
+		return "low" // Pro は medium 非対応
+	case "high", "xhigh":
+		return "high"
+	default:
+		return "low"
+	}
 }
 
 // ChatWithTools は Provider interface の実装（context対応）

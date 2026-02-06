@@ -96,15 +96,36 @@ xelyon --provider openai --model gpt-5.2-codex
 export GEMINI_API_KEY=...
 
 # 使用例
-xelyon --provider gemini --model gemini-2.0-flash-exp
+xelyon --provider gemini --model gemini-3-pro-preview
+xelyon --provider gemini --model gemini-3-flash-preview
 xelyon --provider gemini --model gemini-2.5-flash
-xelyon --provider gemini --model gemini-pro
+xelyon --provider gemini --model gemini-2.0-flash-exp
 ```
 
 **特徴:**
-- 長いコンテキスト対応
+- 長いコンテキスト対応（1M トークン）
 - 画像入力対応
 - 無料枠あり
+
+#### Gemini 3 モデル（thinking 対応）
+
+Gemini 3 Pro / Flash は **thinking（推論）が常時 ON** です。XELYON では自動的に `thinkingLevel` パラメータを送信します。
+
+**デフォルト動作:**
+- `thinking.enabled: false`（デフォルト）→ Flash: `"minimal"` / Pro: `"low"`（latency 最小化）
+- `thinking.enabled: true` → config の `thinking.level` に応じて変換
+
+**対応 thinkingLevel:**
+| Level | Gemini 3 Pro | Gemini 3 Flash |
+|-------|-------------|----------------|
+| `minimal` | ❌ | ✅（デフォルト） |
+| `low` | ✅（デフォルト） | ✅ |
+| `medium` | ❌（low にフォールバック） | ✅ |
+| `high` | ✅ | ✅ |
+
+**Thought Signatures:** Gemini 3 の Function Calling レスポンスには `thoughtSignature`（暗号化された思考プロセス）が含まれます。XELYON はこれをパース・ログ出力しますが、テキストベースの履歴管理のため自動的に処理されます。
+
+**注意:** Gemini 3 Pro の Function Calling には既知のバグ（空レスポンス）が報告されています。問題が発生する場合は `XELYON_DEBUG_GEMINI=1` で詳細ログを確認してください。
 
 ### 4. Claude
 
@@ -236,7 +257,7 @@ provider_models:
   openai:
     default_model: gpt-4
   gemini:
-    default_model: gemini-2.0-flash-exp
+    default_model: gemini-2.5-flash
   claude:
     default_model: claude-sonnet-4-5-20250514
   ollama:

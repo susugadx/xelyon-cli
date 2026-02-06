@@ -7,8 +7,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // chatWithTextMode はテキストベースのツール呼び出しモード（従来の実装）
@@ -44,9 +47,14 @@ func (p *Provider) chatWithTextMode(ctx context.Context, systemPrompt string, hi
 		})
 	}
 
+	cfg := config.GetGlobalConfig()
+
 	reqBody := GeminiRequest{
 		Contents: contents,
 	}
+
+	// Thinking 設定（Gemini 3 vs 2.5 で自動分岐）
+	reqBody.GenerationConfig = getThinkingConfigForModel(model, cfg)
 
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {
@@ -65,7 +73,22 @@ func (p *Provider) chatWithTextMode(ctx context.Context, systemPrompt string, hi
 	req.Header.Set("x-goog-api-key", p.apiKey) // APIキーはヘッダーで送信（セキュリティ向上）
 
 	// スピナー開始
-	spinner := api.StartThinkingSpinner(false, "")
+	// Gemini 3 Flash (minimal) は "Thinking"、Pro または thinking.enabled=true は "Deep thinking"
+	var spinner *ui.Spinner
+	if isGemini3Model(model) {
+		isFlash := strings.Contains(model, "flash")
+		var msg string
+		if isFlash && !cfg.Thinking.Enabled {
+			msg = "Thinking"
+		} else {
+			msg = "Deep thinking"
+		}
+		spinner = ui.NewSpinner()
+		spinner.Start(msg)
+		ui.SetGlobalSpinner(spinner)
+	} else {
+		spinner = api.StartThinkingSpinner(false, "")
+	}
 
 	// 再利用可能なHTTPクライアントを使用
 	resp, err := p.httpClient.Do(req)
@@ -160,9 +183,14 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	}
 	contents = append(contents, multimodalContent)
 
+	cfgImg := config.GetGlobalConfig()
+
 	reqBody := GeminiMultimodalRequest{
 		Contents: contents,
 	}
+
+	// Thinking 設定（Gemini 3 vs 2.5 で自動分岐）
+	reqBody.GenerationConfig = getThinkingConfigForModel(model, cfgImg)
 
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {
@@ -180,8 +208,23 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-goog-api-key", p.apiKey)
 
-	// スピナー開始
-	spinner := api.StartThinkingSpinner(true, "")
+	// スピナー開始（画像モード）
+	// Gemini 3 Flash (minimal) は "Analyzing image"、Pro または thinking.enabled=true は "Deep thinking (image)"
+	var spinner *ui.Spinner
+	if isGemini3Model(model) {
+		isFlash := strings.Contains(model, "flash")
+		var msg string
+		if isFlash && !cfgImg.Thinking.Enabled {
+			msg = "Analyzing image"
+		} else {
+			msg = "Deep thinking (image)"
+		}
+		spinner = ui.NewSpinner()
+		spinner.Start(msg)
+		ui.SetGlobalSpinner(spinner)
+	} else {
+		spinner = api.StartThinkingSpinner(true, "") // isImage=true
+	}
 
 	resp, err := p.httpClient.Do(req)
 	if err != nil {

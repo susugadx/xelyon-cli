@@ -29,7 +29,8 @@ type GeminiMultimodalContent struct {
 
 // GeminiMultimodalRequest はマルチモーダルAPIリクエスト
 type GeminiMultimodalRequest struct {
-	Contents []interface{} `json:"contents"` // GeminiContent or GeminiMultimodalContent
+	Contents         []interface{}           `json:"contents"` // GeminiContent or GeminiMultimodalContent
+	GenerationConfig *GeminiGenerationConfig `json:"generationConfig,omitempty"`
 }
 
 // GeminiContent はGeminiの contents 構造
@@ -40,7 +41,8 @@ type GeminiContent struct {
 
 // GeminiRequest はGemini APIリクエスト
 type GeminiRequest struct {
-	Contents []GeminiContent `json:"contents"`
+	Contents         []GeminiContent         `json:"contents"`
+	GenerationConfig *GeminiGenerationConfig `json:"generationConfig,omitempty"`
 }
 
 // GeminiCandidate はレスポンスの候補
@@ -65,8 +67,10 @@ type GeminiResponse struct {
 
 // GeminiFunctionPart はtext または functionCall を含むパート
 type GeminiFunctionPart struct {
-	Text         string                  `json:"text,omitempty"`
-	FunctionCall *api.GeminiFunctionCall `json:"functionCall,omitempty"`
+	Text             string                  `json:"text,omitempty"`
+	FunctionCall     *api.GeminiFunctionCall `json:"functionCall,omitempty"`
+	ThoughtSignature string                  `json:"thoughtSignature,omitempty"` // Gemini 3: 暗号化された思考プロセス
+	Thought          bool                    `json:"thought,omitempty"`          // Gemini 3: thinking summary フラグ
 }
 
 // GeminiFunctionContent はFunction Calling対応のコンテンツ
@@ -87,8 +91,12 @@ type GeminiFunctionResponse struct {
 }
 
 // GeminiThinkingConfig は Extended Thinking の設定
+// Gemini 2.5: thinkingBudget (int) を使用
+// Gemini 3:   thinkingLevel (string: "low", "high") を使用
+// 両方同時に指定すると 400 エラーになるため、モデルに応じてどちらか一方のみ設定すること
 type GeminiThinkingConfig struct {
-	ThinkingBudget int `json:"thinkingBudget,omitempty"`
+	ThinkingBudget int    `json:"thinkingBudget,omitempty"` // Gemini 2.5 用
+	ThinkingLevel  string `json:"thinkingLevel,omitempty"`  // Gemini 3 用: "low", "medium"(Flash), "high"
 }
 
 // GeminiGenerationConfig は生成設定
