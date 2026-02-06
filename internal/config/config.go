@@ -265,8 +265,8 @@ func DefaultConfig() *Config {
 			},
 		},
 		RepoMap: RepoMapConfig{
-			Enabled:   true, // デフォルトON
-			MaxTokens: 0,    // 0 = 自動計算
+			Enabled:   false, // デフォルトOFF
+			MaxTokens: 0,     // 0 = 自動計算
 		},
 		Thinking: ThinkingConfig{
 			Enabled: false,

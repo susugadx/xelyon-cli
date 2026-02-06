@@ -5,27 +5,27 @@ type Config struct {
 	DefaultProvider string                         `yaml:"default_provider"`
 	DefaultModel    string                         `yaml:"default_model"`
 	ProviderModels  map[string]ProviderModelConfig `yaml:"provider_models"`
-	General         GeneralConfig                  `yaml:"general,omitempty"`
-	Compression     CompressionConfig              `yaml:"compression,omitempty"`
-	Backup          BackupConfig                   `yaml:"backup,omitempty"`
-	LoopDetection   LoopDetectionConfig            `yaml:"loop_detection,omitempty"`
-	APIRetry        APIRetryConfig                 `yaml:"api_retry,omitempty"`
-	Diff            DiffConfig                     `yaml:"diff,omitempty"`
-	ToolConfirm     ToolConfirmConfig              `yaml:"tool_confirm,omitempty"`
+	General         GeneralConfig                  `yaml:"general"`
+	Compression     CompressionConfig              `yaml:"compression"`
+	Backup          BackupConfig                   `yaml:"backup"`
+	LoopDetection   LoopDetectionConfig            `yaml:"loop_detection"`
+	APIRetry        APIRetryConfig                 `yaml:"api_retry"`
+	Diff            DiffConfig                     `yaml:"diff"`
+	ToolConfirm     ToolConfirmConfig              `yaml:"tool_confirm"`
 	CommandAliases  map[string]string              `yaml:"command_aliases,omitempty"` // コマンドエイリアス
-	PromptCache     PromptCacheConfig              `yaml:"prompt_cache,omitempty"`
-	Paste           PasteConfig                    `yaml:"paste,omitempty"`
-	Streaming       StreamingConfig                `yaml:"streaming,omitempty"`
-	Bash            BashConfig                     `yaml:"bash,omitempty"`
-	CodeHealth      CodeHealthConfig               `yaml:"code_health,omitempty"`
-	GitStage        GitStageConfig                 `yaml:"git_stage,omitempty"`
-	PlanMode        PlanModeConfig                 `yaml:"plan_mode,omitempty"`
-	LSP             LSPConfig                      `yaml:"lsp,omitempty"`
-	OpenAI          OpenAIConfig                   `yaml:"openai,omitempty"`
-	Thinking        ThinkingConfig                 `yaml:"thinking,omitempty"`
-	RepoMap         RepoMapConfig                  `yaml:"repomap,omitempty"`
-	Output          OutputConfig                   `yaml:"output,omitempty"`
-	WebSearch       WebSearchConfig                `yaml:"web_search,omitempty"`
+	PromptCache     PromptCacheConfig              `yaml:"prompt_cache"`
+	Paste           PasteConfig                    `yaml:"paste"`
+	Streaming       StreamingConfig                `yaml:"streaming"`
+	Bash            BashConfig                     `yaml:"bash"`
+	CodeHealth      CodeHealthConfig               `yaml:"code_health"`
+	GitStage        GitStageConfig                 `yaml:"git_stage"`
+	PlanMode        PlanModeConfig                 `yaml:"plan_mode"`
+	LSP             LSPConfig                      `yaml:"lsp"`
+	OpenAI          OpenAIConfig                   `yaml:"openai"`
+	Thinking        ThinkingConfig                 `yaml:"thinking"`
+	RepoMap         RepoMapConfig                  `yaml:"repomap"`
+	Output          OutputConfig                   `yaml:"output"`
+	WebSearch       WebSearchConfig                `yaml:"web_search"`
 	// 将来の拡張用
 	// Cloud CloudConfig `yaml:"cloud,omitempty"`
 }
