@@ -116,15 +116,8 @@ func (p *Provider) chatWithTextMode(ctx context.Context, systemPrompt string, hi
 	}
 
 	// Content-Typeでストリーミング対応を判定
-	contentType := resp.Header.Get("Content-Type")
-	isStreaming := contentType == "" || // デフォルトはストリーミング
-		len(contentType) > 0 // Content-Typeがあればストリーミングとして処理
-
-	if isStreaming {
-		return p.handleStreamingResponse(ctx, resp, spinner)
-	} else {
-		return p.handleNonStreamingResponse(resp, spinner)
-	}
+	// streamGenerateContent?alt=sse を使用しているため、常に SSE パーサーを使用する
+	return p.handleSSEResponse(ctx, resp, spinner)
 }
 
 // ChatWithImage は画像付きメッセージで会話を行う

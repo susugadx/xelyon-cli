@@ -20,7 +20,7 @@ func init() {
 	})
 }
 
-const defaultGeminiURLTemplate = "https://generativelanguage.googleapis.com/v1beta/models/%s:streamGenerateContent"
+const defaultGeminiURLTemplate = "https://generativelanguage.googleapis.com/v1beta/models/%s:streamGenerateContent?alt=sse"
 
 // getGeminiURL は環境変数またはデフォルトのURLテンプレートを使用してURLを生成
 func getGeminiURL(model string) string {

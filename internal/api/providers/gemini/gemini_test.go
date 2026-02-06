@@ -3,6 +3,7 @@ package gemini
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -90,7 +91,7 @@ func TestGetGeminiURL(t *testing.T) {
 	t.Run("DefaultURL", func(t *testing.T) {
 		os.Unsetenv("GEMINI_API_URL")
 		url := getGeminiURL("gemini-2.0-flash-exp")
-		expected := "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:streamGenerateContent"
+		expected := "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:streamGenerateContent?alt=sse"
 		if url != expected {
 			t.Errorf("getGeminiURL() = %q, want %q", url, expected)
 		}
@@ -107,7 +108,7 @@ func TestGetGeminiURL(t *testing.T) {
 }
 
 func TestProvider_ChatWithTools_JSONArray(t *testing.T) {
-	// Geminiは JSON 配列形式でストリーミングレスポンスを返す
+	// Geminiは SSE 形式でストリーミングレスポンスを返す
 	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
 		assertRequestMethod(t, r, "POST")
 		assertJSONContentType(t, r)
@@ -118,12 +119,13 @@ func TestProvider_ChatWithTools_JSONArray(t *testing.T) {
 			t.Fatalf("Failed to decode request: %v", err)
 		}
 
-		// JSON配列形式のレスポンス
-		w.Header().Set("Content-Type", "application/json")
-		responses := []GeminiResponse{
-			{Candidates: []GeminiCandidate{{Content: GeminiContent{Parts: []GeminiPart{{Text: "Hello from Gemini"}}}}}},
+		// SSE形式のレスポンス
+		w.Header().Set("Content-Type", "text/event-stream")
+		resp := GeminiFunctionResponse{
+			Candidates: []GeminiFunctionCandidate{{Content: GeminiFunctionContent{Parts: []GeminiFunctionPart{{Text: "Hello from Gemini"}}}}},
 		}
-		_ = json.NewEncoder(w).Encode(responses)
+		jsonBytes, _ := json.Marshal(resp)
+		fmt.Fprintf(w, "data: %s\n\n", string(jsonBytes))
 	})
 
 	originalURL := os.Getenv("GEMINI_API_URL")
@@ -145,13 +147,14 @@ func TestProvider_ChatWithTools_JSONArray(t *testing.T) {
 func TestProvider_ChatWithTools_SingleObject(t *testing.T) {
 	// 単一オブジェクト形式（配列でない場合）
 	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		resp := GeminiResponse{
-			Candidates: []GeminiCandidate{
-				{Content: GeminiContent{Parts: []GeminiPart{{Text: "Single response"}}}},
+		w.Header().Set("Content-Type", "text/event-stream")
+		resp := GeminiFunctionResponse{
+			Candidates: []GeminiFunctionCandidate{
+				{Content: GeminiFunctionContent{Parts: []GeminiFunctionPart{{Text: "Single response"}}}},
 			},
 		}
-		_ = json.NewEncoder(w).Encode(resp)
+		jsonBytes, _ := json.Marshal(resp)
+		fmt.Fprintf(w, "data: %s\n\n", string(jsonBytes))
 	})
 
 	originalURL := os.Getenv("GEMINI_API_URL")
@@ -204,12 +207,13 @@ func TestProvider_ChatWithTools_RateLimit(t *testing.T) {
 
 func TestProvider_ChatWithImage_NoImage(t *testing.T) {
 	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		responses := []GeminiResponse{
-			{Candidates: []GeminiCandidate{{Content: GeminiContent{Parts: []GeminiPart{{Text: "No image response"}}}}}},
-		}
-		_ = json.NewEncoder(w).Encode(responses)
-	})
+			w.Header().Set("Content-Type", "text/event-stream")
+			resp := GeminiFunctionResponse{
+				Candidates: []GeminiFunctionCandidate{{Content: GeminiFunctionContent{Parts: []GeminiFunctionPart{{Text: "No image response"}}}}},
+			}
+			jsonBytes, _ := json.Marshal(resp)
+			fmt.Fprintf(w, "data: %s\n\n", string(jsonBytes))
+		})
 
 	originalURL := os.Getenv("GEMINI_API_URL")
 	defer os.Setenv("GEMINI_API_URL", originalURL)
@@ -234,12 +238,13 @@ func TestProvider_ChatWithImage_WithImage(t *testing.T) {
 			t.Fatalf("Failed to decode request: %v", err)
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		responses := []GeminiResponse{
-			{Candidates: []GeminiCandidate{{Content: GeminiContent{Parts: []GeminiPart{{Text: "Image analysis complete"}}}}}},
-		}
-		_ = json.NewEncoder(w).Encode(responses)
-	})
+			w.Header().Set("Content-Type", "text/event-stream")
+			resp := GeminiFunctionResponse{
+				Candidates: []GeminiFunctionCandidate{{Content: GeminiFunctionContent{Parts: []GeminiFunctionPart{{Text: "Image analysis complete"}}}}},
+			}
+			jsonBytes, _ := json.Marshal(resp)
+			fmt.Fprintf(w, "data: %s\n\n", string(jsonBytes))
+		})
 
 	originalURL := os.Getenv("GEMINI_API_URL")
 	defer os.Setenv("GEMINI_API_URL", originalURL)
@@ -281,7 +286,7 @@ func TestProvider_SetMCPEnabled(t *testing.T) {
 }
 
 func TestProvider_ChatWithTools_FunctionCalling(t *testing.T) {
-	// Function Calling レスポンスをテスト
+	// Function Calling レスポンスをテスト（SSE形式）
 	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
 		assertRequestMethod(t, r, "POST")
 		assertJSONContentType(t, r)
@@ -296,8 +301,8 @@ func TestProvider_ChatWithTools_FunctionCalling(t *testing.T) {
 			t.Error("Request should include tools for Function Calling")
 		}
 
-		// Function Calling レスポンス
-		w.Header().Set("Content-Type", "application/json")
+		// Function Calling レスポンス（SSE形式）
+		w.Header().Set("Content-Type", "text/event-stream")
 		resp := GeminiFunctionResponse{
 			Candidates: []GeminiFunctionCandidate{
 				{
@@ -313,7 +318,8 @@ func TestProvider_ChatWithTools_FunctionCalling(t *testing.T) {
 				},
 			},
 		}
-		_ = json.NewEncoder(w).Encode(resp)
+		jsonBytes, _ := json.Marshal(resp)
+		fmt.Fprintf(w, "data: %s\n\n", string(jsonBytes))
 	})
 
 	originalURL := os.Getenv("GEMINI_API_URL")
@@ -352,11 +358,14 @@ func TestProvider_ChatWithTools_FunctionCallingDisabled(t *testing.T) {
 			t.Error("Request should NOT include tools when Function Calling is disabled")
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		responses := []GeminiResponse{
-			{Candidates: []GeminiCandidate{{Content: GeminiContent{Parts: []GeminiPart{{Text: "Text mode response"}}}}}},
+		w.Header().Set("Content-Type", "text/event-stream")
+		resp := GeminiFunctionResponse{
+			Candidates: []GeminiFunctionCandidate{
+				{Content: GeminiFunctionContent{Parts: []GeminiFunctionPart{{Text: "Text mode response"}}}},
+			},
 		}
-		_ = json.NewEncoder(w).Encode(responses)
+		jsonBytes, _ := json.Marshal(resp)
+		fmt.Fprintf(w, "data: %s\n\n", string(jsonBytes))
 	})
 
 	originalURL := os.Getenv("GEMINI_API_URL")
@@ -405,8 +414,8 @@ func TestProvider_ChatWithTools_WithMCPTools(t *testing.T) {
 			t.Error("MCP tool 'mcp_github_get_issue' should be included in tools")
 		}
 
-		// レスポンス（MCPツール呼び出し）
-		w.Header().Set("Content-Type", "application/json")
+		// レスポンス（MCPツール呼び出し）- SSE形式
+		w.Header().Set("Content-Type", "text/event-stream")
 		resp := GeminiFunctionResponse{
 			Candidates: []GeminiFunctionCandidate{
 				{
@@ -421,7 +430,8 @@ func TestProvider_ChatWithTools_WithMCPTools(t *testing.T) {
 				},
 			},
 		}
-		_ = json.NewEncoder(w).Encode(resp)
+		jsonBytes, _ := json.Marshal(resp)
+		fmt.Fprintf(w, "data: %s\n\n", string(jsonBytes))
 	})
 
 	originalURL := os.Getenv("GEMINI_API_URL")
@@ -489,68 +499,4 @@ func TestGetGeminiFunctionCallingURL(t *testing.T) {
 			t.Errorf("getGeminiFunctionCallingURL() = %q, want %q", url, customURL)
 		}
 	})
-}
-
-func TestHandleFunctionCallingResponse_Array(t *testing.T) {
-	// 配列形式のレスポンス
-	responses := []GeminiFunctionResponse{
-		{
-			Candidates: []GeminiFunctionCandidate{
-				{
-					Content: GeminiFunctionContent{
-						Parts: []GeminiFunctionPart{
-							{Text: "Here's the result: "},
-							{FunctionCall: &api.GeminiFunctionCall{
-								Name: "read_file",
-								Args: map[string]any{"path": "/test.txt"},
-							}},
-						},
-					},
-				},
-			},
-		},
-	}
-
-	body, _ := json.Marshal(responses)
-
-	p := New("test-key")
-	result, err := p.handleFunctionCallingResponse(body, nil)
-	if err != nil {
-		t.Fatalf("handleFunctionCallingResponse() error = %v", err)
-	}
-
-	// テキストとツール呼び出しが含まれていることを確認
-	if result == "" {
-		t.Error("Result should not be empty")
-	}
-}
-
-func TestHandleFunctionCallingResponse_SingleObject(t *testing.T) {
-	// 単一オブジェクト形式のレスポンス
-	response := GeminiFunctionResponse{
-		Candidates: []GeminiFunctionCandidate{
-			{
-				Content: GeminiFunctionContent{
-					Parts: []GeminiFunctionPart{
-						{FunctionCall: &api.GeminiFunctionCall{
-							Name: "write_file",
-							Args: map[string]any{"path": "/out.txt", "content": "hello"},
-						}},
-					},
-				},
-			},
-		},
-	}
-
-	body, _ := json.Marshal(response)
-
-	p := New("test-key")
-	result, err := p.handleFunctionCallingResponse(body, nil)
-	if err != nil {
-		t.Fatalf("handleFunctionCallingResponse() error = %v", err)
-	}
-
-	if result == "" {
-		t.Error("Result should not be empty")
-	}
 }

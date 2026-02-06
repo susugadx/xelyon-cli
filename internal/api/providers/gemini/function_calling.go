@@ -115,20 +115,21 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
-		spinner.Stop()
+		if spinner != nil {
+			spinner.Stop()
+		}
 		return "", err
 	}
 	defer resp.Body.Close()
 
-	// レスポンスボディを読み込み（エラー/成功共通）
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		spinner.Stop()
-		return "", fmt.Errorf("gemini API error (status %d): unable to read response body - %v", resp.StatusCode, err)
-	}
-
 	if resp.StatusCode != 200 {
-		spinner.Stop()
+		if spinner != nil {
+			spinner.Stop()
+		}
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return "", fmt.Errorf("gemini API error (status %d): unable to read response body - %v", resp.StatusCode, err)
+		}
 		if debug {
 			bodyStr := string(body)
 			if len(bodyStr) > 500 {
@@ -145,14 +146,6 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 		return "", api.SanitizeErrorMessage(body, resp.StatusCode)
 	}
 
-	if debug {
-		bodyStr := string(body)
-		if len(bodyStr) > 1000 {
-			bodyStr = bodyStr[:1000] + "..."
-		}
-		fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Response body (%d bytes): %s\n", len(body), bodyStr)
-	}
-
-	// Function Calling レスポンスを処理（非ストリーミング）
-	return p.handleFunctionCallingResponse(body, spinner)
+	// Function Calling レスポンスを処理（SSE ストリーミング）
+	return p.handleSSEResponse(ctx, resp, spinner)
 }
