@@ -2,7 +2,7 @@ module github.com/susugadx/xelyon-cli
 
 go 1.24.0
 
-toolchain go1.24.11
+toolchain go1.24.13
 
 require (
 	github.com/atotto/clipboard v0.1.4

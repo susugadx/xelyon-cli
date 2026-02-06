@@ -53,7 +53,7 @@ func (p *Provider) handleEventStream(ctx context.Context, output *bedrockruntime
 				// ストリーム終了
 				spinner.Stop()
 				if err := stream.Err(); err != nil {
-					return "", fmt.Errorf("Bedrock stream error: %w", err)
+					return "", fmt.Errorf("bedrock stream error: %w", err)
 				}
 
 				content := fullResponse.String()

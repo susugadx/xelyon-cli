@@ -230,7 +230,7 @@ func (p *Provider) invokeStream(ctx context.Context, model string, reqBody inter
 	})
 	if err != nil {
 		spinner.Stop()
-		return "", fmt.Errorf("Bedrock API error: %w", err)
+		return "", fmt.Errorf("bedrock API error: %w", err)
 	}
 
 	return p.handleEventStream(ctx, output, spinner)
