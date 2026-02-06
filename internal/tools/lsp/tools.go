@@ -383,9 +383,10 @@ func GetDiagnosticsSummary(path string) string {
 	var errors, warnings []string
 	for _, d := range diagnostics {
 		msg := fmt.Sprintf("  line %d: %s", d.Range.Start.Line+1, d.Message)
-		if d.Severity == lsplib.DiagnosticSeverityError {
+		switch d.Severity {
+		case lsplib.DiagnosticSeverityError:
 			errors = append(errors, msg)
-		} else if d.Severity == lsplib.DiagnosticSeverityWarning {
+		case lsplib.DiagnosticSeverityWarning:
 			warnings = append(warnings, msg)
 		}
 	}

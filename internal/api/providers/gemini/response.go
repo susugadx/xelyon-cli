@@ -133,9 +133,3 @@ func (p *Provider) handleNonStreamingResponse(resp *http.Response, spinner *ui.S
 	fmt.Println(content)
 	return content, nil
 }
-
-// handleFunctionCallingResponse はSSEパーサーに統合されたため、ダミーとして残すか削除する
-// 現在は function_calling.go から呼ばれていないため、コンパイルエラー回避のために空の実装とする
-func (p *Provider) handleFunctionCallingResponse(body []byte, spinner *ui.Spinner) (string, error) {
-	return "", fmt.Errorf("handleFunctionCallingResponse is deprecated, use handleSSEResponse")
-}
