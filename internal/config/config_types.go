@@ -190,7 +190,8 @@ type LSPServerConfig struct {
 
 // ProviderModelConfig はプロバイダーごとのモデル設定
 type ProviderModelConfig struct {
-	DefaultModel string `yaml:"default_model"`
+	DefaultModel    string `yaml:"default_model"`
+	MaxOutputTokens int    `yaml:"max_output_tokens,omitempty"` // 最大出力トークン数（0 = プロバイダーデフォルト）
 }
 
 // CloudConfig はXELYON Cloud連携設定（将来用）

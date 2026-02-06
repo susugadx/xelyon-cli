@@ -129,7 +129,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 
 	reqBody := BedrockRequest{
 		AnthropicVersion: bedrockAnthropicVersion,
-		MaxTokens:        4096,
+		MaxTokens:        api.GetMaxOutputTokens("bedrock", 32768),
 		System:           buildSystemField(systemPrompt),
 		Messages:         messages,
 	}
@@ -191,7 +191,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 
 	reqBody := BedrockMultimodalRequest{
 		AnthropicVersion: bedrockAnthropicVersion,
-		MaxTokens:        4096,
+		MaxTokens:        api.GetMaxOutputTokens("bedrock", 32768),
 		System:           buildSystemField(systemPrompt),
 		Messages:         messages,
 	}

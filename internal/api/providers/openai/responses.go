@@ -49,6 +49,7 @@ type ResponsesRequest struct {
 	Input                interface{}      `json:"input,omitempty"`                // string or []InputItem（previous_response_id使用時は省略可）
 	PreviousResponseID   string           `json:"previous_response_id,omitempty"` // 前回のレスポンスID（キャッシュ用）
 	Instructions         string           `json:"instructions,omitempty"`         // システムプロンプト
+	MaxOutputTokens      int              `json:"max_output_tokens,omitempty"`    // 最大出力トークン数
 	Stream               bool             `json:"stream,omitempty"`
 	Reasoning            *ReasoningConfig `json:"reasoning,omitempty"`              // Extended Thinking
 	Tools                []ResponsesTool  `json:"tools,omitempty"`                  // ツール定義
@@ -123,6 +124,7 @@ func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, h
 
 	reqBody := ResponsesRequest{
 		Model:                model,
+		MaxOutputTokens:      api.GetMaxOutputTokens("openai", 16384),
 		Stream:               true,
 		Tools:                GetResponsesToolDefinitions(p.mcpTools), // Function Calling
 		PromptCacheKey:       "xelyon",
@@ -449,6 +451,7 @@ func (p *Provider) chatWithImageResponses(ctx context.Context, systemPrompt stri
 	reqBody := ResponsesRequest{
 		Model:                model,
 		Input:                input,
+		MaxOutputTokens:      api.GetMaxOutputTokens("openai", 16384),
 		Stream:               true,
 		Tools:                GetResponsesToolDefinitions(p.mcpTools), // Function Calling
 		PromptCacheKey:       "xelyon",

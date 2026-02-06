@@ -40,28 +40,36 @@ func DefaultConfig() *Config {
 		},
 		ProviderModels: map[string]ProviderModelConfig{
 			"deepseek": {
-				DefaultModel: "deepseek-chat",
+				DefaultModel:    "deepseek-chat",
+				MaxOutputTokens: 8192,
 			},
 			"openai": {
-				DefaultModel: "gpt-5.2",
+				DefaultModel:    "gpt-5.2",
+				MaxOutputTokens: 16384,
 			},
 			"gemini": {
-				DefaultModel: "gemini-2.5-flash",
+				DefaultModel:    "gemini-2.5-flash",
+				MaxOutputTokens: 65536,
 			},
 			"claude": {
-				DefaultModel: "claude-sonnet-4-5-20250514",
+				DefaultModel:    "claude-sonnet-4-5-20250514",
+				MaxOutputTokens: 16384,
 			},
 			"ollama": {
-				DefaultModel: "qwen2.5-coder:7b",
+				DefaultModel:    "qwen2.5-coder:7b",
+				MaxOutputTokens: 4096,
 			},
 			"groq": {
-				DefaultModel: "meta-llama/llama-4-scout-17b-16e-instruct",
+				DefaultModel:    "meta-llama/llama-4-scout-17b-16e-instruct",
+				MaxOutputTokens: 8192,
 			},
 			"openrouter": {
-				DefaultModel: "anthropic/claude-opus-4.5",
+				DefaultModel:    "anthropic/claude-opus-4.5",
+				MaxOutputTokens: 16384,
 			},
 			"bedrock": {
-				DefaultModel: "global.anthropic.claude-opus-4-5-20251101-v1:0",
+				DefaultModel:    "global.anthropic.claude-opus-4-5-20251101-v1:0",
+				MaxOutputTokens: 32768,
 			},
 		},
 		Compression: CompressionConfig{

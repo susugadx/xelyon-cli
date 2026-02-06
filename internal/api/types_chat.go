@@ -12,6 +12,7 @@ type StreamOptions struct {
 type ChatRequest struct {
 	Model                string         `json:"model"`
 	Messages             []Message      `json:"messages"`
+	MaxTokens            int            `json:"max_tokens,omitempty"` // 最大出力トークン数
 	Stream               bool           `json:"stream"`
 	StreamOptions        *StreamOptions `json:"stream_options,omitempty"`         // ストリーミング時のオプション
 	ReasoningEffort      string         `json:"reasoning_effort,omitempty"`       // OpenAI Extended Thinking用

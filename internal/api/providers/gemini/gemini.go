@@ -93,6 +93,8 @@ func isGemini3Model(model string) bool {
 // Gemini 3: thinkingLevel（常時ON、デフォルトは Flash="minimal", Pro="low" でlatency最小化）
 // Gemini 2.5: thinkingBudget（thinking.enabled=true のときのみ）
 func getThinkingConfigForModel(model string, cfg *config.Config) *GeminiGenerationConfig {
+	maxTokens := api.GetMaxOutputTokens("gemini", 65536)
+
 	if isGemini3Model(model) {
 		// Gemini 3: thinking は無効化不可
 		// Flash は "minimal" が使える（最も latency が低い）
@@ -112,6 +114,7 @@ func getThinkingConfigForModel(model string, cfg *config.Config) *GeminiGenerati
 			ThinkingConfig: &GeminiThinkingConfig{
 				ThinkingLevel: thinkingLevel,
 			},
+			MaxOutputTokens: maxTokens,
 		}
 	}
 
@@ -121,10 +124,13 @@ func getThinkingConfigForModel(model string, cfg *config.Config) *GeminiGenerati
 			ThinkingConfig: &GeminiThinkingConfig{
 				ThinkingBudget: api.LevelToBudgetTokens(cfg.Thinking.Level),
 			},
+			MaxOutputTokens: maxTokens,
 		}
 	}
 
-	return nil
+	return &GeminiGenerationConfig{
+		MaxOutputTokens: maxTokens,
+	}
 }
 
 // levelToThinkingLevel は thinking level を Gemini 3 の thinkingLevel 文字列に変換

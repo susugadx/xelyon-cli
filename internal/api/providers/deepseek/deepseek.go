@@ -94,6 +94,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	reqBody := api.ChatRequest{
 		Model:         actualModel,
 		Messages:      messages,
+		MaxTokens:     api.GetMaxOutputTokens("deepseek", 8192),
 		Stream:        true,
 		StreamOptions: &api.StreamOptions{IncludeUsage: true},
 	}

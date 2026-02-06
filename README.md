@@ -185,6 +185,33 @@ xelyon --provider gemini --model gemini-2.5-flash
 > /use claude
 ```
 
+### 最大出力トークン数の設定
+
+```yaml
+# ~/.xelyon/config.yaml
+provider_models:
+  claude:
+    default_model: claude-sonnet-4-5-20250514
+    max_output_tokens: 16384   # デフォルト: 16384
+  gemini:
+    default_model: gemini-2.5-flash
+    max_output_tokens: 65536   # デフォルト: 65536
+  deepseek:
+    default_model: deepseek-chat
+    max_output_tokens: 8192    # デフォルト: 8192
+```
+
+| プロバイダー | デフォルト max_output_tokens |
+|------------|---------------------------|
+| claude     | 16384                     |
+| bedrock    | 32768                     |
+| gemini     | 65536                     |
+| openai     | 16384                     |
+| deepseek   | 8192                      |
+| groq       | 8192                      |
+| ollama     | 4096                      |
+| openrouter | 16384                     |
+
 ### 確認動作のカスタマイズ
 
 ```yaml

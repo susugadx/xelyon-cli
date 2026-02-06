@@ -13,20 +13,28 @@ default_model: deepseek-chat
 provider_models:
     bedrock:
         default_model: global.anthropic.claude-opus-4-5-20251101-v1:0
+        max_output_tokens: 32768
     claude:
         default_model: claude-sonnet-4-5-20250514
+        max_output_tokens: 16384
     deepseek:
         default_model: deepseek-chat
+        max_output_tokens: 8192
     gemini:
         default_model: gemini-2.5-flash
+        max_output_tokens: 65536
     groq:
         default_model: meta-llama/llama-4-scout-17b-16e-instruct
+        max_output_tokens: 8192
     ollama:
         default_model: qwen2.5-coder:7b
+        max_output_tokens: 4096
     openai:
         default_model: gpt-5.2
+        max_output_tokens: 16384
     openrouter:
         default_model: anthropic/claude-opus-4.5
+        max_output_tokens: 16384
 general:
     language: ja
 

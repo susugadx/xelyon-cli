@@ -101,7 +101,8 @@ type GeminiThinkingConfig struct {
 
 // GeminiGenerationConfig は生成設定
 type GeminiGenerationConfig struct {
-	ThinkingConfig *GeminiThinkingConfig `json:"thinkingConfig,omitempty"`
+	ThinkingConfig  *GeminiThinkingConfig `json:"thinkingConfig,omitempty"`
+	MaxOutputTokens int                   `json:"maxOutputTokens,omitempty"` // 最大出力トークン数
 }
 
 // GeminiRequestWithTools はtools を含むリクエスト

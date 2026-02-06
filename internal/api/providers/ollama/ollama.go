@@ -70,11 +70,17 @@ func (p *Provider) IsFunctionCallingEnabled() bool {
 	return os.Getenv("OLLAMA_FUNCTION_CALLING") != "0"
 }
 
+// OllamaOptions はOllamaの生成オプション
+type OllamaOptions struct {
+	NumPredict int `json:"num_predict,omitempty"` // 最大出力トークン数
+}
+
 // OllamaRequest はOllama APIリクエスト
 type OllamaRequest struct {
 	Model      string           `json:"model"`
 	Messages   []api.Message    `json:"messages"`
 	Stream     bool             `json:"stream"`
+	Options    *OllamaOptions   `json:"options,omitempty"`     // 生成オプション
 	Tools      []api.OpenAITool `json:"tools,omitempty"`       // Function Calling用
 	ToolChoice string           `json:"tool_choice,omitempty"` // "auto", "none"
 }
@@ -124,6 +130,9 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		Model:    model,
 		Messages: messages,
 		Stream:   true,
+		Options: &OllamaOptions{
+			NumPredict: api.GetMaxOutputTokens("ollama", 4096),
+		},
 	}
 
 	// Function Calling: ツール定義を追加（環境変数で無効化可能）

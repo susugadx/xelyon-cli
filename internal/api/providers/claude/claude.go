@@ -302,7 +302,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		Model:     model,
 		Messages:  messages,
 		System:    buildSystemField(systemPrompt),
-		MaxTokens: 4096,
+		MaxTokens: api.GetMaxOutputTokens("claude", 16384),
 		Stream:    true,
 	}
 
@@ -514,7 +514,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 		Model:     model,
 		Messages:  messages,
 		System:    buildSystemField(systemPrompt),
-		MaxTokens: 4096,
+		MaxTokens: api.GetMaxOutputTokens("claude", 16384),
 		Stream:    true,
 	}
 

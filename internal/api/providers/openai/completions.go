@@ -35,7 +35,8 @@ type MultimodalMessage struct {
 // MultimodalRequest はマルチモーダルAPIリクエスト
 type MultimodalRequest struct {
 	Model                string        `json:"model"`
-	Messages             []interface{} `json:"messages"` // Message or MultimodalMessage
+	Messages             []interface{} `json:"messages"`             // Message or MultimodalMessage
+	MaxTokens            int           `json:"max_tokens,omitempty"` // 最大出力トークン数
 	Stream               bool          `json:"stream"`
 	ReasoningEffort      string        `json:"reasoning_effort,omitempty"`       // low/medium/high
 	PromptCacheKey       string        `json:"prompt_cache_key,omitempty"`       // プロンプトキャッシュのルーティングキー
@@ -55,6 +56,7 @@ func (p *Provider) chatWithCompletions(ctx context.Context, systemPrompt string,
 	reqBody := api.ChatRequest{
 		Model:                model,
 		Messages:             messages,
+		MaxTokens:            api.GetMaxOutputTokens("openai", 16384),
 		Stream:               true,
 		StreamOptions:        &api.StreamOptions{IncludeUsage: true},
 		PromptCacheKey:       "xelyon",
@@ -289,6 +291,7 @@ func (p *Provider) chatWithImageCompletions(ctx context.Context, systemPrompt st
 	reqBody := MultimodalRequest{
 		Model:                model,
 		Messages:             messages,
+		MaxTokens:            api.GetMaxOutputTokens("openai", 16384),
 		Stream:               true,
 		PromptCacheKey:       "xelyon",
 		PromptCacheRetention: "24h",
