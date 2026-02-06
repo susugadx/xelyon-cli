@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
+	"github.com/susugadx/xelyon-cli/internal/tools/lsp"
 )
 
 // ExecuteWriteFile はファイルに書き込む
@@ -114,5 +115,7 @@ IMPORTANT: Do NOT write the file until the user approves.`, strings.TrimSpace(de
 	}
 
 	common.Green.Printf("✅ Written: %s\n", path)
-	return fmt.Sprintf("Successfully wrote %d bytes to %s", len(content), path), backupPath, nil
+	msg := fmt.Sprintf("Successfully wrote %d bytes to %s", len(content), path)
+	msg += lsp.GetDiagnosticsSummary(absPath)
+	return msg, backupPath, nil
 }

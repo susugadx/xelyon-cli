@@ -359,7 +359,54 @@ func (t *LSPDiagnosticsTool) Run(args map[string]string) (string, *tools.FileCha
 	return sb.String(), nil, nil
 }
 
-// ===== lsp_rename Tool =====
+// GetDiagnosticsSummary returns a summarized string of diagnostics for a file.
+// This is used by file editing tools to provide immediate feedback.
+func GetDiagnosticsSummary(path string) string {
+	if LSPClient == nil {
+		return ""
+	}
+
+	absPath, err := common.ValidatePath(path)
+	if err != nil {
+		return ""
+	}
+
+	// Use a short timeout for background checks
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	diagnostics, err := LSPClient.GetDiagnostics(ctx, absPath)
+	if err != nil || len(diagnostics) == 0 {
+		return ""
+	}
+
+	var errors, warnings []string
+	for _, d := range diagnostics {
+		msg := fmt.Sprintf("  line %d: %s", d.Range.Start.Line+1, d.Message)
+		if d.Severity == lsplib.DiagnosticSeverityError {
+			errors = append(errors, msg)
+		} else if d.Severity == lsplib.DiagnosticSeverityWarning {
+			warnings = append(warnings, msg)
+		}
+	}
+
+	if len(errors) == 0 && len(warnings) == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+	sb.WriteString("\n\n⚠️ LSP Diagnostics:")
+	if len(errors) > 0 {
+		sb.WriteString("\n  Errors:\n")
+		sb.WriteString(strings.Join(errors, "\n"))
+	}
+	if len(warnings) > 0 {
+		sb.WriteString("\n  Warnings:\n")
+		sb.WriteString(strings.Join(warnings, "\n"))
+	}
+
+	return sb.String()
+}
 
 // LSPRenameTool renames a symbol at the given position
 type LSPRenameTool struct{}

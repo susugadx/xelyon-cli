@@ -9,6 +9,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
+	"github.com/susugadx/xelyon-cli/internal/tools/lsp"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -164,7 +165,9 @@ Do not retry the same replacement.`, path), "", nil
 		}
 
 		common.Green.Printf("✅ Replaced lines %d-%d in: %s\n", startLine, endLine, path)
-		return fmt.Sprintf("Successfully replaced lines %d-%d in %s", startLine, endLine, path), backupPath, nil
+		msg := fmt.Sprintf("Successfully replaced lines %d-%d in %s", startLine, endLine, path)
+		msg += lsp.GetDiagnosticsSummary(absPath)
+		return msg, backupPath, nil
 	}
 
 	// ========================
@@ -334,7 +337,9 @@ Do not retry the same replacement.`, path), "", nil
 	}
 
 	common.Green.Printf("✅ Replaced in: %s\n", path)
-	return fmt.Sprintf("Successfully replaced text in %s", path), backupPath, nil
+	msg := fmt.Sprintf("Successfully replaced text in %s", path)
+	msg += lsp.GetDiagnosticsSummary(absPath)
+	return msg, backupPath, nil
 }
 
 type lineRange struct {
