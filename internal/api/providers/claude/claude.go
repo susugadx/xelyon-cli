@@ -74,12 +74,6 @@ func (p *Provider) IsFunctionCallingEnabled() bool {
 	return true
 }
 
-// Message はClaudeのメッセージ構造
-type Message struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
-}
-
 // ClaudeRequest はClaude APIリクエスト
 
 // CacheControl enables prompt caching for a content block.
@@ -106,8 +100,8 @@ type ThinkingConfig struct {
 }
 
 type Request struct {
-	Model    string    `json:"model"`
-	Messages []Message `json:"messages"`
+	Model    string             `json:"model"`
+	Messages []AnthropicMessage `json:"messages"`
 	// System can be either string (legacy) or []SystemBlock (prompt caching).
 	System    interface{}     `json:"system,omitempty"`
 	MaxTokens int             `json:"max_tokens"`
@@ -299,11 +293,8 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	// モデル名を設定（config優先、フォールバックはclaude-sonnet-4-20250514）
 	model = api.GetDefaultModel(model, "claude", "claude-sonnet-4-20250514")
 
-	// Claudeのメッセージ構造に変換（api.Message から必要なフィールドのみコピー）
-	var messages []Message
-	for _, msg := range history {
-		messages = append(messages, Message{Role: msg.Role, Content: msg.Content})
-	}
+	// Anthropic Messages API 形式に変換（role:"tool" → role:"user"+tool_result 等）
+	messages := ConvertToAnthropicMessages(history)
 
 	cfg := config.GetGlobalConfig()
 
@@ -490,10 +481,11 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	// モデル名を設定（config優先、フォールバックはclaude-sonnet-4-20250514）
 	model = api.GetDefaultModel(model, "claude", "claude-sonnet-4-20250514")
 
-	// 履歴をメッセージ配列に変換（テキストのみ）
+	// Anthropic Messages API 形式に変換（role:"tool" → role:"user"+tool_result 等）
+	converted := ConvertToAnthropicMessages(history)
 	var messages []interface{}
-	for _, msg := range history {
-		messages = append(messages, Message{Role: msg.Role, Content: msg.Content})
+	for _, msg := range converted {
+		messages = append(messages, msg)
 	}
 
 	// 画像付きユーザーメッセージを追加

@@ -110,8 +110,8 @@ func TestBedrockRequest_JSON(t *testing.T) {
 		AnthropicVersion: bedrockAnthropicVersion,
 		MaxTokens:        4096,
 		System:           "You are a helpful assistant.",
-		Messages: []claude.Message{
-			{Role: "user", Content: "Hello"},
+		Messages: []claude.AnthropicMessage{
+			{Role: "user", Content: []claude.AnthropicContentBlock{{Type: "text", Text: "Hello"}}},
 		},
 	}
 
@@ -156,8 +156,8 @@ func TestBedrockRequest_WithThinking(t *testing.T) {
 		AnthropicVersion: bedrockAnthropicVersion,
 		MaxTokens:        4096,
 		System:           "System prompt",
-		Messages: []claude.Message{
-			{Role: "user", Content: "Hello"},
+		Messages: []claude.AnthropicMessage{
+			{Role: "user", Content: []claude.AnthropicContentBlock{{Type: "text", Text: "Hello"}}},
 		},
 		Thinking: &claude.ThinkingConfig{
 			Type:         "enabled",
@@ -193,8 +193,8 @@ func TestBedrockRequest_WithTools(t *testing.T) {
 		AnthropicVersion: bedrockAnthropicVersion,
 		MaxTokens:        4096,
 		System:           "System prompt",
-		Messages: []claude.Message{
-			{Role: "user", Content: "Hello"},
+		Messages: []claude.AnthropicMessage{
+			{Role: "user", Content: []claude.AnthropicContentBlock{{Type: "text", Text: "Hello"}}},
 		},
 		Tools: []claude.ClaudeTool{
 			{

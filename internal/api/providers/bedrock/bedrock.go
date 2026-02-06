@@ -79,12 +79,12 @@ func (p *Provider) IsFunctionCallingEnabled() bool {
 // BedrockRequest は Bedrock InvokeModel 用リクエスト
 // Claude API とは異なり anthropic_version をボディに含み、model/stream フィールドは不要
 type BedrockRequest struct {
-	AnthropicVersion string                 `json:"anthropic_version"`
-	MaxTokens        int                    `json:"max_tokens"`
-	System           interface{}            `json:"system,omitempty"`
-	Messages         []claude.Message       `json:"messages"`
-	Thinking         *claude.ThinkingConfig `json:"thinking,omitempty"`
-	Tools            []claude.ClaudeTool    `json:"tools,omitempty"`
+	AnthropicVersion string                    `json:"anthropic_version"`
+	MaxTokens        int                       `json:"max_tokens"`
+	System           interface{}               `json:"system,omitempty"`
+	Messages         []claude.AnthropicMessage `json:"messages"`
+	Thinking         *claude.ThinkingConfig    `json:"thinking,omitempty"`
+	Tools            []claude.ClaudeTool       `json:"tools,omitempty"`
 }
 
 // BedrockMultimodalRequest はマルチモーダル（画像付き）リクエスト
@@ -122,11 +122,8 @@ func buildSystemField(systemPrompt string) interface{} {
 func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
 	model = api.GetDefaultModel(model, "bedrock", defaultModel)
 
-	// Claude のメッセージ構造に変換
-	var messages []claude.Message
-	for _, msg := range history {
-		messages = append(messages, claude.Message{Role: msg.Role, Content: msg.Content})
-	}
+	// Anthropic Messages API 形式に変換（role:"tool" → role:"user"+tool_result 等）
+	messages := claude.ConvertToAnthropicMessages(history)
 
 	cfg := config.GetGlobalConfig()
 
@@ -163,10 +160,11 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 
 	model = api.GetDefaultModel(model, "bedrock", defaultModel)
 
-	// 履歴をメッセージ配列に変換（テキストのみ）
+	// Anthropic Messages API 形式に変換（role:"tool" → role:"user"+tool_result 等）
+	converted := claude.ConvertToAnthropicMessages(history)
 	var messages []interface{}
-	for _, msg := range history {
-		messages = append(messages, claude.Message{Role: msg.Role, Content: msg.Content})
+	for _, msg := range converted {
+		messages = append(messages, msg)
 	}
 
 	// 画像付きユーザーメッセージを追加
