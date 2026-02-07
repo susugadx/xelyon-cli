@@ -16,6 +16,15 @@ import (
 // 警告表示用の色
 var yellow = color.New(color.FgYellow)
 
+// AI発言ヘッダー表示用の色
+var cyanBold = color.New(color.FgCyan, color.Bold)
+
+// PrintAIHeader はAI発言開始時のヘッダーを表示する
+// 全プロバイダーから共通で使用
+func PrintAIHeader() {
+	cyanBold.Print("\n💬 ")
+}
+
 // toolJSONPatterns はツールJSON開始パターン
 var toolJSONPatterns = []string{
 	`{"tool"`,
@@ -153,10 +162,11 @@ func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *u
 				// ツールJSON検出・非表示処理
 				displayContent := filterToolJSON(content, &inToolJSON, &jsonDepth, &inString, &prevChar)
 
-				// 最初のコンテンツでスピナー停止
+				// 最初のコンテンツでスピナー停止 + AI発言ヘッダー表示
 				if firstChunk {
 					spinner.Stop()
 					firstChunk = false
+					cyanBold.Print("\n💬 ")
 				}
 				if displayContent != "" {
 					fmt.Print(displayContent)

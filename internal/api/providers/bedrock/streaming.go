@@ -80,6 +80,7 @@ func (p *Provider) handleEventStream(ctx context.Context, output *bedrockruntime
 					if firstChunk {
 						spinner.Stop()
 						firstChunk = false
+						api.PrintAIHeader()
 					}
 					fmt.Print(text)
 					fullResponse.WriteString(text)

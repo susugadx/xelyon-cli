@@ -193,6 +193,7 @@ func (p *Provider) handleFunctionCallingResponse(body []byte, spinner *ui.Spinne
 	}
 
 	// テキストパートを出力（ツール呼び出しJSONは除外）
+	headerPrinted := false
 	for _, text := range textParts {
 		trimmed := strings.TrimSpace(text)
 		if strings.HasPrefix(trimmed, "{\"tool\"") || strings.HasPrefix(trimmed, "{ \"tool\"") {
@@ -200,6 +201,10 @@ func (p *Provider) handleFunctionCallingResponse(body []byte, spinner *ui.Spinne
 				fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Skipping text (tool JSON)\n")
 			}
 			continue
+		}
+		if !headerPrinted {
+			api.PrintAIHeader()
+			headerPrinted = true
 		}
 		fmt.Print(text)
 		fullResponse.WriteString(text)

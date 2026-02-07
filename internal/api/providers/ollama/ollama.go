@@ -270,10 +270,11 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 
 		content := streamResp.Message.Content
 		if content != "" {
-			// 最初のコンテンツでスピナー停止
+			// 最初のコンテンツでスピナー停止 + AI発言ヘッダー表示
 			if firstChunk {
 				spinner.Stop()
 				firstChunk = false
+				api.PrintAIHeader()
 			}
 
 			fmt.Print(content)

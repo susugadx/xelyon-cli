@@ -261,10 +261,11 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 
 				content := choice.Delta.Content
 
-				// 最初のコンテンツでスピナー停止
+				// 最初のコンテンツでスピナー停止 + AI発言ヘッダー表示
 				if firstChunk && content != "" {
 					spinner.Stop()
 					firstChunk = false
+					api.PrintAIHeader()
 				}
 
 				fmt.Print(content)

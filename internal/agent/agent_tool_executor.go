@@ -122,15 +122,8 @@ func (a *Agent) executeToolCall(response string, toolCall *tools.ToolCall) {
 
 // executeToolCallInternal はツールを実行して結果を履歴に追加（内部実装）
 func (a *Agent) executeToolCallInternal(response string, toolCall *tools.ToolCall) string {
-	// レスポンスから説明部分とツール呼び出しを分離
-	explanation, _ := extractExplanationAndTool(response)
-
-	// 説明部分を先に表示
-	if explanation != "" {
-		cyan.Println("\n💭 AI Explanation:")
-		fmt.Println(explanation)
-		fmt.Println()
-	}
+	// NOTE: 説明テキストはストリーミング中に既に表示済みのため、ここでは表示しない
+	// （Issue #114: 二重表示の修正）
 
 	// ツール呼び出しを履歴に追加
 	a.addToolCallToHistory(response, toolCall)
