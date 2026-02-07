@@ -146,6 +146,13 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 		return "", api.SanitizeErrorMessage(body, resp.StatusCode)
 	}
 
-	// Function Calling レスポンスを処理（SSE ストリーミング）
-	return p.handleSSEResponse(ctx, resp, spinner)
+	// Function Calling レスポンスを処理（非ストリーミング JSON）
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		if spinner != nil {
+			spinner.Stop()
+		}
+		return "", fmt.Errorf("failed to read FC response body: %w", err)
+	}
+	return p.handleFunctionCallingResponse(body, spinner)
 }

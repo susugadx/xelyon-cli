@@ -115,6 +115,121 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 	return p.handleSSEResponse(ctx, resp, spinner)
 }
 
+// handleFunctionCallingResponse は Function Calling レスポンスを処理
+// :generateContent エンドポイントは plain JSON を返すため、SSE パーサーではなくこちらを使用
+func (p *Provider) handleFunctionCallingResponse(body []byte, spinner *ui.Spinner) (string, error) {
+	debug := os.Getenv("XELYON_DEBUG_GEMINI") == "1"
+
+	var responses []GeminiFunctionResponse
+
+	// まず配列としてパースを試みる（ストリーミングレスポンス）
+	if err := json.Unmarshal(body, &responses); err != nil {
+		// 配列でない場合は単一オブジェクトとして試す
+		var singleResponse GeminiFunctionResponse
+		if err := json.Unmarshal(body, &singleResponse); err != nil {
+			if spinner != nil {
+				spinner.Stop()
+			}
+			return "", fmt.Errorf("failed to parse Function Calling response: %w", err)
+		}
+		responses = []GeminiFunctionResponse{singleResponse}
+	}
+
+	if spinner != nil {
+		spinner.Stop()
+	}
+
+	if debug {
+		fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Parsed %d responses\n", len(responses))
+	}
+
+	var fullResponse strings.Builder
+	var functionCalls []*api.GeminiFunctionCall // FunctionCall を収集
+	var textParts []string                      // テキストパートを収集
+
+	for i, response := range responses {
+		if len(response.Candidates) == 0 {
+			if debug {
+				fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Response %d: no candidates\n", i)
+			}
+			continue
+		}
+
+		candidate := response.Candidates[0]
+
+		if response.UsageMetadata != nil && p.usageCallback != nil {
+			p.usageCallback(api.Usage{
+				InputTokens:       response.UsageMetadata.PromptTokenCount,
+				OutputTokens:      response.UsageMetadata.CandidatesTokenCount,
+				CachedInputTokens: response.UsageMetadata.CachedContentTokenCount,
+			})
+		}
+
+		for _, part := range candidate.Content.Parts {
+			if part.Thought {
+				continue
+			}
+
+			// Function Call パートを収集
+			if part.FunctionCall != nil {
+				if debug {
+					fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Found FunctionCall: %s\n", part.FunctionCall.Name)
+				}
+				functionCalls = append(functionCalls, part.FunctionCall)
+			}
+
+			// テキストパートを収集
+			if part.Text != "" {
+				if debug {
+					if len(part.Text) > 100 {
+						fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Text part: %q\n", part.Text[:100])
+					} else {
+						fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Text part: %q\n", part.Text)
+					}
+				}
+				textParts = append(textParts, part.Text)
+			}
+		}
+	}
+
+	// テキストパートを出力（ツール呼び出しJSONは除外）
+	for _, text := range textParts {
+		trimmed := strings.TrimSpace(text)
+		if strings.HasPrefix(trimmed, "{\"tool\"") || strings.HasPrefix(trimmed, "{ \"tool\"") {
+			if debug {
+				fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Skipping text (tool JSON)\n")
+			}
+			continue
+		}
+		fmt.Print(text)
+		fullResponse.WriteString(text)
+	}
+
+	// FunctionCall を出力（重複排除）
+	seenTools := make(map[string]bool)
+	for _, fc := range functionCalls {
+		toolJSON := convertFunctionCallToToolJSON(fc)
+		if seenTools[toolJSON] {
+			continue
+		}
+		seenTools[toolJSON] = true
+		fmt.Printf("\n%s", toolJSON)
+		fullResponse.WriteString(toolJSON)
+	}
+
+	// テキストもFunctionCallもない場合のみエラー
+	if fullResponse.Len() == 0 && len(functionCalls) == 0 {
+		if debug {
+			fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] No content: textParts=%d, functionCalls=%d\n",
+				len(textParts), len(functionCalls))
+		}
+		return "", fmt.Errorf("no content in Function Calling response")
+	}
+
+	fmt.Println()
+	return fullResponse.String(), nil
+}
+
 // handleNonStreamingResponse は非ストリーミングレスポンスを処理（エラーメッセージ表示用などに残す）
 func (p *Provider) handleNonStreamingResponse(resp *http.Response, spinner *ui.Spinner) (string, error) {
 	spinner.Stop()

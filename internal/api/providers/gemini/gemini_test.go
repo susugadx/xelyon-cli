@@ -286,23 +286,25 @@ func TestProvider_SetMCPEnabled(t *testing.T) {
 }
 
 func TestProvider_ChatWithTools_FunctionCalling(t *testing.T) {
-	// Function Calling レスポンスをテスト（SSE形式）
+	// Function Calling レスポンスをテスト（plain JSON）
+	requestCount := 0
 	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
 		assertRequestMethod(t, r, "POST")
 		assertJSONContentType(t, r)
 
-		// リクエストに tools が含まれていることを確認
+		// リクエストに tools が含まれていることを確認（FC リクエストのみ）
 		var req GeminiRequestWithTools
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Fatalf("Failed to decode request: %v", err)
 		}
 
-		if len(req.Tools) == 0 {
+		if requestCount == 1 && len(req.Tools) == 0 {
 			t.Error("Request should include tools for Function Calling")
 		}
 
-		// Function Calling レスポンス（SSE形式）
-		w.Header().Set("Content-Type", "text/event-stream")
+		// Function Calling レスポンス（plain JSON - :generateContent エンドポイント）
+		w.Header().Set("Content-Type", "application/json")
 		resp := GeminiFunctionResponse{
 			Candidates: []GeminiFunctionCandidate{
 				{
@@ -319,7 +321,7 @@ func TestProvider_ChatWithTools_FunctionCalling(t *testing.T) {
 			},
 		}
 		jsonBytes, _ := json.Marshal(resp)
-		fmt.Fprintf(w, "data: %s\n\n", string(jsonBytes))
+		w.Write(jsonBytes)
 	})
 
 	originalURL := os.Getenv("GEMINI_API_URL")
@@ -391,31 +393,38 @@ func TestProvider_ChatWithTools_FunctionCallingDisabled(t *testing.T) {
 
 func TestProvider_ChatWithTools_WithMCPTools(t *testing.T) {
 	// MCPツールが設定されている場合、Function Callingに含まれることを確認
+	requestCount := 0
 	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
-		// リクエストに tools が含まれていることを確認
+		requestCount++
+
+		// リクエストに tools が含まれていることを確認（FC リクエストのみ）
 		var req GeminiRequestWithTools
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Fatalf("Failed to decode request: %v", err)
 		}
 
-		if len(req.Tools) == 0 {
+		if requestCount == 1 && len(req.Tools) == 0 {
 			t.Error("Request should include tools for Function Calling")
 		}
 
-		// MCPツールが含まれていることを確認
-		foundMCPTool := false
-		for _, decl := range req.Tools[0].FunctionDeclarations {
-			if decl.Name == "mcp_github_get_issue" {
-				foundMCPTool = true
-				break
+		// MCPツールが含まれていることを確認（FC リクエストのみ）
+		if requestCount == 1 {
+			foundMCPTool := false
+			if len(req.Tools) > 0 {
+				for _, decl := range req.Tools[0].FunctionDeclarations {
+					if decl.Name == "mcp_github_get_issue" {
+						foundMCPTool = true
+						break
+					}
+				}
+			}
+			if !foundMCPTool {
+				t.Error("MCP tool 'mcp_github_get_issue' should be included in tools")
 			}
 		}
-		if !foundMCPTool {
-			t.Error("MCP tool 'mcp_github_get_issue' should be included in tools")
-		}
 
-		// レスポンス（MCPツール呼び出し）- SSE形式
-		w.Header().Set("Content-Type", "text/event-stream")
+		// レスポンス（MCPツール呼び出し）- plain JSON
+		w.Header().Set("Content-Type", "application/json")
 		resp := GeminiFunctionResponse{
 			Candidates: []GeminiFunctionCandidate{
 				{
@@ -431,7 +440,7 @@ func TestProvider_ChatWithTools_WithMCPTools(t *testing.T) {
 			},
 		}
 		jsonBytes, _ := json.Marshal(resp)
-		fmt.Fprintf(w, "data: %s\n\n", string(jsonBytes))
+		w.Write(jsonBytes)
 	})
 
 	originalURL := os.Getenv("GEMINI_API_URL")
