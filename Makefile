@@ -1,6 +1,6 @@
 # XELYON CLI Makefile
 
-.PHONY: build test fmt lint gen-config gen-docs gen-registry gen-help gen-all clean
+.PHONY: build test fmt lint gen-config gen-docs gen-registry gen-help gen-all clean check ci-check release-check
 
 # ビルド
 build:
@@ -48,6 +48,29 @@ clean:
 
 # 全てのチェック
 check: fmt test lint
+
+# CIと同じチェック（未フォーマットがあればエラー）
+ci-check:
+	@echo "=== Checking go fmt ==="
+	@if [ -n "$$(go fmt ./...)" ]; then \
+		echo "Error: Files need formatting. Run 'make fmt' to fix."; \
+		exit 1; \
+	fi
+	@echo "✓ go fmt check passed"
+	@echo ""
+	@echo "=== Building all packages ==="
+	@go build ./...
+	@echo "✓ Build check passed"
+	@echo ""
+	@echo "=== Running golangci-lint ==="
+	@golangci-lint run
+	@echo "✓ Lint check passed"
+	@echo ""
+	@echo "=== Running tests ==="
+	@go test ./...
+	@echo "✓ Tests passed"
+	@echo ""
+	@echo "✅ All CI checks passed!"
 
 # リリース前チェック
 release-check: fmt test lint build
