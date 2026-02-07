@@ -17,12 +17,25 @@ provider_models:
     claude:
         default_model: claude-sonnet-4-5-20250514
         max_output_tokens: 16384
+        model_overrides:
+            claude-sonnet-4-5-20250514:
+                max_output_tokens: 16384
     deepseek:
         default_model: deepseek-chat
         max_output_tokens: 16384
+        model_overrides:
+            deepseek-chat:
+                max_output_tokens: 8192
+            deepseek-reasoner:
+                max_output_tokens: 64000
     gemini:
         default_model: gemini-2.5-flash
         max_output_tokens: 65536
+        model_overrides:
+            gemini-2.5-flash:
+                max_output_tokens: 65536
+            gemini-3-flash-preview:
+                max_output_tokens: 65536
     groq:
         default_model: meta-llama/llama-4-scout-17b-16e-instruct
         max_output_tokens: 8192
@@ -32,6 +45,9 @@ provider_models:
     openai:
         default_model: gpt-5.2
         max_output_tokens: 16384
+        model_overrides:
+            gpt-5.2:
+                max_output_tokens: 16384
     openrouter:
         default_model: anthropic/claude-opus-4.5
         max_output_tokens: 32768

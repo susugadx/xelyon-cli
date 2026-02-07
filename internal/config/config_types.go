@@ -188,10 +188,16 @@ type LSPServerConfig struct {
 	Disabled bool     `yaml:"disabled,omitempty"` // このサーバーを無効化
 }
 
+// ModelOverride はモデルごとの個別設定
+type ModelOverride struct {
+	MaxOutputTokens int `yaml:"max_output_tokens,omitempty"` // このモデル固有の最大出力トークン数
+}
+
 // ProviderModelConfig はプロバイダーごとのモデル設定
 type ProviderModelConfig struct {
-	DefaultModel    string `yaml:"default_model"`
-	MaxOutputTokens int    `yaml:"max_output_tokens,omitempty"` // 最大出力トークン数（0 = プロバイダーデフォルト）
+	DefaultModel    string                   `yaml:"default_model"`
+	MaxOutputTokens int                      `yaml:"max_output_tokens,omitempty"` // プロバイダー全体のデフォルト最大出力トークン数
+	ModelOverrides  map[string]ModelOverride `yaml:"model_overrides,omitempty"`   // モデルごとの個別オーバーライド
 }
 
 // CloudConfig はXELYON Cloud連携設定（将来用）

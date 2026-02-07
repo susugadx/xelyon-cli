@@ -1,6 +1,7 @@
 package api
 
 import (
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"context"
 	"fmt"
 	"net/http"
@@ -132,6 +133,45 @@ type ReasoningContentProvider interface {
 	// LastReasoningContent は最後の API 呼び出しで返された reasoning_content を返す
 	// ChatWithTools 呼び出し後に取得し、assistant メッセージに含めて次のリクエストに送る
 	LastReasoningContent() string
+}
+
+// knownModelMaxOutputTokens は既知モデルの最大出力トークン数マップ
+var knownModelMaxOutputTokens = map[string]int{
+	"deepseek-chat":           8192,
+	"deepseek-reasoner":       64000,
+	"claude-sonnet-4-5":       16384,
+	"claude-opus-4-5":         32768,
+	"gpt-5.2":                 16384,
+	"gemini-2.5-flash":        65536,
+	"gemini-3-flash-preview":  65536,
+}
+
+// GetMaxOutputTokens は指定されたプロバイダーとモデルの最大出力トークン数を取得する（3段階フォールバック）
+// 1. ユーザーの model_overrides (config)
+// 2. 既知モデルマップ (knownModelMaxOutputTokens)
+// 3. プロバイダーのデフォルト値 (ProviderModelConfig.MaxOutputTokens)
+func GetMaxOutputTokens(providerName, model string) int {
+	cfg := config.GetGlobalConfig()
+	pName := strings.ToLower(providerName)
+	pCfg, ok := cfg.ProviderModels[pName]
+	if !ok {
+		pCfg = config.ProviderModelConfig{}
+	}
+
+	// 1. ユーザーの model_overrides
+	if pCfg.ModelOverrides != nil {
+		if override, ok := pCfg.ModelOverrides[model]; ok && override.MaxOutputTokens > 0 {
+			return override.MaxOutputTokens
+		}
+	}
+
+	// 2. 既知モデルマップ
+	if tokens, ok := knownModelMaxOutputTokens[model]; ok {
+		return tokens
+	}
+
+	// 3. プロバイダーのデフォルト値
+	return pCfg.MaxOutputTokens
 }
 
 // SupportsImages はプロバイダー名から画像対応を判定

@@ -99,7 +99,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	reqBody := api.ChatRequest{
 		Model:         model,
 		Messages:      messages,
-		MaxTokens:     api.GetMaxOutputTokens("groq", 8192),
+		MaxTokens:     api.GetMaxOutputTokens("groq", model),
 		Stream:        true,
 		StreamOptions: &api.StreamOptions{IncludeUsage: true},
 	}

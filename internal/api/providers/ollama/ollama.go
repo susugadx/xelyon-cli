@@ -131,7 +131,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		Messages: messages,
 		Stream:   true,
 		Options: &OllamaOptions{
-			NumPredict: api.GetMaxOutputTokens("ollama", 4096),
+			NumPredict: api.GetMaxOutputTokens("ollama", model),
 		},
 	}
 

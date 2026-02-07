@@ -118,7 +118,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	reqBody := api.ChatRequest{
 		Model:         model,
 		Messages:      messages,
-		MaxTokens:     api.GetMaxOutputTokens("openrouter", 16384),
+		MaxTokens:     api.GetMaxOutputTokens("openrouter", model),
 		Stream:        true,
 		StreamOptions: &api.StreamOptions{IncludeUsage: true},
 	}
@@ -363,7 +363,7 @@ func (p *Provider) chatWithImageRequest(ctx context.Context, systemPrompt string
 	reqBody := multimodalRequest{
 		Model:         model,
 		Messages:      messages,
-		MaxTokens:     api.GetMaxOutputTokens("openrouter", 16384),
+		MaxTokens:     api.GetMaxOutputTokens("openrouter", model),
 		Stream:        true,
 		StreamOptions: &api.StreamOptions{IncludeUsage: true},
 	}

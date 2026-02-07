@@ -56,7 +56,7 @@ func (p *Provider) chatWithCompletions(ctx context.Context, systemPrompt string,
 	reqBody := api.ChatRequest{
 		Model:                model,
 		Messages:             messages,
-		MaxTokens:            api.GetMaxOutputTokens("openai", 16384),
+		MaxTokens:            api.GetMaxOutputTokens("openai", model),
 		Stream:               true,
 		StreamOptions:        &api.StreamOptions{IncludeUsage: true},
 		PromptCacheKey:       "xelyon",
@@ -291,7 +291,7 @@ func (p *Provider) chatWithImageCompletions(ctx context.Context, systemPrompt st
 	reqBody := MultimodalRequest{
 		Model:                model,
 		Messages:             messages,
-		MaxTokens:            api.GetMaxOutputTokens("openai", 16384),
+		MaxTokens:            api.GetMaxOutputTokens("openai", model),
 		Stream:               true,
 		PromptCacheKey:       "xelyon",
 		PromptCacheRetention: "24h",

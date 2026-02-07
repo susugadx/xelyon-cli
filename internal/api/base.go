@@ -136,16 +136,6 @@ func StopSpinner(spinner *ui.Spinner) {
 	}
 }
 
-// GetMaxOutputTokens returns the configured max_output_tokens for a provider.
-// providerName must match the config key (e.g., "openai", "claude", "deepseek").
-// fallback is returned when the config value is 0 (not set).
-func GetMaxOutputTokens(providerName string, fallback int) int {
-	cfg := config.GetGlobalConfig()
-	if pm, ok := cfg.ProviderModels[providerName]; ok && pm.MaxOutputTokens > 0 {
-		return pm.MaxOutputTokens
-	}
-	return fallback
-}
 
 // GetDefaultModel returns the model to use, checking config first, then falling back.
 // providerName must match the config key (e.g., "openai", "claude", "deepseek")

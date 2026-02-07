@@ -93,7 +93,7 @@ func isGemini3Model(model string) bool {
 // Gemini 3: thinkingLevel（常時ON、デフォルトは Flash="minimal", Pro="low" でlatency最小化）
 // Gemini 2.5: thinkingBudget（thinking.enabled=true のときのみ）
 func getThinkingConfigForModel(model string, cfg *config.Config) *GeminiGenerationConfig {
-	maxTokens := api.GetMaxOutputTokens("gemini", 65536)
+	maxTokens := api.GetMaxOutputTokens("gemini", model)
 
 	if isGemini3Model(model) {
 		// Gemini 3: thinking は無効化不可

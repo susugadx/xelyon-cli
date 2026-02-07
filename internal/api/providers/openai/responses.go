@@ -124,7 +124,7 @@ func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, h
 
 	reqBody := ResponsesRequest{
 		Model:                model,
-		MaxOutputTokens:      api.GetMaxOutputTokens("openai", 16384),
+		MaxOutputTokens:      api.GetMaxOutputTokens("openai", model),
 		Stream:               true,
 		Tools:                GetResponsesToolDefinitions(p.mcpTools), // Function Calling
 		PromptCacheKey:       "xelyon",
@@ -451,7 +451,7 @@ func (p *Provider) chatWithImageResponses(ctx context.Context, systemPrompt stri
 	reqBody := ResponsesRequest{
 		Model:                model,
 		Input:                input,
-		MaxOutputTokens:      api.GetMaxOutputTokens("openai", 16384),
+		MaxOutputTokens:      api.GetMaxOutputTokens("openai", model),
 		Stream:               true,
 		Tools:                GetResponsesToolDefinitions(p.mcpTools), // Function Calling
 		PromptCacheKey:       "xelyon",
