@@ -91,6 +91,7 @@ func ReadMultiLineComment(reader *bufio.Reader) (string, *ImageData) {
 			line, err = reader.ReadString('\n')
 			if err == nil {
 				line = strings.TrimRight(line, "\r\n")
+				line = stripBracketedPaste(line)
 			}
 		}
 		if err != nil {

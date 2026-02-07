@@ -106,9 +106,10 @@ func (m *MultilineReader) DisableBracketedPaste() {
 	}
 }
 
-// stripAllBracketedPasteMarkers removes all bracketed paste markers from input
-// Handles both ESC sequence forms (\x1b[200~) and literal forms (^[[200~)
-func stripAllBracketedPasteMarkers(input string) string {
+// StripBracketedPaste removes all bracketed paste markers from input.
+// Handles both ESC sequence forms (\x1b[200~) and literal forms (^[[200~).
+// Exported so other packages can use it for consistent bracket paste cleaning.
+func StripBracketedPaste(input string) string {
 	// ESC sequence forms
 	input = strings.ReplaceAll(input, "\x1b[200~", "")
 	input = strings.ReplaceAll(input, "\x1b[201~", "")
@@ -116,6 +117,11 @@ func stripAllBracketedPasteMarkers(input string) string {
 	input = strings.ReplaceAll(input, "^[[200~", "")
 	input = strings.ReplaceAll(input, "^[[201~", "")
 	return input
+}
+
+// stripAllBracketedPasteMarkers is an alias for backward compatibility within this package.
+func stripAllBracketedPasteMarkers(input string) string {
+	return StripBracketedPaste(input)
 }
 
 // ReadInput reads user input, supporting:
@@ -431,7 +437,8 @@ func (m *MultilineReader) ReadSimpleLine() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimRight(line, "\n\r"), nil
+	line = strings.TrimRight(line, "\n\r")
+	return StripBracketedPaste(line), nil
 }
 
 // readLineFromChannel reads a line from the byte channel (when goroutine is active)
@@ -443,7 +450,7 @@ func (m *MultilineReader) readLineFromChannel() (string, error) {
 			// Enter (raw mode では '\r' が来る)
 			if b == '\n' || b == '\r' {
 				fmt.Print("\r\n") // 改行をエコー
-				return string(buf), nil
+				return StripBracketedPaste(string(buf)), nil
 			}
 
 			buf = append(buf, b)
@@ -477,7 +484,7 @@ func (m *MultilineReader) readLineFromChannel() (string, error) {
 			}
 		case err := <-m.errChan:
 			if len(buf) > 0 {
-				return string(buf), nil
+				return StripBracketedPaste(string(buf)), nil
 			}
 			return "", err
 		}

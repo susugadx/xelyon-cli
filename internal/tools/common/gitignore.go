@@ -68,6 +68,7 @@ func EnsureGitignore(dir string) error {
 		return err
 	}
 
+	input = stripBracketedPaste(input)
 	input = strings.TrimSpace(strings.ToLower(input))
 	if input != "y" && input != "yes" {
 		Yellow.Println("Skipped")

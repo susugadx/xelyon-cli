@@ -114,7 +114,7 @@ func readLineFromStdin() string {
 		buf = append(buf, b[0])
 	}
 
-	return string(buf)
+	return StripBracketedPaste(string(buf))
 }
 
 // ConfirmSelector は確認用の3択セレクター（Yes/No/Comment）

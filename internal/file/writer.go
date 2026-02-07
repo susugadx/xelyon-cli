@@ -8,6 +8,15 @@ import (
 	"strings"
 )
 
+// stripBracketedPaste removes bracketed paste escape sequences from input.
+func stripBracketedPaste(input string) string {
+	input = strings.ReplaceAll(input, "\x1b[200~", "")
+	input = strings.ReplaceAll(input, "\x1b[201~", "")
+	input = strings.ReplaceAll(input, "^[[200~", "")
+	input = strings.ReplaceAll(input, "^[[201~", "")
+	return input
+}
+
 func WriteFile(path string, content string) error {
 	absPath, err := filepath.Abs(path)
 	if err != nil {
@@ -44,6 +53,7 @@ func ConfirmApply(filename string, newContent string) bool {
 
 	reader := bufio.NewReader(os.Stdin)
 	input, _ := reader.ReadString('\n')
+	input = stripBracketedPaste(input)
 	input = strings.TrimSpace(strings.ToLower(input))
 
 	return input == "y" || input == "yes"

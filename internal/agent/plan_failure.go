@@ -86,6 +86,7 @@ func runFailureSelectorUI(options []ui.SelectOption) (plan.FailureAction, string
 		if err != nil {
 			return plan.FailureActionAbort, ""
 		}
+		response = stripBracketedPaste(response)
 		response = strings.ToLower(strings.TrimSpace(response))
 
 		switch response {

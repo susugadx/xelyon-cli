@@ -49,6 +49,7 @@ var SimpleConfirm = func(message string) bool {
 			// EOF または読み取りエラー時は終了
 			return false
 		}
+		response = stripBracketedPaste(response)
 		response = strings.ToLower(strings.TrimSpace(response))
 
 		// 空入力は無視してリトライ（ただし連続3回で終了）

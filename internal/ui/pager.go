@@ -62,6 +62,7 @@ func (p *Pager) promptContinue() bool {
 		return false
 	}
 
+	input = StripBracketedPaste(input)
 	input = strings.TrimSpace(strings.ToLower(input))
 	return input != "q" && input != "quit"
 }

@@ -434,15 +434,6 @@ func (e *StructMapEditor) runLSPServers(cfg *config.Config) (bool, error) {
 	}
 }
 
-// cleanBracketedPaste は Bracketed Paste のエスケープシーケンスを除去
-func cleanBracketedPaste(input string) string {
-	// Bracketed Paste Mode のエスケープシーケンス
-	// \x1b[200~ = 開始, \x1b[201~ = 終了
-	input = strings.ReplaceAll(input, "\x1b[200~", "")
-	input = strings.ReplaceAll(input, "\x1b[201~", "")
-	return strings.TrimSpace(input)
-}
-
 // readLine は標準入力から1行読み取る
 func readLine() string {
 	var line string
@@ -458,6 +449,6 @@ func readLine() string {
 		}
 	}
 
-	// Bracketed Paste シーケンスを除去
-	return cleanBracketedPaste(line)
+	// Bracketed Paste シーケンスを除去 + TrimSpace
+	return strings.TrimSpace(StripBracketedPaste(line))
 }
