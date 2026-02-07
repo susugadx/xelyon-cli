@@ -21,6 +21,7 @@ DeepSeek, OpenAI, Gemini, Claude, Ollama, Groq, OpenRouter, Bedrock をシーム
 ローカルLLM（Ollama）も対応で、オフラインでも使用可能。
 
 **OpenAI Responses API 対応**: `gpt-5.2-codex` などの Codex モデルを自動検出し、最適なAPIを選択。
+**DeepSeek Reasoner 対応**: `reasoning_content`（思考内容）のストリーミング表示・ツール実行フローでの保持に対応。
 
 ### 🛠️ 24種類の組み込みツール
 - **ファイル操作**: 読み書き、編集、削除、バックアップ復元

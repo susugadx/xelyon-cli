@@ -38,7 +38,11 @@ func (a *Agent) runInvestigationPhase(ctx context.Context) (*plan.Plan, error) {
 			return nil, fmt.Errorf("investigation failed: %w", err)
 		}
 
-		a.History = append(a.History, api.Message{Role: "assistant", Content: response})
+		a.History = append(a.History, api.Message{
+			Role:             "assistant",
+			Content:          response,
+			ReasoningContent: a.getLastReasoningContent(),
+		})
 		if a.Stats != nil {
 			a.Stats.AssistantMessages++
 		}

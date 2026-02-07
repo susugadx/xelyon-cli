@@ -78,7 +78,11 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 			return fmt.Errorf("step %d failed: %w", step.ID, err)
 		}
 
-		a.History = append(a.History, api.Message{Role: "assistant", Content: response})
+		a.History = append(a.History, api.Message{
+			Role:             "assistant",
+			Content:          response,
+			ReasoningContent: a.getLastReasoningContent(),
+		})
 		if a.Stats != nil {
 			a.Stats.AssistantMessages++
 		}

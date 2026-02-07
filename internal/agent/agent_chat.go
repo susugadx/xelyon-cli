@@ -112,7 +112,11 @@ func (a *Agent) runNormalMode(ctx context.Context, input string) error {
 		// Plan JSON が検出された場合、ツール使用を促す
 		if plan.ContainsPlanJSON(response) {
 			yellow.Println("⚠️  Plan JSON detected in normal mode. Use create_plan tool instead.")
-			a.History = append(a.History, api.Message{Role: "assistant", Content: response})
+			a.History = append(a.History, api.Message{
+				Role:             "assistant",
+				Content:          response,
+				ReasoningContent: a.getLastReasoningContent(),
+			})
 			a.History = append(a.History, api.Message{
 				Role:    "user",
 				Content: "[SYSTEM] You are in NORMAL MODE. Do NOT output JSON directly. Use create_plan tool or execute tools DIRECTLY.",

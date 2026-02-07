@@ -33,6 +33,7 @@ xelyon --provider deepseek --model deepseek-reasoner
 - 高速・低コスト
 - コード生成に特化したモデルあり
 - 画像入力非対応
+- **deepseek-reasoner**: `reasoning_content`（思考内容）をストリーミング表示（💭）、ツール実行時も思考を保持
 
 ### 2. OpenAI
 

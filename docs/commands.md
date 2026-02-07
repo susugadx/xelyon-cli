@@ -316,7 +316,7 @@ Extended Thinking（推論モード）を切り替えます。複雑なタスク
 - **Claude**: Sonnet 4 以降
 - **OpenAI**: gpt-5.2 系
 - **Gemini**: 2.5 Pro 系（Flash は非対応）
-- **DeepSeek**: 自動で reasoner モデルに切り替わります
+- **DeepSeek**: 自動で reasoner モデルに切り替わります（`reasoning_content` を💭で表示、ツール実行フローでも保持）
 
 **注意**: Extended Thinking はトークン消費量が増加します。
 

@@ -408,10 +408,19 @@ func handleThinkCommand(agent *Agent, args []string) bool {
 		return true
 	}
 
+	isDeepSeek := agent != nil && strings.ToLower(agent.ProviderName) == "deepseek"
+
 	switch args[0] {
 	case "on":
 		cfg.Thinking.Enabled = true
+		// DeepSeek: モデル名で思考が決まるため reasoner に切り替え
+		if isDeepSeek && agent != nil {
+			agent.CurrentModel = "deepseek-reasoner"
+		}
 		green.Printf("🧠 Thinking Mode: ON (level: %s)\n", cfg.Thinking.Level)
+		if isDeepSeek {
+			green.Printf("   Model: %s\n", agent.CurrentModel)
+		}
 	case "off":
 		if isCodex {
 			// Codexモデルは reasoning 必須のため "low" にフォールバック
@@ -421,12 +430,26 @@ func handleThinkCommand(agent *Agent, args []string) bool {
 			green.Println("🧠 Thinking Mode: low (Codex minimum)")
 		} else {
 			cfg.Thinking.Enabled = false
+			// DeepSeek: reasoner → chat にフォールバック
+			if isDeepSeek && agent != nil && agent.CurrentModel == "deepseek-reasoner" {
+				agent.CurrentModel = "deepseek-chat"
+			}
 			green.Println("🧠 Thinking Mode: OFF")
+			if isDeepSeek {
+				green.Printf("   Model: %s\n", agent.CurrentModel)
+			}
 		}
 	case "low", "medium", "high", "xhigh":
 		cfg.Thinking.Enabled = true
 		cfg.Thinking.Level = args[0]
+		// DeepSeek: モデル名で思考が決まるため reasoner に切り替え
+		if isDeepSeek && agent != nil {
+			agent.CurrentModel = "deepseek-reasoner"
+		}
 		green.Printf("🧠 Thinking Mode: ON (level: %s)\n", args[0])
+		if isDeepSeek {
+			green.Printf("   Model: %s\n", agent.CurrentModel)
+		}
 	default:
 		yellow.Println("Usage: /think [on|off|low|medium|high|xhigh]")
 	}

@@ -24,8 +24,9 @@ type ChatRequest struct {
 
 // Delta はストリームレスポンスの差分
 type Delta struct {
-	Content   string           `json:"content,omitempty"`
-	ToolCalls []OpenAIToolCall `json:"tool_calls,omitempty"` // Function Calling用
+	Content          string           `json:"content,omitempty"`
+	ReasoningContent string           `json:"reasoning_content,omitempty"` // DeepSeek Reasoner の思考内容
+	ToolCalls        []OpenAIToolCall `json:"tool_calls,omitempty"`        // Function Calling用
 }
 
 // StreamChoice はストリームの選択肢

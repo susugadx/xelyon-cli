@@ -250,7 +250,11 @@ func (w *Worker) executeStep(ctx context.Context, step *plan.PlanStep, confirmLe
 			}
 		}
 
-		history = append(history, api.Message{Role: "assistant", Content: response})
+		history = append(history, api.Message{
+			Role:             "assistant",
+			Content:          response,
+			ReasoningContent: api.GetReasoningContent(w.provider),
+		})
 
 		toolCalls := tools.ParseToolCalls(response)
 		if len(toolCalls) == 0 {
@@ -393,7 +397,11 @@ func (w *Worker) executeInvestigation(ctx context.Context, query string) WorkerR
 			}
 		}
 
-		history = append(history, api.Message{Role: "assistant", Content: response})
+		history = append(history, api.Message{
+			Role:             "assistant",
+			Content:          response,
+			ReasoningContent: api.GetReasoningContent(w.provider),
+		})
 
 		toolCalls := tools.ParseToolCalls(response)
 		if len(toolCalls) == 0 {

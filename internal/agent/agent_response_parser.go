@@ -84,11 +84,18 @@ func extractExplanationAndTool(response string) (explanation, toolJSON string) {
 	return explanation, response[toolStartIdx:]
 }
 
+// getLastReasoningContent はプロバイダーから最後の reasoning_content を取得する
+// DeepSeek Reasoner などの思考モデルで使用
+func (a *Agent) getLastReasoningContent() string {
+	return api.GetReasoningContent(a.CurrentProvider)
+}
+
 // handleNormalResponse は通常の回答（ツール呼び出しなし）を処理
 func (a *Agent) handleNormalResponse(response string) {
 	a.History = append(a.History, api.Message{
-		Role:    "assistant",
-		Content: response,
+		Role:             "assistant",
+		Content:          response,
+		ReasoningContent: a.getLastReasoningContent(),
 	})
 
 	// 統計情報更新: Assistantメッセージ数をカウント

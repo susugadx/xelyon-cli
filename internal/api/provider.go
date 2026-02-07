@@ -126,6 +126,14 @@ type UsageReporter interface {
 	SetUsageCallback(callback UsageCallback)
 }
 
+// ReasoningContentProvider は reasoning_content（思考内容）に対応するプロバイダーのオプショナルインターフェース
+// DeepSeek Reasoner などの思考モデルで使用
+type ReasoningContentProvider interface {
+	// LastReasoningContent は最後の API 呼び出しで返された reasoning_content を返す
+	// ChatWithTools 呼び出し後に取得し、assistant メッセージに含めて次のリクエストに送る
+	LastReasoningContent() string
+}
+
 // SupportsImages はプロバイダー名から画像対応を判定
 func SupportsImages(providerName string) bool {
 	switch strings.ToLower(providerName) {

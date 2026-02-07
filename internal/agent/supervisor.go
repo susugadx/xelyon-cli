@@ -312,7 +312,11 @@ func (s *Supervisor) generatePlan(ctx context.Context, userRequest, investigatio
 			return nil, err
 		}
 
-		history = append(history, api.Message{Role: "assistant", Content: response})
+		history = append(history, api.Message{
+			Role:             "assistant",
+			Content:          response,
+			ReasoningContent: api.GetReasoningContent(s.supervisorProvider),
+		})
 
 		// ツール呼び出しをパース
 		toolCalls := tools.ParseToolCalls(response)

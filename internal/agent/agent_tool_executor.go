@@ -27,13 +27,17 @@ func (a *Agent) addToolCallToHistory(response string, toolCall *tools.ToolCall) 
 	// レスポンスから説明部分とツール呼び出しを分離
 	explanation, _ := extractExplanationAndTool(response)
 
+	// reasoning_content を取得（DeepSeek Reasoner 対応）
+	reasoningContent := a.getLastReasoningContent()
+
 	// Function Calling: tool_call_id がある場合は OpenAI 形式で履歴に追加
 	isFunctionCalling := toolCall.ID != ""
 	if isFunctionCalling {
 		// assistant メッセージに tool_calls を含める
 		a.History = append(a.History, api.Message{
-			Role:    "assistant",
-			Content: explanation, // 説明部分のみ（ツール呼び出しは ToolCalls に）
+			Role:             "assistant",
+			Content:          explanation, // 説明部分のみ（ツール呼び出しは ToolCalls に）
+			ReasoningContent: reasoningContent,
 			ToolCalls: []api.OpenAIToolCall{{
 				ID:   toolCall.ID,
 				Type: "function",
@@ -46,8 +50,9 @@ func (a *Agent) addToolCallToHistory(response string, toolCall *tools.ToolCall) 
 	} else {
 		// テキストベースのツール呼び出し（従来方式）
 		a.History = append(a.History, api.Message{
-			Role:    "assistant",
-			Content: response,
+			Role:             "assistant",
+			Content:          response,
+			ReasoningContent: reasoningContent,
 		})
 	}
 

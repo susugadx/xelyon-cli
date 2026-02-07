@@ -31,8 +31,9 @@ const defaultDeepSeekURL = "https://api.deepseek.com/chat/completions"
 // Provider はDeepSeek APIのプロバイダー実装
 type Provider struct {
 	api.BaseProvider
-	mcpTools      []api.OpenAIToolFunction // MCP ツール定義（Function Calling用）
-	usageCallback api.UsageCallback        // トークン使用量コールバック
+	mcpTools             []api.OpenAIToolFunction // MCP ツール定義（Function Calling用）
+	usageCallback        api.UsageCallback        // トークン使用量コールバック
+	lastReasoningContent string                   // 最後の reasoning_content（DeepSeek Reasoner用）
 }
 
 // New は新しいProviderを作成
@@ -74,10 +75,14 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	// モデル名を設定（config優先、フォールバックはdeepseek-chat）
 	model = api.GetDefaultModel(model, "deepseek", "deepseek-chat")
 
-	// Extended Thinking 有効時は deepseek-reasoner に切り替え
+	// Extended Thinking の ON/OFF でモデルを切り替え
+	// DeepSeek は reasoner モデル自体が思考モードなので、モデル名で制御する
 	cfg := config.GetGlobalConfig()
 	if cfg.Thinking.Enabled {
 		model = "deepseek-reasoner"
+	} else if model == "deepseek-reasoner" {
+		// /think off 時は deepseek-chat にフォールバック
+		model = "deepseek-chat"
 	}
 
 	// モデル名マッピング
@@ -139,8 +144,14 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 	toolCalls := make(map[int]*toolCallAccumulator)
 	var toolCallsOutput strings.Builder
 
+	// reasoning_content を累積
+	var reasoningContent strings.Builder
+	reasoningStarted := false
+
 	// usage 情報を追跡
 	var lastUsage *api.Usage
+
+	dim := color.New(color.Faint)
 
 	// DeepSeek固有のパース処理（OpenAI互換形式）
 	parser := func(line string) (string, bool, error) {
@@ -158,12 +169,13 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 			return "", false, fmt.Errorf("invalid response structure: %w", err)
 		}
 
-		// 拡張した StreamResponse（tool_calls, finish_reason, usage を含む）
+		// 拡張した StreamResponse（tool_calls, finish_reason, reasoning_content, usage を含む）
 		var streamResp struct {
 			Choices []struct {
 				Delta struct {
-					Content   string               `json:"content,omitempty"`
-					ToolCalls []api.OpenAIToolCall `json:"tool_calls,omitempty"`
+					Content          string               `json:"content,omitempty"`
+					ReasoningContent string               `json:"reasoning_content,omitempty"` // DeepSeek Reasoner の思考内容
+					ToolCalls        []api.OpenAIToolCall `json:"tool_calls,omitempty"`
 				} `json:"delta"`
 				FinishReason string `json:"finish_reason,omitempty"`
 			} `json:"choices"`
@@ -197,6 +209,25 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 
 		choice := streamResp.Choices[0]
 
+		// reasoning_content の累積・表示
+		if choice.Delta.ReasoningContent != "" {
+			if !reasoningStarted {
+				reasoningStarted = true
+				// スピナーを停止して思考表示開始
+				spinner.Stop()
+				dim.Print("💭 ")
+			}
+			reasoningContent.WriteString(choice.Delta.ReasoningContent)
+			dim.Print(choice.Delta.ReasoningContent)
+		}
+
+		// reasoning_content から content に切り替わった時に改行
+		if choice.Delta.Content != "" && reasoningStarted && reasoningContent.Len() > 0 {
+			fmt.Println() // 思考内容の後に改行
+			fmt.Println() // 空行で区切り
+			reasoningStarted = false
+		}
+
 		// tool_calls の累積処理
 		for _, tc := range choice.Delta.ToolCalls {
 			acc, exists := toolCalls[tc.Index]
@@ -217,6 +248,11 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 
 		// finish_reason == "tool_calls" で完了
 		if choice.FinishReason == "tool_calls" {
+			// 思考のみで終了した場合の改行
+			if reasoningStarted && reasoningContent.Len() > 0 {
+				fmt.Println()
+				fmt.Println()
+			}
 			// 累積した tool_calls を内部JSON形式に変換
 			for i := 0; i < len(toolCalls); i++ {
 				acc := toolCalls[i]
@@ -242,9 +278,17 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 		return choice.Delta.Content, false, nil
 	}
 
+	// lastReasoningContent をリセット
+	p.lastReasoningContent = ""
+
 	content, err := api.ParseStreamingResponse(ctx, resp, spinner, parser)
 	if err != nil {
 		return "", err
+	}
+
+	// reasoning_content を保存（次のリクエストに含めるため）
+	if reasoningContent.Len() > 0 {
+		p.lastReasoningContent = reasoningContent.String()
 	}
 
 	// usage コールバックを呼び出し
@@ -294,4 +338,10 @@ func (p *Provider) SetMCPTools(tools []api.OpenAIToolFunction) {
 // SetUsageCallback は使用量レポートのコールバックを設定する
 func (p *Provider) SetUsageCallback(callback api.UsageCallback) {
 	p.usageCallback = callback
+}
+
+// LastReasoningContent は最後の API 呼び出しで返された reasoning_content を返す
+// ReasoningContentProvider インターフェースの実装
+func (p *Provider) LastReasoningContent() string {
+	return p.lastReasoningContent
 }
