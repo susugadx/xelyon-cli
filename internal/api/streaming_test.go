@@ -29,7 +29,7 @@ func TestParseStreamingResponse_EmptyLines(t *testing.T) {
 	originalConfig := config.GetGlobalConfig()
 	defer config.SetGlobalConfig(originalConfig)
 	config.SetGlobalConfig(config.DefaultConfig())
-	
+
 	body := "\n\n\n"
 	resp := &http.Response{
 		Body: &mockReadCloser{reader: strings.NewReader(body)},
@@ -56,7 +56,7 @@ func TestParseStreamingResponse_ParserError(t *testing.T) {
 	originalConfig := config.GetGlobalConfig()
 	defer config.SetGlobalConfig(originalConfig)
 	config.SetGlobalConfig(config.DefaultConfig())
-	
+
 	body := "line1\nline2\nline3\n"
 	resp := &http.Response{
 		Body: &mockReadCloser{reader: strings.NewReader(body)},
@@ -85,7 +85,7 @@ func TestParseStreamingResponse_DoneFlag(t *testing.T) {
 	originalConfig := config.GetGlobalConfig()
 	defer config.SetGlobalConfig(originalConfig)
 	config.SetGlobalConfig(config.DefaultConfig())
-	
+
 	body := "chunk1\nchunk2\n[DONE]\nchunk3\n"
 	resp := &http.Response{
 		Body: &mockReadCloser{reader: strings.NewReader(body)},
@@ -116,7 +116,7 @@ func TestParseStreamingResponse_ContextCanceled(t *testing.T) {
 	originalConfig := config.GetGlobalConfig()
 	defer config.SetGlobalConfig(originalConfig)
 	config.SetGlobalConfig(config.DefaultConfig())
-	
+
 	// 長いストリーム（読み取り中にキャンセルをシミュレート）
 	body := "chunk1\nchunk2\nchunk3\nchunk4\nchunk5\n"
 	resp := &http.Response{
@@ -151,7 +151,7 @@ func TestParseStreamingResponse_NormalFlow(t *testing.T) {
 	originalConfig := config.GetGlobalConfig()
 	defer config.SetGlobalConfig(originalConfig)
 	config.SetGlobalConfig(config.DefaultConfig())
-	
+
 	body := "Hello\nWorld\n!\n"
 	resp := &http.Response{
 		Body: &mockReadCloser{reader: strings.NewReader(body)},
@@ -208,7 +208,7 @@ func (s *slowReader) Close() error {
 func TestStreamingIdleTimeout(t *testing.T) {
 	originalConfig := config.GetGlobalConfig()
 	defer config.SetGlobalConfig(originalConfig)
-	
+
 	// 短いアイドルタイムアウトを設定
 	cfg := config.DefaultConfig()
 	cfg.Streaming.IdleTimeoutSeconds = 1 // 1秒
@@ -259,7 +259,7 @@ func TestStreamingIdleTimeout(t *testing.T) {
 func TestStreamingNoTimeoutWithContinuousData(t *testing.T) {
 	originalConfig := config.GetGlobalConfig()
 	defer config.SetGlobalConfig(originalConfig)
-	
+
 	// 短いアイドルタイムアウトを設定
 	cfg := config.DefaultConfig()
 	cfg.Streaming.IdleTimeoutSeconds = 2 // 2秒

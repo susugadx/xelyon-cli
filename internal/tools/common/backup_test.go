@@ -69,7 +69,7 @@ func TestCreateBackup_ExistingFile(t *testing.T) {
 func TestCleanupOldBackups(t *testing.T) {
 	originalConfig := config.GetGlobalConfig()
 	defer config.SetGlobalConfig(originalConfig)
-	
+
 	tmpDir := testutil.SetupTempHome(t)
 	testFile := filepath.Join(tmpDir, "test.txt")
 
