@@ -321,7 +321,7 @@ func TestProvider_ChatWithTools_FunctionCalling(t *testing.T) {
 			},
 		}
 		jsonBytes, _ := json.Marshal(resp)
-		w.Write(jsonBytes)
+		_, _ = w.Write(jsonBytes)
 	})
 
 	originalURL := os.Getenv("GEMINI_API_URL")
@@ -440,7 +440,7 @@ func TestProvider_ChatWithTools_WithMCPTools(t *testing.T) {
 			},
 		}
 		jsonBytes, _ := json.Marshal(resp)
-		w.Write(jsonBytes)
+		_, _ = w.Write(jsonBytes)
 	})
 
 	originalURL := os.Getenv("GEMINI_API_URL")

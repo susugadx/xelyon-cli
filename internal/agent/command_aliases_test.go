@@ -7,6 +7,9 @@ import (
 )
 
 func TestResolveCommandAlias_Default(t *testing.T) {
+	originalConfig := config.GetGlobalConfig()
+	defer config.SetGlobalConfig(originalConfig)
+	
 	config.SetGlobalConfig(config.DefaultConfig())
 
 	got := resolveCommandAlias("/h")
@@ -21,6 +24,9 @@ func TestResolveCommandAlias_Default(t *testing.T) {
 }
 
 func TestResolveCommandAlias_CaseInsensitive(t *testing.T) {
+	originalConfig := config.GetGlobalConfig()
+	defer config.SetGlobalConfig(originalConfig)
+	
 	config.SetGlobalConfig(config.DefaultConfig())
 
 	got := resolveCommandAlias("/H")
@@ -30,6 +36,9 @@ func TestResolveCommandAlias_CaseInsensitive(t *testing.T) {
 }
 
 func TestResolveCommandAlias_UserOverride(t *testing.T) {
+	originalConfig := config.GetGlobalConfig()
+	defer config.SetGlobalConfig(originalConfig)
+	
 	cfg := config.DefaultConfig()
 	cfg.CommandAliases = map[string]string{
 		"/h": "/history",
@@ -43,6 +52,9 @@ func TestResolveCommandAlias_UserOverride(t *testing.T) {
 }
 
 func TestResolveCommandAlias_UserAdditional(t *testing.T) {
+	originalConfig := config.GetGlobalConfig()
+	defer config.SetGlobalConfig(originalConfig)
+	
 	cfg := config.DefaultConfig()
 	cfg.CommandAliases = map[string]string{
 		"/hh": "/help",
@@ -56,6 +68,9 @@ func TestResolveCommandAlias_UserAdditional(t *testing.T) {
 }
 
 func TestResolveCommandAlias_Chain(t *testing.T) {
+	originalConfig := config.GetGlobalConfig()
+	defer config.SetGlobalConfig(originalConfig)
+	
 	cfg := config.DefaultConfig()
 	cfg.CommandAliases = map[string]string{
 		"/a": "/b",
@@ -70,6 +85,9 @@ func TestResolveCommandAlias_Chain(t *testing.T) {
 }
 
 func TestResolveCommandAlias_Cycle(t *testing.T) {
+	originalConfig := config.GetGlobalConfig()
+	defer config.SetGlobalConfig(originalConfig)
+	
 	cfg := config.DefaultConfig()
 	cfg.CommandAliases = map[string]string{
 		"/a": "/b",
@@ -84,6 +102,9 @@ func TestResolveCommandAlias_Cycle(t *testing.T) {
 }
 
 func TestResolveCommandAlias_NoAlias(t *testing.T) {
+	originalConfig := config.GetGlobalConfig()
+	defer config.SetGlobalConfig(originalConfig)
+	
 	config.SetGlobalConfig(config.DefaultConfig())
 
 	got := resolveCommandAlias("/unknown")

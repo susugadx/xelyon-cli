@@ -44,6 +44,10 @@ coverage.txt
 test.js
 test.txt
 
+# CI logs
+.ci_log
+.ci_build_log
+
 # Go workspace
 go.work
 go.work.sum
