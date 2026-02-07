@@ -48,6 +48,7 @@ type Agent struct {
 	session              *history.Session
 	storage              *history.Storage
 	changeStack          []tools.FileChange
+	taskChangeOffset     int                    // タスク開始時の changeStack 長（タスク単位のサマリー表示用）
 	changeStorage        *history.ChangeStorage // 永続的変更履歴
 	mcpManager           *mcp.Manager
 	lspClient            *lsp.Client         // LSPクライアント

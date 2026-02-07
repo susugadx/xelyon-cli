@@ -23,6 +23,15 @@ import (
 func (a *Agent) chat(input string) {
 	a.SetStatus(StateRunning, "Processing request", "処理中", "Wait for response", "応答を待ってください")
 
+	// タスク開始: changeStack のオフセットを記録（タスク単位のサマリー表示用）
+	prevChanges := len(a.changeStack) - a.taskChangeOffset
+	a.taskChangeOffset = len(a.changeStack)
+	if prevChanges > 0 {
+		yellow.Printf("⚠️  %d uncommitted changes from previous task\n", prevChanges)
+		fmt.Println("💡 Run /commit or git commit to keep changes separate")
+		fmt.Println()
+	}
+
 	// GitHub MCP ヒントを追加（GitHub関連リクエストの場合）
 	input = a.AddGitHubHint(input)
 	// スキル検出・ロード
@@ -234,14 +243,16 @@ Do NOT give up. Try again with a different approach.`, lastFailedResult),
 	return nil
 }
 
-// showTaskSummary は changeStack からサマリーを生成して表示
+// showTaskSummary は現在タスクの changeStack からサマリーを生成して表示
+// taskChangeOffset 以降の変更のみを対象とする（Issue #118: タスク分離）
 func (a *Agent) showTaskSummary() {
-	if len(a.changeStack) == 0 {
+	taskChanges := a.changeStack[a.taskChangeOffset:]
+	if len(taskChanges) == 0 {
 		return
 	}
 
 	ts := ui.NewTaskSummary()
-	for _, change := range a.changeStack {
+	for _, change := range taskChanges {
 		action := ui.InferAction(change.Tool)
 		ts.AddChange(change.FilePath, action, change.LinesAdded, change.LinesRemoved)
 	}
