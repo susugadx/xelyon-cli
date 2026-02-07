@@ -64,6 +64,9 @@ type Agent struct {
 	compactedItems  []api.InputItem // 圧縮済みアイテム
 	isCompactedMode bool            // 圧縮モードフラグ
 
+	// トークン上限エラー処理
+	tokenLimitRetryCount int // トークン上限エラー時のリトライ回数（最大1回）
+
 	// 並列実行用ミューテックス
 	historyMu     sync.Mutex
 	changeStackMu sync.Mutex

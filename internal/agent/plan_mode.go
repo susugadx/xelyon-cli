@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
@@ -38,7 +39,21 @@ func (a *Agent) RunPlanMode(ctx context.Context, userRequest string) error {
 			red.Printf("❌ Failed to create supervisor: %v\n", err)
 			return err
 		}
-		return supervisor.Run(ctx, userRequest)
+
+		// Supervisor実行（トークン上限エラー時は自動圧縮+リトライ）
+		err = supervisor.Run(ctx, userRequest)
+		if err != nil && token.IsTokenLimitError(err) {
+			// リトライ関数を定義
+			retryFunc := func() error {
+				return supervisor.Run(ctx, userRequest)
+			}
+
+			// 自動圧縮+リトライを試みる
+			if a.handleTokenLimitErrorWithRetry(err, retryFunc, true, supervisor) {
+				return nil // リトライ成功
+			}
+		}
+		return err
 	}
 
 	// 以下は順次実行モード（従来の処理）
@@ -55,6 +70,15 @@ func (a *Agent) RunPlanMode(ctx context.Context, userRequest string) error {
 	// 調査フェーズ: SafetyHighツールを実行し、create_plan ツールで Plan を作成
 	p, err := a.runInvestigationPhase(ctx)
 	if err != nil {
+		// トークン上限エラーの場合は自動圧縮+リトライ
+		if token.IsTokenLimitError(err) {
+			retryFunc := func() error {
+				return a.RunPlanMode(ctx, userRequest)
+			}
+			if a.handleTokenLimitErrorWithRetry(err, retryFunc, true, nil) {
+				return nil // リトライ成功
+			}
+		}
 		return err
 	}
 
@@ -101,6 +125,15 @@ func (a *Agent) RunPlanMode(ctx context.Context, userRequest string) error {
 	// Step 4: 実装フェーズ
 	err = a.runImplementationPhase(ctx, p)
 	if err != nil {
+		// トークン上限エラーの場合は自動圧縮+リトライ
+		if token.IsTokenLimitError(err) {
+			retryFunc := func() error {
+				return a.RunPlanMode(ctx, userRequest)
+			}
+			if a.handleTokenLimitErrorWithRetry(err, retryFunc, true, nil) {
+				return nil // リトライ成功
+			}
+		}
 		a.SetStatus(StateAborted, "Implementation failed", "実装に失敗", "Review errors and retry", "エラーを確認して再試行")
 		return err
 	}

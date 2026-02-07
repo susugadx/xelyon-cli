@@ -127,3 +127,67 @@ func handleTokenLimitError(err error) {
 	yellow.Println("💡 Try: /compress to reduce history")
 	yellow.Println("💡 Or:  /clear to start fresh")
 }
+
+// handleTokenLimitErrorWithRetry はトークン上限エラー時に自動圧縮してリトライ
+// 戻り値: リトライ成功時はtrue、失敗時はfalse
+func (a *Agent) handleTokenLimitErrorWithRetry(err error, retryFunc func() error, isPlanMode bool, supervisor *Supervisor) bool {
+	if !token.IsTokenLimitError(err) {
+		return false
+	}
+
+	// リトライ制限（最大1回）
+	if a.tokenLimitRetryCount >= 1 {
+		// 2回目以降は通常のエラー表示
+		handleTokenLimitError(err)
+		return false
+	}
+
+	// 通知表示
+	cyan.Println("\n⚡ トークン上限到達。自動圧縮して再実行します...")
+
+	// LLMサマリー方式で圧縮（既存のCompressHistoryを使用）
+	// keepRecentはデフォルト値10を使用
+	keepRecent := 10
+	cfg := config.GetGlobalConfig()
+	if cfg.Compression.KeepRecent > 0 {
+		keepRecent = cfg.Compression.KeepRecent
+	}
+
+	// 履歴が短すぎる場合は圧縮できない
+	if len(a.History) <= keepRecent {
+		yellow.Println("⚠️  履歴が短すぎるため圧縮できません")
+		handleTokenLimitError(err)
+		return false
+	}
+
+	// 圧縮実行
+	yellow.Println("🗜️  会話を圧縮中...")
+	if err := a.CompressHistory(keepRecent); err != nil {
+		red.Printf("❌ 自動圧縮に失敗しました: %v\n", err)
+		handleTokenLimitError(err)
+		return false
+	}
+
+	// Plan Mode対応: Supervisorで溢れた場合の処理
+	// 完了タスクの結果はSharedContextに保存されているので保持される
+	// 特に追加の処理は不要
+
+	// リトライカウントをインクリメント
+	a.tokenLimitRetryCount++
+
+	// リトライ実行
+	cyan.Println("🔄 圧縮完了、再実行します...")
+	if retryErr := retryFunc(); retryErr != nil {
+		// リトライ後もエラーの場合は通常のエラー表示
+		if token.IsTokenLimitError(retryErr) {
+			red.Println("❌ 圧縮後もトークン上限を超えています")
+		}
+		handleTokenLimitError(retryErr)
+		return false
+	}
+
+	// リトライ成功
+	green.Println("✅ 自動圧縮＆リトライ成功")
+	a.tokenLimitRetryCount = 0 // 成功したらリセット
+	return true
+}

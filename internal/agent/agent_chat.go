@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/agent/plan"
+	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	promptnormal "github.com/susugadx/xelyon-cli/internal/prompt/normal"
@@ -60,9 +61,32 @@ func (a *Agent) chat(input string) {
 		if errors.Is(err, context.Canceled) {
 			yellow.Println("\n⚠️  Response interrupted")
 		} else {
-			// トークン上限エラーの場合は提案を表示
-			handleTokenLimitError(err)
-			red.Printf("Error: %v\n", err)
+			// トークン上限エラーの場合は自動圧縮+リトライを試みる
+			if token.IsTokenLimitError(err) {
+				// リトライ関数を定義
+				retryFunc := func() error {
+					// 同じコンテキストで再実行
+					ctx := context.Background()
+					if a.PlanModeEnabled {
+						return a.RunPlanMode(ctx, input)
+					} else {
+						return a.runNormalMode(ctx, input)
+					}
+				}
+
+				// 自動圧縮+リトライを試みる
+				if a.handleTokenLimitErrorWithRetry(err, retryFunc, a.PlanModeEnabled, nil) {
+					// リトライ成功時はここで終了
+					ui.StopGlobalSpinner()
+					a.SetStatus(StateWaitingInput, "Ready for input", "入力待ち", "Type your request or /help", "リクエスト、または /help を入力")
+					return
+				}
+				// リトライ失敗時はエラーメッセージを表示（handleTokenLimitErrorWithRetry内で既に表示済み）
+				red.Printf("Error: %v\n", err)
+			} else {
+				// トークン上限以外のエラー
+				red.Printf("Error: %v\n", err)
+			}
 		}
 		ui.StopGlobalSpinner()
 		a.SetStatus(StateAborted, "Request failed", "リクエスト失敗", "Try again", "再試行してください")
