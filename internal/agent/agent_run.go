@@ -9,6 +9,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/audit"
+	"github.com/susugadx/xelyon-cli/internal/prompt"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -148,7 +149,16 @@ func RunOnceWithImage(query string, model string, provider api.Provider, imagePa
 
 	// XELYON.md読み込み
 	if config := loadProjectConfig(); config != "" {
-		agent.SystemPrompt += "\n\n## Project Context:\n" + config
+		// ルール系セクションを Workflow Rules 内に強制挿入
+		rulesBlock := prompt.BuildProjectRulesBlock(config)
+		if rulesBlock != "" {
+			agent.SystemPrompt = prompt.InjectProjectRules(agent.SystemPrompt, rulesBlock)
+		}
+		// ルール系を除いた残りを Project Context として末尾に追加
+		stripped := prompt.StripRuleSections(config)
+		if stripped != "" {
+			agent.SystemPrompt += "\n\n## Project Context:\n" + stripped
+		}
 		green.Println("📋 XELYON.md loaded")
 	}
 
