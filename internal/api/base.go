@@ -136,7 +136,6 @@ func StopSpinner(spinner *ui.Spinner) {
 	}
 }
 
-
 // GetDefaultModel returns the model to use, checking config first, then falling back.
 // providerName must match the config key (e.g., "openai", "claude", "deepseek")
 func GetDefaultModel(model, providerName, fallback string) string {

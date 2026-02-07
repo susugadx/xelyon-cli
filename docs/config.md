@@ -67,25 +67,12 @@ provider_models:
     claude:
         default_model: claude-sonnet-4-5-20250514
         max_output_tokens: 16384
-        model_overrides:
-            claude-sonnet-4-5-20250514:
-                max_output_tokens: 16384
     deepseek:
         default_model: deepseek-chat
         max_output_tokens: 16384
-        model_overrides:
-            deepseek-chat:
-                max_output_tokens: 8192
-            deepseek-reasoner:
-                max_output_tokens: 64000
     gemini:
         default_model: gemini-2.5-flash
         max_output_tokens: 65536
-        model_overrides:
-            gemini-2.5-flash:
-                max_output_tokens: 65536
-            gemini-3-flash-preview:
-                max_output_tokens: 65536
     groq:
         default_model: meta-llama/llama-4-scout-17b-16e-instruct
         max_output_tokens: 8192
@@ -95,9 +82,6 @@ provider_models:
     openai:
         default_model: gpt-5.2
         max_output_tokens: 16384
-        model_overrides:
-            gpt-5.2:
-                max_output_tokens: 16384
     openrouter:
         default_model: anthropic/claude-opus-4.5
         max_output_tokens: 32768
@@ -345,27 +329,21 @@ web_search:
 - **サブキー**:
   - `default_model`: プロバイダーのデフォルトモデル名
   - `max_output_tokens`: プロバイダーの出力トークン上限（デフォルト値）
-  - `model_overrides`: 特定モデル別の出力トークン上限設定
-    - **用途**: モデルごとに異なるトークン制限を指定できます
-    - **優先度**: `model_overrides[model]` > `max_output_tokens` > プロバイダー内部デフォルト
-    - **例**: `deepseek-chat: 8192`, `deepseek-reasoner: 64000` など
+  - `model_overrides`: 特定モデル別の出力トークン上限設定（オプション）
+    - **用途**: 既知モデルマップにないモデルや、デフォルト値を上書きしたい場合に指定
+    - **優先度**: `model_overrides[model]` > 既知モデルマップ > `max_output_tokens`
+    - **補足**: 既知モデル（`deepseek-chat`, `gpt-5.2`, `gemini-2.5-flash` 等）は自動解決されるため、通常は設定不要
 - **例**:
   ```yaml
   provider_models:
     deepseek:
       default_model: deepseek-chat
       max_output_tokens: 16384
+      # 既知モデルは自動解決されるため model_overrides 不要
+      # カスタムモデルのみ指定:
       model_overrides:
-        deepseek-chat:
-          max_output_tokens: 8192
-        deepseek-reasoner:
-          max_output_tokens: 64000
-    openai:
-      default_model: gpt-5.2
-      max_output_tokens: 16384
-      model_overrides:
-        gpt-5.2:
-          max_output_tokens: 16384
+        my-custom-model:
+          max_output_tokens: 32768
   ```
 
 ### 会話履歴圧縮設定 (`compression`)

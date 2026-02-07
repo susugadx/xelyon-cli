@@ -1,9 +1,9 @@
 package api
 
 import (
-	"github.com/susugadx/xelyon-cli/internal/config"
 	"context"
 	"fmt"
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"net/http"
 	"os"
 	"regexp"
@@ -137,13 +137,13 @@ type ReasoningContentProvider interface {
 
 // knownModelMaxOutputTokens は既知モデルの最大出力トークン数マップ
 var knownModelMaxOutputTokens = map[string]int{
-	"deepseek-chat":           8192,
-	"deepseek-reasoner":       64000,
-	"claude-sonnet-4-5":       16384,
-	"claude-opus-4-5":         32768,
-	"gpt-5.2":                 16384,
-	"gemini-2.5-flash":        65536,
-	"gemini-3-flash-preview":  65536,
+	"deepseek-chat":          8192,
+	"deepseek-reasoner":      64000,
+	"claude-sonnet-4-5":      16384,
+	"claude-opus-4-5":        32768,
+	"gpt-5.2":                16384,
+	"gemini-2.5-flash":       65536,
+	"gemini-3-flash-preview": 65536,
 }
 
 // GetMaxOutputTokens は指定されたプロバイダーとモデルの最大出力トークン数を取得する（3段階フォールバック）

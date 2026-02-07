@@ -1,8 +1,8 @@
 package api
 
 import (
-	"testing"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"testing"
 )
 
 func TestGetMaxOutputTokens(t *testing.T) {

@@ -42,32 +42,18 @@ func DefaultConfig() *Config {
 			"deepseek": {
 				DefaultModel:    "deepseek-chat",
 				MaxOutputTokens: 16384,
-				ModelOverrides: map[string]ModelOverride{
-					"deepseek-chat":     {MaxOutputTokens: 8192},
-					"deepseek-reasoner": {MaxOutputTokens: 64000},
-				},
 			},
 			"openai": {
 				DefaultModel:    "gpt-5.2",
 				MaxOutputTokens: 16384,
-				ModelOverrides: map[string]ModelOverride{
-					"gpt-5.2": {MaxOutputTokens: 16384},
-				},
 			},
 			"gemini": {
 				DefaultModel:    "gemini-2.5-flash",
 				MaxOutputTokens: 65536,
-				ModelOverrides: map[string]ModelOverride{
-					"gemini-2.5-flash":       {MaxOutputTokens: 65536},
-					"gemini-3-flash-preview": {MaxOutputTokens: 65536},
-				},
 			},
 			"claude": {
 				DefaultModel:    "claude-sonnet-4-5-20250514",
 				MaxOutputTokens: 16384,
-				ModelOverrides: map[string]ModelOverride{
-					"claude-sonnet-4-5-20250514": {MaxOutputTokens: 16384},
-				},
 			},
 			"ollama": {
 				DefaultModel:    "qwen2.5-coder:7b",
