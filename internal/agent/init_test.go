@@ -35,10 +35,15 @@ func TestGenerateXELYONMDTemplate(t *testing.T) {
 		t.Errorf("generateXELYONMDTemplate() missing rules section")
 	}
 
-	// テンプレートが10行以下であることを確認
+	// Verification Commandsセクションが含まれているか
+	if !strings.Contains(result, "## Verification Commands") {
+		t.Errorf("generateXELYONMDTemplate() missing Verification Commands section")
+	}
+
+	// テンプレートが25行以下であることを確認
 	lines := strings.Split(strings.TrimSpace(result), "\n")
-	if len(lines) > 10 {
-		t.Errorf("generateXELYONMDTemplate() generated %d lines, expected <= 10", len(lines))
+	if len(lines) > 25 {
+		t.Errorf("generateXELYONMDTemplate() generated %d lines, expected <= 25", len(lines))
 	}
 }
 

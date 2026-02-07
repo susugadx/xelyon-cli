@@ -28,10 +28,24 @@ Go 製 AI コーディングアシスタント CLI。8 LLM プロバイダー対
 - 公開関数・型には日本語コメント必須（godoc 形式）
 - 複雑なロジックには処理の意図をコメント
 
-## ビルド＆テスト
+## Verification Commands
+
+コード変更後に**必ず**実行するコマンド。AI は変更完了前にこれを実行すること。
 
 ```bash
-go build -o xelyon && go test ./...
+make ci-check
+```
+
+`golangci-lint` 未インストール時のフォールバック:
+
+```bash
+go fmt ./... && go build ./... && go test ./...
+```
+
+設定（config struct / YAML）を変更した場合は追加で:
+
+```bash
+make gen-all
 ```
 
 ## 参照先

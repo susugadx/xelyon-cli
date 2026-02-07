@@ -8,6 +8,15 @@ import (
 	"strings"
 )
 
+// stripBracketedPaste removes bracketed paste escape sequences from input.
+func stripBracketedPaste(input string) string {
+	input = strings.ReplaceAll(input, "\x1b[200~", "")
+	input = strings.ReplaceAll(input, "\x1b[201~", "")
+	input = strings.ReplaceAll(input, "^[[200~", "")
+	input = strings.ReplaceAll(input, "^[[201~", "")
+	return input
+}
+
 // xelyonMDTemplate はXELYON.mdのテンプレート
 const xelyonMDTemplate = `# %s
 
@@ -19,6 +28,15 @@ const xelyonMDTemplate = `# %s
 
 ## 開発ルール
 
+
+## Verification Commands
+
+コード変更後に必ず実行するコマンド。AI は変更完了前にこれを実行すること。
+
+` + "```" + `bash
+# プロジェクトに合わせて変更してください
+go fmt ./... && go build ./... && go test ./...
+` + "```" + `
 `
 
 // handleInitCommand は/initコマンドを処理（XELYON.md生成）
@@ -38,6 +56,7 @@ func handleInitCommand(agent *Agent) bool {
 			red.Printf("Failed to read input: %v\n", err)
 			return true
 		}
+		input = stripBracketedPaste(input)
 		input = strings.TrimSpace(strings.ToLower(input))
 		if input != "y" && input != "yes" {
 			yellow.Println("Cancelled")
@@ -67,7 +86,7 @@ func handleInitCommand(agent *Agent) bool {
 	fmt.Println()
 	yellow.Println("Next steps:")
 	yellow.Println("  1. Edit XELYON.md to add your project overview and rules")
-	yellow.Println("  2. Keep it minimal - RepoMap handles code structure")
+	yellow.Println("  2. Set your verification commands (build/test/lint)")
 	yellow.Println("  3. XELYON.md will be automatically included in AI context")
 
 	return true
