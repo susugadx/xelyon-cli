@@ -341,7 +341,32 @@ web_search:
 
 #### `provider_models`
 - **型**: map
-- **説明**: プロバイダーごとのデフォルトモデル設定
+- **説明**: プロバイダーごとのデフォルトモデル設定と出力トークン制限
+- **サブキー**:
+  - `default_model`: プロバイダーのデフォルトモデル名
+  - `max_output_tokens`: プロバイダーの出力トークン上限（デフォルト値）
+  - `model_overrides`: 特定モデル別の出力トークン上限設定
+    - **用途**: モデルごとに異なるトークン制限を指定できます
+    - **優先度**: `model_overrides[model]` > `max_output_tokens` > プロバイダー内部デフォルト
+    - **例**: `deepseek-chat: 8192`, `deepseek-reasoner: 64000` など
+- **例**:
+  ```yaml
+  provider_models:
+    deepseek:
+      default_model: deepseek-chat
+      max_output_tokens: 16384
+      model_overrides:
+        deepseek-chat:
+          max_output_tokens: 8192
+        deepseek-reasoner:
+          max_output_tokens: 64000
+    openai:
+      default_model: gpt-5.2
+      max_output_tokens: 16384
+      model_overrides:
+        gpt-5.2:
+          max_output_tokens: 16384
+  ```
 
 ### 会話履歴圧縮設定 (`compression`)
 
