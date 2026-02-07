@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/tools"
 
 	// ツール登録のための blank import
 	_ "github.com/susugadx/xelyon-cli/internal/tools/dev"
@@ -14,6 +15,12 @@ import (
 	_ "github.com/susugadx/xelyon-cli/internal/tools/lsp"
 	_ "github.com/susugadx/xelyon-cli/internal/tools/search"
 )
+
+// builtinToolCount は DefaultRegistry に登録された組み込みツール数を動的に取得する。
+// 新ツール追加時にテストの数値を手動で更新する必要がない。
+func builtinToolCount() int {
+	return len(tools.DefaultRegistry.GetToolDefinitions())
+}
 
 func TestGetGeminiToolDefinitions(t *testing.T) {
 	tools := GetGeminiToolDefinitions()
@@ -27,8 +34,8 @@ func TestGetGeminiToolDefinitions(t *testing.T) {
 		t.Error("Expected at least one function declaration")
 	}
 
-	// 19ツールが定義されていることを確認（16ツールを削除: bash/str_replaceで代用可能）
-	expectedCount := 24
+	// DefaultRegistry のツール数と一致すること
+	expectedCount := builtinToolCount()
 	if len(declarations) != expectedCount {
 		t.Errorf("Expected %d tool definitions, got %d", expectedCount, len(declarations))
 	}
@@ -156,8 +163,8 @@ func TestConvertFunctionCallToToolJSON_KeyOrder(t *testing.T) {
 }
 
 func TestAllBuiltinToolsHaveDefinitions(t *testing.T) {
-	// 期待されるツール名のリスト（24ツール）
-	// 注: 16ツールはbash/str_replaceで代用可能なため削除済み
+	// 期待されるツール名のリスト
+	// 注: 新ツール追加時はここにも追加が必要
 	expectedTools := []string{
 		// File Operations (7)
 		"read_file", "write_file", "str_replace", "delete_file",
@@ -168,8 +175,8 @@ func TestAllBuiltinToolsHaveDefinitions(t *testing.T) {
 		"search_code", "search_file", "web_search", "ast_grep", "grep_replace",
 		// Development Operations (5)
 		"run_test", "format", "lint", "http_request", "bash",
-		// LSP Tools (5)
-		"lsp_references", "lsp_definition", "lsp_hover", "lsp_diagnostics", "lsp_rename",
+		// LSP Tools (6)
+		"lsp_references", "lsp_definition", "lsp_hover", "lsp_diagnostics", "lsp_rename", "lsp_find",
 	}
 
 	definedNames := GetToolDefinitionNames()
@@ -642,8 +649,8 @@ func TestGetCombinedToolDefinitions(t *testing.T) {
 			t.Fatalf("Expected 1 tool config, got %d", len(tools))
 		}
 
-		// 組み込みツール19個のみ（16ツールはbash/str_replaceで代用可能なため削除済み）
-		expectedCount := 24
+		// 組み込みツールのみ
+		expectedCount := builtinToolCount()
 		if len(tools[0].FunctionDeclarations) != expectedCount {
 			t.Errorf("Expected %d declarations, got %d", expectedCount, len(tools[0].FunctionDeclarations))
 		}
@@ -662,8 +669,8 @@ func TestGetCombinedToolDefinitions(t *testing.T) {
 			t.Fatalf("Expected 1 tool config, got %d", len(tools))
 		}
 
-		// 組み込み24 + MCP2
-		expectedCount := 24 + 2
+		// 組み込み + MCP2
+		expectedCount := builtinToolCount() + 2
 		if len(tools[0].FunctionDeclarations) != expectedCount {
 			t.Errorf("Expected %d declarations, got %d", expectedCount, len(tools[0].FunctionDeclarations))
 		}
@@ -690,8 +697,8 @@ func TestGetCombinedToolDefinitions(t *testing.T) {
 
 		tools := GetCombinedToolDefinitions(mcpTools)
 
-		// 重複が除去されて 24 + 2 になる
-		expectedCount := 24 + 2
+		// 重複が除去されて 組み込み + 2 になる
+		expectedCount := builtinToolCount() + 2
 		if len(tools[0].FunctionDeclarations) != expectedCount {
 			t.Errorf("Expected %d declarations (duplicates removed), got %d", expectedCount, len(tools[0].FunctionDeclarations))
 		}
