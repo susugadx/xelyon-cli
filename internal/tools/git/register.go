@@ -13,14 +13,15 @@ func (t *GitCommitTool) Name() string {
 }
 
 func (t *GitCommitTool) Description() string {
-	return "Creates a git commit with the specified message."
+	return "Creates a git commit with the specified message. Runs LSP diagnostics on staged files before committing."
 }
 
 func (t *GitCommitTool) Parameters() map[string]interface{} {
 	return map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
-			"message": map[string]interface{}{"type": "string", "description": "Commit message"},
+			"message":        map[string]interface{}{"type": "string", "description": "Commit message"},
+			"no_diagnostics": map[string]interface{}{"type": "string", "description": "Set to 'true' to skip pre-commit LSP diagnostics check"},
 		},
 		"required":             []string{"message"},
 		"additionalProperties": false,
@@ -30,7 +31,8 @@ func (t *GitCommitTool) Parameters() map[string]interface{} {
 // Run executes the git commit tool
 func (t *GitCommitTool) Run(args map[string]string) (string, *tools.FileChange, error) {
 	message := args["message"]
-	output := ExecuteGitCommit(message)
+	skipDiagnostics := args["no_diagnostics"] == "true"
+	output := ExecuteGitCommit(message, skipDiagnostics)
 	return output, nil, nil
 }
 

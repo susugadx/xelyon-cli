@@ -409,6 +409,74 @@ func GetDiagnosticsSummary(path string) string {
 	return sb.String()
 }
 
+// DiagnosticCheckResult はコミット前診断チェックの結果
+type DiagnosticCheckResult struct {
+	HasErrors  bool
+	ErrorCount int
+	WarnCount  int
+	Summary    string // AI向けの詳細テキスト
+}
+
+// CheckDiagnosticsForFiles は複数ファイルの LSP 診断を一括チェックする。
+// git_commit 前の自動チェック用。LSP 未起動時は HasErrors=false を返す（ブロックしない）。
+func CheckDiagnosticsForFiles(files []string) DiagnosticCheckResult {
+	if LSPClient == nil {
+		return DiagnosticCheckResult{}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var totalErrors, totalWarnings int
+	var sb strings.Builder
+
+	for _, file := range files {
+		absPath, err := common.ValidatePath(file)
+		if err != nil {
+			continue
+		}
+
+		diagnostics, err := LSPClient.GetDiagnostics(ctx, absPath)
+		if err != nil || len(diagnostics) == 0 {
+			continue
+		}
+
+		fileHasIssue := false
+		for _, d := range diagnostics {
+			switch d.Severity {
+			case lsplib.DiagnosticSeverityError:
+				if !fileHasIssue {
+					sb.WriteString(fmt.Sprintf("\n%s:\n", file))
+					fileHasIssue = true
+				}
+				sb.WriteString(fmt.Sprintf("  ❌ Error [%d:%d]: %s\n",
+					d.Range.Start.Line+1, d.Range.Start.Character+1, d.Message))
+				totalErrors++
+			case lsplib.DiagnosticSeverityWarning:
+				if !fileHasIssue {
+					sb.WriteString(fmt.Sprintf("\n%s:\n", file))
+					fileHasIssue = true
+				}
+				sb.WriteString(fmt.Sprintf("  ⚠️ Warning [%d:%d]: %s\n",
+					d.Range.Start.Line+1, d.Range.Start.Character+1, d.Message))
+				totalWarnings++
+			}
+		}
+	}
+
+	if totalErrors == 0 && totalWarnings == 0 {
+		return DiagnosticCheckResult{}
+	}
+
+	header := fmt.Sprintf("LSP Diagnostics: %d errors, %d warnings\n", totalErrors, totalWarnings)
+	return DiagnosticCheckResult{
+		HasErrors:  totalErrors > 0,
+		ErrorCount: totalErrors,
+		WarnCount:  totalWarnings,
+		Summary:    header + sb.String(),
+	}
+}
+
 // LSPRenameTool renames a symbol at the given position
 type LSPRenameTool struct{}
 
