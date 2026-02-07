@@ -34,6 +34,7 @@ var ToolSafetyLevels = map[string]ToolSafety{
 	"lsp_hover":       SafetyHigh, // LSP: 型情報取得（読み取り専用）
 	"lsp_diagnostics": SafetyHigh, // LSP: 診断情報取得（読み取り専用）
 	"lsp_rename":      SafetyHigh, // LSP: リネームプレビュー（読み取り専用、実際の変更は行わない）
+	"lsp_find":        SafetyHigh, // LSP: シンボル名ベースの検索（読み取り専用）
 
 	// SafetyMedium: 書き込み操作（リカバリ可能）
 	"write_file":     SafetyMedium,

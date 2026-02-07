@@ -352,8 +352,8 @@ func TestRegisterTools(t *testing.T) {
 	registry := tools.NewRegistry()
 	RegisterTools(registry)
 
-	// 5つのLSPツールが登録されていることを確認
-	lspTools := []string{"lsp_references", "lsp_definition", "lsp_hover", "lsp_diagnostics", "lsp_rename"}
+	// 6つのLSPツールが登録されていることを確認
+	lspTools := []string{"lsp_references", "lsp_definition", "lsp_hover", "lsp_diagnostics", "lsp_rename", "lsp_find"}
 	for _, name := range lspTools {
 		if tool := registry.GetTool(name); tool == nil {
 			t.Errorf("tool %q not registered", name)
@@ -421,7 +421,7 @@ func TestDiagnosticCheckResult_ZeroValue(t *testing.T) {
 
 func TestLSPToolsSafetyLevel(t *testing.T) {
 	// LSPツールはすべてSafetyHigh（読み取り専用）であることを確認
-	lspTools := []string{"lsp_references", "lsp_definition", "lsp_hover", "lsp_diagnostics", "lsp_rename"}
+	lspTools := []string{"lsp_references", "lsp_definition", "lsp_hover", "lsp_diagnostics", "lsp_rename", "lsp_find"}
 	for _, name := range lspTools {
 		safety := common.GetToolSafety(name)
 		if safety != common.SafetyHigh {

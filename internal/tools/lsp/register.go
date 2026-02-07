@@ -11,6 +11,7 @@ func RegisterTools(registry *tools.Registry) {
 	registry.Register(&LSPHoverTool{})
 	registry.Register(&LSPDiagnosticsTool{})
 	registry.Register(&LSPRenameTool{})
+	registry.Register(&LSPFindTool{})
 }
 
 func init() {
