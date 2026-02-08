@@ -55,7 +55,23 @@ func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, s
 
 		for _, part := range chunk.Candidates[0].Content.Parts {
 			if part.Thought {
+				if debug {
+					sig := part.ThoughtSignature
+					if len(sig) > 20 {
+						sig = sig[:20] + "..."
+					}
+					fmt.Fprintf(os.Stderr, "[DEBUG Gemini SSE] Skipping thought part (text=%d chars, sig=%q)\n", len(part.Text), sig)
+				}
 				continue
+			}
+
+			// thoughtSignature のみのパート（thought=false）を検出・ログ
+			if part.ThoughtSignature != "" && debug {
+				sig := part.ThoughtSignature
+				if len(sig) > 20 {
+					sig = sig[:20] + "..."
+				}
+				fmt.Fprintf(os.Stderr, "[DEBUG Gemini SSE] ⚠ thoughtSignature without thought flag: sig=%q, text=%d chars\n", sig, len(part.Text))
 			}
 
 			if part.Text != "" {
@@ -171,7 +187,23 @@ func (p *Provider) handleFunctionCallingResponse(body []byte, spinner *ui.Spinne
 
 		for _, part := range candidate.Content.Parts {
 			if part.Thought {
+				if debug {
+					sig := part.ThoughtSignature
+					if len(sig) > 20 {
+						sig = sig[:20] + "..."
+					}
+					fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Skipping thought part (text=%d chars, sig=%q)\n", len(part.Text), sig)
+				}
 				continue
+			}
+
+			// thoughtSignature のみのパート（thought=false）を検出・ログ
+			if part.ThoughtSignature != "" && debug {
+				sig := part.ThoughtSignature
+				if len(sig) > 20 {
+					sig = sig[:20] + "..."
+				}
+				fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] ⚠ thoughtSignature without thought flag: sig=%q, text=%d chars\n", sig, len(part.Text))
 			}
 
 			// Function Call パートを収集

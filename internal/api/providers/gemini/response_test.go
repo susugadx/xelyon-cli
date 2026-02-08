@@ -510,6 +510,76 @@ func TestHandleFunctionCallingResponse_ThoughtSignatureIgnored(t *testing.T) {
 	}
 }
 
+func TestHandleFunctionCallingResponse_ThoughtSignatureOnlyPart(t *testing.T) {
+	// thoughtSignature のみ（thought=false）のパートはテキストが空なので出力に影響しない
+	resp := GeminiFunctionResponse{
+		Candidates: []GeminiFunctionCandidate{
+			{
+				Content: GeminiFunctionContent{
+					Parts: []GeminiFunctionPart{
+						{ThoughtSignature: "sig-only-no-thought-flag"},
+						{Text: "Normal response."},
+					},
+				},
+			},
+		},
+	}
+	body, _ := json.Marshal(resp)
+
+	p := New("test-key")
+	result, err := p.handleFunctionCallingResponse(body, nil)
+	if err != nil {
+		t.Fatalf("handleFunctionCallingResponse() error = %v", err)
+	}
+	if strings.Contains(result, "sig-only") {
+		t.Error("result should NOT contain thoughtSignature value")
+	}
+	if !strings.Contains(result, "Normal response.") {
+		t.Errorf("result should contain normal response, got %q", result)
+	}
+}
+
+func TestHandleFunctionCallingResponse_ThoughtSignatureCycling(t *testing.T) {
+	// 複数ターンの思考シグネチャが正しくスキップされ、テキスト/FCのみ出力される
+	resp := GeminiFunctionResponse{
+		Candidates: []GeminiFunctionCandidate{
+			{
+				Content: GeminiFunctionContent{
+					Parts: []GeminiFunctionPart{
+						{Text: "thinking step 1...", Thought: true, ThoughtSignature: "sig-turn1-aaa"},
+						{Text: "thinking step 2...", Thought: true, ThoughtSignature: "sig-turn1-bbb"},
+						{ThoughtSignature: "sig-turn1-final"},
+						{Text: "I'll read the file.", FunctionCall: nil},
+						{FunctionCall: &api.GeminiFunctionCall{
+							Name: "read_file",
+							Args: map[string]interface{}{"path": "/src/main.go"},
+						}},
+					},
+				},
+			},
+		},
+	}
+	body, _ := json.Marshal(resp)
+
+	p := New("test-key")
+	result, err := p.handleFunctionCallingResponse(body, nil)
+	if err != nil {
+		t.Fatalf("handleFunctionCallingResponse() error = %v", err)
+	}
+
+	// thinking テキストが出力に含まれないこと
+	if strings.Contains(result, "thinking step") {
+		t.Errorf("result should NOT contain thinking text, got %q", result)
+	}
+	// 実際のテキストとFCが含まれること
+	if !strings.Contains(result, "I'll read the file.") {
+		t.Errorf("result should contain actual text, got %q", result)
+	}
+	if !strings.Contains(result, "read_file") {
+		t.Errorf("result should contain function call, got %q", result)
+	}
+}
+
 func TestHandleFunctionCallingResponse_EmptyBody(t *testing.T) {
 	// 空のボディ
 	p := New("test-key")
