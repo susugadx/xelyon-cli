@@ -39,33 +39,16 @@ type toolCallAccumulator struct {
 
 // Provider はGroq APIのプロバイダー実装（OpenAI互換）
 type Provider struct {
-	apiKey        string
-	apiURL        string
-	httpClient    *http.Client
+	api.BaseProvider
 	mcpTools      []api.OpenAIToolFunction // MCP ツール定義（Function Calling用）
 	usageCallback api.UsageCallback        // トークン使用量コールバック
 }
 
 // New は新しいProviderを作成
 func New(apiKey string) *Provider {
-	// 環境変数からURLをオーバーライド可能
-	apiURL := os.Getenv("GROQ_API_URL")
-	if apiURL == "" {
-		apiURL = defaultGroqURL
-	}
-
 	return &Provider{
-		apiKey: apiKey,
-		apiURL: apiURL,
-		httpClient: &http.Client{
-			Timeout: config.DefaultHTTPTimeout,
-		},
+		BaseProvider: api.NewBaseProvider("Groq", apiKey, defaultGroqURL, "GROQ_API_URL"),
 	}
-}
-
-// Name はプロバイダー名を返す
-func (p *Provider) Name() string {
-	return "Groq"
 }
 
 // SupportsImages は画像入力対応を返す
@@ -115,19 +98,19 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		return "", err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", p.apiURL, bytes.NewBuffer(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", p.BaseProvider.APIURL, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return "", err
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+p.apiKey)
+	req.Header.Set("Authorization", "Bearer "+p.APIKey)
 
 	// スピナー開始
 	spinner := api.StartThinkingSpinner(false, "")
 
 	// 再利用可能なHTTPクライアントを使用
-	resp, err := p.httpClient.Do(req)
+	resp, err := p.HTTPClient.Do(req)
 	if err != nil {
 		spinner.Stop()
 		return "", err
@@ -293,7 +276,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 
 // APIURL はテスト用にAPIURLを公開
 func (p *Provider) APIURL() string {
-	return p.apiURL
+	return p.BaseProvider.APIURL
 }
 
 // SetMCPTools は MCP ツール定義を設定する（Function Calling用）

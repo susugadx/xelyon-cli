@@ -76,6 +76,11 @@ func (b *BaseProvider) ExecuteRequest(req *http.Request) (*http.Response, error)
 	return b.HTTPClient.Do(req)
 }
 
+// Name はプロバイダー名を返す
+func (b *BaseProvider) Name() string {
+	return b.ProviderName
+}
+
 // HandleHTTPError はHTTPエラーレスポンスを処理
 func HandleHTTPError(resp *http.Response, spinner *ui.Spinner, providerName string) error {
 	if spinner != nil {

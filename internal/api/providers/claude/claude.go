@@ -35,33 +35,16 @@ const defaultClaudeURL = "https://api.anthropic.com/v1/messages"
 
 // Provider はClaude (Anthropic) APIのプロバイダー実装
 type Provider struct {
-	apiKey        string
-	apiURL        string
-	httpClient    *http.Client
+	api.BaseProvider
 	mcpTools      []api.OpenAIToolFunction // MCP ツール定義（Tool Use用）
 	usageCallback api.UsageCallback        // トークン使用量コールバック
 }
 
 // New は新しいProviderを作成
 func New(apiKey string) *Provider {
-	// 環境変数からURLをオーバーライド可能
-	apiURL := os.Getenv("ANTHROPIC_API_URL")
-	if apiURL == "" {
-		apiURL = defaultClaudeURL
-	}
-
 	return &Provider{
-		apiKey: apiKey,
-		apiURL: apiURL,
-		httpClient: &http.Client{
-			Timeout: config.DefaultHTTPTimeout,
-		},
+		BaseProvider: api.NewBaseProvider("Claude", apiKey, defaultClaudeURL, "ANTHROPIC_API_URL"),
 	}
-}
-
-// Name はプロバイダー名を返す
-func (p *Provider) Name() string {
-	return "Claude"
 }
 
 // SupportsImages は画像入力対応を返す
@@ -198,13 +181,13 @@ func (p *Provider) executeRequest(ctx context.Context, reqBody interface{}, with
 		return nil, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", p.apiURL, bytes.NewBuffer(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", p.APIURL, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return nil, err
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", p.apiKey)
+	req.Header.Set("x-api-key", p.APIKey)
 
 	cfg := config.GetGlobalConfig()
 	pCfg := cfg.ProviderModels["claude"]
@@ -223,7 +206,7 @@ func (p *Provider) executeRequest(ctx context.Context, reqBody interface{}, with
 
 	spinner := api.StartThinkingSpinner(withImage, "")
 
-	resp, err := p.httpClient.Do(req)
+	resp, err := p.HTTPClient.Do(req)
 	if err != nil {
 		spinner.Stop()
 		return nil, err

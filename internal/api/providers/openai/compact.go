@@ -59,9 +59,9 @@ func (p *Provider) CompactHistory(ctx context.Context, input []api.InputItem, mo
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+p.apiKey)
+	req.Header.Set("Authorization", "Bearer "+p.APIKey)
 
-	resp, err := p.httpClient.Do(req)
+	resp, err := p.HTTPClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("compact API request failed: %w", err)
 	}

@@ -3,7 +3,6 @@ package openai
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"os"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
@@ -23,9 +22,7 @@ const defaultOpenAIURL = "https://api.openai.com/v1/chat/completions"
 
 // Provider はOpenAI APIのプロバイダー実装
 type Provider struct {
-	apiKey         string
-	apiURL         string
-	httpClient     *http.Client
+	api.BaseProvider
 	lastResponseID string                   // Responses API の最新レスポンスID（キャッシュ用）
 	mcpTools       []api.OpenAIToolFunction // MCP ツール定義（Function Calling用）
 	usageCallback  api.UsageCallback        // トークン使用量コールバック
@@ -33,24 +30,9 @@ type Provider struct {
 
 // New は新しいProviderを作成
 func New(apiKey string) *Provider {
-	// 環境変数からURLをオーバーライド可能
-	apiURL := os.Getenv("OPENAI_API_URL")
-	if apiURL == "" {
-		apiURL = defaultOpenAIURL
-	}
-
 	return &Provider{
-		apiKey: apiKey,
-		apiURL: apiURL,
-		httpClient: &http.Client{
-			Timeout: config.DefaultHTTPTimeout,
-		},
+		BaseProvider: api.NewBaseProvider("OpenAI", apiKey, defaultOpenAIURL, "OPENAI_API_URL"),
 	}
-}
-
-// Name はプロバイダー名を返す
-func (p *Provider) Name() string {
-	return "OpenAI"
 }
 
 // SupportsImages は画像入力対応を返す

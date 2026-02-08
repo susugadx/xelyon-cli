@@ -79,19 +79,19 @@ func (p *Provider) chatWithCompletions(ctx context.Context, systemPrompt string,
 		return "", err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", p.apiURL, bytes.NewBuffer(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", p.APIURL, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return "", err
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+p.apiKey)
+	req.Header.Set("Authorization", "Bearer "+p.APIKey)
 
 	// スピナー開始
 	spinner := api.StartThinkingSpinner(false, "")
 
 	// 再利用可能なHTTPクライアントを使用
-	resp, err := p.httpClient.Do(req)
+	resp, err := p.HTTPClient.Do(req)
 	if err != nil {
 		spinner.Stop()
 		return "", err
@@ -307,18 +307,18 @@ func (p *Provider) chatWithImageCompletions(ctx context.Context, systemPrompt st
 		return "", err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", p.apiURL, bytes.NewBuffer(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", p.APIURL, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return "", err
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+p.apiKey)
+	req.Header.Set("Authorization", "Bearer "+p.APIKey)
 
 	// スピナー開始
 	spinner := api.StartThinkingSpinner(true, "")
 
-	resp, err := p.httpClient.Do(req)
+	resp, err := p.HTTPClient.Do(req)
 	if err != nil {
 		spinner.Stop()
 		return "", err

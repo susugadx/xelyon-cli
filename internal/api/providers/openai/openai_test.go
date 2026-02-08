@@ -101,8 +101,8 @@ func TestNewOpenAIProvider_URLOverride(t *testing.T) {
 	t.Run("DefaultURL", func(t *testing.T) {
 		os.Unsetenv("OPENAI_API_URL")
 		p := New("test-key")
-		if p.apiURL != defaultOpenAIURL {
-			t.Errorf("apiURL = %q, want %q", p.apiURL, defaultOpenAIURL)
+		if p.APIURL != defaultOpenAIURL {
+			t.Errorf("apiURL = %q, want %q", p.APIURL, defaultOpenAIURL)
 		}
 	})
 
@@ -110,8 +110,8 @@ func TestNewOpenAIProvider_URLOverride(t *testing.T) {
 		customURL := "https://custom.openai.api.com/v1"
 		os.Setenv("OPENAI_API_URL", customURL)
 		p := New("test-key")
-		if p.apiURL != customURL {
-			t.Errorf("apiURL = %q, want %q", p.apiURL, customURL)
+		if p.APIURL != customURL {
+			t.Errorf("apiURL = %q, want %q", p.APIURL, customURL)
 		}
 	})
 }

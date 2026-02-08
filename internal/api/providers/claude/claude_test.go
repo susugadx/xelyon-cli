@@ -53,8 +53,8 @@ func TestNewClaudeProvider_URLOverride(t *testing.T) {
 	t.Run("DefaultURL", func(t *testing.T) {
 		os.Unsetenv("ANTHROPIC_API_URL")
 		p := New("test-key")
-		if p.apiURL != defaultClaudeURL {
-			t.Errorf("apiURL = %q, want %q", p.apiURL, defaultClaudeURL)
+		if p.APIURL != defaultClaudeURL {
+			t.Errorf("apiURL = %q, want %q", p.APIURL, defaultClaudeURL)
 		}
 	})
 
@@ -62,8 +62,8 @@ func TestNewClaudeProvider_URLOverride(t *testing.T) {
 		customURL := "https://custom.anthropic.api.com/v1"
 		os.Setenv("ANTHROPIC_API_URL", customURL)
 		p := New("test-key")
-		if p.apiURL != customURL {
-			t.Errorf("apiURL = %q, want %q", p.apiURL, customURL)
+		if p.APIURL != customURL {
+			t.Errorf("apiURL = %q, want %q", p.APIURL, customURL)
 		}
 	})
 }

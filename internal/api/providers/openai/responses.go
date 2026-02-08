@@ -194,12 +194,12 @@ func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, h
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+p.apiKey)
+	req.Header.Set("Authorization", "Bearer "+p.APIKey)
 
 	// スピナー開始
 	spinner := api.StartThinkingSpinner(isCodexModel(model) && cfg.Thinking.Enabled, "")
 
-	resp, err := p.httpClient.Do(req)
+	resp, err := p.HTTPClient.Do(req)
 	if err != nil {
 		spinner.Stop()
 		return "", fmt.Errorf("API request failed: %w", err)
@@ -487,12 +487,12 @@ func (p *Provider) chatWithImageResponses(ctx context.Context, systemPrompt stri
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+p.apiKey)
+	req.Header.Set("Authorization", "Bearer "+p.APIKey)
 
 	// スピナー開始
 	spinner := api.StartThinkingSpinner(isCodexModel(model) && cfg.Thinking.Enabled, "")
 
-	resp, err := p.httpClient.Do(req)
+	resp, err := p.HTTPClient.Do(req)
 	if err != nil {
 		spinner.Stop()
 		return "", fmt.Errorf("API request failed: %w", err)
