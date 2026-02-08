@@ -52,8 +52,9 @@ func DefaultConfig() *Config {
 				MaxOutputTokens: 65536,
 			},
 			"claude": {
-				DefaultModel:    "claude-sonnet-4-5-20250514",
-				MaxOutputTokens: 16384,
+				DefaultModel:     "claude-sonnet-4-5-20250514",
+				MaxOutputTokens:  16384,
+				AnthropicVersion: "2023-06-01",
 			},
 			"ollama": {
 				DefaultModel:    "qwen2.5-coder:7b",
@@ -68,8 +69,9 @@ func DefaultConfig() *Config {
 				MaxOutputTokens: 32768,
 			},
 			"bedrock": {
-				DefaultModel:    "global.anthropic.claude-opus-4-5-20251101-v1:0",
-				MaxOutputTokens: 32768,
+				DefaultModel:     "global.anthropic.claude-opus-4-5-20251101-v1:0",
+				MaxOutputTokens:  32768,
+				AnthropicVersion: "bedrock-2023-05-31",
 			},
 		},
 		Compression: CompressionConfig{

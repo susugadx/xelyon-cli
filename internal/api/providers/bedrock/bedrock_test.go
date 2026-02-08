@@ -134,6 +134,11 @@ func TestBedrockRequest_JSON(t *testing.T) {
 		t.Errorf("anthropic_version = %q, want %q", version, "bedrock-2023-05-31")
 	}
 
+	// anthropic_beta が omitempty で省略されることを確認
+	if _, ok := raw["anthropic_beta"]; ok {
+		t.Error("anthropic_beta should be omitted when empty")
+	}
+
 	// model フィールドが存在しないことを確認（Bedrock では ModelId パラメータで送る）
 	if _, ok := raw["model"]; ok {
 		t.Error("model field should not be in request body (Bedrock uses ModelId parameter)")
@@ -148,6 +153,63 @@ func TestBedrockRequest_JSON(t *testing.T) {
 	maxTokens, ok := raw["max_tokens"].(float64)
 	if !ok || int(maxTokens) != 4096 {
 		t.Errorf("max_tokens = %v, want 4096", raw["max_tokens"])
+	}
+}
+
+func TestBedrockRequest_WithAnthropicBeta(t *testing.T) {
+	req := BedrockRequest{
+		AnthropicVersion: bedrockAnthropicVersion,
+		AnthropicBeta:    []string{"context-1m-2025-08-07"},
+		MaxTokens:        4096,
+		System:           "System prompt",
+		Messages: []claude.AnthropicMessage{
+			{Role: "user", Content: []claude.AnthropicContentBlock{{Type: "text", Text: "Hello"}}},
+		},
+	}
+
+	jsonBytes, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("json.Marshal failed: %v", err)
+	}
+
+	var raw map[string]interface{}
+	if err := json.Unmarshal(jsonBytes, &raw); err != nil {
+		t.Fatalf("json.Unmarshal failed: %v", err)
+	}
+
+	beta, ok := raw["anthropic_beta"].([]interface{})
+	if !ok {
+		t.Fatal("anthropic_beta field missing or wrong type")
+	}
+	if len(beta) != 1 || beta[0] != "context-1m-2025-08-07" {
+		t.Errorf("anthropic_beta = %v, want [context-1m-2025-08-07]", beta)
+	}
+}
+
+func TestBedrockRequest_ConfigVersion(t *testing.T) {
+	// config から version を取得する場合のテスト
+	customVersion := "bedrock-2024-01-01"
+	req := BedrockRequest{
+		AnthropicVersion: customVersion,
+		MaxTokens:        4096,
+		System:           "System prompt",
+		Messages: []claude.AnthropicMessage{
+			{Role: "user", Content: []claude.AnthropicContentBlock{{Type: "text", Text: "Hello"}}},
+		},
+	}
+
+	jsonBytes, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("json.Marshal failed: %v", err)
+	}
+
+	var raw map[string]interface{}
+	if err := json.Unmarshal(jsonBytes, &raw); err != nil {
+		t.Fatalf("json.Unmarshal failed: %v", err)
+	}
+
+	if raw["anthropic_version"] != customVersion {
+		t.Errorf("anthropic_version = %q, want %q", raw["anthropic_version"], customVersion)
 	}
 }
 

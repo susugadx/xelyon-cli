@@ -80,6 +80,7 @@ func (p *Provider) IsFunctionCallingEnabled() bool {
 // Claude API とは異なり anthropic_version をボディに含み、model/stream フィールドは不要
 type BedrockRequest struct {
 	AnthropicVersion string                    `json:"anthropic_version"`
+	AnthropicBeta    []string                  `json:"anthropic_beta,omitempty"`
 	MaxTokens        int                       `json:"max_tokens"`
 	System           interface{}               `json:"system,omitempty"` // can be string or []api.SystemBlock
 	Messages         []claude.AnthropicMessage `json:"messages"`
@@ -90,6 +91,7 @@ type BedrockRequest struct {
 // BedrockMultimodalRequest はマルチモーダル（画像付き）リクエスト
 type BedrockMultimodalRequest struct {
 	AnthropicVersion string                 `json:"anthropic_version"`
+	AnthropicBeta    []string               `json:"anthropic_beta,omitempty"`
 	MaxTokens        int                    `json:"max_tokens"`
 	System           interface{}            `json:"system,omitempty"`
 	Messages         []interface{}          `json:"messages"`
@@ -105,9 +107,17 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	messages := claude.ConvertToAnthropicMessages(history)
 
 	cfg := config.GetGlobalConfig()
+	pCfg := cfg.ProviderModels["bedrock"]
+
+	// Anthropic Version（config → フォールバック定数）
+	version := pCfg.AnthropicVersion
+	if version == "" {
+		version = bedrockAnthropicVersion
+	}
 
 	reqBody := BedrockRequest{
-		AnthropicVersion: bedrockAnthropicVersion,
+		AnthropicVersion: version,
+		AnthropicBeta:    pCfg.AnthropicBeta,
 		MaxTokens:        api.GetMaxOutputTokens("bedrock", model),
 		System:           api.BuildSystemField(systemPrompt),
 		Messages:         messages,
@@ -167,9 +177,17 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	messages = append(messages, multimodalMessage)
 
 	cfg := config.GetGlobalConfig()
+	pCfg := cfg.ProviderModels["bedrock"]
+
+	// Anthropic Version（config → フォールバック定数）
+	version := pCfg.AnthropicVersion
+	if version == "" {
+		version = bedrockAnthropicVersion
+	}
 
 	reqBody := BedrockMultimodalRequest{
-		AnthropicVersion: bedrockAnthropicVersion,
+		AnthropicVersion: version,
+		AnthropicBeta:    pCfg.AnthropicBeta,
 		MaxTokens:        api.GetMaxOutputTokens("bedrock", model),
 		System:           api.BuildSystemField(systemPrompt),
 		Messages:         messages,

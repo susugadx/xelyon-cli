@@ -146,12 +146,15 @@ var knownModelMaxOutputTokens = map[string]int{
 	"gemini-3-flash-preview": 65536,
 }
 
-// GetMaxOutputTokens は指定されたプロバイダーとモデルの最大出力トークン数を取得する（3段階フォールバック）
-// 1. ユーザーの model_overrides (config)
-// 2. 既知モデルマップ (knownModelMaxOutputTokens)
-// 3. プロバイダーのデフォルト値 (ProviderModelConfig.MaxOutputTokens)
+// GetMaxOutputTokens は指定されたプロバイダーとモデルの最大出力トークン数を取得する（4段階フォールバック）
+// 1. Extended Thinking 有効時は BudgetTokens を考慮
+// 2. ユーザーの model_overrides (config)
+// 3. 既知モデルマップ (knownModelMaxOutputTokens)
+// 4. プロバイダーのデフォルト値 (ProviderModelConfig.MaxOutputTokens)
 func GetMaxOutputTokens(providerName, model string) int {
 	cfg := config.GetGlobalConfig()
+
+	maxTokens := 0
 	pName := strings.ToLower(providerName)
 	pCfg, ok := cfg.ProviderModels[pName]
 	if !ok {
@@ -161,17 +164,30 @@ func GetMaxOutputTokens(providerName, model string) int {
 	// 1. ユーザーの model_overrides
 	if pCfg.ModelOverrides != nil {
 		if override, ok := pCfg.ModelOverrides[model]; ok && override.MaxOutputTokens > 0 {
-			return override.MaxOutputTokens
+			maxTokens = override.MaxOutputTokens
 		}
 	}
 
 	// 2. 既知モデルマップ
-	if tokens, ok := knownModelMaxOutputTokens[model]; ok {
-		return tokens
+	if maxTokens == 0 {
+		if tokens, ok := knownModelMaxOutputTokens[model]; ok {
+			maxTokens = tokens
+		}
 	}
 
 	// 3. プロバイダーのデフォルト値
-	return pCfg.MaxOutputTokens
+	if maxTokens == 0 {
+		maxTokens = pCfg.MaxOutputTokens
+	}
+
+	// 4. Extended Thinking 有効時は BudgetTokens を考慮
+	// Claude Opus 4.6 などでは max_tokens = budget_tokens + output_tokens とする必要がある
+	if cfg.Thinking.Enabled && (pName == "claude" || pName == "anthropic" || pName == "bedrock") {
+		budget := LevelToBudgetTokens(cfg.Thinking.Level)
+		return budget + maxTokens
+	}
+
+	return maxTokens
 }
 
 // SupportsImages はプロバイダー名から画像対応を判定

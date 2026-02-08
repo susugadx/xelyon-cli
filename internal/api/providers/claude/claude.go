@@ -205,7 +205,21 @@ func (p *Provider) executeRequest(ctx context.Context, reqBody interface{}, with
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-api-key", p.apiKey)
-	req.Header.Set("anthropic-version", "2023-06-01")
+
+	cfg := config.GetGlobalConfig()
+	pCfg := cfg.ProviderModels["claude"]
+
+	// Anthropic Version
+	version := pCfg.AnthropicVersion
+	if version == "" {
+		version = "2023-06-01"
+	}
+	req.Header.Set("anthropic-version", version)
+
+	// Anthropic Beta
+	if len(pCfg.AnthropicBeta) > 0 {
+		req.Header.Set("anthropic-beta", strings.Join(pCfg.AnthropicBeta, ","))
+	}
 
 	spinner := api.StartThinkingSpinner(withImage, "")
 

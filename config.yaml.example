@@ -14,9 +14,11 @@ provider_models:
     bedrock:
         default_model: global.anthropic.claude-opus-4-5-20251101-v1:0
         max_output_tokens: 32768
+        anthropic_version: bedrock-2023-05-31
     claude:
         default_model: claude-sonnet-4-5-20250514
         max_output_tokens: 16384
+        anthropic_version: "2023-06-01"
     deepseek:
         default_model: deepseek-chat
         max_output_tokens: 16384

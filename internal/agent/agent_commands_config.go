@@ -38,6 +38,9 @@ func handleModelCommand(agent *Agent, args []string) bool {
 	// モデルを切り替え
 	oldModel := agent.CurrentModel
 	agent.CurrentModel = newModel
+	if agent.Stats != nil {
+		agent.Stats.Model = newModel
+	}
 
 	green.Printf("✅ Model switched: %s → %s\n", oldModel, newModel)
 

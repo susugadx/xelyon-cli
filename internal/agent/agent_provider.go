@@ -63,6 +63,7 @@ func (a *Agent) SwitchProvider(providerName string) error {
 	if a.Stats != nil {
 		a.statsMu.Lock()
 		a.Stats.Provider = providerName
+		a.Stats.Model = newModel
 		a.Stats.InputTokens = 0
 		a.Stats.OutputTokens = 0
 		a.Stats.LastUsage = nil

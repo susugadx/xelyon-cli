@@ -103,13 +103,47 @@ func TestSessionStats_EstimatedCost_OpenAI(t *testing.T) {
 }
 
 func TestSessionStats_EstimatedCost_Claude(t *testing.T) {
+	// デフォルト（model=""）は Sonnet 料金
 	stats := NewSessionStats("claude")
 	stats.AddTokens(1000000, 1000000)
 
 	cost := stats.EstimatedCost()
 	expected := 3.00 + 15.00
 	if cost != expected {
-		t.Errorf("EstimatedCost() for claude = %f, want %f", cost, expected)
+		t.Errorf("EstimatedCost() for claude (sonnet default) = %f, want %f", cost, expected)
+	}
+}
+
+func TestSessionStats_EstimatedCost_Claude_Opus(t *testing.T) {
+	stats := NewSessionStats("claude", "claude-opus-4-5-20251101")
+	stats.AddTokens(1000000, 1000000)
+
+	cost := stats.EstimatedCost()
+	expected := 5.00 + 25.00
+	if cost != expected {
+		t.Errorf("EstimatedCost() for claude opus = %f, want %f", cost, expected)
+	}
+}
+
+func TestSessionStats_EstimatedCost_Claude_Haiku(t *testing.T) {
+	stats := NewSessionStats("claude", "claude-haiku-4-5-20251001")
+	stats.AddTokens(1000000, 1000000)
+
+	cost := stats.EstimatedCost()
+	expected := 0.80 + 4.00
+	if cost != expected {
+		t.Errorf("EstimatedCost() for claude haiku = %f, want %f", cost, expected)
+	}
+}
+
+func TestSessionStats_EstimatedCost_Bedrock_Opus(t *testing.T) {
+	stats := NewSessionStats("bedrock", "global.anthropic.claude-opus-4-5-20251101-v1:0")
+	stats.AddTokens(1000000, 1000000)
+
+	cost := stats.EstimatedCost()
+	expected := 5.00 + 25.00
+	if cost != expected {
+		t.Errorf("EstimatedCost() for bedrock opus = %f, want %f", cost, expected)
 	}
 }
 
@@ -306,24 +340,58 @@ func TestFormatTokens(t *testing.T) {
 func TestCalculateRequestCost(t *testing.T) {
 	tests := []struct {
 		provider string
+		model    string
 		input    int
 		output   int
 		expected float64
 	}{
 		// Ollama: 常に0
-		{"ollama", 1000000, 1000000, 0.0},
+		{"ollama", "", 1000000, 1000000, 0.0},
 		// DeepSeek: 0.14/1M input, 0.28/1M output
-		{"deepseek", 1000000, 1000000, 0.42},
+		{"deepseek", "", 1000000, 1000000, 0.42},
 		// Unknown: DeepSeek料金と同じ
-		{"unknown", 1000000, 1000000, 0.42},
+		{"unknown", "", 1000000, 1000000, 0.42},
+		// Claude Sonnet（デフォルト）
+		{"claude", "claude-sonnet-4-5-20250929", 1000000, 1000000, 3.00 + 15.00},
+		// Claude Opus
+		{"claude", "claude-opus-4-5", 1000000, 1000000, 5.00 + 25.00},
+		// Claude Haiku
+		{"claude", "claude-haiku-4-5", 1000000, 1000000, 0.80 + 4.00},
 	}
 
 	for _, tt := range tests {
-		result := CalculateRequestCost(tt.provider, tt.input, tt.output)
+		result := CalculateRequestCost(tt.provider, tt.model, tt.input, tt.output)
 		// 浮動小数点の比較は許容誤差を設ける
 		if result < tt.expected-0.001 || result > tt.expected+0.001 {
-			t.Errorf("CalculateRequestCost(%s, %d, %d) = %f, want %f",
-				tt.provider, tt.input, tt.output, result, tt.expected)
+			t.Errorf("CalculateRequestCost(%s, %s, %d, %d) = %f, want %f",
+				tt.provider, tt.model, tt.input, tt.output, result, tt.expected)
+		}
+	}
+}
+
+func TestGetClaudePricing(t *testing.T) {
+	tests := []struct {
+		model      string
+		wantInput  float64
+		wantOutput float64
+	}{
+		{"claude-opus-4-5-20251101", 5.00, 25.00},
+		{"claude-opus-4-6", 5.00, 25.00},
+		{"global.anthropic.claude-opus-4-5-20251101-v1:0", 5.00, 25.00},
+		{"claude-haiku-4-5-20251001", 0.80, 4.00},
+		{"claude-sonnet-4-5-20250929", 3.00, 15.00},
+		{"claude-sonnet-4-20250514", 3.00, 15.00},
+		{"", 3.00, 15.00},                   // 空文字列はSonnetデフォルト
+		{"some-unknown-model", 3.00, 15.00}, // 不明モデルもSonnetデフォルト
+	}
+
+	for _, tt := range tests {
+		pricing := getClaudePricing(tt.model)
+		if pricing.InputCostPerM != tt.wantInput {
+			t.Errorf("getClaudePricing(%q).InputCostPerM = %f, want %f", tt.model, pricing.InputCostPerM, tt.wantInput)
+		}
+		if pricing.OutputCostPerM != tt.wantOutput {
+			t.Errorf("getClaudePricing(%q).OutputCostPerM = %f, want %f", tt.model, pricing.OutputCostPerM, tt.wantOutput)
 		}
 	}
 }

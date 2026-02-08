@@ -3,6 +3,7 @@ package agent
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
@@ -19,15 +20,22 @@ type SessionStats struct {
 	CachedInputTokens   int        // キャッシュヒットトークン数（累計）
 	CacheCreationTokens int        // キャッシュ作成トークン数（累計、Claude用）
 	Provider            string     // "deepseek", "openai", "claude", "gemini", "groq", "ollama"
+	Model               string     // 現在のモデル名（料金計算に使用）
 	LastUsage           *api.Usage // 直近のリクエストの使用量
 }
 
 // NewSessionStats は新しいSessionStatsを作成
-func NewSessionStats(provider string) *SessionStats {
+// model は省略可能（空文字列でデフォルト料金を使用）
+func NewSessionStats(provider string, model ...string) *SessionStats {
+	m := ""
+	if len(model) > 0 {
+		m = model[0]
+	}
 	return &SessionStats{
 		StartTime:      time.Now(),
 		ToolExecutions: make(map[string]int),
 		Provider:       provider,
+		Model:          m,
 	}
 }
 
@@ -64,8 +72,8 @@ type PricingInfo struct {
 	CacheCreationCostPerM float64 // キャッシュ作成（Claude: 1.25x）
 }
 
-// GetPricingInfo はプロバイダー別の料金情報を返す
-func GetPricingInfo(provider string) PricingInfo {
+// GetPricingInfo はプロバイダー・モデル別の料金情報を返す
+func GetPricingInfo(provider string, model string) PricingInfo {
 	switch provider {
 	case "deepseek":
 		// DeepSeek: キャッシュヒット90%割引 ($0.14 → $0.014)
@@ -83,14 +91,8 @@ func GetPricingInfo(provider string) PricingInfo {
 			CachedInputCostPerM:   1.25, // 50% off
 			CacheCreationCostPerM: 2.50, // 通常料金
 		}
-	case "claude":
-		// Claude: キャッシュヒット90%割引 ($3.00 → $0.30), キャッシュ作成25%増 ($3.00 → $3.75)
-		return PricingInfo{
-			InputCostPerM:         3.00,
-			OutputCostPerM:        15.00,
-			CachedInputCostPerM:   0.30, // 90% off
-			CacheCreationCostPerM: 3.75, // 25% premium
-		}
+	case "claude", "bedrock":
+		return getClaudePricing(model)
 	case "gemini":
 		// Gemini: キャッシュヒット90%割引 ($0.075 → $0.0075)
 		return PricingInfo{
@@ -119,6 +121,37 @@ func GetPricingInfo(provider string) PricingInfo {
 	}
 }
 
+// getClaudePricing はモデル名からClaude料金を返す
+func getClaudePricing(model string) PricingInfo {
+	lm := strings.ToLower(model)
+	switch {
+	case strings.Contains(lm, "opus"):
+		// Opus 4.5/4.6: $5/$25 per million tokens
+		return PricingInfo{
+			InputCostPerM:         5.00,
+			OutputCostPerM:        25.00,
+			CachedInputCostPerM:   0.50, // 90% off
+			CacheCreationCostPerM: 6.25, // 25% premium
+		}
+	case strings.Contains(lm, "haiku"):
+		// Haiku 4.5: $0.80/$4 per million tokens
+		return PricingInfo{
+			InputCostPerM:         0.80,
+			OutputCostPerM:        4.00,
+			CachedInputCostPerM:   0.08, // 90% off
+			CacheCreationCostPerM: 1.00, // 25% premium
+		}
+	default:
+		// Sonnet 4.5（デフォルト）: $3/$15 per million tokens
+		return PricingInfo{
+			InputCostPerM:         3.00,
+			OutputCostPerM:        15.00,
+			CachedInputCostPerM:   0.30, // 90% off
+			CacheCreationCostPerM: 3.75, // 25% premium
+		}
+	}
+}
+
 // EstimatedCost は推定コストを計算（USD）
 // キャッシュヒットとキャッシュ作成の割引/割増を反映
 func (s *SessionStats) EstimatedCost() float64 {
@@ -126,7 +159,7 @@ func (s *SessionStats) EstimatedCost() float64 {
 		return 0.0 // ローカル実行
 	}
 
-	pricing := GetPricingInfo(s.Provider)
+	pricing := GetPricingInfo(s.Provider, s.Model)
 
 	// 入力トークンのコスト計算
 	// - CachedInputTokens: キャッシュヒット（割引適用）
@@ -228,12 +261,12 @@ func FormatNumber(n int) string {
 }
 
 // CalculateRequestCost は単一リクエストのコストを計算（キャッシュなし想定）
-func CalculateRequestCost(provider string, input, output int) float64 {
+func CalculateRequestCost(provider, model string, input, output int) float64 {
 	if provider == "ollama" {
 		return 0.0 // ローカル実行
 	}
 
-	pricing := GetPricingInfo(provider)
+	pricing := GetPricingInfo(provider, model)
 
 	// コスト計算: (tokens / 1,000,000) * price
 	inputCostUSD := (float64(input) / 1_000_000.0) * pricing.InputCostPerM
@@ -243,12 +276,12 @@ func CalculateRequestCost(provider string, input, output int) float64 {
 }
 
 // CalculateRequestCostWithCache は単一リクエストのコストを計算（キャッシュ対応）
-func CalculateRequestCostWithCache(provider string, usage api.Usage) float64 {
+func CalculateRequestCostWithCache(provider, model string, usage api.Usage) float64 {
 	if provider == "ollama" {
 		return 0.0
 	}
 
-	pricing := GetPricingInfo(provider)
+	pricing := GetPricingInfo(provider, model)
 
 	cachedInputCost := float64(usage.CachedInputTokens) / 1_000_000.0 * pricing.CachedInputCostPerM
 	cacheCreationCost := float64(usage.CacheCreationTokens) / 1_000_000.0 * pricing.CacheCreationCostPerM

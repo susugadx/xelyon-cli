@@ -31,5 +31,8 @@ func (a *Agent) SyncWithGlobalConfig() {
 	}
 	if resolvedModel != "" {
 		a.CurrentModel = resolvedModel
+		if a.Stats != nil {
+			a.Stats.Model = resolvedModel
+		}
 	}
 }
