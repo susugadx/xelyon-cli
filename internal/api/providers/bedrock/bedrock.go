@@ -81,7 +81,7 @@ func (p *Provider) IsFunctionCallingEnabled() bool {
 type BedrockRequest struct {
 	AnthropicVersion string                    `json:"anthropic_version"`
 	MaxTokens        int                       `json:"max_tokens"`
-	System           interface{}               `json:"system,omitempty"`
+	System           interface{}               `json:"system,omitempty"` // can be string or []api.SystemBlock
 	Messages         []claude.AnthropicMessage `json:"messages"`
 	Thinking         *claude.ThinkingConfig    `json:"thinking,omitempty"`
 	Tools            []claude.ClaudeTool       `json:"tools,omitempty"`
@@ -97,27 +97,6 @@ type BedrockMultimodalRequest struct {
 	Tools            []claude.ClaudeTool    `json:"tools,omitempty"`
 }
 
-// buildSystemField はプロンプトキャッシュ対応のシステムフィールドを構築
-func buildSystemField(systemPrompt string) interface{} {
-	cfg := config.GetGlobalConfig()
-	if cfg == nil {
-		return systemPrompt
-	}
-	if !cfg.PromptCache.Enabled {
-		return systemPrompt
-	}
-
-	return []claude.SystemBlock{
-		{
-			Type: "text",
-			Text: systemPrompt,
-			CacheControl: &claude.CacheControl{
-				Type: "ephemeral",
-			},
-		},
-	}
-}
-
 // ChatWithTools は Provider interface の実装
 func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
 	model = api.GetDefaultModel(model, "bedrock", defaultModel)
@@ -130,7 +109,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	reqBody := BedrockRequest{
 		AnthropicVersion: bedrockAnthropicVersion,
 		MaxTokens:        api.GetMaxOutputTokens("bedrock", model),
-		System:           buildSystemField(systemPrompt),
+		System:           api.BuildSystemField(systemPrompt),
 		Messages:         messages,
 	}
 
@@ -192,7 +171,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	reqBody := BedrockMultimodalRequest{
 		AnthropicVersion: bedrockAnthropicVersion,
 		MaxTokens:        api.GetMaxOutputTokens("bedrock", model),
-		System:           buildSystemField(systemPrompt),
+		System:           api.BuildSystemField(systemPrompt),
 		Messages:         messages,
 	}
 

@@ -367,20 +367,41 @@ func (m *MultilineReader) readWithBracketedPaste() (string, error) {
 func (m *MultilineReader) readMultilineWithMarker() (string, error) {
 	fmt.Println("📝 Multiline input mode (end with ``` on a new line)")
 
+	// When raw mode goroutine is active, enter raw mode to suppress
+	// terminal echo (prevents paste markers from being displayed)
+	useChannel := m.rawModeInit && m.byteChan != nil
+	var oldState *term.State
+	if useChannel && m.fd >= 0 && term.IsTerminal(m.fd) {
+		st, err := term.MakeRaw(m.fd)
+		if err == nil {
+			oldState = st
+			defer func() { _ = term.Restore(m.fd, oldState) }()
+		}
+	}
+
 	var lines []string
 	lineNum := 1
 
 	for {
 		fmt.Printf("%3d | ", lineNum)
-		line, err := m.reader.ReadString('\n')
+
+		var line string
+		var err error
+		if useChannel {
+			line, err = m.readLineFromChannel()
+		} else {
+			line, err = m.reader.ReadString('\n')
+			if err == nil {
+				line = strings.TrimRight(line, "\n\r")
+				line = stripAllBracketedPasteMarkers(line)
+			}
+		}
 		if err != nil {
 			if err == io.EOF && len(lines) > 0 {
 				break
 			}
 			return "", err
 		}
-
-		line = strings.TrimRight(line, "\n\r")
 
 		// Check for end marker
 		if line == "```" {

@@ -74,25 +74,6 @@ func (p *Provider) IsFunctionCallingEnabled() bool {
 	return true
 }
 
-// ClaudeRequest はClaude APIリクエスト
-
-// CacheControl enables prompt caching for a content block.
-//
-// This is gated by config.PromptCache.Enabled and disabled by default.
-// If the upstream schema changes, requests may fail; keep the feature optional.
-type CacheControl struct {
-	Type string `json:"type"` // e.g. "ephemeral"
-}
-
-// SystemBlock represents a system prompt content block.
-//
-// When prompt caching is enabled, we send system as an array of blocks instead of a string.
-type SystemBlock struct {
-	Type         string        `json:"type"` // "text"
-	Text         string        `json:"text"`
-	CacheControl *CacheControl `json:"cache_control,omitempty"`
-}
-
 // ThinkingConfig は Extended Thinking の設定
 type ThinkingConfig struct {
 	Type         string `json:"type"`          // "enabled"
@@ -102,38 +83,12 @@ type ThinkingConfig struct {
 type Request struct {
 	Model    string             `json:"model"`
 	Messages []AnthropicMessage `json:"messages"`
-	// System can be either string (legacy) or []SystemBlock (prompt caching).
+	// System can be either string (legacy) or []api.SystemBlock (prompt caching).
 	System    interface{}     `json:"system,omitempty"`
 	MaxTokens int             `json:"max_tokens"`
 	Stream    bool            `json:"stream"`
 	Thinking  *ThinkingConfig `json:"thinking,omitempty"`
 	Tools     []ClaudeTool    `json:"tools,omitempty"` // Tool Use用
-}
-
-// buildSystemField builds the request "system" field.
-//
-// When prompt caching is enabled in config, it converts the system prompt into a single
-// text block with cache_control to let Anthropic cache the prefix.
-func buildSystemField(systemPrompt string) interface{} {
-	cfg := config.GetGlobalConfig()
-	if cfg == nil {
-		return systemPrompt
-	}
-	if !cfg.PromptCache.Enabled {
-		return systemPrompt
-	}
-
-	// NOTE: The cache_control schema is based on Anthropic prompt caching examples.
-	// We keep it minimal here.
-	return []SystemBlock{
-		{
-			Type: "text",
-			Text: systemPrompt,
-			CacheControl: &CacheControl{
-				Type: "ephemeral",
-			},
-		},
-	}
 }
 
 // LevelToBudgetTokens は api.LevelToBudgetTokens のエイリアス（後方互換）
@@ -215,7 +170,7 @@ type MultimodalMessage struct {
 type MultimodalRequest struct {
 	Model    string        `json:"model"`
 	Messages []interface{} `json:"messages"` // Message or MultimodalMessage
-	// System can be either string (legacy) or []SystemBlock (prompt caching).
+	// System can be either string (legacy) or []api.SystemBlock (prompt caching).
 	System    interface{}     `json:"system,omitempty"`
 	MaxTokens int             `json:"max_tokens"`
 	Stream    bool            `json:"stream"`
@@ -301,7 +256,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	reqBody := Request{
 		Model:     model,
 		Messages:  messages,
-		System:    buildSystemField(systemPrompt),
+		System:    api.BuildSystemField(systemPrompt),
 		MaxTokens: api.GetMaxOutputTokens("claude", model),
 		Stream:    true,
 	}
@@ -513,7 +468,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	reqBody := MultimodalRequest{
 		Model:     model,
 		Messages:  messages,
-		System:    buildSystemField(systemPrompt),
+		System:    api.BuildSystemField(systemPrompt),
 		MaxTokens: api.GetMaxOutputTokens("claude", model),
 		Stream:    true,
 	}

@@ -432,7 +432,7 @@ func TestProcessChunk_InvalidJSON(t *testing.T) {
 }
 
 func TestBuildSystemField(t *testing.T) {
-	result := buildSystemField("Test prompt")
+	result := api.BuildSystemField("Test prompt")
 	if result == nil {
 		t.Fatal("buildSystemField() returned nil")
 	}
@@ -443,7 +443,7 @@ func TestBuildSystemField(t *testing.T) {
 		if v != "Test prompt" {
 			t.Errorf("buildSystemField() = %q, want %q", v, "Test prompt")
 		}
-	case []claude.SystemBlock:
+	case []api.SystemBlock:
 		if len(v) == 0 {
 			t.Fatal("SystemBlock slice is empty")
 		}

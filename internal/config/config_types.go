@@ -195,9 +195,11 @@ type ModelOverride struct {
 
 // ProviderModelConfig はプロバイダーごとのモデル設定
 type ProviderModelConfig struct {
-	DefaultModel    string                   `yaml:"default_model"`
-	MaxOutputTokens int                      `yaml:"max_output_tokens,omitempty"` // プロバイダー全体のデフォルト最大出力トークン数
-	ModelOverrides  map[string]ModelOverride `yaml:"model_overrides,omitempty"`   // モデルごとの個別オーバーライド
+	DefaultModel     string                   `yaml:"default_model"`
+	MaxOutputTokens  int                      `yaml:"max_output_tokens,omitempty"` // プロバイダー全体のデフォルト最大出力トークン数
+	AnthropicVersion string                   `yaml:"anthropic_version,omitempty"` // Anthropic API バージョン
+	AnthropicBeta    []string                 `yaml:"anthropic_beta,omitempty"`    // Anthropic Beta ヘッダー
+	ModelOverrides   map[string]ModelOverride `yaml:"model_overrides,omitempty"`   // モデルごとの個別オーバーライド
 }
 
 // CloudConfig はXELYON Cloud連携設定（将来用）
