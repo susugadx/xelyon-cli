@@ -52,8 +52,8 @@ func TestNew_URLOverride(t *testing.T) {
 	t.Run("DefaultURL", func(t *testing.T) {
 		os.Unsetenv("OPENROUTER_API_URL")
 		p := New("test-key")
-		if p.APIURL() != defaultOpenRouterURL {
-			t.Errorf("apiURL = %q, want %q", p.APIURL(), defaultOpenRouterURL)
+		if p.APIURL != defaultOpenRouterURL {
+			t.Errorf("apiURL = %q, want %q", p.APIURL, defaultOpenRouterURL)
 		}
 	})
 
@@ -61,8 +61,8 @@ func TestNew_URLOverride(t *testing.T) {
 		customURL := "https://custom.openrouter.api.com/v1"
 		os.Setenv("OPENROUTER_API_URL", customURL)
 		p := New("test-key")
-		if p.APIURL() != customURL {
-			t.Errorf("apiURL = %q, want %q", p.APIURL(), customURL)
+		if p.APIURL != customURL {
+			t.Errorf("apiURL = %q, want %q", p.APIURL, customURL)
 		}
 	})
 }
@@ -454,4 +454,89 @@ func containsHelper(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+func TestIsClaudeModel(t *testing.T) {
+	tests := []struct {
+		model string
+		want  bool
+	}{
+		{"anthropic/claude-opus-4.5", true},
+		{"anthropic/claude-3-5-sonnet", true},
+		{"google/gemini-pro", false},
+		{"openai/gpt-4o", false},
+	}
+
+	for _, tt := range tests {
+		if got := isClaudeModel(tt.model); got != tt.want {
+			t.Errorf("isClaudeModel(%q) = %v, want %v", tt.model, got, tt.want)
+		}
+	}
+}
+
+func TestIsCompactionSupported(t *testing.T) {
+	tests := []struct {
+		model string
+		want  bool
+	}{
+		{"anthropic/claude-opus-4.5", true},
+		{"anthropic/claude-opus-4-6", true},
+		{"anthropic/claude-3-5-sonnet", false},
+		{"openai/gpt-4o", false},
+	}
+
+	for _, tt := range tests {
+		if got := isCompactionSupported(tt.model); got != tt.want {
+			t.Errorf("isCompactionSupported(%q) = %v, want %v", tt.model, got, tt.want)
+		}
+	}
+}
+
+func TestGetAnthropicSkinURL(t *testing.T) {
+	tests := []struct {
+		openaiURL string
+		want      string
+	}{
+		{"https://openrouter.ai/api/v1/chat/completions", "https://openrouter.ai/api/v1/messages"},
+		{"https://example.com/v1/chat/completions", "https://example.com/v1/messages"},
+		{"https://api.com/chat/completions", "https://api.com/messages"},
+	}
+
+	for _, tt := range tests {
+		if got := getAnthropicSkinURL(tt.openaiURL); got != tt.want {
+			t.Errorf("getAnthropicSkinURL(%q) = %q, want %q", tt.openaiURL, got, tt.want)
+		}
+	}
+}
+
+func TestHandleClaudeStreamingResponse(t *testing.T) {
+	chunks := []string{
+		`{"type": "message_start", "message": {"usage": {"input_tokens": 10}}}`,
+		`{"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}}`,
+		`{"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "Hello"}}`,
+		`{"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": " World"}}`,
+		`{"type": "content_block_stop", "index": 0}`,
+		`{"type": "message_delta", "delta": {"stop_reason": "end_turn"}, "usage": {"output_tokens": 5}}`,
+		`{"type": "message_stop"}`,
+	}
+	server := mockAPIServer(t, streamingHandler(chunks))
+	defer server.Close()
+
+	p := New("test-key")
+	resp, err := http.Post(server.URL, "application/json", nil)
+	if err != nil {
+		t.Fatalf("Failed to post to mock server: %v", err)
+	}
+	defer resp.Body.Close()
+
+	spinner := api.StartThinkingSpinner(false, "")
+	result, err := p.handleClaudeStreamingResponse(context.Background(), resp, spinner)
+	if err != nil {
+		t.Fatalf("handleClaudeStreamingResponse() error = %v", err)
+	}
+
+	want := "Hello World"
+	if result != want {
+		t.Errorf("handleClaudeStreamingResponse() = %q, want %q", result, want)
+	}
 }

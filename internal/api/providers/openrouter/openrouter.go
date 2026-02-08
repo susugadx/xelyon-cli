@@ -12,6 +12,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/api/providers/claude"
 	"github.com/susugadx/xelyon-cli/internal/api/providers/openai"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/ui"
@@ -55,36 +56,70 @@ type MultimodalMessage struct {
 	Content []ContentPart `json:"content"`
 }
 
-// Provider はOpenRouter APIのプロバイダー実装（OpenAI互換）
+// Provider はOpenRouter APIのプロバイダー実装（OpenAI互換 + Claude Compaction対応）
 type Provider struct {
 	api.BaseProvider
-	mcpTools      []api.ToolDefinition // MCP ツール定義（Function Calling用）
-	usageCallback api.UsageCallback    // トークン使用量コールバック
+	mcpTools          []api.ToolDefinition // MCP ツール定義（Function Calling用）
+	usageCallback     api.UsageCallback    // トークン使用量コールバック
+	compactionEnabled bool                 // Compaction が有効か
+	compactionTrigger int                  // Compaction を開始する入力トークン閾値
 }
 
 // New は新しいProviderを作成
 func New(apiKey string) *Provider {
+	globalCfg := config.GetGlobalConfig()
 	return &Provider{
-		BaseProvider: api.NewBaseProvider("OpenRouter", apiKey, defaultOpenRouterURL, "OPENROUTER_API_URL"),
+		BaseProvider:      api.NewBaseProvider("OpenRouter", apiKey, defaultOpenRouterURL, "OPENROUTER_API_URL"),
+		compactionEnabled: globalCfg.Compression.ClaudeCompaction,
+		compactionTrigger: globalCfg.Compression.CompactionTrigger,
 	}
 }
 
+// isClaudeModel はモデル名が Claude モデルかを判定
+func isClaudeModel(model string) bool {
+	return strings.HasPrefix(model, "anthropic/claude-")
+}
+
+// isCompactionSupported はモデルが Compaction 対応か判定
+func isCompactionSupported(model string) bool {
+	return strings.Contains(model, "opus-4-6") || strings.Contains(model, "opus-4-5") ||
+		strings.Contains(model, "opus-4.6") || strings.Contains(model, "opus-4.5")
+}
+
+// getAnthropicSkinURL は OpenAI 互換 URL から Anthropic Skin URL を導出
+func getAnthropicSkinURL(openaiURL string) string {
+	if idx := strings.Index(openaiURL, "/v1/chat/completions"); idx >= 0 {
+		return openaiURL[:idx] + "/v1/messages"
+	}
+	return strings.TrimSuffix(openaiURL, "/chat/completions") + "/messages"
+}
+
+// SupportsClaudeCompaction はこのプロバイダーが Claude Compaction に対応しているかを返す
+func (p *Provider) SupportsClaudeCompaction() bool {
+	model := api.GetDefaultModel("", "openrouter", "anthropic/claude-opus-4.5")
+	return p.compactionEnabled && isClaudeModel(model) && isCompactionSupported(model)
+}
+
 // SupportsImages は画像入力対応を返す
-// OpenRouterは複数モデルに対応するため、モデルによっては画像対応
 func (p *Provider) SupportsImages() bool {
 	return true
 }
 
 // IsFunctionCallingEnabled は Function Calling が有効かを返す
-// OPENROUTER_FUNCTION_CALLING=0 で無効化可能
 func (p *Provider) IsFunctionCallingEnabled() bool {
 	return os.Getenv("OPENROUTER_FUNCTION_CALLING") != "0"
 }
 
-// ChatWithTools は Provider interface の実装（context対応）
+// ChatWithTools は Provider interface の実装
 func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
-	// Extended Thinking 非対応警告
 	cfg := config.GetGlobalConfig()
+	model = api.GetDefaultModel(model, "openrouter", "anthropic/claude-opus-4.5")
+
+	// Claude モデル + Compaction 有効時は Anthropic Skin エンドポイントを使用
+	if isClaudeModel(model) && p.compactionEnabled && isCompactionSupported(model) {
+		return p.chatWithClaudeAPI(ctx, systemPrompt, history, model, nil)
+	}
+
 	if cfg.Thinking.Enabled {
 		yellow.Println("⚠️  Warning: OpenRouter does not support Extended Thinking. Proceeding without it.")
 	}
@@ -95,9 +130,6 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	}
 	messages = append(messages, history...)
 
-	// モデル名を設定（config優先、フォールバックはanthropic/claude-opus-4.5）
-	model = api.GetDefaultModel(model, "openrouter", "anthropic/claude-opus-4.5")
-
 	reqBody := api.ChatRequest{
 		Model:         model,
 		Messages:      messages,
@@ -106,8 +138,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		StreamOptions: &api.StreamOptions{IncludeUsage: true},
 	}
 
-	// Function Calling: ツール定義を追加（環境変数で無効化可能）
-	if os.Getenv("OPENROUTER_FUNCTION_CALLING") != "0" {
+	if p.IsFunctionCallingEnabled() {
 		reqBody.Tools = openai.GetCombinedOpenAITools(p.mcpTools)
 		reqBody.ToolChoice = "auto"
 	}
@@ -117,21 +148,107 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		return "", err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", p.APIURL(), bytes.NewBuffer(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", p.APIURL, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return "", err
 	}
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+p.APIKey)
-	// OpenRouter 固有ヘッダー（オプション）
 	req.Header.Set("HTTP-Referer", "https://github.com/susugadx/xelyon-cli")
 	req.Header.Set("X-Title", "XELYON CLI")
 
-	// スピナー開始
 	spinner := api.StartThinkingSpinner(false, "")
 
-	// 再利用可能なHTTPクライアントを使用
+	resp, err := p.HTTPClient.Do(req)
+	if err != nil {
+		spinner.Stop()
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return "", api.HandleHTTPError(resp, spinner, p.Name())
+	}
+
+	contentType := resp.Header.Get("Content-Type")
+	isStreaming := strings.Contains(contentType, "text/event-stream")
+
+	if isStreaming {
+		return p.handleStreamingResponse(ctx, resp, spinner)
+	} else {
+		return p.handleNonStreamingResponse(resp, spinner)
+	}
+}
+
+// ChatWithImage は画像付きチャットの実装
+func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {
+	if image == nil || image.Base64 == "" {
+		history = append(history, api.Message{Role: "user", Content: userMessage})
+		return p.ChatWithTools(ctx, systemPrompt, history, model)
+	}
+
+	model = api.GetDefaultModel(model, "openrouter", "anthropic/claude-opus-4.5")
+
+	if isClaudeModel(model) && p.compactionEnabled && isCompactionSupported(model) {
+		history = append(history, api.Message{Role: "user", Content: userMessage})
+		return p.chatWithClaudeAPI(ctx, systemPrompt, history, model, image)
+	}
+
+	return p.chatWithImageRequest(ctx, systemPrompt, history, userMessage, image, model)
+}
+
+// chatWithImageRequest はOpenAI互換形式での画像送信
+func (p *Provider) chatWithImageRequest(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {
+	imageUrl := fmt.Sprintf("data:%s;base64,%s", image.MediaType, image.Base64)
+
+	content := []ContentPart{
+		{Type: "text", Text: userMessage},
+		{Type: "image_url", ImageURL: &ImageURL{URL: imageUrl}},
+	}
+
+	// マルチモーダルメッセージ構築
+	var messages []interface{}
+	messages = append(messages, api.Message{Role: "system", Content: systemPrompt})
+	for _, msg := range history {
+		messages = append(messages, msg)
+	}
+	messages = append(messages, MultimodalMessage{
+		Role:    "user",
+		Content: content,
+	})
+
+	reqBody := struct {
+		Model         string             `json:"model"`
+		Messages      []interface{}      `json:"messages"`
+		MaxTokens     int                `json:"max_tokens"`
+		Stream        bool               `json:"stream"`
+		StreamOptions *api.StreamOptions `json:"stream_options,omitempty"`
+	}{
+		Model:         model,
+		Messages:      messages,
+		MaxTokens:     api.GetMaxOutputTokens("openrouter", model),
+		Stream:        true,
+		StreamOptions: &api.StreamOptions{IncludeUsage: true},
+	}
+
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", p.APIURL, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return "", err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+p.APIKey)
+	req.Header.Set("HTTP-Referer", "https://github.com/susugadx/xelyon-cli")
+	req.Header.Set("X-Title", "XELYON CLI")
+
+	spinner := api.StartThinkingSpinner(true, "")
+
 	resp, err := p.HTTPClient.Do(req)
 	if err != nil {
 		spinner.Stop()
@@ -154,7 +271,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	}
 }
 
-// handleStreamingResponse はストリーミングレスポンスを処理
+// handleStreamingResponse は OpenAI 互換ストリーミングレスポンスを処理
 func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
 	var fullResponse strings.Builder
 	var toolCallsOutput strings.Builder
@@ -164,7 +281,6 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 	var lastUsage *api.Usage
 
 	for scanner.Scan() {
-		// contextキャンセルチェック
 		select {
 		case <-ctx.Done():
 			spinner.Stop()
@@ -181,12 +297,9 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 
 			var streamResp api.StreamResponse
 			if err := json.Unmarshal([]byte(data), &streamResp); err != nil {
-				// JSONパースエラーを警告（データ損失を防ぐため記録）
-				fmt.Fprintf(os.Stderr, "⚠️  Warning: failed to parse streaming response: %v\n", err)
 				continue
 			}
 
-			// Usage情報を追跡（最終チャンクに含まれる）
 			if streamResp.Usage != nil {
 				cachedTokens := 0
 				if streamResp.Usage.PromptTokensDetails != nil {
@@ -202,179 +315,177 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 			if len(streamResp.Choices) > 0 {
 				choice := streamResp.Choices[0]
 
-				// Function Calling: tool_calls を蓄積
-				for _, tc := range choice.Delta.ToolCalls {
-					acc, exists := toolCalls[tc.Index]
-					if !exists {
-						acc = &toolCallAccumulator{}
-						toolCalls[tc.Index] = acc
+				if len(choice.Delta.ToolCalls) > 0 {
+					for _, tc := range choice.Delta.ToolCalls {
+						index := tc.Index
+						if _, ok := toolCalls[index]; !ok {
+							toolCalls[index] = &toolCallAccumulator{ID: tc.ID, Name: tc.Function.Name}
+						}
+						toolCalls[index].Arguments.WriteString(tc.Function.Arguments)
 					}
-					if tc.ID != "" {
-						acc.ID = tc.ID
-					}
-					if tc.Function.Name != "" {
-						acc.Name = tc.Function.Name
-					}
-					if tc.Function.Arguments != "" {
-						acc.Arguments.WriteString(tc.Function.Arguments)
-					}
+					continue
 				}
 
-				// Function Calling: finish_reason == "tool_calls" で完了
-				if choice.FinishReason == "tool_calls" {
-					// tool_calls を内部JSON形式に変換
-					for i := 0; i < len(toolCalls); i++ {
-						acc := toolCalls[i]
-						if acc == nil {
-							continue
-						}
-						tc := &api.OpenAIToolCall{
-							ID:   acc.ID,
-							Type: "function",
-							Function: api.OpenAIToolCallFunction{
-								Name:      acc.Name,
-								Arguments: acc.Arguments.String(),
-							},
-						}
-						if toolJSON, err := openai.ConvertToolCallToToolJSON(tc); err == nil {
-							toolCallsOutput.WriteString(toolJSON)
-						}
+				if choice.Delta.Content != "" {
+					if firstChunk {
+						spinner.Stop()
+						firstChunk = false
+						api.PrintAIHeader()
 					}
+					fmt.Print(choice.Delta.Content)
+					fullResponse.WriteString(choice.Delta.Content)
 				}
-
-				content := choice.Delta.Content
-
-				// 最初のコンテンツでスピナー停止 + AI発言ヘッダー表示
-				if firstChunk && content != "" {
-					spinner.Stop()
-					firstChunk = false
-					api.PrintAIHeader()
-				}
-
-				fmt.Print(content)
-				fullResponse.WriteString(content)
 			}
 		}
 	}
 
-	// スキャナーのI/Oエラーチェック
+	spinner.Stop()
+
 	if err := scanner.Err(); err != nil {
-		return "", fmt.Errorf("stream reading error: %w", err)
+		return "", err
 	}
 
-	// Usage callback
 	if p.usageCallback != nil && lastUsage != nil {
 		p.usageCallback(*lastUsage)
 	}
 
-	// tool_calls がある場合はそれを返す
+	for i := 0; i < len(toolCalls); i++ {
+		if tc, ok := toolCalls[i]; ok {
+			openaiTC := &api.OpenAIToolCall{
+				ID: tc.ID,
+				Function: api.OpenAIToolCallFunction{
+					Name:      tc.Name,
+					Arguments: tc.Arguments.String(),
+				},
+			}
+			if toolJSON, err := openai.ConvertToolCallToToolJSON(openaiTC); err == nil {
+				toolCallsOutput.WriteString(toolJSON)
+			}
+		}
+	}
+
+	content := fullResponse.String()
 	if toolCallsOutput.Len() > 0 {
-		spinner.Stop()
-		if fullResponse.Len() > 0 {
+		if content != "" {
 			fmt.Println()
-			return fullResponse.String() + toolCallsOutput.String(), nil
+			return content + toolCallsOutput.String(), nil
 		}
 		return toolCallsOutput.String(), nil
 	}
 
 	fmt.Println()
-	return fullResponse.String(), nil
+	return content, nil
 }
 
-// handleNonStreamingResponse は非ストリーミングレスポンスを処理（フォールバック）
+// handleNonStreamingResponse は非ストリーミングレスポンスを処理
 func (p *Provider) handleNonStreamingResponse(resp *http.Response, spinner *ui.Spinner) (string, error) {
-	return api.HandleNonStreamingResponse(resp, spinner)
-}
+	var apiResp struct {
+		Choices []api.Choice        `json:"choices"`
+		Usage   api.StreamUsageInfo `json:"usage"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+		spinner.Stop()
+		return "", err
+	}
+	spinner.Stop()
 
-// ChatWithImage は画像付きメッセージで会話を行う
-func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {
-	// 画像がない場合はテキストのみで送信
-	if image == nil || image.Base64 == "" {
-		history = append(history, api.Message{Role: "user", Content: userMessage})
-		return p.ChatWithTools(ctx, systemPrompt, history, model)
+	if p.usageCallback != nil {
+		cachedTokens := 0
+		if apiResp.Usage.PromptTokensDetails != nil {
+			cachedTokens = apiResp.Usage.PromptTokensDetails.CachedTokens
+		}
+		p.usageCallback(api.Usage{
+			InputTokens:       apiResp.Usage.PromptTokens,
+			OutputTokens:      apiResp.Usage.CompletionTokens,
+			CachedInputTokens: cachedTokens,
+		})
 	}
 
-	// 画像付きメッセージの場合、専用のリクエスト構造を使用
-	return p.chatWithImageRequest(ctx, systemPrompt, history, userMessage, image, model)
+	if len(apiResp.Choices) > 0 {
+		api.PrintAIHeader()
+		content := apiResp.Choices[0].Message.Content
+		fmt.Println(content)
+		return content, nil
+	}
+	return "", nil
 }
 
-// chatWithImageRequest は画像付きメッセージ用のリクエストを送信
-func (p *Provider) chatWithImageRequest(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {
-	// システムプロンプトを最初のメッセージとして追加
-	var messages []interface{}
-	messages = append(messages, api.Message{Role: "system", Content: systemPrompt})
+// SetMCPTools はツール定義を設定
+func (p *Provider) SetMCPTools(tools []api.ToolDefinition) {
+	p.mcpTools = tools
+}
 
-	// 履歴をメッセージ配列に追加（テキストのみ）
-	for _, msg := range history {
-		messages = append(messages, msg)
+// SetUsageCallback はトークン使用量コールバックを設定
+func (p *Provider) SetUsageCallback(callback api.UsageCallback) {
+	p.usageCallback = callback
+}
+
+// chatWithClaudeAPI は Claude モデル用に Anthropic Skin エンドポイントを使用して通信する
+func (p *Provider) chatWithClaudeAPI(ctx context.Context, systemPrompt string, history []api.Message, model string, image *api.ImageData) (string, error) {
+	// メッセージを Anthropic 形式に変換
+	anthropicMessages := claude.ConvertToAnthropicMessages(history)
+
+	// リクエスト構造体（Anthropic Messages API 形式）
+	type claudeRequest struct {
+		Model             string                    `json:"model"`
+		AnthropicVersion  string                    `json:"anthropic_version"`
+		AnthropicBeta     []string                  `json:"anthropic_beta,omitempty"`
+		MaxTokens         int                       `json:"max_tokens"`
+		System            string                    `json:"system,omitempty"`
+		Messages          []claude.AnthropicMessage `json:"messages"`
+		Tools             []claude.ClaudeTool       `json:"tools,omitempty"`
+		Stream            bool                      `json:"stream"`
+		ContextManagement *claude.ContextManagement `json:"context_management,omitempty"`
 	}
 
-	// Data URL形式で画像を埋め込む
-	dataURL := fmt.Sprintf("data:%s;base64,%s", image.MediaType, image.Base64)
+	reqBody := claudeRequest{
+		Model:            model,
+		AnthropicVersion: "2023-06-01",
+		MaxTokens:        api.GetMaxOutputTokens("openrouter", model),
+		System:           systemPrompt,
+		Messages:         anthropicMessages,
+		Stream:           true,
+	}
 
-	// 画像付きユーザーメッセージを追加
-	multimodalMessage := MultimodalMessage{
-		Role: "user",
-		Content: []ContentPart{
+	// Tool Use 設定
+	if p.IsFunctionCallingEnabled() {
+		reqBody.Tools = claude.GetCombinedClaudeTools(p.mcpTools)
+	}
+
+	// Compaction 設定
+	reqBody.ContextManagement = &claude.ContextManagement{
+		Edits: []claude.ContextEdit{
 			{
-				Type: "image_url",
-				ImageURL: &ImageURL{
-					URL: dataURL,
+				Type: "compact_20260112",
+				Trigger: &claude.CompactTrigger{
+					Type:  "input_tokens",
+					Value: p.compactionTrigger,
 				},
-			},
-			{
-				Type: "text",
-				Text: userMessage,
 			},
 		},
 	}
-	messages = append(messages, multimodalMessage)
-
-	// モデル名を設定
-	model = api.GetDefaultModel(model, "openrouter", "anthropic/claude-opus-4.5")
-
-	// リクエスト構造体
-	type multimodalRequest struct {
-		Model         string        `json:"model"`
-		Messages      []interface{} `json:"messages"`
-		MaxTokens     int           `json:"max_tokens,omitempty"`
-		Stream        bool          `json:"stream"`
-		StreamOptions interface{}   `json:"stream_options,omitempty"`
-		Tools         interface{}   `json:"tools,omitempty"`
-		ToolChoice    string        `json:"tool_choice,omitempty"`
-	}
-
-	reqBody := multimodalRequest{
-		Model:         model,
-		Messages:      messages,
-		MaxTokens:     api.GetMaxOutputTokens("openrouter", model),
-		Stream:        true,
-		StreamOptions: &api.StreamOptions{IncludeUsage: true},
-	}
-
-	// Function Calling: ツール定義を追加（環境変数で無効化可能）
-	if os.Getenv("OPENROUTER_FUNCTION_CALLING") != "0" {
-		reqBody.Tools = openai.GetCombinedOpenAITools(p.mcpTools)
-		reqBody.ToolChoice = "auto"
-	}
+	reqBody.AnthropicBeta = []string{"compact-2026-01-12"}
 
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {
 		return "", err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", p.BaseProvider.APIURL, bytes.NewBuffer(jsonBody))
+	// Anthropic Skin URL を導出
+	apiURL := getAnthropicSkinURL(p.APIURL)
+
+	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return "", err
 	}
 
+	// ヘッダー設定（Anthropic Skin 用）
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+p.APIKey)
 	req.Header.Set("HTTP-Referer", "https://github.com/susugadx/xelyon-cli")
 	req.Header.Set("X-Title", "XELYON CLI")
 
-	// スピナー開始
-	spinner := api.StartThinkingSpinner(true, "")
+	spinner := api.StartThinkingSpinner(image != nil, "")
 
 	resp, err := p.HTTPClient.Do(req)
 	if err != nil {
@@ -387,27 +498,164 @@ func (p *Provider) chatWithImageRequest(ctx context.Context, systemPrompt string
 		return "", api.HandleHTTPError(resp, spinner, p.Name())
 	}
 
-	// ストリーミング処理
-	contentType := resp.Header.Get("Content-Type")
-	isStreaming := strings.Contains(contentType, "text/event-stream")
+	return p.handleClaudeStreamingResponse(ctx, resp, spinner)
+}
 
-	if isStreaming {
-		return p.handleStreamingResponse(ctx, resp, spinner)
+// handleClaudeStreamingResponse は Anthropic SSE ストリーミングレスポンスを処理する
+func (p *Provider) handleClaudeStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
+	var fullResponse strings.Builder
+	var toolCallsOutput strings.Builder
+	var compactionOutput strings.Builder
+	toolUses := make(map[int]*struct {
+		ID    string
+		Name  string
+		Input strings.Builder
+	})
+	compactionBlocks := make(map[int]*strings.Builder)
+	scanner := bufio.NewScanner(resp.Body)
+	firstChunk := true
+	var lastUsage *api.Usage
+
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			spinner.Stop()
+			content := fullResponse.String()
+			if compactionOutput.Len() > 0 {
+				content = "[COMPACTION]\n" + compactionOutput.String() + "\n[/COMPACTION]\n" + content
+			}
+			if toolCallsOutput.Len() > 0 {
+				if content != "" {
+					return content + toolCallsOutput.String(), ctx.Err()
+				}
+				return toolCallsOutput.String(), ctx.Err()
+			}
+			return content, ctx.Err()
+		default:
+		}
+
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		data := strings.TrimPrefix(line, "data: ")
+
+		var event claude.StreamEvent
+		if err := json.Unmarshal([]byte(data), &event); err != nil {
+			continue
+		}
+
+		switch event.Type {
+		case "message_start":
+			var msgStart struct {
+				Message struct {
+					Usage claude.StreamUsage `json:"usage"`
+				} `json:"message"`
+			}
+			if err := json.Unmarshal([]byte(data), &msgStart); err == nil {
+				usage := msgStart.Message.Usage
+				lastUsage = &api.Usage{
+					InputTokens:         usage.InputTokens,
+					CachedInputTokens:   usage.CacheReadInputTokens,
+					CacheCreationTokens: usage.CacheCreationInputTokens,
+				}
+			}
+
+		case "message_delta":
+			var msgDelta struct {
+				Usage claude.StreamUsage `json:"usage"`
+			}
+			if err := json.Unmarshal([]byte(data), &msgDelta); err == nil && msgDelta.Usage.OutputTokens > 0 {
+				if lastUsage == nil {
+					lastUsage = &api.Usage{}
+				}
+				lastUsage.OutputTokens = msgDelta.Usage.OutputTokens
+			}
+
+		case "message_stop":
+			goto done
+
+		case "content_block_start":
+			if event.ContentBlock == nil {
+				continue
+			}
+			switch event.ContentBlock.Type {
+			case "tool_use":
+				toolUses[event.Index] = &struct {
+					ID    string
+					Name  string
+					Input strings.Builder
+				}{
+					ID:   event.ContentBlock.ID,
+					Name: event.ContentBlock.Name,
+				}
+			case "compaction":
+				compactionBlocks[event.Index] = &strings.Builder{}
+			}
+
+		case "content_block_delta":
+			if event.Delta == nil {
+				continue
+			}
+			if acc, ok := compactionBlocks[event.Index]; ok {
+				acc.WriteString(event.Delta.Text)
+				continue
+			}
+			if event.Delta.Type == "text_delta" && event.Delta.Text != "" {
+				if firstChunk {
+					spinner.Stop()
+					firstChunk = false
+					api.PrintAIHeader()
+				}
+				fmt.Print(event.Delta.Text)
+				fullResponse.WriteString(event.Delta.Text)
+			}
+			if event.Delta.Type == "input_json_delta" {
+				if acc := toolUses[event.Index]; acc != nil {
+					acc.Input.WriteString(event.Delta.PartialJSON)
+				}
+			}
+
+		case "content_block_stop":
+			if acc, ok := compactionBlocks[event.Index]; ok {
+				compactionOutput.WriteString(acc.String())
+				delete(compactionBlocks, event.Index)
+			}
+			if acc := toolUses[event.Index]; acc != nil {
+				var input map[string]interface{}
+				if err := json.Unmarshal([]byte(acc.Input.String()), &input); err == nil {
+					if toolJSON, err := claude.ConvertToolUseToToolJSON(acc.ID, acc.Name, input); err == nil {
+						toolCallsOutput.WriteString(toolJSON)
+					}
+				}
+			}
+		}
 	}
-	return p.handleNonStreamingResponse(resp, spinner)
-}
 
-// APIURL はテスト用にAPIURLを公開
-func (p *Provider) APIURL() string {
-	return p.BaseProvider.APIURL
-}
+done:
+	spinner.Stop()
 
-// SetMCPTools は MCP ツール定義を設定する（Function Calling用）
-func (p *Provider) SetMCPTools(tools []api.ToolDefinition) {
-	p.mcpTools = tools
-}
+	if err := scanner.Err(); err != nil {
+		return "", fmt.Errorf("stream reading error: %w", err)
+	}
 
-// SetUsageCallback は使用量レポートのコールバックを設定する
-func (p *Provider) SetUsageCallback(callback api.UsageCallback) {
-	p.usageCallback = callback
+	if p.usageCallback != nil && lastUsage != nil {
+		p.usageCallback(*lastUsage)
+	}
+
+	content := fullResponse.String()
+	if compactionOutput.Len() > 0 {
+		content = "[COMPACTION]\n" + compactionOutput.String() + "\n[/COMPACTION]\n" + content
+	}
+
+	if toolCallsOutput.Len() > 0 {
+		if content != "" {
+			fmt.Println()
+			return content + toolCallsOutput.String(), nil
+		}
+		return toolCallsOutput.String(), nil
+	}
+
+	fmt.Println()
+	return content, nil
 }
