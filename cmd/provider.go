@@ -9,46 +9,6 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
-// providerConfig はプロバイダーの設定を保持
-type providerConfig struct {
-	envKey       string                             // 環境変数名（空の場合はAPIキー不要）
-	defaultValue string                             // デフォルト値（OllamaのベースURLなど）
-	constructor  func(keyOrURL string) api.Provider // Provider生成関数
-}
-
-// providerConfigs はプロバイダー設定のマップ（DRY化）
-var providerConfigs = map[string]providerConfig{
-	"deepseek": {
-		envKey:      "DEEPSEEK_API_KEY",
-		constructor: func(key string) api.Provider { return api.NewDeepSeekProvider(key) },
-	},
-	"openai": {
-		envKey:      "OPENAI_API_KEY",
-		constructor: func(key string) api.Provider { return api.NewOpenAIProvider(key) },
-	},
-	"gemini": {
-		envKey:      "GEMINI_API_KEY",
-		constructor: func(key string) api.Provider { return api.NewGeminiProvider(key) },
-	},
-	"claude": {
-		envKey:      "ANTHROPIC_API_KEY",
-		constructor: func(key string) api.Provider { return api.NewClaudeProvider(key) },
-	},
-	"anthropic": {
-		envKey:      "ANTHROPIC_API_KEY",
-		constructor: func(key string) api.Provider { return api.NewClaudeProvider(key) },
-	},
-	"ollama": {
-		envKey:       "",
-		defaultValue: "http://localhost:11434",
-		constructor:  func(url string) api.Provider { return api.NewOllamaProvider(url) },
-	},
-	"groq": {
-		envKey:      "GROQ_API_KEY",
-		constructor: func(key string) api.Provider { return api.NewGroqProvider(key) },
-	},
-}
-
 // debugLog はデバッグログを出力（XELYON_DEBUG=1 の場合のみ）
 func debugLog(format string, args ...interface{}) {
 	if os.Getenv("XELYON_DEBUG") == "1" {
@@ -82,36 +42,8 @@ func resolveProviderName(flagValue, configValue string) string {
 func createProvider(providerName string) (api.Provider, error) {
 	name := strings.ToLower(providerName)
 
-	cfg, ok := providerConfigs[name]
-	if !ok {
-		// レジストリベースのプロバイダー（bedrock, openrouter等）にフォールバック
-		// 各プロバイダーのファクトリ関数が認証チェックを行う
-		debugLog("createProvider: %s not in providerConfigs, falling back to api.NewProvider", name)
-		return api.NewProvider(name)
-	}
-
-	// APIキーが不要なプロバイダー（Ollama, Bedrock）
-	if cfg.envKey == "" {
-		value := cfg.defaultValue
-		if name == "ollama" {
-			if envURL := os.Getenv("OLLAMA_BASE_URL"); envURL != "" {
-				value = envURL
-			}
-		}
-		provider := cfg.constructor(value)
-		if provider == nil {
-			return nil, fmt.Errorf("failed to create %s provider", providerName)
-		}
-		return provider, nil
-	}
-
-	// APIキーが必要なプロバイダー
-	apiKey := os.Getenv(cfg.envKey)
-	if apiKey == "" {
-		return nil, fmt.Errorf("%s not set", cfg.envKey)
-	}
-
-	return cfg.constructor(apiKey), nil
+	// api.NewProvider は内部で環境変数をチェックし、プロバイダーを生成する
+	return api.NewProvider(name)
 }
 
 // getProvider は環境変数/設定ファイルからProviderを取得

@@ -50,7 +50,11 @@ func TestDeepSeekProvider_ChatWithTools_Integration(t *testing.T) {
 	os.Setenv("DEEPSEEK_API_URL", server.URL)
 	defer os.Unsetenv("DEEPSEEK_API_URL")
 
-	provider := api.NewDeepSeekProvider("test-api-key")
+	os.Setenv("DEEPSEEK_API_KEY", "test-api-key")
+	provider, err := api.NewProvider("deepseek")
+	if err != nil {
+		t.Fatalf("NewProvider() error = %v", err)
+	}
 
 	history := []api.Message{
 		{Role: "user", Content: "Hello"},
@@ -72,14 +76,18 @@ func TestDeepSeekProvider_ChatWithTools_NetworkError(t *testing.T) {
 	os.Setenv("DEEPSEEK_API_URL", "http://invalid-host-that-does-not-exist:99999")
 	defer os.Unsetenv("DEEPSEEK_API_URL")
 
-	provider := api.NewDeepSeekProvider("test-api-key")
+	os.Setenv("DEEPSEEK_API_KEY", "test-api-key")
+	provider, err := api.NewProvider("deepseek")
+	if err != nil {
+		t.Fatalf("NewProvider() error = %v", err)
+	}
 
 	history := []api.Message{
 		{Role: "user", Content: "Hello"},
 	}
 
 	ctx := context.Background()
-	_, err := provider.ChatWithTools(ctx, "system prompt", history, "deepseek-chat")
+	_, err = provider.ChatWithTools(ctx, "system prompt", history, "deepseek-chat")
 	if err == nil {
 		t.Error("ChatWithTools() should return error for network failure")
 	}
@@ -97,14 +105,18 @@ func TestDeepSeekProvider_ChatWithTools_APIError(t *testing.T) {
 	os.Setenv("DEEPSEEK_API_URL", server.URL)
 	defer os.Unsetenv("DEEPSEEK_API_URL")
 
-	provider := api.NewDeepSeekProvider("test-api-key")
+	os.Setenv("DEEPSEEK_API_KEY", "test-api-key")
+	provider, err := api.NewProvider("deepseek")
+	if err != nil {
+		t.Fatalf("NewProvider() error = %v", err)
+	}
 
 	history := []api.Message{
 		{Role: "user", Content: "Hello"},
 	}
 
 	ctx := context.Background()
-	_, err := provider.ChatWithTools(ctx, "system prompt", history, "deepseek-chat")
+	_, err = provider.ChatWithTools(ctx, "system prompt", history, "deepseek-chat")
 	if err == nil {
 		t.Error("ChatWithTools() should return error for API error response")
 	}
@@ -123,14 +135,18 @@ func TestDeepSeekProvider_ChatWithTools_RateLimit(t *testing.T) {
 	os.Setenv("DEEPSEEK_API_URL", server.URL)
 	defer os.Unsetenv("DEEPSEEK_API_URL")
 
-	provider := api.NewDeepSeekProvider("test-api-key")
+	os.Setenv("DEEPSEEK_API_KEY", "test-api-key")
+	provider, err := api.NewProvider("deepseek")
+	if err != nil {
+		t.Fatalf("NewProvider() error = %v", err)
+	}
 
 	history := []api.Message{
 		{Role: "user", Content: "Hello"},
 	}
 
 	ctx := context.Background()
-	_, err := provider.ChatWithTools(ctx, "system prompt", history, "deepseek-chat")
+	_, err = provider.ChatWithTools(ctx, "system prompt", history, "deepseek-chat")
 	if err == nil {
 		t.Error("ChatWithTools() should return error for rate limit")
 	}
@@ -142,7 +158,11 @@ func TestDeepSeekProvider_ChatWithTools_RateLimit(t *testing.T) {
 func TestDeepSeekProvider_ChatWithImage_NotSupported(t *testing.T) {
 	t.Skip("ChatWithImage calls real API, needs mock server")
 	// 画像非対応プロバイダー（DeepSeek）
-	provider := api.NewDeepSeekProvider("test-api-key")
+	os.Setenv("DEEPSEEK_API_KEY", "test-api-key")
+	provider, err := api.NewProvider("deepseek")
+	if err != nil {
+		t.Fatalf("NewProvider() error = %v", err)
+	}
 
 	history := []api.Message{
 		{Role: "user", Content: "Hello"},
@@ -154,7 +174,7 @@ func TestDeepSeekProvider_ChatWithImage_NotSupported(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	_, err := provider.ChatWithImage(ctx, "system prompt", history, "What's in this image?", imageData, "deepseek-chat")
+	_, err = provider.ChatWithImage(ctx, "system prompt", history, "What's in this image?", imageData, "deepseek-chat")
 	if err == nil {
 		t.Error("ChatWithImage() should return error for unsupported provider")
 	}

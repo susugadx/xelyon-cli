@@ -255,25 +255,32 @@ func TestResolveProviderName_Priority(t *testing.T) {
 }
 
 func TestProviderConfig(t *testing.T) {
-	// Test that all expected providers are configured
-	expectedProviders := []string{"deepseek", "openai", "gemini", "claude", "anthropic", "ollama", "groq"}
+	// 全プロバイダーが createProvider で生成可能かテスト
+	tests := []struct {
+		name   string
+		envKey string
+	}{
+		{"deepseek", "DEEPSEEK_API_KEY"},
+		{"openai", "OPENAI_API_KEY"},
+		{"gemini", "GEMINI_API_KEY"},
+		{"claude", "ANTHROPIC_API_KEY"},
+		{"anthropic", "ANTHROPIC_API_KEY"},
+		{"groq", "GROQ_API_KEY"},
+		{"ollama", ""}, // Ollama は API キー不要
+	}
 
-	for _, name := range expectedProviders {
-		cfg, ok := providerConfigs[name]
-		if !ok {
-			t.Errorf("provider %q not found in providerConfigs", name)
-			continue
-		}
-
-		// Ollama is special (no API key required)
-		if name == "ollama" {
-			if cfg.envKey != "" {
-				t.Errorf("ollama should not require API key, but envKey = %q", cfg.envKey)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.envKey != "" {
+				t.Setenv(tt.envKey, "test-key")
 			}
-		} else {
-			if cfg.envKey == "" {
-				t.Errorf("provider %q should have envKey set", name)
+			provider, err := createProvider(tt.name)
+			if err != nil {
+				t.Errorf("createProvider(%q) unexpected error: %v", tt.name, err)
 			}
-		}
+			if provider == nil {
+				t.Errorf("createProvider(%q) returned nil provider", tt.name)
+			}
+		})
 	}
 }

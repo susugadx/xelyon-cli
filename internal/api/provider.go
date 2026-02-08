@@ -282,57 +282,11 @@ func LevelToBudgetTokens(level string) int {
 
 // NewProvider はプロバイダー名から Provider インスタンスを生成
 func NewProvider(providerName string) (Provider, error) {
-	// まず登録済みプロバイダーをチェック
+	// 登録済みプロバイダーをチェック
 	if factory, ok := getRegisteredProvider(providerName); ok {
 		apiKey := getAPIKeyForProvider(providerName)
 		return factory(apiKey)
 	}
 
-	// フォールバック: 移行中の互換性のため既存switchも維持
-	switch strings.ToLower(providerName) {
-	case "deepseek":
-		apiKey := os.Getenv("DEEPSEEK_API_KEY")
-		if apiKey == "" {
-			return nil, fmt.Errorf("DEEPSEEK_API_KEY not set")
-		}
-		return NewDeepSeekProvider(apiKey), nil
-
-	case "openai":
-		apiKey := os.Getenv("OPENAI_API_KEY")
-		if apiKey == "" {
-			return nil, fmt.Errorf("OPENAI_API_KEY not set")
-		}
-		return NewOpenAIProvider(apiKey), nil
-
-	case "gemini":
-		apiKey := os.Getenv("GEMINI_API_KEY")
-		if apiKey == "" {
-			return nil, fmt.Errorf("GEMINI_API_KEY not set")
-		}
-		return NewGeminiProvider(apiKey), nil
-
-	case "claude", "anthropic":
-		apiKey := os.Getenv("ANTHROPIC_API_KEY")
-		if apiKey == "" {
-			return nil, fmt.Errorf("ANTHROPIC_API_KEY not set")
-		}
-		return NewClaudeProvider(apiKey), nil
-
-	case "ollama":
-		baseURL := os.Getenv("OLLAMA_BASE_URL")
-		if baseURL == "" {
-			baseURL = "http://localhost:11434"
-		}
-		return NewOllamaProvider(baseURL), nil
-
-	case "groq":
-		apiKey := os.Getenv("GROQ_API_KEY")
-		if apiKey == "" {
-			return nil, fmt.Errorf("GROQ_API_KEY not set")
-		}
-		return NewGroqProvider(apiKey), nil
-
-	default:
-		return nil, fmt.Errorf("unknown provider: %s", providerName)
-	}
+	return nil, fmt.Errorf("unknown provider: %s", providerName)
 }
