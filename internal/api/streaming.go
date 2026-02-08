@@ -222,10 +222,12 @@ func filterToolJSON(content string, inToolJSON *bool, jsonDepth *int, inString *
 
 		// パターン検出
 		foundIdx := -1
+		patternLen := 0
 		for _, pattern := range toolJSONPatterns {
 			if idx := strings.Index(remaining, pattern); idx != -1 {
 				if foundIdx == -1 || idx < foundIdx {
 					foundIdx = idx
+					patternLen = len(pattern)
 				}
 			}
 		}
@@ -238,11 +240,12 @@ func filterToolJSON(content string, inToolJSON *bool, jsonDepth *int, inString *
 
 		// パターン前の部分を出力
 		result.WriteString(remaining[:foundIdx])
-		remaining = remaining[foundIdx:]
+		// パターン自体をスキップし、inToolJSON状態に移行する
+		remaining = remaining[foundIdx+patternLen:]
 
 		// パターン以降を処理開始
 		*inToolJSON = true
-		*jsonDepth = 0 // 先頭の '{' を既に読んだ扱いにする（0だと最初の'}'で即終了して漏れる）
+		*jsonDepth = 1 // パターンに含まれる最初の '{' をカウントした状態から開始
 		*inString = false
 		*prevChar = 0
 	}

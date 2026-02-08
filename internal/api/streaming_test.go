@@ -370,6 +370,11 @@ func TestFilterToolJSON_SingleChunk(t *testing.T) {
 			chunks:   []string{`Hello { "tool": "read_file"}`},
 			expected: "Hello ",
 		},
+		{
+			name:     "nested JSON object",
+			chunks:   []string{`JSON: {"tool": "edit", "args": {"files": [{"path": "main.go"}]}} End`},
+			expected: "JSON:  End",
+		},
 	}
 
 	for _, tt := range tests {
