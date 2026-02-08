@@ -1,7 +1,6 @@
 package gemini
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -29,42 +28,87 @@ func getGeminiFunctionCallingURL(model string) string {
 func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
 	debug := os.Getenv("XELYON_DEBUG_GEMINI") == "1"
 
-	// モデル名を設定（config優先、フォールバックはgemini-2.0-flash）
-	model = api.GetDefaultModel(model, "gemini", "gemini-2.0-flash")
+	// モデル名を設定（config優先、フォールバックはgemini-3-flash-preview）
+	model = api.GetDefaultModel(model, "gemini", "gemini-3-flash-preview")
+
+	// System prompt を system_instruction フィールドに設定
+	var sysInstruction *GeminiSystemInstruction
+	if systemPrompt != "" {
+		sysInstruction = &GeminiSystemInstruction{
+			Parts: []GeminiPart{{Text: systemPrompt}},
+		}
+	}
 
 	// メッセージを interface{} スライスに変換（Function Calling リクエスト用）
 	var contents []interface{}
 
-	// System prompt を最初のユーザーメッセージとして追加
-	if systemPrompt != "" {
-		contents = append(contents, GeminiContent{
-			Parts: []GeminiPart{{Text: systemPrompt}},
-			Role:  "user",
-		})
-		contents = append(contents, GeminiContent{
-			Parts: []GeminiPart{{Text: "Understood. I'll follow these instructions."}},
-			Role:  "model",
-		})
-	}
-
-	// 会話履歴を変換
+	// 会話履歴を変換（ネイティブ functionCall / functionResponse 形式）
 	for _, msg := range history {
-		role := "user"
-		if msg.Role == "assistant" {
-			role = "model"
+		switch {
+		case msg.Role == "assistant" && len(msg.ToolCalls) > 0:
+			// assistant の functionCall パート
+			parts := make([]interface{}, 0, len(msg.ToolCalls)+1)
+			if msg.Content != "" {
+				parts = append(parts, GeminiPart{Text: msg.Content})
+			}
+			for _, tc := range msg.ToolCalls {
+				var args map[string]any
+				_ = json.Unmarshal([]byte(tc.Function.Arguments), &args)
+				parts = append(parts, GeminiFunctionCallPart{
+					FunctionCall: GeminiFunctionCallData{
+						Name: tc.Function.Name,
+						Args: args,
+					},
+				})
+			}
+			contents = append(contents, GeminiGenericContent{
+				Parts: parts,
+				Role:  "model",
+			})
+
+		case msg.Role == "tool" && msg.ToolCallID != "":
+			// functionResponse パート（role: "user" — Gemini API仕様）
+			toolName := msg.ToolName
+			if toolName == "" {
+				toolName = extractToolNameFromContent(msg.Content)
+			}
+			contents = append(contents, GeminiGenericContent{
+				Parts: []interface{}{
+					GeminiFunctionResponsePart{
+						FunctionResponse: GeminiFunctionResponseData{
+							Name: toolName,
+							Response: map[string]any{
+								"result": msg.Content,
+							},
+						},
+					},
+				},
+				Role: "user",
+			})
+
+		default:
+			// 通常のテキストメッセージ
+			role := "user"
+			if msg.Role == "assistant" {
+				role = "model"
+			}
+			contents = append(contents, GeminiContent{
+				Parts: []GeminiPart{{Text: msg.Content}},
+				Role:  role,
+			})
 		}
-		contents = append(contents, GeminiContent{
-			Parts: []GeminiPart{{Text: msg.Content}},
-			Role:  role,
-		})
 	}
 
 	cfg := config.GetGlobalConfig()
 
 	// Function Calling 用リクエストを構築（MCPツールを含める）
 	reqBody := GeminiRequestWithTools{
-		Contents: contents,
-		Tools:    GetCombinedToolDefinitions(p.mcpTools),
+		SystemInstruction: sysInstruction,
+		Contents:          contents,
+		Tools:             GetCombinedToolDefinitions(p.mcpTools),
+		ToolConfig: &GeminiToolConfigWrapper{
+			FunctionCallingConfig: GeminiFunctionCallingConfig{Mode: "AUTO"},
+		},
 	}
 
 	// Thinking 設定（Gemini 3 vs 2.5 で自動分岐）
@@ -87,7 +131,7 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 	// Function Calling エンドポイント（非ストリーミング）
 	url := getGeminiFunctionCallingURL(model)
 
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", url, nil)
 	if err != nil {
 		return "", err
 	}
@@ -113,7 +157,7 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 		spinner = api.StartThinkingSpinner(false, "")
 	}
 
-	resp, err := p.httpClient.Do(req)
+	resp, err := p.doRequestWithRetry(ctx, req, jsonBody)
 	if err != nil {
 		if spinner != nil {
 			spinner.Stop()
@@ -155,4 +199,15 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 		return "", fmt.Errorf("failed to read FC response body: %w", err)
 	}
 	return p.handleFunctionCallingResponse(body, spinner)
+}
+
+// extractToolNameFromContent はメッセージ内容からツール名を推定
+func extractToolNameFromContent(content string) string {
+	if strings.HasPrefix(content, "[Tool Result for ") {
+		end := strings.Index(content, "]")
+		if end > 17 {
+			return content[17:end]
+		}
+	}
+	return "unknown_tool"
 }

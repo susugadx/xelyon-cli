@@ -4,6 +4,12 @@ import "github.com/susugadx/xelyon-cli/internal/api"
 
 // ===== Basic Gemini API structures =====
 
+// GeminiSystemInstruction は system_instruction フィールド用構造体
+// user/model ペアではなく専用フィールドで送信することで SP 遵守率を向上させる
+type GeminiSystemInstruction struct {
+	Parts []GeminiPart `json:"parts"`
+}
+
 // GeminiPart はGeminiの parts 構造（テキストのみ）
 type GeminiPart struct {
 	Text string `json:"text"`
@@ -29,8 +35,11 @@ type GeminiMultimodalContent struct {
 
 // GeminiMultimodalRequest はマルチモーダルAPIリクエスト
 type GeminiMultimodalRequest struct {
-	Contents         []interface{}           `json:"contents"` // GeminiContent or GeminiMultimodalContent
-	GenerationConfig *GeminiGenerationConfig `json:"generationConfig,omitempty"`
+	SystemInstruction *GeminiSystemInstruction `json:"system_instruction,omitempty"`
+	Contents          []interface{}            `json:"contents"` // GeminiContent or GeminiMultimodalContent
+	Tools             []api.GeminiToolConfig   `json:"tools,omitempty"`
+	ToolConfig        *GeminiToolConfigWrapper `json:"tool_config,omitempty"`
+	GenerationConfig  *GeminiGenerationConfig  `json:"generationConfig,omitempty"`
 }
 
 // GeminiContent はGeminiの contents 構造
@@ -41,8 +50,9 @@ type GeminiContent struct {
 
 // GeminiRequest はGemini APIリクエスト
 type GeminiRequest struct {
-	Contents         []GeminiContent         `json:"contents"`
-	GenerationConfig *GeminiGenerationConfig `json:"generationConfig,omitempty"`
+	SystemInstruction *GeminiSystemInstruction `json:"system_instruction,omitempty"`
+	Contents          []GeminiContent          `json:"contents"`
+	GenerationConfig  *GeminiGenerationConfig  `json:"generationConfig,omitempty"`
 }
 
 // GeminiCandidate はレスポンスの候補
@@ -103,11 +113,55 @@ type GeminiThinkingConfig struct {
 type GeminiGenerationConfig struct {
 	ThinkingConfig  *GeminiThinkingConfig `json:"thinkingConfig,omitempty"`
 	MaxOutputTokens int                   `json:"maxOutputTokens,omitempty"` // 最大出力トークン数
+	Temperature     *float32              `json:"temperature,omitempty"`     // Gemini 3: 1.0 推奨
+}
+
+// GeminiFunctionCallingConfig は Function Calling の動作モード設定
+type GeminiFunctionCallingConfig struct {
+	Mode string `json:"mode"` // "AUTO", "ANY", "NONE"
+}
+
+// GeminiToolConfigWrapper は tool_config フィールド用ラッパー
+type GeminiToolConfigWrapper struct {
+	FunctionCallingConfig GeminiFunctionCallingConfig `json:"function_calling_config"`
+}
+
+// ===== Function Calling history structures =====
+
+// GeminiFunctionCallPart は functionCall を含む parts 要素
+type GeminiFunctionCallPart struct {
+	FunctionCall GeminiFunctionCallData `json:"functionCall"`
+}
+
+// GeminiFunctionCallData は functionCall のデータ
+type GeminiFunctionCallData struct {
+	Name string         `json:"name"`
+	Args map[string]any `json:"args"`
+}
+
+// GeminiFunctionResponsePart は functionResponse を含む parts 要素
+type GeminiFunctionResponsePart struct {
+	FunctionResponse GeminiFunctionResponseData `json:"functionResponse"`
+}
+
+// GeminiFunctionResponseData は functionResponse のデータ
+type GeminiFunctionResponseData struct {
+	Name     string         `json:"name"`
+	Response map[string]any `json:"response"`
+}
+
+// GeminiGenericContent は任意の parts を含む contents 要素
+// functionCall, functionResponse, text を混在させるため interface{} を使用
+type GeminiGenericContent struct {
+	Parts []interface{} `json:"parts"`
+	Role  string        `json:"role,omitempty"`
 }
 
 // GeminiRequestWithTools はtools を含むリクエスト
 type GeminiRequestWithTools struct {
-	Contents         []interface{}           `json:"contents"`
-	Tools            []api.GeminiToolConfig  `json:"tools,omitempty"`
-	GenerationConfig *GeminiGenerationConfig `json:"generationConfig,omitempty"`
+	SystemInstruction *GeminiSystemInstruction `json:"system_instruction,omitempty"`
+	Contents          []interface{}            `json:"contents"`
+	Tools             []api.GeminiToolConfig   `json:"tools,omitempty"`
+	ToolConfig        *GeminiToolConfigWrapper `json:"tool_config,omitempty"`
+	GenerationConfig  *GeminiGenerationConfig  `json:"generationConfig,omitempty"`
 }

@@ -1,11 +1,14 @@
 package gemini
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
@@ -111,11 +114,15 @@ func getThinkingConfigForModel(model string, cfg *config.Config) *GeminiGenerati
 				thinkingLevel = "low"
 			}
 		}
+		// Gemini 3 は temperature=1.0 推奨（Google公式）
+		// 1.0 以外だとループや性能劣化が発生する
+		temp := float32(1.0)
 		return &GeminiGenerationConfig{
 			ThinkingConfig: &GeminiThinkingConfig{
 				ThinkingLevel: thinkingLevel,
 			},
 			MaxOutputTokens: maxTokens,
+			Temperature:     &temp,
 		}
 	}
 
@@ -193,4 +200,34 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		fmt.Fprintln(os.Stderr, "[DEBUG Gemini] Mode: TextMode (GEMINI_FUNCTION_CALLING=0)")
 	}
 	return p.chatWithTextMode(ctx, systemPrompt, history, model)
+}
+
+// doRequestWithRetry は HTTP リクエストを実行し、503 Service Unavailable の場合に指数バックオフでリトライ
+// 最大3回リトライ（1s, 2s, 4s）
+func (p *Provider) doRequestWithRetry(ctx context.Context, req *http.Request, bodyBytes []byte) (*http.Response, error) {
+	const maxRetries = 3
+
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		req.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+		resp, err := p.httpClient.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		if resp.StatusCode != 503 || attempt == maxRetries {
+			return resp, nil
+		}
+		resp.Body.Close()
+
+		// 指数バックオフ: 1s, 2s, 4s
+		backoff := time.Duration(1<<attempt) * time.Second
+		fmt.Fprintf(os.Stderr, "⚠️  503 Service Unavailable, retrying (%d/%d) after %v...\n", attempt+1, maxRetries, backoff)
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(backoff):
+		}
+	}
+
+	// ここには到達しないが、コンパイラ対策
+	return nil, fmt.Errorf("unexpected: exceeded max retries")
 }

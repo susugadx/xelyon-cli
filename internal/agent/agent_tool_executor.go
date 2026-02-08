@@ -93,6 +93,7 @@ func (a *Agent) shouldAbortToolLoopWithResponse(response string, current, last *
 					Role:       "tool",
 					Content:    fmt.Sprintf("[SYSTEM] Tool loop detected: %s was called %d times. Stopping to prevent infinite loop.", current.Tool, threshold),
 					ToolCallID: current.ID,
+					ToolName:   current.Tool,
 				})
 			} else {
 				// テキストベース: role="user" で送信
@@ -151,6 +152,7 @@ func (a *Agent) executeToolCallInternal(response string, toolCall *tools.ToolCal
 			Role:       "tool",
 			Content:    result,
 			ToolCallID: toolCall.ID,
+			ToolName:   toolCall.Tool,
 		})
 	} else {
 		// テキストベース: role="user" で送信（従来方式）
@@ -197,6 +199,7 @@ func (a *Agent) handleStrReplaceErrors(toolCall *tools.ToolCall, result string) 
 					Role:       "tool",
 					Content:    fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, result),
 					ToolCallID: toolCall.ID,
+					ToolName:   toolCall.Tool,
 				})
 			} else {
 				// テキストベース: role="user" で送信
@@ -262,6 +265,7 @@ func (a *Agent) handleCommentFlow(toolCall *tools.ToolCall, result string) bool 
 			Role:       "tool",
 			Content:    result,
 			ToolCallID: toolCall.ID,
+			ToolName:   toolCall.Tool,
 		})
 	} else {
 		a.History = append(a.History, api.Message{

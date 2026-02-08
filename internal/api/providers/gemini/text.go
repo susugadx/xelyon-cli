@@ -1,7 +1,6 @@
 package gemini
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -16,24 +15,19 @@ import (
 
 // chatWithTextMode はテキストベースのツール呼び出しモード（従来の実装）
 func (p *Provider) chatWithTextMode(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
-	// モデル名を設定（config優先、フォールバックはgemini-2.0-flash）
-	model = api.GetDefaultModel(model, "gemini", "gemini-2.0-flash")
+	// モデル名を設定（config優先、フォールバックはgemini-3-flash-preview）
+	model = api.GetDefaultModel(model, "gemini", "gemini-3-flash-preview")
+
+	// System prompt を system_instruction フィールドに設定
+	var sysInstruction *GeminiSystemInstruction
+	if systemPrompt != "" {
+		sysInstruction = &GeminiSystemInstruction{
+			Parts: []GeminiPart{{Text: systemPrompt}},
+		}
+	}
 
 	// Geminiのメッセージ構造に変換
 	var contents []GeminiContent
-
-	// System promptを最初のユーザーメッセージとして追加
-	if systemPrompt != "" {
-		contents = append(contents, GeminiContent{
-			Parts: []GeminiPart{{Text: systemPrompt}},
-			Role:  "user",
-		})
-		// ダミーのモデル応答を追加（Geminiは交互のroleを期待）
-		contents = append(contents, GeminiContent{
-			Parts: []GeminiPart{{Text: "Understood. I'll follow these instructions."}},
-			Role:  "model",
-		})
-	}
 
 	// 会話履歴を変換
 	for _, msg := range history {
@@ -50,7 +44,8 @@ func (p *Provider) chatWithTextMode(ctx context.Context, systemPrompt string, hi
 	cfg := config.GetGlobalConfig()
 
 	reqBody := GeminiRequest{
-		Contents: contents,
+		SystemInstruction: sysInstruction,
+		Contents:          contents,
 	}
 
 	// Thinking 設定（Gemini 3 vs 2.5 で自動分岐）
@@ -64,7 +59,7 @@ func (p *Provider) chatWithTextMode(ctx context.Context, systemPrompt string, hi
 	// Gemini API endpoint（ストリーミング）
 	url := getGeminiURL(model)
 
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", url, nil)
 	if err != nil {
 		return "", err
 	}
@@ -90,8 +85,8 @@ func (p *Provider) chatWithTextMode(ctx context.Context, systemPrompt string, hi
 		spinner = api.StartThinkingSpinner(false, "")
 	}
 
-	// 再利用可能なHTTPクライアントを使用
-	resp, err := p.httpClient.Do(req)
+	// 503 リトライ付き HTTP リクエスト
+	resp, err := p.doRequestWithRetry(ctx, req, jsonBody)
 	if err != nil {
 		spinner.Stop()
 		return "", err
@@ -128,24 +123,19 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 		return p.ChatWithTools(ctx, systemPrompt, history, model)
 	}
 
-	// モデル名を設定（config優先、フォールバックはgemini-2.0-flash）
-	model = api.GetDefaultModel(model, "gemini", "gemini-2.0-flash")
+	// モデル名を設定（config優先、フォールバックはgemini-3-flash-preview）
+	model = api.GetDefaultModel(model, "gemini", "gemini-3-flash-preview")
+
+	// System prompt を system_instruction フィールドに設定
+	var sysInstruction *GeminiSystemInstruction
+	if systemPrompt != "" {
+		sysInstruction = &GeminiSystemInstruction{
+			Parts: []GeminiPart{{Text: systemPrompt}},
+		}
+	}
 
 	// contentsを構築
 	var contents []interface{}
-
-	// System promptを最初のユーザーメッセージとして追加
-	if systemPrompt != "" {
-		contents = append(contents, GeminiContent{
-			Parts: []GeminiPart{{Text: systemPrompt}},
-			Role:  "user",
-		})
-		// ダミーのモデル応答を追加（Geminiは交互のroleを期待）
-		contents = append(contents, GeminiContent{
-			Parts: []GeminiPart{{Text: "Understood. I'll follow these instructions."}},
-			Role:  "model",
-		})
-	}
 
 	// 会話履歴を変換（テキストのみ）
 	for _, msg := range history {
@@ -179,7 +169,16 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	cfgImg := config.GetGlobalConfig()
 
 	reqBody := GeminiMultimodalRequest{
-		Contents: contents,
+		SystemInstruction: sysInstruction,
+		Contents:          contents,
+	}
+
+	// FC有効時はTools/ToolConfigを追加（画像+FC対応）
+	if p.IsFunctionCallingEnabled() {
+		reqBody.Tools = GetCombinedToolDefinitions(p.mcpTools)
+		reqBody.ToolConfig = &GeminiToolConfigWrapper{
+			FunctionCallingConfig: GeminiFunctionCallingConfig{Mode: "AUTO"},
+		}
 	}
 
 	// Thinking 設定（Gemini 3 vs 2.5 で自動分岐）
@@ -190,10 +189,15 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 		return "", err
 	}
 
-	// Gemini API endpoint（ストリーミング）
-	url := getGeminiURL(model)
+	// URL: FC有効時は非ストリーミング、無効時はストリーミング
+	var url string
+	if p.IsFunctionCallingEnabled() {
+		url = getGeminiFunctionCallingURL(model)
+	} else {
+		url = getGeminiURL(model)
+	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", url, nil)
 	if err != nil {
 		return "", err
 	}
@@ -219,7 +223,8 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 		spinner = api.StartThinkingSpinner(true, "") // isImage=true
 	}
 
-	resp, err := p.httpClient.Do(req)
+	// 503 リトライ付き HTTP リクエスト
+	resp, err := p.doRequestWithRetry(ctx, req, jsonBody)
 	if err != nil {
 		spinner.Stop()
 		return "", err
@@ -242,13 +247,16 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 		return "", api.SanitizeErrorMessage(body, resp.StatusCode)
 	}
 
-	// ストリーミング処理
-	contentType := resp.Header.Get("Content-Type")
-	isStreaming := contentType == "" || len(contentType) > 0
-
-	if isStreaming {
-		return p.handleStreamingResponse(ctx, resp, spinner)
-	} else {
-		return p.handleNonStreamingResponse(resp, spinner)
+	// FC有効時は非ストリーミング（generateContent）レスポンスを処理
+	if p.IsFunctionCallingEnabled() {
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			spinner.Stop()
+			return "", fmt.Errorf("failed to read response body: %w", err)
+		}
+		return p.handleFunctionCallingResponse(body, spinner)
 	}
+
+	// FC無効時はストリーミング処理
+	return p.handleSSEResponse(ctx, resp, spinner)
 }

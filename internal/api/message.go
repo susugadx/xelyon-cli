@@ -7,6 +7,7 @@ type Message struct {
 	ReasoningContent string           `json:"reasoning_content,omitempty"` // DeepSeek Reasoner の思考内容
 	ToolCallID       string           `json:"tool_call_id,omitempty"`      // Function Calling: ツール結果用
 	ToolCalls        []OpenAIToolCall `json:"tool_calls,omitempty"`        // Function Calling: assistant の tool_calls
+	ToolName         string           `json:"tool_name,omitempty"`         // Gemini functionResponse 用ツール名
 }
 
 // MultimodalMessage は画像を含むメッセージ

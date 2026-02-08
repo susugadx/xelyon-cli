@@ -49,7 +49,7 @@ func DefaultConfig() *Config {
 				MaxOutputTokens: 16384,
 			},
 			"gemini": {
-				DefaultModel:    "gemini-2.5-flash",
+				DefaultModel:    "gemini-3-flash-preview",
 				MaxOutputTokens: 65536,
 			},
 			"claude": {

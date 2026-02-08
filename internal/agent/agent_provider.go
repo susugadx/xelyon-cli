@@ -37,7 +37,7 @@ func (a *Agent) SwitchProvider(providerName string) error {
 		case "openai":
 			newModel = "gpt-5.2"
 		case "gemini":
-			newModel = "gemini-2.5-flash"
+			newModel = "gemini-3-flash-preview"
 		case "claude":
 			newModel = "claude-sonnet-4-5-20250514"
 		case "ollama":

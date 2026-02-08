@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -86,6 +85,7 @@ func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, s
 			}
 
 			if part.FunctionCall != nil {
+				part.FunctionCall.ThoughtSignature = part.ThoughtSignature
 				functionCalls = append(functionCalls, part.FunctionCall)
 			}
 		}
@@ -124,11 +124,6 @@ func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, s
 
 	fmt.Println()
 	return fullResponse.String(), nil
-}
-
-// handleStreamingResponse は互換性のために SSE パーサーを呼び出す
-func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
-	return p.handleSSEResponse(ctx, resp, spinner)
 }
 
 // handleFunctionCallingResponse は Function Calling レスポンスを処理
@@ -211,6 +206,7 @@ func (p *Provider) handleFunctionCallingResponse(body []byte, spinner *ui.Spinne
 				if debug {
 					fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Found FunctionCall: %s\n", part.FunctionCall.Name)
 				}
+				part.FunctionCall.ThoughtSignature = part.ThoughtSignature
 				functionCalls = append(functionCalls, part.FunctionCall)
 			}
 
@@ -370,23 +366,4 @@ func extractCodeBlockToolJSON(text string) ([]string, string) {
 	}
 
 	return toolJSONs, remaining
-}
-
-// handleNonStreamingResponse は非ストリーミングレスポンスを処理（エラーメッセージ表示用などに残す）
-func (p *Provider) handleNonStreamingResponse(resp *http.Response, spinner *ui.Spinner) (string, error) {
-	spinner.Stop()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("failed to read response body: %w", err)
-	}
-	var geminiResp GeminiResponse
-	if err := json.Unmarshal(body, &geminiResp); err != nil {
-		return "", fmt.Errorf("failed to parse response: %w", err)
-	}
-	if len(geminiResp.Candidates) == 0 {
-		return "", fmt.Errorf("no candidates in response")
-	}
-	content := geminiResp.Candidates[0].Content.Parts[0].Text
-	fmt.Println(content)
-	return content, nil
 }

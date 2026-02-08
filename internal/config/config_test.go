@@ -341,7 +341,7 @@ func TestGetModelForProvider(t *testing.T) {
 	}{
 		{name: "deepseek", provider: "deepseek", want: "deepseek-chat"},
 		{name: "openai", provider: "openai", want: "gpt-5.2"},
-		{name: "gemini", provider: "gemini", want: "gemini-2.5-flash"},
+		{name: "gemini", provider: "gemini", want: "gemini-3-flash-preview"},
 		{name: "claude", provider: "claude", want: "claude-sonnet-4-5-20250514"},
 		{name: "ollama", provider: "ollama", want: "qwen2.5-coder:7b"},
 		{name: "groq", provider: "groq", want: "meta-llama/llama-4-scout-17b-16e-instruct"},

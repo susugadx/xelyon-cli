@@ -73,7 +73,7 @@ provider_models:
         default_model: deepseek-chat
         max_output_tokens: 16384
     gemini:
-        default_model: gemini-2.5-flash
+        default_model: gemini-3-flash-preview
         max_output_tokens: 65536
     groq:
         default_model: meta-llama/llama-4-scout-17b-16e-instruct
