@@ -424,11 +424,21 @@ func (m *MultilineReader) GetBufioReader() *bufio.Reader {
 	return m.reader
 }
 
-// ReadSimpleLine reads a line without raw mode (for simple prompts like selector)
-// This temporarily disables bracketed paste mode to avoid goroutine conflicts
+// ReadSimpleLine reads a line for simple prompts (like selector, comment input).
+// When the raw mode goroutine is active, enters raw mode so that terminal echo
+// is suppressed and paste marker detection in readLineFromChannel works correctly.
 func (m *MultilineReader) ReadSimpleLine() (string, error) {
 	// If raw mode goroutine is running, read from channel
 	if m.rawModeInit && m.byteChan != nil {
+		// Enter raw mode to suppress terminal echo (paste markers would be
+		// visible in cooked mode because the terminal echoes before we can strip)
+		if m.fd >= 0 && term.IsTerminal(m.fd) {
+			oldState, err := term.MakeRaw(m.fd)
+			if err == nil {
+				defer func() { _ = term.Restore(m.fd, oldState) }()
+				return m.readLineFromChannel()
+			}
+		}
 		return m.readLineFromChannel()
 	}
 
@@ -441,6 +451,16 @@ func (m *MultilineReader) ReadSimpleLine() (string, error) {
 	return StripBracketedPaste(line), nil
 }
 
+// readByteTimeoutFromChannel reads a byte from the channel with timeout
+func (m *MultilineReader) readByteTimeoutFromChannel(timeout time.Duration) (byte, bool) {
+	select {
+	case b := <-m.byteChan:
+		return b, true
+	case <-time.After(timeout):
+		return 0, false
+	}
+}
+
 // readLineFromChannel reads a line from the byte channel (when goroutine is active)
 func (m *MultilineReader) readLineFromChannel() (string, error) {
 	var buf []byte
@@ -451,6 +471,39 @@ func (m *MultilineReader) readLineFromChannel() (string, error) {
 			if b == '\n' || b == '\r' {
 				fmt.Print("\r\n") // 改行をエコー
 				return StripBracketedPaste(string(buf)), nil
+			}
+
+			// ESC or '[' - check for paste marker (suppress echo of marker bytes)
+			if b == 0x1b || b == '[' {
+				escBuf := []byte{b}
+				maxRead := 5
+				if b == 0x1b {
+					maxRead = 6 // ESC + [200~ = 6 bytes total
+				}
+				markerDetected := false
+				for i := 0; i < maxRead; i++ {
+					nb, ok := m.readByteTimeoutFromChannel(10 * time.Millisecond)
+					if !ok {
+						break
+					}
+					escBuf = append(escBuf, nb)
+					escStr := string(escBuf)
+					if escStr == pasteStart || escStr == "[200~" ||
+						escStr == pasteEnd || escStr == "[201~" {
+						markerDetected = true
+						break
+					}
+				}
+				if !markerDetected && len(escBuf) > 0 {
+					buf = append(buf, escBuf...)
+					// Echo non-marker bytes
+					for _, eb := range escBuf {
+						if eb >= 0x20 && eb < 0x80 && eb != 0x7f {
+							fmt.Print(string(eb))
+						}
+					}
+				}
+				continue
 			}
 
 			buf = append(buf, b)

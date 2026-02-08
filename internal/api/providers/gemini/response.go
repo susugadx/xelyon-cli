@@ -103,7 +103,7 @@ func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, s
 	}
 
 	if fullResponse.Len() == 0 {
-		return "", fmt.Errorf("no content in Gemini SSE response")
+		return "", fmt.Errorf("no content in Gemini SSE response (stream ended without generating any text or function calls)")
 	}
 
 	fmt.Println()
@@ -130,7 +130,11 @@ func (p *Provider) handleFunctionCallingResponse(body []byte, spinner *ui.Spinne
 			if spinner != nil {
 				spinner.Stop()
 			}
-			return "", fmt.Errorf("failed to parse Function Calling response: %w", err)
+			preview := string(body)
+			if len(preview) > 200 {
+				preview = preview[:200] + "..."
+			}
+			return "", fmt.Errorf("failed to parse Function Calling response (body preview: %s): %w", preview, err)
 		}
 		responses = []GeminiFunctionResponse{singleResponse}
 	}
@@ -228,7 +232,8 @@ func (p *Provider) handleFunctionCallingResponse(body []byte, spinner *ui.Spinne
 			fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] No content: textParts=%d, functionCalls=%d\n",
 				len(textParts), len(functionCalls))
 		}
-		return "", fmt.Errorf("no content in Function Calling response")
+		return "", fmt.Errorf("no content in Function Calling response (textParts=%d, functionCalls=%d, responses=%d)",
+			len(textParts), len(functionCalls), len(responses))
 	}
 
 	fmt.Println()

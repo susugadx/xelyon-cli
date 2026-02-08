@@ -585,6 +585,47 @@ func TestCheckBashSafety_SafeCommandWithSeparator(t *testing.T) {
 	}
 }
 
+func TestBashTool_EmptyCommand(t *testing.T) {
+	tool := &BashTool{}
+	_, _, err := tool.Run(map[string]string{"command": ""})
+	if err == nil {
+		t.Error("BashTool.Run() should return error for empty command")
+	}
+	if !strings.Contains(err.Error(), "empty") {
+		t.Errorf("error = %v, want to contain 'empty'", err)
+	}
+}
+
+func TestBashTool_WhitespaceOnlyCommand(t *testing.T) {
+	tool := &BashTool{}
+	_, _, err := tool.Run(map[string]string{"command": "   "})
+	if err == nil {
+		t.Error("BashTool.Run() should return error for whitespace-only command")
+	}
+	if !strings.Contains(err.Error(), "empty") {
+		t.Errorf("error = %v, want to contain 'empty'", err)
+	}
+}
+
+func TestBashTool_MissingCommandArg(t *testing.T) {
+	tool := &BashTool{}
+	_, _, err := tool.Run(map[string]string{})
+	if err == nil {
+		t.Error("BashTool.Run() should return error when command arg is missing")
+	}
+}
+
+func TestBashTool_ValidCommand(t *testing.T) {
+	tool := &BashTool{}
+	output, _, err := tool.Run(map[string]string{"command": "echo hello"})
+	if err != nil {
+		t.Fatalf("BashTool.Run() unexpected error: %v", err)
+	}
+	if !strings.Contains(output, "hello") {
+		t.Errorf("output = %q, want to contain 'hello'", output)
+	}
+}
+
 func TestCheckBashSafety_ModerateDangerousPipe(t *testing.T) {
 	cfg := config.BashConfig{
 		SafetyLevel: "moderate",

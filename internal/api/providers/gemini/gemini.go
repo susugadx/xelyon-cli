@@ -175,7 +175,11 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		result, err := p.chatWithFunctionCalling(ctx, systemPrompt, history, model)
 		if err != nil {
 			// Function Calling失敗時はテキストモードにフォールバック
-			fmt.Printf("Warning: Function Calling failed, falling back to text mode: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Warning: Function Calling failed, falling back to text mode\n")
+			fmt.Fprintf(os.Stderr, "  Reason: %v\n", err)
+			if debug {
+				fmt.Fprintf(os.Stderr, "[DEBUG Gemini] FC error detail: %+v\n", err)
+			}
 			return p.chatWithTextMode(ctx, systemPrompt, history, model)
 		}
 		return result, nil

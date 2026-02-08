@@ -13,6 +13,9 @@ func TestGetProviderPrefix_Gemini(t *testing.T) {
 	if !strings.Contains(prefix, "ALWAYS read_file BEFORE str_replace") {
 		t.Error("gemini prefix should contain read_file rule")
 	}
+	if !strings.Contains(prefix, "lsp_find") {
+		t.Error("gemini prefix should contain lsp_find rule for reference checking before deletion")
+	}
 }
 
 func TestGetProviderPrefix_GeminiCaseInsensitive(t *testing.T) {
@@ -54,6 +57,9 @@ func TestBuildProviderSystemPrompt_Gemini(t *testing.T) {
 	}
 	if !strings.Contains(result, "NOT inside markdown code blocks") {
 		t.Error("gemini result should contain code block rule")
+	}
+	if !strings.Contains(result, "lsp_find") {
+		t.Error("gemini result should contain lsp_find rule for reference checking before deletion")
 	}
 }
 

@@ -151,6 +151,10 @@ func TestHandleFunctionCallingResponse_EmptyResponse(t *testing.T) {
 	if !strings.Contains(err.Error(), "no content") {
 		t.Errorf("error = %v, want 'no content' error", err)
 	}
+	// 件数情報がエラーメッセージに含まれることを確認
+	if !strings.Contains(err.Error(), "textParts=") {
+		t.Errorf("error = %v, want to contain count info for debugging", err)
+	}
 }
 
 func TestHandleFunctionCallingResponse_NoCandidates(t *testing.T) {
@@ -309,6 +313,13 @@ func TestHandleFunctionCallingResponse_InvalidJSON(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "failed to parse") {
 		t.Errorf("error = %v, want 'failed to parse' error", err)
+	}
+	// body preview がエラーメッセージに含まれることを確認
+	if !strings.Contains(err.Error(), "body preview") {
+		t.Errorf("error = %v, want to contain 'body preview' for debugging", err)
+	}
+	if !strings.Contains(err.Error(), "invalid json") {
+		t.Errorf("error = %v, want to contain actual body content", err)
 	}
 }
 

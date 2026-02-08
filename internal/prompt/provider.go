@@ -11,6 +11,7 @@ var providerPrefixes = map[string]string{
 3. If you haven't read it this session, you CANNOT edit it
 4. **After running bash verification (test/build/lint), WAIT for the result** - do NOT declare completion until you see the output
 5. **Tool calls must be actual JSON, NOT inside markdown code blocks** - ` + "```json...```" + ` is for display only
+6. **Before deleting any type or function, use lsp_find to check ALL references first** - deletion without reference check is FORBIDDEN
 
 `,
 }

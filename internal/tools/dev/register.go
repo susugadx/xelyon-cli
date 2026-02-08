@@ -1,7 +1,9 @@
 package dev
 
 import (
+	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
@@ -27,6 +29,10 @@ func (t *BashTool) Parameters() map[string]interface{} {
 }
 
 func (t *BashTool) Run(args map[string]string) (string, *tools.FileChange, error) {
+	command := strings.TrimSpace(args["command"])
+	if command == "" {
+		return "", nil, fmt.Errorf("bash command is empty. Provide a valid command string in the 'command' argument")
+	}
 	output := ExecuteBash(args["command"])
 	return output, nil, nil
 }
