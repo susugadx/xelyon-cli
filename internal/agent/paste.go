@@ -16,12 +16,12 @@ func handlePasteCommand(agent *Agent, args []string) bool {
 
 	pm := ui.NewPasteMode(cfg.Paste)
 
-	// 共有リーダーを使用（バッファ競合を回避）
+	// MultilineReader経由で読み取り（raw mode goroutine対応でペーストマーカー抑制）
 	var content string
 	var cancelled bool
 	var err error
 	if agent.mlReader != nil {
-		content, cancelled, err = pm.CaptureWithReader(agent.mlReader.Reader(), os.Stdout)
+		content, cancelled, err = pm.CaptureWithMultilineReader(agent.mlReader, os.Stdout)
 	} else {
 		content, cancelled, err = pm.Capture(os.Stdin, os.Stdout)
 	}

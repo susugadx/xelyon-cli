@@ -103,7 +103,14 @@ func ReadMultiLineComment(reader *bufio.Reader) (string, *ImageData) {
 		// /paste: enter paste mode and insert captured content
 		if trimmed == "/p" || trimmed == "/paste" {
 			pm := ui.NewPasteMode(cfg.Paste)
-			content, cancelled, err := pm.Capture(os.Stdin, os.Stdout)
+			var content string
+			var cancelled bool
+			var err error
+			if globalReader := ui.GetGlobalReader(); globalReader != nil {
+				content, cancelled, err = pm.CaptureWithMultilineReader(globalReader, os.Stdout)
+			} else {
+				content, cancelled, err = pm.Capture(os.Stdin, os.Stdout)
+			}
 			if err != nil {
 				Red.Printf("Paste Mode error: %v\n", err)
 				continue

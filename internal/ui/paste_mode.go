@@ -49,13 +49,7 @@ func (p *PasteMode) CaptureWithReader(reader *bufio.Reader, out io.Writer) (cont
 	maxBytes := p.cfg.MaxBytes
 	timeout := time.Duration(p.cfg.TimeoutSeconds) * time.Second
 
-	fmt.Fprintln(out, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Fprintln(out, "📝 Paste Mode / ペーストモード")
-	fmt.Fprintln(out, "   End: empty line x2, 'END', /end, Ctrl+D")
-	fmt.Fprintln(out, "   Cancel: /cancel, /c")
-	fmt.Fprintln(out, "   終了: 空行2回, END, /end, Ctrl+D")
-	fmt.Fprintln(out, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Fprintln(out)
+	p.printBanner(out)
 
 	var lines []string
 	emptyCount := 0
@@ -83,34 +77,14 @@ func (p *PasteMode) CaptureWithReader(reader *bufio.Reader, out io.Writer) (cont
 			}
 
 			line := strings.TrimRight(result.line, "\r\n")
+			line = StripBracketedPaste(line)
 
-			if line == "" {
-				emptyCount++
-				if emptyCount >= 2 {
-					goto done
-				}
-				lines = append(lines, line)
-				totalBytes += len(line) + 1
-				continue
-			}
-
-			if line == "END" || line == "/end" {
+			action := p.processLine(line, &lines, &emptyCount, &totalBytes, maxLines, maxBytes)
+			switch action {
+			case pasteActionDone:
 				goto done
-			}
-
-			if line == "/cancel" || line == "/c" {
+			case pasteActionCancel:
 				return "", true, nil
-			}
-
-			emptyCount = 0
-			lines = append(lines, line)
-			totalBytes += len(line) + 1
-
-			if maxLines > 0 && len(lines) >= maxLines {
-				goto done
-			}
-			if maxBytes > 0 && totalBytes >= maxBytes {
-				goto done
 			}
 
 		case <-time.After(timeout):
@@ -119,13 +93,122 @@ func (p *PasteMode) CaptureWithReader(reader *bufio.Reader, out io.Writer) (cont
 	}
 
 done:
+	return p.finalize(lines), false, nil
+}
+
+// CaptureWithMultilineReader reads multiline input using a MultilineReader.
+// When the raw mode goroutine is active, this uses ReadSimpleLine() which enters
+// raw mode to suppress terminal echo of paste markers.
+func (p *PasteMode) CaptureWithMultilineReader(mlReader *MultilineReader, out io.Writer) (content string, cancelled bool, err error) {
+	maxLines := p.cfg.MaxLines
+	maxBytes := p.cfg.MaxBytes
+	timeout := time.Duration(p.cfg.TimeoutSeconds) * time.Second
+
+	p.printBanner(out)
+
+	var lines []string
+	emptyCount := 0
+	totalBytes := 0
+
+	type readResult struct {
+		line string
+		err  error
+	}
+	inputChan := make(chan readResult, 1)
+
+	for {
+		go func() {
+			line, e := mlReader.ReadSimpleLine()
+			inputChan <- readResult{line: line, err: e}
+		}()
+
+		select {
+		case result := <-inputChan:
+			if result.err == io.EOF {
+				goto done
+			}
+			if result.err != nil {
+				return "", false, result.err
+			}
+
+			line := result.line // ReadSimpleLine already strips paste markers
+
+			action := p.processLine(line, &lines, &emptyCount, &totalBytes, maxLines, maxBytes)
+			switch action {
+			case pasteActionDone:
+				goto done
+			case pasteActionCancel:
+				return "", true, nil
+			}
+
+		case <-time.After(timeout):
+			goto done
+		}
+	}
+
+done:
+	return p.finalize(lines), false, nil
+}
+
+type pasteAction int
+
+const (
+	pasteActionContinue pasteAction = iota
+	pasteActionDone
+	pasteActionCancel
+)
+
+func (p *PasteMode) printBanner(out io.Writer) {
+	fmt.Fprintln(out, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Fprintln(out, "📝 Paste Mode / ペーストモード")
+	fmt.Fprintln(out, "   End: empty line x2, 'END', /end, Ctrl+D")
+	fmt.Fprintln(out, "   Cancel: /cancel, /c")
+	fmt.Fprintln(out, "   終了: 空行2回, END, /end, Ctrl+D")
+	fmt.Fprintln(out, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Fprintln(out)
+}
+
+func (p *PasteMode) processLine(line string, lines *[]string, emptyCount *int, totalBytes *int, maxLines, maxBytes int) pasteAction {
+	if line == "" {
+		*emptyCount++
+		if *emptyCount >= 2 {
+			return pasteActionDone
+		}
+		*lines = append(*lines, line)
+		*totalBytes += len(line) + 1
+		return pasteActionContinue
+	}
+
+	if line == "END" || line == "/end" {
+		return pasteActionDone
+	}
+
+	if line == "/cancel" || line == "/c" {
+		return pasteActionCancel
+	}
+
+	*emptyCount = 0
+	*lines = append(*lines, line)
+	*totalBytes += len(line) + 1
+
+	if maxLines > 0 && len(*lines) >= maxLines {
+		return pasteActionDone
+	}
+	if maxBytes > 0 && *totalBytes >= maxBytes {
+		return pasteActionDone
+	}
+
+	return pasteActionContinue
+}
+
+func (p *PasteMode) finalize(lines []string) string {
 	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
 		lines = lines[:len(lines)-1]
 	}
 
 	if len(lines) == 0 {
-		return "", false, nil
+		return ""
 	}
 
-	return strings.Join(lines, "\n"), false, nil
+	return strings.Join(lines, "\n")
 }
