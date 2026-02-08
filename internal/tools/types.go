@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -35,7 +36,13 @@ func (tc *ToolCall) NormalizeArgs() {
 		case bool:
 			tc.Args[k] = fmt.Sprintf("%t", val)
 		default:
-			tc.Args[k] = fmt.Sprintf("%v", v)
+			// 配列・オブジェクト等の複合型は json.Marshal で正しい JSON 文字列に変換
+			// fmt.Sprintf("%v", v) は Go 構文（map[k:v]）になるため NG
+			if jsonBytes, err := json.Marshal(v); err == nil {
+				tc.Args[k] = string(jsonBytes)
+			} else {
+				tc.Args[k] = fmt.Sprintf("%v", v)
+			}
 		}
 	}
 }

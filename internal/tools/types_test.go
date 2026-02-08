@@ -49,12 +49,17 @@ func TestToolCall_NormalizeArgs(t *testing.T) {
 		{
 			name:    "nil value (default case)",
 			rawArgs: map[string]any{"unknown": nil},
-			want:    map[string]string{"unknown": "<nil>"},
+			want:    map[string]string{"unknown": "null"},
 		},
 		{
-			name:    "slice value (default case)",
+			name:    "slice value (default case - JSON serialized)",
 			rawArgs: map[string]any{"items": []string{"a", "b"}},
-			want:    map[string]string{"items": "[a b]"},
+			want:    map[string]string{"items": `["a","b"]`},
+		},
+		{
+			name:    "object value (default case - JSON serialized)",
+			rawArgs: map[string]any{"step": map[string]any{"id": float64(1), "description": "test"}},
+			want:    map[string]string{"step": `{"description":"test","id":1}`},
 		},
 		{
 			name:    "large integer as float64",

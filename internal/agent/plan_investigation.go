@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -75,6 +76,38 @@ func (a *Agent) runInvestigationPhase(ctx context.Context) (*plan.Plan, error) {
 					}
 				}
 			}
+
+			// テキストフォールバック: FC失敗時にレスポンスから直接 Plan JSON を抽出
+			if planJSON := plan.ExtractPlanJSON(response); planJSON != "" {
+				if os.Getenv("XELYON_DEBUG_PARSE") == "1" {
+					fmt.Fprintf(os.Stderr, "[DEBUG runInvestigationPhase] text fallback: found plan JSON (%d bytes)\n", len(planJSON))
+				}
+				if p, err := plan.ParsePlan(planJSON); err == nil && len(p.Steps) > 0 {
+					yellow.Println("⚠️  FC fallback: extracted plan from text response")
+					// 保存
+					if createPlanTool != nil {
+						// storage 経由で保存するため create_plan を手動実行
+						tc := &tools.ToolCall{
+							Tool: "create_plan",
+							Args: map[string]string{
+								"title":   p.Title,
+								"summary": p.Summary,
+							},
+						}
+						// steps を JSON 文字列にシリアライズ
+						if stepsJSON, err := json.Marshal(p.Steps); err == nil {
+							tc.Args["steps"] = string(stepsJSON)
+						}
+						tools.Execute(tc)
+						if savedPlan := createPlanTool.LastPlan(); savedPlan != nil {
+							return savedPlan, nil
+						}
+					}
+					// storage なしでも Plan を返す
+					return p, nil
+				}
+			}
+
 			// ツール呼び出しがない場合は終了（AIが調査を終えて説明している）
 			fmt.Println(response)
 			return nil, nil

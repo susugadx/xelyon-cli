@@ -67,11 +67,11 @@ func (t *CreatePlanTool) Parameters() map[string]interface{} {
 			},
 			"clarifications": map[string]interface{}{
 				"type":        "string",
-				"description": "質問と回答のJSON配列（オプション）",
+				"description": `質問と回答のJSON配列文字列（オプション）。例: [{"question":"Q","answer":"A"}]`,
 			},
 			"steps": map[string]interface{}{
 				"type":        "string",
-				"description": "実行ステップのJSON配列",
+				"description": `実行ステップのJSON配列文字列。例: [{"id":1,"description":"Step 1","tools":["read_file"],"depends_on":[]}]`,
 			},
 		},
 		"required":             []string{"title", "summary", "steps"},

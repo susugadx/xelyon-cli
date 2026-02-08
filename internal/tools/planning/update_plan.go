@@ -62,7 +62,7 @@ func (t *UpdatePlanTool) Parameters() map[string]interface{} {
 			},
 			"step": map[string]interface{}{
 				"type":        "string",
-				"description": "add_step/update_step 用: ステップ情報（JSON）",
+				"description": `add_step/update_step 用: ステップ情報のJSON文字列。例: {"id":5,"description":"New step","tools":["bash"],"depends_on":[]}`,
 			},
 			"step_id": map[string]interface{}{
 				"type":        "integer",
