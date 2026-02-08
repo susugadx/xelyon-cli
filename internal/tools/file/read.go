@@ -80,8 +80,16 @@ func ExecuteReadFile(path string, startLine, endLine int) string {
 	lines := strings.Split(contentStr, "\n")
 	totalLines := len(lines)
 
-	// 行範囲が指定されている場合
-	if startLine > 0 && endLine > 0 {
+	// 行範囲が指定されている場合（start_line のみ、end_line のみ、両方指定 に対応）
+	if startLine > 0 || endLine > 0 {
+		// 片方のみ指定時のデフォルト補完
+		if startLine <= 0 {
+			startLine = 1
+		}
+		if endLine <= 0 {
+			endLine = startLine + MaxReadLines - 1
+		}
+
 		// 範囲調整
 		if startLine > totalLines {
 			return fmt.Sprintf("Error: start_line %d exceeds total lines %d", startLine, totalLines)
