@@ -302,6 +302,10 @@ func (a *Agent) chatWithImage(input string, image *api.ImageData) {
 	var lastToolCall *tools.ToolCall
 	var sameCallCount int
 
+	// 自動リトリー設定
+	autoRetryMax := cfg.PlanMode.AutoRetry
+	retryCount := 0
+
 	for i := 0; i < maxIterations; i++ {
 		var response string
 		var err error
@@ -320,8 +324,36 @@ func (a *Agent) chatWithImage(input string, image *api.ImageData) {
 			return
 		}
 
+		// Plan JSON が検出された場合、ツール使用を促す
+		if plan.ContainsPlanJSON(response) {
+			yellow.Println("⚠️  Plan JSON detected in normal mode. Use create_plan tool instead.")
+			a.History = append(a.History, api.Message{
+				Role:             "assistant",
+				Content:          response,
+				ReasoningContent: a.getLastReasoningContent(),
+			})
+			a.History = append(a.History, api.Message{
+				Role:    "user",
+				Content: "[SYSTEM] You are in NORMAL MODE. Do NOT output JSON directly. Use create_plan tool or execute tools DIRECTLY.",
+			})
+			continue
+		}
+
 		// ツール呼び出しをパース
 		toolCalls := tools.ParseToolCalls(response)
+
+		// デバッグログ
+		if os.Getenv("XELYON_DEBUG_TOOLS") == "1" {
+			fmt.Printf("[DEBUG Tools] Response length: %d, ToolCalls found: %d\n", len(response), len(toolCalls))
+			if len(response) < config.DebugPreviewLen {
+				fmt.Printf("[DEBUG Tools] Response: %s\n", response)
+			} else {
+				fmt.Printf("[DEBUG Tools] Response (first %d): %s...\n", config.DebugPreviewLen, response[:config.DebugPreviewLen])
+			}
+			for i, tc := range toolCalls {
+				fmt.Printf("[DEBUG Tools] ToolCall[%d]: tool=%s, args=%v\n", i, tc.Tool, tc.Args)
+			}
+		}
 
 		// ツール呼び出しなし = 通常の回答
 		if len(toolCalls) == 0 {
@@ -330,7 +362,8 @@ func (a *Agent) chatWithImage(input string, image *api.ImageData) {
 			return
 		}
 
-		// ツールを実行
+		// ツールを実行し、失敗を検出
+		var lastFailedResult string
 		for _, toolCall := range toolCalls {
 			// ループ検知
 			if a.shouldAbortToolLoopWithResponse(response, toolCall, lastToolCall, &sameCallCount) {
@@ -339,10 +372,57 @@ func (a *Agent) chatWithImage(input string, image *api.ImageData) {
 			}
 			lastToolCall = toolCall
 
-			// ツール実行
-			a.executeToolCallWithResult(response, toolCall)
+			// ツール実行（executeToolCallWithResult で結果も取得）
+			result := a.executeToolCallWithResult(response, toolCall)
+
+			// 失敗パターンをチェック
+			if failed, _ := plan.ContainsFailure(result); failed {
+				lastFailedResult = result
+			}
+		}
+
+		// 失敗検出時の自動リトリー処理
+		if lastFailedResult != "" {
+			if autoRetryMax > 0 && retryCount < autoRetryMax {
+				retryCount++
+				fmt.Print("\033[?25h") // カーソルを表示（スピナー停止）
+				red.Printf("❌ Failed (retry %d/%d)\n", retryCount, autoRetryMax)
+				yellow.Printf("🔄 Retrying...\n")
+
+				// リトリー用プロンプトを追加
+				a.History = append(a.History, api.Message{
+					Role: "user",
+					Content: fmt.Sprintf(`The previous tool execution FAILED with the following error:
+
+%s
+
+Please:
+1. Analyze the error carefully
+2. Identify the root cause
+3. Try a different approach to fix this
+
+Do NOT give up. Try again with a different approach.`, lastFailedResult),
+				})
+				continue
+			}
+
+			// 自動リトリーが exhausted
+			if autoRetryMax > 0 {
+				fmt.Print("\033[?25h") // カーソルを表示（スピナー停止）
+				red.Printf("❌ Failed (%d retries exhausted)\n", autoRetryMax)
+				yellow.Println("Could not complete the task automatically. Letting AI respond...")
+			}
+			// AI に任せて続行（リトリーカウンターをリセット）
+			retryCount = 0
+		} else if retryCount > 0 {
+			// 成功した場合（リトリー後）
+			green.Printf("✅ Succeeded (on retry %d)\n", retryCount)
+			retryCount = 0
 		}
 	}
+
+	yellow.Printf("⚠️  Tool loop limit reached (%d iterations)\n", maxIterations)
+	a.showTaskSummary()
 }
 
 // printLastUsage はリクエスト完了時の usage を表示
