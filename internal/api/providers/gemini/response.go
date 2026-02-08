@@ -196,14 +196,38 @@ func (p *Provider) handleFunctionCallingResponse(body []byte, spinner *ui.Spinne
 		}
 	}
 
-	// テキストパートを出力（ツール呼び出しJSONは除外）
-	headerPrinted := false
+	// テキストパートを分類: ツールJSON vs 通常テキスト
+	var toolJSONTexts []string
+	var displayTexts []string
 	for _, text := range textParts {
 		trimmed := strings.TrimSpace(text)
-		if strings.HasPrefix(trimmed, "{\"tool\"") || strings.HasPrefix(trimmed, "{ \"tool\"") {
-			if debug {
-				fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Skipping text (tool JSON)\n")
+		if isToolJSONPrefix(trimmed) {
+			toolJSONTexts = append(toolJSONTexts, trimmed)
+		} else {
+			displayTexts = append(displayTexts, text)
+		}
+	}
+
+	// FC が空の場合、コードブロック内のツールJSON も探す
+	if len(functionCalls) == 0 && len(toolJSONTexts) == 0 {
+		for i, text := range displayTexts {
+			extracted, remaining := extractCodeBlockToolJSON(text)
+			if len(extracted) > 0 {
+				toolJSONTexts = append(toolJSONTexts, extracted...)
+				displayTexts[i] = remaining
 			}
+		}
+	}
+
+	if debug && len(toolJSONTexts) > 0 {
+		fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] toolJSONTexts=%d, functionCalls=%d\n",
+			len(toolJSONTexts), len(functionCalls))
+	}
+
+	// 通常テキストを出力
+	headerPrinted := false
+	for _, text := range displayTexts {
+		if strings.TrimSpace(text) == "" {
 			continue
 		}
 		if !headerPrinted {
@@ -214,19 +238,30 @@ func (p *Provider) handleFunctionCallingResponse(body []byte, spinner *ui.Spinne
 		fullResponse.WriteString(text)
 	}
 
-	// FunctionCall を出力（重複排除）
+	// FunctionCall がある場合はそちらを出力（重複排除）
 	seenTools := make(map[string]bool)
-	for _, fc := range functionCalls {
-		toolJSON := convertFunctionCallToToolJSON(fc)
-		if seenTools[toolJSON] {
-			continue
+	if len(functionCalls) > 0 {
+		for _, fc := range functionCalls {
+			toolJSON := convertFunctionCallToToolJSON(fc)
+			if seenTools[toolJSON] {
+				continue
+			}
+			seenTools[toolJSON] = true
+			fmt.Printf("\n%s", toolJSON)
+			fullResponse.WriteString(toolJSON)
 		}
-		seenTools[toolJSON] = true
-		fmt.Printf("\n%s", toolJSON)
-		fullResponse.WriteString(toolJSON)
+	} else if len(toolJSONTexts) > 0 {
+		// FC が空 → テキストから救済したツールJSONを使用
+		if debug {
+			fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Rescuing %d tool call(s) from text\n", len(toolJSONTexts))
+		}
+		fmt.Fprintf(os.Stderr, "⚠️  FC rescue: %d tool call(s) extracted from text response\n", len(toolJSONTexts))
+		for _, tj := range toolJSONTexts {
+			fullResponse.WriteString(tj)
+		}
 	}
 
-	// テキストもFunctionCallもない場合のみエラー
+	// テキストもFunctionCallも救済ツールJSONもない場合のみエラー
 	if fullResponse.Len() == 0 && len(functionCalls) == 0 {
 		if debug {
 			fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] No content: textParts=%d, functionCalls=%d\n",
@@ -238,6 +273,71 @@ func (p *Provider) handleFunctionCallingResponse(body []byte, spinner *ui.Spinne
 
 	fmt.Println()
 	return fullResponse.String(), nil
+}
+
+// isToolJSONPrefix はテキストがツールJSON形式で始まるか判定
+func isToolJSONPrefix(s string) bool {
+	return strings.HasPrefix(s, `{"tool"`) || strings.HasPrefix(s, `{ "tool"`)
+}
+
+// extractCodeBlockToolJSON はテキスト内の ```json...``` コードブロックからツールJSON を抽出する
+// 返値: (抽出されたツールJSON, コードブロック除去後のテキスト)
+func extractCodeBlockToolJSON(text string) ([]string, string) {
+	var toolJSONs []string
+	remaining := text
+	searchFrom := 0
+
+	for searchFrom < len(remaining) {
+		// ``` を探す
+		idx := strings.Index(remaining[searchFrom:], "```")
+		if idx == -1 {
+			break
+		}
+		blockStart := searchFrom + idx
+
+		// 言語指定をスキップ（```json\n の場合）
+		afterTicks := blockStart + 3
+		if afterTicks >= len(remaining) {
+			break
+		}
+		nlIdx := strings.Index(remaining[afterTicks:], "\n")
+		if nlIdx == -1 {
+			break
+		}
+		contentStart := afterTicks + nlIdx + 1
+
+		// 閉じ ``` を探す
+		closeIdx := strings.Index(remaining[contentStart:], "```")
+		if closeIdx == -1 {
+			break
+		}
+		contentEnd := contentStart + closeIdx
+		blockEnd := contentEnd + 3
+
+		content := strings.TrimSpace(remaining[contentStart:contentEnd])
+
+		if isToolJSONPrefix(content) {
+			toolJSONs = append(toolJSONs, content)
+			// コードブロック全体を除去
+			before := strings.TrimRight(remaining[:blockStart], "\n")
+			after := ""
+			if blockEnd < len(remaining) {
+				after = strings.TrimLeft(remaining[blockEnd:], "\n")
+			}
+			if before != "" && after != "" {
+				remaining = before + "\n" + after
+			} else {
+				remaining = before + after
+			}
+			// searchFrom はそのまま（除去で位置がずれるため）
+			continue
+		}
+
+		// ツールJSONでないブロックはスキップ
+		searchFrom = blockEnd
+	}
+
+	return toolJSONs, remaining
 }
 
 // handleNonStreamingResponse は非ストリーミングレスポンスを処理（エラーメッセージ表示用などに残す）

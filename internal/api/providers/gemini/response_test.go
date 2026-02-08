@@ -323,8 +323,8 @@ func TestHandleFunctionCallingResponse_InvalidJSON(t *testing.T) {
 	}
 }
 
-func TestHandleFunctionCallingResponse_ToolJSONTextSkipped(t *testing.T) {
-	// テキストパートがツール呼び出しJSON形式の場合はスキップされる
+func TestHandleFunctionCallingResponse_ToolJSONTextSkippedWhenFCExists(t *testing.T) {
+	// 実FC + ツールJSONテキスト → テキスト側はスキップ（重複防止）
 	resp := GeminiFunctionResponse{
 		Candidates: []GeminiFunctionCandidate{
 			{
@@ -332,6 +332,10 @@ func TestHandleFunctionCallingResponse_ToolJSONTextSkipped(t *testing.T) {
 					Parts: []GeminiFunctionPart{
 						{Text: `{"tool":"read_file","args":{"path":"/test"}}`},
 						{Text: "Normal text response."},
+						{FunctionCall: &api.GeminiFunctionCall{
+							Name: "bash",
+							Args: map[string]any{"command": "ls"},
+						}},
 					},
 				},
 			},
@@ -346,6 +350,99 @@ func TestHandleFunctionCallingResponse_ToolJSONTextSkipped(t *testing.T) {
 	}
 	if !strings.Contains(result, "Normal text response.") {
 		t.Errorf("result should contain normal text, got %q", result)
+	}
+	if !strings.Contains(result, `"tool":"bash"`) {
+		t.Errorf("result should contain FC bash, got %q", result)
+	}
+	// ツールJSONテキストは実FCがあるのでスキップされ、bash FC のみが含まれる
+	if strings.Count(result, `"tool":"bash"`) != 1 {
+		t.Errorf("expected exactly 1 bash FC, got result: %q", result)
+	}
+}
+
+func TestHandleFunctionCallingResponse_ToolJSONTextRescuedWhenNoFC(t *testing.T) {
+	// FC が空、テキストにツールJSON → レスキューされる
+	resp := GeminiFunctionResponse{
+		Candidates: []GeminiFunctionCandidate{
+			{
+				Content: GeminiFunctionContent{
+					Parts: []GeminiFunctionPart{
+						{Text: `{"tool":"read_file","args":{"path":"/src/main.go"}}`},
+					},
+				},
+			},
+		},
+	}
+	body, _ := json.Marshal(resp)
+
+	p := New("test-key")
+	result, err := p.handleFunctionCallingResponse(body, nil)
+	if err != nil {
+		t.Fatalf("handleFunctionCallingResponse() error = %v", err)
+	}
+	if !strings.Contains(result, "read_file") {
+		t.Errorf("rescued tool JSON should contain read_file, got %q", result)
+	}
+	if !strings.Contains(result, "/src/main.go") {
+		t.Errorf("rescued tool JSON should contain path, got %q", result)
+	}
+}
+
+func TestHandleFunctionCallingResponse_CodeBlockToolJSONRescued(t *testing.T) {
+	// FC が空、テキストにコードブロック内ツールJSON → レスキューされる
+	textWithCodeBlock := "I'll read the file for you.\n\n```json\n{\"tool\":\"read_file\",\"args\":{\"path\":\"/file.go\"}}\n```\n"
+	resp := GeminiFunctionResponse{
+		Candidates: []GeminiFunctionCandidate{
+			{
+				Content: GeminiFunctionContent{
+					Parts: []GeminiFunctionPart{
+						{Text: textWithCodeBlock},
+					},
+				},
+			},
+		},
+	}
+	body, _ := json.Marshal(resp)
+
+	p := New("test-key")
+	result, err := p.handleFunctionCallingResponse(body, nil)
+	if err != nil {
+		t.Fatalf("handleFunctionCallingResponse() error = %v", err)
+	}
+	if !strings.Contains(result, "read_file") {
+		t.Errorf("rescued code block tool JSON should contain read_file, got %q", result)
+	}
+	if !strings.Contains(result, "I'll read the file") {
+		t.Errorf("result should still contain normal text, got %q", result)
+	}
+}
+
+func TestHandleFunctionCallingResponse_MultipleToolJSONRescued(t *testing.T) {
+	// FC が空、複数のツールJSONテキスト → 全てレスキュー
+	resp := GeminiFunctionResponse{
+		Candidates: []GeminiFunctionCandidate{
+			{
+				Content: GeminiFunctionContent{
+					Parts: []GeminiFunctionPart{
+						{Text: `{"tool":"read_file","args":{"path":"/a.go"}}`},
+						{Text: `{"tool":"bash","args":{"command":"go test"}}`},
+					},
+				},
+			},
+		},
+	}
+	body, _ := json.Marshal(resp)
+
+	p := New("test-key")
+	result, err := p.handleFunctionCallingResponse(body, nil)
+	if err != nil {
+		t.Fatalf("handleFunctionCallingResponse() error = %v", err)
+	}
+	if !strings.Contains(result, "read_file") {
+		t.Errorf("result should contain read_file, got %q", result)
+	}
+	if !strings.Contains(result, "bash") {
+		t.Errorf("result should contain bash, got %q", result)
 	}
 }
 
@@ -419,6 +516,81 @@ func TestHandleFunctionCallingResponse_EmptyBody(t *testing.T) {
 	_, err := p.handleFunctionCallingResponse([]byte{}, nil)
 	if err == nil {
 		t.Error("handleFunctionCallingResponse() should return error for empty body")
+	}
+}
+
+// ===== extractCodeBlockToolJSON unit tests =====
+
+func TestExtractCodeBlockToolJSON_Basic(t *testing.T) {
+	text := "Some text.\n\n```json\n{\"tool\":\"read_file\",\"args\":{\"path\":\"/file\"}}\n```\n"
+	toolJSONs, remaining := extractCodeBlockToolJSON(text)
+
+	if len(toolJSONs) != 1 {
+		t.Fatalf("expected 1 tool JSON, got %d", len(toolJSONs))
+	}
+	if !strings.Contains(toolJSONs[0], "read_file") {
+		t.Errorf("toolJSON should contain read_file, got %q", toolJSONs[0])
+	}
+	if strings.Contains(remaining, "```") {
+		t.Errorf("remaining should not contain code block markers, got %q", remaining)
+	}
+	if !strings.Contains(remaining, "Some text.") {
+		t.Errorf("remaining should contain surrounding text, got %q", remaining)
+	}
+}
+
+func TestExtractCodeBlockToolJSON_NotToolJSON(t *testing.T) {
+	text := "```go\nfunc main() {}\n```\n"
+	toolJSONs, remaining := extractCodeBlockToolJSON(text)
+
+	if len(toolJSONs) != 0 {
+		t.Errorf("expected 0 tool JSONs for non-tool code block, got %d", len(toolJSONs))
+	}
+	if remaining != text {
+		t.Errorf("remaining should be unchanged, got %q", remaining)
+	}
+}
+
+func TestExtractCodeBlockToolJSON_NoCodeBlock(t *testing.T) {
+	text := "Just plain text."
+	toolJSONs, remaining := extractCodeBlockToolJSON(text)
+
+	if len(toolJSONs) != 0 {
+		t.Errorf("expected 0 tool JSONs, got %d", len(toolJSONs))
+	}
+	if remaining != text {
+		t.Errorf("remaining should be unchanged, got %q", remaining)
+	}
+}
+
+func TestExtractCodeBlockToolJSON_Multiple(t *testing.T) {
+	text := "First\n```json\n{\"tool\":\"read_file\",\"args\":{}}\n```\nMiddle\n```json\n{\"tool\":\"bash\",\"args\":{}}\n```\nLast"
+	toolJSONs, remaining := extractCodeBlockToolJSON(text)
+
+	if len(toolJSONs) != 2 {
+		t.Fatalf("expected 2 tool JSONs, got %d", len(toolJSONs))
+	}
+	if !strings.Contains(remaining, "First") || !strings.Contains(remaining, "Last") {
+		t.Errorf("remaining should contain surrounding text, got %q", remaining)
+	}
+}
+
+func TestIsToolJSONPrefix(t *testing.T) {
+	tests := []struct {
+		input string
+		want  bool
+	}{
+		{`{"tool":"read_file","args":{}}`, true},
+		{`{ "tool": "bash", "args": {} }`, true},
+		{`{"id":"call_1","tool":"read_file"}`, false},
+		{`Just text`, false},
+		{``, false},
+	}
+	for _, tt := range tests {
+		got := isToolJSONPrefix(tt.input)
+		if got != tt.want {
+			t.Errorf("isToolJSONPrefix(%q) = %v, want %v", tt.input, got, tt.want)
+		}
 	}
 }
 
