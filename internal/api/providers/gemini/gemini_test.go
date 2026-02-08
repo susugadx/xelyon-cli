@@ -455,18 +455,18 @@ func TestProvider_ChatWithTools_WithMCPTools(t *testing.T) {
 	p := New("test-key")
 
 	// MCPツールを設定
-	mcpTools := []api.GeminiFunctionDeclaration{
+	mcpTools := []api.ToolDefinition{
 		{
 			Name:        "mcp_github_get_issue",
 			Description: "Get issue details from GitHub",
-			Parameters: &api.GeminiParameterSchema{
-				Type: "object",
-				Properties: map[string]api.GeminiPropertyDef{
-					"owner":        {Type: "string", Description: "Repository owner"},
-					"repo":         {Type: "string", Description: "Repository name"},
-					"issue_number": {Type: "string", Description: "Issue number"},
+			Parameters: map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"owner":        map[string]interface{}{"type": "string", "description": "Repository owner"},
+					"repo":         map[string]interface{}{"type": "string", "description": "Repository name"},
+					"issue_number": map[string]interface{}{"type": "string", "description": "Issue number"},
 				},
-				Required: []string{"owner", "repo", "issue_number"},
+				"required": []string{"owner", "repo", "issue_number"},
 			},
 		},
 	}

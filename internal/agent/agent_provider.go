@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 
@@ -85,23 +86,35 @@ func (a *Agent) SwitchProvider(providerName string) error {
 		mcpTools := a.mcpManager.GetTools()
 		if len(mcpTools) > 0 {
 			// Gemini MCP ツール設定
-			if mcpProvider, ok := provider.(api.MCPToolProvider); ok {
+			if mcpProvider, ok := provider.(api.MCPProvider); ok {
 				debug := os.Getenv("XELYON_DEBUG_GEMINI") == "1"
-				var mcpDeclarations []api.GeminiFunctionDeclaration
+				var mcpToolsConverted []api.ToolDefinition
 				for _, t := range mcpTools {
 					name := fmt.Sprintf("mcp_%s_%s", sanitizeToolName(t.ServerName), sanitizeToolName(t.Name))
-					decl := api.ConvertMCPToolToGeminiDeclaration(name, t.Description, t.InputSchema)
-					mcpDeclarations = append(mcpDeclarations, decl)
+
+					// InputSchema を map[string]interface{} に変換
+					var params map[string]interface{}
+					if len(t.InputSchema) > 0 {
+						if err := json.Unmarshal(t.InputSchema, &params); err != nil {
+							// 変換失敗時は空のパラメータを使用
+							params = nil
+						}
+					}
 
 					if debug {
 						fmt.Fprintf(os.Stderr, "[DEBUG Gemini] MCP tool registered: %s\n", name)
 					}
+					mcpToolsConverted = append(mcpToolsConverted, api.ToolDefinition{
+						Name:        name,
+						Description: t.Description,
+						Parameters:  params,
+					})
 				}
-				mcpProvider.SetMCPTools(mcpDeclarations)
+				mcpProvider.SetMCPTools(mcpToolsConverted)
 			}
 
 			// OpenAI MCP ツール設定
-			if openaiMCPProvider, ok := provider.(api.ToolMCPProvider); ok {
+			if openaiMCPProvider, ok := provider.(api.MCPProvider); ok {
 				debug := os.Getenv("XELYON_DEBUG_OPENAI") == "1"
 				var mcpFunctions []api.ToolDefinition
 				for _, t := range mcpTools {

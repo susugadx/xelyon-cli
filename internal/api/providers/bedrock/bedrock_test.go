@@ -526,8 +526,8 @@ func TestProvider_InterfaceCompliance(t *testing.T) {
 	// Provider interface
 	var _ api.Provider = p
 
-	// ToolMCPProvider interface
-	var _ api.ToolMCPProvider = p
+	// MCPProvider interface
+	var _ api.MCPProvider = p
 
 	// UsageReporter interface
 	var _ api.UsageReporter = p

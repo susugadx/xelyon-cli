@@ -309,7 +309,6 @@ func parseXMLParams(content string) map[string]string {
 	return args
 }
 
-
 // findCodeBlockRanges はMarkdownコードブロックの範囲を返す
 func findCodeBlockRanges(text string) [][2]int {
 	var ranges [][2]int

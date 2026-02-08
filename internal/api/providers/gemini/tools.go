@@ -165,7 +165,7 @@ func convertFunctionCallToToolJSON(fc *api.GeminiFunctionCall) string {
 
 // GetCombinedToolDefinitions は組み込みツール + MCPツールの定義を返す
 // 重複するツール名がある場合は最初に登録されたものを優先
-func GetCombinedToolDefinitions(mcpTools []api.GeminiFunctionDeclaration) []api.GeminiToolConfig {
+func GetCombinedToolDefinitions(mcpTools []api.ToolDefinition) []api.GeminiToolConfig {
 	defs := tools.DefaultRegistry.GetToolDefinitions()
 	declarations := make([]api.GeminiFunctionDeclaration, 0, len(defs)+len(mcpTools))
 	seen := make(map[string]bool)
@@ -183,13 +183,17 @@ func GetCombinedToolDefinitions(mcpTools []api.GeminiFunctionDeclaration) []api.
 		})
 	}
 
-	// MCPツール（重複チェック）
+	// MCPツール（ToolDefinitionからGeminiFunctionDeclarationに変換）
 	for _, mcp := range mcpTools {
 		if seen[mcp.Name] {
 			continue
 		}
 		seen[mcp.Name] = true
-		declarations = append(declarations, mcp)
+		declarations = append(declarations, api.GeminiFunctionDeclaration{
+			Name:        mcp.Name,
+			Description: mcp.Description,
+			Parameters:  convertToGeminiSchema(mcp.Parameters),
+		})
 	}
 
 	return []api.GeminiToolConfig{{FunctionDeclarations: declarations}}

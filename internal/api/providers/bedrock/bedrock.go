@@ -236,6 +236,12 @@ func (p *Provider) SetMCPTools(tools []api.ToolDefinition) {
 	p.mcpTools = tools
 }
 
+// SetMCPEnabled はMCPが有効かどうかを設定する（レガシー、互換性のため）
+func (p *Provider) SetMCPEnabled(enabled bool) {
+	// BedrockプロバイダーではMCP有効/無効の切り替えは不要
+	// 常にFunction Calling経由でMCPツールを使用可能
+}
+
 // SetUsageCallback は使用量レポートのコールバックを設定する
 func (p *Provider) SetUsageCallback(callback api.UsageCallback) {
 	p.usageCallback = callback

@@ -36,9 +36,9 @@ func getGeminiURL(model string) string {
 type Provider struct {
 	apiKey        string
 	httpClient    *http.Client
-	mcpEnabled    bool                            // MCP有効時はテキストモードにフォールバック（レガシー）
-	mcpTools      []api.GeminiFunctionDeclaration // MCPツールの定義
-	usageCallback api.UsageCallback               // トークン使用量コールバック
+	mcpEnabled    bool                 // MCP有効時はテキストモードにフォールバック（レガシー）
+	mcpTools      []api.ToolDefinition // MCPツールの定義
+	usageCallback api.UsageCallback    // トークン使用量コールバック
 }
 
 // New は新しいGeminiProviderを作成
@@ -65,7 +65,7 @@ func (p *Provider) SetMCPEnabled(enabled bool) {
 
 // SetMCPTools はMCPツールの定義を設定する
 // MCPツールはFunction Calling APIで組み込みツールと一緒に送信される
-func (p *Provider) SetMCPTools(tools []api.GeminiFunctionDeclaration) {
+func (p *Provider) SetMCPTools(tools []api.ToolDefinition) {
 	p.mcpTools = tools
 }
 

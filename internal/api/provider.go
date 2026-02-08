@@ -104,19 +104,11 @@ type ModelLister interface {
 	ListModels() ([]string, error)
 }
 
-// MCPToolProvider はMCPツール設定に対応するプロバイダーのオプショナルインターフェース
-// 現時点では GeminiProvider のみが実装
-type MCPToolProvider interface {
+// MCPProvider はMCPツール設定に対応するプロバイダーのオプショナルインターフェース
+type MCPProvider interface {
 	// SetMCPEnabled はMCPが有効かどうかを設定する（レガシー、互換性のため）
 	SetMCPEnabled(enabled bool)
 
-	// SetMCPTools はMCPツールの定義を設定する
-	SetMCPTools(tools []GeminiFunctionDeclaration)
-}
-
-// ToolMCPProvider はOpenAI用のMCPツール設定インターフェース
-// OpenAI Chat Completions / Responses API の Function Calling で使用
-type ToolMCPProvider interface {
 	// SetMCPTools はMCPツールの定義を設定する
 	SetMCPTools(tools []ToolDefinition)
 }

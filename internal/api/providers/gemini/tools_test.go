@@ -658,9 +658,9 @@ func TestGetCombinedToolDefinitions(t *testing.T) {
 
 	// MCPツールありの場合
 	t.Run("with MCP tools", func(t *testing.T) {
-		mcpTools := []api.GeminiFunctionDeclaration{
-			{Name: "mcp_github_get_issue", Description: "Get issue"},
-			{Name: "mcp_github_list_repos", Description: "List repos"},
+		mcpTools := []api.ToolDefinition{
+			{Name: "mcp_github_get_issue", Description: "Get issue", Parameters: nil},
+			{Name: "mcp_github_list_repos", Description: "List repos", Parameters: nil},
 		}
 
 		tools := GetCombinedToolDefinitions(mcpTools)
@@ -689,10 +689,10 @@ func TestGetCombinedToolDefinitions(t *testing.T) {
 
 	// 重複するMCPツールがある場合（最初のものが優先される）
 	t.Run("with duplicate MCP tools", func(t *testing.T) {
-		mcpTools := []api.GeminiFunctionDeclaration{
-			{Name: "mcp_github_create_or_update_file", Description: "First description"},
-			{Name: "mcp_github_create_or_update_file", Description: "Second description (duplicate)"},
-			{Name: "mcp_github_list_repos", Description: "List repos"},
+		mcpTools := []api.ToolDefinition{
+			{Name: "mcp_github_create_or_update_file", Description: "First description", Parameters: nil},
+			{Name: "mcp_github_create_or_update_file", Description: "Second description (duplicate)", Parameters: nil},
+			{Name: "mcp_github_list_repos", Description: "List repos", Parameters: nil},
 		}
 
 		tools := GetCombinedToolDefinitions(mcpTools)
@@ -721,16 +721,16 @@ func TestGetCombinedToolDefinitions(t *testing.T) {
 }
 
 func TestGetCombinedToolDefinitions_JSONSerializable(t *testing.T) {
-	mcpTools := []api.GeminiFunctionDeclaration{
+	mcpTools := []api.ToolDefinition{
 		{
 			Name:        "mcp_test_tool",
 			Description: "Test MCP tool",
-			Parameters: &api.GeminiParameterSchema{
-				Type: "object",
-				Properties: map[string]api.GeminiPropertyDef{
-					"arg1": {Type: "string", Description: "First argument"},
+			Parameters: map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"arg1": map[string]interface{}{"type": "string", "description": "First argument"},
 				},
-				Required: []string{"arg1"},
+				"required": []string{"arg1"},
 			},
 		},
 	}
