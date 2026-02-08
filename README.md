@@ -22,6 +22,7 @@ DeepSeek, OpenAI, Gemini, Claude, Ollama, Groq, OpenRouter, Bedrock をシーム
 
 **OpenAI Responses API 対応**: `gpt-5.2-codex` などの Codex モデルを自動検出し、最適なAPIを選択。
 **DeepSeek Reasoner 対応**: `reasoning_content`（思考内容）のストリーミング表示・ツール実行フローでの保持に対応。
+**プロバイダー別プロンプト最適化**: Geminiなど特定モデルのルール遵守を強化するプレフィックスを自動注入。
 
 ### 🛠️ 24種類の組み込みツール
 - **ファイル操作**: 読み書き、編集、削除、バックアップ復元
