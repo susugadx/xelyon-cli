@@ -173,12 +173,12 @@ func NewAgent(model string, provider api.Provider) *Agent {
 		}
 
 		// OpenAI MCP ツール設定
-		if openaiMCPProvider, ok := provider.(api.OpenAIMCPToolProvider); ok {
+		if openaiMCPProvider, ok := provider.(api.ToolMCPProvider); ok {
 			debug := os.Getenv("XELYON_DEBUG_OPENAI") == "1"
-			var mcpFunctions []api.OpenAIToolFunction
+			var mcpFunctions []api.ToolDefinition
 			for _, t := range mcpManager.GetTools() {
 				name := fmt.Sprintf("mcp_%s_%s", sanitizeToolName(t.ServerName), sanitizeToolName(t.Name))
-				fn := api.ConvertMCPToolToOpenAIFunction(name, t.Description, t.InputSchema)
+				fn := api.ConvertMCPToolToToolDefinition(name, t.Description, t.InputSchema)
 				mcpFunctions = append(mcpFunctions, fn)
 
 				// デバッグログ

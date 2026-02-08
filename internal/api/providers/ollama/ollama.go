@@ -37,8 +37,8 @@ type toolCallAccumulator struct {
 type Provider struct {
 	baseURL       string
 	httpClient    *http.Client
-	mcpTools      []api.OpenAIToolFunction // MCP ツール定義（Function Calling用）
-	usageCallback api.UsageCallback        // トークン使用量コールバック
+	mcpTools      []api.ToolDefinition // MCP ツール定義（Function Calling用）
+	usageCallback api.UsageCallback    // トークン使用量コールバック
 }
 
 // New は新しいProviderを作成
@@ -354,7 +354,7 @@ func (p *Provider) BaseURL() string {
 }
 
 // SetMCPTools は MCP ツール定義を設定する（Function Calling用）
-func (p *Provider) SetMCPTools(tools []api.OpenAIToolFunction) {
+func (p *Provider) SetMCPTools(tools []api.ToolDefinition) {
 	p.mcpTools = tools
 }
 

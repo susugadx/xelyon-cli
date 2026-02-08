@@ -450,7 +450,7 @@ func TestClaudeProvider_ChatWithTools_NonStreaming_ToolUse(t *testing.T) {
 func TestSetMCPTools(t *testing.T) {
 	p := New("test-key")
 
-	tools := []api.OpenAIToolFunction{
+	tools := []api.ToolDefinition{
 		{Name: "custom_tool", Description: "A custom tool"},
 	}
 	p.SetMCPTools(tools)
@@ -559,7 +559,7 @@ func TestGetClaudeToolDefinitions(t *testing.T) {
 }
 
 func TestConvertOpenAIToolToClaude(t *testing.T) {
-	openaiTool := api.OpenAIToolFunction{
+	openaiTool := api.ToolDefinition{
 		Name:        "test_tool",
 		Description: "A test tool",
 		Parameters: map[string]interface{}{
@@ -605,7 +605,7 @@ func TestConvertToolUseToToolJSON(t *testing.T) {
 }
 
 func TestGetCombinedClaudeTools(t *testing.T) {
-	mcpTools := []api.OpenAIToolFunction{
+	mcpTools := []api.ToolDefinition{
 		{Name: "mcp_tool_1", Description: "MCP Tool 1"},
 		{Name: "mcp_tool_2", Description: "MCP Tool 2"},
 	}

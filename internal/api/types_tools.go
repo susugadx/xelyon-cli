@@ -5,12 +5,12 @@ import "encoding/json"
 // OpenAITool は OpenAI Chat Completions API 用のツール形式
 // リクエストの tools[] フィールドに使用
 type OpenAITool struct {
-	Type     string              `json:"type"` // "function"
-	Function *OpenAIToolFunction `json:"function"`
+	Type     string          `json:"type"` // "function"
+	Function *ToolDefinition `json:"function"`
 }
 
-// OpenAIToolFunction はツール関数の定義
-type OpenAIToolFunction struct {
+// ToolDefinition はツール関数の定義
+type ToolDefinition struct {
 	Name        string                 `json:"name"`
 	Description string                 `json:"description,omitempty"`
 	Parameters  map[string]interface{} `json:"parameters,omitempty"`
@@ -32,12 +32,12 @@ type OpenAIToolCallFunction struct {
 	Arguments string `json:"arguments"` // 引数（JSON文字列）
 }
 
-// ConvertMCPToolToOpenAIFunction はMCPツールをOpenAI Function形式に変換
+// ConvertMCPToolToToolDefinition はMCPツールをOpenAI Function形式に変換
 // MCPのInputSchemaはJSON Schema形式でOpenAIと互換性がある
-func ConvertMCPToolToOpenAIFunction(name, description string, inputSchema []byte) OpenAIToolFunction {
+func ConvertMCPToolToToolDefinition(name, description string, inputSchema []byte) ToolDefinition {
 	// スキーマが空またはnullの場合
 	if len(inputSchema) == 0 || string(inputSchema) == "null" {
-		return OpenAIToolFunction{
+		return ToolDefinition{
 			Name:        name,
 			Description: description,
 			Parameters:  nil,
@@ -49,14 +49,14 @@ func ConvertMCPToolToOpenAIFunction(name, description string, inputSchema []byte
 	var params map[string]interface{}
 	if err := json.Unmarshal(inputSchema, &params); err != nil {
 		// パースエラー時は空のパラメータで続行
-		return OpenAIToolFunction{
+		return ToolDefinition{
 			Name:        name,
 			Description: description,
 			Parameters:  nil,
 		}
 	}
 
-	return OpenAIToolFunction{
+	return ToolDefinition{
 		Name:        name,
 		Description: description,
 		Parameters:  params,

@@ -114,11 +114,11 @@ type MCPToolProvider interface {
 	SetMCPTools(tools []GeminiFunctionDeclaration)
 }
 
-// OpenAIMCPToolProvider はOpenAI用のMCPツール設定インターフェース
+// ToolMCPProvider はOpenAI用のMCPツール設定インターフェース
 // OpenAI Chat Completions / Responses API の Function Calling で使用
-type OpenAIMCPToolProvider interface {
+type ToolMCPProvider interface {
 	// SetMCPTools はMCPツールの定義を設定する
-	SetMCPTools(tools []OpenAIToolFunction)
+	SetMCPTools(tools []ToolDefinition)
 }
 
 // UsageReporter はトークン使用量レポートに対応するプロバイダーのオプショナルインターフェース

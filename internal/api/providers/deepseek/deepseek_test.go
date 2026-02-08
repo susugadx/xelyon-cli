@@ -492,7 +492,7 @@ func TestSetMCPTools(t *testing.T) {
 	}
 
 	// MCP ツールを設定
-	mcpTools := []api.OpenAIToolFunction{
+	mcpTools := []api.ToolDefinition{
 		{
 			Name:        "mcp_tool_1",
 			Description: "First MCP tool",
@@ -533,7 +533,7 @@ func TestSetMCPTools(t *testing.T) {
 func TestSetMCPTools_Empty(t *testing.T) {
 	p := New("test-key")
 
-	p.SetMCPTools([]api.OpenAIToolFunction{})
+	p.SetMCPTools([]api.ToolDefinition{})
 
 	if p.mcpTools == nil {
 		t.Error("mcpTools should not be nil after setting empty slice")
@@ -557,7 +557,7 @@ func TestGetCombinedTools(t *testing.T) {
 	}
 
 	// MCP ツールあり
-	mcpTools := []api.OpenAIToolFunction{
+	mcpTools := []api.ToolDefinition{
 		{
 			Name:        "custom_mcp_tool",
 			Description: "A custom tool",

@@ -31,7 +31,7 @@ func GetClaudeToolDefinitions() []ClaudeTool {
 }
 
 // ConvertOpenAIToolToClaude は OpenAI 形式のツールを Claude 形式に変換する
-func ConvertOpenAIToolToClaude(tool api.OpenAIToolFunction) ClaudeTool {
+func ConvertOpenAIToolToClaude(tool api.ToolDefinition) ClaudeTool {
 	return ClaudeTool{
 		Name:        tool.Name,
 		Description: tool.Description,
@@ -41,7 +41,7 @@ func ConvertOpenAIToolToClaude(tool api.OpenAIToolFunction) ClaudeTool {
 
 // GetCombinedClaudeTools は組み込みツール + MCPツールを返す
 // 重複するツール名がある場合は最初に登録されたものを優先
-func GetCombinedClaudeTools(mcpTools []api.OpenAIToolFunction) []ClaudeTool {
+func GetCombinedClaudeTools(mcpTools []api.ToolDefinition) []ClaudeTool {
 	result := GetClaudeToolDefinitions()
 	seen := make(map[string]bool)
 

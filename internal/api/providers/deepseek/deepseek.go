@@ -31,9 +31,9 @@ const defaultDeepSeekURL = "https://api.deepseek.com/chat/completions"
 // Provider はDeepSeek APIのプロバイダー実装
 type Provider struct {
 	api.BaseProvider
-	mcpTools             []api.OpenAIToolFunction // MCP ツール定義（Function Calling用）
-	usageCallback        api.UsageCallback        // トークン使用量コールバック
-	lastReasoningContent string                   // 最後の reasoning_content（DeepSeek Reasoner用）
+	mcpTools             []api.ToolDefinition // MCP ツール定義（Function Calling用）
+	usageCallback        api.UsageCallback    // トークン使用量コールバック
+	lastReasoningContent string               // 最後の reasoning_content（DeepSeek Reasoner用）
 }
 
 // New は新しいProviderを作成
@@ -331,7 +331,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 }
 
 // SetMCPTools は MCP ツール定義を設定する（Function Calling用）
-func (p *Provider) SetMCPTools(tools []api.OpenAIToolFunction) {
+func (p *Provider) SetMCPTools(tools []api.ToolDefinition) {
 	p.mcpTools = tools
 }
 

@@ -210,7 +210,7 @@ func TestProvider_ListModels_APIError(t *testing.T) {
 func TestSetMCPTools(t *testing.T) {
 	p := New("http://localhost:11434")
 
-	tools := []api.OpenAIToolFunction{
+	tools := []api.ToolDefinition{
 		{
 			Name:        "test_tool",
 			Description: "A test tool",

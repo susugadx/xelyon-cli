@@ -331,7 +331,7 @@ func TestProvider_ChatWithTools_ToolCalls(t *testing.T) {
 func TestSetMCPTools(t *testing.T) {
 	p := New("test-key")
 
-	tools := []api.OpenAIToolFunction{
+	tools := []api.ToolDefinition{
 		{Name: "custom_tool", Description: "A custom tool"},
 	}
 	p.SetMCPTools(tools)

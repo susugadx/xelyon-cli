@@ -269,7 +269,7 @@ func TestGetResponsesToolDefinitions(t *testing.T) {
 
 // TestGetResponsesToolDefinitions_WithMCPTools は MCP ツール込みのテスト
 func TestGetResponsesToolDefinitions_WithMCPTools(t *testing.T) {
-	mcpTools := []api.OpenAIToolFunction{
+	mcpTools := []api.ToolDefinition{
 		{
 			Name:        "mcp_custom_tool",
 			Description: "A custom MCP tool",

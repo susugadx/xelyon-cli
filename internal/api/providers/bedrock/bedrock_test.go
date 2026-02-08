@@ -303,7 +303,7 @@ func TestBedrockRequest_WithTools(t *testing.T) {
 func TestSetMCPTools(t *testing.T) {
 	p := &Provider{}
 
-	tools := []api.OpenAIToolFunction{
+	tools := []api.ToolDefinition{
 		{Name: "custom_tool", Description: "A custom tool"},
 	}
 	p.SetMCPTools(tools)
@@ -526,8 +526,8 @@ func TestProvider_InterfaceCompliance(t *testing.T) {
 	// Provider interface
 	var _ api.Provider = p
 
-	// OpenAIMCPToolProvider interface
-	var _ api.OpenAIMCPToolProvider = p
+	// ToolMCPProvider interface
+	var _ api.ToolMCPProvider = p
 
 	// UsageReporter interface
 	var _ api.UsageReporter = p

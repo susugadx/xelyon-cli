@@ -36,8 +36,8 @@ const defaultClaudeURL = "https://api.anthropic.com/v1/messages"
 // Provider はClaude (Anthropic) APIのプロバイダー実装
 type Provider struct {
 	api.BaseProvider
-	mcpTools      []api.OpenAIToolFunction // MCP ツール定義（Tool Use用）
-	usageCallback api.UsageCallback        // トークン使用量コールバック
+	mcpTools      []api.ToolDefinition // MCP ツール定義（Tool Use用）
+	usageCallback api.UsageCallback    // トークン使用量コールバック
 }
 
 // New は新しいProviderを作成
@@ -492,7 +492,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 }
 
 // SetMCPTools は MCP ツール定義を設定する（Tool Use用）
-func (p *Provider) SetMCPTools(tools []api.OpenAIToolFunction) {
+func (p *Provider) SetMCPTools(tools []api.ToolDefinition) {
 	p.mcpTools = tools
 }
 

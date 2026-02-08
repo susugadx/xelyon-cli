@@ -15,7 +15,7 @@ func GetOpenAIToolDefinitions() []api.OpenAITool {
 	for _, def := range defs {
 		result = append(result, api.OpenAITool{
 			Type: "function",
-			Function: &api.OpenAIToolFunction{
+			Function: &api.ToolDefinition{
 				Name:        def.Name,
 				Description: def.Description,
 				Parameters:  def.Parameters,
@@ -27,7 +27,7 @@ func GetOpenAIToolDefinitions() []api.OpenAITool {
 
 // GetCombinedOpenAITools は組み込みツール + MCPツールを返す
 // 重複するツール名がある場合は最初に登録されたものを優先
-func GetCombinedOpenAITools(mcpTools []api.OpenAIToolFunction) []api.OpenAITool {
+func GetCombinedOpenAITools(mcpTools []api.ToolDefinition) []api.OpenAITool {
 	result := GetOpenAIToolDefinitions()
 	seen := make(map[string]bool)
 
@@ -56,7 +56,7 @@ func GetCombinedOpenAITools(mcpTools []api.OpenAIToolFunction) []api.OpenAITool 
 // GetResponsesToolDefinitions は Responses API 用のツール定義を返す
 // Responses API は Chat Completions と異なりフラットな形式
 // 重複するツール名がある場合は最初に登録されたものを優先
-func GetResponsesToolDefinitions(mcpTools []api.OpenAIToolFunction) []ResponsesTool {
+func GetResponsesToolDefinitions(mcpTools []api.ToolDefinition) []ResponsesTool {
 	defs := tools.DefaultRegistry.GetToolDefinitions()
 	result := make([]ResponsesTool, 0, len(defs)+len(mcpTools))
 	seen := make(map[string]bool)

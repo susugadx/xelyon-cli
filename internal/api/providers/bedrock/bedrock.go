@@ -32,8 +32,8 @@ const (
 type Provider struct {
 	client        *bedrockruntime.Client
 	region        string
-	mcpTools      []api.OpenAIToolFunction // MCP ツール定義
-	usageCallback api.UsageCallback        // トークン使用量コールバック
+	mcpTools      []api.ToolDefinition // MCP ツール定義
+	usageCallback api.UsageCallback    // トークン使用量コールバック
 }
 
 // New は新しい Bedrock Provider を作成
@@ -232,7 +232,7 @@ func (p *Provider) invokeStream(ctx context.Context, model string, reqBody inter
 }
 
 // SetMCPTools は MCP ツール定義を設定する
-func (p *Provider) SetMCPTools(tools []api.OpenAIToolFunction) {
+func (p *Provider) SetMCPTools(tools []api.ToolDefinition) {
 	p.mcpTools = tools
 }
 

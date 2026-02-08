@@ -23,9 +23,9 @@ const defaultOpenAIURL = "https://api.openai.com/v1/chat/completions"
 // Provider はOpenAI APIのプロバイダー実装
 type Provider struct {
 	api.BaseProvider
-	lastResponseID string                   // Responses API の最新レスポンスID（キャッシュ用）
-	mcpTools       []api.OpenAIToolFunction // MCP ツール定義（Function Calling用）
-	usageCallback  api.UsageCallback        // トークン使用量コールバック
+	lastResponseID string               // Responses API の最新レスポンスID（キャッシュ用）
+	mcpTools       []api.ToolDefinition // MCP ツール定義（Function Calling用）
+	usageCallback  api.UsageCallback    // トークン使用量コールバック
 }
 
 // New は新しいProviderを作成
@@ -87,7 +87,7 @@ func (p *Provider) ClearResponseID() {
 }
 
 // SetMCPTools は MCP ツール定義を設定する（Function Calling用）
-func (p *Provider) SetMCPTools(tools []api.OpenAIToolFunction) {
+func (p *Provider) SetMCPTools(tools []api.ToolDefinition) {
 	p.mcpTools = tools
 }
 
