@@ -269,13 +269,16 @@ func (a *Agent) chatWithImage(input string, image *api.ImageData) {
 		return
 	}
 
+	// 通常モード用の指示を追加（画像分析時もツールを使えるようにする）
+	inputWithPrompt := input + promptnormal.NormalModePrompt
+
 	// 画像情報をログ
 	green.Printf("🖼️  Sending image: %s (%s)\n", image.Path, api.FormatImageSize(image.Size))
 
 	// 履歴に追加（テキストのみ - 画像はセッションに保存しない）
 	a.History = append(a.History, api.Message{
 		Role:    "user",
-		Content: input,
+		Content: inputWithPrompt,
 	})
 
 	// セッションに保存（テキストのみ）
@@ -288,21 +291,58 @@ func (a *Agent) chatWithImage(input string, image *api.ImageData) {
 		a.Stats.UserMessages++
 	}
 
-	// 画像付きAPI呼び出し（設定からタイムアウト取得）
+	// API呼び出し（設定からタイムアウト取得）
 	cfg := config.GetGlobalConfig()
 	timeout := time.Duration(cfg.APIRetry.Timeout) * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
+	a.cancelFunc = cancel
 
-	response, err := a.CurrentProvider.ChatWithImage(ctx, a.SystemPrompt, a.History[:len(a.History)-1], input, image, a.CurrentModel)
-	if err != nil {
-		red.Printf("エラー: %v\n", err)
-		yellow.Println("API呼び出しに失敗しました。ネットワーク接続を確認してください。")
-		return
+	maxIterations := config.MaxToolIterations
+	var lastToolCall *tools.ToolCall
+	var sameCallCount int
+
+	for i := 0; i < maxIterations; i++ {
+		var response string
+		var err error
+
+		if i == 0 {
+			// 初回のみ画像付きで呼び出し
+			response, err = a.CurrentProvider.ChatWithImage(ctx, a.SystemPrompt, a.History[:len(a.History)-1], inputWithPrompt, image, a.CurrentModel)
+		} else {
+			// 2回目以降（ツール実行結果の送信など）は通常のツール呼び出し
+			response, err = a.CurrentProvider.ChatWithTools(ctx, a.SystemPrompt, a.History, a.CurrentModel)
+		}
+
+		if err != nil {
+			ui.StopGlobalSpinner()
+			red.Printf("Error: %v\n", err)
+			return
+		}
+
+		// ツール呼び出しをパース
+		toolCalls := tools.ParseToolCalls(response)
+
+		// ツール呼び出しなし = 通常の回答
+		if len(toolCalls) == 0 {
+			a.handleNormalResponse(response)
+			a.showTaskSummary()
+			return
+		}
+
+		// ツールを実行
+		for _, toolCall := range toolCalls {
+			// ループ検知
+			if a.shouldAbortToolLoopWithResponse(response, toolCall, lastToolCall, &sameCallCount) {
+				red.Println("Error: tool loop detected")
+				return
+			}
+			lastToolCall = toolCall
+
+			// ツール実行
+			a.executeToolCallWithResult(response, toolCall)
+		}
 	}
-
-	// 通常の回答処理
-	a.handleNormalResponse(response)
 }
 
 // printLastUsage はリクエスト完了時の usage を表示
