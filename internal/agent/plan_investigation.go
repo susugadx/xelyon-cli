@@ -18,7 +18,8 @@ import (
 // runInvestigationPhase は調査フェーズを実行
 // create_plan ツールが呼び出されるまでループし、作成された Plan を返す
 func (a *Agent) runInvestigationPhase(ctx context.Context) (*plan.Plan, error) {
-	maxIterations := config.MaxToolIterations
+	cfg := config.GetGlobalConfig()
+	maxIterations := cfg.General.ToolLoopLimit
 	var lastToolCall *tools.ToolCall
 	var sameCallCount int
 

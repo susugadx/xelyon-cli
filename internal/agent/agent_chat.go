@@ -120,12 +120,12 @@ func (a *Agent) runNormalMode(ctx context.Context, input string) error {
 	// 履歴に追加
 	a.History = append(a.History, api.Message{Role: "user", Content: normalModeInput})
 
-	maxIterations := config.MaxToolIterations
+	cfg := config.GetGlobalConfig()
+	maxIterations := cfg.General.ToolLoopLimit
 	var lastToolCall *tools.ToolCall
 	var sameCallCount int
 
 	// 自動リトライ設定
-	cfg := config.GetGlobalConfig()
 	autoRetryMax := cfg.PlanMode.AutoRetry
 	retryCount := 0
 
@@ -298,7 +298,7 @@ func (a *Agent) chatWithImage(input string, image *api.ImageData) {
 	defer cancel()
 	a.cancelFunc = cancel
 
-	maxIterations := config.MaxToolIterations
+	maxIterations := cfg.General.ToolLoopLimit
 	var lastToolCall *tools.ToolCall
 	var sameCallCount int
 

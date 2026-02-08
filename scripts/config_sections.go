@@ -48,6 +48,21 @@ var Sections = map[string]SectionInfo{
 			"provider_models": "structmap",
 		},
 	},
+	"general": {
+		Title: "一般設定",
+		Icon:  "⚙️",
+		Fields: map[string]string{
+			"language":       "表示言語（ja, en）",
+			"tool_loop_limit": "ツールループ最大回数",
+		},
+		FieldTypes: map[string]string{
+			"language":       "select",
+			"tool_loop_limit": "int",
+		},
+		SelectOpts: map[string][]string{
+			"language": {"ja", "en"},
+		},
+	},
 	"compression": {
 		Title: "会話履歴圧縮設定",
 		Icon:  "📦",

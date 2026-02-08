@@ -207,9 +207,10 @@ func (w *Worker) executeStep(ctx context.Context, step *plan.PlanStep, confirmLe
 	// 履歴構築
 	history := w.buildWorkerHistory(step, contextInfo)
 
-	// ツール実行ループ（最大50回）
+	// ツール実行ループ（最大80回）
 	var toolsExecuted []string
-	maxIterations := config.PlanMaxIterations
+	cfg := config.GetGlobalConfig()
+	maxIterations := cfg.General.ToolLoopLimit
 
 	for i := 0; i < maxIterations; i++ {
 		// タイムアウトチェック

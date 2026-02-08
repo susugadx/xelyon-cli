@@ -36,7 +36,8 @@ func DefaultConfig() *Config {
 		DefaultProvider: "deepseek",
 		DefaultModel:    "deepseek-chat",
 		General: GeneralConfig{
-			Language: "ja", // デフォルト: 日本語
+			Language:      "ja", // デフォルト: 日本語
+			ToolLoopLimit: 80,   // ツールループ最大回数
 		},
 		ProviderModels: map[string]ProviderModelConfig{
 			"deepseek": {

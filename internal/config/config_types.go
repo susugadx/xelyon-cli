@@ -37,7 +37,8 @@ type OutputConfig struct {
 
 // GeneralConfig は一般設定
 type GeneralConfig struct {
-	Language string `yaml:"language"` // 表示言語（ja, en）デフォルト: ja
+	Language      string `yaml:"language"`        // 表示言語（ja, en）デフォルト: ja
+	ToolLoopLimit int    `yaml:"tool_loop_limit"` // ツールループ最大回数（デフォルト: 80）
 }
 
 // CompressionConfig は会話履歴圧縮の設定

@@ -60,7 +60,8 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 	}
 
 	// ステップ内のツール実行ループ
-	maxStepIterations := config.PlanMaxIterations
+	cfg := config.GetGlobalConfig()
+	maxStepIterations := cfg.General.ToolLoopLimit
 	maxContinues := config.PlanMaxAutoContinues
 	continueCount := 0
 	var lastFailedResult string

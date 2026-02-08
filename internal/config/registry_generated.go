@@ -74,6 +74,8 @@ var FieldTypeMap = map[string]ConfigFieldType{
 	"default_model":                    FieldTypeString,
 	"default_provider":                 FieldTypeSelect,
 	"diff.context_lines":               FieldTypeInt,
+	"general.language":                 FieldTypeSelect,
+	"general.tool_loop_limit":          FieldTypeInt,
 	"git_stage.batch_confirm":          FieldTypeBool,
 	"loop_detection.threshold":         FieldTypeInt,
 	"lsp.enabled":                      FieldTypeBool,
@@ -116,6 +118,7 @@ var FieldTypeMap = map[string]ConfigFieldType{
 var SelectOptions = map[string][]string{
 	"bash.safety_level":       {"strict", "moderate", "permissive"},
 	"default_provider":        {"deepseek", "claude", "openai", "gemini", "groq", "ollama", "openrouter", "bedrock"},
+	"general.language":        {"ja", "en"},
 	"plan_mode.confirm_level": {"all", "dangerous", "none"},
 	"thinking.level":          {"low", "medium", "high", "xhigh"},
 }
@@ -145,6 +148,8 @@ var FieldDescriptions = map[string]string{
 	"default_model":                    "デフォルトで使用するモデル",
 	"default_provider":                 "デフォルトで使用するLLMプロバイダー",
 	"diff.context_lines":               "差分表示時のコンテキスト行数",
+	"general.language":                 "表示言語（ja, en）",
+	"general.tool_loop_limit":          "ツールループ最大回数",
 	"git_stage.batch_confirm":          "複数ファイルをまとめて確認",
 	"loop_detection.threshold":         "同じツール呼び出しの繰り返し回数でループと判定",
 	"lsp.enabled":                      "LSP連携の有効/無効",
