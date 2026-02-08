@@ -9,6 +9,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 func init() {
@@ -175,6 +176,9 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		result, err := p.chatWithFunctionCalling(ctx, systemPrompt, history, model)
 		if err != nil {
 			// Function Calling失敗時はテキストモードにフォールバック
+			// スピナーgoroutineの完全停止とターミナル状態のリセットを保証
+			ui.StopGlobalSpinner()
+			ui.ResetTerminalState()
 			fmt.Fprintf(os.Stderr, "Warning: Function Calling failed, falling back to text mode\n")
 			fmt.Fprintf(os.Stderr, "  Reason: %v\n", err)
 			if debug {
