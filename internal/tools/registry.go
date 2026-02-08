@@ -83,6 +83,14 @@ func (r *Registry) GetTool(name string) Tool {
 	return r.tools[name]
 }
 
+// HasTool は指定名のツールが登録されているかを返す（スレッドセーフ）
+func (r *Registry) HasTool(name string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	_, ok := r.tools[name]
+	return ok
+}
+
 // GetToolDefinitions は登録済み全ツールの定義を返す
 func (r *Registry) GetToolDefinitions() []ToolDefinition {
 	r.mu.RLock()

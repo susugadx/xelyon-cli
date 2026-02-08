@@ -24,6 +24,9 @@ var providerPrefixes = map[string]string{
 		"9. **If LSP errors remain, fix ALL of them before moving to the next file** - never leave errors behind\n" +
 		"10. **NEVER leave errors unfixed with excuses** like \"due to time constraints\" or \"for brevity\" - fix every error completely\n" +
 		"11. **After str_replace, if unused imports appear, remove them IMMEDIATELY** - do NOT proceed with unused import errors\n\n",
+	"groq": "## ⚠️ ABSOLUTE RULES (NEVER SKIP)\n" + commonRulesBlock +
+		"8. **Tool calls MUST be JSON format** - `{\"tool\":\"...\",\"args\":{...}}` - NEVER use XML like `<tool_name><param>value</param></tool_name>`\n" +
+		"9. **ALWAYS respond in the same language as the user's message** - if the user writes in Japanese, respond in Japanese\n\n",
 }
 
 // GetProviderPrefix はプロバイダー名に応じたプレフィックスを返す
