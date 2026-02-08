@@ -129,6 +129,8 @@ func (a *Agent) runNormalMode(ctx context.Context, input string) error {
 	autoRetryMax := cfg.PlanMode.AutoRetry
 	retryCount := 0
 
+	var completionVerified bool // 完了検証ガード（タスク内1回限り）
+
 	for i := 0; i < maxIterations; i++ {
 		// API呼び出し
 		response, err := a.CurrentProvider.ChatWithTools(
@@ -175,6 +177,24 @@ func (a *Agent) runNormalMode(ctx context.Context, input string) error {
 
 		// ツール呼び出しなし = 通常の回答
 		if len(toolCalls) == 0 {
+			// 完了検証: 変更ファイルにLSPエラーが残っていないかチェック
+			if !completionVerified {
+				needsContinue, feedback := a.verifyCompletionWithDiagnostics(response)
+				if needsContinue {
+					completionVerified = true
+					yellow.Println("⚠️  Completion verification: LSP errors found in modified files")
+					a.History = append(a.History, api.Message{
+						Role:             "assistant",
+						Content:          response,
+						ReasoningContent: a.getLastReasoningContent(),
+					})
+					a.History = append(a.History, api.Message{
+						Role:    "user",
+						Content: feedback,
+					})
+					continue
+				}
+			}
 			a.handleNormalResponse(response)
 			a.showTaskSummary()
 			return nil
@@ -306,6 +326,8 @@ func (a *Agent) chatWithImage(input string, image *api.ImageData) {
 	autoRetryMax := cfg.PlanMode.AutoRetry
 	retryCount := 0
 
+	var completionVerified bool // 完了検証ガード（タスク内1回限り）
+
 	for i := 0; i < maxIterations; i++ {
 		var response string
 		var err error
@@ -357,6 +379,24 @@ func (a *Agent) chatWithImage(input string, image *api.ImageData) {
 
 		// ツール呼び出しなし = 通常の回答
 		if len(toolCalls) == 0 {
+			// 完了検証: 変更ファイルにLSPエラーが残っていないかチェック
+			if !completionVerified {
+				needsContinue, feedback := a.verifyCompletionWithDiagnostics(response)
+				if needsContinue {
+					completionVerified = true
+					yellow.Println("⚠️  Completion verification: LSP errors found in modified files")
+					a.History = append(a.History, api.Message{
+						Role:             "assistant",
+						Content:          response,
+						ReasoningContent: a.getLastReasoningContent(),
+					})
+					a.History = append(a.History, api.Message{
+						Role:    "user",
+						Content: feedback,
+					})
+					continue
+				}
+			}
 			a.handleNormalResponse(response)
 			a.showTaskSummary()
 			return
