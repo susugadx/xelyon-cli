@@ -97,6 +97,12 @@ type CompactCapable interface {
 	SupportsCompact() bool
 }
 
+// ClaudeCompactionCapable は Claude Compaction API 対応プロバイダーのオプショナルインターフェース
+type ClaudeCompactionCapable interface {
+	// SupportsClaudeCompaction は Claude Compaction 対応を返す
+	SupportsClaudeCompaction() bool
+}
+
 // ModelLister はモデル一覧取得に対応するプロバイダーのオプショナルインターフェース
 // 現時点では OllamaProvider のみが実装
 type ModelLister interface {

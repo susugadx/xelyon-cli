@@ -31,6 +31,13 @@ func (a *Agent) maybeAutoCompress() bool {
 		}
 	}
 
+	// Claude Compaction が有効な場合は自動圧縮をスキップ
+	if compactionProvider, ok := a.CurrentProvider.(api.ClaudeCompactionCapable); ok {
+		if compactionProvider.SupportsClaudeCompaction() {
+			return false
+		}
+	}
+
 	percentage := a.GetTokenUsagePercentage()
 
 	// 閾値を取得（パーセントベース）

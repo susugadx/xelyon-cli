@@ -76,11 +76,13 @@ func DefaultConfig() *Config {
 			},
 		},
 		Compression: CompressionConfig{
-			AutoCompress:     true, // デフォルトON - コスト削減のため
-			ThresholdTokens:  0,    // 0 = 使用率ベース
-			ThresholdPercent: 80,   // 80%で自動圧縮
-			KeepRecent:       20,   // 履歴を多めに保持
-			PreferCompactAPI: true, // OpenAI Compact API 優先
+			AutoCompress:      true, // デフォルトON - コスト削減のため
+			ThresholdTokens:   0,    // 0 = 使用率ベース
+			ThresholdPercent:  80,   // 80%で自動圧縮
+			KeepRecent:        20,   // 履歴を多めに保持
+			PreferCompactAPI:  true, // OpenAI Compact API 優先
+			ClaudeCompaction:  true, // Claude Compaction 優先
+			CompactionTrigger: 150000,
 		},
 		Backup: BackupConfig{
 			MaxGenerations: 5,

@@ -43,11 +43,13 @@ type GeneralConfig struct {
 
 // CompressionConfig は会話履歴圧縮の設定
 type CompressionConfig struct {
-	AutoCompress     bool `yaml:"auto_compress"`      // 自動圧縮を有効化（デフォルト: true）
-	ThresholdTokens  int  `yaml:"threshold_tokens"`   // 自動圧縮のトークン閾値（0 = 使用率ベース）
-	ThresholdPercent int  `yaml:"threshold_percent"`  // 自動圧縮の使用率閾値（デフォルト: 80%）
-	KeepRecent       int  `yaml:"keep_recent"`        // 保持する最新メッセージ数
-	PreferCompactAPI bool `yaml:"prefer_compact_api"` // OpenAI Compact API を優先（デフォルト: true）
+	AutoCompress      bool `yaml:"auto_compress"`      // 自動圧縮を有効化（デフォルト: true）
+	ThresholdTokens   int  `yaml:"threshold_tokens"`   // 自動圧縮のトークン閾値（0 = 使用率ベース）
+	ThresholdPercent  int  `yaml:"threshold_percent"`  // 自動圧縮の使用率閾値（デフォルト: 80%）
+	KeepRecent        int  `yaml:"keep_recent"`        // 保持する最新メッセージ数
+	PreferCompactAPI  bool `yaml:"prefer_compact_api"` // OpenAI Compact API を優先（デフォルト: true）
+	ClaudeCompaction  bool `yaml:"claude_compaction"`  // Claude Compaction API 有効化
+	CompactionTrigger int  `yaml:"compaction_trigger"` // トリガー閾値（デフォルト 150000）
 }
 
 // BackupConfig はバックアップファイルの設定

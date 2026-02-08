@@ -36,14 +36,36 @@ const defaultClaudeURL = "https://api.anthropic.com/v1/messages"
 // Provider はClaude (Anthropic) APIのプロバイダー実装
 type Provider struct {
 	api.BaseProvider
-	mcpTools      []api.ToolDefinition // MCP ツール定義（Tool Use用）
-	usageCallback api.UsageCallback    // トークン使用量コールバック
+	mcpTools          []api.ToolDefinition // MCP ツール定義（Tool Use用）
+	usageCallback     api.UsageCallback    // トークン使用量コールバック
+	compactionEnabled bool                 // Compaction API を使用するか
+	compactionTrigger int                  // トリガー閾値（トークン数）
+}
+
+// ContextManagement は Compaction API の設定
+type ContextManagement struct {
+	Edits []ContextEdit `json:"edits"`
+}
+
+// ContextEdit は context_management.edits の要素
+type ContextEdit struct {
+	Type    string          `json:"type"` // "compact_20260112"
+	Trigger *CompactTrigger `json:"trigger,omitempty"`
+}
+
+// CompactTrigger は compaction のトリガー条件
+type CompactTrigger struct {
+	Type  string `json:"type"`  // "input_tokens"
+	Value int    `json:"value"` // トークン数（最低 50000）
 }
 
 // New は新しいProviderを作成
 func New(apiKey string) *Provider {
+	cfg := config.GetGlobalConfig()
 	return &Provider{
-		BaseProvider: api.NewBaseProvider("Claude", apiKey, defaultClaudeURL, "ANTHROPIC_API_URL"),
+		BaseProvider:      api.NewBaseProvider("Claude", apiKey, defaultClaudeURL, "ANTHROPIC_API_URL"),
+		compactionEnabled: cfg.Compression.ClaudeCompaction,
+		compactionTrigger: cfg.Compression.CompactionTrigger,
 	}
 }
 
@@ -57,6 +79,16 @@ func (p *Provider) IsFunctionCallingEnabled() bool {
 	return true
 }
 
+// SupportsClaudeCompaction は Claude Compaction 対応を返す
+func (p *Provider) SupportsClaudeCompaction() bool {
+	cfg := config.GetGlobalConfig()
+	if !cfg.Compression.ClaudeCompaction {
+		return false
+	}
+	model := api.GetDefaultModel("", "claude", "claude-sonnet-4-20250514")
+	return isCompactionSupported(model)
+}
+
 // ThinkingConfig は Extended Thinking の設定
 type ThinkingConfig struct {
 	Type         string `json:"type"`          // "enabled"
@@ -67,11 +99,12 @@ type Request struct {
 	Model    string             `json:"model"`
 	Messages []AnthropicMessage `json:"messages"`
 	// System can be either string (legacy) or []api.SystemBlock (prompt caching).
-	System    interface{}     `json:"system,omitempty"`
-	MaxTokens int             `json:"max_tokens"`
-	Stream    bool            `json:"stream"`
-	Thinking  *ThinkingConfig `json:"thinking,omitempty"`
-	Tools     []ClaudeTool    `json:"tools,omitempty"` // Tool Use用
+	System            interface{}        `json:"system,omitempty"`
+	MaxTokens         int                `json:"max_tokens"`
+	Stream            bool               `json:"stream"`
+	Thinking          *ThinkingConfig    `json:"thinking,omitempty"`
+	Tools             []ClaudeTool       `json:"tools,omitempty"`              // Tool Use用
+	ContextManagement *ContextManagement `json:"context_management,omitempty"` // NEW
 }
 
 // LevelToBudgetTokens は api.LevelToBudgetTokens のエイリアス（後方互換）
@@ -154,11 +187,12 @@ type MultimodalRequest struct {
 	Model    string        `json:"model"`
 	Messages []interface{} `json:"messages"` // Message or MultimodalMessage
 	// System can be either string (legacy) or []api.SystemBlock (prompt caching).
-	System    interface{}     `json:"system,omitempty"`
-	MaxTokens int             `json:"max_tokens"`
-	Stream    bool            `json:"stream"`
-	Thinking  *ThinkingConfig `json:"thinking,omitempty"`
-	Tools     []ClaudeTool    `json:"tools,omitempty"` // Tool Use用
+	System            interface{}        `json:"system,omitempty"`
+	MaxTokens         int                `json:"max_tokens"`
+	Stream            bool               `json:"stream"`
+	Thinking          *ThinkingConfig    `json:"thinking,omitempty"`
+	Tools             []ClaudeTool       `json:"tools,omitempty"`              // Tool Use用
+	ContextManagement *ContextManagement `json:"context_management,omitempty"` // NEW
 }
 
 // Response は通常レスポンス
@@ -200,8 +234,16 @@ func (p *Provider) executeRequest(ctx context.Context, reqBody interface{}, with
 	req.Header.Set("anthropic-version", version)
 
 	// Anthropic Beta
+	betaHeaders := make([]string, 0)
 	if len(pCfg.AnthropicBeta) > 0 {
-		req.Header.Set("anthropic-beta", strings.Join(pCfg.AnthropicBeta, ","))
+		betaHeaders = append(betaHeaders, pCfg.AnthropicBeta...)
+	}
+	// Compaction が有効な場合は beta ヘッダーを追加
+	if p.compactionEnabled {
+		betaHeaders = append(betaHeaders, "compact-2026-01-12")
+	}
+	if len(betaHeaders) > 0 {
+		req.Header.Set("anthropic-beta", strings.Join(betaHeaders, ","))
 	}
 
 	spinner := api.StartThinkingSpinner(withImage, "")
@@ -240,6 +282,12 @@ func (p *Provider) processResponse(ctx context.Context, result *requestResult) (
 	return p.handleNonStreamingResponse(result.Response, result.Spinner)
 }
 
+// isCompactionSupported は Compaction API 対応モデルか判定
+// 現時点では Opus 4.6 のみ
+func isCompactionSupported(model string) bool {
+	return strings.Contains(model, "opus-4-6") || strings.Contains(model, "opus-4-5")
+}
+
 // ChatWithTools は Provider interface の実装（context対応）
 func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
 	// モデル名を設定（config優先、フォールバックはclaude-sonnet-4-20250514）
@@ -256,6 +304,25 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		System:    api.BuildSystemField(systemPrompt),
 		MaxTokens: api.GetMaxOutputTokens("claude", model),
 		Stream:    true,
+	}
+
+	// Compaction API（Opus 4.6 のみ）
+	if p.compactionEnabled && isCompactionSupported(model) {
+		trigger := p.compactionTrigger
+		if trigger == 0 {
+			trigger = 150000
+		}
+		reqBody.ContextManagement = &ContextManagement{
+			Edits: []ContextEdit{
+				{
+					Type: "compact_20260112",
+					Trigger: &CompactTrigger{
+						Type:  "input_tokens",
+						Value: trigger,
+					},
+				},
+			},
+		}
 	}
 
 	// Extended Thinking 適用
@@ -285,6 +352,10 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 	toolUses := make(map[int]*toolUseAccumulator)
 	var toolCallsOutput strings.Builder
 
+	// Compaction の蓄積用
+	compactionBlocks := make(map[int]*strings.Builder)
+	var compactionOutput strings.Builder
+
 	// usage 情報を追跡
 	var lastUsage *api.Usage
 
@@ -305,11 +376,16 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 			return "", true, nil
 
 		case "content_block_start":
-			// tool_use ブロックの開始
-			if event.ContentBlock != nil && event.ContentBlock.Type == "tool_use" {
-				toolUses[event.Index] = &toolUseAccumulator{
-					ID:   event.ContentBlock.ID,
-					Name: event.ContentBlock.Name,
+			if event.ContentBlock != nil {
+				switch event.ContentBlock.Type {
+				case "tool_use":
+					toolUses[event.Index] = &toolUseAccumulator{
+						ID:   event.ContentBlock.ID,
+						Name: event.ContentBlock.Name,
+					}
+				case "compaction":
+					// compaction ブロックの開始を記録
+					compactionBlocks[event.Index] = &strings.Builder{}
 				}
 			}
 			return "", false, nil
@@ -320,6 +396,11 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 			}
 			// テキストデルタ
 			if event.Delta.Type == "text_delta" {
+				// compaction ブロックの場合は蓄積（表示しない）
+				if acc, ok := compactionBlocks[event.Index]; ok {
+					acc.WriteString(event.Delta.Text)
+					return "", false, nil
+				}
 				return event.Delta.Text, false, nil
 			}
 			// Tool Use の input を蓄積
@@ -331,6 +412,11 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 			return "", false, nil
 
 		case "content_block_stop":
+			// compaction ブロックの完了
+			if acc, ok := compactionBlocks[event.Index]; ok {
+				compactionOutput.WriteString(acc.String())
+				delete(compactionBlocks, event.Index)
+			}
 			// tool_use ブロックの完了 - この時点で変換
 			if acc := toolUses[event.Index]; acc != nil {
 				var input map[string]interface{}
@@ -366,6 +452,11 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 	// usage コールバックを呼び出し
 	if lastUsage != nil && p.usageCallback != nil {
 		p.usageCallback(*lastUsage)
+	}
+
+	// compaction が発生した場合、レスポンスの先頭にマーカーを付加
+	if compactionOutput.Len() > 0 {
+		content = "[COMPACTION]\n" + compactionOutput.String() + "\n[/COMPACTION]\n" + content
 	}
 
 	// Tool Use がある場合はそれを追加して返す

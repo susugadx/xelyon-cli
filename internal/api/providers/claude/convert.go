@@ -2,6 +2,7 @@ package claude
 
 import (
 	"encoding/json"
+	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 )
@@ -15,7 +16,7 @@ type AnthropicContentBlock struct {
 	Name      string         `json:"name,omitempty"`        // type="tool_use" 用
 	Input     map[string]any `json:"input,omitempty"`       // type="tool_use" 用
 	ToolUseID string         `json:"tool_use_id,omitempty"` // type="tool_result" 用
-	Content   string         `json:"content,omitempty"`     // type="tool_result" 用
+	Content   string         `json:"content,omitempty"`     // type="tool_result" / "compaction" 用
 }
 
 // AnthropicMessage は Anthropic Messages API 形式のメッセージ
@@ -96,14 +97,39 @@ func ConvertToAnthropicMessages(history []api.Message) []AnthropicMessage {
 
 		default:
 			// 通常の user/assistant メッセージ
-			converted = AnthropicMessage{
-				Role: msg.Role,
-				Content: []AnthropicContentBlock{
-					{
+			// assistant メッセージに compaction が含まれている場合、構造化して変換
+			if msg.Role == "assistant" && strings.Contains(msg.Content, "[COMPACTION]") {
+				compactionSummary, textContent := extractCompaction(msg.Content)
+				var blocks []AnthropicContentBlock
+
+				if compactionSummary != "" {
+					blocks = append(blocks, AnthropicContentBlock{
+						Type:    "compaction",
+						Content: compactionSummary,
+					})
+				}
+
+				if textContent != "" {
+					blocks = append(blocks, AnthropicContentBlock{
 						Type: "text",
-						Text: msg.Content,
+						Text: textContent,
+					})
+				}
+
+				converted = AnthropicMessage{
+					Role:    "assistant",
+					Content: blocks,
+				}
+			} else {
+				converted = AnthropicMessage{
+					Role: msg.Role,
+					Content: []AnthropicContentBlock{
+						{
+							Type: "text",
+							Text: msg.Content,
+						},
 					},
-				},
+				}
 			}
 		}
 
@@ -116,4 +142,25 @@ func ConvertToAnthropicMessages(history []api.Message) []AnthropicMessage {
 	}
 
 	return result
+}
+
+// extractCompaction は [COMPACTION] マーカーからサマリーと残りのテキストを抽出する
+func extractCompaction(content string) (string, string) {
+	const startMarker = "[COMPACTION]"
+	const endMarker = "[/COMPACTION]"
+
+	startIdx := strings.Index(content, startMarker)
+	if startIdx == -1 {
+		return "", content
+	}
+
+	endIdx := strings.Index(content, endMarker)
+	if endIdx == -1 {
+		return "", content
+	}
+
+	compactionSummary := strings.TrimSpace(content[startIdx+len(startMarker) : endIdx])
+	textContent := strings.TrimSpace(content[:startIdx] + content[endIdx+len(endMarker):])
+
+	return compactionSummary, textContent
 }

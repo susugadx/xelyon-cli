@@ -92,6 +92,19 @@ func (a *Agent) getLastReasoningContent() string {
 
 // handleNormalResponse は通常の回答（ツール呼び出しなし）を処理
 func (a *Agent) handleNormalResponse(response string) {
+	// Compaction が含まれている場合の処理
+	displayResponse := response
+	if strings.Contains(response, "[COMPACTION]") {
+		startIdx := strings.Index(response, "[COMPACTION]")
+		endIdx := strings.Index(response, "[/COMPACTION]")
+		if startIdx != -1 && endIdx != -1 && endIdx > startIdx {
+			// 通知を表示
+			cyan.Println("📦 Context compacted by Claude")
+			// 表示用からは削除
+			displayResponse = strings.TrimSpace(response[:startIdx] + response[endIdx+len("[/COMPACTION]"):])
+		}
+	}
+
 	a.History = append(a.History, api.Message{
 		Role:             "assistant",
 		Content:          response,
@@ -104,14 +117,14 @@ func (a *Agent) handleNormalResponse(response string) {
 	}
 
 	// 最後の出力を記録（最大保存数: config.MaxLastOutputs）
-	a.lastOutputs = append(a.lastOutputs, response)
+	a.lastOutputs = append(a.lastOutputs, displayResponse)
 	if len(a.lastOutputs) > config.MaxLastOutputs {
 		a.lastOutputs = a.lastOutputs[1:]
 	}
 
 	// セッションに保存
 	if a.session != nil {
-		a.session.AddMessage("assistant", response, a.CurrentModel)
+		a.session.AddMessage("assistant", displayResponse, a.CurrentModel)
 		if a.storage != nil {
 			if err := a.storage.Save(a.session); err != nil {
 				// セッション保存失敗を警告（データ損失の可能性を通知）

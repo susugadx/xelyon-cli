@@ -61,6 +61,8 @@ compression:
     keep_recent: 20
     # プロバイダーのCompact APIを優先使用
     prefer_compact_api: true
+    claude_compaction: true
+    compaction_trigger: 150000
 
 # ============================================================
 # バックアップ設定
