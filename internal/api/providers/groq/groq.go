@@ -76,8 +76,8 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	}
 	messages = append(messages, history...)
 
-	// モデル名を設定（config優先、フォールバックはllama-3.3-70b-versatile）
-	model = api.GetDefaultModel(model, "groq", "llama-3.3-70b-versatile")
+	// モデル名を設定（config優先、フォールバックはkimi-k2-instruct）
+	model = api.GetDefaultModel(model, "groq", "moonshotai/kimi-k2-instruct")
 
 	reqBody := api.ChatRequest{
 		Model:         model,
