@@ -13,7 +13,6 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	promptnormal "github.com/susugadx/xelyon-cli/internal/prompt/normal"
-	"github.com/susugadx/xelyon-cli/internal/skills"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -34,8 +33,6 @@ func (a *Agent) chat(input string) {
 
 	// GitHub MCP ヒントを追加（GitHub関連リクエストの場合）
 	input = a.AddGitHubHint(input)
-	// スキル検出・ロード
-	a.loadDetectedSkills(input)
 
 	// セッションに保存
 	if a.session != nil {
@@ -493,26 +490,5 @@ func (a *Agent) printLastUsage() {
 			FormatNumber(usage.OutputTokens),
 			FormatNumber(total))
 		dim.Printf("(~$%.4f)\n", cost)
-	}
-}
-
-// loadDetectedSkills は入力からスキルを検出してシステムプロンプトに追加
-func (a *Agent) loadDetectedSkills(input string) {
-	detected := skills.DetectSkills(input)
-	if len(detected) == 0 {
-		return
-	}
-
-	var skillContents []string
-	for _, name := range detected {
-		content, err := skills.LoadSkill(name)
-		if err == nil {
-			skillContents = append(skillContents, content)
-			green.Printf("📚 Skill loaded: %s\n", name)
-		}
-	}
-
-	if len(skillContents) > 0 {
-		a.SystemPrompt += "\n\n## Loaded Skills\n" + strings.Join(skillContents, "\n\n")
 	}
 }

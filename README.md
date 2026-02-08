@@ -97,10 +97,6 @@ plan_mode:
 Tree-sitterによる高精度なコード構造解析。
 Go, TypeScript, Python, Rust, Java, C/C++, Ruby, Kotlin, Swift, C#, Scala, PHP, Elixir, Lua, CSS/SCSS, HTML, Vue, Svelte, YAML, TOML, SQL, Bash, Markdown, Dockerfile等に対応。
 
-### 📚 Skills（自動知識ロード）
-タスクに応じて関連知識を自動ロード。CI、Git、Docker等の操作をスムーズに。
-カスタムスキルで独自の知識も追加可能。
-
 ### 🔌 LSP連携（IDE並みのコード理解）
 Language Server Protocol (LSP) を活用してIDE並みのコード理解を実現。
 - **参照検索**: シンボルのすべての参照箇所を検索
@@ -256,7 +252,6 @@ xelyon --auto-approve
 | [MCP連携](docs/mcp.md) | 外部ツール追加 |
 | [LSP連携](docs/lsp.md) | 言語サーバー連携（23言語対応） |
 | [使い方詳細](docs/usage.md) | 複数行入力、画像入力、レビュー機能など |
-| [Skills](docs/skills.md) | 組み込み・カスタムスキル |
 
 ## 開発に参加する
 
