@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
@@ -30,10 +31,12 @@ const (
 
 // Provider は AWS Bedrock (Anthropic Claude) のプロバイダー実装
 type Provider struct {
-	client        *bedrockruntime.Client
-	region        string
-	mcpTools      []api.ToolDefinition // MCP ツール定義
-	usageCallback api.UsageCallback    // トークン使用量コールバック
+	client            *bedrockruntime.Client
+	region            string
+	mcpTools          []api.ToolDefinition // MCP ツール定義
+	usageCallback     api.UsageCallback
+	compactionEnabled bool
+	compactionTrigger int
 }
 
 // New は新しい Bedrock Provider を作成
@@ -55,10 +58,25 @@ func New() (*Provider, error) {
 
 	client := bedrockruntime.NewFromConfig(cfg)
 
+	globalCfg := config.GetGlobalConfig()
+
 	return &Provider{
-		client: client,
-		region: region,
+		client:            client,
+		region:            region,
+		compactionEnabled: globalCfg.Compression.ClaudeCompaction,
+		compactionTrigger: globalCfg.Compression.CompactionTrigger,
 	}, nil
+}
+
+// isBedrockCompactionSupported はモデルが Compaction に対応しているか判定
+func isBedrockCompactionSupported(model string) bool {
+	return strings.Contains(model, "opus-4-6") || strings.Contains(model, "opus-4-5")
+}
+
+// SupportsClaudeCompaction は Claude Compaction 対応状況を返す
+func (p *Provider) SupportsClaudeCompaction() bool {
+	model := api.GetDefaultModel("", "bedrock", defaultModel)
+	return p.compactionEnabled && isBedrockCompactionSupported(model)
 }
 
 // Name はプロバイダー名を返す
@@ -79,24 +97,26 @@ func (p *Provider) IsFunctionCallingEnabled() bool {
 // BedrockRequest は Bedrock InvokeModel 用リクエスト
 // Claude API とは異なり anthropic_version をボディに含み、model/stream フィールドは不要
 type BedrockRequest struct {
-	AnthropicVersion string                    `json:"anthropic_version"`
-	AnthropicBeta    []string                  `json:"anthropic_beta,omitempty"`
-	MaxTokens        int                       `json:"max_tokens"`
-	System           interface{}               `json:"system,omitempty"` // can be string or []api.SystemBlock
-	Messages         []claude.AnthropicMessage `json:"messages"`
-	Thinking         *claude.ThinkingConfig    `json:"thinking,omitempty"`
-	Tools            []claude.ClaudeTool       `json:"tools,omitempty"`
+	AnthropicVersion  string                    `json:"anthropic_version"`
+	AnthropicBeta     []string                  `json:"anthropic_beta,omitempty"`
+	MaxTokens         int                       `json:"max_tokens"`
+	System            interface{}               `json:"system,omitempty"` // can be string or []api.SystemBlock
+	Messages          []claude.AnthropicMessage `json:"messages"`
+	Thinking          *claude.ThinkingConfig    `json:"thinking,omitempty"`
+	Tools             []claude.ClaudeTool       `json:"tools,omitempty"`
+	ContextManagement *claude.ContextManagement `json:"context_management,omitempty"`
 }
 
 // BedrockMultimodalRequest はマルチモーダル（画像付き）リクエスト
 type BedrockMultimodalRequest struct {
-	AnthropicVersion string                 `json:"anthropic_version"`
-	AnthropicBeta    []string               `json:"anthropic_beta,omitempty"`
-	MaxTokens        int                    `json:"max_tokens"`
-	System           interface{}            `json:"system,omitempty"`
-	Messages         []interface{}          `json:"messages"`
-	Thinking         *claude.ThinkingConfig `json:"thinking,omitempty"`
-	Tools            []claude.ClaudeTool    `json:"tools,omitempty"`
+	AnthropicVersion  string                    `json:"anthropic_version"`
+	AnthropicBeta     []string                  `json:"anthropic_beta,omitempty"`
+	MaxTokens         int                       `json:"max_tokens"`
+	System            interface{}               `json:"system,omitempty"`
+	Messages          []interface{}             `json:"messages"`
+	Thinking          *claude.ThinkingConfig    `json:"thinking,omitempty"`
+	Tools             []claude.ClaudeTool       `json:"tools,omitempty"`
+	ContextManagement *claude.ContextManagement `json:"context_management,omitempty"`
 }
 
 // ChatWithTools は Provider interface の実装
@@ -134,6 +154,32 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	// Tool Use: ツール定義を追加
 	if p.IsFunctionCallingEnabled() {
 		reqBody.Tools = claude.GetCombinedClaudeTools(p.mcpTools)
+	}
+
+	// Compaction 適用
+	if p.compactionEnabled && isBedrockCompactionSupported(model) {
+		reqBody.ContextManagement = &claude.ContextManagement{
+			Edits: []claude.ContextEdit{
+				{
+					Type: "compact_20260112",
+					Trigger: &claude.CompactTrigger{
+						Type:  "input_tokens",
+						Value: p.compactionTrigger,
+					},
+				},
+			},
+		}
+		// beta 指定のマージ
+		found := false
+		for _, b := range reqBody.AnthropicBeta {
+			if b == "compact-2026-01-12" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			reqBody.AnthropicBeta = append(reqBody.AnthropicBeta, "compact-2026-01-12")
+		}
 	}
 
 	return p.invokeStream(ctx, model, reqBody)
@@ -204,6 +250,32 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	// Tool Use: ツール定義を追加
 	if p.IsFunctionCallingEnabled() {
 		reqBody.Tools = claude.GetCombinedClaudeTools(p.mcpTools)
+	}
+
+	// Compaction 適用
+	if p.compactionEnabled && isBedrockCompactionSupported(model) {
+		reqBody.ContextManagement = &claude.ContextManagement{
+			Edits: []claude.ContextEdit{
+				{
+					Type: "compact_20260112",
+					Trigger: &claude.CompactTrigger{
+						Type:  "input_tokens",
+						Value: p.compactionTrigger,
+					},
+				},
+			},
+		}
+		// beta 指定のマージ
+		found := false
+		for _, b := range reqBody.AnthropicBeta {
+			if b == "compact-2026-01-12" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			reqBody.AnthropicBeta = append(reqBody.AnthropicBeta, "compact-2026-01-12")
+		}
 	}
 
 	return p.invokeStream(ctx, model, reqBody)

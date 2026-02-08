@@ -25,8 +25,10 @@ type toolUseAccumulator struct {
 // handleEventStream は AWS SDK イベントストリームを処理する
 func (p *Provider) handleEventStream(ctx context.Context, output *bedrockruntime.InvokeModelWithResponseStreamOutput, spinner *ui.Spinner) (string, error) {
 	toolUses := make(map[int]*toolUseAccumulator)
+	compactionBlocks := make(map[int]*strings.Builder)
 	var toolCallsOutput strings.Builder
 	var fullResponse strings.Builder
+	var compactionOutput strings.Builder
 	var lastUsage *api.Usage
 	firstChunk := true
 
@@ -40,6 +42,9 @@ func (p *Provider) handleEventStream(ctx context.Context, output *bedrockruntime
 			spinner.Stop()
 			// 部分的な結果を返す
 			content := fullResponse.String()
+			if compactionOutput.Len() > 0 {
+				content = "[COMPACTION]\n" + compactionOutput.String() + "\n[/COMPACTION]\n" + content
+			}
 			if toolCallsOutput.Len() > 0 {
 				if content != "" {
 					return content + toolCallsOutput.String(), ctx.Err()
@@ -57,6 +62,9 @@ func (p *Provider) handleEventStream(ctx context.Context, output *bedrockruntime
 				}
 
 				content := fullResponse.String()
+				if compactionOutput.Len() > 0 {
+					content = "[COMPACTION]\n" + compactionOutput.String() + "\n[/COMPACTION]\n" + content
+				}
 
 				// usage コールバックを呼び出し
 				if lastUsage != nil && p.usageCallback != nil {
@@ -75,7 +83,7 @@ func (p *Provider) handleEventStream(ctx context.Context, output *bedrockruntime
 
 			switch v := event.(type) {
 			case *types.ResponseStreamMemberChunk:
-				text, done := p.processChunk(v.Value.Bytes, toolUses, &toolCallsOutput, &lastUsage)
+				text, done := p.processChunk(v.Value.Bytes, toolUses, &toolCallsOutput, &lastUsage, compactionBlocks, &compactionOutput)
 				if text != "" {
 					if firstChunk {
 						spinner.Stop()
@@ -89,6 +97,9 @@ func (p *Provider) handleEventStream(ctx context.Context, output *bedrockruntime
 					spinner.Stop()
 
 					content := fullResponse.String()
+					if compactionOutput.Len() > 0 {
+						content = "[COMPACTION]\n" + compactionOutput.String() + "\n[/COMPACTION]\n" + content
+					}
 
 					// usage コールバックを呼び出し
 					if lastUsage != nil && p.usageCallback != nil {
@@ -110,7 +121,7 @@ func (p *Provider) handleEventStream(ctx context.Context, output *bedrockruntime
 
 // processChunk は Bedrock チャンクの JSON ペイロードを処理する
 // イベント JSON は Claude SSE の data フィールドと同じ形式
-func (p *Provider) processChunk(data []byte, toolUses map[int]*toolUseAccumulator, toolCallsOutput *strings.Builder, lastUsage **api.Usage) (text string, done bool) {
+func (p *Provider) processChunk(data []byte, toolUses map[int]*toolUseAccumulator, toolCallsOutput *strings.Builder, lastUsage **api.Usage, compactionBlocks map[int]*strings.Builder, compactionOutput *strings.Builder) (text string, done bool) {
 	var event claude.StreamEvent
 	if err := json.Unmarshal(data, &event); err != nil {
 		return "", false
@@ -139,17 +150,28 @@ func (p *Provider) processChunk(data []byte, toolUses map[int]*toolUseAccumulato
 		return "", true
 
 	case "content_block_start":
-		// tool_use ブロックの開始
-		if event.ContentBlock != nil && event.ContentBlock.Type == "tool_use" {
+		if event.ContentBlock == nil {
+			return "", false
+		}
+		// content_block のタイプに応じて処理を分岐
+		switch event.ContentBlock.Type {
+		case "tool_use":
 			toolUses[event.Index] = &toolUseAccumulator{
 				ID:   event.ContentBlock.ID,
 				Name: event.ContentBlock.Name,
 			}
+		case "compaction":
+			compactionBlocks[event.Index] = &strings.Builder{}
 		}
 		return "", false
 
 	case "content_block_delta":
 		if event.Delta == nil {
+			return "", false
+		}
+		// compaction ブロックなら蓄積して非表示
+		if acc, ok := compactionBlocks[event.Index]; ok {
+			acc.WriteString(event.Delta.Text)
 			return "", false
 		}
 		// テキストデルタ
@@ -165,6 +187,11 @@ func (p *Provider) processChunk(data []byte, toolUses map[int]*toolUseAccumulato
 		return "", false
 
 	case "content_block_stop":
+		// compaction ブロック完了処理
+		if acc, ok := compactionBlocks[event.Index]; ok {
+			compactionOutput.WriteString(acc.String())
+			delete(compactionBlocks, event.Index)
+		}
 		// tool_use ブロックの完了 - この時点で変換
 		if acc := toolUses[event.Index]; acc != nil {
 			var input map[string]interface{}
