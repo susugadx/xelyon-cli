@@ -191,7 +191,7 @@ func NewAgent(model string, provider api.Provider) *Agent {
 	}
 
 	// プロバイダー別プレフィックスを冒頭に注入
-	systemPrompt = BuildProviderSystemPrompt(systemPrompt, provider.Name())
+	systemPrompt = prompt.BuildProviderSystemPrompt(systemPrompt, provider.Name())
 
 	// ToolCache 初期化
 	toolCache := NewToolCache()

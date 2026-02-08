@@ -239,6 +239,42 @@ func TestParseToolCalls_InMarkdownCodeBlock(t *testing.T) {
 	}
 }
 
+func TestParseToolCalls_CodeBlockWithRealToolCall(t *testing.T) {
+	// Geminiパターン: コードブロック内のJSONは無視し、実際のツール呼び出しのみ抽出
+	input := "I'll run the command:\n```json\n{\"tool\": \"bash\", \"args\": {\"command\": \"make ci-check\"}}\n```\n\n{\"tool\": \"bash\", \"args\": {\"command\": \"make ci-check\"}}"
+
+	result := ParseToolCalls(input)
+	if len(result) != 1 {
+		t.Errorf("ParseToolCalls() returned %d calls, want 1 (only the real one)", len(result))
+	}
+	if len(result) > 0 && result[0].Tool != "bash" {
+		t.Errorf("Tool = %q, want 'bash'", result[0].Tool)
+	}
+}
+
+func TestParseToolCalls_OnlyCodeBlock(t *testing.T) {
+	// ツール呼び出しがコードブロック内にのみある場合 → 0件
+	input := "Here's what I would run:\n```\n{\"tool\": \"bash\", \"args\": {\"command\": \"go test ./...\"}}\n```\nTask completed!"
+
+	result := ParseToolCalls(input)
+	if len(result) != 0 {
+		t.Errorf("ParseToolCalls() returned %d calls, want 0 (all in code block)", len(result))
+	}
+}
+
+func TestParseToolCalls_MultipleCodeBlocks(t *testing.T) {
+	// 複数のコードブロックがあり、間に実際のツール呼び出しがある
+	input := "Example 1:\n```json\n{\"tool\": \"read_file\", \"args\": {\"path\": \"a.go\"}}\n```\n\n{\"tool\": \"bash\", \"args\": {\"command\": \"ls\"}}\n\nExample 2:\n```\n{\"tool\": \"write_file\", \"args\": {\"path\": \"b.go\", \"content\": \"test\"}}\n```"
+
+	result := ParseToolCalls(input)
+	if len(result) != 1 {
+		t.Errorf("ParseToolCalls() returned %d calls, want 1", len(result))
+	}
+	if len(result) > 0 && result[0].Tool != "bash" {
+		t.Errorf("Tool = %q, want 'bash'", result[0].Tool)
+	}
+}
+
 func TestParseToolCall_SingleCall(t *testing.T) {
 	input := `{"tool": "bash", "args": {"command": "ls -la"}}`
 	result := ParseToolCall(input)

@@ -1,4 +1,4 @@
-package agent
+package prompt
 
 import (
 	"strings"
@@ -6,7 +6,7 @@ import (
 )
 
 func TestGetProviderPrefix_Gemini(t *testing.T) {
-	prefix := getProviderPrefix("gemini")
+	prefix := GetProviderPrefix("gemini")
 	if prefix == "" {
 		t.Fatal("expected non-empty prefix for gemini")
 	}
@@ -16,22 +16,21 @@ func TestGetProviderPrefix_Gemini(t *testing.T) {
 }
 
 func TestGetProviderPrefix_GeminiCaseInsensitive(t *testing.T) {
-	// providerPrefixes はキーが小文字なので、getProviderPrefix 内で ToLower している
-	prefix := getProviderPrefix("Gemini")
+	prefix := GetProviderPrefix("Gemini")
 	if prefix == "" {
 		t.Fatal("expected non-empty prefix for Gemini (uppercase)")
 	}
 }
 
 func TestGetProviderPrefix_Claude(t *testing.T) {
-	prefix := getProviderPrefix("claude")
+	prefix := GetProviderPrefix("claude")
 	if prefix != "" {
 		t.Errorf("expected empty prefix for claude, got: %q", prefix)
 	}
 }
 
 func TestGetProviderPrefix_Unknown(t *testing.T) {
-	prefix := getProviderPrefix("unknown-provider")
+	prefix := GetProviderPrefix("unknown-provider")
 	if prefix != "" {
 		t.Errorf("expected empty prefix for unknown provider, got: %q", prefix)
 	}
@@ -49,6 +48,12 @@ func TestBuildProviderSystemPrompt_Gemini(t *testing.T) {
 	}
 	if !strings.Contains(result, "NEVER guess file contents") {
 		t.Error("gemini result should contain the critical rule")
+	}
+	if !strings.Contains(result, "WAIT for the result") {
+		t.Error("gemini result should contain verification wait rule")
+	}
+	if !strings.Contains(result, "NOT inside markdown code blocks") {
+		t.Error("gemini result should contain code block rule")
 	}
 }
 

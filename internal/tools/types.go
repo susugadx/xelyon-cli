@@ -2,7 +2,9 @@ package tools
 
 import (
 	"fmt"
+	"strings"
 	"time"
+	"unicode"
 )
 
 // ToolCall はAIからのツール呼び出し
@@ -14,12 +16,13 @@ type ToolCall struct {
 }
 
 // NormalizeArgs はRawArgsをArgsに変換（数値→文字列）
+// 末尾の制御文字・ゼロ幅文字をトリミングし、path引数のサニタイズも実施
 func (tc *ToolCall) NormalizeArgs() {
 	tc.Args = make(map[string]string)
 	for k, v := range tc.RawArgs {
 		switch val := v.(type) {
 		case string:
-			tc.Args[k] = val
+			tc.Args[k] = sanitizeArgValue(k, val)
 		case float64:
 			// JSONの数値はfloat64としてパースされる
 			if val == float64(int64(val)) {
@@ -35,6 +38,55 @@ func (tc *ToolCall) NormalizeArgs() {
 			tc.Args[k] = fmt.Sprintf("%v", v)
 		}
 	}
+}
+
+// sanitizeArgValue はツール引数の文字列値をサニタイズ
+// - 末尾の制御文字・ゼロ幅文字をトリミング
+// - path 引数の末尾に付いた不正なサフィックスを除去
+func sanitizeArgValue(key, value string) string {
+	// 末尾の制御文字・ゼロ幅文字をトリミング
+	value = strings.TrimRightFunc(value, func(r rune) bool {
+		return unicode.IsControl(r) || r == '\uFEFF' || r == '\u200B'
+	})
+
+	// path 引数: ファイルパスに不正なサフィックス（スペース+ランダムID）が付くパターンを除去
+	// 例: "internal/agent/agent.go lodge-187541604" → "internal/agent/agent.go"
+	if key == "path" {
+		value = cleanPathArg(value)
+	}
+
+	return value
+}
+
+// cleanPathArg はファイルパス引数から不正なサフィックスを除去
+// Geminiが出力するランダムID付きパスを修正
+func cleanPathArg(path string) string {
+	// パスにスペースが含まれる場合、スペース以降が不正なサフィックスの可能性
+	// 正当なパスにスペースが含まれることもあるが、ツール引数のpathでは稀
+	if idx := strings.IndexByte(path, ' '); idx != -1 {
+		candidate := path[:idx]
+		// スペース前がファイルパスとして妥当なら（拡張子があるか、/で終わるか）
+		if looksLikeFilePath(candidate) {
+			return candidate
+		}
+	}
+	return path
+}
+
+// looksLikeFilePath は文字列がファイルパスらしいかを簡易判定
+func looksLikeFilePath(s string) bool {
+	// 拡張子を持つ（.go, .js, .py, etc.）
+	if idx := strings.LastIndexByte(s, '.'); idx != -1 && idx < len(s)-1 {
+		ext := s[idx:]
+		if !strings.ContainsAny(ext, " \t\n") {
+			return true
+		}
+	}
+	// ディレクトリパス（/で終わる）
+	if strings.HasSuffix(s, "/") {
+		return true
+	}
+	return false
 }
 
 // FileChange はファイル変更履歴

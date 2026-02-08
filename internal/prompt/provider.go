@@ -1,4 +1,4 @@
-package agent
+package prompt
 
 import "strings"
 
@@ -9,19 +9,21 @@ var providerPrefixes = map[string]string{
 1. **ALWAYS read_file BEFORE str_replace** - NO EXCEPTIONS
 2. **NEVER guess file contents** - read first, edit second
 3. If you haven't read it this session, you CANNOT edit it
+4. **After running bash verification (test/build/lint), WAIT for the result** - do NOT declare completion until you see the output
+5. **Tool calls must be actual JSON, NOT inside markdown code blocks** - ` + "```json...```" + ` is for display only
 
 `,
 }
 
-// getProviderPrefix はプロバイダー名に応じたプレフィックスを返す
+// GetProviderPrefix はプロバイダー名に応じたプレフィックスを返す
 // 未登録プロバイダーは空文字を返す
-func getProviderPrefix(provider string) string {
+func GetProviderPrefix(provider string) string {
 	return providerPrefixes[strings.ToLower(provider)]
 }
 
 // BuildProviderSystemPrompt はプロバイダー別プレフィックスをシステムプロンプトの冒頭に注入する
 func BuildProviderSystemPrompt(base, providerName string) string {
-	prefix := getProviderPrefix(providerName)
+	prefix := GetProviderPrefix(providerName)
 	if prefix == "" {
 		return base
 	}

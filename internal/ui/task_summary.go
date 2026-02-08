@@ -183,7 +183,18 @@ func formatLines(added, removed int) string {
 }
 
 // getGitShortHash は現在の git commit hash の短縮版を取得
+// 未コミット変更がある場合は空文字を返す（コミットハッシュに見えて紛らわしいため）
 func getGitShortHash() (string, error) {
+	// 未コミット変更があるかチェック
+	statusCmd := exec.Command("git", "status", "--porcelain")
+	statusOutput, err := statusCmd.Output()
+	if err != nil {
+		return "", err
+	}
+	if len(strings.TrimSpace(string(statusOutput))) > 0 {
+		return "", nil
+	}
+
 	cmd := exec.Command("git", "rev-parse", "--short", "HEAD")
 	output, err := cmd.Output()
 	if err != nil {
