@@ -11,6 +11,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/mattn/go-runewidth"
 	"golang.org/x/term"
 )
 
@@ -314,9 +315,15 @@ func (m *MultilineReader) readWithBracketedPaste() (string, error) {
 			if b == 0x7f || b == 0x08 {
 				if buf.Len() > 0 {
 					data := buf.Bytes()
-					buf.Reset()
-					buf.Write(data[:len(data)-1])
-					fmt.Print("\b \b")
+					r, size := utf8.DecodeLastRune(data)
+					if size > 0 {
+						buf.Reset()
+						buf.Write(data[:len(data)-size])
+						w := runewidth.RuneWidth(r)
+						for i := 0; i < w; i++ {
+							fmt.Print("\b \b")
+						}
+					}
 				}
 				continue
 			}
@@ -521,6 +528,21 @@ func (m *MultilineReader) readLineFromChannel() (string, error) {
 					for _, eb := range escBuf {
 						if eb >= 0x20 && eb < 0x80 && eb != 0x7f {
 							fmt.Print(string(eb))
+						}
+					}
+				}
+				continue
+			}
+
+			// Backspace / DEL
+			if b == 0x7f || b == 0x08 {
+				if len(buf) > 0 {
+					r, size := utf8.DecodeLastRune(buf)
+					if size > 0 {
+						buf = buf[:len(buf)-size]
+						w := runewidth.RuneWidth(r)
+						for i := 0; i < w; i++ {
+							fmt.Print("\b \b")
 						}
 					}
 				}

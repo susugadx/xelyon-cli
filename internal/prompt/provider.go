@@ -26,7 +26,8 @@ var providerPrefixes = map[string]string{
 		"11. **After str_replace, if unused imports appear, remove them IMMEDIATELY** - do NOT proceed with unused import errors\n\n",
 	"groq": "## ⚠️ ABSOLUTE RULES (NEVER SKIP)\n" + commonRulesBlock +
 		"8. **Tool calls MUST be JSON format** - `{\"tool\":\"...\",\"args\":{...}}` - NEVER use XML like `<tool_name><param>value</param></tool_name>`\n" +
-		"9. **ALWAYS respond in the same language as the user's message** - if the user writes in Japanese, respond in Japanese\n\n",
+		"9. **Tool calls must be actual JSON, NOT inside markdown code blocks** - do NOT wrap tool calls in " + "```json...```" + " blocks\n" +
+		"10. **ALWAYS respond in the same language as the user's message** - if the user writes in Japanese, respond in Japanese\n\n",
 }
 
 // GetProviderPrefix はプロバイダー名に応じたプレフィックスを返す
