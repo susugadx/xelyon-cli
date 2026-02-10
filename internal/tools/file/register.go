@@ -188,59 +188,6 @@ func (t *ListDirTool) Run(args map[string]string) (string, *tools.FileChange, er
 	return ExecuteListDir(args["path"]), nil, nil
 }
 
-// RestoreBackupTool wraps restore_backup execution
-type RestoreBackupTool struct{}
-
-func (t *RestoreBackupTool) Name() string { return "restore_backup" }
-
-func (t *RestoreBackupTool) Description() string {
-	return "Restores a file from its backup."
-}
-
-func (t *RestoreBackupTool) Parameters() map[string]interface{} {
-	return map[string]interface{}{
-		"type": "object",
-		"properties": map[string]interface{}{
-			"path":        map[string]interface{}{"type": "string", "description": "Original file path"},
-			"backup_path": map[string]interface{}{"type": "string", "description": "Backup file path to restore from"},
-		},
-		"required":             []string{"path", "backup_path"},
-		"additionalProperties": false,
-	}
-}
-
-func (t *RestoreBackupTool) Run(args map[string]string) (string, *tools.FileChange, error) {
-	result, err := ExecuteRestoreBackup(args["path"], args["backup_path"])
-	if err != nil {
-		return result, nil, err
-	}
-	return result, nil, nil
-}
-
-// ListBackupsTool wraps list_backups execution
-type ListBackupsTool struct{}
-
-func (t *ListBackupsTool) Name() string { return "list_backups" }
-
-func (t *ListBackupsTool) Description() string {
-	return "Lists available backup files for a given file."
-}
-
-func (t *ListBackupsTool) Parameters() map[string]interface{} {
-	return map[string]interface{}{
-		"type": "object",
-		"properties": map[string]interface{}{
-			"path": map[string]interface{}{"type": "string", "description": "File path to find backups for"},
-		},
-		"required":             []string{"path"},
-		"additionalProperties": false,
-	}
-}
-
-func (t *ListBackupsTool) Run(args map[string]string) (string, *tools.FileChange, error) {
-	return ExecuteListBackups(args["path"]), nil, nil
-}
-
 // RegisterTools registers all file tools to the given registry
 func RegisterTools(r *tools.Registry) {
 	r.Register(&ReadFileTool{})
@@ -248,8 +195,6 @@ func RegisterTools(r *tools.Registry) {
 	r.Register(&StrReplaceTool{})
 	r.Register(&DeleteFileTool{})
 	r.Register(&ListDirTool{})
-	r.Register(&RestoreBackupTool{})
-	r.Register(&ListBackupsTool{})
 }
 
 // init registers all file tools to the default registry

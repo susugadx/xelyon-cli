@@ -17,24 +17,17 @@ const (
 // ToolSafetyLevels は各ツールの安全性レベルを定義
 var ToolSafetyLevels = map[string]ToolSafety{
 	// SafetyHigh: 読み取り専用操作
-	"read_file":       SafetyHigh,
-	"search_file":     SafetyHigh,
-	"search_code":     SafetyHigh,
-	"list_dir":        SafetyHigh,
-	"git_status":      SafetyHigh,
-	"git_log":         SafetyHigh,
-	"git_diff":        SafetyHigh,
-	"lint":            SafetyHigh,
-	"test":            SafetyHigh,
-	"web_search":      SafetyHigh,
-	"ask_question":    SafetyHigh,
-	"serper":          SafetyHigh, // Web検索
-	"lsp_references":  SafetyHigh, // LSP: 参照検索（読み取り専用）
-	"lsp_definition":  SafetyHigh, // LSP: 定義ジャンプ（読み取り専用）
-	"lsp_hover":       SafetyHigh, // LSP: 型情報取得（読み取り専用）
-	"lsp_diagnostics": SafetyHigh, // LSP: 診断情報取得（読み取り専用）
-	"lsp_rename":      SafetyHigh, // LSP: リネームプレビュー（読み取り専用、実際の変更は行わない）
-	"lsp_find":        SafetyHigh, // LSP: シンボル名ベースの検索（読み取り専用）
+	"read_file":    SafetyHigh,
+	"search_file":  SafetyHigh,
+	"search_code":  SafetyHigh,
+	"list_dir":     SafetyHigh,
+	"git_status":   SafetyHigh,
+	"git_log":      SafetyHigh,
+	"git_diff":     SafetyHigh,
+	"web_search":   SafetyHigh,
+	"ask_question": SafetyHigh,
+	"serper":       SafetyHigh, // Web検索
+	"lsp_find":     SafetyHigh, // LSP: シンボル名ベースの検索（読み取り専用）
 
 	// SafetyMedium: 書き込み操作（リカバリ可能）
 	"write_file":     SafetyMedium,
@@ -46,7 +39,6 @@ var ToolSafetyLevels = map[string]ToolSafety{
 	"copy_file":      SafetyMedium,
 	"create_dir":     SafetyMedium,
 	"git_add":        SafetyMedium,
-	"git_commit":     SafetyMedium,
 	"git_reset_soft": SafetyMedium,
 
 	// SafetyLow: 破壊的操作（常に確認必須）
@@ -54,7 +46,6 @@ var ToolSafetyLevels = map[string]ToolSafety{
 	"delete_lines":   SafetyLow,
 	"move_file":      SafetyLow,
 	"git_push":       SafetyLow,
-	"git_checkout":   SafetyLow,
 	"git_branch":     SafetyLow,
 	"git_stash":      SafetyLow,
 	"git_reset_hard": SafetyLow,

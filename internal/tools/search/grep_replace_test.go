@@ -46,13 +46,15 @@ func TestGrepReplaceBasic(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result, files, err := ExecuteGrepReplace("oldFunc", "newFunc", dir, "*.go", true)
+	setupTestMocks(t)
+
+	result, files, err := ExecuteGrepReplace("oldFunc", "newFunc", dir, "*.go")
 	if err != nil {
-		t.Fatalf("ExecuteGrepReplace (dry_run) failed: %v", err)
+		t.Fatalf("ExecuteGrepReplace failed: %v", err)
 	}
 
-	if !strings.Contains(result, "Dry Run") {
-		t.Errorf("Expected 'Dry Run' in result, got: %s", result)
+	if !strings.Contains(result, "completed") {
+		t.Errorf("Expected 'completed' in result, got: %s", result)
 	}
 
 	if len(files) != 2 {
@@ -60,8 +62,11 @@ func TestGrepReplaceBasic(t *testing.T) {
 	}
 
 	content1, _ := os.ReadFile(file1)
-	if !strings.Contains(string(content1), "oldFunc") {
-		t.Error("File should not be modified in dry run")
+	if strings.Contains(string(content1), "oldFunc") {
+		t.Error("File should be modified after execution")
+	}
+	if !strings.Contains(string(content1), "newFunc") {
+		t.Error("File should contain replacement text")
 	}
 }
 
@@ -75,7 +80,7 @@ func TestGrepReplaceExecute(t *testing.T) {
 
 	setupTestMocks(t)
 
-	result, _, err := ExecuteGrepReplace("oldName", "newName", dir, "*.go", false)
+	result, _, err := ExecuteGrepReplace("oldName", "newName", dir, "*.go")
 	if err != nil {
 		t.Fatalf("ExecuteGrepReplace failed: %v", err)
 	}
@@ -101,7 +106,9 @@ func TestGrepReplaceNoMatch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result, files, err := ExecuteGrepReplace("nonexistent", "replacement", dir, "*.go", true)
+	setupTestMocks(t)
+
+	result, files, err := ExecuteGrepReplace("nonexistent", "replacement", dir, "*.go")
 	if err != nil {
 		t.Fatalf("ExecuteGrepReplace failed: %v", err)
 	}
@@ -116,7 +123,7 @@ func TestGrepReplaceNoMatch(t *testing.T) {
 func TestGrepReplaceEmptyPattern(t *testing.T) {
 	dir := t.TempDir()
 
-	_, _, err := ExecuteGrepReplace("", "replacement", dir, "*.go", true)
+	_, _, err := ExecuteGrepReplace("", "replacement", dir, "*.go")
 	if err == nil {
 		t.Error("Expected error for empty pattern")
 	}
@@ -125,7 +132,7 @@ func TestGrepReplaceEmptyPattern(t *testing.T) {
 func TestGrepReplaceInvalidRegex(t *testing.T) {
 	dir := t.TempDir()
 
-	_, _, err := ExecuteGrepReplace("[invalid(", "replacement", dir, "*.go", true)
+	_, _, err := ExecuteGrepReplace("[invalid(", "replacement", dir, "*.go")
 	if err == nil {
 		t.Error("Expected error for invalid regex")
 	}
@@ -144,7 +151,9 @@ func TestGrepReplaceFilePattern(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result, files, err := ExecuteGrepReplace("target", "replaced", dir, "*.go", true)
+	setupTestMocks(t)
+
+	result, files, err := ExecuteGrepReplace("target", "replaced", dir, "*.go")
 	if err != nil {
 		t.Fatalf("ExecuteGrepReplace failed: %v", err)
 	}
@@ -170,7 +179,7 @@ func TestGrepReplaceBackupCreated(t *testing.T) {
 
 	setupTestMocks(t)
 
-	_, files, err := ExecuteGrepReplace("target", "replaced", dir, "*.go", false)
+	_, files, err := ExecuteGrepReplace("target", "replaced", dir, "*.go")
 	if err != nil {
 		t.Fatalf("ExecuteGrepReplace failed: %v", err)
 	}
@@ -199,7 +208,9 @@ func TestGrepReplaceSkipsBackupFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, files, err := ExecuteGrepReplace("target", "replaced", dir, "*", true)
+	setupTestMocks(t)
+
+	_, files, err := ExecuteGrepReplace("target", "replaced", dir, "*")
 	if err != nil {
 		t.Fatalf("ExecuteGrepReplace failed: %v", err)
 	}
@@ -221,7 +232,7 @@ func TestGrepReplaceRegexCapture(t *testing.T) {
 
 	setupTestMocks(t)
 
-	_, _, err := ExecuteGrepReplace(`oldFunc(\d+)`, `newFunc$1`, dir, "*.go", false)
+	_, _, err := ExecuteGrepReplace(`oldFunc(\d+)`, `newFunc$1`, dir, "*.go")
 	if err != nil {
 		t.Fatalf("ExecuteGrepReplace failed: %v", err)
 	}
@@ -253,7 +264,6 @@ func TestGrepReplaceTool(t *testing.T) {
 		"pattern":     "target",
 		"replacement": "replaced",
 		"path":        dir,
-		"dry_run":     "true",
 	})
 
 	if err != nil {

@@ -7,7 +7,6 @@ import (
 // NOTE: Tool registration tests are in each subpackage:
 // - dev/bash_test.go tests BashTool
 // - file/read_test.go tests ReadFileTool
-// - git/commit_test.go tests GitCommitTool
 // - search/code_test.go tests SearchCodeTool
 // - lsp/tools_test.go tests LSP tools
 

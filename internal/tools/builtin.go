@@ -54,10 +54,10 @@ func (t *FileModifyingTool) Run(args map[string]string) (string, *FileChange, er
 
 // RegisterBuiltinTools はすべての組み込みツールを登録
 // NOTE: All tools are now registered by subpackages:
-//   - tools/file: read_file, write_file, str_replace, delete_file, list_dir, restore_backup, list_backups
-//   - tools/git: git_commit, git_checkout
-//   - tools/search: search_code, search_file, web_search, ast_grep, grep_replace
-//   - tools/dev: bash, run_test, format, lint, http_request
+//   - tools/file: read_file, write_file, str_replace, delete_file, list_dir
+//   - tools/search: search_code, search_file, web_search, grep_replace
+//   - tools/dev: bash
+//   - tools/lsp: lsp_find
 func RegisterBuiltinTools(r *Registry) {
 	// All tools are now registered by subpackages via init()
 	// This function is kept for backward compatibility

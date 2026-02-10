@@ -6,11 +6,6 @@ import (
 
 // RegisterTools registers all LSP tools to the registry
 func RegisterTools(registry *tools.Registry) {
-	registry.Register(&LSPReferencesTool{})
-	registry.Register(&LSPDefinitionTool{})
-	registry.Register(&LSPHoverTool{})
-	registry.Register(&LSPDiagnosticsTool{})
-	registry.Register(&LSPRenameTool{})
 	registry.Register(&LSPFindTool{})
 }
 

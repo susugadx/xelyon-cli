@@ -10,9 +10,9 @@ func BuildInvestigationPrompt(userRequest string) string {
 You are in PLAN MODE (Investigation Phase).
 
 ### READ-ONLY ONLY
-Modification tools are FORBIDDEN: write_file, str_replace, delete_file, git_commit, git_checkout
+Modification tools are FORBIDDEN: write_file, str_replace, delete_file
 
-Allowed: read_file, search_code, search_file, list_dir, lsp_*, bash (read-only), web_search
+Allowed: read_file, search_code, search_file, list_dir, lsp_find, bash (read-only), web_search
 
 ### INVESTIGATION CHECKLIST
 - [ ] Understand the current implementation (read relevant files)

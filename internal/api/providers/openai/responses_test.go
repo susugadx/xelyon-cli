@@ -9,7 +9,6 @@ import (
 	// ツール登録のための blank import
 	_ "github.com/susugadx/xelyon-cli/internal/tools/dev"
 	_ "github.com/susugadx/xelyon-cli/internal/tools/file"
-	_ "github.com/susugadx/xelyon-cli/internal/tools/git"
 	_ "github.com/susugadx/xelyon-cli/internal/tools/lsp"
 	_ "github.com/susugadx/xelyon-cli/internal/tools/search"
 )
@@ -384,12 +383,12 @@ func TestConvertToolCallToToolJSON(t *testing.T) {
 				ID:   "call_xyz789",
 				Type: "function",
 				Function: api.OpenAIToolCallFunction{
-					Name:      "run_test",
+					Name:      "bash",
 					Arguments: `{}`,
 				},
 			},
 			wantID:   "call_xyz789",
-			wantTool: "run_test",
+			wantTool: "bash",
 		},
 		{
 			name: "invalid JSON arguments",

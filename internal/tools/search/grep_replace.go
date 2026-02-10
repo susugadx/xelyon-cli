@@ -36,8 +36,7 @@ type FileReplaceResult struct {
 // replacement: replacement string
 // path: target directory (default: ".")
 // filePattern: file name pattern (e.g., "*.go", default: all files)
-// dryRun: if true, only preview without actual replacement
-func ExecuteGrepReplace(pattern, replacement, path, filePattern string, dryRun bool) (string, []FileReplaceResult, error) {
+func ExecuteGrepReplace(pattern, replacement, path, filePattern string) (string, []FileReplaceResult, error) {
 	if pattern == "" {
 		return "", nil, fmt.Errorf("pattern is required")
 	}
@@ -128,15 +127,6 @@ func ExecuteGrepReplace(pattern, replacement, path, filePattern string, dryRun b
 
 		totalMatches += len(matches)
 
-		if dryRun {
-			// Dry run: preview only
-			results = append(results, FileReplaceResult{
-				FilePath:   filePath,
-				MatchCount: len(matches),
-			})
-			continue
-		}
-
 		// Create backup
 		backupPath, err := common.CreateBackup(filePath)
 		if err != nil {
@@ -163,11 +153,7 @@ func ExecuteGrepReplace(pattern, replacement, path, filePattern string, dryRun b
 	// Generate result summary
 	var sb strings.Builder
 
-	if dryRun {
-		sb.WriteString("🔍 Dry Run - Preview of changes:\n")
-	} else {
-		sb.WriteString("✅ Replacement completed:\n")
-	}
+	sb.WriteString("✅ Replacement completed:\n")
 
 	sb.WriteString(fmt.Sprintf("  Pattern: %s\n", pattern))
 	sb.WriteString(fmt.Sprintf("  Replacement: %s\n", replacement))

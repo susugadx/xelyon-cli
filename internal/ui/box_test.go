@@ -28,18 +28,12 @@ func TestGetToolIcon(t *testing.T) {
 
 		// Git operations
 		{"git_add", "➕"},
-		{"git_commit", "💾"},
 		{"git_push", "🚀"},
 		{"git_status", "📊"},
 		{"git_diff", "📄"},
 		{"git_log", "📜"},
 		{"git_branch", "🌿"},
-		{"git_checkout", "🔀"},
 		{"git_stash", "📥"},
-
-		// Code quality
-		{"lint", "🔬"},
-		{"test", "🧪"},
 
 		// Web
 		{"web_search", "🌐"},

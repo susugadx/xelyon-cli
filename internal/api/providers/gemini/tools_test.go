@@ -11,7 +11,6 @@ import (
 	// ツール登録のための blank import
 	_ "github.com/susugadx/xelyon-cli/internal/tools/dev"
 	_ "github.com/susugadx/xelyon-cli/internal/tools/file"
-	_ "github.com/susugadx/xelyon-cli/internal/tools/git"
 	_ "github.com/susugadx/xelyon-cli/internal/tools/lsp"
 	_ "github.com/susugadx/xelyon-cli/internal/tools/search"
 )
@@ -166,17 +165,15 @@ func TestAllBuiltinToolsHaveDefinitions(t *testing.T) {
 	// 期待されるツール名のリスト
 	// 注: 新ツール追加時はここにも追加が必要
 	expectedTools := []string{
-		// File Operations (7)
+		// File Operations (5)
 		"read_file", "write_file", "str_replace", "delete_file",
-		"list_dir", "restore_backup", "list_backups",
-		// Git Operations (2)
-		"git_commit", "git_checkout",
-		// Search Operations (5)
-		"search_code", "search_file", "web_search", "ast_grep", "grep_replace",
-		// Development Operations (5)
-		"run_test", "format", "lint", "http_request", "bash",
-		// LSP Tools (6)
-		"lsp_references", "lsp_definition", "lsp_hover", "lsp_diagnostics", "lsp_rename", "lsp_find",
+		"list_dir",
+		// Search Operations (4)
+		"search_code", "search_file", "web_search", "grep_replace",
+		// Development Operations (1)
+		"bash",
+		// LSP Tools (1)
+		"lsp_find",
 	}
 
 	definedNames := GetToolDefinitionNames()

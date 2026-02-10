@@ -96,37 +96,6 @@ func (t *WebSearchTool) Run(args map[string]string) (string, *tools.FileChange, 
 	return output, nil, nil
 }
 
-// AstGrepTool is the tool for ast-grep search
-type AstGrepTool struct{}
-
-// Name returns the tool name
-func (t *AstGrepTool) Name() string {
-	return "ast_grep"
-}
-
-func (t *AstGrepTool) Description() string {
-	return "Performs structural code search using AST patterns (Tree-sitter based)."
-}
-
-func (t *AstGrepTool) Parameters() map[string]interface{} {
-	return map[string]interface{}{
-		"type": "object",
-		"properties": map[string]interface{}{
-			"pattern": map[string]interface{}{"type": "string", "description": "AST pattern to search for"},
-			"lang":    map[string]interface{}{"type": "string", "description": "Language: go, python, javascript, typescript, rust, c, cpp", "enum": []string{"go", "python", "javascript", "typescript", "rust", "c", "cpp"}},
-			"path":    map[string]interface{}{"type": "string", "description": "Directory or file to search in (optional)"},
-		},
-		"required":             []string{"pattern", "lang"},
-		"additionalProperties": false,
-	}
-}
-
-// Run executes the ast-grep tool
-func (t *AstGrepTool) Run(args map[string]string) (string, *tools.FileChange, error) {
-	output := ExecuteAstGrep(args["pattern"], args["lang"], args["path"])
-	return output, nil, nil
-}
-
 // GrepReplaceTool is the tool for bulk grep replace
 type GrepReplaceTool struct{}
 
@@ -147,7 +116,6 @@ func (t *GrepReplaceTool) Parameters() map[string]interface{} {
 			"replacement":  map[string]interface{}{"type": "string", "description": "Replacement string"},
 			"path":         map[string]interface{}{"type": "string", "description": "Directory to search in"},
 			"file_pattern": map[string]interface{}{"type": "string", "description": "File glob pattern (e.g., *.go)"},
-			"dry_run":      map[string]interface{}{"type": "string", "description": "Set to 'true' for preview without changes"},
 		},
 		"required":             []string{"pattern", "replacement"},
 		"additionalProperties": false,
@@ -156,23 +124,20 @@ func (t *GrepReplaceTool) Parameters() map[string]interface{} {
 
 // Run executes the grep replace tool
 func (t *GrepReplaceTool) Run(args map[string]string) (string, *tools.FileChange, error) {
-	dryRun := args["dry_run"] == "true"
-	if !dryRun {
-		yellow.Printf("🔄 Bulk replace across files\n")
-		fmt.Printf("  Pattern: %s\n", args["pattern"])
-		fmt.Printf("  Replacement: %s\n", args["replacement"])
-		fmt.Printf("  Path: %s\n", args["path"])
-		fmt.Printf("  File pattern: %s\n", args["file_pattern"])
+	yellow.Printf("🔄 Bulk replace across files\n")
+	fmt.Printf("  Pattern: %s\n", args["pattern"])
+	fmt.Printf("  Replacement: %s\n", args["replacement"])
+	fmt.Printf("  Path: %s\n", args["path"])
+	fmt.Printf("  File pattern: %s\n", args["file_pattern"])
 
-		decision := common.Confirm("Execute replacement? ")
-		if decision.Action == common.ConfirmNo {
-			return "Replacement cancelled by user", nil, nil
-		}
-		if decision.Action == common.ConfirmComment {
-			return fmt.Sprintf("Replacement cancelled with comment: %s", decision.Comment), nil, nil
-		}
+	decision := common.Confirm("Execute replacement? ")
+	if decision.Action == common.ConfirmNo {
+		return "Replacement cancelled by user", nil, nil
 	}
-	result, _, err := ExecuteGrepReplace(args["pattern"], args["replacement"], args["path"], args["file_pattern"], dryRun)
+	if decision.Action == common.ConfirmComment {
+		return fmt.Sprintf("Replacement cancelled with comment: %s", decision.Comment), nil, nil
+	}
+	result, _, err := ExecuteGrepReplace(args["pattern"], args["replacement"], args["path"], args["file_pattern"])
 	if err != nil {
 		return fmt.Sprintf("Error: %v", err), nil, err
 	}
@@ -184,7 +149,6 @@ func RegisterTools(registry *tools.Registry) {
 	registry.Register(&SearchCodeTool{})
 	registry.Register(&SearchFileTool{})
 	registry.Register(&WebSearchTool{})
-	registry.Register(&AstGrepTool{})
 	registry.Register(&GrepReplaceTool{})
 }
 
