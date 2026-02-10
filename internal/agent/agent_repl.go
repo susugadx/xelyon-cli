@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/signal"
@@ -45,7 +46,7 @@ func RunInteractive(model string, provider api.Provider, autoApprove bool) {
 		green.Println("📝 Audit logging enabled")
 	}
 
-	agent := NewAgent(model, provider)
+	agent := NewAgent(model, provider, false)
 	agent.AutoApprove = autoApprove
 	tools.SetAutoApprove(autoApprove) // ツールに --auto-approve 設定を伝える
 	defer agent.Cleanup()             // グレースフルシャットダウン
@@ -64,7 +65,7 @@ func RunInteractive(model string, provider api.Provider, autoApprove bool) {
 	}
 
 	// コンテキストサイズ表示（ツリー形式）
-	printContextSize(agent.SystemPrompt)
+	printContextSize(agent.SystemPrompt, agent.CurrentProvider.IsFunctionCallingEnabled())
 
 	// REPLループ開始
 	agent.mlReader = mlReader // ペーストモードで共有するため
@@ -109,7 +110,7 @@ func RunInteractiveWithResume(model string, provider api.Provider, autoApprove b
 	}
 
 	// ロード済みセッションでAgent作成
-	agent := NewAgent(model, provider)
+	agent := NewAgent(model, provider, false)
 	agent.AutoApprove = autoApprove
 	tools.SetAutoApprove(autoApprove) // ツールに --auto-approve 設定を伝える
 	agent.session = session
@@ -129,7 +130,7 @@ func RunInteractiveWithResume(model string, provider api.Provider, autoApprove b
 	}
 
 	// コンテキストサイズ表示（ツリー形式）
-	printContextSize(agent.SystemPrompt)
+	printContextSize(agent.SystemPrompt, agent.CurrentProvider.IsFunctionCallingEnabled())
 
 	// REPLループ開始
 	agent.mlReader = mlReader
@@ -226,29 +227,33 @@ func setupSignalHandler(agent *Agent) {
 }
 
 // printContextSize はコンテキストサイズをツリー形式で表示
-func printContextSize(systemPrompt string) {
-	// SystemPrompt からツールセクションを分離して推定
-	const toolsStart = "## Available Tools"
-	const toolsEnd = "## Workflow Rules"
-
+func printContextSize(systemPrompt string, isFunctionCalling bool) {
 	basePromptTokens := 0
 	toolsTokens := 0
 
-	startIdx := strings.Index(systemPrompt, toolsStart)
-	endIdx := strings.Index(systemPrompt, toolsEnd)
-
-	if startIdx != -1 && endIdx != -1 && startIdx < endIdx {
-		// ツールセクション以外（ベースプロンプト）
-		basePrompt := systemPrompt[:startIdx] + systemPrompt[endIdx:]
-		basePromptTokens = token.EstimateTokenCount(basePrompt)
-
-		// ツールセクション
-		toolsSection := systemPrompt[startIdx:endIdx]
-		toolsTokens = token.EstimateTokenCount(toolsSection)
-	} else {
-		// 分離できない場合は全体をベースプロンプトとして扱う
+	if isFunctionCalling {
+		// FC: システムプロンプトからツールセクション除去済み → 全体がベース
 		basePromptTokens = token.EstimateTokenCount(systemPrompt)
+		// ツール定義は Registry から JSON 化して推定
+		toolsTokens = estimateToolDefinitionTokens()
+	} else {
+		// 非FC: システムプロンプト内にツール説明を含む → 従来方式で分離
+		const toolsStart = "## Available Tools"
+		const toolsEnd = "## Workflow Rules"
+		startIdx := strings.Index(systemPrompt, toolsStart)
+		endIdx := strings.Index(systemPrompt, toolsEnd)
+		if startIdx != -1 && endIdx != -1 && startIdx < endIdx {
+			basePrompt := systemPrompt[:startIdx] + systemPrompt[endIdx:]
+			basePromptTokens = token.EstimateTokenCount(basePrompt)
+			toolsSection := systemPrompt[startIdx:endIdx]
+			toolsTokens = token.EstimateTokenCount(toolsSection)
+		} else {
+			basePromptTokens = token.EstimateTokenCount(systemPrompt)
+		}
 	}
+
+	// ツール数カウント（builtin / MCP 分類）
+	builtinCount, mcpCount := countToolsByType()
 
 	// XELYON.md のトークン数
 	xelyonContent := loadProjectConfig()
@@ -260,6 +265,36 @@ func printContextSize(systemPrompt string) {
 	// ツリー形式で表示
 	dim.Printf("📋 Context size: ~%s tok\n", FormatTokens(total))
 	dim.Printf("   ├── Base prompt: ~%s\n", FormatTokens(basePromptTokens))
-	dim.Printf("   ├── Tools: ~%s\n", FormatTokens(toolsTokens))
+	if mcpCount > 0 {
+		dim.Printf("   ├── Tools (%d+%d MCP): ~%s\n",
+			builtinCount, mcpCount, FormatTokens(toolsTokens))
+	} else {
+		dim.Printf("   ├── Tools (%d): ~%s\n",
+			builtinCount, FormatTokens(toolsTokens))
+	}
 	dim.Printf("   └── XELYON.md: ~%s\n", FormatTokens(xelyonTokens))
+}
+
+// estimateToolDefinitionTokens は Registry 全ツールの JSON 定義トークン数を推定
+func estimateToolDefinitionTokens() int {
+	defs := tools.DefaultRegistry.GetToolDefinitions()
+	total := 0
+	for _, def := range defs {
+		jsonBytes, _ := json.Marshal(def)
+		total += token.EstimateTokenCount(string(jsonBytes))
+	}
+	return total
+}
+
+// countToolsByType は builtin と MCP のツール数を返す
+func countToolsByType() (builtin, mcp int) {
+	defs := tools.DefaultRegistry.GetToolDefinitions()
+	for _, def := range defs {
+		if strings.HasPrefix(def.Name, "mcp_") {
+			mcp++
+		} else {
+			builtin++
+		}
+	}
+	return
 }

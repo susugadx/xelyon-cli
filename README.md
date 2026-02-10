@@ -222,6 +222,18 @@ tool_confirm:
 xelyon --auto-approve
 ```
 
+### MCP設定
+
+```yaml
+# ~/.xelyon/config.yaml
+mcp:
+  enabled: true    # MCP機能のON/OFF（デフォルト: true）
+  headless: false  # ヘッドレスモードでMCPを使うか（デフォルト: false）
+```
+
+`enabled: false` にするとMCPサーバーへの接続をスキップし、トークン消費を削減できます。
+`~/.xelyon/mcp.json` の設定はそのまま残るため、再度 `enabled: true` にすれば復活します。
+
 ### 設定管理
 
 ```bash
@@ -231,7 +243,7 @@ xelyon --auto-approve
 
 対話式メニューでは20カテゴリ、50以上の設定項目を編集可能:
 - Provider & Model, Compression, Tool Confirm
-- Bash Safety, LSP Servers, Plan Mode など
+- Bash Safety, LSP Servers, Plan Mode, MCP など
 
 ## ドキュメント
 

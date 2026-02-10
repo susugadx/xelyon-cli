@@ -353,6 +353,20 @@ func handleTokensCommand(agent *Agent) bool {
 	green.Println("📋 Breakdown:")
 	fmt.Printf("    System Prompt: %s tokens (%.1f%%)\n",
 		formatNumber(systemTokens), float64(systemTokens)/float64(limit)*100)
+
+	// ツール定義トークン
+	toolTokens := 0
+	if agent.CurrentProvider != nil && agent.CurrentProvider.IsFunctionCallingEnabled() {
+		toolTokens = estimateToolDefinitionTokens()
+	}
+	builtinCount, mcpCount := countToolsByType()
+	toolLabel := fmt.Sprintf("%d", builtinCount)
+	if mcpCount > 0 {
+		toolLabel = fmt.Sprintf("%d+%d MCP", builtinCount, mcpCount)
+	}
+	fmt.Printf("    Tools (%s):   %s tokens (%.1f%%)\n",
+		toolLabel, formatNumber(toolTokens), float64(toolTokens)/float64(limit)*100)
+
 	fmt.Printf("    History:       %s tokens (%.1f%%)  [%d messages]\n",
 		formatNumber(historyTokens), float64(historyTokens)/float64(limit)*100, len(agent.History))
 

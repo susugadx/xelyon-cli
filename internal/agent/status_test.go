@@ -89,7 +89,7 @@ func TestGlobalAgentStatus_InitialState(t *testing.T) {
 
 func TestAgent_SetStatus(t *testing.T) {
 	provider := &mockProvider{name: "test"}
-	agent := NewAgent("test-model", provider)
+	agent := NewAgent("test-model", provider, false)
 
 	// グローバルステータスを保存してテスト後に復元
 	originalStatus := globalAgentStatus.getStatus()
@@ -117,7 +117,7 @@ func TestAgent_SetStatus(t *testing.T) {
 
 func TestAgentStatus_AllStates(t *testing.T) {
 	provider := &mockProvider{name: "test"}
-	agent := NewAgent("test-model", provider)
+	agent := NewAgent("test-model", provider, false)
 
 	// グローバルステータスを保存
 	originalStatus := globalAgentStatus.getStatus()

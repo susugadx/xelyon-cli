@@ -25,6 +25,7 @@ type Config struct {
 	Thinking        ThinkingConfig                 `yaml:"thinking"`
 	Output          OutputConfig                   `yaml:"output"`
 	WebSearch       WebSearchConfig                `yaml:"web_search"`
+	MCP             MCPConfig                      `yaml:"mcp"`
 	// 将来の拡張用
 	// Cloud CloudConfig `yaml:"cloud,omitempty"`
 }
@@ -167,6 +168,12 @@ type WebSearchConfig struct {
 	CacheEnabled bool `yaml:"cache_enabled"` // キャッシュを有効化（デフォルト: true）
 	CacheTTL     int  `yaml:"cache_ttl"`     // キャッシュTTL秒数（デフォルト: 1800 = 30分）
 	CacheSize    int  `yaml:"cache_size"`    // 最大キャッシュ数（デフォルト: 100）
+}
+
+// MCPConfig は MCP (Model Context Protocol) サーバー接続の設定
+type MCPConfig struct {
+	Enabled  bool `yaml:"enabled"`  // MCP接続を有効化（デフォルト: true）
+	Headless bool `yaml:"headless"` // Headlessモードでも接続（デフォルト: false）
 }
 
 // LSPConfig は LSP (Language Server Protocol) 連携の設定

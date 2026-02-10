@@ -14,7 +14,6 @@ Go 製 AI コーディングアシスタント CLI。8 LLM プロバイダー対
 
 - Go 1.24+
 - Cobra（CLI）
-- Tree-sitter（コード解析）
 
 ## 開発ルール
 

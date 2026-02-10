@@ -19,7 +19,7 @@ func RunHeadless(query string, model string, provider api.Provider) *HeadlessRes
 	startTime := time.Now()
 
 	// Agent初期化
-	agent := NewAgent(model, provider)
+	agent := NewAgent(model, provider, true)
 	agent.AutoApprove = true // Headlessモードは自動承認（SafetyLow以外）
 	tools.SetAutoApprove(true)
 
@@ -113,7 +113,7 @@ func RunOnceWithImage(query string, model string, provider api.Provider, imagePa
 		yellow.Printf("Warning: Failed to initialize audit log: %v\n", err)
 	}
 
-	agent := NewAgent(model, provider)
+	agent := NewAgent(model, provider, false)
 	agent.AutoApprove = autoApprove
 	tools.SetAutoApprove(autoApprove)
 	defer agent.Cleanup()

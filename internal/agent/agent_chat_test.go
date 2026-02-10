@@ -38,7 +38,7 @@ func (m *mockProvider) ChatWithImage(ctx context.Context, systemPrompt string, h
 
 func TestShouldAbortToolLoop_SameToolRepeated(t *testing.T) {
 	provider := &mockProvider{name: "test"}
-	agent := NewAgent("test-model", provider)
+	agent := NewAgent("test-model", provider, false)
 
 	// 閾値を3に設定
 	cfg := config.GetGlobalConfig()
@@ -90,7 +90,7 @@ func TestShouldAbortToolLoop_SameToolRepeated(t *testing.T) {
 
 func TestShouldAbortToolLoop_DifferentTools(t *testing.T) {
 	provider := &mockProvider{name: "test"}
-	agent := NewAgent("test-model", provider)
+	agent := NewAgent("test-model", provider, false)
 
 	cfg := config.GetGlobalConfig()
 	originalThreshold := cfg.LoopDetection.Threshold
@@ -131,7 +131,7 @@ func TestShouldAbortToolLoop_DifferentTools(t *testing.T) {
 
 func TestExecuteToolCall_UpdatesHistory(t *testing.T) {
 	provider := &mockProvider{name: "test"}
-	agent := NewAgent("test-model", provider)
+	agent := NewAgent("test-model", provider, false)
 
 	initialHistoryLen := len(agent.History)
 
@@ -155,7 +155,7 @@ func TestExecuteToolCall_UpdatesHistory(t *testing.T) {
 
 func TestExecuteToolCall_UpdatesStats(t *testing.T) {
 	provider := &mockProvider{name: "test"}
-	agent := NewAgent("test-model", provider)
+	agent := NewAgent("test-model", provider, false)
 
 	// Statsを初期化
 	agent.Stats = &SessionStats{
@@ -182,7 +182,7 @@ func TestExecuteToolCall_UpdatesStats(t *testing.T) {
 
 func TestAgent_Cleanup_NoStorage(t *testing.T) {
 	provider := &mockProvider{name: "test"}
-	agent := NewAgent("test-model", provider)
+	agent := NewAgent("test-model", provider, false)
 
 	// storageとsessionをnil化
 	agent.storage = nil
@@ -198,7 +198,7 @@ func TestAgent_SwitchProvider_Success(t *testing.T) {
 	defer os.Unsetenv("DEEPSEEK_API_KEY")
 
 	provider := &mockProvider{name: "test"}
-	agent := NewAgent("test-model", provider)
+	agent := NewAgent("test-model", provider, false)
 	agent.ProviderName = "test"
 
 	// Statsを初期化
@@ -227,7 +227,7 @@ func TestAgent_SwitchProvider_NoAPIKey_ChatTest(t *testing.T) {
 	os.Unsetenv("DEEPSEEK_API_KEY")
 
 	provider := &mockProvider{name: "test"}
-	agent := NewAgent("test-model", provider)
+	agent := NewAgent("test-model", provider, false)
 
 	err := agent.SwitchProvider("deepseek")
 	if err == nil {
@@ -398,7 +398,7 @@ func TestAutoRetryConfig(t *testing.T) {
 // TestExecuteToolCallWithResult は結果を返すことを確認
 func TestExecuteToolCallWithResult(t *testing.T) {
 	provider := &mockProvider{name: "test"}
-	agent := NewAgent("test-model", provider)
+	agent := NewAgent("test-model", provider, false)
 
 	// Statsを初期化
 	agent.Stats = &SessionStats{

@@ -13,6 +13,24 @@ Model Context Protocol（MCP）は、AIアシスタントが外部のツール�
 - **動的登録**: 起動時にMCPサーバーからツール一覧を自動取得
 - **セキュリティ**: API キーなどの機密情報は自動的に除外
 
+## 設定
+
+`config.yaml` で MCP の動作を制御できます:
+
+```yaml
+# ~/.xelyon/config.yaml
+mcp:
+  enabled: true    # MCP機能のON/OFF（デフォルト: true）
+  headless: false  # ヘッドレスモードでMCPを使うか（デフォルト: false）
+```
+
+| 設定 | 説明 | デフォルト |
+|------|------|-----------|
+| `enabled` | `false` にするとMCPサーバーへの接続をスキップ。トークン消費を削減。 | `true` |
+| `headless` | `true` にすると `--headless` モードでもMCPツールが使える。 | `false` |
+
+`enabled: false` にしても `~/.xelyon/mcp.json` の設定はそのまま残るため、再度 `enabled: true` にすれば復活します。
+
 ## セットアップ
 
 ### 1. 設定ファイルの作成

@@ -24,6 +24,12 @@ func (a *Agent) EstimateTokens() int {
 		total += token.EstimateTokenCount(msg.Content)
 	}
 
+	// FC プロバイダーはツール定義を JSON で別送信 → トークン消費に含める
+	// （非FC プロバイダーはシステムプロンプト内にツール説明を含むため二重計上を避ける）
+	if a.CurrentProvider != nil && a.CurrentProvider.IsFunctionCallingEnabled() {
+		total += estimateToolDefinitionTokens()
+	}
+
 	return total
 }
 

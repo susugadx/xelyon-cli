@@ -20,7 +20,7 @@ func (m *mockPlanProvider) IsFunctionCallingEnabled() bool {
 }
 
 func TestHandlePlanCommand_On(t *testing.T) {
-	agent := NewAgent("test-model", &mockPlanProvider{})
+	agent := NewAgent("test-model", &mockPlanProvider{}, false)
 	agent.PlanModeEnabled = false
 
 	result := handlePlanCommand(agent, []string{"on"})
@@ -34,7 +34,7 @@ func TestHandlePlanCommand_On(t *testing.T) {
 }
 
 func TestHandlePlanCommand_Off(t *testing.T) {
-	agent := NewAgent("test-model", &mockPlanProvider{})
+	agent := NewAgent("test-model", &mockPlanProvider{}, false)
 	agent.PlanModeEnabled = true
 
 	result := handlePlanCommand(agent, []string{"off"})
@@ -48,7 +48,7 @@ func TestHandlePlanCommand_Off(t *testing.T) {
 }
 
 func TestHandlePlanCommand_Status(t *testing.T) {
-	agent := NewAgent("test-model", &mockPlanProvider{})
+	agent := NewAgent("test-model", &mockPlanProvider{}, false)
 
 	// Test status when OFF
 	agent.PlanModeEnabled = false
@@ -66,7 +66,7 @@ func TestHandlePlanCommand_Status(t *testing.T) {
 }
 
 func TestHandlePlanCommand_NoArgs(t *testing.T) {
-	agent := NewAgent("test-model", &mockPlanProvider{})
+	agent := NewAgent("test-model", &mockPlanProvider{}, false)
 	agent.PlanModeEnabled = false
 
 	// No args should show current status (not toggle)
@@ -82,7 +82,7 @@ func TestHandlePlanCommand_NoArgs(t *testing.T) {
 }
 
 func TestHandlePlanCommand_InvalidArg(t *testing.T) {
-	agent := NewAgent("test-model", &mockPlanProvider{})
+	agent := NewAgent("test-model", &mockPlanProvider{}, false)
 	agent.PlanModeEnabled = false
 
 	// Invalid arg should show status (fallthrough)
@@ -98,7 +98,7 @@ func TestHandlePlanCommand_InvalidArg(t *testing.T) {
 }
 
 func TestAgent_PlanModeEnabled_Default(t *testing.T) {
-	agent := NewAgent("test-model", &mockPlanProvider{})
+	agent := NewAgent("test-model", &mockPlanProvider{}, false)
 
 	if agent.PlanModeEnabled {
 		t.Error("PlanModeEnabled should default to false")
@@ -106,7 +106,7 @@ func TestAgent_PlanModeEnabled_Default(t *testing.T) {
 }
 
 func TestHandleSpecialCommand_Plan(t *testing.T) {
-	agent := NewAgent("test-model", &mockPlanProvider{})
+	agent := NewAgent("test-model", &mockPlanProvider{}, false)
 
 	// Test /plan command is recognized
 	result := handleSpecialCommand("/plan on", agent)

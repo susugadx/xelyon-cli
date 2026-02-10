@@ -280,6 +280,10 @@ func DefaultConfig() *Config {
 			CacheTTL:     1800, // 30分
 			CacheSize:    100,
 		},
+		MCP: MCPConfig{
+			Enabled:  true,  // デフォルトON - MCP接続有効
+			Headless: false, // デフォルトOFF - Headlessモードでは接続しない
+		},
 	}
 }
 

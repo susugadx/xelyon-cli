@@ -339,6 +339,22 @@ var Sections = map[string]SectionInfo{
 			"cache_size":    "int",
 		},
 	},
+	"mcp": {
+		Title: "MCP設定",
+		Icon:  "🔌",
+		Comments: []string{
+			"MCP (Model Context Protocol) サーバー接続の設定",
+			"個別サーバー設定は ~/.xelyon/mcp.json で管理",
+		},
+		Fields: map[string]string{
+			"enabled":  "MCP接続を有効化（デフォルト: true）",
+			"headless": "Headlessモードでも接続（デフォルト: false）",
+		},
+		FieldTypes: map[string]string{
+			"enabled":  "bool",
+			"headless": "bool",
+		},
+	},
 }
 
 // SectionOrder はセクションの表示順序
@@ -365,6 +381,7 @@ var SectionOrder = []string{
 	"thinking",
 	"output",
 	"web_search",
+	"mcp",
 }
 
 // CategoryOrder はカテゴリの表示順序（UIでのグループ化用）
@@ -390,6 +407,7 @@ var CategoryOrder = []string{
 	"thinking",
 	"output",
 	"web_search",
+	"mcp",
 }
 
 // SectionToCategory はセクション名をカテゴリ名にマップ
@@ -416,6 +434,7 @@ var SectionToCategory = map[string]string{
 	"thinking":         "thinking",
 	"output":           "output",
 	"web_search":       "web_search",
+	"mcp":              "mcp",
 }
 
 // CategoryInfo はカテゴリの表示情報
@@ -526,5 +545,10 @@ var Categories = map[string]CategoryInfo{
 		DisplayName: "Web Search",
 		Icon:        "🔍",
 		Sections:    []string{"web_search"},
+	},
+	"mcp": {
+		DisplayName: "MCP Servers",
+		Icon:        "🔌",
+		Sections:    []string{"mcp"},
 	},
 }

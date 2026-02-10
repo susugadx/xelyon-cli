@@ -45,6 +45,7 @@ var CategoryDefinitions = []CategoryDef{
 	{Name: "thinking", DisplayName: "Thinking", Icon: "🧠", Fields: []string{"thinking.enabled", "thinking.level"}},
 	{Name: "output", DisplayName: "Output", Icon: "📤", Fields: []string{"output.max_lines"}},
 	{Name: "web_search", DisplayName: "Web Search", Icon: "🔍", Fields: []string{"web_search.cache_enabled", "web_search.cache_size", "web_search.cache_ttl"}},
+	{Name: "mcp", DisplayName: "MCP Servers", Icon: "🔌", Fields: []string{"mcp.enabled", "mcp.headless"}},
 }
 
 // FieldTypeMap はフィールドパスから型へのマップ
@@ -80,6 +81,8 @@ var FieldTypeMap = map[string]ConfigFieldType{
 	"lsp.enabled":                      FieldTypeBool,
 	"lsp.servers":                      FieldTypeStructMap,
 	"lsp.skip_install_prompt":          FieldTypeBool,
+	"mcp.enabled":                      FieldTypeBool,
+	"mcp.headless":                     FieldTypeBool,
 	"openai.responses_api_models":      FieldTypeStringSlice,
 	"output.max_lines":                 FieldTypeInt,
 	"paste.bracketed_paste":            FieldTypeBool,
@@ -150,6 +153,8 @@ var FieldDescriptions = map[string]string{
 	"loop_detection.threshold":         "同じツール呼び出しの繰り返し回数でループと判定",
 	"lsp.enabled":                      "LSP連携の有効/無効",
 	"lsp.skip_install_prompt":          "インストール提案をスキップ",
+	"mcp.enabled":                      "MCP接続を有効化（デフォルト: true）",
+	"mcp.headless":                     "Headlessモードでも接続（デフォルト: false）",
 	"openai.responses_api_models":      "Responses APIを使用するモデル",
 	"output.max_lines":                 "折りたたみ前の最大表示行数",
 	"paste.bracketed_paste":            "Bracketed Paste Mode を有効化（複数行ペースト対応）",
@@ -192,6 +197,7 @@ var CategoryIcons = map[string]string{
 	"git_stage":       "📂",
 	"loop_detection":  "🔄",
 	"lsp":             "🔧",
+	"mcp":             "🔌",
 	"openai":          "🌟",
 	"output":          "📤",
 	"paste":           "📋",

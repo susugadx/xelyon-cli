@@ -307,6 +307,17 @@ web_search:
     cache_ttl: 1800
     # 最大キャッシュ数（デフォルト: 100）
     cache_size: 100
+
+# ============================================================
+# MCP設定
+# ============================================================
+# MCP (Model Context Protocol) サーバー接続の設定
+# 個別サーバー設定は ~/.xelyon/mcp.json で管理
+mcp:
+    # MCP接続を有効化（デフォルト: true）
+    enabled: true
+    # Headlessモードでも接続（デフォルト: false）
+    headless: false
 ```
 <!-- CONFIG-EXAMPLE-END -->
 

@@ -105,7 +105,7 @@ func TestBuildSummaryPrompt_LongMessage(t *testing.T) {
 
 func TestAgent_CompressHistory_TooShort(t *testing.T) {
 	provider := &mockProvider{name: "test"}
-	agent := NewAgent("test-model", provider)
+	agent := NewAgent("test-model", provider, false)
 
 	// 短い履歴（3件）
 	agent.History = []api.Message{
@@ -124,7 +124,7 @@ func TestAgent_CompressHistory_TooShort(t *testing.T) {
 func TestAgent_CompressHistory_Success(t *testing.T) {
 	// モックプロバイダーのChatWithToolsが"Summary text"を返すようにする
 	provider := &mockProvider{name: "test"}
-	agent := NewAgent("test-model", provider)
+	agent := NewAgent("test-model", provider, false)
 
 	// 10件の履歴を作成
 	for i := 0; i < 10; i++ {

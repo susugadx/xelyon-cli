@@ -75,7 +75,7 @@ type Agent struct {
 }
 
 // NewAgent は新しいAgentを作成
-func NewAgent(model string, provider api.Provider) *Agent {
+func NewAgent(model string, provider api.Provider, headless bool) *Agent {
 	// 言語設定を適用
 	cfg := config.GetGlobalConfig()
 	if cfg.General.Language != "" {
@@ -88,20 +88,22 @@ func NewAgent(model string, provider api.Provider) *Agent {
 		storage = nil
 	}
 
-	// MCP初期化
+	// MCP初期化（設定で制御）
 	mcpManager := mcp.NewManager()
-	if err := mcpManager.LoadConfig(); err != nil {
-		yellow.Printf("Warning: Failed to load MCP config: %v\n", err)
-	}
+	if cfg.MCP.Enabled && (!headless || cfg.MCP.Headless) {
+		if err := mcpManager.LoadConfig(); err != nil {
+			yellow.Printf("Warning: Failed to load MCP config: %v\n", err)
+		}
 
-	ctx := context.Background()
-	if err := mcpManager.Connect(ctx); err != nil {
-		yellow.Printf("Warning: MCP connection error: %v\n", err)
-	}
+		ctx := context.Background()
+		if err := mcpManager.Connect(ctx); err != nil {
+			yellow.Printf("Warning: MCP connection error: %v\n", err)
+		}
 
-	// MCPツールをTool Registryに登録
-	if len(mcpManager.GetTools()) > 0 {
-		mcpManager.RegisterToToolRegistry(tools.DefaultRegistry)
+		// MCPツールをTool Registryに登録
+		if len(mcpManager.GetTools()) > 0 {
+			mcpManager.RegisterToToolRegistry(tools.DefaultRegistry)
+		}
 	}
 
 	systemPrompt := prompt.SystemPrompt
