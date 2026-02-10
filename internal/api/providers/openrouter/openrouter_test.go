@@ -529,7 +529,7 @@ func TestHandleClaudeStreamingResponse(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	spinner := api.StartThinkingSpinner(false, "")
+	spinner := api.StartThinkingSpinner(context.Background(), false, "")
 	result, err := p.handleClaudeStreamingResponse(context.Background(), resp, spinner)
 	if err != nil {
 		t.Fatalf("handleClaudeStreamingResponse() error = %v", err)

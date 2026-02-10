@@ -161,19 +161,18 @@ func GetDefaultModel(model, providerName, fallback string) string {
 //   - customSuffix: optional suffix like "Function Calling" or "Reasoner"
 //
 // Returns the started spinner (caller must call Stop()).
-func StartThinkingSpinner(isImage bool, customSuffix string) *ui.Spinner {
-	cfg := config.GetGlobalConfig()
+func StartThinkingSpinner(ctx context.Context, isImage bool, customSuffix string) *ui.Spinner {
 	spinner := ui.NewSpinner()
 
 	var msg string
 	if isImage {
-		if cfg.Thinking.Enabled {
+		if IsThinkingEnabled(ctx) {
 			msg = "Deep thinking (image)"
 		} else {
 			msg = "Analyzing image"
 		}
 	} else {
-		if cfg.Thinking.Enabled {
+		if IsThinkingEnabled(ctx) {
 			msg = "Deep thinking"
 		} else {
 			msg = "Thinking"

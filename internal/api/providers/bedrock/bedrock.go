@@ -138,13 +138,13 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	reqBody := BedrockRequest{
 		AnthropicVersion: version,
 		AnthropicBeta:    pCfg.AnthropicBeta,
-		MaxTokens:        api.GetMaxOutputTokens("bedrock", model),
+		MaxTokens:        api.GetMaxOutputTokens(ctx, "bedrock", model),
 		System:           api.BuildSystemField(systemPrompt),
 		Messages:         messages,
 	}
 
 	// Extended Thinking 適用
-	if cfg.Thinking.Enabled {
+	if api.IsThinkingEnabled(ctx) {
 		reqBody.Thinking = &claude.ThinkingConfig{
 			Type:         "enabled",
 			BudgetTokens: api.LevelToBudgetTokens(cfg.Thinking.Level),
@@ -234,13 +234,13 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	reqBody := BedrockMultimodalRequest{
 		AnthropicVersion: version,
 		AnthropicBeta:    pCfg.AnthropicBeta,
-		MaxTokens:        api.GetMaxOutputTokens("bedrock", model),
+		MaxTokens:        api.GetMaxOutputTokens(ctx, "bedrock", model),
 		System:           api.BuildSystemField(systemPrompt),
 		Messages:         messages,
 	}
 
 	// Extended Thinking 適用
-	if cfg.Thinking.Enabled {
+	if api.IsThinkingEnabled(ctx) {
 		reqBody.Thinking = &claude.ThinkingConfig{
 			Type:         "enabled",
 			BudgetTokens: api.LevelToBudgetTokens(cfg.Thinking.Level),
@@ -288,7 +288,7 @@ func (p *Provider) invokeStream(ctx context.Context, model string, reqBody inter
 		return "", fmt.Errorf("request marshal failed: %w", err)
 	}
 
-	spinner := api.StartThinkingSpinner(false, "")
+	spinner := api.StartThinkingSpinner(ctx, false, "")
 
 	output, err := p.client.InvokeModelWithResponseStream(ctx, &bedrockruntime.InvokeModelWithResponseStreamInput{
 		ModelId:     aws.String(model),

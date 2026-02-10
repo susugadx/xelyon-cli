@@ -96,8 +96,8 @@ func isGemini3Model(model string) bool {
 // getThinkingConfigForModel はモデルに応じた ThinkingConfig を返す
 // Gemini 3: thinkingLevel（常時ON、デフォルトは Flash="minimal", Pro="low" でlatency最小化）
 // Gemini 2.5: thinkingBudget（thinking.enabled=true のときのみ）
-func getThinkingConfigForModel(model string, cfg *config.Config) *GeminiGenerationConfig {
-	maxTokens := api.GetMaxOutputTokens("gemini", model)
+func getThinkingConfigForModel(ctx context.Context, model string, cfg *config.Config) *GeminiGenerationConfig {
+	maxTokens := api.GetMaxOutputTokens(ctx, "gemini", model)
 
 	if isGemini3Model(model) {
 		// Gemini 3: thinking は無効化不可
@@ -105,7 +105,7 @@ func getThinkingConfigForModel(model string, cfg *config.Config) *GeminiGenerati
 		// Pro は "low" が最小
 		isFlash := strings.Contains(model, "flash")
 		var thinkingLevel string
-		if cfg.Thinking.Enabled {
+		if api.IsThinkingEnabled(ctx) {
 			thinkingLevel = levelToThinkingLevel(cfg.Thinking.Level, model)
 		} else {
 			if isFlash {
@@ -127,7 +127,7 @@ func getThinkingConfigForModel(model string, cfg *config.Config) *GeminiGenerati
 	}
 
 	// Gemini 2.5 以前: thinking.enabled=true のときのみ thinkingBudget を送信
-	if cfg.Thinking.Enabled {
+	if api.IsThinkingEnabled(ctx) {
 		return &GeminiGenerationConfig{
 			ThinkingConfig: &GeminiThinkingConfig{
 				ThinkingBudget: api.LevelToBudgetTokens(cfg.Thinking.Level),

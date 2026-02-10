@@ -112,7 +112,7 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 	}
 
 	// Thinking 設定（Gemini 3 vs 2.5 で自動分岐）
-	reqBody.GenerationConfig = getThinkingConfigForModel(model, cfg)
+	reqBody.GenerationConfig = getThinkingConfigForModel(ctx, model, cfg)
 
 	if debug && reqBody.GenerationConfig != nil && reqBody.GenerationConfig.ThinkingConfig != nil {
 		tc := reqBody.GenerationConfig.ThinkingConfig
@@ -145,7 +145,7 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 	if isGemini3Model(model) {
 		isFlash := strings.Contains(model, "flash")
 		var msg string
-		if isFlash && !cfg.Thinking.Enabled {
+		if isFlash && !api.IsThinkingEnabled(ctx) {
 			msg = "Thinking"
 		} else {
 			msg = "Deep thinking"
@@ -154,7 +154,7 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 		spinner.Start(msg)
 		ui.SetGlobalSpinner(spinner)
 	} else {
-		spinner = api.StartThinkingSpinner(false, "")
+		spinner = api.StartThinkingSpinner(ctx, false, "")
 	}
 
 	resp, err := p.doRequestWithRetry(ctx, req, jsonBody)

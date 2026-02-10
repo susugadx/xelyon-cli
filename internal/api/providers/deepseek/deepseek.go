@@ -11,7 +11,6 @@ import (
 	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/api/providers/openai"
-	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -77,8 +76,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 
 	// Extended Thinking の ON/OFF でモデルを切り替え
 	// DeepSeek は reasoner モデル自体が思考モードなので、モデル名で制御する
-	cfg := config.GetGlobalConfig()
-	if cfg.Thinking.Enabled {
+	if api.IsThinkingEnabled(ctx) {
 		model = "deepseek-reasoner"
 	} else if model == "deepseek-reasoner" {
 		// /think off 時は deepseek-chat にフォールバック
@@ -91,7 +89,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	reqBody := api.ChatRequest{
 		Model:         actualModel,
 		Messages:      messages,
-		MaxTokens:     api.GetMaxOutputTokens("deepseek", model),
+		MaxTokens:     api.GetMaxOutputTokens(ctx, "deepseek", model),
 		Stream:        true,
 		StreamOptions: &api.StreamOptions{IncludeUsage: true},
 	}
@@ -110,10 +108,10 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 
 	// スピナー開始
 	spinnerSuffix := ""
-	if cfg.Thinking.Enabled {
+	if api.IsThinkingEnabled(ctx) {
 		spinnerSuffix = "Reasoner"
 	}
-	spinner := api.StartThinkingSpinner(false, spinnerSuffix)
+	spinner := api.StartThinkingSpinner(ctx, false, spinnerSuffix)
 
 	// 再利用可能なHTTPクライアントを使用
 	resp, err := p.ExecuteRequest(req)

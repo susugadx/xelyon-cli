@@ -112,8 +112,7 @@ type OllamaTagsResponse struct {
 // ChatWithTools は Provider interface の実装（context対応）
 func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
 	// Extended Thinking 注意メッセージ（モデル依存）
-	cfg := config.GetGlobalConfig()
-	if cfg.Thinking.Enabled {
+	if api.IsThinkingEnabled(ctx) {
 		yellow.Println("⚠️  Note: Extended Thinking depends on your model (use R1/QwQ for best results).")
 	}
 
@@ -131,7 +130,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		Messages: messages,
 		Stream:   true,
 		Options: &OllamaOptions{
-			NumPredict: api.GetMaxOutputTokens("ollama", model),
+			NumPredict: api.GetMaxOutputTokens(ctx, "ollama", model),
 		},
 	}
 
@@ -155,7 +154,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	req.Header.Set("Content-Type", "application/json")
 
 	// スピナー開始
-	spinner := api.StartThinkingSpinner(false, "")
+	spinner := api.StartThinkingSpinner(ctx, false, "")
 
 	// 再利用可能なHTTPクライアントを使用
 	resp, err := p.httpClient.Do(req)

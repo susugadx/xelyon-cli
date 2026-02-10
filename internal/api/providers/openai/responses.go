@@ -124,7 +124,7 @@ func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, h
 
 	reqBody := ResponsesRequest{
 		Model:                model,
-		MaxOutputTokens:      api.GetMaxOutputTokens("openai", model),
+		MaxOutputTokens:      api.GetMaxOutputTokens(ctx, "openai", model),
 		Stream:               true,
 		Tools:                GetResponsesToolDefinitions(p.mcpTools), // Function Calling
 		PromptCacheKey:       "xelyon",
@@ -166,7 +166,7 @@ func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, h
 	}
 
 	// Extended Thinking 適用
-	if cfg.Thinking.Enabled {
+	if api.IsThinkingEnabled(ctx) {
 		reqBody.Reasoning = &ReasoningConfig{
 			Effort: LevelToReasoningEffort(cfg.Thinking.Level),
 		}
@@ -197,7 +197,7 @@ func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, h
 	req.Header.Set("Authorization", "Bearer "+p.APIKey)
 
 	// スピナー開始
-	spinner := api.StartThinkingSpinner(isCodexModel(model) && cfg.Thinking.Enabled, "")
+	spinner := api.StartThinkingSpinner(ctx, isCodexModel(model) && api.IsThinkingEnabled(ctx), "")
 
 	resp, err := p.HTTPClient.Do(req)
 	if err != nil {
@@ -451,7 +451,7 @@ func (p *Provider) chatWithImageResponses(ctx context.Context, systemPrompt stri
 	reqBody := ResponsesRequest{
 		Model:                model,
 		Input:                input,
-		MaxOutputTokens:      api.GetMaxOutputTokens("openai", model),
+		MaxOutputTokens:      api.GetMaxOutputTokens(ctx, "openai", model),
 		Stream:               true,
 		Tools:                GetResponsesToolDefinitions(p.mcpTools), // Function Calling
 		PromptCacheKey:       "xelyon",
@@ -459,7 +459,7 @@ func (p *Provider) chatWithImageResponses(ctx context.Context, systemPrompt stri
 	}
 
 	// Extended Thinking 適用
-	if cfg.Thinking.Enabled {
+	if api.IsThinkingEnabled(ctx) {
 		reqBody.Reasoning = &ReasoningConfig{
 			Effort: LevelToReasoningEffort(cfg.Thinking.Level),
 		}
@@ -490,7 +490,7 @@ func (p *Provider) chatWithImageResponses(ctx context.Context, systemPrompt stri
 	req.Header.Set("Authorization", "Bearer "+p.APIKey)
 
 	// スピナー開始
-	spinner := api.StartThinkingSpinner(isCodexModel(model) && cfg.Thinking.Enabled, "")
+	spinner := api.StartThinkingSpinner(ctx, isCodexModel(model) && api.IsThinkingEnabled(ctx), "")
 
 	resp, err := p.HTTPClient.Do(req)
 	if err != nil {

@@ -84,14 +84,13 @@ func (ct *CostTracker) SetupUsageCallbacks(supervisorProvider api.Provider, supe
 			ct.AddSupervisorCost(supervisorModel, u.InputTokens, u.OutputTokens)
 		})
 	}
+	// 同一プロバイダーの場合、Worker コストは Supervisor と同じ callback で収集される
+	// （区別できないため、全て Supervisor コストとして記録）
 	if workerProvider != supervisorProvider {
 		if reporter, ok := workerProvider.(api.UsageReporter); ok {
 			reporter.SetUsageCallback(func(u api.Usage) {
 				ct.AddWorkerCost(workerModel, u.InputTokens, u.OutputTokens)
 			})
 		}
-	} else {
-		// 同一プロバイダーの場合、Worker コストは Supervisor と同じ callback で収集される
-		// （区別できないため、全て Supervisor コストとして記録）
 	}
 }

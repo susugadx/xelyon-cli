@@ -60,9 +60,10 @@ plan_mode:
 ```
 
 - **Supervisor**: 調査クエリ生成、計画生成
-- **Worker**: ステップを並列実行（チャンネル通信、UI操作なし）
+- **Worker**: ステップを並列実行（チャンネル通信、UI操作なし、Thinking OFF）
 - **失敗時フロー**: リトライ → ユーザー確認（retry/comment/skip/abort）
 - **依存関係解決**: `depends_on`ベースで並列実行可能なステップを自動判定
+- **Worker Thinking OFF**: Worker は Extended Thinking を自動無効化（`context.Value` でオーバーライド）。コスト削減・高速化のため
 
 ### 🔄 自動リトライ機能
 ツール実行が失敗した場合、自動的にリトライして成功するまで試行します。

@@ -197,6 +197,9 @@ func (w *Worker) executeCommand(ctx context.Context, cmd WorkerCommand) WorkerRe
 func (w *Worker) executeStep(ctx context.Context, step *plan.PlanStep, confirmLevel string) WorkerResult {
 	startTime := time.Now()
 
+	// Worker は Thinking を無効化
+	ctx = api.WithThinkingDisabled(ctx)
+
 	// タイムアウト付きコンテキスト
 	timeoutCtx, cancel := context.WithTimeout(ctx, time.Duration(w.stepTimeout)*time.Second)
 	defer cancel()
@@ -358,6 +361,9 @@ func (w *Worker) executeStep(ctx context.Context, step *plan.PlanStep, confirmLe
 // executeInvestigation は調査を実行
 func (w *Worker) executeInvestigation(ctx context.Context, query string) WorkerResult {
 	startTime := time.Now()
+
+	// Worker は Thinking を無効化
+	ctx = api.WithThinkingDisabled(ctx)
 
 	// タイムアウト付きコンテキスト
 	timeoutCtx, cancel := context.WithTimeout(ctx, time.Duration(w.stepTimeout)*time.Second)

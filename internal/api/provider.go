@@ -149,7 +149,7 @@ var knownModelMaxOutputTokens = map[string]int{
 // 2. ユーザーの model_overrides (config)
 // 3. 既知モデルマップ (knownModelMaxOutputTokens)
 // 4. プロバイダーのデフォルト値 (ProviderModelConfig.MaxOutputTokens)
-func GetMaxOutputTokens(providerName, model string) int {
+func GetMaxOutputTokens(ctx context.Context, providerName, model string) int {
 	cfg := config.GetGlobalConfig()
 
 	maxTokens := 0
@@ -180,7 +180,7 @@ func GetMaxOutputTokens(providerName, model string) int {
 
 	// 4. Extended Thinking 有効時は BudgetTokens を考慮
 	// Claude Opus 4.6 などでは max_tokens = budget_tokens + output_tokens とする必要がある
-	if cfg.Thinking.Enabled && (pName == "claude" || pName == "anthropic" || pName == "bedrock") {
+	if IsThinkingEnabled(ctx) && (pName == "claude" || pName == "anthropic" || pName == "bedrock") {
 		budget := LevelToBudgetTokens(cfg.Thinking.Level)
 		return budget + maxTokens
 	}

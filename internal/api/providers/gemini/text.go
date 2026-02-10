@@ -49,7 +49,7 @@ func (p *Provider) chatWithTextMode(ctx context.Context, systemPrompt string, hi
 	}
 
 	// Thinking 設定（Gemini 3 vs 2.5 で自動分岐）
-	reqBody.GenerationConfig = getThinkingConfigForModel(model, cfg)
+	reqBody.GenerationConfig = getThinkingConfigForModel(ctx, model, cfg)
 
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {
@@ -73,7 +73,7 @@ func (p *Provider) chatWithTextMode(ctx context.Context, systemPrompt string, hi
 	if isGemini3Model(model) {
 		isFlash := strings.Contains(model, "flash")
 		var msg string
-		if isFlash && !cfg.Thinking.Enabled {
+		if isFlash && !api.IsThinkingEnabled(ctx) {
 			msg = "Thinking"
 		} else {
 			msg = "Deep thinking"
@@ -82,7 +82,7 @@ func (p *Provider) chatWithTextMode(ctx context.Context, systemPrompt string, hi
 		spinner.Start(msg)
 		ui.SetGlobalSpinner(spinner)
 	} else {
-		spinner = api.StartThinkingSpinner(false, "")
+		spinner = api.StartThinkingSpinner(ctx, false, "")
 	}
 
 	// 503 リトライ付き HTTP リクエスト
@@ -182,7 +182,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	}
 
 	// Thinking 設定（Gemini 3 vs 2.5 で自動分岐）
-	reqBody.GenerationConfig = getThinkingConfigForModel(model, cfgImg)
+	reqBody.GenerationConfig = getThinkingConfigForModel(ctx, model, cfgImg)
 
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {
@@ -211,7 +211,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	if isGemini3Model(model) {
 		isFlash := strings.Contains(model, "flash")
 		var msg string
-		if isFlash && !cfgImg.Thinking.Enabled {
+		if isFlash && !api.IsThinkingEnabled(ctx) {
 			msg = "Analyzing image"
 		} else {
 			msg = "Deep thinking (image)"
@@ -220,7 +220,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 		spinner.Start(msg)
 		ui.SetGlobalSpinner(spinner)
 	} else {
-		spinner = api.StartThinkingSpinner(true, "") // isImage=true
+		spinner = api.StartThinkingSpinner(ctx, true, "") // isImage=true
 	}
 
 	// 503 リトライ付き HTTP リクエスト

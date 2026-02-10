@@ -56,7 +56,7 @@ func (p *Provider) chatWithCompletions(ctx context.Context, systemPrompt string,
 	reqBody := api.ChatRequest{
 		Model:                model,
 		Messages:             messages,
-		MaxTokens:            api.GetMaxOutputTokens("openai", model),
+		MaxTokens:            api.GetMaxOutputTokens(ctx, "openai", model),
 		Stream:               true,
 		StreamOptions:        &api.StreamOptions{IncludeUsage: true},
 		PromptCacheKey:       "xelyon",
@@ -70,7 +70,7 @@ func (p *Provider) chatWithCompletions(ctx context.Context, systemPrompt string,
 	}
 
 	// Extended Thinking 適用
-	if cfg.Thinking.Enabled {
+	if api.IsThinkingEnabled(ctx) {
 		reqBody.ReasoningEffort = LevelToReasoningEffort(cfg.Thinking.Level)
 	}
 
@@ -88,7 +88,7 @@ func (p *Provider) chatWithCompletions(ctx context.Context, systemPrompt string,
 	req.Header.Set("Authorization", "Bearer "+p.APIKey)
 
 	// スピナー開始
-	spinner := api.StartThinkingSpinner(false, "")
+	spinner := api.StartThinkingSpinner(ctx, false, "")
 
 	// 再利用可能なHTTPクライアントを使用
 	resp, err := p.HTTPClient.Do(req)
@@ -291,14 +291,14 @@ func (p *Provider) chatWithImageCompletions(ctx context.Context, systemPrompt st
 	reqBody := MultimodalRequest{
 		Model:                model,
 		Messages:             messages,
-		MaxTokens:            api.GetMaxOutputTokens("openai", model),
+		MaxTokens:            api.GetMaxOutputTokens(ctx, "openai", model),
 		Stream:               true,
 		PromptCacheKey:       "xelyon",
 		PromptCacheRetention: "24h",
 	}
 
 	// Extended Thinking 適用
-	if cfg.Thinking.Enabled {
+	if api.IsThinkingEnabled(ctx) {
 		reqBody.ReasoningEffort = LevelToReasoningEffort(cfg.Thinking.Level)
 	}
 
@@ -316,7 +316,7 @@ func (p *Provider) chatWithImageCompletions(ctx context.Context, systemPrompt st
 	req.Header.Set("Authorization", "Bearer "+p.APIKey)
 
 	// スピナー開始
-	spinner := api.StartThinkingSpinner(true, "")
+	spinner := api.StartThinkingSpinner(ctx, true, "")
 
 	resp, err := p.HTTPClient.Do(req)
 	if err != nil {

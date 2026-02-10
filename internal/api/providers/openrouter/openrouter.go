@@ -112,7 +112,6 @@ func (p *Provider) IsFunctionCallingEnabled() bool {
 
 // ChatWithTools は Provider interface の実装
 func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
-	cfg := config.GetGlobalConfig()
 	model = api.GetDefaultModel(model, "openrouter", "anthropic/claude-opus-4.5")
 
 	// Claude モデル + Compaction 有効時は Anthropic Skin エンドポイントを使用
@@ -120,7 +119,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		return p.chatWithClaudeAPI(ctx, systemPrompt, history, model, nil)
 	}
 
-	if cfg.Thinking.Enabled {
+	if api.IsThinkingEnabled(ctx) {
 		yellow.Println("⚠️  Warning: OpenRouter does not support Extended Thinking. Proceeding without it.")
 	}
 
@@ -133,7 +132,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	reqBody := api.ChatRequest{
 		Model:         model,
 		Messages:      messages,
-		MaxTokens:     api.GetMaxOutputTokens("openrouter", model),
+		MaxTokens:     api.GetMaxOutputTokens(ctx, "openrouter", model),
 		Stream:        true,
 		StreamOptions: &api.StreamOptions{IncludeUsage: true},
 	}
@@ -158,7 +157,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	req.Header.Set("HTTP-Referer", "https://github.com/susugadx/xelyon-cli")
 	req.Header.Set("X-Title", "XELYON CLI")
 
-	spinner := api.StartThinkingSpinner(false, "")
+	spinner := api.StartThinkingSpinner(ctx, false, "")
 
 	resp, err := p.HTTPClient.Do(req)
 	if err != nil {
@@ -227,7 +226,7 @@ func (p *Provider) chatWithImageRequest(ctx context.Context, systemPrompt string
 	}{
 		Model:         model,
 		Messages:      messages,
-		MaxTokens:     api.GetMaxOutputTokens("openrouter", model),
+		MaxTokens:     api.GetMaxOutputTokens(ctx, "openrouter", model),
 		Stream:        true,
 		StreamOptions: &api.StreamOptions{IncludeUsage: true},
 	}
@@ -247,7 +246,7 @@ func (p *Provider) chatWithImageRequest(ctx context.Context, systemPrompt string
 	req.Header.Set("HTTP-Referer", "https://github.com/susugadx/xelyon-cli")
 	req.Header.Set("X-Title", "XELYON CLI")
 
-	spinner := api.StartThinkingSpinner(true, "")
+	spinner := api.StartThinkingSpinner(ctx, true, "")
 
 	resp, err := p.HTTPClient.Do(req)
 	if err != nil {
@@ -441,7 +440,7 @@ func (p *Provider) chatWithClaudeAPI(ctx context.Context, systemPrompt string, h
 	reqBody := claudeRequest{
 		Model:            model,
 		AnthropicVersion: "2023-06-01",
-		MaxTokens:        api.GetMaxOutputTokens("openrouter", model),
+		MaxTokens:        api.GetMaxOutputTokens(ctx, "openrouter", model),
 		System:           systemPrompt,
 		Messages:         anthropicMessages,
 		Stream:           true,
@@ -485,7 +484,7 @@ func (p *Provider) chatWithClaudeAPI(ctx context.Context, systemPrompt string, h
 	req.Header.Set("HTTP-Referer", "https://github.com/susugadx/xelyon-cli")
 	req.Header.Set("X-Title", "XELYON CLI")
 
-	spinner := api.StartThinkingSpinner(image != nil, "")
+	spinner := api.StartThinkingSpinner(ctx, image != nil, "")
 
 	resp, err := p.HTTPClient.Do(req)
 	if err != nil {

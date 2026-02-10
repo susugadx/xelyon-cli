@@ -13,7 +13,6 @@ import (
 	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/api/providers/openai"
-	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -65,8 +64,7 @@ func (p *Provider) IsFunctionCallingEnabled() bool {
 // ChatWithTools は Provider interface の実装（context対応）
 func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
 	// Extended Thinking 非対応警告
-	cfg := config.GetGlobalConfig()
-	if cfg.Thinking.Enabled {
+	if api.IsThinkingEnabled(ctx) {
 		yellow.Println("⚠️  Warning: Groq does not support Extended Thinking. Proceeding without it.")
 	}
 
@@ -82,7 +80,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	reqBody := api.ChatRequest{
 		Model:         model,
 		Messages:      messages,
-		MaxTokens:     api.GetMaxOutputTokens("groq", model),
+		MaxTokens:     api.GetMaxOutputTokens(ctx, "groq", model),
 		Stream:        true,
 		StreamOptions: &api.StreamOptions{IncludeUsage: true},
 	}
@@ -107,7 +105,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	req.Header.Set("Authorization", "Bearer "+p.APIKey)
 
 	// スピナー開始
-	spinner := api.StartThinkingSpinner(false, "")
+	spinner := api.StartThinkingSpinner(ctx, false, "")
 
 	// 再利用可能なHTTPクライアントを使用
 	resp, err := p.HTTPClient.Do(req)

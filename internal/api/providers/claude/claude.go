@@ -246,7 +246,7 @@ func (p *Provider) executeRequest(ctx context.Context, reqBody interface{}, with
 		req.Header.Set("anthropic-beta", strings.Join(betaHeaders, ","))
 	}
 
-	spinner := api.StartThinkingSpinner(withImage, "")
+	spinner := api.StartThinkingSpinner(ctx, withImage, "")
 
 	resp, err := p.HTTPClient.Do(req)
 	if err != nil {
@@ -302,7 +302,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		Model:     model,
 		Messages:  messages,
 		System:    api.BuildSystemField(systemPrompt),
-		MaxTokens: api.GetMaxOutputTokens("claude", model),
+		MaxTokens: api.GetMaxOutputTokens(ctx, "claude", model),
 		Stream:    true,
 	}
 
@@ -326,7 +326,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	}
 
 	// Extended Thinking 適用
-	if cfg.Thinking.Enabled {
+	if api.IsThinkingEnabled(ctx) {
 		reqBody.Thinking = &ThinkingConfig{
 			Type:         "enabled",
 			BudgetTokens: LevelToBudgetTokens(cfg.Thinking.Level),
@@ -557,12 +557,12 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 		Model:     model,
 		Messages:  messages,
 		System:    api.BuildSystemField(systemPrompt),
-		MaxTokens: api.GetMaxOutputTokens("claude", model),
+		MaxTokens: api.GetMaxOutputTokens(ctx, "claude", model),
 		Stream:    true,
 	}
 
 	// Extended Thinking 適用
-	if cfg.Thinking.Enabled {
+	if api.IsThinkingEnabled(ctx) {
 		reqBody.Thinking = &ThinkingConfig{
 			Type:         "enabled",
 			BudgetTokens: LevelToBudgetTokens(cfg.Thinking.Level),

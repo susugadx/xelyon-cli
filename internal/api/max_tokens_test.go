@@ -1,8 +1,10 @@
 package api
 
 import (
-	"github.com/susugadx/xelyon-cli/internal/config"
+	"context"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 func TestGetMaxOutputTokens(t *testing.T) {
@@ -62,7 +64,7 @@ func TestGetMaxOutputTokens(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			config.SetGlobalConfig(cfg)
 			defer config.SetGlobalConfig(originalConfig)
-			got := GetMaxOutputTokens(tt.provider, tt.model)
+			got := GetMaxOutputTokens(context.Background(), tt.provider, tt.model)
 			if got != tt.expected {
 				t.Errorf("GetMaxOutputTokens() = %v, want %v", got, tt.expected)
 			}
