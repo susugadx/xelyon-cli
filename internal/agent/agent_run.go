@@ -28,16 +28,6 @@ func RunHeadless(query string, model string, provider api.Provider) *HeadlessRes
 		agent.SystemPrompt += "\n\n## Project Context:\n" + config
 	}
 
-	// Repo Map 生成（キャッシュあり / UI出力なし）
-	cwd, err := os.Getwd()
-	if err != nil {
-		cwd = "."
-	}
-	repoMapStr, _, _, _ := loadRepoMapForProject(cwd, getMaxTokens(cwd))
-	if repoMapStr != "" {
-		agent.SystemPrompt += "\n\n" + repoMapStr
-	}
-
 	// ツール呼び出し結果を記録
 	var allToolCalls []ToolCallResult
 
@@ -160,22 +150,6 @@ func RunOnceWithImage(query string, model string, provider api.Provider, imagePa
 			agent.SystemPrompt += "\n\n## Project Context:\n" + stripped
 		}
 		green.Println("📋 XELYON.md loaded")
-	}
-
-	// Repo Map 生成（キャッシュあり）
-	cwd, err := os.Getwd()
-	if err != nil {
-		yellow.Printf("Warning: Could not get current directory: %v\n", err)
-		cwd = "."
-	}
-	repoMapStr, symbols, files, fromCache := loadRepoMapForProject(cwd, getMaxTokens(cwd))
-	if repoMapStr != "" {
-		agent.SystemPrompt += "\n\n" + repoMapStr
-		if fromCache {
-			green.Println("🗺️  Repo map loaded (cache)")
-		} else {
-			green.Printf("🗺️  Repo map loaded (%d symbols from %d files)\n", symbols, files)
-		}
 	}
 
 	fmt.Println()

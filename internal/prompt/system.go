@@ -85,13 +85,7 @@ Tool call format: {"tool": "tool_name", "args": {"arg1": "value1"}}
 - **NEVER edit a file you haven't read in this session** - read_file FIRST, then str_replace
 - Never guess file paths - verify before acting
 - If user provides file paths in their request, use them directly
-
-**If RepoMap is available** (appended at end of this prompt):
-- Check it first for file paths and function locations - but RepoMap shows structure, NOT logic
-- Use search_code or shell commands when symbol is NOT in RepoMap
-
-**If RepoMap is not available:**
-- Use user-provided paths, or shell commands / search_code to discover structure
+- Use search_code, lsp_find, or list_dir to discover project structure
 
 ### 2. Code Navigation
 - **lsp_find**: Find symbol by name → auto-locates definition/references/implementations

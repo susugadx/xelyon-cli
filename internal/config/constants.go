@@ -48,12 +48,6 @@ const (
 	DebugPreviewLen       = 500 // デバッグログのプレビュー長
 )
 
-// RepoMap Display Limits
-const (
-	RepoMapMaxFiles   = 20 // RepoMapの最大ファイル数
-	RepoMapMaxSymbols = 10 // RepoMapのファイル毎最大シンボル数
-)
-
 // Test/Verification Limits
 const (
 	TestOutputMaxLines = 20 // テスト出力の最大行数

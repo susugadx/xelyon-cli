@@ -225,7 +225,7 @@ XELYON CLIで使用できる全コマンドのリファレンスです。
 | map[string]string | エントリ追加/編集/削除 | `command_aliases` |
 | map[string]struct | サブメニューで編集 | `provider_models`, `lsp.servers` |
 
-**20カテゴリ:** Provider & Model, Compression, Backup, Loop Detection, API Settings, Diff Display, Tool Confirm, Command Aliases, Prompt Cache, Paste Mode, Streaming, Bash Safety, Code Health, Git Settings, Plan Mode, LSP Servers, OpenAI, Thinking, Output, RepoMap
+**19カテゴリ:** Provider & Model, Compression, Backup, Loop Detection, API Settings, Diff Display, Tool Confirm, Command Aliases, Prompt Cache, Paste Mode, Streaming, Bash Safety, Code Health, Git Settings, Plan Mode, LSP Servers, OpenAI, Thinking, Output
 
 **変更は即座に保存:** `~/.xelyon/config.yaml` に自動保存されます。
 

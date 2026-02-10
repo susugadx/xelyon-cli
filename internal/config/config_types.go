@@ -23,7 +23,6 @@ type Config struct {
 	LSP             LSPConfig                      `yaml:"lsp"`
 	OpenAI          OpenAIConfig                   `yaml:"openai"`
 	Thinking        ThinkingConfig                 `yaml:"thinking"`
-	RepoMap         RepoMapConfig                  `yaml:"repomap"`
 	Output          OutputConfig                   `yaml:"output"`
 	WebSearch       WebSearchConfig                `yaml:"web_search"`
 	// 将来の拡張用
@@ -161,12 +160,6 @@ type OpenAIConfig struct {
 type ThinkingConfig struct {
 	Enabled bool   `yaml:"enabled"` // デフォルト: false
 	Level   string `yaml:"level"`   // low/medium/high/xhigh（デフォルト: medium）
-}
-
-// RepoMapConfig は RepoMap の設定
-type RepoMapConfig struct {
-	Enabled   bool `yaml:"enabled"`              // RepoMapを有効化（デフォルト: true）
-	MaxTokens int  `yaml:"max_tokens,omitempty"` // 0 = 自動計算（ファイル数ベース）
 }
 
 // WebSearchConfig はWeb検索キャッシュの設定

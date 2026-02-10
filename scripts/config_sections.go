@@ -322,18 +322,6 @@ var Sections = map[string]SectionInfo{
 			"max_lines": "int",
 		},
 	},
-	"repomap": {
-		Title: "RepoMap設定",
-		Icon:  "🗺️",
-		Fields: map[string]string{
-			"enabled":    "RepoMapを有効化（デフォルト: true）",
-			"max_tokens": "最大トークン数（0 = 自動計算）",
-		},
-		FieldTypes: map[string]string{
-			"enabled":    "bool",
-			"max_tokens": "int",
-		},
-	},
 	"web_search": {
 		Title: "Web検索設定",
 		Icon:  "🔍",
@@ -376,7 +364,6 @@ var SectionOrder = []string{
 	"openai",
 	"thinking",
 	"output",
-	"repomap",
 	"web_search",
 }
 
@@ -402,7 +389,6 @@ var CategoryOrder = []string{
 	"openai",
 	"thinking",
 	"output",
-	"repomap",
 	"web_search",
 }
 
@@ -429,7 +415,6 @@ var SectionToCategory = map[string]string{
 	"openai":           "openai",
 	"thinking":         "thinking",
 	"output":           "output",
-	"repomap":          "repomap",
 	"web_search":       "web_search",
 }
 
@@ -536,11 +521,6 @@ var Categories = map[string]CategoryInfo{
 		DisplayName: "Output",
 		Icon:        "📤",
 		Sections:    []string{"output"},
-	},
-	"repomap": {
-		DisplayName: "RepoMap",
-		Icon:        "🗺️",
-		Sections:    []string{"repomap"},
 	},
 	"web_search": {
 		DisplayName: "Web Search",

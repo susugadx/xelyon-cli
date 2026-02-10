@@ -63,24 +63,8 @@ func RunInteractive(model string, provider api.Provider, autoApprove bool) {
 		green.Println("📋 XELYON.md loaded")
 	}
 
-	// Repo Map 生成（キャッシュあり）
-	cwd, err := os.Getwd()
-	if err != nil {
-		yellow.Printf("Warning: Could not get current directory: %v\n", err)
-		cwd = "." // フォールバック
-	}
-	repoMapStr, symbols, files, fromCache := loadRepoMapForProject(cwd, getMaxTokens(cwd))
-	if repoMapStr != "" {
-		agent.SystemPrompt += "\n\n" + repoMapStr
-		if fromCache {
-			green.Println("🗺️  Repo map loaded (cache)")
-		} else {
-			green.Printf("🗺️  Repo map loaded (%d symbols from %d files)\n", symbols, files)
-		}
-	}
-
 	// コンテキストサイズ表示（ツリー形式）
-	printContextSize(agent.SystemPrompt, repoMapStr, symbols, files)
+	printContextSize(agent.SystemPrompt)
 
 	// REPLループ開始
 	agent.mlReader = mlReader // ペーストモードで共有するため
@@ -144,24 +128,8 @@ func RunInteractiveWithResume(model string, provider api.Provider, autoApprove b
 		green.Println("📋 XELYON.md loaded")
 	}
 
-	// Repo Map 生成（キャッシュあり）
-	cwd, err := os.Getwd()
-	if err != nil {
-		yellow.Printf("Warning: Could not get current directory: %v\n", err)
-		cwd = "." // フォールバック
-	}
-	repoMapStr, symbols, files, fromCache := loadRepoMapForProject(cwd, getMaxTokens(cwd))
-	if repoMapStr != "" {
-		agent.SystemPrompt += "\n\n" + repoMapStr
-		if fromCache {
-			green.Println("🗺️  Repo map loaded (cache)")
-		} else {
-			green.Printf("🗺️  Repo map loaded (%d symbols from %d files)\n", symbols, files)
-		}
-	}
-
 	// コンテキストサイズ表示（ツリー形式）
-	printContextSize(agent.SystemPrompt, repoMapStr, symbols, files)
+	printContextSize(agent.SystemPrompt)
 
 	// REPLループ開始
 	agent.mlReader = mlReader
@@ -258,7 +226,7 @@ func setupSignalHandler(agent *Agent) {
 }
 
 // printContextSize はコンテキストサイズをツリー形式で表示
-func printContextSize(systemPrompt, repoMapStr string, repomapSymbols, repomapFiles int) {
+func printContextSize(systemPrompt string) {
 	// SystemPrompt からツールセクションを分離して推定
 	const toolsStart = "## Available Tools"
 	const toolsEnd = "## Workflow Rules"
@@ -286,21 +254,12 @@ func printContextSize(systemPrompt, repoMapStr string, repomapSymbols, repomapFi
 	xelyonContent := loadProjectConfig()
 	xelyonTokens := token.EstimateTokenCount(xelyonContent)
 
-	// Repo Map のトークン数
-	repomapTokens := token.EstimateTokenCount(repoMapStr)
-
 	// 合計
-	total := basePromptTokens + toolsTokens + xelyonTokens + repomapTokens
+	total := basePromptTokens + toolsTokens + xelyonTokens
 
 	// ツリー形式で表示
 	dim.Printf("📋 Context size: ~%s tok\n", FormatTokens(total))
 	dim.Printf("   ├── Base prompt: ~%s\n", FormatTokens(basePromptTokens))
 	dim.Printf("   ├── Tools: ~%s\n", FormatTokens(toolsTokens))
-	dim.Printf("   ├── XELYON.md: ~%s\n", FormatTokens(xelyonTokens))
-	if repomapSymbols > 0 {
-		dim.Printf("   └── Repo Map: ~%s (%d symbols, %d files)\n",
-			FormatTokens(repomapTokens), repomapSymbols, repomapFiles)
-	} else {
-		dim.Printf("   └── Repo Map: ~%s\n", FormatTokens(repomapTokens))
-	}
+	dim.Printf("   └── XELYON.md: ~%s\n", FormatTokens(xelyonTokens))
 }
