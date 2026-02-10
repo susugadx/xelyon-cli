@@ -140,10 +140,9 @@ type PlanModeConfig struct {
 	Parallel   bool `yaml:"parallel"`    // 並列モード有効化（デフォルト: false）
 	MaxWorkers int  `yaml:"max_workers"` // 並列ワーカー数（デフォルト: 3）
 
-	// モデル設定（Phase 3）
+	// モデル設定
 	SupervisorModel string `yaml:"supervisor_model"` // Supervisor用モデル（空=メインモデル）
-	LightModel      string `yaml:"light_model"`      // Worker用軽量モデル（空=メインモデル）
-	HeavyModel      string `yaml:"heavy_model"`      // エスカレーション用モデル（空=無効）
+	WorkerModel     string `yaml:"worker_model"`     // Worker用モデル（空=メインモデル）
 
 	// リトライ・タイムアウト（Phase 3）
 	MaxRetry    int `yaml:"max_retry"`    // 自動リトライ回数（デフォルト: 10）

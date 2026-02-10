@@ -55,14 +55,13 @@ DeepSeek, OpenAI, Gemini, Claude, Ollama, Groq, OpenRouter, Bedrock をシーム
 plan_mode:
   parallel: true         # 並列モード有効化
   max_workers: 3         # 並列ワーカー数
-  light_model: ""        # Worker用モデル（空=メインモデル）
-  heavy_model: ""        # エスカレーション用（空=無効）
+  worker_model: ""       # Worker用モデル（空=メインモデル）
   confirm_level: dangerous  # 確認レベル: all/dangerous/none
 ```
 
-- **Supervisor**: 調査クエリ生成、計画生成、エスカレーション判断
+- **Supervisor**: 調査クエリ生成、計画生成
 - **Worker**: ステップを並列実行（チャンネル通信、UI操作なし）
-- **エスカレーション**: Worker失敗時に`heavy_model`で再実行
+- **失敗時フロー**: リトライ → ユーザー確認（retry/comment/skip/abort）
 - **依存関係解決**: `depends_on`ベースで並列実行可能なステップを自動判定
 
 ### 🔄 自動リトライ機能

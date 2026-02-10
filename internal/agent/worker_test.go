@@ -137,18 +137,6 @@ func TestStepFailure_Error(t *testing.T) {
 	}
 }
 
-func TestEscalationNeeded_Error(t *testing.T) {
-	err := &EscalationNeeded{
-		StepID:   2,
-		ToolName: "delete_file",
-		Reason:   "confirmation required",
-	}
-	expected := "step 2 requires escalation: confirmation required (tool: delete_file)"
-	if err.Error() != expected {
-		t.Errorf("EscalationNeeded.Error() = %s, want %s", err.Error(), expected)
-	}
-}
-
 func TestWorkerStatus_Values(t *testing.T) {
 	tests := []struct {
 		status   WorkerStatus
@@ -184,14 +172,13 @@ func TestCommandType_Constants(t *testing.T) {
 
 func TestWorkerResult_Fields(t *testing.T) {
 	result := WorkerResult{
-		WorkerID:         1,
-		StepID:           5,
-		Success:          true,
-		NeedsEscalation:  false,
-		EscalationReason: "",
-		Output:           "Step completed successfully",
-		ToolsExecuted:    []string{"read_file", "write_file"},
-		Query:            "test query",
+		WorkerID:      1,
+		StepID:        5,
+		Success:       true,
+		SkipRetry:     false,
+		Output:        "Step completed successfully",
+		ToolsExecuted: []string{"read_file", "write_file"},
+		Query:         "test query",
 	}
 
 	if result.WorkerID != 1 {
@@ -203,8 +190,8 @@ func TestWorkerResult_Fields(t *testing.T) {
 	if !result.Success {
 		t.Error("Success should be true")
 	}
-	if result.NeedsEscalation {
-		t.Error("NeedsEscalation should be false")
+	if result.SkipRetry {
+		t.Error("SkipRetry should be false")
 	}
 	if len(result.ToolsExecuted) != 2 {
 		t.Errorf("ToolsExecuted length = %d, want 2", len(result.ToolsExecuted))

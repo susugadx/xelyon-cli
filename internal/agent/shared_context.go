@@ -39,7 +39,7 @@ type SharedContext struct {
 // WorkerMessage は Worker 間のメッセージ
 type WorkerMessage struct {
 	FromWorker int
-	Topic      string // "step_completed", "step_failed", "file_changed", "escalation"
+	Topic      string // "step_completed", "step_failed", "file_changed"
 	Content    string
 	StepID     int
 	FilePath   string

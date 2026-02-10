@@ -303,7 +303,7 @@ func TestPublishWithHistory(t *testing.T) {
 func TestGetMessages(t *testing.T) {
 	sc := NewSharedContext()
 
-	topic := "escalation"
+	topic := "step_failed"
 	sc.Publish(WorkerMessage{FromWorker: 1, Topic: topic, Content: "x", Timestamp: time.Now()})
 
 	msgs := sc.GetMessages(topic)

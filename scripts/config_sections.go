@@ -255,8 +255,7 @@ var Sections = map[string]SectionInfo{
 			"step_timeout":     "ステップタイムアウト（秒）",
 			"confirm_level":    "確認レベル: all / dangerous / none",
 			"supervisor_model": "Supervisor用モデル（空=メインモデル）",
-			"light_model":      "Worker用軽量モデル（空=メインモデル）",
-			"heavy_model":      "エスカレーション用モデル（空=無効）",
+			"worker_model":     "Worker用モデル（空=メインモデル）",
 		},
 		FieldTypes: map[string]string{
 			"parallel":         "bool",
@@ -265,8 +264,7 @@ var Sections = map[string]SectionInfo{
 			"step_timeout":     "int",
 			"confirm_level":    "select",
 			"supervisor_model": "string",
-			"light_model":      "string",
-			"heavy_model":      "string",
+			"worker_model":     "string",
 		},
 		SelectOpts: map[string][]string{
 			"confirm_level": {"all", "dangerous", "none"},

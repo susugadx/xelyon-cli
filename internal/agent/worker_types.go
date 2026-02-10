@@ -10,18 +10,17 @@ import (
 
 // WorkerResult は Worker → Supervisor への結果報告
 type WorkerResult struct {
-	WorkerID         int                // Worker ID
-	StepID           int                // ステップ ID
-	Success          bool               // 成功フラグ
-	NeedsEscalation  bool               // heavy_model へのエスカレーションが必要
-	EscalationReason string             // エスカレーション理由
-	Output           string             // 出力
-	Changes          []tools.FileChange // ファイル変更
-	Error            error              // エラー
-	ToolsExecuted    []string           // 実行したツール名
-	TokensUsed       int                // 使用トークン数
-	Duration         time.Duration      // 実行時間
-	Query            string             // 調査クエリ（調査フェーズ用）
+	WorkerID      int                // Worker ID
+	StepID        int                // ステップ ID
+	Success       bool               // 成功フラグ
+	SkipRetry     bool               // true の場合リトライせず即ユーザー確認
+	Output        string             // 出力
+	Changes       []tools.FileChange // ファイル変更
+	Error         error              // エラー
+	ToolsExecuted []string           // 実行したツール名
+	TokensUsed    int                // 使用トークン数
+	Duration      time.Duration      // 実行時間
+	Query         string             // 調査クエリ（調査フェーズ用）
 }
 
 // WorkerCommand は Supervisor → Worker へのコマンド
@@ -59,19 +58,7 @@ const (
 	IconCompleted = "✅"  // 完了
 	IconFailed    = "❌"  // 失敗
 	IconRetrying  = "🔄"  // リトライ中
-	IconEscalated = "⬆️" // エスカレーション
 )
-
-// EscalationNeeded はエスカレーションが必要な場合のエラー
-type EscalationNeeded struct {
-	StepID   int
-	ToolName string
-	Reason   string
-}
-
-func (e *EscalationNeeded) Error() string {
-	return fmt.Sprintf("step %d requires escalation: %s (tool: %s)", e.StepID, e.Reason, e.ToolName)
-}
 
 // StepFailure はステップ失敗のエラー
 type StepFailure struct {

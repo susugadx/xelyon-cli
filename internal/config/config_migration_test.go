@@ -153,8 +153,7 @@ func TestMigratePlanModeConfig_ModelFields(t *testing.T) {
 	// モデルフィールドはデフォルト空文字（メインモデルを使用）
 	cfg := &PlanModeConfig{
 		SupervisorModel: "claude-3-opus",
-		LightModel:      "",
-		HeavyModel:      "gpt-4",
+		WorkerModel:     "",
 	}
 
 	MigratePlanModeConfig(cfg)
@@ -163,10 +162,7 @@ func TestMigratePlanModeConfig_ModelFields(t *testing.T) {
 	if cfg.SupervisorModel != "claude-3-opus" {
 		t.Errorf("SupervisorModel should remain 'claude-3-opus', got '%s'", cfg.SupervisorModel)
 	}
-	if cfg.LightModel != "" {
-		t.Errorf("LightModel should remain empty, got '%s'", cfg.LightModel)
-	}
-	if cfg.HeavyModel != "gpt-4" {
-		t.Errorf("HeavyModel should remain 'gpt-4', got '%s'", cfg.HeavyModel)
+	if cfg.WorkerModel != "" {
+		t.Errorf("WorkerModel should remain empty, got '%s'", cfg.WorkerModel)
 	}
 }

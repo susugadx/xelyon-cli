@@ -283,21 +283,21 @@ func (w *Worker) executeStep(ctx context.Context, step *plan.PlanStep, confirmLe
 		for _, tc := range toolCalls {
 			// confirm_level チェック
 			if ShouldConfirmTool(tc.Tool, confirmLevel) {
-				// 並列時は確認不可 → エスカレーション要求
+				// 並列時は確認不可 → SkipRetry で即ユーザー確認へ
 				w.sharedContext.Publish(WorkerMessage{
 					FromWorker: w.id,
 					Topic:      "step_failed",
-					Content:    fmt.Sprintf("tool %s requires confirmation", tc.Tool),
+					Content:    fmt.Sprintf("tool %s requires user confirmation", tc.Tool),
 					StepID:     step.ID,
 				})
 				return WorkerResult{
-					WorkerID:         w.id,
-					StepID:           step.ID,
-					Success:          false,
-					NeedsEscalation:  true,
-					EscalationReason: fmt.Sprintf("tool %s requires confirmation", tc.Tool),
-					ToolsExecuted:    toolsExecuted,
-					Duration:         time.Since(startTime),
+					WorkerID:      w.id,
+					StepID:        step.ID,
+					Success:       false,
+					SkipRetry:     true,
+					Error:         fmt.Errorf("tool %s requires user confirmation", tc.Tool),
+					ToolsExecuted: toolsExecuted,
+					Duration:      time.Since(startTime),
 				}
 			}
 

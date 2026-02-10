@@ -201,10 +201,8 @@ plan_mode:
     max_workers: 3
     # Supervisor用モデル（空=メインモデル）
     supervisor_model: ""
-    # Worker用軽量モデル（空=メインモデル）
-    light_model: ""
-    # エスカレーション用モデル（空=無効）
-    heavy_model: ""
+    # Worker用モデル（空=メインモデル）
+    worker_model: ""
     # 最大リトライ回数
     max_retry: 10
     # ステップタイムアウト（秒）

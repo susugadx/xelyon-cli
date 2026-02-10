@@ -22,14 +22,12 @@ import (
 // Supervisor は Plan Mode の実行を監督
 type Supervisor struct {
 	// プロバイダー
-	supervisorProvider api.Provider // Supervisor 用（計画生成、エスカレーション判断）
-	lightProvider      api.Provider // Worker 用軽量モデル
-	heavyProvider      api.Provider // エスカレーション用高性能モデル（nil 可）
+	supervisorProvider api.Provider // Supervisor 用（計画生成）
+	workerProvider     api.Provider // Worker 用モデル
 
 	// モデル名
 	supervisorModel string
-	lightModel      string
-	heavyModel      string
+	workerModel     string
 
 	// 共有状態
 	sharedContext *SharedContext
@@ -47,6 +45,9 @@ type Supervisor struct {
 	// リトライ回数追跡
 	retryCount map[int]int
 
+	// コスト追跡
+	costTracker *CostTracker
+
 	// 監視モード用状態
 	completedByStep map[int]WorkerMessage
 	failedByStep    map[int]WorkerMessage
@@ -63,8 +64,8 @@ func NewSupervisor(agent *Agent, cfg *config.PlanModeConfig) (*Supervisor, error
 		confirmLevel:    cfg.ConfirmLevel,
 		sharedContext:   NewSharedContext(),
 		supervisorModel: cfg.SupervisorModel,
-		lightModel:      cfg.LightModel,
-		heavyModel:      cfg.HeavyModel,
+		workerModel:     cfg.WorkerModel,
+		costTracker:     NewCostTracker(),
 		retryCount:      make(map[int]int),
 		completedByStep: make(map[int]WorkerMessage),
 		failedByStep:    make(map[int]WorkerMessage),
@@ -78,8 +79,8 @@ func NewSupervisor(agent *Agent, cfg *config.PlanModeConfig) (*Supervisor, error
 	// WorkerPool 作成
 	s.workerPool = NewWorkerPool(
 		s.maxWorkers,
-		s.lightProvider,
-		s.lightModel,
+		s.workerProvider,
+		s.workerModel,
 		s.sharedContext,
 		agent,
 		s.stepTimeout,
@@ -103,26 +104,20 @@ func (s *Supervisor) initProviders() error {
 		s.supervisorProvider = provider
 	}
 
-	// light_model（Worker 用）
-	if s.lightModel == "" {
-		s.lightProvider = s.agent.CurrentProvider
-		s.lightModel = s.agent.CurrentModel
+	// worker_model（Worker 用）
+	if s.workerModel == "" {
+		s.workerProvider = s.agent.CurrentProvider
+		s.workerModel = s.agent.CurrentModel
 	} else {
-		provider, err := s.createProviderForModel(s.lightModel)
+		provider, err := s.createProviderForModel(s.workerModel)
 		if err != nil {
-			return fmt.Errorf("failed to create light provider: %w", err)
+			return fmt.Errorf("failed to create worker provider: %w", err)
 		}
-		s.lightProvider = provider
+		s.workerProvider = provider
 	}
 
-	// heavy_model（エスカレーション用、空なら無効）
-	if s.heavyModel != "" {
-		provider, err := s.createProviderForModel(s.heavyModel)
-		if err != nil {
-			return fmt.Errorf("failed to create heavy provider: %w", err)
-		}
-		s.heavyProvider = provider
-	}
+	// コスト追跡の UsageCallback を設定
+	s.costTracker.SetupUsageCallbacks(s.supervisorProvider, s.supervisorModel, s.workerProvider, s.workerModel)
 
 	return nil
 }
@@ -140,6 +135,27 @@ func (s *Supervisor) createProviderForModel(model string) (api.Provider, error) 
 
 // inferProviderFromModel はモデル名からプロバイダー名を推論
 func inferProviderFromModel(model string) string {
+	// "provider/model" 形式
+	if idx := strings.Index(model, "/"); idx != -1 {
+		prefix := model[:idx]
+		// 既知のプロバイダー名ならそのまま返す
+		knownProviders := []string{"openrouter", "groq", "bedrock", "ollama", "openai", "claude", "anthropic", "gemini", "deepseek"}
+		for _, p := range knownProviders {
+			if prefix == p {
+				return prefix
+			}
+		}
+		// 未知のプレフィックス（"meta/...", "anthropic/..." 等）→ OpenRouter 経由と推定
+		return "openrouter"
+	}
+
+	// Bedrock 形式: "anthropic.claude-sonnet-4-20250514-v1:0"
+	if strings.Contains(model, ".") && (strings.HasPrefix(model, "anthropic.") ||
+		strings.HasPrefix(model, "amazon.") || strings.HasPrefix(model, "meta.")) {
+		return "bedrock"
+	}
+
+	// プレフィックスマッチ
 	switch {
 	case strings.HasPrefix(model, "gpt-"), strings.HasPrefix(model, "o1"), strings.HasPrefix(model, "o3"):
 		return "openai"
@@ -152,7 +168,6 @@ func inferProviderFromModel(model string) string {
 	case strings.Contains(model, "llama"), strings.Contains(model, "qwen"):
 		return "ollama"
 	default:
-		// メインプロバイダーと同じにする（安全）
 		return config.GetGlobalConfig().DefaultProvider
 	}
 }
@@ -201,7 +216,12 @@ func (s *Supervisor) Run(ctx context.Context, userRequest string) error {
 	green.Println("✓ Plan approved. Starting parallel execution...")
 
 	// 3. 実装フェーズ
-	return s.runExecution(ctx, p)
+	err = s.runExecution(ctx, p)
+
+	// コストサマリーを表示
+	s.costTracker.PrintSummary()
+
+	return err
 }
 
 // runInvestigation は調査フェーズを実行
@@ -237,7 +257,7 @@ func (s *Supervisor) generateInvestigationQueries(ctx context.Context, userReque
 
 	response, err := s.supervisorProvider.ChatWithTools(
 		ctx,
-		s.agent.SystemPrompt,
+		promptplan.BuildSupervisorSystemPrompt(),
 		[]api.Message{{Role: "user", Content: prompt}},
 		s.supervisorModel,
 	)
@@ -304,7 +324,7 @@ func (s *Supervisor) generatePlan(ctx context.Context, userRequest, investigatio
 	for i := 0; i < maxIterations; i++ {
 		response, err := s.supervisorProvider.ChatWithTools(
 			ctx,
-			s.agent.SystemPrompt,
+			promptplan.BuildSupervisorSystemPrompt(),
 			history,
 			s.supervisorModel,
 		)
@@ -418,8 +438,7 @@ func (s *Supervisor) runExecution(ctx context.Context, p *plan.Plan) error {
 // - 同一 StepID の多重完了（重複通知）
 // - 依存未完了にも関わらず step_completed が流れてきた
 //
-// 競合検出時は警告を出し、必要に応じて当該ステップを再実行キューへ戻す。
-// エスカレーション/ユーザー確認は既存の handleResult/escalate/promptUser を利用する。
+// 競合検出時は警告ログを出力する。再実行判断はメインループ（runExecution）が担当。
 func (s *Supervisor) runMonitor(ctx context.Context, p *plan.Plan) {
 	completedCh := s.sharedContext.Subscribe("step_completed", s.maxWorkers*100)
 	failedCh := s.sharedContext.Subscribe("step_failed", s.maxWorkers*100)
@@ -441,13 +460,7 @@ func (s *Supervisor) runMonitor(ctx context.Context, p *plan.Plan) {
 			// 重複完了（競合）
 			if prev, ok := s.completedByStep[msg.StepID]; ok {
 				s.monitorMu.Unlock()
-				yellow.Printf("[monitor] conflict: step %d completed twice (worker %d then %d)\n", msg.StepID, prev.FromWorker, msg.FromWorker)
-				// 進行不能や不整合を避けるため、再実行キューへ戻す（Supervisor が最終判断）
-				if s.workerPool != nil {
-					if step := p.GetStep(msg.StepID); step != nil {
-						s.workerPool.SubmitStep(step, s.confirmLevel)
-					}
-				}
+				yellow.Printf("[monitor] conflict: step %d completed twice (worker %d then %d) - logged for review\n", msg.StepID, prev.FromWorker, msg.FromWorker)
 				continue
 			}
 
@@ -463,11 +476,7 @@ func (s *Supervisor) runMonitor(ctx context.Context, p *plan.Plan) {
 				}
 				if !depOK {
 					s.monitorMu.Unlock()
-					yellow.Printf("[monitor] conflict: step %d reported completed but dependencies not completed\n", msg.StepID)
-					// 依存が揃うまで待つべきなので、一旦再実行キューへ戻す
-					if s.workerPool != nil {
-						s.workerPool.SubmitStep(step, s.confirmLevel)
-					}
+					yellow.Printf("[monitor] conflict: step %d completed but dependencies not met - logged for review\n", msg.StepID)
 					continue
 				}
 			}
@@ -482,29 +491,10 @@ func (s *Supervisor) runMonitor(ctx context.Context, p *plan.Plan) {
 			if msg.StepID == 0 {
 				continue
 			}
-			// 失敗通知を記録
+			// 失敗通知を記録（handleResult はメインループが担当）
 			s.monitorMu.Lock()
 			s.failedByStep[msg.StepID] = msg
 			s.monitorMu.Unlock()
-
-			// 監視側介入: 失敗通知を受けたら、対象ステップがまだ完了扱いでない場合に限り再実行/エスカレーション等を検討
-			step := p.GetStep(msg.StepID)
-			if step == nil {
-				continue
-			}
-			// 既に plan 上完了なら無視
-			if step.Status == "completed" {
-				continue
-			}
-
-			// WorkerResult 互換の形で既存ロジックに流す
-			result := WorkerResult{
-				WorkerID: msg.FromWorker,
-				StepID:   msg.StepID,
-				Success:  false,
-				Error:    errors.New(msg.Content),
-			}
-			_ = s.handleResult(ctx, result, step, p)
 		}
 	}
 }
@@ -521,7 +511,7 @@ func (s *Supervisor) getExecutableSteps(p *plan.Plan) []*plan.PlanStep {
 	return steps
 }
 
-// handleResult は結果を処理してリトライ/エスカレーション/ユーザー確認を判断
+// handleResult は結果を処理してリトライ/ユーザー確認を判断
 func (s *Supervisor) handleResult(ctx context.Context, result WorkerResult, step *plan.PlanStep, p *plan.Plan) error {
 	if result.Success {
 		p.UpdateStatus(step.ID, "completed", result.Output)
@@ -529,61 +519,26 @@ func (s *Supervisor) handleResult(ctx context.Context, result WorkerResult, step
 		return nil
 	}
 
-	count := s.retryCount[step.ID]
-
-	// エスカレーションが必要な場合
-	if result.NeedsEscalation {
-		cyan.Printf("%s Step %d escalating: %s\n", IconEscalated, step.ID, result.EscalationReason)
-		return s.escalate(ctx, step, p)
+	// リトライスキップが指定されている場合は即ユーザー確認
+	if result.SkipRetry {
+		return s.promptUser(ctx, step, result, p)
 	}
 
-	// 1. リトライ回数が残っている場合
+	count := s.retryCount[step.ID]
+
+	// リトライ回数が残っている場合
 	if count < s.maxRetry {
 		s.retryCount[step.ID] = count + 1
 		yellow.Printf("%s Step %d failed (retry %d/%d)\n", IconRetrying, step.ID, count+1, s.maxRetry)
+		// 失敗理由を SharedContext に追加して別アプローチを促す
+		if result.Error != nil {
+			s.sharedContext.AddStepResult(step.ID, fmt.Sprintf("[Retry hint] Previous attempt failed: %s. Try a different approach.", result.Error.Error()))
+		}
 		s.workerPool.SubmitStep(step, s.confirmLevel)
-		// 結果を待つ（この関数は結果収集ループ内で呼ばれるので、次のイテレーションで結果が来る）
 		return nil
 	}
 
-	// 2. heavy_model が設定されている場合はエスカレーション
-	if s.heavyProvider != nil {
-		cyan.Printf("%s Step %d escalating to heavy model...\n", IconEscalated, step.ID)
-		return s.escalate(ctx, step, p)
-	}
-
-	// 3. ユーザーに確認
-	return s.promptUser(ctx, step, result, p)
-}
-
-// escalate は heavy_model でステップを再実行
-func (s *Supervisor) escalate(ctx context.Context, step *plan.PlanStep, p *plan.Plan) error {
-	if s.heavyProvider == nil {
-		return fmt.Errorf("escalation needed but heavy_model not configured")
-	}
-
-	// heavy_model 用の Worker を一時的に作成して実行
-	heavyWorker := &Worker{
-		id:            -1, // 特別な ID
-		provider:      s.heavyProvider,
-		model:         s.heavyModel,
-		sharedContext: s.sharedContext,
-		agent:         s.agent,
-		stepTimeout:   s.stepTimeout,
-		commands:      make(chan WorkerCommand, 1),
-		results:       make(chan WorkerResult, 1),
-	}
-
-	result := heavyWorker.executeStep(ctx, step, s.confirmLevel)
-
-	if result.Success {
-		p.UpdateStatus(step.ID, "completed", result.Output)
-		s.sharedContext.MarkStepCompleted(step.ID)
-		green.Printf("%s Step %d completed (heavy model)\n", IconCompleted, step.ID)
-		return nil
-	}
-
-	// heavy_model でも失敗 → ユーザーに確認
+	// ユーザーに確認
 	return s.promptUser(ctx, step, result, p)
 }
 

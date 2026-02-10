@@ -149,8 +149,7 @@ func DefaultConfig() *Config {
 			Parallel:        false,
 			MaxWorkers:      3,
 			SupervisorModel: "",
-			LightModel:      "",
-			HeavyModel:      "",
+			WorkerModel:     "",
 			MaxRetry:        10,
 			StepTimeout:     600, // 10分
 			ConfirmLevel:    "dangerous",
