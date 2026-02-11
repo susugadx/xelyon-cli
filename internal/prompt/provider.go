@@ -15,7 +15,9 @@ const commonRulesBlock = `1. **ALWAYS read_file BEFORE str_replace** - if you ha
 // 共通ルール (commonRulesBlock) + プロバイダー固有ルールで構成
 var providerPrefixes = map[string]string{
 	"gemini": "## ⚠️ ABSOLUTE RULES (NEVER SKIP)\n" + commonRulesBlock +
-		"5. **Tool calls must be actual JSON, NOT inside markdown code blocks** - " + "```json...```" + " is for display only\n\n",
+		"5. **Tool calls must be actual JSON, NOT inside markdown code blocks** - " + "```json...```" + " is for display only\n" +
+		"6. **NEVER claim you ran a command without actually calling bash** - always show the actual tool call\n" +
+		"7. **ALWAYS respond in the same language as the user's message** - if the user writes in Japanese, respond in Japanese\n\n",
 	"deepseek": "## ⚠️ ABSOLUTE RULES (NEVER SKIP)\n" + commonRulesBlock +
 		"5. **When function calling is enabled, ALWAYS use tool calls for file operations** - do NOT output raw JSON or describe actions in plain text\n" +
 		"6. **Fix ALL errors completely** - NEVER leave errors with excuses like \"due to time constraints\" or \"for brevity\"\n" +

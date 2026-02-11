@@ -17,7 +17,6 @@ func (a *Agent) CompressHistory(keepRecent int) error {
 	}
 
 	// 圧縮前の統計
-	beforeMessages := len(a.History)
 	beforeTokens := estimateTokens(a.History)
 
 	// 圧縮対象のメッセージを抽出
@@ -33,7 +32,7 @@ func (a *Agent) CompressHistory(keepRecent int) error {
 	summaryPrompt := prompt.BuildSummaryPrompt(promptMessages, config.MessageTruncateLen)
 
 	// LLMにサマリーを依頼
-	yellow.Println("🗜️  会話を圧縮中...")
+	cyan.Println("🗜️ Compressing history...")
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
@@ -57,27 +56,12 @@ func (a *Agent) CompressHistory(keepRecent int) error {
 	a.History = newHistory
 
 	// 圧縮後の統計
-	afterMessages := len(a.History)
 	afterTokens := estimateTokens(a.History)
 
-	// 削減率計算
-	reductionRate := 0.0
-	if beforeTokens > 0 {
-		reductionRate = float64(beforeTokens-afterTokens) / float64(beforeTokens) * 100.0
-	}
-
 	// 結果表示
+	fmt.Printf("   Before: %s tokens → After: %s tokens\n",
+		formatNumber(beforeTokens), formatNumber(afterTokens))
 	fmt.Println()
-	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	cyan.Printf("🗜️  Compression Results / 圧縮結果\n")
-	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Println()
-	fmt.Printf("圧縮前: %s tokens (%d messages)\n", formatNumber(beforeTokens), beforeMessages)
-	fmt.Printf("圧縮後: %s tokens (%d messages + 1 summary)\n", formatNumber(afterTokens), afterMessages-1)
-	fmt.Printf("削減率: %.1f%%\n", reductionRate)
-	fmt.Println()
-	green.Println("✅ 圧縮完了")
-	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
 	return nil
 }
