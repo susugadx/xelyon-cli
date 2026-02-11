@@ -218,7 +218,7 @@ npm run lint && npm run build && npm test
 ### 対象例
 
 - ファイル変更（`write_file`, `str_replace`）
-- Git操作（`git_commit`）
+- Git操作（`bash: git commit`）
 - テスト失敗時のロールバック
 
 ### 設定

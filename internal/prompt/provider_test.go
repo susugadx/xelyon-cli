@@ -69,11 +69,9 @@ func TestCommonRulesBlock(t *testing.T) {
 
 	commonChecks := []string{
 		"ALWAYS read_file BEFORE str_replace",
-		"NEVER guess file contents",
-		"WAIT for the result",
 		"lsp_find",
-		"search_code to identify ALL affected locations",
-		"Read project root config files",
+		"WAIT for output",
+		"Read XELYON.md before starting any task",
 	}
 	for _, check := range commonChecks {
 		if !strings.Contains(gemini, check) {
@@ -105,10 +103,10 @@ func TestProviderSpecificRules(t *testing.T) {
 		t.Error("gemini should NOT contain deepseek-specific tool calls rule")
 	}
 
-	// DeepSeek 固有: LSP エラー修正・unused import 即時削除
+	// DeepSeek 固有: エラー完全修正・unused import 即時削除
 	deepseekOnlyChecks := []string{
-		"fix ALL of them before moving to the next file",
-		"NEVER leave errors unfixed with excuses",
+		"Fix ALL errors completely",
+		"NEVER leave errors with excuses",
 		"unused imports appear, remove them IMMEDIATELY",
 	}
 	for _, check := range deepseekOnlyChecks {
@@ -131,10 +129,10 @@ func TestBuildProviderSystemPrompt_Gemini(t *testing.T) {
 	if !strings.HasSuffix(result, base) {
 		t.Error("gemini result should end with base prompt")
 	}
-	if !strings.Contains(result, "NEVER guess file contents") {
+	if !strings.Contains(result, "ALWAYS read_file BEFORE str_replace") {
 		t.Error("gemini result should contain the critical rule")
 	}
-	if !strings.Contains(result, "WAIT for the result") {
+	if !strings.Contains(result, "WAIT for output") {
 		t.Error("gemini result should contain verification wait rule")
 	}
 	if !strings.Contains(result, "NOT inside markdown code blocks") {
@@ -161,8 +159,8 @@ func TestBuildProviderSystemPrompt_DeepSeek(t *testing.T) {
 	if !strings.Contains(result, "ALWAYS use tool calls for file operations") {
 		t.Error("deepseek result should contain tool calls rule")
 	}
-	if !strings.Contains(result, "fix ALL of them before moving to the next file") {
-		t.Error("deepseek result should contain LSP error fix rule")
+	if !strings.Contains(result, "Fix ALL errors completely") {
+		t.Error("deepseek result should contain error fix rule")
 	}
 	if !strings.Contains(result, "unused imports appear, remove them IMMEDIATELY") {
 		t.Error("deepseek result should contain unused import rule")

@@ -507,35 +507,21 @@ AIが自動で以下のツールを使用します。ユーザーが直接呼び
 | `str_replace` | 文字列置換でファイル編集（old_str優先。old_str空+start_line/end_line指定で行レンジ置換も可） | `path`, `old_str`, `new_str`, `start_line`, `end_line` |
 | `delete_file` | ファイルを削除 | `path` |
 | `list_dir` | ディレクトリ一覧取得 | `path` |
-| `restore_backup` | バックアップから復元 | `path`, `backup_path` (オプション) |
-| `list_backups` | バックアップ一覧表示 | `path` |
-| `grep_replace` | 複数ファイルで一括置換 | `pattern`, `replacement`, `path`, `file_pattern`, `dry_run` |
+| `grep_replace` | 複数ファイルで一括置換 | `pattern`, `replacement`, `path`, `file_pattern` |
 
 **Note**: ファイル操作（mkdir, cp, mv, diff等）は `bash` ツールで実行可能です。
 
-### HTTP Client
-
-| ツール名 | 説明 | 主な引数 |
-|---------|------|---------|
-| `http_request` | HTTPリクエストを実行 | `method`, `url`, `headers`, `body`, `timeout` |
-
-**使用例:**
-```
-# GET リクエスト
-{"tool": "http_request", "args": {"method": "GET", "url": "https://api.example.com/users"}}
-
-# POST リクエスト（JSON）
-{"tool": "http_request", "args": {"method": "POST", "url": "https://api.example.com/users", "body": "{\"name\": \"test\"}", "headers": "{\"Authorization\": \"Bearer token\"}"}}
-```
-
 ### Git操作
 
-| ツール名 | 説明 | 主な引数 |
-|---------|------|---------|
-| `git_commit` | コミット作成 | `message` |
-| `git_checkout` | ブランチ切り替え/ファイル復元 | `target` |
+すべてのGit操作は `bash` ツールで実行します。
 
-**Note**: Git操作（status, diff, log, add, push, branch, stash等）は `bash` ツールで実行可能です。
+```bash
+# 例
+bash: git status
+bash: git diff
+bash: git add -A && git commit -m "message"
+bash: git checkout -b feature-branch
+```
 
 ### 検索
 
@@ -543,7 +529,6 @@ AIが自動で以下のツールを使用します。ユーザーが直接呼び
 |---------|------|---------|
 | `search_code` | コード内を正規表現検索 | `pattern`, `path` |
 | `search_file` | ファイル名検索 | `pattern`, `path` |
-| `ast_grep` | 構造的コード検索（ast-grep使用） | `pattern`, `path`, `lang` |
 | `web_search` | Web検索（Serper API、要APIキー） | `query` |
 
 **注意**: `web_search`を使用するには`SERPER_API_KEY`環境変数の設定が必要です。詳細は[config.md - Web検索（Serper API）](config.md#web検索serper-api)を参照してください。
@@ -553,36 +538,31 @@ AIが自動で以下のツールを使用します。ユーザーが直接呼び
 | ツール名 | 説明 | 主な引数 |
 |---------|------|---------|
 | `bash` | シェルコマンド実行 | `command` |
-| `run_test` | テスト実行 | `path` |
-| `format` | コードフォーマット | `path` |
-| `lint` | Lint実行 | `path`, `auto_fix` |
+
+テスト、フォーマット、Lint はすべて bash で実行:
+```bash
+bash: go test ./...
+bash: go fmt ./...
+bash: golangci-lint run
+```
 
 ### LSP（言語サーバー）
 
-Language Server Protocol を使用したコード解析ツールです。
-
 | ツール名 | 説明 | 主な引数 |
 |---------|------|---------|
-| `lsp_references` | シンボルの参照箇所検索 | `path`, `line`, `character` |
-| `lsp_definition` | 定義位置へジャンプ | `path`, `line`, `character` |
-| `lsp_hover` | 型情報・ドキュメント取得 | `path`, `line`, `character` |
-| `lsp_diagnostics` | ファイルのエラー・警告取得 | `path` |
-| `lsp_rename` | リネーム変更箇所プレビュー | `path`, `line`, `character`, `new_name` |
+| `lsp_find` | シンボル検索（定義・参照・実装） | `symbol`, `action` |
 
 **使用例:**
 ```bash
 > handleUserの参照箇所を探して
-# → lsp_references が実行される
+# → lsp_find(symbol="handleUser", action="references")
 
 > UserServiceの定義を見せて
-# → lsp_definition が実行される
-
-> main.goのエラーを確認して
-# → lsp_diagnostics が実行される
+# → lsp_find(symbol="UserService", action="definition")
 ```
 
-**注意**: LSPツールを使用するには対応するLSPサーバーがインストールされている必要があります。`/lsp detect` で未インストールのサーバーを確認し、`/lsp install <言語>` でインストールしてください。
-
+**注意**: LSPツールを使用するには対応するLSPサーバーがインストールされている必要があります。
+LSP未起動時は自動的に grep にフォールバックします。
 詳細は [LSP連携ガイド](lsp.md) を参照してください。
 
 ### 使用例
@@ -603,7 +583,7 @@ AIは自然言語の指示に基づいてツールを自動選択します。
 # → bash で git status が実行される
 
 > テストを実行して
-# → run_test が実行される
+# → bash で go test が実行される
 
 > search_codeで"TODO"を探して
 # → search_code が実行される
@@ -641,29 +621,6 @@ xelyon --headless "バグを修正して" | jq -r '.response'
 
 # CI/CDパイプラインで使用
 xelyon --output-format json "テストを実行して" | jq '.success'
-```
-
-### Repo Map（コード構造解析）
-
-Tree-sitterを使ってプロジェクトのコード構造を自動解析します。
-
-**対応言語**: Go, JavaScript, TypeScript, Python
-
-**抽出される情報**:
-- 関数、メソッド
-- 構造体、クラス、インターフェース
-- 型定義
-
-**自動生成**: 起動時にプロジェクトをスキャンし、AIに提示されます。
-
-**除外パターン**: `node_modules`, `.git`, `vendor`, `dist`, `build` などは自動除外。
-
-```bash
-# Repo Mapを確認
-xelyon
-> このプロジェクトの構造を教えて
-
-# AIがRepo Mapを使って構造を説明
 ```
 
 ### 対話的確認モード

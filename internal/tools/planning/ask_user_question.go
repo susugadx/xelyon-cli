@@ -19,24 +19,7 @@ func (t *AskUserQuestionTool) Name() string {
 
 // Description はツールの説明を返す
 func (t *AskUserQuestionTool) Description() string {
-	return `計画を立てる前にユーザーに確認事項を質問します。
-
-【重要】必要な場合のみ使用してください。
-
-✓ 質問すべき場合：
-- 実装方法に複数の選択肢があり、ユーザーの好みが不明
-- 要件が曖昧で、間違った方向に進むリスクがある
-- スコープが広すぎて確認が必要
-
-✗ 質問すべきでない場合：
-- ユーザーが具体的に指示している（「JWT使って」「既存DBに」など）
-- 一般的なベストプラクティスで判断できる
-- 小さなタスクで、間違っても修正が容易
-
-原則：
-- 明確な指示なら直接 create_plan へ進む
-- 質問は最小限に（1-3問程度）
-- 「念のため確認」は避ける`
+	return tools.ToolDescriptions[t.Name()]
 }
 
 // Parameters はツールのパラメータ定義を返す

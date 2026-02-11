@@ -16,7 +16,7 @@ func (t *SearchCodeTool) Name() string {
 }
 
 func (t *SearchCodeTool) Description() string {
-	return "Searches for a pattern in source code files using ripgrep."
+	return tools.ToolDescriptions[t.Name()]
 }
 
 func (t *SearchCodeTool) Parameters() map[string]interface{} {
@@ -46,7 +46,7 @@ func (t *SearchFileTool) Name() string {
 }
 
 func (t *SearchFileTool) Description() string {
-	return "Searches for files by name pattern using find."
+	return tools.ToolDescriptions[t.Name()]
 }
 
 func (t *SearchFileTool) Parameters() map[string]interface{} {
@@ -76,7 +76,7 @@ func (t *WebSearchTool) Name() string {
 }
 
 func (t *WebSearchTool) Description() string {
-	return "Searches the web for information using Serper API."
+	return tools.ToolDescriptions[t.Name()]
 }
 
 func (t *WebSearchTool) Parameters() map[string]interface{} {
@@ -105,7 +105,7 @@ func (t *GrepReplaceTool) Name() string {
 }
 
 func (t *GrepReplaceTool) Description() string {
-	return "Performs bulk find-and-replace across multiple files."
+	return tools.ToolDescriptions[t.Name()]
 }
 
 func (t *GrepReplaceTool) Parameters() map[string]interface{} {

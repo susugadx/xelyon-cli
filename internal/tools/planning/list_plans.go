@@ -26,10 +26,7 @@ func (t *ListPlansTool) Name() string {
 
 // Description はツールの説明を返す
 func (t *ListPlansTool) Description() string {
-	return `保存された計画の一覧を取得します。
-
-オプションでステータスによるフィルタリングが可能です。
-新しい順に返します。`
+	return tools.ToolDescriptions[t.Name()]
 }
 
 // Parameters はツールのパラメータ定義を返す

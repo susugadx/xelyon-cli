@@ -27,15 +27,7 @@ func (t *UpdatePlanTool) Name() string {
 
 // Description はツールの説明を返す
 func (t *UpdatePlanTool) Description() string {
-	return `計画を更新します。
-
-以下の操作が可能です：
-- ステータス変更: action="set_status", status="completed"
-- ステップ追加: action="add_step", step={...}
-- ステップ削除: action="remove_step", step_id=N
-- ステップ更新: action="update_step", step_id=N, step={...}
-- タイトル変更: action="set_title", title="新しいタイトル"
-- サマリー変更: action="set_summary", summary="新しいサマリー"`
+	return tools.ToolDescriptions[t.Name()]
 }
 
 // Parameters はツールのパラメータ定義を返す

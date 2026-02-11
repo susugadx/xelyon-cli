@@ -13,7 +13,7 @@ type ReadFileTool struct{}
 func (t *ReadFileTool) Name() string { return "read_file" }
 
 func (t *ReadFileTool) Description() string {
-	return "Reads file contents from the filesystem. Use this to examine source code, configuration files, or any text files."
+	return tools.ToolDescriptions[t.Name()]
 }
 
 func (t *ReadFileTool) Parameters() map[string]interface{} {
@@ -50,7 +50,7 @@ type WriteFileTool struct{}
 func (t *WriteFileTool) Name() string { return "write_file" }
 
 func (t *WriteFileTool) Description() string {
-	return "Creates a new file or overwrites an existing file with the provided content. Automatically creates a backup (.bak) of existing files."
+	return tools.ToolDescriptions[t.Name()]
 }
 
 func (t *WriteFileTool) Parameters() map[string]interface{} {
@@ -90,7 +90,7 @@ type StrReplaceTool struct{}
 func (t *StrReplaceTool) Name() string { return "str_replace" }
 
 func (t *StrReplaceTool) Description() string {
-	return "Replaces a specific string in a file with new content. Use this for precise edits when you know the exact text to replace."
+	return tools.ToolDescriptions[t.Name()]
 }
 
 func (t *StrReplaceTool) Parameters() map[string]interface{} {
@@ -133,7 +133,7 @@ type DeleteFileTool struct{}
 func (t *DeleteFileTool) Name() string { return "delete_file" }
 
 func (t *DeleteFileTool) Description() string {
-	return "Deletes a file permanently. Creates a backup before deletion."
+	return tools.ToolDescriptions[t.Name()]
 }
 
 func (t *DeleteFileTool) Parameters() map[string]interface{} {
@@ -170,7 +170,7 @@ type ListDirTool struct{}
 func (t *ListDirTool) Name() string { return "list_dir" }
 
 func (t *ListDirTool) Description() string {
-	return "Lists files and directories in the specified path."
+	return tools.ToolDescriptions[t.Name()]
 }
 
 func (t *ListDirTool) Parameters() map[string]interface{} {

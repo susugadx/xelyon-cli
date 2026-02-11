@@ -29,23 +29,7 @@ func (t *CreatePlanTool) Name() string {
 
 // Description はツールの説明を返す
 func (t *CreatePlanTool) Description() string {
-	return `新しい計画を作成してファイルに保存します。
-
-計画には以下を含めてください：
-- title: 計画のタイトル
-- summary: 計画の概要
-- user_request: ユーザーの元のリクエスト（オプション）
-- clarifications: 質問と回答（ask_user_question の結果、JSON配列）
-- steps: 実行ステップ（JSON配列）
-
-各ステップには以下を含めてください：
-- id: ステップID（整数）
-- description: ステップの説明
-- tools: 使用予定のツール（配列）
-- files: 関連ファイル（配列、オプション）
-- depends_on: 依存するステップID（配列、オプション）
-
-計画は .xelyon/plans/ に Markdown 形式で保存されます。`
+	return tools.ToolDescriptions[t.Name()]
 }
 
 // Parameters はツールのパラメータ定義を返す

@@ -15,10 +15,10 @@ Modification tools are FORBIDDEN: write_file, str_replace, delete_file
 Allowed: read_file, search_code, search_file, list_dir, lsp_find, bash (read-only), web_search
 
 ### INVESTIGATION CHECKLIST
-- [ ] Understand the current implementation (read relevant files)
-- [ ] Find related code (search for usages, dependencies)
-- [ ] Check for existing patterns to follow
-- [ ] Identify potential impacts of changes
+-  Understand the current implementation (read relevant files)
+-  Find related code (search for usages, dependencies)
+-  Check for existing patterns to follow
+-  Identify potential impacts of changes
 
 ### AFTER INVESTIGATION
 When ready, use the create_plan tool to create your implementation plan.

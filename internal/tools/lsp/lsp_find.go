@@ -26,9 +26,7 @@ type LSPFindTool struct{}
 func (t *LSPFindTool) Name() string { return "lsp_find" }
 
 func (t *LSPFindTool) Description() string {
-	return `Find a symbol by name and run LSP action on it. No need to specify line/character positions.
-Internally searches code for the symbol, identifies the best match (definition site preferred), then calls lsp_definition or lsp_references.
-Falls back to grep results if LSP is unavailable.`
+	return tools.ToolDescriptions[t.Name()]
 }
 
 func (t *LSPFindTool) Parameters() map[string]interface{} {

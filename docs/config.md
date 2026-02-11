@@ -875,14 +875,14 @@ tool_confirm:
 #### `auto_approve_medium`
 - **型**: boolean
 - **デフォルト**: `false`
-- **説明**: SafetyMedium ツール（str_replace, write_file, append_file, copy_file, git_add, git_commit 等）を確認なしで実行
+- **説明**: SafetyMedium ツール（str_replace, write_file, grep_replace 等）を確認なしで実行
 
 **安全性レベル一覧:**
 
 | レベル | ツール例 | 説明 |
 |--------|---------|------|
 | SafetyHigh | read_file, list_dir, search_* | 読み取り専用 |
-| SafetyMedium | str_replace, write_file, git_commit | 書き込み（リカバリ可能） |
+| SafetyMedium | str_replace, write_file, grep_replace | 書き込み（リカバリ可能） |
 | SafetyLow | delete_file, bash, git_push | 破壊的操作（常に確認必須） |
 
 ### プロンプトキャッシュ設定 (`prompt_cache`)
@@ -897,7 +897,7 @@ prompt_cache:
 #### `enabled`
 - **型**: boolean
 - **デフォルト**: `true`
-- **説明**: System PromptやRepo Mapのキャッシュを有効化（Claude使用時のコスト削減）
+- **説明**: System Promptのキャッシュを有効化（Claude使用時のコスト削減）
 
 #### `max_entries`
 - **型**: integer

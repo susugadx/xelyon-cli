@@ -152,121 +152,34 @@ lsp:
 
 ## LSPツール
 
-AIが自動的に以下のツールを使用します。
+AIは `lsp_find` ツールを使用してコード解析を行います。
+シンボル名を指定するだけで、定義・参照・実装を横断検索できます。
 
-### `lsp_references`
+### `lsp_find`
 
-シンボルの参照箇所を検索します。
-
-| パラメータ | 型 | 説明 |
-|-----------|---|------|
-| `path` | string | ファイルパス |
-| `line` | int | 行番号（1-indexed） |
-| `character` | int | 列番号（0-indexed） |
-
-**使用例:**
-```bash
-> handleUserという関数の参照箇所を探して
-# → AIがlsp_referencesを使用
-
-# 出力例:
-References for "handleUser" (3 found):
-  - main.go:45:5
-  - routes/api.go:123:10
-  - handlers/user.go:67:3
-```
-
-### `lsp_definition`
-
-シンボルの定義位置へジャンプします。
+シンボルの定義・参照・実装を検索します。
 
 | パラメータ | 型 | 説明 |
 |-----------|---|------|
-| `path` | string | ファイルパス |
-| `line` | int | 行番号（1-indexed） |
-| `character` | int | 列番号（0-indexed） |
+| `symbol` | string | シンボル名（関数名、型名など） |
+| `action` | string | `definition`, `references`, `implementations` |
 
 **使用例:**
 ```bash
+> handleUserの参照箇所を探して
+# → lsp_find(symbol="handleUser", action="references")
+
 > UserServiceの定義を見せて
-# → AIがlsp_definitionを使用
+# → lsp_find(symbol="UserService", action="definition")
 
-# 出力例:
-Definition of "UserService":
-  File: internal/service/user.go
-  Line: 15
-  Preview:
-    type UserService struct {
-        db *sql.DB
-    }
+> Handlerインターフェースの実装を探して
+# → lsp_find(symbol="Handler", action="implementations")
 ```
 
-### `lsp_hover`
-
-型情報やドキュメントを取得します。
-
-| パラメータ | 型 | 説明 |
-|-----------|---|------|
-| `path` | string | ファイルパス |
-| `line` | int | 行番号（1-indexed） |
-| `character` | int | 列番号（0-indexed） |
-
-**使用例:**
-```bash
-> この変数の型を教えて
-# → AIがlsp_hoverを使用
-
-# 出力例:
-Hover information for "ctx":
-  Type: context.Context
-  Documentation: A Context carries a deadline, a cancellation signal...
-```
-
-### `lsp_diagnostics`
-
-ファイルのエラーや警告を取得します。
-
-| パラメータ | 型 | 説明 |
-|-----------|---|------|
-| `path` | string | ファイルパス |
-
-**使用例:**
-```bash
-> main.goのエラーを確認して
-# → AIがlsp_diagnosticsを使用
-
-# 出力例:
-Diagnostics for "main.go":
-  ❌ Line 15: undefined: handleRequest
-  ⚠️ Line 23: unused variable 'result'
-  ℹ️ Line 30: could use strings.ReplaceAll instead
-```
-
-### `lsp_rename`
-
-リネーム変更箇所をプレビューします（実際の変更は行いません）。
-
-| パラメータ | 型 | 説明 |
-|-----------|---|------|
-| `path` | string | ファイルパス |
-| `line` | int | 行番号（1-indexed） |
-| `character` | int | 列番号（0-indexed） |
-| `new_name` | string | 新しい名前 |
-
-**使用例:**
-```bash
-> handleUserをhandleUserRequestにリネームしたらどこが変わる？
-# → AIがlsp_renameを使用
-
-# 出力例:
-Rename preview "handleUser" → "handleUserRequest":
-  5 changes in 3 files:
-    - main.go:45:5
-    - main.go:67:10
-    - routes/api.go:123:5
-    - routes/api.go:150:10
-    - handlers/user.go:30:6
-```
+**特徴:**
+- シンボル名だけで検索可能（ファイルパス・行番号不要）
+- LSP未起動時は自動的に grep にフォールバック
+- definition/references/implementations を1ツールでカバー
 
 ## 削除時参照チェック
 

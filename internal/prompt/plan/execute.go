@@ -22,10 +22,9 @@ func BuildStepPrompt(stepID int, description string, tools []string) string {
 
 ### Rules
 - Execute autonomously - do NOT ask "Should I proceed?"
-- str_replace for existing files, write_file for new files only
+- Prefer str_replace for edits to existing files, grep_replace for same pattern across files, write_file for new files or full rewrites
 - If a tool fails, try alternative approach
-- Only stop for SafetyLow operations (delete_file, dangerous bash)
-- Run formatter after changes
+
 
 ### Report Format (MANDATORY)
 WHAT: [What you did]

@@ -27,9 +27,8 @@ func BuildStepExecutionPrompt(step *plan.PlanStep, context string) string {
 
 ### Rules
 - Execute autonomously without asking questions
-- str_replace for existing files, write_file for new files only
+- Prefer str_replace for edits to existing files, grep_replace for same pattern across files, write_file for new files or full rewrites
 - If a tool fails, try alternative approach
-- Run formatter after changes
 
 ### Report Format (MANDATORY)
 WHAT: [What you did]

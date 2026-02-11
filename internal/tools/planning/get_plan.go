@@ -26,10 +26,7 @@ func (t *GetPlanTool) Name() string {
 
 // Description はツールの説明を返す
 func (t *GetPlanTool) Description() string {
-	return `保存された計画を取得します。
-
-ID またはファイル名で計画を指定してください。
-計画の内容（タイトル、ステータス、ステップなど）を返します。`
+	return tools.ToolDescriptions[t.Name()]
 }
 
 // Parameters はツールのパラメータ定義を返す

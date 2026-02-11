@@ -13,7 +13,7 @@ type BashTool struct{}
 func (t *BashTool) Name() string { return "bash" }
 
 func (t *BashTool) Description() string {
-	return "Executes a shell command. Use for system operations, running scripts, or commands not covered by other tools."
+	return tools.ToolDescriptions[t.Name()]
 }
 
 func (t *BashTool) Parameters() map[string]interface{} {

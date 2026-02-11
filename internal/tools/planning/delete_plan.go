@@ -25,10 +25,7 @@ func (t *DeletePlanTool) Name() string {
 
 // Description はツールの説明を返す
 func (t *DeletePlanTool) Description() string {
-	return `計画を削除します。
-
-ID またはファイル名で計画を指定してください。
-削除は取り消せません。`
+	return tools.ToolDescriptions[t.Name()]
 }
 
 // Parameters はツールのパラメータ定義を返す

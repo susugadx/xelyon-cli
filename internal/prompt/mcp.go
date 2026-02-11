@@ -82,6 +82,7 @@ func BuildGitHubMCPGuide() string {
 ` + "```" + `
 
 **RULES:**
+- NEVER use MCP tools to read local files - use read_file or bash instead
 - ALWAYS use MCP tools for GitHub operations - never say "use GitHub web UI"
 - Information-only requests (get, show, list): display result and STOP. Do NOT start implementing
 - If a tool fails, report the error and suggest alternatives
