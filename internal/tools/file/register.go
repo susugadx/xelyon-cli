@@ -191,6 +191,7 @@ func (t *ListDirTool) Run(args map[string]string) (string, *tools.FileChange, er
 // RegisterTools registers all file tools to the given registry
 func RegisterTools(r *tools.Registry) {
 	r.Register(&ReadFileTool{})
+	r.Register(&ReadFilesTool{})
 	r.Register(&WriteFileTool{})
 	r.Register(&StrReplaceTool{})
 	r.Register(&DeleteFileTool{})

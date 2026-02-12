@@ -6,6 +6,7 @@ package tools
 var ToolDescriptions = map[string]string{
 	// File Operations
 	"read_file":   "Read file contents. Use to examine source code, config, or any text file. Supports optional line range.",
+	"read_files":  "Read multiple files in one call (max 10). Each path supports optional line range: \"path\" or \"path:start-end\". More efficient than multiple read_file calls when you need 2+ files.",
 	"write_file":  "Create or overwrite a file. Prefer str_replace for small edits to existing files. Creates .bak backup.",
 	"str_replace": "Edit existing file by replacing a specific string. You MUST read_file first - never edit a file you haven't read in this session.",
 	"delete_file": "Delete a file permanently. Creates a .bak backup before deletion.",
