@@ -320,7 +320,20 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 						if _, ok := toolCalls[index]; !ok {
 							toolCalls[index] = &toolCallAccumulator{ID: tc.ID, Name: tc.Function.Name}
 						}
-						toolCalls[index].Arguments.WriteString(tc.Function.Arguments)
+						if tc.Function.Arguments != "" {
+							// スピナーを再表示
+							if !spinner.IsActive() {
+								msg := "Preparing..."
+								switch toolCalls[index].Name {
+								case "write_file":
+									msg = "Writing file..."
+								case "str_replace", "grep_replace":
+									msg = "Editing file..."
+								}
+								spinner.Start(msg)
+							}
+							toolCalls[index].Arguments.WriteString(tc.Function.Arguments)
+						}
 					}
 					continue
 				}

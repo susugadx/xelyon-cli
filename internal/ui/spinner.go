@@ -54,6 +54,13 @@ func (s *Spinner) Start(message string) {
 	go s.spin(message)
 }
 
+// IsActive はスピナーが動作中かどうかを返す
+func (s *Spinner) IsActive() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.active
+}
+
 // Stop はスピナーを停止して行をクリア
 // goroutineの終了を同期的に待機してからクリアするため、
 // Stop()後は確実にターミナル書き込みが完了している
@@ -138,6 +145,7 @@ func (s *Spinner) spin(message string) {
 	}
 
 	i := 0
+	colors := []int{27, 33, 39, 45, 51} // XELYON ブランドカラー
 	for {
 		select {
 		case <-stopChan:
@@ -146,6 +154,7 @@ func (s *Spinner) spin(message string) {
 			frame := s.frames[i%len(s.frames)]
 			elapsed := formatElapsed(time.Since(startTime))
 			status := s.GetStatus()
+			colorCode := colors[i%len(colors)]
 
 			// 出力フォーマット: "⠋ Message (Ns) - Status"
 			var output string
@@ -157,9 +166,12 @@ func (s *Spinner) spin(message string) {
 			if status != "" {
 				output += fmt.Sprintf(" - %s", status)
 			}
-			// 行末の残りをクリア（前の出力が長い場合用）
-			output += "\033[K"
-			fmt.Fprint(s.writer, output)
+
+			// 色を適用 (ANSI 256色)
+			coloredOutput := fmt.Sprintf("\033[38;5;%dm%s\033[0m", colorCode, output)
+
+			// 行末の残りをクリア
+			fmt.Fprint(s.writer, coloredOutput+"\033[K")
 			i++
 		}
 	}
@@ -205,4 +217,16 @@ func ResetTerminalState() {
 	fmt.Print("\033[?25h")
 	// 現在行をクリア（残留するスピナー出力を除去）
 	fmt.Print("\r\033[K")
+}
+
+// SpinnerMessageForTool はツール名に応じたスピナーメッセージを返します
+func SpinnerMessageForTool(toolName string) string {
+	switch toolName {
+	case "write_file":
+		return "Writing file..."
+	case "str_replace", "grep_replace":
+		return "Editing file..."
+	default:
+		return "Preparing..."
+	}
 }

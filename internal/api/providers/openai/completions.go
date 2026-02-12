@@ -198,6 +198,17 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 				acc.Name = tc.Function.Name
 			}
 			if tc.Function.Arguments != "" {
+				// スピナーを再表示
+				if !spinner.IsActive() {
+					msg := "Preparing..."
+					switch acc.Name {
+					case "write_file":
+						msg = "Writing file..."
+					case "str_replace", "grep_replace":
+						msg = "Editing file..."
+					}
+					spinner.Start(msg)
+				}
 				acc.Arguments.WriteString(tc.Function.Arguments)
 			}
 		}

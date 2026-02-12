@@ -83,7 +83,7 @@ func (p *Provider) handleEventStream(ctx context.Context, output *bedrockruntime
 
 			switch v := event.(type) {
 			case *types.ResponseStreamMemberChunk:
-				text, done := p.processChunk(v.Value.Bytes, toolUses, &toolCallsOutput, &lastUsage, compactionBlocks, &compactionOutput)
+				text, done := p.processChunk(v.Value.Bytes, toolUses, &toolCallsOutput, &lastUsage, compactionBlocks, &compactionOutput, spinner)
 				if text != "" {
 					if firstChunk {
 						spinner.Stop()
@@ -121,7 +121,7 @@ func (p *Provider) handleEventStream(ctx context.Context, output *bedrockruntime
 
 // processChunk は Bedrock チャンクの JSON ペイロードを処理する
 // イベント JSON は Claude SSE の data フィールドと同じ形式
-func (p *Provider) processChunk(data []byte, toolUses map[int]*toolUseAccumulator, toolCallsOutput *strings.Builder, lastUsage **api.Usage, compactionBlocks map[int]*strings.Builder, compactionOutput *strings.Builder) (text string, done bool) {
+func (p *Provider) processChunk(data []byte, toolUses map[int]*toolUseAccumulator, toolCallsOutput *strings.Builder, lastUsage **api.Usage, compactionBlocks map[int]*strings.Builder, compactionOutput *strings.Builder, spinner *ui.Spinner) (text string, done bool) {
 	var event claude.StreamEvent
 	if err := json.Unmarshal(data, &event); err != nil {
 		return "", false
@@ -181,6 +181,17 @@ func (p *Provider) processChunk(data []byte, toolUses map[int]*toolUseAccumulato
 		// Tool Use の input を蓄積
 		if event.Delta.Type == "input_json_delta" {
 			if acc := toolUses[event.Index]; acc != nil {
+				// スピナーを再表示（引数生成中）
+				if !spinner.IsActive() {
+					msg := "Preparing..."
+					switch acc.Name {
+					case "write_file":
+						msg = "Writing file..."
+					case "str_replace", "grep_replace":
+						msg = "Editing file..."
+					}
+					spinner.Start(msg)
+				}
 				acc.Input.WriteString(event.Delta.PartialJSON)
 			}
 		}

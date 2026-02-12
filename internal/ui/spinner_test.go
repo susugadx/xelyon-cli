@@ -359,3 +359,23 @@ func TestFormatElapsed(t *testing.T) {
 		})
 	}
 }
+
+func TestSpinnerMessageForTool(t *testing.T) {
+	tests := []struct {
+		toolName string
+		want     string
+	}{
+		{"write_file", "Writing file..."},
+		{"str_replace", "Editing file..."},
+		{"grep_replace", "Editing file..."},
+		{"unknown_tool", "Preparing..."},
+		{"", "Preparing..."},
+	}
+
+	for _, tt := range tests {
+		got := SpinnerMessageForTool(tt.toolName)
+		if got != tt.want {
+			t.Errorf("SpinnerMessageForTool(%q) = %q; want %q", tt.toolName, got, tt.want)
+		}
+	}
+}

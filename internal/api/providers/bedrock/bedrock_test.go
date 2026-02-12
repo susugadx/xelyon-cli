@@ -8,6 +8,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/api/providers/claude"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 
 	// ツール登録のための blank import
 	_ "github.com/susugadx/xelyon-cli/internal/tools/dev"
@@ -359,7 +360,7 @@ func TestProcessChunk_TextDelta(t *testing.T) {
 
 	data := `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}`
 
-	text, done := p.processChunk([]byte(data), toolUses, &toolCallsOutput, &lastUsage, make(map[int]*strings.Builder), &strings.Builder{})
+	text, done := p.processChunk([]byte(data), toolUses, &toolCallsOutput, &lastUsage, make(map[int]*strings.Builder), &strings.Builder{}, ui.NewSpinner())
 	if text != "Hello" {
 		t.Errorf("text = %q, want %q", text, "Hello")
 	}
@@ -376,7 +377,7 @@ func TestProcessChunk_MessageStop(t *testing.T) {
 
 	data := `{"type":"message_stop"}`
 
-	text, done := p.processChunk([]byte(data), toolUses, &toolCallsOutput, &lastUsage, make(map[int]*strings.Builder), &strings.Builder{})
+	text, done := p.processChunk([]byte(data), toolUses, &toolCallsOutput, &lastUsage, make(map[int]*strings.Builder), &strings.Builder{}, ui.NewSpinner())
 	if text != "" {
 		t.Errorf("text = %q, want empty", text)
 	}
@@ -393,7 +394,7 @@ func TestProcessChunk_ToolUse(t *testing.T) {
 
 	// 1. tool_use ブロック開始
 	startData := `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_123","name":"read_file"}}`
-	p.processChunk([]byte(startData), toolUses, &toolCallsOutput, &lastUsage, make(map[int]*strings.Builder), &strings.Builder{})
+	p.processChunk([]byte(startData), toolUses, &toolCallsOutput, &lastUsage, make(map[int]*strings.Builder), &strings.Builder{}, ui.NewSpinner())
 
 	if _, ok := toolUses[0]; !ok {
 		t.Fatal("toolUses[0] should be set after content_block_start")
@@ -401,14 +402,14 @@ func TestProcessChunk_ToolUse(t *testing.T) {
 
 	// 2. input_json_delta
 	delta1 := `{"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\"pa"}}`
-	p.processChunk([]byte(delta1), toolUses, &toolCallsOutput, &lastUsage, make(map[int]*strings.Builder), &strings.Builder{})
+	p.processChunk([]byte(delta1), toolUses, &toolCallsOutput, &lastUsage, make(map[int]*strings.Builder), &strings.Builder{}, ui.NewSpinner())
 
 	delta2 := `{"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"th\":\"/test.txt\"}"}}`
-	p.processChunk([]byte(delta2), toolUses, &toolCallsOutput, &lastUsage, make(map[int]*strings.Builder), &strings.Builder{})
+	p.processChunk([]byte(delta2), toolUses, &toolCallsOutput, &lastUsage, make(map[int]*strings.Builder), &strings.Builder{}, ui.NewSpinner())
 
 	// 3. content_block_stop
 	stopData := `{"type":"content_block_stop","index":0}`
-	p.processChunk([]byte(stopData), toolUses, &toolCallsOutput, &lastUsage, make(map[int]*strings.Builder), &strings.Builder{})
+	p.processChunk([]byte(stopData), toolUses, &toolCallsOutput, &lastUsage, make(map[int]*strings.Builder), &strings.Builder{}, ui.NewSpinner())
 
 	output := toolCallsOutput.String()
 	if output == "" {
@@ -434,7 +435,7 @@ func TestProcessChunk_MessageStart(t *testing.T) {
 	// message_start イベントで input_tokens が設定される
 	startData := `{"type":"message_start","message":{"id":"msg_123","type":"message","role":"assistant","content":[],"model":"claude-3","usage":{"input_tokens":150,"output_tokens":1,"cache_read_input_tokens":80,"cache_creation_input_tokens":20}}}`
 
-	p.processChunk([]byte(startData), toolUses, &toolCallsOutput, &lastUsage, make(map[int]*strings.Builder), &strings.Builder{})
+	p.processChunk([]byte(startData), toolUses, &toolCallsOutput, &lastUsage, make(map[int]*strings.Builder), &strings.Builder{}, ui.NewSpinner())
 
 	if lastUsage == nil {
 		t.Fatal("lastUsage should not be nil after message_start with usage")
@@ -458,11 +459,11 @@ func TestProcessChunk_Usage(t *testing.T) {
 
 	// 1. message_start で input_tokens を設定
 	startData := `{"type":"message_start","message":{"usage":{"input_tokens":100,"output_tokens":1}}}`
-	p.processChunk([]byte(startData), toolUses, &toolCallsOutput, &lastUsage, make(map[int]*strings.Builder), &strings.Builder{})
+	p.processChunk([]byte(startData), toolUses, &toolCallsOutput, &lastUsage, make(map[int]*strings.Builder), &strings.Builder{}, ui.NewSpinner())
 
 	// 2. message_delta で output_tokens を設定（実際の API では output_tokens のみ）
 	deltaData := `{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":50}}`
-	p.processChunk([]byte(deltaData), toolUses, &toolCallsOutput, &lastUsage, make(map[int]*strings.Builder), &strings.Builder{})
+	p.processChunk([]byte(deltaData), toolUses, &toolCallsOutput, &lastUsage, make(map[int]*strings.Builder), &strings.Builder{}, ui.NewSpinner())
 
 	if lastUsage == nil {
 		t.Fatal("lastUsage should not be nil after message_delta with usage")
@@ -483,7 +484,7 @@ func TestProcessChunk_InvalidJSON(t *testing.T) {
 
 	data := `invalid json`
 
-	text, done := p.processChunk([]byte(data), toolUses, &toolCallsOutput, &lastUsage, make(map[int]*strings.Builder), &strings.Builder{})
+	text, done := p.processChunk([]byte(data), toolUses, &toolCallsOutput, &lastUsage, make(map[int]*strings.Builder), &strings.Builder{}, ui.NewSpinner())
 	if text != "" {
 		t.Errorf("text = %q, want empty for invalid JSON", text)
 	}

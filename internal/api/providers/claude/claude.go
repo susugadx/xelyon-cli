@@ -406,6 +406,17 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 			// Tool Use の input を蓄積
 			if event.Delta.Type == "input_json_delta" {
 				if acc := toolUses[event.Index]; acc != nil {
+					// スピナーを再表示（引数生成中）
+					if !spinner.IsActive() {
+						msg := "Preparing..."
+						switch acc.Name {
+						case "write_file":
+							msg = "Writing file..."
+						case "str_replace", "grep_replace":
+							msg = "Editing file..."
+						}
+						spinner.Start(msg)
+					}
 					acc.Input.WriteString(event.Delta.PartialJSON)
 				}
 			}
