@@ -408,14 +408,7 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 				if acc := toolUses[event.Index]; acc != nil {
 					// スピナーを再表示（引数生成中）
 					if !spinner.IsActive() {
-						msg := "Preparing..."
-						switch acc.Name {
-						case "write_file":
-							msg = "Writing file..."
-						case "str_replace", "grep_replace":
-							msg = "Editing file..."
-						}
-						spinner.Start(msg)
+						spinner.Start(ui.SpinnerMessageForTool(acc.Name))
 					}
 					acc.Input.WriteString(event.Delta.PartialJSON)
 				}

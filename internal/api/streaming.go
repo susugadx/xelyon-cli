@@ -165,10 +165,13 @@ func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *u
 				// ツールJSON開始時にスピナーを表示
 				if inToolJSON && spinner != nil && !spinner.IsActive() {
 					msg := "Preparing..."
-					if strings.Contains(fullResponse.String(), "write_file") {
-						msg = "Writing file..."
-					} else if strings.Contains(fullResponse.String(), "str_replace") || strings.Contains(fullResponse.String(), "grep_replace") {
-						msg = "Editing file..."
+					responseStr := fullResponse.String()
+					if strings.Contains(responseStr, "write_file") {
+						msg = ui.SpinnerMessageForTool("write_file")
+					} else if strings.Contains(responseStr, "str_replace") {
+						msg = ui.SpinnerMessageForTool("str_replace")
+					} else if strings.Contains(responseStr, "grep_replace") {
+						msg = ui.SpinnerMessageForTool("grep_replace")
 					}
 					spinner.Start(msg)
 				}

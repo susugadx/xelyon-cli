@@ -323,14 +323,7 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 						if tc.Function.Arguments != "" {
 							// スピナーを再表示
 							if !spinner.IsActive() {
-								msg := "Preparing..."
-								switch toolCalls[index].Name {
-								case "write_file":
-									msg = "Writing file..."
-								case "str_replace", "grep_replace":
-									msg = "Editing file..."
-								}
-								spinner.Start(msg)
+								spinner.Start(ui.SpinnerMessageForTool(toolCalls[index].Name))
 							}
 							toolCalls[index].Arguments.WriteString(tc.Function.Arguments)
 						}
