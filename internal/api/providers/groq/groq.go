@@ -108,7 +108,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	spinner := api.StartThinkingSpinner(ctx, false, "")
 
 	// 再利用可能なHTTPクライアントを使用
-	resp, err := p.HTTPClient.Do(req)
+	resp, err := p.ExecuteRequest(req)
 	if err != nil {
 		spinner.Stop()
 		return "", err

@@ -71,9 +71,9 @@ func (b *BaseProvider) SetAPIKeyAuth(req *http.Request, headerName string) {
 	req.Header.Set(headerName, b.APIKey)
 }
 
-// ExecuteRequest はHTTPリクエストを実行
+// ExecuteRequest はHTTPリクエストを実行（429 自動リトライ付き）
 func (b *BaseProvider) ExecuteRequest(req *http.Request) (*http.Response, error) {
-	return b.HTTPClient.Do(req)
+	return DoWithRetry(req.Context(), b.HTTPClient, req)
 }
 
 // Name はプロバイダー名を返す

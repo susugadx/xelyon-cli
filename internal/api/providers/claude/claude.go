@@ -248,7 +248,7 @@ func (p *Provider) executeRequest(ctx context.Context, reqBody interface{}, with
 
 	spinner := api.StartThinkingSpinner(ctx, withImage, "")
 
-	resp, err := p.HTTPClient.Do(req)
+	resp, err := p.ExecuteRequest(req)
 	if err != nil {
 		spinner.Stop()
 		return nil, err

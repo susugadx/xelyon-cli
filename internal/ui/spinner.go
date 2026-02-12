@@ -201,6 +201,13 @@ func SetGlobalSpinner(s *Spinner) {
 	globalSpinner = s
 }
 
+// GetGlobalSpinner はグローバルスピナーを返す（未設定時はnil）
+func GetGlobalSpinner() *Spinner {
+	globalSpinnerMu.Lock()
+	defer globalSpinnerMu.Unlock()
+	return globalSpinner
+}
+
 // StopGlobalSpinner はグローバルスピナーを停止
 func StopGlobalSpinner() {
 	globalSpinnerMu.Lock()

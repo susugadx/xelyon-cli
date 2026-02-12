@@ -91,7 +91,7 @@ func (p *Provider) chatWithCompletions(ctx context.Context, systemPrompt string,
 	spinner := api.StartThinkingSpinner(ctx, false, "")
 
 	// 再利用可能なHTTPクライアントを使用
-	resp, err := p.HTTPClient.Do(req)
+	resp, err := p.ExecuteRequest(req)
 	if err != nil {
 		spinner.Stop()
 		return "", err
@@ -322,7 +322,7 @@ func (p *Provider) chatWithImageCompletions(ctx context.Context, systemPrompt st
 	// スピナー開始
 	spinner := api.StartThinkingSpinner(ctx, true, "")
 
-	resp, err := p.HTTPClient.Do(req)
+	resp, err := p.ExecuteRequest(req)
 	if err != nil {
 		spinner.Stop()
 		return "", err

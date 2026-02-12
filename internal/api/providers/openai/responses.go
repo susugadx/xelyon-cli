@@ -199,7 +199,7 @@ func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, h
 	// スピナー開始
 	spinner := api.StartThinkingSpinner(ctx, isCodexModel(model) && api.IsThinkingEnabled(ctx), "")
 
-	resp, err := p.HTTPClient.Do(req)
+	resp, err := p.ExecuteRequest(req)
 	if err != nil {
 		spinner.Stop()
 		return "", fmt.Errorf("API request failed: %w", err)
@@ -492,7 +492,7 @@ func (p *Provider) chatWithImageResponses(ctx context.Context, systemPrompt stri
 	// スピナー開始
 	spinner := api.StartThinkingSpinner(ctx, isCodexModel(model) && api.IsThinkingEnabled(ctx), "")
 
-	resp, err := p.HTTPClient.Do(req)
+	resp, err := p.ExecuteRequest(req)
 	if err != nil {
 		spinner.Stop()
 		return "", fmt.Errorf("API request failed: %w", err)

@@ -159,7 +159,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 
 	spinner := api.StartThinkingSpinner(ctx, false, "")
 
-	resp, err := p.HTTPClient.Do(req)
+	resp, err := p.ExecuteRequest(req)
 	if err != nil {
 		spinner.Stop()
 		return "", err
@@ -248,7 +248,7 @@ func (p *Provider) chatWithImageRequest(ctx context.Context, systemPrompt string
 
 	spinner := api.StartThinkingSpinner(ctx, true, "")
 
-	resp, err := p.HTTPClient.Do(req)
+	resp, err := p.ExecuteRequest(req)
 	if err != nil {
 		spinner.Stop()
 		return "", err
@@ -492,7 +492,7 @@ func (p *Provider) chatWithClaudeAPI(ctx context.Context, systemPrompt string, h
 
 	spinner := api.StartThinkingSpinner(ctx, image != nil, "")
 
-	resp, err := p.HTTPClient.Do(req)
+	resp, err := p.ExecuteRequest(req)
 	if err != nil {
 		spinner.Stop()
 		return "", err

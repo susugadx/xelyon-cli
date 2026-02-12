@@ -202,8 +202,9 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	return p.chatWithTextMode(ctx, systemPrompt, history, model)
 }
 
-// doRequestWithRetry は HTTP リクエストを実行し、503 Service Unavailable の場合に指数バックオフでリトライ
-// 最大3回リトライ（1s, 2s, 4s）
+// doRequestWithRetry は HTTP リクエストを実行し、503/429 の場合にリトライ
+// 503: 指数バックオフ（1s, 2s, 4s）
+// 429: Retry-After ヘッダー優先、なければ指数バックオフ（20s, 40s, 60s）
 func (p *Provider) doRequestWithRetry(ctx context.Context, req *http.Request, bodyBytes []byte) (*http.Response, error) {
 	const maxRetries = 3
 
@@ -213,14 +214,28 @@ func (p *Provider) doRequestWithRetry(ctx context.Context, req *http.Request, bo
 		if err != nil {
 			return nil, err
 		}
-		if resp.StatusCode != 503 || attempt == maxRetries {
+		if (resp.StatusCode != 503 && resp.StatusCode != 429) || attempt == maxRetries {
 			return resp, nil
+		}
+
+		var backoff time.Duration
+		var reason string
+		if resp.StatusCode == 429 {
+			reason = "Rate limited (429)"
+			backoff = api.RetryAfterDuration(resp, attempt)
+		} else {
+			reason = "503 Service Unavailable"
+			backoff = time.Duration(1<<attempt) * time.Second
 		}
 		resp.Body.Close()
 
-		// 指数バックオフ: 1s, 2s, 4s
-		backoff := time.Duration(1<<attempt) * time.Second
-		fmt.Fprintf(os.Stderr, "⚠️  503 Service Unavailable, retrying (%d/%d) after %v...\n", attempt+1, maxRetries, backoff)
+		msg := fmt.Sprintf("⚠️  %s, retrying (%d/%d) after %v...", reason, attempt+1, maxRetries, backoff)
+		spinner := ui.GetGlobalSpinner()
+		if spinner != nil && spinner.IsActive() {
+			spinner.SetStatus(msg)
+		} else {
+			fmt.Fprintln(os.Stderr, msg)
+		}
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
