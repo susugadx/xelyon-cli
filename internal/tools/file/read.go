@@ -25,7 +25,7 @@ func formatFileSize(bytes int64) string {
 }
 
 // MaxReadLines はデフォルトの最大読み込み行数
-const MaxReadLines = 200
+const MaxReadLines = 300
 
 // ExecuteReadFile はファイルを読み込む（行範囲指定対応）
 // startLine, endLine が指定されている場合はその範囲のみ返す

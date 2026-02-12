@@ -55,7 +55,7 @@ func TestExecuteReadFile_LargeFile(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	var lines []string
-	for i := 0; i < 300; i++ {
+	for i := 0; i < 400; i++ {
 		lines = append(lines, "line content")
 	}
 	testutil.CreateTempFile(t, tmpDir, "large.txt", strings.Join(lines, "\n"))
@@ -138,7 +138,7 @@ func TestExecuteReadFile_StartLineLargeFile(t *testing.T) {
 	}
 	testutil.CreateTempFile(t, tmpDir, "large_start.txt", strings.Join(lines, "\n"))
 
-	// start_line=250 → 250行目から200行（= 250-300 の51行）が返る
+	// start_line=250 → 250行目から300行（= 250-300 の51行）が返る
 	output := ExecuteReadFile(filepath.Join(tmpDir, "large_start.txt"), 250, 0)
 
 	if !strings.Contains(output, "250: content_line_250") {
