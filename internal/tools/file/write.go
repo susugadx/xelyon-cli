@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 	"github.com/susugadx/xelyon-cli/internal/tools/lsp"
 )
@@ -29,6 +30,11 @@ func ExecuteWriteFile(path string, content string) (string, string, error) {
 	if info, err := os.Stat(absPath); err == nil {
 		exists = true
 		perm = info.Mode().Perm()
+	}
+
+	// Read-Before-Write guard: 既存ファイルの上書き時のみチェック（新規作成は許可）
+	if exists && !tools.GlobalReadTracker.IsRead(absPath) {
+		return fmt.Sprintf("Error: You must read_file before editing. Run read_file(path=\"%s\") first to see the current content.", path), "", nil
 	}
 
 	// 確認UI - 変更サマリーを明確に表示

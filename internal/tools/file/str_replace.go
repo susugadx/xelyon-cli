@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 	"github.com/susugadx/xelyon-cli/internal/tools/lsp"
 	"github.com/susugadx/xelyon-cli/internal/ui"
@@ -30,6 +31,11 @@ func ExecuteStrReplace(path, oldStr, newStr, startLineStr, endLineStr string) (s
 	absPath, err := filepath.Abs(path)
 	if err != nil {
 		return fmt.Sprintf("Error: %v", err), "", nil
+	}
+
+	// Read-Before-Write guard: read_file 前の str_replace をブロック
+	if !tools.GlobalReadTracker.IsRead(absPath) {
+		return fmt.Sprintf("Error: You must read_file before str_replace. Run read_file(path=\"%s\") first to see the current content.", path), "", nil
 	}
 
 	// ファイルを読み込む

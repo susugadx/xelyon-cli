@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
@@ -112,8 +113,19 @@ func ExecuteGrepReplace(pattern, replacement, path, filePattern string) (string,
 	// Process each file
 	var results []FileReplaceResult
 	totalMatches := 0
+	skippedUnread := 0
 
 	for _, filePath := range targetFiles {
+		// Read-Before-Write guard: 未読ファイルはスキップ
+		absFilePath, absErr := filepath.Abs(filePath)
+		if absErr != nil {
+			continue
+		}
+		if !tools.GlobalReadTracker.IsRead(absFilePath) {
+			skippedUnread++
+			continue
+		}
+
 		content, err := os.ReadFile(filePath)
 		if err != nil {
 			continue // Skip read errors
@@ -174,6 +186,10 @@ func ExecuteGrepReplace(pattern, replacement, path, filePattern string) (string,
 
 	if len(results) > 20 {
 		sb.WriteString(fmt.Sprintf("  ... and %d more files\n", len(results)-20))
+	}
+
+	if skippedUnread > 0 {
+		sb.WriteString(fmt.Sprintf("\n  Skipped %d file(s) not previously read with read_file.\n", skippedUnread))
 	}
 
 	return sb.String(), results, nil

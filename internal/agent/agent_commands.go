@@ -69,6 +69,7 @@ func handleSpecialCommand(input string, agent *Agent) bool {
 		handleExitCommand(agent)
 	case "/clear":
 		agent.History = []api.Message{}
+		tools.GlobalReadTracker.Reset()
 		green.Println("🗑️  History cleared")
 		return true
 	case "/history":

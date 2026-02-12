@@ -77,6 +77,9 @@ func ExecuteReadFile(path string, startLine, endLine int) string {
 		}
 	}
 
+	// Read-Before-Write guard: 読み成功を記録
+	tools.GlobalReadTracker.MarkRead(absPath)
+
 	lines := strings.Split(contentStr, "\n")
 	totalLines := len(lines)
 

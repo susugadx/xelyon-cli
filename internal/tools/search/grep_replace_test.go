@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
@@ -16,6 +17,9 @@ func setupTestMocks(t *testing.T) {
 	t.Cleanup(func() {
 		os.Unsetenv("XELYON_INTERACTIVE_CONFIRM")
 	})
+
+	// ReadTracker をリセット
+	tools.GlobalReadTracker.Reset()
 
 	// Default to auto-approve
 	setupTestConfirm(t, true)
@@ -47,6 +51,10 @@ func TestGrepReplaceBasic(t *testing.T) {
 	}
 
 	setupTestMocks(t)
+	abs1, _ := filepath.Abs(file1)
+	abs2, _ := filepath.Abs(file2)
+	tools.GlobalReadTracker.MarkRead(abs1)
+	tools.GlobalReadTracker.MarkRead(abs2)
 
 	result, files, err := ExecuteGrepReplace("oldFunc", "newFunc", dir, "*.go")
 	if err != nil {
@@ -79,6 +87,8 @@ func TestGrepReplaceExecute(t *testing.T) {
 	}
 
 	setupTestMocks(t)
+	abs1, _ := filepath.Abs(file1)
+	tools.GlobalReadTracker.MarkRead(abs1)
 
 	result, _, err := ExecuteGrepReplace("oldName", "newName", dir, "*.go")
 	if err != nil {
@@ -152,6 +162,10 @@ func TestGrepReplaceFilePattern(t *testing.T) {
 	}
 
 	setupTestMocks(t)
+	absGo, _ := filepath.Abs(goFile)
+	absJs, _ := filepath.Abs(jsFile)
+	tools.GlobalReadTracker.MarkRead(absGo)
+	tools.GlobalReadTracker.MarkRead(absJs)
 
 	result, files, err := ExecuteGrepReplace("target", "replaced", dir, "*.go")
 	if err != nil {
@@ -178,6 +192,8 @@ func TestGrepReplaceBackupCreated(t *testing.T) {
 	}
 
 	setupTestMocks(t)
+	abs1, _ := filepath.Abs(file1)
+	tools.GlobalReadTracker.MarkRead(abs1)
 
 	_, files, err := ExecuteGrepReplace("target", "replaced", dir, "*.go")
 	if err != nil {
@@ -209,6 +225,8 @@ func TestGrepReplaceSkipsBackupFiles(t *testing.T) {
 	}
 
 	setupTestMocks(t)
+	absNormal, _ := filepath.Abs(normalFile)
+	tools.GlobalReadTracker.MarkRead(absNormal)
 
 	_, files, err := ExecuteGrepReplace("target", "replaced", dir, "*")
 	if err != nil {
@@ -231,6 +249,8 @@ func TestGrepReplaceRegexCapture(t *testing.T) {
 	}
 
 	setupTestMocks(t)
+	abs1, _ := filepath.Abs(file1)
+	tools.GlobalReadTracker.MarkRead(abs1)
 
 	_, _, err := ExecuteGrepReplace(`oldFunc(\d+)`, `newFunc$1`, dir, "*.go")
 	if err != nil {
@@ -259,6 +279,8 @@ func TestGrepReplaceTool(t *testing.T) {
 	if err := os.WriteFile(file1, []byte("target text here"), 0644); err != nil {
 		t.Fatal(err)
 	}
+	abs1, _ := filepath.Abs(file1)
+	tools.GlobalReadTracker.MarkRead(abs1)
 
 	result, change, err := tool.Run(map[string]string{
 		"pattern":     "target",
