@@ -175,6 +175,15 @@ func invalidateToolCache(tc *ToolCall) {
 	case "bash":
 		GlobalToolCache.Clear()
 	}
+
+	// 書き込み後に ReadTracker の既読フラグをリセット（次回 str_replace 前に read_file を強制）
+	if IsWriteTool(tc.Tool) {
+		if path := tc.Args["path"]; path != "" {
+			if absPath, err := filepath.Abs(path); err == nil {
+				GlobalReadTracker.InvalidateFile(absPath)
+			}
+		}
+	}
 }
 
 // PreviewToolCall displays tool information without executing it

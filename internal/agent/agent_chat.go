@@ -199,7 +199,16 @@ func (a *Agent) runNormalMode(ctx context.Context, input string) error {
 
 		// ツールを実行し、失敗を検出
 		var lastFailedResult string
+		writeExecuted := false
+		skippedWrites := 0
+
 		for _, toolCall := range toolCalls {
+			// Gemini: 書き込み系ツールは1ターン1回まで
+			if a.shouldThrottleWrite(toolCall) && writeExecuted {
+				skippedWrites++
+				continue
+			}
+
 			// ループ検知
 			if a.shouldAbortToolLoopWithResponse(response, toolCall, lastToolCall, &sameCallCount) {
 				return fmt.Errorf("tool loop detected")
@@ -209,10 +218,23 @@ func (a *Agent) runNormalMode(ctx context.Context, input string) error {
 			// ツール実行（executeToolCallWithResult で結果も取得）
 			result := a.executeToolCallWithResult(response, toolCall)
 
+			// 書き込み成功後の自動 read-back（ツール結果に追記）
+			if a.shouldThrottleWrite(toolCall) {
+				writeExecuted = true
+				if !strings.HasPrefix(result, "Error:") {
+					a.autoReadBack(toolCall)
+				}
+			}
+
 			// 失敗パターンをチェック
 			if failed, _ := plan.ContainsFailure(result); failed {
 				lastFailedResult = result
 			}
+		}
+
+		// スキップされた書き込みがあれば通知（最後のツール結果に追記）
+		if skippedWrites > 0 {
+			a.injectWriteThrottleMessage(skippedWrites)
 		}
 
 		// 失敗検出時の自動リトライ処理
@@ -401,7 +423,16 @@ func (a *Agent) chatWithImage(input string, image *api.ImageData) {
 
 		// ツールを実行し、失敗を検出
 		var lastFailedResult string
+		writeExecuted := false
+		skippedWrites := 0
+
 		for _, toolCall := range toolCalls {
+			// Gemini: 書き込み系ツールは1ターン1回まで
+			if a.shouldThrottleWrite(toolCall) && writeExecuted {
+				skippedWrites++
+				continue
+			}
+
 			// ループ検知
 			if a.shouldAbortToolLoopWithResponse(response, toolCall, lastToolCall, &sameCallCount) {
 				red.Println("Error: tool loop detected")
@@ -412,10 +443,23 @@ func (a *Agent) chatWithImage(input string, image *api.ImageData) {
 			// ツール実行（executeToolCallWithResult で結果も取得）
 			result := a.executeToolCallWithResult(response, toolCall)
 
+			// 書き込み成功後の自動 read-back（ツール結果に追記）
+			if a.shouldThrottleWrite(toolCall) {
+				writeExecuted = true
+				if !strings.HasPrefix(result, "Error:") {
+					a.autoReadBack(toolCall)
+				}
+			}
+
 			// 失敗パターンをチェック
 			if failed, _ := plan.ContainsFailure(result); failed {
 				lastFailedResult = result
 			}
+		}
+
+		// スキップされた書き込みがあれば通知（最後のツール結果に追記）
+		if skippedWrites > 0 {
+			a.injectWriteThrottleMessage(skippedWrites)
 		}
 
 		// 失敗検出時の自動リトリー処理

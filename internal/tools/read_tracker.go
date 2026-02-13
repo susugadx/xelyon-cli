@@ -34,6 +34,14 @@ func (rt *ReadTracker) IsRead(absPath string) bool {
 	return rt.paths[absPath]
 }
 
+// InvalidateFile は指定ファイルの既読フラグをリセットする。
+// 書き込み系ツール実行後に呼ばれ、次回編集前の read_file を強制する。
+func (rt *ReadTracker) InvalidateFile(absPath string) {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	delete(rt.paths, absPath)
+}
+
 // Reset はトラッカーをクリアする（新セッション開始時・/clear 時）。
 func (rt *ReadTracker) Reset() {
 	rt.mu.Lock()
