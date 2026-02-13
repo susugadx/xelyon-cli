@@ -107,7 +107,7 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 		Contents:          contents,
 		Tools:             GetCombinedToolDefinitions(p.mcpTools),
 		ToolConfig: &GeminiToolConfigWrapper{
-			FunctionCallingConfig: GeminiFunctionCallingConfig{Mode: "AUTO"},
+			FunctionCallingConfig: GeminiFunctionCallingConfig{Mode: "VALIDATED"},
 		},
 	}
 

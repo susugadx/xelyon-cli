@@ -177,7 +177,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	if p.IsFunctionCallingEnabled() {
 		reqBody.Tools = GetCombinedToolDefinitions(p.mcpTools)
 		reqBody.ToolConfig = &GeminiToolConfigWrapper{
-			FunctionCallingConfig: GeminiFunctionCallingConfig{Mode: "AUTO"},
+			FunctionCallingConfig: GeminiFunctionCallingConfig{Mode: "VALIDATED"},
 		}
 	}
 
