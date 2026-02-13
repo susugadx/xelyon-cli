@@ -19,7 +19,9 @@ func FindPatternInLines(lines []string, pattern string) PatternMatchResult {
 	// Tier 1: Exact match
 	for i, line := range lines {
 		if line == pattern {
-			result.MatchIdx = i
+			if result.MatchIdx == -1 {
+				result.MatchIdx = i
+			}
 			result.MatchCount++
 			result.MatchIndices = append(result.MatchIndices, i)
 		}
@@ -30,7 +32,9 @@ func FindPatternInLines(lines []string, pattern string) PatternMatchResult {
 		normalizedPattern := NormalizeLeadingWhitespace(pattern)
 		for i, line := range lines {
 			if NormalizeLeadingWhitespace(line) == normalizedPattern {
-				result.MatchIdx = i
+				if result.MatchIdx == -1 {
+					result.MatchIdx = i
+				}
 				result.MatchCount++
 				result.MatchIndices = append(result.MatchIndices, i)
 			}
