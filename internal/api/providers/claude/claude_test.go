@@ -267,7 +267,7 @@ func TestClaudeProvider_ChatWithTools_APIError(t *testing.T) {
 }
 
 func TestClaudeProvider_ChatWithTools_RateLimit(t *testing.T) {
-	server := mockAPIServer(t, rateLimitHandler("60"))
+	server := mockAPIServer(t, rateLimitHandler("1"))
 
 	originalURL := os.Getenv("ANTHROPIC_API_URL")
 	defer os.Setenv("ANTHROPIC_API_URL", originalURL)

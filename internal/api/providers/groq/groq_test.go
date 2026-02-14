@@ -194,7 +194,7 @@ func TestProvider_ChatWithTools_APIError(t *testing.T) {
 }
 
 func TestProvider_ChatWithTools_RateLimit(t *testing.T) {
-	server := mockAPIServer(t, rateLimitHandler("60"))
+	server := mockAPIServer(t, rateLimitHandler("1"))
 
 	originalURL := os.Getenv("GROQ_API_URL")
 	defer os.Setenv("GROQ_API_URL", originalURL)

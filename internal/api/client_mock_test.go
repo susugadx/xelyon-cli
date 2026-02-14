@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	_ "github.com/susugadx/xelyon-cli/internal/api/providers/deepseek"
@@ -86,7 +87,8 @@ func TestDeepSeekProvider_ChatWithTools_NetworkError(t *testing.T) {
 		{Role: "user", Content: "Hello"},
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 	_, err = provider.ChatWithTools(ctx, "system prompt", history, "deepseek-chat")
 	if err == nil {
 		t.Error("ChatWithTools() should return error for network failure")
@@ -126,7 +128,7 @@ func TestDeepSeekProvider_ChatWithTools_RateLimit(t *testing.T) {
 	// 429レスポンスを返すサーバー
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Retry-After", "30")
+		w.Header().Set("Retry-After", "1")
 		w.WriteHeader(http.StatusTooManyRequests)
 		_, _ = w.Write([]byte(`{"error": {"message": "Rate limit exceeded"}}`))
 	}))

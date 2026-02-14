@@ -245,7 +245,7 @@ func TestProvider_ChatWithTools_ServerError(t *testing.T) {
 }
 
 func TestProvider_ChatWithTools_RateLimitResponse(t *testing.T) {
-	server := mockAPIServer(t, rateLimitHandler("60"))
+	server := mockAPIServer(t, rateLimitHandler("1"))
 
 	originalURL := os.Getenv("DEEPSEEK_API_URL")
 	defer os.Setenv("DEEPSEEK_API_URL", originalURL)

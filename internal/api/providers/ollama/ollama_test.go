@@ -138,7 +138,7 @@ func TestProvider_ChatWithTools_APIError(t *testing.T) {
 }
 
 func TestProvider_ChatWithTools_RateLimit(t *testing.T) {
-	server := mockAPIServer(t, rateLimitHandler("60"))
+	server := mockAPIServer(t, rateLimitHandler("1"))
 
 	p := New(server.URL)
 	history := []api.Message{{Role: "user", Content: "Hi"}}

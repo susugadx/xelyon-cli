@@ -198,7 +198,7 @@ func TestOpenAIProvider_ChatWithTools_APIError(t *testing.T) {
 }
 
 func TestOpenAIProvider_ChatWithTools_RateLimit(t *testing.T) {
-	server := mockAPIServer(t, rateLimitHandler("60"))
+	server := mockAPIServer(t, rateLimitHandler("1"))
 
 	originalURL := os.Getenv("OPENAI_API_URL")
 	defer os.Setenv("OPENAI_API_URL", originalURL)

@@ -190,7 +190,7 @@ func TestProvider_ChatWithTools_APIError(t *testing.T) {
 }
 
 func TestProvider_ChatWithTools_RateLimit(t *testing.T) {
-	server := mockAPIServer(t, rateLimitHandler("60"))
+	server := mockAPIServer(t, rateLimitHandler("1"))
 
 	originalURL := os.Getenv("GEMINI_API_URL")
 	defer os.Setenv("GEMINI_API_URL", originalURL)

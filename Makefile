@@ -1,6 +1,6 @@
 # XELYON CLI Makefile
 
-.PHONY: build test fmt lint gen-config gen-docs gen-registry gen-help gen-all clean check ci-check release-check
+.PHONY: build test fmt lint gen-config gen-docs gen-registry gen-help gen-all clean check ci-check ci-check-full release-check
 
 # ビルド
 build:
@@ -67,10 +67,16 @@ ci-check:
 	@echo "✓ Lint check passed"
 	@echo ""
 	@echo "=== Running tests ==="
-	@go test ./...
+	@go test -timeout 120s ./...
 	@echo "✓ Tests passed"
 	@echo ""
 	@echo "✅ All CI checks passed!"
+
+# インテグレーションテスト含む全テスト
+ci-check-full:
+	@echo "=== Running all tests (including integration) ==="
+	@go test -tags integration -race -timeout 600s ./...
+	@echo "✓ All tests passed (including integration)"
 
 # リリース前チェック
 release-check: fmt test lint build
