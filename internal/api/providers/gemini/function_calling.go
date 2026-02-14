@@ -31,9 +31,15 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 	// モデル名を設定（config優先、フォールバックはgemini-3-flash-preview）
 	model = api.GetDefaultModel(model, "gemini", "gemini-3-flash-preview")
 
-	// System prompt を system_instruction フィールドに設定
+	// キャッシュ管理
+	cacheName, msgsToSend, err := p.updateOrUseCache(ctx, systemPrompt, history, model)
+	if err != nil {
+		return "", err
+	}
+
+	// System prompt (キャッシュ利用時は不要)
 	var sysInstruction *GeminiSystemInstruction
-	if systemPrompt != "" {
+	if cacheName == "" && systemPrompt != "" {
 		sysInstruction = &GeminiSystemInstruction{
 			Parts: []GeminiPart{{Text: systemPrompt}},
 		}
@@ -43,7 +49,8 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 	var contents []interface{}
 
 	// 会話履歴を変換（ネイティブ functionCall / functionResponse 形式）
-	for _, msg := range history {
+	// msgsToSend（差分のみ、または全量）を使用
+	for _, msg := range msgsToSend {
 		switch {
 		case msg.Role == "assistant" && len(msg.ToolCalls) > 0:
 			// assistant の functionCall パート
@@ -103,6 +110,7 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 
 	// Function Calling 用リクエストを構築（MCPツールを含める）
 	reqBody := GeminiRequestWithTools{
+		CachedContent:     cacheName,
 		SystemInstruction: sysInstruction,
 		Contents:          contents,
 		Tools:             GetCombinedToolDefinitions(p.mcpTools),

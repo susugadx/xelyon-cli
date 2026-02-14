@@ -40,6 +40,7 @@ type GeminiMultimodalRequest struct {
 	Tools             []api.GeminiToolConfig   `json:"tools,omitempty"`
 	ToolConfig        *GeminiToolConfigWrapper `json:"tool_config,omitempty"`
 	GenerationConfig  *GeminiGenerationConfig  `json:"generationConfig,omitempty"`
+	CachedContent     string                   `json:"cachedContent,omitempty"`
 }
 
 // GeminiContent はGeminiの contents 構造
@@ -53,6 +54,7 @@ type GeminiRequest struct {
 	SystemInstruction *GeminiSystemInstruction `json:"system_instruction,omitempty"`
 	Contents          []GeminiContent          `json:"contents"`
 	GenerationConfig  *GeminiGenerationConfig  `json:"generationConfig,omitempty"`
+	CachedContent     string                   `json:"cachedContent,omitempty"`
 }
 
 // GeminiCandidate はレスポンスの候補
@@ -164,4 +166,27 @@ type GeminiRequestWithTools struct {
 	Tools             []api.GeminiToolConfig   `json:"tools,omitempty"`
 	ToolConfig        *GeminiToolConfigWrapper `json:"tool_config,omitempty"`
 	GenerationConfig  *GeminiGenerationConfig  `json:"generationConfig,omitempty"`
+	CachedContent     string                   `json:"cachedContent,omitempty"`
+}
+
+// ===== Context Caching structures =====
+
+// GeminiCachedContentRequest はキャッシュ作成用リクエスト
+type GeminiCachedContentRequest struct {
+	Model             string                   `json:"model"`
+	Contents          []interface{}            `json:"contents"`
+	SystemInstruction *GeminiSystemInstruction `json:"systemInstruction,omitempty"`
+	TTL               string                   `json:"ttl,omitempty"`        // e.g. "300s"
+	ExpireTime        string                   `json:"expireTime,omitempty"` // e.g. "2024-01-01T00:00:00Z"
+	DisplayName       string                   `json:"displayName,omitempty"`
+}
+
+// GeminiCachedContentResponse はキャッシュ作成レスポンス
+type GeminiCachedContentResponse struct {
+	Name        string `json:"name"` // resource name: cachedContents/123...
+	DisplayName string `json:"displayName,omitempty"`
+	Model       string `json:"model"`
+	CreateTime  string `json:"createTime"`
+	UpdateTime  string `json:"updateTime"`
+	ExpireTime  string `json:"expireTime"`
 }

@@ -18,9 +18,15 @@ func (p *Provider) chatWithTextMode(ctx context.Context, systemPrompt string, hi
 	// モデル名を設定（config優先、フォールバックはgemini-3-flash-preview）
 	model = api.GetDefaultModel(model, "gemini", "gemini-3-flash-preview")
 
-	// System prompt を system_instruction フィールドに設定
+	// キャッシュ管理
+	cacheName, msgsToSend, err := p.updateOrUseCache(ctx, systemPrompt, history, model)
+	if err != nil {
+		return "", err
+	}
+
+	// System prompt を system_instruction フィールドに設定（キャッシュ利用時は不要）
 	var sysInstruction *GeminiSystemInstruction
-	if systemPrompt != "" {
+	if cacheName == "" && systemPrompt != "" {
 		sysInstruction = &GeminiSystemInstruction{
 			Parts: []GeminiPart{{Text: systemPrompt}},
 		}
@@ -29,8 +35,8 @@ func (p *Provider) chatWithTextMode(ctx context.Context, systemPrompt string, hi
 	// Geminiのメッセージ構造に変換
 	var contents []GeminiContent
 
-	// 会話履歴を変換
-	for _, msg := range history {
+	// 会話履歴を変換（msgsToSendを使用）
+	for _, msg := range msgsToSend {
 		role := "user"
 		if msg.Role == "assistant" {
 			role = "model"
@@ -44,6 +50,7 @@ func (p *Provider) chatWithTextMode(ctx context.Context, systemPrompt string, hi
 	cfg := config.GetGlobalConfig()
 
 	reqBody := GeminiRequest{
+		CachedContent:     cacheName,
 		SystemInstruction: sysInstruction,
 		Contents:          contents,
 	}
