@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 )
@@ -37,6 +38,11 @@ func (p *Provider) CreateCachedContent(ctx context.Context, model string, system
 			Role:  msg.Role,
 			Parts: parts,
 		})
+	}
+
+	// モデル名に "models/" プレフィックスを強制
+	if !strings.HasPrefix(model, "models/") {
+		model = "models/" + model
 	}
 
 	reqBody := GeminiCachedContentRequest{
