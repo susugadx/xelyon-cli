@@ -52,6 +52,13 @@ func handleModelCommand(agent *Agent, args []string) bool {
 	}
 
 	cfg.DefaultModel = newModel
+
+	// プロバイダー別の設定がある場合はそちらも更新（優先されるため）
+	if pm, ok := cfg.ProviderModels[agent.ProviderName]; ok {
+		pm.DefaultModel = newModel
+		cfg.ProviderModels[agent.ProviderName] = pm
+	}
+
 	if err := config.SaveConfig(cfg); err != nil {
 		yellow.Printf("Warning: Failed to save config: %v\n", err)
 		yellow.Println("Model switched for this session only")
@@ -82,6 +89,15 @@ func handleConfigCommand(agent *Agent, args []string) bool {
 
 		// 設定更新（バリデーションなし、任意のモデル名を受け付ける）
 		cfg.DefaultModel = newModel
+
+		// プロバイダー別の設定がある場合はそちらも更新
+		if agent != nil {
+			if pm, ok := cfg.ProviderModels[agent.ProviderName]; ok {
+				pm.DefaultModel = newModel
+				cfg.ProviderModels[agent.ProviderName] = pm
+			}
+		}
+
 		if err := config.SaveConfig(cfg); err != nil {
 			red.Printf("Failed to save config: %v\n", err)
 			return true

@@ -54,6 +54,22 @@ func TestAutoReadBack_AppendsToHistory(t *testing.T) {
 	}
 }
 
+func TestAutoReadBack_EmptyHistory(t *testing.T) {
+	a := &Agent{
+		ProviderName: "Any",
+		History:      []api.Message{},
+	}
+
+	tc := &tools.ToolCall{Tool: "str_replace", Args: map[string]string{"path": "test.go"}}
+
+	// Should not panic
+	a.autoReadBack(tc)
+
+	if len(a.History) != 0 {
+		t.Errorf("History length should be 0, got %d", len(a.History))
+	}
+}
+
 func TestAutoReadBack_SkipsDeleteFile(t *testing.T) {
 	a := &Agent{
 		ProviderName: "Any",
