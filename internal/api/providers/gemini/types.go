@@ -176,6 +176,8 @@ type GeminiCachedContentRequest struct {
 	Model             string                   `json:"model"`
 	Contents          []interface{}            `json:"contents"`
 	SystemInstruction *GeminiSystemInstruction `json:"systemInstruction,omitempty"`
+	Tools             []api.GeminiToolConfig   `json:"tools,omitempty"`
+	ToolConfig        *GeminiToolConfigWrapper `json:"tool_config,omitempty"`
 	TTL               string                   `json:"ttl,omitempty"`        // e.g. "300s"
 	ExpireTime        string                   `json:"expireTime,omitempty"` // e.g. "2024-01-01T00:00:00Z"
 	DisplayName       string                   `json:"displayName,omitempty"`

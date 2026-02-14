@@ -27,12 +27,13 @@ func estimateTokens(systemPrompt string, history []api.Message) int {
 }
 
 // updateOrUseCache はキャッシュの状態を確認し、更新または利用する
+// tools, toolConfig: キャッシュに含めるツール定義（nilの場合は含めない）
 // 戻り値:
 //
 //	cachedContentName: 使用するキャッシュのリソース名（空ならキャッシュなし）
 //	messagesToSend: APIに送信すべきメッセージ（キャッシュ利用時は差分のみ）
 //	err: エラー
-func (p *Provider) updateOrUseCache(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, []api.Message, error) {
+func (p *Provider) updateOrUseCache(ctx context.Context, systemPrompt string, history []api.Message, model string, tools []api.GeminiToolConfig, toolConfig *GeminiToolConfigWrapper) (string, []api.Message, error) {
 	// キャッシュ機能が無効化されている場合は何もしない
 	if os.Getenv("GEMINI_CONTEXT_CACHING") == "0" {
 		return "", history, nil
@@ -109,8 +110,8 @@ func (p *Provider) updateOrUseCache(ctx context.Context, systemPrompt string, hi
 		return "", history, nil
 	}
 
-	// キャッシュ作成
-	resp, err := p.CreateCachedContent(ctx, model, systemPrompt, cacheHistory, cacheTTL)
+	// キャッシュ作成（ツール定義もキャッシュに含める）
+	resp, err := p.CreateCachedContent(ctx, model, systemPrompt, cacheHistory, cacheTTL, tools, toolConfig)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: Failed to create cache: %v. Proceeding without cache.\n", err)
 		return "", history, nil

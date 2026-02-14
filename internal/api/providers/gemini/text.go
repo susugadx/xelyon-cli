@@ -18,8 +18,8 @@ func (p *Provider) chatWithTextMode(ctx context.Context, systemPrompt string, hi
 	// モデル名を設定（config優先、フォールバックはgemini-3-flash-preview）
 	model = api.GetDefaultModel(model, "gemini", "gemini-3-flash-preview")
 
-	// キャッシュ管理
-	cacheName, msgsToSend, err := p.updateOrUseCache(ctx, systemPrompt, history, model)
+	// キャッシュ管理（テキストモードではツール定義なし）
+	cacheName, msgsToSend, err := p.updateOrUseCache(ctx, systemPrompt, history, model, nil, nil)
 	if err != nil {
 		return "", err
 	}

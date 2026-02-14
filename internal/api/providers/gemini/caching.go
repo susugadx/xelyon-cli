@@ -14,7 +14,8 @@ import (
 // CreateCachedContent は新しいコンテキストキャッシュを作成する
 // model: "models/gemini-1.5-pro-001" など
 // ttl: "300s" などのDuration文字列 (省略時はAPIデフォルト1時間)
-func (p *Provider) CreateCachedContent(ctx context.Context, model string, systemPrompt string, contents []api.Message, ttl string) (*GeminiCachedContentResponse, error) {
+// tools, toolConfig: キャッシュに含めるツール定義（nilの場合は含めない）
+func (p *Provider) CreateCachedContent(ctx context.Context, model string, systemPrompt string, contents []api.Message, ttl string, tools []api.GeminiToolConfig, toolConfig *GeminiToolConfigWrapper) (*GeminiCachedContentResponse, error) {
 	url := "https://generativelanguage.googleapis.com/v1beta/cachedContents"
 
 	// システムプロンプトの変換
@@ -96,6 +97,8 @@ func (p *Provider) CreateCachedContent(ctx context.Context, model string, system
 		Model:             model,
 		Contents:          geminiContents,
 		SystemInstruction: sysInst,
+		Tools:             tools,
+		ToolConfig:        toolConfig,
 		TTL:               ttl,
 	}
 

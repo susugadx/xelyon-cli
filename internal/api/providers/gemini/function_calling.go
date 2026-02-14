@@ -31,8 +31,14 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 	// モデル名を設定（config優先、フォールバックはgemini-3-flash-preview）
 	model = api.GetDefaultModel(model, "gemini", "gemini-3-flash-preview")
 
-	// キャッシュ管理
-	cacheName, msgsToSend, err := p.updateOrUseCache(ctx, systemPrompt, history, model)
+	// ツール定義を事前に取得（キャッシュにも含めるため）
+	toolDefs := GetCombinedToolDefinitions(p.mcpTools)
+	toolCfg := &GeminiToolConfigWrapper{
+		FunctionCallingConfig: GeminiFunctionCallingConfig{Mode: "VALIDATED"},
+	}
+
+	// キャッシュ管理（ツール定義もキャッシュに含める）
+	cacheName, msgsToSend, err := p.updateOrUseCache(ctx, systemPrompt, history, model, toolDefs, toolCfg)
 	if err != nil {
 		return "", err
 	}
@@ -108,15 +114,16 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 
 	cfg := config.GetGlobalConfig()
 
-	// Function Calling 用リクエストを構築（MCPツールを含める）
+	// Function Calling 用リクエストを構築
+	// キャッシュ使用時: system_instruction, tools, tool_config はキャッシュに含まれているため除外
 	reqBody := GeminiRequestWithTools{
 		CachedContent:     cacheName,
 		SystemInstruction: sysInstruction,
 		Contents:          contents,
-		Tools:             GetCombinedToolDefinitions(p.mcpTools),
-		ToolConfig: &GeminiToolConfigWrapper{
-			FunctionCallingConfig: GeminiFunctionCallingConfig{Mode: "VALIDATED"},
-		},
+	}
+	if cacheName == "" {
+		reqBody.Tools = toolDefs
+		reqBody.ToolConfig = toolCfg
 	}
 
 	// Thinking 設定（Gemini 3 vs 2.5 で自動分岐）

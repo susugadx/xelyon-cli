@@ -125,7 +125,7 @@ func TestUpdateOrUseCache(t *testing.T) {
 			os.Setenv("GEMINI_CONTEXT_CACHING", "1")
 			defer os.Unsetenv("GEMINI_CONTEXT_CACHING")
 
-			cacheName, msgs, err := p.updateOrUseCache(context.Background(), tt.systemPrompt, tt.history, "gemini-1.5-pro")
+			cacheName, msgs, err := p.updateOrUseCache(context.Background(), tt.systemPrompt, tt.history, "gemini-1.5-pro", nil, nil)
 
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
