@@ -180,6 +180,16 @@ func runInteractiveConfig(agent *Agent, cfg *config.Config) {
 				continue
 			}
 
+			// default_model 変更時はプロバイダー別設定も同期
+			if selectedField.Path == "default_model" && agent != nil {
+				if strValue, ok := newValue.(string); ok {
+					if pm, ok := cfg.ProviderModels[agent.ProviderName]; ok {
+						pm.DefaultModel = strValue
+						cfg.ProviderModels[agent.ProviderName] = pm
+					}
+				}
+			}
+
 			// 保存
 			if err := config.SaveConfig(cfg); err != nil {
 				red.Printf("Error saving: %v\n", err)
