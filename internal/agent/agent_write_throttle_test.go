@@ -8,36 +8,25 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
-func TestShouldThrottleWrite_GeminiWriteTool(t *testing.T) {
-	a := &Agent{ProviderName: "Gemini"}
+func TestShouldThrottleWrite_WriteTool(t *testing.T) {
+	a := &Agent{ProviderName: "Any"}
 	tc := &tools.ToolCall{Tool: "str_replace", Args: map[string]string{"path": "a.go"}}
 	if !a.shouldThrottleWrite(tc) {
-		t.Error("shouldThrottleWrite should return true for Gemini + write tool")
+		t.Error("shouldThrottleWrite should return true for write tool")
 	}
 }
 
-func TestShouldThrottleWrite_GeminiReadTool(t *testing.T) {
-	a := &Agent{ProviderName: "Gemini"}
+func TestShouldThrottleWrite_ReadTool(t *testing.T) {
+	a := &Agent{ProviderName: "Any"}
 	tc := &tools.ToolCall{Tool: "read_file", Args: map[string]string{"path": "a.go"}}
 	if a.shouldThrottleWrite(tc) {
-		t.Error("shouldThrottleWrite should return false for Gemini + read tool")
+		t.Error("shouldThrottleWrite should return false for read tool")
 	}
 }
 
-func TestShouldThrottleWrite_OtherProvider(t *testing.T) {
-	providers := []string{"Claude", "DeepSeek", "OpenAI", "Ollama"}
-	for _, p := range providers {
-		a := &Agent{ProviderName: p}
-		tc := &tools.ToolCall{Tool: "str_replace", Args: map[string]string{"path": "a.go"}}
-		if a.shouldThrottleWrite(tc) {
-			t.Errorf("shouldThrottleWrite should return false for %s", p)
-		}
-	}
-}
-
-func TestShouldThrottleWrite_GeminiBash(t *testing.T) {
-	a := &Agent{ProviderName: "Gemini"}
-	tc := &tools.ToolCall{Tool: "bash", Args: map[string]string{"command": "rm -rf /"}}
+func TestShouldThrottleWrite_Bash(t *testing.T) {
+	a := &Agent{ProviderName: "Any"}
+	tc := &tools.ToolCall{Tool: "bash", Args: map[string]string{"command": "ls"}}
 	if a.shouldThrottleWrite(tc) {
 		t.Error("shouldThrottleWrite should return false for bash")
 	}
@@ -45,7 +34,7 @@ func TestShouldThrottleWrite_GeminiBash(t *testing.T) {
 
 func TestAutoReadBack_AppendsToHistory(t *testing.T) {
 	a := &Agent{
-		ProviderName: "Gemini",
+		ProviderName: "Any",
 		History: []api.Message{
 			{Role: "tool", Content: "Successfully replaced"},
 		},
@@ -67,7 +56,7 @@ func TestAutoReadBack_AppendsToHistory(t *testing.T) {
 
 func TestAutoReadBack_SkipsDeleteFile(t *testing.T) {
 	a := &Agent{
-		ProviderName: "Gemini",
+		ProviderName: "Any",
 		History: []api.Message{
 			{Role: "tool", Content: "File deleted"},
 		},
@@ -84,7 +73,7 @@ func TestAutoReadBack_SkipsDeleteFile(t *testing.T) {
 
 func TestAutoReadBack_SkipsMoveFile(t *testing.T) {
 	a := &Agent{
-		ProviderName: "Gemini",
+		ProviderName: "Any",
 		History: []api.Message{
 			{Role: "tool", Content: "File moved"},
 		},
@@ -101,7 +90,7 @@ func TestAutoReadBack_SkipsMoveFile(t *testing.T) {
 
 func TestAutoReadBack_SkipsGrepReplace(t *testing.T) {
 	a := &Agent{
-		ProviderName: "Gemini",
+		ProviderName: "Any",
 		History: []api.Message{
 			{Role: "tool", Content: "Replaced in 3 files"},
 		},

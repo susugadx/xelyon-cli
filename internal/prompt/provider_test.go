@@ -72,6 +72,7 @@ func TestCommonRulesBlock(t *testing.T) {
 		"lsp_find",
 		"WAIT for output",
 		"Read XELYON.md before starting any task",
+		"grep_replace",
 	}
 	for _, check := range commonChecks {
 		if !strings.Contains(gemini, check) {

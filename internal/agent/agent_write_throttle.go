@@ -2,18 +2,13 @@ package agent
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/file"
 )
 
 // shouldThrottleWrite は書き込み制限の対象かどうかを判定する。
-// Gemini プロバイダーのみ適用。
 func (a *Agent) shouldThrottleWrite(tc *tools.ToolCall) bool {
-	if strings.ToLower(a.ProviderName) != "gemini" {
-		return false
-	}
 	return tools.IsWriteTool(tc.Tool)
 }
 

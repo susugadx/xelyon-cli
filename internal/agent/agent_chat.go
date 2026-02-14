@@ -204,7 +204,7 @@ func (a *Agent) runNormalMode(ctx context.Context, input string) error {
 		skippedCommands := 0
 
 		for _, toolCall := range toolCalls {
-			// Gemini: 書き込み系ツールは1ターン1回まで
+			// Write Throttle: 書き込み系ツールは1ターン1回まで
 			if a.shouldThrottleWrite(toolCall) && writeExecuted {
 				skippedWrites++
 				continue
@@ -435,7 +435,7 @@ func (a *Agent) chatWithImage(input string, image *api.ImageData) {
 		skippedCommands := 0
 
 		for _, toolCall := range toolCalls {
-			// Gemini: 書き込み系ツールは1ターン1回まで
+			// Write Throttle: 書き込み系ツールは1ターン1回まで
 			if a.shouldThrottleWrite(toolCall) && writeExecuted {
 				skippedWrites++
 				continue
