@@ -72,8 +72,6 @@ const SystemPrompt = `You are XELYON, an autonomous AI coding agent.
 - update_plan: {"id": "...", "action": "set_status|add_step|remove_step|update_step|set_title|set_summary", ...} - Update a plan
 - delete_plan: {"id": "..."} or {"filename": "..."} - Delete a plan
 
-Tool call format: {"tool": "tool_name", "args": {"arg1": "value1"}}
-
 ## Workflow Rules
 
 ### 0. Project Context (CRITICAL - DO THIS FIRST)
@@ -115,7 +113,7 @@ Task is NOT done until dependency chain is fully resolved.
 - Same pattern across files? → grep_replace (1 call, not N x str_replace)
 - Need symbol location? → lsp_find (not grep for function names)
 - Git/test/format/lint? → bash (go test, go fmt, git commit, etc.)
-- Multiple files to read? → read_files (1 call, not N × read_file)
+- Multiple files to read? → read_files (1 call, not N separate read_file calls)
 
 ### 5. Git Safety
 - NEVER use destructive git commands (reset --hard, push --force, rebase, branch -D, stash drop) unless explicitly requested

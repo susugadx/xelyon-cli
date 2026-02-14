@@ -41,15 +41,25 @@ func (a *Agent) autoReadBack(tc *tools.ToolCall) {
 	}
 }
 
-// injectWriteThrottleMessage はスキップされた書き込みについて通知する。
+// injectWriteThrottleMessage はスキップされた書き込みとコマンドについて通知する。
 // 最後の History エントリに追記する（FC モードの role 交互パターンを崩さないため）。
-func (a *Agent) injectWriteThrottleMessage(skippedCount int) {
-	msg := fmt.Sprintf(
-		"\n\n[System] %d write operation(s) were queued but not executed. "+
-			"Only 1 write per turn is allowed. "+
-			"Review the file content above, then execute the next edit.",
-		skippedCount,
-	)
+func (a *Agent) injectWriteThrottleMessage(skippedWrites int, skippedCommands int) {
+	var msg string
+	if skippedCommands > 0 {
+		msg = fmt.Sprintf(
+			"\n\n[System] %d write operation(s) and %d command(s) were queued but not executed. "+
+				"Execute one write at a time, then verify.",
+			skippedWrites,
+			skippedCommands,
+		)
+	} else {
+		msg = fmt.Sprintf(
+			"\n\n[System] %d write operation(s) were queued but not executed. "+
+				"Only 1 write per turn is allowed. "+
+				"Review the file content above, then execute the next edit.",
+			skippedWrites,
+		)
+	}
 
 	if len(a.History) > 0 {
 		last := &a.History[len(a.History)-1]

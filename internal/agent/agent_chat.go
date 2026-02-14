@@ -201,11 +201,18 @@ func (a *Agent) runNormalMode(ctx context.Context, input string) error {
 		var lastFailedResult string
 		writeExecuted := false
 		skippedWrites := 0
+		skippedCommands := 0
 
 		for _, toolCall := range toolCalls {
 			// Gemini: 書き込み系ツールは1ターン1回まで
 			if a.shouldThrottleWrite(toolCall) && writeExecuted {
 				skippedWrites++
+				continue
+			}
+
+			// 書き込みがスキップされた後は bash もスキップ
+			if skippedWrites > 0 && toolCall.Tool == "bash" {
+				skippedCommands++
 				continue
 			}
 
@@ -232,9 +239,9 @@ func (a *Agent) runNormalMode(ctx context.Context, input string) error {
 			}
 		}
 
-		// スキップされた書き込みがあれば通知（最後のツール結果に追記）
-		if skippedWrites > 0 {
-			a.injectWriteThrottleMessage(skippedWrites)
+		// スキップされた書き込みとコマンドがあれば通知（最後のツール結果に追記）
+		if skippedWrites > 0 || skippedCommands > 0 {
+			a.injectWriteThrottleMessage(skippedWrites, skippedCommands)
 		}
 
 		// 失敗検出時の自動リトライ処理
@@ -425,11 +432,18 @@ func (a *Agent) chatWithImage(input string, image *api.ImageData) {
 		var lastFailedResult string
 		writeExecuted := false
 		skippedWrites := 0
+		skippedCommands := 0
 
 		for _, toolCall := range toolCalls {
 			// Gemini: 書き込み系ツールは1ターン1回まで
 			if a.shouldThrottleWrite(toolCall) && writeExecuted {
 				skippedWrites++
+				continue
+			}
+
+			// 書き込みがスキップされた後は bash もスキップ
+			if skippedWrites > 0 && toolCall.Tool == "bash" {
+				skippedCommands++
 				continue
 			}
 
@@ -457,9 +471,9 @@ func (a *Agent) chatWithImage(input string, image *api.ImageData) {
 			}
 		}
 
-		// スキップされた書き込みがあれば通知（最後のツール結果に追記）
-		if skippedWrites > 0 {
-			a.injectWriteThrottleMessage(skippedWrites)
+		// スキップされた書き込みとコマンドがあれば通知（最後のツール結果に追記）
+		if skippedWrites > 0 || skippedCommands > 0 {
+			a.injectWriteThrottleMessage(skippedWrites, skippedCommands)
 		}
 
 		// 失敗検出時の自動リトリー処理

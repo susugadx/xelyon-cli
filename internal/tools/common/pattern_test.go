@@ -72,6 +72,16 @@ func TestFindPatternInLines(t *testing.T) {
 				MatchIndices: []int{1},
 			},
 		},
+		{
+			name:    "empty lines array",
+			lines:   []string{},
+			pattern: "anything",
+			want: PatternMatchResult{
+				MatchIdx:     -1,
+				MatchCount:   0,
+				MatchIndices: nil,
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -82,4 +92,29 @@ func TestFindPatternInLines(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestDisplayPatternNotFound(t *testing.T) {
+	// このテストは主に空のlines配列でもpanicしないことを確認する
+	t.Run("empty lines array", func(t *testing.T) {
+		// 標準出力をキャプチャする代わりに、panicしないことを確認
+		defer func() {
+			if r := recover(); r != nil {
+				t.Errorf("DisplayPatternNotFound panicked with empty lines: %v", r)
+			}
+		}()
+
+		// 空のlines配列で関数を呼び出し
+		DisplayPatternNotFound("test pattern", []string{}, 50)
+	})
+
+	t.Run("normal lines array", func(t *testing.T) {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Errorf("DisplayPatternNotFound panicked: %v", r)
+			}
+		}()
+
+		DisplayPatternNotFound("test pattern", []string{"line1", "line2", "line3"}, 2)
+	})
 }

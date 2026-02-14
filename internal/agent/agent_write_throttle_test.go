@@ -116,21 +116,37 @@ func TestAutoReadBack_SkipsGrepReplace(t *testing.T) {
 	}
 }
 
-func TestInjectWriteThrottleMessage(t *testing.T) {
+func TestInjectWriteThrottleMessage_OnlyWrites(t *testing.T) {
 	a := &Agent{
 		History: []api.Message{
 			{Role: "tool", Content: "Success"},
 		},
 	}
 
-	a.injectWriteThrottleMessage(3)
+	a.injectWriteThrottleMessage(3, 0)
+
+	last := a.History[len(a.History)-1]
+	expected := "3 write operation(s) were queued but not executed"
+	if !strings.Contains(last.Content, expected) {
+		t.Errorf("throttle message should contain %q, got: %s", expected, last.Content)
+	}
+}
+
+func TestInjectWriteThrottleMessage_WithCommands(t *testing.T) {
+	a := &Agent{
+		History: []api.Message{
+			{Role: "tool", Content: "Success"},
+		},
+	}
+
+	a.injectWriteThrottleMessage(2, 1)
 
 	last := a.History[len(a.History)-1]
 	if last.Content == "Success" {
 		t.Error("injectWriteThrottleMessage should have appended to the last history entry")
 	}
 
-	expected := "3 write operation(s) were queued but not executed"
+	expected := "2 write operation(s) and 1 command(s) were queued but not executed"
 	if !strings.Contains(last.Content, expected) {
 		t.Errorf("throttle message should contain %q, got: %s", expected, last.Content)
 	}
