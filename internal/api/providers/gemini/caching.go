@@ -25,19 +25,66 @@ func (p *Provider) CreateCachedContent(ctx context.Context, model string, system
 		}
 	}
 
-	// コンテンツの変換
+	// コンテンツの変換（Gemini API は role: "user" / "model" のみ受け付ける）
 	geminiContents := make([]interface{}, 0, len(contents))
 	for _, msg := range contents {
-		parts := []GeminiPart{}
-		// テキストパート
-		if msg.Content != "" {
-			parts = append(parts, GeminiPart{Text: msg.Content})
-		}
+		switch {
+		case msg.Role == "assistant" && len(msg.ToolCalls) > 0:
+			// assistant の functionCall パート → role: "model"
+			parts := make([]interface{}, 0, len(msg.ToolCalls)+1)
+			if msg.Content != "" {
+				parts = append(parts, GeminiPart{Text: msg.Content})
+			}
+			for _, tc := range msg.ToolCalls {
+				var args map[string]any
+				_ = json.Unmarshal([]byte(tc.Function.Arguments), &args)
+				parts = append(parts, GeminiFunctionCallPart{
+					FunctionCall: GeminiFunctionCallData{
+						Name: tc.Function.Name,
+						Args: args,
+					},
+				})
+			}
+			geminiContents = append(geminiContents, GeminiGenericContent{
+				Parts: parts,
+				Role:  "model",
+			})
 
-		geminiContents = append(geminiContents, GeminiContent{
-			Role:  msg.Role,
-			Parts: parts,
-		})
+		case msg.Role == "tool" && msg.ToolCallID != "":
+			// functionResponse パート → role: "user"（Gemini API仕様）
+			toolName := msg.ToolName
+			if toolName == "" {
+				toolName = extractToolNameFromContent(msg.Content)
+			}
+			geminiContents = append(geminiContents, GeminiGenericContent{
+				Parts: []interface{}{
+					GeminiFunctionResponsePart{
+						FunctionResponse: GeminiFunctionResponseData{
+							Name: toolName,
+							Response: map[string]any{
+								"result": msg.Content,
+							},
+						},
+					},
+				},
+				Role: "user",
+			})
+
+		default:
+			// 通常のテキストメッセージ: "assistant" → "model", それ以外 → "user"
+			role := "user"
+			if msg.Role == "assistant" {
+				role = "model"
+			}
+			parts := []GeminiPart{}
+			if msg.Content != "" {
+				parts = append(parts, GeminiPart{Text: msg.Content})
+			}
+			geminiContents = append(geminiContents, GeminiContent{
+				Role:  role,
+				Parts: parts,
+			})
+		}
 	}
 
 	// モデル名に "models/" プレフィックスを強制
