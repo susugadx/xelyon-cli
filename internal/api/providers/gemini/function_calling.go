@@ -43,14 +43,6 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 		return "", err
 	}
 
-	// System prompt (キャッシュ利用時は不要)
-	var sysInstruction *GeminiSystemInstruction
-	if cacheName == "" && systemPrompt != "" {
-		sysInstruction = &GeminiSystemInstruction{
-			Parts: []GeminiPart{{Text: systemPrompt}},
-		}
-	}
-
 	// メッセージを interface{} スライスに変換（Function Calling リクエスト用）
 	var contents []interface{}
 
@@ -115,13 +107,18 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 	cfg := config.GetGlobalConfig()
 
 	// Function Calling 用リクエストを構築
-	// キャッシュ使用時: system_instruction, tools, tool_config はキャッシュに含まれているため除外
 	reqBody := GeminiRequestWithTools{
-		CachedContent:     cacheName,
-		SystemInstruction: sysInstruction,
-		Contents:          contents,
+		Contents: contents,
 	}
-	if cacheName == "" {
+	if cacheName != "" {
+		// キャッシュ使用時: system_instruction, tools, tool_config はキャッシュに含まれているため除外
+		reqBody.CachedContent = cacheName
+	} else {
+		if systemPrompt != "" {
+			reqBody.SystemInstruction = &GeminiSystemInstruction{
+				Parts: []GeminiPart{{Text: systemPrompt}},
+			}
+		}
 		reqBody.Tools = toolDefs
 		reqBody.ToolConfig = toolCfg
 	}
