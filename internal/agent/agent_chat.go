@@ -174,7 +174,7 @@ func (a *Agent) runNormalMode(ctx context.Context, input string) error {
 
 		// ツール呼び出しなし = 通常の回答
 		if len(toolCalls) == 0 {
-			// 完了検証: 変更ファイルにLSPエラーが残っていないかチェック
+			// Phase 1: LSP 完了検証（1回限り - 同一エラーのループ防止）
 			if !completionVerified {
 				needsContinue, feedback := a.verifyCompletionWithDiagnostics(response)
 				if needsContinue {
@@ -192,6 +192,28 @@ func (a *Agent) runNormalMode(ctx context.Context, input string) error {
 					continue
 				}
 			}
+
+			// Phase 2: Completion hooks（毎回実行 - 修正後の再チェック必要）
+			if containsCompletionDeclaration(response) {
+				changedFiles := a.getTaskChangedFiles()
+				if len(changedFiles) > 0 {
+					hookNeedsContinue, hookFeedback := a.runCompletionHooks(changedFiles)
+					if hookNeedsContinue {
+						yellow.Println("⚠️  Completion verification: hook command failed")
+						a.History = append(a.History, api.Message{
+							Role:             "assistant",
+							Content:          response,
+							ReasoningContent: a.getLastReasoningContent(),
+						})
+						a.History = append(a.History, api.Message{
+							Role:    "user",
+							Content: hookFeedback,
+						})
+						continue
+					}
+				}
+			}
+
 			a.handleNormalResponse(response)
 			a.showTaskSummary()
 			return nil
@@ -405,7 +427,7 @@ func (a *Agent) chatWithImage(input string, image *api.ImageData) {
 
 		// ツール呼び出しなし = 通常の回答
 		if len(toolCalls) == 0 {
-			// 完了検証: 変更ファイルにLSPエラーが残っていないかチェック
+			// Phase 1: LSP 完了検証（1回限り - 同一エラーのループ防止）
 			if !completionVerified {
 				needsContinue, feedback := a.verifyCompletionWithDiagnostics(response)
 				if needsContinue {
@@ -423,6 +445,28 @@ func (a *Agent) chatWithImage(input string, image *api.ImageData) {
 					continue
 				}
 			}
+
+			// Phase 2: Completion hooks（毎回実行 - 修正後の再チェック必要）
+			if containsCompletionDeclaration(response) {
+				changedFiles := a.getTaskChangedFiles()
+				if len(changedFiles) > 0 {
+					hookNeedsContinue, hookFeedback := a.runCompletionHooks(changedFiles)
+					if hookNeedsContinue {
+						yellow.Println("⚠️  Completion verification: hook command failed")
+						a.History = append(a.History, api.Message{
+							Role:             "assistant",
+							Content:          response,
+							ReasoningContent: a.getLastReasoningContent(),
+						})
+						a.History = append(a.History, api.Message{
+							Role:    "user",
+							Content: hookFeedback,
+						})
+						continue
+					}
+				}
+			}
+
 			a.handleNormalResponse(response)
 			a.showTaskSummary()
 			return

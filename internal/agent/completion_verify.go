@@ -1,9 +1,14 @@
 package agent
 
 import (
+	"context"
 	"fmt"
+	"os"
+	"os/exec"
 	"strings"
+	"time"
 
+	"github.com/susugadx/xelyon-cli/internal/config"
 	toolslsp "github.com/susugadx/xelyon-cli/internal/tools/lsp"
 )
 
@@ -97,4 +102,71 @@ func (a *Agent) verifyCompletionWithDiagnostics(response string) (needsContinue 
 Please fix these errors before declaring completion. Do NOT skip these issues.`, result.ErrorCount, result.Summary)
 
 	return true, feedback
+}
+
+// runCompletionHooks は config.yaml の hooks.on_completion に定義された
+// シェルコマンドを順番に実行する。いずれかのコマンドが失敗した場合、
+// needsContinue=true と AI 向けのフィードバックを返す。
+// すべて成功した場合は needsContinue=false を返す。
+func (a *Agent) runCompletionHooks(changedFiles []string) (needsContinue bool, feedback string) {
+	cfg := config.GetGlobalConfig()
+	hooks := cfg.Hooks.OnCompletion
+	if len(hooks) == 0 {
+		return false, ""
+	}
+
+	timeout := time.Duration(cfg.Hooks.Timeout) * time.Second
+	if timeout <= 0 {
+		timeout = 60 * time.Second
+	}
+
+	// XELYON_CHANGED_FILES 環境変数を設定
+	changedFilesEnv := strings.Join(changedFiles, " ")
+
+	for _, cmd := range hooks {
+		yellow.Printf("🏁 Running completion hook: %s\n", cmd)
+
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		proc := exec.CommandContext(ctx, "bash", "-c", cmd)
+
+		// 作業ディレクトリを設定
+		if cwd, err := os.Getwd(); err == nil {
+			proc.Dir = cwd
+		}
+
+		// 環境変数を設定
+		proc.Env = append(os.Environ(), "XELYON_CHANGED_FILES="+changedFilesEnv)
+
+		// stdout と stderr を結合して取得
+		output, err := proc.CombinedOutput()
+		cancel()
+
+		if err != nil {
+			// 出力を最大2000文字に切り詰め
+			outputStr := string(output)
+			if len(outputStr) > 2000 {
+				outputStr = outputStr[:2000] + "\n... (truncated)"
+			}
+
+			// 終了コードを取得
+			exitCode := -1
+			if exitErr, ok := err.(*exec.ExitError); ok {
+				exitCode = exitErr.ExitCode()
+			}
+
+			red.Printf("  Hook failed (exit code %d): %s\n", exitCode, cmd)
+
+			feedback = fmt.Sprintf(`[SYSTEM] Completion verification failed. Hook command %q failed (exit code %d):
+
+%s
+
+Please fix these errors before declaring completion. Do NOT skip these issues.`, cmd, exitCode, outputStr)
+
+			return true, feedback
+		}
+
+		green.Printf("  Hook passed: %s\n", cmd)
+	}
+
+	return false, ""
 }

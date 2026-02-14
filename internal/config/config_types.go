@@ -26,6 +26,7 @@ type Config struct {
 	Output          OutputConfig                   `yaml:"output"`
 	WebSearch       WebSearchConfig                `yaml:"web_search"`
 	MCP             MCPConfig                      `yaml:"mcp"`
+	Hooks           HooksConfig                    `yaml:"hooks"`
 	// 将来の拡張用
 	// Cloud CloudConfig `yaml:"cloud,omitempty"`
 }
@@ -174,6 +175,12 @@ type WebSearchConfig struct {
 type MCPConfig struct {
 	Enabled  bool `yaml:"enabled"`  // MCP接続を有効化（デフォルト: true）
 	Headless bool `yaml:"headless"` // Headlessモードでも接続（デフォルト: false）
+}
+
+// HooksConfig はフック設定
+type HooksConfig struct {
+	OnCompletion []string `yaml:"on_completion"` // 完了時に実行するコマンド
+	Timeout      int      `yaml:"timeout"`       // コマンドタイムアウト秒（デフォルト: 60）
 }
 
 // LSPConfig は LSP (Language Server Protocol) 連携の設定

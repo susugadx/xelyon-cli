@@ -355,6 +355,22 @@ var Sections = map[string]SectionInfo{
 			"headless": "bool",
 		},
 	},
+	"hooks": {
+		Title: "フック設定",
+		Icon:  "🏁",
+		Comments: []string{
+			"タスク完了時に自動実行するシェルコマンド（LSPチェック後）",
+			"変更ファイルは XELYON_CHANGED_FILES 環境変数で参照可能",
+		},
+		Fields: map[string]string{
+			"on_completion": "完了時に実行するコマンド（例: go test ./...）",
+			"timeout":       "コマンドタイムアウト（秒）（デフォルト: 60）",
+		},
+		FieldTypes: map[string]string{
+			"on_completion": "[]string",
+			"timeout":       "int",
+		},
+	},
 }
 
 // SectionOrder はセクションの表示順序
@@ -382,6 +398,7 @@ var SectionOrder = []string{
 	"output",
 	"web_search",
 	"mcp",
+	"hooks",
 }
 
 // CategoryOrder はカテゴリの表示順序（UIでのグループ化用）
@@ -408,6 +425,7 @@ var CategoryOrder = []string{
 	"output",
 	"web_search",
 	"mcp",
+	"hooks",
 }
 
 // SectionToCategory はセクション名をカテゴリ名にマップ
@@ -435,6 +453,7 @@ var SectionToCategory = map[string]string{
 	"output":           "output",
 	"web_search":       "web_search",
 	"mcp":              "mcp",
+	"hooks":            "hooks",
 }
 
 // CategoryInfo はカテゴリの表示情報
@@ -550,5 +569,10 @@ var Categories = map[string]CategoryInfo{
 		DisplayName: "MCP Servers",
 		Icon:        "🔌",
 		Sections:    []string{"mcp"},
+	},
+	"hooks": {
+		DisplayName: "Hooks",
+		Icon:        "🏁",
+		Sections:    []string{"hooks"},
 	},
 }

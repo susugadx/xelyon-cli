@@ -1,8 +1,10 @@
 package agent
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
@@ -207,4 +209,111 @@ func TestVerifyCompletionWithDiagnostics_NoLSP(t *testing.T) {
 			t.Errorf("expected empty feedback, got %q", feedback)
 		}
 	})
+}
+
+func TestRunCompletionHooks_NoHooks(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Hooks.OnCompletion = nil
+	config.SetGlobalConfig(cfg)
+	defer config.SetGlobalConfig(nil)
+
+	a := &Agent{}
+	needsContinue, feedback := a.runCompletionHooks([]string{"/src/main.go"})
+	if needsContinue {
+		t.Error("expected needsContinue=false when no hooks configured")
+	}
+	if feedback != "" {
+		t.Errorf("expected empty feedback, got %q", feedback)
+	}
+}
+
+func TestRunCompletionHooks_SuccessfulCommand(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Hooks.OnCompletion = []string{"echo 'test passed'"}
+	cfg.Hooks.Timeout = 10
+	config.SetGlobalConfig(cfg)
+	defer config.SetGlobalConfig(nil)
+
+	a := &Agent{}
+	needsContinue, feedback := a.runCompletionHooks([]string{"/src/main.go"})
+	if needsContinue {
+		t.Error("expected needsContinue=false for successful command")
+	}
+	if feedback != "" {
+		t.Errorf("expected empty feedback, got %q", feedback)
+	}
+}
+
+func TestRunCompletionHooks_FailedCommand(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Hooks.OnCompletion = []string{"exit 1"}
+	cfg.Hooks.Timeout = 10
+	config.SetGlobalConfig(cfg)
+	defer config.SetGlobalConfig(nil)
+
+	a := &Agent{}
+	needsContinue, feedback := a.runCompletionHooks([]string{"/src/main.go"})
+	if !needsContinue {
+		t.Error("expected needsContinue=true for failed command")
+	}
+	if !strings.Contains(feedback, "[SYSTEM] Completion verification failed") {
+		t.Errorf("expected system feedback, got %q", feedback)
+	}
+	if !strings.Contains(feedback, "exit code 1") {
+		t.Errorf("expected exit code in feedback, got %q", feedback)
+	}
+}
+
+func TestRunCompletionHooks_ChangedFilesEnv(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Hooks.OnCompletion = []string{
+		`test -n "$XELYON_CHANGED_FILES"`,
+	}
+	cfg.Hooks.Timeout = 10
+	config.SetGlobalConfig(cfg)
+	defer config.SetGlobalConfig(nil)
+
+	a := &Agent{}
+	needsContinue, _ := a.runCompletionHooks([]string{"/src/main.go", "/src/util.go"})
+	if needsContinue {
+		t.Error("expected needsContinue=false, XELYON_CHANGED_FILES should be set")
+	}
+}
+
+func TestRunCompletionHooks_MultipleCommands_StopsOnFirstFailure(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Hooks.OnCompletion = []string{
+		"echo 'first ok'",
+		"exit 42",
+		"echo 'should not run'",
+	}
+	cfg.Hooks.Timeout = 10
+	config.SetGlobalConfig(cfg)
+	defer config.SetGlobalConfig(nil)
+
+	a := &Agent{}
+	needsContinue, feedback := a.runCompletionHooks([]string{"/src/main.go"})
+	if !needsContinue {
+		t.Error("expected needsContinue=true when second command fails")
+	}
+	if !strings.Contains(feedback, "exit code 42") {
+		t.Errorf("expected exit code 42 in feedback, got %q", feedback)
+	}
+}
+
+func TestRunCompletionHooks_Timeout(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Hooks.OnCompletion = []string{"sleep 30"}
+	cfg.Hooks.Timeout = 1
+	config.SetGlobalConfig(cfg)
+	defer config.SetGlobalConfig(nil)
+
+	a := &Agent{}
+	needsContinue, feedback := a.runCompletionHooks([]string{"/src/main.go"})
+	if !needsContinue {
+		t.Error("expected needsContinue=true for timed-out command")
+	}
+	if feedback == "" {
+		t.Error("expected non-empty feedback for timed-out command")
+	}
 }

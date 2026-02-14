@@ -284,6 +284,10 @@ func DefaultConfig() *Config {
 			Enabled:  true,  // デフォルトON - MCP接続有効
 			Headless: false, // デフォルトOFF - Headlessモードでは接続しない
 		},
+		Hooks: HooksConfig{
+			OnCompletion: nil, // デフォルト: フックなし
+			Timeout:      60,  // 60秒タイムアウト
+		},
 	}
 }
 
@@ -418,6 +422,10 @@ func applyDefaults(cfg *Config) {
 	// WebSearch: 全てゼロ値の場合のみデフォルト適用
 	if !cfg.WebSearch.CacheEnabled && cfg.WebSearch.CacheTTL == 0 && cfg.WebSearch.CacheSize == 0 {
 		cfg.WebSearch = defaults.WebSearch
+	}
+	// Hooks: Timeout が 0 の場合はデフォルト適用
+	if cfg.Hooks.Timeout == 0 {
+		cfg.Hooks.Timeout = defaults.Hooks.Timeout
 	}
 }
 
