@@ -215,7 +215,7 @@ func NewAgent(model string, provider api.Provider, headless bool) *Agent {
 		Model:           model,
 		CurrentModel:    model,
 		CurrentProvider: provider,
-		ProviderName:    provider.Name(),
+		ProviderName:    strings.ToLower(provider.Name()),
 		History:         []api.Message{},
 		session:         history.NewSession(model),
 		storage:         storage,
@@ -224,7 +224,7 @@ func NewAgent(model string, provider api.Provider, headless bool) *Agent {
 		mcpManager:      mcpManager,
 		lspClient:       lspClient,
 		SystemPrompt:    systemPrompt,
-		Stats:           NewSessionStats(provider.Name(), model),
+		Stats:           NewSessionStats(strings.ToLower(provider.Name()), model),
 		lastOutputs:     []string{},
 		ToolCache:       toolCache,
 	}
