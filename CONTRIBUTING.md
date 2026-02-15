@@ -57,7 +57,6 @@ Serper APIを使ったリアルタイムWeb検索を実装。
 ### ドキュメント更新ルール（必須）
 機能追加・変更時は**必ず**以下を同時に更新：
 - **README.md**: 使い方、コマンド説明、バージョン履歴
-- **XELYON.md**: アーキテクチャ、内部設計、SystemPromptルール
 
 ドキュメント更新なしのPRは受け付けません。
 
@@ -122,4 +121,4 @@ make gen-all
 - Discussions: 質問、アイデア共有
 
 ## 参考資料
-- [XELYON.md](XELYON.md): プロジェクト詳細設計
+- [README.md](README.md): ユーザー向けドキュメント

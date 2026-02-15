@@ -35,27 +35,6 @@ func TestLoadProjectConfig(t *testing.T) {
 		}
 	})
 
-	t.Run("XELYON.md fallback in current directory", func(t *testing.T) {
-		tmpDir := t.TempDir()
-		content := "# Test Project\nThis is a test."
-		err := os.WriteFile(filepath.Join(tmpDir, "XELYON.md"), []byte(content), 0644)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err := os.Chdir(tmpDir); err != nil {
-			t.Fatal(err)
-		}
-
-		result := loadProjectConfig()
-		if result == "" {
-			t.Error("loadProjectConfig() returned empty, want non-empty")
-		}
-		if !contains(result, "Test Project") {
-			t.Errorf("loadProjectConfig() = %q, want to contain 'Test Project'", result)
-		}
-	})
-
 	t.Run("xelyon.yaml exists in parent directory", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		parentDir := filepath.Join(tmpDir, "parent")
@@ -82,7 +61,7 @@ func TestLoadProjectConfig(t *testing.T) {
 		}
 	})
 
-	// Note: "no config found" テストは、親ディレクトリにxelyon.yamlやXELYON.mdが
+	// Note: "no config found" テストは、親ディレクトリにxelyon.yamlが
 	// 存在する可能性があるため、実行環境に依存する。スキップする。
 }
 

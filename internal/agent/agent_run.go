@@ -23,7 +23,7 @@ func RunHeadless(query string, model string, provider api.Provider) *HeadlessRes
 	agent.AutoApprove = true // Headlessモードは自動承認（SafetyLow以外）
 	tools.SetAutoApprove(true)
 
-	// プロジェクト設定読み込み（headless: UI出力は applyProjectConfig 内で行う）
+	// プロジェクト設定読み込み（xelyon.yaml）
 	if pc := loadProjectConfig(); pc != nil {
 		agent.SystemPrompt = injectProjectConfig(agent.SystemPrompt, pc)
 		// headless では hooks 解決のみ（UI 表示不要）
@@ -143,7 +143,7 @@ func RunOnceWithImage(query string, model string, provider api.Provider, imagePa
 	}
 	green.Printf("🖼️  Image loaded: %s (%s)\n", image.Path, api.FormatImageSize(image.Size))
 
-	// プロジェクト設定読み込み（xelyon.yaml → XELYON.md フォールバック）
+	// プロジェクト設定読み込み（xelyon.yaml）
 	if pc := loadProjectConfig(); pc != nil {
 		applyProjectConfig(agent, pc)
 	}

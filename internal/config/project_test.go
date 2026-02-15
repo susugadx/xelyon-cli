@@ -28,9 +28,6 @@ rules:
 	if pc == nil {
 		t.Fatal("LoadProjectConfig() returned nil, want non-nil")
 	}
-	if pc.IsLegacy {
-		t.Error("expected IsLegacy=false for xelyon.yaml")
-	}
 	if pc.Context != "Test project context" {
 		t.Errorf("Context = %q, want %q", pc.Context, "Test project context")
 	}
@@ -45,64 +42,6 @@ rules:
 	}
 }
 
-func TestLoadProjectConfigFromMDFallback(t *testing.T) {
-	dir := t.TempDir()
-	mdContent := "# Test\n## 開発ルール\n- Rule 1\n"
-	if err := os.WriteFile(filepath.Join(dir, "XELYON.md"), []byte(mdContent), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	origDir, _ := os.Getwd()
-	defer func() { _ = os.Chdir(origDir) }()
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-
-	pc := LoadProjectConfig()
-	if pc == nil {
-		t.Fatal("LoadProjectConfig() returned nil, want non-nil")
-	}
-	if !pc.IsLegacy {
-		t.Error("expected IsLegacy=true for XELYON.md fallback")
-	}
-	if pc.Context != mdContent {
-		t.Errorf("Context = %q, want %q", pc.Context, mdContent)
-	}
-}
-
-func TestLoadProjectConfigYAMLPriority(t *testing.T) {
-	dir := t.TempDir()
-
-	// Create both files
-	yamlContent := `context: "from yaml"
-rules:
-  - "yaml rule"
-`
-	if err := os.WriteFile(filepath.Join(dir, "xelyon.yaml"), []byte(yamlContent), 0644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "XELYON.md"), []byte("from md"), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	origDir, _ := os.Getwd()
-	defer func() { _ = os.Chdir(origDir) }()
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-
-	pc := LoadProjectConfig()
-	if pc == nil {
-		t.Fatal("LoadProjectConfig() returned nil")
-	}
-	if pc.IsLegacy {
-		t.Error("expected xelyon.yaml to take priority (IsLegacy=false)")
-	}
-	if pc.Context != "from yaml" {
-		t.Errorf("Context = %q, want %q", pc.Context, "from yaml")
-	}
-}
-
 func TestLoadProjectConfigNeitherExists(t *testing.T) {
 	dir := t.TempDir()
 
@@ -114,7 +53,26 @@ func TestLoadProjectConfigNeitherExists(t *testing.T) {
 
 	pc := LoadProjectConfig()
 	if pc != nil {
-		t.Errorf("expected nil when neither file exists, got %+v", pc)
+		t.Errorf("expected nil when no xelyon.yaml exists, got %+v", pc)
+	}
+}
+
+func TestLoadProjectConfigXELYONMDIgnored(t *testing.T) {
+	dir := t.TempDir()
+	// XELYON.md のみ存在 → 無視される
+	if err := os.WriteFile(filepath.Join(dir, "XELYON.md"), []byte("# Test"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	origDir, _ := os.Getwd()
+	defer func() { _ = os.Chdir(origDir) }()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	pc := LoadProjectConfig()
+	if pc != nil {
+		t.Errorf("expected nil when only XELYON.md exists (should be ignored), got %+v", pc)
 	}
 }
 

@@ -128,38 +128,24 @@ func modelDisplayName(model string) string {
 	}
 }
 
-// loadProjectConfig はプロジェクト設定をロード（xelyon.yaml → XELYON.md フォールバック）
+// loadProjectConfig はプロジェクト設定をロード（xelyon.yaml）
 func loadProjectConfig() *config.ProjectConfig {
 	return config.LoadProjectConfig()
 }
 
 // injectProjectConfig は ProjectConfig を SystemPrompt に注入する。
-// xelyon.yaml: Rules → InjectProjectRules, Context → 末尾に追加
-// XELYON.md (legacy): BuildProjectRulesBlock → InjectProjectRules, StripRuleSections → 末尾に追加
+// Rules → InjectProjectRules, Context → 末尾に追加
 func injectProjectConfig(systemPrompt string, pc *config.ProjectConfig) string {
 	if pc == nil {
 		return systemPrompt
 	}
 
-	if pc.IsLegacy {
-		// Legacy path: XELYON.md と同じ処理（image mode パターンを全モードに統一）
-		rulesBlock := prompt.BuildProjectRulesBlock(pc.Context)
-		if rulesBlock != "" {
-			systemPrompt = prompt.InjectProjectRules(systemPrompt, rulesBlock)
-		}
-		stripped := prompt.StripRuleSections(pc.Context)
-		if stripped != "" {
-			systemPrompt += "\n\n## Project Context:\n" + stripped
-		}
-	} else {
-		// New path: xelyon.yaml
-		rulesBlock := prompt.BuildRulesBlockFromList(pc.Rules)
-		if rulesBlock != "" {
-			systemPrompt = prompt.InjectProjectRules(systemPrompt, rulesBlock)
-		}
-		if pc.Context != "" {
-			systemPrompt += "\n\n## Project Context:\n" + pc.Context
-		}
+	rulesBlock := prompt.BuildRulesBlockFromList(pc.Rules)
+	if rulesBlock != "" {
+		systemPrompt = prompt.InjectProjectRules(systemPrompt, rulesBlock)
+	}
+	if pc.Context != "" {
+		systemPrompt += "\n\n## Project Context:\n" + pc.Context
 	}
 
 	return systemPrompt
@@ -183,9 +169,5 @@ func applyProjectConfig(agent *Agent, pc *config.ProjectConfig) {
 	}
 
 	// 3. UI 表示
-	if pc.IsLegacy {
-		yellow.Println("📋 XELYON.md loaded (deprecated: run /init to migrate to xelyon.yaml)")
-	} else {
-		green.Println("📋 xelyon.yaml loaded")
-	}
+	green.Println("📋 xelyon.yaml loaded")
 }

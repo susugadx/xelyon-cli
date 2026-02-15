@@ -300,7 +300,7 @@ func TestAgent_SwitchProvider_NoAPIKey(t *testing.T) {
 }
 
 func TestLoadProjectConfig_NoFile(t *testing.T) {
-	// xelyon.yaml も XELYON.md も存在しないディレクトリで実行
+	// xelyon.yaml が存在しないディレクトリで実行
 	tmpDir := t.TempDir()
 	originalDir, _ := os.Getwd()
 	defer func() { _ = os.Chdir(originalDir) }()
@@ -310,29 +310,6 @@ func TestLoadProjectConfig_NoFile(t *testing.T) {
 	pc := loadProjectConfig()
 	if pc != nil {
 		t.Errorf("loadProjectConfig() should return nil when no config file, got %+v", pc)
-	}
-}
-
-func TestLoadProjectConfig_WithXELYONMD(t *testing.T) {
-	tmpDir := t.TempDir()
-	originalDir, _ := os.Getwd()
-	defer func() { _ = os.Chdir(originalDir) }()
-
-	// XELYON.mdを作成
-	content := "# Test Project Config\nThis is a test."
-	_ = os.WriteFile(tmpDir+"/XELYON.md", []byte(content), 0644)
-
-	_ = os.Chdir(tmpDir)
-
-	pc := loadProjectConfig()
-	if pc == nil {
-		t.Fatal("loadProjectConfig() returned nil, want non-nil")
-	}
-	if !pc.IsLegacy {
-		t.Error("expected IsLegacy=true for XELYON.md")
-	}
-	if pc.Context != content {
-		t.Errorf("Context = %q, want %q", pc.Context, content)
 	}
 }
 
@@ -349,9 +326,6 @@ func TestLoadProjectConfig_WithXelyonYAML(t *testing.T) {
 	pc := loadProjectConfig()
 	if pc == nil {
 		t.Fatal("loadProjectConfig() returned nil, want non-nil")
-	}
-	if pc.IsLegacy {
-		t.Error("expected IsLegacy=false for xelyon.yaml")
 	}
 	if pc.Context != "test context" {
 		t.Errorf("Context = %q, want %q", pc.Context, "test context")

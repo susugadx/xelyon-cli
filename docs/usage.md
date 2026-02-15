@@ -6,7 +6,7 @@
 
 - [複数行入力](#複数行入力)
 - [画像入力（マルチモーダル）](#画像入力マルチモーダル)
-- [プロジェクト設定ファイル（XELYON.md）](#プロジェクト設定ファイルxelyonmd)
+- [プロジェクト設定ファイル（xelyon.yaml）](#プロジェクト設定ファイルxelyonyaml)
 - [コードレビュー](#コードレビュー)
 - [リファクタリング](#リファクタリング)
 - [確認UI（y/n/c）](#確認uiync)
@@ -96,9 +96,9 @@ xelyon --image error.png --provider gemini "このエラーを修正して"
 
 ---
 
-## プロジェクト設定ファイル（XELYON.md）
+## プロジェクト設定ファイル（xelyon.yaml）
 
-プロジェクトルートに `XELYON.md` を置くと、起動時に自動で読み込まれ、AIのコンテキストとして使用されます。
+プロジェクトルートに `xelyon.yaml` を置くと、起動時に自動で読み込まれ、AIのコンテキストとして使用されます。
 
 ### 作成
 
@@ -106,45 +106,42 @@ xelyon --image error.png --provider gemini "このエラーを修正して"
 > /init
 ```
 
-### XELYON.md について
+### xelyon.yaml について
 
-XELYON.md は AI 用のコンテキストファイルです。
+xelyon.yaml は AI 用の構造化設定ファイルです。
 
 **書くべきこと:**
-- プロジェクトの概要（1-2行）
-- 開発ルール・コーディング規約
-- Verification Commands（変更後に実行する検証コマンド）
+- `context`: プロジェクトの概要（1-2行）
+- `rules`: 開発ルール・コーディング規約
+- `hooks`: 完了時フック（変更後に実行する検証コマンド）
 
 **書かないこと:**
 - ディレクトリ構造やコードマップの詳細
 - 詳細なドキュメント
 
-### XELYON.md の例
+### xelyon.yaml の例
 
-```markdown
-# my-project
+```yaml
+# my-project - Project Configuration
+# AI 用コンテキスト。ドキュメントではありません。
+# AI が許可なくこのファイルを肥大化させることを禁止します。
 
-> AI 用コンテキスト。ドキュメントではありません。
-> AI が許可なくこのファイルを肥大化させることを禁止します。
+context: |
+  Webアプリケーションのバックエンドサーバー
 
-## 概要
-Webアプリケーションのバックエンドサーバー
+rules:
+  - "変数名はキャメルケース"
+  - "関数コメント必須"
+  - "コミットメッセージは日本語で"
 
-## 開発ルール
-- 変数名はキャメルケース
-- 関数コメント必須
-- コミットメッセージは日本語で
-
-## Verification Commands
-
-コード変更後に必ず実行するコマンド。AI は変更完了前にこれを実行すること。
-
-\```bash
-npm run lint && npm run build && npm test
-\```
+hooks:
+  on_completion:
+    - "npm run lint && npm run build && npm test"
+  timeout: 60
+  max_retry: 3
 ```
 
-> **Note:** `## Verification Commands` セクションを定義すると、AI がコード変更後に自動でそのコマンドを実行します。未定義の場合は言語に応じたデフォルト（build → format → test）が使われます。
+> **Note:** `hooks.on_completion` を定義すると、AI がコード変更後に自動でそのコマンドを実行します。省略時は `config.yaml` の hooks 設定が使われます。
 
 ---
 

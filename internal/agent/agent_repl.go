@@ -58,7 +58,7 @@ func RunInteractive(model string, provider api.Provider, autoApprove bool) {
 	printHeader(model, provider)
 	printModeInfo(autoApprove, false)
 
-	// プロジェクト設定読み込み（xelyon.yaml → XELYON.md フォールバック）
+	// プロジェクト設定読み込み（xelyon.yaml）
 	if pc := loadProjectConfig(); pc != nil {
 		applyProjectConfig(agent, pc)
 	}
@@ -256,16 +256,10 @@ func printContextSize(systemPrompt string, isFunctionCalling bool) {
 	// プロジェクト設定のトークン数
 	pc := loadProjectConfig()
 	projectTokens := 0
-	projectLabel := "xelyon.yaml"
 	if pc != nil {
-		if pc.IsLegacy {
-			projectLabel = "XELYON.md"
-			projectTokens = token.EstimateTokenCount(pc.Context)
-		} else {
-			projectTokens = token.EstimateTokenCount(pc.Context)
-			for _, rule := range pc.Rules {
-				projectTokens += token.EstimateTokenCount(rule)
-			}
+		projectTokens = token.EstimateTokenCount(pc.Context)
+		for _, rule := range pc.Rules {
+			projectTokens += token.EstimateTokenCount(rule)
 		}
 	}
 
@@ -282,7 +276,7 @@ func printContextSize(systemPrompt string, isFunctionCalling bool) {
 		dim.Printf("   ├── Tools (%d): ~%s\n",
 			builtinCount, FormatTokens(toolsTokens))
 	}
-	dim.Printf("   └── %s: ~%s\n", projectLabel, FormatTokens(projectTokens))
+	dim.Printf("   └── xelyon.yaml: ~%s\n", FormatTokens(projectTokens))
 }
 
 // estimateToolDefinitionTokens は Registry 全ツールの JSON 定義トークン数を推定

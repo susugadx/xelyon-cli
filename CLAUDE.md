@@ -1,13 +1,11 @@
 # CLAUDE.md
 
-このプロジェクトの詳細設定は **XELYON.md** を参照してください。
+プロジェクト設定は **xelyon.yaml** を参照してください。
 
 ## 開発ルール（必ず守ること）
 
 ### ドキュメント更新
-機能追加・変更時は**必ず**以下を同時に更新：
-- **README.md**: 使い方、コマンド説明、バージョン履歴
-- **XELYON.md**: アーキテクチャ、内部設計、SystemPromptルール
+機能追加・変更時は**必ず** **README.md** を同時に更新（使い方、コマンド説明、バージョン履歴）。
 
 ドキュメント更新なしのコミットは禁止。
 
@@ -106,7 +104,7 @@ make gen-all  # config.yaml.example と docs/config-generated.md を更新
   - エラーレスポンスの安全なパース
   - DeepSeekプロバイダーで実装
 - [x] **非推奨関数レビュー**: 破壊的変更を避けるため保持
-- [x] ドキュメント更新（README.md, XELYON.md）
+- [x] ドキュメント更新（README.md）
 
 **合計: 26件の問題を解決**
 
@@ -166,7 +164,7 @@ make gen-all  # config.yaml.example と docs/config-generated.md を更新
   - 圧縮時に通知表示 + 無効化方法の案内
   - 設定: `compression.auto_compress: true`
 - [x] **トークン上限エラー時の提案**: `/compress` または `/clear` を案内
-- [x] ドキュメント更新（README.md, XELYON.md, CLAUDE.md）
+- [x] ドキュメント更新（README.md, CLAUDE.md）
 
 ### Phase 11: MCP設定 + ツールトークン可視化
 - [x] **MCP ON/OFF設定**: `config.yaml` に `mcp.enabled`（デフォルト: true）追加
@@ -203,15 +201,16 @@ make gen-all  # config.yaml.example と docs/config-generated.md を更新
 ### Phase 13: XELYON.md → xelyon.yaml 移行
 - [x] **ProjectConfig 構造体**: `internal/config/project.go` 新規作成
   - `Context`/`Rules`/`Hooks` を YAML で構造化管理
-  - `LoadProjectConfig()`: cwd → 親方向に `xelyon.yaml` 探索 → `XELYON.md` フォールバック
+  - `LoadProjectConfig()`: cwd → 親方向に `xelyon.yaml` 探索
   - `ResolveHooks()`: xelyon.yaml hooks 優先 → config.yaml フォールバック
 - [x] **prompt 層**: `BuildRulesBlockFromList()` 追加（`[]string` → 番号付き必須ルール）
 - [x] **agent 注入統一**: 全4箇所（Interactive/Resume/Headless/Image）で統一パターン
   - `injectProjectConfig()` + `applyProjectConfig()` ヘルパー
   - Interactive/Headless/Image 間の非対称注入を解消
-- [x] **`/init` 更新**: xelyon.yaml テンプレート生成、XELYON.md 移行案内
+- [x] **`/init` 更新**: xelyon.yaml テンプレート生成
 - [x] **system prompt テキスト更新**: "XELYON.md" → "project config" 参照に統一
 - [x] **テスト**: 11 tests（config/project_test.go）+ 既存テスト更新
+- [x] **XELYON.md フォールバック完全廃止**: IsLegacy, loadProjectConfigFromMD, ExtractSection 等を全削除、XELYON.md ファイル削除
 
 ---
 
@@ -229,7 +228,6 @@ xelyon-cli/
 │   ├── ui/              # スピナー、ページャー
 │   └── version/         # バージョン管理
 ├── CLAUDE.md            # このファイル（Claude Code用）
-├── XELYON.md            # 詳細設計ドキュメント
 └── README.md            # ユーザー向けドキュメント
 ```
 

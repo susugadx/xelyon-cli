@@ -40,42 +40,12 @@ rules:
 #   max_retry: 3
 `
 
-// xelyonMDTemplate はXELYON.mdのテンプレート（後方互換用、generateXELYONMDTemplateで使用）
-const xelyonMDTemplate = `# %s
-
-> AI 用コンテキスト。ドキュメントではありません。
-> AI が許可なくこのファイルを肥大化させることを禁止します。
-
-## 概要
-
-
-## 開発ルール
-
-
-## Verification Commands
-
-コード変更後に必ず実行するコマンド。AI は変更完了前にこれを実行すること。
-
-` + "```" + `bash
-# プロジェクトに合わせて変更してください
-go fmt ./... && go build ./... && go test ./...
-` + "```" + `
-`
-
 // handleInitCommand は/initコマンドを処理（xelyon.yaml 生成）
 func handleInitCommand(agent *Agent) bool {
 	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	cyan.Println("📝 xelyon.yaml Template Generator")
 	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	fmt.Println()
-
-	// XELYON.md が存在する場合は移行案内
-	if _, err := os.Stat("XELYON.md"); err == nil {
-		yellow.Println("⚠️  XELYON.md found (deprecated)")
-		yellow.Println("   xelyon.yaml will take priority over XELYON.md.")
-		yellow.Println("   After creating xelyon.yaml, you can safely delete XELYON.md.")
-		fmt.Println()
-	}
 
 	// xelyon.yaml が既に存在するか確認
 	if _, err := os.Stat("xelyon.yaml"); err == nil {
@@ -121,11 +91,6 @@ func handleInitCommand(agent *Agent) bool {
 	yellow.Println("  3. xelyon.yaml will be automatically loaded on next session")
 
 	return true
-}
-
-// generateXELYONMDTemplate はシンプルなテンプレートを生成（後方互換用）
-func generateXELYONMDTemplate(projectName string) string {
-	return fmt.Sprintf(xelyonMDTemplate, projectName)
 }
 
 // fileExists はファイルの存在を確認（他のコマンドでも使用）

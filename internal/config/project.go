@@ -14,31 +14,22 @@ type ProjectConfig struct {
 	Hooks   *HooksConfig `yaml:"hooks,omitempty"` // 完了時フック（config.yaml の hooks を上書き）
 
 	FilePath string `yaml:"-"` // ロード元ファイルパス
-	IsLegacy bool   `yaml:"-"` // XELYON.md フォールバックの場合 true
 }
 
 // LoadProjectConfig はプロジェクト設定をロードする。
-// cwd から親方向に xelyon.yaml を探索し、なければ XELYON.md にフォールバックする。
-// どちらも見つからない場合は nil を返す。
+// cwd から親方向に xelyon.yaml を探索する。見つからない場合は nil を返す。
 func LoadProjectConfig() *ProjectConfig {
 	dir, err := os.Getwd()
 	if err != nil {
 		return nil
 	}
 
-	// 1. xelyon.yaml を探索
 	if path := findFileUpward(dir, "xelyon.yaml"); path != "" {
 		pc, err := loadProjectConfigFromYAML(path)
 		if err != nil {
-			// パースエラー時は nil を返す（呼び出し元で警告表示）
 			return nil
 		}
 		return pc
-	}
-
-	// 2. XELYON.md フォールバック
-	if path := findFileUpward(dir, "XELYON.md"); path != "" {
-		return loadProjectConfigFromMD(path)
 	}
 
 	return nil
@@ -74,22 +65,7 @@ func loadProjectConfigFromYAML(path string) (*ProjectConfig, error) {
 	}
 
 	pc.FilePath = path
-	pc.IsLegacy = false
 	return pc, nil
-}
-
-// loadProjectConfigFromMD は XELYON.md の全文を Context に格納して返す。
-func loadProjectConfigFromMD(path string) *ProjectConfig {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil
-	}
-
-	return &ProjectConfig{
-		Context:  string(data),
-		FilePath: path,
-		IsLegacy: true,
-	}
 }
 
 // ResolveHooks はプロジェクト設定とグローバル設定から hooks を解決する。

@@ -143,7 +143,6 @@ hooks:                    # config.yaml の hooks を上書き
 - **context**: AI に注入するプロジェクト説明
 - **rules**: 番号付きで system prompt に注入される必須ルール
 - **hooks**: 完了時フック（`config.yaml` の hooks より優先）
-- **後方互換**: `XELYON.md` も引き続きサポート（非推奨、`/init` で移行可能）
 
 ## インストール
 
@@ -305,7 +304,7 @@ go build -o xelyon
 ./xelyon
 ```
 
-> ⚠️ このリポジトリの `xelyon.yaml` / `XELYON.md` は xelyon-cli 開発用です。
+> ⚠️ このリポジトリの `xelyon.yaml` は xelyon-cli 開発用です。
 
 ## コントリビュート
 

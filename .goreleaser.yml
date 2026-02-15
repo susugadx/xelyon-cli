@@ -39,7 +39,6 @@ archives:
     files:
       - LICENSE
       - README.md
-      - XELYON.md
 
 checksum:
   name_template: 'checksums.txt'
