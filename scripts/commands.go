@@ -123,8 +123,8 @@ var Commands = []CommandInfo{
 	},
 	{
 		Name:          "/init",
-		Description:   "Create XELYON.md template (project config)",
-		DescriptionJP: "XELYON.mdテンプレートを作成",
+		Description:   "Create xelyon.yaml template (project config)",
+		DescriptionJP: "xelyon.yamlテンプレートを作成",
 	},
 	{
 		Name:          "/paste",

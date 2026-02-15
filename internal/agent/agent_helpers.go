@@ -2,11 +2,11 @@ package agent
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/prompt"
 	"github.com/susugadx/xelyon-cli/internal/version"
 )
 
@@ -128,23 +128,64 @@ func modelDisplayName(model string) string {
 	}
 }
 
-// loadProjectConfig はXELYON.mdをロード
-func loadProjectConfig() string {
-	dir, err := os.Getwd()
-	if err != nil {
-		yellow.Printf("Warning: Could not get current directory: %v\n", err)
-		return "" // Cannot locate XELYON.md without working directory
+// loadProjectConfig はプロジェクト設定をロード（xelyon.yaml → XELYON.md フォールバック）
+func loadProjectConfig() *config.ProjectConfig {
+	return config.LoadProjectConfig()
+}
+
+// injectProjectConfig は ProjectConfig を SystemPrompt に注入する。
+// xelyon.yaml: Rules → InjectProjectRules, Context → 末尾に追加
+// XELYON.md (legacy): BuildProjectRulesBlock → InjectProjectRules, StripRuleSections → 末尾に追加
+func injectProjectConfig(systemPrompt string, pc *config.ProjectConfig) string {
+	if pc == nil {
+		return systemPrompt
 	}
-	for {
-		path := filepath.Join(dir, "XELYON.md")
-		if content, err := os.ReadFile(path); err == nil {
-			return string(content)
+
+	if pc.IsLegacy {
+		// Legacy path: XELYON.md と同じ処理（image mode パターンを全モードに統一）
+		rulesBlock := prompt.BuildProjectRulesBlock(pc.Context)
+		if rulesBlock != "" {
+			systemPrompt = prompt.InjectProjectRules(systemPrompt, rulesBlock)
 		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break
+		stripped := prompt.StripRuleSections(pc.Context)
+		if stripped != "" {
+			systemPrompt += "\n\n## Project Context:\n" + stripped
 		}
-		dir = parent
+	} else {
+		// New path: xelyon.yaml
+		rulesBlock := prompt.BuildRulesBlockFromList(pc.Rules)
+		if rulesBlock != "" {
+			systemPrompt = prompt.InjectProjectRules(systemPrompt, rulesBlock)
+		}
+		if pc.Context != "" {
+			systemPrompt += "\n\n## Project Context:\n" + pc.Context
+		}
 	}
-	return ""
+
+	return systemPrompt
+}
+
+// applyProjectConfig はプロジェクト設定をエージェントに適用する統一ヘルパー。
+// SystemPrompt 注入 + hooks 解決 + UI 表示を行う。
+func applyProjectConfig(agent *Agent, pc *config.ProjectConfig) {
+	if pc == nil {
+		return
+	}
+
+	// 1. System prompt 注入
+	agent.SystemPrompt = injectProjectConfig(agent.SystemPrompt, pc)
+
+	// 2. hooks 解決（xelyon.yaml 優先、config.yaml フォールバック）
+	if resolved := config.ResolveHooks(config.GetGlobalConfig(), pc); resolved != nil {
+		cfg := config.GetGlobalConfig()
+		cfg.Hooks = *resolved
+		config.SetGlobalConfig(cfg)
+	}
+
+	// 3. UI 表示
+	if pc.IsLegacy {
+		yellow.Println("📋 XELYON.md loaded (deprecated: run /init to migrate to xelyon.yaml)")
+	} else {
+		green.Println("📋 xelyon.yaml loaded")
+	}
 }

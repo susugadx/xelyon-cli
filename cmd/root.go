@@ -43,27 +43,13 @@ var (
 	imageFlag     string
 )
 
-const projectConfigFile = "XELYON.md"
-
+// loadProjectConfig はプロジェクト設定をロードして文字列として返す（legacy.go 用）
 func loadProjectConfig() string {
-	dir, err := os.Getwd()
-	if err != nil {
+	pc := config.LoadProjectConfig()
+	if pc == nil {
 		return ""
 	}
-
-	for {
-		configPath := filepath.Join(dir, projectConfigFile)
-		if content, err := os.ReadFile(configPath); err == nil {
-			return fmt.Sprintf("## プロジェクト設定 (%s):\n%s", configPath, string(content))
-		}
-
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break
-		}
-		dir = parent
-	}
-	return ""
+	return fmt.Sprintf("## プロジェクト設定 (%s):\n%s", pc.FilePath, pc.Context)
 }
 
 // getModel はフラグからモデルを決定する

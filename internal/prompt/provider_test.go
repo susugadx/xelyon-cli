@@ -71,7 +71,7 @@ func TestCommonRulesBlock(t *testing.T) {
 		"ALWAYS read_file BEFORE str_replace",
 		"lsp_find",
 		"WAIT for output",
-		"Read XELYON.md before starting any task",
+		"Follow project rules in Project Context",
 		"grep_replace",
 	}
 	for _, check := range commonChecks {

@@ -17,7 +17,30 @@ func stripBracketedPaste(input string) string {
 	return input
 }
 
-// xelyonMDTemplate はXELYON.mdのテンプレート
+// xelyonYAMLTemplate は xelyon.yaml のテンプレート
+const xelyonYAMLTemplate = `# %s - Project Configuration
+# AI 用コンテキスト。ドキュメントではありません。
+# AI が許可なくこのファイルを肥大化させることを禁止します。
+
+# プロジェクトの概要・背景情報（AI に注入されるコンテキスト）
+context: |
+  # %s
+  ここにプロジェクトの概要を記述してください。
+
+# 必須ルール（AI は必ずこれに従う）
+rules:
+  - "コード変更後は必ず go fmt ./... && go build ./... を実行すること"
+  - "テストが通ることを確認してからコミットすること"
+
+# 完了時フック（省略時は config.yaml の hooks を使用）
+# hooks:
+#   on_completion:
+#     - "go fmt ./... && go build ./... && go test ./..."
+#   timeout: 60
+#   max_retry: 3
+`
+
+// xelyonMDTemplate はXELYON.mdのテンプレート（後方互換用、generateXELYONMDTemplateで使用）
 const xelyonMDTemplate = `# %s
 
 > AI 用コンテキスト。ドキュメントではありません。
@@ -39,16 +62,24 @@ go fmt ./... && go build ./... && go test ./...
 ` + "```" + `
 `
 
-// handleInitCommand は/initコマンドを処理（XELYON.md生成）
+// handleInitCommand は/initコマンドを処理（xelyon.yaml 生成）
 func handleInitCommand(agent *Agent) bool {
 	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	cyan.Println("📝 XELYON.md Template Generator")
+	cyan.Println("📝 xelyon.yaml Template Generator")
 	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	fmt.Println()
 
-	// XELYON.mdが既に存在するか確認
+	// XELYON.md が存在する場合は移行案内
 	if _, err := os.Stat("XELYON.md"); err == nil {
-		yellow.Println("⚠️  XELYON.md already exists")
+		yellow.Println("⚠️  XELYON.md found (deprecated)")
+		yellow.Println("   xelyon.yaml will take priority over XELYON.md.")
+		yellow.Println("   After creating xelyon.yaml, you can safely delete XELYON.md.")
+		fmt.Println()
+	}
+
+	// xelyon.yaml が既に存在するか確認
+	if _, err := os.Stat("xelyon.yaml"); err == nil {
+		yellow.Println("⚠️  xelyon.yaml already exists")
 		fmt.Print("Overwrite? (y/n): ")
 		reader := bufio.NewReader(os.Stdin)
 		input, err := reader.ReadString('\n')
@@ -72,27 +103,27 @@ func handleInitCommand(agent *Agent) bool {
 	}
 	projectName := filepath.Base(cwd)
 
-	// シンプルなテンプレートを生成
-	content := generateXELYONMDTemplate(projectName)
+	// xelyon.yaml テンプレートを生成
+	content := fmt.Sprintf(xelyonYAMLTemplate, projectName, projectName)
 
-	if err := os.WriteFile("XELYON.md", []byte(content), 0644); err != nil {
-		red.Printf("Failed to write XELYON.md: %v\n", err)
+	if err := os.WriteFile("xelyon.yaml", []byte(content), 0644); err != nil {
+		red.Printf("Failed to write xelyon.yaml: %v\n", err)
 		return true
 	}
 
 	green.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	green.Println("✅ XELYON.md template created!")
+	green.Println("✅ xelyon.yaml template created!")
 	green.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	fmt.Println()
 	yellow.Println("Next steps:")
-	yellow.Println("  1. Edit XELYON.md to add your project overview and rules")
-	yellow.Println("  2. Set your verification commands (build/test/lint)")
-	yellow.Println("  3. XELYON.md will be automatically included in AI context")
+	yellow.Println("  1. Edit xelyon.yaml to add your project context and rules")
+	yellow.Println("  2. Optionally configure hooks.on_completion for verification")
+	yellow.Println("  3. xelyon.yaml will be automatically loaded on next session")
 
 	return true
 }
 
-// generateXELYONMDTemplate はシンプルなテンプレートを生成
+// generateXELYONMDTemplate はシンプルなテンプレートを生成（後方互換用）
 func generateXELYONMDTemplate(projectName string) string {
 	return fmt.Sprintf(xelyonMDTemplate, projectName)
 }

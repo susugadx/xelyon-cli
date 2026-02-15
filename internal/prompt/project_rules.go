@@ -1,6 +1,9 @@
 package prompt
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // ruleSections はプロジェクトルールとして抽出するセクション名のリスト
 var ruleSections = []string{
@@ -102,6 +105,23 @@ func stripSection(content, sectionName string) string {
 	}
 	// EOF まで
 	return strings.TrimSpace(content[:idx])
+}
+
+// BuildRulesBlockFromList は []string のルールリストから mandatory rules ブロックを構築する。
+// xelyon.yaml の rules フィールド用。空リストの場合は空文字を返す。
+func BuildRulesBlockFromList(rules []string) string {
+	if len(rules) == 0 {
+		return ""
+	}
+
+	var b strings.Builder
+	b.WriteString("\n\n=== PROJECT-SPECIFIC RULES (MANDATORY) ===\n")
+	for i, rule := range rules {
+		b.WriteString(fmt.Sprintf("%d. %s\n", i+1, rule))
+	}
+	b.WriteString("Violating ANY of these rules is a critical failure.")
+
+	return b.String()
 }
 
 // InjectProjectRules は SystemPrompt の Workflow Rules 内にプロジェクトルールを埋め込む。

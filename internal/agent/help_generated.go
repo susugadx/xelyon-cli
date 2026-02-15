@@ -24,7 +24,7 @@ const GeneratedHelpText = `Commands:
                             /config show - Show all settings with diff from defaults
                             /config model <name> - Change default model
   /model [name]             - Show current model or switch model without restart
-  /init                     - Create XELYON.md template (project config)
+  /init                     - Create xelyon.yaml template (project config)
   /paste, /p                - Paste mode for long text (end with empty line x2, END, or Ctrl+D)
   /plan [on|off]            - Toggle Plan Mode (investigation -> plan -> approval -> execution)
   /think [on|off|level]     - Toggle Extended Thinking mode (level: low/medium/high/xhigh)

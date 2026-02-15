@@ -309,3 +309,45 @@ func TestEndToEnd_Integration(t *testing.T) {
 		t.Error("stripped content should not contain rule sections")
 	}
 }
+
+func TestBuildRulesBlockFromList_Empty(t *testing.T) {
+	result := BuildRulesBlockFromList(nil)
+	if result != "" {
+		t.Errorf("expected empty string for nil rules, got %q", result)
+	}
+	result = BuildRulesBlockFromList([]string{})
+	if result != "" {
+		t.Errorf("expected empty string for empty rules, got %q", result)
+	}
+}
+
+func TestBuildRulesBlockFromList_Single(t *testing.T) {
+	result := BuildRulesBlockFromList([]string{"Always run tests"})
+	if !strings.Contains(result, "PROJECT-SPECIFIC RULES (MANDATORY)") {
+		t.Error("should contain MANDATORY header")
+	}
+	if !strings.Contains(result, "1. Always run tests") {
+		t.Error("should contain numbered rule")
+	}
+	if !strings.Contains(result, "Violating ANY") {
+		t.Error("should contain violation warning")
+	}
+}
+
+func TestBuildRulesBlockFromList_Multiple(t *testing.T) {
+	rules := []string{
+		"Run go fmt before commit",
+		"All tests must pass",
+		"No hardcoded secrets",
+	}
+	result := BuildRulesBlockFromList(rules)
+	if !strings.Contains(result, "1. Run go fmt before commit") {
+		t.Error("should contain rule 1")
+	}
+	if !strings.Contains(result, "2. All tests must pass") {
+		t.Error("should contain rule 2")
+	}
+	if !strings.Contains(result, "3. No hardcoded secrets") {
+		t.Error("should contain rule 3")
+	}
+}

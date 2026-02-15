@@ -58,10 +58,9 @@ func RunInteractive(model string, provider api.Provider, autoApprove bool) {
 	printHeader(model, provider)
 	printModeInfo(autoApprove, false)
 
-	// XELYON.md読み込み
-	if config := loadProjectConfig(); config != "" {
-		agent.SystemPrompt += "\n\n## Project Context:\n" + config
-		green.Println("📋 XELYON.md loaded")
+	// プロジェクト設定読み込み（xelyon.yaml → XELYON.md フォールバック）
+	if pc := loadProjectConfig(); pc != nil {
+		applyProjectConfig(agent, pc)
 	}
 
 	// コンテキストサイズ表示（ツリー形式）
@@ -124,9 +123,8 @@ func RunInteractiveWithResume(model string, provider api.Provider, autoApprove b
 	printModeInfo(autoApprove, false)
 	green.Printf("📂 Resumed session %s (%d messages)\n", sessionID, len(session.Messages))
 
-	if config := loadProjectConfig(); config != "" {
-		agent.SystemPrompt += "\n\n## Project Context:\n" + config
-		green.Println("📋 XELYON.md loaded")
+	if pc := loadProjectConfig(); pc != nil {
+		applyProjectConfig(agent, pc)
 	}
 
 	// コンテキストサイズ表示（ツリー形式）
@@ -255,12 +253,24 @@ func printContextSize(systemPrompt string, isFunctionCalling bool) {
 	// ツール数カウント（builtin / MCP 分類）
 	builtinCount, mcpCount := countToolsByType()
 
-	// XELYON.md のトークン数
-	xelyonContent := loadProjectConfig()
-	xelyonTokens := token.EstimateTokenCount(xelyonContent)
+	// プロジェクト設定のトークン数
+	pc := loadProjectConfig()
+	projectTokens := 0
+	projectLabel := "xelyon.yaml"
+	if pc != nil {
+		if pc.IsLegacy {
+			projectLabel = "XELYON.md"
+			projectTokens = token.EstimateTokenCount(pc.Context)
+		} else {
+			projectTokens = token.EstimateTokenCount(pc.Context)
+			for _, rule := range pc.Rules {
+				projectTokens += token.EstimateTokenCount(rule)
+			}
+		}
+	}
 
 	// 合計
-	total := basePromptTokens + toolsTokens + xelyonTokens
+	total := basePromptTokens + toolsTokens + projectTokens
 
 	// ツリー形式で表示
 	dim.Printf("📋 Context size: ~%s tok\n", FormatTokens(total))
@@ -272,7 +282,7 @@ func printContextSize(systemPrompt string, isFunctionCalling bool) {
 		dim.Printf("   ├── Tools (%d): ~%s\n",
 			builtinCount, FormatTokens(toolsTokens))
 	}
-	dim.Printf("   └── XELYON.md: ~%s\n", FormatTokens(xelyonTokens))
+	dim.Printf("   └── %s: ~%s\n", projectLabel, FormatTokens(projectTokens))
 }
 
 // estimateToolDefinitionTokens は Registry 全ツールの JSON 定義トークン数を推定

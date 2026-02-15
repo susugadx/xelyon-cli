@@ -71,7 +71,7 @@ func BuildMCPToolsPrompt(tools []MCPTool) string {
 func BuildGitHubMCPGuide() string {
 	return `### GitHub MCP Usage Guide
 
-**CONTEXT INFERENCE:** Infer owner/repo from git remote, XELYON.md, or directory name. NEVER ask "which repository?"
+**CONTEXT INFERENCE:** Infer owner/repo from git remote, project config, or directory name. NEVER ask "which repository?"
 
 **CRITICAL: Array arguments (labels, assignees) must be [] not string:**
 ` + "```" + `json

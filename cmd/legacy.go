@@ -17,7 +17,7 @@ func runLegacyMode(query string, model string, provider api.Provider) {
 
 	projectConfig := loadProjectConfig()
 	if projectConfig != "" {
-		fmt.Println("📋 XELYON.md を読み込み")
+		fmt.Println("📋 プロジェクト設定を読み込み")
 		contextParts = append(contextParts, projectConfig)
 	}
 

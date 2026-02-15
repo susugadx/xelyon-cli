@@ -200,6 +200,19 @@ make gen-all  # config.yaml.example と docs/config-generated.md を更新
 - [x] **ガード対象ツール**: `str_replace`, `write_file`（既存ファイルのみ）, `grep_replace`
 - [x] **テスト**: ReadTracker 単体テスト + 各ツールのガードテスト追加
 
+### Phase 13: XELYON.md → xelyon.yaml 移行
+- [x] **ProjectConfig 構造体**: `internal/config/project.go` 新規作成
+  - `Context`/`Rules`/`Hooks` を YAML で構造化管理
+  - `LoadProjectConfig()`: cwd → 親方向に `xelyon.yaml` 探索 → `XELYON.md` フォールバック
+  - `ResolveHooks()`: xelyon.yaml hooks 優先 → config.yaml フォールバック
+- [x] **prompt 層**: `BuildRulesBlockFromList()` 追加（`[]string` → 番号付き必須ルール）
+- [x] **agent 注入統一**: 全4箇所（Interactive/Resume/Headless/Image）で統一パターン
+  - `injectProjectConfig()` + `applyProjectConfig()` ヘルパー
+  - Interactive/Headless/Image 間の非対称注入を解消
+- [x] **`/init` 更新**: xelyon.yaml テンプレート生成、XELYON.md 移行案内
+- [x] **system prompt テキスト更新**: "XELYON.md" → "project config" 参照に統一
+- [x] **テスト**: 11 tests（config/project_test.go）+ 既存テスト更新
+
 ---
 
 ## アーキテクチャ概要

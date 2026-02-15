@@ -9,7 +9,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/audit"
-	"github.com/susugadx/xelyon-cli/internal/prompt"
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -23,9 +23,15 @@ func RunHeadless(query string, model string, provider api.Provider) *HeadlessRes
 	agent.AutoApprove = true // Headlessモードは自動承認（SafetyLow以外）
 	tools.SetAutoApprove(true)
 
-	// プロジェクト設定読み込み（UI出力なし）
-	if config := loadProjectConfig(); config != "" {
-		agent.SystemPrompt += "\n\n## Project Context:\n" + config
+	// プロジェクト設定読み込み（headless: UI出力は applyProjectConfig 内で行う）
+	if pc := loadProjectConfig(); pc != nil {
+		agent.SystemPrompt = injectProjectConfig(agent.SystemPrompt, pc)
+		// headless では hooks 解決のみ（UI 表示不要）
+		if resolved := config.ResolveHooks(config.GetGlobalConfig(), pc); resolved != nil {
+			cfg := config.GetGlobalConfig()
+			cfg.Hooks = *resolved
+			config.SetGlobalConfig(cfg)
+		}
 	}
 
 	// ツール呼び出し結果を記録
@@ -137,19 +143,9 @@ func RunOnceWithImage(query string, model string, provider api.Provider, imagePa
 	}
 	green.Printf("🖼️  Image loaded: %s (%s)\n", image.Path, api.FormatImageSize(image.Size))
 
-	// XELYON.md読み込み
-	if config := loadProjectConfig(); config != "" {
-		// ルール系セクションを Workflow Rules 内に強制挿入
-		rulesBlock := prompt.BuildProjectRulesBlock(config)
-		if rulesBlock != "" {
-			agent.SystemPrompt = prompt.InjectProjectRules(agent.SystemPrompt, rulesBlock)
-		}
-		// ルール系を除いた残りを Project Context として末尾に追加
-		stripped := prompt.StripRuleSections(config)
-		if stripped != "" {
-			agent.SystemPrompt += "\n\n## Project Context:\n" + stripped
-		}
-		green.Println("📋 XELYON.md loaded")
+	// プロジェクト設定読み込み（xelyon.yaml → XELYON.md フォールバック）
+	if pc := loadProjectConfig(); pc != nil {
+		applyProjectConfig(agent, pc)
 	}
 
 	fmt.Println()

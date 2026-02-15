@@ -14,10 +14,31 @@ func TestLoadProjectConfig(t *testing.T) {
 	}
 	defer func() { _ = os.Chdir(originalDir) }()
 
-	t.Run("XELYON.md exists in current directory", func(t *testing.T) {
+	t.Run("xelyon.yaml exists in current directory", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		content := "context: \"Test Project context\"\nrules:\n  - \"rule 1\"\n"
+		err := os.WriteFile(filepath.Join(tmpDir, "xelyon.yaml"), []byte(content), 0644)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := os.Chdir(tmpDir); err != nil {
+			t.Fatal(err)
+		}
+
+		result := loadProjectConfig()
+		if result == "" {
+			t.Error("loadProjectConfig() returned empty, want non-empty")
+		}
+		if !contains(result, "Test Project context") {
+			t.Errorf("loadProjectConfig() = %q, want to contain 'Test Project context'", result)
+		}
+	})
+
+	t.Run("XELYON.md fallback in current directory", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		content := "# Test Project\nThis is a test."
-		err := os.WriteFile(filepath.Join(tmpDir, projectConfigFile), []byte(content), 0644)
+		err := os.WriteFile(filepath.Join(tmpDir, "XELYON.md"), []byte(content), 0644)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -35,15 +56,15 @@ func TestLoadProjectConfig(t *testing.T) {
 		}
 	})
 
-	t.Run("XELYON.md exists in parent directory", func(t *testing.T) {
+	t.Run("xelyon.yaml exists in parent directory", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		parentDir := filepath.Join(tmpDir, "parent")
 		childDir := filepath.Join(parentDir, "child")
 		if err := os.MkdirAll(childDir, 0755); err != nil {
 			t.Fatal(err)
 		}
-		content := "# Parent Config"
-		err := os.WriteFile(filepath.Join(parentDir, projectConfigFile), []byte(content), 0644)
+		content := "context: \"Parent Config\"\nrules:\n  - \"parent rule\"\n"
+		err := os.WriteFile(filepath.Join(parentDir, "xelyon.yaml"), []byte(content), 0644)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -61,7 +82,7 @@ func TestLoadProjectConfig(t *testing.T) {
 		}
 	})
 
-	// Note: "no XELYON.md found" テストは、親ディレクトリにXELYON.mdが
+	// Note: "no config found" テストは、親ディレクトリにxelyon.yamlやXELYON.mdが
 	// 存在する可能性があるため、実行環境に依存する。スキップする。
 }
 

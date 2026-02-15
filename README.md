@@ -124,9 +124,26 @@ API実測値に基づくトークン使用量とコストをリアルタイム�
 - **Ollama対応**: ローカル実行時はコスト表示を非表示
 - **圧縮警告**: `compression.threshold_percent`（デフォルト80%）超過時は黄色で警告表示
 
-### 📝 プロジェクト設定（XELYON.md）
-AIのコンテキストファイル。概要・開発ルール・検証コマンドを記載。
-`/init` でテンプレート作成。`## Verification Commands` で変更後にAIが自動実行するコマンドを定義可能。
+### 📝 プロジェクト設定（xelyon.yaml）
+プロジェクト固有のルール・コンテキストを構造化 YAML で管理。`/init` でテンプレート作成。
+
+```yaml
+# xelyon.yaml（プロジェクトルートに配置）
+context: "Go製CLIツール。Cobraベース。"
+rules:
+  - "変更後は make ci-check を実行"
+  - "公開関数にはコメント必須"
+hooks:                    # config.yaml の hooks を上書き
+  on_completion:
+    - "make ci-check"
+  timeout: 120
+  max_retry: 3
+```
+
+- **context**: AI に注入するプロジェクト説明
+- **rules**: 番号付きで system prompt に注入される必須ルール
+- **hooks**: 完了時フック（`config.yaml` の hooks より優先）
+- **後方互換**: `XELYON.md` も引き続きサポート（非推奨、`/init` で移行可能）
 
 ## インストール
 
@@ -239,13 +256,15 @@ mcp:
 ### Completion Hooks
 
 ```yaml
-# ~/.xelyon/config.yaml
+# ~/.xelyon/config.yaml（グローバル設定）
 hooks:
   on_completion:       # 完了宣言時に実行するコマンド（LSPチェック後）
     - "make ci-check"
   timeout: 120         # コマンドタイムアウト秒（デフォルト: 60）
   max_retry: 3         # フック失敗時の最大リトライ回数（デフォルト: 3）
 ```
+
+`xelyon.yaml` にも `hooks` を定義でき、`config.yaml` より優先されます（プロジェクト固有のフック設定に便利）。
 
 AI が完了を宣言すると、LSP 診断の後にここで定義したコマンドを順番に実行します。
 コマンド失敗時は AI にエラー内容をフィードバックし修正を続行します（最大 `max_retry` 回）。
@@ -286,7 +305,7 @@ go build -o xelyon
 ./xelyon
 ```
 
-> ⚠️ このリポジトリの `XELYON.md` は xelyon-cli 開発用です。
+> ⚠️ このリポジトリの `xelyon.yaml` / `XELYON.md` は xelyon-cli 開発用です。
 
 ## コントリビュート
 
