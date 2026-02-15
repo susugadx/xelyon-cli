@@ -111,7 +111,15 @@ Please fix these errors before declaring completion. Do NOT skip these issues.`,
 // needsContinue=true と AI 向けのフィードバックを返す。
 // すべて成功した場合は needsContinue=false を返す。
 func (a *Agent) runCompletionHooks(changedFiles []string) (needsContinue bool, feedback string) {
-	// 1. Built-in checks (Always run)
+	cfg := config.GetGlobalConfig()
+	hooks := cfg.Hooks.OnCompletion
+
+	// No user hooks → nothing to verify
+	if len(hooks) == 0 {
+		return false, ""
+	}
+
+	// 1. Built-in checks
 	// git diff --stat: Show changes context
 	yellow.Println("📊 Verifying changes with git diff --stat...")
 	var diffOutput string
@@ -122,26 +130,15 @@ func (a *Agent) runCompletionHooks(changedFiles []string) (needsContinue bool, f
 		diffOutput = string(output)
 	}
 
-	cfg := config.GetGlobalConfig()
-	hooks := cfg.Hooks.OnCompletion
-
 	if strings.TrimSpace(diffOutput) == "" {
 		yellow.Println("⚠️  WARNING: No changes detected by git diff.")
 		diffOutput = "(No changes detected)"
-
-		// If no user hooks defined, return to AI to confirm why no changes
-		if len(hooks) == 0 {
-			return true, "[SYSTEM] WARNING: No files changed detected by git diff. Please verify if you have implemented the requested changes or explain why no changes are needed."
-		}
 	} else {
 		// Print to stdout for user confirmation
 		fmt.Println(diffOutput)
 	}
 
 	// 2. User defined hooks
-	if len(hooks) == 0 {
-		return false, ""
-	}
 
 	timeout := time.Duration(cfg.Hooks.Timeout) * time.Second
 	if timeout <= 0 {
