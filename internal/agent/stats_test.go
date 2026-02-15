@@ -96,7 +96,7 @@ func TestSessionStats_EstimatedCost_OpenAI(t *testing.T) {
 	stats.AddTokens(1000000, 1000000)
 
 	cost := stats.EstimatedCost()
-	expected := 2.50 + 10.00
+	expected := 1.25 + 10.00
 	if cost != expected {
 		t.Errorf("EstimatedCost() for openai = %f, want %f", cost, expected)
 	}
@@ -130,7 +130,7 @@ func TestSessionStats_EstimatedCost_Claude_Haiku(t *testing.T) {
 	stats.AddTokens(1000000, 1000000)
 
 	cost := stats.EstimatedCost()
-	expected := 0.80 + 4.00
+	expected := 1.00 + 5.00
 	if cost != expected {
 		t.Errorf("EstimatedCost() for claude haiku = %f, want %f", cost, expected)
 	}
@@ -152,7 +152,7 @@ func TestSessionStats_EstimatedCost_Gemini(t *testing.T) {
 	stats.AddTokens(1000000, 1000000)
 
 	cost := stats.EstimatedCost()
-	expected := 0.075 + 0.30
+	expected := 0.50 + 3.00
 	if cost != expected {
 		t.Errorf("EstimatedCost() for gemini = %f, want %f", cost, expected)
 	}
@@ -356,7 +356,7 @@ func TestCalculateRequestCost(t *testing.T) {
 		// Claude Opus
 		{"claude", "claude-opus-4-5", 1000000, 1000000, 5.00 + 25.00},
 		// Claude Haiku
-		{"claude", "claude-haiku-4-5", 1000000, 1000000, 0.80 + 4.00},
+		{"claude", "claude-haiku-4-5", 1000000, 1000000, 1.00 + 5.00},
 	}
 
 	for _, tt := range tests {
@@ -378,7 +378,7 @@ func TestGetClaudePricing(t *testing.T) {
 		{"claude-opus-4-5-20251101", 5.00, 25.00},
 		{"claude-opus-4-6", 5.00, 25.00},
 		{"global.anthropic.claude-opus-4-5-20251101-v1:0", 5.00, 25.00},
-		{"claude-haiku-4-5-20251001", 0.80, 4.00},
+		{"claude-haiku-4-5-20251001", 1.00, 5.00},
 		{"claude-sonnet-4-5-20250929", 3.00, 15.00},
 		{"claude-sonnet-4-20250514", 3.00, 15.00},
 		{"", 3.00, 15.00},                   // 空文字列はSonnetデフォルト

@@ -574,8 +574,16 @@ func TestIsResponsesAPIModel(t *testing.T) {
 		{"gpt-5.1-codex", true},
 		{"gpt-5.1-codex-max", true},
 		{"gpt-5-codex", true},
-		// Chat Completions API を使用するモデル
+		// GPT-5 シリーズは prefix マッチで全て Responses API
 		{"gpt-5.2", true},
+		{"gpt-5.2-pro", true},
+		{"gpt-5.1", true},
+		{"gpt-5", true},
+		{"gpt-5-mini", true},
+		{"gpt-5-nano", true},
+		{"gpt-5.3-codex-spark", true},
+		{"gpt-5.1-codex-mini", true},
+		// Chat Completions API を使用するモデル（GPT-5 以外）
 		{"gpt-4o", false},
 		{"gpt-4o-mini", false},
 		{"gpt-3.5-turbo", false},

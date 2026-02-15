@@ -1,5 +1,7 @@
 package config
 
+import "strings"
+
 // Config はXELYON CLIの設定
 type Config struct {
 	DefaultProvider string                         `yaml:"default_provider"`
@@ -235,7 +237,12 @@ func (c *Config) ValidateModelForProvider(provider, model string) bool {
 }
 
 // IsResponsesAPIModel はモデルが OpenAI Responses API を使用するか判定
+// GPT-5 シリーズは全て Responses API 対応のため prefix マッチで判定
+// 追加の設定リストもフォールバックとして使用
 func (c *Config) IsResponsesAPIModel(model string) bool {
+	if strings.HasPrefix(model, "gpt-5") {
+		return true
+	}
 	for _, m := range c.OpenAI.ResponsesAPIModels {
 		if m == model {
 			return true
