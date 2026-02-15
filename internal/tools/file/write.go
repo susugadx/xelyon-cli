@@ -12,16 +12,24 @@ import (
 )
 
 // ExecuteWriteFile はファイルに書き込む
-func ExecuteWriteFile(path string, content string) (string, string, error) {
+func ExecuteWriteFile(path string, content string) (string, error) {
 	if path == "" {
-		return "Error: path is empty", "", nil
+		return "Error: path is empty", nil
 	}
 
 	// パストラバーサル防止
 	absPath, err := common.ValidatePath(path)
 	if err != nil {
 		common.Red.Printf("🚫 Security: %v\n", err)
-		return fmt.Sprintf("Error: %v", err), "", nil
+		return fmt.Sprintf("Error: %v", err), nil
+	}
+
+	// 派生パス警告: file.go_temp, file.go.new 等の疑わしいコピーファイル作成をブロック
+	if basePath := detectDerivativeBase(absPath); basePath != "" {
+		if _, err := os.Stat(basePath); err == nil {
+			relBase, _ := filepath.Rel(filepath.Dir(absPath), basePath)
+			return fmt.Sprintf("Error: '%s' looks like a derivative/copy of '%s'. Edit the original file using str_replace instead of creating a copy.", path, relBase), nil
+		}
 	}
 
 	// ファイルが存在するか確認 + 元のパーミッション取得
@@ -34,7 +42,7 @@ func ExecuteWriteFile(path string, content string) (string, string, error) {
 
 	// Read-Before-Write guard: 既存ファイルの上書き時のみチェック（新規作成は許可）
 	if exists && !tools.GlobalReadTracker.IsRead(absPath) {
-		return fmt.Sprintf("Error: You must read_file before editing. Run read_file(path=\"%s\") first to see the current content.", path), "", nil
+		return fmt.Sprintf("Error: You must read_file before editing. Run read_file(path=\"%s\") first to see the current content.", path), nil
 	}
 
 	// 確認UI - 変更サマリーを明確に表示
@@ -98,30 +106,43 @@ Next actions:
 - Use read_file to verify current file contents.
 - Consider using str_replace for partial modifications.
 
-IMPORTANT: Do NOT write the file until the user approves.`, strings.TrimSpace(dec.Comment)), "", nil
+IMPORTANT: Do NOT write the file until the user approves.`, strings.TrimSpace(dec.Comment)), nil
 	default:
-		return "Cancelled by user", "", nil
-	}
-
-	// バックアップ作成（既存ファイルの場合のみ）
-	backupPath, err := common.CreateBackup(absPath)
-	if err != nil {
-		return fmt.Sprintf("Warning: failed to create backup: %v (continuing anyway)", err), "", nil
+		return "Cancelled by user", nil
 	}
 
 	// ディレクトリ作成
 	dir := filepath.Dir(absPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Sprintf("Error creating directory: %v", err), "", nil
+		return fmt.Sprintf("Error creating directory: %v", err), nil
 	}
 
 	// 書き込み（既存ファイルがある場合は元のパーミッションを維持）
 	if err := os.WriteFile(absPath, []byte(content), perm); err != nil {
-		return fmt.Sprintf("Error writing file: %v", err), "", nil
+		return fmt.Sprintf("Error writing file: %v", err), nil
 	}
 
 	common.Green.Printf("✅ Written: %s\n", path)
 	msg := fmt.Sprintf("Successfully wrote %d bytes to %s", len(content), path)
 	msg += lsp.GetDiagnosticsSummary(absPath)
-	return msg, backupPath, nil
+	return msg, nil
+}
+
+// detectDerivativeBase は派生パス（file.go_temp, file.go.new 等）のベースパスを返す。
+// 派生パスでない場合は空文字を返す。
+func detectDerivativeBase(absPath string) string {
+	// パターン1: file.go_temp, file.go_new 等（拡張子の後にサフィックス付加）
+	for _, suffix := range []string{"_temp", "_new", "_backup", "_copy", "_old", "_bak", "_orig", "_tmp"} {
+		if strings.HasSuffix(absPath, suffix) {
+			return strings.TrimSuffix(absPath, suffix)
+		}
+	}
+	// パターン2: file.go.tmp, file.go.new 等（二重拡張子）
+	ext := filepath.Ext(absPath)
+	for _, dext := range []string{".tmp", ".new", ".bak", ".orig", ".backup", ".copy", ".old", ".temp"} {
+		if ext == dext {
+			return strings.TrimSuffix(absPath, dext)
+		}
+	}
+	return ""
 }

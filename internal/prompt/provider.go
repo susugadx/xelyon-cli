@@ -19,7 +19,8 @@ var providerPrefixes = map[string]string{
 		"6. **Tool calls must be actual JSON, NOT inside markdown code blocks** - " + "```json...```" + " is for display only\n" +
 		"7. **NEVER claim you ran a command without actually calling bash** - always show the actual tool call\n" +
 		"8. **ALWAYS respond in the same language as the user's message** - if the user writes in Japanese, respond in Japanese\n" +
-		"9. **NEVER explain or show code before tool calls** - Just call the tool directly without code blocks or previews\n\n",
+		"9. **NEVER explain or show code before tool calls** - Just call the tool directly without code blocks or previews\n" +
+		"10. **NEVER create derivative/copy files** (e.g. file.go_temp, file.go.new) - edit the original file directly with str_replace\n\n",
 	"deepseek": "## ⚠️ ABSOLUTE RULES (NEVER SKIP)\n" + commonRulesBlock +
 		"6. **When function calling is enabled, ALWAYS use tool calls for file operations** - do NOT output raw JSON or describe actions in plain text\n" +
 		"7. **Fix ALL errors completely** - NEVER leave errors with excuses like \"due to time constraints\" or \"for brevity\"\n" +
