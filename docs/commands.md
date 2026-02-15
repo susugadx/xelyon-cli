@@ -643,3 +643,16 @@ xelyon
 - [設定リファレンス](config.md)
 - [LSP連携](lsp.md)
 - [MCP連携](mcp.md)
+
+## 未ドキュメント化コマンド（自動追加）
+
+<!-- TODO: 以下のコマンドに詳細な説明を追加してください -->
+
+### `/project`
+
+Edit xelyon.yaml interactively (rules, hooks)
+
+```
+> /project
+```
+

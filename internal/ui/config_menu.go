@@ -46,7 +46,7 @@ func (m *ConfigMenu) Run() (*config.ConfigCategory, error) {
 		if totalPages > 1 {
 			pageInfo = fmt.Sprintf(" (%d/%d)", currentPage+1, totalPages)
 		}
-		fmt.Printf("\n%s┌─ Configuration%s ─────────────────────┐%s\n", colorCyan, pageInfo, colorReset)
+		fmt.Printf("\n%s── Configuration%s ──────────────────────%s\n\n", colorCyan, pageInfo, colorReset)
 
 		// カテゴリ一覧
 		for i, cat := range pageCategories {
@@ -54,21 +54,20 @@ func (m *ConfigMenu) Run() (*config.ConfigCategory, error) {
 			if num == 10 {
 				num = 0
 			}
-			fmt.Printf("│ [%d] %s %-27s │\n", num, cat.Icon, cat.DisplayName)
+			fmt.Printf("  [%d] %s %s\n", num, cat.Icon, cat.DisplayName)
 		}
 
 		// ナビゲーション
-		fmt.Println("│                                      │")
+		fmt.Println()
 		if totalPages > 1 {
 			if currentPage < totalPages-1 {
-				fmt.Println("│ [n] Next page                        │")
+				fmt.Println("  [n] Next page")
 			}
 			if currentPage > 0 {
-				fmt.Println("│ [p] Previous page                    │")
+				fmt.Println("  [p] Previous page")
 			}
 		}
-		fmt.Println("│ [q] Cancel                           │")
-		fmt.Printf("%s└──────────────────────────────────────┘%s\n", colorCyan, colorReset)
+		fmt.Println("  [q] Cancel")
 		fmt.Printf("\n%sSelect category:%s ", colorCyan, colorReset)
 
 		input := readLine()
@@ -111,7 +110,7 @@ func (m *ConfigMenu) ShowFieldList(cat *config.ConfigCategory) (*config.ConfigFi
 	fmt.Print("\033[?25h")
 
 	for {
-		fmt.Printf("\n%s┌─ %s %s ─────────────────────────────┐%s\n",
+		fmt.Printf("\n%s── %s %s ───────────────────────────────%s\n\n",
 			colorCyan, cat.Icon, cat.DisplayName, colorReset)
 
 		for i, field := range cat.Fields {
@@ -124,12 +123,11 @@ func (m *ConfigMenu) ShowFieldList(cat *config.ConfigCategory) (*config.ConfigFi
 			currentVal := formatValue(field.Current)
 			displayName := field.DisplayName
 
-			fmt.Printf("│ [%d] %-20s = %-10s │\n", num, displayName, truncateString(currentVal, 10))
+			fmt.Printf("  [%d] %-20s = %s\n", num, displayName, truncateString(currentVal, 15))
 		}
 
-		fmt.Println("│                                      │")
-		fmt.Println("│ [b] Back                             │")
-		fmt.Printf("%s└──────────────────────────────────────┘%s\n", colorCyan, colorReset)
+		fmt.Println()
+		fmt.Println("  [b] Back")
 		fmt.Printf("\n%sSelect field:%s ", colorCyan, colorReset)
 
 		input := readLine()

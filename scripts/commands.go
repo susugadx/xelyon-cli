@@ -127,6 +127,11 @@ var Commands = []CommandInfo{
 		DescriptionJP: "xelyon.yamlテンプレートを作成",
 	},
 	{
+		Name:          "/project",
+		Description:   "Edit xelyon.yaml interactively (rules, hooks)",
+		DescriptionJP: "xelyon.yamlを対話式で編集",
+	},
+	{
 		Name:          "/paste",
 		Aliases:       []string{"/p"},
 		Description:   "Paste mode for long text (end with empty line x2, END, or Ctrl+D)",

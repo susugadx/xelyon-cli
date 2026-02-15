@@ -180,6 +180,7 @@ xelyon
 /lsp status  # LSPサーバー状態確認
 /lsp detect  # プロジェクト内の言語を検出
 /lsp install # LSPサーバーをインストール
+/project     # xelyon.yaml を対話式で編集
 /exit        # 終了
 ```
 

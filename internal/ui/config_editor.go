@@ -35,23 +35,22 @@ func (e *StringSliceEditor) Run() ([]string, bool, error) {
 
 	for {
 		// 現在の項目を表示
-		fmt.Printf("\n%s┌─ %s ─────────────────────────────────┐%s\n", colorCyan, e.Path, colorReset)
-		fmt.Printf("│ Current items:                       │\n")
+		fmt.Printf("\n%s── %s ───────────────────────────────────%s\n\n", colorCyan, e.Path, colorReset)
+		fmt.Println("  Current items:")
 
 		if len(result) == 0 {
-			fmt.Printf("│   %s(empty)%s                           │\n", colorDim, colorReset)
+			fmt.Printf("    %s(empty)%s\n", colorDim, colorReset)
 		} else {
 			for i, item := range result {
-				fmt.Printf("│   %d. %s\n", i+1, truncateString(item, 35))
+				fmt.Printf("    %d. %s\n", i+1, truncateString(item, 40))
 			}
 		}
 
-		fmt.Println("│                                      │")
-		fmt.Println("│ [a] Add item                         │")
-		fmt.Println("│ [d] Delete item (enter number)       │")
-		fmt.Println("│ [s] Save and back                    │")
-		fmt.Println("│ [c] Cancel (discard changes)         │")
-		fmt.Printf("%s└──────────────────────────────────────┘%s\n", colorCyan, colorReset)
+		fmt.Println()
+		fmt.Println("  [a] Add item")
+		fmt.Println("  [d] Delete item (enter number)")
+		fmt.Println("  [s] Save and back")
+		fmt.Println("  [c] Cancel (discard changes)")
 		fmt.Printf("\n%sChoice:%s ", colorCyan, colorReset)
 
 		input := readLine()
@@ -127,25 +126,24 @@ func (e *StringMapEditor) Run() (map[string]string, bool, error) {
 		}
 		sort.Strings(keys)
 
-		fmt.Printf("\n%s┌─ %s ─────────────────────────────────┐%s\n", colorCyan, e.Path, colorReset)
-		fmt.Printf("│ Current entries:                     │\n")
+		fmt.Printf("\n%s── %s ───────────────────────────────────%s\n\n", colorCyan, e.Path, colorReset)
+		fmt.Println("  Current entries:")
 
 		if len(result) == 0 {
-			fmt.Printf("│   %s(empty)%s                           │\n", colorDim, colorReset)
+			fmt.Printf("    %s(empty)%s\n", colorDim, colorReset)
 		} else {
 			for i, key := range keys {
 				val := result[key]
-				fmt.Printf("│   %d. %s → %s\n", i+1, key, truncateString(val, 25))
+				fmt.Printf("    %d. %s → %s\n", i+1, key, truncateString(val, 25))
 			}
 		}
 
-		fmt.Println("│                                      │")
-		fmt.Println("│ [a] Add entry                        │")
-		fmt.Println("│ [e] Edit entry (enter number)        │")
-		fmt.Println("│ [d] Delete entry (enter number)      │")
-		fmt.Println("│ [s] Save and back                    │")
-		fmt.Println("│ [c] Cancel (discard changes)         │")
-		fmt.Printf("%s└──────────────────────────────────────┘%s\n", colorCyan, colorReset)
+		fmt.Println()
+		fmt.Println("  [a] Add entry")
+		fmt.Println("  [e] Edit entry (enter number)")
+		fmt.Println("  [d] Delete entry (enter number)")
+		fmt.Println("  [s] Save and back")
+		fmt.Println("  [c] Cancel (discard changes)")
 		fmt.Printf("\n%sChoice:%s ", colorCyan, colorReset)
 
 		input := readLine()
@@ -253,25 +251,24 @@ func (e *StructMapEditor) runProviderModels(cfg *config.Config) (bool, error) {
 		}
 		sort.Strings(providers)
 
-		fmt.Printf("\n%s┌─ provider_models ────────────────────┐%s\n", colorCyan, colorReset)
-		fmt.Printf("│ Configured providers:                │\n")
+		fmt.Printf("\n%s── provider_models ──────────────────────%s\n\n", colorCyan, colorReset)
+		fmt.Println("  Configured providers:")
 
 		if len(providers) == 0 {
-			fmt.Printf("│   %s(empty)%s                           │\n", colorDim, colorReset)
+			fmt.Printf("    %s(empty)%s\n", colorDim, colorReset)
 		} else {
 			for i, p := range providers {
 				model := cfg.ProviderModels[p].DefaultModel
-				fmt.Printf("│   %d. %s: %s\n", i+1, p, truncateString(model, 25))
+				fmt.Printf("    %d. %s: %s\n", i+1, p, truncateString(model, 25))
 			}
 		}
 
-		fmt.Println("│                                      │")
-		fmt.Println("│ [a] Add provider                     │")
-		fmt.Println("│ [1-9] Edit provider                  │")
-		fmt.Println("│ [d] Delete provider                  │")
-		fmt.Println("│ [s] Save and back                    │")
-		fmt.Println("│ [c] Cancel                           │")
-		fmt.Printf("%s└──────────────────────────────────────┘%s\n", colorCyan, colorReset)
+		fmt.Println()
+		fmt.Println("  [a] Add provider")
+		fmt.Println("  [1-9] Edit provider")
+		fmt.Println("  [d] Delete provider")
+		fmt.Println("  [s] Save and back")
+		fmt.Println("  [c] Cancel")
 		fmt.Printf("\n%sChoice:%s ", colorCyan, colorReset)
 
 		input := readLine()
@@ -339,11 +336,11 @@ func (e *StructMapEditor) runLSPServers(cfg *config.Config) (bool, error) {
 		}
 		sort.Strings(servers)
 
-		fmt.Printf("\n%s┌─ lsp.servers ────────────────────────┐%s\n", colorCyan, colorReset)
-		fmt.Printf("│ Configured LSP servers:              │\n")
+		fmt.Printf("\n%s── lsp.servers ──────────────────────────%s\n\n", colorCyan, colorReset)
+		fmt.Println("  Configured LSP servers:")
 
 		if len(servers) == 0 {
-			fmt.Printf("│   %s(using defaults)%s                  │\n", colorDim, colorReset)
+			fmt.Printf("    %s(using defaults)%s\n", colorDim, colorReset)
 		} else {
 			for i, s := range servers {
 				sConfig := cfg.LSP.Servers[s]
@@ -351,17 +348,16 @@ func (e *StructMapEditor) runLSPServers(cfg *config.Config) (bool, error) {
 				if sConfig.Disabled {
 					status = " (disabled)"
 				}
-				fmt.Printf("│   %d. %s: %s%s\n", i+1, s, truncateString(sConfig.Command, 20), status)
+				fmt.Printf("    %d. %s: %s%s\n", i+1, s, truncateString(sConfig.Command, 20), status)
 			}
 		}
 
-		fmt.Println("│                                      │")
-		fmt.Println("│ [a] Add server                       │")
-		fmt.Println("│ [1-9] Edit server                    │")
-		fmt.Println("│ [d] Delete server                    │")
-		fmt.Println("│ [s] Save and back                    │")
-		fmt.Println("│ [c] Cancel                           │")
-		fmt.Printf("%s└──────────────────────────────────────┘%s\n", colorCyan, colorReset)
+		fmt.Println()
+		fmt.Println("  [a] Add server")
+		fmt.Println("  [1-9] Edit server")
+		fmt.Println("  [d] Delete server")
+		fmt.Println("  [s] Save and back")
+		fmt.Println("  [c] Cancel")
 		fmt.Printf("\n%sChoice:%s ", colorCyan, colorReset)
 
 		input := readLine()

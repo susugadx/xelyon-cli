@@ -87,6 +87,8 @@ func handleSpecialCommand(input string, agent *Agent) bool {
 		return handlePlanCommand(agent, args)
 	case "/init":
 		return handleInitCommand(agent)
+	case "/project":
+		return handleProjectCommand(agent)
 	case "/paste":
 		return handlePasteCommand(agent, args)
 	case "/lsp":

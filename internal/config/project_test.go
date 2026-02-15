@@ -207,6 +207,95 @@ func TestResolveHooks_NilProject(t *testing.T) {
 	}
 }
 
+func TestSaveProjectConfig(t *testing.T) {
+	dir := t.TempDir()
+	pc := &ProjectConfig{
+		Context:  "Test project",
+		Rules:    []string{"rule 1", "rule 2"},
+		FilePath: filepath.Join(dir, "xelyon.yaml"),
+	}
+
+	if err := SaveProjectConfig(pc); err != nil {
+		t.Fatalf("SaveProjectConfig() error: %v", err)
+	}
+
+	// 再読み込みして一致確認
+	loaded, err := loadProjectConfigFromYAML(pc.FilePath)
+	if err != nil {
+		t.Fatalf("loadProjectConfigFromYAML() error: %v", err)
+	}
+	if loaded.Context != "Test project" {
+		t.Errorf("Context = %q, want %q", loaded.Context, "Test project")
+	}
+	if len(loaded.Rules) != 2 || loaded.Rules[0] != "rule 1" {
+		t.Errorf("Rules = %v, want [rule 1, rule 2]", loaded.Rules)
+	}
+}
+
+func TestSaveProjectConfig_WithHooks(t *testing.T) {
+	dir := t.TempDir()
+	pc := &ProjectConfig{
+		Context: "test",
+		Rules:   []string{"rule 1"},
+		Hooks: &HooksConfig{
+			OnCompletion: []string{"go test ./..."},
+			Timeout:      120,
+			MaxRetry:     5,
+		},
+		FilePath: filepath.Join(dir, "xelyon.yaml"),
+	}
+
+	if err := SaveProjectConfig(pc); err != nil {
+		t.Fatalf("SaveProjectConfig() error: %v", err)
+	}
+
+	loaded, err := loadProjectConfigFromYAML(pc.FilePath)
+	if err != nil {
+		t.Fatalf("loadProjectConfigFromYAML() error: %v", err)
+	}
+	if loaded.Hooks == nil {
+		t.Fatal("Hooks is nil after save/load")
+	}
+	if len(loaded.Hooks.OnCompletion) != 1 || loaded.Hooks.OnCompletion[0] != "go test ./..." {
+		t.Errorf("Hooks.OnCompletion = %v", loaded.Hooks.OnCompletion)
+	}
+	if loaded.Hooks.Timeout != 120 {
+		t.Errorf("Hooks.Timeout = %d, want 120", loaded.Hooks.Timeout)
+	}
+	if loaded.Hooks.MaxRetry != 5 {
+		t.Errorf("Hooks.MaxRetry = %d, want 5", loaded.Hooks.MaxRetry)
+	}
+}
+
+func TestSaveProjectConfig_DefaultPath(t *testing.T) {
+	dir := t.TempDir()
+	origDir, _ := os.Getwd()
+	defer func() { _ = os.Chdir(origDir) }()
+	_ = os.Chdir(dir)
+
+	pc := &ProjectConfig{
+		Context: "default path test",
+		Rules:   []string{"rule"},
+	}
+
+	if err := SaveProjectConfig(pc); err != nil {
+		t.Fatalf("SaveProjectConfig() error: %v", err)
+	}
+
+	// ./xelyon.yaml に保存されていることを確認
+	if _, err := os.Stat(filepath.Join(dir, "xelyon.yaml")); err != nil {
+		t.Fatalf("xelyon.yaml not created: %v", err)
+	}
+
+	loaded, err := loadProjectConfigFromYAML(filepath.Join(dir, "xelyon.yaml"))
+	if err != nil {
+		t.Fatalf("loadProjectConfigFromYAML() error: %v", err)
+	}
+	if loaded.Context != "default path test" {
+		t.Errorf("Context = %q, want %q", loaded.Context, "default path test")
+	}
+}
+
 func TestFindFileUpward(t *testing.T) {
 	// Create nested directories: parent/child/grandchild
 	parent := t.TempDir()

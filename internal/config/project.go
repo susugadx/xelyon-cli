@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -66,6 +67,36 @@ func loadProjectConfigFromYAML(path string) (*ProjectConfig, error) {
 
 	pc.FilePath = path
 	return pc, nil
+}
+
+// SaveProjectConfig は ProjectConfig を xelyon.yaml に保存する。
+// pc.FilePath が設定されていればそのパスに、なければ ./xelyon.yaml に保存。
+func SaveProjectConfig(pc *ProjectConfig) error {
+	path := pc.FilePath
+	if path == "" {
+		path = "xelyon.yaml"
+	}
+
+	data, err := yaml.Marshal(pc)
+	if err != nil {
+		return fmt.Errorf("failed to marshal project config: %w", err)
+	}
+
+	projectName := filepath.Base(filepath.Dir(path))
+	if path == "xelyon.yaml" {
+		if cwd, err := os.Getwd(); err == nil {
+			projectName = filepath.Base(cwd)
+		}
+	}
+
+	header := fmt.Sprintf("# %s - Project Configuration\n# AI 用コンテキスト。ドキュメントではありません。\n\n", projectName)
+	fullData := []byte(header + string(data))
+
+	if err := os.WriteFile(path, fullData, 0644); err != nil {
+		return fmt.Errorf("failed to write xelyon.yaml: %w", err)
+	}
+
+	return nil
 }
 
 // ResolveHooks はプロジェクト設定とグローバル設定から hooks を解決する。
