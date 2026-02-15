@@ -46,7 +46,7 @@ var CategoryDefinitions = []CategoryDef{
 	{Name: "output", DisplayName: "Output", Icon: "📤", Fields: []string{"output.max_lines"}},
 	{Name: "web_search", DisplayName: "Web Search", Icon: "🔍", Fields: []string{"web_search.cache_enabled", "web_search.cache_size", "web_search.cache_ttl"}},
 	{Name: "mcp", DisplayName: "MCP Servers", Icon: "🔌", Fields: []string{"mcp.enabled", "mcp.headless"}},
-	{Name: "hooks", DisplayName: "Hooks", Icon: "🏁", Fields: []string{"hooks.on_completion", "hooks.timeout"}},
+	{Name: "hooks", DisplayName: "Hooks", Icon: "🏁", Fields: []string{"hooks.max_retry", "hooks.on_completion", "hooks.timeout"}},
 }
 
 // FieldTypeMap はフィールドパスから型へのマップ
@@ -78,6 +78,7 @@ var FieldTypeMap = map[string]ConfigFieldType{
 	"general.language":                 FieldTypeSelect,
 	"general.tool_loop_limit":          FieldTypeInt,
 	"git_stage.batch_confirm":          FieldTypeBool,
+	"hooks.max_retry":                  FieldTypeInt,
 	"hooks.on_completion":              FieldTypeStringSlice,
 	"hooks.timeout":                    FieldTypeInt,
 	"loop_detection.threshold":         FieldTypeInt,
@@ -153,6 +154,7 @@ var FieldDescriptions = map[string]string{
 	"general.language":                 "表示言語（ja, en）",
 	"general.tool_loop_limit":          "ツールループ最大回数",
 	"git_stage.batch_confirm":          "複数ファイルをまとめて確認",
+	"hooks.max_retry":                  "フック失敗時の最大リトライ回数（デフォルト: 3）",
 	"hooks.on_completion":              "完了時に実行するコマンド（例: go test ./...）",
 	"hooks.timeout":                    "コマンドタイムアウト（秒）（デフォルト: 60）",
 	"loop_detection.threshold":         "同じツール呼び出しの繰り返し回数でループと判定",

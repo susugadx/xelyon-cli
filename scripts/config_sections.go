@@ -365,10 +365,12 @@ var Sections = map[string]SectionInfo{
 		Fields: map[string]string{
 			"on_completion": "完了時に実行するコマンド（例: go test ./...）",
 			"timeout":       "コマンドタイムアウト（秒）（デフォルト: 60）",
+			"max_retry":     "フック失敗時の最大リトライ回数（デフォルト: 3）",
 		},
 		FieldTypes: map[string]string{
 			"on_completion": "[]string",
 			"timeout":       "int",
+			"max_retry":     "int",
 		},
 	},
 }

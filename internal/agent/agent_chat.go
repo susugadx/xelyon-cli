@@ -127,6 +127,7 @@ func (a *Agent) runNormalMode(ctx context.Context, input string) error {
 	retryCount := 0
 
 	var completionVerified bool // 完了検証ガード（タスク内1回限り）
+	var hookRetryCount int      // フック失敗リトライカウンター
 
 	for i := 0; i < maxIterations; i++ {
 		// API呼び出し
@@ -193,23 +194,32 @@ func (a *Agent) runNormalMode(ctx context.Context, input string) error {
 				}
 			}
 
-			// Phase 2: Completion hooks（毎回実行 - 修正後の再チェック必要）
+			// Phase 2: Completion hooks（毎回実行 - 修正後の再チェック必要、max_retry で制限）
 			if containsCompletionDeclaration(response) {
 				changedFiles := a.getTaskChangedFiles()
 				if len(changedFiles) > 0 {
 					hookNeedsContinue, hookFeedback := a.runCompletionHooks(changedFiles)
 					if hookNeedsContinue {
-						yellow.Println("⚠️  Completion verification: hook command failed")
-						a.History = append(a.History, api.Message{
-							Role:             "assistant",
-							Content:          response,
-							ReasoningContent: a.getLastReasoningContent(),
-						})
-						a.History = append(a.History, api.Message{
-							Role:    "user",
-							Content: hookFeedback,
-						})
-						continue
+						hookRetryCount++
+						maxRetry := cfg.Hooks.MaxRetry
+						if maxRetry <= 0 {
+							maxRetry = 3
+						}
+						if hookRetryCount >= maxRetry {
+							yellow.Printf("⚠️  Hook retry limit reached (%d/%d). Proceeding with completion.\n", hookRetryCount, maxRetry)
+						} else {
+							yellow.Printf("⚠️  Completion hook failed (%d/%d). Asking AI to fix...\n", hookRetryCount, maxRetry)
+							a.History = append(a.History, api.Message{
+								Role:             "assistant",
+								Content:          response,
+								ReasoningContent: a.getLastReasoningContent(),
+							})
+							a.History = append(a.History, api.Message{
+								Role:    "user",
+								Content: hookFeedback,
+							})
+							continue
+						}
 					}
 				}
 			}
@@ -375,6 +385,7 @@ func (a *Agent) chatWithImage(input string, image *api.ImageData) {
 	retryCount := 0
 
 	var completionVerified bool // 完了検証ガード（タスク内1回限り）
+	var hookRetryCount int      // フック失敗リトライカウンター
 
 	for i := 0; i < maxIterations; i++ {
 		var response string
@@ -446,23 +457,32 @@ func (a *Agent) chatWithImage(input string, image *api.ImageData) {
 				}
 			}
 
-			// Phase 2: Completion hooks（毎回実行 - 修正後の再チェック必要）
+			// Phase 2: Completion hooks（毎回実行 - 修正後の再チェック必要、max_retry で制限）
 			if containsCompletionDeclaration(response) {
 				changedFiles := a.getTaskChangedFiles()
 				if len(changedFiles) > 0 {
 					hookNeedsContinue, hookFeedback := a.runCompletionHooks(changedFiles)
 					if hookNeedsContinue {
-						yellow.Println("⚠️  Completion verification: hook command failed")
-						a.History = append(a.History, api.Message{
-							Role:             "assistant",
-							Content:          response,
-							ReasoningContent: a.getLastReasoningContent(),
-						})
-						a.History = append(a.History, api.Message{
-							Role:    "user",
-							Content: hookFeedback,
-						})
-						continue
+						hookRetryCount++
+						maxRetry := cfg.Hooks.MaxRetry
+						if maxRetry <= 0 {
+							maxRetry = 3
+						}
+						if hookRetryCount >= maxRetry {
+							yellow.Printf("⚠️  Hook retry limit reached (%d/%d). Proceeding with completion.\n", hookRetryCount, maxRetry)
+						} else {
+							yellow.Printf("⚠️  Completion hook failed (%d/%d). Asking AI to fix...\n", hookRetryCount, maxRetry)
+							a.History = append(a.History, api.Message{
+								Role:             "assistant",
+								Content:          response,
+								ReasoningContent: a.getLastReasoningContent(),
+							})
+							a.History = append(a.History, api.Message{
+								Role:    "user",
+								Content: hookFeedback,
+							})
+							continue
+						}
 					}
 				}
 			}

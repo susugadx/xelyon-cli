@@ -8,7 +8,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/tools"
 	toolslsp "github.com/susugadx/xelyon-cli/internal/tools/lsp"
 )
 
@@ -169,4 +171,70 @@ Please fix these errors before declaring completion. Do NOT skip these issues.`,
 	}
 
 	return false, ""
+}
+
+// runCompletionHooksWithRetry は completion hooks を最大 MaxRetry 回実行する。
+// フック失敗時は AI にフィードバックして修正を試み、再実行する。
+// Plan mode での使用を想定（ループ型の runNormalMode では直接カウンターを使用）。
+// 戻り値: hooks がすべてパスした場合 true、max_retry 到達で打ち切った場合 false。
+func (a *Agent) runCompletionHooksWithRetry(ctx context.Context) bool {
+	cfg := config.GetGlobalConfig()
+	if len(cfg.Hooks.OnCompletion) == 0 {
+		return true
+	}
+
+	changedFiles := a.getTaskChangedFiles()
+	if len(changedFiles) == 0 {
+		return true
+	}
+
+	maxRetry := cfg.Hooks.MaxRetry
+	if maxRetry <= 0 {
+		maxRetry = 3
+	}
+
+	for attempt := 1; attempt <= maxRetry; attempt++ {
+		needsContinue, feedback := a.runCompletionHooks(changedFiles)
+		if !needsContinue {
+			return true // all hooks passed
+		}
+
+		if attempt >= maxRetry {
+			yellow.Printf("⚠️  Hook retry limit reached (%d/%d). Proceeding with completion.\n", attempt, maxRetry)
+			return false
+		}
+
+		// AI にフィードバックして修正を試みる
+		yellow.Printf("⚠️  Completion hook failed (%d/%d). Asking AI to fix...\n", attempt, maxRetry)
+		a.History = append(a.History, api.Message{
+			Role:    "user",
+			Content: feedback,
+		})
+
+		response, err := a.CurrentProvider.ChatWithTools(ctx, a.SystemPrompt, a.History, a.CurrentModel)
+		if err != nil {
+			yellow.Printf("⚠️  AI fix attempt failed: %v\n", err)
+			return false
+		}
+
+		a.History = append(a.History, api.Message{
+			Role:             "assistant",
+			Content:          response,
+			ReasoningContent: a.getLastReasoningContent(),
+		})
+
+		// ツール呼び出しがあれば実行
+		toolCalls := tools.ParseToolCalls(response)
+		for _, tc := range toolCalls {
+			a.executeToolCallWithResult(response, tc)
+		}
+
+		// 変更ファイルを更新（修正で新しいファイルが変わる可能性）
+		changedFiles = a.getTaskChangedFiles()
+		if len(changedFiles) == 0 {
+			return true
+		}
+	}
+
+	return false
 }

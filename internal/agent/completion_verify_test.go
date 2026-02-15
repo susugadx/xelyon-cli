@@ -1,9 +1,11 @@
 package agent
 
 import (
+	"context"
 	"strings"
 	"testing"
 
+	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
@@ -315,5 +317,116 @@ func TestRunCompletionHooks_Timeout(t *testing.T) {
 	}
 	if feedback == "" {
 		t.Error("expected non-empty feedback for timed-out command")
+	}
+}
+
+func TestHooksConfig_MaxRetryDefault(t *testing.T) {
+	cfg := config.DefaultConfig()
+	if cfg.Hooks.MaxRetry != 3 {
+		t.Errorf("default MaxRetry = %d, want 3", cfg.Hooks.MaxRetry)
+	}
+}
+
+func TestRunCompletionHooksWithRetry_NoHooks(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Hooks.OnCompletion = nil
+	config.SetGlobalConfig(cfg)
+	defer config.SetGlobalConfig(nil)
+
+	a := &Agent{
+		changeStack:      []tools.FileChange{{FilePath: "/src/main.go"}},
+		taskChangeOffset: 0,
+	}
+
+	result := a.runCompletionHooksWithRetry(context.Background())
+	if !result {
+		t.Error("expected true when no hooks configured")
+	}
+}
+
+func TestRunCompletionHooksWithRetry_NoChangedFiles(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Hooks.OnCompletion = []string{"exit 1"}
+	config.SetGlobalConfig(cfg)
+	defer config.SetGlobalConfig(nil)
+
+	a := &Agent{
+		changeStack:      nil,
+		taskChangeOffset: 0,
+	}
+
+	result := a.runCompletionHooksWithRetry(context.Background())
+	if !result {
+		t.Error("expected true when no changed files")
+	}
+}
+
+func TestRunCompletionHooksWithRetry_AllPass(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Hooks.OnCompletion = []string{"echo 'ok'"}
+	cfg.Hooks.Timeout = 10
+	config.SetGlobalConfig(cfg)
+	defer config.SetGlobalConfig(nil)
+
+	a := &Agent{
+		changeStack:      []tools.FileChange{{FilePath: "/src/main.go"}},
+		taskChangeOffset: 0,
+	}
+
+	result := a.runCompletionHooksWithRetry(context.Background())
+	if !result {
+		t.Error("expected true when all hooks pass")
+	}
+}
+
+func TestRunCompletionHooksWithRetry_MaxRetryExhausted(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Hooks.OnCompletion = []string{"exit 1"}
+	cfg.Hooks.Timeout = 1
+	cfg.Hooks.MaxRetry = 2
+	config.SetGlobalConfig(cfg)
+	defer config.SetGlobalConfig(nil)
+
+	// mockProvider を使って AI 修正試行をシミュレート
+	provider := &mockProvider{name: "test"}
+	a := &Agent{
+		CurrentProvider:  provider,
+		CurrentModel:     "test-model",
+		History:          []api.Message{},
+		changeStack:      []tools.FileChange{{FilePath: "/src/main.go"}},
+		taskChangeOffset: 0,
+	}
+
+	result := a.runCompletionHooksWithRetry(context.Background())
+	if result {
+		t.Error("expected false when max_retry exhausted")
+	}
+}
+
+func TestRunCompletionHooksWithRetry_MaxRetryZeroFallback(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Hooks.OnCompletion = []string{"exit 1"}
+	cfg.Hooks.Timeout = 1
+	cfg.Hooks.MaxRetry = 0 // 0 はフォールバックで 3 になる
+	config.SetGlobalConfig(cfg)
+	defer config.SetGlobalConfig(nil)
+
+	provider := &mockProvider{name: "test"}
+	a := &Agent{
+		CurrentProvider:  provider,
+		CurrentModel:     "test-model",
+		History:          []api.Message{},
+		changeStack:      []tools.FileChange{{FilePath: "/src/main.go"}},
+		taskChangeOffset: 0,
+	}
+
+	result := a.runCompletionHooksWithRetry(context.Background())
+	if result {
+		t.Error("expected false when hooks always fail (MaxRetry=0 should fallback to 3)")
+	}
+	// History にフィードバックが追加されているか確認（2回のリトライ = 2 * 2 messages）
+	// MaxRetry=3 (fallback): 2回の AI 呼び出し（attempt 1, 2）+ 最終回は AI を呼ばない
+	if len(a.History) < 4 {
+		t.Errorf("expected at least 4 history entries from retries, got %d", len(a.History))
 	}
 }

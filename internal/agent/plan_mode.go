@@ -53,6 +53,11 @@ func (a *Agent) RunPlanMode(ctx context.Context, userRequest string) error {
 				return nil // リトライ成功
 			}
 		}
+		if err == nil {
+			// Completion hooks（並列 Plan Mode）
+			a.runCompletionHooksWithRetry(ctx)
+			a.showTaskSummary()
+		}
 		return err
 	}
 
@@ -137,6 +142,9 @@ func (a *Agent) RunPlanMode(ctx context.Context, userRequest string) error {
 		a.SetStatus(StateAborted, "Implementation failed", "実装に失敗", "Review errors and retry", "エラーを確認して再試行")
 		return err
 	}
+
+	// Completion hooks（Plan Mode）
+	a.runCompletionHooksWithRetry(ctx)
 
 	// タスク完了サマリーを表示
 	a.showTaskSummary()

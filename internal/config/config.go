@@ -287,6 +287,7 @@ func DefaultConfig() *Config {
 		Hooks: HooksConfig{
 			OnCompletion: nil, // デフォルト: フックなし
 			Timeout:      60,  // 60秒タイムアウト
+			MaxRetry:     3,   // フック失敗時の最大リトライ回数
 		},
 	}
 }
