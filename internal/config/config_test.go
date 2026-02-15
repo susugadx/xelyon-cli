@@ -54,11 +54,6 @@ func TestDefaultConfig(t *testing.T) {
 		t.Error("Compression.PreferCompactAPI should default to true")
 	}
 
-	// Backup
-	if cfg.Backup.MaxGenerations != 5 {
-		t.Errorf("Backup.MaxGenerations = %d, want 5", cfg.Backup.MaxGenerations)
-	}
-
 	// LoopDetection
 	if cfg.LoopDetection.Threshold != 3 {
 		t.Errorf("LoopDetection.Threshold = %d, want 3", cfg.LoopDetection.Threshold)

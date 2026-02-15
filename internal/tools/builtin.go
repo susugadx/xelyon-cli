@@ -26,7 +26,7 @@ func (t *SimpleTool) Run(args map[string]string) (string, *FileChange, error) {
 // FileModifyingTool はファイルを変更しFileChangeを返すツール
 type FileModifyingTool struct {
 	name        string
-	execute     func(args map[string]string) (result string, backupPath string, err error)
+	execute     func(args map[string]string) (result string, err error)
 	description func(args map[string]string) string
 	getFilePath func(args map[string]string) string
 }
@@ -34,16 +34,12 @@ type FileModifyingTool struct {
 func (t *FileModifyingTool) Name() string { return t.name }
 
 func (t *FileModifyingTool) Run(args map[string]string) (string, *FileChange, error) {
-	result, backupPath, err := t.execute(args)
+	result, err := t.execute(args)
 	if err != nil {
 		return result, nil, err
 	}
-	if backupPath == "" {
-		return result, nil, nil
-	}
 	return result, &FileChange{
 		FilePath:    t.getFilePath(args),
-		BackupPath:  backupPath,
 		Timestamp:   getCurrentTime(),
 		Tool:        t.name,
 		Description: t.description(args),

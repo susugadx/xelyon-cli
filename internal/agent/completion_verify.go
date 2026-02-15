@@ -111,8 +111,34 @@ Please fix these errors before declaring completion. Do NOT skip these issues.`,
 // needsContinue=true と AI 向けのフィードバックを返す。
 // すべて成功した場合は needsContinue=false を返す。
 func (a *Agent) runCompletionHooks(changedFiles []string) (needsContinue bool, feedback string) {
+	// 1. Built-in checks (Always run)
+	// git diff --stat: Show changes context
+	yellow.Println("📊 Verifying changes with git diff --stat...")
+	var diffOutput string
+
+	// 作業ディレクトリがGitリポジトリか確認しつつ実行
+	diffCmd := exec.Command("git", "diff", "--stat")
+	if output, err := diffCmd.CombinedOutput(); err == nil {
+		diffOutput = string(output)
+	}
+
 	cfg := config.GetGlobalConfig()
 	hooks := cfg.Hooks.OnCompletion
+
+	if strings.TrimSpace(diffOutput) == "" {
+		yellow.Println("⚠️  WARNING: No changes detected by git diff.")
+		diffOutput = "(No changes detected)"
+
+		// If no user hooks defined, return to AI to confirm why no changes
+		if len(hooks) == 0 {
+			return true, "[SYSTEM] WARNING: No files changed detected by git diff. Please verify if you have implemented the requested changes or explain why no changes are needed."
+		}
+	} else {
+		// Print to stdout for user confirmation
+		fmt.Println(diffOutput)
+	}
+
+	// 2. User defined hooks
 	if len(hooks) == 0 {
 		return false, ""
 	}
@@ -162,7 +188,10 @@ func (a *Agent) runCompletionHooks(changedFiles []string) (needsContinue bool, f
 
 %s
 
-Please fix these errors before declaring completion. Do NOT skip these issues.`, cmd, exitCode, outputStr)
+[Context] git diff --stat:
+%s
+
+Please fix these errors before declaring completion. Do NOT skip these issues.`, cmd, exitCode, outputStr, diffOutput)
 
 			return true, feedback
 		}
@@ -179,10 +208,6 @@ Please fix these errors before declaring completion. Do NOT skip these issues.`,
 // 戻り値: hooks がすべてパスした場合 true、max_retry 到達で打ち切った場合 false。
 func (a *Agent) runCompletionHooksWithRetry(ctx context.Context) bool {
 	cfg := config.GetGlobalConfig()
-	if len(cfg.Hooks.OnCompletion) == 0 {
-		return true
-	}
-
 	changedFiles := a.getTaskChangedFiles()
 	if len(changedFiles) == 0 {
 		return true

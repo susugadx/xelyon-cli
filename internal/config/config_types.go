@@ -9,7 +9,6 @@ type Config struct {
 	ProviderModels  map[string]ProviderModelConfig `yaml:"provider_models"`
 	General         GeneralConfig                  `yaml:"general"`
 	Compression     CompressionConfig              `yaml:"compression"`
-	Backup          BackupConfig                   `yaml:"backup"`
 	LoopDetection   LoopDetectionConfig            `yaml:"loop_detection"`
 	APIRetry        APIRetryConfig                 `yaml:"api_retry"`
 	Diff            DiffConfig                     `yaml:"diff"`
@@ -53,11 +52,6 @@ type CompressionConfig struct {
 	PreferCompactAPI  bool `yaml:"prefer_compact_api"` // OpenAI Compact API を優先（デフォルト: true）
 	ClaudeCompaction  bool `yaml:"claude_compaction"`  // Claude Compaction API 有効化
 	CompactionTrigger int  `yaml:"compaction_trigger"` // トリガー閾値（デフォルト 150000）
-}
-
-// BackupConfig はバックアップファイルの設定
-type BackupConfig struct {
-	MaxGenerations int `yaml:"max_generations"` // 保持する世代数（デフォルト5）
 }
 
 // LoopDetectionConfig はループ検知の設定

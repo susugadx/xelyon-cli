@@ -284,7 +284,6 @@ func getProviderPrefix(provider string) string
 ## 注意事項
 
 - bash実行は危険コマンドをブロック（blockedCommands参照）
-- ファイル編集時は必ず.bakバックアップ作成
 - 長い差分は10行で省略表示
 - 同じツール呼び出し3回でループ検知・中断
 - **Read-Before-Write ガード**: `read_file` せずに `str_replace`/`write_file`/`grep_replace` するとブロック（`internal/tools/read_tracker.go`）

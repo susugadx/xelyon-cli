@@ -99,7 +99,6 @@ func looksLikeFilePath(s string) bool {
 // FileChange はファイル変更履歴
 type FileChange struct {
 	FilePath     string
-	BackupPath   string
 	Timestamp    time.Time
 	Tool         string
 	Description  string

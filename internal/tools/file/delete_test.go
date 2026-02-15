@@ -18,7 +18,7 @@ func TestExecuteDeleteFile_Normal(t *testing.T) {
 
 	testutil.CreateTempFile(t, tmpDir, "test.txt", testContent)
 
-	output, backupPath, err := ExecuteDeleteFile(testFile)
+	output, err := ExecuteDeleteFile(testFile)
 
 	if err != nil {
 		t.Fatalf("ExecuteDeleteFile failed: %v", err)
@@ -27,10 +27,6 @@ func TestExecuteDeleteFile_Normal(t *testing.T) {
 		t.Errorf("Expected success message, got: %s", output)
 	}
 	testutil.AssertFileNotExists(t, testFile)
-	if backupPath == "" {
-		t.Error("Backup path should not be empty")
-	}
-	testutil.AssertFileExists(t, backupPath)
 }
 
 func TestExecuteDeleteFile_UserCancelled(t *testing.T) {
@@ -41,7 +37,7 @@ func TestExecuteDeleteFile_UserCancelled(t *testing.T) {
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testutil.CreateTempFile(t, tmpDir, "test.txt", "content")
 
-	output, backupPath, err := ExecuteDeleteFile(testFile)
+	output, err := ExecuteDeleteFile(testFile)
 
 	if err != nil {
 		t.Fatalf("ExecuteDeleteFile should not error on cancel: %v", err)
@@ -50,9 +46,6 @@ func TestExecuteDeleteFile_UserCancelled(t *testing.T) {
 		t.Errorf("Expected cancellation message, got: %s", output)
 	}
 	testutil.AssertFileExists(t, testFile)
-	if backupPath != "" {
-		t.Errorf("Backup path should be empty on cancel, got: %s", backupPath)
-	}
 }
 
 func TestExecuteDeleteFile_NonExistentFile(t *testing.T) {
@@ -61,7 +54,7 @@ func TestExecuteDeleteFile_NonExistentFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	nonExistentFile := filepath.Join(tmpDir, "nonexistent.txt")
 
-	output, _, err := ExecuteDeleteFile(nonExistentFile)
+	output, err := ExecuteDeleteFile(nonExistentFile)
 
 	if err != nil {
 		t.Fatalf("ExecuteDeleteFile should not return error: %v", err)
@@ -76,7 +69,7 @@ func TestExecuteDeleteFile_Directory(t *testing.T) {
 
 	tmpDir := t.TempDir()
 
-	output, _, err := ExecuteDeleteFile(tmpDir)
+	output, err := ExecuteDeleteFile(tmpDir)
 
 	if err != nil {
 		t.Fatalf("ExecuteDeleteFile should not return error: %v", err)
@@ -92,7 +85,7 @@ func TestExecuteDeleteFile_Directory(t *testing.T) {
 func TestExecuteDeleteFile_PathTraversal(t *testing.T) {
 	setupTestConfirm(t, true)
 
-	output, _, err := ExecuteDeleteFile("../../../etc/passwd")
+	output, err := ExecuteDeleteFile("../../../etc/passwd")
 
 	if err != nil {
 		t.Fatalf("ExecuteDeleteFile should not return error: %v", err)
@@ -100,24 +93,4 @@ func TestExecuteDeleteFile_PathTraversal(t *testing.T) {
 	if !strings.Contains(output, "Error:") {
 		t.Errorf("Expected security error for path traversal, got: %s", output)
 	}
-}
-
-func TestExecuteDeleteFile_BackupCreated(t *testing.T) {
-	setupTestMocks(t)
-
-	tmpDir := t.TempDir()
-	testFile := filepath.Join(tmpDir, "important.txt")
-	testContent := "critical data"
-	testutil.CreateTempFile(t, tmpDir, "important.txt", testContent)
-
-	_, backupPath, err := ExecuteDeleteFile(testFile)
-
-	if err != nil {
-		t.Fatalf("ExecuteDeleteFile failed: %v", err)
-	}
-	if !strings.HasPrefix(backupPath, testFile+".bak.") {
-		t.Errorf("Backup path should start with %s.bak., got: %s", testFile, backupPath)
-	}
-	testutil.AssertFileExists(t, backupPath)
-	testutil.AssertFileContent(t, backupPath, testContent)
 }

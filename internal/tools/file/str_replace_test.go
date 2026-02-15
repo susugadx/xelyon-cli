@@ -21,7 +21,7 @@ func TestExecuteStrReplace_ExactMatch(t *testing.T) {
 	absPath, _ := filepath.Abs(testFile)
 	tools.GlobalReadTracker.MarkRead(absPath)
 
-	output, backupPath, err := ExecuteStrReplace(testFile, "line2", "REPLACED", "", "")
+	output, err := ExecuteStrReplace(testFile, "line2", "REPLACED", "", "")
 
 	if err != nil {
 		t.Fatalf("ExecuteStrReplace failed: %v", err)
@@ -30,9 +30,6 @@ func TestExecuteStrReplace_ExactMatch(t *testing.T) {
 		t.Errorf("Expected success message, got: %s", output)
 	}
 	testutil.AssertFileContent(t, testFile, "line1\nREPLACED\nline3")
-	if backupPath == "" {
-		t.Error("Backup path should not be empty")
-	}
 }
 
 func TestExecuteStrReplace_MultipleMatches(t *testing.T) {
@@ -44,7 +41,7 @@ func TestExecuteStrReplace_MultipleMatches(t *testing.T) {
 	absPath, _ := filepath.Abs(testFile)
 	tools.GlobalReadTracker.MarkRead(absPath)
 
-	output, _, err := ExecuteStrReplace(testFile, "foo", "REPLACED", "", "")
+	output, err := ExecuteStrReplace(testFile, "foo", "REPLACED", "", "")
 
 	if err != nil {
 		t.Fatalf("ExecuteStrReplace should not return error: %v", err)
@@ -63,7 +60,7 @@ func TestExecuteStrReplace_NotFound(t *testing.T) {
 	absPath, _ := filepath.Abs(testFile)
 	tools.GlobalReadTracker.MarkRead(absPath)
 
-	output, _, err := ExecuteStrReplace(testFile, "nonexistent", "REPLACED", "", "")
+	output, err := ExecuteStrReplace(testFile, "nonexistent", "REPLACED", "", "")
 
 	if err != nil {
 		t.Fatalf("ExecuteStrReplace should not return error: %v", err)
@@ -84,7 +81,7 @@ func TestExecuteStrReplace_UserCancelled(t *testing.T) {
 	absPath, _ := filepath.Abs(testFile)
 	tools.GlobalReadTracker.MarkRead(absPath)
 
-	output, backupPath, err := ExecuteStrReplace(testFile, "line2", "REPLACED", "", "")
+	output, err := ExecuteStrReplace(testFile, "line2", "REPLACED", "", "")
 
 	if err != nil {
 		t.Fatalf("ExecuteStrReplace should not error on cancel: %v", err)
@@ -93,13 +90,10 @@ func TestExecuteStrReplace_UserCancelled(t *testing.T) {
 		t.Errorf("Expected cancellation message, got: %s", output)
 	}
 	testutil.AssertFileContent(t, testFile, originalContent)
-	if backupPath != "" {
-		t.Errorf("Backup path should be empty on cancel, got: %s", backupPath)
-	}
 }
 
 func TestExecuteStrReplace_EmptyPath(t *testing.T) {
-	output, _, err := ExecuteStrReplace("", "old", "new", "", "")
+	output, err := ExecuteStrReplace("", "old", "new", "", "")
 	if err != nil {
 		t.Fatalf("ExecuteStrReplace should not return error: %v", err)
 	}
@@ -115,7 +109,7 @@ func TestExecuteStrReplace_EmptyOldStr(t *testing.T) {
 	absPath, _ := filepath.Abs(filepath.Join(tmpDir, "test.txt"))
 	tools.GlobalReadTracker.MarkRead(absPath)
 
-	output, _, err := ExecuteStrReplace(filepath.Join(tmpDir, "test.txt"), "", "new", "", "")
+	output, err := ExecuteStrReplace(filepath.Join(tmpDir, "test.txt"), "", "new", "", "")
 
 	if err != nil {
 		t.Fatalf("ExecuteStrReplace should not return error: %v", err)
@@ -134,7 +128,7 @@ func TestExecuteStrReplace_LineRangeReplacement_Success(t *testing.T) {
 	absPath, _ := filepath.Abs(filepath.Join(tmpDir, "test.txt"))
 	tools.GlobalReadTracker.MarkRead(absPath)
 
-	output, backupPath, err := ExecuteStrReplace(filepath.Join(tmpDir, "test.txt"), "", "X\nY", "2", "4")
+	output, err := ExecuteStrReplace(filepath.Join(tmpDir, "test.txt"), "", "X\nY", "2", "4")
 
 	if err != nil {
 		t.Fatalf("ExecuteStrReplace failed: %v", err)
@@ -143,9 +137,6 @@ func TestExecuteStrReplace_LineRangeReplacement_Success(t *testing.T) {
 		t.Errorf("Expected line-range success message, got: %s", output)
 	}
 	testutil.AssertFileContent(t, filepath.Join(tmpDir, "test.txt"), "a\nX\nY\ne")
-	if backupPath == "" {
-		t.Fatal("Backup path should not be empty")
-	}
 }
 
 func TestExecuteStrReplace_StringReplace_WarnsOnDuplicateNewStr(t *testing.T) {
@@ -166,7 +157,7 @@ func TestExecuteStrReplace_StringReplace_WarnsOnDuplicateNewStr(t *testing.T) {
 	absPath, _ := filepath.Abs(testFile)
 	tools.GlobalReadTracker.MarkRead(absPath)
 
-	replaceOutput, _, err := ExecuteStrReplace(testFile, "alpha", "EXISTING", "", "")
+	replaceOutput, err := ExecuteStrReplace(testFile, "alpha", "EXISTING", "", "")
 
 	if err != nil {
 		t.Fatalf("ExecuteStrReplace failed: %v", err)
@@ -202,7 +193,7 @@ func TestExecuteStrReplace_StringReplace_NoWarningWhenUnique(t *testing.T) {
 	absPath, _ := filepath.Abs(testFile)
 	tools.GlobalReadTracker.MarkRead(absPath)
 
-	replaceOutput, _, err := ExecuteStrReplace(testFile, "alpha", "NEWVALUE", "", "")
+	replaceOutput, err := ExecuteStrReplace(testFile, "alpha", "NEWVALUE", "", "")
 
 	w.Close()
 	_, _ = io.Copy(&output, r)
@@ -237,7 +228,7 @@ func TestExecuteStrReplace_LineRange_WarnsOnDuplicateOutsideRange(t *testing.T) 
 	absPath, _ := filepath.Abs(testFile)
 	tools.GlobalReadTracker.MarkRead(absPath)
 
-	replaceOutput, _, err := ExecuteStrReplace(testFile, "", "keep", "2", "3")
+	replaceOutput, err := ExecuteStrReplace(testFile, "", "keep", "2", "3")
 
 	if err != nil {
 		t.Fatalf("ExecuteStrReplace failed: %v", err)
@@ -273,7 +264,7 @@ func TestExecuteStrReplace_LineRange_NoWarningWhenUniqueOutsideRange(t *testing.
 	absPath, _ := filepath.Abs(testFile)
 	tools.GlobalReadTracker.MarkRead(absPath)
 
-	replaceOutput, _, err := ExecuteStrReplace(testFile, "", "NEWLINE", "2", "3")
+	replaceOutput, err := ExecuteStrReplace(testFile, "", "NEWLINE", "2", "3")
 
 	w.Close()
 	_, _ = io.Copy(&output, r)
@@ -334,16 +325,13 @@ func TestExecuteStrReplace_GuardBlocksUnreadFile(t *testing.T) {
 
 	// ReadTracker はリセット済み（setupTestMocks）— ファイルは未読状態
 
-	output, backupPath, err := ExecuteStrReplace(testFile, "line2", "REPLACED", "", "")
+	output, err := ExecuteStrReplace(testFile, "line2", "REPLACED", "", "")
 
 	if err != nil {
 		t.Fatalf("ExecuteStrReplace should not return error: %v", err)
 	}
 	if !strings.Contains(output, "Error: You must read_file before str_replace") {
 		t.Errorf("Expected read guard error, got: %s", output)
-	}
-	if backupPath != "" {
-		t.Errorf("Backup path should be empty when guard blocks, got: %s", backupPath)
 	}
 	// ファイルは変更されていないこと
 	testutil.AssertFileContent(t, testFile, "line1\nline2\nline3")
@@ -360,7 +348,7 @@ func TestExecuteStrReplace_GuardAllowsAfterRead(t *testing.T) {
 	absPath, _ := filepath.Abs(testFile)
 	tools.GlobalReadTracker.MarkRead(absPath)
 
-	output, _, err := ExecuteStrReplace(testFile, "line2", "REPLACED", "", "")
+	output, err := ExecuteStrReplace(testFile, "line2", "REPLACED", "", "")
 
 	if err != nil {
 		t.Fatalf("ExecuteStrReplace failed: %v", err)

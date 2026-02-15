@@ -275,7 +275,6 @@ xelyon --dry-run
 $ xelyon
 > バグ #123 を修正して
 > /review
-> /undo  # 問題があれば戻す
 > /exit
 ```
 

@@ -19,6 +19,5 @@ rules:
 hooks:
   on_completion:
     - make ci-check
-    - "git diff --stat"
   timeout: 60
   max_retry: 3

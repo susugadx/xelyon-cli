@@ -199,14 +199,13 @@ XELYON CLIで使用できる全コマンドのリファレンスです。
 ┌─ Configuration (1/2) ─────────────────────┐
 │ [1] 🤖 Provider & Model                   │
 │ [2] 📦 Compression                        │
-│ [3] 💾 Backup                             │
-│ [4] 🔄 Loop Detection                     │
-│ [5] 🌐 API Settings                       │
-│ [6] 📝 Diff Display                       │
-│ [7] ✅ Tool Confirm                       │
-│ [8] 🔗 Command Aliases                    │
-│ [9] 💨 Prompt Cache                       │
-│ [0] 📋 Paste Mode                         │
+│ [3] 🔄 Loop Detection                     │
+│ [4] 🌐 API Settings                       │
+│ [5] 📝 Diff Display                       │
+│ [6] ✅ Tool Confirm                       │
+│ [7] 🔗 Command Aliases                    │
+│ [8] 💨 Prompt Cache                       │
+│ [9] 📋 Paste Mode                         │
 │                                           │
 │ [n] Next page                             │
 │ [q] Cancel                                │
@@ -225,25 +224,9 @@ XELYON CLIで使用できる全コマンドのリファレンスです。
 | map[string]string | エントリ追加/編集/削除 | `command_aliases` |
 | map[string]struct | サブメニューで編集 | `provider_models`, `lsp.servers` |
 
-**19カテゴリ:** Provider & Model, Compression, Backup, Loop Detection, API Settings, Diff Display, Tool Confirm, Command Aliases, Prompt Cache, Paste Mode, Streaming, Bash Safety, Code Health, Git Settings, Plan Mode, LSP Servers, OpenAI, Thinking, Output
+**18カテゴリ:** Provider & Model, Compression, Loop Detection, API Settings, Diff Display, Tool Confirm, Command Aliases, Prompt Cache, Paste Mode, Streaming, Bash Safety, Code Health, Git Settings, Plan Mode, LSP Servers, OpenAI, Thinking, Output
 
 **変更は即座に保存:** `~/.xelyon/config.yaml` に自動保存されます。
-
-### `/changes`
-
-セッション中のファイル変更履歴を表示します。
-
-```
-> /changes
-```
-
-### `/undo`
-
-最後のファイル変更を取り消します（バックアップから復元）。
-
-```
-> /undo
-```
 
 ### `/init`
 
@@ -483,15 +466,6 @@ xelyon
 > この問題を詳しく分析して
 > /use deepseek
 > 同じ問題をもう一度分析して
-```
-
-### 変更管理
-
-```bash
-xelyon
-> ファイルを編集して
-> /changes      # 変更履歴確認
-> /undo         # 最後の変更を取り消し
 ```
 
 ## 利用可能なツール

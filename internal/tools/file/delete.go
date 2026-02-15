@@ -10,33 +10,33 @@ import (
 	toolslsp "github.com/susugadx/xelyon-cli/internal/tools/lsp"
 )
 
-// ExecuteDeleteFile deletes a file permanently (with backup for Undo)
-func ExecuteDeleteFile(path string) (string, string, error) {
+// ExecuteDeleteFile deletes a file permanently
+func ExecuteDeleteFile(path string) (string, error) {
 	// パストラバーサル防止
 	absPath, err := common.ValidatePath(path)
 	if err != nil {
 		common.Red.Printf("🚫 Security: %v\n", err)
-		return fmt.Sprintf("Error: %v", err), "", nil
+		return fmt.Sprintf("Error: %v", err), nil
 	}
 
 	// ファイル存在確認
 	fileInfo, err := os.Stat(absPath)
 	if os.IsNotExist(err) {
-		return "Error: File not found", "", nil
+		return "Error: File not found", nil
 	}
 	if err != nil {
-		return fmt.Sprintf("Error: Cannot access file: %v", err), "", nil
+		return fmt.Sprintf("Error: Cannot access file: %v", err), nil
 	}
 
 	// ディレクトリでないことを確認
 	if fileInfo.IsDir() {
-		return "Error: Cannot delete directory (path is a directory)", "", nil
+		return "Error: Cannot delete directory (path is a directory)", nil
 	}
 
 	// ファイル内容読み込み
 	content, err := os.ReadFile(absPath)
 	if err != nil {
-		return fmt.Sprintf("Error: Failed to read file: %v", err), "", nil
+		return fmt.Sprintf("Error: Failed to read file: %v", err), nil
 	}
 	lines := strings.Split(string(content), "\n")
 
@@ -120,23 +120,15 @@ Next actions:
 - Use read_file to confirm the correct target.
 - Consider delete_lines or move_file if appropriate.
 
-IMPORTANT: Do NOT delete the file until the user approves.`, strings.TrimSpace(dec.Comment)), "", nil
+IMPORTANT: Do NOT delete the file until the user approves.`, strings.TrimSpace(dec.Comment)), nil
 	default:
-		return "Cancelled by user", "", nil
+		return "Cancelled by user", nil
 	}
-
-	// 削除前に必ずバックアップ作成（削除後は不可能）
-	backupPath, err := common.CreateBackup(absPath)
-	if err != nil {
-		// バックアップ失敗時は削除を中止（安全第一）
-		return fmt.Sprintf("Error: Backup failed, deletion ABORTED: %v", err), "", nil
-	}
-	common.Green.Printf("📦 Backup created: %s\n", backupPath)
 
 	// ファイル削除
 	if err := os.Remove(absPath); err != nil {
-		return fmt.Sprintf("Error: Failed to delete file: %v", err), "", nil
+		return fmt.Sprintf("Error: Failed to delete file: %v", err), nil
 	}
 
-	return fmt.Sprintf("✅ Deleted: %s", path), backupPath, nil
+	return fmt.Sprintf("✅ Deleted: %s", path), nil
 }

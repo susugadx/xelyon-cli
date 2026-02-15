@@ -59,21 +59,6 @@ var Commands = []CommandInfo{
 		DescriptionJP: "最近のセッション一覧",
 	},
 	{
-		Name:          "/undo",
-		Args:          "[all]",
-		Description:   "Undo last file change (restore from .bak) or undo all changes",
-		DescriptionJP: "ファイル変更を元に戻す",
-		SubCommands: []SubCommand{
-			{Name: "/undo history", Description: "Show past session changes"},
-			{Name: "/undo session <id>", Description: "Undo all changes from specific session"},
-		},
-	},
-	{
-		Name:          "/changes",
-		Description:   "Show file change history with undo status",
-		DescriptionJP: "ファイル変更履歴を表示",
-	},
-	{
 		Name:          "/stats",
 		Description:   "Show session statistics (time, messages, tokens, cost)",
 		DescriptionJP: "セッション統計を表示",
@@ -171,8 +156,8 @@ var Commands = []CommandInfo{
 var Tools = []ToolInfo{
 	{Name: "bash", Description: "Execute shell commands"},
 	{Name: "read_file", Description: "Read file contents"},
-	{Name: "write_file", Description: "Write/create files (creates .bak backup)"},
-	{Name: "str_replace", Description: "Replace text in file (creates .bak backup)"},
+	{Name: "write_file", Description: "Write/create files"},
+	{Name: "str_replace", Description: "Replace text in file"},
 	{Name: "list_dir", Description: "List directory contents"},
 	{Name: "git_*", Description: "Git operations (status, diff, add, commit, push, log)"},
 	{Name: "search_code", Description: "Search in code files"},
@@ -184,5 +169,5 @@ var Tips = []string{
 	"Just describe what you want in natural language",
 	"AI will ask confirmation for dangerous operations",
 	"Use Ctrl+C to cancel current operation",
-	"Use /undo to revert file changes (up to 10 recent changes)",
+	"Use git to revert file changes when needed",
 }

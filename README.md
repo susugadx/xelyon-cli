@@ -77,10 +77,6 @@ plan_mode:
 `/review` でセキュリティ・テストカバレッジをチェック。
 `/refactor` で静的解析ベースのリファクタリング提案。
 
-### ↩️ 安全なUndo機能
-すべてのファイル変更は自動バックアップ。
-`/undo` または「さっきの変更を戻して」で即座に復元。
-
 ### 📋 複数行ペースト対応
 コードを直接ペーストして処理。Bracketed Paste Mode で改行を含むテキストも1つの入力として認識。
 - **そのままペースト**: ターミナルで Cmd+V / Ctrl+V するだけ
@@ -174,7 +170,6 @@ xelyon
 
 ```bash
 /help        # ヘルプ
-/undo        # 変更取り消し
 /use gemini  # プロバイダー切り替え
 /think high  # Extended Thinking 有効化
 /lsp status  # LSPサーバー状態確認

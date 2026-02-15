@@ -200,43 +200,8 @@ func TestGrepReplaceBackupCreated(t *testing.T) {
 		t.Fatalf("ExecuteGrepReplace failed: %v", err)
 	}
 
-	if len(files) > 0 && files[0].BackupPath == "" {
-		t.Error("Expected backup to be created")
-	}
-
-	if len(files) > 0 {
-		if _, err := os.Stat(files[0].BackupPath); os.IsNotExist(err) {
-			t.Error("Backup file should exist")
-		}
-	}
-}
-
-func TestGrepReplaceSkipsBackupFiles(t *testing.T) {
-	dir := t.TempDir()
-
-	normalFile := filepath.Join(dir, "normal.go")
-	backupFile := filepath.Join(dir, "normal.go.bak.20240101_120000")
-
-	if err := os.WriteFile(normalFile, []byte("target here"), 0644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(backupFile, []byte("target in backup"), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	setupTestMocks(t)
-	absNormal, _ := filepath.Abs(normalFile)
-	tools.GlobalReadTracker.MarkRead(absNormal)
-
-	_, files, err := ExecuteGrepReplace("target", "replaced", dir, "*")
-	if err != nil {
-		t.Fatalf("ExecuteGrepReplace failed: %v", err)
-	}
-
-	for _, f := range files {
-		if strings.Contains(f.FilePath, ".bak.") {
-			t.Errorf("Backup file should be skipped: %s", f.FilePath)
-		}
+	if len(files) != 1 {
+		t.Errorf("Expected 1 file modified, got %d", len(files))
 	}
 }
 

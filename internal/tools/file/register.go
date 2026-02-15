@@ -66,21 +66,16 @@ func (t *WriteFileTool) Parameters() map[string]interface{} {
 }
 
 func (t *WriteFileTool) Run(args map[string]string) (string, *tools.FileChange, error) {
-	result, backupPath, err := ExecuteWriteFile(args["path"], args["content"])
+	result, err := ExecuteWriteFile(args["path"], args["content"])
 	if err != nil {
 		return result, nil, err
 	}
-	if backupPath == "" {
-		return result, nil, nil
-	}
 	return result, &tools.FileChange{
-		FilePath:     args["path"],
-		BackupPath:   backupPath,
-		Timestamp:    common.GetCurrentTime(),
-		Tool:         "write_file",
-		Description:  "Wrote file " + args["path"],
-		LinesAdded:   countLines(args["content"]),
-		LinesRemoved: 0,
+		FilePath:    args["path"],
+		Timestamp:   common.GetCurrentTime(),
+		Tool:        "write_file",
+		Description: "Wrote file " + args["path"],
+		LinesAdded:  countLines(args["content"]),
 	}, nil
 }
 
@@ -109,16 +104,12 @@ func (t *StrReplaceTool) Parameters() map[string]interface{} {
 }
 
 func (t *StrReplaceTool) Run(args map[string]string) (string, *tools.FileChange, error) {
-	result, backupPath, err := ExecuteStrReplace(args["path"], args["old_str"], args["new_str"], args["start_line"], args["end_line"])
+	result, err := ExecuteStrReplace(args["path"], args["old_str"], args["new_str"], args["start_line"], args["end_line"])
 	if err != nil {
 		return result, nil, err
 	}
-	if backupPath == "" {
-		return result, nil, nil
-	}
 	return result, &tools.FileChange{
 		FilePath:     args["path"],
-		BackupPath:   backupPath,
 		Timestamp:    common.GetCurrentTime(),
 		Tool:         "str_replace",
 		Description:  "Replaced in " + args["path"],
@@ -148,16 +139,12 @@ func (t *DeleteFileTool) Parameters() map[string]interface{} {
 }
 
 func (t *DeleteFileTool) Run(args map[string]string) (string, *tools.FileChange, error) {
-	result, backupPath, err := ExecuteDeleteFile(args["path"])
+	result, err := ExecuteDeleteFile(args["path"])
 	if err != nil {
 		return result, nil, err
 	}
-	if backupPath == "" {
-		return result, nil, nil
-	}
 	return result, &tools.FileChange{
 		FilePath:    args["path"],
-		BackupPath:  backupPath,
 		Timestamp:   common.GetCurrentTime(),
 		Tool:        "delete_file",
 		Description: "Deleted file " + args["path"],

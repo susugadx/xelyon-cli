@@ -23,25 +23,25 @@ import (
 // NOTE:
 // - 行レンジは 1-indexed inclusive（start_line=1 は先頭行）
 // - start/end は範囲外の場合エラー（delete_lines とは異なりクランプしない）
-func ExecuteStrReplace(path, oldStr, newStr, startLineStr, endLineStr string) (string, string, error) {
+func ExecuteStrReplace(path, oldStr, newStr, startLineStr, endLineStr string) (string, error) {
 	if path == "" {
-		return "Error: path is required", "", nil
+		return "Error: path is required", nil
 	}
 
 	absPath, err := filepath.Abs(path)
 	if err != nil {
-		return fmt.Sprintf("Error: %v", err), "", nil
+		return fmt.Sprintf("Error: %v", err), nil
 	}
 
 	// Read-Before-Write guard: read_file 前の str_replace をブロック
 	if !tools.GlobalReadTracker.IsRead(absPath) {
-		return fmt.Sprintf("Error: You must read_file before str_replace. Run read_file(path=\"%s\") first to see the current content.", path), "", nil
+		return fmt.Sprintf("Error: You must read_file before str_replace. Run read_file(path=\"%s\") first to see the current content.", path), nil
 	}
 
 	// ファイルを読み込む
 	contentBytes, err := os.ReadFile(absPath)
 	if err != nil {
-		return fmt.Sprintf("Error reading file: %v", err), "", nil
+		return fmt.Sprintf("Error reading file: %v", err), nil
 	}
 
 	oldContent := string(contentBytes)
@@ -57,27 +57,27 @@ func ExecuteStrReplace(path, oldStr, newStr, startLineStr, endLineStr string) (s
 		hasEnd := strings.TrimSpace(endLineStr) != ""
 
 		if !hasStart && !hasEnd {
-			return "Error: old_str is required (or provide both start_line and end_line for line-range replacement)", "", nil
+			return "Error: old_str is required (or provide both start_line and end_line for line-range replacement)", nil
 		}
 		if hasStart != hasEnd {
-			return "Error: both start_line and end_line are required for line-range replacement (1-indexed inclusive)", "", nil
+			return "Error: both start_line and end_line are required for line-range replacement (1-indexed inclusive)", nil
 		}
 
 		startLine, endLine, err := parseLineRange(startLineStr, endLineStr)
 		if err != nil {
-			return fmt.Sprintf("Error: %v", err), "", nil
+			return fmt.Sprintf("Error: %v", err), nil
 		}
 
 		lines := strings.Split(oldContent, "\n")
 		if len(lines) == 0 {
-			return "Error: file is empty", "", nil
+			return "Error: file is empty", nil
 		}
 
 		if startLine > len(lines) {
-			return fmt.Sprintf("Error: start_line is out of range (start_line=%d, file_lines=%d)", startLine, len(lines)), "", nil
+			return fmt.Sprintf("Error: start_line is out of range (start_line=%d, file_lines=%d)", startLine, len(lines)), nil
 		}
 		if endLine > len(lines) {
-			return fmt.Sprintf("Error: end_line is out of range (end_line=%d, file_lines=%d)", endLine, len(lines)), "", nil
+			return fmt.Sprintf("Error: end_line is out of range (end_line=%d, file_lines=%d)", endLine, len(lines)), nil
 		}
 
 		// 指定レンジを new_str の行で置き換える
@@ -149,7 +149,7 @@ Next actions:
 - Use read_file to verify the correct range.
 - Consider using string-based old_str for more precise matching.
 
-IMPORTANT: Do NOT apply the replacement until the user approves.`, strings.TrimSpace(dec.Comment)), "", nil
+IMPORTANT: Do NOT apply the replacement until the user approves.`, strings.TrimSpace(dec.Comment)), nil
 		default:
 			common.Yellow.Println("⚠️  User cancelled the replacement")
 			return fmt.Sprintf(`[CANCELLED] User cancelled str_replace for %s.
@@ -158,22 +158,17 @@ Hint: The replacement was not applied. If you need to make this change:
 1. Verify the range with read_file
 2. Double-check start_line/end_line are correct (1-indexed inclusive)
 
-Do not retry the same replacement.`, path), "", nil
-		}
-
-		backupPath, err := common.CreateBackup(absPath)
-		if err != nil {
-			return fmt.Sprintf("Warning: failed to create backup: %v (continuing anyway)", err), "", nil
+Do not retry the same replacement.`, path), nil
 		}
 
 		if err := os.WriteFile(absPath, []byte(newContent), 0644); err != nil {
-			return fmt.Sprintf("Error writing file: %v", err), "", nil
+			return fmt.Sprintf("Error writing file: %v", err), nil
 		}
 
 		common.Green.Printf("✅ Replaced lines %d-%d in: %s\n", startLine, endLine, path)
 		msg := fmt.Sprintf("Successfully replaced lines %d-%d in %s", startLine, endLine, path)
 		msg += lsp.GetDiagnosticsSummary(absPath)
-		return msg, backupPath, nil
+		return msg, nil
 	}
 
 	// ========================
@@ -183,7 +178,7 @@ Do not retry the same replacement.`, path), "", nil
 
 	// old_str と new_str が同一なら変更不要
 	if oldStr == newStr {
-		return fmt.Sprintf("Error: old_str and new_str are identical in %s (no change needed)", path), "", nil
+		return fmt.Sprintf("Error: old_str and new_str are identical in %s (no change needed)", path), nil
 	}
 
 	// まず完全一致を試行
@@ -222,14 +217,14 @@ Do not retry the same replacement.`, path), "", nil
 
 		b.WriteString("IMPORTANT: Do NOT retry the same str_replace with the same old_str. Make old_str unique first.\n")
 
-		return b.String(), "", nil
+		return b.String(), nil
 	} else {
 		// 完全一致しない → 正規化マッチを試行（従来挙動）
 		common.Yellow.Println("⚠️  Exact match failed, trying normalized whitespace matching...")
 
 		found, startIdxNormalized, endIdx := common.FindWithNormalizedWhitespace(oldContent, oldStr)
 		if !found {
-			return fmt.Sprintf("Error: old_str not found in %s (tried both exact and normalized matching)", path), "", nil
+			return fmt.Sprintf("Error: old_str not found in %s (tried both exact and normalized matching)", path), nil
 		}
 
 		actualOldStr := oldContent[startIdxNormalized : endIdx+1]
@@ -320,7 +315,7 @@ Next actions:
 - Use read_file to confirm the old_str location.
 - Consider using line-range mode (start_line/end_line) for block replacement.
 
-IMPORTANT: Do NOT apply the replacement until the user approves.`, strings.TrimSpace(dec2.Comment)), "", nil
+IMPORTANT: Do NOT apply the replacement until the user approves.`, strings.TrimSpace(dec2.Comment)), nil
 	default:
 		common.Yellow.Println("⚠️  User cancelled the replacement")
 		return fmt.Sprintf(`[CANCELLED] User cancelled str_replace for %s.
@@ -330,22 +325,17 @@ Hint: The replacement was not applied. If you need to make this change:
 2. Try a smaller, more specific replacement
 3. Ask the user for clarification
 
-Do not retry the same replacement.`, path), "", nil
-	}
-
-	backupPath, err := common.CreateBackup(absPath)
-	if err != nil {
-		return fmt.Sprintf("Warning: failed to create backup: %v (continuing anyway)", err), "", nil
+Do not retry the same replacement.`, path), nil
 	}
 
 	if err := os.WriteFile(absPath, []byte(newContent), 0644); err != nil {
-		return fmt.Sprintf("Error writing file: %v", err), "", nil
+		return fmt.Sprintf("Error writing file: %v", err), nil
 	}
 
 	common.Green.Printf("✅ Replaced in: %s\n", path)
 	msg := fmt.Sprintf("Successfully replaced text in %s", path)
 	msg += lsp.GetDiagnosticsSummary(absPath)
-	return msg, backupPath, nil
+	return msg, nil
 }
 
 type lineRange struct {

@@ -84,9 +84,6 @@ func DefaultConfig() *Config {
 			ClaudeCompaction:  true, // Claude Compaction 優先
 			CompactionTrigger: 150000,
 		},
-		Backup: BackupConfig{
-			MaxGenerations: 5,
-		},
 		LoopDetection: LoopDetectionConfig{
 			Threshold: 3,
 		},
@@ -359,9 +356,6 @@ func applyDefaults(cfg *Config) {
 	}
 	if cfg.APIRetry.Timeout == 0 {
 		cfg.APIRetry.Timeout = defaults.APIRetry.Timeout
-	}
-	if cfg.Backup.MaxGenerations == 0 {
-		cfg.Backup = defaults.Backup
 	}
 	// Compression: ThresholdTokens=0 かつ ThresholdPercent=0 の場合のみデフォルト適用
 	// （ThresholdTokens=0 は「使用率ベース」を意味するため）

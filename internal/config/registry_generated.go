@@ -27,7 +27,6 @@ type CategoryDef struct {
 var CategoryDefinitions = []CategoryDef{
 	{Name: "provider", DisplayName: "Provider & Model", Icon: "🤖", Fields: []string{"default_model", "default_provider", "provider_models"}},
 	{Name: "compression", DisplayName: "Compression", Icon: "📦", Fields: []string{"compression.auto_compress", "compression.keep_recent", "compression.prefer_compact_api", "compression.threshold_percent", "compression.threshold_tokens"}},
-	{Name: "backup", DisplayName: "Backup", Icon: "💾", Fields: []string{"backup.max_generations"}},
 	{Name: "loop_detection", DisplayName: "Loop Detection", Icon: "🔄", Fields: []string{"loop_detection.threshold"}},
 	{Name: "api_retry", DisplayName: "API Settings", Icon: "🌐", Fields: []string{"api_retry.count", "api_retry.initial_delay", "api_retry.max_delay", "api_retry.timeout"}},
 	{Name: "diff", DisplayName: "Diff Display", Icon: "📝", Fields: []string{"diff.context_lines"}},
@@ -55,7 +54,6 @@ var FieldTypeMap = map[string]ConfigFieldType{
 	"api_retry.initial_delay":          FieldTypeInt,
 	"api_retry.max_delay":              FieldTypeInt,
 	"api_retry.timeout":                FieldTypeInt,
-	"backup.max_generations":           FieldTypeInt,
 	"bash.allow_inline_edit":           FieldTypeBool,
 	"bash.allow_pipe":                  FieldTypeBool,
 	"bash.allow_redirect":              FieldTypeBool,
@@ -132,7 +130,6 @@ var FieldDescriptions = map[string]string{
 	"api_retry.initial_delay":          "初回リトライ待機時間（秒）",
 	"api_retry.max_delay":              "最大待機時間（秒）",
 	"api_retry.timeout":                "タイムアウト（秒）",
-	"backup.max_generations":           "保持する世代数",
 	"bash.allow_inline_edit":           "インライン編集を許可（sed -i 等）",
 	"bash.allow_pipe":                  "パイプを許可",
 	"bash.allow_redirect":              "リダイレクトを許可",
@@ -195,7 +192,6 @@ var FieldDescriptions = map[string]string{
 // CategoryIcons はカテゴリのアイコン
 var CategoryIcons = map[string]string{
 	"api_retry":       "🌐",
-	"backup":          "💾",
 	"bash":            "💻",
 	"code_health":     "🏥",
 	"command_aliases": "🔗",

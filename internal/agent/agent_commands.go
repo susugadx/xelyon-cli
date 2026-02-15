@@ -49,10 +49,6 @@ func handleSpecialCommand(input string, agent *Agent) bool {
 		return handleLoadCommand(agent, args)
 	case "/sessions":
 		return handleSessionsCommand(agent)
-	case "/undo":
-		return handleUndoCommand(agent, args)
-	case "/changes":
-		return handleChangesCommand(agent)
 	case "/config":
 		return handleConfigCommand(agent, args)
 	case "/stats":

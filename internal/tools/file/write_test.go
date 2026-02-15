@@ -17,7 +17,7 @@ func TestExecuteWriteFile_NewFile(t *testing.T) {
 	testFile := filepath.Join(tmpDir, "new.txt")
 	testContent := "new file content"
 
-	output, backupPath, err := ExecuteWriteFile(testFile, testContent)
+	output, err := ExecuteWriteFile(testFile, testContent)
 
 	if err != nil {
 		t.Fatalf("ExecuteWriteFile failed: %v", err)
@@ -27,9 +27,6 @@ func TestExecuteWriteFile_NewFile(t *testing.T) {
 	}
 	testutil.AssertFileExists(t, testFile)
 	testutil.AssertFileContent(t, testFile, testContent)
-	if backupPath != "" {
-		t.Errorf("Backup path should be empty for new file, got: %s", backupPath)
-	}
 }
 
 func TestExecuteWriteFile_Overwrite(t *testing.T) {
@@ -41,16 +38,13 @@ func TestExecuteWriteFile_Overwrite(t *testing.T) {
 	absPath, _ := filepath.Abs(testFile)
 	tools.GlobalReadTracker.MarkRead(absPath)
 
-	output, backupPath, err := ExecuteWriteFile(testFile, "new content")
+	output, err := ExecuteWriteFile(testFile, "new content")
 
 	if err != nil {
 		t.Fatalf("ExecuteWriteFile failed: %v", err)
 	}
 	if !strings.Contains(output, "Successfully wrote") {
 		t.Errorf("Expected success message, got: %s", output)
-	}
-	if backupPath == "" {
-		t.Error("Backup path should not be empty for overwrite")
 	}
 }
 
@@ -61,7 +55,7 @@ func TestExecuteWriteFile_UserCancelled(t *testing.T) {
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "cancelled.txt")
 
-	output, backupPath, err := ExecuteWriteFile(testFile, "content")
+	output, err := ExecuteWriteFile(testFile, "content")
 
 	if err != nil {
 		t.Fatalf("ExecuteWriteFile should not error on cancel: %v", err)
@@ -70,13 +64,10 @@ func TestExecuteWriteFile_UserCancelled(t *testing.T) {
 		t.Errorf("Expected cancellation message, got: %s", output)
 	}
 	testutil.AssertFileNotExists(t, testFile)
-	if backupPath != "" {
-		t.Errorf("Backup path should be empty on cancel, got: %s", backupPath)
-	}
 }
 
 func TestExecuteWriteFile_EmptyPath(t *testing.T) {
-	output, _, err := ExecuteWriteFile("", "content")
+	output, err := ExecuteWriteFile("", "content")
 	if err != nil {
 		t.Fatalf("ExecuteWriteFile should not return error: %v", err)
 	}
@@ -90,7 +81,7 @@ func TestExecuteWriteFile_PathTraversal(t *testing.T) {
 	t.Cleanup(func() { os.Unsetenv("XELYON_INTERACTIVE_CONFIRM") })
 	setupTestConfirm(t, true)
 
-	output, _, err := ExecuteWriteFile("../../../etc/passwd", "content")
+	output, err := ExecuteWriteFile("../../../etc/passwd", "content")
 	if err != nil {
 		t.Fatalf("ExecuteWriteFile should not return error: %v", err)
 	}
@@ -105,7 +96,7 @@ func TestExecuteWriteFile_CreateDirectory(t *testing.T) {
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "subdir", "nested", "file.txt")
 
-	output, _, err := ExecuteWriteFile(testFile, "content")
+	output, err := ExecuteWriteFile(testFile, "content")
 
 	if err != nil {
 		t.Fatalf("ExecuteWriteFile failed: %v", err)
@@ -125,16 +116,13 @@ func TestExecuteWriteFile_GuardBlocksExistingUnread(t *testing.T) {
 
 	// ReadTracker はリセット済み（setupTestMocks）— ファイルは未読状態
 
-	output, backupPath, err := ExecuteWriteFile(testFile, "new content")
+	output, err := ExecuteWriteFile(testFile, "new content")
 
 	if err != nil {
 		t.Fatalf("ExecuteWriteFile should not return error: %v", err)
 	}
 	if !strings.Contains(output, "Error: You must read_file before editing") {
 		t.Errorf("Expected read guard error, got: %s", output)
-	}
-	if backupPath != "" {
-		t.Errorf("Backup path should be empty when guard blocks, got: %s", backupPath)
 	}
 	// ファイルは変更されていないこと
 	testutil.AssertFileContent(t, testFile, "old content")
@@ -148,7 +136,7 @@ func TestExecuteWriteFile_GuardAllowsNewFile(t *testing.T) {
 
 	// ReadTracker はリセット済み — 新規ファイルはガード対象外
 
-	output, _, err := ExecuteWriteFile(testFile, "new content")
+	output, err := ExecuteWriteFile(testFile, "new content")
 
 	if err != nil {
 		t.Fatalf("ExecuteWriteFile failed: %v", err)
@@ -171,7 +159,7 @@ func TestExecuteWriteFile_GuardAllowsAfterRead(t *testing.T) {
 	absPath, _ := filepath.Abs(testFile)
 	tools.GlobalReadTracker.MarkRead(absPath)
 
-	output, _, err := ExecuteWriteFile(testFile, "new content")
+	output, err := ExecuteWriteFile(testFile, "new content")
 
 	if err != nil {
 		t.Fatalf("ExecuteWriteFile failed: %v", err)

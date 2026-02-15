@@ -22,7 +22,6 @@ type PersistentChange struct {
 	Timestamp   time.Time `json:"timestamp"`
 	Tool        string    `json:"tool"`
 	FilePath    string    `json:"file_path"`
-	BackupPath  string    `json:"backup_path"`
 	Description string    `json:"description"`
 }
 
@@ -69,7 +68,6 @@ func (cs *ChangeStorage) AppendChange(sessionID string, change tools.FileChange)
 		Timestamp:   change.Timestamp,
 		Tool:        change.Tool,
 		FilePath:    change.FilePath,
-		BackupPath:  change.BackupPath,
 		Description: change.Description,
 	}
 
@@ -232,29 +230,4 @@ func (cs *ChangeStorage) CleanupOldChanges(daysToKeep int) (int, error) {
 	}
 
 	return deletedCount, nil
-}
-
-// UndoSessionChange は指定セッションの指定変更を取り消す
-func (cs *ChangeStorage) UndoSessionChange(change PersistentChange) error {
-	// バックアップファイルが存在しない場合
-	if change.BackupPath == "" {
-		return fmt.Errorf("no backup available for this change")
-	}
-
-	// バックアップファイルを確認
-	if _, err := os.Stat(change.BackupPath); os.IsNotExist(err) {
-		return fmt.Errorf("backup file not found: %s", change.BackupPath)
-	}
-
-	// バックアップから復元
-	backupContent, err := os.ReadFile(change.BackupPath)
-	if err != nil {
-		return fmt.Errorf("failed to read backup: %w", err)
-	}
-
-	if err := os.WriteFile(change.FilePath, backupContent, 0644); err != nil {
-		return fmt.Errorf("failed to restore file: %w", err)
-	}
-
-	return nil
 }

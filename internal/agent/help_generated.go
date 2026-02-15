@@ -10,10 +10,6 @@ const GeneratedHelpText = `Commands:
   /save                     - Save current session
   /load [id]                - Load session (or last if no ID)
   /sessions                 - List recent sessions
-  /undo [all]               - Undo last file change (restore from .bak) or undo all changes
-                            /undo history - Show past session changes
-                            /undo session <id> - Undo all changes from specific session
-  /changes                  - Show file change history with undo status
   /stats                    - Show session statistics (time, messages, tokens, cost)
   /tokens                   - Show token usage and context window status
   /copy [code] [-n N]       - Copy last AI output to clipboard (code=code blocks only, -n=N-th last output)
@@ -36,8 +32,8 @@ const GeneratedHelpText = `Commands:
 Available tools (AI will use automatically):
   bash        - Execute shell commands
   read_file   - Read file contents
-  write_file  - Write/create files (creates .bak backup)
-  str_replace - Replace text in file (creates .bak backup)
+  write_file  - Write/create files
+  str_replace - Replace text in file
   list_dir    - List directory contents
   git_*       - Git operations (status, diff, add, commit, push, log)
   search_code - Search in code files
@@ -47,5 +43,5 @@ Tips:
   - Just describe what you want in natural language
   - AI will ask confirmation for dangerous operations
   - Use Ctrl+C to cancel current operation
-  - Use /undo to revert file changes (up to 10 recent changes)
+  - Use git to revert file changes when needed
 `

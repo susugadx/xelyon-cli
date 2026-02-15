@@ -107,7 +107,6 @@ func ValidateConfig(cfg *Config) ValidationResult {
 	validateNumericRange(&result, "api_retry.initial_delay", cfg.APIRetry.InitialDelay, 1, 60, 1)
 	validateNumericRange(&result, "api_retry.max_delay", cfg.APIRetry.MaxDelay, 1, 300, 30)
 	validateNumericRange(&result, "api_retry.timeout", cfg.APIRetry.Timeout, 30, 7200, 3600)
-	validateNumericRange(&result, "backup.max_generations", cfg.Backup.MaxGenerations, 1, 20, 5)
 	validateNumericRange(&result, "compression.keep_recent", cfg.Compression.KeepRecent, 1, 100, 10)
 	validateNumericRange(&result, "diff.context_lines", cfg.Diff.ContextLines, 0, 100, 10)
 	validateNumericRange(&result, "code_health.max_file_lines", cfg.CodeHealth.MaxFileLines, 100, 2000, 300)
@@ -282,11 +281,6 @@ func ApplyAutoFixes(cfg *Config, result ValidationResult) int {
 		case "api_retry.timeout":
 			if v, ok := issue.FixedValue.(int); ok {
 				cfg.APIRetry.Timeout = v
-				fixCount++
-			}
-		case "backup.max_generations":
-			if v, ok := issue.FixedValue.(int); ok {
-				cfg.Backup.MaxGenerations = v
 				fixCount++
 			}
 		case "compression.keep_recent":

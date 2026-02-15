@@ -81,16 +81,6 @@ var Sections = map[string]SectionInfo{
 			"prefer_compact_api": "bool",
 		},
 	},
-	"backup": {
-		Title: "バックアップ設定",
-		Icon:  "💾",
-		Fields: map[string]string{
-			"max_generations": "保持する世代数",
-		},
-		FieldTypes: map[string]string{
-			"max_generations": "int",
-		},
-	},
 	"loop_detection": {
 		Title: "ループ検知設定",
 		Icon:  "🔄",
@@ -381,7 +371,6 @@ var SectionOrder = []string{
 	"default_model",
 	"provider_models",
 	"compression",
-	"backup",
 	"loop_detection",
 	"api_retry",
 	"diff",
@@ -408,7 +397,6 @@ var SectionOrder = []string{
 var CategoryOrder = []string{
 	"provider", // default_provider, provider_models
 	"compression",
-	"backup",
 	"loop_detection",
 	"api_retry",
 	"diff",
@@ -436,7 +424,6 @@ var SectionToCategory = map[string]string{
 	"default_model":    "provider",
 	"provider_models":  "provider",
 	"compression":      "compression",
-	"backup":           "backup",
 	"loop_detection":   "loop_detection",
 	"api_retry":        "api_retry",
 	"diff":             "diff",
@@ -476,11 +463,6 @@ var Categories = map[string]CategoryInfo{
 		DisplayName: "Compression",
 		Icon:        "📦",
 		Sections:    []string{"compression"},
-	},
-	"backup": {
-		DisplayName: "Backup",
-		Icon:        "💾",
-		Sections:    []string{"backup"},
 	},
 	"loop_detection": {
 		DisplayName: "Loop Detection",

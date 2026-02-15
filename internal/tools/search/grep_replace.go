@@ -22,14 +22,12 @@ type GrepReplaceResult struct {
 	FilesModified int
 	TotalMatches  int
 	FileResults   []FileReplaceResult
-	BackupPaths   map[string]string // filepath -> backupPath
 }
 
 // FileReplaceResult is the result of single file replacement
 type FileReplaceResult struct {
 	FilePath   string
 	MatchCount int
-	BackupPath string
 }
 
 // ExecuteGrepReplace executes bulk replace across multiple files
@@ -67,14 +65,9 @@ func ExecuteGrepReplace(pattern, replacement, path, filePattern string) (string,
 		if info.IsDir() {
 			// Skip .git, node_modules, vendor, etc.
 			base := filepath.Base(filePath)
-			if base == ".git" || base == "node_modules" || base == "vendor" || base == ".bak" {
+			if base == ".git" || base == "node_modules" || base == "vendor" {
 				return filepath.SkipDir
 			}
-			return nil
-		}
-
-		// Skip binary and backup files
-		if strings.Contains(filePath, ".bak.") {
 			return nil
 		}
 
@@ -139,13 +132,6 @@ func ExecuteGrepReplace(pattern, replacement, path, filePattern string) (string,
 
 		totalMatches += len(matches)
 
-		// Create backup
-		backupPath, err := common.CreateBackup(filePath)
-		if err != nil {
-			yellow.Printf("Warning: Failed to create backup for %s: %v\n", filePath, err)
-			continue
-		}
-
 		// Execute replacement
 		newContent := re.ReplaceAllString(string(content), replacement)
 
@@ -158,7 +144,6 @@ func ExecuteGrepReplace(pattern, replacement, path, filePattern string) (string,
 		results = append(results, FileReplaceResult{
 			FilePath:   filePath,
 			MatchCount: len(matches),
-			BackupPath: backupPath,
 		})
 	}
 

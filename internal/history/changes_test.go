@@ -41,7 +41,6 @@ func TestAppendChange_Success(t *testing.T) {
 	sessionID := "test-session-123"
 	change := tools.FileChange{
 		FilePath:    "/tmp/test.txt",
-		BackupPath:  "/tmp/test.txt.bak",
 		Timestamp:   time.Now(),
 		Tool:        "write_file",
 		Description: "Test change",
@@ -73,7 +72,6 @@ func TestAppendChange_Multiple(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		change := tools.FileChange{
 			FilePath:    "/tmp/test.txt",
-			BackupPath:  "/tmp/test.txt.bak",
 			Timestamp:   time.Now(),
 			Tool:        "write_file",
 			Description: "Test change",
@@ -125,7 +123,6 @@ func TestLoadSessionChanges_Success(t *testing.T) {
 	sessionID := "test-session-load"
 	change := tools.FileChange{
 		FilePath:    "/tmp/test.txt",
-		BackupPath:  "/tmp/test.txt.bak",
 		Timestamp:   time.Now(),
 		Tool:        "write_file",
 		Description: "Test change",
@@ -171,9 +168,9 @@ func TestLoadSessionChanges_CorruptedLine(t *testing.T) {
 
 	// 手動で破損したJSONLファイルを作成
 	filename := filepath.Join(cs.changesPath, "changes_"+sessionID+".jsonl")
-	content := `{"session_id":"test-session-corrupt","timestamp":"2024-01-01T00:00:00Z","tool":"write_file","file_path":"/tmp/test.txt","backup_path":"","description":"Valid line"}
+	content := `{"session_id":"test-session-corrupt","timestamp":"2024-01-01T00:00:00Z","tool":"write_file","file_path":"/tmp/test.txt","description":"Valid line"}
 {invalid json line}
-{"session_id":"test-session-corrupt","timestamp":"2024-01-01T00:00:01Z","tool":"str_replace","file_path":"/tmp/test2.txt","backup_path":"","description":"Another valid line"}
+{"session_id":"test-session-corrupt","timestamp":"2024-01-01T00:00:01Z","tool":"str_replace","file_path":"/tmp/test2.txt","description":"Another valid line"}
 `
 	if err := os.WriteFile(filename, []byte(content), 0600); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
@@ -204,7 +201,6 @@ func TestListSessions_Multiple(t *testing.T) {
 	for _, sessionID := range sessions {
 		change := tools.FileChange{
 			FilePath:    "/tmp/test.txt",
-			BackupPath:  "/tmp/test.txt.bak",
 			Timestamp:   time.Now(),
 			Tool:        "write_file",
 			Description: "Test change",
@@ -276,7 +272,6 @@ func TestCleanupOldChanges_Default(t *testing.T) {
 	newSessionID := "new-session"
 	change := tools.FileChange{
 		FilePath:    "/tmp/test.txt",
-		BackupPath:  "/tmp/test.txt.bak",
 		Timestamp:   time.Now(),
 		Tool:        "write_file",
 		Description: "Test change",
@@ -307,103 +302,6 @@ func TestCleanupOldChanges_Default(t *testing.T) {
 	}
 }
 
-func TestUndoSessionChange_Success(t *testing.T) {
-	testutil.SetupTempHome(t)
-
-	cs, err := NewChangeStorage()
-	if err != nil {
-		t.Fatalf("NewChangeStorage() error = %v", err)
-	}
-
-	// テストファイルとバックアップを作成
-	tmpDir := t.TempDir()
-	testFile := filepath.Join(tmpDir, "test.txt")
-	backupFile := filepath.Join(tmpDir, "test.txt.bak")
-
-	originalContent := "original content"
-	modifiedContent := "modified content"
-
-	// バックアップファイル（元の内容）
-	if err := os.WriteFile(backupFile, []byte(originalContent), 0644); err != nil {
-		t.Fatalf("Failed to create backup file: %v", err)
-	}
-
-	// 変更後のファイル
-	if err := os.WriteFile(testFile, []byte(modifiedContent), 0644); err != nil {
-		t.Fatalf("Failed to create test file: %v", err)
-	}
-
-	// UndoSessionChange実行
-	change := PersistentChange{
-		SessionID:   "test-session",
-		Timestamp:   time.Now(),
-		Tool:        "write_file",
-		FilePath:    testFile,
-		BackupPath:  backupFile,
-		Description: "Test change",
-	}
-
-	if err := cs.UndoSessionChange(change); err != nil {
-		t.Errorf("UndoSessionChange() error = %v", err)
-	}
-
-	// ファイルが元の内容に復元されたことを確認
-	restoredContent, err := os.ReadFile(testFile)
-	if err != nil {
-		t.Fatalf("Failed to read restored file: %v", err)
-	}
-
-	if string(restoredContent) != originalContent {
-		t.Errorf("UndoSessionChange() restored content = %v, want %v", string(restoredContent), originalContent)
-	}
-}
-
-func TestUndoSessionChange_NoBackup(t *testing.T) {
-	testutil.SetupTempHome(t)
-
-	cs, err := NewChangeStorage()
-	if err != nil {
-		t.Fatalf("NewChangeStorage() error = %v", err)
-	}
-
-	change := PersistentChange{
-		SessionID:   "test-session",
-		Timestamp:   time.Now(),
-		Tool:        "write_file",
-		FilePath:    "/tmp/test.txt",
-		BackupPath:  "", // バックアップなし
-		Description: "Test change",
-	}
-
-	err = cs.UndoSessionChange(change)
-	if err == nil {
-		t.Error("UndoSessionChange() should return error when backup path is empty")
-	}
-}
-
-func TestUndoSessionChange_BackupNotFound(t *testing.T) {
-	testutil.SetupTempHome(t)
-
-	cs, err := NewChangeStorage()
-	if err != nil {
-		t.Fatalf("NewChangeStorage() error = %v", err)
-	}
-
-	change := PersistentChange{
-		SessionID:   "test-session",
-		Timestamp:   time.Now(),
-		Tool:        "write_file",
-		FilePath:    "/tmp/test.txt",
-		BackupPath:  "/nonexistent/backup.bak",
-		Description: "Test change",
-	}
-
-	err = cs.UndoSessionChange(change)
-	if err == nil {
-		t.Error("UndoSessionChange() should return error when backup file not found")
-	}
-}
-
 func TestSessionInfo_FilesChanged(t *testing.T) {
 	testutil.SetupTempHome(t)
 
@@ -418,7 +316,6 @@ func TestSessionInfo_FilesChanged(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		change := tools.FileChange{
 			FilePath:    "/tmp/test.txt",
-			BackupPath:  "/tmp/test.txt.bak",
 			Timestamp:   time.Now(),
 			Tool:        "write_file",
 			Description: "Test change",
@@ -431,7 +328,6 @@ func TestSessionInfo_FilesChanged(t *testing.T) {
 	// 別のファイルへの変更
 	change2 := tools.FileChange{
 		FilePath:    "/tmp/test2.txt",
-		BackupPath:  "/tmp/test2.txt.bak",
 		Timestamp:   time.Now(),
 		Tool:        "str_replace",
 		Description: "Test change 2",
