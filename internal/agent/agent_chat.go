@@ -142,9 +142,27 @@ func (a *Agent) runNormalMode(ctx context.Context, input string) error {
 			return fmt.Errorf("API call failed: %w", err)
 		}
 
-		// Plan JSON が検出された場合、ツール使用を促す
+		// Plan JSON が検出された場合、パースして step-by-step 実行を試みる
 		if plan.ContainsPlanJSON(response) {
-			yellow.Println("⚠️  Plan JSON detected in normal mode. Use create_plan tool instead.")
+			// FC失敗フォールバック: テキスト出力された Plan JSON を抽出して実行
+			if planJSON := plan.ExtractPlanJSON(response); planJSON != "" {
+				if p, err := plan.ParsePlan(planJSON); err == nil && len(p.Steps) > 0 {
+					yellow.Printf("📋 FC fallback: extracted %d-step plan from text. Switching to step-by-step...\n", len(p.Steps))
+					a.History = append(a.History, api.Message{
+						Role:             "assistant",
+						Content:          response,
+						ReasoningContent: a.getLastReasoningContent(),
+					})
+					if err := a.runImplementationPhase(ctx, p); err != nil {
+						return err
+					}
+					a.runCompletionHooksWithRetry(ctx)
+					a.showTaskSummary()
+					return nil
+				}
+			}
+			// パース失敗 → 従来どおりリダイレクト
+			yellow.Println("⚠️  Plan JSON detected but parse failed. Use create_plan tool instead.")
 			a.History = append(a.History, api.Message{
 				Role:             "assistant",
 				Content:          response,
@@ -236,6 +254,38 @@ func (a *Agent) runNormalMode(ctx context.Context, input string) error {
 		skippedCommands := 0
 
 		for _, toolCall := range toolCalls {
+			// Normal Mode で create_plan が FC で呼ばれたら step-by-step 実行に切り替え
+			if toolCall.Tool == "create_plan" {
+				if a.Stats != nil {
+					a.Stats.AddToolExecution(toolCall.Tool)
+				}
+				result, _ := tools.Execute(toolCall)
+				a.History = append(a.History, api.Message{
+					Role:             "assistant",
+					Content:          response,
+					ReasoningContent: a.getLastReasoningContent(),
+				})
+				a.History = append(a.History, api.Message{
+					Role:    "user",
+					Content: fmt.Sprintf("[Tool Result for create_plan]\n%s", result),
+				})
+
+				createPlanTool := a.getCreatePlanTool()
+				if createPlanTool != nil {
+					if p := createPlanTool.LastPlan(); p != nil {
+						green.Printf("📋 Plan created in normal mode (%d steps). Switching to step-by-step execution...\n", len(p.Steps))
+						if err := a.runImplementationPhase(ctx, p); err != nil {
+							return err
+						}
+						a.runCompletionHooksWithRetry(ctx)
+						a.showTaskSummary()
+						return nil
+					}
+				}
+				yellow.Println("⚠️  create_plan failed, continuing in normal mode...")
+				continue
+			}
+
 			// Write Throttle: 書き込み系ツールは1ターン1回まで
 			if a.shouldThrottleWrite(toolCall) && writeExecuted {
 				skippedWrites++
@@ -405,9 +455,28 @@ func (a *Agent) chatWithImage(input string, image *api.ImageData) {
 			return
 		}
 
-		// Plan JSON が検出された場合、ツール使用を促す
+		// Plan JSON が検出された場合、パースして step-by-step 実行を試みる
 		if plan.ContainsPlanJSON(response) {
-			yellow.Println("⚠️  Plan JSON detected in normal mode. Use create_plan tool instead.")
+			// FC失敗フォールバック: テキスト出力された Plan JSON を抽出して実行
+			if planJSON := plan.ExtractPlanJSON(response); planJSON != "" {
+				if p, err := plan.ParsePlan(planJSON); err == nil && len(p.Steps) > 0 {
+					yellow.Printf("📋 FC fallback: extracted %d-step plan from text. Switching to step-by-step...\n", len(p.Steps))
+					a.History = append(a.History, api.Message{
+						Role:             "assistant",
+						Content:          response,
+						ReasoningContent: a.getLastReasoningContent(),
+					})
+					if err := a.runImplementationPhase(ctx, p); err != nil {
+						red.Printf("Error: %v\n", err)
+						return
+					}
+					a.runCompletionHooksWithRetry(ctx)
+					a.showTaskSummary()
+					return
+				}
+			}
+			// パース失敗 → 従来どおりリダイレクト
+			yellow.Println("⚠️  Plan JSON detected but parse failed. Use create_plan tool instead.")
 			a.History = append(a.History, api.Message{
 				Role:             "assistant",
 				Content:          response,
@@ -499,6 +568,39 @@ func (a *Agent) chatWithImage(input string, image *api.ImageData) {
 		skippedCommands := 0
 
 		for _, toolCall := range toolCalls {
+			// Normal Mode で create_plan が FC で呼ばれたら step-by-step 実行に切り替え
+			if toolCall.Tool == "create_plan" {
+				if a.Stats != nil {
+					a.Stats.AddToolExecution(toolCall.Tool)
+				}
+				result, _ := tools.Execute(toolCall)
+				a.History = append(a.History, api.Message{
+					Role:             "assistant",
+					Content:          response,
+					ReasoningContent: a.getLastReasoningContent(),
+				})
+				a.History = append(a.History, api.Message{
+					Role:    "user",
+					Content: fmt.Sprintf("[Tool Result for create_plan]\n%s", result),
+				})
+
+				createPlanTool := a.getCreatePlanTool()
+				if createPlanTool != nil {
+					if p := createPlanTool.LastPlan(); p != nil {
+						green.Printf("📋 Plan created in normal mode (%d steps). Switching to step-by-step execution...\n", len(p.Steps))
+						if err := a.runImplementationPhase(ctx, p); err != nil {
+							red.Printf("Error: %v\n", err)
+							return
+						}
+						a.runCompletionHooksWithRetry(ctx)
+						a.showTaskSummary()
+						return
+					}
+				}
+				yellow.Println("⚠️  create_plan failed, continuing in normal mode...")
+				continue
+			}
+
 			// Write Throttle: 書き込み系ツールは1ターン1回まで
 			if a.shouldThrottleWrite(toolCall) && writeExecuted {
 				skippedWrites++

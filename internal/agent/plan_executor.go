@@ -111,6 +111,12 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 		// ツールを実行
 		var allResults []string
 		for _, toolCall := range toolCalls {
+			// Plan 実行中は create_plan を無視（再帰防止）
+			if toolCall.Tool == "create_plan" {
+				allResults = append(allResults, "[create_plan] Ignored: already executing a plan. Continue with current step.")
+				continue
+			}
+
 			if a.Stats != nil {
 				a.Stats.AddToolExecution(toolCall.Tool)
 			}
