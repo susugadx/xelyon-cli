@@ -132,7 +132,7 @@ func (a *Agent) runCompletionHooks(changedFiles []string) (needsContinue bool, f
 
 	if strings.TrimSpace(diffOutput) == "" {
 		yellow.Println("⚠️  WARNING: No changes detected by git diff.")
-		diffOutput = "(No changes detected)"
+		return true, "[SYSTEM] WARNING: You declared completion but git diff shows NO changes. Did you actually make the required modifications? Review your plan and ensure all steps are implemented."
 	} else {
 		// Print to stdout for user confirmation
 		fmt.Println(diffOutput)

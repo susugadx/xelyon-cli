@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 
@@ -428,5 +429,37 @@ func TestRunCompletionHooksWithRetry_MaxRetryZeroFallback(t *testing.T) {
 	// MaxRetry=3 (fallback): 2回の AI 呼び出し（attempt 1, 2）+ 最終回は AI を呼ばない
 	if len(a.History) < 4 {
 		t.Errorf("expected at least 4 history entries from retries, got %d", len(a.History))
+	}
+}
+
+func TestRunCompletionHooks_GitDiffEmpty(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Hooks.OnCompletion = []string{"echo 'should not run'"}
+	cfg.Hooks.Timeout = 10
+	config.SetGlobalConfig(cfg)
+	defer config.SetGlobalConfig(nil)
+
+	// 非gitディレクトリに移動して git diff が空を返すようにする
+	tmpDir := t.TempDir()
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working directory: %v", err)
+	}
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("failed to chdir to tmpdir: %v", err)
+	}
+	defer func() {
+		if err := os.Chdir(origDir); err != nil {
+			t.Logf("warning: failed to restore working directory: %v", err)
+		}
+	}()
+
+	a := &Agent{}
+	needsContinue, feedback := a.runCompletionHooks([]string{"/src/main.go"})
+	if !needsContinue {
+		t.Error("expected needsContinue=true when git diff is empty")
+	}
+	if !strings.Contains(feedback, "NO changes") {
+		t.Errorf("expected 'NO changes' in feedback, got %q", feedback)
 	}
 }

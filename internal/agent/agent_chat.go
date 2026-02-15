@@ -193,6 +193,23 @@ func (a *Agent) runNormalMode(ctx context.Context, input string) error {
 
 		// ツール呼び出しなし = 通常の回答
 		if len(toolCalls) == 0 {
+			// テキスト計画の自動検出（3ステップ以上の作業計画）
+			if steps := extractTextPlan(response); len(steps) >= 3 && isActionPlan(steps) {
+				yellow.Printf("📋 Auto-detected %d-step plan in text. Switching to step-by-step execution...\n", len(steps))
+				p := buildAutoPlan(steps)
+				a.History = append(a.History, api.Message{
+					Role:             "assistant",
+					Content:          response,
+					ReasoningContent: a.getLastReasoningContent(),
+				})
+				if err := a.runImplementationPhase(ctx, p); err != nil {
+					return err
+				}
+				a.runCompletionHooksWithRetry(ctx)
+				a.showTaskSummary()
+				return nil
+			}
+
 			// Phase 1: LSP 完了検証（1回限り - 同一エラーのループ防止）
 			if !completionVerified {
 				needsContinue, feedback := a.verifyCompletionWithDiagnostics(response)
@@ -507,6 +524,24 @@ func (a *Agent) chatWithImage(input string, image *api.ImageData) {
 
 		// ツール呼び出しなし = 通常の回答
 		if len(toolCalls) == 0 {
+			// テキスト計画の自動検出（3ステップ以上の作業計画）
+			if steps := extractTextPlan(response); len(steps) >= 3 && isActionPlan(steps) {
+				yellow.Printf("📋 Auto-detected %d-step plan in text. Switching to step-by-step execution...\n", len(steps))
+				p := buildAutoPlan(steps)
+				a.History = append(a.History, api.Message{
+					Role:             "assistant",
+					Content:          response,
+					ReasoningContent: a.getLastReasoningContent(),
+				})
+				if err := a.runImplementationPhase(ctx, p); err != nil {
+					red.Printf("Error: %v\n", err)
+					return
+				}
+				a.runCompletionHooksWithRetry(ctx)
+				a.showTaskSummary()
+				return
+			}
+
 			// Phase 1: LSP 完了検証（1回限り - 同一エラーのループ防止）
 			if !completionVerified {
 				needsContinue, feedback := a.verifyCompletionWithDiagnostics(response)
