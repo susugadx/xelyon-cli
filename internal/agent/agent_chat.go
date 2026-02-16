@@ -148,8 +148,19 @@ func (a *Agent) runNormalMode(ctx context.Context, input string) error {
 			return fmt.Errorf("API call failed: %w", err)
 		}
 
-		// Plan JSON が検出された場合、パースして step-by-step 実行を試みる
-		if plan.ContainsPlanJSON(response) {
+		// ツール呼び出しをパース（Plan JSON チェックより先に実行 — create_plan の FC が誤検出されるのを防止）
+		toolCalls := tools.ParseToolCalls(response)
+
+		// FC rescue: テキストから抽出された toolCall にダミー ID を注入
+		// これにより下流の処理が FC 成功時と同じパス（role:"tool"）を通る
+		for i, tc := range toolCalls {
+			if tc.ID == "" {
+				toolCalls[i].ID = fmt.Sprintf("call_rescue_%03d", i+1)
+			}
+		}
+
+		// Plan JSON が検出された場合、パースして step-by-step 実行を試みる（ツール呼び出しがない場合のみ）
+		if len(toolCalls) == 0 && plan.ContainsPlanJSON(response) {
 			// FC失敗フォールバック: テキスト出力された Plan JSON を抽出して実行
 			if planJSON := plan.ExtractPlanJSON(response); planJSON != "" {
 				if p, err := plan.ParsePlan(planJSON); err == nil && len(p.Steps) > 0 {
@@ -187,17 +198,6 @@ func (a *Agent) runNormalMode(ctx context.Context, input string) error {
 				pendingSteps = len(steps)
 				completedActions = 0
 				forceContCount = 0
-			}
-		}
-
-		// ツール呼び出しをパース
-		toolCalls := tools.ParseToolCalls(response)
-
-		// FC rescue: テキストから抽出された toolCall にダミー ID を注入
-		// これにより下流の処理が FC 成功時と同じパス（role:"tool"）を通る
-		for i, tc := range toolCalls {
-			if tc.ID == "" {
-				toolCalls[i].ID = fmt.Sprintf("call_rescue_%03d", i+1)
 			}
 		}
 
@@ -527,8 +527,18 @@ func (a *Agent) chatWithImage(input string, image *api.ImageData) {
 			return
 		}
 
-		// Plan JSON が検出された場合、パースして step-by-step 実行を試みる
-		if plan.ContainsPlanJSON(response) {
+		// ツール呼び出しをパース（Plan JSON チェックより先に実行 — create_plan の FC が誤検出されるのを防止）
+		toolCalls := tools.ParseToolCalls(response)
+
+		// FC rescue: テキストから抽出された toolCall にダミー ID を注入
+		for i, tc := range toolCalls {
+			if tc.ID == "" {
+				toolCalls[i].ID = fmt.Sprintf("call_rescue_%03d", i+1)
+			}
+		}
+
+		// Plan JSON が検出された場合、パースして step-by-step 実行を試みる（ツール呼び出しがない場合のみ）
+		if len(toolCalls) == 0 && plan.ContainsPlanJSON(response) {
 			// FC失敗フォールバック: テキスト出力された Plan JSON を抽出して実行
 			if planJSON := plan.ExtractPlanJSON(response); planJSON != "" {
 				if p, err := plan.ParsePlan(planJSON); err == nil && len(p.Steps) > 0 {
@@ -559,16 +569,6 @@ func (a *Agent) chatWithImage(input string, image *api.ImageData) {
 				Content: "[SYSTEM] You are in NORMAL MODE. Do NOT output JSON directly. Use create_plan tool or execute tools DIRECTLY.",
 			})
 			continue
-		}
-
-		// ツール呼び出しをパース
-		toolCalls := tools.ParseToolCalls(response)
-
-		// FC rescue: テキストから抽出された toolCall にダミー ID を注入
-		for i, tc := range toolCalls {
-			if tc.ID == "" {
-				toolCalls[i].ID = fmt.Sprintf("call_rescue_%03d", i+1)
-			}
 		}
 
 		// デバッグログ
