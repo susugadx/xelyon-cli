@@ -33,8 +33,12 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 
 	// ツール定義を事前に取得（キャッシュにも含めるため）
 	toolDefs := GetCombinedToolDefinitions(p.mcpTools)
+	fcMode := os.Getenv("GEMINI_FC_MODE")
+	if fcMode == "" {
+		fcMode = "AUTO"
+	}
 	toolCfg := &GeminiToolConfigWrapper{
-		FunctionCallingConfig: GeminiFunctionCallingConfig{Mode: "VALIDATED"},
+		FunctionCallingConfig: GeminiFunctionCallingConfig{Mode: fcMode},
 	}
 
 	// キャッシュ管理（ツール定義もキャッシュに含める）

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
@@ -183,8 +184,12 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	// FC有効時はTools/ToolConfigを追加（画像+FC対応）
 	if p.IsFunctionCallingEnabled() {
 		reqBody.Tools = GetCombinedToolDefinitions(p.mcpTools)
+		fcMode := os.Getenv("GEMINI_FC_MODE")
+		if fcMode == "" {
+			fcMode = "AUTO"
+		}
 		reqBody.ToolConfig = &GeminiToolConfigWrapper{
-			FunctionCallingConfig: GeminiFunctionCallingConfig{Mode: "VALIDATED"},
+			FunctionCallingConfig: GeminiFunctionCallingConfig{Mode: fcMode},
 		}
 	}
 

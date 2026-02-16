@@ -120,7 +120,7 @@ type GeminiGenerationConfig struct {
 
 // GeminiFunctionCallingConfig は Function Calling の動作モード設定
 type GeminiFunctionCallingConfig struct {
-	Mode string `json:"mode"` // "AUTO", "ANY", "NONE"
+	Mode string `json:"mode"` // "AUTO" (default), "ANY", "NONE", "VALIDATED" (preview)
 }
 
 // GeminiToolConfigWrapper は tool_config フィールド用ラッパー
