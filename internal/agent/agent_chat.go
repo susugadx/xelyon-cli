@@ -130,10 +130,10 @@ func (a *Agent) runNormalMode(ctx context.Context, input string) error {
 	var hookRetryCount int      // フック失敗リトライカウンター
 
 	// Step Tracking: テキスト計画の未完了検知
-	var pendingSteps int    // テキスト計画のステップ数
+	var pendingSteps int     // テキスト計画のステップ数
 	var completedActions int // 実行済みアクション（write系 + bash）の数
-	var forceContCount int  // 強制続行の回数
-	const maxForceCont = 3  // 強制続行の上限
+	var forceContCount int   // 強制続行の回数
+	const maxForceCont = 3   // 強制続行の上限
 
 	for i := 0; i < maxIterations; i++ {
 		// API呼び出し
@@ -192,6 +192,14 @@ func (a *Agent) runNormalMode(ctx context.Context, input string) error {
 
 		// ツール呼び出しをパース
 		toolCalls := tools.ParseToolCalls(response)
+
+		// FC rescue: テキストから抽出された toolCall にダミー ID を注入
+		// これにより下流の処理が FC 成功時と同じパス（role:"tool"）を通る
+		for i, tc := range toolCalls {
+			if tc.ID == "" {
+				toolCalls[i].ID = fmt.Sprintf("call_rescue_%03d", i+1)
+			}
+		}
 
 		// デバッグログ
 		if os.Getenv("XELYON_DEBUG_TOOLS") == "1" {
@@ -550,6 +558,13 @@ func (a *Agent) chatWithImage(input string, image *api.ImageData) {
 
 		// ツール呼び出しをパース
 		toolCalls := tools.ParseToolCalls(response)
+
+		// FC rescue: テキストから抽出された toolCall にダミー ID を注入
+		for i, tc := range toolCalls {
+			if tc.ID == "" {
+				toolCalls[i].ID = fmt.Sprintf("call_rescue_%03d", i+1)
+			}
+		}
 
 		// デバッグログ
 		if os.Getenv("XELYON_DEBUG_TOOLS") == "1" {

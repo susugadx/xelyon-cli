@@ -18,6 +18,7 @@ rules:
 
 hooks:
   on_completion:
+    - make fmt
     - make ci-check
   timeout: 60
   max_retry: 3
