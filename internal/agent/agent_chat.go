@@ -129,6 +129,12 @@ func (a *Agent) runNormalMode(ctx context.Context, input string) error {
 	var completionVerified bool // 完了検証ガード（タスク内1回限り）
 	var hookRetryCount int      // フック失敗リトライカウンター
 
+	// Step Tracking: テキスト計画の未完了検知
+	var pendingSteps int    // テキスト計画のステップ数
+	var completedWrites int // 実行済み write 系ツールの数
+	var forceContCount int  // 強制続行の回数
+	const maxForceCont = 3  // 強制続行の上限
+
 	for i := 0; i < maxIterations; i++ {
 		// API呼び出し
 		response, err := a.CurrentProvider.ChatWithTools(
@@ -175,6 +181,15 @@ func (a *Agent) runNormalMode(ctx context.Context, input string) error {
 			continue
 		}
 
+		// Step Tracking: テキスト計画を記録（最初の検出のみ）
+		if pendingSteps == 0 {
+			if steps := extractTextPlan(response); len(steps) >= 2 && isActionPlan(steps) {
+				pendingSteps = len(steps)
+				completedWrites = 0
+				forceContCount = 0
+			}
+		}
+
 		// ツール呼び出しをパース
 		toolCalls := tools.ParseToolCalls(response)
 
@@ -193,6 +208,28 @@ func (a *Agent) runNormalMode(ctx context.Context, input string) error {
 
 		// ツール呼び出しなし = 通常の回答
 		if len(toolCalls) == 0 {
+			// Step Tracking: 計画のステップが未完了なら強制続行
+			if pendingSteps > 0 && completedWrites < pendingSteps {
+				forceContCount++
+				if forceContCount <= maxForceCont {
+					yellow.Printf("⚠️  Step tracking: %d/%d steps completed. Forcing continuation... (%d/%d)\n",
+						completedWrites, pendingSteps, forceContCount, maxForceCont)
+					a.History = append(a.History, api.Message{
+						Role:             "assistant",
+						Content:          response,
+						ReasoningContent: a.getLastReasoningContent(),
+					})
+					a.History = append(a.History, api.Message{
+						Role:    "user",
+						Content: fmt.Sprintf("[SYSTEM] You declared %d steps but only completed %d. Do NOT summarize. Continue with the remaining steps immediately.", pendingSteps, completedWrites),
+					})
+					continue
+				}
+				yellow.Printf("⚠️  Step tracking: %d/%d steps completed but AI not progressing. Giving up.\n",
+					completedWrites, pendingSteps)
+				pendingSteps = 0
+			}
+
 			// テキスト計画の自動検出（3ステップ以上の作業計画）
 			if steps := extractTextPlan(response); len(steps) >= 3 && isActionPlan(steps) {
 				yellow.Printf("📋 Auto-detected %d-step plan in text. Switching to step-by-step execution...\n", len(steps))
@@ -323,6 +360,11 @@ func (a *Agent) runNormalMode(ctx context.Context, input string) error {
 
 			// ツール実行（executeToolCallWithResult で結果も取得）
 			result := a.executeToolCallWithResult(response, toolCall)
+
+			// Step Tracking: write 系ツール実行をカウント
+			if tools.IsWriteTool(toolCall.Tool) {
+				completedWrites++
+			}
 
 			// 書き込み成功後の自動 read-back（ツール結果に追記）
 			if a.shouldThrottleWrite(toolCall) {
