@@ -53,8 +53,8 @@ var actionVerbs = []string{
 	"実行", "インストール", "ビルド", "テスト", "設定",
 	"run", "install", "build", "test", "configure",
 	// Write operations
-	"write", "edit", "rename", "migrate",
-	"書く", "編集", "リネーム", "移行",
+	"write", "edit", "rename", "migrate", "optimize", "debug", "remove", "merge", "check",
+	"書く", "編集", "リネーム", "移行", "最適化", "デバッグ", "削除", "マージ", "確認",
 }
 
 var analysisVerbs = []string{

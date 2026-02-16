@@ -140,8 +140,18 @@ func TestIsActionPlan(t *testing.T) {
 		},
 		{
 			name:  "Mixed (mostly analysis)",
-			steps: []string{"Investigate logs", "Check database", "Fix if needed"},
+			steps: []string{"Investigate logs", "Analyze database", "Fix if needed"},
 			want:  false, // 1/3 actions (Fix)
+		},
+		{
+			name:  "New English verbs",
+			steps: []string{"Optimize performance", "Debug issue", "Remove unused code"},
+			want:  true,
+		},
+		{
+			name:  "Merge and Check",
+			steps: []string{"Merge branch", "Check status", "Deploy to prod"},
+			want:  true,
 		},
 	}
 
