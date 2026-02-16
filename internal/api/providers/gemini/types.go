@@ -132,7 +132,8 @@ type GeminiToolConfigWrapper struct {
 
 // GeminiFunctionCallPart は functionCall を含む parts 要素
 type GeminiFunctionCallPart struct {
-	FunctionCall GeminiFunctionCallData `json:"functionCall"`
+	FunctionCall     GeminiFunctionCallData `json:"functionCall"`
+	ThoughtSignature string                 `json:"thoughtSignature,omitempty"` // Gemini 3: 思考署名（履歴再生に必須）
 }
 
 // GeminiFunctionCallData は functionCall のデータ

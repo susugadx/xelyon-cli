@@ -39,8 +39,9 @@ func (a *Agent) addToolCallToHistory(response string, toolCall *tools.ToolCall) 
 			Content:          explanation, // 説明部分のみ（ツール呼び出しは ToolCalls に）
 			ReasoningContent: reasoningContent,
 			ToolCalls: []api.OpenAIToolCall{{
-				ID:   toolCall.ID,
-				Type: "function",
+				ID:               toolCall.ID,
+				Type:             "function",
+				ThoughtSignature: toolCall.ThoughtSignature,
 				Function: api.OpenAIToolCallFunction{
 					Name:      toolCall.Tool,
 					Arguments: argsToJSON(toolCall.RawArgs),

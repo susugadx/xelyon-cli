@@ -20,10 +20,11 @@ type ToolDefinition struct {
 // OpenAIToolCall はレスポンスの tool_calls フィールド
 // ストリーミングでは複数チャンクに分割されて送信される
 type OpenAIToolCall struct {
-	Index    int                    `json:"index"`    // ストリーミング用インデックス
-	ID       string                 `json:"id"`       // ツール呼び出しID
-	Type     string                 `json:"type"`     // "function"
-	Function OpenAIToolCallFunction `json:"function"` // 関数呼び出し情報
+	Index            int                    `json:"index"`                       // ストリーミング用インデックス
+	ID               string                 `json:"id"`                          // ツール呼び出しID
+	Type             string                 `json:"type"`                        // "function"
+	Function         OpenAIToolCallFunction `json:"function"`                    // 関数呼び出し情報
+	ThoughtSignature string                 `json:"thought_signature,omitempty"` // Gemini 3: 暗号化された思考署名（履歴再生用）
 }
 
 // OpenAIToolCallFunction は関数呼び出しの詳細

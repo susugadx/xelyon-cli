@@ -10,10 +10,11 @@ import (
 
 // ToolCall はAIからのツール呼び出し
 type ToolCall struct {
-	ID      string         `json:"id,omitempty"` // Function Calling 用の tool_call_id
-	Tool    string         `json:"tool"`
-	RawArgs map[string]any `json:"args"`
-	Args    map[string]string
+	ID               string         `json:"id,omitempty"` // Function Calling 用の tool_call_id
+	Tool             string         `json:"tool"`
+	RawArgs          map[string]any `json:"args"`
+	ThoughtSignature string         `json:"thought_signature,omitempty"` // Gemini 3: 暗号化された思考プロセス署名
+	Args             map[string]string
 }
 
 // NormalizeArgs はRawArgsをArgsに変換（数値→文字列）

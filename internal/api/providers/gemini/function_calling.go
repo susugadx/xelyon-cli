@@ -68,6 +68,7 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 						Name: tc.Function.Name,
 						Args: args,
 					},
+					ThoughtSignature: tc.ThoughtSignature,
 				})
 			}
 			contents = append(contents, GeminiGenericContent{
