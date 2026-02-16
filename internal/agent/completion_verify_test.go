@@ -432,14 +432,8 @@ func TestRunCompletionHooksWithRetry_MaxRetryZeroFallback(t *testing.T) {
 	}
 }
 
-func TestRunCompletionHooks_GitDiffEmpty(t *testing.T) {
-	cfg := config.DefaultConfig()
-	cfg.Hooks.OnCompletion = []string{"echo 'should not run'"}
-	cfg.Hooks.Timeout = 10
-	config.SetGlobalConfig(cfg)
-	defer config.SetGlobalConfig(nil)
-
-	// 非gitディレクトリに移動して git diff が空を返すようにする
+func TestCheckGitDiffEmpty(t *testing.T) {
+	// 非gitディレクトリに移動して git diff が失敗するようにする
 	tmpDir := t.TempDir()
 	origDir, err := os.Getwd()
 	if err != nil {
@@ -454,8 +448,7 @@ func TestRunCompletionHooks_GitDiffEmpty(t *testing.T) {
 		}
 	}()
 
-	a := &Agent{}
-	needsContinue, feedback := a.runCompletionHooks([]string{"/src/main.go"})
+	needsContinue, feedback := checkGitDiffEmpty()
 	if !needsContinue {
 		t.Error("expected needsContinue=true when git diff is empty")
 	}

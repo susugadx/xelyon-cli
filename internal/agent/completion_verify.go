@@ -106,6 +106,18 @@ Please fix these errors before declaring completion. Do NOT skip these issues.`,
 	return true, feedback
 }
 
+// checkGitDiffEmpty は git diff --stat を実行し、差分が空の場合に警告を返す。
+// runCompletionHooks とは独立して呼び出し元でチェックする。
+func checkGitDiffEmpty() (needsContinue bool, feedback string) {
+	diffCmd := exec.Command("git", "diff", "--stat")
+	output, err := diffCmd.CombinedOutput()
+	if err != nil || strings.TrimSpace(string(output)) == "" {
+		yellow.Println("⚠️  WARNING: No changes detected by git diff.")
+		return true, "[SYSTEM] WARNING: You declared completion but git diff shows NO changes. Did you actually make the required modifications? Review your plan and ensure all steps are implemented."
+	}
+	return false, ""
+}
+
 // runCompletionHooks は config.yaml の hooks.on_completion に定義された
 // シェルコマンドを順番に実行する。いずれかのコマンドが失敗した場合、
 // needsContinue=true と AI 向けのフィードバックを返す。
@@ -119,26 +131,18 @@ func (a *Agent) runCompletionHooks(changedFiles []string) (needsContinue bool, f
 		return false, ""
 	}
 
-	// 1. Built-in checks
-	// git diff --stat: Show changes context
+	// git diff --stat: hook 失敗時のコンテキスト用
 	yellow.Println("📊 Verifying changes with git diff --stat...")
 	var diffOutput string
-
-	// 作業ディレクトリがGitリポジトリか確認しつつ実行
 	diffCmd := exec.Command("git", "diff", "--stat")
 	if output, err := diffCmd.CombinedOutput(); err == nil {
 		diffOutput = string(output)
+		if strings.TrimSpace(diffOutput) != "" {
+			fmt.Println(diffOutput)
+		}
 	}
 
-	if strings.TrimSpace(diffOutput) == "" {
-		yellow.Println("⚠️  WARNING: No changes detected by git diff.")
-		return true, "[SYSTEM] WARNING: You declared completion but git diff shows NO changes. Did you actually make the required modifications? Review your plan and ensure all steps are implemented."
-	} else {
-		// Print to stdout for user confirmation
-		fmt.Println(diffOutput)
-	}
-
-	// 2. User defined hooks
+	// User defined hooks
 
 	timeout := time.Duration(cfg.Hooks.Timeout) * time.Second
 	if timeout <= 0 {
@@ -205,6 +209,12 @@ Please fix these errors before declaring completion. Do NOT skip these issues.`,
 // 戻り値: hooks がすべてパスした場合 true、max_retry 到達で打ち切った場合 false。
 func (a *Agent) runCompletionHooksWithRetry(ctx context.Context) bool {
 	cfg := config.GetGlobalConfig()
+
+	// No hooks configured → nothing to verify
+	if len(cfg.Hooks.OnCompletion) == 0 {
+		return true
+	}
+
 	changedFiles := a.getTaskChangedFiles()
 	if len(changedFiles) == 0 {
 		return true

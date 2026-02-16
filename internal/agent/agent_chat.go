@@ -275,10 +275,15 @@ func (a *Agent) runNormalMode(ctx context.Context, input string) error {
 			}
 
 			// Phase 2: Completion hooks（毎回実行 - 修正後の再チェック必要、max_retry で制限）
-			if containsCompletionDeclaration(response) {
+			if containsCompletionDeclaration(response) && len(cfg.Hooks.OnCompletion) > 0 {
 				changedFiles := a.getTaskChangedFiles()
 				if len(changedFiles) > 0 {
-					hookNeedsContinue, hookFeedback := a.runCompletionHooks(changedFiles)
+					// Built-in: git diff empty check
+					hookNeedsContinue, hookFeedback := checkGitDiffEmpty()
+					// User hooks (only if built-in checks passed)
+					if !hookNeedsContinue {
+						hookNeedsContinue, hookFeedback = a.runCompletionHooks(changedFiles)
+					}
 					if hookNeedsContinue {
 						hookRetryCount++
 						maxRetry := cfg.Hooks.MaxRetry
@@ -619,10 +624,15 @@ func (a *Agent) chatWithImage(input string, image *api.ImageData) {
 			}
 
 			// Phase 2: Completion hooks（毎回実行 - 修正後の再チェック必要、max_retry で制限）
-			if containsCompletionDeclaration(response) {
+			if containsCompletionDeclaration(response) && len(cfg.Hooks.OnCompletion) > 0 {
 				changedFiles := a.getTaskChangedFiles()
 				if len(changedFiles) > 0 {
-					hookNeedsContinue, hookFeedback := a.runCompletionHooks(changedFiles)
+					// Built-in: git diff empty check
+					hookNeedsContinue, hookFeedback := checkGitDiffEmpty()
+					// User hooks (only if built-in checks passed)
+					if !hookNeedsContinue {
+						hookNeedsContinue, hookFeedback = a.runCompletionHooks(changedFiles)
+					}
 					if hookNeedsContinue {
 						hookRetryCount++
 						maxRetry := cfg.Hooks.MaxRetry
