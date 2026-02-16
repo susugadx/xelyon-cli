@@ -18,6 +18,7 @@ func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, s
 	debug := os.Getenv("XELYON_DEBUG_GEMINI") == "1"
 	var fullResponse strings.Builder
 	var functionCalls []*api.GeminiFunctionCall
+	var thoughtParts []map[string]any // Gemini 3: thought パートを収集（次リクエストに返す）
 	var usage *GeminiUsageMetadata
 
 	scanner := bufio.NewScanner(resp.Body)
@@ -53,24 +54,38 @@ func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, s
 		}
 
 		for _, part := range chunk.Candidates[0].Content.Parts {
+			// Gemini 3: thought パートを収集（表示はしないが次リクエストに返す必要がある）
 			if part.Thought {
+				tp := map[string]any{"thought": true}
+				if part.Text != "" {
+					tp["text"] = part.Text
+				}
+				if part.ThoughtSignature != "" {
+					tp["thought_signature"] = part.ThoughtSignature
+				}
+				thoughtParts = append(thoughtParts, tp)
 				if debug {
 					sig := part.ThoughtSignature
 					if len(sig) > 20 {
 						sig = sig[:20] + "..."
 					}
-					fmt.Fprintf(os.Stderr, "[DEBUG Gemini SSE] Skipping thought part (text=%d chars, sig=%q)\n", len(part.Text), sig)
+					fmt.Fprintf(os.Stderr, "[DEBUG Gemini SSE] Collected thought part (text=%d chars, sig=%q)\n", len(part.Text), sig)
 				}
 				continue
 			}
 
-			// thoughtSignature のみのパート（thought=false）を検出・ログ
-			if part.ThoughtSignature != "" && debug {
-				sig := part.ThoughtSignature
-				if len(sig) > 20 {
-					sig = sig[:20] + "..."
+			// thoughtSignature のみのパート（thought=false, text="", functionCall=nil）を収集
+			if part.ThoughtSignature != "" && part.FunctionCall == nil && part.Text == "" {
+				tp := map[string]any{"thought_signature": part.ThoughtSignature}
+				thoughtParts = append(thoughtParts, tp)
+				if debug {
+					sig := part.ThoughtSignature
+					if len(sig) > 20 {
+						sig = sig[:20] + "..."
+					}
+					fmt.Fprintf(os.Stderr, "[DEBUG Gemini SSE] Collected signature-only part (sig=%q)\n", sig)
 				}
-				fmt.Fprintf(os.Stderr, "[DEBUG Gemini SSE] ⚠ thoughtSignature without thought flag: sig=%q, text=%d chars\n", sig, len(part.Text))
+				continue
 			}
 
 			if part.Text != "" {
@@ -88,6 +103,13 @@ func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, s
 				part.FunctionCall.ThoughtSignature = part.ThoughtSignature
 				functionCalls = append(functionCalls, part.FunctionCall)
 			}
+		}
+	}
+
+	// Gemini 3: thought パートを全 functionCall に付与
+	if len(thoughtParts) > 0 {
+		for _, fc := range functionCalls {
+			fc.ThoughtParts = thoughtParts
 		}
 	}
 
@@ -160,6 +182,7 @@ func (p *Provider) handleFunctionCallingResponse(body []byte, spinner *ui.Spinne
 
 	var fullResponse strings.Builder
 	var functionCalls []*api.GeminiFunctionCall // FunctionCall を収集
+	var thoughtParts []map[string]any           // Gemini 3: thought パートを収集
 	var textParts []string                      // テキストパートを収集
 
 	for i, response := range responses {
@@ -181,24 +204,38 @@ func (p *Provider) handleFunctionCallingResponse(body []byte, spinner *ui.Spinne
 		}
 
 		for _, part := range candidate.Content.Parts {
+			// Gemini 3: thought パートを収集（次リクエストに返す必要がある）
 			if part.Thought {
+				tp := map[string]any{"thought": true}
+				if part.Text != "" {
+					tp["text"] = part.Text
+				}
+				if part.ThoughtSignature != "" {
+					tp["thought_signature"] = part.ThoughtSignature
+				}
+				thoughtParts = append(thoughtParts, tp)
 				if debug {
 					sig := part.ThoughtSignature
 					if len(sig) > 20 {
 						sig = sig[:20] + "..."
 					}
-					fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Skipping thought part (text=%d chars, sig=%q)\n", len(part.Text), sig)
+					fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Collected thought part (text=%d chars, sig=%q)\n", len(part.Text), sig)
 				}
 				continue
 			}
 
-			// thoughtSignature のみのパート（thought=false）を検出・ログ
-			if part.ThoughtSignature != "" && debug {
-				sig := part.ThoughtSignature
-				if len(sig) > 20 {
-					sig = sig[:20] + "..."
+			// thoughtSignature のみのパート（thought=false, text="", functionCall=nil）を収集
+			if part.ThoughtSignature != "" && part.FunctionCall == nil && part.Text == "" {
+				tp := map[string]any{"thought_signature": part.ThoughtSignature}
+				thoughtParts = append(thoughtParts, tp)
+				if debug {
+					sig := part.ThoughtSignature
+					if len(sig) > 20 {
+						sig = sig[:20] + "..."
+					}
+					fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Collected signature-only part (sig=%q)\n", sig)
 				}
-				fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] ⚠ thoughtSignature without thought flag: sig=%q, text=%d chars\n", sig, len(part.Text))
+				continue
 			}
 
 			// Function Call パートを収集
@@ -221,6 +258,13 @@ func (p *Provider) handleFunctionCallingResponse(body []byte, spinner *ui.Spinne
 				}
 				textParts = append(textParts, part.Text)
 			}
+		}
+	}
+
+	// Gemini 3: thought パートを全 functionCall に付与
+	if len(thoughtParts) > 0 {
+		for _, fc := range functionCalls {
+			fc.ThoughtParts = thoughtParts
 		}
 	}
 

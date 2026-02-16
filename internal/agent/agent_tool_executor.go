@@ -42,6 +42,7 @@ func (a *Agent) addToolCallToHistory(response string, toolCall *tools.ToolCall) 
 				ID:               toolCall.ID,
 				Type:             "function",
 				ThoughtSignature: toolCall.ThoughtSignature,
+				ThoughtParts:     toolCall.ThoughtParts,
 				Function: api.OpenAIToolCallFunction{
 					Name:      toolCall.Tool,
 					Arguments: argsToJSON(toolCall.RawArgs),

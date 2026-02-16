@@ -146,9 +146,10 @@ func GetToolDefinitionNames() []string {
 
 // internalToolCall は内部ツール呼び出し形式（JSON出力順序を保証）
 type internalToolCall struct {
-	Tool             string         `json:"tool"`
-	Args             map[string]any `json:"args"`
-	ThoughtSignature string         `json:"thought_signature,omitempty"` // Gemini 3: 思考署名
+	Tool             string           `json:"tool"`
+	Args             map[string]any   `json:"args"`
+	ThoughtSignature string           `json:"thought_signature,omitempty"` // Gemini 3: 思考署名
+	ThoughtParts     []map[string]any `json:"thought_parts,omitempty"`     // Gemini 3: thought パート情報
 }
 
 // convertFunctionCallToToolJSON converts Gemini FunctionCall to internal tool JSON format
@@ -160,6 +161,7 @@ func convertFunctionCallToToolJSON(fc *api.GeminiFunctionCall) string {
 		Tool:             fc.Name,
 		Args:             fc.Args,
 		ThoughtSignature: fc.ThoughtSignature,
+		ThoughtParts:     fc.ThoughtParts,
 	}
 	jsonBytes, _ := json.Marshal(toolCall)
 	return string(jsonBytes)

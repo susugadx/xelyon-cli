@@ -25,6 +25,7 @@ type OpenAIToolCall struct {
 	Type             string                 `json:"type"`                        // "function"
 	Function         OpenAIToolCallFunction `json:"function"`                    // 関数呼び出し情報
 	ThoughtSignature string                 `json:"thought_signature,omitempty"` // Gemini 3: 暗号化された思考署名（履歴再生用）
+	ThoughtParts     []map[string]any       `json:"thought_parts,omitempty"`     // Gemini 3: thought パート情報（履歴再生用）
 }
 
 // OpenAIToolCallFunction は関数呼び出しの詳細

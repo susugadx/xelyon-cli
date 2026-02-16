@@ -38,9 +38,10 @@ type GeminiToolConfig struct {
 
 // GeminiFunctionCall - Function Call response from Gemini
 type GeminiFunctionCall struct {
-	Name             string         `json:"name"`
-	Args             map[string]any `json:"args"`
-	ThoughtSignature string         `json:"-"` // JSON出力には含めない（内部転送用）
+	Name             string           `json:"name"`
+	Args             map[string]any   `json:"args"`
+	ThoughtSignature string           `json:"-"` // JSON出力には含めない（内部転送用）
+	ThoughtParts     []map[string]any `json:"-"` // 同ターンの thought パート情報（内部転送用）
 }
 
 // convertPropertyDef はJSON Schemaプロパティ定義をGeminiPropertyDefに変換する

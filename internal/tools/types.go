@@ -10,10 +10,11 @@ import (
 
 // ToolCall はAIからのツール呼び出し
 type ToolCall struct {
-	ID               string         `json:"id,omitempty"` // Function Calling 用の tool_call_id
-	Tool             string         `json:"tool"`
-	RawArgs          map[string]any `json:"args"`
-	ThoughtSignature string         `json:"thought_signature,omitempty"` // Gemini 3: 暗号化された思考プロセス署名
+	ID               string           `json:"id,omitempty"` // Function Calling 用の tool_call_id
+	Tool             string           `json:"tool"`
+	RawArgs          map[string]any   `json:"args"`
+	ThoughtSignature string           `json:"thought_signature,omitempty"` // Gemini 3: 暗号化された思考プロセス署名
+	ThoughtParts     []map[string]any `json:"thought_parts,omitempty"`     // Gemini 3: thought パート情報
 	Args             map[string]string
 }
 

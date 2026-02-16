@@ -567,9 +567,14 @@ func TestHandleFunctionCallingResponse_ThoughtSignatureCycling(t *testing.T) {
 		t.Fatalf("handleFunctionCallingResponse() error = %v", err)
 	}
 
-	// thinking テキストが出力に含まれないこと
-	if strings.Contains(result, "thinking step") {
-		t.Errorf("result should NOT contain thinking text, got %q", result)
+	// thinking テキストが表示テキストとして出力されないこと
+	// （thought_parts メタデータ内に含まれるのは正常）
+	displayText := result
+	if idx := strings.Index(displayText, `{"tool"`); idx >= 0 {
+		displayText = displayText[:idx]
+	}
+	if strings.Contains(displayText, "thinking step") {
+		t.Errorf("display text should NOT contain thinking text, got %q", displayText)
 	}
 	// 実際のテキストとFCが含まれること
 	if !strings.Contains(result, "I'll read the file.") {
@@ -577,6 +582,13 @@ func TestHandleFunctionCallingResponse_ThoughtSignatureCycling(t *testing.T) {
 	}
 	if !strings.Contains(result, "read_file") {
 		t.Errorf("result should contain function call, got %q", result)
+	}
+	// thought_parts がツールJSON内に含まれること
+	if !strings.Contains(result, "thought_parts") {
+		t.Errorf("result should contain thought_parts metadata, got %q", result)
+	}
+	if !strings.Contains(result, "sig-turn1-aaa") {
+		t.Errorf("result should contain thought signature in thought_parts, got %q", result)
 	}
 }
 

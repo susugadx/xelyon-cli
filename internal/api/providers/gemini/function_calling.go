@@ -60,6 +60,24 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 			if msg.Content != "" {
 				parts = append(parts, GeminiPart{Text: msg.Content})
 			}
+			// Gemini 3: thought パートを先に追加（最初の ToolCall から取得、全 TC で共有）
+			if len(msg.ToolCalls) > 0 && len(msg.ToolCalls[0].ThoughtParts) > 0 {
+				for _, tp := range msg.ToolCalls[0].ThoughtParts {
+					geminiPart := make(map[string]any)
+					if text, ok := tp["text"].(string); ok && text != "" {
+						geminiPart["text"] = text
+					}
+					if thought, ok := tp["thought"].(bool); ok && thought {
+						geminiPart["thought"] = true
+					}
+					if sig, ok := tp["thought_signature"].(string); ok && sig != "" {
+						geminiPart["thoughtSignature"] = sig // Gemini API は camelCase
+					}
+					if len(geminiPart) > 0 {
+						parts = append(parts, geminiPart)
+					}
+				}
+			}
 			for _, tc := range msg.ToolCalls {
 				var args map[string]any
 				_ = json.Unmarshal([]byte(tc.Function.Arguments), &args)
