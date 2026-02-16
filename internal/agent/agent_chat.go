@@ -131,7 +131,7 @@ func (a *Agent) runNormalMode(ctx context.Context, input string) error {
 
 	// Step Tracking: テキスト計画の未完了検知
 	var pendingSteps int    // テキスト計画のステップ数
-	var completedWrites int // 実行済み write 系ツールの数
+	var completedActions int // 実行済みアクション（write系 + bash）の数
 	var forceContCount int  // 強制続行の回数
 	const maxForceCont = 3  // 強制続行の上限
 
@@ -185,7 +185,7 @@ func (a *Agent) runNormalMode(ctx context.Context, input string) error {
 		if pendingSteps == 0 {
 			if steps := extractTextPlan(response); len(steps) >= 2 && isActionPlan(steps) {
 				pendingSteps = len(steps)
-				completedWrites = 0
+				completedActions = 0
 				forceContCount = 0
 			}
 		}
@@ -209,11 +209,11 @@ func (a *Agent) runNormalMode(ctx context.Context, input string) error {
 		// ツール呼び出しなし = 通常の回答
 		if len(toolCalls) == 0 {
 			// Step Tracking: 計画のステップが未完了なら強制続行
-			if pendingSteps > 0 && completedWrites < pendingSteps {
+			if pendingSteps > 0 && completedActions < pendingSteps {
 				forceContCount++
 				if forceContCount <= maxForceCont {
 					yellow.Printf("⚠️  Step tracking: %d/%d steps completed. Forcing continuation... (%d/%d)\n",
-						completedWrites, pendingSteps, forceContCount, maxForceCont)
+						completedActions, pendingSteps, forceContCount, maxForceCont)
 					a.History = append(a.History, api.Message{
 						Role:             "assistant",
 						Content:          response,
@@ -221,12 +221,12 @@ func (a *Agent) runNormalMode(ctx context.Context, input string) error {
 					})
 					a.History = append(a.History, api.Message{
 						Role:    "user",
-						Content: fmt.Sprintf("[SYSTEM] You declared %d steps but only completed %d. Do NOT summarize. Continue with the remaining steps immediately.", pendingSteps, completedWrites),
+						Content: fmt.Sprintf("[SYSTEM] You declared %d steps but only completed %d. Do NOT summarize. Continue with the remaining steps immediately.", pendingSteps, completedActions),
 					})
 					continue
 				}
 				yellow.Printf("⚠️  Step tracking: %d/%d steps completed but AI not progressing. Giving up.\n",
-					completedWrites, pendingSteps)
+					completedActions, pendingSteps)
 				pendingSteps = 0
 			}
 
@@ -361,9 +361,9 @@ func (a *Agent) runNormalMode(ctx context.Context, input string) error {
 			// ツール実行（executeToolCallWithResult で結果も取得）
 			result := a.executeToolCallWithResult(response, toolCall)
 
-			// Step Tracking: write 系ツール実行をカウント
-			if tools.IsWriteTool(toolCall.Tool) {
-				completedWrites++
+			// Step Tracking: アクション実行をカウント（write系 + bash）
+			if tools.IsWriteTool(toolCall.Tool) || toolCall.Tool == "bash" {
+				completedActions++
 			}
 
 			// 書き込み成功後の自動 read-back（ツール結果に追記）
