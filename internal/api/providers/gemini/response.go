@@ -131,9 +131,6 @@ func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, s
 			continue
 		}
 		seenTools[toolJSON] = true
-		// 表示用は内部メタデータを除外したクリーン JSON
-		displayJSON := convertFunctionCallToDisplayJSON(fc)
-		fmt.Printf("\n%s", displayJSON)
 		// 内部用は ThoughtSignature/ThoughtParts を含む完全 JSON
 		fullResponse.WriteString(toolJSON)
 	}
@@ -327,9 +324,6 @@ func (p *Provider) handleFunctionCallingResponse(body []byte, spinner *ui.Spinne
 				continue
 			}
 			seenTools[toolJSON] = true
-			// 表示用は内部メタデータを除外したクリーン JSON
-			displayJSON := convertFunctionCallToDisplayJSON(fc)
-			fmt.Printf("\n%s", displayJSON)
 			// 内部用は ThoughtSignature/ThoughtParts を含む完全 JSON
 			fullResponse.WriteString(toolJSON)
 		}

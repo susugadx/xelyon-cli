@@ -22,6 +22,101 @@ func argsToJSON(args map[string]any) string {
 	return string(b)
 }
 
+// addToolCallsToHistory はパラレル FC の全ツール呼び出しを1つの assistant メッセージにまとめて履歴に追加する。
+// ThoughtSignature/ThoughtParts は最初の ToolCall からのみ取得（Gemini 3 仕様）。
+func (a *Agent) addToolCallsToHistory(response string, toolCalls []*tools.ToolCall) {
+	if len(toolCalls) == 0 {
+		return
+	}
+
+	explanation, _ := extractExplanationAndTool(response)
+	reasoningContent := a.getLastReasoningContent()
+
+	openAIToolCalls := make([]api.OpenAIToolCall, len(toolCalls))
+	for i, tc := range toolCalls {
+		openAIToolCalls[i] = api.OpenAIToolCall{
+			ID:   tc.ID,
+			Type: "function",
+			Function: api.OpenAIToolCallFunction{
+				Name:      tc.Tool,
+				Arguments: argsToJSON(tc.RawArgs),
+			},
+		}
+		// ThoughtSignature/ThoughtParts は最初の ToolCall のみ（Gemini 3 仕様）
+		if i == 0 {
+			openAIToolCalls[i].ThoughtSignature = tc.ThoughtSignature
+			openAIToolCalls[i].ThoughtParts = tc.ThoughtParts
+		}
+	}
+
+	a.History = append(a.History, api.Message{
+		Role:             "assistant",
+		Content:          explanation,
+		ReasoningContent: reasoningContent,
+		ToolCalls:        openAIToolCalls,
+	})
+
+	// セッションに保存（1回のみ）
+	if a.session != nil {
+		msg := a.History[len(a.History)-1]
+		a.session.AddMessageFromAPI(msg, a.CurrentModel)
+	}
+
+	// 統計情報更新: AssistantMessages は1回、ToolExecution は各ツール
+	if a.Stats != nil {
+		a.Stats.AssistantMessages++
+		for _, tc := range toolCalls {
+			a.Stats.AddToolExecution(tc.Tool)
+		}
+	}
+}
+
+// executeToolOnly はツールを実行して結果を履歴に追加する（assistant メッセージは追加しない）。
+// addToolCallsToHistory でバッチ化済みの場合に使用する。
+func (a *Agent) executeToolOnly(toolCall *tools.ToolCall) string {
+	// ツール実行
+	result, change := tools.Execute(toolCall)
+
+	// str_replace エラー処理
+	if a.handleStrReplaceErrors(toolCall, result) {
+		return result
+	}
+
+	// comment 継続フロー処理
+	if a.handleCommentFlow(toolCall, result) {
+		return result
+	}
+
+	// 変更履歴を保存
+	a.handleFileChange(change)
+
+	// 結果を履歴に追加
+	if toolCall.ID != "" {
+		// Function Calling: role="tool" で tool_call_id 付きで送信
+		toolMsg := api.Message{
+			Role:       "tool",
+			Content:    result,
+			ToolCallID: toolCall.ID,
+			ToolName:   toolCall.Tool,
+		}
+		a.History = append(a.History, toolMsg)
+
+		// セッションに tool result を保存
+		if a.session != nil {
+			a.session.AddMessageFromAPI(toolMsg, a.CurrentModel)
+		}
+	} else {
+		// テキストベース: role="user" で送信（従来方式）
+		a.History = append(a.History, api.Message{
+			Role:    "user",
+			Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, result),
+		})
+	}
+
+	fmt.Println()
+	return result
+}
+
 // addToolCallToHistory はツール呼び出しを会話履歴に追加する
 func (a *Agent) addToolCallToHistory(response string, toolCall *tools.ToolCall) {
 	// レスポンスから説明部分とツール呼び出しを分離

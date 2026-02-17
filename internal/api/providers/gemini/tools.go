@@ -167,20 +167,6 @@ func convertFunctionCallToToolJSON(fc *api.GeminiFunctionCall) string {
 	return string(jsonBytes)
 }
 
-// displayToolCall は表示用ツール呼び出し形式（内部メタデータを含まない）
-type displayToolCall struct {
-	Tool string         `json:"tool"`
-	Args map[string]any `json:"args"`
-}
-
-// convertFunctionCallToDisplayJSON は表示用のクリーン JSON を生成
-// thought_signature / thought_parts 等の内部メタデータを除外
-func convertFunctionCallToDisplayJSON(fc *api.GeminiFunctionCall) string {
-	tc := displayToolCall{Tool: fc.Name, Args: fc.Args}
-	jsonBytes, _ := json.Marshal(tc)
-	return string(jsonBytes)
-}
-
 // GetCombinedToolDefinitions は組み込みツール + MCPツールの定義を返す
 // 重複するツール名がある場合は最初に登録されたものを優先
 func GetCombinedToolDefinitions(mcpTools []api.ToolDefinition) []api.GeminiToolConfig {

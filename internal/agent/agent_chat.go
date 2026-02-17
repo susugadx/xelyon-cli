@@ -316,74 +316,100 @@ func (a *Agent) runNormalMode(ctx context.Context, input string) error {
 
 		// ツールを実行し、失敗を検出
 		var lastFailedResult string
-		writeExecuted := false
 		skippedWrites := 0
 		skippedCommands := 0
 
+		// Phase 1: create_plan を先に処理（テキストベースで独立した履歴管理）
 		for _, toolCall := range toolCalls {
-			// Normal Mode で create_plan が FC で呼ばれたら step-by-step 実行に切り替え
-			if toolCall.Tool == "create_plan" {
-				if a.Stats != nil {
-					a.Stats.AddToolExecution(toolCall.Tool)
-				}
-				result, _ := tools.Execute(toolCall)
-				a.History = append(a.History, api.Message{
-					Role:             "assistant",
-					Content:          response,
-					ReasoningContent: a.getLastReasoningContent(),
-				})
-				a.History = append(a.History, api.Message{
-					Role:    "user",
-					Content: fmt.Sprintf("[Tool Result for create_plan]\n%s", result),
-				})
-
-				createPlanTool := a.getCreatePlanTool()
-				if createPlanTool != nil {
-					if p := createPlanTool.LastPlan(); p != nil {
-						green.Printf("📋 Plan created in normal mode (%d steps). Switching to step-by-step execution...\n", len(p.Steps))
-						if err := a.runImplementationPhase(ctx, p); err != nil {
-							return err
-						}
-						a.runCompletionHooksWithRetry(ctx)
-						a.showTaskSummary()
-						return nil
-					}
-				}
-				yellow.Println("⚠️  create_plan failed, continuing in normal mode...")
+			if toolCall.Tool != "create_plan" {
 				continue
 			}
+			if a.Stats != nil {
+				a.Stats.AddToolExecution(toolCall.Tool)
+			}
+			result, _ := tools.Execute(toolCall)
+			a.History = append(a.History, api.Message{
+				Role:             "assistant",
+				Content:          response,
+				ReasoningContent: a.getLastReasoningContent(),
+			})
+			a.History = append(a.History, api.Message{
+				Role:    "user",
+				Content: fmt.Sprintf("[Tool Result for create_plan]\n%s", result),
+			})
 
-			// Write Throttle: 書き込み系ツールは1ターン1回まで
-			if a.shouldThrottleWrite(toolCall) && writeExecuted {
+			createPlanTool := a.getCreatePlanTool()
+			if createPlanTool != nil {
+				if p := createPlanTool.LastPlan(); p != nil {
+					green.Printf("📋 Plan created in normal mode (%d steps). Switching to step-by-step execution...\n", len(p.Steps))
+					if err := a.runImplementationPhase(ctx, p); err != nil {
+						return err
+					}
+					a.runCompletionHooksWithRetry(ctx)
+					a.showTaskSummary()
+					return nil
+				}
+			}
+			yellow.Println("⚠️  create_plan failed, continuing in normal mode...")
+		}
+
+		// Phase 2: 実行対象のツール呼び出しをフィルタ（create_plan, write throttle, bash skip を除外）
+		var execToolCalls []*tools.ToolCall
+		writeWillExecute := false
+		for _, tc := range toolCalls {
+			if tc.Tool == "create_plan" {
+				continue
+			}
+			if a.shouldThrottleWrite(tc) && writeWillExecute {
 				skippedWrites++
 				continue
 			}
-
-			// 書き込みがスキップされた後は bash もスキップ
-			if skippedWrites > 0 && toolCall.Tool == "bash" {
+			if skippedWrites > 0 && tc.Tool == "bash" {
 				skippedCommands++
 				continue
 			}
+			execToolCalls = append(execToolCalls, tc)
+			if a.shouldThrottleWrite(tc) {
+				writeWillExecute = true
+			}
+		}
 
-			// ループ検知
-			if a.shouldAbortToolLoopWithResponse(response, toolCall, lastToolCall, &sameCallCount) {
+		// Phase 3: 全ツール呼び出しを1つの assistant メッセージにまとめて履歴追加
+		if len(execToolCalls) > 0 {
+			a.addToolCallsToHistory(response, execToolCalls)
+		}
+
+		// Phase 4: ツールを実行し結果を追加
+		for idx, tc := range execToolCalls {
+			// ループ検知（assistant メッセージは追加済みなので response="" で呼ぶ）
+			if a.shouldAbortToolLoopWithResponse("", tc, lastToolCall, &sameCallCount) {
+				// shouldAbortToolLoopWithResponse が現在の TC の tool result を追加済み。
+				// 残りの未実行 TC にダミー結果を追加（API が tool result 欠落でエラーにならないようにする）。
+				for _, remaining := range execToolCalls[idx+1:] {
+					if remaining.ID != "" {
+						a.History = append(a.History, api.Message{
+							Role:       "tool",
+							Content:    "[SYSTEM] Skipped due to tool loop detection.",
+							ToolCallID: remaining.ID,
+							ToolName:   remaining.Tool,
+						})
+					}
+				}
 				return fmt.Errorf("tool loop detected")
 			}
-			lastToolCall = toolCall
+			lastToolCall = tc
 
-			// ツール実行（executeToolCallWithResult で結果も取得）
-			result := a.executeToolCallWithResult(response, toolCall)
+			result := a.executeToolOnly(tc)
 
 			// Step Tracking: アクション実行をカウント（write系 + bash）
-			if tools.IsWriteTool(toolCall.Tool) || toolCall.Tool == "bash" {
+			if tools.IsWriteTool(tc.Tool) || tc.Tool == "bash" {
 				completedActions++
 			}
 
 			// 書き込み成功後の自動 read-back（ツール結果に追記）
-			if a.shouldThrottleWrite(toolCall) {
-				writeExecuted = true
+			if a.shouldThrottleWrite(tc) {
 				if !strings.HasPrefix(result, "Error:") {
-					a.autoReadBack(toolCall)
+					a.autoReadBack(tc)
 				}
 			}
 
@@ -665,71 +691,97 @@ func (a *Agent) chatWithImage(input string, image *api.ImageData) {
 
 		// ツールを実行し、失敗を検出
 		var lastFailedResult string
-		writeExecuted := false
 		skippedWrites := 0
 		skippedCommands := 0
 
+		// Phase 1: create_plan を先に処理
 		for _, toolCall := range toolCalls {
-			// Normal Mode で create_plan が FC で呼ばれたら step-by-step 実行に切り替え
-			if toolCall.Tool == "create_plan" {
-				if a.Stats != nil {
-					a.Stats.AddToolExecution(toolCall.Tool)
-				}
-				result, _ := tools.Execute(toolCall)
-				a.History = append(a.History, api.Message{
-					Role:             "assistant",
-					Content:          response,
-					ReasoningContent: a.getLastReasoningContent(),
-				})
-				a.History = append(a.History, api.Message{
-					Role:    "user",
-					Content: fmt.Sprintf("[Tool Result for create_plan]\n%s", result),
-				})
-
-				createPlanTool := a.getCreatePlanTool()
-				if createPlanTool != nil {
-					if p := createPlanTool.LastPlan(); p != nil {
-						green.Printf("📋 Plan created in normal mode (%d steps). Switching to step-by-step execution...\n", len(p.Steps))
-						if err := a.runImplementationPhase(ctx, p); err != nil {
-							red.Printf("Error: %v\n", err)
-							return
-						}
-						a.runCompletionHooksWithRetry(ctx)
-						a.showTaskSummary()
-						return
-					}
-				}
-				yellow.Println("⚠️  create_plan failed, continuing in normal mode...")
+			if toolCall.Tool != "create_plan" {
 				continue
 			}
+			if a.Stats != nil {
+				a.Stats.AddToolExecution(toolCall.Tool)
+			}
+			result, _ := tools.Execute(toolCall)
+			a.History = append(a.History, api.Message{
+				Role:             "assistant",
+				Content:          response,
+				ReasoningContent: a.getLastReasoningContent(),
+			})
+			a.History = append(a.History, api.Message{
+				Role:    "user",
+				Content: fmt.Sprintf("[Tool Result for create_plan]\n%s", result),
+			})
 
-			// Write Throttle: 書き込み系ツールは1ターン1回まで
-			if a.shouldThrottleWrite(toolCall) && writeExecuted {
+			createPlanTool := a.getCreatePlanTool()
+			if createPlanTool != nil {
+				if p := createPlanTool.LastPlan(); p != nil {
+					green.Printf("📋 Plan created in normal mode (%d steps). Switching to step-by-step execution...\n", len(p.Steps))
+					if err := a.runImplementationPhase(ctx, p); err != nil {
+						red.Printf("Error: %v\n", err)
+						return
+					}
+					a.runCompletionHooksWithRetry(ctx)
+					a.showTaskSummary()
+					return
+				}
+			}
+			yellow.Println("⚠️  create_plan failed, continuing in normal mode...")
+		}
+
+		// Phase 2: 実行対象のツール呼び出しをフィルタ
+		var execToolCalls []*tools.ToolCall
+		writeWillExecute := false
+		for _, tc := range toolCalls {
+			if tc.Tool == "create_plan" {
+				continue
+			}
+			if a.shouldThrottleWrite(tc) && writeWillExecute {
 				skippedWrites++
 				continue
 			}
-
-			// 書き込みがスキップされた後は bash もスキップ
-			if skippedWrites > 0 && toolCall.Tool == "bash" {
+			if skippedWrites > 0 && tc.Tool == "bash" {
 				skippedCommands++
 				continue
 			}
+			execToolCalls = append(execToolCalls, tc)
+			if a.shouldThrottleWrite(tc) {
+				writeWillExecute = true
+			}
+		}
 
+		// Phase 3: 全ツール呼び出しを1つの assistant メッセージにまとめて履歴追加
+		if len(execToolCalls) > 0 {
+			a.addToolCallsToHistory(response, execToolCalls)
+		}
+
+		// Phase 4: ツールを実行し結果を追加
+		for idx, tc := range execToolCalls {
 			// ループ検知
-			if a.shouldAbortToolLoopWithResponse(response, toolCall, lastToolCall, &sameCallCount) {
+			if a.shouldAbortToolLoopWithResponse("", tc, lastToolCall, &sameCallCount) {
+				// shouldAbortToolLoopWithResponse が現在の TC の tool result を追加済み。
+				// 残りの未実行 TC にダミー結果を追加。
+				for _, remaining := range execToolCalls[idx+1:] {
+					if remaining.ID != "" {
+						a.History = append(a.History, api.Message{
+							Role:       "tool",
+							Content:    "[SYSTEM] Skipped due to tool loop detection.",
+							ToolCallID: remaining.ID,
+							ToolName:   remaining.Tool,
+						})
+					}
+				}
 				red.Println("Error: tool loop detected")
 				return
 			}
-			lastToolCall = toolCall
+			lastToolCall = tc
 
-			// ツール実行（executeToolCallWithResult で結果も取得）
-			result := a.executeToolCallWithResult(response, toolCall)
+			result := a.executeToolOnly(tc)
 
 			// 書き込み成功後の自動 read-back（ツール結果に追記）
-			if a.shouldThrottleWrite(toolCall) {
-				writeExecuted = true
+			if a.shouldThrottleWrite(tc) {
 				if !strings.HasPrefix(result, "Error:") {
-					a.autoReadBack(toolCall)
+					a.autoReadBack(tc)
 				}
 			}
 

@@ -249,16 +249,47 @@ func (a *Agent) runCompletionHooksWithRetry(ctx context.Context) bool {
 			return false
 		}
 
-		a.History = append(a.History, api.Message{
-			Role:             "assistant",
-			Content:          response,
-			ReasoningContent: a.getLastReasoningContent(),
-		})
-
-		// ツール呼び出しがあれば実行
+		// ツール呼び出しをパースして履歴管理
 		toolCalls := tools.ParseToolCalls(response)
-		for _, tc := range toolCalls {
-			a.executeToolCallWithResult(response, tc)
+
+		// FC rescue: テキストから抽出された toolCall にダミー ID を注入
+		for i, tc := range toolCalls {
+			if tc.ID == "" {
+				toolCalls[i].ID = fmt.Sprintf("call_rescue_%03d", i+1)
+			}
+		}
+
+		if len(toolCalls) > 0 {
+			// Write throttle 適用（runNormalMode と同じパターン）
+			var execToolCalls []*tools.ToolCall
+			writeWillExecute := false
+			skippedWrites := 0
+			for _, tc := range toolCalls {
+				if a.shouldThrottleWrite(tc) && writeWillExecute {
+					skippedWrites++
+					continue
+				}
+				if skippedWrites > 0 && tc.Tool == "bash" {
+					continue
+				}
+				execToolCalls = append(execToolCalls, tc)
+				if a.shouldThrottleWrite(tc) {
+					writeWillExecute = true
+				}
+			}
+
+			// バッチで assistant メッセージを追加し、ツールを実行
+			a.addToolCallsToHistory(response, execToolCalls)
+			for _, tc := range execToolCalls {
+				a.executeToolOnly(tc)
+			}
+		} else {
+			// テキストのみの応答
+			a.History = append(a.History, api.Message{
+				Role:             "assistant",
+				Content:          response,
+				ReasoningContent: a.getLastReasoningContent(),
+			})
 		}
 
 		// 変更ファイルを更新（修正で新しいファイルが変わる可能性）

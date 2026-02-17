@@ -73,8 +73,8 @@ func (a *Agent) CompressHistory(keepRecent int) error {
 
 // adjustSplitForFCPairs は FC ターン（assistant+ToolCalls → tool レスポンス）のペアが
 // 分割点で分断されないように splitIdx を調整する。
-// NOTE: パラレル FC（assistant → tool × N）の場合は完全対応していない。
-// 現在の XELYON は write throttle で1ターン1ツールに制限しているため実害なし。
+// パラレル FC（assistant → tool × N）にも対応: 連続する role:"tool" を巻き戻すループで
+// 複数の tool レスポンスを1つの assistant メッセージと一緒に保持する。
 func adjustSplitForFCPairs(history []api.Message, splitIdx int) int {
 	if splitIdx <= 0 || splitIdx >= len(history) {
 		return splitIdx
