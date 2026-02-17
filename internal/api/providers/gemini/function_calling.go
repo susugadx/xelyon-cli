@@ -163,6 +163,12 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 		return "", err
 	}
 
+	// Context window overflow 可視化（debug のみ）
+	if debug && len(jsonBody) > 500_000 {
+		fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Large request: %d bytes (~%dk tokens)\n",
+			len(jsonBody), len(jsonBody)/4/1000)
+	}
+
 	// Function Calling エンドポイント（非ストリーミング）
 	url := getGeminiFunctionCallingURL(model)
 
@@ -218,6 +224,18 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 		}
 		if rateLimitErr := api.HandleRateLimit(resp); rateLimitErr != nil {
 			return "", rateLimitErr
+		}
+		// キャッシュ期限切れ検出 → キャッシュ無効化してリトライ
+		if cacheName != "" && isCacheExpiredError(resp.StatusCode, body) {
+			p.invalidateCache()
+			if ctx.Value(cacheRetryKey) != nil {
+				return "", fmt.Errorf("cache retry failed (status %d): %s", resp.StatusCode, string(body))
+			}
+			if debug {
+				fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Cache expired, invalidating and retrying...\n")
+			}
+			ctx = context.WithValue(ctx, cacheRetryKey, true)
+			return p.chatWithFunctionCalling(ctx, systemPrompt, history, model)
 		}
 		if len(body) == 0 {
 			return "", fmt.Errorf("gemini API error (status %d): empty response body", resp.StatusCode)

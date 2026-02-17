@@ -177,6 +177,89 @@ func stringIndexOf(s, substr string) int {
 	return -1
 }
 
+func TestAdjustSplitForFCPairs_ToolAtKeepHead(t *testing.T) {
+	// toKeep 先頭が role:"tool" → splitIdx が assistant まで巻き戻ること
+	history := []api.Message{
+		{Role: "user", Content: "msg1"},
+		{Role: "assistant", Content: "msg2"},
+		{Role: "assistant", Content: "", ToolCalls: []api.OpenAIToolCall{
+			{ID: "call_1", Function: api.OpenAIToolCallFunction{Name: "read_file", Arguments: `{"path":"/a.go"}`}},
+		}},
+		{Role: "tool", Content: "file content", ToolCallID: "call_1"},
+		{Role: "user", Content: "msg3"},
+	}
+
+	// splitIdx=3 → toKeep[0] = role:"tool" → assistant(TC) まで巻き戻し → さらに assistant(TC) も toKeep に含める → splitIdx=1
+	got := adjustSplitForFCPairs(history, 3)
+	if got != 1 {
+		t.Errorf("Expected splitIdx=1, got %d", got)
+	}
+}
+
+func TestAdjustSplitForFCPairs_AssistantAtCompressTail(t *testing.T) {
+	// toCompress 末尾が assistant(ToolCalls付き) → splitIdx がさらに1つ前にずれること
+	history := []api.Message{
+		{Role: "user", Content: "msg1"},
+		{Role: "assistant", Content: "", ToolCalls: []api.OpenAIToolCall{
+			{ID: "call_1", Function: api.OpenAIToolCallFunction{Name: "bash", Arguments: `{"command":"ls"}`}},
+		}},
+		{Role: "tool", Content: "output", ToolCallID: "call_1"},
+		{Role: "user", Content: "msg2"},
+	}
+
+	// splitIdx=2 → history[splitIdx-1] = assistant(ToolCalls) → splitIdx=1
+	got := adjustSplitForFCPairs(history, 2)
+	if got != 1 {
+		t.Errorf("Expected splitIdx=1, got %d", got)
+	}
+}
+
+func TestAdjustSplitForFCPairs_ZeroBoundary(t *testing.T) {
+	// splitIdx=0 → 先頭ガードでそのまま 0 が返ること
+	history := []api.Message{
+		{Role: "user", Content: "msg1"},
+		{Role: "assistant", Content: "msg2"},
+	}
+
+	got := adjustSplitForFCPairs(history, 0)
+	if got != 0 {
+		t.Errorf("Expected splitIdx=0 (boundary guard), got %d", got)
+	}
+}
+
+func TestAdjustSplitForFCPairs_MinBoundaryWithTool(t *testing.T) {
+	// splitIdx=1 で tool → 1 が返ること（最小境界）
+	history := []api.Message{
+		{Role: "assistant", Content: "", ToolCalls: []api.OpenAIToolCall{
+			{ID: "call_1", Function: api.OpenAIToolCallFunction{Name: "read_file", Arguments: `{}`}},
+		}},
+		{Role: "tool", Content: "result", ToolCallID: "call_1"},
+		{Role: "user", Content: "msg"},
+	}
+
+	// splitIdx=1 → history[1] = role:"tool" → 巻き戻し → splitIdx=0 → assistant(ToolCalls) → さらに戻る → ≤0 → return 1
+	got := adjustSplitForFCPairs(history, 1)
+	if got != 1 {
+		t.Errorf("Expected splitIdx=1 (min boundary), got %d", got)
+	}
+}
+
+func TestAdjustSplitForFCPairs_NoFC(t *testing.T) {
+	// FC なしの通常メッセージ → splitIdx が変わらないこと
+	history := []api.Message{
+		{Role: "user", Content: "msg1"},
+		{Role: "assistant", Content: "msg2"},
+		{Role: "user", Content: "msg3"},
+		{Role: "assistant", Content: "msg4"},
+		{Role: "user", Content: "msg5"},
+	}
+
+	got := adjustSplitForFCPairs(history, 3)
+	if got != 3 {
+		t.Errorf("Expected splitIdx=3 (unchanged), got %d", got)
+	}
+}
+
 func TestConvertToHistoryCompactedItems(t *testing.T) {
 	tests := []struct {
 		name  string

@@ -26,6 +26,10 @@ type InputItem struct {
 
 	// Function Calling 結果用（type="function_call_output"の場合）
 	Output string `json:"output,omitempty"` // ツール実行結果
+
+	// Gemini 3: 思考メタデータ（圧縮を通じて保持）
+	ThoughtSignature string           `json:"thought_signature,omitempty"`
+	ThoughtParts     []map[string]any `json:"thought_parts,omitempty"`
 }
 
 // NormalizeInputItemOutput は空のツール出力を補完する
@@ -72,13 +76,19 @@ func ConvertHistoryToInputItems(history []Message) []InputItem {
 			}))
 		} else if msg.Role == "assistant" && len(msg.ToolCalls) > 0 {
 			// AIのfunction_call → type: "function_call" として各ツール呼び出しを追加
-			for _, tc := range msg.ToolCalls {
-				items = append(items, InputItem{
+			for i, tc := range msg.ToolCalls {
+				item := InputItem{
 					Type:      "function_call",
 					CallID:    tc.ID,
 					Name:      tc.Function.Name,
 					Arguments: tc.Function.Arguments,
-				})
+				}
+				// Gemini 3: 思考メタデータは最初の function_call にのみ付与
+				if i == 0 {
+					item.ThoughtSignature = tc.ThoughtSignature
+					item.ThoughtParts = tc.ThoughtParts
+				}
+				items = append(items, item)
 			}
 		} else {
 			items = append(items, InputItem{

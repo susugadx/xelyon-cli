@@ -107,6 +107,8 @@ func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, s
 	}
 
 	// Gemini 3: thought パートを全 functionCall に付与
+	// NOTE: Gemini 3 仕様: thought パートは1ターン内の全 FC で共有される。
+	// 履歴再構築時（function_calling.go）は ToolCalls[0].ThoughtParts のみを使用し重複を防止。
 	if len(thoughtParts) > 0 {
 		for _, fc := range functionCalls {
 			fc.ThoughtParts = thoughtParts
@@ -129,6 +131,10 @@ func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, s
 			continue
 		}
 		seenTools[toolJSON] = true
+		// 表示用は内部メタデータを除外したクリーン JSON
+		displayJSON := convertFunctionCallToDisplayJSON(fc)
+		fmt.Printf("\n%s", displayJSON)
+		// 内部用は ThoughtSignature/ThoughtParts を含む完全 JSON
 		fullResponse.WriteString(toolJSON)
 	}
 
@@ -262,6 +268,8 @@ func (p *Provider) handleFunctionCallingResponse(body []byte, spinner *ui.Spinne
 	}
 
 	// Gemini 3: thought パートを全 functionCall に付与
+	// NOTE: Gemini 3 仕様: thought パートは1ターン内の全 FC で共有される。
+	// 履歴再構築時（function_calling.go）は ToolCalls[0].ThoughtParts のみを使用し重複を防止。
 	if len(thoughtParts) > 0 {
 		for _, fc := range functionCalls {
 			fc.ThoughtParts = thoughtParts
@@ -319,7 +327,10 @@ func (p *Provider) handleFunctionCallingResponse(body []byte, spinner *ui.Spinne
 				continue
 			}
 			seenTools[toolJSON] = true
-			fmt.Printf("\n%s", toolJSON)
+			// 表示用は内部メタデータを除外したクリーン JSON
+			displayJSON := convertFunctionCallToDisplayJSON(fc)
+			fmt.Printf("\n%s", displayJSON)
+			// 内部用は ThoughtSignature/ThoughtParts を含む完全 JSON
 			fullResponse.WriteString(toolJSON)
 		}
 	} else if len(toolJSONTexts) > 0 {

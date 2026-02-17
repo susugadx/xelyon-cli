@@ -3,6 +3,8 @@ package history
 import (
 	"testing"
 	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/api"
 )
 
 func TestNewSession(t *testing.T) {
@@ -130,5 +132,136 @@ func TestSession_ToAPIMessages_Empty(t *testing.T) {
 
 	if len(apiMsgs) != 0 {
 		t.Errorf("Expected empty API messages, got %d", len(apiMsgs))
+	}
+}
+
+func TestAddMessageFromAPI_ToolCallsRoundTrip(t *testing.T) {
+	// assistant + ToolCalls（ThoughtSignature付き）を保存→復元→ToolCalls が欠落しないこと
+	session := NewSession("gemini-3-pro")
+
+	msg := api.Message{
+		Role:    "assistant",
+		Content: "I'll read the file.",
+		ToolCalls: []api.OpenAIToolCall{
+			{
+				ID:   "call_abc123",
+				Type: "function",
+				Function: api.OpenAIToolCallFunction{
+					Name:      "read_file",
+					Arguments: `{"path":"/src/main.go"}`,
+				},
+				ThoughtSignature: "encrypted-sig-data-xyz",
+				ThoughtParts: []map[string]any{
+					{"thought": true, "text": "thinking about reading"},
+					{"thought_signature": "sig-only"},
+				},
+			},
+		},
+	}
+
+	session.AddMessageFromAPI(msg, "gemini-3-pro")
+
+	// 復元
+	apiMsgs := session.ToAPIMessages()
+	if len(apiMsgs) != 1 {
+		t.Fatalf("Expected 1 message, got %d", len(apiMsgs))
+	}
+
+	restored := apiMsgs[0]
+	if restored.Role != "assistant" {
+		t.Errorf("Expected role=assistant, got %s", restored.Role)
+	}
+	if restored.Content != "I'll read the file." {
+		t.Errorf("Expected content preserved, got %s", restored.Content)
+	}
+	if len(restored.ToolCalls) != 1 {
+		t.Fatalf("Expected 1 ToolCall, got %d", len(restored.ToolCalls))
+	}
+	tc := restored.ToolCalls[0]
+	if tc.ID != "call_abc123" {
+		t.Errorf("Expected ToolCall.ID=call_abc123, got %s", tc.ID)
+	}
+	if tc.Function.Name != "read_file" {
+		t.Errorf("Expected Function.Name=read_file, got %s", tc.Function.Name)
+	}
+	if tc.Function.Arguments != `{"path":"/src/main.go"}` {
+		t.Errorf("Expected Function.Arguments preserved, got %s", tc.Function.Arguments)
+	}
+	if tc.ThoughtSignature != "encrypted-sig-data-xyz" {
+		t.Errorf("Expected ThoughtSignature preserved, got %s", tc.ThoughtSignature)
+	}
+	if len(tc.ThoughtParts) != 2 {
+		t.Errorf("Expected 2 ThoughtParts, got %d", len(tc.ThoughtParts))
+	}
+}
+
+func TestAddMessageFromAPI_ToolResultRoundTrip(t *testing.T) {
+	// tool result（ToolCallID, ToolName付き）を保存→復元→全フィールド一致すること
+	session := NewSession("gemini-3-pro")
+
+	msg := api.Message{
+		Role:       "tool",
+		Content:    "file contents here",
+		ToolCallID: "call_abc123",
+		ToolName:   "read_file",
+	}
+
+	session.AddMessageFromAPI(msg, "gemini-3-pro")
+
+	apiMsgs := session.ToAPIMessages()
+	if len(apiMsgs) != 1 {
+		t.Fatalf("Expected 1 message, got %d", len(apiMsgs))
+	}
+
+	restored := apiMsgs[0]
+	if restored.Role != "tool" {
+		t.Errorf("Expected role=tool, got %s", restored.Role)
+	}
+	if restored.Content != "file contents here" {
+		t.Errorf("Expected content preserved, got %s", restored.Content)
+	}
+	if restored.ToolCallID != "call_abc123" {
+		t.Errorf("Expected ToolCallID=call_abc123, got %s", restored.ToolCallID)
+	}
+	if restored.ToolName != "read_file" {
+		t.Errorf("Expected ToolName=read_file, got %s", restored.ToolName)
+	}
+}
+
+func TestAddMessageFromAPI_PlainMessageRegression(t *testing.T) {
+	// 通常メッセージ（FCなし）は従来通り動くこと（回帰テスト）
+	session := NewSession("test-model")
+
+	// AddMessage（既存メソッド）で追加
+	session.AddMessage("user", "Hello", "test-model")
+
+	// AddMessageFromAPI で FC なしメッセージを追加
+	session.AddMessageFromAPI(api.Message{
+		Role:    "assistant",
+		Content: "Hi there!",
+	}, "test-model")
+
+	apiMsgs := session.ToAPIMessages()
+	if len(apiMsgs) != 2 {
+		t.Fatalf("Expected 2 messages, got %d", len(apiMsgs))
+	}
+
+	// user メッセージ（AddMessage 経由）
+	if apiMsgs[0].Role != "user" || apiMsgs[0].Content != "Hello" {
+		t.Errorf("First message mismatch: %+v", apiMsgs[0])
+	}
+	if len(apiMsgs[0].ToolCalls) != 0 {
+		t.Errorf("Plain user message should have no ToolCalls, got %d", len(apiMsgs[0].ToolCalls))
+	}
+
+	// assistant メッセージ（AddMessageFromAPI 経由、FC なし）
+	if apiMsgs[1].Role != "assistant" || apiMsgs[1].Content != "Hi there!" {
+		t.Errorf("Second message mismatch: %+v", apiMsgs[1])
+	}
+	if len(apiMsgs[1].ToolCalls) != 0 {
+		t.Errorf("Plain assistant message should have no ToolCalls, got %d", len(apiMsgs[1].ToolCalls))
+	}
+	if apiMsgs[1].ToolCallID != "" {
+		t.Errorf("Plain assistant message should have empty ToolCallID, got %s", apiMsgs[1].ToolCallID)
 	}
 }

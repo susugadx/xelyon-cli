@@ -19,9 +19,14 @@ func (a *Agent) CompressHistory(keepRecent int) error {
 	// 圧縮前の統計
 	beforeTokens := estimateTokens(a.History)
 
-	// 圧縮対象のメッセージを抽出
-	toCompress := a.History[:len(a.History)-keepRecent]
-	toKeep := a.History[len(a.History)-keepRecent:]
+	// 圧縮対象のメッセージを抽出（FC ターンペアの分断を防止）
+	splitIdx := adjustSplitForFCPairs(a.History, len(a.History)-keepRecent)
+	toCompress := a.History[:splitIdx]
+	toKeep := a.History[splitIdx:]
+
+	if len(toCompress) == 0 {
+		return fmt.Errorf("圧縮対象のメッセージがありません（FC ターン保護により分割不可）")
+	}
 
 	// サマリー生成プロンプト
 	// api.Message を prompt.Message に変換
@@ -64,6 +69,37 @@ func (a *Agent) CompressHistory(keepRecent int) error {
 	fmt.Println()
 
 	return nil
+}
+
+// adjustSplitForFCPairs は FC ターン（assistant+ToolCalls → tool レスポンス）のペアが
+// 分割点で分断されないように splitIdx を調整する。
+// NOTE: パラレル FC（assistant → tool × N）の場合は完全対応していない。
+// 現在の XELYON は write throttle で1ターン1ツールに制限しているため実害なし。
+func adjustSplitForFCPairs(history []api.Message, splitIdx int) int {
+	if splitIdx <= 0 || splitIdx >= len(history) {
+		return splitIdx
+	}
+
+	// 1. toKeep 側: 先頭が role:"tool" なら、対応する assistant まで巻き戻す
+	for splitIdx > 0 && history[splitIdx].Role == "tool" {
+		splitIdx--
+	}
+	// assistant(ToolCalls付き) も toKeep に含める
+	if splitIdx > 0 && len(history[splitIdx].ToolCalls) > 0 {
+		splitIdx--
+	}
+
+	// 2. toCompress 側: 末尾が assistant(ToolCalls付き) なら、
+	//    対応する tool レスポンスが toKeep に入ってペアが分断されている。
+	//    → assistant も toKeep に移す（splitIdx をさらに1つ前へ）
+	if splitIdx > 0 && len(history[splitIdx-1].ToolCalls) > 0 {
+		splitIdx--
+	}
+
+	if splitIdx <= 0 {
+		return 1
+	}
+	return splitIdx
 }
 
 // estimateTokens は概算トークン数を計算（英語: 4文字/token、日本語: 2文字/token）

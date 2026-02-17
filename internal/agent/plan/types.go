@@ -1,6 +1,10 @@
 package plan
 
-import "time"
+import (
+	"encoding/json"
+	"strconv"
+	"time"
+)
 
 // PlanStatus は計画の全体ステータス
 type PlanStatus string
@@ -80,6 +84,45 @@ type PlanStep struct {
 	Files       []string   `json:"files,omitempty"`        // 関連ファイル
 	StartedAt   *time.Time `json:"started_at,omitempty"`   // 開始時刻
 	CompletedAt *time.Time `json:"completed_at,omitempty"` // 完了時刻
+}
+
+// UnmarshalJSON は PlanStep のカスタムデシリアライズ
+// Gemini が depends_on を []string（例: ["1","2"]）で返すケースに対応
+func (ps *PlanStep) UnmarshalJSON(data []byte) error {
+	type Alias PlanStep
+	type flex struct {
+		Alias
+		DependsOnRaw json.RawMessage `json:"depends_on"`
+	}
+	var f flex
+	if err := json.Unmarshal(data, &f); err != nil {
+		return err
+	}
+	*ps = PlanStep(f.Alias)
+	if len(f.DependsOnRaw) == 0 || string(f.DependsOnRaw) == "null" {
+		return nil
+	}
+	// []int → OK
+	if err := json.Unmarshal(f.DependsOnRaw, &ps.DependsOn); err == nil {
+		return nil
+	}
+	// []string → int に変換
+	var strs []string
+	if err := json.Unmarshal(f.DependsOnRaw, &strs); err == nil {
+		ps.DependsOn = make([]int, 0, len(strs))
+		for _, s := range strs {
+			if v, e := strconv.Atoi(s); e == nil {
+				ps.DependsOn = append(ps.DependsOn, v)
+			}
+		}
+		return nil
+	}
+	// 単一 int
+	var single int
+	if err := json.Unmarshal(f.DependsOnRaw, &single); err == nil {
+		ps.DependsOn = []int{single}
+	}
+	return nil
 }
 
 // CanExecute はステップが実行可能かチェック

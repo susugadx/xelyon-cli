@@ -31,11 +31,14 @@ type CompactedItem struct {
 
 // MessageEntry はタイムスタンプ付きメッセージ
 type MessageEntry struct {
-	Timestamp  time.Time `json:"timestamp"`
-	Role       string    `json:"role"`
-	Content    string    `json:"content"`
-	Model      string    `json:"model,omitempty"`
-	ResponseID string    `json:"response_id,omitempty"` // OpenAI Responses API の ID
+	Timestamp  time.Time            `json:"timestamp"`
+	Role       string               `json:"role"`
+	Content    string               `json:"content"`
+	Model      string               `json:"model,omitempty"`
+	ResponseID string               `json:"response_id,omitempty"`  // OpenAI Responses API の ID
+	ToolCalls  []api.OpenAIToolCall `json:"tool_calls,omitempty"`   // FC: assistant のツール呼び出し
+	ToolCallID string               `json:"tool_call_id,omitempty"` // FC: tool レスポンスの呼び出しID
+	ToolName   string               `json:"tool_name,omitempty"`    // FC: ツール名（Gemini 用）
 }
 
 // SessionMetadata はセッション一覧用のメタデータ
@@ -71,13 +74,30 @@ func (s *Session) AddMessage(role, content, model string) {
 	s.LastModified = time.Now()
 }
 
+// AddMessageFromAPI は api.Message から FC メタデータ付きでセッションに保存
+func (s *Session) AddMessageFromAPI(msg api.Message, model string) {
+	s.Messages = append(s.Messages, MessageEntry{
+		Timestamp:  time.Now(),
+		Role:       msg.Role,
+		Content:    msg.Content,
+		Model:      model,
+		ToolCalls:  msg.ToolCalls,
+		ToolCallID: msg.ToolCallID,
+		ToolName:   msg.ToolName,
+	})
+	s.LastModified = time.Now()
+}
+
 // ToAPIMessages はAPI形式に変換
 func (s *Session) ToAPIMessages() []api.Message {
 	msgs := make([]api.Message, len(s.Messages))
 	for i, m := range s.Messages {
 		msgs[i] = api.Message{
-			Role:    m.Role,
-			Content: m.Content,
+			Role:       m.Role,
+			Content:    m.Content,
+			ToolCalls:  m.ToolCalls,
+			ToolCallID: m.ToolCallID,
+			ToolName:   m.ToolName,
 		}
 	}
 	return msgs

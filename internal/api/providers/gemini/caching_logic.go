@@ -4,11 +4,36 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
+
+// ctxKey はキャッシュリトライの context key
+type ctxKey string
+
+const cacheRetryKey ctxKey = "gemini_cache_retry"
+
+// isCacheExpiredError はエラーがキャッシュ期限切れによるものか判定
+func isCacheExpiredError(statusCode int, body []byte) bool {
+	if statusCode == 404 || statusCode == 400 {
+		s := string(body)
+		return strings.Contains(s, "cachedContent") ||
+			strings.Contains(s, "NOT_FOUND") ||
+			strings.Contains(s, "not found")
+	}
+	return false
+}
+
+// invalidateCache はローカルのキャッシュ状態をクリアする
+func (p *Provider) invalidateCache() {
+	p.activeCacheName = ""
+	p.cachedTokenCount = 0
+	p.cachedMessageCount = 0
+	p.cacheExpireTime = time.Time{}
+}
 
 const (
 	minCacheTokens    = 32768

@@ -58,6 +58,12 @@ func (a *Agent) addToolCallToHistory(response string, toolCall *tools.ToolCall) 
 		})
 	}
 
+	// FC パスの場合、セッションに assistant+ToolCalls を保存
+	if isFunctionCalling && a.session != nil {
+		msg := a.History[len(a.History)-1]
+		a.session.AddMessageFromAPI(msg, a.CurrentModel)
+	}
+
 	// 統計情報更新: Assistantメッセージ数とツール実行回数をカウント
 	if a.Stats != nil {
 		a.Stats.AssistantMessages++
@@ -150,12 +156,18 @@ func (a *Agent) executeToolCallInternal(response string, toolCall *tools.ToolCal
 	// 結果を履歴に追加
 	if toolCall.ID != "" {
 		// Function Calling: role="tool" で tool_call_id 付きで送信
-		a.History = append(a.History, api.Message{
+		toolMsg := api.Message{
 			Role:       "tool",
 			Content:    result,
 			ToolCallID: toolCall.ID,
 			ToolName:   toolCall.Tool,
-		})
+		}
+		a.History = append(a.History, toolMsg)
+
+		// セッションに tool result を保存
+		if a.session != nil {
+			a.session.AddMessageFromAPI(toolMsg, a.CurrentModel)
+		}
 	} else {
 		// テキストベース: role="user" で送信（従来方式）
 		a.History = append(a.History, api.Message{
