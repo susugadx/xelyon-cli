@@ -37,16 +37,16 @@ func (t *UpdatePlanTool) Parameters() map[string]interface{} {
 		"properties": map[string]interface{}{
 			"id": map[string]interface{}{
 				"type":        "string",
-				"description": "計画の ID（UUID）",
+				"description": "計画の ID（UUID）。create_plan が返す Plan ID を指定。省略時は直前のプランを使用",
 			},
 			"filename": map[string]interface{}{
 				"type":        "string",
-				"description": "計画のファイル名",
+				"description": "計画のファイル名。id の代わりに使用可能",
 			},
 			"action": map[string]interface{}{
 				"type":        "string",
 				"enum":        []string{"set_status", "add_step", "remove_step", "update_step", "set_title", "set_summary"},
-				"description": "実行するアクション",
+				"description": "実行するアクション。set_status→statusが必須, add_step→stepが必須, remove_step→step_idが必須, update_step→step_id+stepが必須, set_title→titleが必須, set_summary→summaryが必須",
 			},
 			"status": map[string]interface{}{
 				"type":        "string",
@@ -88,8 +88,11 @@ func (t *UpdatePlanTool) Run(args map[string]string) (string, *tools.FileChange,
 		p, filename, err = t.storage.LoadByID(id)
 	} else if filename != "" {
 		p, err = t.storage.Load(filename)
+	} else if lastID := t.storage.LastPlanID(); lastID != "" {
+		id = lastID
+		p, filename, err = t.storage.LoadByID(lastID)
 	} else {
-		return "", nil, fmt.Errorf("id or filename is required")
+		return "", nil, fmt.Errorf("id or filename is required (no recent plan available)")
 	}
 
 	if err != nil {

@@ -71,3 +71,42 @@ func TestGetPlanTool_Run(t *testing.T) {
 		})
 	}
 }
+
+func TestGetPlanTool_LastPlanIDFallback(t *testing.T) {
+	tmpDir := t.TempDir()
+	oldDir, _ := os.Getwd()
+	_ = os.Chdir(tmpDir)
+	defer func() { _ = os.Chdir(oldDir) }()
+
+	storage, _ := plan.NewPlanStorage()
+	tool := NewGetPlanTool(storage)
+
+	// テスト用の計画を作成
+	p := &plan.Plan{
+		ID:        "get-fallback-uuid",
+		Title:     "Get Fallback Test",
+		Summary:   "Test summary",
+		Status:    plan.PlanStatusPending,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		Steps:     []plan.PlanStep{{ID: 1, Description: "Step 1", Status: "pending"}},
+	}
+	_, _ = storage.Save(p)
+
+	// Case 1: LastPlanID set → success
+	storage.SetLastPlanID("get-fallback-uuid")
+	result, _, err := tool.Run(map[string]string{})
+	if err != nil {
+		t.Errorf("Run() with LastPlanID fallback should succeed, got error: %v", err)
+	}
+	if result == "" {
+		t.Error("Run() with LastPlanID fallback returned empty result")
+	}
+
+	// Case 2: LastPlanID empty → error
+	storage.ClearLastPlanID()
+	_, _, err = tool.Run(map[string]string{})
+	if err == nil {
+		t.Error("Run() without id/filename/LastPlanID should return error")
+	}
+}

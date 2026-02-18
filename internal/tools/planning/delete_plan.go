@@ -35,11 +35,11 @@ func (t *DeletePlanTool) Parameters() map[string]interface{} {
 		"properties": map[string]interface{}{
 			"id": map[string]interface{}{
 				"type":        "string",
-				"description": "計画の ID（UUID）",
+				"description": "計画の ID（UUID）。create_plan が返す Plan ID を指定。省略時は直前のプランを使用",
 			},
 			"filename": map[string]interface{}{
 				"type":        "string",
-				"description": "計画のファイル名",
+				"description": "計画のファイル名。id の代わりに使用可能",
 			},
 		},
 		"additionalProperties": false,
@@ -51,22 +51,30 @@ func (t *DeletePlanTool) Run(args map[string]string) (string, *tools.FileChange,
 	id := args["id"]
 	filename := args["filename"]
 
-	// ID から filename を取得
+	// ID から filename を取得（id → filename → lastPlanID の順でフォールバック）
 	if id != "" {
 		_, fn, err := t.storage.LoadByID(id)
 		if err != nil {
 			return "", nil, fmt.Errorf("%s", i18n.T("plan.not_found", id))
 		}
 		filename = fn
-	}
-
-	if filename == "" {
-		return "", nil, fmt.Errorf("id or filename is required")
+	} else if filename == "" {
+		if lastID := t.storage.LastPlanID(); lastID != "" {
+			_, fn, err := t.storage.LoadByID(lastID)
+			if err != nil {
+				return "", nil, fmt.Errorf("%s", i18n.T("plan.not_found", lastID))
+			}
+			filename = fn
+		} else {
+			return "", nil, fmt.Errorf("id or filename is required (no recent plan available)")
+		}
 	}
 
 	if err := t.storage.Delete(filename); err != nil {
 		return "", nil, err
 	}
+
+	t.storage.ClearLastPlanID()
 
 	return i18n.T("plan.deleted", filename), nil, nil
 }

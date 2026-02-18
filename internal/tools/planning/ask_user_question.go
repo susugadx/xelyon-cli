@@ -39,7 +39,7 @@ func (t *AskUserQuestionTool) Parameters() map[string]interface{} {
 			"options": map[string]interface{}{
 				"type":        "array",
 				"items":       map[string]interface{}{"type": "string"},
-				"description": "選択肢（single_choice/multi_choice の場合必須）",
+				"description": "選択肢の配列。question_type が single_choice または multi_choice の場合は必須",
 			},
 			"default_option": map[string]interface{}{
 				"type":        "string",

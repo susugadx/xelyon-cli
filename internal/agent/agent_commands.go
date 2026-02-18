@@ -66,6 +66,9 @@ func handleSpecialCommand(input string, agent *Agent) bool {
 	case "/clear":
 		agent.History = []api.Message{}
 		tools.GlobalReadTracker.Reset()
+		if ct := agent.getCreatePlanTool(); ct != nil {
+			ct.ClearLastPlan()
+		}
 		green.Println("🗑️  History cleared")
 		return true
 	case "/history":

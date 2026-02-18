@@ -36,7 +36,7 @@ func (t *GetPlanTool) Parameters() map[string]interface{} {
 		"properties": map[string]interface{}{
 			"id": map[string]interface{}{
 				"type":        "string",
-				"description": "計画の ID（UUID）",
+				"description": "計画の ID（UUID）。create_plan が返す Plan ID を指定。省略時は直前のプランを使用",
 			},
 			"filename": map[string]interface{}{
 				"type":        "string",
@@ -55,13 +55,15 @@ func (t *GetPlanTool) Run(args map[string]string) (string, *tools.FileChange, er
 	var p *plan.Plan
 	var err error
 
-	// ID を優先
+	// ID → filename → lastPlanID の順でフォールバック
 	if id != "" {
 		p, _, err = t.storage.LoadByID(id)
 	} else if filename != "" {
 		p, err = t.storage.Load(filename)
+	} else if lastID := t.storage.LastPlanID(); lastID != "" {
+		p, _, err = t.storage.LoadByID(lastID)
 	} else {
-		return "", nil, fmt.Errorf("id or filename is required")
+		return "", nil, fmt.Errorf("id or filename is required (no recent plan available)")
 	}
 
 	if err != nil {

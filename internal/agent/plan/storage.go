@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -20,7 +21,9 @@ const (
 
 // PlanStorage は計画の永続化を管理
 type PlanStorage struct {
-	baseDir string
+	baseDir    string
+	mu         sync.Mutex
+	lastPlanID string
 }
 
 // PlanMetadata は計画の概要情報
@@ -133,6 +136,27 @@ func (s *PlanStorage) LoadByID(id string) (*Plan, string, error) {
 	}
 
 	return nil, "", fmt.Errorf("plan not found: %s", id)
+}
+
+// SetLastPlanID は最後に操作した Plan ID を記録
+func (s *PlanStorage) SetLastPlanID(id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.lastPlanID = id
+}
+
+// LastPlanID は最後に操作した Plan ID を返す
+func (s *PlanStorage) LastPlanID() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.lastPlanID
+}
+
+// ClearLastPlanID は lastPlanID をクリアする
+func (s *PlanStorage) ClearLastPlanID() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.lastPlanID = ""
 }
 
 // generateFilename はタイトルからファイル名を生成

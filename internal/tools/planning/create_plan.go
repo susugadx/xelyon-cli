@@ -54,8 +54,12 @@ func (t *CreatePlanTool) Parameters() map[string]interface{} {
 				"description": `質問と回答のJSON配列文字列（オプション）。例: [{"question":"Q","answer":"A"}]`,
 			},
 			"steps": map[string]interface{}{
-				"type":        "string",
-				"description": `実行ステップのJSON配列文字列。例: [{"id":1,"description":"Step 1","tools":["read_file"],"depends_on":[]}]`,
+				"type": "string",
+				"description": `実行ステップのJSON配列文字列。例: [{"id":1,"description":"Step 1","tools":["read_file"],"depends_on":[]}]
+IMPORTANT: For deletion/deprecation tasks, order steps by dependency:
+1. Remove references (callers/importers) FIRST
+2. Remove definitions (declarations/structs/function bodies) LAST
+Reason: Deleting a definition before its references causes cascading LSP errors, which triggers auto-retry to fix unrelated steps.`,
 			},
 		},
 		"required":             []string{"title", "summary", "steps"},
@@ -112,6 +116,7 @@ func (t *CreatePlanTool) Run(args map[string]string) (string, *tools.FileChange,
 
 	// 作成した Plan を保持
 	t.lastPlan = p
+	t.storage.SetLastPlanID(p.ID)
 
 	return fmt.Sprintf("%s\nPlan ID: %s\nFilename: %s", i18n.T("plan.created", title), p.ID, filename), nil, nil
 }
@@ -121,7 +126,8 @@ func (t *CreatePlanTool) LastPlan() *plan.Plan {
 	return t.lastPlan
 }
 
-// ClearLastPlan は lastPlan をクリアする
+// ClearLastPlan は lastPlan と lastPlanID をクリアする
 func (t *CreatePlanTool) ClearLastPlan() {
 	t.lastPlan = nil
+	t.storage.ClearLastPlanID()
 }

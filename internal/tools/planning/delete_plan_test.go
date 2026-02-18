@@ -73,3 +73,36 @@ func TestDeletePlanTool_Run(t *testing.T) {
 		})
 	}
 }
+
+func TestDeletePlanTool_LastPlanIDFallback(t *testing.T) {
+	tmpDir := t.TempDir()
+	oldDir, _ := os.Getwd()
+	_ = os.Chdir(tmpDir)
+	defer func() { _ = os.Chdir(oldDir) }()
+
+	storage, _ := plan.NewPlanStorage()
+	tool := NewDeletePlanTool(storage)
+
+	// テスト用の計画を作成
+	p := &plan.Plan{
+		ID:        "del-fallback-uuid",
+		Title:     "Delete Fallback Test",
+		Status:    plan.PlanStatusPending,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	_, _ = storage.Save(p)
+
+	// Case 1: LastPlanID set → 削除成功
+	storage.SetLastPlanID("del-fallback-uuid")
+	_, _, err := tool.Run(map[string]string{})
+	if err != nil {
+		t.Errorf("Run() with LastPlanID fallback should succeed, got error: %v", err)
+	}
+
+	// Case 2: 削除後 LastPlanID クリアされている → error
+	_, _, err = tool.Run(map[string]string{})
+	if err == nil {
+		t.Error("Run() after delete should return error (LastPlanID cleared)")
+	}
+}

@@ -192,3 +192,38 @@ func TestPlanStorage_Delete(t *testing.T) {
 		t.Error("Load() should fail after Delete()")
 	}
 }
+
+func TestPlanStorage_LastPlanID(t *testing.T) {
+	tmpDir := t.TempDir()
+	oldDir, _ := os.Getwd()
+	_ = os.Chdir(tmpDir)
+	defer func() { _ = os.Chdir(oldDir) }()
+
+	storage, err := NewPlanStorage()
+	if err != nil {
+		t.Fatalf("NewPlanStorage() error = %v", err)
+	}
+
+	// 初期状態は空
+	if got := storage.LastPlanID(); got != "" {
+		t.Errorf("LastPlanID() = %q, want empty", got)
+	}
+
+	// SetLastPlanID
+	storage.SetLastPlanID("test-id-123")
+	if got := storage.LastPlanID(); got != "test-id-123" {
+		t.Errorf("LastPlanID() = %q, want %q", got, "test-id-123")
+	}
+
+	// 上書き
+	storage.SetLastPlanID("test-id-456")
+	if got := storage.LastPlanID(); got != "test-id-456" {
+		t.Errorf("LastPlanID() = %q, want %q", got, "test-id-456")
+	}
+
+	// ClearLastPlanID
+	storage.ClearLastPlanID()
+	if got := storage.LastPlanID(); got != "" {
+		t.Errorf("LastPlanID() after clear = %q, want empty", got)
+	}
+}
