@@ -128,13 +128,7 @@ func DefaultConfig() *Config {
 			AllowRedirect:   true, // 利便性向上
 			AllowInlineEdit: true, // 利便性向上
 		},
-		CodeHealth: CodeHealthConfig{
-			Enabled:          true,
-			MaxFileLines:     300,
-			MaxFunctionLines: 50,
-			AutoSuggest:      true,
-			OnChange:         []string{"check_file_size", "check_function_size"},
-		},
+
 		GitStage: GitStageConfig{
 			BatchConfirm: true,
 		},

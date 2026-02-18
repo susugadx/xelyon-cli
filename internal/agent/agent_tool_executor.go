@@ -421,6 +421,4 @@ func (a *Agent) handleFileChange(change *tools.FileChange) {
 		}
 	}
 
-	// コード健全性チェック（on_changeフック）
-	a.checkCodeHealthOnChange(change.FilePath)
 }

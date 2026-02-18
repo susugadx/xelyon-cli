@@ -109,8 +109,7 @@ func ValidateConfig(cfg *Config) ValidationResult {
 	validateNumericRange(&result, "api_retry.timeout", cfg.APIRetry.Timeout, 30, 7200, 3600)
 	validateNumericRange(&result, "compression.keep_recent", cfg.Compression.KeepRecent, 1, 100, 10)
 	validateNumericRange(&result, "diff.context_lines", cfg.Diff.ContextLines, 0, 100, 10)
-	validateNumericRange(&result, "code_health.max_file_lines", cfg.CodeHealth.MaxFileLines, 100, 2000, 300)
-	validateNumericRange(&result, "code_health.max_function_lines", cfg.CodeHealth.MaxFunctionLines, 10, 500, 50)
+
 	validateNumericRange(&result, "paste.max_lines", cfg.Paste.MaxLines, 100, 100000, 10000)
 	validateNumericRange(&result, "paste.timeout_seconds", cfg.Paste.TimeoutSeconds, 10, 600, 60)
 	validateNumericRange(&result, "streaming.idle_timeout_seconds", cfg.Streaming.IdleTimeoutSeconds, 10, 7200, 3600)
@@ -291,16 +290,6 @@ func ApplyAutoFixes(cfg *Config, result ValidationResult) int {
 		case "diff.context_lines":
 			if v, ok := issue.FixedValue.(int); ok {
 				cfg.Diff.ContextLines = v
-				fixCount++
-			}
-		case "code_health.max_file_lines":
-			if v, ok := issue.FixedValue.(int); ok {
-				cfg.CodeHealth.MaxFileLines = v
-				fixCount++
-			}
-		case "code_health.max_function_lines":
-			if v, ok := issue.FixedValue.(int); ok {
-				cfg.CodeHealth.MaxFunctionLines = v
 				fixCount++
 			}
 		case "paste.max_lines":

@@ -18,16 +18,16 @@ type Config struct {
 	Paste           PasteConfig                    `yaml:"paste"`
 	Streaming       StreamingConfig                `yaml:"streaming"`
 	Bash            BashConfig                     `yaml:"bash"`
-	CodeHealth      CodeHealthConfig               `yaml:"code_health"`
-	GitStage        GitStageConfig                 `yaml:"git_stage"`
-	PlanMode        PlanModeConfig                 `yaml:"plan_mode"`
-	LSP             LSPConfig                      `yaml:"lsp"`
-	OpenAI          OpenAIConfig                   `yaml:"openai"`
-	Thinking        ThinkingConfig                 `yaml:"thinking"`
-	Output          OutputConfig                   `yaml:"output"`
-	WebSearch       WebSearchConfig                `yaml:"web_search"`
-	MCP             MCPConfig                      `yaml:"mcp"`
-	Hooks           HooksConfig                    `yaml:"hooks"`
+
+	GitStage  GitStageConfig  `yaml:"git_stage"`
+	PlanMode  PlanModeConfig  `yaml:"plan_mode"`
+	LSP       LSPConfig       `yaml:"lsp"`
+	OpenAI    OpenAIConfig    `yaml:"openai"`
+	Thinking  ThinkingConfig  `yaml:"thinking"`
+	Output    OutputConfig    `yaml:"output"`
+	WebSearch WebSearchConfig `yaml:"web_search"`
+	MCP       MCPConfig       `yaml:"mcp"`
+	Hooks     HooksConfig     `yaml:"hooks"`
 	// 将来の拡張用
 	// Cloud CloudConfig `yaml:"cloud,omitempty"`
 }
@@ -111,15 +111,6 @@ type BashConfig struct {
 	AllowPipe       bool     `yaml:"allow_pipe"`        // パイプを許可（デフォルト: true - moderateで有効）
 	AllowRedirect   bool     `yaml:"allow_redirect"`    // リダイレクトを許可（デフォルト: false）
 	AllowInlineEdit bool     `yaml:"allow_inline_edit"` // sed -i等を許可（デフォルト: false）
-}
-
-// CodeHealthConfig はコード健全性チェックの設定
-type CodeHealthConfig struct {
-	Enabled          bool     `yaml:"enabled"`            // コード健全性チェックを有効化（デフォルト: true）
-	MaxFileLines     int      `yaml:"max_file_lines"`     // ファイル行数上限（デフォルト: 300）
-	MaxFunctionLines int      `yaml:"max_function_lines"` // 関数行数上限（デフォルト: 50）
-	AutoSuggest      bool     `yaml:"auto_suggest"`       // 閾値超過時に自動で提案（デフォルト: true）
-	OnChange         []string `yaml:"on_change"`          // 変更時チェック項目（check_file_size, check_function_size, check_duplication）
 }
 
 // GitStageConfig はgit_addツールの設定

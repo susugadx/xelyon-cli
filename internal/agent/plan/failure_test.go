@@ -128,6 +128,19 @@ func TestContainsFailure(t *testing.T) {
 			expectFailure:  true,
 			expectContains: "Rust",
 		},
+		// Read-Before-Write guard errors
+		{
+			name:           "read-before-write guard str_replace",
+			result:         `Error: You must read_file before str_replace. Run read_file(path="main.go") first to see the current content.`,
+			expectFailure:  true,
+			expectContains: "Read-before-write",
+		},
+		{
+			name:           "read-before-write guard write_file",
+			result:         `Error: You must read_file before write_file. Run read_file(path="config.yaml") first to see the current content.`,
+			expectFailure:  true,
+			expectContains: "Read-before-write",
+		},
 		// No failure cases
 		{
 			name:          "success output",
