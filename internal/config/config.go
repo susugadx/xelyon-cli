@@ -105,9 +105,7 @@ func DefaultConfig() *Config {
 			"u": "use",
 		},
 		PromptCache: PromptCacheConfig{
-			Enabled:    true, // デフォルトON（Claude使用時のコスト削減）
-			MaxEntries: 100,
-			TTLSeconds: 300, // 5分
+			Enabled: true,
 		},
 		Paste: PasteConfig{
 			BracketedPaste: true, // デフォルトON - 複数行ペースト対応

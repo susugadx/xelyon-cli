@@ -141,17 +141,13 @@ var Sections = map[string]SectionInfo{
 		},
 	},
 	"prompt_cache": {
-		Title: "プロンプトキャッシュ設定（Claude専用）",
+		Title: "プロンプトキャッシュ設定（Anthropic API cache_control）",
 		Icon:  "💨",
 		Fields: map[string]string{
-			"enabled":     "有効化",
-			"max_entries": "最大エントリ数",
-			"ttl_seconds": "キャッシュTTL（秒）",
+			"enabled": "有効化（cache_control ブレークポイントを設定）",
 		},
 		FieldTypes: map[string]string{
-			"enabled":     "bool",
-			"max_entries": "int",
-			"ttl_seconds": "int",
+			"enabled": "bool",
 		},
 	},
 	"paste": {
@@ -207,24 +203,7 @@ var Sections = map[string]SectionInfo{
 			"safety_level": {"strict", "moderate", "permissive"},
 		},
 	},
-	"code_health": {
-		Title: "コード健全性チェック設定",
-		Icon:  "🏥",
-		Fields: map[string]string{
-			"enabled":            "有効化",
-			"max_file_lines":     "ファイルの最大行数警告",
-			"max_function_lines": "関数の最大行数警告",
-			"auto_suggest":       "変更時に自動提案",
-			"on_change":          "変更時のチェック項目",
-		},
-		FieldTypes: map[string]string{
-			"enabled":            "bool",
-			"max_file_lines":     "int",
-			"max_function_lines": "int",
-			"auto_suggest":       "bool",
-			"on_change":          "[]string",
-		},
-	},
+
 	"git_stage": {
 		Title: "git_add設定",
 		Icon:  "📂",
@@ -380,7 +359,6 @@ var SectionOrder = []string{
 	"paste",
 	"streaming",
 	"bash",
-	"code_health",
 	"git_stage",
 	"plan_mode",
 	"lsp",
@@ -406,7 +384,6 @@ var CategoryOrder = []string{
 	"paste",
 	"streaming",
 	"bash",
-	"code_health",
 	"git_stage",
 	"plan_mode",
 	"lsp",
@@ -433,7 +410,6 @@ var SectionToCategory = map[string]string{
 	"paste":            "paste",
 	"streaming":        "streaming",
 	"bash":             "bash",
-	"code_health":      "code_health",
 	"git_stage":        "git_stage",
 	"plan_mode":        "plan_mode",
 	"lsp":              "lsp",
@@ -508,11 +484,6 @@ var Categories = map[string]CategoryInfo{
 		DisplayName: "Bash Safety",
 		Icon:        "💻",
 		Sections:    []string{"bash"},
-	},
-	"code_health": {
-		DisplayName: "Code Health",
-		Icon:        "🏥",
-		Sections:    []string{"code_health"},
 	},
 	"git_stage": {
 		DisplayName: "Git Settings",

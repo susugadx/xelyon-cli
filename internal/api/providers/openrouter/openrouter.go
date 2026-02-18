@@ -430,13 +430,19 @@ func (p *Provider) chatWithClaudeAPI(ctx context.Context, systemPrompt string, h
 	// メッセージを Anthropic 形式に変換
 	anthropicMessages := claude.ConvertToAnthropicMessages(history)
 
+	// プロンプトキャッシュ: 最後の2つの user メッセージにブレークポイント設定
+	cfg := config.GetGlobalConfig()
+	if cfg != nil && cfg.PromptCache.Enabled {
+		claude.SetCacheOnLastTwoUserMessages(anthropicMessages)
+	}
+
 	// リクエスト構造体（Anthropic Messages API 形式）
 	type claudeRequest struct {
 		Model             string                    `json:"model"`
 		AnthropicVersion  string                    `json:"anthropic_version"`
 		AnthropicBeta     []string                  `json:"anthropic_beta,omitempty"`
 		MaxTokens         int                       `json:"max_tokens"`
-		System            string                    `json:"system,omitempty"`
+		System            interface{}               `json:"system,omitempty"`
 		Messages          []claude.AnthropicMessage `json:"messages"`
 		Tools             []claude.ClaudeTool       `json:"tools,omitempty"`
 		Stream            bool                      `json:"stream"`
@@ -447,7 +453,7 @@ func (p *Provider) chatWithClaudeAPI(ctx context.Context, systemPrompt string, h
 		Model:            model,
 		AnthropicVersion: "2023-06-01",
 		MaxTokens:        api.GetMaxOutputTokens(ctx, "openrouter", model),
-		System:           systemPrompt,
+		System:           api.BuildSystemField(systemPrompt),
 		Messages:         anthropicMessages,
 		Stream:           true,
 	}

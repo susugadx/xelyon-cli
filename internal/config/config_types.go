@@ -78,14 +78,9 @@ type ToolConfirmConfig struct {
 	AutoApproveMedium bool `yaml:"auto_approve_medium"` // SafetyMedium（str_replace等）を確認なしで実行（デフォルトfalse）
 }
 
-// PromptCacheConfig はプロンプトキャッシュの設定
-//
-// 目的: system prompt / repo map 等の生成コストを削減するためのキャッシュ。
-// 現時点では in-memory キャッシュを想定（永続化なし）。
+// PromptCacheConfig はプロンプトキャッシュの設定（Anthropic API cache_control）
 type PromptCacheConfig struct {
-	Enabled    bool `yaml:"enabled"`
-	MaxEntries int  `yaml:"max_entries"` // 0以下の場合はデフォルト適用
-	TTLSeconds int  `yaml:"ttl_seconds"` // 0の場合はデフォルト適用（デフォルトTTL）
+	Enabled bool `yaml:"enabled"`
 }
 
 // PasteConfig はペーストモードの設定

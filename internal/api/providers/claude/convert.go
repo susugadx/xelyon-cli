@@ -10,13 +10,14 @@ import (
 // AnthropicContentBlock は Anthropic Messages API のコンテンツブロック
 // text, tool_use, tool_result の3種類を統一的に表現
 type AnthropicContentBlock struct {
-	Type      string         `json:"type"`                  // "text", "tool_use", "tool_result"
-	Text      string         `json:"text,omitempty"`        // type="text" 用
-	ID        string         `json:"id,omitempty"`          // type="tool_use" 用
-	Name      string         `json:"name,omitempty"`        // type="tool_use" 用
-	Input     map[string]any `json:"input,omitempty"`       // type="tool_use" 用
-	ToolUseID string         `json:"tool_use_id,omitempty"` // type="tool_result" 用
-	Content   string         `json:"content,omitempty"`     // type="tool_result" / "compaction" 用
+	Type         string            `json:"type"`                    // "text", "tool_use", "tool_result"
+	Text         string            `json:"text,omitempty"`          // type="text" 用
+	ID           string            `json:"id,omitempty"`            // type="tool_use" 用
+	Name         string            `json:"name,omitempty"`          // type="tool_use" 用
+	Input        map[string]any    `json:"input,omitempty"`         // type="tool_use" 用
+	ToolUseID    string            `json:"tool_use_id,omitempty"`   // type="tool_result" 用
+	Content      string            `json:"content,omitempty"`       // type="tool_result" / "compaction" 用
+	CacheControl *api.CacheControl `json:"cache_control,omitempty"` // プロンプトキャッシュ用
 }
 
 // AnthropicMessage は Anthropic Messages API 形式のメッセージ
@@ -142,6 +143,20 @@ func ConvertToAnthropicMessages(history []api.Message) []AnthropicMessage {
 	}
 
 	return result
+}
+
+// SetCacheOnLastTwoUserMessages は最後の2つの user メッセージの最後の content block に
+// cache_control を設定する。ブレークポイント #3, #4 を使い切り、
+// 20ブロック lookback × 2 = 約40ターン分のキャッシュカバレッジを確保する。
+func SetCacheOnLastTwoUserMessages(messages []AnthropicMessage) {
+	count := 0
+	for i := len(messages) - 1; i >= 0 && count < 2; i-- {
+		if messages[i].Role == "user" && len(messages[i].Content) > 0 {
+			last := len(messages[i].Content) - 1
+			messages[i].Content[last].CacheControl = &api.CacheControl{Type: "ephemeral"}
+			count++
+		}
+	}
 }
 
 // extractCompaction は [COMPACTION] マーカーからサマリーと残りのテキストを抽出する

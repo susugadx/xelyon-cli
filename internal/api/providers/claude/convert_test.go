@@ -282,6 +282,108 @@ func TestConvertToAnthropicMessages_InvalidArgumentsJSON(t *testing.T) {
 	}
 }
 
+func TestSetCacheOnLastTwoUserMessages(t *testing.T) {
+	messages := []AnthropicMessage{
+		{Role: "user", Content: []AnthropicContentBlock{{Type: "text", Text: "first"}}},
+		{Role: "assistant", Content: []AnthropicContentBlock{{Type: "text", Text: "reply1"}}},
+		{Role: "user", Content: []AnthropicContentBlock{{Type: "text", Text: "second"}}},
+		{Role: "assistant", Content: []AnthropicContentBlock{{Type: "text", Text: "reply2"}}},
+		{Role: "user", Content: []AnthropicContentBlock{{Type: "text", Text: "third"}}},
+	}
+
+	SetCacheOnLastTwoUserMessages(messages)
+
+	// Last user message (index 4) should have cache_control
+	if messages[4].Content[0].CacheControl == nil {
+		t.Error("expected cache_control on last user message")
+	}
+	// Second-to-last user message (index 2) should have cache_control
+	if messages[2].Content[0].CacheControl == nil {
+		t.Error("expected cache_control on second-to-last user message")
+	}
+	// First user message (index 0) should NOT have cache_control
+	if messages[0].Content[0].CacheControl != nil {
+		t.Error("first user message should not have cache_control")
+	}
+	// Assistant messages should NOT have cache_control
+	if messages[1].Content[0].CacheControl != nil {
+		t.Error("assistant message should not have cache_control")
+	}
+}
+
+func TestSetCacheOnLastTwoUserMessages_SingleUser(t *testing.T) {
+	messages := []AnthropicMessage{
+		{Role: "user", Content: []AnthropicContentBlock{{Type: "text", Text: "only one"}}},
+	}
+
+	SetCacheOnLastTwoUserMessages(messages)
+
+	if messages[0].Content[0].CacheControl == nil {
+		t.Error("expected cache_control on the only user message")
+	}
+}
+
+func TestSetCacheOnLastTwoUserMessages_NoUser(t *testing.T) {
+	messages := []AnthropicMessage{
+		{Role: "assistant", Content: []AnthropicContentBlock{{Type: "text", Text: "response"}}},
+	}
+
+	// Should not panic
+	SetCacheOnLastTwoUserMessages(messages)
+
+	if messages[0].Content[0].CacheControl != nil {
+		t.Error("assistant message should not have cache_control")
+	}
+}
+
+func TestSetCacheOnLastTwoUserMessages_ToolResult(t *testing.T) {
+	// tool_result messages have role:"user" in Anthropic format
+	messages := []AnthropicMessage{
+		{Role: "user", Content: []AnthropicContentBlock{{Type: "text", Text: "request"}}},
+		{Role: "assistant", Content: []AnthropicContentBlock{{Type: "tool_use", ID: "t1", Name: "read_file"}}},
+		{Role: "user", Content: []AnthropicContentBlock{
+			{Type: "tool_result", ToolUseID: "t1", Content: "file contents"},
+		}},
+		{Role: "assistant", Content: []AnthropicContentBlock{{Type: "text", Text: "done"}}},
+		{Role: "user", Content: []AnthropicContentBlock{{Type: "text", Text: "next"}}},
+	}
+
+	SetCacheOnLastTwoUserMessages(messages)
+
+	// Last user (index 4): cache_control
+	if messages[4].Content[0].CacheControl == nil {
+		t.Error("expected cache_control on last user message")
+	}
+	// Second-to-last user (index 2, tool_result): cache_control
+	if messages[2].Content[0].CacheControl == nil {
+		t.Error("expected cache_control on tool_result user message")
+	}
+	// First user (index 0): no cache_control
+	if messages[0].Content[0].CacheControl != nil {
+		t.Error("first user message should not have cache_control")
+	}
+}
+
+func TestSetCacheOnLastTwoUserMessages_MultiBlockUser(t *testing.T) {
+	// User message with multiple content blocks - should set cache on the LAST block
+	messages := []AnthropicMessage{
+		{Role: "user", Content: []AnthropicContentBlock{
+			{Type: "tool_result", ToolUseID: "t1", Content: "result1"},
+			{Type: "tool_result", ToolUseID: "t2", Content: "result2"},
+		}},
+	}
+
+	SetCacheOnLastTwoUserMessages(messages)
+
+	// Only the last content block should have cache_control
+	if messages[0].Content[0].CacheControl != nil {
+		t.Error("first content block should not have cache_control")
+	}
+	if messages[0].Content[1].CacheControl == nil {
+		t.Error("expected cache_control on last content block of user message")
+	}
+}
+
 func TestConvertToAnthropicMessages_MultipleToolCalls(t *testing.T) {
 	history := []api.Message{
 		{Role: "user", Content: "Do multiple things"},

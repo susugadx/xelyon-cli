@@ -127,6 +127,11 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	messages := claude.ConvertToAnthropicMessages(history)
 
 	cfg := config.GetGlobalConfig()
+
+	// プロンプトキャッシュ: 最後の2つの user メッセージにブレークポイント設定
+	if cfg != nil && cfg.PromptCache.Enabled {
+		claude.SetCacheOnLastTwoUserMessages(messages)
+	}
 	pCfg := cfg.ProviderModels["bedrock"]
 
 	// Anthropic Version（config → フォールバック定数）
@@ -197,6 +202,13 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 
 	// Anthropic Messages API 形式に変換（role:"tool" → role:"user"+tool_result 等）
 	converted := claude.ConvertToAnthropicMessages(history)
+
+	// プロンプトキャッシュ: 履歴部分にブレークポイント設定
+	cfg := config.GetGlobalConfig()
+	if cfg != nil && cfg.PromptCache.Enabled {
+		claude.SetCacheOnLastTwoUserMessages(converted)
+	}
+
 	var messages []interface{}
 	for _, msg := range converted {
 		messages = append(messages, msg)
@@ -222,7 +234,6 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	}
 	messages = append(messages, multimodalMessage)
 
-	cfg := config.GetGlobalConfig()
 	pCfg := cfg.ProviderModels["bedrock"]
 
 	// Anthropic Version（config → フォールバック定数）

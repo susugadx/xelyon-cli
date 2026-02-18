@@ -298,6 +298,11 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 
 	cfg := config.GetGlobalConfig()
 
+	// プロンプトキャッシュ: 最後の2つの user メッセージにブレークポイント設定
+	if cfg != nil && cfg.PromptCache.Enabled {
+		SetCacheOnLastTwoUserMessages(messages)
+	}
+
 	reqBody := Request{
 		Model:     model,
 		Messages:  messages,
@@ -530,6 +535,16 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 
 	// Anthropic Messages API 形式に変換（role:"tool" → role:"user"+tool_result 等）
 	converted := ConvertToAnthropicMessages(history)
+
+	// プロンプトキャッシュ: 履歴部分にブレークポイント設定
+	// multimodalMessage（画像付き新規入力）は converted に含まれないため BP 対象外。
+	// 画像ターンでは実質 BP が system+tools+履歴の3個になるが、
+	// 次ターンで multimodalMessage も履歴に含まれキャッシュされる。
+	cfg := config.GetGlobalConfig()
+	if cfg != nil && cfg.PromptCache.Enabled {
+		SetCacheOnLastTwoUserMessages(converted)
+	}
+
 	var messages []interface{}
 	for _, msg := range converted {
 		messages = append(messages, msg)
@@ -554,8 +569,6 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 		},
 	}
 	messages = append(messages, multimodalMessage)
-
-	cfg := config.GetGlobalConfig()
 
 	reqBody := MultimodalRequest{
 		Model:     model,

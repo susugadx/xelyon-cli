@@ -4,15 +4,17 @@ import (
 	"encoding/json"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
 // ClaudeTool は Anthropic Claude API 用のツール定義
 // OpenAI とは異なり、フラットな構造で input_schema を使用
 type ClaudeTool struct {
-	Name        string                 `json:"name"`
-	Description string                 `json:"description,omitempty"`
-	InputSchema map[string]interface{} `json:"input_schema"`
+	Name         string                 `json:"name"`
+	Description  string                 `json:"description,omitempty"`
+	InputSchema  map[string]interface{} `json:"input_schema"`
+	CacheControl *api.CacheControl      `json:"cache_control,omitempty"`
 }
 
 // GetClaudeToolDefinitions は組み込みツール定義を Claude 形式で返す
@@ -58,6 +60,13 @@ func GetCombinedClaudeTools(mcpTools []api.ToolDefinition) []ClaudeTool {
 		seen[mcp.Name] = true
 		result = append(result, ConvertOpenAIToolToClaude(mcp))
 	}
+
+	// 最後のツールに cache_control を設定（プロンプトキャッシュ用ブレークポイント #1）
+	cfg := config.GetGlobalConfig()
+	if len(result) > 0 && cfg != nil && cfg.PromptCache.Enabled {
+		result[len(result)-1].CacheControl = &api.CacheControl{Type: "ephemeral"}
+	}
+
 	return result
 }
 

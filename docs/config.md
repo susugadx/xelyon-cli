@@ -160,15 +160,11 @@ command_aliases:
     u: use
 
 # ============================================================
-# プロンプトキャッシュ設定（Claude専用）
+# プロンプトキャッシュ設定（Anthropic API cache_control）
 # ============================================================
 prompt_cache:
-    # 有効化
+    # 有効化（cache_control ブレークポイントを設定）
     enabled: true
-    # 最大エントリ数
-    max_entries: 100
-    # キャッシュTTL（秒）
-    ttl_seconds: 300
 
 # ============================================================
 # ペーストモード設定
@@ -210,22 +206,6 @@ bash:
     allow_redirect: true
     # インライン編集を許可（sed -i 等）
     allow_inline_edit: true
-
-# ============================================================
-# コード健全性チェック設定
-# ============================================================
-code_health:
-    # 有効化
-    enabled: true
-    # ファイルの最大行数警告
-    max_file_lines: 300
-    # 関数の最大行数警告
-    max_function_lines: 50
-    # 変更時に自動提案
-    auto_suggest: true
-    on_change:
-        - check_file_size
-        - check_function_size
 
 # ============================================================
 # git_add設定
@@ -930,44 +910,6 @@ paste:
 - **型**: integer
 - **デフォルト**: `60`
 - **説明**: ペーストモードのタイムアウト秒数
-
-### コード健全性チェック設定 (`code_health`)
-
-```yaml
-code_health:
-  enabled: true           # 健全性チェックを有効化
-  max_file_lines: 300     # ファイル行数上限
-  max_function_lines: 50  # 関数行数上限
-  auto_suggest: true      # 閾値超過時に自動提案
-  on_change:              # 変更時チェック項目
-    - check_file_size
-    - check_function_size
-```
-
-#### `enabled`
-- **型**: boolean
-- **デフォルト**: `true`
-- **説明**: コード健全性チェックを有効化
-
-#### `max_file_lines`
-- **型**: integer
-- **デフォルト**: `300`
-- **説明**: ファイル行数の上限（超過時に警告）
-
-#### `max_function_lines`
-- **型**: integer
-- **デフォルト**: `50`
-- **説明**: 関数行数の上限（超過時に警告）
-
-#### `auto_suggest`
-- **型**: boolean
-- **デフォルト**: `true`
-- **説明**: 閾値超過時に自動でリファクタリングを提案
-
-#### `on_change`
-- **型**: string[]
-- **デフォルト**: `["check_file_size", "check_function_size"]`
-- **説明**: ファイル変更時に実行するチェック項目
 
 ### コマンドエイリアス設定 (`command_aliases`)
 

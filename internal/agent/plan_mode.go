@@ -8,7 +8,6 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/prompt"
 	promptplan "github.com/susugadx/xelyon-cli/internal/prompt/plan"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -18,9 +17,10 @@ import (
 // - 実装ツール(SafetyMedium/Low)の前に計画を生成・承認
 func (a *Agent) RunPlanMode(ctx context.Context, userRequest string) error {
 	// Plan Mode 用のプロンプトを SystemPrompt に追加（一度だけ）
+	// キャッシュ境界マーカーを挟んで追加することで、base prompt のキャッシュを維持する
 	planningPrompt := promptplan.BuildPlanningPrompt()
 	if !strings.Contains(a.SystemPrompt, planningPrompt) {
-		a.SystemPrompt = prompt.BuildSystemPrompt(a.SystemPrompt, true)
+		a.SystemPrompt = a.SystemPrompt + api.SystemPromptCacheBoundary + planningPrompt
 	}
 
 	// 実装前チェック：既存定義の重複を警告
