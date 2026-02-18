@@ -52,11 +52,11 @@ var Sections = map[string]SectionInfo{
 		Title: "一般設定",
 		Icon:  "⚙️",
 		Fields: map[string]string{
-			"language":       "表示言語（ja, en）",
+			"language":        "表示言語（ja, en）",
 			"tool_loop_limit": "ツールループ最大回数",
 		},
 		FieldTypes: map[string]string{
-			"language":       "select",
+			"language":        "select",
 			"tool_loop_limit": "int",
 		},
 		SelectOpts: map[string][]string{
