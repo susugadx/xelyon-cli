@@ -24,6 +24,7 @@ DeepSeek, OpenAI, Gemini, Claude, Ollama, Groq, OpenRouter, Bedrock をシーム
 **DeepSeek Reasoner 対応**: `reasoning_content`（思考内容）のストリーミング表示・ツール実行フローでの保持に対応。
 **プロバイダー別プロンプト最適化**: Geminiなど特定モデルのルール遵守を強化するプレフィックスを自動注入。
 **Gemini FC安全フォールバック**: Function Calling失敗時にターミナル状態を同期的にリセットしてからテキストモードにフォールバック。
+**FC rescue JSON修復**: テキストモードで抽出されたツールJSONに生制御文字（改行・タブ等）が含まれる場合、自動修復してパース成功させる。
 
 ### 🛠️ 24種類の組み込みツール
 - **ファイル操作**: 読み書き、編集、削除、バックアップ復元

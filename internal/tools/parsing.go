@@ -140,13 +140,24 @@ func ParseToolCalls(response string) []*ToolCall {
 		}
 		var toolCall ToolCall
 		if err := json.Unmarshal([]byte(jsonStr), &toolCall); err != nil {
-			// パースエラーの場合はスキップして次を探す
+			// FC rescue フォールバック: JSON文字列値内の生制御文字を修復して再試行
+			repaired := repairJSONStringValues(jsonStr)
+			if repaired != jsonStr {
+				if err2 := json.Unmarshal([]byte(repaired), &toolCall); err2 == nil {
+					if debug {
+						fmt.Fprintf(os.Stderr, "[DEBUG ParseToolCalls] JSON repaired: fixed raw control characters in string values\n")
+					}
+					goto jsonParsed
+				}
+			}
+			// 修復しても失敗 → スキップして次を探す
 			if debug {
 				fmt.Fprintf(os.Stderr, "[DEBUG ParseToolCalls] JSON parse error: %v\n", err)
 			}
 			searchFrom = end
 			continue
 		}
+	jsonParsed:
 
 		// tool フィールドが空の場合はスキップ
 		if toolCall.Tool == "" {
@@ -361,4 +372,64 @@ func truncateDebug(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen] + "..."
+}
+
+// repairJSONStringValues は JSON 文字列値内の生制御文字をエスケープする。
+// LLM が FC rescue テキストで出力する malformed JSON を修復する。
+// 正常な JSON はそのまま返す。既にエスケープ済みの \\n, \\t, \\" 等は二重エスケープしない。
+//
+// 修復対象:
+//   - 生改行 (0x0A) → \n
+//   - 生キャリッジリターン (0x0D) → \r
+//   - 生タブ (0x09) → \t
+//   - その他の制御文字 (0x00-0x1F) → \uXXXX
+func repairJSONStringValues(jsonStr string) string {
+	var buf strings.Builder
+	buf.Grow(len(jsonStr) + 64)
+
+	inString := false
+	escaped := false
+
+	for i := 0; i < len(jsonStr); i++ {
+		ch := jsonStr[i]
+
+		if escaped {
+			buf.WriteByte(ch)
+			escaped = false
+			continue
+		}
+
+		if ch == '\\' && inString {
+			buf.WriteByte(ch)
+			escaped = true
+			continue
+		}
+
+		if ch == '"' {
+			inString = !inString
+			buf.WriteByte(ch)
+			continue
+		}
+
+		if inString {
+			switch ch {
+			case '\n':
+				buf.WriteString(`\n`)
+			case '\r':
+				buf.WriteString(`\r`)
+			case '\t':
+				buf.WriteString(`\t`)
+			default:
+				if ch < 0x20 {
+					fmt.Fprintf(&buf, `\u%04x`, ch)
+				} else {
+					buf.WriteByte(ch)
+				}
+			}
+		} else {
+			buf.WriteByte(ch)
+		}
+	}
+
+	return buf.String()
 }
