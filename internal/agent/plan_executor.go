@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"os/exec"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/agent/plan"
@@ -67,6 +68,11 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 	var lastFailedResult string
 	var lastFailReason string
 
+	// ステップ完了検証用トラッカー
+	executedTools := make(map[string]bool) // ステップ内で実行されたツール名
+	stepHadWrites := false                 // 書き込み系ツールが実行されたか
+	beforeDiffFiles := getGitDiffFiles()   // Level 2 用: ステップ開始時の diff ファイル一覧
+
 	for j := 0; j < maxStepIterations; j++ {
 		response, err := a.CurrentProvider.ChatWithTools(
 			ctx,
@@ -103,6 +109,39 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 				continue
 			}
 
+			// Level 1: 計画の tools に書き込み系があるのに未実行 → 強制続行
+			if missing := checkMissingWriteTools(step.Tools, executedTools); len(missing) > 0 {
+				if continueCount < maxContinues {
+					continueCount++
+					yellow.Printf("⚠️  Step %d: expected %s but never executed (%d/%d)\n",
+						step.ID, strings.Join(missing, ", "), continueCount, maxContinues)
+					a.History = append(a.History, api.Message{
+						Role: "user",
+						Content: fmt.Sprintf("[SYSTEM] Step %d requires %s but none were executed. "+
+							"Do NOT declare completion. Execute the required tools now.", step.ID, strings.Join(missing, ", ")),
+					})
+					continue
+				}
+			}
+
+			// Level 2: 書き込みツール実行済みだが diff 変化なし → 強制続行
+			if stepHadWrites {
+				afterDiffFiles := getGitDiffFiles()
+				if beforeDiffFiles != nil && afterDiffFiles != nil && diffFilesEqual(beforeDiffFiles, afterDiffFiles) {
+					if continueCount < maxContinues {
+						continueCount++
+						yellow.Printf("⚠️  Step %d: write tools executed but no file changes detected (%d/%d)\n",
+							step.ID, continueCount, maxContinues)
+						a.History = append(a.History, api.Message{
+							Role: "user",
+							Content: fmt.Sprintf("[SYSTEM] Step %d executed write tools but git diff shows no new changes. "+
+								"The tool may have failed silently. Verify and retry.", step.ID),
+						})
+						continue
+					}
+				}
+			}
+
 			// ツール呼び出しなし = ステップ完了
 			green.Printf("✓ Step %d completed\n", step.ID)
 			return nil
@@ -123,6 +162,12 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 
 			result, change := tools.Execute(toolCall)
 			allResults = append(allResults, fmt.Sprintf("[%s]\n%s", toolCall.Tool, result))
+
+			// ステップ完了検証用: 実行されたツールを記録
+			executedTools[toolCall.Tool] = true
+			if tools.IsWriteTool(toolCall.Tool) {
+				stepHadWrites = true
+			}
 
 			// 失敗パターンをチェック
 			if failed, reason := plan.ContainsFailure(result); failed {
@@ -261,6 +306,48 @@ func isAIQuestion(response string) bool {
 		}
 	}
 	return false
+}
+
+// checkMissingWriteTools は step.Tools に含まれる書き込み系ツールのうち
+// 実際に実行されなかったものを返す。
+func checkMissingWriteTools(stepTools []string, executedTools map[string]bool) []string {
+	var missing []string
+	for _, t := range stepTools {
+		if tools.IsWriteTool(t) && !executedTools[t] {
+			missing = append(missing, t)
+		}
+	}
+	return missing
+}
+
+// getGitDiffFiles は git diff --name-only HEAD の結果をファイル名セットとして返す。
+// HEAD と比較することで staged + unstaged 両方の変更を検出する。
+// git が使えない場合は nil を返す（Level 2 スキップ用）。
+func getGitDiffFiles() map[string]bool {
+	out, err := exec.Command("git", "diff", "--name-only", "HEAD").CombinedOutput()
+	if err != nil {
+		return nil
+	}
+	files := make(map[string]bool)
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if line != "" {
+			files[line] = true
+		}
+	}
+	return files
+}
+
+// diffFilesEqual は2つの diff ファイルセットが同一かを比較する。
+func diffFilesEqual(before, after map[string]bool) bool {
+	if len(before) != len(after) {
+		return false
+	}
+	for f := range before {
+		if !after[f] {
+			return false
+		}
+	}
+	return true
 }
 
 // confirmPlan は計画の承認確認
