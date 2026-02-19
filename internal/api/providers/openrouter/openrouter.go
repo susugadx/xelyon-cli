@@ -83,7 +83,8 @@ func isClaudeModel(model string) bool {
 // isCompactionSupported はモデルが Compaction 対応か判定
 func isCompactionSupported(model string) bool {
 	return strings.Contains(model, "opus-4-6") || strings.Contains(model, "opus-4-5") ||
-		strings.Contains(model, "opus-4.6") || strings.Contains(model, "opus-4.5")
+		strings.Contains(model, "opus-4.6") || strings.Contains(model, "opus-4.5") ||
+		strings.Contains(model, "sonnet-4-6") || strings.Contains(model, "sonnet-4.6")
 }
 
 // getAnthropicSkinURL は OpenAI 互換 URL から Anthropic Skin URL を導出
@@ -96,7 +97,7 @@ func getAnthropicSkinURL(openaiURL string) string {
 
 // SupportsClaudeCompaction はこのプロバイダーが Claude Compaction に対応しているかを返す
 func (p *Provider) SupportsClaudeCompaction() bool {
-	model := api.GetDefaultModel("", "openrouter", "anthropic/claude-opus-4.5")
+	model := api.GetDefaultModel("", "openrouter", "anthropic/claude-sonnet-4.6")
 	return p.compactionEnabled && isClaudeModel(model) && isCompactionSupported(model)
 }
 
@@ -112,7 +113,7 @@ func (p *Provider) IsFunctionCallingEnabled() bool {
 
 // ChatWithTools は Provider interface の実装
 func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
-	model = api.GetDefaultModel(model, "openrouter", "anthropic/claude-opus-4.5")
+	model = api.GetDefaultModel(model, "openrouter", "anthropic/claude-sonnet-4.6")
 
 	// Claude モデル + Compaction 有効時は Anthropic Skin エンドポイントを使用
 	if isClaudeModel(model) && p.compactionEnabled && isCompactionSupported(model) {
@@ -187,7 +188,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 		return p.ChatWithTools(ctx, systemPrompt, history, model)
 	}
 
-	model = api.GetDefaultModel(model, "openrouter", "anthropic/claude-opus-4.5")
+	model = api.GetDefaultModel(model, "openrouter", "anthropic/claude-sonnet-4.6")
 
 	if isClaudeModel(model) && p.compactionEnabled && isCompactionSupported(model) {
 		history = append(history, api.Message{Role: "user", Content: userMessage})

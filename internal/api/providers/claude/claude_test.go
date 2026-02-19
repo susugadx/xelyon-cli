@@ -204,8 +204,8 @@ func TestClaudeProvider_ChatWithTools_NonStreaming(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Fatalf("Failed to decode request: %v", err)
 		}
-		if req.Model != "claude-sonnet-4-20250514" {
-			t.Errorf("Model = %q, want 'claude-sonnet-4-20250514'", req.Model)
+		if req.Model != "claude-sonnet-4-6" {
+			t.Errorf("Model = %q, want 'claude-sonnet-4-6'", req.Model)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -222,7 +222,7 @@ func TestClaudeProvider_ChatWithTools_NonStreaming(t *testing.T) {
 	p := New("test-key")
 	history := []api.Message{{Role: "user", Content: "Hello"}}
 
-	result, err := p.ChatWithTools(context.Background(), "System prompt", history, "claude-sonnet-4-20250514")
+	result, err := p.ChatWithTools(context.Background(), "System prompt", history, "claude-sonnet-4-6")
 	if err != nil {
 		t.Fatalf("ChatWithTools() error = %v", err)
 	}
@@ -241,7 +241,7 @@ func TestClaudeProvider_ChatWithTools_Streaming(t *testing.T) {
 	p := New("test-key")
 	history := []api.Message{{Role: "user", Content: "Hi"}}
 
-	result, err := p.ChatWithTools(context.Background(), "System", history, "claude-sonnet-4-20250514")
+	result, err := p.ChatWithTools(context.Background(), "System", history, "claude-sonnet-4-6")
 	if err != nil {
 		t.Fatalf("ChatWithTools() error = %v", err)
 	}
@@ -384,7 +384,7 @@ func TestClaudeProvider_ChatWithTools_ToolUse(t *testing.T) {
 	p := New("test-key")
 	history := []api.Message{{Role: "user", Content: "Read test.txt"}}
 
-	result, err := p.ChatWithTools(context.Background(), "System", history, "claude-sonnet-4-20250514")
+	result, err := p.ChatWithTools(context.Background(), "System", history, "claude-sonnet-4-6")
 	if err != nil {
 		t.Fatalf("ChatWithTools() error = %v", err)
 	}
@@ -430,7 +430,7 @@ func TestClaudeProvider_ChatWithTools_NonStreaming_ToolUse(t *testing.T) {
 	p := New("test-key")
 	history := []api.Message{{Role: "user", Content: "Read readme.md"}}
 
-	result, err := p.ChatWithTools(context.Background(), "System", history, "claude-sonnet-4-20250514")
+	result, err := p.ChatWithTools(context.Background(), "System", history, "claude-sonnet-4-6")
 	if err != nil {
 		t.Fatalf("ChatWithTools() error = %v", err)
 	}
@@ -487,7 +487,7 @@ func TestClaudeProvider_ChatWithTools_FunctionCallingDisabled(t *testing.T) {
 	p := New("test-key")
 	history := []api.Message{{Role: "user", Content: "Hello"}}
 
-	_, err := p.ChatWithTools(context.Background(), "System", history, "claude-sonnet-4-20250514")
+	_, err := p.ChatWithTools(context.Background(), "System", history, "claude-sonnet-4-6")
 	if err != nil {
 		t.Fatalf("ChatWithTools() error = %v", err)
 	}
@@ -523,7 +523,7 @@ func TestClaudeProvider_ChatWithTools_FunctionCallingEnabled(t *testing.T) {
 	p := New("test-key")
 	history := []api.Message{{Role: "user", Content: "Hello"}}
 
-	_, err := p.ChatWithTools(context.Background(), "System", history, "claude-sonnet-4-20250514")
+	_, err := p.ChatWithTools(context.Background(), "System", history, "claude-sonnet-4-6")
 	if err != nil {
 		t.Fatalf("ChatWithTools() error = %v", err)
 	}

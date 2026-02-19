@@ -480,6 +480,8 @@ func TestIsCompactionSupported(t *testing.T) {
 	}{
 		{"anthropic/claude-opus-4.5", true},
 		{"anthropic/claude-opus-4-6", true},
+		{"anthropic/claude-sonnet-4.6", true},
+		{"anthropic/claude-sonnet-4-6", true},
 		{"anthropic/claude-3-5-sonnet", false},
 		{"openai/gpt-4o", false},
 	}

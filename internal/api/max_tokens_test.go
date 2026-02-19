@@ -49,8 +49,8 @@ func TestGetMaxOutputTokens(t *testing.T) {
 		{
 			name:     "Works even if provider config is missing",
 			provider: "unknown-provider",
-			model:    "claude-sonnet-4-5",
-			expected: 16384,
+			model:    "claude-sonnet-4-6",
+			expected: 64000,
 		},
 		{
 			name:     "Returns 0 for completely unknown",

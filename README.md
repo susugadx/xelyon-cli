@@ -197,10 +197,10 @@ xelyon --provider gemini --model gemini-2.5-flash
 # ~/.xelyon/config.yaml
 provider_models:
   claude:
-    default_model: claude-sonnet-4-5-20250514
-    max_output_tokens: 16384   # デフォルト: 16384
+    default_model: claude-sonnet-4-6
+    max_output_tokens: 64000   # デフォルト: 64000
   gemini:
-    default_model: gemini-2.5-flash
+    default_model: gemini-3-flash-preview
     max_output_tokens: 65536   # デフォルト: 65536
   deepseek:
     default_model: deepseek-chat
@@ -209,14 +209,14 @@ provider_models:
 
 | プロバイダー | デフォルト max_output_tokens |
 |------------|---------------------------|
-| claude     | 16384                     |
-| bedrock    | 32768                     |
+| claude     | 64000                     |
+| bedrock    | 64000                     |
 | gemini     | 65536                     |
 | openai     | 16384                     |
 | deepseek   | 8192                      |
 | groq       | 8192                      |
 | ollama     | 4096                      |
-| openrouter | 16384                     |
+| openrouter | 64000                     |
 
 ### 確認動作のカスタマイズ
 

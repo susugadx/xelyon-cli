@@ -6,6 +6,8 @@ import "strings"
 // 注: 出力トークンを考慮して、実際の上限より少なめに設定
 var modelTokenLimits = map[string]int{
 	// === Claude ===
+	"claude-sonnet-4-6":          200000,
+	"claude-opus-4-6":            200000,
 	"claude-sonnet-4-20250514":   200000,
 	"claude-sonnet-4-5-20250514": 200000,
 	"claude-opus-4-20250514":     200000,
@@ -16,6 +18,8 @@ var modelTokenLimits = map[string]int{
 	"claude-3-haiku-20240307":    200000,
 
 	// === Bedrock (Claude models) ===
+	"global.anthropic.claude-sonnet-4-6-v1":            200000,
+	"anthropic.claude-sonnet-4-6":                      200000,
 	"global.anthropic.claude-opus-4-5-20251101-v1:0":   200000,
 	"us.anthropic.claude-sonnet-4-20250514-v1:0":       200000,
 	"us.anthropic.claude-haiku-4-5-20251001-v1:0":      200000,

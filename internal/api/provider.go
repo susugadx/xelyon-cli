@@ -137,8 +137,10 @@ type ReasoningContentProvider interface {
 var knownModelMaxOutputTokens = map[string]int{
 	"deepseek-chat":          8192,
 	"deepseek-reasoner":      64000,
-	"claude-sonnet-4-5":      16384,
-	"claude-opus-4-5":        32768,
+	"claude-sonnet-4-6":      64000,
+	"claude-sonnet-4-5":      64000,
+	"claude-opus-4-6":        128000,
+	"claude-opus-4-5":        64000,
 	"gpt-5.2":                16384,
 	"gemini-2.5-flash":       65536,
 	"gemini-3-flash-preview": 65536,

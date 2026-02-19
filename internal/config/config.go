@@ -53,8 +53,8 @@ func DefaultConfig() *Config {
 				MaxOutputTokens: 65536,
 			},
 			"claude": {
-				DefaultModel:     "claude-sonnet-4-5-20250514",
-				MaxOutputTokens:  16384,
+				DefaultModel:     "claude-sonnet-4-6",
+				MaxOutputTokens:  64000,
 				AnthropicVersion: "2023-06-01",
 			},
 			"ollama": {
@@ -66,12 +66,12 @@ func DefaultConfig() *Config {
 				MaxOutputTokens: 8192,
 			},
 			"openrouter": {
-				DefaultModel:    "anthropic/claude-opus-4.5",
-				MaxOutputTokens: 32768,
+				DefaultModel:    "anthropic/claude-sonnet-4.6",
+				MaxOutputTokens: 64000,
 			},
 			"bedrock": {
-				DefaultModel:     "global.anthropic.claude-opus-4-5-20251101-v1:0",
-				MaxOutputTokens:  32768,
+				DefaultModel:     "global.anthropic.claude-sonnet-4-6-v1",
+				MaxOutputTokens:  64000,
 				AnthropicVersion: "bedrock-2023-05-31",
 			},
 		},

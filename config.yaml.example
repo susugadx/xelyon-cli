@@ -12,12 +12,12 @@ default_model: deepseek-chat
 # プロバイダーごとのモデル設定
 provider_models:
     bedrock:
-        default_model: global.anthropic.claude-opus-4-5-20251101-v1:0
-        max_output_tokens: 32768
+        default_model: global.anthropic.claude-sonnet-4-6-v1
+        max_output_tokens: 64000
         anthropic_version: bedrock-2023-05-31
     claude:
-        default_model: claude-sonnet-4-5-20250514
-        max_output_tokens: 16384
+        default_model: claude-sonnet-4-6
+        max_output_tokens: 64000
         anthropic_version: "2023-06-01"
     deepseek:
         default_model: deepseek-chat
@@ -35,8 +35,8 @@ provider_models:
         default_model: gpt-5.2
         max_output_tokens: 16384
     openrouter:
-        default_model: anthropic/claude-opus-4.5
-        max_output_tokens: 32768
+        default_model: anthropic/claude-sonnet-4.6
+        max_output_tokens: 64000
 
 # ============================================================
 # 一般設定

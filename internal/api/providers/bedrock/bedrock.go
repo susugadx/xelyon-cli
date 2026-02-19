@@ -25,7 +25,7 @@ func init() {
 
 const (
 	defaultRegion           = "us-east-1"
-	defaultModel            = "global.anthropic.claude-opus-4-5-20251101-v1:0"
+	defaultModel            = "global.anthropic.claude-sonnet-4-6-v1"
 	bedrockAnthropicVersion = "bedrock-2023-05-31"
 )
 
@@ -70,7 +70,8 @@ func New() (*Provider, error) {
 
 // isBedrockCompactionSupported はモデルが Compaction に対応しているか判定
 func isBedrockCompactionSupported(model string) bool {
-	return strings.Contains(model, "opus-4-6") || strings.Contains(model, "opus-4-5")
+	return strings.Contains(model, "opus-4-6") || strings.Contains(model, "opus-4-5") ||
+		strings.Contains(model, "sonnet-4-6")
 }
 
 // SupportsClaudeCompaction は Claude Compaction 対応状況を返す

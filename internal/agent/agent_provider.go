@@ -39,15 +39,15 @@ func (a *Agent) SwitchProvider(providerName string) error {
 		case "gemini":
 			newModel = "gemini-3-flash-preview"
 		case "claude":
-			newModel = "claude-sonnet-4-5-20250514"
+			newModel = "claude-sonnet-4-6"
 		case "ollama":
 			newModel = "qwen2.5-coder:7b"
 		case "groq":
 			newModel = "meta-llama/llama-4-scout-17b-16e-instruct"
 		case "openrouter":
-			newModel = "anthropic/claude-opus-4.5"
+			newModel = "anthropic/claude-sonnet-4.6"
 		case "bedrock":
-			newModel = "global.anthropic.claude-opus-4-5-20251101-v1:0"
+			newModel = "global.anthropic.claude-sonnet-4-6-v1"
 		default:
 			newModel = "default-model"
 		}

@@ -85,7 +85,7 @@ func (p *Provider) SupportsClaudeCompaction() bool {
 	if !cfg.Compression.ClaudeCompaction {
 		return false
 	}
-	model := api.GetDefaultModel("", "claude", "claude-sonnet-4-20250514")
+	model := api.GetDefaultModel("", "claude", "claude-sonnet-4-6")
 	return isCompactionSupported(model)
 }
 
@@ -285,13 +285,14 @@ func (p *Provider) processResponse(ctx context.Context, result *requestResult) (
 // isCompactionSupported は Compaction API 対応モデルか判定
 // 現時点では Opus 4.6 のみ
 func isCompactionSupported(model string) bool {
-	return strings.Contains(model, "opus-4-6") || strings.Contains(model, "opus-4-5")
+	return strings.Contains(model, "opus-4-6") || strings.Contains(model, "opus-4-5") ||
+		strings.Contains(model, "sonnet-4-6")
 }
 
 // ChatWithTools は Provider interface の実装（context対応）
 func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
-	// モデル名を設定（config優先、フォールバックはclaude-sonnet-4-20250514）
-	model = api.GetDefaultModel(model, "claude", "claude-sonnet-4-20250514")
+	// モデル名を設定（config優先、フォールバックはclaude-sonnet-4-6）
+	model = api.GetDefaultModel(model, "claude", "claude-sonnet-4-6")
 
 	// Anthropic Messages API 形式に変換（role:"tool" → role:"user"+tool_result 等）
 	messages := ConvertToAnthropicMessages(history)
@@ -530,8 +531,8 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 		return p.ChatWithTools(ctx, systemPrompt, history, model)
 	}
 
-	// モデル名を設定（config優先、フォールバックはclaude-sonnet-4-20250514）
-	model = api.GetDefaultModel(model, "claude", "claude-sonnet-4-20250514")
+	// モデル名を設定（config優先、フォールバックはclaude-sonnet-4-6）
+	model = api.GetDefaultModel(model, "claude", "claude-sonnet-4-6")
 
 	// Anthropic Messages API 形式に変換（role:"tool" → role:"user"+tool_result 等）
 	converted := ConvertToAnthropicMessages(history)
