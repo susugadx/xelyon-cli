@@ -111,7 +111,7 @@ func ResolveHooks(globalCfg *Config, projectCfg *ProjectConfig) *HooksConfig {
 	}
 
 	// config.yaml の hooks にフォールバック
-	if globalCfg != nil && len(globalCfg.Hooks.OnCompletion) > 0 {
+	if globalCfg != nil && (len(globalCfg.Hooks.OnCompletion) > 0 || len(globalCfg.Hooks.OnStepComplete) > 0) {
 		return &globalCfg.Hooks
 	}
 

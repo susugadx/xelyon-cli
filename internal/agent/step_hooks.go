@@ -8,7 +8,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
 // runStepCompleteHooks は hooks.on_step_complete に定義されたシェルコマンドを実行する。
@@ -16,15 +18,15 @@ import (
 // いずれかのコマンドが失敗した場合、needsContinue=true と AI 向けのフィードバックを返す。
 // すべて成功した場合は needsContinue=false を返す。
 func (a *Agent) runStepCompleteHooks(stepID int, stepDescription, stepStatus string) (needsContinue bool, feedback string) {
-	cfg := config.GetGlobalConfig()
-	hooks := cfg.Hooks.OnStepComplete
+	globalCfg := config.GetGlobalConfig()
+	hooks := globalCfg.Hooks.OnStepComplete
 
 	// No step hooks → nothing to verify
 	if len(hooks) == 0 {
 		return false, ""
 	}
 
-	timeout := time.Duration(cfg.Hooks.Timeout) * time.Second
+	timeout := time.Duration(globalCfg.Hooks.Timeout) * time.Second
 	if timeout <= 0 {
 		timeout = 60 * time.Second
 	}
@@ -95,14 +97,14 @@ func expandStepTemplate(cmd string, stepID int, stepDescription, stepStatus stri
 // フック失敗時は AI にフィードバックして修正を試み、再実行する。
 // 戻り値: hooks がすべてパスした場合 true、max_retry 到達で打ち切った場合 false。
 func (a *Agent) runStepCompleteHooksWithRetry(ctx context.Context, stepID int, stepDescription, stepStatus string) bool {
-	cfg := config.GetGlobalConfig()
+	globalCfg := config.GetGlobalConfig()
 
 	// No step hooks configured → nothing to verify
-	if len(cfg.Hooks.OnStepComplete) == 0 {
+	if len(globalCfg.Hooks.OnStepComplete) == 0 {
 		return true
 	}
 
-	maxRetry := cfg.Hooks.MaxRetry
+	maxRetry := globalCfg.Hooks.MaxRetry
 	if maxRetry <= 0 {
 		maxRetry = 3
 	}

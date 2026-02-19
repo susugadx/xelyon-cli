@@ -33,6 +33,13 @@ func (a *Agent) runImplementationPhase(ctx context.Context, p *plan.Plan) error 
 		}
 		p.UpdateStatus(nextID, "completed", "")
 
+		// ステップ完了フックを実行
+		if hooks := config.GetGlobalConfig().Hooks; len(hooks.OnStepComplete) > 0 {
+			if !a.runStepCompleteHooksWithRetry(ctx, nextID, step.Description, "completed") {
+				yellow.Printf("⚠️  Step %d hooks failed but proceeding to next step\n", nextID)
+			}
+		}
+
 		// 全て完了したか確認
 		if p.IsCompleted() {
 			break

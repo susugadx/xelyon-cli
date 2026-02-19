@@ -516,6 +516,12 @@ func (s *Supervisor) handleResult(ctx context.Context, result WorkerResult, step
 	if result.Success {
 		p.UpdateStatus(step.ID, "completed", result.Output)
 		s.sharedContext.MarkStepCompleted(step.ID)
+		// ステップ完了フックを実行
+		if hooks := config.GetGlobalConfig().Hooks; len(hooks.OnStepComplete) > 0 {
+			if !s.agent.runStepCompleteHooksWithRetry(ctx, step.ID, step.Description, "completed") {
+				yellow.Printf("⚠️  Step %d hooks failed but proceeding to next step\n", step.ID)
+			}
+		}
 		return nil
 	}
 

@@ -113,7 +113,7 @@ xelyon.yaml は AI 用の構造化設定ファイルです。
 **書くべきこと:**
 - `context`: プロジェクトの概要（1-2行）
 - `rules`: 開発ルール・コーディング規約
-- `hooks`: 完了時フック（変更後に実行する検証コマンド）
+- `hooks`: 完了時フック・ステップ完了時フック（変更後に実行する検証コマンド）
 
 **書かないこと:**
 - ディレクトリ構造やコードマップの詳細
@@ -137,11 +137,13 @@ rules:
 hooks:
   on_completion:
     - "npm run lint && npm run build && npm test"
+  on_step_complete:
+    - "git add -A && git commit -m 'Step {{step_id}}: {{step_description}}'"
   timeout: 60
   max_retry: 3
 ```
 
-> **Note:** `hooks.on_completion` を定義すると、AI がコード変更後に自動でそのコマンドを実行します。省略時は `config.yaml` の hooks 設定が使われます。
+> **Note:** `hooks.on_completion` を定義すると、AI がコード変更後に自動でそのコマンドを実行します。`hooks.on_step_complete` を定義すると、Plan Mode の各ステップ完了時にコマンドを実行します（テンプレート変数: `{{step_id}}`, `{{step_description}}`, `{{step_status}}`）。省略時は `config.yaml` の hooks 設定が使われます。
 
 ---
 

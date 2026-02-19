@@ -20,5 +20,6 @@ hooks:
   on_completion:
     - make fmt
     - make ci-check
+  on_step_complete: []
   timeout: 60
   max_retry: 3

@@ -161,9 +161,10 @@ type MCPConfig struct {
 
 // HooksConfig はフック設定
 type HooksConfig struct {
-	OnCompletion []string `yaml:"on_completion"` // 完了時に実行するコマンド
-	Timeout      int      `yaml:"timeout"`       // コマンドタイムアウト秒（デフォルト: 60）
-	MaxRetry     int      `yaml:"max_retry"`     // フック失敗時の最大リトライ回数（デフォルト: 3）
+	OnCompletion   []string `yaml:"on_completion"`    // 完了時に実行するコマンド
+	OnStepComplete []string `yaml:"on_step_complete"` // ステップ完了時に実行するコマンド
+	Timeout        int      `yaml:"timeout"`          // コマンドタイムアウト秒（デフォルト: 60）
+	MaxRetry       int      `yaml:"max_retry"`        // フック失敗時の最大リトライ回数（デフォルト: 3）
 }
 
 // LSPConfig は LSP (Language Server Protocol) 連携の設定

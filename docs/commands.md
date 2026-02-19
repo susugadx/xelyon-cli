@@ -239,11 +239,12 @@ XELYON CLIで使用できる全コマンドのリファレンスです。
 **テンプレートに含まれるフィールド:**
 - `context` — プロジェクトの概要・背景情報
 - `rules` — 必須ルール（AI が必ず従うルール）
-- `hooks` — 完了時フック（省略時は config.yaml の hooks を使用）
+- `hooks` — 完了時フック・ステップ完了時フック（省略時は config.yaml の hooks を使用）
 
 **注意:**
 - コード構造の詳細な記載は不要
 - `hooks.on_completion` を定義すると、AIが変更後に必ず実行します
+- `hooks.on_step_complete` を定義すると、Plan Mode の各ステップ完了時に実行します（テンプレート変数: `{{step_id}}`, `{{step_description}}`, `{{step_status}}`）
 
 ### `/plan`
 
