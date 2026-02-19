@@ -88,6 +88,16 @@ func isActionPlan(steps []string) bool {
 	return actionCount > len(steps)/2
 }
 
+// isPlanTool はプラン管理系ツールかを判定する。
+// delete_plan / create_plan / update_plan 等は Step Tracking のカウント対象とする。
+func isPlanTool(toolName string) bool {
+	switch toolName {
+	case "create_plan", "update_plan", "delete_plan", "get_plan", "list_plans":
+		return true
+	}
+	return false
+}
+
 // buildAutoPlan creates a Plan object from text steps.
 func buildAutoPlan(steps []string) *plan.Plan {
 	planSteps := make([]plan.PlanStep, len(steps))

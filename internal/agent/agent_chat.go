@@ -193,7 +193,8 @@ func (a *Agent) runNormalMode(ctx context.Context, input string) error {
 		}
 
 		// Step Tracking: テキスト計画を記録（最初の検出のみ）
-		if pendingSteps == 0 {
+		// ツール呼び出しが同時に存在する場合はすでに実行中なのでセットしない（誤検知防止）
+		if pendingSteps == 0 && len(toolCalls) == 0 {
 			if steps := extractTextPlan(response); len(steps) >= 2 && isActionPlan(steps) {
 				pendingSteps = len(steps)
 				completedActions = 0
@@ -401,8 +402,8 @@ func (a *Agent) runNormalMode(ctx context.Context, input string) error {
 
 			result := a.executeToolOnly(tc)
 
-			// Step Tracking: アクション実行をカウント（write系 + bash）
-			if tools.IsWriteTool(tc.Tool) || tc.Tool == "bash" {
+			// Step Tracking: アクション実行をカウント（write系 + bash + プランツール）
+			if tools.IsWriteTool(tc.Tool) || tc.Tool == "bash" || isPlanTool(tc.Tool) {
 				completedActions++
 			}
 
