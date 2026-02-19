@@ -34,11 +34,6 @@ func printToolArgs(tc *ToolCall) {
 				fmt.Printf("   %s: %s\n", k, truncate(v, 60))
 			}
 		}
-	case "search_code", "search_file":
-		fmt.Printf("   Pattern: %s\n", tc.Args["pattern"])
-		if tc.Args["path"] != "" {
-			fmt.Printf("   Path: %s\n", tc.Args["path"])
-		}
 	case "insert_after", "insert_before":
 		fmt.Printf("   File: %s\n", tc.Args["path"])
 		fmt.Printf("   Pattern: %s\n", truncate(tc.Args["pattern"], 60))
@@ -82,10 +77,10 @@ func Execute(tc *ToolCall) (string, *FileChange) {
 	printToolArgs(tc)
 
 	// デフォルト値の設定（Registry実行前）
-	// list_dir, git_add, search_code, search_fileでpathが空の場合"."を設定
+	// list_dir, git_addでpathが空の場合"."を設定
 	if tc.Args["path"] == "" {
 		switch tc.Tool {
-		case "list_dir", "git_add", "search_code", "search_file":
+		case "list_dir", "git_add":
 			tc.Args["path"] = "."
 		}
 	}

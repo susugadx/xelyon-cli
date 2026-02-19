@@ -7,7 +7,7 @@ import (
 // NOTE: Tool registration tests are in each subpackage:
 // - dev/bash_test.go tests BashTool
 // - file/read_test.go tests ReadFileTool
-// - search/code_test.go tests SearchCodeTool
+// - search/grep_replace_test.go tests GrepReplaceTool
 // - lsp/tools_test.go tests LSP tools
 
 // ===== parseInt Tests =====

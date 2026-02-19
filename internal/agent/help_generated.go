@@ -36,8 +36,6 @@ Available tools (AI will use automatically):
   str_replace - Replace text in file
   list_dir    - List directory contents
   git_*       - Git operations (status, diff, add, commit, push, log)
-  search_code - Search in code files
-  search_file - Search for files by name
 
 Tips:
   - Just describe what you want in natural language

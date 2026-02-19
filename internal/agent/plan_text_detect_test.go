@@ -175,7 +175,7 @@ func TestIsPlanTool(t *testing.T) {
 	}
 
 	nonPlanTools := []string{
-		"write_file", "str_replace", "bash", "read_file", "search_code", "",
+		"write_file", "str_replace", "bash", "read_file", "list_dir", "",
 	}
 	for _, name := range nonPlanTools {
 		if isPlanTool(name) {

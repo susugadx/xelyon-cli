@@ -9,7 +9,7 @@ import (
 )
 
 // ToolCache はツール結果のキャッシュ
-// read_file, list_dir, search_code, search_file の結果をキャッシュしてトークン消費を削減
+// read_file, list_dir の結果をキャッシュしてトークン消費を削減
 type ToolCache struct {
 	files    map[string]cacheEntry
 	dirs     map[string]cacheEntry

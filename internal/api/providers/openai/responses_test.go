@@ -253,7 +253,7 @@ func TestGetResponsesToolDefinitions(t *testing.T) {
 	}
 
 	// 特定のツールが存在することを確認
-	requiredTools := []string{"read_file", "write_file", "str_replace", "bash", "search_code"}
+	requiredTools := []string{"read_file", "write_file", "str_replace", "bash", "list_dir"}
 	toolNames := make(map[string]bool)
 	for _, tool := range tools {
 		toolNames[tool.Name] = true

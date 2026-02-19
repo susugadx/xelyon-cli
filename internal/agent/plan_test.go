@@ -487,7 +487,7 @@ internal/agent/plan_test.go:485:	t.Errorf("ContainsFailure() should not detect f
 		},
 		{
 			name:   "grep result with Error string",
-			result: "search_code result:\ninternal/api/client.go:50: type ErrorResponse struct {\ninternal/api/client.go:51:     Error string `json:\"error\"`",
+			result: "grep result:\ninternal/api/client.go:50: type ErrorResponse struct {\ninternal/api/client.go:51:     Error string `json:\"error\"`",
 			want:   false, // コード検索結果は失敗ではない
 		},
 		{

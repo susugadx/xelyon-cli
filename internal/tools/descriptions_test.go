@@ -11,7 +11,7 @@ func TestToolDescriptions_AllKeysNonEmpty(t *testing.T) {
 }
 
 func TestToolDescriptions_ExpectedToolCount(t *testing.T) {
-	expected := 18
+	expected := 16
 	if len(ToolDescriptions) != expected {
 		t.Errorf("ToolDescriptions has %d entries, want %d", len(ToolDescriptions), expected)
 	}
@@ -20,7 +20,7 @@ func TestToolDescriptions_ExpectedToolCount(t *testing.T) {
 func TestToolDescriptions_KnownToolsExist(t *testing.T) {
 	knownTools := []string{
 		"read_file", "read_files", "write_file", "str_replace", "delete_file", "list_dir",
-		"search_code", "search_file", "grep_replace", "web_search",
+		"grep_replace", "web_search",
 		"bash",
 		"lsp_find",
 		"ask_user_question", "create_plan", "get_plan", "list_plans", "update_plan", "delete_plan",

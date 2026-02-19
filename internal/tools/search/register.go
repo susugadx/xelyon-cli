@@ -7,66 +7,6 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
-// SearchCodeTool is the tool for code search
-type SearchCodeTool struct{}
-
-// Name returns the tool name
-func (t *SearchCodeTool) Name() string {
-	return "search_code"
-}
-
-func (t *SearchCodeTool) Description() string {
-	return tools.ToolDescriptions[t.Name()]
-}
-
-func (t *SearchCodeTool) Parameters() map[string]interface{} {
-	return map[string]interface{}{
-		"type": "object",
-		"properties": map[string]interface{}{
-			"pattern": map[string]interface{}{"type": "string", "description": "Search pattern (regex supported)"},
-			"path":    map[string]interface{}{"type": "string", "description": "Directory or file to search in (optional)"},
-		},
-		"required":             []string{"pattern"},
-		"additionalProperties": false,
-	}
-}
-
-// Run executes the code search tool
-func (t *SearchCodeTool) Run(args map[string]string) (string, *tools.FileChange, error) {
-	output := ExecuteSearchCode(args["pattern"], args["path"])
-	return output, nil, nil
-}
-
-// SearchFileTool is the tool for file search
-type SearchFileTool struct{}
-
-// Name returns the tool name
-func (t *SearchFileTool) Name() string {
-	return "search_file"
-}
-
-func (t *SearchFileTool) Description() string {
-	return tools.ToolDescriptions[t.Name()]
-}
-
-func (t *SearchFileTool) Parameters() map[string]interface{} {
-	return map[string]interface{}{
-		"type": "object",
-		"properties": map[string]interface{}{
-			"pattern": map[string]interface{}{"type": "string", "description": "File name pattern (glob or partial name)"},
-			"path":    map[string]interface{}{"type": "string", "description": "Directory to search in (optional)"},
-		},
-		"required":             []string{"pattern"},
-		"additionalProperties": false,
-	}
-}
-
-// Run executes the file search tool
-func (t *SearchFileTool) Run(args map[string]string) (string, *tools.FileChange, error) {
-	output := ExecuteSearchFile(args["pattern"], args["path"])
-	return output, nil, nil
-}
-
 // WebSearchTool is the tool for web search
 type WebSearchTool struct{}
 
@@ -146,8 +86,6 @@ func (t *GrepReplaceTool) Run(args map[string]string) (string, *tools.FileChange
 
 // RegisterTools registers search tools with the registry
 func RegisterTools(registry *tools.Registry) {
-	registry.Register(&SearchCodeTool{})
-	registry.Register(&SearchFileTool{})
 	registry.Register(&WebSearchTool{})
 	registry.Register(&GrepReplaceTool{})
 }

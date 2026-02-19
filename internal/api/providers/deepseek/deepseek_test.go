@@ -594,7 +594,6 @@ func TestGetCombinedTools_BuiltinToolsPresent(t *testing.T) {
 		"write_file",
 		"str_replace",
 		"bash",
-		"search_code",
 		"list_dir",
 	}
 

@@ -99,8 +99,6 @@ func getToolIcon(toolName string) string {
 		"move_file":     "📦",
 		"copy_file":     "📋",
 		"list_dir":      "📁",
-		"search_code":   "🔍",
-		"search_file":   "🔎",
 		"bash":          "💻",
 		"git_add":       "➕",
 		"git_push":      "🚀",

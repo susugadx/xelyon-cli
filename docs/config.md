@@ -848,7 +848,7 @@ tool_confirm:
 #### `auto_approve_safe`
 - **型**: boolean
 - **デフォルト**: `true`
-- **説明**: SafetyHigh ツール（read_file, list_dir, search_file, search_code, git_status, git_log, git_diff 等）を確認なしで実行
+- **説明**: SafetyHigh ツール（read_file, list_dir, git_status, git_log, git_diff, web_search, lsp_find 等）を確認なしで実行
 
 #### `auto_approve_medium`
 - **型**: boolean
@@ -1256,7 +1256,6 @@ output:
 **適用対象:**
 - `bash` コマンド出力
 - `list_dir` ディレクトリ一覧
-- `search_code` / `search_file` 検索結果
 - その他の長い出力を返すツール
 
 ## 関連ドキュメント

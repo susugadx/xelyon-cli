@@ -296,7 +296,7 @@ func (a *Agent) handleStrReplaceErrors(toolCall *tools.ToolCall, result string) 
 			yellow.Printf("⚠️  str_replace failed %d times consecutively. Stopping to prevent loop.\n", a.strReplaceErrorCount)
 			yellow.Println("💡 Suggested alternatives / 代替案:")
 			fmt.Println("   1. Use read_file to verify the exact content of the target file")
-			fmt.Println("   2. Use search_code to find the correct string pattern")
+			fmt.Println("   2. Use bash (grep) to find the correct string pattern")
 			fmt.Println("   3. Ask the user for clarification on what to change")
 			fmt.Println("   4. Try delete_lines + insert_before/insert_after for line-based edits")
 			fmt.Println()
@@ -323,7 +323,7 @@ func (a *Agent) handleStrReplaceErrors(toolCall *tools.ToolCall, result string) 
 
 Suggested next steps:
 1. Use read_file to see the actual file contents
-2. Use search_code to find the correct pattern
+2. Use bash (grep) to find the correct pattern
 3. Ask the user for clarification
 4. Try a different approach (delete_lines + insert_before/insert_after)
 

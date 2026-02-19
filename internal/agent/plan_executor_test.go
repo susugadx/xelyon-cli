@@ -27,7 +27,7 @@ func TestCheckMissingWriteTools_AllExecuted(t *testing.T) {
 }
 
 func TestCheckMissingWriteTools_ReadOnly(t *testing.T) {
-	stepTools := []string{"read_file", "search_code", "bash"}
+	stepTools := []string{"read_file", "list_dir", "bash"}
 	executed := map[string]bool{"read_file": true}
 
 	missing := checkMissingWriteTools(stepTools, executed)

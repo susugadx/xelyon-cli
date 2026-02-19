@@ -13,8 +13,6 @@ var ToolDescriptions = map[string]string{
 	"list_dir":    "List files and directories at the specified path.",
 
 	// Search & Discovery
-	"search_code":  "Search code content for a pattern using ripgrep. Supports regex.",
-	"search_file":  "Search for files by name pattern using find.",
 	"grep_replace": "Bulk regex find-and-replace across multiple files. Always specify path to limit scope.",
 	"web_search":   "Search the web for information using Serper API.",
 

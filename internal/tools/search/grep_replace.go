@@ -13,6 +13,7 @@ import (
 
 // Colors from common package
 var (
+	green  = common.Green
 	yellow = common.Yellow
 	red    = common.Red
 )

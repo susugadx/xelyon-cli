@@ -197,7 +197,7 @@ func TestClassifyMatch(t *testing.T) {
 		symbol   string
 		expected matchType
 	}{
-		{"Go func def", "func ExecuteSearchCode(pattern string) string {", "ExecuteSearchCode", matchDefinition},
+		{"Go func def", "func ExecuteWebSearch(query string) string {", "ExecuteWebSearch", matchDefinition},
 		{"Go method def", "func (t *LSPFindTool) Name() string {", "Name", matchDefinition},
 		{"Go type def", "type LSPFindTool struct{}", "LSPFindTool", matchDefinition},
 		{"Go var def", "var LSPClient *lsplib.Client", "LSPClient", matchDefinition},

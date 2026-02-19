@@ -35,8 +35,6 @@ type DependencyResult struct {
 // ツール分類（読み取り専用）
 var readTools = map[string]bool{
 	"read_file":       true,
-	"search_code":     true,
-	"search_file":     true,
 	"list_dir":        true,
 	"git_status":      true,
 	"git_diff":        true,

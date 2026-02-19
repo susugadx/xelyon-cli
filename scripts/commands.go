@@ -160,8 +160,6 @@ var Tools = []ToolInfo{
 	{Name: "str_replace", Description: "Replace text in file"},
 	{Name: "list_dir", Description: "List directory contents"},
 	{Name: "git_*", Description: "Git operations (status, diff, add, commit, push, log)"},
-	{Name: "search_code", Description: "Search in code files"},
-	{Name: "search_file", Description: "Search for files by name"},
 }
 
 // Tips はTips一覧

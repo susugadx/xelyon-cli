@@ -185,7 +185,7 @@ func TestParseToolCalls_MultipleTool(t *testing.T) {
 {"tool": "read_file", "args": {"path": "main.go"}}
 
 Then I'll search for a pattern:
-{"tool": "search_code", "args": {"pattern": "func main", "path": "."}}
+{"tool": "bash", "args": {"command": "grep -rn 'func main' ."}}
 
 Finally done.`
 
@@ -197,8 +197,8 @@ Finally done.`
 	if result[0].Tool != "read_file" {
 		t.Errorf("First tool = %q, want 'read_file'", result[0].Tool)
 	}
-	if result[1].Tool != "search_code" {
-		t.Errorf("Second tool = %q, want 'search_code'", result[1].Tool)
+	if result[1].Tool != "bash" {
+		t.Errorf("Second tool = %q, want 'bash'", result[1].Tool)
 	}
 }
 
@@ -316,7 +316,7 @@ func (t *xmlTestTool) Run(args map[string]string) (string, *FileChange, error) {
 // registerXMLTestTools はXML rescueテスト用にDefaultRegistryにダミーツールを登録する
 func registerXMLTestTools(t *testing.T) {
 	t.Helper()
-	for _, name := range []string{"read_file", "search_code", "bash", "write_file", "str_replace"} {
+	for _, name := range []string{"read_file", "list_dir", "bash", "write_file", "str_replace"} {
 		if !DefaultRegistry.HasTool(name) {
 			DefaultRegistry.Register(&xmlTestTool{name: name})
 		}
@@ -351,22 +351,18 @@ Done.`
 func TestParseToolCalls_XMLRescue_WithoutArgsWrapper(t *testing.T) {
 	registerXMLTestTools(t)
 
-	input := `I'll search for the pattern.
+	input := `I'll list the directory.
 
-<search_code>
-  <pattern>func main</pattern>
+<list_dir>
   <path>.</path>
-</search_code>`
+</list_dir>`
 
 	result := ParseToolCalls(input)
 	if len(result) != 1 {
 		t.Fatalf("ParseToolCalls() returned %d calls, want 1", len(result))
 	}
-	if result[0].Tool != "search_code" {
-		t.Errorf("Tool = %q, want 'search_code'", result[0].Tool)
-	}
-	if result[0].Args["pattern"] != "func main" {
-		t.Errorf("Args[pattern] = %q, want 'func main'", result[0].Args["pattern"])
+	if result[0].Tool != "list_dir" {
+		t.Errorf("Tool = %q, want 'list_dir'", result[0].Tool)
 	}
 	if result[0].Args["path"] != "." {
 		t.Errorf("Args[path] = %q, want '.'", result[0].Args["path"])
@@ -376,16 +372,15 @@ func TestParseToolCalls_XMLRescue_WithoutArgsWrapper(t *testing.T) {
 func TestParseToolCalls_XMLRescue_MultipleToolCalls(t *testing.T) {
 	registerXMLTestTools(t)
 
-	input := `First read, then search.
+	input := `First read, then list.
 
 <read_file>
 <path>main.go</path>
 </read_file>
 
-<search_code>
-<pattern>TODO</pattern>
+<list_dir>
 <path>.</path>
-</search_code>`
+</list_dir>`
 
 	result := ParseToolCalls(input)
 	if len(result) != 2 {
@@ -394,8 +389,8 @@ func TestParseToolCalls_XMLRescue_MultipleToolCalls(t *testing.T) {
 	if result[0].Tool != "read_file" {
 		t.Errorf("First tool = %q, want 'read_file'", result[0].Tool)
 	}
-	if result[1].Tool != "search_code" {
-		t.Errorf("Second tool = %q, want 'search_code'", result[1].Tool)
+	if result[1].Tool != "list_dir" {
+		t.Errorf("Second tool = %q, want 'list_dir'", result[1].Tool)
 	}
 }
 

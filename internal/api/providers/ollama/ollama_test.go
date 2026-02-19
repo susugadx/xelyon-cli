@@ -403,8 +403,8 @@ func TestProvider_ChatWithTools_TextAndToolCalls(t *testing.T) {
 			ID:   "call_abc",
 			Type: "function",
 			Function: api.OpenAIToolCallFunction{
-				Name:      "search_code",
-				Arguments: `{"pattern":"TODO"}`,
+				Name:      "bash",
+				Arguments: `{"command":"grep -rn TODO ."}`,
 			},
 		},
 	}
@@ -423,8 +423,8 @@ func TestProvider_ChatWithTools_TextAndToolCalls(t *testing.T) {
 	if !contains(result, "I'll search for TODOs") {
 		t.Errorf("result should contain text content, got %q", result)
 	}
-	if !contains(result, "search_code") {
-		t.Errorf("result should contain 'search_code', got %q", result)
+	if !contains(result, "bash") {
+		t.Errorf("result should contain 'bash', got %q", result)
 	}
 }
 

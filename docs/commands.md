@@ -264,7 +264,7 @@ Plan Modeを切り替えます。有効にすると、リクエストが「調�
 - `tool_confirm` 設定に従ってツール確認
 
 **Plan Mode（ON）:**
-1. **調査フェーズ**: SafetyHighツール（read_file, search_code等）を自由に実行
+1. **調査フェーズ**: SafetyHighツール（read_file, list_dir, lsp_find等）を自由に実行
 2. **計画生成**: 実装が必要な場合、ステップをJSONで出力
 3. **承認**: ユーザーが計画を確認・承認
 4. **実行**: ステップごとに失敗検知・リトライ付きで実行
@@ -501,9 +501,8 @@ bash: git checkout -b feature-branch
 
 | ツール名 | 説明 | 主な引数 |
 |---------|------|---------|
-| `search_code` | コード内を正規表現検索 | `pattern`, `path` |
-| `search_file` | ファイル名検索 | `pattern`, `path` |
 | `web_search` | Web検索（Serper API、要APIキー） | `query` |
+| `grep_replace` | 一括正規表現置換 | `pattern`, `replacement`, `path`, `file_pattern` |
 
 **注意**: `web_search`を使用するには`SERPER_API_KEY`環境変数の設定が必要です。詳細は[config.md - Web検索（Serper API）](config.md#web検索serper-api)を参照してください。
 
@@ -559,8 +558,8 @@ AIは自然言語の指示に基づいてツールを自動選択します。
 > テストを実行して
 # → bash で go test が実行される
 
-> search_codeで"TODO"を探して
-# → search_code が実行される
+> TODOを探して
+# → bash (grep -rn "TODO" .) が実行される
 ```
 
 **str_replace の補足**

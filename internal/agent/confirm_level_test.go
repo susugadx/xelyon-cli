@@ -14,7 +14,7 @@ func TestShouldConfirmTool_All(t *testing.T) {
 		{"write_file", "write_file", true},
 		{"delete_file", "delete_file", true},
 		{"bash", "bash", true},
-		{"search_code", "search_code", true},
+		{"web_search", "web_search", true},
 	}
 
 	for _, tt := range tests {
@@ -35,8 +35,6 @@ func TestShouldConfirmTool_Dangerous(t *testing.T) {
 	}{
 		// SafetyHigh (read-only) tools should not require confirmation
 		{"read_file", "read_file", false},
-		{"search_code", "search_code", false},
-		{"search_file", "search_file", false},
 		{"list_dir", "list_dir", false},
 
 		// SafetyMedium tools should not require confirmation

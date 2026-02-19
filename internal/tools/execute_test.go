@@ -66,7 +66,7 @@ func TestIsWriteToolConsistency(t *testing.T) {
 		}
 	}
 
-	readTools := []string{"read_file", "list_dir", "search_code"}
+	readTools := []string{"read_file", "list_dir", "web_search"}
 	for _, tool := range readTools {
 		if IsWriteTool(tool) {
 			t.Errorf("IsWriteTool(%q) = true, want false", tool)

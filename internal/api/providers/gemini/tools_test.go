@@ -168,8 +168,8 @@ func TestAllBuiltinToolsHaveDefinitions(t *testing.T) {
 		// File Operations (5)
 		"read_file", "write_file", "str_replace", "delete_file",
 		"list_dir",
-		// Search Operations (4)
-		"search_code", "search_file", "web_search", "grep_replace",
+		// Search Operations (2)
+		"web_search", "grep_replace",
 		// Development Operations (1)
 		"bash",
 		// LSP Tools (1)

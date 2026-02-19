@@ -19,10 +19,6 @@ func TestGetToolIcon(t *testing.T) {
 		{"copy_file", "📋"},
 		{"list_dir", "📁"},
 
-		// Search
-		{"search_code", "🔍"},
-		{"search_file", "🔎"},
-
 		// Shell
 		{"bash", "💻"},
 
