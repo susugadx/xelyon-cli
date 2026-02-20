@@ -51,6 +51,7 @@ type ResponsesRequest struct {
 	Instructions         string           `json:"instructions,omitempty"`         // システムプロンプト
 	MaxOutputTokens      int              `json:"max_output_tokens,omitempty"`    // 最大出力トークン数
 	Stream               bool             `json:"stream,omitempty"`
+	Store                bool             `json:"store"`                            // レスポンスを保存（previous_response_id に必要）
 	Reasoning            *ReasoningConfig `json:"reasoning,omitempty"`              // Extended Thinking
 	Tools                []ResponsesTool  `json:"tools,omitempty"`                  // ツール定義
 	PromptCacheKey       string           `json:"prompt_cache_key,omitempty"`       // プロンプトキャッシュのルーティングキー
@@ -73,8 +74,14 @@ type ResponseMetadata struct {
 
 // ResponsesUsage は Responses API の usage 情報
 type ResponsesUsage struct {
-	InputTokens  int `json:"input_tokens"`
-	OutputTokens int `json:"output_tokens"`
+	InputTokens        int                    `json:"input_tokens"`
+	OutputTokens       int                    `json:"output_tokens"`
+	InputTokensDetails *ResponsesInputDetails `json:"input_tokens_details,omitempty"`
+}
+
+// ResponsesInputDetails は Responses API の入力トークン詳細
+type ResponsesInputDetails struct {
+	CachedTokens int `json:"cached_tokens,omitempty"`
 }
 
 // ResponsesError は Responses API のエラー情報
@@ -126,6 +133,7 @@ func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, h
 		Model:                model,
 		MaxOutputTokens:      api.GetMaxOutputTokens(ctx, "openai", model),
 		Stream:               true,
+		Store:                true,
 		Tools:                GetResponsesToolDefinitions(p.mcpTools), // Function Calling
 		PromptCacheKey:       "xelyon",
 		PromptCacheRetention: "24h",
@@ -356,13 +364,18 @@ func (p *Provider) handleResponsesStreaming(ctx context.Context, resp *http.Resp
 			}
 
 			if usage != nil {
+				cachedTokens := 0
+				if usage.InputTokensDetails != nil {
+					cachedTokens = usage.InputTokensDetails.CachedTokens
+				}
 				lastUsage = &api.Usage{
-					InputTokens:  usage.InputTokens,
-					OutputTokens: usage.OutputTokens,
+					InputTokens:       usage.InputTokens,
+					OutputTokens:      usage.OutputTokens,
+					CachedInputTokens: cachedTokens,
 				}
 				if os.Getenv("XELYON_DEBUG_OPENAI") == "1" {
-					fmt.Fprintf(os.Stderr, "[DEBUG OpenAI Responses] usage received: input=%d, output=%d\n",
-						usage.InputTokens, usage.OutputTokens)
+					fmt.Fprintf(os.Stderr, "[DEBUG OpenAI Responses] usage received: input=%d, output=%d, cached=%d\n",
+						usage.InputTokens, usage.OutputTokens, cachedTokens)
 				}
 			} else if os.Getenv("XELYON_DEBUG_OPENAI") == "1" {
 				fmt.Fprintf(os.Stderr, "[DEBUG OpenAI Responses] %s event but usage is nil\n", chunk.Type)
@@ -453,6 +466,7 @@ func (p *Provider) chatWithImageResponses(ctx context.Context, systemPrompt stri
 		Input:                input,
 		MaxOutputTokens:      api.GetMaxOutputTokens(ctx, "openai", model),
 		Stream:               true,
+		Store:                true,
 		Tools:                GetResponsesToolDefinitions(p.mcpTools), // Function Calling
 		PromptCacheKey:       "xelyon",
 		PromptCacheRetention: "24h",

@@ -249,13 +249,7 @@ func DefaultConfig() *Config {
 			},
 		},
 		OpenAI: OpenAIConfig{
-			ResponsesAPIModels: []string{
-				"gpt-5.2-codex",
-				"gpt-5.1-codex",
-				"gpt-5.1-codex-max",
-				"gpt-5-codex",
-				"gpt-5.2",
-			},
+			ResponsesAPIModels: []string{}, // プレフィックスマッチで自動判定（ユーザーカスタムモデル追加用）
 		},
 		Thinking: ThinkingConfig{
 			Enabled: false,

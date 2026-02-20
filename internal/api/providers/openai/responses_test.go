@@ -1,6 +1,7 @@
 package openai
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
@@ -511,6 +512,51 @@ func TestResponsesAPIInputFormat(t *testing.T) {
 	}
 	if input[4].Output != "package main" {
 		t.Errorf("function_call_output Output = %q, want 'package main'", input[4].Output)
+	}
+}
+
+// TestResponsesUsageJSONDeserialization は ResponsesUsage の JSON デシリアライズで
+// input_tokens_details.cached_tokens が正しくマッピングされることを確認
+func TestResponsesUsageJSONDeserialization(t *testing.T) {
+	jsonData := `{"input_tokens": 1000, "output_tokens": 200, "input_tokens_details": {"cached_tokens": 800}}`
+
+	var usage ResponsesUsage
+	if err := json.Unmarshal([]byte(jsonData), &usage); err != nil {
+		t.Fatalf("Failed to unmarshal ResponsesUsage: %v", err)
+	}
+
+	if usage.InputTokens != 1000 {
+		t.Errorf("InputTokens = %d, want 1000", usage.InputTokens)
+	}
+	if usage.OutputTokens != 200 {
+		t.Errorf("OutputTokens = %d, want 200", usage.OutputTokens)
+	}
+	if usage.InputTokensDetails == nil {
+		t.Fatal("InputTokensDetails is nil, want non-nil")
+	}
+	if usage.InputTokensDetails.CachedTokens != 800 {
+		t.Errorf("CachedTokens = %d, want 800", usage.InputTokensDetails.CachedTokens)
+	}
+}
+
+// TestResponsesUsageWithoutCachedTokens は input_tokens_details が省略された場合に
+// InputTokensDetails が nil のままであることを確認
+func TestResponsesUsageWithoutCachedTokens(t *testing.T) {
+	jsonData := `{"input_tokens": 500, "output_tokens": 100}`
+
+	var usage ResponsesUsage
+	if err := json.Unmarshal([]byte(jsonData), &usage); err != nil {
+		t.Fatalf("Failed to unmarshal ResponsesUsage: %v", err)
+	}
+
+	if usage.InputTokens != 500 {
+		t.Errorf("InputTokens = %d, want 500", usage.InputTokens)
+	}
+	if usage.OutputTokens != 100 {
+		t.Errorf("OutputTokens = %d, want 100", usage.OutputTokens)
+	}
+	if usage.InputTokensDetails != nil {
+		t.Errorf("InputTokensDetails = %+v, want nil", usage.InputTokensDetails)
 	}
 }
 

@@ -564,12 +564,11 @@ func TestIsResponsesAPIModel(t *testing.T) {
 		model    string
 		expected bool
 	}{
-		// デフォルトで Responses API を使用するモデル
+		// GPT-5 シリーズ（prefix マッチ）
 		{"gpt-5.2-codex", true},
 		{"gpt-5.1-codex", true},
 		{"gpt-5.1-codex-max", true},
 		{"gpt-5-codex", true},
-		// GPT-5 シリーズは prefix マッチで全て Responses API
 		{"gpt-5.2", true},
 		{"gpt-5.2-pro", true},
 		{"gpt-5.1", true},
@@ -578,10 +577,24 @@ func TestIsResponsesAPIModel(t *testing.T) {
 		{"gpt-5-nano", true},
 		{"gpt-5.3-codex-spark", true},
 		{"gpt-5.1-codex-mini", true},
-		// Chat Completions API を使用するモデル（GPT-5 以外）
-		{"gpt-4o", false},
-		{"gpt-4o-mini", false},
+		// GPT-4o シリーズ（prefix マッチ）
+		{"gpt-4o", true},
+		{"gpt-4o-mini", true},
+		{"gpt-4o-audio-preview", true},
+		// o-series reasoning モデル（prefix マッチ）
+		{"o1", true},
+		{"o1-mini", true},
+		{"o1-pro", true},
+		{"o3", true},
+		{"o3-mini", true},
+		{"o3-pro", true},
+		{"o4-mini", true},
+		// Chat Completions API を使用するモデル（Responses API 非対応）
+		{"gpt-4-turbo", false},
+		{"gpt-4", false},
 		{"gpt-3.5-turbo", false},
+		// prefix 誤マッチ防止
+		{"openai-custom", false},
 		// 存在しないモデル
 		{"unknown-model", false},
 	}
