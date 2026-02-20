@@ -128,8 +128,8 @@ func TestOpenAIProvider_ChatWithTools_NonStreaming(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Fatalf("Failed to decode request: %v", err)
 		}
-		if req.Model != "gpt-4o" {
-			t.Errorf("Model = %q, want 'gpt-4o'", req.Model)
+		if req.Model != "gpt-4-turbo" {
+			t.Errorf("Model = %q, want 'gpt-4-turbo'", req.Model)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -148,7 +148,7 @@ func TestOpenAIProvider_ChatWithTools_NonStreaming(t *testing.T) {
 	p := New("test-key")
 	history := []api.Message{{Role: "user", Content: "Hello"}}
 
-	result, err := p.ChatWithTools(context.Background(), "System prompt", history, "gpt-4o")
+	result, err := p.ChatWithTools(context.Background(), "System prompt", history, "gpt-4-turbo")
 	if err != nil {
 		t.Fatalf("ChatWithTools() error = %v", err)
 	}
@@ -172,7 +172,7 @@ func TestOpenAIProvider_ChatWithTools_Streaming(t *testing.T) {
 	p := New("test-key")
 	history := []api.Message{{Role: "user", Content: "Hi"}}
 
-	result, err := p.ChatWithTools(context.Background(), "System", history, "gpt-4o")
+	result, err := p.ChatWithTools(context.Background(), "System", history, "gpt-4-turbo")
 	if err != nil {
 		t.Fatalf("ChatWithTools() error = %v", err)
 	}
@@ -228,15 +228,9 @@ func TestOpenAIProvider_ChatWithImage_NoImage(t *testing.T) {
 	defer os.Setenv("OPENAI_API_URL", originalURL)
 	os.Setenv("OPENAI_API_URL", server.URL)
 
-	// ChatWithImage は image=nil の場合 ChatWithTools 経由になるが、
-	// モデル判定で Responses API 側に流れてもモックを使えるように URL も上書きしておく
-	originalResponsesURL := os.Getenv("OPENAI_RESPONSES_URL")
-	defer os.Setenv("OPENAI_RESPONSES_URL", originalResponsesURL)
-	os.Setenv("OPENAI_RESPONSES_URL", server.URL)
-
 	p := New("test-key")
 
-	result, err := p.ChatWithImage(context.Background(), "System", nil, "Hello", nil, "gpt-4o")
+	result, err := p.ChatWithImage(context.Background(), "System", nil, "Hello", nil, "gpt-4-turbo")
 	if err != nil {
 		t.Fatalf("ChatWithImage() error = %v", err)
 	}
@@ -269,15 +263,10 @@ func TestOpenAIProvider_ChatWithImage_WithImage(t *testing.T) {
 	defer os.Setenv("OPENAI_API_URL", originalURL)
 	os.Setenv("OPENAI_API_URL", server.URL)
 
-	// Responses API 側に流れてもモックを使えるように URL も上書きしておく
-	originalResponsesURL := os.Getenv("OPENAI_RESPONSES_URL")
-	defer os.Setenv("OPENAI_RESPONSES_URL", originalResponsesURL)
-	os.Setenv("OPENAI_RESPONSES_URL", server.URL)
-
 	p := New("test-key")
 	image := &api.ImageData{Base64: "dGVzdA==", MediaType: "image/png"}
 
-	result, err := p.ChatWithImage(context.Background(), "System", nil, "Describe this", image, "gpt-4o")
+	result, err := p.ChatWithImage(context.Background(), "System", nil, "Describe this", image, "gpt-4-turbo")
 	if err != nil {
 		t.Fatalf("ChatWithImage() error = %v", err)
 	}
