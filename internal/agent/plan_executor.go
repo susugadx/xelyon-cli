@@ -50,11 +50,8 @@ func (a *Agent) runImplementationPhase(ctx context.Context, p *plan.Plan) error 
 
 	green.Printf("\n✓ All %d steps completed!\n", len(p.Steps))
 
-	// git diff empty check（Normal Mode と対称にする）
-	if needsContinue, feedback := checkGitDiffEmpty(); needsContinue {
-		yellow.Println("⚠️  Plan completed but no changes detected by git diff")
-		return fmt.Errorf("plan completed but no changes detected: %s", feedback)
-	}
+	// git diff empty check は executeStepV2 の Level 1/Level 2 ガードでカバー済み
+	// runImplementationPhase レベルではチェックしない（調査系プランなど変更なしが正常なケースがある）
 
 	return nil
 }
