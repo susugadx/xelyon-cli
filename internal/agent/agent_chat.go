@@ -135,12 +135,6 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 	var completionVerified bool // 完了検証ガード（タスク内1回限り）
 	var hookRetryCount int      // フック失敗リトライカウンター
 
-	// Step Tracking: テキスト計画の未完了検知
-	var pendingSteps int     // テキスト計画のステップ数
-	var completedActions int // 実行済みアクション（write系 + bash）の数
-	var forceContCount int   // 強制続行の回数
-	const maxForceCont = 3   // 強制続行の上限
-
 	// テキスト計画 → create_plan リダイレクト
 	var textPlanRedirectCount int
 	const maxTextPlanRedirects = 2
@@ -211,16 +205,6 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 			continue
 		}
 
-		// Step Tracking: テキスト計画を記録（最初の検出のみ）
-		// ツール呼び出しが同時に存在する場合はすでに実行中なのでセットしない（誤検知防止）
-		if pendingSteps == 0 && len(toolCalls) == 0 {
-			if steps := extractTextPlan(response); len(steps) >= 2 && isActionPlan(steps) {
-				pendingSteps = len(steps)
-				completedActions = 0
-				forceContCount = 0
-			}
-		}
-
 		// デバッグログ
 		if os.Getenv("XELYON_DEBUG_TOOLS") == "1" {
 			fmt.Printf("[DEBUG Tools] Response length: %d, ToolCalls found: %d\n", len(response), len(toolCalls))
@@ -236,12 +220,11 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 
 		// ツール呼び出しなし = 通常の回答
 		if len(toolCalls) == 0 {
-			// Step Tracking: 計画のステップが未完了なら強制続行
-			if pendingSteps > 0 && completedActions < pendingSteps {
-				forceContCount++
-				if forceContCount <= maxForceCont {
-					yellow.Printf("⚠️  Step tracking: %d/%d steps completed. Forcing continuation... (%d/%d)\n",
-						completedActions, pendingSteps, forceContCount, maxForceCont)
+			// テキスト計画の検出 → create_plan ツール使用を要求
+			if steps := extractTextPlan(response); len(steps) >= 3 && isActionPlan(steps) {
+				textPlanRedirectCount++
+				if textPlanRedirectCount > maxTextPlanRedirects {
+					yellow.Printf("⚠️  AI failed to use create_plan after %d attempts. Execute tools directly.\n", maxTextPlanRedirects)
 					a.History = append(a.History, api.Message{
 						Role:             "assistant",
 						Content:          response,
@@ -249,21 +232,9 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 					})
 					a.History = append(a.History, api.Message{
 						Role:    "user",
-						Content: fmt.Sprintf("[SYSTEM] You declared %d steps but only completed %d. Do NOT summarize. Continue with the remaining steps immediately.", pendingSteps, completedActions),
+						Content: "[SYSTEM] create_plan is not available. Execute the required changes directly using tools (str_replace, bash, etc).",
 					})
 					continue
-				}
-				yellow.Printf("⚠️  Step tracking: %d/%d steps completed but AI not progressing. Giving up.\n",
-					completedActions, pendingSteps)
-				pendingSteps = 0
-			}
-
-			// テキスト計画の検出 → create_plan ツール使用を要求
-			if steps := extractTextPlan(response); len(steps) >= 3 && isActionPlan(steps) {
-				textPlanRedirectCount++
-				if textPlanRedirectCount > maxTextPlanRedirects {
-					yellow.Printf("⚠️  AI failed to use create_plan after %d attempts. Proceeding without plan.\n", maxTextPlanRedirects)
-					break // ループ終了 → Step Tracking がセーフティネット
 				}
 				yellow.Printf("⚠️  Text plan detected (%d steps). Redirecting to create_plan tool... (%d/%d)\n",
 					len(steps), textPlanRedirectCount, maxTextPlanRedirects)
@@ -427,11 +398,6 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 			lastToolCall = tc
 
 			result := a.executeToolOnly(tc)
-
-			// Step Tracking: アクション実行をカウント（write系 + bash + プランツール）
-			if tools.IsWriteTool(tc.Tool) || tc.Tool == "bash" || isPlanTool(tc.Tool) {
-				completedActions++
-			}
 
 			// 書き込み成功後の自動 read-back（ツール結果に追記）
 			if a.shouldThrottleWrite(tc) {
