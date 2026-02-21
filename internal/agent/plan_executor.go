@@ -49,6 +49,13 @@ func (a *Agent) runImplementationPhase(ctx context.Context, p *plan.Plan) error 
 	}
 
 	green.Printf("\n✓ All %d steps completed!\n", len(p.Steps))
+
+	// git diff empty check（Normal Mode と対称にする）
+	if needsContinue, feedback := checkGitDiffEmpty(); needsContinue {
+		yellow.Println("⚠️  Plan completed but no changes detected by git diff")
+		return fmt.Errorf("plan completed but no changes detected: %s", feedback)
+	}
+
 	return nil
 }
 
@@ -81,6 +88,7 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 	executedTools := make(map[string]bool) // ステップ内で実行されたツール名
 	stepHadWrites := false                 // 書き込み系ツールが実行されたか
 	beforeDiffHash := getGitDiffHash()     // Level 2 用: ステップ開始時の diff ハッシュ
+	var stepCompletionVerified bool        // LSP完了検証ガード（ステップ内1回限り）
 
 	for j := 0; j < maxStepIterations; j++ {
 		response, err := a.CurrentProvider.ChatWithTools(
@@ -179,6 +187,19 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 						})
 						continue
 					}
+				}
+			}
+
+			// LSP完了検証（Normal Mode と対称にする - 1回限り）
+			if !stepCompletionVerified {
+				if needsContinue, feedback := a.verifyCompletionWithDiagnostics(response); needsContinue {
+					stepCompletionVerified = true
+					yellow.Println("⚠️  Step completion verification: LSP errors found in modified files")
+					a.History = append(a.History, api.Message{
+						Role:    "user",
+						Content: feedback,
+					})
+					continue
 				}
 			}
 
