@@ -485,7 +485,7 @@ func TestNormalMode_CreatePlanFC(t *testing.T) {
 	agent.Stats = NewSessionStats("test")
 
 	ctx := context.Background()
-	err := agent.runNormalMode(ctx, "do something complex")
+	err := agent.runNormalMode(ctx, "do something complex", nil)
 
 	// create_plan ツールが実行されるが、DefaultRegistry に登録済みかは
 	// 環境依存なので、エラーなく完了することだけを確認
@@ -514,7 +514,7 @@ func TestNormalMode_PlanJSONFallback(t *testing.T) {
 	agent.Stats = NewSessionStats("test")
 
 	ctx := context.Background()
-	err := agent.runNormalMode(ctx, "do something")
+	err := agent.runNormalMode(ctx, "do something", nil)
 
 	if err != nil {
 		t.Errorf("runNormalMode() returned error: %v", err)
@@ -544,7 +544,7 @@ func TestNormalMode_PlanJSONParseFailed(t *testing.T) {
 	agent.Stats = NewSessionStats("test")
 
 	ctx := context.Background()
-	err := agent.runNormalMode(ctx, "do something")
+	err := agent.runNormalMode(ctx, "do something", nil)
 
 	if err != nil {
 		t.Errorf("runNormalMode() returned error: %v", err)
