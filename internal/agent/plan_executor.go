@@ -57,6 +57,9 @@ func (a *Agent) runImplementationPhase(ctx context.Context, p *plan.Plan) error 
 		}
 	}
 
+	// 完了フックを実行
+	a.runCompletionHooksWithRetry(ctx)
+
 	// git diff empty check は executeStepV2 の Level 1/Level 2 ガードでカバー済み
 	// runImplementationPhase レベルではチェックしない（調査系プランなど変更なしが正常なケースがある）
 
@@ -108,6 +111,9 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 
 		// ツール呼び出しチェック
 		toolCalls := tools.ParseToolCalls(response)
+		skippedWrites := 0
+		skippedCommands := 0
+		writeQueued := false
 
 		// FC rescue: テキストから抽出された toolCall にダミー ID を注入
 		// これにより下流の処理が FC 成功時と同じパス（role:"tool"）を通る
@@ -117,9 +123,26 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 			}
 		}
 
-		if len(toolCalls) > 0 {
+		// Write Throttle と bash スキップの適用
+		var execToolCalls []*tools.ToolCall // 実行対象のツール呼び出し
+		for _, tc := range toolCalls {
+			if a.shouldThrottleWrite(tc) && writeQueued {
+				skippedWrites++
+				continue
+			}
+			if skippedWrites > 0 && tc.Tool == "bash" {
+				skippedCommands++
+				continue
+			}
+			execToolCalls = append(execToolCalls, tc)
+			if a.shouldThrottleWrite(tc) {
+				writeQueued = true
+			}
+		}
+
+		if len(execToolCalls) > 0 {
 			// ツール呼び出しあり: addToolCallsToHistory で履歴に追加（セッション保存対応）
-			a.addToolCallsToHistory(response, toolCalls)
+			a.addToolCallsToHistory(response, execToolCalls)
 		} else {
 			// ツール呼び出しなし（ステップ完了時の最終応答）: 通常の履歴追加 + セッション保存
 			assistantMsg := api.Message{
@@ -139,7 +162,7 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 			}
 		}
 
-		if len(toolCalls) == 0 {
+		if len(execToolCalls) == 0 {
 			// AIが質問している場合、自動続行を試みる
 			if isAIQuestion(response) && continueCount < maxContinues {
 				continueCount++
@@ -150,6 +173,16 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 					Content: "[AUTO-CONTINUE] Yes, proceed with the step. Execute the required tools directly without asking for confirmation.",
 				})
 				continue
+			}
+
+			// Level 0: ツール実行なし + 完了宣言 + 既に diff 変化あり → 別ステップで実施済みとして正常終了
+			// 条件3（diff 変化）がないと AI がサボってもスキップされてしまうため必須
+			if containsCompletionDeclaration(response) && beforeDiffHash != "" {
+				afterDiffHash := getGitDiffHash()
+				if afterDiffHash != "" && afterDiffHash != beforeDiffHash {
+					green.Printf("✓ Step %d completed (already applied)\n", step.ID)
+					return nil
+				}
 			}
 
 			// Level 1: 計画の tools に書き込み系があるのに未実行 → 強制続行
@@ -226,7 +259,7 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 		}
 
 		// ツールを実行
-		for _, toolCall := range toolCalls {
+		for _, toolCall := range execToolCalls {
 			// Plan 実行中は create_plan を無視（再帰防止）
 			if toolCall.Tool == "create_plan" {
 				// create_plan を無視したことを履歴に追加
@@ -255,6 +288,13 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 
 			// ツール実行（executeToolOnly と同じパターン）
 			result, change := tools.Execute(toolCall)
+
+			// 書き込み成功後の自動 read-back 処理
+			if a.shouldThrottleWrite(toolCall) {
+				if !strings.HasPrefix(result, "Error:") {
+					a.autoReadBack(toolCall)
+				}
+			}
 
 			// ステップ完了検証用: 実行されたツールを記録
 			executedTools[toolCall.Tool] = true
@@ -304,6 +344,11 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 					Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, result),
 				})
 			}
+		}
+
+		// スキップされた書き込みとコマンドがあればメッセージを注入して通知
+		if skippedWrites > 0 || skippedCommands > 0 {
+			a.injectWriteThrottleMessage(skippedWrites, skippedCommands)
 		}
 
 		// 失敗検出時の処理
