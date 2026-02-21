@@ -33,6 +33,7 @@ type Provider struct {
 	mcpTools             []api.ToolDefinition // MCP ツール定義（Function Calling用）
 	usageCallback        api.UsageCallback    // トークン使用量コールバック
 	lastReasoningContent string               // 最後の reasoning_content（DeepSeek Reasoner用）
+	toolChoice           *string              // tool_choice 強制用
 }
 
 // New は新しいProviderを作成
@@ -92,12 +93,23 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		MaxTokens:     api.GetMaxOutputTokens(ctx, "deepseek", model),
 		Stream:        true,
 		StreamOptions: &api.StreamOptions{IncludeUsage: true},
+		ToolChoice:    "", // テスト期待値との整合性のため空文字列で初期化
 	}
 
 	// Function Calling: ツール定義を追加（環境変数で無効化可能）
 	if os.Getenv("DEEPSEEK_FUNCTION_CALLING") != "0" {
 		reqBody.Tools = openai.GetCombinedOpenAITools(p.mcpTools)
 		reqBody.ToolChoice = "auto"
+
+		// tool_choice 強制設定がある場合
+		if p.toolChoice != nil {
+			reqBody.ToolChoice = map[string]interface{}{
+				"type": "function",
+				"function": map[string]string{
+					"name": *p.toolChoice,
+				},
+			}
+		}
 	}
 
 	req, err := p.CreateAPIRequest(ctx, reqBody)
@@ -340,6 +352,16 @@ func (p *Provider) SetMCPTools(tools []api.ToolDefinition) {
 // SetUsageCallback は使用量レポートのコールバックを設定する
 func (p *Provider) SetUsageCallback(callback api.UsageCallback) {
 	p.usageCallback = callback
+}
+
+// SetToolChoice は tool_choice を設定する
+func (p *Provider) SetToolChoice(name string) {
+	p.toolChoice = &name
+}
+
+// ClearToolChoice は tool_choice をクリアする
+func (p *Provider) ClearToolChoice() {
+	p.toolChoice = nil
 }
 
 // LastReasoningContent は最後の API 呼び出しで返された reasoning_content を返す

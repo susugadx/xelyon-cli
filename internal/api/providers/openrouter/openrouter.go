@@ -63,6 +63,7 @@ type Provider struct {
 	usageCallback     api.UsageCallback    // トークン使用量コールバック
 	compactionEnabled bool                 // Compaction が有効か
 	compactionTrigger int                  // Compaction を開始する入力トークン閾値
+	toolChoice        *string              // tool_choice 強制用
 }
 
 // New は新しいProviderを作成
@@ -141,6 +142,16 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	if p.IsFunctionCallingEnabled() {
 		reqBody.Tools = openai.GetCombinedOpenAITools(p.mcpTools)
 		reqBody.ToolChoice = "auto"
+
+		// tool_choice 強制設定がある場合
+		if p.toolChoice != nil {
+			reqBody.ToolChoice = map[string]interface{}{
+				"type": "function",
+				"function": map[string]string{
+					"name": *p.toolChoice,
+				},
+			}
+		}
 	}
 
 	jsonBody, err := json.Marshal(reqBody)
@@ -424,6 +435,16 @@ func (p *Provider) SetMCPTools(tools []api.ToolDefinition) {
 // SetUsageCallback はトークン使用量コールバックを設定
 func (p *Provider) SetUsageCallback(callback api.UsageCallback) {
 	p.usageCallback = callback
+}
+
+// SetToolChoice は tool_choice を設定する
+func (p *Provider) SetToolChoice(name string) {
+	p.toolChoice = &name
+}
+
+// ClearToolChoice は tool_choice をクリアする
+func (p *Provider) ClearToolChoice() {
+	p.toolChoice = nil
 }
 
 // chatWithClaudeAPI は Claude モデル用に Anthropic Skin エンドポイントを使用して通信する

@@ -54,6 +54,7 @@ type ResponsesRequest struct {
 	Store                bool             `json:"store"`                            // レスポンスを保存（previous_response_id に必要）
 	Reasoning            *ReasoningConfig `json:"reasoning,omitempty"`              // Extended Thinking
 	Tools                []ResponsesTool  `json:"tools,omitempty"`                  // ツール定義
+	ToolChoice           interface{}      `json:"tool_choice,omitempty"`            // "auto", "none", "required", またはオブジェクト
 	PromptCacheKey       string           `json:"prompt_cache_key,omitempty"`       // プロンプトキャッシュのルーティングキー
 	PromptCacheRetention string           `json:"prompt_cache_retention,omitempty"` // キャッシュ保持期間（"24h"でextended cache）
 }
@@ -137,6 +138,16 @@ func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, h
 		Tools:                GetResponsesToolDefinitions(p.mcpTools), // Function Calling
 		PromptCacheKey:       "xelyon",
 		PromptCacheRetention: "24h",
+	}
+
+	// tool_choice 強制設定がある場合
+	if p.toolChoice != nil {
+		reqBody.ToolChoice = map[string]interface{}{
+			"type": "function",
+			"function": map[string]string{
+				"name": *p.toolChoice,
+			},
+		}
 	}
 
 	// システムプロンプトを developer メッセージとして Input の先頭に追加
@@ -470,6 +481,16 @@ func (p *Provider) chatWithImageResponses(ctx context.Context, systemPrompt stri
 		Tools:                GetResponsesToolDefinitions(p.mcpTools), // Function Calling
 		PromptCacheKey:       "xelyon",
 		PromptCacheRetention: "24h",
+	}
+
+	// tool_choice 強制設定がある場合
+	if p.toolChoice != nil {
+		reqBody.ToolChoice = map[string]interface{}{
+			"type": "function",
+			"function": map[string]string{
+				"name": *p.toolChoice,
+			},
+		}
 	}
 
 	// Extended Thinking 適用

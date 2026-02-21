@@ -67,6 +67,16 @@ func (p *Provider) chatWithCompletions(ctx context.Context, systemPrompt string,
 	if os.Getenv("OPENAI_FUNCTION_CALLING") != "0" {
 		reqBody.Tools = GetCombinedOpenAITools(p.mcpTools)
 		reqBody.ToolChoice = "auto"
+
+		// tool_choice 強制設定がある場合
+		if p.toolChoice != nil {
+			reqBody.ToolChoice = map[string]interface{}{
+				"type": "function",
+				"function": map[string]string{
+					"name": *p.toolChoice,
+				},
+			}
+		}
 	}
 
 	// Extended Thinking 適用

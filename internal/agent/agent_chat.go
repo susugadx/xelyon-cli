@@ -155,6 +155,10 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 				a.History,
 				a.CurrentModel,
 			)
+			// tool_choice が設定されていた場合は解除
+			if tc, ok := a.CurrentProvider.(interface{ ClearToolChoice() }); ok {
+				tc.ClearToolChoice()
+			}
 		}
 		if err != nil {
 			ui.StopGlobalSpinner()
@@ -236,6 +240,17 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 					})
 					continue
 				}
+
+				// 2回目: tool_choice で FC 強制
+				if textPlanRedirectCount >= 2 {
+					yellow.Printf("⚠️  Text plan detected again. Forcing create_plan via tool_choice... (%d/%d)\n",
+						textPlanRedirectCount, maxTextPlanRedirects)
+					// tool_choice を一時的に設定
+					if tc, ok := a.CurrentProvider.(interface{ SetToolChoice(name string) }); ok {
+						tc.SetToolChoice("create_plan")
+					}
+				}
+
 				yellow.Printf("⚠️  Text plan detected (%d steps). Redirecting to create_plan tool... (%d/%d)\n",
 					len(steps), textPlanRedirectCount, maxTextPlanRedirects)
 				a.History = append(a.History, api.Message{

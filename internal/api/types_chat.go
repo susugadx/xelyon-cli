@@ -17,7 +17,7 @@ type ChatRequest struct {
 	StreamOptions        *StreamOptions `json:"stream_options,omitempty"`         // ストリーミング時のオプション
 	ReasoningEffort      string         `json:"reasoning_effort,omitempty"`       // OpenAI Extended Thinking用
 	Tools                []OpenAITool   `json:"tools,omitempty"`                  // Function Calling用
-	ToolChoice           string         `json:"tool_choice,omitempty"`            // "auto", "none", "required"
+	ToolChoice           interface{}    `json:"tool_choice,omitempty"`            // "auto", "none", "required", またはオブジェクト
 	PromptCacheKey       string         `json:"prompt_cache_key,omitempty"`       // プロンプトキャッシュのルーティングキー
 	PromptCacheRetention string         `json:"prompt_cache_retention,omitempty"` // キャッシュ保持期間（"24h"でextended cache）
 }

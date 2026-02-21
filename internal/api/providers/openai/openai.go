@@ -26,6 +26,7 @@ type Provider struct {
 	lastResponseID string               // Responses API の最新レスポンスID（キャッシュ用）
 	mcpTools       []api.ToolDefinition // MCP ツール定義（Function Calling用）
 	usageCallback  api.UsageCallback    // トークン使用量コールバック
+	toolChoice     *string              // tool_choice 強制用
 }
 
 // New は新しいProviderを作成
@@ -94,6 +95,16 @@ func (p *Provider) SetMCPTools(tools []api.ToolDefinition) {
 // SetUsageCallback は使用量レポートのコールバックを設定する
 func (p *Provider) SetUsageCallback(callback api.UsageCallback) {
 	p.usageCallback = callback
+}
+
+// SetToolChoice は tool_choice を設定する
+func (p *Provider) SetToolChoice(name string) {
+	p.toolChoice = &name
+}
+
+// ClearToolChoice は tool_choice をクリアする
+func (p *Provider) ClearToolChoice() {
+	p.toolChoice = nil
 }
 
 // ChatWithImage は画像付きメッセージで会話を行う
