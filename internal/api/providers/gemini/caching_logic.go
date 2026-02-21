@@ -35,6 +35,28 @@ func (p *Provider) invalidateCache() {
 	p.cacheExpireTime = time.Time{}
 }
 
+// ClearCache はプロバイダーが保持するキャッシュ（リモート/ローカル）をクリアする
+func (p *Provider) ClearCache() {
+	if p.activeCacheName == "" {
+		return
+	}
+
+	debug := os.Getenv("XELYON_DEBUG_GEMINI") == "1"
+	if debug {
+		fmt.Fprintf(os.Stderr, "[DEBUG Gemini] Clearing cache: %s\n", p.activeCacheName)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	err := p.DeleteCachedContent(ctx, p.activeCacheName)
+	if err != nil && debug {
+		fmt.Fprintf(os.Stderr, "[DEBUG Gemini] Failed to delete remote cache: %v\n", err)
+	}
+
+	p.invalidateCache()
+}
+
 const (
 	minCacheTokens    = 32768
 	maxDiffMessages   = 20      // 差分メッセージ数がこれを超えたらキャッシュ再作成

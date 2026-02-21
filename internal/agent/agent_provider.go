@@ -53,6 +53,13 @@ func (a *Agent) SwitchProvider(providerName string) error {
 		}
 	}
 
+	// 既存プロバイダーのキャッシュをクリア（サポートしている場合）
+	if a.CurrentProvider != nil {
+		if cacheClearable, ok := a.CurrentProvider.(api.CacheClearable); ok {
+			cacheClearable.ClearCache()
+		}
+	}
+
 	// プロバイダー切り替え
 	oldProvider := a.ProviderName
 	oldModel := a.CurrentModel

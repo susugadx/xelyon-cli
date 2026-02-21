@@ -133,6 +133,12 @@ type ReasoningContentProvider interface {
 	LastReasoningContent() string
 }
 
+// CacheClearable はモデル/プロバイダー切り替え時にキャッシュをクリア可能なプロバイダーのオプショナルインターフェース
+type CacheClearable interface {
+	// ClearCache はプロバイダーが保持するキャッシュ（リモート/ローカル）をクリアする
+	ClearCache()
+}
+
 // knownModelMaxOutputTokens は既知モデルの最大出力トークン数マップ
 var knownModelMaxOutputTokens = map[string]int{
 	"deepseek-chat":          8192,

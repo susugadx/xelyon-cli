@@ -35,6 +35,13 @@ func handleModelCommand(agent *Agent, args []string) bool {
 	// /model <model-name> → モデル切り替え
 	newModel := args[0]
 
+	// 既存プロバイダーのキャッシュをクリア（サポートしている場合）
+	if agent.CurrentProvider != nil {
+		if cacheClearable, ok := agent.CurrentProvider.(api.CacheClearable); ok {
+			cacheClearable.ClearCache()
+		}
+	}
+
 	// モデルを切り替え
 	oldModel := agent.CurrentModel
 	agent.CurrentModel = newModel

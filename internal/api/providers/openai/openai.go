@@ -87,6 +87,11 @@ func (p *Provider) ClearResponseID() {
 	p.lastResponseID = ""
 }
 
+// ClearCache はプロバイダーが保持するキャッシュ（リモート/ローカル）をクリアする
+func (p *Provider) ClearCache() {
+	p.ClearResponseID()
+}
+
 // SetMCPTools は MCP ツール定義を設定する（Function Calling用）
 func (p *Provider) SetMCPTools(tools []api.ToolDefinition) {
 	p.mcpTools = tools
