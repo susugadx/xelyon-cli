@@ -23,7 +23,7 @@ provider_models:
         default_model: deepseek-chat
         max_output_tokens: 16384
     gemini:
-        default_model: gemini-3-flash-preview
+        default_model: gemini-3.1-pro-preview
         max_output_tokens: 65536
     groq:
         default_model: meta-llama/llama-4-scout-17b-16e-instruct
@@ -196,12 +196,8 @@ lsp:
 # OpenAI設定
 # ============================================================
 openai:
-    responses_api_models:
-        - gpt-5.2-codex
-        - gpt-5.1-codex
-        - gpt-5.1-codex-max
-        - gpt-5-codex
-        - gpt-5.2
+    # Responses APIを使用するモデル
+    responses_api_models: []
 
 # ============================================================
 # Extended Thinking設定
@@ -250,6 +246,7 @@ mcp:
 hooks:
     # 完了時に実行するコマンド（例: go test ./...）
     on_completion: []
+    on_step_complete: []
     # コマンドタイムアウト（秒）（デフォルト: 60）
     timeout: 60
     # フック失敗時の最大リトライ回数（デフォルト: 3）

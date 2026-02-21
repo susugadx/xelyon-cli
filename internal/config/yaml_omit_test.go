@@ -39,7 +39,7 @@ provider_models:
   bedrock:
     default_model: global.anthropic.claude-opus-4-5-20251101-v1:0
   gemini:
-    default_model: gemini-3-flash-preview
+    default_model: gemini-3.1-pro-preview
 `
 	cfg := DefaultConfig()
 	if err := yaml.Unmarshal([]byte(yamlData), cfg); err != nil {

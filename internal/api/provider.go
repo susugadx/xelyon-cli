@@ -143,7 +143,7 @@ var knownModelMaxOutputTokens = map[string]int{
 	"claude-opus-4-5":        64000,
 	"gpt-5.2":                16384,
 	"gemini-2.5-flash":       65536,
-	"gemini-3-flash-preview": 65536,
+	"gemini-3.1-pro-preview": 65536,
 }
 
 // GetMaxOutputTokens は指定されたプロバイダーとモデルの最大出力トークン数を取得する（4段階フォールバック）

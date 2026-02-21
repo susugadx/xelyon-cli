@@ -73,7 +73,7 @@ provider_models:
         default_model: deepseek-chat
         max_output_tokens: 16384
     gemini:
-        default_model: gemini-3-flash-preview
+        default_model: gemini-3.1-pro-preview
         max_output_tokens: 65536
     groq:
         default_model: meta-llama/llama-4-scout-17b-16e-instruct
@@ -246,12 +246,8 @@ lsp:
 # OpenAI設定
 # ============================================================
 openai:
-    responses_api_models:
-        - gpt-5.2-codex
-        - gpt-5.1-codex
-        - gpt-5.1-codex-max
-        - gpt-5-codex
-        - gpt-5.2
+    # Responses APIを使用するモデル
+    responses_api_models: []
 
 # ============================================================
 # Extended Thinking設定
@@ -295,13 +291,11 @@ mcp:
 # ============================================================
 # フック設定
 # ============================================================
-# タスク完了時・ステップ完了時に自動実行するシェルコマンド（LSPチェック後）
+# タスク完了時に自動実行するシェルコマンド（LSPチェック後）
 # 変更ファイルは XELYON_CHANGED_FILES 環境変数で参照可能
 hooks:
     # 完了時に実行するコマンド（例: go test ./...）
     on_completion: []
-    # Plan Mode のステップ完了時に実行するコマンド
-    # テンプレート変数: {{step_id}}, {{step_description}}, {{step_status}}
     on_step_complete: []
     # コマンドタイムアウト（秒）（デフォルト: 60）
     timeout: 60

@@ -200,7 +200,7 @@ provider_models:
     default_model: claude-sonnet-4-6
     max_output_tokens: 64000   # デフォルト: 64000
   gemini:
-    default_model: gemini-3-flash-preview
+    default_model: gemini-3.1-pro-preview
     max_output_tokens: 65536   # デフォルト: 65536
   deepseek:
     default_model: deepseek-chat

@@ -57,9 +57,6 @@ func (a *Agent) runImplementationPhase(ctx context.Context, p *plan.Plan) error 
 		}
 	}
 
-	// 完了フックを実行
-	a.runCompletionHooksWithRetry(ctx)
-
 	// git diff empty check は executeStepV2 の Level 1/Level 2 ガードでカバー済み
 	// runImplementationPhase レベルではチェックしない（調査系プランなど変更なしが正常なケースがある）
 
@@ -96,6 +93,10 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 	stepHadWrites := false                 // 書き込み系ツールが実行されたか
 	beforeDiffHash := getGitDiffHash()     // Level 2 用: ステップ開始時の diff ハッシュ
 	var stepCompletionVerified bool        // LSP完了検証ガード（ステップ内1回限り）
+
+	// ループ検知用トラッカー
+	var lastToolCall *tools.ToolCall
+	var sameCallCount int
 
 	for j := 0; j < maxStepIterations; j++ {
 		response, err := a.CurrentProvider.ChatWithTools(
@@ -259,7 +260,24 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 		}
 
 		// ツールを実行
-		for _, toolCall := range execToolCalls {
+		for tcIdx, toolCall := range execToolCalls {
+			// ループ検知（assistant メッセージは追加済みなので response="" で呼ぶ）
+			if a.shouldAbortToolLoopWithResponse("", toolCall, lastToolCall, &sameCallCount) {
+				// 残りの未実行 TC にダミー結果を追加
+				for _, remaining := range execToolCalls[tcIdx+1:] {
+					if remaining.ID != "" {
+						a.History = append(a.History, api.Message{
+							Role:       "tool",
+							Content:    "[SYSTEM] Skipped due to tool loop detection.",
+							ToolCallID: remaining.ID,
+							ToolName:   remaining.Tool,
+						})
+					}
+				}
+				break
+			}
+			lastToolCall = toolCall
+
 			// Plan 実行中は create_plan を無視（再帰防止）
 			if toolCall.Tool == "create_plan" {
 				// create_plan を無視したことを履歴に追加

@@ -43,7 +43,7 @@ var modelTokenLimits = map[string]int{
 
 	// === Gemini ===
 	"gemini-3-pro-preview":   1000000,
-	"gemini-3-flash-preview": 1000000,
+	"gemini-3.1-pro-preview": 1000000,
 	"gemini-2.0-flash":       1000000,
 	"gemini-2.0-flash-exp":   1000000,
 	"gemini-2.5-flash":       1000000,

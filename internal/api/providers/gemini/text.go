@@ -16,8 +16,8 @@ import (
 
 // chatWithTextMode はテキストベースのツール呼び出しモード（従来の実装）
 func (p *Provider) chatWithTextMode(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
-	// モデル名を設定（config優先、フォールバックはgemini-3-flash-preview）
-	model = api.GetDefaultModel(model, "gemini", "gemini-3-flash-preview")
+	// モデル名を設定（config優先、フォールバックはgemini-3.1-pro-preview）
+	model = api.GetDefaultModel(model, "gemini", "gemini-3.1-pro-preview")
 
 	// キャッシュ管理（テキストモードではツール定義なし）
 	cacheName, msgsToSend, err := p.updateOrUseCache(ctx, systemPrompt, history, model, nil, nil)
@@ -131,8 +131,8 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 		return p.ChatWithTools(ctx, systemPrompt, history, model)
 	}
 
-	// モデル名を設定（config優先、フォールバックはgemini-3-flash-preview）
-	model = api.GetDefaultModel(model, "gemini", "gemini-3-flash-preview")
+	// モデル名を設定（config優先、フォールバックはgemini-3.1-pro-preview）
+	model = api.GetDefaultModel(model, "gemini", "gemini-3.1-pro-preview")
 
 	// System prompt を system_instruction フィールドに設定
 	var sysInstruction *GeminiSystemInstruction
