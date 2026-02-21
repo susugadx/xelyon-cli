@@ -280,10 +280,10 @@ func (a *Agent) runCompletionHooksWithRetry(ctx context.Context) bool {
 		if len(toolCalls) > 0 {
 			// Write throttle 適用（runNormalMode と同じパターン）
 			var execToolCalls []*tools.ToolCall
-			writeWillExecute := false
+			writeQueued := false
 			skippedWrites := 0
 			for _, tc := range toolCalls {
-				if a.shouldThrottleWrite(tc) && writeWillExecute {
+				if a.shouldThrottleWrite(tc) && writeQueued {
 					skippedWrites++
 					continue
 				}
@@ -292,7 +292,7 @@ func (a *Agent) runCompletionHooksWithRetry(ctx context.Context) bool {
 				}
 				execToolCalls = append(execToolCalls, tc)
 				if a.shouldThrottleWrite(tc) {
-					writeWillExecute = true
+					writeQueued = true
 				}
 			}
 

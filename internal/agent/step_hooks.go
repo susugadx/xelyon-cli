@@ -146,10 +146,10 @@ func (a *Agent) runStepCompleteHooksWithRetry(ctx context.Context, stepID int, s
 		if len(toolCalls) > 0 {
 			// Write throttle 適用
 			var execToolCalls []*tools.ToolCall
-			writeWillExecute := false
+			writeQueued := false
 			skippedWrites := 0
 			for _, tc := range toolCalls {
-				if a.shouldThrottleWrite(tc) && writeWillExecute {
+				if a.shouldThrottleWrite(tc) && writeQueued {
 					skippedWrites++
 					continue
 				}
@@ -158,7 +158,7 @@ func (a *Agent) runStepCompleteHooksWithRetry(ctx context.Context, stepID int, s
 				}
 				execToolCalls = append(execToolCalls, tc)
 				if a.shouldThrottleWrite(tc) {
-					writeWillExecute = true
+					writeQueued = true
 				}
 			}
 

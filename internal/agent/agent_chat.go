@@ -370,12 +370,12 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 
 		// Phase 2: 実行対象のツール呼び出しをフィルタ（create_plan, write throttle, bash skip を除外）
 		var execToolCalls []*tools.ToolCall
-		writeWillExecute := false
+		writeQueued := false
 		for _, tc := range toolCalls {
 			if tc.Tool == "create_plan" {
 				continue
 			}
-			if a.shouldThrottleWrite(tc) && writeWillExecute {
+			if a.shouldThrottleWrite(tc) && writeQueued {
 				skippedWrites++
 				continue
 			}
@@ -385,7 +385,7 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 			}
 			execToolCalls = append(execToolCalls, tc)
 			if a.shouldThrottleWrite(tc) {
-				writeWillExecute = true
+				writeQueued = true
 			}
 		}
 
