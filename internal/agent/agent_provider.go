@@ -83,8 +83,7 @@ func (a *Agent) SwitchProvider(providerName string) error {
 		reporter.SetUsageCallback(func(u api.Usage) {
 			a.statsMu.Lock()
 			defer a.statsMu.Unlock()
-			a.Stats.AddTokens(u.InputTokens, u.OutputTokens)
-			a.Stats.LastUsage = &u
+			a.Stats.AddUsage(u)
 		})
 	}
 

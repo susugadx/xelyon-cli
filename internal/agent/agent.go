@@ -234,8 +234,7 @@ func NewAgent(model string, provider api.Provider, headless bool) *Agent {
 		reporter.SetUsageCallback(func(u api.Usage) {
 			agent.statsMu.Lock()
 			defer agent.statsMu.Unlock()
-			agent.Stats.AddTokens(u.InputTokens, u.OutputTokens)
-			agent.Stats.LastUsage = &u
+			agent.Stats.AddUsage(u)
 		})
 	}
 

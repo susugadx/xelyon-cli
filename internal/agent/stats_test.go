@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/api"
 )
 
 func TestNewSessionStats(t *testing.T) {
@@ -55,6 +57,37 @@ func TestSessionStats_AddTokens(t *testing.T) {
 
 	if stats.OutputTokens != 275 {
 		t.Errorf("AddTokens() OutputTokens = %d, want 275", stats.OutputTokens)
+	}
+}
+
+func TestSessionStats_AddUsage(t *testing.T) {
+	stats := NewSessionStats("test")
+
+	usage := api.Usage{
+		InputTokens:         100,
+		OutputTokens:        200,
+		CachedInputTokens:   50,
+		CacheCreationTokens: 25,
+	}
+
+	stats.AddUsage(usage)
+
+	if stats.InputTokens != 100 {
+		t.Errorf("AddUsage() InputTokens = %d, want 100", stats.InputTokens)
+	}
+	if stats.OutputTokens != 200 {
+		t.Errorf("AddUsage() OutputTokens = %d, want 200", stats.OutputTokens)
+	}
+	if stats.CachedInputTokens != 50 {
+		t.Errorf("AddUsage() CachedInputTokens = %d, want 50", stats.CachedInputTokens)
+	}
+	if stats.CacheCreationTokens != 25 {
+		t.Errorf("AddUsage() CacheCreationTokens = %d, want 25", stats.CacheCreationTokens)
+	}
+	if stats.LastUsage == nil {
+		t.Error("AddUsage() LastUsage should not be nil")
+	} else if stats.LastUsage.InputTokens != 100 {
+		t.Errorf("AddUsage() LastUsage.InputTokens = %d, want 100", stats.LastUsage.InputTokens)
 	}
 }
 
