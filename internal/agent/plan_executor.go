@@ -50,6 +50,13 @@ func (a *Agent) runImplementationPhase(ctx context.Context, p *plan.Plan) error 
 
 	green.Printf("\n✓ All %d steps completed!\n", len(p.Steps))
 
+	// セッションを保存
+	if a.storage != nil && a.session != nil {
+		if err := a.storage.Save(a.session); err != nil {
+			yellow.Printf("Warning: Failed to save session: %v\n", err)
+		}
+	}
+
 	// git diff empty check は executeStepV2 の Level 1/Level 2 ガードでカバー済み
 	// runImplementationPhase レベルではチェックしない（調査系プランなど変更なしが正常なケースがある）
 
@@ -99,15 +106,6 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 			return fmt.Errorf("step %d failed: %w", step.ID, err)
 		}
 
-		a.History = append(a.History, api.Message{
-			Role:             "assistant",
-			Content:          response,
-			ReasoningContent: a.getLastReasoningContent(),
-		})
-		if a.Stats != nil {
-			a.Stats.AssistantMessages++
-		}
-
 		// ツール呼び出しチェック
 		toolCalls := tools.ParseToolCalls(response)
 
@@ -116,6 +114,28 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 		for i, tc := range toolCalls {
 			if tc.ID == "" {
 				toolCalls[i].ID = fmt.Sprintf("call_rescue_%03d", i+1)
+			}
+		}
+
+		if len(toolCalls) > 0 {
+			// ツール呼び出しあり: addToolCallsToHistory で履歴に追加（セッション保存対応）
+			a.addToolCallsToHistory(response, toolCalls)
+		} else {
+			// ツール呼び出しなし（ステップ完了時の最終応答）: 通常の履歴追加 + セッション保存
+			assistantMsg := api.Message{
+				Role:             "assistant",
+				Content:          response,
+				ReasoningContent: a.getLastReasoningContent(),
+			}
+			a.History = append(a.History, assistantMsg)
+
+			// セッションに保存
+			if a.session != nil {
+				a.session.AddMessageFromAPI(assistantMsg, a.CurrentModel)
+			}
+
+			if a.Stats != nil {
+				a.Stats.AssistantMessages++
 			}
 		}
 
@@ -206,20 +226,35 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 		}
 
 		// ツールを実行
-		var allResults []string
 		for _, toolCall := range toolCalls {
 			// Plan 実行中は create_plan を無視（再帰防止）
 			if toolCall.Tool == "create_plan" {
-				allResults = append(allResults, "[create_plan] Ignored: already executing a plan. Continue with current step.")
+				// create_plan を無視したことを履歴に追加
+				ignoreMsg := "[create_plan] Ignored: already executing a plan. Continue with current step."
+				if toolCall.ID != "" {
+					// Function Calling: role="tool" で tool_call_id 付きで送信
+					toolMsg := api.Message{
+						Role:       "tool",
+						Content:    ignoreMsg,
+						ToolCallID: toolCall.ID,
+						ToolName:   toolCall.Tool,
+					}
+					a.History = append(a.History, toolMsg)
+					if a.session != nil {
+						a.session.AddMessageFromAPI(toolMsg, a.CurrentModel)
+					}
+				} else {
+					// テキストベース: role="user" で送信
+					a.History = append(a.History, api.Message{
+						Role:    "user",
+						Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, ignoreMsg),
+					})
+				}
 				continue
 			}
 
-			if a.Stats != nil {
-				a.Stats.AddToolExecution(toolCall.Tool)
-			}
-
+			// ツール実行（executeToolOnly と同じパターン）
 			result, change := tools.Execute(toolCall)
-			allResults = append(allResults, fmt.Sprintf("[%s]\n%s", toolCall.Tool, result))
 
 			// ステップ完了検証用: 実行されたツールを記録
 			executedTools[toolCall.Tool] = true
@@ -245,6 +280,29 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 						yellow.Printf("Warning: Failed to persist change: %v\n", err)
 					}
 				}
+			}
+
+			// ツール結果を履歴に追加（executeToolOnly と同じパターン）
+			if toolCall.ID != "" {
+				// Function Calling: role="tool" で tool_call_id 付きで送信
+				toolMsg := api.Message{
+					Role:       "tool",
+					Content:    result,
+					ToolCallID: toolCall.ID,
+					ToolName:   toolCall.Tool,
+				}
+				a.History = append(a.History, toolMsg)
+
+				// セッションに tool result を保存
+				if a.session != nil {
+					a.session.AddMessageFromAPI(toolMsg, a.CurrentModel)
+				}
+			} else {
+				// テキストベース: role="user" で送信（従来方式）
+				a.History = append(a.History, api.Message{
+					Role:    "user",
+					Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, result),
+				})
 			}
 		}
 
@@ -331,12 +389,6 @@ Please follow these instructions to fix the issue and retry the step.`, comment,
 				return fmt.Errorf("step %d aborted by user: %s", step.ID, lastFailReason)
 			}
 		}
-
-		// 結果を履歴に追加
-		a.History = append(a.History, api.Message{
-			Role:    "user",
-			Content: fmt.Sprintf("[Tool Results]\n%s", strings.Join(allResults, "\n\n")),
-		})
 	}
 
 	green.Printf("✓ Step %d completed\n", step.ID)
