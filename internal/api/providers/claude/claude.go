@@ -378,6 +378,27 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 		}
 
 		switch event.Type {
+		case "message_start":
+			// message_start は常に最初のイベント。input_tokens の権威的ソース。
+			// message_delta には基本リクエストで output_tokens のみ含まれるため、
+			// input_tokens は message_start から取得する。
+			var msgStart struct {
+				Message struct {
+					Usage StreamUsage `json:"usage"`
+				} `json:"message"`
+			}
+			if err := json.Unmarshal([]byte(data), &msgStart); err == nil {
+				u := msgStart.Message.Usage
+				lastUsage = &api.Usage{
+					// InputTokens を正規化: API の input_tokens は非キャッシュ分のみ
+					InputTokens:         u.InputTokens + u.CacheReadInputTokens + u.CacheCreationInputTokens,
+					OutputTokens:        u.OutputTokens,
+					CachedInputTokens:   u.CacheReadInputTokens,
+					CacheCreationTokens: u.CacheCreationInputTokens,
+				}
+			}
+			return "", false, nil
+
 		case "message_stop":
 			return "", true, nil
 
@@ -439,13 +460,21 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 			return "", false, nil
 
 		case "message_delta":
-			// usage 情報を記録
+			// usage 情報を記録（message_delta の usage は累積値）
 			if event.Usage != nil {
-				lastUsage = &api.Usage{
-					InputTokens:         event.Usage.InputTokens,
-					OutputTokens:        event.Usage.OutputTokens,
-					CachedInputTokens:   event.Usage.CacheReadInputTokens,
-					CacheCreationTokens: event.Usage.CacheCreationInputTokens,
+				if lastUsage == nil {
+					lastUsage = &api.Usage{}
+				}
+				lastUsage.OutputTokens = event.Usage.OutputTokens
+				// フォールバック: message_start が欠損した場合 or Web Search で input_tokens が更新された場合
+				if event.Usage.InputTokens > 0 {
+					lastUsage.InputTokens = event.Usage.InputTokens + event.Usage.CacheReadInputTokens + event.Usage.CacheCreationInputTokens
+				}
+				if event.Usage.CacheReadInputTokens > 0 {
+					lastUsage.CachedInputTokens = event.Usage.CacheReadInputTokens
+				}
+				if event.Usage.CacheCreationInputTokens > 0 {
+					lastUsage.CacheCreationTokens = event.Usage.CacheCreationInputTokens
 				}
 			}
 			return "", false, nil

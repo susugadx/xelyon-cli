@@ -235,8 +235,8 @@ func (s *SessionStats) EstimatedCost() float64 {
 	cacheCreationCost := float64(s.CacheCreationTokens) / 1_000_000.0 * pricing.CacheCreationCostPerM
 
 	// 通常入力トークン = 全入力 - キャッシュヒット - キャッシュ作成
-	// 注: InputTokens は API から返される総入力トークン数
-	// キャッシュの場合、InputTokens = CachedInputTokens + CacheCreationTokens + 通常入力 となる
+	// 注: InputTokens はプロバイダー層で正規化済みの総入力トークン数
+	// (= uncached + CachedInputTokens + CacheCreationTokens)
 	uncachedInput := s.InputTokens - s.CachedInputTokens - s.CacheCreationTokens
 	if uncachedInput < 0 {
 		uncachedInput = 0

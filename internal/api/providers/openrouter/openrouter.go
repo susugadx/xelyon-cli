@@ -588,7 +588,8 @@ func (p *Provider) handleClaudeStreamingResponse(ctx context.Context, resp *http
 			if err := json.Unmarshal([]byte(data), &msgStart); err == nil {
 				usage := msgStart.Message.Usage
 				lastUsage = &api.Usage{
-					InputTokens:         usage.InputTokens,
+					// InputTokens を正規化: API の input_tokens は非キャッシュ分のみ
+					InputTokens:         usage.InputTokens + usage.CacheReadInputTokens + usage.CacheCreationInputTokens,
 					CachedInputTokens:   usage.CacheReadInputTokens,
 					CacheCreationTokens: usage.CacheCreationInputTokens,
 				}

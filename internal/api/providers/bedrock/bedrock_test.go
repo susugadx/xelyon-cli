@@ -440,8 +440,9 @@ func TestProcessChunk_MessageStart(t *testing.T) {
 	if lastUsage == nil {
 		t.Fatal("lastUsage should not be nil after message_start with usage")
 	}
-	if lastUsage.InputTokens != 150 {
-		t.Errorf("InputTokens = %d, want 150", lastUsage.InputTokens)
+	// 正規化後: 150 (uncached) + 80 (cache_read) + 20 (cache_creation) = 250
+	if lastUsage.InputTokens != 250 {
+		t.Errorf("InputTokens = %d, want 250", lastUsage.InputTokens)
 	}
 	if lastUsage.CachedInputTokens != 80 {
 		t.Errorf("CachedInputTokens = %d, want 80", lastUsage.CachedInputTokens)

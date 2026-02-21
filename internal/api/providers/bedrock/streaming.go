@@ -140,7 +140,8 @@ func (p *Provider) processChunk(data []byte, toolUses map[int]*toolUseAccumulato
 			if *lastUsage == nil {
 				*lastUsage = &api.Usage{}
 			}
-			(*lastUsage).InputTokens = usage.InputTokens
+			// InputTokens を正規化: API の input_tokens は非キャッシュ分のみ
+			(*lastUsage).InputTokens = usage.InputTokens + usage.CacheReadInputTokens + usage.CacheCreationInputTokens
 			(*lastUsage).CachedInputTokens = usage.CacheReadInputTokens
 			(*lastUsage).CacheCreationTokens = usage.CacheCreationInputTokens
 		}
@@ -214,9 +215,9 @@ func (p *Provider) processChunk(data []byte, toolUses map[int]*toolUseAccumulato
 				*lastUsage = &api.Usage{}
 			}
 			(*lastUsage).OutputTokens = event.Usage.OutputTokens
-			// message_delta に input_tokens がある場合も反映
+			// message_delta に input_tokens がある場合も正規化して反映
 			if event.Usage.InputTokens > 0 {
-				(*lastUsage).InputTokens = event.Usage.InputTokens
+				(*lastUsage).InputTokens = event.Usage.InputTokens + event.Usage.CacheReadInputTokens + event.Usage.CacheCreationInputTokens
 			}
 			if event.Usage.CacheReadInputTokens > 0 {
 				(*lastUsage).CachedInputTokens = event.Usage.CacheReadInputTokens
