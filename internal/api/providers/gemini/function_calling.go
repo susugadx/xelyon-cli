@@ -14,9 +14,8 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
-// getGeminiFunctionCallingURL は Function Calling 用の URL を生成
-// NOTE: Gemini APIはPretty-printed JSONを返すため、行単位ストリーミングは不可能
-// 非ストリーミング（generateContent）エンドポイントを使用
+// getGeminiFunctionCallingURL は非ストリーミング（generateContent）用の URL を生成
+// ChatWithImage (FC有効時) で使用。chatWithFunctionCalling は SSE に移行済み。
 func getGeminiFunctionCallingURL(model string) string {
 	if baseURL := os.Getenv("GEMINI_API_URL"); baseURL != "" {
 		return baseURL
@@ -169,8 +168,8 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 			len(jsonBody), len(jsonBody)/4/1000)
 	}
 
-	// Function Calling エンドポイント（非ストリーミング）
-	url := getGeminiFunctionCallingURL(model)
+	// Function Calling エンドポイント（SSEストリーミング）
+	url := getGeminiURL(model)
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, nil)
 	if err != nil {
@@ -243,15 +242,8 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 		return "", api.SanitizeErrorMessage(body, resp.StatusCode)
 	}
 
-	// Function Calling レスポンスを処理（非ストリーミング JSON）
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		if spinner != nil {
-			spinner.Stop()
-		}
-		return "", fmt.Errorf("failed to read FC response body: %w", err)
-	}
-	return p.handleFunctionCallingResponse(body, spinner)
+	// Function Calling レスポンスを処理（SSE ストリーミング）
+	return p.handleSSEResponse(ctx, resp, spinner)
 }
 
 // extractToolNameFromContent はメッセージ内容からツール名を推定

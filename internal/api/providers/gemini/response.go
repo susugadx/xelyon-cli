@@ -19,6 +19,8 @@ func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, s
 	var fullResponse strings.Builder
 	var functionCalls []*api.GeminiFunctionCall
 	var thoughtParts []map[string]any // Gemini 3: thought パートを収集（次リクエストに返す）
+	var rescuedToolJSONs []string     // FC救済: コードブロックから抽出したツールJSON
+	var headerPrinted bool            // テキスト応答時のAIヘッダー表示済みフラグ
 	var usage *GeminiUsageMetadata
 
 	scanner := bufio.NewScanner(resp.Body)
@@ -89,11 +91,30 @@ func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, s
 			}
 
 			if part.Text != "" {
-				// ツール呼び出しJSONのチェック
 				trimmed := strings.TrimSpace(part.Text)
-				if strings.HasPrefix(trimmed, "{\"tool\"") || strings.HasPrefix(trimmed, "{ \"tool\"") {
+				// ツールJSONプレフィックスの場合は表示せず fullResponse に記録のみ
+				if isToolJSONPrefix(trimmed) {
 					fullResponse.WriteString(part.Text)
 					continue
+				}
+				// コードブロック内のツールJSON救済（ループ内で即時分離）
+				extracted, remaining := extractCodeBlockToolJSON(part.Text)
+				if len(extracted) > 0 {
+					rescuedToolJSONs = append(rescuedToolJSONs, extracted...)
+					if strings.TrimSpace(remaining) != "" {
+						if !headerPrinted {
+							api.PrintAIHeader()
+							headerPrinted = true
+						}
+						fmt.Print(remaining)
+					}
+					fullResponse.WriteString(remaining)
+					continue
+				}
+				// 通常テキスト
+				if !headerPrinted {
+					api.PrintAIHeader()
+					headerPrinted = true
 				}
 				fmt.Print(part.Text)
 				fullResponse.WriteString(part.Text)
@@ -121,6 +142,17 @@ func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, s
 
 	if err := scanner.Err(); err != nil {
 		return "", fmt.Errorf("SSE scan error: %w", err)
+	}
+
+	// FC が空の場合、テキストから救済したツールJSONを使用
+	if len(functionCalls) == 0 && len(rescuedToolJSONs) > 0 {
+		if debug {
+			fmt.Fprintf(os.Stderr, "[DEBUG Gemini SSE] Rescuing %d tool call(s) from text\n", len(rescuedToolJSONs))
+		}
+		fmt.Fprintf(os.Stderr, "⚠️  FC rescue: %d tool call(s) extracted from text response\n", len(rescuedToolJSONs))
+		for _, tj := range rescuedToolJSONs {
+			fullResponse.WriteString(tj)
+		}
 	}
 
 	// FunctionCall を出力（重複排除）

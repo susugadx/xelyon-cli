@@ -303,8 +303,8 @@ func TestProvider_ChatWithTools_FunctionCalling(t *testing.T) {
 			t.Error("Request should include tools for Function Calling")
 		}
 
-		// Function Calling レスポンス（plain JSON - :generateContent エンドポイント）
-		w.Header().Set("Content-Type", "application/json")
+		// Function Calling レスポンス（SSE - :streamGenerateContent エンドポイント）
+		w.Header().Set("Content-Type", "text/event-stream")
 		resp := GeminiFunctionResponse{
 			Candidates: []GeminiFunctionCandidate{
 				{
@@ -321,7 +321,7 @@ func TestProvider_ChatWithTools_FunctionCalling(t *testing.T) {
 			},
 		}
 		jsonBytes, _ := json.Marshal(resp)
-		_, _ = w.Write(jsonBytes)
+		fmt.Fprintf(w, "data: %s\n\n", string(jsonBytes))
 	})
 
 	originalURL := os.Getenv("GEMINI_API_URL")
@@ -423,8 +423,8 @@ func TestProvider_ChatWithTools_WithMCPTools(t *testing.T) {
 			}
 		}
 
-		// レスポンス（MCPツール呼び出し）- plain JSON
-		w.Header().Set("Content-Type", "application/json")
+		// レスポンス（MCPツール呼び出し）- SSE
+		w.Header().Set("Content-Type", "text/event-stream")
 		resp := GeminiFunctionResponse{
 			Candidates: []GeminiFunctionCandidate{
 				{
@@ -440,7 +440,7 @@ func TestProvider_ChatWithTools_WithMCPTools(t *testing.T) {
 			},
 		}
 		jsonBytes, _ := json.Marshal(resp)
-		_, _ = w.Write(jsonBytes)
+		fmt.Fprintf(w, "data: %s\n\n", string(jsonBytes))
 	})
 
 	originalURL := os.Getenv("GEMINI_API_URL")
