@@ -109,9 +109,17 @@ Please fix these errors before declaring completion. Do NOT skip these issues.`,
 // checkGitDiffEmpty は git diff --stat を実行し、差分が空の場合に警告を返す。
 // runCompletionHooks とは独立して呼び出し元でチェックする。
 func checkGitDiffEmpty() (needsContinue bool, feedback string) {
+	// tracked changes
 	diffCmd := exec.Command("git", "diff", "--stat")
 	output, err := diffCmd.CombinedOutput()
-	if err != nil || strings.TrimSpace(string(output)) == "" {
+	hasDiff := err == nil && strings.TrimSpace(string(output)) != ""
+
+	// untracked files（write_file で新規作成されたファイル用）
+	untrackedCmd := exec.Command("git", "ls-files", "--others", "--exclude-standard")
+	untrackedOut, err2 := untrackedCmd.CombinedOutput()
+	hasUntracked := err2 == nil && strings.TrimSpace(string(untrackedOut)) != ""
+
+	if !hasDiff && !hasUntracked {
 		yellow.Println("⚠️  WARNING: No changes detected by git diff.")
 		return true, "[SYSTEM] WARNING: You declared completion but git diff shows NO changes. Did you actually make the required modifications? Review your plan and ensure all steps are implemented."
 	}
@@ -139,6 +147,16 @@ func (a *Agent) runCompletionHooks(changedFiles []string) (needsContinue bool, f
 		diffOutput = string(output)
 		if strings.TrimSpace(diffOutput) != "" {
 			fmt.Println(diffOutput)
+		}
+	}
+
+	// untracked files（write_file で新規作成されたファイル用）
+	untrackedCmd := exec.Command("git", "ls-files", "--others", "--exclude-standard")
+	if untrackedOut, err := untrackedCmd.CombinedOutput(); err == nil {
+		untrackedStr := strings.TrimSpace(string(untrackedOut))
+		if untrackedStr != "" {
+			fmt.Printf("New files (untracked):\n%s\n", untrackedStr)
+			diffOutput += "\nNew files (untracked):\n" + untrackedStr
 		}
 	}
 

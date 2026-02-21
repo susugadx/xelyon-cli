@@ -129,6 +129,11 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 					})
 					continue
 				}
+				// maxContinues 到達 → failed
+				yellow.Printf("⚠️  Step %d: required %s never executed after %d attempts. Marking as failed.\n",
+					step.ID, strings.Join(missing, ", "), maxContinues)
+				return fmt.Errorf("step %d incomplete: required tools [%s] were never executed after %d attempts",
+					step.ID, strings.Join(missing, ", "), maxContinues)
 			}
 
 			// Level 2: 書き込みツール実行済みだが diff 変化なし → 強制続行
@@ -341,6 +346,17 @@ func getGitDiffFiles() map[string]bool {
 			files[line] = true
 		}
 	}
+
+	// untracked files も検出（write_file で新規作成されたファイル用）
+	untrackedOut, err := exec.Command("git", "ls-files", "--others", "--exclude-standard").CombinedOutput()
+	if err == nil {
+		for _, line := range strings.Split(strings.TrimSpace(string(untrackedOut)), "\n") {
+			if line != "" {
+				files[line] = true
+			}
+		}
+	}
+
 	return files
 }
 

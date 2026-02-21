@@ -476,6 +476,44 @@ func TestFilterToolJSON_NestedJSON(t *testing.T) {
 	}
 }
 
+func TestFilterToolJSON_NamePattern(t *testing.T) {
+	tests := []struct {
+		name     string
+		chunks   []string
+		expected string
+	}{
+		{
+			name:     "name pattern (DeepSeek OpenAI format)",
+			chunks:   []string{`{"name": "str_replace", "arguments": {"file": "main.go"}}`},
+			expected: "",
+		},
+		{
+			name:     "name pattern with space",
+			chunks:   []string{`{ "name": "write_file", "arguments": {}}`},
+			expected: "",
+		},
+		{
+			name:     "text before name pattern",
+			chunks:   []string{`I'll edit the file. {"name": "str_replace", "arguments": {}}`},
+			expected: "I'll edit the file. ",
+		},
+		{
+			name:     "name pattern across chunks",
+			chunks:   []string{`{"name": "bash",`, ` "arguments": {"command": "ls"}}`},
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := testFilterToolJSON(tt.chunks)
+			if result != tt.expected {
+				t.Errorf("filterToolJSON(%v) = %q, want %q", tt.chunks, result, tt.expected)
+			}
+		})
+	}
+}
+
 func TestFilterToolJSON_NonToolJSON(t *testing.T) {
 	tests := []struct {
 		name     string

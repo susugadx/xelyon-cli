@@ -1,12 +1,9 @@
 package agent
 
 import (
-	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
-
-	"github.com/susugadx/xelyon-cli/internal/agent/plan"
 )
 
 var textPlanPatterns = []*regexp.Regexp{
@@ -96,26 +93,4 @@ func isPlanTool(toolName string) bool {
 		return true
 	}
 	return false
-}
-
-// buildAutoPlan creates a Plan object from text steps.
-func buildAutoPlan(steps []string) *plan.Plan {
-	planSteps := make([]plan.PlanStep, len(steps))
-	for i, desc := range steps {
-		var deps []int
-		if i > 0 {
-			deps = []int{i} // Sequential dependency (Step N depends on Step N-1)
-		}
-		planSteps[i] = plan.PlanStep{
-			ID:          i + 1,
-			Description: desc,
-			Status:      "pending",
-			DependsOn:   deps,
-		}
-	}
-	return &plan.Plan{
-		Summary: fmt.Sprintf("Auto-detected %d-step plan from text", len(steps)),
-		Steps:   planSteps,
-		Status:  plan.PlanStatusApproved,
-	}
 }

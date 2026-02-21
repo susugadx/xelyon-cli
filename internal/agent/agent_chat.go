@@ -135,6 +135,10 @@ func (a *Agent) runNormalMode(ctx context.Context, input string) error {
 	var forceContCount int   // 強制続行の回数
 	const maxForceCont = 3   // 強制続行の上限
 
+	// テキスト計画 → create_plan リダイレクト
+	var textPlanRedirectCount int
+	const maxTextPlanRedirects = 2
+
 	for i := 0; i < maxIterations; i++ {
 		// API呼び出し
 		response, err := a.CurrentProvider.ChatWithTools(
@@ -239,21 +243,28 @@ func (a *Agent) runNormalMode(ctx context.Context, input string) error {
 				pendingSteps = 0
 			}
 
-			// テキスト計画の自動検出（3ステップ以上の作業計画）
+			// テキスト計画の検出 → create_plan ツール使用を要求
 			if steps := extractTextPlan(response); len(steps) >= 3 && isActionPlan(steps) {
-				yellow.Printf("📋 Auto-detected %d-step plan in text. Switching to step-by-step execution...\n", len(steps))
-				p := buildAutoPlan(steps)
+				textPlanRedirectCount++
+				if textPlanRedirectCount > maxTextPlanRedirects {
+					yellow.Printf("⚠️  AI failed to use create_plan after %d attempts. Proceeding without plan.\n", maxTextPlanRedirects)
+					break // ループ終了 → Step Tracking がセーフティネット
+				}
+				yellow.Printf("⚠️  Text plan detected (%d steps). Redirecting to create_plan tool... (%d/%d)\n",
+					len(steps), textPlanRedirectCount, maxTextPlanRedirects)
 				a.History = append(a.History, api.Message{
 					Role:             "assistant",
 					Content:          response,
 					ReasoningContent: a.getLastReasoningContent(),
 				})
-				if err := a.runImplementationPhase(ctx, p); err != nil {
-					return err
-				}
-				a.runCompletionHooksWithRetry(ctx)
-				a.showTaskSummary()
-				return nil
+				a.History = append(a.History, api.Message{
+					Role: "user",
+					Content: "[SYSTEM] You output a text plan instead of using the create_plan tool. " +
+						"Text plans cannot be tracked or verified. " +
+						"Use the create_plan tool with proper steps and tools fields to create a structured plan. " +
+						"Do NOT output plans as numbered text.",
+				})
+				continue
 			}
 
 			// Phase 1: LSP 完了検証（1回限り - 同一エラーのループ防止）
@@ -536,6 +547,10 @@ func (a *Agent) chatWithImage(input string, image *api.ImageData) {
 	var completionVerified bool // 完了検証ガード（タスク内1回限り）
 	var hookRetryCount int      // フック失敗リトライカウンター
 
+	// テキスト計画 → create_plan リダイレクト
+	var textPlanRedirectCount int
+	const maxTextPlanRedirects = 2
+
 	for i := 0; i < maxIterations; i++ {
 		var response string
 		var err error
@@ -613,22 +628,28 @@ func (a *Agent) chatWithImage(input string, image *api.ImageData) {
 
 		// ツール呼び出しなし = 通常の回答
 		if len(toolCalls) == 0 {
-			// テキスト計画の自動検出（3ステップ以上の作業計画）
+			// テキスト計画の検出 → create_plan ツール使用を要求
 			if steps := extractTextPlan(response); len(steps) >= 3 && isActionPlan(steps) {
-				yellow.Printf("📋 Auto-detected %d-step plan in text. Switching to step-by-step execution...\n", len(steps))
-				p := buildAutoPlan(steps)
+				textPlanRedirectCount++
+				if textPlanRedirectCount > maxTextPlanRedirects {
+					yellow.Printf("⚠️  AI failed to use create_plan after %d attempts. Proceeding without plan.\n", maxTextPlanRedirects)
+					break // ループ終了
+				}
+				yellow.Printf("⚠️  Text plan detected (%d steps). Redirecting to create_plan tool... (%d/%d)\n",
+					len(steps), textPlanRedirectCount, maxTextPlanRedirects)
 				a.History = append(a.History, api.Message{
 					Role:             "assistant",
 					Content:          response,
 					ReasoningContent: a.getLastReasoningContent(),
 				})
-				if err := a.runImplementationPhase(ctx, p); err != nil {
-					red.Printf("Error: %v\n", err)
-					return
-				}
-				a.runCompletionHooksWithRetry(ctx)
-				a.showTaskSummary()
-				return
+				a.History = append(a.History, api.Message{
+					Role: "user",
+					Content: "[SYSTEM] You output a text plan instead of using the create_plan tool. " +
+						"Text plans cannot be tracked or verified. " +
+						"Use the create_plan tool with proper steps and tools fields to create a structured plan. " +
+						"Do NOT output plans as numbered text.",
+				})
+				continue
 			}
 
 			// Phase 1: LSP 完了検証（1回限り - 同一エラーのループ防止）

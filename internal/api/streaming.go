@@ -31,6 +31,8 @@ var toolJSONPatterns = []string{
 	`{ "tool"`,
 	`{"id"`,
 	`{ "id"`,
+	`{"name"`,  // DeepSeek が OpenAI 互換形式で出力するパターン
+	`{ "name"`, // 同上（スペース付き）
 }
 
 // StreamParser はストリーミングレスポンスの1行をパースする関数型
