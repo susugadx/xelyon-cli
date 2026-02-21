@@ -67,6 +67,15 @@ func (a *Agent) runInvestigationPhase(ctx context.Context) (*plan.Plan, error) {
 
 		// ツール呼び出しチェック
 		toolCalls := tools.ParseToolCalls(response)
+
+		// FC rescue: テキストから抽出された toolCall にダミー ID を注入
+		// これにより下流の処理が FC 成功時と同じパス（role:"tool"）を通る
+		for i, tc := range toolCalls {
+			if tc.ID == "" {
+				toolCalls[i].ID = fmt.Sprintf("call_rescue_%03d", i+1)
+			}
+		}
+
 		if len(toolCalls) == 0 {
 			if os.Getenv("XELYON_DEBUG_PARSE") == "1" {
 				fmt.Fprintf(os.Stderr, "[DEBUG runInvestigationPhase] ParseToolCalls returned 0 tools\n")
