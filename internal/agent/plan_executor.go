@@ -91,6 +91,7 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 	// ステップ完了検証用トラッカー
 	executedTools := make(map[string]bool) // ステップ内で実行されたツール名
 	stepHadWrites := false                 // 書き込み系ツールが実行されたか
+	stepHadNoChangeNeeded := false         // 書き込み系ツールが「変更不要」と返したか
 	beforeDiffHash := getGitDiffHash()     // Level 2 用: ステップ開始時の diff ハッシュ
 	var stepCompletionVerified bool        // LSP完了検証ガード（ステップ内1回限り）
 
@@ -224,7 +225,7 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 			}
 
 			// Level 2: 書き込みツール実行済みだが diff 変化なし → 強制続行
-			if stepHadWrites {
+			if stepHadWrites && !stepHadNoChangeNeeded {
 				afterDiffHash := getGitDiffHash()
 				if beforeDiffHash != "" && afterDiffHash != "" && beforeDiffHash == afterDiffHash {
 					if continueCount < maxContinues {
@@ -318,6 +319,13 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 			executedTools[toolCall.Tool] = true
 			if tools.IsWriteTool(toolCall.Tool) {
 				stepHadWrites = true
+
+				// 変更不要・対象なしの場合はLevel 2ガードをスキップ
+				if strings.Contains(result, "no files found") ||
+					strings.Contains(result, "Total matches: 0") ||
+					strings.Contains(result, "no change needed") {
+					stepHadNoChangeNeeded = true
+				}
 			}
 
 			// 失敗パターンをチェック
