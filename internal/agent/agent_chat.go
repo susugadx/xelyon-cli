@@ -225,7 +225,9 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 		// ツール呼び出しなし = 通常の回答
 		if len(toolCalls) == 0 {
 			// テキスト計画の検出 → create_plan ツール使用を要求
-			if steps := extractTextPlan(response); len(steps) >= 3 && isActionPlan(steps) {
+			// ただし完了宣言を含むレスポンスはスキップ（まとめの番号リストを誤検知しない）
+			steps := extractTextPlan(response)
+			if !containsCompletionDeclaration(response) && len(steps) >= 3 && isActionPlan(steps) {
 				textPlanRedirectCount++
 				if textPlanRedirectCount > maxTextPlanRedirects {
 					yellow.Printf("⚠️  AI failed to use create_plan after %d attempts. Execute tools directly.\n", maxTextPlanRedirects)
