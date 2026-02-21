@@ -201,13 +201,8 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 		return "", err
 	}
 
-	// URL: FC有効時は非ストリーミング、無効時はストリーミング
-	var url string
-	if p.IsFunctionCallingEnabled() {
-		url = getGeminiFunctionCallingURL(model)
-	} else {
-		url = getGeminiURL(model)
-	}
+	// URL: 常に SSE 対応エンドポイントを使用
+	url := getGeminiURL(model)
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, nil)
 	if err != nil {
@@ -259,16 +254,6 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 		return "", api.SanitizeErrorMessage(body, resp.StatusCode)
 	}
 
-	// FC有効時は非ストリーミング（generateContent）レスポンスを処理
-	if p.IsFunctionCallingEnabled() {
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			spinner.Stop()
-			return "", fmt.Errorf("failed to read response body: %w", err)
-		}
-		return p.handleFunctionCallingResponse(body, spinner)
-	}
-
-	// FC無効時はストリーミング処理
+	// 常にストリーミング処理（SSE）
 	return p.handleSSEResponse(ctx, resp, spinner)
 }

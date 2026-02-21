@@ -238,12 +238,13 @@ func TestProvider_ChatWithImage_WithImage(t *testing.T) {
 			t.Fatalf("Failed to decode request: %v", err)
 		}
 
-		// FC有効時は非ストリーミング（generateContent）レスポンスを返す
-		w.Header().Set("Content-Type", "application/json")
+		// FC有効/無効に関わらず SSE エンドポイントを使用するようになったため、SSEレスポンスを返す
+		w.Header().Set("Content-Type", "text/event-stream")
 		resp := GeminiFunctionResponse{
 			Candidates: []GeminiFunctionCandidate{{Content: GeminiFunctionContent{Parts: []GeminiFunctionPart{{Text: "Image analysis complete"}}}}},
 		}
-		_ = json.NewEncoder(w).Encode(resp)
+		jsonBytes, _ := json.Marshal(resp)
+		fmt.Fprintf(w, "data: %s\n\n", string(jsonBytes))
 	})
 
 	originalURL := os.Getenv("GEMINI_API_URL")
