@@ -52,10 +52,11 @@ func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *u
 
 	var fullResponse strings.Builder
 	firstChunk := true
-	inToolJSON := false // ツールJSON内にいるか
-	jsonDepth := 0      // JSONのネスト深度
-	inString := false   // JSON文字列リテラル内にいるか
-	var prevChar rune   // 前の文字（エスケープ検出用）
+	inToolJSON := false     // ツールJSON内にいるか
+	jsonDepth := 0          // JSONのネスト深度
+	inString := false       // JSON文字列リテラル内にいるか
+	var prevChar rune       // 前の文字（エスケープ検出用）
+	var pendingChunk string // チャンク分割対応: パターンプレフィックスが末尾にある場合に保留
 
 	// チャンネル経由でスキャン結果を受け取る
 	type scanResult struct {
@@ -151,6 +152,10 @@ func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *u
 
 			if done {
 				spinner.Stop()
+				// チャンク分割対応: 保留分を flush（パターンが完成しなかった = テキスト）
+				if pendingChunk != "" {
+					fmt.Print(pendingChunk)
+				}
 				if !firstChunk {
 					fmt.Println()
 				}
@@ -160,6 +165,20 @@ func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *u
 			if content != "" {
 				// fullResponseには常に追加（内部処理用）
 				fullResponse.WriteString(content)
+
+				// チャンク分割対応: 前回保留分と結合
+				if pendingChunk != "" {
+					content = pendingChunk + content
+					pendingChunk = ""
+				}
+
+				// チャンク末尾がパターンプレフィックスに一致する場合、表示を保留
+				if !inToolJSON {
+					if prefixLen := matchesPatternPrefix(content); prefixLen > 0 {
+						pendingChunk = content[len(content)-prefixLen:]
+						content = content[:len(content)-prefixLen]
+					}
+				}
 
 				// ツールJSON検出・非表示処理
 				displayContent := filterToolJSON(content, &inToolJSON, &jsonDepth, &inString, &prevChar)
@@ -190,6 +209,21 @@ func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *u
 			}
 		}
 	}
+}
+
+// matchesPatternPrefix はチャンク末尾がツールJSONパターンのプレフィックスに
+// 一致する長さを返す。一致しない場合は 0。
+// チャンク分割対応: 次チャンクと結合してからパターン判定するため。
+func matchesPatternPrefix(content string) int {
+	for _, pattern := range toolJSONPatterns {
+		for prefixLen := len(pattern) - 1; prefixLen >= 1; prefixLen-- {
+			prefix := pattern[:prefixLen]
+			if strings.HasSuffix(content, prefix) {
+				return prefixLen
+			}
+		}
+	}
+	return 0
 }
 
 // filterToolJSON はストリーミング中のツールJSONを検知して非表示にする

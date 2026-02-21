@@ -514,6 +514,59 @@ func TestFilterToolJSON_NamePattern(t *testing.T) {
 	}
 }
 
+func TestMatchesPatternPrefix(t *testing.T) {
+	tests := []struct {
+		name     string
+		content  string
+		expected int
+	}{
+		{
+			name:     "no prefix match",
+			content:  "Hello world",
+			expected: 0,
+		},
+		{
+			name:     "single brace at end",
+			content:  "text {",
+			expected: 1, // matches `{` from `{"tool"`
+		},
+		{
+			name:     "partial tool pattern",
+			content:  `text {"to`,
+			expected: 4, // matches `{"to` from `{"tool"`
+		},
+		{
+			name:     "partial id pattern",
+			content:  `text {"i`,
+			expected: 3, // matches `{"i` from `{"id"`
+		},
+		{
+			name:     "full pattern (not prefix)",
+			content:  `text {"tool"`,
+			expected: 0, // full pattern = not a prefix, filterToolJSON handles it
+		},
+		{
+			name:     "partial name pattern",
+			content:  `text {"na`,
+			expected: 4, // matches `{"na` from `{"name"`
+		},
+		{
+			name:     "brace with space",
+			content:  `text { `,
+			expected: 2, // matches `{ ` from `{ "tool"`
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := matchesPatternPrefix(tt.content)
+			if result != tt.expected {
+				t.Errorf("matchesPatternPrefix(%q) = %d, want %d", tt.content, result, tt.expected)
+			}
+		})
+	}
+}
+
 func TestFilterToolJSON_NonToolJSON(t *testing.T) {
 	tests := []struct {
 		name     string

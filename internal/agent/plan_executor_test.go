@@ -56,58 +56,27 @@ func TestCheckMissingWriteTools_EmptyPlan(t *testing.T) {
 	}
 }
 
-// --- Level 2: diffFilesEqual ---
+// --- Level 2: getGitDiffHash ---
 
-func TestDiffFilesEqual_Same(t *testing.T) {
-	a := map[string]bool{"a.go": true, "b.go": true}
-	b := map[string]bool{"a.go": true, "b.go": true}
-
-	if !diffFilesEqual(a, b) {
-		t.Error("expected true for identical sets")
+func TestGetGitDiffHash_Deterministic(t *testing.T) {
+	// 同じ状態で2回呼び出したら同じハッシュを返す
+	h1 := getGitDiffHash()
+	h2 := getGitDiffHash()
+	if h1 == "" {
+		t.Skip("git not available")
+	}
+	if h1 != h2 {
+		t.Errorf("expected same hash, got %q vs %q", h1, h2)
 	}
 }
 
-func TestDiffFilesEqual_Different(t *testing.T) {
-	a := map[string]bool{"a.go": true}
-	b := map[string]bool{"a.go": true, "b.go": true}
-
-	if diffFilesEqual(a, b) {
-		t.Error("expected false for different sets (different length)")
+func TestGetGitDiffHash_NonEmpty(t *testing.T) {
+	h := getGitDiffHash()
+	if h == "" {
+		t.Skip("git not available")
 	}
-}
-
-func TestDiffFilesEqual_DifferentContent(t *testing.T) {
-	a := map[string]bool{"a.go": true, "c.go": true}
-	b := map[string]bool{"a.go": true, "b.go": true}
-
-	if diffFilesEqual(a, b) {
-		t.Error("expected false for different content (same length)")
-	}
-}
-
-func TestDiffFilesEqual_EmptyBoth(t *testing.T) {
-	a := map[string]bool{}
-	b := map[string]bool{}
-
-	if !diffFilesEqual(a, b) {
-		t.Error("expected true for both empty")
-	}
-}
-
-func TestDiffFilesEqual_NilBefore(t *testing.T) {
-	// nil before (git not available at step start) + non-empty after
-	var a map[string]bool
-	b := map[string]bool{"a.go": true}
-
-	if diffFilesEqual(a, b) {
-		t.Error("expected false for nil vs non-empty")
-	}
-}
-
-func TestDiffFilesEqual_BothNil(t *testing.T) {
-	var a, b map[string]bool
-
-	if !diffFilesEqual(a, b) {
-		t.Error("expected true for both nil (len 0 == len 0)")
+	// SHA256 ハッシュは 64 文字の hex 文字列
+	if len(h) != 64 {
+		t.Errorf("expected 64-char hex hash, got %d chars: %q", len(h), h)
 	}
 }

@@ -2,6 +2,8 @@ package agent
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -78,7 +80,7 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 	// ステップ完了検証用トラッカー
 	executedTools := make(map[string]bool) // ステップ内で実行されたツール名
 	stepHadWrites := false                 // 書き込み系ツールが実行されたか
-	beforeDiffFiles := getGitDiffFiles()   // Level 2 用: ステップ開始時の diff ファイル一覧
+	beforeDiffHash := getGitDiffHash()     // Level 2 用: ステップ開始時の diff ハッシュ
 
 	for j := 0; j < maxStepIterations; j++ {
 		response, err := a.CurrentProvider.ChatWithTools(
@@ -129,17 +131,34 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 					})
 					continue
 				}
-				// maxContinues 到達 → failed
-				yellow.Printf("⚠️  Step %d: required %s never executed after %d attempts. Marking as failed.\n",
+				// maxContinues 到達 → Selector UI で確認
+				yellow.Printf("⚠️  Step %d: required %s never executed after %d attempts.\n",
 					step.ID, strings.Join(missing, ", "), maxContinues)
-				return fmt.Errorf("step %d incomplete: required tools [%s] were never executed after %d attempts",
-					step.ID, strings.Join(missing, ", "), maxContinues)
+				ui.StopGlobalSpinner()
+				a.SetStatus(StateWaitingApproval, "Step incomplete - waiting for action", "ステップ未完了 - アクション待ち", "Choose action", "アクションを選択")
+				failMsg := fmt.Sprintf("Required tools [%s] were never executed after %d attempts", strings.Join(missing, ", "), maxContinues)
+				action, comment := promptFailureActionWithSelector(step, failMsg, "required tools not executed", 0)
+				switch action {
+				case plan.FailureActionRetry:
+					return a.executeStepV2(ctx, p, step, idx, 0)
+				case plan.FailureActionComment:
+					a.History = append(a.History, api.Message{
+						Role:    "user",
+						Content: fmt.Sprintf("[USER] %s", comment),
+					})
+					return a.executeStepV2(ctx, p, step, idx, 0)
+				case plan.FailureActionSkip:
+					yellow.Printf("⏭️  Step %d skipped by user\n", step.ID)
+					return nil
+				case plan.FailureActionAbort:
+					return fmt.Errorf("step %d aborted by user", step.ID)
+				}
 			}
 
 			// Level 2: 書き込みツール実行済みだが diff 変化なし → 強制続行
 			if stepHadWrites {
-				afterDiffFiles := getGitDiffFiles()
-				if beforeDiffFiles != nil && afterDiffFiles != nil && diffFilesEqual(beforeDiffFiles, afterDiffFiles) {
+				afterDiffHash := getGitDiffHash()
+				if beforeDiffHash != "" && afterDiffHash != "" && beforeDiffHash == afterDiffHash {
 					if continueCount < maxContinues {
 						continueCount++
 						yellow.Printf("⚠️  Step %d: write tools executed but no file changes detected (%d/%d)\n",
@@ -332,45 +351,20 @@ func checkMissingWriteTools(stepTools []string, executedTools map[string]bool) [
 	return missing
 }
 
-// getGitDiffFiles は git diff --name-only HEAD の結果をファイル名セットとして返す。
-// HEAD と比較することで staged + unstaged 両方の変更を検出する。
-// git が使えない場合は nil を返す（Level 2 スキップ用）。
-func getGitDiffFiles() map[string]bool {
-	out, err := exec.Command("git", "diff", "--name-only", "HEAD").CombinedOutput()
+// getGitDiffHash は git diff HEAD + untracked files の出力を SHA256 ハッシュ化して返す。
+// ファイル名だけでなく内容の変化も検知する（同じファイルへの追加変更を検出）。
+// git が使えない場合は空文字を返す（Level 2 スキップ用）。
+func getGitDiffHash() string {
+	out, err := exec.Command("git", "diff", "HEAD").CombinedOutput()
 	if err != nil {
-		return nil
+		return ""
 	}
-	files := make(map[string]bool)
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		if line != "" {
-			files[line] = true
-		}
-	}
-
-	// untracked files も検出（write_file で新規作成されたファイル用）
-	untrackedOut, err := exec.Command("git", "ls-files", "--others", "--exclude-standard").CombinedOutput()
-	if err == nil {
-		for _, line := range strings.Split(strings.TrimSpace(string(untrackedOut)), "\n") {
-			if line != "" {
-				files[line] = true
-			}
-		}
-	}
-
-	return files
-}
-
-// diffFilesEqual は2つの diff ファイルセットが同一かを比較する。
-func diffFilesEqual(before, after map[string]bool) bool {
-	if len(before) != len(after) {
-		return false
-	}
-	for f := range before {
-		if !after[f] {
-			return false
-		}
-	}
-	return true
+	// untracked files も含める
+	untrackedOut, _ := exec.Command("git", "ls-files", "--others", "--exclude-standard").CombinedOutput()
+	h := sha256.New()
+	h.Write(out)
+	h.Write(untrackedOut)
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 // confirmPlan は計画の承認確認

@@ -8,7 +8,8 @@ const commonRulesBlock = `1. **ALWAYS read_file BEFORE str_replace** - if you ha
 2. **Before changing/deleting any function or type**: lsp_find(references) or bash (grep) to check ALL usages first
 3. **After bash verification (test/build), WAIT for output** - do NOT declare completion before seeing results
 4. **Follow project rules in Project Context** - they are LAW - override all other guidelines
-5. **Same change across 3+ files? Use grep_replace (1 call)** - do NOT repeat str_replace for each file
+5. **Same change across files? Use grep_replace (1 call)** - do NOT repeat str_replace for each file
+   Example: {"tool":"grep_replace","args":{"pattern":"oldFunc\\(","replacement":"newFunc(","path":".","file_pattern":"*.go"}}
 `
 
 // providerPrefixes はプロバイダー別のシステムプロンプトプレフィックス
