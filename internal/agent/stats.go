@@ -76,25 +76,35 @@ type PricingInfo struct {
 func GetPricingInfo(provider string, model string) PricingInfo {
 	switch provider {
 	case "deepseek":
-		// DeepSeek: キャッシュヒット90%割引 ($0.14 → $0.014)
+		// DeepSeekの料金体系
+		return getDeepSeekPricing(model)
+	case "openai":
+		return getOpenAIPricing(model)
+	case "claude":
+		return getClaudePricing(model)
+	case "bedrock":
+		if strings.Contains(strings.ToLower(model), "claude") {
+			return getClaudePricing(model)
+		}
+		// Claude以外のBedrockモデルは一旦汎用料金
 		return PricingInfo{
 			InputCostPerM:         0.14,
 			OutputCostPerM:        0.28,
-			CachedInputCostPerM:   0.014, // 90% off
-			CacheCreationCostPerM: 0.14,  // 通常料金
+			CachedInputCostPerM:   0.014,
+			CacheCreationCostPerM: 0.14,
 		}
-	case "openai":
-		return getOpenAIPricing(model)
-	case "claude", "bedrock":
-		return getClaudePricing(model)
 	case "gemini":
 		return getGeminiPricing(model)
 	case "groq":
+		return getGroqPricing(model)
+	case "openrouter":
+		// OpenRouterは動的料金のため、一旦概算(DeepSeek相当)とする
+		// APIから正確な料金を取得する機能は将来対応
 		return PricingInfo{
-			InputCostPerM:         0.10,
-			OutputCostPerM:        0.10,
-			CachedInputCostPerM:   0.10, // キャッシュなし
-			CacheCreationCostPerM: 0.10,
+			InputCostPerM:         0.14,
+			OutputCostPerM:        0.28,
+			CachedInputCostPerM:   0.014,
+			CacheCreationCostPerM: 0.14,
 		}
 	case "ollama":
 		return PricingInfo{} // ローカル実行は無料
@@ -106,6 +116,27 @@ func GetPricingInfo(provider string, model string) PricingInfo {
 			CachedInputCostPerM:   0.014,
 			CacheCreationCostPerM: 0.14,
 		}
+	}
+}
+
+// getDeepSeekPricing はモデル名からDeepSeek料金を返す
+func getDeepSeekPricing(model string) PricingInfo {
+	lm := strings.ToLower(model)
+	if strings.Contains(lm, "reasoner") {
+		// DeepSeek Reasoner: $0.55/$2.19 per million tokens, Cache hit: $0.14
+		return PricingInfo{
+			InputCostPerM:         0.55,
+			OutputCostPerM:        2.19,
+			CachedInputCostPerM:   0.14,
+			CacheCreationCostPerM: 0.55,
+		}
+	}
+	// DeepSeek Chat（デフォルト）: $0.14/$0.28 per million tokens, Cache hit: $0.014
+	return PricingInfo{
+		InputCostPerM:         0.14,
+		OutputCostPerM:        0.28,
+		CachedInputCostPerM:   0.014,
+		CacheCreationCostPerM: 0.14,
 	}
 }
 
@@ -214,6 +245,53 @@ func getGeminiPricing(model string) PricingInfo {
 			OutputCostPerM:        3.00,
 			CachedInputCostPerM:   0.05, // 90% off
 			CacheCreationCostPerM: 0.50,
+		}
+	}
+}
+
+// getGroqPricing はモデル名からGroq料金を返す
+func getGroqPricing(model string) PricingInfo {
+	lm := strings.ToLower(model)
+	switch {
+	case strings.Contains(lm, "70b"):
+		// Llama 3/3.1 70B: $0.59/$0.79 per million tokens
+		return PricingInfo{
+			InputCostPerM:         0.59,
+			OutputCostPerM:        0.79,
+			CachedInputCostPerM:   0.59, // キャッシュ割引なし
+			CacheCreationCostPerM: 0.59,
+		}
+	case strings.Contains(lm, "405b"):
+		// Llama 3.1 405B: $2.00/$2.00 per million tokens (approximate)
+		return PricingInfo{
+			InputCostPerM:         2.00,
+			OutputCostPerM:        2.00,
+			CachedInputCostPerM:   2.00,
+			CacheCreationCostPerM: 2.00,
+		}
+	case strings.Contains(lm, "mixtral"):
+		// Mixtral 8x7B: $0.24/$0.24 per million tokens
+		return PricingInfo{
+			InputCostPerM:         0.24,
+			OutputCostPerM:        0.24,
+			CachedInputCostPerM:   0.24,
+			CacheCreationCostPerM: 0.24,
+		}
+	case strings.Contains(lm, "gemma"):
+		// Gemma 7B: $0.07/$0.07 per million tokens
+		return PricingInfo{
+			InputCostPerM:         0.07,
+			OutputCostPerM:        0.07,
+			CachedInputCostPerM:   0.07,
+			CacheCreationCostPerM: 0.07,
+		}
+	default:
+		// Llama 3/3.1 8B (default): $0.05/$0.10 per million tokens
+		return PricingInfo{
+			InputCostPerM:         0.05,
+			OutputCostPerM:        0.10,
+			CachedInputCostPerM:   0.05,
+			CacheCreationCostPerM: 0.05,
 		}
 	}
 }

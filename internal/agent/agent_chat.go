@@ -523,7 +523,7 @@ func (a *Agent) printLastUsage() {
 	}
 
 	total := usage.InputTokens + usage.OutputTokens
-	cost := CalculateRequestCost(a.ProviderName, a.CurrentModel, usage.InputTokens, usage.OutputTokens)
+	cost := CalculateRequestCostWithCache(a.ProviderName, a.CurrentModel, *usage)
 
 	// ✓ を緑色で表示、残りはdimまたは通常色
 	green.Print("✓ ")

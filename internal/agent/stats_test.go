@@ -192,12 +192,12 @@ func TestSessionStats_EstimatedCost_Gemini(t *testing.T) {
 }
 
 func TestSessionStats_EstimatedCost_Groq(t *testing.T) {
-	stats := NewSessionStats("groq")
+	stats := NewSessionStats("groq") // default model (Llama 8B)
 	stats.AddTokens(1000000, 1000000)
 
 	cost := stats.EstimatedCost()
-	expected := 0.10 + 0.10
-	if cost != expected {
+	expected := 0.05 + 0.10
+	if cost < expected-0.001 || cost > expected+0.001 {
 		t.Errorf("EstimatedCost() for groq = %f, want %f", cost, expected)
 	}
 }
