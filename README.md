@@ -114,14 +114,16 @@ rules:
   - "公開関数にはコメント必須"
 hooks:                    # config.yaml の hooks を上書き
   on_completion:
-    - "make ci-check"
+    - "go vet ./... && go test ./..."
+  on_step_complete:
+    - "echo 'Step {{step_id}}: {{step_status}}'"
   timeout: 120
   max_retry: 3
 ```
 
 - **context**: AI に注入するプロジェクト説明
 - **rules**: 番号付きで system prompt に注入される必須ルール
-- **hooks**: 完了時フック（`config.yaml` の hooks より優先）
+- **hooks**: 完了時・ステップ完了時フック（`config.yaml` の hooks より優先）
 
 ## インストール
 
@@ -233,22 +235,48 @@ mcp:
 
 ### Completion Hooks
 
+AI が完了を宣言すると、LSP 診断の後にここで定義したコマンドを順番に実行します。
+コマンド失敗時は AI にエラー内容をフィードバックし修正を続行します（最大 `max_retry` 回）。
+Makefile は不要です。普段使っているコマンドをそのまま書けます。
+
 ```yaml
-# ~/.xelyon/config.yaml（グローバル設定）
+# ~/.xelyon/config.yaml
 hooks:
-  on_completion:       # 完了宣言時に実行するコマンド（LSPチェック後）
-    - "make ci-check"
+  on_completion:
+    # Go
+    - "go vet ./... && go test ./..."
+    # Node.js / TypeScript
+    # - "npm test"
+    # Python
+    # - "pytest"
+    # Rust
+    # - "cargo test"
+    # Makefile がある場合
+    # - "make ci-check"
   timeout: 120         # コマンドタイムアウト秒（デフォルト: 60）
   max_retry: 3         # フック失敗時の最大リトライ回数（デフォルト: 3）
 ```
 
 `xelyon.yaml` にも `hooks` を定義でき、`config.yaml` より優先されます（プロジェクト固有のフック設定に便利）。
-
-AI が完了を宣言すると、LSP 診断の後にここで定義したコマンドを順番に実行します。
-コマンド失敗時は AI にエラー内容をフィードバックし修正を続行します（最大 `max_retry` 回）。
-リトライ上限に達した場合は警告を表示して完了を許可します。
 変更ファイルは `XELYON_CHANGED_FILES` 環境変数（スペース区切り）で参照できます。
 Normal mode / Plan mode の両方で動作します。
+
+### Step Complete Hooks
+
+Plan Mode で各ステップ完了時に実行するコマンドです。
+テンプレート変数 `{{step_id}}`, `{{step_description}}`, `{{step_status}}` が使えます。
+
+```yaml
+# ~/.xelyon/config.yaml
+hooks:
+  on_step_complete:
+    # ステップごとにテスト実行
+    - "go test ./..."
+    # 通知（ステップ番号・状態を展開）
+    # - "echo 'Step {{step_id}} ({{step_status}}): {{step_description}}'"
+```
+
+失敗時は AI にフィードバックして修正を試み、次のステップに進む前に再実行します。
 
 ### 設定管理
 
