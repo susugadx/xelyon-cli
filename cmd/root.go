@@ -53,6 +53,7 @@ func loadProjectConfig() string {
 }
 
 // getModel はフラグからモデルを決定する
+// 優先順位: --model フラグ > provider_models.<provider>.default_model > default_model
 func getModel(cmd *cobra.Command) string {
 	// --model フラグが指定されていればそれを優先
 	if modelFlag != "" {
@@ -64,6 +65,12 @@ func getModel(cmd *cobra.Command) string {
 	if err != nil {
 		// エラー時はハードコードされたデフォルトを使用
 		return "deepseek-chat"
+	}
+
+	// プロバイダー固有のモデル設定を確認
+	providerName := resolveProviderName(providerFlag, cfg.DefaultProvider)
+	if providerModel := cfg.GetModelForProvider(providerName); providerModel != "" {
+		return providerModel
 	}
 
 	return cfg.DefaultModel
