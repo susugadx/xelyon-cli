@@ -15,6 +15,12 @@ Use ONLY when necessary:
 - Steps must be IMPLEMENTATION actions (write_file, str_replace, bash, etc.)
 - Do NOT include investigation steps ("read file X", "search for Y")
 - Use depends_on to specify step dependencies
+- Each step description MUST include:
+  - Target file path (e.g. internal/tools/dev/bash.go)
+  - What specifically changes (e.g. function name, variable, what is added/modified/deleted)
+  Bad: "Add read-only commands to defaultSafeCommands in bash.go"
+  Good: "internal/tools/dev/bash.go の defaultSafeCommands に sed -n, diff, file, du, stat, md5sum, sha256sum を追加"
+- Each step MUST include a files field with target file paths.
 
 Plans are saved to .xelyon/plans/ as Markdown.`
 }

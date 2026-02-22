@@ -55,7 +55,7 @@ func (t *CreatePlanTool) Parameters() map[string]interface{} {
 			},
 			"steps": map[string]interface{}{
 				"type": "string",
-				"description": `実行ステップのJSON配列文字列。例: [{"id":1,"description":"Step 1","tools":["read_file"],"depends_on":[]}]
+				"description": `実行ステップのJSON配列文字列。例: [{"id":1,"description":"internal/tools/dev/bash.go の defaultSafeCommands に sed -n, diff を追加","tools":["str_replace"],"files":["internal/tools/dev/bash.go"],"depends_on":[]}]
 IMPORTANT: For deletion/deprecation tasks, order steps by dependency:
 1. Remove references (callers/importers) FIRST
 2. Remove definitions (declarations/structs/function bodies) LAST
