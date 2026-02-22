@@ -37,7 +37,7 @@ var CategoryDefinitions = []CategoryDef{
 	{Name: "streaming", DisplayName: "Streaming", Icon: "📺", Fields: []string{"streaming.idle_timeout_seconds", "streaming.show_file_info", "streaming.show_search_progress", "streaming.stream_bash_output"}},
 	{Name: "bash", DisplayName: "Bash Safety", Icon: "💻", Fields: []string{"bash.allow_inline_edit", "bash.allow_pipe", "bash.allow_redirect", "bash.safe_commands", "bash.safety_level"}},
 	{Name: "git_stage", DisplayName: "Git Settings", Icon: "📂", Fields: []string{"git_stage.batch_confirm"}},
-	{Name: "plan_mode", DisplayName: "Plan Mode", Icon: "📋", Fields: []string{"plan_mode.confirm_level", "plan_mode.max_retry", "plan_mode.max_workers", "plan_mode.parallel", "plan_mode.step_timeout", "plan_mode.supervisor_model", "plan_mode.worker_model"}},
+	{Name: "plan_mode", DisplayName: "Plan Mode", Icon: "📋", Fields: []string{"plan_mode.max_retry", "plan_mode.step_timeout"}},
 	{Name: "lsp", DisplayName: "LSP Servers", Icon: "🔧", Fields: []string{"lsp.enabled", "lsp.skip_install_prompt"}},
 	{Name: "openai", DisplayName: "OpenAI", Icon: "🌟", Fields: []string{"openai.responses_api_models"}},
 	{Name: "thinking", DisplayName: "Thinking", Icon: "🧠", Fields: []string{"thinking.enabled", "thinking.level"}},
@@ -85,13 +85,8 @@ var FieldTypeMap = map[string]ConfigFieldType{
 	"paste.max_bytes":                  FieldTypeInt,
 	"paste.max_lines":                  FieldTypeInt,
 	"paste.timeout_seconds":            FieldTypeInt,
-	"plan_mode.confirm_level":          FieldTypeSelect,
 	"plan_mode.max_retry":              FieldTypeInt,
-	"plan_mode.max_workers":            FieldTypeInt,
-	"plan_mode.parallel":               FieldTypeBool,
 	"plan_mode.step_timeout":           FieldTypeInt,
-	"plan_mode.supervisor_model":       FieldTypeString,
-	"plan_mode.worker_model":           FieldTypeString,
 	"prompt_cache.enabled":             FieldTypeBool,
 	"provider_models":                  FieldTypeStructMap,
 	"streaming.idle_timeout_seconds":   FieldTypeInt,
@@ -109,11 +104,10 @@ var FieldTypeMap = map[string]ConfigFieldType{
 
 // SelectOptions は選択型フィールドの選択肢
 var SelectOptions = map[string][]string{
-	"bash.safety_level":       {"strict", "moderate", "permissive"},
-	"default_provider":        {"deepseek", "claude", "openai", "gemini", "groq", "ollama", "openrouter", "bedrock"},
-	"general.language":        {"ja", "en"},
-	"plan_mode.confirm_level": {"all", "dangerous", "none"},
-	"thinking.level":          {"low", "medium", "high", "xhigh"},
+	"bash.safety_level": {"strict", "moderate", "permissive"},
+	"default_provider":  {"deepseek", "claude", "openai", "gemini", "groq", "ollama", "openrouter", "bedrock"},
+	"general.language":  {"ja", "en"},
+	"thinking.level":    {"low", "medium", "high", "xhigh"},
 }
 
 // FieldDescriptions はフィールドの説明
@@ -152,13 +146,8 @@ var FieldDescriptions = map[string]string{
 	"paste.max_bytes":                  "最大バイト数",
 	"paste.max_lines":                  "最大行数",
 	"paste.timeout_seconds":            "タイムアウト（秒）",
-	"plan_mode.confirm_level":          "確認レベル: all / dangerous / none",
 	"plan_mode.max_retry":              "最大リトライ回数",
-	"plan_mode.max_workers":            "並列ワーカー数",
-	"plan_mode.parallel":               "並列モード有効化",
 	"plan_mode.step_timeout":           "ステップタイムアウト（秒）",
-	"plan_mode.supervisor_model":       "Supervisor用モデル（空=メインモデル）",
-	"plan_mode.worker_model":           "Worker用モデル（空=メインモデル）",
 	"prompt_cache.enabled":             "有効化（cache_control ブレークポイントを設定）",
 	"provider_models":                  "プロバイダーごとのモデル設定",
 	"streaming.idle_timeout_seconds":   "アイドルタイムアウト（秒）",

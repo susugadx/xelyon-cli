@@ -7,7 +7,6 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/config"
 	promptplan "github.com/susugadx/xelyon-cli/internal/prompt/plan"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -29,40 +28,6 @@ func (a *Agent) RunPlanMode(ctx context.Context, userRequest string) error {
 		userRequest = userRequest + "\n\n[SYSTEM NOTE: " + warning + " Please check existing code before creating new definitions.]"
 	}
 
-	// 並列モードが有効な場合は Supervisor に委譲
-	cfg := config.GetGlobalConfig()
-	config.MigratePlanModeConfig(&cfg.PlanMode)
-
-	if cfg.PlanMode.Parallel {
-		supervisor, err := NewSupervisor(a, &cfg.PlanMode)
-		if err != nil {
-			red.Printf("❌ Failed to create supervisor: %v\n", err)
-			return err
-		}
-
-		// Supervisor実行（トークン上限エラー時は自動圧縮+リトライ）
-		err = supervisor.Run(ctx, userRequest)
-		if err != nil && token.IsTokenLimitError(err) {
-			// リトライ関数を定義
-			retryFunc := func() error {
-				return supervisor.Run(ctx, userRequest)
-			}
-
-			// 自動圧縮+リトライを試みる
-			if a.handleTokenLimitErrorWithRetry(err, retryFunc, true, supervisor) {
-				return nil // リトライ成功
-			}
-		}
-		if err == nil {
-			// Completion hooks（並列 Plan Mode）
-			a.runCompletionHooksWithRetry(ctx)
-			a.showTaskSummary()
-		}
-		return err
-	}
-
-	// 以下は順次実行モード（従来の処理）
-
 	// Step 1: 調査フェーズ（SafetyHighツールを自由に実行）
 	cyan.Println("\n🔍 Investigation phase - researching the codebase...")
 	a.SetStatus(StateRunning, "Investigating", "調査中", "Wait for investigation", "調査完了を待ってください")
@@ -80,7 +45,7 @@ func (a *Agent) RunPlanMode(ctx context.Context, userRequest string) error {
 			retryFunc := func() error {
 				return a.RunPlanMode(ctx, userRequest)
 			}
-			if a.handleTokenLimitErrorWithRetry(err, retryFunc, true, nil) {
+			if a.handleTokenLimitErrorWithRetry(err, retryFunc, true) {
 				return nil // リトライ成功
 			}
 		}
@@ -135,7 +100,7 @@ func (a *Agent) RunPlanMode(ctx context.Context, userRequest string) error {
 			retryFunc := func() error {
 				return a.RunPlanMode(ctx, userRequest)
 			}
-			if a.handleTokenLimitErrorWithRetry(err, retryFunc, true, nil) {
+			if a.handleTokenLimitErrorWithRetry(err, retryFunc, true) {
 				return nil // リトライ成功
 			}
 		}

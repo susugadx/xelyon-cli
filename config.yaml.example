@@ -168,20 +168,10 @@ git_stage:
 # Plan Mode設定
 # ============================================================
 plan_mode:
-    # 並列モード有効化
-    parallel: false
-    # 並列ワーカー数
-    max_workers: 3
-    # Supervisor用モデル（空=メインモデル）
-    supervisor_model: ""
-    # Worker用モデル（空=メインモデル）
-    worker_model: ""
     # 最大リトライ回数
     max_retry: 10
     # ステップタイムアウト（秒）
     step_timeout: 600
-    # 確認レベル: all / dangerous / none
-    confirm_level: dangerous
 
 # ============================================================
 # LSP連携設定

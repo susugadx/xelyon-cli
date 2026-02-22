@@ -376,24 +376,24 @@ func TestExtractExplanationAndTool_UnclosedBrace(t *testing.T) {
 // NOTE: shouldEnterPlanMode tests removed in Issue #82
 // Plan Mode Only に統一されたため、shouldEnterPlanMode 関数とそのテストは削除されました
 
-// TestAutoRetryConfig はauto_retryの設定が正しく読み込まれることを確認
-func TestAutoRetryConfig(t *testing.T) {
+// TestMaxRetryConfig はmax_retryの設定が正しく読み込まれることを確認
+func TestMaxRetryConfig(t *testing.T) {
 	cfg := config.GetGlobalConfig()
 
 	// デフォルト値は10
-	if cfg.PlanMode.AutoRetry != 10 {
-		t.Errorf("PlanMode.AutoRetry = %d, want 10", cfg.PlanMode.AutoRetry)
+	if cfg.PlanMode.MaxRetry != 10 {
+		t.Errorf("PlanMode.MaxRetry = %d, want 10", cfg.PlanMode.MaxRetry)
 	}
 
 	// 一時的に変更してテスト
-	original := cfg.PlanMode.AutoRetry
-	cfg.PlanMode.AutoRetry = 5
+	original := cfg.PlanMode.MaxRetry
+	cfg.PlanMode.MaxRetry = 5
 	defer func() {
-		cfg.PlanMode.AutoRetry = original
+		cfg.PlanMode.MaxRetry = original
 	}()
 
-	if cfg.PlanMode.AutoRetry != 5 {
-		t.Errorf("PlanMode.AutoRetry after change = %d, want 5", cfg.PlanMode.AutoRetry)
+	if cfg.PlanMode.MaxRetry != 5 {
+		t.Errorf("PlanMode.MaxRetry after change = %d, want 5", cfg.PlanMode.MaxRetry)
 	}
 }
 

@@ -71,19 +71,6 @@ var messages = map[string]map[string]string{
 		// Errors
 		"error.invalid_option": "無効な選択肢です",
 		"error.required":       "入力は必須です",
-
-		// Supervisor / Worker
-		"supervisor.investigation_start":    "🔍 調査フェーズを開始（並列実行）",
-		"supervisor.investigation_complete": "📊 調査完了（%s、並列実行）",
-		"supervisor.execution_start":        "🚀 実装フェーズを開始（並列実行）",
-		"supervisor.step_retry":             "🔄 Step %d 失敗、リトライ中... (%d/%d)",
-		"supervisor.step_skipped":           "⏭️ Step %d をスキップしました",
-		"supervisor.step_aborted":           "❌ Step %d がユーザーにより中止されました",
-		"supervisor.all_completed":          "✅ 全ステップ完了",
-		"worker.step_timeout":               "⏱️ Step %d がタイムアウト（%d秒）",
-		"worker.step_failed":                "❌ Step %d 失敗: %s",
-		"worker.step_completed":             "✅ Step %d 完了（%s）",
-		"worker.investigation_completed":    "✅ 調査完了: %s",
 	},
 	"en": {
 		// Plan
@@ -106,18 +93,5 @@ var messages = map[string]map[string]string{
 		// Errors
 		"error.invalid_option": "Invalid option",
 		"error.required":       "Input is required",
-
-		// Supervisor / Worker
-		"supervisor.investigation_start":    "🔍 Starting investigation phase (parallel)",
-		"supervisor.investigation_complete": "📊 Investigation complete (%s, parallel)",
-		"supervisor.execution_start":        "🚀 Starting execution phase (parallel)",
-		"supervisor.step_retry":             "🔄 Step %d failed, retrying... (%d/%d)",
-		"supervisor.step_skipped":           "⏭️ Step %d skipped",
-		"supervisor.step_aborted":           "❌ Step %d aborted by user",
-		"supervisor.all_completed":          "✅ All steps completed",
-		"worker.step_timeout":               "⏱️ Step %d timed out (%d seconds)",
-		"worker.step_failed":                "❌ Step %d failed: %s",
-		"worker.step_completed":             "✅ Step %d completed (%s)",
-		"worker.investigation_completed":    "✅ Investigation complete: %s",
 	},
 }

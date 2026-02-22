@@ -40,31 +40,13 @@ DeepSeek, OpenAI, Gemini, Claude, Ollama, Groq, OpenRouter, Bedrock をシーム
 
 ### 📋 Plan Mode（オプショナル）
 `/plan on` で有効化するとPlan Mode経由で処理されます。
-1. **調査フェーズ**: コードベースを調査（SafetyHighツールを**バッチ処理で並列実行**）
+1. **調査フェーズ**: コードベースを調査（SafetyHighツールを自動実行）
 2. **単純なQ&A**: 調査のみで回答可能な場合はそのまま終了
 3. **計画生成**: 実装が必要な場合、ステップを JSON で出力
 4. **承認**: ユーザーが計画を確認・承認
-5. **実行**: ステップごとに失敗検知・リトライ付きで実行（**依存関係のないステップはバッチで並列実行**）
+5. **実行**: ステップごとに失敗検知・リトライ付きで順次実行
 
 デフォルトは通常モード（ツール個別確認）。軽いタスクにはオーバーヘッドなく即座に応答。
-
-### 🚀 Supervisor-Worker 並列実行
-`plan_mode.parallel: true` で有効化すると、Supervisor-Worker アーキテクチャによる本格的な並列実行が可能。
-
-```yaml
-# ~/.xelyon/config.yaml
-plan_mode:
-  parallel: true         # 並列モード有効化
-  max_workers: 3         # 並列ワーカー数
-  worker_model: ""       # Worker用モデル（空=メインモデル）
-  confirm_level: dangerous  # 確認レベル: all/dangerous/none
-```
-
-- **Supervisor**: 調査クエリ生成、計画生成
-- **Worker**: ステップを並列実行（チャンネル通信、UI操作なし、Thinking OFF）
-- **失敗時フロー**: リトライ → ユーザー確認（retry/comment/skip/abort）
-- **依存関係解決**: `depends_on`ベースで並列実行可能なステップを自動判定
-- **Worker Thinking OFF**: Worker は Extended Thinking を自動無効化（`context.Value` でオーバーライド）。コスト削減・高速化のため
 
 ### 🔄 自動リトライ機能
 ツール実行が失敗した場合、自動的にリトライして成功するまで試行します。
@@ -266,7 +248,7 @@ AI が完了を宣言すると、LSP 診断の後にここで定義したコマ�
 コマンド失敗時は AI にエラー内容をフィードバックし修正を続行します（最大 `max_retry` 回）。
 リトライ上限に達した場合は警告を表示して完了を許可します。
 変更ファイルは `XELYON_CHANGED_FILES` 環境変数（スペース区切り）で参照できます。
-Normal mode / Plan mode（順次・並列）の両方で動作します。
+Normal mode / Plan mode の両方で動作します。
 
 ### 設定管理
 

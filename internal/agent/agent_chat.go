@@ -99,7 +99,7 @@ func (a *Agent) chatInternal(input string, image *api.ImageData) {
 				}
 
 				// 自動圧縮+リトライを試みる
-				if a.handleTokenLimitErrorWithRetry(err, retryFunc, a.PlanModeEnabled, nil) {
+				if a.handleTokenLimitErrorWithRetry(err, retryFunc, a.PlanModeEnabled) {
 					// リトライ成功時はここで終了
 					ui.StopGlobalSpinner()
 					a.SetStatus(StateWaitingInput, "Ready for input", "入力待ち", "Type your request or /help", "リクエスト、または /help を入力")
@@ -141,7 +141,7 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 	var sameCallCount int
 
 	// 自動リトライ設定
-	autoRetryMax := cfg.PlanMode.AutoRetry
+	autoRetryMax := cfg.PlanMode.MaxRetry
 	retryCount := 0
 
 	var completionVerified bool // 完了検証ガード（タスク内1回限り）

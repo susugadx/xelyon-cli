@@ -402,7 +402,7 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 		// 失敗検出時の処理
 		if lastFailedResult != "" {
 			cfg := config.GetGlobalConfig()
-			autoRetryMax := cfg.PlanMode.AutoRetry
+			autoRetryMax := cfg.PlanMode.MaxRetry
 
 			// 自動リトライが有効で、まだ上限に達していない場合
 			if autoRetryMax > 0 && retryCount < autoRetryMax {

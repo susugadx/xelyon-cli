@@ -131,17 +131,8 @@ func DefaultConfig() *Config {
 			BatchConfirm: true,
 		},
 		PlanMode: PlanModeConfig{
-			// 旧設定（後方互換性）
-			MaxParallelSteps: 3,
-			AutoRetry:        10,
-			// 新設定（Phase 3）
-			Parallel:        false,
-			MaxWorkers:      3,
-			SupervisorModel: "",
-			WorkerModel:     "",
-			MaxRetry:        10,
-			StepTimeout:     600, // 10分
-			ConfirmLevel:    "dangerous",
+			MaxRetry:    10,
+			StepTimeout: 600, // 10分
 		},
 		LSP: LSPConfig{
 			Enabled: true,
@@ -371,23 +362,11 @@ func applyDefaults(cfg *Config) {
 	if cfg.Streaming.IdleTimeoutSeconds == 0 {
 		cfg.Streaming.IdleTimeoutSeconds = defaults.Streaming.IdleTimeoutSeconds
 	}
-	if cfg.PlanMode.MaxParallelSteps == 0 {
-		cfg.PlanMode.MaxParallelSteps = defaults.PlanMode.MaxParallelSteps
-	}
-	// PlanMode マイグレーション（Phase 3）
-	MigratePlanModeConfig(&cfg.PlanMode)
-	// PlanMode 新フィールドのデフォルト適用
-	if cfg.PlanMode.MaxWorkers == 0 {
-		cfg.PlanMode.MaxWorkers = defaults.PlanMode.MaxWorkers
-	}
 	if cfg.PlanMode.MaxRetry == 0 {
 		cfg.PlanMode.MaxRetry = defaults.PlanMode.MaxRetry
 	}
 	if cfg.PlanMode.StepTimeout == 0 {
 		cfg.PlanMode.StepTimeout = defaults.PlanMode.StepTimeout
-	}
-	if cfg.PlanMode.ConfirmLevel == "" {
-		cfg.PlanMode.ConfirmLevel = defaults.PlanMode.ConfirmLevel
 	}
 	// LSP設定のデフォルト適用
 	// 注: cfg.LSP.Enabled が false の場合と、設定ファイルに LSP セクションがない場合を区別するため
@@ -517,34 +496,5 @@ func (c *Config) ApplyFlagOverrides(loopThreshold, apiRetry, apiRetryDelay, diff
 	}
 	if diffLines != nil && *diffLines >= 0 {
 		c.Diff.ContextLines = *diffLines
-	}
-}
-
-// MigratePlanModeConfig は旧設定を新設定にマイグレーション（Phase 3）
-// - max_parallel_steps → max_workers
-// - auto_retry → max_retry
-// また、デフォルト値も設定する
-func MigratePlanModeConfig(cfg *PlanModeConfig) {
-	// マイグレーション: max_parallel_steps → max_workers
-	if cfg.MaxParallelSteps > 0 && cfg.MaxWorkers == 0 {
-		cfg.MaxWorkers = cfg.MaxParallelSteps
-	}
-	// マイグレーション: auto_retry → max_retry
-	if cfg.AutoRetry > 0 && cfg.MaxRetry == 0 {
-		cfg.MaxRetry = cfg.AutoRetry
-	}
-
-	// デフォルト値の設定
-	if cfg.MaxWorkers == 0 {
-		cfg.MaxWorkers = 3
-	}
-	if cfg.MaxRetry == 0 {
-		cfg.MaxRetry = 10
-	}
-	if cfg.StepTimeout == 0 {
-		cfg.StepTimeout = 600 // 10分
-	}
-	if cfg.ConfirmLevel == "" {
-		cfg.ConfirmLevel = "dangerous"
 	}
 }

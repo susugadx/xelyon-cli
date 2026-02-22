@@ -53,8 +53,7 @@ const (
 	TestOutputMaxLines = 20 // テスト出力の最大行数
 )
 
-// Parallel Execution Defaults
+// Detection Defaults
 const (
-	DefaultParallelWorkers = 3 // Plan実行のデフォルト並列ワーカー数
 	LoopDetectionThreshold = 3 // ループ検知の閾値
 )

@@ -137,7 +137,7 @@ func handleTokenLimitError(err error) {
 
 // handleTokenLimitErrorWithRetry はトークン上限エラー時に自動圧縮してリトライ
 // 戻り値: リトライ成功時はtrue、失敗時はfalse
-func (a *Agent) handleTokenLimitErrorWithRetry(err error, retryFunc func() error, isPlanMode bool, supervisor *Supervisor) bool {
+func (a *Agent) handleTokenLimitErrorWithRetry(err error, retryFunc func() error, isPlanMode bool) bool {
 	if !token.IsTokenLimitError(err) {
 		return false
 	}
@@ -174,10 +174,6 @@ func (a *Agent) handleTokenLimitErrorWithRetry(err error, retryFunc func() error
 		handleTokenLimitError(err)
 		return false
 	}
-
-	// Plan Mode対応: Supervisorで溢れた場合の処理
-	// 完了タスクの結果はSharedContextに保存されているので保持される
-	// 特に追加の処理は不要
 
 	// リトライカウントをインクリメント
 	a.tokenLimitRetryCount++
