@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -31,6 +32,13 @@ func (a *Agent) chatInternal(input string, image *api.ImageData) {
 	// タスク開始: changeStack のオフセットを記録（タスク単位のサマリー表示用）
 	prevChanges := len(a.changeStack) - a.taskChangeOffset
 	a.taskChangeOffset = len(a.changeStack)
+
+	// completion hook の git diff 空チェック判定用ベースハッシュを記録
+	a.taskBaseCommitHash = ""
+	if out, err := exec.Command("git", "rev-parse", "HEAD").Output(); err == nil {
+		a.taskBaseCommitHash = strings.TrimSpace(string(out))
+	}
+
 	if prevChanges > 0 {
 		yellow.Printf("⚠️  %d uncommitted changes from previous task\n", prevChanges)
 		fmt.Println("💡 Run /commit or git commit to keep changes separate")
@@ -298,7 +306,7 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 				changedFiles := a.getTaskChangedFiles()
 				if len(changedFiles) > 0 {
 					// Built-in: git diff empty check
-					hookNeedsContinue, hookFeedback := checkGitDiffEmpty()
+					hookNeedsContinue, hookFeedback := a.checkGitDiffEmpty()
 					// User hooks (only if built-in checks passed)
 					if !hookNeedsContinue {
 						hookNeedsContinue, hookFeedback = a.runCompletionHooks(changedFiles)

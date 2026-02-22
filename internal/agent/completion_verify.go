@@ -108,7 +108,24 @@ Please fix these errors before declaring completion. Do NOT skip these issues.`,
 
 // checkGitDiffEmpty は git diff --stat を実行し、差分が空の場合に警告を返す。
 // runCompletionHooks とは独立して呼び出し元でチェックする。
-func checkGitDiffEmpty() (needsContinue bool, feedback string) {
+// タスク中のコミットにも対応している。
+func (a *Agent) checkGitDiffEmpty() (needsContinue bool, feedback string) {
+	// タスク中にコミットがあったかチェック
+	var currentHash string
+	if out, err := exec.Command("git", "rev-parse", "HEAD").Output(); err == nil {
+		currentHash = strings.TrimSpace(string(out))
+	}
+
+	if a.taskBaseCommitHash != "" && currentHash != "" && currentHash != a.taskBaseCommitHash {
+		// タスク中にコミットが行われている場合は diff empty チェックをスキップ（表示のみ）
+		yellow.Println("📊 Changes already committed during this task.")
+		diffCmd := exec.Command("git", "diff", a.taskBaseCommitHash, "HEAD", "--stat")
+		if output, err := diffCmd.CombinedOutput(); err == nil && len(output) > 0 {
+			fmt.Println(string(output))
+		}
+		return false, ""
+	}
+
 	// tracked changes
 	diffCmd := exec.Command("git", "diff", "--stat")
 	output, err := diffCmd.CombinedOutput()

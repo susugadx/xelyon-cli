@@ -448,7 +448,8 @@ func TestCheckGitDiffEmpty(t *testing.T) {
 		}
 	}()
 
-	needsContinue, feedback := checkGitDiffEmpty()
+	agent := &Agent{} // Dummy agent for test
+	needsContinue, feedback := agent.checkGitDiffEmpty()
 	if !needsContinue {
 		t.Error("expected needsContinue=true when git diff is empty")
 	}

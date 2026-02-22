@@ -60,6 +60,7 @@ type Agent struct {
 	mlReader             *ui.MultilineReader // 共有入力リーダー（ペーストモードでも使用）
 	PlanModeEnabled      bool                // Plan Mode ON/OFF（デフォルト: false）
 	ToolCache            *ToolCache          // ツール結果キャッシュ（read_file, list_dir）
+	taskBaseCommitHash   string              // タスク開始時のHEADコミットハッシュ（completion hook の diff 空チェック判定用）
 
 	// OpenAI Compact API 関連
 	compactedItems  []api.InputItem // 圧縮済みアイテム
