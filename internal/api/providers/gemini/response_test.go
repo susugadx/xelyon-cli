@@ -676,6 +676,123 @@ func TestIsToolJSONPrefix(t *testing.T) {
 	}
 }
 
+func TestHandleFunctionCallingResponse_SignatureWithTextSuppressed(t *testing.T) {
+	// Gemini 3.1 Pro バグ修正: thought=false, thoughtSignature 付き, text 付きのパートが
+	// 生テキストとして出力に漏れないことを確認
+	longSig := "dGhpcyBpcyBhIGJhc2U2NCBlbmNvZGVkIHRob3VnaHQgc2lnbmF0dXJl" // Base64風の署名
+	resp := GeminiFunctionResponse{
+		Candidates: []GeminiFunctionCandidate{
+			{
+				Content: GeminiFunctionContent{
+					Parts: []GeminiFunctionPart{
+						// thought=false だが signature + text を持つパート（バグの原因）
+						{Text: "leaked thinking content", ThoughtSignature: longSig},
+						{Text: "Actual visible response."},
+					},
+				},
+			},
+		},
+	}
+	body, _ := json.Marshal(resp)
+
+	p := New("test-key")
+	result, err := p.handleFunctionCallingResponse(body, nil)
+	if err != nil {
+		t.Fatalf("handleFunctionCallingResponse() error = %v", err)
+	}
+	// 署名+テキストパートのテキストが出力に漏れないこと
+	if strings.Contains(result, "leaked thinking content") {
+		t.Error("result should NOT contain text from signature+text part (thought=false)")
+	}
+	// 通常テキストは表示されること
+	if !strings.Contains(result, "Actual visible response.") {
+		t.Errorf("result should contain actual response, got %q", result)
+	}
+}
+
+func TestHandleFunctionCallingResponse_SignatureWithTextPreservedInThoughtParts(t *testing.T) {
+	// 署名+テキストパートが thoughtParts に収集され、FC の thought_parts に含まれることを確認
+	resp := GeminiFunctionResponse{
+		Candidates: []GeminiFunctionCandidate{
+			{
+				Content: GeminiFunctionContent{
+					Parts: []GeminiFunctionPart{
+						{Text: "thinking internally...", Thought: true, ThoughtSignature: "sig-step1"},
+						{Text: "signature-attached text", ThoughtSignature: "sig-final-abc"}, // thought=false
+						{FunctionCall: &api.GeminiFunctionCall{
+							Name: "read_file",
+							Args: map[string]any{"path": "/main.go"},
+						}},
+					},
+				},
+			},
+		},
+	}
+	body, _ := json.Marshal(resp)
+
+	p := New("test-key")
+	result, err := p.handleFunctionCallingResponse(body, nil)
+	if err != nil {
+		t.Fatalf("handleFunctionCallingResponse() error = %v", err)
+	}
+	// 署名テキストが表示テキストに漏れないこと
+	displayText := result
+	if idx := strings.Index(displayText, `{"tool"`); idx >= 0 {
+		displayText = displayText[:idx]
+	}
+	if strings.Contains(displayText, "signature-attached text") {
+		t.Error("signature+text part should NOT appear in display text")
+	}
+	// thought_parts メタデータに署名が含まれること
+	if !strings.Contains(result, "thought_parts") {
+		t.Errorf("result should contain thought_parts, got %q", result)
+	}
+	if !strings.Contains(result, "sig-final-abc") {
+		t.Errorf("result should contain signature in thought_parts, got %q", result)
+	}
+	// FC は正常に含まれること
+	if !strings.Contains(result, "read_file") {
+		t.Errorf("result should contain function call, got %q", result)
+	}
+}
+
+func TestHandleFunctionCallingResponse_SignatureWithFCNotSuppressed(t *testing.T) {
+	// thoughtSignature + FunctionCall のパートは FC として処理されること
+	// （署名フィルタは FunctionCall == nil の場合のみ発動）
+	resp := GeminiFunctionResponse{
+		Candidates: []GeminiFunctionCandidate{
+			{
+				Content: GeminiFunctionContent{
+					Parts: []GeminiFunctionPart{
+						{
+							FunctionCall: &api.GeminiFunctionCall{
+								Name: "bash",
+								Args: map[string]any{"command": "ls"},
+							},
+							ThoughtSignature: "sig-with-fc",
+						},
+						{Text: "Normal text."},
+					},
+				},
+			},
+		},
+	}
+	body, _ := json.Marshal(resp)
+
+	p := New("test-key")
+	result, err := p.handleFunctionCallingResponse(body, nil)
+	if err != nil {
+		t.Fatalf("handleFunctionCallingResponse() error = %v", err)
+	}
+	// FC が正常に含まれること
+	if !strings.Contains(result, "bash") {
+		t.Errorf("result should contain bash FC, got %q", result)
+	}
+	if !strings.Contains(result, "Normal text.") {
+		t.Errorf("result should contain normal text, got %q", result)
+	}
+}
+
 func TestHandleFunctionCallingResponse_CachedTokens(t *testing.T) {
 	// CachedContentTokenCount が正しくコールバックされる
 	resp := GeminiFunctionResponse{

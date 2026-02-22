@@ -76,16 +76,20 @@ func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, s
 				continue
 			}
 
-			// thoughtSignature のみのパート（thought=false, text="", functionCall=nil）を収集
-			if part.ThoughtSignature != "" && part.FunctionCall == nil && part.Text == "" {
+			// thoughtSignature を含むパート（thought=false）を収集し、テキスト出力を抑制
+			// Gemini 3.1 Pro: signature 付きパートの Text が生出力に漏れるのを防ぐ
+			if part.ThoughtSignature != "" && part.FunctionCall == nil {
 				tp := map[string]any{"thought_signature": part.ThoughtSignature}
+				if part.Text != "" {
+					tp["text"] = part.Text
+				}
 				thoughtParts = append(thoughtParts, tp)
 				if debug {
 					sig := part.ThoughtSignature
 					if len(sig) > 20 {
 						sig = sig[:20] + "..."
 					}
-					fmt.Fprintf(os.Stderr, "[DEBUG Gemini SSE] Collected signature-only part (sig=%q)\n", sig)
+					fmt.Fprintf(os.Stderr, "[DEBUG Gemini SSE] Collected signature part (text=%d chars, sig=%q)\n", len(part.Text), sig)
 				}
 				continue
 			}
@@ -259,16 +263,20 @@ func (p *Provider) handleFunctionCallingResponse(body []byte, spinner *ui.Spinne
 				continue
 			}
 
-			// thoughtSignature のみのパート（thought=false, text="", functionCall=nil）を収集
-			if part.ThoughtSignature != "" && part.FunctionCall == nil && part.Text == "" {
+			// thoughtSignature を含むパート（thought=false）を収集し、テキスト出力を抑制
+			// Gemini 3.1 Pro: signature 付きパートの Text が生出力に漏れるのを防ぐ
+			if part.ThoughtSignature != "" && part.FunctionCall == nil {
 				tp := map[string]any{"thought_signature": part.ThoughtSignature}
+				if part.Text != "" {
+					tp["text"] = part.Text
+				}
 				thoughtParts = append(thoughtParts, tp)
 				if debug {
 					sig := part.ThoughtSignature
 					if len(sig) > 20 {
 						sig = sig[:20] + "..."
 					}
-					fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Collected signature-only part (sig=%q)\n", sig)
+					fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Collected signature part (text=%d chars, sig=%q)\n", len(part.Text), sig)
 				}
 				continue
 			}
