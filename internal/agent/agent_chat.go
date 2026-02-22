@@ -46,8 +46,12 @@ func (a *Agent) chatInternal(input string, image *api.ImageData) {
 	}
 
 	// 統計情報更新: Userメッセージ数をカウント
+	var startStats SessionStats
 	if a.Stats != nil {
+		a.statsMu.Lock()
 		a.Stats.UserMessages++
+		startStats = *a.Stats
+		a.statsMu.Unlock()
 	}
 
 	// タイムアウト付きコンテキスト作成
@@ -106,7 +110,7 @@ func (a *Agent) chatInternal(input string, image *api.ImageData) {
 	}
 
 	// リクエスト完了時の usage 表示
-	a.printLastUsage()
+	a.printTaskUsage(startStats)
 
 	// 自動圧縮チェック（成功時）
 	a.maybeAutoCompress()
@@ -511,33 +515,37 @@ func (a *Agent) chatWithImage(input string, image *api.ImageData) {
 	a.chatInternal(input, image)
 }
 
-// printLastUsage はリクエスト完了時の usage を表示
-func (a *Agent) printLastUsage() {
+// printTaskUsage はタスク全体の usage を表示
+func (a *Agent) printTaskUsage(startStats SessionStats) {
 	a.statsMu.Lock()
-	usage := a.Stats.LastUsage
-	a.Stats.LastUsage = nil // 表示後クリア
-	a.statsMu.Unlock()
-
-	if usage == nil {
+	if a.Stats == nil {
+		a.statsMu.Unlock()
 		return
 	}
 
-	total := usage.InputTokens + usage.OutputTokens
-	cost := CalculateRequestCostWithCache(a.ProviderName, a.CurrentModel, *usage)
+	inDiff := a.Stats.InputTokens - startStats.InputTokens
+	outDiff := a.Stats.OutputTokens - startStats.OutputTokens
+	costDiff := a.Stats.EstimatedCost() - startStats.EstimatedCost()
+	a.statsMu.Unlock()
+
+	total := inDiff + outDiff
+	if total == 0 {
+		return
+	}
 
 	// ✓ を緑色で表示、残りはdimまたは通常色
 	green.Print("✓ ")
 	if strings.ToLower(a.ProviderName) == "ollama" {
 		// Ollama の場合はコスト非表示
 		fmt.Printf("In: %s + Out: %s = %s tok\n",
-			FormatNumber(usage.InputTokens),
-			FormatNumber(usage.OutputTokens),
+			FormatNumber(inDiff),
+			FormatNumber(outDiff),
 			FormatNumber(total))
 	} else {
 		fmt.Printf("In: %s + Out: %s = %s tok ",
-			FormatNumber(usage.InputTokens),
-			FormatNumber(usage.OutputTokens),
+			FormatNumber(inDiff),
+			FormatNumber(outDiff),
 			FormatNumber(total))
-		dim.Printf("(~$%.4f)\n", cost)
+		dim.Printf("(~$%.4f)\n", costDiff)
 	}
 }

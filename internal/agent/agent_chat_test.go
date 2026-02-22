@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/agent/plan"
@@ -585,5 +586,47 @@ func TestExecuteStepV2_IgnoresCreatePlan(t *testing.T) {
 
 	if err != nil {
 		t.Errorf("executeStepV2() returned error: %v", err)
+	}
+}
+
+func TestPrintTaskUsage(t *testing.T) {
+	provider := &mockProvider{name: "test"}
+	agent := NewAgent("test-model", provider, false)
+	agent.Stats = NewSessionStats("test", "test-model")
+	agent.ProviderName = "test"
+
+	// Mock start stats (100 in, 50 out)
+	startStats := SessionStats{
+		InputTokens:  100,
+		OutputTokens: 50,
+		Provider:     "test",
+		Model:        "test-model",
+	}
+
+	// Mock current stats (200 in, 100 out) -> Diff: 100 in, 50 out
+	agent.Stats.InputTokens = 200
+	agent.Stats.OutputTokens = 100
+
+	// Capture stdout
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	agent.printTaskUsage(startStats)
+
+	w.Close()
+	os.Stdout = oldStdout
+
+	buf := make([]byte, 1024)
+	n, _ := r.Read(buf)
+	output := string(buf[:n])
+
+	// We expect the diff to be printed: In: 100 + Out: 50 = 150 tok
+	expectedIn := "100"
+	expectedOut := "50"
+	expectedTotal := "150"
+
+	if !strings.Contains(output, expectedIn) || !strings.Contains(output, expectedOut) || !strings.Contains(output, expectedTotal) {
+		t.Errorf("printTaskUsage output incorrect. Expected containing In: %s, Out: %s, Total: %s, but got: %s", expectedIn, expectedOut, expectedTotal, output)
 	}
 }
