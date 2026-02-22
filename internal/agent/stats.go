@@ -22,6 +22,7 @@ type SessionStats struct {
 	Provider            string     // "deepseek", "openai", "claude", "gemini", "groq", "ollama"
 	Model               string     // 現在のモデル名（料金計算に使用）
 	LastUsage           *api.Usage // 直近のリクエストの使用量
+	AccumulatedCost     float64    // リクエスト単位で計算・累積したコスト
 }
 
 // NewSessionStats は新しいSessionStatsを作成
@@ -51,12 +52,16 @@ func (s *SessionStats) AddTokens(input, output int) {
 }
 
 // AddUsage は api.Usage からトークン使用量を追加
+// リクエスト単位のコストを計算して AccumulatedCost に累積する
 func (s *SessionStats) AddUsage(usage api.Usage) {
 	s.InputTokens += usage.InputTokens
 	s.OutputTokens += usage.OutputTokens
 	s.CachedInputTokens += usage.CachedInputTokens
 	s.CacheCreationTokens += usage.CacheCreationTokens
 	s.LastUsage = &usage
+
+	// リクエスト単位のコストを累積（Gemini 200Kティア等に対応）
+	s.AccumulatedCost += CalculateRequestCostWithCache(s.Provider, s.Model, usage)
 }
 
 // TotalTokens は合計トークン数を返す
@@ -73,7 +78,12 @@ type PricingInfo struct {
 }
 
 // GetPricingInfo はプロバイダー・モデル別の料金情報を返す
-func GetPricingInfo(provider string, model string) PricingInfo {
+// promptTokenCount はオプション（Gemini 200Kティア判定用）
+func GetPricingInfo(provider string, model string, promptTokenCount ...int) PricingInfo {
+	ptc := 0
+	if len(promptTokenCount) > 0 {
+		ptc = promptTokenCount[0]
+	}
 	switch provider {
 	case "deepseek":
 		// DeepSeekの料金体系
@@ -94,7 +104,7 @@ func GetPricingInfo(provider string, model string) PricingInfo {
 			CacheCreationCostPerM: 0.14,
 		}
 	case "gemini":
-		return getGeminiPricing(model)
+		return getGeminiPricing(model, ptc)
 	case "groq":
 		return getGroqPricing(model)
 	case "openrouter":
@@ -106,7 +116,7 @@ func GetPricingInfo(provider string, model string) PricingInfo {
 		case strings.Contains(lm, "gpt") || strings.Contains(lm, "openai") || strings.Contains(lm, "codex"):
 			return getOpenAIPricing(model)
 		case strings.Contains(lm, "gemini") || strings.Contains(lm, "google"):
-			return getGeminiPricing(model)
+			return getGeminiPricing(model, ptc)
 		case strings.Contains(lm, "deepseek"):
 			return getDeepSeekPricing(model)
 		case strings.Contains(lm, "kimi") || strings.Contains(lm, "moonshotai"):
@@ -233,11 +243,21 @@ func getOpenAIPricing(model string) PricingInfo {
 }
 
 // getGeminiPricing はモデル名からGemini料金を返す
-func getGeminiPricing(model string) PricingInfo {
+// promptTokenCount はリクエストの入力トークン数（200Kティア判定に使用）
+func getGeminiPricing(model string, promptTokenCount int) PricingInfo {
 	lm := strings.ToLower(model)
 	switch {
 	case strings.Contains(lm, "pro"):
-		// Gemini 3 Pro / 2.5 Pro: $2/$12 per million tokens
+		if promptTokenCount > 200000 {
+			// Long context pricing (>200K): $4/$18 per million tokens
+			return PricingInfo{
+				InputCostPerM:         4.00,
+				OutputCostPerM:        18.00,
+				CachedInputCostPerM:   0.40,
+				CacheCreationCostPerM: 4.00,
+			}
+		}
+		// Standard pricing (<=200K): $2/$12 per million tokens
 		return PricingInfo{
 			InputCostPerM:         2.00,
 			OutputCostPerM:        12.00,
@@ -332,31 +352,30 @@ func getKimiPricing(model string) PricingInfo {
 }
 
 // EstimatedCost は推定コストを計算（USD）
-// キャッシュヒットとキャッシュ作成の割引/割増を反映
+// AddUsage 経由で累積されたコストがあればそれを使い、
+// AddTokens() のみ使われた場合はフォールバック計算を行う
 func (s *SessionStats) EstimatedCost() float64 {
 	if s.Provider == "ollama" {
 		return 0.0 // ローカル実行
 	}
 
+	// AddUsage 経由で累積されたコストがあればそれを使う
+	if s.AccumulatedCost > 0 {
+		return s.AccumulatedCost
+	}
+
+	// フォールバック: AddTokens() のみ使われた場合（レガシー互換）
 	pricing := GetPricingInfo(s.Provider, s.Model)
 
-	// 入力トークンのコスト計算
-	// - CachedInputTokens: キャッシュヒット（割引適用）
-	// - CacheCreationTokens: キャッシュ作成（Claude: 割増）
-	// - 残り: 通常入力トークン
 	cachedInputCost := float64(s.CachedInputTokens) / 1_000_000.0 * pricing.CachedInputCostPerM
 	cacheCreationCost := float64(s.CacheCreationTokens) / 1_000_000.0 * pricing.CacheCreationCostPerM
 
-	// 通常入力トークン = 全入力 - キャッシュヒット - キャッシュ作成
-	// 注: InputTokens はプロバイダー層で正規化済みの総入力トークン数
-	// (= uncached + CachedInputTokens + CacheCreationTokens)
 	uncachedInput := s.InputTokens - s.CachedInputTokens - s.CacheCreationTokens
 	if uncachedInput < 0 {
 		uncachedInput = 0
 	}
 	uncachedInputCost := float64(uncachedInput) / 1_000_000.0 * pricing.InputCostPerM
 
-	// 出力トークンのコスト
 	outputCost := float64(s.OutputTokens) / 1_000_000.0 * pricing.OutputCostPerM
 
 	return cachedInputCost + cacheCreationCost + uncachedInputCost + outputCost
@@ -445,7 +464,7 @@ func CalculateRequestCost(provider, model string, input, output int) float64 {
 		return 0.0 // ローカル実行
 	}
 
-	pricing := GetPricingInfo(provider, model)
+	pricing := GetPricingInfo(provider, model, input)
 
 	// コスト計算: (tokens / 1,000,000) * price
 	inputCostUSD := (float64(input) / 1_000_000.0) * pricing.InputCostPerM
@@ -460,7 +479,7 @@ func CalculateRequestCostWithCache(provider, model string, usage api.Usage) floa
 		return 0.0
 	}
 
-	pricing := GetPricingInfo(provider, model)
+	pricing := GetPricingInfo(provider, model, usage.InputTokens)
 
 	cachedInputCost := float64(usage.CachedInputTokens) / 1_000_000.0 * pricing.CachedInputCostPerM
 	cacheCreationCost := float64(usage.CacheCreationTokens) / 1_000_000.0 * pricing.CacheCreationCostPerM

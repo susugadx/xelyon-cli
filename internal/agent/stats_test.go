@@ -468,6 +468,96 @@ func TestCalculateRequestCost(t *testing.T) {
 	}
 }
 
+func TestGetGeminiPricing_200KTier(t *testing.T) {
+	// Pro: 200K以下 → 標準料金
+	p1 := getGeminiPricing("gemini-3.1-pro", 100000)
+	if p1.InputCostPerM != 2.00 {
+		t.Errorf("Gemini Pro <200K input = %f, want 2.00", p1.InputCostPerM)
+	}
+	if p1.OutputCostPerM != 12.00 {
+		t.Errorf("Gemini Pro <200K output = %f, want 12.00", p1.OutputCostPerM)
+	}
+
+	// Pro: 200K超 → 高ティア料金
+	p2 := getGeminiPricing("gemini-3.1-pro", 250000)
+	if p2.InputCostPerM != 4.00 {
+		t.Errorf("Gemini Pro >200K input = %f, want 4.00", p2.InputCostPerM)
+	}
+	if p2.OutputCostPerM != 18.00 {
+		t.Errorf("Gemini Pro >200K output = %f, want 18.00", p2.OutputCostPerM)
+	}
+	if p2.CachedInputCostPerM != 0.40 {
+		t.Errorf("Gemini Pro >200K cached = %f, want 0.40", p2.CachedInputCostPerM)
+	}
+
+	// Flash: 200K超でも料金変わらない（現時点）
+	f1 := getGeminiPricing("gemini-3-flash", 250000)
+	if f1.InputCostPerM != 0.50 {
+		t.Errorf("Gemini Flash >200K input = %f, want 0.50", f1.InputCostPerM)
+	}
+}
+
+func TestEstimatedCost_GeminiTierTransition(t *testing.T) {
+	stats := NewSessionStats("gemini", "gemini-3.1-pro")
+
+	// Request 1: 100K input, 10K output (標準ティア)
+	stats.AddUsage(api.Usage{
+		InputTokens:  100000,
+		OutputTokens: 10000,
+	})
+	cost1 := stats.EstimatedCost()
+	// 100K/1M * $2.00 + 10K/1M * $12.00 = $0.20 + $0.12 = $0.32
+	expected1 := 0.32
+	if cost1 < expected1-0.001 || cost1 > expected1+0.001 {
+		t.Errorf("After req1: cost = %f, want %f", cost1, expected1)
+	}
+
+	// Request 2: 250K input, 20K output (高ティア)
+	stats.AddUsage(api.Usage{
+		InputTokens:  250000,
+		OutputTokens: 20000,
+	})
+	cost2 := stats.EstimatedCost()
+	// req2: 250K/1M * $4.00 + 20K/1M * $18.00 = $1.00 + $0.36 = $1.36
+	// 合計: $0.32 + $1.36 = $1.68
+	expected2 := 1.68
+	if cost2 < expected2-0.001 || cost2 > expected2+0.001 {
+		t.Errorf("After req2: cost = %f, want %f", cost2, expected2)
+	}
+}
+
+func TestCalculateRequestCostWithCache_GeminiTier(t *testing.T) {
+	// 200K以下
+	cost1 := CalculateRequestCostWithCache("gemini", "gemini-3.1-pro", api.Usage{
+		InputTokens:       100000,
+		OutputTokens:      10000,
+		CachedInputTokens: 50000,
+	})
+	// uncached: 50K/1M * $2.00 = $0.10
+	// cached:   50K/1M * $0.20 = $0.01
+	// output:   10K/1M * $12.00 = $0.12
+	// total: $0.23
+	expected1 := 0.23
+	if cost1 < expected1-0.001 || cost1 > expected1+0.001 {
+		t.Errorf("CostWithCache <200K = %f, want %f", cost1, expected1)
+	}
+
+	// 200K超
+	cost2 := CalculateRequestCostWithCache("gemini", "gemini-3.1-pro", api.Usage{
+		InputTokens:       300000,
+		OutputTokens:      10000,
+		CachedInputTokens: 100000,
+	})
+	// uncached: 200K/1M * $4.00 = $0.80
+	// cached:   100K/1M * $0.40 = $0.04
+	// output:   10K/1M * $18.00 = $0.18
+	// total: $1.02
+	expected2 := 1.02
+	if cost2 < expected2-0.001 || cost2 > expected2+0.001 {
+		t.Errorf("CostWithCache >200K = %f, want %f", cost2, expected2)
+	}
+}
+
 func TestGetClaudePricing(t *testing.T) {
 	tests := []struct {
 		model      string
