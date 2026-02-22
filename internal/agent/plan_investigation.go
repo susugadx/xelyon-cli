@@ -40,15 +40,6 @@ func (a *Agent) runInvestigationPhase(ctx context.Context) (*plan.Plan, error) {
 			return nil, fmt.Errorf("investigation failed: %w", err)
 		}
 
-		a.History = append(a.History, api.Message{
-			Role:             "assistant",
-			Content:          response,
-			ReasoningContent: a.getLastReasoningContent(),
-		})
-		if a.Stats != nil {
-			a.Stats.AssistantMessages++
-		}
-
 		// デバッグモード: レスポンスの診断情報を出力
 		if os.Getenv("XELYON_DEBUG_PARSE") == "1" {
 			fmt.Fprintf(os.Stderr, "[DEBUG runInvestigationPhase] response length: %d\n", len(response))
@@ -73,6 +64,19 @@ func (a *Agent) runInvestigationPhase(ctx context.Context) (*plan.Plan, error) {
 		for i, tc := range toolCalls {
 			if tc.ID == "" {
 				toolCalls[i].ID = fmt.Sprintf("call_rescue_%03d", i+1)
+			}
+		}
+
+		if len(toolCalls) > 0 {
+			a.addToolCallsToHistory(response, toolCalls)
+		} else {
+			a.History = append(a.History, api.Message{
+				Role:             "assistant",
+				Content:          response,
+				ReasoningContent: a.getLastReasoningContent(),
+			})
+			if a.Stats != nil {
+				a.Stats.AssistantMessages++
 			}
 		}
 
@@ -124,26 +128,16 @@ func (a *Agent) runInvestigationPhase(ctx context.Context) (*plan.Plan, error) {
 		}
 
 		// ツールを分類して実行
-		var allResults []string
-		for _, tc := range toolCalls {
+		for idx, tc := range toolCalls {
 			safety := tools.GetToolSafety(tc.Tool)
 
 			// create_plan ツールの場合
 			if tc.Tool == "create_plan" {
-				if a.Stats != nil {
-					a.Stats.AddToolExecution(tc.Tool)
-				}
-				result, _ := tools.Execute(tc)
-				allResults = append(allResults, fmt.Sprintf("[Tool Result for %s]\n%s", tc.Tool, result))
+				a.executeToolOnly(tc)
 
 				// create_plan ツールから Plan を取得
 				if createPlanTool != nil {
 					if p := createPlanTool.LastPlan(); p != nil {
-						// 結果を履歴に追加してから Plan を返す
-						a.History = append(a.History, api.Message{
-							Role:    "user",
-							Content: strings.Join(allResults, "\n\n"),
-						})
 						return p, nil
 					}
 				}
@@ -158,11 +152,7 @@ func (a *Agent) runInvestigationPhase(ctx context.Context) (*plan.Plan, error) {
 				}
 				lastToolCall = tc
 
-				if a.Stats != nil {
-					a.Stats.AddToolExecution(tc.Tool)
-				}
-				result, _ := tools.Execute(tc)
-				allResults = append(allResults, fmt.Sprintf("[Tool Result for %s]\n%s", tc.Tool, result))
+				a.executeToolOnly(tc)
 				continue
 			}
 
@@ -170,19 +160,34 @@ func (a *Agent) runInvestigationPhase(ctx context.Context) (*plan.Plan, error) {
 			cyan.Printf("\n⚡ Implementation tool detected: %s\n", tc.Tool)
 			cyan.Println("   Requesting implementation plan...")
 
-			a.History = append(a.History, api.Message{
-				Role:    "user",
-				Content: promptplan.BuildPlanRequestMessage(tc.Tool),
-			})
-			break // 変更系ツールが見つかったらループを抜けて次のイテレーションへ
-		}
+			// ツール実行はせずに、計画作成を促すメッセージを追加
+			if tc.ID != "" {
+				// FCの場合はtool結果として返す必要があるため、ダミー結果を追加
+				a.History = append(a.History, api.Message{
+					Role:       "tool",
+					Content:    promptplan.BuildPlanRequestMessage(tc.Tool),
+					ToolCallID: tc.ID,
+					ToolName:   tc.Tool,
+				})
+			} else {
+				a.History = append(a.History, api.Message{
+					Role:    "user",
+					Content: promptplan.BuildPlanRequestMessage(tc.Tool),
+				})
+			}
 
-		// 結果を履歴に追加
-		if len(allResults) > 0 {
-			a.History = append(a.History, api.Message{
-				Role:    "user",
-				Content: strings.Join(allResults, "\n\n"),
-			})
+			// 残りのツール呼び出しに対するダミー結果を追加（APIエラー防止）
+			for _, remaining := range toolCalls[idx+1:] {
+				if remaining.ID != "" {
+					a.History = append(a.History, api.Message{
+						Role:       "tool",
+						Content:    "(skipped - plan required)",
+						ToolCallID: remaining.ID,
+						ToolName:   remaining.Tool,
+					})
+				}
+			}
+			break // 変更系ツールが見つかったらループを抜けて次のイテレーションへ
 		}
 	}
 
