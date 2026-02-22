@@ -12,6 +12,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 	promptplan "github.com/susugadx/xelyon-cli/internal/prompt/plan"
 	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/tools/dev"
 	"github.com/susugadx/xelyon-cli/internal/tools/planning"
 )
 
@@ -154,6 +155,27 @@ func (a *Agent) runInvestigationPhase(ctx context.Context) (*plan.Plan, error) {
 
 				a.executeToolOnly(tc)
 				continue
+			}
+
+			// bash / command の安全なコマンドは SafetyHigh 扱いにする
+			if tc.Tool == "bash" || tc.Tool == "command" {
+				var cmd string
+				if c, exists := tc.Args["command"]; exists {
+					cmd = c
+				} else if c, ok := tc.RawArgs["command"].(string); ok {
+					cmd = c
+				}
+
+				if cmd != "" && dev.IsSafeCommand(cmd, config.GetGlobalConfig().Bash) {
+					// ループ検知
+					if a.shouldAbortToolLoop(tc, lastToolCall, &sameCallCount) {
+						return nil, fmt.Errorf("tool loop detected during investigation")
+					}
+					lastToolCall = tc
+
+					a.executeToolOnly(tc)
+					continue
+				}
 			}
 
 			// SafetyMedium/Low ツール（変更系）→ 計画生成を要求
