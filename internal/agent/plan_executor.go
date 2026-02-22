@@ -189,6 +189,11 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 
 			// Level 1: 計画の tools に書き込み系があるのに未実行 → 強制続行
 			if missing := checkMissingWriteTools(step.Tools, executedTools); len(missing) > 0 {
+				// エスケープ: AI が「既に適用済み」と宣言 + diff に対象ファイルの変更あり
+				if containsAlreadyAppliedDeclaration(response) && diffContainsFileChanges(step.Files) {
+					green.Printf("✓ Step %d completed (verified in diff)\n", step.ID)
+					return nil
+				}
 				if continueCount < maxContinues {
 					continueCount++
 					yellow.Printf("⚠️  Step %d: expected %s but never executed (%d/%d)\n",
@@ -499,6 +504,81 @@ func checkMissingWriteTools(stepTools []string, executedTools map[string]bool) [
 		}
 	}
 	return missing
+}
+
+// containsAlreadyAppliedDeclaration はAI応答に「前ステップで適用済み」系パターンが含まれるか検出
+func containsAlreadyAppliedDeclaration(response string) bool {
+	lowered := strings.ToLower(response)
+	patterns := []string{
+		"already applied",
+		"already been applied",
+		"already been made",
+		"already been implemented",
+		"already modified",
+		"already changed",
+		"already updated",
+		"already exists",
+		"previous step",
+		"earlier step",
+		"already handled",
+		"already done",
+		"already completed",
+	}
+	for _, p := range patterns {
+		if strings.Contains(lowered, p) {
+			return true
+		}
+	}
+	// 日本語パターン
+	jpPatterns := []string{
+		"既に適用",
+		"既に修正",
+		"既に変更",
+		"既に実装",
+		"前のステップ",
+		"先ほどのステップ",
+		"適用済み",
+		"修正済み",
+		"変更済み",
+	}
+	for _, p := range jpPatterns {
+		if strings.Contains(response, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// diffContainsFileChanges は git diff HEAD に指定ファイルへの変更が含まれるか確認
+func diffContainsFileChanges(files []string) bool {
+	if len(files) == 0 {
+		return false
+	}
+	out, err := exec.Command("git", "diff", "HEAD", "--name-only").CombinedOutput()
+	if err != nil {
+		return false
+	}
+	diffOutput := strings.TrimSpace(string(out))
+	if diffOutput == "" {
+		return false
+	}
+	changedFiles := strings.Split(diffOutput, "\n")
+	changedSet := make(map[string]bool)
+	for _, f := range changedFiles {
+		changedSet[strings.TrimSpace(f)] = true
+	}
+	for _, target := range files {
+		if changedSet[target] {
+			return true
+		}
+		// パス末尾マッチ（"internal/api/foo.go" vs "foo.go"）
+		for changed := range changedSet {
+			if strings.HasSuffix(changed, "/"+target) || strings.HasSuffix(target, "/"+changed) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // getGitDiffHash は git diff HEAD + untracked files の出力を SHA256 ハッシュ化して返す。

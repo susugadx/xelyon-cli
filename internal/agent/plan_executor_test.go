@@ -56,6 +56,71 @@ func TestCheckMissingWriteTools_EmptyPlan(t *testing.T) {
 	}
 }
 
+// --- Level 1 エスケープ: containsAlreadyAppliedDeclaration ---
+
+func TestContainsAlreadyAppliedDeclaration_English(t *testing.T) {
+	tests := []struct {
+		input string
+		want  bool
+	}{
+		{"This change was already applied in step 1.", true},
+		{"The modification has already been implemented.", true},
+		{"This was handled in a previous step.", true},
+		{"The file was already modified by an earlier step.", true},
+		{"I'll now apply the str_replace.", false},
+	}
+	for _, tt := range tests {
+		got := containsAlreadyAppliedDeclaration(tt.input)
+		if got != tt.want {
+			t.Errorf("containsAlreadyAppliedDeclaration(%q) = %v, want %v", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestContainsAlreadyAppliedDeclaration_Japanese(t *testing.T) {
+	tests := []struct {
+		input string
+		want  bool
+	}{
+		{"この変更は前のステップで既に適用されています。", true},
+		{"修正済みのため、このステップでは変更不要です。", true},
+		{"既に変更が反映されています。", true},
+		{"str_replaceを実行します。", false},
+	}
+	for _, tt := range tests {
+		got := containsAlreadyAppliedDeclaration(tt.input)
+		if got != tt.want {
+			t.Errorf("containsAlreadyAppliedDeclaration(%q) = %v, want %v", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestContainsAlreadyAppliedDeclaration_NoMatch(t *testing.T) {
+	inputs := []string{
+		"I will now make the changes.",
+		"Let me apply the fix.",
+		"ファイルを修正します。",
+		"",
+	}
+	for _, input := range inputs {
+		if containsAlreadyAppliedDeclaration(input) {
+			t.Errorf("containsAlreadyAppliedDeclaration(%q) should be false", input)
+		}
+	}
+}
+
+// --- diffContainsFileChanges ---
+
+func TestDiffContainsFileChanges_EmptyFiles(t *testing.T) {
+	// 空のファイルリストでは常に false
+	if diffContainsFileChanges(nil) {
+		t.Error("diffContainsFileChanges(nil) should be false")
+	}
+	if diffContainsFileChanges([]string{}) {
+		t.Error("diffContainsFileChanges([]) should be false")
+	}
+}
+
 // --- Level 2: getGitDiffHash ---
 
 func TestGetGitDiffHash_Deterministic(t *testing.T) {
