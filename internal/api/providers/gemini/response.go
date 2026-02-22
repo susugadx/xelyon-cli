@@ -24,18 +24,11 @@ func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, s
 	var usage *GeminiUsageMetadata
 
 	scanner := bufio.NewScanner(resp.Body)
-	firstChunk := true
 
 	for scanner.Scan() {
 		line := scanner.Text()
 		if !strings.HasPrefix(line, "data: ") {
 			continue
-		}
-
-		// スピナーを停止（最初のデータが来たら）
-		if firstChunk && spinner != nil {
-			spinner.Stop()
-			firstChunk = false
 		}
 
 		data := strings.TrimPrefix(line, "data: ")
@@ -107,6 +100,9 @@ func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, s
 					rescuedToolJSONs = append(rescuedToolJSONs, extracted...)
 					if strings.TrimSpace(remaining) != "" {
 						if !headerPrinted {
+							if spinner != nil {
+								spinner.Stop()
+							}
 							api.PrintAIHeader()
 							headerPrinted = true
 						}
@@ -115,8 +111,11 @@ func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, s
 					fullResponse.WriteString(remaining)
 					continue
 				}
-				// 通常テキスト
+				// 通常テキスト: 最初の表示可能コンテンツでスピナー停止
 				if !headerPrinted {
+					if spinner != nil {
+						spinner.Stop()
+					}
 					api.PrintAIHeader()
 					headerPrinted = true
 				}
@@ -125,6 +124,10 @@ func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, s
 			}
 
 			if part.FunctionCall != nil {
+				// テキスト表示後にFCが来た場合、ツール準備中スピナーを再開
+				if headerPrinted && spinner != nil && !spinner.IsActive() {
+					spinner.Start(ui.SpinnerMessageForTool(part.FunctionCall.Name))
+				}
 				part.FunctionCall.ThoughtSignature = part.ThoughtSignature
 				functionCalls = append(functionCalls, part.FunctionCall)
 			}
