@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -59,10 +60,21 @@ func (p *Provider) ClearCache() {
 
 const (
 	minCacheTokens    = 32768
-	maxDiffMessages   = 20      // 差分メッセージ数がこれを超えたらキャッシュ再作成
-	cacheTTL          = "3600s" // キャッシュTTL (1時間)
-	tokenEstimateRate = 1.0     // 1文字あたりのトークン概算（日本語含む）
+	maxDiffMessages   = 20   // 差分メッセージ数がこれを超えたらキャッシュ再作成
+	defaultCacheTTL   = 1800 // デフォルトキャッシュTTL（秒）= 30分
+	tokenEstimateRate = 1.0  // 1文字あたりのトークン概算（日本語含む）
 )
+
+// getCacheTTL はキャッシュTTL秒数を返す
+// 環境変数 GEMINI_CACHE_TTL があればそちらを優先、なければデフォルト1800秒
+func getCacheTTL() int {
+	if v := os.Getenv("GEMINI_CACHE_TTL"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return defaultCacheTTL
+}
 
 // estimateTokens はトークン数を概算する
 func estimateTokens(systemPrompt string, history []api.Message) int {
@@ -158,7 +170,9 @@ func (p *Provider) updateOrUseCache(ctx context.Context, systemPrompt string, hi
 	}
 
 	// キャッシュ作成（ツール定義もキャッシュに含める）
-	resp, err := p.CreateCachedContent(ctx, model, systemPrompt, cacheHistory, cacheTTL, tools, toolConfig)
+	ttl := getCacheTTL()
+	ttlStr := fmt.Sprintf("%ds", ttl)
+	resp, err := p.CreateCachedContent(ctx, model, systemPrompt, cacheHistory, ttlStr, tools, toolConfig)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: Failed to create cache: %v. Proceeding without cache.\n", err)
 		return "", history, nil
@@ -167,8 +181,8 @@ func (p *Provider) updateOrUseCache(ctx context.Context, systemPrompt string, hi
 	p.activeCacheName = resp.Name
 	p.cachedTokenCount = totalTokens
 	p.cachedMessageCount = len(cacheHistory)
-	// 有効期限を設定（TTLより少し短めに設定）
-	p.cacheExpireTime = time.Now().Add(55 * time.Minute)
+	// 有効期限を設定（TTLの90%で期限切れ判定）
+	p.cacheExpireTime = time.Now().Add(time.Duration(ttl) * time.Second * 9 / 10)
 
 	if debug {
 		fmt.Fprintf(os.Stderr, "[DEBUG Gemini] Cache created: %s\n", resp.Name)
