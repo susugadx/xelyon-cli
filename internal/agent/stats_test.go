@@ -202,6 +202,72 @@ func TestSessionStats_EstimatedCost_Groq(t *testing.T) {
 	}
 }
 
+func TestSessionStats_EstimatedCost_OpenRouter_Claude(t *testing.T) {
+	stats := NewSessionStats("openrouter", "anthropic/claude-sonnet-4.5")
+	stats.AddTokens(1000000, 1000000)
+
+	cost := stats.EstimatedCost()
+	expected := 3.00 + 15.00 // Sonnet pricing
+	if cost < expected-0.001 || cost > expected+0.001 {
+		t.Errorf("EstimatedCost() for openrouter claude = %f, want %f", cost, expected)
+	}
+}
+
+func TestSessionStats_EstimatedCost_OpenRouter_Gemini(t *testing.T) {
+	stats := NewSessionStats("openrouter", "google/gemini-3.1-pro")
+	stats.AddTokens(1000000, 1000000)
+
+	cost := stats.EstimatedCost()
+	expected := 2.00 + 12.00 // Gemini Pro pricing
+	if cost < expected-0.001 || cost > expected+0.001 {
+		t.Errorf("EstimatedCost() for openrouter gemini = %f, want %f", cost, expected)
+	}
+}
+
+func TestSessionStats_EstimatedCost_OpenRouter_Kimi(t *testing.T) {
+	stats := NewSessionStats("openrouter", "moonshotai/kimi-k2.5")
+	stats.AddTokens(1000000, 1000000)
+
+	cost := stats.EstimatedCost()
+	expected := 0.60 + 3.00 // Kimi K2.5 pricing
+	if cost < expected-0.001 || cost > expected+0.001 {
+		t.Errorf("EstimatedCost() for openrouter kimi k2.5 = %f, want %f", cost, expected)
+	}
+}
+
+func TestSessionStats_EstimatedCost_OpenRouter_KimiK2(t *testing.T) {
+	stats := NewSessionStats("openrouter", "moonshotai/kimi-k2")
+	stats.AddTokens(1000000, 1000000)
+
+	cost := stats.EstimatedCost()
+	expected := 0.60 + 2.50 // Kimi K2 pricing
+	if cost < expected-0.001 || cost > expected+0.001 {
+		t.Errorf("EstimatedCost() for openrouter kimi k2 = %f, want %f", cost, expected)
+	}
+}
+
+func TestSessionStats_EstimatedCost_OpenRouter_Llama(t *testing.T) {
+	stats := NewSessionStats("openrouter", "meta/llama-3.1-70b")
+	stats.AddTokens(1000000, 1000000)
+
+	cost := stats.EstimatedCost()
+	expected := 0.20 + 0.80 // Llama pricing
+	if cost < expected-0.001 || cost > expected+0.001 {
+		t.Errorf("EstimatedCost() for openrouter llama = %f, want %f", cost, expected)
+	}
+}
+
+func TestSessionStats_EstimatedCost_OpenRouter_Default(t *testing.T) {
+	stats := NewSessionStats("openrouter", "unknown/some-model")
+	stats.AddTokens(1000000, 1000000)
+
+	cost := stats.EstimatedCost()
+	expected := 0.14 + 0.28 // DeepSeek fallback
+	if cost < expected-0.001 || cost > expected+0.001 {
+		t.Errorf("EstimatedCost() for openrouter unknown = %f, want %f", cost, expected)
+	}
+}
+
 func TestSessionStats_EstimatedCost_UnknownProvider(t *testing.T) {
 	stats := NewSessionStats("unknown")
 	stats.AddTokens(1000000, 1000000)
