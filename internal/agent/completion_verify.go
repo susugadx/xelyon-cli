@@ -238,6 +238,37 @@ Please fix these errors before declaring completion. Do NOT skip these issues.`,
 	return false, ""
 }
 
+// addPendingLSPFile は str_replace 成功後に対象ファイルを遅延診断バッファへ追加する。
+// 重複ファイルは追加しない（連続 str_replace で同一ファイルを複数回編集した場合も1エントリ）。
+func (a *Agent) addPendingLSPFile(path string) {
+	if path == "" {
+		return
+	}
+	for _, f := range a.pendingLSPFiles {
+		if f == path {
+			return
+		}
+	}
+	a.pendingLSPFiles = append(a.pendingLSPFiles, path)
+}
+
+// flushLSPDiagnostics はバッファ内の全ファイルに対して LSP 診断を実行し、
+// 結果文字列を返してバッファをクリアする。
+// エラーがなければ空文字を返す。LSP 未起動時も空文字を返す（graceful degradation）。
+func (a *Agent) flushLSPDiagnostics() string {
+	if len(a.pendingLSPFiles) == 0 {
+		return ""
+	}
+	files := a.pendingLSPFiles
+	a.pendingLSPFiles = nil
+
+	result := toolslsp.CheckDiagnosticsForFiles(files)
+	if result.Summary == "" {
+		return ""
+	}
+	return "\n\n⚠️ LSP Diagnostics (deferred):\n" + result.Summary
+}
+
 // runCompletionHooksWithRetry は completion hooks を最大 MaxRetry 回実行する。
 // フック失敗時は AI にフィードバックして修正を試み、再実行する。
 // Plan mode での使用を想定（ループ型の runNormalMode では直接カウンターを使用）。

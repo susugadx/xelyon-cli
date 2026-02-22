@@ -62,6 +62,10 @@ type Agent struct {
 	ToolCache            *ToolCache          // ツール結果キャッシュ（read_file, list_dir）
 	taskBaseCommitHash   string              // タスク開始時のHEADコミットハッシュ（completion hook の diff 空チェック判定用）
 
+	// LSP診断遅延バッファ: 連続str_replace途中の一時的エラーによる誤auto-retry防止用。
+	// str_replace成功後に対象ファイルを追加し、次の非str_replaceアクション時にフラッシュして再診断する。
+	pendingLSPFiles []string
+
 	// OpenAI Compact API 関連
 	compactedItems  []api.InputItem // 圧縮済みアイテム
 	isCompactedMode bool            // 圧縮モードフラグ

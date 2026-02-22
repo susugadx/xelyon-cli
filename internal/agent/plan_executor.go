@@ -320,6 +320,16 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 				}
 			}
 
+			// str_replace 成功時: LSP診断遅延バッファにファイルを追加
+			// 連続 str_replace 途中の一時的エラーによる誤 auto-retry を防ぐため、
+			// 診断は全ツール実行後にまとめて行う（flushLSPDiagnostics）。
+			if toolCall.Tool == "str_replace" && !strings.HasPrefix(result, "Error:") &&
+				!strings.HasPrefix(result, "[CANCELLED]") && !strings.HasPrefix(result, "[COMMENT]") {
+				if path := toolCall.Args["path"]; path != "" {
+					a.addPendingLSPFile(path)
+				}
+			}
+
 			// ステップ完了検証用: 実行されたツールを記録
 			executedTools[toolCall.Tool] = true
 			if tools.IsWriteTool(toolCall.Tool) {
@@ -380,6 +390,13 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 		// スキップされた書き込みとコマンドがあればメッセージを注入して通知
 		if skippedWrites > 0 || skippedCommands > 0 {
 			a.injectWriteThrottleMessage(skippedWrites, skippedCommands)
+		}
+
+		// LSP診断遅延フラッシュ: 全ツール実行後に改めて診断を実行し結果を追記。
+		// str_replace の直後ではなくここで実行することで、連続編集途中の
+		// 「import not used」等の一時エラーによる誤 auto-retry を防ぐ。
+		if diagMsg := a.flushLSPDiagnostics(); diagMsg != "" && len(a.History) > 0 {
+			a.History[len(a.History)-1].Content += diagMsg
 		}
 
 		// 失敗検出時の処理
