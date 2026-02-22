@@ -559,6 +559,13 @@ func TestIsSafeCommand_DefaultSafeCommands(t *testing.T) {
 		{"head", "head -10 file.txt", true},
 		{"tail", "tail -f file.txt", true},
 		{"grep", "grep pattern file.txt", true},
+		{"sed -n", "sed -n '1,5p' file.txt", true},
+		{"diff", "diff file1.txt file2.txt", true},
+		{"file", "file test.txt", true},
+		{"du", "du -sh .", true},
+		{"stat", "stat test.txt", true},
+		{"md5sum", "md5sum file.txt", true},
+		{"sha256sum", "sha256sum file.txt", true},
 		{"unknown", "unknown_command", false},
 		{"npm run", "npm run build", false}, // npm run は安全リストにない
 	}

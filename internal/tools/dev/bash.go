@@ -26,6 +26,8 @@ var (
 var defaultSafeCommands = map[string]bool{
 	"ls": true, "cat": true, "pwd": true, "echo": true, "which": true,
 	"head": true, "tail": true, "wc": true, "grep": true, "find": true,
+	"sed -n": true, "diff": true, "file": true, "du": true, "stat": true,
+	"md5sum": true, "sha256sum": true,
 	"git status": true, "git log": true, "git diff": true, "git branch": true,
 	"git ls-files": true, "git show": true, "git remote": true,
 	"go version": true, "go mod tidy": true,
