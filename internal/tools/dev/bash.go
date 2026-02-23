@@ -507,30 +507,62 @@ func IsSafeCommand(command string, cfg config.BashConfig) bool {
 // splitChainCommand はコマンドを &&, ||, ; で分割する
 // パイプ | は分割しない（パイプチェーンは別途 dangerousPipePatterns でチェック）
 func splitChainCommand(command string) []string {
-	// &&, ||, ; をセンチネルに置換してから分割
-	// 注意: シングルクォート/ダブルクォート内のセパレータは分割しない簡易実装
 	var parts []string
-	remaining := command
-	for remaining != "" {
-		idx := -1
-		sepLen := 0
-		// 最も早く出現するセパレータを探す
-		for _, sep := range []string{"&&", "||", ";"} {
-			i := strings.Index(remaining, sep)
-			if i >= 0 && (idx < 0 || i < idx) {
-				idx = i
-				sepLen = len(sep)
+	var current strings.Builder
+	inSingle := false
+	inDouble := false
+	i := 0
+	for i < len(command) {
+		ch := command[i]
+		// クォート状態の追跡
+		if ch == '\'' && !inDouble {
+			inSingle = !inSingle
+			current.WriteByte(ch)
+			i++
+			continue
+		}
+		if ch == '"' && !inSingle {
+			inDouble = !inDouble
+			current.WriteByte(ch)
+			i++
+			continue
+		}
+		// クォート内ならそのまま追加
+		if inSingle || inDouble {
+			current.WriteByte(ch)
+			i++
+			continue
+		}
+		// セパレータチェック（クォート外のみ）
+		if i+1 < len(command) && command[i:i+2] == "&&" {
+			if part := strings.TrimSpace(current.String()); part != "" {
+				parts = append(parts, part)
 			}
+			current.Reset()
+			i += 2
+			continue
 		}
-		if idx < 0 {
-			parts = append(parts, strings.TrimSpace(remaining))
-			break
+		if i+1 < len(command) && command[i:i+2] == "||" {
+			if part := strings.TrimSpace(current.String()); part != "" {
+				parts = append(parts, part)
+			}
+			current.Reset()
+			i += 2
+			continue
 		}
-		part := strings.TrimSpace(remaining[:idx])
-		if part != "" {
-			parts = append(parts, part)
+		if ch == ';' {
+			if part := strings.TrimSpace(current.String()); part != "" {
+				parts = append(parts, part)
+			}
+			current.Reset()
+			i++
+			continue
 		}
-		remaining = remaining[idx+sepLen:]
+		current.WriteByte(ch)
+		i++
+	}
+	if part := strings.TrimSpace(current.String()); part != "" {
+		parts = append(parts, part)
 	}
 	return parts
 }

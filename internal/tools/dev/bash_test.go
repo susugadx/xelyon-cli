@@ -689,6 +689,8 @@ func TestSplitChainCommand(t *testing.T) {
 		{"a || b && c", []string{"a", "b", "c"}},
 		{"grep foo | head", []string{"grep foo | head"}},
 		{"  ls  &&  pwd  ", []string{"ls", "pwd"}},
+		{`echo "hello && world"`, []string{`echo "hello && world"`}},
+		{"echo 'a;b' && ls", []string{"echo 'a;b'", "ls"}},
 	}
 
 	for _, tt := range tests {
