@@ -644,3 +644,64 @@ func TestCheckBashSafety_ModerateDangerousPipe(t *testing.T) {
 		t.Errorf("CheckBashSafety() should block dangerous pipe in moderate mode, got %v", err)
 	}
 }
+
+func TestIsSafeCommand_ChainedCommands(t *testing.T) {
+	cfg := config.BashConfig{}
+
+	tests := []struct {
+		name     string
+		command  string
+		expected bool
+	}{
+		{"single safe", "git status", true},
+		{"all safe &&", "git status && git log", true},
+		{"all safe ;", "ls -la; cat file.txt", true},
+		{"safe && unsafe", "git status && git push", false},
+		{"safe && dangerous", "git status && rm -rf /tmp", false},
+		{"unsafe ; rm", "ls; rm file", false},
+		{"pipe not split", "grep foo | head", true},
+		{"cat && echo", "cat file && echo done", true},
+		{"three safe", "git status && git diff && git log --oneline", true},
+		{"middle unsafe", "ls && unknown_cmd && echo done", false},
+		{"safe || safe", "git status || git log", true},
+		{"safe || unsafe", "git status || git push", false},
+		{"mixed operators", "git status && git log || echo fail", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := IsSafeCommand(tt.command, cfg)
+			if result != tt.expected {
+				t.Errorf("IsSafeCommand(%q) = %v, want %v", tt.command, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestSplitChainCommand(t *testing.T) {
+	tests := []struct {
+		command  string
+		expected []string
+	}{
+		{"git status", []string{"git status"}},
+		{"git status && git log", []string{"git status", "git log"}},
+		{"ls; cat file", []string{"ls", "cat file"}},
+		{"a || b && c", []string{"a", "b", "c"}},
+		{"grep foo | head", []string{"grep foo | head"}},
+		{"  ls  &&  pwd  ", []string{"ls", "pwd"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.command, func(t *testing.T) {
+			result := splitChainCommand(tt.command)
+			if len(result) != len(tt.expected) {
+				t.Fatalf("splitChainCommand(%q) = %v, want %v", tt.command, result, tt.expected)
+			}
+			for i, part := range result {
+				if part != tt.expected[i] {
+					t.Errorf("splitChainCommand(%q)[%d] = %q, want %q", tt.command, i, part, tt.expected[i])
+				}
+			}
+		})
+	}
+}

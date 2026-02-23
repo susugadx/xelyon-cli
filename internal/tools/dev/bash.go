@@ -492,14 +492,56 @@ func CheckBashSafety(command string, cfg config.BashConfig) string {
 }
 
 // IsSafeCommand checks if a command is safe
+// チェーンコマンド（&&, ||, ;）は全パーツが安全な場合のみ true を返す
+// パイプ | は分割しない（dangerousPipePatterns で別途チェック済み）
 func IsSafeCommand(command string, cfg config.BashConfig) bool {
-	// Check default safe commands
+	parts := splitChainCommand(command)
+	for _, part := range parts {
+		if !isSingleCommandSafe(part, cfg) {
+			return false
+		}
+	}
+	return true
+}
+
+// splitChainCommand はコマンドを &&, ||, ; で分割する
+// パイプ | は分割しない（パイプチェーンは別途 dangerousPipePatterns でチェック）
+func splitChainCommand(command string) []string {
+	// &&, ||, ; をセンチネルに置換してから分割
+	// 注意: シングルクォート/ダブルクォート内のセパレータは分割しない簡易実装
+	var parts []string
+	remaining := command
+	for remaining != "" {
+		idx := -1
+		sepLen := 0
+		// 最も早く出現するセパレータを探す
+		for _, sep := range []string{"&&", "||", ";"} {
+			i := strings.Index(remaining, sep)
+			if i >= 0 && (idx < 0 || i < idx) {
+				idx = i
+				sepLen = len(sep)
+			}
+		}
+		if idx < 0 {
+			parts = append(parts, strings.TrimSpace(remaining))
+			break
+		}
+		part := strings.TrimSpace(remaining[:idx])
+		if part != "" {
+			parts = append(parts, part)
+		}
+		remaining = remaining[idx+sepLen:]
+	}
+	return parts
+}
+
+// isSingleCommandSafe は単一コマンド（チェーンなし）が安全かチェックする
+func isSingleCommandSafe(command string, cfg config.BashConfig) bool {
 	for safe := range defaultSafeCommands {
 		if strings.HasPrefix(command, safe) {
 			return true
 		}
 	}
-	// Check custom safe commands from config
 	for _, safe := range cfg.SafeCommands {
 		if strings.HasPrefix(command, safe) {
 			return true
