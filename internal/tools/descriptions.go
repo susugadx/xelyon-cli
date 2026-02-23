@@ -8,7 +8,7 @@ var ToolDescriptions = map[string]string{
 	"read_file":   "Read file contents. Use to examine source code, config, or any text file. Supports optional line range.",
 	"read_files":  "Read multiple files in one call (max 10). Each path supports optional line range: \"path\" or \"path:start-end\". More efficient than multiple read_file calls when you need 2+ files.",
 	"write_file":  "Create or overwrite a file. Use str_replace for partial edits to existing files.",
-	"str_replace": "Edit existing file by replacing a specific string. You MUST read_file first - never edit a file you haven't read in this session. Use this for ALL edits to existing files regardless of size.",
+	"str_replace": "Edit existing file by replacing a specific string. You MUST read_file first - never edit a file you haven't read in this session. Use this for ALL edits to existing files regardless of size. Batch mode: pass edits=[{old_str,new_str},...] with empty old_str for multiple replacements in one call.",
 	"delete_file": "Delete a file permanently.",
 	"list_dir":    "List files and directories at the specified path.",
 

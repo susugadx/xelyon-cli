@@ -1,6 +1,7 @@
 package file
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +13,12 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
+
+// EditEntry は batch edits の1エントリ
+type EditEntry struct {
+	OldStr string `json:"old_str"`
+	NewStr string `json:"new_str"`
+}
 
 // ExecuteStrReplace はファイル内の文字列を置換
 //
@@ -415,4 +422,133 @@ func buildLineSnippet(lines []string, startLine, endLine, ctx int) string {
 		fmt.Fprintf(&b, "%s%4d: %s\n", prefix, i, lines[i-1])
 	}
 	return b.String()
+}
+
+// executeBatchEdits は batch edits モードを実行する。
+// edits を順番に in-memory 適用し、全成功時のみファイルに書き込む。
+// 1つでも失敗したら即 return（ファイル未書き込み = 自動ロールバック）。
+func executeBatchEdits(path, editsJSON string) (string, error) {
+	if path == "" {
+		return "Error: path is required", nil
+	}
+
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Sprintf("Error: %v", err), nil
+	}
+
+	// Read-Before-Write guard
+	if !tools.GlobalReadTracker.IsRead(absPath) {
+		return fmt.Sprintf("Error: You must read_file before str_replace. Run read_file(path=\"%s\") first to see the current content.", path), nil
+	}
+
+	contentBytes, err := os.ReadFile(absPath)
+	if err != nil {
+		return fmt.Sprintf("Error reading file: %v", err), nil
+	}
+	oldContent := string(contentBytes)
+
+	// edits パース
+	var edits []EditEntry
+	if err := json.Unmarshal([]byte(editsJSON), &edits); err != nil {
+		return fmt.Sprintf("Error: invalid edits JSON: %v", err), nil
+	}
+	if len(edits) == 0 {
+		return "Error: edits array is empty", nil
+	}
+
+	// edits を順番に in-memory 適用
+	content := oldContent
+	for i, edit := range edits {
+		if edit.OldStr == "" {
+			return fmt.Sprintf("Error: edits[%d].old_str is empty", i), nil
+		}
+		if edit.OldStr == edit.NewStr {
+			return fmt.Sprintf("Error: edits[%d] old_str and new_str are identical (no change needed)", i), nil
+		}
+
+		count := strings.Count(content, edit.OldStr)
+		switch {
+		case count == 1:
+			content = strings.Replace(content, edit.OldStr, edit.NewStr, 1)
+		case count > 1:
+			return fmt.Sprintf("Error: edits[%d].old_str appears %d times (must be unique). Batch aborted, no changes written.", i, count), nil
+		default:
+			// exact match なし → normalized whitespace fallback
+			found, startIdx, endIdx := common.FindWithNormalizedWhitespace(content, edit.OldStr)
+			if !found {
+				return fmt.Sprintf("Error: edits[%d].old_str not found (tried exact and normalized matching). Batch aborted, no changes written.", i), nil
+			}
+			content = content[:startIdx] + edit.NewStr + content[endIdx:]
+		}
+	}
+
+	if content == oldContent {
+		return "No changes after applying all edits", nil
+	}
+
+	// combined diff 表示
+	common.Cyan.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	common.Cyan.Printf("🔧 str_replace (batch: %d edits): %s\n", len(edits), path)
+	common.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+	oldLines := strings.Count(oldContent, "\n") + 1
+	newLines := strings.Count(content, "\n") + 1
+	lineDiff := newLines - oldLines
+
+	common.Yellow.Println("\n📊 Summary / 変更サマリー:")
+	fmt.Printf("   • Edits: %d\n", len(edits))
+	if lineDiff > 0 {
+		common.Green.Printf("   • Net: +%d lines\n", lineDiff)
+	} else if lineDiff < 0 {
+		common.Red.Printf("   • Net: %d lines\n", lineDiff)
+	} else {
+		fmt.Printf("   • Net: 0 lines (same size)\n")
+	}
+
+	cfg := config.GetGlobalConfig()
+	opts := &ui.DiffOptions{
+		ContextLines:  cfg.Diff.ContextLines,
+		ShowLineNums:  true,
+		InlineMode:    true,
+		MaxTotalLines: 50,
+	}
+	if opts.ContextLines == 0 {
+		opts.MaxTotalLines = 0
+	}
+	ui.ShowColoredDiff(oldContent, content, opts)
+
+	// 確認
+	dec := common.ConfirmWithAutoApproveDecision("str_replace", "Apply batch replacement? / バッチ置換を適用しますか？")
+	switch dec.Action {
+	case common.ConfirmYes:
+		// continue
+	case common.ConfirmComment:
+		return fmt.Sprintf(`[COMMENT] User provided feedback for str_replace (batch).
+
+Comment:
+%s
+
+Next actions:
+- Review the edits and adjust as needed.
+- Use read_file to verify current content.
+
+IMPORTANT: Do NOT apply the replacement until the user approves.`, strings.TrimSpace(dec.Comment)), nil
+	default:
+		common.Yellow.Println("⚠️  User cancelled the batch replacement")
+		return fmt.Sprintf(`[CANCELLED] User cancelled str_replace batch for %s.
+
+Hint: The replacement was not applied. If you need to make these changes:
+1. Verify the content with read_file
+2. Double-check each old_str is unique and correct
+
+Do not retry the same replacement.`, path), nil
+	}
+
+	if err := os.WriteFile(absPath, []byte(content), 0644); err != nil {
+		return fmt.Sprintf("Error writing file: %v", err), nil
+	}
+
+	common.Green.Printf("✅ Applied %d edits to: %s\n", len(edits), path)
+	return fmt.Sprintf("Successfully applied %d edits to %s", len(edits), path), nil
 }

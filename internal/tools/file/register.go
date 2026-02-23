@@ -1,6 +1,7 @@
 package file
 
 import (
+	"encoding/json"
 	"strconv"
 
 	"github.com/susugadx/xelyon-cli/internal/tools"
@@ -97,13 +98,50 @@ func (t *StrReplaceTool) Parameters() map[string]interface{} {
 			"new_str":    map[string]interface{}{"type": "string", "description": "New string to replace with"},
 			"start_line": map[string]interface{}{"type": "string", "description": "Start line number to limit search scope (optional)"},
 			"end_line":   map[string]interface{}{"type": "string", "description": "End line number to limit search scope (optional)"},
+			"edits": map[string]interface{}{
+				"type": "array",
+				"items": map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"old_str": map[string]interface{}{"type": "string"},
+						"new_str": map[string]interface{}{"type": "string"},
+					},
+					"required": []string{"old_str", "new_str"},
+				},
+				"description": "Batch edits: array of {old_str, new_str} pairs applied sequentially",
+			},
 		},
-		"required":             []string{"path", "old_str", "new_str"},
+		"required":             []string{"path"},
 		"additionalProperties": false,
 	}
 }
 
 func (t *StrReplaceTool) Run(args map[string]string) (string, *tools.FileChange, error) {
+	// batch edits モード: old_str 空 + edits 非空
+	if args["old_str"] == "" && args["edits"] != "" {
+		result, err := executeBatchEdits(args["path"], args["edits"])
+		if err != nil {
+			return result, nil, err
+		}
+		linesAdded, linesRemoved := 0, 0
+		var edits []EditEntry
+		if json.Unmarshal([]byte(args["edits"]), &edits) == nil {
+			for _, e := range edits {
+				linesAdded += countLines(e.NewStr)
+				linesRemoved += countLines(e.OldStr)
+			}
+		}
+		return result, &tools.FileChange{
+			FilePath:     args["path"],
+			Timestamp:    common.GetCurrentTime(),
+			Tool:         "str_replace",
+			Description:  "Batch replaced in " + args["path"],
+			LinesAdded:   linesAdded,
+			LinesRemoved: linesRemoved,
+		}, nil
+	}
+
+	// 従来のシングル編集 or 行レンジ
 	result, err := ExecuteStrReplace(args["path"], args["old_str"], args["new_str"], args["start_line"], args["end_line"])
 	if err != nil {
 		return result, nil, err

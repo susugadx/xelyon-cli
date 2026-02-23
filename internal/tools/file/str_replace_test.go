@@ -358,3 +358,159 @@ func TestExecuteStrReplace_GuardAllowsAfterRead(t *testing.T) {
 	}
 	testutil.AssertFileContent(t, testFile, "line1\nREPLACED\nline3")
 }
+
+// ===== Batch Edits Tests =====
+
+func TestExecuteBatchEdits_Success(t *testing.T) {
+	setupTestMocks(t)
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test.txt")
+	testutil.CreateTempFile(t, tmpDir, "test.txt", "aaa\nbbb\nccc")
+	absPath, _ := filepath.Abs(testFile)
+	tools.GlobalReadTracker.MarkRead(absPath)
+
+	editsJSON := `[{"old_str":"aaa","new_str":"AAA"},{"old_str":"ccc","new_str":"CCC"}]`
+	output, err := executeBatchEdits(testFile, editsJSON)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(output, "Successfully applied 2 edits") {
+		t.Errorf("expected batch success message, got: %s", output)
+	}
+	testutil.AssertFileContent(t, testFile, "AAA\nbbb\nCCC")
+}
+
+func TestExecuteBatchEdits_RollbackOnFailure(t *testing.T) {
+	setupTestMocks(t)
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test.txt")
+	originalContent := "aaa\nbbb\nccc"
+	testutil.CreateTempFile(t, tmpDir, "test.txt", originalContent)
+	absPath, _ := filepath.Abs(testFile)
+	tools.GlobalReadTracker.MarkRead(absPath)
+
+	// First edit valid, second not found
+	editsJSON := `[{"old_str":"aaa","new_str":"AAA"},{"old_str":"zzz","new_str":"ZZZ"}]`
+	output, err := executeBatchEdits(testFile, editsJSON)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(output, "edits[1].old_str not found") {
+		t.Errorf("expected failure on second edit, got: %s", output)
+	}
+	// File must be unchanged (rollback)
+	testutil.AssertFileContent(t, testFile, originalContent)
+}
+
+func TestExecuteBatchEdits_AmbiguousMatch(t *testing.T) {
+	setupTestMocks(t)
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test.txt")
+	testutil.CreateTempFile(t, tmpDir, "test.txt", "foo\nbar\nfoo")
+	absPath, _ := filepath.Abs(testFile)
+	tools.GlobalReadTracker.MarkRead(absPath)
+
+	editsJSON := `[{"old_str":"foo","new_str":"baz"}]`
+	output, err := executeBatchEdits(testFile, editsJSON)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(output, "appears 2 times") {
+		t.Errorf("expected ambiguous match error, got: %s", output)
+	}
+	testutil.AssertFileContent(t, testFile, "foo\nbar\nfoo")
+}
+
+func TestExecuteBatchEdits_EmptyArray(t *testing.T) {
+	setupTestMocks(t)
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test.txt")
+	testutil.CreateTempFile(t, tmpDir, "test.txt", "content")
+	absPath, _ := filepath.Abs(testFile)
+	tools.GlobalReadTracker.MarkRead(absPath)
+
+	output, err := executeBatchEdits(testFile, "[]")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(output, "edits array is empty") {
+		t.Errorf("expected empty array error, got: %s", output)
+	}
+}
+
+func TestExecuteBatchEdits_InvalidJSON(t *testing.T) {
+	setupTestMocks(t)
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test.txt")
+	testutil.CreateTempFile(t, tmpDir, "test.txt", "content")
+	absPath, _ := filepath.Abs(testFile)
+	tools.GlobalReadTracker.MarkRead(absPath)
+
+	output, err := executeBatchEdits(testFile, "not-json")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(output, "invalid edits JSON") {
+		t.Errorf("expected invalid JSON error, got: %s", output)
+	}
+}
+
+func TestExecuteBatchEdits_OldStrPriority(t *testing.T) {
+	setupTestMocks(t)
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test.txt")
+	testutil.CreateTempFile(t, tmpDir, "test.txt", "aaa\nbbb")
+	absPath, _ := filepath.Abs(testFile)
+	tools.GlobalReadTracker.MarkRead(absPath)
+
+	// old_str non-empty -> single mode runs via ExecuteStrReplace, edits ignored
+	output, err := ExecuteStrReplace(testFile, "aaa", "AAA", "", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(output, "Successfully replaced") {
+		t.Errorf("expected single-mode success, got: %s", output)
+	}
+	testutil.AssertFileContent(t, testFile, "AAA\nbbb")
+}
+
+func TestExecuteBatchEdits_UserCancelled(t *testing.T) {
+	setupTestMocks(t)
+	setupTestConfirm(t, false)
+
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test.txt")
+	testutil.CreateTempFile(t, tmpDir, "test.txt", "aaa\nbbb")
+	absPath, _ := filepath.Abs(testFile)
+	tools.GlobalReadTracker.MarkRead(absPath)
+
+	editsJSON := `[{"old_str":"aaa","new_str":"AAA"}]`
+	output, err := executeBatchEdits(testFile, editsJSON)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(output, "[CANCELLED]") {
+		t.Errorf("expected cancellation, got: %s", output)
+	}
+	testutil.AssertFileContent(t, testFile, "aaa\nbbb")
+}
+
+func TestExecuteBatchEdits_SequentialApplication(t *testing.T) {
+	setupTestMocks(t)
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test.txt")
+	testutil.CreateTempFile(t, tmpDir, "test.txt", "hello world")
+	absPath, _ := filepath.Abs(testFile)
+	tools.GlobalReadTracker.MarkRead(absPath)
+
+	// Edit 1 changes "hello" -> "hi", Edit 2 changes "hi world" -> "hi there"
+	editsJSON := `[{"old_str":"hello","new_str":"hi"},{"old_str":"hi world","new_str":"hi there"}]`
+	output, err := executeBatchEdits(testFile, editsJSON)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(output, "Successfully applied 2 edits") {
+		t.Errorf("expected success, got: %s", output)
+	}
+	testutil.AssertFileContent(t, testFile, "hi there")
+}
