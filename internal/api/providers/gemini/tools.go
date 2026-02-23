@@ -167,6 +167,20 @@ func convertFunctionCallToToolJSON(fc *api.GeminiFunctionCall) string {
 	return string(jsonBytes)
 }
 
+// convertFunctionCallToDisplayJSON は表示用のツールJSON（signature除外）を返す
+// 重複排除キーとしても使用。thought_signature/thought_parts はユーザーに見せない。
+func convertFunctionCallToDisplayJSON(fc *api.GeminiFunctionCall) string {
+	toolCall := struct {
+		Tool string         `json:"tool"`
+		Args map[string]any `json:"args"`
+	}{
+		Tool: fc.Name,
+		Args: fc.Args,
+	}
+	jsonBytes, _ := json.Marshal(toolCall)
+	return string(jsonBytes)
+}
+
 // GetCombinedToolDefinitions は組み込みツール + MCPツールの定義を返す
 // 重複するツール名がある場合は最初に登録されたものを優先
 func GetCombinedToolDefinitions(mcpTools []api.ToolDefinition) []api.GeminiToolConfig {

@@ -756,9 +756,10 @@ func TestHandleFunctionCallingResponse_SignatureWithTextPreservedInThoughtParts(
 	}
 }
 
-func TestHandleFunctionCallingResponse_SignatureWithFCNotSuppressed(t *testing.T) {
-	// thoughtSignature + FunctionCall のパートは FC として処理されること
-	// （署名フィルタは FunctionCall == nil の場合のみ発動）
+func TestHandleFunctionCallingResponse_SignatureWithFCCollected(t *testing.T) {
+	// thoughtSignature + FunctionCall のパートは:
+	// - FC は正常に収集される
+	// - テキストは抑制される（signature フィルタが先に発動）
 	resp := GeminiFunctionResponse{
 		Candidates: []GeminiFunctionCandidate{
 			{
@@ -784,12 +785,104 @@ func TestHandleFunctionCallingResponse_SignatureWithFCNotSuppressed(t *testing.T
 	if err != nil {
 		t.Fatalf("handleFunctionCallingResponse() error = %v", err)
 	}
-	// FC が正常に含まれること
+	// FC が正常に含まれること（署名付きでも FC は収集される）
 	if !strings.Contains(result, "bash") {
 		t.Errorf("result should contain bash FC, got %q", result)
 	}
+	// 通常テキスト（別パート）は含まれること
 	if !strings.Contains(result, "Normal text.") {
 		t.Errorf("result should contain normal text, got %q", result)
+	}
+}
+
+func TestHandleFunctionCallingResponse_SignatureWithFCAndTextSuppressed(t *testing.T) {
+	// ThoughtSignature + FunctionCall + Text を同時に持つパート:
+	// - FC は収集される
+	// - Text は表示テキストに漏れない（signature フィルタで抑制）
+	// - Text は thought_parts に保存される
+	resp := GeminiFunctionResponse{
+		Candidates: []GeminiFunctionCandidate{
+			{
+				Content: GeminiFunctionContent{
+					Parts: []GeminiFunctionPart{
+						{
+							Text: "leaked thinking from signature+FC part",
+							FunctionCall: &api.GeminiFunctionCall{
+								Name: "read_files",
+								Args: map[string]any{"paths": "/src/main.go"},
+							},
+							ThoughtSignature: "zM+8H4uKsignatureblob123456789",
+						},
+						{Text: "Visible explanation."},
+					},
+				},
+			},
+		},
+	}
+	body, _ := json.Marshal(resp)
+
+	p := New("test-key")
+	result, err := p.handleFunctionCallingResponse(body, nil)
+	if err != nil {
+		t.Fatalf("handleFunctionCallingResponse() error = %v", err)
+	}
+
+	// FC は正常に含まれること
+	if !strings.Contains(result, "read_files") {
+		t.Errorf("result should contain read_files FC, got %q", result)
+	}
+	// 通常テキスト（別パート）は含まれること
+	if !strings.Contains(result, "Visible explanation.") {
+		t.Errorf("result should contain visible text, got %q", result)
+	}
+	// signature+FC パートのテキストが表示テキストに漏れないこと
+	displayText := result
+	if idx := strings.Index(displayText, `{"tool"`); idx >= 0 {
+		displayText = displayText[:idx]
+	}
+	if strings.Contains(displayText, "leaked thinking from signature+FC part") {
+		t.Error("text from signature+FC part should NOT appear in display text")
+	}
+	// thought_signature がツールJSON内の thought_parts に含まれること
+	if !strings.Contains(result, "thought_parts") {
+		t.Errorf("result should contain thought_parts, got %q", result)
+	}
+	if !strings.Contains(result, "zM+8H4uKsignatureblob123456789") {
+		t.Errorf("result should contain the signature in thought_parts, got %q", result)
+	}
+}
+
+func TestHandleFunctionCallingResponse_SignatureOnlyFCNoText(t *testing.T) {
+	// ThoughtSignature + FunctionCall だがテキストなし → FC だけ収集される
+	resp := GeminiFunctionResponse{
+		Candidates: []GeminiFunctionCandidate{
+			{
+				Content: GeminiFunctionContent{
+					Parts: []GeminiFunctionPart{
+						{
+							FunctionCall: &api.GeminiFunctionCall{
+								Name: "bash",
+								Args: map[string]any{"command": "go test"},
+							},
+							ThoughtSignature: "sig-no-text",
+						},
+					},
+				},
+			},
+		},
+	}
+	body, _ := json.Marshal(resp)
+
+	p := New("test-key")
+	result, err := p.handleFunctionCallingResponse(body, nil)
+	if err != nil {
+		t.Fatalf("handleFunctionCallingResponse() error = %v", err)
+	}
+	if !strings.Contains(result, "bash") {
+		t.Errorf("result should contain bash FC, got %q", result)
+	}
+	if !strings.Contains(result, "go test") {
+		t.Errorf("result should contain command args, got %q", result)
 	}
 }
 

@@ -71,7 +71,8 @@ func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, s
 
 			// thoughtSignature を含むパート（thought=false）を収集し、テキスト出力を抑制
 			// Gemini 3.1 Pro: signature 付きパートの Text が生出力に漏れるのを防ぐ
-			if part.ThoughtSignature != "" && part.FunctionCall == nil {
+			// FunctionCall が同時に存在する場合も、テキスト出力は抑制しつつ FC は収集する
+			if part.ThoughtSignature != "" {
 				tp := map[string]any{"thought_signature": part.ThoughtSignature}
 				if part.Text != "" {
 					tp["text"] = part.Text
@@ -82,7 +83,15 @@ func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, s
 					if len(sig) > 20 {
 						sig = sig[:20] + "..."
 					}
-					fmt.Fprintf(os.Stderr, "[DEBUG Gemini SSE] Collected signature part (text=%d chars, sig=%q)\n", len(part.Text), sig)
+					fmt.Fprintf(os.Stderr, "[DEBUG Gemini SSE] Collected signature part (text=%d chars, sig=%q, hasFC=%v)\n", len(part.Text), sig, part.FunctionCall != nil)
+				}
+				// FunctionCall が同時にある場合は FC も収集してから continue
+				if part.FunctionCall != nil {
+					if headerPrinted && spinner != nil && !spinner.IsActive() {
+						spinner.Start(ui.SpinnerMessageForTool(part.FunctionCall.Name))
+					}
+					part.FunctionCall.ThoughtSignature = part.ThoughtSignature
+					functionCalls = append(functionCalls, part.FunctionCall)
 				}
 				continue
 			}
@@ -162,16 +171,16 @@ func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, s
 		}
 	}
 
-	// FunctionCall を出力（重複排除）
+	// FunctionCall を出力（重複排除: signature を除いた表示用JSONでキー比較）
 	seenTools := make(map[string]bool)
 	for _, fc := range functionCalls {
-		toolJSON := convertFunctionCallToToolJSON(fc)
-		if seenTools[toolJSON] {
+		displayKey := convertFunctionCallToDisplayJSON(fc)
+		if seenTools[displayKey] {
 			continue
 		}
-		seenTools[toolJSON] = true
+		seenTools[displayKey] = true
 		// 内部用は ThoughtSignature/ThoughtParts を含む完全 JSON
-		fullResponse.WriteString(toolJSON)
+		fullResponse.WriteString(convertFunctionCallToToolJSON(fc))
 	}
 
 	if usage != nil && p.usageCallback != nil {
@@ -268,7 +277,8 @@ func (p *Provider) handleFunctionCallingResponse(body []byte, spinner *ui.Spinne
 
 			// thoughtSignature を含むパート（thought=false）を収集し、テキスト出力を抑制
 			// Gemini 3.1 Pro: signature 付きパートの Text が生出力に漏れるのを防ぐ
-			if part.ThoughtSignature != "" && part.FunctionCall == nil {
+			// FunctionCall が同時に存在する場合も、テキスト出力は抑制しつつ FC は収集する
+			if part.ThoughtSignature != "" {
 				tp := map[string]any{"thought_signature": part.ThoughtSignature}
 				if part.Text != "" {
 					tp["text"] = part.Text
@@ -279,7 +289,15 @@ func (p *Provider) handleFunctionCallingResponse(body []byte, spinner *ui.Spinne
 					if len(sig) > 20 {
 						sig = sig[:20] + "..."
 					}
-					fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Collected signature part (text=%d chars, sig=%q)\n", len(part.Text), sig)
+					fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Collected signature part (text=%d chars, sig=%q, hasFC=%v)\n", len(part.Text), sig, part.FunctionCall != nil)
+				}
+				// FunctionCall が同時にある場合は FC も収集してから continue
+				if part.FunctionCall != nil {
+					if debug {
+						fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Found FunctionCall (with signature): %s\n", part.FunctionCall.Name)
+					}
+					part.FunctionCall.ThoughtSignature = part.ThoughtSignature
+					functionCalls = append(functionCalls, part.FunctionCall)
 				}
 				continue
 			}
@@ -358,17 +376,17 @@ func (p *Provider) handleFunctionCallingResponse(body []byte, spinner *ui.Spinne
 		fullResponse.WriteString(text)
 	}
 
-	// FunctionCall がある場合はそちらを出力（重複排除）
+	// FunctionCall がある場合はそちらを出力（重複排除: signature を除いた表示用JSONでキー比較）
 	seenTools := make(map[string]bool)
 	if len(functionCalls) > 0 {
 		for _, fc := range functionCalls {
-			toolJSON := convertFunctionCallToToolJSON(fc)
-			if seenTools[toolJSON] {
+			displayKey := convertFunctionCallToDisplayJSON(fc)
+			if seenTools[displayKey] {
 				continue
 			}
-			seenTools[toolJSON] = true
+			seenTools[displayKey] = true
 			// 内部用は ThoughtSignature/ThoughtParts を含む完全 JSON
-			fullResponse.WriteString(toolJSON)
+			fullResponse.WriteString(convertFunctionCallToToolJSON(fc))
 		}
 	} else if len(toolJSONTexts) > 0 {
 		// FC が空 → テキストから救済したツールJSONを使用

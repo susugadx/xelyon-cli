@@ -12,6 +12,15 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
+// cacheEntry はモデル別キャッシュの状態を保持する
+type cacheEntry struct {
+	name         string    // Gemini API のキャッシュリソース名 (e.g. "cachedContents/xxx")
+	model        string    // キャッシュ作成時のモデル名
+	tokenCount   int       // キャッシュされたトークン数（概算）
+	messageCount int       // キャッシュに含まれるメッセージ数
+	expireTime   time.Time // キャッシュの有効期限
+}
+
 // ctxKey はキャッシュリトライの context key
 type ctxKey string
 
@@ -28,31 +37,47 @@ func isCacheExpiredError(statusCode int, body []byte) bool {
 	return false
 }
 
-// invalidateCache はローカルのキャッシュ状態をクリアする
-func (p *Provider) invalidateCache() {
-	p.activeCacheName = ""
-	p.cachedTokenCount = 0
-	p.cachedMessageCount = 0
-	p.cacheExpireTime = time.Time{}
+// initCacheMap は cacheMap を lazy init する
+func (p *Provider) initCacheMap() {
+	if p.cacheMap == nil {
+		p.cacheMap = make(map[string]*cacheEntry)
+	}
 }
 
-// ClearCache はプロバイダーが保持するキャッシュ（リモート/ローカル）をクリアする
+// invalidateCache は全モデルのローカルキャッシュ状態をクリアする
+func (p *Provider) invalidateCache() {
+	p.cacheMap = make(map[string]*cacheEntry)
+}
+
+// invalidateCacheForModel は特定モデルのローカルキャッシュ状態をクリアする
+func (p *Provider) invalidateCacheForModel(model string) {
+	if p.cacheMap != nil {
+		delete(p.cacheMap, model)
+	}
+}
+
+// ClearCache はプロバイダーが保持するキャッシュ（リモート/ローカル）を全てクリアする
 func (p *Provider) ClearCache() {
-	if p.activeCacheName == "" {
+	if len(p.cacheMap) == 0 {
 		return
 	}
 
 	debug := os.Getenv("XELYON_DEBUG_GEMINI") == "1"
-	if debug {
-		fmt.Fprintf(os.Stderr, "[DEBUG Gemini] Clearing cache: %s\n", p.activeCacheName)
-	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	err := p.DeleteCachedContent(ctx, p.activeCacheName)
-	if err != nil && debug {
-		fmt.Fprintf(os.Stderr, "[DEBUG Gemini] Failed to delete remote cache: %v\n", err)
+	for model, entry := range p.cacheMap {
+		if entry.name == "" {
+			continue
+		}
+		if debug {
+			fmt.Fprintf(os.Stderr, "[DEBUG Gemini] Clearing cache for %s: %s\n", model, entry.name)
+		}
+		err := p.DeleteCachedContent(ctx, entry.name)
+		if err != nil && debug {
+			fmt.Fprintf(os.Stderr, "[DEBUG Gemini] Failed to delete remote cache: %v\n", err)
+		}
 	}
 
 	p.invalidateCache()
@@ -98,30 +123,33 @@ func (p *Provider) updateOrUseCache(ctx context.Context, systemPrompt string, hi
 		return "", history, nil
 	}
 
+	p.initCacheMap()
+
 	// 現在の総トークン数を概算
 	totalTokens := estimateTokens(systemPrompt, history)
 
 	// 最小トークン数未満ならキャッシュしない
 	if totalTokens < minCacheTokens {
-		// すでにキャッシュがある場合は削除しておく（無駄な課金を避ける）
-		if p.activeCacheName != "" {
-			_ = p.DeleteCachedContent(ctx, p.activeCacheName)
-			p.activeCacheName = ""
-			p.cachedTokenCount = 0
-			p.cachedMessageCount = 0
+		// このモデルのキャッシュがある場合は削除しておく（無駄な課金を避ける）
+		if entry, ok := p.cacheMap[model]; ok && entry.name != "" {
+			_ = p.DeleteCachedContent(ctx, entry.name)
+			delete(p.cacheMap, model)
 		}
 		return "", history, nil
 	}
 
 	debug := os.Getenv("XELYON_DEBUG_GEMINI") == "1"
 
+	// このモデルのキャッシュを取得
+	entry := p.cacheMap[model]
+
 	// キャッシュ利用判定
 	useExistingCache := false
-	if p.activeCacheName != "" && time.Now().Before(p.cacheExpireTime) {
+	if entry != nil && entry.name != "" && time.Now().Before(entry.expireTime) {
 		// 前提: 履歴は追記型であること。
 		// 履歴の長さが前回キャッシュ時以上で、差分が許容範囲内なら利用
-		if len(history) >= p.cachedMessageCount {
-			diffCount := len(history) - p.cachedMessageCount
+		if len(history) >= entry.messageCount {
+			diffCount := len(history) - entry.messageCount
 			if diffCount <= maxDiffMessages {
 				useExistingCache = true
 			}
@@ -130,22 +158,21 @@ func (p *Provider) updateOrUseCache(ctx context.Context, systemPrompt string, hi
 
 	if useExistingCache {
 		if debug {
-			fmt.Fprintf(os.Stderr, "[DEBUG Gemini] Using existing cache: %s (diff: %d msgs)\n", p.activeCacheName, len(history)-p.cachedMessageCount)
+			fmt.Fprintf(os.Stderr, "[DEBUG Gemini] Using existing cache for %s: %s (diff: %d msgs)\n", model, entry.name, len(history)-entry.messageCount)
 		}
 		// 差分のみを返す
-		diffMessages := history[p.cachedMessageCount:]
-		return p.activeCacheName, diffMessages, nil
+		diffMessages := history[entry.messageCount:]
+		return entry.name, diffMessages, nil
 	}
 
 	// 新規作成または再作成
 	if debug {
-		fmt.Fprintf(os.Stderr, "[DEBUG Gemini] Creating new cache (tokens: ~%d)\n", totalTokens)
+		fmt.Fprintf(os.Stderr, "[DEBUG Gemini] Creating new cache for %s (tokens: ~%d)\n", model, totalTokens)
 	}
 
-	// 既存キャッシュがあれば削除
-	if p.activeCacheName != "" {
-		_ = p.DeleteCachedContent(ctx, p.activeCacheName)
-		p.activeCacheName = ""
+	// このモデルの既存キャッシュがあれば削除
+	if entry != nil && entry.name != "" {
+		_ = p.DeleteCachedContent(ctx, entry.name)
 	}
 
 	// スピナー表示
@@ -165,7 +192,7 @@ func (p *Provider) updateOrUseCache(ctx context.Context, systemPrompt string, hi
 		cacheHistory = history[:len(history)-1]
 		messagesToSend = history[len(history)-1:]
 	} else {
-		// 履歴がない場合はキャッシュ作成不可（システムプロンプトだけキャッシュしても意味は薄い＆呼び出し元で困る）
+		// 履歴がない場合はキャッシュ作成不可
 		return "", history, nil
 	}
 
@@ -178,11 +205,14 @@ func (p *Provider) updateOrUseCache(ctx context.Context, systemPrompt string, hi
 		return "", history, nil
 	}
 
-	p.activeCacheName = resp.Name
-	p.cachedTokenCount = totalTokens
-	p.cachedMessageCount = len(cacheHistory)
-	// 有効期限を設定（TTLの90%で期限切れ判定）
-	p.cacheExpireTime = time.Now().Add(time.Duration(ttl) * time.Second * 9 / 10)
+	// モデル別キャッシュを保存
+	p.cacheMap[model] = &cacheEntry{
+		name:         resp.Name,
+		model:        model,
+		tokenCount:   totalTokens,
+		messageCount: len(cacheHistory),
+		expireTime:   time.Now().Add(time.Duration(ttl) * time.Second * 9 / 10),
+	}
 
 	// ストレージ料金を概算して通知
 	if p.usageCallback != nil {
@@ -192,8 +222,8 @@ func (p *Provider) updateOrUseCache(ctx context.Context, systemPrompt string, hi
 	}
 
 	if debug {
-		fmt.Fprintf(os.Stderr, "[DEBUG Gemini] Cache created: %s\n", resp.Name)
+		fmt.Fprintf(os.Stderr, "[DEBUG Gemini] Cache created for %s: %s\n", model, resp.Name)
 	}
 
-	return p.activeCacheName, messagesToSend, nil
+	return resp.Name, messagesToSend, nil
 }

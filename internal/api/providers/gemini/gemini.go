@@ -43,11 +43,8 @@ type Provider struct {
 	mcpTools      []api.ToolDefinition // MCPツールの定義
 	usageCallback api.UsageCallback    // トークン使用量コールバック
 
-	// Context Caching state
-	activeCacheName    string    // 現在有効なキャッシュのリソース名
-	cachedTokenCount   int       // キャッシュされたトークン数
-	cachedMessageCount int       // キャッシュに含まれるメッセージ数
-	cacheExpireTime    time.Time // キャッシュの有効期限
+	// Context Caching state（モデル別に管理）
+	cacheMap map[string]*cacheEntry // key = model名
 }
 
 // New は新しいGeminiProviderを作成

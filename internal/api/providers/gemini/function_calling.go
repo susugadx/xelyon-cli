@@ -228,9 +228,9 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 		if rateLimitErr := api.HandleRateLimit(resp); rateLimitErr != nil {
 			return "", rateLimitErr
 		}
-		// キャッシュ期限切れ検出 → キャッシュ無効化してリトライ
+		// キャッシュ期限切れ検出 → 該当モデルのキャッシュを無効化してリトライ
 		if cacheName != "" && isCacheExpiredError(resp.StatusCode, body) {
-			p.invalidateCache()
+			p.invalidateCacheForModel(model)
 			if ctx.Value(cacheRetryKey) != nil {
 				return "", fmt.Errorf("cache retry failed (status %d): %s", resp.StatusCode, string(body))
 			}
