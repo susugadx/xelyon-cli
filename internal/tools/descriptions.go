@@ -13,6 +13,7 @@ var ToolDescriptions = map[string]string{
 	"list_dir":    "List files and directories at the specified path.",
 
 	// Search & Discovery
+	"search_code":  "Search code using ripgrep (rg) with grep fallback. Groups results by file with context lines. Marks found files as read for immediate editing.",
 	"grep_replace": "Bulk regex find-and-replace across multiple files. Always specify path to limit scope.",
 	"web_search":   "Search the web for information using Serper API.",
 

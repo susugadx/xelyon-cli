@@ -53,6 +53,7 @@ const SystemPrompt = `You are XELYON, an autonomous AI coding agent.
 - list_dir: {"path": "..."}
 
 ### Search & Discovery
+- search_code: {"pattern": "regex", "path": "...", "file_pattern": "*.go"} - Code search with context lines
 - grep_replace: {"pattern": "regex", "replacement": "...", "path": "...", "file_pattern": "*.go"} - Always specify path
 - web_search: {"query": "..."}
 

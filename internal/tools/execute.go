@@ -58,6 +58,14 @@ func printToolArgs(tc *ToolCall) {
 		if tc.Args["auto_fix"] == "true" {
 			fmt.Printf("   Auto-fix: enabled\n")
 		}
+	case "search_code":
+		fmt.Printf("   Pattern: %s\n", tc.Args["pattern"])
+		if tc.Args["path"] != "" {
+			fmt.Printf("   Path: %s\n", tc.Args["path"])
+		}
+		if tc.Args["file_pattern"] != "" {
+			fmt.Printf("   File pattern: %s\n", tc.Args["file_pattern"])
+		}
 	case "web_search":
 		fmt.Printf("   Query: %s\n", tc.Args["query"])
 	default:
