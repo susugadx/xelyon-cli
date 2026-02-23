@@ -184,6 +184,13 @@ func (p *Provider) updateOrUseCache(ctx context.Context, systemPrompt string, hi
 	// 有効期限を設定（TTLの90%で期限切れ判定）
 	p.cacheExpireTime = time.Now().Add(time.Duration(ttl) * time.Second * 9 / 10)
 
+	// ストレージ料金を概算して通知
+	if p.usageCallback != nil {
+		ttlHours := float64(ttl) / 3600.0
+		storageCost := float64(totalTokens) / 1_000_000.0 * 4.50 * ttlHours
+		p.usageCallback(api.Usage{StorageCost: storageCost})
+	}
+
 	if debug {
 		fmt.Fprintf(os.Stderr, "[DEBUG Gemini] Cache created: %s\n", resp.Name)
 	}

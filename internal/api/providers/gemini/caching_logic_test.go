@@ -122,6 +122,11 @@ func TestUpdateOrUseCache(t *testing.T) {
 				p.cacheExpireTime = time.Now().Add(1 * time.Hour)
 			}
 
+			var receivedStorageCost float64
+			p.SetUsageCallback(func(usage api.Usage) {
+				receivedStorageCost = usage.StorageCost
+			})
+
 			os.Setenv("GEMINI_CONTEXT_CACHING", "1")
 			defer os.Unsetenv("GEMINI_CONTEXT_CACHING")
 
@@ -129,6 +134,10 @@ func TestUpdateOrUseCache(t *testing.T) {
 
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if tt.expectCreateCall && receivedStorageCost <= 0 {
+				t.Errorf("expected StorageCost > 0 when creating cache, got %v", receivedStorageCost)
 			}
 
 			if tt.expectCache {

@@ -62,6 +62,7 @@ func (s *SessionStats) AddUsage(usage api.Usage) {
 
 	// リクエスト単位のコストを累積（Gemini 200Kティア等に対応）
 	s.AccumulatedCost += CalculateRequestCostWithCache(s.Provider, s.Model, usage)
+	s.AccumulatedCost += usage.StorageCost // ストレージ料金を加算
 }
 
 // TotalTokens は合計トークン数を返す

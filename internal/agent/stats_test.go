@@ -68,6 +68,7 @@ func TestSessionStats_AddUsage(t *testing.T) {
 		OutputTokens:        200,
 		CachedInputTokens:   50,
 		CacheCreationTokens: 25,
+		StorageCost:         1.25,
 	}
 
 	stats.AddUsage(usage)
@@ -88,6 +89,19 @@ func TestSessionStats_AddUsage(t *testing.T) {
 		t.Error("AddUsage() LastUsage should not be nil")
 	} else if stats.LastUsage.InputTokens != 100 {
 		t.Errorf("AddUsage() LastUsage.InputTokens = %d, want 100", stats.LastUsage.InputTokens)
+	}
+
+	// test プロバイダのデフォルトコスト(0.14+0.28)ベースのリクエスト単位コスト計算のうえ、StorageCostが加算される
+	// 100 input, 200 output, 50 cached in, 25 cache creation
+	// DeepSeek(default)の場合:
+	//   Input: (100-50)/1M * 0.14 = 50 * 0.00000014 = 0.000007
+	//   CachedInput: 50/1M * 0.014 = 0.0000007
+	//   CacheCreation: 25/1M * 0.14 = 0.0000035
+	//   Output: 200/1M * 0.28 = 0.000056
+	//   StorageCost: 1.25
+	// 合計: 0.0000672 + 1.25 = 1.2500672
+	if stats.AccumulatedCost < 1.25 || stats.AccumulatedCost > 1.26 {
+		t.Errorf("AddUsage() AccumulatedCost = %f, expected around 1.2500672", stats.AccumulatedCost)
 	}
 }
 
