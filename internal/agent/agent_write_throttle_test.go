@@ -32,6 +32,22 @@ func TestShouldThrottleWrite_Bash(t *testing.T) {
 	}
 }
 
+func TestShouldThrottleWrite_AutoApproveDisabled(t *testing.T) {
+	a := &Agent{ProviderName: "Any", AutoApprove: false}
+	tc := &tools.ToolCall{Tool: "str_replace", Args: map[string]string{"path": "a.go"}}
+	if !a.shouldThrottleWrite(tc) {
+		t.Error("shouldThrottleWrite should return true for write tool when AutoApprove=false")
+	}
+}
+
+func TestShouldThrottleWrite_AutoApproveEnabled(t *testing.T) {
+	a := &Agent{ProviderName: "Any", AutoApprove: true}
+	tc := &tools.ToolCall{Tool: "str_replace", Args: map[string]string{"path": "a.go"}}
+	if a.shouldThrottleWrite(tc) {
+		t.Error("shouldThrottleWrite should return false for write tool when AutoApprove=true")
+	}
+}
+
 func TestAutoReadBack_AppendsToHistory(t *testing.T) {
 	a := &Agent{
 		ProviderName: "Any",

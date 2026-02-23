@@ -8,7 +8,11 @@ import (
 )
 
 // shouldThrottleWrite は書き込み制限の対象かどうかを判定する。
+// AutoApprove 時はパラレル書き込みを許可するため常に false を返す。
 func (a *Agent) shouldThrottleWrite(tc *tools.ToolCall) bool {
+	if a.AutoApprove {
+		return false
+	}
 	return tools.IsWriteTool(tc.Tool)
 }
 
