@@ -27,8 +27,9 @@ func getGeminiFunctionCallingURL(model string) string {
 func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
 	debug := os.Getenv("XELYON_DEBUG_GEMINI") == "1"
 
-	// モデル名を設定（config優先、フォールバックはgemini-3.1-pro-preview）
-	model = api.GetDefaultModel(model, "gemini", "gemini-3.1-pro-preview")
+	// モデル名を設定（config優先、フォールバックはgemini-3.1-pro-preview-customtools）
+	// customtools版はカスタムツール優先度が高くパラレルFCを出す
+	model = api.GetDefaultModel(model, "gemini", "gemini-3.1-pro-preview-customtools")
 
 	// ツール定義を事前に取得（キャッシュにも含めるため）
 	toolDefs := GetCombinedToolDefinitions(p.mcpTools)
