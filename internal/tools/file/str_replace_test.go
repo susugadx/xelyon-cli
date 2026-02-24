@@ -514,3 +514,23 @@ func TestExecuteBatchEdits_SequentialApplication(t *testing.T) {
 	}
 	testutil.AssertFileContent(t, testFile, "hi there")
 }
+
+func TestExecuteBatchEdits_GuardBlocksUnreadFile(t *testing.T) {
+	setupTestMocks(t)
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "guarded.txt")
+	testutil.CreateTempFile(t, tmpDir, "guarded.txt", "aaa\nbbb\nccc")
+
+	// ReadTracker はリセット済み（setupTestMocks）— ファイルは未読状態
+
+	editsJSON := `[{"old_str":"aaa","new_str":"AAA"}]`
+	output, err := executeBatchEdits(testFile, editsJSON)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(output, "Error: You must read_file before str_replace") {
+		t.Errorf("expected read guard error, got: %s", output)
+	}
+	// ファイルは変更されていないこと
+	testutil.AssertFileContent(t, testFile, "aaa\nbbb\nccc")
+}
