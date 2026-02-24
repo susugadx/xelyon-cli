@@ -192,10 +192,14 @@ make gen-all  # config.yaml.example と docs/config-generated.md を更新
 
 ### Phase 12: Read-Before-Write Guard
 - [x] **ReadTracker 実装**: `internal/tools/read_tracker.go`
-  - `read_file`/`read_files` で読んだファイルパスを追跡
+  - `read_file`/`read_files` で読んだファイルパスを追跡（全体既読: `MarkRead`）
+  - `search_code` のマッチ行範囲を追跡（行範囲既読: `MarkReadRange`）
   - 書き込み系ツール実行前に「読み済みか」をチェック
   - セッションリセット時（NewAgent, /clear）にクリア
 - [x] **ガード対象ツール**: `str_replace`, `write_file`（既存ファイルのみ）, `grep_replace`
+  - `str_replace` old_str モード: `IsRead`（全体既読が必要 = `read_file` 必須）
+  - `str_replace` line-range モード: `IsReadRange`（行範囲既読でOK = `search_code` 後に直接編集可）
+  - `write_file` / `grep_replace`: `IsRead`（全体既読が必要）
 - [x] **テスト**: ReadTracker 単体テスト + 各ツールのガードテスト追加
 
 ### Phase 13: XELYON.md → xelyon.yaml 移行
@@ -286,4 +290,4 @@ func getProviderPrefix(provider string) string
 - bash実行は危険コマンドをブロック（blockedCommands参照）
 - 長い差分は10行で省略表示
 - 同じツール呼び出し3回でループ検知・中断
-- **Read-Before-Write ガード**: `read_file` せずに `str_replace`/`write_file`/`grep_replace` するとブロック（`internal/tools/read_tracker.go`）
+- **Read-Before-Write ガード**: `read_file` せずに `str_replace`(old_str)/`write_file`/`grep_replace` するとブロック。ただし `str_replace` の line-range モード（start_line/end_line）は `search_code` で既読マークされた行範囲なら `read_file` 不要（`internal/tools/read_tracker.go`）

@@ -116,7 +116,7 @@ func ExecuteSearchCode(pattern, path, filePattern, contextLinesStr, tokenBudgetS
 	// トークンバジェット制御
 	results, truncated := truncateToTokenBudget(results, tokenBudget)
 
-	// ReadTracker 連携: 結果ファイルの行範囲を既読マーク
+	// ReadTracker 連携: 結果ファイルの行範囲を既読マーク（str_replace line-range モードで read_file なし編集を許可）
 	for _, r := range results {
 		if absPath, err := filepath.Abs(r.FilePath); err == nil {
 			if len(r.Matches) > 0 {

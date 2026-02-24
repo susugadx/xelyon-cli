@@ -36,7 +36,7 @@ DeepSeek, OpenAI, Gemini, Claude, Ollama, Groq, OpenRouter, Bedrock をシーム
 - 安全なツール（ファイル読み取り等）は自動実行
 - 危険なツール（ファイル編集、bash等）は毎回確認
 - `--auto-approve`で信頼環境向け自動承認モードも可能
-- **Read-Before-Write ガード**: `read_file` せずに `str_replace` / `write_file` / `grep_replace` を実行しようとするとブロック（AI の盲目的な編集を防止）
+- **Read-Before-Write ガード**: `read_file` せずに `str_replace`(old_str) / `write_file` / `grep_replace` を実行しようとするとブロック（AI の盲目的な編集を防止）。`search_code` 後は結果の行範囲に対して `str_replace`(line-range) で直接編集可能
 
 ### 📋 Plan Mode（オプショナル）
 `/plan on` で有効化するとPlan Mode経由で処理されます。

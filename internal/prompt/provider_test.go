@@ -10,7 +10,7 @@ func TestGetProviderPrefix_Gemini(t *testing.T) {
 	if prefix == "" {
 		t.Fatal("expected non-empty prefix for gemini")
 	}
-	if !strings.Contains(prefix, "ALWAYS read_file BEFORE str_replace") {
+	if !strings.Contains(prefix, "read_file BEFORE str_replace") {
 		t.Error("gemini prefix should contain read_file rule")
 	}
 	if !strings.Contains(prefix, "lsp_find") {
@@ -30,7 +30,7 @@ func TestGetProviderPrefix_DeepSeek(t *testing.T) {
 	if prefix == "" {
 		t.Fatal("expected non-empty prefix for deepseek")
 	}
-	if !strings.Contains(prefix, "ALWAYS read_file BEFORE str_replace") {
+	if !strings.Contains(prefix, "read_file BEFORE str_replace") {
 		t.Error("deepseek prefix should contain read_file rule")
 	}
 	if !strings.Contains(prefix, "lsp_find") {
@@ -68,7 +68,7 @@ func TestCommonRulesBlock(t *testing.T) {
 	deepseek := GetProviderPrefix("deepseek")
 
 	commonChecks := []string{
-		"ALWAYS read_file BEFORE str_replace",
+		"read_file BEFORE str_replace",
 		"lsp_find",
 		"WAIT for output",
 		"Follow project rules in Project Context",
@@ -130,7 +130,7 @@ func TestBuildProviderSystemPrompt_Gemini(t *testing.T) {
 	if !strings.HasSuffix(result, base) {
 		t.Error("gemini result should end with base prompt")
 	}
-	if !strings.Contains(result, "ALWAYS read_file BEFORE str_replace") {
+	if !strings.Contains(result, "read_file BEFORE str_replace") {
 		t.Error("gemini result should contain the critical rule")
 	}
 	if !strings.Contains(result, "WAIT for output") {
@@ -154,7 +154,7 @@ func TestBuildProviderSystemPrompt_DeepSeek(t *testing.T) {
 	if !strings.HasSuffix(result, base) {
 		t.Error("deepseek result should end with base prompt")
 	}
-	if !strings.Contains(result, "ALWAYS read_file BEFORE str_replace") {
+	if !strings.Contains(result, "read_file BEFORE str_replace") {
 		t.Error("deepseek result should contain read_file rule")
 	}
 	if !strings.Contains(result, "ALWAYS use tool calls for file operations") {
