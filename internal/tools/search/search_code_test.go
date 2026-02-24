@@ -157,6 +157,9 @@ func TestSearchCode_ReadTrackerIntegration(t *testing.T) {
 	if tools.GlobalReadTracker.IsRead(absFile1) {
 		t.Error("File should not be marked as read before search")
 	}
+	if tools.GlobalReadTracker.IsReadLine(absFile1, 1) {
+		t.Error("Line should not be marked as read before search")
+	}
 
 	result := ExecuteSearchCode("tracked_func", dir, "", "0", "3000")
 
@@ -164,9 +167,13 @@ func TestSearchCode_ReadTrackerIntegration(t *testing.T) {
 		t.Error("Expected matches")
 	}
 
-	// 検索後は既読
-	if !tools.GlobalReadTracker.IsRead(absFile1) {
-		t.Error("File should be marked as read after search_code finds matches")
+	// 検索後: ファイル全体は未読だが、マッチ行範囲は既読
+	if tools.GlobalReadTracker.IsRead(absFile1) {
+		t.Error("File should NOT be fully marked as read after search_code (only line ranges)")
+	}
+	// マッチ行（tracked_func は1行目）は既読
+	if !tools.GlobalReadTracker.IsReadLine(absFile1, 1) {
+		t.Error("Match line should be marked as read after search_code")
 	}
 }
 

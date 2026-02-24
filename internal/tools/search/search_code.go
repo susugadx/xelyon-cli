@@ -116,10 +116,23 @@ func ExecuteSearchCode(pattern, path, filePattern, contextLinesStr, tokenBudgetS
 	// トークンバジェット制御
 	results, truncated := truncateToTokenBudget(results, tokenBudget)
 
-	// ReadTracker 連携: 結果ファイルを既読マーク
+	// ReadTracker 連携: 結果ファイルの行範囲を既読マーク
 	for _, r := range results {
 		if absPath, err := filepath.Abs(r.FilePath); err == nil {
-			tools.GlobalReadTracker.MarkRead(absPath)
+			if len(r.Matches) > 0 {
+				// Matches はソート済みとは限らないため min/max で算出
+				startLine := r.Matches[0].LineNum
+				endLine := r.Matches[0].LineNum
+				for _, m := range r.Matches {
+					if m.LineNum < startLine {
+						startLine = m.LineNum
+					}
+					if m.LineNum > endLine {
+						endLine = m.LineNum
+					}
+				}
+				tools.GlobalReadTracker.MarkReadRange(absPath, startLine, endLine)
+			}
 		}
 	}
 
