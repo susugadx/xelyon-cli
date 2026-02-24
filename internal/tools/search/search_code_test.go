@@ -368,6 +368,43 @@ func TestSearchCode_CacheHitAfterSearch(t *testing.T) {
 	}
 }
 
+func TestSearchCode_CacheDifferentParams(t *testing.T) {
+	setupSearchTestMocks(t)
+
+	dir := t.TempDir()
+	file1 := filepath.Join(dir, "params.go")
+	// コンテキスト行の有無で結果が変わるようにマッチ前後に行を配置
+	content := "line1\nline2\ntarget_param_check\nline4\nline5\n"
+	if err := os.WriteFile(file1, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cache := &testSearchCache{data: make(map[string]string)}
+	origCache := tools.GlobalToolCache
+	tools.GlobalToolCache = cache
+	t.Cleanup(func() {
+		tools.GlobalToolCache = origCache
+	})
+
+	// context_lines=0 で検索
+	result0 := ExecuteSearchCode("target_param_check", dir, "", "0", "3000")
+	if strings.Contains(result0, "No matches found") {
+		t.Fatal("Expected matches with context_lines=0")
+	}
+
+	// context_lines=3 で検索 — キャッシュキーが異なるため別結果が返るべき
+	result3 := ExecuteSearchCode("target_param_check", dir, "", "3", "3000")
+	if strings.Contains(result3, "No matches found") {
+		t.Fatal("Expected matches with context_lines=3")
+	}
+
+	// context_lines=3 の結果にはコンテキスト行（line1, line2 等）が含まれるはず
+	// context_lines=0 の結果には含まれない
+	if result0 == result3 {
+		t.Error("Results with different context_lines should differ (cache key should include context_lines)")
+	}
+}
+
 // testSearchCache はテスト用のキャッシュ実装
 type testSearchCache struct {
 	data     map[string]string
@@ -541,6 +578,9 @@ func TestClassifyMatch(t *testing.T) {
 		{"fmt.Println(target)", MatchTypeUsage},
 		{`fmt.Println("hello=world")`, MatchTypeUsage},
 		{`url := "https://example.com?key=value"`, MatchTypeAssignment},
+		// Usage (struct tag with = inside backtick — NOT assignment)
+		{"\tName string `json:\"name\"`", MatchTypeUsage},
+		{"\tValue int `yaml:\"val=default\"`", MatchTypeUsage},
 		// Comment
 		{"// comment", MatchTypeComment},
 		{"# python comment", MatchTypeComment},
@@ -715,6 +755,10 @@ func TestStripQuoted(t *testing.T) {
 		{"", ""},
 		// URL 内の = がクォート内にある
 		{`url := "https://example.com?key=value"`, `url := `},
+		// バッククォート（Go struct tag 等）
+		{"Name string `json:\"name=value\"`", "Name string "},
+		{"`entire backtick`", ""},
+		{"before `inside` after", "before  after"},
 	}
 	for _, tt := range tests {
 		got := stripQuoted(tt.input)

@@ -91,7 +91,7 @@ func ExecuteSearchCode(pattern, path, filePattern, contextLinesStr, tokenBudgetS
 	if len(patterns) > 1 {
 		// 複数パターン: マルチキャッシュチェック → 並列検索
 		multiKey := buildMultiCacheKey(patterns)
-		cacheKey := path + "|" + filePattern
+		cacheKey := fmt.Sprintf("%s|%s|%d|%d", path, filePattern, ctxLines, tokenBudget)
 		if tools.GlobalToolCache != nil {
 			if cached, ok := tools.GlobalToolCache.GetSearch(multiKey, cacheKey); ok {
 				return cached
@@ -105,7 +105,7 @@ func ExecuteSearchCode(pattern, path, filePattern, contextLinesStr, tokenBudgetS
 // executeSinglePattern は単一パターンの検索処理（キャッシュ・検索・パース・マージ・トランケート・ReadTracker・ブロック認識・フォーマット・キャッシュ保存）
 func executeSinglePattern(pattern, path, filePattern string, ctxLines, tokenBudget int) string {
 	// キャッシュチェック
-	cacheKey := path + "|" + filePattern
+	cacheKey := fmt.Sprintf("%s|%s|%d|%d", path, filePattern, ctxLines, tokenBudget)
 	if tools.GlobalToolCache != nil {
 		if cached, ok := tools.GlobalToolCache.GetSearch(pattern, cacheKey); ok {
 			return cached
@@ -151,6 +151,7 @@ func executeSinglePattern(pattern, path, filePattern string, ctxLines, tokenBudg
 }
 
 // markReadRanges は検索結果ファイルの行範囲を既読マークする（str_replace line-range モードで read_file なし編集を許可）
+// goroutine から並列呼び出し可能（GlobalReadTracker は sync.RWMutex で保護）
 func markReadRanges(results []SearchResult) {
 	for _, r := range results {
 		if absPath, err := filepath.Abs(r.FilePath); err == nil {
@@ -243,7 +244,7 @@ func executeMultiplePatterns(patterns []string, path, filePattern string, ctxLin
 	// キャッシュ保存（multi 全体を1エントリとして保存）
 	if tools.GlobalToolCache != nil {
 		multiKey := buildMultiCacheKey(patterns)
-		cacheKey := path + "|" + filePattern
+		cacheKey := fmt.Sprintf("%s|%s|%d|%d", path, filePattern, ctxLines, tokenBudget)
 		tools.GlobalToolCache.SetSearch(multiKey, cacheKey, formatted)
 	}
 
@@ -265,7 +266,7 @@ func executeSearch(pattern, path, filePattern string, ctxLines int) (string, boo
 		args := []string{
 			"--json",
 			"-n",
-			"--max-count", "30",
+			"--max-count", "30", // per-file limit（全体ではなく各ファイル30行まで）
 		}
 		if ctxLines > 0 {
 			args = append(args, "--context", strconv.Itoa(ctxLines))
@@ -283,7 +284,8 @@ func executeSearch(pattern, path, filePattern string, ctxLines int) (string, boo
 		return string(out), true
 	}
 
-	// grep フォールバック
+	// grep フォールバック（rg がない環境用）
+	// Note: grep は .gitignore を参照しない。主要ディレクトリは --exclude-dir で除外。rg 推奨。
 	args := []string{
 		"-rn",
 		"-I",
@@ -674,9 +676,10 @@ func isCommentLine(trimmed string) bool {
 }
 
 // stripQuoted は文字列リテラル内の内容を除去する（クォート外のみ残す）
+// ダブルクォート、シングルクォート、バッククォート（Go struct tag 等）に対応
 func stripQuoted(s string) string {
 	var result strings.Builder
-	inDouble, inSingle := false, false
+	inDouble, inSingle, inBacktick := false, false, false
 	escaped := false
 	for _, ch := range s {
 		if escaped {
@@ -687,15 +690,19 @@ func stripQuoted(s string) string {
 			escaped = true
 			continue
 		}
-		if ch == '"' && !inSingle {
+		if ch == '"' && !inSingle && !inBacktick {
 			inDouble = !inDouble
 			continue
 		}
-		if ch == '\'' && !inDouble {
+		if ch == '\'' && !inDouble && !inBacktick {
 			inSingle = !inSingle
 			continue
 		}
-		if !inDouble && !inSingle {
+		if ch == '`' && !inDouble && !inSingle {
+			inBacktick = !inBacktick
+			continue
+		}
+		if !inDouble && !inSingle && !inBacktick {
 			result.WriteRune(ch)
 		}
 	}
@@ -1096,6 +1103,10 @@ func formatMultiResults(collected []patternResult, tokenBudget int) string {
 		if len(pr.Results) > 0 {
 			matchedPatterns++
 		}
+	}
+
+	if totalMatches == 0 {
+		return "No matches found\n"
 	}
 
 	fmt.Fprintf(&b, "Found %d match(es) across %d/%d patterns\n\n", totalMatches, matchedPatterns, len(collected))
