@@ -97,7 +97,7 @@ func (t *SearchCodeTool) Parameters() map[string]interface{} {
 	return map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
-			"pattern":       map[string]interface{}{"type": "string", "description": "Search pattern (regex supported)"},
+			"pattern":       map[string]interface{}{"type": "string", "description": "Search pattern (regex). Comma-separated for parallel multi-search (e.g. 'handleSSE,parseResponse')"},
 			"path":          map[string]interface{}{"type": "string", "description": "Directory or file to search in (default: current directory)"},
 			"file_pattern":  map[string]interface{}{"type": "string", "description": "File glob pattern to filter (e.g., *.go, *.ts)"},
 			"context_lines": map[string]interface{}{"type": "integer", "description": "Number of context lines around matches (default: 3, max: 10)"},

@@ -150,36 +150,15 @@ lsp:
 | `lsp.servers.<lang>.args` | string[] | `[]` | コマンドに渡す引数 |
 | `lsp.servers.<lang>.disabled` | boolean | `false` | 個別サーバーの無効化 |
 
-## LSPツール
+## LSP機能
 
-AIは `lsp_find` ツールを使用してコード解析を行います。
-シンボル名を指定するだけで、定義・参照・実装を横断検索できます。
+LSPは以下の用途で内部的に利用されます（専用ツールは不要）:
 
-### `lsp_find`
+- **診断（エラー検知）**: `str_replace` 後の即座フィードバック、コミット前の自動チェック
+- **削除時参照チェック**: `delete_file` 実行前に外部参照を自動検出し警告
+- **Plan依存分析**: 変更ファイル間の依存関係を自動検出
 
-シンボルの定義・参照・実装を検索します。
-
-| パラメータ | 型 | 説明 |
-|-----------|---|------|
-| `symbol` | string | シンボル名（関数名、型名など） |
-| `action` | string | `definition`, `references`, `implementations` |
-
-**使用例:**
-```bash
-> handleUserの参照箇所を探して
-# → lsp_find(symbol="handleUser", action="references")
-
-> UserServiceの定義を見せて
-# → lsp_find(symbol="UserService", action="definition")
-
-> Handlerインターフェースの実装を探して
-# → lsp_find(symbol="Handler", action="implementations")
-```
-
-**特徴:**
-- シンボル名だけで検索可能（ファイルパス・行番号不要）
-- LSP未起動時は自動的に grep にフォールバック
-- definition/references/implementations を1ツールでカバー
+コード検索には `search_code` ツールを使用してください。`[def]`/`[ref]`/`[call]` アノテーションで定義・参照を自動識別します。
 
 ## 削除時参照チェック
 

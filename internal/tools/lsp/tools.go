@@ -10,8 +10,6 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
-var green = common.Green
-
 // LSPClient is set by agent during initialization
 var LSPClient *lsplib.Client
 

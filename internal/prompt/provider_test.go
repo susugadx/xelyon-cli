@@ -13,8 +13,8 @@ func TestGetProviderPrefix_Gemini(t *testing.T) {
 	if !strings.Contains(prefix, "read_file BEFORE str_replace") {
 		t.Error("gemini prefix should contain read_file rule")
 	}
-	if !strings.Contains(prefix, "lsp_find") {
-		t.Error("gemini prefix should contain lsp_find rule for reference checking before deletion")
+	if !strings.Contains(prefix, "search_code") {
+		t.Error("gemini prefix should contain search_code rule for reference checking")
 	}
 }
 
@@ -33,8 +33,8 @@ func TestGetProviderPrefix_DeepSeek(t *testing.T) {
 	if !strings.Contains(prefix, "read_file BEFORE str_replace") {
 		t.Error("deepseek prefix should contain read_file rule")
 	}
-	if !strings.Contains(prefix, "lsp_find") {
-		t.Error("deepseek prefix should contain lsp_find rule")
+	if !strings.Contains(prefix, "search_code") {
+		t.Error("deepseek prefix should contain search_code rule")
 	}
 	if !strings.Contains(prefix, "ALWAYS use tool calls for file operations") {
 		t.Error("deepseek prefix should contain tool calls rule")
@@ -69,7 +69,7 @@ func TestCommonRulesBlock(t *testing.T) {
 
 	commonChecks := []string{
 		"read_file BEFORE str_replace",
-		"lsp_find",
+		"search_code",
 		"WAIT for output",
 		"Follow project rules in Project Context",
 		"grep_replace",
@@ -139,8 +139,8 @@ func TestBuildProviderSystemPrompt_Gemini(t *testing.T) {
 	if !strings.Contains(result, "NOT inside markdown code blocks") {
 		t.Error("gemini result should contain code block rule")
 	}
-	if !strings.Contains(result, "lsp_find") {
-		t.Error("gemini result should contain lsp_find rule")
+	if !strings.Contains(result, "search_code") {
+		t.Error("gemini result should contain search_code rule")
 	}
 }
 

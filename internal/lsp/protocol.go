@@ -90,22 +90,10 @@ type ClientCapabilities struct {
 // TextDocumentClientCapabilities represents text document capabilities
 type TextDocumentClientCapabilities struct {
 	References *ReferencesCapability `json:"references,omitempty"`
-	Definition *DefinitionCapability `json:"definition,omitempty"`
-	Hover      *HoverCapability      `json:"hover,omitempty"`
 }
 
 // ReferencesCapability represents references capability
 type ReferencesCapability struct {
-	DynamicRegistration bool `json:"dynamicRegistration,omitempty"`
-}
-
-// DefinitionCapability represents definition capability
-type DefinitionCapability struct {
-	DynamicRegistration bool `json:"dynamicRegistration,omitempty"`
-}
-
-// HoverCapability represents hover capability
-type HoverCapability struct {
 	DynamicRegistration bool `json:"dynamicRegistration,omitempty"`
 }
 
@@ -117,8 +105,6 @@ type InitializeResult struct {
 // ServerCapabilities represents the server's capabilities
 type ServerCapabilities struct {
 	ReferencesProvider bool `json:"referencesProvider,omitempty"`
-	DefinitionProvider bool `json:"definitionProvider,omitempty"`
-	HoverProvider      bool `json:"hoverProvider,omitempty"`
 	TextDocumentSync   int  `json:"textDocumentSync,omitempty"` // 0=None, 1=Full, 2=Incremental
 }
 
@@ -134,26 +120,6 @@ type ReferenceParams struct {
 // ReferenceContext represents the context for a reference request
 type ReferenceContext struct {
 	IncludeDeclaration bool `json:"includeDeclaration"`
-}
-
-// ===== textDocument/hover =====
-
-// HoverParams are the parameters for the hover request
-type HoverParams struct {
-	TextDocument TextDocumentIdentifier `json:"textDocument"`
-	Position     Position               `json:"position"`
-}
-
-// HoverResult is the result of a hover request
-type HoverResult struct {
-	Contents MarkupContent `json:"contents"`
-	Range    *Range        `json:"range,omitempty"`
-}
-
-// MarkupContent represents markup content (plaintext or markdown)
-type MarkupContent struct {
-	Kind  string `json:"kind"` // "plaintext" or "markdown"
-	Value string `json:"value"`
 }
 
 // ===== textDocument/didOpen =====
@@ -195,24 +161,4 @@ type Diagnostic struct {
 type PublishDiagnosticsParams struct {
 	URI         string       `json:"uri"`
 	Diagnostics []Diagnostic `json:"diagnostics"`
-}
-
-// ===== textDocument/rename =====
-
-// RenameParams are the parameters for the rename request
-type RenameParams struct {
-	TextDocument TextDocumentIdentifier `json:"textDocument"`
-	Position     Position               `json:"position"`
-	NewName      string                 `json:"newName"`
-}
-
-// WorkspaceEdit represents changes to many resources managed in the workspace
-type WorkspaceEdit struct {
-	Changes map[string][]TextEdit `json:"changes,omitempty"`
-}
-
-// TextEdit represents a textual edit applicable to a text document
-type TextEdit struct {
-	Range   Range  `json:"range"`
-	NewText string `json:"newText"`
 }

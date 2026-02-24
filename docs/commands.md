@@ -265,7 +265,7 @@ Plan Modeを切り替えます。有効にすると、リクエストが「調�
 - `tool_confirm` 設定に従ってツール確認
 
 **Plan Mode（ON）:**
-1. **調査フェーズ**: SafetyHighツール（read_file, list_dir, lsp_find等）を自由に実行
+1. **調査フェーズ**: SafetyHighツール（read_file, list_dir, search_code等）を自由に実行
 2. **計画生成**: 実装が必要な場合、ステップをJSONで出力
 3. **承認**: ユーザーが計画を確認・承認
 4. **実行**: ステップごとに失敗検知・リトライ付きで実行
@@ -522,21 +522,8 @@ bash: golangci-lint run
 
 ### LSP（言語サーバー）
 
-| ツール名 | 説明 | 主な引数 |
-|---------|------|---------|
-| `lsp_find` | シンボル検索（定義・参照・実装） | `symbol`, `action` |
-
-**使用例:**
-```bash
-> handleUserの参照箇所を探して
-# → lsp_find(symbol="handleUser", action="references")
-
-> UserServiceの定義を見せて
-# → lsp_find(symbol="UserService", action="definition")
-```
-
-**注意**: LSPツールを使用するには対応するLSPサーバーがインストールされている必要があります。
-LSP未起動時は自動的に grep にフォールバックします。
+LSPは診断（エラー検知）、削除時参照チェック、Plan依存分析で内部的に利用されます。
+コード検索には `search_code` ツールを使用してください。
 詳細は [LSP連携ガイド](lsp.md) を参照してください。
 
 ### 使用例

@@ -74,7 +74,6 @@ DeepSeek, OpenAI, Gemini, Claude, Ollama, Groq, OpenRouter, Bedrock をシーム
 
 ### 🔌 LSP連携（IDE並みのコード理解）
 Language Server Protocol (LSP) を活用してIDE並みのコード理解を実現。
-- **シンボル検索（`lsp_find`）**: シンボル名から定義・参照・実装を自動検索
 - **削除時参照チェック**: ファイル削除前に外部参照を自動検出し警告
 - **完了検証**: AI が「完了」「done」と宣言した際、変更ファイルの LSP 診断を自動実行しエラー残存時は修正を続行
 - **Completion Hooks**: LSP チェック後にユーザー定義のシェルコマンド（`go test ./...` 等）を自動実行。失敗時は AI が修正を続行（`hooks.on_completion` で設定）

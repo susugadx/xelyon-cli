@@ -53,7 +53,7 @@ func (t *FileModifyingTool) Run(args map[string]string) (string, *FileChange, er
 //   - tools/file: read_file, write_file, str_replace, delete_file, list_dir
 //   - tools/search: web_search, grep_replace
 //   - tools/dev: bash
-//   - tools/lsp: lsp_find
+//   - tools/lsp: (diagnostics only)
 func RegisterBuiltinTools(r *Registry) {
 	// All tools are now registered by subpackages via init()
 	// This function is kept for backward compatibility

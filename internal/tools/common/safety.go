@@ -25,7 +25,6 @@ var ToolSafetyLevels = map[string]ToolSafety{
 	"web_search":   SafetyHigh,
 	"ask_question": SafetyHigh,
 	"serper":       SafetyHigh, // Web検索
-	"lsp_find":     SafetyHigh, // LSP: シンボル名ベースの検索（読み取り専用）
 	"read_files":   SafetyHigh,
 
 	// SafetyMedium: 書き込み操作（リカバリ可能）

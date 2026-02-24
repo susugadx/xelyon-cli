@@ -122,8 +122,6 @@ func (s *Server) initialize(ctx context.Context) error {
 		Capabilities: ClientCapabilities{
 			TextDocument: TextDocumentClientCapabilities{
 				References: &ReferencesCapability{DynamicRegistration: false},
-				Definition: &DefinitionCapability{DynamicRegistration: false},
-				Hover:      &HoverCapability{DynamicRegistration: false},
 			},
 		},
 	}

@@ -172,8 +172,6 @@ func TestAllBuiltinToolsHaveDefinitions(t *testing.T) {
 		"web_search", "grep_replace",
 		// Development Operations (1)
 		"bash",
-		// LSP Tools (1)
-		"lsp_find",
 	}
 
 	definedNames := GetToolDefinitionNames()

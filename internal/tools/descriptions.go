@@ -20,9 +20,6 @@ var ToolDescriptions = map[string]string{
 	// Development Tools
 	"bash": "Execute a shell command. Use for git, npm, pip, make, go test, go fmt, curl, etc.",
 
-	// Code Navigation
-	"lsp_find": "Find a symbol by name and run LSP action (definition/references/implementations). Falls back to grep if LSP unavailable.",
-
 	// Planning Tools
 	"ask_user_question": "Ask the user a clarification question before planning. Use only when requirements are ambiguous.",
 	"create_plan":       "Create and save a new execution plan with title, summary, and steps.",

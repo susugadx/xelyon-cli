@@ -726,7 +726,7 @@ tool_confirm:
 #### `auto_approve_safe`
 - **型**: boolean
 - **デフォルト**: `true`
-- **説明**: SafetyHigh ツール（read_file, list_dir, git_status, git_log, git_diff, web_search, lsp_find 等）を確認なしで実行
+- **説明**: SafetyHigh ツール（read_file, list_dir, git_status, git_log, git_diff, web_search 等）を確認なしで実行
 
 #### `auto_approve_medium`
 - **型**: boolean

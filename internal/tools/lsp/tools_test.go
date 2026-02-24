@@ -4,19 +4,7 @@ import (
 	"testing"
 
 	lsplib "github.com/susugadx/xelyon-cli/internal/lsp"
-	"github.com/susugadx/xelyon-cli/internal/tools"
-	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
-
-func TestRegisterTools(t *testing.T) {
-	registry := tools.NewRegistry()
-	RegisterTools(registry)
-
-	// lsp_find のみが登録されていることを確認
-	if tool := registry.GetTool("lsp_find"); tool == nil {
-		t.Error("tool \"lsp_find\" not registered")
-	}
-}
 
 // ===== CheckDiagnosticsForFiles Tests =====
 
@@ -73,13 +61,5 @@ func TestDiagnosticCheckResult_ZeroValue(t *testing.T) {
 	}
 	if result.Summary != "" {
 		t.Error("zero value Summary should be empty")
-	}
-}
-
-func TestLSPToolsSafetyLevel(t *testing.T) {
-	// lsp_find は SafetyHigh（読み取り専用）であることを確認
-	safety := common.GetToolSafety("lsp_find")
-	if safety != common.SafetyHigh {
-		t.Errorf("tool \"lsp_find\" safety = %v, want SafetyHigh", safety)
 	}
 }
