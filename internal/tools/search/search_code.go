@@ -1,6 +1,7 @@
 package search
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -113,14 +114,17 @@ func executeSinglePattern(pattern, path, filePattern string, ctxLines, tokenBudg
 	}
 
 	// ripgrep or grep 実行
-	output, useRipgrep := executeSearch(pattern, path, filePattern, ctxLines)
+	output, useRipgrep, searchErr := executeSearch(pattern, path, filePattern, ctxLines)
+	if searchErr != nil {
+		return fmt.Sprintf("Error: %v", searchErr)
+	}
 
-	// 結果パース
+	// 結果パース（早期打ち切り: 最大200マッチ）
 	var results []SearchResult
 	if useRipgrep {
-		results = parseRipgrepJSON(output)
+		results = parseRipgrepJSON(output, 200)
 	} else {
-		results = parseGrepOutput(output)
+		results = parseGrepOutput(output, 200)
 	}
 
 	if len(results) == 0 {
@@ -129,6 +133,9 @@ func executeSinglePattern(pattern, path, filePattern string, ctxLines, tokenBudg
 
 	// コンテキスト行マージ
 	results = mergeContextLines(results)
+
+	// ファイル優先度ソート（非テスト→テスト、定義あり→なし）
+	sortResultsByPriority(results)
 
 	// トークンバジェット制御
 	results, truncated := truncateToTokenBudget(results, tokenBudget)
@@ -213,14 +220,23 @@ func executeMultiplePatterns(patterns []string, path, filePattern string, ctxLin
 	ch := make(chan patternResult, len(patterns))
 	for i, p := range patterns {
 		go func(idx int, pat string) {
-			output, useRg := executeSearch(pat, path, filePattern, ctxLines)
+			output, useRg, searchErr := executeSearch(pat, path, filePattern, ctxLines)
+			if searchErr != nil {
+				ch <- patternResult{Pattern: pat, Index: idx}
+				return
+			}
+			maxMatches := 200 / len(patterns)
+			if maxMatches < 50 {
+				maxMatches = 50
+			}
 			var results []SearchResult
 			if useRg {
-				results = parseRipgrepJSON(output)
+				results = parseRipgrepJSON(output, maxMatches)
 			} else {
-				results = parseGrepOutput(output)
+				results = parseGrepOutput(output, maxMatches)
 			}
 			results = mergeContextLines(results)
+			sortResultsByPriority(results)
 			results, truncated := truncateToTokenBudget(results, budgetPerPattern)
 
 			// ReadTracker 連携
@@ -260,7 +276,7 @@ func buildMultiCacheKey(patterns []string) string {
 }
 
 // executeSearch は rg（優先）または grep を実行し、出力と使用ツールを返す
-func executeSearch(pattern, path, filePattern string, ctxLines int) (string, bool) {
+func executeSearch(pattern, path, filePattern string, ctxLines int) (string, bool, error) {
 	// ripgrep を試行
 	if rgPath, err := exec.LookPath("rg"); err == nil {
 		args := []string{
@@ -280,14 +296,21 @@ func executeSearch(pattern, path, filePattern string, ctxLines int) (string, boo
 		defer cancel()
 
 		cmd := exec.CommandContext(ctx, rgPath, args...)
-		out, _ := cmd.Output() // rg はマッチなしで exit 1 を返すのでエラーは無視
-		return string(out), true
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		_ = cmd.Run() // rg はマッチなしで exit 1 を返すのでエラーは無視
+		if stdout.Len() == 0 && stderr.Len() > 0 {
+			return "", true, fmt.Errorf("regex error: %s", strings.TrimSpace(stderr.String()))
+		}
+		return stdout.String(), true, nil
 	}
 
 	// grep フォールバック（rg がない環境用）
 	// Note: grep は .gitignore を参照しない。主要ディレクトリは --exclude-dir で除外。rg 推奨。
 	args := []string{
 		"-rn",
+		"-E", // 拡張正規表現（rg と同等の regex 解釈 + 不正 regex のエラー検出）
 		"-I",
 		"-m", "30",
 		"--exclude-dir=.git",
@@ -307,8 +330,14 @@ func executeSearch(pattern, path, filePattern string, ctxLines int) (string, boo
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "grep", args...)
-	out, _ := cmd.Output() // grep もマッチなしで exit 1
-	return string(out), false
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	_ = cmd.Run() // grep もマッチなしで exit 1
+	if stdout.Len() == 0 && stderr.Len() > 0 {
+		return "", false, fmt.Errorf("regex error: %s", strings.TrimSpace(stderr.String()))
+	}
+	return stdout.String(), false, nil
 }
 
 // --- rg --json パーサー ---
@@ -337,7 +366,7 @@ type rgBeginData struct {
 	Path rgPath `json:"path"`
 }
 
-func parseRipgrepJSON(output string) []SearchResult {
+func parseRipgrepJSON(output string, maxTotalMatches int) []SearchResult {
 	if output == "" {
 		return nil
 	}
@@ -345,8 +374,10 @@ func parseRipgrepJSON(output string) []SearchResult {
 	fileMap := make(map[string]*SearchResult)
 	var fileOrder []string
 	var currentFile string
+	totalMatches := 0
 
 	lines := strings.Split(strings.TrimSpace(output), "\n")
+outer:
 	for _, line := range lines {
 		if line == "" {
 			continue
@@ -388,6 +419,10 @@ func parseRipgrepJSON(output string) []SearchResult {
 					Type:    classifyMatch(lineText),
 				})
 				sr.MatchCount++
+				totalMatches++
+				if totalMatches >= maxTotalMatches {
+					break outer
+				}
 			}
 
 		case "context":
@@ -424,15 +459,17 @@ func parseRipgrepJSON(output string) []SearchResult {
 
 // --- grep 出力パーサー ---
 
-func parseGrepOutput(output string) []SearchResult {
+func parseGrepOutput(output string, maxTotalMatches int) []SearchResult {
 	if output == "" {
 		return nil
 	}
 
 	fileMap := make(map[string]*SearchResult)
 	var fileOrder []string
+	totalMatches := 0
 
 	lines := strings.Split(strings.TrimSpace(output), "\n")
+outer:
 	for _, line := range lines {
 		// ブロック境界セパレータ
 		if line == "--" {
@@ -462,6 +499,10 @@ func parseGrepOutput(output string) []SearchResult {
 		})
 		if isMatch {
 			sr.MatchCount++
+			totalMatches++
+			if totalMatches >= maxTotalMatches {
+				break outer
+			}
 		}
 	}
 
@@ -567,6 +608,46 @@ func mergeContextLines(results []SearchResult) []SearchResult {
 	return merged
 }
 
+// --- ファイル優先度ソート ---
+
+// sortResultsByPriority はファイルを重要度順にソート（非テスト→テスト、定義あり→なし）
+func sortResultsByPriority(results []SearchResult) {
+	sort.SliceStable(results, func(i, j int) bool {
+		iTest := isTestFile(results[i].FilePath)
+		jTest := isTestFile(results[j].FilePath)
+		if iTest != jTest {
+			return !iTest
+		}
+		iHasDef := hasDefinitionMatch(results[i])
+		jHasDef := hasDefinitionMatch(results[j])
+		if iHasDef != jHasDef {
+			return iHasDef
+		}
+		return false
+	})
+}
+
+// hasDefinitionMatch はファイルに定義マッチが含まれるか判定する
+func hasDefinitionMatch(r SearchResult) bool {
+	for _, m := range r.Matches {
+		if m.IsMatch && m.Type == MatchTypeDefinition {
+			return true
+		}
+	}
+	return false
+}
+
+// isTestFile はファイルパスがテストファイルかどうか判定する
+func isTestFile(path string) bool {
+	base := filepath.Base(path)
+	return strings.HasSuffix(base, "_test.go") ||
+		strings.HasSuffix(base, ".test.js") ||
+		strings.HasSuffix(base, ".test.ts") ||
+		strings.HasSuffix(base, ".spec.js") ||
+		strings.HasSuffix(base, ".spec.ts") ||
+		strings.Contains(base, "test_")
+}
+
 // --- トークンバジェット制御 ---
 
 func truncateToTokenBudget(results []SearchResult, budget int) ([]SearchResult, bool) {
@@ -641,18 +722,16 @@ func classifyMatch(line string) MatchType {
 		return MatchTypeImport
 	}
 
-	// 3. 定義（インデントなし = 行頭が空白でない）
-	if line == trimmed {
-		defKeywords := []string{
-			"func ", "fn ", "def ", "function ", "sub ", "method ",
-			"type ", "class ", "struct ", "interface ", "enum ", "trait ",
-			"const ", "var ", "let ", "static ", "pub ", "export ",
-			"module ", "namespace ", "package ",
-		}
-		for _, kw := range defKeywords {
-			if strings.HasPrefix(trimmed, kw) {
-				return MatchTypeDefinition
-			}
+	// 3. 定義（インデント問わず defKeyword で始まる行）
+	defKeywords := []string{
+		"func ", "fn ", "def ", "function ", "sub ", "method ",
+		"type ", "class ", "struct ", "interface ", "enum ", "trait ",
+		"const ", "var ", "let ", "static ", "pub ", "export ",
+		"module ", "namespace ", "package ",
+	}
+	for _, kw := range defKeywords {
+		if strings.HasPrefix(trimmed, kw) {
+			return MatchTypeDefinition
 		}
 	}
 

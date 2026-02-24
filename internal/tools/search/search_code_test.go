@@ -237,7 +237,7 @@ func TestParseRipgrepJSON(t *testing.T) {
 {"type":"end","data":{"path":{"text":"src/util.go"},"stats":{"elapsed":{"secs":0}}}}
 {"type":"summary","data":{"elapsed_total":{"secs":0},"stats":{"searches":1}}}`
 
-	results := parseRipgrepJSON(input)
+	results := parseRipgrepJSON(input, 200)
 
 	if len(results) != 2 {
 		t.Fatalf("Expected 2 files, got %d", len(results))
@@ -286,7 +286,7 @@ src/main.go-6-}
 --
 src/util.go:10:var target = 42`
 
-	results := parseGrepOutput(input)
+	results := parseGrepOutput(input, 200)
 
 	if len(results) != 2 {
 		t.Fatalf("Expected 2 files, got %d", len(results))
@@ -561,11 +561,16 @@ func TestClassifyMatch(t *testing.T) {
 		line     string
 		expected MatchType
 	}{
-		// Definition
+		// Definition (top-level)
 		{"func hello() {}", MatchTypeDefinition},
 		{"type Config struct {", MatchTypeDefinition},
 		{"class MyClass:", MatchTypeDefinition},
 		{"def process(data):", MatchTypeDefinition},
+		// Definition (indented — Python methods, nested classes, etc.)
+		{"    def method(self):", MatchTypeDefinition},
+		{"    class InnerClass:", MatchTypeDefinition},
+		{"        func nested() {", MatchTypeDefinition},
+		{"    var localVar = 1", MatchTypeDefinition},
 		// Import
 		{"import fmt", MatchTypeImport},
 		{"from os import path", MatchTypeImport},
@@ -1057,5 +1062,83 @@ func cleanup() {
 	hasCleanup := strings.Contains(result, "func cleanup")
 	if !hasSetup && !hasCleanup {
 		t.Errorf("Expected block annotation for func setup or func cleanup, got:\n%s", result)
+	}
+}
+
+// --- ファイルソート順テスト ---
+
+func TestIsTestFile(t *testing.T) {
+	tests := []struct {
+		path     string
+		expected bool
+	}{
+		{"main.go", false},
+		{"main_test.go", true},
+		{"src/handler.go", false},
+		{"src/handler_test.go", true},
+		{"app.test.js", true},
+		{"app.test.ts", true},
+		{"app.spec.js", true},
+		{"app.spec.ts", true},
+		{"test_helper.py", true},
+		{"utils.py", false},
+	}
+	for _, tt := range tests {
+		got := isTestFile(tt.path)
+		if got != tt.expected {
+			t.Errorf("isTestFile(%q) = %v, want %v", tt.path, got, tt.expected)
+		}
+	}
+}
+
+func TestSortResultsByPriority(t *testing.T) {
+	results := []SearchResult{
+		{FilePath: "handler_test.go", Matches: []Match{{IsMatch: true, Type: MatchTypeUsage}}},
+		{FilePath: "handler.go", Matches: []Match{{IsMatch: true, Type: MatchTypeUsage}}},
+	}
+	sortResultsByPriority(results)
+
+	if results[0].FilePath != "handler.go" {
+		t.Errorf("Expected non-test file first, got %s", results[0].FilePath)
+	}
+	if results[1].FilePath != "handler_test.go" {
+		t.Errorf("Expected test file second, got %s", results[1].FilePath)
+	}
+}
+
+func TestSortResultsByPriority_DefinitionFirst(t *testing.T) {
+	results := []SearchResult{
+		{FilePath: "caller.go", Matches: []Match{{IsMatch: true, Type: MatchTypeUsage}}},
+		{FilePath: "define.go", Matches: []Match{{IsMatch: true, Type: MatchTypeDefinition}}},
+	}
+	sortResultsByPriority(results)
+
+	if results[0].FilePath != "define.go" {
+		t.Errorf("Expected definition file first, got %s", results[0].FilePath)
+	}
+	if results[1].FilePath != "caller.go" {
+		t.Errorf("Expected usage-only file second, got %s", results[1].FilePath)
+	}
+}
+
+// --- 不正 regex テスト ---
+
+func TestSearchCode_InvalidRegex(t *testing.T) {
+	setupSearchTestMocks(t)
+
+	dir := t.TempDir()
+	file1 := filepath.Join(dir, "test.go")
+	if err := os.WriteFile(file1, []byte("func hello() {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// 不正な regex パターン（閉じ括弧なし）
+	result := ExecuteSearchCode("func(", dir, "", "0", "3000")
+
+	if result == "No matches found" {
+		t.Error("Invalid regex should NOT return 'No matches found' — should return error message")
+	}
+	if !strings.Contains(result, "Error") {
+		t.Errorf("Expected error message for invalid regex, got: %s", result)
 	}
 }
