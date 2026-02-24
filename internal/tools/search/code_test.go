@@ -200,7 +200,12 @@ func TestSearchCode_MergeOverlappingContext(t *testing.T) {
 		l = strings.TrimSpace(l)
 		if strings.Contains(l, "│") {
 			parts := strings.SplitN(l, "│", 2)
-			numPart := strings.TrimSpace(strings.TrimPrefix(parts[0], ">"))
+			numPart := parts[0]
+			// タグとマッチマーカーを除去して行番号のみ抽出
+			for _, tag := range []string{"[def]", "[import]", "[assign]", "[use]", "[comment]", ">"} {
+				numPart = strings.ReplaceAll(numPart, tag, "")
+			}
+			numPart = strings.TrimSpace(numPart)
 			lineNums[numPart]++
 		}
 	}
@@ -385,4 +390,70 @@ func (c *testSearchCache) SetSearch(pattern, path, result string) {
 	c.setCalls++
 	key := pattern + "|" + path
 	c.data[key] = result
+}
+
+// --- マッチ種別分類テスト ---
+
+func TestClassifyMatch(t *testing.T) {
+	tests := []struct {
+		line     string
+		expected MatchType
+	}{
+		// Definition
+		{"func hello() {}", MatchTypeDefinition},
+		{"type Config struct {", MatchTypeDefinition},
+		{"class MyClass:", MatchTypeDefinition},
+		{"def process(data):", MatchTypeDefinition},
+		// Import
+		{"import fmt", MatchTypeImport},
+		{"from os import path", MatchTypeImport},
+		{`const { useState } = require('react')`, MatchTypeImport},
+		// Assignment
+		{"x := 42", MatchTypeAssignment},
+		{"self.value = data", MatchTypeAssignment},
+		// Usage
+		{"if x == 1 {", MatchTypeUsage},
+		{"fmt.Println(target)", MatchTypeUsage},
+		{`fmt.Println("hello=world")`, MatchTypeUsage},
+		{`url := "https://example.com?key=value"`, MatchTypeAssignment},
+		// Comment
+		{"// comment", MatchTypeComment},
+		{"# python comment", MatchTypeComment},
+	}
+	for _, tt := range tests {
+		got := classifyMatch(tt.line)
+		if got != tt.expected {
+			t.Errorf("classifyMatch(%q) = %d, want %d", tt.line, got, tt.expected)
+		}
+	}
+}
+
+func TestSearchCode_ResultRanking(t *testing.T) {
+	setupSearchTestMocks(t)
+
+	dir := t.TempDir()
+	file1 := filepath.Join(dir, "rank.go")
+	// 使用 → 定義 の順で配置（ソート後は定義が先に来るべき）
+	content := "fmt.Println(target)\nfunc target() {}\n"
+	if err := os.WriteFile(file1, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	result := ExecuteSearchCode("target", dir, "*.go", "0", "3000")
+
+	if strings.Contains(result, "No matches found") {
+		t.Error("Expected matches")
+	}
+
+	defIdx := strings.Index(result, "[def]")
+	useIdx := strings.Index(result, "[use]")
+	if defIdx < 0 {
+		t.Error("Expected [def] tag in result")
+	}
+	if useIdx < 0 {
+		t.Error("Expected [use] tag in result")
+	}
+	if defIdx >= 0 && useIdx >= 0 && defIdx >= useIdx {
+		t.Errorf("Expected [def] before [use], but [def] at %d, [use] at %d", defIdx, useIdx)
+	}
 }

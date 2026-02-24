@@ -6,12 +6,27 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
+
+// MatchType はマッチ行の種別（ソート順序を定義）
+type MatchType int
+
+const (
+	MatchTypeDefinition MatchType = iota // 0: func/type/class 等の定義
+	MatchTypeImport                      // 1: import/require/use 等
+	MatchTypeAssignment                  // 2: := や = による代入
+	MatchTypeUsage                       // 3: その他の参照・使用
+	MatchTypeComment                     // 4: コメント行
+)
+
+// matchTypeTag はマッチ種別の表示タグ
+var matchTypeTag = [5]string{"[def]", "[import]", "[assign]", "[use]", "[comment]"}
 
 // SearchResult はファイルごとの検索結果
 type SearchResult struct {
@@ -24,7 +39,8 @@ type SearchResult struct {
 type Match struct {
 	LineNum int
 	Line    string
-	IsMatch bool // true=マッチ行, false=コンテキスト行
+	IsMatch bool      // true=マッチ行, false=コンテキスト行
+	Type    MatchType // マッチ種別（ソート用）
 }
 
 // ExecuteSearchCode はコード検索を実行し、フォーマット済み結果を返す
@@ -230,10 +246,12 @@ func parseRipgrepJSON(output string) []SearchResult {
 					fileOrder = append(fileOrder, filePath)
 				}
 				sr := fileMap[filePath]
+				lineText := strings.TrimRight(data.Lines.Text, "\n")
 				sr.Matches = append(sr.Matches, Match{
 					LineNum: data.LineNumber,
-					Line:    strings.TrimRight(data.Lines.Text, "\n"),
+					Line:    lineText,
 					IsMatch: true,
+					Type:    classifyMatch(lineText),
 				})
 				sr.MatchCount++
 			}
@@ -254,6 +272,7 @@ func parseRipgrepJSON(output string) []SearchResult {
 					LineNum: data.LineNumber,
 					Line:    strings.TrimRight(data.Lines.Text, "\n"),
 					IsMatch: false,
+					Type:    MatchTypeUsage,
 				})
 			}
 
@@ -297,10 +316,15 @@ func parseGrepOutput(output string) []SearchResult {
 		}
 
 		sr := fileMap[filePath]
+		matchType := MatchTypeUsage
+		if isMatch {
+			matchType = classifyMatch(content)
+		}
 		sr.Matches = append(sr.Matches, Match{
 			LineNum: lineNum,
 			Line:    content,
 			IsMatch: isMatch,
+			Type:    matchType,
 		})
 		if isMatch {
 			sr.MatchCount++
@@ -458,6 +482,126 @@ func truncateToTokenBudget(results []SearchResult, budget int) ([]SearchResult, 
 	return kept, truncated
 }
 
+// --- マッチ種別分類 ---
+
+// classifyMatch はマッチ行の内容から種別を判定する（言語非依存の汎用パターン）
+func classifyMatch(line string) MatchType {
+	trimmed := strings.TrimSpace(line)
+
+	// 1. コメント
+	commentPrefixes := []string{"//", "/*", "#", "--", ";", `"""`, "'''"}
+	for _, prefix := range commentPrefixes {
+		if strings.HasPrefix(trimmed, prefix) {
+			return MatchTypeComment
+		}
+	}
+
+	// 2. Import（定義より先に判定: require() を含む行の誤分類防止）
+	importKeywords := []string{"import ", "from ", "use ", "include ", "using "}
+	for _, kw := range importKeywords {
+		if strings.HasPrefix(trimmed, kw) {
+			return MatchTypeImport
+		}
+	}
+	if strings.Contains(trimmed, "require(") {
+		return MatchTypeImport
+	}
+
+	// 3. 定義（インデントなし = 行頭が空白でない）
+	if line == trimmed {
+		defKeywords := []string{
+			"func ", "fn ", "def ", "function ", "sub ", "method ",
+			"type ", "class ", "struct ", "interface ", "enum ", "trait ",
+			"const ", "var ", "let ", "static ", "pub ", "export ",
+			"module ", "namespace ", "package ",
+		}
+		for _, kw := range defKeywords {
+			if strings.HasPrefix(trimmed, kw) {
+				return MatchTypeDefinition
+			}
+		}
+	}
+
+	// 4. 代入
+	if hasAssignment(line) {
+		return MatchTypeAssignment
+	}
+
+	// 5. 使用（デフォルト）
+	return MatchTypeUsage
+}
+
+// stripQuoted は文字列リテラル内の内容を除去する（クォート外のみ残す）
+func stripQuoted(s string) string {
+	var result strings.Builder
+	inDouble, inSingle := false, false
+	escaped := false
+	for _, ch := range s {
+		if escaped {
+			escaped = false
+			continue
+		}
+		if ch == '\\' && (inDouble || inSingle) {
+			escaped = true
+			continue
+		}
+		if ch == '"' && !inSingle {
+			inDouble = !inDouble
+			continue
+		}
+		if ch == '\'' && !inDouble {
+			inSingle = !inSingle
+			continue
+		}
+		if !inDouble && !inSingle {
+			result.WriteRune(ch)
+		}
+	}
+	return result.String()
+}
+
+// hasAssignment は行に代入演算子が含まれるか判定する（比較演算子・文字列内を除外）
+func hasAssignment(line string) bool {
+	s := stripQuoted(line)
+	for _, op := range []string{"===", "!==", "==", "!=", ">=", "<=", "=>"} {
+		s = strings.ReplaceAll(s, op, "")
+	}
+	return strings.Contains(s, ":=") || strings.Contains(s, "=")
+}
+
+// --- マッチブロック ---
+
+// matchBlock はマッチ行とその前後のコンテキスト行をまとめたブロック
+type matchBlock struct {
+	matches []Match
+	typ     MatchType
+}
+
+// buildMatchBlocks は deduped な Match リストをブロックに分割する
+// コンテキスト行はマッチ行に到達するまで pending に蓄積し、次のマッチブロックの先頭に付与
+func buildMatchBlocks(matches []Match) []matchBlock {
+	var blocks []matchBlock
+	var pending []Match
+
+	for _, m := range matches {
+		if m.IsMatch {
+			var blockMatches []Match
+			blockMatches = append(blockMatches, pending...)
+			blockMatches = append(blockMatches, m)
+			blocks = append(blocks, matchBlock{typ: m.Type, matches: blockMatches})
+			pending = nil
+		} else {
+			pending = append(pending, m)
+		}
+	}
+	// 末尾コンテキスト → 最後のブロック
+	if len(pending) > 0 && len(blocks) > 0 {
+		last := &blocks[len(blocks)-1]
+		last.matches = append(last.matches, pending...)
+	}
+	return blocks
+}
+
 // --- 出力フォーマット ---
 
 func formatSearchResults(results []SearchResult, truncated bool, tokenBudget int) string {
@@ -472,18 +616,28 @@ func formatSearchResults(results []SearchResult, truncated bool, tokenBudget int
 	for _, r := range results {
 		sb.WriteString(fmt.Sprintf("\n📄 %s (%d match(es))\n", r.FilePath, r.MatchCount))
 
+		// ブロック分割 → MatchType でソート → 展開
+		blocks := buildMatchBlocks(r.Matches)
+		sort.SliceStable(blocks, func(i, j int) bool {
+			return blocks[i].typ < blocks[j].typ
+		})
+		var sorted []Match
+		for _, b := range blocks {
+			sorted = append(sorted, b.matches...)
+		}
+
 		prevLineNum := -1
-		for _, m := range r.Matches {
-			// 非連続行間に "..." を表示
-			if prevLineNum > 0 && m.LineNum > prevLineNum+1 {
+		for _, m := range sorted {
+			// 非連続行間に "..." を表示（ソートによる逆方向ジャンプにも対応）
+			if prevLineNum > 0 && m.LineNum != prevLineNum+1 {
 				sb.WriteString("      ...\n")
 			}
 			prevLineNum = m.LineNum
 
 			if m.IsMatch {
-				sb.WriteString(fmt.Sprintf("  > %4d │ %s\n", m.LineNum, m.Line))
+				sb.WriteString(fmt.Sprintf("  %-10s> %4d │ %s\n", matchTypeTag[m.Type], m.LineNum, m.Line))
 			} else {
-				sb.WriteString(fmt.Sprintf("    %4d │ %s\n", m.LineNum, m.Line))
+				sb.WriteString(fmt.Sprintf("  %10s  %4d │ %s\n", "", m.LineNum, m.Line))
 			}
 		}
 	}
