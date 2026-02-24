@@ -87,6 +87,23 @@ func ExecuteSearchCode(pattern, path, filePattern, contextLinesStr, tokenBudgetS
 		}
 	}
 
+	patterns := splitPatterns(pattern)
+	if len(patterns) > 1 {
+		// 複数パターン: マルチキャッシュチェック → 並列検索
+		multiKey := buildMultiCacheKey(patterns)
+		cacheKey := path + "|" + filePattern
+		if tools.GlobalToolCache != nil {
+			if cached, ok := tools.GlobalToolCache.GetSearch(multiKey, cacheKey); ok {
+				return cached
+			}
+		}
+		return executeMultiplePatterns(patterns, path, filePattern, ctxLines, tokenBudget)
+	}
+	return executeSinglePattern(patterns[0], path, filePattern, ctxLines, tokenBudget)
+}
+
+// executeSinglePattern は単一パターンの検索処理（キャッシュ・検索・パース・マージ・トランケート・ReadTracker・ブロック認識・フォーマット・キャッシュ保存）
+func executeSinglePattern(pattern, path, filePattern string, ctxLines, tokenBudget int) string {
 	// キャッシュチェック
 	cacheKey := path + "|" + filePattern
 	if tools.GlobalToolCache != nil {
@@ -116,11 +133,28 @@ func ExecuteSearchCode(pattern, path, filePattern, contextLinesStr, tokenBudgetS
 	// トークンバジェット制御
 	results, truncated := truncateToTokenBudget(results, tokenBudget)
 
-	// ReadTracker 連携: 結果ファイルの行範囲を既読マーク（str_replace line-range モードで read_file なし編集を許可）
+	// ReadTracker 連携
+	markReadRanges(results)
+
+	// ブロック認識（関数/クラス境界検出）
+	detectBlocks(results)
+
+	// 出力フォーマット
+	formatted := formatSearchResults(results, truncated, tokenBudget)
+
+	// キャッシュ保存
+	if tools.GlobalToolCache != nil {
+		tools.GlobalToolCache.SetSearch(pattern, cacheKey, formatted)
+	}
+
+	return formatted
+}
+
+// markReadRanges は検索結果ファイルの行範囲を既読マークする（str_replace line-range モードで read_file なし編集を許可）
+func markReadRanges(results []SearchResult) {
 	for _, r := range results {
 		if absPath, err := filepath.Abs(r.FilePath); err == nil {
 			if len(r.Matches) > 0 {
-				// Matches はソート済みとは限らないため min/max で算出
 				startLine := r.Matches[0].LineNum
 				endLine := r.Matches[0].LineNum
 				for _, m := range r.Matches {
@@ -135,19 +169,93 @@ func ExecuteSearchCode(pattern, path, filePattern, contextLinesStr, tokenBudgetS
 			}
 		}
 	}
+}
 
-	// ブロック認識（関数/クラス境界検出）
-	detectBlocks(results)
+const escapedCommaPlaceholder = "\x00COMMA\x00"
 
-	// 出力フォーマット
-	formatted := formatSearchResults(results, truncated, tokenBudget)
+// splitPatterns はカンマ区切りのパターン文字列を分割する。
+// \, はリテラルカンマとして扱う。空文字除外、TrimSpace、最大 5 パターン。
+func splitPatterns(pattern string) []string {
+	// エスケープカンマを一時退避
+	s := strings.ReplaceAll(pattern, `\,`, escapedCommaPlaceholder)
+	parts := strings.Split(s, ",")
+	var result []string
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		// プレースホルダをリテラルカンマに復元
+		p = strings.ReplaceAll(p, escapedCommaPlaceholder, ",")
+		if p != "" {
+			result = append(result, p)
+		}
+	}
+	if len(result) > 5 {
+		result = result[:5]
+	}
+	return result
+}
 
-	// キャッシュ保存
+// patternResult は複数パターン検索の各パターンの結果
+type patternResult struct {
+	Pattern   string
+	Results   []SearchResult
+	Truncated bool
+	Index     int
+}
+
+// executeMultiplePatterns は複数パターンを goroutine 並列で検索する
+func executeMultiplePatterns(patterns []string, path, filePattern string, ctxLines, tokenBudget int) string {
+	budgetPerPattern := tokenBudget / len(patterns)
+	if budgetPerPattern < 500 {
+		budgetPerPattern = 500
+	}
+
+	ch := make(chan patternResult, len(patterns))
+	for i, p := range patterns {
+		go func(idx int, pat string) {
+			output, useRg := executeSearch(pat, path, filePattern, ctxLines)
+			var results []SearchResult
+			if useRg {
+				results = parseRipgrepJSON(output)
+			} else {
+				results = parseGrepOutput(output)
+			}
+			results = mergeContextLines(results)
+			results, truncated := truncateToTokenBudget(results, budgetPerPattern)
+
+			// ReadTracker 連携
+			markReadRanges(results)
+
+			// ブロック認識
+			detectBlocks(results)
+
+			ch <- patternResult{Pattern: pat, Results: results, Truncated: truncated, Index: idx}
+		}(i, p)
+	}
+
+	collected := make([]patternResult, len(patterns))
+	for range patterns {
+		r := <-ch
+		collected[r.Index] = r
+	}
+
+	formatted := formatMultiResults(collected, tokenBudget)
+
+	// キャッシュ保存（multi 全体を1エントリとして保存）
 	if tools.GlobalToolCache != nil {
-		tools.GlobalToolCache.SetSearch(pattern, cacheKey, formatted)
+		multiKey := buildMultiCacheKey(patterns)
+		cacheKey := path + "|" + filePattern
+		tools.GlobalToolCache.SetSearch(multiKey, cacheKey, formatted)
 	}
 
 	return formatted
+}
+
+// buildMultiCacheKey は複数パターンからソート済みキャッシュキーを構築する
+func buildMultiCacheKey(patterns []string) string {
+	sorted := make([]string, len(patterns))
+	copy(sorted, patterns)
+	sort.Strings(sorted)
+	return strings.Join(sorted, "|")
 }
 
 // executeSearch は rg（優先）または grep を実行し、出力と使用ツールを返す
@@ -926,7 +1034,15 @@ func formatSearchResults(results []SearchResult, truncated bool, tokenBudget int
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Found %d match(es) in %d file(s)\n", totalMatches, len(results)))
+	fmt.Fprintf(&sb, "Found %d match(es) in %d file(s)\n", totalMatches, len(results))
+	sb.WriteString(formatSearchResultsBody(results, truncated, tokenBudget))
+	return sb.String()
+}
+
+// formatSearchResultsBody はファイルごとの結果部分のみをフォーマットする
+// formatSearchResults と formatMultiResults の両方から呼ばれる
+func formatSearchResultsBody(results []SearchResult, truncated bool, tokenBudget int) string {
+	var sb strings.Builder
 
 	for _, r := range results {
 		sb.WriteString(fmt.Sprintf("\n📄 %s (%d match(es))\n", r.FilePath, r.MatchCount))
@@ -965,4 +1081,37 @@ func formatSearchResults(results []SearchResult, truncated bool, tokenBudget int
 	}
 
 	return sb.String()
+}
+
+// formatMultiResults は複数パターンの検索結果をフォーマットする
+func formatMultiResults(collected []patternResult, tokenBudget int) string {
+	var b strings.Builder
+
+	totalMatches := 0
+	matchedPatterns := 0
+	for _, pr := range collected {
+		for _, r := range pr.Results {
+			totalMatches += r.MatchCount
+		}
+		if len(pr.Results) > 0 {
+			matchedPatterns++
+		}
+	}
+
+	fmt.Fprintf(&b, "Found %d match(es) across %d/%d patterns\n\n", totalMatches, matchedPatterns, len(collected))
+
+	budgetPerPattern := tokenBudget / len(collected)
+	for i, pr := range collected {
+		fmt.Fprintf(&b, "━━ Pattern %d/%d: %q ━━\n", i+1, len(collected), pr.Pattern)
+
+		if len(pr.Results) == 0 {
+			b.WriteString("No matches found\n\n")
+			continue
+		}
+
+		b.WriteString(formatSearchResultsBody(pr.Results, pr.Truncated, budgetPerPattern))
+		b.WriteString("\n")
+	}
+
+	return b.String()
 }

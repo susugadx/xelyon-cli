@@ -399,6 +399,124 @@ func (c *testSearchCache) SetSearch(pattern, path, result string) {
 	c.data[key] = result
 }
 
+// --- splitPatterns テスト ---
+
+func TestSplitPatterns(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected []string
+	}{
+		{"a,b,c", []string{"a", "b", "c"}},
+		{"  a , b ", []string{"a", "b"}},
+		{"a,,b,", []string{"a", "b"}},
+		{"a,b,c,d,e,f", []string{"a", "b", "c", "d", "e"}}, // 上限5
+		{"single", []string{"single"}},
+		{"", nil},
+		{`a\,b,c`, []string{"a,b", "c"}},          // エスケープカンマ
+		{`hello\,world`, []string{"hello,world"}}, // 単一パターン内のカンマ
+	}
+	for _, tt := range tests {
+		got := splitPatterns(tt.input)
+		if len(got) != len(tt.expected) {
+			t.Errorf("splitPatterns(%q) = %v (len %d), want %v (len %d)", tt.input, got, len(got), tt.expected, len(tt.expected))
+			continue
+		}
+		for i := range got {
+			if got[i] != tt.expected[i] {
+				t.Errorf("splitPatterns(%q)[%d] = %q, want %q", tt.input, i, got[i], tt.expected[i])
+			}
+		}
+	}
+}
+
+// --- 複数パターン検索テスト ---
+
+func TestExecuteSearchCode_MultiplePatterns(t *testing.T) {
+	setupSearchTestMocks(t)
+
+	dir := t.TempDir()
+	file1 := filepath.Join(dir, "multi.go")
+	content := "func func_a() {}\nvar x = 1\nfunc func_b() {}\n"
+	if err := os.WriteFile(file1, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	result := ExecuteSearchCode("func_a,func_b", dir, "*.go", "0", "3000")
+
+	// 複数パターンヘッダー
+	if !strings.Contains(result, "patterns") {
+		t.Errorf("Expected multi-pattern header, got:\n%s", result)
+	}
+	// Pattern 1/2 と Pattern 2/2
+	if !strings.Contains(result, "Pattern 1/2") {
+		t.Errorf("Expected 'Pattern 1/2' in result, got:\n%s", result)
+	}
+	if !strings.Contains(result, "Pattern 2/2") {
+		t.Errorf("Expected 'Pattern 2/2' in result, got:\n%s", result)
+	}
+	// 各パターンのマッチ
+	if !strings.Contains(result, "func_a") {
+		t.Error("Expected func_a match in result")
+	}
+	if !strings.Contains(result, "func_b") {
+		t.Error("Expected func_b match in result")
+	}
+}
+
+func TestExecuteSearchCode_MultiplePatterns_PartialMatch(t *testing.T) {
+	setupSearchTestMocks(t)
+
+	dir := t.TempDir()
+	file1 := filepath.Join(dir, "partial.go")
+	content := "func existing_func() {}\nvar x = 1\n"
+	if err := os.WriteFile(file1, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	result := ExecuteSearchCode("existing_func,nonexistent_xyz_pattern", dir, "*.go", "0", "3000")
+
+	// マッチしたパターンの結果が含まれる
+	if !strings.Contains(result, "existing_func") {
+		t.Error("Expected existing_func match in result")
+	}
+	// マッチしないパターンは "No matches found"
+	if !strings.Contains(result, "No matches found") {
+		t.Error("Expected 'No matches found' for unmatched pattern")
+	}
+}
+
+func TestExecuteSearchCode_MultiplePatterns_ReadTracker(t *testing.T) {
+	setupSearchTestMocks(t)
+
+	dir := t.TempDir()
+	file1 := filepath.Join(dir, "tracker_multi.go")
+	content := "func track_a() {}\nvar x = 1\nfunc track_b() {}\n"
+	if err := os.WriteFile(file1, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	absFile1, _ := filepath.Abs(file1)
+
+	// 検索前は未読
+	if tools.GlobalReadTracker.IsReadLine(absFile1, 1) {
+		t.Error("Line 1 should not be marked as read before search")
+	}
+
+	result := ExecuteSearchCode("track_a,track_b", dir, "*.go", "0", "3000")
+
+	if !strings.Contains(result, "Pattern 1/2") {
+		t.Fatalf("Expected multi-pattern result, got:\n%s", result)
+	}
+
+	// track_a は1行目、track_b は3行目 — 両方が ReadTracker に登録される
+	if !tools.GlobalReadTracker.IsReadLine(absFile1, 1) {
+		t.Error("Line 1 (track_a) should be marked as read after multi-pattern search")
+	}
+	if !tools.GlobalReadTracker.IsReadLine(absFile1, 3) {
+		t.Error("Line 3 (track_b) should be marked as read after multi-pattern search")
+	}
+}
+
 // --- マッチ種別分類テスト ---
 
 func TestClassifyMatch(t *testing.T) {
