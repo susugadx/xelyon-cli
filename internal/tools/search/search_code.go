@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
@@ -28,6 +29,12 @@ const (
 // matchTypeTag はマッチ種別の表示タグ
 var matchTypeTag = [5]string{"[def]", "[import]", "[assign]", "[use]", "[comment]"}
 
+// BlockInfo はマッチが所属するブロック（関数/クラス）の情報
+type BlockInfo struct {
+	Name      string // "func handleSSEResponse", "class MyClass" 等
+	StartLine int
+}
+
 // SearchResult はファイルごとの検索結果
 type SearchResult struct {
 	FilePath   string
@@ -39,8 +46,9 @@ type SearchResult struct {
 type Match struct {
 	LineNum int
 	Line    string
-	IsMatch bool      // true=マッチ行, false=コンテキスト行
-	Type    MatchType // マッチ種別（ソート用）
+	IsMatch bool       // true=マッチ行, false=コンテキスト行
+	Type    MatchType  // マッチ種別（ソート用）
+	Block   *BlockInfo // マッチが所属するブロック（nil=トップレベル）
 }
 
 // ExecuteSearchCode はコード検索を実行し、フォーマット済み結果を返す
@@ -114,6 +122,9 @@ func ExecuteSearchCode(pattern, path, filePattern, contextLinesStr, tokenBudgetS
 			tools.GlobalReadTracker.MarkRead(absPath)
 		}
 	}
+
+	// ブロック認識（関数/クラス境界検出）
+	detectBlocks(results)
 
 	// 出力フォーマット
 	formatted := formatSearchResults(results, truncated, tokenBudget)
@@ -455,6 +466,9 @@ func truncateToTokenBudget(results []SearchResult, budget int) ([]SearchResult, 
 		matchCount := 0
 		for _, m := range r.Matches {
 			lineTokens := len(m.Line)/4 + 3 // 行番号 + セパレータ + 内容
+			if m.IsMatch {
+				lineTokens += 10 // ブロック注釈分
+			}
 			if usedTokens+lineTokens > budget {
 				truncated = true
 				break
@@ -489,11 +503,8 @@ func classifyMatch(line string) MatchType {
 	trimmed := strings.TrimSpace(line)
 
 	// 1. コメント
-	commentPrefixes := []string{"//", "/*", "#", "--", ";", `"""`, "'''"}
-	for _, prefix := range commentPrefixes {
-		if strings.HasPrefix(trimmed, prefix) {
-			return MatchTypeComment
-		}
+	if isCommentLine(trimmed) {
+		return MatchTypeComment
 	}
 
 	// 2. Import（定義より先に判定: require() を含む行の誤分類防止）
@@ -529,6 +540,16 @@ func classifyMatch(line string) MatchType {
 
 	// 5. 使用（デフォルト）
 	return MatchTypeUsage
+}
+
+// isCommentLine はコメント行かどうか判定する
+func isCommentLine(trimmed string) bool {
+	for _, prefix := range []string{"//", "/*", "#", "--", ";", `"""`, "'''"} {
+		if strings.HasPrefix(trimmed, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // stripQuoted は文字列リテラル内の内容を除去する（クォート外のみ残す）
@@ -602,6 +623,287 @@ func buildMatchBlocks(matches []Match) []matchBlock {
 	return blocks
 }
 
+// --- ブロック認識（関数/クラス境界検出） ---
+
+// blockRange はファイル内のブロック（関数/クラス）の範囲
+type blockRange struct {
+	Name      string
+	StartLine int
+	EndLine   int
+}
+
+// isBraceLanguage はファイル拡張子からブレース言語かどうか判定する
+func isBraceLanguage(filePath string) bool {
+	ext := filepath.Ext(filePath)
+	switch ext {
+	case ".py", ".pyw", ".yaml", ".yml", ".coffee":
+		return false
+	default:
+		return true
+	}
+}
+
+// extractBlockName は宣言行からブロック名を抽出する
+func extractBlockName(line string) string {
+	// Go method receiver: func (f *Foo) Bar(...)
+	if strings.HasPrefix(line, "func (") {
+		closeIdx := strings.Index(line, ") ")
+		if closeIdx > 0 {
+			rest := line[closeIdx+2:]
+			nameEnd := strings.IndexAny(rest, "( {")
+			if nameEnd < 0 {
+				nameEnd = len(rest)
+			}
+			name := strings.TrimSpace(rest[:nameEnd])
+			if name != "" {
+				return "func " + name
+			}
+		}
+		return ""
+	}
+	// General: keyword + name
+	keywords := []string{
+		"func ", "fn ", "def ", "function ", "sub ", "method ",
+		"type ", "class ", "struct ", "interface ", "enum ", "trait ",
+	}
+	for _, kw := range keywords {
+		if strings.HasPrefix(line, kw) {
+			rest := line[len(kw):]
+			nameEnd := strings.IndexAny(rest, "( {:\n")
+			if nameEnd < 0 {
+				nameEnd = len(rest)
+			}
+			name := strings.TrimSpace(rest[:nameEnd])
+			if name != "" {
+				return strings.TrimSpace(kw) + " " + name
+			}
+		}
+	}
+	return ""
+}
+
+// countIndent は行のインデント幅を返す（タブ=4スペース換算）
+func countIndent(line string) int {
+	count := 0
+	for _, ch := range line {
+		switch ch {
+		case ' ':
+			count++
+		case '\t':
+			count += 4
+		default:
+			return count
+		}
+	}
+	return count
+}
+
+// buildBlockMap はファイル内容からブロック範囲リストを構築する
+func buildBlockMap(content string, isBrace bool) []blockRange {
+	lines := strings.Split(content, "\n")
+	if isBrace {
+		return buildBlockMapBrace(lines)
+	}
+	return buildBlockMapIndent(lines)
+}
+
+// buildBlockMapBrace はブレース言語用のブロック検出
+func buildBlockMapBrace(lines []string) []blockRange {
+	var ranges []blockRange
+	type stackEntry struct {
+		name      string
+		startLine int
+		depth     int // ブロック開始前の depth
+	}
+	var stack []stackEntry
+	depth := 0
+	var inBlockComment bool
+
+	for i, line := range lines {
+		lineNum := i + 1
+		trimmed := strings.TrimSpace(line)
+
+		// 複数行コメントスキップ
+		if inBlockComment {
+			if strings.Contains(trimmed, "*/") {
+				inBlockComment = false
+			}
+			continue
+		}
+		// stripQuoted 後に /* が含まれれば複数行コメント開始
+		stripped := stripQuoted(line)
+		if strings.Contains(stripped, "/*") {
+			if !strings.Contains(stripped, "*/") {
+				inBlockComment = true
+			}
+			continue
+		}
+
+		// 単一行コメントスキップ
+		if isCommentLine(trimmed) {
+			continue
+		}
+
+		// 宣言検出
+		if name := extractBlockName(trimmed); name != "" {
+			stack = append(stack, stackEntry{name: name, startLine: lineNum, depth: depth})
+		}
+
+		// 文字列リテラル内の {} を除外してカウント
+		for _, ch := range stripped {
+			switch ch {
+			case '{':
+				depth++
+			case '}':
+				depth--
+				if depth < 0 {
+					depth = 0
+				}
+				// スタック top の depth >= 現在 depth → ブロック終了
+				for len(stack) > 0 && stack[len(stack)-1].depth >= depth {
+					top := stack[len(stack)-1]
+					stack = stack[:len(stack)-1]
+					ranges = append(ranges, blockRange{
+						Name:      top.name,
+						StartLine: top.startLine,
+						EndLine:   lineNum,
+					})
+				}
+			}
+		}
+	}
+
+	// 未クローズブロック → EndLine = EOF
+	totalLines := len(lines)
+	for _, s := range stack {
+		ranges = append(ranges, blockRange{
+			Name:      s.name,
+			StartLine: s.startLine,
+			EndLine:   totalLines,
+		})
+	}
+
+	sort.Slice(ranges, func(i, j int) bool {
+		return ranges[i].StartLine < ranges[j].StartLine
+	})
+
+	return ranges
+}
+
+// buildBlockMapIndent はインデント言語用のブロック検出
+func buildBlockMapIndent(lines []string) []blockRange {
+	var ranges []blockRange
+	type stackEntry struct {
+		name      string
+		startLine int
+		indent    int
+	}
+	var stack []stackEntry
+
+	for i, line := range lines {
+		lineNum := i + 1
+		if strings.TrimSpace(line) == "" {
+			continue // 空行スキップ
+		}
+
+		indent := countIndent(line)
+
+		// 現在行のインデント <= スタック top のインデント → ブロック終了
+		for len(stack) > 0 && stack[len(stack)-1].indent >= indent {
+			top := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			ranges = append(ranges, blockRange{
+				Name:      top.name,
+				StartLine: top.startLine,
+				EndLine:   lineNum - 1,
+			})
+		}
+
+		trimmed := strings.TrimSpace(line)
+		if name := extractBlockName(trimmed); name != "" {
+			stack = append(stack, stackEntry{name: name, startLine: lineNum, indent: indent})
+		}
+	}
+
+	// 未クローズブロック → EndLine = EOF
+	totalLines := len(lines)
+	for _, s := range stack {
+		ranges = append(ranges, blockRange{
+			Name:      s.name,
+			StartLine: s.startLine,
+			EndLine:   totalLines,
+		})
+	}
+
+	sort.Slice(ranges, func(i, j int) bool {
+		return ranges[i].StartLine < ranges[j].StartLine
+	})
+
+	return ranges
+}
+
+// findBlockForLine は指定行番号を含む最内ブロックを返す
+func findBlockForLine(ranges []blockRange, lineNum int) *BlockInfo {
+	var best *blockRange
+	for i := range ranges {
+		r := &ranges[i]
+		if lineNum >= r.StartLine && lineNum <= r.EndLine {
+			if best == nil || r.StartLine > best.StartLine {
+				best = r // 最内ブロック優先
+			}
+		}
+	}
+	if best == nil {
+		return nil
+	}
+	return &BlockInfo{Name: best.Name, StartLine: best.StartLine}
+}
+
+// getFileContent はファイル内容を取得する（キャッシュ連携）
+func getFileContent(filePath string) string {
+	absPath, err := filepath.Abs(filePath)
+	if err != nil {
+		return ""
+	}
+	if tools.GlobalToolCache != nil {
+		if cached, ok := tools.GlobalToolCache.GetFile(absPath); ok {
+			return cached
+		}
+	}
+	data, err := os.ReadFile(absPath)
+	if err != nil {
+		return ""
+	}
+	content := string(data)
+	if tools.GlobalToolCache != nil {
+		tools.GlobalToolCache.SetFile(absPath, content)
+	}
+	return content
+}
+
+// detectBlocks は検索結果の各マッチに所属ブロック情報を付与する
+func detectBlocks(results []SearchResult) {
+	for i := range results {
+		r := &results[i]
+		content := getFileContent(r.FilePath)
+		if content == "" {
+			continue
+		}
+		isBrace := isBraceLanguage(r.FilePath)
+		blocks := buildBlockMap(content, isBrace)
+		for j := range r.Matches {
+			m := &r.Matches[j]
+			if m.IsMatch {
+				m.Block = findBlockForLine(blocks, m.LineNum)
+				// マッチ自身がブロック開始行なら注釈不要
+				if m.Block != nil && m.Block.StartLine == m.LineNum {
+					m.Block = nil
+				}
+			}
+		}
+	}
+}
+
 // --- 出力フォーマット ---
 
 func formatSearchResults(results []SearchResult, truncated bool, tokenBudget int) string {
@@ -636,6 +938,9 @@ func formatSearchResults(results []SearchResult, truncated bool, tokenBudget int
 
 			if m.IsMatch {
 				sb.WriteString(fmt.Sprintf("  %-10s> %4d │ %s\n", matchTypeTag[m.Type], m.LineNum, m.Line))
+				if m.Block != nil {
+					sb.WriteString(fmt.Sprintf("  %10s  %4s   ── in %s (L%d)\n", "", "", m.Block.Name, m.Block.StartLine))
+				}
 			} else {
 				sb.WriteString(fmt.Sprintf("  %10s  %4d │ %s\n", "", m.LineNum, m.Line))
 			}

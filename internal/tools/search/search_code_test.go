@@ -457,3 +457,436 @@ func TestSearchCode_ResultRanking(t *testing.T) {
 		t.Errorf("Expected [def] before [use], but [def] at %d, [use] at %d", defIdx, useIdx)
 	}
 }
+
+// --- ヘルパー関数ユニットテスト ---
+
+func TestExtractBlockName(t *testing.T) {
+	tests := []struct {
+		line     string
+		expected string
+	}{
+		// Go
+		{"func hello() {}", "func hello"},
+		{"func (s *Server) Start() {", "func Start"},
+		{"func (s *Server) handleRequest(w http.ResponseWriter) {", "func handleRequest"},
+		{"type Config struct {", "type Config"},
+		{"type Handler interface {", "type Handler"},
+		// Python
+		{"def process(data):", "def process"},
+		{"class MyClass:", "class MyClass"},
+		// JavaScript
+		{"function doSomething(arg1, arg2) {", "function doSomething"},
+		// Rust
+		{"fn main() {", "fn main"},
+		{"struct Point {", "struct Point"},
+		{"enum Color {", "enum Color"},
+		{"trait Display {", "trait Display"},
+		// その他
+		{"interface Runnable {", "interface Runnable"},
+		{"method run() {", "method run"},
+		// 非宣言行 → 空文字列
+		{"x := 42", ""},
+		{"if cond {", ""},
+		{"fmt.Println(hello)", ""},
+		{"// func fake() {}", ""},
+		{"", ""},
+	}
+	for _, tt := range tests {
+		got := extractBlockName(tt.line)
+		if got != tt.expected {
+			t.Errorf("extractBlockName(%q) = %q, want %q", tt.line, got, tt.expected)
+		}
+	}
+}
+
+func TestIsCommentLine(t *testing.T) {
+	tests := []struct {
+		line     string
+		expected bool
+	}{
+		{"// Go comment", true},
+		{"/* block comment */", true},
+		{"# Python comment", true},
+		{"-- SQL comment", true},
+		{"; Lisp comment", true},
+		{`"""docstring"""`, true},
+		{"'''docstring'''", true},
+		{"func foo() {}", false},
+		{"x := 1 // inline comment", false},
+		{"", false},
+	}
+	for _, tt := range tests {
+		got := isCommentLine(tt.line)
+		if got != tt.expected {
+			t.Errorf("isCommentLine(%q) = %v, want %v", tt.line, got, tt.expected)
+		}
+	}
+}
+
+func TestCountIndent(t *testing.T) {
+	tests := []struct {
+		line     string
+		expected int
+	}{
+		{"no indent", 0},
+		{"  two spaces", 2},
+		{"    four spaces", 4},
+		{"\tone tab", 4},
+		{"\t\ttwo tabs", 8},
+		{"  \tmixed", 6}, // 2 spaces + 1 tab(4)
+		{"", 0},
+	}
+	for _, tt := range tests {
+		got := countIndent(tt.line)
+		if got != tt.expected {
+			t.Errorf("countIndent(%q) = %d, want %d", tt.line, got, tt.expected)
+		}
+	}
+}
+
+func TestIsBraceLanguage(t *testing.T) {
+	tests := []struct {
+		path     string
+		expected bool
+	}{
+		{"main.go", true},
+		{"app.js", true},
+		{"index.ts", true},
+		{"Main.java", true},
+		{"lib.rs", true},
+		{"main.c", true},
+		{"script.py", false},
+		{"script.pyw", false},
+		{"config.yaml", false},
+		{"config.yml", false},
+		{"app.coffee", false},
+	}
+	for _, tt := range tests {
+		got := isBraceLanguage(tt.path)
+		if got != tt.expected {
+			t.Errorf("isBraceLanguage(%q) = %v, want %v", tt.path, got, tt.expected)
+		}
+	}
+}
+
+func TestStripQuoted(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		// ダブルクォート
+		{`x = "hello"`, `x = `},
+		{`fmt.Println("hello=world")`, `fmt.Println()`},
+		// シングルクォート
+		{`x = 'hello'`, `x = `},
+		// エスケープ
+		{`x = "he\"llo"`, `x = `},
+		{`x = 'he\'llo'`, `x = `},
+		// 混在
+		{`x = "it's"`, `x = `},
+		{`x = 'say "hi"'`, `x = `},
+		// クォートなし
+		{"x := 42", "x := 42"},
+		{"", ""},
+		// URL 内の = がクォート内にある
+		{`url := "https://example.com?key=value"`, `url := `},
+	}
+	for _, tt := range tests {
+		got := stripQuoted(tt.input)
+		if got != tt.expected {
+			t.Errorf("stripQuoted(%q) = %q, want %q", tt.input, got, tt.expected)
+		}
+	}
+}
+
+func TestBuildMatchBlocks(t *testing.T) {
+	matches := []Match{
+		{LineNum: 1, Line: "ctx1", IsMatch: false, Type: MatchTypeUsage},
+		{LineNum: 2, Line: "match1", IsMatch: true, Type: MatchTypeDefinition},
+		{LineNum: 3, Line: "ctx2", IsMatch: false, Type: MatchTypeUsage},
+		{LineNum: 4, Line: "ctx3", IsMatch: false, Type: MatchTypeUsage},
+		{LineNum: 5, Line: "match2", IsMatch: true, Type: MatchTypeUsage},
+		{LineNum: 6, Line: "ctx4", IsMatch: false, Type: MatchTypeUsage},
+	}
+
+	blocks := buildMatchBlocks(matches)
+
+	if len(blocks) != 2 {
+		t.Fatalf("Expected 2 blocks, got %d", len(blocks))
+	}
+
+	// Block 1: [ctx1, match1] typ=Definition
+	if blocks[0].typ != MatchTypeDefinition {
+		t.Errorf("Block 0 typ = %d, want %d", blocks[0].typ, MatchTypeDefinition)
+	}
+	if len(blocks[0].matches) != 2 {
+		t.Errorf("Block 0 has %d matches, want 2", len(blocks[0].matches))
+	}
+
+	// Block 2: [ctx2, ctx3, match2, ctx4] typ=Usage
+	if blocks[1].typ != MatchTypeUsage {
+		t.Errorf("Block 1 typ = %d, want %d", blocks[1].typ, MatchTypeUsage)
+	}
+	if len(blocks[1].matches) != 4 {
+		t.Errorf("Block 1 has %d matches, want 4", len(blocks[1].matches))
+	}
+}
+
+func TestFindBlockForLine(t *testing.T) {
+	ranges := []blockRange{
+		{Name: "func outer", StartLine: 1, EndLine: 20},
+		{Name: "func inner", StartLine: 5, EndLine: 10},
+	}
+
+	// 最内ブロック優先
+	b := findBlockForLine(ranges, 7)
+	if b == nil || b.Name != "func inner" {
+		t.Errorf("Expected innermost block 'func inner' for line 7, got: %v", b)
+	}
+
+	// outer のみ
+	b = findBlockForLine(ranges, 15)
+	if b == nil || b.Name != "func outer" {
+		t.Errorf("Expected 'func outer' for line 15, got: %v", b)
+	}
+
+	// 範囲外
+	b = findBlockForLine(ranges, 25)
+	if b != nil {
+		t.Errorf("Expected nil for line 25, got: %v", b)
+	}
+
+	// 空 ranges
+	b = findBlockForLine(nil, 1)
+	if b != nil {
+		t.Errorf("Expected nil for empty ranges, got: %v", b)
+	}
+
+	// 境界値: ブロック開始行
+	b = findBlockForLine(ranges, 5)
+	if b == nil || b.Name != "func inner" {
+		t.Errorf("Expected 'func inner' for start line 5, got: %v", b)
+	}
+
+	// 境界値: ブロック終了行
+	b = findBlockForLine(ranges, 10)
+	if b == nil || b.Name != "func inner" {
+		t.Errorf("Expected 'func inner' for end line 10, got: %v", b)
+	}
+}
+
+// --- ブロック認識テスト ---
+
+func TestBuildBlockMap_BraceLanguage(t *testing.T) {
+	content := `package main
+
+func foo() {
+	x := 1
+}
+
+func bar() {
+	if cond {
+		y := 2
+	}
+}
+
+type Server struct {
+	addr string
+}
+
+func (s *Server) Start() {
+	listen()
+}
+`
+	ranges := buildBlockMap(content, true)
+
+	// ブロック名を収集
+	names := make(map[string]bool)
+	for _, r := range ranges {
+		names[r.Name] = true
+	}
+
+	// func foo, func bar, type Server, func Start が検出されること
+	expectedNames := []string{"func foo", "func bar", "type Server", "func Start"}
+	for _, name := range expectedNames {
+		if !names[name] {
+			t.Errorf("Expected block '%s' to be detected, got blocks: %v", name, ranges)
+		}
+	}
+
+	// findBlockForLine: line 4 (x := 1) → func foo
+	b := findBlockForLine(ranges, 4)
+	if b == nil || b.Name != "func foo" {
+		t.Errorf("Expected line 4 to be in 'func foo', got: %v", b)
+	}
+
+	// line 9 (y := 2) → func bar
+	b = findBlockForLine(ranges, 9)
+	if b == nil || b.Name != "func bar" {
+		t.Errorf("Expected line 9 to be in 'func bar', got: %v", b)
+	}
+
+	// line 18 (listen()) → func Start
+	b = findBlockForLine(ranges, 18)
+	if b == nil || b.Name != "func Start" {
+		t.Errorf("Expected line 18 to be in 'func Start', got: %v", b)
+	}
+
+	// line 1 (package main) → nil（トップレベル）
+	b = findBlockForLine(ranges, 1)
+	if b != nil {
+		t.Errorf("Expected line 1 to be outside any block, got: %v", b)
+	}
+
+	// 複数行コメント内の func 宣言はブロックとして検出されないこと
+	contentWithComment := `package main
+
+func real() {
+	x := 1
+}
+
+/*
+func fake() {
+	y := 2
+}
+*/
+
+func another() {
+	z := 3
+}
+`
+	rangesC := buildBlockMap(contentWithComment, true)
+	for _, r := range rangesC {
+		if r.Name == "func fake" {
+			t.Error("func fake inside /* */ block comment should NOT be detected as a block")
+		}
+	}
+
+	// real と another は検出されること
+	namesC := make(map[string]bool)
+	for _, r := range rangesC {
+		namesC[r.Name] = true
+	}
+	if !namesC["func real"] {
+		t.Error("Expected 'func real' to be detected")
+	}
+	if !namesC["func another"] {
+		t.Error("Expected 'func another' to be detected")
+	}
+
+	// 同一行 /* ... */ コメントの後の func が正しく検出されること
+	contentInline := `package main
+
+func before() {
+	x := 1
+}
+
+/* inline comment */ func after() {
+	y := 2
+}
+
+func last() {
+	z := 3
+}
+`
+	rangesI := buildBlockMap(contentInline, true)
+	namesI := make(map[string]bool)
+	for _, r := range rangesI {
+		namesI[r.Name] = true
+	}
+	if !namesI["func before"] {
+		t.Error("Expected 'func before' to be detected")
+	}
+	if !namesI["func last"] {
+		t.Error("Expected 'func last' to be detected after inline /* */ comment line")
+	}
+}
+
+func TestBuildBlockMap_IndentLanguage(t *testing.T) {
+	content := `class MyClass:
+    def process(self):
+        x = 1
+        y = 2
+    def cleanup(self):
+        pass
+
+def standalone():
+    z = 3
+`
+	ranges := buildBlockMap(content, false)
+
+	// ブロック名を収集
+	names := make(map[string]bool)
+	for _, r := range ranges {
+		names[r.Name] = true
+	}
+
+	// class MyClass, def process, def cleanup, def standalone が検出されること
+	expectedNames := []string{"class MyClass", "def process", "def cleanup", "def standalone"}
+	for _, name := range expectedNames {
+		if !names[name] {
+			t.Errorf("Expected block '%s' to be detected, got blocks: %v", name, ranges)
+		}
+	}
+
+	// findBlockForLine: line 3 (x = 1) → def process（最内ブロック）
+	b := findBlockForLine(ranges, 3)
+	if b == nil || b.Name != "def process" {
+		t.Errorf("Expected line 3 to be in 'def process', got: %v", b)
+	}
+
+	// line 6 (pass) → def cleanup
+	b = findBlockForLine(ranges, 6)
+	if b == nil || b.Name != "def cleanup" {
+		t.Errorf("Expected line 6 to be in 'def cleanup', got: %v", b)
+	}
+
+	// line 9 (z = 3) → def standalone
+	b = findBlockForLine(ranges, 9)
+	if b == nil || b.Name != "def standalone" {
+		t.Errorf("Expected line 9 to be in 'def standalone', got: %v", b)
+	}
+}
+
+func TestSearchCode_BlockDetection(t *testing.T) {
+	setupSearchTestMocks(t)
+
+	dir := t.TempDir()
+	file1 := filepath.Join(dir, "blocks.go")
+	content := `package main
+
+func setup() {
+	target_var := 1
+	fmt.Println(target_var)
+}
+
+func process() {
+	x := 2
+}
+
+func cleanup() {
+	target_var := 3
+}
+`
+	if err := os.WriteFile(file1, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	result := ExecuteSearchCode("target_var", dir, "*.go", "0", "3000")
+
+	if strings.Contains(result, "No matches found") {
+		t.Error("Expected matches")
+	}
+
+	// ブロック注釈が含まれること
+	if !strings.Contains(result, "── in") {
+		t.Errorf("Expected block annotation '── in' in result, got:\n%s", result)
+	}
+
+	// func setup または func cleanup のブロック注釈が含まれること
+	hasSetup := strings.Contains(result, "func setup")
+	hasCleanup := strings.Contains(result, "func cleanup")
+	if !hasSetup && !hasCleanup {
+		t.Errorf("Expected block annotation for func setup or func cleanup, got:\n%s", result)
+	}
+}
