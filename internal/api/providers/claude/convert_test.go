@@ -427,3 +427,17 @@ func TestConvertToAnthropicMessages_MultipleToolCalls(t *testing.T) {
 		t.Errorf("Content[2].Type = %q, want 'tool_use'", assistantMsg.Content[2].Type)
 	}
 }
+
+func TestConvertToAnthropicMessages_EmptyContentFallback(t *testing.T) {
+	history := []api.Message{
+		{Role: "user", Content: ""},
+	}
+
+	result := ConvertToAnthropicMessages(history)
+	if len(result) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(result))
+	}
+	if result[0].Content[0].Text != "(empty)" {
+		t.Errorf("expected empty content fallback to '(empty)', got %q", result[0].Content[0].Text)
+	}
+}

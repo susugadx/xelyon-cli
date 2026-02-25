@@ -343,10 +343,13 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 				}
 			}
 
-			// 失敗パターンをチェック
-			if failed, reason := plan.ContainsFailure(result); failed {
-				lastFailedResult = result
-				lastFailReason = reason
+			// 失敗パターンをチェック（読み取り専用ツールは除外）
+			// bash 等のコマンド実行系と、ファイル変更系（str_replace, write_file等）のみチェック
+			if toolCall.Tool == "bash" || tools.IsWriteTool(toolCall.Tool) {
+				if failed, reason := plan.ContainsFailure(result); failed {
+					lastFailedResult = result
+					lastFailReason = reason
+				}
 			}
 
 			// 変更履歴を保存

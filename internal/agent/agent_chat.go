@@ -446,8 +446,11 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 			}
 
 			// 失敗パターンをチェック
-			if failed, _ := plan.ContainsFailure(result); failed {
-				lastFailedResult = result
+			// bash 等のコマンド実行系と、ファイル変更系（str_replace, write_file等）のみチェック
+			if tc.Tool == "bash" || tools.IsWriteTool(tc.Tool) {
+				if failed, _ := plan.ContainsFailure(result); failed {
+					lastFailedResult = result
+				}
 			}
 		}
 

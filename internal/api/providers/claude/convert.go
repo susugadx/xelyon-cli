@@ -122,12 +122,16 @@ func ConvertToAnthropicMessages(history []api.Message) []AnthropicMessage {
 					Content: blocks,
 				}
 			} else {
+				textContent := msg.Content
+				if textContent == "" {
+					textContent = "(empty)"
+				}
 				converted = AnthropicMessage{
 					Role: msg.Role,
 					Content: []AnthropicContentBlock{
 						{
 							Type: "text",
-							Text: msg.Content,
+							Text: textContent,
 						},
 					},
 				}
