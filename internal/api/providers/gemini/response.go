@@ -24,6 +24,9 @@ func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, s
 	var rescuedToolJSONs []string     // FC救済: コードブロックから抽出したツールJSON
 	var headerPrinted bool            // テキスト応答時のAIヘッダー表示済みフラグ
 	var usage *GeminiUsageMetadata
+	var suppressingToolJSON bool // テキストパート内のツールJSON抑制中フラグ
+	var toolJSONDepth int        // ツールJSON の {} ネスト深度
+	var toolJSONInStr bool       // ツールJSON 内の文字列リテラルフラグ
 
 	// goroutine + channel でスキャン（ctx キャンセル・idle timeout 対応）
 	type scanResult struct {
@@ -166,9 +169,27 @@ loop:
 				}
 
 				if part.Text != "" {
+					// ツールJSON抑制中: 後続チャンクも非表示にする（チャンク分割対応）
+					if suppressingToolJSON {
+						fullResponse.WriteString(part.Text)
+						updateToolJSONDepth(part.Text, &toolJSONDepth, &toolJSONInStr)
+						if toolJSONDepth <= 0 {
+							suppressingToolJSON = false
+						}
+						continue
+					}
+
 					trimmed := strings.TrimSpace(part.Text)
 					// ツールJSONプレフィックスの場合は表示せず fullResponse に記録のみ
+					// 複数チャンクに分割される場合は depth tracking で後続も抑制
 					if isToolJSONPrefix(trimmed) {
+						suppressingToolJSON = true
+						toolJSONDepth = 0
+						toolJSONInStr = false
+						updateToolJSONDepth(part.Text, &toolJSONDepth, &toolJSONInStr)
+						if toolJSONDepth <= 0 {
+							suppressingToolJSON = false
+						}
 						fullResponse.WriteString(part.Text)
 						continue
 					}
@@ -481,6 +502,34 @@ func (p *Provider) handleFunctionCallingResponse(body []byte, spinner *ui.Spinne
 
 	fmt.Println()
 	return fullResponse.String(), nil
+}
+
+// updateToolJSONDepth はテキスト中の {} ネスト深度を追跡する（文字列リテラル内は無視）
+// SSE テキストパートが複数チャンクに分割された場合に、ツールJSON全体を抑制するために使用
+func updateToolJSONDepth(s string, depth *int, inStr *bool) {
+	escaped := false
+	for _, ch := range s {
+		if escaped {
+			escaped = false
+			continue
+		}
+		if ch == '\\' && *inStr {
+			escaped = true
+			continue
+		}
+		if ch == '"' {
+			*inStr = !*inStr
+			continue
+		}
+		if !*inStr {
+			switch ch {
+			case '{':
+				*depth++
+			case '}':
+				*depth--
+			}
+		}
+	}
 }
 
 // isToolJSONPrefix はテキストがツールJSON形式で始まるか判定

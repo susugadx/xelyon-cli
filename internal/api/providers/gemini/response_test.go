@@ -2,6 +2,7 @@ package gemini
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -883,6 +884,102 @@ func TestHandleFunctionCallingResponse_SignatureOnlyFCNoText(t *testing.T) {
 	}
 	if !strings.Contains(result, "go test") {
 		t.Errorf("result should contain command args, got %q", result)
+	}
+}
+
+// ===== updateToolJSONDepth unit tests =====
+
+func TestUpdateToolJSONDepth_SimpleObject(t *testing.T) {
+	depth := 0
+	inStr := false
+	updateToolJSONDepth(`{"tool":"read_file"}`, &depth, &inStr)
+	if depth != 0 {
+		t.Errorf("depth = %d, want 0 (balanced braces)", depth)
+	}
+	if inStr {
+		t.Error("inStr should be false after balanced JSON")
+	}
+}
+
+func TestUpdateToolJSONDepth_NestedObject(t *testing.T) {
+	depth := 0
+	inStr := false
+	updateToolJSONDepth(`{"tool":"bash","args":{"command":"ls"}}`, &depth, &inStr)
+	if depth != 0 {
+		t.Errorf("depth = %d, want 0 (balanced nested braces)", depth)
+	}
+}
+
+func TestUpdateToolJSONDepth_PartialFirstChunk(t *testing.T) {
+	// チャンク1: `{"tool":"read` → depth=1 (開いたまま)
+	depth := 0
+	inStr := false
+	updateToolJSONDepth(`{"tool":"read`, &depth, &inStr)
+	if depth != 1 {
+		t.Errorf("depth = %d, want 1 (unclosed brace)", depth)
+	}
+	if !inStr {
+		t.Error("inStr should be true (inside unclosed string)")
+	}
+}
+
+func TestUpdateToolJSONDepth_PartialSecondChunk(t *testing.T) {
+	// チャンク1 → チャンク2 で閉じる
+	depth := 1
+	inStr := true
+	updateToolJSONDepth(`_files","args":{"path":"/main.go"}}`, &depth, &inStr)
+	if depth != 0 {
+		t.Errorf("depth = %d, want 0 (closed by second chunk)", depth)
+	}
+	if inStr {
+		t.Error("inStr should be false after balanced JSON")
+	}
+}
+
+func TestUpdateToolJSONDepth_BracesInString(t *testing.T) {
+	// 文字列リテラル内の {} は深度に影響しない
+	depth := 0
+	inStr := false
+	updateToolJSONDepth(`{"content":"value with { and } inside"}`, &depth, &inStr)
+	if depth != 0 {
+		t.Errorf("depth = %d, want 0 (braces in string should be ignored)", depth)
+	}
+}
+
+func TestUpdateToolJSONDepth_EscapedQuotes(t *testing.T) {
+	// エスケープされた引用符は文字列の終端にならない
+	depth := 0
+	inStr := false
+	updateToolJSONDepth(`{"content":"say \"hello\" world"}`, &depth, &inStr)
+	if depth != 0 {
+		t.Errorf("depth = %d, want 0", depth)
+	}
+	if inStr {
+		t.Error("inStr should be false after balanced JSON with escaped quotes")
+	}
+}
+
+func TestUpdateToolJSONDepth_ThoughtSignatureChunk(t *testing.T) {
+	// thought_signature を含む巨大チャンク
+	depth := 1
+	inStr := true
+	sig := strings.Repeat("A", 10000) // 巨大な署名
+	chunk := fmt.Sprintf(`_files","args":{"path":"/file"},"thought_signature":"%s"}`, sig)
+	updateToolJSONDepth(chunk, &depth, &inStr)
+	if depth != 0 {
+		t.Errorf("depth = %d, want 0 (should close after signature)", depth)
+	}
+}
+
+func TestUpdateToolJSONDepth_EmptyString(t *testing.T) {
+	depth := 5
+	inStr := true
+	updateToolJSONDepth("", &depth, &inStr)
+	if depth != 5 {
+		t.Errorf("depth = %d, want 5 (unchanged for empty string)", depth)
+	}
+	if !inStr {
+		t.Error("inStr should remain true for empty string")
 	}
 }
 
