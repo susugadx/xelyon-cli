@@ -25,9 +25,8 @@ func (a *Agent) autoReadBack(tc *tools.ToolCall) {
 	}
 
 	// delete_file, move_file: ファイルが存在しないため読み返し不要
-	// grep_replace: 複数ファイル対象で結果にサマリーが含まれるため不要
 	switch tc.Tool {
-	case "delete_file", "move_file", "grep_replace":
+	case "delete_file", "move_file":
 		return
 	}
 

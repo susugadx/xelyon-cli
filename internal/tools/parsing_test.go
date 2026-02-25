@@ -137,13 +137,6 @@ func TestParseToolCalls_SingleTool(t *testing.T) {
 			wantLen:  1,
 			wantTool: "bash",
 		},
-		// grep_replace with regex patterns
-		{
-			name:     "grep_replace with brace pattern",
-			input:    `{"id":"call_grep","tool":"grep_replace","args":{"pattern":"func\\s+\\w+\\s*\\(","replacement":"func newName(","path":"."}}`,
-			wantLen:  1,
-			wantTool: "grep_replace",
-		},
 		// ast_grep with code pattern
 		{
 			name:     "ast_grep with struct pattern",

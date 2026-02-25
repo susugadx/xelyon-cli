@@ -367,7 +367,6 @@ func TestSpinnerMessageForTool(t *testing.T) {
 	}{
 		{"write_file", "Writing file..."},
 		{"str_replace", "Editing file..."},
-		{"grep_replace", "Editing file..."},
 		{"unknown_tool", "Preparing..."},
 		{"", "Preparing..."},
 	}

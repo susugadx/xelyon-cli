@@ -733,14 +733,14 @@ tool_confirm:
 #### `auto_approve_medium`
 - **型**: boolean
 - **デフォルト**: `false`
-- **説明**: SafetyMedium ツール（str_replace, write_file, grep_replace 等）を確認なしで実行
+- **説明**: SafetyMedium ツール（str_replace, write_file 等）を確認なしで実行
 
 **安全性レベル一覧:**
 
 | レベル | ツール例 | 説明 |
 |--------|---------|------|
 | SafetyHigh | read_file, list_dir, search_* | 読み取り専用 |
-| SafetyMedium | str_replace, write_file, grep_replace | 書き込み（リカバリ可能） |
+| SafetyMedium | str_replace, write_file | 書き込み（リカバリ可能） |
 | SafetyLow | delete_file, bash, git_push | 破壊的操作（常に確認必須） |
 
 ### プロンプトキャッシュ設定 (`prompt_cache`)

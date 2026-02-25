@@ -482,7 +482,6 @@ AIが自動で以下のツールを使用します。ユーザーが直接呼び
 | `str_replace` | 文字列置換でファイル編集（old_str優先。old_str空+start_line/end_line指定で行レンジ置換も可） | `path`, `old_str`, `new_str`, `start_line`, `end_line` |
 | `delete_file` | ファイルを削除 | `path` |
 | `list_dir` | ディレクトリ一覧取得 | `path` |
-| `grep_replace` | 複数ファイルで一括置換 | `pattern`, `replacement`, `path`, `file_pattern` |
 
 **Note**: ファイル操作（mkdir, cp, mv, diff等）は `bash` ツールで実行可能です。
 
@@ -503,8 +502,6 @@ bash: git checkout -b feature-branch
 | ツール名 | 説明 | 主な引数 |
 |---------|------|---------|
 | `web_search` | Web検索（Serper API、要APIキー） | `query` |
-| `grep_replace` | 一括正規表現置換 | `pattern`, `replacement`, `path`, `file_pattern` |
-
 **注意**: `web_search`を使用するには`SERPER_API_KEY`環境変数の設定が必要です。詳細は[config.md - Web検索（Serper API）](config.md#web検索serper-api)を参照してください。
 
 ### 開発支援

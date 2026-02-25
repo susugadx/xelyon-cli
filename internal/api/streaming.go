@@ -191,8 +191,6 @@ func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *u
 						msg = ui.SpinnerMessageForTool("write_file")
 					} else if strings.Contains(responseStr, "str_replace") {
 						msg = ui.SpinnerMessageForTool("str_replace")
-					} else if strings.Contains(responseStr, "grep_replace") {
-						msg = ui.SpinnerMessageForTool("grep_replace")
 					}
 					spinner.Start(msg)
 				}

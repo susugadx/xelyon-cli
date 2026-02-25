@@ -26,9 +26,9 @@ DeepSeek, OpenAI, Gemini, Claude, Ollama, Groq, OpenRouter, Bedrock をシーム
 **Gemini FC安全フォールバック**: Function Calling失敗時にターミナル状態を同期的にリセットしてからテキストモードにフォールバック。
 **FC rescue JSON修復**: テキストモードで抽出されたツールJSONに生制御文字（改行・タブ等）が含まれる場合、自動修復してパース成功させる。
 
-### 🛠️ 24種類の組み込みツール
+### 🛠️ 23種類の組み込みツール
 - **ファイル操作**: 読み書き、編集、削除、バックアップ復元
-- **コード検索**: grep検索、ファイル検索、一括置換（結果は非テスト→テスト順・定義優先でソート、不正regexはエラー検出）
+- **コード検索**: grep検索、ファイル検索（結果は非テスト→テスト順・定義優先でソート、不正regexはエラー検出）
 - **開発支援**: bash（git, テスト, フォーマット等すべて対応）
 - **LSP連携**: シンボル検索（定義・参照・実装）
 
@@ -36,7 +36,7 @@ DeepSeek, OpenAI, Gemini, Claude, Ollama, Groq, OpenRouter, Bedrock をシーム
 - 安全なツール（ファイル読み取り等）は自動実行
 - 危険なツール（ファイル編集、bash等）は毎回確認
 - `--auto-approve`で信頼環境向け自動承認モードも可能
-- **Read-Before-Write ガード**: `read_file` せずに `str_replace`(old_str) / `write_file` / `grep_replace` を実行しようとするとブロック（AI の盲目的な編集を防止）。`search_code` 後は結果の行範囲に対して `str_replace`(line-range) で直接編集可能
+- **Read-Before-Write ガード**: `read_file` せずに `str_replace`(old_str) / `write_file` を実行しようとするとブロック（AI の盲目的な編集を防止）。`search_code` 後は結果の行範囲に対して `str_replace`(line-range) で直接編集可能
 
 ### 📋 Plan Mode（オプショナル）
 `/plan on` で有効化するとPlan Mode経由で処理されます。

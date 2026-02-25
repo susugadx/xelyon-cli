@@ -120,23 +120,6 @@ func TestAutoReadBack_SkipsMoveFile(t *testing.T) {
 	}
 }
 
-func TestAutoReadBack_SkipsGrepReplace(t *testing.T) {
-	a := &Agent{
-		ProviderName: "Any",
-		History: []api.Message{
-			{Role: "tool", Content: "Replaced in 3 files"},
-		},
-	}
-
-	tc := &tools.ToolCall{Tool: "grep_replace", Args: map[string]string{"path": ".", "pattern": "foo"}}
-	a.autoReadBack(tc)
-
-	last := a.History[len(a.History)-1]
-	if last.Content != "Replaced in 3 files" {
-		t.Error("autoReadBack should not modify history for grep_replace")
-	}
-}
-
 func TestInjectWriteThrottleMessage_OnlyWrites(t *testing.T) {
 	a := &Agent{
 		History: []api.Message{

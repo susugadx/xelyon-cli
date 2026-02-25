@@ -4,7 +4,7 @@ import "testing"
 
 func TestIsWriteTool(t *testing.T) {
 	writeTools := []string{
-		"write_file", "str_replace", "grep_replace",
+		"write_file", "str_replace",
 		"append_file", "prepend_file",
 		"insert_after", "insert_before",
 		"delete_lines", "delete_file", "move_file",

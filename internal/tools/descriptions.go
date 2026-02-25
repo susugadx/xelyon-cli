@@ -13,9 +13,8 @@ var ToolDescriptions = map[string]string{
 	"list_dir":    "List files and directories at the specified path.",
 
 	// Search & Discovery
-	"search_code":  "Search code using ripgrep (rg) with grep fallback. Supports multiple comma-separated patterns for parallel search. Groups results by file with context lines and block annotations. Marks matched line ranges as read, enabling str_replace line-range mode (start_line/end_line) without read_file.",
-	"grep_replace": "Bulk regex find-and-replace across multiple files. Always specify path to limit scope.",
-	"web_search":   "Search the web for information using Serper API.",
+	"search_code": "Search code using ripgrep (rg) with grep fallback. Supports multiple comma-separated patterns for parallel search. Groups results by file with context lines and block annotations. Marks matched line ranges as read, enabling str_replace line-range mode (start_line/end_line) without read_file.",
+	"web_search":  "Search the web for information using Serper API.",
 
 	// Development Tools
 	"bash": "Execute a shell command. Use for git, npm, pip, make, go test, go fmt, curl, etc.",

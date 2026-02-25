@@ -220,7 +220,7 @@ Do not retry the same replacement.`, path), nil
 		b.WriteString("1) Use read_file to inspect the target area and expand old_str with more surrounding context (e.g. function signature + block).\n")
 		b.WriteString("2) If you intended a line-based edit, use delete_lines / insert_before / insert_after.\n")
 		b.WriteString("3) If you intended to replace a specific line range, set old_str to empty and provide start_line/end_line (1-indexed inclusive).\n")
-		b.WriteString("4) If you want to replace ALL occurrences, use grep_replace: {\"tool\": \"grep_replace\", \"args\": {\"pattern\": \"...\", \"replacement\": \"...\", \"path\": \"file.go\", \"file_pattern\": \"*.go\"}}\n\n")
+		b.WriteString("4) If you want to replace ALL occurrences, use str_replace batch mode: {\"tool\": \"str_replace\", \"args\": {\"path\": \"file.go\", \"edits\": \"[{\\\"old_str\\\":\\\"...\\\",\\\"new_str\\\":\\\"...\\\"},...]\"}}\n\n")
 
 		previewLines := common.Min(50, len(lines))
 		preview := strings.Join(lines[:previewLines], "\n")

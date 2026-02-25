@@ -4,7 +4,10 @@ import (
 	"fmt"
 
 	"github.com/susugadx/xelyon-cli/internal/api/providers/serper"
+	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
+
+var green = common.Green
 
 // ExecuteWebSearch executes web search using Serper API (with caching)
 func ExecuteWebSearch(query string) string {
