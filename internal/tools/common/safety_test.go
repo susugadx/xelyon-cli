@@ -29,6 +29,11 @@ func TestGetToolSafety(t *testing.T) {
 			want:     SafetyLow,
 		},
 		{
+			name:     "web_search is SafetyMedium",
+			toolName: "web_search",
+			want:     SafetyMedium,
+		},
+		{
 			name:     "unknown tool defaults to SafetyMedium",
 			toolName: "unknown_tool",
 			want:     SafetyMedium,
@@ -71,22 +76,22 @@ func TestIsAutoApprovable(t *testing.T) {
 			want:        true,
 		},
 		{
-			name:        "SafetyLow tool with auto-approve (should not approve)",
+			name:        "SafetyLow tool with auto-approve (should approve)",
 			toolName:    "delete_file",
 			autoApprove: true,
-			want:        false,
+			want:        true,
 		},
 		{
-			name:        "bash with auto-approve (should not approve)",
+			name:        "bash with auto-approve (should approve)",
 			toolName:    "bash",
 			autoApprove: true,
-			want:        false,
+			want:        true,
 		},
 		{
-			name:        "git_push with auto-approve (should not approve)",
+			name:        "git_push with auto-approve (should approve)",
 			toolName:    "git_push",
 			autoApprove: true,
-			want:        false,
+			want:        true,
 		},
 	}
 

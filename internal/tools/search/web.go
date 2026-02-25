@@ -15,6 +15,16 @@ func ExecuteWebSearch(query string) string {
 		return "Error: query is required"
 	}
 
+	// 確認プロンプト（--auto-approve / config で自動承認可能）
+	dec := common.ConfirmWithAutoApproveDecision("web_search",
+		fmt.Sprintf("Execute web search: %s", query))
+	switch dec.Action {
+	case common.ConfirmNo:
+		return "User rejected web search"
+	case common.ConfirmComment:
+		return fmt.Sprintf("User feedback: %s", dec.Comment)
+	}
+
 	result, cached, err := serper.WebSearchWithCache(query)
 	if err != nil {
 		return fmt.Sprintf("Error: %v", err)

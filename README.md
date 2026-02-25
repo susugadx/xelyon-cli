@@ -34,8 +34,8 @@ DeepSeek, OpenAI, Gemini, Claude, Ollama, Groq, OpenRouter, Bedrock をシーム
 
 ### 📋 確認ベースの安全設計
 - 安全なツール（ファイル読み取り等）は自動実行
-- 危険なツール（ファイル編集、bash等）は毎回確認
-- `--auto-approve`で信頼環境向け自動承認モードも可能
+- 危険なツール（ファイル編集、bash、Web検索等）は毎回確認
+- `--auto-approve`で信頼環境向け全ツール自動承認（SafetyLow含む）
 - **Read-Before-Write ガード**: `read_file` せずに `str_replace`(old_str) / `write_file` を実行しようとするとブロック（AI の盲目的な編集を防止）。`search_code` 後は結果の行範囲に対して `str_replace`(line-range) で直接編集可能
 
 ### 📋 Plan Mode（オプショナル）
@@ -212,8 +212,8 @@ tool_confirm:
 
 | 設定 | 対象ツール | デフォルト |
 |------|-----------|-----------|
-| `auto_approve_safe` | read_file, list_dir, search_* 等 | true |
-| `auto_approve_medium` | str_replace, write_file 等 | false |
+| `auto_approve_safe` | read_file, list_dir, search_code 等 | true |
+| `auto_approve_medium` | str_replace, write_file, web_search 等 | false |
 
 ```bash
 # 全ツール自動承認（信頼できる環境向け、SafetyLow含む）
