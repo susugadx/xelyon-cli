@@ -57,6 +57,15 @@ func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, s
 	idleTimer := time.NewTimer(idleTimeout)
 	defer idleTimer.Stop()
 
+	// thinking タイマー: text/FC を受信せず thinking のみが続く場合のタイムアウト
+	thinkingTimeout := time.Duration(cfg.Streaming.ThinkingTimeoutSeconds) * time.Second
+	if thinkingTimeout <= 0 {
+		thinkingTimeout = 300 * time.Second // フォールバック
+	}
+	thinkingTimer := time.NewTimer(thinkingTimeout)
+	defer thinkingTimer.Stop()
+	hadOutput := false // text/FC を1つでも受信したら true
+
 	var scanErr error
 
 loop:
@@ -77,6 +86,15 @@ loop:
 				spinner.Stop()
 			}
 			return fullResponse.String(), fmt.Errorf("idle timeout: no data received for %v", idleTimeout)
+
+		case <-thinkingTimer.C:
+			// thinking のみが続き text/FC が来ない場合のタイムアウト
+			if !hadOutput {
+				if spinner != nil {
+					spinner.Stop()
+				}
+				return fullResponse.String(), fmt.Errorf("thinking timeout: no text or function call received for %v (thinking data was received but no actionable output)", thinkingTimeout)
+			}
 
 		case result, ok := <-lineCh:
 			if !ok {
@@ -159,6 +177,10 @@ loop:
 					}
 					// FunctionCall が同時にある場合は FC も収集してから continue
 					if part.FunctionCall != nil {
+						if !hadOutput {
+							hadOutput = true
+							thinkingTimer.Stop()
+						}
 						if headerPrinted && spinner != nil && !spinner.IsActive() {
 							spinner.Start(ui.SpinnerMessageForTool(part.FunctionCall.Name))
 						}
@@ -169,6 +191,11 @@ loop:
 				}
 
 				if part.Text != "" {
+					// text を受信 → thinking タイマー停止
+					if !hadOutput {
+						hadOutput = true
+						thinkingTimer.Stop()
+					}
 					// ツールJSON抑制中: 後続チャンクも非表示にする（チャンク分割対応）
 					if suppressingToolJSON {
 						fullResponse.WriteString(part.Text)
@@ -223,6 +250,11 @@ loop:
 				}
 
 				if part.FunctionCall != nil {
+					// FC を受信 → thinking タイマー停止
+					if !hadOutput {
+						hadOutput = true
+						thinkingTimer.Stop()
+					}
 					// テキスト表示後にFCが来た場合、ツール準備中スピナーを再開
 					if headerPrinted && spinner != nil && !spinner.IsActive() {
 						spinner.Start(ui.SpinnerMessageForTool(part.FunctionCall.Name))

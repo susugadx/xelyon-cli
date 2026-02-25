@@ -114,10 +114,11 @@ func DefaultConfig() *Config {
 			TimeoutSeconds: 60,
 		},
 		Streaming: StreamingConfig{
-			IdleTimeoutSeconds: 3600, // xhigh thinking 対応（1時間）
-			ShowFileInfo:       true,
-			ShowSearchProgress: true,
-			StreamBashOutput:   true,
+			IdleTimeoutSeconds:     3600, // xhigh thinking 対応（1時間）
+			ThinkingTimeoutSeconds: 300,  // thinking専用: 5分間 text/FC が来なければタイムアウト
+			ShowFileInfo:           true,
+			ShowSearchProgress:     true,
+			StreamBashOutput:       true,
 		},
 		Bash: BashConfig{
 			SafetyLevel:     "permissive", // 確認出るので安全、利便性向上

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 // ===== handleFunctionCallingResponse unit tests =====
@@ -980,6 +981,19 @@ func TestUpdateToolJSONDepth_EmptyString(t *testing.T) {
 	}
 	if !inStr {
 		t.Error("inStr should remain true for empty string")
+	}
+}
+
+// ===== ThinkingTimeout config tests =====
+
+func TestThinkingTimeoutDefaults(t *testing.T) {
+	// config のデフォルト値が正しいことを確認
+	cfg := config.DefaultConfig()
+	if cfg.Streaming.ThinkingTimeoutSeconds != 300 {
+		t.Errorf("ThinkingTimeoutSeconds default = %d, want 300", cfg.Streaming.ThinkingTimeoutSeconds)
+	}
+	if cfg.Streaming.IdleTimeoutSeconds != 3600 {
+		t.Errorf("IdleTimeoutSeconds default = %d, want 3600", cfg.Streaming.IdleTimeoutSeconds)
 	}
 }
 

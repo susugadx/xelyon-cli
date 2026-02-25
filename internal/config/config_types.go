@@ -95,10 +95,11 @@ type PasteConfig struct {
 
 // StreamingConfig はストリーミングレスポンスの設定
 type StreamingConfig struct {
-	IdleTimeoutSeconds int  `yaml:"idle_timeout_seconds"` // アイドルタイムアウト秒（デフォルト30）
-	ShowFileInfo       bool `yaml:"show_file_info"`       // ファイル読み込み時にサイズ表示（デフォルト: true）
-	ShowSearchProgress bool `yaml:"show_search_progress"` // 検索中に進捗表示（デフォルト: true）
-	StreamBashOutput   bool `yaml:"stream_bash_output"`   // bashコマンド出力をストリーミング（デフォルト: true）
+	IdleTimeoutSeconds     int  `yaml:"idle_timeout_seconds"`     // アイドルタイムアウト秒（デフォルト3600）
+	ThinkingTimeoutSeconds int  `yaml:"thinking_timeout_seconds"` // thinking専用タイムアウト秒（text/FC未受信時、デフォルト300）
+	ShowFileInfo           bool `yaml:"show_file_info"`           // ファイル読み込み時にサイズ表示（デフォルト: true）
+	ShowSearchProgress     bool `yaml:"show_search_progress"`     // 検索中に進捗表示（デフォルト: true）
+	StreamBashOutput       bool `yaml:"stream_bash_output"`       // bashコマンド出力をストリーミング（デフォルト: true）
 }
 
 // BashConfig はbashツールの設定
