@@ -361,6 +361,28 @@ func TestExecuteStrReplace_GuardAllowsAfterRead(t *testing.T) {
 
 // ===== Batch Edits Tests =====
 
+func TestExecuteBatchEdits_NormalizedWhitespaceFallback(t *testing.T) {
+	setupTestMocks(t)
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test.txt")
+	originalContent := "func main() {\n\tfmt.Println(\"hello\")\n}"
+	testutil.CreateTempFile(t, tmpDir, "test.txt", originalContent)
+	absPath, _ := filepath.Abs(testFile)
+	tools.GlobalReadTracker.MarkRead(absPath)
+
+	// Indentation is intentionally different to trigger fallback
+	editsJSON := `[{"old_str":"func main() {\n    fmt.Println(\"hello\")\n}","new_str":"func main() {\n\tfmt.Println(\"world\")\n}"}]`
+	output, err := executeBatchEdits(testFile, editsJSON)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(output, "Successfully applied 1 edits") && !strings.Contains(output, "Summary") {
+		t.Errorf("expected batch success message, got: %s", output)
+	}
+	// Ensure the replacement correctly handled the bounds without leaving extra characters (off-by-one fix)
+	testutil.AssertFileContent(t, testFile, "func main() {\n\tfmt.Println(\"world\")\n}")
+}
+
 func TestExecuteBatchEdits_Success(t *testing.T) {
 	setupTestMocks(t)
 	tmpDir := t.TempDir()

@@ -470,10 +470,10 @@ func executeBatchEdits(path, editsJSON string) (string, error) {
 	content := oldContent
 	for i, edit := range edits {
 		if edit.OldStr == "" {
-			return fmt.Sprintf("Error: edits[%d].old_str is empty", i), nil
+			return fmt.Sprintf("Error: edits[%d].old_str is empty in %s", i, path), nil
 		}
 		if edit.OldStr == edit.NewStr {
-			return fmt.Sprintf("Error: edits[%d] old_str and new_str are identical (no change needed)", i), nil
+			return fmt.Sprintf("Error: edits[%d] old_str and new_str are identical (no change needed) in %s", i, path), nil
 		}
 
 		count := strings.Count(content, edit.OldStr)
@@ -481,14 +481,15 @@ func executeBatchEdits(path, editsJSON string) (string, error) {
 		case count == 1:
 			content = strings.Replace(content, edit.OldStr, edit.NewStr, 1)
 		case count > 1:
-			return fmt.Sprintf("Error: edits[%d].old_str appears %d times (must be unique). Batch aborted, no changes written.", i, count), nil
+			return fmt.Sprintf("Error: edits[%d].old_str appears %d times in %s (must be unique). Batch aborted, no changes written.", i, count, path), nil
 		default:
 			// exact match なし → normalized whitespace fallback
+			common.Yellow.Printf("⚠️  edits[%d]: Exact match failed, trying normalized whitespace matching...\n", i)
 			found, startIdx, endIdx := common.FindWithNormalizedWhitespace(content, edit.OldStr)
 			if !found {
-				return fmt.Sprintf("Error: edits[%d].old_str not found (tried exact and normalized matching). Batch aborted, no changes written.", i), nil
+				return fmt.Sprintf("Error: edits[%d].old_str not found in %s (tried exact and normalized matching). Batch aborted, no changes written.", i, path), nil
 			}
-			content = content[:startIdx] + edit.NewStr + content[endIdx:]
+			content = content[:startIdx] + edit.NewStr + content[endIdx+1:]
 		}
 	}
 
@@ -513,6 +514,12 @@ func executeBatchEdits(path, editsJSON string) (string, error) {
 		common.Red.Printf("   • Net: %d lines\n", lineDiff)
 	} else {
 		fmt.Printf("   • Net: 0 lines (same size)\n")
+	}
+
+	// 大規模変更の警告
+	if oldLines > 100 || newLines > 100 || lineDiff > 100 || lineDiff < -100 {
+		common.Red.Println("\n⚠️  WARNING: LARGE CHANGE DETECTED")
+		common.Red.Println("   This is a significant modification. Please review the diff carefully.")
 	}
 
 	cfg := config.GetGlobalConfig()
