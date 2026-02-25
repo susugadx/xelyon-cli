@@ -8,7 +8,7 @@ var ToolDescriptions = map[string]string{
 	"read_file":   "Read file contents. Use to examine source code, config, or any text file. Supports optional line range.",
 	"read_files":  "Read multiple files in one call (max 10). Each path supports optional line range: \"path\" or \"path:start-end\". More efficient than multiple read_file calls when you need 2+ files.",
 	"write_file":  "Create or overwrite a file. Use str_replace for partial edits to existing files.",
-	"str_replace": "Edit existing file by replacing a specific string. You MUST read_file first for old_str mode. Line-range mode (old_str empty + start_line/end_line): can edit lines covered by search_code results without read_file. Batch mode: pass edits=[{old_str,new_str},...] for multiple replacements in one call.",
+	"str_replace": "Edit existing file. PREFERRED: Line-range mode (old_str empty + start_line/end_line) after search_code — no read_file needed. FALLBACK: old_str mode requires read_file first. Batch mode: pass edits=[{old_str,new_str},...] for multiple replacements in one call.",
 	"delete_file": "Delete a file permanently.",
 	"list_dir":    "List files and directories at the specified path.",
 

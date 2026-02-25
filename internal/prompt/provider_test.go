@@ -10,8 +10,8 @@ func TestGetProviderPrefix_Gemini(t *testing.T) {
 	if prefix == "" {
 		t.Fatal("expected non-empty prefix for gemini")
 	}
-	if !strings.Contains(prefix, "read_file BEFORE str_replace") {
-		t.Error("gemini prefix should contain read_file rule")
+	if !strings.Contains(prefix, "search_code → str_replace(line-range) is PREFERRED") {
+		t.Error("gemini prefix should contain search_code → str_replace(line-range) rule")
 	}
 	if !strings.Contains(prefix, "search_code") {
 		t.Error("gemini prefix should contain search_code rule for reference checking")
@@ -30,8 +30,8 @@ func TestGetProviderPrefix_DeepSeek(t *testing.T) {
 	if prefix == "" {
 		t.Fatal("expected non-empty prefix for deepseek")
 	}
-	if !strings.Contains(prefix, "read_file BEFORE str_replace") {
-		t.Error("deepseek prefix should contain read_file rule")
+	if !strings.Contains(prefix, "search_code → str_replace(line-range) is PREFERRED") {
+		t.Error("deepseek prefix should contain search_code → str_replace(line-range) rule")
 	}
 	if !strings.Contains(prefix, "search_code") {
 		t.Error("deepseek prefix should contain search_code rule")
@@ -68,7 +68,7 @@ func TestCommonRulesBlock(t *testing.T) {
 	deepseek := GetProviderPrefix("deepseek")
 
 	commonChecks := []string{
-		"read_file BEFORE str_replace",
+		"search_code → str_replace(line-range) is PREFERRED",
 		"search_code",
 		"WAIT for output",
 		"Follow project rules in Project Context",
@@ -130,7 +130,7 @@ func TestBuildProviderSystemPrompt_Gemini(t *testing.T) {
 	if !strings.HasSuffix(result, base) {
 		t.Error("gemini result should end with base prompt")
 	}
-	if !strings.Contains(result, "read_file BEFORE str_replace") {
+	if !strings.Contains(result, "search_code → str_replace(line-range) is PREFERRED") {
 		t.Error("gemini result should contain the critical rule")
 	}
 	if !strings.Contains(result, "WAIT for output") {
@@ -154,8 +154,8 @@ func TestBuildProviderSystemPrompt_DeepSeek(t *testing.T) {
 	if !strings.HasSuffix(result, base) {
 		t.Error("deepseek result should end with base prompt")
 	}
-	if !strings.Contains(result, "read_file BEFORE str_replace") {
-		t.Error("deepseek result should contain read_file rule")
+	if !strings.Contains(result, "search_code → str_replace(line-range) is PREFERRED") {
+		t.Error("deepseek result should contain search_code → str_replace(line-range) rule")
 	}
 	if !strings.Contains(result, "ALWAYS use tool calls for file operations") {
 		t.Error("deepseek result should contain tool calls rule")

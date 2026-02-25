@@ -4,7 +4,7 @@ import "strings"
 
 // commonRulesBlock は複数プロバイダーで共通する重要ルール
 // Gemini・DeepSeek 等、指示を無視しやすいモデルに冒頭で強制注入する
-const commonRulesBlock = `1. **read_file BEFORE str_replace (old_str mode)** - if you haven't read the file, you CANNOT edit it. Exception: line-range mode (start_line/end_line) works after search_code for matched lines
+const commonRulesBlock = `1. **search_code → str_replace(line-range) is PREFERRED** — search_code marks matched lines as read, no read_file needed. Use read_file → str_replace(old_str) only when line-range is not applicable
 2. **Before changing/deleting any function or type**: search_code to check ALL usages first — NOT bash (grep/rg)
 3. **After bash verification (test/build), WAIT for output** - do NOT declare completion before seeing results
 4. **Follow project rules in Project Context** - they are LAW - override all other guidelines
@@ -27,7 +27,8 @@ var providerPrefixes = map[string]string{
 		"7. **When function calling is enabled, ALWAYS use tool calls for file operations** - do NOT output raw JSON or describe actions in plain text\n" +
 		"8. **Fix ALL errors completely** - NEVER leave errors with excuses like \"due to time constraints\" or \"for brevity\"\n" +
 		"9. **After str_replace, if unused imports appear, remove them IMMEDIATELY** - do NOT proceed with unused import errors\n" +
-		"10. **You are already in the project root directory. Do NOT prefix commands with `cd /path && `** - just run commands directly (e.g. `grep -n 'pattern' file.go`, NOT `cd /home/user/project && grep -n 'pattern' file.go`)\n\n",
+		"10. **NEVER output file contents or explain code between read_file and str_replace — call str_replace IMMEDIATELY after reading** - no commentary, no summaries, just the tool call\n" +
+		"11. **You are already in the project root directory. Do NOT prefix commands with `cd /path && `** - just run commands directly (e.g. `grep -n 'pattern' file.go`, NOT `cd /home/user/project && grep -n 'pattern' file.go`)\n\n",
 	"groq": "## ⚠️ ABSOLUTE RULES (NEVER SKIP)\n" + commonRulesBlock +
 		"7. **Tool calls MUST be raw JSON** - NEVER wrap in markdown code blocks or use XML like `<tool_name><param>value</param></tool_name>`\n" +
 		"8. **ALWAYS respond in the same language as the user's message** - if the user writes in Japanese, respond in Japanese\n\n",
