@@ -263,6 +263,11 @@ func DefaultConfig() *Config {
 			Timeout:      60,  // 60秒タイムアウト
 			MaxRetry:     3,   // フック失敗時の最大リトライ回数
 		},
+		Embedding: EmbeddingConfig{
+			Enabled: true,
+			Model:   "qwen3-embedding:0.6b",
+			BaseURL: "http://localhost:11434",
+		},
 	}
 }
 
@@ -386,6 +391,13 @@ func applyDefaults(cfg *Config) {
 	// Hooks: Timeout が 0 の場合はデフォルト適用
 	if cfg.Hooks.Timeout == 0 {
 		cfg.Hooks.Timeout = defaults.Hooks.Timeout
+	}
+	// Embedding: Model または BaseURL が空の場合はデフォルト適用
+	if cfg.Embedding.Model == "" {
+		cfg.Embedding.Model = defaults.Embedding.Model
+	}
+	if cfg.Embedding.BaseURL == "" {
+		cfg.Embedding.BaseURL = defaults.Embedding.BaseURL
 	}
 }
 
