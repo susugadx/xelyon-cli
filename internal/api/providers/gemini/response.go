@@ -8,8 +8,10 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -23,122 +25,187 @@ func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, s
 	var headerPrinted bool            // テキスト応答時のAIヘッダー表示済みフラグ
 	var usage *GeminiUsageMetadata
 
-	scanner := bufio.NewScanner(resp.Body)
+	// goroutine + channel でスキャン（ctx キャンセル・idle timeout 対応）
+	type scanResult struct {
+		line string
+		err  error
+		done bool
+	}
+	lineCh := make(chan scanResult)
 
-	for scanner.Scan() {
-		line := scanner.Text()
-		if !strings.HasPrefix(line, "data: ") {
-			continue
+	go func() {
+		defer close(lineCh)
+		scanner := bufio.NewScanner(resp.Body)
+		for scanner.Scan() {
+			lineCh <- scanResult{line: scanner.Text()}
 		}
+		if err := scanner.Err(); err != nil {
+			lineCh <- scanResult{err: err, done: true}
+		} else {
+			lineCh <- scanResult{done: true}
+		}
+	}()
 
-		data := strings.TrimPrefix(line, "data: ")
-		var chunk GeminiFunctionResponse
-		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
-			if debug {
-				fmt.Fprintf(os.Stderr, "[DEBUG Gemini SSE] Failed to unmarshal chunk: %v\n", err)
+	cfg := config.GetGlobalConfig()
+	idleTimeout := time.Duration(cfg.Streaming.IdleTimeoutSeconds) * time.Second
+	idleTimer := time.NewTimer(idleTimeout)
+	defer idleTimer.Stop()
+
+	var scanErr error
+
+loop:
+	for {
+		select {
+		case <-ctx.Done():
+			if spinner != nil {
+				spinner.Stop()
 			}
-			continue
-		}
+			partial := fullResponse.String()
+			if partial != "" {
+				return partial, nil
+			}
+			return "", ctx.Err()
 
-		if chunk.UsageMetadata != nil {
-			usage = chunk.UsageMetadata
-		}
+		case <-idleTimer.C:
+			if spinner != nil {
+				spinner.Stop()
+			}
+			return fullResponse.String(), fmt.Errorf("idle timeout: no data received for %v", idleTimeout)
 
-		if len(chunk.Candidates) == 0 {
-			continue
-		}
+		case result, ok := <-lineCh:
+			if !ok {
+				// チャンネルクローズ（予期しない終了）
+				break loop
+			}
 
-		for _, part := range chunk.Candidates[0].Content.Parts {
-			// Gemini 3: thought パートを収集（表示はしないが次リクエストに返す必要がある）
-			if part.Thought {
-				tp := map[string]any{"thought": true}
-				if part.Text != "" {
-					tp["text"] = part.Text
+			// アイドルタイマーをリセット
+			if !idleTimer.Stop() {
+				select {
+				case <-idleTimer.C:
+				default:
 				}
-				if part.ThoughtSignature != "" {
-					tp["thought_signature"] = part.ThoughtSignature
-				}
-				thoughtParts = append(thoughtParts, tp)
+			}
+			idleTimer.Reset(idleTimeout)
+
+			if result.done {
+				scanErr = result.err
+				break loop
+			}
+
+			line := result.line
+			if !strings.HasPrefix(line, "data: ") {
+				continue
+			}
+
+			data := strings.TrimPrefix(line, "data: ")
+			var chunk GeminiFunctionResponse
+			if err := json.Unmarshal([]byte(data), &chunk); err != nil {
 				if debug {
-					sig := part.ThoughtSignature
-					if len(sig) > 20 {
-						sig = sig[:20] + "..."
-					}
-					fmt.Fprintf(os.Stderr, "[DEBUG Gemini SSE] Collected thought part (text=%d chars, sig=%q)\n", len(part.Text), sig)
+					fmt.Fprintf(os.Stderr, "[DEBUG Gemini SSE] Failed to unmarshal chunk: %v\n", err)
 				}
 				continue
 			}
 
-			// thoughtSignature を含むパート（thought=false）を収集し、テキスト出力を抑制
-			// Gemini 3.1 Pro: signature 付きパートの Text が生出力に漏れるのを防ぐ
-			// FunctionCall が同時に存在する場合も、テキスト出力は抑制しつつ FC は収集する
-			if part.ThoughtSignature != "" {
-				tp := map[string]any{"thought_signature": part.ThoughtSignature}
-				if part.Text != "" {
-					tp["text"] = part.Text
-				}
-				thoughtParts = append(thoughtParts, tp)
-				if debug {
-					sig := part.ThoughtSignature
-					if len(sig) > 20 {
-						sig = sig[:20] + "..."
+			if chunk.UsageMetadata != nil {
+				usage = chunk.UsageMetadata
+			}
+
+			if len(chunk.Candidates) == 0 {
+				continue
+			}
+
+			for _, part := range chunk.Candidates[0].Content.Parts {
+				// Gemini 3: thought パートを収集（表示はしないが次リクエストに返す必要がある）
+				if part.Thought {
+					tp := map[string]any{"thought": true}
+					if part.Text != "" {
+						tp["text"] = part.Text
 					}
-					fmt.Fprintf(os.Stderr, "[DEBUG Gemini SSE] Collected signature part (text=%d chars, sig=%q, hasFC=%v)\n", len(part.Text), sig, part.FunctionCall != nil)
+					if part.ThoughtSignature != "" {
+						tp["thought_signature"] = part.ThoughtSignature
+					}
+					thoughtParts = append(thoughtParts, tp)
+					if debug {
+						sig := part.ThoughtSignature
+						if len(sig) > 20 {
+							sig = sig[:20] + "..."
+						}
+						fmt.Fprintf(os.Stderr, "[DEBUG Gemini SSE] Collected thought part (text=%d chars, sig=%q)\n", len(part.Text), sig)
+					}
+					continue
 				}
-				// FunctionCall が同時にある場合は FC も収集してから continue
+
+				// thoughtSignature を含むパート（thought=false）を収集し、テキスト出力を抑制
+				// Gemini 3.1 Pro: signature 付きパートの Text が生出力に漏れるのを防ぐ
+				// FunctionCall が同時に存在する場合も、テキスト出力は抑制しつつ FC は収集する
+				if part.ThoughtSignature != "" {
+					tp := map[string]any{"thought_signature": part.ThoughtSignature}
+					if part.Text != "" {
+						tp["text"] = part.Text
+					}
+					thoughtParts = append(thoughtParts, tp)
+					if debug {
+						sig := part.ThoughtSignature
+						if len(sig) > 20 {
+							sig = sig[:20] + "..."
+						}
+						fmt.Fprintf(os.Stderr, "[DEBUG Gemini SSE] Collected signature part (text=%d chars, sig=%q, hasFC=%v)\n", len(part.Text), sig, part.FunctionCall != nil)
+					}
+					// FunctionCall が同時にある場合は FC も収集してから continue
+					if part.FunctionCall != nil {
+						if headerPrinted && spinner != nil && !spinner.IsActive() {
+							spinner.Start(ui.SpinnerMessageForTool(part.FunctionCall.Name))
+						}
+						part.FunctionCall.ThoughtSignature = part.ThoughtSignature
+						functionCalls = append(functionCalls, part.FunctionCall)
+					}
+					continue
+				}
+
+				if part.Text != "" {
+					trimmed := strings.TrimSpace(part.Text)
+					// ツールJSONプレフィックスの場合は表示せず fullResponse に記録のみ
+					if isToolJSONPrefix(trimmed) {
+						fullResponse.WriteString(part.Text)
+						continue
+					}
+					// コードブロック内のツールJSON救済（ループ内で即時分離）
+					extracted, remaining := extractCodeBlockToolJSON(part.Text)
+					if len(extracted) > 0 {
+						rescuedToolJSONs = append(rescuedToolJSONs, extracted...)
+						if strings.TrimSpace(remaining) != "" {
+							if !headerPrinted {
+								if spinner != nil {
+									spinner.Stop()
+								}
+								api.PrintAIHeader()
+								headerPrinted = true
+							}
+							fmt.Print(remaining)
+						}
+						fullResponse.WriteString(remaining)
+						continue
+					}
+					// 通常テキスト: 最初の表示可能コンテンツでスピナー停止
+					if !headerPrinted {
+						if spinner != nil {
+							spinner.Stop()
+						}
+						api.PrintAIHeader()
+						headerPrinted = true
+					}
+					fmt.Print(part.Text)
+					fullResponse.WriteString(part.Text)
+				}
+
 				if part.FunctionCall != nil {
+					// テキスト表示後にFCが来た場合、ツール準備中スピナーを再開
 					if headerPrinted && spinner != nil && !spinner.IsActive() {
 						spinner.Start(ui.SpinnerMessageForTool(part.FunctionCall.Name))
 					}
 					part.FunctionCall.ThoughtSignature = part.ThoughtSignature
 					functionCalls = append(functionCalls, part.FunctionCall)
 				}
-				continue
-			}
-
-			if part.Text != "" {
-				trimmed := strings.TrimSpace(part.Text)
-				// ツールJSONプレフィックスの場合は表示せず fullResponse に記録のみ
-				if isToolJSONPrefix(trimmed) {
-					fullResponse.WriteString(part.Text)
-					continue
-				}
-				// コードブロック内のツールJSON救済（ループ内で即時分離）
-				extracted, remaining := extractCodeBlockToolJSON(part.Text)
-				if len(extracted) > 0 {
-					rescuedToolJSONs = append(rescuedToolJSONs, extracted...)
-					if strings.TrimSpace(remaining) != "" {
-						if !headerPrinted {
-							if spinner != nil {
-								spinner.Stop()
-							}
-							api.PrintAIHeader()
-							headerPrinted = true
-						}
-						fmt.Print(remaining)
-					}
-					fullResponse.WriteString(remaining)
-					continue
-				}
-				// 通常テキスト: 最初の表示可能コンテンツでスピナー停止
-				if !headerPrinted {
-					if spinner != nil {
-						spinner.Stop()
-					}
-					api.PrintAIHeader()
-					headerPrinted = true
-				}
-				fmt.Print(part.Text)
-				fullResponse.WriteString(part.Text)
-			}
-
-			if part.FunctionCall != nil {
-				// テキスト表示後にFCが来た場合、ツール準備中スピナーを再開
-				if headerPrinted && spinner != nil && !spinner.IsActive() {
-					spinner.Start(ui.SpinnerMessageForTool(part.FunctionCall.Name))
-				}
-				part.FunctionCall.ThoughtSignature = part.ThoughtSignature
-				functionCalls = append(functionCalls, part.FunctionCall)
 			}
 		}
 	}
@@ -156,8 +223,8 @@ func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, s
 		spinner.Stop()
 	}
 
-	if err := scanner.Err(); err != nil {
-		return "", fmt.Errorf("SSE scan error: %w", err)
+	if scanErr != nil {
+		return "", fmt.Errorf("SSE scan error: %w", scanErr)
 	}
 
 	// FC が空の場合、テキストから救済したツールJSONを使用
