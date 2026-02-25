@@ -72,6 +72,7 @@ func TestCommonRulesBlock(t *testing.T) {
 		"search_code",
 		"WAIT for output",
 		"Follow project rules in Project Context",
+		"str_replace batch mode",
 	}
 	for _, check := range commonChecks {
 		if !strings.Contains(gemini, check) {
