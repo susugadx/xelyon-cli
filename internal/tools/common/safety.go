@@ -30,10 +30,6 @@ var ToolSafetyLevels = map[string]ToolSafety{
 	// SafetyMedium: 書き込み操作（リカバリ可能）
 	"write_file":     SafetyMedium,
 	"str_replace":    SafetyMedium,
-	"append_file":    SafetyMedium,
-	"prepend_file":   SafetyMedium,
-	"insert_after":   SafetyMedium,
-	"insert_before":  SafetyMedium,
 	"copy_file":      SafetyMedium,
 	"create_dir":     SafetyMedium,
 	"git_add":        SafetyMedium,
@@ -41,8 +37,6 @@ var ToolSafetyLevels = map[string]ToolSafety{
 
 	// SafetyLow: 破壊的操作（常に確認必須）
 	"delete_file":    SafetyLow,
-	"delete_lines":   SafetyLow,
-	"move_file":      SafetyLow,
 	"git_push":       SafetyLow,
 	"git_branch":     SafetyLow,
 	"git_stash":      SafetyLow,

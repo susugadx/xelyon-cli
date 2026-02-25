@@ -14,8 +14,6 @@ func TestGetToolIcon(t *testing.T) {
 		{"write_file", "📝"},
 		{"str_replace", "✏️"},
 		{"delete_file", "🗑️"},
-		{"delete_lines", "✂️"},
-		{"move_file", "📦"},
 		{"copy_file", "📋"},
 		{"list_dir", "📁"},
 
@@ -33,10 +31,6 @@ func TestGetToolIcon(t *testing.T) {
 
 		// Web
 		{"web_search", "🌐"},
-
-		// Insert operations
-		{"insert_after", "⬇️"},
-		{"insert_before", "⬆️"},
 
 		// Unknown tool should return default icon
 		{"unknown_tool", "🔧"},

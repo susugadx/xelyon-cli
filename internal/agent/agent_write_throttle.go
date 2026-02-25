@@ -24,9 +24,8 @@ func (a *Agent) autoReadBack(tc *tools.ToolCall) {
 		return
 	}
 
-	// delete_file, move_file: ファイルが存在しないため読み返し不要
-	switch tc.Tool {
-	case "delete_file", "move_file":
+	// delete_file: ファイルが存在しないため読み返し不要
+	if tc.Tool == "delete_file" {
 		return
 	}
 

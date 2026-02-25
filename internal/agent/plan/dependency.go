@@ -50,12 +50,6 @@ var writeTools = map[string]bool{
 	"write_file":    true,
 	"str_replace":   true,
 	"delete_file":   true,
-	"append_file":   true,
-	"prepend_file":  true,
-	"insert_after":  true,
-	"insert_before": true,
-	"delete_lines":  true,
-	"move_file":     true,
 	"copy_file":     true,
 	"create_dir":    true,
 	"lsp_rename":    true, // 実際にはプレビューのみだが、将来の実装に備えてwrite扱い

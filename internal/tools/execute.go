@@ -34,21 +34,11 @@ func printToolArgs(tc *ToolCall) {
 				fmt.Printf("   %s: %s\n", k, truncate(v, 60))
 			}
 		}
-	case "insert_after", "insert_before":
-		fmt.Printf("   File: %s\n", tc.Args["path"])
-		fmt.Printf("   Pattern: %s\n", truncate(tc.Args["pattern"], 60))
-		fmt.Printf("   Content: %s\n", truncate(tc.Args["content"], 60))
 	case "copy_file":
 		fmt.Printf("   Source: %s\n", tc.Args["src"])
 		fmt.Printf("   Destination: %s\n", tc.Args["dest"])
-	case "delete_lines":
-		fmt.Printf("   File: %s\n", tc.Args["path"])
-		fmt.Printf("   Lines: %s-%s\n", tc.Args["start_line"], tc.Args["end_line"])
 	case "delete_file":
 		fmt.Printf("   File: %s\n", tc.Args["path"])
-	case "move_file":
-		fmt.Printf("   Source: %s\n", tc.Args["src"])
-		fmt.Printf("   Destination: %s\n", tc.Args["dest"])
 	case "lint":
 		path := tc.Args["path"]
 		if path == "" {
@@ -120,8 +110,7 @@ func invalidateToolCache(tc *ToolCall) {
 
 	switch tc.Tool {
 	// ファイル内容を変更するツール → ファイルキャッシュ＆検索キャッシュ無効化
-	case "write_file", "str_replace", "append_file", "prepend_file",
-		"insert_after", "insert_before", "delete_lines", "format", "lint":
+	case "write_file", "str_replace", "format", "lint":
 		if path := tc.Args["path"]; path != "" {
 			if absPath, err := filepath.Abs(path); err == nil {
 				GlobalToolCache.InvalidateFile(absPath)
@@ -129,22 +118,10 @@ func invalidateToolCache(tc *ToolCall) {
 		}
 		GlobalToolCache.ClearSearchCache()
 
-	// ファイルを削除/移動するツール → ファイル＆ディレクトリ＆検索キャッシュ無効化
-	case "delete_file", "move_file":
+	// ファイルを削除するツール → ファイル＆ディレクトリ＆検索キャッシュ無効化
+	case "delete_file":
 		if path := tc.Args["path"]; path != "" {
 			if absPath, err := filepath.Abs(path); err == nil {
-				GlobalToolCache.InvalidateFile(absPath)
-				GlobalToolCache.InvalidateDir(filepath.Dir(absPath))
-			}
-		}
-		if src := tc.Args["src"]; src != "" {
-			if absPath, err := filepath.Abs(src); err == nil {
-				GlobalToolCache.InvalidateFile(absPath)
-				GlobalToolCache.InvalidateDir(filepath.Dir(absPath))
-			}
-		}
-		if dest := tc.Args["dest"]; dest != "" {
-			if absPath, err := filepath.Abs(dest); err == nil {
 				GlobalToolCache.InvalidateFile(absPath)
 				GlobalToolCache.InvalidateDir(filepath.Dir(absPath))
 			}

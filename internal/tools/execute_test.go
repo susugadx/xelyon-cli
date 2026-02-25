@@ -59,7 +59,7 @@ func TestPreviewToolCall(t *testing.T) {
 }
 
 func TestIsWriteToolConsistency(t *testing.T) {
-	writeTools := []string{"write_file", "str_replace", "insert_after", "delete_lines"}
+	writeTools := []string{"write_file", "str_replace", "delete_file"}
 	for _, tool := range writeTools {
 		if !IsWriteTool(tool) {
 			t.Errorf("IsWriteTool(%q) = false, want true", tool)

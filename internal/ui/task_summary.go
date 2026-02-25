@@ -208,14 +208,10 @@ func InferAction(tool string) string {
 	switch tool {
 	case "write_file":
 		return "created"
-	case "str_replace", "insert_before", "insert_after":
+	case "str_replace":
 		return "modified"
 	case "delete_file":
 		return "deleted"
-	case "delete_lines":
-		return "modified"
-	case "move_file":
-		return "moved"
 	default:
 		return "modified"
 	}

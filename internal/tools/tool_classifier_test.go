@@ -4,10 +4,7 @@ import "testing"
 
 func TestIsWriteTool(t *testing.T) {
 	writeTools := []string{
-		"write_file", "str_replace",
-		"append_file", "prepend_file",
-		"insert_after", "insert_before",
-		"delete_lines", "delete_file", "move_file",
+		"write_file", "str_replace", "delete_file",
 	}
 
 	for _, name := range writeTools {

@@ -193,11 +193,7 @@ func TestInferAction(t *testing.T) {
 	}{
 		{"write_file", "created"},
 		{"str_replace", "modified"},
-		{"insert_before", "modified"},
-		{"insert_after", "modified"},
 		{"delete_file", "deleted"},
-		{"delete_lines", "modified"},
-		{"move_file", "moved"},
 		{"unknown_tool", "modified"},
 	}
 

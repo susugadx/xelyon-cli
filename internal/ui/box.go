@@ -95,8 +95,6 @@ func getToolIcon(toolName string) string {
 		"write_file":    "📝",
 		"str_replace":   "✏️",
 		"delete_file":   "🗑️",
-		"delete_lines":  "✂️",
-		"move_file":     "📦",
 		"copy_file":     "📋",
 		"list_dir":      "📁",
 		"bash":          "💻",
@@ -108,8 +106,6 @@ func getToolIcon(toolName string) string {
 		"git_branch":    "🌿",
 		"git_stash":     "📥",
 		"web_search":    "🌐",
-		"insert_after":  "⬇️",
-		"insert_before": "⬆️",
 	}
 
 	if icon, ok := icons[toolName]; ok {

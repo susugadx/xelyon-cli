@@ -103,23 +103,6 @@ func TestAutoReadBack_SkipsDeleteFile(t *testing.T) {
 	}
 }
 
-func TestAutoReadBack_SkipsMoveFile(t *testing.T) {
-	a := &Agent{
-		ProviderName: "Any",
-		History: []api.Message{
-			{Role: "tool", Content: "File moved"},
-		},
-	}
-
-	tc := &tools.ToolCall{Tool: "move_file", Args: map[string]string{"src": "a.go", "dest": "b.go"}}
-	a.autoReadBack(tc)
-
-	last := a.History[len(a.History)-1]
-	if last.Content != "File moved" {
-		t.Error("autoReadBack should not modify history for move_file")
-	}
-}
-
 func TestInjectWriteThrottleMessage_OnlyWrites(t *testing.T) {
 	a := &Agent{
 		History: []api.Message{
