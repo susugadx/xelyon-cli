@@ -47,12 +47,12 @@ var readTools = map[string]bool{
 
 // ツール分類（書き込み）
 var writeTools = map[string]bool{
-	"write_file":    true,
-	"str_replace":   true,
-	"delete_file":   true,
-	"copy_file":     true,
-	"create_dir":    true,
-	"lsp_rename":    true, // 実際にはプレビューのみだが、将来の実装に備えてwrite扱い
+	"write_file":  true,
+	"str_replace": true,
+	"delete_file": true,
+	"copy_file":   true,
+	"create_dir":  true,
+	"lsp_rename":  true, // 実際にはプレビューのみだが、将来の実装に備えてwrite扱い
 }
 
 // ファイルパス抽出用の正規表現パターン

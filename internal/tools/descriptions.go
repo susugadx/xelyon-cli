@@ -22,8 +22,5 @@ var ToolDescriptions = map[string]string{
 	// Planning Tools
 	"ask_user_question": "Ask the user a clarification question before planning. Use only when requirements are ambiguous.",
 	"create_plan":       "Create and save a new execution plan with title, summary, and steps.",
-	"get_plan":          "Retrieve a saved plan by ID or filename. Falls back to last created plan if omitted.",
-	"list_plans":        "List saved plans. Supports optional status filter and limit.",
 	"update_plan":       "Update a plan: change status, add/remove/update steps, change title or summary. Falls back to last created plan if id omitted.",
-	"delete_plan":       "Permanently delete a plan by ID or filename. Falls back to last created plan if omitted.",
 }

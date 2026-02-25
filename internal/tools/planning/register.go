@@ -19,8 +19,5 @@ func init() {
 	tools.DefaultRegistry.Register(NewCreatePlanTool(storage))
 
 	// Phase 2
-	tools.DefaultRegistry.Register(NewGetPlanTool(storage))
-	tools.DefaultRegistry.Register(NewListPlansTool(storage))
 	tools.DefaultRegistry.Register(NewUpdatePlanTool(storage))
-	tools.DefaultRegistry.Register(NewDeletePlanTool(storage))
 }
