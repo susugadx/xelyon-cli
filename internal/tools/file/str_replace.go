@@ -141,11 +141,8 @@ func ExecuteStrReplace(path, oldStr, newStr, startLineStr, endLineStr string) (s
 				ContextLines:  cfg.Diff.ContextLines,
 				ShowLineNums:  true,
 				InlineMode:    true,
-				MaxTotalLines: 50,
+				MaxTotalLines: cfg.Diff.MaxTotalLines,
 				LineNumOffset: offset,
-			}
-			if opts.ContextLines == 0 {
-				opts.MaxTotalLines = 0
 			}
 			ui.ShowColoredDiff(beforeStr, newStr, opts)
 		}
@@ -303,11 +300,8 @@ Do not retry the same replacement.`, path), nil
 			ContextLines:  cfg.Diff.ContextLines,
 			ShowLineNums:  true,
 			InlineMode:    true,
-			MaxTotalLines: 50,
+			MaxTotalLines: cfg.Diff.MaxTotalLines,
 			LineNumOffset: offset,
-		}
-		if opts.ContextLines == 0 {
-			opts.MaxTotalLines = 0
 		}
 		ui.ShowColoredDiff(oldStr, newStr, opts)
 	}
@@ -527,10 +521,7 @@ func executeBatchEdits(path, editsJSON string) (string, error) {
 		ContextLines:  cfg.Diff.ContextLines,
 		ShowLineNums:  true,
 		InlineMode:    true,
-		MaxTotalLines: 50,
-	}
-	if opts.ContextLines == 0 {
-		opts.MaxTotalLines = 0
+		MaxTotalLines: cfg.Diff.MaxTotalLines,
 	}
 	ui.ShowColoredDiff(oldContent, content, opts)
 

@@ -69,7 +69,8 @@ type APIRetryConfig struct {
 
 // DiffConfig は差分表示の設定
 type DiffConfig struct {
-	ContextLines int `yaml:"context_lines"` // 差分表示行数（デフォルト10、0で省略なし）
+	ContextLines  int `yaml:"context_lines"`   // 差分表示行数（デフォルト10、0で省略なし）
+	MaxTotalLines int `yaml:"max_total_lines"` // 差分表示の最大行数（0で無制限）
 }
 
 // ToolConfirmConfig はツール実行確認の設定

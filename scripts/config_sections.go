@@ -111,10 +111,12 @@ var Sections = map[string]SectionInfo{
 		Title: "差分表示設定",
 		Icon:  "📝",
 		Fields: map[string]string{
-			"context_lines": "差分表示時のコンテキスト行数",
+			"context_lines":   "差分表示時のコンテキスト行数",
+			"max_total_lines": "差分表示の最大行数（0で無制限）",
 		},
 		FieldTypes: map[string]string{
-			"context_lines": "int",
+			"context_lines":   "int",
+			"max_total_lines": "int",
 		},
 	},
 	"tool_confirm": {

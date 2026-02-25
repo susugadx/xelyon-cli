@@ -220,6 +220,15 @@ tool_confirm:
 xelyon --auto-approve
 ```
 
+### 差分表示設定
+
+```yaml
+# ~/.xelyon/config.yaml
+diff:
+  context_lines: 10    # 差分表示のコンテキスト行数（0で省略なし、デフォルト: 10）
+  max_total_lines: 0   # 差分表示の最大行数（0で無制限、デフォルト: 0）
+```
+
 ### MCP設定
 
 ```yaml
