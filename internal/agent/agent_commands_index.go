@@ -37,15 +37,20 @@ func (a *Agent) handleIndexCommand() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
 
+	progress := func(current, total int) {
+		fmt.Printf("\rIndexing... %d/%d files", current, total)
+	}
+
 	idx, err := embedding.LoadIndex(cwd, provider)
 	if err != nil {
 		// インデックスが存在しない場合は新規ビルド
 		idx = embedding.NewIndex(cwd, provider)
-		err = idx.Build(ctx, files)
+		err = idx.Build(ctx, files, progress)
 	} else {
 		// 既存のインデックスがある場合は差分更新
-		err = idx.Update(ctx, files)
+		err = idx.Update(ctx, files, progress)
 	}
+	fmt.Println() // 改行
 
 	if err != nil {
 		if strings.Contains(err.Error(), "connection refused") || strings.Contains(err.Error(), "dial tcp") {
@@ -92,7 +97,7 @@ func (a *Agent) updateIndexBackground(cwd string, provider *embedding.Provider) 
 		return nil
 	}
 
-	if err := idx.Update(ctx, files); err != nil {
+	if err := idx.Update(ctx, files, nil); err != nil {
 		// Ollama未起動時など → 静かに失敗
 		return err
 	}
@@ -167,11 +172,7 @@ func isValidIndexFile(path string, extensions []string) bool {
 
 	// 特殊ファイル名の一致
 	if name == "Makefile" || name == "Dockerfile" {
-		for _, ext := range extensions {
-			if ext == name {
-				return true
-			}
-		}
+		return true
 	}
 
 	// 拡張子の一致

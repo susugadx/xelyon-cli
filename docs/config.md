@@ -187,6 +187,7 @@ paste:
 streaming:
     # アイドルタイムアウト（秒）
     idle_timeout_seconds: 3600
+    thinking_timeout_seconds: 300
     # ファイル読み込み時にサイズ・行数を表示
     show_file_info: true
     # 検索時に進捗を表示
@@ -297,6 +298,43 @@ embedding:
     enabled: true
     model: qwen3-embedding:0.6b
     base_url: http://localhost:11434
+    extensions:
+        - .go
+        - .py
+        - .js
+        - .ts
+        - .jsx
+        - .tsx
+        - .rs
+        - .java
+        - .c
+        - .cpp
+        - .h
+        - .hpp
+        - .cs
+        - .rb
+        - .php
+        - .swift
+        - .kt
+        - .scala
+        - .sh
+        - .bash
+        - .zsh
+        - .sql
+        - .proto
+        - .html
+        - .css
+        - .vue
+        - .svelte
+        - .md
+        - .txt
+        - .rst
+        - .yaml
+        - .yml
+        - .toml
+        - .json
+        - Makefile
+        - Dockerfile
 ```
 <!-- CONFIG-EXAMPLE-END -->
 

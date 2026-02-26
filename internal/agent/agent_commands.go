@@ -77,6 +77,12 @@ func handleSpecialCommand(input string, agent *Agent) bool {
 	case "/help":
 		printHelp()
 		return true
+	case "/index":
+		err := agent.handleIndexCommand()
+		if err != nil {
+			red.Printf("❌ Error: %v\n", err)
+		}
+		return true
 	case "/model":
 		return handleModelCommand(agent, args)
 	case "/version":

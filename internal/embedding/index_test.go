@@ -65,7 +65,7 @@ func TestIndex_BuildAndLoad(t *testing.T) {
 	idx := NewIndex(tempDir, provider)
 
 	ctx := context.Background()
-	err := idx.Build(ctx, []string{file1, file2})
+	err := idx.Build(ctx, []string{file1, file2}, nil)
 	if err != nil {
 		t.Fatalf("Build failed: %v", err)
 	}
@@ -124,7 +124,7 @@ func TestIndex_LoadIndex_OverrideDir(t *testing.T) {
 	file1 := filepath.Join(tempDir, "f1.txt")
 	_ = os.WriteFile(file1, []byte("hello world\ntesting"), 0644)
 
-	if err := idx.Build(context.Background(), []string{file1}); err != nil {
+	if err := idx.Build(context.Background(), []string{file1}, nil); err != nil {
 		t.Fatalf("Build failed: %v", err)
 	}
 
@@ -204,7 +204,7 @@ func TestIndex_Update(t *testing.T) {
 	defer func() { _ = os.Chdir(pwd) }()
 
 	ctx := context.Background()
-	_ = idx.Build(ctx, []string{file1, file2})
+	_ = idx.Build(ctx, []string{file1, file2}, nil)
 
 	// wait a bit for mtime difference
 	time.Sleep(100 * time.Millisecond)
@@ -220,7 +220,7 @@ func TestIndex_Update(t *testing.T) {
 	_ = os.WriteFile(file3, []byte("C"), 0644)
 
 	// Call Update without explicit files -> should detect changes
-	err := idx.Update(ctx, nil) // update does not automatically discover file3 if not in git...
+	err := idx.Update(ctx, nil, nil) // update does not automatically discover file3 if not in git...
 	// wait, our simple implementation only checks idx.Files for deletions/modifications if files is nil.
 	// So it won't see file3 unless we pass it.
 	if err != nil {
@@ -239,7 +239,7 @@ func TestIndex_Update(t *testing.T) {
 	}
 
 	// Test explicit files list
-	err = idx.Update(ctx, []string{file1, file3})
+	err = idx.Update(ctx, []string{file1, file3}, nil)
 	if err != nil {
 		t.Fatalf("Update explicit failed: %v", err)
 	}
@@ -299,7 +299,7 @@ func TestIndex_Update_Git(t *testing.T) {
 	// Oh wait, Build uses absolute paths in idx.Files keys, so we should build with abs paths.
 	absFile1 := filepath.Join(tempDir, file1)
 	absFile2 := filepath.Join(tempDir, file2)
-	_ = idx.Build(ctx, []string{absFile1, absFile2})
+	_ = idx.Build(ctx, []string{absFile1, absFile2}, nil)
 
 	// Modify file1
 	_ = os.WriteFile(absFile1, []byte("A-changed"), 0644)
@@ -318,7 +318,7 @@ func TestIndex_Update_Git(t *testing.T) {
 	defer func() { _ = os.Chdir(pwd) }()
 
 	// Call Update without explicit files
-	err := idx.Update(ctx, nil)
+	err := idx.Update(ctx, nil, nil)
 	if err != nil {
 		t.Fatalf("Update failed: %v", err)
 	}
@@ -334,5 +334,15 @@ func TestIndex_Update_Git(t *testing.T) {
 
 	if _, ok := idx.Files[absFile3]; !ok {
 		t.Errorf("absFile3 should be added")
+	}
+}
+
+func TestNewIndex_Path(t *testing.T) {
+	provider := New("dummy", "dummy-model")
+	idx := NewIndex("/home/user/project", provider)
+
+	expected := filepath.Join("/home/user/project", ".xelyon", "index")
+	if idx.Dir != expected {
+		t.Errorf("Expected dir %s, got %s", expected, idx.Dir)
 	}
 }

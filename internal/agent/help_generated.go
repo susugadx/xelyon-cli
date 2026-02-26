@@ -26,6 +26,7 @@ const GeneratedHelpText = `Commands:
   /plan [on|off]            - Toggle Plan Mode (investigation -> plan -> approval -> execution)
   /think [on|off|level]     - Toggle Extended Thinking mode (level: low/medium/high/xhigh)
   /lsp [status]             - Show LSP server status (running/not started/disabled)
+  /index                    - Build or update embedding index for the current project
   /version                  - Show version information
   /help                     - Show this help
 

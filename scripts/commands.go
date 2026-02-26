@@ -141,6 +141,11 @@ var Commands = []CommandInfo{
 		DescriptionJP: "LSPサーバー状態を表示",
 	},
 	{
+		Name:          "/index",
+		Description:   "Build or update embedding index for the current project",
+		DescriptionJP: "現在のプロジェクトのEmbeddingインデックスを構築・更新",
+	},
+	{
 		Name:          "/version",
 		Description:   "Show version information",
 		DescriptionJP: "バージョンを表示",

@@ -20,6 +20,8 @@ const (
 	IndexVersion = "1.0"
 )
 
+type ProgressFunc func(current, total int)
+
 type Index struct {
 	Dir       string      // インデックス保存ディレクトリ
 	Provider  *Provider   // Embedding API
@@ -61,15 +63,7 @@ type SearchResult struct {
 
 // NewIndex は新しいIndexインスタンスを作成します
 func NewIndex(projectRoot string, provider *Provider) *Index {
-	absRoot, err := filepath.Abs(projectRoot)
-	if err != nil {
-		absRoot = projectRoot
-	}
-	hash := sha256.Sum256([]byte(absRoot))
-	hashStr := hex.EncodeToString(hash[:])[:16]
-
-	homeDir, _ := os.UserHomeDir()
-	indexDir := filepath.Join(homeDir, ".xelyon", "embedding_index", hashStr)
+	indexDir := filepath.Join(projectRoot, ".xelyon", "index")
 
 	return &Index{
 		Dir:      indexDir,
@@ -94,19 +88,24 @@ func hashFile(filePath string) (string, error) {
 }
 
 // Build は指定されたファイルのインデックスを構築します
-func (idx *Index) Build(ctx context.Context, files []string) error {
+func (idx *Index) Build(ctx context.Context, files []string, progressFn ProgressFunc) error {
 	idx.Vectors = nil
 	idx.Chunks = nil
 	idx.Files = make(map[string]FileMeta)
 
-	return idx.processFiles(ctx, files, false)
+	return idx.processFiles(ctx, files, false, progressFn)
 }
 
-func (idx *Index) processFiles(ctx context.Context, files []string, isUpdate bool) error {
+func (idx *Index) processFiles(ctx context.Context, files []string, isUpdate bool, progressFn ProgressFunc) error {
 	var allTexts []string
 	var allChunks []ChunkMeta
 
-	for _, file := range files {
+	total := len(files)
+	for i, file := range files {
+		if progressFn != nil {
+			progressFn(i+1, total)
+		}
+
 		// skip missing or empty files
 		info, err := os.Stat(file)
 		if err != nil || info.Size() == 0 {
@@ -387,7 +386,7 @@ func (idx *Index) Search(ctx context.Context, query string, topK int) ([]SearchR
 }
 
 // Update は差分更新を行います
-func (idx *Index) Update(ctx context.Context, files []string) error {
+func (idx *Index) Update(ctx context.Context, files []string, progressFn ProgressFunc) error {
 	// 変更・追加されたファイル、削除されたファイルを検出
 	var changedFiles []string
 	deletedFiles := make(map[string]bool)
@@ -501,7 +500,7 @@ func (idx *Index) Update(ctx context.Context, files []string) error {
 
 	// 変更・追加ファイルのチャンクを再計算して追加
 	if len(changedFiles) > 0 {
-		return idx.processFiles(ctx, changedFiles, true)
+		return idx.processFiles(ctx, changedFiles, true, progressFn)
 	}
 
 	return idx.Save()

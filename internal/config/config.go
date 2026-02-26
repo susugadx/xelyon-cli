@@ -268,6 +268,12 @@ func DefaultConfig() *Config {
 			Enabled: true,
 			Model:   "qwen3-embedding:0.6b",
 			BaseURL: "http://localhost:11434",
+			Extensions: []string{
+				".go", ".py", ".js", ".ts", ".jsx", ".tsx", ".rs", ".java", ".c", ".cpp", ".h", ".hpp", ".cs", ".rb", ".php", ".swift", ".kt", ".scala", ".sh", ".bash", ".zsh", ".sql", ".proto", ".html", ".css", ".vue", ".svelte",
+				".md", ".txt", ".rst",
+				".yaml", ".yml", ".toml", ".json",
+				"Makefile", "Dockerfile",
+			},
 		},
 	}
 }
