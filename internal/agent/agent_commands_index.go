@@ -96,7 +96,6 @@ func (a *Agent) updateIndexBackground(cwd string, provider *embedding.Provider) 
 		// Ollama未起動時など → 静かに失敗
 		return err
 	}
-
 	a.indexMu.Lock()
 	a.index = idx
 	a.indexMu.Unlock()
