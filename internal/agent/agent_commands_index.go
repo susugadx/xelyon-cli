@@ -172,7 +172,11 @@ func isValidIndexFile(path string, extensions []string) bool {
 
 	// 特殊ファイル名の一致
 	if name == "Makefile" || name == "Dockerfile" {
-		return true
+		for _, ext := range extensions {
+			if ext == name {
+				return true
+			}
+		}
 	}
 
 	// 拡張子の一致

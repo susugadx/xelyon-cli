@@ -30,7 +30,7 @@ func TestGatherIndexFiles(t *testing.T) {
 		}
 	}
 
-	extensions := []string{".go", ".py", ".md", ".yaml"}
+	extensions := []string{".go", ".py", ".md", ".yaml", "Makefile", "Dockerfile"}
 	gathered := gatherIndexFiles(tmpDir, extensions)
 
 	// パスをベース名のみに変換してソート
@@ -123,7 +123,7 @@ func TestGatherIndexFiles_GitRepo_EmptyResult(t *testing.T) {
 }
 
 func TestIsValidIndexFile(t *testing.T) {
-	extensions := []string{".go", ".py", ".ts", ".md", ".yaml"}
+	extensions := []string{".go", ".py", ".ts", ".md", ".yaml", "Makefile", "Dockerfile"}
 
 	tests := []struct {
 		name     string
