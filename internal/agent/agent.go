@@ -7,10 +7,12 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/embedding"
 	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/lsp"
 	"github.com/susugadx/xelyon-cli/internal/mcp"
@@ -73,10 +75,16 @@ type Agent struct {
 	// トークン上限エラー処理
 	tokenLimitRetryCount int // トークン上限エラー時のリトライ回数（最大1回）
 
+	// Embedding Index
+	index       *embedding.Index
+	indexTicker *time.Ticker
+	indexStop   chan struct{}
+
 	// 並列実行用ミューテックス
 	historyMu     sync.Mutex
 	changeStackMu sync.Mutex
 	statsMu       sync.Mutex
+	indexMu       sync.Mutex // a.index 書き込み保護（バックグラウンドgoroutineとのrace防止）
 }
 
 // NewAgent は新しいAgentを作成
@@ -243,6 +251,8 @@ func NewAgent(model string, provider api.Provider, headless bool) *Agent {
 		})
 	}
 
+	agent.startIndexing()
+
 	return agent
 }
 
@@ -275,6 +285,7 @@ func removeToolsSection(prompt string) string {
 
 // Cleanup はエージェントのリソースをクリーンアップ
 func (a *Agent) Cleanup() {
+	a.stopIndexing()
 	if a.mcpManager != nil {
 		a.mcpManager.Close()
 	}
@@ -336,5 +347,52 @@ func (a *Agent) incrementAssistantMessages() {
 	defer a.statsMu.Unlock()
 	if a.Stats != nil {
 		a.Stats.AssistantMessages++
+	}
+}
+
+// startIndexing はバックグラウンドでのインデックス更新を開始します
+func (a *Agent) startIndexing() {
+	cfg := config.GetGlobalConfig()
+	if !cfg.Embedding.Enabled {
+		return
+	}
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		return
+	}
+
+	provider := embedding.New(cfg.Embedding.BaseURL, cfg.Embedding.Model)
+	idx, err := embedding.LoadIndex(cwd, provider)
+	if err == nil {
+		a.indexMu.Lock()
+		a.index = idx
+		a.indexMu.Unlock()
+
+		a.indexStop = make(chan struct{})
+		a.indexTicker = time.NewTicker(5 * time.Minute)
+
+		go func() {
+			// 初期化時バックグラウンド更新
+			_ = a.updateIndexBackground(cwd, provider)
+
+			for {
+				select {
+				case <-a.indexTicker.C:
+					_ = a.updateIndexBackground(cwd, provider)
+				case <-a.indexStop:
+					a.indexTicker.Stop()
+					return
+				}
+			}
+		}()
+	}
+}
+
+// stopIndexing はバックグラウンドでのインデックス更新を停止します
+func (a *Agent) stopIndexing() {
+	if a.indexStop != nil {
+		close(a.indexStop)
+		a.indexStop = nil
 	}
 }
