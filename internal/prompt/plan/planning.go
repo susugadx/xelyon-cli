@@ -15,11 +15,15 @@ Use ONLY when necessary:
 - Steps must be IMPLEMENTATION actions (write_file, str_replace, bash, etc.)
 - Do NOT include investigation steps ("read file X", "search for Y")
 - Use depends_on to specify step dependencies
+- ONE STEP = ONE CONCERN: each step should target a single function, feature, or fix
+  Bad: "Implement index.go (Build, Save, Load, Search, Update)"
+  Good: Split into separate steps for Build+Save, Load, Search, Update+Git integration
+- Do NOT combine multiple features into one step. More steps = better tracking.
 - Each step description MUST include:
   - Target file path (e.g. internal/tools/dev/bash.go)
   - What specifically changes (e.g. function name, variable, what is added/modified/deleted)
   Bad: "Add read-only commands to defaultSafeCommands in bash.go"
-  Good: "internal/tools/dev/bash.go の defaultSafeCommands に sed -n, diff, file, du, stat, md5sum, sha256sum を追加"
+  Good: "Add sed -n, diff, file, du, stat, md5sum, sha256sum to defaultSafeCommands in internal/tools/dev/bash.go"
 - Each step MUST include a files field with target file paths.
 
 Plans are saved to .xelyon/plans/ as Markdown.`
