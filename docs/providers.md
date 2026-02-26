@@ -98,7 +98,7 @@ export GEMINI_API_KEY=...
 
 # 使用例
 xelyon --provider gemini --model gemini-3-pro-preview
-xelyon --provider gemini --model gemini-3.1-pro-preview
+xelyon --provider gemini --model gemini-3.1-pro-preview-customtools
 xelyon --provider gemini --model gemini-2.5-flash
 xelyon --provider gemini --model gemini-2.0-flash-exp
 ```
