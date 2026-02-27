@@ -2,6 +2,7 @@ package agent
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
@@ -227,28 +228,21 @@ func runInteractiveConfig(agent *Agent, cfg *config.Config) {
 
 // handleUseCommand はプロバイダーを切り替える
 func handleUseCommand(agent *Agent, args []string) bool {
+	providerList := strings.Join(api.ListProviders(), ", ")
+
 	if len(args) == 0 {
 		yellow.Println("Usage: /use <provider> [model]")
-		yellow.Println("Available providers: deepseek, claude, openai, gemini, groq, ollama")
+		yellow.Printf("Available providers: %s\n", providerList)
 		yellow.Println("Example: /use gemini gemini-2.0-flash-exp")
 		return true
 	}
 
 	providerName := args[0]
 
-	// サポートされているプロバイダーかチェック
-	validProviders := map[string]bool{
-		"deepseek": true,
-		"claude":   true,
-		"openai":   true,
-		"gemini":   true,
-		"groq":     true,
-		"ollama":   true,
-	}
-
-	if !validProviders[providerName] {
+	// レジストリで登録済みかチェック
+	if !api.IsRegisteredProvider(providerName) {
 		red.Printf("Unknown provider: %s\n", providerName)
-		yellow.Println("Available providers: deepseek, claude, openai, gemini, groq, ollama")
+		yellow.Printf("Available providers: %s\n", providerList)
 		return true
 	}
 
@@ -280,6 +274,12 @@ func handleUseCommand(agent *Agent, args []string) bool {
 		case "groq":
 			yellow.Println("\n設定方法:")
 			yellow.Println("  export GROQ_API_KEY=your-api-key")
+		case "openrouter":
+			yellow.Println("\n設定方法:")
+			yellow.Println("  export OPENROUTER_API_KEY=your-api-key")
+		case "bedrock":
+			yellow.Println("\n設定方法:")
+			yellow.Println("  AWS認証チェーン（IAMロール、環境変数、~/.aws/credentials等）を設定")
 		}
 		return true
 	}
@@ -297,7 +297,7 @@ func handleUseCommand(agent *Agent, args []string) bool {
 
 // handleProvidersCommand は利用可能なプロバイダー一覧を表示
 func handleProvidersCommand(agent *Agent) bool {
-	providers := []string{"deepseek", "claude", "openai", "gemini", "groq", "ollama"}
+	providers := api.ListProviders()
 
 	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	cyan.Println("📡 利用可能なプロバイダー / Available Providers")
@@ -319,6 +319,8 @@ func handleProvidersCommand(agent *Agent) bool {
 		status := ""
 		if provider == "ollama" {
 			status = "(ローカル)"
+		} else if provider == "bedrock" {
+			status = "(AWS認証)"
 		} else if hasAPIKey {
 			status = "(API key設定済み)"
 		} else {

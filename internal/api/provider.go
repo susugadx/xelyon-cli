@@ -3,14 +3,16 @@ package api
 import (
 	"context"
 	"fmt"
-	"github.com/susugadx/xelyon-cli/internal/config"
 	"net/http"
 	"os"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 // ProviderFactory はプロバイダーを生成するファクトリ関数
@@ -34,6 +36,30 @@ func getRegisteredProvider(name string) (ProviderFactory, bool) {
 	defer providerRegistryMu.RUnlock()
 	factory, ok := providerRegistry[strings.ToLower(name)]
 	return factory, ok
+}
+
+// IsRegisteredProvider は指定名がレジストリに登録済みか返す
+func IsRegisteredProvider(name string) bool {
+	_, ok := getRegisteredProvider(name)
+	return ok
+}
+
+// ListProviders は登録済みプロバイダー名をソート済みで返す（エイリアスを除く）
+func ListProviders() []string {
+	providerRegistryMu.RLock()
+	defer providerRegistryMu.RUnlock()
+
+	// エイリアス（anthropic → claude）を除外
+	aliases := map[string]bool{"anthropic": true}
+
+	var names []string
+	for name := range providerRegistry {
+		if !aliases[name] {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	return names
 }
 
 // getAPIKeyForProvider はプロバイダー名から環境変数のAPIキーを取得

@@ -2,18 +2,19 @@ package api_test
 
 import (
 	"os"
+	"sort"
 	"strings"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	_ "github.com/susugadx/xelyon-cli/internal/api/providers/bedrock"
 	_ "github.com/susugadx/xelyon-cli/internal/api/providers/claude"
 	_ "github.com/susugadx/xelyon-cli/internal/api/providers/deepseek"
 	_ "github.com/susugadx/xelyon-cli/internal/api/providers/gemini"
 	_ "github.com/susugadx/xelyon-cli/internal/api/providers/groq"
 	_ "github.com/susugadx/xelyon-cli/internal/api/providers/ollama"
 	_ "github.com/susugadx/xelyon-cli/internal/api/providers/openai"
-
-	_ "github.com/susugadx/xelyon-cli/internal/api/providers/bedrock"
+	_ "github.com/susugadx/xelyon-cli/internal/api/providers/openrouter"
 )
 
 func TestNewProvider_MissingAPIKey(t *testing.T) {
@@ -193,5 +194,64 @@ func TestNewProvider_SuccessPaths(t *testing.T) {
 				t.Errorf("NewProvider(%q) Name() = %v, want %v", tt.providerName, provider.Name(), tt.wantName)
 			}
 		})
+	}
+}
+
+// --- IsRegisteredProvider / ListProviders テスト ---
+
+func TestIsRegisteredProvider(t *testing.T) {
+	// 全 LLM プロバイダーが登録されていること
+	registered := []string{"deepseek", "claude", "anthropic", "openai", "gemini", "groq", "ollama", "openrouter", "bedrock"}
+	for _, name := range registered {
+		if !api.IsRegisteredProvider(name) {
+			t.Errorf("IsRegisteredProvider(%q) = false, want true", name)
+		}
+	}
+
+	// 大文字小文字を無視すること
+	if !api.IsRegisteredProvider("Claude") {
+		t.Error("IsRegisteredProvider should be case-insensitive")
+	}
+	if !api.IsRegisteredProvider("OPENAI") {
+		t.Error("IsRegisteredProvider should be case-insensitive")
+	}
+
+	// 未登録の名前
+	if api.IsRegisteredProvider("nonexistent") {
+		t.Error("IsRegisteredProvider('nonexistent') = true, want false")
+	}
+	if api.IsRegisteredProvider("") {
+		t.Error("IsRegisteredProvider('') = true, want false")
+	}
+}
+
+func TestListProviders(t *testing.T) {
+	providers := api.ListProviders()
+
+	// 全 LLM プロバイダーが含まれること
+	required := []string{"bedrock", "claude", "deepseek", "gemini", "groq", "ollama", "openai", "openrouter"}
+	for _, name := range required {
+		found := false
+		for _, p := range providers {
+			if p == name {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("ListProviders() missing %q, got %v", name, providers)
+		}
+	}
+
+	// anthropic エイリアスが除外されていること
+	for _, p := range providers {
+		if p == "anthropic" {
+			t.Error("ListProviders() should exclude 'anthropic' alias")
+		}
+	}
+
+	// ソート済みであること
+	if !sort.StringsAreSorted(providers) {
+		t.Errorf("ListProviders() should be sorted, got %v", providers)
 	}
 }
