@@ -167,7 +167,9 @@ func (idx *Index) processFiles(ctx context.Context, files []string, isUpdate boo
 		}
 
 		// embedding進捗を報告（ファイル処理とは別の文言）
-		fmt.Printf("\rEmbedding chunks... %d/%d", end, len(allTexts))
+		if progressFn != nil {
+			fmt.Printf("\rEmbedding chunks... %d/%d", end, len(allTexts))
+		}
 
 		vecs, err := idx.Provider.Embed(ctx, allTexts[i:end])
 		if err != nil {

@@ -377,6 +377,11 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 				}
 			}
 
+			// 書き込みツール成功後にインデックス更新をトリガー
+			if tools.IsWriteTool(toolCall.Tool) && !strings.HasPrefix(result, "Error:") {
+				a.triggerIndexUpdate()
+			}
+
 			// ステップ完了検証用: 実行されたツールを記録
 			executedTools[toolCall.Tool] = true
 			if tools.IsWriteTool(toolCall.Tool) {

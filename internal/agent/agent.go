@@ -76,9 +76,11 @@ type Agent struct {
 	tokenLimitRetryCount int // トークン上限エラー時のリトライ回数（最大1回）
 
 	// Embedding Index
-	index       *embedding.Index
-	indexTicker *time.Ticker
-	indexStop   chan struct{}
+	index           *embedding.Index
+	indexTicker     *time.Ticker
+	indexStop       chan struct{}
+	indexDebounce   *time.Timer // デバウンスタイマー（ファイル変更トリガー用）
+	indexDebounceMu sync.Mutex  // デバウンスタイマーの排他制御
 
 	// 並列実行用ミューテックス
 	historyMu     sync.Mutex
@@ -389,8 +391,42 @@ func (a *Agent) startIndexing() {
 	}
 }
 
+// triggerIndexUpdate はファイル変更後にデバウンス付きでインデックス更新をトリガーする。
+// 最後の呼び出しから3秒後に1回だけ実行される。
+func (a *Agent) triggerIndexUpdate() {
+	cfg := config.GetGlobalConfig()
+	if !cfg.Embedding.Enabled {
+		return
+	}
+
+	a.indexDebounceMu.Lock()
+	defer a.indexDebounceMu.Unlock()
+
+	// 既存タイマーをリセット
+	if a.indexDebounce != nil {
+		a.indexDebounce.Stop()
+	}
+
+	a.indexDebounce = time.AfterFunc(3*time.Second, func() {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return
+		}
+		provider := embedding.New(cfg.Embedding.BaseURL, cfg.Embedding.Model)
+		_ = a.updateIndexBackground(cwd, provider)
+	})
+}
+
 // stopIndexing はバックグラウンドでのインデックス更新を停止します
 func (a *Agent) stopIndexing() {
+	// デバウンスタイマーをクリーンアップ
+	a.indexDebounceMu.Lock()
+	if a.indexDebounce != nil {
+		a.indexDebounce.Stop()
+		a.indexDebounce = nil
+	}
+	a.indexDebounceMu.Unlock()
+
 	if a.indexStop != nil {
 		close(a.indexStop)
 		a.indexStop = nil
