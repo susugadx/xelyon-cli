@@ -25,10 +25,6 @@ import (
 )
 
 var (
-	userID        string
-	files         []string
-	edit          bool
-	output        string
 	resume        bool
 	providerFlag  string
 	modelFlag     string
@@ -42,15 +38,6 @@ var (
 	noUpdateCheck bool
 	imageFlag     string
 )
-
-// loadProjectConfig はプロジェクト設定をロードして文字列として返す（legacy.go 用）
-func loadProjectConfig() string {
-	pc := config.LoadProjectConfig()
-	if pc == nil {
-		return ""
-	}
-	return fmt.Sprintf("## プロジェクト設定 (%s):\n%s", pc.FilePath, pc.Context)
-}
 
 // getModel はフラグからモデルを決定する
 // 優先順位: --model フラグ > provider_models.<provider>.default_model > default_model
@@ -87,8 +74,7 @@ Examples:
   xelyon "explain this project"                    # One-shot query
   xelyon --provider gemini --model gemini-2.5-flash # Use Gemini
   xelyon --provider openai --model gpt-5.2         # Use OpenAI GPT-5.2
-  xelyon -p deepseek -m deepseek-chat             # Short flags
-  xelyon -f main.go "add logging"                  # With file context`,
+  xelyon -p deepseek -m deepseek-chat             # Short flags`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// バージョンチェック（--no-update-check または --headless でない場合）
 		if !noUpdateCheck && !headless && outputFormat != "json" {
@@ -151,13 +137,13 @@ Examples:
 		}
 
 		// --resume フラグチェック
-		if resume && len(args) == 0 && len(files) == 0 {
+		if resume && len(args) == 0 {
 			agent.RunInteractiveWithResume(model, provider, autoApprove)
 			return
 		}
 
-		// 引数なし & ファイル指定なし & 画像指定なし → 対話モード
-		if len(args) == 0 && len(files) == 0 && imageFlag == "" {
+		// 引数なし & 画像指定なし → 対話モード
+		if len(args) == 0 && imageFlag == "" {
 			agent.RunInteractive(model, provider, autoApprove)
 			return
 		}
@@ -172,10 +158,8 @@ Examples:
 			return
 		}
 
-		// 従来のワンショットモード（後方互換）
-		if len(args) > 0 {
-			runLegacyMode(args[0], model, provider)
-		}
+		// クエリ引数付き → 対話モード（初期クエリとして処理）
+		agent.RunInteractive(model, provider, autoApprove)
 	},
 }
 
@@ -183,13 +167,7 @@ func init() {
 	// バージョン表示のカスタマイズ
 	rootCmd.SetVersionTemplate(version.GetFullVersion() + "\n")
 
-	// 既存フラグ
-	rootCmd.PersistentFlags().StringVar(&userID, "user", "", "User ID for RAG search")
-	rootCmd.PersistentFlags().StringSliceVarP(&files, "file", "f", []string{}, "Files to include as context")
-	rootCmd.PersistentFlags().BoolVarP(&edit, "edit", "e", false, "Enable edit mode")
-	rootCmd.PersistentFlags().StringVarP(&output, "output", "o", "", "Output file path")
-
-	// 新規: プロバイダー/モデル指定フラグ
+	// プロバイダー/モデル指定フラグ
 	providerHelp := fmt.Sprintf("Specify LLM provider (%s)", strings.Join(config.GetDisplayProviders(), ", "))
 	rootCmd.Flags().StringVarP(&providerFlag, "provider", "p", "", providerHelp)
 	rootCmd.Flags().StringVarP(&modelFlag, "model", "m", "", "Specify model name (e.g., gpt-4o, gemini-2.0-flash-exp)")
