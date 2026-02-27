@@ -3,14 +3,18 @@ package agent
 import (
 	"fmt"
 
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/file"
 )
 
 // shouldThrottleWrite は書き込み制限の対象かどうかを判定する。
-// AutoApprove 時はパラレル書き込みを許可するため常に false を返す。
+// AutoApprove または auto_approve_medium 時はパラレル書き込みを許可するため常に false を返す。
 func (a *Agent) shouldThrottleWrite(tc *tools.ToolCall) bool {
 	if a.AutoApprove {
+		return false
+	}
+	if config.GetGlobalConfig().ToolConfirm.AutoApproveMedium {
 		return false
 	}
 	return tools.IsWriteTool(tc.Tool)
