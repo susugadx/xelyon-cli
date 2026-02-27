@@ -114,8 +114,8 @@ func DefaultConfig() *Config {
 			TimeoutSeconds: 60,
 		},
 		Streaming: StreamingConfig{
-			IdleTimeoutSeconds:     3600, // xhigh thinking 対応（1時間）
-			ThinkingTimeoutSeconds: 300,  // thinking専用: 5分間 text/FC が来なければタイムアウト
+			IdleTimeoutSeconds:     300, // チャンク間隔タイムアウト（5分）
+			ThinkingTimeoutSeconds: 120, // thinking専用: text/FC が来なければタイムアウト（最大リトライ2回=360秒）
 			ShowFileInfo:           true,
 			ShowSearchProgress:     true,
 			StreamBashOutput:       true,

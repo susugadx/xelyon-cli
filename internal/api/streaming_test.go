@@ -307,8 +307,8 @@ func TestStreamingNoTimeoutWithContinuousData(t *testing.T) {
 func TestStreamingConfigDefault(t *testing.T) {
 	cfg := config.DefaultConfig()
 
-	if cfg.Streaming.IdleTimeoutSeconds != 3600 {
-		t.Errorf("Expected default IdleTimeoutSeconds=3600, got %d", cfg.Streaming.IdleTimeoutSeconds)
+	if cfg.Streaming.IdleTimeoutSeconds != 300 {
+		t.Errorf("Expected default IdleTimeoutSeconds=300, got %d", cfg.Streaming.IdleTimeoutSeconds)
 	}
 }
 

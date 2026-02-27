@@ -65,6 +65,7 @@ func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, s
 	thinkingTimer := time.NewTimer(thinkingTimeout)
 	defer thinkingTimer.Stop()
 	hadOutput := false // text/FC を1つでも受信したら true
+	thinkingRetries := 0
 
 	var scanErr error
 
@@ -95,6 +96,16 @@ loop:
 				}
 				return fullResponse.String(), fmt.Errorf("thinking timeout: no text or function call received for %v (thinking data was received but no actionable output)", thinkingTimeout)
 			}
+			// hadOutput == true: text/FC を受信済みだが thinking が続いている
+			// → タイマーをリセットして再度待つ（最大2回まで）
+			thinkingRetries++
+			if thinkingRetries >= 2 {
+				if spinner != nil {
+					spinner.Stop()
+				}
+				return fullResponse.String(), fmt.Errorf("thinking timeout: extended thinking exceeded %v with no new output", thinkingTimeout*time.Duration(thinkingRetries+1))
+			}
+			thinkingTimer.Reset(thinkingTimeout)
 
 		case result, ok := <-lineCh:
 			if !ok {
@@ -102,14 +113,9 @@ loop:
 				break loop
 			}
 
-			// アイドルタイマーをリセット
-			if !idleTimer.Stop() {
-				select {
-				case <-idleTimer.C:
-				default:
-				}
-			}
-			idleTimer.Reset(idleTimeout)
+			// hadNonThoughtData: このチャンクで text/FC データがあったかを追跡
+			// thought パートのみの場合は idleTimer をリセットしない
+			hadNonThoughtData := false
 
 			if result.done {
 				scanErr = result.err
@@ -177,6 +183,7 @@ loop:
 					}
 					// FunctionCall が同時にある場合は FC も収集してから continue
 					if part.FunctionCall != nil {
+						hadNonThoughtData = true
 						if !hadOutput {
 							hadOutput = true
 							thinkingTimer.Stop()
@@ -191,6 +198,7 @@ loop:
 				}
 
 				if part.Text != "" {
+					hadNonThoughtData = true
 					// text を受信 → thinking タイマー停止
 					if !hadOutput {
 						hadOutput = true
@@ -250,6 +258,7 @@ loop:
 				}
 
 				if part.FunctionCall != nil {
+					hadNonThoughtData = true
 					// FC を受信 → thinking タイマー停止
 					if !hadOutput {
 						hadOutput = true
@@ -262,6 +271,17 @@ loop:
 					part.FunctionCall.ThoughtSignature = part.ThoughtSignature
 					functionCalls = append(functionCalls, part.FunctionCall)
 				}
+			}
+
+			// idleTimer: text/FC を含むチャンクのみリセット（thought のみではリセットしない）
+			if hadNonThoughtData {
+				if !idleTimer.Stop() {
+					select {
+					case <-idleTimer.C:
+					default:
+					}
+				}
+				idleTimer.Reset(idleTimeout)
 			}
 		}
 	}
