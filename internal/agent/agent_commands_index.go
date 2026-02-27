@@ -38,7 +38,8 @@ func (a *Agent) handleIndexCommand() error {
 	defer cancel()
 
 	progress := func(current, total int) {
-		fmt.Printf("\rIndexing... %d/%d files", current, total)
+		// ファイル処理フェーズ専用の進捗表示
+		fmt.Printf("\rProcessing files... %d/%d", current, total)
 	}
 
 	idx, err := embedding.LoadIndex(cwd, provider)
@@ -47,8 +48,8 @@ func (a *Agent) handleIndexCommand() error {
 		idx = embedding.NewIndex(cwd, provider)
 		err = idx.Build(ctx, files, progress)
 	} else {
-		// 既存のインデックスがある場合は差分更新
-		err = idx.Update(ctx, files, progress)
+		// 既存のインデックスがある場合は差分更新（nil で git diff ベースの差分検出）
+		err = idx.Update(ctx, nil, progress)
 	}
 	fmt.Println() // 改行
 
@@ -97,7 +98,7 @@ func (a *Agent) updateIndexBackground(cwd string, provider *embedding.Provider) 
 		return nil
 	}
 
-	if err := idx.Update(ctx, files, nil); err != nil {
+	if err := idx.Update(ctx, nil, nil); err != nil {
 		// Ollama未起動時など → 静かに失敗
 		return err
 	}

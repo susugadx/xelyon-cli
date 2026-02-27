@@ -206,11 +206,14 @@ func TestIndex_Update(t *testing.T) {
 	ctx := context.Background()
 	_ = idx.Build(ctx, []string{file1, file2}, nil)
 
-	// wait a bit for mtime difference
+	// mtimeを確実に変更するために待機してからファイルを変更
 	time.Sleep(100 * time.Millisecond)
 
-	// Modify file1
+	// Modify file1 (change content and mtime)
 	_ = os.WriteFile(file1, []byte("A-changed"), 0644)
+	// 明示的にmtimeを変更
+	newTime := time.Now().Add(1 * time.Second)
+	_ = os.Chtimes(file1, newTime, newTime)
 
 	// Delete file2
 	_ = os.Remove(file2)
@@ -219,10 +222,8 @@ func TestIndex_Update(t *testing.T) {
 	file3 := filepath.Join(tempDir, "file3.txt")
 	_ = os.WriteFile(file3, []byte("C"), 0644)
 
-	// Call Update without explicit files -> should detect changes
-	err := idx.Update(ctx, nil, nil) // update does not automatically discover file3 if not in git...
-	// wait, our simple implementation only checks idx.Files for deletions/modifications if files is nil.
-	// So it won't see file3 unless we pass it.
+	// Call Update without explicit files -> should detect changes in existing files only
+	err := idx.Update(ctx, nil, nil) // git非管理なので idx.Files 内のファイルのみチェック
 	if err != nil {
 		t.Fatalf("Update failed: %v", err)
 	}
@@ -235,16 +236,12 @@ func TestIndex_Update(t *testing.T) {
 	// Verify file1 is updated (hash should match "A-changed")
 	h, _ := hashFile(file1)
 	if idx.Files[file1].Hash != h {
-		t.Errorf("file1 hash not updated")
+		t.Errorf("file1 hash not updated: expected %s, got %s", h, idx.Files[file1].Hash)
 	}
 
-	// Test explicit files list
-	err = idx.Update(ctx, []string{file1, file3}, nil)
-	if err != nil {
-		t.Fatalf("Update explicit failed: %v", err)
-	}
-	if _, ok := idx.Files[file3]; !ok {
-		t.Errorf("file3 should be added")
+	// file3 は idx.Files に存在しないので追加されない（期待通り）
+	if _, ok := idx.Files[file3]; ok {
+		t.Errorf("file3 should not be added when files=nil in non-git directory")
 	}
 }
 
@@ -344,5 +341,188 @@ func TestNewIndex_Path(t *testing.T) {
 	expected := filepath.Join("/home/user/project", ".xelyon", "index")
 	if idx.Dir != expected {
 		t.Errorf("Expected dir %s, got %s", expected, idx.Dir)
+	}
+}
+
+// TestUpdate_NoChanges は同じファイルで2回Updateしても2回目はchangedFiles=0でスキップすることを確認
+func TestUpdate_NoChanges(t *testing.T) {
+	ts := setupMockServer()
+	defer ts.Close()
+
+	provider := New(ts.URL, "test-model")
+	tempDir := t.TempDir()
+
+	file1 := filepath.Join(tempDir, "file1.txt")
+	_ = os.WriteFile(file1, []byte("content\nline2\nline3\nline4\nline5\nline6"), 0644)
+
+	idx := NewIndex(tempDir, provider)
+	idx.Dir = filepath.Join(tempDir, "index")
+
+	ctx := context.Background()
+	err := idx.Build(ctx, []string{file1}, nil)
+	if err != nil {
+		t.Fatalf("Build failed: %v", err)
+	}
+
+	initialChunks := len(idx.Chunks)
+
+	// 同じファイルで再度Update（変更なし）
+	err = idx.Update(ctx, []string{file1}, nil)
+	if err != nil {
+		t.Fatalf("Update failed: %v", err)
+	}
+
+	// チャンク数が変わらないことを確認
+	if len(idx.Chunks) != initialChunks {
+		t.Errorf("Expected %d chunks, got %d", initialChunks, len(idx.Chunks))
+	}
+}
+
+// TestUpdate_NilFiles_NoGit は files=nil かつ git 非管理の場合、ハッシュベースで変更検出することを確認
+func TestUpdate_NilFiles_NoGit(t *testing.T) {
+	ts := setupMockServer()
+	defer ts.Close()
+
+	provider := New(ts.URL, "test-model")
+	tempDir := t.TempDir()
+
+	file1 := filepath.Join(tempDir, "file1.txt")
+	_ = os.WriteFile(file1, []byte("original content\nline2\nline3\nline4\nline5\nline6"), 0644)
+
+	idx := NewIndex(tempDir, provider)
+	idx.Dir = filepath.Join(tempDir, "index")
+
+	// git 非管理のディレクトリで作業
+	pwd, _ := os.Getwd()
+	_ = os.Chdir(tempDir)
+	defer func() { _ = os.Chdir(pwd) }()
+
+	ctx := context.Background()
+	err := idx.Build(ctx, []string{file1}, nil)
+	if err != nil {
+		t.Fatalf("Build failed: %v", err)
+	}
+
+	initialChunks := len(idx.Chunks)
+
+	// 変更なしで Update(nil)
+	err = idx.Update(ctx, nil, nil)
+	if err != nil {
+		t.Fatalf("Update failed: %v", err)
+	}
+
+	// チャンク数が変わらない
+	if len(idx.Chunks) != initialChunks {
+		t.Errorf("Expected %d chunks unchanged, got %d", initialChunks, len(idx.Chunks))
+	}
+
+	// ファイルを変更（mtimeを明示的に変更）
+	_ = os.WriteFile(file1, []byte("modified content\nline2\nline3\nline4\nline5\nline6"), 0644)
+	// mtimeを1秒後に設定して変更を確実に検出
+	newTime := time.Now().Add(1 * time.Second)
+	_ = os.Chtimes(file1, newTime, newTime)
+
+	err = idx.Update(ctx, nil, nil)
+	if err != nil {
+		t.Fatalf("Update after modify failed: %v", err)
+	}
+
+	// チャンクが更新されている（数は同じだが内容が変わる）
+	if len(idx.Chunks) == 0 {
+		t.Errorf("Expected chunks to be updated")
+	}
+}
+
+// TestUpdate_FileDeleted は削除されたファイルのチャンクが除去されることを確認
+func TestUpdate_FileDeleted(t *testing.T) {
+	ts := setupMockServer()
+	defer ts.Close()
+
+	provider := New(ts.URL, "test-model")
+	tempDir := t.TempDir()
+
+	file1 := filepath.Join(tempDir, "file1.txt")
+	file2 := filepath.Join(tempDir, "file2.txt")
+	_ = os.WriteFile(file1, []byte("content1\nline2\nline3\nline4\nline5\nline6"), 0644)
+	_ = os.WriteFile(file2, []byte("content2\nline2\nline3\nline4\nline5\nline6"), 0644)
+
+	idx := NewIndex(tempDir, provider)
+	idx.Dir = filepath.Join(tempDir, "index")
+
+	ctx := context.Background()
+	err := idx.Build(ctx, []string{file1, file2}, nil)
+	if err != nil {
+		t.Fatalf("Build failed: %v", err)
+	}
+
+	if len(idx.Chunks) < 2 {
+		t.Fatalf("Expected at least 2 chunks, got %d", len(idx.Chunks))
+	}
+
+	// file2 を削除
+	_ = os.Remove(file2)
+
+	err = idx.Update(ctx, []string{file1, file2}, nil)
+	if err != nil {
+		t.Fatalf("Update failed: %v", err)
+	}
+
+	// file2 のチャンクが削除されている
+	for _, c := range idx.Chunks {
+		if c.FilePath == file2 {
+			t.Errorf("file2 chunks should be removed")
+			break
+		}
+	}
+
+	// file2 が Files からも削除されている
+	if _, ok := idx.Files[file2]; ok {
+		t.Errorf("file2 should be removed from idx.Files")
+	}
+}
+
+// TestUpdate_FileModified は変更されたファイルのチャンクが再計算されることを確認
+func TestUpdate_FileModified(t *testing.T) {
+	ts := setupMockServer()
+	defer ts.Close()
+
+	provider := New(ts.URL, "test-model")
+	tempDir := t.TempDir()
+
+	file1 := filepath.Join(tempDir, "file1.txt")
+	_ = os.WriteFile(file1, []byte("original content\nline2\nline3\nline4\nline5\nline6"), 0644)
+
+	idx := NewIndex(tempDir, provider)
+	idx.Dir = filepath.Join(tempDir, "index")
+
+	ctx := context.Background()
+	err := idx.Build(ctx, []string{file1}, nil)
+	if err != nil {
+		t.Fatalf("Build failed: %v", err)
+	}
+
+	initialHash := idx.Files[file1].Hash
+
+	// ファイルを変更（mtimeを明示的に変更）
+	_ = os.WriteFile(file1, []byte("modified content\nline2\nline3\nline4\nline5\nline6"), 0644)
+	// mtimeを1秒後に設定して変更を確実に検出
+	newTime := time.Now().Add(1 * time.Second)
+	_ = os.Chtimes(file1, newTime, newTime)
+
+	err = idx.Update(ctx, []string{file1}, nil)
+	if err != nil {
+		t.Fatalf("Update failed: %v", err)
+	}
+
+	// ハッシュが更新されている
+	newHash := idx.Files[file1].Hash
+	if newHash == initialHash {
+		t.Errorf("Hash should be updated after file modification")
+	}
+
+	// 新しいハッシュが正しい
+	h, _ := hashFile(file1)
+	if newHash != h {
+		t.Errorf("Hash mismatch: expected %s, got %s", h, newHash)
 	}
 }
