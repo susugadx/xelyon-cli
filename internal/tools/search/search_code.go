@@ -11,8 +11,11 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/embedding"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
@@ -26,10 +29,11 @@ const (
 	MatchTypeAssignment                  // 2: := や = による代入
 	MatchTypeUsage                       // 3: その他の参照・使用
 	MatchTypeComment                     // 4: コメント行
+	MatchTypeSemantic                    // 5: セマンティック検索結果
 )
 
 // matchTypeTag はマッチ種別の表示タグ
-var matchTypeTag = [5]string{"[def]", "[import]", "[assign]", "[use]", "[comment]"}
+var matchTypeTag = [6]string{"[def]", "[import]", "[assign]", "[use]", "[comment]", "[semantic]"}
 
 // BlockInfo はマッチが所属するブロック（関数/クラス）の情報
 type BlockInfo struct {
@@ -114,29 +118,69 @@ func executeSinglePattern(pattern, path, filePattern string, ctxLines, tokenBudg
 		}
 	}
 
-	// ripgrep or grep 実行
-	output, useRipgrep, searchErr := executeSearch(pattern, path, filePattern, ctxLines)
-	if searchErr != nil {
-		return fmt.Sprintf("Error: %v", searchErr)
+	// embedding インデックスを1回だけロード
+	idx := loadEmbeddingIndex()
+
+	// ripgrep と embedding 検索を並列実行
+	var wg sync.WaitGroup
+	var rgResults []SearchResult
+	var embResults []embedding.SearchResult
+	var rgErr error
+
+	// ripgrep 検索（常に実行）
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		output, useRipgrep, err := executeSearch(pattern, path, filePattern, ctxLines)
+		if err != nil {
+			rgErr = err
+			return
+		}
+		if useRipgrep {
+			rgResults = parseRipgrepJSON(output, 200)
+		} else {
+			rgResults = parseGrepOutput(output, 200)
+		}
+	}()
+
+	// embedding 検索（インデックスがあれば実行）
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		embResults = executeEmbeddingSearch(idx, pattern)
+	}()
+
+	// 両方の検索が完了するのを待つ
+	wg.Wait()
+
+	// ripgrep エラーがあれば返す
+	if rgErr != nil {
+		return fmt.Sprintf("Error: %v", rgErr)
 	}
 
-	// 結果パース（早期打ち切り: 最大200マッチ）
+	// 結果をマージ
 	var results []SearchResult
-	if useRipgrep {
-		results = parseRipgrepJSON(output, 200)
-	} else {
-		results = parseGrepOutput(output, 200)
+	if len(rgResults) > 0 {
+		results = rgResults
+		// コンテキスト行マージ
+		results = mergeContextLines(results)
+		// ファイル優先度ソート（非テスト→テスト、定義あり→なし）
+		sortResultsByPriority(results)
+	}
+
+	// embedding 結果を追加（重複除去は後で行う）
+	if len(embResults) > 0 {
+		// embedding 結果を SearchResult 形式に変換
+		embSearchResults := convertEmbeddingResults(embResults)
+		// ripgrep 結果とマージ（重複除去付き）
+		results = mergeSearchResults(results, embSearchResults)
+		// マージ後にソート（embedding 結果が追加されたため再ソート）
+		sortResultsByPriority(results)
 	}
 
 	if len(results) == 0 {
 		return "No matches found"
 	}
-
-	// コンテキスト行マージ
-	results = mergeContextLines(results)
-
-	// ファイル優先度ソート（非テスト→テスト、定義あり→なし）
-	sortResultsByPriority(results)
 
 	// トークンバジェット制御
 	results, truncated := truncateToTokenBudget(results, tokenBudget)
@@ -218,9 +262,13 @@ func executeMultiplePatterns(patterns []string, path, filePattern string, ctxLin
 		budgetPerPattern = 500
 	}
 
+	// embedding インデックスを1回だけロード（全 goroutine で共有）
+	embIdx := loadEmbeddingIndex()
+
 	ch := make(chan patternResult, len(patterns))
 	for i, p := range patterns {
 		go func(idx int, pat string) {
+			// ripgrep 検索
 			output, useRg, searchErr := executeSearch(pat, path, filePattern, ctxLines)
 			if searchErr != nil {
 				ch <- patternResult{Pattern: pat, Index: idx}
@@ -238,6 +286,16 @@ func executeMultiplePatterns(patterns []string, path, filePattern string, ctxLin
 			}
 			results = mergeContextLines(results)
 			sortResultsByPriority(results)
+
+			// embedding 検索を実行
+			embResults := executeEmbeddingSearch(embIdx, pat)
+			if len(embResults) > 0 {
+				embSearchResults := convertEmbeddingResults(embResults)
+				results = mergeSearchResults(results, embSearchResults)
+				// マージ後にソート（embedding 結果が追加されたため再ソート）
+				sortResultsByPriority(results)
+			}
+
 			results, truncated := truncateToTokenBudget(results, budgetPerPattern)
 
 			// ReadTracker 連携
@@ -266,6 +324,44 @@ func executeMultiplePatterns(patterns []string, path, filePattern string, ctxLin
 	}
 
 	return formatted
+}
+
+// loadEmbeddingIndex は embedding インデックスを1回ロードして返す。
+// 無効化されている場合やロード失敗時は nil を返す。
+func loadEmbeddingIndex() *embedding.Index {
+	cfg := config.GetGlobalConfig()
+	if !cfg.Embedding.Enabled {
+		return nil
+	}
+	provider := embedding.New(cfg.Embedding.BaseURL, cfg.Embedding.Model)
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil
+	}
+	idx, err := embedding.LoadIndex(cwd, provider)
+	if err != nil {
+		return nil
+	}
+	return idx
+}
+
+// executeEmbeddingSearch は事前にロードされた embedding インデックスでセマンティック検索を実行する。
+// idx が nil の場合は即座に nil を返す。
+func executeEmbeddingSearch(idx *embedding.Index, pattern string) []embedding.SearchResult {
+	if idx == nil {
+		return nil
+	}
+
+	// セマンティック検索を実行（タイムアウト: 5秒）
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	results, err := idx.Search(ctx, pattern, 10) // topK=10
+	if err != nil {
+		// エラーは無視して続行（embedding 検索はオプション）
+		return nil
+	}
+	return results
 }
 
 // buildMultiCacheKey は複数パターンからソート済みキャッシュキーを構築する
@@ -905,6 +1001,114 @@ func formatSearchResultsBody(results []SearchResult, truncated bool, tokenBudget
 	}
 
 	return sb.String()
+}
+
+// convertEmbeddingResults は embedding.SearchResult を SearchResult 形式に変換します
+func convertEmbeddingResults(embResults []embedding.SearchResult) []SearchResult {
+	var results []SearchResult
+	fileIndex := make(map[string]int) // ファイルパス → results のインデックス
+
+	for _, emb := range embResults {
+		filePath := emb.FilePath
+
+		// map ベースで O(1) ルックアップ
+		idx, exists := fileIndex[filePath]
+		if !exists {
+			idx = len(results)
+			fileIndex[filePath] = idx
+			results = append(results, SearchResult{
+				FilePath: filePath,
+				Matches:  []Match{},
+			})
+		}
+
+		// チャンクの各行を Match として追加
+		lines := strings.Split(strings.TrimSpace(emb.Content), "\n")
+		for i, line := range lines {
+			lineNum := emb.StartLine + i
+			if lineNum > emb.EndLine {
+				break
+			}
+
+			// 行を追加（セマンティック検索結果としてマーク）
+			match := Match{
+				LineNum: lineNum,
+				Line:    line,
+				IsMatch: true,
+				Type:    MatchTypeSemantic,
+				Block:   nil,
+			}
+
+			// ブロック名があれば設定
+			if emb.BlockName != "" {
+				match.Block = &BlockInfo{
+					Name:      emb.BlockName,
+					StartLine: emb.StartLine,
+				}
+			}
+
+			results[idx].Matches = append(results[idx].Matches, match)
+			results[idx].MatchCount++
+		}
+	}
+
+	return results
+}
+
+// mergeSearchResults は ripgrep 結果と embedding 結果をマージし、重複を除去します
+func mergeSearchResults(rgResults, embResults []SearchResult) []SearchResult {
+	if len(rgResults) == 0 {
+		return embResults
+	}
+	if len(embResults) == 0 {
+		return rgResults
+	}
+
+	// ripgrep 結果をベースに開始
+	merged := make([]SearchResult, len(rgResults))
+	copy(merged, rgResults)
+
+	// ファイルパス → merged のインデックス（O(1) ルックアップ）
+	fileIndex := make(map[string]int, len(merged))
+	for i, r := range merged {
+		fileIndex[r.FilePath] = i
+	}
+
+	// 重複チェック用のマップを作成（ファイルパス+行番号）
+	seen := make(map[string]bool)
+	for _, result := range rgResults {
+		for _, match := range result.Matches {
+			if match.IsMatch {
+				key := fmt.Sprintf("%s:%d", result.FilePath, match.LineNum)
+				seen[key] = true
+			}
+		}
+	}
+
+	// embedding 結果を追加（重複していない場合のみ）
+	for _, embResult := range embResults {
+		idx, exists := fileIndex[embResult.FilePath]
+		if !exists {
+			// 新しいファイルの場合は追加
+			fileIndex[embResult.FilePath] = len(merged)
+			merged = append(merged, embResult)
+			continue
+		}
+
+		// 既存のファイルに重複していない行を追加
+		for _, match := range embResult.Matches {
+			if match.IsMatch {
+				key := fmt.Sprintf("%s:%d", embResult.FilePath, match.LineNum)
+				if !seen[key] {
+					seen[key] = true
+					merged[idx].Matches = append(merged[idx].Matches, match)
+					merged[idx].MatchCount++
+				}
+			}
+		}
+	}
+
+	return merged
 }
 
 // formatMultiResults は複数パターンの検索結果をフォーマットする
