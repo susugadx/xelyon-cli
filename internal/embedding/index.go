@@ -166,6 +166,9 @@ func (idx *Index) processFiles(ctx context.Context, files []string, isUpdate boo
 			end = len(allTexts)
 		}
 
+		// embedding進捗を報告（ファイル処理とは別の文言）
+		fmt.Printf("\rEmbedding chunks... %d/%d", end, len(allTexts))
+
 		vecs, err := idx.Provider.Embed(ctx, allTexts[i:end])
 		if err != nil {
 			return fmt.Errorf("embedding error: %w", err)
@@ -386,6 +389,8 @@ func (idx *Index) Search(ctx context.Context, query string, topK int) ([]SearchR
 }
 
 // Update は差分更新を行います
+// files が nil または空の場合: git 管理下なら git status/diff で変更を検出、非管理ならハッシュ比較で変更を検出
+// files が指定された場合: 指定されたファイルを処理（既存インデックスにあるファイルはハッシュ比較で変更なしならスキップ）
 func (idx *Index) Update(ctx context.Context, files []string, progressFn ProgressFunc) error {
 	// 変更・追加されたファイル、削除されたファイルを検出
 	var changedFiles []string
@@ -453,20 +458,44 @@ func (idx *Index) Update(ctx context.Context, files []string, progressFn Progres
 					deletedFiles[f] = true
 					continue
 				}
-				h, err := hashFile(f)
-				if err != nil || h != m.Hash || info.ModTime().Format(time.RFC3339) != m.Mtime {
-					changedFiles = append(changedFiles, f)
+				// mtime同じ → 高速スキップ
+				if info.ModTime().Format(time.RFC3339) == m.Mtime {
+					continue
 				}
+				// mtime違う → ハッシュで確認
+				h, err := hashFile(f)
+				if err == nil && h == m.Hash {
+					// 内容同じ、mtime更新だけ
+					m.Mtime = info.ModTime().Format(time.RFC3339)
+					idx.Files[f] = m // 更新を保存
+					continue
+				}
+				changedFiles = append(changedFiles, f)
 			}
 		}
 	} else {
 		for _, f := range files {
-			_, err := os.Stat(f)
+			info, err := os.Stat(f)
 			if err != nil {
 				deletedFiles[f] = true
-			} else {
-				changedFiles = append(changedFiles, f)
+				continue
 			}
+			// 既存インデックスにあるファイルはハッシュ比較
+			if meta, exists := idx.Files[f]; exists {
+				// mtime同じ → 高速スキップ
+				if info.ModTime().Format(time.RFC3339) == meta.Mtime {
+					continue
+				}
+				// mtime違う → ハッシュで確認
+				h, err := hashFile(f)
+				if err == nil && h == meta.Hash {
+					// 内容同じ、mtime更新だけ
+					meta.Mtime = info.ModTime().Format(time.RFC3339)
+					idx.Files[f] = meta // 更新を保存
+					continue
+				}
+			}
+			changedFiles = append(changedFiles, f)
 		}
 	}
 
