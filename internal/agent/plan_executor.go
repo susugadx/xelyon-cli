@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -617,7 +618,7 @@ func containsAlreadyAppliedDeclaration(response string) bool {
 	return false
 }
 
-// diffContainsFileChanges は git diff HEAD に指定ファイルへの変更が含まれるか確認
+// diffContainsFileChanges は git diff HEAD および untracked files に指定ファイルへの変更が含まれるか確認
 func diffContainsFileChanges(files []string) bool {
 	if len(files) == 0 {
 		return false
@@ -627,14 +628,26 @@ func diffContainsFileChanges(files []string) bool {
 		return false
 	}
 	diffOutput := strings.TrimSpace(string(out))
-	if diffOutput == "" {
+	changedSet := make(map[string]bool)
+	if diffOutput != "" {
+		for _, f := range strings.Split(diffOutput, "\n") {
+			changedSet[strings.TrimSpace(f)] = true
+		}
+	}
+
+	// untracked ファイルも changedSet に追加
+	untrackedOut, _ := exec.Command("git", "ls-files", "--others", "--exclude-standard").CombinedOutput()
+	for _, f := range strings.Split(strings.TrimSpace(string(untrackedOut)), "\n") {
+		f = strings.TrimSpace(f)
+		if f != "" {
+			changedSet[f] = true
+		}
+	}
+
+	if len(changedSet) == 0 {
 		return false
 	}
-	changedFiles := strings.Split(diffOutput, "\n")
-	changedSet := make(map[string]bool)
-	for _, f := range changedFiles {
-		changedSet[strings.TrimSpace(f)] = true
-	}
+
 	for _, target := range files {
 		if changedSet[target] {
 			return true
@@ -651,17 +664,30 @@ func diffContainsFileChanges(files []string) bool {
 
 // getGitDiffHash は git diff HEAD + untracked files の出力を SHA256 ハッシュ化して返す。
 // ファイル名だけでなく内容の変化も検知する（同じファイルへの追加変更を検出）。
+// untracked ファイルはファイル名リストだけでなく内容もハッシュに含めることで、
+// git add 前のファイルへの str_replace 等の変更を正しく検知する。
 // git が使えない場合は空文字を返す（Level 2 スキップ用）。
 func getGitDiffHash() string {
+	// 1. tracked の差分（unstaged + staged）
 	out, err := exec.Command("git", "diff", "HEAD").CombinedOutput()
 	if err != nil {
 		return ""
 	}
-	// untracked files も含める
-	untrackedOut, _ := exec.Command("git", "ls-files", "--others", "--exclude-standard").CombinedOutput()
 	h := sha256.New()
 	h.Write(out)
-	h.Write(untrackedOut)
+
+	// 2. untracked ファイルの名前と内容を両方ハッシュに含める
+	untrackedOut, _ := exec.Command("git", "ls-files", "--others", "--exclude-standard").CombinedOutput()
+	h.Write(untrackedOut) // ファイル名リスト（新規追加検知）
+	for _, f := range strings.Split(strings.TrimSpace(string(untrackedOut)), "\n") {
+		if f == "" {
+			continue
+		}
+		content, err := os.ReadFile(f)
+		if err == nil {
+			h.Write(content) // 内容（編集検知）
+		}
+	}
 	return hex.EncodeToString(h.Sum(nil))
 }
 
