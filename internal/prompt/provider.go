@@ -32,6 +32,12 @@ var providerPrefixes = map[string]string{
 	"groq": "## ⚠️ ABSOLUTE RULES (NEVER SKIP)\n" + commonRulesBlock +
 		"7. **Tool calls MUST be raw JSON** - NEVER wrap in markdown code blocks or use XML like `<tool_name><param>value</param></tool_name>`\n" +
 		"8. **ALWAYS respond in the same language as the user's message** - if the user writes in Japanese, respond in Japanese\n\n",
+	"anthropic": "## ⚠️ ABSOLUTE RULES (NEVER SKIP)\n" + commonRulesBlock +
+		"7. **File search → search_code, NOT bash (grep/rg/find)** - bash is for build/test/run commands ONLY (e.g. make, go test, npm run)\n" +
+		"8. **File reading → read_file, NOT bash (cat/head/tail/sed)** - use read_file with line ranges for targeted reading\n\n",
+	"claude": "## ⚠️ ABSOLUTE RULES (NEVER SKIP)\n" + commonRulesBlock +
+		"7. **File search → search_code, NOT bash (grep/rg/find)** - bash is for build/test/run commands ONLY (e.g. make, go test, npm run)\n" +
+		"8. **File reading → read_file, NOT bash (cat/head/tail/sed)** - use read_file with line ranges for targeted reading\n\n",
 }
 
 // GetProviderPrefix はプロバイダー名に応じたプレフィックスを返す

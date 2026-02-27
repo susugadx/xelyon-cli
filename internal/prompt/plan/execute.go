@@ -21,6 +21,10 @@ func BuildStepPrompt(stepID int, description string, tools []string) string {
 %s
 
 ### Rules
+- Execute ONLY this step — do NOT execute other steps or claim they are already done
+- Do NOT use update_plan to set status to completed — the system handles completion automatically
+- You MUST actually call the required tools — do NOT just describe what you would do in text
+- If this step requires str_replace, you MUST call str_replace — text descriptions of changes are NOT execution
 - Execute autonomously - do NOT ask "Should I proceed?"
 - Prefer str_replace for edits to existing files, write_file for new files or full rewrites
 - If a tool fails, try alternative approach

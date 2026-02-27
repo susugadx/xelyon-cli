@@ -50,8 +50,27 @@ func TestGetProviderPrefix_DeepSeekCaseInsensitive(t *testing.T) {
 
 func TestGetProviderPrefix_Claude(t *testing.T) {
 	prefix := GetProviderPrefix("claude")
-	if prefix != "" {
-		t.Errorf("expected empty prefix for claude, got: %q", prefix)
+	if prefix == "" {
+		t.Fatal("expected non-empty prefix for claude")
+	}
+	if !strings.Contains(prefix, "search_code → str_replace(line-range) is PREFERRED") {
+		t.Error("claude prefix should contain search_code → str_replace(line-range) rule")
+	}
+	if !strings.Contains(prefix, "File search → search_code, NOT bash (grep/rg/find)") {
+		t.Error("claude prefix should contain file search rule")
+	}
+	if !strings.Contains(prefix, "File reading → read_file, NOT bash (cat/head/tail/sed)") {
+		t.Error("claude prefix should contain file reading rule")
+	}
+}
+
+func TestGetProviderPrefix_Anthropic(t *testing.T) {
+	prefix := GetProviderPrefix("anthropic")
+	if prefix == "" {
+		t.Fatal("expected non-empty prefix for anthropic")
+	}
+	if !strings.Contains(prefix, "File search → search_code, NOT bash (grep/rg/find)") {
+		t.Error("anthropic prefix should contain file search rule")
 	}
 }
 
@@ -172,8 +191,20 @@ func TestBuildProviderSystemPrompt_Claude(t *testing.T) {
 	base := "You are XELYON, an autonomous AI coding agent."
 	result := BuildProviderSystemPrompt(base, "claude")
 
-	if result != base {
-		t.Errorf("claude result should be unchanged base prompt, got diff length: %d vs %d", len(result), len(base))
+	if !strings.HasPrefix(result, "## ") {
+		t.Error("claude result should start with prefix header")
+	}
+	if !strings.HasSuffix(result, base) {
+		t.Error("claude result should end with base prompt")
+	}
+	if !strings.Contains(result, "search_code → str_replace(line-range) is PREFERRED") {
+		t.Error("claude result should contain search_code → str_replace(line-range) rule")
+	}
+	if !strings.Contains(result, "File search → search_code, NOT bash (grep/rg/find)") {
+		t.Error("claude result should contain file search rule")
+	}
+	if !strings.Contains(result, "File reading → read_file, NOT bash (cat/head/tail/sed)") {
+		t.Error("claude result should contain file reading rule")
 	}
 }
 
@@ -183,5 +214,20 @@ func TestBuildProviderSystemPrompt_EmptyProvider(t *testing.T) {
 
 	if result != base {
 		t.Error("empty provider should return unchanged base prompt")
+	}
+}
+
+func TestBuildProviderSystemPrompt_Anthropic(t *testing.T) {
+	base := "You are XELYON, an autonomous AI coding agent."
+	result := BuildProviderSystemPrompt(base, "anthropic")
+
+	if !strings.HasPrefix(result, "## ") {
+		t.Error("anthropic result should start with prefix header")
+	}
+	if !strings.HasSuffix(result, base) {
+		t.Error("anthropic result should end with base prompt")
+	}
+	if !strings.Contains(result, "File search → search_code, NOT bash (grep/rg/find)") {
+		t.Error("anthropic result should contain file search rule")
 	}
 }
