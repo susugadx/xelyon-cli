@@ -173,7 +173,13 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 
 			// Level 1: 計画の tools に書き込み系があるのに未実行 → 強制続行
 			if missing := checkMissingWriteTools(step.Tools, executedTools); len(missing) > 0 {
-				// エスケープ: AI が「既に適用済み」と宣言 + diff に対象ファイルの変更あり
+				// エスケープ1: diff に対象ファイルの変更あり → 既に適用済み
+				// retry で executedTools がリセットされても diff は残るため、AI の宣言なしに完了判定できる
+				if len(step.Files) > 0 && diffContainsFileChanges(step.Files) {
+					green.Printf("✓ Step %d completed (changes verified in diff)\n", step.ID)
+					return nil
+				}
+				// エスケープ2（後方互換）: AI が「既に適用済み」と宣言 + diff に変更あり
 				if containsAlreadyAppliedDeclaration(response) && diffContainsFileChanges(step.Files) {
 					green.Printf("✓ Step %d completed (verified in diff)\n", step.ID)
 					return nil

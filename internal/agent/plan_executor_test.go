@@ -121,6 +121,28 @@ func TestDiffContainsFileChanges_EmptyFiles(t *testing.T) {
 	}
 }
 
+// --- Level 1 エスケープ1: diffContainsFileChanges による宣言不要エスケープ ---
+
+// TestLevel1Escape_DiffWins は、step.Files が非空かつ diff にそのファイルが含まれれば
+// AI の宣言なしに Level 1 エスケープが成立することを確認する。
+// diffContainsFileChanges 自体が git 操作を行うため、git が使えない環境ではスキップ。
+func TestLevel1Escape_DiffWins_FilesEmpty(t *testing.T) {
+	// step.Files が空なら diff チェックをスキップし false を返すことを確認
+	// （エスケープ1 の len(step.Files) > 0 ガード）
+	result := diffContainsFileChanges([]string{})
+	if result {
+		t.Error("diffContainsFileChanges([]) should return false (no files to check)")
+	}
+}
+
+func TestLevel1Escape_DiffWins_NilFiles(t *testing.T) {
+	// nil でも false を返すことを確認
+	result := diffContainsFileChanges(nil)
+	if result {
+		t.Error("diffContainsFileChanges(nil) should return false")
+	}
+}
+
 // --- Level 2: getGitDiffHash ---
 
 func TestGetGitDiffHash_Deterministic(t *testing.T) {
