@@ -21,7 +21,8 @@ func BuildStepPrompt(stepID int, description string, tools []string) string {
 %s
 
 ### Rules
-- Execute ONLY this step — do NOT execute other steps or claim they are already done
+- Execute ONLY this step — do NOT execute other steps
+- If this step's changes were already applied by a previous step, declare "already applied" and explain which step made the change
 - Do NOT use update_plan to set status to completed — the system handles completion automatically
 - You MUST actually call the required tools — do NOT just describe what you would do in text
 - If this step requires str_replace, you MUST call str_replace — text descriptions of changes are NOT execution
