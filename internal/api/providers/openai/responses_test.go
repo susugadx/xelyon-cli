@@ -351,8 +351,9 @@ func TestResponsesToolFormat(t *testing.T) {
 	if !ok {
 		t.Fatal("read_file.Parameters.required is not []string")
 	}
-	if len(required) == 0 || required[0] != "path" {
-		t.Errorf("read_file.Parameters.required = %v, want ['path']", required)
+	// paths バッチモード統合により required は空配列（path/paths どちらも省略可能な設計）
+	if len(required) != 0 {
+		t.Errorf("read_file.Parameters.required = %v, want []", required)
 	}
 }
 

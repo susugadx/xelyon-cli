@@ -1,12 +1,10 @@
 package file
 
 import (
-	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
 
-	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
@@ -78,43 +76,4 @@ func ExecuteReadFiles(paths []string) string {
 
 	common.Green.Printf("📄 Read: %d files\n", len(paths))
 	return sb.String()
-}
-
-// ReadFilesTool は複数ファイル一括読み込みツール
-type ReadFilesTool struct{}
-
-func (t *ReadFilesTool) Name() string { return "read_files" }
-
-func (t *ReadFilesTool) Description() string {
-	return tools.ToolDescriptions[t.Name()]
-}
-
-func (t *ReadFilesTool) Parameters() map[string]interface{} {
-	return map[string]interface{}{
-		"type": "object",
-		"properties": map[string]interface{}{
-			"paths": map[string]interface{}{
-				"type":        "array",
-				"items":       map[string]interface{}{"type": "string"},
-				"maxItems":    MaxReadFilesPaths,
-				"description": "File paths to read (max 10). Format: \"path\" or \"path:start_line-end_line\"",
-			},
-		},
-		"required":             []string{"paths"},
-		"additionalProperties": false,
-	}
-}
-
-func (t *ReadFilesTool) Run(args map[string]string) (string, *tools.FileChange, error) {
-	pathsJSON := args["paths"]
-	if pathsJSON == "" {
-		return "Error: paths is empty", nil, nil
-	}
-
-	var paths []string
-	if err := json.Unmarshal([]byte(pathsJSON), &paths); err != nil {
-		return fmt.Sprintf("Error: invalid paths format: %v", err), nil, nil
-	}
-
-	return ExecuteReadFiles(paths), nil, nil
 }

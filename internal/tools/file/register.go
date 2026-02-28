@@ -2,6 +2,7 @@ package file
 
 import (
 	"encoding/json"
+	"fmt"
 	"strconv"
 
 	"github.com/susugadx/xelyon-cli/internal/tools"
@@ -24,13 +25,32 @@ func (t *ReadFileTool) Parameters() map[string]interface{} {
 			"path":       map[string]interface{}{"type": "string", "description": "Absolute or relative file path to read"},
 			"start_line": map[string]interface{}{"type": "integer", "description": "Start line number (1-indexed, optional)"},
 			"end_line":   map[string]interface{}{"type": "integer", "description": "End line number (1-indexed, optional)"},
+			"paths": map[string]interface{}{
+				"type":        "array",
+				"items":       map[string]interface{}{"type": "string"},
+				"maxItems":    MaxReadFilesPaths,
+				"description": "Read multiple files in one call (max 10). Format: \"path\" or \"path:start-end\". When paths is provided, path/start_line/end_line are ignored.",
+			},
 		},
-		"required":             []string{"path"},
+		"required":             []string{},
 		"additionalProperties": false,
 	}
 }
 
 func (t *ReadFileTool) Run(args map[string]string) (string, *tools.FileChange, error) {
+	// バッチモード: paths が指定されている場合
+	if args["paths"] != "" {
+		var paths []string
+		if err := json.Unmarshal([]byte(args["paths"]), &paths); err != nil {
+			return fmt.Sprintf("Error: invalid paths format: %v", err), nil, nil
+		}
+		return ExecuteReadFiles(paths), nil, nil
+	}
+
+	// 単体モード: 従来の path + start_line/end_line
+	if args["path"] == "" {
+		return "Error: path or paths is required", nil, nil
+	}
 	startLine, endLine := 0, 0
 	if args["start_line"] != "" {
 		if n, err := strconv.Atoi(args["start_line"]); err == nil {
@@ -216,7 +236,6 @@ func (t *ListDirTool) Run(args map[string]string) (string, *tools.FileChange, er
 // RegisterTools registers all file tools to the given registry
 func RegisterTools(r *tools.Registry) {
 	r.Register(&ReadFileTool{})
-	r.Register(&ReadFilesTool{})
 	r.Register(&WriteFileTool{})
 	r.Register(&StrReplaceTool{})
 	r.Register(&DeleteFileTool{})

@@ -5,8 +5,7 @@ package tools
 // 非FC プロバイダー: system.go の Available Tools テキストと手動同期。
 var ToolDescriptions = map[string]string{
 	// File Operations
-	"read_file":   "Read file contents. Use to examine source code, config, or any text file. Supports optional line range.",
-	"read_files":  "Read multiple files in one call (max 10). Each path supports optional line range: \"path\" or \"path:start-end\". More efficient than multiple read_file calls when you need 2+ files.",
+	"read_file":   "Read file contents. Single: {path, start_line?, end_line?}. Batch: {paths: [\"path1\", \"path2:10-20\"]} for multiple files in one call (max 10). Batch is preferred when reading 2+ files.",
 	"write_file":  "Create or overwrite a file. Use str_replace for partial edits to existing files.",
 	"str_replace": "Edit existing file. PREFERRED: Line-range mode (old_str empty + start_line/end_line) after search_code — no read_file needed. FALLBACK: old_str mode requires read_file first. Batch mode: pass edits=[{old_str,new_str},...] for multiple replacements in one call.",
 	"delete_file": "Delete a file permanently.",

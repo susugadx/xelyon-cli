@@ -151,3 +151,68 @@ func TestExecuteReadFile_StartLineLargeFile(t *testing.T) {
 		t.Errorf("Expected output to contain last line 300, got: %s", output)
 	}
 }
+
+func TestReadFileTool_BatchMode(t *testing.T) {
+	setupTestMocks(t)
+	tmpDir := t.TempDir()
+
+	testutil.CreateTempFile(t, tmpDir, "file1.txt", "hello from file1")
+	testutil.CreateTempFile(t, tmpDir, "file2.txt", "hello from file2")
+
+	file1 := filepath.Join(tmpDir, "file1.txt")
+	file2 := filepath.Join(tmpDir, "file2.txt")
+
+	tool := &ReadFileTool{}
+	result, fc, err := tool.Run(map[string]string{
+		"paths": `["` + file1 + `", "` + file2 + `"]`,
+	})
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if fc != nil {
+		t.Errorf("expected nil FileChange, got: %v", fc)
+	}
+	if !strings.Contains(result, "hello from file1") {
+		t.Errorf("expected result to contain file1 content, got: %s", result)
+	}
+	if !strings.Contains(result, "hello from file2") {
+		t.Errorf("expected result to contain file2 content, got: %s", result)
+	}
+}
+
+func TestReadFileTool_BatchMode_LineRange(t *testing.T) {
+	setupTestMocks(t)
+	tmpDir := t.TempDir()
+
+	testutil.CreateTempFile(t, tmpDir, "range.txt", "line1\nline2\nline3\nline4\nline5")
+
+	file := filepath.Join(tmpDir, "range.txt")
+
+	tool := &ReadFileTool{}
+	result, _, err := tool.Run(map[string]string{
+		"paths": `["` + file + `:2-3"]`,
+	})
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(result, "line2") {
+		t.Errorf("expected result to contain line2, got: %s", result)
+	}
+	if strings.Contains(result, "line4") {
+		t.Errorf("result should NOT contain line4, got: %s", result)
+	}
+}
+
+func TestReadFileTool_PathRequired(t *testing.T) {
+	tool := &ReadFileTool{}
+	result, _, err := tool.Run(map[string]string{})
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(result, "Error") {
+		t.Errorf("expected error when neither path nor paths provided, got: %s", result)
+	}
+}
