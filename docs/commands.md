@@ -619,11 +619,3 @@ Edit xelyon.yaml interactively (rules, hooks)
 
 <!-- TODO: 以下のコマンドに詳細な説明を追加してください -->
 
-### `/index`
-
-Build or update embedding index for the current project
-
-```
-> /index
-```
-
