@@ -65,12 +65,14 @@ func TestGetProviderPrefix_Claude(t *testing.T) {
 }
 
 func TestGetProviderPrefix_Anthropic(t *testing.T) {
-	prefix := GetProviderPrefix("anthropic")
-	if prefix == "" {
+	// "anthropic" は "claude" のエイリアス — 同一プレフィックスが返ること
+	anthropic := GetProviderPrefix("anthropic")
+	claude := GetProviderPrefix("claude")
+	if anthropic == "" {
 		t.Fatal("expected non-empty prefix for anthropic")
 	}
-	if !strings.Contains(prefix, "File search → search_code, NOT bash (grep/rg/find)") {
-		t.Error("anthropic prefix should contain file search rule")
+	if anthropic != claude {
+		t.Error("anthropic and claude should return identical prefixes")
 	}
 }
 
@@ -218,16 +220,12 @@ func TestBuildProviderSystemPrompt_EmptyProvider(t *testing.T) {
 }
 
 func TestBuildProviderSystemPrompt_Anthropic(t *testing.T) {
+	// "anthropic" は "claude" のエイリアス — 同一結果が返ること
 	base := "You are XELYON, an autonomous AI coding agent."
-	result := BuildProviderSystemPrompt(base, "anthropic")
+	anthropic := BuildProviderSystemPrompt(base, "anthropic")
+	claude := BuildProviderSystemPrompt(base, "claude")
 
-	if !strings.HasPrefix(result, "## ") {
-		t.Error("anthropic result should start with prefix header")
-	}
-	if !strings.HasSuffix(result, base) {
-		t.Error("anthropic result should end with base prompt")
-	}
-	if !strings.Contains(result, "File search → search_code, NOT bash (grep/rg/find)") {
-		t.Error("anthropic result should contain file search rule")
+	if anthropic != claude {
+		t.Error("anthropic and claude should produce identical system prompts")
 	}
 }

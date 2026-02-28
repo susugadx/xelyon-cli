@@ -32,20 +32,27 @@ var providerPrefixes = map[string]string{
 	"groq": "## ⚠️ ABSOLUTE RULES (NEVER SKIP)\n" + commonRulesBlock +
 		"7. **Tool calls MUST be raw JSON** - NEVER wrap in markdown code blocks or use XML like `<tool_name><param>value</param></tool_name>`\n" +
 		"8. **ALWAYS respond in the same language as the user's message** - if the user writes in Japanese, respond in Japanese\n\n",
-	"anthropic": "## ⚠️ ABSOLUTE RULES (NEVER SKIP)\n" + commonRulesBlock +
-		"7. **File search → search_code, NOT bash (grep/rg/find)** - bash is for build/test/run commands ONLY (e.g. make, go test, npm run)\n" +
-		"8. **File reading → read_file, NOT bash (cat/head/tail/sed)** - use read_file with line ranges for targeted reading\n" +
-		"9. **ALWAYS use parallel tool calls** - When operations are independent (e.g., searching def + ref, editing multiple files, reading + searching), call ALL tools in a single response. One-at-a-time calls for independent operations are FORBIDDEN — they double token costs\n\n",
+	// "claude" と "anthropic" は同一プロバイダー（anthropic はエイリアス）
+	// GetProviderPrefix() 内でエイリアス正規化するため "claude" のみ定義
 	"claude": "## ⚠️ ABSOLUTE RULES (NEVER SKIP)\n" + commonRulesBlock +
 		"7. **File search → search_code, NOT bash (grep/rg/find)** - bash is for build/test/run commands ONLY (e.g. make, go test, npm run)\n" +
 		"8. **File reading → read_file, NOT bash (cat/head/tail/sed)** - use read_file with line ranges for targeted reading\n" +
 		"9. **ALWAYS use parallel tool calls** - When operations are independent (e.g., searching def + ref, editing multiple files, reading + searching), call ALL tools in a single response. One-at-a-time calls for independent operations are FORBIDDEN — they double token costs\n\n",
 }
 
+// providerAliases はプロバイダー名のエイリアスを正規名に変換するマップ
+var providerAliases = map[string]string{
+	"anthropic": "claude",
+}
+
 // GetProviderPrefix はプロバイダー名に応じたプレフィックスを返す
 // 未登録プロバイダーは空文字を返す
 func GetProviderPrefix(provider string) string {
-	return providerPrefixes[strings.ToLower(provider)]
+	name := strings.ToLower(provider)
+	if canonical, ok := providerAliases[name]; ok {
+		name = canonical
+	}
+	return providerPrefixes[name]
 }
 
 // BuildProviderSystemPrompt はプロバイダー別プレフィックスをシステムプロンプトの冒頭に注入する
