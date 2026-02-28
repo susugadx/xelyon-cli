@@ -588,6 +588,24 @@ func TestClassifyMatch(t *testing.T) {
 		// Usage (struct tag with = inside backtick — NOT assignment)
 		{"\tName string `json:\"name\"`", MatchTypeUsage},
 		{"\tValue int `yaml:\"val=default\"`", MatchTypeUsage},
+		// Modifiers
+		{"async def process():", MatchTypeDefinition},
+		{"export function doSomething() {", MatchTypeDefinition},
+		{"export default function doSomething() {", MatchTypeDefinition},
+		{"async export const getUser = () => {", MatchTypeDefinition},
+		// Return types
+		{"static void main()", MatchTypeDefinition},
+		{"public int getValue()", MatchTypeDefinition},
+		{"private string ToString()", MatchTypeDefinition},
+		// Control flow usage
+		{"if something() {", MatchTypeUsage},
+		{"for i := range items {", MatchTypeUsage},
+		{"return getValue()", MatchTypeUsage},
+		{"switch getType() {", MatchTypeUsage},
+		{"while hasNext() {", MatchTypeUsage},
+		// Anonymous func usage
+		{"go func() {", MatchTypeUsage},
+		{"defer func() {", MatchTypeUsage},
 		// Comment
 		{"// comment", MatchTypeComment},
 		{"# python comment", MatchTypeComment},

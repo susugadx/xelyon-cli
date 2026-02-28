@@ -43,6 +43,121 @@ func TestExtractBlockName(t *testing.T) {
 	}
 }
 
+func TestExtractBlockName_Modifiers(t *testing.T) {
+	tests := []struct {
+		line     string
+		expected string
+	}{
+		{"async def process():", "def process"},
+		{"export default function doSomething() {", "function doSomething"},
+		{"go func() {", "func(anonymous)"},
+		{"defer func() {", "func(anonymous)"},
+		{"public class MyClass {", "class MyClass"},
+		{"export async function fetchData() {", "function fetchData"},
+		{"async def async_function():", "def async_function"},
+	}
+	for _, tt := range tests {
+		got := ExtractBlockName(tt.line)
+		if got != tt.expected {
+			t.Errorf("ExtractBlockName(%q) = %q, want %q", tt.line, got, tt.expected)
+		}
+	}
+}
+
+func TestExtractBlockName_VarAssignment(t *testing.T) {
+	tests := []struct {
+		line     string
+		expected string
+	}{
+		{"const config =", "const config"},
+		{"var count =", "var count"},
+		{"let isReady =", "let isReady"},
+		{"export const MyComponent = () => {", "const MyComponent"},
+		{"const handler = (req, res) => {", "const handler"},
+		{"var processor = func(data string) {", "var processor"},
+	}
+	for _, tt := range tests {
+		got := ExtractBlockName(tt.line)
+		if got != tt.expected {
+			t.Errorf("ExtractBlockName(%q) = %q, want %q", tt.line, got, tt.expected)
+		}
+	}
+}
+
+func TestExtractBlockName_AnonymousFunc(t *testing.T) {
+	tests := []struct {
+		line     string
+		expected string
+	}{
+		{"func() {", "func(anonymous)"},
+		{"go func() {", "func(anonymous)"},
+		{"defer func() {", "func(anonymous)"},
+	}
+	for _, tt := range tests {
+		got := ExtractBlockName(tt.line)
+		if got != tt.expected {
+			t.Errorf("ExtractBlockName(%q) = %q, want %q", tt.line, got, tt.expected)
+		}
+	}
+}
+
+func TestExtractBlockName_Generics(t *testing.T) {
+	tests := []struct {
+		line     string
+		expected string
+	}{
+		{"func Process[T any](data T) {", "func Process"},
+		{"func Convert<T>() {", "func Convert"},
+		{"type Cache[K comparable, V any] struct {", "type Cache"},
+		{"fn process<T: Clone>(item: T) {", "fn process"},
+		{"class Container<T> {", "class Container"},
+		{"function process<T>(value: T) {", "function process"},
+	}
+	for _, tt := range tests {
+		got := ExtractBlockName(tt.line)
+		if got != tt.expected {
+			t.Errorf("ExtractBlockName(%q) = %q, want %q", tt.line, got, tt.expected)
+		}
+	}
+}
+
+func TestExtractBlockName_ArrowFunction(t *testing.T) {
+	tests := []struct {
+		line     string
+		expected string
+	}{
+		{"const x = () => {", "const x"},
+		{"let multiply = (x, y) => x * y", "let multiply"},
+		{"export const handleClick = () => {", "const handleClick"},
+	}
+	for _, tt := range tests {
+		got := ExtractBlockName(tt.line)
+		if got != tt.expected {
+			t.Errorf("ExtractBlockName(%q) = %q, want %q", tt.line, got, tt.expected)
+		}
+	}
+}
+
+func TestStripModifiers(t *testing.T) {
+	tests := []struct {
+		line     string
+		expected string
+	}{
+		{"async export default public private protected static abstract override final virtual inline go defer func()", "func()"},
+		{"async const x = 1", "const x = 1"},
+		{"async def process():", "def process():"},
+		{"export function App() {", "function App() {"},
+		{"public static void main() {", "void main() {"},
+		{"", ""},
+	}
+	for _, tt := range tests {
+		got := StripModifiers(tt.line)
+		if got != tt.expected {
+			t.Errorf("StripModifiers(%q) = %q, want %q", tt.line, got, tt.expected)
+		}
+	}
+}
+
 func TestIsCommentLine(t *testing.T) {
 	tests := []struct {
 		line     string

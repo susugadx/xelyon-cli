@@ -68,14 +68,41 @@ func IsBraceLanguage(filePath string) bool {
 	}
 }
 
+// StripModifiers は行の先頭から修飾子（async, export, default, public, private, protected, static, abstract, override, final, virtual, inline, go, defer）を剥がす
+func StripModifiers(line string) string {
+	modifiers := []string{
+		"async ", "export ", "default ", "public ", "private ", "protected ",
+		"static ", "abstract ", "override ", "final ", "virtual ", "inline ",
+		"go ", "defer ",
+	}
+
+	trimmed := strings.TrimSpace(line)
+	for {
+		changed := false
+		for _, mod := range modifiers {
+			if strings.HasPrefix(trimmed, mod) {
+				trimmed = strings.TrimSpace(trimmed[len(mod):])
+				changed = true
+				break
+			}
+		}
+		if !changed {
+			break
+		}
+	}
+	return trimmed
+}
+
 // ExtractBlockName は宣言行からブロック名を抽出する
 func ExtractBlockName(line string) string {
+	trimmed := StripModifiers(line)
+
 	// Go method receiver: func (f *Foo) Bar(...)
-	if strings.HasPrefix(line, "func (") {
-		closeIdx := strings.Index(line, ") ")
+	if strings.HasPrefix(trimmed, "func (") {
+		closeIdx := strings.Index(trimmed, ") ")
 		if closeIdx > 0 {
-			rest := line[closeIdx+2:]
-			nameEnd := strings.IndexAny(rest, "( {")
+			rest := trimmed[closeIdx+2:]
+			nameEnd := strings.IndexAny(rest, "( {<[")
 			if nameEnd < 0 {
 				nameEnd = len(rest)
 			}
@@ -86,15 +113,21 @@ func ExtractBlockName(line string) string {
 		}
 		return ""
 	}
+
+	// Anonymous func (Go)
+	if strings.HasPrefix(trimmed, "func(") {
+		return "func(anonymous)"
+	}
+
 	// General: keyword + name
 	keywords := []string{
 		"func ", "fn ", "def ", "function ", "sub ", "method ",
 		"type ", "class ", "struct ", "interface ", "enum ", "trait ",
 	}
 	for _, kw := range keywords {
-		if strings.HasPrefix(line, kw) {
-			rest := line[len(kw):]
-			nameEnd := strings.IndexAny(rest, "( {:\n")
+		if strings.HasPrefix(trimmed, kw) {
+			rest := trimmed[len(kw):]
+			nameEnd := strings.IndexAny(rest, "( {:\n<[")
 			if nameEnd < 0 {
 				nameEnd = len(rest)
 			}
@@ -104,6 +137,26 @@ func ExtractBlockName(line string) string {
 			}
 		}
 	}
+
+	// Variable assignment: const/var/let + name
+	varKeywords := []string{"const ", "var ", "let "}
+	for _, kw := range varKeywords {
+		if strings.HasPrefix(trimmed, kw) {
+			eqIdx := strings.Index(trimmed, "=")
+			if eqIdx > 0 {
+				left := strings.TrimSpace(trimmed[len(kw):eqIdx])
+				nameEnd := strings.IndexAny(left, " :")
+				if nameEnd < 0 {
+					nameEnd = len(left)
+				}
+				name := strings.TrimSpace(left[:nameEnd])
+				if name != "" {
+					return strings.TrimSpace(kw) + " " + name
+				}
+			}
+		}
+	}
+
 	return ""
 }
 

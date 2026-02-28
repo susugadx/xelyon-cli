@@ -799,6 +799,13 @@ func truncateToTokenBudget(results []SearchResult, budget int) ([]SearchResult, 
 
 // --- マッチ種別分類 ---
 
+var controlFlowKeywords = map[string]bool{
+	"if": true, "else": true, "for": true, "while": true,
+	"switch": true, "case": true, "return": true, "break": true,
+	"continue": true, "throw": true, "try": true, "catch": true,
+	"finally": true, "select": true, "range": true, "yield": true, "await": true,
+}
+
 // classifyMatch はマッチ行の内容から種別を判定する（言語非依存の汎用パターン）
 func classifyMatch(line string) MatchType {
 	trimmed := strings.TrimSpace(line)
@@ -819,6 +826,8 @@ func classifyMatch(line string) MatchType {
 		return MatchTypeImport
 	}
 
+	strippedTrimmed := common.StripModifiers(trimmed)
+
 	// 3. 定義（インデント問わず defKeyword で始まる行）
 	defKeywords := []string{
 		"func ", "fn ", "def ", "function ", "sub ", "method ",
@@ -827,8 +836,30 @@ func classifyMatch(line string) MatchType {
 		"module ", "namespace ", "package ",
 	}
 	for _, kw := range defKeywords {
-		if strings.HasPrefix(trimmed, kw) {
+		if strings.HasPrefix(strippedTrimmed, kw) {
 			return MatchTypeDefinition
+		}
+	}
+
+	// 戻り値型スキップ判定
+	parts := strings.Fields(strippedTrimmed)
+	if len(parts) > 0 {
+		firstWord := parts[0]
+		// 制御構文の場合は即座に Usage を返す（代入と誤判定させない）
+		if controlFlowKeywords[firstWord] {
+			return MatchTypeUsage
+		}
+
+		if len(parts) >= 2 {
+			rest := strings.TrimSpace(strippedTrimmed[len(firstWord):])
+			// 識別子 + '(' であれば定義とみなす
+			parenIdx := strings.Index(rest, "(")
+			if parenIdx > 0 {
+				idCandidate := strings.TrimSpace(rest[:parenIdx])
+				if isValidIdentifier(idCandidate) {
+					return MatchTypeDefinition
+				}
+			}
 		}
 	}
 
@@ -839,6 +870,35 @@ func classifyMatch(line string) MatchType {
 
 	// 5. 使用（デフォルト）
 	return MatchTypeUsage
+}
+
+// isValidIdentifier は関数名などの識別子として妥当か判定する（ジェネリクス <> [] 対応）
+func isValidIdentifier(s string) bool {
+	if s == "" {
+		return false
+	}
+	// ジェネリクスの括弧を取り除く
+	idx := strings.IndexAny(s, "<[")
+	if idx >= 0 {
+		s = s[:idx]
+	}
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return false
+	}
+
+	for i, r := range s {
+		if i == 0 {
+			if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && r != '_' && r < 0x80 {
+				return false
+			}
+		} else {
+			if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') && r != '_' && r < 0x80 {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // hasAssignment は行に代入演算子が含まれるか判定する（比較演算子・文字列内を除外）
