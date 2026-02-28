@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/embedding"
@@ -745,6 +746,19 @@ func isTestFile(path string) bool {
 		strings.Contains(base, "test_")
 }
 
+const maxLineLength = 500
+
+func estimateTokens(line string) int {
+	return utf8.RuneCountInString(line)/2 + len(line)/8 + 3
+}
+
+func truncateLine(line string) string {
+	if utf8.RuneCountInString(line) > maxLineLength {
+		return string([]rune(line)[:maxLineLength]) + "..."
+	}
+	return line
+}
+
 // --- トークンバジェット制御 ---
 
 func truncateToTokenBudget(results []SearchResult, budget int) ([]SearchResult, bool) {
@@ -766,7 +780,7 @@ func truncateToTokenBudget(results []SearchResult, budget int) ([]SearchResult, 
 		var keptMatches []Match
 		matchCount := 0
 		for _, m := range r.Matches {
-			lineTokens := len(m.Line)/4 + 3 // 行番号 + セパレータ + 内容
+			lineTokens := estimateTokens(m.Line) // 行番号 + セパレータ + 内容
 			if m.IsMatch {
 				lineTokens += 10 // ブロック注釈分
 			}
@@ -1046,12 +1060,12 @@ func formatSearchResultsBody(results []SearchResult, truncated bool, tokenBudget
 			prevLineNum = m.LineNum
 
 			if m.IsMatch {
-				sb.WriteString(fmt.Sprintf("  %-10s> %4d │ %s\n", matchTypeTag[m.Type], m.LineNum, m.Line))
+				sb.WriteString(fmt.Sprintf("  %-10s> %4d │ %s\n", matchTypeTag[m.Type], m.LineNum, truncateLine(m.Line)))
 				if m.Block != nil {
 					sb.WriteString(fmt.Sprintf("  %10s  %4s   ── in %s (L%d)\n", "", "", m.Block.Name, m.Block.StartLine))
 				}
 			} else {
-				sb.WriteString(fmt.Sprintf("  %10s  %4d │ %s\n", "", m.LineNum, m.Line))
+				sb.WriteString(fmt.Sprintf("  %10s  %4d │ %s\n", "", m.LineNum, truncateLine(m.Line)))
 			}
 		}
 	}

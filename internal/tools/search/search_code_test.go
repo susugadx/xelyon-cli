@@ -134,6 +134,18 @@ func TestSearchCode_TokenBudget(t *testing.T) {
 		}
 	}
 
+	// 1行が1000文字を超えるファイルを追加（行長制限テスト）
+	longLine := "var long_target_budget_check = \"" + strings.Repeat("a", 1000) + "\"\n"
+	if err := os.WriteFile(filepath.Join(dir, "long.go"), []byte(longLine), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// 日本語コメントを含むファイルを追加（マルチバイト文字推定テスト）
+	japaneseLine := "// target_budget_check " + strings.Repeat("あ", 100) + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "japanese.go"), []byte(japaneseLine), 0644); err != nil {
+		t.Fatal(err)
+	}
+
 	// context_lines=3 + 小バジェット → 確実に打ち切り
 	result := ExecuteSearchCode("target_budget_check", dir, "", "3", "500")
 
@@ -142,6 +154,22 @@ func TestSearchCode_TokenBudget(t *testing.T) {
 	}
 	if !strings.Contains(result, "truncated") {
 		t.Error("Expected truncation message with small token budget")
+	}
+
+	// longLine が切り詰められていることを確認
+	longResult := ExecuteSearchCode("long_target_budget_check", dir, "", "0", "3000")
+	if !strings.Contains(longResult, "...") {
+		t.Error("Expected long line to be truncated with ...")
+	}
+	// 行自体の長さが maxLineLength (500) 付近に切り詰められているので、1000文字の 'a' はフルでは含まれない
+	if strings.Contains(longResult, strings.Repeat("a", 1000)) {
+		t.Error("Expected long line to not contain the full 1000 character string")
+	}
+
+	// 日本語行の検索が正常に行われ、バジェット内に収まるか
+	jpResult := ExecuteSearchCode("target_budget_check あ", dir, "", "0", "3000")
+	if !strings.Contains(jpResult, "target_budget_check") {
+		t.Error("Expected japanese comment to be searchable and displayed")
 	}
 }
 
@@ -1106,5 +1134,76 @@ func TestMergeSearchResults_EmptySlices(t *testing.T) {
 	}
 	if merged[0].FilePath != "c.go" {
 		t.Errorf("Expected 'c.go', got '%s'", merged[0].FilePath)
+	}
+}
+
+func TestTruncateLine(t *testing.T) {
+	tests := []struct {
+		name     string
+		line     string
+		expected string
+	}{
+		{
+			name:     "500 characters or less",
+			line:     strings.Repeat("a", 500),
+			expected: strings.Repeat("a", 500),
+		},
+		{
+			name:     "501 characters",
+			line:     strings.Repeat("a", 501),
+			expected: strings.Repeat("a", 500) + "...",
+		},
+		{
+			name:     "empty line",
+			line:     "",
+			expected: "",
+		},
+		{
+			name:     "multibyte characters (501 runes)",
+			line:     strings.Repeat("あ", 501),
+			expected: strings.Repeat("あ", 500) + "...",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := truncateLine(tt.line)
+			if result != tt.expected {
+				t.Errorf("truncateLine() len=%d, expected len=%d", len([]rune(result)), len([]rune(tt.expected)))
+			}
+		})
+	}
+}
+
+func TestEstimateTokens(t *testing.T) {
+	tests := []struct {
+		name     string
+		line     string
+		expected int
+	}{
+		{
+			name:     "English text",
+			line:     "hello world", // runes: 11/2=5, bytes: 11/8=1, +3 = 9
+			expected: 9,
+		},
+		{
+			name:     "Japanese text",
+			line:     "これはテストです", // runes: 8/2=4, bytes: 24/8=3, +3 = 10
+			expected: 10,
+		},
+		{
+			name:     "Mixed text",
+			line:     "hello これはテスト world", // runes: 18/2=9, bytes: 30/8=3, +3 = 15
+			expected: 15,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := estimateTokens(tt.line)
+			if result != tt.expected {
+				t.Errorf("estimateTokens(%q) = %d, expected %d", tt.line, result, tt.expected)
+			}
+		})
 	}
 }
