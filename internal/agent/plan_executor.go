@@ -90,11 +90,10 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 	var lastFailReason string
 
 	// ステップ完了検証用トラッカー
-	executedTools := make(map[string]bool) // ステップ内で実行されたツール名
-	stepHadWrites := false                 // 書き込み系ツールが実行されたか
-	stepHadNoChangeNeeded := false         // 書き込み系ツールが「変更不要」と返したか
-	beforeDiffHash := getGitDiffHash()     // Level 2 用: ステップ開始時の diff ハッシュ
-	var stepCompletionVerified bool        // LSP完了検証ガード（ステップ内1回限り）
+	stepHadWrites := false             // 書き込み系ツールが実行されたか
+	stepHadNoChangeNeeded := false     // 書き込み系ツールが「変更不要」と返したか
+	beforeDiffHash := getGitDiffHash() // Level 2 用: ステップ開始時の diff ハッシュ
+	var stepCompletionVerified bool    // LSP完了検証ガード（ステップ内1回限り）
 
 	// ループ検知用トラッカー
 	var lastToolCall *tools.ToolCall
@@ -168,54 +167,6 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 				if afterDiffHash != "" && afterDiffHash != beforeDiffHash {
 					green.Printf("✓ Step %d completed (already applied)\n", step.ID)
 					return nil
-				}
-			}
-
-			// Level 1: 計画の tools に書き込み系があるのに未実行 → 強制続行
-			if missing := checkMissingWriteTools(step.Tools, executedTools); len(missing) > 0 {
-				// エスケープ1: diff に対象ファイルの変更あり → 既に適用済み
-				// retry で executedTools がリセットされても diff は残るため、AI の宣言なしに完了判定できる
-				if len(step.Files) > 0 && diffContainsFileChanges(step.Files) {
-					green.Printf("✓ Step %d completed (changes verified in diff)\n", step.ID)
-					return nil
-				}
-				// エスケープ2（後方互換）: AI が「既に適用済み」と宣言 + diff に変更あり
-				if containsAlreadyAppliedDeclaration(response) && diffContainsFileChanges(step.Files) {
-					green.Printf("✓ Step %d completed (verified in diff)\n", step.ID)
-					return nil
-				}
-				if continueCount < maxContinues {
-					continueCount++
-					yellow.Printf("⚠️  Step %d: expected %s but never executed (%d/%d)\n",
-						step.ID, strings.Join(missing, ", "), continueCount, maxContinues)
-					a.History = append(a.History, api.Message{
-						Role: "user",
-						Content: fmt.Sprintf("[SYSTEM] Step %d requires %s but none were executed. "+
-							"Do NOT declare completion. Execute the required tools now.", step.ID, strings.Join(missing, ", ")),
-					})
-					continue
-				}
-				// maxContinues 到達 → Selector UI で確認
-				yellow.Printf("⚠️  Step %d: required %s never executed after %d attempts.\n",
-					step.ID, strings.Join(missing, ", "), maxContinues)
-				ui.StopGlobalSpinner()
-				a.SetStatus(StateWaitingApproval, "Step incomplete - waiting for action", "ステップ未完了 - アクション待ち", "Choose action", "アクションを選択")
-				failMsg := fmt.Sprintf("Required tools [%s] were never executed after %d attempts", strings.Join(missing, ", "), maxContinues)
-				action, comment := promptFailureActionWithSelector(step, failMsg, "required tools not executed", 0)
-				switch action {
-				case plan.FailureActionRetry:
-					return a.executeStepV2(ctx, p, step, idx, 0)
-				case plan.FailureActionComment:
-					a.History = append(a.History, api.Message{
-						Role:    "user",
-						Content: fmt.Sprintf("[USER] %s", comment),
-					})
-					return a.executeStepV2(ctx, p, step, idx, 0)
-				case plan.FailureActionSkip:
-					yellow.Printf("⏭️  Step %d skipped by user\n", step.ID)
-					return nil
-				case plan.FailureActionAbort:
-					return fmt.Errorf("step %d aborted by user", step.ID)
 				}
 			}
 
@@ -359,13 +310,7 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 				}
 			}
 
-			// 書き込みツール成功後にインデックス更新をトリガー
-			if tools.IsWriteTool(toolCall.Tool) && !strings.HasPrefix(result, "Error:") {
-				a.triggerIndexUpdate()
-			}
-
-			// ステップ完了検証用: 実行されたツールを記録
-			executedTools[toolCall.Tool] = true
+			// ステップ完了検証用: 書き込み系ツールの実行を記録
 			if tools.IsWriteTool(toolCall.Tool) {
 				stepHadWrites = true
 
@@ -540,105 +485,6 @@ func isAIQuestion(response string) bool {
 	for _, pattern := range questionPatterns {
 		if strings.Contains(lowered, strings.ToLower(pattern)) {
 			return true
-		}
-	}
-	return false
-}
-
-// checkMissingWriteTools は step.Tools に含まれる書き込み系ツールのうち
-// 実際に実行されなかったものを返す。
-func checkMissingWriteTools(stepTools []string, executedTools map[string]bool) []string {
-	var missing []string
-	for _, t := range stepTools {
-		if tools.IsWriteTool(t) && !executedTools[t] {
-			missing = append(missing, t)
-		}
-	}
-	return missing
-}
-
-// containsAlreadyAppliedDeclaration はAI応答に「前ステップで適用済み」系パターンが含まれるか検出
-func containsAlreadyAppliedDeclaration(response string) bool {
-	lowered := strings.ToLower(response)
-	patterns := []string{
-		"already applied",
-		"already been applied",
-		"already been made",
-		"already been implemented",
-		"already modified",
-		"already changed",
-		"already updated",
-		"already exists",
-		"previous step",
-		"earlier step",
-		"already handled",
-		"already done",
-		"already completed",
-	}
-	for _, p := range patterns {
-		if strings.Contains(lowered, p) {
-			return true
-		}
-	}
-	// 日本語パターン
-	jpPatterns := []string{
-		"既に適用",
-		"既に修正",
-		"既に変更",
-		"既に実装",
-		"前のステップ",
-		"先ほどのステップ",
-		"適用済み",
-		"修正済み",
-		"変更済み",
-	}
-	for _, p := range jpPatterns {
-		if strings.Contains(response, p) {
-			return true
-		}
-	}
-	return false
-}
-
-// diffContainsFileChanges は git diff HEAD および untracked files に指定ファイルへの変更が含まれるか確認
-func diffContainsFileChanges(files []string) bool {
-	if len(files) == 0 {
-		return false
-	}
-	out, err := exec.Command("git", "diff", "HEAD", "--name-only").CombinedOutput()
-	if err != nil {
-		return false
-	}
-	diffOutput := strings.TrimSpace(string(out))
-	changedSet := make(map[string]bool)
-	if diffOutput != "" {
-		for _, f := range strings.Split(diffOutput, "\n") {
-			changedSet[strings.TrimSpace(f)] = true
-		}
-	}
-
-	// untracked ファイルも changedSet に追加
-	untrackedOut, _ := exec.Command("git", "ls-files", "--others", "--exclude-standard").CombinedOutput()
-	for _, f := range strings.Split(strings.TrimSpace(string(untrackedOut)), "\n") {
-		f = strings.TrimSpace(f)
-		if f != "" {
-			changedSet[f] = true
-		}
-	}
-
-	if len(changedSet) == 0 {
-		return false
-	}
-
-	for _, target := range files {
-		if changedSet[target] {
-			return true
-		}
-		// パス末尾マッチ（"internal/api/foo.go" vs "foo.go"）
-		for changed := range changedSet {
-			if strings.HasSuffix(changed, "/"+target) || strings.HasSuffix(target, "/"+changed) {
-				return true
-			}
 		}
 	}
 	return false
