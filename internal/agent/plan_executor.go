@@ -101,10 +101,11 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 	var sameCallCount int
 
 	for j := 0; j < maxStepIterations; j++ {
+		compactedHistory := CompactOldToolResults(a.History, DefaultKeepTurns, DefaultMaxLines, DefaultHeadLines, DefaultTailLines)
 		response, err := a.CurrentProvider.ChatWithTools(
 			ctx,
 			a.SystemPrompt,
-			a.History,
+			compactedHistory,
 			a.CurrentModel,
 		)
 		if err != nil {

@@ -31,10 +31,11 @@ func (a *Agent) runInvestigationPhase(ctx context.Context) (*plan.Plan, error) {
 	}
 
 	for i := 0; i < maxIterations; i++ {
+		compactedHistory := CompactOldToolResults(a.History, DefaultKeepTurns, DefaultMaxLines, DefaultHeadLines, DefaultTailLines)
 		response, err := a.CurrentProvider.ChatWithTools(
 			ctx,
 			a.SystemPrompt,
-			a.History,
+			compactedHistory,
 			a.CurrentModel,
 		)
 		if err != nil {

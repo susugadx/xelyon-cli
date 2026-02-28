@@ -157,14 +157,16 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 		var err error
 		if i == 0 && image != nil {
 			inputWithPrompt := input + promptnormal.NormalModePrompt
+			compactedHistory := CompactOldToolResults(a.History[:len(a.History)-1], DefaultKeepTurns, DefaultMaxLines, DefaultHeadLines, DefaultTailLines)
 			response, err = a.CurrentProvider.ChatWithImage(
-				ctx, a.SystemPrompt, a.History[:len(a.History)-1], inputWithPrompt, image, a.CurrentModel,
+				ctx, a.SystemPrompt, compactedHistory, inputWithPrompt, image, a.CurrentModel,
 			)
 		} else {
+			compactedHistory := CompactOldToolResults(a.History, DefaultKeepTurns, DefaultMaxLines, DefaultHeadLines, DefaultTailLines)
 			response, err = a.CurrentProvider.ChatWithTools(
 				ctx,
 				a.SystemPrompt,
-				a.History,
+				compactedHistory,
 				a.CurrentModel,
 			)
 			// tool_choice が設定されていた場合は解除
