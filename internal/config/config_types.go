@@ -28,7 +28,6 @@ type Config struct {
 	WebSearch WebSearchConfig `yaml:"web_search"`
 	MCP       MCPConfig       `yaml:"mcp"`
 	Hooks     HooksConfig     `yaml:"hooks"`
-	Embedding EmbeddingConfig `yaml:"embedding"`
 	// 将来の拡張用
 	// Cloud CloudConfig `yaml:"cloud,omitempty"`
 }
@@ -152,14 +151,6 @@ type HooksConfig struct {
 	OnStepComplete []string `yaml:"on_step_complete"` // ステップ完了時に実行するコマンド
 	Timeout        int      `yaml:"timeout"`          // コマンドタイムアウト秒（デフォルト: 60）
 	MaxRetry       int      `yaml:"max_retry"`        // フック失敗時の最大リトライ回数（デフォルト: 3）
-}
-
-// EmbeddingConfig はEmbedding検索の設定
-type EmbeddingConfig struct {
-	Enabled    bool     `yaml:"enabled"`    // Embedding検索を有効化（デフォルト: true）
-	Model      string   `yaml:"model"`      // Embeddingモデル名（デフォルト: qwen3-embedding:0.6b）
-	BaseURL    string   `yaml:"base_url"`   // Ollama APIのURL（デフォルト: http://localhost:11434）
-	Extensions []string `yaml:"extensions"` // インデックス対象の拡張子リスト
 }
 
 // LSPConfig は LSP (Language Server Protocol) 連携の設定

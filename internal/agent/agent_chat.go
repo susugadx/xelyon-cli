@@ -426,11 +426,6 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 				}
 			}
 
-			// 書き込みツール成功後にインデックス更新をトリガー
-			if tools.IsWriteTool(tc.Tool) && !strings.HasPrefix(result, "Error:") {
-				a.triggerIndexUpdate()
-			}
-
 			// 失敗パターンをチェック
 			// bash 等のコマンド実行系と、ファイル変更系（str_replace, write_file等）のみチェック
 			if tc.Tool == "bash" || tools.IsWriteTool(tc.Tool) {
