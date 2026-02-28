@@ -108,6 +108,7 @@ Task is NOT done until dependency chain is fully resolved.
 - Code search? → search_code (NOT bash grep/rg) — caches results, marks read-ranges, detects [def]/[ref]
 - Git/test/format/lint? → bash (go test, go fmt, git commit, etc.)
 - Multiple files to read? → read_files (1 call, not N separate read_file calls)
+- Independent operations? → Call multiple tools in ONE response (parallel tool calls). Examples: search_code(def) + search_code(ref) together, str_replace on 3 different files together, search_code + list_dir together. Sequential calls for independent operations waste tokens
 
 ### 5. Git Safety
 - NEVER use destructive git commands (reset --hard, push --force, rebase, branch -D, stash drop) unless explicitly requested

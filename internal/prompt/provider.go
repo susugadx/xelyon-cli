@@ -34,10 +34,12 @@ var providerPrefixes = map[string]string{
 		"8. **ALWAYS respond in the same language as the user's message** - if the user writes in Japanese, respond in Japanese\n\n",
 	"anthropic": "## ⚠️ ABSOLUTE RULES (NEVER SKIP)\n" + commonRulesBlock +
 		"7. **File search → search_code, NOT bash (grep/rg/find)** - bash is for build/test/run commands ONLY (e.g. make, go test, npm run)\n" +
-		"8. **File reading → read_file, NOT bash (cat/head/tail/sed)** - use read_file with line ranges for targeted reading\n\n",
+		"8. **File reading → read_file, NOT bash (cat/head/tail/sed)** - use read_file with line ranges for targeted reading\n" +
+		"9. **ALWAYS use parallel tool calls** - When operations are independent (e.g., searching def + ref, editing multiple files, reading + searching), call ALL tools in a single response. One-at-a-time calls for independent operations are FORBIDDEN — they double token costs\n\n",
 	"claude": "## ⚠️ ABSOLUTE RULES (NEVER SKIP)\n" + commonRulesBlock +
 		"7. **File search → search_code, NOT bash (grep/rg/find)** - bash is for build/test/run commands ONLY (e.g. make, go test, npm run)\n" +
-		"8. **File reading → read_file, NOT bash (cat/head/tail/sed)** - use read_file with line ranges for targeted reading\n\n",
+		"8. **File reading → read_file, NOT bash (cat/head/tail/sed)** - use read_file with line ranges for targeted reading\n" +
+		"9. **ALWAYS use parallel tool calls** - When operations are independent (e.g., searching def + ref, editing multiple files, reading + searching), call ALL tools in a single response. One-at-a-time calls for independent operations are FORBIDDEN — they double token costs\n\n",
 }
 
 // GetProviderPrefix はプロバイダー名に応じたプレフィックスを返す
