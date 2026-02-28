@@ -25,6 +25,9 @@ const (
 // truncate方式:
 // - 結果が maxLines 行を超える場合: 先頭 headLines 行 + "\n... (truncated: was N lines, ~M tokens)" + 末尾 tailLines 行
 // - maxLines 以下の場合: そのまま
+//
+// 注意: shallow copy のため、返されたスライスの Content 以外のフィールド（ToolCalls 等）は
+// 元の history と共有されている。返り値の Content 以外を変更してはならない。
 func CompactOldToolResults(history []api.Message, keepTurns, maxLines, headLines, tailLines int) []api.Message {
 	if len(history) == 0 {
 		return history
@@ -65,7 +68,7 @@ func CompactOldToolResults(history []api.Message, keepTurns, maxLines, headLines
 
 // truncateToolResult は大きなツール結果を truncate する
 func truncateToolResult(msg api.Message, maxLines, headLines, tailLines int) api.Message {
-	lines := strings.Split(msg.Content, "\n")
+	lines := strings.Split(strings.TrimRight(msg.Content, "\n"), "\n")
 	if len(lines) <= maxLines || headLines+tailLines >= len(lines) {
 		return msg
 	}

@@ -227,7 +227,7 @@ func TestCompactOldToolResults_TruncatedContentFormat(t *testing.T) {
 	}
 
 	// truncation marker が含まれること
-	if !strings.Contains(content, "... (truncated: was 101 lines") {
+	if !strings.Contains(content, "... (truncated: was 100 lines") {
 		t.Errorf("expected truncation marker with line count, got: %s", content)
 	}
 
@@ -236,8 +236,8 @@ func TestCompactOldToolResults_TruncatedContentFormat(t *testing.T) {
 		t.Error("expected token estimate in truncation marker")
 	}
 
-	// 末尾行が保持されていること
-	if !strings.HasSuffix(content, "line content here\n") {
+	// 末尾行が保持されていること（TrimRight で末尾改行が除去されている）
+	if !strings.HasSuffix(content, "line content here") {
 		t.Errorf("truncated content should end with tail lines, got suffix: %q",
 			content[len(content)-40:])
 	}
