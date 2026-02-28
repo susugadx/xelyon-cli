@@ -109,7 +109,7 @@ func ExecuteSearchCode(pattern, path, filePattern, contextLinesStr, tokenBudgetS
 	return executeSinglePattern(patterns[0], path, filePattern, ctxLines, tokenBudget)
 }
 
-// executeSinglePattern は単一パターンの検索処理（キャッシュ・検索・パース・マージ・トランケート・ReadTracker・ブロック認識・フォーマット・キャッシュ保存）
+// executeSinglePattern は単一パターンの検索処理（キャッシュ・検索・パース・マージ・トランケート・ブロック認識・フォーマット・キャッシュ保存）
 func executeSinglePattern(pattern, path, filePattern string, ctxLines, tokenBudget int) string {
 	// キャッシュチェック
 	cacheKey := fmt.Sprintf("%s|%s|%d|%d", path, filePattern, ctxLines, tokenBudget)
@@ -186,9 +186,6 @@ func executeSinglePattern(pattern, path, filePattern string, ctxLines, tokenBudg
 	// トークンバジェット制御
 	results, truncated := truncateToTokenBudget(results, tokenBudget)
 
-	// ReadTracker 連携
-	markReadRanges(results)
-
 	// ブロック認識（関数/クラス境界検出）
 	detectBlocks(results)
 
@@ -201,28 +198,6 @@ func executeSinglePattern(pattern, path, filePattern string, ctxLines, tokenBudg
 	}
 
 	return formatted
-}
-
-// markReadRanges は検索結果ファイルの行範囲を既読マークする（str_replace line-range モードで read_file なし編集を許可）
-// goroutine から並列呼び出し可能（GlobalReadTracker は sync.RWMutex で保護）
-func markReadRanges(results []SearchResult) {
-	for _, r := range results {
-		if absPath, err := filepath.Abs(r.FilePath); err == nil {
-			if len(r.Matches) > 0 {
-				startLine := r.Matches[0].LineNum
-				endLine := r.Matches[0].LineNum
-				for _, m := range r.Matches {
-					if m.LineNum < startLine {
-						startLine = m.LineNum
-					}
-					if m.LineNum > endLine {
-						endLine = m.LineNum
-					}
-				}
-				tools.GlobalReadTracker.MarkReadRange(absPath, startLine, endLine)
-			}
-		}
-	}
 }
 
 const escapedCommaPlaceholder = "\x00COMMA\x00"
@@ -298,9 +273,6 @@ func executeMultiplePatterns(patterns []string, path, filePattern string, ctxLin
 			}
 
 			results, truncated := truncateToTokenBudget(results, budgetPerPattern)
-
-			// ReadTracker 連携
-			markReadRanges(results)
 
 			// ブロック認識
 			detectBlocks(results)

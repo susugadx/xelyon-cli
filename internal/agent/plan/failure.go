@@ -46,8 +46,6 @@ func ContainsFailure(result string) (bool, string) {
 		"AssertionError:":                    "Assertion failed",
 		// Rust errors
 		"error[E": "Rust compilation error",
-		// Read-Before-Write guard errors
-		"You must read_file before": "Read-before-write guard: file not read",
 	}
 
 	// パターンの優先度順にチェック（より具体的なものを先に）
@@ -69,7 +67,6 @@ func ContainsFailure(result string) (bool, string) {
 		"TypeError:",
 		"ReferenceError:",
 		"AssertionError:",
-		"You must read_file before",
 		"exit status 1",
 	}
 

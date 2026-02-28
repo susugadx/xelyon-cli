@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
@@ -19,9 +18,6 @@ func setupTestMocks(t *testing.T) {
 		os.Unsetenv("XELYON_INTERACTIVE_CONFIRM")
 		os.Unsetenv("XELYON_SKIP_GITIGNORE_PROMPT")
 	})
-
-	// ReadTracker をリセット（テスト間の状態をクリーン化）
-	tools.GlobalReadTracker.Reset()
 
 	// confirm関数をモック（デフォルトは自動承認）
 	setupTestConfirm(t, true)

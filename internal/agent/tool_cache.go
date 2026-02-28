@@ -2,6 +2,7 @@ package agent
 
 import (
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -189,6 +190,17 @@ func (c *ToolCache) ClearSearchCache() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.searches = make(map[string]cacheEntry)
+}
+
+// InvalidateSearchCacheForFile は指定ファイルパスを含む検索キャッシュエントリを無効化
+func (c *ToolCache) InvalidateSearchCacheForFile(absPath string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for key, entry := range c.searches {
+		if strings.Contains(entry.Content, absPath) {
+			delete(c.searches, key)
+		}
+	}
 }
 
 // Stats はキャッシュの統計情報を返す

@@ -114,9 +114,6 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 
 		// ツール呼び出しチェック
 		toolCalls := tools.ParseToolCalls(response)
-		skippedWrites := 0
-		skippedCommands := 0
-		writeQueued := false
 
 		// FC rescue: テキストから抽出された toolCall にダミー ID を注入
 		// これにより下流の処理が FC 成功時と同じパス（role:"tool"）を通る
@@ -126,22 +123,7 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 			}
 		}
 
-		// Write Throttle と bash スキップの適用
-		var execToolCalls []*tools.ToolCall // 実行対象のツール呼び出し
-		for _, tc := range toolCalls {
-			if a.shouldThrottleWrite(tc) && writeQueued {
-				skippedWrites++
-				continue
-			}
-			if skippedWrites > 0 && tc.Tool == "bash" {
-				skippedCommands++
-				continue
-			}
-			execToolCalls = append(execToolCalls, tc)
-			if a.shouldThrottleWrite(tc) {
-				writeQueued = true
-			}
-		}
+		execToolCalls := toolCalls
 
 		if len(execToolCalls) > 0 {
 			// ツール呼び出しあり: addToolCallsToHistory で履歴に追加（セッション保存対応）
@@ -360,13 +342,6 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 			// ツール実行（executeToolOnly と同じパターン）
 			result, change := tools.Execute(toolCall)
 
-			// 書き込み成功後の自動 read-back 処理
-			if a.shouldThrottleWrite(toolCall) {
-				if !strings.HasPrefix(result, "Error:") {
-					a.autoReadBack(toolCall)
-				}
-			}
-
 			// str_replace 成功時: LSP診断遅延バッファにファイルを追加
 			// 連続 str_replace 途中の一時的エラーによる誤 auto-retry を防ぐため、
 			// 診断は全ツール実行後にまとめて行う（flushLSPDiagnostics）。
@@ -440,11 +415,6 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 					Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, result),
 				})
 			}
-		}
-
-		// スキップされた書き込みとコマンドがあればメッセージを注入して通知
-		if skippedWrites > 0 || skippedCommands > 0 {
-			a.injectWriteThrottleMessage(skippedWrites, skippedCommands)
 		}
 
 		// LSP診断遅延フラッシュ: 全ツール実行後に改めて診断を実行し結果を追記。

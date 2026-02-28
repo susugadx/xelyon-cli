@@ -222,9 +222,6 @@ func NewAgent(model string, provider api.Provider, headless bool) *Agent {
 	toolCache := NewToolCache()
 	tools.GlobalToolCache = toolCache
 
-	// ReadTracker リセット（新セッション開始時）
-	tools.GlobalReadTracker.Reset()
-
 	// Agent を作成
 	agent := &Agent{
 		Model:           model,

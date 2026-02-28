@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -37,20 +36,6 @@ func ExecuteStrReplace(path, oldStr, newStr, startLineStr, endLineStr string) (s
 	absPath, err := filepath.Abs(path)
 	if err != nil {
 		return fmt.Sprintf("Error: %v", err), nil
-	}
-
-	// Read-Before-Write guard: read_file 前の str_replace をブロック
-	if !tools.GlobalReadTracker.IsRead(absPath) {
-		// line-range モード: search_code で既読の行範囲ならガード通過
-		if oldStr == "" && strings.TrimSpace(startLineStr) != "" && strings.TrimSpace(endLineStr) != "" {
-			start, err1 := strconv.Atoi(strings.TrimSpace(startLineStr))
-			end, err2 := strconv.Atoi(strings.TrimSpace(endLineStr))
-			if err1 != nil || err2 != nil || !tools.GlobalReadTracker.IsReadRange(absPath, start, end) {
-				return fmt.Sprintf("Error: You must read_file before str_replace. The specified line range (L%s-L%s) was not covered by search_code results. Run read_file(path=\"%s\") first.", startLineStr, endLineStr, path), nil
-			}
-		} else {
-			return fmt.Sprintf("Error: You must read_file before str_replace. Run read_file(path=\"%s\") first to see the current content.", path), nil
-		}
 	}
 
 	// ファイルを読み込む
@@ -438,11 +423,6 @@ func executeBatchEdits(path, editsJSON string) (string, error) {
 	absPath, err := filepath.Abs(path)
 	if err != nil {
 		return fmt.Sprintf("Error: %v", err), nil
-	}
-
-	// Read-Before-Write guard
-	if !tools.GlobalReadTracker.IsRead(absPath) {
-		return fmt.Sprintf("Error: You must read_file before str_replace. Run read_file(path=\"%s\") first to see the current content.", path), nil
 	}
 
 	contentBytes, err := os.ReadFile(absPath)

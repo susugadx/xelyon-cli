@@ -326,23 +326,7 @@ func (a *Agent) runCompletionHooksWithRetry(ctx context.Context) bool {
 		}
 
 		if len(toolCalls) > 0 {
-			// Write throttle 適用（runNormalMode と同じパターン）
-			var execToolCalls []*tools.ToolCall
-			writeQueued := false
-			skippedWrites := 0
-			for _, tc := range toolCalls {
-				if a.shouldThrottleWrite(tc) && writeQueued {
-					skippedWrites++
-					continue
-				}
-				if skippedWrites > 0 && tc.Tool == "bash" {
-					continue
-				}
-				execToolCalls = append(execToolCalls, tc)
-				if a.shouldThrottleWrite(tc) {
-					writeQueued = true
-				}
-			}
+			execToolCalls := toolCalls
 
 			// バッチで assistant メッセージを追加し、ツールを実行
 			a.addToolCallsToHistory(response, execToolCalls)

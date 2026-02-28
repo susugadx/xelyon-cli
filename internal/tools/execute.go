@@ -114,9 +114,9 @@ func invalidateToolCache(tc *ToolCall) {
 		if path := tc.Args["path"]; path != "" {
 			if absPath, err := filepath.Abs(path); err == nil {
 				GlobalToolCache.InvalidateFile(absPath)
+				GlobalToolCache.InvalidateSearchCacheForFile(absPath)
 			}
 		}
-		GlobalToolCache.ClearSearchCache()
 
 	// ファイルを削除するツール → ファイル＆ディレクトリ＆検索キャッシュ無効化
 	case "delete_file":
@@ -124,27 +124,26 @@ func invalidateToolCache(tc *ToolCall) {
 			if absPath, err := filepath.Abs(path); err == nil {
 				GlobalToolCache.InvalidateFile(absPath)
 				GlobalToolCache.InvalidateDir(filepath.Dir(absPath))
+				GlobalToolCache.InvalidateSearchCacheForFile(absPath)
 			}
 		}
-		GlobalToolCache.ClearSearchCache()
 
 	// コピーはコピー先のディレクトリキャッシュ＆検索キャッシュを無効化
 	case "copy_file":
 		if dest := tc.Args["dest"]; dest != "" {
 			if absPath, err := filepath.Abs(dest); err == nil {
 				GlobalToolCache.InvalidateDir(filepath.Dir(absPath))
+				GlobalToolCache.InvalidateSearchCacheForFile(absPath)
 			}
 		}
-		GlobalToolCache.ClearSearchCache()
 
-	// ディレクトリ作成 → 検索キャッシュも無効化
+	// ディレクトリ作成は検索結果に影響しないため検索キャッシュはクリアしない
 	case "create_dir":
 		if path := tc.Args["path"]; path != "" {
 			if absPath, err := filepath.Abs(path); err == nil {
 				GlobalToolCache.InvalidateDir(filepath.Dir(absPath))
 			}
 		}
-		GlobalToolCache.ClearSearchCache()
 
 	// git checkout でファイルが復元される可能性
 	case "git_checkout":
@@ -154,15 +153,6 @@ func invalidateToolCache(tc *ToolCall) {
 	// bash は何が起こるか分からないので全クリア
 	case "bash":
 		GlobalToolCache.Clear()
-	}
-
-	// 書き込み後に ReadTracker の既読フラグをリセット（次回 str_replace 前に read_file を強制）
-	if IsWriteTool(tc.Tool) {
-		if path := tc.Args["path"]; path != "" {
-			if absPath, err := filepath.Abs(path); err == nil {
-				GlobalReadTracker.InvalidateFile(absPath)
-			}
-		}
 	}
 }
 

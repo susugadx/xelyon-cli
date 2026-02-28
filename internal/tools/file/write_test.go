@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/testutil"
-	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
 func TestExecuteWriteFile_NewFile(t *testing.T) {
@@ -35,8 +34,6 @@ func TestExecuteWriteFile_Overwrite(t *testing.T) {
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "existing.txt")
 	testutil.CreateTempFile(t, tmpDir, "existing.txt", "old content")
-	absPath, _ := filepath.Abs(testFile)
-	tools.GlobalReadTracker.MarkRead(absPath)
 
 	output, err := ExecuteWriteFile(testFile, "new content")
 
@@ -107,57 +104,12 @@ func TestExecuteWriteFile_CreateDirectory(t *testing.T) {
 	testutil.AssertFileExists(t, testFile)
 }
 
-func TestExecuteWriteFile_GuardBlocksExistingUnread(t *testing.T) {
-	setupTestMocks(t)
-
-	tmpDir := t.TempDir()
-	testFile := filepath.Join(tmpDir, "guarded.txt")
-	testutil.CreateTempFile(t, tmpDir, "guarded.txt", "old content")
-
-	// ReadTracker はリセット済み（setupTestMocks）— ファイルは未読状態
-
-	output, err := ExecuteWriteFile(testFile, "new content")
-
-	if err != nil {
-		t.Fatalf("ExecuteWriteFile should not return error: %v", err)
-	}
-	if !strings.Contains(output, "Error: You must read_file before editing") {
-		t.Errorf("Expected read guard error, got: %s", output)
-	}
-	// ファイルは変更されていないこと
-	testutil.AssertFileContent(t, testFile, "old content")
-}
-
-func TestExecuteWriteFile_GuardAllowsNewFile(t *testing.T) {
-	setupTestMocks(t)
-
-	tmpDir := t.TempDir()
-	testFile := filepath.Join(tmpDir, "brand_new.txt")
-
-	// ReadTracker はリセット済み — 新規ファイルはガード対象外
-
-	output, err := ExecuteWriteFile(testFile, "new content")
-
-	if err != nil {
-		t.Fatalf("ExecuteWriteFile failed: %v", err)
-	}
-	if !strings.Contains(output, "Successfully wrote") {
-		t.Errorf("Expected success message, got: %s", output)
-	}
-	testutil.AssertFileExists(t, testFile)
-	testutil.AssertFileContent(t, testFile, "new content")
-}
-
-func TestExecuteWriteFile_GuardAllowsAfterRead(t *testing.T) {
+func TestExecuteWriteFile_OverwriteExistingFile(t *testing.T) {
 	setupTestMocks(t)
 
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "readable.txt")
 	testutil.CreateTempFile(t, tmpDir, "readable.txt", "old content")
-
-	// read_file をシミュレート
-	absPath, _ := filepath.Abs(testFile)
-	tools.GlobalReadTracker.MarkRead(absPath)
 
 	output, err := ExecuteWriteFile(testFile, "new content")
 

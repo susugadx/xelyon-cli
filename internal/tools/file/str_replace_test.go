@@ -9,7 +9,6 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/testutil"
-	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
 func TestExecuteStrReplace_ExactMatch(t *testing.T) {
@@ -18,8 +17,6 @@ func TestExecuteStrReplace_ExactMatch(t *testing.T) {
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testutil.CreateTempFile(t, tmpDir, "test.txt", "line1\nline2\nline3")
-	absPath, _ := filepath.Abs(testFile)
-	tools.GlobalReadTracker.MarkRead(absPath)
 
 	output, err := ExecuteStrReplace(testFile, "line2", "REPLACED", "", "")
 
@@ -38,8 +35,6 @@ func TestExecuteStrReplace_MultipleMatches(t *testing.T) {
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testutil.CreateTempFile(t, tmpDir, "test.txt", "foo\nbar\nfoo\nbaz")
-	absPath, _ := filepath.Abs(testFile)
-	tools.GlobalReadTracker.MarkRead(absPath)
 
 	output, err := ExecuteStrReplace(testFile, "foo", "REPLACED", "", "")
 
@@ -57,8 +52,6 @@ func TestExecuteStrReplace_NotFound(t *testing.T) {
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testutil.CreateTempFile(t, tmpDir, "test.txt", "line1\nline2\nline3")
-	absPath, _ := filepath.Abs(testFile)
-	tools.GlobalReadTracker.MarkRead(absPath)
 
 	output, err := ExecuteStrReplace(testFile, "nonexistent", "REPLACED", "", "")
 
@@ -78,8 +71,6 @@ func TestExecuteStrReplace_UserCancelled(t *testing.T) {
 	testFile := filepath.Join(tmpDir, "test.txt")
 	originalContent := "line1\nline2\nline3"
 	testutil.CreateTempFile(t, tmpDir, "test.txt", originalContent)
-	absPath, _ := filepath.Abs(testFile)
-	tools.GlobalReadTracker.MarkRead(absPath)
 
 	output, err := ExecuteStrReplace(testFile, "line2", "REPLACED", "", "")
 
@@ -106,8 +97,6 @@ func TestExecuteStrReplace_EmptyOldStr(t *testing.T) {
 	setupTestMocks(t)
 	tmpDir := t.TempDir()
 	testutil.CreateTempFile(t, tmpDir, "test.txt", "content")
-	absPath, _ := filepath.Abs(filepath.Join(tmpDir, "test.txt"))
-	tools.GlobalReadTracker.MarkRead(absPath)
 
 	output, err := ExecuteStrReplace(filepath.Join(tmpDir, "test.txt"), "", "new", "", "")
 
@@ -125,8 +114,6 @@ func TestExecuteStrReplace_LineRangeReplacement_Success(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	testutil.CreateTempFile(t, tmpDir, "test.txt", "a\nb\nc\nd\ne")
-	absPath, _ := filepath.Abs(filepath.Join(tmpDir, "test.txt"))
-	tools.GlobalReadTracker.MarkRead(absPath)
 
 	output, err := ExecuteStrReplace(filepath.Join(tmpDir, "test.txt"), "", "X\nY", "2", "4")
 
@@ -154,8 +141,6 @@ func TestExecuteStrReplace_StringReplace_WarnsOnDuplicateNewStr(t *testing.T) {
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testutil.CreateTempFile(t, tmpDir, "test.txt", "alpha\nEXISTING\nomega")
-	absPath, _ := filepath.Abs(testFile)
-	tools.GlobalReadTracker.MarkRead(absPath)
 
 	replaceOutput, err := ExecuteStrReplace(testFile, "alpha", "EXISTING", "", "")
 
@@ -190,8 +175,6 @@ func TestExecuteStrReplace_StringReplace_NoWarningWhenUnique(t *testing.T) {
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testutil.CreateTempFile(t, tmpDir, "test.txt", "alpha\nEXISTING\nomega")
-	absPath, _ := filepath.Abs(testFile)
-	tools.GlobalReadTracker.MarkRead(absPath)
 
 	replaceOutput, err := ExecuteStrReplace(testFile, "alpha", "NEWVALUE", "", "")
 
@@ -225,8 +208,6 @@ func TestExecuteStrReplace_LineRange_WarnsOnDuplicateOutsideRange(t *testing.T) 
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testutil.CreateTempFile(t, tmpDir, "test.txt", "keep\nold\nold\nkeep")
-	absPath, _ := filepath.Abs(testFile)
-	tools.GlobalReadTracker.MarkRead(absPath)
 
 	replaceOutput, err := ExecuteStrReplace(testFile, "", "keep", "2", "3")
 
@@ -261,8 +242,6 @@ func TestExecuteStrReplace_LineRange_NoWarningWhenUniqueOutsideRange(t *testing.
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testutil.CreateTempFile(t, tmpDir, "test.txt", "keep\nold\nold\nkeep")
-	absPath, _ := filepath.Abs(testFile)
-	tools.GlobalReadTracker.MarkRead(absPath)
 
 	replaceOutput, err := ExecuteStrReplace(testFile, "", "NEWLINE", "2", "3")
 
@@ -316,49 +295,6 @@ func TestParseLineRange(t *testing.T) {
 	}
 }
 
-func TestExecuteStrReplace_GuardBlocksUnreadFile(t *testing.T) {
-	setupTestMocks(t)
-
-	tmpDir := t.TempDir()
-	testFile := filepath.Join(tmpDir, "guarded.txt")
-	testutil.CreateTempFile(t, tmpDir, "guarded.txt", "line1\nline2\nline3")
-
-	// ReadTracker はリセット済み（setupTestMocks）— ファイルは未読状態
-
-	output, err := ExecuteStrReplace(testFile, "line2", "REPLACED", "", "")
-
-	if err != nil {
-		t.Fatalf("ExecuteStrReplace should not return error: %v", err)
-	}
-	if !strings.Contains(output, "Error: You must read_file before str_replace") {
-		t.Errorf("Expected read guard error, got: %s", output)
-	}
-	// ファイルは変更されていないこと
-	testutil.AssertFileContent(t, testFile, "line1\nline2\nline3")
-}
-
-func TestExecuteStrReplace_GuardAllowsAfterRead(t *testing.T) {
-	setupTestMocks(t)
-
-	tmpDir := t.TempDir()
-	testFile := filepath.Join(tmpDir, "allowed.txt")
-	testutil.CreateTempFile(t, tmpDir, "allowed.txt", "line1\nline2\nline3")
-
-	// read_file をシミュレート
-	absPath, _ := filepath.Abs(testFile)
-	tools.GlobalReadTracker.MarkRead(absPath)
-
-	output, err := ExecuteStrReplace(testFile, "line2", "REPLACED", "", "")
-
-	if err != nil {
-		t.Fatalf("ExecuteStrReplace failed: %v", err)
-	}
-	if !strings.Contains(output, "Successfully replaced") {
-		t.Errorf("Expected success message, got: %s", output)
-	}
-	testutil.AssertFileContent(t, testFile, "line1\nREPLACED\nline3")
-}
-
 // ===== Batch Edits Tests =====
 
 func TestExecuteBatchEdits_NormalizedWhitespaceFallback(t *testing.T) {
@@ -367,8 +303,6 @@ func TestExecuteBatchEdits_NormalizedWhitespaceFallback(t *testing.T) {
 	testFile := filepath.Join(tmpDir, "test.txt")
 	originalContent := "func main() {\n\tfmt.Println(\"hello\")\n}"
 	testutil.CreateTempFile(t, tmpDir, "test.txt", originalContent)
-	absPath, _ := filepath.Abs(testFile)
-	tools.GlobalReadTracker.MarkRead(absPath)
 
 	// Indentation is intentionally different to trigger fallback
 	editsJSON := `[{"old_str":"func main() {\n    fmt.Println(\"hello\")\n}","new_str":"func main() {\n\tfmt.Println(\"world\")\n}"}]`
@@ -388,8 +322,6 @@ func TestExecuteBatchEdits_Success(t *testing.T) {
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testutil.CreateTempFile(t, tmpDir, "test.txt", "aaa\nbbb\nccc")
-	absPath, _ := filepath.Abs(testFile)
-	tools.GlobalReadTracker.MarkRead(absPath)
 
 	editsJSON := `[{"old_str":"aaa","new_str":"AAA"},{"old_str":"ccc","new_str":"CCC"}]`
 	output, err := executeBatchEdits(testFile, editsJSON)
@@ -408,8 +340,6 @@ func TestExecuteBatchEdits_RollbackOnFailure(t *testing.T) {
 	testFile := filepath.Join(tmpDir, "test.txt")
 	originalContent := "aaa\nbbb\nccc"
 	testutil.CreateTempFile(t, tmpDir, "test.txt", originalContent)
-	absPath, _ := filepath.Abs(testFile)
-	tools.GlobalReadTracker.MarkRead(absPath)
 
 	// First edit valid, second not found
 	editsJSON := `[{"old_str":"aaa","new_str":"AAA"},{"old_str":"zzz","new_str":"ZZZ"}]`
@@ -429,8 +359,6 @@ func TestExecuteBatchEdits_AmbiguousMatch(t *testing.T) {
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testutil.CreateTempFile(t, tmpDir, "test.txt", "foo\nbar\nfoo")
-	absPath, _ := filepath.Abs(testFile)
-	tools.GlobalReadTracker.MarkRead(absPath)
 
 	editsJSON := `[{"old_str":"foo","new_str":"baz"}]`
 	output, err := executeBatchEdits(testFile, editsJSON)
@@ -448,8 +376,6 @@ func TestExecuteBatchEdits_EmptyArray(t *testing.T) {
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testutil.CreateTempFile(t, tmpDir, "test.txt", "content")
-	absPath, _ := filepath.Abs(testFile)
-	tools.GlobalReadTracker.MarkRead(absPath)
 
 	output, err := executeBatchEdits(testFile, "[]")
 	if err != nil {
@@ -465,8 +391,6 @@ func TestExecuteBatchEdits_InvalidJSON(t *testing.T) {
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testutil.CreateTempFile(t, tmpDir, "test.txt", "content")
-	absPath, _ := filepath.Abs(testFile)
-	tools.GlobalReadTracker.MarkRead(absPath)
 
 	output, err := executeBatchEdits(testFile, "not-json")
 	if err != nil {
@@ -482,8 +406,6 @@ func TestExecuteBatchEdits_OldStrPriority(t *testing.T) {
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testutil.CreateTempFile(t, tmpDir, "test.txt", "aaa\nbbb")
-	absPath, _ := filepath.Abs(testFile)
-	tools.GlobalReadTracker.MarkRead(absPath)
 
 	// old_str non-empty -> single mode runs via ExecuteStrReplace, edits ignored
 	output, err := ExecuteStrReplace(testFile, "aaa", "AAA", "", "")
@@ -503,8 +425,6 @@ func TestExecuteBatchEdits_UserCancelled(t *testing.T) {
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testutil.CreateTempFile(t, tmpDir, "test.txt", "aaa\nbbb")
-	absPath, _ := filepath.Abs(testFile)
-	tools.GlobalReadTracker.MarkRead(absPath)
 
 	editsJSON := `[{"old_str":"aaa","new_str":"AAA"}]`
 	output, err := executeBatchEdits(testFile, editsJSON)
@@ -522,8 +442,6 @@ func TestExecuteBatchEdits_SequentialApplication(t *testing.T) {
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testutil.CreateTempFile(t, tmpDir, "test.txt", "hello world")
-	absPath, _ := filepath.Abs(testFile)
-	tools.GlobalReadTracker.MarkRead(absPath)
 
 	// Edit 1 changes "hello" -> "hi", Edit 2 changes "hi world" -> "hi there"
 	editsJSON := `[{"old_str":"hello","new_str":"hi"},{"old_str":"hi world","new_str":"hi there"}]`
@@ -535,24 +453,4 @@ func TestExecuteBatchEdits_SequentialApplication(t *testing.T) {
 		t.Errorf("expected success, got: %s", output)
 	}
 	testutil.AssertFileContent(t, testFile, "hi there")
-}
-
-func TestExecuteBatchEdits_GuardBlocksUnreadFile(t *testing.T) {
-	setupTestMocks(t)
-	tmpDir := t.TempDir()
-	testFile := filepath.Join(tmpDir, "guarded.txt")
-	testutil.CreateTempFile(t, tmpDir, "guarded.txt", "aaa\nbbb\nccc")
-
-	// ReadTracker はリセット済み（setupTestMocks）— ファイルは未読状態
-
-	editsJSON := `[{"old_str":"aaa","new_str":"AAA"}]`
-	output, err := executeBatchEdits(testFile, editsJSON)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !strings.Contains(output, "Error: You must read_file before str_replace") {
-		t.Errorf("expected read guard error, got: %s", output)
-	}
-	// ファイルは変更されていないこと
-	testutil.AssertFileContent(t, testFile, "aaa\nbbb\nccc")
 }

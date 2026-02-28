@@ -13,7 +13,6 @@ import (
 
 func setupSearchTestMocks(t *testing.T) {
 	t.Helper()
-	tools.GlobalReadTracker.Reset()
 }
 
 // --- 統合テスト ---
@@ -170,40 +169,6 @@ func TestSearchCode_TokenBudget(t *testing.T) {
 	jpResult := ExecuteSearchCode("target_budget_check あ", dir, "", "0", "3000")
 	if !strings.Contains(jpResult, "target_budget_check") {
 		t.Error("Expected japanese comment to be searchable and displayed")
-	}
-}
-
-func TestSearchCode_ReadTrackerIntegration(t *testing.T) {
-	setupSearchTestMocks(t)
-
-	dir := t.TempDir()
-	file1 := filepath.Join(dir, "tracked.go")
-	if err := os.WriteFile(file1, []byte("func tracked_func() {}\n"), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	// 検索前は未読
-	absFile1, _ := filepath.Abs(file1)
-	if tools.GlobalReadTracker.IsRead(absFile1) {
-		t.Error("File should not be marked as read before search")
-	}
-	if tools.GlobalReadTracker.IsReadLine(absFile1, 1) {
-		t.Error("Line should not be marked as read before search")
-	}
-
-	result := ExecuteSearchCode("tracked_func", dir, "", "0", "3000")
-
-	if strings.Contains(result, "No matches found") {
-		t.Error("Expected matches")
-	}
-
-	// 検索後: ファイル全体は未読だが、マッチ行範囲は既読
-	if tools.GlobalReadTracker.IsRead(absFile1) {
-		t.Error("File should NOT be fully marked as read after search_code (only line ranges)")
-	}
-	// マッチ行（tracked_func は1行目）は既読
-	if !tools.GlobalReadTracker.IsReadLine(absFile1, 1) {
-		t.Error("Match line should be marked as read after search_code")
 	}
 }
 
@@ -442,14 +407,15 @@ type testSearchCache struct {
 	setCalls int
 }
 
-func (c *testSearchCache) GetFile(path string) (string, bool) { return "", false }
-func (c *testSearchCache) SetFile(path, content string)       {}
-func (c *testSearchCache) GetDir(path string) (string, bool)  { return "", false }
-func (c *testSearchCache) SetDir(path, result string)         {}
-func (c *testSearchCache) InvalidateFile(path string)         {}
-func (c *testSearchCache) InvalidateDir(path string)          {}
-func (c *testSearchCache) Clear()                             {}
-func (c *testSearchCache) ClearSearchCache()                  {}
+func (c *testSearchCache) GetFile(path string) (string, bool)          { return "", false }
+func (c *testSearchCache) SetFile(path, content string)                {}
+func (c *testSearchCache) GetDir(path string) (string, bool)           { return "", false }
+func (c *testSearchCache) SetDir(path, result string)                  {}
+func (c *testSearchCache) InvalidateFile(path string)                  {}
+func (c *testSearchCache) InvalidateDir(path string)                   {}
+func (c *testSearchCache) Clear()                                      {}
+func (c *testSearchCache) ClearSearchCache()                           {}
+func (c *testSearchCache) InvalidateSearchCacheForFile(absPath string) {}
 
 func (c *testSearchCache) GetSearch(pattern, path string) (string, bool) {
 	c.getCalls++
@@ -549,38 +515,6 @@ func TestExecuteSearchCode_MultiplePatterns_PartialMatch(t *testing.T) {
 	// マッチしないパターンは "No matches found"
 	if !strings.Contains(result, "No matches found") {
 		t.Error("Expected 'No matches found' for unmatched pattern")
-	}
-}
-
-func TestExecuteSearchCode_MultiplePatterns_ReadTracker(t *testing.T) {
-	setupSearchTestMocks(t)
-
-	dir := t.TempDir()
-	file1 := filepath.Join(dir, "tracker_multi.go")
-	content := "func track_a() {}\nvar x = 1\nfunc track_b() {}\n"
-	if err := os.WriteFile(file1, []byte(content), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	absFile1, _ := filepath.Abs(file1)
-
-	// 検索前は未読
-	if tools.GlobalReadTracker.IsReadLine(absFile1, 1) {
-		t.Error("Line 1 should not be marked as read before search")
-	}
-
-	result := ExecuteSearchCode("track_a,track_b", dir, "*.go", "0", "3000")
-
-	if !strings.Contains(result, "Pattern 1/2") {
-		t.Fatalf("Expected multi-pattern result, got:\n%s", result)
-	}
-
-	// track_a は1行目、track_b は3行目 — 両方が ReadTracker に登録される
-	if !tools.GlobalReadTracker.IsReadLine(absFile1, 1) {
-		t.Error("Line 1 (track_a) should be marked as read after multi-pattern search")
-	}
-	if !tools.GlobalReadTracker.IsReadLine(absFile1, 3) {
-		t.Error("Line 3 (track_b) should be marked as read after multi-pattern search")
 	}
 }
 

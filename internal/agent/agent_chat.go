@@ -343,8 +343,6 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 
 		// ツールを実行し、失敗を検出
 		var lastFailedResult string
-		skippedWrites := 0
-		skippedCommands := 0
 
 		// Phase 1: create_plan を先に処理（テキストベースで独立した履歴管理）
 		for _, toolCall := range toolCalls {
@@ -380,25 +378,13 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 			yellow.Println("⚠️  create_plan failed, continuing in normal mode...")
 		}
 
-		// Phase 2: 実行対象のツール呼び出しをフィルタ（create_plan, write throttle, bash skip を除外）
+		// Phase 2: 実行対象のツール呼び出しをフィルタ（create_plan を除外）
 		var execToolCalls []*tools.ToolCall
-		writeQueued := false
 		for _, tc := range toolCalls {
 			if tc.Tool == "create_plan" {
 				continue
 			}
-			if a.shouldThrottleWrite(tc) && writeQueued {
-				skippedWrites++
-				continue
-			}
-			if skippedWrites > 0 && tc.Tool == "bash" {
-				skippedCommands++
-				continue
-			}
 			execToolCalls = append(execToolCalls, tc)
-			if a.shouldThrottleWrite(tc) {
-				writeQueued = true
-			}
 		}
 
 		// Phase 3: 全ツール呼び出しを1つの assistant メッセージにまとめて履歴追加
@@ -428,13 +414,6 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 
 			result := a.executeToolOnly(tc)
 
-			// 書き込み成功後の自動 read-back（ツール結果に追記）
-			if a.shouldThrottleWrite(tc) {
-				if !strings.HasPrefix(result, "Error:") {
-					a.autoReadBack(tc)
-				}
-			}
-
 			// str_replace 成功時: LSP診断遅延バッファにファイルを追加
 			// 連続 str_replace 途中の一時的エラーによる誤 auto-retry を防ぐため、
 			// 診断は全ツール実行後にまとめて行う（flushLSPDiagnostics）。
@@ -457,11 +436,6 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 					lastFailedResult = result
 				}
 			}
-		}
-
-		// スキップされた書き込みとコマンドがあれば通知（最後のツール結果に追記）
-		if skippedWrites > 0 || skippedCommands > 0 {
-			a.injectWriteThrottleMessage(skippedWrites, skippedCommands)
 		}
 
 		// LSP診断遅延フラッシュ: 全ツール実行後に改めて診断を実行し結果を追記。

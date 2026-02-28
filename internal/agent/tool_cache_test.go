@@ -273,3 +273,30 @@ func TestToolCache_ClearSearchCache(t *testing.T) {
 		t.Error("Expected search cache miss after ClearSearchCache")
 	}
 }
+
+func TestToolCache_InvalidateSearchCacheForFile(t *testing.T) {
+	c := NewToolCache()
+	// absPathを含む検索結果をキャッシュ
+	c.SetSearch("pattern1", "/project", "File: /project/main.go\nLine 10: func main()")
+	c.SetSearch("pattern2", "/project", "File: /project/utils.go\nLine 5: func helper()")
+	c.SetSearch("pattern3", "/project", "File: /project/main.go\nLine 20: var x")
+
+	// main.go だけ無効化
+	c.InvalidateSearchCacheForFile("/project/main.go")
+
+	// main.go を含むキャッシュは消えている
+	_, ok1 := c.GetSearch("pattern1", "/project")
+	if ok1 {
+		t.Error("expected cache miss for pattern1 (contains main.go)")
+	}
+	_, ok3 := c.GetSearch("pattern3", "/project")
+	if ok3 {
+		t.Error("expected cache miss for pattern3 (contains main.go)")
+	}
+
+	// utils.go のみのキャッシュは残っている
+	_, ok2 := c.GetSearch("pattern2", "/project")
+	if !ok2 {
+		t.Error("expected cache hit for pattern2 (only contains utils.go)")
+	}
+}

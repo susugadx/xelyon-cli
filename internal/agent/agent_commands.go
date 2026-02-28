@@ -65,7 +65,6 @@ func handleSpecialCommand(input string, agent *Agent) bool {
 		handleExitCommand(agent)
 	case "/clear":
 		agent.History = []api.Message{}
-		tools.GlobalReadTracker.Reset()
 		if ct := agent.getCreatePlanTool(); ct != nil {
 			ct.ClearLastPlan()
 		}

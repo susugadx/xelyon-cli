@@ -42,6 +42,10 @@ type ToolCacheInterface interface {
 	// ClearSearchCache は検索キャッシュをクリア
 	// ファイル変更系ツール実行時に呼ばれる
 	ClearSearchCache()
+
+	// InvalidateSearchCacheForFile は指定ファイルに関連する検索キャッシュのみ無効化
+	// ファイル書き込み系ツール実行時に ClearSearchCache の代わりに使用
+	InvalidateSearchCacheForFile(absPath string)
 }
 
 // GlobalToolCache はグローバルなツールキャッシュ
