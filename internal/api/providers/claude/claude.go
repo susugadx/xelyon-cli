@@ -299,9 +299,9 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 
 	cfg := config.GetGlobalConfig()
 
-	// プロンプトキャッシュ: 最後の2つの user メッセージにブレークポイント設定
+	// プロンプトキャッシュ: 安定区間+最新userにブレークポイント設定
 	if cfg != nil && cfg.PromptCache.Enabled {
-		SetCacheOnLastTwoUserMessages(messages)
+		SetMessageCacheBreakpoints(messages)
 	}
 
 	reqBody := Request{
@@ -572,7 +572,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	// 次ターンで multimodalMessage も履歴に含まれキャッシュされる。
 	cfg := config.GetGlobalConfig()
 	if cfg != nil && cfg.PromptCache.Enabled {
-		SetCacheOnLastTwoUserMessages(converted)
+		SetMessageCacheBreakpoints(converted)
 	}
 
 	var messages []interface{}

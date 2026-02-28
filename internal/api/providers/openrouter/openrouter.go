@@ -452,10 +452,10 @@ func (p *Provider) chatWithClaudeAPI(ctx context.Context, systemPrompt string, h
 	// メッセージを Anthropic 形式に変換
 	anthropicMessages := claude.ConvertToAnthropicMessages(history)
 
-	// プロンプトキャッシュ: 最後の2つの user メッセージにブレークポイント設定
+	// プロンプトキャッシュ: 安定区間+最新userにブレークポイント設定
 	cfg := config.GetGlobalConfig()
 	if cfg != nil && cfg.PromptCache.Enabled {
-		claude.SetCacheOnLastTwoUserMessages(anthropicMessages)
+		claude.SetMessageCacheBreakpoints(anthropicMessages)
 	}
 
 	// リクエスト構造体（Anthropic Messages API 形式）

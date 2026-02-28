@@ -149,16 +149,47 @@ func ConvertToAnthropicMessages(history []api.Message) []AnthropicMessage {
 	return result
 }
 
-// SetCacheOnLastTwoUserMessages は最後の2つの user メッセージの最後の content block に
-// cache_control を設定する。ブレークポイント #3, #4 を使い切り、
-// 20ブロック lookback × 2 = 約40ターン分のキャッシュカバレッジを確保する。
-func SetCacheOnLastTwoUserMessages(messages []AnthropicMessage) {
-	count := 0
-	for i := len(messages) - 1; i >= 0 && count < 2; i-- {
-		if messages[i].Role == "user" && len(messages[i].Content) > 0 {
-			last := len(messages[i].Content) - 1
-			messages[i].Content[last].CacheControl = &api.CacheControl{Type: "ephemeral"}
-			count++
+// SetMessageCacheBreakpoints はメッセージ履歴にキャッシュ用ブレークポイントを設定する。
+//
+// BP配置戦略:
+//
+//	BP#4: 最後のuserメッセージ（常にMISSだが、次ターンでHITする）
+//	BP#3: 安定区間の末尾userメッセージ（古い履歴をプレフィックスキャッシュでカバー）
+//
+// 安定区間の決定:
+//   - userメッセージが stableOffset 個以上ある場合: 末尾から stableOffset 番目のuserにBPを設定
+//   - stableOffset 未満の場合: BP#3は設定しない（短い会話ではBP#1, #2で十分）
+//
+// stableOffset のデフォルト値: 4
+// （最新4つのuserメッセージ = 約4ターン分をキャッシュ外に置き、それより前を安定区間とする）
+func SetMessageCacheBreakpoints(messages []AnthropicMessage) {
+	const stableOffset = 4
+
+	// user メッセージのインデックスを収集
+	var userIndices []int
+	for i, msg := range messages {
+		if msg.Role == "user" {
+			userIndices = append(userIndices, i)
+		}
+	}
+
+	if len(userIndices) == 0 {
+		return
+	}
+
+	// BP#4: 最後のuserメッセージ
+	lastIdx := userIndices[len(userIndices)-1]
+	if len(messages[lastIdx].Content) > 0 {
+		last := len(messages[lastIdx].Content) - 1
+		messages[lastIdx].Content[last].CacheControl = &api.CacheControl{Type: "ephemeral"}
+	}
+
+	// BP#3: 安定区間の末尾（userが stableOffset+1 個以上ある場合のみ）
+	if len(userIndices) > stableOffset {
+		stableIdx := userIndices[len(userIndices)-1-stableOffset]
+		if len(messages[stableIdx].Content) > 0 {
+			last := len(messages[stableIdx].Content) - 1
+			messages[stableIdx].Content[last].CacheControl = &api.CacheControl{Type: "ephemeral"}
 		}
 	}
 }
