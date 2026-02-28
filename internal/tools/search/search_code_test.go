@@ -1,6 +1,7 @@
 package search
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -429,6 +430,105 @@ func (c *testSearchCache) SetSearch(pattern, path, result string) {
 	c.setCalls++
 	key := pattern + "|" + path
 	c.data[key] = result
+}
+
+// --- adaptiveContextTrim テスト ---
+
+func TestAdaptiveContextTrim_FewMatches(t *testing.T) {
+	// 5マッチ以下 → コンテキスト行そのまま維持
+	matches := make([]Match, 0)
+	for i := 1; i <= 15; i++ {
+		isMatch := i%3 == 0 // 行3,6,9,12,15 → 5マッチ
+		matches = append(matches, Match{
+			LineNum: i,
+			Line:    fmt.Sprintf("line%d", i),
+			IsMatch: isMatch,
+			Type:    MatchTypeUsage,
+		})
+	}
+	results := []SearchResult{{FilePath: "few.go", Matches: matches, MatchCount: 5}}
+	trimmed := adaptiveContextTrim(results)
+
+	if len(trimmed[0].Matches) != len(matches) {
+		t.Errorf("Expected all %d matches preserved, got %d", len(matches), len(trimmed[0].Matches))
+	}
+}
+
+func TestAdaptiveContextTrim_ManyMatches(t *testing.T) {
+	// 10マッチ → コンテキスト行は直前後1行のみ
+	var matches []Match
+	for i := 1; i <= 30; i++ {
+		isMatch := i%3 == 0 // 行3,6,9,...,30 → 10マッチ
+		matches = append(matches, Match{
+			LineNum: i,
+			Line:    fmt.Sprintf("line%d", i),
+			IsMatch: isMatch,
+			Type:    MatchTypeUsage,
+		})
+	}
+	results := []SearchResult{{FilePath: "many.go", Matches: matches, MatchCount: 10}}
+	trimmed := adaptiveContextTrim(results)
+
+	// マッチ行は全部残る
+	matchCount := 0
+	ctxCount := 0
+	for _, m := range trimmed[0].Matches {
+		if m.IsMatch {
+			matchCount++
+		} else {
+			ctxCount++
+		}
+	}
+	if matchCount != 10 {
+		t.Errorf("Expected 10 match lines, got %d", matchCount)
+	}
+	// コンテキスト行は削減されるはず（元は20行 → マッチ隣接のみ残る）
+	if ctxCount >= 20 {
+		t.Errorf("Expected context lines to be reduced, but got %d (same as original)", ctxCount)
+	}
+
+	// 各コンテキスト行はマッチ行の直前後1行以内か確認
+	for j, m := range trimmed[0].Matches {
+		if m.IsMatch {
+			continue
+		}
+		hasNearMatch := false
+		for k := max(0, j-1); k <= min(len(trimmed[0].Matches)-1, j+1); k++ {
+			if trimmed[0].Matches[k].IsMatch {
+				hasNearMatch = true
+				break
+			}
+		}
+		if !hasNearMatch {
+			t.Errorf("Context line %d at index %d is not adjacent to any match line", m.LineNum, j)
+		}
+	}
+}
+
+func TestAdaptiveContextTrim_TooManyMatches(t *testing.T) {
+	// 20マッチ → コンテキスト行なし
+	var matches []Match
+	for i := 1; i <= 60; i++ {
+		isMatch := i%3 == 0 // 行3,6,9,...,60 → 20マッチ
+		matches = append(matches, Match{
+			LineNum: i,
+			Line:    fmt.Sprintf("line%d", i),
+			IsMatch: isMatch,
+			Type:    MatchTypeUsage,
+		})
+	}
+	results := []SearchResult{{FilePath: "toomany.go", Matches: matches, MatchCount: 20}}
+	trimmed := adaptiveContextTrim(results)
+
+	// マッチ行のみ残る
+	for _, m := range trimmed[0].Matches {
+		if !m.IsMatch {
+			t.Errorf("Expected only match lines, but found context line %d", m.LineNum)
+		}
+	}
+	if len(trimmed[0].Matches) != 20 {
+		t.Errorf("Expected 20 match lines, got %d", len(trimmed[0].Matches))
+	}
 }
 
 // --- splitPatterns テスト ---

@@ -115,8 +115,10 @@ func executeSinglePattern(pattern, path, filePattern string, ctxLines, tokenBudg
 		}
 	}
 
+	maxCountPerFile := calcMaxCountPerFile(tokenBudget)
+
 	// ripgrep 検索
-	output, useRipgrep, err := executeSearch(pattern, path, filePattern, ctxLines)
+	output, useRipgrep, err := executeSearch(pattern, path, filePattern, ctxLines, maxCountPerFile)
 	if err != nil {
 		return fmt.Sprintf("Error: %v", err)
 	}
@@ -134,6 +136,8 @@ func executeSinglePattern(pattern, path, filePattern string, ctxLines, tokenBudg
 
 	// コンテキスト行マージ
 	results = mergeContextLines(results)
+	// マッチ数に応じてコンテキスト行を適応的に縮小
+	results = adaptiveContextTrim(results)
 	// ファイル優先度ソート（非テスト→テスト、定義あり→なし）
 	sortResultsByPriority(results)
 
@@ -179,10 +183,11 @@ func splitPatterns(pattern string) []string {
 
 // patternResult は複数パターン検索の各パターンの結果
 type patternResult struct {
-	Pattern   string
-	Results   []SearchResult
-	Truncated bool
-	Index     int
+	Pattern      string
+	Results      []SearchResult
+	Truncated    bool
+	Index        int
+	TotalMatches int // truncate前の全マッチ数（バジェット比例配分に使用）
 }
 
 // executeMultiplePatterns は複数パターンを goroutine 並列で検索する
@@ -192,11 +197,13 @@ func executeMultiplePatterns(patterns []string, path, filePattern string, ctxLin
 		budgetPerPattern = 500
 	}
 
+	maxCountPerFile := calcMaxCountPerFile(budgetPerPattern)
+
 	ch := make(chan patternResult, len(patterns))
 	for i, p := range patterns {
 		go func(idx int, pat string) {
 			// ripgrep 検索
-			output, useRg, searchErr := executeSearch(pat, path, filePattern, ctxLines)
+			output, useRg, searchErr := executeSearch(pat, path, filePattern, ctxLines, maxCountPerFile)
 			if searchErr != nil {
 				ch <- patternResult{Pattern: pat, Index: idx}
 				return
@@ -212,14 +219,16 @@ func executeMultiplePatterns(patterns []string, path, filePattern string, ctxLin
 				results = parseGrepOutput(output, maxMatches)
 			}
 			results = mergeContextLines(results)
+			results = adaptiveContextTrim(results)
 			sortResultsByPriority(results)
 
-			results, truncated := truncateToTokenBudget(results, budgetPerPattern)
+			// truncate前のマッチ数を記録（比例配分に使用）
+			totalMatches := 0
+			for _, r := range results {
+				totalMatches += r.MatchCount
+			}
 
-			// ブロック認識
-			detectBlocks(results)
-
-			ch <- patternResult{Pattern: pat, Results: results, Truncated: truncated, Index: idx}
+			ch <- patternResult{Pattern: pat, Results: results, Index: idx, TotalMatches: totalMatches}
 		}(i, p)
 	}
 
@@ -227,6 +236,25 @@ func executeMultiplePatterns(patterns []string, path, filePattern string, ctxLin
 	for range patterns {
 		r := <-ch
 		collected[r.Index] = r
+	}
+
+	// パス2: マッチ数に比例してバジェット再配分
+	totalAllMatches := 0
+	for _, c := range collected {
+		totalAllMatches += c.TotalMatches
+	}
+	for i, c := range collected {
+		var allocatedBudget int
+		if totalAllMatches == 0 {
+			allocatedBudget = tokenBudget / len(patterns)
+		} else {
+			allocatedBudget = tokenBudget * c.TotalMatches / totalAllMatches
+		}
+		if allocatedBudget < 300 {
+			allocatedBudget = 300
+		}
+		collected[i].Results, collected[i].Truncated = truncateToTokenBudget(c.Results, allocatedBudget)
+		detectBlocks(collected[i].Results)
 	}
 
 	formatted := formatMultiResults(collected, tokenBudget)
@@ -249,14 +277,28 @@ func buildMultiCacheKey(patterns []string) string {
 	return strings.Join(sorted, "|")
 }
 
+// calcMaxCountPerFile はトークンバジェットからファイルあたりのマッチ上限を計算する
+// 1マッチあたり平均 ~30 トークン（行 + コンテキスト + ブロック注釈）と見積もり
+func calcMaxCountPerFile(budget int) int {
+	n := budget / 30
+	if n < 10 {
+		n = 10
+	}
+	if n > 50 {
+		n = 50
+	}
+	return n
+}
+
 // executeSearch は rg（優先）または grep を実行し、出力と使用ツールを返す
-func executeSearch(pattern, path, filePattern string, ctxLines int) (string, bool, error) {
+// maxCountPerFile はファイルあたりのマッチ上限（ripgrep --max-count に対応）
+func executeSearch(pattern, path, filePattern string, ctxLines, maxCountPerFile int) (string, bool, error) {
 	// ripgrep を試行
 	if rgPath, err := exec.LookPath("rg"); err == nil {
 		args := []string{
 			"--json",
 			"-n",
-			"--max-count", "30", // per-file limit（全体ではなく各ファイル30行まで）
+			"--max-count", strconv.Itoa(maxCountPerFile),
 		}
 		if ctxLines > 0 {
 			args = append(args, "--context", strconv.Itoa(ctxLines))
@@ -286,7 +328,7 @@ func executeSearch(pattern, path, filePattern string, ctxLines int) (string, boo
 		"-rn",
 		"-E", // 拡張正規表現（rg と同等の regex 解釈 + 不正 regex のエラー検出）
 		"-I",
-		"-m", "30",
+		"-m", strconv.Itoa(maxCountPerFile), // NOTE: grep -m はファイルあたりN行（rg --max-count と同じ）
 		"--exclude-dir=.git",
 		"--exclude-dir=node_modules",
 		"--exclude-dir=vendor",
@@ -580,6 +622,61 @@ func mergeContextLines(results []SearchResult) []SearchResult {
 		})
 	}
 	return merged
+}
+
+// --- adaptive context trim ---
+
+// adaptiveContextTrim はファイルごとのマッチ数に応じてコンテキスト行を削る
+// 5マッチ以下: そのまま、6-15マッチ: 前後1行のみ、16マッチ以上: コンテキスト行なし
+func adaptiveContextTrim(results []SearchResult) []SearchResult {
+	for i, r := range results {
+		matchCount := 0
+		for _, m := range r.Matches {
+			if m.IsMatch {
+				matchCount++
+			}
+		}
+		if matchCount <= 5 {
+			continue // 5マッチ以下はコンテキスト維持
+		}
+
+		// マッチが多いファイル: コンテキスト行をマッチ行の直前後 maxCtx 行のみに縮小
+		maxCtx := 1
+		if matchCount > 15 {
+			maxCtx = 0 // 15マッチ超はコンテキスト行なし
+		}
+
+		var trimmed []Match
+		for _, m := range r.Matches {
+			if m.IsMatch {
+				trimmed = append(trimmed, m)
+				continue
+			}
+			if maxCtx == 0 {
+				continue
+			}
+			// コンテキスト行: 行番号の差でマッチ行との距離を判定
+			nearMatch := false
+			for k := range r.Matches {
+				if r.Matches[k].IsMatch && absInt(m.LineNum-r.Matches[k].LineNum) <= maxCtx {
+					nearMatch = true
+					break
+				}
+			}
+			if nearMatch {
+				trimmed = append(trimmed, m)
+			}
+		}
+		results[i].Matches = trimmed
+	}
+	return results
+}
+
+func absInt(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
 }
 
 // --- ファイル優先度ソート ---
