@@ -153,17 +153,22 @@ func ConvertToAnthropicMessages(history []api.Message) []AnthropicMessage {
 //
 // BP配置戦略:
 //
-//	BP#4: 最後のuserメッセージ（常にMISSだが、次ターンでHITする）
-//	BP#3: 安定区間の末尾userメッセージ（古い履歴をプレフィックスキャッシュでカバー）
+//	BP#3 のみ使用。BP#4 は使わない（毎ターンcreation 1.25xが発生し、1度もREADされないため）。
 //
-// 安定区間の決定:
-//   - userメッセージが stableOffset 個以上ある場合: 末尾から stableOffset 番目のuserにBPを設定
-//   - stableOffset 未満の場合: BP#3は設定しない（短い会話ではBP#1, #2で十分）
+//	BP#3: 安定区間の末尾userメッセージ。
+//	位置は bpInterval 単位で切り捨てて決定するため、interval ターンの間は同じ位置に留まる。
+//	これにより cache creation は interval ターンに1回だけ発生し、残りは cache read になる。
 //
-// stableOffset のデフォルト値: 4
-// （最新4つのuserメッセージ = 約4ターン分をキャッシュ外に置き、それより前を安定区間とする）
+// 計算方法:
+//  1. userメッセージ数から stableOffset を引く = 安定区間のuser数
+//  2. bpInterval の倍数に切り捨て = BP#3の位置（userインデックス）
+//  3. 安定区間のuser数が bpInterval 未満なら BP#3 は設定しない
+//
+// stableOffset=3: 最新3ターン分をキャッシュ外に置く（CompactOldToolResults の keepTurns=3 と一致）
+// bpInterval=3: 3ターンごとにBP#3が進む（creation頻度とカバー範囲のバランス）
 func SetMessageCacheBreakpoints(messages []AnthropicMessage) {
-	const stableOffset = 4
+	const stableOffset = 3
+	const bpInterval = 3
 
 	// user メッセージのインデックスを収集
 	var userIndices []int
@@ -177,20 +182,23 @@ func SetMessageCacheBreakpoints(messages []AnthropicMessage) {
 		return
 	}
 
-	// BP#4: 最後のuserメッセージ
-	lastIdx := userIndices[len(userIndices)-1]
-	if len(messages[lastIdx].Content) > 0 {
-		last := len(messages[lastIdx].Content) - 1
-		messages[lastIdx].Content[last].CacheControl = &api.CacheControl{Type: "ephemeral"}
+	// 安定区間の user 数
+	stableCount := len(userIndices) - stableOffset
+	if stableCount < bpInterval {
+		return // 短い会話では BP#3 不要（BP#1, #2 で十分）
 	}
 
-	// BP#3: 安定区間の末尾（userが stableOffset+1 個以上ある場合のみ）
-	if len(userIndices) > stableOffset {
-		stableIdx := userIndices[len(userIndices)-1-stableOffset]
-		if len(messages[stableIdx].Content) > 0 {
-			last := len(messages[stableIdx].Content) - 1
-			messages[stableIdx].Content[last].CacheControl = &api.CacheControl{Type: "ephemeral"}
-		}
+	// bpInterval の倍数に切り捨て → BP#3 の位置
+	roundedDown := (stableCount / bpInterval) * bpInterval
+	if roundedDown <= 0 {
+		return
+	}
+
+	// BP#3: 安定区間末尾の user メッセージ
+	bp3Idx := userIndices[roundedDown-1]
+	if len(messages[bp3Idx].Content) > 0 {
+		last := len(messages[bp3Idx].Content) - 1
+		messages[bp3Idx].Content[last].CacheControl = &api.CacheControl{Type: "ephemeral"}
 	}
 }
 
