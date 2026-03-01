@@ -58,6 +58,14 @@ ci-check:
 	fi
 	@echo "✓ go fmt check passed"
 	@echo ""
+	@echo "=== Checking go mod tidy ==="
+	@go mod tidy
+	@if ! git diff --exit-code go.mod go.sum >/dev/null; then \
+		echo "Error: go.mod/go.sum are not tidy. Run 'go mod tidy' and commit the changes."; \
+		exit 1; \
+	fi
+	@echo "✓ go mod tidy check passed"
+	@echo ""
 	@echo "=== Building all packages ==="
 	@go build ./...
 	@echo "✓ Build check passed"
