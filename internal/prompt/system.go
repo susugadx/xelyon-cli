@@ -8,7 +8,7 @@ import (
 
 // PlanningToolNames は Plan Mode 専用ツール名一覧
 // Normal Mode では Registry から除外される
-var PlanningToolNames = []string{"create_plan", "update_plan", "ask_user_question"}
+var PlanningToolNames = []string{"ask_user_question"}
 
 // BuildSystemPrompt はシステムプロンプトを構築
 // planModeEnabled が true の場合、Planning Tools のガイドラインを追加
@@ -98,8 +98,6 @@ const SystemPrompt = `You are XELYON, an autonomous AI coding agent.
 <!-- PLANNING_TOOLS_START -->
 ### Planning Tools
 - ask_user_question: {"question": "...", "question_type": "single_choice|multi_choice|free_text", "options": [...]} - Ask user before planning (use only when needed)
-- create_plan: {"title": "...", "summary": "...", "steps": [...]} - Create and save a plan
-- update_plan: {"id": "...", "action": "set_status|add_step|remove_step|update_step|set_title|set_summary", ...} - Update a plan
 <!-- PLANNING_TOOLS_END -->
 
 ## Workflow Rules
@@ -140,9 +138,7 @@ Task is NOT done until dependency chain is fully resolved.
 
 ### 4. Tool Selection Guide
 - Don't know an API/library/syntax? → web_search first, don't guess
-<!-- PLANNING_REF -->- Large refactoring (5+ files across packages)? → consider create_plan
-<!-- /PLANNING_REF --><!-- PLANNING_REF -->- Multiple valid approaches? → ask_user_question
-<!-- /PLANNING_REF -->- Same pattern across files? → str_replace batch mode (edits=[{old_str,new_str},...]) or bash (sed)
+- Same pattern across files? → str_replace batch mode (edits=[{old_str,new_str},...]) or bash (sed)
 - Code search? → search_code (NOT bash grep/rg) — caches results, marks read-ranges, detects [def]/[ref]
 - Git/test/format/lint? → bash (go test, go fmt, git commit, etc.)
 - Multiple files to read? → read_file batch mode (paths=["file1", "file2:10-20"])

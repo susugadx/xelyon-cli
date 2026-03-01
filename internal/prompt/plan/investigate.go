@@ -21,13 +21,11 @@ Allowed: read_file, list_dir, search_code, bash (find/read-only), web_search
 -  Identify potential impacts of changes
 
 ### AFTER INVESTIGATION
-When ready, use the create_plan tool to create your implementation plan.
+When ready, output your implementation plan as text that includes a single JSON object matching the Plan schema.
+- The runtime extracts it via ExtractPlanJSON/ParsePlan
 - Plan should contain IMPLEMENTATION steps, not investigation steps
 - Do NOT create steps like "investigate X" or "read file Y"
 - Each step should be an ACTION that modifies the codebase
-- If you still need to investigate, continue using read-only tools first
-
-Do NOT output JSON directly. Always use the create_plan tool.
 
 Start investigation now.`, userRequest)
 }
@@ -38,8 +36,9 @@ Start investigation now.`, userRequest)
 func BuildPlanRequestMessage(toolName string) string {
 	return fmt.Sprintf(`[SYSTEM] You tried to use a modification tool (%s) during the investigation phase.
 
-Before using modification tools, you must create an implementation plan.
-Use the create_plan tool now to create your plan.
+Before using modification tools, you must provide an implementation plan.
+Output your plan as text that includes a single JSON object matching the Plan schema.
+The runtime extracts it via ExtractPlanJSON/ParsePlan.
 
-Do NOT output JSON directly.`, toolName)
+Do NOT call create_plan/update_plan tools.`, toolName)
 }

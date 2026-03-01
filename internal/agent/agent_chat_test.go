@@ -468,17 +468,17 @@ func (m *sequenceMockProvider) ChatWithImage(ctx context.Context, systemPrompt s
 }
 
 // TestNormalMode_CreatePlanFC は Normal Mode で create_plan ツールコールが FC で来た場合、
-// runImplementationPhase に切り替わることをテスト
+// deprecated 扱いで通常モード継続できることをテスト
 func TestNormalMode_CreatePlanFC(t *testing.T) {
-	// create_plan ツールコールを含むレスポンス → ステップ実行 → 完了
+	// create_plan ツールコールを含むレスポンス → deprecated として無視 → 通常応答で終了
 	provider := &sequenceMockProvider{
 		name: "test",
 		responses: []string{
 			// 1回目: create_plan FC ツールコール
 			`I'll create a plan for this task.
 {"tool": "create_plan", "args": {"title": "Test Plan", "summary": "Test", "steps": "[{\"id\":1,\"description\":\"Step 1\",\"tools\":[\"bash\"]}]"}}`,
-			// 2回目以降（runImplementationPhase 内）: ステップ完了の応答
-			"Step 1 completed successfully.",
+			// 2回目: 通常応答（ツールなし）
+			"OK. Continuing without create_plan.",
 		},
 	}
 
@@ -488,9 +488,6 @@ func TestNormalMode_CreatePlanFC(t *testing.T) {
 	ctx := context.Background()
 	err := agent.runNormalMode(ctx, "do something complex", nil)
 
-	// create_plan ツールが実行されるが、DefaultRegistry に登録済みかは
-	// 環境依存なので、エラーなく完了することだけを確認
-	// (create_plan が失敗した場合は "continuing in normal mode" で継続)
 	if err != nil {
 		t.Errorf("runNormalMode() returned error: %v", err)
 	}

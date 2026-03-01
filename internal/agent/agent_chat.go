@@ -399,19 +399,7 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 				Content: fmt.Sprintf("[Tool Result for create_plan]\n%s", result),
 			})
 
-			createPlanTool := a.getCreatePlanTool()
-			if createPlanTool != nil {
-				if p := createPlanTool.LastPlan(); p != nil {
-					green.Printf("📋 Plan created in normal mode (%d steps). Switching to step-by-step execution...\n", len(p.Steps))
-					if err := a.runImplementationPhase(ctx, p); err != nil {
-						return err
-					}
-					a.runCompletionHooksWithRetry(ctx)
-					a.showTaskSummary()
-					return nil
-				}
-			}
-			yellow.Println("⚠️  create_plan failed, continuing in normal mode...")
+			yellow.Println("⚠️  create_plan is deprecated, continuing in normal mode...")
 		}
 
 		// Phase 2: 実行対象のツール呼び出しをフィルタ（create_plan を除外）

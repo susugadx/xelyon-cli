@@ -54,18 +54,16 @@ func TestRegistry(t *testing.T) {
 func TestRegistry_ExcludedTools(t *testing.T) {
 	r := NewRegistry()
 	r.Register(&MockTool{name: "read_file"})
-	r.Register(&MockTool{name: "create_plan"})
-	r.Register(&MockTool{name: "update_plan"})
 	r.Register(&MockTool{name: "ask_user_question"})
 
-	// 除外なし: 全4ツール
+	// 除外なし: 全2ツール
 	defs := r.GetToolDefinitions()
-	if len(defs) != 4 {
-		t.Errorf("GetToolDefinitions() without exclusion = %d, want 4", len(defs))
+	if len(defs) != 2 {
+		t.Errorf("GetToolDefinitions() without exclusion = %d, want 2", len(defs))
 	}
 
 	// planning 系を除外
-	r.SetExcludedTools([]string{"create_plan", "update_plan", "ask_user_question"})
+	r.SetExcludedTools([]string{"ask_user_question"})
 	defs = r.GetToolDefinitions()
 	if len(defs) != 1 {
 		t.Errorf("GetToolDefinitions() with exclusion = %d, want 1", len(defs))
@@ -75,14 +73,14 @@ func TestRegistry_ExcludedTools(t *testing.T) {
 	}
 
 	// HasTool は除外に関係なく true
-	if !r.HasTool("create_plan") {
-		t.Error("HasTool(create_plan) should be true even when excluded")
+	if !r.HasTool("ask_user_question") {
+		t.Error("HasTool(ask_user_question) should be true even when excluded")
 	}
 
 	// ClearExcludedTools で復帰
 	r.ClearExcludedTools()
 	defs = r.GetToolDefinitions()
-	if len(defs) != 4 {
-		t.Errorf("GetToolDefinitions() after clear = %d, want 4", len(defs))
+	if len(defs) != 2 {
+		t.Errorf("GetToolDefinitions() after clear = %d, want 2", len(defs))
 	}
 }

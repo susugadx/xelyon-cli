@@ -37,7 +37,7 @@ func (a *Agent) RunPlanMode(ctx context.Context, userRequest string) error {
 
 	a.History = append(a.History, api.Message{Role: "user", Content: investigationPrompt})
 
-	// 調査フェーズ: SafetyHighツールを実行し、create_plan ツールで Plan を作成
+	// 調査フェーズ: SafetyHighツールを実行し、Plan JSON をテキスト出力→抽出/パースして Plan を作成
 	p, err := a.runInvestigationPhase(ctx)
 	if err != nil {
 		// トークン上限エラーの場合は自動圧縮+リトライ

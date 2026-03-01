@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -10,76 +9,40 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/agent/plan"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	promptplan "github.com/susugadx/xelyon-cli/internal/prompt/plan"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/dev"
-	"github.com/susugadx/xelyon-cli/internal/tools/planning"
 )
 
 // runInvestigationPhase は調査フェーズを実行
-// create_plan ツールが呼び出されるまでループし、作成された Plan を返す
+// テキスト出力された計画（Plan JSON）を ExtractPlanJSON/ParsePlan でパースし、Plan を返す
 func (a *Agent) runInvestigationPhase(ctx context.Context) (*plan.Plan, error) {
 	cfg := config.GetGlobalConfig()
 	maxIterations := cfg.General.ToolLoopLimit
-	var lastToolCall *tools.ToolCall
-	var sameCallCount int
 
-	// create_plan ツールを取得（LastPlan() で Plan を取得するため）
-	createPlanTool := a.getCreatePlanTool()
-	if createPlanTool != nil {
-		createPlanTool.ClearLastPlan() // 前回の Plan をクリア
-	}
+	var lastToolCall *tools.ToolCall
+	sameCallCount := 0
 
 	for i := 0; i < maxIterations; i++ {
-		compactedHistory := CompactOldToolResults(a.History, DefaultKeepTurns, DefaultMaxLines, DefaultHeadLines, DefaultTailLines)
 		response, err := a.CurrentProvider.ChatWithTools(
 			ctx,
 			a.SystemPrompt,
-			compactedHistory,
+			CompactOldToolResults(a.History, DefaultKeepTurns, DefaultMaxLines, DefaultHeadLines, DefaultTailLines),
 			a.CurrentModel,
 		)
 		if err != nil {
-			return nil, fmt.Errorf("investigation failed: %w", err)
+			return nil, fmt.Errorf("API call failed: %w", err)
 		}
 
-		// デバッグモード: レスポンスの診断情報を出力
-		if os.Getenv("XELYON_DEBUG_PARSE") == "1" {
-			fmt.Fprintf(os.Stderr, "[DEBUG runInvestigationPhase] response length: %d\n", len(response))
-			if idx := strings.Index(response, `{"tool"`); idx != -1 {
-				fmt.Fprintf(os.Stderr, "[DEBUG runInvestigationPhase] found {\"tool\" at index %d\n", idx)
-			}
-			if idx := strings.Index(response, `{ "tool"`); idx != -1 {
-				fmt.Fprintf(os.Stderr, "[DEBUG runInvestigationPhase] found { \"tool\" at index %d\n", idx)
-			}
-			codeBlockOpens := strings.Count(response, "```")
-			fmt.Fprintf(os.Stderr, "[DEBUG runInvestigationPhase] code block markers (```): %d (odd = unclosed)\n", codeBlockOpens)
-			openBraces := strings.Count(response, "{")
-			closeBraces := strings.Count(response, "}")
-			fmt.Fprintf(os.Stderr, "[DEBUG runInvestigationPhase] braces: { = %d, } = %d (mismatch = incomplete JSON)\n", openBraces, closeBraces)
-		}
-
-		// ツール呼び出しチェック
 		toolCalls := tools.ParseToolCalls(response)
 
-		// FC rescue: テキストから抽出された toolCall にダミー ID を注入
-		// これにより下流の処理が FC 成功時と同じパス（role:"tool"）を通る
-		for i, tc := range toolCalls {
-			if tc.ID == "" {
-				toolCalls[i].ID = fmt.Sprintf("call_rescue_%03d", i+1)
-			}
+		// assistant message を履歴に追加
+		assistantMsg := api.Message{Role: "assistant", Content: response, ReasoningContent: a.getLastReasoningContent()}
+		a.History = append(a.History, assistantMsg)
+		if a.session != nil {
+			a.session.AddMessageFromAPI(assistantMsg, a.CurrentModel)
 		}
-
-		if len(toolCalls) > 0 {
-			a.addToolCallsToHistory(response, toolCalls)
-		} else {
-			a.History = append(a.History, api.Message{
-				Role:             "assistant",
-				Content:          response,
-				ReasoningContent: a.getLastReasoningContent(),
-			})
-			if a.Stats != nil {
-				a.Stats.AssistantMessages++
-			}
+		if a.Stats != nil {
+			a.Stats.AssistantMessages++
 		}
 
 		if len(toolCalls) == 0 {
@@ -93,35 +56,20 @@ func (a *Agent) runInvestigationPhase(ctx context.Context) (*plan.Plan, error) {
 				}
 			}
 
-			// テキストフォールバック: FC失敗時にレスポンスから直接 Plan JSON を抽出
 			if planJSON := plan.ExtractPlanJSON(response); planJSON != "" {
 				if os.Getenv("XELYON_DEBUG_PARSE") == "1" {
-					fmt.Fprintf(os.Stderr, "[DEBUG runInvestigationPhase] text fallback: found plan JSON (%d bytes)\n", len(planJSON))
+					fmt.Fprintf(os.Stderr, "[DEBUG runInvestigationPhase] found plan JSON (%d bytes)\n", len(planJSON))
 				}
 				if p, err := plan.ParsePlan(planJSON); err == nil && len(p.Steps) > 0 {
-					yellow.Println("⚠️  FC fallback: extracted plan from text response")
-					// 保存
-					if createPlanTool != nil {
-						// storage 経由で保存するため create_plan を手動実行
-						tc := &tools.ToolCall{
-							Tool: "create_plan",
-							Args: map[string]string{
-								"title":   p.Title,
-								"summary": p.Summary,
-							},
-						}
-						// steps を JSON 文字列にシリアライズ
-						if stepsJSON, err := json.Marshal(p.Steps); err == nil {
-							tc.Args["steps"] = string(stepsJSON)
-						}
-						tools.Execute(tc)
-						if savedPlan := createPlanTool.LastPlan(); savedPlan != nil {
-							return savedPlan, nil
-						}
-					}
-					// storage なしでも Plan を返す
 					return p, nil
 				}
+
+				// パース失敗: JSON スキーマ例つきで再提示を促す（番号付きリストだと ExtractPlanJSON が拾えない）
+				a.History = append(a.History, api.Message{
+					Role:    "user",
+					Content: "[SYSTEM] Plan JSON を**必ず**次のスキーマ例に沿って、```json``` で囲んだ1つのJSONとして出力してください（箇条書き/番号付きリスト/文章のみは禁止）。\n\n例:\n```json\n{\n  \"title\": \"調査と実装計画\",\n  \"goal\": \"<最終的に達成したいこと>\",\n  \"assumptions\": [\"<前提>\"],\n  \"steps\": [\n    {\n      \"id\": 1,\n      \"title\": \"<手順タイトル>\",\n      \"description\": \"<この手順でやること>\",\n      \"expected_output\": \"<完了条件/成果物>\"\n    }\n  ]\n}\n```",
+				})
+				continue
 			}
 
 			// ツール呼び出しがない場合は終了（AIが調査を終えて説明している）
@@ -132,19 +80,6 @@ func (a *Agent) runInvestigationPhase(ctx context.Context) (*plan.Plan, error) {
 		// ツールを分類して実行
 		for idx, tc := range toolCalls {
 			safety := tools.GetToolSafety(tc.Tool)
-
-			// create_plan ツールの場合
-			if tc.Tool == "create_plan" {
-				a.executeToolOnly(tc)
-
-				// create_plan ツールから Plan を取得
-				if createPlanTool != nil {
-					if p := createPlanTool.LastPlan(); p != nil {
-						return p, nil
-					}
-				}
-				continue
-			}
 
 			// SafetyHigh ツール（読み取り専用）
 			if safety == tools.SafetyHigh {
@@ -158,74 +93,28 @@ func (a *Agent) runInvestigationPhase(ctx context.Context) (*plan.Plan, error) {
 				continue
 			}
 
-			// bash / command の安全なコマンドは SafetyHigh 扱いにする
 			if tc.Tool == "bash" || tc.Tool == "command" {
-				var cmd string
-				if c, exists := tc.Args["command"]; exists {
-					cmd = c
-				} else if c, ok := tc.RawArgs["command"].(string); ok {
-					cmd = c
-				}
-
-				if cmd != "" && dev.IsSafeCommand(cmd, config.GetGlobalConfig().Bash) {
-					// ループ検知
+				cmd := tc.Args["command"]
+				if dev.IsSafeCommand(cmd, config.GetGlobalConfig().Bash) {
 					if a.shouldAbortToolLoop(tc, lastToolCall, &sameCallCount) {
 						return nil, fmt.Errorf("tool loop detected during investigation")
 					}
 					lastToolCall = tc
-
 					a.executeToolOnly(tc)
 					continue
 				}
 			}
 
-			// SafetyMedium/Low ツール（変更系）→ 計画生成を要求
-			cyan.Printf("\n⚡ Implementation tool detected: %s\n", tc.Tool)
-			cyan.Println("   Requesting implementation plan...")
-
-			// ツール実行はせずに、計画作成を促すメッセージを追加
-			if tc.ID != "" {
-				// FCの場合はtool結果として返す必要があるため、ダミー結果を追加
-				a.History = append(a.History, api.Message{
-					Role:       "tool",
-					Content:    promptplan.BuildPlanRequestMessage(tc.Tool),
-					ToolCallID: tc.ID,
-					ToolName:   tc.Tool,
-				})
-			} else {
-				a.History = append(a.History, api.Message{
-					Role:    "user",
-					Content: promptplan.BuildPlanRequestMessage(tc.Tool),
-				})
+			// 書き込み系/危険系ツールは実行しない（調査フェーズ）
+			a.History = append(a.History, api.Message{
+				Role:    "user",
+				Content: fmt.Sprintf("[SYSTEM] Tool '%s' is not allowed in investigation phase. Please only use read-only tools.", tc.Tool),
+			})
+			if idx == len(toolCalls)-1 {
+				continue
 			}
-
-			// 残りのツール呼び出しに対するダミー結果を追加（APIエラー防止）
-			for _, remaining := range toolCalls[idx+1:] {
-				if remaining.ID != "" {
-					a.History = append(a.History, api.Message{
-						Role:       "tool",
-						Content:    "(skipped - plan required)",
-						ToolCallID: remaining.ID,
-						ToolName:   remaining.Tool,
-					})
-				}
-			}
-			break // 変更系ツールが見つかったらループを抜けて次のイテレーションへ
 		}
 	}
 
-	yellow.Printf("⚠️  調査フェーズが%d回のツール実行に達しました。続けて指示してください。\n", maxIterations)
-	return nil, nil
-}
-
-// getCreatePlanTool は ToolRegistry から create_plan ツールを取得
-func (a *Agent) getCreatePlanTool() *planning.CreatePlanTool {
-	tool := tools.DefaultRegistry.GetTool("create_plan")
-	if tool == nil {
-		return nil
-	}
-	if createPlanTool, ok := tool.(*planning.CreatePlanTool); ok {
-		return createPlanTool
-	}
-	return nil
+	return nil, fmt.Errorf("investigation phase exceeded max iterations (%d)", maxIterations)
 }

@@ -225,12 +225,11 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 			}
 			lastToolCall = toolCall
 
-			// Plan 実行中は create_plan を無視（再帰防止）
-			if toolCall.Tool == "create_plan" {
-				// create_plan を無視したことを履歴に追加
-				ignoreMsg := "[create_plan] Ignored: already executing a plan. Continue with current step."
+			// Plan 実行中に廃止済み planning ツールが来た場合は明示的に無視
+			if toolCall.Tool == "create_plan" || toolCall.Tool == "update_plan" {
+				yellow.Printf("⚠️  Ignored deprecated planning tool call: %s\n", toolCall.Tool)
+				ignoreMsg := fmt.Sprintf("[%s] Ignored: planning tools are deprecated. Continue with current step.", toolCall.Tool)
 				if toolCall.ID != "" {
-					// Function Calling: role="tool" で tool_call_id 付きで送信
 					toolMsg := api.Message{
 						Role:       "tool",
 						Content:    ignoreMsg,
@@ -242,59 +241,12 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 						a.session.AddMessageFromAPI(toolMsg, a.CurrentModel)
 					}
 				} else {
-					// テキストベース: role="user" で送信
 					a.History = append(a.History, api.Message{
 						Role:    "user",
 						Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, ignoreMsg),
 					})
 				}
 				continue
-			}
-
-			// update_plan(set_status: completed/failed/cancelled) → 即座にステップ完了して return
-			// 根本修正: Plan 完了後に不要な ChatWithTools を呼ぶと、Gemini が thinking ループに入り
-			// text/FC を一切出さずにフリーズする。完了を検出したら次の API 呼び出しを防ぐ。
-			if toolCall.Tool == "update_plan" {
-				action := toolCall.Args["action"]
-				status := strings.ToLower(toolCall.Args["status"])
-				if action == "set_status" && (status == "completed" || status == "failed" || status == "cancelled") {
-					// ツールは実行する（Plan ファイルを更新）
-					updateResult, _ := tools.Execute(toolCall)
-
-					// 結果を履歴に追加
-					if toolCall.ID != "" {
-						toolMsg := api.Message{
-							Role:       "tool",
-							Content:    updateResult,
-							ToolCallID: toolCall.ID,
-							ToolName:   toolCall.Tool,
-						}
-						a.History = append(a.History, toolMsg)
-						if a.session != nil {
-							a.session.AddMessageFromAPI(toolMsg, a.CurrentModel)
-						}
-					} else {
-						a.History = append(a.History, api.Message{
-							Role:    "user",
-							Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, updateResult),
-						})
-					}
-
-					// 残りのツール呼び出しにダミー結果を追加（API エラー防止）
-					for _, remaining := range execToolCalls[tcIdx+1:] {
-						if remaining.ID != "" {
-							a.History = append(a.History, api.Message{
-								Role:       "tool",
-								Content:    fmt.Sprintf("[SYSTEM] Skipped: plan status set to %s", status),
-								ToolCallID: remaining.ID,
-								ToolName:   remaining.Tool,
-							})
-						}
-					}
-
-					green.Printf("✓ Step %d completed (plan %s)\n", step.ID, status)
-					return nil
-				}
 			}
 
 			// ツール実行（executeToolOnly と同じパターン）
