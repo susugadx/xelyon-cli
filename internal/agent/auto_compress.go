@@ -22,45 +22,67 @@ func (a *Agent) maybeAutoCompress() bool {
 		return false
 	}
 
-	// Responses API で responseID がキャッシュされている場合は自動圧縮をスキップ
-	// （サーバー側でコンテキスト管理、cached_tokens として課金）
-	if ridProvider, ok := a.CurrentProvider.(ResponseIDCapable); ok {
-		if ridProvider.HasCachedResponseID() {
-			// キャッシュが効いているので圧縮不要
-			return false
+	// プロバイダ別コスト最適化閾値
+	providerThreshold := GetProviderCompressThreshold(a.ProviderName, a.CurrentModel)
+	forceCompress := false
+	if providerThreshold > 0 {
+		currentTokens := a.EstimateTokens()
+		if currentTokens >= providerThreshold {
+			forceCompress = true
 		}
 	}
 
-	// Claude Compaction が有効な場合は自動圧縮をスキップ
-	if compactionProvider, ok := a.CurrentProvider.(api.ClaudeCompactionCapable); ok {
-		if compactionProvider.SupportsClaudeCompaction() {
-			return false
+	if !forceCompress {
+		// Responses API で responseID がキャッシュされている場合は自動圧縮をスキップ
+		// （サーバー側でコンテキスト管理、cached_tokens として課金）
+		if ridProvider, ok := a.CurrentProvider.(ResponseIDCapable); ok {
+			if ridProvider.HasCachedResponseID() {
+				// キャッシュが効いているので圧縮不要
+				return false
+			}
+		}
+
+		// Claude Compaction が有効な場合は自動圧縮をスキップ
+		if compactionProvider, ok := a.CurrentProvider.(api.ClaudeCompactionCapable); ok {
+			if compactionProvider.SupportsClaudeCompaction() {
+				return false
+			}
+		}
+
+		percentage := a.GetTokenUsagePercentage()
+
+		// 閾値を取得（パーセントベース）
+		threshold := float64(cfg.Compression.ThresholdPercent)
+		if threshold == 0 {
+			threshold = 80
+		}
+
+		// トークン数ベースの閾値が設定されている場合はそちらを優先
+		if cfg.Compression.ThresholdTokens > 0 {
+			currentTokens := a.EstimateTokens()
+			if currentTokens < cfg.Compression.ThresholdTokens {
+				return false
+			}
+		} else {
+			// パーセントベース
+			if percentage < threshold {
+				return false
+			}
 		}
 	}
 
 	percentage := a.GetTokenUsagePercentage()
 
-	// 閾値を取得（パーセントベース）
-	threshold := float64(cfg.Compression.ThresholdPercent)
-	if threshold == 0 {
-		threshold = 80
-	}
-
-	// トークン数ベースの閾値が設定されている場合はそちらを優先
-	if cfg.Compression.ThresholdTokens > 0 {
-		currentTokens := a.EstimateTokens()
-		if currentTokens < cfg.Compression.ThresholdTokens {
-			return false
-		}
-	} else {
-		// パーセントベース
-		if percentage < threshold {
-			return false
-		}
-	}
-
 	// 圧縮実行（通知付き）
-	cyan.Printf("\n🗜️ Auto-compressing history (%.0f%% threshold reached)...\n", percentage)
+	if forceCompress {
+		cyan.Printf(
+			"\n🗜️ Auto-compressing for cost optimization (%dK > %dK threshold)...\n",
+			a.EstimateTokens()/1000,
+			providerThreshold/1000,
+		)
+	} else {
+		cyan.Printf("\n🗜️ Auto-compressing history (%.0f%% threshold reached)...\n", percentage)
+	}
 
 	// Compact API を優先的に使用するか確認
 	if cfg.Compression.PreferCompactAPI {
