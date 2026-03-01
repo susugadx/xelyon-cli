@@ -123,6 +123,28 @@ func (a *Agent) chatInternal(input string, image *api.ImageData) {
 	// 自動圧縮チェック（成功時）
 	a.maybeAutoCompress()
 
+	// ターン完了後のcontext提案メッセージ表示
+	currentTokens := a.EstimateTokens()
+	contextK := currentTokens / 1000
+
+	baseTokens := a.EstimateSystemPromptTokens()
+	if a.CurrentProvider != nil && a.CurrentProvider.IsFunctionCallingEnabled() {
+		baseTokens += estimateToolDefinitionTokens()
+	}
+
+	if currentTokens <= baseTokens {
+		dim.Printf("💡 Context %dK - clean state ✓\n", contextK)
+	} else {
+		saved := currentTokens - baseTokens
+		pricing := GetPricingInfo(a.ProviderName, a.CurrentModel)
+		if pricing.InputCostPerM > 0 {
+			savingPerTurn := float64(saved) / 1_000_000.0 * pricing.InputCostPerM * 0.5
+			dim.Printf("💡 Context %dK - /clear saves ~$%.2f/turn, /compress keeps key context\n", contextK, savingPerTurn)
+		} else {
+			dim.Printf("💡 Context %dK - /clear or /compress to reduce context\n", contextK)
+		}
+	}
+
 	a.SetStatus(StateWaitingInput, "Ready for input", "入力待ち", "Type your request or /help", "リクエスト、または /help を入力")
 }
 
