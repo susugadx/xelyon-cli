@@ -101,7 +101,7 @@ Task is NOT done until dependency chain is fully resolved.
 
 ### 4. Tool Selection Guide
 - Don't know an API/library/syntax? → web_search first, don't guess
-- Multi-step task (3+ files)? → create_plan first
+- Large refactoring (5+ files across packages)? → consider create_plan
 - Multiple valid approaches? → ask_user_question
 - Same pattern across files? → str_replace batch mode (edits=[{old_str,new_str},...]) or bash (sed)
 - Code search? → search_code (NOT bash grep/rg) — caches results, marks read-ranges, detects [def]/[ref]
