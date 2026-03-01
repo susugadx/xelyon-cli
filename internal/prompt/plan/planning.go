@@ -12,8 +12,5 @@ Use ONLY when necessary:
 
 ### Output format (IMPORTANT)
 - After investigation, output a plan as plain text that includes a single JSON object matching the Plan schema.
-- The runtime will extract it via ExtractPlanJSON/ParsePlan.
-- Do NOT call create_plan/update_plan tools.
-
-Plans are saved to .xelyon/plans/ as Markdown.`
+- The runtime will extract it via ExtractPlanJSON/ParsePlan.`
 }
