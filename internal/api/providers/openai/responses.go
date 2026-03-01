@@ -329,6 +329,9 @@ func (p *Provider) handleResponsesStreaming(ctx context.Context, resp *http.Resp
 
 		// response.output_item.added: function_call 開始
 		if chunk.Type == "response.output_item.added" && chunk.Item != nil && chunk.Item.Type == "function_call" {
+			if spinner != nil && !spinner.IsActive() {
+				spinner.Start(ui.SpinnerMessageForTool(chunk.Item.Name))
+			}
 			acc := &responsesFunctionCallAccumulator{
 				CallID: chunk.Item.CallID,
 				Name:   chunk.Item.Name,
