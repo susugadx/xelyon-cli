@@ -188,7 +188,7 @@ loop:
 							hadOutput = true
 							thinkingTimer.Stop()
 						}
-						if headerPrinted && spinner != nil && !spinner.IsActive() {
+						if spinner != nil && !spinner.IsActive() {
 							spinner.Start(ui.SpinnerMessageForTool(part.FunctionCall.Name))
 						}
 						part.FunctionCall.ThoughtSignature = part.ThoughtSignature
@@ -265,7 +265,7 @@ loop:
 						thinkingTimer.Stop()
 					}
 					// テキスト表示後にFCが来た場合、ツール準備中スピナーを再開
-					if headerPrinted && spinner != nil && !spinner.IsActive() {
+					if spinner != nil && !spinner.IsActive() {
 						spinner.Start(ui.SpinnerMessageForTool(part.FunctionCall.Name))
 					}
 					part.FunctionCall.ThoughtSignature = part.ThoughtSignature
