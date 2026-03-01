@@ -1,0 +1,150 @@
+openai:
+  default:
+    inputcostperm: 1.25
+    outputcostperm: 10.0
+    cachedinputcostperm: 0.125
+    cachecreationcostperm: 1.25
+  rules:
+    - contains: ["nano"]
+      pricing:
+        inputcostperm: 0.05
+        outputcostperm: 0.40
+        cachedinputcostperm: 0.005
+        cachecreationcostperm: 0.05
+    - contains: ["mini"]
+      pricing:
+        inputcostperm: 0.25
+        outputcostperm: 2.00
+        cachedinputcostperm: 0.025
+        cachecreationcostperm: 0.25
+    - contains: ["5.2-pro"]
+      pricing:
+        inputcostperm: 21.00
+        outputcostperm: 168.00
+        cachedinputcostperm: 2.10
+        cachecreationcostperm: 21.00
+    - contains: ["5.1"]
+      pricing:
+        inputcostperm: 2.00
+        outputcostperm: 8.00
+        cachedinputcostperm: 0.50
+        cachecreationcostperm: 2.00
+    - contains: ["5.3"]
+      pricing:
+        inputcostperm: 1.75
+        outputcostperm: 14.00
+        cachedinputcostperm: 0.175
+        cachecreationcostperm: 1.75
+    - contains: ["5.2"]
+      pricing:
+        inputcostperm: 1.75
+        outputcostperm: 14.00
+        cachedinputcostperm: 0.175
+        cachecreationcostperm: 1.75
+
+claude:
+  default:
+    inputcostperm: 3.00
+    outputcostperm: 15.00
+    cachedinputcostperm: 0.30
+    cachecreationcostperm: 3.75
+  rules:
+    - contains: ["opus"]
+      pricing:
+        inputcostperm: 5.00
+        outputcostperm: 25.00
+        cachedinputcostperm: 0.50
+        cachecreationcostperm: 6.25
+    - contains: ["haiku"]
+      pricing:
+        inputcostperm: 1.00
+        outputcostperm: 5.00
+        cachedinputcostperm: 0.10
+        cachecreationcostperm: 1.25
+
+gemini:
+  default:
+    inputcostperm: 0.50
+    outputcostperm: 3.00
+    cachedinputcostperm: 0.05
+    cachecreationcostperm: 0.50
+  long_input:
+    threshold: 200000
+    pricing:
+      inputcostperm: 4.00
+      outputcostperm: 18.00
+      cachedinputcostperm: 0.40
+      cachecreationcostperm: 4.00
+  rules:
+    - contains: ["pro"]
+      pricing:
+        inputcostperm: 2.00
+        outputcostperm: 12.00
+        cachedinputcostperm: 0.20
+        cachecreationcostperm: 2.00
+    - contains: ["2.5-flash", "2.5-flash-lite"]
+      pricing:
+        inputcostperm: 0.30
+        outputcostperm: 2.50
+        cachedinputcostperm: 0.03
+        cachecreationcostperm: 0.30
+
+deepseek:
+  default:
+    inputcostperm: 0.14
+    outputcostperm: 0.28
+    cachedinputcostperm: 0.014
+    cachecreationcostperm: 0.14
+  rules:
+    - contains: ["reasoner"]
+      pricing:
+        inputcostperm: 0.55
+        outputcostperm: 2.19
+        cachedinputcostperm: 0.14
+        cachecreationcostperm: 0.55
+
+groq:
+  default:
+    inputcostperm: 0.05
+    outputcostperm: 0.10
+    cachedinputcostperm: 0.05
+    cachecreationcostperm: 0.05
+  rules:
+    - contains: ["70b"]
+      pricing:
+        inputcostperm: 0.59
+        outputcostperm: 0.79
+        cachedinputcostperm: 0.59
+        cachecreationcostperm: 0.59
+    - contains: ["405b"]
+      pricing:
+        inputcostperm: 2.00
+        outputcostperm: 2.00
+        cachedinputcostperm: 2.00
+        cachecreationcostperm: 2.00
+    - contains: ["mixtral"]
+      pricing:
+        inputcostperm: 0.24
+        outputcostperm: 0.24
+        cachedinputcostperm: 0.24
+        cachecreationcostperm: 0.24
+    - contains: ["gemma"]
+      pricing:
+        inputcostperm: 0.07
+        outputcostperm: 0.07
+        cachedinputcostperm: 0.07
+        cachecreationcostperm: 0.07
+
+kimi:
+  default:
+    inputcostperm: 0.60
+    outputcostperm: 2.50
+    cachedinputcostperm: 0.06
+    cachecreationcostperm: 0.60
+  rules:
+    - contains: ["k2.5"]
+      pricing:
+        inputcostperm: 0.60
+        outputcostperm: 3.00
+        cachedinputcostperm: 0.06
+        cachecreationcostperm: 0.60
