@@ -83,8 +83,16 @@ func handleStatsCommand(agent *Agent) bool {
 	fmt.Println()
 	green.Println("💰 Token Usage & Cost")
 	if stats.TotalTokens() > 0 {
-		tokenTable := ui.NewTable().
-			AddRow("Input", formatNumber(stats.InputTokens)+" tokens")
+		tokenTable := ui.NewTable()
+
+		currentTokens := agent.EstimateTokens()
+		limit := token.GetModelTokenLimit(agent.CurrentModel)
+		if limit > 0 {
+			contextPct := float64(currentTokens) / float64(limit) * 100
+			tokenTable.AddRow("Context", fmt.Sprintf("%s / %s (%.1f%%)", formatNumber(currentTokens), formatNumber(limit), contextPct))
+		}
+
+		tokenTable.AddRow("Input", formatNumber(stats.InputTokens)+" tokens")
 
 		if stats.CachedInputTokens > 0 || stats.CacheCreationTokens > 0 {
 			tokenTable.AddRow("Cached", formatNumber(stats.CachedInputTokens)+" tokens").
