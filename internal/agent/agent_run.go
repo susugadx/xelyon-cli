@@ -10,6 +10,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/audit"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/prompt"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -33,6 +34,9 @@ func RunHeadless(query string, model string, provider api.Provider) *HeadlessRes
 			config.SetGlobalConfig(cfg)
 		}
 	}
+
+	// Headless Mode は Normal Mode 相当: planning 系ツールを除外
+	tools.DefaultRegistry.SetExcludedTools(prompt.PlanningToolNames)
 
 	// ツール呼び出し結果を記録
 	var allToolCalls []ToolCallResult

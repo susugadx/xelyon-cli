@@ -13,6 +13,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/prompt"
 	promptnormal "github.com/susugadx/xelyon-cli/internal/prompt/normal"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/ui"
@@ -74,10 +75,12 @@ func (a *Agent) chatInternal(input string, image *api.ImageData) {
 
 	var err error
 	if a.PlanModeEnabled {
-		// Plan Mode: 調査 → 計画 → 承認 → 実行
+		// Plan Mode: planning 系ツールを有効化
+		tools.DefaultRegistry.ClearExcludedTools()
 		err = a.RunPlanMode(ctx, input)
 	} else {
-		// 通常モード: ツール実行ループ
+		// Normal Mode: planning 系ツールを除外（FC 定義から非表示）
+		tools.DefaultRegistry.SetExcludedTools(prompt.PlanningToolNames)
 		err = a.runNormalMode(ctx, input, image)
 	}
 
@@ -89,7 +92,7 @@ func (a *Agent) chatInternal(input string, image *api.ImageData) {
 			if token.IsTokenLimitError(err) {
 				// リトライ関数を定義
 				retryFunc := func() error {
-					// 同じコンテキストで再実行
+					// 同じコンテキストで再実行（除外設定は chatInternal 冒頭で設定済み）
 					ctx := context.Background()
 					if a.PlanModeEnabled {
 						return a.RunPlanMode(ctx, input)
@@ -155,6 +158,9 @@ func (a *Agent) chatInternal(input string, image *api.ImageData) {
 // runNormalMode は通常モードでの処理（Plan Mode OFF 時）
 // ツールを個別に確認しながら実行するループ（自動リトライ対応）
 func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.ImageData) error {
+	// Normal Mode 用: planning ツール参照をシステムプロンプトから除去
+	effectivePrompt := prompt.StripPlanningReferences(a.SystemPrompt)
+
 	// 通常モード用の指示を追加（prompt パッケージから取得）
 	normalModeInput := input + promptnormal.NormalModePrompt
 
@@ -173,9 +179,10 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 	var completionVerified bool // 完了検証ガード（タスク内1回限り）
 	var hookRetryCount int      // フック失敗リトライカウンター
 
-	// テキスト計画 → create_plan リダイレクト
+	// テキスト計画検出 → 直接実行リダイレクト（Normal Mode では create_plan 非表示のため）
 	var textPlanRedirectCount int
-	const maxTextPlanRedirects = 2
+	const maxTextPlanRedirects = 2 // ソフトリダイレクト回数
+	const maxTextPlanHardLimit = 5 // これ以上繰り返したら break（無限ループ防止）
 
 	for i := 0; i < maxIterations; i++ {
 		// API呼び出し
@@ -185,13 +192,13 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 			inputWithPrompt := input + promptnormal.NormalModePrompt
 			compactedHistory := CompactOldToolResults(a.History[:len(a.History)-1], DefaultKeepTurns, DefaultMaxLines, DefaultHeadLines, DefaultTailLines)
 			response, err = a.CurrentProvider.ChatWithImage(
-				ctx, a.SystemPrompt, compactedHistory, inputWithPrompt, image, a.CurrentModel,
+				ctx, effectivePrompt, compactedHistory, inputWithPrompt, image, a.CurrentModel,
 			)
 		} else {
 			compactedHistory := CompactOldToolResults(a.History, DefaultKeepTurns, DefaultMaxLines, DefaultHeadLines, DefaultTailLines)
 			response, err = a.CurrentProvider.ChatWithTools(
 				ctx,
-				a.SystemPrompt,
+				effectivePrompt,
 				compactedHistory,
 				a.CurrentModel,
 			)
@@ -235,8 +242,8 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 					return nil
 				}
 			}
-			// パース失敗 → 従来どおりリダイレクト
-			yellow.Println("⚠️  Plan JSON detected but parse failed. Use create_plan tool instead.")
+			// パース失敗 → 直接ツール実行を促す
+			yellow.Println("⚠️  Plan JSON detected but parse failed. Execute tools directly.")
 			a.History = append(a.History, api.Message{
 				Role:             "assistant",
 				Content:          response,
@@ -244,7 +251,7 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 			})
 			a.History = append(a.History, api.Message{
 				Role:    "user",
-				Content: "[SYSTEM] You are in NORMAL MODE. Do NOT output JSON directly. Use create_plan tool or execute tools DIRECTLY.",
+				Content: "[SYSTEM] You are in NORMAL MODE. Do NOT output JSON directly. Execute the required changes directly using tools (str_replace, bash, etc).",
 			})
 			continue
 		}
@@ -264,13 +271,27 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 
 		// ツール呼び出しなし = 通常の回答
 		if len(toolCalls) == 0 {
-			// テキスト計画の検出 → create_plan ツール使用を要求
+			// テキスト計画の検出 → 直接ツール実行を要求
+			// Normal Mode では create_plan が非表示のため、直接実行を促す
 			// ただし完了宣言を含むレスポンスはスキップ（まとめの番号リストを誤検知しない）
 			steps := extractTextPlan(response)
 			if !containsCompletionDeclaration(response) && len(steps) >= 5 && isActionPlan(steps) {
 				textPlanRedirectCount++
+
+				// ハードリミット: これ以上繰り返してもツール使用に移行しない → break してユーザーに返す
+				if textPlanRedirectCount > maxTextPlanHardLimit {
+					yellow.Printf("⚠️  Text plan detected %d times without tool use. Returning response to user.\n", textPlanRedirectCount)
+					a.History = append(a.History, api.Message{
+						Role:             "assistant",
+						Content:          response,
+						ReasoningContent: a.getLastReasoningContent(),
+					})
+					break
+				}
+
+				// ソフトリダイレクト上限後: より強い指示
 				if textPlanRedirectCount > maxTextPlanRedirects {
-					yellow.Printf("⚠️  AI failed to use create_plan after %d attempts. Execute tools directly.\n", maxTextPlanRedirects)
+					yellow.Printf("⚠️  Text plan detected %d times. Forcing direct execution.\n", textPlanRedirectCount)
 					a.History = append(a.History, api.Message{
 						Role:             "assistant",
 						Content:          response,
@@ -278,22 +299,12 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 					})
 					a.History = append(a.History, api.Message{
 						Role:    "user",
-						Content: "[SYSTEM] create_plan is not available. Execute the required changes directly using tools (str_replace, bash, etc).",
+						Content: "[SYSTEM] STOP planning. Pick the FIRST change and execute it NOW using str_replace or bash. One tool call, no explanation.",
 					})
 					continue
 				}
 
-				// 2回目: tool_choice で FC 強制
-				if textPlanRedirectCount >= 2 {
-					yellow.Printf("⚠️  Text plan detected again. Forcing create_plan via tool_choice... (%d/%d)\n",
-						textPlanRedirectCount, maxTextPlanRedirects)
-					// tool_choice を一時的に設定
-					if tc, ok := a.CurrentProvider.(interface{ SetToolChoice(name string) }); ok {
-						tc.SetToolChoice("create_plan")
-					}
-				}
-
-				yellow.Printf("⚠️  Text plan detected (%d steps). Redirecting to create_plan tool... (%d/%d)\n",
+				yellow.Printf("⚠️  Text plan detected (%d steps). Execute tools directly instead. (%d/%d)\n",
 					len(steps), textPlanRedirectCount, maxTextPlanRedirects)
 				a.History = append(a.History, api.Message{
 					Role:             "assistant",
@@ -301,11 +312,8 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 					ReasoningContent: a.getLastReasoningContent(),
 				})
 				a.History = append(a.History, api.Message{
-					Role: "user",
-					Content: "[SYSTEM] You output a text plan instead of using the create_plan tool. " +
-						"Text plans cannot be tracked or verified. " +
-						"Use the create_plan tool with proper steps and tools fields to create a structured plan. " +
-						"Do NOT output plans as numbered text.",
+					Role:    "user",
+					Content: "[SYSTEM] Do NOT output plans as numbered text. Execute the required changes directly using tools (str_replace, bash, etc).",
 				})
 				continue
 			}

@@ -1,8 +1,14 @@
 package prompt
 
 import (
+	"regexp"
+
 	promptplan "github.com/susugadx/xelyon-cli/internal/prompt/plan"
 )
+
+// PlanningToolNames は Plan Mode 専用ツール名一覧
+// Normal Mode では Registry から除外される
+var PlanningToolNames = []string{"create_plan", "update_plan", "ask_user_question"}
 
 // BuildSystemPrompt はシステムプロンプトを構築
 // planModeEnabled が true の場合、Planning Tools のガイドラインを追加
@@ -11,6 +17,37 @@ func BuildSystemPrompt(basePrompt string, planModeEnabled bool) string {
 		return basePrompt
 	}
 	return basePrompt + "\n\n" + promptplan.BuildPlanningPrompt()
+}
+
+// planningBlockRe は <!-- PLANNING_TOOLS_START --> ... <!-- PLANNING_TOOLS_END --> を除去
+var planningBlockRe = regexp.MustCompile(`(?s)\n?<!-- PLANNING_TOOLS_START -->.*?<!-- PLANNING_TOOLS_END -->\n?`)
+
+// planningRefRe は <!-- PLANNING_REF --> ... <!-- /PLANNING_REF --> を除去
+// 代替テキストは PLANNING_REF タグの alt 属性から取得
+var planningRefRe = regexp.MustCompile(`(?s)<!-- PLANNING_REF(?:\s+alt="([^"]*)")? -->.*?<!-- /PLANNING_REF -->`)
+
+// StripPlanningReferences は SystemPrompt から planning ツール関連の参照を除去
+// Normal Mode で使用: FC プロバイダーは GetToolDefinitions() の除外で対応済みだが、
+// Workflow Rules 内のテキスト参照（create_plan, ask_user_question）も除去する必要がある
+//
+// マーカー方式:
+//   - <!-- PLANNING_TOOLS_START --> ... <!-- PLANNING_TOOLS_END --> → 全体除去
+//   - <!-- PLANNING_REF alt="replacement" --> ... <!-- /PLANNING_REF --> → alt テキストで置換
+//   - <!-- PLANNING_REF --> ... <!-- /PLANNING_REF --> → 空文字で除去
+func StripPlanningReferences(s string) string {
+	// Planning Tools ブロック除去
+	s = planningBlockRe.ReplaceAllString(s, "")
+
+	// Planning 参照を alt テキストで置換（alt なし → 空除去）
+	s = planningRefRe.ReplaceAllStringFunc(s, func(match string) string {
+		sub := planningRefRe.FindStringSubmatch(match)
+		if len(sub) > 1 && sub[1] != "" {
+			return sub[1]
+		}
+		return ""
+	})
+
+	return s
 }
 
 // SystemPrompt is the main system prompt for XELYON agent.
@@ -36,8 +73,8 @@ const SystemPrompt = `You are XELYON, an autonomous AI coding agent.
 ## Autonomy & Persistence
 - Once given a task, gather context → implement → verify without waiting for prompts
 - Bias to action: make reasonable assumptions and proceed
-- If uncertain: proceed with stated assumption. If multiple valid approaches exist: ask via ask_user_question
-- Use tools proactively: search before guessing, plan before complex changes, ask before ambiguous choices
+<!-- PLANNING_REF alt="- If uncertain: proceed with stated assumption" -->- If uncertain: proceed with stated assumption. If multiple valid approaches exist: ask via ask_user_question<!-- /PLANNING_REF -->
+<!-- PLANNING_REF alt="- Use tools proactively: search before guessing, verify before modifying" -->- Use tools proactively: search before guessing, plan before complex changes, ask before ambiguous choices<!-- /PLANNING_REF -->
 - Persist until fully complete, but STOP and reassess if 10+ tool calls show no progress
 - **STOP immediately for**: greetings, thanks, casual chat - respond conversationally, NO tool calls
 - User asking a question (not requesting changes)? → answer and stop. Do NOT start implementing
@@ -58,10 +95,12 @@ const SystemPrompt = `You are XELYON, an autonomous AI coding agent.
 ### Development Tools
 - bash: {"command": "..."} - Shell commands (git, npm, pip, make, go test, go fmt, curl, etc.)
 
+<!-- PLANNING_TOOLS_START -->
 ### Planning Tools
 - ask_user_question: {"question": "...", "question_type": "single_choice|multi_choice|free_text", "options": [...]} - Ask user before planning (use only when needed)
 - create_plan: {"title": "...", "summary": "...", "steps": [...]} - Create and save a plan
 - update_plan: {"id": "...", "action": "set_status|add_step|remove_step|update_step|set_title|set_summary", ...} - Update a plan
+<!-- PLANNING_TOOLS_END -->
 
 ## Workflow Rules
 
@@ -101,9 +140,9 @@ Task is NOT done until dependency chain is fully resolved.
 
 ### 4. Tool Selection Guide
 - Don't know an API/library/syntax? → web_search first, don't guess
-- Large refactoring (5+ files across packages)? → consider create_plan
-- Multiple valid approaches? → ask_user_question
-- Same pattern across files? → str_replace batch mode (edits=[{old_str,new_str},...]) or bash (sed)
+<!-- PLANNING_REF -->- Large refactoring (5+ files across packages)? → consider create_plan
+<!-- /PLANNING_REF --><!-- PLANNING_REF -->- Multiple valid approaches? → ask_user_question
+<!-- /PLANNING_REF -->- Same pattern across files? → str_replace batch mode (edits=[{old_str,new_str},...]) or bash (sed)
 - Code search? → search_code (NOT bash grep/rg) — caches results, marks read-ranges, detects [def]/[ref]
 - Git/test/format/lint? → bash (go test, go fmt, git commit, etc.)
 - Multiple files to read? → read_file batch mode (paths=["file1", "file2:10-20"])

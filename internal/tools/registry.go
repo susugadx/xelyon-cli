@@ -34,8 +34,9 @@ type ToolDefinition struct {
 
 // Registry はツールの登録・管理を行う
 type Registry struct {
-	mu    sync.RWMutex // 並行アクセス保護（MCP動的登録対応）
-	tools map[string]Tool
+	mu            sync.RWMutex // 並行アクセス保護（MCP動的登録対応）
+	tools         map[string]Tool
+	excludedTools map[string]bool // GetToolDefinitions から除外するツール名セット
 }
 
 // NewRegistry は新しいRegistryを作成
@@ -91,13 +92,34 @@ func (r *Registry) HasTool(name string) bool {
 	return ok
 }
 
-// GetToolDefinitions は登録済み全ツールの定義を返す
+// SetExcludedTools は GetToolDefinitions から除外するツール名を設定
+// Normal Mode で planning 系ツールを非表示にするために使用
+func (r *Registry) SetExcludedTools(names []string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.excludedTools = make(map[string]bool, len(names))
+	for _, n := range names {
+		r.excludedTools[n] = true
+	}
+}
+
+// ClearExcludedTools は除外ツール設定をクリア
+func (r *Registry) ClearExcludedTools() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.excludedTools = nil
+}
+
+// GetToolDefinitions は登録済みツールの定義を返す（除外設定を適用）
 func (r *Registry) GetToolDefinitions() []ToolDefinition {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	defs := make([]ToolDefinition, 0, len(r.tools))
 	for _, tool := range r.tools {
+		if r.excludedTools[tool.Name()] {
+			continue
+		}
 		defs = append(defs, ToolDefinition{
 			Name:        tool.Name(),
 			Description: tool.Description(),
