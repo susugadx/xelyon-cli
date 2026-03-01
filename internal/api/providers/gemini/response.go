@@ -330,6 +330,7 @@ loop:
 		p.usageCallback(api.Usage{
 			InputTokens:       usage.PromptTokenCount,
 			OutputTokens:      usage.CandidatesTokenCount,
+			ThinkingTokens:    usage.ThoughtsTokenCount,
 			CachedInputTokens: usage.CachedContentTokenCount,
 		})
 	}
@@ -393,6 +394,7 @@ func (p *Provider) handleFunctionCallingResponse(body []byte, spinner *ui.Spinne
 			p.usageCallback(api.Usage{
 				InputTokens:       response.UsageMetadata.PromptTokenCount,
 				OutputTokens:      response.UsageMetadata.CandidatesTokenCount,
+				ThinkingTokens:    response.UsageMetadata.ThoughtsTokenCount,
 				CachedInputTokens: response.UsageMetadata.CachedContentTokenCount,
 			})
 		}

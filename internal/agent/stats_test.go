@@ -572,6 +572,53 @@ func TestCalculateRequestCostWithCache_GeminiTier(t *testing.T) {
 	}
 }
 
+func TestSessionStats_AddUsage_ThinkingTokens(t *testing.T) {
+	stats := NewSessionStats("gemini", "gemini-3.1-pro")
+
+	usage := api.Usage{
+		InputTokens:    100000,
+		OutputTokens:   10000,
+		ThinkingTokens: 50000,
+	}
+	stats.AddUsage(usage)
+
+	if stats.ThinkingTokens != 50000 {
+		t.Errorf("AddUsage() ThinkingTokens = %d, want 50000", stats.ThinkingTokens)
+	}
+
+	// TotalTokens = Input + Output + Thinking
+	if stats.TotalTokens() != 160000 {
+		t.Errorf("TotalTokens() = %d, want 160000", stats.TotalTokens())
+	}
+
+	// コスト検証: thinking tokens は出力レートで課金
+	// Input: 100K/1M * $2.00 = $0.20
+	// Output: 10K/1M * $12.00 = $0.12
+	// Thinking: 50K/1M * $12.00 = $0.60
+	// 合計: $0.92
+	expected := 0.92
+	cost := stats.EstimatedCost()
+	if cost < expected-0.001 || cost > expected+0.001 {
+		t.Errorf("EstimatedCost() with thinking = %f, want %f", cost, expected)
+	}
+}
+
+func TestCalculateRequestCostWithCache_ThinkingTokens(t *testing.T) {
+	cost := CalculateRequestCostWithCache("gemini", "gemini-3.1-pro", api.Usage{
+		InputTokens:    100000,
+		OutputTokens:   10000,
+		ThinkingTokens: 50000,
+	})
+	// Input: 100K/1M * $2.00 = $0.20
+	// Output: 10K/1M * $12.00 = $0.12
+	// Thinking: 50K/1M * $12.00 = $0.60
+	// 合計: $0.92
+	expected := 0.92
+	if cost < expected-0.001 || cost > expected+0.001 {
+		t.Errorf("CostWithCache thinking = %f, want %f", cost, expected)
+	}
+}
+
 func TestGetClaudePricing(t *testing.T) {
 	tests := []struct {
 		model      string

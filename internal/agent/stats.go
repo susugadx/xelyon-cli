@@ -17,6 +17,7 @@ type SessionStats struct {
 	ToolExecutions      map[string]int // ツール名 -> 実行回数
 	InputTokens         int
 	OutputTokens        int
+	ThinkingTokens      int        // Extended Thinking トークン数（累計、出力レート課金）
 	CachedInputTokens   int        // キャッシュヒットトークン数（累計）
 	CacheCreationTokens int        // キャッシュ作成トークン数（累計、Claude用）
 	Provider            string     // "deepseek", "openai", "claude", "gemini", "groq", "ollama"
@@ -56,6 +57,7 @@ func (s *SessionStats) AddTokens(input, output int) {
 func (s *SessionStats) AddUsage(usage api.Usage) {
 	s.InputTokens += usage.InputTokens
 	s.OutputTokens += usage.OutputTokens
+	s.ThinkingTokens += usage.ThinkingTokens
 	s.CachedInputTokens += usage.CachedInputTokens
 	s.CacheCreationTokens += usage.CacheCreationTokens
 	s.LastUsage = &usage
@@ -67,7 +69,7 @@ func (s *SessionStats) AddUsage(usage api.Usage) {
 
 // TotalTokens は合計トークン数を返す
 func (s *SessionStats) TotalTokens() int {
-	return s.InputTokens + s.OutputTokens
+	return s.InputTokens + s.OutputTokens + s.ThinkingTokens
 }
 
 // PricingInfo はプロバイダー別の料金情報（$/1M tokens）
@@ -378,8 +380,9 @@ func (s *SessionStats) EstimatedCost() float64 {
 	uncachedInputCost := float64(uncachedInput) / 1_000_000.0 * pricing.InputCostPerM
 
 	outputCost := float64(s.OutputTokens) / 1_000_000.0 * pricing.OutputCostPerM
+	thinkingCost := float64(s.ThinkingTokens) / 1_000_000.0 * pricing.OutputCostPerM
 
-	return cachedInputCost + cacheCreationCost + uncachedInputCost + outputCost
+	return cachedInputCost + cacheCreationCost + uncachedInputCost + outputCost + thinkingCost
 }
 
 // ElapsedTime はセッション開始からの経過時間を返す
@@ -493,5 +496,8 @@ func CalculateRequestCostWithCache(provider, model string, usage api.Usage) floa
 
 	outputCost := float64(usage.OutputTokens) / 1_000_000.0 * pricing.OutputCostPerM
 
-	return cachedInputCost + cacheCreationCost + uncachedInputCost + outputCost
+	// Thinking tokens は出力レートで課金（candidatesTokenCount とは別計上）
+	thinkingCost := float64(usage.ThinkingTokens) / 1_000_000.0 * pricing.OutputCostPerM
+
+	return cachedInputCost + cacheCreationCost + uncachedInputCost + outputCost + thinkingCost
 }

@@ -97,8 +97,13 @@ func handleStatsCommand(agent *Agent) bool {
 			tokenTable.AddRow("Hit Rate", fmt.Sprintf("%.1f%%", hitRate))
 		}
 
-		tokenTable.AddRow("Output", formatNumber(stats.OutputTokens)+" tokens").
-			AddRow("Total", formatNumber(stats.TotalTokens())+" tokens")
+		tokenTable.AddRow("Output", formatNumber(stats.OutputTokens)+" tokens")
+
+		if stats.ThinkingTokens > 0 {
+			tokenTable.AddRow("Thinking", formatNumber(stats.ThinkingTokens)+" tokens")
+		}
+
+		tokenTable.AddRow("Total", formatNumber(stats.TotalTokens())+" tokens")
 
 		cost := stats.EstimatedCost()
 		if cost > 0 {

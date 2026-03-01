@@ -5,6 +5,9 @@ type Usage struct {
 	InputTokens  int
 	OutputTokens int
 
+	// Thinking 関連（Extended Thinking 対応プロバイダー用）
+	ThinkingTokens int // 思考トークン数（出力レートで課金、OutputTokens には含まれない）
+
 	// キャッシュ関連（プロバイダーにより対応状況が異なる）
 	CachedInputTokens   int     // キャッシュから読み取ったトークン数（割引対象）
 	CacheCreationTokens int     // キャッシュ作成に使用したトークン数（Claude: 1.25x課金）
