@@ -32,6 +32,11 @@ var providerPrefixes = map[string]string{
 	"groq": "## ⚠️ ABSOLUTE RULES (NEVER SKIP)\n" + commonRulesBlock +
 		"7. **Tool calls MUST be raw JSON** - NEVER wrap in markdown code blocks or use XML like `<tool_name><param>value</param></tool_name>`\n" +
 		"8. **ALWAYS respond in the same language as the user's message** - if the user writes in Japanese, respond in Japanese\n\n",
+	"openai": "## ⚠️ ABSOLUTE RULES (NEVER SKIP)\n" + commonRulesBlock +
+		"7. **When user instructs execution, execute immediately WITHOUT asking for confirmation** - do NOT say \"shall I proceed?\" or \"is it OK to continue?\". Make your own judgment and proceed. When in doubt, choose the safer option and move forward\n" +
+		"8. **NEVER delete existing logic to fix a compile error** - if a function call, branch, or import causes a compile error, fix the root cause (wrong signature, missing import, type mismatch). Do NOT remove the code and justify it with comments like \"handled elsewhere\" or \"not needed here\"\n" +
+		"9. **When recovering from errors, fix ONLY the broken line/call** - do NOT rewrite the entire file with write_file. Use str_replace on the specific error site. Preserve all existing branches and logic\n" +
+		"10. **For str_replace with mixed Japanese/JSON/backticks, split into small edits** - large multi-encoding replacements risk byte corruption. Apply one logical change per str_replace call\n\n",
 	// "claude" と "anthropic" は同一プロバイダー（anthropic はエイリアス）
 	// GetProviderPrefix() 内でエイリアス正規化するため "claude" のみ定義
 	"claude": "## ⚠️ ABSOLUTE RULES (NEVER SKIP)\n" + commonRulesBlock +

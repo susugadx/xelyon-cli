@@ -83,10 +83,40 @@ func TestGetProviderPrefix_Unknown(t *testing.T) {
 	}
 }
 
+func TestGetProviderPrefix_OpenAI(t *testing.T) {
+	prefix := GetProviderPrefix("openai")
+	if prefix == "" {
+		t.Fatal("expected non-empty prefix for openai")
+	}
+	if !strings.Contains(prefix, "search_code → str_replace(line-range) is PREFERRED") {
+		t.Error("openai prefix should contain common search_code rule")
+	}
+	if !strings.Contains(prefix, "execute immediately WITHOUT asking for confirmation") {
+		t.Error("openai prefix should contain no-confirmation rule")
+	}
+	if !strings.Contains(prefix, "NEVER delete existing logic to fix a compile error") {
+		t.Error("openai prefix should contain no-delete-on-error rule")
+	}
+	if !strings.Contains(prefix, "fix ONLY the broken line/call") {
+		t.Error("openai prefix should contain targeted-fix rule")
+	}
+	if !strings.Contains(prefix, "mixed Japanese/JSON/backticks") {
+		t.Error("openai prefix should contain str_replace safety rule")
+	}
+}
+
+func TestGetProviderPrefix_OpenAICaseInsensitive(t *testing.T) {
+	prefix := GetProviderPrefix("OpenAI")
+	if prefix == "" {
+		t.Fatal("expected non-empty prefix for OpenAI (uppercase)")
+	}
+}
+
 func TestCommonRulesBlock(t *testing.T) {
-	// 共通ルールが Gemini と DeepSeek の両方に含まれていることを確認
+	// 共通ルールが全プロバイダーに含まれていることを確認
 	gemini := GetProviderPrefix("gemini")
 	deepseek := GetProviderPrefix("deepseek")
+	openai := GetProviderPrefix("openai")
 
 	commonChecks := []string{
 		"search_code → str_replace(line-range) is PREFERRED",
@@ -102,12 +132,16 @@ func TestCommonRulesBlock(t *testing.T) {
 		if !strings.Contains(deepseek, check) {
 			t.Errorf("deepseek prefix missing common rule: %s", check)
 		}
+		if !strings.Contains(openai, check) {
+			t.Errorf("openai prefix missing common rule: %s", check)
+		}
 	}
 }
 
 func TestProviderSpecificRules(t *testing.T) {
 	gemini := GetProviderPrefix("gemini")
 	deepseek := GetProviderPrefix("deepseek")
+	openai := GetProviderPrefix("openai")
 
 	// Gemini 固有: マークダウンコードブロック禁止
 	if !strings.Contains(gemini, "NOT inside markdown code blocks") {
@@ -137,6 +171,25 @@ func TestProviderSpecificRules(t *testing.T) {
 		}
 		if strings.Contains(gemini, check) {
 			t.Errorf("gemini should NOT contain deepseek-specific rule: %s", check)
+		}
+	}
+
+	// OpenAI 固有: 確認不要・ロジック削除禁止・ターゲット修正
+	openaiOnlyChecks := []string{
+		"execute immediately WITHOUT asking for confirmation",
+		"NEVER delete existing logic to fix a compile error",
+		"fix ONLY the broken line/call",
+		"mixed Japanese/JSON/backticks",
+	}
+	for _, check := range openaiOnlyChecks {
+		if !strings.Contains(openai, check) {
+			t.Errorf("openai should contain rule: %s", check)
+		}
+		if strings.Contains(gemini, check) {
+			t.Errorf("gemini should NOT contain openai-specific rule: %s", check)
+		}
+		if strings.Contains(deepseek, check) {
+			t.Errorf("deepseek should NOT contain openai-specific rule: %s", check)
 		}
 	}
 }
@@ -207,6 +260,24 @@ func TestBuildProviderSystemPrompt_Claude(t *testing.T) {
 	}
 	if !strings.Contains(result, "File reading → read_file, NOT bash (cat/head/tail/sed)") {
 		t.Error("claude result should contain file reading rule")
+	}
+}
+
+func TestBuildProviderSystemPrompt_OpenAI(t *testing.T) {
+	base := "You are XELYON, an autonomous AI coding agent."
+	result := BuildProviderSystemPrompt(base, "openai")
+
+	if !strings.HasPrefix(result, "## ") {
+		t.Error("openai result should start with prefix header")
+	}
+	if !strings.HasSuffix(result, base) {
+		t.Error("openai result should end with base prompt")
+	}
+	if !strings.Contains(result, "execute immediately WITHOUT asking for confirmation") {
+		t.Error("openai result should contain no-confirmation rule")
+	}
+	if !strings.Contains(result, "NEVER delete existing logic to fix a compile error") {
+		t.Error("openai result should contain no-delete-on-error rule")
 	}
 }
 
