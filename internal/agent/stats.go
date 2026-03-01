@@ -226,12 +226,20 @@ func getOpenAIPricing(model string) PricingInfo {
 			CachedInputCostPerM:   2.10, // 90% off
 			CacheCreationCostPerM: 21.00,
 		}
+	case strings.Contains(lm, "5.1"):
+		// GPT-5.1 / 5.1-Codex: $2.00/$8.00 per million tokens
+		return PricingInfo{
+			InputCostPerM:         2.00,
+			OutputCostPerM:        8.00,
+			CachedInputCostPerM:   0.50,
+			CacheCreationCostPerM: 2.00,
+		}
 	case strings.Contains(lm, "5.2"):
 		// GPT-5.2 / 5.2-Codex: $1.75/$14 per million tokens
 		return PricingInfo{
 			InputCostPerM:         1.75,
 			OutputCostPerM:        14.00,
-			CachedInputCostPerM:   0.18, // 90% off
+			CachedInputCostPerM:   0.175, // 90% off
 			CacheCreationCostPerM: 1.75,
 		}
 	default:
