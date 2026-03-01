@@ -1,12 +1,15 @@
 package agent
 
 import (
+	_ "embed"
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"gopkg.in/yaml.v3"
 )
 
 // SessionStats はセッション統計情報
@@ -80,6 +83,64 @@ type PricingInfo struct {
 	CacheCreationCostPerM float64 // キャッシュ作成（Claude: 1.25x）
 }
 
+type pricingRule struct {
+	Contains []string    `yaml:"contains"`
+	Pricing  PricingInfo `yaml:"pricing"`
+}
+
+type providerPricingConfig struct {
+	Default   PricingInfo    `yaml:"default"`
+	LongInput *longInputTier `yaml:"long_input"`
+	Rules     []pricingRule  `yaml:"rules"`
+}
+
+type longInputTier struct {
+	Threshold int         `yaml:"threshold"`
+	Pricing   PricingInfo `yaml:"pricing"`
+}
+
+type pricingConfig struct {
+	OpenAI   providerPricingConfig `yaml:"openai"`
+	Claude   providerPricingConfig `yaml:"claude"`
+	Gemini   providerPricingConfig `yaml:"gemini"`
+	DeepSeek providerPricingConfig `yaml:"deepseek"`
+	Groq     providerPricingConfig `yaml:"groq"`
+	Kimi     providerPricingConfig `yaml:"kimi"`
+}
+
+//go:embed pricing.yaml
+var embeddedPricingYAML []byte
+
+var (
+	pricingConfigOnce   sync.Once
+	loadedPricingConfig *pricingConfig
+)
+
+func loadPricingConfig() *pricingConfig {
+	pricingConfigOnce.Do(func() {
+		if len(embeddedPricingYAML) == 0 {
+			return
+		}
+		var cfg pricingConfig
+		if err := yaml.Unmarshal(embeddedPricingYAML, &cfg); err != nil {
+			return
+		}
+		loadedPricingConfig = &cfg
+	})
+	return loadedPricingConfig
+}
+
+func matchPricingRules(lm string, provider providerPricingConfig) (PricingInfo, bool) {
+	for _, rule := range provider.Rules {
+		for _, keyword := range rule.Contains {
+			if strings.Contains(lm, keyword) {
+				return rule.Pricing, true
+			}
+		}
+	}
+	return PricingInfo{}, false
+}
+
 // GetPricingInfo はプロバイダー・モデル別の料金情報を返す
 // promptTokenCount はオプション（Gemini 200Kティア判定用）
 func GetPricingInfo(provider string, model string, promptTokenCount ...int) PricingInfo {
@@ -149,6 +210,14 @@ func GetPricingInfo(provider string, model string, promptTokenCount ...int) Pric
 // getDeepSeekPricing はモデル名からDeepSeek料金を返す
 func getDeepSeekPricing(model string) PricingInfo {
 	lm := strings.ToLower(model)
+	if cfg := loadPricingConfig(); cfg != nil {
+		provider := cfg.DeepSeek
+		if pricing, ok := matchPricingRules(lm, provider); ok {
+			return pricing
+		}
+		return provider.Default
+	}
+
 	if strings.Contains(lm, "reasoner") {
 		// DeepSeek Reasoner: $0.55/$2.19 per million tokens, Cache hit: $0.14
 		return PricingInfo{
@@ -170,6 +239,14 @@ func getDeepSeekPricing(model string) PricingInfo {
 // getClaudePricing はモデル名からClaude料金を返す
 func getClaudePricing(model string) PricingInfo {
 	lm := strings.ToLower(model)
+	if cfg := loadPricingConfig(); cfg != nil {
+		provider := cfg.Claude
+		if pricing, ok := matchPricingRules(lm, provider); ok {
+			return pricing
+		}
+		return provider.Default
+	}
+
 	switch {
 	case strings.Contains(lm, "opus"):
 		// Opus 4.5/4.6: $5/$25 per million tokens
@@ -201,6 +278,14 @@ func getClaudePricing(model string) PricingInfo {
 // getOpenAIPricing はモデル名からOpenAI料金を返す
 func getOpenAIPricing(model string) PricingInfo {
 	lm := strings.ToLower(model)
+	if cfg := loadPricingConfig(); cfg != nil {
+		provider := cfg.OpenAI
+		if pricing, ok := matchPricingRules(lm, provider); ok {
+			return pricing
+		}
+		return provider.Default
+	}
+
 	switch {
 	case strings.Contains(lm, "nano"):
 		// GPT-5 Nano: $0.05/$0.40 per million tokens
@@ -265,6 +350,17 @@ func getOpenAIPricing(model string) PricingInfo {
 // promptTokenCount はリクエストの入力トークン数（200Kティア判定に使用）
 func getGeminiPricing(model string, promptTokenCount int) PricingInfo {
 	lm := strings.ToLower(model)
+	if cfg := loadPricingConfig(); cfg != nil {
+		provider := cfg.Gemini
+		if pricing, ok := matchPricingRules(lm, provider); ok {
+			if strings.Contains(lm, "pro") && provider.LongInput != nil && promptTokenCount > provider.LongInput.Threshold {
+				return provider.LongInput.Pricing
+			}
+			return pricing
+		}
+		return provider.Default
+	}
+
 	switch {
 	case strings.Contains(lm, "pro"):
 		if promptTokenCount > 200000 {
@@ -305,6 +401,14 @@ func getGeminiPricing(model string, promptTokenCount int) PricingInfo {
 // getGroqPricing はモデル名からGroq料金を返す
 func getGroqPricing(model string) PricingInfo {
 	lm := strings.ToLower(model)
+	if cfg := loadPricingConfig(); cfg != nil {
+		provider := cfg.Groq
+		if pricing, ok := matchPricingRules(lm, provider); ok {
+			return pricing
+		}
+		return provider.Default
+	}
+
 	switch {
 	case strings.Contains(lm, "70b"):
 		// Llama 3/3.1 70B: $0.59/$0.79 per million tokens
@@ -352,6 +456,14 @@ func getGroqPricing(model string) PricingInfo {
 // getKimiPricing はモデル名からKimi料金を返す
 func getKimiPricing(model string) PricingInfo {
 	lm := strings.ToLower(model)
+	if cfg := loadPricingConfig(); cfg != nil {
+		provider := cfg.Kimi
+		if pricing, ok := matchPricingRules(lm, provider); ok {
+			return pricing
+		}
+		return provider.Default
+	}
+
 	if strings.Contains(lm, "k2.5") {
 		// Kimi K2.5: $0.60/$3.00 per million tokens
 		return PricingInfo{
