@@ -27,6 +27,9 @@ var modelTokenLimits = map[string]int{
 	"global.anthropic.claude-sonnet-4-5-20250929-v1:0": 200000,
 
 	// === OpenAI ===
+	"gpt-4.1":             1000000,
+	"gpt-4.1-mini":        1000000,
+	"gpt-4.1-nano":        1000000,
 	"gpt-4o":              128000,
 	"gpt-4o-mini":         128000,
 	"gpt-4-turbo":         128000,
@@ -39,7 +42,8 @@ var modelTokenLimits = map[string]int{
 	"o1-preview":          128000,
 	"o3-mini":             200000,
 	"gpt-5":               200000,
-	"gpt-5.2":             200000,
+	"gpt-5.1":             196000,
+	"gpt-5.2":             400000,
 
 	// === Gemini ===
 	"gemini-3-pro-preview":               1000000,
@@ -99,6 +103,7 @@ func GetModelTokenLimit(model string) int {
 		{"anthropic.claude", 200000},
 		{"global.anthropic.claude", 200000},
 		{"claude-", 200000},
+		{"gpt-4.1", 1000000},
 		{"gpt-4o", 128000},
 		{"gpt-4", 8192},
 		{"gpt-3.5", 16385},

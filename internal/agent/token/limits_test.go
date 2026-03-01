@@ -15,6 +15,10 @@ func TestGetModelTokenLimit_ExactMatch(t *testing.T) {
 		{"claude-3-opus-20240229", 200000},
 
 		// OpenAI models
+		{"gpt-4.1", 1000000},
+		{"gpt-4.1-mini", 1000000},
+		{"gpt-5.1", 196000},
+		{"gpt-5.2", 400000},
 		{"gpt-4o", 128000},
 		{"gpt-4o-mini", 128000},
 		{"gpt-4", 8192},
@@ -58,6 +62,9 @@ func TestGetModelTokenLimit_PrefixMatch(t *testing.T) {
 		// Claude prefix
 		{"claude-3-5-sonnet-latest", 200000},
 		{"claude-new-model", 200000},
+
+		// GPT-4.1 prefix
+		{"gpt-4.1-nano-20250101", 1000000},
 
 		// GPT-4o prefix
 		{"gpt-4o-2024-08-06", 128000},
