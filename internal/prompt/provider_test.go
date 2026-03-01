@@ -103,6 +103,9 @@ func TestGetProviderPrefix_OpenAI(t *testing.T) {
 	if !strings.Contains(prefix, "mixed Japanese/JSON/backticks") {
 		t.Error("openai prefix should contain str_replace safety rule")
 	}
+	if !strings.Contains(prefix, "clean up ALL remnants") {
+		t.Error("openai prefix should contain cleanup rule")
+	}
 }
 
 func TestGetProviderPrefix_OpenAICaseInsensitive(t *testing.T) {
@@ -180,6 +183,7 @@ func TestProviderSpecificRules(t *testing.T) {
 		"NEVER delete existing logic to fix a compile error",
 		"fix ONLY the broken line/call",
 		"mixed Japanese/JSON/backticks",
+		"clean up ALL remnants",
 	}
 	for _, check := range openaiOnlyChecks {
 		if !strings.Contains(openai, check) {

@@ -36,7 +36,8 @@ var providerPrefixes = map[string]string{
 		"7. **When user instructs execution, execute immediately WITHOUT asking for confirmation** - do NOT say \"shall I proceed?\" or \"is it OK to continue?\". Make your own judgment and proceed. When in doubt, choose the safer option and move forward\n" +
 		"8. **NEVER delete existing logic to fix a compile error** - if a function call, branch, or import causes a compile error, fix the root cause (wrong signature, missing import, type mismatch). Do NOT remove the code and justify it with comments like \"handled elsewhere\" or \"not needed here\"\n" +
 		"9. **When recovering from errors, fix ONLY the broken line/call** - do NOT rewrite the entire file with write_file. Use str_replace on the specific error site. Preserve all existing branches and logic\n" +
-		"10. **For str_replace with mixed Japanese/JSON/backticks, split into small edits** - large multi-encoding replacements risk byte corruption. Apply one logical change per str_replace call\n\n",
+		"10. **For str_replace with mixed Japanese/JSON/backticks, split into small edits** - large multi-encoding replacements risk byte corruption. Apply one logical change per str_replace call\n" +
+		"11. **When removing functionality, clean up ALL remnants in the same task** - unused imports, dead code, empty init() functions, orphaned dependencies in go.mod. \"Does not affect behavior\" is NOT a valid reason to leave dead code — unused dependencies cause CI failures (go mod tidy, npm audit, etc.)\n\n",
 	// "claude" と "anthropic" は同一プロバイダー（anthropic はエイリアス）
 	// GetProviderPrefix() 内でエイリアス正規化するため "claude" のみ定義
 	"claude": "## ⚠️ ABSOLUTE RULES (NEVER SKIP)\n" + commonRulesBlock +
