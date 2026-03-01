@@ -139,7 +139,11 @@ func (a *Agent) chatInternal(input string, image *api.ImageData) {
 		pricing := GetPricingInfo(a.ProviderName, a.CurrentModel)
 		if pricing.InputCostPerM > 0 {
 			savingPerTurn := float64(saved) / 1_000_000.0 * pricing.InputCostPerM * 0.5
-			dim.Printf("💡 Context %dK - /clear saves ~$%.2f/turn, /compress keeps key context\n", contextK, savingPerTurn)
+			if savingPerTurn < 0.01 {
+				dim.Printf("💡 Context %dK - clean state ✓\n", contextK)
+			} else {
+				dim.Printf("💡 Context %dK - /clear saves ~$%.2f/turn, /compress keeps key context\n", contextK, savingPerTurn)
+			}
 		} else {
 			dim.Printf("💡 Context %dK - /clear or /compress to reduce context\n", contextK)
 		}
