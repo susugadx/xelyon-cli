@@ -145,18 +145,19 @@ func getThinkingConfigForModel(ctx context.Context, model string, cfg *config.Co
 }
 
 // levelToThinkingLevel は thinking level を Gemini 3 の thinkingLevel 文字列に変換
-// Gemini 3 Pro:   "low", "high" のみ
+// Gemini 3 Pro:   "low", "high" のみ (3.1 Pro は "medium" も対応)
 // Gemini 3 Flash: "minimal", "low", "medium", "high"
 func levelToThinkingLevel(level string, model string) string {
 	isFlash := strings.Contains(model, "flash")
+	is31Pro := strings.Contains(model, "3.1")
 	switch level {
 	case "low":
 		return "low"
 	case "medium":
-		if isFlash {
+		if isFlash || is31Pro {
 			return "medium"
 		}
-		return "low" // Pro は medium 非対応
+		return "low" // 3.0 Pro は medium 非対応
 	case "high", "xhigh":
 		return "high"
 	default:
