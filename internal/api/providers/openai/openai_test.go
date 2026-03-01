@@ -370,6 +370,98 @@ func TestOpenAIProvider_ResponsesAPI_RequestFormat(t *testing.T) {
 	}
 }
 
+func TestOpenAIProvider_ResponsesAPI_ToolResultUsesPreviousResponseID(t *testing.T) {
+	var requests []ResponsesRequest
+
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		var req ResponsesRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("Failed to decode request: %v", err)
+		}
+		requests = append(requests, req)
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			t.Fatal("Streaming unsupported")
+		}
+		if len(requests) == 1 {
+			fmt.Fprintf(w, "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_first\"}}\n\n")
+			fmt.Fprintf(w, "data: {\"type\":\"response.output_item.added\",\"item\":{\"type\":\"function_call\",\"call_id\":\"call_1\",\"name\":\"read_file\"}}\n\n")
+			fmt.Fprintf(w, "data: {\"type\":\"response.function_call_arguments.done\",\"item_id\":\"dummy\",\"output_index\":0,\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"a.txt\\\"}\",\"call_id\":\"call_1\"}\n\n")
+		} else {
+			fmt.Fprintf(w, "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_second\"}}\n\n")
+			fmt.Fprintf(w, "data: {\"type\":\"response.output_text.delta\",\"delta\":\"done\"}\n\n")
+		}
+		fmt.Fprintf(w, "data: [DONE]\n\n")
+		flusher.Flush()
+	})
+
+	originalURL := os.Getenv("OPENAI_RESPONSES_URL")
+	defer os.Setenv("OPENAI_RESPONSES_URL", originalURL)
+	os.Setenv("OPENAI_RESPONSES_URL", server.URL)
+
+	p := New("test-key")
+
+	firstHistory := []api.Message{{Role: "user", Content: "read a.txt"}}
+	_, _ = p.chatWithResponses(context.Background(), "You are helpful", firstHistory, "gpt-5.2-codex")
+
+	secondHistory := []api.Message{
+		{Role: "assistant", ToolCalls: []api.OpenAIToolCall{{ID: "call_1", Type: "function", Function: api.OpenAIToolCallFunction{Name: "read_file", Arguments: `{"path":"a.txt"}`}}}},
+		{Role: "tool", ToolCallID: "call_1", Content: "file-a"},
+		{Role: "tool", ToolCallID: "call_2", Content: "file-b"},
+	}
+	_, _ = p.chatWithResponses(context.Background(), "You are helpful", secondHistory, "gpt-5.2-codex")
+
+	if len(requests) != 2 {
+		t.Fatalf("request count = %d, want 2", len(requests))
+	}
+
+	secondReq := requests[1]
+	if secondReq.PreviousResponseID != "resp_first" {
+		t.Errorf("PreviousResponseID = %q, want 'resp_first'", secondReq.PreviousResponseID)
+	}
+	inputItems, ok := secondReq.Input.([]interface{})
+	if !ok {
+		t.Fatalf("Input type = %T, want []interface{}", secondReq.Input)
+	}
+	if len(inputItems) != 2 {
+		t.Fatalf("Input length = %d, want 2", len(inputItems))
+	}
+
+	first, ok := inputItems[0].(map[string]interface{})
+	if !ok {
+		t.Fatalf("Input[0] type = %T, want map[string]interface{}", inputItems[0])
+	}
+	if first["type"] != "function_call_output" {
+		t.Errorf("Input[0].type = %v, want function_call_output", first["type"])
+	}
+	if first["call_id"] != "call_1" {
+		t.Errorf("Input[0].call_id = %v, want call_1", first["call_id"])
+	}
+	if first["output"] != "file-a" {
+		t.Errorf("Input[0].output = %v, want file-a", first["output"])
+	}
+
+	second, ok := inputItems[1].(map[string]interface{})
+	if !ok {
+		t.Fatalf("Input[1] type = %T, want map[string]interface{}", inputItems[1])
+	}
+	if second["type"] != "function_call_output" {
+		t.Errorf("Input[1].type = %v, want function_call_output", second["type"])
+	}
+	if second["call_id"] != "call_2" {
+		t.Errorf("Input[1].call_id = %v, want call_2", second["call_id"])
+	}
+	if second["output"] != "file-b" {
+		t.Errorf("Input[1].output = %v, want file-b", second["output"])
+	}
+
+	if _, hasRole := first["role"]; hasRole {
+		t.Error("Input[0] should not include role for function_call_output")
+	}
+}
+
 func TestResponsesStreamChunk_Parse(t *testing.T) {
 	tests := []struct {
 		name     string

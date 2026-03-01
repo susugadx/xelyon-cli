@@ -159,15 +159,27 @@ func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, h
 	}
 
 	// previous_response_id がある場合はキャッシュを活用
-	// ただし、Function Calling 結果の場合は full history を送信（function_call との対応が必要）
 	if p.lastResponseID != "" && len(history) > 0 {
 		lastMsg := history[len(history)-1]
 
 		if lastMsg.Role == "tool" {
-			// Function Calling 結果: previous_response_id を使わず full history
-			// （function_call + function_call_output の対応が必要）
-			historyInput := convertHistoryToResponsesInput(history)
-			reqBody.Input = append([]InputItem{developerMsg}, historyInput...)
+			// Function Calling 結果: previous_response_id + 末尾の tool 結果のみ送信
+			// （parallel tool calls 対応: 末尾から連続する tool をすべて送る）
+			reqBody.PreviousResponseID = p.lastResponseID
+			toolStart := len(history) - 1
+			for toolStart >= 0 && history[toolStart].Role == "tool" {
+				toolStart--
+			}
+			toolMessages := history[toolStart+1:]
+			toolOutputs := make([]InputItem, 0, len(toolMessages))
+			for _, msg := range toolMessages {
+				toolOutputs = append(toolOutputs, InputItem{
+					Type:   "function_call_output",
+					CallID: msg.ToolCallID,
+					Output: msg.Content,
+				})
+			}
+			reqBody.Input = toolOutputs
 		} else {
 			// 通常メッセージ: previous_response_id で最新メッセージのみ
 			// NOTE: previous_response_id 使用時は developer メッセージ不要（前回と同じなので）
