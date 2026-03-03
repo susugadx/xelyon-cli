@@ -94,7 +94,7 @@ Language Server Protocol (LSP) を活用してIDE並みのコード理解を実�
 - **80%/90%警告**: 上限接近時に自動で警告表示
 - **トークン上限エラー時の提案**: エラー発生時に `/compress` または `/clear` を案内
 - **ツール結果の自動truncate**: 3ターン以上前のツール結果（50行超）を送信時に自動圧縮（先頭20行+末尾5行を保持）。元の履歴は保持され、API送信時にのみ適用
-- **プロンプトキャッシュ最適化**: Claude/Bedrock利用時、安定区間の末尾userメッセージにBPを配置し、古い履歴のキャッシュHIT率を向上（`prompt_cache.enabled: true`で有効）
+- **プロンプトキャッシュ最適化**: Claude/Bedrock利用時、安定区間の末尾userメッセージにBPを配置し、古い履歴のキャッシュHIT率を向上（`prompt_cache.enabled: true`で有効）。Opus 4.6の最低キャッシュトークン数（4096）に対応するため、system promptの最終ブロックにcache_controlを配置
 
 ### 📈 リアルタイムトークン表示
 API実測値に基づくトークン使用量とコストをリアルタイム表示。

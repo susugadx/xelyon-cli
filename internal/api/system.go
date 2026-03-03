@@ -19,15 +19,20 @@ type SystemBlock struct {
 }
 
 // SystemPromptCacheBoundary は system prompt の静的/動的部分の境界マーカー。
-// BuildSystemField はこの位置で分割し、前半に cache_control を設定する。
-// Plan Mode 追加時にこのマーカーを挿入することで、base prompt のキャッシュを維持する。
+// BuildSystemField はこの位置で分割して2ブロックにし、最後のブロックに cache_control を設定する。
+// Plan Mode 追加時にこのマーカーを挿入することで、system 全体を1つの cache prefix にまとめる。
 const SystemPromptCacheBoundary = "\n---XELYON_CACHE_SPLIT---\n"
 
 // BuildSystemField はプロンプトキャッシュ対応のシステムフィールドを構築します。
-// キャッシュ有効時は SystemBlock 配列を返し（静的部分に cache_control 付き）、
+// キャッシュ有効時は SystemBlock 配列を返し（最後のブロックに cache_control 付き）、
 // 無効時は string を返します。
-// SystemPromptCacheBoundary が含まれる場合、そこで分割して
-// 前半（静的）に cache_control、後半（動的）は cache_control なしのブロックにします。
+// SystemPromptCacheBoundary が含まれる場合、そこで分割して2ブロックにします。
+//
+// cache_control は最後の system ブロックに設定します。
+// これにより cache prefix は tools + system 全体となり、
+// Opus 4.6 の最低キャッシュ可能トークン数（4096）を確実に超えます。
+// （以前は parts[0] のみに設定していたため、tools + system[0] が 4096 未満の場合に
+// Opus でキャッシュが効かない問題がありました）
 func BuildSystemField(systemPrompt string) interface{} {
 	cfg := config.GetGlobalConfig()
 	if cfg == nil || !cfg.PromptCache.Enabled {
@@ -37,22 +42,30 @@ func BuildSystemField(systemPrompt string) interface{} {
 
 	parts := strings.SplitN(systemPrompt, SystemPromptCacheBoundary, 2)
 
-	// 静的部分（base）に cache_control を設定
-	blocks := []SystemBlock{
+	hasDynamic := len(parts) > 1 && strings.TrimSpace(parts[1]) != ""
+
+	if hasDynamic {
+		// 2ブロック: 静的部分（cache_control なし）+ 動的部分（cache_control あり）
+		// cache_control を最後のブロックに置くことで、prefix = tools + system 全体がキャッシュ対象
+		return []SystemBlock{
+			{
+				Type: "text",
+				Text: parts[0],
+			},
+			{
+				Type:         "text",
+				Text:         parts[1],
+				CacheControl: &CacheControl{Type: "ephemeral"},
+			},
+		}
+	}
+
+	// 1ブロック: 唯一のブロックに cache_control を設定
+	return []SystemBlock{
 		{
 			Type:         "text",
 			Text:         parts[0],
 			CacheControl: &CacheControl{Type: "ephemeral"},
 		},
 	}
-
-	// 動的部分があれば別ブロック（cache_control なし）
-	if len(parts) > 1 && strings.TrimSpace(parts[1]) != "" {
-		blocks = append(blocks, SystemBlock{
-			Type: "text",
-			Text: parts[1],
-		})
-	}
-
-	return blocks
 }
