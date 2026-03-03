@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -367,5 +368,35 @@ func TestRunHeadless_RepeatedInvocations(t *testing.T) {
 
 	if called.Load() != 5 {
 		t.Errorf("Cleanup was called %d times for 5 invocations, want 5", called.Load())
+	}
+}
+
+func TestRunHeadless_NoLeakOnRepeatedInvocations(t *testing.T) {
+	var cleanupCount atomic.Int32
+	cleanupHook = func() { cleanupCount.Add(1) }
+	defer func() { cleanupHook = nil }()
+
+	const iterations = 20
+	provider := &mockProvider{name: "mock"}
+
+	runtime.GC()
+	baseGoroutines := runtime.NumGoroutine()
+
+	for i := 0; i < iterations; i++ {
+		res := RunHeadless("test query", "mock-model", provider)
+		if res.Status != "success" {
+			t.Fatalf("iteration %d: RunHeadless failed: %v", i, res.Error)
+		}
+	}
+
+	runtime.GC()
+	finalGoroutines := runtime.NumGoroutine()
+
+	if cleanupCount.Load() != int32(iterations) {
+		t.Fatalf("Cleanup call count mismatch: got %d, want %d", cleanupCount.Load(), iterations)
+	}
+
+	if leaked := finalGoroutines - baseGoroutines; leaked > 5 {
+		t.Errorf("possible goroutine leak: base=%d, final=%d, leaked=%d", baseGoroutines, finalGoroutines, leaked)
 	}
 }
