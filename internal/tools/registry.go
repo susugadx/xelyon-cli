@@ -103,6 +103,17 @@ func (r *Registry) SetExcludedTools(names []string) {
 	}
 }
 
+// GetExcludedTools は現在の除外ツール名リストを返す
+func (r *Registry) GetExcludedTools() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	names := make([]string, 0, len(r.excludedTools))
+	for n := range r.excludedTools {
+		names = append(names, n)
+	}
+	return names
+}
+
 // ClearExcludedTools は除外ツール設定をクリア
 func (r *Registry) ClearExcludedTools() {
 	r.mu.Lock()

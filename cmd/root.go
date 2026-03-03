@@ -26,6 +26,8 @@ import (
 
 var (
 	resume        bool
+	once          bool
+	quiet         bool
 	providerFlag  string
 	modelFlag     string
 	autoApprove   bool
@@ -37,6 +39,12 @@ var (
 	headless      bool
 	noUpdateCheck bool
 	imageFlag     string
+
+	runInteractive           = agent.RunInteractive
+	runInteractiveWithResume = agent.RunInteractiveWithResume
+	runHeadless              = agent.RunHeadless
+	runOnce                  = agent.RunOnce
+	runOnceWithImage         = agent.RunOnceWithImage
 )
 
 // getModel はフラグからモデルを決定する
@@ -75,7 +83,7 @@ Examples:
   xelyon --provider gemini --model gemini-2.5-flash # Use Gemini
   xelyon --provider openai --model gpt-5.2         # Use OpenAI GPT-5.2
   xelyon -p deepseek -m deepseek-chat             # Short flags`,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		// バージョンチェック（--no-update-check または --headless でない場合）
 		if !noUpdateCheck && !headless && outputFormat != "json" {
 			configDir := filepath.Join(os.Getenv("HOME"), ".xelyon")
@@ -87,6 +95,23 @@ Examples:
 		// --headless は --output-format json のエイリアス
 		if headless {
 			outputFormat = "json"
+		}
+
+		// --quiet は --once 専用
+		if quiet && !once {
+			return fmt.Errorf("--quiet can only be used with --once")
+		}
+
+		if once {
+			if resume {
+				return fmt.Errorf("--once cannot be used with --resume")
+			}
+			if headless || outputFormat == "json" {
+				return fmt.Errorf("--once cannot be used with --headless or --output-format json")
+			}
+			if len(args) == 0 {
+				return fmt.Errorf("query argument is required when using --once")
+			}
 		}
 
 		// 設定を読み込み
@@ -124,28 +149,31 @@ Examples:
 		// Headlessモードチェック（クエリ必須）
 		if outputFormat == "json" {
 			if len(args) == 0 {
-				fmt.Fprintln(os.Stderr, "Error: Query argument is required in headless mode")
-				os.Exit(1)
+				return fmt.Errorf("query argument is required in headless mode")
 			}
-			result := agent.RunHeadless(args[0], model, provider)
+			result := runHeadless(strings.Join(args, " "), model, provider)
 			jsonBytes, _ := json.MarshalIndent(result, "", "  ")
 			fmt.Println(string(jsonBytes))
 			if result.Status == "error" {
-				os.Exit(1)
+				return fmt.Errorf("headless execution failed")
 			}
-			os.Exit(0)
+			return nil
+		}
+
+		if once {
+			return runOnce(strings.Join(args, " "), model, provider, autoApprove, quiet)
 		}
 
 		// --resume フラグチェック
 		if resume && len(args) == 0 {
-			agent.RunInteractiveWithResume(model, provider, autoApprove)
-			return
+			runInteractiveWithResume(model, provider, autoApprove)
+			return nil
 		}
 
 		// 引数なし & 画像指定なし → 対話モード
 		if len(args) == 0 && imageFlag == "" {
-			agent.RunInteractive(model, provider, autoApprove)
-			return
+			runInteractive(model, provider, autoApprove)
+			return nil
 		}
 
 		// 画像フラグが指定された場合 → ワンショットモード（画像付き）
@@ -154,12 +182,13 @@ Examples:
 			if len(args) > 0 {
 				query = args[0]
 			}
-			agent.RunOnceWithImage(query, model, provider, imageFlag, autoApprove)
-			return
+			runOnceWithImage(query, model, provider, imageFlag, autoApprove)
+			return nil
 		}
 
 		// クエリ引数付き → 対話モード（初期クエリとして処理）
-		agent.RunInteractive(model, provider, autoApprove)
+		runInteractive(model, provider, autoApprove)
+		return nil
 	},
 }
 
@@ -172,8 +201,10 @@ func init() {
 	rootCmd.Flags().StringVarP(&providerFlag, "provider", "p", "", providerHelp)
 	rootCmd.Flags().StringVarP(&modelFlag, "model", "m", "", "Specify model name (e.g., gpt-4o, gemini-2.0-flash-exp)")
 
-	// 新規: --resume フラグ
+	// 新規: --resume / --once / --quiet フラグ
 	rootCmd.Flags().BoolVar(&resume, "resume", false, "Resume last session")
+	rootCmd.Flags().BoolVar(&once, "once", false, "Execute exactly one query turn and exit")
+	rootCmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress header and status output (requires --once)")
 
 	// 新規: 設定カスタマイズフラグ
 	rootCmd.Flags().IntVar(&loopThreshold, "loop-threshold", 0, "Loop detection threshold (default: 3)")
