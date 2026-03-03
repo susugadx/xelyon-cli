@@ -21,6 +21,7 @@ func RunHeadless(query string, model string, provider api.Provider) *HeadlessRes
 
 	// Agent初期化
 	agent := NewAgent(model, provider, true)
+	defer agent.Cleanup()
 	agent.AutoApprove = true // Headlessモードは自動承認（SafetyLow以外）
 	tools.SetAutoApprove(true)
 

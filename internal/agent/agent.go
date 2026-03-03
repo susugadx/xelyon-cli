@@ -270,8 +270,14 @@ func removeToolsSection(prompt string) string {
 	return prompt[:startIdx] + prompt[endIdx:]
 }
 
+// cleanupHook はテスト用フック（非nil時にCleanupから呼ばれる）
+var cleanupHook func()
+
 // Cleanup はエージェントのリソースをクリーンアップ
 func (a *Agent) Cleanup() {
+	if cleanupHook != nil {
+		cleanupHook()
+	}
 	if a.mcpManager != nil {
 		a.mcpManager.Close()
 	}

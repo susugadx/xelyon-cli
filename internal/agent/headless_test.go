@@ -1,11 +1,29 @@
 package agent
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/api"
 )
+
+// mockErrorProvider は常にエラーを返すプロバイダー
+type mockErrorProvider struct{}
+
+func (m *mockErrorProvider) Name() string                   { return "test-error" }
+func (m *mockErrorProvider) SupportsImages() bool           { return false }
+func (m *mockErrorProvider) IsFunctionCallingEnabled() bool { return false }
+func (m *mockErrorProvider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
+	return "", fmt.Errorf("mock error")
+}
+func (m *mockErrorProvider) ChatWithImage(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {
+	return "", fmt.Errorf("mock error")
+}
 
 func TestHeadlessResult_ToJSON(t *testing.T) {
 	result := &HeadlessResult{
@@ -305,5 +323,49 @@ func TestHeadlessResult_LargeOutput(t *testing.T) {
 
 	if len(parsed.ToolCalls) != 10 {
 		t.Errorf("Expected 10 tool calls, got %d", len(parsed.ToolCalls))
+	}
+}
+
+func TestRunHeadless_CallsCleanup(t *testing.T) {
+	var called atomic.Int32
+	cleanupHook = func() { called.Add(1) }
+	defer func() { cleanupHook = nil }()
+
+	provider := &mockProvider{name: "test"}
+	_ = RunHeadless("hello", "test-model", provider)
+
+	if called.Load() != 1 {
+		t.Errorf("Cleanup was called %d times, want 1", called.Load())
+	}
+}
+
+func TestRunHeadless_CallsCleanupOnError(t *testing.T) {
+	var called atomic.Int32
+	cleanupHook = func() { called.Add(1) }
+	defer func() { cleanupHook = nil }()
+
+	provider := &mockErrorProvider{}
+	result := RunHeadless("hello", "test-model", provider)
+
+	if result.Status != "error" {
+		t.Errorf("Expected error status, got %s", result.Status)
+	}
+	if called.Load() != 1 {
+		t.Errorf("Cleanup was called %d times on error path, want 1", called.Load())
+	}
+}
+
+func TestRunHeadless_RepeatedInvocations(t *testing.T) {
+	var called atomic.Int32
+	cleanupHook = func() { called.Add(1) }
+	defer func() { cleanupHook = nil }()
+
+	provider := &mockProvider{name: "test"}
+	for i := 0; i < 5; i++ {
+		_ = RunHeadless("hello", "test-model", provider)
+	}
+
+	if called.Load() != 5 {
+		t.Errorf("Cleanup was called %d times for 5 invocations, want 5", called.Load())
 	}
 }
