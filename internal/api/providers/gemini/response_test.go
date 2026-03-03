@@ -986,6 +986,31 @@ func TestUpdateToolJSONDepth_EmptyString(t *testing.T) {
 
 // ===== ThinkingTimeout config tests =====
 
+func TestErrThinkingTimeout_Error(t *testing.T) {
+	err := &ErrThinkingTimeout{Message: "test timeout message"}
+	if err.Error() != "test timeout message" {
+		t.Errorf("ErrThinkingTimeout.Error() = %q, want %q", err.Error(), "test timeout message")
+	}
+}
+
+func TestErrThinkingTimeout_Is(t *testing.T) {
+	// errors.As で ErrThinkingTimeout を識別できることを確認
+	var target *ErrThinkingTimeout
+	err := fmt.Errorf("wrapped: %w", &ErrThinkingTimeout{Message: "inner"})
+
+	// errors パッケージのインポートなしでも、ErrThinkingTimeout 自体のキャスト確認
+	if !isThinkingTimeoutError(err) {
+		t.Error("isThinkingTimeoutError should return true for wrapped ErrThinkingTimeout")
+	}
+	_ = target
+
+	// 通常のエラーは false
+	normalErr := fmt.Errorf("some other error")
+	if isThinkingTimeoutError(normalErr) {
+		t.Error("isThinkingTimeoutError should return false for non-ErrThinkingTimeout")
+	}
+}
+
 func TestThinkingTimeoutDefaults(t *testing.T) {
 	// config のデフォルト値が正しいことを確認
 	cfg := config.DefaultConfig()

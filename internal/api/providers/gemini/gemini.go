@@ -3,6 +3,7 @@ package gemini
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -165,6 +166,12 @@ func levelToThinkingLevel(level string, model string) string {
 	}
 }
 
+// thinkingTimeoutRetryKey はthinking timeoutリトライ回数を追跡するcontext key
+const thinkingTimeoutRetryKey ctxKey = "gemini_thinking_timeout_retry"
+
+// maxThinkingTimeoutRetries はthinking timeout時のFCモードリトライ上限
+const maxThinkingTimeoutRetries = 2
+
 // ChatWithTools は Provider interface の実装（context対応）
 // GEMINI_FUNCTION_CALLING=0の場合のみテキストモードを使用
 // MCPツールもFunction Calling経由で呼び出される
@@ -186,7 +193,25 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		}
 		result, err := p.chatWithFunctionCalling(ctx, systemPrompt, history, model)
 		if err != nil {
-			// Function Calling失敗時はテキストモードにフォールバック
+			// Thinking timeout はテキストモードにフォールバックしない（ツールが使えなくなるため）
+			// FCモードのままリトライし、上限に達したらエラーを返す
+			var thinkingErr *ErrThinkingTimeout
+			if errors.As(err, &thinkingErr) {
+				retryCount := 0
+				if v := ctx.Value(thinkingTimeoutRetryKey); v != nil {
+					retryCount = v.(int)
+				}
+				if retryCount >= maxThinkingTimeoutRetries {
+					return "", fmt.Errorf("thinking timeout: exceeded max retries (%d): %w", maxThinkingTimeoutRetries, err)
+				}
+				retryCount++
+				ui.StopGlobalSpinner()
+				ui.ResetTerminalState()
+				fmt.Fprintf(os.Stderr, "⚠️ Thinking timeout, retrying FC mode (attempt %d/%d)...\n", retryCount, maxThinkingTimeoutRetries)
+				ctx = context.WithValue(ctx, thinkingTimeoutRetryKey, retryCount)
+				return p.ChatWithTools(ctx, systemPrompt, history, model)
+			}
+			// Thinking timeout以外のFC失敗時はテキストモードにフォールバック
 			// スピナーgoroutineの完全停止とターミナル状態のリセットを保証
 			ui.StopGlobalSpinner()
 			ui.ResetTerminalState()

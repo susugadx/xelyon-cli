@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -14,6 +15,22 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
+
+// ErrThinkingTimeout はthinkingのみが続きtext/FCが来ない場合のタイムアウトエラー
+type ErrThinkingTimeout struct {
+	Message string
+}
+
+// Error はエラーメッセージを返す
+func (e *ErrThinkingTimeout) Error() string {
+	return e.Message
+}
+
+// isThinkingTimeoutError はエラーがErrThinkingTimeoutかどうかを判定する
+func isThinkingTimeoutError(err error) bool {
+	var target *ErrThinkingTimeout
+	return errors.As(err, &target)
+}
 
 // handleSSEResponse は streamGenerateContent?alt=sse の SSE ストリームを処理する
 func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
@@ -94,7 +111,7 @@ loop:
 				if spinner != nil {
 					spinner.Stop()
 				}
-				return fullResponse.String(), fmt.Errorf("thinking timeout: no text or function call received for %v (thinking data was received but no actionable output)", thinkingTimeout)
+				return fullResponse.String(), &ErrThinkingTimeout{Message: fmt.Sprintf("thinking timeout: no text or function call received for %v (thinking data was received but no actionable output)", thinkingTimeout)}
 			}
 			// hadOutput == true: text/FC を受信済みだが thinking が続いている
 			// → タイマーをリセットして再度待つ（最大2回まで）
@@ -103,7 +120,7 @@ loop:
 				if spinner != nil {
 					spinner.Stop()
 				}
-				return fullResponse.String(), fmt.Errorf("thinking timeout: extended thinking exceeded %v with no new output", thinkingTimeout*time.Duration(thinkingRetries+1))
+				return fullResponse.String(), &ErrThinkingTimeout{Message: fmt.Sprintf("thinking timeout: extended thinking exceeded %v with no new output", thinkingTimeout*time.Duration(thinkingRetries+1))}
 			}
 			thinkingTimer.Reset(thinkingTimeout)
 
