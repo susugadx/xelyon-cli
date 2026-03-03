@@ -25,9 +25,21 @@ func (a *Agent) chat(input string) {
 	a.chatInternal(input, nil)
 }
 
-// chatInternal はAIと対話する内部実装
+// ChatOnce は単一クエリを1ターンだけ実行してエラーを返す（--once 用）
+// stdin を読まず、REPL ループに入らない。chatCore を共有する。
+func (a *Agent) ChatOnce(input string) error {
+	return a.chatCore(input, nil, true)
+}
+
+// chatInternal はAIと対話する内部実装（対話モード用ラッパー）
 // image が nil でない場合は画像付きメッセージとして処理
 func (a *Agent) chatInternal(input string, image *api.ImageData) {
+	_ = a.chatCore(input, image, false)
+}
+
+// chatCore は chat / ChatOnce の共有実装
+// oneShot=true の場合: エラーを返し、対話向け後処理（usage表示・圧縮・context提案）をスキップ
+func (a *Agent) chatCore(input string, image *api.ImageData, oneShot bool) error {
 	a.SetStatus(StateRunning, "Processing request", "処理中", "Wait for response", "応答を待ってください")
 
 	// タスク開始: changeStack のオフセットを記録（タスク単位のサマリー表示用）
@@ -70,8 +82,16 @@ func (a *Agent) chatInternal(input string, image *api.ImageData) {
 	defer cancel()
 	a.cancelFunc = cancel
 
-	// トークン使用量の警告チェック（API呼び出し前）
-	a.checkTokenWarning()
+	// トークン使用量の警告チェック（API呼び出し前、対話モードのみ）
+	if !oneShot {
+		a.checkTokenWarning()
+	}
+
+	// excludedTools を設定（oneShot 時は defer で復元）
+	if oneShot {
+		prev := tools.DefaultRegistry.GetExcludedTools()
+		defer tools.DefaultRegistry.SetExcludedTools(prev)
+	}
 
 	var err error
 	if a.PlanModeEnabled {
@@ -85,6 +105,12 @@ func (a *Agent) chatInternal(input string, image *api.ImageData) {
 	}
 
 	if err != nil {
+		// oneShot: エラーをそのまま返す（対話的リトライ不要）
+		if oneShot {
+			ui.StopGlobalSpinner()
+			return err
+		}
+
 		if errors.Is(err, context.Canceled) {
 			yellow.Println("\n⚠️  Response interrupted")
 		} else {
@@ -92,7 +118,7 @@ func (a *Agent) chatInternal(input string, image *api.ImageData) {
 			if token.IsTokenLimitError(err) {
 				// リトライ関数を定義
 				retryFunc := func() error {
-					// 同じコンテキストで再実行（除外設定は chatInternal 冒頭で設定済み）
+					// 同じコンテキストで再実行（除外設定は chatCore 冒頭で設定済み）
 					ctx := context.Background()
 					if a.PlanModeEnabled {
 						return a.RunPlanMode(ctx, input)
@@ -106,7 +132,7 @@ func (a *Agent) chatInternal(input string, image *api.ImageData) {
 					// リトライ成功時はここで終了
 					ui.StopGlobalSpinner()
 					a.SetStatus(StateWaitingInput, "Ready for input", "入力待ち", "Type your request or /help", "リクエスト、または /help を入力")
-					return
+					return nil
 				}
 				// リトライ失敗時はエラーメッセージを表示（handleTokenLimitErrorWithRetry内で既に表示済み）
 				red.Printf("Error: %v\n", err)
@@ -117,7 +143,12 @@ func (a *Agent) chatInternal(input string, image *api.ImageData) {
 		}
 		ui.StopGlobalSpinner()
 		a.SetStatus(StateAborted, "Request failed", "リクエスト失敗", "Try again", "再試行してください")
-		return
+		return nil
+	}
+
+	// oneShot: 対話向け後処理をスキップ
+	if oneShot {
+		return nil
 	}
 
 	// リクエスト完了時の usage 表示
@@ -153,6 +184,7 @@ func (a *Agent) chatInternal(input string, image *api.ImageData) {
 	}
 
 	a.SetStatus(StateWaitingInput, "Ready for input", "入力待ち", "Type your request or /help", "リクエスト、または /help を入力")
+	return nil
 }
 
 // runNormalMode は通常モードでの処理（Plan Mode OFF 時）

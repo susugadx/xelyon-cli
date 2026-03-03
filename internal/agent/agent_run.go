@@ -115,6 +115,37 @@ func RunHeadless(query string, model string, provider api.Provider) *HeadlessRes
 	return NewSuccessResult(provider.Name(), model, finalResponse, allToolCalls, duration)
 }
 
+// RunOnce は単一クエリを1ターンだけ実行して終了する
+func RunOnce(query string, model string, provider api.Provider, autoApprove bool, quiet bool) error {
+	// 監査ログ初期化（環境変数で制御: XELYON_AUDIT_LOG=1 で有効化）
+	auditEnabled := os.Getenv("XELYON_AUDIT_LOG") == "1"
+	if err := audit.Init(auditEnabled); err != nil {
+		yellow.Printf("Warning: Failed to initialize audit log: %v\n", err)
+	}
+	if auditEnabled && !quiet {
+		green.Println("📝 Audit logging enabled")
+	}
+
+	agent := NewAgent(model, provider, false)
+	agent.AutoApprove = autoApprove
+	tools.SetAutoApprove(autoApprove)
+	defer agent.Cleanup()
+
+	// ヘッダー表示（quiet 時はスキップ）
+	if !quiet {
+		printHeader(model, provider)
+		printModeInfo(autoApprove, false)
+	}
+
+	// プロジェクト設定読み込み（xelyon.yaml）
+	if pc := loadProjectConfig(); pc != nil {
+		applyProjectConfig(agent, pc)
+	}
+
+	// 明示的に1ターンのみ実行（ChatOnce は stdin を読まず、REPL に入らない）
+	return agent.ChatOnce(query)
+}
+
 // RunOnceWithImage は画像付きの単一クエリを実行（CLIフラグ -i/--image 用）
 func RunOnceWithImage(query string, model string, provider api.Provider, imagePath string, autoApprove bool) {
 	// 監査ログ初期化（環境変数で制御: XELYON_AUDIT_LOG=1 で有効化）
