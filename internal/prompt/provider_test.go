@@ -76,6 +76,18 @@ func TestGetProviderPrefix_Anthropic(t *testing.T) {
 	}
 }
 
+func TestGetProviderPrefix_Bedrock(t *testing.T) {
+	// "bedrock" は "claude" のエイリアス — 同一プレフィックスが返ること
+	bedrock := GetProviderPrefix("bedrock")
+	claude := GetProviderPrefix("claude")
+	if bedrock == "" {
+		t.Fatal("expected non-empty prefix for bedrock")
+	}
+	if bedrock != claude {
+		t.Error("bedrock and claude should return identical prefixes")
+	}
+}
+
 func TestGetProviderPrefix_Unknown(t *testing.T) {
 	prefix := GetProviderPrefix("unknown-provider")
 	if prefix != "" {
@@ -137,6 +149,24 @@ func TestCommonRulesBlock(t *testing.T) {
 		}
 		if !strings.Contains(openai, check) {
 			t.Errorf("openai prefix missing common rule: %s", check)
+		}
+	}
+}
+
+func TestCommonBoostBlock(t *testing.T) {
+	// commonBoostBlock が全プロバイダーに含まれていることを確認
+	providers := []string{"gemini", "deepseek", "groq", "openai", "claude", "openrouter", "ollama"}
+	boostChecks := []string{
+		"Quality Standards",
+		"self-review",
+		"established patterns",
+	}
+	for _, provider := range providers {
+		prefix := GetProviderPrefix(provider)
+		for _, check := range boostChecks {
+			if !strings.Contains(prefix, check) {
+				t.Errorf("%s prefix missing boost rule: %s", provider, check)
+			}
 		}
 	}
 }

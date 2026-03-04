@@ -1,8 +1,7 @@
 package tools
 
 // ToolDescriptions は全ビルトインツールの Description を一元管理する。
-// FC プロバイダー: GetToolDefinitions() 経由で JSON schema の description に使用。
-// 非FC プロバイダー: system.go の Available Tools テキストと手動同期。
+// GetToolDefinitions() 経由で JSON schema の description に使用。
 var ToolDescriptions = map[string]string{
 	// File Operations
 	"read_file":   "Read file contents. Single: {path, start_line?, end_line?}. Batch: {paths: [\"path1\", \"path2:10-20\"]} for multiple files in one call (max 10). Batch is preferred when reading 2+ files.",

@@ -230,24 +230,11 @@ func printContextSize(systemPrompt string, isFunctionCalling bool) {
 	toolsTokens := 0
 
 	if isFunctionCalling {
-		// FC: システムプロンプトからツールセクション除去済み → 全体がベース
 		basePromptTokens = token.EstimateTokenCount(systemPrompt)
 		// ツール定義は Registry から JSON 化して推定
 		toolsTokens = estimateToolDefinitionTokens()
 	} else {
-		// 非FC: システムプロンプト内にツール説明を含む → 従来方式で分離
-		const toolsStart = "## Available Tools"
-		const toolsEnd = "## Workflow Rules"
-		startIdx := strings.Index(systemPrompt, toolsStart)
-		endIdx := strings.Index(systemPrompt, toolsEnd)
-		if startIdx != -1 && endIdx != -1 && startIdx < endIdx {
-			basePrompt := systemPrompt[:startIdx] + systemPrompt[endIdx:]
-			basePromptTokens = token.EstimateTokenCount(basePrompt)
-			toolsSection := systemPrompt[startIdx:endIdx]
-			toolsTokens = token.EstimateTokenCount(toolsSection)
-		} else {
-			basePromptTokens = token.EstimateTokenCount(systemPrompt)
-		}
+		basePromptTokens = token.EstimateTokenCount(systemPrompt)
 	}
 
 	// ツール数カウント（builtin / MCP 分類）

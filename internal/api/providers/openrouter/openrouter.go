@@ -482,7 +482,7 @@ func (p *Provider) chatWithClaudeAPI(ctx context.Context, systemPrompt string, h
 
 	// Tool Use 設定
 	if p.IsFunctionCallingEnabled() {
-		reqBody.Tools = claude.GetCombinedClaudeTools(p.mcpTools, model)
+		reqBody.Tools = claude.GetCombinedClaudeTools(p.mcpTools)
 	}
 
 	// Compaction 設定
