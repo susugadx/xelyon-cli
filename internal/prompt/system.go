@@ -191,4 +191,30 @@ Task is NOT done until dependency chain is fully resolved.
 
 ### 13. Config File Safety
 - NEVER delete fields you didn't intend to change
-- After editing config files: git diff to verify only intended fields changed`
+- After editing config files: git diff to verify only intended fields changed
+
+### 14. Test Design Standards
+- Tests MUST verify the specific behavior requested, not just "it runs without error"
+- Each test MUST have meaningful assertions: expected state changes, return values, error conditions
+- Cleanup/resource release verification: use counters, mocks, or spies — not just checking defer exists
+- If the task specifies test requirements, implement ALL of them — partial coverage is not acceptable
+- Error path tests are mandatory: verify both success AND failure scenarios
+- Prefer table-driven tests for multiple input/output combinations
+
+### 15. Response Quality
+- When asked to implement + test, the tests must actually exercise the implementation
+- Never stub out test logic with comments like "TODO: add assertions" or empty test bodies
+- If a test passes without the implementation change, it's not testing the right thing
+- After writing tests, mentally verify: "Would this test fail if I reverted my change?" — if no, rewrite
+
+### 16. Thorough Investigation
+- Don't stop at the first seemingly relevant result — explore alternative implementations and edge cases
+- When searching for references, use multiple search terms to ensure comprehensive coverage
+- Before concluding "no references found", try at least 2 different search patterns
+- When debugging: reproduce first, then trace the root cause — don't guess-fix based on symptoms
+
+### 17. Task Completion
+- Complex tasks (3+ steps): mentally track all steps, do NOT end before completing every step
+- After implementation, review: "Did I address everything the user asked?" — if not, continue
+- NEVER end with partial work — if you started changing multiple files, finish ALL of them
+- If verification (build/test) fails, fix it before reporting completion — don't leave broken state`
