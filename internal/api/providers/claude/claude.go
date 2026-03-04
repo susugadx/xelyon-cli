@@ -341,7 +341,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 
 	// Tool Use: ツール定義を追加（環境変数で無効化可能）
 	if os.Getenv("CLAUDE_FUNCTION_CALLING") != "0" {
-		reqBody.Tools = GetCombinedClaudeTools(p.mcpTools)
+		reqBody.Tools = GetCombinedClaudeTools(p.mcpTools, model)
 	}
 
 	result, err := p.executeRequest(ctx, reqBody, false)
@@ -618,7 +618,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 
 	// Tool Use: ツール定義を追加（環境変数で無効化可能）
 	if os.Getenv("CLAUDE_FUNCTION_CALLING") != "0" {
-		reqBody.Tools = GetCombinedClaudeTools(p.mcpTools)
+		reqBody.Tools = GetCombinedClaudeTools(p.mcpTools, model)
 	}
 
 	result, err := p.executeRequest(ctx, reqBody, true)

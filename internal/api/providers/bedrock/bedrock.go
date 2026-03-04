@@ -159,7 +159,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 
 	// Tool Use: ツール定義を追加
 	if p.IsFunctionCallingEnabled() {
-		reqBody.Tools = claude.GetCombinedClaudeTools(p.mcpTools)
+		reqBody.Tools = claude.GetCombinedClaudeTools(p.mcpTools, model)
 	}
 
 	// Compaction 適用
@@ -261,7 +261,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 
 	// Tool Use: ツール定義を追加
 	if p.IsFunctionCallingEnabled() {
-		reqBody.Tools = claude.GetCombinedClaudeTools(p.mcpTools)
+		reqBody.Tools = claude.GetCombinedClaudeTools(p.mcpTools, model)
 	}
 
 	// Compaction 適用

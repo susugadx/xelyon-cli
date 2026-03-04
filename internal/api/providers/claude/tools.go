@@ -2,6 +2,7 @@ package claude
 
 import (
 	"encoding/json"
+	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
@@ -43,7 +44,11 @@ func ConvertOpenAIToolToClaude(tool api.ToolDefinition) ClaudeTool {
 
 // GetCombinedClaudeTools は組み込みツール + MCPツールを返す
 // 重複するツール名がある場合は最初に登録されたものを優先
-func GetCombinedClaudeTools(mcpTools []api.ToolDefinition) []ClaudeTool {
+// model はキャッシュブレークポイント制御に使用:
+// Opus 4.6 は最低キャッシュ可能トークン数が 4096 のため、
+// ツール定義（~2,000トークン）だけでは閾値を超えない。
+// BP#1 を省略し BP#2（tools+system 合計 ~5,800トークン）でまとめてキャッシュする。
+func GetCombinedClaudeTools(mcpTools []api.ToolDefinition, model string) []ClaudeTool {
 	result := GetClaudeToolDefinitions()
 	seen := make(map[string]bool)
 
@@ -62,12 +67,21 @@ func GetCombinedClaudeTools(mcpTools []api.ToolDefinition) []ClaudeTool {
 	}
 
 	// 最後のツールに cache_control を設定（プロンプトキャッシュ用ブレークポイント #1）
+	// Opus は最低 4096 トークン必要だが、ツール定義だけでは ~2,000 トークンで不足。
+	// BP#1 を省略して BP#2（system の最後）に統合し、tools+system 全体をキャッシュする。
 	cfg := config.GetGlobalConfig()
-	if len(result) > 0 && cfg != nil && cfg.PromptCache.Enabled {
+	if len(result) > 0 && cfg != nil && cfg.PromptCache.Enabled && !isHighMinCacheModel(model) {
 		result[len(result)-1].CacheControl = &api.CacheControl{Type: "ephemeral"}
 	}
 
 	return result
+}
+
+// isHighMinCacheModel は最低キャッシュ可能トークン数が高い（4096）モデルかを判定。
+// 該当モデルではツール定義のみの BP#1 がキャッシュ閾値に達しないため、
+// BP#1 を省略して BP#2 に統合する必要がある。
+func isHighMinCacheModel(model string) bool {
+	return strings.Contains(model, "opus") || strings.Contains(model, "haiku")
 }
 
 // internalToolCall は内部ツール呼び出し形式（JSON出力順序を保証）

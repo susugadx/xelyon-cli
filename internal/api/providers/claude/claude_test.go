@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
 
 	// ツール登録のための blank import
 	_ "github.com/susugadx/xelyon-cli/internal/tools/dev"
@@ -609,7 +610,7 @@ func TestGetCombinedClaudeTools(t *testing.T) {
 		{Name: "mcp_tool_2", Description: "MCP Tool 2"},
 	}
 
-	combined := GetCombinedClaudeTools(mcpTools)
+	combined := GetCombinedClaudeTools(mcpTools, "claude-sonnet-4-6")
 
 	builtInCount := len(GetClaudeToolDefinitions())
 	expectedCount := builtInCount + 2
@@ -627,6 +628,62 @@ func TestGetCombinedClaudeTools(t *testing.T) {
 	}
 	if found != 2 {
 		t.Errorf("Expected 2 MCP tools in combined list, found %d", found)
+	}
+}
+
+func TestGetCombinedClaudeTools_OpusSkipsBP1(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.PromptCache.Enabled = true
+	config.SetGlobalConfig(cfg)
+	defer config.SetGlobalConfig(nil)
+
+	// Opus: BP#1 を省略（最後のツールに cache_control なし）
+	opusTools := GetCombinedClaudeTools(nil, "claude-opus-4-6")
+	if len(opusTools) == 0 {
+		t.Fatal("expected at least 1 tool")
+	}
+	last := opusTools[len(opusTools)-1]
+	if last.CacheControl != nil {
+		t.Errorf("Opus: expected no cache_control on last tool (BP#1 should be skipped), got %+v", last.CacheControl)
+	}
+}
+
+func TestGetCombinedClaudeTools_SonnetSetsBP1(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.PromptCache.Enabled = true
+	config.SetGlobalConfig(cfg)
+	defer config.SetGlobalConfig(nil)
+
+	// Sonnet: BP#1 を設定（最後のツールに cache_control あり）
+	sonnetTools := GetCombinedClaudeTools(nil, "claude-sonnet-4-6")
+	if len(sonnetTools) == 0 {
+		t.Fatal("expected at least 1 tool")
+	}
+	last := sonnetTools[len(sonnetTools)-1]
+	if last.CacheControl == nil {
+		t.Error("Sonnet: expected cache_control on last tool (BP#1)")
+	} else if last.CacheControl.Type != "ephemeral" {
+		t.Errorf("Sonnet: cache_control type = %q, want 'ephemeral'", last.CacheControl.Type)
+	}
+}
+
+func TestIsHighMinCacheModel(t *testing.T) {
+	tests := []struct {
+		model string
+		want  bool
+	}{
+		{"claude-opus-4-6", true},
+		{"claude-opus-4-20250514", true},
+		{"claude-sonnet-4-6", false},
+		{"claude-sonnet-4-5-20250514", false},
+		{"claude-3-5-haiku-20241022", true},
+		{"claude-haiku-4-5-20251001", true},
+		{"anthropic.claude-opus-4-6", true},
+	}
+	for _, tt := range tests {
+		if got := isHighMinCacheModel(tt.model); got != tt.want {
+			t.Errorf("isHighMinCacheModel(%q) = %v, want %v", tt.model, got, tt.want)
+		}
 	}
 }
 
