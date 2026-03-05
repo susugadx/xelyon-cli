@@ -92,17 +92,17 @@ func TestSessionStats_AddUsage(t *testing.T) {
 		t.Errorf("AddUsage() LastUsage.InputTokens = %d, want 100", stats.LastUsage.InputTokens)
 	}
 
-	// test プロバイダのデフォルトコスト(0.14+0.28)ベースのリクエスト単位コスト計算のうえ、StorageCostが加算される
+	// test プロバイダのデフォルトコスト(0.28+0.42 DeepSeek V3.2)ベースのリクエスト単位コスト計算のうえ、StorageCostが加算される
 	// 100 input, 200 output, 50 cached in, 25 cache creation
-	// DeepSeek(default)の場合:
-	//   Input: (100-50)/1M * 0.14 = 50 * 0.00000014 = 0.000007
-	//   CachedInput: 50/1M * 0.014 = 0.0000007
-	//   CacheCreation: 25/1M * 0.14 = 0.0000035
-	//   Output: 200/1M * 0.28 = 0.000056
+	// unknown provider → DeepSeek V3.2 料金:
+	//   uncachedInput: (100-50-25)/1M * 0.28 = 25 * 0.00000028 = 0.000007
+	//   CachedInput: 50/1M * 0.028 = 0.0000014
+	//   CacheCreation: 25/1M * 0.28 = 0.000007
+	//   Output: 200/1M * 0.42 = 0.000084
 	//   StorageCost: 1.25
-	// 合計: 0.0000672 + 1.25 = 1.2500672
+	// 合計: ~0.0000994 + 1.25 ≈ 1.2500994
 	if stats.AccumulatedCost < 1.25 || stats.AccumulatedCost > 1.26 {
-		t.Errorf("AddUsage() AccumulatedCost = %f, expected around 1.2500672", stats.AccumulatedCost)
+		t.Errorf("AddUsage() AccumulatedCost = %f, expected around 1.25", stats.AccumulatedCost)
 	}
 }
 
@@ -131,7 +131,7 @@ func TestSessionStats_EstimatedCost_DeepSeek(t *testing.T) {
 	stats.AddTokens(1000000, 1000000) // 1M input, 1M output
 
 	cost := stats.EstimatedCost()
-	expected := 0.14 + 0.28 // $0.14/1M + $0.28/1M
+	expected := 0.28 + 0.42 // DeepSeek V3.2: $0.28/1M + $0.42/1M
 
 	// 浮動小数点の比較は許容誤差で
 	if cost < expected-0.001 || cost > expected+0.001 {
@@ -152,28 +152,31 @@ func TestSessionStats_EstimatedCost_OpenAI(t *testing.T) {
 
 func TestSessionStats_EstimatedCost_Claude(t *testing.T) {
 	// デフォルト（model=""）は Sonnet 料金
+	// 1M input > 200K → long context 料金 ($6/$22.50)
 	stats := NewSessionStats("claude")
 	stats.AddTokens(1000000, 1000000)
 
 	cost := stats.EstimatedCost()
-	expected := 3.00 + 15.00
+	expected := 6.00 + 22.50 // Sonnet long context
 	if cost != expected {
-		t.Errorf("EstimatedCost() for claude (sonnet default) = %f, want %f", cost, expected)
+		t.Errorf("EstimatedCost() for claude (sonnet long context) = %f, want %f", cost, expected)
 	}
 }
 
 func TestSessionStats_EstimatedCost_Claude_Opus(t *testing.T) {
+	// 1M input > 200K → long context 料金 ($10/$37.50)
 	stats := NewSessionStats("claude", "claude-opus-4-5-20251101")
 	stats.AddTokens(1000000, 1000000)
 
 	cost := stats.EstimatedCost()
-	expected := 5.00 + 25.00
+	expected := 10.00 + 37.50 // Opus long context
 	if cost != expected {
-		t.Errorf("EstimatedCost() for claude opus = %f, want %f", cost, expected)
+		t.Errorf("EstimatedCost() for claude opus long context = %f, want %f", cost, expected)
 	}
 }
 
 func TestSessionStats_EstimatedCost_Claude_Haiku(t *testing.T) {
+	// Haiku は long context なし
 	stats := NewSessionStats("claude", "claude-haiku-4-5-20251001")
 	stats.AddTokens(1000000, 1000000)
 
@@ -185,13 +188,14 @@ func TestSessionStats_EstimatedCost_Claude_Haiku(t *testing.T) {
 }
 
 func TestSessionStats_EstimatedCost_Bedrock_Opus(t *testing.T) {
+	// 1M input > 200K → long context 料金 ($10/$37.50)
 	stats := NewSessionStats("bedrock", "global.anthropic.claude-opus-4-5-20251101-v1:0")
 	stats.AddTokens(1000000, 1000000)
 
 	cost := stats.EstimatedCost()
-	expected := 5.00 + 25.00
+	expected := 10.00 + 37.50 // Opus long context
 	if cost != expected {
-		t.Errorf("EstimatedCost() for bedrock opus = %f, want %f", cost, expected)
+		t.Errorf("EstimatedCost() for bedrock opus long context = %f, want %f", cost, expected)
 	}
 }
 
@@ -218,22 +222,24 @@ func TestSessionStats_EstimatedCost_Groq(t *testing.T) {
 }
 
 func TestSessionStats_EstimatedCost_OpenRouter_Claude(t *testing.T) {
+	// 1M input > 200K → Sonnet long context 料金 ($6/$22.50)
 	stats := NewSessionStats("openrouter", "anthropic/claude-sonnet-4.5")
 	stats.AddTokens(1000000, 1000000)
 
 	cost := stats.EstimatedCost()
-	expected := 3.00 + 15.00 // Sonnet pricing
+	expected := 6.00 + 22.50 // Sonnet long context pricing
 	if cost < expected-0.001 || cost > expected+0.001 {
 		t.Errorf("EstimatedCost() for openrouter claude = %f, want %f", cost, expected)
 	}
 }
 
 func TestSessionStats_EstimatedCost_OpenRouter_Gemini(t *testing.T) {
+	// 1M input > 200K → Gemini 3.1 Pro long context ($4/$18)
 	stats := NewSessionStats("openrouter", "google/gemini-3.1-pro")
 	stats.AddTokens(1000000, 1000000)
 
 	cost := stats.EstimatedCost()
-	expected := 2.00 + 12.00 // Gemini Pro pricing
+	expected := 4.00 + 18.00 // Gemini 3.1 Pro long context pricing
 	if cost < expected-0.001 || cost > expected+0.001 {
 		t.Errorf("EstimatedCost() for openrouter gemini = %f, want %f", cost, expected)
 	}
@@ -277,7 +283,7 @@ func TestSessionStats_EstimatedCost_OpenRouter_Default(t *testing.T) {
 	stats.AddTokens(1000000, 1000000)
 
 	cost := stats.EstimatedCost()
-	expected := 0.14 + 0.28 // DeepSeek fallback
+	expected := 0.28 + 0.42 // DeepSeek V3.2 fallback
 	if cost < expected-0.001 || cost > expected+0.001 {
 		t.Errorf("EstimatedCost() for openrouter unknown = %f, want %f", cost, expected)
 	}
@@ -288,8 +294,8 @@ func TestSessionStats_EstimatedCost_UnknownProvider(t *testing.T) {
 	stats.AddTokens(1000000, 1000000)
 
 	cost := stats.EstimatedCost()
-	// デフォルトはDeepSeek料金
-	expected := 0.14 + 0.28
+	// デフォルトはDeepSeek V3.2料金
+	expected := 0.28 + 0.42
 
 	// 浮動小数点の比較は許容誤差で
 	if cost < expected-0.001 || cost > expected+0.001 {
@@ -461,16 +467,20 @@ func TestCalculateRequestCost(t *testing.T) {
 	}{
 		// Ollama: 常に0
 		{"ollama", "", 1000000, 1000000, 0.0},
-		// DeepSeek: 0.14/1M input, 0.28/1M output
-		{"deepseek", "", 1000000, 1000000, 0.42},
-		// Unknown: DeepSeek料金と同じ
-		{"unknown", "", 1000000, 1000000, 0.42},
-		// Claude Sonnet（デフォルト）
-		{"claude", "claude-sonnet-4-5-20250929", 1000000, 1000000, 3.00 + 15.00},
-		// Claude Opus
-		{"claude", "claude-opus-4-5", 1000000, 1000000, 5.00 + 25.00},
-		// Claude Haiku
+		// DeepSeek V3.2: $0.28/1M input, $0.42/1M output
+		{"deepseek", "", 1000000, 1000000, 0.70},
+		// Unknown: DeepSeek V3.2料金と同じ
+		{"unknown", "", 1000000, 1000000, 0.70},
+		// Claude Sonnet（1M input > 200K → long context 料金）
+		{"claude", "claude-sonnet-4-5-20250929", 1000000, 1000000, 6.00 + 22.50},
+		// Claude Opus（1M input > 200K → long context 料金）
+		{"claude", "claude-opus-4-5", 1000000, 1000000, 10.00 + 37.50},
+		// Claude Haiku（long context なし）
 		{"claude", "claude-haiku-4-5", 1000000, 1000000, 1.00 + 5.00},
+		// Claude Sonnet 通常料金（<=200K）
+		{"claude", "claude-sonnet-4-5-20250929", 100000, 100000, 0.30 + 1.50},
+		// Claude Opus 通常料金（<=200K）
+		{"claude", "claude-opus-4-5", 100000, 100000, 0.50 + 2.50},
 	}
 
 	for _, tt := range tests {
@@ -505,10 +515,10 @@ func TestGetGeminiPricing_200KTier(t *testing.T) {
 		t.Errorf("Gemini Pro >200K cached = %f, want 0.40", p2.CachedInputCostPerM)
 	}
 
-	// Flash: 200K超でも料金変わらない（現時点）
+	// Flash: 200K超でも料金変わらない（long context ティアなし）
 	f1 := getGeminiPricing("gemini-3-flash", 250000)
 	if f1.InputCostPerM != 0.50 {
-		t.Errorf("Gemini Flash >200K input = %f, want 0.50", f1.InputCostPerM)
+		t.Errorf("Gemini Flash >200K input = %f, want 0.50 (no long context tier)", f1.InputCostPerM)
 	}
 }
 
@@ -623,26 +633,36 @@ func TestCalculateRequestCostWithCache_ThinkingTokens(t *testing.T) {
 func TestGetClaudePricing(t *testing.T) {
 	tests := []struct {
 		model      string
+		ptc        int // promptTokenCount
 		wantInput  float64
 		wantOutput float64
 	}{
-		{"claude-opus-4-5-20251101", 5.00, 25.00},
-		{"claude-opus-4-6", 5.00, 25.00},
-		{"global.anthropic.claude-opus-4-5-20251101-v1:0", 5.00, 25.00},
-		{"claude-haiku-4-5-20251001", 1.00, 5.00},
-		{"claude-sonnet-4-5-20250929", 3.00, 15.00},
-		{"claude-sonnet-4-20250514", 3.00, 15.00},
-		{"", 3.00, 15.00},                   // 空文字列はSonnetデフォルト
-		{"some-unknown-model", 3.00, 15.00}, // 不明モデルもSonnetデフォルト
+		// 通常料金 (<=200K)
+		{"claude-opus-4-5-20251101", 0, 5.00, 25.00},
+		{"claude-opus-4-6", 0, 5.00, 25.00},
+		{"global.anthropic.claude-opus-4-5-20251101-v1:0", 0, 5.00, 25.00},
+		{"claude-haiku-4-5-20251001", 0, 1.00, 5.00},
+		{"claude-sonnet-4-5-20250929", 0, 3.00, 15.00},
+		{"claude-sonnet-4-20250514", 0, 3.00, 15.00},
+		{"", 0, 3.00, 15.00},                   // 空文字列はSonnetデフォルト
+		{"some-unknown-model", 0, 3.00, 15.00}, // 不明モデルもSonnetデフォルト
+
+		// Long context (>200K)
+		{"claude-opus-4-6", 250000, 10.00, 37.50},
+		{"claude-sonnet-4-5-20250929", 250000, 6.00, 22.50},
+		{"", 250000, 6.00, 22.50}, // Sonnet デフォルト long context
+
+		// Haiku は long context なし
+		{"claude-haiku-4-5-20251001", 250000, 1.00, 5.00},
 	}
 
 	for _, tt := range tests {
-		pricing := getClaudePricing(tt.model)
+		pricing := getClaudePricing(tt.model, tt.ptc)
 		if pricing.InputCostPerM != tt.wantInput {
-			t.Errorf("getClaudePricing(%q).InputCostPerM = %f, want %f", tt.model, pricing.InputCostPerM, tt.wantInput)
+			t.Errorf("getClaudePricing(%q, %d).InputCostPerM = %f, want %f", tt.model, tt.ptc, pricing.InputCostPerM, tt.wantInput)
 		}
 		if pricing.OutputCostPerM != tt.wantOutput {
-			t.Errorf("getClaudePricing(%q).OutputCostPerM = %f, want %f", tt.model, pricing.OutputCostPerM, tt.wantOutput)
+			t.Errorf("getClaudePricing(%q, %d).OutputCostPerM = %f, want %f", tt.model, tt.ptc, pricing.OutputCostPerM, tt.wantOutput)
 		}
 	}
 }
@@ -663,5 +683,135 @@ func TestGetPricingInfo_FallbackToHardcodedWhenYAMLUnavailable(t *testing.T) {
 	pricing := GetPricingInfo("openai", "gpt-5")
 	if pricing.InputCostPerM != 1.25 || pricing.OutputCostPerM != 10.00 {
 		t.Fatalf("fallback pricing mismatch: got input=%f output=%f", pricing.InputCostPerM, pricing.OutputCostPerM)
+	}
+}
+
+// === 新規テスト: DeepSeek V3.2 統一料金 ===
+
+func TestGetDeepSeekPricing_V32Unified(t *testing.T) {
+	// deepseek-chat と deepseek-reasoner は V3.2 で統一料金
+	tests := []struct {
+		model      string
+		wantInput  float64
+		wantOutput float64
+	}{
+		{"deepseek-chat", 0.28, 0.42},
+		{"deepseek-reasoner", 0.28, 0.42}, // V3.2 で統一
+		{"", 0.28, 0.42},                  // デフォルト
+	}
+	for _, tt := range tests {
+		pricing := getDeepSeekPricing(tt.model)
+		if pricing.InputCostPerM != tt.wantInput {
+			t.Errorf("getDeepSeekPricing(%q).InputCostPerM = %f, want %f", tt.model, pricing.InputCostPerM, tt.wantInput)
+		}
+		if pricing.OutputCostPerM != tt.wantOutput {
+			t.Errorf("getDeepSeekPricing(%q).OutputCostPerM = %f, want %f", tt.model, pricing.OutputCostPerM, tt.wantOutput)
+		}
+	}
+}
+
+// === 新規テスト: Claude long context 200K超 ===
+
+func TestGetClaudePricing_LongContext(t *testing.T) {
+	// Sonnet: >200K → $6/$22.50
+	p := getClaudePricing("claude-sonnet-4-5-20250929", 250000)
+	if p.InputCostPerM != 6.00 || p.OutputCostPerM != 22.50 {
+		t.Errorf("Sonnet long context: got input=%f output=%f, want 6.00/22.50", p.InputCostPerM, p.OutputCostPerM)
+	}
+	if p.CachedInputCostPerM != 0.60 {
+		t.Errorf("Sonnet long context cached: got %f, want 0.60", p.CachedInputCostPerM)
+	}
+
+	// Opus: >200K → $10/$37.50
+	p2 := getClaudePricing("claude-opus-4-6", 250000)
+	if p2.InputCostPerM != 10.00 || p2.OutputCostPerM != 37.50 {
+		t.Errorf("Opus long context: got input=%f output=%f, want 10.00/37.50", p2.InputCostPerM, p2.OutputCostPerM)
+	}
+
+	// Haiku: long context なし
+	p3 := getClaudePricing("claude-haiku-4-5", 250000)
+	if p3.InputCostPerM != 1.00 || p3.OutputCostPerM != 5.00 {
+		t.Errorf("Haiku should not have long context pricing: got input=%f output=%f", p3.InputCostPerM, p3.OutputCostPerM)
+	}
+}
+
+// === 新規テスト: 200Kティア判定がキャッシュトークンを含む ===
+
+func TestCalculateRequestCostWithCache_TierIncludesCachedTokens(t *testing.T) {
+	// Claude Sonnet: 通常input 150K + cached 60K = 210K → long context 料金
+	cost := CalculateRequestCostWithCache("claude", "claude-sonnet-4-5", api.Usage{
+		InputTokens:       150000,
+		OutputTokens:      10000,
+		CachedInputTokens: 60000,
+	})
+	// totalInputForTier = 150K + 60K + 0 = 210K → long context ($6/$22.50)
+	// uncached: (150K-60K)/1M * $6.00 = 90K * 0.000006 = $0.54
+	// cached:   60K/1M * $0.60 = $0.036
+	// output:   10K/1M * $22.50 = $0.225
+	// total: $0.801
+	expected := 0.801
+	if cost < expected-0.01 || cost > expected+0.01 {
+		t.Errorf("CostWithCache (cached triggers 200K tier) = %f, want ~%f", cost, expected)
+	}
+
+	// 同じトークン数でもキャッシュなし 150K → 通常料金
+	cost2 := CalculateRequestCostWithCache("claude", "claude-sonnet-4-5", api.Usage{
+		InputTokens:  150000,
+		OutputTokens: 10000,
+	})
+	// totalInputForTier = 150K → 通常 ($3/$15)
+	// uncached: 150K/1M * $3.00 = $0.45
+	// output:   10K/1M * $15.00 = $0.15
+	// total: $0.60
+	expected2 := 0.60
+	if cost2 < expected2-0.01 || cost2 > expected2+0.01 {
+		t.Errorf("CostWithCache (no cache, <200K) = %f, want ~%f", cost2, expected2)
+	}
+}
+
+// === 新規テスト: Gemini 2.5 Pro ===
+
+func TestGetGeminiPricing_25Pro(t *testing.T) {
+	// 2.5 Pro: $1.25/$10.00 (<=200K)
+	p := getGeminiPricing("gemini-2.5-pro", 100000)
+	if p.InputCostPerM != 1.25 || p.OutputCostPerM != 10.00 {
+		t.Errorf("Gemini 2.5 Pro <200K: got input=%f output=%f, want 1.25/10.00", p.InputCostPerM, p.OutputCostPerM)
+	}
+
+	// 2.5 Pro: $2.50/$15.00 (>200K)
+	p2 := getGeminiPricing("gemini-2.5-pro", 250000)
+	if p2.InputCostPerM != 2.50 || p2.OutputCostPerM != 15.00 {
+		t.Errorf("Gemini 2.5 Pro >200K: got input=%f output=%f, want 2.50/15.00", p2.InputCostPerM, p2.OutputCostPerM)
+	}
+}
+
+// === 新規テスト: Gemini Flash-Lite 分離 ===
+
+func TestGetGeminiPricing_FlashLite(t *testing.T) {
+	// 2.5 Flash-Lite: $0.10/$0.40
+	p := getGeminiPricing("gemini-2.5-flash-lite", 0)
+	if p.InputCostPerM != 0.10 || p.OutputCostPerM != 0.40 {
+		t.Errorf("Gemini 2.5 Flash-Lite: got input=%f output=%f, want 0.10/0.40", p.InputCostPerM, p.OutputCostPerM)
+	}
+
+	// 2.5 Flash: $0.30/$2.50 (Flash-Lite とは違う)
+	p2 := getGeminiPricing("gemini-2.5-flash", 0)
+	if p2.InputCostPerM != 0.30 || p2.OutputCostPerM != 2.50 {
+		t.Errorf("Gemini 2.5 Flash: got input=%f output=%f, want 0.30/2.50", p2.InputCostPerM, p2.OutputCostPerM)
+	}
+}
+
+// === 新規テスト: Gemini 2.0 Flash ===
+
+func TestGetGeminiPricing_20Flash(t *testing.T) {
+	p := getGeminiPricing("gemini-2.0-flash", 0)
+	if p.InputCostPerM != 0.10 || p.OutputCostPerM != 0.40 {
+		t.Errorf("Gemini 2.0 Flash: got input=%f output=%f, want 0.10/0.40", p.InputCostPerM, p.OutputCostPerM)
+	}
+
+	// 2.0 Flash-Lite
+	p2 := getGeminiPricing("gemini-2.0-flash-lite", 0)
+	if p2.InputCostPerM != 0.075 || p2.OutputCostPerM != 0.30 {
+		t.Errorf("Gemini 2.0 Flash-Lite: got input=%f output=%f, want 0.075/0.30", p2.InputCostPerM, p2.OutputCostPerM)
 	}
 }

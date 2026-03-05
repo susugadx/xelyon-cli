@@ -84,8 +84,9 @@ type PricingInfo struct {
 }
 
 type pricingRule struct {
-	Contains []string    `yaml:"contains"`
-	Pricing  PricingInfo `yaml:"pricing"`
+	Contains  []string       `yaml:"contains"`
+	Pricing   PricingInfo    `yaml:"pricing"`
+	LongInput *longInputTier `yaml:"long_input"` // ルール別 long context ティア
 }
 
 type providerPricingConfig struct {
@@ -130,10 +131,14 @@ func loadPricingConfig() *pricingConfig {
 	return loadedPricingConfig
 }
 
-func matchPricingRules(lm string, provider providerPricingConfig) (PricingInfo, bool) {
+func matchPricingRules(lm string, provider providerPricingConfig, promptTokenCount int) (PricingInfo, bool) {
 	for _, rule := range provider.Rules {
 		for _, keyword := range rule.Contains {
 			if strings.Contains(lm, keyword) {
+				// ルール別 long_input ティアがあれば優先チェック
+				if rule.LongInput != nil && promptTokenCount > rule.LongInput.Threshold {
+					return rule.LongInput.Pricing, true
+				}
 				return rule.Pricing, true
 			}
 		}
@@ -155,17 +160,17 @@ func GetPricingInfo(provider string, model string, promptTokenCount ...int) Pric
 	case "openai":
 		return getOpenAIPricing(model)
 	case "claude":
-		return getClaudePricing(model)
+		return getClaudePricing(model, ptc)
 	case "bedrock":
 		if strings.Contains(strings.ToLower(model), "claude") {
-			return getClaudePricing(model)
+			return getClaudePricing(model, ptc)
 		}
 		// Claude以外のBedrockモデルは一旦汎用料金
 		return PricingInfo{
-			InputCostPerM:         0.14,
-			OutputCostPerM:        0.28,
-			CachedInputCostPerM:   0.014,
-			CacheCreationCostPerM: 0.14,
+			InputCostPerM:         0.28,
+			OutputCostPerM:        0.42,
+			CachedInputCostPerM:   0.028,
+			CacheCreationCostPerM: 0.28,
 		}
 	case "gemini":
 		return getGeminiPricing(model, ptc)
@@ -176,7 +181,7 @@ func GetPricingInfo(provider string, model string, promptTokenCount ...int) Pric
 		lm := strings.ToLower(model)
 		switch {
 		case strings.Contains(lm, "claude"):
-			return getClaudePricing(model)
+			return getClaudePricing(model, ptc)
 		case strings.Contains(lm, "gpt") || strings.Contains(lm, "openai") || strings.Contains(lm, "codex"):
 			return getOpenAIPricing(model)
 		case strings.Contains(lm, "gemini") || strings.Contains(lm, "google"):
@@ -197,12 +202,12 @@ func GetPricingInfo(provider string, model string, promptTokenCount ...int) Pric
 	case "ollama":
 		return PricingInfo{} // ローカル実行は無料
 	default:
-		// 不明なプロバイダーはDeepSeek料金で概算
+		// 不明なプロバイダーはDeepSeek V3.2料金で概算
 		return PricingInfo{
-			InputCostPerM:         0.14,
-			OutputCostPerM:        0.28,
-			CachedInputCostPerM:   0.014,
-			CacheCreationCostPerM: 0.14,
+			InputCostPerM:         0.28,
+			OutputCostPerM:        0.42,
+			CachedInputCostPerM:   0.028,
+			CacheCreationCostPerM: 0.28,
 		}
 	}
 }
@@ -212,43 +217,49 @@ func getDeepSeekPricing(model string) PricingInfo {
 	lm := strings.ToLower(model)
 	if cfg := loadPricingConfig(); cfg != nil {
 		provider := cfg.DeepSeek
-		if pricing, ok := matchPricingRules(lm, provider); ok {
+		if pricing, ok := matchPricingRules(lm, provider, 0); ok {
 			return pricing
 		}
 		return provider.Default
 	}
 
-	if strings.Contains(lm, "reasoner") {
-		// DeepSeek Reasoner: $0.55/$2.19 per million tokens, Cache hit: $0.14
-		return PricingInfo{
-			InputCostPerM:         0.55,
-			OutputCostPerM:        2.19,
-			CachedInputCostPerM:   0.14,
-			CacheCreationCostPerM: 0.55,
-		}
-	}
-	// DeepSeek Chat（デフォルト）: $0.14/$0.28 per million tokens, Cache hit: $0.014
+	// DeepSeek V3.2: deepseek-chat/deepseek-reasoner 統一料金
+	// $0.28/$0.42 per million tokens, Cache hit: $0.028
 	return PricingInfo{
-		InputCostPerM:         0.14,
-		OutputCostPerM:        0.28,
-		CachedInputCostPerM:   0.014,
-		CacheCreationCostPerM: 0.14,
+		InputCostPerM:         0.28,
+		OutputCostPerM:        0.42,
+		CachedInputCostPerM:   0.028,
+		CacheCreationCostPerM: 0.28,
 	}
 }
 
 // getClaudePricing はモデル名からClaude料金を返す
-func getClaudePricing(model string) PricingInfo {
+// promptTokenCount は200Kティア判定に使用（Geminiと同様）
+func getClaudePricing(model string, promptTokenCount int) PricingInfo {
 	lm := strings.ToLower(model)
 	if cfg := loadPricingConfig(); cfg != nil {
 		provider := cfg.Claude
-		if pricing, ok := matchPricingRules(lm, provider); ok {
+		if pricing, ok := matchPricingRules(lm, provider, promptTokenCount); ok {
 			return pricing
+		}
+		// デフォルトの long_input チェック
+		if provider.LongInput != nil && promptTokenCount > provider.LongInput.Threshold {
+			return provider.LongInput.Pricing
 		}
 		return provider.Default
 	}
 
 	switch {
 	case strings.Contains(lm, "opus"):
+		if promptTokenCount > 200000 {
+			// Opus long context (>200K): $10/$37.50 per million tokens
+			return PricingInfo{
+				InputCostPerM:         10.00,
+				OutputCostPerM:        37.50,
+				CachedInputCostPerM:   1.00,
+				CacheCreationCostPerM: 12.50,
+			}
+		}
 		// Opus 4.5/4.6: $5/$25 per million tokens
 		return PricingInfo{
 			InputCostPerM:         5.00,
@@ -257,7 +268,7 @@ func getClaudePricing(model string) PricingInfo {
 			CacheCreationCostPerM: 6.25, // 25% premium
 		}
 	case strings.Contains(lm, "haiku"):
-		// Haiku 4.5: $1/$5 per million tokens
+		// Haiku 4.5: $1/$5 per million tokens (long context なし)
 		return PricingInfo{
 			InputCostPerM:         1.00,
 			OutputCostPerM:        5.00,
@@ -265,7 +276,16 @@ func getClaudePricing(model string) PricingInfo {
 			CacheCreationCostPerM: 1.25, // 25% premium
 		}
 	default:
-		// Sonnet 4.5（デフォルト）: $3/$15 per million tokens
+		if promptTokenCount > 200000 {
+			// Sonnet long context (>200K): $6/$22.50 per million tokens
+			return PricingInfo{
+				InputCostPerM:         6.00,
+				OutputCostPerM:        22.50,
+				CachedInputCostPerM:   0.60,
+				CacheCreationCostPerM: 7.50,
+			}
+		}
+		// Sonnet 4.5/4.6（デフォルト）: $3/$15 per million tokens
 		return PricingInfo{
 			InputCostPerM:         3.00,
 			OutputCostPerM:        15.00,
@@ -280,7 +300,7 @@ func getOpenAIPricing(model string) PricingInfo {
 	lm := strings.ToLower(model)
 	if cfg := loadPricingConfig(); cfg != nil {
 		provider := cfg.OpenAI
-		if pricing, ok := matchPricingRules(lm, provider); ok {
+		if pricing, ok := matchPricingRules(lm, provider, 0); ok {
 			return pricing
 		}
 		return provider.Default
@@ -352,48 +372,66 @@ func getGeminiPricing(model string, promptTokenCount int) PricingInfo {
 	lm := strings.ToLower(model)
 	if cfg := loadPricingConfig(); cfg != nil {
 		provider := cfg.Gemini
-		if pricing, ok := matchPricingRules(lm, provider); ok {
-			if strings.Contains(lm, "pro") && provider.LongInput != nil && promptTokenCount > provider.LongInput.Threshold {
-				return provider.LongInput.Pricing
-			}
+		if pricing, ok := matchPricingRules(lm, provider, promptTokenCount); ok {
 			return pricing
+		}
+		// デフォルトの long_input チェック
+		if provider.LongInput != nil && promptTokenCount > provider.LongInput.Threshold {
+			return provider.LongInput.Pricing
 		}
 		return provider.Default
 	}
 
 	switch {
+	case strings.Contains(lm, "2.5-pro"):
+		if promptTokenCount > 200000 {
+			return PricingInfo{
+				InputCostPerM: 2.50, OutputCostPerM: 15.00,
+				CachedInputCostPerM: 0.25, CacheCreationCostPerM: 2.50,
+			}
+		}
+		return PricingInfo{
+			InputCostPerM: 1.25, OutputCostPerM: 10.00,
+			CachedInputCostPerM: 0.125, CacheCreationCostPerM: 1.25,
+		}
 	case strings.Contains(lm, "pro"):
 		if promptTokenCount > 200000 {
 			// Long context pricing (>200K): $4/$18 per million tokens
 			return PricingInfo{
-				InputCostPerM:         4.00,
-				OutputCostPerM:        18.00,
-				CachedInputCostPerM:   0.40,
-				CacheCreationCostPerM: 4.00,
+				InputCostPerM: 4.00, OutputCostPerM: 18.00,
+				CachedInputCostPerM: 0.40, CacheCreationCostPerM: 4.00,
 			}
 		}
-		// Standard pricing (<=200K): $2/$12 per million tokens
+		// Gemini 3.x Pro (<=200K): $2/$12 per million tokens
 		return PricingInfo{
-			InputCostPerM:         2.00,
-			OutputCostPerM:        12.00,
-			CachedInputCostPerM:   0.20, // 90% off
-			CacheCreationCostPerM: 2.00,
+			InputCostPerM: 2.00, OutputCostPerM: 12.00,
+			CachedInputCostPerM: 0.20, CacheCreationCostPerM: 2.00,
 		}
-	case strings.Contains(lm, "2.5-flash"), strings.Contains(lm, "2.5-flash-lite"):
-		// Gemini 2.5 Flash: $0.30/$2.50 per million tokens
+	case strings.Contains(lm, "2.5-flash-lite"):
 		return PricingInfo{
-			InputCostPerM:         0.30,
-			OutputCostPerM:        2.50,
-			CachedInputCostPerM:   0.03, // 90% off
-			CacheCreationCostPerM: 0.30,
+			InputCostPerM: 0.10, OutputCostPerM: 0.40,
+			CachedInputCostPerM: 0.01, CacheCreationCostPerM: 0.10,
+		}
+	case strings.Contains(lm, "2.0-flash-lite"):
+		return PricingInfo{
+			InputCostPerM: 0.075, OutputCostPerM: 0.30,
+			CachedInputCostPerM: 0.01, CacheCreationCostPerM: 0.075,
+		}
+	case strings.Contains(lm, "2.5-flash"):
+		return PricingInfo{
+			InputCostPerM: 0.30, OutputCostPerM: 2.50,
+			CachedInputCostPerM: 0.03, CacheCreationCostPerM: 0.30,
+		}
+	case strings.Contains(lm, "2.0-flash"):
+		return PricingInfo{
+			InputCostPerM: 0.10, OutputCostPerM: 0.40,
+			CachedInputCostPerM: 0.025, CacheCreationCostPerM: 0.10,
 		}
 	default:
-		// Gemini 3 Flash / 2.0 Flash（デフォルト）: $0.50/$3.00 per million tokens
+		// Gemini 3 Flash（デフォルト）: $0.50/$3.00 per million tokens
 		return PricingInfo{
-			InputCostPerM:         0.50,
-			OutputCostPerM:        3.00,
-			CachedInputCostPerM:   0.05, // 90% off
-			CacheCreationCostPerM: 0.50,
+			InputCostPerM: 0.50, OutputCostPerM: 3.00,
+			CachedInputCostPerM: 0.05, CacheCreationCostPerM: 0.50,
 		}
 	}
 }
@@ -403,7 +441,7 @@ func getGroqPricing(model string) PricingInfo {
 	lm := strings.ToLower(model)
 	if cfg := loadPricingConfig(); cfg != nil {
 		provider := cfg.Groq
-		if pricing, ok := matchPricingRules(lm, provider); ok {
+		if pricing, ok := matchPricingRules(lm, provider, 0); ok {
 			return pricing
 		}
 		return provider.Default
@@ -458,7 +496,7 @@ func getKimiPricing(model string) PricingInfo {
 	lm := strings.ToLower(model)
 	if cfg := loadPricingConfig(); cfg != nil {
 		provider := cfg.Kimi
-		if pricing, ok := matchPricingRules(lm, provider); ok {
+		if pricing, ok := matchPricingRules(lm, provider, 0); ok {
 			return pricing
 		}
 		return provider.Default
@@ -496,7 +534,9 @@ func (s *SessionStats) EstimatedCost() float64 {
 	}
 
 	// フォールバック: AddTokens() のみ使われた場合（レガシー互換）
-	pricing := GetPricingInfo(s.Provider, s.Model)
+	// キャッシュ情報がないので InputTokens でティア判定
+	totalInputForTier := s.InputTokens + s.CachedInputTokens + s.CacheCreationTokens
+	pricing := GetPricingInfo(s.Provider, s.Model, totalInputForTier)
 
 	cachedInputCost := float64(s.CachedInputTokens) / 1_000_000.0 * pricing.CachedInputCostPerM
 	cacheCreationCost := float64(s.CacheCreationTokens) / 1_000_000.0 * pricing.CacheCreationCostPerM
@@ -611,7 +651,10 @@ func CalculateRequestCostWithCache(provider, model string, usage api.Usage) floa
 		return 0.0
 	}
 
-	pricing := GetPricingInfo(provider, model, usage.InputTokens)
+	// キャッシュトークンも含めた総入力トークンで200Kティア判定
+	// Anthropic/Gemini公式: input + cache_read + cache_creation の合計でティア判定
+	totalInputForTier := usage.InputTokens + usage.CachedInputTokens + usage.CacheCreationTokens
+	pricing := GetPricingInfo(provider, model, totalInputForTier)
 
 	cachedInputCost := float64(usage.CachedInputTokens) / 1_000_000.0 * pricing.CachedInputCostPerM
 	cacheCreationCost := float64(usage.CacheCreationTokens) / 1_000_000.0 * pricing.CacheCreationCostPerM

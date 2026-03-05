@@ -48,6 +48,13 @@ claude:
     outputcostperm: 15.00
     cachedinputcostperm: 0.30
     cachecreationcostperm: 3.75
+  long_input:
+    threshold: 200000
+    pricing:
+      inputcostperm: 6.00
+      outputcostperm: 22.50
+      cachedinputcostperm: 0.60
+      cachecreationcostperm: 7.50
   rules:
     - contains: ["opus"]
       pricing:
@@ -55,6 +62,13 @@ claude:
         outputcostperm: 25.00
         cachedinputcostperm: 0.50
         cachecreationcostperm: 6.25
+      long_input:
+        threshold: 200000
+        pricing:
+          inputcostperm: 10.00
+          outputcostperm: 37.50
+          cachedinputcostperm: 1.00
+          cachecreationcostperm: 12.50
     - contains: ["haiku"]
       pricing:
         inputcostperm: 1.00
@@ -68,40 +82,77 @@ gemini:
     outputcostperm: 3.00
     cachedinputcostperm: 0.05
     cachecreationcostperm: 0.50
-  long_input:
-    threshold: 200000
-    pricing:
-      inputcostperm: 4.00
-      outputcostperm: 18.00
-      cachedinputcostperm: 0.40
-      cachecreationcostperm: 4.00
   rules:
+    - contains: ["3.1-pro", "3-pro"]
+      pricing:
+        inputcostperm: 2.00
+        outputcostperm: 12.00
+        cachedinputcostperm: 0.20
+        cachecreationcostperm: 2.00
+      long_input:
+        threshold: 200000
+        pricing:
+          inputcostperm: 4.00
+          outputcostperm: 18.00
+          cachedinputcostperm: 0.40
+          cachecreationcostperm: 4.00
+    - contains: ["2.5-pro"]
+      pricing:
+        inputcostperm: 1.25
+        outputcostperm: 10.00
+        cachedinputcostperm: 0.125
+        cachecreationcostperm: 1.25
+      long_input:
+        threshold: 200000
+        pricing:
+          inputcostperm: 2.50
+          outputcostperm: 15.00
+          cachedinputcostperm: 0.25
+          cachecreationcostperm: 2.50
     - contains: ["pro"]
       pricing:
         inputcostperm: 2.00
         outputcostperm: 12.00
         cachedinputcostperm: 0.20
         cachecreationcostperm: 2.00
-    - contains: ["2.5-flash", "2.5-flash-lite"]
+      long_input:
+        threshold: 200000
+        pricing:
+          inputcostperm: 4.00
+          outputcostperm: 18.00
+          cachedinputcostperm: 0.40
+          cachecreationcostperm: 4.00
+    - contains: ["2.5-flash-lite"]
+      pricing:
+        inputcostperm: 0.10
+        outputcostperm: 0.40
+        cachedinputcostperm: 0.01
+        cachecreationcostperm: 0.10
+    - contains: ["2.0-flash-lite"]
+      pricing:
+        inputcostperm: 0.075
+        outputcostperm: 0.30
+        cachedinputcostperm: 0.01
+        cachecreationcostperm: 0.075
+    - contains: ["2.5-flash"]
       pricing:
         inputcostperm: 0.30
         outputcostperm: 2.50
         cachedinputcostperm: 0.03
         cachecreationcostperm: 0.30
+    - contains: ["2.0-flash"]
+      pricing:
+        inputcostperm: 0.10
+        outputcostperm: 0.40
+        cachedinputcostperm: 0.025
+        cachecreationcostperm: 0.10
 
 deepseek:
   default:
-    inputcostperm: 0.14
-    outputcostperm: 0.28
-    cachedinputcostperm: 0.014
-    cachecreationcostperm: 0.14
-  rules:
-    - contains: ["reasoner"]
-      pricing:
-        inputcostperm: 0.55
-        outputcostperm: 2.19
-        cachedinputcostperm: 0.14
-        cachecreationcostperm: 0.55
+    inputcostperm: 0.28
+    outputcostperm: 0.42
+    cachedinputcostperm: 0.028
+    cachecreationcostperm: 0.28
 
 groq:
   default:
