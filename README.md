@@ -243,6 +243,7 @@ mcp:
 
 `enabled: false` にするとMCPサーバーへの接続をスキップし、トークン消費を削減できます。
 `~/.xelyon/mcp.json` の設定はそのまま残るため、再度 `enabled: true` にすれば復活します。
+- **ツール単位フィルタリング**: MCPサーバーのツールを `include`/`exclude` で制御。不要なツールを除外してトークン消費を最適化
 
 ### Completion Hooks
 

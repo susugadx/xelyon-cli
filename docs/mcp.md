@@ -148,6 +148,84 @@ MCPサーバーに渡す環境変数。
 - `*_PASSWORD`
 - `*_API_KEY`
 
+### サーバーの無効化
+
+特定のMCPサーバーを一時的に無効化できます:
+
+```json
+{
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["@modelcontextprotocol/server-github"],
+      "disabled": true
+    }
+  }
+}
+```
+
+### ツール単位のフィルタリング
+
+MCPサーバーが提供するツールの中から、使用するツールを制限できます。
+不要なツールを除外することでトークン消費を削減できます。
+
+#### ホワイトリスト（include）
+
+指定したツールのみ有効にします:
+
+```json
+{
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["@modelcontextprotocol/server-github"],
+      "env": { "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}" },
+      "tools": {
+        "include": ["create_issue", "list_issues", "get_issue"]
+      }
+    }
+  }
+}
+```
+
+#### ブラックリスト（exclude）
+
+指定したツールだけ除外し、残りを全て有効にします:
+
+```json
+{
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["@modelcontextprotocol/server-github"],
+      "env": { "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}" },
+      "tools": {
+        "exclude": ["delete_repository", "transfer_repository"]
+      }
+    }
+  }
+}
+```
+
+| フィールド | 説明 |
+|---|---|
+| `disabled` | `true` でサーバー全体を無効化。設定は保持される |
+| `tools.include` | ホワイトリスト。指定したツールのみ登録 |
+| `tools.exclude` | ブラックリスト。指定したツールを除外（`include` 未設定時のみ有効） |
+
+> **Note**: `include` と `exclude` を両方設定した場合は `include` が優先されます。
+> ツール名はMCPサーバーが公開する名前をそのまま使用します（`mcp_` プレフィックスなし）。
+
+#### 利用可能なツール名の確認
+
+MCPサーバーが提供するツール一覧はXELYON起動時のログで確認できます:
+
+```
+🔌 MCP server 'github' connected (5 tools, 25 filtered out)
+```
+
+全ツールを確認するには、フィルタなしで一度起動してください。
+
 ## 利用可能な公式MCPサーバー
 
 Anthropicが公開しているMCPサーバー一覧: https://github.com/modelcontextprotocol/servers

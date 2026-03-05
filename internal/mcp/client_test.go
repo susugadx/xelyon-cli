@@ -502,3 +502,101 @@ func TestManager_GetTools_AfterConnect(t *testing.T) {
 		t.Errorf("Expected tool name 'test-tool', got %q", tools[0].Name)
 	}
 }
+
+func TestShouldIncludeTool(t *testing.T) {
+	tests := []struct {
+		name     string
+		toolName string
+		filter   *ToolsFilter
+		want     bool
+	}{
+		{"nil filter", "any_tool", nil, true},
+		{"empty filter", "any_tool", &ToolsFilter{}, true},
+		{"include match", "create_issue", &ToolsFilter{Include: []string{"create_issue", "list_issues"}}, true},
+		{"include no match", "delete_repo", &ToolsFilter{Include: []string{"create_issue", "list_issues"}}, false},
+		{"exclude match", "delete_repo", &ToolsFilter{Exclude: []string{"delete_repo"}}, false},
+		{"exclude no match", "create_issue", &ToolsFilter{Exclude: []string{"delete_repo"}}, true},
+		{
+			"include takes precedence",
+			"create_issue",
+			&ToolsFilter{
+				Include: []string{"create_issue"},
+				Exclude: []string{"create_issue"},
+			},
+			true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := shouldIncludeTool(tt.toolName, tt.filter)
+			if got != tt.want {
+				t.Errorf("shouldIncludeTool(%q, %+v) = %v, want %v",
+					tt.toolName, tt.filter, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestServerConfig_Disabled(t *testing.T) {
+	config := &Config{
+		MCPServers: map[string]ServerConfig{
+			"disabled_server": {
+				Command:  "npx",
+				Args:     []string{"some-server"},
+				Disabled: true,
+			},
+		},
+	}
+
+	server := config.MCPServers["disabled_server"]
+	if !server.Disabled {
+		t.Error("Expected server to be disabled")
+	}
+}
+
+func TestServerConfig_ToolsFilter_JSON(t *testing.T) {
+	jsonStr := `{
+		"mcpServers": {
+			"github": {
+				"command": "npx",
+				"args": ["@modelcontextprotocol/server-github"],
+				"disabled": false,
+				"tools": {
+					"include": ["create_issue", "list_issues"]
+				}
+			},
+			"filesystem": {
+				"command": "npx",
+				"args": ["@modelcontextprotocol/server-filesystem"],
+				"tools": {
+					"exclude": ["delete_file"]
+				}
+			},
+			"legacy": {
+				"command": "npx",
+				"args": ["some-server"]
+			}
+		}
+	}`
+
+	var config Config
+	if err := json.Unmarshal([]byte(jsonStr), &config); err != nil {
+		t.Fatalf("Failed to parse JSON: %v", err)
+	}
+
+	gh := config.MCPServers["github"]
+	if gh.Tools == nil || len(gh.Tools.Include) != 2 {
+		t.Errorf("github tools include: got %+v", gh.Tools)
+	}
+
+	fs := config.MCPServers["filesystem"]
+	if fs.Tools == nil || len(fs.Tools.Exclude) != 1 {
+		t.Errorf("filesystem tools exclude: got %+v", fs.Tools)
+	}
+
+	legacy := config.MCPServers["legacy"]
+	if legacy.Tools != nil {
+		t.Errorf("legacy should have nil tools filter, got %+v", legacy.Tools)
+	}
+}

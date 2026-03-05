@@ -16,9 +16,17 @@ import (
 
 // ServerConfig はMCPサーバーの設定
 type ServerConfig struct {
-	Command string            `json:"command"`
-	Args    []string          `json:"args,omitempty"`
-	Env     map[string]string `json:"env,omitempty"`
+	Command  string            `json:"command"`
+	Args     []string          `json:"args,omitempty"`
+	Env      map[string]string `json:"env,omitempty"`
+	Disabled bool              `json:"disabled,omitempty"` // サーバー全体を無効化
+	Tools    *ToolsFilter      `json:"tools,omitempty"`    // ツール単位フィルタ
+}
+
+// ToolsFilter はツールのinclude/excludeフィルタ
+type ToolsFilter struct {
+	Include []string `json:"include,omitempty"` // ホワイトリスト（指定時はこれだけ有効）
+	Exclude []string `json:"exclude,omitempty"` // ブラックリスト（include未指定時に使用）
 }
 
 // Config は ~/.xelyon/mcp.json の構造
@@ -115,6 +123,35 @@ func sanitizeEnv(customEnv map[string]string) []string {
 	return env
 }
 
+// shouldIncludeTool はツールがフィルタを通過するか判定
+// - include が設定されている場合: include に含まれるツールのみ通過（ホワイトリスト）
+// - include 未設定で exclude が設定されている場合: exclude に含まれないツールが通過（ブラックリスト）
+// - どちらも未設定: 全ツール通過
+func shouldIncludeTool(toolName string, filter *ToolsFilter) bool {
+	if filter == nil {
+		return true
+	}
+
+	if len(filter.Include) > 0 {
+		for _, name := range filter.Include {
+			if name == toolName {
+				return true
+			}
+		}
+		return false
+	}
+
+	if len(filter.Exclude) > 0 {
+		for _, name := range filter.Exclude {
+			if name == toolName {
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
 // LoadConfig は ~/.xelyon/mcp.json を読み込む
 func (m *Manager) LoadConfig() error {
 	homeDir, err := os.UserHomeDir()
@@ -186,6 +223,11 @@ func (m *Manager) Connect(ctx context.Context) error {
 	}, nil)
 
 	for name, serverConfig := range m.config.MCPServers {
+		if serverConfig.Disabled {
+			fmt.Printf("⏭️  MCP server '%s' is disabled, skipping\n", name)
+			continue
+		}
+
 		// コマンドの安全性を検証
 		if err := validateMCPCommand(serverConfig.Command); err != nil {
 			fmt.Printf("⚠️  MCP server '%s' blocked: %v\n", name, err)
@@ -214,7 +256,13 @@ func (m *Manager) Connect(ctx context.Context) error {
 			continue
 		}
 
+		registered := 0
+		skipped := 0
 		for _, tool := range toolsResult.Tools {
+			if !shouldIncludeTool(tool.Name, serverConfig.Tools) {
+				skipped++
+				continue
+			}
 			schemaBytes, _ := json.Marshal(tool.InputSchema)
 			m.tools = append(m.tools, MCPTool{
 				ServerName:  name,
@@ -223,9 +271,14 @@ func (m *Manager) Connect(ctx context.Context) error {
 				InputSchema: schemaBytes,
 				Session:     session,
 			})
+			registered++
 		}
 
-		fmt.Printf("🔌 MCP server '%s' connected (%d tools)\n", name, len(toolsResult.Tools))
+		if skipped > 0 {
+			fmt.Printf("🔌 MCP server '%s' connected (%d tools, %d filtered out)\n", name, registered, skipped)
+		} else {
+			fmt.Printf("🔌 MCP server '%s' connected (%d tools)\n", name, registered)
+		}
 	}
 
 	return nil
@@ -333,6 +386,9 @@ func (m *Manager) Reconnect(ctx context.Context, serverName string) error {
 	if !ok {
 		return fmt.Errorf("server '%s' not found in config", serverName)
 	}
+	if serverConfig.Disabled {
+		return fmt.Errorf("server '%s' is disabled", serverName)
+	}
 
 	// 既存のセッションを閉じる
 	if session, ok := m.sessions[serverName]; ok {
@@ -377,7 +433,13 @@ func (m *Manager) Reconnect(ctx context.Context, serverName string) error {
 		return fmt.Errorf("failed to list tools: %w", err)
 	}
 
+	registered := 0
+	skipped := 0
 	for _, tool := range toolsResult.Tools {
+		if !shouldIncludeTool(tool.Name, serverConfig.Tools) {
+			skipped++
+			continue
+		}
 		schemaBytes, _ := json.Marshal(tool.InputSchema)
 		m.tools = append(m.tools, MCPTool{
 			ServerName:  serverName,
@@ -386,9 +448,14 @@ func (m *Manager) Reconnect(ctx context.Context, serverName string) error {
 			InputSchema: schemaBytes,
 			Session:     session,
 		})
+		registered++
 	}
 
 	m.healthCheck[serverName] = time.Now()
-	fmt.Printf("🔌 MCP server '%s' reconnected (%d tools)\n", serverName, len(toolsResult.Tools))
+	if skipped > 0 {
+		fmt.Printf("🔌 MCP server '%s' reconnected (%d tools, %d filtered out)\n", serverName, registered, skipped)
+	} else {
+		fmt.Printf("🔌 MCP server '%s' reconnected (%d tools)\n", serverName, registered)
+	}
 	return nil
 }
