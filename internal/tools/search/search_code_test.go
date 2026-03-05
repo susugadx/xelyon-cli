@@ -986,6 +986,26 @@ func TestSearchCode_FixedStrings(t *testing.T) {
 	}
 }
 
+func TestSearchCode_TypeToGlobMapping(t *testing.T) {
+	tests := []struct {
+		fileType string
+		wantGlob string
+		wantOK   bool
+	}{
+		{fileType: "go", wantGlob: "*.go", wantOK: true},
+		{fileType: "py", wantGlob: "*.py", wantOK: true},
+		{fileType: "rust", wantGlob: "*.rs", wantOK: true},
+		{fileType: "unknown", wantGlob: "", wantOK: false},
+	}
+
+	for _, tt := range tests {
+		got, ok := fileTypeToGlob(tt.fileType)
+		if ok != tt.wantOK || got != tt.wantGlob {
+			t.Fatalf("fileTypeToGlob(%q) = (%q, %v), want (%q, %v)", tt.fileType, got, ok, tt.wantGlob, tt.wantOK)
+		}
+	}
+}
+
 func TestEstimateTokens(t *testing.T) {
 	tests := []struct {
 		name     string

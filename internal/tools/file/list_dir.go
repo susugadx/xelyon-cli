@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
 // デフォルト除外ディレクトリ
@@ -28,7 +29,7 @@ func ExecuteListDir(path string, depth int) string {
 		depth = 3
 	}
 
-	absPath, err := filepath.Abs(path)
+	absPath, err := common.ValidatePath(path)
 	if err != nil {
 		return fmt.Sprintf("Error: %v", err)
 	}

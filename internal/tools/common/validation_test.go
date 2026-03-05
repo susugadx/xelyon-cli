@@ -78,7 +78,7 @@ func TestValidatePathImpl(t *testing.T) {
 					return
 				}
 				// 正常系では結果がcwd配下であることを確認
-				if !strings.HasPrefix(result, cwd) {
+				if !isSubPath(result, cwd) {
 					t.Errorf("validatePathImpl(%q) = %q, not under cwd %q", tt.path, result, cwd)
 				}
 			}
@@ -186,5 +186,33 @@ func TestValidatePathImpl_SymlinkEscape(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "symlink escape") {
 		t.Fatalf("expected symlink escape error, got: %v", err)
+	}
+}
+
+func TestValidatePathImpl_SimilarPrefixDir(t *testing.T) {
+	tmpDir := t.TempDir()
+	siblingDir := tmpDir + "2"
+	if err := os.Mkdir(siblingDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(siblingDir) })
+
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+
+	testFile := filepath.Join(siblingDir, "secret.txt")
+	if err := os.WriteFile(testFile, []byte("secret"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = validatePathImpl(testFile)
+	if err == nil {
+		t.Fatal("expected path outside workspace to be rejected")
 	}
 }

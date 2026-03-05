@@ -7,6 +7,15 @@ import (
 	"strings"
 )
 
+// isSubPath は target が base ディレクトリ配下かどうか判定する
+// base="/work/proj" のとき target="/work/proj2" は false
+func isSubPath(target, base string) bool {
+	if target == base {
+		return true
+	}
+	return strings.HasPrefix(target, base+string(filepath.Separator))
+}
+
 // validatePathImpl はパストラバーサル攻撃を防ぐためにパスを検証（実装）
 func validatePathImpl(path string) (string, error) {
 	if path == "" {
@@ -33,7 +42,7 @@ func validatePathImpl(path string) (string, error) {
 
 	// Clean 前チェック
 	cleanPath := filepath.Clean(absPath)
-	if !strings.HasPrefix(cleanPath, allowedDir) {
+	if !isSubPath(cleanPath, allowedDir) {
 		return "", fmt.Errorf("path escape attempt detected: %s is outside of %s", cleanPath, allowedDir)
 	}
 
@@ -49,7 +58,7 @@ func validatePathImpl(path string) (string, error) {
 			realAllowed = allowedDir
 		}
 
-		if !strings.HasPrefix(realPath, realAllowed) {
+		if !isSubPath(realPath, realAllowed) {
 			return "", fmt.Errorf("symlink escape attempt detected: %s resolves to %s (outside %s)", cleanPath, realPath, realAllowed)
 		}
 		return realPath, nil
@@ -64,7 +73,7 @@ func validatePathImpl(path string) (string, error) {
 			if realAllowed == "" {
 				realAllowed = allowedDir
 			}
-			if !strings.HasPrefix(realParent, realAllowed) {
+			if !isSubPath(realParent, realAllowed) {
 				return "", fmt.Errorf("symlink escape attempt in parent directory: %s", parentDir)
 			}
 		}

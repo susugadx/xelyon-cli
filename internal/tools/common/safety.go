@@ -17,14 +17,14 @@ const (
 // ToolSafetyLevels は各ツールの安全性レベルを定義
 var ToolSafetyLevels = map[string]ToolSafety{
 	// SafetyHigh: 読み取り専用操作
-	"read_file":    SafetyHigh,
-	"read_files":   SafetyHigh,
-	"search_code":  SafetyHigh,
-	"list_dir":     SafetyHigh,
-	"git_status":   SafetyHigh,
-	"git_log":      SafetyHigh,
-	"git_diff":     SafetyHigh,
-	"ask_question": SafetyHigh,
+	"read_file":         SafetyHigh,
+	"read_files":        SafetyHigh,
+	"search_code":       SafetyHigh,
+	"list_dir":          SafetyHigh,
+	"git_status":        SafetyHigh,
+	"git_log":           SafetyHigh,
+	"git_diff":          SafetyHigh,
+	"ask_user_question": SafetyHigh,
 
 	// SafetyMedium: 外部APIコール（確認対象）
 	"web_search": SafetyMedium, // Serper APIにクエリ送信

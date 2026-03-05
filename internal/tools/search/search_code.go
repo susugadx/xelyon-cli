@@ -121,7 +121,7 @@ func executeSinglePattern(pattern string, opts SearchOptions) string {
 	maxCountPerFile := calcMaxCountPerFile(opts.TokenBudget)
 
 	// ripgrep 検索
-	output, useRipgrep, err := executeSearch(pattern, opts, maxCountPerFile)
+	output, useRipgrep, warnings, err := executeSearch(pattern, opts, maxCountPerFile)
 	if err != nil {
 		return fmt.Sprintf("Error: %v", err)
 	}
@@ -134,6 +134,9 @@ func executeSinglePattern(pattern string, opts SearchOptions) string {
 	}
 
 	if len(results) == 0 {
+		if len(warnings) > 0 {
+			return strings.Join(warnings, "\n") + "\nNo matches found"
+		}
 		return "No matches found"
 	}
 
@@ -156,6 +159,10 @@ func executeSinglePattern(pattern string, opts SearchOptions) string {
 	// キャッシュ保存
 	if tools.GlobalToolCache != nil {
 		tools.GlobalToolCache.SetSearch(pattern, cacheKey, formatted, collectFilePaths(results))
+	}
+
+	if len(warnings) > 0 {
+		return strings.Join(warnings, "\n") + "\n" + formatted
 	}
 
 	return formatted
@@ -192,6 +199,7 @@ type patternResult struct {
 	Index        int
 	TotalMatches int // truncate前の全マッチ数（バジェット比例配分に使用）
 	Error        string
+	Warnings     []string
 }
 
 // executeMultiplePatterns は複数パターンを goroutine 並列で検索する
@@ -207,9 +215,9 @@ func executeMultiplePatterns(patterns []string, opts SearchOptions) string {
 	for i, p := range patterns {
 		go func(idx int, pat string) {
 			// ripgrep 検索
-			output, useRg, searchErr := executeSearch(pat, opts, maxCountPerFile)
+			output, useRg, searchWarnings, searchErr := executeSearch(pat, opts, maxCountPerFile)
 			if searchErr != nil {
-				ch <- patternResult{Pattern: pat, Index: idx, Error: searchErr.Error()}
+				ch <- patternResult{Pattern: pat, Index: idx, Error: searchErr.Error(), Warnings: searchWarnings}
 				return
 			}
 			maxMatches := 200 / len(patterns)
@@ -232,7 +240,7 @@ func executeMultiplePatterns(patterns []string, opts SearchOptions) string {
 				totalMatches += r.MatchCount
 			}
 
-			ch <- patternResult{Pattern: pat, Results: results, Index: idx, TotalMatches: totalMatches}
+			ch <- patternResult{Pattern: pat, Results: results, Index: idx, TotalMatches: totalMatches, Warnings: searchWarnings}
 		}(i, p)
 	}
 
@@ -318,6 +326,24 @@ func dedupePaths(paths []string) []string {
 	return out
 }
 
+func fileTypeToGlob(fileType string) (string, bool) {
+	typeToGlob := map[string]string{
+		"go":    "*.go",
+		"py":    "*.py",
+		"js":    "*.js",
+		"ts":    "*.ts",
+		"rust":  "*.rs",
+		"java":  "*.java",
+		"c":     "*.c",
+		"cpp":   "*.cpp",
+		"rb":    "*.rb",
+		"php":   "*.php",
+		"swift": "*.swift",
+	}
+	glob, ok := typeToGlob[fileType]
+	return glob, ok
+}
+
 // calcMaxCountPerFile はトークンバジェットからファイルあたりのマッチ上限を計算する
 // 1マッチあたり平均 ~30 トークン（行 + コンテキスト + ブロック注釈）と見積もり
 func calcMaxCountPerFile(budget int) int {
@@ -333,7 +359,7 @@ func calcMaxCountPerFile(budget int) int {
 
 // executeSearch は rg（優先）または grep を実行し、出力と使用ツールを返す
 // maxCountPerFile はファイルあたりのマッチ上限（ripgrep --max-count に対応）
-func executeSearch(pattern string, opts SearchOptions, maxCountPerFile int) (string, bool, error) {
+func executeSearch(pattern string, opts SearchOptions, maxCountPerFile int) (string, bool, []string, error) {
 	// ripgrep を試行
 	if rgPath, err := exec.LookPath("rg"); err == nil {
 		args := []string{
@@ -366,13 +392,16 @@ func executeSearch(pattern string, opts SearchOptions, maxCountPerFile int) (str
 		cmd.Stderr = &stderr
 		_ = cmd.Run() // rg はマッチなしで exit 1 を返すのでエラーは無視
 		if stdout.Len() == 0 && stderr.Len() > 0 {
-			return "", true, fmt.Errorf("regex error: %s", strings.TrimSpace(stderr.String()))
+			return "", true, nil, fmt.Errorf("regex error: %s", strings.TrimSpace(stderr.String()))
 		}
-		return stdout.String(), true, nil
+		return stdout.String(), true, nil, nil
 	}
 
 	// grep フォールバック（rg がない環境用）
 	// Note: grep は .gitignore を参照しない。主要ディレクトリは --exclude-dir で除外。rg 推奨。
+	warnings := []string{
+		"Warning: ripgrep (rg) not found; using grep fallback mode.",
+	}
 	args := []string{
 		"-rn",
 		"-I",
@@ -387,8 +416,22 @@ func executeSearch(pattern string, opts SearchOptions, maxCountPerFile int) (str
 	} else {
 		args = append(args, "-F")
 	}
-	if opts.FilePattern != "" {
+
+	if opts.FileType != "" {
+		if glob, ok := fileTypeToGlob(opts.FileType); ok {
+			args = append(args, "--include="+glob)
+		} else {
+			warnings = append(warnings, fmt.Sprintf("Warning: file_type=%q is not supported in grep fallback mode (rg not found)", opts.FileType))
+			if opts.FilePattern != "" {
+				args = append(args, "--include="+opts.FilePattern)
+			}
+		}
+	} else if opts.FilePattern != "" {
 		args = append(args, "--include="+opts.FilePattern)
+	}
+
+	if opts.Multiline {
+		warnings = append(warnings, "Warning: multiline search is not supported in grep fallback mode (rg not found)")
 	}
 	if opts.CtxLines > 0 {
 		args = append(args, "-C", strconv.Itoa(opts.CtxLines))
@@ -404,9 +447,9 @@ func executeSearch(pattern string, opts SearchOptions, maxCountPerFile int) (str
 	cmd.Stderr = &stderr
 	_ = cmd.Run() // grep もマッチなしで exit 1
 	if stdout.Len() == 0 && stderr.Len() > 0 {
-		return "", false, fmt.Errorf("regex error: %s", strings.TrimSpace(stderr.String()))
+		return "", false, warnings, fmt.Errorf("regex error: %s", strings.TrimSpace(stderr.String()))
 	}
-	return stdout.String(), false, nil
+	return stdout.String(), false, warnings, nil
 }
 
 // --- rg --json パーサー ---
@@ -1127,6 +1170,12 @@ func formatMultiResults(collected []patternResult, tokenBudget int) string {
 	budgetPerPattern := tokenBudget / len(collected)
 	for i, pr := range collected {
 		fmt.Fprintf(&b, "━━ Pattern %d/%d: %q ━━\n", i+1, len(collected), pr.Pattern)
+		for _, w := range pr.Warnings {
+			fmt.Fprintf(&b, "%s\n", w)
+		}
+		if len(pr.Warnings) > 0 {
+			b.WriteString("\n")
+		}
 		if pr.Error != "" {
 			fmt.Fprintf(&b, "⚠️ Error: %s\n\n", pr.Error)
 			continue

@@ -8,8 +8,21 @@ import (
 	"testing"
 )
 
+func chdirForListDirTest(t *testing.T, dir string) {
+	t.Helper()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+}
+
 func TestExecuteListDir_Success(t *testing.T) {
 	tmpDir := t.TempDir()
+	chdirForListDirTest(t, tmpDir)
 
 	if err := os.WriteFile(filepath.Join(tmpDir, "file1.txt"), []byte("content1"), 0644); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
@@ -39,6 +52,7 @@ func TestExecuteListDir_Success(t *testing.T) {
 
 func TestExecuteListDir_EmptyDirectory(t *testing.T) {
 	tmpDir := t.TempDir()
+	chdirForListDirTest(t, tmpDir)
 	output := ExecuteListDir(tmpDir, 1)
 
 	if !strings.Contains(output, tmpDir) {
@@ -48,6 +62,7 @@ func TestExecuteListDir_EmptyDirectory(t *testing.T) {
 
 func TestExecuteListDir_DirectoryNotFound(t *testing.T) {
 	tmpDir := t.TempDir()
+	chdirForListDirTest(t, tmpDir)
 	nonExistentDir := filepath.Join(tmpDir, "notexist")
 
 	output := ExecuteListDir(nonExistentDir, 1)
@@ -59,6 +74,7 @@ func TestExecuteListDir_DirectoryNotFound(t *testing.T) {
 
 func TestExecuteListDir_FileSizes(t *testing.T) {
 	tmpDir := t.TempDir()
+	chdirForListDirTest(t, tmpDir)
 
 	if err := os.WriteFile(filepath.Join(tmpDir, "small.txt"), []byte("small"), 0644); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
@@ -89,6 +105,7 @@ func TestExecuteListDir_RelativePath(t *testing.T) {
 
 func TestExecuteListDir_IgnoreDefaultDirs(t *testing.T) {
 	tmpDir := t.TempDir()
+	chdirForListDirTest(t, tmpDir)
 	if err := os.Mkdir(filepath.Join(tmpDir, "node_modules"), 0755); err != nil {
 		t.Fatalf("Failed to create ignored directory: %v", err)
 	}
@@ -107,6 +124,7 @@ func TestExecuteListDir_IgnoreDefaultDirs(t *testing.T) {
 
 func TestExecuteListDir_DepthTwoShowsChildren(t *testing.T) {
 	tmpDir := t.TempDir()
+	chdirForListDirTest(t, tmpDir)
 	if err := os.MkdirAll(filepath.Join(tmpDir, "a", "b"), 0755); err != nil {
 		t.Fatalf("Failed to create nested directory: %v", err)
 	}
@@ -128,6 +146,7 @@ func TestExecuteListDir_DepthTwoShowsChildren(t *testing.T) {
 
 func TestExecuteListDir_TruncatesEntries(t *testing.T) {
 	tmpDir := t.TempDir()
+	chdirForListDirTest(t, tmpDir)
 	for i := 0; i < 210; i++ {
 		name := filepath.Join(tmpDir, fmt.Sprintf("f%03d.txt", i))
 		if err := os.WriteFile(name, []byte("x"), 0644); err != nil {
@@ -143,6 +162,7 @@ func TestExecuteListDir_TruncatesEntries(t *testing.T) {
 
 func TestExecuteListDir_TreeConnectorWithIgnored(t *testing.T) {
 	tmpDir := t.TempDir()
+	chdirForListDirTest(t, tmpDir)
 	if err := os.WriteFile(filepath.Join(tmpDir, "aaa.txt"), []byte("x"), 0644); err != nil {
 		t.Fatalf("failed to create aaa.txt: %v", err)
 	}
@@ -159,5 +179,15 @@ func TestExecuteListDir_TreeConnectorWithIgnored(t *testing.T) {
 	output := ExecuteListDir(tmpDir, 1)
 	if !strings.Contains(output, "└── 📄 bbb.txt") {
 		t.Errorf("last visible entry should use └── connector, got:\n%s", output)
+	}
+}
+
+func TestExecuteListDir_RejectsOutsideWorkspace(t *testing.T) {
+	tmpDir := t.TempDir()
+	chdirForListDirTest(t, tmpDir)
+
+	output := ExecuteListDir("/etc", 1)
+	if !strings.Contains(output, "Error") {
+		t.Errorf("expected error for path outside workspace, got: %s", output)
 	}
 }
