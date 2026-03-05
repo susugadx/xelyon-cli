@@ -154,8 +154,9 @@ IMPORTANT: Do NOT write the file until the user approves.`, strings.TrimSpace(de
 	}
 	success = true
 
-	common.Green.Printf("✅ Written: %s\n", path)
-	msg := fmt.Sprintf("Successfully wrote %d bytes to %s", len(content), path)
+	lineCount := strings.Count(content, "\n") + 1
+	common.Green.Printf("✅ Written: %s (%d lines)\n", path, lineCount)
+	msg := fmt.Sprintf("Successfully wrote %d bytes (%d lines) to %s", len(content), lineCount, path)
 	msg += lsp.GetDiagnosticsSummary(absPath)
 	return msg, nil
 }

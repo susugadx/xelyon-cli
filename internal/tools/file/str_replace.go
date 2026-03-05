@@ -91,10 +91,26 @@ func ExecuteStrReplace(path, oldStr, newStr, startLineStr, endLineStr string) (s
 		newContent = strings.Join(newLines, "\n")
 
 		if newStr != "" {
-			prefixContent := strings.Join(lines[:startLine-1], "\n")
-			suffixContent := strings.Join(lines[endLine:], "\n")
-			if strings.Contains(prefixContent, newStr) || strings.Contains(suffixContent, newStr) {
-				common.Yellow.Println("⚠️  Warning: new_str already exists outside the target range (possible duplication)")
+			nearbyStart := startLine - 10
+			if nearbyStart < 1 {
+				nearbyStart = 1
+			}
+			nearbyEnd := endLine + 10
+			if nearbyEnd > len(lines) {
+				nearbyEnd = len(lines)
+			}
+
+			beforeContent := ""
+			if nearbyStart < startLine {
+				beforeContent = strings.Join(lines[nearbyStart-1:startLine-1], "\n")
+			}
+			afterContent := ""
+			if endLine < nearbyEnd {
+				afterContent = strings.Join(lines[endLine:nearbyEnd], "\n")
+			}
+
+			if strings.Contains(beforeContent, newStr) || strings.Contains(afterContent, newStr) {
+				common.Yellow.Println("⚠️  Warning: new_str already exists near the target range (±10 lines, possible duplication)")
 			}
 		}
 
@@ -300,8 +316,29 @@ Do not retry the same replacement.`, path), nil
 		}
 		ui.ShowColoredDiff(oldStr, newStr, opts)
 	}
-	if newStr != "" && strings.Contains(oldContent, newStr) {
-		common.Yellow.Println("⚠️  Warning: new_str already exists in file (possible duplication)")
+	if newStr != "" && matchStartLine > 0 {
+		nearbyStart := matchStartLine - 10
+		if nearbyStart < 1 {
+			nearbyStart = 1
+		}
+		nearbyEnd := matchEndLine + 10
+		allLines := strings.Split(oldContent, "\n")
+		if nearbyEnd > len(allLines) {
+			nearbyEnd = len(allLines)
+		}
+
+		beforeContent := ""
+		if nearbyStart < matchStartLine {
+			beforeContent = strings.Join(allLines[nearbyStart-1:matchStartLine-1], "\n")
+		}
+		afterContent := ""
+		if matchEndLine < nearbyEnd {
+			afterContent = strings.Join(allLines[matchEndLine:nearbyEnd], "\n")
+		}
+
+		if strings.Contains(beforeContent, newStr) || strings.Contains(afterContent, newStr) {
+			common.Yellow.Println("⚠️  Warning: new_str already exists near the replacement (±10 lines, possible duplication)")
+		}
 	}
 
 	dec2 := common.ConfirmWithAutoApproveDecision("str_replace", "Apply this replacement? / この置換を適用しますか？")

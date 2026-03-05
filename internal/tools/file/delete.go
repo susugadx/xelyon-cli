@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/lsp"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 	toolslsp "github.com/susugadx/xelyon-cli/internal/tools/lsp"
@@ -53,6 +54,8 @@ func ExecuteDeleteFile(path string) (string, error) {
 				}
 			}
 		}
+	} else {
+		common.Yellow.Println("ℹ️  LSP not connected — external reference check skipped")
 	}
 
 	// 確認UI表示（ファイルプレビュー付き）
@@ -64,17 +67,22 @@ func ExecuteDeleteFile(path string) (string, error) {
 	common.Red.Println("⚠️  DESTRUCTIVE: File will be permanently deleted!")
 	common.Red.Println("⚠️  破壊的操作: ファイルは完全に削除されます!")
 
-	// ファイルプレビュー（最初20行）
-	common.Yellow.Println("\nFile preview (first 20 lines) / ファイルプレビュー:")
-	previewLines := 20
-	if len(lines) < previewLines {
-		previewLines = len(lines)
+	cfg := config.GetGlobalConfig()
+	maxPreviewLines := cfg.Diff.MaxTotalLines
+	if maxPreviewLines <= 0 {
+		maxPreviewLines = len(lines)
 	}
-	for i := 0; i < previewLines; i++ {
+
+	if len(lines) > maxPreviewLines {
+		common.Yellow.Printf("\nFile preview (first %d of %d lines) / ファイルプレビュー:\n", maxPreviewLines, len(lines))
+	} else {
+		common.Yellow.Printf("\nFile contents (%d lines) / ファイル内容:\n", len(lines))
+	}
+	for i := 0; i < len(lines) && i < maxPreviewLines; i++ {
 		fmt.Printf("  %4d: %s\n", i+1, lines[i])
 	}
-	if len(lines) > 20 {
-		common.Yellow.Printf("  ... (%d more lines)\n", len(lines)-20)
+	if len(lines) > maxPreviewLines {
+		common.Yellow.Printf("  ... (%d more lines)\n", len(lines)-maxPreviewLines)
 	}
 
 	// 外部参照の警告表示

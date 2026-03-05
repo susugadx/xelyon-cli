@@ -1,6 +1,7 @@
 package file
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -144,7 +145,7 @@ func TestExecuteStrReplace_LineRangeReplacement_Success(t *testing.T) {
 	testutil.AssertFileContent(t, filepath.Join(tmpDir, "test.txt"), "a\nX\nY\ne")
 }
 
-func TestExecuteStrReplace_StringReplace_WarnsOnDuplicateNewStr(t *testing.T) {
+func TestExecuteStrReplace_DuplicateWarningForNearbyMatch(t *testing.T) {
 	setupTestMocks(t)
 	setupTestConfirm(t, true)
 
@@ -165,7 +166,7 @@ func TestExecuteStrReplace_StringReplace_WarnsOnDuplicateNewStr(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ExecuteStrReplace failed: %v", err)
 	}
-	if !strings.Contains(buf.String(), "Warning: new_str already exists in file") {
+	if !strings.Contains(buf.String(), "Warning: new_str already exists near the replacement") {
 		t.Errorf("Expected warning output, got: %s", buf.String())
 	}
 	if !strings.Contains(replaceOutput, "Successfully replaced") {
@@ -202,7 +203,7 @@ func TestExecuteStrReplace_StringReplace_NoWarningWhenUnique(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ExecuteStrReplace failed: %v", err)
 	}
-	if strings.Contains(output.String(), "Warning: new_str already exists in file") {
+	if strings.Contains(output.String(), "Warning: new_str already exists near the replacement") {
 		t.Errorf("Did not expect warning output, got: %s", output.String())
 	}
 	if !strings.Contains(replaceOutput, "Successfully replaced") {
@@ -211,7 +212,7 @@ func TestExecuteStrReplace_StringReplace_NoWarningWhenUnique(t *testing.T) {
 	testutil.AssertFileContent(t, testFile, "NEWVALUE\nEXISTING\nomega")
 }
 
-func TestExecuteStrReplace_LineRange_WarnsOnDuplicateOutsideRange(t *testing.T) {
+func TestExecuteStrReplace_LineRange_WarnsOnDuplicateNearby(t *testing.T) {
 	setupTestMocks(t)
 	setupTestConfirm(t, true)
 
@@ -232,7 +233,7 @@ func TestExecuteStrReplace_LineRange_WarnsOnDuplicateOutsideRange(t *testing.T) 
 	if err != nil {
 		t.Fatalf("ExecuteStrReplace failed: %v", err)
 	}
-	if !strings.Contains(buf.String(), "Warning: new_str already exists outside the target range") {
+	if !strings.Contains(buf.String(), "Warning: new_str already exists near the target range") {
 		t.Errorf("Expected warning output, got: %s", buf.String())
 	}
 	if !strings.Contains(replaceOutput, "Successfully replaced lines 2-3") {
@@ -269,13 +270,45 @@ func TestExecuteStrReplace_LineRange_NoWarningWhenUniqueOutsideRange(t *testing.
 	if err != nil {
 		t.Fatalf("ExecuteStrReplace failed: %v", err)
 	}
-	if strings.Contains(output.String(), "Warning: new_str already exists outside the target range") {
+	if strings.Contains(output.String(), "Warning: new_str already exists near the target range") {
 		t.Errorf("Did not expect warning output, got: %s", output.String())
 	}
 	if !strings.Contains(replaceOutput, "Successfully replaced lines 2-3") {
 		t.Errorf("Expected success message, got: %s", replaceOutput)
 	}
 	testutil.AssertFileContent(t, testFile, "keep\nNEWLINE\nkeep")
+}
+
+func TestExecuteStrReplace_NoDuplicateWarningForDistantMatch(t *testing.T) {
+	setupTestMocks(t)
+	setupTestConfirm(t, true)
+
+	var buf strings.Builder
+	oldOut := color.Output
+	color.Output = &buf
+	t.Cleanup(func() {
+		color.Output = oldOut
+	})
+
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test.txt")
+	lines := []string{"TARGET"}
+	for i := 0; i < 20; i++ {
+		lines = append(lines, fmt.Sprintf("middle-%d", i))
+	}
+	lines = append(lines, "EXISTING")
+	testutil.CreateTempFile(t, tmpDir, "test.txt", strings.Join(lines, "\n"))
+
+	result, err := ExecuteStrReplace(testFile, "TARGET", "EXISTING", "", "")
+	if err != nil {
+		t.Fatalf("ExecuteStrReplace failed: %v", err)
+	}
+	if strings.Contains(buf.String(), "Warning: new_str already exists near the replacement") {
+		t.Fatalf("did not expect nearby warning, got: %s", buf.String())
+	}
+	if !strings.Contains(result, "Successfully replaced") {
+		t.Fatalf("expected success message, got: %s", result)
+	}
 }
 
 func TestParseLineRange(t *testing.T) {

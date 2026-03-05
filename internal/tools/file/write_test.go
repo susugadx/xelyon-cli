@@ -148,3 +148,18 @@ func TestExecuteWriteFile_AtomicWriteNoTempFileLeft(t *testing.T) {
 		}
 	}
 }
+
+func TestExecuteWriteFile_SuccessMessageIncludesLineCount(t *testing.T) {
+	setupTestMocks(t)
+
+	tmpDir := t.TempDir()
+	file := filepath.Join(tmpDir, "test.txt")
+
+	result, err := ExecuteWriteFile(file, "line1\nline2\nline3")
+	if err != nil {
+		t.Fatalf("ExecuteWriteFile failed: %v", err)
+	}
+	if !strings.Contains(result, "3 lines") {
+		t.Fatalf("expected line count in result, got: %s", result)
+	}
+}

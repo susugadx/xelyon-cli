@@ -17,10 +17,7 @@ func ShowImprovedDiff(oldStr, newStr string) {
 		ContextLines:  cfg.Diff.ContextLines,
 		ShowLineNums:  true,
 		InlineMode:    true,
-		MaxTotalLines: 50,
-	}
-	if opts.ContextLines == 0 {
-		opts.MaxTotalLines = 0 // 無制限
+		MaxTotalLines: cfg.Diff.MaxTotalLines,
 	}
 
 	ui.ShowColoredDiff(oldStr, newStr, opts)
@@ -35,10 +32,7 @@ func ShowDiff(old, new, filename string) {
 		ContextLines:  cfg.Diff.ContextLines,
 		ShowLineNums:  true,
 		InlineMode:    true,
-		MaxTotalLines: 50,
-	}
-	if opts.ContextLines == 0 {
-		opts.MaxTotalLines = 0
+		MaxTotalLines: cfg.Diff.MaxTotalLines,
 	}
 
 	ui.ShowColoredDiff(old, new, opts)
@@ -46,14 +40,17 @@ func ShowDiff(old, new, filename string) {
 
 // ShowPreview は新規ファイルのプレビューを表示
 func ShowPreview(content string) {
+	cfg := config.GetGlobalConfig()
+	maxLines := cfg.Diff.MaxTotalLines
+
 	fmt.Println(strings.Repeat("-", 50))
 	lines := strings.Split(content, "\n")
 	for i, line := range lines {
-		if i >= 20 {
-			Yellow.Printf("... (%d more lines)\n", len(lines)-20)
+		if maxLines > 0 && i >= maxLines {
+			Yellow.Printf("... (%d more lines)\n", len(lines)-i)
 			break
 		}
-		fmt.Println(line)
+		fmt.Printf("%4d: %s\n", i+1, line)
 	}
 	fmt.Println(strings.Repeat("-", 50))
 }
