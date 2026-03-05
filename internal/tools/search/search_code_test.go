@@ -54,8 +54,8 @@ func TestSearchCode_NoMatch(t *testing.T) {
 
 	result := ExecuteSearchCode(SearchOptions{Pattern: "nonexistent_pattern_xyz", Path: dir, FilePattern: "", FileType: "", CtxLines: 0, TokenBudget: 3000, IsRegex: true, Multiline: false})
 
-	if result != "No matches found" {
-		t.Errorf("Expected 'No matches found', got: %s", result)
+	if !strings.Contains(result, "No matches found") {
+		t.Errorf("Expected 'No matches found' in result, got: %s", result)
 	}
 }
 

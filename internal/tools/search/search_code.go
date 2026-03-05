@@ -135,6 +135,7 @@ func executeSinglePattern(pattern string, opts SearchOptions) string {
 	} else {
 		results = parseGrepOutput(output, 200)
 	}
+	results = filterResultsByOptions(results, opts)
 
 	if len(results) == 0 {
 		if len(warnings) > 0 {
@@ -158,17 +159,17 @@ func executeSinglePattern(pattern string, opts SearchOptions) string {
 
 	// 出力フォーマット
 	formatted := formatSearchResults(results, truncated, opts.TokenBudget)
+	finalOutput := formatted
+	if len(warnings) > 0 {
+		finalOutput = strings.Join(warnings, "\n") + "\n" + formatted
+	}
 
 	// キャッシュ保存
 	if tools.GlobalToolCache != nil {
-		tools.GlobalToolCache.SetSearch(pattern, cacheKey, formatted, collectFilePaths(results))
+		tools.GlobalToolCache.SetSearch(pattern, cacheKey, finalOutput, collectFilePaths(results))
 	}
 
-	if len(warnings) > 0 {
-		return strings.Join(warnings, "\n") + "\n" + formatted
-	}
-
-	return formatted
+	return finalOutput
 }
 
 const escapedCommaPlaceholder = "\x00COMMA\x00"
@@ -233,6 +234,7 @@ func executeMultiplePatterns(patterns []string, opts SearchOptions) string {
 			} else {
 				results = parseGrepOutput(output, maxMatches)
 			}
+			results = filterResultsByOptions(results, opts)
 			results = mergeContextLines(results)
 			results = adaptiveContextTrim(results)
 			sortResultsByPriority(results)
@@ -327,6 +329,42 @@ func dedupePaths(paths []string) []string {
 		out = append(out, p)
 	}
 	return out
+}
+
+func filterResultsByOptions(results []SearchResult, opts SearchOptions) []SearchResult {
+	if opts.FileType == "" && opts.FilePattern == "" {
+		return results
+	}
+
+	var filtered []SearchResult
+	for _, result := range results {
+		if matchesSearchFileFilter(result.FilePath, opts) {
+			filtered = append(filtered, result)
+		}
+	}
+	return filtered
+}
+
+func matchesSearchFileFilter(filePath string, opts SearchOptions) bool {
+	glob := opts.FilePattern
+	if opts.FileType != "" {
+		if typeGlob, ok := fileTypeToGlob(opts.FileType); ok {
+			glob = typeGlob
+		}
+	}
+	if glob == "" {
+		return true
+	}
+
+	cleanPath := filepath.ToSlash(filePath)
+	base := filepath.Base(cleanPath)
+	if matched, err := filepath.Match(glob, base); err == nil && matched {
+		return true
+	}
+	if matched, err := filepath.Match(glob, cleanPath); err == nil && matched {
+		return true
+	}
+	return false
 }
 
 func fileTypeToGlob(fileType string) (string, bool) {
