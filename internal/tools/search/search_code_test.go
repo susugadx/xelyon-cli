@@ -26,7 +26,7 @@ func TestSearchCode_BasicMatch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result := ExecuteSearchCode("hello", dir, "*.go", "0", "3000")
+	result := ExecuteSearchCode(SearchOptions{Pattern: "hello", Path: dir, FilePattern: "*.go", CtxLines: 0, TokenBudget: 3000, IsRegex: true, Multiline: false})
 
 	if strings.Contains(result, "No matches found") {
 		t.Error("Expected matches but got 'No matches found'")
@@ -52,7 +52,7 @@ func TestSearchCode_NoMatch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result := ExecuteSearchCode("nonexistent_pattern_xyz", dir, "", "0", "3000")
+	result := ExecuteSearchCode(SearchOptions{Pattern: "nonexistent_pattern_xyz", Path: dir, FilePattern: "", FileType: "", CtxLines: 0, TokenBudget: 3000, IsRegex: true, Multiline: false})
 
 	if result != "No matches found" {
 		t.Errorf("Expected 'No matches found', got: %s", result)
@@ -62,7 +62,7 @@ func TestSearchCode_NoMatch(t *testing.T) {
 func TestSearchCode_EmptyPattern(t *testing.T) {
 	setupSearchTestMocks(t)
 
-	result := ExecuteSearchCode("", ".", "", "", "")
+	result := ExecuteSearchCode(SearchOptions{Pattern: "", Path: ".", FilePattern: "", FileType: "", IsRegex: true, Multiline: false})
 
 	if !strings.Contains(result, "Error") {
 		t.Errorf("Expected error for empty pattern, got: %s", result)
@@ -82,7 +82,7 @@ func TestSearchCode_FilePattern(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result := ExecuteSearchCode("target", dir, "*.go", "0", "3000")
+	result := ExecuteSearchCode(SearchOptions{Pattern: "target", Path: dir, FilePattern: "*.go", FileType: "", CtxLines: 0, TokenBudget: 3000, IsRegex: true, Multiline: false})
 
 	if strings.Contains(result, "No matches found") {
 		t.Error("Expected matches")
@@ -106,7 +106,7 @@ func TestSearchCode_ContextLines(t *testing.T) {
 	}
 
 	// context_lines=0: コンテキスト行なし
-	result := ExecuteSearchCode("target_match", dir, "", "0", "3000")
+	result := ExecuteSearchCode(SearchOptions{Pattern: "target_match", Path: dir, FilePattern: "", FileType: "", CtxLines: 0, TokenBudget: 3000, IsRegex: true, Multiline: false})
 
 	if strings.Contains(result, "No matches found") {
 		t.Error("Expected matches")
@@ -146,7 +146,7 @@ func TestSearchCode_TokenBudget(t *testing.T) {
 	}
 
 	// context_lines=3 + 小バジェット → 確実に打ち切り
-	result := ExecuteSearchCode("target_budget_check", dir, "", "3", "500")
+	result := ExecuteSearchCode(SearchOptions{Pattern: "target_budget_check", Path: dir, FilePattern: "", FileType: "", CtxLines: 3, TokenBudget: 500, IsRegex: true, Multiline: false})
 
 	if strings.Contains(result, "No matches found") {
 		t.Error("Expected matches")
@@ -156,7 +156,7 @@ func TestSearchCode_TokenBudget(t *testing.T) {
 	}
 
 	// longLine が切り詰められていることを確認
-	longResult := ExecuteSearchCode("long_target_budget_check", dir, "", "0", "3000")
+	longResult := ExecuteSearchCode(SearchOptions{Pattern: "long_target_budget_check", Path: dir, FilePattern: "", FileType: "", CtxLines: 0, TokenBudget: 3000, IsRegex: true, Multiline: false})
 	if !strings.Contains(longResult, "...") {
 		t.Error("Expected long line to be truncated with ...")
 	}
@@ -166,7 +166,7 @@ func TestSearchCode_TokenBudget(t *testing.T) {
 	}
 
 	// 日本語行の検索が正常に行われ、バジェット内に収まるか
-	jpResult := ExecuteSearchCode("target_budget_check あ", dir, "", "0", "3000")
+	jpResult := ExecuteSearchCode(SearchOptions{Pattern: "target_budget_check あ", Path: dir, FilePattern: "", FileType: "", CtxLines: 0, TokenBudget: 3000, IsRegex: true, Multiline: false})
 	if !strings.Contains(jpResult, "target_budget_check") {
 		t.Error("Expected japanese comment to be searchable and displayed")
 	}
@@ -183,7 +183,7 @@ func TestSearchCode_MergeOverlappingContext(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result := ExecuteSearchCode("match_", dir, "", "3", "3000")
+	result := ExecuteSearchCode(SearchOptions{Pattern: "match_", Path: dir, FilePattern: "", FileType: "", CtxLines: 3, TokenBudget: 3000, IsRegex: true, Multiline: false})
 
 	if strings.Contains(result, "No matches found") {
 		t.Error("Expected matches")
@@ -341,7 +341,7 @@ func TestSearchCode_CacheHitAfterSearch(t *testing.T) {
 	})
 
 	// 1回目の検索
-	result1 := ExecuteSearchCode("cached_target", dir, "", "0", "3000")
+	result1 := ExecuteSearchCode(SearchOptions{Pattern: "cached_target", Path: dir, FilePattern: "", FileType: "", CtxLines: 0, TokenBudget: 3000, IsRegex: true, Multiline: false})
 	if strings.Contains(result1, "No matches found") {
 		t.Fatal("Expected matches on first search")
 	}
@@ -353,7 +353,7 @@ func TestSearchCode_CacheHitAfterSearch(t *testing.T) {
 
 	// 2回目の検索 — キャッシュヒット
 	getCalls := cache.getCalls
-	result2 := ExecuteSearchCode("cached_target", dir, "", "0", "3000")
+	result2 := ExecuteSearchCode(SearchOptions{Pattern: "cached_target", Path: dir, FilePattern: "", FileType: "", CtxLines: 0, TokenBudget: 3000, IsRegex: true, Multiline: false})
 
 	if cache.getCalls <= getCalls {
 		t.Error("Expected GetSearch to be called on second search")
@@ -382,13 +382,13 @@ func TestSearchCode_CacheDifferentParams(t *testing.T) {
 	})
 
 	// context_lines=0 で検索
-	result0 := ExecuteSearchCode("target_param_check", dir, "", "0", "3000")
+	result0 := ExecuteSearchCode(SearchOptions{Pattern: "target_param_check", Path: dir, FilePattern: "", FileType: "", CtxLines: 0, TokenBudget: 3000, IsRegex: true, Multiline: false})
 	if strings.Contains(result0, "No matches found") {
 		t.Fatal("Expected matches with context_lines=0")
 	}
 
 	// context_lines=3 で検索 — キャッシュキーが異なるため別結果が返るべき
-	result3 := ExecuteSearchCode("target_param_check", dir, "", "3", "3000")
+	result3 := ExecuteSearchCode(SearchOptions{Pattern: "target_param_check", Path: dir, FilePattern: "", FileType: "", CtxLines: 3, TokenBudget: 3000, IsRegex: true, Multiline: false})
 	if strings.Contains(result3, "No matches found") {
 		t.Fatal("Expected matches with context_lines=3")
 	}
@@ -426,7 +426,7 @@ func (c *testSearchCache) GetSearch(pattern, path string) (string, bool) {
 	return "", false
 }
 
-func (c *testSearchCache) SetSearch(pattern, path, result string) {
+func (c *testSearchCache) SetSearch(pattern, path, result string, affectedFiles []string) {
 	c.setCalls++
 	key := pattern + "|" + path
 	c.data[key] = result
@@ -573,7 +573,7 @@ func TestExecuteSearchCode_MultiplePatterns(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result := ExecuteSearchCode("func_a,func_b", dir, "*.go", "0", "3000")
+	result := ExecuteSearchCode(SearchOptions{Pattern: "func_a,func_b", Path: dir, FilePattern: "*.go", FileType: "", CtxLines: 0, TokenBudget: 3000, IsRegex: true, Multiline: false})
 
 	// 複数パターンヘッダー
 	if !strings.Contains(result, "patterns") {
@@ -605,7 +605,7 @@ func TestExecuteSearchCode_MultiplePatterns_PartialMatch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result := ExecuteSearchCode("existing_func,nonexistent_xyz_pattern", dir, "*.go", "0", "3000")
+	result := ExecuteSearchCode(SearchOptions{Pattern: "existing_func,nonexistent_xyz_pattern", Path: dir, FilePattern: "*.go", FileType: "", CtxLines: 0, TokenBudget: 3000, IsRegex: true, Multiline: false})
 
 	// マッチしたパターンの結果が含まれる
 	if !strings.Contains(result, "existing_func") {
@@ -690,7 +690,7 @@ func TestSearchCode_ResultRanking(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result := ExecuteSearchCode("target", dir, "*.go", "0", "3000")
+	result := ExecuteSearchCode(SearchOptions{Pattern: "target", Path: dir, FilePattern: "*.go", FileType: "", CtxLines: 0, TokenBudget: 3000, IsRegex: true, Multiline: false})
 
 	if strings.Contains(result, "No matches found") {
 		t.Error("Expected matches")
@@ -813,7 +813,7 @@ func cleanup() {
 		t.Fatal(err)
 	}
 
-	result := ExecuteSearchCode("target_var", dir, "*.go", "0", "3000")
+	result := ExecuteSearchCode(SearchOptions{Pattern: "target_var", Path: dir, FilePattern: "*.go", FileType: "", CtxLines: 0, TokenBudget: 3000, IsRegex: true, Multiline: false})
 
 	if strings.Contains(result, "No matches found") {
 		t.Error("Expected matches")
@@ -900,7 +900,7 @@ func TestSearchCode_InvalidRegex(t *testing.T) {
 	}
 
 	// 不正な regex パターン（閉じ括弧なし）
-	result := ExecuteSearchCode("func(", dir, "", "0", "3000")
+	result := ExecuteSearchCode(SearchOptions{Pattern: "func(", Path: dir, FilePattern: "", FileType: "", CtxLines: 0, TokenBudget: 3000, IsRegex: true, Multiline: false})
 
 	if result == "No matches found" {
 		t.Error("Invalid regex should NOT return 'No matches found' — should return error message")
@@ -948,6 +948,44 @@ func TestTruncateLine(t *testing.T) {
 	}
 }
 
+func TestSearchCode_FileTypePreferred(t *testing.T) {
+	setupSearchTestMocks(t)
+
+	dir := t.TempDir()
+	goFile := filepath.Join(dir, "typed.go")
+	jsFile := filepath.Join(dir, "typed.js")
+	if err := os.WriteFile(goFile, []byte("func typedTarget() {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(jsFile, []byte("function typedTarget() {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	result := ExecuteSearchCode(SearchOptions{Pattern: "typedTarget", Path: dir, FilePattern: "*.js", FileType: "go", CtxLines: 0, TokenBudget: 3000, IsRegex: true, Multiline: false})
+	if !strings.Contains(result, "typed.go") {
+		t.Fatalf("expected go file in result, got: %s", result)
+	}
+	if strings.Contains(result, "typed.js") {
+		t.Fatalf("file_type should take precedence over file_pattern, got: %s", result)
+	}
+}
+
+func TestSearchCode_FixedStrings(t *testing.T) {
+	setupSearchTestMocks(t)
+
+	dir := t.TempDir()
+	file1 := filepath.Join(dir, "fixed.go")
+	if err := os.WriteFile(file1, []byte("var name = \"a+b\"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// regex としては '+' が特殊文字だが、固定文字列検索ならマッチする
+	result := ExecuteSearchCode(SearchOptions{Pattern: "a+b", Path: dir, FilePattern: "*.go", FileType: "", CtxLines: 0, TokenBudget: 3000, IsRegex: false, Multiline: false})
+	if strings.Contains(result, "No matches found") || !strings.Contains(result, "a+b") {
+		t.Fatalf("expected literal match with is_regex=false, got: %s", result)
+	}
+}
+
 func TestEstimateTokens(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -978,5 +1016,16 @@ func TestEstimateTokens(t *testing.T) {
 				t.Errorf("estimateTokens(%q) = %d, expected %d", tt.line, result, tt.expected)
 			}
 		})
+	}
+}
+
+func TestFormatMultiResults_WithPatternError(t *testing.T) {
+	collected := []patternResult{
+		{Pattern: "ok", Results: []SearchResult{{FilePath: "a.go", MatchCount: 1, Matches: []Match{{LineNum: 1, Line: "ok", IsMatch: true, Type: MatchTypeUsage}}}}},
+		{Pattern: "bad", Error: "regex error"},
+	}
+	out := formatMultiResults(collected, 3000)
+	if !strings.Contains(out, "⚠️ Error: regex error") {
+		t.Fatalf("expected pattern error to be shown, got: %s", out)
 	}
 }

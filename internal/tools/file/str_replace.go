@@ -46,6 +46,7 @@ func ExecuteStrReplace(path, oldStr, newStr, startLineStr, endLineStr string) (s
 
 	oldContent := string(contentBytes)
 	var newContent string
+	usedNormalizedMatch := false
 
 	// ==============================
 	// 1) Line range replacement mode
@@ -225,6 +226,7 @@ Do not retry the same replacement.`, path), nil
 
 		actualOldStr := oldContent[startIdxNormalized : endIdx+1]
 		newContent = oldContent[:startIdxNormalized] + newStr + oldContent[endIdx+1:]
+		usedNormalizedMatch = true
 
 		common.Yellow.Printf("ℹ️  Matched with normalized whitespace (indentation may differ)\n")
 		common.Yellow.Printf("   Actual match in file:\n")
@@ -326,6 +328,9 @@ Do not retry the same replacement.`, path), nil
 	}
 
 	common.Green.Printf("✅ Replaced in: %s\n", path)
+	if usedNormalizedMatch {
+		return fmt.Sprintf("Successfully replaced text in %s (used normalized whitespace matching)", path), nil
+	}
 	return fmt.Sprintf("Successfully replaced text in %s", path), nil
 }
 

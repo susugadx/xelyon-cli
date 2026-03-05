@@ -37,7 +37,7 @@ type ToolCacheInterface interface {
 	GetSearch(pattern, path string) (string, bool)
 
 	// SetSearch は検索結果をキャッシュに保存
-	SetSearch(pattern, path, result string)
+	SetSearch(pattern, path, result string, affectedFiles []string)
 
 	// ClearSearchCache は検索キャッシュをクリア
 	// ファイル変更系ツール実行時に呼ばれる

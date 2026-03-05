@@ -222,7 +222,8 @@ func (t *ListDirTool) Parameters() map[string]interface{} {
 	return map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
-			"path": map[string]interface{}{"type": "string", "description": "Directory path to list"},
+			"path":  map[string]interface{}{"type": "string", "description": "Directory path to list"},
+			"depth": map[string]interface{}{"type": "integer", "description": "Recursion depth (default: 1, max: 3)"},
 		},
 		"required":             []string{"path"},
 		"additionalProperties": false,
@@ -230,7 +231,13 @@ func (t *ListDirTool) Parameters() map[string]interface{} {
 }
 
 func (t *ListDirTool) Run(args map[string]string) (string, *tools.FileChange, error) {
-	return ExecuteListDir(args["path"]), nil, nil
+	depth := 1
+	if args["depth"] != "" {
+		if n, err := strconv.Atoi(args["depth"]); err == nil {
+			depth = n
+		}
+	}
+	return ExecuteListDir(args["path"], depth), nil, nil
 }
 
 // RegisterTools registers all file tools to the given registry

@@ -2,7 +2,7 @@ package agent
 
 import (
 	"os"
-	"strings"
+	"sort"
 	"sync"
 	"time"
 
@@ -20,12 +20,20 @@ type ToolCache struct {
 
 // cacheEntry はキャッシュエントリ
 type cacheEntry struct {
-	Content string
-	ModTime time.Time
+	Content       string
+	ModTime       time.Time
+	AccessedAt    time.Time
+	AffectedFiles []string // 検索キャッシュのみ使用
 }
 
 // MaxFileCacheSize はキャッシュする最大ファイルサイズ (1MB)
 const MaxFileCacheSize = 1024 * 1024
+
+const (
+	MaxFileCacheEntries   = 100
+	MaxDirCacheEntries    = 50
+	MaxSearchCacheEntries = 50
+)
 
 // NewToolCache は新しい ToolCache を作成
 func NewToolCache() *ToolCache {
@@ -61,6 +69,10 @@ func (c *ToolCache) GetFile(path string) (string, bool) {
 	}
 
 	green.Printf("📦 Cache hit: %s\n", path)
+	c.mu.Lock()
+	entry.AccessedAt = time.Now()
+	c.files[path] = entry
+	c.mu.Unlock()
 	return entry.Content, true
 }
 
@@ -80,9 +92,11 @@ func (c *ToolCache) SetFile(path, content string) {
 	defer c.mu.Unlock()
 
 	c.files[path] = cacheEntry{
-		Content: content,
-		ModTime: info.ModTime(),
+		Content:    content,
+		ModTime:    info.ModTime(),
+		AccessedAt: time.Now(),
 	}
+	pruneOldestEntries(c.files, MaxFileCacheEntries)
 }
 
 // GetDir はディレクトリ一覧のキャッシュを取得
@@ -109,6 +123,10 @@ func (c *ToolCache) GetDir(path string) (string, bool) {
 	}
 
 	green.Printf("📦 Cache hit: %s\n", path)
+	c.mu.Lock()
+	entry.AccessedAt = time.Now()
+	c.dirs[path] = entry
+	c.mu.Unlock()
 	return entry.Content, true
 }
 
@@ -123,9 +141,11 @@ func (c *ToolCache) SetDir(path, result string) {
 	defer c.mu.Unlock()
 
 	c.dirs[path] = cacheEntry{
-		Content: result,
-		ModTime: info.ModTime(),
+		Content:    result,
+		ModTime:    info.ModTime(),
+		AccessedAt: time.Now(),
 	}
+	pruneOldestEntries(c.dirs, MaxDirCacheEntries)
 }
 
 // InvalidateFile は指定ファイルのキャッシュを無効化
@@ -169,20 +189,27 @@ func (c *ToolCache) GetSearch(pattern, path string) (string, bool) {
 	}
 
 	green.Printf("📦 Cache hit: search(%s, %s)\n", pattern, path)
+	c.mu.Lock()
+	entry.AccessedAt = time.Now()
+	c.searches[key] = entry
+	c.mu.Unlock()
 	return entry.Content, true
 }
 
 // SetSearch は検索結果をキャッシュに保存
-func (c *ToolCache) SetSearch(pattern, path, result string) {
+func (c *ToolCache) SetSearch(pattern, path, result string, affectedFiles []string) {
 	key := searchCacheKey(pattern, path)
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	c.searches[key] = cacheEntry{
-		Content: result,
+		Content:       result,
+		AccessedAt:    time.Now(),
+		AffectedFiles: append([]string(nil), affectedFiles...),
 		// 検索キャッシュはmtimeチェック不要（全クリア方式）
 	}
+	pruneOldestEntries(c.searches, MaxSearchCacheEntries)
 }
 
 // ClearSearchCache は検索キャッシュをクリア
@@ -197,8 +224,11 @@ func (c *ToolCache) InvalidateSearchCacheForFile(absPath string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for key, entry := range c.searches {
-		if strings.Contains(entry.Content, absPath) {
-			delete(c.searches, key)
+		for _, fp := range entry.AffectedFiles {
+			if fp == absPath {
+				delete(c.searches, key)
+				break
+			}
 		}
 	}
 }
@@ -212,3 +242,30 @@ func (c *ToolCache) Stats() (files, dirs, searches int) {
 
 // インターフェース実装の確認
 var _ tools.ToolCacheInterface = (*ToolCache)(nil)
+
+func pruneOldestEntries(m map[string]cacheEntry, maxEntries int) {
+	if len(m) <= maxEntries {
+		return
+	}
+
+	// 超過数 + 10% をまとめて削除（頻繁な prune を回避）
+	pruneCount := len(m) - maxEntries + maxEntries/10
+	if pruneCount < 1 {
+		pruneCount = 1
+	}
+
+	type kv struct {
+		key  string
+		time time.Time
+	}
+	items := make([]kv, 0, len(m))
+	for k, v := range m {
+		items = append(items, kv{key: k, time: v.AccessedAt})
+	}
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].time.Before(items[j].time)
+	})
+	for i := 0; i < pruneCount && i < len(items); i++ {
+		delete(m, items[i].key)
+	}
+}

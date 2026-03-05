@@ -18,6 +18,8 @@ const (
 var ToolSafetyLevels = map[string]ToolSafety{
 	// SafetyHigh: 読み取り専用操作
 	"read_file":    SafetyHigh,
+	"read_files":   SafetyHigh,
+	"search_code":  SafetyHigh,
 	"list_dir":     SafetyHigh,
 	"git_status":   SafetyHigh,
 	"git_log":      SafetyHigh,

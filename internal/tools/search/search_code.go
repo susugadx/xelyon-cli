@@ -54,71 +54,74 @@ type Match struct {
 	Block   *BlockInfo // マッチが所属するブロック（nil=トップレベル）
 }
 
+// SearchOptions はコード検索のオプション
+type SearchOptions struct {
+	Pattern     string
+	Path        string
+	FilePattern string
+	FileType    string
+	CtxLines    int
+	TokenBudget int
+	IsRegex     bool
+	Multiline   bool
+}
+
 // ExecuteSearchCode はコード検索を実行し、フォーマット済み結果を返す
-func ExecuteSearchCode(pattern, path, filePattern, contextLinesStr, tokenBudgetStr string) string {
+func ExecuteSearchCode(opts SearchOptions) string {
 	// 引数バリデーション
-	if pattern == "" {
+	if opts.Pattern == "" {
 		return "Error: pattern is required"
 	}
-	if path == "" {
-		path = "."
+	if opts.Path == "" {
+		opts.Path = "."
 	}
 
-	ctxLines := 3
-	if contextLinesStr != "" {
-		if n, err := strconv.Atoi(contextLinesStr); err == nil {
-			if n < 0 {
-				n = 0
-			}
-			if n > 10 {
-				n = 10
-			}
-			ctxLines = n
-		}
+	if opts.CtxLines < 0 {
+		opts.CtxLines = 3
+	}
+	if opts.CtxLines > 10 {
+		opts.CtxLines = 10
 	}
 
-	tokenBudget := 3000
-	if tokenBudgetStr != "" {
-		if n, err := strconv.Atoi(tokenBudgetStr); err == nil {
-			if n < 500 {
-				n = 500
-			}
-			if n > 6000 {
-				n = 6000
-			}
-			tokenBudget = n
-		}
+	if opts.TokenBudget < 0 {
+		opts.TokenBudget = 3000
+	}
+	if opts.TokenBudget < 500 {
+		opts.TokenBudget = 500
+	}
+	if opts.TokenBudget > 6000 {
+		opts.TokenBudget = 6000
 	}
 
-	patterns := splitPatterns(pattern)
+	patterns := splitPatterns(opts.Pattern)
 	if len(patterns) > 1 {
 		// 複数パターン: マルチキャッシュチェック → 並列検索
 		multiKey := buildMultiCacheKey(patterns)
-		cacheKey := fmt.Sprintf("%s|%s|%d|%d", path, filePattern, ctxLines, tokenBudget)
+		cacheKey := buildSearchCacheKey(opts)
 		if tools.GlobalToolCache != nil {
 			if cached, ok := tools.GlobalToolCache.GetSearch(multiKey, cacheKey); ok {
 				return cached
 			}
 		}
-		return executeMultiplePatterns(patterns, path, filePattern, ctxLines, tokenBudget)
+		return executeMultiplePatterns(patterns, opts)
 	}
-	return executeSinglePattern(patterns[0], path, filePattern, ctxLines, tokenBudget)
+	return executeSinglePattern(patterns[0], opts)
 }
 
 // executeSinglePattern は単一パターンの検索処理（キャッシュ・検索・パース・マージ・トランケート・ブロック認識・フォーマット・キャッシュ保存）
-func executeSinglePattern(pattern, path, filePattern string, ctxLines, tokenBudget int) string {
+func executeSinglePattern(pattern string, opts SearchOptions) string {
 	// キャッシュチェック
-	cacheKey := fmt.Sprintf("%s|%s|%d|%d", path, filePattern, ctxLines, tokenBudget)
+	cacheKey := buildSearchCacheKey(opts)
 	if tools.GlobalToolCache != nil {
 		if cached, ok := tools.GlobalToolCache.GetSearch(pattern, cacheKey); ok {
 			return cached
 		}
 	}
 
-	maxCountPerFile := calcMaxCountPerFile(tokenBudget)
+	maxCountPerFile := calcMaxCountPerFile(opts.TokenBudget)
 
 	// ripgrep 検索
-	output, useRipgrep, err := executeSearch(pattern, path, filePattern, ctxLines, maxCountPerFile)
+	output, useRipgrep, err := executeSearch(pattern, opts, maxCountPerFile)
 	if err != nil {
 		return fmt.Sprintf("Error: %v", err)
 	}
@@ -142,17 +145,17 @@ func executeSinglePattern(pattern, path, filePattern string, ctxLines, tokenBudg
 	sortResultsByPriority(results)
 
 	// トークンバジェット制御
-	results, truncated := truncateToTokenBudget(results, tokenBudget)
+	results, truncated := truncateToTokenBudget(results, opts.TokenBudget)
 
 	// ブロック認識（関数/クラス境界検出）
 	detectBlocks(results)
 
 	// 出力フォーマット
-	formatted := formatSearchResults(results, truncated, tokenBudget)
+	formatted := formatSearchResults(results, truncated, opts.TokenBudget)
 
 	// キャッシュ保存
 	if tools.GlobalToolCache != nil {
-		tools.GlobalToolCache.SetSearch(pattern, cacheKey, formatted)
+		tools.GlobalToolCache.SetSearch(pattern, cacheKey, formatted, collectFilePaths(results))
 	}
 
 	return formatted
@@ -188,11 +191,12 @@ type patternResult struct {
 	Truncated    bool
 	Index        int
 	TotalMatches int // truncate前の全マッチ数（バジェット比例配分に使用）
+	Error        string
 }
 
 // executeMultiplePatterns は複数パターンを goroutine 並列で検索する
-func executeMultiplePatterns(patterns []string, path, filePattern string, ctxLines, tokenBudget int) string {
-	budgetPerPattern := tokenBudget / len(patterns)
+func executeMultiplePatterns(patterns []string, opts SearchOptions) string {
+	budgetPerPattern := opts.TokenBudget / len(patterns)
 	if budgetPerPattern < 500 {
 		budgetPerPattern = 500
 	}
@@ -203,9 +207,9 @@ func executeMultiplePatterns(patterns []string, path, filePattern string, ctxLin
 	for i, p := range patterns {
 		go func(idx int, pat string) {
 			// ripgrep 検索
-			output, useRg, searchErr := executeSearch(pat, path, filePattern, ctxLines, maxCountPerFile)
+			output, useRg, searchErr := executeSearch(pat, opts, maxCountPerFile)
 			if searchErr != nil {
-				ch <- patternResult{Pattern: pat, Index: idx}
+				ch <- patternResult{Pattern: pat, Index: idx, Error: searchErr.Error()}
 				return
 			}
 			maxMatches := 200 / len(patterns)
@@ -246,9 +250,9 @@ func executeMultiplePatterns(patterns []string, path, filePattern string, ctxLin
 	for i, c := range collected {
 		var allocatedBudget int
 		if totalAllMatches == 0 {
-			allocatedBudget = tokenBudget / len(patterns)
+			allocatedBudget = opts.TokenBudget / len(patterns)
 		} else {
-			allocatedBudget = tokenBudget * c.TotalMatches / totalAllMatches
+			allocatedBudget = opts.TokenBudget * c.TotalMatches / totalAllMatches
 		}
 		if allocatedBudget < 300 {
 			allocatedBudget = 300
@@ -257,13 +261,17 @@ func executeMultiplePatterns(patterns []string, path, filePattern string, ctxLin
 		detectBlocks(collected[i].Results)
 	}
 
-	formatted := formatMultiResults(collected, tokenBudget)
+	formatted := formatMultiResults(collected, opts.TokenBudget)
 
 	// キャッシュ保存（multi 全体を1エントリとして保存）
 	if tools.GlobalToolCache != nil {
 		multiKey := buildMultiCacheKey(patterns)
-		cacheKey := fmt.Sprintf("%s|%s|%d|%d", path, filePattern, ctxLines, tokenBudget)
-		tools.GlobalToolCache.SetSearch(multiKey, cacheKey, formatted)
+		cacheKey := buildSearchCacheKey(opts)
+		allFiles := make([]string, 0)
+		for _, c := range collected {
+			allFiles = append(allFiles, collectFilePaths(c.Results)...)
+		}
+		tools.GlobalToolCache.SetSearch(multiKey, cacheKey, formatted, dedupePaths(allFiles))
 	}
 
 	return formatted
@@ -275,6 +283,39 @@ func buildMultiCacheKey(patterns []string) string {
 	copy(sorted, patterns)
 	sort.Strings(sorted)
 	return strings.Join(sorted, "|")
+}
+
+func buildSearchCacheKey(opts SearchOptions) string {
+	return fmt.Sprintf("%s|%s|%s|%d|%d|regex=%t|multiline=%t",
+		opts.Path, opts.FilePattern, opts.FileType, opts.CtxLines, opts.TokenBudget, opts.IsRegex, opts.Multiline)
+}
+
+func collectFilePaths(results []SearchResult) []string {
+	paths := make([]string, 0, len(results))
+	for _, r := range results {
+		if r.FilePath == "" {
+			continue
+		}
+		if absPath, err := filepath.Abs(r.FilePath); err == nil {
+			paths = append(paths, absPath)
+		} else {
+			paths = append(paths, r.FilePath)
+		}
+	}
+	return dedupePaths(paths)
+}
+
+func dedupePaths(paths []string) []string {
+	seen := make(map[string]bool, len(paths))
+	out := make([]string, 0, len(paths))
+	for _, p := range paths {
+		if p == "" || seen[p] {
+			continue
+		}
+		seen[p] = true
+		out = append(out, p)
+	}
+	return out
 }
 
 // calcMaxCountPerFile はトークンバジェットからファイルあたりのマッチ上限を計算する
@@ -292,7 +333,7 @@ func calcMaxCountPerFile(budget int) int {
 
 // executeSearch は rg（優先）または grep を実行し、出力と使用ツールを返す
 // maxCountPerFile はファイルあたりのマッチ上限（ripgrep --max-count に対応）
-func executeSearch(pattern, path, filePattern string, ctxLines, maxCountPerFile int) (string, bool, error) {
+func executeSearch(pattern string, opts SearchOptions, maxCountPerFile int) (string, bool, error) {
 	// ripgrep を試行
 	if rgPath, err := exec.LookPath("rg"); err == nil {
 		args := []string{
@@ -300,13 +341,21 @@ func executeSearch(pattern, path, filePattern string, ctxLines, maxCountPerFile 
 			"-n",
 			"--max-count", strconv.Itoa(maxCountPerFile),
 		}
-		if ctxLines > 0 {
-			args = append(args, "--context", strconv.Itoa(ctxLines))
+		if opts.CtxLines > 0 {
+			args = append(args, "--context", strconv.Itoa(opts.CtxLines))
 		}
-		if filePattern != "" {
-			args = append(args, "--glob", filePattern)
+		if opts.FileType != "" {
+			args = append(args, "--type", opts.FileType)
+		} else if opts.FilePattern != "" {
+			args = append(args, "--glob", opts.FilePattern)
 		}
-		args = append(args, pattern, path)
+		if !opts.IsRegex {
+			args = append(args, "--fixed-strings")
+		}
+		if opts.Multiline {
+			args = append(args, "--multiline")
+		}
+		args = append(args, pattern, opts.Path)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
@@ -326,7 +375,6 @@ func executeSearch(pattern, path, filePattern string, ctxLines, maxCountPerFile 
 	// Note: grep は .gitignore を参照しない。主要ディレクトリは --exclude-dir で除外。rg 推奨。
 	args := []string{
 		"-rn",
-		"-E", // 拡張正規表現（rg と同等の regex 解釈 + 不正 regex のエラー検出）
 		"-I",
 		"-m", strconv.Itoa(maxCountPerFile), // NOTE: grep -m はファイルあたりN行（rg --max-count と同じ）
 		"--exclude-dir=.git",
@@ -334,13 +382,18 @@ func executeSearch(pattern, path, filePattern string, ctxLines, maxCountPerFile 
 		"--exclude-dir=vendor",
 		"--exclude-dir=.next",
 	}
-	if filePattern != "" {
-		args = append(args, "--include="+filePattern)
+	if opts.IsRegex {
+		args = append(args, "-E") // 拡張正規表現（rg と同等の regex 解釈 + 不正 regex のエラー検出）
+	} else {
+		args = append(args, "-F")
 	}
-	if ctxLines > 0 {
-		args = append(args, "-C", strconv.Itoa(ctxLines))
+	if opts.FilePattern != "" {
+		args = append(args, "--include="+opts.FilePattern)
 	}
-	args = append(args, pattern, path)
+	if opts.CtxLines > 0 {
+		args = append(args, "-C", strconv.Itoa(opts.CtxLines))
+	}
+	args = append(args, pattern, opts.Path)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -1074,6 +1127,10 @@ func formatMultiResults(collected []patternResult, tokenBudget int) string {
 	budgetPerPattern := tokenBudget / len(collected)
 	for i, pr := range collected {
 		fmt.Fprintf(&b, "━━ Pattern %d/%d: %q ━━\n", i+1, len(collected), pr.Pattern)
+		if pr.Error != "" {
+			fmt.Fprintf(&b, "⚠️ Error: %s\n\n", pr.Error)
+			continue
+		}
 
 		if len(pr.Results) == 0 {
 			b.WriteString("No matches found\n\n")

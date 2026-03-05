@@ -2,6 +2,7 @@ package file
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -214,5 +215,19 @@ func TestReadFileTool_PathRequired(t *testing.T) {
 	}
 	if !strings.Contains(result, "Error") {
 		t.Errorf("expected error when neither path nor paths provided, got: %s", result)
+	}
+}
+
+func TestExecuteReadFile_BinaryFile(t *testing.T) {
+	setupTestMocks(t)
+	tmpDir := t.TempDir()
+	binFile := filepath.Join(tmpDir, "sample.bin")
+	if err := os.WriteFile(binFile, []byte{0x41, 0x00, 0x42, 0x43}, 0644); err != nil {
+		t.Fatalf("failed to write binary file: %v", err)
+	}
+
+	output := ExecuteReadFile(binFile, 0, 0)
+	if !strings.Contains(output, "appears to be a binary file") {
+		t.Fatalf("expected binary-file error, got: %s", output)
 	}
 }

@@ -77,6 +77,15 @@ func ExecuteReadFile(path string, startLine, endLine int) string {
 		}
 	}
 
+	// バイナリファイル検出（先頭 512 バイトに NUL が含まれる場合）
+	checkLen := len(contentStr)
+	if checkLen > 512 {
+		checkLen = 512
+	}
+	if strings.Contains(contentStr[:checkLen], "\x00") {
+		return fmt.Sprintf("Error: %s appears to be a binary file (contains null bytes). Use 'file %s' or 'xxd %s | head' for binary inspection.", path, path, path)
+	}
+
 	lines := strings.Split(contentStr, "\n")
 	totalLines := len(lines)
 

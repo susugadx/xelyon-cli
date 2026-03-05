@@ -1,6 +1,7 @@
 package file
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,7 +21,7 @@ func TestExecuteListDir_Success(t *testing.T) {
 		t.Fatalf("Failed to create test directory: %v", err)
 	}
 
-	output := ExecuteListDir(tmpDir)
+	output := ExecuteListDir(tmpDir, 1)
 
 	if !strings.Contains(output, tmpDir) {
 		t.Errorf("ExecuteListDir() output should contain directory path, got %v", output)
@@ -38,7 +39,7 @@ func TestExecuteListDir_Success(t *testing.T) {
 
 func TestExecuteListDir_EmptyDirectory(t *testing.T) {
 	tmpDir := t.TempDir()
-	output := ExecuteListDir(tmpDir)
+	output := ExecuteListDir(tmpDir, 1)
 
 	if !strings.Contains(output, tmpDir) {
 		t.Errorf("ExecuteListDir() output should contain directory path, got %v", output)
@@ -49,7 +50,7 @@ func TestExecuteListDir_DirectoryNotFound(t *testing.T) {
 	tmpDir := t.TempDir()
 	nonExistentDir := filepath.Join(tmpDir, "notexist")
 
-	output := ExecuteListDir(nonExistentDir)
+	output := ExecuteListDir(nonExistentDir, 1)
 
 	if !strings.Contains(output, "Error") {
 		t.Errorf("ExecuteListDir() output = %v, should contain 'Error'", output)
@@ -66,7 +67,7 @@ func TestExecuteListDir_FileSizes(t *testing.T) {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
-	output := ExecuteListDir(tmpDir)
+	output := ExecuteListDir(tmpDir, 1)
 
 	if !strings.Contains(output, "bytes") {
 		t.Error("ExecuteListDir() output should contain file size in bytes")
@@ -74,7 +75,7 @@ func TestExecuteListDir_FileSizes(t *testing.T) {
 }
 
 func TestExecuteListDir_RelativePath(t *testing.T) {
-	output := ExecuteListDir(".")
+	output := ExecuteListDir(".", 1)
 
 	absPath, err := filepath.Abs(".")
 	if err != nil {
@@ -83,5 +84,80 @@ func TestExecuteListDir_RelativePath(t *testing.T) {
 
 	if !strings.Contains(output, absPath) {
 		t.Errorf("ExecuteListDir() output should contain absolute path, got %v", output)
+	}
+}
+
+func TestExecuteListDir_IgnoreDefaultDirs(t *testing.T) {
+	tmpDir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(tmpDir, "node_modules"), 0755); err != nil {
+		t.Fatalf("Failed to create ignored directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "keep.txt"), []byte("ok"), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	output := ExecuteListDir(tmpDir, 2)
+	if strings.Contains(output, "node_modules") {
+		t.Errorf("node_modules should be ignored, got: %s", output)
+	}
+	if !strings.Contains(output, "keep.txt") {
+		t.Errorf("keep.txt should be listed, got: %s", output)
+	}
+}
+
+func TestExecuteListDir_DepthTwoShowsChildren(t *testing.T) {
+	tmpDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(tmpDir, "a", "b"), 0755); err != nil {
+		t.Fatalf("Failed to create nested directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "a", "child.txt"), []byte("x"), 0644); err != nil {
+		t.Fatalf("Failed to create nested file: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "a", "b", "grandchild.txt"), []byte("x"), 0644); err != nil {
+		t.Fatalf("Failed to create deeper nested file: %v", err)
+	}
+
+	output := ExecuteListDir(tmpDir, 2)
+	if !strings.Contains(output, "child.txt") {
+		t.Errorf("depth=2 should include child entries, got: %s", output)
+	}
+	if strings.Contains(output, "grandchild.txt") {
+		t.Errorf("depth=2 should not include depth=3 entries, got: %s", output)
+	}
+}
+
+func TestExecuteListDir_TruncatesEntries(t *testing.T) {
+	tmpDir := t.TempDir()
+	for i := 0; i < 210; i++ {
+		name := filepath.Join(tmpDir, fmt.Sprintf("f%03d.txt", i))
+		if err := os.WriteFile(name, []byte("x"), 0644); err != nil {
+			t.Fatalf("Failed to create file %d: %v", i, err)
+		}
+	}
+
+	output := ExecuteListDir(tmpDir, 1)
+	if !strings.Contains(output, "showing first 200") {
+		t.Errorf("expected truncation message, got: %s", output)
+	}
+}
+
+func TestExecuteListDir_TreeConnectorWithIgnored(t *testing.T) {
+	tmpDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmpDir, "aaa.txt"), []byte("x"), 0644); err != nil {
+		t.Fatalf("failed to create aaa.txt: %v", err)
+	}
+	if err := os.Mkdir(filepath.Join(tmpDir, "node_modules"), 0755); err != nil {
+		t.Fatalf("failed to create ignored node_modules: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "bbb.txt"), []byte("x"), 0644); err != nil {
+		t.Fatalf("failed to create bbb.txt: %v", err)
+	}
+	if err := os.Mkdir(filepath.Join(tmpDir, "vendor"), 0755); err != nil {
+		t.Fatalf("failed to create ignored vendor: %v", err)
+	}
+
+	output := ExecuteListDir(tmpDir, 1)
+	if !strings.Contains(output, "└── 📄 bbb.txt") {
+		t.Errorf("last visible entry should use └── connector, got:\n%s", output)
 	}
 }

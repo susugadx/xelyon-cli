@@ -42,6 +42,12 @@ var alwaysBlockedCommands = []string{
 	"chmod 777", "chmod -R 777",
 	"mkfs", "dd if=", ":(){:|:&};:",
 	"> /dev/sda", "mv / ",
+	"base64 -d", "base64 --decode",
+	"python -c", "python3 -c",
+	"node -e", "node --eval",
+	"ruby -e",
+	"perl -e",
+	"LD_PRELOAD=", "LD_LIBRARY_PATH=",
 }
 
 // Inline edit commands (blocked except permissive)
@@ -72,50 +78,8 @@ func ExecuteBash(command string) string {
 		return "Error: command is empty"
 	}
 
-	cfg := config.GetGlobalConfig().Bash
-
-	// Always blocked commands (at all levels)
-	for _, blocked := range alwaysBlockedCommands {
-		if strings.Contains(command, blocked) {
-			red.Printf("🚫 Blocked dangerous command: %s\n", command)
-			return "Error: This command is blocked for safety"
-		}
-	}
-
-	// Safety level checks
-	if err := CheckBashSafety(command, cfg); err != "" {
-		return err
-	}
-
-	// Determine if command is safe
-	isSafe := IsSafeCommand(command, cfg)
-
-	// Require confirmation for non-safe commands
-	if !isSafe {
-		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		cyan.Printf("⚙️  Shell Command / シェルコマンド実行\n")
-		cyan.Printf("📜 Command / コマンド: %s\n", command)
-		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		yellow.Println("⚠️  Warning: This command may modify your system / 警告: システムに変更が加わる可能性があります")
-
-		dec := common.Confirm("Run this command? / 実行しますか？")
-		switch dec.Action {
-		case common.ConfirmYes:
-			// continue
-		case common.ConfirmComment:
-			return fmt.Sprintf(`[COMMENT] User provided feedback for bash.
-
-Comment:
-%s
-
-Next actions:
-- Revise the command to be safer/smaller and propose again.
-- Or split into multiple safe commands.
-
-IMPORTANT: Do NOT execute the previous command as-is.`, strings.TrimSpace(dec.Comment))
-		default: // ConfirmNo
-			return "Cancelled by user"
-		}
+	if msg, ok := checkAndConfirmBash(command); !ok {
+		return msg
 	}
 
 	// Execute
@@ -165,50 +129,8 @@ func ExecuteBashWithContext(ctx context.Context, command string) string {
 		return "Error: command is empty"
 	}
 
-	cfg := config.GetGlobalConfig().Bash
-
-	// Always blocked commands (at all levels)
-	for _, blocked := range alwaysBlockedCommands {
-		if strings.Contains(command, blocked) {
-			red.Printf("🚫 Blocked dangerous command: %s\n", command)
-			return "Error: This command is blocked for safety"
-		}
-	}
-
-	// Safety level checks
-	if err := CheckBashSafety(command, cfg); err != "" {
-		return err
-	}
-
-	// Determine if command is safe
-	isSafe := IsSafeCommand(command, cfg)
-
-	// Require confirmation for non-safe commands
-	if !isSafe {
-		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		cyan.Printf("⚙️  Shell Command / シェルコマンド実行\n")
-		cyan.Printf("📜 Command / コマンド: %s\n", command)
-		cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		yellow.Println("⚠️  Warning: This command may modify your system / 警告: システムに変更が加わる可能性があります")
-
-		dec := common.Confirm("Run this command? / 実行しますか？")
-		switch dec.Action {
-		case common.ConfirmYes:
-			// continue
-		case common.ConfirmComment:
-			return fmt.Sprintf(`[COMMENT] User provided feedback for bash.
-
-Comment:
-%s
-
-Next actions:
-- Revise the command to be safer/smaller and propose again.
-- Or split into multiple safe commands.
-
-IMPORTANT: Do NOT execute the previous command as-is.`, strings.TrimSpace(dec.Comment))
-		default: // ConfirmNo
-			return "Cancelled by user"
-		}
+	if msg, ok := checkAndConfirmBash(command); !ok {
+		return msg
 	}
 
 	// Execute with context
@@ -374,6 +296,60 @@ func executeBashWithStreaming(cmd *exec.Cmd) (string, error) {
 	err = cmd.Wait()
 
 	return outputBuf.String(), err
+}
+
+// checkAndConfirmBash は共通のセキュリティチェック + 確認UIを実行
+// 返り値: ("", true) = 実行OK, (errorMsg, false) = ブロック/キャンセル
+func checkAndConfirmBash(command string) (string, bool) {
+	cfg := config.GetGlobalConfig().Bash
+
+	for _, blocked := range alwaysBlockedCommands {
+		if strings.Contains(command, blocked) {
+			red.Printf("🚫 Blocked dangerous command: %s\n", command)
+			return "Error: This command is blocked for safety", false
+		}
+	}
+
+	// eval コマンドをブロック（チェーン内も対象）
+	for _, part := range splitChainCommand(command) {
+		if isEvalInvocation(strings.TrimSpace(part)) {
+			red.Printf("🚫 Blocked dangerous command: eval\n")
+			return "Error: eval is blocked for safety", false
+		}
+	}
+
+	if err := CheckBashSafety(command, cfg); err != "" {
+		return err, false
+	}
+
+	if IsSafeCommand(command, cfg) {
+		return "", true
+	}
+
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	cyan.Printf("⚙️  Shell Command / シェルコマンド実行\n")
+	cyan.Printf("📜 Command / コマンド: %s\n", command)
+	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	yellow.Println("⚠️  Warning: This command may modify your system / 警告: システムに変更が加わる可能性があります")
+
+	dec := common.Confirm("Run this command? / 実行しますか？")
+	switch dec.Action {
+	case common.ConfirmYes:
+		return "", true
+	case common.ConfirmComment:
+		return fmt.Sprintf(`[COMMENT] User provided feedback for bash.
+
+Comment:
+%s
+
+Next actions:
+- Revise the command to be safer/smaller and propose again.
+- Or split into multiple safe commands.
+
+IMPORTANT: Do NOT execute the previous command as-is.`, strings.TrimSpace(dec.Comment)), false
+	default:
+		return "Cancelled by user", false
+	}
 }
 
 // streamOutput はパイプからの出力をリアルタイムで表示しバッファに保存
@@ -569,15 +545,45 @@ func splitChainCommand(command string) []string {
 
 // isSingleCommandSafe は単一コマンド（チェーンなし）が安全かチェックする
 func isSingleCommandSafe(command string, cfg config.BashConfig) bool {
+	trimmed := strings.TrimSpace(command)
 	for safe := range defaultSafeCommands {
-		if strings.HasPrefix(command, safe) {
+		if matchCommandPrefix(trimmed, safe) {
 			return true
 		}
 	}
 	for _, safe := range cfg.SafeCommands {
-		if strings.HasPrefix(command, safe) {
+		if matchCommandPrefix(trimmed, safe) {
 			return true
 		}
 	}
 	return false
+}
+
+// matchCommandPrefix はコマンドが安全なプレフィックスで始まるか判定する
+// プレフィックスの直後が空白・タブ・EOFのいずれかであることを確認
+func matchCommandPrefix(command, prefix string) bool {
+	if command == prefix {
+		return true
+	}
+	if strings.HasPrefix(command, prefix) {
+		next := command[len(prefix)]
+		return next == ' ' || next == '\t'
+	}
+	return false
+}
+
+func isEvalInvocation(command string) bool {
+	if !strings.HasPrefix(command, "eval") {
+		return false
+	}
+	if len(command) == len("eval") {
+		return true
+	}
+	next := command[len("eval")]
+	// "evaluate" などの英数字連結は除外し、記号開始は eval 呼び出しとして扱う
+	isAlphaNumOrUnderscore := (next >= 'a' && next <= 'z') ||
+		(next >= 'A' && next <= 'Z') ||
+		(next >= '0' && next <= '9') ||
+		next == '_'
+	return !isAlphaNumOrUnderscore
 }

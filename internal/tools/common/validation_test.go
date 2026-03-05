@@ -3,6 +3,7 @@ package common
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -154,5 +155,36 @@ func TestValidatePathAllowParent(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestValidatePathImpl_SymlinkEscape(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink behavior differs on windows")
+	}
+
+	tmpDir := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(oldWd)
+	})
+
+	linkPath := filepath.Join(tmpDir, "escape")
+	if err := os.Symlink("/etc", linkPath); err != nil {
+		t.Fatalf("failed to create symlink: %v", err)
+	}
+
+	_, err = validatePathImpl("escape/passwd")
+	if err == nil {
+		t.Fatal("expected symlink escape to be blocked")
+	}
+	if !strings.Contains(err.Error(), "symlink escape") {
+		t.Fatalf("expected symlink escape error, got: %v", err)
 	}
 }

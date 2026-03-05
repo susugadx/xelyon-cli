@@ -31,17 +31,43 @@ func validatePathImpl(path string) (string, error) {
 		return "", fmt.Errorf("failed to resolve allowed directory: %w", err)
 	}
 
-	// パスがカレントディレクトリ配下にあるかチェック
-	if !strings.HasPrefix(absPath, allowedDir) {
-		return "", fmt.Errorf("path escape attempt detected: %s is outside of %s", absPath, allowedDir)
+	// Clean 前チェック
+	cleanPath := filepath.Clean(absPath)
+	if !strings.HasPrefix(cleanPath, allowedDir) {
+		return "", fmt.Errorf("path escape attempt detected: %s is outside of %s", cleanPath, allowedDir)
 	}
 
-	// Clean してシンボリックリンク攻撃を防ぐ
-	cleanPath := filepath.Clean(absPath)
+	// シンボリックリンク解決後に再チェック（ファイルが存在する場合）
+	if _, statErr := os.Lstat(cleanPath); statErr == nil {
+		realPath, err := filepath.EvalSymlinks(cleanPath)
+		if err != nil {
+			return "", fmt.Errorf("failed to resolve symlinks: %w", err)
+		}
 
-	// 再度チェック（Clean後も境界内か）
-	if !strings.HasPrefix(cleanPath, allowedDir) {
-		return "", fmt.Errorf("path escape attempt detected after clean: %s", cleanPath)
+		realAllowed, err := filepath.EvalSymlinks(allowedDir)
+		if err != nil {
+			realAllowed = allowedDir
+		}
+
+		if !strings.HasPrefix(realPath, realAllowed) {
+			return "", fmt.Errorf("symlink escape attempt detected: %s resolves to %s (outside %s)", cleanPath, realPath, realAllowed)
+		}
+		return realPath, nil
+	}
+
+	// ファイルが存在しない場合は親ディレクトリのシンボリックリンクを確認
+	parentDir := filepath.Dir(cleanPath)
+	if _, statErr := os.Lstat(parentDir); statErr == nil {
+		realParent, err := filepath.EvalSymlinks(parentDir)
+		if err == nil {
+			realAllowed, _ := filepath.EvalSymlinks(allowedDir)
+			if realAllowed == "" {
+				realAllowed = allowedDir
+			}
+			if !strings.HasPrefix(realParent, realAllowed) {
+				return "", fmt.Errorf("symlink escape attempt in parent directory: %s", parentDir)
+			}
+		}
 	}
 
 	return cleanPath, nil

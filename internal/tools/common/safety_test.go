@@ -14,6 +14,11 @@ func TestGetToolSafety(t *testing.T) {
 			want:     SafetyHigh,
 		},
 		{
+			name:     "search_code is SafetyHigh",
+			toolName: "search_code",
+			want:     SafetyHigh,
+		},
+		{
 			name:     "write_file is SafetyMedium",
 			toolName: "write_file",
 			want:     SafetyMedium,

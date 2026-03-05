@@ -141,6 +141,38 @@ func TestExecuteBash_BlockedCommand_DangerousOther(t *testing.T) {
 			name:    "dd if=",
 			command: "dd if=/dev/zero of=/dev/sda",
 		},
+		{
+			name:    "base64 decode",
+			command: "echo ZWNobyBoaQ== | base64 -d",
+		},
+		{
+			name:    "eval command",
+			command: "eval echo hello",
+		},
+		{
+			name:    "eval standalone",
+			command: "eval",
+		},
+		{
+			name:    "eval with subshell",
+			command: "eval$(echo hello)",
+		},
+		{
+			name:    "eval in chain",
+			command: "ls && eval echo hi",
+		},
+		{
+			name:    "python inline",
+			command: "python -c 'print(1)'",
+		},
+		{
+			name:    "node inline",
+			command: "node -e 'console.log(1)'",
+		},
+		{
+			name:    "ld preload injection",
+			command: "LD_PRELOAD=/tmp/evil.so ls",
+		},
 	}
 
 	for _, tt := range tests {
@@ -151,6 +183,14 @@ func TestExecuteBash_BlockedCommand_DangerousOther(t *testing.T) {
 				t.Errorf("ExecuteBash() should block dangerous command '%s', got %v", tt.command, output)
 			}
 		})
+	}
+}
+
+func TestExecuteBash_EvaluateNotBlockedByEvalRule(t *testing.T) {
+	setupTestMocks(t)
+	output := ExecuteBash("evaluate something")
+	if strings.Contains(strings.ToLower(output), "blocked") {
+		t.Fatalf("evaluate should not be blocked by eval rule, got: %s", output)
 	}
 }
 
@@ -568,6 +608,12 @@ func TestIsSafeCommand_DefaultSafeCommands(t *testing.T) {
 		{"sha256sum", "sha256sum file.txt", true},
 		{"unknown", "unknown_command", false},
 		{"npm run", "npm run build", false}, // npm run は安全リストにない
+		{"cat prefix boundary positive", "cat foo.txt", true},
+		{"cat prefix boundary negative", "catalog-destroyer", false},
+		{"echo prefix boundary positive", "echo hello", true},
+		{"echo prefix boundary negative", "echomalware", false},
+		{"git status exact word boundary", "git status", true},
+		{"git status boundary negative", "git statusx", false},
 	}
 
 	for _, tt := range tests {

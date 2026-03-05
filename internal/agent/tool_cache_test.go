@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -127,7 +128,7 @@ func TestToolCache_Clear(t *testing.T) {
 	// キャッシュに保存
 	cache.SetFile(testFile, "test")
 	cache.SetDir(tmpDir, "dir result")
-	cache.SetSearch("pattern", ".", "search result")
+	cache.SetSearch("pattern", ".", "search result", nil)
 
 	// 全クリア
 	cache.Clear()
@@ -187,7 +188,7 @@ func TestToolCache_Stats(t *testing.T) {
 	// キャッシュ追加後
 	cache.SetFile(testFile, "test")
 	cache.SetDir(tmpDir, "dir")
-	cache.SetSearch("pattern", ".", "search result")
+	cache.SetSearch("pattern", ".", "search result", nil)
 
 	files, dirs, searches = cache.Stats()
 	if files != 1 || dirs != 1 || searches != 1 {
@@ -209,7 +210,7 @@ func TestToolCache_SearchCache(t *testing.T) {
 	}
 
 	// キャッシュに保存
-	cache.SetSearch(pattern, path, result)
+	cache.SetSearch(pattern, path, result, nil)
 
 	// キャッシュヒット
 	cached, hit := cache.GetSearch(pattern, path)
@@ -245,8 +246,8 @@ func TestToolCache_ClearSearchCache(t *testing.T) {
 	// 各種キャッシュを保存
 	cache.SetFile(testFile, "file content")
 	cache.SetDir(tmpDir, "dir result")
-	cache.SetSearch("pattern1", ".", "search result 1")
-	cache.SetSearch("pattern2", "/path", "search result 2")
+	cache.SetSearch("pattern1", ".", "search result 1", nil)
+	cache.SetSearch("pattern2", "/path", "search result 2", nil)
 
 	// 検索キャッシュだけクリア
 	cache.ClearSearchCache()
@@ -277,9 +278,9 @@ func TestToolCache_ClearSearchCache(t *testing.T) {
 func TestToolCache_InvalidateSearchCacheForFile(t *testing.T) {
 	c := NewToolCache()
 	// absPathを含む検索結果をキャッシュ
-	c.SetSearch("pattern1", "/project", "File: /project/main.go\nLine 10: func main()")
-	c.SetSearch("pattern2", "/project", "File: /project/utils.go\nLine 5: func helper()")
-	c.SetSearch("pattern3", "/project", "File: /project/main.go\nLine 20: var x")
+	c.SetSearch("pattern1", "/project", "result1", []string{"/project/main.go"})
+	c.SetSearch("pattern2", "/project", "result2", []string{"/project/utils.go"})
+	c.SetSearch("pattern3", "/project", "result3", []string{"/project/main.go"})
 
 	// main.go だけ無効化
 	c.InvalidateSearchCacheForFile("/project/main.go")
@@ -298,5 +299,23 @@ func TestToolCache_InvalidateSearchCacheForFile(t *testing.T) {
 	_, ok2 := c.GetSearch("pattern2", "/project")
 	if !ok2 {
 		t.Error("expected cache hit for pattern2 (only contains utils.go)")
+	}
+}
+
+func TestToolCache_FileCacheLRU(t *testing.T) {
+	cache := NewToolCache()
+	tmpDir := t.TempDir()
+
+	for i := 0; i < MaxFileCacheEntries+1; i++ {
+		p := filepath.Join(tmpDir, fmt.Sprintf("f%03d.txt", i))
+		if err := os.WriteFile(p, []byte("v"), 0644); err != nil {
+			t.Fatalf("failed to create file: %v", err)
+		}
+		cache.SetFile(p, "v")
+	}
+
+	files, _, _ := cache.Stats()
+	if files > MaxFileCacheEntries {
+		t.Fatalf("file cache should be capped at %d, got %d", MaxFileCacheEntries, files)
 	}
 }

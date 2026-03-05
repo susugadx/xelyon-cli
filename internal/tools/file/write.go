@@ -33,6 +33,7 @@ func ExecuteWriteFile(path string, content string) (string, error) {
 
 	// ファイルが存在するか確認 + 元のパーミッション取得
 	exists := false
+	// 新規ファイルは 0644 固定（実行権限が必要な場合は別途 chmod を使用）
 	perm := os.FileMode(0644)
 	if info, err := os.Stat(absPath); err == nil {
 		exists = true
