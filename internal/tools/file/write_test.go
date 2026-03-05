@@ -121,3 +121,30 @@ func TestExecuteWriteFile_OverwriteExistingFile(t *testing.T) {
 	}
 	testutil.AssertFileContent(t, testFile, "new content")
 }
+
+func TestExecuteWriteFile_AtomicWriteNoTempFileLeft(t *testing.T) {
+	setupTestMocks(t)
+
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "atomic.txt")
+	testutil.CreateTempFile(t, tmpDir, "atomic.txt", "before")
+
+	output, err := ExecuteWriteFile(testFile, "after")
+	if err != nil {
+		t.Fatalf("ExecuteWriteFile failed: %v", err)
+	}
+	if !strings.Contains(output, "Successfully wrote") {
+		t.Errorf("Expected success message, got: %s", output)
+	}
+	testutil.AssertFileContent(t, testFile, "after")
+
+	entries, err := os.ReadDir(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to read tmp directory: %v", err)
+	}
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".xelyon-write-") && strings.HasSuffix(e.Name(), ".tmp") {
+			t.Fatalf("temporary file should not remain after successful write: %s", e.Name())
+		}
+	}
+}

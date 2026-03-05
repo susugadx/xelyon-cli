@@ -1,7 +1,9 @@
 package file
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -27,6 +29,9 @@ func formatFileSize(bytes int64) string {
 // MaxReadLines はデフォルトの最大読み込み行数
 const MaxReadLines = 300
 
+// LargeFileThreshold は「大容量ファイル」と判定するサイズ（1MB）
+const LargeFileThreshold = 1024 * 1024
+
 // ExecuteReadFile はファイルを読み込む（行範囲指定対応）
 // startLine, endLine が指定されている場合はその範囲のみ返す
 // 指定がない場合は最初のMaxReadLines行を返す
@@ -47,9 +52,11 @@ func ExecuteReadFile(path string, startLine, endLine int) string {
 	showFileInfo := cfg != nil && cfg.Streaming.ShowFileInfo
 
 	// ファイル情報を取得（サイズ表示用）
+	var fileInfo os.FileInfo
 	var fileSize int64
 	if showFileInfo {
 		if info, err := os.Stat(absPath); err == nil {
+			fileInfo = info
 			fileSize = info.Size()
 		}
 	}
@@ -65,7 +72,73 @@ func ExecuteReadFile(path string, startLine, endLine int) string {
 
 	// キャッシュミスまたは行範囲指定ありの場合はファイルを読む
 	if contentStr == "" {
-		content, err := os.ReadFile(absPath)
+		if fileInfo == nil {
+			info, err := os.Stat(absPath)
+			if err != nil {
+				return fmt.Sprintf("Error reading file: %v", err)
+			}
+			fileInfo = info
+			if showFileInfo {
+				fileSize = info.Size()
+			}
+		}
+
+		f, err := os.Open(absPath)
+		if err != nil {
+			return fmt.Sprintf("Error reading file: %v", err)
+		}
+		defer f.Close()
+
+		// 先頭 512 バイトでバイナリ判定
+		header := make([]byte, 512)
+		n, _ := f.Read(header)
+		if strings.Contains(string(header[:n]), "\x00") {
+			return fmt.Sprintf("Error: %s appears to be a binary file (contains null bytes). Use 'file %s' or 'xxd %s | head' for binary inspection.", path, path, path)
+		}
+
+		// 行範囲指定なし + 大容量ファイルはストリーミング読み込み
+		if startLine == 0 && endLine == 0 && fileInfo.Size() > LargeFileThreshold {
+			if _, err := f.Seek(0, 0); err != nil {
+				return fmt.Sprintf("Error reading file: %v", err)
+			}
+			lines, totalRead, hasMore, err := readFirstNLines(f, MaxReadLines)
+			if err != nil {
+				return fmt.Sprintf("Error reading file: %v", err)
+			}
+
+			result := formatLinesWithNumbers(lines, 1)
+			if hasMore {
+				totalLines := totalRead
+				if totalRead > 0 {
+					avgLineLen := fileInfo.Size() / int64(totalRead)
+					if avgLineLen > 0 {
+						totalLines = int(fileInfo.Size() / avgLineLen)
+					}
+				}
+				remaining := totalLines - MaxReadLines
+				if remaining < 1 {
+					remaining = 1
+				}
+				result += fmt.Sprintf("\n... (truncated, ~%d lines remaining, file size: %s)\nUse start_line/end_line to read specific sections.", remaining, formatFileSize(fileInfo.Size()))
+				if showFileInfo && fileSize > 0 {
+					common.Green.Printf("📄 Read: %s (%s, showing first %d lines)\n", path, formatFileSize(fileSize), MaxReadLines)
+				} else {
+					common.Green.Printf("📄 Read: %s (showing first %d lines)\n", path, MaxReadLines)
+				}
+			} else {
+				if showFileInfo && fileSize > 0 {
+					common.Green.Printf("📄 Read: %s (%s, %d lines)\n", path, formatFileSize(fileSize), len(lines))
+				} else {
+					common.Green.Printf("📄 Read: %s (%d lines)\n", path, len(lines))
+				}
+			}
+			return result
+		}
+
+		if _, err := f.Seek(0, 0); err != nil {
+			return fmt.Sprintf("Error reading file: %v", err)
+		}
+		content, err := io.ReadAll(f)
 		if err != nil {
 			return fmt.Sprintf("Error reading file: %v", err)
 		}
@@ -153,4 +226,24 @@ func formatLinesWithNumbers(lines []string, startNum int) string {
 		sb.WriteString(fmt.Sprintf("%d: %s\n", startNum+i, line))
 	}
 	return sb.String()
+}
+
+// readFirstNLines は io.Reader から最初の n 行を読み、残りがあるかを返す
+func readFirstNLines(r io.Reader, n int) (lines []string, totalRead int, hasMore bool, err error) {
+	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+
+	for scanner.Scan() {
+		totalRead++
+		if totalRead <= n {
+			lines = append(lines, scanner.Text())
+			continue
+		}
+		hasMore = true
+		return lines, totalRead, hasMore, nil
+	}
+	if scanErr := scanner.Err(); scanErr != nil {
+		return nil, 0, false, scanErr
+	}
+	return lines, totalRead, false, nil
 }

@@ -986,6 +986,41 @@ func TestSearchCode_FixedStrings(t *testing.T) {
 	}
 }
 
+func TestSearchCode_IncludeHidden(t *testing.T) {
+	setupSearchTestMocks(t)
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("SECRET=hidden_value\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	result := ExecuteSearchCode(SearchOptions{
+		Pattern:     "hidden_value",
+		Path:        dir,
+		IsRegex:     true,
+		CtxLines:    -1,
+		TokenBudget: -1,
+	})
+	if strings.Contains(result, ".env") {
+		t.Fatalf("hidden files should be excluded by default, got: %s", result)
+	}
+
+	result = ExecuteSearchCode(SearchOptions{
+		Pattern:       "hidden_value",
+		Path:          dir,
+		IsRegex:       true,
+		IncludeHidden: true,
+		CtxLines:      -1,
+		TokenBudget:   -1,
+	})
+	if !strings.Contains(result, ".env") {
+		t.Fatalf("hidden files should be included with IncludeHidden, got: %s", result)
+	}
+}
+
 func TestSearchCode_TypeToGlobMapping(t *testing.T) {
 	tests := []struct {
 		fileType string

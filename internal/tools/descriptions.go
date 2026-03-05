@@ -11,7 +11,7 @@ var ToolDescriptions = map[string]string{
 	"list_dir":    "List files and directories. Returns file sizes and types. Ignores .git, node_modules, vendor by default. Use depth parameter (1-3) for recursive listing.",
 
 	// Search & Discovery
-	"search_code": "Search code using ripgrep (rg) with grep fallback. Supports multiple comma-separated patterns for parallel search, file_type filtering, fixed-string mode, and multiline mode. Groups results by file with context lines and block annotations. Marks matched line ranges as read, enabling str_replace line-range mode (start_line/end_line) without read_file.",
+	"search_code": "Search code using ripgrep (rg) with grep fallback. Supports multiple comma-separated patterns for parallel search, file_type filtering, fixed-string mode, multiline mode, and hidden/ignored file inclusion. Groups results by file with context lines and block annotations. Marks matched line ranges as read, enabling str_replace line-range mode (start_line/end_line) without read_file.",
 	"web_search":  "Search the web for information using Serper API.",
 
 	// Development Tools

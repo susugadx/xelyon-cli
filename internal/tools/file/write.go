@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
@@ -112,10 +113,46 @@ IMPORTANT: Do NOT write the file until the user approves.`, strings.TrimSpace(de
 		return fmt.Sprintf("Error creating directory: %v", err), nil
 	}
 
-	// 書き込み（既存ファイルがある場合は元のパーミッションを維持）
-	if err := os.WriteFile(absPath, []byte(content), perm); err != nil {
-		return fmt.Sprintf("Error writing file: %v", err), nil
+	// Atomic write: tmp ファイルに書き込み後、rename で差し替え
+	tmpFile, err := os.CreateTemp(dir, ".xelyon-write-*.tmp")
+	if err != nil {
+		return fmt.Sprintf("Error creating temp file: %v", err), nil
 	}
+	tmpPath := tmpFile.Name()
+
+	success := false
+	defer func() {
+		if !success {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+
+	if _, err := tmpFile.WriteString(content); err != nil {
+		_ = tmpFile.Close()
+		return fmt.Sprintf("Error writing temp file: %v", err), nil
+	}
+	if err := tmpFile.Chmod(perm); err != nil {
+		_ = tmpFile.Close()
+		return fmt.Sprintf("Error setting permissions: %v", err), nil
+	}
+	if err := tmpFile.Close(); err != nil {
+		return fmt.Sprintf("Error closing temp file: %v", err), nil
+	}
+
+	if err := os.Rename(tmpPath, absPath); err != nil {
+		// Windows は既存ファイル上書き rename が失敗する場合がある
+		if runtime.GOOS == "windows" {
+			if rmErr := os.Remove(absPath); rmErr != nil && !os.IsNotExist(rmErr) {
+				return fmt.Sprintf("Error replacing file: %v", err), nil
+			}
+			if rnErr := os.Rename(tmpPath, absPath); rnErr != nil {
+				return fmt.Sprintf("Error replacing file: %v", rnErr), nil
+			}
+		} else {
+			return fmt.Sprintf("Error replacing file: %v", err), nil
+		}
+	}
+	success = true
 
 	common.Green.Printf("✅ Written: %s\n", path)
 	msg := fmt.Sprintf("Successfully wrote %d bytes to %s", len(content), path)

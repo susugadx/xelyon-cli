@@ -127,6 +127,9 @@ func DefaultConfig() *Config {
 			AllowRedirect:   true, // 利便性向上
 			AllowInlineEdit: true, // 利便性向上
 		},
+		ListDir: ListDirConfig{
+			AdditionalIgnoreDirs: []string{},
+		},
 
 		GitStage: GitStageConfig{
 			BatchConfirm: true,

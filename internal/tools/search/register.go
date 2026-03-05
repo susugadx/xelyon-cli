@@ -48,14 +48,16 @@ func (t *SearchCodeTool) Parameters() map[string]interface{} {
 	return map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
-			"pattern":       map[string]interface{}{"type": "string", "description": "Search pattern (regex). Comma-separated for parallel multi-search (e.g. 'handleSSE,parseResponse')"},
-			"path":          map[string]interface{}{"type": "string", "description": "Directory or file to search in (default: current directory)"},
-			"file_pattern":  map[string]interface{}{"type": "string", "description": "File glob pattern to filter (e.g., *.go, *.ts)"},
-			"file_type":     map[string]interface{}{"type": "string", "description": "File type filter using rg --type (e.g., go, py, js, ts). Preferred over file_pattern for known languages."},
-			"is_regex":      map[string]interface{}{"type": "boolean", "description": "Whether pattern is regex (default: true). Set false for literal string search."},
-			"multiline":     map[string]interface{}{"type": "boolean", "description": "Enable multiline matching for struct/interface/multi-line import search."},
-			"context_lines": map[string]interface{}{"type": "integer", "description": "Number of context lines around matches (default: 3, max: 10)"},
-			"token_budget":  map[string]interface{}{"type": "integer", "description": "Approximate token budget for results (default: 3000, max: 6000)"},
+			"pattern":         map[string]interface{}{"type": "string", "description": "Search pattern (regex). Comma-separated for parallel multi-search (e.g. 'handleSSE,parseResponse')"},
+			"path":            map[string]interface{}{"type": "string", "description": "Directory or file to search in (default: current directory)"},
+			"file_pattern":    map[string]interface{}{"type": "string", "description": "File glob pattern to filter (e.g., *.go, *.ts)"},
+			"file_type":       map[string]interface{}{"type": "string", "description": "File type filter using rg --type (e.g., go, py, js, ts). Preferred over file_pattern for known languages."},
+			"is_regex":        map[string]interface{}{"type": "boolean", "description": "Whether pattern is regex (default: true). Set false for literal string search."},
+			"multiline":       map[string]interface{}{"type": "boolean", "description": "Enable multiline matching for struct/interface/multi-line import search."},
+			"include_hidden":  map[string]interface{}{"type": "boolean", "description": "Include hidden files (dotfiles) in search. Default: false."},
+			"include_ignored": map[string]interface{}{"type": "boolean", "description": "Include files ignored by .gitignore. Default: false."},
+			"context_lines":   map[string]interface{}{"type": "integer", "description": "Number of context lines around matches (default: 3, max: 10)"},
+			"token_budget":    map[string]interface{}{"type": "integer", "description": "Approximate token budget for results (default: 3000, max: 6000)"},
 		},
 		"required":             []string{"pattern"},
 		"additionalProperties": false,
@@ -82,6 +84,16 @@ func (t *SearchCodeTool) Run(args map[string]string) (string, *tools.FileChange,
 	if args["multiline"] != "" {
 		if b, err := strconv.ParseBool(args["multiline"]); err == nil {
 			opts.Multiline = b
+		}
+	}
+	if args["include_hidden"] != "" {
+		if b, err := strconv.ParseBool(args["include_hidden"]); err == nil {
+			opts.IncludeHidden = b
+		}
+	}
+	if args["include_ignored"] != "" {
+		if b, err := strconv.ParseBool(args["include_ignored"]); err == nil {
+			opts.IncludeIgnored = b
 		}
 	}
 	if args["context_lines"] != "" {

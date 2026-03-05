@@ -47,6 +47,7 @@ func ExecuteStrReplace(path, oldStr, newStr, startLineStr, endLineStr string) (s
 	oldContent := string(contentBytes)
 	var newContent string
 	usedNormalizedMatch := false
+	var matchStartLine, matchEndLine, replacedEndLine int
 
 	// ==============================
 	// 1) Line range replacement mode
@@ -164,7 +165,7 @@ Do not retry the same replacement.`, path), nil
 		}
 
 		common.Green.Printf("✅ Replaced lines %d-%d in: %s\n", startLine, endLine, path)
-		return fmt.Sprintf("Successfully replaced lines %d-%d in %s", startLine, endLine, path), nil
+		return fmt.Sprintf("Successfully replaced lines %d-%d in %s (new range: %d-%d)", startLine, endLine, path, startLine, startLine+len(newStrLines)-1), nil
 	}
 
 	// ========================
@@ -182,6 +183,10 @@ Do not retry the same replacement.`, path), nil
 	exactCount := strings.Count(oldContent, oldStr)
 
 	if exactMatch && exactCount == 1 {
+		matchIdx := strings.Index(oldContent, oldStr)
+		matchStartLine = 1 + strings.Count(oldContent[:matchIdx], "\n")
+		matchEndLine = matchStartLine + strings.Count(oldStr, "\n")
+		replacedEndLine = matchStartLine + strings.Count(newStr, "\n")
 		newContent = strings.Replace(oldContent, oldStr, newStr, 1)
 	} else if exactMatch && exactCount > 1 {
 		// 完全一致が複数 → 改善エラー（Candidates + snippet + Next actions + IMPORTANT）
@@ -225,6 +230,9 @@ Do not retry the same replacement.`, path), nil
 		}
 
 		actualOldStr := oldContent[startIdxNormalized : endIdx+1]
+		matchStartLine = 1 + strings.Count(oldContent[:startIdxNormalized], "\n")
+		matchEndLine = 1 + strings.Count(oldContent[:endIdx], "\n")
+		replacedEndLine = matchStartLine + strings.Count(newStr, "\n")
 		newContent = oldContent[:startIdxNormalized] + newStr + oldContent[endIdx+1:]
 		usedNormalizedMatch = true
 
@@ -329,9 +337,9 @@ Do not retry the same replacement.`, path), nil
 
 	common.Green.Printf("✅ Replaced in: %s\n", path)
 	if usedNormalizedMatch {
-		return fmt.Sprintf("Successfully replaced text in %s (used normalized whitespace matching)", path), nil
+		return fmt.Sprintf("Successfully replaced text in %s (lines %d-%d → %d-%d, used normalized whitespace matching)", path, matchStartLine, matchEndLine, matchStartLine, replacedEndLine), nil
 	}
-	return fmt.Sprintf("Successfully replaced text in %s", path), nil
+	return fmt.Sprintf("Successfully replaced text in %s (lines %d-%d → %d-%d)", path, matchStartLine, matchEndLine, matchStartLine, replacedEndLine), nil
 }
 
 type lineRange struct {

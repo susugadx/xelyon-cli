@@ -29,6 +29,24 @@ func TestExecuteStrReplace_ExactMatch(t *testing.T) {
 	testutil.AssertFileContent(t, testFile, "line1\nREPLACED\nline3")
 }
 
+func TestExecuteStrReplace_ReturnsLineNumbers(t *testing.T) {
+	setupTestMocks(t)
+	tmpDir := t.TempDir()
+	file := filepath.Join(tmpDir, "test.go")
+	content := "line1\nline2\nTARGET\nline4\n"
+	if err := os.WriteFile(file, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	result, err := ExecuteStrReplace(file, "TARGET", "REPLACED", "", "")
+	if err != nil {
+		t.Fatalf("ExecuteStrReplace failed: %v", err)
+	}
+	if !strings.Contains(result, "lines 3-3") {
+		t.Fatalf("expected line number in result, got: %s", result)
+	}
+}
+
 func TestExecuteStrReplace_MultipleMatches(t *testing.T) {
 	setupTestMocks(t)
 

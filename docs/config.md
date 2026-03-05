@@ -209,6 +209,8 @@ bash:
     allow_redirect: true
     # インライン編集を許可（sed -i 等）
     allow_inline_edit: true
+list_dir:
+    additional_ignore_dirs: []
 
 # ============================================================
 # git_add設定

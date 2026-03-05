@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
@@ -35,6 +36,20 @@ func ExecuteListDir(path string, depth int) string {
 	}
 
 	cachePath := absPath + "::depth=" + strconv.Itoa(depth)
+
+	ignoreDirs := make(map[string]bool, len(defaultIgnoreDirs))
+	for k, v := range defaultIgnoreDirs {
+		ignoreDirs[k] = v
+	}
+	if cfg := config.GetGlobalConfig(); cfg != nil {
+		for _, d := range cfg.ListDir.AdditionalIgnoreDirs {
+			d = strings.TrimSpace(d)
+			if d == "" {
+				continue
+			}
+			ignoreDirs[d] = true
+		}
+	}
 
 	// キャッシュチェック
 	if tools.GlobalToolCache != nil {
@@ -73,7 +88,7 @@ func ExecuteListDir(path string, depth int) string {
 
 		var entries []os.DirEntry
 		for _, entry := range rawEntries {
-			if entry.IsDir() && defaultIgnoreDirs[entry.Name()] {
+			if entry.IsDir() && ignoreDirs[entry.Name()] {
 				continue
 			}
 			entries = append(entries, entry)

@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -56,14 +57,16 @@ type Match struct {
 
 // SearchOptions はコード検索のオプション
 type SearchOptions struct {
-	Pattern     string
-	Path        string
-	FilePattern string
-	FileType    string
-	CtxLines    int
-	TokenBudget int
-	IsRegex     bool
-	Multiline   bool
+	Pattern        string
+	Path           string
+	FilePattern    string
+	FileType       string
+	CtxLines       int
+	TokenBudget    int
+	IsRegex        bool
+	Multiline      bool
+	IncludeHidden  bool
+	IncludeIgnored bool
 }
 
 // ExecuteSearchCode はコード検索を実行し、フォーマット済み結果を返す
@@ -294,8 +297,8 @@ func buildMultiCacheKey(patterns []string) string {
 }
 
 func buildSearchCacheKey(opts SearchOptions) string {
-	return fmt.Sprintf("%s|%s|%s|%d|%d|regex=%t|multiline=%t",
-		opts.Path, opts.FilePattern, opts.FileType, opts.CtxLines, opts.TokenBudget, opts.IsRegex, opts.Multiline)
+	return fmt.Sprintf("%s|%s|%s|%d|%d|regex=%t|multiline=%t|hidden=%t|ignored=%t",
+		opts.Path, opts.FilePattern, opts.FileType, opts.CtxLines, opts.TokenBudget, opts.IsRegex, opts.Multiline, opts.IncludeHidden, opts.IncludeIgnored)
 }
 
 func collectFilePaths(results []SearchResult) []string {
@@ -344,6 +347,23 @@ func fileTypeToGlob(fileType string) (string, bool) {
 	return glob, ok
 }
 
+var (
+	gnuGrepCheckOnce sync.Once
+	gnuGrepAvailable bool
+)
+
+func isGNUGrep() bool {
+	gnuGrepCheckOnce.Do(func() {
+		out, err := exec.Command("grep", "--version").CombinedOutput()
+		if err != nil {
+			gnuGrepAvailable = false
+			return
+		}
+		gnuGrepAvailable = strings.Contains(strings.ToLower(string(out)), "gnu grep")
+	})
+	return gnuGrepAvailable
+}
+
 // calcMaxCountPerFile はトークンバジェットからファイルあたりのマッチ上限を計算する
 // 1マッチあたり平均 ~30 トークン（行 + コンテキスト + ブロック注釈）と見積もり
 func calcMaxCountPerFile(budget int) int {
@@ -381,6 +401,12 @@ func executeSearch(pattern string, opts SearchOptions, maxCountPerFile int) (str
 		if opts.Multiline {
 			args = append(args, "--multiline")
 		}
+		if opts.IncludeHidden {
+			args = append(args, "--hidden")
+		}
+		if opts.IncludeIgnored {
+			args = append(args, "--no-ignore")
+		}
 		args = append(args, pattern, opts.Path)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -415,6 +441,16 @@ func executeSearch(pattern string, opts SearchOptions, maxCountPerFile int) (str
 		args = append(args, "-E") // 拡張正規表現（rg と同等の regex 解釈 + 不正 regex のエラー検出）
 	} else {
 		args = append(args, "-F")
+	}
+	if !opts.IncludeHidden {
+		// rg のデフォルト挙動に寄せる。GNU grep でのみ --exclude 系を使用。
+		if isGNUGrep() {
+			args = append(args, "--exclude=.*", "--exclude-dir=.*")
+		} else {
+			warnings = append(warnings, "Warning: hidden-file exclusion is not fully supported in grep fallback mode on non-GNU grep")
+		}
+	} else {
+		warnings = append(warnings, "Warning: include_hidden is partially supported in grep fallback mode")
 	}
 
 	if opts.FileType != "" {

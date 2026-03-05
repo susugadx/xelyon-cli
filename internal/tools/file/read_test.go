@@ -231,3 +231,31 @@ func TestExecuteReadFile_BinaryFile(t *testing.T) {
 		t.Fatalf("expected binary-file error, got: %s", output)
 	}
 }
+
+func TestExecuteReadFile_LargeFileStreaming(t *testing.T) {
+	setupTestMocks(t)
+	tmpDir := t.TempDir()
+	largeFile := filepath.Join(tmpDir, "large.log")
+
+	f, err := os.Create(largeFile)
+	if err != nil {
+		t.Fatalf("failed to create large file: %v", err)
+	}
+	for i := 0; i < 25000; i++ {
+		if _, err := fmt.Fprintf(f, "line %05d: %s\n", i+1, strings.Repeat("x", 70)); err != nil {
+			_ = f.Close()
+			t.Fatalf("failed to write large file: %v", err)
+		}
+	}
+	if err := f.Close(); err != nil {
+		t.Fatalf("failed to close large file: %v", err)
+	}
+
+	output := ExecuteReadFile(largeFile, 0, 0)
+	if !strings.Contains(output, "truncated") {
+		t.Fatalf("expected truncation for large file, got: %s", output)
+	}
+	if !strings.Contains(output, "1: line 00001") {
+		t.Fatalf("expected first line in output, got: %s", output)
+	}
+}

@@ -18,6 +18,7 @@ type Config struct {
 	Paste           PasteConfig                    `yaml:"paste"`
 	Streaming       StreamingConfig                `yaml:"streaming"`
 	Bash            BashConfig                     `yaml:"bash"`
+	ListDir         ListDirConfig                  `yaml:"list_dir"`
 
 	GitStage  GitStageConfig  `yaml:"git_stage"`
 	PlanMode  PlanModeConfig  `yaml:"plan_mode"`
@@ -108,6 +109,11 @@ type BashConfig struct {
 	AllowPipe       bool     `yaml:"allow_pipe"`        // パイプを許可（デフォルト: true - moderateで有効）
 	AllowRedirect   bool     `yaml:"allow_redirect"`    // リダイレクトを許可（デフォルト: false）
 	AllowInlineEdit bool     `yaml:"allow_inline_edit"` // sed -i等を許可（デフォルト: false）
+}
+
+// ListDirConfig は list_dir ツールの設定
+type ListDirConfig struct {
+	AdditionalIgnoreDirs []string `yaml:"additional_ignore_dirs"` // デフォルト除外に追加するディレクトリ名
 }
 
 // GitStageConfig はgit_addツールの設定

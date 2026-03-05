@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 func chdirForListDirTest(t *testing.T, dir string) {
@@ -116,6 +118,32 @@ func TestExecuteListDir_IgnoreDefaultDirs(t *testing.T) {
 	output := ExecuteListDir(tmpDir, 2)
 	if strings.Contains(output, "node_modules") {
 		t.Errorf("node_modules should be ignored, got: %s", output)
+	}
+	if !strings.Contains(output, "keep.txt") {
+		t.Errorf("keep.txt should be listed, got: %s", output)
+	}
+}
+
+func TestExecuteListDir_CustomIgnoreDirs(t *testing.T) {
+	tmpDir := t.TempDir()
+	chdirForListDirTest(t, tmpDir)
+
+	if err := os.Mkdir(filepath.Join(tmpDir, "coverage"), 0755); err != nil {
+		t.Fatalf("Failed to create coverage directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "keep.txt"), []byte("ok"), 0644); err != nil {
+		t.Fatalf("Failed to create keep file: %v", err)
+	}
+
+	origCfg := config.GetGlobalConfig()
+	cfgCopy := *origCfg
+	cfgCopy.ListDir.AdditionalIgnoreDirs = []string{"coverage"}
+	config.SetGlobalConfig(&cfgCopy)
+	t.Cleanup(func() { config.SetGlobalConfig(origCfg) })
+
+	output := ExecuteListDir(tmpDir, 1)
+	if strings.Contains(output, "coverage") {
+		t.Errorf("coverage should be ignored by custom list_dir config, got: %s", output)
 	}
 	if !strings.Contains(output, "keep.txt") {
 		t.Errorf("keep.txt should be listed, got: %s", output)
