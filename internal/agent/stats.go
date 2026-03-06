@@ -158,7 +158,7 @@ func GetPricingInfo(provider string, model string, promptTokenCount ...int) Pric
 		// DeepSeekの料金体系
 		return getDeepSeekPricing(model)
 	case "openai":
-		return getOpenAIPricing(model)
+		return getOpenAIPricing(model, ptc)
 	case "claude":
 		return getClaudePricing(model, ptc)
 	case "bedrock":
@@ -183,7 +183,7 @@ func GetPricingInfo(provider string, model string, promptTokenCount ...int) Pric
 		case strings.Contains(lm, "claude"):
 			return getClaudePricing(model, ptc)
 		case strings.Contains(lm, "gpt") || strings.Contains(lm, "openai") || strings.Contains(lm, "codex"):
-			return getOpenAIPricing(model)
+			return getOpenAIPricing(model, ptc)
 		case strings.Contains(lm, "gemini") || strings.Contains(lm, "google"):
 			return getGeminiPricing(model, ptc)
 		case strings.Contains(lm, "deepseek"):
@@ -296,12 +296,15 @@ func getClaudePricing(model string, promptTokenCount int) PricingInfo {
 }
 
 // getOpenAIPricing はモデル名からOpenAI料金を返す
-func getOpenAIPricing(model string) PricingInfo {
+func getOpenAIPricing(model string, promptTokenCount int) PricingInfo {
 	lm := strings.ToLower(model)
 	if cfg := loadPricingConfig(); cfg != nil {
 		provider := cfg.OpenAI
-		if pricing, ok := matchPricingRules(lm, provider, 0); ok {
+		if pricing, ok := matchPricingRules(lm, provider, promptTokenCount); ok {
 			return pricing
+		}
+		if provider.LongInput != nil && promptTokenCount > provider.LongInput.Threshold {
+			return provider.LongInput.Pricing
 		}
 		return provider.Default
 	}
@@ -330,6 +333,38 @@ func getOpenAIPricing(model string) PricingInfo {
 			OutputCostPerM:        168.00,
 			CachedInputCostPerM:   2.10, // 90% off
 			CacheCreationCostPerM: 21.00,
+		}
+	case strings.Contains(lm, "5.4-pro"):
+		// GPT-5.4 Pro: $30/$180 per million tokens, >272K input doubles input-side pricing
+		if promptTokenCount > 272000 {
+			return PricingInfo{
+				InputCostPerM:         60.00,
+				OutputCostPerM:        180.00,
+				CachedInputCostPerM:   6.00,
+				CacheCreationCostPerM: 60.00,
+			}
+		}
+		return PricingInfo{
+			InputCostPerM:         30.00,
+			OutputCostPerM:        180.00,
+			CachedInputCostPerM:   3.00,
+			CacheCreationCostPerM: 30.00,
+		}
+	case strings.Contains(lm, "5.4"):
+		// GPT-5.4: $2.50/$15 per million tokens, >272K input doubles input-side pricing
+		if promptTokenCount > 272000 {
+			return PricingInfo{
+				InputCostPerM:         5.00,
+				OutputCostPerM:        15.00,
+				CachedInputCostPerM:   0.50,
+				CacheCreationCostPerM: 5.00,
+			}
+		}
+		return PricingInfo{
+			InputCostPerM:         2.50,
+			OutputCostPerM:        15.00,
+			CachedInputCostPerM:   0.25,
+			CacheCreationCostPerM: 2.50,
 		}
 	case strings.Contains(lm, "5.1"):
 		// GPT-5.1 / 5.1-Codex: $2.00/$8.00 per million tokens

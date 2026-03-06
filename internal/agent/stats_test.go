@@ -686,6 +686,46 @@ func TestGetPricingInfo_FallbackToHardcodedWhenYAMLUnavailable(t *testing.T) {
 	}
 }
 
+func TestGetOpenAIPricing_GPT54(t *testing.T) {
+	pricing := GetPricingInfo("openai", "gpt-5.4")
+	if pricing.InputCostPerM != 2.50 {
+		t.Errorf("expected 2.50, got %f", pricing.InputCostPerM)
+	}
+	if pricing.OutputCostPerM != 15.00 {
+		t.Errorf("expected 15.00, got %f", pricing.OutputCostPerM)
+	}
+}
+
+func TestGetOpenAIPricing_GPT54Pro(t *testing.T) {
+	pricing := GetPricingInfo("openai", "gpt-5.4-pro")
+	if pricing.InputCostPerM != 30.00 {
+		t.Errorf("expected 30.00, got %f", pricing.InputCostPerM)
+	}
+	if pricing.OutputCostPerM != 180.00 {
+		t.Errorf("expected 180.00, got %f", pricing.OutputCostPerM)
+	}
+}
+
+func TestGetOpenAIPricing_GPT54_LongInput(t *testing.T) {
+	pricing := GetPricingInfo("openai", "gpt-5.4", 300000)
+	if pricing.InputCostPerM != 5.00 {
+		t.Errorf("expected 5.00 for long input, got %f", pricing.InputCostPerM)
+	}
+	if pricing.CachedInputCostPerM != 0.50 {
+		t.Errorf("expected 0.50 cached long input, got %f", pricing.CachedInputCostPerM)
+	}
+}
+
+func TestGetOpenAIPricing_GPT54Pro_LongInput(t *testing.T) {
+	pricing := GetPricingInfo("openai", "gpt-5.4-pro", 300000)
+	if pricing.InputCostPerM != 60.00 {
+		t.Errorf("expected 60.00 for long input, got %f", pricing.InputCostPerM)
+	}
+	if pricing.CachedInputCostPerM != 6.00 {
+		t.Errorf("expected 6.00 cached long input, got %f", pricing.CachedInputCostPerM)
+	}
+}
+
 // === 新規テスト: DeepSeek V3.2 統一料金 ===
 
 func TestGetDeepSeekPricing_V32Unified(t *testing.T) {

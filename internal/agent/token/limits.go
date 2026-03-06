@@ -42,6 +42,8 @@ var modelTokenLimits = map[string]int{
 	"o1-preview":          128000,
 	"o3-mini":             200000,
 	"gpt-5":               200000,
+	"gpt-5.4":             1000000,
+	"gpt-5.4-pro":         1000000,
 	"gpt-5.1":             196000,
 	"gpt-5.2":             400000,
 
@@ -107,6 +109,7 @@ func GetModelTokenLimit(model string) int {
 		{"gpt-4o", 128000},
 		{"gpt-4", 8192},
 		{"gpt-3.5", 16385},
+		{"gpt-5.4", 1000000},
 		{"gpt-5", 200000},
 		{"o1", 200000},
 		{"o3", 200000},

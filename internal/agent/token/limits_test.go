@@ -17,6 +17,8 @@ func TestGetModelTokenLimit_ExactMatch(t *testing.T) {
 		// OpenAI models
 		{"gpt-4.1", 1000000},
 		{"gpt-4.1-mini", 1000000},
+		{"gpt-5.4", 1000000},
+		{"gpt-5.4-pro", 1000000},
 		{"gpt-5.1", 196000},
 		{"gpt-5.2", 400000},
 		{"gpt-4o", 128000},
@@ -76,6 +78,7 @@ func TestGetModelTokenLimit_PrefixMatch(t *testing.T) {
 		{"gpt-3.5-turbo-0125", 16385},
 
 		// GPT-5 prefix
+		{"gpt-5.4-preview", 1000000},
 		{"gpt-5-preview", 200000},
 
 		// O1/O3 prefix

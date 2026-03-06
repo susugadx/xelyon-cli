@@ -23,6 +23,32 @@ openai:
         outputcostperm: 168.00
         cachedinputcostperm: 2.10
         cachecreationcostperm: 21.00
+    - contains: ["5.4-pro"]
+      pricing:
+        inputcostperm: 30.00
+        outputcostperm: 180.00
+        cachedinputcostperm: 3.00
+        cachecreationcostperm: 30.00
+      long_input:
+        threshold: 272000
+        pricing:
+          inputcostperm: 60.00
+          outputcostperm: 180.00
+          cachedinputcostperm: 6.00
+          cachecreationcostperm: 60.00
+    - contains: ["5.4"]
+      pricing:
+        inputcostperm: 2.50
+        outputcostperm: 15.00
+        cachedinputcostperm: 0.25
+        cachecreationcostperm: 2.50
+      long_input:
+        threshold: 272000
+        pricing:
+          inputcostperm: 5.00
+          outputcostperm: 15.00
+          cachedinputcostperm: 0.50
+          cachecreationcostperm: 5.00
     - contains: ["5.1"]
       pricing:
         inputcostperm: 2.00
