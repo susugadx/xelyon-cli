@@ -250,7 +250,7 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 			}
 
 			// ツール実行（executeToolOnly と同じパターン）
-			result, change := tools.Execute(toolCall)
+			result, change := executeToolWithSpinner(toolCall)
 
 			// str_replace 成功時: LSP診断遅延バッファにファイルを追加
 			// 連続 str_replace 途中の一時的エラーによる誤 auto-retry を防ぐため、

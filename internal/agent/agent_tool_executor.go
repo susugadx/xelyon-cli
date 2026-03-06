@@ -8,6 +8,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // argsToJSON は RawArgs を JSON 文字列に変換
@@ -20,6 +21,16 @@ func argsToJSON(args map[string]any) string {
 		return "{}"
 	}
 	return string(b)
+}
+
+func executeToolWithSpinner(toolCall *tools.ToolCall) (string, *tools.FileChange) {
+	spinner := ui.NewSpinner()
+	spinner.Start(ui.SpinnerMessageForTool(toolCall.Tool))
+	ui.SetGlobalSpinner(spinner)
+
+	result, change := tools.Execute(toolCall)
+	spinner.Stop()
+	return result, change
 }
 
 // addToolCallsToHistory はパラレル FC の全ツール呼び出しを1つの assistant メッセージにまとめて履歴に追加する。
@@ -75,7 +86,7 @@ func (a *Agent) addToolCallsToHistory(response string, toolCalls []*tools.ToolCa
 // addToolCallsToHistory でバッチ化済みの場合に使用する。
 func (a *Agent) executeToolOnly(toolCall *tools.ToolCall) string {
 	// ツール実行
-	result, change := tools.Execute(toolCall)
+	result, change := executeToolWithSpinner(toolCall)
 
 	// str_replace エラー処理
 	if a.handleStrReplaceErrors(toolCall, result) {
@@ -233,7 +244,7 @@ func (a *Agent) executeToolCallInternal(response string, toolCall *tools.ToolCal
 	a.addToolCallToHistory(response, toolCall)
 
 	// ツール実行
-	result, change := tools.Execute(toolCall)
+	result, change := executeToolWithSpinner(toolCall)
 
 	// str_replace エラー処理
 	if a.handleStrReplaceErrors(toolCall, result) {

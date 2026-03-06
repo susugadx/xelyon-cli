@@ -420,7 +420,7 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 			if a.Stats != nil {
 				a.Stats.AddToolExecution(toolCall.Tool)
 			}
-			result, _ := tools.Execute(toolCall)
+			result, _ := executeToolWithSpinner(toolCall)
 			a.History = append(a.History, api.Message{
 				Role:             "assistant",
 				Content:          response,
