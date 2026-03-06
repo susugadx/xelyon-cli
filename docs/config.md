@@ -186,7 +186,7 @@ paste:
 # ============================================================
 streaming:
     # アイドルタイムアウト（秒）
-    idle_timeout_seconds: 300
+    idle_timeout_seconds: 30
     thinking_timeout_seconds: 120
     # ファイル読み込み時にサイズ・行数を表示
     show_file_info: true

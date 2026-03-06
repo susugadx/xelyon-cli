@@ -34,13 +34,6 @@ provider_models:
     openai:
         default_model: gpt-5.2
         max_output_tokens: 16384
-        # 利用可能モデル: gpt-5.4, gpt-5.4-pro, gpt-5.3, gpt-5.2, gpt-5.2-pro, gpt-5.1, gpt-5
-        # GPT-5.4 は最大128K出力対応。必要に応じて model_overrides で増やす:
-        # model_overrides:
-        #     gpt-5.4:
-        #         max_output_tokens: 32768
-        #     gpt-5.4-pro:
-        #         max_output_tokens: 65536
     openrouter:
         default_model: anthropic/claude-sonnet-4.6
         max_output_tokens: 64000
@@ -143,7 +136,7 @@ paste:
 # ============================================================
 streaming:
     # アイドルタイムアウト（秒）
-    idle_timeout_seconds: 300
+    idle_timeout_seconds: 30
     thinking_timeout_seconds: 120
     # ファイル読み込み時にサイズ・行数を表示
     show_file_info: true

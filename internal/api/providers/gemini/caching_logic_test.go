@@ -23,7 +23,7 @@ func TestEstimateTokens(t *testing.T) {
 
 	// "You are a helpful assistant." (28) + "Hello" (5) + "Hi there!" (9) = 42
 	expected := 42
-	actual := estimateTokens(systemPrompt, history)
+	actual := estimateTokens(systemPrompt, history, nil)
 
 	if actual != expected {
 		t.Errorf("expected %d tokens, got %d", expected, actual)

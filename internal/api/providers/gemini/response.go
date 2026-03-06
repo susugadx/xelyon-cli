@@ -32,6 +32,15 @@ func isThinkingTimeoutError(err error) bool {
 	return errors.As(err, &target)
 }
 
+// ErrIdleTimeout はSSEストリームでデータ受信がない場合のタイムアウトエラー
+type ErrIdleTimeout struct {
+	Message string
+}
+
+func (e *ErrIdleTimeout) Error() string {
+	return e.Message
+}
+
 // handleSSEResponse は streamGenerateContent?alt=sse の SSE ストリームを処理する
 func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
 	debug := os.Getenv("XELYON_DEBUG_GEMINI") == "1"
@@ -103,7 +112,7 @@ loop:
 			if spinner != nil {
 				spinner.Stop()
 			}
-			return fullResponse.String(), fmt.Errorf("idle timeout: no data received for %v", idleTimeout)
+			return fullResponse.String(), &ErrIdleTimeout{Message: fmt.Sprintf("idle timeout: no data received for %v", idleTimeout)}
 
 		case <-thinkingTimer.C:
 			// thinking のみが続き text/FC が来ない場合のタイムアウト

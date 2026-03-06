@@ -172,6 +172,18 @@ const thinkingTimeoutRetryKey ctxKey = "gemini_thinking_timeout_retry"
 // maxThinkingTimeoutRetries はthinking timeout時のFCモードリトライ上限
 const maxThinkingTimeoutRetries = 2
 
+// idleTimeoutRetryKey はidle timeoutリトライ回数を追跡するcontext key
+const idleTimeoutRetryKey ctxKey = "gemini_idle_timeout_retry"
+
+// maxIdleTimeoutRetries はidle timeout時のFCモードリトライ上限
+const maxIdleTimeoutRetries = 1
+
+// fcErrorRetryKey はFC一般エラーのリトライ回数を追跡するcontext key
+const fcErrorRetryKey ctxKey = "gemini_fc_error_retry"
+
+// maxFCErrorRetries はFC一般エラー時のリトライ上限
+const maxFCErrorRetries = 1
+
 // ChatWithTools は Provider interface の実装（context対応）
 // GEMINI_FUNCTION_CALLING=0の場合のみテキストモードを使用
 // MCPツールもFunction Calling経由で呼び出される
@@ -193,8 +205,25 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		}
 		result, err := p.chatWithFunctionCalling(ctx, systemPrompt, history, model)
 		if err != nil {
-			// Thinking timeout はテキストモードにフォールバックしない（ツールが使えなくなるため）
-			// FCモードのままリトライし、上限に達したらエラーを返す
+			// Idle timeout: FCモードで1回リトライ → それでもダメならエラー
+			var idleErr *ErrIdleTimeout
+			if errors.As(err, &idleErr) {
+				retryCount := 0
+				if v := ctx.Value(idleTimeoutRetryKey); v != nil {
+					retryCount = v.(int)
+				}
+				if retryCount >= maxIdleTimeoutRetries {
+					return "", fmt.Errorf("idle timeout: exceeded max retries (%d): %w", maxIdleTimeoutRetries, err)
+				}
+				retryCount++
+				ui.StopGlobalSpinner()
+				ui.ResetTerminalState()
+				fmt.Fprintf(os.Stderr, "⚠️ Idle timeout, retrying FC mode (attempt %d/%d)...\n", retryCount, maxIdleTimeoutRetries)
+				ctx = context.WithValue(ctx, idleTimeoutRetryKey, retryCount)
+				return p.ChatWithTools(ctx, systemPrompt, history, model)
+			}
+
+			// Thinking timeout: FCモードでリトライ（既存ロジック、変更なし）
 			var thinkingErr *ErrThinkingTimeout
 			if errors.As(err, &thinkingErr) {
 				retryCount := 0
@@ -211,16 +240,28 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 				ctx = context.WithValue(ctx, thinkingTimeoutRetryKey, retryCount)
 				return p.ChatWithTools(ctx, systemPrompt, history, model)
 			}
-			// Thinking timeout以外のFC失敗時はテキストモードにフォールバック
-			// スピナーgoroutineの完全停止とターミナル状態のリセットを保証
+
+			// その他のFCエラー: FCモードで1回リトライ → それでもダメならエラー
+			// テキストモードフォールバックは廃止（ツール定義が消えてキャッシュ汚染するため）
+			retryCount := 0
+			if v := ctx.Value(fcErrorRetryKey); v != nil {
+				retryCount = v.(int)
+			}
+			if retryCount >= maxFCErrorRetries {
+				ui.StopGlobalSpinner()
+				ui.ResetTerminalState()
+				return "", fmt.Errorf("FC mode failed after %d retries: %w", maxFCErrorRetries, err)
+			}
+			retryCount++
 			ui.StopGlobalSpinner()
 			ui.ResetTerminalState()
-			fmt.Fprintf(os.Stderr, "Warning: Function Calling failed, falling back to text mode\n")
+			fmt.Fprintf(os.Stderr, "⚠️ FC error, retrying FC mode (attempt %d/%d)...\n", retryCount, maxFCErrorRetries)
 			fmt.Fprintf(os.Stderr, "  Reason: %v\n", err)
 			if debug {
 				fmt.Fprintf(os.Stderr, "[DEBUG Gemini] FC error detail: %+v\n", err)
 			}
-			return p.chatWithTextMode(ctx, systemPrompt, history, model)
+			ctx = context.WithValue(ctx, fcErrorRetryKey, retryCount)
+			return p.ChatWithTools(ctx, systemPrompt, history, model)
 		}
 		return result, nil
 	}

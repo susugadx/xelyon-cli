@@ -2,6 +2,7 @@ package gemini
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
@@ -101,11 +102,21 @@ func getCacheTTL() int {
 	return defaultCacheTTL
 }
 
-// estimateTokens はトークン数を概算する
-func estimateTokens(systemPrompt string, history []api.Message) int {
+// estimateTokens はトークン数を概算する（ツール定義を含む）
+func estimateTokens(systemPrompt string, history []api.Message, tools []api.GeminiToolConfig) int {
 	totalChars := len(systemPrompt)
 	for _, msg := range history {
 		totalChars += len(msg.Content)
+	}
+	// ツール定義のトークン数を概算（JSON構造分を加算）
+	for _, tool := range tools {
+		for _, fd := range tool.FunctionDeclarations {
+			totalChars += len(fd.Name) + len(fd.Description)
+			if fd.Parameters != nil {
+				paramBytes, _ := json.Marshal(fd.Parameters)
+				totalChars += len(paramBytes)
+			}
+		}
 	}
 	return int(float64(totalChars) * tokenEstimateRate)
 }
@@ -126,7 +137,7 @@ func (p *Provider) updateOrUseCache(ctx context.Context, systemPrompt string, hi
 	p.initCacheMap()
 
 	// 現在の総トークン数を概算
-	totalTokens := estimateTokens(systemPrompt, history)
+	totalTokens := estimateTokens(systemPrompt, history, tools)
 
 	// 最小トークン数未満ならキャッシュしない
 	if totalTokens < minCacheTokens {

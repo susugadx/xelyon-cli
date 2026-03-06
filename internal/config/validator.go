@@ -112,7 +112,7 @@ func ValidateConfig(cfg *Config) ValidationResult {
 
 	validateNumericRange(&result, "paste.max_lines", cfg.Paste.MaxLines, 100, 100000, 10000)
 	validateNumericRange(&result, "paste.timeout_seconds", cfg.Paste.TimeoutSeconds, 10, 600, 60)
-	validateNumericRange(&result, "streaming.idle_timeout_seconds", cfg.Streaming.IdleTimeoutSeconds, 10, 7200, 3600)
+	validateNumericRange(&result, "streaming.idle_timeout_seconds", cfg.Streaming.IdleTimeoutSeconds, 10, 7200, 30)
 
 	// 5. Bash安全性レベル検証
 	if cfg.Bash.SafetyLevel != "" {

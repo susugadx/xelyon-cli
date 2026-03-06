@@ -1017,8 +1017,8 @@ func TestThinkingTimeoutDefaults(t *testing.T) {
 	if cfg.Streaming.ThinkingTimeoutSeconds != 120 {
 		t.Errorf("ThinkingTimeoutSeconds default = %d, want 120", cfg.Streaming.ThinkingTimeoutSeconds)
 	}
-	if cfg.Streaming.IdleTimeoutSeconds != 300 {
-		t.Errorf("IdleTimeoutSeconds default = %d, want 300", cfg.Streaming.IdleTimeoutSeconds)
+	if cfg.Streaming.IdleTimeoutSeconds != 30 {
+		t.Errorf("IdleTimeoutSeconds default = %d, want 30", cfg.Streaming.IdleTimeoutSeconds)
 	}
 }
 
