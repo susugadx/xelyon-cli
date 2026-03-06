@@ -159,20 +159,25 @@ func GetDefaultModel(model, providerName, fallback string) string {
 // Parameters:
 //   - isImage: true for image analysis, false for normal chat
 //   - customSuffix: optional suffix like "Function Calling" or "Reasoner"
+//   - forceDeep: optional override to show deep-thinking messaging even when config thinking is disabled
 //
 // Returns the started spinner (caller must call Stop()).
-func StartThinkingSpinner(ctx context.Context, isImage bool, customSuffix string) *ui.Spinner {
+func StartThinkingSpinner(ctx context.Context, isImage bool, customSuffix string, forceDeep ...bool) *ui.Spinner {
 	spinner := ui.NewSpinner()
+	deep := IsThinkingEnabled(ctx)
+	if len(forceDeep) > 0 && forceDeep[0] {
+		deep = true
+	}
 
 	var msg string
 	if isImage {
-		if IsThinkingEnabled(ctx) {
+		if deep {
 			msg = "Deep thinking (image)"
 		} else {
 			msg = "Analyzing image"
 		}
 	} else {
-		if IsThinkingEnabled(ctx) {
+		if deep {
 			msg = "Deep thinking"
 		} else {
 			msg = "Thinking"

@@ -228,7 +228,7 @@ func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, h
 	req.Header.Set("Authorization", "Bearer "+p.APIKey)
 
 	// スピナー開始
-	spinner := api.StartThinkingSpinner(ctx, isCodexModel(model) && api.IsThinkingEnabled(ctx), "")
+	spinner := api.StartThinkingSpinner(ctx, false, "", reqBody.Reasoning != nil)
 
 	resp, err := p.ExecuteRequest(req)
 	if err != nil {
@@ -541,7 +541,7 @@ func (p *Provider) chatWithImageResponses(ctx context.Context, systemPrompt stri
 	req.Header.Set("Authorization", "Bearer "+p.APIKey)
 
 	// スピナー開始
-	spinner := api.StartThinkingSpinner(ctx, isCodexModel(model) && api.IsThinkingEnabled(ctx), "")
+	spinner := api.StartThinkingSpinner(ctx, false, "", reqBody.Reasoning != nil)
 
 	resp, err := p.ExecuteRequest(req)
 	if err != nil {
