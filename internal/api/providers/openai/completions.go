@@ -59,7 +59,7 @@ func (p *Provider) chatWithCompletions(ctx context.Context, systemPrompt string,
 		MaxTokens:            api.GetMaxOutputTokens(ctx, "openai", model),
 		Stream:               true,
 		StreamOptions:        &api.StreamOptions{IncludeUsage: true},
-		PromptCacheKey:       "xelyon",
+		PromptCacheKey:       BuildPromptCacheKey(model, systemPrompt),
 		PromptCacheRetention: "24h",
 	}
 
@@ -307,7 +307,7 @@ func (p *Provider) chatWithImageCompletions(ctx context.Context, systemPrompt st
 		Messages:             messages,
 		MaxTokens:            api.GetMaxOutputTokens(ctx, "openai", model),
 		Stream:               true,
-		PromptCacheKey:       "xelyon",
+		PromptCacheKey:       BuildPromptCacheKey(model, systemPrompt),
 		PromptCacheRetention: "24h",
 	}
 

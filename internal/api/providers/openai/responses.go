@@ -136,7 +136,7 @@ func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, h
 		Stream:               true,
 		Store:                true,
 		Tools:                GetResponsesToolDefinitions(p.mcpTools), // Function Calling
-		PromptCacheKey:       "xelyon",
+		PromptCacheKey:       BuildPromptCacheKey(model, systemPrompt),
 		PromptCacheRetention: "24h",
 	}
 
@@ -495,7 +495,7 @@ func (p *Provider) chatWithImageResponses(ctx context.Context, systemPrompt stri
 		Stream:               true,
 		Store:                true,
 		Tools:                GetResponsesToolDefinitions(p.mcpTools), // Function Calling
-		PromptCacheKey:       "xelyon",
+		PromptCacheKey:       BuildPromptCacheKey(model, systemPrompt),
 		PromptCacheRetention: "24h",
 	}
 
