@@ -58,6 +58,61 @@ func TestPreviewToolCall(t *testing.T) {
 	}
 }
 
+func TestIsBashReadOnly(t *testing.T) {
+	tests := []struct {
+		command string
+		want    bool
+	}{
+		// read-only コマンド
+		{"ls -la", true},
+		{"cat main.go", true},
+		{"grep -r TODO .", true},
+		{"git status", true},
+		{"git log --oneline -5", true},
+		{"git diff HEAD~1", true},
+		{"go test ./...", true},
+		{"pwd", true},
+		{"echo hello", true},
+		{"find . -name '*.go'", true},
+		{"head -20 main.go", true},
+		{"tree", true},
+		{"env", true},
+
+		// 空コマンド
+		{"", true},
+		{"  ", true},
+
+		// unsafe コマンド（パイプ）
+		{"cat main.go | grep TODO", false},
+		{"ls -la | wc -l", false},
+
+		// unsafe コマンド（リダイレクト）
+		{"echo hello > file.txt", false},
+		{"cat a >> b", false},
+
+		// unsafe コマンド（連結）
+		{"go fmt ./... && go build", false},
+		{"ls; rm foo", false},
+
+		// unsafe コマンド（不明なコマンド）
+		{"make build", false},
+		{"go build -o xelyon", false},
+		{"rm -rf dist", false},
+		{"npm install", false},
+		{"go mod tidy", false},
+
+		// プレフィックス誤マッチ防止（lsxyz は ls ではない）
+		{"lsxyz", false},
+		{"grepall foo", false},
+	}
+	for _, tt := range tests {
+		got := isBashReadOnly(tt.command)
+		if got != tt.want {
+			t.Errorf("isBashReadOnly(%q) = %v, want %v", tt.command, got, tt.want)
+		}
+	}
+}
+
 func TestIsWriteToolConsistency(t *testing.T) {
 	writeTools := []string{"write_file", "str_replace", "delete_file"}
 	for _, tool := range writeTools {
