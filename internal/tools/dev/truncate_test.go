@@ -41,7 +41,7 @@ func TestTruncateWithFile_OverLimit_Format(t *testing.T) {
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.Chdir(origDir) })
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
 
 	// 50行のテストデータを生成（各行"line_NNN\n"）
 	var sb strings.Builder
@@ -88,7 +88,7 @@ func TestTruncateWithFile_FileSaved(t *testing.T) {
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.Chdir(origDir) })
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
 
 	input := "HEAD" + strings.Repeat("m", config.OutputTruncateLen+4992) + "TAIL"
 	result := TruncateWithFile(input)
@@ -130,7 +130,7 @@ func TestTruncateWithFile_Last30Lines(t *testing.T) {
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.Chdir(origDir) })
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
 
 	// 100行 + パディングで閾値超過
 	var sb strings.Builder
@@ -179,7 +179,7 @@ func TestCleanupArtifacts(t *testing.T) {
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.Chdir(origDir) })
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
 
 	dir := filepath.Join(tmpDir, artifactsDir)
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -192,7 +192,7 @@ func TestCleanupArtifacts(t *testing.T) {
 		t.Fatal(err)
 	}
 	oldTime := time.Now().Add(-25 * time.Hour)
-	os.Chtimes(oldFile, oldTime, oldTime)
+	_ = os.Chtimes(oldFile, oldTime, oldTime)
 
 	// 新しいファイル（1時間前）
 	newFile := filepath.Join(dir, "output_new.txt")
@@ -200,7 +200,7 @@ func TestCleanupArtifacts(t *testing.T) {
 		t.Fatal(err)
 	}
 	newTime := time.Now().Add(-1 * time.Hour)
-	os.Chtimes(newFile, newTime, newTime)
+	_ = os.Chtimes(newFile, newTime, newTime)
 
 	CleanupArtifacts()
 
@@ -221,7 +221,7 @@ func TestCleanupArtifacts_NoDir(t *testing.T) {
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.Chdir(origDir) })
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
 
 	// ディレクトリが存在しなくてもパニックしないこと
 	CleanupArtifacts()
@@ -233,10 +233,10 @@ func TestCheckGitignore_Present(t *testing.T) {
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.Chdir(origDir) })
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
 
 	// .xelyon/ を含む .gitignore
-	os.WriteFile(filepath.Join(tmpDir, ".gitignore"), []byte("node_modules/\n.xelyon/\n"), 0644)
+	_ = os.WriteFile(filepath.Join(tmpDir, ".gitignore"), []byte("node_modules/\n.xelyon/\n"), 0644)
 
 	// パニックしないこと（log出力はなし）
 	checkGitignore()
@@ -248,7 +248,7 @@ func TestCheckGitignore_Missing(t *testing.T) {
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.Chdir(origDir) })
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
 
 	// .gitignore なし → 警告が出るがパニックしないこと
 	checkGitignore()
@@ -260,10 +260,10 @@ func TestCheckGitignore_WithoutXelyon(t *testing.T) {
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.Chdir(origDir) })
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
 
 	// .xelyon/ を含まない .gitignore
-	os.WriteFile(filepath.Join(tmpDir, ".gitignore"), []byte("node_modules/\n"), 0644)
+	_ = os.WriteFile(filepath.Join(tmpDir, ".gitignore"), []byte("node_modules/\n"), 0644)
 
 	// パニックしないこと（log出力あり）
 	checkGitignore()

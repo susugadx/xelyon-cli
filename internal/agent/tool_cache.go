@@ -322,7 +322,7 @@ func negativeCacheKey(toolName string, args map[string]interface{}) string {
 		b.WriteString("::")
 		b.WriteString(k)
 		b.WriteString("=")
-		b.WriteString(fmt.Sprintf("%v", args[k]))
+		fmt.Fprintf(&b, "%v", args[k])
 	}
 	return b.String()
 }
