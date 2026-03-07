@@ -23,10 +23,16 @@ func argsToJSON(args map[string]any) string {
 	return string(b)
 }
 
-func executeToolWithSpinner(toolCall *tools.ToolCall) (string, *tools.FileChange) {
+func (a *Agent) executeToolWithSpinner(toolCall *tools.ToolCall) (string, *tools.FileChange) {
 	spinner := ui.NewSpinner()
 	spinner.Start(ui.SpinnerMessageForTool(toolCall.Tool))
 	ui.SetGlobalSpinner(spinner)
+
+	tools.SetExecutionContext(tools.ExecutionContext{
+		ProviderName: a.ProviderName,
+		Model:        a.CurrentModel,
+	})
+	defer tools.ClearExecutionContext()
 
 	result, change := tools.Execute(toolCall)
 	spinner.Stop()
@@ -86,7 +92,7 @@ func (a *Agent) addToolCallsToHistory(response string, toolCalls []*tools.ToolCa
 // addToolCallsToHistory でバッチ化済みの場合に使用する。
 func (a *Agent) executeToolOnly(toolCall *tools.ToolCall) string {
 	// ツール実行
-	result, change := executeToolWithSpinner(toolCall)
+	result, change := a.executeToolWithSpinner(toolCall)
 
 	// str_replace エラー処理
 	if a.handleStrReplaceErrors(toolCall, result) {
@@ -244,7 +250,7 @@ func (a *Agent) executeToolCallInternal(response string, toolCall *tools.ToolCal
 	a.addToolCallToHistory(response, toolCall)
 
 	// ツール実行
-	result, change := executeToolWithSpinner(toolCall)
+	result, change := a.executeToolWithSpinner(toolCall)
 
 	// str_replace エラー処理
 	if a.handleStrReplaceErrors(toolCall, result) {

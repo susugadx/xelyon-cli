@@ -199,6 +199,58 @@ func TestWebSearchWithCache_CacheDisabled(t *testing.T) {
 	}
 }
 
+func TestSearchWithCache_ProviderScopedKeys(t *testing.T) {
+	webSearchCache = cache.New(cache.Config{
+		Enabled:    true,
+		Capacity:   10,
+		DefaultTTL: 5 * time.Minute,
+	}, nil)
+	cacheOnce = sync.Once{}
+
+	openAICalls := 0
+	claudeCalls := 0
+
+	_, cached, err := SearchWithCache("openai", "same query", func(query string) (string, error) {
+		openAICalls++
+		return "openai-result", nil
+	})
+	if err != nil {
+		t.Fatalf("openai first call failed: %v", err)
+	}
+	if cached {
+		t.Fatal("openai first call should not be cached")
+	}
+
+	_, cached, err = SearchWithCache("openai", "same query", func(query string) (string, error) {
+		openAICalls++
+		return "openai-result", nil
+	})
+	if err != nil {
+		t.Fatalf("openai second call failed: %v", err)
+	}
+	if !cached {
+		t.Fatal("openai second call should be cached")
+	}
+
+	_, cached, err = SearchWithCache("claude", "same query", func(query string) (string, error) {
+		claudeCalls++
+		return "claude-result", nil
+	})
+	if err != nil {
+		t.Fatalf("claude first call failed: %v", err)
+	}
+	if cached {
+		t.Fatal("claude first call should not be cached")
+	}
+
+	if openAICalls != 1 {
+		t.Fatalf("expected 1 openai executor call, got %d", openAICalls)
+	}
+	if claudeCalls != 1 {
+		t.Fatalf("expected 1 claude executor call, got %d", claudeCalls)
+	}
+}
+
 func TestInitCache(t *testing.T) {
 	// グローバル設定を一時的に変更
 	originalConfig := config.GetGlobalConfig()

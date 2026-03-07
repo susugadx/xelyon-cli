@@ -21,6 +21,9 @@ var (
 	cacheOnce      sync.Once
 )
 
+// SearchFunc は検索実行関数のシグネチャ。
+type SearchFunc func(query string) (string, error)
+
 // initCache はキャッシュを遅延初期化
 func initCache() {
 	cfg := config.GetGlobalConfig()
@@ -33,12 +36,17 @@ func initCache() {
 	}
 }
 
-// WebSearchWithCache はキャッシュ対応のWeb検索
+// SearchWithCache はキャッシュ対応のWeb検索を実行する。
+// cacheScope はプロバイダー別キャッシュキーの接頭辞に使用する。
 // 戻り値: (result, cached, error)
-func WebSearchWithCache(query string) (string, bool, error) {
+func SearchWithCache(cacheScope, query string, searchFn SearchFunc) (string, bool, error) {
 	cacheOnce.Do(initCache)
 
-	key := normalizeQuery(query)
+	if searchFn == nil {
+		searchFn = WebSearch
+	}
+
+	key := normalizeCacheKey(cacheScope, query)
 
 	// キャッシュチェック
 	if webSearchCache != nil {
@@ -47,8 +55,8 @@ func WebSearchWithCache(query string) (string, bool, error) {
 		}
 	}
 
-	// API呼び出し（既存のWebSearch関数）
-	result, err := WebSearch(query)
+	// API呼び出し
+	result, err := searchFn(query)
 	if err != nil {
 		return "", false, err
 	}
@@ -61,9 +69,22 @@ func WebSearchWithCache(query string) (string, bool, error) {
 	return result, false, nil
 }
 
+// WebSearchWithCache は Serper 用の後方互換ラッパー。
+func WebSearchWithCache(query string) (string, bool, error) {
+	return SearchWithCache("serper", query, WebSearch)
+}
+
 // normalizeQuery はクエリを正規化（大文字小文字、空白の統一）
 func normalizeQuery(query string) string {
 	return strings.ToLower(strings.TrimSpace(query))
+}
+
+func normalizeCacheKey(cacheScope, query string) string {
+	scope := strings.ToLower(strings.TrimSpace(cacheScope))
+	if scope == "" {
+		scope = "default"
+	}
+	return scope + ":" + normalizeQuery(query)
 }
 
 // SearchRequest は Serper API へのリクエスト構造
