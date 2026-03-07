@@ -67,6 +67,7 @@ type SearchOptions struct {
 	Multiline      bool
 	IncludeHidden  bool
 	IncludeIgnored bool
+	OutputMode     string // "full"（デフォルト）or "manifest"
 }
 
 // ExecuteSearchCode はコード検索を実行し、フォーマット済み結果を返す
@@ -142,6 +143,22 @@ func executeSinglePattern(pattern string, opts SearchOptions) string {
 			return strings.Join(warnings, "\n") + "\nNo matches found"
 		}
 		return "No matches found"
+	}
+
+	// manifest mode: ブロック認識 + マニフェスト出力のみ
+	if opts.OutputMode == "manifest" {
+		sortResultsByPriority(results)
+		detectBlocks(results)
+		formatted := formatManifestResults(results)
+		finalOutput := formatted
+		if len(warnings) > 0 {
+			finalOutput = strings.Join(warnings, "\n") + "\n" + formatted
+		}
+
+		if tools.GlobalToolCache != nil {
+			tools.GlobalToolCache.SetSearch(pattern, cacheKey, finalOutput, collectFilePaths(results))
+		}
+		return finalOutput
 	}
 
 	// コンテキスト行マージ
@@ -262,6 +279,25 @@ func executeMultiplePatterns(patterns []string, opts SearchOptions) string {
 	for _, c := range collected {
 		totalAllMatches += c.TotalMatches
 	}
+	if opts.OutputMode == "manifest" {
+		// manifest mode: truncate 不要、ブロック認識のみ
+		for i := range collected {
+			detectBlocks(collected[i].Results)
+		}
+		formatted := formatManifestMultiResults(collected)
+
+		if tools.GlobalToolCache != nil {
+			multiKey := buildMultiCacheKey(patterns)
+			cacheKey := buildSearchCacheKey(opts)
+			allFiles := make([]string, 0)
+			for _, c := range collected {
+				allFiles = append(allFiles, collectFilePaths(c.Results)...)
+			}
+			tools.GlobalToolCache.SetSearch(multiKey, cacheKey, formatted, dedupePaths(allFiles))
+		}
+		return formatted
+	}
+
 	for i, c := range collected {
 		var allocatedBudget int
 		if totalAllMatches == 0 {
@@ -302,8 +338,8 @@ func buildMultiCacheKey(patterns []string) string {
 }
 
 func buildSearchCacheKey(opts SearchOptions) string {
-	return fmt.Sprintf("%s|%s|%s|%d|%d|regex=%t|multiline=%t|hidden=%t|ignored=%t",
-		opts.Path, opts.FilePattern, opts.FileType, opts.CtxLines, opts.TokenBudget, opts.IsRegex, opts.Multiline, opts.IncludeHidden, opts.IncludeIgnored)
+	return fmt.Sprintf("%s|%s|%s|%d|%d|regex=%t|multiline=%t|hidden=%t|ignored=%t|mode=%s",
+		opts.Path, opts.FilePattern, opts.FileType, opts.CtxLines, opts.TokenBudget, opts.IsRegex, opts.Multiline, opts.IncludeHidden, opts.IncludeIgnored, opts.OutputMode)
 }
 
 func collectFilePaths(results []SearchResult) []string {
@@ -1370,4 +1406,83 @@ func formatMultiResults(collected []patternResult, tokenBudget int) string {
 	}
 
 	return b.String()
+}
+
+// --- manifest mode フォーマッター ---
+
+// formatManifestLine はファイル1つ分のマニフェスト行を生成する。
+// ブロック名を最大3つまで付記する。
+func formatManifestLine(r SearchResult) string {
+	blockNames := collectUniqueBlockNames(r.Matches, 3)
+	if len(blockNames) > 0 {
+		return fmt.Sprintf("  %-40s — %d matches (%s)", r.FilePath, r.MatchCount, strings.Join(blockNames, ", "))
+	}
+	return fmt.Sprintf("  %-40s — %d matches", r.FilePath, r.MatchCount)
+}
+
+// collectUniqueBlockNames はマッチ群からユニークなブロック名を出現順で最大 limit 個返す
+func collectUniqueBlockNames(matches []Match, limit int) []string {
+	seen := make(map[string]bool)
+	var names []string
+	for _, m := range matches {
+		if !m.IsMatch || m.Block == nil {
+			continue
+		}
+		if !seen[m.Block.Name] {
+			seen[m.Block.Name] = true
+			names = append(names, m.Block.Name)
+			if len(names) >= limit {
+				break
+			}
+		}
+	}
+	return names
+}
+
+// formatManifestResults は単一パターンのマニフェスト出力を生成する
+func formatManifestResults(results []SearchResult) string {
+	totalMatches := 0
+	for _, r := range results {
+		totalMatches += r.MatchCount
+	}
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "Found %d matches in %d files:\n", totalMatches, len(results))
+	for _, r := range results {
+		sb.WriteString(formatManifestLine(r))
+		sb.WriteString("\n")
+	}
+	return sb.String()
+}
+
+// formatManifestMultiResults は複数パターンのマニフェスト出力を生成する
+func formatManifestMultiResults(collected []patternResult) string {
+	var sb strings.Builder
+	totalMatches := 0
+	for _, pr := range collected {
+		for _, r := range pr.Results {
+			totalMatches += r.MatchCount
+		}
+	}
+	if totalMatches == 0 {
+		return "No matches found\n"
+	}
+
+	fmt.Fprintf(&sb, "Found %d matches across %d patterns:\n\n", totalMatches, len(collected))
+	for i, pr := range collected {
+		fmt.Fprintf(&sb, "━━ Pattern %d/%d: %q ━━\n", i+1, len(collected), pr.Pattern)
+		if pr.Error != "" {
+			fmt.Fprintf(&sb, "⚠️ Error: %s\n\n", pr.Error)
+			continue
+		}
+		if len(pr.Results) == 0 {
+			sb.WriteString("No matches found\n\n")
+			continue
+		}
+		for _, r := range pr.Results {
+			sb.WriteString(formatManifestLine(r))
+			sb.WriteString("\n")
+		}
+		sb.WriteString("\n")
+	}
+	return sb.String()
 }

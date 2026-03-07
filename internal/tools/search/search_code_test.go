@@ -1233,6 +1233,142 @@ func TestCollapseBlockMatches_FormatterRendering(t *testing.T) {
 	}
 }
 
+// --- manifest mode テスト ---
+
+func TestFormatManifestResults_WithBlocks(t *testing.T) {
+	results := []SearchResult{
+		{
+			FilePath:   "internal/agent/agent.go",
+			MatchCount: 5,
+			Matches: []Match{
+				{LineNum: 10, Line: "x", IsMatch: true, Type: MatchTypeUsage, Block: &BlockInfo{Name: "func NewAgent", StartLine: 5}},
+				{LineNum: 20, Line: "x", IsMatch: true, Type: MatchTypeUsage, Block: &BlockInfo{Name: "func Cleanup", StartLine: 15}},
+				{LineNum: 30, Line: "x", IsMatch: true, Type: MatchTypeUsage, Block: &BlockInfo{Name: "func handleRequest", StartLine: 25}},
+				{LineNum: 40, Line: "x", IsMatch: true, Type: MatchTypeUsage, Block: &BlockInfo{Name: "func fourthBlock", StartLine: 35}},
+				{LineNum: 50, Line: "x", IsMatch: true, Type: MatchTypeUsage, Block: nil},
+			},
+		},
+		{
+			FilePath:   "internal/tools/execute.go",
+			MatchCount: 2,
+			Matches: []Match{
+				{LineNum: 5, Line: "y", IsMatch: true, Type: MatchTypeUsage, Block: nil},
+				{LineNum: 15, Line: "y", IsMatch: true, Type: MatchTypeUsage, Block: nil},
+			},
+		},
+	}
+
+	out := formatManifestResults(results)
+
+	if !strings.Contains(out, "Found 7 matches in 2 files") {
+		t.Errorf("expected header, got:\n%s", out)
+	}
+	if !strings.Contains(out, "agent.go") {
+		t.Errorf("expected agent.go in output")
+	}
+	// ブロック名は最大3つ
+	if !strings.Contains(out, "func NewAgent") || !strings.Contains(out, "func Cleanup") || !strings.Contains(out, "func handleRequest") {
+		t.Errorf("expected first 3 block names, got:\n%s", out)
+	}
+	if strings.Contains(out, "fourthBlock") {
+		t.Errorf("should not include 4th block name, got:\n%s", out)
+	}
+	// ブロックなしファイル
+	if !strings.Contains(out, "execute.go") || !strings.Contains(out, "2 matches") {
+		t.Errorf("expected execute.go with 2 matches, got:\n%s", out)
+	}
+	// コードスニペットは含まれない
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "│") {
+			t.Errorf("manifest mode should not contain code snippets, got line: %s", line)
+		}
+	}
+}
+
+func TestFormatManifestResults_NoBlocks(t *testing.T) {
+	results := []SearchResult{{
+		FilePath:   "main.go",
+		MatchCount: 3,
+		Matches: []Match{
+			{LineNum: 1, Line: "a", IsMatch: true, Type: MatchTypeUsage},
+			{LineNum: 2, Line: "b", IsMatch: true, Type: MatchTypeUsage},
+			{LineNum: 3, Line: "c", IsMatch: true, Type: MatchTypeUsage},
+		},
+	}}
+
+	out := formatManifestResults(results)
+	if !strings.Contains(out, "3 matches") {
+		t.Errorf("expected 3 matches, got:\n%s", out)
+	}
+	// ブロック名の括弧がないことを確認
+	if strings.Contains(out, "(") {
+		t.Errorf("should not have block names in parens, got:\n%s", out)
+	}
+}
+
+func TestFormatManifestMultiResults(t *testing.T) {
+	collected := []patternResult{
+		{
+			Pattern: "handleSSE",
+			Results: []SearchResult{{
+				FilePath:   "stream.go",
+				MatchCount: 3,
+				Matches: []Match{
+					{LineNum: 10, Line: "x", IsMatch: true, Type: MatchTypeUsage, Block: &BlockInfo{Name: "func handleSSE", StartLine: 5}},
+					{LineNum: 20, Line: "x", IsMatch: true, Type: MatchTypeUsage, Block: &BlockInfo{Name: "func handleSSE", StartLine: 5}},
+					{LineNum: 30, Line: "x", IsMatch: true, Type: MatchTypeUsage, Block: &BlockInfo{Name: "func parseEvent", StartLine: 25}},
+				},
+			}},
+		},
+		{
+			Pattern: "badPattern",
+			Error:   "regex syntax error",
+		},
+	}
+
+	out := formatManifestMultiResults(collected)
+	if !strings.Contains(out, "handleSSE") {
+		t.Errorf("expected pattern name")
+	}
+	if !strings.Contains(out, "stream.go") {
+		t.Errorf("expected file path")
+	}
+	if !strings.Contains(out, "⚠️ Error: regex syntax error") {
+		t.Errorf("expected error for bad pattern, got:\n%s", out)
+	}
+}
+
+func TestSearchCode_ManifestMode(t *testing.T) {
+	setupSearchTestMocks(t)
+
+	dir := t.TempDir()
+	file1 := filepath.Join(dir, "hello.go")
+	if err := os.WriteFile(file1, []byte("package main\n\nfunc hello() {\n\tfmt.Println(\"hello world\")\n}\n\nfunc goodbye() {\n\tfmt.Println(\"hello again\")\n}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	result := ExecuteSearchCode(SearchOptions{
+		Pattern:     "hello",
+		Path:        dir,
+		FilePattern: "*.go",
+		CtxLines:    0,
+		TokenBudget: 3000,
+		IsRegex:     true,
+		OutputMode:  "manifest",
+	})
+
+	if !strings.Contains(result, "matches") {
+		t.Errorf("expected manifest output with 'matches', got:\n%s", result)
+	}
+	// manifest mode ではコードスニペットが含まれない
+	if strings.Contains(result, "Println") {
+		t.Errorf("manifest mode should not include code snippets, got:\n%s", result)
+	}
+	if strings.Contains(result, "│") {
+		t.Errorf("manifest mode should not contain │ separator, got:\n%s", result)
+	}
+}
+
 func TestFormatMultiResults_WithPatternError(t *testing.T) {
 	collected := []patternResult{
 		{Pattern: "ok", Results: []SearchResult{{FilePath: "a.go", MatchCount: 1, Matches: []Match{{LineNum: 1, Line: "ok", IsMatch: true, Type: MatchTypeUsage}}}}},
