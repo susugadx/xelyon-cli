@@ -66,8 +66,58 @@ func CompactOldToolResults(history []api.Message, keepTurns, maxLines, headLines
 	return result
 }
 
-// truncateToolResult は大きなツール結果を truncate する
+// compressErrorResult はエラーパターンを検出して短い要約に圧縮する。
+// 圧縮した場合は (要約, true) を返す。エラーパターンでなければ ("", false)。
+func compressErrorResult(content string) (string, bool) {
+	trimmed := strings.TrimSpace(content)
+
+	// "No matches found" → 既に短いのでそのまま
+	if trimmed == "No matches found" {
+		return trimmed, true
+	}
+
+	// "Error: pattern not found" / "Error: old_str not found"
+	if strings.HasPrefix(trimmed, "Error: pattern not found") ||
+		strings.HasPrefix(trimmed, "Error: old_str not found") {
+		// 1行目だけ残す
+		if idx := strings.IndexByte(trimmed, '\n'); idx >= 0 {
+			return trimmed[:idx], true
+		}
+		return trimmed, true
+	}
+
+	// "Error reading file:" → 1行目だけ
+	if strings.HasPrefix(trimmed, "Error reading file:") {
+		if idx := strings.IndexByte(trimmed, '\n'); idx >= 0 {
+			return trimmed[:idx], true
+		}
+		return trimmed, true
+	}
+
+	// "Error:" で始まる結果全般 → 1行目だけ
+	if strings.HasPrefix(trimmed, "Error:") {
+		if idx := strings.IndexByte(trimmed, '\n'); idx >= 0 {
+			return trimmed[:idx], true
+		}
+		return trimmed, true
+	}
+
+	return "", false
+}
+
+// truncateToolResult は大きなツール結果を truncate する。
+// エラーパターンは行数に関係なく圧縮する。
 func truncateToolResult(msg api.Message, maxLines, headLines, tailLines int) api.Message {
+	// エラーパターンの圧縮を先に試す
+	if compressed, ok := compressErrorResult(msg.Content); ok {
+		if compressed != msg.Content {
+			result := msg
+			result.Content = compressed
+			return result
+		}
+		return msg
+	}
+
 	lines := strings.Split(strings.TrimRight(msg.Content, "\n"), "\n")
 	if len(lines) <= maxLines || headLines+tailLines >= len(lines) {
 		return msg

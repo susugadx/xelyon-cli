@@ -207,6 +207,122 @@ func TestCompactOldToolResults_TurnCounting(t *testing.T) {
 	}
 }
 
+func TestCompressErrorResult(t *testing.T) {
+	tests := []struct {
+		name       string
+		content    string
+		wantResult string
+		wantOk     bool
+	}{
+		{
+			name:       "No matches found",
+			content:    "No matches found",
+			wantResult: "No matches found",
+			wantOk:     true,
+		},
+		{
+			name:       "No matches found with whitespace",
+			content:    "  No matches found  \n",
+			wantResult: "No matches found",
+			wantOk:     true,
+		},
+		{
+			name:       "Error: pattern not found",
+			content:    "Error: pattern not found in file.go\nsome extra details\nmore details",
+			wantResult: "Error: pattern not found in file.go",
+			wantOk:     true,
+		},
+		{
+			name:       "Error: old_str not found",
+			content:    "Error: old_str not found in the file\nExpected:\nfunc foo()\nGot:\nfunc bar()",
+			wantResult: "Error: old_str not found in the file",
+			wantOk:     true,
+		},
+		{
+			name:       "Error reading file multiline",
+			content:    "Error reading file: /path/to/file.go\nopen /path/to/file.go: permission denied",
+			wantResult: "Error reading file: /path/to/file.go",
+			wantOk:     true,
+		},
+		{
+			name:       "Error reading file single line",
+			content:    "Error reading file: /path/to/file.go",
+			wantResult: "Error reading file: /path/to/file.go",
+			wantOk:     true,
+		},
+		{
+			name:       "Generic Error: prefix",
+			content:    "Error: something went wrong\nstack trace line 1\nstack trace line 2",
+			wantResult: "Error: something went wrong",
+			wantOk:     true,
+		},
+		{
+			name:       "Normal content not compressed",
+			content:    "package main\n\nfunc main() {}",
+			wantResult: "",
+			wantOk:     false,
+		},
+		{
+			name:       "Content containing Error: but not at start",
+			content:    "result contains Error: in the middle",
+			wantResult: "",
+			wantOk:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, ok := compressErrorResult(tt.content)
+			if ok != tt.wantOk {
+				t.Errorf("compressErrorResult() ok = %v, want %v", ok, tt.wantOk)
+			}
+			if result != tt.wantResult {
+				t.Errorf("compressErrorResult() = %q, want %q", result, tt.wantResult)
+			}
+		})
+	}
+}
+
+func TestCompactOldToolResults_CompressesOldErrors(t *testing.T) {
+	history := []api.Message{
+		{Role: "user", Content: "turn 1"},
+		{Role: "assistant", Content: "a1"},
+		{Role: "tool", Content: "Error: pattern not found in main.go\nExpected: func foo()\nGot: func bar()", ToolCallID: "c1", ToolName: "str_replace"},
+		{Role: "tool", Content: "No matches found", ToolCallID: "c2", ToolName: "search_code"},
+		{Role: "user", Content: "turn 2"},
+		{Role: "user", Content: "turn 3"},
+		{Role: "user", Content: "turn 4"},
+	}
+
+	result := CompactOldToolResults(history, 3, 50, 20, 5)
+
+	// Error: pattern not found は1行に圧縮
+	if result[2].Content != "Error: pattern not found in main.go" {
+		t.Errorf("expected compressed error, got %q", result[2].Content)
+	}
+
+	// No matches found はそのまま（既に短い）
+	if result[3].Content != "No matches found" {
+		t.Errorf("expected 'No matches found' unchanged, got %q", result[3].Content)
+	}
+}
+
+func TestCompactOldToolResults_RecentErrorsNotCompressed(t *testing.T) {
+	errorContent := "Error: pattern not found in main.go\nExpected: func foo()\nGot: func bar()"
+	history := []api.Message{
+		{Role: "user", Content: "turn 1"},
+		{Role: "assistant", Content: "a1"},
+		{Role: "tool", Content: errorContent, ToolCallID: "c1", ToolName: "str_replace"},
+	}
+
+	result := CompactOldToolResults(history, 3, 50, 20, 5)
+
+	// keepTurns 内なので圧縮されない
+	if result[2].Content != errorContent {
+		t.Errorf("recent error should not be compressed, got %q", result[2].Content)
+	}
+}
+
 func TestCompactOldToolResults_TruncatedContentFormat(t *testing.T) {
 	large := makeLargeContent(100)
 

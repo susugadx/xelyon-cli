@@ -24,6 +24,11 @@ func argsToJSON(args map[string]any) string {
 }
 
 func (a *Agent) executeToolWithSpinner(toolCall *tools.ToolCall) (string, *tools.FileChange) {
+	// ネガティブキャッシュチェック（ブロックせずログ表示のみ）
+	if a.ToolCache != nil {
+		a.ToolCache.CheckNegativeCache(toolCall.Tool, toolCall.RawArgs)
+	}
+
 	spinner := ui.NewSpinner()
 	spinner.Start(ui.SpinnerMessageForTool(toolCall.Tool))
 	ui.SetGlobalSpinner(spinner)
@@ -36,6 +41,12 @@ func (a *Agent) executeToolWithSpinner(toolCall *tools.ToolCall) (string, *tools
 
 	result, change := tools.Execute(toolCall)
 	spinner.Stop()
+
+	// エラー/空結果をネガティブキャッシュに記録
+	if a.ToolCache != nil {
+		a.ToolCache.SetNegativeCache(toolCall.Tool, toolCall.RawArgs, result)
+	}
+
 	return result, change
 }
 

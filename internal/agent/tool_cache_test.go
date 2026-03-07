@@ -468,3 +468,142 @@ func TestToolCache_ResultHashPruning(t *testing.T) {
 	}
 }
 
+func TestIsNegativeResult(t *testing.T) {
+	tests := []struct {
+		content string
+		want    bool
+	}{
+		{"No matches found", true},
+		{"  No matches found\n", true},
+		{"Error: pattern not found", true},
+		{"Error: old_str not found in file", true},
+		{"Error reading file: /foo", true},
+		{"Error: something", true},
+		{"package main", false},
+		{"result contains Error: in middle", false},
+		{"", false},
+	}
+	for _, tt := range tests {
+		got := isNegativeResult(tt.content)
+		if got != tt.want {
+			t.Errorf("isNegativeResult(%q) = %v, want %v", tt.content, got, tt.want)
+		}
+	}
+}
+
+func TestNegativeCacheKey(t *testing.T) {
+	args := map[string]interface{}{"path": "/foo.go", "pattern": "func main"}
+	key1 := negativeCacheKey("search_code", args)
+	key2 := negativeCacheKey("search_code", args)
+	if key1 != key2 {
+		t.Errorf("same args should produce same key: %q != %q", key1, key2)
+	}
+
+	// 異なるツール名→異なるキー
+	key3 := negativeCacheKey("read_file", args)
+	if key1 == key3 {
+		t.Error("different tool name should produce different key")
+	}
+
+	// 異なる引数→異なるキー
+	args2 := map[string]interface{}{"path": "/bar.go", "pattern": "func main"}
+	key4 := negativeCacheKey("search_code", args2)
+	if key1 == key4 {
+		t.Error("different args should produce different key")
+	}
+}
+
+func TestToolCache_NegativeCache_SetAndCheck(t *testing.T) {
+	cache := NewToolCache()
+	args := map[string]interface{}{"pattern": "nonexistent", "path": "."}
+
+	// 初回はミス
+	_, hit := cache.CheckNegativeCache("search_code", args)
+	if hit {
+		t.Error("expected negative cache miss on first check")
+	}
+
+	// エラー結果をセット
+	cache.SetNegativeCache("search_code", args, "No matches found")
+
+	// ヒット
+	result, hit := cache.CheckNegativeCache("search_code", args)
+	if !hit {
+		t.Error("expected negative cache hit")
+	}
+	if result != "No matches found" {
+		t.Errorf("expected 'No matches found', got %q", result)
+	}
+}
+
+func TestToolCache_NegativeCache_MultilineError(t *testing.T) {
+	cache := NewToolCache()
+	args := map[string]interface{}{"path": "/foo.go"}
+
+	// 複数行エラーは1行目だけ保存される
+	cache.SetNegativeCache("read_file", args, "Error: file not found\nstack trace line 1\nstack trace line 2")
+
+	result, hit := cache.CheckNegativeCache("read_file", args)
+	if !hit {
+		t.Error("expected negative cache hit")
+	}
+	if result != "Error: file not found" {
+		t.Errorf("expected first line only, got %q", result)
+	}
+}
+
+func TestToolCache_NegativeCache_IgnoresNonError(t *testing.T) {
+	cache := NewToolCache()
+	args := map[string]interface{}{"path": "/foo.go"}
+
+	// 正常な結果はネガティブキャッシュに保存されない
+	cache.SetNegativeCache("read_file", args, "package main\n\nfunc main() {}")
+
+	_, hit := cache.CheckNegativeCache("read_file", args)
+	if hit {
+		t.Error("non-error result should not be cached in negative cache")
+	}
+}
+
+func TestToolCache_NegativeCache_TTLExpiry(t *testing.T) {
+	cache := NewToolCache()
+	args := map[string]interface{}{"pattern": "x"}
+
+	cache.SetNegativeCache("search_code", args, "No matches found")
+
+	// 手動で CachedAt を過去にセット
+	key := negativeCacheKey("search_code", args)
+	cache.mu.Lock()
+	entry := cache.negatives[key]
+	entry.CachedAt = time.Now().Add(-NegativeCacheTTL - time.Second)
+	cache.negatives[key] = entry
+	cache.mu.Unlock()
+
+	// TTL 切れでミス
+	_, hit := cache.CheckNegativeCache("search_code", args)
+	if hit {
+		t.Error("expected negative cache miss after TTL expiry")
+	}
+
+	// 期限切れエントリは削除されている
+	cache.mu.RLock()
+	_, exists := cache.negatives[key]
+	cache.mu.RUnlock()
+	if exists {
+		t.Error("expired entry should be deleted")
+	}
+}
+
+func TestToolCache_NegativeCache_ClearResetsAll(t *testing.T) {
+	cache := NewToolCache()
+	args := map[string]interface{}{"pattern": "x"}
+
+	cache.SetNegativeCache("search_code", args, "No matches found")
+	cache.Clear()
+
+	_, hit := cache.CheckNegativeCache("search_code", args)
+	if hit {
+		t.Error("expected negative cache miss after Clear")
+	}
+}
+

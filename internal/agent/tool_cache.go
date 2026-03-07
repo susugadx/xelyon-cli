@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,6 +19,7 @@ type ToolCache struct {
 	dirs         map[string]cacheEntry
 	searches     map[string]cacheEntry
 	resultHashes map[string]resultHashEntry // content hash → 既出情報（履歴重複排除用）
+	negatives    map[string]negativeCacheEntry
 	mu           sync.RWMutex
 }
 
@@ -36,6 +38,16 @@ type resultHashEntry struct {
 	AccessedAt time.Time
 }
 
+// negativeCacheEntry はエラー/空結果のネガティブキャッシュエントリ
+type negativeCacheEntry struct {
+	ToolName string
+	Result   string // 元のエラーメッセージ（1行目）
+	CachedAt time.Time
+}
+
+// NegativeCacheTTL はネガティブキャッシュの有効期間
+const NegativeCacheTTL = 30 * time.Second
+
 // MaxFileCacheSize はキャッシュする最大ファイルサイズ (1MB)
 const MaxFileCacheSize = 1024 * 1024
 
@@ -53,6 +65,7 @@ func NewToolCache() *ToolCache {
 		dirs:         make(map[string]cacheEntry),
 		searches:     make(map[string]cacheEntry),
 		resultHashes: make(map[string]resultHashEntry),
+		negatives:    make(map[string]negativeCacheEntry),
 	}
 }
 
@@ -182,6 +195,7 @@ func (c *ToolCache) Clear() {
 	c.dirs = make(map[string]cacheEntry)
 	c.searches = make(map[string]cacheEntry)
 	c.resultHashes = make(map[string]resultHashEntry)
+	c.negatives = make(map[string]negativeCacheEntry)
 }
 
 // DeduplicateResult は同一内容の tool result が既に履歴に存在するか確認し、
@@ -282,6 +296,84 @@ func (c *ToolCache) InvalidateSearchCacheForFile(absPath string) {
 				break
 			}
 		}
+	}
+}
+
+// isNegativeResult はエラーや空結果かどうかを判定する
+func isNegativeResult(content string) bool {
+	trimmed := strings.TrimSpace(content)
+	return trimmed == "No matches found" ||
+		strings.HasPrefix(trimmed, "Error:") ||
+		strings.HasPrefix(trimmed, "Error reading file:")
+}
+
+// negativeCacheKey はツール名と引数からキャッシュキーを生成する
+func negativeCacheKey(toolName string, args map[string]interface{}) string {
+	// ツール名 + 引数の文字列化（ソート済み）
+	keys := make([]string, 0, len(args))
+	for k := range args {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	var b strings.Builder
+	b.WriteString(toolName)
+	for _, k := range keys {
+		b.WriteString("::")
+		b.WriteString(k)
+		b.WriteString("=")
+		b.WriteString(fmt.Sprintf("%v", args[k]))
+	}
+	return b.String()
+}
+
+// CheckNegativeCache はネガティブキャッシュを確認する。
+// ヒット時は (前回の結果, true) を返し、ログ表示する。ブロックはしない。
+func (c *ToolCache) CheckNegativeCache(toolName string, args map[string]interface{}) (string, bool) {
+	key := negativeCacheKey(toolName, args)
+
+	c.mu.RLock()
+	entry, exists := c.negatives[key]
+	c.mu.RUnlock()
+
+	if !exists {
+		return "", false
+	}
+
+	// TTL チェック
+	if time.Since(entry.CachedAt) > NegativeCacheTTL {
+		c.mu.Lock()
+		delete(c.negatives, key)
+		c.mu.Unlock()
+		return "", false
+	}
+
+	yellow.Printf("⚠ Negative cache hit: %s previously returned: %s\n", toolName, entry.Result)
+	return entry.Result, true
+}
+
+// SetNegativeCache はエラー/空結果をネガティブキャッシュに記録する。
+// isNegativeResult が true の結果のみキャッシュする。
+func (c *ToolCache) SetNegativeCache(toolName string, args map[string]interface{}, content string) {
+	if !isNegativeResult(content) {
+		return
+	}
+
+	// 1行目だけ保存
+	result := strings.TrimSpace(content)
+	if idx := strings.IndexByte(result, '\n'); idx >= 0 {
+		result = result[:idx]
+	}
+
+	key := negativeCacheKey(toolName, args)
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.negatives[key] = negativeCacheEntry{
+		ToolName: toolName,
+		Result:   result,
+		CachedAt: time.Now(),
 	}
 }
 
