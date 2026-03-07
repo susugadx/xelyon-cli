@@ -606,4 +606,3 @@ func TestToolCache_NegativeCache_ClearResetsAll(t *testing.T) {
 		t.Error("expected negative cache miss after Clear")
 	}
 }
-

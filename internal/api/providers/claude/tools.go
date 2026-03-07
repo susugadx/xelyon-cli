@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
@@ -43,9 +44,8 @@ func ConvertOpenAIToolToClaude(tool api.ToolDefinition) ClaudeTool {
 // GetCombinedClaudeTools は組み込みツール + MCPツールを返す
 // 重複するツール名がある場合は最初に登録されたものを優先
 //
-// BP#1（tools 最後の cache_control）は省略。
-// BP#2（system 最後）で tools+system を一体キャッシュする設計に統一。
-// モデル別の閾値超過は system prompt 側の安定ブロックで確保する。
+// BP#2: ツール定義の末尾に cache_control を設定。
+// ツール定義は安定しているため、tools prefix のキャッシュヒット率が高い。
 func GetCombinedClaudeTools(mcpTools []api.ToolDefinition) []ClaudeTool {
 	result := GetClaudeToolDefinitions()
 	seen := make(map[string]bool)
@@ -64,7 +64,14 @@ func GetCombinedClaudeTools(mcpTools []api.ToolDefinition) []ClaudeTool {
 		result = append(result, ConvertOpenAIToolToClaude(mcp))
 	}
 
-	// BP#1 は省略: BP#2（system の最後）で tools+system 全体をキャッシュする
+	// BP#2: ツール定義末尾に cache_control を設定
+	if len(result) > 0 {
+		cfg := config.GetGlobalConfig()
+		if cfg != nil && cfg.PromptCache.Enabled {
+			result[len(result)-1].CacheControl = api.NewCacheControl()
+		}
+	}
+
 	return result
 }
 

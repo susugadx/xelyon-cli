@@ -8,7 +8,19 @@ import (
 
 // CacheControl enables prompt caching for a content block.
 type CacheControl struct {
-	Type string `json:"type"` // e.g. "ephemeral"
+	Type string `json:"type"`          // e.g. "ephemeral"
+	TTL  string `json:"ttl,omitempty"` // 延長キャッシュ用（"1h" 等）
+}
+
+// NewCacheControl はconfig設定に基づいてCacheControlを生成する。
+// CacheTTL が "5m"（デフォルト）ならTTLフィールドなし、"1h" 等なら ttl を設定。
+func NewCacheControl() *CacheControl {
+	cc := &CacheControl{Type: "ephemeral"}
+	cfg := config.GetGlobalConfig()
+	if cfg != nil && cfg.PromptCache.CacheTTL != "" && cfg.PromptCache.CacheTTL != "5m" {
+		cc.TTL = cfg.PromptCache.CacheTTL
+	}
+	return cc
 }
 
 // SystemBlock represents a system prompt content block.
@@ -55,7 +67,7 @@ func BuildSystemField(systemPrompt string) interface{} {
 			{
 				Type:         "text",
 				Text:         parts[1],
-				CacheControl: &CacheControl{Type: "ephemeral"},
+				CacheControl: NewCacheControl(),
 			},
 		}
 	}
@@ -65,7 +77,7 @@ func BuildSystemField(systemPrompt string) interface{} {
 		{
 			Type:         "text",
 			Text:         parts[0],
-			CacheControl: &CacheControl{Type: "ephemeral"},
+			CacheControl: NewCacheControl(),
 		},
 	}
 }

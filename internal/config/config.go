@@ -105,7 +105,8 @@ func DefaultConfig() *Config {
 			"u": "use",
 		},
 		PromptCache: PromptCacheConfig{
-			Enabled: true,
+			Enabled:  true,
+			CacheTTL: "5m",
 		},
 		Paste: PasteConfig{
 			BracketedPaste: true, // デフォルトON - 複数行ペースト対応

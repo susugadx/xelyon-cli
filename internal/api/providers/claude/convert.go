@@ -2,9 +2,11 @@ package claude
 
 import (
 	"encoding/json"
+	"sort"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 // AnthropicContentBlock は Anthropic Messages API のコンテンツブロック
@@ -151,24 +153,26 @@ func ConvertToAnthropicMessages(history []api.Message) []AnthropicMessage {
 
 // SetMessageCacheBreakpoints はメッセージ履歴にキャッシュ用ブレークポイントを設定する。
 //
-// BP配置戦略:
+// BP配置戦略（動的 tool_result ベース）:
 //
-//	BP#3 のみ使用。BP#4 は使わない（毎ターンcreation 1.25xが発生し、1度もREADされないため）。
+//	BP#3, BP#4: 会話履歴中で最も content が大きい tool_result ブロック上位2つに設定。
+//	大きな tool_result（ファイル読み込み結果等）をキャッシュすることで cache read を最大化する。
 //
-//	BP#3: 安定区間の末尾userメッセージ。
-//	位置は bpInterval 単位で切り捨てて決定するため、interval ターンの間は同じ位置に留まる。
-//	これにより cache creation は interval ターンに1回だけ発生し、残りは cache read になる。
+//	最新3ターン以内の tool_result は対象外（内容が変わる可能性があるため）。
+//	stableOffset=3: CompactOldToolResults の keepTurns=3 と一致。
 //
-// 計算方法:
-//  1. userメッセージ数から stableOffset を引く = 安定区間のuser数
-//  2. bpInterval の倍数に切り捨て = BP#3の位置（userインデックス）
-//  3. 安定区間のuser数が bpInterval 未満なら BP#3 は設定しない
+// 合計4 BP の内訳（Anthropic API 上限 = 4）:
 //
-// stableOffset=3: 最新3ターン分をキャッシュ外に置く（CompactOldToolResults の keepTurns=3 と一致）
-// bpInterval=3: 3ターンごとにBP#3が進む（creation頻度とカバー範囲のバランス）
+//	BP#1: システムプロンプト最後のブロック（BuildSystemField）
+//	BP#2: ツール定義末尾（GetCombinedClaudeTools）
+//	BP#3, BP#4: tool_result 上位2つ（本関数）
 func SetMessageCacheBreakpoints(messages []AnthropicMessage) {
 	const stableOffset = 3
-	const bpInterval = 3
+
+	cfg := config.GetGlobalConfig()
+	if cfg != nil && !cfg.PromptCache.Enabled {
+		return
+	}
 
 	// user メッセージのインデックスを収集
 	var userIndices []int
@@ -178,27 +182,53 @@ func SetMessageCacheBreakpoints(messages []AnthropicMessage) {
 		}
 	}
 
-	if len(userIndices) == 0 {
+	if len(userIndices) <= stableOffset {
+		return // 短い会話では message BP 不要（BP#1, #2 で十分）
+	}
+
+	// 安定区間の境界: この index より前のメッセージのみ対象
+	boundaryIdx := userIndices[len(userIndices)-stableOffset]
+
+	// 安定区間内の tool_result ブロックを content 長で収集
+	type candidate struct {
+		msgIdx   int // messages 配列のインデックス
+		blockIdx int // Content 配列のインデックス
+		length   int // content の文字数
+	}
+	var candidates []candidate
+
+	for i := 0; i < boundaryIdx; i++ {
+		if messages[i].Role != "user" {
+			continue
+		}
+		for j, block := range messages[i].Content {
+			if block.Type == "tool_result" && len(block.Content) > 0 {
+				candidates = append(candidates, candidate{
+					msgIdx:   i,
+					blockIdx: j,
+					length:   len(block.Content),
+				})
+			}
+		}
+	}
+
+	if len(candidates) == 0 {
 		return
 	}
 
-	// 安定区間の user 数
-	stableCount := len(userIndices) - stableOffset
-	if stableCount < bpInterval {
-		return // 短い会話では BP#3 不要（BP#1, #2 で十分）
-	}
+	// content 長で降順ソート
+	sort.Slice(candidates, func(a, b int) bool {
+		return candidates[a].length > candidates[b].length
+	})
 
-	// bpInterval の倍数に切り捨て → BP#3 の位置
-	roundedDown := (stableCount / bpInterval) * bpInterval
-	if roundedDown <= 0 {
-		return
+	// 上位2つに cache_control を設定（BP#3, BP#4）
+	limit := 2
+	if len(candidates) < limit {
+		limit = len(candidates)
 	}
-
-	// BP#3: 安定区間末尾の user メッセージ
-	bp3Idx := userIndices[roundedDown-1]
-	if len(messages[bp3Idx].Content) > 0 {
-		last := len(messages[bp3Idx].Content) - 1
-		messages[bp3Idx].Content[last].CacheControl = &api.CacheControl{Type: "ephemeral"}
+	for i := 0; i < limit; i++ {
+		c := candidates[i]
+		messages[c.msgIdx].Content[c.blockIdx].CacheControl = api.NewCacheControl()
 	}
 }
 

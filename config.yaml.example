@@ -117,6 +117,7 @@ command_aliases:
 prompt_cache:
     # 有効化（cache_control ブレークポイントを設定）
     enabled: true
+    cache_ttl: 5m
 
 # ============================================================
 # ペーストモード設定

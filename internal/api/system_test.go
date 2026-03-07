@@ -84,6 +84,38 @@ func TestBuildSystemField_Disabled(t *testing.T) {
 	}
 }
 
+func TestNewCacheControl_DefaultTTL(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.PromptCache.Enabled = true
+	// CacheTTL = "5m" (default)
+	config.SetGlobalConfig(cfg)
+	defer config.SetGlobalConfig(nil)
+
+	cc := NewCacheControl()
+	if cc.Type != "ephemeral" {
+		t.Errorf("type = %q, want 'ephemeral'", cc.Type)
+	}
+	if cc.TTL != "" {
+		t.Errorf("TTL should be empty for default 5m, got %q", cc.TTL)
+	}
+}
+
+func TestNewCacheControl_ExtendedTTL(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.PromptCache.Enabled = true
+	cfg.PromptCache.CacheTTL = "1h"
+	config.SetGlobalConfig(cfg)
+	defer config.SetGlobalConfig(nil)
+
+	cc := NewCacheControl()
+	if cc.Type != "ephemeral" {
+		t.Errorf("type = %q, want 'ephemeral'", cc.Type)
+	}
+	if cc.TTL != "1h" {
+		t.Errorf("TTL = %q, want '1h'", cc.TTL)
+	}
+}
+
 func TestBuildSystemField_EmptyDynamic(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.PromptCache.Enabled = true

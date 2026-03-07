@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 func TestConvertToAnthropicMessages_EmptyHistory(t *testing.T) {
@@ -284,138 +285,126 @@ func TestConvertToAnthropicMessages_InvalidArgumentsJSON(t *testing.T) {
 }
 
 func TestSetMessageCacheBreakpoints_ShortConversation(t *testing.T) {
-	// user 5個: stableCount = 5-3 = 2, bpInterval=3 → 2 < 3 → BPなし
+	// user 3個以下: stableOffset=3 → len(userIndices) <= 3 → BPなし
 	messages := []AnthropicMessage{
-		{Role: "user", Content: []AnthropicContentBlock{{Type: "text", Text: "first"}}},
+		{Role: "user", Content: []AnthropicContentBlock{{Type: "tool_result", ToolUseID: "t1", Content: "big result"}}},
 		{Role: "assistant", Content: []AnthropicContentBlock{{Type: "text", Text: "reply1"}}},
 		{Role: "user", Content: []AnthropicContentBlock{{Type: "text", Text: "second"}}},
 		{Role: "assistant", Content: []AnthropicContentBlock{{Type: "text", Text: "reply2"}}},
 		{Role: "user", Content: []AnthropicContentBlock{{Type: "text", Text: "third"}}},
-		{Role: "assistant", Content: []AnthropicContentBlock{{Type: "text", Text: "reply3"}}},
-		{Role: "user", Content: []AnthropicContentBlock{{Type: "text", Text: "fourth"}}},
-		{Role: "assistant", Content: []AnthropicContentBlock{{Type: "text", Text: "reply4"}}},
-		{Role: "user", Content: []AnthropicContentBlock{{Type: "text", Text: "fifth"}}},
 	}
 
 	SetMessageCacheBreakpoints(messages)
 
-	// 全 user に CacheControl なし
-	for _, idx := range []int{0, 2, 4, 6, 8} {
-		if messages[idx].Content[0].CacheControl != nil {
-			t.Errorf("user at index %d should not have cache_control (short conversation)", idx)
-		}
-	}
-}
-
-func TestSetMessageCacheBreakpoints_LongConversation(t *testing.T) {
-	// user 10個: stableCount = 10-3 = 7, roundedDown = (7/3)*3 = 6, BP#3 = user[5]
-	var messages []AnthropicMessage
-	for i := 0; i < 10; i++ {
-		messages = append(messages,
-			AnthropicMessage{Role: "user", Content: []AnthropicContentBlock{
-				{Type: "text", Text: fmt.Sprintf("user%d", i)},
-			}},
-			AnthropicMessage{Role: "assistant", Content: []AnthropicContentBlock{
-				{Type: "text", Text: fmt.Sprintf("reply%d", i)},
-			}},
-		)
-	}
-
-	SetMessageCacheBreakpoints(messages)
-
-	// user インデックス: 0,2,4,6,8,10,12,14,16,18
-	// BP#3 = user[5] = index 10
-	if messages[10].Content[0].CacheControl == nil {
-		t.Error("expected cache_control on user[5] (index 10, BP#3)")
-	}
-	// 最後の user (index 18) には CacheControl なし（BP#4 削除）
-	if messages[18].Content[0].CacheControl != nil {
-		t.Error("last user should NOT have cache_control (no BP#4)")
-	}
-	// その他の user にも CacheControl なし
-	for _, idx := range []int{0, 2, 4, 6, 8, 12, 14, 16} {
-		if messages[idx].Content[0].CacheControl != nil {
-			t.Errorf("user at index %d should not have cache_control", idx)
-		}
-	}
-}
-
-func TestSetMessageCacheBreakpoints_IntervalStability(t *testing.T) {
-	// bpInterval=3 の切り捨てにより、3ターンの間 BP#3 が同じ位置に留まることを検証
-	makeMessages := func(userCount int) []AnthropicMessage {
-		var msgs []AnthropicMessage
-		for i := 0; i < userCount; i++ {
-			msgs = append(msgs,
-				AnthropicMessage{Role: "user", Content: []AnthropicContentBlock{
-					{Type: "text", Text: fmt.Sprintf("user%d", i)},
-				}},
-				AnthropicMessage{Role: "assistant", Content: []AnthropicContentBlock{
-					{Type: "text", Text: fmt.Sprintf("reply%d", i)},
-				}},
-			)
-		}
-		return msgs
-	}
-
-	findBP3 := func(msgs []AnthropicMessage) int {
-		for i, m := range msgs {
-			if m.Role == "user" && len(m.Content) > 0 && m.Content[len(m.Content)-1].CacheControl != nil {
-				return i
+	// 全ブロックに CacheControl なし
+	for i, msg := range messages {
+		for j, block := range msg.Content {
+			if block.CacheControl != nil {
+				t.Errorf("messages[%d].Content[%d] should not have cache_control (short conversation)", i, j)
 			}
 		}
-		return -1
-	}
-
-	applyAndFind := func(userCount int) int {
-		msgs := makeMessages(userCount)
-		SetMessageCacheBreakpoints(msgs)
-		return findBP3(msgs)
-	}
-
-	// user 6: stableCount=3, roundedDown=3, BP#3=user[2]=index 4
-	bp3at6 := applyAndFind(6)
-	// user 7: stableCount=4, roundedDown=3, BP#3=user[2]=index 4 ← 同じ！
-	bp3at7 := applyAndFind(7)
-	// user 8: stableCount=5, roundedDown=3, BP#3=user[2]=index 4 ← まだ同じ！
-	bp3at8 := applyAndFind(8)
-
-	if bp3at6 != bp3at7 || bp3at7 != bp3at8 {
-		t.Errorf("BP#3 should stay stable for 3 turns: user6=%d, user7=%d, user8=%d",
-			bp3at6, bp3at7, bp3at8)
-	}
-
-	// user 9: stableCount=6, roundedDown=6, BP#3=user[5]=index 10 ← ここで更新
-	bp3at9 := applyAndFind(9)
-	if bp3at9 == bp3at8 {
-		t.Errorf("BP#3 should advance at user 9, but stayed at %d", bp3at9)
-	}
-	if bp3at9 != 10 { // user[5] = index 10
-		t.Errorf("BP#3 at user 9 should be index 10, got %d", bp3at9)
 	}
 }
 
-func TestSetMessageCacheBreakpoints_NoBP4(t *testing.T) {
-	// 任意の長さで、最後のuserメッセージに CacheControl がないことを検証
-	for _, userCount := range []int{6, 8, 10, 15} {
-		var messages []AnthropicMessage
-		for i := 0; i < userCount; i++ {
-			messages = append(messages,
-				AnthropicMessage{Role: "user", Content: []AnthropicContentBlock{
-					{Type: "text", Text: fmt.Sprintf("user%d", i)},
-				}},
-				AnthropicMessage{Role: "assistant", Content: []AnthropicContentBlock{
-					{Type: "text", Text: fmt.Sprintf("reply%d", i)},
-				}},
-			)
+func TestSetMessageCacheBreakpoints_DynamicToolResult(t *testing.T) {
+	// user 7個: tool_result を含むメッセージのうち、最大2つの content に BP を設定
+	// user[0]: tool_result 5000 chars (大)
+	// user[1]: tool_result 200 chars (小)
+	// user[2]: tool_result 8000 chars (最大)
+	// user[3]: text only
+	// user[4..6]: 最新3ターン（対象外）
+	largeContent := string(make([]byte, 5000))
+	smallContent := "small result"
+	hugeContent := string(make([]byte, 8000))
+
+	messages := []AnthropicMessage{
+		{Role: "user", Content: []AnthropicContentBlock{{Type: "tool_result", ToolUseID: "t1", Content: largeContent}}},
+		{Role: "assistant", Content: []AnthropicContentBlock{{Type: "text", Text: "reply1"}}},
+		{Role: "user", Content: []AnthropicContentBlock{{Type: "tool_result", ToolUseID: "t2", Content: smallContent}}},
+		{Role: "assistant", Content: []AnthropicContentBlock{{Type: "text", Text: "reply2"}}},
+		{Role: "user", Content: []AnthropicContentBlock{{Type: "tool_result", ToolUseID: "t3", Content: hugeContent}}},
+		{Role: "assistant", Content: []AnthropicContentBlock{{Type: "text", Text: "reply3"}}},
+		{Role: "user", Content: []AnthropicContentBlock{{Type: "text", Text: "text only"}}},
+		{Role: "assistant", Content: []AnthropicContentBlock{{Type: "text", Text: "reply4"}}},
+		// 最新3ターン（対象外）
+		{Role: "user", Content: []AnthropicContentBlock{{Type: "tool_result", ToolUseID: "t4", Content: string(make([]byte, 9999))}}},
+		{Role: "assistant", Content: []AnthropicContentBlock{{Type: "text", Text: "reply5"}}},
+		{Role: "user", Content: []AnthropicContentBlock{{Type: "text", Text: "recent1"}}},
+		{Role: "assistant", Content: []AnthropicContentBlock{{Type: "text", Text: "reply6"}}},
+		{Role: "user", Content: []AnthropicContentBlock{{Type: "text", Text: "recent2"}}},
+	}
+
+	SetMessageCacheBreakpoints(messages)
+
+	// BP#3: hugeContent (8000) at messages[4]
+	if messages[4].Content[0].CacheControl == nil {
+		t.Error("expected cache_control on largest tool_result (messages[4])")
+	}
+	// BP#4: largeContent (5000) at messages[0]
+	if messages[0].Content[0].CacheControl == nil {
+		t.Error("expected cache_control on second largest tool_result (messages[0])")
+	}
+
+	// smallContent は対象外
+	if messages[2].Content[0].CacheControl != nil {
+		t.Error("small tool_result should not have cache_control")
+	}
+	// text only は対象外
+	if messages[6].Content[0].CacheControl != nil {
+		t.Error("text-only message should not have cache_control")
+	}
+	// 最新3ターン内の tool_result は対象外
+	if messages[8].Content[0].CacheControl != nil {
+		t.Error("recent tool_result should not have cache_control")
+	}
+}
+
+func TestSetMessageCacheBreakpoints_ExcludesRecentTurns(t *testing.T) {
+	// 全 tool_result が最新3ターン内 → BP なし
+	messages := []AnthropicMessage{
+		{Role: "user", Content: []AnthropicContentBlock{{Type: "text", Text: "old"}}},
+		{Role: "assistant", Content: []AnthropicContentBlock{{Type: "text", Text: "reply"}}},
+		// 最新3ターン
+		{Role: "user", Content: []AnthropicContentBlock{{Type: "tool_result", ToolUseID: "t1", Content: string(make([]byte, 5000))}}},
+		{Role: "assistant", Content: []AnthropicContentBlock{{Type: "text", Text: "reply"}}},
+		{Role: "user", Content: []AnthropicContentBlock{{Type: "tool_result", ToolUseID: "t2", Content: string(make([]byte, 8000))}}},
+		{Role: "assistant", Content: []AnthropicContentBlock{{Type: "text", Text: "reply"}}},
+		{Role: "user", Content: []AnthropicContentBlock{{Type: "text", Text: "latest"}}},
+	}
+
+	SetMessageCacheBreakpoints(messages)
+
+	for i, msg := range messages {
+		for j, block := range msg.Content {
+			if block.CacheControl != nil {
+				t.Errorf("messages[%d].Content[%d] should not have cache_control (all in recent turns)", i, j)
+			}
 		}
+	}
+}
 
-		SetMessageCacheBreakpoints(messages)
+func TestSetMessageCacheBreakpoints_SingleToolResult(t *testing.T) {
+	// 安定区間に tool_result が1つだけ → BP 1つだけ設定
+	messages := []AnthropicMessage{
+		{Role: "user", Content: []AnthropicContentBlock{{Type: "tool_result", ToolUseID: "t1", Content: "only result"}}},
+		{Role: "assistant", Content: []AnthropicContentBlock{{Type: "text", Text: "reply"}}},
+		{Role: "user", Content: []AnthropicContentBlock{{Type: "text", Text: "msg1"}}},
+		{Role: "assistant", Content: []AnthropicContentBlock{{Type: "text", Text: "reply"}}},
+		{Role: "user", Content: []AnthropicContentBlock{{Type: "text", Text: "msg2"}}},
+		{Role: "assistant", Content: []AnthropicContentBlock{{Type: "text", Text: "reply"}}},
+		{Role: "user", Content: []AnthropicContentBlock{{Type: "text", Text: "msg3"}}},
+	}
 
-		// 最後の user メッセージ
-		lastUserIdx := len(messages) - 2
-		if messages[lastUserIdx].Content[0].CacheControl != nil {
-			t.Errorf("userCount=%d: last user (index %d) should NOT have cache_control",
-				userCount, lastUserIdx)
+	SetMessageCacheBreakpoints(messages)
+
+	if messages[0].Content[0].CacheControl == nil {
+		t.Error("expected cache_control on the only tool_result")
+	}
+
+	// 他のメッセージには cache_control なし
+	for _, idx := range []int{2, 4, 6} {
+		if messages[idx].Content[0].CacheControl != nil {
+			t.Errorf("messages[%d] should not have cache_control", idx)
 		}
 	}
 }
@@ -433,56 +422,80 @@ func TestSetMessageCacheBreakpoints_NoUser(t *testing.T) {
 	}
 }
 
-func TestSetMessageCacheBreakpoints_SingleUser(t *testing.T) {
-	messages := []AnthropicMessage{
-		{Role: "user", Content: []AnthropicContentBlock{{Type: "text", Text: "only one"}}},
-	}
-
-	// panic しないこと + BPなし（stableCount = 1-3 = -2 < 3）
-	SetMessageCacheBreakpoints(messages)
-
-	if messages[0].Content[0].CacheControl != nil {
-		t.Error("single user should not have cache_control")
-	}
-}
-
-func TestSetMessageCacheBreakpoints_MultiBlockUser(t *testing.T) {
-	// 十分な長さで BP#3 が設定される状況で、最後のブロックに cache_control が付くことを検証
+func TestSetMessageCacheBreakpoints_NoToolResults(t *testing.T) {
+	// tool_result がない会話 → BP なし
 	var messages []AnthropicMessage
-	// user[0]: multi-block
-	messages = append(messages, AnthropicMessage{
-		Role: "user",
-		Content: []AnthropicContentBlock{
-			{Type: "tool_result", ToolUseID: "t1", Content: "result1"},
-			{Type: "tool_result", ToolUseID: "t2", Content: "result2"},
-		},
-	})
-	// 残りの user+assistant を追加（合計 user 7個、stableCount=4, roundedDown=3, BP#3=user[2]）
-	for i := 1; i < 7; i++ {
+	for i := 0; i < 8; i++ {
 		messages = append(messages,
-			AnthropicMessage{Role: "assistant", Content: []AnthropicContentBlock{
-				{Type: "text", Text: "reply"},
-			}},
 			AnthropicMessage{Role: "user", Content: []AnthropicContentBlock{
-				{Type: "text", Text: fmt.Sprintf("msg%d", i)},
+				{Type: "text", Text: fmt.Sprintf("user%d", i)},
+			}},
+			AnthropicMessage{Role: "assistant", Content: []AnthropicContentBlock{
+				{Type: "text", Text: fmt.Sprintf("reply%d", i)},
 			}},
 		)
 	}
 
 	SetMessageCacheBreakpoints(messages)
 
-	// BP#3 = user[2] = index 4（3番目のuser）
-	// user[0]=index 0 (multi-block), user[1]=index 2, user[2]=index 4
-	if messages[4].Content[0].CacheControl == nil {
-		t.Error("expected cache_control on BP#3 user")
+	for i, msg := range messages {
+		for j, block := range msg.Content {
+			if block.CacheControl != nil {
+				t.Errorf("messages[%d].Content[%d] should not have cache_control (no tool_results)", i, j)
+			}
+		}
+	}
+}
+
+func TestSetMessageCacheBreakpoints_MultiBlockUser(t *testing.T) {
+	// 1つの user メッセージに複数の tool_result → 最大のブロックに BP
+	messages := []AnthropicMessage{
+		{Role: "user", Content: []AnthropicContentBlock{
+			{Type: "tool_result", ToolUseID: "t1", Content: "short"},
+			{Type: "tool_result", ToolUseID: "t2", Content: string(make([]byte, 3000))},
+		}},
+		{Role: "assistant", Content: []AnthropicContentBlock{{Type: "text", Text: "reply"}}},
+		{Role: "user", Content: []AnthropicContentBlock{{Type: "text", Text: "msg"}}},
+		{Role: "assistant", Content: []AnthropicContentBlock{{Type: "text", Text: "reply"}}},
+		{Role: "user", Content: []AnthropicContentBlock{{Type: "text", Text: "msg"}}},
+		{Role: "assistant", Content: []AnthropicContentBlock{{Type: "text", Text: "reply"}}},
+		{Role: "user", Content: []AnthropicContentBlock{{Type: "text", Text: "msg"}}},
 	}
 
-	// user[0] の multi-block は BP ではないので CacheControl なし
-	if messages[0].Content[0].CacheControl != nil {
-		t.Error("first block of user[0] should not have cache_control")
+	SetMessageCacheBreakpoints(messages)
+
+	// 大きい tool_result (block[1]) に BP
+	if messages[0].Content[1].CacheControl == nil {
+		t.Error("expected cache_control on larger tool_result block")
 	}
-	if messages[0].Content[1].CacheControl != nil {
-		t.Error("second block of user[0] should not have cache_control")
+	// 小さい tool_result (block[0]) には BP なし（上位2つに入らない場合）
+	// ただし候補が2つしかないため、short にも BP が付く
+	if messages[0].Content[0].CacheControl == nil {
+		t.Error("expected cache_control on second tool_result (only 2 candidates)")
+	}
+}
+
+func TestSetMessageCacheBreakpoints_Disabled(t *testing.T) {
+	// prompt_cache.enabled=false → cache_control を設定しない
+	cfg := config.DefaultConfig()
+	cfg.PromptCache.Enabled = false
+	config.SetGlobalConfig(cfg)
+	defer config.SetGlobalConfig(nil)
+
+	messages := []AnthropicMessage{
+		{Role: "user", Content: []AnthropicContentBlock{{Type: "tool_result", ToolUseID: "t1", Content: string(make([]byte, 5000))}}},
+		{Role: "assistant", Content: []AnthropicContentBlock{{Type: "text", Text: "reply"}}},
+		{Role: "user", Content: []AnthropicContentBlock{{Type: "text", Text: "msg"}}},
+		{Role: "assistant", Content: []AnthropicContentBlock{{Type: "text", Text: "reply"}}},
+		{Role: "user", Content: []AnthropicContentBlock{{Type: "text", Text: "msg"}}},
+		{Role: "assistant", Content: []AnthropicContentBlock{{Type: "text", Text: "reply"}}},
+		{Role: "user", Content: []AnthropicContentBlock{{Type: "text", Text: "msg"}}},
+	}
+
+	SetMessageCacheBreakpoints(messages)
+
+	if messages[0].Content[0].CacheControl != nil {
+		t.Error("expected no cache_control when prompt cache disabled")
 	}
 }
 

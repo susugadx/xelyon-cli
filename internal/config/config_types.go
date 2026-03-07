@@ -82,7 +82,8 @@ type ToolConfirmConfig struct {
 
 // PromptCacheConfig はプロンプトキャッシュの設定（Anthropic API cache_control）
 type PromptCacheConfig struct {
-	Enabled bool `yaml:"enabled"`
+	Enabled  bool   `yaml:"enabled"`
+	CacheTTL string `yaml:"cache_ttl"` // キャッシュTTL（デフォルト: "5m"、"1h" で延長キャッシュ）
 }
 
 // PasteConfig はペーストモードの設定
