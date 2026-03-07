@@ -106,8 +106,8 @@ func ExecuteReadFile(path string, startLine, endLine int) string {
 				return fmt.Sprintf("Error reading file: %v", err)
 			}
 
-			result := formatLinesWithNumbers(lines, 1)
 			if hasMore {
+				// 推定総行数
 				totalLines := totalRead
 				if totalRead > 0 {
 					avgLineLen := fileInfo.Size() / int64(totalRead)
@@ -115,22 +115,21 @@ func ExecuteReadFile(path string, startLine, endLine int) string {
 						totalLines = int(fileInfo.Size() / avgLineLen)
 					}
 				}
-				remaining := totalLines - MaxReadLines
-				if remaining < 1 {
-					remaining = 1
-				}
-				result += fmt.Sprintf("\n... (truncated, ~%d lines remaining, file size: %s)\nUse start_line/end_line to read specific sections.", remaining, formatFileSize(fileInfo.Size()))
+				// outline-first モード（先頭300行分の content で BuildBlockMap）
+				result := formatOutline(absPath, lines, totalLines)
 				if showFileInfo && fileSize > 0 {
-					common.Green.Printf("📄 Read: %s (%s, showing first %d lines)\n", path, formatFileSize(fileSize), MaxReadLines)
+					common.Green.Printf("📄 Read: %s (%s, outline of ~%d lines)\n", path, formatFileSize(fileSize), totalLines)
 				} else {
-					common.Green.Printf("📄 Read: %s (showing first %d lines)\n", path, MaxReadLines)
+					common.Green.Printf("📄 Read: %s (outline of ~%d lines)\n", path, totalLines)
 				}
+				return result
+			}
+			// 300行以下に収まった場合は全行表示
+			result := formatLinesWithNumbers(lines, 1)
+			if showFileInfo && fileSize > 0 {
+				common.Green.Printf("📄 Read: %s (%s, %d lines)\n", path, formatFileSize(fileSize), len(lines))
 			} else {
-				if showFileInfo && fileSize > 0 {
-					common.Green.Printf("📄 Read: %s (%s, %d lines)\n", path, formatFileSize(fileSize), len(lines))
-				} else {
-					common.Green.Printf("📄 Read: %s (%d lines)\n", path, len(lines))
-				}
+				common.Green.Printf("📄 Read: %s (%d lines)\n", path, len(lines))
 			}
 			return result
 		}
@@ -206,17 +205,69 @@ func ExecuteReadFile(path string, startLine, endLine int) string {
 		return result
 	}
 
-	// 切り詰めて表示
-	selectedLines := lines[:MaxReadLines]
-	result := formatLinesWithNumbers(selectedLines, 1)
-	remaining := totalLines - MaxReadLines
-	result += fmt.Sprintf("\n... (truncated, %d lines remaining)\nUse start_line/end_line to read specific sections.", remaining)
+	// outline-first モード: 先頭 + シグネチャ一覧 + 末尾
+	result := formatOutline(absPath, lines, totalLines)
 	if showFileInfo && fileSize > 0 {
-		common.Green.Printf("📄 Read: %s (%s, showing first %d of %d lines)\n", path, formatFileSize(fileSize), MaxReadLines, totalLines)
+		common.Green.Printf("📄 Read: %s (%s, outline of %d lines)\n", path, formatFileSize(fileSize), totalLines)
 	} else {
-		common.Green.Printf("📄 Read: %s (showing first %d of %d lines)\n", path, MaxReadLines, totalLines)
+		common.Green.Printf("📄 Read: %s (outline of %d lines)\n", path, totalLines)
 	}
 	return result
+}
+
+// outlineHeadLines はアウトラインモードで表示する先頭行数
+const outlineHeadLines = 30
+
+// outlineTailLines はアウトラインモードで表示する末尾行数
+const outlineTailLines = 10
+
+// formatOutline はファイルのアウトラインを生成する。
+// 先頭30行 + 関数/メソッドシグネチャ一覧 + 末尾10行 を返す。
+func formatOutline(filePath string, lines []string, totalLines int) string {
+	var sb strings.Builder
+
+	// 1. 先頭 outlineHeadLines 行
+	headEnd := outlineHeadLines
+	if headEnd > totalLines {
+		headEnd = totalLines
+	}
+	sb.WriteString(formatLinesWithNumbers(lines[:headEnd], 1))
+
+	// 2. シグネチャ一覧
+	content := strings.Join(lines, "\n")
+	isBrace := common.IsBraceLanguage(filePath)
+	blocks := common.BuildBlockMap(content, isBrace)
+
+	// headEnd 行より後のブロックのみ抽出（先頭部分と重複しないように）
+	var signatures []string
+	for _, b := range blocks {
+		if b.StartLine > headEnd && b.StartLine <= totalLines-outlineTailLines {
+			signatures = append(signatures, fmt.Sprintf("  L%-4d %s", b.StartLine, b.Name))
+		}
+	}
+
+	if len(signatures) > 0 {
+		sb.WriteString("\n--- Signatures ---\n")
+		for _, sig := range signatures {
+			sb.WriteString(sig)
+			sb.WriteString("\n")
+		}
+	}
+
+	// 3. 末尾 outlineTailLines 行
+	tailStart := totalLines - outlineTailLines
+	if tailStart < headEnd {
+		tailStart = headEnd
+	}
+	if tailStart < totalLines {
+		sb.WriteString("\n--- Last lines ---\n")
+		sb.WriteString(formatLinesWithNumbers(lines[tailStart:], tailStart+1))
+	}
+
+	// 4. ガイドメッセージ
+	fmt.Fprintf(&sb, "\n(%d lines total. Use start_line/end_line to read function body)\n", totalLines)
+
+	return sb.String()
 }
 
 // formatLinesWithNumbers は行番号付きでフォーマット

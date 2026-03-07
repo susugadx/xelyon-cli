@@ -51,19 +51,67 @@ func TestExecuteReadFile_PathTraversal(t *testing.T) {
 	}
 }
 
-func TestExecuteReadFile_LargeFile(t *testing.T) {
+func TestExecuteReadFile_LargeFile_Outline(t *testing.T) {
 	setupTestMocks(t)
 	tmpDir := t.TempDir()
 
+	// 400行のGoファイル（関数定義を含む）
+	var sb strings.Builder
+	sb.WriteString("package main\n\nimport \"fmt\"\n\n")
+	for i := 0; i < 5; i++ {
+		fmt.Fprintf(&sb, "func handler%d() {\n", i)
+		for j := 0; j < 70; j++ {
+			fmt.Fprintf(&sb, "\tfmt.Println(%d)\n", j)
+		}
+		sb.WriteString("}\n\n")
+	}
+	testutil.CreateTempFile(t, tmpDir, "large.go", sb.String())
+
+	output := ExecuteReadFile(filepath.Join(tmpDir, "large.go"), 0, 0)
+
+	// outline-first モードの検証
+	if !strings.Contains(output, "Signatures") {
+		t.Errorf("Expected outline to contain 'Signatures', got:\n%s", output)
+	}
+	if !strings.Contains(output, "Use start_line/end_line to read function body") {
+		t.Errorf("Expected guide message, got:\n%s", output)
+	}
+	// 先頭行が含まれる
+	if !strings.Contains(output, "package main") {
+		t.Errorf("Expected head lines to contain 'package main'")
+	}
+	// シグネチャに関数名が含まれる
+	if !strings.Contains(output, "func handler") {
+		t.Errorf("Expected signatures to contain function names, got:\n%s", output)
+	}
+	// 末尾行セクションが含まれる
+	if !strings.Contains(output, "Last lines") {
+		t.Errorf("Expected 'Last lines' section, got:\n%s", output)
+	}
+}
+
+func TestExecuteReadFile_LargeFile_PlainText(t *testing.T) {
+	setupTestMocks(t)
+	tmpDir := t.TempDir()
+
+	// 400行のプレーンテキスト（ブロックなし）
 	var lines []string
 	for i := 0; i < 400; i++ {
-		lines = append(lines, "line content")
+		lines = append(lines, fmt.Sprintf("log entry %d", i))
 	}
 	testutil.CreateTempFile(t, tmpDir, "large.txt", strings.Join(lines, "\n"))
 
 	output := ExecuteReadFile(filepath.Join(tmpDir, "large.txt"), 0, 0)
-	if !strings.Contains(output, "truncated") {
-		t.Errorf("Expected output to be truncated, got: %s", output)
+
+	// シグネチャなしでもアウトラインが動作する
+	if !strings.Contains(output, "Use start_line/end_line to read function body") {
+		t.Errorf("Expected guide message, got:\n%s", output)
+	}
+	if !strings.Contains(output, "Last lines") {
+		t.Errorf("Expected 'Last lines' section, got:\n%s", output)
+	}
+	if !strings.Contains(output, "log entry 0") {
+		t.Errorf("Expected head to contain first entry")
 	}
 }
 
@@ -218,6 +266,83 @@ func TestReadFileTool_PathRequired(t *testing.T) {
 	}
 }
 
+func TestFormatOutline_Signatures(t *testing.T) {
+	// 50行のGoファイルを構築（>30行で先頭ゾーン外にシグネチャがある）
+	var sb strings.Builder
+	sb.WriteString("package main\n\nimport \"fmt\"\n\n")
+	// 先頭を埋める（30行に到達させる）
+	for i := 5; i <= 30; i++ {
+		fmt.Fprintf(&sb, "// line %d\n", i)
+	}
+	// 31行目以降に関数定義
+	sb.WriteString("func Alpha() {\n")
+	for i := 0; i < 5; i++ {
+		sb.WriteString("\tfmt.Println()\n")
+	}
+	sb.WriteString("}\n\n")
+	sb.WriteString("func Beta() {\n")
+	for i := 0; i < 5; i++ {
+		sb.WriteString("\tfmt.Println()\n")
+	}
+	sb.WriteString("}\n")
+
+	lines := strings.Split(sb.String(), "\n")
+	tmpDir := t.TempDir()
+	goFile := filepath.Join(tmpDir, "test.go")
+	if err := os.WriteFile(goFile, []byte(sb.String()), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	out := formatOutline(goFile, lines, len(lines))
+
+	// 先頭行
+	if !strings.Contains(out, "package main") {
+		t.Errorf("expected head to contain package declaration")
+	}
+	// シグネチャ
+	if !strings.Contains(out, "func Alpha") {
+		t.Errorf("expected signature for Alpha, got:\n%s", out)
+	}
+	if !strings.Contains(out, "func Beta") {
+		t.Errorf("expected signature for Beta, got:\n%s", out)
+	}
+	// 行番号付き
+	if !strings.Contains(out, "L") {
+		t.Errorf("expected line numbers in signatures, got:\n%s", out)
+	}
+	// ガイドメッセージ
+	if !strings.Contains(out, "Use start_line/end_line") {
+		t.Errorf("expected guide message")
+	}
+}
+
+func TestFormatOutline_SmallFile(t *testing.T) {
+	// 35行のファイル — headEnd=30, tailStart=25 → tailStart は headEnd に補正
+	var sb strings.Builder
+	for i := 1; i <= 35; i++ {
+		fmt.Fprintf(&sb, "line %d\n", i)
+	}
+	lines := strings.Split(strings.TrimRight(sb.String(), "\n"), "\n")
+	tmpDir := t.TempDir()
+	txtFile := filepath.Join(tmpDir, "small.txt")
+	if err := os.WriteFile(txtFile, []byte(sb.String()), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	out := formatOutline(txtFile, lines, len(lines))
+
+	// 先頭30行 + 末尾5行（35-30=5）
+	if !strings.Contains(out, "line 1") {
+		t.Errorf("expected first line")
+	}
+	if !strings.Contains(out, "line 35") {
+		t.Errorf("expected last line, got:\n%s", out)
+	}
+	if !strings.Contains(out, "35 lines total") {
+		t.Errorf("expected total line count, got:\n%s", out)
+	}
+}
+
 func TestExecuteReadFile_BinaryFile(t *testing.T) {
 	setupTestMocks(t)
 	tmpDir := t.TempDir()
@@ -232,7 +357,7 @@ func TestExecuteReadFile_BinaryFile(t *testing.T) {
 	}
 }
 
-func TestExecuteReadFile_LargeFileStreaming(t *testing.T) {
+func TestExecuteReadFile_LargeFileStreaming_Outline(t *testing.T) {
 	setupTestMocks(t)
 	tmpDir := t.TempDir()
 	largeFile := filepath.Join(tmpDir, "large.log")
@@ -252,10 +377,49 @@ func TestExecuteReadFile_LargeFileStreaming(t *testing.T) {
 	}
 
 	output := ExecuteReadFile(largeFile, 0, 0)
-	if !strings.Contains(output, "truncated") {
-		t.Fatalf("expected truncation for large file, got: %s", output)
+	// outline-first モードに切り替わる
+	if !strings.Contains(output, "Use start_line/end_line to read function body") {
+		t.Fatalf("expected outline guide message for large file, got: %s", output)
 	}
 	if !strings.Contains(output, "1: line 00001") {
 		t.Fatalf("expected first line in output, got: %s", output)
+	}
+	if !strings.Contains(output, "Last lines") {
+		t.Fatalf("expected 'Last lines' section, got: %s", output)
+	}
+}
+
+func TestExecuteReadFile_LargeFileStreaming_GoOutline(t *testing.T) {
+	setupTestMocks(t)
+	tmpDir := t.TempDir()
+	largeFile := filepath.Join(tmpDir, "large.go")
+
+	// 1MB超のGoファイルを生成（関数定義を含む）
+	f, err := os.Create(largeFile)
+	if err != nil {
+		t.Fatalf("failed to create large file: %v", err)
+	}
+	fmt.Fprintf(f, "package main\n\nimport \"fmt\"\n\n")
+	for i := 0; i < 500; i++ {
+		fmt.Fprintf(f, "func handler%d() {\n", i)
+		for j := 0; j < 30; j++ {
+			fmt.Fprintf(f, "\tfmt.Println(%q)\n", strings.Repeat("x", 100))
+		}
+		fmt.Fprintf(f, "}\n\n")
+	}
+	if err := f.Close(); err != nil {
+		t.Fatalf("failed to close large file: %v", err)
+	}
+
+	output := ExecuteReadFile(largeFile, 0, 0)
+
+	if !strings.Contains(output, "Signatures") {
+		t.Fatalf("expected 'Signatures' section for Go file, got: %s", output)
+	}
+	if !strings.Contains(output, "func handler") {
+		t.Fatalf("expected function signatures, got: %s", output)
+	}
+	if !strings.Contains(output, "Use start_line/end_line to read function body") {
+		t.Fatalf("expected guide message, got: %s", output)
 	}
 }
