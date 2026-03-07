@@ -198,8 +198,8 @@ func formatWebSearchResult(summary string, sources []webSearchSource) string {
 			if title == "" {
 				title = source.URL
 			}
-			b.WriteString(fmt.Sprintf("%d. %s\n", i+1, title))
-			b.WriteString(fmt.Sprintf("   URL: %s\n", source.URL))
+			fmt.Fprintf(&b, "%d. %s\n", i+1, title)
+			fmt.Fprintf(&b, "   URL: %s\n", source.URL)
 			if i < len(sources)-1 {
 				b.WriteString("\n")
 			}

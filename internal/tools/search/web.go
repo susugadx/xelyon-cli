@@ -82,7 +82,7 @@ func searchWithProvider(query, providerName, model string) (string, string, erro
 
 	result, err := serper.WebSearch(query)
 	if err != nil {
-		return "", "serper", fmt.Errorf("Serper fallback failed: %w", err)
+		return "", "serper", fmt.Errorf("serper fallback failed: %w", err)
 	}
 	return result, "serper", nil
 }
