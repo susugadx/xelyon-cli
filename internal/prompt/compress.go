@@ -46,7 +46,7 @@ func BuildSummaryPrompt(messages []Message, truncateLen int) string {
 			content = content[:truncateLen] + "..."
 		}
 
-		sb.WriteString(fmt.Sprintf("[%s]\n%s\n\n", role, content))
+		fmt.Fprintf(&sb, "[%s]\n%s\n\n", role, content)
 	}
 
 	sb.WriteString("---\n\n")

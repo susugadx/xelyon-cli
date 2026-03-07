@@ -223,7 +223,7 @@ func ExecuteReadFile(path string, startLine, endLine int) string {
 func formatLinesWithNumbers(lines []string, startNum int) string {
 	var sb strings.Builder
 	for i, line := range lines {
-		sb.WriteString(fmt.Sprintf("%d: %s\n", startNum+i, line))
+		fmt.Fprintf(&sb, "%d: %s\n", startNum+i, line)
 	}
 	return sb.String()
 }

@@ -38,7 +38,7 @@ func ShowConfig(current *Config) string {
 			if currentGroup != "" {
 				sb.WriteString("\n")
 			}
-			sb.WriteString(fmt.Sprintf("[%s]\n", group))
+			fmt.Fprintf(&sb, "[%s]\n", group)
 			currentGroup = group
 		}
 
@@ -50,9 +50,9 @@ func ShowConfig(current *Config) string {
 
 		// 値と差分マーク
 		if diff.IsDiff {
-			sb.WriteString(fmt.Sprintf("%-35s = %-20s (default: %s) ⚡\n", keyName, diff.Current, diff.Default))
+			fmt.Fprintf(&sb, "%-35s = %-20s (default: %s) ⚡\n", keyName, diff.Current, diff.Default)
 		} else {
-			sb.WriteString(fmt.Sprintf("%-35s = %s\n", keyName, diff.Current))
+			fmt.Fprintf(&sb, "%-35s = %s\n", keyName, diff.Current)
 		}
 	}
 

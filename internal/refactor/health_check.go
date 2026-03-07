@@ -107,21 +107,21 @@ func FormatHealthWarning(result *HealthCheckResult) string {
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("\n⚠️  Code Health Warning: %s\n", result.FilePath))
+	fmt.Fprintf(&sb, "\n⚠️  Code Health Warning: %s\n", result.FilePath)
 
 	if result.FileLines >= result.MaxFileLines {
-		sb.WriteString(fmt.Sprintf("   📦 File size: %d lines (limit: %d)\n",
-			result.FileLines, result.MaxFileLines))
+		fmt.Fprintf(&sb, "   📦 File size: %d lines (limit: %d)\n",
+			result.FileLines, result.MaxFileLines)
 	}
 
 	for _, f := range result.LongFunctions {
-		sb.WriteString(fmt.Sprintf("   📏 Long function: %s() - %d lines (limit: %d)\n",
-			f.Name, f.Lines, result.MaxFunctionLines))
+		fmt.Fprintf(&sb, "   📏 Long function: %s() - %d lines (limit: %d)\n",
+			f.Name, f.Lines, result.MaxFunctionLines)
 	}
 
 	sb.WriteString("\n💡 Suggestions:\n")
 	for _, s := range result.Suggestions {
-		sb.WriteString(fmt.Sprintf("   • %s\n", s))
+		fmt.Fprintf(&sb, "   • %s\n", s)
 	}
 
 	return sb.String()

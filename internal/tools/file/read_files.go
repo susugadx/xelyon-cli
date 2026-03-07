@@ -67,7 +67,7 @@ func ExecuteReadFiles(paths []string) string {
 		path, startLine, endLine := parsePath(entry)
 
 		// ファイルヘッダー
-		sb.WriteString(fmt.Sprintf("📄 File: %s\n", entry))
+		fmt.Fprintf(&sb, "📄 File: %s\n", entry)
 
 		// 既存の ExecuteReadFile を再利用
 		result := ExecuteReadFile(path, startLine, endLine)

@@ -103,19 +103,19 @@ func CheckDiagnosticsForFiles(files []string) DiagnosticCheckResult {
 			switch d.Severity {
 			case lsplib.DiagnosticSeverityError:
 				if !fileHasIssue {
-					sb.WriteString(fmt.Sprintf("\n%s:\n", file))
+					fmt.Fprintf(&sb, "\n%s:\n", file)
 					fileHasIssue = true
 				}
-				sb.WriteString(fmt.Sprintf("  ❌ Error [%d:%d]: %s\n",
-					d.Range.Start.Line+1, d.Range.Start.Character+1, d.Message))
+				fmt.Fprintf(&sb, "  ❌ Error [%d:%d]: %s\n",
+					d.Range.Start.Line+1, d.Range.Start.Character+1, d.Message)
 				totalErrors++
 			case lsplib.DiagnosticSeverityWarning:
 				if !fileHasIssue {
-					sb.WriteString(fmt.Sprintf("\n%s:\n", file))
+					fmt.Fprintf(&sb, "\n%s:\n", file)
 					fileHasIssue = true
 				}
-				sb.WriteString(fmt.Sprintf("  ⚠️ Warning [%d:%d]: %s\n",
-					d.Range.Start.Line+1, d.Range.Start.Character+1, d.Message))
+				fmt.Fprintf(&sb, "  ⚠️ Warning [%d:%d]: %s\n",
+					d.Range.Start.Line+1, d.Range.Start.Character+1, d.Message)
 				totalWarnings++
 			}
 		}

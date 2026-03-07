@@ -57,7 +57,7 @@ func CollapseOutputWithPrefix(output string, prefix string, maxLines int) string
 	for i, line := range lines {
 		if visibleCount >= maxLines {
 			hidden := len(lines) - i
-			result.WriteString(fmt.Sprintf("%s%s... +%d lines%s\n", prefix, colorDim, hidden, colorReset))
+			fmt.Fprintf(&result, "%s%s... +%d lines%s\n", prefix, colorDim, hidden, colorReset)
 			break
 		}
 
@@ -115,7 +115,7 @@ func FormatToolOutput(output string, maxLines int) string {
 	for i, line := range lines {
 		if i >= maxLines {
 			hidden := len(lines) - i
-			result.WriteString(fmt.Sprintf("   %s... +%d lines%s\n", colorDim, hidden, colorReset))
+			fmt.Fprintf(&result, "   %s... +%d lines%s\n", colorDim, hidden, colorReset)
 			break
 		}
 

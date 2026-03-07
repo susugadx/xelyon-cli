@@ -15,7 +15,7 @@ func BuildRulesBlockFromList(rules []string) string {
 	var b strings.Builder
 	b.WriteString("\n\n=== PROJECT-SPECIFIC RULES (MANDATORY) ===\n")
 	for i, rule := range rules {
-		b.WriteString(fmt.Sprintf("%d. %s\n", i+1, rule))
+		fmt.Fprintf(&b, "%d. %s\n", i+1, rule)
 	}
 	b.WriteString("Violating ANY of these rules is a critical failure.")
 

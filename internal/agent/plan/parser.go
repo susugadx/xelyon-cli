@@ -169,14 +169,14 @@ func FormatPlan(plan *Plan) string {
 	sb.WriteString("Plan:\n")
 
 	for _, step := range plan.Steps {
-		sb.WriteString(fmt.Sprintf("  %d. %s\n", step.ID, step.Description))
+		fmt.Fprintf(&sb, "  %d. %s\n", step.ID, step.Description)
 
 		if len(step.Tools) > 0 {
-			sb.WriteString(fmt.Sprintf("     Tools: %s\n", strings.Join(step.Tools, ", ")))
+			fmt.Fprintf(&sb, "     Tools: %s\n", strings.Join(step.Tools, ", "))
 		}
 
 		if len(step.DependsOn) > 0 {
-			sb.WriteString(fmt.Sprintf("     Depends on: %v\n", step.DependsOn))
+			fmt.Fprintf(&sb, "     Depends on: %v\n", step.DependsOn)
 		}
 	}
 

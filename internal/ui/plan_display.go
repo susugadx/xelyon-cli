@@ -57,7 +57,7 @@ func (p *PlanDisplay) Render() string {
 
 	// タイトル
 	if p.Title != "" {
-		sb.WriteString(fmt.Sprintf("📋 Plan: %s\n", p.Title))
+		fmt.Fprintf(&sb, "📋 Plan: %s\n", p.Title)
 		sb.WriteString("\n")
 	}
 
@@ -67,7 +67,7 @@ func (p *PlanDisplay) Render() string {
 		// 概要を行分割してインデント
 		for _, line := range strings.Split(p.Summary, "\n") {
 			if line != "" {
-				sb.WriteString(fmt.Sprintf("  %s\n", line))
+				fmt.Fprintf(&sb, "  %s\n", line)
 			}
 		}
 		sb.WriteString("\n")
@@ -78,11 +78,11 @@ func (p *PlanDisplay) Render() string {
 		sb.WriteString("ステップ\n")
 		for _, step := range p.Steps {
 			icon := getStepStatusIcon(step.Status)
-			sb.WriteString(fmt.Sprintf("  %s %d. %s\n", icon, step.ID, step.Description))
+			fmt.Fprintf(&sb, "  %s %d. %s\n", icon, step.ID, step.Description)
 
 			// ツール
 			if len(step.Tools) > 0 {
-				sb.WriteString(fmt.Sprintf("       Tools: %s\n", strings.Join(step.Tools, ", ")))
+				fmt.Fprintf(&sb, "       Tools: %s\n", strings.Join(step.Tools, ", "))
 			}
 		}
 		sb.WriteString("\n")
@@ -200,7 +200,7 @@ func FormatPlanHeader(title string) string {
 	sb.WriteString("\n")
 	sb.WriteString(strings.Repeat("╌", 50))
 	sb.WriteString("\n")
-	sb.WriteString(fmt.Sprintf("📋 Plan: %s\n", title))
+	fmt.Fprintf(&sb, "📋 Plan: %s\n", title)
 	sb.WriteString(strings.Repeat("╌", 50))
 	sb.WriteString("\n")
 	return sb.String()

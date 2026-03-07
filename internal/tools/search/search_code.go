@@ -1182,7 +1182,7 @@ func formatSearchResultsBody(results []SearchResult, truncated bool, tokenBudget
 	var sb strings.Builder
 
 	for _, r := range results {
-		sb.WriteString(fmt.Sprintf("\n📄 %s (%d match(es))\n", r.FilePath, r.MatchCount))
+		fmt.Fprintf(&sb, "\n📄 %s (%d match(es))\n", r.FilePath, r.MatchCount)
 
 		// ブロック分割 → MatchType でソート → 展開
 		blocks := buildMatchBlocks(r.Matches)
@@ -1203,18 +1203,18 @@ func formatSearchResultsBody(results []SearchResult, truncated bool, tokenBudget
 			prevLineNum = m.LineNum
 
 			if m.IsMatch {
-				sb.WriteString(fmt.Sprintf("  %-10s> %4d │ %s\n", matchTypeTag[m.Type], m.LineNum, truncateLine(m.Line)))
+				fmt.Fprintf(&sb, "  %-10s> %4d │ %s\n", matchTypeTag[m.Type], m.LineNum, truncateLine(m.Line))
 				if m.Block != nil {
-					sb.WriteString(fmt.Sprintf("  %10s  %4s   ── in %s (L%d)\n", "", "", m.Block.Name, m.Block.StartLine))
+					fmt.Fprintf(&sb, "  %10s  %4s   ── in %s (L%d)\n", "", "", m.Block.Name, m.Block.StartLine)
 				}
 			} else {
-				sb.WriteString(fmt.Sprintf("  %10s  %4d │ %s\n", "", m.LineNum, truncateLine(m.Line)))
+				fmt.Fprintf(&sb, "  %10s  %4d │ %s\n", "", m.LineNum, truncateLine(m.Line))
 			}
 		}
 	}
 
 	if truncated {
-		sb.WriteString(fmt.Sprintf("\n[Results truncated to fit token budget (%d)]\n", tokenBudget))
+		fmt.Fprintf(&sb, "\n[Results truncated to fit token budget (%d)]\n", tokenBudget)
 	}
 
 	return sb.String()

@@ -51,10 +51,10 @@ func BuildMCPToolsPrompt(tools []MCPTool) string {
 
 	// 各サーバーのツールを列挙
 	for serverName, serverToolList := range serverTools {
-		sb.WriteString(fmt.Sprintf("### %s Server\n", serverName))
+		fmt.Fprintf(&sb, "### %s Server\n", serverName)
 		for _, t := range serverToolList {
 			toolName := fmt.Sprintf("mcp_%s_%s", SanitizeToolName(serverName), SanitizeToolName(t.Name))
-			sb.WriteString(fmt.Sprintf("- **%s**: %s\n", toolName, t.Description))
+			fmt.Fprintf(&sb, "- **%s**: %s\n", toolName, t.Description)
 		}
 		sb.WriteString("\n")
 	}
