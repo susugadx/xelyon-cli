@@ -1074,6 +1074,165 @@ func TestEstimateTokens(t *testing.T) {
 	}
 }
 
+// --- collapseBlockMatches テスト ---
+
+func TestCollapseBlockMatches_ThreeMatchesSameBlock(t *testing.T) {
+	block := &BlockInfo{Name: "func doStuff", StartLine: 10}
+	results := []SearchResult{{
+		FilePath:   "a.go",
+		MatchCount: 3,
+		Matches: []Match{
+			{LineNum: 11, Line: "ctx line before", IsMatch: false},
+			{LineNum: 12, Line: "match1", IsMatch: true, Type: MatchTypeUsage, Block: block},
+			{LineNum: 13, Line: "ctx between 1-2", IsMatch: false},
+			{LineNum: 14, Line: "match2", IsMatch: true, Type: MatchTypeUsage, Block: block},
+			{LineNum: 15, Line: "ctx between 2-3", IsMatch: false},
+			{LineNum: 16, Line: "match3", IsMatch: true, Type: MatchTypeUsage, Block: block},
+			{LineNum: 17, Line: "ctx line after", IsMatch: false},
+		},
+	}}
+
+	collapseBlockMatches(results)
+
+	matches := results[0].Matches
+	// Expected: ctx_before, match1, marker, match3, ctx_after
+	if len(matches) != 5 {
+		t.Fatalf("expected 5 entries, got %d: %+v", len(matches), matches)
+	}
+	if matches[0].LineNum != 11 {
+		t.Errorf("expected pre-context at line 11, got %d", matches[0].LineNum)
+	}
+	if matches[1].LineNum != 12 || !matches[1].IsMatch {
+		t.Errorf("expected first match at line 12")
+	}
+	if matches[2].LineNum != -1 {
+		t.Errorf("expected collapse marker (LineNum=-1), got %d", matches[2].LineNum)
+	}
+	if !strings.Contains(matches[2].Line, "+1 more match") {
+		t.Errorf("expected collapse marker text, got %q", matches[2].Line)
+	}
+	if matches[3].LineNum != 16 || !matches[3].IsMatch {
+		t.Errorf("expected last match at line 16")
+	}
+	if matches[4].LineNum != 17 {
+		t.Errorf("expected post-context at line 17, got %d", matches[4].LineNum)
+	}
+}
+
+func TestCollapseBlockMatches_TwoMatchesNoCollapse(t *testing.T) {
+	block := &BlockInfo{Name: "func foo", StartLine: 5}
+	results := []SearchResult{{
+		FilePath:   "b.go",
+		MatchCount: 2,
+		Matches: []Match{
+			{LineNum: 6, Line: "match1", IsMatch: true, Type: MatchTypeUsage, Block: block},
+			{LineNum: 7, Line: "match2", IsMatch: true, Type: MatchTypeUsage, Block: block},
+		},
+	}}
+
+	collapseBlockMatches(results)
+
+	if len(results[0].Matches) != 2 {
+		t.Fatalf("expected 2 entries (no collapse), got %d", len(results[0].Matches))
+	}
+}
+
+func TestCollapseBlockMatches_NilBlockNoCollapse(t *testing.T) {
+	results := []SearchResult{{
+		FilePath:   "c.go",
+		MatchCount: 3,
+		Matches: []Match{
+			{LineNum: 1, Line: "match1", IsMatch: true, Type: MatchTypeUsage, Block: nil},
+			{LineNum: 2, Line: "match2", IsMatch: true, Type: MatchTypeUsage, Block: nil},
+			{LineNum: 3, Line: "match3", IsMatch: true, Type: MatchTypeUsage, Block: nil},
+		},
+	}}
+
+	collapseBlockMatches(results)
+
+	if len(results[0].Matches) != 3 {
+		t.Fatalf("expected 3 entries (nil block, no collapse), got %d", len(results[0].Matches))
+	}
+}
+
+func TestCollapseBlockMatches_DifferentBlocks(t *testing.T) {
+	blockA := &BlockInfo{Name: "func a", StartLine: 10}
+	blockB := &BlockInfo{Name: "func b", StartLine: 30}
+	results := []SearchResult{{
+		FilePath:   "d.go",
+		MatchCount: 4,
+		Matches: []Match{
+			{LineNum: 12, Line: "a1", IsMatch: true, Type: MatchTypeUsage, Block: blockA},
+			{LineNum: 14, Line: "a2", IsMatch: true, Type: MatchTypeUsage, Block: blockA},
+			{LineNum: 32, Line: "b1", IsMatch: true, Type: MatchTypeUsage, Block: blockB},
+			{LineNum: 34, Line: "b2", IsMatch: true, Type: MatchTypeUsage, Block: blockB},
+		},
+	}}
+
+	collapseBlockMatches(results)
+
+	// Neither block has 3+ matches, so no collapse
+	if len(results[0].Matches) != 4 {
+		t.Fatalf("expected 4 entries (different blocks <3), got %d", len(results[0].Matches))
+	}
+}
+
+func TestCollapseBlockMatches_FiveMatches(t *testing.T) {
+	block := &BlockInfo{Name: "func big", StartLine: 1}
+	results := []SearchResult{{
+		FilePath:   "e.go",
+		MatchCount: 5,
+		Matches: []Match{
+			{LineNum: 2, Line: "m1", IsMatch: true, Type: MatchTypeUsage, Block: block},
+			{LineNum: 4, Line: "m2", IsMatch: true, Type: MatchTypeUsage, Block: block},
+			{LineNum: 6, Line: "m3", IsMatch: true, Type: MatchTypeUsage, Block: block},
+			{LineNum: 8, Line: "m4", IsMatch: true, Type: MatchTypeUsage, Block: block},
+			{LineNum: 10, Line: "m5", IsMatch: true, Type: MatchTypeUsage, Block: block},
+		},
+	}}
+
+	collapseBlockMatches(results)
+
+	matches := results[0].Matches
+	// Expected: m1, marker(+3), m5
+	if len(matches) != 3 {
+		t.Fatalf("expected 3 entries, got %d: %+v", len(matches), matches)
+	}
+	if matches[0].LineNum != 2 {
+		t.Errorf("expected first match at line 2")
+	}
+	if matches[1].LineNum != -1 || !strings.Contains(matches[1].Line, "+3 more match") {
+		t.Errorf("expected collapse marker with +3, got %q", matches[1].Line)
+	}
+	if matches[2].LineNum != 10 {
+		t.Errorf("expected last match at line 10")
+	}
+}
+
+func TestCollapseBlockMatches_FormatterRendering(t *testing.T) {
+	block := &BlockInfo{Name: "func render", StartLine: 5}
+	results := []SearchResult{{
+		FilePath:   "f.go",
+		MatchCount: 3,
+		Matches: []Match{
+			{LineNum: 6, Line: "first", IsMatch: true, Type: MatchTypeUsage, Block: block},
+			{LineNum: 7, Line: "middle", IsMatch: true, Type: MatchTypeUsage, Block: block},
+			{LineNum: 8, Line: "last", IsMatch: true, Type: MatchTypeUsage, Block: block},
+		},
+	}}
+
+	collapseBlockMatches(results)
+	out := formatSearchResults(results, false, 3000)
+
+	if !strings.Contains(out, "+1 more match") {
+		t.Errorf("expected collapse marker in formatted output, got:\n%s", out)
+	}
+	// 中間マッチ行は含まれない
+	if strings.Contains(out, "middle") {
+		t.Errorf("expected middle match to be collapsed, got:\n%s", out)
+	}
+}
+
 func TestFormatMultiResults_WithPatternError(t *testing.T) {
 	collected := []patternResult{
 		{Pattern: "ok", Results: []SearchResult{{FilePath: "a.go", MatchCount: 1, Matches: []Match{{LineNum: 1, Line: "ok", IsMatch: true, Type: MatchTypeUsage}}}}},

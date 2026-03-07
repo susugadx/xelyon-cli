@@ -156,6 +156,8 @@ func executeSinglePattern(pattern string, opts SearchOptions) string {
 
 	// ブロック認識（関数/クラス境界検出）
 	detectBlocks(results)
+	// 同一ブロック内3+マッチの中間を圧縮
+	collapseBlockMatches(results)
 
 	// 出力フォーマット
 	formatted := formatSearchResults(results, truncated, opts.TokenBudget)
@@ -272,6 +274,7 @@ func executeMultiplePatterns(patterns []string, opts SearchOptions) string {
 		}
 		collected[i].Results, collected[i].Truncated = truncateToTokenBudget(c.Results, allocatedBudget)
 		detectBlocks(collected[i].Results)
+		collapseBlockMatches(collected[i].Results)
 	}
 
 	formatted := formatMultiResults(collected, opts.TokenBudget)
@@ -1162,6 +1165,99 @@ func detectBlocks(results []SearchResult) {
 	}
 }
 
+// collapseBlockMatches は同一ブロック内に3つ以上のマッチがある場合、中間マッチを圧縮する。
+// 先頭マッチの前コンテキスト＋先頭マッチ＋圧縮マーカー＋末尾マッチ＋末尾マッチの後コンテキストだけ残す。
+// 圧縮マーカーは LineNum=-1 の合成 Match で表現する。
+func collapseBlockMatches(results []SearchResult) {
+	for i := range results {
+		r := &results[i]
+		// ブロックキー → マッチ行インデックスを収集
+		type blockKey struct {
+			Name      string
+			StartLine int
+		}
+		type matchIdx struct {
+			idx     int // r.Matches 内のインデックス
+			lineNum int
+		}
+		groups := make(map[blockKey][]matchIdx)
+		var order []blockKey // 出現順を保持
+
+		for j, m := range r.Matches {
+			if !m.IsMatch || m.Block == nil {
+				continue
+			}
+			key := blockKey{Name: m.Block.Name, StartLine: m.Block.StartLine}
+			if _, exists := groups[key]; !exists {
+				order = append(order, key)
+			}
+			groups[key] = append(groups[key], matchIdx{idx: j, lineNum: m.LineNum})
+		}
+
+		// 3つ以上マッチがあるブロックの中間を除去対象にする
+		removeSet := make(map[int]bool) // 除去する Matches インデックス
+		type insertion struct {
+			afterIdx int   // この Matches インデックスの後に挿入
+			marker   Match // 挿入するマーカー
+		}
+		var insertions []insertion
+
+		for _, key := range order {
+			idxs := groups[key]
+			if len(idxs) < 3 {
+				continue
+			}
+
+			first := idxs[0]
+			last := idxs[len(idxs)-1]
+			collapsedCount := len(idxs) - 2
+
+			// 中間マッチ行を除去対象にする
+			for _, mi := range idxs[1 : len(idxs)-1] {
+				removeSet[mi.idx] = true
+			}
+
+			// 先頭マッチと末尾マッチの間のコンテキスト行も除去
+			for j := first.idx + 1; j < last.idx; j++ {
+				if !r.Matches[j].IsMatch {
+					removeSet[j] = true
+				}
+			}
+
+			// 先頭マッチの後に圧縮マーカーを挿入
+			insertions = append(insertions, insertion{
+				afterIdx: first.idx,
+				marker: Match{
+					LineNum: -1,
+					Line:    fmt.Sprintf("[+%d more matches in %s]", collapsedCount, key.Name),
+					IsMatch: false,
+				},
+			})
+		}
+
+		if len(removeSet) == 0 {
+			continue
+		}
+
+		// 新しい Matches を構築（除去 + 挿入）
+		insertMap := make(map[int]Match)
+		for _, ins := range insertions {
+			insertMap[ins.afterIdx] = ins.marker
+		}
+
+		newMatches := make([]Match, 0, len(r.Matches))
+		for j, m := range r.Matches {
+			if !removeSet[j] {
+				newMatches = append(newMatches, m)
+			}
+			if marker, ok := insertMap[j]; ok {
+				newMatches = append(newMatches, marker)
+			}
+		}
+		r.Matches = newMatches
+	}
+}
+
 // --- 出力フォーマット ---
 
 func formatSearchResults(results []SearchResult, truncated bool, tokenBudget int) string {
@@ -1196,6 +1292,15 @@ func formatSearchResultsBody(results []SearchResult, truncated bool, tokenBudget
 
 		prevLineNum := -1
 		for _, m := range sorted {
+			// 圧縮マーカー（LineNum < 0）
+			if m.LineNum < 0 {
+				sb.WriteString("      ...\n")
+				fmt.Fprintf(&sb, "  %10s       │ %s\n", "", m.Line)
+				sb.WriteString("      ...\n")
+				prevLineNum = -1
+				continue
+			}
+
 			// 非連続行間に "..." を表示（ソートによる逆方向ジャンプにも対応）
 			if prevLineNum > 0 && m.LineNum != prevLineNum+1 {
 				sb.WriteString("      ...\n")
