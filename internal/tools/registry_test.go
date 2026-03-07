@@ -84,3 +84,21 @@ func TestRegistry_ExcludedTools(t *testing.T) {
 		t.Errorf("GetToolDefinitions() after clear = %d, want 2", len(defs))
 	}
 }
+
+func TestRegistry_GetToolDefinitions_SortedByName(t *testing.T) {
+	r := NewRegistry()
+	r.Register(&MockTool{name: "z_tool"})
+	r.Register(&MockTool{name: "a_tool"})
+	r.Register(&MockTool{name: "m_tool"})
+
+	defs := r.GetToolDefinitions()
+	if len(defs) != 3 {
+		t.Fatalf("GetToolDefinitions() length = %d, want 3", len(defs))
+	}
+
+	got := []string{defs[0].Name, defs[1].Name, defs[2].Name}
+	want := []string{"a_tool", "m_tool", "z_tool"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("GetToolDefinitions() names = %v, want %v", got, want)
+	}
+}

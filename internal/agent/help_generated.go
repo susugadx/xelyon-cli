@@ -10,7 +10,7 @@ const GeneratedHelpText = `Commands:
   /save                     - Save current session
   /load [id]                - Load session (or last if no ID)
   /sessions                 - List recent sessions
-  /stats                    - Show session statistics (time, messages, tokens, cost)
+  /status, /stats           - Show current state, last request, and session statistics
   /tokens                   - Show token usage and context window status
   /copy [code] [-n N]       - Copy last AI output to clipboard (code=code blocks only, -n=N-th last output)
   /compress [N] [-c]        - Compress history (keep recent N, -c: use OpenAI Compact API)

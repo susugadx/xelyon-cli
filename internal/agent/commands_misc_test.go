@@ -2,6 +2,8 @@ package agent
 
 import (
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/api"
 )
 
 func TestIsCodexModel(t *testing.T) {
@@ -104,5 +106,33 @@ func TestExtractCodeBlocks(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestRequestCacheMode(t *testing.T) {
+	tests := []struct {
+		name  string
+		usage api.Usage
+		want  string
+	}{
+		{name: "none", usage: api.Usage{}, want: "none"},
+		{name: "read", usage: api.Usage{InputTokens: 100, CachedInputTokens: 40}, want: "read"},
+		{name: "create", usage: api.Usage{InputTokens: 100, CacheCreationTokens: 40}, want: "create"},
+		{name: "read and create", usage: api.Usage{InputTokens: 100, CachedInputTokens: 20, CacheCreationTokens: 30}, want: "read + create"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := requestCacheMode(tt.usage); got != tt.want {
+				t.Fatalf("requestCacheMode() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRequestCacheHitRate(t *testing.T) {
+	usage := api.Usage{InputTokens: 200, CachedInputTokens: 50}
+	if got := requestCacheHitRate(usage); got != 25.0 {
+		t.Fatalf("requestCacheHitRate() = %.1f, want 25.0", got)
 	}
 }

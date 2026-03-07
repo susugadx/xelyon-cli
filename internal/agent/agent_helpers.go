@@ -7,6 +7,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
+	promptplan "github.com/susugadx/xelyon-cli/internal/prompt/plan"
 	"github.com/susugadx/xelyon-cli/internal/version"
 )
 
@@ -170,4 +171,31 @@ func applyProjectConfig(agent *Agent, pc *config.ProjectConfig) {
 
 	// 3. UI 表示
 	green.Println("📋 xelyon.yaml loaded")
+}
+
+// rebuildSystemPromptForCurrentProvider は現在の provider/model に合わせて
+// SystemPrompt をベースから再構築する。
+func (a *Agent) rebuildSystemPromptForCurrentProvider() {
+	if a == nil || a.CurrentProvider == nil {
+		return
+	}
+
+	planningPrompt := promptplan.BuildPlanningPrompt()
+	hadPlanPrompt := strings.Contains(a.SystemPrompt, planningPrompt)
+
+	systemPrompt := prompt.SystemPrompt
+	if a.mcpManager != nil && len(a.mcpManager.GetTools()) > 0 {
+		systemPrompt += buildMCPToolsPrompt(a.mcpManager)
+	}
+	systemPrompt = prompt.BuildProviderSystemPrompt(systemPrompt, a.CurrentProvider.Name(), a.CurrentModel)
+
+	if pc := loadProjectConfig(); pc != nil {
+		systemPrompt = injectProjectConfig(systemPrompt, pc)
+	}
+
+	if hadPlanPrompt {
+		systemPrompt += api.SystemPromptCacheBoundary + planningPrompt
+	}
+
+	a.SystemPrompt = systemPrompt
 }

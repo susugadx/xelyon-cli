@@ -30,9 +30,9 @@ const SystemPromptCacheBoundary = "\n---XELYON_CACHE_SPLIT---\n"
 //
 // cache_control は最後の system ブロックに設定します。
 // これにより cache prefix は tools + system 全体となり、
-// Opus 4.6 の最低キャッシュ可能トークン数（4096）を確実に超えます。
-// （以前は parts[0] のみに設定していたため、tools + system[0] が 4096 未満の場合に
-// Opus でキャッシュが効かない問題がありました）
+// Anthropic prompt caching の閾値判定に tools 定義も含められます。
+// 実際の最低キャッシュ可能トークン数はモデルごとに異なるため、
+// 閾値超過のための安定ブロック追加は prompt builder 側で行います。
 func BuildSystemField(systemPrompt string) interface{} {
 	cfg := config.GetGlobalConfig()
 	if cfg == nil || !cfg.PromptCache.Enabled {

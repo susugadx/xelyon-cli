@@ -44,8 +44,8 @@ func ConvertOpenAIToolToClaude(tool api.ToolDefinition) ClaudeTool {
 // 重複するツール名がある場合は最初に登録されたものを優先
 //
 // BP#1（tools 最後の cache_control）は省略。
-// ツール定義だけでは ~2,000 トークンで Opus 4.6 の最低キャッシュ閾値（4096）に届かないため、
 // BP#2（system 最後）で tools+system を一体キャッシュする設計に統一。
+// モデル別の閾値超過は system prompt 側の安定ブロックで確保する。
 func GetCombinedClaudeTools(mcpTools []api.ToolDefinition) []ClaudeTool {
 	result := GetClaudeToolDefinitions()
 	seen := make(map[string]bool)

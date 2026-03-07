@@ -53,6 +53,8 @@ func handleSpecialCommand(input string, agent *Agent) bool {
 		return handleConfigCommand(agent, args)
 	case "/stats":
 		return handleStatsCommand(agent)
+	case "/status":
+		return handleStatusCommand(agent)
 	case "/copy":
 		return handleCopyCommand(agent, args)
 	case "/compress":

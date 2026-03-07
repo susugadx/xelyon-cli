@@ -2,10 +2,12 @@ package agent
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/prompt"
 )
 
 // MockProvider implements api.Provider for testing
@@ -104,5 +106,29 @@ func TestSyncWithGlobalConfig_DefaultModelUpdate_WhenNoProviderOverride(t *testi
 
 	if a.CurrentModel != "gpt-default-new" {
 		t.Errorf("Expected CurrentModel to be 'gpt-default-new', got '%s'", a.CurrentModel)
+	}
+}
+
+func TestSyncWithGlobalConfig_RebuildsPromptForClaudeOpus(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.PromptCache.Enabled = true
+	cfg.DefaultProvider = "claude"
+	cfg.ProviderModels["claude"] = config.ProviderModelConfig{
+		DefaultModel: "claude-opus-4-6",
+	}
+	config.SetGlobalConfig(cfg)
+	defer config.SetGlobalConfig(nil)
+
+	a := &Agent{
+		ProviderName:    "claude",
+		CurrentModel:    "claude-sonnet-4-6",
+		CurrentProvider: &MockProvider{name: "claude"},
+		SystemPrompt:    prompt.BuildProviderSystemPrompt(prompt.SystemPrompt, "claude", "claude-sonnet-4-6"),
+	}
+
+	a.SyncWithGlobalConfig()
+
+	if !strings.Contains(a.SystemPrompt, "### Stable Working Reference") {
+		t.Fatal("expected SyncWithGlobalConfig to rebuild the Claude Opus system prompt")
 	}
 }

@@ -3,6 +3,8 @@ package prompt
 import (
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 func TestGetProviderPrefix_Gemini(t *testing.T) {
@@ -207,7 +209,7 @@ func TestProviderSpecificRules(t *testing.T) {
 
 func TestBuildProviderSystemPrompt_InsertsBeforeWorkflowRules(t *testing.T) {
 	base := "You are XELYON.\n\n## Core Identity\n- test\n\n## Workflow Rules\n- workflow"
-	result := BuildProviderSystemPrompt(base, "gemini")
+	result := BuildProviderSystemPrompt(base, "gemini", "gemini-3.1-pro-preview-customtools")
 
 	if strings.HasPrefix(result, "## Provider Notes") {
 		t.Error("provider notes should not replace the start of the base prompt")
@@ -231,7 +233,7 @@ func TestBuildProviderSystemPrompt_InsertsBeforeWorkflowRules(t *testing.T) {
 
 func TestBuildProviderSystemPrompt_FallbackWhenHeaderMissing(t *testing.T) {
 	base := "You are XELYON, an autonomous AI coding agent."
-	result := BuildProviderSystemPrompt(base, "openai")
+	result := BuildProviderSystemPrompt(base, "openai", "gpt-5.2")
 
 	if !strings.HasPrefix(result, "## Provider Notes") {
 		t.Error("when workflow header is missing, provider notes should be prepended")
@@ -243,7 +245,7 @@ func TestBuildProviderSystemPrompt_FallbackWhenHeaderMissing(t *testing.T) {
 
 func TestBuildProviderSystemPrompt_EmptyProvider(t *testing.T) {
 	base := "You are XELYON, an autonomous AI coding agent."
-	result := BuildProviderSystemPrompt(base, "")
+	result := BuildProviderSystemPrompt(base, "", "")
 
 	if result != base {
 		t.Error("empty provider should return unchanged base prompt")
@@ -252,10 +254,59 @@ func TestBuildProviderSystemPrompt_EmptyProvider(t *testing.T) {
 
 func TestBuildProviderSystemPrompt_Anthropic(t *testing.T) {
 	base := "You are XELYON.\n\n## Workflow Rules\n- workflow"
-	anthropic := BuildProviderSystemPrompt(base, "anthropic")
-	claude := BuildProviderSystemPrompt(base, "claude")
+	anthropic := BuildProviderSystemPrompt(base, "anthropic", "claude-sonnet-4-6")
+	claude := BuildProviderSystemPrompt(base, "claude", "claude-sonnet-4-6")
 
 	if anthropic != claude {
 		t.Error("anthropic and claude should produce identical system prompts")
+	}
+}
+
+func TestBuildProviderSystemPrompt_ClaudeOpusAddsCacheMargin(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.PromptCache.Enabled = true
+	config.SetGlobalConfig(cfg)
+	defer config.SetGlobalConfig(nil)
+
+	base := "You are XELYON.\n\n## Workflow Rules\n- workflow"
+	sonnet := BuildProviderSystemPrompt(base, "claude", "claude-sonnet-4-6")
+	opus := BuildProviderSystemPrompt(base, "claude", "claude-opus-4-6")
+
+	if strings.Contains(sonnet, "### Stable Working Reference") {
+		t.Fatal("sonnet prompt should not include the Opus cache margin block")
+	}
+	if !strings.Contains(opus, "### Stable Working Reference") {
+		t.Fatal("opus prompt should include the cache margin block")
+	}
+	if len(opus)-len(sonnet) < 2500 {
+		t.Fatalf("expected opus cache margin to add substantial stable context, delta=%d", len(opus)-len(sonnet))
+	}
+}
+
+func TestBuildProviderSystemPrompt_OpenRouterAnthropicOpusAddsCacheMargin(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.PromptCache.Enabled = true
+	config.SetGlobalConfig(cfg)
+	defer config.SetGlobalConfig(nil)
+
+	base := "You are XELYON.\n\n## Workflow Rules\n- workflow"
+	result := BuildProviderSystemPrompt(base, "openrouter", "anthropic/claude-opus-4.6")
+
+	if !strings.Contains(result, "### Stable Working Reference") {
+		t.Fatal("openrouter anthropic opus prompt should include the cache margin block")
+	}
+}
+
+func TestBuildProviderSystemPrompt_CacheMarginDisabledWhenPromptCacheOff(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.PromptCache.Enabled = false
+	config.SetGlobalConfig(cfg)
+	defer config.SetGlobalConfig(nil)
+
+	base := "You are XELYON.\n\n## Workflow Rules\n- workflow"
+	result := BuildProviderSystemPrompt(base, "claude", "claude-opus-4-6")
+
+	if strings.Contains(result, "### Stable Working Reference") {
+		t.Fatal("cache margin block should not be included when prompt cache is disabled")
 	}
 }

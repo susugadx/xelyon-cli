@@ -73,7 +73,11 @@ func (a *Agent) SwitchProvider(providerName string) error {
 		a.Stats.Provider = providerName
 		a.Stats.Model = newModel
 		a.Stats.InputTokens = 0
+		a.Stats.CachedInputTokens = 0
+		a.Stats.CacheCreationTokens = 0
 		a.Stats.OutputTokens = 0
+		a.Stats.ThinkingTokens = 0
+		a.Stats.ToolExecutions = make(map[string]int)
 		a.Stats.LastUsage = nil
 		a.statsMu.Unlock()
 	}
@@ -136,6 +140,8 @@ func (a *Agent) SwitchProvider(providerName string) error {
 			}
 		}
 	}
+
+	a.rebuildSystemPromptForCurrentProvider()
 
 	green.Printf("✅ Provider: %s → %s\n", oldProvider, providerName)
 	green.Printf("✅ Model: %s → %s\n", oldModel, newModel)

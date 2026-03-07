@@ -59,9 +59,10 @@ var Commands = []CommandInfo{
 		DescriptionJP: "最近のセッション一覧",
 	},
 	{
-		Name:          "/stats",
-		Description:   "Show session statistics (time, messages, tokens, cost)",
-		DescriptionJP: "セッション統計を表示",
+		Name:          "/status",
+		Aliases:       []string{"/stats"},
+		Description:   "Show current state, last request, and session statistics",
+		DescriptionJP: "現在状態、直近リクエスト、セッション統計を表示",
 	},
 	{
 		Name:          "/tokens",

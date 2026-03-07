@@ -6,6 +6,8 @@ import (
 	"sync"
 
 	"github.com/fatih/color"
+	"github.com/susugadx/xelyon-cli/internal/agent/token"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // AgentState represents the current interaction state.
@@ -135,4 +137,49 @@ func (a *Agent) PrintStatusFooter() {
 
 	// 下の区切り線
 	statusDim.Println(dividerLine)
+}
+
+// handleStatusCommand は現在の状態、直近リクエスト、セッション統計を表示する。
+func handleStatusCommand(agent *Agent) bool {
+	printCommandHeader("Status / 状態")
+	fmt.Println()
+
+	modeText := "Normal"
+	if agent.PlanModeEnabled {
+		modeText = "Plan"
+	}
+
+	status := globalAgentStatus.getStatus()
+	currentTokens := agent.EstimateTokens()
+	limit := token.GetModelTokenLimit(agent.CurrentModel)
+	contextText := formatNumber(currentTokens)
+	if limit > 0 {
+		contextText = fmt.Sprintf("%s / %s (%.1f%%)", formatNumber(currentTokens), formatNumber(limit), float64(currentTokens)/float64(limit)*100)
+	}
+
+	statusTable := ui.NewTable().
+		AddRow("State", string(status.State)).
+		AddRow("Reason", status.ReasonEN).
+		AddRow("Next", status.NextEN).
+		AddRow("Mode", modeText).
+		AddRow("Provider", agent.ProviderName).
+		AddRow("Model", agent.CurrentModel).
+		AddRow("Context", contextText)
+	fmt.Print(statusTable.RenderCompact())
+
+	fmt.Println()
+	green.Println("🧾 Last Request")
+	if agent.Stats != nil {
+		if table := buildLastRequestTable(agent.ProviderName, agent.CurrentModel, agent.Stats.LastUsage); table != nil {
+			fmt.Print(table.RenderCompact())
+		} else {
+			dim.Println("  No request usage data available")
+		}
+	} else {
+		dim.Println("  No request usage data available")
+	}
+
+	printSessionSections(agent)
+	fmt.Println()
+	return true
 }

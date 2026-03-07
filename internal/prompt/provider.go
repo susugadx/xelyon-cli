@@ -1,6 +1,10 @@
 package prompt
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/config"
+)
 
 // commonExecutionBlock は複数プロバイダーで共通する実行指針
 // ガードよりも、調査と編集の進め方を短く揃える
@@ -19,6 +23,45 @@ const commonBoostBlock = `### Quality Boost
 - If you are unsure between two edit scopes, gather more context before editing; an extra read is cheaper than a wrong patch
 - Match existing project patterns for validation, defaults, and tests
 - Before reporting completion, self-review changed call sites, imports, and error paths
+`
+
+// anthropicCacheMarginBlock は Claude Opus 4.x の prompt cache 作成閾値を跨ぎやすくするための
+// 安定した指針ブロック。単なる埋め草ではなく、高thinkingモデルでも有効な実務ガイドを置く。
+const anthropicCacheMarginBlock = `### Stable Working Reference
+- Start from evidence. Confirm the current behavior from code, logs, tests, or command output before deciding what to change.
+- Read the definition, main callers, nearby helpers, and relevant tests before editing shared code. Correct edits usually require understanding the local contract.
+- Preserve behavior outside the requested scope. When behavior must change, update every affected caller, test, and validation path in the same task.
+- Prefer small targeted edits that fit the surrounding structure over broad rewrites. Rewrite whole files only when the change is truly cross-cutting or mechanical.
+- Keep invariants explicit. If a type, function, or config value has preconditions, maintain them and propagate the constraint to all dependent code paths.
+- Avoid speculative abstraction. New helpers, wrappers, or interfaces should exist only when they simplify the actual change being made right now.
+
+### Investigation Checklist
+- Search for definitions, references, constructors, interface implementations, config readers, CLI flags, and tests that mention the same concept.
+- Read enough surrounding code to understand how data enters, transforms, and leaves the area you are touching.
+- When a bug report describes symptoms rather than causes, inspect the code path end-to-end before patching the first suspicious line.
+- If behavior depends on provider/model/config selection, verify the dispatch path and defaults instead of assuming the active branch.
+- If generated code, schemas, fixtures, or snapshots depend on the change, identify that dependency before editing source files.
+- When an existing helper almost fits, compare its assumptions carefully before reusing it. Near-matches often hide the actual bug.
+
+### Editing Checklist
+- Keep naming, validation flow, error style, and struct layout aligned with neighboring code unless the task explicitly changes the pattern.
+- For signature or type changes, update all direct callers first, then follow the dependency chain until constructors, tests, and adapters also match.
+- Remove dead branches, unused imports, stale comments, and orphaned flags introduced by the edit so the tree is internally consistent.
+- For config changes, preserve unrelated fields and defaults. Extend parsing, validation, docs, and tests together when the config contract changes.
+- For user-facing behavior, prefer explicit errors and deterministic defaults over silent fallback paths.
+- When touching concurrency, lifecycle, or caching logic, reason about initialization, repeated calls, cleanup, and stale state, not just the happy path.
+
+### Verification Checklist
+- Run the narrowest check that proves the edited path, then broader project verification before finishing.
+- If a test fails, inspect the real failure output before patching. Do not cargo-cult a fix from the first error line alone.
+- After a compile or lint fix, recheck whether the requested runtime behavior is actually solved; passing build output alone is not completion.
+- If a bug involves multiple layers, confirm both the local fix and the externally visible result.
+- Before reporting completion, mentally diff the intended behavior against the final code and verify nothing necessary was left half-updated.
+
+### Response Checklist
+- State the concrete change first, then mention verification and any remaining constraints.
+- Cite files and lines when explaining findings or risky behavior so the reasoning is auditable.
+- If something could not be verified, say exactly what was not run and why.
 `
 
 // providerPrefixes はプロバイダー別のシステムプロンプトプレフィックス
@@ -85,11 +128,39 @@ func GetProviderPrefix(provider string) string {
 
 const workflowRulesHeader = "\n## Workflow Rules\n"
 
+func isAnthropicCacheProvider(providerName, model string) bool {
+	name := strings.ToLower(providerName)
+	model = strings.ToLower(model)
+
+	switch name {
+	case "claude", "anthropic", "bedrock":
+		return true
+	case "openrouter":
+		return strings.Contains(model, "claude")
+	default:
+		return false
+	}
+}
+
+func needsAnthropicCacheMargin(providerName, model string) bool {
+	cfg := config.GetGlobalConfig()
+	if cfg == nil || !cfg.PromptCache.Enabled {
+		return false
+	}
+	if !isAnthropicCacheProvider(providerName, model) {
+		return false
+	}
+	return strings.Contains(strings.ToLower(model), "claude-opus-4")
+}
+
 // BuildProviderSystemPrompt はプロバイダー別ノートを Workflow Rules の直前に挿入する
-func BuildProviderSystemPrompt(base, providerName string) string {
+func BuildProviderSystemPrompt(base, providerName, model string) string {
 	prefix := strings.TrimSpace(GetProviderPrefix(providerName))
 	if prefix == "" {
 		return base
+	}
+	if needsAnthropicCacheMargin(providerName, model) {
+		prefix += "\n\n" + anthropicCacheMarginBlock
 	}
 	idx := strings.Index(base, workflowRulesHeader)
 	if idx < 0 {

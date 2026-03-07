@@ -34,5 +34,6 @@ func (a *Agent) SyncWithGlobalConfig() {
 		if a.Stats != nil {
 			a.Stats.Model = resolvedModel
 		}
+		a.rebuildSystemPromptForCurrentProvider()
 	}
 }

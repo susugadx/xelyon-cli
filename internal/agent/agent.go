@@ -198,8 +198,8 @@ func NewAgent(model string, provider api.Provider, headless bool) *Agent {
 		}
 	}
 
-	// プロバイダー別プレフィックスを冒頭に注入
-	systemPrompt = prompt.BuildProviderSystemPrompt(systemPrompt, provider.Name())
+	// プロバイダー別プレフィックスを Workflow Rules の直前に注入
+	systemPrompt = prompt.BuildProviderSystemPrompt(systemPrompt, provider.Name(), model)
 
 	// ToolCache 初期化
 	toolCache := NewToolCache()

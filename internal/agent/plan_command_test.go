@@ -125,3 +125,17 @@ func TestHandleSpecialCommand_Plan(t *testing.T) {
 		t.Error("PlanModeEnabled should be false after /plan off")
 	}
 }
+
+func TestHandleSpecialCommand_Status(t *testing.T) {
+	agent := NewAgent("test-model", &mockPlanProvider{}, false)
+
+	result := handleSpecialCommand("/status", agent)
+	if !result {
+		t.Error("handleSpecialCommand should return true for /status")
+	}
+
+	result = handleSpecialCommand("/stats", agent)
+	if !result {
+		t.Error("handleSpecialCommand should return true for /stats alias")
+	}
+}

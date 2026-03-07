@@ -49,8 +49,12 @@ func handleModelCommand(agent *Agent, args []string) bool {
 	if agent.Stats != nil {
 		agent.Stats.Model = newModel
 	}
+	agent.rebuildSystemPromptForCurrentProvider()
 
 	green.Printf("✅ Model switched: %s → %s\n", oldModel, newModel)
+	if agent.CurrentProvider != nil {
+		printContextSize(agent.SystemPrompt, agent.CurrentProvider.IsFunctionCallingEnabled())
+	}
 
 	// 設定ファイルにも保存
 	cfg, err := config.LoadConfig()
@@ -289,7 +293,15 @@ func handleUseCommand(agent *Agent, args []string) bool {
 		newModel := args[1]
 		oldModel := agent.CurrentModel
 		agent.CurrentModel = newModel
+		if agent.Stats != nil {
+			agent.Stats.Model = newModel
+		}
+		agent.rebuildSystemPromptForCurrentProvider()
 		green.Printf("✅ Model: %s → %s\n", oldModel, newModel)
+	}
+
+	if agent.CurrentProvider != nil {
+		printContextSize(agent.SystemPrompt, agent.CurrentProvider.IsFunctionCallingEnabled())
 	}
 
 	return true

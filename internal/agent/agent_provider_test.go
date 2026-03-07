@@ -7,14 +7,20 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/prompt"
 )
 
 // mockCacheClearableProvider はキャッシュクリアと Provider を実装したモック
 type mockCacheClearableProvider struct {
 	cleared bool
+	name    string
 }
 
 func (m *mockCacheClearableProvider) Name() string {
+	if m.name != "" {
+		return m.name
+	}
 	return "mock-cache"
 }
 
@@ -65,4 +71,25 @@ func TestAgent_SwitchProvider_ClearCache(t *testing.T) {
 	// プロバイダーが切り替わったことを確認
 	assert.Equal(t, "ollama", agent.ProviderName)
 	assert.NotEqual(t, mockProvider, agent.CurrentProvider, "CurrentProvider should be replaced")
+}
+
+func TestAgent_SwitchProvider_RebuildsSystemPrompt(t *testing.T) {
+	t.Setenv("DEEPSEEK_API_KEY", "test-key")
+
+	cfg := config.DefaultConfig()
+	config.SetGlobalConfig(cfg)
+	defer config.SetGlobalConfig(nil)
+
+	agent := &Agent{
+		ProviderName:    "gemini",
+		CurrentModel:    "gemini-3.1-pro-preview-customtools",
+		CurrentProvider: &mockCacheClearableProvider{name: "gemini"},
+		SystemPrompt:    prompt.BuildProviderSystemPrompt(prompt.SystemPrompt, "gemini", "gemini-3.1-pro-preview-customtools"),
+		Stats:           NewSessionStats("gemini"),
+	}
+
+	err := agent.SwitchProvider("deepseek")
+	assert.NoError(t, err)
+	assert.Contains(t, agent.SystemPrompt, "### DeepSeek-specific")
+	assert.NotContains(t, agent.SystemPrompt, "### Gemini-specific")
 }

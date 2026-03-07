@@ -20,16 +20,61 @@ const (
 	defaultKeepRecent = 10
 )
 
-// handleStatsCommand はセッション統計を表示
-func handleStatsCommand(agent *Agent) bool {
-	if agent.Stats == nil {
-		yellow.Println("Statistics not available")
-		return true
+func requestCacheMode(usage api.Usage) string {
+	switch {
+	case usage.CachedInputTokens > 0 && usage.CacheCreationTokens > 0:
+		return "read + create"
+	case usage.CachedInputTokens > 0:
+		return "read"
+	case usage.CacheCreationTokens > 0:
+		return "create"
+	default:
+		return "none"
+	}
+}
+
+func requestCacheHitRate(usage api.Usage) float64 {
+	if usage.InputTokens <= 0 {
+		return 0
+	}
+	return float64(usage.CachedInputTokens) / float64(usage.InputTokens) * 100.0
+}
+
+func requestUsageCost(provider, model string, usage api.Usage) float64 {
+	return CalculateRequestCostWithCache(provider, model, usage) + usage.StorageCost
+}
+
+func buildLastRequestTable(provider, model string, usage *api.Usage) *ui.Table {
+	if usage == nil {
+		return nil
 	}
 
-	stats := agent.Stats
+	table := ui.NewTable().
+		AddRow("Input", formatNumber(usage.InputTokens)+" tokens").
+		AddRow("Cache Mode", requestCacheMode(*usage))
 
-	// セッションファイルパスとサイズを取得
+	if usage.CachedInputTokens > 0 || usage.CacheCreationTokens > 0 {
+		table.AddRow("Cached", formatNumber(usage.CachedInputTokens)+" tokens").
+			AddRow("Cache Creation", formatNumber(usage.CacheCreationTokens)+" tokens").
+			AddRow("Hit Rate", fmt.Sprintf("%.1f%%", requestCacheHitRate(*usage)))
+	}
+
+	table.AddRow("Output", formatNumber(usage.OutputTokens)+" tokens")
+	if usage.ThinkingTokens > 0 {
+		table.AddRow("Thinking", formatNumber(usage.ThinkingTokens)+" tokens")
+	}
+
+	cost := requestUsageCost(provider, model, *usage)
+	if cost > 0 {
+		table.AddRow("Cost", fmt.Sprintf("$%.4f USD", cost))
+	} else {
+		table.AddRow("Cost", "Free (local)")
+	}
+
+	return table
+}
+
+func getSessionFileInfo(agent *Agent) (string, int64) {
 	sessionPath := ""
 	sessionSize := int64(0)
 	if agent.session != nil {
@@ -44,28 +89,83 @@ func handleStatsCommand(agent *Agent) bool {
 			}
 		}
 	}
+	return sessionPath, sessionSize
+}
 
-	// 統計情報を表示
-	printCommandHeader("Session Statistics / セッション統計")
+func sessionCacheHitRate(stats *SessionStats) float64 {
+	if stats.InputTokens <= 0 {
+		return 0
+	}
+	return float64(stats.CachedInputTokens) / float64(stats.InputTokens) * 100.0
+}
+
+func buildSessionOverviewTable(agent *Agent, stats *SessionStats) *ui.Table {
+	sessionPath, sessionSize := getSessionFileInfo(agent)
+	table := ui.NewTable().
+		AddRow("Elapsed", stats.FormatElapsedTime()).
+		AddRow("User Messages", fmt.Sprintf("%d", stats.UserMessages)).
+		AddRow("Assistant Messages", fmt.Sprintf("%d", stats.AssistantMessages)).
+		AddRow("Total Messages", fmt.Sprintf("%d", stats.TotalMessages())).
+		AddRow("Tool Executions", fmt.Sprintf("%d", stats.TotalToolExecutions()))
+
+	if sessionPath != "" {
+		table.AddRow("Session File", sessionPath)
+		if sessionSize > 0 {
+			table.AddRow("Session Size", FormatFileSize(sessionSize))
+		}
+	}
+	return table
+}
+
+func buildSessionTokenTable(agent *Agent, stats *SessionStats) *ui.Table {
+	if stats.TotalTokens() <= 0 {
+		return nil
+	}
+
+	tokenTable := ui.NewTable()
+	currentTokens := agent.EstimateTokens()
+	limit := token.GetModelTokenLimit(agent.CurrentModel)
+	if limit > 0 {
+		contextPct := float64(currentTokens) / float64(limit) * 100
+		tokenTable.AddRow("Context", fmt.Sprintf("%s / %s (%.1f%%)", formatNumber(currentTokens), formatNumber(limit), contextPct))
+	}
+
+	tokenTable.AddRow("Input", formatNumber(stats.InputTokens)+" tokens")
+
+	if stats.CachedInputTokens > 0 || stats.CacheCreationTokens > 0 {
+		tokenTable.AddRow("Cached", formatNumber(stats.CachedInputTokens)+" tokens").
+			AddRow("Cache Creation", formatNumber(stats.CacheCreationTokens)+" tokens").
+			AddRow("Hit Rate", fmt.Sprintf("%.1f%%", sessionCacheHitRate(stats)))
+	}
+
+	tokenTable.AddRow("Output", formatNumber(stats.OutputTokens)+" tokens")
+	if stats.ThinkingTokens > 0 {
+		tokenTable.AddRow("Thinking", formatNumber(stats.ThinkingTokens)+" tokens")
+	}
+
+	tokenTable.AddRow("Total", formatNumber(stats.TotalTokens())+" tokens")
+
+	cost := stats.EstimatedCost()
+	if cost > 0 {
+		tokenTable.AddRow("Cost", fmt.Sprintf("$%.4f USD", cost))
+	} else {
+		tokenTable.AddRow("Cost", "Free (local)")
+	}
+	return tokenTable
+}
+
+func printSessionSections(agent *Agent) {
+	if agent.Stats == nil {
+		dim.Println("  Statistics not available")
+		return
+	}
+
+	stats := agent.Stats
+
 	fmt.Println()
+	green.Println("📚 Session")
+	fmt.Print(buildSessionOverviewTable(agent, stats).RenderCompact())
 
-	// 基本情報テーブル
-	basicTable := ui.NewTable().
-		AddRow("⏱️  Elapsed", stats.FormatElapsedTime()).
-		AddRow("🤖 Provider", stats.Provider).
-		AddRow("📦 Model", agent.CurrentModel)
-	fmt.Print(basicTable.Render())
-
-	// メッセージ数テーブル
-	fmt.Println()
-	green.Println("💬 Messages")
-	msgTable := ui.NewTable().
-		AddRow("User", fmt.Sprintf("%d", stats.UserMessages)).
-		AddRow("Assistant", fmt.Sprintf("%d", stats.AssistantMessages)).
-		AddRow("Total", fmt.Sprintf("%d", stats.TotalMessages()))
-	fmt.Print(msgTable.RenderCompact())
-
-	// ツール実行テーブル
 	fmt.Println()
 	green.Println("🔧 Tool Executions")
 	if stats.TotalToolExecutions() > 0 {
@@ -79,67 +179,18 @@ func handleStatsCommand(agent *Agent) bool {
 		dim.Println("  No tools executed yet")
 	}
 
-	// トークン使用量テーブル
 	fmt.Println()
-	green.Println("💰 Token Usage & Cost")
-	if stats.TotalTokens() > 0 {
-		tokenTable := ui.NewTable()
-
-		currentTokens := agent.EstimateTokens()
-		limit := token.GetModelTokenLimit(agent.CurrentModel)
-		if limit > 0 {
-			contextPct := float64(currentTokens) / float64(limit) * 100
-			tokenTable.AddRow("Context", fmt.Sprintf("%s / %s (%.1f%%)", formatNumber(currentTokens), formatNumber(limit), contextPct))
-		}
-
-		tokenTable.AddRow("Input", formatNumber(stats.InputTokens)+" tokens")
-
-		if stats.CachedInputTokens > 0 || stats.CacheCreationTokens > 0 {
-			tokenTable.AddRow("Cached", formatNumber(stats.CachedInputTokens)+" tokens").
-				AddRow("Cache Creation", formatNumber(stats.CacheCreationTokens)+" tokens")
-
-			hitRate := 0.0
-			if stats.InputTokens > 0 {
-				hitRate = float64(stats.CachedInputTokens) / float64(stats.InputTokens) * 100.0
-			}
-			tokenTable.AddRow("Hit Rate", fmt.Sprintf("%.1f%%", hitRate))
-		}
-
-		tokenTable.AddRow("Output", formatNumber(stats.OutputTokens)+" tokens")
-
-		if stats.ThinkingTokens > 0 {
-			tokenTable.AddRow("Thinking", formatNumber(stats.ThinkingTokens)+" tokens")
-		}
-
-		tokenTable.AddRow("Total", formatNumber(stats.TotalTokens())+" tokens")
-
-		cost := stats.EstimatedCost()
-		if cost > 0 {
-			tokenTable.AddRow("Cost", fmt.Sprintf("$%.4f USD", cost))
-		} else {
-			tokenTable.AddRow("Cost", "Free (local)")
-		}
+	green.Println("💰 Session Tokens & Cost")
+	if tokenTable := buildSessionTokenTable(agent, stats); tokenTable != nil {
 		fmt.Print(tokenTable.RenderCompact())
 	} else {
 		dim.Println("  No token usage data available")
 	}
+}
 
-	// セッションファイル情報
-	fmt.Println()
-	green.Println("📁 Session File")
-	if sessionPath != "" {
-		sessionTable := ui.NewTable().
-			AddRow("Path", sessionPath)
-		if sessionSize > 0 {
-			sessionTable.AddRow("Size", FormatFileSize(sessionSize))
-		}
-		fmt.Print(sessionTable.RenderCompact())
-	} else {
-		dim.Println("  No session file")
-	}
-
-	fmt.Println()
-	return true
+// handleStatsCommand は /status の互換エイリアス
+func handleStatsCommand(agent *Agent) bool {
+	return handleStatusCommand(agent)
 }
 
 // formatNumber はカンマ区切りの数値を返す
