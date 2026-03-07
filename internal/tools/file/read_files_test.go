@@ -148,3 +148,100 @@ func TestParsePath_InvalidRange(t *testing.T) {
 		t.Errorf("Expected (file.go:abc-def, 0, 0), got (%s, %d, %d)", path, start, end)
 	}
 }
+
+func TestPerFileBudget(t *testing.T) {
+	tests := []struct {
+		n    int
+		want int
+	}{
+		{1, MaxReadLines},
+		{2, MaxReadLines},
+		{3, 150},
+		{5, 150},
+		{6, 80},
+		{10, 80},
+	}
+	for _, tt := range tests {
+		got := perFileBudget(tt.n)
+		if got != tt.want {
+			t.Errorf("perFileBudget(%d) = %d, want %d", tt.n, got, tt.want)
+		}
+	}
+}
+
+// generateLines は指定行数のテスト用コンテンツを生成する
+func generateLines(n int) string {
+	lines := make([]string, n)
+	for i := range lines {
+		lines[i] = fmt.Sprintf("line%d", i+1)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func TestExecuteReadFiles_BudgetManyFiles(t *testing.T) {
+	setupTestMocks(t)
+	tmpDir := t.TempDir()
+
+	// 200行のファイルを6個作成（budget=80 が適用される）
+	paths := make([]string, 6)
+	for i := range paths {
+		name := fmt.Sprintf("f%d.go", i)
+		testutil.CreateTempFile(t, tmpDir, name, generateLines(200))
+		paths[i] = filepath.Join(tmpDir, name)
+	}
+
+	output := ExecuteReadFiles(paths)
+
+	// 各ファイルで80行目は含まれ、81行目は含まれないことを確認
+	if !strings.Contains(output, "80: line80") {
+		t.Error("Expected line 80 to be present")
+	}
+	if strings.Contains(output, "81: line81") {
+		t.Error("Expected line 81 to NOT be present (budget=80)")
+	}
+}
+
+func TestExecuteReadFiles_BudgetMediumFiles(t *testing.T) {
+	setupTestMocks(t)
+	tmpDir := t.TempDir()
+
+	// 200行のファイルを4個作成（budget=150 が適用される）
+	paths := make([]string, 4)
+	for i := range paths {
+		name := fmt.Sprintf("f%d.go", i)
+		testutil.CreateTempFile(t, tmpDir, name, generateLines(200))
+		paths[i] = filepath.Join(tmpDir, name)
+	}
+
+	output := ExecuteReadFiles(paths)
+
+	if !strings.Contains(output, "150: line150") {
+		t.Error("Expected line 150 to be present")
+	}
+	if strings.Contains(output, "151: line151") {
+		t.Error("Expected line 151 to NOT be present (budget=150)")
+	}
+}
+
+func TestExecuteReadFiles_BudgetExplicitRangePriority(t *testing.T) {
+	setupTestMocks(t)
+	tmpDir := t.TempDir()
+
+	// 200行のファイルを6個作成（budget=80）
+	paths := make([]string, 6)
+	for i := 0; i < 5; i++ {
+		name := fmt.Sprintf("f%d.go", i)
+		testutil.CreateTempFile(t, tmpDir, name, generateLines(200))
+		paths[i] = filepath.Join(tmpDir, name)
+	}
+	// 6番目は明示的に行範囲指定（budget より広い範囲）
+	testutil.CreateTempFile(t, tmpDir, "f5.go", generateLines(200))
+	paths[5] = filepath.Join(tmpDir, "f5.go") + ":1-120"
+
+	output := ExecuteReadFiles(paths)
+
+	// 明示指定のファイルは120行目まで含まれる（budget=80 を無視）
+	if !strings.Contains(output, "120: line120") {
+		t.Error("Expected explicit range file to include line 120")
+	}
+}

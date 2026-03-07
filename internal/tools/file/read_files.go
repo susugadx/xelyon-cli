@@ -49,6 +49,18 @@ func parsePath(entry string) (string, int, int) {
 	return entry, 0, 0
 }
 
+// perFileBudget はファイル数に応じた1ファイルあたりの最大行数を返す
+func perFileBudget(n int) int {
+	switch {
+	case n <= 2:
+		return MaxReadLines // 300
+	case n <= 5:
+		return 150
+	default:
+		return 80
+	}
+}
+
 // ExecuteReadFiles は複数ファイルを一括読み込みする
 func ExecuteReadFiles(paths []string) string {
 	if len(paths) == 0 {
@@ -58,6 +70,8 @@ func ExecuteReadFiles(paths []string) string {
 		return fmt.Sprintf("Error: too many paths (max %d), got %d", MaxReadFilesPaths, len(paths))
 	}
 
+	budget := perFileBudget(len(paths))
+
 	var sb strings.Builder
 	for i, entry := range paths {
 		if i > 0 {
@@ -65,6 +79,11 @@ func ExecuteReadFiles(paths []string) string {
 		}
 
 		path, startLine, endLine := parsePath(entry)
+
+		// 明示的な行範囲指定がない場合、バジェットを適用
+		if startLine == 0 && endLine == 0 && budget < MaxReadLines {
+			endLine = budget
+		}
 
 		// ファイルヘッダー
 		fmt.Fprintf(&sb, "📄 File: %s\n", entry)
