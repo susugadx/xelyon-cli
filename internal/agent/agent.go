@@ -239,6 +239,18 @@ func NewAgent(model string, provider api.Provider, headless bool) *Agent {
 // cleanupHook はテスト用フック（非nil時にCleanupから呼ばれる）
 var cleanupHook func()
 
+// syncResponseIDToSession はプロバイダーの ResponseID をセッションに同期する（保存前に呼ぶ）
+func (a *Agent) syncResponseIDToSession() {
+	if a.session == nil {
+		return
+	}
+	if ridProvider, ok := a.CurrentProvider.(ResponseIDCapable); ok {
+		if ridProvider.HasCachedResponseID() {
+			a.session.ResponseID = ridProvider.GetResponseID()
+		}
+	}
+}
+
 // Cleanup はエージェントのリソースをクリーンアップ
 func (a *Agent) Cleanup() {
 	if cleanupHook != nil {
@@ -253,6 +265,7 @@ func (a *Agent) Cleanup() {
 	}
 	// セッション保存
 	if a.storage != nil && a.session != nil {
+		a.syncResponseIDToSession()
 		if err := a.storage.Save(a.session); err != nil {
 			yellow.Printf("Warning: Failed to save session: %v\n", err)
 		}

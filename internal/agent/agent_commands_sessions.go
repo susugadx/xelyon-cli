@@ -13,6 +13,7 @@ func handleSaveCommand(agent *Agent) bool {
 		return true
 	}
 
+	agent.syncResponseIDToSession()
 	if err := agent.storage.Save(agent.session); err != nil {
 		red.Printf("Failed to save session: %v\n", err)
 		return true
@@ -50,6 +51,14 @@ func handleLoadCommand(agent *Agent, args []string) bool {
 	// セッション置き換え
 	agent.session = session
 	agent.History = session.ToAPIMessages()
+	// Compacted 状態を復元（Compact API で圧縮済みの場合）
+	agent.RestoreCompactedState(session)
+	// ResponseID 復元（OpenAI Responses API キャッシュ）
+	if session.ResponseID != "" {
+		if ridProvider, ok := agent.CurrentProvider.(ResponseIDCapable); ok {
+			ridProvider.SetResponseID(session.ResponseID)
+		}
+	}
 
 	green.Printf("📂 Loaded session %s (%d messages)\n", sessionID, len(session.Messages))
 	return true

@@ -53,6 +53,7 @@ func (a *Agent) runImplementationPhase(ctx context.Context, p *plan.Plan) error 
 
 	// セッションを保存
 	if a.storage != nil && a.session != nil {
+		a.syncResponseIDToSession()
 		if err := a.storage.Save(a.session); err != nil {
 			yellow.Printf("Warning: Failed to save session: %v\n", err)
 		}

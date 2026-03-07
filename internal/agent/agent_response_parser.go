@@ -126,6 +126,7 @@ func (a *Agent) handleNormalResponse(response string) {
 	if a.session != nil {
 		a.session.AddMessage("assistant", displayResponse, a.CurrentModel)
 		if a.storage != nil {
+			a.syncResponseIDToSession()
 			if err := a.storage.Save(a.session); err != nil {
 				// セッション保存失敗を警告（データ損失の可能性を通知）
 				yellow.Printf("⚠️  Warning: Failed to save session: %v\n", err)

@@ -114,6 +114,14 @@ func RunInteractiveWithResume(model string, provider api.Provider, autoApprove b
 	tools.SetAutoApprove(autoApprove) // ツールに --auto-approve 設定を伝える
 	agent.session = session
 	agent.History = session.ToAPIMessages()
+	// Compacted 状態を復元（Compact API で圧縮済みの場合）
+	agent.RestoreCompactedState(session)
+	// ResponseID 復元（OpenAI Responses API キャッシュ）
+	if session.ResponseID != "" {
+		if ridProvider, ok := provider.(ResponseIDCapable); ok {
+			ridProvider.SetResponseID(session.ResponseID)
+		}
+	}
 	defer agent.Cleanup() // グレースフルシャットダウン
 
 	// シグナルハンドリング（Ctrl+C 2回で終了、1回目はAI応答中断）

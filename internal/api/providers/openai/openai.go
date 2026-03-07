@@ -82,6 +82,16 @@ func (p *Provider) HasCachedResponseID() bool {
 	return p.lastResponseID != ""
 }
 
+// SetResponseID は responseID を設定する（セッション復元用）
+func (p *Provider) SetResponseID(id string) {
+	p.lastResponseID = id
+}
+
+// GetResponseID は現在の responseID を返す（セッション保存用）
+func (p *Provider) GetResponseID() string {
+	return p.lastResponseID
+}
+
 // ClearResponseID は responseID をクリアする（圧縮後などに使用）
 func (p *Provider) ClearResponseID() {
 	p.lastResponseID = ""

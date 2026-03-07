@@ -523,6 +523,48 @@ func TestLevelToReasoningEffort(t *testing.T) {
 	}
 }
 
+func TestOpenAIProvider_SetGetResponseID(t *testing.T) {
+	p := New("test-key")
+
+	// 初期状態: 空
+	if p.GetResponseID() != "" {
+		t.Errorf("GetResponseID() = %q, want empty", p.GetResponseID())
+	}
+	if p.HasCachedResponseID() {
+		t.Error("HasCachedResponseID() = true, want false")
+	}
+
+	// Set
+	p.SetResponseID("resp_abc123")
+	if p.GetResponseID() != "resp_abc123" {
+		t.Errorf("GetResponseID() = %q, want 'resp_abc123'", p.GetResponseID())
+	}
+	if !p.HasCachedResponseID() {
+		t.Error("HasCachedResponseID() = false, want true")
+	}
+
+	// Clear
+	p.ClearResponseID()
+	if p.GetResponseID() != "" {
+		t.Errorf("GetResponseID() after clear = %q, want empty", p.GetResponseID())
+	}
+	if p.HasCachedResponseID() {
+		t.Error("HasCachedResponseID() after clear = true, want false")
+	}
+
+	// Set again
+	p.SetResponseID("resp_xyz")
+	if p.GetResponseID() != "resp_xyz" {
+		t.Errorf("GetResponseID() = %q, want 'resp_xyz'", p.GetResponseID())
+	}
+
+	// ClearCache also clears
+	p.ClearCache()
+	if p.GetResponseID() != "" {
+		t.Errorf("GetResponseID() after ClearCache = %q, want empty", p.GetResponseID())
+	}
+}
+
 func TestIsCodexModel(t *testing.T) {
 	tests := []struct {
 		model string

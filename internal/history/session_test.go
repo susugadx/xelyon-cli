@@ -228,6 +228,21 @@ func TestAddMessageFromAPI_ToolResultRoundTrip(t *testing.T) {
 	}
 }
 
+func TestSession_ResponseID(t *testing.T) {
+	session := NewSession("gpt-5.2-codex")
+
+	// 初期状態: 空
+	if session.ResponseID != "" {
+		t.Errorf("ResponseID = %q, want empty", session.ResponseID)
+	}
+
+	// 設定
+	session.ResponseID = "resp_abc123"
+	if session.ResponseID != "resp_abc123" {
+		t.Errorf("ResponseID = %q, want 'resp_abc123'", session.ResponseID)
+	}
+}
+
 func TestAddMessageFromAPI_PlainMessageRegression(t *testing.T) {
 	// 通常メッセージ（FCなし）は従来通り動くこと（回帰テスト）
 	session := NewSession("test-model")

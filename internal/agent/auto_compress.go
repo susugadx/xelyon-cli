@@ -12,6 +12,8 @@ import (
 // ResponseIDCapable は Responses API のキャッシュ機能を持つプロバイダー
 type ResponseIDCapable interface {
 	HasCachedResponseID() bool
+	SetResponseID(id string)
+	GetResponseID() string
 }
 
 // maybeAutoCompress は閾値を超えた場合に自動圧縮を実行

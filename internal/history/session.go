@@ -16,6 +16,7 @@ type Session struct {
 	Messages        []MessageEntry
 	CompactedItems  []CompactedItem `json:"compacted_items,omitempty"`   // Compact API 圧縮済みアイテム
 	IsCompactedMode bool            `json:"is_compacted_mode,omitempty"` // 圧縮モードフラグ
+	ResponseID      string          `json:"response_id,omitempty"`       // OpenAI Responses API の最新レスポンスID
 }
 
 // CompactedItem は Compact API の圧縮済みアイテム（セッション保存用）
