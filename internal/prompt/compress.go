@@ -40,7 +40,8 @@ func BuildSummaryPrompt(messages []Message, truncateLen int) string {
 	sb.WriteString("- Exploratory searches that did not affect the final direction\n\n")
 	sb.WriteString("Output as bullet points (5-10 items).\n")
 	sb.WriteString("Focus on what the next assistant turn needs to know.\n")
-	sb.WriteString("Respond in the same language as the conversation.\n\n")
+	sb.WriteString("Respond in the same language as the conversation.\n")
+	sb.WriteString("Maximum 500 words.\n\n")
 	sb.WriteString("---\n\n")
 
 	for _, msg := range messages {
