@@ -323,6 +323,196 @@ func TestCompactOldToolResults_RecentErrorsNotCompressed(t *testing.T) {
 	}
 }
 
+// --- 改善1: 段階的圧縮テスト ---
+
+func TestGraduatedTruncateParams(t *testing.T) {
+	tests := []struct {
+		name      string
+		age       int
+		keepTurns int
+		wantHead  int
+		wantTail  int
+	}{
+		{"age=1, keep=3: default params", 1, 3, 20, 5},
+		{"age=3, keep=3: default params", 3, 3, 20, 5},
+		{"age=4, keep=3: medium params", 4, 3, 10, 3},
+		{"age=6, keep=3: medium params", 6, 3, 10, 3},
+		{"age=7, keep=3: aggressive params", 7, 3, 5, 2},
+		{"age=100, keep=3: aggressive params", 100, 3, 5, 2},
+		{"age=1, keep=1: default params", 1, 1, 20, 5},
+		{"age=2, keep=1: medium params", 2, 1, 10, 3},
+		{"age=3, keep=1: aggressive params", 3, 1, 5, 2},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h, tl := graduatedTruncateParams(tt.age, tt.keepTurns, 20, 5)
+			if h != tt.wantHead || tl != tt.wantTail {
+				t.Errorf("graduatedTruncateParams(%d, %d) = (%d, %d), want (%d, %d)",
+					tt.age, tt.keepTurns, h, tl, tt.wantHead, tt.wantTail)
+			}
+		})
+	}
+}
+
+func TestCompactOldToolResults_GraduatedCompression(t *testing.T) {
+	large := makeLargeContent(100)
+
+	// 10ターン: keepTurns=3 → boundary=turn7
+	// turn1 (age=7+): aggressive (5/2)
+	// turn2 (age=6): medium (10/3)
+	// turn3 (age=5): medium (10/3)
+	// turn4 (age=4): medium (10/3)
+	// turn5-7: default (20/5) — boundary直前
+	// turn8-10: keepTurns内 — truncate なし
+	history := []api.Message{
+		{Role: "user", Content: "turn1"},
+		{Role: "tool", Content: large, ToolCallID: "c1", ToolName: "read_file"},
+		{Role: "user", Content: "turn2"},
+		{Role: "tool", Content: large, ToolCallID: "c2", ToolName: "read_file"},
+		{Role: "user", Content: "turn3"},
+		{Role: "tool", Content: large, ToolCallID: "c3", ToolName: "read_file"},
+		{Role: "user", Content: "turn4"},
+		{Role: "tool", Content: large, ToolCallID: "c4", ToolName: "read_file"},
+		{Role: "user", Content: "turn5"},
+		{Role: "tool", Content: large, ToolCallID: "c5", ToolName: "read_file"},
+		{Role: "user", Content: "turn6"},
+		{Role: "tool", Content: large, ToolCallID: "c6", ToolName: "read_file"},
+		{Role: "user", Content: "turn7"},
+		{Role: "tool", Content: large, ToolCallID: "c7", ToolName: "read_file"},
+		{Role: "user", Content: "turn8"},
+		{Role: "tool", Content: large, ToolCallID: "c8", ToolName: "read_file"},
+		{Role: "user", Content: "turn9"},
+		{Role: "tool", Content: large, ToolCallID: "c9", ToolName: "read_file"},
+		{Role: "user", Content: "turn10"},
+		{Role: "assistant", Content: "done"},
+	}
+
+	result := CompactOldToolResults(history, 3, 50, 20, 5)
+
+	// turn1 tool (index 1): aggressive → "was 100 lines" + 短い
+	if !strings.Contains(result[1].Content, "truncated") {
+		t.Error("turn1 tool should be truncated (aggressive)")
+	}
+	// aggressive は head=5 行なので、default の head=20 より短い
+	turn1Lines := strings.Split(result[1].Content, "\n")
+	turn4Lines := strings.Split(result[7].Content, "\n")
+	if len(turn1Lines) >= len(turn4Lines) {
+		t.Errorf("turn1 (aggressive) should be shorter than turn4 (medium): %d >= %d lines",
+			len(turn1Lines), len(turn4Lines))
+	}
+
+	// turn8-10 (keepTurns内): truncate なし
+	if strings.Contains(result[15].Content, "truncated") {
+		t.Error("turn8 tool (keepTurns内) should NOT be truncated")
+	}
+}
+
+// --- 改善2: 失敗ペア圧縮テスト ---
+
+func TestCompressFailedPair_Basic(t *testing.T) {
+	history := []api.Message{
+		{Role: "user", Content: "fix it"},
+		{Role: "assistant", Content: "trying", ToolCalls: []api.OpenAIToolCall{
+			{ID: "c1", Function: api.OpenAIToolCallFunction{Name: "str_replace"}},
+		}},
+		{Role: "tool", Content: "Error: old_str not found in file.go\nExpected: func foo()\nGot: func bar()", ToolCallID: "c1", ToolName: "str_replace"},
+		// 直後の assistant が同じツールを再呼び出し
+		{Role: "assistant", Content: "retrying", ToolCalls: []api.OpenAIToolCall{
+			{ID: "c2", Function: api.OpenAIToolCallFunction{Name: "str_replace"}},
+		}},
+		{Role: "tool", Content: "OK", ToolCallID: "c2", ToolName: "str_replace"},
+	}
+
+	compressed, ok := compressFailedPair(history, 2)
+	if !ok {
+		t.Fatal("expected failed pair to be detected")
+	}
+	if !strings.HasPrefix(compressed.Content, "[Failed: str_replace") {
+		t.Errorf("expected [Failed: str_replace ...], got %q", compressed.Content)
+	}
+	if !strings.Contains(compressed.Content, "Error: old_str not found") {
+		t.Errorf("expected error first line in summary, got %q", compressed.Content)
+	}
+	// ToolCallID/ToolName は保持
+	if compressed.ToolCallID != "c1" {
+		t.Errorf("expected ToolCallID preserved, got %q", compressed.ToolCallID)
+	}
+}
+
+func TestCompressFailedPair_DifferentTool(t *testing.T) {
+	history := []api.Message{
+		{Role: "tool", Content: "Error: file not found", ToolCallID: "c1", ToolName: "read_file"},
+		// 直後の assistant が別のツールを呼ぶ → 失敗ペアではない
+		{Role: "assistant", Content: "trying write", ToolCalls: []api.OpenAIToolCall{
+			{ID: "c2", Function: api.OpenAIToolCallFunction{Name: "write_file"}},
+		}},
+	}
+
+	_, ok := compressFailedPair(history, 0)
+	if ok {
+		t.Error("should NOT detect failed pair when retry uses different tool")
+	}
+}
+
+func TestCompressFailedPair_NoAssistantAfter(t *testing.T) {
+	history := []api.Message{
+		{Role: "tool", Content: "Error: something", ToolCallID: "c1", ToolName: "bash"},
+		{Role: "user", Content: "next question"},
+	}
+
+	_, ok := compressFailedPair(history, 0)
+	if ok {
+		t.Error("should NOT detect failed pair when user comes before assistant")
+	}
+}
+
+func TestCompressFailedPair_NotError(t *testing.T) {
+	history := []api.Message{
+		{Role: "tool", Content: "Success: done", ToolCallID: "c1", ToolName: "bash"},
+		{Role: "assistant", Content: "ok", ToolCalls: []api.OpenAIToolCall{
+			{ID: "c2", Function: api.OpenAIToolCallFunction{Name: "bash"}},
+		}},
+	}
+
+	_, ok := compressFailedPair(history, 0)
+	if ok {
+		t.Error("should NOT detect failed pair for non-error result")
+	}
+}
+
+func TestCompactOldToolResults_FailedPairIntegration(t *testing.T) {
+	large := makeLargeContent(60)
+
+	history := []api.Message{
+		{Role: "user", Content: "turn 1"},
+		{Role: "assistant", Content: "trying", ToolCalls: []api.OpenAIToolCall{
+			{ID: "c1", Function: api.OpenAIToolCallFunction{Name: "str_replace"}},
+		}},
+		{Role: "tool", Content: "Error: old_str not found in main.go\nline2\nline3", ToolCallID: "c1", ToolName: "str_replace"},
+		// retry
+		{Role: "assistant", Content: "retry", ToolCalls: []api.OpenAIToolCall{
+			{ID: "c2", Function: api.OpenAIToolCallFunction{Name: "str_replace"}},
+		}},
+		{Role: "tool", Content: large, ToolCallID: "c2", ToolName: "str_replace"},
+		{Role: "user", Content: "turn 2"},
+		{Role: "user", Content: "turn 3"},
+		{Role: "user", Content: "turn 4"},
+	}
+
+	result := CompactOldToolResults(history, 3, 50, 20, 5)
+
+	// 失敗ツール結果は [Failed: ...] に圧縮
+	if !strings.HasPrefix(result[2].Content, "[Failed: str_replace") {
+		t.Errorf("expected failed pair compressed, got %q", result[2].Content)
+	}
+
+	// 成功したリトライ結果は通常の truncate
+	if !strings.Contains(result[4].Content, "truncated") {
+		t.Error("retry result should be truncated normally")
+	}
+}
+
 func TestCompactOldToolResults_TruncatedContentFormat(t *testing.T) {
 	large := makeLargeContent(100)
 

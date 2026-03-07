@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
@@ -57,6 +58,11 @@ func (a *Agent) maybeAutoCompress() bool {
 		threshold := float64(cfg.Compression.ThresholdPercent)
 		if threshold == 0 {
 			threshold = 80
+		}
+
+		// マイルストーン駆動: 特定パターンで閾値を 60% に下げる
+		if detectMilestonePattern(a.History) {
+			threshold = 60
 		}
 
 		// トークン数ベースの閾値が設定されている場合はそちらを優先
@@ -146,6 +152,52 @@ func (a *Agent) checkTokenWarning() {
 	} else if percentage > 80 {
 		fmt.Println("💡 Token usage is high (80%). /compress available if needed")
 	}
+}
+
+// detectMilestonePattern は直近の履歴から圧縮トリガーとなるパターンを検出する。
+// - bash で成功（Error: なし）かつ出力が OutputTruncateLen 超
+// - 直近3ターンが連続で search_code
+func detectMilestonePattern(history []api.Message) bool {
+	if len(history) == 0 {
+		return false
+	}
+
+	// 末尾から tool 結果を探す
+	lastToolIdx := -1
+	for i := len(history) - 1; i >= 0; i-- {
+		if history[i].Role == "tool" {
+			lastToolIdx = i
+			break
+		}
+	}
+	if lastToolIdx < 0 {
+		return false
+	}
+
+	// パターン1: bash 成功 + 出力大
+	last := history[lastToolIdx]
+	if last.ToolName == "bash" &&
+		!strings.HasPrefix(strings.TrimSpace(last.Content), "Error:") &&
+		len(last.Content) > config.OutputTruncateLen {
+		return true
+	}
+
+	// パターン2: 直近3つの tool 結果が全て search_code
+	searchCount := 0
+	for i := len(history) - 1; i >= 0 && searchCount < 3; i-- {
+		if history[i].Role == "tool" {
+			if history[i].ToolName == "search_code" {
+				searchCount++
+			} else {
+				break // 連続でなければ中断
+			}
+		}
+	}
+	if searchCount >= 3 {
+		return true
+	}
+
+	return false
 }
 
 // handleTokenLimitError はトークン上限エラー時の提案を表示

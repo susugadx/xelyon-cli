@@ -2,9 +2,11 @@ package agent
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 // TestAgent_handleTokenLimitErrorWithRetry_Basic は基本的なテストケース
@@ -173,4 +175,106 @@ func TestAgent_handleTokenLimitErrorWithRetry_TestCases(t *testing.T) {
 // TestAgent_handleTokenLimitErrorWithRetry_Integration は統合テストのプレースホルダー
 func TestAgent_handleTokenLimitErrorWithRetry_Integration(t *testing.T) {
 	t.Skip("統合テストは別ファイルで実装: 実際のトークン上限エラー、config、CompressHistoryのモックが必要")
+}
+
+// --- 改善3: マイルストーン駆動テスト ---
+
+func TestDetectMilestonePattern_EmptyHistory(t *testing.T) {
+	if detectMilestonePattern(nil) {
+		t.Error("nil history should return false")
+	}
+	if detectMilestonePattern([]api.Message{}) {
+		t.Error("empty history should return false")
+	}
+}
+
+func TestDetectMilestonePattern_LargeBashOutput(t *testing.T) {
+	largeOutput := strings.Repeat("x", config.OutputTruncateLen+1)
+	history := []api.Message{
+		{Role: "user", Content: "run tests"},
+		{Role: "assistant", Content: "ok"},
+		{Role: "tool", Content: largeOutput, ToolCallID: "c1", ToolName: "bash"},
+	}
+
+	if !detectMilestonePattern(history) {
+		t.Error("large successful bash output should trigger milestone")
+	}
+}
+
+func TestDetectMilestonePattern_BashError(t *testing.T) {
+	largeOutput := "Error: " + strings.Repeat("x", config.OutputTruncateLen+1)
+	history := []api.Message{
+		{Role: "user", Content: "run tests"},
+		{Role: "assistant", Content: "ok"},
+		{Role: "tool", Content: largeOutput, ToolCallID: "c1", ToolName: "bash"},
+	}
+
+	if detectMilestonePattern(history) {
+		t.Error("bash error should NOT trigger milestone even if output is large")
+	}
+}
+
+func TestDetectMilestonePattern_SmallBashOutput(t *testing.T) {
+	history := []api.Message{
+		{Role: "user", Content: "echo hi"},
+		{Role: "assistant", Content: "ok"},
+		{Role: "tool", Content: "hi", ToolCallID: "c1", ToolName: "bash"},
+	}
+
+	if detectMilestonePattern(history) {
+		t.Error("small bash output should NOT trigger milestone")
+	}
+}
+
+func TestDetectMilestonePattern_ThreeConsecutiveSearchCode(t *testing.T) {
+	history := []api.Message{
+		{Role: "user", Content: "find usage"},
+		{Role: "assistant", Content: "searching"},
+		{Role: "tool", Content: "result 1", ToolCallID: "c1", ToolName: "search_code"},
+		{Role: "tool", Content: "result 2", ToolCallID: "c2", ToolName: "search_code"},
+		{Role: "tool", Content: "result 3", ToolCallID: "c3", ToolName: "search_code"},
+	}
+
+	if !detectMilestonePattern(history) {
+		t.Error("3 consecutive search_code should trigger milestone")
+	}
+}
+
+func TestDetectMilestonePattern_TwoSearchCode(t *testing.T) {
+	history := []api.Message{
+		{Role: "user", Content: "find usage"},
+		{Role: "assistant", Content: "searching"},
+		{Role: "tool", Content: "result 1", ToolCallID: "c1", ToolName: "search_code"},
+		{Role: "tool", Content: "result 2", ToolCallID: "c2", ToolName: "search_code"},
+	}
+
+	if detectMilestonePattern(history) {
+		t.Error("only 2 search_code should NOT trigger milestone")
+	}
+}
+
+func TestDetectMilestonePattern_SearchCodeInterrupted(t *testing.T) {
+	history := []api.Message{
+		{Role: "user", Content: "find usage"},
+		{Role: "assistant", Content: "searching"},
+		{Role: "tool", Content: "result 1", ToolCallID: "c1", ToolName: "search_code"},
+		{Role: "tool", Content: "file content", ToolCallID: "c2", ToolName: "read_file"},
+		{Role: "tool", Content: "result 2", ToolCallID: "c3", ToolName: "search_code"},
+		{Role: "tool", Content: "result 3", ToolCallID: "c4", ToolName: "search_code"},
+	}
+
+	if detectMilestonePattern(history) {
+		t.Error("non-consecutive search_code (interrupted by read_file) should NOT trigger milestone")
+	}
+}
+
+func TestDetectMilestonePattern_NoToolResults(t *testing.T) {
+	history := []api.Message{
+		{Role: "user", Content: "hello"},
+		{Role: "assistant", Content: "hi"},
+	}
+
+	if detectMilestonePattern(history) {
+		t.Error("no tool results should not trigger milestone")
+	}
 }
