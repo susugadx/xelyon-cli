@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -302,6 +303,121 @@ func TestToolCache_InvalidateSearchCacheForFile(t *testing.T) {
 	}
 }
 
+func TestToolCache_DeduplicateResult(t *testing.T) {
+	cache := NewToolCache()
+
+	content := "package main\n\nfunc main() {\n\tfmt.Println(\"hello\")\n}\n"
+
+	// 初回: 新規登録、空文字を返す
+	ref := cache.DeduplicateResult("read_file", content, 1)
+	if ref != "" {
+		t.Errorf("expected empty string on first call, got %q", ref)
+	}
+
+	// 同一内容で2回目: 参照文字列を返す
+	ref = cache.DeduplicateResult("read_file", content, 3)
+	if ref == "" {
+		t.Error("expected reference string on duplicate, got empty")
+	}
+	if !strings.Contains(ref, "read_file") {
+		t.Errorf("reference should mention tool name, got %q", ref)
+	}
+	if !strings.Contains(ref, "turn 1") {
+		t.Errorf("reference should mention original turn, got %q", ref)
+	}
+
+	// 異なる内容は新規扱い
+	ref = cache.DeduplicateResult("read_file", "different content", 4)
+	if ref != "" {
+		t.Errorf("expected empty string for different content, got %q", ref)
+	}
+}
+
+func TestToolCache_DeduplicateResult_OnlyTargetTools(t *testing.T) {
+	cache := NewToolCache()
+	content := "some tool output"
+
+	// 対象ツール: read_file, search_code, list_dir
+	for _, tool := range []string{"read_file", "search_code", "list_dir"} {
+		ref := cache.DeduplicateResult(tool, content+"_"+tool, 1)
+		if ref != "" {
+			t.Errorf("first call for %s should return empty, got %q", tool, ref)
+		}
+		ref = cache.DeduplicateResult(tool, content+"_"+tool, 2)
+		if ref == "" {
+			t.Errorf("second call for %s should return reference", tool)
+		}
+	}
+
+	// 対象外ツール: bash, write_file, str_replace
+	for _, tool := range []string{"bash", "write_file", "str_replace"} {
+		ref := cache.DeduplicateResult(tool, "output_"+tool, 1)
+		if ref != "" {
+			t.Errorf("non-target tool %s should always return empty, got %q", tool, ref)
+		}
+		ref = cache.DeduplicateResult(tool, "output_"+tool, 2)
+		if ref != "" {
+			t.Errorf("non-target tool %s should always return empty on repeat, got %q", tool, ref)
+		}
+	}
+}
+
+func TestToolCache_DeduplicateResult_ClearResetsHashes(t *testing.T) {
+	cache := NewToolCache()
+	content := "file contents here"
+
+	// 登録
+	cache.DeduplicateResult("read_file", content, 1)
+
+	// Clear で全リセット
+	cache.Clear()
+
+	// 同一内容でも新規扱い
+	ref := cache.DeduplicateResult("read_file", content, 5)
+	if ref != "" {
+		t.Errorf("after Clear, same content should be treated as new, got %q", ref)
+	}
+}
+
+func TestContentHash_Deterministic(t *testing.T) {
+	content := "hello world"
+	h1 := contentHash(content)
+	h2 := contentHash(content)
+	if h1 != h2 {
+		t.Errorf("contentHash should be deterministic: %s != %s", h1, h2)
+	}
+	if len(h1) != 16 {
+		t.Errorf("contentHash should be 16 hex chars, got %d: %s", len(h1), h1)
+	}
+
+	// 異なる内容は異なるハッシュ
+	h3 := contentHash("different")
+	if h1 == h3 {
+		t.Error("different content should produce different hash")
+	}
+}
+
+func TestIsDeduplicableToolResult(t *testing.T) {
+	tests := []struct {
+		tool string
+		want bool
+	}{
+		{"read_file", true},
+		{"search_code", true},
+		{"list_dir", true},
+		{"bash", false},
+		{"write_file", false},
+		{"str_replace", false},
+		{"", false},
+	}
+	for _, tt := range tests {
+		got := isDeduplicableToolResult(tt.tool)
+		if got != tt.want {
+			t.Errorf("isDeduplicableToolResult(%q) = %v, want %v", tt.tool, got, tt.want)
+		}
+	}
+}
+
 func TestToolCache_FileCacheLRU(t *testing.T) {
 	cache := NewToolCache()
 	tmpDir := t.TempDir()
@@ -319,3 +435,36 @@ func TestToolCache_FileCacheLRU(t *testing.T) {
 		t.Fatalf("file cache should be capped at %d, got %d", MaxFileCacheEntries, files)
 	}
 }
+
+func TestToolCache_ResultHashPruning(t *testing.T) {
+	cache := NewToolCache()
+
+	// MaxResultHashEntries + 1 個のエントリを登録
+	for i := 0; i < MaxResultHashEntries+1; i++ {
+		content := fmt.Sprintf("content-%d", i)
+		cache.DeduplicateResult("read_file", content, i)
+	}
+
+	// resultHashes が MaxResultHashEntries 以下であることを確認
+	cache.mu.RLock()
+	count := len(cache.resultHashes)
+	cache.mu.RUnlock()
+
+	if count > MaxResultHashEntries {
+		t.Fatalf("resultHashes should be capped at %d, got %d", MaxResultHashEntries, count)
+	}
+
+	// 最後に登録したエントリはまだ存在する（pruning は古いものから削除）
+	lastContent := fmt.Sprintf("content-%d", MaxResultHashEntries)
+	ref := cache.DeduplicateResult("read_file", lastContent, 999)
+	if ref == "" {
+		t.Error("most recent entry should still exist after pruning")
+	}
+
+	// 最初に登録したエントリは pruning で削除されている
+	ref = cache.DeduplicateResult("read_file", "content-0", 999)
+	if ref != "" {
+		t.Errorf("oldest entry should have been pruned, got %q", ref)
+	}
+}
+

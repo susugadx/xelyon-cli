@@ -298,12 +298,13 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 				}
 			}
 
-			// ツール結果を履歴に追加（executeToolOnly と同じパターン）
+			// ツール結果を履歴に追加（同一内容の重複は参照に差し替え）
+			historyContent := a.deduplicateToolResult(toolCall.Tool, result)
 			if toolCall.ID != "" {
 				// Function Calling: role="tool" で tool_call_id 付きで送信
 				toolMsg := api.Message{
 					Role:       "tool",
-					Content:    result,
+					Content:    historyContent,
 					ToolCallID: toolCall.ID,
 					ToolName:   toolCall.Tool,
 				}
@@ -317,7 +318,7 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 				// テキストベース: role="user" で送信（従来方式）
 				a.History = append(a.History, api.Message{
 					Role:    "user",
-					Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, result),
+					Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, historyContent),
 				})
 			}
 		}
