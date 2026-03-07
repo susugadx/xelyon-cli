@@ -29,9 +29,11 @@ func (a *Agent) CompressHistory(keepRecent int) error {
 	}
 
 	// サマリー生成プロンプト
+	// 古いツール結果を截断してトークン節約（サマリー生成の入力を削減）
+	prunedCompress := CompactOldToolResults(toCompress, DefaultKeepTurns, DefaultMaxLines, DefaultHeadLines, DefaultTailLines)
 	// api.Message を prompt.Message に変換
-	promptMessages := make([]prompt.Message, len(toCompress))
-	for i, m := range toCompress {
+	promptMessages := make([]prompt.Message, len(prunedCompress))
+	for i, m := range prunedCompress {
 		promptMessages[i] = prompt.Message{Role: m.Role, Content: m.Content}
 	}
 	summaryPrompt := prompt.BuildSummaryPrompt(promptMessages, config.MessageTruncateLen)

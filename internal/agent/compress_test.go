@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"context"
+	"strings"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
@@ -8,6 +10,22 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
 )
+
+// capturingMockProvider は ChatWithTools の引数をキャプチャするモック
+type capturingMockProvider struct {
+	capturedHistory []api.Message
+}
+
+func (m *capturingMockProvider) Name() string                   { return "test" }
+func (m *capturingMockProvider) SupportsImages() bool           { return false }
+func (m *capturingMockProvider) IsFunctionCallingEnabled() bool { return true }
+func (m *capturingMockProvider) ChatWithTools(_ context.Context, _ string, history []api.Message, _ string) (string, error) {
+	m.capturedHistory = history
+	return "Summary of conversation", nil
+}
+func (m *capturingMockProvider) ChatWithImage(_ context.Context, _ string, _ []api.Message, _ string, _ *api.ImageData, _ string) (string, error) {
+	return "", nil
+}
 
 func TestEstimateTokens(t *testing.T) {
 	tests := []struct {
@@ -257,6 +275,115 @@ func TestAdjustSplitForFCPairs_NoFC(t *testing.T) {
 	got := adjustSplitForFCPairs(history, 3)
 	if got != 3 {
 		t.Errorf("Expected splitIdx=3 (unchanged), got %d", got)
+	}
+}
+
+func TestBuildFullInputItems_PrePrunesToolResults(t *testing.T) {
+	// buildFullInputItems が古いツール結果を截断してから InputItem に変換することを確認
+	provider := &mockProvider{name: "test"}
+	agent := NewAgent("test-model", provider, false)
+
+	large := makeLargeContent(60)
+
+	// keepTurns=3 より古いターンに大きい tool 結果を配置（5ターンで turn1 が古い）
+	agent.History = []api.Message{
+		{Role: "user", Content: "turn 1"},
+		{Role: "assistant", Content: "a1"},
+		{Role: "tool", Content: large, ToolCallID: "c1", ToolName: "search_code"},
+		{Role: "user", Content: "turn 2"},
+		{Role: "assistant", Content: "a2"},
+		{Role: "user", Content: "turn 3"},
+		{Role: "assistant", Content: "a3"},
+		{Role: "user", Content: "turn 4"},
+		{Role: "assistant", Content: "a4"},
+		{Role: "user", Content: "turn 5"},
+		{Role: "assistant", Content: "a5"},
+	}
+
+	items := agent.buildFullInputItems()
+
+	// items が生成されること
+	if len(items) == 0 {
+		t.Fatal("buildFullInputItems() returned empty")
+	}
+
+	// 古いツール結果（turn 1）が截断されていること
+	// ConvertHistoryToInputItems は role="tool" を function_call_output に変換し、内容は Output フィールド
+	foundTruncated := false
+	for _, item := range items {
+		if item.Type == "function_call_output" && strings.Contains(item.Output, "truncated") {
+			foundTruncated = true
+			break
+		}
+	}
+	if !foundTruncated {
+		t.Error("buildFullInputItems() should pre-prune old tool results (expected truncated marker)")
+	}
+
+	// 元の History は変更されていないこと
+	if strings.Contains(agent.History[2].Content, "truncated") {
+		t.Error("original History should not be modified by buildFullInputItems()")
+	}
+}
+
+func TestBuildFullInputItems_CompactedModeBypassesPrune(t *testing.T) {
+	// 圧縮モードの場合は compactedItems をそのまま返す（pre-prune しない）
+	provider := &mockProvider{name: "test"}
+	agent := NewAgent("test-model", provider, false)
+
+	agent.isCompactedMode = true
+	agent.compactedItems = []api.InputItem{
+		{Type: "compacted", Data: "compressed-data"},
+	}
+
+	items := agent.buildFullInputItems()
+
+	if len(items) != 1 {
+		t.Fatalf("expected 1 compacted item, got %d", len(items))
+	}
+	if items[0].Type != "compacted" {
+		t.Errorf("expected type=compacted, got %q", items[0].Type)
+	}
+}
+
+func TestCompressHistory_PrePrunesBeforeSummary(t *testing.T) {
+	// CompressHistory が BuildSummaryPrompt に渡す前に古いツール結果を截断することを確認
+	provider := &capturingMockProvider{}
+	agent := NewAgent("test-model", provider, false)
+
+	large := makeLargeContent(60)
+
+	// toCompress に4ターン以上のuserメッセージを含めて、keepTurns=3 で古い tool が截断されるようにする
+	// keepRecent=4 → splitIdx=14-4=10 → toCompress=history[:10], toKeep=history[10:]
+	agent.History = []api.Message{
+		{Role: "user", Content: "turn 1"},                                         // 0
+		{Role: "tool", Content: large, ToolCallID: "c1", ToolName: "search_code"}, // 1: old → truncated
+		{Role: "user", Content: "turn 2"},                                         // 2
+		{Role: "assistant", Content: "a2"},                                        // 3
+		{Role: "user", Content: "turn 3"},                                         // 4
+		{Role: "assistant", Content: "a3"},                                        // 5
+		{Role: "user", Content: "turn 4"},                                         // 6
+		{Role: "assistant", Content: "a4"},                                        // 7
+		{Role: "user", Content: "turn 5"},                                         // 8
+		{Role: "assistant", Content: "a5"},                                        // 9
+		{Role: "user", Content: "turn 6"},                                         // 10 (toKeep)
+		{Role: "assistant", Content: "a6"},                                        // 11
+		{Role: "user", Content: "turn 7"},                                         // 12
+		{Role: "assistant", Content: "a7"},                                        // 13
+	}
+
+	err := agent.CompressHistory(4)
+	if err != nil {
+		t.Fatalf("CompressHistory() error = %v", err)
+	}
+
+	// ChatWithTools に渡されたプロンプト（history[0].Content）に "truncated" が含まれること
+	if len(provider.capturedHistory) == 0 {
+		t.Fatal("ChatWithTools was not called")
+	}
+	capturedPrompt := provider.capturedHistory[0].Content
+	if !strings.Contains(capturedPrompt, "truncated") {
+		t.Error("CompressHistory() should pre-prune old tool results before BuildSummaryPrompt")
 	}
 }
 

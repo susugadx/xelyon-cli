@@ -67,8 +67,9 @@ func (a *Agent) buildFullInputItems() []api.InputItem {
 		return a.compactedItems
 	}
 
-	// 通常の履歴を InputItem に変換
-	return api.ConvertHistoryToInputItems(a.History)
+	// 古いツール結果を截断してから InputItem に変換（トークン節約）
+	pruned := CompactOldToolResults(a.History, DefaultKeepTurns, DefaultMaxLines, DefaultHeadLines, DefaultTailLines)
+	return api.ConvertHistoryToInputItems(pruned)
 }
 
 // GetCompactedItems は API 用の圧縮済みアイテムを返す
