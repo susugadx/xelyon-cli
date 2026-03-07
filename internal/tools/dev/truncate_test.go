@@ -1,9 +1,12 @@
 package dev
 
 import (
+	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
@@ -24,69 +27,95 @@ func TestTruncateWithFile_ExactLimit(t *testing.T) {
 	}
 }
 
-func TestTruncateWithFile_OverLimit(t *testing.T) {
-	input := strings.Repeat("x", config.OutputTruncateLen+5000)
+func TestTruncateWithFile_Empty(t *testing.T) {
+	result := TruncateWithFile("")
+	if result != "" {
+		t.Errorf("TruncateWithFile() should return empty string for empty input, got %q", result)
+	}
+}
+
+func TestTruncateWithFile_OverLimit_Format(t *testing.T) {
+	// テスト用に cwd を一時ディレクトリに変更
+	tmpDir := t.TempDir()
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(origDir) })
+
+	// 50行のテストデータを生成（各行"line_NNN\n"）
+	var sb strings.Builder
+	totalLines := 200
+	for i := 1; i <= totalLines; i++ {
+		fmt.Fprintf(&sb, "line_%03d\n", i)
+	}
+	// OutputTruncateLen を超えるようにパディング
+	padding := strings.Repeat("x", config.OutputTruncateLen)
+	input := sb.String() + padding
+
 	result := TruncateWithFile(input)
 
-	// 先頭1000文字が含まれること
-	head := strings.Repeat("x", 1000)
-	if !strings.HasPrefix(result, head) {
-		t.Error("TruncateWithFile() should start with first 1000 chars of input")
+	// "Output saved:" で始まること
+	if !strings.HasPrefix(result, "Output saved: .xelyon/artifacts/output_") {
+		t.Errorf("should start with 'Output saved:', got: %s", result[:80])
 	}
 
-	// 末尾500文字が含まれること
-	tail := strings.Repeat("x", 500)
-	if !strings.HasSuffix(result, tail) {
-		t.Error("TruncateWithFile() should end with last 500 chars of input")
+	// ファイルメタデータが含まれること
+	if !strings.Contains(result, "lines,") {
+		t.Error("should contain line count")
+	}
+	if !strings.Contains(result, "KB)") {
+		t.Error("should contain size in KB")
 	}
 
-	// ファイルパスが含まれること
-	if !strings.Contains(result, "/tmp/xelyon_output_") {
-		t.Error("TruncateWithFile() should contain file path")
+	// "Last 30 lines:" が含まれること
+	if !strings.Contains(result, "Last 30 lines:") {
+		t.Error("should contain 'Last 30 lines:'")
 	}
 
-	// truncated メッセージが含まれること
-	if !strings.Contains(result, "truncated") {
-		t.Error("TruncateWithFile() should contain 'truncated' message")
+	// read_file ヒントが含まれること
+	if !strings.Contains(result, "Use `read_file .xelyon/artifacts/output_") {
+		t.Error("should contain read_file hint")
 	}
-
-	// 文字数が含まれること
-	if !strings.Contains(result, "25000 chars") {
-		t.Errorf("TruncateWithFile() should contain total char count, got: %s", result)
+	if !strings.Contains(result, ":1-50` to read specific sections.") {
+		t.Error("should contain read_file range hint")
 	}
 }
 
 func TestTruncateWithFile_FileSaved(t *testing.T) {
-	// 25000文字のテストデータ（先頭と末尾で区別可能にする）
+	tmpDir := t.TempDir()
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(origDir) })
+
 	input := "HEAD" + strings.Repeat("m", config.OutputTruncateLen+4992) + "TAIL"
 	result := TruncateWithFile(input)
 
 	// ファイルパスを抽出
-	idx := strings.Index(result, "/tmp/xelyon_output_")
+	prefix := ".xelyon/artifacts/output_"
+	idx := strings.Index(result, prefix)
 	if idx == -1 {
-		t.Fatal("TruncateWithFile() should contain file path")
+		t.Fatal("should contain artifact file path")
 	}
-	// パスの末尾を探す
-	end := strings.Index(result[idx:], ")")
+	end := strings.Index(result[idx:], " ")
 	if end == -1 {
 		t.Fatal("could not find end of file path")
 	}
-	filePath := result[idx : idx+end]
+	relPath := result[idx : idx+end]
 
-	// ファイルが存在すること
-	data, err := os.ReadFile(filePath)
+	// ファイルが存在し内容が一致すること
+	data, err := os.ReadFile(relPath)
 	if err != nil {
 		t.Fatalf("saved file should be readable: %v", err)
 	}
-	defer os.Remove(filePath)
-
-	// ファイル内容が元の出力と一致すること
 	if string(data) != input {
 		t.Error("saved file content should match original input")
 	}
 
-	// ファイルパーミッションが0600であること
-	info, err := os.Stat(filePath)
+	// パーミッションが0600であること
+	info, err := os.Stat(relPath)
 	if err != nil {
 		t.Fatalf("could not stat file: %v", err)
 	}
@@ -95,38 +124,147 @@ func TestTruncateWithFile_FileSaved(t *testing.T) {
 	}
 }
 
-func TestTruncateWithFile_HeadAndTailContent(t *testing.T) {
-	// 先頭と末尾が異なるデータで確認
-	head := strings.Repeat("H", 1000)
-	middle := strings.Repeat("M", config.OutputTruncateLen)
-	tail := strings.Repeat("T", 500)
-	input := head + middle + tail
+func TestTruncateWithFile_Last30Lines(t *testing.T) {
+	tmpDir := t.TempDir()
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(origDir) })
+
+	// 100行 + パディングで閾値超過
+	var sb strings.Builder
+	for i := 1; i <= 100; i++ {
+		fmt.Fprintf(&sb, "LINE_%03d\n", i)
+	}
+	sb.WriteString(strings.Repeat("P", config.OutputTruncateLen))
+	input := sb.String()
 
 	result := TruncateWithFile(input)
 
-	// 先頭1000文字が正しいこと
-	if !strings.HasPrefix(result, head) {
-		t.Error("TruncateWithFile() head portion should be first 1000 chars")
-	}
-
-	// 末尾500文字が正しいこと
-	if !strings.HasSuffix(result, tail) {
-		t.Error("TruncateWithFile() tail portion should be last 500 chars")
-	}
-
-	// 保存されたファイルをクリーンアップ
-	idx := strings.Index(result, "/tmp/xelyon_output_")
-	if idx != -1 {
-		end := strings.Index(result[idx:], ")")
-		if end != -1 {
-			os.Remove(result[idx : idx+end])
-		}
+	// 末尾にはパディングの最後の部分が含まれる
+	// "Last 30 lines:" セクションが存在すること
+	if !strings.Contains(result, "Last 30 lines:") {
+		t.Fatal("should contain 'Last 30 lines:'")
 	}
 }
 
-func TestTruncateWithFile_Empty(t *testing.T) {
-	result := TruncateWithFile("")
-	if result != "" {
-		t.Errorf("TruncateWithFile() should return empty string for empty input, got %q", result)
+func TestLastNLines(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		n     int
+		want  string
+	}{
+		{"fewer than n", "a\nb\nc", 5, "a\nb\nc"},
+		{"exact n", "a\nb\nc", 3, "a\nb\nc"},
+		{"more than n", "a\nb\nc\nd\ne", 3, "c\nd\ne"},
+		{"single line", "hello", 3, "hello"},
+		{"empty", "", 3, ""},
 	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := lastNLines(tt.input, tt.n)
+			if got != tt.want {
+				t.Errorf("lastNLines(%q, %d) = %q, want %q", tt.input, tt.n, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCleanupArtifacts(t *testing.T) {
+	tmpDir := t.TempDir()
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(origDir) })
+
+	dir := filepath.Join(tmpDir, artifactsDir)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// 古いファイル（25時間前）
+	oldFile := filepath.Join(dir, "output_old.txt")
+	if err := os.WriteFile(oldFile, []byte("old"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	oldTime := time.Now().Add(-25 * time.Hour)
+	os.Chtimes(oldFile, oldTime, oldTime)
+
+	// 新しいファイル（1時間前）
+	newFile := filepath.Join(dir, "output_new.txt")
+	if err := os.WriteFile(newFile, []byte("new"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	newTime := time.Now().Add(-1 * time.Hour)
+	os.Chtimes(newFile, newTime, newTime)
+
+	CleanupArtifacts()
+
+	// 古いファイルは削除されていること
+	if _, err := os.Stat(oldFile); !os.IsNotExist(err) {
+		t.Error("old artifact should be deleted")
+	}
+
+	// 新しいファイルは残っていること
+	if _, err := os.Stat(newFile); err != nil {
+		t.Error("new artifact should still exist")
+	}
+}
+
+func TestCleanupArtifacts_NoDir(t *testing.T) {
+	tmpDir := t.TempDir()
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(origDir) })
+
+	// ディレクトリが存在しなくてもパニックしないこと
+	CleanupArtifacts()
+}
+
+func TestCheckGitignore_Present(t *testing.T) {
+	tmpDir := t.TempDir()
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(origDir) })
+
+	// .xelyon/ を含む .gitignore
+	os.WriteFile(filepath.Join(tmpDir, ".gitignore"), []byte("node_modules/\n.xelyon/\n"), 0644)
+
+	// パニックしないこと（log出力はなし）
+	checkGitignore()
+}
+
+func TestCheckGitignore_Missing(t *testing.T) {
+	tmpDir := t.TempDir()
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(origDir) })
+
+	// .gitignore なし → 警告が出るがパニックしないこと
+	checkGitignore()
+}
+
+func TestCheckGitignore_WithoutXelyon(t *testing.T) {
+	tmpDir := t.TempDir()
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(origDir) })
+
+	// .xelyon/ を含まない .gitignore
+	os.WriteFile(filepath.Join(tmpDir, ".gitignore"), []byte("node_modules/\n"), 0644)
+
+	// パニックしないこと（log出力あり）
+	checkGitignore()
 }

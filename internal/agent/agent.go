@@ -21,7 +21,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/i18n"
 
 	// Subpackage imports - trigger init() for tool registration
-	_ "github.com/susugadx/xelyon-cli/internal/tools/dev"
+	toolsdev "github.com/susugadx/xelyon-cli/internal/tools/dev"
 	_ "github.com/susugadx/xelyon-cli/internal/tools/file"
 	toolslsp "github.com/susugadx/xelyon-cli/internal/tools/lsp"
 	_ "github.com/susugadx/xelyon-cli/internal/tools/planning"
@@ -86,6 +86,9 @@ func NewAgent(model string, provider api.Provider, headless bool) *Agent {
 	if cfg.General.Language != "" {
 		i18n.SetLang(cfg.General.Language)
 	}
+
+	// 古いartifactファイルを削除
+	toolsdev.CleanupArtifacts()
 
 	storage, err := history.NewStorage()
 	if err != nil {
