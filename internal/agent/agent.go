@@ -204,8 +204,9 @@ func NewAgent(model string, provider api.Provider, headless bool) *Agent {
 	// プロバイダー別プレフィックスを Workflow Rules の直前に注入
 	systemPrompt = prompt.BuildProviderSystemPrompt(systemPrompt, provider.Name(), model)
 
-	// ToolCache 初期化
+	// ToolCache 初期化（ディスクから復元）
 	toolCache := NewToolCache()
+	_ = toolCache.Load()
 	tools.GlobalToolCache = toolCache
 
 	// Agent を作成
@@ -265,6 +266,12 @@ func (a *Agent) Cleanup() {
 	// LSPクリーンアップ
 	if a.lspClient != nil {
 		a.lspClient.Close()
+	}
+	// ToolCache 永続化
+	if a.ToolCache != nil {
+		if err := a.ToolCache.Save(); err != nil {
+			yellow.Printf("Warning: Failed to save tool cache: %v\n", err)
+		}
 	}
 	// セッション保存
 	if a.storage != nil && a.session != nil {

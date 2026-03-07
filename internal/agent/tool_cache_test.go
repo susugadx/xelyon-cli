@@ -606,3 +606,228 @@ func TestToolCache_NegativeCache_ClearResetsAll(t *testing.T) {
 		t.Error("expected negative cache miss after Clear")
 	}
 }
+
+// --- Save/Load 永続化テスト ---
+
+func TestToolCache_SaveLoad_RoundTrip(t *testing.T) {
+	// テスト用ディレクトリでSave/Loadを実行
+	tmpDir := t.TempDir()
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(origDir) }()
+
+	// テスト用ファイル作成
+	testFile := filepath.Join(tmpDir, "test.go")
+	if err := os.WriteFile(testFile, []byte("package main"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	testDir := filepath.Join(tmpDir, "subdir")
+	if err := os.Mkdir(testDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// キャッシュにデータを設定
+	cache1 := NewToolCache()
+	cache1.SetFile(testFile, "package main")
+	cache1.SetDir(testDir, "file1.go\nfile2.go")
+	cache1.SetSearch("func", ".", "results", []string{testFile})
+
+	// Save
+	if err := cache1.Save(); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	// 新しいキャッシュでLoad
+	cache2 := NewToolCache()
+	if err := cache2.Load(); err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	// ファイルキャッシュが復元されていること
+	if content, hit := cache2.GetFile(testFile); !hit {
+		t.Error("expected file cache hit after Load")
+	} else if content != "package main" {
+		t.Errorf("expected 'package main', got %q", content)
+	}
+
+	// ディレクトリキャッシュが復元されていること
+	if content, hit := cache2.GetDir(testDir); !hit {
+		t.Error("expected dir cache hit after Load")
+	} else if content != "file1.go\nfile2.go" {
+		t.Errorf("expected dir listing, got %q", content)
+	}
+
+	// 検索キャッシュは永続化されないこと
+	if _, hit := cache2.GetSearch("func", "."); hit {
+		t.Error("search cache should NOT be persisted")
+	}
+}
+
+func TestToolCache_Load_InvalidatesModified(t *testing.T) {
+	tmpDir := t.TempDir()
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(origDir) }()
+
+	testFile := filepath.Join(tmpDir, "test.txt")
+	if err := os.WriteFile(testFile, []byte("old content"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// キャッシュ保存
+	cache1 := NewToolCache()
+	cache1.SetFile(testFile, "old content")
+	if err := cache1.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	// ファイルを変更
+	time.Sleep(10 * time.Millisecond) // mtime が確実に変わるように
+	if err := os.WriteFile(testFile, []byte("new content"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Load → 変更されたファイルは復元されないこと
+	cache2 := NewToolCache()
+	if err := cache2.Load(); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, hit := cache2.GetFile(testFile); hit {
+		t.Error("modified file should NOT be restored from cache")
+	}
+}
+
+func TestToolCache_Load_InvalidatesDeleted(t *testing.T) {
+	tmpDir := t.TempDir()
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(origDir) }()
+
+	testFile := filepath.Join(tmpDir, "test.txt")
+	if err := os.WriteFile(testFile, []byte("content"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cache1 := NewToolCache()
+	cache1.SetFile(testFile, "content")
+	if err := cache1.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	// ファイル削除
+	os.Remove(testFile)
+
+	cache2 := NewToolCache()
+	if err := cache2.Load(); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, hit := cache2.GetFile(testFile); hit {
+		t.Error("deleted file should NOT be restored from cache")
+	}
+}
+
+func TestToolCache_Save_EmptyCacheRemovesFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(origDir) }()
+
+	// まずキャッシュファイルを作成
+	cacheDir := filepath.Join(tmpDir, ".xelyon", "cache")
+	os.MkdirAll(cacheDir, 0755)
+	cacheFile := filepath.Join(tmpDir, ".xelyon", "cache", "tool_cache.json")
+	os.WriteFile(cacheFile, []byte(`{"files":{},"dirs":{}}`), 0600)
+
+	// 空キャッシュで Save → ファイル削除
+	cache := NewToolCache()
+	if err := cache.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(cacheFile); !os.IsNotExist(err) {
+		t.Error("expected cache file to be removed for empty cache")
+	}
+}
+
+func TestToolCache_Load_CorruptedFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(origDir) }()
+
+	// 壊れたJSONを書き込み
+	cacheDir := filepath.Join(tmpDir, ".xelyon", "cache")
+	os.MkdirAll(cacheDir, 0755)
+	cacheFile := filepath.Join(tmpDir, ".xelyon", "cache", "tool_cache.json")
+	os.WriteFile(cacheFile, []byte("not json{{{"), 0600)
+
+	cache := NewToolCache()
+	err := cache.Load()
+	if err != nil {
+		t.Errorf("Load should not return error for corrupted file, got: %v", err)
+	}
+
+	// 壊れたファイルは削除されること
+	if _, statErr := os.Stat(cacheFile); !os.IsNotExist(statErr) {
+		t.Error("expected corrupted cache file to be removed")
+	}
+}
+
+func TestToolCache_Load_NoFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(origDir) }()
+
+	cache := NewToolCache()
+	err := cache.Load()
+	if err != nil {
+		t.Errorf("Load should not return error when no cache file exists, got: %v", err)
+	}
+}
+
+func TestToolCache_Save_SizeLimit(t *testing.T) {
+	tmpDir := t.TempDir()
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(origDir) }()
+
+	// 大量のキャッシュエントリを作成（10MB超を狙う）
+	cache := NewToolCache()
+	bigContent := strings.Repeat("x", 500*1024) // 500KB per entry
+	for i := 0; i < 25; i++ {
+		f := filepath.Join(tmpDir, fmt.Sprintf("big_%d.txt", i))
+		os.WriteFile(f, []byte(bigContent), 0644)
+		cache.SetFile(f, bigContent)
+	}
+
+	// Save → 10MB超ならスキップ
+	if err := cache.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	cacheFile := filepath.Join(tmpDir, ".xelyon", "cache", "tool_cache.json")
+	if _, err := os.Stat(cacheFile); !os.IsNotExist(err) {
+		// ファイルが存在する場合はサイズが10MB以下であること
+		info, _ := os.Stat(cacheFile)
+		if info != nil && info.Size() > int64(maxCacheFileSize) {
+			t.Errorf("cache file should not exceed %d bytes, got %d", maxCacheFileSize, info.Size())
+		}
+	}
+}
