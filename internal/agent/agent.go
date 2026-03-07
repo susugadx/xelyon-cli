@@ -93,9 +93,9 @@ func NewAgent(model string, provider api.Provider, headless bool) *Agent {
 		storage = nil
 	}
 
-	// MCP初期化（設定で制御）
+	// MCP初期化（設定と環境変数で制御）
 	mcpManager := mcp.NewManager()
-	if cfg.MCP.Enabled && (!headless || cfg.MCP.Headless) {
+	if cfg.MCP.Enabled && (!headless || cfg.MCP.Headless) && os.Getenv("XELYON_DISABLE_MCP") != "1" {
 		if err := mcpManager.LoadConfig(); err != nil {
 			yellow.Printf("Warning: Failed to load MCP config: %v\n", err)
 		}

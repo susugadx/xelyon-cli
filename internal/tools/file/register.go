@@ -22,14 +22,14 @@ func (t *ReadFileTool) Parameters() map[string]interface{} {
 	return map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
-			"path":       map[string]interface{}{"type": "string", "description": "Absolute or relative file path to read"},
-			"start_line": map[string]interface{}{"type": "integer", "description": "Start line number (1-indexed, optional)"},
-			"end_line":   map[string]interface{}{"type": "integer", "description": "End line number (1-indexed, optional)"},
+			"path":       map[string]interface{}{"type": "string", "description": "Absolute or relative file path to read. Omitting start_line/end_line reads up to the first 300 lines."},
+			"start_line": map[string]interface{}{"type": "integer", "description": "Start line number (1-indexed). Use only when the target section is already known."},
+			"end_line":   map[string]interface{}{"type": "integer", "description": "End line number (1-indexed). Omit to read up to 300 lines from start_line."},
 			"paths": map[string]interface{}{
 				"type":        "array",
 				"items":       map[string]interface{}{"type": "string"},
 				"maxItems":    MaxReadFilesPaths,
-				"description": "Read multiple files in one call (max 10). Format: \"path\" or \"path:start-end\". When paths is provided, path/start_line/end_line are ignored.",
+				"description": "Read multiple files in one call (max 10). Format: \"path\" or \"path:start-end\". Prefer plain \"path\" when investigating; add ranges only for known sections. When paths is provided, path/start_line/end_line are ignored.",
 			},
 		},
 		"required":             []string{},

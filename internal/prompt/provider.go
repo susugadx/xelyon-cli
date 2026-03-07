@@ -2,63 +2,69 @@ package prompt
 
 import "strings"
 
-// commonRulesBlock は複数プロバイダーで共通する重要ルール
-// Gemini・DeepSeek 等、指示を無視しやすいモデルに冒頭で強制注入する
-const commonRulesBlock = `1. **search_code → str_replace(line-range) is PREFERRED** — search_code marks matched lines as read, no read_file needed. Use read_file → str_replace(old_str) only when line-range is not applicable
-2. **Before changing/deleting any function or type**: search_code to check ALL usages first — NOT bash (grep/rg)
-3. **After bash verification (test/build), WAIT for output** - do NOT declare completion before seeing results
-4. **Follow project rules in Project Context** - they are LAW - override all other guidelines
-5. **Code search → search_code, NOT bash (grep/rg)** - search_code caches results, marks read-ranges for str_replace, and detects [def]/[ref] blocks
-6. **Same change in multiple places? Use str_replace batch mode** - pass edits=[{old_str,new_str},...] in one call instead of repeating str_replace for each location
+// commonExecutionBlock は複数プロバイダーで共通する実行指針
+// ガードよりも、調査と編集の進め方を短く揃える
+const commonExecutionBlock = `### Shared Notes
+- When the exact edit target is already known, prefer search_code -> str_replace(line-range)
+- When scope is unclear, read broadly first; omit line ranges to read up to 300 lines
+- Check all usages before changing shared functions or types
+- Wait for build/test output before declaring completion
+- Follow project-specific rules from Project Context when present
 `
 
 // commonBoostBlock は全プロバイダー共通の品質向上ルール
 // ガード（〜するな）ではなく、判断力を引き出すブースト指示
-const commonBoostBlock = `## Quality Standards
-- Before reporting completion, self-review: verify all changed functions have callers updated (search_code refs), error paths return meaningful messages
-- When the project has established patterns (validation, defaults, tests), follow those patterns for new additions — do NOT invent new patterns
+const commonBoostBlock = `### Quality Boost
+- For investigation tasks, read enough surrounding code to understand callers, types, helpers, and tests
+- If you are unsure between two edit scopes, gather more context before editing; an extra read is cheaper than a wrong patch
+- Match existing project patterns for validation, defaults, and tests
+- Before reporting completion, self-review changed call sites, imports, and error paths
 `
 
 // providerPrefixes はプロバイダー別のシステムプロンプトプレフィックス
-// クリティカルルールを冒頭に注入してモデルの遵守率を上げる
-// 共通ルール (commonRulesBlock) + プロバイダー固有ルール + 共通ブースト (commonBoostBlock) で構成
+// Workflow Rules の直前に挿入し、共通指針 + プロバイダー固有ノート + 共通ブーストで構成する
 var providerPrefixes = map[string]string{
-	"gemini": "## ⚠️ ABSOLUTE RULES (NEVER SKIP)\n" + commonRulesBlock +
-		"7. **Tool calls must be actual JSON, NOT inside markdown code blocks** - " + "```json...```" + " is for display only\n" +
-		"8. **NEVER claim you ran a command without actually calling bash** - always show the actual tool call\n" +
-		"9. **ALWAYS respond in the same language as the user's message** - if the user writes in Japanese, respond in Japanese\n" +
-		"10. **NEVER explain or show code before tool calls** - Just call the tool directly without code blocks or previews\n" +
-		"11. **NEVER create derivative/copy files** (e.g. file.go_temp, file.go.new) - edit the original file directly with str_replace\n" +
-		"12. **str_replace old_str must be UNIQUE** - include surrounding lines (before/after) so the match is unambiguous\n\n" +
+	"gemini": "## Provider Notes\n" + commonExecutionBlock +
+		"### Gemini-specific\n" +
+		"- Tool calls must be raw JSON, not markdown code blocks\n" +
+		"- Do not claim a command ran unless you actually called bash\n" +
+		"- Respond in the same language as the user's message\n" +
+		"- Call tools directly for action requests instead of previewing hypothetical edits\n" +
+		"- Edit the original file directly; do not create derivative temp files\n" +
+		"- Make str_replace old_str unique by including enough surrounding context\n\n" +
 		commonBoostBlock,
-	"deepseek": "## ⚠️ ABSOLUTE RULES (NEVER SKIP)\n" + commonRulesBlock +
-		"7. **When function calling is enabled, ALWAYS use tool calls for file operations** - do NOT output raw JSON or describe actions in plain text\n" +
-		"8. **Fix ALL errors completely** - NEVER leave errors with excuses like \"due to time constraints\" or \"for brevity\"\n" +
-		"9. **After str_replace, if unused imports appear, remove them IMMEDIATELY** - do NOT proceed with unused import errors\n" +
-		"10. **NEVER output file contents or explain code between read_file and str_replace — call str_replace IMMEDIATELY after reading** - no commentary, no summaries, just the tool call\n" +
-		"11. **You are already in the project root directory. Do NOT prefix commands with `cd /path && `** - just run commands directly (e.g. `grep -n 'pattern' file.go`, NOT `cd /home/user/project && grep -n 'pattern' file.go`)\n\n" +
+	"deepseek": "## Provider Notes\n" + commonExecutionBlock +
+		"### DeepSeek-specific\n" +
+		"- When function calling is enabled, use tool calls for file operations instead of plain-text descriptions\n" +
+		"- Fix errors completely; do not leave TODO-style excuses such as \"for brevity\" or \"due to time constraints\"\n" +
+		"- After str_replace, remove any unused imports introduced by the edit before moving on\n" +
+		"- After read_file, either edit or gather more context; do not echo file contents back to the user\n" +
+		"- You are already in the project root directory; do not prefix commands with `cd /path &&`\n\n" +
 		commonBoostBlock,
-	"groq": "## ⚠️ ABSOLUTE RULES (NEVER SKIP)\n" + commonRulesBlock +
-		"7. **Tool calls MUST be raw JSON** - NEVER wrap in markdown code blocks or use XML like `<tool_name><param>value</param></tool_name>`\n" +
-		"8. **ALWAYS respond in the same language as the user's message** - if the user writes in Japanese, respond in Japanese\n\n" +
+	"groq": "## Provider Notes\n" + commonExecutionBlock +
+		"### Groq-specific\n" +
+		"- Tool calls must be raw JSON, not markdown code blocks or XML wrappers\n" +
+		"- Respond in the same language as the user's message\n\n" +
 		commonBoostBlock,
-	"openai": "## ⚠️ ABSOLUTE RULES (NEVER SKIP)\n" + commonRulesBlock +
-		"7. **When user instructs execution, execute immediately WITHOUT asking for confirmation** - do NOT say \"shall I proceed?\" or \"is it OK to continue?\". Make your own judgment and proceed. When in doubt, choose the safer option and move forward\n" +
-		"8. **NEVER delete existing logic to fix a compile error** - if a function call, branch, or import causes a compile error, fix the root cause (wrong signature, missing import, type mismatch). Do NOT remove the code and justify it with comments like \"handled elsewhere\" or \"not needed here\"\n" +
-		"9. **When recovering from errors, fix ONLY the broken line/call** - do NOT rewrite the entire file with write_file. Use str_replace on the specific error site. Preserve all existing branches and logic\n" +
-		"10. **For str_replace with mixed Japanese/JSON/backticks, split into small edits** - large multi-encoding replacements risk byte corruption. Apply one logical change per str_replace call\n" +
-		"11. **When removing functionality, clean up ALL remnants in the same task** - unused imports, dead code, empty init() functions, orphaned dependencies in go.mod. \"Does not affect behavior\" is NOT a valid reason to leave dead code — unused dependencies cause CI failures (go mod tidy, npm audit, etc.)\n\n" +
+	"openai": "## Provider Notes\n" + commonExecutionBlock +
+		"### OpenAI-specific\n" +
+		"- When the user instructs execution, proceed without asking for confirmation; choose the safer reasonable option and move forward\n" +
+		"- Fix compile errors at the root cause; do not delete existing logic just to make the build pass\n" +
+		"- When recovering from errors, prefer targeted str_replace edits over whole-file rewrites\n" +
+		"- For str_replace with mixed Japanese, JSON, or backticks, split the change into smaller edits to avoid byte corruption\n" +
+		"- When removing functionality, clean up dead imports, dead code, and orphaned dependencies in the same task\n\n" +
 		commonBoostBlock,
 	// "claude" と "anthropic" は同一プロバイダー（anthropic はエイリアス）
 	// GetProviderPrefix() 内でエイリアス正規化するため "claude" のみ定義
-	"claude": "## ⚠️ ABSOLUTE RULES (NEVER SKIP)\n" + commonRulesBlock +
-		"7. **File search → search_code, NOT bash (grep/rg/find)** - bash is for build/test/run commands ONLY (e.g. make, go test, npm run)\n" +
-		"8. **File reading → read_file, NOT bash (cat/head/tail/sed)** - use read_file with line ranges for targeted reading\n" +
-		"9. **ALWAYS use parallel tool calls** - When operations are independent (e.g., searching def + ref, editing multiple files, reading + searching), call ALL tools in a single response. One-at-a-time calls for independent operations are FORBIDDEN — they double token costs\n\n" +
+	"claude": "## Provider Notes\n" + commonExecutionBlock +
+		"### Claude-specific\n" +
+		"- Use search_code for file search instead of bash grep/rg/find\n" +
+		"- Use read_file for file contents instead of cat/head/tail/sed\n" +
+		"- When operations are independent, use parallel tool calls in a single response\n\n" +
 		commonBoostBlock,
 	// openrouter / ollama: 裏のモデルが不定だが、共通ルール + ブーストは害がない
-	"openrouter": "## ⚠️ ABSOLUTE RULES (NEVER SKIP)\n" + commonRulesBlock + "\n" + commonBoostBlock,
-	"ollama":     "## ⚠️ ABSOLUTE RULES (NEVER SKIP)\n" + commonRulesBlock + "\n" + commonBoostBlock,
+	"openrouter": "## Provider Notes\n" + commonExecutionBlock + "\n" + commonBoostBlock,
+	"ollama":     "## Provider Notes\n" + commonExecutionBlock + "\n" + commonBoostBlock,
 }
 
 // providerAliases はプロバイダー名のエイリアスを正規名に変換するマップ
@@ -77,11 +83,17 @@ func GetProviderPrefix(provider string) string {
 	return providerPrefixes[name]
 }
 
-// BuildProviderSystemPrompt はプロバイダー別プレフィックスをシステムプロンプトの冒頭に注入する
+const workflowRulesHeader = "\n## Workflow Rules\n"
+
+// BuildProviderSystemPrompt はプロバイダー別ノートを Workflow Rules の直前に挿入する
 func BuildProviderSystemPrompt(base, providerName string) string {
-	prefix := GetProviderPrefix(providerName)
+	prefix := strings.TrimSpace(GetProviderPrefix(providerName))
 	if prefix == "" {
 		return base
 	}
-	return prefix + base
+	idx := strings.Index(base, workflowRulesHeader)
+	if idx < 0 {
+		return prefix + "\n\n" + base
+	}
+	return base[:idx] + "\n\n" + prefix + "\n" + base[idx:]
 }

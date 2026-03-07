@@ -17,12 +17,18 @@ type Message struct {
 func BuildSummaryPrompt(messages []Message, truncateLen int) string {
 	var sb strings.Builder
 
-	sb.WriteString("Summarize this conversation history into a concise summary.\n\n")
+	sb.WriteString("Summarize this conversation into a concise continuation context.\n\n")
 	sb.WriteString("Include:\n")
-	sb.WriteString("- Key decisions made\n")
-	sb.WriteString("- Files created/modified\n")
-	sb.WriteString("- Remaining tasks (if any)\n\n")
-	sb.WriteString("Output as bullet points (5-8 items max).\n")
+	sb.WriteString("- Current task and progress status\n")
+	sb.WriteString("- Key decisions and their rationale\n")
+	sb.WriteString("- Files created/modified and what changed\n")
+	sb.WriteString("- Remaining work (if any)\n\n")
+	sb.WriteString("Exclude:\n")
+	sb.WriteString("- Failed attempts and error messages unless they are still unresolved\n")
+	sb.WriteString("- Tool outputs that are no longer relevant\n")
+	sb.WriteString("- Exploratory searches that did not affect the final direction\n\n")
+	sb.WriteString("Output as bullet points (5-10 items).\n")
+	sb.WriteString("Focus on what the next assistant turn needs to know.\n")
 	sb.WriteString("Respond in the same language as the conversation.\n\n")
 	sb.WriteString("---\n\n")
 
