@@ -35,6 +35,36 @@ func TestExecuteReadFiles_Normal(t *testing.T) {
 	}
 }
 
+func TestExecuteReadFiles_ParallelOrder(t *testing.T) {
+	setupTestMocks(t)
+	tmpDir := t.TempDir()
+
+	testutil.CreateTempFile(t, tmpDir, "first.txt", "first content")
+	testutil.CreateTempFile(t, tmpDir, "second.txt", "second content")
+	testutil.CreateTempFile(t, tmpDir, "third.txt", "third content")
+
+	paths := []string{
+		filepath.Join(tmpDir, "third.txt"),
+		filepath.Join(tmpDir, "first.txt"),
+		filepath.Join(tmpDir, "second.txt"),
+	}
+
+	output := ExecuteReadFiles(paths)
+
+	prevIndex := -1
+	for _, path := range paths {
+		header := "📄 File: " + path
+		idx := strings.Index(output, header)
+		if idx < 0 {
+			t.Fatalf("expected output to contain header %q, got: %s", header, output)
+		}
+		if idx <= prevIndex {
+			t.Fatalf("expected headers to follow input order, got: %s", output)
+		}
+		prevIndex = idx
+	}
+}
+
 func TestExecuteReadFiles_EmptyPaths(t *testing.T) {
 	output := ExecuteReadFiles([]string{})
 	if !strings.Contains(output, "Error: paths is empty") {

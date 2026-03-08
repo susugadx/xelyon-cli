@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
+
+	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
 // MaxReadFilesPaths は一度に読み込めるファイル数の上限
@@ -69,26 +72,44 @@ func ExecuteReadFiles(paths []string) string {
 	}
 
 	budget := perFileBudget(len(paths))
+	sem := make(chan struct{}, tools.MaxParallelTools)
+
+	type readResult struct {
+		entry  string
+		result string
+	}
+	results := make([]readResult, len(paths))
+	var wg sync.WaitGroup
+
+	for i, entry := range paths {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(idx int, rawEntry string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+
+			path, startLine, endLine := parsePath(rawEntry)
+
+			// 明示的な行範囲指定がない場合、バジェットを適用
+			if startLine == 0 && endLine == 0 && budget < MaxReadLines {
+				endLine = budget
+			}
+
+			results[idx] = readResult{
+				entry:  rawEntry,
+				result: ExecuteReadFile(path, startLine, endLine),
+			}
+		}(i, entry)
+	}
+	wg.Wait()
 
 	var sb strings.Builder
-	for i, entry := range paths {
+	for i, result := range results {
 		if i > 0 {
 			sb.WriteString("\n")
 		}
-
-		path, startLine, endLine := parsePath(entry)
-
-		// 明示的な行範囲指定がない場合、バジェットを適用
-		if startLine == 0 && endLine == 0 && budget < MaxReadLines {
-			endLine = budget
-		}
-
-		// ファイルヘッダー
-		fmt.Fprintf(&sb, "📄 File: %s\n", entry)
-
-		// 既存の ExecuteReadFile を再利用
-		result := ExecuteReadFile(path, startLine, endLine)
-		sb.WriteString(result)
+		fmt.Fprintf(&sb, "📄 File: %s\n", result.entry)
+		sb.WriteString(result.result)
 	}
 
 	printReadStatus("📄 Read: %d files\n", len(paths))
