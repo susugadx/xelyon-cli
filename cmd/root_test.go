@@ -12,6 +12,7 @@ import (
 func resetRootFlagsForTest() {
 	resume = false
 	once = false
+	interactive = false
 	quiet = false
 	providerFlag = ""
 	modelFlag = ""
@@ -24,6 +25,59 @@ func resetRootFlagsForTest() {
 	headless = false
 	noUpdateCheck = false
 	imageFlag = ""
+}
+
+func TestRootCommand_PositionalQueryDefaultsToOnce(t *testing.T) {
+	resetRootFlagsForTest()
+
+	origRunInteractive := runInteractive
+	origRunInteractiveWithResume := runInteractiveWithResume
+	origRunHeadless := runHeadless
+	origRunOnce := runOnce
+	origRunOnceWithImage := runOnceWithImage
+	t.Cleanup(func() {
+		runInteractive = origRunInteractive
+		runInteractiveWithResume = origRunInteractiveWithResume
+		runHeadless = origRunHeadless
+		runOnce = origRunOnce
+		runOnceWithImage = origRunOnceWithImage
+		resetRootFlagsForTest()
+	})
+
+	interactiveCalled := false
+	onceCalled := false
+	runInteractive = func(model string, provider api.Provider, autoApprove bool) {
+		interactiveCalled = true
+	}
+	runInteractiveWithResume = func(model string, provider api.Provider, autoApprove bool) {
+		interactiveCalled = true
+	}
+	runHeadless = func(query string, model string, provider api.Provider) *agent.HeadlessResult {
+		interactiveCalled = true
+		return agent.NewSuccessResult(provider.Name(), model, "", nil, 0)
+	}
+	runOnceWithImage = func(query string, model string, provider api.Provider, imagePath string, autoApprove bool) {
+		interactiveCalled = true
+	}
+	runOnce = func(query string, model string, provider api.Provider, autoApprove bool, quiet bool) error {
+		onceCalled = true
+		if query != "hello" {
+			t.Fatalf("query = %q, want hello", query)
+		}
+		return nil
+	}
+
+	rootCmd.SetArgs([]string{"--provider", "ollama", "--no-update-check", "hello"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if !onceCalled {
+		t.Fatal("expected positional query to use one-shot path")
+	}
+	if interactiveCalled {
+		t.Fatal("interactive path must not be executed for positional one-shot query")
+	}
 }
 
 func TestRootCommand_OnceExecutesSingleTurn(t *testing.T) {
@@ -79,6 +133,53 @@ func TestRootCommand_OnceExecutesSingleTurn(t *testing.T) {
 	}
 }
 
+func TestRootCommand_InteractiveFlagForcesREPLWithPositionalQuery(t *testing.T) {
+	resetRootFlagsForTest()
+
+	origRunInteractive := runInteractive
+	origRunOnce := runOnce
+	t.Cleanup(func() {
+		runInteractive = origRunInteractive
+		runOnce = origRunOnce
+		resetRootFlagsForTest()
+	})
+
+	interactiveCalled := false
+	onceCalled := false
+	runInteractive = func(model string, provider api.Provider, autoApprove bool) {
+		interactiveCalled = true
+	}
+	runOnce = func(query string, model string, provider api.Provider, autoApprove bool, quiet bool) error {
+		onceCalled = true
+		return nil
+	}
+
+	rootCmd.SetArgs([]string{"--interactive", "--provider", "ollama", "--no-update-check", "hello"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if !interactiveCalled {
+		t.Fatal("expected --interactive to use interactive path")
+	}
+	if onceCalled {
+		t.Fatal("one-shot path must not be executed when --interactive is set")
+	}
+}
+
+func TestRootCommand_InteractiveWithOnceReturnsError(t *testing.T) {
+	resetRootFlagsForTest()
+	rootCmd.SetArgs([]string{"--interactive", "--once", "--provider", "ollama", "--no-update-check", "hello"})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for --interactive with --once")
+	}
+	if !strings.Contains(err.Error(), "--interactive cannot be used with --once") {
+		t.Fatalf("unexpected error message: %v", err)
+	}
+}
+
 func TestRootCommand_OnceRequiresQuery(t *testing.T) {
 	resetRootFlagsForTest()
 	rootCmd.SetArgs([]string{"--once", "--no-update-check"})
@@ -99,6 +200,19 @@ func TestRootCommand_OnceWithResumeReturnsError(t *testing.T) {
 	}
 }
 
+func TestRootCommand_ResumeWithPositionalQueryReturnsError(t *testing.T) {
+	resetRootFlagsForTest()
+	rootCmd.SetArgs([]string{"--resume", "--provider", "ollama", "--no-update-check", "hello"})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for --resume with positional query")
+	}
+	if !strings.Contains(err.Error(), "--resume cannot be used with query arguments") {
+		t.Fatalf("unexpected error message: %v", err)
+	}
+}
+
 func TestRootCommand_OnceWithHeadlessReturnsError(t *testing.T) {
 	resetRootFlagsForTest()
 	rootCmd.SetArgs([]string{"--once", "--headless", "--no-update-check", "hello"})
@@ -115,10 +229,54 @@ func TestRootCommand_QuietWithoutOnceReturnsError(t *testing.T) {
 
 	err := rootCmd.Execute()
 	if err == nil {
-		t.Fatal("expected error for --quiet without --once")
+		t.Fatal("expected error for --quiet without one-shot execution")
 	}
-	if !strings.Contains(err.Error(), "--quiet can only be used with --once") {
+	if !strings.Contains(err.Error(), "--quiet can only be used with one-shot execution") {
 		t.Fatalf("unexpected error message: %v", err)
+	}
+}
+
+func TestRootCommand_InteractiveWithQuietReturnsError(t *testing.T) {
+	resetRootFlagsForTest()
+	rootCmd.SetArgs([]string{"--interactive", "--quiet", "--provider", "ollama", "--no-update-check", "hello"})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for --interactive with --quiet")
+	}
+	if !strings.Contains(err.Error(), "--quiet can only be used with one-shot execution") {
+		t.Fatalf("unexpected error message: %v", err)
+	}
+}
+
+func TestRootCommand_QuietWithPositionalQueryUsesImplicitOnce(t *testing.T) {
+	resetRootFlagsForTest()
+
+	origRunOnce := runOnce
+	t.Cleanup(func() {
+		runOnce = origRunOnce
+		resetRootFlagsForTest()
+	})
+
+	called := false
+	runOnce = func(query string, model string, provider api.Provider, autoApprove bool, quiet bool) error {
+		called = true
+		if !quiet {
+			t.Fatal("expected quiet to be passed to one-shot execution")
+		}
+		if query != "hello" {
+			t.Fatalf("query = %q, want hello", query)
+		}
+		return nil
+	}
+
+	rootCmd.SetArgs([]string{"--quiet", "--provider", "ollama", "--no-update-check", "hello"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if !called {
+		t.Fatal("expected implicit one-shot execution")
 	}
 }
 
@@ -168,5 +326,101 @@ func TestRootCommand_OnceErrorPropagation(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "something went wrong") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRootCommand_PositionalQueryUsesHeadlessInJSONMode(t *testing.T) {
+	resetRootFlagsForTest()
+
+	origRunHeadless := runHeadless
+	origRunOnce := runOnce
+	origRunInteractive := runInteractive
+	t.Cleanup(func() {
+		runHeadless = origRunHeadless
+		runOnce = origRunOnce
+		runInteractive = origRunInteractive
+		resetRootFlagsForTest()
+	})
+
+	headlessCalled := false
+	onceCalled := false
+	interactiveCalled := false
+	runHeadless = func(query string, model string, provider api.Provider) *agent.HeadlessResult {
+		headlessCalled = true
+		if query != "hello" {
+			t.Fatalf("query = %q, want hello", query)
+		}
+		return agent.NewSuccessResult(provider.Name(), model, "ok", nil, 0)
+	}
+	runOnce = func(query string, model string, provider api.Provider, autoApprove bool, quiet bool) error {
+		onceCalled = true
+		return nil
+	}
+	runInteractive = func(model string, provider api.Provider, autoApprove bool) {
+		interactiveCalled = true
+	}
+
+	rootCmd.SetArgs([]string{"--output-format", "json", "--provider", "ollama", "--no-update-check", "hello"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if !headlessCalled {
+		t.Fatal("expected JSON mode to use headless path")
+	}
+	if onceCalled {
+		t.Fatal("one-shot path must not be executed in JSON mode")
+	}
+	if interactiveCalled {
+		t.Fatal("interactive path must not be executed in JSON mode")
+	}
+}
+
+func TestRootCommand_ImageFlagPreservesImagePath(t *testing.T) {
+	resetRootFlagsForTest()
+
+	origRunOnce := runOnce
+	origRunInteractive := runInteractive
+	origRunOnceWithImage := runOnceWithImage
+	t.Cleanup(func() {
+		runOnce = origRunOnce
+		runInteractive = origRunInteractive
+		runOnceWithImage = origRunOnceWithImage
+		resetRootFlagsForTest()
+	})
+
+	imageCalled := false
+	onceCalled := false
+	interactiveCalled := false
+	runOnce = func(query string, model string, provider api.Provider, autoApprove bool, quiet bool) error {
+		onceCalled = true
+		return nil
+	}
+	runInteractive = func(model string, provider api.Provider, autoApprove bool) {
+		interactiveCalled = true
+	}
+	runOnceWithImage = func(query string, model string, provider api.Provider, imagePath string, autoApprove bool) {
+		imageCalled = true
+		if query != "describe" {
+			t.Fatalf("query = %q, want describe", query)
+		}
+		if imagePath != "/tmp/image.png" {
+			t.Fatalf("imagePath = %q, want /tmp/image.png", imagePath)
+		}
+	}
+
+	rootCmd.SetArgs([]string{"--image", "/tmp/image.png", "--provider", "ollama", "--no-update-check", "describe"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if !imageCalled {
+		t.Fatal("expected image path to be executed when --image is set")
+	}
+	if onceCalled {
+		t.Fatal("text one-shot path must not be executed when --image is set")
+	}
+	if interactiveCalled {
+		t.Fatal("interactive path must not be executed when --image is set")
 	}
 }

@@ -27,6 +27,7 @@ import (
 var (
 	resume        bool
 	once          bool
+	interactive   bool
 	quiet         bool
 	providerFlag  string
 	modelFlag     string
@@ -80,6 +81,7 @@ var rootCmd = &cobra.Command{
 Examples:
   xelyon                                           # Interactive mode (DeepSeek Chat)
   xelyon "explain this project"                    # One-shot query
+  xelyon --interactive "explain this project"      # Force interactive REPL
   xelyon --provider gemini --model gemini-2.5-flash # Use Gemini
   xelyon --provider openai --model gpt-5.2         # Use OpenAI GPT-5.2
   xelyon -p deepseek -m deepseek-chat             # Short flags`,
@@ -97,9 +99,20 @@ Examples:
 			outputFormat = "json"
 		}
 
-		// --quiet は --once 専用
-		if quiet && !once {
-			return fmt.Errorf("--quiet can only be used with --once")
+		implicitOnce := outputFormat == "text" && len(args) > 0 && imageFlag == "" && !interactive && !resume
+		effectiveOnce := once || implicitOnce
+
+		if interactive && once {
+			return fmt.Errorf("--interactive cannot be used with --once")
+		}
+
+		if resume && len(args) > 0 && outputFormat == "text" && imageFlag == "" {
+			return fmt.Errorf("--resume cannot be used with query arguments")
+		}
+
+		// --quiet はワンショット実行専用
+		if quiet && !effectiveOnce {
+			return fmt.Errorf("--quiet can only be used with one-shot execution")
 		}
 
 		if once {
@@ -186,7 +199,12 @@ Examples:
 			return nil
 		}
 
-		// クエリ引数付き → 対話モード（初期クエリとして処理）
+		// テキストクエリ引数付き → デフォルトでワンショット実行
+		if implicitOnce {
+			return runOnce(strings.Join(args, " "), model, provider, autoApprove, quiet)
+		}
+
+		// クエリ引数付き + --interactive → 対話モード
 		runInteractive(model, provider, autoApprove)
 		return nil
 	},
@@ -201,10 +219,11 @@ func init() {
 	rootCmd.Flags().StringVarP(&providerFlag, "provider", "p", "", providerHelp)
 	rootCmd.Flags().StringVarP(&modelFlag, "model", "m", "", "Specify model name (e.g., gpt-4o, gemini-2.0-flash-exp)")
 
-	// 新規: --resume / --once / --quiet フラグ
+	// 新規: --resume / --once / --interactive / --quiet フラグ
 	rootCmd.Flags().BoolVar(&resume, "resume", false, "Resume last session")
-	rootCmd.Flags().BoolVar(&once, "once", false, "Execute exactly one query turn and exit")
-	rootCmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress header and status output (requires --once)")
+	rootCmd.Flags().BoolVar(&once, "once", false, "Execute exactly one query turn and exit (compatibility alias for positional queries)")
+	rootCmd.Flags().BoolVar(&interactive, "interactive", false, "Force interactive REPL even when query arguments are provided")
+	rootCmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress header and status output for one-shot execution")
 
 	// 新規: 設定カスタマイズフラグ
 	rootCmd.Flags().IntVar(&loopThreshold, "loop-threshold", 0, "Loop detection threshold (default: 3)")
