@@ -3,7 +3,9 @@ package search
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -1018,6 +1020,63 @@ func TestSearchCode_IncludeHidden(t *testing.T) {
 	})
 	if !strings.Contains(result, ".env") {
 		t.Fatalf("hidden files should be included with IncludeHidden, got: %s", result)
+	}
+}
+
+func TestSearchCode_GrepFallback_DoesNotExcludeRootDot(t *testing.T) {
+	setupSearchTestMocks(t)
+
+	if runtime.GOOS == "windows" {
+		t.Skip("grep fallback regression test is linux/mac specific")
+	}
+
+	grepPath, err := exec.LookPath("grep")
+	if err != nil {
+		t.Skip("grep not available")
+	}
+
+	binDir := t.TempDir()
+	if err := os.Symlink(grepPath, filepath.Join(binDir, "grep")); err != nil {
+		t.Skipf("failed to prepare isolated grep PATH: %v", err)
+	}
+
+	dir := t.TempDir()
+	oldwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(oldwd)
+	})
+
+	t.Setenv("PATH", binDir)
+
+	file1 := filepath.Join(dir, "search_target.go")
+	if err := os.WriteFile(file1, []byte("package main\n\nfunc maybeAutoCompress() {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	result := ExecuteSearchCode(SearchOptions{
+		Pattern:     "maybeAutoCompress",
+		Path:        ".",
+		FilePattern: "*.go",
+		CtxLines:    0,
+		TokenBudget: 3000,
+		IsRegex:     true,
+		Multiline:   false,
+	})
+
+	if strings.Contains(result, "No matches found") {
+		t.Fatalf("expected grep fallback to find match from root dot, got: %s", result)
+	}
+	if !strings.Contains(result, "Warning: ripgrep (rg) not found; using grep fallback mode.") {
+		t.Fatalf("expected grep fallback warning, got: %s", result)
+	}
+	if !strings.Contains(result, "search_target.go") {
+		t.Fatalf("expected file name in result, got: %s", result)
 	}
 }
 

@@ -522,7 +522,14 @@ func executeSearch(pattern string, opts SearchOptions, maxCountPerFile int) (str
 	if !opts.IncludeHidden {
 		// rg のデフォルト挙動に寄せる。GNU grep でのみ --exclude 系を使用。
 		if isGNUGrep() {
-			args = append(args, "--exclude=.*", "--exclude-dir=.*")
+			// ".*" をそのまま使うと開始ディレクトリ "." 自体も除外されてしまうため、
+			// "." / ".." を除いた hidden file/dir パターンだけを指定する。
+			args = append(args,
+				"--exclude=.[!.]*",
+				"--exclude=..?*",
+				"--exclude-dir=.[!.]*",
+				"--exclude-dir=..?*",
+			)
 		} else {
 			warnings = append(warnings, "Warning: hidden-file exclusion is not fully supported in grep fallback mode on non-GNU grep")
 		}
