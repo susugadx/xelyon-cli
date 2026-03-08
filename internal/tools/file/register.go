@@ -89,7 +89,7 @@ func (t *WriteFileTool) Parameters() map[string]interface{} {
 }
 
 func (t *WriteFileTool) Run(execCtx tools.ExecutionContext, args map[string]string) (string, *tools.FileChange, error) {
-	result, err := ExecuteWriteFileWithOutput(execCtx.Output(), args["path"], args["content"])
+	result, err := ExecuteWriteFileWithPromptIO(execCtx.PromptIO(), args["path"], args["content"])
 	if err != nil {
 		return result, nil, err
 	}
@@ -139,11 +139,9 @@ func (t *StrReplaceTool) Parameters() map[string]interface{} {
 }
 
 func (t *StrReplaceTool) Run(execCtx tools.ExecutionContext, args map[string]string) (string, *tools.FileChange, error) {
-	out := execCtx.Output()
-
 	// batch edits モード: old_str 空 + edits 非空
 	if args["old_str"] == "" && args["edits"] != "" {
-		result, err := executeBatchEditsWithOutput(out, args["path"], args["edits"])
+		result, err := executeBatchEditsWithPromptIO(execCtx.PromptIO(), args["path"], args["edits"])
 		if err != nil {
 			return result, nil, err
 		}
@@ -166,7 +164,7 @@ func (t *StrReplaceTool) Run(execCtx tools.ExecutionContext, args map[string]str
 	}
 
 	// 従来のシングル編集 or 行レンジ
-	result, err := ExecuteStrReplaceWithOutput(out, args["path"], args["old_str"], args["new_str"], args["start_line"], args["end_line"])
+	result, err := ExecuteStrReplaceWithPromptIO(execCtx.PromptIO(), args["path"], args["old_str"], args["new_str"], args["start_line"], args["end_line"])
 	if err != nil {
 		return result, nil, err
 	}
@@ -201,7 +199,7 @@ func (t *DeleteFileTool) Parameters() map[string]interface{} {
 }
 
 func (t *DeleteFileTool) Run(execCtx tools.ExecutionContext, args map[string]string) (string, *tools.FileChange, error) {
-	result, err := ExecuteDeleteFileWithOutput(execCtx.Output(), args["path"])
+	result, err := ExecuteDeleteFileWithPromptIO(execCtx.PromptIO(), args["path"])
 	if err != nil {
 		return result, nil, err
 	}

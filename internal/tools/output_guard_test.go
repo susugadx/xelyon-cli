@@ -20,10 +20,9 @@ func TestToolPackages_AvoidDirectProcessOutput(t *testing.T) {
 	root := filepath.Dir(currentFile)
 
 	allowedFiles := map[string]bool{
-		"common/interactive.go": true,
-		"common/output.go":      true,
-		"context.go":            true,
-		"execute.go":            true,
+		"common/output.go": true,
+		"context.go":       true,
+		"execute.go":       true,
 	}
 
 	fset := token.NewFileSet()
@@ -66,7 +65,7 @@ func TestToolPackages_AvoidDirectProcessOutput(t *testing.T) {
 			}
 
 			switch pkgIdent.Name + "." + sel.Sel.Name {
-			case "fmt.Print", "fmt.Printf", "fmt.Println", "os.Stdout", "color.Output":
+			case "fmt.Print", "fmt.Printf", "fmt.Println", "os.Stdin", "os.Stdout", "color.Output":
 				pos := fset.Position(sel.Pos())
 				violations = append(violations, rel+":"+itoa(pos.Line)+": "+pkgIdent.Name+"."+sel.Sel.Name)
 			}

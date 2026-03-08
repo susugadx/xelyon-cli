@@ -32,8 +32,10 @@ func (a *Agent) toolExecutionContext(stdout, stderr io.Writer) tools.ExecutionCo
 	return tools.ExecutionContext{
 		ProviderName: a.ProviderName,
 		Model:        a.CurrentModel,
+		Stdin:        os.Stdin,
 		Stdout:       stdout,
 		Stderr:       stderr,
+		PromptReader: a.mlReader,
 	}
 }
 

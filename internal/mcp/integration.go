@@ -116,7 +116,7 @@ func (w *MCPToolWrapper) Run(execCtx tools.ExecutionContext, args map[string]str
 			w.toolName, w.serverName, strings.Join(argsDisplay, ", "))
 	}
 
-	decision := common.ConfirmWithAutoApproveDecision(execCtx.Output(), toolName, message)
+	decision := common.ConfirmWithAutoApproveDecision(execCtx.PromptIO(), toolName, message)
 	switch decision.Action {
 	case common.ConfirmNo:
 		return "User rejected MCP tool execution", nil, nil

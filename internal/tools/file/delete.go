@@ -9,6 +9,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/lsp"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 	toolslsp "github.com/susugadx/xelyon-cli/internal/tools/lsp"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // ExecuteDeleteFile deletes a file permanently
@@ -18,6 +19,14 @@ func ExecuteDeleteFile(path string) (string, error) {
 
 // ExecuteDeleteFileWithOutput deletes a file permanently with explicit output writers.
 func ExecuteDeleteFileWithOutput(out common.Output, path string) (string, error) {
+	return ExecuteDeleteFileWithPromptIO(ui.NewPromptIO(nil, out.StdoutWriter(), out.StderrWriter(), nil), path)
+}
+
+// ExecuteDeleteFileWithPromptIO deletes a file permanently with explicit interactive I/O.
+func ExecuteDeleteFileWithPromptIO(promptIO ui.PromptIO, path string) (string, error) {
+	promptIO = ui.NewPromptIO(promptIO.In, promptIO.Out, promptIO.Err, promptIO.Reader)
+	out := common.NewOutput(promptIO.Out, promptIO.Err)
+
 	// パストラバーサル防止
 	absPath, err := common.ValidatePath(path)
 	if err != nil {
@@ -121,7 +130,7 @@ func ExecuteDeleteFileWithOutput(out common.Output, path string) (string, error)
 		}
 	}
 
-	dec := common.ConfirmWithAutoApproveDecision(out, "delete_file", "Delete this file? / このファイルを削除しますか？")
+	dec := common.ConfirmWithAutoApproveDecision(promptIO, "delete_file", "Delete this file? / このファイルを削除しますか？")
 	switch dec.Action {
 	case common.ConfirmYes:
 		// continue

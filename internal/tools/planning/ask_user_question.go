@@ -52,7 +52,7 @@ func (t *AskUserQuestionTool) Parameters() map[string]interface{} {
 }
 
 // Run はツールを実行
-func (t *AskUserQuestionTool) Run(_ tools.ExecutionContext, args map[string]string) (string, *tools.FileChange, error) {
+func (t *AskUserQuestionTool) Run(execCtx tools.ExecutionContext, args map[string]string) (string, *tools.FileChange, error) {
 	question := args["question"]
 	questionType := args["question_type"]
 	optionsJSON := args["options"]
@@ -82,7 +82,7 @@ func (t *AskUserQuestionTool) Run(_ tools.ExecutionContext, args map[string]stri
 		Default:      defaultOption,
 	}
 
-	answer, err := q.Ask()
+	answer, err := q.AskWithIO(execCtx.PromptIO())
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to get user answer: %w", err)
 	}

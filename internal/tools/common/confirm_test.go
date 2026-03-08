@@ -1,19 +1,29 @@
 package common
 
 import (
+	"bytes"
+	"io"
 	"os"
+	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // setupTestConfirm はSimpleConfirmをモックする
 func setupTestConfirm(t *testing.T, result bool) {
 	t.Helper()
 	original := SimpleConfirm
+	originalWithIO := SimpleConfirmWithIO
 	SimpleConfirm = func(msg string) bool {
+		return result
+	}
+	SimpleConfirmWithIO = func(_ ui.PromptIO, msg string) bool {
 		return result
 	}
 	t.Cleanup(func() {
 		SimpleConfirm = original
+		SimpleConfirmWithIO = originalWithIO
 	})
 }
 
@@ -109,5 +119,51 @@ func TestConfirmWithFeedback_No(t *testing.T) {
 	}
 	if image != nil {
 		t.Error("expected image to be nil")
+	}
+}
+
+func TestConfirmWithIO_UsesInjectedIO(t *testing.T) {
+	os.Setenv("XELYON_INTERACTIVE_CONFIRM", "0")
+	t.Cleanup(func() {
+		os.Unsetenv("XELYON_INTERACTIVE_CONFIRM")
+	})
+
+	var out bytes.Buffer
+	dec := ConfirmWithIO(ui.NewPromptIO(strings.NewReader("y\n"), &out, io.Discard, nil), "Proceed?")
+	if dec.Action != ConfirmYes {
+		t.Fatalf("expected ConfirmYes, got %q", dec.Action)
+	}
+	if !strings.Contains(out.String(), "Proceed? (y/n): ") {
+		t.Fatalf("expected prompt in injected stdout, got %q", out.String())
+	}
+}
+
+func TestConfirmWithIO_DiscardDoesNotLeakProcessStdout(t *testing.T) {
+	os.Setenv("XELYON_INTERACTIVE_CONFIRM", "0")
+	t.Cleanup(func() {
+		os.Unsetenv("XELYON_INTERACTIVE_CONFIRM")
+	})
+
+	oldStdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe() error = %v", err)
+	}
+	os.Stdout = w
+	t.Cleanup(func() {
+		os.Stdout = oldStdout
+	})
+
+	dec := ConfirmWithIO(ui.NewPromptIO(strings.NewReader("y\n"), io.Discard, io.Discard, nil), "Proceed?")
+	_ = w.Close()
+
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, r)
+
+	if dec.Action != ConfirmYes {
+		t.Fatalf("expected ConfirmYes, got %q", dec.Action)
+	}
+	if buf.Len() != 0 {
+		t.Fatalf("expected no process stdout leak, got %q", buf.String())
 	}
 }

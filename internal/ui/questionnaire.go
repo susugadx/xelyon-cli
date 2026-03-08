@@ -26,24 +26,30 @@ type QuestionnaireAnswer struct {
 
 // Ask は質問を表示し、回答を収集
 func (q *Questionnaire) Ask() (*QuestionnaireAnswer, error) {
+	return q.AskWithIO(DefaultPromptIO())
+}
+
+// AskWithIO は入出力先を指定して質問を表示し、回答を収集する。
+func (q *Questionnaire) AskWithIO(promptIO PromptIO) (*QuestionnaireAnswer, error) {
+	promptIO = normalizePromptIO(promptIO)
 	StopGlobalSpinner()
-	fmt.Print("\033[?25h") // カーソル表示
+	_, _ = fmt.Fprint(promptIO.Out, "\033[?25h") // カーソル表示
 
 	switch q.QuestionType {
 	case "single_choice":
-		return q.askSingleChoice()
+		return q.askSingleChoice(promptIO)
 	case "multi_choice":
-		return q.askMultiChoice()
+		return q.askMultiChoice(promptIO)
 	case "free_text":
-		return q.askFreeText()
+		return q.askFreeText(promptIO)
 	default:
 		return nil, fmt.Errorf("unknown question type: %s", q.QuestionType)
 	}
 }
 
 // askSingleChoice は単一選択質問を処理
-func (q *Questionnaire) askSingleChoice() (*QuestionnaireAnswer, error) {
-	fmt.Printf("\n%s?%s %s\n\n", colorCyan, colorReset, q.Question)
+func (q *Questionnaire) askSingleChoice(promptIO PromptIO) (*QuestionnaireAnswer, error) {
+	_, _ = fmt.Fprintf(promptIO.Out, "\n%s?%s %s\n\n", colorCyan, colorReset, q.Question)
 
 	defaultIdx := -1
 	for i, opt := range q.Options {
@@ -52,54 +58,60 @@ func (q *Questionnaire) askSingleChoice() (*QuestionnaireAnswer, error) {
 			marker = "▶ "
 			defaultIdx = i
 		}
-		fmt.Printf("  %s%d. %s%s\n", marker, i+1, opt, colorReset)
+		_, _ = fmt.Fprintf(promptIO.Out, "  %s%d. %s%s\n", marker, i+1, opt, colorReset)
 	}
 
 	if defaultIdx >= 0 {
-		fmt.Printf("\n%s  %s%s\n", colorDim, i18n.T("q.default_hint", q.Options[defaultIdx]), colorReset)
+		_, _ = fmt.Fprintf(promptIO.Out, "\n%s  %s%s\n", colorDim, i18n.T("q.default_hint", q.Options[defaultIdx]), colorReset)
 	}
-	fmt.Printf("%s%s:%s ", colorCyan, i18n.T("q.choice_prompt"), colorReset)
+	_, _ = fmt.Fprintf(promptIO.Out, "%s%s:%s ", colorCyan, i18n.T("q.choice_prompt"), colorReset)
 
-	input := q.readInput()
+	input, err := q.readInput(promptIO)
+	if err != nil {
+		return nil, err
+	}
 	input = strings.TrimSpace(input)
 
 	// 空入力 = デフォルト
 	if input == "" && defaultIdx >= 0 {
-		fmt.Printf("%s✓ %s%s\n", colorGreen, q.Options[defaultIdx], colorReset)
+		_, _ = fmt.Fprintf(promptIO.Out, "%s✓ %s%s\n", colorGreen, q.Options[defaultIdx], colorReset)
 		return &QuestionnaireAnswer{Value: q.Options[defaultIdx]}, nil
 	}
 
 	// 数字入力
 	if num, err := strconv.Atoi(input); err == nil && num >= 1 && num <= len(q.Options) {
-		fmt.Printf("%s✓ %s%s\n", colorGreen, q.Options[num-1], colorReset)
+		_, _ = fmt.Fprintf(promptIO.Out, "%s✓ %s%s\n", colorGreen, q.Options[num-1], colorReset)
 		return &QuestionnaireAnswer{Value: q.Options[num-1]}, nil
 	}
 
 	// テキストマッチ
 	for _, opt := range q.Options {
 		if strings.EqualFold(input, opt) {
-			fmt.Printf("%s✓ %s%s\n", colorGreen, opt, colorReset)
+			_, _ = fmt.Fprintf(promptIO.Out, "%s✓ %s%s\n", colorGreen, opt, colorReset)
 			return &QuestionnaireAnswer{Value: opt}, nil
 		}
 	}
 
 	// 無効な入力 → 最初の選択肢
-	fmt.Printf("%s✓ %s (default)%s\n", colorGreen, q.Options[0], colorReset)
+	_, _ = fmt.Fprintf(promptIO.Out, "%s✓ %s (default)%s\n", colorGreen, q.Options[0], colorReset)
 	return &QuestionnaireAnswer{Value: q.Options[0]}, nil
 }
 
 // askMultiChoice は複数選択質問を処理
-func (q *Questionnaire) askMultiChoice() (*QuestionnaireAnswer, error) {
-	fmt.Printf("\n%s?%s %s\n", colorCyan, colorReset, q.Question)
-	fmt.Printf("%s  %s%s\n\n", colorDim, i18n.T("q.multi_prompt"), colorReset)
+func (q *Questionnaire) askMultiChoice(promptIO PromptIO) (*QuestionnaireAnswer, error) {
+	_, _ = fmt.Fprintf(promptIO.Out, "\n%s?%s %s\n", colorCyan, colorReset, q.Question)
+	_, _ = fmt.Fprintf(promptIO.Out, "%s  %s%s\n\n", colorDim, i18n.T("q.multi_prompt"), colorReset)
 
 	for i, opt := range q.Options {
-		fmt.Printf("  %d. %s\n", i+1, opt)
+		_, _ = fmt.Fprintf(promptIO.Out, "  %d. %s\n", i+1, opt)
 	}
 
-	fmt.Printf("\n%s%s:%s ", colorCyan, i18n.T("q.choice_prompt"), colorReset)
+	_, _ = fmt.Fprintf(promptIO.Out, "\n%s%s:%s ", colorCyan, i18n.T("q.choice_prompt"), colorReset)
 
-	input := q.readInput()
+	input, err := q.readInput(promptIO)
+	if err != nil {
+		return nil, err
+	}
 	input = strings.TrimSpace(input)
 
 	if input == "" {
@@ -126,38 +138,35 @@ func (q *Questionnaire) askMultiChoice() (*QuestionnaireAnswer, error) {
 		}
 	}
 
-	fmt.Printf("%s✓ %s%s\n", colorGreen, i18n.T("q.selected", strings.Join(unique, ", ")), colorReset)
+	_, _ = fmt.Fprintf(promptIO.Out, "%s✓ %s%s\n", colorGreen, i18n.T("q.selected", strings.Join(unique, ", ")), colorReset)
 	return &QuestionnaireAnswer{Values: unique, IsMultiple: true}, nil
 }
 
 // askFreeText はフリーテキスト質問を処理
-func (q *Questionnaire) askFreeText() (*QuestionnaireAnswer, error) {
-	fmt.Printf("\n%s?%s %s\n", colorCyan, colorReset, q.Question)
+func (q *Questionnaire) askFreeText(promptIO PromptIO) (*QuestionnaireAnswer, error) {
+	_, _ = fmt.Fprintf(promptIO.Out, "\n%s?%s %s\n", colorCyan, colorReset, q.Question)
 
 	if q.Default != "" {
-		fmt.Printf("%s  %s%s\n", colorDim, i18n.T("q.default_hint", q.Default), colorReset)
+		_, _ = fmt.Fprintf(promptIO.Out, "%s  %s%s\n", colorDim, i18n.T("q.default_hint", q.Default), colorReset)
 	}
-	fmt.Printf("%s%s:%s ", colorCyan, i18n.T("q.text_prompt"), colorReset)
+	_, _ = fmt.Fprintf(promptIO.Out, "%s%s:%s ", colorCyan, i18n.T("q.text_prompt"), colorReset)
 
-	input := q.readInput()
+	input, err := q.readInput(promptIO)
+	if err != nil {
+		return nil, err
+	}
 	input = strings.TrimSpace(input)
 
 	if input == "" && q.Default != "" {
-		fmt.Printf("%s✓ %s%s\n", colorGreen, q.Default, colorReset)
+		_, _ = fmt.Fprintf(promptIO.Out, "%s✓ %s%s\n", colorGreen, q.Default, colorReset)
 		return &QuestionnaireAnswer{Value: q.Default}, nil
 	}
 
-	fmt.Printf("%s✓ %s%s\n", colorGreen, input, colorReset)
+	_, _ = fmt.Fprintf(promptIO.Out, "%s✓ %s%s\n", colorGreen, input, colorReset)
 	return &QuestionnaireAnswer{Value: input}, nil
 }
 
 // readInput は入力を読み取る
-func (q *Questionnaire) readInput() string {
-	if reader := GetGlobalReader(); reader != nil {
-		line, err := reader.ReadSimpleLine()
-		if err == nil {
-			return line
-		}
-	}
-	return readLineFromStdin()
+func (q *Questionnaire) readInput(promptIO PromptIO) (string, error) {
+	return promptIO.ReadSimpleLine()
 }

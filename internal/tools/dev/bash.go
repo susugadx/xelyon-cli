@@ -12,6 +12,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // Auto-executable safe commands
@@ -71,11 +72,19 @@ func ExecuteBash(command string) string {
 
 // ExecuteBashWithOutput executes a shell command with explicit output writers.
 func ExecuteBashWithOutput(out common.Output, command string) string {
+	return ExecuteBashWithPromptIO(ui.NewPromptIO(nil, out.StdoutWriter(), out.StderrWriter(), nil), command)
+}
+
+// ExecuteBashWithPromptIO executes a shell command with explicit interactive I/O.
+func ExecuteBashWithPromptIO(promptIO ui.PromptIO, command string) string {
+	promptIO = ui.NewPromptIO(promptIO.In, promptIO.Out, promptIO.Err, promptIO.Reader)
+	out := common.NewOutput(promptIO.Out, promptIO.Err)
+
 	if command == "" {
 		return "Error: command is empty"
 	}
 
-	if msg, ok := checkAndConfirmBash(out, command); !ok {
+	if msg, ok := checkAndConfirmBash(promptIO, command); !ok {
 		return msg
 	}
 
@@ -127,11 +136,19 @@ func ExecuteBashWithContext(ctx context.Context, command string) string {
 
 // ExecuteBashWithContextAndOutput はContext対応でシェルコマンドを実行する。
 func ExecuteBashWithContextAndOutput(ctx context.Context, out common.Output, command string) string {
+	return ExecuteBashWithContextAndPromptIO(ctx, ui.NewPromptIO(nil, out.StdoutWriter(), out.StderrWriter(), nil), command)
+}
+
+// ExecuteBashWithContextAndPromptIO はContext対応でシェルコマンドを実行する。
+func ExecuteBashWithContextAndPromptIO(ctx context.Context, promptIO ui.PromptIO, command string) string {
+	promptIO = ui.NewPromptIO(promptIO.In, promptIO.Out, promptIO.Err, promptIO.Reader)
+	out := common.NewOutput(promptIO.Out, promptIO.Err)
+
 	if command == "" {
 		return "Error: command is empty"
 	}
 
-	if msg, ok := checkAndConfirmBash(out, command); !ok {
+	if msg, ok := checkAndConfirmBash(promptIO, command); !ok {
 		return msg
 	}
 
@@ -302,7 +319,9 @@ func executeBashWithStreaming(out common.Output, cmd *exec.Cmd) (string, error) 
 
 // checkAndConfirmBash は共通のセキュリティチェック + 確認UIを実行
 // 返り値: ("", true) = 実行OK, (errorMsg, false) = ブロック/キャンセル
-func checkAndConfirmBash(out common.Output, command string) (string, bool) {
+func checkAndConfirmBash(promptIO ui.PromptIO, command string) (string, bool) {
+	promptIO = ui.NewPromptIO(promptIO.In, promptIO.Out, promptIO.Err, promptIO.Reader)
+	out := common.NewOutput(promptIO.Out, promptIO.Err)
 	cfg := config.GetGlobalConfig().Bash
 
 	for _, blocked := range alwaysBlockedCommands {
@@ -334,7 +353,7 @@ func checkAndConfirmBash(out common.Output, command string) (string, bool) {
 	out.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	out.Yellow.Println("⚠️  Warning: This command may modify your system / 警告: システムに変更が加わる可能性があります")
 
-	dec := common.Confirm("Run this command? / 実行しますか？")
+	dec := common.ConfirmWithIO(promptIO, "Run this command? / 実行しますか？")
 	switch dec.Action {
 	case common.ConfirmYes:
 		return "", true

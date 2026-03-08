@@ -29,6 +29,8 @@ const (
 // MultilineReader handles multiline input with bracketed paste mode and ``` markers
 type MultilineReader struct {
 	reader                *bufio.Reader
+	input                 io.Reader
+	out                   io.Writer
 	bracketedPasteEnabled bool
 	fd                    int // file descriptor for stdin (for raw mode)
 	// Raw mode channels (initialized lazily, reused across calls)
@@ -39,12 +41,22 @@ type MultilineReader struct {
 
 // NewMultilineReader creates a new multiline reader
 func NewMultilineReader(r io.Reader) *MultilineReader {
+	return NewMultilineReaderWithOutput(r, os.Stdout)
+}
+
+// NewMultilineReaderWithOutput creates a new multiline reader with an explicit output writer.
+func NewMultilineReaderWithOutput(r io.Reader, out io.Writer) *MultilineReader {
 	fd := -1
 	if f, ok := r.(*os.File); ok {
 		fd = int(f.Fd())
 	}
+	if out == nil {
+		out = os.Stdout
+	}
 	return &MultilineReader{
 		reader:                bufio.NewReaderSize(r, 1024*1024), // 1MB buffer
+		input:                 r,
+		out:                   out,
 		bracketedPasteEnabled: false,
 		fd:                    fd,
 		byteChan:              nil,
@@ -64,8 +76,12 @@ func (m *MultilineReader) initRawModeChannels() {
 
 	go func() {
 		b := make([]byte, 1)
+		input := m.input
+		if input == nil {
+			input = os.Stdin
+		}
 		for {
-			_, err := os.Stdin.Read(b)
+			_, err := input.Read(b)
 			if err != nil {
 				m.errChan <- err
 				return
@@ -88,7 +104,7 @@ func (m *MultilineReader) EnableBracketedPaste() {
 
 	if m.fd >= 0 && term.IsTerminal(m.fd) {
 		// Use WriteString for immediate, unbuffered output
-		_, _ = os.Stdout.WriteString(bracketedPasteEnable)
+		m.writeString(bracketedPasteEnable)
 		m.bracketedPasteEnabled = true
 		if debug {
 			fmt.Fprintf(os.Stderr, "[DEBUG] Sent: \\x1b[?2004h (bracketed paste enable)\n")
@@ -102,7 +118,7 @@ func (m *MultilineReader) EnableBracketedPaste() {
 // This sends the escape sequence to the terminal to disable the mode
 func (m *MultilineReader) DisableBracketedPaste() {
 	if m.bracketedPasteEnabled {
-		_, _ = os.Stdout.WriteString(bracketedPasteDisable)
+		m.writeString(bracketedPasteDisable)
 		m.bracketedPasteEnabled = false
 	}
 }
@@ -131,7 +147,7 @@ func stripAllBracketedPasteMarkers(input string) string {
 // 3. Single line input (default)
 // All bracketed paste markers are automatically stripped from input
 func (m *MultilineReader) ReadInput(prompt string) (string, error) {
-	fmt.Print(prompt)
+	m.print(prompt)
 
 	// If bracketed paste mode is enabled and we're in a terminal, use raw mode
 	if m.bracketedPasteEnabled && m.fd >= 0 && term.IsTerminal(m.fd) {
@@ -207,7 +223,7 @@ func (m *MultilineReader) readWithBracketedPaste() (string, error) {
 			// Ctrl+C - always handle first (even in paste mode)
 			if b == 0x03 {
 				_ = term.Restore(m.fd, oldState)
-				fmt.Print("^C\r\n")
+				m.print("^C\r\n")
 				return "", ErrInterrupted
 			}
 
@@ -229,7 +245,7 @@ func (m *MultilineReader) readWithBracketedPaste() (string, error) {
 					// Check for Ctrl+C even inside escape sequence detection
 					if nb == 0x03 {
 						_ = term.Restore(m.fd, oldState)
-						fmt.Print("^C\r\n")
+						m.print("^C\r\n")
 						return "", ErrInterrupted
 					}
 					escBuf = append(escBuf, nb)
@@ -266,7 +282,7 @@ func (m *MultilineReader) readWithBracketedPaste() (string, error) {
 						// Echo pasted content to terminal so user can see it
 						// In raw mode, need \r\n for proper line breaks
 						displayContent := strings.ReplaceAll(content, "\n", "\r\n")
-						fmt.Print(displayContent)
+						m.print(displayContent)
 						pasteContent.Reset()
 						escBuf = nil
 						markerDetected = true
@@ -295,13 +311,13 @@ func (m *MultilineReader) readWithBracketedPaste() (string, error) {
 				if buf.Len() == 0 {
 					return "", io.EOF
 				}
-				fmt.Print("\r\n")
+				m.print("\r\n")
 				return buf.String(), nil
 			}
 
 			// Enter
 			if b == '\r' || b == '\n' {
-				fmt.Print("\r\n")
+				m.print("\r\n")
 				content := buf.String()
 				content = stripAllBracketedPasteMarkers(content)
 				if content == "```" {
@@ -321,7 +337,7 @@ func (m *MultilineReader) readWithBracketedPaste() (string, error) {
 						buf.Write(data[:len(data)-size])
 						w := runewidth.RuneWidth(r)
 						for i := 0; i < w; i++ {
-							fmt.Print("\b \b")
+							m.print("\b \b")
 						}
 					}
 				}
@@ -335,7 +351,7 @@ func (m *MultilineReader) readWithBracketedPaste() (string, error) {
 			if b < 0x80 {
 				// ASCII: 印字可能文字のみエコー
 				if b >= 0x20 && b != 0x7f {
-					fmt.Print(string(b))
+					m.print(string(b))
 				}
 			} else if b >= 0xC0 {
 				// UTF-8マルチバイトの先頭: 何もしない（継続バイトを待つ）
@@ -346,17 +362,17 @@ func (m *MultilineReader) readWithBracketedPaste() (string, error) {
 				if n >= 2 && utf8.Valid(data[n-2:]) {
 					r, _ := utf8.DecodeLastRune(data)
 					if r != utf8.RuneError {
-						fmt.Print(string(r))
+						m.print(string(r))
 					}
 				} else if n >= 3 && utf8.Valid(data[n-3:]) {
 					r, _ := utf8.DecodeLastRune(data)
 					if r != utf8.RuneError {
-						fmt.Print(string(r))
+						m.print(string(r))
 					}
 				} else if n >= 4 && utf8.Valid(data[n-4:]) {
 					r, _ := utf8.DecodeLastRune(data)
 					if r != utf8.RuneError {
-						fmt.Print(string(r))
+						m.print(string(r))
 					}
 				}
 			}
@@ -372,7 +388,7 @@ func (m *MultilineReader) readWithBracketedPaste() (string, error) {
 
 // readMultilineWithMarker handles explicit multiline mode with ``` markers
 func (m *MultilineReader) readMultilineWithMarker() (string, error) {
-	fmt.Println("📝 Multiline input mode (end with ``` on a new line)")
+	m.println("📝 Multiline input mode (end with ``` on a new line)")
 
 	// When raw mode goroutine is active, enter raw mode to suppress
 	// terminal echo (prevents paste markers from being displayed)
@@ -390,7 +406,7 @@ func (m *MultilineReader) readMultilineWithMarker() (string, error) {
 	lineNum := 1
 
 	for {
-		fmt.Printf("%3d | ", lineNum)
+		m.printf("%3d | ", lineNum)
 
 		var line string
 		var err error
@@ -420,7 +436,7 @@ func (m *MultilineReader) readMultilineWithMarker() (string, error) {
 	}
 
 	result := strings.Join(lines, "\n")
-	fmt.Printf("✅ Captured %d lines\n", len(lines))
+	m.printf("✅ Captured %d lines\n", len(lines))
 	return result, nil
 }
 
@@ -497,7 +513,7 @@ func (m *MultilineReader) readLineFromChannel() (string, error) {
 		case b := <-m.byteChan:
 			// Enter (raw mode では '\r' が来る)
 			if b == '\n' || b == '\r' {
-				fmt.Print("\r\n") // 改行をエコー
+				m.print("\r\n") // 改行をエコー
 				return StripBracketedPaste(string(buf)), nil
 			}
 
@@ -527,7 +543,7 @@ func (m *MultilineReader) readLineFromChannel() (string, error) {
 					// Echo non-marker bytes
 					for _, eb := range escBuf {
 						if eb >= 0x20 && eb < 0x80 && eb != 0x7f {
-							fmt.Print(string(eb))
+							m.print(string(eb))
 						}
 					}
 				}
@@ -542,7 +558,7 @@ func (m *MultilineReader) readLineFromChannel() (string, error) {
 						buf = buf[:len(buf)-size]
 						w := runewidth.RuneWidth(r)
 						for i := 0; i < w; i++ {
-							fmt.Print("\b \b")
+							m.print("\b \b")
 						}
 					}
 				}
@@ -554,7 +570,7 @@ func (m *MultilineReader) readLineFromChannel() (string, error) {
 			// UTF-8対応エコー
 			if b < 0x80 {
 				if b >= 0x20 && b != 0x7f {
-					fmt.Print(string(b))
+					m.print(string(b))
 				}
 			} else if b >= 0xC0 {
 				// UTF-8マルチバイトの先頭: 何もしない
@@ -564,17 +580,17 @@ func (m *MultilineReader) readLineFromChannel() (string, error) {
 				if n >= 2 && utf8.Valid(buf[n-2:]) {
 					r, _ := utf8.DecodeLastRune(buf)
 					if r != utf8.RuneError {
-						fmt.Print(string(r))
+						m.print(string(r))
 					}
 				} else if n >= 3 && utf8.Valid(buf[n-3:]) {
 					r, _ := utf8.DecodeLastRune(buf)
 					if r != utf8.RuneError {
-						fmt.Print(string(r))
+						m.print(string(r))
 					}
 				} else if n >= 4 && utf8.Valid(buf[n-4:]) {
 					r, _ := utf8.DecodeLastRune(buf)
 					if r != utf8.RuneError {
-						fmt.Print(string(r))
+						m.print(string(r))
 					}
 				}
 			}
@@ -605,4 +621,27 @@ func (m *MultilineReader) Reader() *bufio.Reader {
 // IsBracketedPasteEnabled returns whether bracketed paste mode is enabled
 func (m *MultilineReader) IsBracketedPasteEnabled() bool {
 	return m.bracketedPasteEnabled
+}
+
+func (m *MultilineReader) outputWriter() io.Writer {
+	if m.out == nil {
+		return os.Stdout
+	}
+	return m.out
+}
+
+func (m *MultilineReader) print(args ...interface{}) {
+	_, _ = fmt.Fprint(m.outputWriter(), args...)
+}
+
+func (m *MultilineReader) printf(format string, args ...interface{}) {
+	_, _ = fmt.Fprintf(m.outputWriter(), format, args...)
+}
+
+func (m *MultilineReader) println(args ...interface{}) {
+	_, _ = fmt.Fprintln(m.outputWriter(), args...)
+}
+
+func (m *MultilineReader) writeString(s string) {
+	_, _ = io.WriteString(m.outputWriter(), s)
 }

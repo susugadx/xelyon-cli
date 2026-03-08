@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // setupTestMocks はテスト用の共通モックを設定
@@ -35,10 +36,15 @@ func setupTestMocks(t *testing.T) {
 // setupTestConfirm はconfirm関数をモック
 func setupTestConfirm(t *testing.T, result bool) {
 	originalConfirm := common.SimpleConfirm
+	originalConfirmWithIO := common.SimpleConfirmWithIO
 	common.SimpleConfirm = func(msg string) bool {
+		return result
+	}
+	common.SimpleConfirmWithIO = func(_ ui.PromptIO, msg string) bool {
 		return result
 	}
 	t.Cleanup(func() {
 		common.SimpleConfirm = originalConfirm
+		common.SimpleConfirmWithIO = originalConfirmWithIO
 	})
 }

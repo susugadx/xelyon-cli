@@ -38,8 +38,13 @@ func IsInteractiveModeEnabled() bool {
 // 外部パッケージからも使用可能なようにエクスポート
 // NOTE: テスト時は環境変数 XELYON_INTERACTIVE_CONFIRM=0 で無効化される
 var ConfirmInteractive = func(message string) ConfirmResult {
+	return ConfirmInteractiveWithIO(ui.DefaultPromptIO(), message)
+}
+
+// ConfirmInteractiveWithIO は入出力先を指定した拡張確認プロンプトを実行する。
+func ConfirmInteractiveWithIO(promptIO ui.PromptIO, message string) ConfirmResult {
 	// 矢印キー選択UIを使用
-	result, err := ui.ConfirmSelector(message)
+	result, err := ui.ConfirmSelectorWithIO(promptIO, message)
 	if err != nil {
 		// キャンセルまたはエラー時はnoを返す
 		return ConfirmResult{Action: "no"}
@@ -47,14 +52,7 @@ var ConfirmInteractive = func(message string) ConfirmResult {
 
 	// comment選択時はコメント入力モードへ
 	if result == "comment" {
-		var reader *bufio.Reader
-		if globalReader := ui.GetGlobalReader(); globalReader != nil {
-			// globalReader.FlushInput()
-			reader = globalReader.GetBufioReader()
-		} else {
-			reader = bufio.NewReader(os.Stdin)
-		}
-		comment, image := ReadMultiLineComment(reader)
+		comment, image := ReadMultiLineCommentWithIO(promptIO)
 		return ConfirmResult{Action: "comment", Comment: comment, Image: image}
 	}
 	return ConfirmResult{Action: result}
@@ -65,11 +63,22 @@ var ConfirmInteractive = func(message string) ConfirmResult {
 // image:プレフィックスで画像を指定可能
 // /paste（または /p）で Paste Mode を起動して長文を挿入可能
 func ReadMultiLineComment(reader *bufio.Reader) (string, *ImageData) {
-	Cyan.Println("--------------------------------------------")
-	Cyan.Println("Enter your comment (press Enter twice to finish):")
-	Cyan.Println("   Tip: Use 'image:/path/to/file.png' to attach an image")
-	Cyan.Println("   Tip: Use '/paste' (or /p) to enter Paste Mode and insert long text")
-	Cyan.Println("--------------------------------------------")
+	return readMultiLineComment(ui.DefaultPromptIO(), reader)
+}
+
+// ReadMultiLineCommentWithIO は入出力先を指定して複数行コメントを読み取る。
+func ReadMultiLineCommentWithIO(promptIO ui.PromptIO) (string, *ImageData) {
+	promptIO = ui.NewPromptIO(promptIO.In, promptIO.Out, promptIO.Err, promptIO.Reader)
+	return readMultiLineComment(promptIO, nil)
+}
+
+func readMultiLineComment(promptIO ui.PromptIO, reader *bufio.Reader) (string, *ImageData) {
+	out := NewOutput(promptIO.Out, promptIO.Err)
+	out.Cyan.Println("--------------------------------------------")
+	out.Cyan.Println("Enter your comment (press Enter twice to finish):")
+	out.Cyan.Println("   Tip: Use 'image:/path/to/file.png' to attach an image")
+	out.Cyan.Println("   Tip: Use '/paste' (or /p) to enter Paste Mode and insert long text")
+	out.Cyan.Println("--------------------------------------------")
 
 	cfg := config.GetGlobalConfig()
 	maxLines := cfg.Paste.MaxLines
@@ -79,19 +88,22 @@ func ReadMultiLineComment(reader *bufio.Reader) (string, *ImageData) {
 	var imageData *ImageData
 	emptyLineCount := 0
 	totalBytes := 0
+	if promptIO.Reader == nil && reader == nil {
+		reader = promptIO.BufioReader()
+	}
 
 	for {
-		Yellow.Print("> ")
+		out.Yellow.Print("> ")
 
 		var line string
 		var err error
-		if globalReader := ui.GetGlobalReader(); globalReader != nil {
-			line, err = globalReader.ReadSimpleLine()
+		if promptIO.Reader != nil {
+			line, err = promptIO.Reader.ReadSimpleLine()
 		} else {
 			line, err = reader.ReadString('\n')
 			if err == nil {
 				line = strings.TrimRight(line, "\r\n")
-				line = stripBracketedPaste(line)
+				line = ui.StripBracketedPaste(line)
 			}
 		}
 		if err != nil {
@@ -106,24 +118,24 @@ func ReadMultiLineComment(reader *bufio.Reader) (string, *ImageData) {
 			var content string
 			var cancelled bool
 			var err error
-			if globalReader := ui.GetGlobalReader(); globalReader != nil {
-				content, cancelled, err = pm.CaptureWithMultilineReader(globalReader, os.Stdout)
+			if promptIO.Reader != nil {
+				content, cancelled, err = pm.CaptureWithMultilineReader(promptIO.Reader, promptIO.Out)
 			} else {
-				content, cancelled, err = pm.Capture(os.Stdin, os.Stdout)
+				content, cancelled, err = pm.CaptureWithReader(reader, promptIO.Out)
 			}
 			if err != nil {
-				Red.Printf("Paste Mode error: %v\n", err)
+				out.Red.Printf("Paste Mode error: %v\n", err)
 				continue
 			}
 			if cancelled {
-				Yellow.Println("Cancelled - input discarded")
+				out.Yellow.Println("Cancelled - input discarded")
 				continue
 			}
 
 			content = strings.ReplaceAll(content, "\r\n", "\n")
 			content = strings.TrimRight(content, "\n")
 			if content == "" {
-				Yellow.Println("No content captured")
+				out.Yellow.Println("No content captured")
 				continue
 			}
 
@@ -135,16 +147,16 @@ func ReadMultiLineComment(reader *bufio.Reader) (string, *ImageData) {
 			emptyLineCount = 0
 
 			if len(lines) >= maxLines {
-				Yellow.Printf("Max lines (%d) reached\n", maxLines)
+				out.Yellow.Printf("Max lines (%d) reached\n", maxLines)
 				goto done
 			}
 			if totalBytes >= maxBytes {
-				Yellow.Printf("Max size (%d bytes) reached\n", maxBytes)
+				out.Yellow.Printf("Max size (%d bytes) reached\n", maxBytes)
 				goto done
 			}
 
-			Green.Printf("Inserted %d lines from Paste Mode into comment\n", len(pastedLines))
-			Cyan.Println("Back to comment input (finish with empty line x2)")
+			out.Green.Printf("Inserted %d lines from Paste Mode into comment\n", len(pastedLines))
+			out.Cyan.Println("Back to comment input (finish with empty line x2)")
 			continue
 		}
 
@@ -167,12 +179,12 @@ func ReadMultiLineComment(reader *bufio.Reader) (string, *ImageData) {
 
 			img, err := LoadImage(imagePath)
 			if err != nil {
-				Red.Printf("Failed to load image: %v\n", err)
+				out.Red.Printf("Failed to load image: %v\n", err)
 				lines = append(lines, line)
 				totalBytes += len(line) + 1
 			} else {
 				imageData = img
-				Green.Printf("Image loaded: %s (%s)\n", img.Path, FormatSize(img.Size))
+				out.Green.Printf("Image loaded: %s (%s)\n", img.Path, FormatSize(img.Size))
 			}
 		} else {
 			lines = append(lines, line)
@@ -180,11 +192,11 @@ func ReadMultiLineComment(reader *bufio.Reader) (string, *ImageData) {
 		}
 
 		if len(lines) >= maxLines {
-			Yellow.Printf("Max lines (%d) reached\n", maxLines)
+			out.Yellow.Printf("Max lines (%d) reached\n", maxLines)
 			goto done
 		}
 		if totalBytes >= maxBytes {
-			Yellow.Printf("Max size (%d bytes) reached\n", maxBytes)
+			out.Yellow.Printf("Max size (%d bytes) reached\n", maxBytes)
 			goto done
 		}
 	}
@@ -196,6 +208,6 @@ done:
 	}
 
 	comment := strings.Join(lines, "\n")
-	Cyan.Println("--------------------------------------------")
+	out.Cyan.Println("--------------------------------------------")
 	return comment, imageData
 }

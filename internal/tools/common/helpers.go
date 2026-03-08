@@ -6,15 +6,6 @@ import (
 	"time"
 )
 
-// stripBracketedPaste removes bracketed paste escape sequences from input.
-func stripBracketedPaste(input string) string {
-	input = strings.ReplaceAll(input, "\x1b[200~", "")
-	input = strings.ReplaceAll(input, "\x1b[201~", "")
-	input = strings.ReplaceAll(input, "^[[200~", "")
-	input = strings.ReplaceAll(input, "^[[201~", "")
-	return input
-}
-
 // GetCurrentTime returns the current time
 func GetCurrentTime() time.Time {
 	return time.Now()

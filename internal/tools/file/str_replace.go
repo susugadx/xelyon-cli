@@ -34,6 +34,14 @@ func ExecuteStrReplace(path, oldStr, newStr, startLineStr, endLineStr string) (s
 
 // ExecuteStrReplaceWithOutput は出力先を指定してファイル内の文字列を置換する。
 func ExecuteStrReplaceWithOutput(out common.Output, path, oldStr, newStr, startLineStr, endLineStr string) (string, error) {
+	return ExecuteStrReplaceWithPromptIO(ui.NewPromptIO(nil, out.StdoutWriter(), out.StderrWriter(), nil), path, oldStr, newStr, startLineStr, endLineStr)
+}
+
+// ExecuteStrReplaceWithPromptIO は入出力先を指定してファイル内の文字列を置換する。
+func ExecuteStrReplaceWithPromptIO(promptIO ui.PromptIO, path, oldStr, newStr, startLineStr, endLineStr string) (string, error) {
+	promptIO = ui.NewPromptIO(promptIO.In, promptIO.Out, promptIO.Err, promptIO.Reader)
+	out := common.NewOutput(promptIO.Out, promptIO.Err)
+
 	if path == "" {
 		return "Error: path is required", nil
 	}
@@ -155,7 +163,7 @@ func ExecuteStrReplaceWithOutput(out common.Output, path, oldStr, newStr, startL
 			ui.ShowColoredDiffToWriter(out.StdoutWriter(), beforeStr, newStr, opts)
 		}
 
-		dec := common.ConfirmWithAutoApproveDecision(out, "str_replace", "Apply this replacement? / この置換を適用しますか？")
+		dec := common.ConfirmWithAutoApproveDecision(promptIO, "str_replace", "Apply this replacement? / この置換を適用しますか？")
 		switch dec.Action {
 		case common.ConfirmYes:
 			// continue
@@ -350,7 +358,7 @@ Do not retry the same replacement.`, path), nil
 		}
 	}
 
-	dec2 := common.ConfirmWithAutoApproveDecision(out, "str_replace", "Apply this replacement? / この置換を適用しますか？")
+	dec2 := common.ConfirmWithAutoApproveDecision(promptIO, "str_replace", "Apply this replacement? / この置換を適用しますか？")
 	switch dec2.Action {
 	case common.ConfirmYes:
 		// continue
@@ -479,6 +487,13 @@ func executeBatchEdits(path, editsJSON string) (string, error) {
 }
 
 func executeBatchEditsWithOutput(out common.Output, path, editsJSON string) (string, error) {
+	return executeBatchEditsWithPromptIO(ui.NewPromptIO(nil, out.StdoutWriter(), out.StderrWriter(), nil), path, editsJSON)
+}
+
+func executeBatchEditsWithPromptIO(promptIO ui.PromptIO, path, editsJSON string) (string, error) {
+	promptIO = ui.NewPromptIO(promptIO.In, promptIO.Out, promptIO.Err, promptIO.Reader)
+	out := common.NewOutput(promptIO.Out, promptIO.Err)
+
 	if path == "" {
 		return "Error: path is required", nil
 	}
@@ -573,7 +588,7 @@ func executeBatchEditsWithOutput(out common.Output, path, editsJSON string) (str
 	}
 
 	// 確認
-	dec := common.ConfirmWithAutoApproveDecision(out, "str_replace", "Apply batch replacement? / バッチ置換を適用しますか？")
+	dec := common.ConfirmWithAutoApproveDecision(promptIO, "str_replace", "Apply batch replacement? / バッチ置換を適用しますか？")
 	switch dec.Action {
 	case common.ConfirmYes:
 		// continue

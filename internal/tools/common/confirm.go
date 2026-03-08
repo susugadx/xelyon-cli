@@ -1,11 +1,11 @@
 package common
 
 import (
-	"bufio"
-	"os"
+	"io"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // ConfirmAction is the normalized action returned by confirmation prompts.
@@ -38,21 +38,28 @@ func SetAutoApprove(enabled bool) {
 // 空入力は無視してリトライする（AI実行中のEnter押下対策）
 // ただしEOF時はfalseを返して終了する
 // NOTE: テスト時は setupTestConfirm() でモックされる
-var SimpleConfirm = func(message string) bool {
-	reader := bufio.NewReader(os.Stdin)
+var SimpleConfirmWithIO = func(promptIO ui.PromptIO, message string) bool {
+	promptIO = ui.NewPromptIO(promptIO.In, promptIO.Out, promptIO.Err, promptIO.Reader)
+	reader := promptIO.BufioReader()
+	out := NewOutput(promptIO.Out, promptIO.Err)
 
 	for {
-		Yellow.Printf("%s (y/n): ", message)
+		out.Yellow.Printf("%s (y/n): ", message)
 
 		response, err := reader.ReadString('\n')
 		if err != nil {
+			if err == io.EOF && response != "" {
+				response = ui.StripBracketedPaste(response)
+				response = strings.ToLower(strings.TrimSpace(response))
+				return response == "y" || response == "yes" || response == "ｙ" || response == "はい"
+			}
 			// EOF または読み取りエラー時は終了
 			return false
 		}
-		response = stripBracketedPaste(response)
+		response = ui.StripBracketedPaste(response)
 		response = strings.ToLower(strings.TrimSpace(response))
 
-		// 空入力は無視してリトライ（ただし連続3回で終了）
+		// 空入力は無視してリトライ
 		if response == "" {
 			continue
 		}
@@ -61,19 +68,28 @@ var SimpleConfirm = func(message string) bool {
 	}
 }
 
+var SimpleConfirm = func(message string) bool {
+	return SimpleConfirmWithIO(ui.DefaultPromptIO(), message)
+}
+
 // Confirm asks user for confirmation and optionally captures feedback.
 // If interactive confirmation is enabled, it supports y/n/c and multi-line comments.
 // Otherwise it falls back to legacy y/n confirm.
 func Confirm(message string) ConfirmDecision {
+	return ConfirmWithIO(ui.DefaultPromptIO(), message)
+}
+
+// ConfirmWithIO は入出力先を指定して確認を行う。
+func ConfirmWithIO(promptIO ui.PromptIO, message string) ConfirmDecision {
 	if !IsInteractiveModeEnabled() {
-		approved := SimpleConfirm(message)
+		approved := SimpleConfirmWithIO(promptIO, message)
 		if approved {
 			return ConfirmDecision{Action: ConfirmYes}
 		}
 		return ConfirmDecision{Action: ConfirmNo}
 	}
 
-	res := ConfirmInteractive(message)
+	res := ConfirmInteractiveWithIO(promptIO, message)
 	switch res.Action {
 	case "yes":
 		return ConfirmDecision{Action: ConfirmYes}
@@ -95,7 +111,10 @@ func ConfirmApproved(message string) bool {
 // message: 確認メッセージ
 // - auto-approve の場合は yes を返す
 // - それ以外は Confirm(message) を呼び、y/n/c の結果を返す
-func ConfirmWithAutoApproveDecision(out Output, toolName, message string) ConfirmDecision {
+func ConfirmWithAutoApproveDecision(promptIO ui.PromptIO, toolName, message string) ConfirmDecision {
+	promptIO = ui.NewPromptIO(promptIO.In, promptIO.Out, promptIO.Err, promptIO.Reader)
+	out := NewOutput(promptIO.Out, promptIO.Err)
+
 	// --auto-approve が有効 かつ ツールが自動承認可能な場合
 	if IsAutoApprovable(toolName, GlobalAutoApprove) {
 		safety := GetToolSafety(toolName)
@@ -117,7 +136,7 @@ func ConfirmWithAutoApproveDecision(out Output, toolName, message string) Confir
 	}
 
 	// それ以外は通常の確認プロンプト（対話モード時は y/n/c）
-	return Confirm(message)
+	return ConfirmWithIO(promptIO, message)
 }
 
 // ConfirmWithFeedback は対話的確認を行う（互換ラッパー）

@@ -55,6 +55,7 @@ func RunHeadless(query string, model string, provider api.Provider) *HeadlessRes
 	execCtx := tools.ExecutionContext{
 		ProviderName: provider.Name(),
 		Model:        model,
+		Stdin:        strings.NewReader(""),
 		Stdout:       io.Discard,
 		Stderr:       io.Discard,
 	}

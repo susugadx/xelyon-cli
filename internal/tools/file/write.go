@@ -9,6 +9,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 	"github.com/susugadx/xelyon-cli/internal/tools/lsp"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // ExecuteWriteFile はファイルに書き込む
@@ -18,6 +19,14 @@ func ExecuteWriteFile(path string, content string) (string, error) {
 
 // ExecuteWriteFileWithOutput は出力先を指定してファイルに書き込む。
 func ExecuteWriteFileWithOutput(out common.Output, path string, content string) (string, error) {
+	return ExecuteWriteFileWithPromptIO(ui.NewPromptIO(nil, out.StdoutWriter(), out.StderrWriter(), nil), path, content)
+}
+
+// ExecuteWriteFileWithPromptIO は入出力先を指定してファイルに書き込む。
+func ExecuteWriteFileWithPromptIO(promptIO ui.PromptIO, path string, content string) (string, error) {
+	promptIO = ui.NewPromptIO(promptIO.In, promptIO.Out, promptIO.Err, promptIO.Reader)
+	out := common.NewOutput(promptIO.Out, promptIO.Err)
+
 	if path == "" {
 		return "Error: path is empty", nil
 	}
@@ -94,7 +103,7 @@ func ExecuteWriteFileWithOutput(out common.Output, path string, content string) 
 		}
 	}
 
-	dec := common.ConfirmWithAutoApproveDecision(out, "write_file", "Create/overwrite this file? / このファイルを作成・上書きしますか？")
+	dec := common.ConfirmWithAutoApproveDecision(promptIO, "write_file", "Create/overwrite this file? / このファイルを作成・上書きしますか？")
 	switch dec.Action {
 	case common.ConfirmYes:
 		// continue

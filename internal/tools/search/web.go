@@ -20,7 +20,7 @@ func ExecuteWebSearch(execCtx tools.ExecutionContext, query string) string {
 	out := execCtx.Output()
 
 	// 確認プロンプト（--auto-approve / config で自動承認可能）
-	dec := common.ConfirmWithAutoApproveDecision(out, "web_search",
+	dec := common.ConfirmWithAutoApproveDecision(execCtx.PromptIO(), "web_search",
 		fmt.Sprintf("Execute web search: %s", query))
 	switch dec.Action {
 	case common.ConfirmNo:
