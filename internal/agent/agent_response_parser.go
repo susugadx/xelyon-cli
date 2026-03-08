@@ -92,6 +92,8 @@ func (a *Agent) getLastReasoningContent() string {
 
 // handleNormalResponse は通常の回答（ツール呼び出しなし）を処理
 func (a *Agent) handleNormalResponse(response string) {
+	out := a.output()
+
 	// Compaction が含まれている場合の処理
 	displayResponse := response
 	if strings.Contains(response, "[COMPACTION]") {
@@ -99,7 +101,7 @@ func (a *Agent) handleNormalResponse(response string) {
 		endIdx := strings.Index(response, "[/COMPACTION]")
 		if startIdx != -1 && endIdx != -1 && endIdx > startIdx {
 			// 通知を表示
-			cyan.Println("📦 Context compacted by Claude")
+			cyan.Fprintln(out, "📦 Context compacted by Claude")
 			// 表示用からは削除
 			displayResponse = strings.TrimSpace(response[:startIdx] + response[endIdx+len("[/COMPACTION]"):])
 		}
@@ -129,7 +131,7 @@ func (a *Agent) handleNormalResponse(response string) {
 			a.syncResponseIDToSession()
 			if err := a.storage.Save(a.session); err != nil {
 				// セッション保存失敗を警告（データ損失の可能性を通知）
-				yellow.Printf("⚠️  Warning: Failed to save session: %v\n", err)
+				yellow.Fprintf(out, "⚠️  Warning: Failed to save session: %v\n", err)
 			}
 		}
 	}

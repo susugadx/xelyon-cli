@@ -129,6 +129,12 @@ type ClaudeCompactionCapable interface {
 	SupportsClaudeCompaction() bool
 }
 
+// ClaudeCompactionRuntimeCapable は runtime/config 注入付きで Claude Compaction 判定を行えるプロバイダー。
+type ClaudeCompactionRuntimeCapable interface {
+	// SupportsClaudeCompactionWithContext は request context とモデル名を使って Claude Compaction 対応可否を返す。
+	SupportsClaudeCompactionWithContext(ctx context.Context, model string) bool
+}
+
 // ModelLister はモデル一覧取得に対応するプロバイダーのオプショナルインターフェース
 // 現時点では OllamaProvider のみが実装
 type ModelLister interface {
@@ -143,6 +149,12 @@ type MCPProvider interface {
 
 	// SetMCPTools はMCPツールの定義を設定する
 	SetMCPTools(tools []ToolDefinition)
+}
+
+// RuntimeConfigurable は provider に runtime 単位の設定を注入できるオプショナルインターフェース。
+type RuntimeConfigurable interface {
+	// SetRuntimeConfig は provider が参照する runtime 設定を差し替える。
+	SetRuntimeConfig(cfg *config.Config)
 }
 
 // UsageReporter はトークン使用量レポートに対応するプロバイダーのオプショナルインターフェース
@@ -185,7 +197,7 @@ var knownModelMaxOutputTokens = map[string]int{
 // 3. 既知モデルマップ (knownModelMaxOutputTokens)
 // 4. プロバイダーのデフォルト値 (ProviderModelConfig.MaxOutputTokens)
 func GetMaxOutputTokens(ctx context.Context, providerName, model string) int {
-	cfg := config.GetGlobalConfig()
+	cfg := config.FromContext(ctx)
 
 	maxTokens := 0
 	pName := strings.ToLower(providerName)
@@ -232,6 +244,16 @@ func SupportsImages(providerName string) bool {
 		return false
 	default:
 		return false
+	}
+}
+
+// ApplyRuntimeConfig は provider が RuntimeConfigurable の場合に runtime 設定を注入する。
+func ApplyRuntimeConfig(provider Provider, cfg *config.Config) {
+	if provider == nil || cfg == nil {
+		return
+	}
+	if configurable, ok := provider.(RuntimeConfigurable); ok {
+		configurable.SetRuntimeConfig(cfg)
 	}
 }
 

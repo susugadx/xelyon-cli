@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -29,8 +28,15 @@ func argsToJSON(args map[string]any) string {
 }
 
 func (a *Agent) toolExecutionContext(stdin io.Reader, stdout, stderr io.Writer) tools.ExecutionContext {
+	runtimeUI := a.ui()
 	if stdin == nil {
-		stdin = os.Stdin
+		stdin = runtimeUI.Input()
+	}
+	if stdout == nil {
+		stdout = runtimeUI.Output()
+	}
+	if stderr == nil {
+		stderr = runtimeUI.ErrorOutput()
 	}
 	return tools.ExecutionContext{
 		ProviderName: a.ProviderName,
@@ -38,28 +44,30 @@ func (a *Agent) toolExecutionContext(stdin io.Reader, stdout, stderr io.Writer) 
 		Stdin:        stdin,
 		Stdout:       stdout,
 		Stderr:       stderr,
-		PromptReader: a.mlReader,
+		PromptReader: runtimeUI.PromptReader(),
 		Registry:     a.registry(),
 		ToolCache:    a.ToolCache,
 		Config:       a.cfg(),
 		AutoApprove:  a.autoApprove(),
+		AuditLogger:  a.auditLogger(),
 	}
 }
 
 func (a *Agent) executeToolWithSpinner(toolCall *tools.ToolCall) (string, *tools.FileChange) {
 	// ネガティブキャッシュチェック（ブロックせずログ表示のみ）
 	if a.ToolCache != nil {
-		if _, hit := a.ToolCache.CheckNegativeCache(toolCall.Tool, toolCall.RawArgs); hit {
+		if result, hit := a.ToolCache.CheckNegativeCache(toolCall.Tool, toolCall.RawArgs); hit {
+			yellow.Fprintf(a.output(), "⚠ Negative cache hit: %s previously returned: %s\n", toolCall.Tool, result)
 			a.addOptimizationMetrics(OptimizationMetrics{NegativeCacheHits: 1})
 		}
 	}
 
-	spinner := ui.NewSpinner()
+	spinner := a.ui().NewSpinner()
 	spinner.Start(ui.SpinnerMessageForTool(toolCall.Tool))
-	ui.SetGlobalSpinner(spinner)
+	a.ui().SetSpinner(spinner)
 
-	result, change := tools.ExecuteWithContext(a.toolExecutionContext(os.Stdin, os.Stdout, os.Stderr), toolCall)
-	spinner.Stop()
+	result, change := tools.ExecuteWithContext(a.toolExecutionContext(nil, nil, nil), toolCall)
+	a.ui().StopSpinner()
 	a.recordToolResultOptimizations(toolCall.Tool, result)
 
 	// エラー/空結果をネガティブキャッシュに記録
@@ -162,7 +170,7 @@ func (a *Agent) executeToolOnly(toolCall *tools.ToolCall) string {
 		})
 	}
 
-	fmt.Println()
+	_, _ = fmt.Fprintln(a.output())
 	return result
 }
 
@@ -229,8 +237,8 @@ func (a *Agent) shouldAbortToolLoopWithResponse(response string, current, last *
 	if isSameToolCall(current, last) {
 		*count++
 		if *count >= threshold {
-			yellow.Printf("⚠️  Warning: Same tool call repeated %d times, stopping to prevent infinite loop\n", *count)
-			yellow.Printf("   Tool: %s\n", current.Tool)
+			yellow.Fprintf(a.output(), "⚠️  Warning: Same tool call repeated %d times, stopping to prevent infinite loop\n", *count)
+			yellow.Fprintf(a.output(), "   Tool: %s\n", current.Tool)
 
 			// ツール呼び出しを履歴に追加（response がある場合のみ）
 			if response != "" {
@@ -320,7 +328,7 @@ func (a *Agent) executeToolCallInternal(response string, toolCall *tools.ToolCal
 		})
 	}
 
-	fmt.Println()
+	_, _ = fmt.Fprintln(a.output())
 	return result
 }
 
@@ -342,13 +350,14 @@ func (a *Agent) handleStrReplaceErrors(toolCall *tools.ToolCall, result string) 
 			threshold = 2
 		}
 		if a.strReplaceErrorCount >= threshold {
-			yellow.Printf("⚠️  str_replace failed %d times consecutively. Stopping to prevent loop.\n", a.strReplaceErrorCount)
-			yellow.Println("💡 Suggested alternatives / 代替案:")
-			fmt.Println("   1. Use read_file to verify the exact content of the target file")
-			fmt.Println("   2. Use bash (grep) to find the correct string pattern")
-			fmt.Println("   3. Ask the user for clarification on what to change")
-			fmt.Println("   4. Try delete_lines + insert_before/insert_after for line-based edits")
-			fmt.Println()
+			out := a.output()
+			yellow.Fprintf(out, "⚠️  str_replace failed %d times consecutively. Stopping to prevent loop.\n", a.strReplaceErrorCount)
+			yellow.Fprintln(out, "💡 Suggested alternatives / 代替案:")
+			_, _ = fmt.Fprintln(out, "   1. Use read_file to verify the exact content of the target file")
+			_, _ = fmt.Fprintln(out, "   2. Use bash (grep) to find the correct string pattern")
+			_, _ = fmt.Fprintln(out, "   3. Ask the user for clarification on what to change")
+			_, _ = fmt.Fprintln(out, "   4. Try delete_lines + insert_before/insert_after for line-based edits")
+			_, _ = fmt.Fprintln(out)
 
 			// AIに警告を送信
 			if toolCall.ID != "" {
@@ -379,7 +388,7 @@ Suggested next steps:
 IMPORTANT: Do NOT retry str_replace with the same or similar old_str pattern. Take a different approach.`,
 			})
 			a.strReplaceErrorCount = 0 // リセット
-			fmt.Println()
+			_, _ = fmt.Fprintln(a.output())
 			return true
 		}
 	} else if strings.Contains(result, "Successfully replaced") {
@@ -412,7 +421,7 @@ func (a *Agent) handleCommentFlow(toolCall *tools.ToolCall, result string) bool 
 		}
 	}
 	if feedbackCount >= maxFeedback {
-		yellow.Printf("⚠️  Feedback loop detected (%d), stopping comment retry\n", feedbackCount)
+		yellow.Fprintf(a.output(), "⚠️  Feedback loop detected (%d), stopping comment retry\n", feedbackCount)
 		return false
 	}
 
@@ -447,7 +456,7 @@ IMPORTANT:
 	})
 
 	// 次ループで callAPIWithRetry() が走るようにする
-	fmt.Println()
+	_, _ = fmt.Fprintln(a.output())
 	return true
 }
 
@@ -466,7 +475,7 @@ func (a *Agent) handleFileChange(change *tools.FileChange) {
 	if a.changeStorage != nil && a.session != nil {
 		if err := a.changeStorage.AppendChange(a.session.ID, *change); err != nil {
 			// エラーログは出すが実行は継続
-			yellow.Printf("Warning: Failed to persist change: %v\n", err)
+			yellow.Fprintf(a.output(), "Warning: Failed to persist change: %v\n", err)
 		}
 	}
 }
@@ -665,7 +674,7 @@ func (a *Agent) executeToolCallsWithParallel(
 			}(idx)
 		}
 		wg.Wait()
-		printParallelToolGroup(allToolCalls, parallelEntries, results, time.Since(startedAt))
+		printParallelToolGroup(a.output(), allToolCalls, parallelEntries, results, time.Since(startedAt))
 	}
 
 	// Phase 1b: sequential 群を順次実行（spinner あり）
@@ -755,34 +764,34 @@ func (a *Agent) executeToolCallsWithParallel(
 	return loopDetected
 }
 
-func printParallelToolGroup(allToolCalls []*tools.ToolCall, indices []int, results []toolExecResult, elapsed time.Duration) {
+func printParallelToolGroup(out io.Writer, allToolCalls []*tools.ToolCall, indices []int, results []toolExecResult, elapsed time.Duration) {
 	if len(indices) == 0 {
 		return
 	}
 
 	if len(indices) == 1 {
 		idx := indices[0]
-		fmt.Println(ui.FormatToolLine(ui.ToolDisplayInfo{
+		_, _ = fmt.Fprintln(out, ui.FormatToolLine(ui.ToolDisplayInfo{
 			ToolName: allToolCalls[idx].Tool,
 			Args:     allToolCalls[idx].Args,
 			Result:   results[idx].result,
 			Error:    strings.HasPrefix(strings.TrimSpace(results[idx].result), "Error:"),
 		}))
-		printParallelCollapsedOutput(allToolCalls[idx].Tool, results[idx].result)
+		printParallelCollapsedOutput(out, allToolCalls[idx].Tool, results[idx].result)
 		return
 	}
 
-	ui.PrintParallelGroupStart(len(indices))
+	ui.PrintParallelGroupStartToWriter(out, len(indices))
 	for _, idx := range indices {
-		ui.PrintParallelGroupLine(ui.FormatToolLine(ui.ToolDisplayInfo{
+		ui.PrintParallelGroupLineToWriter(out, ui.FormatToolLine(ui.ToolDisplayInfo{
 			ToolName: allToolCalls[idx].Tool,
 			Args:     allToolCalls[idx].Args,
 			Result:   results[idx].result,
 			Error:    strings.HasPrefix(strings.TrimSpace(results[idx].result), "Error:"),
 		}))
-		printParallelCollapsedOutputWithPrefix(allToolCalls[idx].Tool, results[idx].result, "│    ")
+		printParallelCollapsedOutputWithPrefix(out, allToolCalls[idx].Tool, results[idx].result, "│    ")
 	}
-	ui.PrintParallelGroupEnd(formatParallelGroupSummary(allToolCalls, indices, elapsed))
+	ui.PrintParallelGroupEndToWriter(out, formatParallelGroupSummary(allToolCalls, indices, elapsed))
 }
 
 func shouldShowParallelCollapsed(toolName, result string) bool {
@@ -796,14 +805,14 @@ func shouldShowParallelCollapsed(toolName, result string) bool {
 	return false
 }
 
-func printParallelCollapsedOutput(toolName, result string) {
+func printParallelCollapsedOutput(out io.Writer, toolName, result string) {
 	if !shouldShowParallelCollapsed(toolName, result) {
 		return
 	}
-	fmt.Println(ui.FormatToolOutput(result, ui.GetMaxVisibleLines()))
+	_, _ = fmt.Fprintln(out, ui.FormatToolOutput(result, ui.GetMaxVisibleLines()))
 }
 
-func printParallelCollapsedOutputWithPrefix(toolName, result, prefix string) {
+func printParallelCollapsedOutputWithPrefix(out io.Writer, toolName, result, prefix string) {
 	if !shouldShowParallelCollapsed(toolName, result) {
 		return
 	}
@@ -813,7 +822,7 @@ func printParallelCollapsedOutputWithPrefix(toolName, result, prefix string) {
 		if line == "" {
 			continue
 		}
-		fmt.Printf("%s%s\n", prefix, line)
+		_, _ = fmt.Fprintf(out, "%s%s\n", prefix, line)
 	}
 }
 

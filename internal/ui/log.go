@@ -1,11 +1,13 @@
 package ui
 
 import (
-	"fmt"
+	"io"
 	"os"
+
+	"github.com/fatih/color"
 )
 
-// LogLevel represents the severity of a log message
+// LogLevel はログメッセージの重要度を表す。
 type LogLevel int
 
 const (
@@ -23,76 +25,123 @@ func init() {
 	}
 }
 
-// SetLogLevel sets the current logging level
+// SetLogLevel は現在のログレベルを設定する。
 func SetLogLevel(level LogLevel) {
 	currentLogLevel = level
 }
 
-// GetLogLevel returns the current logging level
+// GetLogLevel は現在のログレベルを返す。
 func GetLogLevel() LogLevel {
 	return currentLogLevel
 }
 
-// Debug logs a debug message (only when XELYON_DEBUG=1)
+// Debug はデバッグログを出力する。
 func Debug(format string, args ...interface{}) {
+	DebugToWriter(DefaultRuntime().ErrorOutput(), format, args...)
+}
+
+// DebugToWriter は指定 writer にデバッグログを出力する。
+func DebugToWriter(w io.Writer, format string, args ...interface{}) {
 	if currentLogLevel <= LogDebug {
-		Dim.Printf("[DEBUG] "+format+"\n", args...)
+		logMessage(w, []color.Attribute{color.Faint}, "[DEBUG] ", format, args...)
 	}
 }
 
-// InfoLog logs an info message
+// InfoLog は情報ログを出力する。
 func InfoLog(format string, args ...interface{}) {
+	InfoLogToWriter(DefaultRuntime().Output(), format, args...)
+}
+
+// InfoLogToWriter は指定 writer に情報ログを出力する。
+func InfoLogToWriter(w io.Writer, format string, args ...interface{}) {
 	if currentLogLevel <= LogInfo {
-		Info.Printf(format+"\n", args...)
+		logMessage(w, []color.Attribute{color.FgCyan}, "", format, args...)
 	}
 }
 
-// Warn logs a warning message
+// Warn は警告ログを出力する。
 func Warn(format string, args ...interface{}) {
+	WarnToWriter(DefaultRuntime().Output(), format, args...)
+}
+
+// WarnToWriter は指定 writer に警告ログを出力する。
+func WarnToWriter(w io.Writer, format string, args ...interface{}) {
 	if currentLogLevel <= LogWarn {
-		Warning.Printf("Warning: "+format+"\n", args...)
+		logMessage(w, []color.Attribute{color.FgYellow}, "Warning: ", format, args...)
 	}
 }
 
-// WarnWithoutEmoji logs a warning message without prefix
+// WarnWithoutEmoji は接頭辞なしの警告ログを出力する。
 func WarnWithoutEmoji(format string, args ...interface{}) {
+	WarnWithoutEmojiToWriter(DefaultRuntime().Output(), format, args...)
+}
+
+// WarnWithoutEmojiToWriter は指定 writer に接頭辞なしの警告ログを出力する。
+func WarnWithoutEmojiToWriter(w io.Writer, format string, args ...interface{}) {
 	if currentLogLevel <= LogWarn {
-		Warning.Printf(format+"\n", args...)
+		logMessage(w, []color.Attribute{color.FgYellow}, "", format, args...)
 	}
 }
 
-// ErrorLog logs an error message
+// ErrorLog はエラーログを出力する。
 func ErrorLog(format string, args ...interface{}) {
+	ErrorLogToWriter(DefaultRuntime().ErrorOutput(), format, args...)
+}
+
+// ErrorLogToWriter は指定 writer にエラーログを出力する。
+func ErrorLogToWriter(w io.Writer, format string, args ...interface{}) {
 	if currentLogLevel <= LogError {
-		Error.Printf("Error: "+format+"\n", args...)
+		logMessage(w, []color.Attribute{color.FgRed}, "Error: ", format, args...)
 	}
 }
 
-// ErrorLogWithoutEmoji logs an error message without prefix
+// ErrorLogWithoutEmoji は接頭辞なしのエラーログを出力する。
 func ErrorLogWithoutEmoji(format string, args ...interface{}) {
+	ErrorLogWithoutEmojiToWriter(DefaultRuntime().ErrorOutput(), format, args...)
+}
+
+// ErrorLogWithoutEmojiToWriter は指定 writer に接頭辞なしのエラーログを出力する。
+func ErrorLogWithoutEmojiToWriter(w io.Writer, format string, args ...interface{}) {
 	if currentLogLevel <= LogError {
-		Error.Printf(format+"\n", args...)
+		logMessage(w, []color.Attribute{color.FgRed}, "", format, args...)
 	}
 }
 
-// SuccessLog logs a success message
+// SuccessLog は成功ログを出力する。
 func SuccessLog(format string, args ...interface{}) {
-	Success.Printf(format+"\n", args...)
+	SuccessLogToWriter(DefaultRuntime().Output(), format, args...)
 }
 
-// SuccessLogWithEmoji logs a success message with custom emoji
+// SuccessLogToWriter は指定 writer に成功ログを出力する。
+func SuccessLogToWriter(w io.Writer, format string, args ...interface{}) {
+	logMessage(w, []color.Attribute{color.FgGreen}, "", format, args...)
+}
+
+// SuccessLogWithEmoji は絵文字付きの成功ログを出力する。
 func SuccessLogWithEmoji(emoji, format string, args ...interface{}) {
-	Success.Printf(emoji+" "+format+"\n", args...)
+	SuccessLogWithEmojiToWriter(DefaultRuntime().Output(), emoji, format, args...)
 }
 
-// Fatal logs an error message and exits with code 1
+// SuccessLogWithEmojiToWriter は指定 writer に絵文字付き成功ログを出力する。
+func SuccessLogWithEmojiToWriter(w io.Writer, emoji, format string, args ...interface{}) {
+	logMessage(w, []color.Attribute{color.FgGreen}, emoji+" ", format, args...)
+}
+
+// Fatal はエラーログを出力して終了する。
 func Fatal(format string, args ...interface{}) {
-	Error.Printf("Error: "+format+"\n", args...)
+	ErrorLogToWriter(DefaultRuntime().ErrorOutput(), format, args...)
 	os.Exit(1)
 }
 
-// Fatalf logs an error message to stderr and exits with code 1
+// Fatalf は整形済みエラーログを出力して終了する。
 func Fatalf(format string, args ...interface{}) {
-	fmt.Fprintf(os.Stderr, "Error: "+format+"\n", args...)
+	ErrorLogToWriter(DefaultRuntime().ErrorOutput(), format, args...)
 	os.Exit(1)
+}
+
+func logMessage(w io.Writer, attrs []color.Attribute, prefix, format string, args ...interface{}) {
+	if w == nil {
+		w = DefaultRuntime().Output()
+	}
+	_, _ = color.New(attrs...).Fprintf(w, prefix+format+"\n", args...)
 }

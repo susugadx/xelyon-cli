@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	_ "github.com/susugadx/xelyon-cli/internal/api/providers/deepseek"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // mockProvider は api.Provider のモック実装
@@ -604,19 +606,13 @@ func TestPrintTaskUsage(t *testing.T) {
 	agent.Stats.InputTokens = 200
 	agent.Stats.OutputTokens = 100
 
-	// Capture stdout
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
+	var out bytes.Buffer
+	agent.Runtime = &AgentRuntime{
+		UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+	}
 
 	agent.printTaskUsage(startStats)
-
-	w.Close()
-	os.Stdout = oldStdout
-
-	buf := make([]byte, 1024)
-	n, _ := r.Read(buf)
-	output := string(buf[:n])
+	output := out.String()
 
 	// We expect the diff to be printed: In: 100 + Out: 50 = 150 tok
 	expectedIn := "100"

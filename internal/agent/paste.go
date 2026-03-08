@@ -2,7 +2,6 @@ package agent
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/ui"
@@ -12,6 +11,7 @@ import (
 // WSLなどBracketed Paste Modeが動作しない環境向け
 func handlePasteCommand(agent *Agent, args []string) bool {
 	cfg := agent.cfg()
+	out := agent.output()
 
 	pm := ui.NewPasteMode(cfg.Paste)
 
@@ -19,21 +19,22 @@ func handlePasteCommand(agent *Agent, args []string) bool {
 	var content string
 	var cancelled bool
 	var err error
-	if agent.mlReader != nil {
-		content, cancelled, err = pm.CaptureWithMultilineReader(agent.mlReader, os.Stdout)
+	runtimeUI := agent.ui()
+	if reader := runtimeUI.PromptReader(); reader != nil {
+		content, cancelled, err = pm.CaptureWithMultilineReader(reader, runtimeUI.Output())
 	} else {
-		content, cancelled, err = pm.Capture(os.Stdin, os.Stdout)
+		content, cancelled, err = pm.Capture(runtimeUI.Input(), runtimeUI.Output())
 	}
 	if err != nil {
-		red.Printf("Read error: %v\n", err)
+		red.Fprintf(out, "Read error: %v\n", err)
 		return true
 	}
 	if cancelled {
-		yellow.Println("❌ Cancelled - input discarded")
+		yellow.Fprintln(out, "❌ Cancelled - input discarded")
 		return true
 	}
 	if content == "" {
-		yellow.Println("⚠️ No content captured")
+		yellow.Fprintln(out, "⚠️ No content captured")
 		return true
 	}
 
@@ -43,10 +44,10 @@ func handlePasteCommand(agent *Agent, args []string) bool {
 		linesCount = len(strings.Split(content, "\n"))
 	}
 
-	fmt.Println()
-	green.Printf("✅ Captured %d lines (%.1f KB)\n", linesCount, sizeKB)
-	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Println()
+	_, _ = fmt.Fprintln(out)
+	green.Fprintf(out, "✅ Captured %d lines (%.1f KB)\n", linesCount, sizeKB)
+	cyan.Fprintln(out, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	_, _ = fmt.Fprintln(out)
 
 	// エージェントに入力を渡す（chat メソッドを呼び出す）
 	agent.chat(content)

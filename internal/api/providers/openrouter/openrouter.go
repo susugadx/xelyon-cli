@@ -59,20 +59,16 @@ type MultimodalMessage struct {
 // Provider はOpenRouter APIのプロバイダー実装（OpenAI互換 + Claude Compaction対応）
 type Provider struct {
 	api.BaseProvider
-	mcpTools          []api.ToolDefinition // MCP ツール定義（Function Calling用）
-	usageCallback     api.UsageCallback    // トークン使用量コールバック
-	compactionEnabled bool                 // Compaction が有効か
-	compactionTrigger int                  // Compaction を開始する入力トークン閾値
-	toolChoice        *string              // tool_choice 強制用
+	mcpTools      []api.ToolDefinition // MCP ツール定義（Function Calling用）
+	usageCallback api.UsageCallback    // トークン使用量コールバック
+	runtimeConfig *config.Config
+	toolChoice    *string // tool_choice 強制用
 }
 
 // New は新しいProviderを作成
 func New(apiKey string) *Provider {
-	globalCfg := config.GetGlobalConfig()
 	return &Provider{
-		BaseProvider:      api.NewBaseProvider("OpenRouter", apiKey, defaultOpenRouterURL, "OPENROUTER_API_URL"),
-		compactionEnabled: globalCfg.Compression.ClaudeCompaction,
-		compactionTrigger: globalCfg.Compression.CompactionTrigger,
+		BaseProvider: api.NewBaseProvider("OpenRouter", apiKey, defaultOpenRouterURL, "OPENROUTER_API_URL"),
 	}
 }
 
@@ -96,10 +92,43 @@ func getAnthropicSkinURL(openaiURL string) string {
 	return strings.TrimSuffix(openaiURL, "/chat/completions") + "/messages"
 }
 
+func (p *Provider) effectiveConfig() *config.Config {
+	if p != nil && p.runtimeConfig != nil {
+		return p.runtimeConfig
+	}
+	return config.GetGlobalConfig()
+}
+
+func (p *Provider) supportsClaudeCompactionWithConfig(cfg *config.Config, model string) bool {
+	if cfg == nil || !cfg.Compression.ClaudeCompaction {
+		return false
+	}
+	if model == "" {
+		model = cfg.GetModelForProvider("openrouter")
+	}
+	if model == "" {
+		model = "anthropic/claude-sonnet-4.6"
+	}
+	return isClaudeModel(model) && isCompactionSupported(model)
+}
+
 // SupportsClaudeCompaction はこのプロバイダーが Claude Compaction に対応しているかを返す
 func (p *Provider) SupportsClaudeCompaction() bool {
-	model := api.GetDefaultModel("", "openrouter", "anthropic/claude-sonnet-4.6")
-	return p.compactionEnabled && isClaudeModel(model) && isCompactionSupported(model)
+	return p.supportsClaudeCompactionWithConfig(p.effectiveConfig(), "")
+}
+
+// SupportsClaudeCompactionWithContext は request context とモデルを使って Claude Compaction 対応可否を返す。
+func (p *Provider) SupportsClaudeCompactionWithContext(ctx context.Context, model string) bool {
+	cfg := p.effectiveConfig()
+	if ctxCfg, ok := config.LookupContext(ctx); ok {
+		cfg = ctxCfg
+	}
+	return p.supportsClaudeCompactionWithConfig(cfg, model)
+}
+
+// SetRuntimeConfig は provider が参照する runtime 設定を差し替える。
+func (p *Provider) SetRuntimeConfig(cfg *config.Config) {
+	p.runtimeConfig = cfg
 }
 
 // SupportsImages は画像入力対応を返す
@@ -114,10 +143,11 @@ func (p *Provider) IsFunctionCallingEnabled() bool {
 
 // ChatWithTools は Provider interface の実装
 func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
-	model = api.GetDefaultModel(model, "openrouter", "anthropic/claude-sonnet-4.6")
+	model = api.GetDefaultModelWithContext(ctx, model, "openrouter", "anthropic/claude-sonnet-4.6")
+	cfg := config.FromContext(ctx)
 
 	// Claude モデル + Compaction 有効時は Anthropic Skin エンドポイントを使用
-	if isClaudeModel(model) && p.compactionEnabled && isCompactionSupported(model) {
+	if isClaudeModel(model) && cfg.Compression.ClaudeCompaction && isCompactionSupported(model) {
 		return p.chatWithClaudeAPI(ctx, systemPrompt, history, model, nil)
 	}
 
@@ -188,7 +218,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	if isStreaming {
 		return p.handleStreamingResponse(ctx, resp, spinner)
 	} else {
-		return p.handleNonStreamingResponse(resp, spinner)
+		return p.handleNonStreamingResponse(ctx, resp, spinner)
 	}
 }
 
@@ -199,9 +229,10 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 		return p.ChatWithTools(ctx, systemPrompt, history, model)
 	}
 
-	model = api.GetDefaultModel(model, "openrouter", "anthropic/claude-sonnet-4.6")
+	model = api.GetDefaultModelWithContext(ctx, model, "openrouter", "anthropic/claude-sonnet-4.6")
+	cfg := config.FromContext(ctx)
 
-	if isClaudeModel(model) && p.compactionEnabled && isCompactionSupported(model) {
+	if isClaudeModel(model) && cfg.Compression.ClaudeCompaction && isCompactionSupported(model) {
 		history = append(history, api.Message{Role: "user", Content: userMessage})
 		return p.chatWithClaudeAPI(ctx, systemPrompt, history, model, image)
 	}
@@ -278,12 +309,13 @@ func (p *Provider) chatWithImageRequest(ctx context.Context, systemPrompt string
 	if isStreaming {
 		return p.handleStreamingResponse(ctx, resp, spinner)
 	} else {
-		return p.handleNonStreamingResponse(resp, spinner)
+		return p.handleNonStreamingResponse(ctx, resp, spinner)
 	}
 }
 
 // handleStreamingResponse は OpenAI 互換ストリーミングレスポンスを処理
 func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
+	out := api.OutputWriterFromContext(ctx)
 	var fullResponse strings.Builder
 	var toolCallsOutput strings.Builder
 	toolCalls := make(map[int]*toolCallAccumulator)
@@ -347,9 +379,9 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 					if firstChunk {
 						spinner.Stop()
 						firstChunk = false
-						api.PrintAIHeader()
+						api.PrintAIHeaderWithContext(ctx)
 					}
-					fmt.Print(choice.Delta.Content)
+					_, _ = fmt.Fprint(out, choice.Delta.Content)
 					fullResponse.WriteString(choice.Delta.Content)
 				}
 			}
@@ -384,18 +416,18 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 	content := fullResponse.String()
 	if toolCallsOutput.Len() > 0 {
 		if content != "" {
-			fmt.Println()
+			_, _ = fmt.Fprintln(out)
 			return content + toolCallsOutput.String(), nil
 		}
 		return toolCallsOutput.String(), nil
 	}
 
-	fmt.Println()
+	_, _ = fmt.Fprintln(out)
 	return content, nil
 }
 
 // handleNonStreamingResponse は非ストリーミングレスポンスを処理
-func (p *Provider) handleNonStreamingResponse(resp *http.Response, spinner *ui.Spinner) (string, error) {
+func (p *Provider) handleNonStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
 	var apiResp struct {
 		Choices []api.Choice        `json:"choices"`
 		Usage   api.StreamUsageInfo `json:"usage"`
@@ -419,9 +451,9 @@ func (p *Provider) handleNonStreamingResponse(resp *http.Response, spinner *ui.S
 	}
 
 	if len(apiResp.Choices) > 0 {
-		api.PrintAIHeader()
+		api.PrintAIHeaderWithContext(ctx)
 		content := apiResp.Choices[0].Message.Content
-		fmt.Println(content)
+		_, _ = fmt.Fprintln(api.OutputWriterFromContext(ctx), content)
 		return content, nil
 	}
 	return "", nil
@@ -453,9 +485,9 @@ func (p *Provider) chatWithClaudeAPI(ctx context.Context, systemPrompt string, h
 	anthropicMessages := claude.ConvertToAnthropicMessages(history)
 
 	// プロンプトキャッシュ: 安定区間+最新userにブレークポイント設定
-	cfg := config.GetGlobalConfig()
+	cfg := config.FromContext(ctx)
 	if cfg != nil && cfg.PromptCache.Enabled {
-		claude.SetMessageCacheBreakpoints(anthropicMessages)
+		claude.SetMessageCacheBreakpointsWithEnabled(anthropicMessages, true)
 	}
 
 	// リクエスト構造体（Anthropic Messages API 形式）
@@ -492,10 +524,13 @@ func (p *Provider) chatWithClaudeAPI(ctx context.Context, systemPrompt string, h
 				Type: "compact_20260112",
 				Trigger: &claude.CompactTrigger{
 					Type:  "input_tokens",
-					Value: p.compactionTrigger,
+					Value: cfg.Compression.CompactionTrigger,
 				},
 			},
 		},
+	}
+	if reqBody.ContextManagement.Edits[0].Trigger.Value == 0 {
+		reqBody.ContextManagement.Edits[0].Trigger.Value = 150000
 	}
 	reqBody.AnthropicBeta = []string{"compact-2026-01-12"}
 
@@ -639,9 +674,9 @@ func (p *Provider) handleClaudeStreamingResponse(ctx context.Context, resp *http
 				if firstChunk {
 					spinner.Stop()
 					firstChunk = false
-					api.PrintAIHeader()
+					api.PrintAIHeaderWithContext(ctx)
 				}
-				fmt.Print(event.Delta.Text)
+				_, _ = fmt.Fprint(api.OutputWriterFromContext(ctx), event.Delta.Text)
 				fullResponse.WriteString(event.Delta.Text)
 			}
 			if event.Delta.Type == "input_json_delta" {
@@ -684,12 +719,12 @@ done:
 
 	if toolCallsOutput.Len() > 0 {
 		if content != "" {
-			fmt.Println()
+			_, _ = fmt.Fprintln(api.OutputWriterFromContext(ctx))
 			return content + toolCallsOutput.String(), nil
 		}
 		return toolCallsOutput.String(), nil
 	}
 
-	fmt.Println()
+	_, _ = fmt.Fprintln(api.OutputWriterFromContext(ctx))
 	return content, nil
 }

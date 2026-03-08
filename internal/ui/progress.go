@@ -3,7 +3,6 @@ package ui
 import (
 	"fmt"
 	"io"
-	"os"
 	"sync"
 	"time"
 )
@@ -25,13 +24,18 @@ type Progress struct {
 // total: 全体の数（0 の場合は不確定モード）
 // message: 表示するメッセージ
 func NewProgress(total int, message string) *Progress {
-	return NewProgressWithWriter(total, message, os.Stdout)
+	return NewProgressWithRuntime(total, message, DefaultRuntime())
+}
+
+// NewProgressWithRuntime は UI runtime に紐づく出力先で Progress を作成する。
+func NewProgressWithRuntime(total int, message string, runtime *Runtime) *Progress {
+	return NewProgressWithWriter(total, message, runtimeOrDefault(runtime).Output())
 }
 
 // NewProgressWithWriter は出力先を指定してProgressを作成
 func NewProgressWithWriter(total int, message string, w io.Writer) *Progress {
 	if w == nil {
-		w = os.Stdout
+		w = DefaultRuntime().Output()
 	}
 	return &Progress{
 		total:   total,

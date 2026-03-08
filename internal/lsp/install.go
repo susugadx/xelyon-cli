@@ -2,6 +2,7 @@ package lsp
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -159,6 +160,11 @@ func GetAllInstallInfos() map[string]InstallInfo {
 // RunInstall はLSPサーバーをインストール（最初のコマンドを実行）
 // 成功した場合は nil、失敗した場合はエラーを返す
 func RunInstall(serverKey string) error {
+	return RunInstallWithIO(serverKey, os.Stdin, os.Stdout, os.Stderr)
+}
+
+// RunInstallWithIO は LSP サーバーをインストールし、入出力先を明示指定する。
+func RunInstallWithIO(serverKey string, in io.Reader, out, errOut io.Writer) error {
 	info, ok := GetInstallInfo(serverKey)
 	if !ok {
 		return fmt.Errorf("unknown server key: %s", serverKey)
@@ -170,11 +176,18 @@ func RunInstall(serverKey string) error {
 
 	// 最初のコマンドを実行
 	cmdStr := info.Commands[0]
-	return executeCommand(cmdStr)
+	if in == os.Stdin && out == os.Stdout && errOut == os.Stderr {
+		return executeCommand(cmdStr)
+	}
+	return executeCommandWithIO(cmdStr, in, out, errOut)
 }
 
 // executeCommand はシェルコマンドを実行
 func executeCommand(cmdStr string) error {
+	return executeCommandWithIO(cmdStr, os.Stdin, os.Stdout, os.Stderr)
+}
+
+func executeCommandWithIO(cmdStr string, in io.Reader, out, errOut io.Writer) error {
 	// コマンドをパース
 	parts := strings.Fields(cmdStr)
 	if len(parts) == 0 {
@@ -182,9 +195,18 @@ func executeCommand(cmdStr string) error {
 	}
 
 	cmd := exec.Command(parts[0], parts[1:]...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
+	if in == nil {
+		in = os.Stdin
+	}
+	if out == nil {
+		out = os.Stdout
+	}
+	if errOut == nil {
+		errOut = os.Stderr
+	}
+	cmd.Stdout = out
+	cmd.Stderr = errOut
+	cmd.Stdin = in
 
 	return cmd.Run()
 }

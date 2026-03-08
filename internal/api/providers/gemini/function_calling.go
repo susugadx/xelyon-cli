@@ -29,7 +29,7 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 
 	// モデル名を設定（config優先、フォールバックはgemini-3.1-pro-preview-customtools）
 	// customtools版はカスタムツール優先度が高くパラレルFCを出す
-	model = api.GetDefaultModel(model, "gemini", "gemini-3.1-pro-preview-customtools")
+	model = api.GetDefaultModelWithContext(ctx, model, "gemini", "gemini-3.1-pro-preview-customtools")
 
 	// ツール定義を事前に取得（キャッシュにも含めるため）
 	toolDefs := GetCombinedToolDefinitionsWithContext(ctx, p.mcpTools)
@@ -191,9 +191,7 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 		} else {
 			msg = "Deep thinking"
 		}
-		spinner = ui.NewSpinner()
-		spinner.Start(msg)
-		ui.SetGlobalSpinner(spinner)
+		spinner = api.StartSpinnerWithMessage(ctx, msg)
 	} else {
 		spinner = api.StartThinkingSpinner(ctx, false, "")
 	}

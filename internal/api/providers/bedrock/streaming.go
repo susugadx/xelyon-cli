@@ -24,6 +24,7 @@ type toolUseAccumulator struct {
 
 // handleEventStream は AWS SDK イベントストリームを処理する
 func (p *Provider) handleEventStream(ctx context.Context, output *bedrockruntime.InvokeModelWithResponseStreamOutput, spinner *ui.Spinner) (string, error) {
+	out := api.OutputWriterFromContext(ctx)
 	toolUses := make(map[int]*toolUseAccumulator)
 	compactionBlocks := make(map[int]*strings.Builder)
 	var toolCallsOutput strings.Builder
@@ -88,9 +89,9 @@ func (p *Provider) handleEventStream(ctx context.Context, output *bedrockruntime
 					if firstChunk {
 						spinner.Stop()
 						firstChunk = false
-						api.PrintAIHeader()
+						api.PrintAIHeaderWithContext(ctx)
 					}
-					fmt.Print(text)
+					_, _ = fmt.Fprint(out, text)
 					fullResponse.WriteString(text)
 				}
 				if done {

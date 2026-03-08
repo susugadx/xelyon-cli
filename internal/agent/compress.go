@@ -12,6 +12,8 @@ import (
 
 // CompressHistory は会話履歴を圧縮する
 func (a *Agent) CompressHistory(keepRecent int) error {
+	out := a.output()
+
 	if len(a.History) <= keepRecent {
 		return fmt.Errorf("履歴が短すぎます（%d件）。圧縮は%d件を超える場合のみ可能です", len(a.History), keepRecent)
 	}
@@ -40,7 +42,7 @@ func (a *Agent) CompressHistory(keepRecent int) error {
 	summaryPrompt := prompt.BuildSummaryPrompt(promptMessages, config.MessageTruncateLen)
 
 	// LLMにサマリーを依頼
-	cyan.Println("🗜️ Compressing history...")
+	cyan.Fprintln(out, "🗜️ Compressing history...")
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
@@ -67,9 +69,9 @@ func (a *Agent) CompressHistory(keepRecent int) error {
 	afterTokens := estimateTokens(a.History)
 
 	// 結果表示
-	fmt.Printf("   Before: %s tokens → After: %s tokens\n",
+	_, _ = fmt.Fprintf(out, "   Before: %s tokens → After: %s tokens\n",
 		formatNumber(beforeTokens), formatNumber(afterTokens))
-	fmt.Println()
+	_, _ = fmt.Fprintln(out)
 
 	return nil
 }

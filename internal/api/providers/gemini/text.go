@@ -17,7 +17,7 @@ import (
 // chatWithTextMode はテキストベースのツール呼び出しモード（従来の実装）
 func (p *Provider) chatWithTextMode(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
 	// モデル名を設定（config優先、フォールバックはgemini-3.1-pro-preview-customtools）
-	model = api.GetDefaultModel(model, "gemini", "gemini-3.1-pro-preview-customtools")
+	model = api.GetDefaultModelWithContext(ctx, model, "gemini", "gemini-3.1-pro-preview-customtools")
 
 	// キャッシュ管理（テキストモードではツール定義なし）
 	cacheName, msgsToSend, err := p.updateOrUseCache(ctx, systemPrompt, history, model, nil, nil)
@@ -86,9 +86,7 @@ func (p *Provider) chatWithTextMode(ctx context.Context, systemPrompt string, hi
 		} else {
 			msg = "Deep thinking"
 		}
-		spinner = ui.NewSpinner()
-		spinner.Start(msg)
-		ui.SetGlobalSpinner(spinner)
+		spinner = api.StartSpinnerWithMessage(ctx, msg)
 	} else {
 		spinner = api.StartThinkingSpinner(ctx, false, "")
 	}
@@ -132,7 +130,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	}
 
 	// モデル名を設定（config優先、フォールバックはgemini-3.1-pro-preview-customtools）
-	model = api.GetDefaultModel(model, "gemini", "gemini-3.1-pro-preview-customtools")
+	model = api.GetDefaultModelWithContext(ctx, model, "gemini", "gemini-3.1-pro-preview-customtools")
 
 	// System prompt を system_instruction フィールドに設定
 	var sysInstruction *GeminiSystemInstruction
@@ -223,9 +221,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 		} else {
 			msg = "Deep thinking (image)"
 		}
-		spinner = ui.NewSpinner()
-		spinner.Start(msg)
-		ui.SetGlobalSpinner(spinner)
+		spinner = api.StartSpinnerWithMessage(ctx, msg)
 	} else {
 		spinner = api.StartThinkingSpinner(ctx, true, "") // isImage=true
 	}

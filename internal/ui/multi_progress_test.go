@@ -25,6 +25,17 @@ func TestMultiProgress_AddTask(t *testing.T) {
 	}
 }
 
+func TestNewMultiProgressWithRuntime_UsesInjectedWriter(t *testing.T) {
+	runtime := NewRuntime(strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{})
+	out := runtime.Output()
+
+	mp := NewMultiProgressWithRuntime(runtime)
+
+	if mp.writer != out {
+		t.Fatalf("multi progress writer = %#v, want runtime output %#v", mp.writer, out)
+	}
+}
+
 func TestMultiProgress_StatusTransitions(t *testing.T) {
 	mp := NewMultiProgress()
 	mp.AddTask(1, "Test task")

@@ -31,6 +31,7 @@ var Confirm = common.Confirm
 var ConfirmApproved = common.ConfirmApproved
 var ConfirmWithFeedback = common.ConfirmWithFeedback
 var ConfirmInteractive = common.ConfirmInteractive
+var ConfirmInteractiveWithIO = common.ConfirmInteractiveWithIO
 var IsInteractiveModeEnabled = common.IsInteractiveModeEnabled
 
 // 関数エイリアス - Safety

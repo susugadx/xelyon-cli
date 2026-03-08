@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"bytes"
+	"strings"
 	"testing"
 	"time"
 )
@@ -72,5 +74,24 @@ func TestFormatParallelElapsed(t *testing.T) {
 	}
 	if got := FormatParallelElapsed(1200 * time.Millisecond); got != "1.2s" {
 		t.Fatalf("FormatParallelElapsed(1.2s) = %q, want %q", got, "1.2s")
+	}
+}
+
+func TestPrintParallelGroupToWriter_UsesInjectedWriter(t *testing.T) {
+	var buf bytes.Buffer
+
+	PrintParallelGroupStartToWriter(&buf, 2)
+	PrintParallelGroupLineToWriter(&buf, "📄 read_file: file.go")
+	PrintParallelGroupEndToWriter(&buf, "Done: 2 tools")
+
+	output := buf.String()
+	for _, want := range []string{
+		"┌ Parallel (2 calls)",
+		"│ 📄 read_file: file.go",
+		"└ Done: 2 tools",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("expected injected output to contain %q, got %q", want, output)
+		}
 	}
 }

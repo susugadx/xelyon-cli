@@ -64,23 +64,28 @@ type webSearchSource struct {
 }
 
 func init() {
-	websearch.Register("gemini", WebSearch)
+	websearch.RegisterWithContext("gemini", WebSearchWithContext)
 }
 
 // WebSearch executes Gemini's native Google Search grounding.
 func WebSearch(query, model string) (string, error) {
+	return WebSearchWithContext(context.Background(), query, model)
+}
+
+// WebSearchWithContext は request context を使って Gemini ネイティブ web search を実行する。
+func WebSearchWithContext(ctx context.Context, query, model string) (string, error) {
 	apiKey := os.Getenv("GEMINI_API_KEY")
 	if apiKey == "" {
 		return "", fmt.Errorf("GEMINI_API_KEY not set")
 	}
 
-	model = api.GetDefaultModel(model, "gemini", "gemini-3.1-pro-preview-customtools")
+	model = api.GetDefaultModelWithContext(ctx, model, "gemini", "gemini-3.1-pro-preview-customtools")
 	provider := New(apiKey)
-	return provider.webSearch(context.Background(), query, model)
+	return provider.webSearch(ctx, query, model)
 }
 
 func (p *Provider) webSearch(ctx context.Context, query, model string) (string, error) {
-	cfg := config.GetGlobalConfig()
+	cfg := config.FromContext(ctx)
 	reqBody := webSearchRequest{
 		Contents: []GeminiContent{{
 			Role:  "user",

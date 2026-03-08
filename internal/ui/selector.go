@@ -44,7 +44,7 @@ func (s *Selector) RunWithIO(promptIO PromptIO) (string, error) {
 	promptIO = normalizePromptIO(promptIO)
 
 	// カーソルを表示（スピナー停止）
-	StopGlobalSpinner()
+	stopSpinnerForPromptIO(promptIO)
 	_, _ = fmt.Fprint(promptIO.Out, "\033[?25h")
 	// メッセージを表示
 	_, _ = fmt.Fprintf(promptIO.Out, "\n%s?%s %s\n\n", colorCyan, colorReset, s.Message)

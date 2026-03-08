@@ -76,7 +76,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	messages = append(messages, history...)
 
 	// モデル名を設定（config優先、フォールバックはkimi-k2-instruct）
-	model = api.GetDefaultModel(model, "groq", "moonshotai/kimi-k2-instruct")
+	model = api.GetDefaultModelWithContext(ctx, model, "groq", "moonshotai/kimi-k2-instruct")
 
 	reqBody := api.ChatRequest{
 		Model:         model,
@@ -137,12 +137,14 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	if isStreaming {
 		return p.handleStreamingResponse(ctx, resp, spinner)
 	} else {
-		return p.handleNonStreamingResponse(resp, spinner)
+		return p.handleNonStreamingResponse(ctx, resp, spinner)
 	}
 }
 
 // handleStreamingResponse はストリーミングレスポンスを処理
 func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
+	out := api.OutputWriterFromContext(ctx)
+	errOut := api.ErrorWriterFromContext(ctx)
 	var fullResponse strings.Builder
 	var toolCallsOutput strings.Builder
 	toolCalls := make(map[int]*toolCallAccumulator)
@@ -169,7 +171,7 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 			var streamResp api.StreamResponse
 			if err := json.Unmarshal([]byte(data), &streamResp); err != nil {
 				// JSONパースエラーを警告（データ損失を防ぐため記録）
-				fmt.Fprintf(os.Stderr, "⚠️  Warning: failed to parse streaming response: %v\n", err)
+				fmt.Fprintf(errOut, "⚠️  Warning: failed to parse streaming response: %v\n", err)
 				continue
 			}
 
@@ -239,10 +241,10 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 				if firstChunk && content != "" {
 					spinner.Stop()
 					firstChunk = false
-					api.PrintAIHeader()
+					api.PrintAIHeaderWithContext(ctx)
 				}
 
-				fmt.Print(content)
+				_, _ = fmt.Fprint(out, content)
 				fullResponse.WriteString(content)
 			}
 		}
@@ -262,19 +264,19 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 	if toolCallsOutput.Len() > 0 {
 		spinner.Stop()
 		if fullResponse.Len() > 0 {
-			fmt.Println()
+			_, _ = fmt.Fprintln(out)
 			return fullResponse.String() + toolCallsOutput.String(), nil
 		}
 		return toolCallsOutput.String(), nil
 	}
 
-	fmt.Println()
+	_, _ = fmt.Fprintln(out)
 	return fullResponse.String(), nil
 }
 
 // handleNonStreamingResponse は非ストリーミングレスポンスを処理（フォールバック）
-func (p *Provider) handleNonStreamingResponse(resp *http.Response, spinner *ui.Spinner) (string, error) {
-	return api.HandleNonStreamingResponse(resp, spinner)
+func (p *Provider) handleNonStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
+	return api.HandleNonStreamingResponse(ctx, resp, spinner)
 }
 
 // ChatWithImage は画像付きメッセージで会話を行う（非対応：テキストのみ送信）

@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"strings"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // --- Test 1: Loop detection prevents execution of subsequent tools ---
@@ -369,7 +371,10 @@ func TestExecuteToolCallsWithParallel_AllParallelConcurrency(t *testing.T) {
 
 func TestExecuteToolCallsWithParallel_PrintsParallelGroup(t *testing.T) {
 	provider := &mockProvider{name: "test"}
-	agent := NewAgent("test-model", provider, false)
+	var out bytes.Buffer
+	agent := NewAgentWithRuntime("test-model", provider, false, &AgentRuntime{
+		UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+	})
 	agent.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
 
 	toolCalls := []*tools.ToolCall{
@@ -395,16 +400,15 @@ func TestExecuteToolCallsWithParallel_PrintsParallelGroup(t *testing.T) {
 
 	agent.addToolCallsToHistory("test", toolCalls)
 
-	output := captureStdout(t, func() {
-		agent.executeToolCallsWithParallel(context.Background(), toolCalls, nil, nil,
-			func(_ int, _ *tools.ToolCall, _ string, _ *tools.FileChange) {})
-	})
+	agent.executeToolCallsWithParallel(context.Background(), toolCalls, nil, nil,
+		func(_ int, _ *tools.ToolCall, _ string, _ *tools.FileChange) {})
+	output := out.String()
 
 	for _, want := range []string{
 		"┌ Parallel (2 calls)",
 		"📄 read_file: auto_compress.go",
 		`🔍 search_code: "maybeAutoCompress" in . →`,
-		"│    ⎿  Found ",
+		"Found ",
 		"└ Done:",
 	} {
 		if !strings.Contains(output, want) {

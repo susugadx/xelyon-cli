@@ -53,9 +53,9 @@ func (a *Agent) chatCore(input string, image *api.ImageData, oneShot bool) error
 	}
 
 	if prevChanges > 0 {
-		yellow.Printf("⚠️  %d uncommitted changes from previous task\n", prevChanges)
-		fmt.Println("💡 Run /commit or git commit to keep changes separate")
-		fmt.Println()
+		yellow.Fprintf(a.output(), "⚠️  %d uncommitted changes from previous task\n", prevChanges)
+		_, _ = fmt.Fprintln(a.output(), "💡 Run /commit or git commit to keep changes separate")
+		_, _ = fmt.Fprintln(a.output())
 	}
 
 	// GitHub MCP ヒントを追加（GitHub関連リクエストの場合）
@@ -107,12 +107,12 @@ func (a *Agent) chatCore(input string, image *api.ImageData, oneShot bool) error
 	if err != nil {
 		// oneShot: エラーをそのまま返す（対話的リトライ不要）
 		if oneShot {
-			ui.StopGlobalSpinner()
+			a.ui().StopSpinner()
 			return err
 		}
 
 		if errors.Is(err, context.Canceled) {
-			yellow.Println("\n⚠️  Response interrupted")
+			yellow.Fprintln(a.output(), "\n⚠️  Response interrupted")
 		} else {
 			// トークン上限エラーの場合は自動圧縮+リトライを試みる
 			if token.IsTokenLimitError(err) {
@@ -130,18 +130,18 @@ func (a *Agent) chatCore(input string, image *api.ImageData, oneShot bool) error
 				// 自動圧縮+リトライを試みる
 				if a.handleTokenLimitErrorWithRetry(err, retryFunc, a.PlanModeEnabled) {
 					// リトライ成功時はここで終了
-					ui.StopGlobalSpinner()
+					a.ui().StopSpinner()
 					a.SetStatus(StateWaitingInput, "Ready for input", "入力待ち", "Type your request or /help", "リクエスト、または /help を入力")
 					return nil
 				}
 				// リトライ失敗時はエラーメッセージを表示（handleTokenLimitErrorWithRetry内で既に表示済み）
-				red.Printf("Error: %v\n", err)
+				red.Fprintf(a.output(), "Error: %v\n", err)
 			} else {
 				// トークン上限以外のエラー
-				red.Printf("Error: %v\n", err)
+				red.Fprintf(a.output(), "Error: %v\n", err)
 			}
 		}
-		ui.StopGlobalSpinner()
+		a.ui().StopSpinner()
 		a.SetStatus(StateAborted, "Request failed", "リクエスト失敗", "Try again", "再試行してください")
 		return nil
 	}
@@ -167,19 +167,19 @@ func (a *Agent) chatCore(input string, image *api.ImageData, oneShot bool) error
 	}
 
 	if currentTokens <= baseTokens {
-		dim.Printf("💡 Context %dK - clean state ✓\n", contextK)
+		dim.Fprintf(a.output(), "💡 Context %dK - clean state ✓\n", contextK)
 	} else {
 		saved := currentTokens - baseTokens
 		pricing := GetPricingInfo(a.ProviderName, a.CurrentModel)
 		if pricing.InputCostPerM > 0 {
 			savingPerTurn := float64(saved) / 1_000_000.0 * pricing.InputCostPerM * 0.5
 			if savingPerTurn < 0.01 {
-				dim.Printf("💡 Context %dK - clean state ✓\n", contextK)
+				dim.Fprintf(a.output(), "💡 Context %dK - clean state ✓\n", contextK)
 			} else {
-				dim.Printf("💡 Context %dK - /clear saves ~$%.2f/turn, /compress keeps key context\n", contextK, savingPerTurn)
+				dim.Fprintf(a.output(), "💡 Context %dK - /clear saves ~$%.2f/turn, /compress keeps key context\n", contextK, savingPerTurn)
 			}
 		} else {
-			dim.Printf("💡 Context %dK - /clear or /compress to reduce context\n", contextK)
+			dim.Fprintf(a.output(), "💡 Context %dK - /clear or /compress to reduce context\n", contextK)
 		}
 	}
 
@@ -243,7 +243,7 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 			}
 		}
 		if err != nil {
-			ui.StopGlobalSpinner()
+			a.ui().StopSpinner()
 			return fmt.Errorf("API call failed: %w", err)
 		}
 
@@ -263,7 +263,7 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 			// FC失敗フォールバック: テキスト出力された Plan JSON を抽出して実行
 			if planJSON := plan.ExtractPlanJSON(response); planJSON != "" {
 				if p, err := plan.ParsePlan(planJSON); err == nil && len(p.Steps) > 0 {
-					yellow.Printf("📋 FC fallback: extracted %d-step plan from text. Switching to step-by-step...\n", len(p.Steps))
+					yellow.Fprintf(a.output(), "📋 FC fallback: extracted %d-step plan from text. Switching to step-by-step...\n", len(p.Steps))
 					a.History = append(a.History, api.Message{
 						Role:             "assistant",
 						Content:          response,
@@ -278,7 +278,7 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 				}
 			}
 			// パース失敗 → 直接ツール実行を促す
-			yellow.Println("⚠️  Plan JSON detected but parse failed. Execute tools directly.")
+			yellow.Fprintln(a.output(), "⚠️  Plan JSON detected but parse failed. Execute tools directly.")
 			a.History = append(a.History, api.Message{
 				Role:             "assistant",
 				Content:          response,
@@ -293,14 +293,14 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 
 		// デバッグログ
 		if os.Getenv("XELYON_DEBUG_TOOLS") == "1" {
-			fmt.Printf("[DEBUG Tools] Response length: %d, ToolCalls found: %d\n", len(response), len(toolCalls))
+			_, _ = fmt.Fprintf(a.errorOutput(), "[DEBUG Tools] Response length: %d, ToolCalls found: %d\n", len(response), len(toolCalls))
 			if len(response) < config.DebugPreviewLen {
-				fmt.Printf("[DEBUG Tools] Response: %s\n", response)
+				_, _ = fmt.Fprintf(a.errorOutput(), "[DEBUG Tools] Response: %s\n", response)
 			} else {
-				fmt.Printf("[DEBUG Tools] Response (first %d): %s...\n", config.DebugPreviewLen, response[:config.DebugPreviewLen])
+				_, _ = fmt.Fprintf(a.errorOutput(), "[DEBUG Tools] Response (first %d): %s...\n", config.DebugPreviewLen, response[:config.DebugPreviewLen])
 			}
 			for i, tc := range toolCalls {
-				fmt.Printf("[DEBUG Tools] ToolCall[%d]: tool=%s, args=%v\n", i, tc.Tool, tc.Args)
+				_, _ = fmt.Fprintf(a.errorOutput(), "[DEBUG Tools] ToolCall[%d]: tool=%s, args=%v\n", i, tc.Tool, tc.Args)
 			}
 		}
 
@@ -315,7 +315,7 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 
 				// ハードリミット: これ以上繰り返してもツール使用に移行しない → break してユーザーに返す
 				if textPlanRedirectCount > maxTextPlanHardLimit {
-					yellow.Printf("⚠️  Text plan detected %d times without tool use. Returning response to user.\n", textPlanRedirectCount)
+					yellow.Fprintf(a.output(), "⚠️  Text plan detected %d times without tool use. Returning response to user.\n", textPlanRedirectCount)
 					a.History = append(a.History, api.Message{
 						Role:             "assistant",
 						Content:          response,
@@ -326,7 +326,7 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 
 				// ソフトリダイレクト上限後: より強い指示
 				if textPlanRedirectCount > maxTextPlanRedirects {
-					yellow.Printf("⚠️  Text plan detected %d times. Forcing direct execution.\n", textPlanRedirectCount)
+					yellow.Fprintf(a.output(), "⚠️  Text plan detected %d times. Forcing direct execution.\n", textPlanRedirectCount)
 					a.History = append(a.History, api.Message{
 						Role:             "assistant",
 						Content:          response,
@@ -339,7 +339,7 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 					continue
 				}
 
-				yellow.Printf("⚠️  Text plan detected (%d steps). Execute tools directly instead. (%d/%d)\n",
+				yellow.Fprintf(a.output(), "⚠️  Text plan detected (%d steps). Execute tools directly instead. (%d/%d)\n",
 					len(steps), textPlanRedirectCount, maxTextPlanRedirects)
 				a.History = append(a.History, api.Message{
 					Role:             "assistant",
@@ -358,7 +358,7 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 				needsContinue, feedback := a.verifyCompletionWithDiagnostics(response)
 				if needsContinue {
 					completionVerified = true
-					yellow.Println("⚠️  Completion verification: LSP errors found in modified files")
+					yellow.Fprintln(a.output(), "⚠️  Completion verification: LSP errors found in modified files")
 					a.History = append(a.History, api.Message{
 						Role:             "assistant",
 						Content:          response,
@@ -389,9 +389,9 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 							maxRetry = 3
 						}
 						if hookRetryCount >= maxRetry {
-							yellow.Printf("⚠️  Hook retry limit reached (%d/%d). Proceeding with completion.\n", hookRetryCount, maxRetry)
+							yellow.Fprintf(a.output(), "⚠️  Hook retry limit reached (%d/%d). Proceeding with completion.\n", hookRetryCount, maxRetry)
 						} else {
-							yellow.Printf("⚠️  Completion hook failed (%d/%d). Asking AI to fix...\n", hookRetryCount, maxRetry)
+							yellow.Fprintf(a.output(), "⚠️  Completion hook failed (%d/%d). Asking AI to fix...\n", hookRetryCount, maxRetry)
 							a.History = append(a.History, api.Message{
 								Role:             "assistant",
 								Content:          response,
@@ -434,7 +434,7 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 				Content: fmt.Sprintf("[Tool Result for create_plan]\n%s", result),
 			})
 
-			yellow.Println("⚠️  create_plan is deprecated, continuing in normal mode...")
+			yellow.Fprintln(a.output(), "⚠️  create_plan is deprecated, continuing in normal mode...")
 		}
 
 		// Phase 2: 実行対象のツール呼び出しをフィルタ（create_plan を除外）
@@ -459,8 +459,8 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 			if isSameToolCall(tc, lastToolCall) {
 				sameCallCount++
 				if sameCallCount >= threshold {
-					yellow.Printf("⚠️  Warning: Same tool call repeated %d times, stopping to prevent infinite loop\n", sameCallCount)
-					yellow.Printf("   Tool: %s\n", tc.Tool)
+					yellow.Fprintf(a.output(), "⚠️  Warning: Same tool call repeated %d times, stopping to prevent infinite loop\n", sameCallCount)
+					yellow.Fprintf(a.output(), "   Tool: %s\n", tc.Tool)
 					return true
 				}
 			} else {
@@ -503,7 +503,7 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 						Content: fmt.Sprintf("[Tool Result for %s]\n%s", tc.Tool, historyContent),
 					})
 				}
-				fmt.Println()
+				_, _ = fmt.Fprintln(a.output())
 
 				// str_replace 成功時: LSP診断遅延バッファにファイルを追加
 				if tc.Tool == "str_replace" && !strings.HasPrefix(result, "Error:") &&
@@ -536,9 +536,9 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 		if lastFailedResult != "" {
 			if autoRetryMax > 0 && retryCount < autoRetryMax {
 				retryCount++
-				fmt.Print("\033[?25h") // カーソルを表示（スピナー停止）
-				red.Printf("❌ Failed (retry %d/%d)\n", retryCount, autoRetryMax)
-				yellow.Printf("🔄 Retrying...\n")
+				a.ui().ResetTerminalState()
+				red.Fprintf(a.output(), "❌ Failed (retry %d/%d)\n", retryCount, autoRetryMax)
+				yellow.Fprintf(a.output(), "🔄 Retrying...\n")
 
 				// リトライ用プロンプトを追加
 				a.History = append(a.History, api.Message{
@@ -559,20 +559,20 @@ Do NOT give up. Try again with a different approach.`, lastFailedResult),
 
 			// 自動リトライが exhausted
 			if autoRetryMax > 0 {
-				fmt.Print("\033[?25h") // カーソルを表示（スピナー停止）
-				red.Printf("❌ Failed (%d retries exhausted)\n", autoRetryMax)
-				yellow.Println("Could not complete the task automatically. Letting AI respond...")
+				a.ui().ResetTerminalState()
+				red.Fprintf(a.output(), "❌ Failed (%d retries exhausted)\n", autoRetryMax)
+				yellow.Fprintln(a.output(), "Could not complete the task automatically. Letting AI respond...")
 			}
 			// AI に任せて続行（リトライカウンターをリセット）
 			retryCount = 0
 		} else if retryCount > 0 {
 			// 成功した場合（リトライ後）
-			green.Printf("✅ Succeeded (on retry %d)\n", retryCount)
+			green.Fprintf(a.output(), "✅ Succeeded (on retry %d)\n", retryCount)
 			retryCount = 0
 		}
 	}
 
-	yellow.Printf("⚠️  Tool loop limit reached (%d iterations)\n", maxIterations)
+	yellow.Fprintf(a.output(), "⚠️  Tool loop limit reached (%d iterations)\n", maxIterations)
 	a.showTaskSummary()
 	return nil
 }
@@ -591,20 +591,20 @@ func (a *Agent) showTaskSummary() {
 		ts.AddChange(change.FilePath, action, change.LinesAdded, change.LinesRemoved)
 	}
 
-	fmt.Print(ts.Render())
+	_, _ = fmt.Fprint(a.output(), ts.Render())
 }
 
 // chatWithImage は画像付きメッセージでAIと対話する
 func (a *Agent) chatWithImage(input string, image *api.ImageData) {
 	// プロバイダーが画像対応かチェック
 	if !a.CurrentProvider.SupportsImages() {
-		yellow.Printf("Warning: %s does not support images. The image will be ignored.\n", a.CurrentProvider.Name())
+		yellow.Fprintf(a.output(), "Warning: %s does not support images. The image will be ignored.\n", a.CurrentProvider.Name())
 		a.chat(input)
 		return
 	}
 
 	// 画像情報をログ
-	green.Printf("🖼️  Sending image: %s (%s)\n", image.Path, api.FormatImageSize(image.Size))
+	green.Fprintf(a.output(), "🖼️  Sending image: %s (%s)\n", image.Path, api.FormatImageSize(image.Size))
 
 	a.chatInternal(input, image)
 }
@@ -628,18 +628,18 @@ func (a *Agent) printTaskUsage(startStats SessionStats) {
 	}
 
 	// ✓ を緑色で表示、残りはdimまたは通常色
-	green.Print("✓ ")
+	green.Fprint(a.output(), "✓ ")
 	if strings.ToLower(a.ProviderName) == "ollama" {
 		// Ollama の場合はコスト非表示
-		fmt.Printf("In: %s + Out: %s = %s tok\n",
+		_, _ = fmt.Fprintf(a.output(), "In: %s + Out: %s = %s tok\n",
 			FormatNumber(inDiff),
 			FormatNumber(outDiff),
 			FormatNumber(total))
 	} else {
-		fmt.Printf("In: %s + Out: %s = %s tok ",
+		_, _ = fmt.Fprintf(a.output(), "In: %s + Out: %s = %s tok ",
 			FormatNumber(inDiff),
 			FormatNumber(outDiff),
 			FormatNumber(total))
-		dim.Printf("(~$%.4f)\n", costDiff)
+		dim.Fprintf(a.output(), "(~$%.4f)\n", costDiff)
 	}
 }

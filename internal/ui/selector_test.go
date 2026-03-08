@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"bytes"
+	"strings"
 	"testing"
 )
 
@@ -61,4 +63,28 @@ func TestGlobalReader(t *testing.T) {
 
 	// Cleanup
 	SetGlobalReader(nil)
+}
+
+func TestSelector_RunWithIO_StopsRuntimeSpinner(t *testing.T) {
+	runtime := NewRuntime(strings.NewReader("1\n"), &bytes.Buffer{}, &bytes.Buffer{})
+	runtime.SetSpinner(NewSpinnerWithRuntime(runtime))
+
+	selector := NewSelector("Test message", []SelectOption{
+		{Label: "Yes", Description: "Confirm", Value: "yes"},
+	})
+
+	result, err := selector.RunWithIO(runtime.PromptIO())
+	if err != nil {
+		t.Fatalf("RunWithIO() error = %v", err)
+	}
+	if result != "yes" {
+		t.Fatalf("RunWithIO() = %q, want %q", result, "yes")
+	}
+	if runtime.CurrentSpinner() != nil {
+		t.Fatal("expected runtime spinner to be cleared")
+	}
+	output := runtime.Output().(*bytes.Buffer).String()
+	if !strings.Contains(output, "Choice [1]:") {
+		t.Fatalf("expected injected output to contain selector prompt, got %q", output)
+	}
 }

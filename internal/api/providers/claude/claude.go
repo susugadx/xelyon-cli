@@ -36,10 +36,9 @@ const defaultClaudeURL = "https://api.anthropic.com/v1/messages"
 // Provider はClaude (Anthropic) APIのプロバイダー実装
 type Provider struct {
 	api.BaseProvider
-	mcpTools          []api.ToolDefinition // MCP ツール定義（Tool Use用）
-	usageCallback     api.UsageCallback    // トークン使用量コールバック
-	compactionEnabled bool                 // Compaction API を使用するか
-	compactionTrigger int                  // トリガー閾値（トークン数）
+	mcpTools      []api.ToolDefinition // MCP ツール定義（Tool Use用）
+	usageCallback api.UsageCallback    // トークン使用量コールバック
+	runtimeConfig *config.Config
 }
 
 // ContextManagement は Compaction API の設定
@@ -61,11 +60,8 @@ type CompactTrigger struct {
 
 // New は新しいProviderを作成
 func New(apiKey string) *Provider {
-	cfg := config.GetGlobalConfig()
 	return &Provider{
-		BaseProvider:      api.NewBaseProvider("Claude", apiKey, defaultClaudeURL, "ANTHROPIC_API_URL"),
-		compactionEnabled: cfg.Compression.ClaudeCompaction,
-		compactionTrigger: cfg.Compression.CompactionTrigger,
+		BaseProvider: api.NewBaseProvider("Claude", apiKey, defaultClaudeURL, "ANTHROPIC_API_URL"),
 	}
 }
 
@@ -81,12 +77,21 @@ func (p *Provider) IsFunctionCallingEnabled() bool {
 
 // SupportsClaudeCompaction は Claude Compaction 対応を返す
 func (p *Provider) SupportsClaudeCompaction() bool {
-	cfg := config.GetGlobalConfig()
-	if !cfg.Compression.ClaudeCompaction {
-		return false
+	return p.supportsClaudeCompactionWithConfig(p.effectiveConfig(), "")
+}
+
+// SupportsClaudeCompactionWithContext は request context とモデルを使って Claude Compaction 対応可否を返す。
+func (p *Provider) SupportsClaudeCompactionWithContext(ctx context.Context, model string) bool {
+	cfg := p.effectiveConfig()
+	if ctxCfg, ok := config.LookupContext(ctx); ok {
+		cfg = ctxCfg
 	}
-	model := api.GetDefaultModel("", "claude", "claude-sonnet-4-6")
-	return isCompactionSupported(model)
+	return p.supportsClaudeCompactionWithConfig(cfg, model)
+}
+
+// SetRuntimeConfig は provider が参照する runtime 設定を差し替える。
+func (p *Provider) SetRuntimeConfig(cfg *config.Config) {
+	p.runtimeConfig = cfg
 }
 
 // ThinkingConfig は Extended Thinking の設定
@@ -223,7 +228,7 @@ func (p *Provider) executeRequest(ctx context.Context, reqBody interface{}, with
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-api-key", p.APIKey)
 
-	cfg := config.GetGlobalConfig()
+	cfg := config.FromContext(ctx)
 	pCfg := cfg.ProviderModels["claude"]
 
 	// Anthropic Version
@@ -239,7 +244,7 @@ func (p *Provider) executeRequest(ctx context.Context, reqBody interface{}, with
 		betaHeaders = append(betaHeaders, pCfg.AnthropicBeta...)
 	}
 	// Compaction が有効な場合は beta ヘッダーを追加
-	if p.compactionEnabled {
+	if cfg.Compression.ClaudeCompaction {
 		betaHeaders = append(betaHeaders, "compact-2026-01-12")
 	}
 	if len(betaHeaders) > 0 {
@@ -279,7 +284,7 @@ func (p *Provider) processResponse(ctx context.Context, result *requestResult) (
 	if strings.Contains(contentType, "text/event-stream") {
 		return p.handleStreamingResponse(ctx, result.Response, result.Spinner)
 	}
-	return p.handleNonStreamingResponse(result.Response, result.Spinner)
+	return p.handleNonStreamingResponse(ctx, result.Response, result.Spinner)
 }
 
 // isCompactionSupported は Compaction API 対応モデルか判定
@@ -289,19 +294,39 @@ func isCompactionSupported(model string) bool {
 		strings.Contains(model, "sonnet-4-6")
 }
 
+func (p *Provider) effectiveConfig() *config.Config {
+	if p != nil && p.runtimeConfig != nil {
+		return p.runtimeConfig
+	}
+	return config.GetGlobalConfig()
+}
+
+func (p *Provider) supportsClaudeCompactionWithConfig(cfg *config.Config, model string) bool {
+	if cfg == nil || !cfg.Compression.ClaudeCompaction {
+		return false
+	}
+	if model == "" {
+		model = cfg.GetModelForProvider("claude")
+	}
+	if model == "" {
+		model = "claude-sonnet-4-6"
+	}
+	return isCompactionSupported(model)
+}
+
 // ChatWithTools は Provider interface の実装（context対応）
 func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
 	// モデル名を設定（config優先、フォールバックはclaude-sonnet-4-6）
-	model = api.GetDefaultModel(model, "claude", "claude-sonnet-4-6")
+	model = api.GetDefaultModelWithContext(ctx, model, "claude", "claude-sonnet-4-6")
 
 	// Anthropic Messages API 形式に変換（role:"tool" → role:"user"+tool_result 等）
 	messages := ConvertToAnthropicMessages(history)
 
-	cfg := config.GetGlobalConfig()
+	cfg := config.FromContext(ctx)
 
 	// プロンプトキャッシュ: 安定区間+最新userにブレークポイント設定
 	if cfg != nil && cfg.PromptCache.Enabled {
-		SetMessageCacheBreakpoints(messages)
+		SetMessageCacheBreakpointsWithEnabled(messages, true)
 	}
 
 	reqBody := Request{
@@ -313,8 +338,8 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	}
 
 	// Compaction API（Opus 4.6 のみ）
-	if p.compactionEnabled && isCompactionSupported(model) {
-		trigger := p.compactionTrigger
+	if cfg.Compression.ClaudeCompaction && isCompactionSupported(model) {
+		trigger := cfg.Compression.CompactionTrigger
 		if trigger == 0 {
 			trigger = 150000
 		}
@@ -509,7 +534,7 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 }
 
 // handleNonStreamingResponse は非ストリーミングレスポンスを処理（フォールバック）
-func (p *Provider) handleNonStreamingResponse(resp *http.Response, spinner *ui.Spinner) (string, error) {
+func (p *Provider) handleNonStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
 	var result Response
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		spinner.Stop()
@@ -539,7 +564,7 @@ func (p *Provider) handleNonStreamingResponse(resp *http.Response, spinner *ui.S
 
 	content := textContent.String()
 	if content != "" {
-		fmt.Println(content)
+		_, _ = fmt.Fprintln(api.OutputWriterFromContext(ctx), content)
 	}
 
 	// Tool Use がある場合は追加
@@ -561,7 +586,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	}
 
 	// モデル名を設定（config優先、フォールバックはclaude-sonnet-4-6）
-	model = api.GetDefaultModel(model, "claude", "claude-sonnet-4-6")
+	model = api.GetDefaultModelWithContext(ctx, model, "claude", "claude-sonnet-4-6")
 
 	// Anthropic Messages API 形式に変換（role:"tool" → role:"user"+tool_result 等）
 	converted := ConvertToAnthropicMessages(history)
@@ -570,9 +595,9 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	// multimodalMessage（画像付き新規入力）は converted に含まれないため BP 対象外。
 	// 画像ターンでは実質 BP が system+tools+履歴の3個になるが、
 	// 次ターンで multimodalMessage も履歴に含まれキャッシュされる。
-	cfg := config.GetGlobalConfig()
+	cfg := config.FromContext(ctx)
 	if cfg != nil && cfg.PromptCache.Enabled {
-		SetMessageCacheBreakpoints(converted)
+		SetMessageCacheBreakpointsWithEnabled(converted, true)
 	}
 
 	var messages []interface{}

@@ -6,11 +6,13 @@ import (
 	"os"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 // SwitchProvider はプロバイダーを切り替える
 func (a *Agent) SwitchProvider(providerName string) error {
+	out := a.output()
+	errOut := a.errorOutput()
+
 	// API キー存在チェック
 	if !IsAPIKeyAvailable(providerName) {
 		return fmt.Errorf("%s のAPIキーが設定されていません", providerName)
@@ -21,13 +23,10 @@ func (a *Agent) SwitchProvider(providerName string) error {
 	if err != nil {
 		return fmt.Errorf("プロバイダーの初期化に失敗しました: %w", err)
 	}
+	api.ApplyRuntimeConfig(provider, a.cfg())
 
-	// 設定ファイルから新しいプロバイダーのデフォルトモデルを取得
-	cfg, err := config.LoadConfig()
-	if err != nil {
-		yellow.Printf("Warning: Failed to load config: %v\n", err)
-		cfg = config.DefaultConfig()
-	}
+	// runtime 設定から新しいプロバイダーのデフォルトモデルを取得
+	cfg := a.cfg()
 	newModel := cfg.GetModelForProvider(providerName)
 	if newModel == "" {
 		// フォールバック: プロバイダー別のハードコードされたデフォルト
@@ -112,7 +111,7 @@ func (a *Agent) SwitchProvider(providerName string) error {
 					}
 
 					if debug {
-						fmt.Fprintf(os.Stderr, "[DEBUG Gemini] MCP tool registered: %s\n", name)
+						_, _ = fmt.Fprintf(errOut, "[DEBUG Gemini] MCP tool registered: %s\n", name)
 					}
 					mcpToolsConverted = append(mcpToolsConverted, api.ToolDefinition{
 						Name:        name,
@@ -133,7 +132,7 @@ func (a *Agent) SwitchProvider(providerName string) error {
 					mcpFunctions = append(mcpFunctions, fn)
 
 					if debug {
-						fmt.Fprintf(os.Stderr, "[DEBUG OpenAI] MCP tool registered: %s\n", name)
+						_, _ = fmt.Fprintf(errOut, "[DEBUG OpenAI] MCP tool registered: %s\n", name)
 					}
 				}
 				openaiMCPProvider.SetMCPTools(mcpFunctions)
@@ -143,8 +142,8 @@ func (a *Agent) SwitchProvider(providerName string) error {
 
 	a.rebuildSystemPromptForCurrentProvider()
 
-	green.Printf("✅ Provider: %s → %s\n", oldProvider, providerName)
-	green.Printf("✅ Model: %s → %s\n", oldModel, newModel)
+	green.Fprintf(out, "✅ Provider: %s → %s\n", oldProvider, providerName)
+	green.Fprintf(out, "✅ Model: %s → %s\n", oldModel, newModel)
 	return nil
 }
 

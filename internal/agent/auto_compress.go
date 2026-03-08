@@ -3,11 +3,13 @@ package agent
 import (
 	"context"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // ResponseIDCapable は Responses API のキャッシュ機能を持つプロバイダー
@@ -45,7 +47,12 @@ func (a *Agent) maybeAutoCompress() bool {
 		}
 
 		// Claude Compaction が有効な場合は自動圧縮をスキップ
-		if compactionProvider, ok := a.CurrentProvider.(api.ClaudeCompactionCapable); ok {
+		requestCtx := a.requestContext(context.Background())
+		if compactionProvider, ok := a.CurrentProvider.(api.ClaudeCompactionRuntimeCapable); ok {
+			if compactionProvider.SupportsClaudeCompactionWithContext(requestCtx, a.CurrentModel) {
+				return false
+			}
+		} else if compactionProvider, ok := a.CurrentProvider.(api.ClaudeCompactionCapable); ok {
 			if compactionProvider.SupportsClaudeCompaction() {
 				return false
 			}
@@ -89,20 +96,20 @@ func (a *Agent) maybeAutoCompress() bool {
 	// 圧縮実行（通知付き）
 	if forceCompress {
 		if costAwareCompress {
-			cyan.Printf(
+			cyan.Fprintf(a.output(),
 				"\n🗜️ Auto-compressing before pricing cliff (%dK → %dK projected)...\n",
 				currentTokens/1000,
 				projectedTokens/1000,
 			)
 		} else {
-			cyan.Printf(
+			cyan.Fprintf(a.output(),
 				"\n🗜️ Auto-compressing for cost optimization (%dK > %dK threshold)...\n",
 				currentTokens/1000,
 				providerThreshold/1000,
 			)
 		}
 	} else {
-		cyan.Printf("\n🗜️ Auto-compressing history (%.0f%% threshold reached)...\n", percentage)
+		cyan.Fprintf(a.output(), "\n🗜️ Auto-compressing history (%.0f%% threshold reached)...\n", percentage)
 	}
 
 	// Compact API を優先的に使用するか確認
@@ -116,12 +123,12 @@ func (a *Agent) maybeAutoCompress() bool {
 						metrics.CostAwareCompressions = 1
 					}
 					a.addOptimizationMetrics(metrics)
-					fmt.Println("   💡 Disable with: xelyon config set compression.auto_compress false")
-					fmt.Println()
+					_, _ = fmt.Fprintln(a.output(), "   💡 Disable with: xelyon config set compression.auto_compress false")
+					_, _ = fmt.Fprintln(a.output())
 					return true
 				}
 				// Compact API 失敗時はLLMサマリーにフォールバック
-				yellow.Printf("   ⚠️ Compact API failed, falling back to LLM summary...\n")
+				yellow.Fprintf(a.output(), "   ⚠️ Compact API failed, falling back to LLM summary...\n")
 			}
 		}
 	}
@@ -133,22 +140,22 @@ func (a *Agent) maybeAutoCompress() bool {
 
 	// 履歴が短すぎる場合はスキップ
 	if len(a.History) <= keepRecent {
-		fmt.Println("   Skipped: history too short")
+		_, _ = fmt.Fprintln(a.output(), "   Skipped: history too short")
 		return false
 	}
 
 	beforeTokens := a.EstimateTokens()
 	if err := a.CompressHistory(keepRecent); err != nil {
-		yellow.Printf("   ⚠️ Auto-compress failed: %v\n", err)
+		yellow.Fprintf(a.output(), "   ⚠️ Auto-compress failed: %v\n", err)
 		return false
 	}
 	afterTokens := a.EstimateTokens()
 
 	// 結果を表示
-	fmt.Printf("   Before: %s tokens → After: %s tokens\n",
+	_, _ = fmt.Fprintf(a.output(), "   Before: %s tokens → After: %s tokens\n",
 		formatNumber(beforeTokens), formatNumber(afterTokens))
-	fmt.Println("   💡 Disable with: xelyon config set compression.auto_compress false")
-	fmt.Println()
+	_, _ = fmt.Fprintln(a.output(), "   💡 Disable with: xelyon config set compression.auto_compress false")
+	_, _ = fmt.Fprintln(a.output())
 
 	metrics := OptimizationMetrics{CompactionCount: 1}
 	if costAwareCompress {
@@ -171,9 +178,9 @@ func (a *Agent) checkTokenWarning() {
 	percentage := a.GetTokenUsagePercentage()
 
 	if percentage > 90 {
-		yellow.Println("⚠️ Token usage is at 90%. Consider using /compress")
+		yellow.Fprintln(a.output(), "⚠️ Token usage is at 90%. Consider using /compress")
 	} else if percentage > 80 {
-		fmt.Println("💡 Token usage is high (80%). /compress available if needed")
+		_, _ = fmt.Fprintln(a.output(), "💡 Token usage is high (80%). /compress available if needed")
 	}
 }
 
@@ -219,15 +226,17 @@ func detectMilestonePattern(history []api.Message) bool {
 	return searchCount >= 3
 }
 
-// handleTokenLimitError はトークン上限エラー時の提案を表示
-func handleTokenLimitError(err error) {
+func handleTokenLimitErrorWithWriter(out io.Writer, err error) {
 	if !token.IsTokenLimitError(err) {
 		return
 	}
 
-	red.Println("❌ Token limit exceeded")
-	yellow.Println("💡 Try: /compress to reduce history")
-	yellow.Println("💡 Or:  /clear to start fresh")
+	if out == nil {
+		out = ui.DefaultRuntime().Output()
+	}
+	red.Fprintln(out, "❌ Token limit exceeded")
+	yellow.Fprintln(out, "💡 Try: /compress to reduce history")
+	yellow.Fprintln(out, "💡 Or:  /clear to start fresh")
 }
 
 // handleTokenLimitErrorWithRetry はトークン上限エラー時に自動圧縮してリトライ
@@ -240,12 +249,12 @@ func (a *Agent) handleTokenLimitErrorWithRetry(err error, retryFunc func() error
 	// リトライ制限（最大1回）
 	if a.tokenLimitRetryCount >= 1 {
 		// 2回目以降は通常のエラー表示
-		handleTokenLimitError(err)
+		handleTokenLimitErrorWithWriter(a.output(), err)
 		return false
 	}
 
 	// 通知表示
-	cyan.Println("\n⚡ トークン上限到達。自動圧縮して再実行します...")
+	cyan.Fprintln(a.output(), "\n⚡ トークン上限到達。自動圧縮して再実行します...")
 
 	// LLMサマリー方式で圧縮（既存のCompressHistoryを使用）
 	// keepRecentはデフォルト値10を使用
@@ -257,16 +266,16 @@ func (a *Agent) handleTokenLimitErrorWithRetry(err error, retryFunc func() error
 
 	// 履歴が短すぎる場合は圧縮できない
 	if len(a.History) <= keepRecent {
-		yellow.Println("⚠️  履歴が短すぎるため圧縮できません")
-		handleTokenLimitError(err)
+		yellow.Fprintln(a.output(), "⚠️  履歴が短すぎるため圧縮できません")
+		handleTokenLimitErrorWithWriter(a.output(), err)
 		return false
 	}
 
 	// 圧縮実行
-	yellow.Println("🗜️  会話を圧縮中...")
+	yellow.Fprintln(a.output(), "🗜️  会話を圧縮中...")
 	if err := a.CompressHistory(keepRecent); err != nil {
-		red.Printf("❌ 自動圧縮に失敗しました: %v\n", err)
-		handleTokenLimitError(err)
+		red.Fprintf(a.output(), "❌ 自動圧縮に失敗しました: %v\n", err)
+		handleTokenLimitErrorWithWriter(a.output(), err)
 		return false
 	}
 
@@ -274,18 +283,18 @@ func (a *Agent) handleTokenLimitErrorWithRetry(err error, retryFunc func() error
 	a.tokenLimitRetryCount++
 
 	// リトライ実行
-	cyan.Println("🔄 圧縮完了、再実行します...")
+	cyan.Fprintln(a.output(), "🔄 圧縮完了、再実行します...")
 	if retryErr := retryFunc(); retryErr != nil {
 		// リトライ後もエラーの場合は通常のエラー表示
 		if token.IsTokenLimitError(retryErr) {
-			red.Println("❌ 圧縮後もトークン上限を超えています")
+			red.Fprintln(a.output(), "❌ 圧縮後もトークン上限を超えています")
 		}
-		handleTokenLimitError(retryErr)
+		handleTokenLimitErrorWithWriter(a.output(), retryErr)
 		return false
 	}
 
 	// リトライ成功
-	green.Println("✅ 自動圧縮＆リトライ成功")
+	green.Fprintln(a.output(), "✅ 自動圧縮＆リトライ成功")
 	a.tokenLimitRetryCount = 0 // 成功したらリセット
 	return true
 }

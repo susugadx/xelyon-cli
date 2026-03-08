@@ -32,6 +32,17 @@ func TestNewSpinner(t *testing.T) {
 	}
 }
 
+func TestNewSpinnerWithRuntime_UsesInjectedWriter(t *testing.T) {
+	runtime := NewRuntime(strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{})
+	out := runtime.Output()
+
+	s := NewSpinnerWithRuntime(runtime)
+
+	if s.writer != out {
+		t.Fatalf("spinner writer = %#v, want runtime output %#v", s.writer, out)
+	}
+}
+
 func TestSpinner_StartStop(t *testing.T) {
 	// Note: This test has a race condition when using bytes.Buffer
 	// because the spinner goroutine writes while we read.

@@ -116,3 +116,22 @@ func TestProgress_StopWithoutStart(t *testing.T) {
 
 	// パニックしないことを確認
 }
+
+func TestNewProgressWithRuntime_UsesInjectedWriter(t *testing.T) {
+	runtime := NewRuntime(strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{})
+	out := runtime.Output().(*bytes.Buffer)
+	p := NewProgressWithRuntime(10, "Runtime Progress", runtime)
+
+	p.Start()
+	p.Update(5)
+	time.Sleep(150 * time.Millisecond)
+	p.Stop()
+
+	output := out.String()
+	if !strings.Contains(output, "Runtime Progress") {
+		t.Fatalf("expected injected output to contain runtime progress message, got %q", output)
+	}
+	if !strings.Contains(output, "50%") {
+		t.Fatalf("expected injected output to contain progress percentage, got %q", output)
+	}
+}

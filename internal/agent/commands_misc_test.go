@@ -1,13 +1,12 @@
 package agent
 
 import (
-	"io"
-	"os"
+	"bytes"
 	"strings"
 	"testing"
 
-	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 func TestIsCodexModel(t *testing.T) {
@@ -141,33 +140,6 @@ func TestRequestCacheHitRate(t *testing.T) {
 	}
 }
 
-func captureStdout(t *testing.T, fn func()) string {
-	t.Helper()
-
-	oldStdout := os.Stdout
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("os.Pipe() error = %v", err)
-	}
-	os.Stdout = w
-	oldColorOutput := color.Output
-	color.Output = w
-	defer func() {
-		os.Stdout = oldStdout
-		color.Output = oldColorOutput
-	}()
-
-	fn()
-
-	_ = w.Close()
-
-	data, readErr := io.ReadAll(r)
-	if readErr != nil {
-		t.Fatalf("ReadAll() error = %v", readErr)
-	}
-	return string(data)
-}
-
 func TestPrintSessionSections_Optimizations(t *testing.T) {
 	stats := NewSessionStats("test")
 	stats.ToolExecutions["read_file"] = 2
@@ -185,13 +157,16 @@ func TestPrintSessionSections_Optimizations(t *testing.T) {
 		CostAwareCompressions:  4,
 	}
 
+	var out bytes.Buffer
 	agent := &Agent{
 		Stats: stats,
+		Runtime: &AgentRuntime{
+			UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+		},
 	}
 
-	output := captureStdout(t, func() {
-		printSessionSections(agent)
-	})
+	printSessionSections(agent)
+	output := out.String()
 
 	for _, want := range []string{
 		"⚡ Optimizations",
@@ -217,15 +192,40 @@ func TestPrintSessionSections_NoOptimizations(t *testing.T) {
 	stats := NewSessionStats("test")
 	stats.ToolExecutions = map[string]int{}
 
+	var out bytes.Buffer
 	agent := &Agent{
 		Stats: stats,
+		Runtime: &AgentRuntime{
+			UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+		},
 	}
 
-	output := captureStdout(t, func() {
-		printSessionSections(agent)
-	})
+	printSessionSections(agent)
+	output := out.String()
 
 	if !strings.Contains(output, "No optimizations triggered yet") {
 		t.Fatalf("printSessionSections() output missing empty optimization message:\n%s", output)
+	}
+}
+
+func TestHandleTokensCommand_UsesRuntimeOutput(t *testing.T) {
+	var out bytes.Buffer
+	agent := &Agent{
+		CurrentModel: "gpt-5.2",
+		Runtime: &AgentRuntime{
+			UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+		},
+	}
+
+	if !handleTokensCommand(agent) {
+		t.Fatal("handleTokensCommand() = false, want true")
+	}
+
+	output := out.String()
+	if !strings.Contains(output, "Token Usage / トークン使用量") {
+		t.Fatalf("expected runtime output to contain token header, got %q", output)
+	}
+	if !strings.Contains(output, "Current:") {
+		t.Fatalf("expected runtime output to contain current token line, got %q", output)
 	}
 }

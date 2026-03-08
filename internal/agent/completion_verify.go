@@ -108,6 +108,8 @@ Please fix these errors before declaring completion. Do NOT skip these issues.`,
 // runCompletionHooks とは独立して呼び出し元でチェックする。
 // タスク中のコミットにも対応している。
 func (a *Agent) checkGitDiffEmpty() (needsContinue bool, feedback string) {
+	out := a.output()
+
 	// タスク中にコミットがあったかチェック
 	var currentHash string
 	if out, err := exec.Command("git", "rev-parse", "HEAD").Output(); err == nil {
@@ -116,10 +118,10 @@ func (a *Agent) checkGitDiffEmpty() (needsContinue bool, feedback string) {
 
 	if a.taskBaseCommitHash != "" && currentHash != "" && currentHash != a.taskBaseCommitHash {
 		// タスク中にコミットが行われている場合は diff empty チェックをスキップ（表示のみ）
-		yellow.Println("📊 Changes already committed during this task.")
+		yellow.Fprintln(out, "📊 Changes already committed during this task.")
 		diffCmd := exec.Command("git", "diff", a.taskBaseCommitHash, "HEAD", "--stat")
 		if output, err := diffCmd.CombinedOutput(); err == nil && len(output) > 0 {
-			fmt.Println(string(output))
+			_, _ = fmt.Fprintln(out, string(output))
 		}
 		return false, ""
 	}
@@ -135,7 +137,7 @@ func (a *Agent) checkGitDiffEmpty() (needsContinue bool, feedback string) {
 	hasUntracked := err2 == nil && strings.TrimSpace(string(untrackedOut)) != ""
 
 	if !hasDiff && !hasUntracked {
-		yellow.Println("⚠️  WARNING: No changes detected by git diff.")
+		yellow.Fprintln(out, "⚠️  WARNING: No changes detected by git diff.")
 		return true, "[SYSTEM] WARNING: You declared completion but git diff shows NO changes. Did you actually make the required modifications? Review your plan and ensure all steps are implemented."
 	}
 	return false, ""
@@ -148,6 +150,7 @@ func (a *Agent) checkGitDiffEmpty() (needsContinue bool, feedback string) {
 func (a *Agent) runCompletionHooks(changedFiles []string) (needsContinue bool, feedback string) {
 	cfg := a.cfg()
 	hooks := cfg.Hooks.OnCompletion
+	out := a.output()
 
 	// No user hooks → nothing to verify
 	if len(hooks) == 0 {
@@ -155,13 +158,13 @@ func (a *Agent) runCompletionHooks(changedFiles []string) (needsContinue bool, f
 	}
 
 	// git diff --stat: hook 失敗時のコンテキスト用
-	yellow.Println("📊 Verifying changes with git diff --stat...")
+	yellow.Fprintln(out, "📊 Verifying changes with git diff --stat...")
 	var diffOutput string
 	diffCmd := exec.Command("git", "diff", "--stat")
 	if output, err := diffCmd.CombinedOutput(); err == nil {
 		diffOutput = string(output)
 		if strings.TrimSpace(diffOutput) != "" {
-			fmt.Println(diffOutput)
+			_, _ = fmt.Fprintln(out, diffOutput)
 		}
 	}
 
@@ -170,7 +173,7 @@ func (a *Agent) runCompletionHooks(changedFiles []string) (needsContinue bool, f
 	if untrackedOut, err := untrackedCmd.CombinedOutput(); err == nil {
 		untrackedStr := strings.TrimSpace(string(untrackedOut))
 		if untrackedStr != "" {
-			fmt.Printf("New files (untracked):\n%s\n", untrackedStr)
+			_, _ = fmt.Fprintf(out, "New files (untracked):\n%s\n", untrackedStr)
 			diffOutput += "\nNew files (untracked):\n" + untrackedStr
 		}
 	}
@@ -186,7 +189,7 @@ func (a *Agent) runCompletionHooks(changedFiles []string) (needsContinue bool, f
 	changedFilesEnv := strings.Join(changedFiles, " ")
 
 	for _, cmd := range hooks {
-		yellow.Printf("🏁 Running completion hook: %s\n", cmd)
+		yellow.Fprintf(out, "🏁 Running completion hook: %s\n", cmd)
 
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		proc := exec.CommandContext(ctx, "bash", "-c", cmd)
@@ -216,7 +219,7 @@ func (a *Agent) runCompletionHooks(changedFiles []string) (needsContinue bool, f
 				exitCode = exitErr.ExitCode()
 			}
 
-			red.Printf("  Hook failed (exit code %d): %s\n", exitCode, cmd)
+			red.Fprintf(out, "  Hook failed (exit code %d): %s\n", exitCode, cmd)
 
 			feedback = fmt.Sprintf(`[SYSTEM] Completion verification failed. Hook command %q failed (exit code %d):
 
@@ -230,7 +233,7 @@ Please fix these errors before declaring completion. Do NOT skip these issues.`,
 			return true, feedback
 		}
 
-		green.Printf("  Hook passed: %s\n", cmd)
+		green.Fprintf(out, "  Hook passed: %s\n", cmd)
 	}
 
 	return false, ""
@@ -273,6 +276,7 @@ func (a *Agent) flushLSPDiagnostics() string {
 // 戻り値: hooks がすべてパスした場合 true、max_retry 到達で打ち切った場合 false。
 func (a *Agent) runCompletionHooksWithRetry(ctx context.Context) bool {
 	cfg := a.cfg()
+	out := a.output()
 
 	// No hooks configured → nothing to verify
 	if len(cfg.Hooks.OnCompletion) == 0 {
@@ -296,12 +300,12 @@ func (a *Agent) runCompletionHooksWithRetry(ctx context.Context) bool {
 		}
 
 		if attempt >= maxRetry {
-			yellow.Printf("⚠️  Hook retry limit reached (%d/%d). Proceeding with completion.\n", attempt, maxRetry)
+			yellow.Fprintf(out, "⚠️  Hook retry limit reached (%d/%d). Proceeding with completion.\n", attempt, maxRetry)
 			return false
 		}
 
 		// AI にフィードバックして修正を試みる
-		yellow.Printf("⚠️  Completion hook failed (%d/%d). Asking AI to fix...\n", attempt, maxRetry)
+		yellow.Fprintf(out, "⚠️  Completion hook failed (%d/%d). Asking AI to fix...\n", attempt, maxRetry)
 		a.History = append(a.History, api.Message{
 			Role:    "user",
 			Content: feedback,
@@ -309,7 +313,7 @@ func (a *Agent) runCompletionHooksWithRetry(ctx context.Context) bool {
 
 		response, err := a.CurrentProvider.ChatWithTools(a.requestContext(ctx), a.SystemPrompt, a.History, a.CurrentModel)
 		if err != nil {
-			yellow.Printf("⚠️  AI fix attempt failed: %v\n", err)
+			yellow.Fprintf(out, "⚠️  AI fix attempt failed: %v\n", err)
 			return false
 		}
 

@@ -14,11 +14,11 @@ func WithThinkingDisabled(ctx context.Context) context.Context {
 }
 
 // IsThinkingEnabled は context のオーバーライドを優先し、
-// なければグローバル設定を参照して Thinking が有効かを返す
+// なければ context に埋め込まれた設定、最後にグローバル設定を参照して Thinking が有効かを返す
 func IsThinkingEnabled(ctx context.Context) bool {
 	if v, ok := ctx.Value(thinkingOverrideKey{}).(bool); ok {
 		return v
 	}
-	cfg := config.GetGlobalConfig()
+	cfg := config.FromContext(ctx)
 	return cfg.Thinking.Enabled
 }

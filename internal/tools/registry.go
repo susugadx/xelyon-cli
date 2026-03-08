@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"sort"
 	"sync"
-
-	"github.com/susugadx/xelyon-cli/internal/audit"
 )
 
 // Tool はツールの共通インターフェース
@@ -67,8 +65,9 @@ func (r *Registry) ExecuteWithContext(execCtx ExecutionContext, tc *ToolCall) (s
 	output, change, err := tool.Run(normalizeExecutionContext(execCtx), tc.Args)
 
 	// 監査ログ記録（失敗しても処理続行）
-	logger := audit.GetLogger()
-	logger.LogToolExecution(tc.Tool, tc.Args, output, err, change != nil)
+	if logger := normalizeExecutionContext(execCtx).EffectiveAuditLogger(); logger != nil {
+		logger.LogToolExecution(tc.Tool, tc.Args, output, err, change != nil)
+	}
 
 	if err != nil {
 		return fmt.Sprintf("Error: %v", err), change

@@ -1,7 +1,11 @@
 package agent
 
 import (
+	"bytes"
+	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 func TestAgentState_Constants(t *testing.T) {
@@ -78,22 +82,18 @@ func TestDefaultStatus(t *testing.T) {
 	}
 }
 
-func TestGlobalAgentStatus_InitialState(t *testing.T) {
-	// グローバルステータスはdefaultStatusで初期化されている
-	status := globalAgentStatus.getStatus()
+func TestStatusRef_InitializesDefault(t *testing.T) {
+	var agent Agent
 
+	status := agent.statusRef().getStatus()
 	if status.State != StateWaitingInput {
-		t.Errorf("globalAgentStatus initial State = %q, want %q", status.State, StateWaitingInput)
+		t.Errorf("statusRef().State = %q, want %q", status.State, StateWaitingInput)
 	}
 }
 
 func TestAgent_SetStatus(t *testing.T) {
 	provider := &mockProvider{name: "test"}
 	agent := NewAgent("test-model", provider, false)
-
-	// グローバルステータスを保存してテスト後に復元
-	originalStatus := globalAgentStatus.getStatus()
-	defer globalAgentStatus.setStatus(originalStatus)
 
 	agent.SetStatus(
 		StateRunning,
@@ -103,7 +103,7 @@ func TestAgent_SetStatus(t *testing.T) {
 		"完了をお待ちください",
 	)
 
-	status := globalAgentStatus.getStatus()
+	status := agent.statusRef().getStatus()
 	if status.State != StateRunning {
 		t.Errorf("State = %q, want %q", status.State, StateRunning)
 	}
@@ -118,10 +118,6 @@ func TestAgent_SetStatus(t *testing.T) {
 func TestAgentStatus_AllStates(t *testing.T) {
 	provider := &mockProvider{name: "test"}
 	agent := NewAgent("test-model", provider, false)
-
-	// グローバルステータスを保存
-	originalStatus := globalAgentStatus.getStatus()
-	defer globalAgentStatus.setStatus(originalStatus)
 
 	testCases := []struct {
 		state    AgentState
@@ -138,7 +134,7 @@ func TestAgentStatus_AllStates(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(string(tc.state), func(t *testing.T) {
 			agent.SetStatus(tc.state, tc.reasonEN, tc.reasonJP, "", "")
-			status := globalAgentStatus.getStatus()
+			status := agent.statusRef().getStatus()
 			if status.State != tc.state {
 				t.Errorf("State = %q, want %q", status.State, tc.state)
 			}
@@ -171,4 +167,42 @@ func TestStatusHolder_Concurrent(t *testing.T) {
 	<-done
 	<-done
 	// パニックせずに完了すればOK
+}
+
+func TestPrintStatusFooter_UsesRuntimeOutput(t *testing.T) {
+	var outA bytes.Buffer
+	var outB bytes.Buffer
+
+	agentA := &Agent{
+		CurrentModel: "model-a",
+		ProviderName: "openai",
+		Stats:        NewSessionStats("openai", "model-a"),
+		Runtime: &AgentRuntime{
+			UI: ui.NewRuntime(strings.NewReader(""), &outA, &outA),
+		},
+	}
+	agentB := &Agent{
+		CurrentModel: "model-b",
+		ProviderName: "openai",
+		Stats:        NewSessionStats("openai", "model-b"),
+		Runtime: &AgentRuntime{
+			UI: ui.NewRuntime(strings.NewReader(""), &outB, &outB),
+		},
+	}
+
+	agentA.PrintStatusFooter()
+	agentB.PrintStatusFooter()
+
+	if strings.Contains(outA.String(), "model-b") {
+		t.Fatalf("agent A output should not contain model-b: %q", outA.String())
+	}
+	if !strings.Contains(outA.String(), "model-a") {
+		t.Fatalf("agent A output should contain model-a: %q", outA.String())
+	}
+	if strings.Contains(outB.String(), "model-a") {
+		t.Fatalf("agent B output should not contain model-a: %q", outB.String())
+	}
+	if !strings.Contains(outB.String(), "model-b") {
+		t.Fatalf("agent B output should contain model-b: %q", outB.String())
+	}
 }

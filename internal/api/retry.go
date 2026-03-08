@@ -6,11 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strconv"
 	"time"
-
-	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 const (
@@ -52,7 +49,7 @@ func DoWithRetry(ctx context.Context, client *http.Client, req *http.Request) (*
 		waitDuration := RetryAfterDuration(resp, attempt)
 		resp.Body.Close()
 
-		showRetryMessage(waitDuration, attempt+1, maxRetries)
+		showRetryMessage(ctx, waitDuration, attempt+1, maxRetries)
 
 		select {
 		case <-ctx.Done():
@@ -91,14 +88,15 @@ func RetryAfterDuration(resp *http.Response, attempt int) time.Duration {
 }
 
 // showRetryMessage はリトライ待機中のメッセージを表示
-func showRetryMessage(wait time.Duration, attempt, max int) {
+func showRetryMessage(ctx context.Context, wait time.Duration, attempt, max int) {
 	msg := fmt.Sprintf("⚠️  Rate limited (429), retrying in %ds... (%d/%d)", int(wait.Seconds()), attempt, max)
 
 	// スピナーが動いていればステータスを更新、そうでなければ stderr に出力
-	spinner := ui.GetGlobalSpinner()
+	runtime := uiRuntimeFromContext(ctx)
+	spinner := runtime.CurrentSpinner()
 	if spinner != nil && spinner.IsActive() {
 		spinner.SetStatus(msg)
 	} else {
-		fmt.Fprintln(os.Stderr, msg)
+		fmt.Fprintln(runtime.ErrorOutput(), msg)
 	}
 }

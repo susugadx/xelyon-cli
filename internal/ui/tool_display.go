@@ -3,6 +3,7 @@ package ui
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"regexp"
 	"sort"
 	"strconv"
@@ -47,17 +48,32 @@ func FormatToolLine(info ToolDisplayInfo) string {
 
 // PrintParallelGroupStart は並列実行グループの開始行を表示する。
 func PrintParallelGroupStart(count int) {
-	fmt.Printf("┌ Parallel (%d calls)\n", count)
+	PrintParallelGroupStartToWriter(DefaultRuntime().Output(), count)
 }
 
 // PrintParallelGroupLine は並列実行グループ内の1行を表示する。
 func PrintParallelGroupLine(line string) {
-	fmt.Printf("│ %s\n", line)
+	PrintParallelGroupLineToWriter(DefaultRuntime().Output(), line)
 }
 
 // PrintParallelGroupEnd は並列実行グループの終了行を表示する。
 func PrintParallelGroupEnd(summary string) {
-	fmt.Printf("└ %s\n", summary)
+	PrintParallelGroupEndToWriter(DefaultRuntime().Output(), summary)
+}
+
+// PrintParallelGroupStartToWriter は並列実行グループの開始行を指定 writer に表示する。
+func PrintParallelGroupStartToWriter(w io.Writer, count int) {
+	_, _ = fmt.Fprintf(w, "┌ Parallel (%d calls)\n", count)
+}
+
+// PrintParallelGroupLineToWriter は並列実行グループ内の1行を指定 writer に表示する。
+func PrintParallelGroupLineToWriter(w io.Writer, line string) {
+	_, _ = fmt.Fprintf(w, "│ %s\n", line)
+}
+
+// PrintParallelGroupEndToWriter は並列実行グループの終了行を指定 writer に表示する。
+func PrintParallelGroupEndToWriter(w io.Writer, summary string) {
+	_, _ = fmt.Fprintf(w, "└ %s\n", summary)
 }
 
 func isToolDisplayError(info ToolDisplayInfo, trimmed string) bool {

@@ -2,31 +2,28 @@ package agent
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/tools/common"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 	"github.com/susugadx/xelyon-cli/internal/version"
 )
 
-// printCommandHeader はコマンド出力の共通ヘッダーを表示
-func printCommandHeader(title string) {
-	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	cyan.Printf("📊 %s\n", title)
-	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+func printCommandHeaderToWriter(out io.Writer, title string) {
+	cyan.Fprintln(out, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	cyan.Fprintf(out, "📊 %s\n", title)
+	cyan.Fprintln(out, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 }
 
-// promptConfirm はユーザーに確認を求める（空入力は無視してリトライ）
-// AI実行中のEnter押下による誤操作を防ぐ
-// テストモード時は自動承認
-// NOTE: ユーザーコマンド用の確認のため、コメント入力は「キャンセル」として扱う
-func promptConfirm(prompt string) bool {
-	// tools.ConfirmInteractive を使用してテストモード対応
-	result := tools.ConfirmInteractive(prompt)
+// promptConfirmWithRuntime は slash command 用の確認を runtime の入出力で行う。
+// NOTE: コメント入力は AI ツール確認専用のため、ここではキャンセルとして扱う。
+func promptConfirmWithRuntime(runtime *ui.Runtime, prompt string) bool {
+	result := common.ConfirmInteractiveWithIO(runtime.PromptIO(), prompt)
 	if result.Action == "comment" {
-		// ユーザーコマンドではコメントは使用しない旨を表示
-		yellow.Println("⚠️  Comment mode is for AI tool confirmations only. Treating as cancel.")
+		yellow.Fprintln(runtime.Output(), "⚠️  Comment mode is for AI tool confirmations only. Treating as cancel.")
 		return false
 	}
 	return result.Action == "yes"
@@ -67,19 +64,19 @@ func handleSpecialCommand(input string, agent *Agent) bool {
 		handleExitCommand(agent)
 	case "/clear":
 		agent.History = []api.Message{}
-		green.Println("🗑️  History cleared")
+		green.Fprintln(agent.output(), "🗑️  History cleared")
 		return true
 	case "/history":
 		handleHistoryCommand(agent)
 		return true
 	case "/help":
-		printHelp()
+		printHelpToWriter(agent.output())
 		return true
 
 	case "/model":
 		return handleModelCommand(agent, args)
 	case "/version":
-		cyan.Printf("🚀 XELYON CLI v%s\n", version.GetVersion())
+		cyan.Fprintf(agent.output(), "🚀 XELYON CLI v%s\n", version.GetVersion())
 		return true
 	case "/plan":
 		return handlePlanCommand(agent, args)
@@ -131,13 +128,14 @@ func splitCommand(input string) []string {
 
 // handleExitCommand は終了処理を行う
 func handleExitCommand(agent *Agent) {
-	yellow.Println("👋 See you!")
+	yellow.Fprintln(agent.output(), "👋 See you!")
 	os.Exit(0)
 }
 
 // handleHistoryCommand は会話履歴を表示
 func handleHistoryCommand(agent *Agent) {
-	fmt.Printf("📜 %d messages in history\n", len(agent.History))
+	out := agent.output()
+	_, _ = fmt.Fprintf(out, "📜 %d messages in history\n", len(agent.History))
 	for i, msg := range agent.History {
 		role := "👤"
 		if msg.Role == "assistant" {
@@ -147,11 +145,10 @@ func handleHistoryCommand(agent *Agent) {
 		if len(preview) > config.HistoryPreviewLen {
 			preview = preview[:config.HistoryPreviewLen] + "..."
 		}
-		fmt.Printf("  %d. %s %s\n", i+1, role, preview)
+		_, _ = fmt.Fprintf(out, "  %d. %s %s\n", i+1, role, preview)
 	}
 }
 
-// printHelp はヘルプを表示
-func printHelp() {
-	fmt.Print(GeneratedHelpText)
+func printHelpToWriter(out io.Writer) {
+	_, _ = fmt.Fprint(out, GeneratedHelpText)
 }

@@ -1,21 +1,11 @@
 package agent
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 )
-
-// stripBracketedPaste removes bracketed paste escape sequences from input.
-func stripBracketedPaste(input string) string {
-	input = strings.ReplaceAll(input, "\x1b[200~", "")
-	input = strings.ReplaceAll(input, "\x1b[201~", "")
-	input = strings.ReplaceAll(input, "^[[200~", "")
-	input = strings.ReplaceAll(input, "^[[201~", "")
-	return input
-}
 
 // xelyonYAMLTemplate は xelyon.yaml のテンプレート
 const xelyonYAMLTemplate = `# %s - Project Configuration
@@ -42,25 +32,27 @@ rules:
 
 // handleInitCommand は/initコマンドを処理（xelyon.yaml 生成）
 func handleInitCommand(agent *Agent) bool {
-	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	cyan.Println("📝 xelyon.yaml Template Generator")
-	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Println()
+	runtimeUI := agent.ui()
+	promptIO := runtimeUI.PromptIO()
+	out := runtimeUI.Output()
+
+	cyan.Fprintln(out, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	cyan.Fprintln(out, "📝 xelyon.yaml Template Generator")
+	cyan.Fprintln(out, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	_, _ = fmt.Fprintln(out)
 
 	// xelyon.yaml が既に存在するか確認
 	if _, err := os.Stat("xelyon.yaml"); err == nil {
-		yellow.Println("⚠️  xelyon.yaml already exists")
-		fmt.Print("Overwrite? (y/n): ")
-		reader := bufio.NewReader(os.Stdin)
-		input, err := reader.ReadString('\n')
+		yellow.Fprintln(out, "⚠️  xelyon.yaml already exists")
+		_, _ = fmt.Fprint(out, "Overwrite? (y/n): ")
+		input, err := promptIO.ReadSimpleLine()
 		if err != nil {
-			red.Printf("Failed to read input: %v\n", err)
+			red.Fprintf(out, "Failed to read input: %v\n", err)
 			return true
 		}
-		input = stripBracketedPaste(input)
 		input = strings.TrimSpace(strings.ToLower(input))
 		if input != "y" && input != "yes" {
-			yellow.Println("Cancelled")
+			yellow.Fprintln(out, "Cancelled")
 			return true
 		}
 	}
@@ -68,7 +60,7 @@ func handleInitCommand(agent *Agent) bool {
 	// プロジェクト名を取得（ディレクトリ名）
 	cwd, err := os.Getwd()
 	if err != nil {
-		red.Printf("Failed to get current directory: %v\n", err)
+		red.Fprintf(out, "Failed to get current directory: %v\n", err)
 		return true
 	}
 	projectName := filepath.Base(cwd)
@@ -77,18 +69,18 @@ func handleInitCommand(agent *Agent) bool {
 	content := fmt.Sprintf(xelyonYAMLTemplate, projectName, projectName)
 
 	if err := os.WriteFile("xelyon.yaml", []byte(content), 0644); err != nil {
-		red.Printf("Failed to write xelyon.yaml: %v\n", err)
+		red.Fprintf(out, "Failed to write xelyon.yaml: %v\n", err)
 		return true
 	}
 
-	green.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	green.Println("✅ xelyon.yaml template created!")
-	green.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Println()
-	yellow.Println("Next steps:")
-	yellow.Println("  1. Edit xelyon.yaml to add your project context and rules")
-	yellow.Println("  2. Optionally configure hooks.on_completion for verification")
-	yellow.Println("  3. xelyon.yaml will be automatically loaded on next session")
+	green.Fprintln(out, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	green.Fprintln(out, "✅ xelyon.yaml template created!")
+	green.Fprintln(out, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	_, _ = fmt.Fprintln(out)
+	yellow.Fprintln(out, "Next steps:")
+	yellow.Fprintln(out, "  1. Edit xelyon.yaml to add your project context and rules")
+	yellow.Fprintln(out, "  2. Optionally configure hooks.on_completion for verification")
+	yellow.Fprintln(out, "  3. xelyon.yaml will be automatically loaded on next session")
 
 	return true
 }

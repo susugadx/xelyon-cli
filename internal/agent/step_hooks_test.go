@@ -1,9 +1,12 @@
 package agent
 
 import (
+	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 func TestExpandStepTemplate(t *testing.T) {
@@ -154,5 +157,26 @@ func TestRunStepCompleteHooksWithRetry_NoHooks(t *testing.T) {
 	result := a.runStepCompleteHooksWithRetry(t.Context(), 1, "step", "completed")
 	if !result {
 		t.Error("expected true when no hooks configured")
+	}
+}
+
+func TestRunStepCompleteHooks_UsesRuntimeOutput(t *testing.T) {
+	var out bytes.Buffer
+	runtime := NewAgentRuntime()
+	runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, &out)
+	runtime.Config.Hooks.OnStepComplete = []string{"echo 'ok'"}
+	runtime.Config.Hooks.Timeout = 10
+
+	a := &Agent{Runtime: runtime}
+
+	needsContinue, feedback := a.runStepCompleteHooks(4, "runtime step", "completed")
+	if needsContinue {
+		t.Fatalf("expected needsContinue=false, got true; feedback=%q", feedback)
+	}
+	if !strings.Contains(out.String(), "Running step complete hook") {
+		t.Fatalf("expected runtime output to contain start message, got %q", out.String())
+	}
+	if !strings.Contains(out.String(), "Step hook passed") {
+		t.Fatalf("expected runtime output to contain success message, got %q", out.String())
 	}
 }

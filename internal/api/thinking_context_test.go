@@ -68,3 +68,24 @@ func TestWithThinkingDisabled_NestedContext(t *testing.T) {
 		t.Error("expected false for child context derived from WithThinkingDisabled context")
 	}
 }
+
+func TestIsThinkingEnabled_UsesContextConfig(t *testing.T) {
+	originalConfig := config.GetGlobalConfig()
+	defer config.SetGlobalConfig(originalConfig)
+
+	globalCfg := &config.Config{}
+	globalCfg.Thinking.Enabled = false
+	config.SetGlobalConfig(globalCfg)
+
+	ctxCfg := config.DefaultConfig()
+	ctxCfg.Thinking.Enabled = true
+
+	ctx := config.WithContext(context.Background(), ctxCfg)
+	if !IsThinkingEnabled(ctx) {
+		t.Error("expected context config to enable thinking even when global config is disabled")
+	}
+
+	if IsThinkingEnabled(WithThinkingDisabled(ctx)) {
+		t.Error("expected explicit thinking override to win over context config")
+	}
+}

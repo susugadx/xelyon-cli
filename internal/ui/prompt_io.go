@@ -15,6 +15,7 @@ type PromptIO struct {
 	Reader *MultilineReader
 
 	simpleReader *bufio.Reader
+	runtime      *Runtime
 }
 
 // NewPromptIO は入出力先を明示した PromptIO を返す。
@@ -29,7 +30,7 @@ func NewPromptIO(in io.Reader, out, err io.Writer, reader *MultilineReader) Prom
 
 // DefaultPromptIO は process stdio を使う PromptIO を返す。
 func DefaultPromptIO() PromptIO {
-	return NormalizePromptIO(PromptIO{})
+	return DefaultRuntime().PromptIO()
 }
 
 // NormalizePromptIO は不足している入出力を補い、共有 reader を初期化する。
@@ -67,6 +68,20 @@ func (p *PromptIO) BufioReader() *bufio.Reader {
 }
 
 func normalizePromptIO(p PromptIO) PromptIO {
+	if p.runtime != nil {
+		if p.In == nil {
+			p.In = p.runtime.Input()
+		}
+		if p.Out == nil {
+			p.Out = p.runtime.Output()
+		}
+		if p.Err == nil {
+			p.Err = p.runtime.ErrorOutput()
+		}
+		if p.Reader == nil {
+			p.Reader = p.runtime.PromptReader()
+		}
+	}
 	if p.In == nil {
 		p.In = os.Stdin
 	}
@@ -80,4 +95,12 @@ func normalizePromptIO(p PromptIO) PromptIO {
 		p.simpleReader = bufio.NewReader(p.In)
 	}
 	return p
+}
+
+func stopSpinnerForPromptIO(promptIO PromptIO) {
+	if promptIO.runtime != nil {
+		promptIO.runtime.StopSpinner()
+		return
+	}
+	StopGlobalSpinner()
 }

@@ -347,7 +347,6 @@ func (c *ToolCache) CheckNegativeCache(toolName string, args map[string]interfac
 		return "", false
 	}
 
-	yellow.Printf("⚠ Negative cache hit: %s previously returned: %s\n", toolName, entry.Result)
 	return entry.Result, true
 }
 

@@ -31,6 +31,7 @@ type MultilineReader struct {
 	reader                *bufio.Reader
 	input                 io.Reader
 	out                   io.Writer
+	err                   io.Writer
 	bracketedPasteEnabled bool
 	fd                    int // file descriptor for stdin (for raw mode)
 	// Raw mode channels (initialized lazily, reused across calls)
@@ -41,22 +42,39 @@ type MultilineReader struct {
 
 // NewMultilineReader creates a new multiline reader
 func NewMultilineReader(r io.Reader) *MultilineReader {
-	return NewMultilineReaderWithOutput(r, os.Stdout)
+	return NewMultilineReaderWithOutput(r, DefaultRuntime().Output())
 }
 
 // NewMultilineReaderWithOutput creates a new multiline reader with an explicit output writer.
 func NewMultilineReaderWithOutput(r io.Reader, out io.Writer) *MultilineReader {
+	return newMultilineReader(r, out, DefaultRuntime().ErrorOutput())
+}
+
+// NewMultilineReaderWithRuntime は runtime の入出力に紐づく multiline reader を返す。
+func NewMultilineReaderWithRuntime(runtime *Runtime) *MultilineReader {
+	rt := runtimeOrDefault(runtime)
+	return newMultilineReader(rt.Input(), rt.Output(), rt.ErrorOutput())
+}
+
+func newMultilineReader(r io.Reader, out, errOut io.Writer) *MultilineReader {
+	if r == nil {
+		r = DefaultRuntime().Input()
+	}
 	fd := -1
 	if f, ok := r.(*os.File); ok {
 		fd = int(f.Fd())
 	}
 	if out == nil {
-		out = os.Stdout
+		out = DefaultRuntime().Output()
+	}
+	if errOut == nil {
+		errOut = DefaultRuntime().ErrorOutput()
 	}
 	return &MultilineReader{
 		reader:                bufio.NewReaderSize(r, 1024*1024), // 1MB buffer
 		input:                 r,
 		out:                   out,
+		err:                   errOut,
 		bracketedPasteEnabled: false,
 		fd:                    fd,
 		byteChan:              nil,
@@ -95,22 +113,15 @@ func (m *MultilineReader) initRawModeChannels() {
 // This sends the escape sequence to the terminal to enable the mode
 // Windows Terminal skips multiline paste warning when this mode is active
 func (m *MultilineReader) EnableBracketedPaste() {
-	// Debug: XELYON_DEBUG_PASTE=1 で詳細表示
-	debug := os.Getenv("XELYON_DEBUG_PASTE") == "1"
-
-	if debug {
-		fmt.Fprintf(os.Stderr, "[DEBUG] EnableBracketedPaste: fd=%d, IsTerminal=%v\n", m.fd, m.fd >= 0 && term.IsTerminal(m.fd))
-	}
+	pasteDebugf(m.errorWriter(), "[DEBUG] EnableBracketedPaste: fd=%d, IsTerminal=%v\n", m.fd, m.fd >= 0 && term.IsTerminal(m.fd))
 
 	if m.fd >= 0 && term.IsTerminal(m.fd) {
 		// Use WriteString for immediate, unbuffered output
 		m.writeString(bracketedPasteEnable)
 		m.bracketedPasteEnabled = true
-		if debug {
-			fmt.Fprintf(os.Stderr, "[DEBUG] Sent: \\x1b[?2004h (bracketed paste enable)\n")
-		}
-	} else if debug {
-		fmt.Fprintf(os.Stderr, "[DEBUG] Skipped: not a terminal\n")
+		pasteDebugf(m.errorWriter(), "[DEBUG] Sent: \\x1b[?2004h (bracketed paste enable)\n")
+	} else {
+		pasteDebugf(m.errorWriter(), "[DEBUG] Skipped: not a terminal\n")
 	}
 }
 
@@ -181,24 +192,16 @@ func (m *MultilineReader) readLine() (string, error) {
 
 // readWithBracketedPaste reads input using raw mode with paste marker detection
 func (m *MultilineReader) readWithBracketedPaste() (string, error) {
-	debug := os.Getenv("XELYON_DEBUG_PASTE") == "1"
-
-	if debug {
-		fmt.Fprintf(os.Stderr, "[DEBUG] Entering raw mode...\n")
-	}
+	pasteDebugf(m.errorWriter(), "[DEBUG] Entering raw mode...\n")
 
 	oldState, err := term.MakeRaw(m.fd)
 	if err != nil {
-		if debug {
-			fmt.Fprintf(os.Stderr, "[DEBUG] MakeRaw FAILED: %v\n", err)
-		}
+		pasteDebugf(m.errorWriter(), "[DEBUG] MakeRaw FAILED: %v\n", err)
 		return m.readLine()
 	}
 	defer func() { _ = term.Restore(m.fd, oldState) }()
 
-	if debug {
-		_, _ = os.Stderr.WriteString("[DEBUG] Raw mode OK\r\n")
-	}
+	pasteDebugWriteString(m.errorWriter(), "[DEBUG] Raw mode OK\r\n")
 
 	var buf bytes.Buffer
 	var pasteContent bytes.Buffer
@@ -257,9 +260,7 @@ func (m *MultilineReader) readWithBracketedPaste() (string, error) {
 						if !inPaste {
 							inPaste = true
 							pasteContent.Reset()
-							if debug {
-								_, _ = os.Stderr.WriteString("[DEBUG] Paste START\r\n")
-							}
+							pasteDebugWriteString(m.errorWriter(), "[DEBUG] Paste START\r\n")
 						}
 						// If already in paste mode, ignore duplicate start marker
 						escBuf = nil
@@ -269,9 +270,7 @@ func (m *MultilineReader) readWithBracketedPaste() (string, error) {
 					if escStr == pasteEnd || escStr == "[201~" { // \x1b[201~ or [201~
 						inPaste = false
 						content := pasteContent.String()
-						if debug {
-							fmt.Fprintf(os.Stderr, "[DEBUG] Paste END, %d bytes\r\n", len(content))
-						}
+						pasteDebugf(m.errorWriter(), "[DEBUG] Paste END, %d bytes\r\n", len(content))
 						// Normalize line endings: \r\n -> \n, standalone \r -> \n
 						content = strings.ReplaceAll(content, "\r\n", "\n")
 						content = strings.ReplaceAll(content, "\r", "\n")
@@ -450,17 +449,14 @@ func TrimBracketedPasteMarkers(input string) string {
 	return stripAllBracketedPasteMarkers(input)
 }
 
-// globalReader is the shared MultilineReader for the application
-var globalReader *MultilineReader
-
 // SetGlobalReader sets the global MultilineReader for shared access
 func SetGlobalReader(r *MultilineReader) {
-	globalReader = r
+	DefaultRuntime().SetPromptReader(r)
 }
 
 // GetGlobalReader returns the global MultilineReader
 func GetGlobalReader() *MultilineReader {
-	return globalReader
+	return DefaultRuntime().PromptReader()
 }
 
 // GetBufioReader returns the internal bufio.Reader for direct access
@@ -628,6 +624,13 @@ func (m *MultilineReader) outputWriter() io.Writer {
 		return os.Stdout
 	}
 	return m.out
+}
+
+func (m *MultilineReader) errorWriter() io.Writer {
+	if m.err == nil {
+		return DefaultRuntime().ErrorOutput()
+	}
+	return m.err
 }
 
 func (m *MultilineReader) print(args ...interface{}) {

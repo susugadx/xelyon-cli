@@ -73,7 +73,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	messages = append(messages, history...)
 
 	// モデル名を設定（config優先、フォールバックはdeepseek-chat）
-	model = api.GetDefaultModel(model, "deepseek", "deepseek-chat")
+	model = api.GetDefaultModelWithContext(ctx, model, "deepseek", "deepseek-chat")
 
 	// Extended Thinking の ON/OFF でモデルを切り替え
 	// DeepSeek は reasoner モデル自体が思考モードなので、モデル名で制御する
@@ -150,6 +150,7 @@ type toolCallAccumulator struct {
 
 // handleStreamingResponse はストリーミングレスポンスを処理（tool_calls対応）
 func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
+	out := api.OutputWriterFromContext(ctx)
 	// ストリーミングで分割されて送られてくる tool_calls を累積
 	toolCalls := make(map[int]*toolCallAccumulator)
 	var toolCallsOutput strings.Builder
@@ -225,16 +226,16 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 				reasoningStarted = true
 				// スピナーを停止して思考表示開始
 				spinner.Stop()
-				dim.Print("💭 ")
+				dim.Fprint(out, "💭 ")
 			}
 			reasoningContent.WriteString(choice.Delta.ReasoningContent)
-			dim.Print(choice.Delta.ReasoningContent)
+			dim.Fprint(out, choice.Delta.ReasoningContent)
 		}
 
 		// reasoning_content から content に切り替わった時に改行
 		if choice.Delta.Content != "" && reasoningStarted && reasoningContent.Len() > 0 {
-			fmt.Println() // 思考内容の後に改行
-			fmt.Println() // 空行で区切り
+			_, _ = fmt.Fprintln(out) // 思考内容の後に改行
+			_, _ = fmt.Fprintln(out) // 空行で区切り
 			reasoningStarted = false
 		}
 
@@ -264,8 +265,8 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 		if choice.FinishReason == "tool_calls" {
 			// 思考のみで終了した場合の改行
 			if reasoningStarted && reasoningContent.Len() > 0 {
-				fmt.Println()
-				fmt.Println()
+				_, _ = fmt.Fprintln(out)
+				_, _ = fmt.Fprintln(out)
 			}
 			// 累積した tool_calls を内部JSON形式に変換
 			for i := 0; i < len(toolCalls); i++ {

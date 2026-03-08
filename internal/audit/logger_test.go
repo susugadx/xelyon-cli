@@ -15,8 +15,7 @@ import (
 
 // resetGlobalLogger はテスト間でグローバルロガーをリセット
 func resetGlobalLogger() {
-	globalLogger = nil
-	once = sync.Once{}
+	SetGlobalLogger(nil)
 }
 
 func TestInit(t *testing.T) {

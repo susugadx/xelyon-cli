@@ -105,7 +105,7 @@ func HandleHTTPError(resp *http.Response, spinner *ui.Spinner, providerName stri
 }
 
 // HandleNonStreamingResponse は非ストリーミングレスポンスを処理
-func HandleNonStreamingResponse(resp *http.Response, spinner *ui.Spinner) (string, error) {
+func HandleNonStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
 	var result ChatResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		if spinner != nil {
@@ -123,7 +123,7 @@ func HandleNonStreamingResponse(resp *http.Response, spinner *ui.Spinner) (strin
 	}
 
 	content := result.Choices[0].Message.Content
-	fmt.Println(content)
+	_, _ = fmt.Fprintln(outputWriterFromContext(ctx), content)
 	return content, nil
 }
 
@@ -134,6 +134,15 @@ func StartSpinner(message string) *ui.Spinner {
 	return spinner
 }
 
+// StartSpinnerWithMessage は request context に紐づく出力先で spinner を開始する。
+func StartSpinnerWithMessage(ctx context.Context, message string) *ui.Spinner {
+	runtime := uiRuntimeFromContext(ctx)
+	spinner := runtime.NewSpinner()
+	spinner.Start(message)
+	runtime.SetSpinner(spinner)
+	return spinner
+}
+
 // StopSpinner はスピナーを停止（nilセーフ）
 func StopSpinner(spinner *ui.Spinner) {
 	if spinner != nil {
@@ -141,17 +150,23 @@ func StopSpinner(spinner *ui.Spinner) {
 	}
 }
 
-// GetDefaultModel returns the model to use, checking config first, then falling back.
-// providerName must match the config key (e.g., "openai", "claude", "deepseek")
-func GetDefaultModel(model, providerName, fallback string) string {
+// GetDefaultModelWithContext は context に埋め込まれた設定を優先して使用モデルを返す。
+// providerName は設定上のキー（例: "openai", "claude", "deepseek"）と一致している必要がある。
+func GetDefaultModelWithContext(ctx context.Context, model, providerName, fallback string) string {
 	if model != "" {
 		return model
 	}
-	cfg := config.GetGlobalConfig()
+	cfg := config.FromContext(ctx)
 	if pm, ok := cfg.ProviderModels[providerName]; ok && pm.DefaultModel != "" {
 		return pm.DefaultModel
 	}
 	return fallback
+}
+
+// GetDefaultModel returns the model to use, checking config first, then falling back.
+// providerName must match the config key (e.g., "openai", "claude", "deepseek")
+func GetDefaultModel(model, providerName, fallback string) string {
+	return GetDefaultModelWithContext(context.Background(), model, providerName, fallback)
 }
 
 // StartThinkingSpinner creates and starts a spinner with appropriate message.
@@ -163,7 +178,6 @@ func GetDefaultModel(model, providerName, fallback string) string {
 //
 // Returns the started spinner (caller must call Stop()).
 func StartThinkingSpinner(ctx context.Context, isImage bool, customSuffix string, forceDeep ...bool) *ui.Spinner {
-	spinner := ui.NewSpinner()
 	deep := IsThinkingEnabled(ctx)
 	if len(forceDeep) > 0 && forceDeep[0] {
 		deep = true
@@ -189,7 +203,5 @@ func StartThinkingSpinner(ctx context.Context, isImage bool, customSuffix string
 		msg = msg + " (" + customSuffix + ")"
 	}
 
-	spinner.Start(msg)
-	ui.SetGlobalSpinner(spinner)
-	return spinner
+	return StartSpinnerWithMessage(ctx, msg)
 }

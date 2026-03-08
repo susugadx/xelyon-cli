@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -120,7 +119,7 @@ func (p *Provider) chatWithCompletions(ctx context.Context, systemPrompt string,
 	if isStreaming {
 		return p.handleStreamingResponse(ctx, resp, spinner)
 	} else {
-		return p.handleNonStreamingResponse(resp, spinner)
+		return p.handleNonStreamingResponse(ctx, resp, spinner)
 	}
 }
 
@@ -265,13 +264,13 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 }
 
 // handleNonStreamingResponse は非ストリーミングレスポンスを処理（フォールバック）
-func (p *Provider) handleNonStreamingResponse(resp *http.Response, spinner *ui.Spinner) (string, error) {
-	return api.HandleNonStreamingResponse(resp, spinner)
+func (p *Provider) handleNonStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
+	return api.HandleNonStreamingResponse(ctx, resp, spinner)
 }
 
 // chatWithImageCompletions は Completions API で画像付きメッセージを処理
 func (p *Provider) chatWithImageCompletions(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {
-	cfg := config.GetGlobalConfig()
+	cfg := tools.ConfigFromContext(ctx)
 
 	// システムプロンプトを最初のメッセージとして追加
 	var messages []interface{}
@@ -351,6 +350,6 @@ func (p *Provider) chatWithImageCompletions(ctx context.Context, systemPrompt st
 	if isStreaming {
 		return p.handleStreamingResponse(ctx, resp, spinner)
 	} else {
-		return p.handleNonStreamingResponse(resp, spinner)
+		return p.handleNonStreamingResponse(ctx, resp, spinner)
 	}
 }

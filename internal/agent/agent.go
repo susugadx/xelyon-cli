@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"sync"
@@ -52,16 +53,16 @@ type Agent struct {
 	taskChangeOffset     int                    // タスク開始時の changeStack 長（タスク単位のサマリー表示用）
 	changeStorage        *history.ChangeStorage // 永続的変更履歴
 	mcpManager           *mcp.Manager
-	lspClient            *lsp.Client         // LSPクライアント
-	AutoApprove          bool                // --auto-approve フラグ
-	Stats                *SessionStats       // セッション統計情報
-	lastOutputs          []string            // 最後のAI出力履歴（最大10件）
-	cancelFunc           context.CancelFunc  // 現在のAPI呼び出しをキャンセルするための関数
-	strReplaceErrorCount int                 // str_replace連続エラーカウント（old_str not found）
-	mlReader             *ui.MultilineReader // 共有入力リーダー（ペーストモードでも使用）
-	PlanModeEnabled      bool                // Plan Mode ON/OFF（デフォルト: false）
-	ToolCache            *ToolCache          // ツール結果キャッシュ（read_file, list_dir）
-	taskBaseCommitHash   string              // タスク開始時のHEADコミットハッシュ（completion hook の diff 空チェック判定用）
+	lspClient            *lsp.Client        // LSPクライアント
+	AutoApprove          bool               // --auto-approve フラグ
+	Stats                *SessionStats      // セッション統計情報
+	lastOutputs          []string           // 最後のAI出力履歴（最大10件）
+	cancelFunc           context.CancelFunc // 現在のAPI呼び出しをキャンセルするための関数
+	strReplaceErrorCount int                // str_replace連続エラーカウント（old_str not found）
+	PlanModeEnabled      bool               // Plan Mode ON/OFF（デフォルト: false）
+	ToolCache            *ToolCache         // ツール結果キャッシュ（read_file, list_dir）
+	taskBaseCommitHash   string             // タスク開始時のHEADコミットハッシュ（completion hook の diff 空チェック判定用）
+	status               statusHolder
 
 	// LSP診断遅延バッファ: 連続str_replace途中の一時的エラーによる誤auto-retry防止用。
 	// str_replace成功後に対象ファイルを追加し、次の非str_replaceアクション時にフラッシュして再診断する。
@@ -80,6 +81,27 @@ type Agent struct {
 	statsMu       sync.Mutex
 }
 
+func (a *Agent) setPromptReader(reader *ui.MultilineReader) {
+	if a == nil {
+		return
+	}
+	a.ui().SetPromptReader(reader)
+}
+
+func (a *Agent) output() io.Writer {
+	if a == nil {
+		return ui.DefaultRuntime().Output()
+	}
+	return a.ui().Output()
+}
+
+func (a *Agent) errorOutput() io.Writer {
+	if a == nil {
+		return ui.DefaultRuntime().ErrorOutput()
+	}
+	return a.ui().ErrorOutput()
+}
+
 // NewAgent は新しいAgentを作成
 func NewAgent(model string, provider api.Provider, headless bool) *Agent {
 	return NewAgentWithRuntime(model, provider, headless, nil)
@@ -88,6 +110,10 @@ func NewAgent(model string, provider api.Provider, headless bool) *Agent {
 // NewAgentWithRuntime は runtime を指定して新しい Agent を作成する。
 func NewAgentWithRuntime(model string, provider api.Provider, headless bool, runtime *AgentRuntime) *Agent {
 	runtime = normalizeAgentRuntime(runtime)
+	api.ApplyRuntimeConfig(provider, runtime.effectiveConfig())
+	runtimeUI := runtime.effectiveUI()
+	out := runtimeUI.Output()
+	errOut := runtimeUI.ErrorOutput()
 
 	// 言語設定を適用
 	cfg := runtime.effectiveConfig()
@@ -100,7 +126,7 @@ func NewAgentWithRuntime(model string, provider api.Provider, headless bool, run
 
 	storage, err := history.NewStorage()
 	if err != nil {
-		red.Printf("Warning: Failed to initialize history storage: %v\n", err)
+		red.Fprintf(out, "Warning: Failed to initialize history storage: %v\n", err)
 		storage = nil
 	}
 
@@ -108,12 +134,12 @@ func NewAgentWithRuntime(model string, provider api.Provider, headless bool, run
 	mcpManager := mcp.NewManager()
 	if cfg.MCP.Enabled && (!headless || cfg.MCP.Headless) && os.Getenv("XELYON_DISABLE_MCP") != "1" {
 		if err := mcpManager.LoadConfig(); err != nil {
-			yellow.Printf("Warning: Failed to load MCP config: %v\n", err)
+			yellow.Fprintf(out, "Warning: Failed to load MCP config: %v\n", err)
 		}
 
 		ctx := context.Background()
 		if err := mcpManager.Connect(ctx); err != nil {
-			yellow.Printf("Warning: MCP connection error: %v\n", err)
+			yellow.Fprintf(out, "Warning: MCP connection error: %v\n", err)
 		}
 
 		// MCPツールをTool Registryに登録
@@ -132,7 +158,7 @@ func NewAgentWithRuntime(model string, provider api.Provider, headless bool, run
 	// 変更履歴ストレージ初期化
 	changeStorage, err := history.NewChangeStorage()
 	if err != nil {
-		yellow.Printf("Warning: Failed to initialize change storage: %v\n", err)
+		yellow.Fprintf(out, "Warning: Failed to initialize change storage: %v\n", err)
 		changeStorage = nil
 	}
 
@@ -172,7 +198,7 @@ func NewAgentWithRuntime(model string, provider api.Provider, headless bool, run
 				name := fmt.Sprintf("mcp_%s_%s", sanitizeToolName(t.ServerName), sanitizeToolName(t.Name))
 				// デバッグログ
 				if debug {
-					fmt.Fprintf(os.Stderr, "[DEBUG Gemini] MCP tool registered: %s\n", name)
+					_, _ = fmt.Fprintf(errOut, "[DEBUG Gemini] MCP tool registered: %s\n", name)
 				}
 				// InputSchema を map[string]interface{} に変換
 				var params map[string]interface{}
@@ -202,7 +228,7 @@ func NewAgentWithRuntime(model string, provider api.Provider, headless bool, run
 
 				// デバッグログ
 				if debug {
-					fmt.Fprintf(os.Stderr, "[DEBUG OpenAI] MCP tool registered: %s\n", name)
+					_, _ = fmt.Fprintf(errOut, "[DEBUG OpenAI] MCP tool registered: %s\n", name)
 				}
 			}
 			openaiMCPProvider.SetMCPTools(mcpFunctions)
@@ -233,6 +259,7 @@ func NewAgentWithRuntime(model string, provider api.Provider, headless bool, run
 		Stats:           NewSessionStats(strings.ToLower(provider.Name()), model),
 		lastOutputs:     []string{},
 		ToolCache:       toolCache,
+		status:          statusHolder{status: defaultStatus()},
 	}
 
 	// Usage callback を設定（プロバイダーがサポートしている場合）
@@ -277,14 +304,14 @@ func (a *Agent) Cleanup() {
 	// ToolCache 永続化
 	if a.ToolCache != nil {
 		if err := a.ToolCache.Save(); err != nil {
-			yellow.Printf("Warning: Failed to save tool cache: %v\n", err)
+			yellow.Fprintf(a.output(), "Warning: Failed to save tool cache: %v\n", err)
 		}
 	}
 	// セッション保存
 	if a.storage != nil && a.session != nil {
 		a.syncResponseIDToSession()
 		if err := a.storage.Save(a.session); err != nil {
-			yellow.Printf("Warning: Failed to save session: %v\n", err)
+			yellow.Fprintf(a.output(), "Warning: Failed to save session: %v\n", err)
 		}
 	}
 }

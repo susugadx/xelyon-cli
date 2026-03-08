@@ -10,10 +10,11 @@ import (
 
 // handleLSPCommand は LSP サーバーの状態を表示・管理
 func handleLSPCommand(agent *Agent, args []string) bool {
+	out := agent.output()
 	lspClient := agent.GetLSPClient()
 	if lspClient == nil {
-		yellow.Println("LSP is not enabled.")
-		yellow.Println("To enable, set 'lsp.enabled: true' in ~/.xelyon/config.yaml")
+		yellow.Fprintln(out, "LSP is not enabled.")
+		yellow.Fprintln(out, "To enable, set 'lsp.enabled: true' in ~/.xelyon/config.yaml")
 		return true
 	}
 
@@ -34,19 +35,20 @@ func handleLSPCommand(agent *Agent, args []string) bool {
 		return handleLSPInstall(agent, lspClient, args[1:])
 
 	default:
-		yellow.Printf("Unknown subcommand: %s\n", subCmd)
-		yellow.Println("Usage: /lsp [status|detect|install <language|all>]")
+		yellow.Fprintf(out, "Unknown subcommand: %s\n", subCmd)
+		yellow.Fprintln(out, "Usage: /lsp [status|detect|install <language|all>]")
 		return true
 	}
 }
 
 // handleLSPStatus は LSP サーバーの状態を表示
 func handleLSPStatus(agent *Agent, lspClient *lsp.Client) bool {
-	printCommandHeader("LSP Server Status")
+	out := agent.output()
+	printCommandHeaderToWriter(out, "LSP Server Status")
 
 	status := lspClient.Status()
 	if len(status) == 0 {
-		yellow.Println("  No LSP servers configured")
+		yellow.Fprintln(out, "  No LSP servers configured")
 		return true
 	}
 
@@ -66,36 +68,36 @@ func handleLSPStatus(agent *Agent, lspClient *lsp.Client) bool {
 		default:
 			icon = "⚪"
 		}
-		fmt.Printf("  %s %-12s : %s\n", icon, lang, state)
+		_, _ = fmt.Fprintf(out, "  %s %-12s : %s\n", icon, lang, state)
 	}
 
 	// プロジェクト内の言語を検出
 	cwd, _ := os.Getwd()
 	detectedLangs, _ := lsp.DetectProjectLanguages(cwd)
 	if len(detectedLangs) > 0 {
-		fmt.Println()
+		_, _ = fmt.Fprintln(out)
 		var langNames []string
 		for _, info := range detectedLangs {
 			langNames = append(langNames, info.ServerKey)
 		}
-		cyan.Printf("🔍 Detected languages in project: %s\n", strings.Join(langNames, ", "))
+		cyan.Fprintf(out, "🔍 Detected languages in project: %s\n", strings.Join(langNames, ", "))
 	}
 
 	// 未インストールサーバーのインストール提案
 	if len(notInstalled) > 0 {
-		fmt.Println()
-		yellow.Println("💡 Missing LSP servers:")
+		_, _ = fmt.Fprintln(out)
+		yellow.Fprintln(out, "💡 Missing LSP servers:")
 		for _, lang := range notInstalled {
 			if info, ok := lsp.GetInstallInfo(lang); ok {
-				fmt.Printf("   %s: %s\n", lang, info.Commands[0])
+				_, _ = fmt.Fprintf(out, "   %s: %s\n", lang, info.Commands[0])
 			}
 		}
-		fmt.Println()
-		yellow.Printf("   Run '/lsp install <language>' to install\n")
-		yellow.Printf("   Run '/lsp install all' to install all missing servers\n")
+		_, _ = fmt.Fprintln(out)
+		yellow.Fprintln(out, "   Run '/lsp install <language>' to install")
+		yellow.Fprintln(out, "   Run '/lsp install all' to install all missing servers")
 	} else {
-		fmt.Println()
-		green.Println("Tip: LSP servers start lazily when first used.")
+		_, _ = fmt.Fprintln(out)
+		green.Fprintln(out, "Tip: LSP servers start lazily when first used.")
 	}
 
 	return true
@@ -103,36 +105,37 @@ func handleLSPStatus(agent *Agent, lspClient *lsp.Client) bool {
 
 // handleLSPDetect はプロジェクト内の言語を検出して表示
 func handleLSPDetect(agent *Agent, lspClient *lsp.Client) bool {
-	cyan.Println("🔍 Detecting languages in project...")
-	fmt.Println()
+	out := agent.output()
+	cyan.Fprintln(out, "🔍 Detecting languages in project...")
+	_, _ = fmt.Fprintln(out)
 
 	cwd, err := os.Getwd()
 	if err != nil {
-		red.Printf("Error getting current directory: %v\n", err)
+		red.Fprintf(out, "Error getting current directory: %v\n", err)
 		return true
 	}
 
 	languages, err := lsp.DetectProjectLanguages(cwd)
 	if err != nil {
-		red.Printf("Error detecting languages: %v\n", err)
+		red.Fprintf(out, "Error detecting languages: %v\n", err)
 		return true
 	}
 
 	if len(languages) == 0 {
-		yellow.Println("No supported languages detected in this project.")
+		yellow.Fprintln(out, "No supported languages detected in this project.")
 		return true
 	}
 
-	cyan.Println("Found:")
+	cyan.Fprintln(out, "Found:")
 	for _, info := range languages {
 		exts := strings.Join(info.Extensions, ", ")
-		fmt.Printf("  - %s (%s): %d files\n", info.ServerKey, exts, info.FileCount)
+		_, _ = fmt.Fprintf(out, "  - %s (%s): %d files\n", info.ServerKey, exts, info.FileCount)
 	}
 
 	// LSPサーバーの状態を確認
 	status := lspClient.Status()
-	fmt.Println()
-	cyan.Println("LSP Status:")
+	_, _ = fmt.Fprintln(out)
+	cyan.Fprintln(out, "LSP Status:")
 
 	var notInstalled []string
 	for _, info := range languages {
@@ -140,26 +143,26 @@ func handleLSPDetect(agent *Agent, lspClient *lsp.Client) bool {
 		state, ok := status[serverKey]
 
 		if !ok {
-			fmt.Printf("  ❓ %s: not configured\n", serverKey)
+			_, _ = fmt.Fprintf(out, "  ❓ %s: not configured\n", serverKey)
 			continue
 		}
 
 		if strings.HasPrefix(state, "not installed") {
-			fmt.Printf("  ❌ %s: not installed\n", serverKey)
+			_, _ = fmt.Fprintf(out, "  ❌ %s: not installed\n", serverKey)
 			notInstalled = append(notInstalled, serverKey)
 		} else if state == "disabled" {
-			fmt.Printf("  🔴 %s: disabled\n", serverKey)
+			_, _ = fmt.Fprintf(out, "  🔴 %s: disabled\n", serverKey)
 		} else {
 			installInfo, _ := lsp.GetInstallInfo(serverKey)
-			fmt.Printf("  ✅ %s: installed (%s)\n", serverKey, installInfo.PackageName)
+			_, _ = fmt.Fprintf(out, "  ✅ %s: installed (%s)\n", serverKey, installInfo.PackageName)
 		}
 	}
 
 	if len(notInstalled) > 0 {
-		fmt.Println()
-		yellow.Printf("Run '/lsp install %s' to install missing servers.\n", notInstalled[0])
+		_, _ = fmt.Fprintln(out)
+		yellow.Fprintf(out, "Run '/lsp install %s' to install missing servers.\n", notInstalled[0])
 		if len(notInstalled) > 1 {
-			yellow.Println("Run '/lsp install all' to install all missing servers.")
+			yellow.Fprintln(out, "Run '/lsp install all' to install all missing servers.")
 		}
 	}
 
@@ -168,9 +171,10 @@ func handleLSPDetect(agent *Agent, lspClient *lsp.Client) bool {
 
 // handleLSPInstall は LSP サーバーをインストール
 func handleLSPInstall(agent *Agent, lspClient *lsp.Client, args []string) bool {
+	out := agent.output()
 	if len(args) == 0 {
-		yellow.Println("Usage: /lsp install <language|all>")
-		yellow.Println("Available languages: go, typescript, python, rust")
+		yellow.Fprintln(out, "Usage: /lsp install <language|all>")
+		yellow.Fprintln(out, "Available languages: go, typescript, python, rust")
 		return true
 	}
 
@@ -183,43 +187,44 @@ func handleLSPInstall(agent *Agent, lspClient *lsp.Client, args []string) bool {
 	// 単一言語のインストール
 	info, ok := lsp.GetInstallInfo(target)
 	if !ok {
-		red.Printf("Unknown language: %s\n", target)
-		yellow.Println("Available languages: go, typescript, python, rust")
+		red.Fprintf(out, "Unknown language: %s\n", target)
+		yellow.Fprintln(out, "Available languages: go, typescript, python, rust")
 		return true
 	}
 
 	// インストール済みチェック
 	status := lspClient.Status()
 	if state, exists := status[target]; exists && !strings.HasPrefix(state, "not installed") {
-		green.Printf("✅ %s is already installed (%s)\n", target, info.PackageName)
+		green.Fprintf(out, "✅ %s is already installed (%s)\n", target, info.PackageName)
 		return true
 	}
 
 	// インストール実行
-	cyan.Printf("📦 Installing %s LSP server (%s)...\n", target, info.PackageName)
-	fmt.Println()
-	cyan.Printf("Running: %s\n", info.Commands[0])
-	fmt.Println()
+	cyan.Fprintf(out, "📦 Installing %s LSP server (%s)...\n", target, info.PackageName)
+	_, _ = fmt.Fprintln(out)
+	cyan.Fprintf(out, "Running: %s\n", info.Commands[0])
+	_, _ = fmt.Fprintln(out)
 
-	if err := lsp.RunInstall(target); err != nil {
-		red.Printf("❌ Installation failed: %v\n", err)
-		fmt.Println()
-		yellow.Println("Try installing manually:")
+	if err := lsp.RunInstallWithIO(target, agent.ui().Input(), agent.ui().Output(), agent.ui().ErrorOutput()); err != nil {
+		red.Fprintf(out, "❌ Installation failed: %v\n", err)
+		_, _ = fmt.Fprintln(out)
+		yellow.Fprintln(out, "Try installing manually:")
 		for _, cmd := range info.Commands {
-			fmt.Printf("   %s\n", cmd)
+			_, _ = fmt.Fprintf(out, "   %s\n", cmd)
 		}
 		return true
 	}
 
-	fmt.Println()
-	green.Printf("✅ %s installed successfully!\n", info.PackageName)
-	fmt.Println()
-	yellow.Println("Tip: LSP server will start automatically when you use LSP tools.")
+	_, _ = fmt.Fprintln(out)
+	green.Fprintf(out, "✅ %s installed successfully!\n", info.PackageName)
+	_, _ = fmt.Fprintln(out)
+	yellow.Fprintln(out, "Tip: LSP server will start automatically when you use LSP tools.")
 	return true
 }
 
 // handleLSPInstallAll は未インストールの全LSPサーバーをインストール
 func handleLSPInstallAll(agent *Agent, lspClient *lsp.Client) bool {
+	out := agent.output()
 	status := lspClient.Status()
 
 	// 未インストールのサーバーを収集
@@ -231,12 +236,12 @@ func handleLSPInstallAll(agent *Agent, lspClient *lsp.Client) bool {
 	}
 
 	if len(toInstall) == 0 {
-		green.Println("✅ All configured LSP servers are already installed!")
+		green.Fprintln(out, "✅ All configured LSP servers are already installed!")
 		return true
 	}
 
-	cyan.Println("📦 Installing missing LSP servers...")
-	fmt.Println()
+	cyan.Fprintln(out, "📦 Installing missing LSP servers...")
+	_, _ = fmt.Fprintln(out)
 
 	successCount := 0
 	for i, lang := range toInstall {
@@ -245,22 +250,22 @@ func handleLSPInstallAll(agent *Agent, lspClient *lsp.Client) bool {
 			continue
 		}
 
-		fmt.Printf("[%d/%d] Installing %s (%s)...\n", i+1, len(toInstall), lang, info.PackageName)
-		fmt.Printf("      %s\n", info.Commands[0])
+		_, _ = fmt.Fprintf(out, "[%d/%d] Installing %s (%s)...\n", i+1, len(toInstall), lang, info.PackageName)
+		_, _ = fmt.Fprintf(out, "      %s\n", info.Commands[0])
 
-		if err := lsp.RunInstall(lang); err != nil {
-			red.Printf("      ❌ Failed: %v\n", err)
+		if err := lsp.RunInstallWithIO(lang, agent.ui().Input(), agent.ui().Output(), agent.ui().ErrorOutput()); err != nil {
+			red.Fprintf(out, "      ❌ Failed: %v\n", err)
 		} else {
-			green.Println("      ✅ Success")
+			green.Fprintln(out, "      ✅ Success")
 			successCount++
 		}
-		fmt.Println()
+		_, _ = fmt.Fprintln(out)
 	}
 
 	if successCount == len(toInstall) {
-		green.Println("All servers installed!")
+		green.Fprintln(out, "All servers installed!")
 	} else {
-		yellow.Printf("%d of %d servers installed successfully.\n", successCount, len(toInstall))
+		yellow.Fprintf(out, "%d of %d servers installed successfully.\n", successCount, len(toInstall))
 	}
 
 	return true

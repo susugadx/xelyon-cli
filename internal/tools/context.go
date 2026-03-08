@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/susugadx/xelyon-cli/internal/audit"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 	"github.com/susugadx/xelyon-cli/internal/ui"
@@ -24,6 +25,7 @@ type ExecutionContext struct {
 	ToolCache    ToolCacheInterface
 	Config       *config.Config
 	AutoApprove  bool
+	AuditLogger  audit.ToolLogger
 }
 
 // DefaultExecutionContext は標準入出力を使う実行コンテキストを返す。
@@ -33,6 +35,7 @@ func DefaultExecutionContext() ExecutionContext {
 		ToolCache:   GlobalToolCache,
 		Config:      config.GetGlobalConfig(),
 		AutoApprove: common.GlobalAutoApprove,
+		AuditLogger: audit.GetLogger(),
 	})
 }
 
@@ -75,6 +78,12 @@ func (ctx ExecutionContext) EffectiveConfig() *config.Config {
 	return normalized.Config
 }
 
+// EffectiveAuditLogger は実行時に使う監査ロガーを返す。
+func (ctx ExecutionContext) EffectiveAuditLogger() audit.ToolLogger {
+	normalized := normalizeExecutionContext(ctx)
+	return normalized.AuditLogger
+}
+
 func normalizeExecutionContext(ctx ExecutionContext) ExecutionContext {
 	if ctx.Stdin == nil {
 		ctx.Stdin = os.Stdin
@@ -94,12 +103,14 @@ func normalizeExecutionContext(ctx ExecutionContext) ExecutionContext {
 	if ctx.Config == nil {
 		ctx.Config = config.GetGlobalConfig()
 	}
+	if ctx.AuditLogger == nil {
+		ctx.AuditLogger = audit.GetLogger()
+	}
 	return ctx
 }
 
 type (
 	registryContextKey struct{}
-	configContextKey   struct{}
 )
 
 // WithRegistry は request context に Tool Registry を埋め込む。
@@ -123,19 +134,10 @@ func RegistryFromContext(ctx context.Context) *Registry {
 
 // WithConfig は request context に設定を埋め込む。
 func WithConfig(ctx context.Context, cfg *config.Config) context.Context {
-	if cfg == nil {
-		return ctx
-	}
-	return context.WithValue(ctx, configContextKey{}, cfg)
+	return config.WithContext(ctx, cfg)
 }
 
 // ConfigFromContext は request context から設定を取得する。
 func ConfigFromContext(ctx context.Context) *config.Config {
-	if ctx == nil {
-		return config.GetGlobalConfig()
-	}
-	if cfg, ok := ctx.Value(configContextKey{}).(*config.Config); ok && cfg != nil {
-		return cfg
-	}
-	return config.GetGlobalConfig()
+	return config.FromContext(ctx)
 }

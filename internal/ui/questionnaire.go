@@ -32,7 +32,7 @@ func (q *Questionnaire) Ask() (*QuestionnaireAnswer, error) {
 // AskWithIO は入出力先を指定して質問を表示し、回答を収集する。
 func (q *Questionnaire) AskWithIO(promptIO PromptIO) (*QuestionnaireAnswer, error) {
 	promptIO = normalizePromptIO(promptIO)
-	StopGlobalSpinner()
+	stopSpinnerForPromptIO(promptIO)
 	_, _ = fmt.Fprint(promptIO.Out, "\033[?25h") // カーソル表示
 
 	switch q.QuestionType {

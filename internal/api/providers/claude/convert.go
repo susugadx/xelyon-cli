@@ -167,12 +167,17 @@ func ConvertToAnthropicMessages(history []api.Message) []AnthropicMessage {
 //	BP#2: ツール定義末尾（GetCombinedClaudeTools）
 //	BP#3, BP#4: tool_result 上位2つ（本関数）
 func SetMessageCacheBreakpoints(messages []AnthropicMessage) {
-	const stableOffset = 3
-
 	cfg := config.GetGlobalConfig()
-	if cfg != nil && !cfg.PromptCache.Enabled {
+	SetMessageCacheBreakpointsWithEnabled(messages, cfg == nil || cfg.PromptCache.Enabled)
+}
+
+// SetMessageCacheBreakpointsWithEnabled は prompt cache 有効時のみメッセージに breakpoints を設定する。
+func SetMessageCacheBreakpointsWithEnabled(messages []AnthropicMessage, enabled bool) {
+	if !enabled {
 		return
 	}
+
+	const stableOffset = 3
 
 	// user メッセージのインデックスを収集
 	var userIndices []int

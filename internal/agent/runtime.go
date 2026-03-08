@@ -3,11 +3,14 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/agent/token"
+	"github.com/susugadx/xelyon-cli/internal/audit"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // AgentRuntime は agent/session 単位で保持する実行時 state を束ねる。
@@ -16,6 +19,8 @@ type AgentRuntime struct {
 	ToolCache   *ToolCache
 	Config      *config.Config
 	AutoApprove bool
+	UI          *ui.Runtime
+	AuditLogger audit.ToolLogger
 }
 
 // NewAgentRuntime は CLI 互換の初期値を持つ runtime を返す。
@@ -40,6 +45,12 @@ func normalizeAgentRuntime(runtime *AgentRuntime) *AgentRuntime {
 	} else {
 		runtime.Config = config.CloneConfig(runtime.Config)
 	}
+	if runtime.UI == nil {
+		runtime.UI = ui.NewRuntime(os.Stdin, os.Stdout, os.Stderr)
+	}
+	if runtime.AuditLogger == nil {
+		runtime.AuditLogger = audit.NewDisabledLogger()
+	}
 	return runtime
 }
 
@@ -62,6 +73,20 @@ func (r *AgentRuntime) effectiveConfig() *config.Config {
 		return config.GetGlobalConfig()
 	}
 	return r.Config
+}
+
+func (r *AgentRuntime) effectiveUI() *ui.Runtime {
+	if r == nil || r.UI == nil {
+		return ui.DefaultRuntime()
+	}
+	return r.UI
+}
+
+func (r *AgentRuntime) effectiveAuditLogger() audit.ToolLogger {
+	if r == nil || r.AuditLogger == nil {
+		return audit.GetLogger()
+	}
+	return r.AuditLogger
 }
 
 func (r *AgentRuntime) effectiveAutoApprove() bool {
@@ -95,6 +120,20 @@ func (a *Agent) autoApprove() bool {
 	return a.AutoApprove
 }
 
+func (a *Agent) ui() *ui.Runtime {
+	if a == nil || a.Runtime == nil {
+		return ui.DefaultRuntime()
+	}
+	return a.Runtime.effectiveUI()
+}
+
+func (a *Agent) auditLogger() audit.ToolLogger {
+	if a == nil || a.Runtime == nil {
+		return audit.GetLogger()
+	}
+	return a.Runtime.effectiveAuditLogger()
+}
+
 func (a *Agent) setAutoApprove(enabled bool) {
 	if a == nil {
 		return
@@ -108,6 +147,7 @@ func (a *Agent) setAutoApprove(enabled bool) {
 func (a *Agent) requestContext(ctx context.Context) context.Context {
 	ctx = tools.WithRegistry(ctx, a.registry())
 	ctx = tools.WithConfig(ctx, a.cfg())
+	ctx = ui.WithRuntime(ctx, a.ui())
 	return ctx
 }
 

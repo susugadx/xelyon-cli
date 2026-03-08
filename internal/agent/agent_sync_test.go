@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"strings"
 	"testing"
@@ -8,6 +9,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // MockProvider implements api.Provider for testing
@@ -130,5 +132,25 @@ func TestSyncWithGlobalConfig_RebuildsPromptForClaudeOpus(t *testing.T) {
 
 	if !strings.Contains(a.SystemPrompt, "### Stable Working Reference") {
 		t.Fatal("expected SyncWithGlobalConfig to rebuild the Claude Opus system prompt")
+	}
+}
+
+func TestSyncWithGlobalConfig_UsesRuntimeOutputForSwitchWarning(t *testing.T) {
+	var out bytes.Buffer
+	runtime := NewAgentRuntime()
+	runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, &out)
+	runtime.Config.DefaultProvider = "missing-provider"
+
+	a := &Agent{
+		ProviderName:    "openai",
+		CurrentModel:    "gpt-old",
+		CurrentProvider: &MockProvider{name: "openai"},
+		Runtime:         runtime,
+	}
+
+	a.SyncWithGlobalConfig()
+
+	if !strings.Contains(out.String(), "Warning: Failed to switch provider") {
+		t.Fatalf("expected runtime output to contain switch warning, got %q", out.String())
 	}
 }

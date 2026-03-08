@@ -3,7 +3,6 @@ package ui
 import (
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
 	"github.com/fatih/color"
@@ -15,7 +14,7 @@ type diffPrinter struct {
 
 func newDiffPrinter(out io.Writer) diffPrinter {
 	if out == nil {
-		out = os.Stdout
+		out = DefaultRuntime().Output()
 	}
 	return diffPrinter{out: out}
 }
@@ -55,7 +54,12 @@ var DefaultDiffOptions = DiffOptions{
 
 // ShowColoredDiff は標準出力へ色付きの差分を表示する。
 func ShowColoredDiff(oldStr, newStr string, opts *DiffOptions) {
-	ShowColoredDiffToWriter(os.Stdout, oldStr, newStr, opts)
+	ShowColoredDiffWithRuntime(DefaultRuntime(), oldStr, newStr, opts)
+}
+
+// ShowColoredDiffWithRuntime は UI runtime の出力先へ色付きの差分を表示する。
+func ShowColoredDiffWithRuntime(runtime *Runtime, oldStr, newStr string, opts *DiffOptions) {
+	ShowColoredDiffToWriter(runtimeOrDefault(runtime).Output(), oldStr, newStr, opts)
 }
 
 // ShowColoredDiffToWriter は指定 writer へ色付きの差分を表示する。
@@ -271,10 +275,16 @@ func min(a, b int) int {
 
 // ShowUnifiedDiff は Unified Diff 形式で色付き表示する。
 func ShowUnifiedDiff(diffOutput string) {
-	showUnifiedDiffToWriter(os.Stdout, diffOutput)
+	ShowUnifiedDiffWithRuntime(DefaultRuntime(), diffOutput)
 }
 
-func showUnifiedDiffToWriter(out io.Writer, diffOutput string) {
+// ShowUnifiedDiffWithRuntime は UI runtime の出力先へ Unified Diff を表示する。
+func ShowUnifiedDiffWithRuntime(runtime *Runtime, diffOutput string) {
+	ShowUnifiedDiffToWriter(runtimeOrDefault(runtime).Output(), diffOutput)
+}
+
+// ShowUnifiedDiffToWriter は指定 writer へ Unified Diff を表示する。
+func ShowUnifiedDiffToWriter(out io.Writer, diffOutput string) {
 	p := newDiffPrinter(out)
 	lines := strings.Split(diffOutput, "\n")
 

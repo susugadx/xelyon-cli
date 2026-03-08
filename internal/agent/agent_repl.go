@@ -20,30 +20,34 @@ import (
 func RunInteractive(model string, provider api.Provider, autoApprove bool) {
 	runtime := NewAgentRuntime()
 	runtime.AutoApprove = autoApprove
+	runtimeUI := runtime.effectiveUI()
 
 	// Bracketed Paste Mode を最初に有効化（Windows Terminal の警告回避のため）
 	// 他の出力より前に送信する必要がある
-	mlReader := ui.NewMultilineReader(os.Stdin)
+	mlReader := ui.NewMultilineReaderWithRuntime(runtimeUI)
+	runtimeUI.SetPromptReader(mlReader)
 	cfg := runtime.effectiveConfig()
 
 	// Debug: XELYON_DEBUG_PASTE=1 で詳細表示
 	if os.Getenv("XELYON_DEBUG_PASTE") == "1" {
-		fmt.Fprintf(os.Stderr, "[DEBUG] cfg.Paste.BracketedPaste = %v\n", cfg.Paste.BracketedPaste)
+		_, _ = fmt.Fprintf(runtimeUI.ErrorOutput(), "[DEBUG] cfg.Paste.BracketedPaste = %v\n", cfg.Paste.BracketedPaste)
 	}
 
 	if cfg.Paste.BracketedPaste {
 		mlReader.EnableBracketedPaste()
 		defer mlReader.DisableBracketedPaste()
 	}
-	ui.SetGlobalReader(mlReader) // セレクターで共有するため
 
 	// 監査ログ初期化（環境変数で制御: XELYON_AUDIT_LOG=1 で有効化）
 	auditEnabled := os.Getenv("XELYON_AUDIT_LOG") == "1"
-	if err := audit.Init(auditEnabled); err != nil {
-		yellow.Printf("Warning: Failed to initialize audit log: %v\n", err)
+	logger, err := audit.NewDefaultLogger(auditEnabled)
+	if err != nil {
+		yellow.Fprintf(runtimeUI.Output(), "Warning: Failed to initialize audit log: %v\n", err)
+	} else {
+		runtime.AuditLogger = logger
 	}
 	if auditEnabled {
-		green.Println("📝 Audit logging enabled")
+		green.Fprintln(runtimeUI.Output(), "📝 Audit logging enabled")
 	}
 
 	agent := NewAgentWithRuntime(model, provider, false, runtime)
@@ -54,8 +58,8 @@ func RunInteractive(model string, provider api.Provider, autoApprove bool) {
 	setupSignalHandler(agent)
 
 	// ヘッダー表示
-	printHeader(model, provider)
-	printModeInfo(autoApprove, false)
+	printHeaderToWriter(runtimeUI.Output(), model, provider)
+	printModeInfoToWriter(runtimeUI.Output(), autoApprove, false)
 
 	// プロジェクト設定読み込み（xelyon.yaml）
 	if pc := loadProjectConfig(); pc != nil {
@@ -66,7 +70,7 @@ func RunInteractive(model string, provider api.Provider, autoApprove bool) {
 	printContextSize(agent)
 
 	// REPLループ開始
-	agent.mlReader = mlReader // ペーストモードで共有するため
+	agent.setPromptReader(mlReader)
 	runREPLLoop(agent, mlReader)
 }
 
@@ -74,38 +78,50 @@ func RunInteractive(model string, provider api.Provider, autoApprove bool) {
 func RunInteractiveWithResume(model string, provider api.Provider, autoApprove bool) {
 	runtime := NewAgentRuntime()
 	runtime.AutoApprove = autoApprove
+	runtimeUI := runtime.effectiveUI()
 
 	// Bracketed Paste Mode を最初に有効化（Windows Terminal の警告回避のため）
-	mlReader := ui.NewMultilineReader(os.Stdin)
+	mlReader := ui.NewMultilineReaderWithRuntime(runtimeUI)
+	runtimeUI.SetPromptReader(mlReader)
 	cfg := runtime.effectiveConfig()
 
 	if os.Getenv("XELYON_DEBUG_PASTE") == "1" {
-		fmt.Fprintf(os.Stderr, "[DEBUG] cfg.Paste.BracketedPaste = %v\n", cfg.Paste.BracketedPaste)
+		_, _ = fmt.Fprintf(runtimeUI.ErrorOutput(), "[DEBUG] cfg.Paste.BracketedPaste = %v\n", cfg.Paste.BracketedPaste)
 	}
 
 	if cfg.Paste.BracketedPaste {
 		mlReader.EnableBracketedPaste()
 		defer mlReader.DisableBracketedPaste()
 	}
-	ui.SetGlobalReader(mlReader) // セレクターで共有するため
+
+	auditEnabled := os.Getenv("XELYON_AUDIT_LOG") == "1"
+	logger, err := audit.NewDefaultLogger(auditEnabled)
+	if err != nil {
+		yellow.Fprintf(runtimeUI.Output(), "Warning: Failed to initialize audit log: %v\n", err)
+	} else {
+		runtime.AuditLogger = logger
+	}
+	if auditEnabled {
+		green.Fprintln(runtimeUI.Output(), "📝 Audit logging enabled")
+	}
 
 	storage, err := history.NewStorage()
 	if err != nil {
-		red.Printf("Failed to initialize storage: %v\n", err)
+		red.Fprintf(runtimeUI.Output(), "Failed to initialize storage: %v\n", err)
 		RunInteractive(model, provider, autoApprove)
 		return
 	}
 
 	sessionID, err := storage.GetLastSession()
 	if err != nil {
-		yellow.Println("No previous session found, starting new session")
+		yellow.Fprintln(runtimeUI.Output(), "No previous session found, starting new session")
 		RunInteractive(model, provider, autoApprove)
 		return
 	}
 
 	session, err := storage.Load(sessionID)
 	if err != nil {
-		red.Printf("Failed to load session: %v\n", err)
+		red.Fprintf(runtimeUI.Output(), "Failed to load session: %v\n", err)
 		RunInteractive(model, provider, autoApprove)
 		return
 	}
@@ -128,9 +144,9 @@ func RunInteractiveWithResume(model string, provider api.Provider, autoApprove b
 	// シグナルハンドリング（Ctrl+C 2回で終了、1回目はAI応答中断）
 	setupSignalHandler(agent)
 
-	printHeader(model, provider)
-	printModeInfo(autoApprove, false)
-	green.Printf("📂 Resumed session %s (%d messages)\n", sessionID, len(session.Messages))
+	printHeaderToWriter(runtimeUI.Output(), model, provider)
+	printModeInfoToWriter(runtimeUI.Output(), autoApprove, false)
+	green.Fprintf(runtimeUI.Output(), "📂 Resumed session %s (%d messages)\n", sessionID, len(session.Messages))
 
 	if pc := loadProjectConfig(); pc != nil {
 		applyProjectConfig(agent, pc)
@@ -140,7 +156,7 @@ func RunInteractiveWithResume(model string, provider api.Provider, autoApprove b
 	printContextSize(agent)
 
 	// REPLループ開始
-	agent.mlReader = mlReader
+	agent.setPromptReader(mlReader)
 	runREPLLoop(agent, mlReader)
 }
 
@@ -164,12 +180,12 @@ func runREPLLoop(agent *Agent, mlReader *ui.MultilineReader) {
 				now := time.Now()
 				if now.Sub(lastInterrupt) < 3*time.Second {
 					// 2回目（3秒以内）: アプリ終了
-					fmt.Println("\n👋 Gracefully shutting down...")
+					_, _ = fmt.Fprintln(agent.output(), "\n👋 Gracefully shutting down...")
 					agent.Cleanup()
 					os.Exit(0)
 				}
 				lastInterrupt = now
-				fmt.Println("⚠️  Interrupted. Press Ctrl+C again within 3 seconds to exit.")
+				_, _ = fmt.Fprintln(agent.output(), "⚠️  Interrupted. Press Ctrl+C again within 3 seconds to exit.")
 				continue
 			}
 			// Other errors (like EOF): exit loop
@@ -188,7 +204,7 @@ func runREPLLoop(agent *Agent, mlReader *ui.MultilineReader) {
 
 		// 画像入力チェック: image:/path/to/file.png 形式を検出
 		if strings.Contains(input, "image:") {
-			textPart, image := parseImageInput(input)
+			textPart, image := parseImageInputWithWriter(agent.output(), input)
 			if image != nil {
 				agent.chatWithImage(textPart, image)
 				continue
@@ -214,7 +230,7 @@ func setupSignalHandler(agent *Agent) {
 			if now.Sub(lastInterrupt) < 3*time.Second {
 				// 2回目（3秒以内）: アプリ終了
 				interruptMu.Unlock()
-				fmt.Println("\n\n👋 Gracefully shutting down...")
+				_, _ = fmt.Fprintln(agent.output(), "\n\n👋 Gracefully shutting down...")
 				agent.Cleanup()
 				os.Exit(0)
 			}
@@ -223,7 +239,7 @@ func setupSignalHandler(agent *Agent) {
 			interruptMu.Unlock()
 
 			// 1回目: 中断メッセージ
-			fmt.Println("\n\n⚠️  Interrupted. Press Ctrl+C again within 3 seconds to exit.")
+			_, _ = fmt.Fprintln(agent.output(), "\n\n⚠️  Interrupted. Press Ctrl+C again within 3 seconds to exit.")
 
 			// 現在のAPI呼び出しをキャンセル
 			if agent.cancelFunc != nil {
@@ -263,14 +279,15 @@ func printContextSize(agent *Agent) {
 	total := basePromptTokens + toolsTokens + projectTokens
 
 	// ツリー形式で表示
-	dim.Printf("📋 Context size: ~%s tok\n", FormatTokens(total))
-	dim.Printf("   ├── Base prompt: ~%s\n", FormatTokens(basePromptTokens))
+	out := agent.output()
+	dim.Fprintf(out, "📋 Context size: ~%s tok\n", FormatTokens(total))
+	dim.Fprintf(out, "   ├── Base prompt: ~%s\n", FormatTokens(basePromptTokens))
 	if mcpCount > 0 {
-		dim.Printf("   ├── Tools (%d+%d MCP): ~%s\n",
+		dim.Fprintf(out, "   ├── Tools (%d+%d MCP): ~%s\n",
 			builtinCount, mcpCount, FormatTokens(toolsTokens))
 	} else {
-		dim.Printf("   ├── Tools (%d): ~%s\n",
+		dim.Fprintf(out, "   ├── Tools (%d): ~%s\n",
 			builtinCount, FormatTokens(toolsTokens))
 	}
-	dim.Printf("   └── xelyon.yaml: ~%s\n", FormatTokens(projectTokens))
+	dim.Fprintf(out, "   └── xelyon.yaml: ~%s\n", FormatTokens(projectTokens))
 }

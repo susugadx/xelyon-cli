@@ -44,6 +44,8 @@ func (e *ErrIdleTimeout) Error() string {
 // handleSSEResponse は streamGenerateContent?alt=sse の SSE ストリームを処理する
 func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
 	debug := os.Getenv("XELYON_DEBUG_GEMINI") == "1"
+	out := api.OutputWriterFromContext(ctx)
+	errOut := api.ErrorWriterFromContext(ctx)
 	var fullResponse strings.Builder
 	var functionCalls []*api.GeminiFunctionCall
 	var thoughtParts []map[string]any // Gemini 3: thought パートを収集（次リクエストに返す）
@@ -78,7 +80,7 @@ func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, s
 		}
 	}()
 
-	cfg := config.GetGlobalConfig()
+	cfg := config.FromContext(ctx)
 	idleTimeout := time.Duration(cfg.Streaming.IdleTimeoutSeconds) * time.Second
 	idleTimer := time.NewTimer(idleTimeout)
 	defer idleTimer.Stop()
@@ -264,10 +266,10 @@ loop:
 								if spinner != nil {
 									spinner.Stop()
 								}
-								api.PrintAIHeader()
+								api.PrintAIHeaderWithContext(ctx)
 								headerPrinted = true
 							}
-							fmt.Print(remaining)
+							_, _ = fmt.Fprint(out, remaining)
 						}
 						fullResponse.WriteString(remaining)
 						continue
@@ -277,10 +279,10 @@ loop:
 						if spinner != nil {
 							spinner.Stop()
 						}
-						api.PrintAIHeader()
+						api.PrintAIHeaderWithContext(ctx)
 						headerPrinted = true
 					}
-					fmt.Print(part.Text)
+					_, _ = fmt.Fprint(out, part.Text)
 					fullResponse.WriteString(part.Text)
 				}
 
@@ -336,7 +338,7 @@ loop:
 		if debug {
 			fmt.Fprintf(os.Stderr, "[DEBUG Gemini SSE] Rescuing %d tool call(s) from text\n", len(rescuedToolJSONs))
 		}
-		fmt.Fprintf(os.Stderr, "⚠️  FC rescue: %d tool call(s) extracted from text response\n", len(rescuedToolJSONs))
+		fmt.Fprintf(errOut, "⚠️  FC rescue: %d tool call(s) extracted from text response\n", len(rescuedToolJSONs))
 		for _, tj := range rescuedToolJSONs {
 			fullResponse.WriteString(tj)
 		}
@@ -367,14 +369,21 @@ loop:
 		return "", fmt.Errorf("no content in Gemini SSE response (stream ended without generating any text or function calls)")
 	}
 
-	fmt.Println()
+	_, _ = fmt.Fprintln(out)
 	return fullResponse.String(), nil
 }
 
-// handleFunctionCallingResponse は Function Calling レスポンスを処理
-// :generateContent エンドポイントは plain JSON を返すため、SSE パーサーではなくこちらを使用
+// handleFunctionCallingResponse は Function Calling レスポンスを処理する互換ラッパー。
 func (p *Provider) handleFunctionCallingResponse(body []byte, spinner *ui.Spinner) (string, error) {
+	return p.handleFunctionCallingResponseWithContext(context.Background(), body, spinner)
+}
+
+// handleFunctionCallingResponseWithContext は Function Calling レスポンスを処理する。
+// :generateContent エンドポイントは plain JSON を返すため、SSE パーサーではなくこちらを使用する。
+func (p *Provider) handleFunctionCallingResponseWithContext(ctx context.Context, body []byte, spinner *ui.Spinner) (string, error) {
 	debug := os.Getenv("XELYON_DEBUG_GEMINI") == "1"
+	out := api.OutputWriterFromContext(ctx)
+	errOut := api.ErrorWriterFromContext(ctx)
 
 	var responses []GeminiFunctionResponse
 
@@ -542,10 +551,10 @@ func (p *Provider) handleFunctionCallingResponse(body []byte, spinner *ui.Spinne
 			continue
 		}
 		if !headerPrinted {
-			api.PrintAIHeader()
+			api.PrintAIHeaderWithContext(ctx)
 			headerPrinted = true
 		}
-		fmt.Print(text)
+		_, _ = fmt.Fprint(out, text)
 		fullResponse.WriteString(text)
 	}
 
@@ -566,7 +575,7 @@ func (p *Provider) handleFunctionCallingResponse(body []byte, spinner *ui.Spinne
 		if debug {
 			fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Rescuing %d tool call(s) from text\n", len(toolJSONTexts))
 		}
-		fmt.Fprintf(os.Stderr, "⚠️  FC rescue: %d tool call(s) extracted from text response\n", len(toolJSONTexts))
+		fmt.Fprintf(errOut, "⚠️  FC rescue: %d tool call(s) extracted from text response\n", len(toolJSONTexts))
 		for _, tj := range toolJSONTexts {
 			fullResponse.WriteString(tj)
 		}
@@ -582,7 +591,7 @@ func (p *Provider) handleFunctionCallingResponse(body []byte, spinner *ui.Spinne
 			len(textParts), len(functionCalls), len(responses))
 	}
 
-	fmt.Println()
+	_, _ = fmt.Fprintln(out)
 	return fullResponse.String(), nil
 }
 

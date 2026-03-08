@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"bytes"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -83,6 +85,35 @@ func TestLogFunctionsNoPanic(t *testing.T) {
 	ErrorLogWithoutEmoji("test error without emoji")
 	SuccessLog("test success")
 	SuccessLogWithEmoji("OK", "test success with emoji")
+}
+
+func TestLogFunctionsToWriter_UseInjectedWriters(t *testing.T) {
+	originalLevel := currentLogLevel
+	defer func() { currentLogLevel = originalLevel }()
+
+	SetLogLevel(LogDebug)
+
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+
+	DebugToWriter(&errOut, "debug message")
+	InfoLogToWriter(&out, "info message")
+	WarnToWriter(&out, "warn message")
+	ErrorLogToWriter(&errOut, "error message")
+	SuccessLogWithEmojiToWriter(&out, "OK", "done")
+
+	if !strings.Contains(stripANSI(errOut.String()), "[DEBUG] debug message") {
+		t.Fatalf("expected debug output in injected error writer, got %q", errOut.String())
+	}
+	plainOut := stripANSI(out.String())
+	for _, want := range []string{"info message", "Warning: warn message", "OK done"} {
+		if !strings.Contains(plainOut, want) {
+			t.Fatalf("expected injected output to contain %q, got %q", want, plainOut)
+		}
+	}
+	if !strings.Contains(stripANSI(errOut.String()), "Error: error message") {
+		t.Fatalf("expected error output in injected error writer, got %q", errOut.String())
+	}
 }
 
 func TestLogLevelFiltering(t *testing.T) {

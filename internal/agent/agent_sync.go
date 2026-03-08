@@ -10,12 +10,13 @@ func (a *Agent) SyncWithGlobalConfig() {
 	}
 
 	cfg := a.cfg()
+	out := a.output()
 
 	// Provider: 変更があれば切り替え（モデルもプロバイダー別デフォルトに更新される）
 	if cfg.DefaultProvider != "" && cfg.DefaultProvider != a.ProviderName {
 		if err := a.SwitchProvider(cfg.DefaultProvider); err != nil {
 			// /config 直後にエラーを出して操作を止めるより、既存プロバイダーで継続
-			yellow.Printf("Warning: Failed to switch provider: %v\n", err)
+			yellow.Fprintf(out, "Warning: Failed to switch provider: %v\n", err)
 		}
 	}
 

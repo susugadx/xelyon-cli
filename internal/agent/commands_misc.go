@@ -154,40 +154,41 @@ func buildSessionTokenTable(agent *Agent, stats *SessionStats) *ui.Table {
 }
 
 func printSessionSections(agent *Agent) {
+	out := agent.output()
 	if agent.Stats == nil {
-		dim.Println("  Statistics not available")
+		dim.Fprintln(out, "  Statistics not available")
 		return
 	}
 
 	stats := agent.Stats
 
-	fmt.Println()
-	green.Println("📚 Session")
-	fmt.Print(buildSessionOverviewTable(agent, stats).RenderCompact())
+	_, _ = fmt.Fprintln(out)
+	green.Fprintln(out, "📚 Session")
+	_, _ = fmt.Fprint(out, buildSessionOverviewTable(agent, stats).RenderCompact())
 
-	fmt.Println()
-	green.Println("🔧 Tool Executions")
+	_, _ = fmt.Fprintln(out)
+	green.Fprintln(out, "🔧 Tool Executions")
 	if stats.TotalToolExecutions() > 0 {
 		toolTable := ui.NewTable()
 		for tool, count := range stats.ToolExecutions {
 			toolTable.AddRow(tool, fmt.Sprintf("%d", count))
 		}
 		toolTable.AddRow("Total", fmt.Sprintf("%d", stats.TotalToolExecutions()))
-		fmt.Print(toolTable.RenderCompact())
+		_, _ = fmt.Fprint(out, toolTable.RenderCompact())
 	} else {
-		dim.Println("  No tools executed yet")
+		dim.Fprintln(out, "  No tools executed yet")
 	}
 
-	fmt.Println()
-	green.Println("💰 Session Tokens & Cost")
+	_, _ = fmt.Fprintln(out)
+	green.Fprintln(out, "💰 Session Tokens & Cost")
 	if tokenTable := buildSessionTokenTable(agent, stats); tokenTable != nil {
-		fmt.Print(tokenTable.RenderCompact())
+		_, _ = fmt.Fprint(out, tokenTable.RenderCompact())
 	} else {
-		dim.Println("  No token usage data available")
+		dim.Fprintln(out, "  No token usage data available")
 	}
 
-	fmt.Println()
-	green.Println("⚡ Optimizations")
+	_, _ = fmt.Fprintln(out)
+	green.Fprintln(out, "⚡ Optimizations")
 	opt := stats.Optimizations
 	if opt.hasAny() {
 		optTable := ui.NewTable()
@@ -221,9 +222,9 @@ func printSessionSections(agent *Agent) {
 		if opt.CostAwareCompressions > 0 {
 			optTable.AddRow("Cost-aware auto-compress", fmt.Sprintf("%d times", opt.CostAwareCompressions))
 		}
-		fmt.Print(optTable.RenderCompact())
+		_, _ = fmt.Fprint(out, optTable.RenderCompact())
 	} else {
-		dim.Println("  No optimizations triggered yet")
+		dim.Fprintln(out, "  No optimizations triggered yet")
 	}
 }
 
@@ -242,8 +243,10 @@ func formatNumber(n int) string {
 
 // handleCopyCommand は最後のAI出力をクリップボードにコピー
 func handleCopyCommand(agent *Agent, args []string) bool {
+	out := agent.output()
+
 	if len(agent.lastOutputs) == 0 {
-		yellow.Println("No AI output to copy yet")
+		yellow.Fprintln(out, "No AI output to copy yet")
 		return true
 	}
 
@@ -261,22 +264,22 @@ func handleCopyCommand(agent *Agent, args []string) bool {
 			if i+1 < len(args) {
 				n, err := strconv.Atoi(args[i+1])
 				if err != nil {
-					red.Printf("Invalid number: %s\n", args[i+1])
+					red.Fprintf(out, "Invalid number: %s\n", args[i+1])
 					return true
 				}
 				if n < 1 || n > len(agent.lastOutputs) {
-					red.Printf("Index out of range (1-%d): %d\n", len(agent.lastOutputs), n)
+					red.Fprintf(out, "Index out of range (1-%d): %d\n", len(agent.lastOutputs), n)
 					return true
 				}
 				outputIndex = len(agent.lastOutputs) - n
 				i++ // skip next arg
 			} else {
-				red.Println("Missing value for -n flag")
+				red.Fprintln(out, "Missing value for -n flag")
 				return true
 			}
 		default:
-			yellow.Printf("Unknown argument: %s\n", arg)
-			yellow.Println("Usage: /copy [code] [-n <number>]")
+			yellow.Fprintf(out, "Unknown argument: %s\n", arg)
+			yellow.Fprintln(out, "Usage: /copy [code] [-n <number>]")
 			return true
 		}
 	}
@@ -287,7 +290,7 @@ func handleCopyCommand(agent *Agent, args []string) bool {
 	if codeOnly {
 		codeBlocks := extractCodeBlocks(output)
 		if len(codeBlocks) == 0 {
-			yellow.Println("No code blocks found in output")
+			yellow.Fprintln(out, "No code blocks found in output")
 			return true
 		}
 		output = strings.Join(codeBlocks, "\n\n")
@@ -295,12 +298,12 @@ func handleCopyCommand(agent *Agent, args []string) bool {
 
 	// クリップボードにコピー
 	if err := clipboard.WriteAll(output); err != nil {
-		red.Printf("Failed to copy to clipboard: %v\n", err)
+		red.Fprintf(out, "Failed to copy to clipboard: %v\n", err)
 		if strings.Contains(err.Error(), "xclip") || strings.Contains(err.Error(), "xsel") {
-			yellow.Println("\nLinux requires xclip or xsel:")
-			yellow.Println("  Ubuntu/Debian: sudo apt-get install xclip")
-			yellow.Println("  Fedora/RHEL:   sudo dnf install xclip")
-			yellow.Println("  Arch:          sudo pacman -S xclip")
+			yellow.Fprintln(out, "\nLinux requires xclip or xsel:")
+			yellow.Fprintln(out, "  Ubuntu/Debian: sudo apt-get install xclip")
+			yellow.Fprintln(out, "  Fedora/RHEL:   sudo dnf install xclip")
+			yellow.Fprintln(out, "  Arch:          sudo pacman -S xclip")
 		}
 		return true
 	}
@@ -308,11 +311,11 @@ func handleCopyCommand(agent *Agent, args []string) bool {
 	// 成功メッセージ
 	lines := strings.Count(output, "\n") + 1
 	chars := len(output)
-	green.Printf("✅ Copied to clipboard (%d lines, %d chars", lines, chars)
+	green.Fprintf(out, "✅ Copied to clipboard (%d lines, %d chars", lines, chars)
 	if codeOnly {
-		fmt.Printf(", code blocks only")
+		_, _ = fmt.Fprint(out, ", code blocks only")
 	}
-	fmt.Println(")")
+	_, _ = fmt.Fprintln(out, ")")
 
 	return true
 }
@@ -335,6 +338,8 @@ func extractCodeBlocks(text string) []string {
 
 // handleCompressCommand は会話履歴を圧縮
 func handleCompressCommand(agent *Agent, args []string) bool {
+	out := agent.output()
+
 	// フラグ解析
 	useCompactAPI := false
 	keepRecent := defaultKeepRecent
@@ -357,33 +362,33 @@ func handleCompressCommand(agent *Agent, args []string) bool {
 	if len(remainingArgs) > 0 {
 		n, err := strconv.Atoi(remainingArgs[0])
 		if err != nil {
-			red.Printf("Invalid number: %s\n", remainingArgs[0])
-			yellow.Println("Usage: /compress [keep_recent] [--compact|-c]")
+			red.Fprintf(out, "Invalid number: %s\n", remainingArgs[0])
+			yellow.Fprintln(out, "Usage: /compress [keep_recent] [--compact|-c]")
 			return true
 		}
 		if n < 1 {
-			red.Println("keep_recent must be at least 1")
+			red.Fprintln(out, "keep_recent must be at least 1")
 			return true
 		}
 		keepRecent = n
 	}
 
 	// 確認プロンプト
-	printCommandHeader("Compress History / 会話履歴を圧縮")
-	fmt.Printf("現在の履歴: %d messages\n", len(agent.History))
-	fmt.Printf("保持する最新件数: %d messages\n", keepRecent)
-	fmt.Printf("圧縮対象: %d messages\n", len(agent.History)-keepRecent)
-	yellow.Println("\n⚠️  Warning: 圧縮後、古いメッセージはサマリーに置き換わります")
+	printCommandHeaderToWriter(out, "Compress History / 会話履歴を圧縮")
+	_, _ = fmt.Fprintf(out, "現在の履歴: %d messages\n", len(agent.History))
+	_, _ = fmt.Fprintf(out, "保持する最新件数: %d messages\n", keepRecent)
+	_, _ = fmt.Fprintf(out, "圧縮対象: %d messages\n", len(agent.History)-keepRecent)
+	yellow.Fprintln(out, "\n⚠️  Warning: 圧縮後、古いメッセージはサマリーに置き換わります")
 
 	// 確認
-	if !promptConfirm("\nContinue? (y/n): ") {
-		yellow.Println("Cancelled")
+	if !promptConfirmWithRuntime(agent.ui(), "\nContinue? (y/n): ") {
+		yellow.Fprintln(out, "Cancelled")
 		return true
 	}
 
 	// 圧縮実行
 	if err := agent.CompressHistory(keepRecent); err != nil {
-		red.Printf("圧縮に失敗しました: %v\n", err)
+		red.Fprintf(out, "圧縮に失敗しました: %v\n", err)
 		return true
 	}
 
@@ -392,46 +397,49 @@ func handleCompressCommand(agent *Agent, args []string) bool {
 
 // handleCompactAPICompress は OpenAI Compact API で圧縮
 func handleCompactAPICompress(agent *Agent) bool {
+	out := agent.output()
+
 	// Compact API 対応チェック
 	compactProvider, ok := agent.CurrentProvider.(api.CompactCapable)
 	if !ok {
-		red.Println("❌ Current provider does not support Compact API")
-		yellow.Println("💡 Compact API is only available for OpenAI Responses API models")
+		red.Fprintln(out, "❌ Current provider does not support Compact API")
+		yellow.Fprintln(out, "💡 Compact API is only available for OpenAI Responses API models")
 		return true
 	}
 
 	if !compactProvider.SupportsCompact() {
-		red.Println("❌ Current model does not support Compact API")
+		red.Fprintln(out, "❌ Current model does not support Compact API")
 		return true
 	}
 
 	// 確認プロンプト
-	printCommandHeader("Compress with OpenAI Compact API")
-	fmt.Printf("現在の履歴: %d messages\n", len(agent.History))
-	yellow.Println("\n💡 Compact API uses OpenAI's lossy compression")
-	yellow.Println("   User messages are preserved verbatim")
-	yellow.Println("   Assistant responses are replaced with encrypted data")
+	printCommandHeaderToWriter(out, "Compress with OpenAI Compact API")
+	_, _ = fmt.Fprintf(out, "現在の履歴: %d messages\n", len(agent.History))
+	yellow.Fprintln(out, "\n💡 Compact API uses OpenAI's lossy compression")
+	yellow.Fprintln(out, "   User messages are preserved verbatim")
+	yellow.Fprintln(out, "   Assistant responses are replaced with encrypted data")
 
 	// 確認
-	if !promptConfirm("\nContinue? (y/n): ") {
-		yellow.Println("Cancelled")
+	if !promptConfirmWithRuntime(agent.ui(), "\nContinue? (y/n): ") {
+		yellow.Fprintln(out, "Cancelled")
 		return true
 	}
 
 	// Compact API 実行
 	ctx := context.Background()
 	if err := agent.CompressWithCompactAPI(ctx); err != nil {
-		red.Printf("❌ Compact API failed: %v\n", err)
+		red.Fprintf(out, "❌ Compact API failed: %v\n", err)
 		return true
 	}
 
-	green.Println("✅ History compressed with Compact API")
+	green.Fprintln(out, "✅ History compressed with Compact API")
 	return true
 }
 
 // handleTokensCommand はトークン使用量を表示
 func handleTokensCommand(agent *Agent) bool {
 	cfg := agent.cfg()
+	out := agent.output()
 
 	// トークン推定
 	totalTokens := agent.EstimateTokens()
@@ -441,8 +449,8 @@ func handleTokensCommand(agent *Agent) bool {
 	percentage := float64(totalTokens) / float64(limit) * 100
 
 	// 表示
-	printCommandHeader("Token Usage / トークン使用量")
-	fmt.Println()
+	printCommandHeaderToWriter(out, "Token Usage / トークン使用量")
+	_, _ = fmt.Fprintln(out)
 
 	// 使用量バー表示
 	barWidth := 30
@@ -454,19 +462,19 @@ func handleTokensCommand(agent *Agent) bool {
 
 	// 色分け
 	if percentage > 90 {
-		red.Printf("  [%s] %.1f%%\n", bar, percentage)
+		red.Fprintf(out, "  [%s] %.1f%%\n", bar, percentage)
 	} else if percentage > 80 {
-		yellow.Printf("  [%s] %.1f%%\n", bar, percentage)
+		yellow.Fprintf(out, "  [%s] %.1f%%\n", bar, percentage)
 	} else {
-		green.Printf("  [%s] %.1f%%\n", bar, percentage)
+		green.Fprintf(out, "  [%s] %.1f%%\n", bar, percentage)
 	}
 
-	fmt.Println()
-	fmt.Printf("  Current: %s / %s tokens\n", formatNumber(totalTokens), formatNumber(limit))
+	_, _ = fmt.Fprintln(out)
+	_, _ = fmt.Fprintf(out, "  Current: %s / %s tokens\n", formatNumber(totalTokens), formatNumber(limit))
 
-	fmt.Println()
-	green.Println("📋 Breakdown:")
-	fmt.Printf("    System Prompt: %s tokens (%.1f%%)\n",
+	_, _ = fmt.Fprintln(out)
+	green.Fprintln(out, "📋 Breakdown:")
+	_, _ = fmt.Fprintf(out, "    System Prompt: %s tokens (%.1f%%)\n",
 		formatNumber(systemTokens), float64(systemTokens)/float64(limit)*100)
 
 	// ツール定義トークン
@@ -479,38 +487,38 @@ func handleTokensCommand(agent *Agent) bool {
 	if mcpCount > 0 {
 		toolLabel = fmt.Sprintf("%d+%d MCP", builtinCount, mcpCount)
 	}
-	fmt.Printf("    Tools (%s):   %s tokens (%.1f%%)\n",
+	_, _ = fmt.Fprintf(out, "    Tools (%s):   %s tokens (%.1f%%)\n",
 		toolLabel, formatNumber(toolTokens), float64(toolTokens)/float64(limit)*100)
 
-	fmt.Printf("    History:       %s tokens (%.1f%%)  [%d messages]\n",
+	_, _ = fmt.Fprintf(out, "    History:       %s tokens (%.1f%%)  [%d messages]\n",
 		formatNumber(historyTokens), float64(historyTokens)/float64(limit)*100, len(agent.History))
 
-	fmt.Println()
-	green.Println("🤖 Model:")
-	fmt.Printf("    %s (context: %s tokens)\n", agent.CurrentModel, formatNumber(limit))
+	_, _ = fmt.Fprintln(out)
+	green.Fprintln(out, "🤖 Model:")
+	_, _ = fmt.Fprintf(out, "    %s (context: %s tokens)\n", agent.CurrentModel, formatNumber(limit))
 
-	fmt.Println()
-	green.Println("⚙️  Auto-compress:")
+	_, _ = fmt.Fprintln(out)
+	green.Fprintln(out, "⚙️  Auto-compress:")
 	if cfg.Compression.AutoCompress {
 		threshold := cfg.Compression.ThresholdPercent
 		if threshold == 0 {
 			threshold = 80
 		}
-		fmt.Printf("    ON (threshold: %d%%)\n", threshold)
+		_, _ = fmt.Fprintf(out, "    ON (threshold: %d%%)\n", threshold)
 	} else {
-		fmt.Println("    OFF")
+		_, _ = fmt.Fprintln(out, "    OFF")
 	}
 
 	// 警告
 	if percentage > 90 {
-		fmt.Println()
-		red.Println("⚠️  Token usage is very high! Consider using /compress")
+		_, _ = fmt.Fprintln(out)
+		red.Fprintln(out, "⚠️  Token usage is very high! Consider using /compress")
 	} else if percentage > 80 {
-		fmt.Println()
-		yellow.Println("💡 Token usage is high. /compress available if needed")
+		_, _ = fmt.Fprintln(out)
+		yellow.Fprintln(out, "💡 Token usage is high. /compress available if needed")
 	}
 
-	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	cyan.Fprintln(out, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	return true
 }
 
@@ -524,6 +532,7 @@ func isCodexModel(model string) bool {
 func handleThinkCommand(agent *Agent, args []string) bool {
 	cfg := agent.cfg()
 	isCodex := agent != nil && isCodexModel(agent.CurrentModel)
+	out := agent.output()
 
 	if len(args) == 0 {
 		// 現在の状態を表示
@@ -533,7 +542,7 @@ func handleThinkCommand(agent *Agent, args []string) bool {
 		} else if isCodex {
 			status = "low (Codex minimum)"
 		}
-		fmt.Printf("🧠 Thinking Mode: %s\n", status)
+		_, _ = fmt.Fprintf(out, "🧠 Thinking Mode: %s\n", status)
 		return true
 	}
 
@@ -546,26 +555,26 @@ func handleThinkCommand(agent *Agent, args []string) bool {
 		if isDeepSeek && agent != nil {
 			agent.CurrentModel = "deepseek-reasoner"
 		}
-		green.Printf("🧠 Thinking Mode: ON (level: %s)\n", cfg.Thinking.Level)
+		green.Fprintf(out, "🧠 Thinking Mode: ON (level: %s)\n", cfg.Thinking.Level)
 		if isDeepSeek {
-			green.Printf("   Model: %s\n", agent.CurrentModel)
+			green.Fprintf(out, "   Model: %s\n", agent.CurrentModel)
 		}
 	case "off":
 		if isCodex {
 			// Codexモデルは reasoning 必須のため "low" にフォールバック
 			cfg.Thinking.Enabled = false
 			cfg.Thinking.Level = "low"
-			yellow.Println("⚠️  Codexモデルは reasoning 必須のため low に設定しました")
-			green.Println("🧠 Thinking Mode: low (Codex minimum)")
+			yellow.Fprintln(out, "⚠️  Codexモデルは reasoning 必須のため low に設定しました")
+			green.Fprintln(out, "🧠 Thinking Mode: low (Codex minimum)")
 		} else {
 			cfg.Thinking.Enabled = false
 			// DeepSeek: reasoner → chat にフォールバック
 			if isDeepSeek && agent != nil && agent.CurrentModel == "deepseek-reasoner" {
 				agent.CurrentModel = "deepseek-chat"
 			}
-			green.Println("🧠 Thinking Mode: OFF")
+			green.Fprintln(out, "🧠 Thinking Mode: OFF")
 			if isDeepSeek {
-				green.Printf("   Model: %s\n", agent.CurrentModel)
+				green.Fprintf(out, "   Model: %s\n", agent.CurrentModel)
 			}
 		}
 	case "low", "medium", "high", "xhigh":
@@ -575,35 +584,37 @@ func handleThinkCommand(agent *Agent, args []string) bool {
 		if isDeepSeek && agent != nil {
 			agent.CurrentModel = "deepseek-reasoner"
 		}
-		green.Printf("🧠 Thinking Mode: ON (level: %s)\n", args[0])
+		green.Fprintf(out, "🧠 Thinking Mode: ON (level: %s)\n", args[0])
 		if isDeepSeek {
-			green.Printf("   Model: %s\n", agent.CurrentModel)
+			green.Fprintf(out, "   Model: %s\n", agent.CurrentModel)
 		}
 	default:
-		yellow.Println("Usage: /think [on|off|low|medium|high|xhigh]")
+		yellow.Fprintln(out, "Usage: /think [on|off|low|medium|high|xhigh]")
 	}
 	return true
 }
 
 // handlePlanCommand は Plan Mode の切り替え
 func handlePlanCommand(agent *Agent, args []string) bool {
+	out := agent.output()
+
 	if len(args) > 0 {
 		switch args[0] {
 		case "on":
 			agent.PlanModeEnabled = true
-			green.Println("✅ Plan Mode ON - 調査→計画→承認→実行")
+			green.Fprintln(out, "✅ Plan Mode ON - 調査→計画→承認→実行")
 			return true
 		case "off":
 			agent.PlanModeEnabled = false
-			green.Println("✅ Plan Mode OFF - 通常モード")
+			green.Fprintln(out, "✅ Plan Mode OFF - 通常モード")
 			return true
 		case "status":
 			if agent.PlanModeEnabled {
-				cyan.Println("📋 Plan Mode: ON")
-				fmt.Println("   調査 → 計画 → 承認 → 実行 のフローで処理")
+				cyan.Fprintln(out, "📋 Plan Mode: ON")
+				_, _ = fmt.Fprintln(out, "   調査 → 計画 → 承認 → 実行 のフローで処理")
 			} else {
-				cyan.Println("📋 Plan Mode: OFF")
-				fmt.Println("   通常モード（ツール個別確認）")
+				cyan.Fprintln(out, "📋 Plan Mode: OFF")
+				_, _ = fmt.Fprintln(out, "   通常モード（ツール個別確認）")
 			}
 			return true
 		}
@@ -611,11 +622,11 @@ func handlePlanCommand(agent *Agent, args []string) bool {
 
 	// 引数なし：現在のステータスを表示
 	if agent.PlanModeEnabled {
-		cyan.Println("📋 Plan Mode: ON")
-		fmt.Println("   調査 → 計画 → 承認 → 実行 のフローで処理")
+		cyan.Fprintln(out, "📋 Plan Mode: ON")
+		_, _ = fmt.Fprintln(out, "   調査 → 計画 → 承認 → 実行 のフローで処理")
 	} else {
-		cyan.Println("📋 Plan Mode: OFF")
-		fmt.Println("   通常モード（ツール個別確認）")
+		cyan.Fprintln(out, "📋 Plan Mode: OFF")
+		_, _ = fmt.Fprintln(out, "   通常モード（ツール個別確認）")
 	}
 	return true
 }

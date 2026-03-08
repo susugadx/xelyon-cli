@@ -8,25 +8,29 @@ import (
 
 // handleSaveCommand はセッション保存を処理
 func handleSaveCommand(agent *Agent) bool {
+	out := agent.output()
+
 	if agent.storage == nil {
-		red.Println("History storage not available")
+		red.Fprintln(out, "History storage not available")
 		return true
 	}
 
 	agent.syncResponseIDToSession()
 	if err := agent.storage.Save(agent.session); err != nil {
-		red.Printf("Failed to save session: %v\n", err)
+		red.Fprintf(out, "Failed to save session: %v\n", err)
 		return true
 	}
 
-	green.Printf("💾 Session saved: %s\n", agent.session.ID)
+	green.Fprintf(out, "💾 Session saved: %s\n", agent.session.ID)
 	return true
 }
 
 // handleLoadCommand はセッション読み込みを処理
 func handleLoadCommand(agent *Agent, args []string) bool {
+	out := agent.output()
+
 	if agent.storage == nil {
-		red.Println("History storage not available")
+		red.Fprintln(out, "History storage not available")
 		return true
 	}
 
@@ -36,7 +40,7 @@ func handleLoadCommand(agent *Agent, args []string) bool {
 	} else {
 		lastID, err := agent.storage.GetLastSession()
 		if err != nil {
-			red.Printf("No sessions found: %v\n", err)
+			red.Fprintf(out, "No sessions found: %v\n", err)
 			return true
 		}
 		sessionID = lastID
@@ -44,7 +48,7 @@ func handleLoadCommand(agent *Agent, args []string) bool {
 
 	session, err := agent.storage.Load(sessionID)
 	if err != nil {
-		red.Printf("Failed to load session: %v\n", err)
+		red.Fprintf(out, "Failed to load session: %v\n", err)
 		return true
 	}
 
@@ -60,29 +64,31 @@ func handleLoadCommand(agent *Agent, args []string) bool {
 		}
 	}
 
-	green.Printf("📂 Loaded session %s (%d messages)\n", sessionID, len(session.Messages))
+	green.Fprintf(out, "📂 Loaded session %s (%d messages)\n", sessionID, len(session.Messages))
 	return true
 }
 
 // handleSessionsCommand はセッション一覧を表示
 func handleSessionsCommand(agent *Agent) bool {
+	out := agent.output()
+
 	if agent.storage == nil {
-		red.Println("History storage not available")
+		red.Fprintln(out, "History storage not available")
 		return true
 	}
 
 	sessions, err := agent.storage.ListSessions()
 	if err != nil {
-		red.Printf("Failed to list sessions: %v\n", err)
+		red.Fprintf(out, "Failed to list sessions: %v\n", err)
 		return true
 	}
 
 	if len(sessions) == 0 {
-		yellow.Println("No sessions found")
+		yellow.Fprintln(out, "No sessions found")
 		return true
 	}
 
-	cyan.Println("\n📚 Recent Sessions:")
+	cyan.Fprintln(out, "\n📚 Recent Sessions:")
 	for i, s := range sessions {
 		if i >= config.SessionListMaxDisplay {
 			break
@@ -94,9 +100,9 @@ func handleSessionsCommand(agent *Agent) bool {
 			preview = preview[:config.SessionPreviewLen] + "..."
 		}
 
-		fmt.Printf("  [%s] %s - %s (%d msgs)\n",
+		_, _ = fmt.Fprintf(out, "  [%s] %s - %s (%d msgs)\n",
 			s.ID, timeStr, preview, s.MessageCount)
 	}
-	fmt.Println()
+	_, _ = fmt.Fprintln(out)
 	return true
 }

@@ -18,6 +18,7 @@ import (
 func (a *Agent) runStepCompleteHooks(stepID int, stepDescription, stepStatus string) (needsContinue bool, feedback string) {
 	globalCfg := a.cfg()
 	hooks := globalCfg.Hooks.OnStepComplete
+	out := a.output()
 
 	// No step hooks → nothing to verify
 	if len(hooks) == 0 {
@@ -32,7 +33,7 @@ func (a *Agent) runStepCompleteHooks(stepID int, stepDescription, stepStatus str
 	for _, cmd := range hooks {
 		// テンプレート変数を展開
 		expandedCmd := expandStepTemplate(cmd, stepID, stepDescription, stepStatus)
-		yellow.Printf("🏁 Running step complete hook: %s\n", expandedCmd)
+		yellow.Fprintf(out, "🏁 Running step complete hook: %s\n", expandedCmd)
 
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		proc := exec.CommandContext(ctx, "bash", "-c", expandedCmd)
@@ -59,7 +60,7 @@ func (a *Agent) runStepCompleteHooks(stepID int, stepDescription, stepStatus str
 				exitCode = exitErr.ExitCode()
 			}
 
-			red.Printf("  Step hook failed (exit code %d): %s\n", exitCode, expandedCmd)
+			red.Fprintf(out, "  Step hook failed (exit code %d): %s\n", exitCode, expandedCmd)
 
 			feedback = fmt.Sprintf(`[SYSTEM] Step %d completion verification failed. Hook command %q failed (exit code %d):
 
@@ -70,7 +71,7 @@ Please fix these errors before proceeding to the next step. Do NOT skip these is
 			return true, feedback
 		}
 
-		green.Printf("  Step hook passed: %s\n", expandedCmd)
+		green.Fprintf(out, "  Step hook passed: %s\n", expandedCmd)
 	}
 
 	return false, ""
@@ -96,6 +97,7 @@ func expandStepTemplate(cmd string, stepID int, stepDescription, stepStatus stri
 // 戻り値: hooks がすべてパスした場合 true、max_retry 到達で打ち切った場合 false。
 func (a *Agent) runStepCompleteHooksWithRetry(ctx context.Context, stepID int, stepDescription, stepStatus string) bool {
 	globalCfg := a.cfg()
+	out := a.output()
 
 	// No step hooks configured → nothing to verify
 	if len(globalCfg.Hooks.OnStepComplete) == 0 {
@@ -114,12 +116,12 @@ func (a *Agent) runStepCompleteHooksWithRetry(ctx context.Context, stepID int, s
 		}
 
 		if attempt >= maxRetry {
-			yellow.Printf("⚠️  Step hook retry limit reached (%d/%d). Proceeding to next step.\n", attempt, maxRetry)
+			yellow.Fprintf(out, "⚠️  Step hook retry limit reached (%d/%d). Proceeding to next step.\n", attempt, maxRetry)
 			return false
 		}
 
 		// AI にフィードバックして修正を試みる
-		yellow.Printf("⚠️  Step hook failed (%d/%d). Asking AI to fix...\n", attempt, maxRetry)
+		yellow.Fprintf(out, "⚠️  Step hook failed (%d/%d). Asking AI to fix...\n", attempt, maxRetry)
 		a.History = append(a.History, api.Message{
 			Role:    "user",
 			Content: feedback,
@@ -127,7 +129,7 @@ func (a *Agent) runStepCompleteHooksWithRetry(ctx context.Context, stepID int, s
 
 		response, err := a.CurrentProvider.ChatWithTools(a.requestContext(ctx), a.SystemPrompt, a.History, a.CurrentModel)
 		if err != nil {
-			yellow.Printf("⚠️  AI fix attempt failed: %v\n", err)
+			yellow.Fprintf(out, "⚠️  AI fix attempt failed: %v\n", err)
 			return false
 		}
 

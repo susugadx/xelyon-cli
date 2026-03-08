@@ -216,9 +216,10 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 					return "", fmt.Errorf("idle timeout: exceeded max retries (%d): %w", maxIdleTimeoutRetries, err)
 				}
 				retryCount++
-				ui.StopGlobalSpinner()
-				ui.ResetTerminalState()
-				fmt.Fprintf(os.Stderr, "⚠️ Idle timeout, retrying FC mode (attempt %d/%d)...\n", retryCount, maxIdleTimeoutRetries)
+				runtime := ui.RuntimeFromContext(ctx)
+				runtime.StopSpinner()
+				runtime.ResetTerminalState()
+				fmt.Fprintf(runtime.ErrorOutput(), "⚠️ Idle timeout, retrying FC mode (attempt %d/%d)...\n", retryCount, maxIdleTimeoutRetries)
 				ctx = context.WithValue(ctx, idleTimeoutRetryKey, retryCount)
 				return p.ChatWithTools(ctx, systemPrompt, history, model)
 			}
@@ -234,9 +235,10 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 					return "", fmt.Errorf("thinking timeout: exceeded max retries (%d): %w", maxThinkingTimeoutRetries, err)
 				}
 				retryCount++
-				ui.StopGlobalSpinner()
-				ui.ResetTerminalState()
-				fmt.Fprintf(os.Stderr, "⚠️ Thinking timeout, retrying FC mode (attempt %d/%d)...\n", retryCount, maxThinkingTimeoutRetries)
+				runtime := ui.RuntimeFromContext(ctx)
+				runtime.StopSpinner()
+				runtime.ResetTerminalState()
+				fmt.Fprintf(runtime.ErrorOutput(), "⚠️ Thinking timeout, retrying FC mode (attempt %d/%d)...\n", retryCount, maxThinkingTimeoutRetries)
 				ctx = context.WithValue(ctx, thinkingTimeoutRetryKey, retryCount)
 				return p.ChatWithTools(ctx, systemPrompt, history, model)
 			}
@@ -248,17 +250,19 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 				retryCount = v.(int)
 			}
 			if retryCount >= maxFCErrorRetries {
-				ui.StopGlobalSpinner()
-				ui.ResetTerminalState()
+				runtime := ui.RuntimeFromContext(ctx)
+				runtime.StopSpinner()
+				runtime.ResetTerminalState()
 				return "", fmt.Errorf("FC mode failed after %d retries: %w", maxFCErrorRetries, err)
 			}
 			retryCount++
-			ui.StopGlobalSpinner()
-			ui.ResetTerminalState()
-			fmt.Fprintf(os.Stderr, "⚠️ FC error, retrying FC mode (attempt %d/%d)...\n", retryCount, maxFCErrorRetries)
-			fmt.Fprintf(os.Stderr, "  Reason: %v\n", err)
+			runtime := ui.RuntimeFromContext(ctx)
+			runtime.StopSpinner()
+			runtime.ResetTerminalState()
+			fmt.Fprintf(runtime.ErrorOutput(), "⚠️ FC error, retrying FC mode (attempt %d/%d)...\n", retryCount, maxFCErrorRetries)
+			fmt.Fprintf(runtime.ErrorOutput(), "  Reason: %v\n", err)
 			if debug {
-				fmt.Fprintf(os.Stderr, "[DEBUG Gemini] FC error detail: %+v\n", err)
+				fmt.Fprintf(runtime.ErrorOutput(), "[DEBUG Gemini] FC error detail: %+v\n", err)
 			}
 			ctx = context.WithValue(ctx, fcErrorRetryKey, retryCount)
 			return p.ChatWithTools(ctx, systemPrompt, history, model)
@@ -300,11 +304,11 @@ func (p *Provider) doRequestWithRetry(ctx context.Context, req *http.Request, bo
 		resp.Body.Close()
 
 		msg := fmt.Sprintf("⚠️  %s, retrying (%d/%d) after %v...", reason, attempt+1, maxRetries, backoff)
-		spinner := ui.GetGlobalSpinner()
+		spinner := ui.RuntimeFromContext(ctx).CurrentSpinner()
 		if spinner != nil && spinner.IsActive() {
 			spinner.SetStatus(msg)
 		} else {
-			fmt.Fprintln(os.Stderr, msg)
+			fmt.Fprintln(ui.RuntimeFromContext(ctx).ErrorOutput(), msg)
 		}
 		select {
 		case <-ctx.Done():

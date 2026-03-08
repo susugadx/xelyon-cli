@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"io"
 	"strings"
 )
 
@@ -31,10 +32,24 @@ var DefaultBoxStyle = BoxStyle{
 
 // ToolConfirmBox はツール確認用のボックスを表示
 func ToolConfirmBox(toolName string, details []string) {
+	ToolConfirmBoxToWriter(DefaultRuntime().Output(), toolName, details)
+}
+
+// ToolConfirmBoxWithRuntime は runtime の出力先にツール確認用ボックスを表示する。
+func ToolConfirmBoxWithRuntime(runtime *Runtime, toolName string, details []string) {
+	ToolConfirmBoxToWriter(runtimeOrDefault(runtime).Output(), toolName, details)
+}
+
+// ToolConfirmBoxToWriter は指定 writer にツール確認用ボックスを表示する。
+func ToolConfirmBoxToWriter(out io.Writer, toolName string, details []string) {
+	if out == nil {
+		out = DefaultRuntime().Output()
+	}
+
 	width := 45
 
 	// 上辺
-	Cyan.Printf("%s%s%s\n", DefaultBoxStyle.TopLeft, strings.Repeat(DefaultBoxStyle.Horizontal, width-2), DefaultBoxStyle.TopRight)
+	Cyan.Fprintf(out, "%s%s%s\n", DefaultBoxStyle.TopLeft, strings.Repeat(DefaultBoxStyle.Horizontal, width-2), DefaultBoxStyle.TopRight)
 
 	// ツール名（アイコン付き）
 	icon := getToolIcon(toolName)
@@ -43,17 +58,17 @@ func ToolConfirmBox(toolName string, details []string) {
 	if padding < 0 {
 		padding = 0
 	}
-	Cyan.Printf("%s", DefaultBoxStyle.Vertical)
-	Yellow.Printf("%s%s", title, strings.Repeat(" ", padding))
-	Cyan.Printf("%s\n", DefaultBoxStyle.Vertical)
+	Cyan.Fprintf(out, "%s", DefaultBoxStyle.Vertical)
+	Yellow.Fprintf(out, "%s%s", title, strings.Repeat(" ", padding))
+	Cyan.Fprintf(out, "%s\n", DefaultBoxStyle.Vertical)
 
 	// 詳細行
 	for _, detail := range details {
-		printBoxLine(detail, width)
+		printBoxLineToWriter(out, detail, width)
 	}
 
 	// 区切り線
-	Cyan.Printf("%s%s%s\n", DefaultBoxStyle.LeftT, strings.Repeat(DefaultBoxStyle.Horizontal, width-2), DefaultBoxStyle.RightT)
+	Cyan.Fprintf(out, "%s%s%s\n", DefaultBoxStyle.LeftT, strings.Repeat(DefaultBoxStyle.Horizontal, width-2), DefaultBoxStyle.RightT)
 
 	// 選択肢
 	options := " [y] Approve  [n] Reject  [c] Comment"
@@ -61,16 +76,19 @@ func ToolConfirmBox(toolName string, details []string) {
 	if optPadding < 0 {
 		optPadding = 0
 	}
-	Cyan.Printf("%s", DefaultBoxStyle.Vertical)
-	fmt.Printf("%s%s", options, strings.Repeat(" ", optPadding))
-	Cyan.Printf("%s\n", DefaultBoxStyle.Vertical)
+	Cyan.Fprintf(out, "%s", DefaultBoxStyle.Vertical)
+	_, _ = fmt.Fprintf(out, "%s%s", options, strings.Repeat(" ", optPadding))
+	Cyan.Fprintf(out, "%s\n", DefaultBoxStyle.Vertical)
 
 	// 下辺
-	Cyan.Printf("%s%s%s\n", DefaultBoxStyle.BottomLeft, strings.Repeat(DefaultBoxStyle.Horizontal, width-2), DefaultBoxStyle.BottomRight)
+	Cyan.Fprintf(out, "%s%s%s\n", DefaultBoxStyle.BottomLeft, strings.Repeat(DefaultBoxStyle.Horizontal, width-2), DefaultBoxStyle.BottomRight)
 }
 
-// printBoxLine はボックス内の1行を表示
-func printBoxLine(text string, width int) {
+func printBoxLineToWriter(out io.Writer, text string, width int) {
+	if out == nil {
+		out = DefaultRuntime().Output()
+	}
+
 	// 長すぎる場合は切り詰め
 	maxLen := width - 4
 	displayText := text
@@ -83,9 +101,9 @@ func printBoxLine(text string, width int) {
 		padding = 0
 	}
 
-	Cyan.Printf("%s", DefaultBoxStyle.Vertical)
-	fmt.Printf(" %s%s", displayText, strings.Repeat(" ", padding))
-	Cyan.Printf("%s\n", DefaultBoxStyle.Vertical)
+	Cyan.Fprintf(out, "%s", DefaultBoxStyle.Vertical)
+	_, _ = fmt.Fprintf(out, " %s%s", displayText, strings.Repeat(" ", padding))
+	Cyan.Fprintf(out, "%s\n", DefaultBoxStyle.Vertical)
 }
 
 // getToolIcon はツール名に対応するアイコンを返す
@@ -116,15 +134,42 @@ func getToolIcon(toolName string) string {
 
 // SimpleDivider はシンプルな区切り線を表示
 func SimpleDivider(width int) {
-	Cyan.Println(strings.Repeat("─", width))
+	SimpleDividerToWriter(DefaultRuntime().Output(), width)
+}
+
+// SimpleDividerWithRuntime は runtime の出力先に区切り線を表示する。
+func SimpleDividerWithRuntime(runtime *Runtime, width int) {
+	SimpleDividerToWriter(runtimeOrDefault(runtime).Output(), width)
+}
+
+// SimpleDividerToWriter は指定 writer に区切り線を表示する。
+func SimpleDividerToWriter(out io.Writer, width int) {
+	if out == nil {
+		out = DefaultRuntime().Output()
+	}
+	Cyan.Fprintln(out, strings.Repeat("─", width))
 }
 
 // ConfirmPromptBox は確認プロンプト用のボックスを表示
 func ConfirmPromptBox(message string) {
+	ConfirmPromptBoxToWriter(DefaultRuntime().Output(), message)
+}
+
+// ConfirmPromptBoxWithRuntime は runtime の出力先に確認プロンプト用ボックスを表示する。
+func ConfirmPromptBoxWithRuntime(runtime *Runtime, message string) {
+	ConfirmPromptBoxToWriter(runtimeOrDefault(runtime).Output(), message)
+}
+
+// ConfirmPromptBoxToWriter は指定 writer に確認プロンプト用ボックスを表示する。
+func ConfirmPromptBoxToWriter(out io.Writer, message string) {
+	if out == nil {
+		out = DefaultRuntime().Output()
+	}
+
 	width := 45
 
 	// 上辺
-	Cyan.Printf("%s%s%s\n", DefaultBoxStyle.TopLeft, strings.Repeat(DefaultBoxStyle.Horizontal, width-2), DefaultBoxStyle.TopRight)
+	Cyan.Fprintf(out, "%s%s%s\n", DefaultBoxStyle.TopLeft, strings.Repeat(DefaultBoxStyle.Horizontal, width-2), DefaultBoxStyle.TopRight)
 
 	// メッセージ
 	displayMsg := message
@@ -136,12 +181,12 @@ func ConfirmPromptBox(message string) {
 	if padding < 0 {
 		padding = 0
 	}
-	Cyan.Printf("%s", DefaultBoxStyle.Vertical)
-	Yellow.Printf(" %s%s", displayMsg, strings.Repeat(" ", padding))
-	Cyan.Printf("%s\n", DefaultBoxStyle.Vertical)
+	Cyan.Fprintf(out, "%s", DefaultBoxStyle.Vertical)
+	Yellow.Fprintf(out, " %s%s", displayMsg, strings.Repeat(" ", padding))
+	Cyan.Fprintf(out, "%s\n", DefaultBoxStyle.Vertical)
 
 	// 区切り線
-	Cyan.Printf("%s%s%s\n", DefaultBoxStyle.LeftT, strings.Repeat(DefaultBoxStyle.Horizontal, width-2), DefaultBoxStyle.RightT)
+	Cyan.Fprintf(out, "%s%s%s\n", DefaultBoxStyle.LeftT, strings.Repeat(DefaultBoxStyle.Horizontal, width-2), DefaultBoxStyle.RightT)
 
 	// 選択肢
 	options := " [y] Approve  [n] Reject  [c] Comment"
@@ -149,10 +194,10 @@ func ConfirmPromptBox(message string) {
 	if optPadding < 0 {
 		optPadding = 0
 	}
-	Cyan.Printf("%s", DefaultBoxStyle.Vertical)
-	fmt.Printf("%s%s", options, strings.Repeat(" ", optPadding))
-	Cyan.Printf("%s\n", DefaultBoxStyle.Vertical)
+	Cyan.Fprintf(out, "%s", DefaultBoxStyle.Vertical)
+	_, _ = fmt.Fprintf(out, "%s%s", options, strings.Repeat(" ", optPadding))
+	Cyan.Fprintf(out, "%s\n", DefaultBoxStyle.Vertical)
 
 	// 下辺
-	Cyan.Printf("%s%s%s\n", DefaultBoxStyle.BottomLeft, strings.Repeat(DefaultBoxStyle.Horizontal, width-2), DefaultBoxStyle.BottomRight)
+	Cyan.Fprintf(out, "%s%s%s\n", DefaultBoxStyle.BottomLeft, strings.Repeat(DefaultBoxStyle.Horizontal, width-2), DefaultBoxStyle.BottomRight)
 }

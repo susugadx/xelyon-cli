@@ -23,6 +23,10 @@ func RunHeadless(query string, model string, provider api.Provider) *HeadlessRes
 	// Agent初期化
 	runtime := NewAgentRuntime()
 	runtime.AutoApprove = true
+	runtime.UI = ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
+	if logger, err := audit.NewDefaultLogger(os.Getenv("XELYON_AUDIT_LOG") == "1"); err == nil {
+		runtime.AuditLogger = logger
+	}
 	agent := NewAgentWithRuntime(model, provider, true, runtime)
 	defer agent.Cleanup()
 	agent.setAutoApprove(true) // Headlessモードは自動承認（SafetyLow以外）
@@ -52,7 +56,7 @@ func RunHeadless(query string, model string, provider api.Provider) *HeadlessRes
 	// イテレーションループ（最大10回で無限ループ防止）
 	const maxIterations = 10
 	var finalResponse string
-	execCtx := agent.toolExecutionContext(strings.NewReader(""), io.Discard, io.Discard)
+	execCtx := agent.toolExecutionContext(nil, nil, nil)
 
 	for iteration := 0; iteration < maxIterations; iteration++ {
 		// API呼び出し
@@ -120,25 +124,30 @@ func RunHeadless(query string, model string, provider api.Provider) *HeadlessRes
 
 // RunOnce は単一クエリを1ターンだけ実行して終了する
 func RunOnce(query string, model string, provider api.Provider, autoApprove bool, quiet bool) error {
-	// 監査ログ初期化（環境変数で制御: XELYON_AUDIT_LOG=1 で有効化）
-	auditEnabled := os.Getenv("XELYON_AUDIT_LOG") == "1"
-	if err := audit.Init(auditEnabled); err != nil {
-		yellow.Printf("Warning: Failed to initialize audit log: %v\n", err)
-	}
-	if auditEnabled && !quiet {
-		green.Println("📝 Audit logging enabled")
-	}
-
 	runtime := NewAgentRuntime()
 	runtime.AutoApprove = autoApprove
+	out := runtime.effectiveUI().Output()
+
+	// 監査ログ初期化（環境変数で制御: XELYON_AUDIT_LOG=1 で有効化）
+	auditEnabled := os.Getenv("XELYON_AUDIT_LOG") == "1"
+	logger, err := audit.NewDefaultLogger(auditEnabled)
+	if err != nil {
+		yellow.Fprintf(out, "Warning: Failed to initialize audit log: %v\n", err)
+	}
+	if auditEnabled && !quiet {
+		green.Fprintln(out, "📝 Audit logging enabled")
+	}
+	if logger != nil {
+		runtime.AuditLogger = logger
+	}
 	agent := NewAgentWithRuntime(model, provider, false, runtime)
 	agent.setAutoApprove(autoApprove)
 	defer agent.Cleanup()
 
 	// ヘッダー表示（quiet 時はスキップ）
 	if !quiet {
-		printHeader(model, provider)
-		printModeInfo(autoApprove, false)
+		printHeaderToWriter(runtime.effectiveUI().Output(), model, provider)
+		printModeInfoToWriter(runtime.effectiveUI().Output(), autoApprove, false)
 	}
 
 	// プロジェクト設定読み込み（xelyon.yaml）
@@ -152,43 +161,48 @@ func RunOnce(query string, model string, provider api.Provider, autoApprove bool
 
 // RunOnceWithImage は画像付きの単一クエリを実行（CLIフラグ -i/--image 用）
 func RunOnceWithImage(query string, model string, provider api.Provider, imagePath string, autoApprove bool) {
-	// 監査ログ初期化（環境変数で制御: XELYON_AUDIT_LOG=1 で有効化）
-	auditEnabled := os.Getenv("XELYON_AUDIT_LOG") == "1"
-	if err := audit.Init(auditEnabled); err != nil {
-		yellow.Printf("Warning: Failed to initialize audit log: %v\n", err)
-	}
-
 	runtime := NewAgentRuntime()
 	runtime.AutoApprove = autoApprove
+	out := runtime.effectiveUI().Output()
+
+	// 監査ログ初期化（環境変数で制御: XELYON_AUDIT_LOG=1 で有効化）
+	auditEnabled := os.Getenv("XELYON_AUDIT_LOG") == "1"
+	logger, err := audit.NewDefaultLogger(auditEnabled)
+	if err != nil {
+		yellow.Fprintf(out, "Warning: Failed to initialize audit log: %v\n", err)
+	}
+	if logger != nil {
+		runtime.AuditLogger = logger
+	}
 	agent := NewAgentWithRuntime(model, provider, false, runtime)
 	agent.setAutoApprove(autoApprove)
 	defer agent.Cleanup()
 
 	// ヘッダー表示
-	printHeader(model, provider)
-	printModeInfo(autoApprove, false)
+	printHeaderToWriter(runtime.effectiveUI().Output(), model, provider)
+	printModeInfoToWriter(runtime.effectiveUI().Output(), autoApprove, false)
 
 	// プロバイダーが画像対応かチェック
 	if !api.SupportsImages(provider.Name()) {
-		red.Printf("❌ Provider '%s' does not support image input\n", provider.Name())
-		fmt.Println("Supported providers for image input: gemini, claude, openai")
+		red.Fprintf(out, "❌ Provider '%s' does not support image input\n", provider.Name())
+		_, _ = fmt.Fprintln(agent.output(), "Supported providers for image input: gemini, claude, openai")
 		return
 	}
 
 	// 画像読み込み
 	image, err := api.LoadImage(imagePath)
 	if err != nil {
-		red.Printf("❌ Failed to load image: %v\n", err)
+		red.Fprintf(out, "❌ Failed to load image: %v\n", err)
 		return
 	}
-	green.Printf("🖼️  Image loaded: %s (%s)\n", image.Path, api.FormatImageSize(image.Size))
+	green.Fprintf(out, "🖼️  Image loaded: %s (%s)\n", image.Path, api.FormatImageSize(image.Size))
 
 	// プロジェクト設定読み込み（xelyon.yaml）
 	if pc := loadProjectConfig(); pc != nil {
 		applyProjectConfig(agent, pc)
 	}
 
-	fmt.Println()
+	_, _ = fmt.Fprintln(agent.output())
 
 	// デフォルトメッセージ
 	if query == "" {
@@ -199,11 +213,12 @@ func RunOnceWithImage(query string, model string, provider api.Provider, imagePa
 	agent.chatWithImage(query, image)
 
 	// 対話ループに入る
-	mlReader := ui.NewMultilineReader(os.Stdin)
+	runtimeUI := runtime.effectiveUI()
+	mlReader := ui.NewMultilineReaderWithRuntime(runtimeUI)
+	runtimeUI.SetPromptReader(mlReader)
 	mlReader.EnableBracketedPaste()
 	defer mlReader.DisableBracketedPaste()
-	agent.mlReader = mlReader    // ペーストモードで共有するため
-	ui.SetGlobalReader(mlReader) // セレクターで共有するため
+	agent.setPromptReader(mlReader)
 
 	for {
 		mlReader.FlushInput()

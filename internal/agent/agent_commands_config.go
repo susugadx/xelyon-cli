@@ -11,22 +11,24 @@ import (
 
 // handleModelCommand はモデルの表示・切り替えを処理
 func handleModelCommand(agent *Agent, args []string) bool {
+	out := agent.output()
+
 	// 引数なし → 現在のモデルとプロバイダーを表示
 	if len(args) == 0 {
-		fmt.Printf("🤖 Current model: %s\n", agent.CurrentModel)
-		fmt.Printf("🌐 Provider: %s\n", agent.ProviderName)
-		yellow.Println("\nUsage: /model <model-name>")
-		yellow.Println("Enter any model name supported by your provider.")
+		_, _ = fmt.Fprintf(out, "🤖 Current model: %s\n", agent.CurrentModel)
+		_, _ = fmt.Fprintf(out, "🌐 Provider: %s\n", agent.ProviderName)
+		yellow.Fprintln(out, "\nUsage: /model <model-name>")
+		yellow.Fprintln(out, "Enter any model name supported by your provider.")
 
 		// ModelLister対応プロバイダーの場合、インストール済みモデルを表示
 		if modelLister, ok := agent.CurrentProvider.(api.ModelLister); ok {
 			models, err := modelLister.ListModels()
 			if err != nil {
-				yellow.Printf("\nWarning: Could not list models: %v\n", err)
+				yellow.Fprintf(out, "\nWarning: Could not list models: %v\n", err)
 			} else if len(models) > 0 {
-				yellow.Println("\nInstalled models:")
+				yellow.Fprintln(out, "\nInstalled models:")
 				for _, model := range models {
-					fmt.Printf("  - %s\n", model)
+					_, _ = fmt.Fprintf(out, "  - %s\n", model)
 				}
 			}
 		}
@@ -51,7 +53,7 @@ func handleModelCommand(agent *Agent, args []string) bool {
 	}
 	agent.rebuildSystemPromptForCurrentProvider()
 
-	green.Printf("✅ Model switched: %s → %s\n", oldModel, newModel)
+	green.Fprintf(out, "✅ Model switched: %s → %s\n", oldModel, newModel)
 	if agent.CurrentProvider != nil {
 		printContextSize(agent)
 	}
@@ -59,7 +61,7 @@ func handleModelCommand(agent *Agent, args []string) bool {
 	// 設定ファイルにも保存
 	cfg, err := config.LoadConfig()
 	if err != nil {
-		yellow.Printf("Warning: Failed to load config: %v\n", err)
+		yellow.Fprintf(out, "Warning: Failed to load config: %v\n", err)
 		return true
 	}
 
@@ -72,26 +74,28 @@ func handleModelCommand(agent *Agent, args []string) bool {
 	}
 
 	if err := config.SaveConfig(cfg); err != nil {
-		yellow.Printf("Warning: Failed to save config: %v\n", err)
-		yellow.Println("Model switched for this session only")
+		yellow.Fprintf(out, "Warning: Failed to save config: %v\n", err)
+		yellow.Fprintln(out, "Model switched for this session only")
 		return true
 	}
 
-	green.Println("💾 Default model saved to config")
+	green.Fprintln(out, "💾 Default model saved to config")
 	return true
 }
 
 // handleConfigCommand は設定の表示・変更を処理
 func handleConfigCommand(agent *Agent, args []string) bool {
+	out := agent.output()
+
 	cfg, err := config.LoadConfig()
 	if err != nil {
-		red.Printf("Failed to load config: %v\n", err)
+		red.Fprintf(out, "Failed to load config: %v\n", err)
 		return true
 	}
 
 	// /config show → 全設定をデフォルトとの差分付きで表示
 	if len(args) > 0 && args[0] == "show" {
-		fmt.Print(config.ShowConfig(cfg))
+		_, _ = fmt.Fprint(out, config.ShowConfig(cfg))
 		return true
 	}
 
@@ -111,7 +115,7 @@ func handleConfigCommand(agent *Agent, args []string) bool {
 		}
 
 		if err := config.SaveConfig(cfg); err != nil {
-			red.Printf("Failed to save config: %v\n", err)
+			red.Fprintf(out, "Failed to save config: %v\n", err)
 			return true
 		}
 
@@ -122,7 +126,7 @@ func handleConfigCommand(agent *Agent, args []string) bool {
 			agent.SyncWithGlobalConfig()
 		}
 
-		green.Printf("✅ Default model updated to: %s\n", newModel)
+		green.Fprintf(out, "✅ Default model updated to: %s\n", newModel)
 		return true
 	}
 
@@ -133,8 +137,9 @@ func handleConfigCommand(agent *Agent, args []string) bool {
 
 // runInteractiveConfig は対話式設定メニューを実行
 func runInteractiveConfig(agent *Agent, cfg *config.Config) {
+	out := agent.output()
 	categories := config.BuildConfigRegistry(cfg)
-	menu := ui.NewConfigMenu(cfg, categories)
+	menu := ui.NewConfigMenuWithRuntime(cfg, categories, agent.ui())
 
 	for {
 		// カテゴリ選択
@@ -153,7 +158,7 @@ func runInteractiveConfig(agent *Agent, cfg *config.Config) {
 			// フィールド編集
 			newValue, changed, err := menu.EditField(selectedField)
 			if err != nil {
-				red.Printf("Error: %v\n", err)
+				red.Fprintf(out, "Error: %v\n", err)
 				continue
 			}
 
@@ -164,9 +169,9 @@ func runInteractiveConfig(agent *Agent, cfg *config.Config) {
 			// StructMap型は直接Configを編集するので、保存のみ
 			if selectedField.FieldType == config.FieldTypeStructMap {
 				if err := config.SaveConfig(cfg); err != nil {
-					red.Printf("Error saving: %v\n", err)
+					red.Fprintf(out, "Error saving: %v\n", err)
 				} else {
-					green.Printf("✓ Saved: %s\n", selectedField.Path)
+					green.Fprintf(out, "✓ Saved: %s\n", selectedField.Path)
 					// グローバル設定/Agent を同期（即反映）
 					config.SetGlobalConfig(cfg)
 					if agent != nil {
@@ -175,7 +180,7 @@ func runInteractiveConfig(agent *Agent, cfg *config.Config) {
 				}
 				// カテゴリを再構築
 				categories = config.BuildConfigRegistry(cfg)
-				menu = ui.NewConfigMenu(cfg, categories)
+				menu = ui.NewConfigMenuWithRuntime(cfg, categories, agent.ui())
 				// 現在のカテゴリを更新
 				for i := range categories {
 					if categories[i].Name == selectedCategory.Name {
@@ -188,7 +193,7 @@ func runInteractiveConfig(agent *Agent, cfg *config.Config) {
 
 			// 値を設定
 			if err := config.SetFieldValue(cfg, selectedField.Path, newValue); err != nil {
-				red.Printf("Error setting value: %v\n", err)
+				red.Fprintf(out, "Error setting value: %v\n", err)
 				continue
 			}
 
@@ -204,11 +209,11 @@ func runInteractiveConfig(agent *Agent, cfg *config.Config) {
 
 			// 保存
 			if err := config.SaveConfig(cfg); err != nil {
-				red.Printf("Error saving: %v\n", err)
+				red.Fprintf(out, "Error saving: %v\n", err)
 				continue
 			}
 
-			green.Printf("✓ Saved: %s = %v\n", selectedField.Path, newValue)
+			green.Fprintf(out, "✓ Saved: %s = %v\n", selectedField.Path, newValue)
 
 			// グローバル設定/Agent を同期（即反映）
 			config.SetGlobalConfig(cfg)
@@ -218,7 +223,7 @@ func runInteractiveConfig(agent *Agent, cfg *config.Config) {
 
 			// カテゴリを再構築して現在値を更新
 			categories = config.BuildConfigRegistry(cfg)
-			menu = ui.NewConfigMenu(cfg, categories)
+			menu = ui.NewConfigMenuWithRuntime(cfg, categories, agent.ui())
 			// 現在のカテゴリを更新
 			for i := range categories {
 				if categories[i].Name == selectedCategory.Name {
@@ -233,11 +238,12 @@ func runInteractiveConfig(agent *Agent, cfg *config.Config) {
 // handleUseCommand はプロバイダーを切り替える
 func handleUseCommand(agent *Agent, args []string) bool {
 	providerList := strings.Join(api.ListProviders(), ", ")
+	out := agent.output()
 
 	if len(args) == 0 {
-		yellow.Println("Usage: /use <provider> [model]")
-		yellow.Printf("Available providers: %s\n", providerList)
-		yellow.Println("Example: /use gemini gemini-2.0-flash-exp")
+		yellow.Fprintln(out, "Usage: /use <provider> [model]")
+		yellow.Fprintf(out, "Available providers: %s\n", providerList)
+		yellow.Fprintln(out, "Example: /use gemini gemini-2.0-flash-exp")
 		return true
 	}
 
@@ -245,45 +251,45 @@ func handleUseCommand(agent *Agent, args []string) bool {
 
 	// レジストリで登録済みかチェック
 	if !api.IsRegisteredProvider(providerName) {
-		red.Printf("Unknown provider: %s\n", providerName)
-		yellow.Printf("Available providers: %s\n", providerList)
+		red.Fprintf(out, "Unknown provider: %s\n", providerName)
+		yellow.Fprintf(out, "Available providers: %s\n", providerList)
 		return true
 	}
 
 	// 既に同じプロバイダーの場合でも、モデルが指定されていれば切り替え
 	if agent.ProviderName == providerName && len(args) < 2 {
-		yellow.Printf("Already using %s (model: %s)\n", providerName, agent.CurrentModel)
-		yellow.Println("Hint: Use '/use <provider> <model>' to change model")
+		yellow.Fprintf(out, "Already using %s (model: %s)\n", providerName, agent.CurrentModel)
+		yellow.Fprintln(out, "Hint: Use '/use <provider> <model>' to change model")
 		return true
 	}
 
 	// プロバイダー切り替え実行
 	if err := agent.SwitchProvider(providerName); err != nil {
-		red.Printf("❌ %v\n", err)
+		red.Fprintf(out, "❌ %v\n", err)
 
 		// API キー設定方法を表示
 		switch providerName {
 		case "deepseek":
-			yellow.Println("\n設定方法:")
-			yellow.Println("  export DEEPSEEK_API_KEY=your-api-key")
+			yellow.Fprintln(out, "\n設定方法:")
+			yellow.Fprintln(out, "  export DEEPSEEK_API_KEY=your-api-key")
 		case "openai":
-			yellow.Println("\n設定方法:")
-			yellow.Println("  export OPENAI_API_KEY=your-api-key")
+			yellow.Fprintln(out, "\n設定方法:")
+			yellow.Fprintln(out, "  export OPENAI_API_KEY=your-api-key")
 		case "claude":
-			yellow.Println("\n設定方法:")
-			yellow.Println("  export ANTHROPIC_API_KEY=your-api-key")
+			yellow.Fprintln(out, "\n設定方法:")
+			yellow.Fprintln(out, "  export ANTHROPIC_API_KEY=your-api-key")
 		case "gemini":
-			yellow.Println("\n設定方法:")
-			yellow.Println("  export GEMINI_API_KEY=your-api-key")
+			yellow.Fprintln(out, "\n設定方法:")
+			yellow.Fprintln(out, "  export GEMINI_API_KEY=your-api-key")
 		case "groq":
-			yellow.Println("\n設定方法:")
-			yellow.Println("  export GROQ_API_KEY=your-api-key")
+			yellow.Fprintln(out, "\n設定方法:")
+			yellow.Fprintln(out, "  export GROQ_API_KEY=your-api-key")
 		case "openrouter":
-			yellow.Println("\n設定方法:")
-			yellow.Println("  export OPENROUTER_API_KEY=your-api-key")
+			yellow.Fprintln(out, "\n設定方法:")
+			yellow.Fprintln(out, "  export OPENROUTER_API_KEY=your-api-key")
 		case "bedrock":
-			yellow.Println("\n設定方法:")
-			yellow.Println("  AWS認証チェーン（IAMロール、環境変数、~/.aws/credentials等）を設定")
+			yellow.Fprintln(out, "\n設定方法:")
+			yellow.Fprintln(out, "  AWS認証チェーン（IAMロール、環境変数、~/.aws/credentials等）を設定")
 		}
 		return true
 	}
@@ -297,7 +303,7 @@ func handleUseCommand(agent *Agent, args []string) bool {
 			agent.Stats.Model = newModel
 		}
 		agent.rebuildSystemPromptForCurrentProvider()
-		green.Printf("✅ Model: %s → %s\n", oldModel, newModel)
+		green.Fprintf(out, "✅ Model: %s → %s\n", oldModel, newModel)
 	}
 
 	if agent.CurrentProvider != nil {
@@ -310,11 +316,12 @@ func handleUseCommand(agent *Agent, args []string) bool {
 // handleProvidersCommand は利用可能なプロバイダー一覧を表示
 func handleProvidersCommand(agent *Agent) bool {
 	providers := api.ListProviders()
+	out := agent.output()
 
-	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	cyan.Println("📡 利用可能なプロバイダー / Available Providers")
-	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Println()
+	cyan.Fprintln(out, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	cyan.Fprintln(out, "📡 利用可能なプロバイダー / Available Providers")
+	cyan.Fprintln(out, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	_, _ = fmt.Fprintln(out)
 
 	for _, provider := range providers {
 		// 現在使用中かチェック
@@ -341,19 +348,19 @@ func handleProvidersCommand(agent *Agent) bool {
 
 		// 色付け
 		if isCurrent {
-			green.Printf("%s%-12s %s\n", icon, provider, status)
+			green.Fprintf(out, "%s%-12s %s\n", icon, provider, status)
 		} else if hasAPIKey {
-			fmt.Printf("%s%-12s %s\n", icon, provider, status)
+			_, _ = fmt.Fprintf(out, "%s%-12s %s\n", icon, provider, status)
 		} else {
 			// API key未設定は薄く表示
-			fmt.Printf("%s%-12s %s\n", icon, provider, status)
+			_, _ = fmt.Fprintf(out, "%s%-12s %s\n", icon, provider, status)
 		}
 	}
 
-	fmt.Println()
-	cyan.Println("使い方: /use <provider>")
-	cyan.Println("例: /use claude")
-	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	_, _ = fmt.Fprintln(out)
+	cyan.Fprintln(out, "使い方: /use <provider>")
+	cyan.Fprintln(out, "例: /use claude")
+	cyan.Fprintln(out, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
 	return true
 }

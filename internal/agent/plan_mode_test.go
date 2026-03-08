@@ -1,9 +1,13 @@
 package agent
 
 import (
+	"bytes"
+	"context"
+	"strings"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/agent/plan"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 func TestExtractPlanJSON_Mode(t *testing.T) {
@@ -128,5 +132,47 @@ func TestPlanStep_Tools(t *testing.T) {
 	}
 	if step.Tools[0] != "write_file" || step.Tools[1] != "str_replace" {
 		t.Errorf("Step Tools = %v, want [write_file, str_replace]", step.Tools)
+	}
+}
+
+func TestRunPlanMode_UsesRuntimeOutput(t *testing.T) {
+	var out bytes.Buffer
+
+	agent := NewAgentWithRuntime("test-model", &mockProvider{name: "test"}, false, &AgentRuntime{
+		UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+	})
+	t.Cleanup(agent.Cleanup)
+
+	if err := agent.RunPlanMode(context.Background(), "investigate only"); err != nil {
+		t.Fatalf("RunPlanMode() error = %v", err)
+	}
+
+	output := out.String()
+	if !strings.Contains(output, "Investigation phase - researching the codebase") {
+		t.Fatalf("expected runtime output to contain investigation header, got %q", output)
+	}
+	if !strings.Contains(output, "Investigation complete. No implementation needed.") {
+		t.Fatalf("expected runtime output to contain completion message, got %q", output)
+	}
+}
+
+func TestConfirmPlan_UsesRuntimePromptIO(t *testing.T) {
+	var out bytes.Buffer
+
+	agent := &Agent{
+		Runtime: &AgentRuntime{
+			UI: ui.NewRuntime(strings.NewReader("2\n"), &out, &out),
+		},
+	}
+
+	approved, feedback := agent.confirmPlan()
+	if approved {
+		t.Fatal("confirmPlan() approved = true, want false")
+	}
+	if feedback != "" {
+		t.Fatalf("confirmPlan() feedback = %q, want empty", feedback)
+	}
+	if !strings.Contains(out.String(), "Approve this plan?") {
+		t.Fatalf("expected runtime output to contain confirmation prompt, got %q", out.String())
 	}
 }

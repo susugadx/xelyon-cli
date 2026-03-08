@@ -27,44 +27,83 @@ type Logger struct {
 	enabled  bool
 }
 
-var globalLogger *Logger
-var once sync.Once
+// ToolLogger はツール実行の監査ログ記録に必要な最小インターフェース。
+type ToolLogger interface {
+	// LogToolExecution はツール実行結果を記録する。
+	LogToolExecution(tool string, args map[string]string, output string, err error, fileChanged bool)
+}
+
+var (
+	globalLogger   *Logger
+	globalLoggerMu sync.RWMutex
+)
+
+// NewDefaultLogger は標準の保存先を使う監査ロガーを作成する。
+func NewDefaultLogger(enabled bool) (*Logger, error) {
+	if !enabled {
+		return NewDisabledLogger(), nil
+	}
+	logPath, err := defaultLogPath()
+	if err != nil {
+		return nil, err
+	}
+	return NewLoggerWithPath(logPath, true), nil
+}
+
+// NewLoggerWithPath は保存先を明示した監査ロガーを作成する。
+func NewLoggerWithPath(filePath string, enabled bool) *Logger {
+	return &Logger{
+		filePath: filePath,
+		enabled:  enabled,
+	}
+}
+
+// NewDisabledLogger は無効状態の監査ロガーを返す。
+func NewDisabledLogger() *Logger {
+	return &Logger{enabled: false}
+}
+
+// SetGlobalLogger は互換用途のグローバル監査ロガーを差し替える。
+func SetGlobalLogger(logger *Logger) {
+	globalLoggerMu.Lock()
+	defer globalLoggerMu.Unlock()
+	globalLogger = logger
+}
 
 // Init は監査ログを初期化
 func Init(enabled bool) error {
-	var err error
-	once.Do(func() {
-		homeDir, e := os.UserHomeDir()
-		if e != nil {
-			err = e
-			return
-		}
-
-		logDir := filepath.Join(homeDir, ".xelyon", "audit")
-		if e := os.MkdirAll(logDir, 0700); e != nil {
-			err = e
-			return
-		}
-
-		// ログファイル名: audit_YYYYMMDD.jsonl
-		logFileName := fmt.Sprintf("audit_%s.jsonl", time.Now().Format("20060102"))
-		logPath := filepath.Join(logDir, logFileName)
-
-		globalLogger = &Logger{
-			filePath: logPath,
-			enabled:  enabled,
-		}
-	})
+	logger, err := NewDefaultLogger(enabled)
+	if err != nil {
+		return err
+	}
+	SetGlobalLogger(logger)
 	return err
 }
 
 // GetLogger はグローバルロガーを取得
 func GetLogger() *Logger {
+	globalLoggerMu.RLock()
+	defer globalLoggerMu.RUnlock()
 	if globalLogger == nil {
 		// デフォルトで無効状態のロガーを返す
-		return &Logger{enabled: false}
+		return NewDisabledLogger()
 	}
 	return globalLogger
+}
+
+func defaultLogPath() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+
+	logDir := filepath.Join(homeDir, ".xelyon", "audit")
+	if err := os.MkdirAll(logDir, 0700); err != nil {
+		return "", err
+	}
+
+	logFileName := fmt.Sprintf("audit_%s.jsonl", time.Now().Format("20060102"))
+	return filepath.Join(logDir, logFileName), nil
 }
 
 // LogToolExecution はツール実行をログに記録

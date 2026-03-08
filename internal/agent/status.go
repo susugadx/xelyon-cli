@@ -66,21 +66,26 @@ func defaultStatus() AgentStatus {
 	}
 }
 
-// globalAgentStatus は Agent からアクセスされる共有ステータス
-// Agent 構造体を変更せずに利用するための簡易実装
-var globalAgentStatus = statusHolder{
-	status: defaultStatus(),
-}
-
 // SetStatus updates the current agent status.
 func (a *Agent) SetStatus(state AgentState, reasonEN, reasonJP, nextEN, nextJP string) {
-	globalAgentStatus.setStatus(AgentStatus{
+	a.statusRef().setStatus(AgentStatus{
 		State:    state,
 		ReasonEN: reasonEN,
 		ReasonJP: reasonJP,
 		NextEN:   nextEN,
 		NextJP:   nextJP,
 	})
+}
+
+func (a *Agent) statusRef() *statusHolder {
+	if a == nil {
+		holder := &statusHolder{status: defaultStatus()}
+		return holder
+	}
+	if a.status.getStatus().State == "" {
+		a.status.setStatus(defaultStatus())
+	}
+	return &a.status
 }
 
 // PrintStatusFooter prints a status bar with divider lines.
@@ -107,16 +112,17 @@ func (a *Agent) PrintStatusFooter() {
 
 	// インジケーター（常に緑）
 	indicator := statusGreen.Sprint("●")
+	out := a.output()
 
 	// 区切り線（dim色）
-	fmt.Println()
-	statusDim.Println(dividerLine)
+	_, _ = fmt.Fprintln(out)
+	statusDim.Fprintln(out, dividerLine)
 
 	// ステータス行: ● model │ Mode │ tokens │ ~$cost
 	// Ollama の場合はコスト非表示
 	providerLower := strings.ToLower(a.ProviderName)
 	if providerLower == "ollama" {
-		fmt.Printf("%s %s %s %s %s %s\n",
+		_, _ = fmt.Fprintf(out, "%s %s %s %s %s %s\n",
 			indicator,
 			statusCyan.Sprint(a.CurrentModel),
 			sep,
@@ -124,7 +130,7 @@ func (a *Agent) PrintStatusFooter() {
 			sep,
 			tokenStr)
 	} else {
-		fmt.Printf("%s %s %s %s %s %s %s ~$%.3f\n",
+		_, _ = fmt.Fprintf(out, "%s %s %s %s %s %s %s ~$%.3f\n",
 			indicator,
 			statusCyan.Sprint(a.CurrentModel),
 			sep,
@@ -136,20 +142,21 @@ func (a *Agent) PrintStatusFooter() {
 	}
 
 	// 下の区切り線
-	statusDim.Println(dividerLine)
+	statusDim.Fprintln(out, dividerLine)
 }
 
 // handleStatusCommand は現在の状態、直近リクエスト、セッション統計を表示する。
 func handleStatusCommand(agent *Agent) bool {
-	printCommandHeader("Status / 状態")
-	fmt.Println()
+	out := agent.output()
+	printCommandHeaderToWriter(out, "Status / 状態")
+	_, _ = fmt.Fprintln(out)
 
 	modeText := "Normal"
 	if agent.PlanModeEnabled {
 		modeText = "Plan"
 	}
 
-	status := globalAgentStatus.getStatus()
+	status := agent.statusRef().getStatus()
 	currentTokens := agent.EstimateTokens()
 	limit := token.GetModelTokenLimit(agent.CurrentModel)
 	contextText := formatNumber(currentTokens)
@@ -165,21 +172,21 @@ func handleStatusCommand(agent *Agent) bool {
 		AddRow("Provider", agent.ProviderName).
 		AddRow("Model", agent.CurrentModel).
 		AddRow("Context", contextText)
-	fmt.Print(statusTable.RenderCompact())
+	_, _ = fmt.Fprint(out, statusTable.RenderCompact())
 
-	fmt.Println()
-	green.Println("🧾 Last Request")
+	_, _ = fmt.Fprintln(out)
+	green.Fprintln(out, "🧾 Last Request")
 	if agent.Stats != nil {
 		if table := buildLastRequestTable(agent.ProviderName, agent.CurrentModel, agent.Stats.LastUsage); table != nil {
-			fmt.Print(table.RenderCompact())
+			_, _ = fmt.Fprint(out, table.RenderCompact())
 		} else {
-			dim.Println("  No request usage data available")
+			dim.Fprintln(out, "  No request usage data available")
 		}
 	} else {
-		dim.Println("  No request usage data available")
+		dim.Fprintln(out, "  No request usage data available")
 	}
 
 	printSessionSections(agent)
-	fmt.Println()
+	_, _ = fmt.Fprintln(out)
 	return true
 }

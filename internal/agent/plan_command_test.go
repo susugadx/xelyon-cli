@@ -1,9 +1,12 @@
 package agent
 
 import (
+	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // mockPlanProvider for testing
@@ -62,6 +65,24 @@ func TestHandlePlanCommand_Status(t *testing.T) {
 	result = handlePlanCommand(agent, []string{"status"})
 	if !result {
 		t.Error("handlePlanCommand should return true for status")
+	}
+}
+
+func TestHandlePlanCommand_StatusUsesRuntimeOutput(t *testing.T) {
+	var out bytes.Buffer
+	agent := NewAgent("test-model", &mockPlanProvider{}, false)
+	agent.Runtime = &AgentRuntime{
+		UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+	}
+
+	result := handlePlanCommand(agent, []string{"status"})
+	if !result {
+		t.Fatal("handlePlanCommand() = false, want true")
+	}
+
+	output := out.String()
+	if !strings.Contains(output, "Plan Mode: OFF") {
+		t.Fatalf("expected runtime output to contain plan status, got %q", output)
 	}
 }
 

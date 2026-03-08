@@ -187,7 +187,7 @@ func (p *Provider) updateOrUseCache(ctx context.Context, systemPrompt string, hi
 	}
 
 	// スピナー表示
-	spinner := ui.GetGlobalSpinner()
+	spinner := ui.RuntimeFromContext(ctx).CurrentSpinner()
 	if spinner != nil {
 		spinner.SetStatus("Creating context cache...")
 	}
@@ -212,7 +212,7 @@ func (p *Provider) updateOrUseCache(ctx context.Context, systemPrompt string, hi
 	ttlStr := fmt.Sprintf("%ds", ttl)
 	resp, err := p.CreateCachedContent(ctx, model, systemPrompt, cacheHistory, ttlStr, tools, toolConfig)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: Failed to create cache: %v. Proceeding without cache.\n", err)
+		fmt.Fprintf(ui.RuntimeFromContext(ctx).ErrorOutput(), "Warning: Failed to create cache: %v. Proceeding without cache.\n", err)
 		return "", history, nil
 	}
 

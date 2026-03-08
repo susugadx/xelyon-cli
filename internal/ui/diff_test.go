@@ -157,6 +157,35 @@ func TestShowUnifiedDiff(t *testing.T) {
 	}
 }
 
+func TestShowColoredDiffWithRuntime_UsesInjectedWriter(t *testing.T) {
+	runtime := NewRuntime(strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{})
+	out := runtime.Output().(*bytes.Buffer)
+
+	ShowColoredDiffWithRuntime(runtime, "before\nline2", "after\nline2", nil)
+
+	output := stripANSI(out.String())
+	if !strings.Contains(output, "Diff / 差分表示") {
+		t.Fatalf("expected injected output to contain diff header, got %q", output)
+	}
+	if !strings.Contains(output, "net: 0") {
+		t.Fatalf("expected injected output to contain summary, got %q", output)
+	}
+}
+
+func TestShowUnifiedDiffToWriter_UsesInjectedWriter(t *testing.T) {
+	var buf bytes.Buffer
+
+	ShowUnifiedDiffToWriter(&buf, "--- a/file.txt\n+++ b/file.txt\n@@ -1 +1 @@\n-old\n+new\n")
+
+	output := stripANSI(buf.String())
+	if !strings.Contains(output, "--- a/file.txt") {
+		t.Fatalf("expected injected output to contain unified diff header, got %q", output)
+	}
+	if !strings.Contains(output, "+new") {
+		t.Fatalf("expected injected output to contain added line, got %q", output)
+	}
+}
+
 func TestTruncateLine(t *testing.T) {
 	tests := []struct {
 		input    string

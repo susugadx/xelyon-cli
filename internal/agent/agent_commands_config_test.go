@@ -1,13 +1,16 @@
 package agent
 
 import (
+	"bytes"
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // mockCacheClearableProviderForModel はキャッシュクリアと Provider を実装したモック（モデルコマンド用）
@@ -87,4 +90,55 @@ func TestHandleModelCommand_RebuildsClaudePromptForOpus(t *testing.T) {
 	assert.True(t, result)
 	assert.Contains(t, agent.SystemPrompt, "### Stable Working Reference")
 	assert.Contains(t, agent.SystemPrompt, "### Claude-specific")
+}
+
+func TestHandleModelCommand_NoArgs_UsesRuntimeOutput(t *testing.T) {
+	var out bytes.Buffer
+	agent := &Agent{
+		ProviderName:    "mock",
+		CurrentModel:    "test-model",
+		CurrentProvider: &mockCacheClearableProviderForModel{name: "mock"},
+		Runtime: &AgentRuntime{
+			UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+		},
+	}
+
+	result := handleModelCommand(agent, nil)
+	if !result {
+		t.Fatal("handleModelCommand() = false, want true")
+	}
+
+	output := out.String()
+	if !strings.Contains(output, "Current model: test-model") {
+		t.Fatalf("expected runtime output to contain current model, got %q", output)
+	}
+	if !strings.Contains(output, "Usage: /model <model-name>") {
+		t.Fatalf("expected runtime output to contain usage, got %q", output)
+	}
+}
+
+func TestHandleProvidersCommand_UsesRuntimeOutput(t *testing.T) {
+	var out bytes.Buffer
+	agent := &Agent{
+		ProviderName: "ollama",
+		Runtime: &AgentRuntime{
+			UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+		},
+	}
+
+	result := handleProvidersCommand(agent)
+	if !result {
+		t.Fatal("handleProvidersCommand() = false, want true")
+	}
+
+	output := out.String()
+	if !strings.Contains(output, "利用可能なプロバイダー") {
+		t.Fatalf("expected runtime output to contain providers header, got %q", output)
+	}
+	if !strings.Contains(output, "/use <provider>") {
+		t.Fatalf("expected runtime output to contain usage hint, got %q", output)
+	}
+	if !strings.Contains(output, "openai") {
+		t.Fatalf("expected runtime output to contain provider list, got %q", output)
+	}
 }

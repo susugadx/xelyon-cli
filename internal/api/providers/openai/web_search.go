@@ -56,24 +56,29 @@ type webSearchSource struct {
 }
 
 func init() {
-	websearch.Register("openai", WebSearch)
+	websearch.RegisterWithContext("openai", WebSearchWithContext)
 }
 
 // WebSearch executes OpenAI's native web_search tool via the Responses API.
 func WebSearch(query, model string) (string, error) {
+	return WebSearchWithContext(context.Background(), query, model)
+}
+
+// WebSearchWithContext は request context を使って OpenAI ネイティブ web_search を実行する。
+func WebSearchWithContext(ctx context.Context, query, model string) (string, error) {
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
 		return "", fmt.Errorf("OPENAI_API_KEY not set")
 	}
 
-	model = api.GetDefaultModel(model, "openai", "gpt-4o")
-	cfg := config.GetGlobalConfig()
+	model = api.GetDefaultModelWithContext(ctx, model, "openai", "gpt-4o")
+	cfg := config.FromContext(ctx)
 	if !cfg.IsResponsesAPIModel(model) {
 		return "", fmt.Errorf("model %q does not support Responses API web search", model)
 	}
 
 	provider := New(apiKey)
-	return provider.webSearch(context.Background(), query, model)
+	return provider.webSearch(ctx, query, model)
 }
 
 func (p *Provider) webSearch(ctx context.Context, query, model string) (string, error) {
@@ -90,7 +95,7 @@ func (p *Provider) webSearch(ctx context.Context, query, model string) (string, 
 		Store:   false,
 	}
 
-	cfg := config.GetGlobalConfig()
+	cfg := config.FromContext(ctx)
 	if api.IsThinkingEnabled(ctx) {
 		reqBody.Reasoning = &ReasoningConfig{Effort: LevelToReasoningEffort(cfg.Thinking.Level)}
 	} else if isCodexModel(model) {

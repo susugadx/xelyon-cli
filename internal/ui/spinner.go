@@ -3,7 +3,6 @@ package ui
 import (
 	"fmt"
 	"io"
-	"os"
 	"sync"
 	"time"
 )
@@ -22,14 +21,19 @@ type Spinner struct {
 
 // NewSpinner は新しいSpinnerを作成
 func NewSpinner() *Spinner {
-	return NewSpinnerWithWriter(os.Stdout)
+	return NewSpinnerWithRuntime(DefaultRuntime())
+}
+
+// NewSpinnerWithRuntime は UI runtime に紐づく出力先で Spinner を作成する。
+func NewSpinnerWithRuntime(runtime *Runtime) *Spinner {
+	return NewSpinnerWithWriter(runtimeOrDefault(runtime).Output())
 }
 
 // NewSpinnerWithWriter は出力先を指定してSpinnerを作成
 // run_test などで stdout 出力（コマンド結果）と混ざらないよう、stderr を指定する用途を想定。
 func NewSpinnerWithWriter(w io.Writer) *Spinner {
 	if w == nil {
-		w = os.Stdout
+		w = DefaultRuntime().Output()
 	}
 	return &Spinner{
 		writer: w,
@@ -186,44 +190,25 @@ func formatElapsed(d time.Duration) string {
 	return fmt.Sprintf("(%ds)", seconds)
 }
 
-// グローバルスピナー（どこからでも停止可能）
-var globalSpinner *Spinner
-var globalSpinnerMu sync.Mutex
-
 // SetGlobalSpinner はグローバルスピナーを設定
 func SetGlobalSpinner(s *Spinner) {
-	globalSpinnerMu.Lock()
-	defer globalSpinnerMu.Unlock()
-	// 既存のスピナーを先に停止
-	if globalSpinner != nil {
-		globalSpinner.Stop()
-	}
-	globalSpinner = s
+	DefaultRuntime().SetSpinner(s)
 }
 
 // GetGlobalSpinner はグローバルスピナーを返す（未設定時はnil）
 func GetGlobalSpinner() *Spinner {
-	globalSpinnerMu.Lock()
-	defer globalSpinnerMu.Unlock()
-	return globalSpinner
+	return DefaultRuntime().CurrentSpinner()
 }
 
 // StopGlobalSpinner はグローバルスピナーを停止
 func StopGlobalSpinner() {
-	globalSpinnerMu.Lock()
-	defer globalSpinnerMu.Unlock()
-	if globalSpinner != nil {
-		globalSpinner.Stop()
-	}
+	DefaultRuntime().StopSpinner()
 }
 
 // ResetTerminalState はターミナル状態をリセットする
 // FC→テキストモードフォールバック時など、ターミナル状態が不整合になった場合に使用
 func ResetTerminalState() {
-	// カーソルを表示（非表示になっている場合の復旧）
-	fmt.Print("\033[?25h")
-	// 現在行をクリア（残留するスピナー出力を除去）
-	fmt.Print("\r\033[K")
+	DefaultRuntime().ResetTerminalState()
 }
 
 // SpinnerMessageForTool はツール名に応じたスピナーメッセージを返します

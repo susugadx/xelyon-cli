@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -452,7 +451,7 @@ func (p *Provider) handleResponsesStreaming(ctx context.Context, resp *http.Resp
 // chatWithImageResponses は Responses API で画像付きメッセージを処理
 // NOTE: 画像付きの場合は previous_response_id を使用しない（キャッシュ動作が不明瞭なため）
 func (p *Provider) chatWithImageResponses(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {
-	cfg := config.GetGlobalConfig()
+	cfg := tools.ConfigFromContext(ctx)
 
 	// Responses API URL
 	apiURL := os.Getenv("OPENAI_RESPONSES_URL")

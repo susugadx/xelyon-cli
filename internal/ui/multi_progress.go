@@ -3,7 +3,6 @@ package ui
 import (
 	"fmt"
 	"io"
-	"os"
 	"sync"
 	"time"
 )
@@ -40,13 +39,18 @@ type MultiProgress struct {
 
 // NewMultiProgress は新しいMultiProgressを作成
 func NewMultiProgress() *MultiProgress {
-	return NewMultiProgressWithWriter(os.Stdout)
+	return NewMultiProgressWithRuntime(DefaultRuntime())
+}
+
+// NewMultiProgressWithRuntime は UI runtime に紐づく出力先で MultiProgress を作成する。
+func NewMultiProgressWithRuntime(runtime *Runtime) *MultiProgress {
+	return NewMultiProgressWithWriter(runtimeOrDefault(runtime).Output())
 }
 
 // NewMultiProgressWithWriter は出力先を指定してMultiProgressを作成
 func NewMultiProgressWithWriter(w io.Writer) *MultiProgress {
 	if w == nil {
-		w = os.Stdout
+		w = DefaultRuntime().Output()
 	}
 	return &MultiProgress{
 		tasks:  make([]*Task, 0),

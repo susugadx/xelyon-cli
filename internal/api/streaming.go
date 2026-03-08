@@ -22,7 +22,7 @@ var cyanBold = color.New(color.FgCyan, color.Bold)
 // PrintAIHeader はAI発言開始時のヘッダーを表示する
 // 全プロバイダーから共通で使用
 func PrintAIHeader() {
-	cyanBold.Print("\n💬 ")
+	PrintAIHeaderWithContext(context.Background())
 }
 
 // toolJSONPatterns はツールJSON開始パターン
@@ -47,8 +47,10 @@ type StreamParser func(line string) (content string, done bool, err error)
 // アイドルタイムアウト方式: データ受信がない状態がN秒続くとタイムアウト
 // ツールJSON部分は内部で記録するが表示しない
 func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner, parser StreamParser) (string, error) {
-	cfg := config.GetGlobalConfig()
+	cfg := config.FromContext(ctx)
 	idleTimeout := time.Duration(cfg.Streaming.IdleTimeoutSeconds) * time.Second
+	out := outputWriterFromContext(ctx)
+	errOut := errorWriterFromContext(ctx)
 
 	var fullResponse strings.Builder
 	firstChunk := true
@@ -95,9 +97,9 @@ func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *u
 			if partialResponse != "" {
 				// 部分結果がある場合は警告と共に返す
 				if !firstChunk {
-					fmt.Println() // 改行
+					_, _ = fmt.Fprintln(out) // 改行
 				}
-				yellow.Println("\n⚠️  Response interrupted. Partial result returned.")
+				yellow.Fprintln(errOut, "\n⚠️  Response interrupted. Partial result returned.")
 				return partialResponse, nil // エラーではなく部分結果を返す
 			}
 			return "", ctx.Err()
@@ -112,7 +114,7 @@ func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *u
 				// チャンネルクローズ（予期しない終了）
 				spinner.Stop()
 				if !firstChunk {
-					fmt.Println()
+					_, _ = fmt.Fprintln(out)
 				}
 				return fullResponse.String(), nil
 			}
@@ -133,7 +135,7 @@ func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *u
 					return fullResponse.String(), fmt.Errorf("scanner error: %w", result.err)
 				}
 				if !firstChunk {
-					fmt.Println()
+					_, _ = fmt.Fprintln(out)
 				}
 				return fullResponse.String(), nil
 			}
@@ -154,10 +156,10 @@ func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *u
 				spinner.Stop()
 				// チャンク分割対応: 保留分を flush（パターンが完成しなかった = テキスト）
 				if pendingChunk != "" {
-					fmt.Print(pendingChunk)
+					_, _ = fmt.Fprint(out, pendingChunk)
 				}
 				if !firstChunk {
-					fmt.Println()
+					_, _ = fmt.Fprintln(out)
 				}
 				return fullResponse.String(), nil
 			}
@@ -199,10 +201,10 @@ func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *u
 				if firstChunk {
 					spinner.Stop()
 					firstChunk = false
-					cyanBold.Print("\n💬 ")
+					PrintAIHeaderWithContext(ctx)
 				}
 				if displayContent != "" {
-					fmt.Print(displayContent)
+					_, _ = fmt.Fprint(out, displayContent)
 				}
 			}
 		}

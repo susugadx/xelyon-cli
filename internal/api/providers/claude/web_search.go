@@ -53,19 +53,24 @@ type webSearchSource struct {
 }
 
 func init() {
-	websearch.Register("claude", WebSearch)
+	websearch.RegisterWithContext("claude", WebSearchWithContext)
 }
 
 // WebSearch executes Anthropic's native web search tool.
 func WebSearch(query, model string) (string, error) {
+	return WebSearchWithContext(context.Background(), query, model)
+}
+
+// WebSearchWithContext は request context を使って Claude ネイティブ web_search を実行する。
+func WebSearchWithContext(ctx context.Context, query, model string) (string, error) {
 	apiKey := os.Getenv("ANTHROPIC_API_KEY")
 	if apiKey == "" {
 		return "", fmt.Errorf("ANTHROPIC_API_KEY not set")
 	}
 
-	model = api.GetDefaultModel(model, "claude", "claude-sonnet-4-6")
+	model = api.GetDefaultModelWithContext(ctx, model, "claude", "claude-sonnet-4-6")
 	provider := New(apiKey)
-	return provider.webSearch(context.Background(), query, model)
+	return provider.webSearch(ctx, query, model)
 }
 
 func (p *Provider) webSearch(ctx context.Context, query, model string) (string, error) {
@@ -103,8 +108,8 @@ func (p *Provider) webSearch(ctx context.Context, query, model string) (string, 
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-api-key", p.APIKey)
-	req.Header.Set("anthropic-version", getAnthropicVersion())
-	req.Header.Set("anthropic-beta", strings.Join(getAnthropicBetaHeaders(), ","))
+	req.Header.Set("anthropic-version", getAnthropicVersion(ctx))
+	req.Header.Set("anthropic-beta", strings.Join(getAnthropicBetaHeaders(ctx), ","))
 
 	resp, err := p.ExecuteRequest(req)
 	if err != nil {
@@ -129,16 +134,16 @@ func buildWebSearchPrompt(query string) string {
 	return fmt.Sprintf("Use web search to answer the query below. Return a concise summary of the most relevant findings.\n\nQuery: %s", query)
 }
 
-func getAnthropicVersion() string {
-	cfg := config.GetGlobalConfig()
+func getAnthropicVersion(ctx context.Context) string {
+	cfg := config.FromContext(ctx)
 	if pm, ok := cfg.ProviderModels["claude"]; ok && pm.AnthropicVersion != "" {
 		return pm.AnthropicVersion
 	}
 	return "2023-06-01"
 }
 
-func getAnthropicBetaHeaders() []string {
-	cfg := config.GetGlobalConfig()
+func getAnthropicBetaHeaders(ctx context.Context) []string {
+	cfg := config.FromContext(ctx)
 	seen := map[string]bool{webSearchBetaHeader: true}
 	headers := []string{webSearchBetaHeader}
 	if pm, ok := cfg.ProviderModels["claude"]; ok {

@@ -52,18 +52,18 @@ func (a *Agent) runInvestigationPhase(ctx context.Context) (*plan.Plan, error) {
 
 		if len(toolCalls) == 0 {
 			if os.Getenv("XELYON_DEBUG_PARSE") == "1" {
-				fmt.Fprintf(os.Stderr, "[DEBUG runInvestigationPhase] ParseToolCalls returned 0 tools\n")
+				_, _ = fmt.Fprintf(a.errorOutput(), "[DEBUG runInvestigationPhase] ParseToolCalls returned 0 tools\n")
 				if strings.Contains(response, `{"tool"`) || strings.Contains(response, `{ "tool"`) {
-					fmt.Fprintf(os.Stderr, "[DEBUG runInvestigationPhase] WARNING: tool pattern exists but not parsed!\n")
+					_, _ = fmt.Fprintf(a.errorOutput(), "[DEBUG runInvestigationPhase] WARNING: tool pattern exists but not parsed!\n")
 					if len(response) > 200 {
-						fmt.Fprintf(os.Stderr, "[DEBUG runInvestigationPhase] tail: ...%s\n", response[len(response)-200:])
+						_, _ = fmt.Fprintf(a.errorOutput(), "[DEBUG runInvestigationPhase] tail: ...%s\n", response[len(response)-200:])
 					}
 				}
 			}
 
 			if planJSON := plan.ExtractPlanJSON(response); planJSON != "" {
 				if os.Getenv("XELYON_DEBUG_PARSE") == "1" {
-					fmt.Fprintf(os.Stderr, "[DEBUG runInvestigationPhase] found plan JSON (%d bytes)\n", len(planJSON))
+					_, _ = fmt.Fprintf(a.errorOutput(), "[DEBUG runInvestigationPhase] found plan JSON (%d bytes)\n", len(planJSON))
 				}
 				if p, err := plan.ParsePlan(planJSON); err == nil && len(p.Steps) > 0 {
 					return p, nil
@@ -78,7 +78,7 @@ func (a *Agent) runInvestigationPhase(ctx context.Context) (*plan.Plan, error) {
 			}
 
 			// ツール呼び出しがない場合は終了（AIが調査を終えて説明している）
-			fmt.Println(response)
+			_, _ = fmt.Fprintln(a.output(), response)
 			return nil, nil
 		}
 

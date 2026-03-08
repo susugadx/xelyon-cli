@@ -10,6 +10,8 @@ import (
 
 // CompressWithCompactAPI は OpenAI Compact API で会話履歴を圧縮
 func (a *Agent) CompressWithCompactAPI(ctx context.Context) error {
+	out := a.output()
+
 	// CompactCapable インターフェースをチェック
 	compactProvider, ok := a.CurrentProvider.(api.CompactCapable)
 	if !ok {
@@ -29,7 +31,7 @@ func (a *Agent) CompressWithCompactAPI(ctx context.Context) error {
 	input := a.buildFullInputItems()
 
 	// Compact API 呼び出し
-	result, err := compactProvider.CompactHistory(ctx, input, a.CurrentModel, a.SystemPrompt)
+	result, err := compactProvider.CompactHistory(a.requestContext(ctx), input, a.CurrentModel, a.SystemPrompt)
 	if err != nil {
 		return fmt.Errorf("compact API failed: %w", err)
 	}
@@ -49,11 +51,11 @@ func (a *Agent) CompressWithCompactAPI(ctx context.Context) error {
 
 	// 統計情報を表示
 	if result.Usage != nil {
-		yellow.Printf("📦 History compacted: %d → %d tokens\n",
+		yellow.Fprintf(out, "📦 History compacted: %d → %d tokens\n",
 			result.Usage.InputTokens,
 			result.Usage.OutputTokens)
 	} else {
-		yellow.Printf("📦 History compacted successfully\n")
+		yellow.Fprintln(out, "📦 History compacted successfully")
 	}
 
 	return nil

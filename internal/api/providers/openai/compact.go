@@ -39,7 +39,7 @@ func (p *Provider) CompactHistory(ctx context.Context, input []api.InputItem, mo
 
 	// モデルが指定されていない場合はデフォルト
 	if model == "" {
-		model = config.GetGlobalConfig().DefaultModel
+		model = config.FromContext(ctx).DefaultModel
 	}
 
 	reqBody := CompactRequest{

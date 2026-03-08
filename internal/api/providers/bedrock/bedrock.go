@@ -31,12 +31,11 @@ const (
 
 // Provider は AWS Bedrock (Anthropic Claude) のプロバイダー実装
 type Provider struct {
-	client            *bedrockruntime.Client
-	region            string
-	mcpTools          []api.ToolDefinition // MCP ツール定義
-	usageCallback     api.UsageCallback
-	compactionEnabled bool
-	compactionTrigger int
+	client        *bedrockruntime.Client
+	region        string
+	mcpTools      []api.ToolDefinition // MCP ツール定義
+	usageCallback api.UsageCallback
+	runtimeConfig *config.Config
 }
 
 // New は新しい Bedrock Provider を作成
@@ -58,13 +57,9 @@ func New() (*Provider, error) {
 
 	client := bedrockruntime.NewFromConfig(cfg)
 
-	globalCfg := config.GetGlobalConfig()
-
 	return &Provider{
-		client:            client,
-		region:            region,
-		compactionEnabled: globalCfg.Compression.ClaudeCompaction,
-		compactionTrigger: globalCfg.Compression.CompactionTrigger,
+		client: client,
+		region: region,
 	}, nil
 }
 
@@ -76,8 +71,21 @@ func isBedrockCompactionSupported(model string) bool {
 
 // SupportsClaudeCompaction は Claude Compaction 対応状況を返す
 func (p *Provider) SupportsClaudeCompaction() bool {
-	model := api.GetDefaultModel("", "bedrock", defaultModel)
-	return p.compactionEnabled && isBedrockCompactionSupported(model)
+	return p.supportsClaudeCompactionWithConfig(p.effectiveConfig(), "")
+}
+
+// SupportsClaudeCompactionWithContext は request context とモデルを使って Claude Compaction 対応可否を返す。
+func (p *Provider) SupportsClaudeCompactionWithContext(ctx context.Context, model string) bool {
+	cfg := p.effectiveConfig()
+	if ctxCfg, ok := config.LookupContext(ctx); ok {
+		cfg = ctxCfg
+	}
+	return p.supportsClaudeCompactionWithConfig(cfg, model)
+}
+
+// SetRuntimeConfig は provider が参照する runtime 設定を差し替える。
+func (p *Provider) SetRuntimeConfig(cfg *config.Config) {
+	p.runtimeConfig = cfg
 }
 
 // Name はプロバイダー名を返す
@@ -122,16 +130,16 @@ type BedrockMultimodalRequest struct {
 
 // ChatWithTools は Provider interface の実装
 func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
-	model = api.GetDefaultModel(model, "bedrock", defaultModel)
+	model = api.GetDefaultModelWithContext(ctx, model, "bedrock", defaultModel)
 
 	// Anthropic Messages API 形式に変換（role:"tool" → role:"user"+tool_result 等）
 	messages := claude.ConvertToAnthropicMessages(history)
 
-	cfg := config.GetGlobalConfig()
+	cfg := config.FromContext(ctx)
 
 	// プロンプトキャッシュ: 安定区間+最新userにブレークポイント設定
 	if cfg != nil && cfg.PromptCache.Enabled {
-		claude.SetMessageCacheBreakpoints(messages)
+		claude.SetMessageCacheBreakpointsWithEnabled(messages, true)
 	}
 	pCfg := cfg.ProviderModels["bedrock"]
 
@@ -163,14 +171,18 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	}
 
 	// Compaction 適用
-	if p.compactionEnabled && isBedrockCompactionSupported(model) {
+	if cfg.Compression.ClaudeCompaction && isBedrockCompactionSupported(model) {
+		trigger := cfg.Compression.CompactionTrigger
+		if trigger == 0 {
+			trigger = 150000
+		}
 		reqBody.ContextManagement = &claude.ContextManagement{
 			Edits: []claude.ContextEdit{
 				{
 					Type: "compact_20260112",
 					Trigger: &claude.CompactTrigger{
 						Type:  "input_tokens",
-						Value: p.compactionTrigger,
+						Value: trigger,
 					},
 				},
 			},
@@ -199,15 +211,15 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 		return p.ChatWithTools(ctx, systemPrompt, history, model)
 	}
 
-	model = api.GetDefaultModel(model, "bedrock", defaultModel)
+	model = api.GetDefaultModelWithContext(ctx, model, "bedrock", defaultModel)
 
 	// Anthropic Messages API 形式に変換（role:"tool" → role:"user"+tool_result 等）
 	converted := claude.ConvertToAnthropicMessages(history)
 
 	// プロンプトキャッシュ: 履歴部分にブレークポイント設定
-	cfg := config.GetGlobalConfig()
+	cfg := config.FromContext(ctx)
 	if cfg != nil && cfg.PromptCache.Enabled {
-		claude.SetMessageCacheBreakpoints(converted)
+		claude.SetMessageCacheBreakpointsWithEnabled(converted, true)
 	}
 
 	var messages []interface{}
@@ -265,14 +277,18 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	}
 
 	// Compaction 適用
-	if p.compactionEnabled && isBedrockCompactionSupported(model) {
+	if cfg.Compression.ClaudeCompaction && isBedrockCompactionSupported(model) {
+		trigger := cfg.Compression.CompactionTrigger
+		if trigger == 0 {
+			trigger = 150000
+		}
 		reqBody.ContextManagement = &claude.ContextManagement{
 			Edits: []claude.ContextEdit{
 				{
 					Type: "compact_20260112",
 					Trigger: &claude.CompactTrigger{
 						Type:  "input_tokens",
-						Value: p.compactionTrigger,
+						Value: trigger,
 					},
 				},
 			},
@@ -291,6 +307,26 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	}
 
 	return p.invokeStream(ctx, model, reqBody)
+}
+
+func (p *Provider) effectiveConfig() *config.Config {
+	if p != nil && p.runtimeConfig != nil {
+		return p.runtimeConfig
+	}
+	return config.GetGlobalConfig()
+}
+
+func (p *Provider) supportsClaudeCompactionWithConfig(cfg *config.Config, model string) bool {
+	if cfg == nil || !cfg.Compression.ClaudeCompaction {
+		return false
+	}
+	if model == "" {
+		model = cfg.GetModelForProvider("bedrock")
+	}
+	if model == "" {
+		model = defaultModel
+	}
+	return isBedrockCompactionSupported(model)
 }
 
 // invokeStream は Bedrock InvokeModelWithResponseStream を呼び出す共通処理

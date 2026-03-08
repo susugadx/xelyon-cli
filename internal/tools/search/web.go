@@ -1,6 +1,7 @@
 package search
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -29,7 +30,10 @@ func ExecuteWebSearch(execCtx tools.ExecutionContext, query string) string {
 		return fmt.Sprintf("User feedback: %s", dec.Comment)
 	}
 
-	result, cached, source, err := executeWebSearchWithFallback(out, query, execCtx.ProviderName, execCtx.Model)
+	requestCtx := tools.WithRegistry(context.Background(), execCtx.EffectiveRegistry())
+	requestCtx = tools.WithConfig(requestCtx, execCtx.EffectiveConfig())
+
+	result, cached, source, err := executeWebSearchWithFallback(requestCtx, out, query, execCtx.ProviderName, execCtx.Model)
 	if err != nil {
 		return fmt.Sprintf("Error: %v", err)
 	}
@@ -43,35 +47,35 @@ func ExecuteWebSearch(execCtx tools.ExecutionContext, query string) string {
 	return result
 }
 
-func executeWebSearchWithFallback(out common.Output, query, providerName, model string) (string, bool, string, error) {
+func executeWebSearchWithFallback(ctx context.Context, out common.Output, query, providerName, model string) (string, bool, string, error) {
 	providerName = normalizeProviderName(providerName)
 	cacheScope := cacheScopeForProvider(providerName)
 
 	searchSource := "serper"
 	result, cached, err := serper.SearchWithCache(cacheScope, query, func(q string) (string, error) {
-		output, source, err := searchWithProvider(out, q, providerName, model)
+		output, source, err := searchWithProvider(ctx, out, q, providerName, model)
 		searchSource = source
 		return output, err
 	})
 	return result, cached, searchSource, err
 }
 
-func searchWithProvider(out common.Output, query, providerName, model string) (string, string, error) {
+func searchWithProvider(ctx context.Context, out common.Output, query, providerName, model string) (string, string, error) {
 	switch providerName {
 	case "gemini":
-		result, err := websearch.Search(providerName, query, model)
+		result, err := websearch.SearchWithContext(ctx, providerName, query, model)
 		if err == nil {
 			return result, "gemini", nil
 		}
 		out.Yellow.Printf("⚠️  Gemini native web search failed, falling back to Serper: %v\n", err)
 	case "claude":
-		result, err := websearch.Search(providerName, query, model)
+		result, err := websearch.SearchWithContext(ctx, providerName, query, model)
 		if err == nil {
 			return result, "claude", nil
 		}
 		out.Yellow.Printf("⚠️  Claude native web search failed, falling back to Serper: %v\n", err)
 	case "openai":
-		result, err := websearch.Search(providerName, query, model)
+		result, err := websearch.SearchWithContext(ctx, providerName, query, model)
 		if err == nil {
 			return result, "openai", nil
 		}

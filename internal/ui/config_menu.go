@@ -12,20 +12,30 @@ import (
 type ConfigMenu struct {
 	Config     *config.Config
 	Categories []config.ConfigCategory
+	Runtime    *Runtime
 }
 
 // NewConfigMenu は新しいConfigMenuを作成
 func NewConfigMenu(cfg *config.Config, categories []config.ConfigCategory) *ConfigMenu {
+	return NewConfigMenuWithRuntime(cfg, categories, DefaultRuntime())
+}
+
+// NewConfigMenuWithRuntime は UI runtime を指定して新しい ConfigMenu を作成する。
+func NewConfigMenuWithRuntime(cfg *config.Config, categories []config.ConfigCategory, runtime *Runtime) *ConfigMenu {
 	return &ConfigMenu{
 		Config:     cfg,
 		Categories: categories,
+		Runtime:    runtimeOrDefault(runtime),
 	}
 }
 
 // Run はメインメニューを表示し、選択されたカテゴリを返す
 func (m *ConfigMenu) Run() (*config.ConfigCategory, error) {
-	StopGlobalSpinner()
-	fmt.Print("\033[?25h") // カーソル表示
+	runtime := runtimeOrDefault(m.Runtime)
+	runtime.StopSpinner()
+	runtime.ResetTerminalState()
+	promptIO := runtime.PromptIO()
+	out := promptIO.Out
 
 	// ページング（10カテゴリ/ページ）
 	pageSize := 10
@@ -46,7 +56,7 @@ func (m *ConfigMenu) Run() (*config.ConfigCategory, error) {
 		if totalPages > 1 {
 			pageInfo = fmt.Sprintf(" (%d/%d)", currentPage+1, totalPages)
 		}
-		fmt.Printf("\n%s── Configuration%s ──────────────────────%s\n\n", colorCyan, pageInfo, colorReset)
+		_, _ = fmt.Fprintf(out, "\n%s── Configuration%s ──────────────────────%s\n\n", colorCyan, pageInfo, colorReset)
 
 		// カテゴリ一覧
 		for i, cat := range pageCategories {
@@ -54,23 +64,23 @@ func (m *ConfigMenu) Run() (*config.ConfigCategory, error) {
 			if num == 10 {
 				num = 0
 			}
-			fmt.Printf("  [%d] %s %s\n", num, cat.Icon, cat.DisplayName)
+			_, _ = fmt.Fprintf(out, "  [%d] %s %s\n", num, cat.Icon, cat.DisplayName)
 		}
 
 		// ナビゲーション
-		fmt.Println()
+		_, _ = fmt.Fprintln(out)
 		if totalPages > 1 {
 			if currentPage < totalPages-1 {
-				fmt.Println("  [n] Next page")
+				_, _ = fmt.Fprintln(out, "  [n] Next page")
 			}
 			if currentPage > 0 {
-				fmt.Println("  [p] Previous page")
+				_, _ = fmt.Fprintln(out, "  [p] Previous page")
 			}
 		}
-		fmt.Println("  [q] Cancel")
-		fmt.Printf("\n%sSelect category:%s ", colorCyan, colorReset)
+		_, _ = fmt.Fprintln(out, "  [q] Cancel")
+		_, _ = fmt.Fprintf(out, "\n%sSelect category:%s ", colorCyan, colorReset)
 
-		input := readLine()
+		input := readLineWithIO(&promptIO)
 		input = strings.TrimSpace(strings.ToLower(input))
 
 		switch input {
@@ -106,11 +116,14 @@ func (m *ConfigMenu) Run() (*config.ConfigCategory, error) {
 
 // ShowFieldList はカテゴリ内のフィールドリストを表示
 func (m *ConfigMenu) ShowFieldList(cat *config.ConfigCategory) (*config.ConfigField, error) {
-	StopGlobalSpinner()
-	fmt.Print("\033[?25h")
+	runtime := runtimeOrDefault(m.Runtime)
+	runtime.StopSpinner()
+	runtime.ResetTerminalState()
+	promptIO := runtime.PromptIO()
+	out := promptIO.Out
 
 	for {
-		fmt.Printf("\n%s── %s %s ───────────────────────────────%s\n\n",
+		_, _ = fmt.Fprintf(out, "\n%s── %s %s ───────────────────────────────%s\n\n",
 			colorCyan, cat.Icon, cat.DisplayName, colorReset)
 
 		for i, field := range cat.Fields {
@@ -123,14 +136,14 @@ func (m *ConfigMenu) ShowFieldList(cat *config.ConfigCategory) (*config.ConfigFi
 			currentVal := formatValue(field.Current)
 			displayName := field.DisplayName
 
-			fmt.Printf("  [%d] %-20s = %s\n", num, displayName, truncateString(currentVal, 15))
+			_, _ = fmt.Fprintf(out, "  [%d] %-20s = %s\n", num, displayName, truncateString(currentVal, 15))
 		}
 
-		fmt.Println()
-		fmt.Println("  [b] Back")
-		fmt.Printf("\n%sSelect field:%s ", colorCyan, colorReset)
+		_, _ = fmt.Fprintln(out)
+		_, _ = fmt.Fprintln(out, "  [b] Back")
+		_, _ = fmt.Fprintf(out, "\n%sSelect field:%s ", colorCyan, colorReset)
 
-		input := readLine()
+		input := readLineWithIO(&promptIO)
 		input = strings.TrimSpace(strings.ToLower(input))
 
 		switch input {
@@ -155,27 +168,30 @@ func (m *ConfigMenu) ShowFieldList(cat *config.ConfigCategory) (*config.ConfigFi
 
 // EditField はフィールドを編集する
 func (m *ConfigMenu) EditField(field *config.ConfigField) (interface{}, bool, error) {
-	StopGlobalSpinner()
-	fmt.Print("\033[?25h")
+	runtime := runtimeOrDefault(m.Runtime)
+	runtime.StopSpinner()
+	runtime.ResetTerminalState()
+	promptIO := runtime.PromptIO()
+	out := promptIO.Out
 
-	fmt.Printf("\n%s%s%s\n", colorCyan, field.Description, colorReset)
-	fmt.Printf("Path: %s\n", field.Path)
-	fmt.Printf("Type: %s\n", field.FieldType.String())
-	fmt.Printf("Current: %v\n", formatValue(field.Current))
+	_, _ = fmt.Fprintf(out, "\n%s%s%s\n", colorCyan, field.Description, colorReset)
+	_, _ = fmt.Fprintf(out, "Path: %s\n", field.Path)
+	_, _ = fmt.Fprintf(out, "Type: %s\n", field.FieldType.String())
+	_, _ = fmt.Fprintf(out, "Current: %v\n", formatValue(field.Current))
 	if field.Default != nil {
-		fmt.Printf("Default: %v\n", formatValue(field.Default))
+		_, _ = fmt.Fprintf(out, "Default: %v\n", formatValue(field.Default))
 	}
-	fmt.Println()
+	_, _ = fmt.Fprintln(out)
 
 	switch field.FieldType {
 	case config.FieldTypeBool:
-		return m.editBool(field)
+		return m.editBool(promptIO, field)
 	case config.FieldTypeInt:
-		return m.editInt(field)
+		return m.editInt(promptIO, field)
 	case config.FieldTypeString:
-		return m.editString(field)
+		return m.editString(promptIO, field)
 	case config.FieldTypeSelect:
-		return m.editSelect(field)
+		return m.editSelect(promptIO, field)
 	case config.FieldTypeStringSlice:
 		return m.editStringSlice(field)
 	case config.FieldTypeStringMap:
@@ -183,18 +199,19 @@ func (m *ConfigMenu) EditField(field *config.ConfigField) (interface{}, bool, er
 	case config.FieldTypeStructMap:
 		return m.editStructMap(field)
 	default:
-		fmt.Printf("%sUnsupported field type%s\n", colorDim, colorReset)
+		_, _ = fmt.Fprintf(out, "%sUnsupported field type%s\n", colorDim, colorReset)
 		return nil, false, nil
 	}
 }
 
-func (m *ConfigMenu) editBool(field *config.ConfigField) (interface{}, bool, error) {
+func (m *ConfigMenu) editBool(promptIO PromptIO, field *config.ConfigField) (interface{}, bool, error) {
 	current, _ := field.Current.(bool)
+	out := promptIO.Out
 
-	fmt.Printf("Current value: %v\n", current)
-	fmt.Printf("Enter new value (y/n, or Enter to keep): ")
+	_, _ = fmt.Fprintf(out, "Current value: %v\n", current)
+	_, _ = fmt.Fprint(out, "Enter new value (y/n, or Enter to keep): ")
 
-	input := strings.TrimSpace(strings.ToLower(readLine()))
+	input := strings.TrimSpace(strings.ToLower(readLineWithIO(&promptIO)))
 
 	switch input {
 	case "":
@@ -204,13 +221,14 @@ func (m *ConfigMenu) editBool(field *config.ConfigField) (interface{}, bool, err
 	case "n", "no", "false", "0", "off":
 		return false, true, nil
 	default:
-		fmt.Printf("%sInvalid input, keeping current value%s\n", colorDim, colorReset)
+		_, _ = fmt.Fprintf(out, "%sInvalid input, keeping current value%s\n", colorDim, colorReset)
 		return current, false, nil
 	}
 }
 
-func (m *ConfigMenu) editInt(field *config.ConfigField) (interface{}, bool, error) {
+func (m *ConfigMenu) editInt(promptIO PromptIO, field *config.ConfigField) (interface{}, bool, error) {
 	current := 0
+	out := promptIO.Out
 	switch v := field.Current.(type) {
 	case int:
 		current = v
@@ -220,30 +238,31 @@ func (m *ConfigMenu) editInt(field *config.ConfigField) (interface{}, bool, erro
 		current = int(v)
 	}
 
-	fmt.Printf("Current value: %d\n", current)
-	fmt.Printf("Enter new value (or Enter to keep): ")
+	_, _ = fmt.Fprintf(out, "Current value: %d\n", current)
+	_, _ = fmt.Fprint(out, "Enter new value (or Enter to keep): ")
 
-	input := strings.TrimSpace(readLine())
+	input := strings.TrimSpace(readLineWithIO(&promptIO))
 	if input == "" {
 		return current, false, nil
 	}
 
 	newVal, err := strconv.Atoi(input)
 	if err != nil {
-		fmt.Printf("%sInvalid number, keeping current value%s\n", colorDim, colorReset)
+		_, _ = fmt.Fprintf(out, "%sInvalid number, keeping current value%s\n", colorDim, colorReset)
 		return current, false, nil
 	}
 
 	return newVal, true, nil
 }
 
-func (m *ConfigMenu) editString(field *config.ConfigField) (interface{}, bool, error) {
+func (m *ConfigMenu) editString(promptIO PromptIO, field *config.ConfigField) (interface{}, bool, error) {
 	current, _ := field.Current.(string)
+	out := promptIO.Out
 
-	fmt.Printf("Current value: %s\n", current)
-	fmt.Printf("Enter new value (or Enter to keep): ")
+	_, _ = fmt.Fprintf(out, "Current value: %s\n", current)
+	_, _ = fmt.Fprint(out, "Enter new value (or Enter to keep): ")
 
-	input := readLine()
+	input := readLineWithIO(&promptIO)
 	if strings.TrimSpace(input) == "" {
 		return current, false, nil
 	}
@@ -251,30 +270,31 @@ func (m *ConfigMenu) editString(field *config.ConfigField) (interface{}, bool, e
 	return strings.TrimSpace(input), true, nil
 }
 
-func (m *ConfigMenu) editSelect(field *config.ConfigField) (interface{}, bool, error) {
+func (m *ConfigMenu) editSelect(promptIO PromptIO, field *config.ConfigField) (interface{}, bool, error) {
 	current, _ := field.Current.(string)
+	out := promptIO.Out
 
-	fmt.Printf("Current value: %s\n", current)
-	fmt.Println("Available options:")
+	_, _ = fmt.Fprintf(out, "Current value: %s\n", current)
+	_, _ = fmt.Fprintln(out, "Available options:")
 
 	for i, opt := range field.Options {
 		marker := "  "
 		if opt == current {
 			marker = "▶ "
 		}
-		fmt.Printf("  %s%d. %s\n", marker, i+1, opt)
+		_, _ = fmt.Fprintf(out, "  %s%d. %s\n", marker, i+1, opt)
 	}
 
-	fmt.Printf("\nEnter number (1-%d) or Enter to keep: ", len(field.Options))
+	_, _ = fmt.Fprintf(out, "\nEnter number (1-%d) or Enter to keep: ", len(field.Options))
 
-	input := strings.TrimSpace(readLine())
+	input := strings.TrimSpace(readLineWithIO(&promptIO))
 	if input == "" {
 		return current, false, nil
 	}
 
 	num, err := strconv.Atoi(input)
 	if err != nil || num < 1 || num > len(field.Options) {
-		fmt.Printf("%sInvalid selection, keeping current value%s\n", colorDim, colorReset)
+		_, _ = fmt.Fprintf(out, "%sInvalid selection, keeping current value%s\n", colorDim, colorReset)
 		return current, false, nil
 	}
 
@@ -287,7 +307,7 @@ func (m *ConfigMenu) editStringSlice(field *config.ConfigField) (interface{}, bo
 		current = slice
 	}
 
-	editor := NewStringSliceEditor(field.Path, current)
+	editor := NewStringSliceEditorWithRuntime(field.Path, current, m.Runtime)
 	result, changed, err := editor.Run()
 	if err != nil {
 		return nil, false, err
@@ -302,7 +322,7 @@ func (m *ConfigMenu) editStringMap(field *config.ConfigField) (interface{}, bool
 		current = mp
 	}
 
-	editor := NewStringMapEditor(field.Path, current)
+	editor := NewStringMapEditorWithRuntime(field.Path, current, m.Runtime)
 	result, changed, err := editor.Run()
 	if err != nil {
 		return nil, false, err
@@ -312,7 +332,7 @@ func (m *ConfigMenu) editStringMap(field *config.ConfigField) (interface{}, bool
 }
 
 func (m *ConfigMenu) editStructMap(field *config.ConfigField) (interface{}, bool, error) {
-	editor := NewStructMapEditor(field.Path, field.FieldType)
+	editor := NewStructMapEditorWithRuntime(field.Path, field.FieldType, m.Runtime)
 	changed, err := editor.Run(m.Config)
 	if err != nil {
 		return nil, false, err

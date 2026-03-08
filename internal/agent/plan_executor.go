@@ -30,7 +30,7 @@ func (a *Agent) runImplementationPhase(ctx context.Context, p *plan.Plan) error 
 			break
 		}
 
-		fmt.Printf("\n%s\n", ui.FormatStepProgress(nextID, len(p.Steps), step.Description, "running"))
+		_, _ = fmt.Fprintf(a.output(), "\n%s\n", ui.FormatStepProgress(nextID, len(p.Steps), step.Description, "running"))
 		if err := a.executeStepV2(ctx, p, step, nextID-1, 0); err != nil {
 			return err
 		}
@@ -39,7 +39,7 @@ func (a *Agent) runImplementationPhase(ctx context.Context, p *plan.Plan) error 
 		// ステップ完了フックを実行
 		if hooks := a.cfg().Hooks; len(hooks.OnStepComplete) > 0 {
 			if !a.runStepCompleteHooksWithRetry(ctx, nextID, step.Description, "completed") {
-				yellow.Printf("⚠️  Step %d hooks failed but proceeding to next step\n", nextID)
+				yellow.Fprintf(a.output(), "⚠️  Step %d hooks failed but proceeding to next step\n", nextID)
 			}
 		}
 
@@ -49,13 +49,13 @@ func (a *Agent) runImplementationPhase(ctx context.Context, p *plan.Plan) error 
 		}
 	}
 
-	green.Printf("\n✓ All %d steps completed!\n", len(p.Steps))
+	green.Fprintf(a.output(), "\n✓ All %d steps completed!\n", len(p.Steps))
 
 	// セッションを保存
 	if a.storage != nil && a.session != nil {
 		a.syncResponseIDToSession()
 		if err := a.storage.Save(a.session); err != nil {
-			yellow.Printf("Warning: Failed to save session: %v\n", err)
+			yellow.Fprintf(a.output(), "Warning: Failed to save session: %v\n", err)
 		}
 	}
 
@@ -70,8 +70,8 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 	maxRetries := config.PlanMaxRetries
 
 	if retryCount > 0 {
-		ui.StopGlobalSpinner()
-		yellow.Printf("🔄 Retry attempt %d/%d for step %d...\n", retryCount, maxRetries, step.ID)
+		a.ui().StopSpinner()
+		yellow.Fprintf(a.output(), "🔄 Retry attempt %d/%d for step %d...\n", retryCount, maxRetries, step.ID)
 	}
 
 	// ステップ実行を指示
@@ -110,7 +110,7 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 			a.CurrentModel,
 		)
 		if err != nil {
-			ui.StopGlobalSpinner()
+			a.ui().StopSpinner()
 			return fmt.Errorf("step %d failed: %w", step.ID, err)
 		}
 
@@ -153,7 +153,7 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 			// AIが質問している場合、自動続行を試みる
 			if isAIQuestionWithToolParser(response, a.parseToolCalls) && continueCount < maxContinues {
 				continueCount++
-				yellow.Printf("⚠️  AI asked a question, auto-continuing (%d/%d)...\n", continueCount, maxContinues)
+				yellow.Fprintf(a.output(), "⚠️  AI asked a question, auto-continuing (%d/%d)...\n", continueCount, maxContinues)
 
 				a.History = append(a.History, api.Message{
 					Role:    "user",
@@ -167,7 +167,7 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 			if containsCompletionDeclaration(response) && beforeDiffHash != "" {
 				afterDiffHash := getGitDiffHash()
 				if afterDiffHash != "" && afterDiffHash != beforeDiffHash {
-					green.Printf("✓ Step %d completed (already applied)\n", step.ID)
+					green.Fprintf(a.output(), "✓ Step %d completed (already applied)\n", step.ID)
 					return nil
 				}
 			}
@@ -178,7 +178,7 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 				if beforeDiffHash != "" && afterDiffHash != "" && beforeDiffHash == afterDiffHash {
 					if continueCount < maxContinues {
 						continueCount++
-						yellow.Printf("⚠️  Step %d: write tools executed but no file changes detected (%d/%d)\n",
+						yellow.Fprintf(a.output(), "⚠️  Step %d: write tools executed but no file changes detected (%d/%d)\n",
 							step.ID, continueCount, maxContinues)
 						a.History = append(a.History, api.Message{
 							Role: "user",
@@ -194,7 +194,7 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 			if !stepCompletionVerified {
 				if needsContinue, feedback := a.verifyCompletionWithDiagnostics(response); needsContinue {
 					stepCompletionVerified = true
-					yellow.Println("⚠️  Step completion verification: LSP errors found in modified files")
+					yellow.Fprintln(a.output(), "⚠️  Step completion verification: LSP errors found in modified files")
 					a.History = append(a.History, api.Message{
 						Role:    "user",
 						Content: feedback,
@@ -204,7 +204,7 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 			}
 
 			// ツール呼び出しなし = ステップ完了
-			green.Printf("✓ Step %d completed\n", step.ID)
+			green.Fprintf(a.output(), "✓ Step %d completed\n", step.ID)
 			return nil
 		}
 
@@ -216,8 +216,8 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 			if isSameToolCall(tc, lastToolCall) {
 				sameCallCount++
 				if sameCallCount >= threshold {
-					yellow.Printf("⚠️  Warning: Same tool call repeated %d times, stopping to prevent infinite loop\n", sameCallCount)
-					yellow.Printf("   Tool: %s\n", tc.Tool)
+					yellow.Fprintf(a.output(), "⚠️  Warning: Same tool call repeated %d times, stopping to prevent infinite loop\n", sameCallCount)
+					yellow.Fprintf(a.output(), "   Tool: %s\n", tc.Tool)
 					return true
 				}
 			} else {
@@ -230,7 +230,7 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 		// skipFn: deprecated planning tools を実行前に除外
 		skipFn := func(tc *tools.ToolCall) (bool, string) {
 			if tc.Tool == "create_plan" || tc.Tool == "update_plan" {
-				yellow.Printf("⚠️  Ignored deprecated planning tool call: %s\n", tc.Tool)
+				yellow.Fprintf(a.output(), "⚠️  Ignored deprecated planning tool call: %s\n", tc.Tool)
 				return true, fmt.Sprintf("[%s] Ignored: planning tools are deprecated. Continue with current step.", tc.Tool)
 			}
 			return false, ""
@@ -306,9 +306,9 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 
 			// 自動リトライが有効で、まだ上限に達していない場合
 			if autoRetryMax > 0 && retryCount < autoRetryMax {
-				ui.StopGlobalSpinner()
-				red.Printf("❌ Step %d Failed (auto-retry %d/%d)\n", step.ID, retryCount+1, autoRetryMax)
-				yellow.Printf("🔄 Retrying...\n")
+				a.ui().StopSpinner()
+				red.Fprintf(a.output(), "❌ Step %d Failed (auto-retry %d/%d)\n", step.ID, retryCount+1, autoRetryMax)
+				yellow.Fprintf(a.output(), "🔄 Retrying...\n")
 
 				// リトライ用プロンプトを追加
 				a.History = append(a.History, api.Message{
@@ -330,15 +330,15 @@ Do NOT skip this step. The issue must be resolved before proceeding.`, lastFaile
 
 			// 自動リトライが exhausted または無効 → Selector UI で確認
 			a.SetStatus(StateWaitingApproval, "Step failed - waiting for action", "ステップ失敗 - アクション待ち", "Choose action", "アクションを選択")
-			ui.StopGlobalSpinner()
+			a.ui().StopSpinner()
 
 			for {
-				action, comment := promptFailureActionWithSelector(step, lastFailedResult, lastFailReason, autoRetryMax)
+				action, comment := promptFailureActionWithSelector(a.ui().PromptIO(), step, lastFailedResult, lastFailReason, autoRetryMax)
 
 				switch action {
 				case plan.FailureActionRetry:
 					if retryCount >= maxRetries {
-						red.Printf("⚠️  Max retries (%d) reached for step %d\n", maxRetries, step.ID)
+						red.Fprintf(a.output(), "⚠️  Max retries (%d) reached for step %d\n", maxRetries, step.ID)
 						continue
 					}
 					// 手動リトライ: リトライカウンターをリセットして新しいシーケンスを開始
@@ -359,7 +359,7 @@ Do NOT skip this step. The issue must be resolved before proceeding.`, lastFaile
 					return a.executeStepV2(ctx, p, step, idx, 0) // リセット: retryCount=0
 				case plan.FailureActionComment:
 					if retryCount >= maxRetries {
-						red.Printf("⚠️  Max retries (%d) reached for step %d\n", maxRetries, step.ID)
+						red.Fprintf(a.output(), "⚠️  Max retries (%d) reached for step %d\n", maxRetries, step.ID)
 						continue
 					}
 					// ユーザーの指示付きリトライ: リトライカウンターをリセット
@@ -376,17 +376,17 @@ Please follow these instructions to fix the issue and retry the step.`, comment,
 					})
 					return a.executeStepV2(ctx, p, step, idx, 0) // リセット: retryCount=0
 				case plan.FailureActionSkip:
-					yellow.Printf("⏭️  Step %d skipped by user\n", step.ID)
+					yellow.Fprintf(a.output(), "⏭️  Step %d skipped by user\n", step.ID)
 					return nil
 				case plan.FailureActionAbort:
-					red.Printf("🛑 Step %d aborted by user\n", step.ID)
+					red.Fprintf(a.output(), "🛑 Step %d aborted by user\n", step.ID)
 					return fmt.Errorf("step %d aborted by user: %s", step.ID, lastFailReason)
 				}
 			}
 		}
 	}
 
-	green.Printf("✓ Step %d completed\n", step.ID)
+	green.Fprintf(a.output(), "✓ Step %d completed\n", step.ID)
 	return nil
 }
 
@@ -449,7 +449,7 @@ func getGitDiffHash() string {
 
 // confirmPlan は計画の承認確認
 func (a *Agent) confirmPlan() (approved bool, feedback string) {
-	result := tools.ConfirmInteractive("Approve this plan?")
+	result := tools.ConfirmInteractiveWithIO(a.ui().PromptIO(), "Approve this plan?")
 
 	switch result.Action {
 	case "yes":

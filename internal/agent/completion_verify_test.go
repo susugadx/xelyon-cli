@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 func TestContainsCompletionDeclaration(t *testing.T) {
@@ -429,6 +431,55 @@ func TestRunCompletionHooksWithRetry_MaxRetryZeroFallback(t *testing.T) {
 	// MaxRetry=3 (fallback): 2回の AI 呼び出し（attempt 1, 2）+ 最終回は AI を呼ばない
 	if len(a.History) < 4 {
 		t.Errorf("expected at least 4 history entries from retries, got %d", len(a.History))
+	}
+}
+
+func TestRunCompletionHooksWithRetry_UsesRuntimeOutput(t *testing.T) {
+	runtimeA := NewAgentRuntime()
+	runtimeB := NewAgentRuntime()
+	var outA bytes.Buffer
+	var outB bytes.Buffer
+	runtimeA.UI = ui.NewRuntime(strings.NewReader(""), &outA, &outA)
+	runtimeB.UI = ui.NewRuntime(strings.NewReader(""), &outB, &outB)
+	runtimeA.Config.Hooks.OnCompletion = []string{"exit 1"}
+	runtimeA.Config.Hooks.Timeout = 1
+	runtimeA.Config.Hooks.MaxRetry = 2
+	runtimeB.Config.Hooks.OnCompletion = []string{"exit 1"}
+	runtimeB.Config.Hooks.Timeout = 1
+	runtimeB.Config.Hooks.MaxRetry = 3
+
+	provider := &mockProvider{name: "test"}
+	agentA := &Agent{
+		Runtime:         runtimeA,
+		CurrentProvider: provider,
+		CurrentModel:    "test-model-a",
+		changeStack:     []tools.FileChange{{FilePath: "/src/a.go"}},
+	}
+	agentB := &Agent{
+		Runtime:         runtimeB,
+		CurrentProvider: provider,
+		CurrentModel:    "test-model-b",
+		changeStack:     []tools.FileChange{{FilePath: "/src/b.go"}},
+	}
+
+	if got := agentA.runCompletionHooksWithRetry(context.Background()); got {
+		t.Fatal("agent A should exhaust retries and return false")
+	}
+	if got := agentB.runCompletionHooksWithRetry(context.Background()); got {
+		t.Fatal("agent B should exhaust retries and return false")
+	}
+
+	if !strings.Contains(outA.String(), "Completion hook failed (1/2)") {
+		t.Fatalf("agent A output should contain runtime-specific retry message, got %q", outA.String())
+	}
+	if strings.Contains(outA.String(), "(1/3)") {
+		t.Fatalf("agent A output should not contain agent B retry count, got %q", outA.String())
+	}
+	if !strings.Contains(outB.String(), "Completion hook failed (1/3)") {
+		t.Fatalf("agent B output should contain runtime-specific retry message, got %q", outB.String())
+	}
+	if strings.Contains(outB.String(), "(1/2)") {
+		t.Fatalf("agent B output should not contain agent A retry count, got %q", outB.String())
 	}
 }
 

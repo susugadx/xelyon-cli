@@ -2,18 +2,24 @@ package agent
 
 import (
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
 	promptplan "github.com/susugadx/xelyon-cli/internal/prompt/plan"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 	"github.com/susugadx/xelyon-cli/internal/version"
 )
 
-// parseImageInput は入力から画像パスを抽出
+// parseImageInput は入力から画像パスを抽出する。
 // 形式: "image:/path/to/file.png こんにちは" または "こんにちは image:/path/to/file.png"
 func parseImageInput(input string) (text string, image *api.ImageData) {
+	return parseImageInputWithWriter(ui.DefaultRuntime().Output(), input)
+}
+
+func parseImageInputWithWriter(out io.Writer, input string) (text string, image *api.ImageData) {
 	// image:プレフィックスを探す
 	imagePrefix := "image:"
 
@@ -44,11 +50,11 @@ func parseImageInput(input string) (text string, image *api.ImageData) {
 	// 画像読み込み
 	img, err := api.LoadImage(imagePath)
 	if err != nil {
-		red.Printf("Failed to load image: %v\n", err)
+		red.Fprintf(out, "Failed to load image: %v\n", err)
 		return input, nil
 	}
 
-	green.Printf("🖼️  Image loaded: %s (%s)\n", img.Path, api.FormatImageSize(img.Size))
+	green.Fprintf(out, "🖼️  Image loaded: %s (%s)\n", img.Path, api.FormatImageSize(img.Size))
 	return text, img
 }
 
@@ -65,6 +71,10 @@ const (
 
 // printHeader はセッション開始時のヘッダーを表示
 func printHeader(model string, provider api.Provider) {
+	printHeaderToWriter(ui.DefaultRuntime().Output(), model, provider)
+}
+
+func printHeaderToWriter(out io.Writer, model string, provider api.Provider) {
 	// ASCII logo with info on the right side
 	// Logo lines paired with info text
 	type lineInfo struct {
@@ -83,19 +93,18 @@ func printHeader(model string, provider api.Provider) {
 	}
 
 	// Print logo with info
-	fmt.Println()
+	_, _ = fmt.Fprintln(out)
 	for _, l := range lines {
 		if l.info == "" {
-			fmt.Printf("  %s%s%s\n", l.color, l.logo, colorReset)
+			_, _ = fmt.Fprintf(out, "  %s%s%s\n", l.color, l.logo, colorReset)
 		} else {
-			fmt.Printf("  %s%s%s   %s\n", l.color, l.logo, colorReset, l.info)
+			_, _ = fmt.Fprintf(out, "  %s%s%s   %s\n", l.color, l.logo, colorReset, l.info)
 		}
 	}
-	fmt.Println()
+	_, _ = fmt.Fprintln(out)
 }
 
-// printModeInfo はモード情報を表示
-func printModeInfo(autoApprove, dryRun bool) {
+func printModeInfoToWriter(out io.Writer, autoApprove, dryRun bool) {
 	var modes []string
 	if autoApprove {
 		modes = append(modes, "Auto-approve")
@@ -106,11 +115,11 @@ func printModeInfo(autoApprove, dryRun bool) {
 
 	// 特殊モードのときだけ表示
 	if len(modes) > 0 {
-		yellow.Printf("  Mode: %s\n\n", strings.Join(modes, ", "))
+		yellow.Fprintf(out, "  Mode: %s\n\n", strings.Join(modes, ", "))
 	}
 
-	cyan.Println("  ─────────────────────────────────────────")
-	yellow.Println("  Type /help for commands, /exit to quit")
+	cyan.Fprintln(out, "  ─────────────────────────────────────────")
+	yellow.Fprintln(out, "  Type /help for commands, /exit to quit")
 }
 
 // modelDisplayName はモデル名を表示用にフォーマット
@@ -169,7 +178,7 @@ func applyProjectConfig(agent *Agent, pc *config.ProjectConfig) {
 	}
 
 	// 3. UI 表示
-	green.Println("📋 xelyon.yaml loaded")
+	green.Fprintln(agent.output(), "📋 xelyon.yaml loaded")
 }
 
 // rebuildSystemPromptForCurrentProvider は現在の provider/model に合わせて
