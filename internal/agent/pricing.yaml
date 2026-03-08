@@ -33,7 +33,7 @@ openai:
         threshold: 272000
         pricing:
           inputcostperm: 60.00
-          outputcostperm: 180.00
+          outputcostperm: 270.00
           cachedinputcostperm: 6.00
           cachecreationcostperm: 60.00
     - contains: ["5.4"]
@@ -46,7 +46,7 @@ openai:
         threshold: 272000
         pricing:
           inputcostperm: 5.00
-          outputcostperm: 15.00
+          outputcostperm: 22.50
           cachedinputcostperm: 0.50
           cachecreationcostperm: 5.00
     - contains: ["5.1"]
