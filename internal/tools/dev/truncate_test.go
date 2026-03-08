@@ -173,6 +173,119 @@ func TestLastNLines(t *testing.T) {
 	}
 }
 
+// --- deduplicateLines tests ---
+
+func TestDeduplicateLines_NoChange(t *testing.T) {
+	input := "line A\nline B\nline C"
+	got := deduplicateLines(input)
+	if got != input {
+		t.Errorf("no duplicates should return unchanged:\ngot:  %q\nwant: %q", got, input)
+	}
+}
+
+func TestDeduplicateLines_TwoSameLines(t *testing.T) {
+	input := "same_prefix_aaa\nsame_prefix_bbb\nother"
+	got := deduplicateLines(input)
+	if got != input {
+		t.Errorf("2 lines should not compress:\ngot:  %q\nwant: %q", got, input)
+	}
+}
+
+func TestDeduplicateLines_ThreeConsecutive(t *testing.T) {
+	input := "same_prefix_001\nsame_prefix_002\nsame_prefix_003"
+	got := deduplicateLines(input)
+	want := "same_prefix_001\nsame_prefix_002\n[... 0 more similar lines]\nsame_prefix_003"
+	if got != want {
+		t.Errorf("3 lines: first 2 + marker + last 1:\ngot:  %q\nwant: %q", got, want)
+	}
+}
+
+func TestDeduplicateLines_FiveConsecutive(t *testing.T) {
+	input := "same_prefix_001\nsame_prefix_002\nsame_prefix_003\nsame_prefix_004\nsame_prefix_005"
+	got := deduplicateLines(input)
+	want := "same_prefix_001\nsame_prefix_002\n[... 2 more similar lines]\nsame_prefix_005"
+	if got != want {
+		t.Errorf("5 lines should compress middle 2:\ngot:  %q\nwant: %q", got, want)
+	}
+}
+
+func TestDeduplicateLines_MultipleGroups(t *testing.T) {
+	input := "aaa_prefix_1\naaa_prefix_2\naaa_prefix_3\naaa_prefix_4\nbbb_prefix_1\nbbb_prefix_2\nbbb_prefix_3"
+	got := deduplicateLines(input)
+	want := "aaa_prefix_1\naaa_prefix_2\n[... 1 more similar lines]\naaa_prefix_4\nbbb_prefix_1\nbbb_prefix_2\n[... 0 more similar lines]\nbbb_prefix_3"
+	if got != want {
+		t.Errorf("multiple groups:\ngot:  %q\nwant: %q", got, want)
+	}
+}
+
+func TestDeduplicateLines_ShortLines(t *testing.T) {
+	// 10文字未満の行は全体がプレフィックス
+	input := "short\nshort\nshort\nshort"
+	got := deduplicateLines(input)
+	want := "short\nshort\n[... 1 more similar lines]\nshort"
+	if got != want {
+		t.Errorf("short lines:\ngot:  %q\nwant: %q", got, want)
+	}
+}
+
+func TestDeduplicateLines_EmptyLines(t *testing.T) {
+	// 空行連続はそのまま残す（圧縮しない）
+	input := "before\n\n\n\nafter"
+	got := deduplicateLines(input)
+	if got != input {
+		t.Errorf("empty lines should not be compressed:\ngot:  %q\nwant: %q", got, input)
+	}
+}
+
+func TestDeduplicateLines_Empty(t *testing.T) {
+	if got := deduplicateLines(""); got != "" {
+		t.Errorf("empty input should return empty, got %q", got)
+	}
+}
+
+func TestDeduplicateLines_SingleLine(t *testing.T) {
+	input := "just one line"
+	if got := deduplicateLines(input); got != input {
+		t.Errorf("single line should return unchanged, got %q", got)
+	}
+}
+
+func TestLinePrefix(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"hello", "hello"},
+		{"", ""},
+		{"abcdefghij", "abcdefghij"},      // exactly 10
+		{"abcdefghijklmno", "abcdefghij"}, // 15 chars → first 10
+		{"short", "short"},
+	}
+	for _, tt := range tests {
+		got := linePrefix(tt.input)
+		if got != tt.want {
+			t.Errorf("linePrefix(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestTruncateWithFile_DeduplicationApplied(t *testing.T) {
+	// OutputTruncateLen 以下でも deduplication が適用されること
+	var sb strings.Builder
+	for i := 0; i < 10; i++ {
+		fmt.Fprintf(&sb, "same_prefix_%03d\n", i)
+	}
+	input := sb.String()
+	result := TruncateWithFile(input)
+
+	if !strings.Contains(result, "[... ") {
+		t.Error("deduplication should be applied even under OutputTruncateLen")
+	}
+	if strings.Contains(result, "same_prefix_005") {
+		t.Error("middle lines should be compressed away")
+	}
+}
+
 func TestCleanupArtifacts(t *testing.T) {
 	tmpDir := t.TempDir()
 	origDir, _ := os.Getwd()

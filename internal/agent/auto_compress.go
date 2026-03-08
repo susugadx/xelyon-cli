@@ -193,11 +193,7 @@ func detectMilestonePattern(history []api.Message) bool {
 			}
 		}
 	}
-	if searchCount >= 3 {
-		return true
-	}
-
-	return false
+	return searchCount >= 3
 }
 
 // handleTokenLimitError はトークン上限エラー時の提案を表示

@@ -746,7 +746,7 @@ func TestToolCache_Save_EmptyCacheRemovesFile(t *testing.T) {
 	cacheDir := filepath.Join(tmpDir, ".xelyon", "cache")
 	os.MkdirAll(cacheDir, 0755)
 	cacheFile := filepath.Join(tmpDir, ".xelyon", "cache", "tool_cache.json")
-	os.WriteFile(cacheFile, []byte(`{"files":{},"dirs":{}}`), 0600)
+	_ = os.WriteFile(cacheFile, []byte(`{"files":{},"dirs":{}}`), 0600)
 
 	// 空キャッシュで Save → ファイル削除
 	cache := NewToolCache()
@@ -771,7 +771,7 @@ func TestToolCache_Load_CorruptedFile(t *testing.T) {
 	cacheDir := filepath.Join(tmpDir, ".xelyon", "cache")
 	os.MkdirAll(cacheDir, 0755)
 	cacheFile := filepath.Join(tmpDir, ".xelyon", "cache", "tool_cache.json")
-	os.WriteFile(cacheFile, []byte("not json{{{"), 0600)
+	_ = os.WriteFile(cacheFile, []byte("not json{{{"), 0600)
 
 	cache := NewToolCache()
 	err := cache.Load()
@@ -813,7 +813,7 @@ func TestToolCache_Save_SizeLimit(t *testing.T) {
 	bigContent := strings.Repeat("x", 500*1024) // 500KB per entry
 	for i := 0; i < 25; i++ {
 		f := filepath.Join(tmpDir, fmt.Sprintf("big_%d.txt", i))
-		os.WriteFile(f, []byte(bigContent), 0644)
+		_ = os.WriteFile(f, []byte(bigContent), 0644)
 		cache.SetFile(f, bigContent)
 	}
 
