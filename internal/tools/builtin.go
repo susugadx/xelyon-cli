@@ -19,7 +19,7 @@ type SimpleTool struct {
 
 func (t *SimpleTool) Name() string { return t.name }
 
-func (t *SimpleTool) Run(args map[string]string) (string, *FileChange, error) {
+func (t *SimpleTool) Run(_ ExecutionContext, args map[string]string) (string, *FileChange, error) {
 	return t.execute(args), nil, nil
 }
 
@@ -33,7 +33,7 @@ type FileModifyingTool struct {
 
 func (t *FileModifyingTool) Name() string { return t.name }
 
-func (t *FileModifyingTool) Run(args map[string]string) (string, *FileChange, error) {
+func (t *FileModifyingTool) Run(_ ExecutionContext, args map[string]string) (string, *FileChange, error) {
 	result, err := t.execute(args)
 	if err != nil {
 		return result, nil, err

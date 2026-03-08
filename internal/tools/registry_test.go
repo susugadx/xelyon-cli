@@ -15,7 +15,7 @@ func (m *MockTool) Description() string { return "Mock description" }
 func (m *MockTool) Parameters() map[string]interface{} {
 	return map[string]interface{}{"type": "object"}
 }
-func (m *MockTool) Run(args map[string]string) (string, *FileChange, error) {
+func (m *MockTool) Run(_ ExecutionContext, args map[string]string) (string, *FileChange, error) {
 	return "Success", nil, nil
 }
 

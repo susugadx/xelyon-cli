@@ -95,24 +95,24 @@ func ConfirmApproved(message string) bool {
 // message: 確認メッセージ
 // - auto-approve の場合は yes を返す
 // - それ以外は Confirm(message) を呼び、y/n/c の結果を返す
-func ConfirmWithAutoApproveDecision(toolName, message string) ConfirmDecision {
+func ConfirmWithAutoApproveDecision(out Output, toolName, message string) ConfirmDecision {
 	// --auto-approve が有効 かつ ツールが自動承認可能な場合
 	if IsAutoApprovable(toolName, GlobalAutoApprove) {
 		safety := GetToolSafety(toolName)
-		Green.Printf("Auto-approved (%s): %s\n", GetSafetyDescription(safety), toolName)
+		out.Green.Printf("Auto-approved (%s): %s\n", GetSafetyDescription(safety), toolName)
 		return ConfirmDecision{Action: ConfirmYes}
 	}
 
 	// SafetyHigh ツールの自動承認（設定で有効な場合）
 	cfg := config.GetGlobalConfig()
 	if cfg.ToolConfirm.AutoApproveSafe && IsSafeToolAutoApprovable(toolName) {
-		Green.Printf("Auto-approved (Safe read-only): %s\n", toolName)
+		out.Green.Printf("Auto-approved (Safe read-only): %s\n", toolName)
 		return ConfirmDecision{Action: ConfirmYes}
 	}
 
 	// SafetyMedium ツールの自動承認（設定で有効な場合）
 	if cfg.ToolConfirm.AutoApproveMedium && IsMediumToolAutoApprovable(toolName) {
-		Green.Printf("Auto-approved (Medium write): %s\n", toolName)
+		out.Green.Printf("Auto-approved (Medium write): %s\n", toolName)
 		return ConfirmDecision{Action: ConfirmYes}
 	}
 

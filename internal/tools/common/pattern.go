@@ -42,26 +42,36 @@ func FindPatternInLines(lines []string, pattern string) PatternMatchResult {
 
 // DisplayPatternNotFound はパターンが見つからない場合のエラー表示
 func DisplayPatternNotFound(pattern string, lines []string, maxPreview int) {
-	if IsQuietMode() {
+	DisplayPatternNotFoundWithOutput(DefaultOutput(), pattern, lines, maxPreview)
+}
+
+// DisplayPatternNotFoundWithOutput は出力先を指定して未検出メッセージを表示する。
+func DisplayPatternNotFoundWithOutput(out Output, pattern string, lines []string, maxPreview int) {
+	if out.SuppressStdout() {
 		return
 	}
-	Yellow.Printf("Pattern not found: %s\n\n", pattern)
-	Yellow.Println("File preview (first 50 lines):")
+	out.Yellow.Printf("Pattern not found: %s\n\n", pattern)
+	out.Yellow.Println("File preview (first 50 lines):")
 	for i := 0; i < Min(len(lines), maxPreview); i++ {
-		Printf("%4d: %s\n", i+1, lines[i])
+		out.Printf("%4d: %s\n", i+1, lines[i])
 	}
 	if len(lines) > maxPreview {
-		Yellow.Printf("... (%d more lines)\n", len(lines)-maxPreview)
+		out.Yellow.Printf("... (%d more lines)\n", len(lines)-maxPreview)
 	}
 }
 
 // DisplayMultipleMatches は複数マッチ時のエラー表示
 func DisplayMultipleMatches(matchIndices []int, lines []string) {
-	if IsQuietMode() {
+	DisplayMultipleMatchesWithOutput(DefaultOutput(), matchIndices, lines)
+}
+
+// DisplayMultipleMatchesWithOutput は出力先を指定して複数マッチを表示する。
+func DisplayMultipleMatchesWithOutput(out Output, matchIndices []int, lines []string) {
+	if out.SuppressStdout() {
 		return
 	}
-	Red.Printf("Error: Pattern matches %d locations (must be unique)\n", len(matchIndices))
-	Yellow.Println("All match locations:")
+	out.Red.Printf("Error: Pattern matches %d locations (must be unique)\n", len(matchIndices))
+	out.Yellow.Println("All match locations:")
 	for _, idx := range matchIndices {
 		start := Max(0, idx-2)
 		end := Min(len(lines), idx+3)
@@ -70,19 +80,24 @@ func DisplayMultipleMatches(matchIndices []int, lines []string) {
 			if i == idx {
 				prefix = "> "
 			}
-			Printf("%s%4d: %s\n", prefix, i+1, lines[i])
+			out.Printf("%s%4d: %s\n", prefix, i+1, lines[i])
 		}
-		Println()
+		out.Println()
 	}
 }
 
 // DisplayContextAround はマッチ行の周囲コンテキストを表示
 func DisplayContextAround(matchIdx int, lines []string, contextLines int) {
-	if IsQuietMode() {
+	DisplayContextAroundWithOutput(DefaultOutput(), matchIdx, lines, contextLines)
+}
+
+// DisplayContextAroundWithOutput は出力先を指定して周辺コンテキストを表示する。
+func DisplayContextAroundWithOutput(out Output, matchIdx int, lines []string, contextLines int) {
+	if out.SuppressStdout() {
 		return
 	}
-	Green.Printf("Pattern found at line %d\n\n", matchIdx+1)
-	Yellow.Printf("Context (%d lines before/after):\n", contextLines)
+	out.Green.Printf("Pattern found at line %d\n\n", matchIdx+1)
+	out.Yellow.Printf("Context (%d lines before/after):\n", contextLines)
 	start := Max(0, matchIdx-contextLines)
 	end := Min(len(lines), matchIdx+contextLines+1)
 	for i := start; i < end; i++ {
@@ -90,16 +105,21 @@ func DisplayContextAround(matchIdx int, lines []string, contextLines int) {
 		if i == matchIdx {
 			prefix = "> "
 		}
-		Printf("%s%4d: %s\n", prefix, i+1, lines[i])
+		out.Printf("%s%4d: %s\n", prefix, i+1, lines[i])
 	}
 }
 
 // DisplayContentToInsert は挿入する内容を表示
 func DisplayContentToInsert(content string) {
-	if IsQuietMode() {
+	DisplayContentToInsertWithOutput(DefaultOutput(), content)
+}
+
+// DisplayContentToInsertWithOutput は出力先を指定して挿入内容を表示する。
+func DisplayContentToInsertWithOutput(out Output, content string) {
+	if out.SuppressStdout() {
 		return
 	}
-	Cyan.Println("\n---- Content to insert ----")
-	Println(content)
-	Cyan.Println("---------------------------")
+	out.Cyan.Println("\n---- Content to insert ----")
+	out.Println(content)
+	out.Cyan.Println("---------------------------")
 }

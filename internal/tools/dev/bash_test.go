@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
@@ -640,7 +641,7 @@ func TestCheckBashSafety_SafeCommandWithSeparator(t *testing.T) {
 
 func TestBashTool_EmptyCommand(t *testing.T) {
 	tool := &BashTool{}
-	_, _, err := tool.Run(map[string]string{"command": ""})
+	_, _, err := tool.Run(tools.DefaultExecutionContext(), map[string]string{"command": ""})
 	if err == nil {
 		t.Error("BashTool.Run() should return error for empty command")
 	}
@@ -651,7 +652,7 @@ func TestBashTool_EmptyCommand(t *testing.T) {
 
 func TestBashTool_WhitespaceOnlyCommand(t *testing.T) {
 	tool := &BashTool{}
-	_, _, err := tool.Run(map[string]string{"command": "   "})
+	_, _, err := tool.Run(tools.DefaultExecutionContext(), map[string]string{"command": "   "})
 	if err == nil {
 		t.Error("BashTool.Run() should return error for whitespace-only command")
 	}
@@ -662,7 +663,7 @@ func TestBashTool_WhitespaceOnlyCommand(t *testing.T) {
 
 func TestBashTool_MissingCommandArg(t *testing.T) {
 	tool := &BashTool{}
-	_, _, err := tool.Run(map[string]string{})
+	_, _, err := tool.Run(tools.DefaultExecutionContext(), map[string]string{})
 	if err == nil {
 		t.Error("BashTool.Run() should return error when command arg is missing")
 	}
@@ -670,7 +671,7 @@ func TestBashTool_MissingCommandArg(t *testing.T) {
 
 func TestBashTool_ValidCommand(t *testing.T) {
 	tool := &BashTool{}
-	output, _, err := tool.Run(map[string]string{"command": "echo hello"})
+	output, _, err := tool.Run(tools.DefaultExecutionContext(), map[string]string{"command": "echo hello"})
 	if err != nil {
 		t.Fatalf("BashTool.Run() unexpected error: %v", err)
 	}

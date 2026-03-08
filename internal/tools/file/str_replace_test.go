@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/testutil"
 )
 
@@ -149,12 +148,14 @@ func TestExecuteStrReplace_DuplicateWarningForNearbyMatch(t *testing.T) {
 	setupTestMocks(t)
 	setupTestConfirm(t, true)
 
-	// fatih/color の global writer を差し替えて、警告文が出力されたかを検証する
-	var buf strings.Builder
-	oldOut := color.Output
-	color.Output = &buf
+	oldStdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("Failed to create pipe: %v", err)
+	}
+	os.Stdout = w
 	t.Cleanup(func() {
-		color.Output = oldOut
+		os.Stdout = oldStdout
 	})
 
 	tmpDir := t.TempDir()
@@ -166,8 +167,11 @@ func TestExecuteStrReplace_DuplicateWarningForNearbyMatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ExecuteStrReplace failed: %v", err)
 	}
-	if !strings.Contains(buf.String(), "Warning: new_str already exists near the replacement") {
-		t.Errorf("Expected warning output, got: %s", buf.String())
+	_ = w.Close()
+	var output strings.Builder
+	_, _ = io.Copy(&output, r)
+	if !strings.Contains(output.String(), "Warning: new_str already exists near the replacement") {
+		t.Errorf("Expected warning output, got: %s", output.String())
 	}
 	if !strings.Contains(replaceOutput, "Successfully replaced") {
 		t.Errorf("Expected success message, got: %s", replaceOutput)
@@ -179,16 +183,15 @@ func TestExecuteStrReplace_StringReplace_NoWarningWhenUnique(t *testing.T) {
 	setupTestMocks(t)
 	setupTestConfirm(t, true)
 
-	// fatih/color はデフォルトで stderr に出すため、stderr を捕捉する
 	var output strings.Builder
-	originalStderr := os.Stderr
+	oldStdout := os.Stdout
 	r, w, err := os.Pipe()
 	if err != nil {
 		t.Fatalf("Failed to create pipe: %v", err)
 	}
-	os.Stderr = w
+	os.Stdout = w
 	t.Cleanup(func() {
-		os.Stderr = originalStderr
+		os.Stdout = oldStdout
 	})
 
 	tmpDir := t.TempDir()
@@ -216,12 +219,14 @@ func TestExecuteStrReplace_LineRange_WarnsOnDuplicateNearby(t *testing.T) {
 	setupTestMocks(t)
 	setupTestConfirm(t, true)
 
-	// fatih/color の global writer を差し替えて、警告文が出力されたかを検証する
-	var buf strings.Builder
-	oldOut := color.Output
-	color.Output = &buf
+	oldStdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("Failed to create pipe: %v", err)
+	}
+	os.Stdout = w
 	t.Cleanup(func() {
-		color.Output = oldOut
+		os.Stdout = oldStdout
 	})
 
 	tmpDir := t.TempDir()
@@ -233,8 +238,11 @@ func TestExecuteStrReplace_LineRange_WarnsOnDuplicateNearby(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ExecuteStrReplace failed: %v", err)
 	}
-	if !strings.Contains(buf.String(), "Warning: new_str already exists near the target range") {
-		t.Errorf("Expected warning output, got: %s", buf.String())
+	_ = w.Close()
+	var output strings.Builder
+	_, _ = io.Copy(&output, r)
+	if !strings.Contains(output.String(), "Warning: new_str already exists near the target range") {
+		t.Errorf("Expected warning output, got: %s", output.String())
 	}
 	if !strings.Contains(replaceOutput, "Successfully replaced lines 2-3") {
 		t.Errorf("Expected success message, got: %s", replaceOutput)
@@ -246,16 +254,15 @@ func TestExecuteStrReplace_LineRange_NoWarningWhenUniqueOutsideRange(t *testing.
 	setupTestMocks(t)
 	setupTestConfirm(t, true)
 
-	// fatih/color はデフォルトで stderr に出すため、stderr を捕捉する
 	var output strings.Builder
-	originalStderr := os.Stderr
+	oldStdout := os.Stdout
 	r, w, err := os.Pipe()
 	if err != nil {
 		t.Fatalf("Failed to create pipe: %v", err)
 	}
-	os.Stderr = w
+	os.Stdout = w
 	t.Cleanup(func() {
-		os.Stderr = originalStderr
+		os.Stdout = oldStdout
 	})
 
 	tmpDir := t.TempDir()
@@ -283,11 +290,14 @@ func TestExecuteStrReplace_NoDuplicateWarningForDistantMatch(t *testing.T) {
 	setupTestMocks(t)
 	setupTestConfirm(t, true)
 
-	var buf strings.Builder
-	oldOut := color.Output
-	color.Output = &buf
+	oldStdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("Failed to create pipe: %v", err)
+	}
+	os.Stdout = w
 	t.Cleanup(func() {
-		color.Output = oldOut
+		os.Stdout = oldStdout
 	})
 
 	tmpDir := t.TempDir()
@@ -303,8 +313,11 @@ func TestExecuteStrReplace_NoDuplicateWarningForDistantMatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ExecuteStrReplace failed: %v", err)
 	}
-	if strings.Contains(buf.String(), "Warning: new_str already exists near the replacement") {
-		t.Fatalf("did not expect nearby warning, got: %s", buf.String())
+	_ = w.Close()
+	var output strings.Builder
+	_, _ = io.Copy(&output, r)
+	if strings.Contains(output.String(), "Warning: new_str already exists near the replacement") {
+		t.Fatalf("did not expect nearby warning, got: %s", output.String())
 	}
 	if !strings.Contains(result, "Successfully replaced") {
 		t.Fatalf("expected success message, got: %s", result)

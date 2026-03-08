@@ -2,8 +2,39 @@ package ui
 
 import (
 	"fmt"
+	"io"
+	"os"
 	"strings"
+
+	"github.com/fatih/color"
 )
+
+type diffPrinter struct {
+	out io.Writer
+}
+
+func newDiffPrinter(out io.Writer) diffPrinter {
+	if out == nil {
+		out = os.Stdout
+	}
+	return diffPrinter{out: out}
+}
+
+func (p diffPrinter) printf(format string, args ...interface{}) {
+	_, _ = fmt.Fprintf(p.out, format, args...)
+}
+
+func (p diffPrinter) println(args ...interface{}) {
+	_, _ = fmt.Fprintln(p.out, args...)
+}
+
+func (p diffPrinter) colorPrintf(attrs []color.Attribute, format string, args ...interface{}) {
+	_, _ = color.New(attrs...).Fprintf(p.out, format, args...)
+}
+
+func (p diffPrinter) colorPrintln(attrs []color.Attribute, args ...interface{}) {
+	_, _ = color.New(attrs...).Fprintln(p.out, args...)
+}
 
 // DiffOptions は差分表示のオプション
 type DiffOptions struct {
@@ -22,61 +53,59 @@ var DefaultDiffOptions = DiffOptions{
 	MaxTotalLines: 50,
 }
 
-// ShowColoredDiff は色付きの差分を表示
-// oldStr: 変更前のテキスト
-// newStr: 変更後のテキスト
-// opts: 表示オプション（nilならデフォルト使用）
+// ShowColoredDiff は標準出力へ色付きの差分を表示する。
 func ShowColoredDiff(oldStr, newStr string, opts *DiffOptions) {
+	ShowColoredDiffToWriter(os.Stdout, oldStr, newStr, opts)
+}
+
+// ShowColoredDiffToWriter は指定 writer へ色付きの差分を表示する。
+func ShowColoredDiffToWriter(out io.Writer, oldStr, newStr string, opts *DiffOptions) {
 	if opts == nil {
 		opts = &DefaultDiffOptions
 	}
 
+	p := newDiffPrinter(out)
 	oldLines := strings.Split(oldStr, "\n")
 	newLines := strings.Split(newStr, "\n")
 
-	// ヘッダー
-	Cyan.Println("\n" + strings.Repeat("─", 62))
-	Cyan.Println("📊 Diff / 差分表示")
-	Cyan.Println(strings.Repeat("─", 62))
+	p.colorPrintln([]color.Attribute{color.FgCyan}, "\n"+strings.Repeat("─", 62))
+	p.colorPrintln([]color.Attribute{color.FgCyan}, "📊 Diff / 差分表示")
+	p.colorPrintln([]color.Attribute{color.FgCyan}, strings.Repeat("─", 62))
 
-	// サマリー
 	removed := len(oldLines)
 	added := len(newLines)
 	diff := added - removed
-	fmt.Printf("   ")
-	Red.Printf("-%d", removed)
-	fmt.Printf(" / ")
-	Green.Printf("+%d", added)
+	p.printf("   ")
+	p.colorPrintf([]color.Attribute{color.FgRed}, "-%d", removed)
+	p.printf(" / ")
+	p.colorPrintf([]color.Attribute{color.FgGreen}, "+%d", added)
 	if diff > 0 {
-		fmt.Printf(" (net: ")
-		Green.Printf("+%d", diff)
-		fmt.Printf(")\n")
+		p.printf(" (net: ")
+		p.colorPrintf([]color.Attribute{color.FgGreen}, "+%d", diff)
+		p.printf(")\n")
 	} else if diff < 0 {
-		fmt.Printf(" (net: ")
-		Red.Printf("%d", diff)
-		fmt.Printf(")\n")
+		p.printf(" (net: ")
+		p.colorPrintf([]color.Attribute{color.FgRed}, "%d", diff)
+		p.printf(")\n")
 	} else {
-		fmt.Printf(" (net: 0)\n")
+		p.printf(" (net: 0)\n")
 	}
-	fmt.Println()
+	p.println()
 
 	if opts.InlineMode {
-		showInlineDiff(oldLines, newLines, opts)
+		showInlineDiffToWriter(p, oldLines, newLines, opts)
 	} else {
-		showSideBySideDiff(oldLines, newLines, opts)
+		showSideBySideDiffToWriter(p, oldLines, newLines, opts)
 	}
 
-	Cyan.Println(strings.Repeat("─", 62) + "\n")
+	p.colorPrintln([]color.Attribute{color.FgCyan}, strings.Repeat("─", 62)+"\n")
 }
 
-// showInlineDiff はインライン形式で差分を表示
-func showInlineDiff(oldLines, newLines []string, opts *DiffOptions) {
-	// LCS (Longest Common Subsequence) ベースの簡易差分
-	// 行単位で比較して変更箇所を特定
-
+// showInlineDiffToWriter はインライン形式で差分を表示する。
+func showInlineDiffToWriter(p diffPrinter, oldLines, newLines []string, opts *DiffOptions) {
 	type diffLine struct {
-		typ     string // "=", "-", "+"
-		lineNum int    // 行番号（1-indexed）
+		typ     string
+		lineNum int
 		text    string
 	}
 
@@ -84,26 +113,19 @@ func showInlineDiff(oldLines, newLines []string, opts *DiffOptions) {
 	i, j := 0, 0
 
 	for i < len(oldLines) || j < len(newLines) {
-		// 両方終了
 		if i >= len(oldLines) && j >= len(newLines) {
 			break
 		}
-
-		// oldが終了 → 残りは追加
 		if i >= len(oldLines) {
 			diffs = append(diffs, diffLine{"+", j + 1, newLines[j]})
 			j++
 			continue
 		}
-
-		// newが終了 → 残りは削除
 		if j >= len(newLines) {
 			diffs = append(diffs, diffLine{"-", i + 1, oldLines[i]})
 			i++
 			continue
 		}
-
-		// 同じ行
 		if oldLines[i] == newLines[j] {
 			diffs = append(diffs, diffLine{"=", i + 1, oldLines[i]})
 			i++
@@ -111,15 +133,12 @@ func showInlineDiff(oldLines, newLines []string, opts *DiffOptions) {
 			continue
 		}
 
-		// 異なる行 → 次の一致点を探す
 		foundOld, foundNew := -1, -1
 		for look := 1; look < 10; look++ {
-			// oldLines[i+look]がnewLines[j]と一致するか
 			if i+look < len(oldLines) && oldLines[i+look] == newLines[j] {
 				foundOld = i + look
 				break
 			}
-			// newLines[j+look]がoldLines[i]と一致するか
 			if j+look < len(newLines) && newLines[j+look] == oldLines[i] {
 				foundNew = j + look
 				break
@@ -127,19 +146,16 @@ func showInlineDiff(oldLines, newLines []string, opts *DiffOptions) {
 		}
 
 		if foundOld >= 0 {
-			// old側に一致があった → それまでは削除
 			for k := i; k < foundOld; k++ {
 				diffs = append(diffs, diffLine{"-", k + 1, oldLines[k]})
 			}
 			i = foundOld
 		} else if foundNew >= 0 {
-			// new側に一致があった → それまでは追加
 			for k := j; k < foundNew; k++ {
 				diffs = append(diffs, diffLine{"+", k + 1, newLines[k]})
 			}
 			j = foundNew
 		} else {
-			// 一致なし → 削除して追加
 			diffs = append(diffs, diffLine{"-", i + 1, oldLines[i]})
 			diffs = append(diffs, diffLine{"+", j + 1, newLines[j]})
 			i++
@@ -147,20 +163,13 @@ func showInlineDiff(oldLines, newLines []string, opts *DiffOptions) {
 		}
 	}
 
-	// コンテキストを考慮して表示
 	displayedLines := 0
 	lastDisplayed := -1
 
 	for idx, d := range diffs {
-		// 変更行かどうか
 		isChange := d.typ != "="
-
-		// 表示するかの判定
 		shouldDisplay := isChange
-
-		// コンテキスト行（変更行の前後）
 		if !isChange && opts.ContextLines > 0 {
-			// 前後にある変更行を確認
 			for k := max(0, idx-opts.ContextLines); k <= min(len(diffs)-1, idx+opts.ContextLines); k++ {
 				if diffs[k].typ != "=" {
 					shouldDisplay = true
@@ -168,24 +177,20 @@ func showInlineDiff(oldLines, newLines []string, opts *DiffOptions) {
 				}
 			}
 		}
-
 		if !shouldDisplay {
 			continue
 		}
 
-		// 省略記号（連続していない場合）
 		if lastDisplayed >= 0 && idx-lastDisplayed > 1 {
-			Yellow.Println("   ...")
+			p.colorPrintln([]color.Attribute{color.FgYellow}, "   ...")
 		}
 		lastDisplayed = idx
 
-		// 最大行数チェック
 		if opts.MaxTotalLines > 0 && displayedLines >= opts.MaxTotalLines {
-			Yellow.Printf("   ... (%d more lines / さらに%d行)\n", len(diffs)-idx, len(diffs)-idx)
+			p.colorPrintf([]color.Attribute{color.FgYellow}, "   ... (%d more lines / さらに%d行)\n", len(diffs)-idx, len(diffs)-idx)
 			break
 		}
 
-		// 行を表示
 		lineNumStr := ""
 		if opts.ShowLineNums {
 			lineNum := d.lineNum + opts.LineNumOffset
@@ -194,24 +199,23 @@ func showInlineDiff(oldLines, newLines []string, opts *DiffOptions) {
 
 		switch d.typ {
 		case "-":
-			Red.Printf("   %s- %s\n", lineNumStr, d.text)
+			p.colorPrintf([]color.Attribute{color.FgRed}, "   %s- %s\n", lineNumStr, d.text)
 		case "+":
-			Green.Printf("   %s+ %s\n", lineNumStr, d.text)
+			p.colorPrintf([]color.Attribute{color.FgGreen}, "   %s+ %s\n", lineNumStr, d.text)
 		case "=":
-			fmt.Printf("   %s  %s\n", lineNumStr, d.text)
+			p.printf("   %s  %s\n", lineNumStr, d.text)
 		}
 		displayedLines++
 	}
 }
 
-// showSideBySideDiff は左右並列形式で差分を表示（Before/After）
-func showSideBySideDiff(oldLines, newLines []string, opts *DiffOptions) {
-	// Before
-	Cyan.Println("Before / 変更前:")
-	Cyan.Println("┌" + strings.Repeat("─", 58) + "┐")
+// showSideBySideDiffToWriter は左右並列形式で差分を表示する。
+func showSideBySideDiffToWriter(p diffPrinter, oldLines, newLines []string, opts *DiffOptions) {
+	p.colorPrintln([]color.Attribute{color.FgCyan}, "Before / 変更前:")
+	p.colorPrintln([]color.Attribute{color.FgCyan}, "┌"+strings.Repeat("─", 58)+"┐")
 	for i, line := range oldLines {
 		if opts.MaxTotalLines > 0 && i >= opts.MaxTotalLines/2 {
-			Yellow.Printf("│ ... (%d lines omitted / 行省略)\n", len(oldLines)-i)
+			p.colorPrintf([]color.Attribute{color.FgYellow}, "│ ... (%d lines omitted / 行省略)\n", len(oldLines)-i)
 			break
 		}
 		lineNumStr := ""
@@ -219,18 +223,16 @@ func showSideBySideDiff(oldLines, newLines []string, opts *DiffOptions) {
 			lineNum := (i + 1) + opts.LineNumOffset
 			lineNumStr = fmt.Sprintf("L%-4d ", lineNum)
 		}
-
 		text := truncateLine(line, 50)
-		Cyan.Printf("│ %s%-50s │\n", lineNumStr, text)
+		p.colorPrintf([]color.Attribute{color.FgCyan}, "│ %s%-50s │\n", lineNumStr, text)
 	}
-	Cyan.Println("└" + strings.Repeat("─", 58) + "┘")
+	p.colorPrintln([]color.Attribute{color.FgCyan}, "└"+strings.Repeat("─", 58)+"┘")
 
-	// After
-	Cyan.Println("\nAfter / 変更後:")
-	Cyan.Println("┌" + strings.Repeat("─", 58) + "┐")
+	p.colorPrintln([]color.Attribute{color.FgCyan}, "\nAfter / 変更後:")
+	p.colorPrintln([]color.Attribute{color.FgCyan}, "┌"+strings.Repeat("─", 58)+"┐")
 	for i, line := range newLines {
 		if opts.MaxTotalLines > 0 && i >= opts.MaxTotalLines/2 {
-			Yellow.Printf("│ ... (%d lines omitted / 行省略)\n", len(newLines)-i)
+			p.colorPrintf([]color.Attribute{color.FgYellow}, "│ ... (%d lines omitted / 行省略)\n", len(newLines)-i)
 			break
 		}
 		lineNumStr := ""
@@ -238,14 +240,13 @@ func showSideBySideDiff(oldLines, newLines []string, opts *DiffOptions) {
 			lineNum := (i + 1) + opts.LineNumOffset
 			lineNumStr = fmt.Sprintf("L%-4d ", lineNum)
 		}
-
 		text := truncateLine(line, 50)
-		Cyan.Printf("│ %s%-50s │\n", lineNumStr, text)
+		p.colorPrintf([]color.Attribute{color.FgCyan}, "│ %s%-50s │\n", lineNumStr, text)
 	}
-	Cyan.Println("└" + strings.Repeat("─", 58) + "┘")
+	p.colorPrintln([]color.Attribute{color.FgCyan}, "└"+strings.Repeat("─", 58)+"┘")
 }
 
-// truncateLine は行を指定幅で切り詰め
+// truncateLine は行を指定幅で切り詰める。
 func truncateLine(s string, maxLen int) string {
 	runes := []rune(s)
 	if len(runes) <= maxLen {
@@ -254,7 +255,6 @@ func truncateLine(s string, maxLen int) string {
 	return string(runes[:maxLen-3]) + "..."
 }
 
-// max は2つの整数の大きい方を返す
 func max(a, b int) int {
 	if a > b {
 		return a
@@ -262,7 +262,6 @@ func max(a, b int) int {
 	return b
 }
 
-// min は2つの整数の小さい方を返す
 func min(a, b int) int {
 	if a < b {
 		return a
@@ -270,29 +269,30 @@ func min(a, b int) int {
 	return b
 }
 
-// ShowUnifiedDiff はUnified Diff形式で色付き表示
+// ShowUnifiedDiff は Unified Diff 形式で色付き表示する。
 func ShowUnifiedDiff(diffOutput string) {
+	showUnifiedDiffToWriter(os.Stdout, diffOutput)
+}
+
+func showUnifiedDiffToWriter(out io.Writer, diffOutput string) {
+	p := newDiffPrinter(out)
 	lines := strings.Split(diffOutput, "\n")
 
 	for _, line := range lines {
 		if line == "" {
-			fmt.Println()
+			p.println()
 			continue
 		}
 
 		switch {
-		case strings.HasPrefix(line, "---"):
-			Cyan.Println(line)
-		case strings.HasPrefix(line, "+++"):
-			Cyan.Println(line)
-		case strings.HasPrefix(line, "@@"):
-			Cyan.Println(line)
+		case strings.HasPrefix(line, "---"), strings.HasPrefix(line, "+++"), strings.HasPrefix(line, "@@"):
+			p.colorPrintln([]color.Attribute{color.FgCyan}, line)
 		case strings.HasPrefix(line, "-"):
-			Red.Println(line)
+			p.colorPrintln([]color.Attribute{color.FgRed}, line)
 		case strings.HasPrefix(line, "+"):
-			Green.Println(line)
+			p.colorPrintln([]color.Attribute{color.FgGreen}, line)
 		default:
-			fmt.Println(line)
+			p.println(line)
 		}
 	}
 }

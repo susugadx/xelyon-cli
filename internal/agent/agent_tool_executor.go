@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -11,7 +13,6 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
-	"github.com/susugadx/xelyon-cli/internal/tools/common"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -27,6 +28,15 @@ func argsToJSON(args map[string]any) string {
 	return string(b)
 }
 
+func (a *Agent) toolExecutionContext(stdout, stderr io.Writer) tools.ExecutionContext {
+	return tools.ExecutionContext{
+		ProviderName: a.ProviderName,
+		Model:        a.CurrentModel,
+		Stdout:       stdout,
+		Stderr:       stderr,
+	}
+}
+
 func (a *Agent) executeToolWithSpinner(toolCall *tools.ToolCall) (string, *tools.FileChange) {
 	// ネガティブキャッシュチェック（ブロックせずログ表示のみ）
 	if a.ToolCache != nil {
@@ -39,13 +49,7 @@ func (a *Agent) executeToolWithSpinner(toolCall *tools.ToolCall) (string, *tools
 	spinner.Start(ui.SpinnerMessageForTool(toolCall.Tool))
 	ui.SetGlobalSpinner(spinner)
 
-	tools.SetExecutionContext(tools.ExecutionContext{
-		ProviderName: a.ProviderName,
-		Model:        a.CurrentModel,
-	})
-	defer tools.ClearExecutionContext()
-
-	result, change := tools.Execute(toolCall)
+	result, change := tools.ExecuteWithContext(a.toolExecutionContext(os.Stdout, os.Stderr), toolCall)
 	spinner.Stop()
 	a.recordToolResultOptimizations(toolCall.Tool, result)
 
@@ -470,17 +474,17 @@ type toolExecResult struct {
 // executeToolForParallel は並列実行用のツール実行関数。
 // goroutine から安全に呼び出せるよう、以下を省略している:
 //   - spinner / SetGlobalSpinner: goroutine 内で global spinner を操作すると競合する
-//   - SetExecutionContext: parallel batch 開始前に1回だけ設定済み（context.go 参照）
+//   - stdout/stderr: io.Discard を使って補助出力を抑制する
 //
 // stdout 出力の抑制:
 //
-//	tools.ExecuteQuiet を使用し、wrapper 層の出力（ヘッダー・引数・折りたたみ結果）を抑制する。
-//	Tool.Run() 内部の補助的な出力は common quiet mode を batch 単位で積み上げて抑制する。
+//	tools.ExecuteQuietWithContext を使用し、wrapper 層の出力（ヘッダー・引数・折りたたみ結果）を抑制する。
+//	Tool.Run() 内部の補助的な出力は execCtx.Stdout=io.Discard に流し、process stdout へは出さない。
 //
 // cancel の実効性（best effort）:
 //
 //	ctx.Err() を実行前にチェックして早期リターンする。
-//	ただし tools.ExecuteQuiet → Tool.Run() は ctx を受け取らないため、
+//	ただし tools.ExecuteQuietWithContext → Tool.Run() は ctx を受け取らないため、
 //	実行開始後のキャンセルは効かない（best effort）。
 //	Tool interface への ctx 伝播は将来課題。
 //	bash のみ ExecuteBashWithContext(ctx) が存在するが、Registry 経由の
@@ -497,8 +501,8 @@ func (a *Agent) executeToolForParallel(ctx context.Context, tc *tools.ToolCall) 
 		}
 	}
 
-	// ExecuteQuiet: ヘッダー・引数・折りたたみ出力を抑制（parallel path 用）
-	result, change := tools.ExecuteQuiet(tc)
+	// ExecuteQuietWithContext: ヘッダー・引数・折りたたみ出力と補助 stdout を抑制（parallel path 用）
+	result, change := tools.ExecuteQuietWithContext(a.toolExecutionContext(io.Discard, io.Discard), tc)
 	a.recordToolResultOptimizations(tc.Tool, result)
 
 	if a.ToolCache != nil {
@@ -621,9 +625,8 @@ func (a *Agent) executeToolCallsWithParallel(
 	// ExecutionContext（tools/context.go）は process-global 変数だが sync.RWMutex で
 	// race-safe に保護されている。ここでは parallel batch 開始前に1回だけ Set し、
 	// 全 goroutine 完了後に Clear する。goroutine 内は GetExecutionContext()（RLock）で
-	// 読み取るのみ。single-agent CLI 前提で意味的にも正しい値が読み取れる。
-	// sequential phase（Phase 1b）の executeToolWithSpinner は独自に Set/Clear するため、
-	// Phase 1a の Clear 後でも正しく動作する。
+	// parallel path では ExecuteQuietWithContext に io.Discard を渡し、
+	// 補助 stdout を構造的に抑制する。
 	//
 	// cancel の実効性（best effort）:
 	//   各 goroutine 起動前に ctx.Err() をチェックし、executeToolForParallel 内でも
@@ -631,41 +634,30 @@ func (a *Agent) executeToolCallsWithParallel(
 	//   実行開始後のキャンセルは効かない（次の goroutine 起動時にスキップされる）。
 	if len(parallelEntries) > 0 {
 		startedAt := time.Now()
-		func() {
-			restoreQuiet := common.PushQuietMode()
-			defer restoreQuiet()
+		sem := make(chan struct{}, tools.MaxParallelTools)
+		var wg sync.WaitGroup
+		var mu sync.Mutex
 
-			tools.SetExecutionContext(tools.ExecutionContext{
-				ProviderName: a.ProviderName,
-				Model:        a.CurrentModel,
-			})
-			defer tools.ClearExecutionContext()
-
-			sem := make(chan struct{}, tools.MaxParallelTools)
-			var wg sync.WaitGroup
-			var mu sync.Mutex
-
-			for _, idx := range parallelEntries {
-				if ctx.Err() != nil {
-					mu.Lock()
-					results[idx] = toolExecResult{result: "Error: context cancelled"}
-					mu.Unlock()
-					continue
-				}
-				wg.Add(1)
-				sem <- struct{}{}
-				go func(i int) {
-					defer wg.Done()
-					defer func() { <-sem }()
-
-					r, c := a.executeToolForParallel(ctx, allToolCalls[i])
-					mu.Lock()
-					results[i] = toolExecResult{result: r, change: c}
-					mu.Unlock()
-				}(idx)
+		for _, idx := range parallelEntries {
+			if ctx.Err() != nil {
+				mu.Lock()
+				results[idx] = toolExecResult{result: "Error: context cancelled"}
+				mu.Unlock()
+				continue
 			}
-			wg.Wait()
-		}()
+			wg.Add(1)
+			sem <- struct{}{}
+			go func(i int) {
+				defer wg.Done()
+				defer func() { <-sem }()
+
+				r, c := a.executeToolForParallel(ctx, allToolCalls[i])
+				mu.Lock()
+				results[i] = toolExecResult{result: r, change: c}
+				mu.Unlock()
+			}(idx)
+		}
+		wg.Wait()
 		printParallelToolGroup(allToolCalls, parallelEntries, results, time.Since(startedAt))
 	}
 

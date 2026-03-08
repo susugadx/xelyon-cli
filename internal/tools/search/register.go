@@ -30,8 +30,8 @@ func (t *WebSearchTool) Parameters() map[string]interface{} {
 }
 
 // Run executes the web search tool
-func (t *WebSearchTool) Run(args map[string]string) (string, *tools.FileChange, error) {
-	output := ExecuteWebSearch(args["query"])
+func (t *WebSearchTool) Run(execCtx tools.ExecutionContext, args map[string]string) (string, *tools.FileChange, error) {
+	output := ExecuteWebSearch(execCtx, args["query"])
 	return output, nil, nil
 }
 
@@ -65,7 +65,7 @@ func (t *SearchCodeTool) Parameters() map[string]interface{} {
 	}
 }
 
-func (t *SearchCodeTool) Run(args map[string]string) (string, *tools.FileChange, error) {
+func (t *SearchCodeTool) Run(_ tools.ExecutionContext, args map[string]string) (string, *tools.FileChange, error) {
 	opts := SearchOptions{
 		Pattern:     args["pattern"],
 		Path:        args["path"],

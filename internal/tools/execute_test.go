@@ -2,7 +2,6 @@ package tools
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -160,10 +159,8 @@ func (t *testDisplayTool) Parameters() map[string]interface{} {
 	return map[string]interface{}{}
 }
 
-func (t *testDisplayTool) Run(args map[string]string) (string, *FileChange, error) {
-	if !common.IsQuietMode() {
-		fmt.Println("INTERNAL STDOUT")
-	}
+func (t *testDisplayTool) Run(execCtx ExecutionContext, args map[string]string) (string, *FileChange, error) {
+	execCtx.Output().Println("INTERNAL STDOUT")
 	return t.result, nil, nil
 }
 
@@ -233,9 +230,10 @@ func (t *testQuietTool) Parameters() map[string]interface{} {
 	return map[string]interface{}{}
 }
 
-func (t *testQuietTool) Run(args map[string]string) (string, *FileChange, error) {
-	common.Green.Printf("QUIET COLOR OUTPUT\n")
-	common.Printf("QUIET STDOUT OUTPUT\n")
+func (t *testQuietTool) Run(execCtx ExecutionContext, args map[string]string) (string, *FileChange, error) {
+	out := execCtx.Output()
+	out.Green.Printf("QUIET COLOR OUTPUT\n")
+	out.Printf("QUIET STDOUT OUTPUT\n")
 	return t.result, nil, nil
 }
 
@@ -256,11 +254,11 @@ func (t *testOverlapQuietTool) Parameters() map[string]interface{} {
 	return map[string]interface{}{}
 }
 
-func (t *testOverlapQuietTool) Run(args map[string]string) (string, *FileChange, error) {
+func (t *testOverlapQuietTool) Run(execCtx ExecutionContext, args map[string]string) (string, *FileChange, error) {
 	id := args["id"]
 	t.started <- id
 	<-t.release[id]
-	common.Printf("OVERLAP STDOUT %s\n", id)
+	execCtx.Output().Printf("OVERLAP STDOUT %s\n", id)
 	return "result " + id, nil, nil
 }
 
@@ -286,7 +284,10 @@ func TestExecuteQuiet_SuppressesInternalStdout(t *testing.T) {
 		Tool: "quiet_test",
 		Args: map[string]string{},
 	}
-	result, change := ExecuteQuiet(tc)
+	result, change := ExecuteQuietWithContext(ExecutionContext{
+		Stdout: io.Discard,
+		Stderr: io.Discard,
+	}, tc)
 
 	_ = w.Close()
 	os.Stdout = oldStdout
@@ -338,7 +339,10 @@ func TestExecuteQuiet_ParallelOverlapKeepsStdoutSuppressed(t *testing.T) {
 
 	results := make(chan execResult, 2)
 	run := func(id string) {
-		result, change := ExecuteQuiet(&ToolCall{
+		result, change := ExecuteQuietWithContext(ExecutionContext{
+			Stdout: io.Discard,
+			Stderr: io.Discard,
+		}, &ToolCall{
 			Tool: "overlap_quiet_test",
 			Args: map[string]string{"id": id},
 		})

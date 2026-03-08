@@ -14,14 +14,6 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
-// Colors from common package
-var (
-	cyan   = common.Cyan
-	green  = common.Green
-	yellow = common.Yellow
-	red    = common.Red
-)
-
 // Auto-executable safe commands
 var defaultSafeCommands = map[string]bool{
 	"ls": true, "cat": true, "pwd": true, "echo": true, "which": true,
@@ -74,21 +66,26 @@ var moderateSeparators = []string{
 
 // ExecuteBash executes a shell command
 func ExecuteBash(command string) string {
+	return ExecuteBashWithOutput(common.DefaultOutput(), command)
+}
+
+// ExecuteBashWithOutput executes a shell command with explicit output writers.
+func ExecuteBashWithOutput(out common.Output, command string) string {
 	if command == "" {
 		return "Error: command is empty"
 	}
 
-	if msg, ok := checkAndConfirmBash(command); !ok {
+	if msg, ok := checkAndConfirmBash(out, command); !ok {
 		return msg
 	}
 
 	// Execute
-	green.Printf("▶ Running: %s\n", command)
+	out.Green.Printf("▶ Running: %s\n", command)
 	cmd := exec.Command("bash", "-c", command)
 	if cwd, err := os.Getwd(); err == nil {
 		cmd.Dir = cwd
 	} else {
-		yellow.Printf("Warning: Could not get current directory: %v\n", err)
+		out.Yellow.Printf("Warning: Could not get current directory: %v\n", err)
 		cmd.Dir = "." // fallback
 	}
 
@@ -101,7 +98,7 @@ func ExecuteBash(command string) string {
 
 	if streamOutput {
 		// ストリーミングモード: リアルタイム出力
-		result, cmdErr = executeBashWithStreaming(cmd)
+		result, cmdErr = executeBashWithStreaming(out, cmd)
 	} else {
 		// 従来モード: バッファリング出力
 		output, err := cmd.CombinedOutput()
@@ -125,21 +122,26 @@ func ExecuteBash(command string) string {
 // ExecuteBashWithContext はContext対応でシェルコマンドを実行
 // コンテキストがキャンセルされた場合、部分結果を返す
 func ExecuteBashWithContext(ctx context.Context, command string) string {
+	return ExecuteBashWithContextAndOutput(ctx, common.DefaultOutput(), command)
+}
+
+// ExecuteBashWithContextAndOutput はContext対応でシェルコマンドを実行する。
+func ExecuteBashWithContextAndOutput(ctx context.Context, out common.Output, command string) string {
 	if command == "" {
 		return "Error: command is empty"
 	}
 
-	if msg, ok := checkAndConfirmBash(command); !ok {
+	if msg, ok := checkAndConfirmBash(out, command); !ok {
 		return msg
 	}
 
 	// Execute with context
-	green.Printf("▶ Running: %s\n", command)
+	out.Green.Printf("▶ Running: %s\n", command)
 	cmd := exec.CommandContext(ctx, "bash", "-c", command)
 	if cwd, err := os.Getwd(); err == nil {
 		cmd.Dir = cwd
 	} else {
-		yellow.Printf("Warning: Could not get current directory: %v\n", err)
+		out.Yellow.Printf("Warning: Could not get current directory: %v\n", err)
 		cmd.Dir = "."
 	}
 
@@ -154,7 +156,7 @@ func ExecuteBashWithContext(ctx context.Context, command string) string {
 	var cmdErr error
 
 	if streamOutput {
-		result, cmdErr = executeBashWithStreamingAndContext(ctx, cmd)
+		result, cmdErr = executeBashWithStreamingAndContext(ctx, out, cmd)
 	} else {
 		output, err := cmd.CombinedOutput()
 		result = string(output)
@@ -163,7 +165,7 @@ func ExecuteBashWithContext(ctx context.Context, command string) string {
 
 	// コンテキストキャンセルの場合は部分結果を返す
 	if ctx.Err() != nil {
-		yellow.Println("\n⚠️  Command interrupted. Partial output returned.")
+		out.Yellow.Println("\n⚠️  Command interrupted. Partial output returned.")
 		// プロセスグループ全体を終了
 		killProcessGroup(cmd)
 		return fmt.Sprintf("Command interrupted.\nPartial output:\n%s", result)
@@ -183,7 +185,7 @@ func ExecuteBashWithContext(ctx context.Context, command string) string {
 }
 
 // executeBashWithStreamingAndContext はContext対応でストリーミング出力
-func executeBashWithStreamingAndContext(ctx context.Context, cmd *exec.Cmd) (string, error) {
+func executeBashWithStreamingAndContext(ctx context.Context, out common.Output, cmd *exec.Cmd) (string, error) {
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return "", fmt.Errorf("failed to get stdout pipe: %w", err)
@@ -207,14 +209,14 @@ func executeBashWithStreamingAndContext(ctx context.Context, cmd *exec.Cmd) (str
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		streamOutputWithContext(ctx, stdout, &outputBuf, &mu, false)
+		streamOutputWithContext(ctx, out, stdout, &outputBuf, &mu, false)
 	}()
 
 	// stderr ストリーミング
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		streamOutputWithContext(ctx, stderr, &outputBuf, &mu, true)
+		streamOutputWithContext(ctx, out, stderr, &outputBuf, &mu, true)
 	}()
 
 	// 完了を待機
@@ -235,7 +237,7 @@ func executeBashWithStreamingAndContext(ctx context.Context, cmd *exec.Cmd) (str
 }
 
 // streamOutputWithContext はContext対応でストリーミング出力
-func streamOutputWithContext(ctx context.Context, pipe io.Reader, buf *strings.Builder, mu *sync.Mutex, isStderr bool) {
+func streamOutputWithContext(ctx context.Context, out common.Output, pipe io.Reader, buf *strings.Builder, mu *sync.Mutex, isStderr bool) {
 	scanner := bufio.NewScanner(pipe)
 	for scanner.Scan() {
 		select {
@@ -247,9 +249,9 @@ func streamOutputWithContext(ctx context.Context, pipe io.Reader, buf *strings.B
 		line := scanner.Text()
 
 		if isStderr {
-			red.Println(line)
+			out.Red.Println(line)
 		} else {
-			common.Println(line)
+			out.Println(line)
 		}
 
 		mu.Lock()
@@ -259,7 +261,7 @@ func streamOutputWithContext(ctx context.Context, pipe io.Reader, buf *strings.B
 }
 
 // executeBashWithStreaming はコマンド出力をリアルタイムでストリーミング
-func executeBashWithStreaming(cmd *exec.Cmd) (string, error) {
+func executeBashWithStreaming(out common.Output, cmd *exec.Cmd) (string, error) {
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return "", fmt.Errorf("failed to get stdout pipe: %w", err)
@@ -282,14 +284,14 @@ func executeBashWithStreaming(cmd *exec.Cmd) (string, error) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		streamOutput(stdout, &outputBuf, &mu, false)
+		streamOutput(out, stdout, &outputBuf, &mu, false)
 	}()
 
 	// stderr ストリーミング (赤色で表示)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		streamOutput(stderr, &outputBuf, &mu, true)
+		streamOutput(out, stderr, &outputBuf, &mu, true)
 	}()
 
 	wg.Wait()
@@ -300,12 +302,12 @@ func executeBashWithStreaming(cmd *exec.Cmd) (string, error) {
 
 // checkAndConfirmBash は共通のセキュリティチェック + 確認UIを実行
 // 返り値: ("", true) = 実行OK, (errorMsg, false) = ブロック/キャンセル
-func checkAndConfirmBash(command string) (string, bool) {
+func checkAndConfirmBash(out common.Output, command string) (string, bool) {
 	cfg := config.GetGlobalConfig().Bash
 
 	for _, blocked := range alwaysBlockedCommands {
 		if strings.Contains(command, blocked) {
-			red.Printf("🚫 Blocked dangerous command: %s\n", command)
+			out.Red.Printf("🚫 Blocked dangerous command: %s\n", command)
 			return "Error: This command is blocked for safety", false
 		}
 	}
@@ -313,12 +315,12 @@ func checkAndConfirmBash(command string) (string, bool) {
 	// eval コマンドをブロック（チェーン内も対象）
 	for _, part := range splitChainCommand(command) {
 		if isEvalInvocation(strings.TrimSpace(part)) {
-			red.Printf("🚫 Blocked dangerous command: eval\n")
+			out.Red.Printf("🚫 Blocked dangerous command: eval\n")
 			return "Error: eval is blocked for safety", false
 		}
 	}
 
-	if err := CheckBashSafety(command, cfg); err != "" {
+	if err := CheckBashSafetyWithOutput(out, command, cfg); err != "" {
 		return err, false
 	}
 
@@ -326,11 +328,11 @@ func checkAndConfirmBash(command string) (string, bool) {
 		return "", true
 	}
 
-	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	cyan.Printf("⚙️  Shell Command / シェルコマンド実行\n")
-	cyan.Printf("📜 Command / コマンド: %s\n", command)
-	cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	yellow.Println("⚠️  Warning: This command may modify your system / 警告: システムに変更が加わる可能性があります")
+	out.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	out.Cyan.Printf("⚙️  Shell Command / シェルコマンド実行\n")
+	out.Cyan.Printf("📜 Command / コマンド: %s\n", command)
+	out.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	out.Yellow.Println("⚠️  Warning: This command may modify your system / 警告: システムに変更が加わる可能性があります")
 
 	dec := common.Confirm("Run this command? / 実行しますか？")
 	switch dec.Action {
@@ -353,16 +355,16 @@ IMPORTANT: Do NOT execute the previous command as-is.`, strings.TrimSpace(dec.Co
 }
 
 // streamOutput はパイプからの出力をリアルタイムで表示しバッファに保存
-func streamOutput(pipe io.Reader, buf *strings.Builder, mu *sync.Mutex, isStderr bool) {
+func streamOutput(out common.Output, pipe io.Reader, buf *strings.Builder, mu *sync.Mutex, isStderr bool) {
 	scanner := bufio.NewScanner(pipe)
 	for scanner.Scan() {
 		line := scanner.Text()
 
 		// リアルタイム表示
 		if isStderr {
-			red.Println(line)
+			out.Red.Println(line)
 		} else {
-			common.Println(line)
+			out.Println(line)
 		}
 
 		// バッファに保存
@@ -375,6 +377,11 @@ func streamOutput(pipe io.Reader, buf *strings.Builder, mu *sync.Mutex, isStderr
 // CheckBashSafety performs safety level checks
 // Returns error message if check fails, empty string otherwise
 func CheckBashSafety(command string, cfg config.BashConfig) string {
+	return CheckBashSafetyWithOutput(common.DefaultOutput(), command, cfg)
+}
+
+// CheckBashSafetyWithOutput performs safety checks with explicit output writers.
+func CheckBashSafetyWithOutput(out common.Output, command string, cfg config.BashConfig) string {
 	level := cfg.SafetyLevel
 	if level == "" {
 		level = "moderate" // default
@@ -387,8 +394,8 @@ func CheckBashSafety(command string, cfg config.BashConfig) string {
 		if !cfg.AllowInlineEdit {
 			for _, inline := range inlineEditCommands {
 				if strings.Contains(command, inline) {
-					red.Printf("🚫 Inline edit not allowed: %s\n", command)
-					yellow.Println("💡 Tip: Set bash.allow_inline_edit: true in config.yaml to enable")
+					out.Red.Printf("🚫 Inline edit not allowed: %s\n", command)
+					out.Yellow.Println("💡 Tip: Set bash.allow_inline_edit: true in config.yaml to enable")
 					return "Error: Inline edit commands are not allowed"
 				}
 			}
@@ -396,7 +403,7 @@ func CheckBashSafety(command string, cfg config.BashConfig) string {
 		// Check dangerous pipe patterns only
 		for _, pattern := range dangerousPipePatterns {
 			if strings.Contains(command, pattern) {
-				red.Printf("🚫 Dangerous pipe pattern: %s\n", command)
+				out.Red.Printf("🚫 Dangerous pipe pattern: %s\n", command)
 				return "Error: Dangerous pipe pattern detected"
 			}
 		}
@@ -407,8 +414,8 @@ func CheckBashSafety(command string, cfg config.BashConfig) string {
 		if !cfg.AllowInlineEdit {
 			for _, inline := range inlineEditCommands {
 				if strings.Contains(command, inline) {
-					red.Printf("🚫 Inline edit not allowed: %s\n", command)
-					yellow.Println("💡 Tip: Set bash.allow_inline_edit: true in config.yaml to enable")
+					out.Red.Printf("🚫 Inline edit not allowed: %s\n", command)
+					out.Yellow.Println("💡 Tip: Set bash.allow_inline_edit: true in config.yaml to enable")
 					return "Error: Inline edit commands are not allowed"
 				}
 			}
@@ -416,7 +423,7 @@ func CheckBashSafety(command string, cfg config.BashConfig) string {
 		// Check dangerous pipe patterns
 		for _, pattern := range dangerousPipePatterns {
 			if strings.Contains(command, pattern) {
-				red.Printf("🚫 Dangerous pipe pattern: %s\n", command)
+				out.Red.Printf("🚫 Dangerous pipe pattern: %s\n", command)
 				return "Error: Dangerous pipe pattern detected"
 			}
 		}
@@ -424,9 +431,9 @@ func CheckBashSafety(command string, cfg config.BashConfig) string {
 		if !IsSafeCommand(command, cfg) {
 			for _, sep := range moderateSeparators {
 				if strings.Contains(command, sep) {
-					red.Printf("🚫 Blocked command injection attempt: %s\n", command)
-					yellow.Println("⚠️  Command contains potentially dangerous separator characters.")
-					yellow.Println("   Allowed separators in moderate mode: | > >> <")
+					out.Red.Printf("🚫 Blocked command injection attempt: %s\n", command)
+					out.Yellow.Println("⚠️  Command contains potentially dangerous separator characters.")
+					out.Yellow.Println("   Allowed separators in moderate mode: | > >> <")
 					return "Error: Command injection attempt detected (separator found)"
 				}
 			}
@@ -434,8 +441,8 @@ func CheckBashSafety(command string, cfg config.BashConfig) string {
 			if !cfg.AllowRedirect {
 				for _, redir := range []string{">", ">>", "<"} {
 					if strings.Contains(command, redir) {
-						red.Printf("🚫 Redirect not allowed: %s\n", command)
-						yellow.Println("💡 Tip: Set bash.allow_redirect: true in config.yaml to enable")
+						out.Red.Printf("🚫 Redirect not allowed: %s\n", command)
+						out.Yellow.Println("💡 Tip: Set bash.allow_redirect: true in config.yaml to enable")
 						return "Error: Redirect is not allowed"
 					}
 				}
@@ -447,8 +454,8 @@ func CheckBashSafety(command string, cfg config.BashConfig) string {
 		// Block inline edits
 		for _, inline := range inlineEditCommands {
 			if strings.Contains(command, inline) {
-				red.Printf("🚫 Inline edit not allowed: %s\n", command)
-				yellow.Println("💡 Tip: Set bash.safety_level: moderate in config.yaml")
+				out.Red.Printf("🚫 Inline edit not allowed: %s\n", command)
+				out.Yellow.Println("💡 Tip: Set bash.safety_level: moderate in config.yaml")
 				return "Error: Inline edit commands are not allowed"
 			}
 		}
@@ -456,9 +463,9 @@ func CheckBashSafety(command string, cfg config.BashConfig) string {
 		if !IsSafeCommand(command, cfg) {
 			for _, sep := range strictSeparators {
 				if strings.Contains(command, sep) {
-					red.Printf("🚫 Blocked command injection attempt: %s\n", command)
-					yellow.Println("⚠️  Command contains potentially dangerous separator characters.")
-					yellow.Println("💡 Tip: Set bash.safety_level: moderate in config.yaml to allow pipes")
+					out.Red.Printf("🚫 Blocked command injection attempt: %s\n", command)
+					out.Yellow.Println("⚠️  Command contains potentially dangerous separator characters.")
+					out.Yellow.Println("💡 Tip: Set bash.safety_level: moderate in config.yaml to allow pipes")
 					return "Error: Command injection attempt detected (separator found)"
 				}
 			}

@@ -10,18 +10,17 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
-var green = common.Green
-var yellow = common.Yellow
-
 // ExecuteWebSearch executes web search using a provider-native search if available,
 // then falls back to Serper. Cache is shared across all implementations.
-func ExecuteWebSearch(query string) string {
+func ExecuteWebSearch(execCtx tools.ExecutionContext, query string) string {
 	if query == "" {
 		return "Error: query is required"
 	}
 
+	out := execCtx.Output()
+
 	// 確認プロンプト（--auto-approve / config で自動承認可能）
-	dec := common.ConfirmWithAutoApproveDecision("web_search",
+	dec := common.ConfirmWithAutoApproveDecision(out, "web_search",
 		fmt.Sprintf("Execute web search: %s", query))
 	switch dec.Action {
 	case common.ConfirmNo:
@@ -30,54 +29,53 @@ func ExecuteWebSearch(query string) string {
 		return fmt.Sprintf("User feedback: %s", dec.Comment)
 	}
 
-	ctx := tools.GetExecutionContext()
-	result, cached, source, err := executeWebSearchWithFallback(query, ctx.ProviderName, ctx.Model)
+	result, cached, source, err := executeWebSearchWithFallback(out, query, execCtx.ProviderName, execCtx.Model)
 	if err != nil {
 		return fmt.Sprintf("Error: %v", err)
 	}
 
 	if cached {
-		green.Printf("🔍 Web search (cached): %s\n", query)
+		out.Green.Printf("🔍 Web search (cached): %s\n", query)
 	} else {
-		green.Printf("🔍 Searching the web (%s): %s\n", source, query)
+		out.Green.Printf("🔍 Searching the web (%s): %s\n", source, query)
 	}
 
 	return result
 }
 
-func executeWebSearchWithFallback(query, providerName, model string) (string, bool, string, error) {
+func executeWebSearchWithFallback(out common.Output, query, providerName, model string) (string, bool, string, error) {
 	providerName = normalizeProviderName(providerName)
 	cacheScope := cacheScopeForProvider(providerName)
 
 	searchSource := "serper"
 	result, cached, err := serper.SearchWithCache(cacheScope, query, func(q string) (string, error) {
-		output, source, err := searchWithProvider(q, providerName, model)
+		output, source, err := searchWithProvider(out, q, providerName, model)
 		searchSource = source
 		return output, err
 	})
 	return result, cached, searchSource, err
 }
 
-func searchWithProvider(query, providerName, model string) (string, string, error) {
+func searchWithProvider(out common.Output, query, providerName, model string) (string, string, error) {
 	switch providerName {
 	case "gemini":
 		result, err := websearch.Search(providerName, query, model)
 		if err == nil {
 			return result, "gemini", nil
 		}
-		yellow.Printf("⚠️  Gemini native web search failed, falling back to Serper: %v\n", err)
+		out.Yellow.Printf("⚠️  Gemini native web search failed, falling back to Serper: %v\n", err)
 	case "claude":
 		result, err := websearch.Search(providerName, query, model)
 		if err == nil {
 			return result, "claude", nil
 		}
-		yellow.Printf("⚠️  Claude native web search failed, falling back to Serper: %v\n", err)
+		out.Yellow.Printf("⚠️  Claude native web search failed, falling back to Serper: %v\n", err)
 	case "openai":
 		result, err := websearch.Search(providerName, query, model)
 		if err == nil {
 			return result, "openai", nil
 		}
-		yellow.Printf("⚠️  OpenAI native web search failed, falling back to Serper: %v\n", err)
+		out.Yellow.Printf("⚠️  OpenAI native web search failed, falling back to Serper: %v\n", err)
 	}
 
 	result, err := serper.WebSearch(query)

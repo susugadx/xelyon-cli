@@ -37,14 +37,16 @@ func (t *ReadFileTool) Parameters() map[string]interface{} {
 	}
 }
 
-func (t *ReadFileTool) Run(args map[string]string) (string, *tools.FileChange, error) {
+func (t *ReadFileTool) Run(execCtx tools.ExecutionContext, args map[string]string) (string, *tools.FileChange, error) {
+	out := execCtx.Output()
+
 	// バッチモード: paths が指定されている場合
 	if args["paths"] != "" {
 		var paths []string
 		if err := json.Unmarshal([]byte(args["paths"]), &paths); err != nil {
 			return fmt.Sprintf("Error: invalid paths format: %v", err), nil, nil
 		}
-		return ExecuteReadFiles(paths), nil, nil
+		return ExecuteReadFilesWithOutput(out, paths), nil, nil
 	}
 
 	// 単体モード: 従来の path + start_line/end_line
@@ -62,7 +64,7 @@ func (t *ReadFileTool) Run(args map[string]string) (string, *tools.FileChange, e
 			endLine = n
 		}
 	}
-	return ExecuteReadFile(args["path"], startLine, endLine), nil, nil
+	return ExecuteReadFileWithOutput(out, args["path"], startLine, endLine), nil, nil
 }
 
 // WriteFileTool wraps write_file execution
@@ -86,8 +88,8 @@ func (t *WriteFileTool) Parameters() map[string]interface{} {
 	}
 }
 
-func (t *WriteFileTool) Run(args map[string]string) (string, *tools.FileChange, error) {
-	result, err := ExecuteWriteFile(args["path"], args["content"])
+func (t *WriteFileTool) Run(execCtx tools.ExecutionContext, args map[string]string) (string, *tools.FileChange, error) {
+	result, err := ExecuteWriteFileWithOutput(execCtx.Output(), args["path"], args["content"])
 	if err != nil {
 		return result, nil, err
 	}
@@ -136,10 +138,12 @@ func (t *StrReplaceTool) Parameters() map[string]interface{} {
 	}
 }
 
-func (t *StrReplaceTool) Run(args map[string]string) (string, *tools.FileChange, error) {
+func (t *StrReplaceTool) Run(execCtx tools.ExecutionContext, args map[string]string) (string, *tools.FileChange, error) {
+	out := execCtx.Output()
+
 	// batch edits モード: old_str 空 + edits 非空
 	if args["old_str"] == "" && args["edits"] != "" {
-		result, err := executeBatchEdits(args["path"], args["edits"])
+		result, err := executeBatchEditsWithOutput(out, args["path"], args["edits"])
 		if err != nil {
 			return result, nil, err
 		}
@@ -162,7 +166,7 @@ func (t *StrReplaceTool) Run(args map[string]string) (string, *tools.FileChange,
 	}
 
 	// 従来のシングル編集 or 行レンジ
-	result, err := ExecuteStrReplace(args["path"], args["old_str"], args["new_str"], args["start_line"], args["end_line"])
+	result, err := ExecuteStrReplaceWithOutput(out, args["path"], args["old_str"], args["new_str"], args["start_line"], args["end_line"])
 	if err != nil {
 		return result, nil, err
 	}
@@ -196,8 +200,8 @@ func (t *DeleteFileTool) Parameters() map[string]interface{} {
 	}
 }
 
-func (t *DeleteFileTool) Run(args map[string]string) (string, *tools.FileChange, error) {
-	result, err := ExecuteDeleteFile(args["path"])
+func (t *DeleteFileTool) Run(execCtx tools.ExecutionContext, args map[string]string) (string, *tools.FileChange, error) {
+	result, err := ExecuteDeleteFileWithOutput(execCtx.Output(), args["path"])
 	if err != nil {
 		return result, nil, err
 	}
@@ -230,7 +234,7 @@ func (t *ListDirTool) Parameters() map[string]interface{} {
 	}
 }
 
-func (t *ListDirTool) Run(args map[string]string) (string, *tools.FileChange, error) {
+func (t *ListDirTool) Run(_ tools.ExecutionContext, args map[string]string) (string, *tools.FileChange, error) {
 	depth := 1
 	if args["depth"] != "" {
 		if n, err := strconv.Atoi(args["depth"]); err == nil {

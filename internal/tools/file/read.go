@@ -12,11 +12,11 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
-func printReadStatus(format string, args ...interface{}) {
-	if common.IsQuietMode() {
+func printReadStatus(out common.Output, format string, args ...interface{}) {
+	if out.SuppressStdout() {
 		return
 	}
-	common.Green.Printf(format, args...)
+	out.Green.Printf(format, args...)
 }
 
 // formatFileSize はバイト数を人間が読みやすい形式に変換
@@ -43,6 +43,11 @@ const LargeFileThreshold = 1024 * 1024
 // startLine, endLine が指定されている場合はその範囲のみ返す
 // 指定がない場合は最初のMaxReadLines行を返す
 func ExecuteReadFile(path string, startLine, endLine int) string {
+	return ExecuteReadFileWithOutput(common.DefaultOutput(), path, startLine, endLine)
+}
+
+// ExecuteReadFileWithOutput は出力先を指定してファイルを読み込む。
+func ExecuteReadFileWithOutput(out common.Output, path string, startLine, endLine int) string {
 	if path == "" {
 		return "Error: path is empty"
 	}
@@ -50,7 +55,7 @@ func ExecuteReadFile(path string, startLine, endLine int) string {
 	// パストラバーサル防止
 	absPath, err := common.ValidatePath(path)
 	if err != nil {
-		common.Red.Printf("🚫 Security: %v\n", err)
+		out.Red.Printf("🚫 Security: %v\n", err)
 		return fmt.Sprintf("Error: %v", err)
 	}
 
@@ -125,18 +130,18 @@ func ExecuteReadFile(path string, startLine, endLine int) string {
 				// outline-first モード（先頭300行分の content で BuildBlockMap）
 				result := formatOutline(absPath, lines, totalLines)
 				if showFileInfo && fileSize > 0 {
-					printReadStatus("📄 Read: %s (%s, outline of ~%d lines)\n", path, formatFileSize(fileSize), totalLines)
+					printReadStatus(out, "📄 Read: %s (%s, outline of ~%d lines)\n", path, formatFileSize(fileSize), totalLines)
 				} else {
-					printReadStatus("📄 Read: %s (outline of ~%d lines)\n", path, totalLines)
+					printReadStatus(out, "📄 Read: %s (outline of ~%d lines)\n", path, totalLines)
 				}
 				return result
 			}
 			// 300行以下に収まった場合は全行表示
 			result := formatLinesWithNumbers(lines, 1)
 			if showFileInfo && fileSize > 0 {
-				printReadStatus("📄 Read: %s (%s, %d lines)\n", path, formatFileSize(fileSize), len(lines))
+				printReadStatus(out, "📄 Read: %s (%s, %d lines)\n", path, formatFileSize(fileSize), len(lines))
 			} else {
-				printReadStatus("📄 Read: %s (%d lines)\n", path, len(lines))
+				printReadStatus(out, "📄 Read: %s (%d lines)\n", path, len(lines))
 			}
 			return result
 		}
@@ -193,9 +198,9 @@ func ExecuteReadFile(path string, startLine, endLine int) string {
 		selectedLines := lines[startLine-1 : endLine]
 		result := formatLinesWithNumbers(selectedLines, startLine)
 		if showFileInfo && fileSize > 0 {
-			printReadStatus("📄 Read: %s (%s, lines %d-%d of %d)\n", path, formatFileSize(fileSize), startLine, endLine, totalLines)
+			printReadStatus(out, "📄 Read: %s (%s, lines %d-%d of %d)\n", path, formatFileSize(fileSize), startLine, endLine, totalLines)
 		} else {
-			printReadStatus("📄 Read: %s (lines %d-%d of %d)\n", path, startLine, endLine, totalLines)
+			printReadStatus(out, "📄 Read: %s (lines %d-%d of %d)\n", path, startLine, endLine, totalLines)
 		}
 		return result
 	}
@@ -205,9 +210,9 @@ func ExecuteReadFile(path string, startLine, endLine int) string {
 		// 全行表示
 		result := formatLinesWithNumbers(lines, 1)
 		if showFileInfo && fileSize > 0 {
-			printReadStatus("📄 Read: %s (%s, %d lines)\n", path, formatFileSize(fileSize), totalLines)
+			printReadStatus(out, "📄 Read: %s (%s, %d lines)\n", path, formatFileSize(fileSize), totalLines)
 		} else {
-			printReadStatus("📄 Read: %s (%d lines)\n", path, totalLines)
+			printReadStatus(out, "📄 Read: %s (%d lines)\n", path, totalLines)
 		}
 		return result
 	}
@@ -215,9 +220,9 @@ func ExecuteReadFile(path string, startLine, endLine int) string {
 	// outline-first モード: 先頭 + シグネチャ一覧 + 末尾
 	result := formatOutline(absPath, lines, totalLines)
 	if showFileInfo && fileSize > 0 {
-		printReadStatus("📄 Read: %s (%s, outline of %d lines)\n", path, formatFileSize(fileSize), totalLines)
+		printReadStatus(out, "📄 Read: %s (%s, outline of %d lines)\n", path, formatFileSize(fileSize), totalLines)
 	} else {
-		printReadStatus("📄 Read: %s (outline of %d lines)\n", path, totalLines)
+		printReadStatus(out, "📄 Read: %s (outline of %d lines)\n", path, totalLines)
 	}
 	return result
 }

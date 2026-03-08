@@ -13,6 +13,11 @@ import (
 
 // ExecuteWriteFile はファイルに書き込む
 func ExecuteWriteFile(path string, content string) (string, error) {
+	return ExecuteWriteFileWithOutput(common.DefaultOutput(), path, content)
+}
+
+// ExecuteWriteFileWithOutput は出力先を指定してファイルに書き込む。
+func ExecuteWriteFileWithOutput(out common.Output, path string, content string) (string, error) {
 	if path == "" {
 		return "Error: path is empty", nil
 	}
@@ -20,7 +25,7 @@ func ExecuteWriteFile(path string, content string) (string, error) {
 	// パストラバーサル防止
 	absPath, err := common.ValidatePath(path)
 	if err != nil {
-		common.Red.Printf("🚫 Security: %v\n", err)
+		out.Red.Printf("🚫 Security: %v\n", err)
 		return fmt.Sprintf("Error: %v", err), nil
 	}
 
@@ -43,29 +48,29 @@ func ExecuteWriteFile(path string, content string) (string, error) {
 
 	// 確認UI - 変更サマリーを明確に表示
 	newLines := strings.Split(content, "\n")
-	if !common.IsQuietMode() {
-		common.Cyan.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	if !out.SuppressStdout() {
+		out.Cyan.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 		if exists {
-			common.Cyan.Printf("📝 write_file (overwrite): %s\n", path)
+			out.Cyan.Printf("📝 write_file (overwrite): %s\n", path)
 		} else {
-			common.Cyan.Printf("📝 write_file (create): %s\n", path)
+			out.Cyan.Printf("📝 write_file (create): %s\n", path)
 		}
-		common.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		out.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
 		// 変更サマリー
-		common.Yellow.Println("\n📊 Summary / 変更サマリー:")
+		out.Yellow.Println("\n📊 Summary / 変更サマリー:")
 		if exists {
 			oldContent, _ := os.ReadFile(absPath)
 			oldLines := strings.Split(string(oldContent), "\n")
 			lineDiff := len(newLines) - len(oldLines)
-			common.Printf("   • Before: %d lines / 変更前: %d行\n", len(oldLines), len(oldLines))
-			common.Printf("   • After: %d lines / 変更後: %d行\n", len(newLines), len(newLines))
+			out.Printf("   • Before: %d lines / 変更前: %d行\n", len(oldLines), len(oldLines))
+			out.Printf("   • After: %d lines / 変更後: %d行\n", len(newLines), len(newLines))
 			if lineDiff > 0 {
-				common.Green.Printf("   • Net: +%d lines\n", lineDiff)
+				out.Green.Printf("   • Net: +%d lines\n", lineDiff)
 			} else if lineDiff < 0 {
-				common.Red.Printf("   • Net: %d lines\n", lineDiff)
+				out.Red.Printf("   • Net: %d lines\n", lineDiff)
 			} else {
-				common.Printf("   • Net: 0 lines (same size)\n")
+				out.Printf("   • Net: 0 lines (same size)\n")
 			}
 
 			// 既存ファイルの全体上書き警告
@@ -75,21 +80,21 @@ func ExecuteWriteFile(path string, content string) (string, error) {
 				absLineDiff = -absLineDiff
 			}
 			if absLineDiff < 10 && len(oldLines) > 50 {
-				common.Red.Println("\n🚨 WARNING: Large file overwrite with minimal changes!")
-				common.Red.Println("   あなたは大きなファイルを少ない変更で全体上書きしようとしています。")
-				common.Yellow.Println("💡 Consider using str_replace for partial edits instead.")
-				common.Yellow.Println("   部分的な編集には str_replace の使用を検討してください。")
+				out.Red.Println("\n🚨 WARNING: Large file overwrite with minimal changes!")
+				out.Red.Println("   あなたは大きなファイルを少ない変更で全体上書きしようとしています。")
+				out.Yellow.Println("💡 Consider using str_replace for partial edits instead.")
+				out.Yellow.Println("   部分的な編集には str_replace の使用を検討してください。")
 			}
 
-			common.ShowDiff(string(oldContent), content, path)
+			common.ShowDiffWithOutput(out, string(oldContent), content, path)
 		} else {
-			common.Printf("   • New file: %d lines / 新規: %d行\n", len(newLines), len(newLines))
-			common.Printf("   • Size: %d bytes\n", len(content))
-			common.ShowPreview(content)
+			out.Printf("   • New file: %d lines / 新規: %d行\n", len(newLines), len(newLines))
+			out.Printf("   • Size: %d bytes\n", len(content))
+			common.ShowPreviewWithOutput(out, content)
 		}
 	}
 
-	dec := common.ConfirmWithAutoApproveDecision("write_file", "Create/overwrite this file? / このファイルを作成・上書きしますか？")
+	dec := common.ConfirmWithAutoApproveDecision(out, "write_file", "Create/overwrite this file? / このファイルを作成・上書きしますか？")
 	switch dec.Action {
 	case common.ConfirmYes:
 		// continue
@@ -156,7 +161,7 @@ IMPORTANT: Do NOT write the file until the user approves.`, strings.TrimSpace(de
 	success = true
 
 	lineCount := strings.Count(content, "\n") + 1
-	common.Green.Printf("✅ Written: %s (%d lines)\n", path, lineCount)
+	out.Green.Printf("✅ Written: %s (%d lines)\n", path, lineCount)
 	msg := fmt.Sprintf("Successfully wrote %d bytes (%d lines) to %s", len(content), lineCount, path)
 	msg += lsp.GetDiagnosticsSummary(absPath)
 	return msg, nil

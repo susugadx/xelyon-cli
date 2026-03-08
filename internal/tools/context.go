@@ -1,6 +1,12 @@
 package tools
 
-import "sync"
+import (
+	"io"
+	"os"
+	"sync"
+
+	"github.com/susugadx/xelyon-cli/internal/tools/common"
+)
 
 // ExecutionContext はツール実行時の周辺コンテキストを保持する。
 // web_search などが現在のプロバイダー/モデルを参照するために使用する。
@@ -21,6 +27,8 @@ import "sync"
 type ExecutionContext struct {
 	ProviderName string
 	Model        string
+	Stdout       io.Writer
+	Stderr       io.Writer
 }
 
 var (
@@ -32,7 +40,7 @@ var (
 func SetExecutionContext(ctx ExecutionContext) {
 	executionContextMu.Lock()
 	defer executionContextMu.Unlock()
-	executionContext = ctx
+	executionContext = normalizeExecutionContext(ctx)
 }
 
 // ClearExecutionContext は現在のツール実行コンテキストをクリアする（race-safe）。
@@ -44,5 +52,26 @@ func ClearExecutionContext() {
 func GetExecutionContext() ExecutionContext {
 	executionContextMu.RLock()
 	defer executionContextMu.RUnlock()
-	return executionContext
+	return normalizeExecutionContext(executionContext)
+}
+
+// DefaultExecutionContext は標準入出力を使う実行コンテキストを返す。
+func DefaultExecutionContext() ExecutionContext {
+	return normalizeExecutionContext(ExecutionContext{})
+}
+
+// Output は common.Output へ変換する。
+func (ctx ExecutionContext) Output() common.Output {
+	normalized := normalizeExecutionContext(ctx)
+	return common.NewOutput(normalized.Stdout, normalized.Stderr)
+}
+
+func normalizeExecutionContext(ctx ExecutionContext) ExecutionContext {
+	if ctx.Stdout == nil {
+		ctx.Stdout = os.Stdout
+	}
+	if ctx.Stderr == nil {
+		ctx.Stderr = os.Stderr
+	}
+	return ctx
 }

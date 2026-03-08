@@ -160,7 +160,7 @@ func (m *mockTool) Parameters() map[string]interface{} {
 	}
 }
 
-func (m *mockTool) Run(args map[string]string) (string, *FileChange, error) {
+func (m *mockTool) Run(_ ExecutionContext, args map[string]string) (string, *FileChange, error) {
 	return "mock output", nil, nil
 }
 

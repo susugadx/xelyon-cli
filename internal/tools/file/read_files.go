@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
 // MaxReadFilesPaths は一度に読み込めるファイル数の上限
@@ -64,6 +65,11 @@ func perFileBudget(n int) int {
 
 // ExecuteReadFiles は複数ファイルを一括読み込みする
 func ExecuteReadFiles(paths []string) string {
+	return ExecuteReadFilesWithOutput(common.DefaultOutput(), paths)
+}
+
+// ExecuteReadFilesWithOutput は出力先を指定して複数ファイルを一括読み込みする。
+func ExecuteReadFilesWithOutput(out common.Output, paths []string) string {
 	if len(paths) == 0 {
 		return "Error: paths is empty"
 	}
@@ -97,7 +103,7 @@ func ExecuteReadFiles(paths []string) string {
 
 			results[idx] = readResult{
 				entry:  rawEntry,
-				result: ExecuteReadFile(path, startLine, endLine),
+				result: ExecuteReadFileWithOutput(out, path, startLine, endLine),
 			}
 		}(i, entry)
 	}
@@ -112,6 +118,6 @@ func ExecuteReadFiles(paths []string) string {
 		sb.WriteString(result.result)
 	}
 
-	printReadStatus("📄 Read: %d files\n", len(paths))
+	printReadStatus(out, "📄 Read: %d files\n", len(paths))
 	return sb.String()
 }

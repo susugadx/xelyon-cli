@@ -302,7 +302,7 @@ type xmlTestTool struct {
 func (t *xmlTestTool) Name() string                       { return t.name }
 func (t *xmlTestTool) Description() string                { return "test tool" }
 func (t *xmlTestTool) Parameters() map[string]interface{} { return nil }
-func (t *xmlTestTool) Run(args map[string]string) (string, *FileChange, error) {
+func (t *xmlTestTool) Run(_ ExecutionContext, args map[string]string) (string, *FileChange, error) {
 	return "", nil, nil
 }
 

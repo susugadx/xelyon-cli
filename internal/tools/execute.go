@@ -2,6 +2,8 @@ package tools
 
 import (
 	"fmt"
+	"io"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -10,71 +12,77 @@ import (
 )
 
 // printToolArgs はツールの引数を簡潔に表示する（Execute/PreviewToolCallで共通使用）
-func printToolArgs(tc *ToolCall) {
+func printToolArgs(w io.Writer, tc *ToolCall) {
 	switch tc.Tool {
 	case "read_file":
-		fmt.Printf("   File: %s\n", tc.Args["path"])
+		_, _ = fmt.Fprintf(w, "   File: %s\n", tc.Args["path"])
 	case "write_file":
 		lines := strings.Split(tc.Args["content"], "\n")
-		fmt.Printf("   File: %s (%d lines)\n", tc.Args["path"], len(lines))
+		_, _ = fmt.Fprintf(w, "   File: %s (%d lines)\n", tc.Args["path"], len(lines))
 	case "str_replace":
-		fmt.Printf("   File: %s\n", tc.Args["path"])
+		_, _ = fmt.Fprintf(w, "   File: %s\n", tc.Args["path"])
 	case "bash":
-		fmt.Printf("   Command: %s\n", truncate(tc.Args["command"], 60))
+		_, _ = fmt.Fprintf(w, "   Command: %s\n", truncate(tc.Args["command"], 60))
 	case "list_dir":
 		path := tc.Args["path"]
 		if path == "" {
 			path = "."
 		}
-		fmt.Printf("   Directory: %s\n", path)
+		_, _ = fmt.Fprintf(w, "   Directory: %s\n", path)
 	case "git_add", "git_commit", "git_push", "git_status", "git_diff", "git_log",
 		"git_branch", "git_checkout", "git_stash":
 		// Git操作は引数を簡潔に表示
 		for k, v := range tc.Args {
 			if v != "" {
-				fmt.Printf("   %s: %s\n", k, truncate(v, 60))
+				_, _ = fmt.Fprintf(w, "   %s: %s\n", k, truncate(v, 60))
 			}
 		}
 	case "copy_file":
-		fmt.Printf("   Source: %s\n", tc.Args["src"])
-		fmt.Printf("   Destination: %s\n", tc.Args["dest"])
+		_, _ = fmt.Fprintf(w, "   Source: %s\n", tc.Args["src"])
+		_, _ = fmt.Fprintf(w, "   Destination: %s\n", tc.Args["dest"])
 	case "delete_file":
-		fmt.Printf("   File: %s\n", tc.Args["path"])
+		_, _ = fmt.Fprintf(w, "   File: %s\n", tc.Args["path"])
 	case "lint":
 		path := tc.Args["path"]
 		if path == "" {
 			path = "."
 		}
-		fmt.Printf("   Path: %s\n", path)
+		_, _ = fmt.Fprintf(w, "   Path: %s\n", path)
 		if tc.Args["auto_fix"] == "true" {
-			fmt.Printf("   Auto-fix: enabled\n")
+			_, _ = fmt.Fprintf(w, "   Auto-fix: enabled\n")
 		}
 	case "search_code":
-		fmt.Printf("   Pattern: %s\n", tc.Args["pattern"])
+		_, _ = fmt.Fprintf(w, "   Pattern: %s\n", tc.Args["pattern"])
 		if tc.Args["path"] != "" {
-			fmt.Printf("   Path: %s\n", tc.Args["path"])
+			_, _ = fmt.Fprintf(w, "   Path: %s\n", tc.Args["path"])
 		}
 		if tc.Args["file_pattern"] != "" {
-			fmt.Printf("   File pattern: %s\n", tc.Args["file_pattern"])
+			_, _ = fmt.Fprintf(w, "   File pattern: %s\n", tc.Args["file_pattern"])
 		}
 	case "web_search":
-		fmt.Printf("   Query: %s\n", tc.Args["query"])
+		_, _ = fmt.Fprintf(w, "   Query: %s\n", tc.Args["query"])
 	default:
 		// その他のツール（MCPツール等）
 		if len(tc.Args) > 0 {
 			for k, v := range tc.Args {
-				fmt.Printf("   %s: %s\n", k, truncate(v, 60))
+				_, _ = fmt.Fprintf(w, "   %s: %s\n", k, truncate(v, 60))
 			}
 		}
 	}
-	fmt.Println()
+	_, _ = fmt.Fprintln(w)
 }
 
 // Execute はツールを実行し、統一フォーマットの1行サマリーと必要に応じて折りたたみ結果を表示する。
 func Execute(tc *ToolCall) (string, *FileChange) {
-	result, change := executeCore(tc)
+	return ExecuteWithContext(GetExecutionContext(), tc)
+}
 
-	fmt.Println(ui.FormatToolLine(ui.ToolDisplayInfo{
+// ExecuteWithContext は実行コンテキスト付きでツールを実行する。
+func ExecuteWithContext(execCtx ExecutionContext, tc *ToolCall) (string, *FileChange) {
+	execCtx = normalizeExecutionContext(execCtx)
+	result, change := executeCoreWithContext(execCtx, tc)
+
+	_, _ = fmt.Fprintln(execCtx.Stdout, ui.FormatToolLine(ui.ToolDisplayInfo{
 		ToolName: tc.Tool,
 		Args:     tc.Args,
 		Result:   result,
@@ -83,7 +91,7 @@ func Execute(tc *ToolCall) (string, *FileChange) {
 
 	// ツール出力の折りたたみ表示（bashはストリーミング表示済みなので除外）
 	if !isStreamingTool(tc.Tool) && shouldShowCollapsedOutput(result) {
-		displayCollapsedOutput(result)
+		displayCollapsedOutput(execCtx.Stdout, result)
 	}
 
 	return result, change
@@ -95,14 +103,18 @@ func Execute(tc *ToolCall) (string, *FileChange) {
 // 抑制するもの: ツールヘッダー（"🔧 Tool: ..."）、引数表示、折りたたみ結果表示。
 // Tool.Run() 内部の補助的な標準出力も common quiet mode で抑制する。
 func ExecuteQuiet(tc *ToolCall) (string, *FileChange) {
-	restoreQuiet := common.PushQuietMode()
-	defer restoreQuiet()
-	return executeCore(tc)
+	return ExecuteQuietWithContext(GetExecutionContext(), tc)
 }
 
-// executeCore は Execute / ExecuteQuiet の共通ロジック。
-// デフォルト値設定 → Registry 実行 → キャッシュ無効化 → 空結果補完。
-func executeCore(tc *ToolCall) (string, *FileChange) {
+// ExecuteQuietWithContext は実行コンテキスト付きでツールを実行するが、wrapper 出力を抑制する。
+func ExecuteQuietWithContext(execCtx ExecutionContext, tc *ToolCall) (string, *FileChange) {
+	execCtx = normalizeExecutionContext(execCtx)
+	restoreQuiet := common.PushQuietMode()
+	defer restoreQuiet()
+	return executeCoreWithContext(execCtx, tc)
+}
+
+func executeCoreWithContext(execCtx ExecutionContext, tc *ToolCall) (string, *FileChange) {
 	// デフォルト値の設定（Registry実行前）
 	// list_dir, git_addでpathが空の場合"."を設定
 	if tc.Args["path"] == "" {
@@ -113,7 +125,7 @@ func executeCore(tc *ToolCall) (string, *FileChange) {
 	}
 
 	// Registry経由でツール実行
-	result, change := DefaultRegistry.Execute(tc)
+	result, change := DefaultRegistry.ExecuteWithContext(execCtx, tc)
 
 	// ファイル変更系ツールの場合、キャッシュを無効化
 	invalidateToolCache(tc)
@@ -232,7 +244,7 @@ func isBashReadOnly(command string) bool {
 // PreviewToolCall displays tool information without executing it
 func PreviewToolCall(tc *ToolCall) {
 	cyan.Printf("🔧 Tool: %s (Dry Run)\n", tc.Tool)
-	printToolArgs(tc)
+	printToolArgs(os.Stdout, tc)
 }
 
 // isStreamingTool はストリーミング出力を行うツールか判定
@@ -252,7 +264,7 @@ func shouldShowCollapsedOutput(output string) bool {
 }
 
 // displayCollapsedOutput はツール出力を折りたたみ表示
-func displayCollapsedOutput(output string) {
+func displayCollapsedOutput(w io.Writer, output string) {
 	// エラー出力や短い成功メッセージはそのまま表示
 	if strings.HasPrefix(output, "Error:") ||
 		strings.HasPrefix(output, "Successfully") ||
@@ -267,5 +279,5 @@ func displayCollapsedOutput(output string) {
 
 	// 折りたたみ表示
 	formatted := ui.FormatToolOutput(output, ui.GetMaxVisibleLines())
-	fmt.Print(formatted)
+	_, _ = fmt.Fprint(w, formatted)
 }

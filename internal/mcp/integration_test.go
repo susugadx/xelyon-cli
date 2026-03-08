@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
 func TestMCPToolWrapper_Name(t *testing.T) {
@@ -287,7 +289,7 @@ func TestMCPToolWrapper_Run_ValidationError(t *testing.T) {
 	}
 
 	// 必須パラメータなしで実行
-	result, change, err := wrapper.Run(map[string]string{})
+	result, change, err := wrapper.Run(tools.DefaultExecutionContext(), map[string]string{})
 
 	if err == nil {
 		t.Error("Run() should return error for missing required parameter")
@@ -314,7 +316,7 @@ func TestMCPToolWrapper_Run_CallToolError(t *testing.T) {
 	}
 
 	// 接続していないサーバーに対して実行
-	result, change, err := wrapper.Run(map[string]string{})
+	result, change, err := wrapper.Run(tools.DefaultExecutionContext(), map[string]string{})
 
 	if err == nil {
 		t.Error("Run() should return error for non-connected server")

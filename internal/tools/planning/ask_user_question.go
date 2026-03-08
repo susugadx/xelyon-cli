@@ -52,7 +52,7 @@ func (t *AskUserQuestionTool) Parameters() map[string]interface{} {
 }
 
 // Run はツールを実行
-func (t *AskUserQuestionTool) Run(args map[string]string) (string, *tools.FileChange, error) {
+func (t *AskUserQuestionTool) Run(_ tools.ExecutionContext, args map[string]string) (string, *tools.FileChange, error) {
 	question := args["question"]
 	questionType := args["question_type"]
 	optionsJSON := args["options"]

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -28,7 +29,7 @@ func TestAskUserQuestionTool_Run_SingleChoice(t *testing.T) {
 	setTestReader(t, "2\n")
 
 	tool := &AskUserQuestionTool{}
-	result, _, err := tool.Run(map[string]string{
+	result, _, err := tool.Run(tools.DefaultExecutionContext(), map[string]string{
 		"question":      "Choose",
 		"question_type": "single_choice",
 		"options":       `["Yes","No"]`,
@@ -53,7 +54,7 @@ func TestAskUserQuestionTool_Run_MultiChoice(t *testing.T) {
 	setTestReader(t, "1,3\n")
 
 	tool := &AskUserQuestionTool{}
-	result, _, err := tool.Run(map[string]string{
+	result, _, err := tool.Run(tools.DefaultExecutionContext(), map[string]string{
 		"question":      "Pick",
 		"question_type": "multi_choice",
 		"options":       `["A","B","C"]`,
@@ -73,7 +74,7 @@ func TestAskUserQuestionTool_Run_MultiChoice(t *testing.T) {
 
 func TestAskUserQuestionTool_Run_OptionsValidation(t *testing.T) {
 	tool := &AskUserQuestionTool{}
-	_, _, err := tool.Run(map[string]string{
+	_, _, err := tool.Run(tools.DefaultExecutionContext(), map[string]string{
 		"question":      "Choose",
 		"question_type": "single_choice",
 	})
@@ -86,7 +87,7 @@ func TestAskUserQuestionTool_Run_OptionsParseFallback(t *testing.T) {
 	setTestReader(t, "\n")
 
 	tool := &AskUserQuestionTool{}
-	result, _, err := tool.Run(map[string]string{
+	result, _, err := tool.Run(tools.DefaultExecutionContext(), map[string]string{
 		"question":      "Choose",
 		"question_type": "single_choice",
 		"options":       "Yes,No",

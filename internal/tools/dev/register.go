@@ -27,12 +27,12 @@ func (t *BashTool) Parameters() map[string]interface{} {
 	}
 }
 
-func (t *BashTool) Run(args map[string]string) (string, *tools.FileChange, error) {
+func (t *BashTool) Run(execCtx tools.ExecutionContext, args map[string]string) (string, *tools.FileChange, error) {
 	command := strings.TrimSpace(args["command"])
 	if command == "" {
 		return "", nil, fmt.Errorf("bash command is empty. Provide a valid command string in the 'command' argument")
 	}
-	output := ExecuteBash(args["command"])
+	output := ExecuteBashWithOutput(execCtx.Output(), args["command"])
 	return output, nil, nil
 }
 

@@ -91,7 +91,7 @@ func (w *MCPToolWrapper) Parameters() map[string]interface{} {
 }
 
 // Run はツールを実行
-func (w *MCPToolWrapper) Run(args map[string]string) (string, *tools.FileChange, error) {
+func (w *MCPToolWrapper) Run(execCtx tools.ExecutionContext, args map[string]string) (string, *tools.FileChange, error) {
 	// 引数バリデーション（簡易版）
 	if err := w.validateArgs(args); err != nil {
 		return fmt.Sprintf("Validation Error: %v", err), nil, err
@@ -116,7 +116,7 @@ func (w *MCPToolWrapper) Run(args map[string]string) (string, *tools.FileChange,
 			w.toolName, w.serverName, strings.Join(argsDisplay, ", "))
 	}
 
-	decision := common.ConfirmWithAutoApproveDecision(toolName, message)
+	decision := common.ConfirmWithAutoApproveDecision(execCtx.Output(), toolName, message)
 	switch decision.Action {
 	case common.ConfirmNo:
 		return "User rejected MCP tool execution", nil, nil

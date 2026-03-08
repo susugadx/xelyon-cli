@@ -13,10 +13,15 @@ import (
 
 // ExecuteDeleteFile deletes a file permanently
 func ExecuteDeleteFile(path string) (string, error) {
+	return ExecuteDeleteFileWithOutput(common.DefaultOutput(), path)
+}
+
+// ExecuteDeleteFileWithOutput deletes a file permanently with explicit output writers.
+func ExecuteDeleteFileWithOutput(out common.Output, path string) (string, error) {
 	// パストラバーサル防止
 	absPath, err := common.ValidatePath(path)
 	if err != nil {
-		common.Red.Printf("🚫 Security: %v\n", err)
+		out.Red.Printf("🚫 Security: %v\n", err)
 		return fmt.Sprintf("Error: %v", err), nil
 	}
 
@@ -55,18 +60,18 @@ func ExecuteDeleteFile(path string) (string, error) {
 			}
 		}
 	} else {
-		common.Yellow.Println("ℹ️  LSP not connected — external reference check skipped")
+		out.Yellow.Println("ℹ️  LSP not connected — external reference check skipped")
 	}
 
 	// 確認UI表示（ファイルプレビュー付き）
-	if !common.IsQuietMode() {
-		common.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		common.Cyan.Printf("🗑️  Delete File / ファイル削除\n")
-		common.Cyan.Printf("📂 Path / パス: %s\n", path)
-		common.Cyan.Printf("📏 Size / サイズ: %d bytes (%d lines)\n", fileInfo.Size(), len(lines))
-		common.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		common.Red.Println("⚠️  DESTRUCTIVE: File will be permanently deleted!")
-		common.Red.Println("⚠️  破壊的操作: ファイルは完全に削除されます!")
+	if !out.SuppressStdout() {
+		out.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		out.Cyan.Printf("🗑️  Delete File / ファイル削除\n")
+		out.Cyan.Printf("📂 Path / パス: %s\n", path)
+		out.Cyan.Printf("📏 Size / サイズ: %d bytes (%d lines)\n", fileInfo.Size(), len(lines))
+		out.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		out.Red.Println("⚠️  DESTRUCTIVE: File will be permanently deleted!")
+		out.Red.Println("⚠️  破壊的操作: ファイルは完全に削除されます!")
 
 		cfg := config.GetGlobalConfig()
 		maxPreviewLines := cfg.Diff.MaxTotalLines
@@ -75,23 +80,23 @@ func ExecuteDeleteFile(path string) (string, error) {
 		}
 
 		if len(lines) > maxPreviewLines {
-			common.Yellow.Printf("\nFile preview (first %d of %d lines) / ファイルプレビュー:\n", maxPreviewLines, len(lines))
+			out.Yellow.Printf("\nFile preview (first %d of %d lines) / ファイルプレビュー:\n", maxPreviewLines, len(lines))
 		} else {
-			common.Yellow.Printf("\nFile contents (%d lines) / ファイル内容:\n", len(lines))
+			out.Yellow.Printf("\nFile contents (%d lines) / ファイル内容:\n", len(lines))
 		}
 		for i := 0; i < len(lines) && i < maxPreviewLines; i++ {
-			common.Printf("  %4d: %s\n", i+1, lines[i])
+			out.Printf("  %4d: %s\n", i+1, lines[i])
 		}
 		if len(lines) > maxPreviewLines {
-			common.Yellow.Printf("  ... (%d more lines)\n", len(lines)-maxPreviewLines)
+			out.Yellow.Printf("  ... (%d more lines)\n", len(lines)-maxPreviewLines)
 		}
 
 		// 外部参照の警告表示
 		if len(externalRefs) > 0 {
-			common.Println()
-			common.Yellow.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-			common.Yellow.Printf("⚠️  LSP Warning: This file contains %d external references!\n", len(externalRefs))
-			common.Yellow.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+			out.Println()
+			out.Yellow.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+			out.Yellow.Printf("⚠️  LSP Warning: This file contains %d external references!\n", len(externalRefs))
+			out.Yellow.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
 			// シンボルごとにグループ化して表示
 			symbolRefs := make(map[string][]toolslsp.ReferenceInfo)
@@ -100,23 +105,23 @@ func ExecuteDeleteFile(path string) (string, error) {
 			}
 
 			for symbol, refs := range symbolRefs {
-				common.Yellow.Printf("   %s (%d references):\n", symbol, len(refs))
+				out.Yellow.Printf("   %s (%d references):\n", symbol, len(refs))
 				shown := 0
 				for _, ref := range refs {
 					if shown >= 3 {
-						common.Yellow.Printf("      ... and %d more\n", len(refs)-3)
+						out.Yellow.Printf("      ... and %d more\n", len(refs)-3)
 						break
 					}
-					common.Printf("      - %s:%d\n", ref.FilePath, ref.Line)
+					out.Printf("      - %s:%d\n", ref.FilePath, ref.Line)
 					shown++
 				}
 			}
-			common.Println()
-			common.Red.Println("⚠️  Deleting this file may break the code that references these symbols!")
+			out.Println()
+			out.Red.Println("⚠️  Deleting this file may break the code that references these symbols!")
 		}
 	}
 
-	dec := common.ConfirmWithAutoApproveDecision("delete_file", "Delete this file? / このファイルを削除しますか？")
+	dec := common.ConfirmWithAutoApproveDecision(out, "delete_file", "Delete this file? / このファイルを削除しますか？")
 	switch dec.Action {
 	case common.ConfirmYes:
 		// continue

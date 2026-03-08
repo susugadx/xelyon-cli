@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/testutil"
+	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
@@ -248,7 +249,7 @@ func TestReadFileTool_BatchMode(t *testing.T) {
 	file2 := filepath.Join(tmpDir, "file2.txt")
 
 	tool := &ReadFileTool{}
-	result, fc, err := tool.Run(map[string]string{
+	result, fc, err := tool.Run(tools.DefaultExecutionContext(), map[string]string{
 		"paths": `["` + file1 + `", "` + file2 + `"]`,
 	})
 
@@ -313,7 +314,7 @@ func TestReadFileTool_BatchMode_LineRange(t *testing.T) {
 	file := filepath.Join(tmpDir, "range.txt")
 
 	tool := &ReadFileTool{}
-	result, _, err := tool.Run(map[string]string{
+	result, _, err := tool.Run(tools.DefaultExecutionContext(), map[string]string{
 		"paths": `["` + file + `:2-3"]`,
 	})
 
@@ -330,7 +331,7 @@ func TestReadFileTool_BatchMode_LineRange(t *testing.T) {
 
 func TestReadFileTool_PathRequired(t *testing.T) {
 	tool := &ReadFileTool{}
-	result, _, err := tool.Run(map[string]string{})
+	result, _, err := tool.Run(tools.DefaultExecutionContext(), map[string]string{})
 
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

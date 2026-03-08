@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
@@ -51,6 +52,12 @@ func RunHeadless(query string, model string, provider api.Provider) *HeadlessRes
 	// イテレーションループ（最大10回で無限ループ防止）
 	const maxIterations = 10
 	var finalResponse string
+	execCtx := tools.ExecutionContext{
+		ProviderName: provider.Name(),
+		Model:        model,
+		Stdout:       io.Discard,
+		Stderr:       io.Discard,
+	}
 
 	for iteration := 0; iteration < maxIterations; iteration++ {
 		// API呼び出し
@@ -76,7 +83,7 @@ func RunHeadless(query string, model string, provider api.Provider) *HeadlessRes
 		// ツール実行と結果収集
 		var toolOutputs []string
 		for _, tc := range parsedCalls {
-			output, change := tools.ExecuteQuiet(tc)
+			output, change := tools.ExecuteQuietWithContext(execCtx, tc)
 
 			// 成功判定（"Error:"を含むかどうかで簡易判定）
 			success := !strings.Contains(output, "Error:")

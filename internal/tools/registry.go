@@ -23,7 +23,7 @@ type Tool interface {
 	// output: ツールの実行結果
 	// change: ファイル変更情報（変更がない場合はnil）
 	// err: エラー（エラーがない場合はnil）
-	Run(args map[string]string) (output string, change *FileChange, err error)
+	Run(execCtx ExecutionContext, args map[string]string) (output string, change *FileChange, err error)
 }
 
 // ToolDefinition はツール定義（プロバイダー変換用）
@@ -56,6 +56,11 @@ func (r *Registry) Register(tool Tool) {
 
 // Execute はツール呼び出しを実行（スレッドセーフ + 監査ログ記録）
 func (r *Registry) Execute(tc *ToolCall) (string, *FileChange) {
+	return r.ExecuteWithContext(GetExecutionContext(), tc)
+}
+
+// ExecuteWithContext は実行コンテキスト付きでツール呼び出しを実行する。
+func (r *Registry) ExecuteWithContext(execCtx ExecutionContext, tc *ToolCall) (string, *FileChange) {
 	r.mu.RLock()
 	tool, ok := r.tools[tc.Tool]
 	r.mu.RUnlock()
@@ -64,7 +69,7 @@ func (r *Registry) Execute(tc *ToolCall) (string, *FileChange) {
 		return fmt.Sprintf("Unknown tool: %s", tc.Tool), nil
 	}
 
-	output, change, err := tool.Run(tc.Args)
+	output, change, err := tool.Run(normalizeExecutionContext(execCtx), tc.Args)
 
 	// 監査ログ記録（失敗しても処理続行）
 	logger := audit.GetLogger()
