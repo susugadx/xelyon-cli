@@ -1,0 +1,76 @@
+package ui
+
+import (
+	"testing"
+	"time"
+)
+
+func TestFormatToolLine_SearchCode(t *testing.T) {
+	line := FormatToolLine(ToolDisplayInfo{
+		ToolName: "search_code",
+		Args: map[string]string{
+			"pattern": "GetPricingInfo",
+			"path":    "internal/agent/",
+		},
+		Result: "Found 8 match(es) in 4 file(s)\ninternal/agent/stats.go:42: ...",
+	})
+
+	want := `🔍 search_code: "GetPricingInfo" in internal/agent/ → 8 matches, 4 files`
+	if line != want {
+		t.Fatalf("FormatToolLine() = %q, want %q", line, want)
+	}
+}
+
+func TestFormatToolLine_SearchCodeNoMatches(t *testing.T) {
+	line := FormatToolLine(ToolDisplayInfo{
+		ToolName: "search_code",
+		Args: map[string]string{
+			"pattern": "nonExistent",
+		},
+		Result: "No matches found",
+	})
+
+	want := `🔍 search_code: "nonExistent" → No matches found`
+	if line != want {
+		t.Fatalf("FormatToolLine() = %q, want %q", line, want)
+	}
+}
+
+func TestFormatToolLine_ReadFile(t *testing.T) {
+	line := FormatToolLine(ToolDisplayInfo{
+		ToolName: "read_file",
+		Args: map[string]string{
+			"path": "example.txt",
+		},
+		Result: "1: line1\n2: line2\n3: line3\n",
+	})
+
+	want := "📄 read_file: example.txt (3 lines)"
+	if line != want {
+		t.Fatalf("FormatToolLine() = %q, want %q", line, want)
+	}
+}
+
+func TestFormatToolLine_StrReplace(t *testing.T) {
+	line := FormatToolLine(ToolDisplayInfo{
+		ToolName: "str_replace",
+		Args: map[string]string{
+			"path": "auto_compress.go",
+		},
+		Result: "Successfully replaced text in auto_compress.go (lines 30-30 → 30-32)",
+	})
+
+	want := "✏️ str_replace: auto_compress.go:30"
+	if line != want {
+		t.Fatalf("FormatToolLine() = %q, want %q", line, want)
+	}
+}
+
+func TestFormatParallelElapsed(t *testing.T) {
+	if got := FormatParallelElapsed(250 * time.Millisecond); got != "250ms" {
+		t.Fatalf("FormatParallelElapsed(250ms) = %q, want %q", got, "250ms")
+	}
+	if got := FormatParallelElapsed(1200 * time.Millisecond); got != "1.2s" {
+		t.Fatalf("FormatParallelElapsed(1.2s) = %q, want %q", got, "1.2s")
+	}
+}

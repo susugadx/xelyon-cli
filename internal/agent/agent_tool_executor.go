@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/tools/common"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -460,6 +462,11 @@ func (a *Agent) handleFileChange(change *tools.FileChange) {
 // 元のインデックス順で呼ばれる（skip / loopAbort されたツールには呼ばれない）。
 type ToolExecCallback func(idx int, tc *tools.ToolCall, result string, change *tools.FileChange)
 
+type toolExecResult struct {
+	result string
+	change *tools.FileChange
+}
+
 // executeToolForParallel は並列実行用のツール実行関数。
 // goroutine から安全に呼び出せるよう、以下を省略している:
 //   - spinner / SetGlobalSpinner: goroutine 内で global spinner を操作すると競合する
@@ -468,10 +475,7 @@ type ToolExecCallback func(idx int, tc *tools.ToolCall, result string, change *t
 // stdout 出力の抑制:
 //
 //	tools.ExecuteQuiet を使用し、wrapper 層の出力（ヘッダー・引数・折りたたみ結果）を抑制する。
-//	抑制できないもの: Tool.Run() 内部の直接 stdout 出力（例: read_file の "📄 Read: ..."）。
-//	Tool interface が io.Writer を受け取らないため、個々のツール実装内の出力は制御できない。
-//	parallel-safe ツールの Tool.Run() 内部出力は比較的少量のステータス行のみであり、
-//	goroutine 間で interleave しても致命的ではないと現時点で判断している。
+//	Tool.Run() 内部の補助的な出力は common.SetQuietMode(true) を batch 単位で設定して抑制する。
 //
 // cancel の実効性（best effort）:
 //
@@ -598,11 +602,7 @@ func (a *Agent) executeToolCallsWithParallel(
 
 	// ── Phase 1: 実行 ──
 	// 実行対象のツールを parallel-safe / sequential に分類して実行する。
-	type execResult struct {
-		result string
-		change *tools.FileChange
-	}
-	results := make([]execResult, n)
+	results := make([]toolExecResult, n)
 
 	var parallelEntries, seqEntries []int
 	for i, e := range entries {
@@ -630,6 +630,10 @@ func (a *Agent) executeToolCallsWithParallel(
 	//   再チェックする。ただし Tool.Run() 自体は ctx を受け取らないため、
 	//   実行開始後のキャンセルは効かない（次の goroutine 起動時にスキップされる）。
 	if len(parallelEntries) > 0 {
+		prevQuiet := common.IsQuietMode()
+		common.SetQuietMode(true)
+		startedAt := time.Now()
+
 		tools.SetExecutionContext(tools.ExecutionContext{
 			ProviderName: a.ProviderName,
 			Model:        a.CurrentModel,
@@ -642,7 +646,7 @@ func (a *Agent) executeToolCallsWithParallel(
 		for _, idx := range parallelEntries {
 			if ctx.Err() != nil {
 				mu.Lock()
-				results[idx] = execResult{result: "Error: context cancelled"}
+				results[idx] = toolExecResult{result: "Error: context cancelled"}
 				mu.Unlock()
 				continue
 			}
@@ -654,23 +658,25 @@ func (a *Agent) executeToolCallsWithParallel(
 
 				r, c := a.executeToolForParallel(ctx, allToolCalls[i])
 				mu.Lock()
-				results[i] = execResult{result: r, change: c}
+				results[i] = toolExecResult{result: r, change: c}
 				mu.Unlock()
 			}(idx)
 		}
 		wg.Wait()
 
 		tools.ClearExecutionContext()
+		common.SetQuietMode(prevQuiet)
+		printParallelToolGroup(allToolCalls, parallelEntries, results, time.Since(startedAt))
 	}
 
 	// Phase 1b: sequential 群を順次実行（spinner あり）
 	for _, idx := range seqEntries {
 		if ctx.Err() != nil {
-			results[idx] = execResult{result: "Error: context cancelled"}
+			results[idx] = toolExecResult{result: "Error: context cancelled"}
 			continue
 		}
 		r, c := a.executeToolWithSpinner(allToolCalls[idx])
-		results[idx] = execResult{result: r, change: c}
+		results[idx] = toolExecResult{result: r, change: c}
 	}
 
 	// ── Phase 2: 結果配送（元の tool call 順） ──
@@ -748,4 +754,83 @@ func (a *Agent) executeToolCallsWithParallel(
 	}
 
 	return loopDetected
+}
+
+func printParallelToolGroup(allToolCalls []*tools.ToolCall, indices []int, results []toolExecResult, elapsed time.Duration) {
+	if len(indices) == 0 {
+		return
+	}
+
+	if len(indices) == 1 {
+		idx := indices[0]
+		fmt.Println(ui.FormatToolLine(ui.ToolDisplayInfo{
+			ToolName: allToolCalls[idx].Tool,
+			Args:     allToolCalls[idx].Args,
+			Result:   results[idx].result,
+			Error:    strings.HasPrefix(strings.TrimSpace(results[idx].result), "Error:"),
+		}))
+		return
+	}
+
+	ui.PrintParallelGroupStart(len(indices))
+	for _, idx := range indices {
+		ui.PrintParallelGroupLine(ui.FormatToolLine(ui.ToolDisplayInfo{
+			ToolName: allToolCalls[idx].Tool,
+			Args:     allToolCalls[idx].Args,
+			Result:   results[idx].result,
+			Error:    strings.HasPrefix(strings.TrimSpace(results[idx].result), "Error:"),
+		}))
+	}
+	ui.PrintParallelGroupEnd(formatParallelGroupSummary(allToolCalls, indices, elapsed))
+}
+
+func formatParallelGroupSummary(allToolCalls []*tools.ToolCall, indices []int, elapsed time.Duration) string {
+	counts := make(map[string]int)
+	var order []string
+
+	addCount := func(label string) {
+		if counts[label] == 0 {
+			order = append(order, label)
+		}
+		counts[label]++
+	}
+
+	for _, idx := range indices {
+		switch allToolCalls[idx].Tool {
+		case "read_file", "read_files", "list_dir":
+			addCount("reads")
+		case "search_code":
+			addCount("searches")
+		case "web_search":
+			addCount("web")
+		case "bash":
+			addCount("bash")
+		default:
+			addCount(allToolCalls[idx].Tool)
+		}
+	}
+
+	var parts []string
+	for _, label := range order {
+		count := counts[label]
+		switch label {
+		case "reads", "searches":
+			parts = append(parts, fmt.Sprintf("%d %s", count, label))
+		case "web":
+			parts = append(parts, fmt.Sprintf("%d web", count))
+		case "bash":
+			parts = append(parts, fmt.Sprintf("%d bash", count))
+		default:
+			if count == 1 {
+				parts = append(parts, fmt.Sprintf("%d %s", count, label))
+			} else {
+				parts = append(parts, fmt.Sprintf("%d %ss", count, label))
+			}
+		}
+	}
+
+	if len(parts) == 0 {
+		return fmt.Sprintf("Done (%s)", ui.FormatParallelElapsed(elapsed))
+	}
+	return fmt.Sprintf("Done: %s (%s)", strings.Join(parts, ", "), ui.FormatParallelElapsed(elapsed))
 }

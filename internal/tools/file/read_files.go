@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-
-	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
 // MaxReadFilesPaths は一度に読み込めるファイル数の上限
@@ -93,6 +91,6 @@ func ExecuteReadFiles(paths []string) string {
 		sb.WriteString(result)
 	}
 
-	common.Green.Printf("📄 Read: %d files\n", len(paths))
+	printReadStatus("📄 Read: %d files\n", len(paths))
 	return sb.String()
 }

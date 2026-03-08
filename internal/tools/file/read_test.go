@@ -2,12 +2,14 @@ package file
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/testutil"
+	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
 func TestExecuteReadFile_Normal(t *testing.T) {
@@ -201,6 +203,40 @@ func TestExecuteReadFile_StartLineLargeFile(t *testing.T) {
 	}
 }
 
+func TestExecuteReadFile_QuietModeSuppressesStdout(t *testing.T) {
+	setupTestMocks(t)
+	tmpDir := t.TempDir()
+	testutil.CreateTempFile(t, tmpDir, "quiet.txt", "line1\nline2")
+
+	oldStdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe() error = %v", err)
+	}
+	os.Stdout = w
+	defer func() {
+		os.Stdout = oldStdout
+	}()
+
+	common.SetQuietMode(true)
+	defer common.SetQuietMode(false)
+
+	result := ExecuteReadFile(filepath.Join(tmpDir, "quiet.txt"), 0, 0)
+	_ = w.Close()
+
+	data, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("ReadAll() error = %v", err)
+	}
+
+	if strings.TrimSpace(string(data)) != "" {
+		t.Fatalf("expected no stdout in quiet mode, got %q", string(data))
+	}
+	if !strings.Contains(result, "1: line1") {
+		t.Fatalf("ExecuteReadFile() result = %q", result)
+	}
+}
+
 func TestReadFileTool_BatchMode(t *testing.T) {
 	setupTestMocks(t)
 	tmpDir := t.TempDir()
@@ -227,6 +263,44 @@ func TestReadFileTool_BatchMode(t *testing.T) {
 	}
 	if !strings.Contains(result, "hello from file2") {
 		t.Errorf("expected result to contain file2 content, got: %s", result)
+	}
+}
+
+func TestExecuteReadFiles_QuietModeSuppressesStdout(t *testing.T) {
+	setupTestMocks(t)
+	tmpDir := t.TempDir()
+	testutil.CreateTempFile(t, tmpDir, "file1.txt", "hello from file1")
+	testutil.CreateTempFile(t, tmpDir, "file2.txt", "hello from file2")
+
+	oldStdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe() error = %v", err)
+	}
+	os.Stdout = w
+	defer func() {
+		os.Stdout = oldStdout
+	}()
+
+	common.SetQuietMode(true)
+	defer common.SetQuietMode(false)
+
+	result := ExecuteReadFiles([]string{
+		filepath.Join(tmpDir, "file1.txt"),
+		filepath.Join(tmpDir, "file2.txt"),
+	})
+	_ = w.Close()
+
+	data, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("ReadAll() error = %v", err)
+	}
+
+	if strings.TrimSpace(string(data)) != "" {
+		t.Fatalf("expected no stdout in quiet mode, got %q", string(data))
+	}
+	if !strings.Contains(result, "📄 File: ") {
+		t.Fatalf("ExecuteReadFiles() result = %q", result)
 	}
 }
 

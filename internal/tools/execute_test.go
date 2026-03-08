@@ -2,12 +2,14 @@ package tools
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os"
 	"strings"
 	"testing"
 
 	"github.com/fatih/color"
+	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
 func TestPreviewToolCall(t *testing.T) {
@@ -126,5 +128,80 @@ func TestIsWriteToolConsistency(t *testing.T) {
 		if IsWriteTool(tool) {
 			t.Errorf("IsWriteTool(%q) = true, want false", tool)
 		}
+	}
+}
+
+type testDisplayTool struct {
+	name   string
+	result string
+}
+
+func (t *testDisplayTool) Name() string {
+	return t.name
+}
+
+func (t *testDisplayTool) Description() string {
+	return "test tool"
+}
+
+func (t *testDisplayTool) Parameters() map[string]interface{} {
+	return map[string]interface{}{}
+}
+
+func (t *testDisplayTool) Run(args map[string]string) (string, *FileChange, error) {
+	if !common.IsQuietMode() {
+		fmt.Println("INTERNAL STDOUT")
+	}
+	return t.result, nil, nil
+}
+
+func TestExecute_UsesUnifiedToolDisplay(t *testing.T) {
+	color.NoColor = true
+
+	origTool := DefaultRegistry.GetTool("search_code")
+	DefaultRegistry.Register(&testDisplayTool{
+		name:   "search_code",
+		result: "Found 3 match(es) in 2 file(s)\nstats.go:42: ...\nauto_compress.go:30: ...",
+	})
+	defer func() {
+		if origTool != nil {
+			DefaultRegistry.Register(origTool)
+		}
+	}()
+
+	oldStdout := os.Stdout
+	oldColorOutput := color.Output
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	color.Output = w
+
+	tc := &ToolCall{
+		Tool: "search_code",
+		Args: map[string]string{
+			"pattern": "threshold",
+			"path":    "internal/agent/",
+		},
+	}
+	result, change := Execute(tc)
+
+	_ = w.Close()
+	os.Stdout = oldStdout
+	color.Output = oldColorOutput
+
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, r)
+	output := buf.String()
+
+	if change != nil {
+		t.Fatalf("Execute() returned unexpected change: %+v", change)
+	}
+	if !strings.Contains(result, "Found 3 match(es) in 2 file(s)") {
+		t.Fatalf("Execute() result = %q", result)
+	}
+	if strings.Contains(output, "INTERNAL STDOUT") {
+		t.Fatalf("Execute() should suppress internal stdout, got: %q", output)
+	}
+	if !strings.Contains(output, `🔍 search_code: "threshold" in internal/agent/ → 3 matches, 2 files`) {
+		t.Fatalf("Execute() output missing summary line: %q", output)
 	}
 }

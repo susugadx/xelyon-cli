@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/susugadx/xelyon-cli/internal/tools/common"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -69,17 +70,22 @@ func printToolArgs(tc *ToolCall) {
 	fmt.Println()
 }
 
-// Execute はツールを実行（Registry経由）。
-// ツールヘッダー（🔧 Tool: ...）、引数表示、折りたたみ結果表示を stdout に出力する。
-// 並列実行では stdout が interleave するため、ExecuteQuiet を使用すること。
+// Execute はツールを実行し、統一フォーマットの1行サマリーと必要に応じて折りたたみ結果を表示する。
 func Execute(tc *ToolCall) (string, *FileChange) {
-	cyan.Printf("🔧 Tool: %s\n", tc.Tool)
-	printToolArgs(tc)
-
+	prevQuiet := common.IsQuietMode()
+	common.SetQuietMode(true)
 	result, change := executeCore(tc)
+	common.SetQuietMode(prevQuiet)
+
+	fmt.Println(ui.FormatToolLine(ui.ToolDisplayInfo{
+		ToolName: tc.Tool,
+		Args:     tc.Args,
+		Result:   result,
+		Error:    strings.HasPrefix(strings.TrimSpace(result), "Error:"),
+	}))
 
 	// ツール出力の折りたたみ表示（bashはストリーミング表示済みなので除外）
-	if !isStreamingTool(tc.Tool) && result != "" {
+	if !isStreamingTool(tc.Tool) && shouldShowCollapsedOutput(result) {
 		displayCollapsedOutput(result)
 	}
 
@@ -90,13 +96,9 @@ func Execute(tc *ToolCall) (string, *FileChange) {
 // parallel path（goroutine 内）から呼び出すために使用する。
 //
 // 抑制するもの: ツールヘッダー（"🔧 Tool: ..."）、引数表示、折りたたみ結果表示。
-// 抑制できないもの: Tool.Run() 内部の直接 stdout 出力（例: read_file の "📄 Read: ..."）。
+// Tool.Run() 内部の出力抑制は caller が common.SetQuietMode(true) を設定した場合に限る。
 //
-//	Tool interface が io.Writer を受け取らないため、個々のツール実装内の出力は制御できない。
-//
-// parallel-safe ツール（read_file, list_dir, search_code 等）の Tool.Run() 内部出力は
-// 比較的少量のステータス行のみであり、goroutine 間で interleave しても致命的ではないと
-// 現時点で判断している。
+//	Tool interface が io.Writer を受け取らないため、quiet 制御に対応したツールのみ抑制される。
 func ExecuteQuiet(tc *ToolCall) (string, *FileChange) {
 	return executeCore(tc)
 }
@@ -246,6 +248,10 @@ func isStreamingTool(toolName string) bool {
 	default:
 		return false
 	}
+}
+
+func shouldShowCollapsedOutput(output string) bool {
+	return strings.Contains(output, "\n")
 }
 
 // displayCollapsedOutput はツール出力を折りたたみ表示

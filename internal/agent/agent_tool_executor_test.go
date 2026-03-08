@@ -367,6 +367,51 @@ func TestExecuteToolCallsWithParallel_AllParallelConcurrency(t *testing.T) {
 	}
 }
 
+func TestExecuteToolCallsWithParallel_PrintsParallelGroup(t *testing.T) {
+	provider := &mockProvider{name: "test"}
+	agent := NewAgent("test-model", provider, false)
+	agent.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
+
+	toolCalls := []*tools.ToolCall{
+		{
+			ID:      "c1",
+			Tool:    "read_file",
+			Args:    map[string]string{"path": "auto_compress.go"},
+			RawArgs: map[string]any{"path": "auto_compress.go"},
+		},
+		{
+			ID:   "c2",
+			Tool: "search_code",
+			Args: map[string]string{
+				"pattern": "maybeAutoCompress",
+				"path":    ".",
+			},
+			RawArgs: map[string]any{
+				"pattern": "maybeAutoCompress",
+				"path":    ".",
+			},
+		},
+	}
+
+	agent.addToolCallsToHistory("test", toolCalls)
+
+	output := captureStdout(t, func() {
+		agent.executeToolCallsWithParallel(context.Background(), toolCalls, nil, nil,
+			func(_ int, _ *tools.ToolCall, _ string, _ *tools.FileChange) {})
+	})
+
+	for _, want := range []string{
+		"┌ Parallel (2 calls)",
+		"📄 read_file: auto_compress.go",
+		`🔍 search_code: "maybeAutoCompress" in . →`,
+		"└ Done:",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("parallel group output missing %q:\n%s", want, output)
+		}
+	}
+}
+
 // --- Test: Text-based (non-FC) tool calls also handled correctly ---
 
 func TestExecuteToolCallsWithParallel_TextBased_Skip(t *testing.T) {

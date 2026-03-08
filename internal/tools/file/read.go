@@ -12,6 +12,13 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
+func printReadStatus(format string, args ...interface{}) {
+	if common.IsQuietMode() {
+		return
+	}
+	common.Green.Printf(format, args...)
+}
+
 // formatFileSize はバイト数を人間が読みやすい形式に変換
 func formatFileSize(bytes int64) string {
 	const unit = 1024
@@ -118,18 +125,18 @@ func ExecuteReadFile(path string, startLine, endLine int) string {
 				// outline-first モード（先頭300行分の content で BuildBlockMap）
 				result := formatOutline(absPath, lines, totalLines)
 				if showFileInfo && fileSize > 0 {
-					common.Green.Printf("📄 Read: %s (%s, outline of ~%d lines)\n", path, formatFileSize(fileSize), totalLines)
+					printReadStatus("📄 Read: %s (%s, outline of ~%d lines)\n", path, formatFileSize(fileSize), totalLines)
 				} else {
-					common.Green.Printf("📄 Read: %s (outline of ~%d lines)\n", path, totalLines)
+					printReadStatus("📄 Read: %s (outline of ~%d lines)\n", path, totalLines)
 				}
 				return result
 			}
 			// 300行以下に収まった場合は全行表示
 			result := formatLinesWithNumbers(lines, 1)
 			if showFileInfo && fileSize > 0 {
-				common.Green.Printf("📄 Read: %s (%s, %d lines)\n", path, formatFileSize(fileSize), len(lines))
+				printReadStatus("📄 Read: %s (%s, %d lines)\n", path, formatFileSize(fileSize), len(lines))
 			} else {
-				common.Green.Printf("📄 Read: %s (%d lines)\n", path, len(lines))
+				printReadStatus("📄 Read: %s (%d lines)\n", path, len(lines))
 			}
 			return result
 		}
@@ -186,9 +193,9 @@ func ExecuteReadFile(path string, startLine, endLine int) string {
 		selectedLines := lines[startLine-1 : endLine]
 		result := formatLinesWithNumbers(selectedLines, startLine)
 		if showFileInfo && fileSize > 0 {
-			common.Green.Printf("📄 Read: %s (%s, lines %d-%d of %d)\n", path, formatFileSize(fileSize), startLine, endLine, totalLines)
+			printReadStatus("📄 Read: %s (%s, lines %d-%d of %d)\n", path, formatFileSize(fileSize), startLine, endLine, totalLines)
 		} else {
-			common.Green.Printf("📄 Read: %s (lines %d-%d of %d)\n", path, startLine, endLine, totalLines)
+			printReadStatus("📄 Read: %s (lines %d-%d of %d)\n", path, startLine, endLine, totalLines)
 		}
 		return result
 	}
@@ -198,9 +205,9 @@ func ExecuteReadFile(path string, startLine, endLine int) string {
 		// 全行表示
 		result := formatLinesWithNumbers(lines, 1)
 		if showFileInfo && fileSize > 0 {
-			common.Green.Printf("📄 Read: %s (%s, %d lines)\n", path, formatFileSize(fileSize), totalLines)
+			printReadStatus("📄 Read: %s (%s, %d lines)\n", path, formatFileSize(fileSize), totalLines)
 		} else {
-			common.Green.Printf("📄 Read: %s (%d lines)\n", path, totalLines)
+			printReadStatus("📄 Read: %s (%d lines)\n", path, totalLines)
 		}
 		return result
 	}
@@ -208,9 +215,9 @@ func ExecuteReadFile(path string, startLine, endLine int) string {
 	// outline-first モード: 先頭 + シグネチャ一覧 + 末尾
 	result := formatOutline(absPath, lines, totalLines)
 	if showFileInfo && fileSize > 0 {
-		common.Green.Printf("📄 Read: %s (%s, outline of %d lines)\n", path, formatFileSize(fileSize), totalLines)
+		printReadStatus("📄 Read: %s (%s, outline of %d lines)\n", path, formatFileSize(fileSize), totalLines)
 	} else {
-		common.Green.Printf("📄 Read: %s (outline of %d lines)\n", path, totalLines)
+		printReadStatus("📄 Read: %s (outline of %d lines)\n", path, totalLines)
 	}
 	return result
 }
