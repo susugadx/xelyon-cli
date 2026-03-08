@@ -24,7 +24,7 @@ func ExecuteDeleteFileWithOutput(out common.Output, path string) (string, error)
 
 // ExecuteDeleteFileWithPromptIO deletes a file permanently with explicit interactive I/O.
 func ExecuteDeleteFileWithPromptIO(promptIO ui.PromptIO, path string) (string, error) {
-	promptIO = ui.NewPromptIO(promptIO.In, promptIO.Out, promptIO.Err, promptIO.Reader)
+	promptIO = ui.NormalizePromptIO(promptIO)
 	out := common.NewOutput(promptIO.Out, promptIO.Err)
 
 	// パストラバーサル防止

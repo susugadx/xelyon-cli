@@ -13,11 +13,13 @@ type PromptIO struct {
 	Out    io.Writer
 	Err    io.Writer
 	Reader *MultilineReader
+
+	simpleReader *bufio.Reader
 }
 
 // NewPromptIO は入出力先を明示した PromptIO を返す。
 func NewPromptIO(in io.Reader, out, err io.Writer, reader *MultilineReader) PromptIO {
-	return normalizePromptIO(PromptIO{
+	return NormalizePromptIO(PromptIO{
 		In:     in,
 		Out:    out,
 		Err:    err,
@@ -27,12 +29,17 @@ func NewPromptIO(in io.Reader, out, err io.Writer, reader *MultilineReader) Prom
 
 // DefaultPromptIO は process stdio を使う PromptIO を返す。
 func DefaultPromptIO() PromptIO {
-	return normalizePromptIO(PromptIO{})
+	return NormalizePromptIO(PromptIO{})
+}
+
+// NormalizePromptIO は不足している入出力を補い、共有 reader を初期化する。
+func NormalizePromptIO(p PromptIO) PromptIO {
+	return normalizePromptIO(p)
 }
 
 // ReadSimpleLine は PromptIO に紐づく入力から1行読む。
-func (p PromptIO) ReadSimpleLine() (string, error) {
-	p = normalizePromptIO(p)
+func (p *PromptIO) ReadSimpleLine() (string, error) {
+	*p = NormalizePromptIO(*p)
 	if p.Reader != nil {
 		return p.Reader.ReadSimpleLine()
 	}
@@ -51,12 +58,12 @@ func (p PromptIO) ReadSimpleLine() (string, error) {
 }
 
 // BufioReader は共有可能な bufio.Reader を返す。
-func (p PromptIO) BufioReader() *bufio.Reader {
-	p = normalizePromptIO(p)
+func (p *PromptIO) BufioReader() *bufio.Reader {
+	*p = NormalizePromptIO(*p)
 	if p.Reader != nil {
 		return p.Reader.GetBufioReader()
 	}
-	return bufio.NewReader(p.In)
+	return p.simpleReader
 }
 
 func normalizePromptIO(p PromptIO) PromptIO {
@@ -68,6 +75,9 @@ func normalizePromptIO(p PromptIO) PromptIO {
 	}
 	if p.Err == nil {
 		p.Err = os.Stderr
+	}
+	if p.Reader == nil && p.simpleReader == nil {
+		p.simpleReader = bufio.NewReader(p.In)
 	}
 	return p
 }

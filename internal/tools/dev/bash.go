@@ -77,7 +77,7 @@ func ExecuteBashWithOutput(out common.Output, command string) string {
 
 // ExecuteBashWithPromptIO executes a shell command with explicit interactive I/O.
 func ExecuteBashWithPromptIO(promptIO ui.PromptIO, command string) string {
-	promptIO = ui.NewPromptIO(promptIO.In, promptIO.Out, promptIO.Err, promptIO.Reader)
+	promptIO = ui.NormalizePromptIO(promptIO)
 	out := common.NewOutput(promptIO.Out, promptIO.Err)
 
 	if command == "" {
@@ -141,7 +141,7 @@ func ExecuteBashWithContextAndOutput(ctx context.Context, out common.Output, com
 
 // ExecuteBashWithContextAndPromptIO はContext対応でシェルコマンドを実行する。
 func ExecuteBashWithContextAndPromptIO(ctx context.Context, promptIO ui.PromptIO, command string) string {
-	promptIO = ui.NewPromptIO(promptIO.In, promptIO.Out, promptIO.Err, promptIO.Reader)
+	promptIO = ui.NormalizePromptIO(promptIO)
 	out := common.NewOutput(promptIO.Out, promptIO.Err)
 
 	if command == "" {
@@ -320,7 +320,7 @@ func executeBashWithStreaming(out common.Output, cmd *exec.Cmd) (string, error) 
 // checkAndConfirmBash は共通のセキュリティチェック + 確認UIを実行
 // 返り値: ("", true) = 実行OK, (errorMsg, false) = ブロック/キャンセル
 func checkAndConfirmBash(promptIO ui.PromptIO, command string) (string, bool) {
-	promptIO = ui.NewPromptIO(promptIO.In, promptIO.Out, promptIO.Err, promptIO.Reader)
+	promptIO = ui.NormalizePromptIO(promptIO)
 	out := common.NewOutput(promptIO.Out, promptIO.Err)
 	cfg := config.GetGlobalConfig().Bash
 

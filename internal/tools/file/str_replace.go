@@ -39,7 +39,7 @@ func ExecuteStrReplaceWithOutput(out common.Output, path, oldStr, newStr, startL
 
 // ExecuteStrReplaceWithPromptIO は入出力先を指定してファイル内の文字列を置換する。
 func ExecuteStrReplaceWithPromptIO(promptIO ui.PromptIO, path, oldStr, newStr, startLineStr, endLineStr string) (string, error) {
-	promptIO = ui.NewPromptIO(promptIO.In, promptIO.Out, promptIO.Err, promptIO.Reader)
+	promptIO = ui.NormalizePromptIO(promptIO)
 	out := common.NewOutput(promptIO.Out, promptIO.Err)
 
 	if path == "" {
@@ -491,7 +491,7 @@ func executeBatchEditsWithOutput(out common.Output, path, editsJSON string) (str
 }
 
 func executeBatchEditsWithPromptIO(promptIO ui.PromptIO, path, editsJSON string) (string, error) {
-	promptIO = ui.NewPromptIO(promptIO.In, promptIO.Out, promptIO.Err, promptIO.Reader)
+	promptIO = ui.NormalizePromptIO(promptIO)
 	out := common.NewOutput(promptIO.Out, promptIO.Err)
 
 	if path == "" {

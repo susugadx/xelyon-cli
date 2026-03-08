@@ -39,7 +39,7 @@ func SetAutoApprove(enabled bool) {
 // ただしEOF時はfalseを返して終了する
 // NOTE: テスト時は setupTestConfirm() でモックされる
 var SimpleConfirmWithIO = func(promptIO ui.PromptIO, message string) bool {
-	promptIO = ui.NewPromptIO(promptIO.In, promptIO.Out, promptIO.Err, promptIO.Reader)
+	promptIO = ui.NormalizePromptIO(promptIO)
 	reader := promptIO.BufioReader()
 	out := NewOutput(promptIO.Out, promptIO.Err)
 
@@ -112,7 +112,7 @@ func ConfirmApproved(message string) bool {
 // - auto-approve の場合は yes を返す
 // - それ以外は Confirm(message) を呼び、y/n/c の結果を返す
 func ConfirmWithAutoApproveDecision(promptIO ui.PromptIO, toolName, message string) ConfirmDecision {
-	promptIO = ui.NewPromptIO(promptIO.In, promptIO.Out, promptIO.Err, promptIO.Reader)
+	promptIO = ui.NormalizePromptIO(promptIO)
 	out := NewOutput(promptIO.Out, promptIO.Err)
 
 	// --auto-approve が有効 かつ ツールが自動承認可能な場合

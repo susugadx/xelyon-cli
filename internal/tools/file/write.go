@@ -24,7 +24,7 @@ func ExecuteWriteFileWithOutput(out common.Output, path string, content string) 
 
 // ExecuteWriteFileWithPromptIO は入出力先を指定してファイルに書き込む。
 func ExecuteWriteFileWithPromptIO(promptIO ui.PromptIO, path string, content string) (string, error) {
-	promptIO = ui.NewPromptIO(promptIO.In, promptIO.Out, promptIO.Err, promptIO.Reader)
+	promptIO = ui.NormalizePromptIO(promptIO)
 	out := common.NewOutput(promptIO.Out, promptIO.Err)
 
 	if path == "" {

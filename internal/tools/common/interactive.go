@@ -68,7 +68,7 @@ func ReadMultiLineComment(reader *bufio.Reader) (string, *ImageData) {
 
 // ReadMultiLineCommentWithIO は入出力先を指定して複数行コメントを読み取る。
 func ReadMultiLineCommentWithIO(promptIO ui.PromptIO) (string, *ImageData) {
-	promptIO = ui.NewPromptIO(promptIO.In, promptIO.Out, promptIO.Err, promptIO.Reader)
+	promptIO = ui.NormalizePromptIO(promptIO)
 	return readMultiLineComment(promptIO, nil)
 }
 
