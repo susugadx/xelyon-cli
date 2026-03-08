@@ -52,5 +52,6 @@ test.txt
 go.work
 go.work.sum
 CLAUDE.md
+AGENTS.md
 temp_config.yaml
 /xelyon-cli
