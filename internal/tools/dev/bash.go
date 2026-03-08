@@ -77,14 +77,22 @@ func ExecuteBashWithOutput(out common.Output, command string) string {
 
 // ExecuteBashWithPromptIO executes a shell command with explicit interactive I/O.
 func ExecuteBashWithPromptIO(promptIO ui.PromptIO, command string) string {
+	return ExecuteBashWithPromptIOAndConfig(promptIO, config.GetGlobalConfig(), command)
+}
+
+// ExecuteBashWithPromptIOAndConfig executes a shell command with explicit config.
+func ExecuteBashWithPromptIOAndConfig(promptIO ui.PromptIO, cfg *config.Config, command string) string {
 	promptIO = ui.NormalizePromptIO(promptIO)
 	out := common.NewOutput(promptIO.Out, promptIO.Err)
+	if cfg == nil {
+		cfg = config.GetGlobalConfig()
+	}
 
 	if command == "" {
 		return "Error: command is empty"
 	}
 
-	if msg, ok := checkAndConfirmBash(promptIO, command); !ok {
+	if msg, ok := checkAndConfirmBash(promptIO, cfg, command); !ok {
 		return msg
 	}
 
@@ -99,8 +107,7 @@ func ExecuteBashWithPromptIO(promptIO ui.PromptIO, command string) string {
 	}
 
 	// ストリーミング設定を確認
-	globalCfg, _ := config.LoadConfig()
-	streamOutput := globalCfg != nil && globalCfg.Streaming.StreamBashOutput
+	streamOutput := cfg.Streaming.StreamBashOutput
 
 	var result string
 	var cmdErr error
@@ -141,14 +148,22 @@ func ExecuteBashWithContextAndOutput(ctx context.Context, out common.Output, com
 
 // ExecuteBashWithContextAndPromptIO はContext対応でシェルコマンドを実行する。
 func ExecuteBashWithContextAndPromptIO(ctx context.Context, promptIO ui.PromptIO, command string) string {
+	return ExecuteBashWithContextAndPromptIOAndConfig(ctx, promptIO, config.GetGlobalConfig(), command)
+}
+
+// ExecuteBashWithContextAndPromptIOAndConfig はContext対応でシェルコマンドを実行する。
+func ExecuteBashWithContextAndPromptIOAndConfig(ctx context.Context, promptIO ui.PromptIO, cfg *config.Config, command string) string {
 	promptIO = ui.NormalizePromptIO(promptIO)
 	out := common.NewOutput(promptIO.Out, promptIO.Err)
+	if cfg == nil {
+		cfg = config.GetGlobalConfig()
+	}
 
 	if command == "" {
 		return "Error: command is empty"
 	}
 
-	if msg, ok := checkAndConfirmBash(promptIO, command); !ok {
+	if msg, ok := checkAndConfirmBash(promptIO, cfg, command); !ok {
 		return msg
 	}
 
@@ -166,8 +181,7 @@ func ExecuteBashWithContextAndPromptIO(ctx context.Context, promptIO ui.PromptIO
 	setSysProcAttr(cmd)
 
 	// ストリーミング設定を確認
-	globalCfg, _ := config.LoadConfig()
-	streamOutput := globalCfg != nil && globalCfg.Streaming.StreamBashOutput
+	streamOutput := cfg.Streaming.StreamBashOutput
 
 	var result string
 	var cmdErr error
@@ -319,10 +333,13 @@ func executeBashWithStreaming(out common.Output, cmd *exec.Cmd) (string, error) 
 
 // checkAndConfirmBash は共通のセキュリティチェック + 確認UIを実行
 // 返り値: ("", true) = 実行OK, (errorMsg, false) = ブロック/キャンセル
-func checkAndConfirmBash(promptIO ui.PromptIO, command string) (string, bool) {
+func checkAndConfirmBash(promptIO ui.PromptIO, cfg *config.Config, command string) (string, bool) {
 	promptIO = ui.NormalizePromptIO(promptIO)
 	out := common.NewOutput(promptIO.Out, promptIO.Err)
-	cfg := config.GetGlobalConfig().Bash
+	if cfg == nil {
+		cfg = config.GetGlobalConfig()
+	}
+	bashCfg := cfg.Bash
 
 	for _, blocked := range alwaysBlockedCommands {
 		if strings.Contains(command, blocked) {
@@ -339,11 +356,11 @@ func checkAndConfirmBash(promptIO ui.PromptIO, command string) (string, bool) {
 		}
 	}
 
-	if err := CheckBashSafetyWithOutput(out, command, cfg); err != "" {
+	if err := CheckBashSafetyWithOutput(out, command, bashCfg); err != "" {
 		return err, false
 	}
 
-	if IsSafeCommand(command, cfg) {
+	if IsSafeCommand(command, bashCfg) {
 		return "", true
 	}
 

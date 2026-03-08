@@ -44,7 +44,7 @@ func (a *Agent) CompressHistory(keepRecent int) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	summary, err := a.CurrentProvider.ChatWithTools(ctx, "", []api.Message{
+	summary, err := a.CurrentProvider.ChatWithTools(a.requestContext(ctx), "", []api.Message{
 		{Role: "user", Content: summaryPrompt},
 	}, a.CurrentModel)
 	if err != nil {

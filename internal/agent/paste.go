@@ -5,14 +5,13 @@ import (
 	"os"
 	"strings"
 
-	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // handlePasteCommand はペーストモードを開始し、複数行入力を受け付ける
 // WSLなどBracketed Paste Modeが動作しない環境向け
 func handlePasteCommand(agent *Agent, args []string) bool {
-	cfg := config.GetGlobalConfig()
+	cfg := agent.cfg()
 
 	pm := ui.NewPasteMode(cfg.Paste)
 

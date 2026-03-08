@@ -163,10 +163,9 @@ func applyProjectConfig(agent *Agent, pc *config.ProjectConfig) {
 	agent.SystemPrompt = injectProjectConfig(agent.SystemPrompt, pc)
 
 	// 2. hooks 解決（xelyon.yaml 優先、config.yaml フォールバック）
-	if resolved := config.ResolveHooks(config.GetGlobalConfig(), pc); resolved != nil {
-		cfg := config.GetGlobalConfig()
+	if resolved := config.ResolveHooks(agent.cfg(), pc); resolved != nil {
+		cfg := agent.cfg()
 		cfg.Hooks = *resolved
-		config.SetGlobalConfig(cfg)
 	}
 
 	// 3. UI 表示

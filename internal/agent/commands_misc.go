@@ -11,7 +11,6 @@ import (
 	"github.com/atotto/clipboard"
 	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -432,7 +431,7 @@ func handleCompactAPICompress(agent *Agent) bool {
 
 // handleTokensCommand はトークン使用量を表示
 func handleTokensCommand(agent *Agent) bool {
-	cfg := config.GetGlobalConfig()
+	cfg := agent.cfg()
 
 	// トークン推定
 	totalTokens := agent.EstimateTokens()
@@ -473,9 +472,9 @@ func handleTokensCommand(agent *Agent) bool {
 	// ツール定義トークン
 	toolTokens := 0
 	if agent.CurrentProvider != nil && agent.CurrentProvider.IsFunctionCallingEnabled() {
-		toolTokens = estimateToolDefinitionTokens()
+		toolTokens = agent.estimateToolDefinitionTokens()
 	}
-	builtinCount, mcpCount := countToolsByType()
+	builtinCount, mcpCount := agent.countToolsByType()
 	toolLabel := fmt.Sprintf("%d", builtinCount)
 	if mcpCount > 0 {
 		toolLabel = fmt.Sprintf("%d+%d MCP", builtinCount, mcpCount)
@@ -523,7 +522,7 @@ func isCodexModel(model string) bool {
 
 // handleThinkCommand は Extended Thinking モードの切り替え
 func handleThinkCommand(agent *Agent, args []string) bool {
-	cfg := config.GetGlobalConfig()
+	cfg := agent.cfg()
 	isCodex := agent != nil && isCodexModel(agent.CurrentModel)
 
 	if len(args) == 0 {

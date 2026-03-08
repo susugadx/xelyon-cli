@@ -85,6 +85,27 @@ func (r *Registry) GetTool(name string) Tool {
 	return r.tools[name]
 }
 
+// Clone は現在の Registry をコピーした新しい Registry を返す。
+func (r *Registry) Clone() *Registry {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	cloned := &Registry{
+		tools:         make(map[string]Tool, len(r.tools)),
+		excludedTools: make(map[string]bool, len(r.excludedTools)),
+	}
+	for name, tool := range r.tools {
+		cloned.tools[name] = tool
+	}
+	for name, excluded := range r.excludedTools {
+		cloned.excludedTools[name] = excluded
+	}
+	if len(cloned.excludedTools) == 0 {
+		cloned.excludedTools = nil
+	}
+	return cloned
+}
+
 // HasTool は指定名のツールが登録されているかを返す（スレッドセーフ）
 func (r *Registry) HasTool(name string) bool {
 	r.mu.RLock()

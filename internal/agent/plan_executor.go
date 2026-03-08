@@ -37,7 +37,7 @@ func (a *Agent) runImplementationPhase(ctx context.Context, p *plan.Plan) error 
 		p.UpdateStatus(nextID, "completed", "")
 
 		// ステップ完了フックを実行
-		if hooks := config.GetGlobalConfig().Hooks; len(hooks.OnStepComplete) > 0 {
+		if hooks := a.cfg().Hooks; len(hooks.OnStepComplete) > 0 {
 			if !a.runStepCompleteHooksWithRetry(ctx, nextID, step.Description, "completed") {
 				yellow.Printf("⚠️  Step %d hooks failed but proceeding to next step\n", nextID)
 			}
@@ -83,7 +83,7 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 	}
 
 	// ステップ内のツール実行ループ
-	cfg := config.GetGlobalConfig()
+	cfg := a.cfg()
 	maxStepIterations := cfg.General.ToolLoopLimit
 	maxContinues := config.PlanMaxAutoContinues
 	continueCount := 0
@@ -104,7 +104,7 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 		compactedHistory, metrics := CompactOldToolResults(a.History, DefaultKeepTurns, DefaultMaxLines, DefaultHeadLines, DefaultTailLines)
 		a.addCompactionMetrics(metrics)
 		response, err := a.CurrentProvider.ChatWithTools(
-			ctx,
+			a.requestContext(ctx),
 			a.SystemPrompt,
 			compactedHistory,
 			a.CurrentModel,
@@ -115,7 +115,7 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 		}
 
 		// ツール呼び出しチェック
-		toolCalls := tools.ParseToolCalls(response)
+		toolCalls := a.parseToolCalls(response)
 
 		// FC rescue: テキストから抽出された toolCall にダミー ID を注入
 		// これにより下流の処理が FC 成功時と同じパス（role:"tool"）を通る
@@ -151,7 +151,7 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 
 		if len(execToolCalls) == 0 {
 			// AIが質問している場合、自動続行を試みる
-			if isAIQuestion(response) && continueCount < maxContinues {
+			if isAIQuestionWithToolParser(response, a.parseToolCalls) && continueCount < maxContinues {
 				continueCount++
 				yellow.Printf("⚠️  AI asked a question, auto-continuing (%d/%d)...\n", continueCount, maxContinues)
 
@@ -211,7 +211,7 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 		// ツールを実行（parallel-safe なツールは並列実行）
 		// loopDetectFn: 履歴は変更しない（executor の Phase 2 でメッセージ追加する）
 		loopDetectFn := func(tc *tools.ToolCall) bool {
-			cfg := config.GetGlobalConfig()
+			cfg := a.cfg()
 			threshold := cfg.LoopDetection.Threshold
 			if isSameToolCall(tc, lastToolCall) {
 				sameCallCount++
@@ -301,7 +301,7 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 
 		// 失敗検出時の処理
 		if lastFailedResult != "" {
-			cfg := config.GetGlobalConfig()
+			cfg := a.cfg()
 			autoRetryMax := cfg.PlanMode.MaxRetry
 
 			// 自動リトライが有効で、まだ上限に達していない場合
@@ -390,10 +390,11 @@ Please follow these instructions to fix the issue and retry the step.`, comment,
 	return nil
 }
 
-// isAIQuestion はAIが質問しているかを判定
-func isAIQuestion(response string) bool {
+// isAIQuestionWithToolParser は AI が質問しているかを判定する。
+// tool call parser は明示注入し、Agent には依存しない。
+func isAIQuestionWithToolParser(response string, parseToolCalls func(string) []*tools.ToolCall) bool {
 	// ツール呼び出しがある場合は質問とみなさない
-	if len(tools.ParseToolCalls(response)) > 0 {
+	if parseToolCalls != nil && len(parseToolCalls(response)) > 0 {
 		return false
 	}
 
@@ -411,6 +412,10 @@ func isAIQuestion(response string) bool {
 		}
 	}
 	return false
+}
+
+func isAIQuestion(response string) bool {
+	return isAIQuestionWithToolParser(response, tools.ParseToolCalls)
 }
 
 // getGitDiffHash は git diff HEAD + untracked files の出力を SHA256 ハッシュ化して返す。

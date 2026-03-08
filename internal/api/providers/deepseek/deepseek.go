@@ -98,7 +98,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 
 	// Function Calling: ツール定義を追加（環境変数で無効化可能）
 	if os.Getenv("DEEPSEEK_FUNCTION_CALLING") != "0" {
-		reqBody.Tools = openai.GetCombinedOpenAITools(p.mcpTools)
+		reqBody.Tools = openai.GetCombinedOpenAIToolsWithContext(ctx, p.mcpTools)
 		reqBody.ToolChoice = "auto"
 
 		// tool_choice 強制設定がある場合

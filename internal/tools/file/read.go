@@ -48,6 +48,11 @@ func ExecuteReadFile(path string, startLine, endLine int) string {
 
 // ExecuteReadFileWithOutput は出力先を指定してファイルを読み込む。
 func ExecuteReadFileWithOutput(out common.Output, path string, startLine, endLine int) string {
+	return ExecuteReadFileWithRuntime(out, config.GetGlobalConfig(), tools.GlobalToolCache, path, startLine, endLine)
+}
+
+// ExecuteReadFileWithRuntime は runtime 設定を指定してファイルを読み込む。
+func ExecuteReadFileWithRuntime(out common.Output, cfg *config.Config, cache tools.ToolCacheInterface, path string, startLine, endLine int) string {
 	if path == "" {
 		return "Error: path is empty"
 	}
@@ -60,7 +65,6 @@ func ExecuteReadFileWithOutput(out common.Output, path string, startLine, endLin
 	}
 
 	// 設定読み込み（ファイル情報表示用）
-	cfg, _ := config.LoadConfig()
 	showFileInfo := cfg != nil && cfg.Streaming.ShowFileInfo
 
 	// ファイル情報を取得（サイズ表示用）
@@ -76,8 +80,8 @@ func ExecuteReadFileWithOutput(out common.Output, path string, startLine, endLin
 	var contentStr string
 
 	// キャッシュチェック（行範囲指定なしの場合のみ）
-	if startLine == 0 && endLine == 0 && tools.GlobalToolCache != nil {
-		if cached, hit := tools.GlobalToolCache.GetFile(absPath); hit {
+	if startLine == 0 && endLine == 0 && cache != nil {
+		if cached, hit := cache.GetFile(absPath); hit {
 			contentStr = cached
 		}
 	}
@@ -156,8 +160,8 @@ func ExecuteReadFileWithOutput(out common.Output, path string, startLine, endLin
 		contentStr = string(content)
 
 		// キャッシュに保存（行範囲指定なしの場合のみ）
-		if startLine == 0 && endLine == 0 && tools.GlobalToolCache != nil {
-			tools.GlobalToolCache.SetFile(absPath, contentStr)
+		if startLine == 0 && endLine == 0 && cache != nil {
+			cache.SetFile(absPath, contentStr)
 		}
 	}
 

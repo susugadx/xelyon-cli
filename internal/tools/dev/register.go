@@ -32,7 +32,7 @@ func (t *BashTool) Run(execCtx tools.ExecutionContext, args map[string]string) (
 	if command == "" {
 		return "", nil, fmt.Errorf("bash command is empty. Provide a valid command string in the 'command' argument")
 	}
-	output := ExecuteBashWithPromptIO(execCtx.PromptIO(), args["command"])
+	output := ExecuteBashWithPromptIOAndConfig(execCtx.PromptIO(), execCtx.EffectiveConfig(), args["command"])
 	return output, nil, nil
 }
 

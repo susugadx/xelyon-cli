@@ -9,8 +9,6 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/tools"
 	toolslsp "github.com/susugadx/xelyon-cli/internal/tools/lsp"
 )
 
@@ -148,7 +146,7 @@ func (a *Agent) checkGitDiffEmpty() (needsContinue bool, feedback string) {
 // needsContinue=true と AI 向けのフィードバックを返す。
 // すべて成功した場合は needsContinue=false を返す。
 func (a *Agent) runCompletionHooks(changedFiles []string) (needsContinue bool, feedback string) {
-	cfg := config.GetGlobalConfig()
+	cfg := a.cfg()
 	hooks := cfg.Hooks.OnCompletion
 
 	// No user hooks → nothing to verify
@@ -274,7 +272,7 @@ func (a *Agent) flushLSPDiagnostics() string {
 // Plan mode での使用を想定（ループ型の runNormalMode では直接カウンターを使用）。
 // 戻り値: hooks がすべてパスした場合 true、max_retry 到達で打ち切った場合 false。
 func (a *Agent) runCompletionHooksWithRetry(ctx context.Context) bool {
-	cfg := config.GetGlobalConfig()
+	cfg := a.cfg()
 
 	// No hooks configured → nothing to verify
 	if len(cfg.Hooks.OnCompletion) == 0 {
@@ -309,14 +307,14 @@ func (a *Agent) runCompletionHooksWithRetry(ctx context.Context) bool {
 			Content: feedback,
 		})
 
-		response, err := a.CurrentProvider.ChatWithTools(ctx, a.SystemPrompt, a.History, a.CurrentModel)
+		response, err := a.CurrentProvider.ChatWithTools(a.requestContext(ctx), a.SystemPrompt, a.History, a.CurrentModel)
 		if err != nil {
 			yellow.Printf("⚠️  AI fix attempt failed: %v\n", err)
 			return false
 		}
 
 		// ツール呼び出しをパースして履歴管理
-		toolCalls := tools.ParseToolCalls(response)
+		toolCalls := a.parseToolCalls(response)
 
 		// FC rescue: テキストから抽出された toolCall にダミー ID を注入
 		for i, tc := range toolCalls {

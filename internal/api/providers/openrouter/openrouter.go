@@ -140,7 +140,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	}
 
 	if p.IsFunctionCallingEnabled() {
-		reqBody.Tools = openai.GetCombinedOpenAITools(p.mcpTools)
+		reqBody.Tools = openai.GetCombinedOpenAIToolsWithContext(ctx, p.mcpTools)
 		reqBody.ToolChoice = "auto"
 
 		// tool_choice 強制設定がある場合
@@ -482,7 +482,7 @@ func (p *Provider) chatWithClaudeAPI(ctx context.Context, systemPrompt string, h
 
 	// Tool Use 設定
 	if p.IsFunctionCallingEnabled() {
-		reqBody.Tools = claude.GetCombinedClaudeTools(p.mcpTools)
+		reqBody.Tools = claude.GetCombinedClaudeToolsWithContext(ctx, p.mcpTools)
 	}
 
 	// Compaction 設定

@@ -1,7 +1,6 @@
 package agent
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/signal"
@@ -13,18 +12,19 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/audit"
-	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/history"
-	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // RunInteractive はインタラクティブモードでエージェントを実行
 func RunInteractive(model string, provider api.Provider, autoApprove bool) {
+	runtime := NewAgentRuntime()
+	runtime.AutoApprove = autoApprove
+
 	// Bracketed Paste Mode を最初に有効化（Windows Terminal の警告回避のため）
 	// 他の出力より前に送信する必要がある
 	mlReader := ui.NewMultilineReader(os.Stdin)
-	cfg := config.GetGlobalConfig()
+	cfg := runtime.effectiveConfig()
 
 	// Debug: XELYON_DEBUG_PASTE=1 で詳細表示
 	if os.Getenv("XELYON_DEBUG_PASTE") == "1" {
@@ -46,10 +46,9 @@ func RunInteractive(model string, provider api.Provider, autoApprove bool) {
 		green.Println("📝 Audit logging enabled")
 	}
 
-	agent := NewAgent(model, provider, false)
-	agent.AutoApprove = autoApprove
-	tools.SetAutoApprove(autoApprove) // ツールに --auto-approve 設定を伝える
-	defer agent.Cleanup()             // グレースフルシャットダウン
+	agent := NewAgentWithRuntime(model, provider, false, runtime)
+	agent.setAutoApprove(autoApprove)
+	defer agent.Cleanup() // グレースフルシャットダウン
 
 	// シグナルハンドリング（Ctrl+C 2回で終了、1回目はAI応答中断）
 	setupSignalHandler(agent)
@@ -64,7 +63,7 @@ func RunInteractive(model string, provider api.Provider, autoApprove bool) {
 	}
 
 	// コンテキストサイズ表示（ツリー形式）
-	printContextSize(agent.SystemPrompt, agent.CurrentProvider.IsFunctionCallingEnabled())
+	printContextSize(agent)
 
 	// REPLループ開始
 	agent.mlReader = mlReader // ペーストモードで共有するため
@@ -73,9 +72,12 @@ func RunInteractive(model string, provider api.Provider, autoApprove bool) {
 
 // RunInteractiveWithResume は前回のセッションを再開してインタラクティブモードを実行
 func RunInteractiveWithResume(model string, provider api.Provider, autoApprove bool) {
+	runtime := NewAgentRuntime()
+	runtime.AutoApprove = autoApprove
+
 	// Bracketed Paste Mode を最初に有効化（Windows Terminal の警告回避のため）
 	mlReader := ui.NewMultilineReader(os.Stdin)
-	cfg := config.GetGlobalConfig()
+	cfg := runtime.effectiveConfig()
 
 	if os.Getenv("XELYON_DEBUG_PASTE") == "1" {
 		fmt.Fprintf(os.Stderr, "[DEBUG] cfg.Paste.BracketedPaste = %v\n", cfg.Paste.BracketedPaste)
@@ -109,9 +111,8 @@ func RunInteractiveWithResume(model string, provider api.Provider, autoApprove b
 	}
 
 	// ロード済みセッションでAgent作成
-	agent := NewAgent(model, provider, false)
-	agent.AutoApprove = autoApprove
-	tools.SetAutoApprove(autoApprove) // ツールに --auto-approve 設定を伝える
+	agent := NewAgentWithRuntime(model, provider, false, runtime)
+	agent.setAutoApprove(autoApprove)
 	agent.session = session
 	agent.History = session.ToAPIMessages()
 	// Compacted 状態を復元（Compact API で圧縮済みの場合）
@@ -136,7 +137,7 @@ func RunInteractiveWithResume(model string, provider api.Provider, autoApprove b
 	}
 
 	// コンテキストサイズ表示（ツリー形式）
-	printContextSize(agent.SystemPrompt, agent.CurrentProvider.IsFunctionCallingEnabled())
+	printContextSize(agent)
 
 	// REPLループ開始
 	agent.mlReader = mlReader
@@ -233,20 +234,20 @@ func setupSignalHandler(agent *Agent) {
 }
 
 // printContextSize はコンテキストサイズをツリー形式で表示
-func printContextSize(systemPrompt string, isFunctionCalling bool) {
+func printContextSize(agent *Agent) {
 	basePromptTokens := 0
 	toolsTokens := 0
 
-	if isFunctionCalling {
-		basePromptTokens = token.EstimateTokenCount(systemPrompt)
+	if agent.CurrentProvider != nil && agent.CurrentProvider.IsFunctionCallingEnabled() {
+		basePromptTokens = token.EstimateTokenCount(agent.SystemPrompt)
 		// ツール定義は Registry から JSON 化して推定
-		toolsTokens = estimateToolDefinitionTokens()
+		toolsTokens = agent.estimateToolDefinitionTokens()
 	} else {
-		basePromptTokens = token.EstimateTokenCount(systemPrompt)
+		basePromptTokens = token.EstimateTokenCount(agent.SystemPrompt)
 	}
 
 	// ツール数カウント（builtin / MCP 分類）
-	builtinCount, mcpCount := countToolsByType()
+	builtinCount, mcpCount := agent.countToolsByType()
 
 	// プロジェクト設定のトークン数
 	pc := loadProjectConfig()
@@ -272,28 +273,4 @@ func printContextSize(systemPrompt string, isFunctionCalling bool) {
 			builtinCount, FormatTokens(toolsTokens))
 	}
 	dim.Printf("   └── xelyon.yaml: ~%s\n", FormatTokens(projectTokens))
-}
-
-// estimateToolDefinitionTokens は Registry 全ツールの JSON 定義トークン数を推定
-func estimateToolDefinitionTokens() int {
-	defs := tools.DefaultRegistry.GetToolDefinitions()
-	total := 0
-	for _, def := range defs {
-		jsonBytes, _ := json.Marshal(def)
-		total += token.EstimateTokenCount(string(jsonBytes))
-	}
-	return total
-}
-
-// countToolsByType は builtin と MCP のツール数を返す
-func countToolsByType() (builtin, mcp int) {
-	defs := tools.DefaultRegistry.GetToolDefinitions()
-	for _, def := range defs {
-		if strings.HasPrefix(def.Name, "mcp_") {
-			mcp++
-		} else {
-			builtin++
-		}
-	}
-	return
 }

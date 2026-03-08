@@ -39,6 +39,10 @@ func (a *Agent) toolExecutionContext(stdin io.Reader, stdout, stderr io.Writer) 
 		Stdout:       stdout,
 		Stderr:       stderr,
 		PromptReader: a.mlReader,
+		Registry:     a.registry(),
+		ToolCache:    a.ToolCache,
+		Config:       a.cfg(),
+		AutoApprove:  a.autoApprove(),
 	}
 }
 
@@ -219,7 +223,7 @@ func (a *Agent) shouldAbortToolLoop(current, last *tools.ToolCall, count *int) b
 
 // shouldAbortToolLoopWithResponse は同じツール呼び出しの繰り返しを検知（response パラメータ付き）
 func (a *Agent) shouldAbortToolLoopWithResponse(response string, current, last *tools.ToolCall, count *int) bool {
-	cfg := config.GetGlobalConfig()
+	cfg := a.cfg()
 	threshold := cfg.LoopDetection.Threshold
 
 	if isSameToolCall(current, last) {
@@ -332,7 +336,7 @@ func (a *Agent) handleStrReplaceErrors(toolCall *tools.ToolCall, result string) 
 	if strings.Contains(result, "Error: old_str not found") ||
 		strings.Contains(result, "Error: old_str appears") {
 		a.strReplaceErrorCount++
-		cfg := config.GetGlobalConfig()
+		cfg := a.cfg()
 		threshold := cfg.LoopDetection.Threshold
 		if threshold < 2 {
 			threshold = 2
@@ -394,7 +398,7 @@ func (a *Agent) handleCommentFlow(toolCall *tools.ToolCall, result string) bool 
 	}
 
 	// ループ防止（同一コメントの連続は抑止）
-	cfg := config.GetGlobalConfig()
+	cfg := a.cfg()
 	maxFeedback := cfg.LoopDetection.Threshold
 	if maxFeedback < 3 {
 		maxFeedback = 3
@@ -676,7 +680,7 @@ func (a *Agent) executeToolCallsWithParallel(
 
 	// ── Phase 2: 結果配送（元の tool call 順） ──
 	// 旧 shouldAbortToolLoopWithResponse と意味的に同等のメッセージを生成する。
-	cfg := config.GetGlobalConfig()
+	cfg := a.cfg()
 	threshold := cfg.LoopDetection.Threshold
 
 	for i := 0; i < n; i++ {

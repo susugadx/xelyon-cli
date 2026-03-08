@@ -76,7 +76,7 @@ func (a *Agent) chatCore(input string, image *api.ImageData, oneShot bool) error
 	}
 
 	// タイムアウト付きコンテキスト作成
-	cfg := config.GetGlobalConfig()
+	cfg := a.cfg()
 	timeout := time.Duration(cfg.APIRetry.Timeout) * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -89,18 +89,18 @@ func (a *Agent) chatCore(input string, image *api.ImageData, oneShot bool) error
 
 	// excludedTools を設定（oneShot 時は defer で復元）
 	if oneShot {
-		prev := tools.DefaultRegistry.GetExcludedTools()
-		defer tools.DefaultRegistry.SetExcludedTools(prev)
+		prev := a.registry().GetExcludedTools()
+		defer a.registry().SetExcludedTools(prev)
 	}
 
 	var err error
 	if a.PlanModeEnabled {
 		// Plan Mode: planning 系ツールを有効化
-		tools.DefaultRegistry.ClearExcludedTools()
+		a.registry().ClearExcludedTools()
 		err = a.RunPlanMode(ctx, input)
 	} else {
 		// Normal Mode: planning 系ツールを除外（FC 定義から非表示）
-		tools.DefaultRegistry.SetExcludedTools(prompt.PlanningToolNames)
+		a.registry().SetExcludedTools(prompt.PlanningToolNames)
 		err = a.runNormalMode(ctx, input, image)
 	}
 
@@ -163,7 +163,7 @@ func (a *Agent) chatCore(input string, image *api.ImageData, oneShot bool) error
 
 	baseTokens := a.EstimateSystemPromptTokens()
 	if a.CurrentProvider != nil && a.CurrentProvider.IsFunctionCallingEnabled() {
-		baseTokens += estimateToolDefinitionTokens()
+		baseTokens += a.estimateToolDefinitionTokens()
 	}
 
 	if currentTokens <= baseTokens {
@@ -199,7 +199,7 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 	// 履歴に追加
 	a.History = append(a.History, api.Message{Role: "user", Content: normalModeInput})
 
-	cfg := config.GetGlobalConfig()
+	cfg := a.cfg()
 	maxIterations := cfg.General.ToolLoopLimit
 	var lastToolCall *tools.ToolCall
 	var sameCallCount int
@@ -220,18 +220,19 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 		// API呼び出し
 		var response string
 		var err error
+		requestCtx := a.requestContext(ctx)
 		if i == 0 && image != nil {
 			inputWithPrompt := input + promptnormal.NormalModePrompt
 			compactedHistory, metrics := CompactOldToolResults(a.History[:len(a.History)-1], DefaultKeepTurns, DefaultMaxLines, DefaultHeadLines, DefaultTailLines)
 			a.addCompactionMetrics(metrics)
 			response, err = a.CurrentProvider.ChatWithImage(
-				ctx, effectivePrompt, compactedHistory, inputWithPrompt, image, a.CurrentModel,
+				requestCtx, effectivePrompt, compactedHistory, inputWithPrompt, image, a.CurrentModel,
 			)
 		} else {
 			compactedHistory, metrics := CompactOldToolResults(a.History, DefaultKeepTurns, DefaultMaxLines, DefaultHeadLines, DefaultTailLines)
 			a.addCompactionMetrics(metrics)
 			response, err = a.CurrentProvider.ChatWithTools(
-				ctx,
+				requestCtx,
 				effectivePrompt,
 				compactedHistory,
 				a.CurrentModel,
@@ -247,7 +248,7 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 		}
 
 		// ツール呼び出しをパース（Plan JSON チェックより先に実行 — create_plan の FC が誤検出されるのを防止）
-		toolCalls := tools.ParseToolCalls(response)
+		toolCalls := a.parseToolCalls(response)
 
 		// FC rescue: テキストから抽出された toolCall にダミー ID を注入
 		// これにより下流の処理が FC 成功時と同じパス（role:"tool"）を通る
@@ -453,7 +454,7 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 		// Phase 4: ツールを実行し結果を追加（parallel-safe なツールは並列実行）
 		// loopDetectFn: 履歴は変更しない（executor の Phase 2 でメッセージ追加する）
 		loopDetectFn := func(tc *tools.ToolCall) bool {
-			cfg := config.GetGlobalConfig()
+			cfg := a.cfg()
 			threshold := cfg.LoopDetection.Threshold
 			if isSameToolCall(tc, lastToolCall) {
 				sameCallCount++

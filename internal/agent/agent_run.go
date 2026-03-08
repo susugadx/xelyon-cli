@@ -21,24 +21,24 @@ func RunHeadless(query string, model string, provider api.Provider) *HeadlessRes
 	startTime := time.Now()
 
 	// Agent初期化
-	agent := NewAgent(model, provider, true)
+	runtime := NewAgentRuntime()
+	runtime.AutoApprove = true
+	agent := NewAgentWithRuntime(model, provider, true, runtime)
 	defer agent.Cleanup()
-	agent.AutoApprove = true // Headlessモードは自動承認（SafetyLow以外）
-	tools.SetAutoApprove(true)
+	agent.setAutoApprove(true) // Headlessモードは自動承認（SafetyLow以外）
 
 	// プロジェクト設定読み込み（xelyon.yaml）
 	if pc := loadProjectConfig(); pc != nil {
 		agent.SystemPrompt = injectProjectConfig(agent.SystemPrompt, pc)
 		// headless では hooks 解決のみ（UI 表示不要）
-		if resolved := config.ResolveHooks(config.GetGlobalConfig(), pc); resolved != nil {
-			cfg := config.GetGlobalConfig()
+		if resolved := config.ResolveHooks(agent.cfg(), pc); resolved != nil {
+			cfg := agent.cfg()
 			cfg.Hooks = *resolved
-			config.SetGlobalConfig(cfg)
 		}
 	}
 
 	// Headless Mode は Normal Mode 相当: planning 系ツールを除外
-	tools.DefaultRegistry.SetExcludedTools(prompt.PlanningToolNames)
+	agent.registry().SetExcludedTools(prompt.PlanningToolNames)
 
 	// ツール呼び出し結果を記録
 	var allToolCalls []ToolCallResult
@@ -58,7 +58,7 @@ func RunHeadless(query string, model string, provider api.Provider) *HeadlessRes
 		// API呼び出し
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 
-		response, err := provider.ChatWithTools(ctx, agent.SystemPrompt, agent.History, model)
+		response, err := provider.ChatWithTools(agent.requestContext(ctx), agent.SystemPrompt, agent.History, model)
 		cancel()
 
 		if err != nil {
@@ -67,7 +67,7 @@ func RunHeadless(query string, model string, provider api.Provider) *HeadlessRes
 		}
 
 		// ツール呼び出し解析
-		parsedCalls := tools.ParseToolCalls(response)
+		parsedCalls := agent.parseToolCalls(response)
 
 		// ツール呼び出しがなければ最終レスポンスとして終了
 		if len(parsedCalls) == 0 {
@@ -129,9 +129,10 @@ func RunOnce(query string, model string, provider api.Provider, autoApprove bool
 		green.Println("📝 Audit logging enabled")
 	}
 
-	agent := NewAgent(model, provider, false)
-	agent.AutoApprove = autoApprove
-	tools.SetAutoApprove(autoApprove)
+	runtime := NewAgentRuntime()
+	runtime.AutoApprove = autoApprove
+	agent := NewAgentWithRuntime(model, provider, false, runtime)
+	agent.setAutoApprove(autoApprove)
 	defer agent.Cleanup()
 
 	// ヘッダー表示（quiet 時はスキップ）
@@ -157,9 +158,10 @@ func RunOnceWithImage(query string, model string, provider api.Provider, imagePa
 		yellow.Printf("Warning: Failed to initialize audit log: %v\n", err)
 	}
 
-	agent := NewAgent(model, provider, false)
-	agent.AutoApprove = autoApprove
-	tools.SetAutoApprove(autoApprove)
+	runtime := NewAgentRuntime()
+	runtime.AutoApprove = autoApprove
+	agent := NewAgentWithRuntime(model, provider, false, runtime)
+	agent.setAutoApprove(autoApprove)
 	defer agent.Cleanup()
 
 	// ヘッダー表示

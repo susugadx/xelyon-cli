@@ -24,6 +24,11 @@ func ExecuteWriteFileWithOutput(out common.Output, path string, content string) 
 
 // ExecuteWriteFileWithPromptIO は入出力先を指定してファイルに書き込む。
 func ExecuteWriteFileWithPromptIO(promptIO ui.PromptIO, path string, content string) (string, error) {
+	return ExecuteWriteFileWithPromptIOAndOptions(promptIO, common.DefaultConfirmOptions(), path, content)
+}
+
+// ExecuteWriteFileWithPromptIOAndOptions は確認設定を指定してファイルに書き込む。
+func ExecuteWriteFileWithPromptIOAndOptions(promptIO ui.PromptIO, options common.ConfirmOptions, path string, content string) (string, error) {
 	promptIO = ui.NormalizePromptIO(promptIO)
 	out := common.NewOutput(promptIO.Out, promptIO.Err)
 
@@ -103,7 +108,7 @@ func ExecuteWriteFileWithPromptIO(promptIO ui.PromptIO, path string, content str
 		}
 	}
 
-	dec := common.ConfirmWithAutoApproveDecision(promptIO, "write_file", "Create/overwrite this file? / このファイルを作成・上書きしますか？")
+	dec := common.ConfirmWithAutoApproveDecisionAndOptions(promptIO, options, "write_file", "Create/overwrite this file? / このファイルを作成・上書きしますか？")
 	switch dec.Action {
 	case common.ConfirmYes:
 		// continue

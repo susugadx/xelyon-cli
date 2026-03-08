@@ -65,7 +65,7 @@ func (t *SearchCodeTool) Parameters() map[string]interface{} {
 	}
 }
 
-func (t *SearchCodeTool) Run(_ tools.ExecutionContext, args map[string]string) (string, *tools.FileChange, error) {
+func (t *SearchCodeTool) Run(execCtx tools.ExecutionContext, args map[string]string) (string, *tools.FileChange, error) {
 	opts := SearchOptions{
 		Pattern:     args["pattern"],
 		Path:        args["path"],
@@ -112,7 +112,7 @@ func (t *SearchCodeTool) Run(_ tools.ExecutionContext, args map[string]string) (
 		}
 	}
 
-	result := ExecuteSearchCode(opts)
+	result := ExecuteSearchCodeWithCache(execCtx.EffectiveToolCache(), opts)
 	return result, nil, nil
 }
 

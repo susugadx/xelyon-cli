@@ -1,9 +1,5 @@
 package agent
 
-import (
-	"github.com/susugadx/xelyon-cli/internal/config"
-)
-
 // SyncWithGlobalConfig はグローバル設定（config.GetGlobalConfig）と Agent の状態を同期する。
 //
 // /config などで設定を変更した場合に、フッター表示・次回API呼び出しに即反映させるために使用する。
@@ -13,7 +9,7 @@ func (a *Agent) SyncWithGlobalConfig() {
 		return
 	}
 
-	cfg := config.GetGlobalConfig()
+	cfg := a.cfg()
 
 	// Provider: 変更があれば切り替え（モデルもプロバイダー別デフォルトに更新される）
 	if cfg.DefaultProvider != "" && cfg.DefaultProvider != a.ProviderName {

@@ -9,8 +9,6 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
 // runStepCompleteHooks は hooks.on_step_complete に定義されたシェルコマンドを実行する。
@@ -18,7 +16,7 @@ import (
 // いずれかのコマンドが失敗した場合、needsContinue=true と AI 向けのフィードバックを返す。
 // すべて成功した場合は needsContinue=false を返す。
 func (a *Agent) runStepCompleteHooks(stepID int, stepDescription, stepStatus string) (needsContinue bool, feedback string) {
-	globalCfg := config.GetGlobalConfig()
+	globalCfg := a.cfg()
 	hooks := globalCfg.Hooks.OnStepComplete
 
 	// No step hooks → nothing to verify
@@ -97,7 +95,7 @@ func expandStepTemplate(cmd string, stepID int, stepDescription, stepStatus stri
 // フック失敗時は AI にフィードバックして修正を試み、再実行する。
 // 戻り値: hooks がすべてパスした場合 true、max_retry 到達で打ち切った場合 false。
 func (a *Agent) runStepCompleteHooksWithRetry(ctx context.Context, stepID int, stepDescription, stepStatus string) bool {
-	globalCfg := config.GetGlobalConfig()
+	globalCfg := a.cfg()
 
 	// No step hooks configured → nothing to verify
 	if len(globalCfg.Hooks.OnStepComplete) == 0 {
@@ -127,14 +125,14 @@ func (a *Agent) runStepCompleteHooksWithRetry(ctx context.Context, stepID int, s
 			Content: feedback,
 		})
 
-		response, err := a.CurrentProvider.ChatWithTools(ctx, a.SystemPrompt, a.History, a.CurrentModel)
+		response, err := a.CurrentProvider.ChatWithTools(a.requestContext(ctx), a.SystemPrompt, a.History, a.CurrentModel)
 		if err != nil {
 			yellow.Printf("⚠️  AI fix attempt failed: %v\n", err)
 			return false
 		}
 
 		// ツール呼び出しをパースして履歴管理
-		toolCalls := tools.ParseToolCalls(response)
+		toolCalls := a.parseToolCalls(response)
 
 		// FC rescue: テキストから抽出された toolCall にダミー ID を注入
 		for i, tc := range toolCalls {

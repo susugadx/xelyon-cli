@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -28,6 +29,26 @@ func GetGlobalConfig() *Config {
 		globalConfig = DefaultConfig()
 	}
 	return globalConfig
+}
+
+// CloneConfig は設定をディープコピーして返す。
+func CloneConfig(cfg *Config) *Config {
+	if cfg == nil {
+		return DefaultConfig()
+	}
+
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		clone := *cfg
+		return &clone
+	}
+
+	var cloned Config
+	if err := json.Unmarshal(data, &cloned); err != nil {
+		clone := *cfg
+		return &clone
+	}
+	return &cloned
 }
 
 // DefaultConfig はデフォルト設定

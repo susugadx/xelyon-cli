@@ -72,6 +72,11 @@ type SearchOptions struct {
 
 // ExecuteSearchCode はコード検索を実行し、フォーマット済み結果を返す
 func ExecuteSearchCode(opts SearchOptions) string {
+	return ExecuteSearchCodeWithCache(tools.GlobalToolCache, opts)
+}
+
+// ExecuteSearchCodeWithCache はキャッシュを指定してコード検索を実行する。
+func ExecuteSearchCodeWithCache(cache tools.ToolCacheInterface, opts SearchOptions) string {
 	// 引数バリデーション
 	if opts.Pattern == "" {
 		return "Error: pattern is required"
@@ -102,22 +107,22 @@ func ExecuteSearchCode(opts SearchOptions) string {
 		// 複数パターン: マルチキャッシュチェック → 並列検索
 		multiKey := buildMultiCacheKey(patterns)
 		cacheKey := buildSearchCacheKey(opts)
-		if tools.GlobalToolCache != nil {
-			if cached, ok := tools.GlobalToolCache.GetSearch(multiKey, cacheKey); ok {
+		if cache != nil {
+			if cached, ok := cache.GetSearch(multiKey, cacheKey); ok {
 				return cached
 			}
 		}
-		return executeMultiplePatterns(patterns, opts)
+		return executeMultiplePatterns(cache, patterns, opts)
 	}
-	return executeSinglePattern(patterns[0], opts)
+	return executeSinglePattern(cache, patterns[0], opts)
 }
 
 // executeSinglePattern は単一パターンの検索処理（キャッシュ・検索・パース・マージ・トランケート・ブロック認識・フォーマット・キャッシュ保存）
-func executeSinglePattern(pattern string, opts SearchOptions) string {
+func executeSinglePattern(cache tools.ToolCacheInterface, pattern string, opts SearchOptions) string {
 	// キャッシュチェック
 	cacheKey := buildSearchCacheKey(opts)
-	if tools.GlobalToolCache != nil {
-		if cached, ok := tools.GlobalToolCache.GetSearch(pattern, cacheKey); ok {
+	if cache != nil {
+		if cached, ok := cache.GetSearch(pattern, cacheKey); ok {
 			return cached
 		}
 	}
@@ -148,15 +153,15 @@ func executeSinglePattern(pattern string, opts SearchOptions) string {
 	// manifest mode: ブロック認識 + マニフェスト出力のみ
 	if opts.OutputMode == "manifest" {
 		sortResultsByPriority(results)
-		detectBlocks(results)
+		detectBlocksWithCache(cache, results)
 		formatted := formatManifestResults(results)
 		finalOutput := formatted
 		if len(warnings) > 0 {
 			finalOutput = strings.Join(warnings, "\n") + "\n" + formatted
 		}
 
-		if tools.GlobalToolCache != nil {
-			tools.GlobalToolCache.SetSearch(pattern, cacheKey, finalOutput, collectFilePaths(results))
+		if cache != nil {
+			cache.SetSearch(pattern, cacheKey, finalOutput, collectFilePaths(results))
 		}
 		return finalOutput
 	}
@@ -172,7 +177,7 @@ func executeSinglePattern(pattern string, opts SearchOptions) string {
 	results, truncated := truncateToTokenBudget(results, opts.TokenBudget)
 
 	// ブロック認識（関数/クラス境界検出）
-	detectBlocks(results)
+	detectBlocksWithCache(cache, results)
 	// 同一ブロック内3+マッチの中間を圧縮
 	collapseBlockMatches(results)
 
@@ -184,8 +189,8 @@ func executeSinglePattern(pattern string, opts SearchOptions) string {
 	}
 
 	// キャッシュ保存
-	if tools.GlobalToolCache != nil {
-		tools.GlobalToolCache.SetSearch(pattern, cacheKey, finalOutput, collectFilePaths(results))
+	if cache != nil {
+		cache.SetSearch(pattern, cacheKey, finalOutput, collectFilePaths(results))
 	}
 
 	return finalOutput
@@ -226,7 +231,7 @@ type patternResult struct {
 }
 
 // executeMultiplePatterns は複数パターンを goroutine 並列で検索する
-func executeMultiplePatterns(patterns []string, opts SearchOptions) string {
+func executeMultiplePatterns(cache tools.ToolCacheInterface, patterns []string, opts SearchOptions) string {
 	budgetPerPattern := opts.TokenBudget / len(patterns)
 	if budgetPerPattern < 500 {
 		budgetPerPattern = 500
@@ -282,18 +287,18 @@ func executeMultiplePatterns(patterns []string, opts SearchOptions) string {
 	if opts.OutputMode == "manifest" {
 		// manifest mode: truncate 不要、ブロック認識のみ
 		for i := range collected {
-			detectBlocks(collected[i].Results)
+			detectBlocksWithCache(cache, collected[i].Results)
 		}
 		formatted := formatManifestMultiResults(collected)
 
-		if tools.GlobalToolCache != nil {
+		if cache != nil {
 			multiKey := buildMultiCacheKey(patterns)
 			cacheKey := buildSearchCacheKey(opts)
 			allFiles := make([]string, 0)
 			for _, c := range collected {
 				allFiles = append(allFiles, collectFilePaths(c.Results)...)
 			}
-			tools.GlobalToolCache.SetSearch(multiKey, cacheKey, formatted, dedupePaths(allFiles))
+			cache.SetSearch(multiKey, cacheKey, formatted, dedupePaths(allFiles))
 		}
 		return formatted
 	}
@@ -309,21 +314,21 @@ func executeMultiplePatterns(patterns []string, opts SearchOptions) string {
 			allocatedBudget = 300
 		}
 		collected[i].Results, collected[i].Truncated = truncateToTokenBudget(c.Results, allocatedBudget)
-		detectBlocks(collected[i].Results)
+		detectBlocksWithCache(cache, collected[i].Results)
 		collapseBlockMatches(collected[i].Results)
 	}
 
 	formatted := formatMultiResults(collected, opts.TokenBudget)
 
 	// キャッシュ保存（multi 全体を1エントリとして保存）
-	if tools.GlobalToolCache != nil {
+	if cache != nil {
 		multiKey := buildMultiCacheKey(patterns)
 		cacheKey := buildSearchCacheKey(opts)
 		allFiles := make([]string, 0)
 		for _, c := range collected {
 			allFiles = append(allFiles, collectFilePaths(c.Results)...)
 		}
-		tools.GlobalToolCache.SetSearch(multiKey, cacheKey, formatted, dedupePaths(allFiles))
+		cache.SetSearch(multiKey, cacheKey, formatted, dedupePaths(allFiles))
 	}
 
 	return formatted
@@ -1164,13 +1169,13 @@ func findBlockForLine(ranges []common.BlockRange, lineNum int) *BlockInfo {
 }
 
 // getFileContent はファイル内容を取得する（キャッシュ連携）
-func getFileContent(filePath string) string {
+func getFileContentWithCache(cache tools.ToolCacheInterface, filePath string) string {
 	absPath, err := filepath.Abs(filePath)
 	if err != nil {
 		return ""
 	}
-	if tools.GlobalToolCache != nil {
-		if cached, ok := tools.GlobalToolCache.GetFile(absPath); ok {
+	if cache != nil {
+		if cached, ok := cache.GetFile(absPath); ok {
 			return cached
 		}
 	}
@@ -1179,17 +1184,16 @@ func getFileContent(filePath string) string {
 		return ""
 	}
 	content := string(data)
-	if tools.GlobalToolCache != nil {
-		tools.GlobalToolCache.SetFile(absPath, content)
+	if cache != nil {
+		cache.SetFile(absPath, content)
 	}
 	return content
 }
 
-// detectBlocks は検索結果の各マッチに所属ブロック情報を付与する
-func detectBlocks(results []SearchResult) {
+func detectBlocksWithCache(cache tools.ToolCacheInterface, results []SearchResult) {
 	for i := range results {
 		r := &results[i]
-		content := getFileContent(r.FilePath)
+		content := getFileContentWithCache(cache, r.FilePath)
 		if content == "" {
 			continue
 		}

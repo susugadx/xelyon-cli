@@ -1,6 +1,7 @@
 package openai
 
 import (
+	"context"
 	"encoding/json"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
@@ -10,7 +11,12 @@ import (
 // GetOpenAIToolDefinitions は組み込みツール定義を OpenAI 形式で返す
 // ToolRegistry から自動生成
 func GetOpenAIToolDefinitions() []api.OpenAITool {
-	defs := tools.DefaultRegistry.GetToolDefinitions()
+	return GetOpenAIToolDefinitionsWithContext(context.Background())
+}
+
+// GetOpenAIToolDefinitionsWithContext は request context の Registry を使って OpenAI 形式のツール定義を返す。
+func GetOpenAIToolDefinitionsWithContext(ctx context.Context) []api.OpenAITool {
+	defs := tools.RegistryFromContext(ctx).GetToolDefinitions()
 	result := make([]api.OpenAITool, 0, len(defs))
 	for _, def := range defs {
 		result = append(result, api.OpenAITool{
@@ -28,7 +34,12 @@ func GetOpenAIToolDefinitions() []api.OpenAITool {
 // GetCombinedOpenAITools は組み込みツール + MCPツールを返す
 // 重複するツール名がある場合は最初に登録されたものを優先
 func GetCombinedOpenAITools(mcpTools []api.ToolDefinition) []api.OpenAITool {
-	result := GetOpenAIToolDefinitions()
+	return GetCombinedOpenAIToolsWithContext(context.Background(), mcpTools)
+}
+
+// GetCombinedOpenAIToolsWithContext は request context の Registry を使って組み込みツール + MCPツールを返す。
+func GetCombinedOpenAIToolsWithContext(ctx context.Context, mcpTools []api.ToolDefinition) []api.OpenAITool {
+	result := GetOpenAIToolDefinitionsWithContext(ctx)
 	seen := make(map[string]bool)
 
 	// 組み込みツールの名前を記録
@@ -57,7 +68,12 @@ func GetCombinedOpenAITools(mcpTools []api.ToolDefinition) []api.OpenAITool {
 // Responses API は Chat Completions と異なりフラットな形式
 // 重複するツール名がある場合は最初に登録されたものを優先
 func GetResponsesToolDefinitions(mcpTools []api.ToolDefinition) []ResponsesTool {
-	defs := tools.DefaultRegistry.GetToolDefinitions()
+	return GetResponsesToolDefinitionsWithContext(context.Background(), mcpTools)
+}
+
+// GetResponsesToolDefinitionsWithContext は request context の Registry を使って Responses API 用のツール定義を返す。
+func GetResponsesToolDefinitionsWithContext(ctx context.Context, mcpTools []api.ToolDefinition) []ResponsesTool {
+	defs := tools.RegistryFromContext(ctx).GetToolDefinitions()
 	result := make([]ResponsesTool, 0, len(defs)+len(mcpTools))
 	seen := make(map[string]bool)
 
@@ -120,7 +136,7 @@ func ConvertToolCallToToolJSON(tc *api.OpenAIToolCall) (string, error) {
 
 // GetToolDefinitionNames は定義済みツール名一覧を返す（テスト用）
 func GetToolDefinitionNames() []string {
-	defs := tools.DefaultRegistry.GetToolDefinitions()
+	defs := tools.RegistryFromContext(context.Background()).GetToolDefinitions()
 	names := make([]string, 0, len(defs))
 	for _, def := range defs {
 		names = append(names, def.Name)

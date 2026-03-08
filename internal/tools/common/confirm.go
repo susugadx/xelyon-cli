@@ -25,6 +25,12 @@ type ConfirmDecision struct {
 	Image   *ImageData
 }
 
+// ConfirmOptions は確認 UI に必要な実行時設定を束ねる。
+type ConfirmOptions struct {
+	AutoApprove bool
+	Config      *config.Config
+}
+
 // GlobalAutoApprove は --auto-approve フラグの状態を保持
 // Agent から SetAutoApprove() で設定される
 var GlobalAutoApprove = false
@@ -112,18 +118,34 @@ func ConfirmApproved(message string) bool {
 // - auto-approve の場合は yes を返す
 // - それ以外は Confirm(message) を呼び、y/n/c の結果を返す
 func ConfirmWithAutoApproveDecision(promptIO ui.PromptIO, toolName, message string) ConfirmDecision {
+	return ConfirmWithAutoApproveDecisionAndOptions(promptIO, DefaultConfirmOptions(), toolName, message)
+}
+
+// DefaultConfirmOptions は互換用のデフォルト確認設定を返す。
+func DefaultConfirmOptions() ConfirmOptions {
+	return ConfirmOptions{
+		AutoApprove: GlobalAutoApprove,
+		Config:      config.GetGlobalConfig(),
+	}
+}
+
+// ConfirmWithAutoApproveDecisionAndOptions は実行時設定を指定して確認を行う。
+func ConfirmWithAutoApproveDecisionAndOptions(promptIO ui.PromptIO, options ConfirmOptions, toolName, message string) ConfirmDecision {
 	promptIO = ui.NormalizePromptIO(promptIO)
 	out := NewOutput(promptIO.Out, promptIO.Err)
+	cfg := options.Config
+	if cfg == nil {
+		cfg = config.GetGlobalConfig()
+	}
 
 	// --auto-approve が有効 かつ ツールが自動承認可能な場合
-	if IsAutoApprovable(toolName, GlobalAutoApprove) {
+	if IsAutoApprovable(toolName, options.AutoApprove) {
 		safety := GetToolSafety(toolName)
 		out.Green.Printf("Auto-approved (%s): %s\n", GetSafetyDescription(safety), toolName)
 		return ConfirmDecision{Action: ConfirmYes}
 	}
 
 	// SafetyHigh ツールの自動承認（設定で有効な場合）
-	cfg := config.GetGlobalConfig()
 	if cfg.ToolConfirm.AutoApproveSafe && IsSafeToolAutoApprovable(toolName) {
 		out.Green.Printf("Auto-approved (Safe read-only): %s\n", toolName)
 		return ConfirmDecision{Action: ConfirmYes}

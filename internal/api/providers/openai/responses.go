@@ -11,6 +11,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -122,7 +123,7 @@ func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, h
 	if os.Getenv("XELYON_DEBUG_OPENAI") == "1" {
 		fmt.Fprintf(os.Stderr, "[DEBUG OpenAI] chatWithResponses called, model=%s\n", model)
 	}
-	cfg := config.GetGlobalConfig()
+	cfg := tools.ConfigFromContext(ctx)
 
 	// Responses API URL
 	apiURL := os.Getenv("OPENAI_RESPONSES_URL")
@@ -135,7 +136,7 @@ func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, h
 		MaxOutputTokens:      api.GetMaxOutputTokens(ctx, "openai", model),
 		Stream:               true,
 		Store:                true,
-		Tools:                GetResponsesToolDefinitions(p.mcpTools), // Function Calling
+		Tools:                GetResponsesToolDefinitionsWithContext(ctx, p.mcpTools), // Function Calling
 		PromptCacheKey:       BuildPromptCacheKey(model, systemPrompt),
 		PromptCacheRetention: "24h",
 	}
@@ -494,7 +495,7 @@ func (p *Provider) chatWithImageResponses(ctx context.Context, systemPrompt stri
 		MaxOutputTokens:      api.GetMaxOutputTokens(ctx, "openai", model),
 		Stream:               true,
 		Store:                true,
-		Tools:                GetResponsesToolDefinitions(p.mcpTools), // Function Calling
+		Tools:                GetResponsesToolDefinitionsWithContext(ctx, p.mcpTools), // Function Calling
 		PromptCacheKey:       BuildPromptCacheKey(model, systemPrompt),
 		PromptCacheRetention: "24h",
 	}

@@ -20,6 +20,13 @@ func ParseToolCall(response string) *ToolCall {
 // ParseToolCalls はレスポンスから全てのツール呼び出しを抽出
 // Markdownコードブロック内のJSONは除外する
 func ParseToolCalls(response string) []*ToolCall {
+	return ParseToolCallsWithRegistry(response, DefaultRegistry)
+}
+
+// ParseToolCallsWithRegistry は registry を指定して全てのツール呼び出しを抽出する。
+func ParseToolCallsWithRegistry(response string, registry *Registry) []*ToolCall {
+	registry = resolveRegistry(registry)
+
 	// デバッグモード
 	debug := os.Getenv("XELYON_DEBUG_PARSE") == "1"
 	if debug {
@@ -177,7 +184,7 @@ func ParseToolCalls(response string) []*ToolCall {
 
 	// XML rescue: JSONで何も見つからなかった場合にXML形式を試す
 	if len(results) == 0 {
-		xmlResults := parseXMLToolCalls(response, codeBlockRanges, debug)
+		xmlResults := parseXMLToolCalls(response, codeBlockRanges, debug, registry)
 		results = append(results, xmlResults...)
 	}
 
@@ -189,7 +196,7 @@ var xmlOpenTagPattern = regexp.MustCompile(`<([a-zA-Z_][\w-]*)>`)
 
 // parseXMLToolCalls はXML形式のツール呼び出しをパースする
 // Kimi K2 等がFC失敗時に出力する XML 形式を rescue する
-func parseXMLToolCalls(response string, codeBlockRanges [][2]int, debug bool) []*ToolCall {
+func parseXMLToolCalls(response string, codeBlockRanges [][2]int, debug bool, registry *Registry) []*ToolCall {
 	var results []*ToolCall
 	searchFrom := 0
 
@@ -228,8 +235,8 @@ func parseXMLToolCalls(response string, codeBlockRanges [][2]int, debug bool) []
 			continue
 		}
 
-		// DefaultRegistry に登録されているツール名のみ許可
-		if !DefaultRegistry.HasTool(tagName) {
+		// 指定 Registry に登録されているツール名のみ許可
+		if !registry.HasTool(tagName) {
 			if debug {
 				fmt.Fprintf(os.Stderr, "[DEBUG ParseToolCalls] XML rescue: skipping unknown tool %q\n", tagName)
 			}
@@ -251,6 +258,13 @@ func parseXMLToolCalls(response string, codeBlockRanges [][2]int, debug bool) []
 	}
 
 	return results
+}
+
+func resolveRegistry(registry *Registry) *Registry {
+	if registry == nil {
+		return DefaultRegistry
+	}
+	return registry
 }
 
 // parseXMLParams は XML 内部コンテンツからパラメータを抽出する

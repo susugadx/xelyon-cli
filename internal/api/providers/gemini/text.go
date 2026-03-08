@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -48,7 +48,7 @@ func (p *Provider) chatWithTextMode(ctx context.Context, systemPrompt string, hi
 		})
 	}
 
-	cfg := config.GetGlobalConfig()
+	cfg := tools.ConfigFromContext(ctx)
 
 	reqBody := GeminiRequest{
 		CachedContent:     cacheName,
@@ -174,7 +174,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	}
 	contents = append(contents, multimodalContent)
 
-	cfgImg := config.GetGlobalConfig()
+	cfgImg := tools.ConfigFromContext(ctx)
 
 	reqBody := GeminiMultimodalRequest{
 		SystemInstruction: sysInstruction,
@@ -183,7 +183,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 
 	// FC有効時はTools/ToolConfigを追加（画像+FC対応）
 	if p.IsFunctionCallingEnabled() {
-		reqBody.Tools = GetCombinedToolDefinitions(p.mcpTools)
+		reqBody.Tools = GetCombinedToolDefinitionsWithContext(ctx, p.mcpTools)
 		fcMode := os.Getenv("GEMINI_FC_MODE")
 		if fcMode == "" {
 			fcMode = "AUTO"

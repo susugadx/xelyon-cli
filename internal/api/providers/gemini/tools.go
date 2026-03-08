@@ -1,6 +1,7 @@
 package gemini
 
 import (
+	"context"
 	"encoding/json"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
@@ -10,7 +11,12 @@ import (
 // GetGeminiToolDefinitions returns all tool definitions for Function Calling API
 // ToolRegistry から自動生成
 func GetGeminiToolDefinitions() []api.GeminiToolConfig {
-	defs := tools.DefaultRegistry.GetToolDefinitions()
+	return GetGeminiToolDefinitionsWithContext(context.Background())
+}
+
+// GetGeminiToolDefinitionsWithContext は request context の Registry を使って Function Calling API 用のツール定義を返す。
+func GetGeminiToolDefinitionsWithContext(ctx context.Context) []api.GeminiToolConfig {
+	defs := tools.RegistryFromContext(ctx).GetToolDefinitions()
 	declarations := make([]api.GeminiFunctionDeclaration, 0, len(defs))
 
 	for _, def := range defs {
@@ -136,7 +142,7 @@ func convertPropertyItems(itemsMap map[string]interface{}) api.GeminiPropertyDef
 
 // GetToolDefinitionNames returns all defined tool names for testing
 func GetToolDefinitionNames() []string {
-	defs := tools.DefaultRegistry.GetToolDefinitions()
+	defs := tools.RegistryFromContext(context.Background()).GetToolDefinitions()
 	names := make([]string, 0, len(defs))
 	for _, def := range defs {
 		names = append(names, def.Name)
@@ -184,7 +190,12 @@ func convertFunctionCallToDisplayJSON(fc *api.GeminiFunctionCall) string {
 // GetCombinedToolDefinitions は組み込みツール + MCPツールの定義を返す
 // 重複するツール名がある場合は最初に登録されたものを優先
 func GetCombinedToolDefinitions(mcpTools []api.ToolDefinition) []api.GeminiToolConfig {
-	defs := tools.DefaultRegistry.GetToolDefinitions()
+	return GetCombinedToolDefinitionsWithContext(context.Background(), mcpTools)
+}
+
+// GetCombinedToolDefinitionsWithContext は request context の Registry を使って組み込みツール + MCPツール定義を返す。
+func GetCombinedToolDefinitionsWithContext(ctx context.Context, mcpTools []api.ToolDefinition) []api.GeminiToolConfig {
+	defs := tools.RegistryFromContext(ctx).GetToolDefinitions()
 	declarations := make([]api.GeminiFunctionDeclaration, 0, len(defs)+len(mcpTools))
 	seen := make(map[string]bool)
 

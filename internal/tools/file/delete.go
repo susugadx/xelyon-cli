@@ -24,6 +24,11 @@ func ExecuteDeleteFileWithOutput(out common.Output, path string) (string, error)
 
 // ExecuteDeleteFileWithPromptIO deletes a file permanently with explicit interactive I/O.
 func ExecuteDeleteFileWithPromptIO(promptIO ui.PromptIO, path string) (string, error) {
+	return ExecuteDeleteFileWithPromptIOAndOptions(promptIO, common.DefaultConfirmOptions(), path)
+}
+
+// ExecuteDeleteFileWithPromptIOAndOptions deletes a file with explicit confirm options.
+func ExecuteDeleteFileWithPromptIOAndOptions(promptIO ui.PromptIO, options common.ConfirmOptions, path string) (string, error) {
 	promptIO = ui.NormalizePromptIO(promptIO)
 	out := common.NewOutput(promptIO.Out, promptIO.Err)
 
@@ -82,7 +87,10 @@ func ExecuteDeleteFileWithPromptIO(promptIO ui.PromptIO, path string) (string, e
 		out.Red.Println("⚠️  DESTRUCTIVE: File will be permanently deleted!")
 		out.Red.Println("⚠️  破壊的操作: ファイルは完全に削除されます!")
 
-		cfg := config.GetGlobalConfig()
+		cfg := options.Config
+		if cfg == nil {
+			cfg = config.GetGlobalConfig()
+		}
 		maxPreviewLines := cfg.Diff.MaxTotalLines
 		if maxPreviewLines <= 0 {
 			maxPreviewLines = len(lines)
@@ -130,7 +138,7 @@ func ExecuteDeleteFileWithPromptIO(promptIO ui.PromptIO, path string) (string, e
 		}
 	}
 
-	dec := common.ConfirmWithAutoApproveDecision(promptIO, "delete_file", "Delete this file? / このファイルを削除しますか？")
+	dec := common.ConfirmWithAutoApproveDecisionAndOptions(promptIO, options, "delete_file", "Delete this file? / このファイルを削除しますか？")
 	switch dec.Action {
 	case common.ConfirmYes:
 		// continue

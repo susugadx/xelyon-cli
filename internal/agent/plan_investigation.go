@@ -8,7 +8,6 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/agent/plan"
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/dev"
 )
@@ -20,7 +19,7 @@ import (
 // SafetyHigh ツール制約のある独自ループ（executeToolOnly）を持ち、
 // 並列実行の対象外である。ツールは1つずつ順次実行される。
 func (a *Agent) runInvestigationPhase(ctx context.Context) (*plan.Plan, error) {
-	cfg := config.GetGlobalConfig()
+	cfg := a.cfg()
 	maxIterations := cfg.General.ToolLoopLimit
 
 	var lastToolCall *tools.ToolCall
@@ -30,7 +29,7 @@ func (a *Agent) runInvestigationPhase(ctx context.Context) (*plan.Plan, error) {
 		compactedHistory, metrics := CompactOldToolResults(a.History, DefaultKeepTurns, DefaultMaxLines, DefaultHeadLines, DefaultTailLines)
 		a.addCompactionMetrics(metrics)
 		response, err := a.CurrentProvider.ChatWithTools(
-			ctx,
+			a.requestContext(ctx),
 			a.SystemPrompt,
 			compactedHistory,
 			a.CurrentModel,
@@ -39,7 +38,7 @@ func (a *Agent) runInvestigationPhase(ctx context.Context) (*plan.Plan, error) {
 			return nil, fmt.Errorf("API call failed: %w", err)
 		}
 
-		toolCalls := tools.ParseToolCalls(response)
+		toolCalls := a.parseToolCalls(response)
 
 		// assistant message を履歴に追加
 		assistantMsg := api.Message{Role: "assistant", Content: response, ReasoningContent: a.getLastReasoningContent()}
@@ -101,7 +100,7 @@ func (a *Agent) runInvestigationPhase(ctx context.Context) (*plan.Plan, error) {
 
 			if tc.Tool == "bash" || tc.Tool == "command" {
 				cmd := tc.Args["command"]
-				if dev.IsSafeCommand(cmd, config.GetGlobalConfig().Bash) {
+				if dev.IsSafeCommand(cmd, a.cfg().Bash) {
 					if a.shouldAbortToolLoop(tc, lastToolCall, &sameCallCount) {
 						return nil, fmt.Errorf("tool loop detected during investigation")
 					}

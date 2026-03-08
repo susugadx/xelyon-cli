@@ -111,10 +111,10 @@ func executeCoreWithContext(execCtx ExecutionContext, tc *ToolCall) (string, *Fi
 	}
 
 	// Registry経由でツール実行
-	result, change := DefaultRegistry.ExecuteWithContext(execCtx, tc)
+	result, change := execCtx.EffectiveRegistry().ExecuteWithContext(execCtx, tc)
 
 	// ファイル変更系ツールの場合、キャッシュを無効化
-	invalidateToolCache(tc)
+	invalidateToolCache(execCtx, tc)
 
 	// ツール出力が空の場合は補完
 	if strings.TrimSpace(result) == "" {
@@ -125,8 +125,9 @@ func executeCoreWithContext(execCtx ExecutionContext, tc *ToolCall) (string, *Fi
 }
 
 // invalidateToolCache はファイル変更系ツール実行後にキャッシュを無効化
-func invalidateToolCache(tc *ToolCall) {
-	if GlobalToolCache == nil {
+func invalidateToolCache(execCtx ExecutionContext, tc *ToolCall) {
+	cache := execCtx.EffectiveToolCache()
+	if cache == nil {
 		return
 	}
 
@@ -135,8 +136,8 @@ func invalidateToolCache(tc *ToolCall) {
 	case "write_file", "str_replace", "format", "lint":
 		if path := tc.Args["path"]; path != "" {
 			if absPath, err := filepath.Abs(path); err == nil {
-				GlobalToolCache.InvalidateFile(absPath)
-				GlobalToolCache.InvalidateSearchCacheForFile(absPath)
+				cache.InvalidateFile(absPath)
+				cache.InvalidateSearchCacheForFile(absPath)
 			}
 		}
 
@@ -144,9 +145,9 @@ func invalidateToolCache(tc *ToolCall) {
 	case "delete_file":
 		if path := tc.Args["path"]; path != "" {
 			if absPath, err := filepath.Abs(path); err == nil {
-				GlobalToolCache.InvalidateFile(absPath)
-				GlobalToolCache.InvalidateDir(filepath.Dir(absPath))
-				GlobalToolCache.InvalidateSearchCacheForFile(absPath)
+				cache.InvalidateFile(absPath)
+				cache.InvalidateDir(filepath.Dir(absPath))
+				cache.InvalidateSearchCacheForFile(absPath)
 			}
 		}
 
@@ -154,8 +155,8 @@ func invalidateToolCache(tc *ToolCall) {
 	case "copy_file":
 		if dest := tc.Args["dest"]; dest != "" {
 			if absPath, err := filepath.Abs(dest); err == nil {
-				GlobalToolCache.InvalidateDir(filepath.Dir(absPath))
-				GlobalToolCache.InvalidateSearchCacheForFile(absPath)
+				cache.InvalidateDir(filepath.Dir(absPath))
+				cache.InvalidateSearchCacheForFile(absPath)
 			}
 		}
 
@@ -163,19 +164,19 @@ func invalidateToolCache(tc *ToolCall) {
 	case "create_dir":
 		if path := tc.Args["path"]; path != "" {
 			if absPath, err := filepath.Abs(path); err == nil {
-				GlobalToolCache.InvalidateDir(filepath.Dir(absPath))
+				cache.InvalidateDir(filepath.Dir(absPath))
 			}
 		}
 
 	// git checkout でファイルが復元される可能性
 	case "git_checkout":
 		// 全キャッシュクリア（どのファイルが変更されるか分からない）
-		GlobalToolCache.Clear()
+		cache.Clear()
 
 	// bash: read-only コマンドならキャッシュを保持、それ以外は全クリア
 	case "bash":
 		if cmd := tc.Args["command"]; !isBashReadOnly(cmd) {
-			GlobalToolCache.Clear()
+			cache.Clear()
 		}
 	}
 }

@@ -22,8 +22,12 @@ var defaultCommandAliases = map[string]string{
 // - 大文字小文字は無視（内部で lower に正規化）
 func resolveCommandAlias(cmd string) string {
 	cmd = strings.ToLower(cmd)
+	return resolveCommandAliasWithConfig(cmd, config.GetGlobalConfig())
+}
 
-	cfg := config.GetGlobalConfig()
+func resolveCommandAliasWithConfig(cmd string, cfg *config.Config) string {
+	cmd = strings.ToLower(cmd)
+
 	userAliases := map[string]string{}
 	if cfg != nil && cfg.CommandAliases != nil {
 		userAliases = cfg.CommandAliases

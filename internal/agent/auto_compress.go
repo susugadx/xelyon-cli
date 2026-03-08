@@ -20,7 +20,7 @@ type ResponseIDCapable interface {
 // maybeAutoCompress は閾値を超えた場合に自動圧縮を実行
 // 圧縮した場合は true を返す
 func (a *Agent) maybeAutoCompress() bool {
-	cfg := config.GetGlobalConfig()
+	cfg := a.cfg()
 	if !cfg.Compression.AutoCompress {
 		return false
 	}
@@ -161,7 +161,7 @@ func (a *Agent) maybeAutoCompress() bool {
 // checkTokenWarning はトークン使用率をチェックして警告を表示
 // 自動圧縮が有効な場合は表示しない（自動圧縮が処理するため）
 func (a *Agent) checkTokenWarning() {
-	cfg := config.GetGlobalConfig()
+	cfg := a.cfg()
 
 	// 自動圧縮が有効な場合は警告をスキップ（自動圧縮が処理する）
 	if cfg.Compression.AutoCompress {
@@ -250,7 +250,7 @@ func (a *Agent) handleTokenLimitErrorWithRetry(err error, retryFunc func() error
 	// LLMサマリー方式で圧縮（既存のCompressHistoryを使用）
 	// keepRecentはデフォルト値10を使用
 	keepRecent := 10
-	cfg := config.GetGlobalConfig()
+	cfg := a.cfg()
 	if cfg.Compression.KeepRecent > 0 {
 		keepRecent = cfg.Compression.KeepRecent
 	}

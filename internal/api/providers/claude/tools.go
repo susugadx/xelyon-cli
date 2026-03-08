@@ -1,10 +1,10 @@
 package claude
 
 import (
+	"context"
 	"encoding/json"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
@@ -20,7 +20,12 @@ type ClaudeTool struct {
 // GetClaudeToolDefinitions は組み込みツール定義を Claude 形式で返す
 // ToolRegistry から自動生成
 func GetClaudeToolDefinitions() []ClaudeTool {
-	defs := tools.DefaultRegistry.GetToolDefinitions()
+	return GetClaudeToolDefinitionsWithContext(context.Background())
+}
+
+// GetClaudeToolDefinitionsWithContext は request context の Registry を使って Claude 形式のツール定義を返す。
+func GetClaudeToolDefinitionsWithContext(ctx context.Context) []ClaudeTool {
+	defs := tools.RegistryFromContext(ctx).GetToolDefinitions()
 	result := make([]ClaudeTool, 0, len(defs))
 	for _, def := range defs {
 		result = append(result, ClaudeTool{
@@ -47,7 +52,12 @@ func ConvertOpenAIToolToClaude(tool api.ToolDefinition) ClaudeTool {
 // BP#2: ツール定義の末尾に cache_control を設定。
 // ツール定義は安定しているため、tools prefix のキャッシュヒット率が高い。
 func GetCombinedClaudeTools(mcpTools []api.ToolDefinition) []ClaudeTool {
-	result := GetClaudeToolDefinitions()
+	return GetCombinedClaudeToolsWithContext(context.Background(), mcpTools)
+}
+
+// GetCombinedClaudeToolsWithContext は request context の Registry/Config を使って組み込みツール + MCPツールを返す。
+func GetCombinedClaudeToolsWithContext(ctx context.Context, mcpTools []api.ToolDefinition) []ClaudeTool {
+	result := GetClaudeToolDefinitionsWithContext(ctx)
 	seen := make(map[string]bool)
 
 	// 組み込みツールの名前を記録
@@ -66,7 +76,7 @@ func GetCombinedClaudeTools(mcpTools []api.ToolDefinition) []ClaudeTool {
 
 	// BP#2: ツール定義末尾に cache_control を設定
 	if len(result) > 0 {
-		cfg := config.GetGlobalConfig()
+		cfg := tools.ConfigFromContext(ctx)
 		if cfg != nil && cfg.PromptCache.Enabled {
 			result[len(result)-1].CacheControl = api.NewCacheControl()
 		}
@@ -105,7 +115,7 @@ func ConvertToolUseToToolJSON(id, name string, input map[string]interface{}) (st
 
 // GetToolDefinitionNames は定義済みツール名一覧を返す（テスト用）
 func GetToolDefinitionNames() []string {
-	defs := tools.DefaultRegistry.GetToolDefinitions()
+	defs := tools.RegistryFromContext(context.Background()).GetToolDefinitions()
 	names := make([]string, 0, len(defs))
 	for _, def := range defs {
 		names = append(names, def.Name)

@@ -39,7 +39,7 @@ func handleSpecialCommand(input string, agent *Agent) bool {
 		return false
 	}
 
-	cmd := resolveCommandAlias(parts[0])
+	cmd := resolveCommandAliasWithConfig(parts[0], agent.cfg())
 	args := parts[1:]
 
 	switch cmd {

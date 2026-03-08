@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -32,7 +32,7 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 	model = api.GetDefaultModel(model, "gemini", "gemini-3.1-pro-preview-customtools")
 
 	// ツール定義を事前に取得（キャッシュにも含めるため）
-	toolDefs := GetCombinedToolDefinitions(p.mcpTools)
+	toolDefs := GetCombinedToolDefinitionsWithContext(ctx, p.mcpTools)
 	fcMode := os.Getenv("GEMINI_FC_MODE")
 	if fcMode == "" {
 		fcMode = "AUTO"
@@ -127,7 +127,7 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 		}
 	}
 
-	cfg := config.GetGlobalConfig()
+	cfg := tools.ConfigFromContext(ctx)
 
 	// Function Calling 用リクエストを構築
 	reqBody := GeminiRequestWithTools{

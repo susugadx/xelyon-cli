@@ -11,6 +11,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -45,7 +46,7 @@ type MultimodalRequest struct {
 
 // chatWithCompletions は Chat Completions API でチャット
 func (p *Provider) chatWithCompletions(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
-	cfg := config.GetGlobalConfig()
+	cfg := tools.ConfigFromContext(ctx)
 
 	// メッセージ構築
 	messages := []api.Message{
@@ -65,7 +66,7 @@ func (p *Provider) chatWithCompletions(ctx context.Context, systemPrompt string,
 
 	// Function Calling: ツール定義を追加（環境変数で無効化可能）
 	if os.Getenv("OPENAI_FUNCTION_CALLING") != "0" {
-		reqBody.Tools = GetCombinedOpenAITools(p.mcpTools)
+		reqBody.Tools = GetCombinedOpenAIToolsWithContext(ctx, p.mcpTools)
 		reqBody.ToolChoice = "auto"
 
 		// tool_choice 強制設定がある場合

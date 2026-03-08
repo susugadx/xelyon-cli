@@ -53,7 +53,7 @@ func handleModelCommand(agent *Agent, args []string) bool {
 
 	green.Printf("✅ Model switched: %s → %s\n", oldModel, newModel)
 	if agent.CurrentProvider != nil {
-		printContextSize(agent.SystemPrompt, agent.CurrentProvider.IsFunctionCallingEnabled())
+		printContextSize(agent)
 	}
 
 	// 設定ファイルにも保存
@@ -301,7 +301,7 @@ func handleUseCommand(agent *Agent, args []string) bool {
 	}
 
 	if agent.CurrentProvider != nil {
-		printContextSize(agent.SystemPrompt, agent.CurrentProvider.IsFunctionCallingEnabled())
+		printContextSize(agent)
 	}
 
 	return true

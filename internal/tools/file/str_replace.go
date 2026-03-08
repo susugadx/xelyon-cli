@@ -39,6 +39,11 @@ func ExecuteStrReplaceWithOutput(out common.Output, path, oldStr, newStr, startL
 
 // ExecuteStrReplaceWithPromptIO は入出力先を指定してファイル内の文字列を置換する。
 func ExecuteStrReplaceWithPromptIO(promptIO ui.PromptIO, path, oldStr, newStr, startLineStr, endLineStr string) (string, error) {
+	return ExecuteStrReplaceWithPromptIOAndOptions(promptIO, common.DefaultConfirmOptions(), path, oldStr, newStr, startLineStr, endLineStr)
+}
+
+// ExecuteStrReplaceWithPromptIOAndOptions は確認設定を指定してファイル内の文字列を置換する。
+func ExecuteStrReplaceWithPromptIOAndOptions(promptIO ui.PromptIO, options common.ConfirmOptions, path, oldStr, newStr, startLineStr, endLineStr string) (string, error) {
 	promptIO = ui.NormalizePromptIO(promptIO)
 	out := common.NewOutput(promptIO.Out, promptIO.Err)
 
@@ -152,7 +157,10 @@ func ExecuteStrReplaceWithPromptIO(promptIO ui.PromptIO, path, oldStr, newStr, s
 			// Before/After（レンジ部分のみを表示）
 			beforeStr := strings.Join(lines[startLine-1:endLine], "\n")
 			offset := startLine - 1
-			cfg := config.GetGlobalConfig()
+			cfg := options.Config
+			if cfg == nil {
+				cfg = config.GetGlobalConfig()
+			}
 			opts := &ui.DiffOptions{
 				ContextLines:  cfg.Diff.ContextLines,
 				ShowLineNums:  true,
@@ -163,7 +171,7 @@ func ExecuteStrReplaceWithPromptIO(promptIO ui.PromptIO, path, oldStr, newStr, s
 			ui.ShowColoredDiffToWriter(out.StdoutWriter(), beforeStr, newStr, opts)
 		}
 
-		dec := common.ConfirmWithAutoApproveDecision(promptIO, "str_replace", "Apply this replacement? / この置換を適用しますか？")
+		dec := common.ConfirmWithAutoApproveDecisionAndOptions(promptIO, options, "str_replace", "Apply this replacement? / この置換を適用しますか？")
 		switch dec.Action {
 		case common.ConfirmYes:
 			// continue
@@ -358,7 +366,7 @@ Do not retry the same replacement.`, path), nil
 		}
 	}
 
-	dec2 := common.ConfirmWithAutoApproveDecision(promptIO, "str_replace", "Apply this replacement? / この置換を適用しますか？")
+	dec2 := common.ConfirmWithAutoApproveDecisionAndOptions(promptIO, options, "str_replace", "Apply this replacement? / この置換を適用しますか？")
 	switch dec2.Action {
 	case common.ConfirmYes:
 		// continue
@@ -491,6 +499,10 @@ func executeBatchEditsWithOutput(out common.Output, path, editsJSON string) (str
 }
 
 func executeBatchEditsWithPromptIO(promptIO ui.PromptIO, path, editsJSON string) (string, error) {
+	return executeBatchEditsWithPromptIOAndOptions(promptIO, common.DefaultConfirmOptions(), path, editsJSON)
+}
+
+func executeBatchEditsWithPromptIOAndOptions(promptIO ui.PromptIO, options common.ConfirmOptions, path, editsJSON string) (string, error) {
 	promptIO = ui.NormalizePromptIO(promptIO)
 	out := common.NewOutput(promptIO.Out, promptIO.Err)
 
@@ -577,7 +589,10 @@ func executeBatchEditsWithPromptIO(promptIO ui.PromptIO, path, editsJSON string)
 			out.Red.Println("   This is a significant modification. Please review the diff carefully.")
 		}
 
-		cfg := config.GetGlobalConfig()
+		cfg := options.Config
+		if cfg == nil {
+			cfg = config.GetGlobalConfig()
+		}
 		opts := &ui.DiffOptions{
 			ContextLines:  cfg.Diff.ContextLines,
 			ShowLineNums:  true,
@@ -588,7 +603,7 @@ func executeBatchEditsWithPromptIO(promptIO ui.PromptIO, path, editsJSON string)
 	}
 
 	// 確認
-	dec := common.ConfirmWithAutoApproveDecision(promptIO, "str_replace", "Apply batch replacement? / バッチ置換を適用しますか？")
+	dec := common.ConfirmWithAutoApproveDecisionAndOptions(promptIO, options, "str_replace", "Apply batch replacement? / バッチ置換を適用しますか？")
 	switch dec.Action {
 	case common.ConfirmYes:
 		// continue

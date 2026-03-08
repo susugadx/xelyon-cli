@@ -43,6 +43,7 @@ type Agent struct {
 	CurrentModel         string // 現在のモデル（再起動なしで切り替え可能）
 	CurrentProvider      api.Provider
 	ProviderName         string
+	Runtime              *AgentRuntime
 	History              []api.Message
 	SystemPrompt         string
 	session              *history.Session
@@ -81,8 +82,15 @@ type Agent struct {
 
 // NewAgent は新しいAgentを作成
 func NewAgent(model string, provider api.Provider, headless bool) *Agent {
+	return NewAgentWithRuntime(model, provider, headless, nil)
+}
+
+// NewAgentWithRuntime は runtime を指定して新しい Agent を作成する。
+func NewAgentWithRuntime(model string, provider api.Provider, headless bool, runtime *AgentRuntime) *Agent {
+	runtime = normalizeAgentRuntime(runtime)
+
 	// 言語設定を適用
-	cfg := config.GetGlobalConfig()
+	cfg := runtime.effectiveConfig()
 	if cfg.General.Language != "" {
 		i18n.SetLang(cfg.General.Language)
 	}
@@ -110,7 +118,7 @@ func NewAgent(model string, provider api.Provider, headless bool) *Agent {
 
 		// MCPツールをTool Registryに登録
 		if len(mcpManager.GetTools()) > 0 {
-			mcpManager.RegisterToToolRegistry(tools.DefaultRegistry)
+			mcpManager.RegisterToToolRegistry(runtime.effectiveRegistry())
 		}
 	}
 
@@ -130,7 +138,7 @@ func NewAgent(model string, provider api.Provider, headless bool) *Agent {
 
 	// LSP初期化
 	var lspClient *lsp.Client
-	cfg = config.GetGlobalConfig()
+	cfg = runtime.effectiveConfig()
 	if cfg.LSP.Enabled {
 		cwd, err := os.Getwd()
 		if err == nil {
@@ -205,9 +213,7 @@ func NewAgent(model string, provider api.Provider, headless bool) *Agent {
 	systemPrompt = prompt.BuildProviderSystemPrompt(systemPrompt, provider.Name(), model)
 
 	// ToolCache 初期化（ディスクから復元）
-	toolCache := NewToolCache()
-	_ = toolCache.Load()
-	tools.GlobalToolCache = toolCache
+	toolCache := runtime.effectiveToolCache()
 
 	// Agent を作成
 	agent := &Agent{
@@ -215,6 +221,7 @@ func NewAgent(model string, provider api.Provider, headless bool) *Agent {
 		CurrentModel:    model,
 		CurrentProvider: provider,
 		ProviderName:    strings.ToLower(provider.Name()),
+		Runtime:         runtime,
 		History:         []api.Message{},
 		session:         history.NewSession(model),
 		storage:         storage,
