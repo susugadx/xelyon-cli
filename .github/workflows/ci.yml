@@ -32,16 +32,6 @@ jobs:
         with:
           go-version: "1.26"
 
-      # Go modules をキャッシュして CI を高速化
-      # go.sum が変わらなければキャッシュを再利用
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-
       # 依存関係の整合性を確認
       - name: Verify dependencies
         run: go mod verify
