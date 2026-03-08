@@ -769,6 +769,7 @@ func printParallelToolGroup(allToolCalls []*tools.ToolCall, indices []int, resul
 			Result:   results[idx].result,
 			Error:    strings.HasPrefix(strings.TrimSpace(results[idx].result), "Error:"),
 		}))
+		printParallelCollapsedOutput(allToolCalls[idx].Tool, results[idx].result)
 		return
 	}
 
@@ -780,8 +781,41 @@ func printParallelToolGroup(allToolCalls []*tools.ToolCall, indices []int, resul
 			Result:   results[idx].result,
 			Error:    strings.HasPrefix(strings.TrimSpace(results[idx].result), "Error:"),
 		}))
+		printParallelCollapsedOutputWithPrefix(allToolCalls[idx].Tool, results[idx].result, "│    ")
 	}
 	ui.PrintParallelGroupEnd(formatParallelGroupSummary(allToolCalls, indices, elapsed))
+}
+
+func shouldShowParallelCollapsed(toolName, result string) bool {
+	trimmed := strings.TrimSpace(result)
+	if strings.HasPrefix(trimmed, "Error:") {
+		return true
+	}
+	if toolName == "search_code" && strings.Contains(result, "\n") {
+		return true
+	}
+	return false
+}
+
+func printParallelCollapsedOutput(toolName, result string) {
+	if !shouldShowParallelCollapsed(toolName, result) {
+		return
+	}
+	fmt.Println(ui.FormatToolOutput(result, ui.GetMaxVisibleLines()))
+}
+
+func printParallelCollapsedOutputWithPrefix(toolName, result, prefix string) {
+	if !shouldShowParallelCollapsed(toolName, result) {
+		return
+	}
+
+	collapsed := ui.FormatToolOutput(result, ui.GetMaxVisibleLines())
+	for _, line := range strings.Split(strings.TrimRight(collapsed, "\n"), "\n") {
+		if line == "" {
+			continue
+		}
+		fmt.Printf("%s%s\n", prefix, line)
+	}
 }
 
 func formatParallelGroupSummary(allToolCalls []*tools.ToolCall, indices []int, elapsed time.Duration) string {

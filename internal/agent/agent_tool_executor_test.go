@@ -404,6 +404,7 @@ func TestExecuteToolCallsWithParallel_PrintsParallelGroup(t *testing.T) {
 		"┌ Parallel (2 calls)",
 		"📄 read_file: auto_compress.go",
 		`🔍 search_code: "maybeAutoCompress" in . →`,
+		"│    ⎿  Found ",
 		"└ Done:",
 	} {
 		if !strings.Contains(output, want) {
