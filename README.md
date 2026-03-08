@@ -56,6 +56,16 @@ DeepSeek, OpenAI, Gemini, Claude, Ollama, Groq, OpenRouter, Bedrock をシーム
 - 成功時: `✅ Succeeded (on retry 3)`
 - 上限到達時: Selector UI で継続/中止を選択（Plan Mode のみ）
 
+### ⚡ Parallel Tool Execution
+LLMが1回の応答で複数のread-onlyツールを返した場合、並列実行してレイテンシを削減します。
+- **parallel-safe ツール**: `read_file`, `list_dir`, `search_code`, `web_search`, `git_status` 等
+- **bash**: `ls`, `find`, `rg`, `grep`, `cat`, `git status`, `git diff`, `git log` 等のread-onlyコマンド（allowlist ベース）のみ並列化
+- **sequential ツール**: `write_file`, `str_replace`, `delete_file`, MCP ツール等の副作用ありツールは従来通り順次実行
+- mixed case: parallel-safe 群を先に並列実行 → sequential 群を順次実行 → 結果は元の tool call 順で配送
+- 最大並列数: 4（セマフォ制御）
+- 通常モード・Plan Mode 両方で同じポリシーを適用（`executeToolCallsWithParallel` 共通 executor）
+- **安全性**: ループ検知・deprecated ツールフィルタリングは実行前（Phase 0）に評価。Investigation Phase は影響なし
+
 ### 🔍 コードレビュー & リファクタリング
 `/review` でセキュリティ・テストカバレッジをチェック。
 `/refactor` で静的解析ベースのリファクタリング提案。

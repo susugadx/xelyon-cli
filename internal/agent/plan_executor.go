@@ -207,33 +207,74 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 			return nil
 		}
 
-		// ツールを実行
-		for tcIdx, toolCall := range execToolCalls {
-			// ループ検知（assistant メッセージは追加済みなので response="" で呼ぶ）
-			if a.shouldAbortToolLoopWithResponse("", toolCall, lastToolCall, &sameCallCount) {
-				// 残りの未実行 TC にダミー結果を追加
-				for _, remaining := range execToolCalls[tcIdx+1:] {
-					if remaining.ID != "" {
-						a.History = append(a.History, api.Message{
-							Role:       "tool",
-							Content:    "[SYSTEM] Skipped due to tool loop detection.",
-							ToolCallID: remaining.ID,
-							ToolName:   remaining.Tool,
-						})
+		// ツールを実行（parallel-safe なツールは並列実行）
+		// loopDetectFn: 履歴は変更しない（executor の Phase 2 でメッセージ追加する）
+		loopDetectFn := func(tc *tools.ToolCall) bool {
+			cfg := config.GetGlobalConfig()
+			threshold := cfg.LoopDetection.Threshold
+			if isSameToolCall(tc, lastToolCall) {
+				sameCallCount++
+				if sameCallCount >= threshold {
+					yellow.Printf("⚠️  Warning: Same tool call repeated %d times, stopping to prevent infinite loop\n", sameCallCount)
+					yellow.Printf("   Tool: %s\n", tc.Tool)
+					return true
+				}
+			} else {
+				sameCallCount = 1
+			}
+			lastToolCall = tc
+			return false
+		}
+
+		// skipFn: deprecated planning tools を実行前に除外
+		skipFn := func(tc *tools.ToolCall) (bool, string) {
+			if tc.Tool == "create_plan" || tc.Tool == "update_plan" {
+				yellow.Printf("⚠️  Ignored deprecated planning tool call: %s\n", tc.Tool)
+				return true, fmt.Sprintf("[%s] Ignored: planning tools are deprecated. Continue with current step.", tc.Tool)
+			}
+			return false, ""
+		}
+
+		a.executeToolCallsWithParallel(ctx, execToolCalls,
+			loopDetectFn,
+			skipFn,
+			// 各ツール結果の処理
+			func(_ int, toolCall *tools.ToolCall, result string, change *tools.FileChange) {
+				// str_replace 成功時: LSP診断遅延バッファにファイルを追加
+				if toolCall.Tool == "str_replace" && !strings.HasPrefix(result, "Error:") &&
+					!strings.HasPrefix(result, "[CANCELLED]") && !strings.HasPrefix(result, "[COMMENT]") {
+					if path := toolCall.Args["path"]; path != "" {
+						a.addPendingLSPFile(path)
 					}
 				}
-				break
-			}
-			lastToolCall = toolCall
 
-			// Plan 実行中に廃止済み planning ツールが来た場合は明示的に無視
-			if toolCall.Tool == "create_plan" || toolCall.Tool == "update_plan" {
-				yellow.Printf("⚠️  Ignored deprecated planning tool call: %s\n", toolCall.Tool)
-				ignoreMsg := fmt.Sprintf("[%s] Ignored: planning tools are deprecated. Continue with current step.", toolCall.Tool)
+				// ステップ完了検証用: 書き込み系ツールの実行を記録
+				if tools.IsWriteTool(toolCall.Tool) {
+					stepHadWrites = true
+					if strings.Contains(result, "no files found") ||
+						strings.Contains(result, "Total matches: 0") ||
+						strings.Contains(result, "no change needed") {
+						stepHadNoChangeNeeded = true
+					}
+				}
+
+				// 失敗パターンをチェック
+				if toolCall.Tool == "bash" || tools.IsWriteTool(toolCall.Tool) {
+					if failed, reason := plan.ContainsFailure(result); failed {
+						lastFailedResult = result
+						lastFailReason = reason
+					}
+				}
+
+				// 変更履歴を保存
+				a.handleFileChange(change)
+
+				// ツール結果を履歴に追加（同一内容の重複は参照に差し替え）
+				historyContent := a.deduplicateToolResult(toolCall.Tool, result)
 				if toolCall.ID != "" {
 					toolMsg := api.Message{
 						Role:       "tool",
-						Content:    ignoreMsg,
+						Content:    historyContent,
 						ToolCallID: toolCall.ID,
 						ToolName:   toolCall.Tool,
 					}
@@ -244,84 +285,11 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 				} else {
 					a.History = append(a.History, api.Message{
 						Role:    "user",
-						Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, ignoreMsg),
+						Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, historyContent),
 					})
 				}
-				continue
-			}
-
-			// ツール実行（executeToolOnly と同じパターン）
-			result, change := a.executeToolWithSpinner(toolCall)
-
-			// str_replace 成功時: LSP診断遅延バッファにファイルを追加
-			// 連続 str_replace 途中の一時的エラーによる誤 auto-retry を防ぐため、
-			// 診断は全ツール実行後にまとめて行う（flushLSPDiagnostics）。
-			if toolCall.Tool == "str_replace" && !strings.HasPrefix(result, "Error:") &&
-				!strings.HasPrefix(result, "[CANCELLED]") && !strings.HasPrefix(result, "[COMMENT]") {
-				if path := toolCall.Args["path"]; path != "" {
-					a.addPendingLSPFile(path)
-				}
-			}
-
-			// ステップ完了検証用: 書き込み系ツールの実行を記録
-			if tools.IsWriteTool(toolCall.Tool) {
-				stepHadWrites = true
-
-				// 変更不要・対象なしの場合はLevel 2ガードをスキップ
-				if strings.Contains(result, "no files found") ||
-					strings.Contains(result, "Total matches: 0") ||
-					strings.Contains(result, "no change needed") {
-					stepHadNoChangeNeeded = true
-				}
-			}
-
-			// 失敗パターンをチェック（読み取り専用ツールは除外）
-			// bash 等のコマンド実行系と、ファイル変更系（str_replace, write_file等）のみチェック
-			if toolCall.Tool == "bash" || tools.IsWriteTool(toolCall.Tool) {
-				if failed, reason := plan.ContainsFailure(result); failed {
-					lastFailedResult = result
-					lastFailReason = reason
-				}
-			}
-
-			// 変更履歴を保存
-			if change != nil {
-				a.changeStack = append(a.changeStack, *change)
-				if len(a.changeStack) > config.MaxChangeStack {
-					a.changeStack = a.changeStack[1:]
-				}
-
-				if a.changeStorage != nil && a.session != nil {
-					if err := a.changeStorage.AppendChange(a.session.ID, *change); err != nil {
-						yellow.Printf("Warning: Failed to persist change: %v\n", err)
-					}
-				}
-			}
-
-			// ツール結果を履歴に追加（同一内容の重複は参照に差し替え）
-			historyContent := a.deduplicateToolResult(toolCall.Tool, result)
-			if toolCall.ID != "" {
-				// Function Calling: role="tool" で tool_call_id 付きで送信
-				toolMsg := api.Message{
-					Role:       "tool",
-					Content:    historyContent,
-					ToolCallID: toolCall.ID,
-					ToolName:   toolCall.Tool,
-				}
-				a.History = append(a.History, toolMsg)
-
-				// セッションに tool result を保存
-				if a.session != nil {
-					a.session.AddMessageFromAPI(toolMsg, a.CurrentModel)
-				}
-			} else {
-				// テキストベース: role="user" で送信（従来方式）
-				a.History = append(a.History, api.Message{
-					Role:    "user",
-					Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, historyContent),
-				})
-			}
-		}
+			},
+		)
 
 		// LSP診断遅延フラッシュ: 全ツール実行後に改めて診断を実行し結果を追記。
 		// str_replace の直後ではなくここで実行することで、連続編集途中の

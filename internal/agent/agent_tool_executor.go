@@ -1,9 +1,11 @@
 package agent
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
@@ -449,5 +451,231 @@ func (a *Agent) handleFileChange(change *tools.FileChange) {
 			yellow.Printf("Warning: Failed to persist change: %v\n", err)
 		}
 	}
+}
 
+// ToolExecCallback は executeToolCallsWithParallel の呼び出し元が各結果を処理するコールバック。
+// 元のインデックス順で呼ばれる（skipされたツールには呼ばれない）。
+type ToolExecCallback func(idx int, tc *tools.ToolCall, result string, change *tools.FileChange)
+
+// executeToolForParallel は並列実行用のツール実行関数。
+// spinner / SetGlobalSpinner / SetExecutionContext を使用しないため、
+// goroutine から安全に呼び出せる。ctx がキャンセル済みなら早期リターン。
+func (a *Agent) executeToolForParallel(ctx context.Context, tc *tools.ToolCall) (string, *tools.FileChange) {
+	if ctx.Err() != nil {
+		return "Error: context cancelled", nil
+	}
+
+	// ネガティブキャッシュチェック（ToolCache は thread-safe）
+	if a.ToolCache != nil {
+		a.ToolCache.CheckNegativeCache(tc.Tool, tc.RawArgs)
+	}
+
+	// spinner なしでツール実行（tools.Execute は内部で stdout に出力するため
+	// 並列時に出力がインターリーブする可能性がある。これは既知の制約。）
+	result, change := tools.Execute(tc)
+
+	if a.ToolCache != nil {
+		a.ToolCache.SetNegativeCache(tc.Tool, tc.RawArgs, result)
+	}
+
+	return result, change
+}
+
+// executeToolCallsWithParallel は parallel-safe なツールを並列実行し、sequential なツールを順次実行する。
+// 通常モードと Plan Mode の両方で使用する共通 executor。
+//
+// 処理フロー:
+//
+//	Phase 0: 実行前フィルタリング（元の tool call 順で走査）
+//	  - loopDetectFn: ループ検知。true を返すとそのツール以降すべてを中止。
+//	    履歴には変更を加えない（executor がメッセージを追加する）。
+//	  - skipFn: スキップ判定（例: deprecated planning tools）。
+//	    (skip=true, msg) を返すとそのツールを実行せずに msg を結果として扱う。
+//	Phase 1: 実行（parallel-safe は goroutine、sequential は順次）
+//	Phase 2: 結果配送（元の tool call 順で callback を呼ぶ）
+//
+// loopDetected: ループが検知された場合に true を返す。
+func (a *Agent) executeToolCallsWithParallel(
+	ctx context.Context,
+	allToolCalls []*tools.ToolCall,
+	loopDetectFn func(tc *tools.ToolCall) (abort bool),
+	skipFn func(tc *tools.ToolCall) (skip bool, msg string),
+	callback ToolExecCallback,
+) (loopDetected bool) {
+	n := len(allToolCalls)
+	if n == 0 {
+		return false
+	}
+
+	// ── Phase 0: 実行前フィルタリング ──
+	// 元の tool call 順で走査し、各ツールの状態を確定する。
+	// ループ検知はスキップ対象ツールにも適用する（元の sequential 動作と一致）。
+	const (
+		statusExecute   = 0 // 実行対象
+		statusSkip      = 1 // skipFn によりスキップ
+		statusLoopAbort = 2 // ループ検知で中止
+	)
+	type entry struct {
+		status  int
+		skipMsg string // statusSkip 時のメッセージ
+	}
+	entries := make([]entry, n)
+	aborted := false
+	loopTriggerIdx := -1
+
+	for i, tc := range allToolCalls {
+		if aborted {
+			entries[i] = entry{status: statusLoopAbort}
+			continue
+		}
+		// ループ検知（スキップ対象ツールにも適用して lastToolCall を更新する）
+		if loopDetectFn != nil && loopDetectFn(tc) {
+			entries[i] = entry{status: statusLoopAbort}
+			loopDetected = true
+			aborted = true
+			loopTriggerIdx = i
+			continue
+		}
+		// スキップ判定（ループ検知の後に評価）
+		if skipFn != nil {
+			if skip, msg := skipFn(tc); skip {
+				entries[i] = entry{status: statusSkip, skipMsg: msg}
+				continue
+			}
+		}
+		entries[i] = entry{status: statusExecute}
+	}
+
+	// ── Phase 1: 実行 ──
+	// 実行対象のツールを parallel-safe / sequential に分類して実行する。
+	type execResult struct {
+		result string
+		change *tools.FileChange
+	}
+	results := make([]execResult, n)
+
+	var parallelEntries, seqEntries []int
+	for i, e := range entries {
+		if e.status != statusExecute {
+			continue
+		}
+		if tools.IsParallelSafe(allToolCalls[i]) {
+			parallelEntries = append(parallelEntries, i)
+		} else {
+			seqEntries = append(seqEntries, i)
+		}
+	}
+
+	// Phase 1a: parallel-safe 群を並列実行（spinner なし、ctx チェックあり）
+	if len(parallelEntries) > 0 {
+		// ExecutionContext を並列実行前に1回だけ設定（goroutine 内では触らない）
+		tools.SetExecutionContext(tools.ExecutionContext{
+			ProviderName: a.ProviderName,
+			Model:        a.CurrentModel,
+		})
+
+		sem := make(chan struct{}, tools.MaxParallelTools)
+		var wg sync.WaitGroup
+		var mu sync.Mutex
+
+		for _, idx := range parallelEntries {
+			if ctx.Err() != nil {
+				mu.Lock()
+				results[idx] = execResult{result: "Error: context cancelled"}
+				mu.Unlock()
+				continue
+			}
+			wg.Add(1)
+			sem <- struct{}{}
+			go func(i int) {
+				defer wg.Done()
+				defer func() { <-sem }()
+
+				r, c := a.executeToolForParallel(ctx, allToolCalls[i])
+				mu.Lock()
+				results[i] = execResult{result: r, change: c}
+				mu.Unlock()
+			}(idx)
+		}
+		wg.Wait()
+
+		tools.ClearExecutionContext()
+	}
+
+	// Phase 1b: sequential 群を順次実行（spinner あり）
+	for _, idx := range seqEntries {
+		if ctx.Err() != nil {
+			results[idx] = execResult{result: "Error: context cancelled"}
+			continue
+		}
+		r, c := a.executeToolWithSpinner(allToolCalls[idx])
+		results[idx] = execResult{result: r, change: c}
+	}
+
+	// ── Phase 2: 結果配送（元の tool call 順） ──
+	cfg := config.GetGlobalConfig()
+	threshold := cfg.LoopDetection.Threshold
+
+	for i := 0; i < n; i++ {
+		tc := allToolCalls[i]
+		e := entries[i]
+
+		switch e.status {
+		case statusSkip:
+			// スキップされたツール: skipMsg を tool result として履歴に追加
+			if tc.ID != "" {
+				toolMsg := api.Message{
+					Role:       "tool",
+					Content:    e.skipMsg,
+					ToolCallID: tc.ID,
+					ToolName:   tc.Tool,
+				}
+				a.History = append(a.History, toolMsg)
+				if a.session != nil {
+					a.session.AddMessageFromAPI(toolMsg, a.CurrentModel)
+				}
+			} else {
+				a.History = append(a.History, api.Message{
+					Role:    "user",
+					Content: fmt.Sprintf("[Tool Result for %s]\n%s", tc.Tool, e.skipMsg),
+				})
+			}
+
+		case statusLoopAbort:
+			if i == loopTriggerIdx {
+				// ループを引き起こしたツール: 検知メッセージを追加
+				if tc.ID != "" {
+					a.History = append(a.History, api.Message{
+						Role:       "tool",
+						Content:    fmt.Sprintf("[SYSTEM] Tool loop detected: %s was called %d times. Stopping to prevent infinite loop.", tc.Tool, threshold),
+						ToolCallID: tc.ID,
+						ToolName:   tc.Tool,
+					})
+				} else {
+					a.History = append(a.History, api.Message{
+						Role:    "user",
+						Content: fmt.Sprintf("[SYSTEM WARNING] The same tool call was repeated %d times. Please try a different approach or ask the user for clarification.", threshold),
+					})
+				}
+			} else {
+				// ループ後の残りのツール: ダミー結果を追加
+				if tc.ID != "" {
+					a.History = append(a.History, api.Message{
+						Role:       "tool",
+						Content:    "[SYSTEM] Skipped due to tool loop detection.",
+						ToolCallID: tc.ID,
+						ToolName:   tc.Tool,
+					})
+				}
+			}
+
+		case statusExecute:
+			r := results[i]
+			if callback != nil {
+				callback(i, tc, r.result, r.change)
+			}
+		}
+	}
+
+	return loopDetected
 }

@@ -448,45 +448,78 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 			a.addToolCallsToHistory(response, execToolCalls)
 		}
 
-		// Phase 4: ツールを実行し結果を追加
-		for idx, tc := range execToolCalls {
-			// ループ検知（assistant メッセージは追加済みなので response="" で呼ぶ）
-			if a.shouldAbortToolLoopWithResponse("", tc, lastToolCall, &sameCallCount) {
-				// shouldAbortToolLoopWithResponse が現在の TC の tool result を追加済み。
-				// 残りの未実行 TC にダミー結果を追加（API が tool result 欠落でエラーにならないようにする）。
-				for _, remaining := range execToolCalls[idx+1:] {
-					if remaining.ID != "" {
-						a.History = append(a.History, api.Message{
-							Role:       "tool",
-							Content:    "[SYSTEM] Skipped due to tool loop detection.",
-							ToolCallID: remaining.ID,
-							ToolName:   remaining.Tool,
-						})
-					}
+		// Phase 4: ツールを実行し結果を追加（parallel-safe なツールは並列実行）
+		// loopDetectFn: 履歴は変更しない（executor の Phase 2 でメッセージ追加する）
+		loopDetectFn := func(tc *tools.ToolCall) bool {
+			cfg := config.GetGlobalConfig()
+			threshold := cfg.LoopDetection.Threshold
+			if isSameToolCall(tc, lastToolCall) {
+				sameCallCount++
+				if sameCallCount >= threshold {
+					yellow.Printf("⚠️  Warning: Same tool call repeated %d times, stopping to prevent infinite loop\n", sameCallCount)
+					yellow.Printf("   Tool: %s\n", tc.Tool)
+					return true
 				}
-				return fmt.Errorf("tool loop detected")
+			} else {
+				sameCallCount = 1
 			}
 			lastToolCall = tc
+			return false
+		}
 
-			result := a.executeToolOnly(tc)
+		toolLoopDetected := a.executeToolCallsWithParallel(ctx, execToolCalls,
+			loopDetectFn,
+			nil, // Normal Mode ではスキップ対象なし
+			// 各ツール結果の処理
+			func(_ int, tc *tools.ToolCall, result string, change *tools.FileChange) {
+				// str_replace エラー処理
+				a.handleStrReplaceErrors(tc, result)
 
-			// str_replace 成功時: LSP診断遅延バッファにファイルを追加
-			// 連続 str_replace 途中の一時的エラーによる誤 auto-retry を防ぐため、
-			// 診断は全ツール実行後にまとめて行う（flushLSPDiagnostics）。
-			if tc.Tool == "str_replace" && !strings.HasPrefix(result, "Error:") &&
-				!strings.HasPrefix(result, "[CANCELLED]") && !strings.HasPrefix(result, "[COMMENT]") {
-				if path := tc.Args["path"]; path != "" {
-					a.addPendingLSPFile(path)
+				// comment 継続フロー処理
+				a.handleCommentFlow(tc, result)
+
+				// 変更履歴を保存
+				a.handleFileChange(change)
+
+				// 結果を履歴に追加（同一内容の重複は参照に差し替え）
+				historyContent := a.deduplicateToolResult(tc.Tool, result)
+				if tc.ID != "" {
+					toolMsg := api.Message{
+						Role:       "tool",
+						Content:    historyContent,
+						ToolCallID: tc.ID,
+						ToolName:   tc.Tool,
+					}
+					a.History = append(a.History, toolMsg)
+					if a.session != nil {
+						a.session.AddMessageFromAPI(toolMsg, a.CurrentModel)
+					}
+				} else {
+					a.History = append(a.History, api.Message{
+						Role:    "user",
+						Content: fmt.Sprintf("[Tool Result for %s]\n%s", tc.Tool, historyContent),
+					})
 				}
-			}
+				fmt.Println()
 
-			// 失敗パターンをチェック
-			// bash 等のコマンド実行系と、ファイル変更系（str_replace, write_file等）のみチェック
-			if tc.Tool == "bash" || tools.IsWriteTool(tc.Tool) {
-				if failed, _ := plan.ContainsFailure(result); failed {
-					lastFailedResult = result
+				// str_replace 成功時: LSP診断遅延バッファにファイルを追加
+				if tc.Tool == "str_replace" && !strings.HasPrefix(result, "Error:") &&
+					!strings.HasPrefix(result, "[CANCELLED]") && !strings.HasPrefix(result, "[COMMENT]") {
+					if path := tc.Args["path"]; path != "" {
+						a.addPendingLSPFile(path)
+					}
 				}
-			}
+
+				// 失敗パターンをチェック
+				if tc.Tool == "bash" || tools.IsWriteTool(tc.Tool) {
+					if failed, _ := plan.ContainsFailure(result); failed {
+						lastFailedResult = result
+					}
+				}
+			},
+		)
+		if toolLoopDetected {
+			return fmt.Errorf("tool loop detected")
 		}
 
 		// LSP診断遅延フラッシュ: 全ツール実行後に改めて診断を実行し結果を追記。
