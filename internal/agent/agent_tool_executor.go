@@ -464,17 +464,18 @@ type ToolExecCallback func(idx int, tc *tools.ToolCall, result string, change *t
 //
 // stdout 出力の抑制:
 //
-//	tools.ExecuteQuiet を使用し、ヘッダー・引数・折りたたみ出力を抑制する。
-//	ただし Tool.Run() 内部の直接出力（read_file の "📄 Read: ..." 等）は
-//	Tool interface が io.Writer を受け取らないため抑制できない。
-//	parallel-safe ツールは比較的少量のステータス出力のみであり、
-//	interleave しても致命的ではないと判断している。
+//	tools.ExecuteQuiet を使用し、wrapper 層の出力（ヘッダー・引数・折りたたみ結果）を抑制する。
+//	抑制できないもの: Tool.Run() 内部の直接 stdout 出力（例: read_file の "📄 Read: ..."）。
+//	Tool interface が io.Writer を受け取らないため、個々のツール実装内の出力は制御できない。
+//	parallel-safe ツールの Tool.Run() 内部出力は比較的少量のステータス行のみであり、
+//	goroutine 間で interleave しても致命的ではないと現時点で判断している。
 //
-// cancel の実効性:
+// cancel の実効性（best effort）:
 //
 //	ctx.Err() を実行前にチェックして早期リターンする。
 //	ただし tools.ExecuteQuiet → Tool.Run() は ctx を受け取らないため、
-//	実行中のキャンセルは効かない。Tool interface への ctx 伝播は将来課題。
+//	実行開始後のキャンセルは効かない（best effort）。
+//	Tool interface への ctx 伝播は将来課題。
 //	bash のみ ExecuteBashWithContext(ctx) が存在するが、Registry 経由の
 //	Tool.Run() からは使えない。
 func (a *Agent) executeToolForParallel(ctx context.Context, tc *tools.ToolCall) (string, *tools.FileChange) {
@@ -530,10 +531,10 @@ func (a *Agent) executeToolForParallel(ctx context.Context, tc *tools.ToolCall) 
 //	  - FC trigger tool: role="tool", "[SYSTEM] Tool loop detected: ..."
 //	  - text-based trigger: role="user", "[SYSTEM WARNING] ..."
 //	  - FC 後続 tool: role="tool", "[SYSTEM] Skipped due to tool loop detection."
-//	  - text-based 後続 tool: 何も追加しない（仕様）
+//	  - text-based 後続 tool: 何も追加しない（intentional spec, by design）
 //	    → text-based パスでは tool_call_id がないため role="tool" メッセージを
-//	      追加できない。旧実装でも text-based 後続 tool にはダミーを追加して
-//	      いなかったため、この挙動を維持している。
+//	      追加できない。旧 sequential 実装でも text-based 後続 tool にはダミーを
+//	      追加していなかったため、互換性のためにこの挙動を維持している。
 //
 // loopDetected: ループが検知された場合に true を返す。
 func (a *Agent) executeToolCallsWithParallel(
@@ -611,13 +612,14 @@ func (a *Agent) executeToolCallsWithParallel(
 
 	// Phase 1a: parallel-safe 群を並列実行
 	//
-	// ExecutionContext（tools/context.go）は process-global 変数だが sync.RWMutex で保護されている。
-	// ここでは parallel batch 開始前に1回だけ Set し、全 goroutine 完了後に Clear する。
-	// goroutine 内では GetExecutionContext()（RLock）で読み取るのみ。
+	// ExecutionContext（tools/context.go）は process-global 変数だが sync.RWMutex で
+	// race-safe に保護されている。ここでは parallel batch 開始前に1回だけ Set し、
+	// 全 goroutine 完了後に Clear する。goroutine 内は GetExecutionContext()（RLock）で
+	// 読み取るのみ。single-agent CLI 前提で意味的にも正しい値が読み取れる。
 	// sequential phase（Phase 1b）の executeToolWithSpinner は独自に Set/Clear するため、
 	// Phase 1a の Clear 後でも正しく動作する。
 	//
-	// cancel の実効性:
+	// cancel の実効性（best effort）:
 	//   各 goroutine 起動前に ctx.Err() をチェックし、executeToolForParallel 内でも
 	//   再チェックする。ただし Tool.Run() 自体は ctx を受け取らないため、
 	//   実行開始後のキャンセルは効かない（次の goroutine 起動時にスキップされる）。
@@ -716,8 +718,9 @@ func (a *Agent) executeToolCallsWithParallel(
 				}
 			} else {
 				// ループ後の残りのツール: FC の場合のみダミー結果を追加。
-				// text-based（ID=""）の場合は何も追加しない。これは仕様であり、
-				// 旧実装と一致する。text-based パスでは tool_call_id がないため
+				// text-based（ID=""）の場合は何も追加しない。
+				// これは intentional spec であり、旧 sequential 実装と一致する挙動を
+				// by design で維持している。text-based パスでは tool_call_id がないため
 				// role="tool" メッセージを追加できず、role="user" のダミーを
 				// 追加しても LLM の文脈を汚すだけであるため省略している。
 				if tc.ID != "" {

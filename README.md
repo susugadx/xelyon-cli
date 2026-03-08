@@ -65,10 +65,10 @@ LLMが1回の応答で複数のread-onlyツールを返した場合、並列実�
 - 最大並列数: 4（セマフォ制御、固定値）
 - 通常モード・Plan Mode 両方で同じポリシーを適用（`executeToolCallsWithParallel` 共通 executor）
 - **安全性**: ループ検知・deprecated ツールフィルタリングは実行前（Phase 0）に評価。Investigation Phase は独自ループ（`executeToolOnly`）を使用し並列実行の対象外
-- **stdout 制御**: 並列パスでは `ExecuteQuiet()` を使用しヘッダー・引数表示を抑制。`Tool.Run()` 内部の出力（例: `read_file` の `📄 Read: ...`）は抑制対象外
-- **キャンセル**: `context.Context` は goroutine 起動前・実行前にチェック。`Tool.Run()` は ctx を受け取らないため、実行中のツールは中断不可（既知の制約）
-- **ExecutionContext**: process-global（`sync.RWMutex` 保護）。並列 batch 開始前に Set → goroutine は Read のみ → batch 完了後に Clear
-- **FC / text-based 差異**: FC（tool_call_id あり）はループ中断時に role=tool で応答。text-based は role=user。text-based の後続ツールにはダミーメッセージを追加しない（仕様）
+- **stdout 制御**: 並列パスでは `ExecuteQuiet()` を使用し wrapper 層の出力（ヘッダー・引数・折りたたみ結果）を抑制。`Tool.Run()` 内部の直接 stdout 出力（例: `read_file` の `📄 Read: ...`）は抑制できない（Tool interface が io.Writer を受け取らないため）。parallel-safe ツールの内部出力は少量のステータス行のみであり、現時点で致命的ではないと判断
+- **キャンセル（best effort）**: `context.Context` は goroutine 起動前・実行前にチェック。`Tool.Run()` は ctx を受け取らないため、実行開始後の中断は不可。cancel は best effort であり、fully cancellable ではない
+- **ExecutionContext**: process-global 単一変数（`sync.RWMutex` で race-safe）。並列 batch 開始前に Set → goroutine は Read のみ → batch 完了後に Clear。ただし race-safe であることと multi-owner-safe であることは異なり、同一プロセス内で複数 Agent が同時に異なる ExecutionContext を必要とする設計には対応していない。single-agent CLI 前提で許容
+- **FC / text-based 差異**: FC（tool_call_id あり）はループ中断時に role=tool で応答。text-based は role=user。text-based の後続ツールにはダミーメッセージを追加しない（intentional spec — 旧 sequential 実装との互換性を by design で維持）
 
 ### 🔍 コードレビュー & リファクタリング
 `/review` でセキュリティ・テストカバレッジをチェック。

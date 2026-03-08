@@ -518,7 +518,10 @@ func TestLoopDetection_TextBased_TriggerMessage(t *testing.T) {
 	}
 }
 
-// --- Test: Text-based subsequent tools after loop get NO dummy message (by design) ---
+// --- Test: Text-based subsequent tools after loop get NO dummy message (intentional spec) ---
+// text-based パスでは tool_call_id がないため role="tool" ダミーを追加できない。
+// role="user" のダミーを追加しても LLM 文脈を汚すだけであるため、旧 sequential 実装と
+// 同様にダミーを追加しない。これは by design であり、互換性のために維持している。
 
 func TestLoopDetection_TextBased_SubsequentNoDummy(t *testing.T) {
 	cfg := config.GetGlobalConfig()
@@ -557,8 +560,8 @@ func TestLoopDetection_TextBased_SubsequentNoDummy(t *testing.T) {
 		func(_ int, _ *tools.ToolCall, _ string, _ *tools.FileChange) {})
 
 	msgs := agent.History[historyBefore:]
-	// text-based: trigger(1) のみ。後続(search_code) にはダミーなし = 仕様。
-	// 旧実装でも text-based 後続にダミーは追加されなかった。
+	// text-based: trigger(1) のみ。後続(search_code) にはダミーなし = intentional spec。
+	// 旧 sequential 実装でも text-based 後続にダミーは追加されなかった（by design）。
 	if len(msgs) != 1 {
 		t.Fatalf("expected 1 message (trigger only, no dummy for text-based subsequent), got %d", len(msgs))
 	}

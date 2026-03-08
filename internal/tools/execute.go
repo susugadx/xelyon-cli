@@ -86,13 +86,17 @@ func Execute(tc *ToolCall) (string, *FileChange) {
 	return result, change
 }
 
-// ExecuteQuiet はツールを実行するが、ヘッダー・引数・折りたたみ結果の stdout 出力を抑制する。
+// ExecuteQuiet はツールを実行するが、wrapper 層の stdout 出力を抑制する。
 // parallel path（goroutine 内）から呼び出すために使用する。
 //
-// 注意: Tool.Run() 内部の直接 stdout 出力（read_file の "📄 Read: ..." 等）は
-// 抑制できない。これは Tool interface が io.Writer を受け取らないため。
-// parallel-safe ツール（read_file, list_dir, search_code 等）は比較的少量の
-// ステータス出力のみであり、interleave しても致命的ではないと判断している。
+// 抑制するもの: ツールヘッダー（"🔧 Tool: ..."）、引数表示、折りたたみ結果表示。
+// 抑制できないもの: Tool.Run() 内部の直接 stdout 出力（例: read_file の "📄 Read: ..."）。
+//
+//	Tool interface が io.Writer を受け取らないため、個々のツール実装内の出力は制御できない。
+//
+// parallel-safe ツール（read_file, list_dir, search_code 等）の Tool.Run() 内部出力は
+// 比較的少量のステータス行のみであり、goroutine 間で interleave しても致命的ではないと
+// 現時点で判断している。
 func ExecuteQuiet(tc *ToolCall) (string, *FileChange) {
 	return executeCore(tc)
 }

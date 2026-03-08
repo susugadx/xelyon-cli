@@ -7,8 +7,8 @@ import (
 )
 
 // MaxParallelTools は並列実行する tool の最大数。
-// 現在は固定値。将来的に config.yaml の parallel.max_workers 等で
-// 設定可能にする余地がある。
+// CLI での過剰並列を避ける conservative default として 4 を採用。
+// 将来的に config.yaml の parallel.max_workers 等で設定可能にする余地がある。
 const MaxParallelTools = 4
 
 // parallelSafeTools は静的に parallel-safe と判定されるツール名のセット。
