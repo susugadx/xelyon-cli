@@ -62,6 +62,13 @@ func (a *Agent) maybeAutoCompress() bool {
 
 		// マイルストーン駆動: 特定パターンで閾値を 60% に下げる
 		if detectMilestonePattern(a.History) {
+			a.addOptimizationMetrics(OptimizationMetrics{MilestoneDetections: 1})
+			threshold = 60
+		}
+
+		// tool出力比率: tool resultが全体の70%以上なら閾値を60%に下げる
+		if ToolResultContentRatio(a.History) > 0.70 {
+			a.addOptimizationMetrics(OptimizationMetrics{ToolRatioDetections: 1})
 			threshold = 60
 		}
 
@@ -98,6 +105,7 @@ func (a *Agent) maybeAutoCompress() bool {
 			if compactProvider.SupportsCompact() {
 				ctx := context.Background()
 				if err := a.CompressWithCompactAPI(ctx); err == nil {
+					a.addOptimizationMetrics(OptimizationMetrics{CompactionCount: 1})
 					fmt.Println("   💡 Disable with: xelyon config set compression.auto_compress false")
 					fmt.Println()
 					return true
@@ -132,6 +140,7 @@ func (a *Agent) maybeAutoCompress() bool {
 	fmt.Println("   💡 Disable with: xelyon config set compression.auto_compress false")
 	fmt.Println()
 
+	a.addOptimizationMetrics(OptimizationMetrics{CompactionCount: 1})
 	return true
 }
 

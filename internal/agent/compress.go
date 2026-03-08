@@ -30,7 +30,8 @@ func (a *Agent) CompressHistory(keepRecent int) error {
 
 	// サマリー生成プロンプト
 	// 古いツール結果を截断してトークン節約（サマリー生成の入力を削減）
-	prunedCompress := CompactOldToolResults(toCompress, DefaultKeepTurns, DefaultMaxLines, DefaultHeadLines, DefaultTailLines)
+	prunedCompress, metrics := CompactOldToolResults(toCompress, DefaultKeepTurns, DefaultMaxLines, DefaultHeadLines, DefaultTailLines)
+	a.addCompactionMetrics(metrics)
 	// api.Message を prompt.Message に変換
 	promptMessages := make([]prompt.Message, len(prunedCompress))
 	for i, m := range prunedCompress {

@@ -28,7 +28,9 @@ func argsToJSON(args map[string]any) string {
 func (a *Agent) executeToolWithSpinner(toolCall *tools.ToolCall) (string, *tools.FileChange) {
 	// ネガティブキャッシュチェック（ブロックせずログ表示のみ）
 	if a.ToolCache != nil {
-		a.ToolCache.CheckNegativeCache(toolCall.Tool, toolCall.RawArgs)
+		if _, hit := a.ToolCache.CheckNegativeCache(toolCall.Tool, toolCall.RawArgs); hit {
+			a.addOptimizationMetrics(OptimizationMetrics{NegativeCacheHits: 1})
+		}
 	}
 
 	spinner := ui.NewSpinner()
@@ -43,6 +45,7 @@ func (a *Agent) executeToolWithSpinner(toolCall *tools.ToolCall) (string, *tools
 
 	result, change := tools.Execute(toolCall)
 	spinner.Stop()
+	a.recordToolResultOptimizations(toolCall.Tool, result)
 
 	// エラー/空結果をネガティブキャッシュに記録
 	if a.ToolCache != nil {
@@ -485,11 +488,14 @@ func (a *Agent) executeToolForParallel(ctx context.Context, tc *tools.ToolCall) 
 
 	// ネガティブキャッシュチェック（ToolCache は thread-safe）
 	if a.ToolCache != nil {
-		a.ToolCache.CheckNegativeCache(tc.Tool, tc.RawArgs)
+		if _, hit := a.ToolCache.CheckNegativeCache(tc.Tool, tc.RawArgs); hit {
+			a.addOptimizationMetrics(OptimizationMetrics{NegativeCacheHits: 1})
+		}
 	}
 
 	// ExecuteQuiet: ヘッダー・引数・折りたたみ出力を抑制（parallel path 用）
 	result, change := tools.ExecuteQuiet(tc)
+	a.recordToolResultOptimizations(tc.Tool, result)
 
 	if a.ToolCache != nil {
 		a.ToolCache.SetNegativeCache(tc.Tool, tc.RawArgs, result)

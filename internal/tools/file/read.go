@@ -265,6 +265,7 @@ func formatOutline(filePath string, lines []string, totalLines int) string {
 	}
 
 	// 4. ガイドメッセージ
+	// NOTE: この文字列は agent.go の recordToolResultOptimizations で検出に使われている。
 	fmt.Fprintf(&sb, "\n(%d lines total. Use start_line/end_line to read function body)\n", totalLines)
 
 	return sb.String()

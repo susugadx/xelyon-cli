@@ -27,10 +27,12 @@ func (a *Agent) runInvestigationPhase(ctx context.Context) (*plan.Plan, error) {
 	sameCallCount := 0
 
 	for i := 0; i < maxIterations; i++ {
+		compactedHistory, metrics := CompactOldToolResults(a.History, DefaultKeepTurns, DefaultMaxLines, DefaultHeadLines, DefaultTailLines)
+		a.addCompactionMetrics(metrics)
 		response, err := a.CurrentProvider.ChatWithTools(
 			ctx,
 			a.SystemPrompt,
-			CompactOldToolResults(a.History, DefaultKeepTurns, DefaultMaxLines, DefaultHeadLines, DefaultTailLines),
+			compactedHistory,
 			a.CurrentModel,
 		)
 		if err != nil {

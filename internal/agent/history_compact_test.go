@@ -16,6 +16,21 @@ func makeLargeContent(lines int) string {
 	return b.String()
 }
 
+func TestToolResultContentRatio(t *testing.T) {
+	toolContent := strings.Repeat("t", 80)
+	userContent := strings.Repeat("u", 20)
+
+	history := []api.Message{
+		{Role: "tool", Content: toolContent},
+		{Role: "user", Content: userContent},
+	}
+
+	ratio := ToolResultContentRatio(history)
+	if ratio <= 0.70 {
+		t.Fatalf("ToolResultContentRatio() = %.2f, want > 0.70", ratio)
+	}
+}
+
 func TestCompactOldToolResults_TruncatesOldLargeResults(t *testing.T) {
 	large := makeLargeContent(60)
 
@@ -33,7 +48,7 @@ func TestCompactOldToolResults_TruncatesOldLargeResults(t *testing.T) {
 		{Role: "assistant", Content: "a4"},
 	}
 
-	result := CompactOldToolResults(history, 3, 50, 20, 5)
+	result, _ := CompactOldToolResults(history, 3, 50, 20, 5)
 
 	// turn 1 の tool (index 2): old → truncated
 	if !strings.Contains(result[2].Content, "truncated") {
@@ -66,7 +81,7 @@ func TestCompactOldToolResults_KeepsRecentResults(t *testing.T) {
 		{Role: "assistant", Content: "a3"},
 	}
 
-	result := CompactOldToolResults(history, 3, 50, 20, 5)
+	result, _ := CompactOldToolResults(history, 3, 50, 20, 5)
 
 	// 最新 3 ターン内のツール結果はそのまま
 	if strings.Contains(result[5].Content, "truncated") {
@@ -92,7 +107,7 @@ func TestCompactOldToolResults_SmallResultsNotTruncated(t *testing.T) {
 		{Role: "user", Content: "turn 4"},
 	}
 
-	result := CompactOldToolResults(history, 3, 50, 20, 5)
+	result, _ := CompactOldToolResults(history, 3, 50, 20, 5)
 
 	// 50行以下の小さいツール結果は truncate されない
 	if result[2].Content != "small result" {
@@ -112,7 +127,7 @@ func TestCompactOldToolResults_OriginalUnchanged(t *testing.T) {
 		{Role: "user", Content: "turn 4"},
 	}
 
-	result := CompactOldToolResults(history, 3, 50, 20, 5)
+	result, _ := CompactOldToolResults(history, 3, 50, 20, 5)
 
 	// 元の history は変更されていないこと
 	if history[1].Content != original {
@@ -127,13 +142,13 @@ func TestCompactOldToolResults_OriginalUnchanged(t *testing.T) {
 
 func TestCompactOldToolResults_EmptyHistory(t *testing.T) {
 	// nil
-	result := CompactOldToolResults(nil, 3, 50, 20, 5)
+	result, _ := CompactOldToolResults(nil, 3, 50, 20, 5)
 	if result != nil {
 		t.Errorf("expected nil for nil history, got length %d", len(result))
 	}
 
 	// empty
-	result = CompactOldToolResults([]api.Message{}, 3, 50, 20, 5)
+	result, _ = CompactOldToolResults([]api.Message{}, 3, 50, 20, 5)
 	if len(result) != 0 {
 		t.Errorf("expected empty for empty history, got length %d", len(result))
 	}
@@ -147,7 +162,7 @@ func TestCompactOldToolResults_NoToolResults(t *testing.T) {
 		{Role: "assistant", Content: "fine"},
 	}
 
-	result := CompactOldToolResults(history, 3, 50, 20, 5)
+	result, _ := CompactOldToolResults(history, 3, 50, 20, 5)
 
 	// panic しないことと、内容が保持されること
 	if len(result) != len(history) {
@@ -182,7 +197,7 @@ func TestCompactOldToolResults_TurnCounting(t *testing.T) {
 		{Role: "tool", Content: large, ToolCallID: "c5", ToolName: "t5"},
 	}
 
-	result := CompactOldToolResults(history, 3, 50, 20, 5)
+	result, _ := CompactOldToolResults(history, 3, 50, 20, 5)
 
 	// keepTurns=3 → user3 (index 6) が boundary
 	// turn1 tool (index 2): old → truncated
@@ -294,7 +309,7 @@ func TestCompactOldToolResults_CompressesOldErrors(t *testing.T) {
 		{Role: "user", Content: "turn 4"},
 	}
 
-	result := CompactOldToolResults(history, 3, 50, 20, 5)
+	result, _ := CompactOldToolResults(history, 3, 50, 20, 5)
 
 	// Error: pattern not found は1行に圧縮
 	if result[2].Content != "Error: pattern not found in main.go" {
@@ -315,7 +330,7 @@ func TestCompactOldToolResults_RecentErrorsNotCompressed(t *testing.T) {
 		{Role: "tool", Content: errorContent, ToolCallID: "c1", ToolName: "str_replace"},
 	}
 
-	result := CompactOldToolResults(history, 3, 50, 20, 5)
+	result, _ := CompactOldToolResults(history, 3, 50, 20, 5)
 
 	// keepTurns 内なので圧縮されない
 	if result[2].Content != errorContent {
@@ -388,7 +403,7 @@ func TestCompactOldToolResults_GraduatedCompression(t *testing.T) {
 		{Role: "assistant", Content: "done"},
 	}
 
-	result := CompactOldToolResults(history, 3, 50, 20, 5)
+	result, _ := CompactOldToolResults(history, 3, 50, 20, 5)
 
 	// turn1 tool (index 1): aggressive → "was 100 lines" + 短い
 	if !strings.Contains(result[1].Content, "truncated") {
@@ -500,7 +515,7 @@ func TestCompactOldToolResults_FailedPairIntegration(t *testing.T) {
 		{Role: "user", Content: "turn 4"},
 	}
 
-	result := CompactOldToolResults(history, 3, 50, 20, 5)
+	result, _ := CompactOldToolResults(history, 3, 50, 20, 5)
 
 	// 失敗ツール結果は [Failed: ...] に圧縮
 	if !strings.HasPrefix(result[2].Content, "[Failed: str_replace") {
@@ -524,7 +539,7 @@ func TestCompactOldToolResults_TruncatedContentFormat(t *testing.T) {
 		{Role: "user", Content: "turn 4"},
 	}
 
-	result := CompactOldToolResults(history, 3, 50, 20, 5)
+	result, _ := CompactOldToolResults(history, 3, 50, 20, 5)
 	content := result[1].Content
 
 	// 先頭行が保持されていること
@@ -551,5 +566,37 @@ func TestCompactOldToolResults_TruncatedContentFormat(t *testing.T) {
 	// truncated は元より短い
 	if len(content) >= len(large) {
 		t.Error("truncated content should be shorter than original")
+	}
+}
+
+func TestCompactOldToolResults_CompactionMetrics(t *testing.T) {
+	large := makeLargeContent(60)
+
+	history := []api.Message{
+		{Role: "user", Content: "turn 1"},
+		{Role: "assistant", Content: "trying", ToolCalls: []api.OpenAIToolCall{
+			{ID: "c1", Function: api.OpenAIToolCallFunction{Name: "str_replace"}},
+		}},
+		{Role: "tool", Content: "Error: old_str not found in main.go\nline2\nline3", ToolCallID: "c1", ToolName: "str_replace"},
+		{Role: "assistant", Content: "retry", ToolCalls: []api.OpenAIToolCall{
+			{ID: "c2", Function: api.OpenAIToolCallFunction{Name: "str_replace"}},
+		}},
+		{Role: "tool", Content: large, ToolCallID: "c2", ToolName: "str_replace"},
+		{Role: "tool", Content: "Error: pattern not found in file.go\nmore detail", ToolCallID: "c3", ToolName: "str_replace"},
+		{Role: "user", Content: "turn 2"},
+		{Role: "user", Content: "turn 3"},
+		{Role: "user", Content: "turn 4"},
+	}
+
+	_, metrics := CompactOldToolResults(history, 3, 50, 20, 5)
+
+	if metrics.FailedPairCompressions != 1 {
+		t.Fatalf("FailedPairCompressions = %d, want 1", metrics.FailedPairCompressions)
+	}
+	if metrics.TruncationCount != 1 {
+		t.Fatalf("TruncationCount = %d, want 1", metrics.TruncationCount)
+	}
+	if metrics.ErrorCompressions != 1 {
+		t.Fatalf("ErrorCompressions = %d, want 1", metrics.ErrorCompressions)
 	}
 }

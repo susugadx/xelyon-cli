@@ -12,6 +12,52 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// OptimizationMetrics は最適化機構の発動回数を保持する。
+type OptimizationMetrics struct {
+	DeduplicateCount       int // cache-hit参照化（同一result省略）
+	DeduplicateTokensSaved int // 推定削減トークン数（len(original)/4）
+	NegativeCacheHits      int // ネガティブキャッシュヒット
+	ErrorCompressions      int // compressErrorResult 発動
+	FailedPairCompressions int // compressFailedPair 発動
+	TruncationCount        int // 段階的truncate発動
+	OutlineFirstCount      int // outline-first mode発動
+	MilestoneDetections    int // マイルストーンパターン検出
+	ToolRatioDetections    int // tool出力比率トリガー検出
+	CompactionCount        int // auto-compress実行
+}
+
+func (m *OptimizationMetrics) add(other OptimizationMetrics) {
+	m.DeduplicateCount += other.DeduplicateCount
+	m.DeduplicateTokensSaved += other.DeduplicateTokensSaved
+	m.NegativeCacheHits += other.NegativeCacheHits
+	m.ErrorCompressions += other.ErrorCompressions
+	m.FailedPairCompressions += other.FailedPairCompressions
+	m.TruncationCount += other.TruncationCount
+	m.OutlineFirstCount += other.OutlineFirstCount
+	m.MilestoneDetections += other.MilestoneDetections
+	m.ToolRatioDetections += other.ToolRatioDetections
+	m.CompactionCount += other.CompactionCount
+}
+
+func (m *OptimizationMetrics) addCompaction(other CompactionMetrics) {
+	m.ErrorCompressions += other.ErrorCompressions
+	m.FailedPairCompressions += other.FailedPairCompressions
+	m.TruncationCount += other.TruncationCount
+}
+
+func (m *OptimizationMetrics) hasAny() bool {
+	return m.DeduplicateCount > 0 ||
+		m.DeduplicateTokensSaved > 0 ||
+		m.NegativeCacheHits > 0 ||
+		m.ErrorCompressions > 0 ||
+		m.FailedPairCompressions > 0 ||
+		m.TruncationCount > 0 ||
+		m.OutlineFirstCount > 0 ||
+		m.MilestoneDetections > 0 ||
+		m.ToolRatioDetections > 0 ||
+		m.CompactionCount > 0
+}
+
 // SessionStats はセッション統計情報
 type SessionStats struct {
 	StartTime           time.Time
@@ -27,6 +73,7 @@ type SessionStats struct {
 	Model               string     // 現在のモデル名（料金計算に使用）
 	LastUsage           *api.Usage // 直近のリクエストの使用量
 	AccumulatedCost     float64    // リクエスト単位で計算・累積したコスト
+	Optimizations       OptimizationMetrics
 }
 
 // NewSessionStats は新しいSessionStatsを作成

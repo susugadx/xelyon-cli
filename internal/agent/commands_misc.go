@@ -186,6 +186,43 @@ func printSessionSections(agent *Agent) {
 	} else {
 		dim.Println("  No token usage data available")
 	}
+
+	fmt.Println()
+	green.Println("⚡ Optimizations")
+	opt := stats.Optimizations
+	if opt.hasAny() {
+		optTable := ui.NewTable()
+		if opt.DeduplicateCount > 0 {
+			optTable.AddRow("Cache-hit dedup", fmt.Sprintf("%d times (~%s tokens saved)", opt.DeduplicateCount, formatNumber(opt.DeduplicateTokensSaved)))
+		}
+		if opt.NegativeCacheHits > 0 {
+			optTable.AddRow("Negative cache", fmt.Sprintf("%d hits", opt.NegativeCacheHits))
+		}
+		if opt.ErrorCompressions > 0 {
+			optTable.AddRow("Error compression", fmt.Sprintf("%d times", opt.ErrorCompressions))
+		}
+		if opt.FailedPairCompressions > 0 {
+			optTable.AddRow("Failed-pair compression", fmt.Sprintf("%d times", opt.FailedPairCompressions))
+		}
+		if opt.TruncationCount > 0 {
+			optTable.AddRow("Graduated truncate", fmt.Sprintf("%d times", opt.TruncationCount))
+		}
+		if opt.OutlineFirstCount > 0 {
+			optTable.AddRow("Outline-first mode", fmt.Sprintf("%d times", opt.OutlineFirstCount))
+		}
+		if opt.MilestoneDetections > 0 {
+			optTable.AddRow("Milestone triggers", fmt.Sprintf("%d times", opt.MilestoneDetections))
+		}
+		if opt.ToolRatioDetections > 0 {
+			optTable.AddRow("Tool-ratio triggers", fmt.Sprintf("%d times", opt.ToolRatioDetections))
+		}
+		if opt.CompactionCount > 0 {
+			optTable.AddRow("Auto-compress", fmt.Sprintf("%d times", opt.CompactionCount))
+		}
+		fmt.Print(optTable.RenderCompact())
+	} else {
+		dim.Println("  No optimizations triggered yet")
+	}
 }
 
 // handleStatsCommand は /status の互換エイリアス

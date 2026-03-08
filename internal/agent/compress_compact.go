@@ -68,7 +68,8 @@ func (a *Agent) buildFullInputItems() []api.InputItem {
 	}
 
 	// 古いツール結果を截断してから InputItem に変換（トークン節約）
-	pruned := CompactOldToolResults(a.History, DefaultKeepTurns, DefaultMaxLines, DefaultHeadLines, DefaultTailLines)
+	pruned, metrics := CompactOldToolResults(a.History, DefaultKeepTurns, DefaultMaxLines, DefaultHeadLines, DefaultTailLines)
+	a.addCompactionMetrics(metrics)
 	return api.ConvertHistoryToInputItems(pruned)
 }
 

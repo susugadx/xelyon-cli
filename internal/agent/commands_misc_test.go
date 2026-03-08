@@ -1,8 +1,12 @@
 package agent
 
 import (
+	"io"
+	"os"
+	"strings"
 	"testing"
 
+	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/api"
 )
 
@@ -134,5 +138,92 @@ func TestRequestCacheHitRate(t *testing.T) {
 	usage := api.Usage{InputTokens: 200, CachedInputTokens: 50}
 	if got := requestCacheHitRate(usage); got != 25.0 {
 		t.Fatalf("requestCacheHitRate() = %.1f, want 25.0", got)
+	}
+}
+
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+
+	oldStdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe() error = %v", err)
+	}
+	os.Stdout = w
+	oldColorOutput := color.Output
+	color.Output = w
+	defer func() {
+		os.Stdout = oldStdout
+		color.Output = oldColorOutput
+	}()
+
+	fn()
+
+	_ = w.Close()
+
+	data, readErr := io.ReadAll(r)
+	if readErr != nil {
+		t.Fatalf("ReadAll() error = %v", readErr)
+	}
+	return string(data)
+}
+
+func TestPrintSessionSections_Optimizations(t *testing.T) {
+	stats := NewSessionStats("test")
+	stats.ToolExecutions["read_file"] = 2
+	stats.Optimizations = OptimizationMetrics{
+		DeduplicateCount:       2,
+		DeduplicateTokensSaved: 120,
+		NegativeCacheHits:      3,
+		ErrorCompressions:      4,
+		FailedPairCompressions: 5,
+		TruncationCount:        6,
+		OutlineFirstCount:      7,
+		MilestoneDetections:    8,
+		ToolRatioDetections:    9,
+		CompactionCount:        10,
+	}
+
+	agent := &Agent{
+		Stats: stats,
+	}
+
+	output := captureStdout(t, func() {
+		printSessionSections(agent)
+	})
+
+	for _, want := range []string{
+		"⚡ Optimizations",
+		"Cache-hit dedup",
+		"~120 tokens saved",
+		"Negative cache",
+		"Error compression",
+		"Failed-pair compression",
+		"Graduated truncate",
+		"Outline-first mode",
+		"Milestone triggers",
+		"Tool-ratio triggers",
+		"Auto-compress",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("printSessionSections() output missing %q:\n%s", want, output)
+		}
+	}
+}
+
+func TestPrintSessionSections_NoOptimizations(t *testing.T) {
+	stats := NewSessionStats("test")
+	stats.ToolExecutions = map[string]int{}
+
+	agent := &Agent{
+		Stats: stats,
+	}
+
+	output := captureStdout(t, func() {
+		printSessionSections(agent)
+	})
+
+	if !strings.Contains(output, "No optimizations triggered yet") {
+		t.Fatalf("printSessionSections() output missing empty optimization message:\n%s", output)
 	}
 }

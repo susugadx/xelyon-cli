@@ -295,6 +295,10 @@ func (a *Agent) deduplicateToolResult(toolName, content string) string {
 	}
 	turn := countUserTurns(a.History)
 	if ref := a.ToolCache.DeduplicateResult(toolName, content, turn); ref != "" {
+		a.addOptimizationMetrics(OptimizationMetrics{
+			DeduplicateCount:       1,
+			DeduplicateTokensSaved: len(content) / 4,
+		})
 		return ref
 	}
 	return content
@@ -352,5 +356,27 @@ func (a *Agent) incrementAssistantMessages() {
 	defer a.statsMu.Unlock()
 	if a.Stats != nil {
 		a.Stats.AssistantMessages++
+	}
+}
+
+func (a *Agent) addOptimizationMetrics(metrics OptimizationMetrics) {
+	a.statsMu.Lock()
+	defer a.statsMu.Unlock()
+	if a.Stats != nil {
+		a.Stats.Optimizations.add(metrics)
+	}
+}
+
+func (a *Agent) addCompactionMetrics(metrics CompactionMetrics) {
+	a.statsMu.Lock()
+	defer a.statsMu.Unlock()
+	if a.Stats != nil {
+		a.Stats.Optimizations.addCompaction(metrics)
+	}
+}
+
+func (a *Agent) recordToolResultOptimizations(toolName, result string) {
+	if toolName == "read_file" && strings.Contains(result, "Use start_line/end_line to read function body") {
+		a.addOptimizationMetrics(OptimizationMetrics{OutlineFirstCount: 1})
 	}
 }

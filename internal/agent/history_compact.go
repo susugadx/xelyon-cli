@@ -14,7 +14,14 @@ const (
 	DefaultTailLines = 5  // 末尾5行を保持
 )
 
-// CompactOldToolResults は送信前に古いツール結果をtruncateした履歴コピーを返す。
+// CompactionMetrics は履歴圧縮時に発生した圧縮メトリクスを表す。
+type CompactionMetrics struct {
+	ErrorCompressions      int
+	FailedPairCompressions int
+	TruncationCount        int
+}
+
+// CompactOldToolResults は送信前に古いツール結果をtruncateした履歴コピーと圧縮メトリクスを返す。
 // 元の history は変更しない（セッション保存用に原本を保持）。
 //
 // ルール:
@@ -34,9 +41,10 @@ const (
 //
 // 注意: shallow copy のため、返されたスライスの Content 以外のフィールド（ToolCalls 等）は
 // 元の history と共有されている。返り値の Content 以外を変更してはならない。
-func CompactOldToolResults(history []api.Message, keepTurns, maxLines, headLines, tailLines int) []api.Message {
+func CompactOldToolResults(history []api.Message, keepTurns, maxLines, headLines, tailLines int) ([]api.Message, CompactionMetrics) {
+	var metrics CompactionMetrics
 	if len(history) == 0 {
-		return history
+		return history, metrics
 	}
 
 	// ターン境界を計算: 末尾から user メッセージを数えて keepTurns 個目の位置を求める
@@ -56,7 +64,7 @@ func CompactOldToolResults(history []api.Message, keepTurns, maxLines, headLines
 	if boundary == 0 {
 		result := make([]api.Message, len(history))
 		copy(result, history)
-		return result
+		return result, metrics
 	}
 
 	// ターン境界マップ: 各 index が boundary からどれだけ古いか（ターン数）
@@ -71,6 +79,7 @@ func CompactOldToolResults(history []api.Message, keepTurns, maxLines, headLines
 		if result[i].Role == "tool" {
 			// 失敗ペア圧縮: Error で始まり、直後の assistant が同じツールを再呼び出し
 			if compressed, ok := compressFailedPair(result, i); ok {
+				metrics.FailedPairCompressions++
 				result[i] = compressed
 				continue
 			}
@@ -78,11 +87,14 @@ func CompactOldToolResults(history []api.Message, keepTurns, maxLines, headLines
 			// 段階的圧縮: ターンの古さに応じて truncate 量を変える
 			age := turnAge[i]
 			h, t := graduatedTruncateParams(age, keepTurns, headLines, tailLines)
-			result[i] = truncateToolResult(result[i], maxLines, h, t)
+			var itemMetrics CompactionMetrics
+			result[i], itemMetrics = truncateToolResult(result[i], maxLines, h, t)
+			metrics.ErrorCompressions += itemMetrics.ErrorCompressions
+			metrics.TruncationCount += itemMetrics.TruncationCount
 		}
 	}
 
-	return result
+	return result, metrics
 }
 
 // buildTurnAgeMap は boundary より前の各 index について、
@@ -206,22 +218,43 @@ func compressErrorResult(content string) (string, bool) {
 	return "", false
 }
 
+// ToolResultContentRatio はHistory内のtool resultコンテンツが全体に占める割合を返す。
+// len(Content) ベースの簡易推定。
+func ToolResultContentRatio(history []api.Message) float64 {
+	total := 0
+	toolTotal := 0
+	for _, msg := range history {
+		n := len(msg.Content)
+		total += n
+		if msg.Role == "tool" {
+			toolTotal += n
+		}
+	}
+	if total == 0 {
+		return 0
+	}
+	return float64(toolTotal) / float64(total)
+}
+
 // truncateToolResult は大きなツール結果を truncate する。
 // エラーパターンは行数に関係なく圧縮する。
-func truncateToolResult(msg api.Message, maxLines, headLines, tailLines int) api.Message {
+func truncateToolResult(msg api.Message, maxLines, headLines, tailLines int) (api.Message, CompactionMetrics) {
+	var metrics CompactionMetrics
+
 	// エラーパターンの圧縮を先に試す
 	if compressed, ok := compressErrorResult(msg.Content); ok {
+		metrics.ErrorCompressions++
 		if compressed != msg.Content {
 			result := msg
 			result.Content = compressed
-			return result
+			return result, metrics
 		}
-		return msg
+		return msg, metrics
 	}
 
 	lines := strings.Split(strings.TrimRight(msg.Content, "\n"), "\n")
 	if len(lines) <= maxLines || headLines+tailLines >= len(lines) {
-		return msg
+		return msg, metrics
 	}
 
 	// おおよそのトークン数を推定（~4文字/トークン）
@@ -235,5 +268,6 @@ func truncateToolResult(msg api.Message, maxLines, headLines, tailLines int) api
 	// shallow copy して Content だけ差し替え
 	result := msg
 	result.Content = truncated
-	return result
+	metrics.TruncationCount++
+	return result, metrics
 }
