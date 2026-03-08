@@ -1,7 +1,6 @@
 package common
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
@@ -11,6 +10,9 @@ import (
 // ShowImprovedDiff は改善された差分表示
 // ui.ShowColoredDiff を使用してインライン形式で表示
 func ShowImprovedDiff(oldStr, newStr string) {
+	if IsQuietMode() {
+		return
+	}
 	cfg := config.GetGlobalConfig()
 
 	opts := &ui.DiffOptions{
@@ -25,6 +27,9 @@ func ShowImprovedDiff(oldStr, newStr string) {
 
 // ShowDiff は差分を表示
 func ShowDiff(old, new, filename string) {
+	if IsQuietMode() {
+		return
+	}
 	Yellow.Printf("Changes to: %s\n", filename)
 	cfg := config.GetGlobalConfig()
 
@@ -40,17 +45,20 @@ func ShowDiff(old, new, filename string) {
 
 // ShowPreview は新規ファイルのプレビューを表示
 func ShowPreview(content string) {
+	if IsQuietMode() {
+		return
+	}
 	cfg := config.GetGlobalConfig()
 	maxLines := cfg.Diff.MaxTotalLines
 
-	fmt.Println(strings.Repeat("-", 50))
+	Println(strings.Repeat("-", 50))
 	lines := strings.Split(content, "\n")
 	for i, line := range lines {
 		if maxLines > 0 && i >= maxLines {
 			Yellow.Printf("... (%d more lines)\n", len(lines)-i)
 			break
 		}
-		fmt.Printf("%4d: %s\n", i+1, line)
+		Printf("%4d: %s\n", i+1, line)
 	}
-	fmt.Println(strings.Repeat("-", 50))
+	Println(strings.Repeat("-", 50))
 }

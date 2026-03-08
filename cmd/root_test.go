@@ -1,13 +1,51 @@
 package cmd
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/agent"
 	"github.com/susugadx/xelyon-cli/internal/api"
 )
+
+type headlessSequenceProvider struct {
+	name      string
+	responses []string
+	index     int
+}
+
+func (p *headlessSequenceProvider) Name() string {
+	return p.name
+}
+
+func (p *headlessSequenceProvider) SupportsImages() bool {
+	return false
+}
+
+func (p *headlessSequenceProvider) IsFunctionCallingEnabled() bool {
+	return true
+}
+
+func (p *headlessSequenceProvider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
+	if p.index >= len(p.responses) {
+		return "done", nil
+	}
+	resp := p.responses[p.index]
+	p.index++
+	return resp, nil
+}
+
+func (p *headlessSequenceProvider) ChatWithImage(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {
+	return "", fmt.Errorf("not supported")
+}
 
 func resetRootFlagsForTest() {
 	resume = false
@@ -373,6 +411,67 @@ func TestRootCommand_PositionalQueryUsesHeadlessInJSONMode(t *testing.T) {
 	}
 	if interactiveCalled {
 		t.Fatal("interactive path must not be executed in JSON mode")
+	}
+}
+
+func TestRootCommand_HeadlessJSONStdoutIsPureJSON(t *testing.T) {
+	resetRootFlagsForTest()
+
+	origRunHeadless := runHeadless
+	t.Cleanup(func() {
+		runHeadless = origRunHeadless
+		resetRootFlagsForTest()
+	})
+
+	tempDir, err := os.MkdirTemp(".", "headless-json-*")
+	if err != nil {
+		t.Fatalf("MkdirTemp() error = %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	targetPath := filepath.Join(tempDir, "output.txt")
+	provider := &headlessSequenceProvider{
+		name: "headless-seq",
+		responses: []string{
+			fmt.Sprintf(`{"tool":"write_file","args":{"path":%q,"content":%q}}`, targetPath, "hello from headless"),
+			"done",
+		},
+	}
+
+	runHeadless = func(query string, model string, providerArg api.Provider) *agent.HeadlessResult {
+		return agent.RunHeadless(query, model, provider)
+	}
+
+	oldStdout := os.Stdout
+	oldColorOutput := color.Output
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	color.Output = w
+
+	rootCmd.SetArgs([]string{"--output-format", "json", "--provider", "ollama", "--no-update-check", "hello"})
+	execErr := rootCmd.Execute()
+
+	_ = w.Close()
+	os.Stdout = oldStdout
+	color.Output = oldColorOutput
+
+	if execErr != nil {
+		t.Fatalf("Execute() error = %v", execErr)
+	}
+
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, r)
+	output := strings.TrimSpace(buf.String())
+
+	var parsed map[string]interface{}
+	if err := json.Unmarshal([]byte(output), &parsed); err != nil {
+		t.Fatalf("stdout is not pure JSON: %v\noutput=%q", err, output)
+	}
+	if parsed["status"] != "success" {
+		t.Fatalf("status = %v, want success", parsed["status"])
+	}
+	if _, err := os.Stat(targetPath); err != nil {
+		t.Fatalf("expected write_file to create %s: %v", targetPath, err)
 	}
 }
 

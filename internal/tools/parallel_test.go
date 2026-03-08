@@ -505,7 +505,7 @@ func TestExecuteQuiet_ReturnsResult(t *testing.T) {
 	// ExecuteQuiet が正常に結果を返すことを確認する機能テスト。
 	// wrapper 層の stdout 出力（ヘッダー・引数・折りたたみ）が抑制されることは
 	// このテストでは直接検証していない（stdout キャプチャは testing では煩雑なため）。
-	// Tool.Run() 内部の直接 stdout 出力は ExecuteQuiet でも抑制できない（既知の制約）。
+	// Tool.Run() 内部の quiet-aware な補助出力は ExecuteQuiet で抑制される。
 	tc := &ToolCall{
 		Tool: "list_dir",
 		Args: map[string]string{"path": "."},

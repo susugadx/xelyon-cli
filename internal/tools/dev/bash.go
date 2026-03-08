@@ -249,7 +249,7 @@ func streamOutputWithContext(ctx context.Context, pipe io.Reader, buf *strings.B
 		if isStderr {
 			red.Println(line)
 		} else {
-			fmt.Println(line)
+			common.Println(line)
 		}
 
 		mu.Lock()
@@ -362,7 +362,7 @@ func streamOutput(pipe io.Reader, buf *strings.Builder, mu *sync.Mutex, isStderr
 		if isStderr {
 			red.Println(line)
 		} else {
-			fmt.Println(line)
+			common.Println(line)
 		}
 
 		// バッファに保存

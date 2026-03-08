@@ -90,7 +90,7 @@ func ExecuteStrReplace(path, oldStr, newStr, startLineStr, endLineStr string) (s
 		newLines = append(newLines, lines[endLine:]...)
 		newContent = strings.Join(newLines, "\n")
 
-		if newStr != "" {
+		if newStr != "" && !common.IsQuietMode() {
 			nearbyStart := startLine - 10
 			if nearbyStart < 1 {
 				nearbyStart = 1
@@ -119,25 +119,25 @@ func ExecuteStrReplace(path, oldStr, newStr, startLineStr, endLineStr string) (s
 		added := len(newStrLines)
 		lineDiff := added - removed
 
-		common.Cyan.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		common.Cyan.Printf("🔧 str_replace (line range): %s\n", path)
-		common.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		if !common.IsQuietMode() {
+			common.Cyan.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+			common.Cyan.Printf("🔧 str_replace (line range): %s\n", path)
+			common.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
-		common.Yellow.Println("\n📊 Summary / 変更サマリー:")
-		fmt.Printf("   • Range: %d-%d (1-indexed inclusive)\n", startLine, endLine)
-		fmt.Printf("   • Remove %d lines / %d行削除\n", removed, removed)
-		fmt.Printf("   • Add %d lines / %d行追加\n", added, added)
-		if lineDiff > 0 {
-			common.Green.Printf("   • Net: +%d lines\n", lineDiff)
-		} else if lineDiff < 0 {
-			common.Red.Printf("   • Net: %d lines\n", lineDiff)
-		} else {
-			fmt.Printf("   • Net: 0 lines (same size)\n")
-		}
+			common.Yellow.Println("\n📊 Summary / 変更サマリー:")
+			common.Printf("   • Range: %d-%d (1-indexed inclusive)\n", startLine, endLine)
+			common.Printf("   • Remove %d lines / %d行削除\n", removed, removed)
+			common.Printf("   • Add %d lines / %d行追加\n", added, added)
+			if lineDiff > 0 {
+				common.Green.Printf("   • Net: +%d lines\n", lineDiff)
+			} else if lineDiff < 0 {
+				common.Red.Printf("   • Net: %d lines\n", lineDiff)
+			} else {
+				common.Printf("   • Net: 0 lines (same size)\n")
+			}
 
-		// Before/After（レンジ部分のみを表示）
-		beforeStr := strings.Join(lines[startLine-1:endLine], "\n")
-		{
+			// Before/After（レンジ部分のみを表示）
+			beforeStr := strings.Join(lines[startLine-1:endLine], "\n")
 			offset := startLine - 1
 			cfg := config.GetGlobalConfig()
 			opts := &ui.DiffOptions{
@@ -238,7 +238,9 @@ Do not retry the same replacement.`, path), nil
 		return b.String(), nil
 	} else {
 		// 完全一致しない → 正規化マッチを試行（従来挙動）
-		common.Yellow.Println("⚠️  Exact match failed, trying normalized whitespace matching...")
+		if !common.IsQuietMode() {
+			common.Yellow.Println("⚠️  Exact match failed, trying normalized whitespace matching...")
+		}
 
 		found, startIdxNormalized, endIdx := common.FindWithNormalizedWhitespace(oldContent, oldStr)
 		if !found {
@@ -252,17 +254,19 @@ Do not retry the same replacement.`, path), nil
 		newContent = oldContent[:startIdxNormalized] + newStr + oldContent[endIdx+1:]
 		usedNormalizedMatch = true
 
-		common.Yellow.Printf("ℹ️  Matched with normalized whitespace (indentation may differ)\n")
-		common.Yellow.Printf("   Actual match in file:\n")
-		matchLines := strings.Split(actualOldStr, "\n")
-		for i, line := range matchLines {
-			if i >= 5 {
-				common.Yellow.Printf("   ... (%d more lines)\n", len(matchLines)-5)
-				break
+		if !common.IsQuietMode() {
+			common.Yellow.Printf("ℹ️  Matched with normalized whitespace (indentation may differ)\n")
+			common.Yellow.Printf("   Actual match in file:\n")
+			matchLines := strings.Split(actualOldStr, "\n")
+			for i, line := range matchLines {
+				if i >= 5 {
+					common.Yellow.Printf("   ... (%d more lines)\n", len(matchLines)-5)
+					break
+				}
+				common.Yellow.Printf("   │ %s\n", line)
 			}
-			common.Yellow.Printf("   │ %s\n", line)
+			common.Println()
 		}
-		fmt.Println()
 	}
 
 	// 確認UI - 変更サマリーを明確に表示
@@ -270,41 +274,41 @@ Do not retry the same replacement.`, path), nil
 	newStrLines := strings.Split(newStr, "\n")
 	lineDiff := len(newStrLines) - len(oldStrLines)
 
-	common.Cyan.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	common.Cyan.Printf("🔧 str_replace: %s\n", path)
-	common.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	if !common.IsQuietMode() {
+		common.Cyan.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		common.Cyan.Printf("🔧 str_replace: %s\n", path)
+		common.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
-	common.Yellow.Println("\n📊 Summary / 変更サマリー:")
-	fmt.Printf("   • Remove %d lines / %d行削除\n", len(oldStrLines), len(oldStrLines))
-	fmt.Printf("   • Add %d lines / %d行追加\n", len(newStrLines), len(newStrLines))
-	if lineDiff > 0 {
-		common.Green.Printf("   • Net: +%d lines\n", lineDiff)
-	} else if lineDiff < 0 {
-		common.Red.Printf("   • Net: %d lines\n", lineDiff)
-	} else {
-		fmt.Printf("   • Net: 0 lines (same size)\n")
-	}
+		common.Yellow.Println("\n📊 Summary / 変更サマリー:")
+		common.Printf("   • Remove %d lines / %d行削除\n", len(oldStrLines), len(oldStrLines))
+		common.Printf("   • Add %d lines / %d行追加\n", len(newStrLines), len(newStrLines))
+		if lineDiff > 0 {
+			common.Green.Printf("   • Net: +%d lines\n", lineDiff)
+		} else if lineDiff < 0 {
+			common.Red.Printf("   • Net: %d lines\n", lineDiff)
+		} else {
+			common.Printf("   • Net: 0 lines (same size)\n")
+		}
 
-	// 大規模変更警告
-	absLineDiff := lineDiff
-	if absLineDiff < 0 {
-		absLineDiff = -absLineDiff
-	}
-	if absLineDiff > 100 || len(oldStrLines) > 100 || len(newStrLines) > 100 {
-		common.Red.Println("\n🚨 VERY LARGE CHANGE DETECTED!")
-		common.Red.Println("   非常に大きな変更が検出されました。")
-		common.Yellow.Println("💡 Consider splitting into multiple smaller str_replace calls.")
-		common.Yellow.Println("   複数の小さな str_replace に分割することを検討してください。")
-	}
+		// 大規模変更警告
+		absLineDiff := lineDiff
+		if absLineDiff < 0 {
+			absLineDiff = -absLineDiff
+		}
+		if absLineDiff > 100 || len(oldStrLines) > 100 || len(newStrLines) > 100 {
+			common.Red.Println("\n🚨 VERY LARGE CHANGE DETECTED!")
+			common.Red.Println("   非常に大きな変更が検出されました。")
+			common.Yellow.Println("💡 Consider splitting into multiple smaller str_replace calls.")
+			common.Yellow.Println("   複数の小さな str_replace に分割することを検討してください。")
+		}
 
-	// diff表示用に、old_str の実ファイル開始行（1-indexed）を算出
-	startLineForDisplay := 1
-	if idx := strings.Index(oldContent, oldStr); idx >= 0 {
-		// 完全一致（または偶然一致）できる場合は、その位置を採用
-		startLineForDisplay = strings.Count(oldContent[:idx], "\n") + 1
-	}
+		// diff表示用に、old_str の実ファイル開始行（1-indexed）を算出
+		startLineForDisplay := 1
+		if idx := strings.Index(oldContent, oldStr); idx >= 0 {
+			// 完全一致（または偶然一致）できる場合は、その位置を採用
+			startLineForDisplay = strings.Count(oldContent[:idx], "\n") + 1
+		}
 
-	{
 		offset := startLineForDisplay - 1
 		cfg := config.GetGlobalConfig()
 		opts := &ui.DiffOptions{
@@ -316,7 +320,7 @@ Do not retry the same replacement.`, path), nil
 		}
 		ui.ShowColoredDiff(oldStr, newStr, opts)
 	}
-	if newStr != "" && matchStartLine > 0 {
+	if newStr != "" && matchStartLine > 0 && !common.IsQuietMode() {
 		nearbyStart := matchStartLine - 10
 		if nearbyStart < 1 {
 			nearbyStart = 1
@@ -508,7 +512,9 @@ func executeBatchEdits(path, editsJSON string) (string, error) {
 			return fmt.Sprintf("Error: edits[%d].old_str appears %d times in %s (must be unique). Batch aborted, no changes written.", i, count, path), nil
 		default:
 			// exact match なし → normalized whitespace fallback
-			common.Yellow.Printf("⚠️  edits[%d]: Exact match failed, trying normalized whitespace matching...\n", i)
+			if !common.IsQuietMode() {
+				common.Yellow.Printf("⚠️  edits[%d]: Exact match failed, trying normalized whitespace matching...\n", i)
+			}
 			found, startIdx, endIdx := common.FindWithNormalizedWhitespace(content, edit.OldStr)
 			if !found {
 				return fmt.Sprintf("Error: edits[%d].old_str not found in %s (tried exact and normalized matching). Batch aborted, no changes written.", i, path), nil
@@ -522,38 +528,40 @@ func executeBatchEdits(path, editsJSON string) (string, error) {
 	}
 
 	// combined diff 表示
-	common.Cyan.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	common.Cyan.Printf("🔧 str_replace (batch: %d edits): %s\n", len(edits), path)
-	common.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-
 	oldLines := strings.Count(oldContent, "\n") + 1
 	newLines := strings.Count(content, "\n") + 1
 	lineDiff := newLines - oldLines
 
-	common.Yellow.Println("\n📊 Summary / 変更サマリー:")
-	fmt.Printf("   • Edits: %d\n", len(edits))
-	if lineDiff > 0 {
-		common.Green.Printf("   • Net: +%d lines\n", lineDiff)
-	} else if lineDiff < 0 {
-		common.Red.Printf("   • Net: %d lines\n", lineDiff)
-	} else {
-		fmt.Printf("   • Net: 0 lines (same size)\n")
-	}
+	if !common.IsQuietMode() {
+		common.Cyan.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		common.Cyan.Printf("🔧 str_replace (batch: %d edits): %s\n", len(edits), path)
+		common.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
-	// 大規模変更の警告
-	if oldLines > 100 || newLines > 100 || lineDiff > 100 || lineDiff < -100 {
-		common.Red.Println("\n⚠️  WARNING: LARGE CHANGE DETECTED")
-		common.Red.Println("   This is a significant modification. Please review the diff carefully.")
-	}
+		common.Yellow.Println("\n📊 Summary / 変更サマリー:")
+		common.Printf("   • Edits: %d\n", len(edits))
+		if lineDiff > 0 {
+			common.Green.Printf("   • Net: +%d lines\n", lineDiff)
+		} else if lineDiff < 0 {
+			common.Red.Printf("   • Net: %d lines\n", lineDiff)
+		} else {
+			common.Printf("   • Net: 0 lines (same size)\n")
+		}
 
-	cfg := config.GetGlobalConfig()
-	opts := &ui.DiffOptions{
-		ContextLines:  cfg.Diff.ContextLines,
-		ShowLineNums:  true,
-		InlineMode:    true,
-		MaxTotalLines: cfg.Diff.MaxTotalLines,
+		// 大規模変更の警告
+		if oldLines > 100 || newLines > 100 || lineDiff > 100 || lineDiff < -100 {
+			common.Red.Println("\n⚠️  WARNING: LARGE CHANGE DETECTED")
+			common.Red.Println("   This is a significant modification. Please review the diff carefully.")
+		}
+
+		cfg := config.GetGlobalConfig()
+		opts := &ui.DiffOptions{
+			ContextLines:  cfg.Diff.ContextLines,
+			ShowLineNums:  true,
+			InlineMode:    true,
+			MaxTotalLines: cfg.Diff.MaxTotalLines,
+		}
+		ui.ShowColoredDiff(oldContent, content, opts)
 	}
-	ui.ShowColoredDiff(oldContent, content, opts)
 
 	// 確認
 	dec := common.ConfirmWithAutoApproveDecision("str_replace", "Apply batch replacement? / バッチ置換を適用しますか？")

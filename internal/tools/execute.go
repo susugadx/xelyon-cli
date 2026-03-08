@@ -72,10 +72,7 @@ func printToolArgs(tc *ToolCall) {
 
 // Execute はツールを実行し、統一フォーマットの1行サマリーと必要に応じて折りたたみ結果を表示する。
 func Execute(tc *ToolCall) (string, *FileChange) {
-	prevQuiet := common.IsQuietMode()
-	common.SetQuietMode(true)
 	result, change := executeCore(tc)
-	common.SetQuietMode(prevQuiet)
 
 	fmt.Println(ui.FormatToolLine(ui.ToolDisplayInfo{
 		ToolName: tc.Tool,
@@ -96,10 +93,10 @@ func Execute(tc *ToolCall) (string, *FileChange) {
 // parallel path（goroutine 内）から呼び出すために使用する。
 //
 // 抑制するもの: ツールヘッダー（"🔧 Tool: ..."）、引数表示、折りたたみ結果表示。
-// Tool.Run() 内部の出力抑制は caller が common.SetQuietMode(true) を設定した場合に限る。
-//
-//	Tool interface が io.Writer を受け取らないため、quiet 制御に対応したツールのみ抑制される。
+// Tool.Run() 内部の補助的な標準出力も common quiet mode で抑制する。
 func ExecuteQuiet(tc *ToolCall) (string, *FileChange) {
+	restoreQuiet := common.PushQuietMode()
+	defer restoreQuiet()
 	return executeCore(tc)
 }
 

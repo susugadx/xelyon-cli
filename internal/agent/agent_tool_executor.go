@@ -475,7 +475,7 @@ type toolExecResult struct {
 // stdout 出力の抑制:
 //
 //	tools.ExecuteQuiet を使用し、wrapper 層の出力（ヘッダー・引数・折りたたみ結果）を抑制する。
-//	Tool.Run() 内部の補助的な出力は common.SetQuietMode(true) を batch 単位で設定して抑制する。
+//	Tool.Run() 内部の補助的な出力は common quiet mode を batch 単位で積み上げて抑制する。
 //
 // cancel の実効性（best effort）:
 //
@@ -630,42 +630,42 @@ func (a *Agent) executeToolCallsWithParallel(
 	//   再チェックする。ただし Tool.Run() 自体は ctx を受け取らないため、
 	//   実行開始後のキャンセルは効かない（次の goroutine 起動時にスキップされる）。
 	if len(parallelEntries) > 0 {
-		prevQuiet := common.IsQuietMode()
-		common.SetQuietMode(true)
 		startedAt := time.Now()
+		func() {
+			restoreQuiet := common.PushQuietMode()
+			defer restoreQuiet()
 
-		tools.SetExecutionContext(tools.ExecutionContext{
-			ProviderName: a.ProviderName,
-			Model:        a.CurrentModel,
-		})
+			tools.SetExecutionContext(tools.ExecutionContext{
+				ProviderName: a.ProviderName,
+				Model:        a.CurrentModel,
+			})
+			defer tools.ClearExecutionContext()
 
-		sem := make(chan struct{}, tools.MaxParallelTools)
-		var wg sync.WaitGroup
-		var mu sync.Mutex
+			sem := make(chan struct{}, tools.MaxParallelTools)
+			var wg sync.WaitGroup
+			var mu sync.Mutex
 
-		for _, idx := range parallelEntries {
-			if ctx.Err() != nil {
-				mu.Lock()
-				results[idx] = toolExecResult{result: "Error: context cancelled"}
-				mu.Unlock()
-				continue
+			for _, idx := range parallelEntries {
+				if ctx.Err() != nil {
+					mu.Lock()
+					results[idx] = toolExecResult{result: "Error: context cancelled"}
+					mu.Unlock()
+					continue
+				}
+				wg.Add(1)
+				sem <- struct{}{}
+				go func(i int) {
+					defer wg.Done()
+					defer func() { <-sem }()
+
+					r, c := a.executeToolForParallel(ctx, allToolCalls[i])
+					mu.Lock()
+					results[i] = toolExecResult{result: r, change: c}
+					mu.Unlock()
+				}(idx)
 			}
-			wg.Add(1)
-			sem <- struct{}{}
-			go func(i int) {
-				defer wg.Done()
-				defer func() { <-sem }()
-
-				r, c := a.executeToolForParallel(ctx, allToolCalls[i])
-				mu.Lock()
-				results[i] = toolExecResult{result: r, change: c}
-				mu.Unlock()
-			}(idx)
-		}
-		wg.Wait()
-
-		tools.ClearExecutionContext()
-		common.SetQuietMode(prevQuiet)
+			wg.Wait()
+		}()
 		printParallelToolGroup(allToolCalls, parallelEntries, results, time.Since(startedAt))
 	}
 

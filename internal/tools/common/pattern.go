@@ -1,9 +1,5 @@
 package common
 
-import (
-	"fmt"
-)
-
 // PatternMatchResult はパターンマッチの結果を保持
 type PatternMatchResult struct {
 	MatchIdx     int   // マッチした行インデックス（-1 = not found）
@@ -46,10 +42,13 @@ func FindPatternInLines(lines []string, pattern string) PatternMatchResult {
 
 // DisplayPatternNotFound はパターンが見つからない場合のエラー表示
 func DisplayPatternNotFound(pattern string, lines []string, maxPreview int) {
+	if IsQuietMode() {
+		return
+	}
 	Yellow.Printf("Pattern not found: %s\n\n", pattern)
 	Yellow.Println("File preview (first 50 lines):")
 	for i := 0; i < Min(len(lines), maxPreview); i++ {
-		fmt.Printf("%4d: %s\n", i+1, lines[i])
+		Printf("%4d: %s\n", i+1, lines[i])
 	}
 	if len(lines) > maxPreview {
 		Yellow.Printf("... (%d more lines)\n", len(lines)-maxPreview)
@@ -58,6 +57,9 @@ func DisplayPatternNotFound(pattern string, lines []string, maxPreview int) {
 
 // DisplayMultipleMatches は複数マッチ時のエラー表示
 func DisplayMultipleMatches(matchIndices []int, lines []string) {
+	if IsQuietMode() {
+		return
+	}
 	Red.Printf("Error: Pattern matches %d locations (must be unique)\n", len(matchIndices))
 	Yellow.Println("All match locations:")
 	for _, idx := range matchIndices {
@@ -68,14 +70,17 @@ func DisplayMultipleMatches(matchIndices []int, lines []string) {
 			if i == idx {
 				prefix = "> "
 			}
-			fmt.Printf("%s%4d: %s\n", prefix, i+1, lines[i])
+			Printf("%s%4d: %s\n", prefix, i+1, lines[i])
 		}
-		fmt.Println()
+		Println()
 	}
 }
 
 // DisplayContextAround はマッチ行の周囲コンテキストを表示
 func DisplayContextAround(matchIdx int, lines []string, contextLines int) {
+	if IsQuietMode() {
+		return
+	}
 	Green.Printf("Pattern found at line %d\n\n", matchIdx+1)
 	Yellow.Printf("Context (%d lines before/after):\n", contextLines)
 	start := Max(0, matchIdx-contextLines)
@@ -85,13 +90,16 @@ func DisplayContextAround(matchIdx int, lines []string, contextLines int) {
 		if i == matchIdx {
 			prefix = "> "
 		}
-		fmt.Printf("%s%4d: %s\n", prefix, i+1, lines[i])
+		Printf("%s%4d: %s\n", prefix, i+1, lines[i])
 	}
 }
 
 // DisplayContentToInsert は挿入する内容を表示
 func DisplayContentToInsert(content string) {
+	if IsQuietMode() {
+		return
+	}
 	Cyan.Println("\n---- Content to insert ----")
-	fmt.Println(content)
+	Println(content)
 	Cyan.Println("---------------------------")
 }

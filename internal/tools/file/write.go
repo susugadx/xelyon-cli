@@ -43,49 +43,50 @@ func ExecuteWriteFile(path string, content string) (string, error) {
 
 	// 確認UI - 変更サマリーを明確に表示
 	newLines := strings.Split(content, "\n")
-
-	common.Cyan.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	if exists {
-		common.Cyan.Printf("📝 write_file (overwrite): %s\n", path)
-	} else {
-		common.Cyan.Printf("📝 write_file (create): %s\n", path)
-	}
-	common.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-
-	// 変更サマリー
-	common.Yellow.Println("\n📊 Summary / 変更サマリー:")
-	if exists {
-		oldContent, _ := os.ReadFile(absPath)
-		oldLines := strings.Split(string(oldContent), "\n")
-		lineDiff := len(newLines) - len(oldLines)
-		fmt.Printf("   • Before: %d lines / 変更前: %d行\n", len(oldLines), len(oldLines))
-		fmt.Printf("   • After: %d lines / 変更後: %d行\n", len(newLines), len(newLines))
-		if lineDiff > 0 {
-			common.Green.Printf("   • Net: +%d lines\n", lineDiff)
-		} else if lineDiff < 0 {
-			common.Red.Printf("   • Net: %d lines\n", lineDiff)
+	if !common.IsQuietMode() {
+		common.Cyan.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		if exists {
+			common.Cyan.Printf("📝 write_file (overwrite): %s\n", path)
 		} else {
-			fmt.Printf("   • Net: 0 lines (same size)\n")
+			common.Cyan.Printf("📝 write_file (create): %s\n", path)
 		}
+		common.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
-		// 既存ファイルの全体上書き警告
-		// 行数の変化が少ないのに大きなファイルを全体上書きしようとしている場合
-		absLineDiff := lineDiff
-		if absLineDiff < 0 {
-			absLineDiff = -absLineDiff
-		}
-		if absLineDiff < 10 && len(oldLines) > 50 {
-			common.Red.Println("\n🚨 WARNING: Large file overwrite with minimal changes!")
-			common.Red.Println("   あなたは大きなファイルを少ない変更で全体上書きしようとしています。")
-			common.Yellow.Println("💡 Consider using str_replace for partial edits instead.")
-			common.Yellow.Println("   部分的な編集には str_replace の使用を検討してください。")
-		}
+		// 変更サマリー
+		common.Yellow.Println("\n📊 Summary / 変更サマリー:")
+		if exists {
+			oldContent, _ := os.ReadFile(absPath)
+			oldLines := strings.Split(string(oldContent), "\n")
+			lineDiff := len(newLines) - len(oldLines)
+			common.Printf("   • Before: %d lines / 変更前: %d行\n", len(oldLines), len(oldLines))
+			common.Printf("   • After: %d lines / 変更後: %d行\n", len(newLines), len(newLines))
+			if lineDiff > 0 {
+				common.Green.Printf("   • Net: +%d lines\n", lineDiff)
+			} else if lineDiff < 0 {
+				common.Red.Printf("   • Net: %d lines\n", lineDiff)
+			} else {
+				common.Printf("   • Net: 0 lines (same size)\n")
+			}
 
-		common.ShowDiff(string(oldContent), content, path)
-	} else {
-		fmt.Printf("   • New file: %d lines / 新規: %d行\n", len(newLines), len(newLines))
-		fmt.Printf("   • Size: %d bytes\n", len(content))
-		common.ShowPreview(content)
+			// 既存ファイルの全体上書き警告
+			// 行数の変化が少ないのに大きなファイルを全体上書きしようとしている場合
+			absLineDiff := lineDiff
+			if absLineDiff < 0 {
+				absLineDiff = -absLineDiff
+			}
+			if absLineDiff < 10 && len(oldLines) > 50 {
+				common.Red.Println("\n🚨 WARNING: Large file overwrite with minimal changes!")
+				common.Red.Println("   あなたは大きなファイルを少ない変更で全体上書きしようとしています。")
+				common.Yellow.Println("💡 Consider using str_replace for partial edits instead.")
+				common.Yellow.Println("   部分的な編集には str_replace の使用を検討してください。")
+			}
+
+			common.ShowDiff(string(oldContent), content, path)
+		} else {
+			common.Printf("   • New file: %d lines / 新規: %d行\n", len(newLines), len(newLines))
+			common.Printf("   • Size: %d bytes\n", len(content))
+			common.ShowPreview(content)
+		}
 	}
 
 	dec := common.ConfirmWithAutoApproveDecision("write_file", "Create/overwrite this file? / このファイルを作成・上書きしますか？")

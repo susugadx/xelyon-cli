@@ -4,17 +4,6 @@ import (
 	"os"
 	"strings"
 	"time"
-
-	"github.com/susugadx/xelyon-cli/internal/ui"
-)
-
-// Colors - ui パッケージの共通色を使用
-var (
-	Yellow = ui.Yellow
-	Green  = ui.Green
-	Red    = ui.Red
-	Cyan   = ui.Cyan
-	Dim    = ui.Dim
 )
 
 // stripBracketedPaste removes bracketed paste escape sequences from input.

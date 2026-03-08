@@ -76,7 +76,7 @@ func RunHeadless(query string, model string, provider api.Provider) *HeadlessRes
 		// ツール実行と結果収集
 		var toolOutputs []string
 		for _, tc := range parsedCalls {
-			output, change := tools.Execute(tc)
+			output, change := tools.ExecuteQuiet(tc)
 
 			// 成功判定（"Error:"を含むかどうかで簡易判定）
 			success := !strings.Contains(output, "Error:")

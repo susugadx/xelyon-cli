@@ -6,7 +6,9 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
@@ -136,6 +138,16 @@ type testDisplayTool struct {
 	result string
 }
 
+func restoreRegistryTool(name string, orig Tool) {
+	DefaultRegistry.mu.Lock()
+	defer DefaultRegistry.mu.Unlock()
+	if orig != nil {
+		DefaultRegistry.tools[name] = orig
+		return
+	}
+	delete(DefaultRegistry.tools, name)
+}
+
 func (t *testDisplayTool) Name() string {
 	return t.name
 }
@@ -159,15 +171,13 @@ func TestExecute_UsesUnifiedToolDisplay(t *testing.T) {
 	color.NoColor = true
 
 	origTool := DefaultRegistry.GetTool("search_code")
+	t.Cleanup(func() {
+		restoreRegistryTool("search_code", origTool)
+	})
 	DefaultRegistry.Register(&testDisplayTool{
 		name:   "search_code",
 		result: "Found 3 match(es) in 2 file(s)\nstats.go:42: ...\nauto_compress.go:30: ...",
 	})
-	defer func() {
-		if origTool != nil {
-			DefaultRegistry.Register(origTool)
-		}
-	}()
 
 	oldStdout := os.Stdout
 	oldColorOutput := color.Output
@@ -198,10 +208,207 @@ func TestExecute_UsesUnifiedToolDisplay(t *testing.T) {
 	if !strings.Contains(result, "Found 3 match(es) in 2 file(s)") {
 		t.Fatalf("Execute() result = %q", result)
 	}
-	if strings.Contains(output, "INTERNAL STDOUT") {
-		t.Fatalf("Execute() should suppress internal stdout, got: %q", output)
+	if !strings.Contains(output, "INTERNAL STDOUT") {
+		t.Fatalf("Execute() should keep internal stdout in normal mode, got: %q", output)
 	}
 	if !strings.Contains(output, `🔍 search_code: "threshold" in internal/agent/ → 3 matches, 2 files`) {
 		t.Fatalf("Execute() output missing summary line: %q", output)
+	}
+}
+
+type testQuietTool struct {
+	name   string
+	result string
+}
+
+func (t *testQuietTool) Name() string {
+	return t.name
+}
+
+func (t *testQuietTool) Description() string {
+	return "quiet test tool"
+}
+
+func (t *testQuietTool) Parameters() map[string]interface{} {
+	return map[string]interface{}{}
+}
+
+func (t *testQuietTool) Run(args map[string]string) (string, *FileChange, error) {
+	common.Green.Printf("QUIET COLOR OUTPUT\n")
+	common.Printf("QUIET STDOUT OUTPUT\n")
+	return t.result, nil, nil
+}
+
+type testOverlapQuietTool struct {
+	started chan string
+	release map[string]chan struct{}
+}
+
+func (t *testOverlapQuietTool) Name() string {
+	return "overlap_quiet_test"
+}
+
+func (t *testOverlapQuietTool) Description() string {
+	return "overlap quiet test tool"
+}
+
+func (t *testOverlapQuietTool) Parameters() map[string]interface{} {
+	return map[string]interface{}{}
+}
+
+func (t *testOverlapQuietTool) Run(args map[string]string) (string, *FileChange, error) {
+	id := args["id"]
+	t.started <- id
+	<-t.release[id]
+	common.Printf("OVERLAP STDOUT %s\n", id)
+	return "result " + id, nil, nil
+}
+
+func TestExecuteQuiet_SuppressesInternalStdout(t *testing.T) {
+	color.NoColor = true
+
+	origTool := DefaultRegistry.GetTool("quiet_test")
+	t.Cleanup(func() {
+		restoreRegistryTool("quiet_test", origTool)
+	})
+	DefaultRegistry.Register(&testQuietTool{
+		name:   "quiet_test",
+		result: "quiet result",
+	})
+
+	oldStdout := os.Stdout
+	oldColorOutput := color.Output
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	color.Output = w
+
+	tc := &ToolCall{
+		Tool: "quiet_test",
+		Args: map[string]string{},
+	}
+	result, change := ExecuteQuiet(tc)
+
+	_ = w.Close()
+	os.Stdout = oldStdout
+	color.Output = oldColorOutput
+
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, r)
+	output := buf.String()
+
+	if change != nil {
+		t.Fatalf("ExecuteQuiet() returned unexpected change: %+v", change)
+	}
+	if result != "quiet result" {
+		t.Fatalf("ExecuteQuiet() result = %q, want %q", result, "quiet result")
+	}
+	if output != "" {
+		t.Fatalf("ExecuteQuiet() should not write to stdout, got: %q", output)
+	}
+}
+
+func TestExecuteQuiet_ParallelOverlapKeepsStdoutSuppressed(t *testing.T) {
+	color.NoColor = true
+
+	origTool := DefaultRegistry.GetTool("overlap_quiet_test")
+	t.Cleanup(func() {
+		restoreRegistryTool("overlap_quiet_test", origTool)
+	})
+	started := make(chan string, 2)
+	release := map[string]chan struct{}{
+		"first":  make(chan struct{}),
+		"second": make(chan struct{}),
+	}
+	DefaultRegistry.Register(&testOverlapQuietTool{
+		started: started,
+		release: release,
+	})
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	defer func() {
+		os.Stdout = oldStdout
+	}()
+
+	type execResult struct {
+		result string
+		change *FileChange
+	}
+
+	results := make(chan execResult, 2)
+	run := func(id string) {
+		result, change := ExecuteQuiet(&ToolCall{
+			Tool: "overlap_quiet_test",
+			Args: map[string]string{"id": id},
+		})
+		results <- execResult{result: result, change: change}
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		run("first")
+	}()
+	go func() {
+		defer wg.Done()
+		run("second")
+	}()
+
+	startedIDs := map[string]bool{}
+	for len(startedIDs) < 2 {
+		select {
+		case id := <-started:
+			startedIDs[id] = true
+		case <-time.After(2 * time.Second):
+			t.Fatal("timed out waiting for overlapping ExecuteQuiet calls to start")
+		}
+	}
+
+	close(release["first"])
+
+	select {
+	case firstResult := <-results:
+		if firstResult.change != nil {
+			t.Fatalf("first ExecuteQuiet() returned unexpected change: %+v", firstResult.change)
+		}
+		if firstResult.result != "result first" {
+			t.Fatalf("first ExecuteQuiet() result = %q, want %q", firstResult.result, "result first")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for first ExecuteQuiet() result")
+	}
+
+	if !common.IsQuietMode() {
+		t.Fatal("quiet mode should remain enabled while another ExecuteQuiet() is still running")
+	}
+
+	close(release["second"])
+
+	select {
+	case secondResult := <-results:
+		if secondResult.change != nil {
+			t.Fatalf("second ExecuteQuiet() returned unexpected change: %+v", secondResult.change)
+		}
+		if secondResult.result != "result second" {
+			t.Fatalf("second ExecuteQuiet() result = %q, want %q", secondResult.result, "result second")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for second ExecuteQuiet() result")
+	}
+
+	wg.Wait()
+	_ = w.Close()
+
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, r)
+	output := buf.String()
+
+	if output != "" {
+		t.Fatalf("overlapping ExecuteQuiet() calls should not write to stdout, got: %q", output)
+	}
+	if common.IsQuietMode() {
+		t.Fatal("quiet mode should be disabled after all ExecuteQuiet() calls complete")
 	}
 }
