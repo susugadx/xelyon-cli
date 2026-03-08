@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"io"
+	"os"
 	"strings"
 
 	"github.com/fatih/color"
@@ -216,14 +218,17 @@ func contains(slice []string, s string) bool {
 	return false
 }
 
-// PrintValidationWarnings はバリデーション警告を表示
-func PrintValidationWarnings(result ValidationResult) {
+// PrintValidationWarningsToWriter は指定 writer にバリデーション警告を表示する。
+func PrintValidationWarningsToWriter(w io.Writer, result ValidationResult) {
 	if len(result.Issues) == 0 {
 		return
 	}
+	if w == nil {
+		w = os.Stdout
+	}
 
-	yellow.Println("\n⚠️  設定ファイルに問題があります: ~/.xelyon/config.yaml")
-	fmt.Println()
+	yellow.Fprintln(w, "\n⚠️  設定ファイルに問題があります: ~/.xelyon/config.yaml")
+	fmt.Fprintln(w)
 
 	for i, issue := range result.Issues {
 		icon := "⚠️"
@@ -231,15 +236,20 @@ func PrintValidationWarnings(result ValidationResult) {
 			icon = "❌"
 		}
 
-		fmt.Printf("%d. %s %s: %s\n", i+1, icon, issue.Field, issue.Message)
+		fmt.Fprintf(w, "%d. %s %s: %s\n", i+1, icon, issue.Field, issue.Message)
 		if issue.Value != "" {
-			fmt.Printf("   現在の値: %s\n", issue.Value)
+			fmt.Fprintf(w, "   現在の値: %s\n", issue.Value)
 		}
 		if issue.Suggestion != "" {
-			cyan.Printf("   提案: %s\n", issue.Suggestion)
+			cyan.Fprintf(w, "   提案: %s\n", issue.Suggestion)
 		}
-		fmt.Println()
+		fmt.Fprintln(w)
 	}
+}
+
+// PrintValidationWarnings はバリデーション警告を表示
+func PrintValidationWarnings(result ValidationResult) {
+	PrintValidationWarningsToWriter(os.Stdout, result)
 }
 
 // ApplyAutoFixes は自動修正可能な問題を修正

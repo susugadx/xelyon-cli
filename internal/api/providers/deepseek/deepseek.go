@@ -339,7 +339,7 @@ func getActualModel(model string) string {
 func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {
 	// DeepSeekは画像非対応なので警告を出してテキストのみ送信
 	if image != nil && image.Base64 != "" {
-		yellow.Println("Warning: DeepSeek does not support image input. The image will be ignored.")
+		yellow.Fprintln(api.OutputWriterFromContext(ctx), "Warning: DeepSeek does not support image input. The image will be ignored.")
 	}
 	history = append(history, api.Message{Role: "user", Content: userMessage})
 	return p.ChatWithTools(ctx, systemPrompt, history, model)

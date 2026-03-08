@@ -131,3 +131,71 @@ func TestLogLevelFiltering(t *testing.T) {
 	// Error should still work
 	ErrorLog("not filtered")
 }
+
+func TestRuntimeLogLevel(t *testing.T) {
+	originalLevel := currentLogLevel
+	defer func() { currentLogLevel = originalLevel }()
+
+	// global を Info にする
+	SetLogLevel(LogInfo)
+
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	rt := NewRuntime(nil, &out, &errOut)
+
+	// 未設定の場合は global に fallback
+	if rt.LogLevel() != LogInfo {
+		t.Fatalf("runtime without logLevelSet should fallback to global, got %v", rt.LogLevel())
+	}
+
+	// runtime に Debug を設定
+	rt.SetLogLevel(LogDebug)
+	if rt.LogLevel() != LogDebug {
+		t.Fatalf("runtime LogLevel = %v, want LogDebug", rt.LogLevel())
+	}
+
+	// global は変わっていない
+	if GetLogLevel() != LogInfo {
+		t.Fatalf("global level should stay LogInfo, got %v", GetLogLevel())
+	}
+
+	// WithRuntime 系が runtime のレベルを参照する
+	DebugWithRuntime(rt, "rt-debug")
+	if !strings.Contains(stripANSI(errOut.String()), "[DEBUG] rt-debug") {
+		t.Fatalf("expected debug output via runtime, got %q", errOut.String())
+	}
+
+	// global は Info なので Debug は出ない
+	var globalErr bytes.Buffer
+	DebugToWriter(&globalErr, "global-debug")
+	if globalErr.Len() != 0 {
+		t.Fatalf("expected no output from global DebugToWriter at Info level, got %q", globalErr.String())
+	}
+}
+
+func TestRuntimeLogLevelFiltering(t *testing.T) {
+	originalLevel := currentLogLevel
+	defer func() { currentLogLevel = originalLevel }()
+
+	SetLogLevel(LogDebug)
+
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	rt := NewRuntime(nil, &out, &errOut)
+	rt.SetLogLevel(LogError)
+
+	// runtime が Error レベル → Debug/Info/Warn は出力されない
+	DebugWithRuntime(rt, "filtered-debug")
+	InfoLogWithRuntime(rt, "filtered-info")
+	WarnWithRuntime(rt, "filtered-warn")
+
+	if out.Len() != 0 || errOut.Len() != 0 {
+		t.Fatalf("expected no output at Error level, out=%q, err=%q", out.String(), errOut.String())
+	}
+
+	// Error は出力される
+	ErrorLogWithRuntime(rt, "visible-error")
+	if !strings.Contains(stripANSI(errOut.String()), "Error: visible-error") {
+		t.Fatalf("expected error output, got %q", errOut.String())
+	}
+}

@@ -114,7 +114,7 @@ type OllamaTagsResponse struct {
 func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
 	// Extended Thinking 注意メッセージ（モデル依存）
 	if api.IsThinkingEnabled(ctx) {
-		yellow.Println("⚠️  Note: Extended Thinking depends on your model (use R1/QwQ for best results).")
+		yellow.Fprintln(api.OutputWriterFromContext(ctx), "⚠️  Note: Extended Thinking depends on your model (use R1/QwQ for best results).")
 	}
 
 	// モデル名を設定（config優先、フォールバックはllama3）
@@ -353,7 +353,7 @@ func (p *Provider) ListModels() ([]string, error) {
 func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {
 	// Ollamaは画像非対応なので警告を出してテキストのみ送信
 	if image != nil && image.Base64 != "" {
-		yellow.Println("Warning: Ollama does not support image input. The image will be ignored.")
+		yellow.Fprintln(api.OutputWriterFromContext(ctx), "Warning: Ollama does not support image input. The image will be ignored.")
 	}
 	history = append(history, api.Message{Role: "user", Content: userMessage})
 	return p.ChatWithTools(ctx, systemPrompt, history, model)

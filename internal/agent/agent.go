@@ -132,6 +132,7 @@ func NewAgentWithRuntime(model string, provider api.Provider, headless bool, run
 
 	// MCP初期化（設定と環境変数で制御）
 	mcpManager := mcp.NewManager()
+	mcpManager.SetOutput(out)
 	if cfg.MCP.Enabled && (!headless || cfg.MCP.Headless) && os.Getenv("XELYON_DISABLE_MCP") != "1" {
 		if err := mcpManager.LoadConfig(); err != nil {
 			yellow.Fprintf(out, "Warning: Failed to load MCP config: %v\n", err)
@@ -169,6 +170,7 @@ func NewAgentWithRuntime(model string, provider api.Provider, headless bool, run
 		cwd, err := os.Getwd()
 		if err == nil {
 			lspClient = lsp.NewClient(cwd)
+			lspClient.SetOutput(out)
 			// Config形式からLSP形式に変換
 			servers := make(map[string]lsp.ServerConfig)
 			for lang, serverCfg := range cfg.LSP.Servers {

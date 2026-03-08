@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"sync"
@@ -23,6 +24,7 @@ type Client struct {
 	servers map[string]*Server      // language key -> server
 	configs map[string]ServerConfig // language key -> config
 	rootURI string
+	output  io.Writer
 }
 
 // NewClient creates a new LSP client
@@ -32,6 +34,19 @@ func NewClient(rootPath string) *Client {
 		configs: make(map[string]ServerConfig),
 		rootURI: FileToURI(rootPath),
 	}
+}
+
+// SetOutput は Client の出力先を設定する。
+func (c *Client) SetOutput(w io.Writer) {
+	c.output = w
+}
+
+// out は Client の出力先を返す。nil なら os.Stdout へ fallback する。
+func (c *Client) out() io.Writer {
+	if c.output != nil {
+		return c.output
+	}
+	return os.Stdout
 }
 
 // SetConfigs sets the server configurations
@@ -86,7 +101,7 @@ func (c *Client) GetServer(ctx context.Context, language string) (*Server, error
 	}
 
 	c.servers[serverKey] = server
-	fmt.Printf("🔌 LSP server '%s' started for %s\n", config.Command, language)
+	fmt.Fprintf(c.out(), "🔌 LSP server '%s' started for %s\n", config.Command, language)
 	return server, nil
 }
 
@@ -106,7 +121,7 @@ func (c *Client) Close() {
 
 	for lang, server := range c.servers {
 		if err := server.Close(); err != nil {
-			fmt.Printf("Warning: failed to close LSP server for %s: %v\n", lang, err)
+			fmt.Fprintf(c.out(), "Warning: failed to close LSP server for %s: %v\n", lang, err)
 		}
 	}
 	c.servers = make(map[string]*Server)

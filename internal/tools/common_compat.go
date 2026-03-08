@@ -61,7 +61,3 @@ var getCurrentTime = common.GetCurrentTime
 // 関数エイリアス - Image
 var LoadImage = common.LoadImage
 var FormatSize = common.FormatSize
-
-// 色エイリアス
-var cyan = common.Cyan
-var dim = common.Dim

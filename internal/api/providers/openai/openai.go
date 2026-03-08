@@ -69,7 +69,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	cfg := tools.ConfigFromContext(ctx)
 	isResponses := cfg.IsResponsesAPIModel(model)
 	if os.Getenv("XELYON_DEBUG_OPENAI") == "1" {
-		fmt.Printf("[DEBUG OpenAI] ChatWithTools model=%s, isResponsesAPI=%v\n", model, isResponses)
+		fmt.Fprintf(api.ErrorWriterFromContext(ctx), "[DEBUG OpenAI] ChatWithTools model=%s, isResponsesAPI=%v\n", model, isResponses)
 	}
 	if isResponses {
 		return p.chatWithResponses(ctx, systemPrompt, history, model)

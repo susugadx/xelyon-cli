@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -228,10 +229,18 @@ func isBashReadOnly(command string) bool {
 	return false
 }
 
+// PreviewToolCallWithWriter は指定 writer にツール情報を表示する（実行はしない）。
+func PreviewToolCallWithWriter(w io.Writer, tc *ToolCall) {
+	if w == nil {
+		w = os.Stdout
+	}
+	color.New(color.FgCyan).Fprintf(w, "🔧 Tool: %s (Dry Run)\n", tc.Tool)
+	printToolArgs(w, tc)
+}
+
 // PreviewToolCall displays tool information without executing it
 func PreviewToolCall(tc *ToolCall) {
-	cyan.Printf("🔧 Tool: %s (Dry Run)\n", tc.Tool)
-	printToolArgs(os.Stdout, tc)
+	PreviewToolCallWithWriter(os.Stdout, tc)
 }
 
 // isStreamingTool はストリーミング出力を行うツールか判定
@@ -259,7 +268,7 @@ func displayCollapsedOutput(w io.Writer, output string) {
 		strings.HasPrefix(output, "No ") {
 		// 1行メッセージはそのまま
 		if !strings.Contains(output, "\n") {
-			dim.Printf("⎿  %s\n", output)
+			color.New(color.Faint).Fprintf(w, "⎿  %s\n", output)
 			return
 		}
 	}

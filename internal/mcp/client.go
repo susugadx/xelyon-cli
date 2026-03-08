@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -49,6 +50,7 @@ type Manager struct {
 	sessions    map[string]*mcp.ClientSession
 	tools       []MCPTool
 	healthCheck map[string]time.Time // サーバーごとの最終正常接続時刻
+	output      io.Writer
 }
 
 // 安全なMCPコマンドのホワイトリスト
@@ -68,6 +70,19 @@ func NewManager() *Manager {
 		tools:       []MCPTool{},
 		healthCheck: make(map[string]time.Time),
 	}
+}
+
+// SetOutput は Manager の出力先を設定する。
+func (m *Manager) SetOutput(w io.Writer) {
+	m.output = w
+}
+
+// out は Manager の出力先を返す。nil なら os.Stdout へ fallback する。
+func (m *Manager) out() io.Writer {
+	if m.output != nil {
+		return m.output
+	}
+	return os.Stdout
 }
 
 // validateMCPCommand はMCPコマンドの安全性を検証
@@ -191,8 +206,8 @@ func (m *Manager) LoadConfig() error {
 			return fmt.Errorf("failed to write default config: %w", err)
 		}
 
-		fmt.Printf("📄 Created default MCP config at %s\n", configPath)
-		fmt.Println("ℹ️  Please edit the config file to add your MCP servers")
+		fmt.Fprintf(m.out(), "📄 Created default MCP config at %s\n", configPath)
+		fmt.Fprintln(m.out(), "ℹ️  Please edit the config file to add your MCP servers")
 		m.config = &defaultConfig
 		return nil
 	}
@@ -224,13 +239,13 @@ func (m *Manager) Connect(ctx context.Context) error {
 
 	for name, serverConfig := range m.config.MCPServers {
 		if serverConfig.Disabled {
-			fmt.Printf("⏭️  MCP server '%s' is disabled, skipping\n", name)
+			fmt.Fprintf(m.out(), "⏭️  MCP server '%s' is disabled, skipping\n", name)
 			continue
 		}
 
 		// コマンドの安全性を検証
 		if err := validateMCPCommand(serverConfig.Command); err != nil {
-			fmt.Printf("⚠️  MCP server '%s' blocked: %v\n", name, err)
+			fmt.Fprintf(m.out(), "⚠️  MCP server '%s' blocked: %v\n", name, err)
 			continue
 		}
 
@@ -243,7 +258,7 @@ func (m *Manager) Connect(ctx context.Context) error {
 		session, err := client.Connect(ctx, transport, nil)
 		if err != nil {
 			// 接続失敗は警告のみ、続行
-			fmt.Printf("⚠️  MCP server '%s' connection failed: %v\n", name, err)
+			fmt.Fprintf(m.out(), "⚠️  MCP server '%s' connection failed: %v\n", name, err)
 			continue
 		}
 
@@ -252,7 +267,7 @@ func (m *Manager) Connect(ctx context.Context) error {
 		// ツール一覧を取得
 		toolsResult, err := session.ListTools(ctx, nil)
 		if err != nil {
-			fmt.Printf("⚠️  Failed to list tools from '%s': %v\n", name, err)
+			fmt.Fprintf(m.out(), "⚠️  Failed to list tools from '%s': %v\n", name, err)
 			continue
 		}
 
@@ -275,9 +290,9 @@ func (m *Manager) Connect(ctx context.Context) error {
 		}
 
 		if skipped > 0 {
-			fmt.Printf("🔌 MCP server '%s' connected (%d tools, %d filtered out)\n", name, registered, skipped)
+			fmt.Fprintf(m.out(), "🔌 MCP server '%s' connected (%d tools, %d filtered out)\n", name, registered, skipped)
 		} else {
-			fmt.Printf("🔌 MCP server '%s' connected (%d tools)\n", name, registered)
+			fmt.Fprintf(m.out(), "🔌 MCP server '%s' connected (%d tools)\n", name, registered)
 		}
 	}
 
@@ -318,7 +333,7 @@ func (m *Manager) CallTool(ctx context.Context, serverName, toolName string, arg
 			} else if result.IsError {
 				errMsg = "tool returned error"
 			}
-			fmt.Printf("⚠️  MCP tool '%s' call attempt %d failed: %s (retrying...)\n", toolName, attempt, errMsg)
+			fmt.Fprintf(m.out(), "⚠️  MCP tool '%s' call attempt %d failed: %s (retrying...)\n", toolName, attempt, errMsg)
 			shift := min(attempt-1, 30)
 			time.Sleep(time.Duration(1<<uint(shift)) * time.Second)
 		}
@@ -453,9 +468,9 @@ func (m *Manager) Reconnect(ctx context.Context, serverName string) error {
 
 	m.healthCheck[serverName] = time.Now()
 	if skipped > 0 {
-		fmt.Printf("🔌 MCP server '%s' reconnected (%d tools, %d filtered out)\n", serverName, registered, skipped)
+		fmt.Fprintf(m.out(), "🔌 MCP server '%s' reconnected (%d tools, %d filtered out)\n", serverName, registered, skipped)
 	} else {
-		fmt.Printf("🔌 MCP server '%s' reconnected (%d tools)\n", serverName, registered)
+		fmt.Fprintf(m.out(), "🔌 MCP server '%s' reconnected (%d tools)\n", serverName, registered)
 	}
 	return nil
 }

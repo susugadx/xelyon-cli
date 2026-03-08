@@ -152,7 +152,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	}
 
 	if api.IsThinkingEnabled(ctx) {
-		yellow.Println("⚠️  Warning: OpenRouter does not support Extended Thinking. Proceeding without it.")
+		yellow.Fprintln(api.OutputWriterFromContext(ctx), "⚠️  Warning: OpenRouter does not support Extended Thinking. Proceeding without it.")
 	}
 
 	// メッセージ構築

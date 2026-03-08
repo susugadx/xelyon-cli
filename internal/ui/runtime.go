@@ -7,6 +7,8 @@ import (
 	"io"
 	"os"
 	"sync"
+
+	"golang.org/x/term"
 )
 
 // Runtime は UI/terminal の入出力状態を session 単位で保持する。
@@ -18,6 +20,8 @@ type Runtime struct {
 	promptReader *MultilineReader
 	simpleReader *bufio.Reader
 	spinner      *Spinner
+	logLevel     LogLevel
+	logLevelSet  bool
 }
 
 // NewRuntime は UI/terminal 用の runtime を作成する。
@@ -88,6 +92,30 @@ func (r *Runtime) ErrorOutput() io.Writer {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.err
+}
+
+// SetLogLevel は runtime のログレベルを設定する。
+func (r *Runtime) SetLogLevel(level LogLevel) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.logLevel = level
+	r.logLevelSet = true
+}
+
+// LogLevel は runtime のログレベルを返す。未設定の場合は global に fallback する。
+func (r *Runtime) LogLevel() LogLevel {
+	if r == nil {
+		return GetLogLevel()
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if !r.logLevelSet {
+		return GetLogLevel()
+	}
+	return r.logLevel
 }
 
 // SetPromptReader は runtime に紐づく共有 MultilineReader を設定する。
@@ -189,6 +217,22 @@ func (r *Runtime) ResetTerminalState() {
 	out := r.Output()
 	_, _ = fmt.Fprint(out, "\033[?25h")
 	_, _ = fmt.Fprint(out, "\r\033[K")
+}
+
+// IsTerminal は runtime の出力先が端末かどうかを返す。
+func (r *Runtime) IsTerminal() bool {
+	if r == nil {
+		return DefaultRuntime().IsTerminal()
+	}
+	return isFileTerminal(r.Output())
+}
+
+// isFileTerminal は writer が *os.File かつ端末であれば true を返す。
+func isFileTerminal(w io.Writer) bool {
+	if f, ok := w.(*os.File); ok {
+		return term.IsTerminal(int(f.Fd()))
+	}
+	return false
 }
 
 type runtimeContextKey struct{}
