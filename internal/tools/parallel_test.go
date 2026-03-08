@@ -421,6 +421,97 @@ func TestExecuteToolCallsParallel_Empty(t *testing.T) {
 	}
 }
 
+// --- ExecutionContext の goroutine 安全性テスト ---
+
+func TestExecutionContext_ConcurrentReadWrite(t *testing.T) {
+	// 複数 goroutine から同時に Set/Get しても panic / race しないことを確認。
+	// go test -race で実行すると data race を検出できる。
+	var wg sync.WaitGroup
+	ctx1 := ExecutionContext{ProviderName: "provider-A", Model: "model-A"}
+	ctx2 := ExecutionContext{ProviderName: "provider-B", Model: "model-B"}
+
+	// Writer goroutine
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 100; i++ {
+			if i%2 == 0 {
+				SetExecutionContext(ctx1)
+			} else {
+				SetExecutionContext(ctx2)
+			}
+		}
+	}()
+
+	// Reader goroutines
+	for r := 0; r < 4; r++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 100; i++ {
+				got := GetExecutionContext()
+				// 値は ctx1 か ctx2 か空のいずれか（Set 前の初期値）
+				if got.ProviderName != "" && got.ProviderName != "provider-A" && got.ProviderName != "provider-B" {
+					t.Errorf("unexpected ProviderName: %q", got.ProviderName)
+				}
+			}
+		}()
+	}
+	wg.Wait()
+
+	ClearExecutionContext()
+	got := GetExecutionContext()
+	if got.ProviderName != "" || got.Model != "" {
+		t.Errorf("after Clear, expected empty context, got %+v", got)
+	}
+}
+
+func TestExecutionContext_ParallelBatchPattern(t *testing.T) {
+	// executeToolCallsWithParallel の実際のパターンを模倣:
+	// Set → 複数 goroutine で Get（読み取りのみ）→ Clear
+	expected := ExecutionContext{ProviderName: "test-provider", Model: "test-model"}
+	SetExecutionContext(expected)
+
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			got := GetExecutionContext()
+			if got.ProviderName != expected.ProviderName {
+				t.Errorf("goroutine got ProviderName=%q, want %q", got.ProviderName, expected.ProviderName)
+			}
+			if got.Model != expected.Model {
+				t.Errorf("goroutine got Model=%q, want %q", got.Model, expected.Model)
+			}
+		}()
+	}
+	wg.Wait()
+	ClearExecutionContext()
+}
+
+// --- ExecuteQuiet の stdout 抑制テスト ---
+
+func TestExecuteQuiet_NoHeaderOutput(t *testing.T) {
+	// ExecuteQuiet は "🔧 Tool: ..." ヘッダーや折りたたみ表示を出力しない。
+	// ここでは関数が正常に呼べることと、結果を返すことを確認する。
+	// （stdout のキャプチャは testing では煩雑なため、機能テストのみ）
+	tc := &ToolCall{
+		Tool: "list_dir",
+		Args: map[string]string{"path": "."},
+	}
+	result, change := ExecuteQuiet(tc)
+
+	// list_dir は結果を返すはず
+	if result == "" {
+		t.Error("ExecuteQuiet returned empty result")
+	}
+	// list_dir は FileChange を返さない
+	if change != nil {
+		t.Error("ExecuteQuiet returned non-nil change for list_dir")
+	}
+}
+
 func TestIsBashParallelSafe(t *testing.T) {
 	tests := []struct {
 		command  string

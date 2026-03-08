@@ -69,11 +69,37 @@ func printToolArgs(tc *ToolCall) {
 	fmt.Println()
 }
 
-// Execute はツールを実行（Registry経由）
+// Execute はツールを実行（Registry経由）。
+// ツールヘッダー（🔧 Tool: ...）、引数表示、折りたたみ結果表示を stdout に出力する。
+// 並列実行では stdout が interleave するため、ExecuteQuiet を使用すること。
 func Execute(tc *ToolCall) (string, *FileChange) {
 	cyan.Printf("🔧 Tool: %s\n", tc.Tool)
 	printToolArgs(tc)
 
+	result, change := executeCore(tc)
+
+	// ツール出力の折りたたみ表示（bashはストリーミング表示済みなので除外）
+	if !isStreamingTool(tc.Tool) && result != "" {
+		displayCollapsedOutput(result)
+	}
+
+	return result, change
+}
+
+// ExecuteQuiet はツールを実行するが、ヘッダー・引数・折りたたみ結果の stdout 出力を抑制する。
+// parallel path（goroutine 内）から呼び出すために使用する。
+//
+// 注意: Tool.Run() 内部の直接 stdout 出力（read_file の "📄 Read: ..." 等）は
+// 抑制できない。これは Tool interface が io.Writer を受け取らないため。
+// parallel-safe ツール（read_file, list_dir, search_code 等）は比較的少量の
+// ステータス出力のみであり、interleave しても致命的ではないと判断している。
+func ExecuteQuiet(tc *ToolCall) (string, *FileChange) {
+	return executeCore(tc)
+}
+
+// executeCore は Execute / ExecuteQuiet の共通ロジック。
+// デフォルト値設定 → Registry 実行 → キャッシュ無効化 → 空結果補完。
+func executeCore(tc *ToolCall) (string, *FileChange) {
 	// デフォルト値の設定（Registry実行前）
 	// list_dir, git_addでpathが空の場合"."を設定
 	if tc.Args["path"] == "" {
@@ -92,11 +118,6 @@ func Execute(tc *ToolCall) (string, *FileChange) {
 	// ツール出力が空の場合は補完
 	if strings.TrimSpace(result) == "" {
 		result = "(no output)"
-	}
-
-	// ツール出力の折りたたみ表示（bashはストリーミング表示済みなので除外）
-	if !isStreamingTool(tc.Tool) && result != "" {
-		displayCollapsedOutput(result)
 	}
 
 	return result, change

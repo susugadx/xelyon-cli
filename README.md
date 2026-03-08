@@ -62,9 +62,13 @@ LLMが1回の応答で複数のread-onlyツールを返した場合、並列実�
 - **bash**: `ls`, `find`, `rg`, `grep`, `cat`, `git status`, `git diff`, `git log` 等のread-onlyコマンド（allowlist ベース）のみ並列化
 - **sequential ツール**: `write_file`, `str_replace`, `delete_file`, MCP ツール等の副作用ありツールは従来通り順次実行
 - mixed case: parallel-safe 群を先に並列実行 → sequential 群を順次実行 → 結果は元の tool call 順で配送
-- 最大並列数: 4（セマフォ制御）
+- 最大並列数: 4（セマフォ制御、固定値）
 - 通常モード・Plan Mode 両方で同じポリシーを適用（`executeToolCallsWithParallel` 共通 executor）
-- **安全性**: ループ検知・deprecated ツールフィルタリングは実行前（Phase 0）に評価。Investigation Phase は影響なし
+- **安全性**: ループ検知・deprecated ツールフィルタリングは実行前（Phase 0）に評価。Investigation Phase は独自ループ（`executeToolOnly`）を使用し並列実行の対象外
+- **stdout 制御**: 並列パスでは `ExecuteQuiet()` を使用しヘッダー・引数表示を抑制。`Tool.Run()` 内部の出力（例: `read_file` の `📄 Read: ...`）は抑制対象外
+- **キャンセル**: `context.Context` は goroutine 起動前・実行前にチェック。`Tool.Run()` は ctx を受け取らないため、実行中のツールは中断不可（既知の制約）
+- **ExecutionContext**: process-global（`sync.RWMutex` 保護）。並列 batch 開始前に Set → goroutine は Read のみ → batch 完了後に Clear
+- **FC / text-based 差異**: FC（tool_call_id あり）はループ中断時に role=tool で応答。text-based は role=user。text-based の後続ツールにはダミーメッセージを追加しない（仕様）
 
 ### 🔍 コードレビュー & リファクタリング
 `/review` でセキュリティ・テストカバレッジをチェック。

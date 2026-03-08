@@ -411,3 +411,190 @@ func TestExecuteToolCallsWithParallel_TextBased_Skip(t *testing.T) {
 		t.Error("expected text-based skip message in history")
 	}
 }
+
+// --- Test: FC loop detection message matches old shouldAbortToolLoopWithResponse format ---
+
+func TestLoopDetection_FC_MessageConsistency(t *testing.T) {
+	cfg := config.GetGlobalConfig()
+	origThreshold := cfg.LoopDetection.Threshold
+	cfg.LoopDetection.Threshold = 2
+	defer func() { cfg.LoopDetection.Threshold = origThreshold }()
+
+	provider := &mockProvider{name: "test"}
+	agent := NewAgent("test-model", provider, false)
+	agent.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
+
+	toolCalls := []*tools.ToolCall{
+		{ID: "c1", Tool: "read_file", Args: map[string]string{"path": "/x.go"}, RawArgs: map[string]any{"path": "/x.go"}},
+		{ID: "c2", Tool: "read_file", Args: map[string]string{"path": "/x.go"}, RawArgs: map[string]any{"path": "/x.go"}},
+	}
+	agent.addToolCallsToHistory("test", toolCalls)
+	historyBefore := len(agent.History)
+
+	var lastTC *tools.ToolCall
+	count := 0
+	loopDetectFn := func(tc *tools.ToolCall) bool {
+		if isSameToolCall(tc, lastTC) {
+			count++
+			if count >= cfg.LoopDetection.Threshold {
+				return true
+			}
+		} else {
+			count = 1
+		}
+		lastTC = tc
+		return false
+	}
+
+	agent.executeToolCallsWithParallel(context.Background(), toolCalls, loopDetectFn, nil,
+		func(_ int, _ *tools.ToolCall, _ string, _ *tools.FileChange) {})
+
+	// 旧実装と同じフォーマット: "[SYSTEM] Tool loop detected: read_file was called 2 times. ..."
+	msgs := agent.History[historyBefore:]
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 loop message, got %d", len(msgs))
+	}
+	msg := msgs[0]
+	if msg.Role != "tool" {
+		t.Errorf("loop message role = %q, want 'tool'", msg.Role)
+	}
+	if msg.ToolCallID != "c2" {
+		t.Errorf("loop message ToolCallID = %q, want 'c2'", msg.ToolCallID)
+	}
+	// 旧実装のフォーマット: "[SYSTEM] Tool loop detected: %s was called %d times. Stopping to prevent infinite loop."
+	expectedContent := "[SYSTEM] Tool loop detected: read_file was called 2 times. Stopping to prevent infinite loop."
+	if msg.Content != expectedContent {
+		t.Errorf("loop message content = %q, want %q", msg.Content, expectedContent)
+	}
+}
+
+// --- Test: Text-based loop detection message matches old format ---
+
+func TestLoopDetection_TextBased_TriggerMessage(t *testing.T) {
+	cfg := config.GetGlobalConfig()
+	origThreshold := cfg.LoopDetection.Threshold
+	cfg.LoopDetection.Threshold = 2
+	defer func() { cfg.LoopDetection.Threshold = origThreshold }()
+
+	provider := &mockProvider{name: "test"}
+	agent := NewAgent("test-model", provider, false)
+	agent.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
+
+	// ID="" = text-based
+	toolCalls := []*tools.ToolCall{
+		{Tool: "read_file", Args: map[string]string{"path": "/x.go"}, RawArgs: map[string]any{"path": "/x.go"}},
+		{Tool: "read_file", Args: map[string]string{"path": "/x.go"}, RawArgs: map[string]any{"path": "/x.go"}},
+	}
+	historyBefore := len(agent.History)
+
+	var lastTC *tools.ToolCall
+	count := 0
+	loopDetectFn := func(tc *tools.ToolCall) bool {
+		if isSameToolCall(tc, lastTC) {
+			count++
+			if count >= cfg.LoopDetection.Threshold {
+				return true
+			}
+		} else {
+			count = 1
+		}
+		lastTC = tc
+		return false
+	}
+
+	agent.executeToolCallsWithParallel(context.Background(), toolCalls, loopDetectFn, nil,
+		func(_ int, _ *tools.ToolCall, _ string, _ *tools.FileChange) {})
+
+	msgs := agent.History[historyBefore:]
+	// text-based trigger: role="user", "[SYSTEM WARNING] ..."
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 loop message, got %d", len(msgs))
+	}
+	if msgs[0].Role != "user" {
+		t.Errorf("text-based loop message role = %q, want 'user'", msgs[0].Role)
+	}
+	if !strings.Contains(msgs[0].Content, "[SYSTEM WARNING]") {
+		t.Errorf("text-based loop message should contain '[SYSTEM WARNING]', got %q", msgs[0].Content)
+	}
+}
+
+// --- Test: Text-based subsequent tools after loop get NO dummy message (by design) ---
+
+func TestLoopDetection_TextBased_SubsequentNoDummy(t *testing.T) {
+	cfg := config.GetGlobalConfig()
+	origThreshold := cfg.LoopDetection.Threshold
+	cfg.LoopDetection.Threshold = 2
+	defer func() { cfg.LoopDetection.Threshold = origThreshold }()
+
+	provider := &mockProvider{name: "test"}
+	agent := NewAgent("test-model", provider, false)
+	agent.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
+
+	// text-based (ID="") + 後続ツール
+	toolCalls := []*tools.ToolCall{
+		{Tool: "read_file", Args: map[string]string{"path": "/x.go"}, RawArgs: map[string]any{"path": "/x.go"}},
+		{Tool: "read_file", Args: map[string]string{"path": "/x.go"}, RawArgs: map[string]any{"path": "/x.go"}}, // trigger
+		{Tool: "search_code", Args: map[string]string{"pattern": "y"}, RawArgs: map[string]any{"pattern": "y"}}, // subsequent
+	}
+	historyBefore := len(agent.History)
+
+	var lastTC *tools.ToolCall
+	count := 0
+	loopDetectFn := func(tc *tools.ToolCall) bool {
+		if isSameToolCall(tc, lastTC) {
+			count++
+			if count >= cfg.LoopDetection.Threshold {
+				return true
+			}
+		} else {
+			count = 1
+		}
+		lastTC = tc
+		return false
+	}
+
+	agent.executeToolCallsWithParallel(context.Background(), toolCalls, loopDetectFn, nil,
+		func(_ int, _ *tools.ToolCall, _ string, _ *tools.FileChange) {})
+
+	msgs := agent.History[historyBefore:]
+	// text-based: trigger(1) のみ。後続(search_code) にはダミーなし = 仕様。
+	// 旧実装でも text-based 後続にダミーは追加されなかった。
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 message (trigger only, no dummy for text-based subsequent), got %d", len(msgs))
+	}
+}
+
+// --- Test: Cancel before execution skips all tools ---
+
+func TestExecuteToolCallsWithParallel_CancelBeforeExecution(t *testing.T) {
+	provider := &mockProvider{name: "test"}
+	agent := NewAgent("test-model", provider, false)
+	agent.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
+
+	toolCalls := []*tools.ToolCall{
+		{ID: "c0", Tool: "read_file", Args: map[string]string{"path": "/a.go"}, RawArgs: map[string]any{"path": "/a.go"}},
+		{ID: "c1", Tool: "write_file", Args: map[string]string{"path": "/b.go"}, RawArgs: map[string]any{"path": "/b.go"}},
+	}
+	agent.addToolCallsToHistory("test", toolCalls)
+
+	// 既にキャンセル済みの ctx
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	var callbackResults []string
+	callback := func(_ int, tc *tools.ToolCall, result string, change *tools.FileChange) {
+		callbackResults = append(callbackResults, result)
+	}
+
+	agent.executeToolCallsWithParallel(ctx, toolCalls, nil, nil, callback)
+
+	// 全ツールが "Error: context cancelled" を返すこと
+	if len(callbackResults) != 2 {
+		t.Fatalf("callback count = %d, want 2", len(callbackResults))
+	}
+	for i, r := range callbackResults {
+		if !strings.Contains(r, "cancel") {
+			t.Errorf("callbackResults[%d] = %q, want containing 'cancel'", i, r)
+		}
+	}
+}

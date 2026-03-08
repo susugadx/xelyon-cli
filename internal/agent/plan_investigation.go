@@ -13,8 +13,12 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/tools/dev"
 )
 
-// runInvestigationPhase は調査フェーズを実行
-// テキスト出力された計画（Plan JSON）を ExtractPlanJSON/ParsePlan でパースし、Plan を返す
+// runInvestigationPhase は調査フェーズを実行する。
+// テキスト出力された計画（Plan JSON）を ExtractPlanJSON/ParsePlan でパースし、Plan を返す。
+//
+// NOTE: 本フェーズは executeToolCallsWithParallel を使用しない。
+// SafetyHigh ツール制約のある独自ループ（executeToolOnly）を持ち、
+// 並列実行の対象外である。ツールは1つずつ順次実行される。
 func (a *Agent) runInvestigationPhase(ctx context.Context) (*plan.Plan, error) {
 	cfg := config.GetGlobalConfig()
 	maxIterations := cfg.General.ToolLoopLimit

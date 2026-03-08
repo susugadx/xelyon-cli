@@ -6,7 +6,9 @@ import (
 	"sync"
 )
 
-// MaxParallelTools は並列実行する tool の最大数
+// MaxParallelTools は並列実行する tool の最大数。
+// 現在は固定値。将来的に config.yaml の parallel.max_workers 等で
+// 設定可能にする余地がある。
 const MaxParallelTools = 4
 
 // parallelSafeTools は静的に parallel-safe と判定されるツール名のセット。

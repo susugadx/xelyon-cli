@@ -454,12 +454,29 @@ func (a *Agent) handleFileChange(change *tools.FileChange) {
 }
 
 // ToolExecCallback は executeToolCallsWithParallel の呼び出し元が各結果を処理するコールバック。
-// 元のインデックス順で呼ばれる（skipされたツールには呼ばれない）。
+// 元のインデックス順で呼ばれる（skip / loopAbort されたツールには呼ばれない）。
 type ToolExecCallback func(idx int, tc *tools.ToolCall, result string, change *tools.FileChange)
 
 // executeToolForParallel は並列実行用のツール実行関数。
-// spinner / SetGlobalSpinner / SetExecutionContext を使用しないため、
-// goroutine から安全に呼び出せる。ctx がキャンセル済みなら早期リターン。
+// goroutine から安全に呼び出せるよう、以下を省略している:
+//   - spinner / SetGlobalSpinner: goroutine 内で global spinner を操作すると競合する
+//   - SetExecutionContext: parallel batch 開始前に1回だけ設定済み（context.go 参照）
+//
+// stdout 出力の抑制:
+//
+//	tools.ExecuteQuiet を使用し、ヘッダー・引数・折りたたみ出力を抑制する。
+//	ただし Tool.Run() 内部の直接出力（read_file の "📄 Read: ..." 等）は
+//	Tool interface が io.Writer を受け取らないため抑制できない。
+//	parallel-safe ツールは比較的少量のステータス出力のみであり、
+//	interleave しても致命的ではないと判断している。
+//
+// cancel の実効性:
+//
+//	ctx.Err() を実行前にチェックして早期リターンする。
+//	ただし tools.ExecuteQuiet → Tool.Run() は ctx を受け取らないため、
+//	実行中のキャンセルは効かない。Tool interface への ctx 伝播は将来課題。
+//	bash のみ ExecuteBashWithContext(ctx) が存在するが、Registry 経由の
+//	Tool.Run() からは使えない。
 func (a *Agent) executeToolForParallel(ctx context.Context, tc *tools.ToolCall) (string, *tools.FileChange) {
 	if ctx.Err() != nil {
 		return "Error: context cancelled", nil
@@ -470,9 +487,8 @@ func (a *Agent) executeToolForParallel(ctx context.Context, tc *tools.ToolCall) 
 		a.ToolCache.CheckNegativeCache(tc.Tool, tc.RawArgs)
 	}
 
-	// spinner なしでツール実行（tools.Execute は内部で stdout に出力するため
-	// 並列時に出力がインターリーブする可能性がある。これは既知の制約。）
-	result, change := tools.Execute(tc)
+	// ExecuteQuiet: ヘッダー・引数・折りたたみ出力を抑制（parallel path 用）
+	result, change := tools.ExecuteQuiet(tc)
 
 	if a.ToolCache != nil {
 		a.ToolCache.SetNegativeCache(tc.Tool, tc.RawArgs, result)
@@ -484,15 +500,40 @@ func (a *Agent) executeToolForParallel(ctx context.Context, tc *tools.ToolCall) 
 // executeToolCallsWithParallel は parallel-safe なツールを並列実行し、sequential なツールを順次実行する。
 // 通常モードと Plan Mode の両方で使用する共通 executor。
 //
+// NOTE: Investigation Phase（plan_investigation.go）は本 executor を使用しない。
+// Investigation Phase は SafetyHigh 制約のある独自ループ（executeToolOnly）を持ち、
+// 並列実行の対象外である。
+//
 // 処理フロー:
 //
 //	Phase 0: 実行前フィルタリング（元の tool call 順で走査）
 //	  - loopDetectFn: ループ検知。true を返すとそのツール以降すべてを中止。
-//	    履歴には変更を加えない（executor がメッセージを追加する）。
+//	    履歴には変更を加えない（executor が Phase 2 でメッセージを追加する）。
 //	  - skipFn: スキップ判定（例: deprecated planning tools）。
 //	    (skip=true, msg) を返すとそのツールを実行せずに msg を結果として扱う。
+//
+//	  評価順序: loopDetectFn → skipFn（この順序は重要）
+//	    - loopDetectFn を先に評価する理由: 呼び出し元の loopDetectFn は内部で
+//	      lastToolCall / sameCallCount を更新する。skip 対象ツールにもループ検知を
+//	      適用することで、skip 対象ツールも lastToolCall の連続性に参加する。
+//	      これは旧 sequential 実装（shouldAbortToolLoopWithResponse が全ツールに
+//	      適用されていた）と一致する。
+//	    - skipFn はループ検知の後に評価されるため、skip 対象ツールがループの
+//	      一部として数えられた後にスキップされる。
+//
 //	Phase 1: 実行（parallel-safe は goroutine、sequential は順次）
 //	Phase 2: 結果配送（元の tool call 順で callback を呼ぶ）
+//
+// loop detection 履歴メッセージ:
+//
+//	旧実装（shouldAbortToolLoopWithResponse）と意味的に同等のメッセージを生成する:
+//	  - FC trigger tool: role="tool", "[SYSTEM] Tool loop detected: ..."
+//	  - text-based trigger: role="user", "[SYSTEM WARNING] ..."
+//	  - FC 後続 tool: role="tool", "[SYSTEM] Skipped due to tool loop detection."
+//	  - text-based 後続 tool: 何も追加しない（仕様）
+//	    → text-based パスでは tool_call_id がないため role="tool" メッセージを
+//	      追加できない。旧実装でも text-based 後続 tool にはダミーを追加して
+//	      いなかったため、この挙動を維持している。
 //
 // loopDetected: ループが検知された場合に true を返す。
 func (a *Agent) executeToolCallsWithParallel(
@@ -528,7 +569,9 @@ func (a *Agent) executeToolCallsWithParallel(
 			entries[i] = entry{status: statusLoopAbort}
 			continue
 		}
-		// ループ検知（スキップ対象ツールにも適用して lastToolCall を更新する）
+		// loopDetectFn を skipFn より先に評価する。
+		// 理由: loopDetectFn 内で lastToolCall / sameCallCount が更新されるため、
+		// skip 対象ツールも連続性の判定に参加する必要がある。
 		if loopDetectFn != nil && loopDetectFn(tc) {
 			entries[i] = entry{status: statusLoopAbort}
 			loopDetected = true
@@ -536,7 +579,7 @@ func (a *Agent) executeToolCallsWithParallel(
 			loopTriggerIdx = i
 			continue
 		}
-		// スキップ判定（ループ検知の後に評価）
+		// skipFn はループ検知の後に評価する。
 		if skipFn != nil {
 			if skip, msg := skipFn(tc); skip {
 				entries[i] = entry{status: statusSkip, skipMsg: msg}
@@ -566,9 +609,19 @@ func (a *Agent) executeToolCallsWithParallel(
 		}
 	}
 
-	// Phase 1a: parallel-safe 群を並列実行（spinner なし、ctx チェックあり）
+	// Phase 1a: parallel-safe 群を並列実行
+	//
+	// ExecutionContext（tools/context.go）は process-global 変数だが sync.RWMutex で保護されている。
+	// ここでは parallel batch 開始前に1回だけ Set し、全 goroutine 完了後に Clear する。
+	// goroutine 内では GetExecutionContext()（RLock）で読み取るのみ。
+	// sequential phase（Phase 1b）の executeToolWithSpinner は独自に Set/Clear するため、
+	// Phase 1a の Clear 後でも正しく動作する。
+	//
+	// cancel の実効性:
+	//   各 goroutine 起動前に ctx.Err() をチェックし、executeToolForParallel 内でも
+	//   再チェックする。ただし Tool.Run() 自体は ctx を受け取らないため、
+	//   実行開始後のキャンセルは効かない（次の goroutine 起動時にスキップされる）。
 	if len(parallelEntries) > 0 {
-		// ExecutionContext を並列実行前に1回だけ設定（goroutine 内では触らない）
 		tools.SetExecutionContext(tools.ExecutionContext{
 			ProviderName: a.ProviderName,
 			Model:        a.CurrentModel,
@@ -613,6 +666,7 @@ func (a *Agent) executeToolCallsWithParallel(
 	}
 
 	// ── Phase 2: 結果配送（元の tool call 順） ──
+	// 旧 shouldAbortToolLoopWithResponse と意味的に同等のメッセージを生成する。
 	cfg := config.GetGlobalConfig()
 	threshold := cfg.LoopDetection.Threshold
 
@@ -624,6 +678,7 @@ func (a *Agent) executeToolCallsWithParallel(
 		case statusSkip:
 			// スキップされたツール: skipMsg を tool result として履歴に追加
 			if tc.ID != "" {
+				// FC: role="tool" + tool_call_id
 				toolMsg := api.Message{
 					Role:       "tool",
 					Content:    e.skipMsg,
@@ -635,6 +690,7 @@ func (a *Agent) executeToolCallsWithParallel(
 					a.session.AddMessageFromAPI(toolMsg, a.CurrentModel)
 				}
 			} else {
+				// text-based: role="user"
 				a.History = append(a.History, api.Message{
 					Role:    "user",
 					Content: fmt.Sprintf("[Tool Result for %s]\n%s", tc.Tool, e.skipMsg),
@@ -644,6 +700,7 @@ func (a *Agent) executeToolCallsWithParallel(
 		case statusLoopAbort:
 			if i == loopTriggerIdx {
 				// ループを引き起こしたツール: 検知メッセージを追加
+				// （旧 shouldAbortToolLoopWithResponse と同じフォーマット）
 				if tc.ID != "" {
 					a.History = append(a.History, api.Message{
 						Role:       "tool",
@@ -658,7 +715,11 @@ func (a *Agent) executeToolCallsWithParallel(
 					})
 				}
 			} else {
-				// ループ後の残りのツール: ダミー結果を追加
+				// ループ後の残りのツール: FC の場合のみダミー結果を追加。
+				// text-based（ID=""）の場合は何も追加しない。これは仕様であり、
+				// 旧実装と一致する。text-based パスでは tool_call_id がないため
+				// role="tool" メッセージを追加できず、role="user" のダミーを
+				// 追加しても LLM の文脈を汚すだけであるため省略している。
 				if tc.ID != "" {
 					a.History = append(a.History, api.Message{
 						Role:       "tool",
