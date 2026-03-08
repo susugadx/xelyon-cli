@@ -95,7 +95,6 @@ func (c *ToolCache) GetFile(path string) (string, bool) {
 		return "", false
 	}
 
-	green.Printf("📦 Cache hit: %s\n", path)
 	c.mu.Lock()
 	entry.AccessedAt = time.Now()
 	c.files[path] = entry
@@ -149,7 +148,6 @@ func (c *ToolCache) GetDir(path string) (string, bool) {
 		return "", false
 	}
 
-	green.Printf("📦 Cache hit: %s\n", path)
 	c.mu.Lock()
 	entry.AccessedAt = time.Now()
 	c.dirs[path] = entry
@@ -256,7 +254,6 @@ func (c *ToolCache) GetSearch(pattern, path string) (string, bool) {
 		return "", false
 	}
 
-	green.Printf("📦 Cache hit: search(%s, %s)\n", pattern, path)
 	c.mu.Lock()
 	entry.AccessedAt = time.Now()
 	c.searches[key] = entry
