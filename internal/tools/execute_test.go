@@ -164,7 +164,7 @@ func (t *testDisplayTool) Run(execCtx ExecutionContext, args map[string]string) 
 	return t.result, nil, nil
 }
 
-func TestExecute_UsesUnifiedToolDisplay(t *testing.T) {
+func TestExecuteWithContext_UsesUnifiedToolDisplay(t *testing.T) {
 	color.NoColor = true
 
 	origTool := DefaultRegistry.GetTool("search_code")
@@ -176,11 +176,7 @@ func TestExecute_UsesUnifiedToolDisplay(t *testing.T) {
 		result: "Found 3 match(es) in 2 file(s)\nstats.go:42: ...\nauto_compress.go:30: ...",
 	})
 
-	oldStdout := os.Stdout
-	oldColorOutput := color.Output
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-	color.Output = w
+	var output bytes.Buffer
 
 	tc := &ToolCall{
 		Tool: "search_code",
@@ -189,27 +185,22 @@ func TestExecute_UsesUnifiedToolDisplay(t *testing.T) {
 			"path":    "internal/agent/",
 		},
 	}
-	result, change := Execute(tc)
-
-	_ = w.Close()
-	os.Stdout = oldStdout
-	color.Output = oldColorOutput
-
-	var buf bytes.Buffer
-	_, _ = io.Copy(&buf, r)
-	output := buf.String()
+	result, change := ExecuteWithContext(ExecutionContext{
+		Stdout: &output,
+		Stderr: &output,
+	}, tc)
 
 	if change != nil {
-		t.Fatalf("Execute() returned unexpected change: %+v", change)
+		t.Fatalf("ExecuteWithContext() returned unexpected change: %+v", change)
 	}
 	if !strings.Contains(result, "Found 3 match(es) in 2 file(s)") {
-		t.Fatalf("Execute() result = %q", result)
+		t.Fatalf("ExecuteWithContext() result = %q", result)
 	}
-	if !strings.Contains(output, "INTERNAL STDOUT") {
-		t.Fatalf("Execute() should keep internal stdout in normal mode, got: %q", output)
+	if !strings.Contains(output.String(), "INTERNAL STDOUT") {
+		t.Fatalf("ExecuteWithContext() should keep internal stdout in normal mode, got: %q", output.String())
 	}
-	if !strings.Contains(output, `🔍 search_code: "threshold" in internal/agent/ → 3 matches, 2 files`) {
-		t.Fatalf("Execute() output missing summary line: %q", output)
+	if !strings.Contains(output.String(), `🔍 search_code: "threshold" in internal/agent/ → 3 matches, 2 files`) {
+		t.Fatalf("ExecuteWithContext() output missing summary line: %q", output.String())
 	}
 }
 
@@ -260,6 +251,31 @@ func (t *testOverlapQuietTool) Run(execCtx ExecutionContext, args map[string]str
 	<-t.release[id]
 	execCtx.Output().Printf("OVERLAP STDOUT %s\n", id)
 	return "result " + id, nil, nil
+}
+
+type testContextIsolationTool struct {
+	started chan string
+	release chan struct{}
+}
+
+func (t *testContextIsolationTool) Name() string {
+	return "context_isolation_test"
+}
+
+func (t *testContextIsolationTool) Description() string {
+	return "context isolation test tool"
+}
+
+func (t *testContextIsolationTool) Parameters() map[string]interface{} {
+	return map[string]interface{}{}
+}
+
+func (t *testContextIsolationTool) Run(execCtx ExecutionContext, args map[string]string) (string, *FileChange, error) {
+	t.started <- execCtx.ProviderName
+	<-t.release
+	value := execCtx.ProviderName + "/" + execCtx.Model
+	execCtx.Output().Printf("CTX %s\n", value)
+	return value, nil, nil
 }
 
 func TestExecuteQuiet_SuppressesInternalStdout(t *testing.T) {
@@ -414,5 +430,83 @@ func TestExecuteQuiet_ParallelOverlapKeepsStdoutSuppressed(t *testing.T) {
 	}
 	if common.IsQuietMode() {
 		t.Fatal("quiet mode should be disabled after all ExecuteQuiet() calls complete")
+	}
+}
+
+func TestExecuteWithContext_ConcurrentContextsRemainIsolated(t *testing.T) {
+	origTool := DefaultRegistry.GetTool("context_isolation_test")
+	t.Cleanup(func() {
+		restoreRegistryTool("context_isolation_test", origTool)
+	})
+
+	started := make(chan string, 2)
+	release := make(chan struct{})
+	DefaultRegistry.Register(&testContextIsolationTool{
+		started: started,
+		release: release,
+	})
+
+	type execResult struct {
+		result string
+		output string
+	}
+
+	ctxs := []ExecutionContext{
+		{ProviderName: "provider-A", Model: "model-A"},
+		{ProviderName: "provider-B", Model: "model-B"},
+	}
+
+	resultsCh := make(chan execResult, len(ctxs))
+	for _, execCtx := range ctxs {
+		execCtx := execCtx
+		go func() {
+			var buf bytes.Buffer
+			execCtx.Stdout = &buf
+			execCtx.Stderr = &buf
+
+			result, _ := ExecuteWithContext(execCtx, &ToolCall{
+				Tool: "context_isolation_test",
+				Args: map[string]string{},
+			})
+			resultsCh <- execResult{result: result, output: buf.String()}
+		}()
+	}
+
+	startedProviders := map[string]bool{}
+	for len(startedProviders) < len(ctxs) {
+		select {
+		case provider := <-started:
+			startedProviders[provider] = true
+		case <-time.After(2 * time.Second):
+			t.Fatal("timed out waiting for ExecuteWithContext calls to start")
+		}
+	}
+	close(release)
+
+	got := map[string]string{}
+	for i := 0; i < len(ctxs); i++ {
+		select {
+		case result := <-resultsCh:
+			got[result.result] = result.output
+		case <-time.After(2 * time.Second):
+			t.Fatal("timed out waiting for ExecuteWithContext result")
+		}
+	}
+
+	for _, execCtx := range ctxs {
+		key := execCtx.ProviderName + "/" + execCtx.Model
+		output, ok := got[key]
+		if !ok {
+			t.Fatalf("missing result for %s", key)
+		}
+		if !strings.Contains(output, "CTX "+key) {
+			t.Fatalf("output for %s missing its own context: %q", key, output)
+		}
+		for _, other := range ctxs {
+			otherKey := other.ProviderName + "/" + other.Model
+			if otherKey != key && strings.Contains(output, otherKey) {
+				t.Fatalf("output for %s leaked other context %s: %q", key, otherKey, output)
+			}
+		}
 	}
 }

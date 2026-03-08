@@ -28,11 +28,14 @@ func argsToJSON(args map[string]any) string {
 	return string(b)
 }
 
-func (a *Agent) toolExecutionContext(stdout, stderr io.Writer) tools.ExecutionContext {
+func (a *Agent) toolExecutionContext(stdin io.Reader, stdout, stderr io.Writer) tools.ExecutionContext {
+	if stdin == nil {
+		stdin = os.Stdin
+	}
 	return tools.ExecutionContext{
 		ProviderName: a.ProviderName,
 		Model:        a.CurrentModel,
-		Stdin:        os.Stdin,
+		Stdin:        stdin,
 		Stdout:       stdout,
 		Stderr:       stderr,
 		PromptReader: a.mlReader,
@@ -51,7 +54,7 @@ func (a *Agent) executeToolWithSpinner(toolCall *tools.ToolCall) (string, *tools
 	spinner.Start(ui.SpinnerMessageForTool(toolCall.Tool))
 	ui.SetGlobalSpinner(spinner)
 
-	result, change := tools.ExecuteWithContext(a.toolExecutionContext(os.Stdout, os.Stderr), toolCall)
+	result, change := tools.ExecuteWithContext(a.toolExecutionContext(os.Stdin, os.Stdout, os.Stderr), toolCall)
 	spinner.Stop()
 	a.recordToolResultOptimizations(toolCall.Tool, result)
 
@@ -504,7 +507,7 @@ func (a *Agent) executeToolForParallel(ctx context.Context, tc *tools.ToolCall) 
 	}
 
 	// ExecuteQuietWithContext: ヘッダー・引数・折りたたみ出力と補助 stdout を抑制（parallel path 用）
-	result, change := tools.ExecuteQuietWithContext(a.toolExecutionContext(io.Discard, io.Discard), tc)
+	result, change := tools.ExecuteQuietWithContext(a.toolExecutionContext(strings.NewReader(""), io.Discard, io.Discard), tc)
 	a.recordToolResultOptimizations(tc.Tool, result)
 
 	if a.ToolCache != nil {
@@ -624,11 +627,9 @@ func (a *Agent) executeToolCallsWithParallel(
 
 	// Phase 1a: parallel-safe 群を並列実行
 	//
-	// ExecutionContext（tools/context.go）は process-global 変数だが sync.RWMutex で
-	// race-safe に保護されている。ここでは parallel batch 開始前に1回だけ Set し、
-	// 全 goroutine 完了後に Clear する。goroutine 内は GetExecutionContext()（RLock）で
-	// parallel path では ExecuteQuietWithContext に io.Discard を渡し、
-	// 補助 stdout を構造的に抑制する。
+	// 各 goroutine は個別の ExecutionContext を明示的に組み立てて
+	// ExecuteQuietWithContext に渡す。process-global な実行コンテキストには依存しない。
+	// parallel path では io.Discard を使い、補助 stdout を構造的に抑制する。
 	//
 	// cancel の実効性（best effort）:
 	//   各 goroutine 起動前に ctx.Err() をチェックし、executeToolForParallel 内でも

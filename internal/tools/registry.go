@@ -54,11 +54,6 @@ func (r *Registry) Register(tool Tool) {
 	r.tools[tool.Name()] = tool
 }
 
-// Execute はツール呼び出しを実行（スレッドセーフ + 監査ログ記録）
-func (r *Registry) Execute(tc *ToolCall) (string, *FileChange) {
-	return r.ExecuteWithContext(GetExecutionContext(), tc)
-}
-
 // ExecuteWithContext は実行コンテキスト付きでツール呼び出しを実行する。
 func (r *Registry) ExecuteWithContext(execCtx ExecutionContext, tc *ToolCall) (string, *FileChange) {
 	r.mu.RLock()

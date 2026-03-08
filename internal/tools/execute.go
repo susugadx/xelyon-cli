@@ -72,11 +72,6 @@ func printToolArgs(w io.Writer, tc *ToolCall) {
 	_, _ = fmt.Fprintln(w)
 }
 
-// Execute はツールを実行し、統一フォーマットの1行サマリーと必要に応じて折りたたみ結果を表示する。
-func Execute(tc *ToolCall) (string, *FileChange) {
-	return ExecuteWithContext(GetExecutionContext(), tc)
-}
-
 // ExecuteWithContext は実行コンテキスト付きでツールを実行する。
 func ExecuteWithContext(execCtx ExecutionContext, tc *ToolCall) (string, *FileChange) {
 	execCtx = normalizeExecutionContext(execCtx)
@@ -95,15 +90,6 @@ func ExecuteWithContext(execCtx ExecutionContext, tc *ToolCall) (string, *FileCh
 	}
 
 	return result, change
-}
-
-// ExecuteQuiet はツールを実行するが、wrapper 層の stdout 出力を抑制する。
-// parallel path（goroutine 内）から呼び出すために使用する。
-//
-// 抑制するもの: ツールヘッダー（"🔧 Tool: ..."）、引数表示、折りたたみ結果表示。
-// Tool.Run() 内部の補助的な標準出力も common quiet mode で抑制する。
-func ExecuteQuiet(tc *ToolCall) (string, *FileChange) {
-	return ExecuteQuietWithContext(GetExecutionContext(), tc)
 }
 
 // ExecuteQuietWithContext は実行コンテキスト付きでツールを実行するが、wrapper 出力を抑制する。
