@@ -182,6 +182,7 @@ func TestPrintSessionSections_Optimizations(t *testing.T) {
 		MilestoneDetections:    8,
 		ToolRatioDetections:    9,
 		CompactionCount:        10,
+		CostAwareCompressions:  4,
 	}
 
 	agent := &Agent{
@@ -204,6 +205,7 @@ func TestPrintSessionSections_Optimizations(t *testing.T) {
 		"Milestone triggers",
 		"Tool-ratio triggers",
 		"Auto-compress",
+		"Cost-aware auto-compress",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("printSessionSections() output missing %q:\n%s", want, output)

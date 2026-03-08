@@ -24,6 +24,7 @@ type OptimizationMetrics struct {
 	MilestoneDetections    int // マイルストーンパターン検出
 	ToolRatioDetections    int // tool出力比率トリガー検出
 	CompactionCount        int // auto-compress実行
+	CostAwareCompressions  int // pricing cliff回避による auto-compress 実行
 }
 
 func (m *OptimizationMetrics) add(other OptimizationMetrics) {
@@ -37,6 +38,7 @@ func (m *OptimizationMetrics) add(other OptimizationMetrics) {
 	m.MilestoneDetections += other.MilestoneDetections
 	m.ToolRatioDetections += other.ToolRatioDetections
 	m.CompactionCount += other.CompactionCount
+	m.CostAwareCompressions += other.CostAwareCompressions
 }
 
 func (m *OptimizationMetrics) addCompaction(other CompactionMetrics) {
@@ -55,7 +57,8 @@ func (m *OptimizationMetrics) hasAny() bool {
 		m.OutlineFirstCount > 0 ||
 		m.MilestoneDetections > 0 ||
 		m.ToolRatioDetections > 0 ||
-		m.CompactionCount > 0
+		m.CompactionCount > 0 ||
+		m.CostAwareCompressions > 0
 }
 
 // SessionStats はセッション統計情報

@@ -177,6 +177,100 @@ func TestAgent_handleTokenLimitErrorWithRetry_Integration(t *testing.T) {
 	t.Skip("統合テストは別ファイルで実装: 実際のトークン上限エラー、config、CompressHistoryのモックが必要")
 }
 
+func TestShouldForceCompressForPricingCliff(t *testing.T) {
+	tests := []struct {
+		name          string
+		provider      string
+		model         string
+		currentTokens int
+		stats         *SessionStats
+		wantProjected int
+		wantForce     bool
+	}{
+		{
+			name:          "Claude pricing cliff手前でforce compressになる",
+			provider:      "claude",
+			model:         "claude-sonnet-4-5",
+			currentTokens: 199000,
+			stats: &SessionStats{
+				OutputTokens:      3000,
+				AssistantMessages: 1,
+			},
+			wantProjected: 202000,
+			wantForce:     true,
+		},
+		{
+			name:          "Gemini cliff未到達ならforce compressにならない",
+			provider:      "gemini",
+			model:         "gemini-3.1-pro",
+			currentTokens: 199500,
+			stats: &SessionStats{
+				OutputTokens:      500,
+				AssistantMessages: 1,
+			},
+			wantProjected: 200000,
+			wantForce:     false,
+		},
+		{
+			name:          "GPT-5.4 long input cliff手前でforce compressになる",
+			provider:      "openai",
+			model:         "gpt-5.4",
+			currentTokens: 271000,
+			stats: &SessionStats{
+				OutputTokens:      2000,
+				AssistantMessages: 1,
+			},
+			wantProjected: 273000,
+			wantForce:     true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			projectedTokens, got := shouldForceCompressForPricingCliff(tt.provider, tt.model, tt.currentTokens, tt.stats)
+			if projectedTokens != tt.wantProjected {
+				t.Fatalf("projectedTokens = %d, want %d", projectedTokens, tt.wantProjected)
+			}
+			if got != tt.wantForce {
+				t.Fatalf("shouldForceCompressForPricingCliff() = %v, want %v", got, tt.wantForce)
+			}
+		})
+	}
+}
+
+func TestGetPricingInfo_PricingCliffBoundaries(t *testing.T) {
+	tests := []struct {
+		name      string
+		provider  string
+		model     string
+		threshold int
+		wantBase  float64
+		wantHigh  float64
+	}{
+		{name: "Claude 200K cliff", provider: "claude", model: "claude-sonnet-4-5", threshold: 200000, wantBase: 3.00, wantHigh: 6.00},
+		{name: "Gemini 200K cliff", provider: "gemini", model: "gemini-3.1-pro", threshold: 200000, wantBase: 2.00, wantHigh: 4.00},
+		{name: "GPT-5.4 272K cliff", provider: "openai", model: "gpt-5.4", threshold: 272000, wantBase: 2.50, wantHigh: 5.00},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			below := GetPricingInfo(tt.provider, tt.model, tt.threshold-1)
+			atThreshold := GetPricingInfo(tt.provider, tt.model, tt.threshold)
+			above := GetPricingInfo(tt.provider, tt.model, tt.threshold+1)
+
+			if below.InputCostPerM != tt.wantBase {
+				t.Fatalf("below cliff InputCostPerM = %f, want %f", below.InputCostPerM, tt.wantBase)
+			}
+			if atThreshold.InputCostPerM != tt.wantBase {
+				t.Fatalf("at threshold InputCostPerM = %f, want %f", atThreshold.InputCostPerM, tt.wantBase)
+			}
+			if above.InputCostPerM != tt.wantHigh {
+				t.Fatalf("above cliff InputCostPerM = %f, want %f", above.InputCostPerM, tt.wantHigh)
+			}
+		})
+	}
+}
+
 // --- 改善3: マイルストーン駆動テスト ---
 
 func TestDetectMilestonePattern_EmptyHistory(t *testing.T) {

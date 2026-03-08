@@ -27,12 +27,11 @@ func (a *Agent) maybeAutoCompress() bool {
 
 	// プロバイダ別コスト最適化閾値
 	providerThreshold := GetProviderCompressThreshold(a.ProviderName, a.CurrentModel)
-	forceCompress := false
-	if providerThreshold > 0 {
-		currentTokens := a.EstimateTokens()
-		if currentTokens >= providerThreshold {
-			forceCompress = true
-		}
+	currentTokens := a.EstimateTokens()
+	projectedTokens, costAwareCompress := shouldForceCompressForPricingCliff(a.ProviderName, a.CurrentModel, currentTokens, a.Stats)
+	forceCompress := costAwareCompress
+	if !forceCompress && providerThreshold > 0 && currentTokens >= providerThreshold {
+		forceCompress = true
 	}
 
 	if !forceCompress {
@@ -74,7 +73,6 @@ func (a *Agent) maybeAutoCompress() bool {
 
 		// トークン数ベースの閾値が設定されている場合はそちらを優先
 		if cfg.Compression.ThresholdTokens > 0 {
-			currentTokens := a.EstimateTokens()
 			if currentTokens < cfg.Compression.ThresholdTokens {
 				return false
 			}
@@ -90,11 +88,19 @@ func (a *Agent) maybeAutoCompress() bool {
 
 	// 圧縮実行（通知付き）
 	if forceCompress {
-		cyan.Printf(
-			"\n🗜️ Auto-compressing for cost optimization (%dK > %dK threshold)...\n",
-			a.EstimateTokens()/1000,
-			providerThreshold/1000,
-		)
+		if costAwareCompress {
+			cyan.Printf(
+				"\n🗜️ Auto-compressing before pricing cliff (%dK → %dK projected)...\n",
+				currentTokens/1000,
+				projectedTokens/1000,
+			)
+		} else {
+			cyan.Printf(
+				"\n🗜️ Auto-compressing for cost optimization (%dK > %dK threshold)...\n",
+				currentTokens/1000,
+				providerThreshold/1000,
+			)
+		}
 	} else {
 		cyan.Printf("\n🗜️ Auto-compressing history (%.0f%% threshold reached)...\n", percentage)
 	}
@@ -105,7 +111,11 @@ func (a *Agent) maybeAutoCompress() bool {
 			if compactProvider.SupportsCompact() {
 				ctx := context.Background()
 				if err := a.CompressWithCompactAPI(ctx); err == nil {
-					a.addOptimizationMetrics(OptimizationMetrics{CompactionCount: 1})
+					metrics := OptimizationMetrics{CompactionCount: 1}
+					if costAwareCompress {
+						metrics.CostAwareCompressions = 1
+					}
+					a.addOptimizationMetrics(metrics)
 					fmt.Println("   💡 Disable with: xelyon config set compression.auto_compress false")
 					fmt.Println()
 					return true
@@ -140,7 +150,11 @@ func (a *Agent) maybeAutoCompress() bool {
 	fmt.Println("   💡 Disable with: xelyon config set compression.auto_compress false")
 	fmt.Println()
 
-	a.addOptimizationMetrics(OptimizationMetrics{CompactionCount: 1})
+	metrics := OptimizationMetrics{CompactionCount: 1}
+	if costAwareCompress {
+		metrics.CostAwareCompressions = 1
+	}
+	a.addOptimizationMetrics(metrics)
 	return true
 }
 

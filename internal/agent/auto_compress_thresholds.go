@@ -25,3 +25,29 @@ func GetProviderCompressThreshold(provider string, model string) int {
 		return 0 // 不明なプロバイダは既存ロジックに任せる
 	}
 }
+
+func averageOutputTokens(stats *SessionStats) int {
+	if stats == nil || stats.OutputTokens <= 0 {
+		return 0
+	}
+	assistantMessages := stats.AssistantMessages
+	if assistantMessages < 1 {
+		assistantMessages = 1
+	}
+	return stats.OutputTokens / assistantMessages
+}
+
+func shouldForceCompressForPricingCliff(provider, model string, currentTokens int, stats *SessionStats) (int, bool) {
+	if currentTokens <= 0 {
+		return currentTokens, false
+	}
+
+	projectedTokens := currentTokens + averageOutputTokens(stats)
+	currentPricing := GetPricingInfo(provider, model, currentTokens)
+	projectedPricing := GetPricingInfo(provider, model, projectedTokens)
+	if projectedPricing.InputCostPerM > currentPricing.InputCostPerM {
+		return projectedTokens, true
+	}
+
+	return projectedTokens, false
+}

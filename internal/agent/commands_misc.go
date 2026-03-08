@@ -219,6 +219,9 @@ func printSessionSections(agent *Agent) {
 		if opt.CompactionCount > 0 {
 			optTable.AddRow("Auto-compress", fmt.Sprintf("%d times", opt.CompactionCount))
 		}
+		if opt.CostAwareCompressions > 0 {
+			optTable.AddRow("Cost-aware auto-compress", fmt.Sprintf("%d times", opt.CostAwareCompressions))
+		}
 		fmt.Print(optTable.RenderCompact())
 	} else {
 		dim.Println("  No optimizations triggered yet")

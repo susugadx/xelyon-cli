@@ -382,6 +382,7 @@ func TestOptimizationMetrics_Add(t *testing.T) {
 		MilestoneDetections:    1,
 		ToolRatioDetections:    2,
 		CompactionCount:        1,
+		CostAwareCompressions:  1,
 	})
 	metrics.addCompaction(CompactionMetrics{
 		ErrorCompressions:      5,
@@ -418,6 +419,9 @@ func TestOptimizationMetrics_Add(t *testing.T) {
 	}
 	if metrics.CompactionCount != 1 {
 		t.Fatalf("CompactionCount = %d, want 1", metrics.CompactionCount)
+	}
+	if metrics.CostAwareCompressions != 1 {
+		t.Fatalf("CostAwareCompressions = %d, want 1", metrics.CostAwareCompressions)
 	}
 }
 
