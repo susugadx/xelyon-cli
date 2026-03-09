@@ -1,10 +1,13 @@
 package file
 
 import (
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -47,4 +50,38 @@ func setupTestConfirm(t *testing.T, result bool) {
 		common.SimpleConfirm = originalConfirm
 		common.SimpleConfirmWithIO = originalConfirmWithIO
 	})
+}
+
+func testConfirmOptions() common.ConfirmOptions {
+	return common.ConfirmOptions{Config: config.DefaultConfig()}
+}
+
+func testPromptIO(stdout, stderr io.Writer) ui.PromptIO {
+	if stdout == nil {
+		stdout = io.Discard
+	}
+	if stderr == nil {
+		stderr = io.Discard
+	}
+	return ui.NewPromptIO(strings.NewReader(""), stdout, stderr, nil)
+}
+
+func executeWriteFileForTest(path, content string) (string, error) {
+	return ExecuteWriteFileWithPromptIOAndOptionsAndLSPClient(testPromptIO(nil, nil), testConfirmOptions(), nil, path, content)
+}
+
+func executeDeleteFileForTest(path string) (string, error) {
+	return ExecuteDeleteFileWithPromptIOAndOptionsAndLSPClient(testPromptIO(nil, nil), testConfirmOptions(), nil, path)
+}
+
+func executeStrReplaceForTest(path, oldStr, newStr, startLineStr, endLineStr string) (string, error) {
+	return ExecuteStrReplaceWithPromptIOAndOptions(testPromptIO(nil, nil), testConfirmOptions(), path, oldStr, newStr, startLineStr, endLineStr)
+}
+
+func executeStrReplaceWithWritersForTest(stdout, stderr io.Writer, path, oldStr, newStr, startLineStr, endLineStr string) (string, error) {
+	return ExecuteStrReplaceWithPromptIOAndOptions(testPromptIO(stdout, stderr), testConfirmOptions(), path, oldStr, newStr, startLineStr, endLineStr)
+}
+
+func executeBatchEditsForTest(path, editsJSON string) (string, error) {
+	return executeBatchEditsWithPromptIOAndOptions(testPromptIO(nil, nil), testConfirmOptions(), path, editsJSON)
 }

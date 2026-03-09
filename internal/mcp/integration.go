@@ -93,8 +93,10 @@ func (w *MCPToolWrapper) Parameters() map[string]interface{} {
 
 // Run はツールを実行
 func (w *MCPToolWrapper) Run(execCtx tools.ExecutionContext, args map[string]string) (string, *tools.FileChange, error) {
+	out := execCtx.Output()
+
 	// 引数バリデーション（簡易版）
-	if err := w.validateArgs(execCtx.Stdout, args); err != nil {
+	if err := w.validateArgs(out.StdoutWriter(), args); err != nil {
 		return fmt.Sprintf("Validation Error: %v", err), nil, err
 	}
 
@@ -210,6 +212,10 @@ func (w *MCPToolWrapper) convertArgsWithSchema(args map[string]string) map[strin
 
 // validateArgs は引数を検証する（簡易版）
 func (w *MCPToolWrapper) validateArgs(out io.Writer, args map[string]string) error {
+	if out == nil {
+		out = io.Discard
+	}
+
 	// 空のスキーマの場合はスキップ
 	if len(w.inputSchema) == 0 || string(w.inputSchema) == "null" {
 		return nil

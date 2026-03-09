@@ -77,7 +77,7 @@ func TestHandleConfigCommand_Model_UpdatesProviderModel(t *testing.T) {
 	// Execute /config model command
 	handleConfigCommand(a, []string{"model", "gpt-new"})
 
-	// Verify Agent state (SyncWithGlobalConfig is called inside handleConfigCommand)
+	// Verify Agent state (SyncWithRuntimeConfig is called inside handleConfigCommand)
 	if a.CurrentModel != "gpt-new" {
 		t.Errorf("Agent.CurrentModel = %s, want gpt-new", a.CurrentModel)
 	}

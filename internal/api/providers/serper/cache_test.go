@@ -56,7 +56,8 @@ func TestWebSearchWithCache_CacheHit(t *testing.T) {
 	cacheOnce = sync.Once{} // リセット
 
 	// 1回目: API呼び出し
-	result1, cached1, err := WebSearchWithCache("test query")
+	cfg := config.DefaultConfig()
+	result1, cached1, err := SearchWithCacheAndConfig(cfg, "serper", "test query", WebSearch)
 	if err != nil {
 		t.Fatalf("First call failed: %v", err)
 	}
@@ -68,7 +69,7 @@ func TestWebSearchWithCache_CacheHit(t *testing.T) {
 	}
 
 	// 2回目: キャッシュヒット
-	result2, cached2, err := WebSearchWithCache("test query")
+	result2, cached2, err := SearchWithCacheAndConfig(cfg, "serper", "test query", WebSearch)
 	if err != nil {
 		t.Fatalf("Second call failed: %v", err)
 	}
@@ -111,7 +112,8 @@ func TestWebSearchWithCache_CacheNormalization(t *testing.T) {
 	cacheOnce = sync.Once{} // リセット
 
 	// 1回目: "Go version"
-	_, cached1, err := WebSearchWithCache("Go version")
+	cfg := config.DefaultConfig()
+	_, cached1, err := SearchWithCacheAndConfig(cfg, "serper", "Go version", WebSearch)
 	if err != nil {
 		t.Fatalf("First call failed: %v", err)
 	}
@@ -120,7 +122,7 @@ func TestWebSearchWithCache_CacheNormalization(t *testing.T) {
 	}
 
 	// 2回目: "go version" (同じクエリとして扱われるべき)
-	_, cached2, err := WebSearchWithCache("go version")
+	_, cached2, err := SearchWithCacheAndConfig(cfg, "serper", "go version", WebSearch)
 	if err != nil {
 		t.Fatalf("Second call failed: %v", err)
 	}
@@ -129,7 +131,7 @@ func TestWebSearchWithCache_CacheNormalization(t *testing.T) {
 	}
 
 	// 3回目: "  GO VERSION  " (同じクエリとして扱われるべき)
-	_, cached3, err := WebSearchWithCache("  GO VERSION  ")
+	_, cached3, err := SearchWithCacheAndConfig(cfg, "serper", "  GO VERSION  ", WebSearch)
 	if err != nil {
 		t.Fatalf("Third call failed: %v", err)
 	}

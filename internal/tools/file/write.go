@@ -7,27 +7,11 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/susugadx/xelyon-cli/internal/config"
 	lsplib "github.com/susugadx/xelyon-cli/internal/lsp"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 	toolslsp "github.com/susugadx/xelyon-cli/internal/tools/lsp"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
-
-// ExecuteWriteFile はファイルに書き込む
-func ExecuteWriteFile(path string, content string) (string, error) {
-	return ExecuteWriteFileWithOutput(common.DefaultOutput(), path, content)
-}
-
-// ExecuteWriteFileWithOutput は出力先を指定してファイルに書き込む。
-func ExecuteWriteFileWithOutput(out common.Output, path string, content string) (string, error) {
-	return ExecuteWriteFileWithPromptIO(ui.NewPromptIO(nil, out.StdoutWriter(), out.StderrWriter(), nil), path, content)
-}
-
-// ExecuteWriteFileWithPromptIO は入出力先を指定してファイルに書き込む。
-func ExecuteWriteFileWithPromptIO(promptIO ui.PromptIO, path string, content string) (string, error) {
-	return ExecuteWriteFileWithPromptIOAndOptionsAndLSPClient(promptIO, common.DefaultConfirmOptions(), nil, path, content)
-}
 
 // ExecuteWriteFileWithPromptIOAndOptions は確認設定を指定してファイルに書き込む。
 func ExecuteWriteFileWithPromptIOAndOptions(promptIO ui.PromptIO, options common.ConfirmOptions, path string, content string) (string, error) {
@@ -40,7 +24,7 @@ func ExecuteWriteFileWithPromptIOAndOptionsAndLSPClient(promptIO ui.PromptIO, op
 	out := common.NewOutput(promptIO.Out, promptIO.Err)
 	cfg := options.Config
 	if cfg == nil {
-		cfg = config.DefaultConfig()
+		return "", fmt.Errorf("missing confirm options config")
 	}
 
 	if path == "" {

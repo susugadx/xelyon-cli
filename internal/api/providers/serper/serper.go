@@ -71,11 +71,6 @@ func SearchWithCacheAndConfig(cfg *config.Config, cacheScope, query string, sear
 	return result, false, nil
 }
 
-// WebSearchWithCache は Serper 用の後方互換ラッパー。
-func WebSearchWithCache(query string) (string, bool, error) {
-	return SearchWithCacheAndConfig(config.DefaultConfig(), "serper", query, WebSearch)
-}
-
 // normalizeQuery はクエリを正規化（大文字小文字、空白の統一）
 func normalizeQuery(query string) string {
 	return strings.ToLower(strings.TrimSpace(query))

@@ -30,11 +30,6 @@ var DefaultBoxStyle = BoxStyle{
 	RightT:      "┤",
 }
 
-// ToolConfirmBox はツール確認用のボックスを表示
-func ToolConfirmBox(toolName string, details []string) {
-	ToolConfirmBoxToWriter(DefaultRuntime().Output(), toolName, details)
-}
-
 // ToolConfirmBoxWithRuntime は runtime の出力先にツール確認用ボックスを表示する。
 func ToolConfirmBoxWithRuntime(runtime *Runtime, toolName string, details []string) {
 	ToolConfirmBoxToWriter(runtimeOrDefault(runtime).Output(), toolName, details)
@@ -43,7 +38,7 @@ func ToolConfirmBoxWithRuntime(runtime *Runtime, toolName string, details []stri
 // ToolConfirmBoxToWriter は指定 writer にツール確認用ボックスを表示する。
 func ToolConfirmBoxToWriter(out io.Writer, toolName string, details []string) {
 	if out == nil {
-		out = DefaultRuntime().Output()
+		return
 	}
 
 	width := 45
@@ -86,7 +81,7 @@ func ToolConfirmBoxToWriter(out io.Writer, toolName string, details []string) {
 
 func printBoxLineToWriter(out io.Writer, text string, width int) {
 	if out == nil {
-		out = DefaultRuntime().Output()
+		return
 	}
 
 	// 長すぎる場合は切り詰め
@@ -132,11 +127,6 @@ func getToolIcon(toolName string) string {
 	return "🔧"
 }
 
-// SimpleDivider はシンプルな区切り線を表示
-func SimpleDivider(width int) {
-	SimpleDividerToWriter(DefaultRuntime().Output(), width)
-}
-
 // SimpleDividerWithRuntime は runtime の出力先に区切り線を表示する。
 func SimpleDividerWithRuntime(runtime *Runtime, width int) {
 	SimpleDividerToWriter(runtimeOrDefault(runtime).Output(), width)
@@ -145,14 +135,9 @@ func SimpleDividerWithRuntime(runtime *Runtime, width int) {
 // SimpleDividerToWriter は指定 writer に区切り線を表示する。
 func SimpleDividerToWriter(out io.Writer, width int) {
 	if out == nil {
-		out = DefaultRuntime().Output()
+		return
 	}
 	Cyan.Fprintln(out, strings.Repeat("─", width))
-}
-
-// ConfirmPromptBox は確認プロンプト用のボックスを表示
-func ConfirmPromptBox(message string) {
-	ConfirmPromptBoxToWriter(DefaultRuntime().Output(), message)
 }
 
 // ConfirmPromptBoxWithRuntime は runtime の出力先に確認プロンプト用ボックスを表示する。
@@ -163,7 +148,7 @@ func ConfirmPromptBoxWithRuntime(runtime *Runtime, message string) {
 // ConfirmPromptBoxToWriter は指定 writer に確認プロンプト用ボックスを表示する。
 func ConfirmPromptBoxToWriter(out io.Writer, message string) {
 	if out == nil {
-		out = DefaultRuntime().Output()
+		return
 	}
 
 	width := 45

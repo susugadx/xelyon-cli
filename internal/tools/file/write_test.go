@@ -16,7 +16,7 @@ func TestExecuteWriteFile_NewFile(t *testing.T) {
 	testFile := filepath.Join(tmpDir, "new.txt")
 	testContent := "new file content"
 
-	output, err := ExecuteWriteFile(testFile, testContent)
+	output, err := executeWriteFileForTest(testFile, testContent)
 
 	if err != nil {
 		t.Fatalf("ExecuteWriteFile failed: %v", err)
@@ -35,7 +35,7 @@ func TestExecuteWriteFile_Overwrite(t *testing.T) {
 	testFile := filepath.Join(tmpDir, "existing.txt")
 	testutil.CreateTempFile(t, tmpDir, "existing.txt", "old content")
 
-	output, err := ExecuteWriteFile(testFile, "new content")
+	output, err := executeWriteFileForTest(testFile, "new content")
 
 	if err != nil {
 		t.Fatalf("ExecuteWriteFile failed: %v", err)
@@ -52,7 +52,7 @@ func TestExecuteWriteFile_UserCancelled(t *testing.T) {
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "cancelled.txt")
 
-	output, err := ExecuteWriteFile(testFile, "content")
+	output, err := executeWriteFileForTest(testFile, "content")
 
 	if err != nil {
 		t.Fatalf("ExecuteWriteFile should not error on cancel: %v", err)
@@ -64,7 +64,7 @@ func TestExecuteWriteFile_UserCancelled(t *testing.T) {
 }
 
 func TestExecuteWriteFile_EmptyPath(t *testing.T) {
-	output, err := ExecuteWriteFile("", "content")
+	output, err := executeWriteFileForTest("", "content")
 	if err != nil {
 		t.Fatalf("ExecuteWriteFile should not return error: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestExecuteWriteFile_PathTraversal(t *testing.T) {
 	t.Cleanup(func() { os.Unsetenv("XELYON_INTERACTIVE_CONFIRM") })
 	setupTestConfirm(t, true)
 
-	output, err := ExecuteWriteFile("../../../etc/passwd", "content")
+	output, err := executeWriteFileForTest("../../../etc/passwd", "content")
 	if err != nil {
 		t.Fatalf("ExecuteWriteFile should not return error: %v", err)
 	}
@@ -93,7 +93,7 @@ func TestExecuteWriteFile_CreateDirectory(t *testing.T) {
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "subdir", "nested", "file.txt")
 
-	output, err := ExecuteWriteFile(testFile, "content")
+	output, err := executeWriteFileForTest(testFile, "content")
 
 	if err != nil {
 		t.Fatalf("ExecuteWriteFile failed: %v", err)
@@ -111,7 +111,7 @@ func TestExecuteWriteFile_OverwriteExistingFile(t *testing.T) {
 	testFile := filepath.Join(tmpDir, "readable.txt")
 	testutil.CreateTempFile(t, tmpDir, "readable.txt", "old content")
 
-	output, err := ExecuteWriteFile(testFile, "new content")
+	output, err := executeWriteFileForTest(testFile, "new content")
 
 	if err != nil {
 		t.Fatalf("ExecuteWriteFile failed: %v", err)
@@ -129,7 +129,7 @@ func TestExecuteWriteFile_AtomicWriteNoTempFileLeft(t *testing.T) {
 	testFile := filepath.Join(tmpDir, "atomic.txt")
 	testutil.CreateTempFile(t, tmpDir, "atomic.txt", "before")
 
-	output, err := ExecuteWriteFile(testFile, "after")
+	output, err := executeWriteFileForTest(testFile, "after")
 	if err != nil {
 		t.Fatalf("ExecuteWriteFile failed: %v", err)
 	}
@@ -155,7 +155,7 @@ func TestExecuteWriteFile_SuccessMessageIncludesLineCount(t *testing.T) {
 	tmpDir := t.TempDir()
 	file := filepath.Join(tmpDir, "test.txt")
 
-	result, err := ExecuteWriteFile(file, "line1\nline2\nline3")
+	result, err := executeWriteFileForTest(file, "line1\nline2\nline3")
 	if err != nil {
 		t.Fatalf("ExecuteWriteFile failed: %v", err)
 	}

@@ -29,15 +29,6 @@ type ExecutionContext struct {
 	AuditLogger  audit.ToolLogger
 }
 
-// DefaultExecutionContext は標準入出力を使う実行コンテキストを返す。
-func DefaultExecutionContext() ExecutionContext {
-	return normalizeExecutionContext(ExecutionContext{
-		Registry:    DefaultRegistry,
-		Config:      config.DefaultConfig(),
-		AuditLogger: audit.NewDisabledLogger(),
-	})
-}
-
 // Output は common.Output へ変換する。
 func (ctx ExecutionContext) Output() common.Output {
 	normalized := normalizeExecutionContext(ctx)

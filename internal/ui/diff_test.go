@@ -2,7 +2,7 @@ package ui
 
 import (
 	"bytes"
-	"os"
+	"io"
 	"regexp"
 	"strings"
 	"testing"
@@ -21,23 +21,15 @@ func stripANSI(s string) string {
 	return re.ReplaceAllString(s, "")
 }
 
-// captureOutput はShowColoredDiffの出力をキャプチャするヘルパー
-func captureOutput(f func()) string {
-	// 標準出力とcolorの出力先をリダイレクト
-	oldStdout := os.Stdout
+// captureOutput は差分描画の出力をキャプチャするヘルパー
+func captureOutput(f func(io.Writer)) string {
 	oldColorOutput := color.Output
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-	color.Output = w
-
-	f()
-
-	w.Close()
-	os.Stdout = oldStdout
-	color.Output = oldColorOutput
-
 	var buf bytes.Buffer
-	_, _ = buf.ReadFrom(r)
+	color.Output = &buf
+
+	f(&buf)
+
+	color.Output = oldColorOutput
 	return stripANSI(buf.String())
 }
 
@@ -45,8 +37,8 @@ func TestShowColoredDiff_NoChanges(t *testing.T) {
 	old := "line1\nline2\nline3"
 	new := "line1\nline2\nline3"
 
-	output := captureOutput(func() {
-		ShowColoredDiff(old, new, nil)
+	output := captureOutput(func(w io.Writer) {
+		ShowColoredDiffToWriter(w, old, new, nil)
 	})
 
 	// サマリー行があること（net: 0）
@@ -59,8 +51,8 @@ func TestShowColoredDiff_WithChanges(t *testing.T) {
 	old := "line1\nline2\nline3"
 	new := "line1\nmodified\nline3"
 
-	output := captureOutput(func() {
-		ShowColoredDiff(old, new, nil)
+	output := captureOutput(func(w io.Writer) {
+		ShowColoredDiffToWriter(w, old, new, nil)
 	})
 
 	// 差分表示があること
@@ -80,8 +72,8 @@ func TestShowColoredDiff_Addition(t *testing.T) {
 		MaxTotalLines: 50,
 	}
 
-	output := captureOutput(func() {
-		ShowColoredDiff(old, new, opts)
+	output := captureOutput(func(w io.Writer) {
+		ShowColoredDiffToWriter(w, old, new, opts)
 	})
 
 	// +1の表示があること（net: +1）
@@ -101,8 +93,8 @@ func TestShowColoredDiff_Deletion(t *testing.T) {
 		MaxTotalLines: 50,
 	}
 
-	output := captureOutput(func() {
-		ShowColoredDiff(old, new, opts)
+	output := captureOutput(func(w io.Writer) {
+		ShowColoredDiffToWriter(w, old, new, opts)
 	})
 
 	// -1の表示があること（net: -1）
@@ -122,8 +114,8 @@ func TestShowColoredDiff_SideBySide(t *testing.T) {
 		MaxTotalLines: 50,
 	}
 
-	output := captureOutput(func() {
-		ShowColoredDiff(old, new, opts)
+	output := captureOutput(func(w io.Writer) {
+		ShowColoredDiffToWriter(w, old, new, opts)
 	})
 
 	// Before/After表示があること
@@ -141,8 +133,8 @@ func TestShowUnifiedDiff(t *testing.T) {
 +new line
  line3`
 
-	output := captureOutput(func() {
-		ShowUnifiedDiff(diffOutput)
+	output := captureOutput(func(w io.Writer) {
+		ShowUnifiedDiffToWriter(w, diffOutput)
 	})
 
 	// 各行が正しく処理されていること
@@ -240,8 +232,8 @@ func TestShowColoredDiff_MaxTotalLines(t *testing.T) {
 		MaxTotalLines: 10, // Limit to 10 lines
 	}
 
-	output := captureOutput(func() {
-		ShowColoredDiff(old, new, opts)
+	output := captureOutput(func(w io.Writer) {
+		ShowColoredDiffToWriter(w, old, new, opts)
 	})
 
 	// Should contain truncation message
@@ -267,8 +259,8 @@ func TestShowColoredDiff_SideBySide_MaxTotalLines(t *testing.T) {
 		MaxTotalLines: 10,    // Limit to 10 lines
 	}
 
-	output := captureOutput(func() {
-		ShowColoredDiff(old, new, opts)
+	output := captureOutput(func(w io.Writer) {
+		ShowColoredDiffToWriter(w, old, new, opts)
 	})
 
 	// Should contain truncation message
@@ -288,8 +280,8 @@ func TestShowColoredDiff_NoLineNumbers(t *testing.T) {
 		MaxTotalLines: 50,
 	}
 
-	output := captureOutput(func() {
-		ShowColoredDiff(old, new, opts)
+	output := captureOutput(func(w io.Writer) {
+		ShowColoredDiffToWriter(w, old, new, opts)
 	})
 
 	// Should not contain line numbers like "   1 "
@@ -303,8 +295,8 @@ func TestShowColoredDiff_LargeDeletion(t *testing.T) {
 	old := "line1\nline2\nline3\nline4\nline5\nline6\nline7"
 	new := "line1"
 
-	output := captureOutput(func() {
-		ShowColoredDiff(old, new, nil)
+	output := captureOutput(func(w io.Writer) {
+		ShowColoredDiffToWriter(w, old, new, nil)
 	})
 
 	// Should show net negative
@@ -318,8 +310,8 @@ func TestShowColoredDiff_LargeAddition(t *testing.T) {
 	old := "line1"
 	new := "line1\nline2\nline3\nline4\nline5\nline6\nline7"
 
-	output := captureOutput(func() {
-		ShowColoredDiff(old, new, nil)
+	output := captureOutput(func(w io.Writer) {
+		ShowColoredDiffToWriter(w, old, new, nil)
 	})
 
 	// Should show net positive
@@ -338,8 +330,8 @@ func TestShowUnifiedDiff_EmptyLines(t *testing.T) {
 
  context`
 
-	output := captureOutput(func() {
-		ShowUnifiedDiff(diffOutput)
+	output := captureOutput(func(w io.Writer) {
+		ShowUnifiedDiffToWriter(w, diffOutput)
 	})
 
 	// Should process empty lines without error
@@ -360,8 +352,8 @@ func TestShowInlineDiff_SkipContext(t *testing.T) {
 		MaxTotalLines: 100,
 	}
 
-	output := captureOutput(func() {
-		ShowColoredDiff(old, new, opts)
+	output := captureOutput(func(w io.Writer) {
+		ShowColoredDiffToWriter(w, old, new, opts)
 	})
 
 	// Should show "..." for skipped sections

@@ -71,7 +71,7 @@ func TestAskUserQuestionTool_Run_MultiChoice(t *testing.T) {
 
 func TestAskUserQuestionTool_Run_OptionsValidation(t *testing.T) {
 	tool := &AskUserQuestionTool{}
-	_, _, err := tool.Run(tools.DefaultExecutionContext(), map[string]string{
+	_, _, err := tool.Run(tools.ExecutionContext{}, map[string]string{
 		"question":      "Choose",
 		"question_type": "single_choice",
 	})

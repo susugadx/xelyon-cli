@@ -13,33 +13,33 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/testutil"
 )
 
-func TestInitReturnsEnabledLogger(t *testing.T) {
+func TestNewDefaultLoggerReturnsEnabledLogger(t *testing.T) {
 	tmpHome := testutil.SetupTempHome(t)
 	logDir := filepath.Join(tmpHome, ".xelyon", "audit")
 
-	logger, err := Init(true)
+	logger, err := NewDefaultLogger(true)
 	if err != nil {
-		t.Fatalf("Init(true) error = %v", err)
+		t.Fatalf("NewDefaultLogger(true) error = %v", err)
 	}
 	if logger == nil {
-		t.Fatal("Init(true) returned nil logger")
+		t.Fatal("NewDefaultLogger(true) returned nil logger")
 	}
 	if !logger.enabled {
-		t.Fatal("Init(true) should return enabled logger")
+		t.Fatal("NewDefaultLogger(true) should return enabled logger")
 	}
 	testutil.AssertFileExists(t, logDir)
 }
 
-func TestInitReturnsDisabledLogger(t *testing.T) {
-	logger, err := Init(false)
+func TestNewDefaultLoggerReturnsDisabledLogger(t *testing.T) {
+	logger, err := NewDefaultLogger(false)
 	if err != nil {
-		t.Fatalf("Init(false) error = %v", err)
+		t.Fatalf("NewDefaultLogger(false) error = %v", err)
 	}
 	if logger == nil {
-		t.Fatal("Init(false) returned nil logger")
+		t.Fatal("NewDefaultLogger(false) returned nil logger")
 	}
 	if logger.enabled {
-		t.Fatal("Init(false) should return disabled logger")
+		t.Fatal("NewDefaultLogger(false) should return disabled logger")
 	}
 }
 

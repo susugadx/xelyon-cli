@@ -2,6 +2,7 @@ package ui
 
 import (
 	"bytes"
+	"io"
 	"strings"
 	"testing"
 )
@@ -25,14 +26,14 @@ func TestDefaultLogLevel_DebugEnv(t *testing.T) {
 func TestLogFunctionsNoPanic(t *testing.T) {
 	t.Setenv("XELYON_DEBUG", "1")
 
-	Debug("test debug: %s", "value")
-	InfoLog("test info: %d", 42)
-	Warn("test warning: %v", nil)
-	WarnWithoutEmoji("test warning without emoji")
-	ErrorLog("test error: %s", "oops")
-	ErrorLogWithoutEmoji("test error without emoji")
-	SuccessLog("test success")
-	SuccessLogWithEmoji("OK", "test success with emoji")
+	DebugToWriter(io.Discard, "test debug: %s", "value")
+	InfoLogToWriter(io.Discard, "test info: %d", 42)
+	WarnToWriter(io.Discard, "test warning: %v", nil)
+	WarnWithoutEmojiToWriter(io.Discard, "test warning without emoji")
+	ErrorLogToWriter(io.Discard, "test error: %s", "oops")
+	ErrorLogWithoutEmojiToWriter(io.Discard, "test error without emoji")
+	SuccessLogToWriter(io.Discard, "test success")
+	SuccessLogWithEmojiToWriter(io.Discard, "OK", "test success with emoji")
 }
 
 func TestLogFunctionsToWriter_UseInjectedWriters(t *testing.T) {

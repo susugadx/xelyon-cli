@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -19,33 +18,14 @@ type EditEntry struct {
 	NewStr string `json:"new_str"`
 }
 
-// ExecuteStrReplace はファイル内の文字列を置換
-//
-// Behavior:
-// - old_str が非空の場合: 既存の文字列置換モード（old_str優先、従来挙動を維持）
-// - old_str が空 かつ start_line/end_line が両方指定の場合: 行レンジ置換モード
-//
-// NOTE:
-// - 行レンジは 1-indexed inclusive（start_line=1 は先頭行）
-// - start/end は範囲外の場合エラー（delete_lines とは異なりクランプしない）
-func ExecuteStrReplace(path, oldStr, newStr, startLineStr, endLineStr string) (string, error) {
-	return ExecuteStrReplaceWithOutput(common.DefaultOutput(), path, oldStr, newStr, startLineStr, endLineStr)
-}
-
-// ExecuteStrReplaceWithOutput は出力先を指定してファイル内の文字列を置換する。
-func ExecuteStrReplaceWithOutput(out common.Output, path, oldStr, newStr, startLineStr, endLineStr string) (string, error) {
-	return ExecuteStrReplaceWithPromptIO(ui.NewPromptIO(nil, out.StdoutWriter(), out.StderrWriter(), nil), path, oldStr, newStr, startLineStr, endLineStr)
-}
-
-// ExecuteStrReplaceWithPromptIO は入出力先を指定してファイル内の文字列を置換する。
-func ExecuteStrReplaceWithPromptIO(promptIO ui.PromptIO, path, oldStr, newStr, startLineStr, endLineStr string) (string, error) {
-	return ExecuteStrReplaceWithPromptIOAndOptions(promptIO, common.DefaultConfirmOptions(), path, oldStr, newStr, startLineStr, endLineStr)
-}
-
 // ExecuteStrReplaceWithPromptIOAndOptions は確認設定を指定してファイル内の文字列を置換する。
 func ExecuteStrReplaceWithPromptIOAndOptions(promptIO ui.PromptIO, options common.ConfirmOptions, path, oldStr, newStr, startLineStr, endLineStr string) (string, error) {
 	promptIO = ui.NormalizePromptIO(promptIO)
 	out := common.NewOutput(promptIO.Out, promptIO.Err)
+	cfg := options.Config
+	if cfg == nil {
+		return "", fmt.Errorf("missing confirm options config")
+	}
 
 	if path == "" {
 		return "Error: path is required", nil
@@ -157,10 +137,6 @@ func ExecuteStrReplaceWithPromptIOAndOptions(promptIO ui.PromptIO, options commo
 			// Before/After（レンジ部分のみを表示）
 			beforeStr := strings.Join(lines[startLine-1:endLine], "\n")
 			offset := startLine - 1
-			cfg := options.Config
-			if cfg == nil {
-				cfg = config.DefaultConfig()
-			}
 			opts := &ui.DiffOptions{
 				ContextLines:  cfg.Diff.ContextLines,
 				ShowLineNums:  true,
@@ -331,7 +307,6 @@ Do not retry the same replacement.`, path), nil
 		}
 
 		offset := startLineForDisplay - 1
-		cfg := config.DefaultConfig()
 		opts := &ui.DiffOptions{
 			ContextLines:  cfg.Diff.ContextLines,
 			ShowLineNums:  true,
@@ -490,21 +465,13 @@ func buildLineSnippet(lines []string, startLine, endLine, ctx int) string {
 // executeBatchEdits は batch edits モードを実行する。
 // edits を順番に in-memory 適用し、全成功時のみファイルに書き込む。
 // 1つでも失敗したら即 return（ファイル未書き込み = 自動ロールバック）。
-func executeBatchEdits(path, editsJSON string) (string, error) {
-	return executeBatchEditsWithOutput(common.DefaultOutput(), path, editsJSON)
-}
-
-func executeBatchEditsWithOutput(out common.Output, path, editsJSON string) (string, error) {
-	return executeBatchEditsWithPromptIO(ui.NewPromptIO(nil, out.StdoutWriter(), out.StderrWriter(), nil), path, editsJSON)
-}
-
-func executeBatchEditsWithPromptIO(promptIO ui.PromptIO, path, editsJSON string) (string, error) {
-	return executeBatchEditsWithPromptIOAndOptions(promptIO, common.DefaultConfirmOptions(), path, editsJSON)
-}
-
 func executeBatchEditsWithPromptIOAndOptions(promptIO ui.PromptIO, options common.ConfirmOptions, path, editsJSON string) (string, error) {
 	promptIO = ui.NormalizePromptIO(promptIO)
 	out := common.NewOutput(promptIO.Out, promptIO.Err)
+	cfg := options.Config
+	if cfg == nil {
+		return "", fmt.Errorf("missing confirm options config")
+	}
 
 	if path == "" {
 		return "Error: path is required", nil
@@ -589,10 +556,6 @@ func executeBatchEditsWithPromptIOAndOptions(promptIO ui.PromptIO, options commo
 			out.Red.Println("   This is a significant modification. Please review the diff carefully.")
 		}
 
-		cfg := options.Config
-		if cfg == nil {
-			cfg = config.DefaultConfig()
-		}
 		opts := &ui.DiffOptions{
 			ContextLines:  cfg.Diff.ContextLines,
 			ShowLineNums:  true,

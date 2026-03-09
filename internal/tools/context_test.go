@@ -6,8 +6,8 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
-func TestDefaultExecutionContext_UsesIsolatedDefaults(t *testing.T) {
-	ctx := DefaultExecutionContext()
+func TestExecutionContextZeroValue_UsesIsolatedDefaults(t *testing.T) {
+	ctx := ExecutionContext{}
 
 	if ctx.EffectiveToolCache() != nil {
 		t.Fatal("expected default execution context to omit tool cache")

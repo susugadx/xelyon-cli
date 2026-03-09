@@ -58,11 +58,6 @@ func NewDisabledLogger() *Logger {
 	return &Logger{enabled: false}
 }
 
-// Init は標準保存先の監査ロガーを初期化して返す。
-func Init(enabled bool) (*Logger, error) {
-	return NewDefaultLogger(enabled)
-}
-
 func defaultLogPath() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {

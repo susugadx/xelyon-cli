@@ -18,7 +18,7 @@ func TestExecuteDeleteFile_Normal(t *testing.T) {
 
 	testutil.CreateTempFile(t, tmpDir, "test.txt", testContent)
 
-	output, err := ExecuteDeleteFile(testFile)
+	output, err := executeDeleteFileForTest(testFile)
 
 	if err != nil {
 		t.Fatalf("ExecuteDeleteFile failed: %v", err)
@@ -37,7 +37,7 @@ func TestExecuteDeleteFile_UserCancelled(t *testing.T) {
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testutil.CreateTempFile(t, tmpDir, "test.txt", "content")
 
-	output, err := ExecuteDeleteFile(testFile)
+	output, err := executeDeleteFileForTest(testFile)
 
 	if err != nil {
 		t.Fatalf("ExecuteDeleteFile should not error on cancel: %v", err)
@@ -54,7 +54,7 @@ func TestExecuteDeleteFile_NonExistentFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	nonExistentFile := filepath.Join(tmpDir, "nonexistent.txt")
 
-	output, err := ExecuteDeleteFile(nonExistentFile)
+	output, err := executeDeleteFileForTest(nonExistentFile)
 
 	if err != nil {
 		t.Fatalf("ExecuteDeleteFile should not return error: %v", err)
@@ -69,7 +69,7 @@ func TestExecuteDeleteFile_Directory(t *testing.T) {
 
 	tmpDir := t.TempDir()
 
-	output, err := ExecuteDeleteFile(tmpDir)
+	output, err := executeDeleteFileForTest(tmpDir)
 
 	if err != nil {
 		t.Fatalf("ExecuteDeleteFile should not return error: %v", err)
@@ -85,7 +85,7 @@ func TestExecuteDeleteFile_Directory(t *testing.T) {
 func TestExecuteDeleteFile_PathTraversal(t *testing.T) {
 	setupTestConfirm(t, true)
 
-	output, err := ExecuteDeleteFile("../../../etc/passwd")
+	output, err := executeDeleteFileForTest("../../../etc/passwd")
 
 	if err != nil {
 		t.Fatalf("ExecuteDeleteFile should not return error: %v", err)

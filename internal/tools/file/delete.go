@@ -5,27 +5,11 @@ import (
 	"os"
 	"strings"
 
-	"github.com/susugadx/xelyon-cli/internal/config"
 	lsplib "github.com/susugadx/xelyon-cli/internal/lsp"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 	toolslsp "github.com/susugadx/xelyon-cli/internal/tools/lsp"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
-
-// ExecuteDeleteFile deletes a file permanently
-func ExecuteDeleteFile(path string) (string, error) {
-	return ExecuteDeleteFileWithOutput(common.DefaultOutput(), path)
-}
-
-// ExecuteDeleteFileWithOutput deletes a file permanently with explicit output writers.
-func ExecuteDeleteFileWithOutput(out common.Output, path string) (string, error) {
-	return ExecuteDeleteFileWithPromptIO(ui.NewPromptIO(nil, out.StdoutWriter(), out.StderrWriter(), nil), path)
-}
-
-// ExecuteDeleteFileWithPromptIO deletes a file permanently with explicit interactive I/O.
-func ExecuteDeleteFileWithPromptIO(promptIO ui.PromptIO, path string) (string, error) {
-	return ExecuteDeleteFileWithPromptIOAndOptionsAndLSPClient(promptIO, common.DefaultConfirmOptions(), nil, path)
-}
 
 // ExecuteDeleteFileWithPromptIOAndOptions deletes a file with explicit confirm options.
 func ExecuteDeleteFileWithPromptIOAndOptions(promptIO ui.PromptIO, options common.ConfirmOptions, path string) (string, error) {
@@ -94,7 +78,7 @@ func ExecuteDeleteFileWithPromptIOAndOptionsAndLSPClient(promptIO ui.PromptIO, o
 
 		cfg := options.Config
 		if cfg == nil {
-			cfg = config.DefaultConfig()
+			return "", fmt.Errorf("missing confirm options config")
 		}
 		maxPreviewLines := cfg.Diff.MaxTotalLines
 		if maxPreviewLines <= 0 {

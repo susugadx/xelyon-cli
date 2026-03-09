@@ -429,7 +429,7 @@ func TestExecuteQuiet_ReturnsResult(t *testing.T) {
 		Tool: "list_dir",
 		Args: map[string]string{"path": "."},
 	}
-	result, change := ExecuteQuietWithContext(DefaultExecutionContext(), tc)
+	result, change := ExecuteQuietWithContext(ExecutionContext{}, tc)
 
 	// list_dir は結果を返すはず
 	if result == "" {

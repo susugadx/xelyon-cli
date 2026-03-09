@@ -1,11 +1,13 @@
 package mcp
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"strings"
 	"testing"
 
+	"github.com/susugadx/xelyon-cli/internal/stdio"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
@@ -290,7 +292,7 @@ func TestMCPToolWrapper_Run_ValidationError(t *testing.T) {
 	}
 
 	// 必須パラメータなしで実行
-	result, change, err := wrapper.Run(tools.DefaultExecutionContext(), map[string]string{})
+	result, change, err := wrapper.Run(tools.ExecutionContext{}, map[string]string{})
 
 	if err == nil {
 		t.Error("Run() should return error for missing required parameter")
@@ -317,7 +319,7 @@ func TestMCPToolWrapper_Run_CallToolError(t *testing.T) {
 	}
 
 	// 接続していないサーバーに対して実行
-	result, change, err := wrapper.Run(tools.DefaultExecutionContext(), map[string]string{})
+	result, change, err := wrapper.Run(tools.ExecutionContext{}, map[string]string{})
 
 	if err == nil {
 		t.Error("Run() should return error for non-connected server")
@@ -329,6 +331,38 @@ func TestMCPToolWrapper_Run_CallToolError(t *testing.T) {
 
 	if !strings.Contains(result, "Error:") {
 		t.Errorf("Result should contain 'Error:', got: %s", result)
+	}
+}
+
+func TestMCPToolWrapper_Run_ZeroValueExecutionContext_InvalidPropertySchema(t *testing.T) {
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	stdio.SetDefaults(strings.NewReader("\n"), &out, &errOut)
+	t.Cleanup(func() {
+		stdio.SetDefaults(nil, nil, nil)
+	})
+
+	manager := NewManager()
+	wrapper := &MCPToolWrapper{
+		manager:     manager,
+		serverName:  "nonexistent-server",
+		toolName:    "test-tool",
+		desc:        "A test tool",
+		inputSchema: json.RawMessage(`{"type":"object","properties":{"broken":"oops"}}`),
+	}
+
+	result, change, err := wrapper.Run(tools.ExecutionContext{}, map[string]string{})
+	if err == nil {
+		t.Error("Run() should return error for non-connected server")
+	}
+	if change != nil {
+		t.Error("Run() should not return FileChange on error")
+	}
+	if !strings.Contains(result, "Error:") {
+		t.Errorf("Result should contain 'Error:', got: %s", result)
+	}
+	if !strings.Contains(out.String(), "Invalid property schema") {
+		t.Fatalf("expected warning output for invalid property schema, got %q", out.String())
 	}
 }
 

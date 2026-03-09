@@ -131,7 +131,7 @@ func TestSyncWithRuntimeConfig_RebuildsPromptForClaudeOpus(t *testing.T) {
 	a.SyncWithRuntimeConfig()
 
 	if !strings.Contains(a.SystemPrompt, "### Stable Working Reference") {
-		t.Fatal("expected SyncWithGlobalConfig to rebuild the Claude Opus system prompt")
+		t.Fatal("expected SyncWithRuntimeConfig to rebuild the Claude Opus system prompt")
 	}
 }
 

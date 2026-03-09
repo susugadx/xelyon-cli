@@ -18,7 +18,7 @@ func TestExecuteStrReplace_ExactMatch(t *testing.T) {
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testutil.CreateTempFile(t, tmpDir, "test.txt", "line1\nline2\nline3")
 
-	output, err := ExecuteStrReplace(testFile, "line2", "REPLACED", "", "")
+	output, err := executeStrReplaceForTest(testFile, "line2", "REPLACED", "", "")
 
 	if err != nil {
 		t.Fatalf("ExecuteStrReplace failed: %v", err)
@@ -38,7 +38,7 @@ func TestExecuteStrReplace_ReturnsLineNumbers(t *testing.T) {
 		t.Fatalf("failed to write test file: %v", err)
 	}
 
-	result, err := ExecuteStrReplace(file, "TARGET", "REPLACED", "", "")
+	result, err := executeStrReplaceForTest(file, "TARGET", "REPLACED", "", "")
 	if err != nil {
 		t.Fatalf("ExecuteStrReplace failed: %v", err)
 	}
@@ -54,7 +54,7 @@ func TestExecuteStrReplace_MultipleMatches(t *testing.T) {
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testutil.CreateTempFile(t, tmpDir, "test.txt", "foo\nbar\nfoo\nbaz")
 
-	output, err := ExecuteStrReplace(testFile, "foo", "REPLACED", "", "")
+	output, err := executeStrReplaceForTest(testFile, "foo", "REPLACED", "", "")
 
 	if err != nil {
 		t.Fatalf("ExecuteStrReplace should not return error: %v", err)
@@ -71,7 +71,7 @@ func TestExecuteStrReplace_NotFound(t *testing.T) {
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testutil.CreateTempFile(t, tmpDir, "test.txt", "line1\nline2\nline3")
 
-	output, err := ExecuteStrReplace(testFile, "nonexistent", "REPLACED", "", "")
+	output, err := executeStrReplaceForTest(testFile, "nonexistent", "REPLACED", "", "")
 
 	if err != nil {
 		t.Fatalf("ExecuteStrReplace should not return error: %v", err)
@@ -90,7 +90,7 @@ func TestExecuteStrReplace_UserCancelled(t *testing.T) {
 	originalContent := "line1\nline2\nline3"
 	testutil.CreateTempFile(t, tmpDir, "test.txt", originalContent)
 
-	output, err := ExecuteStrReplace(testFile, "line2", "REPLACED", "", "")
+	output, err := executeStrReplaceForTest(testFile, "line2", "REPLACED", "", "")
 
 	if err != nil {
 		t.Fatalf("ExecuteStrReplace should not error on cancel: %v", err)
@@ -102,7 +102,7 @@ func TestExecuteStrReplace_UserCancelled(t *testing.T) {
 }
 
 func TestExecuteStrReplace_EmptyPath(t *testing.T) {
-	output, err := ExecuteStrReplace("", "old", "new", "", "")
+	output, err := executeStrReplaceForTest("", "old", "new", "", "")
 	if err != nil {
 		t.Fatalf("ExecuteStrReplace should not return error: %v", err)
 	}
@@ -116,7 +116,7 @@ func TestExecuteStrReplace_EmptyOldStr(t *testing.T) {
 	tmpDir := t.TempDir()
 	testutil.CreateTempFile(t, tmpDir, "test.txt", "content")
 
-	output, err := ExecuteStrReplace(filepath.Join(tmpDir, "test.txt"), "", "new", "", "")
+	output, err := executeStrReplaceForTest(filepath.Join(tmpDir, "test.txt"), "", "new", "", "")
 
 	if err != nil {
 		t.Fatalf("ExecuteStrReplace should not return error: %v", err)
@@ -133,7 +133,7 @@ func TestExecuteStrReplace_LineRangeReplacement_Success(t *testing.T) {
 	tmpDir := t.TempDir()
 	testutil.CreateTempFile(t, tmpDir, "test.txt", "a\nb\nc\nd\ne")
 
-	output, err := ExecuteStrReplace(filepath.Join(tmpDir, "test.txt"), "", "X\nY", "2", "4")
+	output, err := executeStrReplaceForTest(filepath.Join(tmpDir, "test.txt"), "", "X\nY", "2", "4")
 
 	if err != nil {
 		t.Fatalf("ExecuteStrReplace failed: %v", err)
@@ -148,28 +148,17 @@ func TestExecuteStrReplace_DuplicateWarningForNearbyMatch(t *testing.T) {
 	setupTestMocks(t)
 	setupTestConfirm(t, true)
 
-	oldStdout := os.Stdout
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("Failed to create pipe: %v", err)
-	}
-	os.Stdout = w
-	t.Cleanup(func() {
-		os.Stdout = oldStdout
-	})
+	var output strings.Builder
 
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testutil.CreateTempFile(t, tmpDir, "test.txt", "alpha\nEXISTING\nomega")
 
-	replaceOutput, err := ExecuteStrReplace(testFile, "alpha", "EXISTING", "", "")
+	replaceOutput, err := executeStrReplaceWithWritersForTest(&output, io.Discard, testFile, "alpha", "EXISTING", "", "")
 
 	if err != nil {
 		t.Fatalf("ExecuteStrReplace failed: %v", err)
 	}
-	_ = w.Close()
-	var output strings.Builder
-	_, _ = io.Copy(&output, r)
 	if !strings.Contains(output.String(), "Warning: new_str already exists near the replacement") {
 		t.Errorf("Expected warning output, got: %s", output.String())
 	}
@@ -184,24 +173,12 @@ func TestExecuteStrReplace_StringReplace_NoWarningWhenUnique(t *testing.T) {
 	setupTestConfirm(t, true)
 
 	var output strings.Builder
-	oldStdout := os.Stdout
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("Failed to create pipe: %v", err)
-	}
-	os.Stdout = w
-	t.Cleanup(func() {
-		os.Stdout = oldStdout
-	})
 
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testutil.CreateTempFile(t, tmpDir, "test.txt", "alpha\nEXISTING\nomega")
 
-	replaceOutput, err := ExecuteStrReplace(testFile, "alpha", "NEWVALUE", "", "")
-
-	w.Close()
-	_, _ = io.Copy(&output, r)
+	replaceOutput, err := executeStrReplaceWithWritersForTest(&output, io.Discard, testFile, "alpha", "NEWVALUE", "", "")
 
 	if err != nil {
 		t.Fatalf("ExecuteStrReplace failed: %v", err)
@@ -219,28 +196,17 @@ func TestExecuteStrReplace_LineRange_WarnsOnDuplicateNearby(t *testing.T) {
 	setupTestMocks(t)
 	setupTestConfirm(t, true)
 
-	oldStdout := os.Stdout
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("Failed to create pipe: %v", err)
-	}
-	os.Stdout = w
-	t.Cleanup(func() {
-		os.Stdout = oldStdout
-	})
+	var output strings.Builder
 
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testutil.CreateTempFile(t, tmpDir, "test.txt", "keep\nold\nold\nkeep")
 
-	replaceOutput, err := ExecuteStrReplace(testFile, "", "keep", "2", "3")
+	replaceOutput, err := executeStrReplaceWithWritersForTest(&output, io.Discard, testFile, "", "keep", "2", "3")
 
 	if err != nil {
 		t.Fatalf("ExecuteStrReplace failed: %v", err)
 	}
-	_ = w.Close()
-	var output strings.Builder
-	_, _ = io.Copy(&output, r)
 	if !strings.Contains(output.String(), "Warning: new_str already exists near the target range") {
 		t.Errorf("Expected warning output, got: %s", output.String())
 	}
@@ -255,24 +221,12 @@ func TestExecuteStrReplace_LineRange_NoWarningWhenUniqueOutsideRange(t *testing.
 	setupTestConfirm(t, true)
 
 	var output strings.Builder
-	oldStdout := os.Stdout
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("Failed to create pipe: %v", err)
-	}
-	os.Stdout = w
-	t.Cleanup(func() {
-		os.Stdout = oldStdout
-	})
 
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testutil.CreateTempFile(t, tmpDir, "test.txt", "keep\nold\nold\nkeep")
 
-	replaceOutput, err := ExecuteStrReplace(testFile, "", "NEWLINE", "2", "3")
-
-	w.Close()
-	_, _ = io.Copy(&output, r)
+	replaceOutput, err := executeStrReplaceWithWritersForTest(&output, io.Discard, testFile, "", "NEWLINE", "2", "3")
 
 	if err != nil {
 		t.Fatalf("ExecuteStrReplace failed: %v", err)
@@ -290,15 +244,7 @@ func TestExecuteStrReplace_NoDuplicateWarningForDistantMatch(t *testing.T) {
 	setupTestMocks(t)
 	setupTestConfirm(t, true)
 
-	oldStdout := os.Stdout
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("Failed to create pipe: %v", err)
-	}
-	os.Stdout = w
-	t.Cleanup(func() {
-		os.Stdout = oldStdout
-	})
+	var output strings.Builder
 
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
@@ -309,13 +255,10 @@ func TestExecuteStrReplace_NoDuplicateWarningForDistantMatch(t *testing.T) {
 	lines = append(lines, "EXISTING")
 	testutil.CreateTempFile(t, tmpDir, "test.txt", strings.Join(lines, "\n"))
 
-	result, err := ExecuteStrReplace(testFile, "TARGET", "EXISTING", "", "")
+	result, err := executeStrReplaceWithWritersForTest(&output, io.Discard, testFile, "TARGET", "EXISTING", "", "")
 	if err != nil {
 		t.Fatalf("ExecuteStrReplace failed: %v", err)
 	}
-	_ = w.Close()
-	var output strings.Builder
-	_, _ = io.Copy(&output, r)
 	if strings.Contains(output.String(), "Warning: new_str already exists near the replacement") {
 		t.Fatalf("did not expect nearby warning, got: %s", output.String())
 	}
@@ -370,7 +313,7 @@ func TestExecuteBatchEdits_NormalizedWhitespaceFallback(t *testing.T) {
 
 	// Indentation is intentionally different to trigger fallback
 	editsJSON := `[{"old_str":"func main() {\n    fmt.Println(\"hello\")\n}","new_str":"func main() {\n\tfmt.Println(\"world\")\n}"}]`
-	output, err := executeBatchEdits(testFile, editsJSON)
+	output, err := executeBatchEditsForTest(testFile, editsJSON)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -388,7 +331,7 @@ func TestExecuteBatchEdits_Success(t *testing.T) {
 	testutil.CreateTempFile(t, tmpDir, "test.txt", "aaa\nbbb\nccc")
 
 	editsJSON := `[{"old_str":"aaa","new_str":"AAA"},{"old_str":"ccc","new_str":"CCC"}]`
-	output, err := executeBatchEdits(testFile, editsJSON)
+	output, err := executeBatchEditsForTest(testFile, editsJSON)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -407,7 +350,7 @@ func TestExecuteBatchEdits_RollbackOnFailure(t *testing.T) {
 
 	// First edit valid, second not found
 	editsJSON := `[{"old_str":"aaa","new_str":"AAA"},{"old_str":"zzz","new_str":"ZZZ"}]`
-	output, err := executeBatchEdits(testFile, editsJSON)
+	output, err := executeBatchEditsForTest(testFile, editsJSON)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -425,7 +368,7 @@ func TestExecuteBatchEdits_AmbiguousMatch(t *testing.T) {
 	testutil.CreateTempFile(t, tmpDir, "test.txt", "foo\nbar\nfoo")
 
 	editsJSON := `[{"old_str":"foo","new_str":"baz"}]`
-	output, err := executeBatchEdits(testFile, editsJSON)
+	output, err := executeBatchEditsForTest(testFile, editsJSON)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -441,7 +384,7 @@ func TestExecuteBatchEdits_EmptyArray(t *testing.T) {
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testutil.CreateTempFile(t, tmpDir, "test.txt", "content")
 
-	output, err := executeBatchEdits(testFile, "[]")
+	output, err := executeBatchEditsForTest(testFile, "[]")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -456,7 +399,7 @@ func TestExecuteBatchEdits_InvalidJSON(t *testing.T) {
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testutil.CreateTempFile(t, tmpDir, "test.txt", "content")
 
-	output, err := executeBatchEdits(testFile, "not-json")
+	output, err := executeBatchEditsForTest(testFile, "not-json")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -472,7 +415,7 @@ func TestExecuteBatchEdits_OldStrPriority(t *testing.T) {
 	testutil.CreateTempFile(t, tmpDir, "test.txt", "aaa\nbbb")
 
 	// old_str non-empty -> single mode runs via ExecuteStrReplace, edits ignored
-	output, err := ExecuteStrReplace(testFile, "aaa", "AAA", "", "")
+	output, err := executeStrReplaceForTest(testFile, "aaa", "AAA", "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -491,7 +434,7 @@ func TestExecuteBatchEdits_UserCancelled(t *testing.T) {
 	testutil.CreateTempFile(t, tmpDir, "test.txt", "aaa\nbbb")
 
 	editsJSON := `[{"old_str":"aaa","new_str":"AAA"}]`
-	output, err := executeBatchEdits(testFile, editsJSON)
+	output, err := executeBatchEditsForTest(testFile, editsJSON)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -509,7 +452,7 @@ func TestExecuteBatchEdits_SequentialApplication(t *testing.T) {
 
 	// Edit 1 changes "hello" -> "hi", Edit 2 changes "hi world" -> "hi there"
 	editsJSON := `[{"old_str":"hello","new_str":"hi"},{"old_str":"hi world","new_str":"hi there"}]`
-	output, err := executeBatchEdits(testFile, editsJSON)
+	output, err := executeBatchEditsForTest(testFile, editsJSON)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

@@ -14,7 +14,7 @@ type diffPrinter struct {
 
 func newDiffPrinter(out io.Writer) diffPrinter {
 	if out == nil {
-		out = DefaultRuntime().Output()
+		out = io.Discard
 	}
 	return diffPrinter{out: out}
 }
@@ -50,11 +50,6 @@ var DefaultDiffOptions = DiffOptions{
 	ShowLineNums:  true,
 	InlineMode:    true,
 	MaxTotalLines: 50,
-}
-
-// ShowColoredDiff は標準出力へ色付きの差分を表示する。
-func ShowColoredDiff(oldStr, newStr string, opts *DiffOptions) {
-	ShowColoredDiffWithRuntime(DefaultRuntime(), oldStr, newStr, opts)
 }
 
 // ShowColoredDiffWithRuntime は UI runtime の出力先へ色付きの差分を表示する。
@@ -271,11 +266,6 @@ func min(a, b int) int {
 		return a
 	}
 	return b
-}
-
-// ShowUnifiedDiff は Unified Diff 形式で色付き表示する。
-func ShowUnifiedDiff(diffOutput string) {
-	ShowUnifiedDiffWithRuntime(DefaultRuntime(), diffOutput)
 }
 
 // ShowUnifiedDiffWithRuntime は UI runtime の出力先へ Unified Diff を表示する。

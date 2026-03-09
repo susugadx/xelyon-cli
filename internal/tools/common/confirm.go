@@ -103,31 +103,11 @@ func ConfirmApproved(message string) bool {
 	return Confirm(message).Action == ConfirmYes
 }
 
-// ConfirmWithAutoApproveDecision は危険度を考慮した確認プロンプト
-// toolName: 実行するツール名
-// message: 確認メッセージ
-// - auto-approve の場合は yes を返す
-// - それ以外は Confirm(message) を呼び、y/n/c の結果を返す
-func ConfirmWithAutoApproveDecision(promptIO ui.PromptIO, toolName, message string) ConfirmDecision {
-	return ConfirmWithAutoApproveDecisionAndOptions(promptIO, DefaultConfirmOptions(), toolName, message)
-}
-
-// DefaultConfirmOptions は互換用のデフォルト確認設定を返す。
-func DefaultConfirmOptions() ConfirmOptions {
-	return ConfirmOptions{
-		AutoApprove: false,
-		Config:      config.DefaultConfig(),
-	}
-}
-
 // ConfirmWithAutoApproveDecisionAndOptions は実行時設定を指定して確認を行う。
 func ConfirmWithAutoApproveDecisionAndOptions(promptIO ui.PromptIO, options ConfirmOptions, toolName, message string) ConfirmDecision {
 	promptIO = ui.NormalizePromptIO(promptIO)
 	out := NewOutput(promptIO.Out, promptIO.Err)
 	cfg := options.Config
-	if cfg == nil {
-		cfg = config.DefaultConfig()
-	}
 
 	// --auto-approve が有効 かつ ツールが自動承認可能な場合
 	if IsAutoApprovable(toolName, options.AutoApprove) {
@@ -137,13 +117,13 @@ func ConfirmWithAutoApproveDecisionAndOptions(promptIO ui.PromptIO, options Conf
 	}
 
 	// SafetyHigh ツールの自動承認（設定で有効な場合）
-	if cfg.ToolConfirm.AutoApproveSafe && IsSafeToolAutoApprovable(toolName) {
+	if cfg != nil && cfg.ToolConfirm.AutoApproveSafe && IsSafeToolAutoApprovable(toolName) {
 		out.Green.Printf("Auto-approved (Safe read-only): %s\n", toolName)
 		return ConfirmDecision{Action: ConfirmYes}
 	}
 
 	// SafetyMedium ツールの自動承認（設定で有効な場合）
-	if cfg.ToolConfirm.AutoApproveMedium && IsMediumToolAutoApprovable(toolName) {
+	if cfg != nil && cfg.ToolConfirm.AutoApproveMedium && IsMediumToolAutoApprovable(toolName) {
 		out.Green.Printf("Auto-approved (Medium write): %s\n", toolName)
 		return ConfirmDecision{Action: ConfirmYes}
 	}
