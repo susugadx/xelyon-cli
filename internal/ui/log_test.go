@@ -7,12 +7,33 @@ import (
 	"testing"
 )
 
-func TestLogLevelDefault(t *testing.T) {
-	// Reset for test
-	originalLevel := currentLogLevel
-	defer func() { currentLogLevel = originalLevel }()
+func resetDefaultRuntimeLogLevelForTest(t *testing.T, level LogLevel, set bool) {
+	t.Helper()
+	defaultRuntime.mu.Lock()
+	originalLevel := defaultRuntime.logLevel
+	originalSet := defaultRuntime.logLevelSet
+	defaultRuntime.logLevel = level
+	defaultRuntime.logLevelSet = set
+	defaultRuntime.mu.Unlock()
+	t.Cleanup(func() {
+		defaultRuntime.mu.Lock()
+		defaultRuntime.logLevel = originalLevel
+		defaultRuntime.logLevelSet = originalSet
+		defaultRuntime.mu.Unlock()
+	})
+}
 
-	currentLogLevel = LogInfo
+func TestLogLevelDefault(t *testing.T) {
+	originalEnv := os.Getenv("XELYON_DEBUG")
+	t.Cleanup(func() {
+		if originalEnv != "" {
+			os.Setenv("XELYON_DEBUG", originalEnv)
+		} else {
+			os.Unsetenv("XELYON_DEBUG")
+		}
+	})
+	os.Unsetenv("XELYON_DEBUG")
+	resetDefaultRuntimeLogLevelForTest(t, LogInfo, false)
 
 	if GetLogLevel() != LogInfo {
 		t.Errorf("default log level = %v, want LogInfo", GetLogLevel())
@@ -20,8 +41,7 @@ func TestLogLevelDefault(t *testing.T) {
 }
 
 func TestSetLogLevel(t *testing.T) {
-	originalLevel := currentLogLevel
-	defer func() { currentLogLevel = originalLevel }()
+	resetDefaultRuntimeLogLevelForTest(t, LogInfo, false)
 
 	tests := []struct {
 		name  string
@@ -44,23 +64,19 @@ func TestSetLogLevel(t *testing.T) {
 }
 
 func TestDebugEnvVar(t *testing.T) {
-	originalLevel := currentLogLevel
 	originalEnv := os.Getenv("XELYON_DEBUG")
-	defer func() {
-		currentLogLevel = originalLevel
+	resetDefaultRuntimeLogLevelForTest(t, LogInfo, false)
+	t.Cleanup(func() {
 		if originalEnv != "" {
 			os.Setenv("XELYON_DEBUG", originalEnv)
 		} else {
 			os.Unsetenv("XELYON_DEBUG")
 		}
-	}()
+	})
 
 	// Test that XELYON_DEBUG=1 should enable debug logging
 	os.Setenv("XELYON_DEBUG", "1")
-	// Simulate init behavior
-	if os.Getenv("XELYON_DEBUG") == "1" {
-		SetLogLevel(LogDebug)
-	}
+	resetDefaultRuntimeLogLevelForTest(t, LogInfo, false)
 
 	if GetLogLevel() != LogDebug {
 		t.Error("XELYON_DEBUG=1 should set LogDebug")
@@ -71,9 +87,7 @@ func TestLogFunctionsNoPanic(t *testing.T) {
 	// These tests just verify the functions don't panic
 	// Actual output testing would require capturing stdout
 
-	originalLevel := currentLogLevel
-	defer func() { currentLogLevel = originalLevel }()
-
+	resetDefaultRuntimeLogLevelForTest(t, LogInfo, false)
 	SetLogLevel(LogDebug)
 
 	// Should not panic
@@ -88,9 +102,7 @@ func TestLogFunctionsNoPanic(t *testing.T) {
 }
 
 func TestLogFunctionsToWriter_UseInjectedWriters(t *testing.T) {
-	originalLevel := currentLogLevel
-	defer func() { currentLogLevel = originalLevel }()
-
+	resetDefaultRuntimeLogLevelForTest(t, LogInfo, false)
 	SetLogLevel(LogDebug)
 
 	var out bytes.Buffer
@@ -117,9 +129,7 @@ func TestLogFunctionsToWriter_UseInjectedWriters(t *testing.T) {
 }
 
 func TestLogLevelFiltering(t *testing.T) {
-	originalLevel := currentLogLevel
-	defer func() { currentLogLevel = originalLevel }()
-
+	resetDefaultRuntimeLogLevelForTest(t, LogInfo, false)
 	// At Error level, Debug/Info/Warn should be filtered
 	SetLogLevel(LogError)
 
@@ -133,10 +143,8 @@ func TestLogLevelFiltering(t *testing.T) {
 }
 
 func TestRuntimeLogLevel(t *testing.T) {
-	originalLevel := currentLogLevel
-	defer func() { currentLogLevel = originalLevel }()
-
 	// global を Info にする
+	resetDefaultRuntimeLogLevelForTest(t, LogInfo, false)
 	SetLogLevel(LogInfo)
 
 	var out bytes.Buffer
@@ -174,9 +182,7 @@ func TestRuntimeLogLevel(t *testing.T) {
 }
 
 func TestRuntimeLogLevelFiltering(t *testing.T) {
-	originalLevel := currentLogLevel
-	defer func() { currentLogLevel = originalLevel }()
-
+	resetDefaultRuntimeLogLevelForTest(t, LogInfo, false)
 	SetLogLevel(LogDebug)
 
 	var out bytes.Buffer

@@ -96,7 +96,7 @@ func (p *Provider) effectiveConfig() *config.Config {
 	if p != nil && p.runtimeConfig != nil {
 		return p.runtimeConfig
 	}
-	return config.GetGlobalConfig()
+	return config.DefaultConfig()
 }
 
 func (p *Provider) supportsClaudeCompactionWithConfig(cfg *config.Config, model string) bool {
@@ -144,7 +144,7 @@ func (p *Provider) IsFunctionCallingEnabled() bool {
 // ChatWithTools は Provider interface の実装
 func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
 	model = api.GetDefaultModelWithContext(ctx, model, "openrouter", "anthropic/claude-sonnet-4.6")
-	cfg := config.FromContext(ctx)
+	cfg := config.ResolveContext(ctx, p.effectiveConfig())
 
 	// Claude モデル + Compaction 有効時は Anthropic Skin エンドポイントを使用
 	if isClaudeModel(model) && cfg.Compression.ClaudeCompaction && isCompactionSupported(model) {
@@ -230,7 +230,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	}
 
 	model = api.GetDefaultModelWithContext(ctx, model, "openrouter", "anthropic/claude-sonnet-4.6")
-	cfg := config.FromContext(ctx)
+	cfg := config.ResolveContext(ctx, p.effectiveConfig())
 
 	if isClaudeModel(model) && cfg.Compression.ClaudeCompaction && isCompactionSupported(model) {
 		history = append(history, api.Message{Role: "user", Content: userMessage})
@@ -485,9 +485,9 @@ func (p *Provider) chatWithClaudeAPI(ctx context.Context, systemPrompt string, h
 	anthropicMessages := claude.ConvertToAnthropicMessages(history)
 
 	// プロンプトキャッシュ: 安定区間+最新userにブレークポイント設定
-	cfg := config.FromContext(ctx)
+	cfg := config.ResolveContext(ctx, p.effectiveConfig())
 	if cfg != nil && cfg.PromptCache.Enabled {
-		claude.SetMessageCacheBreakpointsWithEnabled(anthropicMessages, true)
+		claude.SetMessageCacheBreakpointsWithConfigAndEnabled(anthropicMessages, cfg, true)
 	}
 
 	// リクエスト構造体（Anthropic Messages API 形式）
@@ -507,7 +507,7 @@ func (p *Provider) chatWithClaudeAPI(ctx context.Context, systemPrompt string, h
 		Model:            model,
 		AnthropicVersion: "2023-06-01",
 		MaxTokens:        api.GetMaxOutputTokens(ctx, "openrouter", model),
-		System:           api.BuildSystemField(systemPrompt),
+		System:           api.BuildSystemFieldWithConfig(systemPrompt, cfg),
 		Messages:         anthropicMessages,
 		Stream:           true,
 	}

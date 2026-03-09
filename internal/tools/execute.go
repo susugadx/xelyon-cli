@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/fatih/color"
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -86,7 +87,7 @@ func ExecuteWithContext(execCtx ExecutionContext, tc *ToolCall) (string, *FileCh
 
 	// ツール出力の折りたたみ表示（bashはストリーミング表示済みなので除外）
 	if !isStreamingTool(tc.Tool) && shouldShowCollapsedOutput(result) {
-		displayCollapsedOutput(execCtx.Stdout, result)
+		displayCollapsedOutput(execCtx.Stdout, result, execCtx.EffectiveConfig())
 	}
 
 	return result, change
@@ -259,7 +260,7 @@ func shouldShowCollapsedOutput(output string) bool {
 }
 
 // displayCollapsedOutput はツール出力を折りたたみ表示
-func displayCollapsedOutput(w io.Writer, output string) {
+func displayCollapsedOutput(w io.Writer, output string, cfg *config.Config) {
 	// エラー出力や短い成功メッセージはそのまま表示
 	if strings.HasPrefix(output, "Error:") ||
 		strings.HasPrefix(output, "Successfully") ||
@@ -273,6 +274,6 @@ func displayCollapsedOutput(w io.Writer, output string) {
 	}
 
 	// 折りたたみ表示
-	formatted := ui.FormatToolOutput(output, ui.GetMaxVisibleLines())
+	formatted := ui.FormatToolOutput(output, ui.GetMaxVisibleLinesWithConfig(cfg))
 	_, _ = fmt.Fprint(w, formatted)
 }

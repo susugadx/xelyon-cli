@@ -102,5 +102,5 @@ func stopSpinnerForPromptIO(promptIO PromptIO) {
 		promptIO.runtime.StopSpinner()
 		return
 	}
-	StopGlobalSpinner()
+	DefaultRuntime().StopSpinner()
 }

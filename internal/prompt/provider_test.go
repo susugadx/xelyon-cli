@@ -310,3 +310,21 @@ func TestBuildProviderSystemPrompt_CacheMarginDisabledWhenPromptCacheOff(t *test
 		t.Fatal("cache margin block should not be included when prompt cache is disabled")
 	}
 }
+
+func TestBuildProviderSystemPromptWithConfig_UsesInjectedConfig(t *testing.T) {
+	original := config.GetGlobalConfig()
+	globalCfg := config.DefaultConfig()
+	globalCfg.PromptCache.Enabled = false
+	config.SetGlobalConfig(globalCfg)
+	defer config.SetGlobalConfig(original)
+
+	cfg := config.DefaultConfig()
+	cfg.PromptCache.Enabled = true
+
+	base := "You are XELYON.\n\n## Workflow Rules\n- workflow"
+	result := BuildProviderSystemPromptWithConfig(base, "claude", "claude-opus-4-6", cfg)
+
+	if !strings.Contains(result, "### Stable Working Reference") {
+		t.Fatal("injected config should enable cache margin block")
+	}
+}

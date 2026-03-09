@@ -8,9 +8,6 @@ import (
 )
 
 func TestGetMaxOutputTokens(t *testing.T) {
-	originalConfig := config.GetGlobalConfig()
-	defer config.SetGlobalConfig(originalConfig)
-
 	cfg := &config.Config{
 		ProviderModels: map[string]config.ProviderModelConfig{
 			"deepseek": {
@@ -62,9 +59,8 @@ func TestGetMaxOutputTokens(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config.SetGlobalConfig(cfg)
-			defer config.SetGlobalConfig(originalConfig)
-			got := GetMaxOutputTokens(context.Background(), tt.provider, tt.model)
+			ctx := config.WithContext(context.Background(), cfg)
+			got := GetMaxOutputTokens(ctx, tt.provider, tt.model)
 			if got != tt.expected {
 				t.Errorf("GetMaxOutputTokens() = %v, want %v", got, tt.expected)
 			}

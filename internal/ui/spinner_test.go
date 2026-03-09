@@ -43,6 +43,32 @@ func TestNewSpinnerWithRuntime_UsesInjectedWriter(t *testing.T) {
 	}
 }
 
+func TestGlobalSpinnerWrapper_UsesDefaultRuntimeOnly(t *testing.T) {
+	runtime := NewRuntime(strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{})
+	runtimeSpinner := NewSpinnerWithRuntime(runtime)
+	runtime.SetSpinner(runtimeSpinner)
+	t.Cleanup(runtime.StopSpinner)
+
+	globalSpinner := NewSpinner()
+	SetGlobalSpinner(globalSpinner)
+	t.Cleanup(StopGlobalSpinner)
+
+	if GetGlobalSpinner() != globalSpinner {
+		t.Fatal("expected global spinner wrapper to update default runtime spinner")
+	}
+	if runtime.CurrentSpinner() != runtimeSpinner {
+		t.Fatal("expected injected runtime spinner to remain untouched")
+	}
+
+	StopGlobalSpinner()
+	if GetGlobalSpinner() != nil {
+		t.Fatal("expected default runtime spinner to be cleared")
+	}
+	if runtime.CurrentSpinner() != runtimeSpinner {
+		t.Fatal("expected injected runtime spinner to remain after stopping global spinner")
+	}
+}
+
 func TestSpinner_StartStop(t *testing.T) {
 	// Note: This test has a race condition when using bytes.Buffer
 	// because the spinner goroutine writes while we read.

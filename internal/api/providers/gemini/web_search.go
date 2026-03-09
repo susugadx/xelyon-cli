@@ -69,7 +69,7 @@ func init() {
 
 // WebSearch executes Gemini's native Google Search grounding.
 func WebSearch(query, model string) (string, error) {
-	return WebSearchWithContext(context.Background(), query, model)
+	return WebSearchWithContext(config.WithGlobalFallback(context.Background()), query, model)
 }
 
 // WebSearchWithContext は request context を使って Gemini ネイティブ web search を実行する。

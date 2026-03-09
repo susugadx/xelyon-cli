@@ -298,7 +298,7 @@ func (p *Provider) effectiveConfig() *config.Config {
 	if p != nil && p.runtimeConfig != nil {
 		return p.runtimeConfig
 	}
-	return config.GetGlobalConfig()
+	return config.DefaultConfig()
 }
 
 func (p *Provider) supportsClaudeCompactionWithConfig(cfg *config.Config, model string) bool {
@@ -322,17 +322,17 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	// Anthropic Messages API 形式に変換（role:"tool" → role:"user"+tool_result 等）
 	messages := ConvertToAnthropicMessages(history)
 
-	cfg := config.FromContext(ctx)
+	cfg := config.ResolveContext(ctx, p.effectiveConfig())
 
 	// プロンプトキャッシュ: 安定区間+最新userにブレークポイント設定
 	if cfg != nil && cfg.PromptCache.Enabled {
-		SetMessageCacheBreakpointsWithEnabled(messages, true)
+		SetMessageCacheBreakpointsWithConfigAndEnabled(messages, cfg, true)
 	}
 
 	reqBody := Request{
 		Model:     model,
 		Messages:  messages,
-		System:    api.BuildSystemField(systemPrompt),
+		System:    api.BuildSystemFieldWithConfig(systemPrompt, cfg),
 		MaxTokens: api.GetMaxOutputTokens(ctx, "claude", model),
 		Stream:    true,
 	}
@@ -595,9 +595,9 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	// multimodalMessage（画像付き新規入力）は converted に含まれないため BP 対象外。
 	// 画像ターンでは実質 BP が system+tools+履歴の3個になるが、
 	// 次ターンで multimodalMessage も履歴に含まれキャッシュされる。
-	cfg := config.FromContext(ctx)
+	cfg := config.ResolveContext(ctx, p.effectiveConfig())
 	if cfg != nil && cfg.PromptCache.Enabled {
-		SetMessageCacheBreakpointsWithEnabled(converted, true)
+		SetMessageCacheBreakpointsWithConfigAndEnabled(converted, cfg, true)
 	}
 
 	var messages []interface{}
@@ -628,7 +628,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	reqBody := MultimodalRequest{
 		Model:     model,
 		Messages:  messages,
-		System:    api.BuildSystemField(systemPrompt),
+		System:    api.BuildSystemFieldWithConfig(systemPrompt, cfg),
 		MaxTokens: api.GetMaxOutputTokens(ctx, "claude", model),
 		Stream:    true,
 	}

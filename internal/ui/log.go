@@ -17,22 +17,21 @@ const (
 	LogError
 )
 
-var currentLogLevel = LogInfo
-
-func init() {
+func defaultLogLevel() LogLevel {
 	if os.Getenv("XELYON_DEBUG") == "1" {
-		currentLogLevel = LogDebug
+		return LogDebug
 	}
+	return LogInfo
 }
 
-// SetLogLevel は現在の global ログレベルを設定する。
+// SetLogLevel は互換用途で DefaultRuntime のログレベルを設定する。
 func SetLogLevel(level LogLevel) {
-	currentLogLevel = level
+	DefaultRuntime().SetLogLevel(level)
 }
 
-// GetLogLevel は現在の global ログレベルを返す。
+// GetLogLevel は互換用途で DefaultRuntime のログレベルを返す。
 func GetLogLevel() LogLevel {
-	return currentLogLevel
+	return DefaultRuntime().LogLevel()
 }
 
 // --- WithRuntime 系（runtime のログレベルを参照） ---

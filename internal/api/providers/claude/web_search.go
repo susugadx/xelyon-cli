@@ -58,7 +58,7 @@ func init() {
 
 // WebSearch executes Anthropic's native web search tool.
 func WebSearch(query, model string) (string, error) {
-	return WebSearchWithContext(context.Background(), query, model)
+	return WebSearchWithContext(config.WithGlobalFallback(context.Background()), query, model)
 }
 
 // WebSearchWithContext は request context を使って Claude ネイティブ web_search を実行する。

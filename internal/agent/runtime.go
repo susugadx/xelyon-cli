@@ -69,7 +69,7 @@ func (r *AgentRuntime) effectiveToolCache() *ToolCache {
 
 func (r *AgentRuntime) effectiveConfig() *config.Config {
 	if r == nil || r.Config == nil {
-		return config.GetGlobalConfig()
+		return config.DefaultConfig()
 	}
 	return r.Config
 }

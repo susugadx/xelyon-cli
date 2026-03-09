@@ -109,15 +109,18 @@ func (r *Runtime) SetLogLevel(level LogLevel) {
 	r.logLevelSet = true
 }
 
-// LogLevel は runtime のログレベルを返す。未設定の場合は global に fallback する。
+// LogLevel は runtime のログレベルを返す。未設定の場合は default runtime のレベルを使う。
 func (r *Runtime) LogLevel() LogLevel {
 	if r == nil {
-		return GetLogLevel()
+		return DefaultRuntime().LogLevel()
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	if !r.logLevelSet {
-		return GetLogLevel()
+		if r != defaultRuntime {
+			return DefaultRuntime().LogLevel()
+		}
+		return defaultLogLevel()
 	}
 	return r.logLevel
 }

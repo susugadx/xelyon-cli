@@ -135,11 +135,11 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	// Anthropic Messages API 形式に変換（role:"tool" → role:"user"+tool_result 等）
 	messages := claude.ConvertToAnthropicMessages(history)
 
-	cfg := config.FromContext(ctx)
+	cfg := config.ResolveContext(ctx, p.effectiveConfig())
 
 	// プロンプトキャッシュ: 安定区間+最新userにブレークポイント設定
 	if cfg != nil && cfg.PromptCache.Enabled {
-		claude.SetMessageCacheBreakpointsWithEnabled(messages, true)
+		claude.SetMessageCacheBreakpointsWithConfigAndEnabled(messages, cfg, true)
 	}
 	pCfg := cfg.ProviderModels["bedrock"]
 
@@ -153,7 +153,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		AnthropicVersion: version,
 		AnthropicBeta:    pCfg.AnthropicBeta,
 		MaxTokens:        api.GetMaxOutputTokens(ctx, "bedrock", model),
-		System:           api.BuildSystemField(systemPrompt),
+		System:           api.BuildSystemFieldWithConfig(systemPrompt, cfg),
 		Messages:         messages,
 	}
 
@@ -217,9 +217,9 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	converted := claude.ConvertToAnthropicMessages(history)
 
 	// プロンプトキャッシュ: 履歴部分にブレークポイント設定
-	cfg := config.FromContext(ctx)
+	cfg := config.ResolveContext(ctx, p.effectiveConfig())
 	if cfg != nil && cfg.PromptCache.Enabled {
-		claude.SetMessageCacheBreakpointsWithEnabled(converted, true)
+		claude.SetMessageCacheBreakpointsWithConfigAndEnabled(converted, cfg, true)
 	}
 
 	var messages []interface{}
@@ -259,7 +259,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 		AnthropicVersion: version,
 		AnthropicBeta:    pCfg.AnthropicBeta,
 		MaxTokens:        api.GetMaxOutputTokens(ctx, "bedrock", model),
-		System:           api.BuildSystemField(systemPrompt),
+		System:           api.BuildSystemFieldWithConfig(systemPrompt, cfg),
 		Messages:         messages,
 	}
 
@@ -313,7 +313,7 @@ func (p *Provider) effectiveConfig() *config.Config {
 	if p != nil && p.runtimeConfig != nil {
 		return p.runtimeConfig
 	}
-	return config.GetGlobalConfig()
+	return config.DefaultConfig()
 }
 
 func (p *Provider) supportsClaudeCompactionWithConfig(cfg *config.Config, model string) bool {

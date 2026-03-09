@@ -116,6 +116,16 @@ func TestNewCacheControl_ExtendedTTL(t *testing.T) {
 	}
 }
 
+func TestNewCacheControlWithConfig_UsesInjectedConfig(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.PromptCache.CacheTTL = "1h"
+
+	cc := NewCacheControlWithConfig(cfg)
+	if cc.TTL != "1h" {
+		t.Fatalf("TTL = %q, want %q", cc.TTL, "1h")
+	}
+}
+
 func TestBuildSystemField_EmptyDynamic(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.PromptCache.Enabled = true
@@ -135,5 +145,22 @@ func TestBuildSystemField_EmptyDynamic(t *testing.T) {
 	}
 	if blocks[0].Text != "base prompt" {
 		t.Errorf("block text = %q, want 'base prompt'", blocks[0].Text)
+	}
+}
+
+func TestBuildSystemFieldWithConfig_UsesInjectedConfig(t *testing.T) {
+	original := config.GetGlobalConfig()
+	globalCfg := config.DefaultConfig()
+	globalCfg.PromptCache.Enabled = false
+	config.SetGlobalConfig(globalCfg)
+	defer config.SetGlobalConfig(original)
+
+	cfg := config.DefaultConfig()
+	cfg.PromptCache.Enabled = true
+
+	result := BuildSystemFieldWithConfig("Hello world", cfg)
+
+	if _, ok := result.([]SystemBlock); !ok {
+		t.Fatalf("expected []SystemBlock with injected config, got %T", result)
 	}
 }

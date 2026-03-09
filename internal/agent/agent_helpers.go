@@ -186,7 +186,7 @@ func (a *Agent) rebuildSystemPromptForCurrentProvider() {
 	if a.mcpManager != nil && len(a.mcpManager.GetTools()) > 0 {
 		systemPrompt += buildMCPToolsPrompt(a.mcpManager)
 	}
-	systemPrompt = prompt.BuildProviderSystemPrompt(systemPrompt, a.CurrentProvider.Name(), a.CurrentModel)
+	systemPrompt = prompt.BuildProviderSystemPromptWithConfig(systemPrompt, a.CurrentProvider.Name(), a.CurrentModel, a.cfg())
 
 	if pc := loadProjectConfig(); pc != nil {
 		systemPrompt = injectProjectConfig(systemPrompt, pc)

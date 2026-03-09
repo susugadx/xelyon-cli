@@ -141,6 +141,21 @@ func TestAgentRuntime_SeparatesBuiltinListDirConfig(t *testing.T) {
 	}
 }
 
+func TestAgentRuntime_EffectiveConfigDoesNotUseGlobalFallback(t *testing.T) {
+	original := config.GetGlobalConfig()
+	global := config.DefaultConfig()
+	global.DefaultModel = "global-only-model"
+	config.SetGlobalConfig(global)
+	t.Cleanup(func() {
+		config.SetGlobalConfig(original)
+	})
+
+	runtime := &AgentRuntime{}
+	if got := runtime.effectiveConfig().DefaultModel; got != config.DefaultConfig().DefaultModel {
+		t.Fatalf("runtime effectiveConfig default model = %q, want %q", got, config.DefaultConfig().DefaultModel)
+	}
+}
+
 func TestAgentRuntime_SeparatesRegistryCacheAndAutoApprove(t *testing.T) {
 	root, err := os.MkdirTemp(".", "runtime-cache-*")
 	if err != nil {

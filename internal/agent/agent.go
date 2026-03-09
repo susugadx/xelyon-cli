@@ -238,7 +238,7 @@ func NewAgentWithRuntime(model string, provider api.Provider, headless bool, run
 	}
 
 	// プロバイダー別プレフィックスを Workflow Rules の直前に注入
-	systemPrompt = prompt.BuildProviderSystemPrompt(systemPrompt, provider.Name(), model)
+	systemPrompt = prompt.BuildProviderSystemPromptWithConfig(systemPrompt, provider.Name(), model, runtime.effectiveConfig())
 
 	// ToolCache 初期化（ディスクから復元）
 	toolCache := runtime.effectiveToolCache()

@@ -25,8 +25,10 @@ var (
 type SearchFunc func(query string) (string, error)
 
 // initCache はキャッシュを遅延初期化
-func initCache() {
-	cfg := config.GetGlobalConfig()
+func initCacheWithConfig(cfg *config.Config) {
+	if cfg == nil {
+		cfg = config.DefaultConfig()
+	}
 	if cfg.WebSearch.CacheEnabled && cfg.WebSearch.CacheSize > 0 {
 		webSearchCache = cache.New(cache.Config{
 			Enabled:    true,
@@ -36,11 +38,22 @@ func initCache() {
 	}
 }
 
+func initCache() {
+	initCacheWithConfig(config.GetGlobalConfig())
+}
+
 // SearchWithCache はキャッシュ対応のWeb検索を実行する。
 // cacheScope はプロバイダー別キャッシュキーの接頭辞に使用する。
 // 戻り値: (result, cached, error)
 func SearchWithCache(cacheScope, query string, searchFn SearchFunc) (string, bool, error) {
-	cacheOnce.Do(initCache)
+	return SearchWithCacheAndConfig(config.GetGlobalConfig(), cacheScope, query, searchFn)
+}
+
+// SearchWithCacheAndConfig は明示指定された設定でキャッシュ対応の Web 検索を実行する。
+func SearchWithCacheAndConfig(cfg *config.Config, cacheScope, query string, searchFn SearchFunc) (string, bool, error) {
+	cacheOnce.Do(func() {
+		initCacheWithConfig(cfg)
+	})
 
 	if searchFn == nil {
 		searchFn = WebSearch

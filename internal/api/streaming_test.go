@@ -26,9 +26,7 @@ func (m *mockReadCloser) Close() error {
 }
 
 func TestParseStreamingResponse_EmptyLines(t *testing.T) {
-	originalConfig := config.GetGlobalConfig()
-	defer config.SetGlobalConfig(originalConfig)
-	config.SetGlobalConfig(config.DefaultConfig())
+	ctx := config.WithContext(context.Background(), config.DefaultConfig())
 
 	body := "\n\n\n"
 	resp := &http.Response{
@@ -36,7 +34,6 @@ func TestParseStreamingResponse_EmptyLines(t *testing.T) {
 	}
 
 	spinner := ui.NewSpinner()
-	ctx := context.Background()
 
 	parser := func(line string) (string, bool, error) {
 		return "", false, nil
@@ -53,9 +50,7 @@ func TestParseStreamingResponse_EmptyLines(t *testing.T) {
 }
 
 func TestParseStreamingResponse_ParserError(t *testing.T) {
-	originalConfig := config.GetGlobalConfig()
-	defer config.SetGlobalConfig(originalConfig)
-	config.SetGlobalConfig(config.DefaultConfig())
+	ctx := config.WithContext(context.Background(), config.DefaultConfig())
 
 	body := "line1\nline2\nline3\n"
 	resp := &http.Response{
@@ -63,7 +58,6 @@ func TestParseStreamingResponse_ParserError(t *testing.T) {
 	}
 
 	spinner := ui.NewSpinner()
-	ctx := context.Background()
 
 	// 常にエラーを返すパーサー
 	parser := func(line string) (string, bool, error) {
@@ -82,9 +76,7 @@ func TestParseStreamingResponse_ParserError(t *testing.T) {
 }
 
 func TestParseStreamingResponse_DoneFlag(t *testing.T) {
-	originalConfig := config.GetGlobalConfig()
-	defer config.SetGlobalConfig(originalConfig)
-	config.SetGlobalConfig(config.DefaultConfig())
+	ctx := config.WithContext(context.Background(), config.DefaultConfig())
 
 	body := "chunk1\nchunk2\n[DONE]\nchunk3\n"
 	resp := &http.Response{
@@ -92,7 +84,6 @@ func TestParseStreamingResponse_DoneFlag(t *testing.T) {
 	}
 
 	spinner := ui.NewSpinner()
-	ctx := context.Background()
 
 	parser := func(line string) (string, bool, error) {
 		if line == "[DONE]" {
@@ -113,10 +104,6 @@ func TestParseStreamingResponse_DoneFlag(t *testing.T) {
 }
 
 func TestParseStreamingResponse_ContextCanceled(t *testing.T) {
-	originalConfig := config.GetGlobalConfig()
-	defer config.SetGlobalConfig(originalConfig)
-	config.SetGlobalConfig(config.DefaultConfig())
-
 	// 長いストリーム（読み取り中にキャンセルをシミュレート）
 	body := "chunk1\nchunk2\nchunk3\nchunk4\nchunk5\n"
 	resp := &http.Response{
@@ -124,7 +111,8 @@ func TestParseStreamingResponse_ContextCanceled(t *testing.T) {
 	}
 
 	spinner := ui.NewSpinner()
-	ctx, cancel := context.WithCancel(context.Background())
+	baseCtx := config.WithContext(context.Background(), config.DefaultConfig())
+	ctx, cancel := context.WithCancel(baseCtx)
 
 	callCount := 0
 	parser := func(line string) (string, bool, error) {
@@ -148,9 +136,7 @@ func TestParseStreamingResponse_ContextCanceled(t *testing.T) {
 }
 
 func TestParseStreamingResponse_NormalFlow(t *testing.T) {
-	originalConfig := config.GetGlobalConfig()
-	defer config.SetGlobalConfig(originalConfig)
-	config.SetGlobalConfig(config.DefaultConfig())
+	ctx := config.WithContext(context.Background(), config.DefaultConfig())
 
 	body := "Hello\nWorld\n!\n"
 	resp := &http.Response{
@@ -158,7 +144,6 @@ func TestParseStreamingResponse_NormalFlow(t *testing.T) {
 	}
 
 	spinner := ui.NewSpinner()
-	ctx := context.Background()
 
 	parser := func(line string) (string, bool, error) {
 		return line, false, nil
@@ -206,13 +191,10 @@ func (s *slowReader) Close() error {
 
 // TestStreamingIdleTimeout はアイドルタイムアウトをテスト
 func TestStreamingIdleTimeout(t *testing.T) {
-	originalConfig := config.GetGlobalConfig()
-	defer config.SetGlobalConfig(originalConfig)
-
 	// 短いアイドルタイムアウトを設定
 	cfg := config.DefaultConfig()
 	cfg.Streaming.IdleTimeoutSeconds = 1 // 1秒
-	config.SetGlobalConfig(cfg)
+	ctx := config.WithContext(context.Background(), cfg)
 
 	// 2秒遅延で読み込むリーダー（タイムアウトする）
 	slowR := &slowReader{
@@ -238,7 +220,7 @@ func TestStreamingIdleTimeout(t *testing.T) {
 	}
 
 	start := time.Now()
-	_, err := ParseStreamingResponse(context.Background(), resp, spinner, parser)
+	_, err := ParseStreamingResponse(ctx, resp, spinner, parser)
 	elapsed := time.Since(start)
 
 	// タイムアウトエラーが発生すること
@@ -257,13 +239,10 @@ func TestStreamingIdleTimeout(t *testing.T) {
 
 // TestStreamingNoTimeoutWithContinuousData は連続データでタイムアウトしないことをテスト
 func TestStreamingNoTimeoutWithContinuousData(t *testing.T) {
-	originalConfig := config.GetGlobalConfig()
-	defer config.SetGlobalConfig(originalConfig)
-
 	// 短いアイドルタイムアウトを設定
 	cfg := config.DefaultConfig()
 	cfg.Streaming.IdleTimeoutSeconds = 2 // 2秒
-	config.SetGlobalConfig(cfg)
+	ctx := config.WithContext(context.Background(), cfg)
 
 	// 0.5秒遅延で読み込むリーダー（タイムアウトしない）
 	slowR := &slowReader{
@@ -295,7 +274,7 @@ func TestStreamingNoTimeoutWithContinuousData(t *testing.T) {
 		return "", false, nil
 	}
 
-	_, err := ParseStreamingResponse(context.Background(), resp, spinner, parser)
+	_, err := ParseStreamingResponse(ctx, resp, spinner, parser)
 
 	// エラーなしで完了すること
 	if err != nil {

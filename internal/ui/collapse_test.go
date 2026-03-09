@@ -3,6 +3,8 @@ package ui
 import (
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 func TestCollapseOutput_ShortOutput(t *testing.T) {
@@ -99,5 +101,14 @@ func TestGetMaxVisibleLines_Default(t *testing.T) {
 
 	if lines <= 0 {
 		t.Errorf("Expected positive default, got %d", lines)
+	}
+}
+
+func TestGetMaxVisibleLinesWithConfig_UsesInjectedConfig(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Output.MaxLines = 12
+
+	if got := GetMaxVisibleLinesWithConfig(cfg); got != 12 {
+		t.Fatalf("GetMaxVisibleLinesWithConfig() = %d, want 12", got)
 	}
 }

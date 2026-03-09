@@ -142,8 +142,10 @@ func isAnthropicCacheProvider(providerName, model string) bool {
 	}
 }
 
-func needsAnthropicCacheMargin(providerName, model string) bool {
-	cfg := config.GetGlobalConfig()
+func needsAnthropicCacheMarginWithConfig(providerName, model string, cfg *config.Config) bool {
+	if cfg == nil {
+		cfg = config.DefaultConfig()
+	}
 	if cfg == nil || !cfg.PromptCache.Enabled {
 		return false
 	}
@@ -155,11 +157,16 @@ func needsAnthropicCacheMargin(providerName, model string) bool {
 
 // BuildProviderSystemPrompt はプロバイダー別ノートを Workflow Rules の直前に挿入する
 func BuildProviderSystemPrompt(base, providerName, model string) string {
+	return BuildProviderSystemPromptWithConfig(base, providerName, model, config.GetGlobalConfig())
+}
+
+// BuildProviderSystemPromptWithConfig は明示指定した設定を使ってプロバイダー別ノートを挿入する。
+func BuildProviderSystemPromptWithConfig(base, providerName, model string, cfg *config.Config) string {
 	prefix := strings.TrimSpace(GetProviderPrefix(providerName))
 	if prefix == "" {
 		return base
 	}
-	if needsAnthropicCacheMargin(providerName, model) {
+	if needsAnthropicCacheMarginWithConfig(providerName, model, cfg) {
 		prefix += "\n\n" + anthropicCacheMarginBlock
 	}
 	idx := strings.Index(base, workflowRulesHeader)

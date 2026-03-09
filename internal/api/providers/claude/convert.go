@@ -168,13 +168,21 @@ func ConvertToAnthropicMessages(history []api.Message) []AnthropicMessage {
 //	BP#3, BP#4: tool_result 上位2つ（本関数）
 func SetMessageCacheBreakpoints(messages []AnthropicMessage) {
 	cfg := config.GetGlobalConfig()
-	SetMessageCacheBreakpointsWithEnabled(messages, cfg == nil || cfg.PromptCache.Enabled)
+	SetMessageCacheBreakpointsWithConfigAndEnabled(messages, cfg, cfg == nil || cfg.PromptCache.Enabled)
 }
 
 // SetMessageCacheBreakpointsWithEnabled は prompt cache 有効時のみメッセージに breakpoints を設定する。
 func SetMessageCacheBreakpointsWithEnabled(messages []AnthropicMessage, enabled bool) {
+	SetMessageCacheBreakpointsWithConfigAndEnabled(messages, config.DefaultConfig(), enabled)
+}
+
+// SetMessageCacheBreakpointsWithConfigAndEnabled は設定と有効フラグを指定して breakpoints を設定する。
+func SetMessageCacheBreakpointsWithConfigAndEnabled(messages []AnthropicMessage, cfg *config.Config, enabled bool) {
 	if !enabled {
 		return
+	}
+	if cfg == nil {
+		cfg = config.DefaultConfig()
 	}
 
 	const stableOffset = 3
@@ -233,7 +241,7 @@ func SetMessageCacheBreakpointsWithEnabled(messages []AnthropicMessage, enabled 
 	}
 	for i := 0; i < limit; i++ {
 		c := candidates[i]
-		messages[c.msgIdx].Content[c.blockIdx].CacheControl = api.NewCacheControl()
+		messages[c.msgIdx].Content[c.blockIdx].CacheControl = api.NewCacheControlWithConfig(cfg)
 	}
 }
 

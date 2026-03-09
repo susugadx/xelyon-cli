@@ -7,6 +7,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api/providers/serper"
 	"github.com/susugadx/xelyon-cli/internal/api/websearch"
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
@@ -33,7 +34,7 @@ func ExecuteWebSearch(execCtx tools.ExecutionContext, query string) string {
 	requestCtx := tools.WithRegistry(context.Background(), execCtx.EffectiveRegistry())
 	requestCtx = tools.WithConfig(requestCtx, execCtx.EffectiveConfig())
 
-	result, cached, source, err := executeWebSearchWithFallback(requestCtx, out, query, execCtx.ProviderName, execCtx.Model)
+	result, cached, source, err := executeWebSearchWithFallback(requestCtx, out, execCtx.EffectiveConfig(), query, execCtx.ProviderName, execCtx.Model)
 	if err != nil {
 		return fmt.Sprintf("Error: %v", err)
 	}
@@ -47,12 +48,12 @@ func ExecuteWebSearch(execCtx tools.ExecutionContext, query string) string {
 	return result
 }
 
-func executeWebSearchWithFallback(ctx context.Context, out common.Output, query, providerName, model string) (string, bool, string, error) {
+func executeWebSearchWithFallback(ctx context.Context, out common.Output, cfg *config.Config, query, providerName, model string) (string, bool, string, error) {
 	providerName = normalizeProviderName(providerName)
 	cacheScope := cacheScopeForProvider(providerName)
 
 	searchSource := "serper"
-	result, cached, err := serper.SearchWithCache(cacheScope, query, func(q string) (string, error) {
+	result, cached, err := serper.SearchWithCacheAndConfig(cfg, cacheScope, query, func(q string) (string, error) {
 		output, source, err := searchWithProvider(ctx, out, q, providerName, model)
 		searchSource = source
 		return output, err

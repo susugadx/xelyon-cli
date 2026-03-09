@@ -8,22 +8,19 @@ import (
 )
 
 func TestIsThinkingEnabled_DefaultFallback(t *testing.T) {
-	originalConfig := config.GetGlobalConfig()
-	defer config.SetGlobalConfig(originalConfig)
-
 	// Thinking OFF の設定
 	cfg := &config.Config{}
 	cfg.Thinking.Enabled = false
-	config.SetGlobalConfig(cfg)
 
-	ctx := context.Background()
+	ctx := config.WithContext(context.Background(), cfg)
 	if IsThinkingEnabled(ctx) {
 		t.Error("expected false when config.Thinking.Enabled=false and no override")
 	}
 
 	// Thinking ON の設定
-	cfg.Thinking.Enabled = true
-	config.SetGlobalConfig(cfg)
+	cfgOn := &config.Config{}
+	cfgOn.Thinking.Enabled = true
+	ctx = config.WithContext(context.Background(), cfgOn)
 
 	if !IsThinkingEnabled(ctx) {
 		t.Error("expected true when config.Thinking.Enabled=true and no override")
@@ -31,36 +28,28 @@ func TestIsThinkingEnabled_DefaultFallback(t *testing.T) {
 }
 
 func TestWithThinkingDisabled(t *testing.T) {
-	originalConfig := config.GetGlobalConfig()
-	defer config.SetGlobalConfig(originalConfig)
-
-	// グローバル設定は Thinking ON
+	// context 設定は Thinking ON
 	cfg := &config.Config{}
 	cfg.Thinking.Enabled = true
-	config.SetGlobalConfig(cfg)
 
 	// context.Value でオーバーライド
-	ctx := WithThinkingDisabled(context.Background())
+	ctx := WithThinkingDisabled(config.WithContext(context.Background(), cfg))
 	if IsThinkingEnabled(ctx) {
 		t.Error("expected false after WithThinkingDisabled, even when config.Thinking.Enabled=true")
 	}
 
-	// 元の context はオーバーライドなし → グローバル設定を参照
-	if !IsThinkingEnabled(context.Background()) {
+	// 元の context はオーバーライドなし
+	if !IsThinkingEnabled(config.WithContext(context.Background(), cfg)) {
 		t.Error("expected true for plain context when config.Thinking.Enabled=true")
 	}
 }
 
 func TestWithThinkingDisabled_NestedContext(t *testing.T) {
-	originalConfig := config.GetGlobalConfig()
-	defer config.SetGlobalConfig(originalConfig)
-
 	cfg := &config.Config{}
 	cfg.Thinking.Enabled = true
-	config.SetGlobalConfig(cfg)
 
 	// WithThinkingDisabled の後に WithTimeout しても override は保持される
-	ctx := WithThinkingDisabled(context.Background())
+	ctx := WithThinkingDisabled(config.WithContext(context.Background(), cfg))
 	childCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -70,13 +59,6 @@ func TestWithThinkingDisabled_NestedContext(t *testing.T) {
 }
 
 func TestIsThinkingEnabled_UsesContextConfig(t *testing.T) {
-	originalConfig := config.GetGlobalConfig()
-	defer config.SetGlobalConfig(originalConfig)
-
-	globalCfg := &config.Config{}
-	globalCfg.Thinking.Enabled = false
-	config.SetGlobalConfig(globalCfg)
-
 	ctxCfg := config.DefaultConfig()
 	ctxCfg.Thinking.Enabled = true
 

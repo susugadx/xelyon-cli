@@ -85,7 +85,7 @@ func ExecuteBashWithPromptIOAndConfig(promptIO ui.PromptIO, cfg *config.Config, 
 	promptIO = ui.NormalizePromptIO(promptIO)
 	out := common.NewOutput(promptIO.Out, promptIO.Err)
 	if cfg == nil {
-		cfg = config.GetGlobalConfig()
+		cfg = config.DefaultConfig()
 	}
 
 	if command == "" {
@@ -156,7 +156,7 @@ func ExecuteBashWithContextAndPromptIOAndConfig(ctx context.Context, promptIO ui
 	promptIO = ui.NormalizePromptIO(promptIO)
 	out := common.NewOutput(promptIO.Out, promptIO.Err)
 	if cfg == nil {
-		cfg = config.GetGlobalConfig()
+		cfg = config.DefaultConfig()
 	}
 
 	if command == "" {
@@ -337,7 +337,7 @@ func checkAndConfirmBash(promptIO ui.PromptIO, cfg *config.Config, command strin
 	promptIO = ui.NormalizePromptIO(promptIO)
 	out := common.NewOutput(promptIO.Out, promptIO.Err)
 	if cfg == nil {
-		cfg = config.GetGlobalConfig()
+		cfg = config.DefaultConfig()
 	}
 	bashCfg := cfg.Bash
 

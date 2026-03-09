@@ -72,6 +72,11 @@ func CollapseOutputWithPrefix(output string, prefix string, maxLines int) string
 
 // GetMaxVisibleLines は設定から最大表示行数を取得
 func GetMaxVisibleLines() int {
+	return GetMaxVisibleLinesWithConfig(config.GetGlobalConfig())
+}
+
+// GetMaxVisibleLinesWithConfig は設定から最大表示行数を取得する。
+func GetMaxVisibleLinesWithConfig(cfg *config.Config) int {
 	// 環境変数を優先
 	if envVal := os.Getenv("XELYON_OUTPUT_MAX_LINES"); envVal != "" {
 		if val, err := strconv.Atoi(envVal); err == nil && val > 0 {
@@ -80,7 +85,9 @@ func GetMaxVisibleLines() int {
 	}
 
 	// 設定ファイルから取得
-	cfg := config.GetGlobalConfig()
+	if cfg == nil {
+		cfg = config.DefaultConfig()
+	}
 	if cfg != nil && cfg.Output.MaxLines > 0 {
 		return cfg.Output.MaxLines
 	}

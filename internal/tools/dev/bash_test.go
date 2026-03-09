@@ -1,6 +1,7 @@
 package dev
 
 import (
+	"bytes"
 	"os"
 	"strings"
 	"testing"
@@ -49,6 +50,27 @@ func setupTestConfirm(t *testing.T, approve bool) {
 		common.SimpleConfirmWithIO = originalConfirmWithIO
 		os.Unsetenv("XELYON_INTERACTIVE_CONFIRM")
 	})
+}
+
+func TestCheckAndConfirmBash_NilConfigUsesDefaultConfig(t *testing.T) {
+	original := config.GetGlobalConfig()
+	global := config.DefaultConfig()
+	global.Bash.SafetyLevel = "strict"
+	global.Bash.AllowRedirect = false
+	config.SetGlobalConfig(global)
+	t.Cleanup(func() {
+		config.SetGlobalConfig(original)
+	})
+
+	promptIO := ui.NewPromptIO(strings.NewReader("y\n"), &bytes.Buffer{}, &bytes.Buffer{}, nil)
+
+	msg, ok := checkAndConfirmBash(promptIO, nil, "printf hi > /tmp/xelyon-bash-test.txt")
+	if !ok {
+		t.Fatalf("checkAndConfirmBash() rejected default-config command: %s", msg)
+	}
+	if msg != "" {
+		t.Fatalf("checkAndConfirmBash() message = %q, want empty", msg)
+	}
 }
 
 func TestExecuteBash_SafeCommand(t *testing.T) {

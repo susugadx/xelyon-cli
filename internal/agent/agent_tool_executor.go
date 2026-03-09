@@ -675,7 +675,7 @@ func (a *Agent) executeToolCallsWithParallel(
 			}(idx)
 		}
 		wg.Wait()
-		printParallelToolGroup(a.output(), allToolCalls, parallelEntries, results, time.Since(startedAt))
+		printParallelToolGroup(a.output(), a.cfg(), allToolCalls, parallelEntries, results, time.Since(startedAt))
 	}
 
 	// Phase 1b: sequential 群を順次実行（spinner あり）
@@ -765,7 +765,7 @@ func (a *Agent) executeToolCallsWithParallel(
 	return loopDetected
 }
 
-func printParallelToolGroup(out io.Writer, allToolCalls []*tools.ToolCall, indices []int, results []toolExecResult, elapsed time.Duration) {
+func printParallelToolGroup(out io.Writer, cfg *config.Config, allToolCalls []*tools.ToolCall, indices []int, results []toolExecResult, elapsed time.Duration) {
 	if len(indices) == 0 {
 		return
 	}
@@ -778,7 +778,7 @@ func printParallelToolGroup(out io.Writer, allToolCalls []*tools.ToolCall, indic
 			Result:   results[idx].result,
 			Error:    strings.HasPrefix(strings.TrimSpace(results[idx].result), "Error:"),
 		}))
-		printParallelCollapsedOutput(out, allToolCalls[idx].Tool, results[idx].result)
+		printParallelCollapsedOutput(out, cfg, allToolCalls[idx].Tool, results[idx].result)
 		return
 	}
 
@@ -790,7 +790,7 @@ func printParallelToolGroup(out io.Writer, allToolCalls []*tools.ToolCall, indic
 			Result:   results[idx].result,
 			Error:    strings.HasPrefix(strings.TrimSpace(results[idx].result), "Error:"),
 		}))
-		printParallelCollapsedOutputWithPrefix(out, allToolCalls[idx].Tool, results[idx].result, "│    ")
+		printParallelCollapsedOutputWithPrefix(out, cfg, allToolCalls[idx].Tool, results[idx].result, "│    ")
 	}
 	ui.PrintParallelGroupEndToWriter(out, formatParallelGroupSummary(allToolCalls, indices, elapsed))
 }
@@ -806,19 +806,19 @@ func shouldShowParallelCollapsed(toolName, result string) bool {
 	return false
 }
 
-func printParallelCollapsedOutput(out io.Writer, toolName, result string) {
+func printParallelCollapsedOutput(out io.Writer, cfg *config.Config, toolName, result string) {
 	if !shouldShowParallelCollapsed(toolName, result) {
 		return
 	}
-	_, _ = fmt.Fprintln(out, ui.FormatToolOutput(result, ui.GetMaxVisibleLines()))
+	_, _ = fmt.Fprintln(out, ui.FormatToolOutput(result, ui.GetMaxVisibleLinesWithConfig(cfg)))
 }
 
-func printParallelCollapsedOutputWithPrefix(out io.Writer, toolName, result, prefix string) {
+func printParallelCollapsedOutputWithPrefix(out io.Writer, cfg *config.Config, toolName, result, prefix string) {
 	if !shouldShowParallelCollapsed(toolName, result) {
 		return
 	}
 
-	collapsed := ui.FormatToolOutput(result, ui.GetMaxVisibleLines())
+	collapsed := ui.FormatToolOutput(result, ui.GetMaxVisibleLinesWithConfig(cfg))
 	for _, line := range strings.Split(strings.TrimRight(collapsed, "\n"), "\n") {
 		if line == "" {
 			continue

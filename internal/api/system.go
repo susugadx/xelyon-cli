@@ -15,8 +15,15 @@ type CacheControl struct {
 // NewCacheControl はconfig設定に基づいてCacheControlを生成する。
 // CacheTTL が "5m"（デフォルト）ならTTLフィールドなし、"1h" 等なら ttl を設定。
 func NewCacheControl() *CacheControl {
+	return NewCacheControlWithConfig(config.GetGlobalConfig())
+}
+
+// NewCacheControlWithConfig は明示指定した設定に基づいて CacheControl を生成する。
+func NewCacheControlWithConfig(cfg *config.Config) *CacheControl {
 	cc := &CacheControl{Type: "ephemeral"}
-	cfg := config.GetGlobalConfig()
+	if cfg == nil {
+		cfg = config.DefaultConfig()
+	}
 	if cfg != nil && cfg.PromptCache.CacheTTL != "" && cfg.PromptCache.CacheTTL != "5m" {
 		cc.TTL = cfg.PromptCache.CacheTTL
 	}
@@ -46,7 +53,14 @@ const SystemPromptCacheBoundary = "\n---XELYON_CACHE_SPLIT---\n"
 // 実際の最低キャッシュ可能トークン数はモデルごとに異なるため、
 // 閾値超過のための安定ブロック追加は prompt builder 側で行います。
 func BuildSystemField(systemPrompt string) interface{} {
-	cfg := config.GetGlobalConfig()
+	return BuildSystemFieldWithConfig(systemPrompt, config.GetGlobalConfig())
+}
+
+// BuildSystemFieldWithConfig は明示指定した設定でプロンプトキャッシュ対応のシステムフィールドを構築する。
+func BuildSystemFieldWithConfig(systemPrompt string, cfg *config.Config) interface{} {
+	if cfg == nil {
+		cfg = config.DefaultConfig()
+	}
 	if cfg == nil || !cfg.PromptCache.Enabled {
 		// 境界マーカーを除去して plain string で返す
 		return strings.ReplaceAll(systemPrompt, SystemPromptCacheBoundary, "\n\n")
@@ -67,7 +81,7 @@ func BuildSystemField(systemPrompt string) interface{} {
 			{
 				Type:         "text",
 				Text:         parts[1],
-				CacheControl: NewCacheControl(),
+				CacheControl: NewCacheControlWithConfig(cfg),
 			},
 		}
 	}
@@ -77,7 +91,7 @@ func BuildSystemField(systemPrompt string) interface{} {
 		{
 			Type:         "text",
 			Text:         parts[0],
-			CacheControl: NewCacheControl(),
+			CacheControl: NewCacheControlWithConfig(cfg),
 		},
 	}
 }
