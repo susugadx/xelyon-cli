@@ -170,14 +170,6 @@ func TestConfirmWithIO_DiscardDoesNotLeakProcessStdout(t *testing.T) {
 }
 
 func TestDefaultConfirmOptions_UsesIsolatedDefaults(t *testing.T) {
-	originalConfig := config.GetGlobalConfig()
-	customConfig := config.CloneConfig(originalConfig)
-	customConfig.DefaultProvider = "gemini"
-	config.SetGlobalConfig(customConfig)
-	t.Cleanup(func() {
-		config.SetGlobalConfig(originalConfig)
-	})
-
 	options := DefaultConfirmOptions()
 
 	if options.AutoApprove {

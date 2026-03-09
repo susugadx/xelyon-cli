@@ -97,7 +97,7 @@ func TestFormatToolOutput_SingleLine(t *testing.T) {
 
 func TestGetMaxVisibleLines_Default(t *testing.T) {
 	// 環境変数とconfigがない場合のデフォルト
-	lines := GetMaxVisibleLines()
+	lines := GetMaxVisibleLinesWithConfig(config.DefaultConfig())
 
 	if lines <= 0 {
 		t.Errorf("Expected positive default, got %d", lines)

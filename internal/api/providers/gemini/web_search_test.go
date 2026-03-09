@@ -1,11 +1,14 @@
 package gemini
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 func TestWebSearch_Success(t *testing.T) {
@@ -50,9 +53,10 @@ func TestWebSearch_Success(t *testing.T) {
 	defer os.Setenv("GEMINI_API_URL", oldURL)
 	defer os.Setenv("GEMINI_API_KEY", oldKey)
 
-	result, err := WebSearch("go 1.24 release", "gemini-3.1-pro-preview-customtools")
+	ctx := config.WithContext(context.Background(), config.DefaultConfig())
+	result, err := WebSearchWithContext(ctx, "go 1.24 release", "gemini-3.1-pro-preview-customtools")
 	if err != nil {
-		t.Fatalf("WebSearch() error = %v", err)
+		t.Fatalf("WebSearchWithContext() error = %v", err)
 	}
 	if !strings.Contains(result, "Summary:") {
 		t.Fatalf("result should contain Summary, got %q", result)
@@ -88,9 +92,10 @@ func TestWebSearch_LegacyModelUsesGoogleSearchRetrieval(t *testing.T) {
 	defer os.Setenv("GEMINI_API_URL", oldURL)
 	defer os.Setenv("GEMINI_API_KEY", oldKey)
 
-	result, err := WebSearch("legacy grounding", "gemini-1.5-pro")
+	ctx := config.WithContext(context.Background(), config.DefaultConfig())
+	result, err := WebSearchWithContext(ctx, "legacy grounding", "gemini-1.5-pro")
 	if err != nil {
-		t.Fatalf("WebSearch() error = %v", err)
+		t.Fatalf("WebSearchWithContext() error = %v", err)
 	}
 	if !strings.Contains(result, "Legacy grounded response.") {
 		t.Fatalf("result should contain model output, got %q", result)

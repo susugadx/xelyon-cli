@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
@@ -45,16 +44,6 @@ func ConvertOpenAIToolToClaude(tool api.ToolDefinition) ClaudeTool {
 		Description: tool.Description,
 		InputSchema: tool.Parameters,
 	}
-}
-
-// GetCombinedClaudeTools は組み込みツール + MCPツールを返す
-// 重複するツール名がある場合は最初に登録されたものを優先
-//
-// BP#2: ツール定義の末尾に cache_control を設定。
-// ツール定義は安定しているため、tools prefix のキャッシュヒット率が高い。
-func GetCombinedClaudeTools(mcpTools []api.ToolDefinition) []ClaudeTool {
-	ctx := tools.WithConfig(context.Background(), config.DefaultConfig())
-	return GetCombinedClaudeToolsWithContext(ctx, mcpTools)
 }
 
 // GetCombinedClaudeToolsWithContext は request context の Registry/Config を使って組み込みツール + MCPツールを返す。

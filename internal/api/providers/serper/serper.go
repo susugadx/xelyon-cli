@@ -38,13 +38,6 @@ func initCacheWithConfig(cfg *config.Config) {
 	}
 }
 
-// SearchWithCache はキャッシュ対応のWeb検索を実行する。
-// cacheScope はプロバイダー別キャッシュキーの接頭辞に使用する。
-// 戻り値: (result, cached, error)
-func SearchWithCache(cacheScope, query string, searchFn SearchFunc) (string, bool, error) {
-	return SearchWithCacheAndConfig(config.DefaultConfig(), cacheScope, query, searchFn)
-}
-
 // SearchWithCacheAndConfig は明示指定された設定でキャッシュ対応の Web 検索を実行する。
 func SearchWithCacheAndConfig(cfg *config.Config, cacheScope, query string, searchFn SearchFunc) (string, bool, error) {
 	cacheOnce.Do(func() {
@@ -80,7 +73,7 @@ func SearchWithCacheAndConfig(cfg *config.Config, cacheScope, query string, sear
 
 // WebSearchWithCache は Serper 用の後方互換ラッパー。
 func WebSearchWithCache(query string) (string, bool, error) {
-	return SearchWithCache("serper", query, WebSearch)
+	return SearchWithCacheAndConfig(config.DefaultConfig(), "serper", query, WebSearch)
 }
 
 // normalizeQuery はクエリを正規化（大文字小文字、空白の統一）

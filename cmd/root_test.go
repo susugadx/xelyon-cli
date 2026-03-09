@@ -440,7 +440,7 @@ func TestRootCommand_HeadlessJSONStdoutIsPureJSON(t *testing.T) {
 	}
 
 	runHeadless = func(query string, model string, providerArg api.Provider, cfg *config.Config) *agent.HeadlessResult {
-		return agent.RunHeadless(query, model, provider)
+		return agent.RunHeadlessWithConfig(query, model, provider, cfg)
 	}
 
 	oldStdout := os.Stdout

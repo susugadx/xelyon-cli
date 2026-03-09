@@ -8,6 +8,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/api/providers/claude"
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 
 	// ツール登録のための blank import
@@ -495,7 +496,7 @@ func TestProcessChunk_InvalidJSON(t *testing.T) {
 }
 
 func TestBuildSystemField(t *testing.T) {
-	result := api.BuildSystemField("Test prompt")
+	result := api.BuildSystemFieldWithConfig("Test prompt", config.DefaultConfig())
 	if result == nil {
 		t.Fatal("buildSystemField() returned nil")
 	}

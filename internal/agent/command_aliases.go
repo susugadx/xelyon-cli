@@ -13,18 +13,6 @@ var defaultCommandAliases = map[string]string{
 	"/p": "/paste",
 }
 
-// resolveCommandAlias は / で始まるコマンドをエイリアス解決して返す。
-// 未定義なら元の cmd を返す。
-//
-// 仕様:
-// - 解決は最大 maxDepth 回まで（循環/多段の無限ループ防止）
-// - config.command_aliases は default より優先
-// - 大文字小文字は無視（内部で lower に正規化）
-func resolveCommandAlias(cmd string) string {
-	cmd = strings.ToLower(cmd)
-	return resolveCommandAliasWithConfig(cmd, config.DefaultConfig())
-}
-
 func resolveCommandAliasWithConfig(cmd string, cfg *config.Config) string {
 	cmd = strings.ToLower(cmd)
 

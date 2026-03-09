@@ -59,11 +59,6 @@ func init() {
 	websearch.RegisterWithContext("openai", WebSearchWithContext)
 }
 
-// WebSearch executes OpenAI's native web_search tool via the Responses API.
-func WebSearch(query, model string) (string, error) {
-	return WebSearchWithContext(config.WithContext(context.Background(), config.DefaultConfig()), query, model)
-}
-
 // WebSearchWithContext は request context を使って OpenAI ネイティブ web_search を実行する。
 func WebSearchWithContext(ctx context.Context, query, model string) (string, error) {
 	apiKey := os.Getenv("OPENAI_API_KEY")

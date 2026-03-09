@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 // mockErrorProvider は常にエラーを返すプロバイダー
@@ -333,7 +334,7 @@ func TestRunHeadless_CallsCleanup(t *testing.T) {
 	defer func() { cleanupHook = nil }()
 
 	provider := &mockProvider{name: "test"}
-	_ = RunHeadless("hello", "test-model", provider)
+	_ = RunHeadlessWithConfig("hello", "test-model", provider, config.DefaultConfig())
 
 	if called.Load() != 1 {
 		t.Errorf("Cleanup was called %d times, want 1", called.Load())
@@ -346,7 +347,7 @@ func TestRunHeadless_CallsCleanupOnError(t *testing.T) {
 	defer func() { cleanupHook = nil }()
 
 	provider := &mockErrorProvider{}
-	result := RunHeadless("hello", "test-model", provider)
+	result := RunHeadlessWithConfig("hello", "test-model", provider, config.DefaultConfig())
 
 	if result.Status != "error" {
 		t.Errorf("Expected error status, got %s", result.Status)
@@ -363,7 +364,7 @@ func TestRunHeadless_RepeatedInvocations(t *testing.T) {
 
 	provider := &mockProvider{name: "test"}
 	for i := 0; i < 5; i++ {
-		_ = RunHeadless("hello", "test-model", provider)
+		_ = RunHeadlessWithConfig("hello", "test-model", provider, config.DefaultConfig())
 	}
 
 	if called.Load() != 5 {
@@ -383,7 +384,7 @@ func TestRunHeadless_NoLeakOnRepeatedInvocations(t *testing.T) {
 	baseGoroutines := runtime.NumGoroutine()
 
 	for i := 0; i < iterations; i++ {
-		res := RunHeadless("test query", "mock-model", provider)
+		res := RunHeadlessWithConfig("test query", "mock-model", provider, config.DefaultConfig())
 		if res.Status != "success" {
 			t.Fatalf("iteration %d: RunHeadless failed: %v", i, res.Error)
 		}

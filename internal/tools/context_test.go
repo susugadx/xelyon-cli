@@ -7,14 +7,6 @@ import (
 )
 
 func TestDefaultExecutionContext_UsesIsolatedDefaults(t *testing.T) {
-	originalConfig := config.GetGlobalConfig()
-	customConfig := config.CloneConfig(originalConfig)
-	customConfig.DefaultProvider = "gemini"
-	config.SetGlobalConfig(customConfig)
-	t.Cleanup(func() {
-		config.SetGlobalConfig(originalConfig)
-	})
-
 	ctx := DefaultExecutionContext()
 
 	if ctx.EffectiveToolCache() != nil {

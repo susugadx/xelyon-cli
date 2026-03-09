@@ -1,11 +1,14 @@
 package claude
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 func TestWebSearch_Success(t *testing.T) {
@@ -54,9 +57,10 @@ func TestWebSearch_Success(t *testing.T) {
 	defer os.Setenv("ANTHROPIC_API_URL", oldURL)
 	defer os.Setenv("ANTHROPIC_API_KEY", oldKey)
 
-	result, err := WebSearch("anthropic web search tool", "claude-sonnet-4-6")
+	ctx := config.WithContext(context.Background(), config.DefaultConfig())
+	result, err := WebSearchWithContext(ctx, "anthropic web search tool", "claude-sonnet-4-6")
 	if err != nil {
-		t.Fatalf("WebSearch() error = %v", err)
+		t.Fatalf("WebSearchWithContext() error = %v", err)
 	}
 	if !strings.Contains(result, "Summary:") {
 		t.Fatalf("result should contain Summary, got %q", result)

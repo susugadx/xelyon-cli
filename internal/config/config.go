@@ -16,21 +16,6 @@ const (
 	configFile = "config.yaml"
 )
 
-var globalConfig *Config
-
-// SetGlobalConfig はグローバル設定を保存
-func SetGlobalConfig(cfg *Config) {
-	globalConfig = cfg
-}
-
-// GetGlobalConfig はグローバル設定を取得
-func GetGlobalConfig() *Config {
-	if globalConfig == nil {
-		globalConfig = DefaultConfig()
-	}
-	return globalConfig
-}
-
 // CloneConfig は設定をディープコピーして返す。
 func CloneConfig(cfg *Config) *Config {
 	if cfg == nil {

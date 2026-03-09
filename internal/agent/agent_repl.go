@@ -17,11 +17,6 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
-// RunInteractive はインタラクティブモードでエージェントを実行
-func RunInteractive(model string, provider api.Provider, autoApprove bool) {
-	RunInteractiveWithConfig(model, provider, config.DefaultConfig(), autoApprove)
-}
-
 // RunInteractiveWithConfig は指定設定でインタラクティブモードを実行する。
 func RunInteractiveWithConfig(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
 	runtime := NewAgentRuntimeWithConfig(cfg)
@@ -78,11 +73,6 @@ func RunInteractiveWithConfig(model string, provider api.Provider, cfg *config.C
 	// REPLループ開始
 	agent.setPromptReader(mlReader)
 	runREPLLoop(agent, mlReader)
-}
-
-// RunInteractiveWithResume は前回のセッションを再開してインタラクティブモードを実行
-func RunInteractiveWithResume(model string, provider api.Provider, autoApprove bool) {
-	RunInteractiveWithResumeWithConfig(model, provider, config.DefaultConfig(), autoApprove)
 }
 
 // RunInteractiveWithResumeWithConfig は指定設定で前回セッションを再開してインタラクティブモードを実行する。

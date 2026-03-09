@@ -505,46 +505,6 @@ func TestApplyFlagOverrides(t *testing.T) {
 	}
 }
 
-func TestGlobalConfig_SetGet(t *testing.T) {
-	// グローバル状態をリセット
-	globalConfig = nil
-
-	customCfg := &Config{
-		DefaultProvider: "custom",
-		DefaultModel:    "custom-model",
-	}
-
-	SetGlobalConfig(customCfg)
-
-	got := GetGlobalConfig()
-	if got.DefaultProvider != "custom" {
-		t.Errorf("GetGlobalConfig().DefaultProvider = %v, want custom", got.DefaultProvider)
-	}
-	if got.DefaultModel != "custom-model" {
-		t.Errorf("GetGlobalConfig().DefaultModel = %v, want custom-model", got.DefaultModel)
-	}
-
-	// 同じインスタンスであることを確認
-	if got != customCfg {
-		t.Error("GetGlobalConfig() should return same instance as SetGlobalConfig")
-	}
-}
-
-func TestGlobalConfig_NilFallback(t *testing.T) {
-	// グローバル状態をリセット
-	globalConfig = nil
-
-	got := GetGlobalConfig()
-	if got == nil {
-		t.Fatal("GetGlobalConfig() should return default config, got nil")
-	}
-
-	// デフォルト値を確認
-	if got.DefaultProvider != "deepseek" {
-		t.Errorf("GetGlobalConfig() with nil should return default, got %v", got.DefaultProvider)
-	}
-}
-
 func TestIsResponsesAPIModel(t *testing.T) {
 	cfg := DefaultConfig()
 

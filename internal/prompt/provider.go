@@ -155,11 +155,6 @@ func needsAnthropicCacheMarginWithConfig(providerName, model string, cfg *config
 	return strings.Contains(strings.ToLower(model), "claude-opus-4")
 }
 
-// BuildProviderSystemPrompt はプロバイダー別ノートを Workflow Rules の直前に挿入する
-func BuildProviderSystemPrompt(base, providerName, model string) string {
-	return BuildProviderSystemPromptWithConfig(base, providerName, model, config.DefaultConfig())
-}
-
 // BuildProviderSystemPromptWithConfig は明示指定した設定を使ってプロバイダー別ノートを挿入する。
 func BuildProviderSystemPromptWithConfig(base, providerName, model string, cfg *config.Config) string {
 	prefix := strings.TrimSpace(GetProviderPrefix(providerName))

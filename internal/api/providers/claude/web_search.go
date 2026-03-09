@@ -56,11 +56,6 @@ func init() {
 	websearch.RegisterWithContext("claude", WebSearchWithContext)
 }
 
-// WebSearch executes Anthropic's native web search tool.
-func WebSearch(query, model string) (string, error) {
-	return WebSearchWithContext(config.WithContext(context.Background(), config.DefaultConfig()), query, model)
-}
-
 // WebSearchWithContext は request context を使って Claude ネイティブ web_search を実行する。
 func WebSearchWithContext(ctx context.Context, query, model string) (string, error) {
 	apiKey := os.Getenv("ANTHROPIC_API_KEY")

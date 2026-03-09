@@ -16,7 +16,7 @@ const DefaultMaxVisibleLines = 5
 // maxLines が 0 の場合は設定から取得
 func CollapseOutput(output string, maxLines int) string {
 	if maxLines == 0 {
-		maxLines = GetMaxVisibleLines()
+		maxLines = GetMaxVisibleLinesWithConfig(config.DefaultConfig())
 	}
 
 	lines := strings.Split(output, "\n")
@@ -41,7 +41,7 @@ func CollapseOutput(output string, maxLines int) string {
 // Claude Code 風の表示用
 func CollapseOutputWithPrefix(output string, prefix string, maxLines int) string {
 	if maxLines == 0 {
-		maxLines = GetMaxVisibleLines()
+		maxLines = GetMaxVisibleLinesWithConfig(config.DefaultConfig())
 	}
 
 	lines := strings.Split(output, "\n")
@@ -68,11 +68,6 @@ func CollapseOutputWithPrefix(output string, prefix string, maxLines int) string
 	}
 
 	return strings.TrimSuffix(result.String(), "\n")
-}
-
-// GetMaxVisibleLines は設定から最大表示行数を取得
-func GetMaxVisibleLines() int {
-	return GetMaxVisibleLinesWithConfig(config.DefaultConfig())
 }
 
 // GetMaxVisibleLinesWithConfig は設定から最大表示行数を取得する。
@@ -114,7 +109,7 @@ func FormatToolOutput(output string, maxLines int) string {
 	}
 
 	if maxLines == 0 {
-		maxLines = GetMaxVisibleLines()
+		maxLines = GetMaxVisibleLinesWithConfig(config.DefaultConfig())
 	}
 
 	var result strings.Builder

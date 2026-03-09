@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-
-	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 // SearchFunc はプロバイダー固有のネイティブ検索実装。
@@ -38,11 +36,6 @@ func RegisterWithContext(providerName string, fn SearchFuncWithContext) {
 	registryMu.Lock()
 	defer registryMu.Unlock()
 	registry[strings.ToLower(strings.TrimSpace(providerName))] = fn
-}
-
-// Search executes a registered provider-native web search implementation.
-func Search(providerName, query, model string) (string, error) {
-	return SearchWithContext(config.WithContext(context.Background(), config.DefaultConfig()), providerName, query, model)
 }
 
 // SearchWithContext は request context を渡してネイティブ検索実装を実行する。

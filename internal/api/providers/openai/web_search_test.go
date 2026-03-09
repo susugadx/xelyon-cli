@@ -1,12 +1,15 @@
 package openai
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 func TestWebSearch_Success(t *testing.T) {
@@ -71,9 +74,10 @@ func TestWebSearch_Success(t *testing.T) {
 	defer os.Setenv("OPENAI_RESPONSES_URL", oldURL)
 	defer os.Setenv("OPENAI_API_KEY", oldKey)
 
-	result, err := WebSearch("latest openai news", "gpt-4o")
+	ctx := config.WithContext(context.Background(), config.DefaultConfig())
+	result, err := WebSearchWithContext(ctx, "latest openai news", "gpt-4o")
 	if err != nil {
-		t.Fatalf("WebSearch() error = %v", err)
+		t.Fatalf("WebSearchWithContext() error = %v", err)
 	}
 
 	if !strings.Contains(result, "Summary:") {
@@ -92,9 +96,10 @@ func TestWebSearch_UnsupportedModel(t *testing.T) {
 	os.Setenv("OPENAI_API_KEY", "test-key")
 	defer os.Setenv("OPENAI_API_KEY", oldKey)
 
-	_, err := WebSearch("latest openai news", "gpt-4")
+	ctx := config.WithContext(context.Background(), config.DefaultConfig())
+	_, err := WebSearchWithContext(ctx, "latest openai news", "gpt-4")
 	if err == nil {
-		t.Fatal("WebSearch() should fail for non-Responses models")
+		t.Fatal("WebSearchWithContext() should fail for non-Responses models")
 	}
 	if !strings.Contains(err.Error(), "does not support Responses API web search") {
 		t.Fatalf("unexpected error: %v", err)

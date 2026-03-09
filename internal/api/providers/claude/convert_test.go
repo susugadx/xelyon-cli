@@ -294,7 +294,7 @@ func TestSetMessageCacheBreakpoints_ShortConversation(t *testing.T) {
 		{Role: "user", Content: []AnthropicContentBlock{{Type: "text", Text: "third"}}},
 	}
 
-	SetMessageCacheBreakpoints(messages)
+	SetMessageCacheBreakpointsWithConfigAndEnabled(messages, config.DefaultConfig(), true)
 
 	// 全ブロックに CacheControl なし
 	for i, msg := range messages {
@@ -334,7 +334,7 @@ func TestSetMessageCacheBreakpoints_DynamicToolResult(t *testing.T) {
 		{Role: "user", Content: []AnthropicContentBlock{{Type: "text", Text: "recent2"}}},
 	}
 
-	SetMessageCacheBreakpoints(messages)
+	SetMessageCacheBreakpointsWithConfigAndEnabled(messages, config.DefaultConfig(), true)
 
 	// BP#3: hugeContent (8000) at messages[4]
 	if messages[4].Content[0].CacheControl == nil {
@@ -372,7 +372,7 @@ func TestSetMessageCacheBreakpoints_ExcludesRecentTurns(t *testing.T) {
 		{Role: "user", Content: []AnthropicContentBlock{{Type: "text", Text: "latest"}}},
 	}
 
-	SetMessageCacheBreakpoints(messages)
+	SetMessageCacheBreakpointsWithConfigAndEnabled(messages, config.DefaultConfig(), true)
 
 	for i, msg := range messages {
 		for j, block := range msg.Content {
@@ -395,7 +395,7 @@ func TestSetMessageCacheBreakpoints_SingleToolResult(t *testing.T) {
 		{Role: "user", Content: []AnthropicContentBlock{{Type: "text", Text: "msg3"}}},
 	}
 
-	SetMessageCacheBreakpoints(messages)
+	SetMessageCacheBreakpointsWithConfigAndEnabled(messages, config.DefaultConfig(), true)
 
 	if messages[0].Content[0].CacheControl == nil {
 		t.Error("expected cache_control on the only tool_result")
@@ -415,7 +415,7 @@ func TestSetMessageCacheBreakpoints_NoUser(t *testing.T) {
 	}
 
 	// panic しないこと
-	SetMessageCacheBreakpoints(messages)
+	SetMessageCacheBreakpointsWithConfigAndEnabled(messages, config.DefaultConfig(), true)
 
 	if messages[0].Content[0].CacheControl != nil {
 		t.Error("assistant message should not have cache_control")
@@ -436,7 +436,7 @@ func TestSetMessageCacheBreakpoints_NoToolResults(t *testing.T) {
 		)
 	}
 
-	SetMessageCacheBreakpoints(messages)
+	SetMessageCacheBreakpointsWithConfigAndEnabled(messages, config.DefaultConfig(), true)
 
 	for i, msg := range messages {
 		for j, block := range msg.Content {
@@ -462,7 +462,7 @@ func TestSetMessageCacheBreakpoints_MultiBlockUser(t *testing.T) {
 		{Role: "user", Content: []AnthropicContentBlock{{Type: "text", Text: "msg"}}},
 	}
 
-	SetMessageCacheBreakpoints(messages)
+	SetMessageCacheBreakpointsWithConfigAndEnabled(messages, config.DefaultConfig(), true)
 
 	// 大きい tool_result (block[1]) に BP
 	if messages[0].Content[1].CacheControl == nil {

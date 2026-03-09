@@ -35,21 +35,6 @@ func LookupContext(ctx context.Context) (*Config, bool) {
 	return cfg, true
 }
 
-// WithGlobalFallback は context に設定が未注入のとき、現在のグローバル設定を埋め込む。
-// グローバル設定が未初期化の場合はデフォルト設定を埋め込む。
-func WithGlobalFallback(ctx context.Context) context.Context {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	if _, ok := LookupContext(ctx); ok {
-		return ctx
-	}
-	if globalConfig != nil {
-		return WithContext(ctx, globalConfig)
-	}
-	return WithContext(ctx, DefaultConfig())
-}
-
 // ResolveContext は request context の設定を優先し、未注入時は fallback、
 // それも nil の場合は DefaultConfig を返す。
 func ResolveContext(ctx context.Context, fallback *Config) *Config {

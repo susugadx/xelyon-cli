@@ -72,12 +72,7 @@ func ExecuteBash(command string) string {
 
 // ExecuteBashWithOutput executes a shell command with explicit output writers.
 func ExecuteBashWithOutput(out common.Output, command string) string {
-	return ExecuteBashWithPromptIO(ui.NewPromptIO(nil, out.StdoutWriter(), out.StderrWriter(), nil), command)
-}
-
-// ExecuteBashWithPromptIO executes a shell command with explicit interactive I/O.
-func ExecuteBashWithPromptIO(promptIO ui.PromptIO, command string) string {
-	return ExecuteBashWithPromptIOAndConfig(promptIO, config.DefaultConfig(), command)
+	return ExecuteBashWithPromptIOAndConfig(ui.NewPromptIO(nil, out.StdoutWriter(), out.StderrWriter(), nil), config.DefaultConfig(), command)
 }
 
 // ExecuteBashWithPromptIOAndConfig executes a shell command with explicit config.
@@ -143,12 +138,7 @@ func ExecuteBashWithContext(ctx context.Context, command string) string {
 
 // ExecuteBashWithContextAndOutput はContext対応でシェルコマンドを実行する。
 func ExecuteBashWithContextAndOutput(ctx context.Context, out common.Output, command string) string {
-	return ExecuteBashWithContextAndPromptIO(ctx, ui.NewPromptIO(nil, out.StdoutWriter(), out.StderrWriter(), nil), command)
-}
-
-// ExecuteBashWithContextAndPromptIO はContext対応でシェルコマンドを実行する。
-func ExecuteBashWithContextAndPromptIO(ctx context.Context, promptIO ui.PromptIO, command string) string {
-	return ExecuteBashWithContextAndPromptIOAndConfig(ctx, promptIO, config.DefaultConfig(), command)
+	return ExecuteBashWithContextAndPromptIOAndConfig(ctx, ui.NewPromptIO(nil, out.StdoutWriter(), out.StderrWriter(), nil), config.DefaultConfig(), command)
 }
 
 // ExecuteBashWithContextAndPromptIOAndConfig はContext対応でシェルコマンドを実行する。

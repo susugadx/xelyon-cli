@@ -67,11 +67,6 @@ func init() {
 	websearch.RegisterWithContext("gemini", WebSearchWithContext)
 }
 
-// WebSearch executes Gemini's native Google Search grounding.
-func WebSearch(query, model string) (string, error) {
-	return WebSearchWithContext(config.WithContext(context.Background(), config.DefaultConfig()), query, model)
-}
-
 // WebSearchWithContext は request context を使って Gemini ネイティブ web search を実行する。
 func WebSearchWithContext(ctx context.Context, query, model string) (string, error) {
 	apiKey := os.Getenv("GEMINI_API_KEY")

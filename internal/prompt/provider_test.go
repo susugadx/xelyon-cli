@@ -209,7 +209,7 @@ func TestProviderSpecificRules(t *testing.T) {
 
 func TestBuildProviderSystemPrompt_InsertsBeforeWorkflowRules(t *testing.T) {
 	base := "You are XELYON.\n\n## Core Identity\n- test\n\n## Workflow Rules\n- workflow"
-	result := BuildProviderSystemPrompt(base, "gemini", "gemini-3.1-pro-preview-customtools")
+	result := BuildProviderSystemPromptWithConfig(base, "gemini", "gemini-3.1-pro-preview-customtools", config.DefaultConfig())
 
 	if strings.HasPrefix(result, "## Provider Notes") {
 		t.Error("provider notes should not replace the start of the base prompt")
@@ -233,7 +233,7 @@ func TestBuildProviderSystemPrompt_InsertsBeforeWorkflowRules(t *testing.T) {
 
 func TestBuildProviderSystemPrompt_FallbackWhenHeaderMissing(t *testing.T) {
 	base := "You are XELYON, an autonomous AI coding agent."
-	result := BuildProviderSystemPrompt(base, "openai", "gpt-5.2")
+	result := BuildProviderSystemPromptWithConfig(base, "openai", "gpt-5.2", config.DefaultConfig())
 
 	if !strings.HasPrefix(result, "## Provider Notes") {
 		t.Error("when workflow header is missing, provider notes should be prepended")
@@ -245,7 +245,7 @@ func TestBuildProviderSystemPrompt_FallbackWhenHeaderMissing(t *testing.T) {
 
 func TestBuildProviderSystemPrompt_EmptyProvider(t *testing.T) {
 	base := "You are XELYON, an autonomous AI coding agent."
-	result := BuildProviderSystemPrompt(base, "", "")
+	result := BuildProviderSystemPromptWithConfig(base, "", "", config.DefaultConfig())
 
 	if result != base {
 		t.Error("empty provider should return unchanged base prompt")
@@ -254,8 +254,8 @@ func TestBuildProviderSystemPrompt_EmptyProvider(t *testing.T) {
 
 func TestBuildProviderSystemPrompt_Anthropic(t *testing.T) {
 	base := "You are XELYON.\n\n## Workflow Rules\n- workflow"
-	anthropic := BuildProviderSystemPrompt(base, "anthropic", "claude-sonnet-4-6")
-	claude := BuildProviderSystemPrompt(base, "claude", "claude-sonnet-4-6")
+	anthropic := BuildProviderSystemPromptWithConfig(base, "anthropic", "claude-sonnet-4-6", config.DefaultConfig())
+	claude := BuildProviderSystemPromptWithConfig(base, "claude", "claude-sonnet-4-6", config.DefaultConfig())
 
 	if anthropic != claude {
 		t.Error("anthropic and claude should produce identical system prompts")

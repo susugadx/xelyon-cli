@@ -142,14 +142,6 @@ func TestAgentRuntime_SeparatesBuiltinListDirConfig(t *testing.T) {
 }
 
 func TestAgentRuntime_EffectiveConfigDoesNotUseGlobalFallback(t *testing.T) {
-	original := config.GetGlobalConfig()
-	global := config.DefaultConfig()
-	global.DefaultModel = "global-only-model"
-	config.SetGlobalConfig(global)
-	t.Cleanup(func() {
-		config.SetGlobalConfig(original)
-	})
-
 	runtime := &AgentRuntime{}
 	if got := runtime.effectiveConfig().DefaultModel; got != config.DefaultConfig().DefaultModel {
 		t.Fatalf("runtime effectiveConfig default model = %q, want %q", got, config.DefaultConfig().DefaultModel)
@@ -295,14 +287,6 @@ func TestAgentRuntime_RequestContextSeparatesProviderView(t *testing.T) {
 }
 
 func TestAgentRuntime_SeparatesClaudeCompactionCapability(t *testing.T) {
-	originalConfig := config.GetGlobalConfig()
-	globalCfg := config.DefaultConfig()
-	globalCfg.Compression.ClaudeCompaction = false
-	config.SetGlobalConfig(globalCfg)
-	t.Cleanup(func() {
-		config.SetGlobalConfig(originalConfig)
-	})
-
 	runtimeA := newIsolatedRuntime()
 	runtimeB := newIsolatedRuntime()
 	runtimeA.Config.Compression.ClaudeCompaction = true
@@ -349,15 +333,6 @@ func TestAgentRuntime_SeparatesClaudeCompactionCapability(t *testing.T) {
 
 func TestAgentRuntime_SwitchProviderUsesRuntimeConfig(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "test-key")
-
-	originalConfig := config.GetGlobalConfig()
-	globalCfg := config.DefaultConfig()
-	globalCfg.ProviderModels["claude"] = config.ProviderModelConfig{DefaultModel: "claude-opus-4-6"}
-	globalCfg.Compression.ClaudeCompaction = false
-	config.SetGlobalConfig(globalCfg)
-	t.Cleanup(func() {
-		config.SetGlobalConfig(originalConfig)
-	})
 
 	runtimeA := newIsolatedRuntime()
 	runtimeB := newIsolatedRuntime()

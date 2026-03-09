@@ -5,57 +5,33 @@ import (
 	"testing"
 )
 
-func TestWithGlobalFallback_PreservesInjectedConfig(t *testing.T) {
-	originalGlobal := globalConfig
-	t.Cleanup(func() {
-		globalConfig = originalGlobal
-	})
-
-	globalConfig = DefaultConfig()
-	globalConfig.DefaultModel = "global-model"
-
+func TestWithContextAndFromContext_PreserveInjectedConfig(t *testing.T) {
 	injected := DefaultConfig()
 	injected.DefaultModel = "injected-model"
 
 	ctx := WithContext(context.Background(), injected)
-	got := FromContext(WithGlobalFallback(ctx))
+	got := FromContext(ctx)
 	if got != injected {
-		t.Fatalf("WithGlobalFallback should preserve injected config")
+		t.Fatalf("FromContext() should preserve injected config")
 	}
 }
 
-func TestWithGlobalFallback_UsesGlobalConfig(t *testing.T) {
-	originalGlobal := globalConfig
-	t.Cleanup(func() {
-		globalConfig = originalGlobal
-	})
+func TestResolveContext_UsesFallbackWhenContextMissing(t *testing.T) {
+	fallback := DefaultConfig()
+	fallback.DefaultModel = "fallback-model"
 
-	global := DefaultConfig()
-	global.DefaultModel = "global-model"
-	globalConfig = global
-
-	got := FromContext(WithGlobalFallback(context.Background()))
-	if got != global {
-		t.Fatalf("WithGlobalFallback should use current global config")
+	got := ResolveContext(context.Background(), fallback)
+	if got != fallback {
+		t.Fatalf("ResolveContext() should use fallback config")
 	}
 }
 
-func TestWithGlobalFallback_UsesDefaultConfigWithoutInitializingGlobal(t *testing.T) {
-	originalGlobal := globalConfig
-	t.Cleanup(func() {
-		globalConfig = originalGlobal
-	})
-
-	globalConfig = nil
-
-	got := FromContext(WithGlobalFallback(context.TODO()))
+func TestResolveContext_UsesDefaultConfigWhenNil(t *testing.T) {
+	got := ResolveContext(context.TODO(), nil)
 	if got == nil {
-		t.Fatal("WithGlobalFallback(context.TODO()) returned nil config")
+		t.Fatal("ResolveContext(context.TODO(), nil) returned nil config")
 	}
 	if got.DefaultModel != DefaultConfig().DefaultModel {
 		t.Fatalf("default model = %q, want %q", got.DefaultModel, DefaultConfig().DefaultModel)
-	}
-	if globalConfig != nil {
-		t.Fatal("WithGlobalFallback should not initialize globalConfig when it is unset")
 	}
 }

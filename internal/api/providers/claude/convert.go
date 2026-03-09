@@ -151,26 +151,6 @@ func ConvertToAnthropicMessages(history []api.Message) []AnthropicMessage {
 	return result
 }
 
-// SetMessageCacheBreakpoints はメッセージ履歴にキャッシュ用ブレークポイントを設定する。
-//
-// BP配置戦略（動的 tool_result ベース）:
-//
-//	BP#3, BP#4: 会話履歴中で最も content が大きい tool_result ブロック上位2つに設定。
-//	大きな tool_result（ファイル読み込み結果等）をキャッシュすることで cache read を最大化する。
-//
-//	最新3ターン以内の tool_result は対象外（内容が変わる可能性があるため）。
-//	stableOffset=3: CompactOldToolResults の keepTurns=3 と一致。
-//
-// 合計4 BP の内訳（Anthropic API 上限 = 4）:
-//
-//	BP#1: システムプロンプト最後のブロック（BuildSystemField）
-//	BP#2: ツール定義末尾（GetCombinedClaudeTools）
-//	BP#3, BP#4: tool_result 上位2つ（本関数）
-func SetMessageCacheBreakpoints(messages []AnthropicMessage) {
-	cfg := config.DefaultConfig()
-	SetMessageCacheBreakpointsWithConfigAndEnabled(messages, cfg, cfg == nil || cfg.PromptCache.Enabled)
-}
-
 // SetMessageCacheBreakpointsWithEnabled は prompt cache 有効時のみメッセージに breakpoints を設定する。
 func SetMessageCacheBreakpointsWithEnabled(messages []AnthropicMessage, enabled bool) {
 	SetMessageCacheBreakpointsWithConfigAndEnabled(messages, config.DefaultConfig(), enabled)

@@ -611,13 +611,13 @@ func TestGetCombinedClaudeTools(t *testing.T) {
 		{Name: "mcp_tool_2", Description: "MCP Tool 2"},
 	}
 
-	combined := GetCombinedClaudeTools(mcpTools)
+	combined := GetCombinedClaudeToolsWithContext(context.Background(), mcpTools)
 
 	builtInCount := len(GetClaudeToolDefinitions())
 	expectedCount := builtInCount + 2
 
 	if len(combined) != expectedCount {
-		t.Errorf("GetCombinedClaudeTools() returned %d tools, want %d", len(combined), expectedCount)
+		t.Errorf("GetCombinedClaudeToolsWithContext() returned %d tools, want %d", len(combined), expectedCount)
 	}
 
 	// MCP ツールが含まれていることを確認

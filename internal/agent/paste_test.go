@@ -212,7 +212,7 @@ func parsePasteInput(r io.Reader, maxLines, maxBytes int, timeout time.Duration)
 
 // TestCommandAliasP は /p エイリアスが /paste に解決されることをテスト
 func TestCommandAliasP(t *testing.T) {
-	resolved := resolveCommandAlias("/p")
+	resolved := resolveCommandAliasWithConfig("/p", config.DefaultConfig())
 	if resolved != "/paste" {
 		t.Errorf("Expected /p to resolve to /paste, got %s", resolved)
 	}

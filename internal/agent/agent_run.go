@@ -16,11 +16,6 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
-// RunHeadless はHeadlessモードでクエリを実行（マルチターンツール実行対応）
-func RunHeadless(query string, model string, provider api.Provider) *HeadlessResult {
-	return RunHeadlessWithConfig(query, model, provider, config.DefaultConfig())
-}
-
 // RunHeadlessWithConfig は指定設定で Headless モードのクエリを実行する。
 func RunHeadlessWithConfig(query string, model string, provider api.Provider, cfg *config.Config) *HeadlessResult {
 	startTime := time.Now()
@@ -127,11 +122,6 @@ func RunHeadlessWithConfig(query string, model string, provider api.Provider, cf
 	return NewSuccessResult(provider.Name(), model, finalResponse, allToolCalls, duration)
 }
 
-// RunOnce は単一クエリを1ターンだけ実行して終了する
-func RunOnce(query string, model string, provider api.Provider, autoApprove bool, quiet bool) error {
-	return RunOnceWithConfig(query, model, provider, config.DefaultConfig(), autoApprove, quiet)
-}
-
 // RunOnceWithConfig は指定設定で単一クエリを1ターンだけ実行して終了する。
 func RunOnceWithConfig(query string, model string, provider api.Provider, cfg *config.Config, autoApprove bool, quiet bool) error {
 	runtime := NewAgentRuntimeWithConfig(cfg)
@@ -167,11 +157,6 @@ func RunOnceWithConfig(query string, model string, provider api.Provider, cfg *c
 
 	// 明示的に1ターンのみ実行（ChatOnce は stdin を読まず、REPL に入らない）
 	return agent.ChatOnce(query)
-}
-
-// RunOnceWithImage は画像付きの単一クエリを実行（CLIフラグ -i/--image 用）
-func RunOnceWithImage(query string, model string, provider api.Provider, imagePath string, autoApprove bool) {
-	RunOnceWithImageWithConfig(query, model, provider, imagePath, config.DefaultConfig(), autoApprove)
 }
 
 // RunOnceWithImageWithConfig は指定設定で画像付きの単一クエリを実行する。

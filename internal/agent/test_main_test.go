@@ -3,8 +3,6 @@ package agent
 import (
 	"os"
 	"testing"
-
-	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 func TestMain(m *testing.M) {
@@ -37,11 +35,6 @@ func TestMain(m *testing.M) {
 		}
 		_ = os.Setenv("XELYON_DISABLE_MCP", originalDisableMCP)
 	}()
-
-	cfg := config.DefaultConfig()
-	cfg.MCP.Enabled = false
-	cfg.LSP.Enabled = false
-	config.SetGlobalConfig(cfg)
 
 	os.Exit(m.Run())
 }
