@@ -22,7 +22,6 @@ type Runtime struct {
 	simpleReader *bufio.Reader
 	spinner      *Spinner
 	logLevel     LogLevel
-	logLevelSet  bool
 }
 
 // NewRuntime は UI/terminal 用の runtime を作成する。
@@ -37,32 +36,35 @@ func NewRuntime(in io.Reader, out, err io.Writer) *Runtime {
 		err = stdio.ErrorOutput()
 	}
 	return &Runtime{
-		in:  in,
-		out: out,
-		err: err,
+		in:       in,
+		out:      out,
+		err:      err,
+		logLevel: defaultLogLevel(),
 	}
 }
 
 var defaultRuntime = NewRuntime(stdio.Input(), stdio.Output(), stdio.ErrorOutput())
 
-// DefaultRuntime は互換用途の process-global UI runtime を返す。
+// DefaultRuntime は現在の stdio に紐づく runtime を返す。
 func DefaultRuntime() *Runtime {
 	defaultRuntime.mu.Lock()
+	defer defaultRuntime.mu.Unlock()
+
 	currentIn := stdio.Input()
 	currentOut := stdio.Output()
 	currentErr := stdio.ErrorOutput()
 	if defaultRuntime.in != currentIn {
 		defaultRuntime.simpleReader = nil
+		defaultRuntime.promptReader = nil
 	}
 	defaultRuntime.in = currentIn
 	defaultRuntime.out = currentOut
 	defaultRuntime.err = currentErr
-	defaultRuntime.mu.Unlock()
 	return defaultRuntime
 }
 
 func runtimeOrDefault(runtime *Runtime) *Runtime {
-	if runtime == nil || runtime == defaultRuntime {
+	if runtime == nil {
 		return DefaultRuntime()
 	}
 	return runtime
@@ -71,7 +73,7 @@ func runtimeOrDefault(runtime *Runtime) *Runtime {
 // Input は runtime が使用する標準入力を返す。
 func (r *Runtime) Input() io.Reader {
 	if r == nil {
-		return DefaultRuntime().Input()
+		return stdio.Input()
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -81,7 +83,7 @@ func (r *Runtime) Input() io.Reader {
 // Output は runtime が使用する標準出力を返す。
 func (r *Runtime) Output() io.Writer {
 	if r == nil {
-		return DefaultRuntime().Output()
+		return stdio.Output()
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -91,7 +93,7 @@ func (r *Runtime) Output() io.Writer {
 // ErrorOutput は runtime が使用する標準エラー出力を返す。
 func (r *Runtime) ErrorOutput() io.Writer {
 	if r == nil {
-		return DefaultRuntime().ErrorOutput()
+		return stdio.ErrorOutput()
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -106,22 +108,15 @@ func (r *Runtime) SetLogLevel(level LogLevel) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.logLevel = level
-	r.logLevelSet = true
 }
 
-// LogLevel は runtime のログレベルを返す。未設定の場合は default runtime のレベルを使う。
+// LogLevel は runtime のログレベルを返す。
 func (r *Runtime) LogLevel() LogLevel {
 	if r == nil {
-		return DefaultRuntime().LogLevel()
+		return defaultLogLevel()
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	if !r.logLevelSet {
-		if r != defaultRuntime {
-			return DefaultRuntime().LogLevel()
-		}
-		return defaultLogLevel()
-	}
 	return r.logLevel
 }
 
@@ -141,7 +136,7 @@ func (r *Runtime) SetPromptReader(reader *MultilineReader) {
 // PromptReader は runtime に紐づく共有 MultilineReader を返す。
 func (r *Runtime) PromptReader() *MultilineReader {
 	if r == nil {
-		return DefaultRuntime().PromptReader()
+		return nil
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -151,7 +146,7 @@ func (r *Runtime) PromptReader() *MultilineReader {
 // PromptIO は runtime の入出力から PromptIO を構築する。
 func (r *Runtime) PromptIO() PromptIO {
 	if r == nil {
-		return DefaultRuntime().PromptIO()
+		return NewPromptIO(stdio.Input(), stdio.Output(), stdio.ErrorOutput(), nil)
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -171,7 +166,7 @@ func (r *Runtime) PromptIO() PromptIO {
 // NewSpinner は runtime の出力先へ紐づく spinner を作成する。
 func (r *Runtime) NewSpinner() *Spinner {
 	if r == nil {
-		return DefaultRuntime().NewSpinner()
+		return NewSpinnerWithWriter(stdio.Output())
 	}
 	return NewSpinnerWithWriter(r.Output())
 }
@@ -179,7 +174,6 @@ func (r *Runtime) NewSpinner() *Spinner {
 // SetSpinner は runtime に紐づく現在の spinner を設定する。
 func (r *Runtime) SetSpinner(spinner *Spinner) {
 	if r == nil {
-		DefaultRuntime().SetSpinner(spinner)
 		return
 	}
 	r.mu.Lock()
@@ -193,7 +187,7 @@ func (r *Runtime) SetSpinner(spinner *Spinner) {
 // CurrentSpinner は runtime に紐づく現在の spinner を返す。
 func (r *Runtime) CurrentSpinner() *Spinner {
 	if r == nil {
-		return DefaultRuntime().CurrentSpinner()
+		return nil
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -203,7 +197,6 @@ func (r *Runtime) CurrentSpinner() *Spinner {
 // StopSpinner は runtime に紐づく spinner を停止する。
 func (r *Runtime) StopSpinner() {
 	if r == nil {
-		DefaultRuntime().StopSpinner()
 		return
 	}
 	r.mu.Lock()
@@ -218,7 +211,8 @@ func (r *Runtime) StopSpinner() {
 // ResetTerminalState は runtime に紐づく terminal 表示をリセットする。
 func (r *Runtime) ResetTerminalState() {
 	if r == nil {
-		DefaultRuntime().ResetTerminalState()
+		_, _ = fmt.Fprint(stdio.Output(), "\033[?25h")
+		_, _ = fmt.Fprint(stdio.Output(), "\r\033[K")
 		return
 	}
 	out := r.Output()
@@ -229,7 +223,7 @@ func (r *Runtime) ResetTerminalState() {
 // IsTerminal は runtime の出力先が端末かどうかを返す。
 func (r *Runtime) IsTerminal() bool {
 	if r == nil {
-		return DefaultRuntime().IsTerminal()
+		return isFileTerminal(stdio.Output())
 	}
 	return isFileTerminal(r.Output())
 }

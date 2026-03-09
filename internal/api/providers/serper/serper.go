@@ -38,15 +38,11 @@ func initCacheWithConfig(cfg *config.Config) {
 	}
 }
 
-func initCache() {
-	initCacheWithConfig(config.GetGlobalConfig())
-}
-
 // SearchWithCache はキャッシュ対応のWeb検索を実行する。
 // cacheScope はプロバイダー別キャッシュキーの接頭辞に使用する。
 // 戻り値: (result, cached, error)
 func SearchWithCache(cacheScope, query string, searchFn SearchFunc) (string, bool, error) {
-	return SearchWithCacheAndConfig(config.GetGlobalConfig(), cacheScope, query, searchFn)
+	return SearchWithCacheAndConfig(config.DefaultConfig(), cacheScope, query, searchFn)
 }
 
 // SearchWithCacheAndConfig は明示指定された設定でキャッシュ対応の Web 検索を実行する。

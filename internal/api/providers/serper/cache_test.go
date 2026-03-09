@@ -165,18 +165,14 @@ func TestWebSearchWithCache_CacheDisabled(t *testing.T) {
 	// config.WebSearch.CacheEnabled がfalseならwebSearchCache=nilのまま
 	webSearchCache = nil
 
-	// 設定を一時的に変更してキャッシュ無効に
-	originalConfig := config.GetGlobalConfig()
 	testConfig := config.DefaultConfig()
 	testConfig.WebSearch.CacheEnabled = false
-	config.SetGlobalConfig(testConfig)
-	defer config.SetGlobalConfig(originalConfig)
 
 	// cacheOnce をリセット
 	cacheOnce = sync.Once{}
 
 	// 1回目
-	_, cached1, err := WebSearchWithCache("disabled-test")
+	_, cached1, err := SearchWithCacheAndConfig(testConfig, "serper", "disabled-test", WebSearch)
 	if err != nil {
 		t.Fatalf("First call failed: %v", err)
 	}
@@ -185,7 +181,7 @@ func TestWebSearchWithCache_CacheDisabled(t *testing.T) {
 	}
 
 	// 2回目（キャッシュ無効なので再度API呼び出し）
-	_, cached2, err := WebSearchWithCache("disabled-test")
+	_, cached2, err := SearchWithCacheAndConfig(testConfig, "serper", "disabled-test", WebSearch)
 	if err != nil {
 		t.Fatalf("Second call failed: %v", err)
 	}
@@ -210,7 +206,8 @@ func TestSearchWithCache_ProviderScopedKeys(t *testing.T) {
 	openAICalls := 0
 	claudeCalls := 0
 
-	_, cached, err := SearchWithCache("openai", "same query", func(query string) (string, error) {
+	cfg := config.DefaultConfig()
+	_, cached, err := SearchWithCacheAndConfig(cfg, "openai", "same query", func(query string) (string, error) {
 		openAICalls++
 		return "openai-result", nil
 	})
@@ -221,7 +218,7 @@ func TestSearchWithCache_ProviderScopedKeys(t *testing.T) {
 		t.Fatal("openai first call should not be cached")
 	}
 
-	_, cached, err = SearchWithCache("openai", "same query", func(query string) (string, error) {
+	_, cached, err = SearchWithCacheAndConfig(cfg, "openai", "same query", func(query string) (string, error) {
 		openAICalls++
 		return "openai-result", nil
 	})
@@ -232,7 +229,7 @@ func TestSearchWithCache_ProviderScopedKeys(t *testing.T) {
 		t.Fatal("openai second call should be cached")
 	}
 
-	_, cached, err = SearchWithCache("claude", "same query", func(query string) (string, error) {
+	_, cached, err = SearchWithCacheAndConfig(cfg, "claude", "same query", func(query string) (string, error) {
 		claudeCalls++
 		return "claude-result", nil
 	})
@@ -252,23 +249,18 @@ func TestSearchWithCache_ProviderScopedKeys(t *testing.T) {
 }
 
 func TestInitCache(t *testing.T) {
-	// グローバル設定を一時的に変更
-	originalConfig := config.GetGlobalConfig()
-	defer config.SetGlobalConfig(originalConfig)
-
 	// テスト用設定
 	testConfig := config.DefaultConfig()
 	testConfig.WebSearch.CacheEnabled = true
 	testConfig.WebSearch.CacheSize = 50
 	testConfig.WebSearch.CacheTTL = 600
-	config.SetGlobalConfig(testConfig)
 
 	// キャッシュをリセット
 	webSearchCache = nil
 	cacheOnce = sync.Once{}
 
 	// initCache を呼び出し
-	initCache()
+	initCacheWithConfig(testConfig)
 
 	// キャッシュが初期化されていることを確認
 	if webSearchCache == nil {
@@ -277,21 +269,16 @@ func TestInitCache(t *testing.T) {
 }
 
 func TestInitCache_Disabled(t *testing.T) {
-	// グローバル設定を一時的に変更
-	originalConfig := config.GetGlobalConfig()
-	defer config.SetGlobalConfig(originalConfig)
-
 	// キャッシュ無効の設定
 	testConfig := config.DefaultConfig()
 	testConfig.WebSearch.CacheEnabled = false
-	config.SetGlobalConfig(testConfig)
 
 	// キャッシュをリセット
 	webSearchCache = nil
 	cacheOnce = sync.Once{}
 
 	// initCache を呼び出し
-	initCache()
+	initCacheWithConfig(testConfig)
 
 	// キャッシュが初期化されていないことを確認
 	if webSearchCache != nil {

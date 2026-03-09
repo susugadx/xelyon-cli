@@ -166,7 +166,7 @@ func GetDefaultModelWithContext(ctx context.Context, model, providerName, fallba
 // GetDefaultModel returns the model to use, checking config first, then falling back.
 // providerName must match the config key (e.g., "openai", "claude", "deepseek")
 func GetDefaultModel(model, providerName, fallback string) string {
-	return GetDefaultModelWithContext(config.WithGlobalFallback(context.Background()), model, providerName, fallback)
+	return GetDefaultModelWithContext(config.WithContext(context.Background(), config.DefaultConfig()), model, providerName, fallback)
 }
 
 // StartThinkingSpinner creates and starts a spinner with appropriate message.

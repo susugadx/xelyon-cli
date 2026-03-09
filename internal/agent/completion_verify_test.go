@@ -13,6 +13,10 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
+func newCompletionTestAgent(cfg *config.Config) *Agent {
+	return &Agent{Runtime: NewAgentRuntimeWithConfig(cfg)}
+}
+
 func TestContainsCompletionDeclaration(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -219,10 +223,8 @@ func TestVerifyCompletionWithDiagnostics_NoLSP(t *testing.T) {
 func TestRunCompletionHooks_NoHooks(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Hooks.OnCompletion = nil
-	config.SetGlobalConfig(cfg)
-	defer config.SetGlobalConfig(nil)
 
-	a := &Agent{}
+	a := newCompletionTestAgent(cfg)
 	needsContinue, feedback := a.runCompletionHooks([]string{"/src/main.go"})
 	if needsContinue {
 		t.Error("expected needsContinue=false when no hooks configured")
@@ -236,10 +238,8 @@ func TestRunCompletionHooks_SuccessfulCommand(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Hooks.OnCompletion = []string{"echo 'test passed'"}
 	cfg.Hooks.Timeout = 10
-	config.SetGlobalConfig(cfg)
-	defer config.SetGlobalConfig(nil)
 
-	a := &Agent{}
+	a := newCompletionTestAgent(cfg)
 	needsContinue, feedback := a.runCompletionHooks([]string{"/src/main.go"})
 	if needsContinue {
 		t.Error("expected needsContinue=false for successful command")
@@ -253,10 +253,8 @@ func TestRunCompletionHooks_FailedCommand(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Hooks.OnCompletion = []string{"exit 1"}
 	cfg.Hooks.Timeout = 10
-	config.SetGlobalConfig(cfg)
-	defer config.SetGlobalConfig(nil)
 
-	a := &Agent{}
+	a := newCompletionTestAgent(cfg)
 	needsContinue, feedback := a.runCompletionHooks([]string{"/src/main.go"})
 	if !needsContinue {
 		t.Error("expected needsContinue=true for failed command")
@@ -275,10 +273,8 @@ func TestRunCompletionHooks_ChangedFilesEnv(t *testing.T) {
 		`test -n "$XELYON_CHANGED_FILES"`,
 	}
 	cfg.Hooks.Timeout = 10
-	config.SetGlobalConfig(cfg)
-	defer config.SetGlobalConfig(nil)
 
-	a := &Agent{}
+	a := newCompletionTestAgent(cfg)
 	needsContinue, _ := a.runCompletionHooks([]string{"/src/main.go", "/src/util.go"})
 	if needsContinue {
 		t.Error("expected needsContinue=false, XELYON_CHANGED_FILES should be set")
@@ -293,10 +289,8 @@ func TestRunCompletionHooks_MultipleCommands_StopsOnFirstFailure(t *testing.T) {
 		"echo 'should not run'",
 	}
 	cfg.Hooks.Timeout = 10
-	config.SetGlobalConfig(cfg)
-	defer config.SetGlobalConfig(nil)
 
-	a := &Agent{}
+	a := newCompletionTestAgent(cfg)
 	needsContinue, feedback := a.runCompletionHooks([]string{"/src/main.go"})
 	if !needsContinue {
 		t.Error("expected needsContinue=true when second command fails")
@@ -310,10 +304,8 @@ func TestRunCompletionHooks_Timeout(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Hooks.OnCompletion = []string{"sleep 30"}
 	cfg.Hooks.Timeout = 1
-	config.SetGlobalConfig(cfg)
-	defer config.SetGlobalConfig(nil)
 
-	a := &Agent{}
+	a := newCompletionTestAgent(cfg)
 	needsContinue, feedback := a.runCompletionHooks([]string{"/src/main.go"})
 	if !needsContinue {
 		t.Error("expected needsContinue=true for timed-out command")
@@ -333,13 +325,10 @@ func TestHooksConfig_MaxRetryDefault(t *testing.T) {
 func TestRunCompletionHooksWithRetry_NoHooks(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Hooks.OnCompletion = nil
-	config.SetGlobalConfig(cfg)
-	defer config.SetGlobalConfig(nil)
 
-	a := &Agent{
-		changeStack:      []tools.FileChange{{FilePath: "/src/main.go"}},
-		taskChangeOffset: 0,
-	}
+	a := newCompletionTestAgent(cfg)
+	a.changeStack = []tools.FileChange{{FilePath: "/src/main.go"}}
+	a.taskChangeOffset = 0
 
 	result := a.runCompletionHooksWithRetry(context.Background())
 	if !result {
@@ -350,13 +339,10 @@ func TestRunCompletionHooksWithRetry_NoHooks(t *testing.T) {
 func TestRunCompletionHooksWithRetry_NoChangedFiles(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Hooks.OnCompletion = []string{"exit 1"}
-	config.SetGlobalConfig(cfg)
-	defer config.SetGlobalConfig(nil)
 
-	a := &Agent{
-		changeStack:      nil,
-		taskChangeOffset: 0,
-	}
+	a := newCompletionTestAgent(cfg)
+	a.changeStack = nil
+	a.taskChangeOffset = 0
 
 	result := a.runCompletionHooksWithRetry(context.Background())
 	if !result {
@@ -368,13 +354,10 @@ func TestRunCompletionHooksWithRetry_AllPass(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Hooks.OnCompletion = []string{"echo 'ok'"}
 	cfg.Hooks.Timeout = 10
-	config.SetGlobalConfig(cfg)
-	defer config.SetGlobalConfig(nil)
 
-	a := &Agent{
-		changeStack:      []tools.FileChange{{FilePath: "/src/main.go"}},
-		taskChangeOffset: 0,
-	}
+	a := newCompletionTestAgent(cfg)
+	a.changeStack = []tools.FileChange{{FilePath: "/src/main.go"}}
+	a.taskChangeOffset = 0
 
 	result := a.runCompletionHooksWithRetry(context.Background())
 	if !result {
@@ -387,18 +370,15 @@ func TestRunCompletionHooksWithRetry_MaxRetryExhausted(t *testing.T) {
 	cfg.Hooks.OnCompletion = []string{"exit 1"}
 	cfg.Hooks.Timeout = 1
 	cfg.Hooks.MaxRetry = 2
-	config.SetGlobalConfig(cfg)
-	defer config.SetGlobalConfig(nil)
 
 	// mockProvider を使って AI 修正試行をシミュレート
 	provider := &mockProvider{name: "test"}
-	a := &Agent{
-		CurrentProvider:  provider,
-		CurrentModel:     "test-model",
-		History:          []api.Message{},
-		changeStack:      []tools.FileChange{{FilePath: "/src/main.go"}},
-		taskChangeOffset: 0,
-	}
+	a := newCompletionTestAgent(cfg)
+	a.CurrentProvider = provider
+	a.CurrentModel = "test-model"
+	a.History = []api.Message{}
+	a.changeStack = []tools.FileChange{{FilePath: "/src/main.go"}}
+	a.taskChangeOffset = 0
 
 	result := a.runCompletionHooksWithRetry(context.Background())
 	if result {
@@ -411,17 +391,14 @@ func TestRunCompletionHooksWithRetry_MaxRetryZeroFallback(t *testing.T) {
 	cfg.Hooks.OnCompletion = []string{"exit 1"}
 	cfg.Hooks.Timeout = 1
 	cfg.Hooks.MaxRetry = 0 // 0 はフォールバックで 3 になる
-	config.SetGlobalConfig(cfg)
-	defer config.SetGlobalConfig(nil)
 
 	provider := &mockProvider{name: "test"}
-	a := &Agent{
-		CurrentProvider:  provider,
-		CurrentModel:     "test-model",
-		History:          []api.Message{},
-		changeStack:      []tools.FileChange{{FilePath: "/src/main.go"}},
-		taskChangeOffset: 0,
-	}
+	a := newCompletionTestAgent(cfg)
+	a.CurrentProvider = provider
+	a.CurrentModel = "test-model"
+	a.History = []api.Message{}
+	a.changeStack = []tools.FileChange{{FilePath: "/src/main.go"}}
+	a.taskChangeOffset = 0
 
 	result := a.runCompletionHooksWithRetry(context.Background())
 	if result {

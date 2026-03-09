@@ -27,6 +27,11 @@ func NewAgentRuntime() *AgentRuntime {
 	return normalizeAgentRuntime(nil)
 }
 
+// NewAgentRuntimeWithConfig は指定設定を保持した runtime を返す。
+func NewAgentRuntimeWithConfig(cfg *config.Config) *AgentRuntime {
+	return normalizeAgentRuntime(&AgentRuntime{Config: cfg})
+}
+
 func normalizeAgentRuntime(runtime *AgentRuntime) *AgentRuntime {
 	if runtime == nil {
 		runtime = &AgentRuntime{}
@@ -40,7 +45,7 @@ func normalizeAgentRuntime(runtime *AgentRuntime) *AgentRuntime {
 		runtime.ToolCache = cache
 	}
 	if runtime.Config == nil {
-		runtime.Config = config.CloneConfig(config.GetGlobalConfig())
+		runtime.Config = config.CloneConfig(config.DefaultConfig())
 	} else {
 		runtime.Config = config.CloneConfig(runtime.Config)
 	}
@@ -51,6 +56,14 @@ func normalizeAgentRuntime(runtime *AgentRuntime) *AgentRuntime {
 		runtime.AuditLogger = audit.NewDisabledLogger()
 	}
 	return runtime
+}
+
+// SetConfig は runtime の設定をディープコピーして差し替える。
+func (r *AgentRuntime) SetConfig(cfg *config.Config) {
+	if r == nil {
+		return
+	}
+	r.Config = config.CloneConfig(cfg)
 }
 
 func (r *AgentRuntime) effectiveRegistry() *tools.Registry {
@@ -76,7 +89,7 @@ func (r *AgentRuntime) effectiveConfig() *config.Config {
 
 func (r *AgentRuntime) effectiveUI() *ui.Runtime {
 	if r == nil || r.UI == nil {
-		return ui.DefaultRuntime()
+		return ui.NewRuntime(nil, nil, nil)
 	}
 	return r.UI
 }
@@ -97,7 +110,7 @@ func (r *AgentRuntime) effectiveAutoApprove() bool {
 
 func (a *Agent) cfg() *config.Config {
 	if a == nil || a.Runtime == nil {
-		return config.GetGlobalConfig()
+		return config.DefaultConfig()
 	}
 	return a.Runtime.effectiveConfig()
 }
@@ -121,7 +134,7 @@ func (a *Agent) autoApprove() bool {
 
 func (a *Agent) ui() *ui.Runtime {
 	if a == nil || a.Runtime == nil {
-		return ui.DefaultRuntime()
+		return ui.NewRuntime(nil, nil, nil)
 	}
 	return a.Runtime.effectiveUI()
 }
@@ -141,6 +154,17 @@ func (a *Agent) setAutoApprove(enabled bool) {
 	if a.Runtime != nil {
 		a.Runtime.AutoApprove = enabled
 	}
+}
+
+func (a *Agent) setRuntimeConfig(cfg *config.Config) {
+	if a == nil {
+		return
+	}
+	if a.Runtime == nil {
+		a.Runtime = NewAgentRuntimeWithConfig(cfg)
+		return
+	}
+	a.Runtime.SetConfig(cfg)
 }
 
 func (a *Agent) requestContext(ctx context.Context) context.Context {

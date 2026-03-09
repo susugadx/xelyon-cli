@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -21,7 +20,7 @@ func TestExecuteToolCallsWithParallel_LoopDetection_PreventsExecution(t *testing
 	agent := NewAgent("test-model", provider, false)
 	agent.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
 
-	cfg := config.GetGlobalConfig()
+	cfg := agent.cfg()
 	origThreshold := cfg.LoopDetection.Threshold
 	cfg.LoopDetection.Threshold = 2
 	defer func() { cfg.LoopDetection.Threshold = origThreshold }()
@@ -238,7 +237,7 @@ func TestExecuteToolCallsWithParallel_HistoryMessages(t *testing.T) {
 	agent := NewAgent("test-model", provider, false)
 	agent.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
 
-	cfg := config.GetGlobalConfig()
+	cfg := agent.cfg()
 	origThreshold := cfg.LoopDetection.Threshold
 	cfg.LoopDetection.Threshold = 2
 	defer func() { cfg.LoopDetection.Threshold = origThreshold }()
@@ -465,14 +464,13 @@ func TestExecuteToolCallsWithParallel_TextBased_Skip(t *testing.T) {
 // --- Test: FC loop detection message matches old shouldAbortToolLoopWithResponse format ---
 
 func TestLoopDetection_FC_MessageConsistency(t *testing.T) {
-	cfg := config.GetGlobalConfig()
-	origThreshold := cfg.LoopDetection.Threshold
-	cfg.LoopDetection.Threshold = 2
-	defer func() { cfg.LoopDetection.Threshold = origThreshold }()
-
 	provider := &mockProvider{name: "test"}
 	agent := NewAgent("test-model", provider, false)
 	agent.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
+	cfg := agent.cfg()
+	origThreshold := cfg.LoopDetection.Threshold
+	cfg.LoopDetection.Threshold = 2
+	defer func() { cfg.LoopDetection.Threshold = origThreshold }()
 
 	toolCalls := []*tools.ToolCall{
 		{ID: "c1", Tool: "read_file", Args: map[string]string{"path": "/x.go"}, RawArgs: map[string]any{"path": "/x.go"}},
@@ -521,14 +519,13 @@ func TestLoopDetection_FC_MessageConsistency(t *testing.T) {
 // --- Test: Text-based loop detection message matches old format ---
 
 func TestLoopDetection_TextBased_TriggerMessage(t *testing.T) {
-	cfg := config.GetGlobalConfig()
-	origThreshold := cfg.LoopDetection.Threshold
-	cfg.LoopDetection.Threshold = 2
-	defer func() { cfg.LoopDetection.Threshold = origThreshold }()
-
 	provider := &mockProvider{name: "test"}
 	agent := NewAgent("test-model", provider, false)
 	agent.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
+	cfg := agent.cfg()
+	origThreshold := cfg.LoopDetection.Threshold
+	cfg.LoopDetection.Threshold = 2
+	defer func() { cfg.LoopDetection.Threshold = origThreshold }()
 
 	// ID="" = text-based
 	toolCalls := []*tools.ToolCall{
@@ -574,14 +571,13 @@ func TestLoopDetection_TextBased_TriggerMessage(t *testing.T) {
 // 同様にダミーを追加しない。これは by design であり、互換性のために維持している。
 
 func TestLoopDetection_TextBased_SubsequentNoDummy(t *testing.T) {
-	cfg := config.GetGlobalConfig()
-	origThreshold := cfg.LoopDetection.Threshold
-	cfg.LoopDetection.Threshold = 2
-	defer func() { cfg.LoopDetection.Threshold = origThreshold }()
-
 	provider := &mockProvider{name: "test"}
 	agent := NewAgent("test-model", provider, false)
 	agent.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
+	cfg := agent.cfg()
+	origThreshold := cfg.LoopDetection.Threshold
+	cfg.LoopDetection.Threshold = 2
+	defer func() { cfg.LoopDetection.Threshold = origThreshold }()
 
 	// text-based (ID="") + 後続ツール
 	toolCalls := []*tools.ToolCall{

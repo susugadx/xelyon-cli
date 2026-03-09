@@ -479,8 +479,6 @@ func TestSetMessageCacheBreakpoints_Disabled(t *testing.T) {
 	// prompt_cache.enabled=false → cache_control を設定しない
 	cfg := config.DefaultConfig()
 	cfg.PromptCache.Enabled = false
-	config.SetGlobalConfig(cfg)
-	defer config.SetGlobalConfig(nil)
 
 	messages := []AnthropicMessage{
 		{Role: "user", Content: []AnthropicContentBlock{{Type: "tool_result", ToolUseID: "t1", Content: string(make([]byte, 5000))}}},
@@ -492,7 +490,7 @@ func TestSetMessageCacheBreakpoints_Disabled(t *testing.T) {
 		{Role: "user", Content: []AnthropicContentBlock{{Type: "text", Text: "msg"}}},
 	}
 
-	SetMessageCacheBreakpoints(messages)
+	SetMessageCacheBreakpointsWithConfigAndEnabled(messages, cfg, false)
 
 	if messages[0].Content[0].CacheControl != nil {
 		t.Error("expected no cache_control when prompt cache disabled")

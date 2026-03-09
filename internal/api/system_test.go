@@ -9,10 +9,8 @@ import (
 func TestBuildSystemField_SingleBlock(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.PromptCache.Enabled = true
-	config.SetGlobalConfig(cfg)
-	defer config.SetGlobalConfig(nil)
 
-	result := BuildSystemField("Hello world")
+	result := BuildSystemFieldWithConfig("Hello world", cfg)
 
 	blocks, ok := result.([]SystemBlock)
 	if !ok {
@@ -35,11 +33,9 @@ func TestBuildSystemField_SingleBlock(t *testing.T) {
 func TestBuildSystemField_SplitBlocks(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.PromptCache.Enabled = true
-	config.SetGlobalConfig(cfg)
-	defer config.SetGlobalConfig(nil)
 
 	prompt := "base prompt" + SystemPromptCacheBoundary + "dynamic part"
-	result := BuildSystemField(prompt)
+	result := BuildSystemFieldWithConfig(prompt, cfg)
 
 	blocks, ok := result.([]SystemBlock)
 	if !ok {
@@ -69,11 +65,9 @@ func TestBuildSystemField_SplitBlocks(t *testing.T) {
 func TestBuildSystemField_Disabled(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.PromptCache.Enabled = false
-	config.SetGlobalConfig(cfg)
-	defer config.SetGlobalConfig(nil)
 
 	prompt := "base prompt" + SystemPromptCacheBoundary + "dynamic part"
-	result := BuildSystemField(prompt)
+	result := BuildSystemFieldWithConfig(prompt, cfg)
 
 	str, ok := result.(string)
 	if !ok {
@@ -88,10 +82,8 @@ func TestNewCacheControl_DefaultTTL(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.PromptCache.Enabled = true
 	// CacheTTL = "5m" (default)
-	config.SetGlobalConfig(cfg)
-	defer config.SetGlobalConfig(nil)
 
-	cc := NewCacheControl()
+	cc := NewCacheControlWithConfig(cfg)
 	if cc.Type != "ephemeral" {
 		t.Errorf("type = %q, want 'ephemeral'", cc.Type)
 	}
@@ -104,10 +96,8 @@ func TestNewCacheControl_ExtendedTTL(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.PromptCache.Enabled = true
 	cfg.PromptCache.CacheTTL = "1h"
-	config.SetGlobalConfig(cfg)
-	defer config.SetGlobalConfig(nil)
 
-	cc := NewCacheControl()
+	cc := NewCacheControlWithConfig(cfg)
 	if cc.Type != "ephemeral" {
 		t.Errorf("type = %q, want 'ephemeral'", cc.Type)
 	}
@@ -129,11 +119,9 @@ func TestNewCacheControlWithConfig_UsesInjectedConfig(t *testing.T) {
 func TestBuildSystemField_EmptyDynamic(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.PromptCache.Enabled = true
-	config.SetGlobalConfig(cfg)
-	defer config.SetGlobalConfig(nil)
 
 	prompt := "base prompt" + SystemPromptCacheBoundary + "   "
-	result := BuildSystemField(prompt)
+	result := BuildSystemFieldWithConfig(prompt, cfg)
 
 	blocks, ok := result.([]SystemBlock)
 	if !ok {
@@ -149,12 +137,6 @@ func TestBuildSystemField_EmptyDynamic(t *testing.T) {
 }
 
 func TestBuildSystemFieldWithConfig_UsesInjectedConfig(t *testing.T) {
-	original := config.GetGlobalConfig()
-	globalCfg := config.DefaultConfig()
-	globalCfg.PromptCache.Enabled = false
-	config.SetGlobalConfig(globalCfg)
-	defer config.SetGlobalConfig(original)
-
 	cfg := config.DefaultConfig()
 	cfg.PromptCache.Enabled = true
 

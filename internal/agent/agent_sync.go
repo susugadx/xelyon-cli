@@ -1,10 +1,10 @@
 package agent
 
-// SyncWithGlobalConfig はグローバル設定（config.GetGlobalConfig）と Agent の状態を同期する。
+// SyncWithRuntimeConfig は runtime に保持した設定と Agent の状態を同期する。
 //
 // /config などで設定を変更した場合に、フッター表示・次回API呼び出しに即反映させるために使用する。
 // プロバイダー変更が必要な場合は SwitchProvider を呼び出す。
-func (a *Agent) SyncWithGlobalConfig() {
+func (a *Agent) SyncWithRuntimeConfig() {
 	if a == nil {
 		return
 	}

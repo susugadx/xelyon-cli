@@ -167,7 +167,7 @@ func ConvertToAnthropicMessages(history []api.Message) []AnthropicMessage {
 //	BP#2: ツール定義末尾（GetCombinedClaudeTools）
 //	BP#3, BP#4: tool_result 上位2つ（本関数）
 func SetMessageCacheBreakpoints(messages []AnthropicMessage) {
-	cfg := config.GetGlobalConfig()
+	cfg := config.DefaultConfig()
 	SetMessageCacheBreakpointsWithConfigAndEnabled(messages, cfg, cfg == nil || cfg.PromptCache.Enabled)
 }
 

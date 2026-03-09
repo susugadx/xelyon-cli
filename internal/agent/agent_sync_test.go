@@ -27,35 +27,35 @@ func (m *MockProvider) ChatWithImage(ctx context.Context, systemPrompt string, h
 }
 func (m *MockProvider) IsFunctionCallingEnabled() bool { return false }
 
-func TestSyncWithGlobalConfig_ModelUpdate(t *testing.T) {
+func TestSyncWithRuntimeConfig_ModelUpdate(t *testing.T) {
 	// Setup
 	cfg := config.DefaultConfig()
 	cfg.DefaultProvider = "openai"
 	cfg.ProviderModels["openai"] = config.ProviderModelConfig{
 		DefaultModel: "gpt-old",
 	}
-	config.SetGlobalConfig(cfg)
+	runtime := NewAgentRuntimeWithConfig(cfg)
 
 	a := &Agent{
 		ProviderName:    "openai",
 		CurrentModel:    "gpt-old",
 		CurrentProvider: &MockProvider{name: "openai"},
+		Runtime:         runtime,
 	}
 
 	// Scenario 1: Update provider specific model in config
-	cfg.ProviderModels["openai"] = config.ProviderModelConfig{
+	runtime.Config.ProviderModels["openai"] = config.ProviderModelConfig{
 		DefaultModel: "gpt-new",
 	}
-	config.SetGlobalConfig(cfg)
 
-	a.SyncWithGlobalConfig()
+	a.SyncWithRuntimeConfig()
 
 	if a.CurrentModel != "gpt-new" {
 		t.Errorf("Expected CurrentModel to be 'gpt-new', got '%s'", a.CurrentModel)
 	}
 }
 
-func TestSyncWithGlobalConfig_DefaultModelShadowing(t *testing.T) {
+func TestSyncWithRuntimeConfig_DefaultModelShadowing(t *testing.T) {
 	// Setup
 	cfg := config.DefaultConfig()
 	cfg.DefaultProvider = "openai"
@@ -63,20 +63,20 @@ func TestSyncWithGlobalConfig_DefaultModelShadowing(t *testing.T) {
 	cfg.ProviderModels["openai"] = config.ProviderModelConfig{
 		DefaultModel: "gpt-specific",
 	}
-	config.SetGlobalConfig(cfg)
+	runtime := NewAgentRuntimeWithConfig(cfg)
 
 	a := &Agent{
 		ProviderName:    "openai",
 		CurrentModel:    "gpt-specific",
 		CurrentProvider: &MockProvider{name: "openai"},
+		Runtime:         runtime,
 	}
 
 	// Scenario: Update global DefaultModel
 	// This simulates user changing 'default_model' via /config
-	cfg.DefaultModel = "gpt-default-new"
-	config.SetGlobalConfig(cfg)
+	runtime.Config.DefaultModel = "gpt-default-new"
 
-	a.SyncWithGlobalConfig()
+	a.SyncWithRuntimeConfig()
 
 	// Because provider_models.openai.default_model exists, it should take precedence
 	// So CurrentModel should remain "gpt-specific"
@@ -85,57 +85,57 @@ func TestSyncWithGlobalConfig_DefaultModelShadowing(t *testing.T) {
 	}
 }
 
-func TestSyncWithGlobalConfig_DefaultModelUpdate_WhenNoProviderOverride(t *testing.T) {
+func TestSyncWithRuntimeConfig_DefaultModelUpdate_WhenNoProviderOverride(t *testing.T) {
 	// Setup
 	cfg := config.DefaultConfig()
 	cfg.DefaultProvider = "openai"
 	cfg.DefaultModel = "gpt-default-old"
 	// Clear provider override for openai
 	delete(cfg.ProviderModels, "openai")
-	config.SetGlobalConfig(cfg)
+	runtime := NewAgentRuntimeWithConfig(cfg)
 
 	a := &Agent{
 		ProviderName:    "openai",
 		CurrentModel:    "gpt-default-old",
 		CurrentProvider: &MockProvider{name: "openai"},
+		Runtime:         runtime,
 	}
 
 	// Scenario: Update global DefaultModel
-	cfg.DefaultModel = "gpt-default-new"
-	config.SetGlobalConfig(cfg)
+	runtime.Config.DefaultModel = "gpt-default-new"
 
-	a.SyncWithGlobalConfig()
+	a.SyncWithRuntimeConfig()
 
 	if a.CurrentModel != "gpt-default-new" {
 		t.Errorf("Expected CurrentModel to be 'gpt-default-new', got '%s'", a.CurrentModel)
 	}
 }
 
-func TestSyncWithGlobalConfig_RebuildsPromptForClaudeOpus(t *testing.T) {
+func TestSyncWithRuntimeConfig_RebuildsPromptForClaudeOpus(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.PromptCache.Enabled = true
 	cfg.DefaultProvider = "claude"
 	cfg.ProviderModels["claude"] = config.ProviderModelConfig{
 		DefaultModel: "claude-opus-4-6",
 	}
-	config.SetGlobalConfig(cfg)
-	defer config.SetGlobalConfig(nil)
+	runtime := NewAgentRuntimeWithConfig(cfg)
 
 	a := &Agent{
 		ProviderName:    "claude",
 		CurrentModel:    "claude-sonnet-4-6",
 		CurrentProvider: &MockProvider{name: "claude"},
-		SystemPrompt:    prompt.BuildProviderSystemPrompt(prompt.SystemPrompt, "claude", "claude-sonnet-4-6"),
+		SystemPrompt:    prompt.BuildProviderSystemPromptWithConfig(prompt.SystemPrompt, "claude", "claude-sonnet-4-6", runtime.Config),
+		Runtime:         runtime,
 	}
 
-	a.SyncWithGlobalConfig()
+	a.SyncWithRuntimeConfig()
 
 	if !strings.Contains(a.SystemPrompt, "### Stable Working Reference") {
 		t.Fatal("expected SyncWithGlobalConfig to rebuild the Claude Opus system prompt")
 	}
 }
 
-func TestSyncWithGlobalConfig_UsesRuntimeOutputForSwitchWarning(t *testing.T) {
+func TestSyncWithRuntimeConfig_UsesRuntimeOutputForSwitchWarning(t *testing.T) {
 	var out bytes.Buffer
 	runtime := NewAgentRuntime()
 	runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, &out)
@@ -148,7 +148,7 @@ func TestSyncWithGlobalConfig_UsesRuntimeOutputForSwitchWarning(t *testing.T) {
 		Runtime:         runtime,
 	}
 
-	a.SyncWithGlobalConfig()
+	a.SyncWithRuntimeConfig()
 
 	if !strings.Contains(out.String(), "Warning: Failed to switch provider") {
 		t.Fatalf("expected runtime output to contain switch warning, got %q", out.String())

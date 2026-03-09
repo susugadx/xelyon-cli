@@ -77,15 +77,15 @@ func TestAgent_SwitchProvider_RebuildsSystemPrompt(t *testing.T) {
 	t.Setenv("DEEPSEEK_API_KEY", "test-key")
 
 	cfg := config.DefaultConfig()
-	config.SetGlobalConfig(cfg)
-	defer config.SetGlobalConfig(nil)
+	runtime := NewAgentRuntimeWithConfig(cfg)
 
 	agent := &Agent{
 		ProviderName:    "gemini",
 		CurrentModel:    "gemini-3.1-pro-preview-customtools",
 		CurrentProvider: &mockCacheClearableProvider{name: "gemini"},
-		SystemPrompt:    prompt.BuildProviderSystemPrompt(prompt.SystemPrompt, "gemini", "gemini-3.1-pro-preview-customtools"),
+		SystemPrompt:    prompt.BuildProviderSystemPromptWithConfig(prompt.SystemPrompt, "gemini", "gemini-3.1-pro-preview-customtools", cfg),
 		Stats:           NewSessionStats("gemini"),
+		Runtime:         runtime,
 	}
 
 	err := agent.SwitchProvider("deepseek")

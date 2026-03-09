@@ -12,13 +12,19 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/audit"
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // RunInteractive はインタラクティブモードでエージェントを実行
 func RunInteractive(model string, provider api.Provider, autoApprove bool) {
-	runtime := NewAgentRuntime()
+	RunInteractiveWithConfig(model, provider, config.DefaultConfig(), autoApprove)
+}
+
+// RunInteractiveWithConfig は指定設定でインタラクティブモードを実行する。
+func RunInteractiveWithConfig(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
+	runtime := NewAgentRuntimeWithConfig(cfg)
 	runtime.AutoApprove = autoApprove
 	runtimeUI := runtime.effectiveUI()
 
@@ -26,14 +32,14 @@ func RunInteractive(model string, provider api.Provider, autoApprove bool) {
 	// 他の出力より前に送信する必要がある
 	mlReader := ui.NewMultilineReaderWithRuntime(runtimeUI)
 	runtimeUI.SetPromptReader(mlReader)
-	cfg := runtime.effectiveConfig()
+	runtimeCfg := runtime.effectiveConfig()
 
 	// Debug: XELYON_DEBUG_PASTE=1 で詳細表示
 	if os.Getenv("XELYON_DEBUG_PASTE") == "1" {
-		_, _ = fmt.Fprintf(runtimeUI.ErrorOutput(), "[DEBUG] cfg.Paste.BracketedPaste = %v\n", cfg.Paste.BracketedPaste)
+		_, _ = fmt.Fprintf(runtimeUI.ErrorOutput(), "[DEBUG] cfg.Paste.BracketedPaste = %v\n", runtimeCfg.Paste.BracketedPaste)
 	}
 
-	if cfg.Paste.BracketedPaste {
+	if runtimeCfg.Paste.BracketedPaste {
 		mlReader.EnableBracketedPaste()
 		defer mlReader.DisableBracketedPaste()
 	}
@@ -76,20 +82,25 @@ func RunInteractive(model string, provider api.Provider, autoApprove bool) {
 
 // RunInteractiveWithResume は前回のセッションを再開してインタラクティブモードを実行
 func RunInteractiveWithResume(model string, provider api.Provider, autoApprove bool) {
-	runtime := NewAgentRuntime()
+	RunInteractiveWithResumeWithConfig(model, provider, config.DefaultConfig(), autoApprove)
+}
+
+// RunInteractiveWithResumeWithConfig は指定設定で前回セッションを再開してインタラクティブモードを実行する。
+func RunInteractiveWithResumeWithConfig(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
+	runtime := NewAgentRuntimeWithConfig(cfg)
 	runtime.AutoApprove = autoApprove
 	runtimeUI := runtime.effectiveUI()
 
 	// Bracketed Paste Mode を最初に有効化（Windows Terminal の警告回避のため）
 	mlReader := ui.NewMultilineReaderWithRuntime(runtimeUI)
 	runtimeUI.SetPromptReader(mlReader)
-	cfg := runtime.effectiveConfig()
+	runtimeCfg := runtime.effectiveConfig()
 
 	if os.Getenv("XELYON_DEBUG_PASTE") == "1" {
-		_, _ = fmt.Fprintf(runtimeUI.ErrorOutput(), "[DEBUG] cfg.Paste.BracketedPaste = %v\n", cfg.Paste.BracketedPaste)
+		_, _ = fmt.Fprintf(runtimeUI.ErrorOutput(), "[DEBUG] cfg.Paste.BracketedPaste = %v\n", runtimeCfg.Paste.BracketedPaste)
 	}
 
-	if cfg.Paste.BracketedPaste {
+	if runtimeCfg.Paste.BracketedPaste {
 		mlReader.EnableBracketedPaste()
 		defer mlReader.DisableBracketedPaste()
 	}
@@ -108,21 +119,21 @@ func RunInteractiveWithResume(model string, provider api.Provider, autoApprove b
 	storage, err := history.NewStorage()
 	if err != nil {
 		red.Fprintf(runtimeUI.Output(), "Failed to initialize storage: %v\n", err)
-		RunInteractive(model, provider, autoApprove)
+		RunInteractiveWithConfig(model, provider, cfg, autoApprove)
 		return
 	}
 
 	sessionID, err := storage.GetLastSession()
 	if err != nil {
 		yellow.Fprintln(runtimeUI.Output(), "No previous session found, starting new session")
-		RunInteractive(model, provider, autoApprove)
+		RunInteractiveWithConfig(model, provider, cfg, autoApprove)
 		return
 	}
 
 	session, err := storage.Load(sessionID)
 	if err != nil {
 		red.Fprintf(runtimeUI.Output(), "Failed to load session: %v\n", err)
-		RunInteractive(model, provider, autoApprove)
+		RunInteractiveWithConfig(model, provider, cfg, autoApprove)
 		return
 	}
 

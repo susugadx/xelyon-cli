@@ -72,7 +72,7 @@ func CollapseOutputWithPrefix(output string, prefix string, maxLines int) string
 
 // GetMaxVisibleLines は設定から最大表示行数を取得
 func GetMaxVisibleLines() int {
-	return GetMaxVisibleLinesWithConfig(config.GetGlobalConfig())
+	return GetMaxVisibleLinesWithConfig(config.DefaultConfig())
 }
 
 // GetMaxVisibleLinesWithConfig は設定から最大表示行数を取得する。

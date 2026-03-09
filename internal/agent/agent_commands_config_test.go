@@ -72,17 +72,17 @@ func TestHandleModelCommand_RebuildsClaudePromptForOpus(t *testing.T) {
 
 	cfg := config.DefaultConfig()
 	cfg.PromptCache.Enabled = true
-	config.SetGlobalConfig(cfg)
-	defer config.SetGlobalConfig(nil)
 	if err := config.SaveConfig(cfg); err != nil {
 		t.Fatalf("failed to save config: %v", err)
 	}
+	runtime := NewAgentRuntimeWithConfig(cfg)
 
 	agent := &Agent{
 		ProviderName:    "claude",
 		CurrentModel:    "claude-sonnet-4-6",
 		CurrentProvider: &mockCacheClearableProviderForModel{name: "claude"},
-		SystemPrompt:    prompt.BuildProviderSystemPrompt(prompt.SystemPrompt, "claude", "claude-sonnet-4-6"),
+		SystemPrompt:    prompt.BuildProviderSystemPromptWithConfig(prompt.SystemPrompt, "claude", "claude-sonnet-4-6", cfg),
+		Runtime:         runtime,
 	}
 
 	result := handleModelCommand(agent, []string{"claude-opus-4-6"})

@@ -18,10 +18,15 @@ import (
 
 // RunHeadless はHeadlessモードでクエリを実行（マルチターンツール実行対応）
 func RunHeadless(query string, model string, provider api.Provider) *HeadlessResult {
+	return RunHeadlessWithConfig(query, model, provider, config.DefaultConfig())
+}
+
+// RunHeadlessWithConfig は指定設定で Headless モードのクエリを実行する。
+func RunHeadlessWithConfig(query string, model string, provider api.Provider, cfg *config.Config) *HeadlessResult {
 	startTime := time.Now()
 
 	// Agent初期化
-	runtime := NewAgentRuntime()
+	runtime := NewAgentRuntimeWithConfig(cfg)
 	runtime.AutoApprove = true
 	runtime.UI = ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
 	if logger, err := audit.NewDefaultLogger(os.Getenv("XELYON_AUDIT_LOG") == "1"); err == nil {
@@ -124,7 +129,12 @@ func RunHeadless(query string, model string, provider api.Provider) *HeadlessRes
 
 // RunOnce は単一クエリを1ターンだけ実行して終了する
 func RunOnce(query string, model string, provider api.Provider, autoApprove bool, quiet bool) error {
-	runtime := NewAgentRuntime()
+	return RunOnceWithConfig(query, model, provider, config.DefaultConfig(), autoApprove, quiet)
+}
+
+// RunOnceWithConfig は指定設定で単一クエリを1ターンだけ実行して終了する。
+func RunOnceWithConfig(query string, model string, provider api.Provider, cfg *config.Config, autoApprove bool, quiet bool) error {
+	runtime := NewAgentRuntimeWithConfig(cfg)
 	runtime.AutoApprove = autoApprove
 	out := runtime.effectiveUI().Output()
 
@@ -161,7 +171,12 @@ func RunOnce(query string, model string, provider api.Provider, autoApprove bool
 
 // RunOnceWithImage は画像付きの単一クエリを実行（CLIフラグ -i/--image 用）
 func RunOnceWithImage(query string, model string, provider api.Provider, imagePath string, autoApprove bool) {
-	runtime := NewAgentRuntime()
+	RunOnceWithImageWithConfig(query, model, provider, imagePath, config.DefaultConfig(), autoApprove)
+}
+
+// RunOnceWithImageWithConfig は指定設定で画像付きの単一クエリを実行する。
+func RunOnceWithImageWithConfig(query string, model string, provider api.Provider, imagePath string, cfg *config.Config, autoApprove bool) {
+	runtime := NewAgentRuntimeWithConfig(cfg)
 	runtime.AutoApprove = autoApprove
 	out := runtime.effectiveUI().Output()
 

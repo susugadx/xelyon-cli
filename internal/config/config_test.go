@@ -252,12 +252,6 @@ func TestSaveConfig_NewFile(t *testing.T) {
 		t.Error("SaveConfig() did not save custom provider")
 	}
 
-	// グローバル設定が更新されたことを確認
-	globalCfg := GetGlobalConfig()
-	if globalCfg.DefaultProvider != "gemini" {
-		t.Error("SaveConfig() did not update global config")
-	}
-
 	// ヘッダーコメントを確認
 	if !strings.Contains(content, "# XELYON CLI 設定") {
 		t.Error("SaveConfig() should include header comment")

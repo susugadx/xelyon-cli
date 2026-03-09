@@ -265,12 +265,10 @@ func TestBuildProviderSystemPrompt_Anthropic(t *testing.T) {
 func TestBuildProviderSystemPrompt_ClaudeOpusAddsCacheMargin(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.PromptCache.Enabled = true
-	config.SetGlobalConfig(cfg)
-	defer config.SetGlobalConfig(nil)
 
 	base := "You are XELYON.\n\n## Workflow Rules\n- workflow"
-	sonnet := BuildProviderSystemPrompt(base, "claude", "claude-sonnet-4-6")
-	opus := BuildProviderSystemPrompt(base, "claude", "claude-opus-4-6")
+	sonnet := BuildProviderSystemPromptWithConfig(base, "claude", "claude-sonnet-4-6", cfg)
+	opus := BuildProviderSystemPromptWithConfig(base, "claude", "claude-opus-4-6", cfg)
 
 	if strings.Contains(sonnet, "### Stable Working Reference") {
 		t.Fatal("sonnet prompt should not include the Opus cache margin block")
@@ -286,11 +284,9 @@ func TestBuildProviderSystemPrompt_ClaudeOpusAddsCacheMargin(t *testing.T) {
 func TestBuildProviderSystemPrompt_OpenRouterAnthropicOpusAddsCacheMargin(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.PromptCache.Enabled = true
-	config.SetGlobalConfig(cfg)
-	defer config.SetGlobalConfig(nil)
 
 	base := "You are XELYON.\n\n## Workflow Rules\n- workflow"
-	result := BuildProviderSystemPrompt(base, "openrouter", "anthropic/claude-opus-4.6")
+	result := BuildProviderSystemPromptWithConfig(base, "openrouter", "anthropic/claude-opus-4.6", cfg)
 
 	if !strings.Contains(result, "### Stable Working Reference") {
 		t.Fatal("openrouter anthropic opus prompt should include the cache margin block")
@@ -300,11 +296,9 @@ func TestBuildProviderSystemPrompt_OpenRouterAnthropicOpusAddsCacheMargin(t *tes
 func TestBuildProviderSystemPrompt_CacheMarginDisabledWhenPromptCacheOff(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.PromptCache.Enabled = false
-	config.SetGlobalConfig(cfg)
-	defer config.SetGlobalConfig(nil)
 
 	base := "You are XELYON.\n\n## Workflow Rules\n- workflow"
-	result := BuildProviderSystemPrompt(base, "claude", "claude-opus-4-6")
+	result := BuildProviderSystemPromptWithConfig(base, "claude", "claude-opus-4-6", cfg)
 
 	if strings.Contains(result, "### Stable Working Reference") {
 		t.Fatal("cache margin block should not be included when prompt cache is disabled")
@@ -312,12 +306,6 @@ func TestBuildProviderSystemPrompt_CacheMarginDisabledWhenPromptCacheOff(t *test
 }
 
 func TestBuildProviderSystemPromptWithConfig_UsesInjectedConfig(t *testing.T) {
-	original := config.GetGlobalConfig()
-	globalCfg := config.DefaultConfig()
-	globalCfg.PromptCache.Enabled = false
-	config.SetGlobalConfig(globalCfg)
-	defer config.SetGlobalConfig(original)
-
 	cfg := config.DefaultConfig()
 	cfg.PromptCache.Enabled = true
 

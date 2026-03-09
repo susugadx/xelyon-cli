@@ -157,7 +157,7 @@ func needsAnthropicCacheMarginWithConfig(providerName, model string, cfg *config
 
 // BuildProviderSystemPrompt はプロバイダー別ノートを Workflow Rules の直前に挿入する
 func BuildProviderSystemPrompt(base, providerName, model string) string {
-	return BuildProviderSystemPromptWithConfig(base, providerName, model, config.GetGlobalConfig())
+	return BuildProviderSystemPromptWithConfig(base, providerName, model, config.DefaultConfig())
 }
 
 // BuildProviderSystemPromptWithConfig は明示指定した設定を使ってプロバイダー別ノートを挿入する。

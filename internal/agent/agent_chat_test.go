@@ -46,7 +46,7 @@ func TestShouldAbortToolLoop_SameToolRepeated(t *testing.T) {
 	agent := NewAgent("test-model", provider, false)
 
 	// 閾値を3に設定
-	cfg := config.GetGlobalConfig()
+	cfg := agent.cfg()
 	originalThreshold := cfg.LoopDetection.Threshold
 	cfg.LoopDetection.Threshold = 3
 	defer func() {
@@ -97,7 +97,7 @@ func TestShouldAbortToolLoop_DifferentTools(t *testing.T) {
 	provider := &mockProvider{name: "test"}
 	agent := NewAgent("test-model", provider, false)
 
-	cfg := config.GetGlobalConfig()
+	cfg := agent.cfg()
 	originalThreshold := cfg.LoopDetection.Threshold
 	cfg.LoopDetection.Threshold = 3
 	defer func() {
@@ -381,7 +381,7 @@ func TestExtractExplanationAndTool_UnclosedBrace(t *testing.T) {
 
 // TestMaxRetryConfig はmax_retryの設定が正しく読み込まれることを確認
 func TestMaxRetryConfig(t *testing.T) {
-	cfg := config.GetGlobalConfig()
+	cfg := config.DefaultConfig()
 
 	// デフォルト値は10
 	if cfg.PlanMode.MaxRetry != 10 {

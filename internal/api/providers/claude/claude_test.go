@@ -11,6 +11,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/tools"
 
 	// ツール登録のための blank import
 	_ "github.com/susugadx/xelyon-cli/internal/tools/dev"
@@ -635,14 +636,13 @@ func TestGetCombinedClaudeTools_BP2(t *testing.T) {
 	// BP#2: ツール定義の末尾に cache_control が設定されること
 	cfg := config.DefaultConfig()
 	cfg.PromptCache.Enabled = true
-	config.SetGlobalConfig(cfg)
-	defer config.SetGlobalConfig(nil)
 
-	tools := GetCombinedClaudeTools(nil)
-	if len(tools) == 0 {
+	ctx := tools.WithConfig(context.Background(), cfg)
+	claudeTools := GetCombinedClaudeToolsWithContext(ctx, nil)
+	if len(claudeTools) == 0 {
 		t.Fatal("expected at least 1 tool")
 	}
-	last := tools[len(tools)-1]
+	last := claudeTools[len(claudeTools)-1]
 	if last.CacheControl == nil {
 		t.Error("expected cache_control on last tool (BP#2)")
 	}
@@ -651,8 +651,8 @@ func TestGetCombinedClaudeTools_BP2(t *testing.T) {
 	}
 
 	// 最後以外には cache_control なし
-	for i := 0; i < len(tools)-1; i++ {
-		if tools[i].CacheControl != nil {
+	for i := 0; i < len(claudeTools)-1; i++ {
+		if claudeTools[i].CacheControl != nil {
 			t.Errorf("tools[%d] should not have cache_control", i)
 		}
 	}
@@ -662,14 +662,13 @@ func TestGetCombinedClaudeTools_BP2Disabled(t *testing.T) {
 	// prompt_cache.enabled=false → cache_control なし
 	cfg := config.DefaultConfig()
 	cfg.PromptCache.Enabled = false
-	config.SetGlobalConfig(cfg)
-	defer config.SetGlobalConfig(nil)
 
-	tools := GetCombinedClaudeTools(nil)
-	if len(tools) == 0 {
+	ctx := tools.WithConfig(context.Background(), cfg)
+	claudeTools := GetCombinedClaudeToolsWithContext(ctx, nil)
+	if len(claudeTools) == 0 {
 		t.Fatal("expected at least 1 tool")
 	}
-	last := tools[len(tools)-1]
+	last := claudeTools[len(claudeTools)-1]
 	if last.CacheControl != nil {
 		t.Errorf("expected no cache_control when prompt cache disabled, got %+v", last.CacheControl)
 	}

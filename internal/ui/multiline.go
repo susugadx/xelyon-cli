@@ -449,16 +449,6 @@ func TrimBracketedPasteMarkers(input string) string {
 	return stripAllBracketedPasteMarkers(input)
 }
 
-// SetGlobalReader sets the global MultilineReader for shared access
-func SetGlobalReader(r *MultilineReader) {
-	DefaultRuntime().SetPromptReader(r)
-}
-
-// GetGlobalReader returns the global MultilineReader
-func GetGlobalReader() *MultilineReader {
-	return DefaultRuntime().PromptReader()
-}
-
 // GetBufioReader returns the internal bufio.Reader for direct access
 func (m *MultilineReader) GetBufioReader() *bufio.Reader {
 	return m.reader

@@ -14,6 +14,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/agent"
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 type headlessSequenceProvider struct {
@@ -84,20 +85,20 @@ func TestRootCommand_PositionalQueryDefaultsToOnce(t *testing.T) {
 
 	interactiveCalled := false
 	onceCalled := false
-	runInteractive = func(model string, provider api.Provider, autoApprove bool) {
+	runInteractive = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
 		interactiveCalled = true
 	}
-	runInteractiveWithResume = func(model string, provider api.Provider, autoApprove bool) {
+	runInteractiveWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
 		interactiveCalled = true
 	}
-	runHeadless = func(query string, model string, provider api.Provider) *agent.HeadlessResult {
+	runHeadless = func(query string, model string, provider api.Provider, cfg *config.Config) *agent.HeadlessResult {
 		interactiveCalled = true
 		return agent.NewSuccessResult(provider.Name(), model, "", nil, 0)
 	}
-	runOnceWithImage = func(query string, model string, provider api.Provider, imagePath string, autoApprove bool) {
+	runOnceWithImage = func(query string, model string, provider api.Provider, imagePath string, cfg *config.Config, autoApprove bool) {
 		interactiveCalled = true
 	}
-	runOnce = func(query string, model string, provider api.Provider, autoApprove bool, quiet bool) error {
+	runOnce = func(query string, model string, provider api.Provider, cfg *config.Config, autoApprove bool, quiet bool) error {
 		onceCalled = true
 		if query != "hello" {
 			t.Fatalf("query = %q, want hello", query)
@@ -137,20 +138,20 @@ func TestRootCommand_OnceExecutesSingleTurn(t *testing.T) {
 
 	interactiveCalled := false
 	onceCalled := false
-	runInteractive = func(model string, provider api.Provider, autoApprove bool) {
+	runInteractive = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
 		interactiveCalled = true
 	}
-	runInteractiveWithResume = func(model string, provider api.Provider, autoApprove bool) {
+	runInteractiveWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
 		interactiveCalled = true
 	}
-	runHeadless = func(query string, model string, provider api.Provider) *agent.HeadlessResult {
+	runHeadless = func(query string, model string, provider api.Provider, cfg *config.Config) *agent.HeadlessResult {
 		interactiveCalled = true
 		return nil
 	}
-	runOnceWithImage = func(query string, model string, provider api.Provider, imagePath string, autoApprove bool) {
+	runOnceWithImage = func(query string, model string, provider api.Provider, imagePath string, cfg *config.Config, autoApprove bool) {
 		interactiveCalled = true
 	}
-	runOnce = func(query string, model string, provider api.Provider, autoApprove bool, quiet bool) error {
+	runOnce = func(query string, model string, provider api.Provider, cfg *config.Config, autoApprove bool, quiet bool) error {
 		onceCalled = true
 		if query != "hello" {
 			t.Fatalf("query = %q, want hello", query)
@@ -184,10 +185,10 @@ func TestRootCommand_InteractiveFlagForcesREPLWithPositionalQuery(t *testing.T) 
 
 	interactiveCalled := false
 	onceCalled := false
-	runInteractive = func(model string, provider api.Provider, autoApprove bool) {
+	runInteractive = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
 		interactiveCalled = true
 	}
-	runOnce = func(query string, model string, provider api.Provider, autoApprove bool, quiet bool) error {
+	runOnce = func(query string, model string, provider api.Provider, cfg *config.Config, autoApprove bool, quiet bool) error {
 		onceCalled = true
 		return nil
 	}
@@ -297,7 +298,7 @@ func TestRootCommand_QuietWithPositionalQueryUsesImplicitOnce(t *testing.T) {
 	})
 
 	called := false
-	runOnce = func(query string, model string, provider api.Provider, autoApprove bool, quiet bool) error {
+	runOnce = func(query string, model string, provider api.Provider, cfg *config.Config, autoApprove bool, quiet bool) error {
 		called = true
 		if !quiet {
 			t.Fatal("expected quiet to be passed to one-shot execution")
@@ -328,7 +329,7 @@ func TestRootCommand_OnceMultiWordQuery(t *testing.T) {
 	})
 
 	var gotQuery string
-	runOnce = func(query string, model string, provider api.Provider, autoApprove bool, quiet bool) error {
+	runOnce = func(query string, model string, provider api.Provider, cfg *config.Config, autoApprove bool, quiet bool) error {
 		gotQuery = query
 		return nil
 	}
@@ -353,7 +354,7 @@ func TestRootCommand_OnceErrorPropagation(t *testing.T) {
 		resetRootFlagsForTest()
 	})
 
-	runOnce = func(query string, model string, provider api.Provider, autoApprove bool, quiet bool) error {
+	runOnce = func(query string, model string, provider api.Provider, cfg *config.Config, autoApprove bool, quiet bool) error {
 		return fmt.Errorf("something went wrong")
 	}
 
@@ -383,18 +384,18 @@ func TestRootCommand_PositionalQueryUsesHeadlessInJSONMode(t *testing.T) {
 	headlessCalled := false
 	onceCalled := false
 	interactiveCalled := false
-	runHeadless = func(query string, model string, provider api.Provider) *agent.HeadlessResult {
+	runHeadless = func(query string, model string, provider api.Provider, cfg *config.Config) *agent.HeadlessResult {
 		headlessCalled = true
 		if query != "hello" {
 			t.Fatalf("query = %q, want hello", query)
 		}
 		return agent.NewSuccessResult(provider.Name(), model, "ok", nil, 0)
 	}
-	runOnce = func(query string, model string, provider api.Provider, autoApprove bool, quiet bool) error {
+	runOnce = func(query string, model string, provider api.Provider, cfg *config.Config, autoApprove bool, quiet bool) error {
 		onceCalled = true
 		return nil
 	}
-	runInteractive = func(model string, provider api.Provider, autoApprove bool) {
+	runInteractive = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
 		interactiveCalled = true
 	}
 
@@ -438,7 +439,7 @@ func TestRootCommand_HeadlessJSONStdoutIsPureJSON(t *testing.T) {
 		},
 	}
 
-	runHeadless = func(query string, model string, providerArg api.Provider) *agent.HeadlessResult {
+	runHeadless = func(query string, model string, providerArg api.Provider, cfg *config.Config) *agent.HeadlessResult {
 		return agent.RunHeadless(query, model, provider)
 	}
 
@@ -491,14 +492,14 @@ func TestRootCommand_ImageFlagPreservesImagePath(t *testing.T) {
 	imageCalled := false
 	onceCalled := false
 	interactiveCalled := false
-	runOnce = func(query string, model string, provider api.Provider, autoApprove bool, quiet bool) error {
+	runOnce = func(query string, model string, provider api.Provider, cfg *config.Config, autoApprove bool, quiet bool) error {
 		onceCalled = true
 		return nil
 	}
-	runInteractive = func(model string, provider api.Provider, autoApprove bool) {
+	runInteractive = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
 		interactiveCalled = true
 	}
-	runOnceWithImage = func(query string, model string, provider api.Provider, imagePath string, autoApprove bool) {
+	runOnceWithImage = func(query string, model string, provider api.Provider, imagePath string, cfg *config.Config, autoApprove bool) {
 		imageCalled = true
 		if query != "describe" {
 			t.Fatalf("query = %q, want describe", query)

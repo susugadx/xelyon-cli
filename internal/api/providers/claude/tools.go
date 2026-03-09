@@ -53,7 +53,8 @@ func ConvertOpenAIToolToClaude(tool api.ToolDefinition) ClaudeTool {
 // BP#2: ツール定義の末尾に cache_control を設定。
 // ツール定義は安定しているため、tools prefix のキャッシュヒット率が高い。
 func GetCombinedClaudeTools(mcpTools []api.ToolDefinition) []ClaudeTool {
-	return GetCombinedClaudeToolsWithContext(config.WithGlobalFallback(context.Background()), mcpTools)
+	ctx := tools.WithConfig(context.Background(), config.DefaultConfig())
+	return GetCombinedClaudeToolsWithContext(ctx, mcpTools)
 }
 
 // GetCombinedClaudeToolsWithContext は request context の Registry/Config を使って組み込みツール + MCPツールを返す。

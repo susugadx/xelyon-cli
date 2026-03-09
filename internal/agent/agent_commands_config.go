@@ -79,6 +79,7 @@ func handleModelCommand(agent *Agent, args []string) bool {
 		return true
 	}
 
+	agent.setRuntimeConfig(cfg)
 	green.Fprintln(out, "💾 Default model saved to config")
 	return true
 }
@@ -119,11 +120,9 @@ func handleConfigCommand(agent *Agent, args []string) bool {
 			return true
 		}
 
-		// グローバル設定を更新（このプロセス内で即反映させる）
-		config.SetGlobalConfig(cfg)
-		// Agent にも同期（フッター/次回API呼び出し）
 		if agent != nil {
-			agent.SyncWithGlobalConfig()
+			agent.setRuntimeConfig(cfg)
+			agent.SyncWithRuntimeConfig()
 		}
 
 		green.Fprintf(out, "✅ Default model updated to: %s\n", newModel)
@@ -172,10 +171,9 @@ func runInteractiveConfig(agent *Agent, cfg *config.Config) {
 					red.Fprintf(out, "Error saving: %v\n", err)
 				} else {
 					green.Fprintf(out, "✓ Saved: %s\n", selectedField.Path)
-					// グローバル設定/Agent を同期（即反映）
-					config.SetGlobalConfig(cfg)
 					if agent != nil {
-						agent.SyncWithGlobalConfig()
+						agent.setRuntimeConfig(cfg)
+						agent.SyncWithRuntimeConfig()
 					}
 				}
 				// カテゴリを再構築
@@ -215,10 +213,9 @@ func runInteractiveConfig(agent *Agent, cfg *config.Config) {
 
 			green.Fprintf(out, "✓ Saved: %s = %v\n", selectedField.Path, newValue)
 
-			// グローバル設定/Agent を同期（即反映）
-			config.SetGlobalConfig(cfg)
 			if agent != nil {
-				agent.SyncWithGlobalConfig()
+				agent.setRuntimeConfig(cfg)
+				agent.SyncWithRuntimeConfig()
 			}
 
 			// カテゴリを再構築して現在値を更新

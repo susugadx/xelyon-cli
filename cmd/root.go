@@ -41,25 +41,22 @@ var (
 	noUpdateCheck bool
 	imageFlag     string
 
-	runInteractive           = agent.RunInteractive
-	runInteractiveWithResume = agent.RunInteractiveWithResume
-	runHeadless              = agent.RunHeadless
-	runOnce                  = agent.RunOnce
-	runOnceWithImage         = agent.RunOnceWithImage
+	runInteractive           = agent.RunInteractiveWithConfig
+	runInteractiveWithResume = agent.RunInteractiveWithResumeWithConfig
+	runHeadless              = agent.RunHeadlessWithConfig
+	runOnce                  = agent.RunOnceWithConfig
+	runOnceWithImage         = agent.RunOnceWithImageWithConfig
 )
 
 // getModel はフラグからモデルを決定する
 // 優先順位: --model フラグ > provider_models.<provider>.default_model > default_model
-func getModel(cmd *cobra.Command) string {
+func getModel(cfg *config.Config) string {
 	// --model フラグが指定されていればそれを優先
 	if modelFlag != "" {
 		return modelFlag
 	}
 
-	// 設定ファイルから読み込み
-	cfg, err := config.LoadConfig()
-	if err != nil {
-		// エラー時はハードコードされたデフォルトを使用
+	if cfg == nil {
 		return "deepseek-chat"
 	}
 
@@ -153,18 +150,15 @@ Examples:
 		}
 		cfg.ApplyFlagOverrides(loopPtr, retryPtr, delayPtr, diffPtr)
 
-		// グローバル設定として保存（agent側で参照できるように）
-		config.SetGlobalConfig(cfg)
-
-		model := getModel(cmd)
-		provider := getProvider()
+		model := getModel(cfg)
+		provider := getProvider(cfg)
 
 		// Headlessモードチェック（クエリ必須）
 		if outputFormat == "json" {
 			if len(args) == 0 {
 				return fmt.Errorf("query argument is required in headless mode")
 			}
-			result := runHeadless(strings.Join(args, " "), model, provider)
+			result := runHeadless(strings.Join(args, " "), model, provider, cfg)
 			jsonBytes, _ := json.MarshalIndent(result, "", "  ")
 			fmt.Println(string(jsonBytes))
 			if result.Status == "error" {
@@ -174,18 +168,18 @@ Examples:
 		}
 
 		if once {
-			return runOnce(strings.Join(args, " "), model, provider, autoApprove, quiet)
+			return runOnce(strings.Join(args, " "), model, provider, cfg, autoApprove, quiet)
 		}
 
 		// --resume フラグチェック
 		if resume && len(args) == 0 {
-			runInteractiveWithResume(model, provider, autoApprove)
+			runInteractiveWithResume(model, provider, cfg, autoApprove)
 			return nil
 		}
 
 		// 引数なし & 画像指定なし → 対話モード
 		if len(args) == 0 && imageFlag == "" {
-			runInteractive(model, provider, autoApprove)
+			runInteractive(model, provider, cfg, autoApprove)
 			return nil
 		}
 
@@ -195,17 +189,17 @@ Examples:
 			if len(args) > 0 {
 				query = args[0]
 			}
-			runOnceWithImage(query, model, provider, imageFlag, autoApprove)
+			runOnceWithImage(query, model, provider, imageFlag, cfg, autoApprove)
 			return nil
 		}
 
 		// テキストクエリ引数付き → デフォルトでワンショット実行
 		if implicitOnce {
-			return runOnce(strings.Join(args, " "), model, provider, autoApprove, quiet)
+			return runOnce(strings.Join(args, " "), model, provider, cfg, autoApprove, quiet)
 		}
 
 		// クエリ引数付き + --interactive → 対話モード
-		runInteractive(model, provider, autoApprove)
+		runInteractive(model, provider, cfg, autoApprove)
 		return nil
 	},
 }

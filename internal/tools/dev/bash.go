@@ -77,7 +77,7 @@ func ExecuteBashWithOutput(out common.Output, command string) string {
 
 // ExecuteBashWithPromptIO executes a shell command with explicit interactive I/O.
 func ExecuteBashWithPromptIO(promptIO ui.PromptIO, command string) string {
-	return ExecuteBashWithPromptIOAndConfig(promptIO, config.GetGlobalConfig(), command)
+	return ExecuteBashWithPromptIOAndConfig(promptIO, config.DefaultConfig(), command)
 }
 
 // ExecuteBashWithPromptIOAndConfig executes a shell command with explicit config.
@@ -148,7 +148,7 @@ func ExecuteBashWithContextAndOutput(ctx context.Context, out common.Output, com
 
 // ExecuteBashWithContextAndPromptIO はContext対応でシェルコマンドを実行する。
 func ExecuteBashWithContextAndPromptIO(ctx context.Context, promptIO ui.PromptIO, command string) string {
-	return ExecuteBashWithContextAndPromptIOAndConfig(ctx, promptIO, config.GetGlobalConfig(), command)
+	return ExecuteBashWithContextAndPromptIOAndConfig(ctx, promptIO, config.DefaultConfig(), command)
 }
 
 // ExecuteBashWithContextAndPromptIOAndConfig はContext対応でシェルコマンドを実行する。

@@ -22,7 +22,7 @@ var defaultCommandAliases = map[string]string{
 // - 大文字小文字は無視（内部で lower に正規化）
 func resolveCommandAlias(cmd string) string {
 	cmd = strings.ToLower(cmd)
-	return resolveCommandAliasWithConfig(cmd, config.GetGlobalConfig())
+	return resolveCommandAliasWithConfig(cmd, config.DefaultConfig())
 }
 
 func resolveCommandAliasWithConfig(cmd string, cfg *config.Config) string {

@@ -53,15 +53,6 @@ func setupTestConfirm(t *testing.T, approve bool) {
 }
 
 func TestCheckAndConfirmBash_NilConfigUsesDefaultConfig(t *testing.T) {
-	original := config.GetGlobalConfig()
-	global := config.DefaultConfig()
-	global.Bash.SafetyLevel = "strict"
-	global.Bash.AllowRedirect = false
-	config.SetGlobalConfig(global)
-	t.Cleanup(func() {
-		config.SetGlobalConfig(original)
-	})
-
 	promptIO := ui.NewPromptIO(strings.NewReader("y\n"), &bytes.Buffer{}, &bytes.Buffer{}, nil)
 
 	msg, ok := checkAndConfirmBash(promptIO, nil, "printf hi > /tmp/xelyon-bash-test.txt")
@@ -390,10 +381,6 @@ func TestExecuteBash_InlineEditBlocked_Moderate(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Bash.SafetyLevel = "moderate"
 	cfg.Bash.AllowInlineEdit = false
-	config.SetGlobalConfig(cfg)
-	t.Cleanup(func() {
-		config.SetGlobalConfig(config.DefaultConfig())
-	})
 
 	tests := []struct {
 		name    string
@@ -411,7 +398,7 @@ func TestExecuteBash_InlineEditBlocked_Moderate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			output := ExecuteBash(tt.command)
+			output := ExecuteBashWithPromptIOAndConfig(ui.NewPromptIO(strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{}, nil), cfg, tt.command)
 
 			if !strings.Contains(output, "Error:") || !strings.Contains(output, "Inline edit") {
 				t.Errorf("ExecuteBash() should block inline edit '%s', got %v", tt.command, output)

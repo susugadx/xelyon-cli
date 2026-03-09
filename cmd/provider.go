@@ -48,15 +48,11 @@ func createProvider(providerName string) (api.Provider, error) {
 
 // getProvider は環境変数/設定ファイルからProviderを取得
 // 優先順位: CLI flag > 環境変数 > 設定ファイル > デフォルト
-func getProvider() api.Provider {
+func getProvider(cfg *config.Config) api.Provider {
 	debugLog("getProvider: providerFlag=%q", providerFlag)
 
-	// 設定ファイルからデフォルトプロバイダーを取得
 	var configProvider string
-	cfg, err := config.LoadConfig()
-	if err != nil {
-		debugLog("getProvider: config.LoadConfig() error: %v", err)
-	} else if cfg != nil {
+	if cfg != nil {
 		configProvider = cfg.DefaultProvider
 		debugLog("getProvider: config.DefaultProvider=%q", configProvider)
 	}

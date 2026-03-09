@@ -47,24 +47,6 @@ func TestSelectOption(t *testing.T) {
 	}
 }
 
-func TestGlobalReader(t *testing.T) {
-	// Initially nil
-	if GetGlobalReader() != nil {
-		t.Error("Expected global reader to be nil initially")
-	}
-
-	// Set and get
-	reader := NewMultilineReader(nil)
-	SetGlobalReader(reader)
-
-	if GetGlobalReader() != reader {
-		t.Error("Expected global reader to be set correctly")
-	}
-
-	// Cleanup
-	SetGlobalReader(nil)
-}
-
 func TestSelector_RunWithIO_StopsRuntimeSpinner(t *testing.T) {
 	runtime := NewRuntime(strings.NewReader("1\n"), &bytes.Buffer{}, &bytes.Buffer{})
 	runtime.SetSpinner(NewSpinnerWithRuntime(runtime))

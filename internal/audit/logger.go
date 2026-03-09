@@ -33,11 +33,6 @@ type ToolLogger interface {
 	LogToolExecution(tool string, args map[string]string, output string, err error, fileChanged bool)
 }
 
-var (
-	globalLogger   *Logger
-	globalLoggerMu sync.RWMutex
-)
-
 // NewDefaultLogger は標準の保存先を使う監査ロガーを作成する。
 func NewDefaultLogger(enabled bool) (*Logger, error) {
 	if !enabled {
@@ -63,32 +58,9 @@ func NewDisabledLogger() *Logger {
 	return &Logger{enabled: false}
 }
 
-// SetGlobalLogger は互換用途のグローバル監査ロガーを差し替える。
-func SetGlobalLogger(logger *Logger) {
-	globalLoggerMu.Lock()
-	defer globalLoggerMu.Unlock()
-	globalLogger = logger
-}
-
-// Init は監査ログを初期化
-func Init(enabled bool) error {
-	logger, err := NewDefaultLogger(enabled)
-	if err != nil {
-		return err
-	}
-	SetGlobalLogger(logger)
-	return err
-}
-
-// GetLogger はグローバルロガーを取得
-func GetLogger() *Logger {
-	globalLoggerMu.RLock()
-	defer globalLoggerMu.RUnlock()
-	if globalLogger == nil {
-		// デフォルトで無効状態のロガーを返す
-		return NewDisabledLogger()
-	}
-	return globalLogger
+// Init は標準保存先の監査ロガーを初期化して返す。
+func Init(enabled bool) (*Logger, error) {
+	return NewDefaultLogger(enabled)
 }
 
 func defaultLogPath() (string, error) {

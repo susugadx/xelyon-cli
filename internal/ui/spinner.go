@@ -190,21 +190,6 @@ func formatElapsed(d time.Duration) string {
 	return fmt.Sprintf("(%ds)", seconds)
 }
 
-// SetGlobalSpinner はグローバルスピナーを設定
-func SetGlobalSpinner(s *Spinner) {
-	DefaultRuntime().SetSpinner(s)
-}
-
-// GetGlobalSpinner はグローバルスピナーを返す（未設定時はnil）
-func GetGlobalSpinner() *Spinner {
-	return DefaultRuntime().CurrentSpinner()
-}
-
-// StopGlobalSpinner はグローバルスピナーを停止
-func StopGlobalSpinner() {
-	DefaultRuntime().StopSpinner()
-}
-
 // ResetTerminalState はターミナル状態をリセットする
 // FC→テキストモードフォールバック時など、ターミナル状態が不整合になった場合に使用
 func ResetTerminalState() {

@@ -103,7 +103,7 @@ func (a *Agent) errorOutput() io.Writer {
 
 // NewAgent は新しいAgentを作成
 func NewAgent(model string, provider api.Provider, headless bool) *Agent {
-	return NewAgentWithRuntime(model, provider, headless, nil)
+	return NewAgentWithRuntime(model, provider, headless, NewAgentRuntimeWithConfig(config.DefaultConfig()))
 }
 
 // NewAgentWithRuntime は runtime を指定して新しい Agent を作成する。

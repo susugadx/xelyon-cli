@@ -42,7 +42,7 @@ func RegisterWithContext(providerName string, fn SearchFuncWithContext) {
 
 // Search executes a registered provider-native web search implementation.
 func Search(providerName, query, model string) (string, error) {
-	return SearchWithContext(config.WithGlobalFallback(context.Background()), providerName, query, model)
+	return SearchWithContext(config.WithContext(context.Background(), config.DefaultConfig()), providerName, query, model)
 }
 
 // SearchWithContext は request context を渡してネイティブ検索実装を実行する。

@@ -71,10 +71,9 @@ func TestExpandStepTemplate(t *testing.T) {
 }
 
 func TestRunStepCompleteHooks_NoHooks(t *testing.T) {
-	a := &Agent{}
-	cfg := config.GetGlobalConfig()
+	cfg := config.DefaultConfig()
 	cfg.Hooks.OnStepComplete = nil
-	config.SetGlobalConfig(cfg)
+	a := &Agent{Runtime: NewAgentRuntimeWithConfig(cfg)}
 
 	needsContinue, feedback := a.runStepCompleteHooks(1, "test step", "completed")
 	if needsContinue {
@@ -86,16 +85,10 @@ func TestRunStepCompleteHooks_NoHooks(t *testing.T) {
 }
 
 func TestRunStepCompleteHooks_Success(t *testing.T) {
-	a := &Agent{}
-	cfg := config.GetGlobalConfig()
+	cfg := config.DefaultConfig()
 	cfg.Hooks.OnStepComplete = []string{"echo 'step {{step_id}} done'"}
 	cfg.Hooks.Timeout = 10
-	config.SetGlobalConfig(cfg)
-	t.Cleanup(func() {
-		cfg2 := config.GetGlobalConfig()
-		cfg2.Hooks.OnStepComplete = nil
-		config.SetGlobalConfig(cfg2)
-	})
+	a := &Agent{Runtime: NewAgentRuntimeWithConfig(cfg)}
 
 	needsContinue, feedback := a.runStepCompleteHooks(2, "テストステップ", "completed")
 	if needsContinue {
@@ -107,16 +100,10 @@ func TestRunStepCompleteHooks_Success(t *testing.T) {
 }
 
 func TestRunStepCompleteHooks_Failure(t *testing.T) {
-	a := &Agent{}
-	cfg := config.GetGlobalConfig()
+	cfg := config.DefaultConfig()
 	cfg.Hooks.OnStepComplete = []string{"exit 1"}
 	cfg.Hooks.Timeout = 10
-	config.SetGlobalConfig(cfg)
-	t.Cleanup(func() {
-		cfg2 := config.GetGlobalConfig()
-		cfg2.Hooks.OnStepComplete = nil
-		config.SetGlobalConfig(cfg2)
-	})
+	a := &Agent{Runtime: NewAgentRuntimeWithConfig(cfg)}
 
 	needsContinue, feedback := a.runStepCompleteHooks(3, "failing step", "completed")
 	if !needsContinue {
@@ -129,17 +116,11 @@ func TestRunStepCompleteHooks_Failure(t *testing.T) {
 
 func TestRunStepCompleteHooks_TemplateExpanded(t *testing.T) {
 	// テンプレート変数がコマンドに正しく展開されることを確認
-	a := &Agent{}
-	cfg := config.GetGlobalConfig()
+	cfg := config.DefaultConfig()
 	// step_id が展開されていれば "exit 0" (成功) になるコマンド
 	cfg.Hooks.OnStepComplete = []string{"test '{{step_id}}' = '7'"}
 	cfg.Hooks.Timeout = 10
-	config.SetGlobalConfig(cfg)
-	t.Cleanup(func() {
-		cfg2 := config.GetGlobalConfig()
-		cfg2.Hooks.OnStepComplete = nil
-		config.SetGlobalConfig(cfg2)
-	})
+	a := &Agent{Runtime: NewAgentRuntimeWithConfig(cfg)}
 
 	needsContinue, _ := a.runStepCompleteHooks(7, "desc", "completed")
 	if needsContinue {
@@ -148,10 +129,9 @@ func TestRunStepCompleteHooks_TemplateExpanded(t *testing.T) {
 }
 
 func TestRunStepCompleteHooksWithRetry_NoHooks(t *testing.T) {
-	a := &Agent{}
-	cfg := config.GetGlobalConfig()
+	cfg := config.DefaultConfig()
 	cfg.Hooks.OnStepComplete = nil
-	config.SetGlobalConfig(cfg)
+	a := &Agent{Runtime: NewAgentRuntimeWithConfig(cfg)}
 
 	// hooks が未設定なら即 true を返す
 	result := a.runStepCompleteHooksWithRetry(t.Context(), 1, "step", "completed")

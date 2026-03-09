@@ -15,7 +15,7 @@ type CacheControl struct {
 // NewCacheControl はconfig設定に基づいてCacheControlを生成する。
 // CacheTTL が "5m"（デフォルト）ならTTLフィールドなし、"1h" 等なら ttl を設定。
 func NewCacheControl() *CacheControl {
-	return NewCacheControlWithConfig(config.GetGlobalConfig())
+	return NewCacheControlWithConfig(config.DefaultConfig())
 }
 
 // NewCacheControlWithConfig は明示指定した設定に基づいて CacheControl を生成する。
@@ -53,7 +53,7 @@ const SystemPromptCacheBoundary = "\n---XELYON_CACHE_SPLIT---\n"
 // 実際の最低キャッシュ可能トークン数はモデルごとに異なるため、
 // 閾値超過のための安定ブロック追加は prompt builder 側で行います。
 func BuildSystemField(systemPrompt string) interface{} {
-	return BuildSystemFieldWithConfig(systemPrompt, config.GetGlobalConfig())
+	return BuildSystemFieldWithConfig(systemPrompt, config.DefaultConfig())
 }
 
 // BuildSystemFieldWithConfig は明示指定した設定でプロンプトキャッシュ対応のシステムフィールドを構築する。
