@@ -23,7 +23,7 @@ const maxEntries = 200
 
 // ExecuteListDir はディレクトリ一覧を取得
 func ExecuteListDir(path string, depth int) string {
-	return ExecuteListDirWithRuntime(config.GetGlobalConfig(), tools.GlobalToolCache, path, depth)
+	return ExecuteListDirWithRuntime(config.DefaultConfig(), nil, path, depth)
 }
 
 // ExecuteListDirWithRuntime は runtime 設定を指定してディレクトリ一覧を取得する。

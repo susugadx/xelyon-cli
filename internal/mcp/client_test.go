@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"strings"
 	"testing"
@@ -188,6 +189,10 @@ func TestNewManager(t *testing.T) {
 
 	if len(manager.tools) != 0 {
 		t.Errorf("Expected empty tools, got %d", len(manager.tools))
+	}
+
+	if manager.out() != io.Discard {
+		t.Fatalf("expected default output to be io.Discard")
 	}
 }
 

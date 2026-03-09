@@ -147,21 +147,3 @@ func TestGetSafetyDescription(t *testing.T) {
 		})
 	}
 }
-
-func TestSetAutoApprove(t *testing.T) {
-	// Save original state
-	original := GlobalAutoApprove
-	defer func() { GlobalAutoApprove = original }()
-
-	// Test setting to true
-	SetAutoApprove(true)
-	if !GlobalAutoApprove {
-		t.Error("SetAutoApprove(true) did not set GlobalAutoApprove to true")
-	}
-
-	// Test setting to false
-	SetAutoApprove(false)
-	if GlobalAutoApprove {
-		t.Error("SetAutoApprove(false) did not set GlobalAutoApprove to false")
-	}
-}

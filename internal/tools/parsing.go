@@ -7,6 +7,8 @@ import (
 	"os"
 	"regexp"
 	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // ParseToolCall はレスポンスからツール呼び出しを抽出（最初の1つのみ - 後方互換）
@@ -21,7 +23,7 @@ func ParseToolCall(response string) *ToolCall {
 // ParseToolCalls はレスポンスから全てのツール呼び出しを抽出
 // Markdownコードブロック内のJSONは除外する
 func ParseToolCalls(response string) []*ToolCall {
-	return ParseToolCallsWithRegistry(response, DefaultRegistry, os.Stderr)
+	return ParseToolCallsWithRegistry(response, DefaultRegistry, ui.DefaultRuntime().ErrorOutput())
 }
 
 // ParseToolCallsWithRegistry は registry を指定して全てのツール呼び出しを抽出する。

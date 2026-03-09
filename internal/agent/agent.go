@@ -24,7 +24,6 @@ import (
 	// Subpackage imports - trigger init() for tool registration
 	toolsdev "github.com/susugadx/xelyon-cli/internal/tools/dev"
 	_ "github.com/susugadx/xelyon-cli/internal/tools/file"
-	toolslsp "github.com/susugadx/xelyon-cli/internal/tools/lsp"
 	_ "github.com/susugadx/xelyon-cli/internal/tools/planning"
 	_ "github.com/susugadx/xelyon-cli/internal/tools/search"
 )
@@ -112,6 +111,7 @@ func NewAgentWithRuntime(model string, provider api.Provider, headless bool, run
 	runtime = normalizeAgentRuntime(runtime)
 	api.ApplyRuntimeConfig(provider, runtime.effectiveConfig())
 	runtimeUI := runtime.effectiveUI()
+	api.ApplyUIRuntime(provider, runtimeUI)
 	out := runtimeUI.Output()
 	errOut := runtimeUI.ErrorOutput()
 
@@ -122,7 +122,7 @@ func NewAgentWithRuntime(model string, provider api.Provider, headless bool, run
 	}
 
 	// 古いartifactファイルを削除
-	toolsdev.CleanupArtifacts()
+	toolsdev.CleanupArtifactsWithWriter(errOut)
 
 	storage, err := history.NewStorage()
 	if err != nil {
@@ -132,7 +132,7 @@ func NewAgentWithRuntime(model string, provider api.Provider, headless bool, run
 
 	// MCP初期化（設定と環境変数で制御）
 	mcpManager := mcp.NewManager()
-	mcpManager.SetOutput(out)
+	mcpManager.SetOutput(errOut)
 	if cfg.MCP.Enabled && (!headless || cfg.MCP.Headless) && os.Getenv("XELYON_DISABLE_MCP") != "1" {
 		if err := mcpManager.LoadConfig(); err != nil {
 			yellow.Fprintf(out, "Warning: Failed to load MCP config: %v\n", err)
@@ -170,7 +170,8 @@ func NewAgentWithRuntime(model string, provider api.Provider, headless bool, run
 		cwd, err := os.Getwd()
 		if err == nil {
 			lspClient = lsp.NewClient(cwd)
-			lspClient.SetOutput(out)
+			lspClient.SetOutput(errOut)
+			lspClient.SetErrorOutput(errOut)
 			// Config形式からLSP形式に変換
 			servers := make(map[string]lsp.ServerConfig)
 			for lang, serverCfg := range cfg.LSP.Servers {
@@ -181,7 +182,6 @@ func NewAgentWithRuntime(model string, provider api.Provider, headless bool, run
 				}
 			}
 			lspClient.SetConfigs(servers)
-			toolslsp.LSPClient = lspClient
 
 			// LSPツールはinit()で自動登録済み
 			// LSPドキュメントはSystemPromptのWorkflow Rulesに統合済み

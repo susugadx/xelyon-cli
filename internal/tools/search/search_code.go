@@ -72,7 +72,7 @@ type SearchOptions struct {
 
 // ExecuteSearchCode はコード検索を実行し、フォーマット済み結果を返す
 func ExecuteSearchCode(opts SearchOptions) string {
-	return ExecuteSearchCodeWithCache(tools.GlobalToolCache, opts)
+	return ExecuteSearchCodeWithCache(nil, opts)
 }
 
 // ExecuteSearchCodeWithCache はキャッシュを指定してコード検索を実行する。

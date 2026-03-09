@@ -8,6 +8,7 @@ import (
 	"os"
 	"sync"
 
+	"github.com/susugadx/xelyon-cli/internal/stdio"
 	"golang.org/x/term"
 )
 
@@ -27,13 +28,13 @@ type Runtime struct {
 // NewRuntime は UI/terminal 用の runtime を作成する。
 func NewRuntime(in io.Reader, out, err io.Writer) *Runtime {
 	if in == nil {
-		in = os.Stdin
+		in = stdio.Input()
 	}
 	if out == nil {
-		out = os.Stdout
+		out = stdio.Output()
 	}
 	if err == nil {
-		err = os.Stderr
+		err = stdio.ErrorOutput()
 	}
 	return &Runtime{
 		in:  in,
@@ -42,17 +43,20 @@ func NewRuntime(in io.Reader, out, err io.Writer) *Runtime {
 	}
 }
 
-var defaultRuntime = NewRuntime(os.Stdin, os.Stdout, os.Stderr)
+var defaultRuntime = NewRuntime(stdio.Input(), stdio.Output(), stdio.ErrorOutput())
 
 // DefaultRuntime は互換用途の process-global UI runtime を返す。
 func DefaultRuntime() *Runtime {
 	defaultRuntime.mu.Lock()
-	if defaultRuntime.in != os.Stdin {
+	currentIn := stdio.Input()
+	currentOut := stdio.Output()
+	currentErr := stdio.ErrorOutput()
+	if defaultRuntime.in != currentIn {
 		defaultRuntime.simpleReader = nil
 	}
-	defaultRuntime.in = os.Stdin
-	defaultRuntime.out = os.Stdout
-	defaultRuntime.err = os.Stderr
+	defaultRuntime.in = currentIn
+	defaultRuntime.out = currentOut
+	defaultRuntime.err = currentErr
 	defaultRuntime.mu.Unlock()
 	return defaultRuntime
 }

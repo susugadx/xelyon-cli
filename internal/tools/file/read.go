@@ -48,7 +48,7 @@ func ExecuteReadFile(path string, startLine, endLine int) string {
 
 // ExecuteReadFileWithOutput は出力先を指定してファイルを読み込む。
 func ExecuteReadFileWithOutput(out common.Output, path string, startLine, endLine int) string {
-	return ExecuteReadFileWithRuntime(out, config.GetGlobalConfig(), tools.GlobalToolCache, path, startLine, endLine)
+	return ExecuteReadFileWithRuntime(out, config.DefaultConfig(), nil, path, startLine, endLine)
 }
 
 // ExecuteReadFileWithRuntime は runtime 設定を指定してファイルを読み込む。

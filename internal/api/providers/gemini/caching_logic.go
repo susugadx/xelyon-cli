@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // cacheEntry はモデル別キャッシュの状態を保持する
@@ -68,7 +67,7 @@ func (p *Provider) ClearCache() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	errOut := api.ErrorWriterFromContext(ctx)
+	errOut := api.RuntimeOrDefault(p.runtime).ErrorOutput()
 	for model, entry := range p.cacheMap {
 		if entry.name == "" {
 			continue
@@ -189,7 +188,7 @@ func (p *Provider) updateOrUseCache(ctx context.Context, systemPrompt string, hi
 	}
 
 	// スピナー表示
-	spinner := ui.RuntimeFromContext(ctx).CurrentSpinner()
+	spinner := api.SpinnerFromContext(ctx)
 	if spinner != nil {
 		spinner.SetStatus("Creating context cache...")
 	}
@@ -214,7 +213,7 @@ func (p *Provider) updateOrUseCache(ctx context.Context, systemPrompt string, hi
 	ttlStr := fmt.Sprintf("%ds", ttl)
 	resp, err := p.CreateCachedContent(ctx, model, systemPrompt, cacheHistory, ttlStr, tools, toolConfig)
 	if err != nil {
-		fmt.Fprintf(ui.RuntimeFromContext(ctx).ErrorOutput(), "Warning: Failed to create cache: %v. Proceeding without cache.\n", err)
+		fmt.Fprintf(api.ErrorWriterFromContext(ctx), "Warning: Failed to create cache: %v. Proceeding without cache.\n", err)
 		return "", history, nil
 	}
 

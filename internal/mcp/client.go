@@ -69,6 +69,7 @@ func NewManager() *Manager {
 		sessions:    make(map[string]*mcp.ClientSession),
 		tools:       []MCPTool{},
 		healthCheck: make(map[string]time.Time),
+		output:      io.Discard,
 	}
 }
 
@@ -77,12 +78,12 @@ func (m *Manager) SetOutput(w io.Writer) {
 	m.output = w
 }
 
-// out は Manager の出力先を返す。nil なら os.Stdout へ fallback する。
+// out は Manager の出力先を返す。未設定時は出力を抑制する。
 func (m *Manager) out() io.Writer {
 	if m.output != nil {
 		return m.output
 	}
-	return os.Stdout
+	return io.Discard
 }
 
 // validateMCPCommand はMCPコマンドの安全性を検証

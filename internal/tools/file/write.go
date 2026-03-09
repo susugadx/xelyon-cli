@@ -7,8 +7,10 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/susugadx/xelyon-cli/internal/config"
+	lsplib "github.com/susugadx/xelyon-cli/internal/lsp"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
-	"github.com/susugadx/xelyon-cli/internal/tools/lsp"
+	toolslsp "github.com/susugadx/xelyon-cli/internal/tools/lsp"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -24,13 +26,22 @@ func ExecuteWriteFileWithOutput(out common.Output, path string, content string) 
 
 // ExecuteWriteFileWithPromptIO は入出力先を指定してファイルに書き込む。
 func ExecuteWriteFileWithPromptIO(promptIO ui.PromptIO, path string, content string) (string, error) {
-	return ExecuteWriteFileWithPromptIOAndOptions(promptIO, common.DefaultConfirmOptions(), path, content)
+	return ExecuteWriteFileWithPromptIOAndOptionsAndLSPClient(promptIO, common.DefaultConfirmOptions(), nil, path, content)
 }
 
 // ExecuteWriteFileWithPromptIOAndOptions は確認設定を指定してファイルに書き込む。
 func ExecuteWriteFileWithPromptIOAndOptions(promptIO ui.PromptIO, options common.ConfirmOptions, path string, content string) (string, error) {
+	return ExecuteWriteFileWithPromptIOAndOptionsAndLSPClient(promptIO, options, nil, path, content)
+}
+
+// ExecuteWriteFileWithPromptIOAndOptionsAndLSPClient は確認設定と LSP client を指定してファイルに書き込む。
+func ExecuteWriteFileWithPromptIOAndOptionsAndLSPClient(promptIO ui.PromptIO, options common.ConfirmOptions, lspClient *lsplib.Client, path string, content string) (string, error) {
 	promptIO = ui.NormalizePromptIO(promptIO)
 	out := common.NewOutput(promptIO.Out, promptIO.Err)
+	cfg := options.Config
+	if cfg == nil {
+		cfg = config.DefaultConfig()
+	}
 
 	if path == "" {
 		return "Error: path is empty", nil
@@ -100,11 +111,11 @@ func ExecuteWriteFileWithPromptIOAndOptions(promptIO ui.PromptIO, options common
 				out.Yellow.Println("   部分的な編集には str_replace の使用を検討してください。")
 			}
 
-			common.ShowDiffWithOutput(out, string(oldContent), content, path)
+			common.ShowDiffWithOutputAndConfig(out, cfg, string(oldContent), content, path)
 		} else {
 			out.Printf("   • New file: %d lines / 新規: %d行\n", len(newLines), len(newLines))
 			out.Printf("   • Size: %d bytes\n", len(content))
-			common.ShowPreviewWithOutput(out, content)
+			common.ShowPreviewWithOutputAndConfig(out, cfg, content)
 		}
 	}
 
@@ -177,7 +188,7 @@ IMPORTANT: Do NOT write the file until the user approves.`, strings.TrimSpace(de
 	lineCount := strings.Count(content, "\n") + 1
 	out.Green.Printf("✅ Written: %s (%d lines)\n", path, lineCount)
 	msg := fmt.Sprintf("Successfully wrote %d bytes (%d lines) to %s", len(content), lineCount, path)
-	msg += lsp.GetDiagnosticsSummary(absPath)
+	msg += toolslsp.GetDiagnosticsSummaryWithClient(lspClient, absPath)
 	return msg, nil
 }
 

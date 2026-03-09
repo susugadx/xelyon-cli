@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -165,5 +166,27 @@ func TestConfirmWithIO_DiscardDoesNotLeakProcessStdout(t *testing.T) {
 	}
 	if buf.Len() != 0 {
 		t.Fatalf("expected no process stdout leak, got %q", buf.String())
+	}
+}
+
+func TestDefaultConfirmOptions_UsesIsolatedDefaults(t *testing.T) {
+	originalConfig := config.GetGlobalConfig()
+	customConfig := config.CloneConfig(originalConfig)
+	customConfig.DefaultProvider = "gemini"
+	config.SetGlobalConfig(customConfig)
+	t.Cleanup(func() {
+		config.SetGlobalConfig(originalConfig)
+	})
+
+	options := DefaultConfirmOptions()
+
+	if options.AutoApprove {
+		t.Fatal("expected auto-approve to default to false")
+	}
+	if options.Config == nil {
+		t.Fatal("expected config to be populated")
+	}
+	if options.Config.DefaultProvider != config.DefaultConfig().DefaultProvider {
+		t.Fatalf("expected isolated default config, got %q", options.Config.DefaultProvider)
 	}
 }

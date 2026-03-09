@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/lsp"
+	lsplib "github.com/susugadx/xelyon-cli/internal/lsp"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 	toolslsp "github.com/susugadx/xelyon-cli/internal/tools/lsp"
 	"github.com/susugadx/xelyon-cli/internal/ui"
@@ -24,11 +24,16 @@ func ExecuteDeleteFileWithOutput(out common.Output, path string) (string, error)
 
 // ExecuteDeleteFileWithPromptIO deletes a file permanently with explicit interactive I/O.
 func ExecuteDeleteFileWithPromptIO(promptIO ui.PromptIO, path string) (string, error) {
-	return ExecuteDeleteFileWithPromptIOAndOptions(promptIO, common.DefaultConfirmOptions(), path)
+	return ExecuteDeleteFileWithPromptIOAndOptionsAndLSPClient(promptIO, common.DefaultConfirmOptions(), nil, path)
 }
 
 // ExecuteDeleteFileWithPromptIOAndOptions deletes a file with explicit confirm options.
 func ExecuteDeleteFileWithPromptIOAndOptions(promptIO ui.PromptIO, options common.ConfirmOptions, path string) (string, error) {
+	return ExecuteDeleteFileWithPromptIOAndOptionsAndLSPClient(promptIO, options, nil, path)
+}
+
+// ExecuteDeleteFileWithPromptIOAndOptionsAndLSPClient deletes a file with explicit confirm options and LSP client.
+func ExecuteDeleteFileWithPromptIOAndOptionsAndLSPClient(promptIO ui.PromptIO, options common.ConfirmOptions, lspClient *lsplib.Client, path string) (string, error) {
 	promptIO = ui.NormalizePromptIO(promptIO)
 	out := common.NewOutput(promptIO.Out, promptIO.Err)
 
@@ -62,12 +67,12 @@ func ExecuteDeleteFileWithPromptIOAndOptions(promptIO ui.PromptIO, options commo
 
 	// LSP参照チェック（LSPクライアントが有効な場合のみ）
 	var externalRefs []toolslsp.ReferenceInfo
-	if toolslsp.LSPClient != nil {
-		language := lsp.DetectLanguage(absPath)
+	if lspClient != nil {
+		language := lsplib.DetectLanguage(absPath)
 		if language != "" {
 			symbols := toolslsp.ExtractSymbolsFromContent(string(content), language)
 			if len(symbols) > 0 {
-				refs, hasExternal, _ := toolslsp.CheckReferencesBeforeDelete(absPath, symbols)
+				refs, hasExternal, _ := toolslsp.CheckReferencesBeforeDeleteWithClient(lspClient, absPath, symbols)
 				if hasExternal {
 					externalRefs = toolslsp.GetExternalReferences(refs)
 				}
@@ -89,7 +94,7 @@ func ExecuteDeleteFileWithPromptIOAndOptions(promptIO ui.PromptIO, options commo
 
 		cfg := options.Config
 		if cfg == nil {
-			cfg = config.GetGlobalConfig()
+			cfg = config.DefaultConfig()
 		}
 		maxPreviewLines := cfg.Diff.MaxTotalLines
 		if maxPreviewLines <= 0 {

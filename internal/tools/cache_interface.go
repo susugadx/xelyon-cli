@@ -47,7 +47,3 @@ type ToolCacheInterface interface {
 	// ファイル書き込み系ツール実行時に ClearSearchCache の代わりに使用
 	InvalidateSearchCacheForFile(absPath string)
 }
-
-// GlobalToolCache はグローバルなツールキャッシュ
-// agent.NewAgent() で設定される
-var GlobalToolCache ToolCacheInterface

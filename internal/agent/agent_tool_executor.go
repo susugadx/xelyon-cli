@@ -47,6 +47,7 @@ func (a *Agent) toolExecutionContext(stdin io.Reader, stdout, stderr io.Writer) 
 		PromptReader: runtimeUI.PromptReader(),
 		Registry:     a.registry(),
 		ToolCache:    a.ToolCache,
+		LSPClient:    a.GetLSPClient(),
 		Config:       a.cfg(),
 		AutoApprove:  a.autoApprove(),
 		AuditLogger:  a.auditLogger(),

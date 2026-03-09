@@ -1,6 +1,7 @@
 package dev
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -380,4 +381,25 @@ func TestCheckGitignore_WithoutXelyon(t *testing.T) {
 
 	// パニックしないこと（log出力あり）
 	checkGitignore()
+}
+
+func TestCleanupArtifactsWithWriter_UsesInjectedWriter(t *testing.T) {
+	tmpDir := t.TempDir()
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+
+	dir := filepath.Join(tmpDir, artifactsDir)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+	CleanupArtifactsWithWriter(&buf)
+
+	if !strings.Contains(buf.String(), "Warning: .xelyon/ is not in .gitignore") {
+		t.Fatalf("expected warning in injected writer, got %q", buf.String())
+	}
 }

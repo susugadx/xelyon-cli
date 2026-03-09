@@ -31,15 +31,6 @@ type ConfirmOptions struct {
 	Config      *config.Config
 }
 
-// GlobalAutoApprove は --auto-approve フラグの状態を保持
-// Agent から SetAutoApprove() で設定される
-var GlobalAutoApprove = false
-
-// SetAutoApprove は --auto-approve フラグを設定
-func SetAutoApprove(enabled bool) {
-	GlobalAutoApprove = enabled
-}
-
 // SimpleConfirm はユーザーに確認を求める（テスト用にグローバル変数として定義）
 // 空入力は無視してリトライする（AI実行中のEnter押下対策）
 // ただしEOF時はfalseを返して終了する
@@ -124,8 +115,8 @@ func ConfirmWithAutoApproveDecision(promptIO ui.PromptIO, toolName, message stri
 // DefaultConfirmOptions は互換用のデフォルト確認設定を返す。
 func DefaultConfirmOptions() ConfirmOptions {
 	return ConfirmOptions{
-		AutoApprove: GlobalAutoApprove,
-		Config:      config.GetGlobalConfig(),
+		AutoApprove: false,
+		Config:      config.DefaultConfig(),
 	}
 }
 
@@ -135,7 +126,7 @@ func ConfirmWithAutoApproveDecisionAndOptions(promptIO ui.PromptIO, options Conf
 	out := NewOutput(promptIO.Out, promptIO.Err)
 	cfg := options.Config
 	if cfg == nil {
-		cfg = config.GetGlobalConfig()
+		cfg = config.DefaultConfig()
 	}
 
 	// --auto-approve が有効 かつ ツールが自動承認可能な場合

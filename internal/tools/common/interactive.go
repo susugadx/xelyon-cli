@@ -80,7 +80,7 @@ func readMultiLineComment(promptIO ui.PromptIO, reader *bufio.Reader) (string, *
 	out.Cyan.Println("   Tip: Use '/paste' (or /p) to enter Paste Mode and insert long text")
 	out.Cyan.Println("--------------------------------------------")
 
-	cfg := config.GetGlobalConfig()
+	cfg := config.DefaultConfig()
 	maxLines := cfg.Paste.MaxLines
 	maxBytes := cfg.Paste.MaxBytes
 

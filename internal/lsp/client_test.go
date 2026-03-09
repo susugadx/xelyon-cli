@@ -1,6 +1,8 @@
 package lsp
 
 import (
+	"bytes"
+	"io"
 	"testing"
 )
 
@@ -20,6 +22,13 @@ func TestNewClient(t *testing.T) {
 
 	if client.rootURI != "file:///home/user/project" {
 		t.Errorf("rootURI = %q, want %q", client.rootURI, "file:///home/user/project")
+	}
+
+	if client.out() != io.Discard {
+		t.Fatalf("expected default output to be io.Discard")
+	}
+	if client.errorOutput() != io.Discard {
+		t.Fatalf("expected default error output to be io.Discard")
 	}
 }
 
@@ -90,5 +99,29 @@ func TestClientClose(t *testing.T) {
 
 	if len(client.servers) != 0 {
 		t.Errorf("servers not cleared after Close")
+	}
+}
+
+func TestServerDebugOutputUsesInjectedWriter(t *testing.T) {
+	t.Setenv("XELYON_DEBUG_LSP", "1")
+
+	server := NewServer("test")
+	var buf bytes.Buffer
+	server.SetDebugOutput(&buf)
+	server.debugf("[LSP %s] hello\n", server.name)
+
+	if got := buf.String(); got != "[LSP test] hello\n" {
+		t.Fatalf("debug output = %q", got)
+	}
+
+	server.SetDebugOutput(nil)
+	if server.debugOut != io.Discard {
+		t.Fatalf("expected nil debug output to normalize to io.Discard")
+	}
+
+	t.Setenv("XELYON_DEBUG_LSP", "")
+	server.debugf("hidden")
+	if buf.String() != "[LSP test] hello\n" {
+		t.Fatalf("debug output should not change when debug is disabled")
 	}
 }

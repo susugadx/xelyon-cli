@@ -26,7 +26,6 @@ const (
 )
 
 // 関数エイリアス - Confirm
-var SetAutoApprove = common.SetAutoApprove
 var Confirm = common.Confirm
 var ConfirmApproved = common.ConfirmApproved
 var ConfirmWithFeedback = common.ConfirmWithFeedback

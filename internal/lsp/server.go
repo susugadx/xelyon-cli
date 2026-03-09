@@ -17,11 +17,12 @@ import (
 
 // Server manages a single LSP server process
 type Server struct {
-	name    string
-	cmd     *exec.Cmd
-	stdin   io.WriteCloser
-	stdout  *bufio.Reader
-	rootURI string
+	name     string
+	cmd      *exec.Cmd
+	stdin    io.WriteCloser
+	stdout   *bufio.Reader
+	rootURI  string
+	debugOut io.Writer
 
 	mu          sync.Mutex
 	requestID   atomic.Int64
@@ -41,10 +42,26 @@ type Server struct {
 func NewServer(name string) *Server {
 	return &Server{
 		name:        name,
+		debugOut:    io.Discard,
 		pending:     make(map[int]chan *Response),
 		diagnostics: make(map[string][]Diagnostic),
 		done:        make(chan struct{}),
 	}
+}
+
+// SetDebugOutput は LSP サーバーのデバッグ出力先を設定する。
+func (s *Server) SetDebugOutput(w io.Writer) {
+	if w == nil {
+		w = io.Discard
+	}
+	s.debugOut = w
+}
+
+func (s *Server) debugf(format string, args ...interface{}) {
+	if os.Getenv("XELYON_DEBUG_LSP") != "1" {
+		return
+	}
+	_, _ = fmt.Fprintf(s.debugOut, format, args...)
 }
 
 // Start launches the LSP server process and initializes it
@@ -91,8 +108,8 @@ func (s *Server) Start(ctx context.Context, command string, args []string, rootU
 			if err != nil {
 				return
 			}
-			if n > 0 && os.Getenv("XELYON_DEBUG_LSP") == "1" {
-				fmt.Fprintf(os.Stderr, "[LSP %s stderr] %s", s.name, string(buf[:n]))
+			if n > 0 {
+				s.debugf("[LSP %s stderr] %s", s.name, string(buf[:n]))
 			}
 		}
 	}()
@@ -147,7 +164,6 @@ func (s *Server) initialize(ctx context.Context) error {
 
 // readResponses reads responses from the LSP server in a loop
 func (s *Server) readResponses() {
-	debug := os.Getenv("XELYON_DEBUG_LSP") == "1"
 	for {
 		select {
 		case <-s.done:
@@ -156,9 +172,7 @@ func (s *Server) readResponses() {
 			// Read Content-Length header
 			contentLength, err := s.readHeader()
 			if err != nil {
-				if debug {
-					fmt.Fprintf(os.Stderr, "[LSP %s] readHeader error: %v\n", s.name, err)
-				}
+				s.debugf("[LSP %s] readHeader error: %v\n", s.name, err)
 				return
 			}
 
@@ -169,9 +183,7 @@ func (s *Server) readResponses() {
 			// Read body
 			body := make([]byte, contentLength)
 			if _, err := io.ReadFull(s.stdout, body); err != nil {
-				if debug {
-					fmt.Fprintf(os.Stderr, "[LSP %s] readBody error: %v\n", s.name, err)
-				}
+				s.debugf("[LSP %s] readBody error: %v\n", s.name, err)
 				return
 			}
 
@@ -307,15 +319,11 @@ func (s *Server) send(msg interface{}) error {
 	}
 
 	if _, err := s.stdin.Write([]byte(header)); err != nil {
-		if os.Getenv("XELYON_DEBUG_LSP") == "1" {
-			fmt.Fprintf(os.Stderr, "[LSP %s] write header error: %v\n", s.name, err)
-		}
+		s.debugf("[LSP %s] write header error: %v\n", s.name, err)
 		return err
 	}
 	if _, err := s.stdin.Write(data); err != nil {
-		if os.Getenv("XELYON_DEBUG_LSP") == "1" {
-			fmt.Fprintf(os.Stderr, "[LSP %s] write body error: %v\n", s.name, err)
-		}
+		s.debugf("[LSP %s] write body error: %v\n", s.name, err)
 		return err
 	}
 	return nil

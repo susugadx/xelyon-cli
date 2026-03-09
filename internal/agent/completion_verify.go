@@ -90,7 +90,7 @@ func (a *Agent) verifyCompletionWithDiagnostics(response string) (needsContinue 
 		return false, ""
 	}
 
-	result := toolslsp.CheckDiagnosticsForFiles(changedFiles)
+	result := toolslsp.CheckDiagnosticsForFilesWithClient(a.GetLSPClient(), changedFiles)
 	if !result.HasErrors {
 		return false, ""
 	}
@@ -263,7 +263,7 @@ func (a *Agent) flushLSPDiagnostics() string {
 	files := a.pendingLSPFiles
 	a.pendingLSPFiles = nil
 
-	result := toolslsp.CheckDiagnosticsForFiles(files)
+	result := toolslsp.CheckDiagnosticsForFilesWithClient(a.GetLSPClient(), files)
 	if result.Summary == "" {
 		return ""
 	}

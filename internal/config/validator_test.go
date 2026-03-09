@@ -1,7 +1,12 @@
 package config
 
 import (
+	"bytes"
+	"io"
+	"os"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/stdio"
 )
 
 func TestIsValidProvider(t *testing.T) {
@@ -238,6 +243,45 @@ func TestValidateConfig_ProviderModelsValidation(t *testing.T) {
 	}
 	if !found {
 		t.Error("Should have warning for invalid provider in ProviderModels")
+	}
+}
+
+func TestPrintValidationWarnings_UsesConfiguredDefaultOutput(t *testing.T) {
+	t.Cleanup(func() {
+		stdio.SetDefaults(nil, nil, nil)
+	})
+
+	var out bytes.Buffer
+	stdio.SetDefaults(nil, &out, io.Discard)
+
+	oldStdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe() error = %v", err)
+	}
+	os.Stdout = w
+	t.Cleanup(func() {
+		os.Stdout = oldStdout
+	})
+
+	PrintValidationWarnings(ValidationResult{
+		Issues: []ValidationIssue{{
+			Field:      "default_provider",
+			Message:    "required",
+			Severity:   "error",
+			Suggestion: "deepseek",
+		}},
+	})
+	_ = w.Close()
+
+	var leaked bytes.Buffer
+	_, _ = io.Copy(&leaked, r)
+
+	if !bytes.Contains(out.Bytes(), []byte("default_provider")) {
+		t.Fatalf("expected configured default output to receive warnings, got %q", out.String())
+	}
+	if leaked.Len() != 0 {
+		t.Fatalf("expected no process stdout leak, got %q", leaked.String())
 	}
 }
 

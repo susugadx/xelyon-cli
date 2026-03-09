@@ -113,7 +113,12 @@ func detectKind(pattern string) string {
 // CheckReferencesBeforeDelete はLSPで参照をチェック
 // 戻り値: 参照リスト, 外部参照あり?, エラー
 func CheckReferencesBeforeDelete(filePath string, symbols []SymbolInfo) ([]ReferenceInfo, bool, error) {
-	if LSPClient == nil {
+	return CheckReferencesBeforeDeleteWithClient(nil, filePath, symbols)
+}
+
+// CheckReferencesBeforeDeleteWithClient は明示指定された client で参照をチェックする。
+func CheckReferencesBeforeDeleteWithClient(client *lsplib.Client, filePath string, symbols []SymbolInfo) ([]ReferenceInfo, bool, error) {
+	if client == nil {
 		return nil, false, nil
 	}
 
@@ -130,7 +135,7 @@ func CheckReferencesBeforeDelete(filePath string, symbols []SymbolInfo) ([]Refer
 
 	for _, sym := range symbols {
 		// LSPで参照を検索
-		locations, err := LSPClient.FindReferences(ctx, absPath, sym.Line, sym.Column, true)
+		locations, err := client.FindReferences(ctx, absPath, sym.Line, sym.Column, true)
 		if err != nil {
 			continue // エラーは無視して続行
 		}

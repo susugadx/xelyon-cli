@@ -3,9 +3,10 @@ package lsp
 import (
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // InstallInfo はLSPサーバーのインストール情報
@@ -160,7 +161,8 @@ func GetAllInstallInfos() map[string]InstallInfo {
 // RunInstall はLSPサーバーをインストール（最初のコマンドを実行）
 // 成功した場合は nil、失敗した場合はエラーを返す
 func RunInstall(serverKey string) error {
-	return RunInstallWithIO(serverKey, os.Stdin, os.Stdout, os.Stderr)
+	runtime := ui.DefaultRuntime()
+	return RunInstallWithIO(serverKey, runtime.Input(), runtime.Output(), runtime.ErrorOutput())
 }
 
 // RunInstallWithIO は LSP サーバーをインストールし、入出力先を明示指定する。
@@ -174,17 +176,7 @@ func RunInstallWithIO(serverKey string, in io.Reader, out, errOut io.Writer) err
 		return fmt.Errorf("no install command available for %s", serverKey)
 	}
 
-	// 最初のコマンドを実行
-	cmdStr := info.Commands[0]
-	if in == os.Stdin && out == os.Stdout && errOut == os.Stderr {
-		return executeCommand(cmdStr)
-	}
-	return executeCommandWithIO(cmdStr, in, out, errOut)
-}
-
-// executeCommand はシェルコマンドを実行
-func executeCommand(cmdStr string) error {
-	return executeCommandWithIO(cmdStr, os.Stdin, os.Stdout, os.Stderr)
+	return executeCommandWithIO(info.Commands[0], in, out, errOut)
 }
 
 func executeCommandWithIO(cmdStr string, in io.Reader, out, errOut io.Writer) error {
@@ -196,13 +188,13 @@ func executeCommandWithIO(cmdStr string, in io.Reader, out, errOut io.Writer) er
 
 	cmd := exec.Command(parts[0], parts[1:]...)
 	if in == nil {
-		in = os.Stdin
+		in = ui.DefaultRuntime().Input()
 	}
 	if out == nil {
-		out = os.Stdout
+		out = ui.DefaultRuntime().Output()
 	}
 	if errOut == nil {
-		errOut = os.Stderr
+		errOut = ui.DefaultRuntime().ErrorOutput()
 	}
 	cmd.Stdout = out
 	cmd.Stderr = errOut

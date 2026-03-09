@@ -135,13 +135,10 @@ func TestExecuteListDir_CustomIgnoreDirs(t *testing.T) {
 		t.Fatalf("Failed to create keep file: %v", err)
 	}
 
-	origCfg := config.GetGlobalConfig()
-	cfgCopy := *origCfg
-	cfgCopy.ListDir.AdditionalIgnoreDirs = []string{"coverage"}
-	config.SetGlobalConfig(&cfgCopy)
-	t.Cleanup(func() { config.SetGlobalConfig(origCfg) })
+	cfg := config.DefaultConfig()
+	cfg.ListDir.AdditionalIgnoreDirs = []string{"coverage"}
 
-	output := ExecuteListDir(tmpDir, 1)
+	output := ExecuteListDirWithRuntime(cfg, nil, tmpDir, 1)
 	if strings.Contains(output, "coverage") {
 		t.Errorf("coverage should be ignored by custom list_dir config, got: %s", output)
 	}

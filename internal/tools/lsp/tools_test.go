@@ -1,19 +1,10 @@
 package lsp
 
-import (
-	"testing"
-
-	lsplib "github.com/susugadx/xelyon-cli/internal/lsp"
-)
+import "testing"
 
 // ===== CheckDiagnosticsForFiles Tests =====
 
 func TestCheckDiagnosticsForFiles_NoLSP(t *testing.T) {
-	// LSPClient が nil の場合、空の結果を返す（ブロックしない）
-	originalClient := LSPClient
-	LSPClient = nil
-	defer func() { LSPClient = originalClient }()
-
 	result := CheckDiagnosticsForFiles([]string{"test.go", "main.go"})
 
 	if result.HasErrors {
@@ -30,12 +21,21 @@ func TestCheckDiagnosticsForFiles_NoLSP(t *testing.T) {
 	}
 }
 
-func TestCheckDiagnosticsForFiles_EmptyFiles(t *testing.T) {
-	// ファイルリストが空の場合
-	originalClient := LSPClient
-	LSPClient = lsplib.NewClient("/tmp")
-	defer func() { LSPClient = originalClient }()
+func TestCheckDiagnosticsForFilesWithClient_NoLSP(t *testing.T) {
+	result := CheckDiagnosticsForFilesWithClient(nil, []string{"test.go"})
 
+	if result.HasErrors {
+		t.Error("expected HasErrors=false when explicit client is nil")
+	}
+	if result.ErrorCount != 0 || result.WarnCount != 0 {
+		t.Errorf("expected zero counts, got errors=%d warnings=%d", result.ErrorCount, result.WarnCount)
+	}
+	if result.Summary != "" {
+		t.Errorf("expected empty Summary, got %q", result.Summary)
+	}
+}
+
+func TestCheckDiagnosticsForFiles_EmptyFiles(t *testing.T) {
 	result := CheckDiagnosticsForFiles([]string{})
 
 	if result.HasErrors {
@@ -61,5 +61,17 @@ func TestDiagnosticCheckResult_ZeroValue(t *testing.T) {
 	}
 	if result.Summary != "" {
 		t.Error("zero value Summary should be empty")
+	}
+}
+
+func TestGetDiagnosticsSummaryWithClient_NoLSP(t *testing.T) {
+	if got := GetDiagnosticsSummaryWithClient(nil, "main.go"); got != "" {
+		t.Fatalf("expected empty summary with nil client, got %q", got)
+	}
+}
+
+func TestGetDiagnosticsSummary_NoLSP(t *testing.T) {
+	if got := GetDiagnosticsSummary("main.go"); got != "" {
+		t.Fatalf("expected empty summary without explicit client, got %q", got)
 	}
 }

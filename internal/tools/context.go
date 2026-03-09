@@ -3,10 +3,10 @@ package tools
 import (
 	"context"
 	"io"
-	"os"
 
 	"github.com/susugadx/xelyon-cli/internal/audit"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	lsplib "github.com/susugadx/xelyon-cli/internal/lsp"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -23,6 +23,7 @@ type ExecutionContext struct {
 	PromptReader *ui.MultilineReader
 	Registry     *Registry
 	ToolCache    ToolCacheInterface
+	LSPClient    *lsplib.Client
 	Config       *config.Config
 	AutoApprove  bool
 	AuditLogger  audit.ToolLogger
@@ -32,10 +33,8 @@ type ExecutionContext struct {
 func DefaultExecutionContext() ExecutionContext {
 	return normalizeExecutionContext(ExecutionContext{
 		Registry:    DefaultRegistry,
-		ToolCache:   GlobalToolCache,
-		Config:      config.GetGlobalConfig(),
-		AutoApprove: common.GlobalAutoApprove,
-		AuditLogger: audit.GetLogger(),
+		Config:      config.DefaultConfig(),
+		AuditLogger: audit.NewDisabledLogger(),
 	})
 }
 
@@ -72,6 +71,12 @@ func (ctx ExecutionContext) EffectiveToolCache() ToolCacheInterface {
 	return normalized.ToolCache
 }
 
+// EffectiveLSPClient は実行時に使う LSP Client を返す。
+func (ctx ExecutionContext) EffectiveLSPClient() *lsplib.Client {
+	normalized := normalizeExecutionContext(ctx)
+	return normalized.LSPClient
+}
+
 // EffectiveConfig は実行時に使う設定を返す。
 func (ctx ExecutionContext) EffectiveConfig() *config.Config {
 	normalized := normalizeExecutionContext(ctx)
@@ -85,26 +90,24 @@ func (ctx ExecutionContext) EffectiveAuditLogger() audit.ToolLogger {
 }
 
 func normalizeExecutionContext(ctx ExecutionContext) ExecutionContext {
+	runtime := ui.DefaultRuntime()
 	if ctx.Stdin == nil {
-		ctx.Stdin = os.Stdin
+		ctx.Stdin = runtime.Input()
 	}
 	if ctx.Stdout == nil {
-		ctx.Stdout = os.Stdout
+		ctx.Stdout = runtime.Output()
 	}
 	if ctx.Stderr == nil {
-		ctx.Stderr = os.Stderr
+		ctx.Stderr = runtime.ErrorOutput()
 	}
 	if ctx.Registry == nil {
 		ctx.Registry = DefaultRegistry
 	}
-	if ctx.ToolCache == nil {
-		ctx.ToolCache = GlobalToolCache
-	}
 	if ctx.Config == nil {
-		ctx.Config = config.GetGlobalConfig()
+		ctx.Config = config.DefaultConfig()
 	}
 	if ctx.AuditLogger == nil {
-		ctx.AuditLogger = audit.GetLogger()
+		ctx.AuditLogger = audit.NewDisabledLogger()
 	}
 	return ctx
 }

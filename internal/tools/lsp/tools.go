@@ -10,16 +10,18 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
-// LSPClient is set by agent during initialization
-var LSPClient *lsplib.Client
-
 // LSPToolTimeout is the timeout for LSP operations
 const LSPToolTimeout = 30 * time.Second
 
 // GetDiagnosticsSummary returns a summarized string of diagnostics for a file.
-// This is used by file editing tools to provide immediate feedback.
+// 明示的な LSP client がない互換経路では空文字列を返す。
 func GetDiagnosticsSummary(path string) string {
-	if LSPClient == nil {
+	return GetDiagnosticsSummaryWithClient(nil, path)
+}
+
+// GetDiagnosticsSummaryWithClient returns a summarized string of diagnostics for a file.
+func GetDiagnosticsSummaryWithClient(client *lsplib.Client, path string) string {
+	if client == nil {
 		return ""
 	}
 
@@ -32,7 +34,7 @@ func GetDiagnosticsSummary(path string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	diagnostics, err := LSPClient.GetDiagnostics(ctx, absPath)
+	diagnostics, err := client.GetDiagnostics(ctx, absPath)
 	if err != nil || len(diagnostics) == 0 {
 		return ""
 	}
@@ -75,9 +77,14 @@ type DiagnosticCheckResult struct {
 }
 
 // CheckDiagnosticsForFiles は複数ファイルの LSP 診断を一括チェックする。
-// git_commit 前の自動チェック用。LSP 未起動時は HasErrors=false を返す（ブロックしない）。
+// 明示的な LSP client がない互換経路ではブロックせず空結果を返す。
 func CheckDiagnosticsForFiles(files []string) DiagnosticCheckResult {
-	if LSPClient == nil {
+	return CheckDiagnosticsForFilesWithClient(nil, files)
+}
+
+// CheckDiagnosticsForFilesWithClient は明示指定された client で複数ファイルの診断をチェックする。
+func CheckDiagnosticsForFilesWithClient(client *lsplib.Client, files []string) DiagnosticCheckResult {
+	if client == nil {
 		return DiagnosticCheckResult{}
 	}
 
@@ -93,7 +100,7 @@ func CheckDiagnosticsForFiles(files []string) DiagnosticCheckResult {
 			continue
 		}
 
-		diagnostics, err := LSPClient.GetDiagnostics(ctx, absPath)
+		diagnostics, err := client.GetDiagnostics(ctx, absPath)
 		if err != nil || len(diagnostics) == 0 {
 			continue
 		}

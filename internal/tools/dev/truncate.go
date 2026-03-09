@@ -3,6 +3,7 @@ package dev
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -53,18 +54,24 @@ func TruncateWithFile(output string) string {
 		relPath, lineCount, sizeKB, tailLineCount, tail, relPath)
 }
 
-var warnColor = common.Yellow
-
 // CleanupArtifacts は24時間以上前のartifactファイルを削除する。
 // 起動時に呼び出す。artifactsディレクトリが存在する場合のみ .gitignore もチェックする。
 func CleanupArtifacts() {
+	CleanupArtifactsWithWriter(common.DefaultOutput().StdoutWriter())
+}
+
+// CleanupArtifactsWithWriter は警告出力先を指定して古いartifactファイルを削除する。
+func CleanupArtifactsWithWriter(w io.Writer) {
+	if w == nil {
+		w = io.Discard
+	}
 	entries, err := os.ReadDir(artifactsDir)
 	if err != nil {
 		return // ディレクトリがなければ何もしない
 	}
 
 	// artifactsディレクトリが存在する場合のみ .gitignore チェック
-	checkGitignore()
+	checkGitignoreWithWriter(w)
 
 	now := time.Now()
 	for _, entry := range entries {
@@ -78,7 +85,7 @@ func CleanupArtifacts() {
 		if now.Sub(info.ModTime()) > maxArtifactAge {
 			path := filepath.Join(artifactsDir, entry.Name())
 			if err := os.Remove(path); err != nil {
-				warnColor.Printf("Warning: failed to remove old artifact %s: %v\n", path, err)
+				_, _ = fmt.Fprintf(w, "Warning: failed to remove old artifact %s: %v\n", path, err)
 			}
 		}
 	}
@@ -87,9 +94,16 @@ func CleanupArtifacts() {
 // checkGitignore は .gitignore に .xelyon/ が含まれているかチェックし、
 // なければ警告を出力する。
 func checkGitignore() {
+	checkGitignoreWithWriter(common.DefaultOutput().StdoutWriter())
+}
+
+func checkGitignoreWithWriter(w io.Writer) {
+	if w == nil {
+		w = io.Discard
+	}
 	f, err := os.Open(".gitignore")
 	if err != nil {
-		warnColor.Println("Warning: .xelyon/ is not in .gitignore. Add it to avoid committing artifacts.")
+		_, _ = fmt.Fprintln(w, "Warning: .xelyon/ is not in .gitignore. Add it to avoid committing artifacts.")
 		return
 	}
 	defer f.Close()
@@ -101,7 +115,7 @@ func checkGitignore() {
 			return
 		}
 	}
-	warnColor.Println("Warning: .xelyon/ is not in .gitignore. Add it to avoid committing artifacts.")
+	_, _ = fmt.Fprintln(w, "Warning: .xelyon/ is not in .gitignore. Add it to avoid committing artifacts.")
 }
 
 const deduplicatePrefixLen = 10

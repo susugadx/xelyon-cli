@@ -159,7 +159,7 @@ func ExecuteStrReplaceWithPromptIOAndOptions(promptIO ui.PromptIO, options commo
 			offset := startLine - 1
 			cfg := options.Config
 			if cfg == nil {
-				cfg = config.GetGlobalConfig()
+				cfg = config.DefaultConfig()
 			}
 			opts := &ui.DiffOptions{
 				ContextLines:  cfg.Diff.ContextLines,
@@ -331,7 +331,7 @@ Do not retry the same replacement.`, path), nil
 		}
 
 		offset := startLineForDisplay - 1
-		cfg := config.GetGlobalConfig()
+		cfg := config.DefaultConfig()
 		opts := &ui.DiffOptions{
 			ContextLines:  cfg.Diff.ContextLines,
 			ShowLineNums:  true,
@@ -591,7 +591,7 @@ func executeBatchEditsWithPromptIOAndOptions(promptIO ui.PromptIO, options commo
 
 		cfg := options.Config
 		if cfg == nil {
-			cfg = config.GetGlobalConfig()
+			cfg = config.DefaultConfig()
 		}
 		opts := &ui.DiffOptions{
 			ContextLines:  cfg.Diff.ContextLines,

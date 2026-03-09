@@ -89,7 +89,7 @@ func (t *WriteFileTool) Parameters() map[string]interface{} {
 }
 
 func (t *WriteFileTool) Run(execCtx tools.ExecutionContext, args map[string]string) (string, *tools.FileChange, error) {
-	result, err := ExecuteWriteFileWithPromptIOAndOptions(execCtx.PromptIO(), execCtx.ConfirmOptions(), args["path"], args["content"])
+	result, err := ExecuteWriteFileWithPromptIOAndOptionsAndLSPClient(execCtx.PromptIO(), execCtx.ConfirmOptions(), execCtx.EffectiveLSPClient(), args["path"], args["content"])
 	if err != nil {
 		return result, nil, err
 	}
@@ -199,7 +199,7 @@ func (t *DeleteFileTool) Parameters() map[string]interface{} {
 }
 
 func (t *DeleteFileTool) Run(execCtx tools.ExecutionContext, args map[string]string) (string, *tools.FileChange, error) {
-	result, err := ExecuteDeleteFileWithPromptIOAndOptions(execCtx.PromptIO(), execCtx.ConfirmOptions(), args["path"])
+	result, err := ExecuteDeleteFileWithPromptIOAndOptionsAndLSPClient(execCtx.PromptIO(), execCtx.ConfirmOptions(), execCtx.EffectiveLSPClient(), args["path"])
 	if err != nil {
 		return result, nil, err
 	}

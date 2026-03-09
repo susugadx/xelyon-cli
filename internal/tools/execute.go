@@ -3,7 +3,6 @@ package tools
 import (
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -232,7 +231,7 @@ func isBashReadOnly(command string) bool {
 // PreviewToolCallWithWriter は指定 writer にツール情報を表示する（実行はしない）。
 func PreviewToolCallWithWriter(w io.Writer, tc *ToolCall) {
 	if w == nil {
-		w = os.Stdout
+		w = ui.DefaultRuntime().Output()
 	}
 	color.New(color.FgCyan).Fprintf(w, "🔧 Tool: %s (Dry Run)\n", tc.Tool)
 	printToolArgs(w, tc)
@@ -240,7 +239,7 @@ func PreviewToolCallWithWriter(w io.Writer, tc *ToolCall) {
 
 // PreviewToolCall displays tool information without executing it
 func PreviewToolCall(tc *ToolCall) {
-	PreviewToolCallWithWriter(os.Stdout, tc)
+	PreviewToolCallWithWriter(ui.DefaultRuntime().Output(), tc)
 }
 
 // isStreamingTool はストリーミング出力を行うツールか判定

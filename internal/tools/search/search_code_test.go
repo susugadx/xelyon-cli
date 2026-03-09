@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
@@ -336,14 +335,9 @@ func TestSearchCode_CacheHitAfterSearch(t *testing.T) {
 
 	// テスト用の簡易キャッシュ実装
 	cache := &testSearchCache{data: make(map[string]string)}
-	origCache := tools.GlobalToolCache
-	tools.GlobalToolCache = cache
-	t.Cleanup(func() {
-		tools.GlobalToolCache = origCache
-	})
 
 	// 1回目の検索
-	result1 := ExecuteSearchCode(SearchOptions{Pattern: "cached_target", Path: dir, FilePattern: "", FileType: "", CtxLines: 0, TokenBudget: 3000, IsRegex: true, Multiline: false})
+	result1 := ExecuteSearchCodeWithCache(cache, SearchOptions{Pattern: "cached_target", Path: dir, FilePattern: "", FileType: "", CtxLines: 0, TokenBudget: 3000, IsRegex: true, Multiline: false})
 	if strings.Contains(result1, "No matches found") {
 		t.Fatal("Expected matches on first search")
 	}
@@ -355,7 +349,7 @@ func TestSearchCode_CacheHitAfterSearch(t *testing.T) {
 
 	// 2回目の検索 — キャッシュヒット
 	getCalls := cache.getCalls
-	result2 := ExecuteSearchCode(SearchOptions{Pattern: "cached_target", Path: dir, FilePattern: "", FileType: "", CtxLines: 0, TokenBudget: 3000, IsRegex: true, Multiline: false})
+	result2 := ExecuteSearchCodeWithCache(cache, SearchOptions{Pattern: "cached_target", Path: dir, FilePattern: "", FileType: "", CtxLines: 0, TokenBudget: 3000, IsRegex: true, Multiline: false})
 
 	if cache.getCalls <= getCalls {
 		t.Error("Expected GetSearch to be called on second search")
@@ -377,20 +371,15 @@ func TestSearchCode_CacheDifferentParams(t *testing.T) {
 	}
 
 	cache := &testSearchCache{data: make(map[string]string)}
-	origCache := tools.GlobalToolCache
-	tools.GlobalToolCache = cache
-	t.Cleanup(func() {
-		tools.GlobalToolCache = origCache
-	})
 
 	// context_lines=0 で検索
-	result0 := ExecuteSearchCode(SearchOptions{Pattern: "target_param_check", Path: dir, FilePattern: "", FileType: "", CtxLines: 0, TokenBudget: 3000, IsRegex: true, Multiline: false})
+	result0 := ExecuteSearchCodeWithCache(cache, SearchOptions{Pattern: "target_param_check", Path: dir, FilePattern: "", FileType: "", CtxLines: 0, TokenBudget: 3000, IsRegex: true, Multiline: false})
 	if strings.Contains(result0, "No matches found") {
 		t.Fatal("Expected matches with context_lines=0")
 	}
 
 	// context_lines=3 で検索 — キャッシュキーが異なるため別結果が返るべき
-	result3 := ExecuteSearchCode(SearchOptions{Pattern: "target_param_check", Path: dir, FilePattern: "", FileType: "", CtxLines: 3, TokenBudget: 3000, IsRegex: true, Multiline: false})
+	result3 := ExecuteSearchCodeWithCache(cache, SearchOptions{Pattern: "target_param_check", Path: dir, FilePattern: "", FileType: "", CtxLines: 3, TokenBudget: 3000, IsRegex: true, Multiline: false})
 	if strings.Contains(result3, "No matches found") {
 		t.Fatal("Expected matches with context_lines=3")
 	}

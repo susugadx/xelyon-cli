@@ -3,10 +3,10 @@ package config
 import (
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
 	"github.com/fatih/color"
+	"github.com/susugadx/xelyon-cli/internal/stdio"
 )
 
 // ValidProviders は有効なプロバイダー名の一覧
@@ -224,7 +224,7 @@ func PrintValidationWarningsToWriter(w io.Writer, result ValidationResult) {
 		return
 	}
 	if w == nil {
-		w = os.Stdout
+		w = stdio.Output()
 	}
 
 	yellow.Fprintln(w, "\n⚠️  設定ファイルに問題があります: ~/.xelyon/config.yaml")
@@ -249,7 +249,7 @@ func PrintValidationWarningsToWriter(w io.Writer, result ValidationResult) {
 
 // PrintValidationWarnings はバリデーション警告を表示
 func PrintValidationWarnings(result ValidationResult) {
-	PrintValidationWarningsToWriter(os.Stdout, result)
+	PrintValidationWarningsToWriter(nil, result)
 }
 
 // ApplyAutoFixes は自動修正可能な問題を修正

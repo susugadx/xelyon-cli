@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"encoding/json"
-	"os"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/agent/token"
@@ -46,7 +45,7 @@ func normalizeAgentRuntime(runtime *AgentRuntime) *AgentRuntime {
 		runtime.Config = config.CloneConfig(runtime.Config)
 	}
 	if runtime.UI == nil {
-		runtime.UI = ui.NewRuntime(os.Stdin, os.Stdout, os.Stderr)
+		runtime.UI = ui.NewRuntime(nil, nil, nil)
 	}
 	if runtime.AuditLogger == nil {
 		runtime.AuditLogger = audit.NewDisabledLogger()
@@ -84,7 +83,7 @@ func (r *AgentRuntime) effectiveUI() *ui.Runtime {
 
 func (r *AgentRuntime) effectiveAuditLogger() audit.ToolLogger {
 	if r == nil || r.AuditLogger == nil {
-		return audit.GetLogger()
+		return audit.NewDisabledLogger()
 	}
 	return r.AuditLogger
 }
@@ -129,7 +128,7 @@ func (a *Agent) ui() *ui.Runtime {
 
 func (a *Agent) auditLogger() audit.ToolLogger {
 	if a == nil || a.Runtime == nil {
-		return audit.GetLogger()
+		return audit.NewDisabledLogger()
 	}
 	return a.Runtime.effectiveAuditLogger()
 }

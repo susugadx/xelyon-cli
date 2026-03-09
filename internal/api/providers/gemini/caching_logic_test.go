@@ -1,6 +1,7 @@
 package gemini
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 func TestEstimateTokens(t *testing.T) {
@@ -165,6 +167,35 @@ func TestUpdateOrUseCache(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestProviderClearCache_UsesInjectedRuntime(t *testing.T) {
+	t.Setenv("XELYON_DEBUG_GEMINI", "1")
+
+	var errBuf bytes.Buffer
+	p := New("test-key")
+	p.SetUIRuntime(ui.NewRuntime(nil, io.Discard, &errBuf))
+	p.cacheMap = map[string]*cacheEntry{
+		"gemini-1.5-pro": {
+			name: "cachedContents/test-cache",
+		},
+	}
+	p.httpClient = &http.Client{
+		Transport: &mockTransport{
+			roundTripFunc: func(req *http.Request) (*http.Response, error) {
+				return &http.Response{
+					StatusCode: http.StatusNoContent,
+					Body:       io.NopCloser(strings.NewReader("")),
+				}, nil
+			},
+		},
+	}
+
+	p.ClearCache()
+
+	if !strings.Contains(errBuf.String(), "[DEBUG Gemini] Clearing cache for gemini-1.5-pro: cachedContents/test-cache") {
+		t.Fatalf("expected debug log in injected runtime, got %q", errBuf.String())
 	}
 }
 

@@ -24,6 +24,7 @@ func (a *Agent) SwitchProvider(providerName string) error {
 		return fmt.Errorf("プロバイダーの初期化に失敗しました: %w", err)
 	}
 	api.ApplyRuntimeConfig(provider, a.cfg())
+	api.ApplyUIRuntime(provider, a.ui())
 
 	// runtime 設定から新しいプロバイダーのデフォルトモデルを取得
 	cfg := a.cfg()

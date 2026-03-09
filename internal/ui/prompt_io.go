@@ -3,7 +3,6 @@ package ui
 import (
 	"bufio"
 	"io"
-	"os"
 	"strings"
 )
 
@@ -68,6 +67,7 @@ func (p *PromptIO) BufioReader() *bufio.Reader {
 }
 
 func normalizePromptIO(p PromptIO) PromptIO {
+	defaultRuntime := DefaultRuntime()
 	if p.runtime != nil {
 		if p.In == nil {
 			p.In = p.runtime.Input()
@@ -83,13 +83,13 @@ func normalizePromptIO(p PromptIO) PromptIO {
 		}
 	}
 	if p.In == nil {
-		p.In = os.Stdin
+		p.In = defaultRuntime.Input()
 	}
 	if p.Out == nil {
-		p.Out = os.Stdout
+		p.Out = defaultRuntime.Output()
 	}
 	if p.Err == nil {
-		p.Err = os.Stderr
+		p.Err = defaultRuntime.ErrorOutput()
 	}
 	if p.Reader == nil && p.simpleReader == nil {
 		p.simpleReader = bufio.NewReader(p.In)

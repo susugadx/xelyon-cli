@@ -43,6 +43,7 @@ type Provider struct {
 	mcpEnabled    bool                 // MCP有効時はテキストモードにフォールバック（レガシー）
 	mcpTools      []api.ToolDefinition // MCPツールの定義
 	usageCallback api.UsageCallback    // トークン使用量コールバック
+	runtime       *ui.Runtime          // 補助出力に使う UI runtime
 
 	// Context Caching state（モデル別に管理）
 	cacheMap map[string]*cacheEntry // key = model名
@@ -90,6 +91,11 @@ func (p *Provider) IsFunctionCallingEnabled() bool {
 // SetUsageCallback は使用量レポートのコールバックを設定する
 func (p *Provider) SetUsageCallback(callback api.UsageCallback) {
 	p.usageCallback = callback
+}
+
+// SetUIRuntime は provider が補助出力に使う UI runtime を設定する。
+func (p *Provider) SetUIRuntime(runtime *ui.Runtime) {
+	p.runtime = runtime
 }
 
 // isGemini3Model は Gemini 3 モデルかどうかを判定
@@ -217,10 +223,8 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 					return "", fmt.Errorf("idle timeout: exceeded max retries (%d): %w", maxIdleTimeoutRetries, err)
 				}
 				retryCount++
-				runtime := ui.RuntimeFromContext(ctx)
-				runtime.StopSpinner()
-				runtime.ResetTerminalState()
-				fmt.Fprintf(runtime.ErrorOutput(), "⚠️ Idle timeout, retrying FC mode (attempt %d/%d)...\n", retryCount, maxIdleTimeoutRetries)
+				api.StopSpinnerAndResetTerminal(ctx)
+				fmt.Fprintf(api.ErrorWriterFromContext(ctx), "⚠️ Idle timeout, retrying FC mode (attempt %d/%d)...\n", retryCount, maxIdleTimeoutRetries)
 				ctx = context.WithValue(ctx, idleTimeoutRetryKey, retryCount)
 				return p.ChatWithTools(ctx, systemPrompt, history, model)
 			}
@@ -236,10 +240,8 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 					return "", fmt.Errorf("thinking timeout: exceeded max retries (%d): %w", maxThinkingTimeoutRetries, err)
 				}
 				retryCount++
-				runtime := ui.RuntimeFromContext(ctx)
-				runtime.StopSpinner()
-				runtime.ResetTerminalState()
-				fmt.Fprintf(runtime.ErrorOutput(), "⚠️ Thinking timeout, retrying FC mode (attempt %d/%d)...\n", retryCount, maxThinkingTimeoutRetries)
+				api.StopSpinnerAndResetTerminal(ctx)
+				fmt.Fprintf(api.ErrorWriterFromContext(ctx), "⚠️ Thinking timeout, retrying FC mode (attempt %d/%d)...\n", retryCount, maxThinkingTimeoutRetries)
 				ctx = context.WithValue(ctx, thinkingTimeoutRetryKey, retryCount)
 				return p.ChatWithTools(ctx, systemPrompt, history, model)
 			}
@@ -251,19 +253,15 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 				retryCount = v.(int)
 			}
 			if retryCount >= maxFCErrorRetries {
-				runtime := ui.RuntimeFromContext(ctx)
-				runtime.StopSpinner()
-				runtime.ResetTerminalState()
+				api.StopSpinnerAndResetTerminal(ctx)
 				return "", fmt.Errorf("FC mode failed after %d retries: %w", maxFCErrorRetries, err)
 			}
 			retryCount++
-			runtime := ui.RuntimeFromContext(ctx)
-			runtime.StopSpinner()
-			runtime.ResetTerminalState()
-			fmt.Fprintf(runtime.ErrorOutput(), "⚠️ FC error, retrying FC mode (attempt %d/%d)...\n", retryCount, maxFCErrorRetries)
-			fmt.Fprintf(runtime.ErrorOutput(), "  Reason: %v\n", err)
+			api.StopSpinnerAndResetTerminal(ctx)
+			fmt.Fprintf(api.ErrorWriterFromContext(ctx), "⚠️ FC error, retrying FC mode (attempt %d/%d)...\n", retryCount, maxFCErrorRetries)
+			fmt.Fprintf(api.ErrorWriterFromContext(ctx), "  Reason: %v\n", err)
 			if debug {
-				fmt.Fprintf(runtime.ErrorOutput(), "[DEBUG Gemini] FC error detail: %+v\n", err)
+				fmt.Fprintf(api.ErrorWriterFromContext(ctx), "[DEBUG Gemini] FC error detail: %+v\n", err)
 			}
 			ctx = context.WithValue(ctx, fcErrorRetryKey, retryCount)
 			return p.ChatWithTools(ctx, systemPrompt, history, model)
@@ -305,11 +303,11 @@ func (p *Provider) doRequestWithRetry(ctx context.Context, req *http.Request, bo
 		resp.Body.Close()
 
 		msg := fmt.Sprintf("⚠️  %s, retrying (%d/%d) after %v...", reason, attempt+1, maxRetries, backoff)
-		spinner := ui.RuntimeFromContext(ctx).CurrentSpinner()
+		spinner := api.SpinnerFromContext(ctx)
 		if spinner != nil && spinner.IsActive() {
 			spinner.SetStatus(msg)
 		} else {
-			fmt.Fprintln(ui.RuntimeFromContext(ctx).ErrorOutput(), msg)
+			fmt.Fprintln(api.ErrorWriterFromContext(ctx), msg)
 		}
 		select {
 		case <-ctx.Done():

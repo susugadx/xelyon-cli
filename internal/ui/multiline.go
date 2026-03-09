@@ -96,7 +96,7 @@ func (m *MultilineReader) initRawModeChannels() {
 		b := make([]byte, 1)
 		input := m.input
 		if input == nil {
-			input = os.Stdin
+			input = DefaultRuntime().Input()
 		}
 		for {
 			_, err := input.Read(b)
@@ -621,7 +621,7 @@ func (m *MultilineReader) IsBracketedPasteEnabled() bool {
 
 func (m *MultilineReader) outputWriter() io.Writer {
 	if m.out == nil {
-		return os.Stdout
+		return DefaultRuntime().Output()
 	}
 	return m.out
 }

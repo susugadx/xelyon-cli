@@ -3,9 +3,9 @@ package common
 import (
 	"fmt"
 	"io"
-	"os"
 
 	"github.com/fatih/color"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // OutputColor は writer 指定可能な色付き出力ラッパー。
@@ -73,11 +73,11 @@ type Output struct {
 func NewOutput(stdout, stderr io.Writer) Output {
 	stdoutWriter := stdout
 	if stdoutWriter == nil {
-		stdoutWriter = os.Stdout
+		stdoutWriter = ui.DefaultRuntime().Output()
 	}
 	stderrWriter := stderr
 	if stderrWriter == nil {
-		stderrWriter = os.Stderr
+		stderrWriter = ui.DefaultRuntime().ErrorOutput()
 	}
 
 	out := Output{
@@ -98,15 +98,16 @@ func NewOutput(stdout, stderr io.Writer) Output {
 	return out
 }
 
-// DefaultOutput は現在の process stdout/stderr を使う Output を返す。
+// DefaultOutput は current UI runtime に紐づく Output を返す。
 func DefaultOutput() Output {
-	return NewOutput(os.Stdout, os.Stderr)
+	runtime := ui.DefaultRuntime()
+	return NewOutput(runtime.Output(), runtime.ErrorOutput())
 }
 
 // StdoutWriter は stdout writer を返す。
 func (o Output) StdoutWriter() io.Writer {
 	if o.stdout == nil {
-		return os.Stdout
+		return ui.DefaultRuntime().Output()
 	}
 	return o.stdout()
 }
@@ -114,7 +115,7 @@ func (o Output) StdoutWriter() io.Writer {
 // StderrWriter は stderr writer を返す。
 func (o Output) StderrWriter() io.Writer {
 	if o.stderr == nil {
-		return os.Stderr
+		return ui.DefaultRuntime().ErrorOutput()
 	}
 	return o.stderr()
 }
@@ -178,7 +179,7 @@ func (o Output) ErrPrintln(args ...interface{}) {
 }
 
 func defaultStdoutWriter() io.Writer {
-	return os.Stdout
+	return ui.DefaultRuntime().Output()
 }
 
 func defaultStdoutSuppressed() bool {

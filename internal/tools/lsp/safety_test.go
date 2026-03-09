@@ -255,6 +255,19 @@ func TestFormatReferenceWarning_WithExternal(t *testing.T) {
 	}
 }
 
+func TestCheckReferencesBeforeDeleteWithClient_NoLSP(t *testing.T) {
+	refs, hasExternal, err := CheckReferencesBeforeDeleteWithClient(nil, "main.go", []SymbolInfo{{Name: "main", Line: 1, Column: 1}})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if hasExternal {
+		t.Fatal("expected hasExternal=false with nil client")
+	}
+	if refs != nil {
+		t.Fatalf("expected nil refs with nil client, got %v", refs)
+	}
+}
+
 func TestDetectKind(t *testing.T) {
 	tests := []struct {
 		pattern  string
