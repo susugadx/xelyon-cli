@@ -3,6 +3,7 @@ package tools
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"regexp"
 	"strings"
@@ -20,21 +21,22 @@ func ParseToolCall(response string) *ToolCall {
 // ParseToolCalls はレスポンスから全てのツール呼び出しを抽出
 // Markdownコードブロック内のJSONは除外する
 func ParseToolCalls(response string) []*ToolCall {
-	return ParseToolCallsWithRegistry(response, DefaultRegistry)
+	return ParseToolCallsWithRegistry(response, DefaultRegistry, os.Stderr)
 }
 
 // ParseToolCallsWithRegistry は registry を指定して全てのツール呼び出しを抽出する。
-func ParseToolCallsWithRegistry(response string, registry *Registry) []*ToolCall {
+// debugOut にはデバッグログの出力先を渡す。
+func ParseToolCallsWithRegistry(response string, registry *Registry, debugOut io.Writer) []*ToolCall {
 	registry = resolveRegistry(registry)
 
 	// デバッグモード
 	debug := os.Getenv("XELYON_DEBUG_PARSE") == "1"
 	if debug {
-		fmt.Fprintf(os.Stderr, "[DEBUG ParseToolCalls] response length: %d\n", len(response))
+		fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] response length: %d\n", len(response))
 		// ツールパターンの存在をチェック
 		for _, p := range []string{`{"tool"`, `{ "tool"`} {
 			if idx := strings.Index(response, p); idx != -1 {
-				fmt.Fprintf(os.Stderr, "[DEBUG ParseToolCalls] found pattern %q at index %d\n", p, idx)
+				fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] found pattern %q at index %d\n", p, idx)
 				// 周辺100文字を表示
 				start := idx
 				if start > 50 {
@@ -44,7 +46,7 @@ func ParseToolCallsWithRegistry(response string, registry *Registry) []*ToolCall
 				if end > len(response) {
 					end = len(response)
 				}
-				fmt.Fprintf(os.Stderr, "[DEBUG ParseToolCalls] context: ...%s...\n", response[start:end])
+				fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] context: ...%s...\n", response[start:end])
 			}
 		}
 	}
@@ -84,7 +86,7 @@ func ParseToolCallsWithRegistry(response string, registry *Registry) []*ToolCall
 		// コードブロック内の場合はスキップ
 		if isInCodeBlock(start, codeBlockRanges) {
 			if debug {
-				fmt.Fprintf(os.Stderr, "[DEBUG ParseToolCalls] skipping: in code block at %d\n", start)
+				fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] skipping: in code block at %d\n", start)
 			}
 			searchFrom = start + 1
 			continue
@@ -130,20 +132,20 @@ func ParseToolCallsWithRegistry(response string, registry *Registry) []*ToolCall
 
 		if end == -1 {
 			if debug {
-				fmt.Fprintf(os.Stderr, "[DEBUG ParseToolCalls] incomplete JSON: no closing brace found from index %d\n", start)
+				fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] incomplete JSON: no closing brace found from index %d\n", start)
 				// 末尾100文字を表示
 				showStart := start
 				if len(response)-showStart > 200 {
 					showStart = len(response) - 200
 				}
-				fmt.Fprintf(os.Stderr, "[DEBUG ParseToolCalls] tail: ...%s\n", response[showStart:])
+				fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] tail: ...%s\n", response[showStart:])
 			}
 			break
 		}
 
 		jsonStr := response[start:end]
 		if debug {
-			fmt.Fprintf(os.Stderr, "[DEBUG ParseToolCalls] extracted JSON (%d bytes): %s\n", len(jsonStr), truncateDebug(jsonStr, 200))
+			fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] extracted JSON (%d bytes): %s\n", len(jsonStr), truncateDebug(jsonStr, 200))
 		}
 		var toolCall ToolCall
 		if err := json.Unmarshal([]byte(jsonStr), &toolCall); err != nil {
@@ -152,14 +154,14 @@ func ParseToolCallsWithRegistry(response string, registry *Registry) []*ToolCall
 			if repaired != jsonStr {
 				if err2 := json.Unmarshal([]byte(repaired), &toolCall); err2 == nil {
 					if debug {
-						fmt.Fprintf(os.Stderr, "[DEBUG ParseToolCalls] JSON repaired: fixed raw control characters in string values\n")
+						fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] JSON repaired: fixed raw control characters in string values\n")
 					}
 					goto jsonParsed
 				}
 			}
 			// 修復しても失敗 → スキップして次を探す
 			if debug {
-				fmt.Fprintf(os.Stderr, "[DEBUG ParseToolCalls] JSON parse error: %v\n", err)
+				fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] JSON parse error: %v\n", err)
 			}
 			searchFrom = end
 			continue
@@ -169,7 +171,7 @@ func ParseToolCallsWithRegistry(response string, registry *Registry) []*ToolCall
 		// tool フィールドが空の場合はスキップ
 		if toolCall.Tool == "" {
 			if debug {
-				fmt.Fprintf(os.Stderr, "[DEBUG ParseToolCalls] skipping: empty tool field\n")
+				fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] skipping: empty tool field\n")
 			}
 			searchFrom = end
 			continue
@@ -184,7 +186,7 @@ func ParseToolCallsWithRegistry(response string, registry *Registry) []*ToolCall
 
 	// XML rescue: JSONで何も見つからなかった場合にXML形式を試す
 	if len(results) == 0 {
-		xmlResults := parseXMLToolCalls(response, codeBlockRanges, debug, registry)
+		xmlResults := parseXMLToolCalls(response, codeBlockRanges, debug, registry, debugOut)
 		results = append(results, xmlResults...)
 	}
 
@@ -196,7 +198,7 @@ var xmlOpenTagPattern = regexp.MustCompile(`<([a-zA-Z_][\w-]*)>`)
 
 // parseXMLToolCalls はXML形式のツール呼び出しをパースする
 // Kimi K2 等がFC失敗時に出力する XML 形式を rescue する
-func parseXMLToolCalls(response string, codeBlockRanges [][2]int, debug bool, registry *Registry) []*ToolCall {
+func parseXMLToolCalls(response string, codeBlockRanges [][2]int, debug bool, registry *Registry, debugOut io.Writer) []*ToolCall {
 	var results []*ToolCall
 	searchFrom := 0
 
@@ -230,7 +232,7 @@ func parseXMLToolCalls(response string, codeBlockRanges [][2]int, debug bool, re
 		// コードブロック内はスキップ
 		if isInCodeBlock(absStart, codeBlockRanges) {
 			if debug {
-				fmt.Fprintf(os.Stderr, "[DEBUG ParseToolCalls] XML rescue: skipping %q in code block\n", tagName)
+				fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] XML rescue: skipping %q in code block\n", tagName)
 			}
 			continue
 		}
@@ -238,7 +240,7 @@ func parseXMLToolCalls(response string, codeBlockRanges [][2]int, debug bool, re
 		// 指定 Registry に登録されているツール名のみ許可
 		if !registry.HasTool(tagName) {
 			if debug {
-				fmt.Fprintf(os.Stderr, "[DEBUG ParseToolCalls] XML rescue: skipping unknown tool %q\n", tagName)
+				fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] XML rescue: skipping unknown tool %q\n", tagName)
 			}
 			continue
 		}
@@ -247,7 +249,7 @@ func parseXMLToolCalls(response string, codeBlockRanges [][2]int, debug bool, re
 		args := parseXMLParams(innerContent)
 
 		if debug {
-			fmt.Fprintf(os.Stderr, "[DEBUG ParseToolCalls] XML rescue: tool=%s, args=%v\n", tagName, args)
+			fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] XML rescue: tool=%s, args=%v\n", tagName, args)
 		}
 
 		tc := &ToolCall{

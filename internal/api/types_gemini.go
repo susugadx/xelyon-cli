@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 )
 
@@ -82,8 +83,8 @@ func convertPropertyDef(propMap map[string]any) GeminiPropertyDef {
 
 // ConvertMCPToolToGeminiDeclaration はMCPツールをGemini Function Declaration形式に変換
 // MCPのInputSchemaはJSON Schema形式でGeminiと互換性がある
-// XELYON_DEBUG_GEMINI=1 でデバッグログを出力
-func ConvertMCPToolToGeminiDeclaration(name, description string, inputSchema json.RawMessage) GeminiFunctionDeclaration {
+// XELYON_DEBUG_GEMINI=1 でデバッグログを debugOut に出力
+func ConvertMCPToolToGeminiDeclaration(name, description string, inputSchema json.RawMessage, debugOut io.Writer) GeminiFunctionDeclaration {
 	debug := os.Getenv("XELYON_DEBUG_GEMINI") == "1"
 	// スキーマが空またはnullの場合
 	if len(inputSchema) == 0 || string(inputSchema) == "null" {
@@ -116,10 +117,10 @@ func ConvertMCPToolToGeminiDeclaration(name, description string, inputSchema jso
 				// デバッグログ: array型のitems情報
 				if debug && def.Type == "array" {
 					if def.Items != nil {
-						fmt.Fprintf(os.Stderr, "[DEBUG Gemini] Tool %s, property %s: array items.type=%q\n",
+						fmt.Fprintf(debugOut, "[DEBUG Gemini] Tool %s, property %s: array items.type=%q\n",
 							name, propName, def.Items.Type)
 					} else {
-						fmt.Fprintf(os.Stderr, "[DEBUG Gemini] Tool %s, property %s: array but items is nil\n",
+						fmt.Fprintf(debugOut, "[DEBUG Gemini] Tool %s, property %s: array but items is nil\n",
 							name, propName)
 					}
 				}
@@ -144,7 +145,7 @@ func ConvertMCPToolToGeminiDeclaration(name, description string, inputSchema jso
 
 	if debug {
 		jsonData, _ := json.Marshal(geminiParams)
-		fmt.Fprintf(os.Stderr, "[DEBUG Gemini] Tool %s parameters: %s\n", name, string(jsonData))
+		fmt.Fprintf(debugOut, "[DEBUG Gemini] Tool %s parameters: %s\n", name, string(jsonData))
 	}
 
 	return GeminiFunctionDeclaration{

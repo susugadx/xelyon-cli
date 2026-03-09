@@ -190,18 +190,19 @@ const maxFCErrorRetries = 1
 func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
 	// デバッグモード
 	debug := os.Getenv("XELYON_DEBUG_GEMINI") == "1"
+	errOut := api.ErrorWriterFromContext(ctx)
 
 	// 環境変数でFunction Callingを制御（デフォルト: 有効）
 	useFunctionCalling := os.Getenv("GEMINI_FUNCTION_CALLING") != "0"
 
 	if debug {
-		fmt.Fprintf(os.Stderr, "[DEBUG Gemini] GEMINI_FUNCTION_CALLING=%q, useFunctionCalling=%v, mcpTools=%d\n",
+		fmt.Fprintf(errOut, "[DEBUG Gemini] GEMINI_FUNCTION_CALLING=%q, useFunctionCalling=%v, mcpTools=%d\n",
 			os.Getenv("GEMINI_FUNCTION_CALLING"), useFunctionCalling, len(p.mcpTools))
 	}
 
 	if useFunctionCalling {
 		if debug {
-			fmt.Fprintln(os.Stderr, "[DEBUG Gemini] Mode: Function Calling")
+			fmt.Fprintln(errOut, "[DEBUG Gemini] Mode: Function Calling")
 		}
 		result, err := p.chatWithFunctionCalling(ctx, systemPrompt, history, model)
 		if err != nil {
@@ -271,7 +272,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	}
 
 	if debug {
-		fmt.Fprintln(os.Stderr, "[DEBUG Gemini] Mode: TextMode (GEMINI_FUNCTION_CALLING=0)")
+		fmt.Fprintln(errOut, "[DEBUG Gemini] Mode: TextMode (GEMINI_FUNCTION_CALLING=0)")
 	}
 	return p.chatWithTextMode(ctx, systemPrompt, history, model)
 }

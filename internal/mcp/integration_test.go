@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"encoding/json"
+	"io"
 	"strings"
 	"testing"
 
@@ -141,7 +142,7 @@ func TestMCPToolWrapper_ValidateArgs_EmptySchema(t *testing.T) {
 		"param1": "value1",
 	}
 
-	err := wrapper.validateArgs(args)
+	err := wrapper.validateArgs(io.Discard, args)
 	if err != nil {
 		t.Errorf("validateArgs with empty schema should not error, got: %v", err)
 	}
@@ -157,7 +158,7 @@ func TestMCPToolWrapper_ValidateArgs_NullSchema(t *testing.T) {
 		"param1": "value1",
 	}
 
-	err := wrapper.validateArgs(args)
+	err := wrapper.validateArgs(io.Discard, args)
 	if err != nil {
 		t.Errorf("validateArgs with null schema should not error, got: %v", err)
 	}
@@ -174,7 +175,7 @@ func TestMCPToolWrapper_ValidateArgs_InvalidJSON(t *testing.T) {
 	}
 
 	// 不正なJSONの場合は警告のみで成功するべき
-	err := wrapper.validateArgs(args)
+	err := wrapper.validateArgs(io.Discard, args)
 	if err != nil {
 		t.Errorf("validateArgs with invalid JSON should warn but not error, got: %v", err)
 	}
@@ -229,7 +230,7 @@ func TestMCPToolWrapper_ValidateArgs_ValidSchema(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := wrapper.validateArgs(tt.args)
+			err := wrapper.validateArgs(io.Discard, tt.args)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("validateArgs() error = %v, wantErr %v", err, tt.wantErr)
 			}

@@ -2,6 +2,7 @@ package gemini
 
 import (
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 
@@ -315,7 +316,7 @@ func TestConvertMCPToolToGeminiDeclaration(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			decl := api.ConvertMCPToolToGeminiDeclaration(tc.toolName, tc.description, tc.inputSchema)
+			decl := api.ConvertMCPToolToGeminiDeclaration(tc.toolName, tc.description, tc.inputSchema, os.Stderr)
 
 			if decl.Name != tc.toolName {
 				t.Errorf("Expected name=%s, got %s", tc.toolName, decl.Name)
@@ -349,7 +350,7 @@ func TestConvertMCPToolToGeminiDeclaration(t *testing.T) {
 
 func TestConvertMCPToolToGeminiDeclaration_InvalidJSON(t *testing.T) {
 	// 不正なJSONでもエラーにならない（空のパラメータで続行）
-	decl := api.ConvertMCPToolToGeminiDeclaration("mcp_test", "Test", json.RawMessage(`{invalid json`))
+	decl := api.ConvertMCPToolToGeminiDeclaration("mcp_test", "Test", json.RawMessage(`{invalid json`), os.Stderr)
 
 	if decl.Name != "mcp_test" {
 		t.Errorf("Expected name=mcp_test, got %s", decl.Name)
@@ -378,7 +379,7 @@ func TestConvertMCPToolToGeminiDeclaration_ArrayWithItems(t *testing.T) {
 		"required": ["files"]
 	}`)
 
-	decl := api.ConvertMCPToolToGeminiDeclaration("mcp_test_array", "Test array tool", inputSchema)
+	decl := api.ConvertMCPToolToGeminiDeclaration("mcp_test_array", "Test array tool", inputSchema, os.Stderr)
 
 	if decl.Parameters == nil {
 		t.Fatal("Expected parameters to be set")
@@ -437,7 +438,7 @@ func TestConvertMCPToolToGeminiDeclaration_ArrayWithoutItems(t *testing.T) {
 		}
 	}`)
 
-	decl := api.ConvertMCPToolToGeminiDeclaration("mcp_test_no_items", "Test without items", inputSchema)
+	decl := api.ConvertMCPToolToGeminiDeclaration("mcp_test_no_items", "Test without items", inputSchema, os.Stderr)
 
 	if decl.Parameters == nil {
 		t.Fatal("Expected parameters to be set")
@@ -472,7 +473,7 @@ func TestConvertMCPToolToGeminiDeclaration_ArrayWithEmptyItemsType(t *testing.T)
 		}
 	}`)
 
-	decl := api.ConvertMCPToolToGeminiDeclaration("mcp_test_empty_type", "Test with empty items type", inputSchema)
+	decl := api.ConvertMCPToolToGeminiDeclaration("mcp_test_empty_type", "Test with empty items type", inputSchema, os.Stderr)
 
 	valuesProp := decl.Parameters.Properties["values"]
 	if valuesProp.Items == nil {

@@ -119,8 +119,9 @@ type ResponsesResult struct {
 // chatWithResponses は Responses API でチャット
 // previous_response_id を使用してキャッシュを活用
 func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
+	errOut := api.ErrorWriterFromContext(ctx)
 	if os.Getenv("XELYON_DEBUG_OPENAI") == "1" {
-		fmt.Fprintf(os.Stderr, "[DEBUG OpenAI] chatWithResponses called, model=%s\n", model)
+		fmt.Fprintf(errOut, "[DEBUG OpenAI] chatWithResponses called, model=%s\n", model)
 	}
 	cfg := tools.ConfigFromContext(ctx)
 
@@ -216,7 +217,7 @@ func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, h
 
 	// デバッグ: リクエストボディを出力
 	if os.Getenv("XELYON_DEBUG_OPENAI") == "1" {
-		fmt.Fprintf(os.Stderr, "[DEBUG OpenAI Responses] Request body:\n%s\n", string(jsonBody))
+		fmt.Fprintf(errOut, "[DEBUG OpenAI Responses] Request body:\n%s\n", string(jsonBody))
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewBuffer(jsonBody))
@@ -275,10 +276,12 @@ func (p *Provider) handleResponsesStreaming(ctx context.Context, resp *http.Resp
 	// usage 情報を追跡
 	var lastUsage *api.Usage
 
+	errOut := api.ErrorWriterFromContext(ctx)
+
 	parser := func(line string) (string, bool, error) {
 		// デバッグ: 全SSE行を出力
 		if os.Getenv("XELYON_DEBUG_OPENAI") == "1" && line != "" {
-			fmt.Fprintf(os.Stderr, "[DEBUG OpenAI Responses] SSE line: %s\n", line)
+			fmt.Fprintf(errOut, "[DEBUG OpenAI Responses] SSE line: %s\n", line)
 		}
 
 		// SSE形式: "event: xxx" と "data: {...}" の組み合わせ
@@ -297,10 +300,10 @@ func (p *Provider) handleResponsesStreaming(ctx context.Context, resp *http.Resp
 
 		// デバッグログ: イベントタイプを表示
 		if os.Getenv("XELYON_DEBUG_OPENAI") == "1" {
-			fmt.Fprintf(os.Stderr, "[DEBUG OpenAI Responses] event: %s\n", chunk.Type)
+			fmt.Fprintf(errOut, "[DEBUG OpenAI Responses] event: %s\n", chunk.Type)
 			// response.completed の生データを表示
 			if chunk.Type == "response.completed" {
-				fmt.Fprintf(os.Stderr, "[DEBUG OpenAI Responses] raw data: %s\n", data)
+				fmt.Fprintf(errOut, "[DEBUG OpenAI Responses] raw data: %s\n", data)
 			}
 		}
 
@@ -401,11 +404,11 @@ func (p *Provider) handleResponsesStreaming(ctx context.Context, resp *http.Resp
 					CachedInputTokens: cachedTokens,
 				}
 				if os.Getenv("XELYON_DEBUG_OPENAI") == "1" {
-					fmt.Fprintf(os.Stderr, "[DEBUG OpenAI Responses] usage received: input=%d, output=%d, cached=%d\n",
+					fmt.Fprintf(errOut, "[DEBUG OpenAI Responses] usage received: input=%d, output=%d, cached=%d\n",
 						usage.InputTokens, usage.OutputTokens, cachedTokens)
 				}
 			} else if os.Getenv("XELYON_DEBUG_OPENAI") == "1" {
-				fmt.Fprintf(os.Stderr, "[DEBUG OpenAI Responses] %s event but usage is nil\n", chunk.Type)
+				fmt.Fprintf(errOut, "[DEBUG OpenAI Responses] %s event but usage is nil\n", chunk.Type)
 			}
 
 			// Function Calling: 累積した呼び出しを内部形式に変換
@@ -529,7 +532,8 @@ func (p *Provider) chatWithImageResponses(ctx context.Context, systemPrompt stri
 
 	// デバッグ: リクエストボディを出力
 	if os.Getenv("XELYON_DEBUG_OPENAI") == "1" {
-		fmt.Fprintf(os.Stderr, "[DEBUG OpenAI Responses] Request body:\n%s\n", string(jsonBody))
+		errOut := api.ErrorWriterFromContext(ctx)
+		fmt.Fprintf(errOut, "[DEBUG OpenAI Responses] Request body:\n%s\n", string(jsonBody))
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewBuffer(jsonBody))

@@ -183,7 +183,7 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 				CachedInputTokens: cachedTokens,
 			}
 			if os.Getenv("XELYON_DEBUG_OPENAI") == "1" {
-				fmt.Fprintf(os.Stderr, "[DEBUG OpenAI] usage received: input=%d, output=%d, cached=%d\n",
+				fmt.Fprintf(api.ErrorWriterFromContext(ctx), "[DEBUG OpenAI] usage received: input=%d, output=%d, cached=%d\n",
 					streamResp.Usage.PromptTokens, streamResp.Usage.CompletionTokens, cachedTokens)
 			}
 		}

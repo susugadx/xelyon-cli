@@ -151,6 +151,7 @@ type toolCallAccumulator struct {
 // handleStreamingResponse はストリーミングレスポンスを処理（tool_calls対応）
 func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
 	out := api.OutputWriterFromContext(ctx)
+	errOut := api.ErrorWriterFromContext(ctx)
 	// ストリーミングで分割されて送られてくる tool_calls を累積
 	toolCalls := make(map[int]*toolCallAccumulator)
 	var toolCallsOutput strings.Builder
@@ -209,7 +210,7 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 				CachedInputTokens: streamResp.Usage.PromptCacheHitTokens,
 			}
 			if os.Getenv("XELYON_DEBUG_DEEPSEEK") == "1" {
-				fmt.Fprintf(os.Stderr, "[DEBUG DeepSeek] usage received: input=%d, output=%d, cached=%d\n",
+				fmt.Fprintf(errOut, "[DEBUG DeepSeek] usage received: input=%d, output=%d, cached=%d\n",
 					streamResp.Usage.PromptTokens, streamResp.Usage.CompletionTokens, streamResp.Usage.PromptCacheHitTokens)
 			}
 		}

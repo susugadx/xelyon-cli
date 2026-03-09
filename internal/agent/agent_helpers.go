@@ -9,16 +9,11 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
 	promptplan "github.com/susugadx/xelyon-cli/internal/prompt/plan"
-	"github.com/susugadx/xelyon-cli/internal/ui"
 	"github.com/susugadx/xelyon-cli/internal/version"
 )
 
-// parseImageInput は入力から画像パスを抽出する。
+// parseImageInputWithWriter は入力から画像パスを抽出する。
 // 形式: "image:/path/to/file.png こんにちは" または "こんにちは image:/path/to/file.png"
-func parseImageInput(input string) (text string, image *api.ImageData) {
-	return parseImageInputWithWriter(ui.DefaultRuntime().Output(), input)
-}
-
 func parseImageInputWithWriter(out io.Writer, input string) (text string, image *api.ImageData) {
 	// image:プレフィックスを探す
 	imagePrefix := "image:"
@@ -69,11 +64,7 @@ const (
 	colorDim   = "\033[2m"
 )
 
-// printHeader はセッション開始時のヘッダーを表示
-func printHeader(model string, provider api.Provider) {
-	printHeaderToWriter(ui.DefaultRuntime().Output(), model, provider)
-}
-
+// printHeaderToWriter はセッション開始時のヘッダーを表示
 func printHeaderToWriter(out io.Writer, model string, provider api.Provider) {
 	// ASCII logo with info on the right side
 	// Logo lines paired with info text

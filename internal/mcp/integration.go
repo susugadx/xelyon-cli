@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 	"time"
@@ -93,7 +94,7 @@ func (w *MCPToolWrapper) Parameters() map[string]interface{} {
 // Run はツールを実行
 func (w *MCPToolWrapper) Run(execCtx tools.ExecutionContext, args map[string]string) (string, *tools.FileChange, error) {
 	// 引数バリデーション（簡易版）
-	if err := w.validateArgs(args); err != nil {
+	if err := w.validateArgs(execCtx.Stdout, args); err != nil {
 		return fmt.Sprintf("Validation Error: %v", err), nil, err
 	}
 
@@ -208,7 +209,7 @@ func (w *MCPToolWrapper) convertArgsWithSchema(args map[string]string) map[strin
 }
 
 // validateArgs は引数を検証する（簡易版）
-func (w *MCPToolWrapper) validateArgs(args map[string]string) error {
+func (w *MCPToolWrapper) validateArgs(out io.Writer, args map[string]string) error {
 	// 空のスキーマの場合はスキップ
 	if len(w.inputSchema) == 0 || string(w.inputSchema) == "null" {
 		return nil
@@ -218,7 +219,7 @@ func (w *MCPToolWrapper) validateArgs(args map[string]string) error {
 	var schema map[string]any
 	if err := json.Unmarshal(w.inputSchema, &schema); err != nil {
 		// パースエラーは警告のみ
-		fmt.Printf("⚠️  Failed to parse input schema for tool %s: %v\n", w.toolName, err)
+		fmt.Fprintf(out, "⚠️  Failed to parse input schema for tool %s: %v\n", w.toolName, err)
 		return nil
 	}
 
@@ -228,7 +229,7 @@ func (w *MCPToolWrapper) validateArgs(args map[string]string) error {
 			propMap, ok := propInfo.(map[string]any)
 			if !ok || propMap == nil {
 				// プロパティスキーマが不正な場合は警告してスキップ
-				fmt.Printf("⚠️  Warning: Invalid property schema for %s in tool %s\n", propName, w.toolName)
+				fmt.Fprintf(out, "⚠️  Warning: Invalid property schema for %s in tool %s\n", propName, w.toolName)
 				continue
 			}
 			if required, ok := propMap["required"].(bool); ok && required {

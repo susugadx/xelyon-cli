@@ -106,7 +106,7 @@ func Debug(format string, args ...any) {
 
 // DebugToWriter は指定 writer にデバッグログを出力する。
 func DebugToWriter(w io.Writer, format string, args ...any) {
-	if currentLogLevel <= LogDebug {
+	if DefaultRuntime().LogLevel() <= LogDebug {
 		logMessage(w, []color.Attribute{color.Faint}, "[DEBUG] ", format, args...)
 	}
 }
@@ -118,7 +118,7 @@ func InfoLog(format string, args ...any) {
 
 // InfoLogToWriter は指定 writer に情報ログを出力する。
 func InfoLogToWriter(w io.Writer, format string, args ...any) {
-	if currentLogLevel <= LogInfo {
+	if DefaultRuntime().LogLevel() <= LogInfo {
 		logMessage(w, []color.Attribute{color.FgCyan}, "", format, args...)
 	}
 }
@@ -130,7 +130,7 @@ func Warn(format string, args ...any) {
 
 // WarnToWriter は指定 writer に警告ログを出力する。
 func WarnToWriter(w io.Writer, format string, args ...any) {
-	if currentLogLevel <= LogWarn {
+	if DefaultRuntime().LogLevel() <= LogWarn {
 		logMessage(w, []color.Attribute{color.FgYellow}, "Warning: ", format, args...)
 	}
 }
@@ -142,7 +142,7 @@ func WarnWithoutEmoji(format string, args ...any) {
 
 // WarnWithoutEmojiToWriter は指定 writer に接頭辞なしの警告ログを出力する。
 func WarnWithoutEmojiToWriter(w io.Writer, format string, args ...any) {
-	if currentLogLevel <= LogWarn {
+	if DefaultRuntime().LogLevel() <= LogWarn {
 		logMessage(w, []color.Attribute{color.FgYellow}, "", format, args...)
 	}
 }
@@ -154,7 +154,7 @@ func ErrorLog(format string, args ...any) {
 
 // ErrorLogToWriter は指定 writer にエラーログを出力する。
 func ErrorLogToWriter(w io.Writer, format string, args ...any) {
-	if currentLogLevel <= LogError {
+	if DefaultRuntime().LogLevel() <= LogError {
 		logMessage(w, []color.Attribute{color.FgRed}, "Error: ", format, args...)
 	}
 }
@@ -166,7 +166,7 @@ func ErrorLogWithoutEmoji(format string, args ...any) {
 
 // ErrorLogWithoutEmojiToWriter は指定 writer に接頭辞なしのエラーログを出力する。
 func ErrorLogWithoutEmojiToWriter(w io.Writer, format string, args ...any) {
-	if currentLogLevel <= LogError {
+	if DefaultRuntime().LogLevel() <= LogError {
 		logMessage(w, []color.Attribute{color.FgRed}, "", format, args...)
 	}
 }

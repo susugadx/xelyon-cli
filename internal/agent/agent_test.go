@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"io"
 	"os"
 	"testing"
 
@@ -264,27 +265,27 @@ func TestIsAPIKeyAvailable(t *testing.T) {
 
 func TestParseImageInput_NoImage(t *testing.T) {
 	input := "Hello world"
-	text, image := parseImageInput(input)
+	text, image := parseImageInputWithWriter(io.Discard, input)
 
 	if text != input {
-		t.Errorf("parseImageInput() text = %q, want %q", text, input)
+		t.Errorf("parseImageInputWithWriter() text = %q, want %q", text, input)
 	}
 
 	if image != nil {
-		t.Error("parseImageInput() should return nil image when no image: prefix")
+		t.Error("parseImageInputWithWriter() should return nil image when no image: prefix")
 	}
 }
 
 func TestParseImageInput_ImagePrefixWithoutFile(t *testing.T) {
 	input := "image:/nonexistent/file.png analyze this"
-	text, image := parseImageInput(input)
+	text, image := parseImageInputWithWriter(io.Discard, input)
 
 	if text != input {
-		t.Errorf("parseImageInput() text = %q, want %q", text, input)
+		t.Errorf("parseImageInputWithWriter() text = %q, want %q", text, input)
 	}
 
 	if image != nil {
-		t.Error("parseImageInput() should return nil image when file doesn't exist")
+		t.Error("parseImageInputWithWriter() should return nil image when file doesn't exist")
 	}
 }
 

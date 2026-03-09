@@ -9,7 +9,6 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // ResponseIDCapable は Responses API のキャッシュ機能を持つプロバイダー
@@ -226,14 +225,13 @@ func detectMilestonePattern(history []api.Message) bool {
 	return searchCount >= 3
 }
 
+// handleTokenLimitErrorWithWriter はトークン上限エラー時にユーザーへ案内を表示する。
+// out は非nil前提（caller が a.output() を渡す）。
 func handleTokenLimitErrorWithWriter(out io.Writer, err error) {
 	if !token.IsTokenLimitError(err) {
 		return
 	}
 
-	if out == nil {
-		out = ui.DefaultRuntime().Output()
-	}
 	red.Fprintln(out, "❌ Token limit exceeded")
 	yellow.Fprintln(out, "💡 Try: /compress to reduce history")
 	yellow.Fprintln(out, "💡 Or:  /clear to start fresh")

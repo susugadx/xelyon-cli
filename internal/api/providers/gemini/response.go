@@ -159,7 +159,7 @@ loop:
 			var chunk GeminiFunctionResponse
 			if err := json.Unmarshal([]byte(data), &chunk); err != nil {
 				if debug {
-					fmt.Fprintf(os.Stderr, "[DEBUG Gemini SSE] Failed to unmarshal chunk: %v\n", err)
+					fmt.Fprintf(errOut, "[DEBUG Gemini SSE] Failed to unmarshal chunk: %v\n", err)
 				}
 				continue
 			}
@@ -188,7 +188,7 @@ loop:
 						if len(sig) > 20 {
 							sig = sig[:20] + "..."
 						}
-						fmt.Fprintf(os.Stderr, "[DEBUG Gemini SSE] Collected thought part (text=%d chars, sig=%q)\n", len(part.Text), sig)
+						fmt.Fprintf(errOut, "[DEBUG Gemini SSE] Collected thought part (text=%d chars, sig=%q)\n", len(part.Text), sig)
 					}
 					continue
 				}
@@ -207,7 +207,7 @@ loop:
 						if len(sig) > 20 {
 							sig = sig[:20] + "..."
 						}
-						fmt.Fprintf(os.Stderr, "[DEBUG Gemini SSE] Collected signature part (text=%d chars, sig=%q, hasFC=%v)\n", len(part.Text), sig, part.FunctionCall != nil)
+						fmt.Fprintf(errOut, "[DEBUG Gemini SSE] Collected signature part (text=%d chars, sig=%q, hasFC=%v)\n", len(part.Text), sig, part.FunctionCall != nil)
 					}
 					// FunctionCall が同時にある場合は FC も収集してから continue
 					if part.FunctionCall != nil {
@@ -336,7 +336,7 @@ loop:
 	// FC が空の場合、テキストから救済したツールJSONを使用
 	if len(functionCalls) == 0 && len(rescuedToolJSONs) > 0 {
 		if debug {
-			fmt.Fprintf(os.Stderr, "[DEBUG Gemini SSE] Rescuing %d tool call(s) from text\n", len(rescuedToolJSONs))
+			fmt.Fprintf(errOut, "[DEBUG Gemini SSE] Rescuing %d tool call(s) from text\n", len(rescuedToolJSONs))
 		}
 		fmt.Fprintf(errOut, "⚠️  FC rescue: %d tool call(s) extracted from text response\n", len(rescuedToolJSONs))
 		for _, tj := range rescuedToolJSONs {
@@ -409,7 +409,7 @@ func (p *Provider) handleFunctionCallingResponseWithContext(ctx context.Context,
 	}
 
 	if debug {
-		fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Parsed %d responses\n", len(responses))
+		fmt.Fprintf(errOut, "[DEBUG Gemini FC] Parsed %d responses\n", len(responses))
 	}
 
 	var fullResponse strings.Builder
@@ -420,7 +420,7 @@ func (p *Provider) handleFunctionCallingResponseWithContext(ctx context.Context,
 	for i, response := range responses {
 		if len(response.Candidates) == 0 {
 			if debug {
-				fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Response %d: no candidates\n", i)
+				fmt.Fprintf(errOut, "[DEBUG Gemini FC] Response %d: no candidates\n", i)
 			}
 			continue
 		}
@@ -452,7 +452,7 @@ func (p *Provider) handleFunctionCallingResponseWithContext(ctx context.Context,
 					if len(sig) > 20 {
 						sig = sig[:20] + "..."
 					}
-					fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Collected thought part (text=%d chars, sig=%q)\n", len(part.Text), sig)
+					fmt.Fprintf(errOut, "[DEBUG Gemini FC] Collected thought part (text=%d chars, sig=%q)\n", len(part.Text), sig)
 				}
 				continue
 			}
@@ -471,12 +471,12 @@ func (p *Provider) handleFunctionCallingResponseWithContext(ctx context.Context,
 					if len(sig) > 20 {
 						sig = sig[:20] + "..."
 					}
-					fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Collected signature part (text=%d chars, sig=%q, hasFC=%v)\n", len(part.Text), sig, part.FunctionCall != nil)
+					fmt.Fprintf(errOut, "[DEBUG Gemini FC] Collected signature part (text=%d chars, sig=%q, hasFC=%v)\n", len(part.Text), sig, part.FunctionCall != nil)
 				}
 				// FunctionCall が同時にある場合は FC も収集してから continue
 				if part.FunctionCall != nil {
 					if debug {
-						fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Found FunctionCall (with signature): %s\n", part.FunctionCall.Name)
+						fmt.Fprintf(errOut, "[DEBUG Gemini FC] Found FunctionCall (with signature): %s\n", part.FunctionCall.Name)
 					}
 					part.FunctionCall.ThoughtSignature = part.ThoughtSignature
 					functionCalls = append(functionCalls, part.FunctionCall)
@@ -487,7 +487,7 @@ func (p *Provider) handleFunctionCallingResponseWithContext(ctx context.Context,
 			// Function Call パートを収集
 			if part.FunctionCall != nil {
 				if debug {
-					fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Found FunctionCall: %s\n", part.FunctionCall.Name)
+					fmt.Fprintf(errOut, "[DEBUG Gemini FC] Found FunctionCall: %s\n", part.FunctionCall.Name)
 				}
 				part.FunctionCall.ThoughtSignature = part.ThoughtSignature
 				functionCalls = append(functionCalls, part.FunctionCall)
@@ -497,9 +497,9 @@ func (p *Provider) handleFunctionCallingResponseWithContext(ctx context.Context,
 			if part.Text != "" {
 				if debug {
 					if len(part.Text) > 100 {
-						fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Text part: %q\n", part.Text[:100])
+						fmt.Fprintf(errOut, "[DEBUG Gemini FC] Text part: %q\n", part.Text[:100])
 					} else {
-						fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Text part: %q\n", part.Text)
+						fmt.Fprintf(errOut, "[DEBUG Gemini FC] Text part: %q\n", part.Text)
 					}
 				}
 				textParts = append(textParts, part.Text)
@@ -540,7 +540,7 @@ func (p *Provider) handleFunctionCallingResponseWithContext(ctx context.Context,
 	}
 
 	if debug && len(toolJSONTexts) > 0 {
-		fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] toolJSONTexts=%d, functionCalls=%d\n",
+		fmt.Fprintf(errOut, "[DEBUG Gemini FC] toolJSONTexts=%d, functionCalls=%d\n",
 			len(toolJSONTexts), len(functionCalls))
 	}
 
@@ -573,7 +573,7 @@ func (p *Provider) handleFunctionCallingResponseWithContext(ctx context.Context,
 	} else if len(toolJSONTexts) > 0 {
 		// FC が空 → テキストから救済したツールJSONを使用
 		if debug {
-			fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Rescuing %d tool call(s) from text\n", len(toolJSONTexts))
+			fmt.Fprintf(errOut, "[DEBUG Gemini FC] Rescuing %d tool call(s) from text\n", len(toolJSONTexts))
 		}
 		fmt.Fprintf(errOut, "⚠️  FC rescue: %d tool call(s) extracted from text response\n", len(toolJSONTexts))
 		for _, tj := range toolJSONTexts {
@@ -584,7 +584,7 @@ func (p *Provider) handleFunctionCallingResponseWithContext(ctx context.Context,
 	// テキストもFunctionCallも救済ツールJSONもない場合のみエラー
 	if fullResponse.Len() == 0 && len(functionCalls) == 0 {
 		if debug {
-			fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] No content: textParts=%d, functionCalls=%d\n",
+			fmt.Fprintf(errOut, "[DEBUG Gemini FC] No content: textParts=%d, functionCalls=%d\n",
 				len(textParts), len(functionCalls))
 		}
 		return "", fmt.Errorf("no content in Function Calling response (textParts=%d, functionCalls=%d, responses=%d)",

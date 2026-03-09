@@ -68,16 +68,17 @@ func (p *Provider) ClearCache() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	errOut := api.ErrorWriterFromContext(ctx)
 	for model, entry := range p.cacheMap {
 		if entry.name == "" {
 			continue
 		}
 		if debug {
-			fmt.Fprintf(os.Stderr, "[DEBUG Gemini] Clearing cache for %s: %s\n", model, entry.name)
+			fmt.Fprintf(errOut, "[DEBUG Gemini] Clearing cache for %s: %s\n", model, entry.name)
 		}
 		err := p.DeleteCachedContent(ctx, entry.name)
 		if err != nil && debug {
-			fmt.Fprintf(os.Stderr, "[DEBUG Gemini] Failed to delete remote cache: %v\n", err)
+			fmt.Fprintf(errOut, "[DEBUG Gemini] Failed to delete remote cache: %v\n", err)
 		}
 	}
 
@@ -150,6 +151,7 @@ func (p *Provider) updateOrUseCache(ctx context.Context, systemPrompt string, hi
 	}
 
 	debug := os.Getenv("XELYON_DEBUG_GEMINI") == "1"
+	errOut := api.ErrorWriterFromContext(ctx)
 
 	// このモデルのキャッシュを取得
 	entry := p.cacheMap[model]
@@ -169,7 +171,7 @@ func (p *Provider) updateOrUseCache(ctx context.Context, systemPrompt string, hi
 
 	if useExistingCache {
 		if debug {
-			fmt.Fprintf(os.Stderr, "[DEBUG Gemini] Using existing cache for %s: %s (diff: %d msgs)\n", model, entry.name, len(history)-entry.messageCount)
+			fmt.Fprintf(errOut, "[DEBUG Gemini] Using existing cache for %s: %s (diff: %d msgs)\n", model, entry.name, len(history)-entry.messageCount)
 		}
 		// 差分のみを返す
 		diffMessages := history[entry.messageCount:]
@@ -178,7 +180,7 @@ func (p *Provider) updateOrUseCache(ctx context.Context, systemPrompt string, hi
 
 	// 新規作成または再作成
 	if debug {
-		fmt.Fprintf(os.Stderr, "[DEBUG Gemini] Creating new cache for %s (tokens: ~%d)\n", model, totalTokens)
+		fmt.Fprintf(errOut, "[DEBUG Gemini] Creating new cache for %s (tokens: ~%d)\n", model, totalTokens)
 	}
 
 	// このモデルの既存キャッシュがあれば削除
@@ -233,7 +235,7 @@ func (p *Provider) updateOrUseCache(ctx context.Context, systemPrompt string, hi
 	}
 
 	if debug {
-		fmt.Fprintf(os.Stderr, "[DEBUG Gemini] Cache created for %s: %s\n", model, resp.Name)
+		fmt.Fprintf(errOut, "[DEBUG Gemini] Cache created for %s: %s\n", model, resp.Name)
 	}
 
 	return resp.Name, messagesToSend, nil

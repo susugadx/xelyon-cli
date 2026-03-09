@@ -26,6 +26,7 @@ func getGeminiFunctionCallingURL(model string) string {
 // chatWithFunctionCalling は Function Calling API を使用してツールを呼び出す
 func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
 	debug := os.Getenv("XELYON_DEBUG_GEMINI") == "1"
+	errOut := api.ErrorWriterFromContext(ctx)
 
 	// モデル名を設定（config優先、フォールバックはgemini-3.1-pro-preview-customtools）
 	// customtools版はカスタムツール優先度が高くパラレルFCを出す
@@ -152,9 +153,9 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 	if debug && reqBody.GenerationConfig != nil && reqBody.GenerationConfig.ThinkingConfig != nil {
 		tc := reqBody.GenerationConfig.ThinkingConfig
 		if tc.ThinkingLevel != "" {
-			fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] thinkingLevel=%q (Gemini 3)\n", tc.ThinkingLevel)
+			fmt.Fprintf(errOut, "[DEBUG Gemini FC] thinkingLevel=%q (Gemini 3)\n", tc.ThinkingLevel)
 		} else {
-			fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] thinkingBudget=%d (Gemini 2.5)\n", tc.ThinkingBudget)
+			fmt.Fprintf(errOut, "[DEBUG Gemini FC] thinkingBudget=%d (Gemini 2.5)\n", tc.ThinkingBudget)
 		}
 	}
 
@@ -165,7 +166,7 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 
 	// Context window overflow 可視化（debug のみ）
 	if debug && len(jsonBody) > 500_000 {
-		fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Large request: %d bytes (~%dk tokens)\n",
+		fmt.Fprintf(errOut, "[DEBUG Gemini FC] Large request: %d bytes (~%dk tokens)\n",
 			len(jsonBody), len(jsonBody)/4/1000)
 	}
 
@@ -218,7 +219,7 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 			if len(bodyStr) > 500 {
 				bodyStr = bodyStr[:500] + "..."
 			}
-			fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Error response (status %d): %s\n", resp.StatusCode, bodyStr)
+			fmt.Fprintf(errOut, "[DEBUG Gemini FC] Error response (status %d): %s\n", resp.StatusCode, bodyStr)
 		}
 		if rateLimitErr := api.HandleRateLimit(resp); rateLimitErr != nil {
 			return "", rateLimitErr
@@ -230,7 +231,7 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 				return "", fmt.Errorf("cache retry failed (status %d): %s", resp.StatusCode, string(body))
 			}
 			if debug {
-				fmt.Fprintf(os.Stderr, "[DEBUG Gemini FC] Cache expired, invalidating and retrying...\n")
+				fmt.Fprintf(errOut, "[DEBUG Gemini FC] Cache expired, invalidating and retrying...\n")
 			}
 			ctx = context.WithValue(ctx, cacheRetryKey, true)
 			return p.chatWithFunctionCalling(ctx, systemPrompt, history, model)

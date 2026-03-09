@@ -152,7 +152,7 @@ func (a *Agent) requestContext(ctx context.Context) context.Context {
 }
 
 func (a *Agent) parseToolCalls(response string) []*tools.ToolCall {
-	return tools.ParseToolCallsWithRegistry(response, a.registry())
+	return tools.ParseToolCallsWithRegistry(response, a.registry(), a.ui().ErrorOutput())
 }
 
 func (a *Agent) estimateToolDefinitionTokens() int {
