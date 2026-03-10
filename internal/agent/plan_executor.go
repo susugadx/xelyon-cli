@@ -270,8 +270,8 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 				// 変更履歴を保存
 				a.handleFileChange(change)
 
-				// ツール結果を履歴に追加（同一内容の重複は参照に差し替え）
-				historyContent := a.deduplicateToolResult(toolCall.Tool, result)
+				// ツール結果を履歴に追加（重複チェック → 入口圧縮）
+				historyContent := a.compactToolResult(toolCall, result)
 				if toolCall.ID != "" {
 					toolMsg := api.Message{
 						Role:       "tool",

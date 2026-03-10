@@ -484,8 +484,8 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 				// 変更履歴を保存
 				a.handleFileChange(change)
 
-				// 結果を履歴に追加（同一内容の重複は参照に差し替え）
-				historyContent := a.deduplicateToolResult(tc.Tool, result)
+				// 結果を履歴に追加（重複チェック → 入口圧縮）
+				historyContent := a.compactToolResult(tc, result)
 				if tc.ID != "" {
 					toolMsg := api.Message{
 						Role:       "tool",

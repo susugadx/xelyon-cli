@@ -147,8 +147,8 @@ func (a *Agent) executeToolOnly(toolCall *tools.ToolCall) string {
 	// 変更履歴を保存
 	a.handleFileChange(change)
 
-	// 結果を履歴に追加（同一内容の重複は参照に差し替え）
-	historyContent := a.deduplicateToolResult(toolCall.Tool, result)
+	// 結果を履歴に追加（重複チェック → 入口圧縮）
+	historyContent := a.compactToolResult(toolCall, result)
 	if toolCall.ID != "" {
 		// Function Calling: role="tool" で tool_call_id 付きで送信
 		toolMsg := api.Message{
@@ -306,12 +306,13 @@ func (a *Agent) executeToolCallInternal(response string, toolCall *tools.ToolCal
 	// 変更履歴を保存
 	a.handleFileChange(change)
 
-	// 結果を履歴に追加
+	// 結果を履歴に追加（重複チェック → 入口圧縮）
+	historyContent := a.compactToolResult(toolCall, result)
 	if toolCall.ID != "" {
 		// Function Calling: role="tool" で tool_call_id 付きで送信
 		toolMsg := api.Message{
 			Role:       "tool",
-			Content:    result,
+			Content:    historyContent,
 			ToolCallID: toolCall.ID,
 			ToolName:   toolCall.Tool,
 		}
@@ -325,7 +326,7 @@ func (a *Agent) executeToolCallInternal(response string, toolCall *tools.ToolCal
 		// テキストベース: role="user" で送信（従来方式）
 		a.History = append(a.History, api.Message{
 			Role:    "user",
-			Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, result),
+			Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, historyContent),
 		})
 	}
 
