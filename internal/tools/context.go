@@ -21,6 +21,7 @@ type ExecutionContext struct {
 	Stdout       io.Writer
 	Stderr       io.Writer
 	PromptReader *ui.MultilineReader
+	Runtime      *ui.Runtime // スピナー停止に使用する UI Runtime
 	Registry     *Registry
 	ToolCache    ToolCacheInterface
 	LSPClient    *lsplib.Client
@@ -38,7 +39,7 @@ func (ctx ExecutionContext) Output() common.Output {
 // PromptIO は対話 UI 用の入出力コンテキストへ変換する。
 func (ctx ExecutionContext) PromptIO() ui.PromptIO {
 	normalized := normalizeExecutionContext(ctx)
-	return ui.NewPromptIO(normalized.Stdin, normalized.Stdout, normalized.Stderr, normalized.PromptReader)
+	return ui.NewPromptIOWithRuntime(normalized.Stdin, normalized.Stdout, normalized.Stderr, normalized.PromptReader, ctx.Runtime)
 }
 
 // ConfirmOptions は確認 UI 用の設定を返す。

@@ -27,6 +27,18 @@ func NewPromptIO(in io.Reader, out, err io.Writer, reader *MultilineReader) Prom
 	})
 }
 
+// NewPromptIOWithRuntime は Runtime を紐づけた PromptIO を返す。
+// stopSpinnerForPromptIO が正しい Runtime のスピナーを停止できるようにする。
+func NewPromptIOWithRuntime(in io.Reader, out, err io.Writer, reader *MultilineReader, runtime *Runtime) PromptIO {
+	return NormalizePromptIO(PromptIO{
+		In:      in,
+		Out:     out,
+		Err:     err,
+		Reader:  reader,
+		runtime: runtime,
+	})
+}
+
 // DefaultPromptIO は process stdio を使う PromptIO を返す。
 func DefaultPromptIO() PromptIO {
 	return DefaultRuntime().PromptIO()
