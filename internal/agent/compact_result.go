@@ -57,6 +57,23 @@ func compactBash(command, result string) string {
 		return fmt.Sprintf("OK: %s (exit 0)", truncateCommand(command, compactCommandMaxLen))
 	}
 
+	// git/CI系の構造化圧縮（閾値ベース）
+	if isGitDiff(command) {
+		return compactGitDiff(result)
+	}
+	if isGitLog(command) {
+		return compactGitLog(result)
+	}
+	if isGitShow(command) {
+		return compactGitShow(result)
+	}
+	if isGitBlame(command) {
+		return compactGitBlame(result)
+	}
+	if isGHRunLog(command) {
+		return compactGHRunLog(result)
+	}
+
 	return result
 }
 
