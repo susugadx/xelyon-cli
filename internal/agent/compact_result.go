@@ -74,7 +74,63 @@ func compactBash(command, result string) string {
 		return compactGHRunLog(result)
 	}
 
+	// ログ系の末尾圧縮
+	if isLogCommand(command) {
+		return compactLogOutput(result)
+	}
+
 	return result
+}
+
+// ── ログ系コマンド ──
+
+// logPrefixes はログ出力系コマンドのプレフィックス。
+var logPrefixes = []string{
+	"kubectl logs",
+	"docker logs", "docker compose logs",
+	"journalctl",
+	"heroku logs",
+	"aws logs get",
+	"gcloud logging read",
+	"az monitor log",
+	"stern",
+}
+
+// logKeywords はログ出力系コマンドを示すキーワード。
+var logKeywords = []string{"logs", "log-events", "logging"}
+
+// isLogCommand はログ出力系コマンドか判定する。
+func isLogCommand(command string) bool {
+	cmd := strings.TrimSpace(command)
+	for _, prefix := range logPrefixes {
+		if cmd == prefix || (strings.HasPrefix(cmd, prefix) && len(cmd) > len(prefix) &&
+			(cmd[len(prefix)] == ' ' || cmd[len(prefix)] == '\t')) {
+			return true
+		}
+	}
+	// キーワードフォールバック
+	for _, part := range strings.Fields(cmd) {
+		lower := strings.ToLower(part)
+		for _, kw := range logKeywords {
+			if lower == kw {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+const logTailLines = 50
+
+// compactLogOutput はログ出力を末尾N行に切り詰める。
+// ログは最新の末尾が一番重要なため、tailのみ残す。
+func compactLogOutput(result string) string {
+	lines := strings.Split(result, "\n")
+	if len(lines) <= logTailLines {
+		return result
+	}
+	return fmt.Sprintf("[... %d lines total, showing last %d ...]\n%s",
+		len(lines), logTailLines, strings.Join(lines[len(lines)-logTailLines:], "\n"))
 }
 
 // isBashError はbash実行結果がエラーかを判定する。

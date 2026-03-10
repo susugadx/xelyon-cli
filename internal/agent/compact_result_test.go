@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -147,5 +148,83 @@ func TestCompactToolResult_OtherTools(t *testing.T) {
 	// bash with empty command and no error → not verify, returns as-is
 	if got != "file contents..." {
 		t.Errorf("non-bash tools should return as-is, got: %s", got)
+	}
+}
+
+// ── ログ系コマンド ──
+
+func TestCompactBash_LogCommand(t *testing.T) {
+	var lines []string
+	for i := range 200 {
+		lines = append(lines, fmt.Sprintf("2026-03-10 10:00:%02d log line %d", i%60, i))
+	}
+	longLog := strings.Join(lines, "\n")
+
+	got := compactBash("kubectl logs my-pod", longLog)
+	if !strings.Contains(got, "200 lines total") {
+		t.Errorf("should contain total line count, got: %s", got[:80])
+	}
+	if !strings.Contains(got, "showing last 50") {
+		t.Error("should indicate tail lines")
+	}
+	if !strings.Contains(got, "log line 199") {
+		t.Error("should contain last log line")
+	}
+}
+
+func TestCompactBash_LogCommandShort(t *testing.T) {
+	shortLog := "2026-03-10 log line 1\n2026-03-10 log line 2"
+	got := compactBash("docker logs my-container", shortLog)
+	if got != shortLog {
+		t.Error("short log should return as-is")
+	}
+}
+
+func TestIsLogCommand(t *testing.T) {
+	tests := []struct {
+		command string
+		want    bool
+	}{
+		{"kubectl logs my-pod", true},
+		{"docker logs my-container", true},
+		{"docker compose logs", true},
+		{"journalctl -u nginx", true},
+		{"heroku logs --tail", true},
+		{"aws logs get-log-events --log-group /ecs/app", true},
+		{"stern my-pod", true},
+
+		// 非ログ
+		{"kubectl get pods", false},
+		{"docker ps", false},
+		{"git log", false}, // git logはPhase 2で別処理
+	}
+	for _, tt := range tests {
+		t.Run(tt.command, func(t *testing.T) {
+			if got := isLogCommand(tt.command); got != tt.want {
+				t.Errorf("isLogCommand(%q) = %v, want %v", tt.command, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCompactLogOutput(t *testing.T) {
+	// 短い → そのまま
+	short := strings.Repeat("line\n", 30)
+	if got := compactLogOutput(short); got != short {
+		t.Error("short log should return as-is")
+	}
+
+	// 長い → tail 50行
+	var lines []string
+	for i := range 100 {
+		lines = append(lines, fmt.Sprintf("line %d", i))
+	}
+	long := strings.Join(lines, "\n")
+	got := compactLogOutput(long)
+	if !strings.Contains(got, "100 lines total") {
+		t.Errorf("should contain total count, got: %s", got[:60])
+	}
+	if !strings.Contains(got, "line 99") {
+		t.Error("should contain last line")
 	}
 }
