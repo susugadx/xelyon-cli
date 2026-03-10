@@ -264,14 +264,18 @@ output:
 # ============================================================
 # Web検索設定
 # ============================================================
-# Serper API Web検索のキャッシュ設定
+# ネイティブ Web 検索の実行プロバイダーとキャッシュ設定
+# 未設定の場合はメインプロバイダーの検索を使用
+# メインが非対応の場合は openai / gemini / claude のいずれかを設定
 web_search:
+    # 検索プロバイダー（openai / gemini / claude、未設定時はメインプロバイダーを使用）
+    provider: gemini
     # キャッシュを有効化（デフォルト: true）
     cache_enabled: true
-    # キャッシュTTL秒数（デフォルト: 1800 = 30分）
-    cache_ttl: 1800
-    # 最大キャッシュ数（デフォルト: 100）
-    cache_size: 100
+    # キャッシュTTL秒数（デフォルト: 3600 = 1時間）
+    cache_ttl: 3600
+    # 最大キャッシュ数（デフォルト: 50）
+    cache_size: 50
 
 # ============================================================
 # MCP設定
@@ -732,12 +736,12 @@ tool_confirm:
 #### `auto_approve_safe`
 - **型**: boolean
 - **デフォルト**: `true`
-- **説明**: SafetyHigh ツール（read_file, list_dir, git_status, git_log, git_diff, web_search 等）を確認なしで実行
+- **説明**: SafetyHigh ツール（read_file, list_dir, git_status, git_log, git_diff, search_code 等）を確認なしで実行
 
 #### `auto_approve_medium`
 - **型**: boolean
 - **デフォルト**: `false`
-- **説明**: SafetyMedium ツール（str_replace, write_file 等）を確認なしで実行
+- **説明**: SafetyMedium ツール（str_replace, write_file, web_search 等）を確認なしで実行
 
 **安全性レベル一覧:**
 
@@ -830,49 +834,52 @@ export GROQ_API_KEY=gsk_...
 # Ollama（環境変数不要・ローカル実行）
 ```
 
-### Web検索（Serper API）
+### Web検索
 
-**オプション機能**: `web_search`ツールを使用する場合のみ必要です。
+`web_search` は OpenAI / Gemini / Claude のネイティブ検索を使います。
 
-```bash
-# Serper API キー
-export SERPER_API_KEY=your_serper_api_key_here
+- **`web_search.provider` 未設定**: メインプロバイダーが OpenAI / Gemini / Claude の場合、そのままネイティブ検索を使用
+- **`web_search.provider` 設定あり**: 指定した検索プロバイダーを使用
+- **メインが非対応**: DeepSeek / OpenRouter / Groq / Ollama / Bedrock などでは `web_search.provider` の設定が必要
+
+#### 設定例
+
+```yaml
+web_search:
+  provider: gemini
 ```
 
-#### Serper APIとは
+#### 必要なAPIキー
 
-[Serper](https://serper.dev)は、Google検索結果を取得できるAPIサービスです。
-
-**特徴**:
-- Google検索結果を高速に取得
-- 無料枠: 2,500クエリ/月
-- 有料プラン: $50/月〜（100,000クエリ）
-
-#### APIキーの取得方法
-
-1. [https://serper.dev](https://serper.dev)にアクセス
-2. GitHubアカウントでサインアップ
-3. ダッシュボードからAPIキーを取得
-4. `.env`ファイルまたは環境変数に設定
+検索に使うプロバイダーに応じて、以下のいずれかを設定してください。
 
 ```bash
-# .envファイルに追加
-echo "SERPER_API_KEY=your_api_key_here" >> .env
+# OpenAI を検索に使う場合
+export OPENAI_API_KEY=sk-...
 
-# または環境変数で設定
-export SERPER_API_KEY=your_api_key_here
+# Gemini を検索に使う場合
+export GEMINI_API_KEY=...
+
+# Claude を検索に使う場合
+export ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-#### 使用例
+Gemini API キーは無料で取得できます: https://aistudio.google.com/apikey
+
+#### 動作例
+
+```yaml
+# メインが DeepSeek でも、検索だけ Gemini を使う
+web_search:
+  provider: gemini
+```
 
 ```bash
 xelyon
 > 最新のGo言語の情報を検索して
-
-# AIがweb_searchツールを使って検索結果を取得
 ```
 
-**注意**: APIキーが未設定の場合、`web_search`ツールは使用できませんが、他のツールは正常に動作します。
+メインプロバイダーが OpenAI / Gemini / Claude の場合は、`web_search.provider` を省略するとそのままネイティブ検索を使用します。
 
 ### プロバイダー・モデル指定
 
@@ -991,9 +998,6 @@ export GEMINI_API_URL=https://your-proxy.com/v1beta/models
 
 # Groq
 export GROQ_API_URL=https://your-proxy.com/openai/v1/chat/completions
-
-# Serper (Web検索)
-export SERPER_API_URL=https://your-proxy.com/search
 ```
 
 ## 設定ファイルの編集

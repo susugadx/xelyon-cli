@@ -191,6 +191,18 @@ xelyon --provider gemini --model gemini-2.5-flash
 > /use claude
 ```
 
+### Web検索
+
+`web_search` は OpenAI / Gemini / Claude のネイティブ検索を使います。メインプロバイダーが DeepSeek / Groq / Ollama / OpenRouter / Bedrock の場合は、`web_search.provider` で検索専用プロバイダーを指定できます。
+
+```yaml
+# ~/.xelyon/config.yaml
+web_search:
+  provider: gemini
+```
+
+Gemini API キーは無料で取得できます: https://aistudio.google.com/apikey
+
 ### 最大出力トークン数の設定
 
 ```yaml

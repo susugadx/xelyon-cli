@@ -139,11 +139,12 @@ type ThinkingConfig struct {
 	Level   string `yaml:"level"`   // low/medium/high/xhigh（デフォルト: medium）
 }
 
-// WebSearchConfig はWeb検索キャッシュの設定
+// WebSearchConfig は Web 検索プロバイダーとキャッシュの設定
 type WebSearchConfig struct {
-	CacheEnabled bool `yaml:"cache_enabled"` // キャッシュを有効化（デフォルト: true）
-	CacheTTL     int  `yaml:"cache_ttl"`     // キャッシュTTL秒数（デフォルト: 1800 = 30分）
-	CacheSize    int  `yaml:"cache_size"`    // 最大キャッシュ数（デフォルト: 100）
+	Provider     string `yaml:"provider,omitempty"` // 検索プロバイダー（openai/gemini/claude、未設定時はメインプロバイダーを使用）
+	CacheEnabled bool   `yaml:"cache_enabled"`      // キャッシュを有効化（デフォルト: true）
+	CacheTTL     int    `yaml:"cache_ttl"`          // キャッシュTTL秒数（デフォルト: 3600 = 1時間）
+	CacheSize    int    `yaml:"cache_size"`         // 最大キャッシュ数（デフォルト: 50）
 }
 
 // MCPConfig は MCP (Model Context Protocol) サーバー接続の設定

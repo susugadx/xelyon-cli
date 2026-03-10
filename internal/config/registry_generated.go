@@ -42,7 +42,7 @@ var CategoryDefinitions = []CategoryDef{
 	{Name: "openai", DisplayName: "OpenAI", Icon: "🌟", Fields: []string{"openai.responses_api_models"}},
 	{Name: "thinking", DisplayName: "Thinking", Icon: "🧠", Fields: []string{"thinking.enabled", "thinking.level"}},
 	{Name: "output", DisplayName: "Output", Icon: "📤", Fields: []string{"output.max_lines"}},
-	{Name: "web_search", DisplayName: "Web Search", Icon: "🔍", Fields: []string{"web_search.cache_enabled", "web_search.cache_size", "web_search.cache_ttl"}},
+	{Name: "web_search", DisplayName: "Web Search", Icon: "🔍", Fields: []string{"web_search.cache_enabled", "web_search.cache_size", "web_search.cache_ttl", "web_search.provider"}},
 	{Name: "mcp", DisplayName: "MCP Servers", Icon: "🔌", Fields: []string{"mcp.enabled", "mcp.headless"}},
 	{Name: "hooks", DisplayName: "Hooks", Icon: "🏁", Fields: []string{"hooks.max_retry", "hooks.on_completion", "hooks.timeout"}},
 }
@@ -101,14 +101,16 @@ var FieldTypeMap = map[string]ConfigFieldType{
 	"web_search.cache_enabled":         FieldTypeBool,
 	"web_search.cache_size":            FieldTypeInt,
 	"web_search.cache_ttl":             FieldTypeInt,
+	"web_search.provider":              FieldTypeSelect,
 }
 
 // SelectOptions は選択型フィールドの選択肢
 var SelectOptions = map[string][]string{
-	"bash.safety_level": {"strict", "moderate", "permissive"},
-	"default_provider":  {"deepseek", "claude", "openai", "gemini", "groq", "ollama", "openrouter", "bedrock"},
-	"general.language":  {"ja", "en"},
-	"thinking.level":    {"low", "medium", "high", "xhigh"},
+	"bash.safety_level":   {"strict", "moderate", "permissive"},
+	"default_provider":    {"deepseek", "claude", "openai", "gemini", "groq", "ollama", "openrouter", "bedrock"},
+	"general.language":    {"ja", "en"},
+	"thinking.level":      {"low", "medium", "high", "xhigh"},
+	"web_search.provider": {"openai", "gemini", "claude"},
 }
 
 // FieldDescriptions はフィールドの説明
@@ -161,8 +163,9 @@ var FieldDescriptions = map[string]string{
 	"tool_confirm.auto_approve_medium": "中程度のツール（write_file等）を自動承認",
 	"tool_confirm.auto_approve_safe":   "安全なツール（read_file等）を自動承認",
 	"web_search.cache_enabled":         "キャッシュを有効化（デフォルト: true）",
-	"web_search.cache_size":            "最大キャッシュ数（デフォルト: 100）",
-	"web_search.cache_ttl":             "キャッシュTTL秒数（デフォルト: 1800 = 30分）",
+	"web_search.cache_size":            "最大キャッシュ数（デフォルト: 50）",
+	"web_search.cache_ttl":             "キャッシュTTL秒数（デフォルト: 3600 = 1時間）",
+	"web_search.provider":              "検索プロバイダー（openai / gemini / claude、未設定時はメインプロバイダーを使用）",
 }
 
 // CategoryIcons はカテゴリのアイコン

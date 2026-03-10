@@ -284,17 +284,24 @@ var Sections = map[string]SectionInfo{
 		Title: "Web検索設定",
 		Icon:  "🔍",
 		Comments: []string{
-			"Serper API Web検索のキャッシュ設定",
+			"ネイティブ Web 検索の実行プロバイダーとキャッシュ設定",
+			"未設定の場合はメインプロバイダーの検索を使用",
+			"メインが非対応の場合は openai / gemini / claude のいずれかを設定",
 		},
 		Fields: map[string]string{
+			"provider":      "検索プロバイダー（openai / gemini / claude、未設定時はメインプロバイダーを使用）",
 			"cache_enabled": "キャッシュを有効化（デフォルト: true）",
-			"cache_ttl":     "キャッシュTTL秒数（デフォルト: 1800 = 30分）",
-			"cache_size":    "最大キャッシュ数（デフォルト: 100）",
+			"cache_ttl":     "キャッシュTTL秒数（デフォルト: 3600 = 1時間）",
+			"cache_size":    "最大キャッシュ数（デフォルト: 50）",
 		},
 		FieldTypes: map[string]string{
+			"provider":      "select",
 			"cache_enabled": "bool",
 			"cache_ttl":     "int",
 			"cache_size":    "int",
+		},
+		SelectOpts: map[string][]string{
+			"provider": {"openai", "gemini", "claude"},
 		},
 	},
 	"mcp": {

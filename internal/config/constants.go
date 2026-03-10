@@ -1,14 +1,11 @@
 package config
 
-import "time"
-
 // HTTP Configuration
 const (
 	// DefaultHTTPTimeout は LLM API 用の HTTP クライアントタイムアウト
 	// ストリーミング時はアイドルタイムアウト（streaming.idle_timeout_seconds）で管理するため、
 	// HTTPクライアントレベルでは無制限（0）に設定
-	DefaultHTTPTimeout = 0                // 無制限（context/アイドルタイムアウトで管理）
-	SerperHTTPTimeout  = 10 * time.Second // Serper API専用（非ストリーミング）
+	DefaultHTTPTimeout = 0 // 無制限（context/アイドルタイムアウトで管理）
 )
 
 // Tool Execution Limits

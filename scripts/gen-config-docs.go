@@ -249,6 +249,7 @@ func generateConfigDetails(structs []StructInfo, defaults map[string]interface{}
 		"OpenAIConfig":        "openai",
 		"ThinkingConfig":      "thinking",
 		"LSPConfig":           "lsp",
+		"WebSearchConfig":     "web_search",
 	}
 
 	// 順序を定義
@@ -268,6 +269,7 @@ func generateConfigDetails(structs []StructInfo, defaults map[string]interface{}
 		"OpenAIConfig",
 		"LSPConfig",
 		"ThinkingConfig",
+		"WebSearchConfig",
 	}
 
 	structMap := make(map[string]StructInfo)
@@ -364,6 +366,7 @@ func formatTitle(structName string) string {
 		"OpenAIConfig":        "OpenAI設定",
 		"ThinkingConfig":      "Extended Thinking設定",
 		"LSPConfig":           "LSP連携設定",
+		"WebSearchConfig":     "Web検索設定",
 	}
 	if title, ok := titles[structName]; ok {
 		return title

@@ -22,7 +22,10 @@ go build -o xelyon
 
 # 環境変数設定
 export DEEPSEEK_API_KEY="your-api-key"
-export SERPER_API_KEY="your-serper-api-key"  # Web検索用（オプション）
+# Web検索を別プロバイダーで試す場合は以下も設定
+# export GEMINI_API_KEY="your-gemini-api-key"
+# export OPENAI_API_KEY="your-openai-api-key"
+# export ANTHROPIC_API_KEY="your-anthropic-api-key"
 
 # 実行
 ./xelyon
@@ -47,11 +50,12 @@ export SERPER_API_KEY="your-serper-api-key"  # Web検索用（オプション）
 
 **例**:
 ```
-feat: Web検索機能を追加
+feat: Web検索プロバイダー設定を追加
 
-Serper APIを使ったリアルタイムWeb検索を実装。
-- web_searchツール追加
-- 上位5件の検索結果を取得
+ネイティブWeb検索の実行先を設定できるようにした。
+- web_search.provider を追加
+- OpenAI / Gemini / Claude のネイティブ検索を選択可能
+- 検索結果キャッシュを維持
 ```
 
 ### ドキュメント更新ルール（必須）

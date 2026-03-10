@@ -107,7 +107,7 @@ func TestIsVerifyCommand_NonVerifyOverridesKeyword(t *testing.T) {
 		command string
 		want    bool
 	}{
-		{"echo test", false},      // "echo" が非verify、"test" キーワードより優先
+		{"echo test", false},       // "echo" が非verify、"test" キーワードより優先
 		{"cat install.log", false}, // "cat" が非verify
 		{"grep build .", false},    // "grep" が非verify
 		{"psql -c 'SELECT 1'", false},

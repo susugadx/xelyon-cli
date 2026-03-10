@@ -26,6 +26,9 @@ func main() {
 	// LSPのserversを空にする（デフォルト内蔵のため）
 	cfg.LSP.Servers = nil
 
+	// config.yaml.example では推奨例として Gemini を検索プロバイダーに設定する
+	cfg.WebSearch.Provider = "gemini"
+
 	// YAML形式で出力
 	data, err := yaml.Marshal(cfg)
 	if err != nil {

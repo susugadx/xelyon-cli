@@ -502,8 +502,8 @@ bash: git checkout -b feature-branch
 
 | ツール名 | 説明 | 主な引数 |
 |---------|------|---------|
-| `web_search` | Web検索（Serper API、要APIキー） | `query` |
-**注意**: `web_search`を使用するには`SERPER_API_KEY`環境変数の設定が必要です。詳細は[config.md - Web検索（Serper API）](config.md#web検索serper-api)を参照してください。
+| `web_search` | ネイティブWeb検索（`web_search.provider` で OpenAI / Gemini / Claude を選択可能） | `query` |
+**注意**: メインプロバイダーがネイティブ検索非対応（DeepSeek / Groq / Ollama / OpenRouter など）の場合は、`config.yaml` で `web_search.provider` を設定してください。詳細は[config.md - Web検索](config.md#web検索)を参照してください。
 
 ### 開発支援
 

@@ -26,8 +26,8 @@ var ToolSafetyLevels = map[string]ToolSafety{
 	"git_diff":          SafetyHigh,
 	"ask_user_question": SafetyHigh,
 
-	// SafetyMedium: 外部APIコール（確認対象）
-	"web_search": SafetyMedium, // Serper APIにクエリ送信
+	// SafetyMedium: 外部検索APIコール（確認対象）
+	"web_search": SafetyMedium,
 
 	// SafetyMedium: 書き込み操作（リカバリ可能）
 	"write_file":     SafetyMedium,

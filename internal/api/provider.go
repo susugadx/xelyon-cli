@@ -87,8 +87,6 @@ func getAPIKeyForProvider(providerName string) string {
 	case "bedrock":
 		// Bedrock は AWS 認証チェーンを使用するため、常にダミー値を返す
 		return "aws-credentials"
-	case "serper":
-		return os.Getenv("SERPER_API_KEY")
 	default:
 		return ""
 	}

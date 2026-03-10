@@ -12,7 +12,7 @@ var ToolDescriptions = map[string]string{
 
 	// Search & Discovery
 	"search_code": "Search project code with smart caching and result classification ([def]/[ref]/[call]). Supports multiple comma-separated patterns for parallel search, file_type filtering, fixed-string mode, multiline mode, and hidden/ignored file inclusion. Results are grouped by file with context lines and block annotations, and matched line ranges are marked as read for direct str_replace line-range edits.",
-	"web_search":  "Search the web and return summarized findings plus source URLs, not full page contents. Uses provider-native search when available and Serper as fallback. For deeper coverage, run multiple targeted searches with narrower queries.",
+	"web_search":  "Search the web and return summarized findings plus source URLs, not full page contents. Uses provider-native search. Configure web_search.provider to choose openai, gemini, or claude when the main provider lacks native search support. For deeper coverage, run multiple targeted searches with narrower queries.",
 
 	// Development Tools
 	"bash": "Execute a shell command. Use for: git operations, npm/pip install, make, go test, go fmt, curl, compilers. Commands like cat/ls/grep auto-approve. Dangerous commands require confirmation.",

@@ -262,8 +262,8 @@ func DefaultConfig() *Config {
 		},
 		WebSearch: WebSearchConfig{
 			CacheEnabled: true,
-			CacheTTL:     1800, // 30分
-			CacheSize:    100,
+			CacheTTL:     3600, // 1時間
+			CacheSize:    50,
 		},
 		MCP: MCPConfig{
 			Enabled:  true,  // デフォルトON - MCP接続有効

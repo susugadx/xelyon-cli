@@ -4,16 +4,29 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
+	"time"
 
-	"github.com/susugadx/xelyon-cli/internal/api/providers/serper"
 	"github.com/susugadx/xelyon-cli/internal/api/websearch"
+	"github.com/susugadx/xelyon-cli/internal/cache"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
-// ExecuteWebSearch executes web search using a provider-native search if available,
-// then falls back to Serper. Cache is shared across all implementations.
+var (
+	webSearchCacheMu       sync.Mutex
+	webSearchCache         *cache.Cache
+	webSearchCacheSettings webSearchCacheConfig
+)
+
+type webSearchCacheConfig struct {
+	Enabled bool
+	Size    int
+	TTL     int
+}
+
+// ExecuteWebSearch はネイティブ Web 検索を実行し、必要に応じて結果キャッシュを利用する。
 func ExecuteWebSearch(execCtx tools.ExecutionContext, query string) string {
 	if query == "" {
 		return "Error: query is required"
@@ -31,10 +44,17 @@ func ExecuteWebSearch(execCtx tools.ExecutionContext, query string) string {
 		return fmt.Sprintf("User feedback: %s", dec.Comment)
 	}
 
-	requestCtx := tools.WithRegistry(context.Background(), execCtx.EffectiveRegistry())
-	requestCtx = tools.WithConfig(requestCtx, execCtx.EffectiveConfig())
+	cfg := execCtx.EffectiveConfig()
+	searchProvider := resolveSearchProvider(cfg, execCtx.ProviderName)
+	if searchProvider == "" {
+		return webSearchProviderError()
+	}
+	searchModel := resolveSearchModel(cfg, searchProvider, execCtx.ProviderName, execCtx.Model)
 
-	result, cached, source, err := executeWebSearchWithFallback(requestCtx, out, execCtx.EffectiveConfig(), query, execCtx.ProviderName, execCtx.Model)
+	requestCtx := tools.WithRegistry(context.Background(), execCtx.EffectiveRegistry())
+	requestCtx = tools.WithConfig(requestCtx, cfg)
+
+	result, cached, err := searchWithCache(requestCtx, cfg, searchProvider, query, searchModel)
 	if err != nil {
 		return fmt.Sprintf("Error: %v", err)
 	}
@@ -42,52 +62,131 @@ func ExecuteWebSearch(execCtx tools.ExecutionContext, query string) string {
 	if cached {
 		out.Green.Printf("🔍 Web search (cached): %s\n", query)
 	} else {
-		out.Green.Printf("🔍 Searching the web (%s): %s\n", source, query)
+		out.Green.Printf("🔍 Searching the web (%s): %s\n", searchProvider, query)
 	}
 
 	return result
 }
 
-func executeWebSearchWithFallback(ctx context.Context, out common.Output, cfg *config.Config, query, providerName, model string) (string, bool, string, error) {
-	providerName = normalizeProviderName(providerName)
-	cacheScope := cacheScopeForProvider(providerName)
+func searchWithCache(ctx context.Context, cfg *config.Config, provider, query, model string) (string, bool, error) {
+	searchCache := getWebSearchCache(cfg)
+	cacheKey := normalizeCacheKey(provider, query)
 
-	searchSource := "serper"
-	result, cached, err := serper.SearchWithCacheAndConfig(cfg, cacheScope, query, func(q string) (string, error) {
-		output, source, err := searchWithProvider(ctx, out, q, providerName, model)
-		searchSource = source
-		return output, err
-	})
-	return result, cached, searchSource, err
+	if searchCache != nil {
+		if cached, err := searchCache.Get(cacheKey); err == nil {
+			return string(cached), true, nil
+		}
+	}
+
+	result, err := websearch.SearchWithContext(ctx, provider, query, model)
+	if err != nil {
+		return "", false, err
+	}
+
+	if searchCache != nil {
+		searchCache.Set(cacheKey, []byte(result), 0)
+	}
+
+	return result, false, nil
 }
 
-func searchWithProvider(ctx context.Context, out common.Output, query, providerName, model string) (string, string, error) {
-	switch providerName {
-	case "gemini":
-		result, err := websearch.SearchWithContext(ctx, providerName, query, model)
-		if err == nil {
-			return result, "gemini", nil
-		}
-		out.Yellow.Printf("⚠️  Gemini native web search failed, falling back to Serper: %v\n", err)
-	case "claude":
-		result, err := websearch.SearchWithContext(ctx, providerName, query, model)
-		if err == nil {
-			return result, "claude", nil
-		}
-		out.Yellow.Printf("⚠️  Claude native web search failed, falling back to Serper: %v\n", err)
-	case "openai":
-		result, err := websearch.SearchWithContext(ctx, providerName, query, model)
-		if err == nil {
-			return result, "openai", nil
-		}
-		out.Yellow.Printf("⚠️  OpenAI native web search failed, falling back to Serper: %v\n", err)
+func getWebSearchCache(cfg *config.Config) *cache.Cache {
+	settings := newWebSearchCacheConfig(cfg)
+
+	webSearchCacheMu.Lock()
+	defer webSearchCacheMu.Unlock()
+
+	if webSearchCache != nil && webSearchCacheSettings == settings {
+		return webSearchCache
+	}
+	if webSearchCache == nil && webSearchCacheSettings == settings {
+		return nil
 	}
 
-	result, err := serper.WebSearch(query)
-	if err != nil {
-		return "", "serper", fmt.Errorf("serper fallback failed: %w", err)
+	webSearchCacheSettings = settings
+	if !settings.Enabled || settings.Size <= 0 {
+		webSearchCache = nil
+		return nil
 	}
-	return result, "serper", nil
+
+	webSearchCache = cache.New(cache.Config{
+		Enabled:    true,
+		Capacity:   settings.Size,
+		DefaultTTL: time.Duration(settings.TTL) * time.Second,
+	}, nil)
+	return webSearchCache
+}
+
+func newWebSearchCacheConfig(cfg *config.Config) webSearchCacheConfig {
+	if cfg == nil {
+		cfg = config.DefaultConfig()
+	}
+	return webSearchCacheConfig{
+		Enabled: cfg.WebSearch.CacheEnabled,
+		Size:    cfg.WebSearch.CacheSize,
+		TTL:     cfg.WebSearch.CacheTTL,
+	}
+}
+
+func normalizeQuery(query string) string {
+	return strings.ToLower(strings.TrimSpace(query))
+}
+
+func normalizeCacheKey(provider, query string) string {
+	provider = strings.ToLower(strings.TrimSpace(provider))
+	if provider == "" {
+		provider = "default"
+	}
+	return provider + ":" + normalizeQuery(query)
+}
+
+func resolveSearchProvider(cfg *config.Config, mainProvider string) string {
+	if cfg != nil {
+		provider := normalizeProviderName(cfg.WebSearch.Provider)
+		if isNativeSearchProvider(provider) {
+			return provider
+		}
+	}
+
+	provider := normalizeProviderName(mainProvider)
+	if isNativeSearchProvider(provider) {
+		return provider
+	}
+
+	return ""
+}
+
+func resolveSearchModel(cfg *config.Config, searchProvider, mainProvider, mainModel string) string {
+	if searchProvider == normalizeProviderName(mainProvider) {
+		return mainModel
+	}
+	if cfg == nil {
+		return ""
+	}
+	if providerConfig, ok := cfg.ProviderModels[searchProvider]; ok {
+		return providerConfig.DefaultModel
+	}
+	return ""
+}
+
+func isNativeSearchProvider(provider string) bool {
+	switch provider {
+	case "openai", "gemini", "claude":
+		return true
+	default:
+		return false
+	}
+}
+
+func webSearchProviderError() string {
+	return `Web search requires a provider with native search support.
+Set web_search.provider in config.yaml to one of: openai, gemini, claude
+
+Example:
+  web_search:
+    provider: gemini
+
+Gemini API key is free at https://aistudio.google.com/apikey`
 }
 
 func normalizeProviderName(providerName string) string {
@@ -96,14 +195,5 @@ func normalizeProviderName(providerName string) string {
 		return "claude"
 	default:
 		return strings.ToLower(strings.TrimSpace(providerName))
-	}
-}
-
-func cacheScopeForProvider(providerName string) string {
-	switch providerName {
-	case "gemini", "claude", "openai":
-		return providerName
-	default:
-		return "serper"
 	}
 }
