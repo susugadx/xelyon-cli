@@ -14,7 +14,6 @@ func TestGetProviderPrefix_Gemini(t *testing.T) {
 	}
 	checks := []string{
 		"## Provider Notes",
-		"read broadly first",
 		"raw JSON",
 	}
 	for _, check := range checks {
@@ -37,7 +36,6 @@ func TestGetProviderPrefix_DeepSeek(t *testing.T) {
 		t.Fatal("expected non-empty prefix for deepseek")
 	}
 	checks := []string{
-		"read broadly first",
 		"tool calls for file operations",
 		"unused imports",
 	}
@@ -123,49 +121,6 @@ func TestGetProviderPrefix_OpenAICaseInsensitive(t *testing.T) {
 	prefix := GetProviderPrefix("OpenAI")
 	if prefix == "" {
 		t.Fatal("expected non-empty prefix for OpenAI (uppercase)")
-	}
-}
-
-func TestCommonExecutionBlock(t *testing.T) {
-	gemini := GetProviderPrefix("gemini")
-	deepseek := GetProviderPrefix("deepseek")
-	openai := GetProviderPrefix("openai")
-
-	commonChecks := []string{
-		"### Shared Notes",
-		"prefer search_code -> str_replace(line-range)",
-		"read broadly first",
-		"Wait for build/test output",
-		"Project Context",
-	}
-	for _, check := range commonChecks {
-		if !strings.Contains(gemini, check) {
-			t.Errorf("gemini prefix missing common note: %s", check)
-		}
-		if !strings.Contains(deepseek, check) {
-			t.Errorf("deepseek prefix missing common note: %s", check)
-		}
-		if !strings.Contains(openai, check) {
-			t.Errorf("openai prefix missing common note: %s", check)
-		}
-	}
-}
-
-func TestCommonBoostBlock(t *testing.T) {
-	providers := []string{"gemini", "deepseek", "groq", "openai", "claude", "openrouter", "ollama"}
-	boostChecks := []string{
-		"### Quality Boost",
-		"surrounding code",
-		"extra read is cheaper",
-		"self-review changed call sites",
-	}
-	for _, provider := range providers {
-		prefix := GetProviderPrefix(provider)
-		for _, check := range boostChecks {
-			if !strings.Contains(prefix, check) {
-				t.Errorf("%s prefix missing boost rule: %s", provider, check)
-			}
-		}
 	}
 }
 
@@ -262,57 +217,11 @@ func TestBuildProviderSystemPrompt_Anthropic(t *testing.T) {
 	}
 }
 
-func TestBuildProviderSystemPrompt_ClaudeOpusAddsCacheMargin(t *testing.T) {
-	cfg := config.DefaultConfig()
-	cfg.PromptCache.Enabled = true
-
+func TestBuildProviderSystemPrompt_OpenRouterReturnsBase(t *testing.T) {
 	base := "You are XELYON.\n\n## Workflow Rules\n- workflow"
-	sonnet := BuildProviderSystemPromptWithConfig(base, "claude", "claude-sonnet-4-6", cfg)
-	opus := BuildProviderSystemPromptWithConfig(base, "claude", "claude-opus-4-6", cfg)
+	result := BuildProviderSystemPromptWithConfig(base, "openrouter", "anthropic/claude-opus-4.6", config.DefaultConfig())
 
-	if strings.Contains(sonnet, "### Stable Working Reference") {
-		t.Fatal("sonnet prompt should not include the Opus cache margin block")
-	}
-	if !strings.Contains(opus, "### Stable Working Reference") {
-		t.Fatal("opus prompt should include the cache margin block")
-	}
-	if len(opus)-len(sonnet) < 2500 {
-		t.Fatalf("expected opus cache margin to add substantial stable context, delta=%d", len(opus)-len(sonnet))
-	}
-}
-
-func TestBuildProviderSystemPrompt_OpenRouterAnthropicOpusAddsCacheMargin(t *testing.T) {
-	cfg := config.DefaultConfig()
-	cfg.PromptCache.Enabled = true
-
-	base := "You are XELYON.\n\n## Workflow Rules\n- workflow"
-	result := BuildProviderSystemPromptWithConfig(base, "openrouter", "anthropic/claude-opus-4.6", cfg)
-
-	if !strings.Contains(result, "### Stable Working Reference") {
-		t.Fatal("openrouter anthropic opus prompt should include the cache margin block")
-	}
-}
-
-func TestBuildProviderSystemPrompt_CacheMarginDisabledWhenPromptCacheOff(t *testing.T) {
-	cfg := config.DefaultConfig()
-	cfg.PromptCache.Enabled = false
-
-	base := "You are XELYON.\n\n## Workflow Rules\n- workflow"
-	result := BuildProviderSystemPromptWithConfig(base, "claude", "claude-opus-4-6", cfg)
-
-	if strings.Contains(result, "### Stable Working Reference") {
-		t.Fatal("cache margin block should not be included when prompt cache is disabled")
-	}
-}
-
-func TestBuildProviderSystemPromptWithConfig_UsesInjectedConfig(t *testing.T) {
-	cfg := config.DefaultConfig()
-	cfg.PromptCache.Enabled = true
-
-	base := "You are XELYON.\n\n## Workflow Rules\n- workflow"
-	result := BuildProviderSystemPromptWithConfig(base, "claude", "claude-opus-4-6", cfg)
-
-	if !strings.Contains(result, "### Stable Working Reference") {
-		t.Fatal("injected config should enable cache margin block")
+	if result != base {
+		t.Error("openrouter with empty prefix should return unchanged base prompt")
 	}
 }

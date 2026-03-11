@@ -88,7 +88,6 @@ func TestHandleModelCommand_RebuildsClaudePromptForOpus(t *testing.T) {
 	result := handleModelCommand(agent, []string{"claude-opus-4-6"})
 
 	assert.True(t, result)
-	assert.Contains(t, agent.SystemPrompt, "### Stable Working Reference")
 	assert.Contains(t, agent.SystemPrompt, "### Claude-specific")
 }
 

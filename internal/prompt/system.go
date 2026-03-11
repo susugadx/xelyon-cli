@@ -130,6 +130,15 @@ Task is NOT done until the dependency chain is resolved.
 - Don't read the same file twice unless the file changed or you need a different section
 - Prefer a simple complete fix over a clever partial fix
 - If rereading or re-editing the same area 3+ times without progress, change approach
+- One broad search_code call with comma-separated patterns replaces multiple narrow searches; prefer fewer comprehensive searches over many incremental ones
+- When the user provides a detailed plan or spec, trust their design and implement directly; do not re-investigate what the plan already specifies
+- Avoid re-reading files already covered by search_code results or earlier read_file calls in this session; search_code marks matched ranges as read
+- After str_replace fails, read_file the target section once, then retry with corrected old_str; do not cycle read-fail-read-fail more than twice
+- Group related edits to the same file into a single str_replace batch call instead of making one edit per response
+- Run verification commands once after all edits are complete, not after each individual edit
+- When removing or renaming code, search for all references once with a comprehensive pattern, fix everything, then verify once; do not alternate between searching and fixing
+- After verification passes, stop; do not re-search for leftover references unless verification failed
+- For deletion tasks: search once, delete all matches, verify once — three steps, not a loop
 
 ### 5. Implementation Standards
 - Follow existing codebase conventions for structure, naming, formatting, validation, defaults, and tests
