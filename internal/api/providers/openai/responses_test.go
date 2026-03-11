@@ -561,6 +561,114 @@ func TestResponsesUsageWithoutCachedTokens(t *testing.T) {
 	}
 }
 
+// TestResponsesUsageWithReasoningTokens は output_tokens_details.reasoning_tokens が
+// 正しくデシリアライズされることを確認
+func TestResponsesUsageWithReasoningTokens(t *testing.T) {
+	jsonData := `{"input_tokens": 1000, "output_tokens": 500, "input_tokens_details": {"cached_tokens": 200}, "output_tokens_details": {"reasoning_tokens": 300}}`
+
+	var usage ResponsesUsage
+	if err := json.Unmarshal([]byte(jsonData), &usage); err != nil {
+		t.Fatalf("Failed to unmarshal ResponsesUsage: %v", err)
+	}
+
+	if usage.InputTokens != 1000 {
+		t.Errorf("InputTokens = %d, want 1000", usage.InputTokens)
+	}
+	if usage.OutputTokens != 500 {
+		t.Errorf("OutputTokens = %d, want 500", usage.OutputTokens)
+	}
+	if usage.OutputTokensDetails == nil {
+		t.Fatal("OutputTokensDetails is nil, want non-nil")
+	}
+	if usage.OutputTokensDetails.ReasoningTokens != 300 {
+		t.Errorf("ReasoningTokens = %d, want 300", usage.OutputTokensDetails.ReasoningTokens)
+	}
+	if usage.InputTokensDetails == nil {
+		t.Fatal("InputTokensDetails is nil, want non-nil")
+	}
+	if usage.InputTokensDetails.CachedTokens != 200 {
+		t.Errorf("CachedTokens = %d, want 200", usage.InputTokensDetails.CachedTokens)
+	}
+}
+
+// TestResponsesUsageWithoutReasoningTokens は output_tokens_details が省略された場合に
+// OutputTokensDetails が nil のままであることを確認
+func TestResponsesUsageWithoutReasoningTokens(t *testing.T) {
+	jsonData := `{"input_tokens": 500, "output_tokens": 100}`
+
+	var usage ResponsesUsage
+	if err := json.Unmarshal([]byte(jsonData), &usage); err != nil {
+		t.Fatalf("Failed to unmarshal ResponsesUsage: %v", err)
+	}
+
+	if usage.OutputTokensDetails != nil {
+		t.Errorf("OutputTokensDetails = %+v, want nil", usage.OutputTokensDetails)
+	}
+}
+
+// TestResponsesUsageReasoningTokensToAPIUsage は reasoning_tokens が api.Usage.ThinkingTokens に
+// 正しく変換されることを確認
+func TestResponsesUsageReasoningTokensToAPIUsage(t *testing.T) {
+	tests := []struct {
+		name               string
+		usage              ResponsesUsage
+		wantThinkingTokens int
+	}{
+		{
+			name: "reasoning_tokens あり",
+			usage: ResponsesUsage{
+				InputTokens:  1000,
+				OutputTokens: 500,
+				OutputTokensDetails: &ResponsesOutputDetails{
+					ReasoningTokens: 300,
+				},
+			},
+			wantThinkingTokens: 300,
+		},
+		{
+			name: "OutputTokensDetails nil",
+			usage: ResponsesUsage{
+				InputTokens:  1000,
+				OutputTokens: 500,
+			},
+			wantThinkingTokens: 0,
+		},
+		{
+			name: "reasoning_tokens ゼロ",
+			usage: ResponsesUsage{
+				InputTokens:  1000,
+				OutputTokens: 500,
+				OutputTokensDetails: &ResponsesOutputDetails{
+					ReasoningTokens: 0,
+				},
+			},
+			wantThinkingTokens: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reasoningTokens := 0
+			if tt.usage.OutputTokensDetails != nil {
+				reasoningTokens = tt.usage.OutputTokensDetails.ReasoningTokens
+			}
+			cachedTokens := 0
+			if tt.usage.InputTokensDetails != nil {
+				cachedTokens = tt.usage.InputTokensDetails.CachedTokens
+			}
+			apiUsage := &api.Usage{
+				InputTokens:       tt.usage.InputTokens,
+				OutputTokens:      tt.usage.OutputTokens,
+				ThinkingTokens:    reasoningTokens,
+				CachedInputTokens: cachedTokens,
+			}
+			if apiUsage.ThinkingTokens != tt.wantThinkingTokens {
+				t.Errorf("ThinkingTokens = %d, want %d", apiUsage.ThinkingTokens, tt.wantThinkingTokens)
+			}
+		})
+	}
+}
+
 // TestResponsesAPI_FunctionCall_ArgumentsDeltaAccumulation_Note:
 // function_call_arguments.delta の累積処理は実際の streaming でのみテスト可能
 // (response.output_item.added → delta (複数) → done → response.completed)

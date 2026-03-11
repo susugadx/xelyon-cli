@@ -165,6 +165,9 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 				PromptTokensDetails *struct {
 					CachedTokens int `json:"cached_tokens,omitempty"`
 				} `json:"prompt_tokens_details,omitempty"`
+				CompletionTokensDetails *struct {
+					ReasoningTokens int `json:"reasoning_tokens,omitempty"`
+				} `json:"completion_tokens_details,omitempty"`
 			} `json:"usage,omitempty"`
 		}
 		if err := json.Unmarshal([]byte(data), &streamResp); err != nil {
@@ -177,9 +180,14 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 			if streamResp.Usage.PromptTokensDetails != nil {
 				cachedTokens = streamResp.Usage.PromptTokensDetails.CachedTokens
 			}
+			reasoningTokens := 0
+			if streamResp.Usage.CompletionTokensDetails != nil {
+				reasoningTokens = streamResp.Usage.CompletionTokensDetails.ReasoningTokens
+			}
 			lastUsage = &api.Usage{
 				InputTokens:       streamResp.Usage.PromptTokens,
 				OutputTokens:      streamResp.Usage.CompletionTokens,
+				ThinkingTokens:    reasoningTokens,
 				CachedInputTokens: cachedTokens,
 			}
 			if os.Getenv("XELYON_DEBUG_OPENAI") == "1" {

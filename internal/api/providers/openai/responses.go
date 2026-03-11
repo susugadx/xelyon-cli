@@ -75,14 +75,20 @@ type ResponseMetadata struct {
 
 // ResponsesUsage は Responses API の usage 情報
 type ResponsesUsage struct {
-	InputTokens        int                    `json:"input_tokens"`
-	OutputTokens       int                    `json:"output_tokens"`
-	InputTokensDetails *ResponsesInputDetails `json:"input_tokens_details,omitempty"`
+	InputTokens         int                     `json:"input_tokens"`
+	OutputTokens        int                     `json:"output_tokens"`
+	InputTokensDetails  *ResponsesInputDetails  `json:"input_tokens_details,omitempty"`
+	OutputTokensDetails *ResponsesOutputDetails `json:"output_tokens_details,omitempty"`
 }
 
 // ResponsesInputDetails は Responses API の入力トークン詳細
 type ResponsesInputDetails struct {
 	CachedTokens int `json:"cached_tokens,omitempty"`
+}
+
+// ResponsesOutputDetails は Responses API の出力トークン詳細
+type ResponsesOutputDetails struct {
+	ReasoningTokens int `json:"reasoning_tokens,omitempty"`
 }
 
 // ResponsesError は Responses API のエラー情報
@@ -398,9 +404,14 @@ func (p *Provider) handleResponsesStreaming(ctx context.Context, resp *http.Resp
 				if usage.InputTokensDetails != nil {
 					cachedTokens = usage.InputTokensDetails.CachedTokens
 				}
+				reasoningTokens := 0
+				if usage.OutputTokensDetails != nil {
+					reasoningTokens = usage.OutputTokensDetails.ReasoningTokens
+				}
 				lastUsage = &api.Usage{
 					InputTokens:       usage.InputTokens,
 					OutputTokens:      usage.OutputTokens,
+					ThinkingTokens:    reasoningTokens,
 					CachedInputTokens: cachedTokens,
 				}
 				if os.Getenv("XELYON_DEBUG_OPENAI") == "1" {
