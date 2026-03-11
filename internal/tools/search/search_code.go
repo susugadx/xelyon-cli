@@ -30,6 +30,10 @@ const (
 	MatchTypeComment                     // 4: コメント行
 )
 
+// lineRangeHint は search_code 結果末尾に付与する str_replace line-range モード推奨ヒント。
+// UI には表示されず、LLM の tool result にのみ含まれる。
+const lineRangeHint = "\n\nTip: Use str_replace line-range mode (old_str empty + start_line/end_line) to edit matched lines directly."
+
 // matchTypeTag はマッチ種別の表示タグ
 var matchTypeTag = [5]string{"[def]", "[import]", "[assign]", "[use]", "[comment]"}
 
@@ -187,6 +191,7 @@ func executeSinglePattern(cache tools.ToolCacheInterface, pattern string, opts S
 	if len(warnings) > 0 {
 		finalOutput = strings.Join(warnings, "\n") + "\n" + formatted
 	}
+	finalOutput += lineRangeHint
 
 	// キャッシュ保存
 	if cache != nil {
@@ -319,6 +324,7 @@ func executeMultiplePatterns(cache tools.ToolCacheInterface, patterns []string, 
 	}
 
 	formatted := formatMultiResults(collected, opts.TokenBudget)
+	formattedWithHint := formatted + lineRangeHint
 
 	// キャッシュ保存（multi 全体を1エントリとして保存）
 	if cache != nil {
@@ -328,10 +334,10 @@ func executeMultiplePatterns(cache tools.ToolCacheInterface, patterns []string, 
 		for _, c := range collected {
 			allFiles = append(allFiles, collectFilePaths(c.Results)...)
 		}
-		cache.SetSearch(multiKey, cacheKey, formatted, dedupePaths(allFiles))
+		cache.SetSearch(multiKey, cacheKey, formattedWithHint, dedupePaths(allFiles))
 	}
 
-	return formatted
+	return formattedWithHint
 }
 
 // buildMultiCacheKey は複数パターンからソート済みキャッシュキーを構築する

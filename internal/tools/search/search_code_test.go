@@ -42,6 +42,9 @@ func TestSearchCode_BasicMatch(t *testing.T) {
 	if !strings.Contains(result, ">") {
 		t.Error("Expected '>' match marker in result")
 	}
+	if !strings.Contains(result, lineRangeHint) {
+		t.Error("Expected line-range hint in normal search result")
+	}
 }
 
 func TestSearchCode_NoMatch(t *testing.T) {
@@ -57,6 +60,9 @@ func TestSearchCode_NoMatch(t *testing.T) {
 
 	if !strings.Contains(result, "No matches found") {
 		t.Errorf("Expected 'No matches found' in result, got: %s", result)
+	}
+	if strings.Contains(result, lineRangeHint) {
+		t.Error("No-match result should not include line-range hint")
 	}
 }
 
@@ -583,6 +589,9 @@ func TestExecuteSearchCode_MultiplePatterns(t *testing.T) {
 	}
 	if !strings.Contains(result, "func_b") {
 		t.Error("Expected func_b match in result")
+	}
+	if !strings.Contains(result, lineRangeHint) {
+		t.Error("Expected line-range hint in multi-pattern result")
 	}
 }
 
@@ -1414,6 +1423,9 @@ func TestSearchCode_ManifestMode(t *testing.T) {
 	}
 	if strings.Contains(result, "│") {
 		t.Errorf("manifest mode should not contain │ separator, got:\n%s", result)
+	}
+	if strings.Contains(result, lineRangeHint) {
+		t.Errorf("manifest mode should not include line-range hint, got:\n%s", result)
 	}
 }
 
