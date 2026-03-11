@@ -134,6 +134,7 @@ Task is NOT done until the dependency chain is resolved.
 - One broad search_code call with comma-separated patterns replaces multiple narrow searches; prefer fewer comprehensive searches over many incremental ones
 - When the user provides a detailed plan or spec, trust their design and implement directly; do not re-investigate what the plan already specifies
 - Avoid re-reading files already covered by search_code results or earlier read_file calls in this session; search_code marks matched ranges as read
+- str_replace old_str must come from actual read_file or search_code output in this session; never reconstruct it from memory or assumption
 - After str_replace fails, read_file the target section once, then retry with corrected old_str; do not cycle read-fail-read-fail more than twice
 - Group related edits to the same file into a single str_replace batch call instead of making one edit per response
 - Run verification commands once after all edits are complete, not after each individual edit

@@ -241,7 +241,7 @@ Do not retry the same replacement.`, path), nil
 
 		found, startIdxNormalized, endIdx := common.FindWithNormalizedWhitespace(oldContent, oldStr)
 		if !found {
-			return fmt.Sprintf("Error: old_str not found in %s (tried both exact and normalized matching)", path), nil
+			return fmt.Sprintf("Error: old_str not found in %s (tried exact and normalized matching).\n\nNext actions:\n1) Use read_file to see the actual content around the target area.\n2) Copy the exact text from read_file output as old_str.\n3) Do not guess or reconstruct old_str from memory.\n4) Alternatively, use line-range mode with start_line/end_line.", path), nil
 		}
 
 		actualOldStr := oldContent[startIdxNormalized : endIdx+1]
@@ -520,7 +520,7 @@ func executeBatchEditsWithPromptIOAndOptions(promptIO ui.PromptIO, options commo
 			}
 			found, startIdx, endIdx := common.FindWithNormalizedWhitespace(content, edit.OldStr)
 			if !found {
-				return fmt.Sprintf("Error: edits[%d].old_str not found in %s (tried exact and normalized matching). Batch aborted, no changes written.", i, path), nil
+				return fmt.Sprintf("Error: edits[%d].old_str not found in %s (tried exact and normalized matching). Batch aborted, no changes written.\n\nNext actions:\n1) Use read_file to see the actual content around the target area.\n2) Copy the exact text from read_file output as old_str.\n3) Do not guess or reconstruct old_str from memory.", i, path), nil
 			}
 			content = content[:startIdx] + edit.NewStr + content[endIdx+1:]
 		}
