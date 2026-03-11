@@ -88,7 +88,7 @@ func TestHandleModelCommand_RebuildsClaudePromptForOpus(t *testing.T) {
 	result := handleModelCommand(agent, []string{"claude-opus-4-6"})
 
 	assert.True(t, result)
-	assert.Contains(t, agent.SystemPrompt, "### Claude-specific")
+	assert.Contains(t, agent.SystemPrompt, "## Workflow Rules")
 }
 
 func TestHandleModelCommand_NoArgs_UsesRuntimeOutput(t *testing.T) {

@@ -130,8 +130,8 @@ func TestSyncWithRuntimeConfig_RebuildsPromptForClaudeOpus(t *testing.T) {
 
 	a.SyncWithRuntimeConfig()
 
-	if !strings.Contains(a.SystemPrompt, "### Claude-specific") {
-		t.Fatal("expected SyncWithRuntimeConfig to rebuild the Claude system prompt")
+	if !strings.Contains(a.SystemPrompt, "## Workflow Rules") {
+		t.Fatal("expected SyncWithRuntimeConfig to rebuild the system prompt")
 	}
 }
 

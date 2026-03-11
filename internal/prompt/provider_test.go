@@ -55,27 +55,14 @@ func TestGetProviderPrefix_DeepSeekCaseInsensitive(t *testing.T) {
 
 func TestGetProviderPrefix_Claude(t *testing.T) {
 	prefix := GetProviderPrefix("claude")
-	if prefix == "" {
-		t.Fatal("expected non-empty prefix for claude")
-	}
-	checks := []string{
-		"Use search_code for file search",
-		"Use read_file for file contents",
-		"parallel tool calls",
-	}
-	for _, check := range checks {
-		if !strings.Contains(prefix, check) {
-			t.Errorf("claude prefix missing %q", check)
-		}
+	if prefix != "" {
+		t.Errorf("expected empty prefix for claude (system.go covers all rules), got: %q", prefix)
 	}
 }
 
 func TestGetProviderPrefix_Anthropic(t *testing.T) {
 	anthropic := GetProviderPrefix("anthropic")
 	claude := GetProviderPrefix("claude")
-	if anthropic == "" {
-		t.Fatal("expected non-empty prefix for anthropic")
-	}
 	if anthropic != claude {
 		t.Error("anthropic and claude should return identical prefixes")
 	}
@@ -84,9 +71,6 @@ func TestGetProviderPrefix_Anthropic(t *testing.T) {
 func TestGetProviderPrefix_Bedrock(t *testing.T) {
 	bedrock := GetProviderPrefix("bedrock")
 	claude := GetProviderPrefix("claude")
-	if bedrock == "" {
-		t.Fatal("expected non-empty prefix for bedrock")
-	}
 	if bedrock != claude {
 		t.Error("bedrock and claude should return identical prefixes")
 	}
@@ -104,16 +88,8 @@ func TestGetProviderPrefix_OpenAI(t *testing.T) {
 	if prefix == "" {
 		t.Fatal("expected non-empty prefix for openai")
 	}
-	checks := []string{
-		"proceed without asking for confirmation",
-		"root cause",
-		"targeted str_replace edits",
-		"orphaned dependencies",
-	}
-	for _, check := range checks {
-		if !strings.Contains(prefix, check) {
-			t.Errorf("openai prefix missing %q", check)
-		}
+	if !strings.Contains(prefix, "byte corruption") {
+		t.Error("openai prefix missing byte corruption rule")
 	}
 }
 
@@ -143,22 +119,14 @@ func TestProviderSpecificRules(t *testing.T) {
 		t.Error("gemini should not contain deepseek-specific tool call rule")
 	}
 
-	openaiOnlyChecks := []string{
-		"proceed without asking for confirmation",
-		"root cause",
-		"targeted str_replace edits",
-		"orphaned dependencies",
+	if !strings.Contains(openai, "byte corruption") {
+		t.Error("openai should contain byte corruption rule")
 	}
-	for _, check := range openaiOnlyChecks {
-		if !strings.Contains(openai, check) {
-			t.Errorf("openai should contain rule: %s", check)
-		}
-		if strings.Contains(gemini, check) {
-			t.Errorf("gemini should not contain openai-specific rule: %s", check)
-		}
-		if strings.Contains(deepseek, check) {
-			t.Errorf("deepseek should not contain openai-specific rule: %s", check)
-		}
+	if strings.Contains(gemini, "byte corruption") {
+		t.Error("gemini should not contain openai-specific byte corruption rule")
+	}
+	if strings.Contains(deepseek, "byte corruption") {
+		t.Error("deepseek should not contain openai-specific byte corruption rule")
 	}
 }
 
