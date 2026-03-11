@@ -55,8 +55,14 @@ func TestGetProviderPrefix_DeepSeekCaseInsensitive(t *testing.T) {
 
 func TestGetProviderPrefix_Claude(t *testing.T) {
 	prefix := GetProviderPrefix("claude")
-	if prefix != "" {
-		t.Errorf("expected empty prefix for claude (system.go covers all rules), got: %q", prefix)
+	if prefix == "" {
+		t.Fatal("expected non-empty prefix for claude")
+	}
+	if !strings.Contains(prefix, "dedicated tools") {
+		t.Error("claude prefix missing dedicated tools rule")
+	}
+	if !strings.Contains(prefix, "do not prefix commands") {
+		t.Error("claude prefix missing cd prefix rule")
 	}
 }
 

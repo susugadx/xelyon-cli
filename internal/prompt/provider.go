@@ -27,7 +27,10 @@ var providerPrefixes = map[string]string{
 	"openai": "## Provider Notes\n" +
 		"### OpenAI-specific\n" +
 		"- For str_replace with mixed Japanese, JSON, or backticks, split the change into smaller edits to avoid byte corruption\n",
-	"claude":     "",
+	"claude": "## Provider Notes\n" +
+		"### Claude-specific\n" +
+		"- Always use dedicated tools (read_file, search_code, list_dir) instead of bash equivalents; tools provide caching, range tracking, and structured output\n" +
+		"- You are already in the project root directory; do not prefix commands with `cd /path &&`\n",
 	"openrouter": "",
 	"ollama":     "",
 }
