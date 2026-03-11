@@ -697,12 +697,16 @@ thinking:
 
 **レベル別パラメータ:**
 
-| Level | Claude (budget_tokens) | OpenAI (effort) | Gemini (budget) |
-|-------|------------------------|-----------------|-----------------|
-| low | 5,000 | low | 5,000 |
-| medium | 10,000 | medium | 10,000 |
-| high | 20,000 | high | 20,000 |
-| xhigh | 40,000 | high | 40,000 |
+| Level | Claude 4.6 (effort) | Claude 4.5以前 (budget_tokens) | OpenAI (effort) | Gemini (budget) |
+|-------|---------------------|-------------------------------|-----------------|-----------------|
+| low | low | 5,000 | low | 5,000 |
+| medium | medium | 10,000 | medium | 10,000 |
+| high | high | 20,000 | high | 20,000 |
+| xhigh | max (Opus) / high | 40,000 | xhigh | 40,000 |
+
+> Claude Opus 4.6 / Sonnet 4.6 では `type: "adaptive"` + `output_config.effort` を使用。
+> それ以前のモデルでは従来の `type: "enabled"` + `budget_tokens` を使用。
+> `xhigh` の `max` は Opus 4.6 のみ対応（Sonnet 4.6 では `high` にフォールバック）。
 
 **コマンドで切り替え:**
 

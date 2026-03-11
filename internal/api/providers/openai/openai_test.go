@@ -507,7 +507,7 @@ func TestLevelToReasoningEffort(t *testing.T) {
 		{"low", "low"},
 		{"medium", "medium"},
 		{"high", "high"},
-		{"xhigh", "high"},     // xhigh maps to high
+		{"xhigh", "xhigh"},
 		{"unknown", "medium"}, // default
 		{"", "medium"},        // default
 		{"invalid", "medium"}, // default

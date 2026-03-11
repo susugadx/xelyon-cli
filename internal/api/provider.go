@@ -231,10 +231,13 @@ func GetMaxOutputTokens(ctx context.Context, providerName, model string) int {
 	}
 
 	// 4. Extended Thinking 有効時は BudgetTokens を考慮
-	// Claude Opus 4.6 などでは max_tokens = budget_tokens + output_tokens とする必要がある
+	// adaptive thinking モデル（Claude 4.6）は API が自動管理するため加算不要
+	// それ以外は max_tokens = budget_tokens + output_tokens
 	if IsThinkingEnabled(ctx) && (pName == "claude" || pName == "anthropic" || pName == "bedrock") {
-		budget := LevelToBudgetTokens(cfg.Thinking.Level)
-		return budget + maxTokens
+		if !isAdaptiveThinkingModel(model) {
+			budget := LevelToBudgetTokens(cfg.Thinking.Level)
+			return budget + maxTokens
+		}
 	}
 
 	return maxTokens
@@ -332,6 +335,16 @@ func HandleRateLimit(resp *http.Response) error {
 	}
 
 	return fmt.Errorf("rate limit exceeded (429). Please retry later")
+}
+
+// isAdaptiveThinkingModel は adaptive thinking を使用するモデルか判定する。
+// claude パッケージと循環依存を避けるため api パッケージにも定義。
+func isAdaptiveThinkingModel(model string) bool {
+	m := strings.ToLower(model)
+	return strings.Contains(m, "claude-opus-4-6") ||
+		strings.Contains(m, "claude-sonnet-4-6") ||
+		strings.Contains(m, "claude-opus-4.6") ||
+		strings.Contains(m, "claude-sonnet-4.6")
 }
 
 // LevelToBudgetTokens は Thinking Level を budget_tokens に変換（Claude/Gemini共通）

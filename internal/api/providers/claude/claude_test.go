@@ -363,6 +363,53 @@ func TestLevelToBudgetTokens(t *testing.T) {
 	}
 }
 
+func TestIsAdaptiveThinkingModel(t *testing.T) {
+	tests := []struct {
+		model string
+		want  bool
+	}{
+		{"claude-opus-4-6", true},
+		{"claude-sonnet-4-6", true},
+		{"claude-opus-4.6", true},
+		{"claude-sonnet-4.6", true},
+		{"claude-opus-4-5-20251101", false},
+		{"claude-sonnet-4-5-20250929", false},
+		{"claude-sonnet-4-20250514", false},
+		{"claude-opus-4-20250918", false},
+		{"claude-sonnet-3-7-20250219", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			if got := IsAdaptiveThinkingModel(tt.model); got != tt.want {
+				t.Errorf("IsAdaptiveThinkingModel(%q) = %v, want %v", tt.model, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestLevelToEffort(t *testing.T) {
+	tests := []struct {
+		level string
+		model string
+		want  string
+	}{
+		{"low", "claude-opus-4-6", "low"},
+		{"medium", "claude-opus-4-6", "medium"},
+		{"high", "claude-opus-4-6", "high"},
+		{"xhigh", "claude-opus-4-6", "max"},
+		{"xhigh", "claude-sonnet-4-6", "high"},
+		{"", "claude-opus-4-6", "medium"},
+		{"invalid", "claude-opus-4-6", "medium"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.level+"_"+tt.model, func(t *testing.T) {
+			if got := levelToEffort(tt.level, tt.model); got != tt.want {
+				t.Errorf("levelToEffort(%q, %q) = %q, want %q", tt.level, tt.model, got, tt.want)
+			}
+		})
+	}
+}
+
 // Tool Use Tests
 
 func TestClaudeProvider_ChatWithTools_ToolUse(t *testing.T) {

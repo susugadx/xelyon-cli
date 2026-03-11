@@ -95,9 +95,16 @@ func (p *Provider) SetRuntimeConfig(cfg *config.Config) {
 }
 
 // ThinkingConfig は Extended Thinking の設定
+// Opus 4.6 / Sonnet 4.6: type="adaptive"（budget_tokens 不要）
+// それ以前: type="enabled" + budget_tokens
 type ThinkingConfig struct {
-	Type         string `json:"type"`          // "enabled"
-	BudgetTokens int    `json:"budget_tokens"` // min 1024
+	Type         string `json:"type"`                    // "enabled" or "adaptive"
+	BudgetTokens int    `json:"budget_tokens,omitempty"` // type="enabled" 時のみ（min 1024）
+}
+
+// OutputConfig は出力制御の設定（Claude 4.6 モデル用）
+type OutputConfig struct {
+	Effort string `json:"effort"` // low / medium / high / max
 }
 
 type Request struct {
@@ -108,6 +115,7 @@ type Request struct {
 	MaxTokens         int                `json:"max_tokens"`
 	Stream            bool               `json:"stream"`
 	Thinking          *ThinkingConfig    `json:"thinking,omitempty"`
+	OutputConfig      *OutputConfig      `json:"output_config,omitempty"`
 	Tools             []ClaudeTool       `json:"tools,omitempty"`              // Tool Use用
 	ContextManagement *ContextManagement `json:"context_management,omitempty"` // NEW
 }
@@ -115,6 +123,37 @@ type Request struct {
 // LevelToBudgetTokens は api.LevelToBudgetTokens のエイリアス（後方互換）
 func LevelToBudgetTokens(level string) int {
 	return api.LevelToBudgetTokens(level)
+}
+
+// IsAdaptiveThinkingModel は adaptive thinking を使用すべきモデルか判定する。
+// Claude Opus 4.6 と Sonnet 4.6 が対象。
+func IsAdaptiveThinkingModel(model string) bool {
+	m := strings.ToLower(model)
+	return strings.Contains(m, "claude-opus-4-6") ||
+		strings.Contains(m, "claude-sonnet-4-6") ||
+		strings.Contains(m, "claude-opus-4.6") ||
+		strings.Contains(m, "claude-sonnet-4.6")
+}
+
+// levelToEffort は thinking level を Claude effort パラメータに変換する。
+// xhigh は Opus 4.6 限定の max にマッピングする。
+func levelToEffort(level, model string) string {
+	switch level {
+	case "low":
+		return "low"
+	case "medium":
+		return "medium"
+	case "high":
+		return "high"
+	case "xhigh":
+		// max は Opus 4.6 のみ対応
+		if strings.Contains(strings.ToLower(model), "opus") {
+			return "max"
+		}
+		return "high"
+	default:
+		return "medium"
+	}
 }
 
 // Delta はストリームの差分
@@ -196,6 +235,7 @@ type MultimodalRequest struct {
 	MaxTokens         int                `json:"max_tokens"`
 	Stream            bool               `json:"stream"`
 	Thinking          *ThinkingConfig    `json:"thinking,omitempty"`
+	OutputConfig      *OutputConfig      `json:"output_config,omitempty"`
 	Tools             []ClaudeTool       `json:"tools,omitempty"`              // Tool Use用
 	ContextManagement *ContextManagement `json:"context_management,omitempty"` // NEW
 }
@@ -358,9 +398,18 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 
 	// Extended Thinking 適用
 	if api.IsThinkingEnabled(ctx) {
-		reqBody.Thinking = &ThinkingConfig{
-			Type:         "enabled",
-			BudgetTokens: LevelToBudgetTokens(cfg.Thinking.Level),
+		if IsAdaptiveThinkingModel(model) {
+			reqBody.Thinking = &ThinkingConfig{
+				Type: "adaptive",
+			}
+			reqBody.OutputConfig = &OutputConfig{
+				Effort: levelToEffort(cfg.Thinking.Level, model),
+			}
+		} else {
+			reqBody.Thinking = &ThinkingConfig{
+				Type:         "enabled",
+				BudgetTokens: LevelToBudgetTokens(cfg.Thinking.Level),
+			}
 		}
 	}
 
@@ -635,9 +684,18 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 
 	// Extended Thinking 適用
 	if api.IsThinkingEnabled(ctx) {
-		reqBody.Thinking = &ThinkingConfig{
-			Type:         "enabled",
-			BudgetTokens: LevelToBudgetTokens(cfg.Thinking.Level),
+		if IsAdaptiveThinkingModel(model) {
+			reqBody.Thinking = &ThinkingConfig{
+				Type: "adaptive",
+			}
+			reqBody.OutputConfig = &OutputConfig{
+				Effort: levelToEffort(cfg.Thinking.Level, model),
+			}
+		} else {
+			reqBody.Thinking = &ThinkingConfig{
+				Type:         "enabled",
+				BudgetTokens: LevelToBudgetTokens(cfg.Thinking.Level),
+			}
 		}
 	}
 

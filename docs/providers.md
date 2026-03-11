@@ -144,6 +144,11 @@ xelyon --provider claude --model claude-opus-4
 - 倫理的な回答
 - 画像入力対応
 
+**Extended Thinking:**
+- Opus 4.6 / Sonnet 4.6: `type: "adaptive"` + `output_config.effort`（low / medium / high / max）
+- それ以前のモデル: `type: "enabled"` + `budget_tokens`
+- `xhigh` レベルは Opus 4.6 で `max`、Sonnet 4.6 では `high` にフォールバック
+
 ### 5. Groq
 
 ```bash

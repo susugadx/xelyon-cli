@@ -53,8 +53,10 @@ func LevelToReasoningEffort(level string) string {
 		return "low"
 	case "medium":
 		return "medium"
-	case "high", "xhigh":
+	case "high":
 		return "high"
+	case "xhigh":
+		return "xhigh"
 	default:
 		return "medium"
 	}
