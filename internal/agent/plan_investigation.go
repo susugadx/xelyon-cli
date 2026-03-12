@@ -26,7 +26,7 @@ func (a *Agent) runInvestigationPhase(ctx context.Context) (*plan.Plan, error) {
 	sameCallCount := 0
 
 	for i := 0; i < maxIterations; i++ {
-		compactedHistory, metrics := CompactOldToolResults(a.History, DefaultKeepTurns, DefaultMaxLines, DefaultHeadLines, DefaultTailLines)
+		compactedHistory, metrics := CompactOldToolResults(a.History, DefaultMaxLines, DefaultHeadLines, DefaultTailLines)
 		a.addCompactionMetrics(metrics)
 		response, err := a.CurrentProvider.ChatWithTools(
 			a.requestContext(ctx),

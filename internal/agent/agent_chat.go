@@ -223,13 +223,13 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 		requestCtx := a.requestContext(ctx)
 		if i == 0 && image != nil {
 			inputWithPrompt := input + promptnormal.NormalModePrompt
-			compactedHistory, metrics := CompactOldToolResults(a.History[:len(a.History)-1], DefaultKeepTurns, DefaultMaxLines, DefaultHeadLines, DefaultTailLines)
+			compactedHistory, metrics := CompactOldToolResults(a.History[:len(a.History)-1], DefaultMaxLines, DefaultHeadLines, DefaultTailLines)
 			a.addCompactionMetrics(metrics)
 			response, err = a.CurrentProvider.ChatWithImage(
 				requestCtx, effectivePrompt, compactedHistory, inputWithPrompt, image, a.CurrentModel,
 			)
 		} else {
-			compactedHistory, metrics := CompactOldToolResults(a.History, DefaultKeepTurns, DefaultMaxLines, DefaultHeadLines, DefaultTailLines)
+			compactedHistory, metrics := CompactOldToolResults(a.History, DefaultMaxLines, DefaultHeadLines, DefaultTailLines)
 			a.addCompactionMetrics(metrics)
 			response, err = a.CurrentProvider.ChatWithTools(
 				requestCtx,

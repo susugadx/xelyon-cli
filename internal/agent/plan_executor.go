@@ -101,7 +101,7 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 	var sameCallCount int
 
 	for j := 0; j < maxStepIterations; j++ {
-		compactedHistory, metrics := CompactOldToolResults(a.History, DefaultKeepTurns, DefaultMaxLines, DefaultHeadLines, DefaultTailLines)
+		compactedHistory, metrics := CompactOldToolResults(a.History, DefaultMaxLines, DefaultHeadLines, DefaultTailLines)
 		a.addCompactionMetrics(metrics)
 		response, err := a.CurrentProvider.ChatWithTools(
 			a.requestContext(ctx),
