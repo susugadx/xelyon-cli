@@ -1,12 +1,15 @@
 package agent
 
 import (
+	"bytes"
+	"context"
 	"errors"
 	"strings"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // TestAgent_handleTokenLimitErrorWithRetry_Basic は基本的なテストケース
@@ -370,5 +373,186 @@ func TestDetectMilestonePattern_NoToolResults(t *testing.T) {
 
 	if detectMilestonePattern(history) {
 		t.Error("no tool results should not trigger milestone")
+	}
+}
+
+type compressionTestProvider struct {
+	name                 string
+	summary              string
+	chatErr              error
+	chatCalls            int
+	capturedChatModel    string
+	capturedChatHistory  []api.Message
+	cachedResponseID     bool
+	responseID           string
+	supportsCompact      bool
+	compactErr           error
+	compactCalls         int
+	capturedCompactModel string
+	compactOutput        []api.InputItem
+}
+
+func (m *compressionTestProvider) Name() string {
+	if m.name == "" {
+		return "test"
+	}
+	return m.name
+}
+
+func (m *compressionTestProvider) SupportsImages() bool {
+	return false
+}
+
+func (m *compressionTestProvider) IsFunctionCallingEnabled() bool {
+	return false
+}
+
+func (m *compressionTestProvider) ChatWithTools(_ context.Context, _ string, history []api.Message, model string) (string, error) {
+	m.chatCalls++
+	m.capturedChatModel = model
+	m.capturedChatHistory = append([]api.Message(nil), history...)
+	if m.chatErr != nil {
+		return "", m.chatErr
+	}
+	if m.summary != "" {
+		return m.summary, nil
+	}
+	return "summary", nil
+}
+
+func (m *compressionTestProvider) ChatWithImage(_ context.Context, _ string, _ []api.Message, _ string, _ *api.ImageData, _ string) (string, error) {
+	return "", nil
+}
+
+func (m *compressionTestProvider) HasCachedResponseID() bool {
+	return m.cachedResponseID
+}
+
+func (m *compressionTestProvider) SetResponseID(id string) {
+	m.responseID = id
+	m.cachedResponseID = id != ""
+}
+
+func (m *compressionTestProvider) GetResponseID() string {
+	return m.responseID
+}
+
+func (m *compressionTestProvider) SupportsCompact() bool {
+	return m.supportsCompact
+}
+
+func (m *compressionTestProvider) CompactHistory(_ context.Context, _ []api.InputItem, model, _ string) (*api.CompactResponse, error) {
+	m.compactCalls++
+	m.capturedCompactModel = model
+	if m.compactErr != nil {
+		return nil, m.compactErr
+	}
+	output := m.compactOutput
+	if len(output) == 0 {
+		output = []api.InputItem{{Type: "compacted", Data: "compressed"}}
+	}
+	return &api.CompactResponse{Output: output, Model: model}, nil
+}
+
+func newCompressionTestAgent(t *testing.T, provider *compressionTestProvider, model string, cfg *config.Config) (*Agent, *bytes.Buffer) {
+	t.Helper()
+
+	var out bytes.Buffer
+	runtime := NewAgentRuntimeWithConfig(cfg)
+	runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, &out)
+
+	agent := NewAgentWithRuntime(model, provider, false, runtime)
+	t.Cleanup(agent.Cleanup)
+	return agent, &out
+}
+
+func oversizedCompressionHistory() []api.Message {
+	return []api.Message{
+		{Role: "user", Content: strings.Repeat("x", 260000)},
+		{Role: "assistant", Content: "latest message"},
+	}
+}
+
+func TestAbsoluteTokenThreshold_TriggersBeforePercentage(t *testing.T) {
+	provider := &compressionTestProvider{name: "openai", summary: "compressed summary"}
+	cfg := config.DefaultConfig()
+	cfg.Compression.TokenThreshold = 100000
+	cfg.Compression.ThresholdPercent = 99
+	cfg.Compression.KeepRecent = 1
+	cfg.Compression.PreferCompactAPI = false
+
+	agent, out := newCompressionTestAgent(t, provider, "gpt-5.4", cfg)
+	agent.History = oversizedCompressionHistory()
+
+	beforePercentage := agent.GetTokenUsagePercentage()
+	if beforePercentage >= 99 {
+		t.Fatalf("GetTokenUsagePercentage() = %f, want below percentage threshold", beforePercentage)
+	}
+
+	if !agent.maybeAutoCompress() {
+		t.Fatal("maybeAutoCompress() = false, want true when absolute threshold is exceeded")
+	}
+	if provider.chatCalls != 1 {
+		t.Fatalf("ChatWithTools call count = %d, want 1", provider.chatCalls)
+	}
+	if !strings.Contains(out.String(), "absolute threshold") {
+		t.Fatalf("output %q does not mention absolute threshold", out.String())
+	}
+}
+
+func TestAbsoluteTokenThreshold_IgnoresCacheSkip(t *testing.T) {
+	provider := &compressionTestProvider{
+		name:             "openai",
+		summary:          "compressed summary",
+		cachedResponseID: true,
+		responseID:       "resp_cached",
+	}
+	cfg := config.DefaultConfig()
+	cfg.Compression.TokenThreshold = 100000
+	cfg.Compression.ThresholdPercent = 99
+	cfg.Compression.KeepRecent = 1
+	cfg.Compression.PreferCompactAPI = false
+
+	agent, _ := newCompressionTestAgent(t, provider, "gpt-5.4", cfg)
+	agent.History = oversizedCompressionHistory()
+
+	if !agent.maybeAutoCompress() {
+		t.Fatal("maybeAutoCompress() = false, want true even when response cache is active")
+	}
+	if provider.chatCalls != 1 {
+		t.Fatalf("ChatWithTools call count = %d, want 1", provider.chatCalls)
+	}
+}
+
+func TestDefaultCompressionModel_OpenAI(t *testing.T) {
+	if got := defaultCompressionModel("openai"); got != "gpt-5-mini" {
+		t.Fatalf("defaultCompressionModel(openai) = %q, want %q", got, "gpt-5-mini")
+	}
+}
+
+func TestDefaultCompressionModel_Gemini(t *testing.T) {
+	if got := defaultCompressionModel("gemini"); got != "gemini-3.1-flash-lite-preview" {
+		t.Fatalf("defaultCompressionModel(gemini) = %q, want %q", got, "gemini-3.1-flash-lite-preview")
+	}
+}
+
+func TestDefaultCompressionModel_Claude(t *testing.T) {
+	if got := defaultCompressionModel("claude"); got != "claude-haiku-4-5" {
+		t.Fatalf("defaultCompressionModel(claude) = %q, want %q", got, "claude-haiku-4-5")
+	}
+}
+
+func TestCompressWithModel_Fallback(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Compression.Model = ""
+
+	agent := &Agent{
+		CurrentModel: "llama-3.3-70b",
+		ProviderName: "groq",
+		Runtime:      NewAgentRuntimeWithConfig(cfg),
+	}
+
+	if got := agent.getCompressionModel(); got != "llama-3.3-70b" {
+		t.Fatalf("getCompressionModel() = %q, want current model", got)
 	}
 }

@@ -387,6 +387,41 @@ func TestCompressHistory_PrePrunesBeforeSummary(t *testing.T) {
 	}
 }
 
+func TestCompressHistory_UsesCompressionModelDefault(t *testing.T) {
+	provider := &compressionTestProvider{name: "openai", summary: "summary"}
+	cfg := config.DefaultConfig()
+	cfg.Compression.Model = ""
+
+	agent, _ := newCompressionTestAgent(t, provider, "gpt-5.4", cfg)
+	agent.History = []api.Message{
+		{Role: "user", Content: "message 1"},
+		{Role: "assistant", Content: "message 2"},
+	}
+
+	if err := agent.CompressHistory(1); err != nil {
+		t.Fatalf("CompressHistory() error = %v", err)
+	}
+	if provider.capturedChatModel != "gpt-5-mini" {
+		t.Fatalf("CompressHistory() model = %q, want %q", provider.capturedChatModel, "gpt-5-mini")
+	}
+}
+
+func TestCompressWithCompactAPI_UsesCompressionModel(t *testing.T) {
+	provider := &compressionTestProvider{name: "openai", supportsCompact: true}
+	cfg := config.DefaultConfig()
+	cfg.Compression.Model = ""
+
+	agent, _ := newCompressionTestAgent(t, provider, "gpt-5.4", cfg)
+	agent.History = []api.Message{{Role: "user", Content: "hello"}}
+
+	if err := agent.CompressWithCompactAPI(context.Background()); err != nil {
+		t.Fatalf("CompressWithCompactAPI() error = %v", err)
+	}
+	if provider.capturedCompactModel != "gpt-5-mini" {
+		t.Fatalf("CompressWithCompactAPI() model = %q, want %q", provider.capturedCompactModel, "gpt-5-mini")
+	}
+}
+
 func TestConvertToHistoryCompactedItems(t *testing.T) {
 	tests := []struct {
 		name  string

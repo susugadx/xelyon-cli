@@ -46,9 +46,10 @@ func (a *Agent) CompressHistory(keepRecent int) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
+	compressModel := a.getCompressionModel()
 	summary, err := a.CurrentProvider.ChatWithTools(a.requestContext(ctx), "", []api.Message{
 		{Role: "user", Content: summaryPrompt},
-	}, a.CurrentModel)
+	}, compressModel)
 	if err != nil {
 		return fmt.Errorf("サマリー生成に失敗しました: %w", err)
 	}

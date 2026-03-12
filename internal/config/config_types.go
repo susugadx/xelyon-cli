@@ -46,13 +46,15 @@ type GeneralConfig struct {
 
 // CompressionConfig は会話履歴圧縮の設定
 type CompressionConfig struct {
-	AutoCompress      bool `yaml:"auto_compress"`      // 自動圧縮を有効化（デフォルト: true）
-	ThresholdTokens   int  `yaml:"threshold_tokens"`   // 自動圧縮のトークン閾値（0 = 使用率ベース）
-	ThresholdPercent  int  `yaml:"threshold_percent"`  // 自動圧縮の使用率閾値（デフォルト: 80%）
-	KeepRecent        int  `yaml:"keep_recent"`        // 保持する最新メッセージ数
-	PreferCompactAPI  bool `yaml:"prefer_compact_api"` // OpenAI Compact API を優先（デフォルト: true）
-	ClaudeCompaction  bool `yaml:"claude_compaction"`  // Claude Compaction API 有効化
-	CompactionTrigger int  `yaml:"compaction_trigger"` // トリガー閾値（デフォルト 150000）
+	AutoCompress      bool   `yaml:"auto_compress"`                          // 自動圧縮を有効化（デフォルト: true）
+	ThresholdTokens   int    `yaml:"threshold_tokens"`                       // 自動圧縮のトークン閾値（0 = 使用率ベース）
+	ThresholdPercent  int    `yaml:"threshold_percent"`                      // 自動圧縮の使用率閾値（デフォルト: 80%）
+	TokenThreshold    int    `yaml:"token_threshold" json:"token_threshold"` // Context トークン数の絶対閾値（デフォルト: 100000）
+	Model             string `yaml:"model" json:"model"`                     // 圧縮用モデル名（空 = プロバイダー別デフォルト、main = メインモデル）
+	KeepRecent        int    `yaml:"keep_recent"`                            // 保持する最新メッセージ数
+	PreferCompactAPI  bool   `yaml:"prefer_compact_api"`                     // OpenAI Compact API を優先（デフォルト: true）
+	ClaudeCompaction  bool   `yaml:"claude_compaction"`                      // Claude Compaction API 有効化
+	CompactionTrigger int    `yaml:"compaction_trigger"`                     // トリガー閾値（デフォルト 150000）
 }
 
 // LoopDetectionConfig はループ検知の設定

@@ -107,6 +107,10 @@ compression:
     threshold_tokens: 0
     # トークン使用率の閾値（%）
     threshold_percent: 80
+    # 絶対トークン閾値（デフォルト100000、キャッシュ有無に関係なく発動）
+    token_threshold: 100000
+    # 圧縮用モデル（空 = プロバイダー別デフォルト、main = メインモデル）
+    model: ""
     # 圧縮時に保持する直近メッセージ数
     keep_recent: 20
     # プロバイダーのCompact APIを優先使用
@@ -364,9 +368,21 @@ Context Window（コンテキストウィンドウ）を管理し、トークン
 - **説明**: 自動圧縮を実行するトークン閾値（絶対値）
 - **補足**: `0` = 使用率ベース（`threshold_percent`を使用）
 
+#### `token_threshold`
+- **型**: integer
+- **デフォルト**: `100000`
+- **説明**: Context トークン数の絶対閾値
+- **補足**: キャッシュ有無に関係なく、この閾値を超えたら自動圧縮を実行
+
+#### `model`
+- **型**: string
+- **デフォルト**: `""`
+- **説明**: 圧縮時に使用するモデル名
+- **補足**: 空文字はプロバイダー別デフォルト、`main` は現在のメインモデルを使用
+
 #### `keep_recent`
 - **型**: integer
-- **デフォルト**: `10`
+- **デフォルト**: `20`
 - **説明**: 圧縮時に保持する最新メッセージ数
 
 #### `prefer_compact_api`
@@ -378,13 +394,13 @@ Context Window（コンテキストウィンドウ）を管理し、トークン
 - **フォールバック**: Compact API 失敗時は LLM サマリーに自動フォールバック
 
 **自動圧縮の動作:**
-1. API呼び出し成功後にトークン使用率をチェック
-2. `threshold_percent`（デフォルト80%）を超えた場合に圧縮実行
+1. API呼び出し成功後に `token_threshold`（デフォルト100K）を先にチェック
+2. 100K 未満の場合は `threshold_percent`（デフォルト80%）やプロバイダー別閾値を評価
 3. 圧縮時に通知を表示（無言で実行しない）
 4. 無効化方法も案内
 
 ```
-🗜️ Auto-compressing history (82% threshold reached)...
+🗜️ Auto-compressing: context 104K exceeds 100K absolute threshold...
    Before: 162,000 tokens → After: 45,000 tokens
    💡 Disable with: xelyon config set compression.auto_compress false
 ```
@@ -1027,13 +1043,15 @@ xelyon  # 次回起動時にデフォルト設定が再作成される
 
 ## 使用例
 
-### 1. 自動圧縮の閾値を変更
+### 1. 自動圧縮の閾値と圧縮モデルを調整
 
 ```yaml
 compression:
   auto_compress: true       # デフォルトON
-  threshold_percent: 70     # 70%で圧縮（デフォルト: 80%）
-  keep_recent: 15           # 最新15件を保持（デフォルト: 10）
+  token_threshold: 100000   # Context 100K で圧縮
+  threshold_percent: 70     # 70%でも圧縮（保険として残す）
+  model: ""                # プロバイダー別デフォルト圧縮モデル
+  keep_recent: 15           # 最新15件を保持
 ```
 
 ### 1b. 自動圧縮を無効化

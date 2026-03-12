@@ -102,7 +102,8 @@ Language Server Protocol (LSP) を活用してIDE並みのコード理解を実�
 ### 📊 Context Window 管理
 長時間の会話でもトークン上限を気にせず作業。
 - **`/tokens`**: 現在のトークン使用量と上限を確認
-- **自動圧縮**: 80%到達で自動的に履歴を圧縮（デフォルトON）
+- **自動圧縮**: Context 100K または 80% 到達で自動的に履歴を圧縮（デフォルトON）
+- **圧縮専用モデル**: OpenAI は GPT-5 Mini、Gemini は Flash-Lite、Claude/Bedrock は Haiku で低コスト圧縮
 - **手動圧縮**: `/compress [N]` で履歴を圧縮（最新N件を保持）
 - **OpenAI Compact API**: `/compress --compact` でOpenAI独自の圧縮（ユーザーメッセージ保持）
 - **80%/90%警告**: 上限接近時に自動で警告表示
@@ -117,7 +118,7 @@ API実測値に基づくトークン使用量とコストをリアルタイム�
 - **起動時コンテキスト表示**: ツリー形式で初期コンテキストの内訳を表示
 - **リクエスト完了時**: `✓ In: 1,234 + Out: 567 = 1,801 tok (~$0.002)` で使用量を表示
 - **Ollama対応**: ローカル実行時はコスト表示を非表示
-- **圧縮警告**: `compression.threshold_percent`（デフォルト80%）超過時は黄色で警告表示
+- **圧縮閾値**: `compression.token_threshold`（デフォルト100K）または `compression.threshold_percent`（デフォルト80%）超過時に自動圧縮/警告
 
 ### 📝 プロジェクト設定（xelyon.yaml）
 プロジェクト固有のルール・コンテキストを構造化 YAML で管理。`/init` でテンプレート作成。

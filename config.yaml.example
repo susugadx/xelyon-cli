@@ -57,6 +57,10 @@ compression:
     threshold_tokens: 0
     # トークン使用率の閾値（%）
     threshold_percent: 80
+    # 絶対トークン閾値（デフォルト100000、キャッシュ有無に関係なく発動）
+    token_threshold: 100000
+    # 圧縮用モデル（空 = プロバイダー別デフォルト、main = メインモデル）
+    model: ""
     # 圧縮時に保持する直近メッセージ数
     keep_recent: 20
     # プロバイダーのCompact APIを優先使用

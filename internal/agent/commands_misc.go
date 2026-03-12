@@ -500,11 +500,16 @@ func handleTokensCommand(agent *Agent) bool {
 	_, _ = fmt.Fprintln(out)
 	green.Fprintln(out, "⚙️  Auto-compress:")
 	if cfg.Compression.AutoCompress {
-		threshold := cfg.Compression.ThresholdPercent
-		if threshold == 0 {
-			threshold = 80
+		thresholdPercent := cfg.Compression.ThresholdPercent
+		if thresholdPercent == 0 {
+			thresholdPercent = 80
 		}
-		_, _ = fmt.Fprintf(out, "    ON (threshold: %d%%)\n", threshold)
+		tokenThreshold := cfg.Compression.TokenThreshold
+		if tokenThreshold <= 0 {
+			tokenThreshold = 100000
+		}
+		_, _ = fmt.Fprintf(out, "    ON (absolute: %s tokens, percent: %d%%, model: %s)\n",
+			formatNumber(tokenThreshold), thresholdPercent, agent.getCompressionModel())
 	} else {
 		_, _ = fmt.Fprintln(out, "    OFF")
 	}

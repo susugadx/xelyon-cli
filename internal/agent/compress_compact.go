@@ -31,7 +31,8 @@ func (a *Agent) CompressWithCompactAPI(ctx context.Context) error {
 	input := a.buildFullInputItems()
 
 	// Compact API 呼び出し
-	result, err := compactProvider.CompactHistory(a.requestContext(ctx), input, a.CurrentModel, a.SystemPrompt)
+	compactModel := a.getCompressionModel()
+	result, err := compactProvider.CompactHistory(a.requestContext(ctx), input, compactModel, a.SystemPrompt)
 	if err != nil {
 		return fmt.Errorf("compact API failed: %w", err)
 	}

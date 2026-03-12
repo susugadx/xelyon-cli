@@ -18,6 +18,95 @@ type ResponseIDCapable interface {
 	GetResponseID() string
 }
 
+// defaultCompressionModel はプロバイダー別のデフォルト圧縮モデルを返す。
+// compression.model が空の場合に使用する。
+func defaultCompressionModel(providerName string) string {
+	switch strings.ToLower(providerName) {
+	case "openai":
+		return "gpt-5-mini"
+	case "gemini":
+		return "gemini-3.1-flash-lite-preview"
+	case "claude", "anthropic", "bedrock":
+		return "claude-haiku-4-5"
+	case "deepseek":
+		return ""
+	default:
+		return ""
+	}
+}
+
+// getCompressionModel は圧縮に使用するモデルを返す。
+// 優先順位: config.compression.model > プロバイダー別デフォルト > 現在モデル。
+func (a *Agent) getCompressionModel() string {
+	cfg := a.cfg()
+	if strings.EqualFold(cfg.Compression.Model, "main") {
+		return a.CurrentModel
+	}
+	if cfg.Compression.Model != "" {
+		return cfg.Compression.Model
+	}
+	if model := defaultCompressionModel(a.ProviderName); model != "" {
+		return model
+	}
+	return a.CurrentModel
+}
+
+func (a *Agent) runAutoCompression(costAwareCompress bool) bool {
+	cfg := a.cfg()
+
+	// Compact API を優先的に使用するか確認
+	if cfg.Compression.PreferCompactAPI {
+		if compactProvider, ok := a.CurrentProvider.(api.CompactCapable); ok {
+			if compactProvider.SupportsCompact() {
+				ctx := context.Background()
+				if err := a.CompressWithCompactAPI(ctx); err == nil {
+					metrics := OptimizationMetrics{CompactionCount: 1}
+					if costAwareCompress {
+						metrics.CostAwareCompressions = 1
+					}
+					a.addOptimizationMetrics(metrics)
+					_, _ = fmt.Fprintln(a.output(), "   💡 Disable with: xelyon config set compression.auto_compress false")
+					_, _ = fmt.Fprintln(a.output())
+					return true
+				}
+				// Compact API 失敗時はLLMサマリーにフォールバック
+				yellow.Fprintf(a.output(), "   ⚠️ Compact API failed, falling back to LLM summary...\n")
+			}
+		}
+	}
+
+	keepRecent := cfg.Compression.KeepRecent
+	if keepRecent == 0 {
+		keepRecent = 10
+	}
+
+	// 履歴が短すぎる場合はスキップ
+	if len(a.History) <= keepRecent {
+		_, _ = fmt.Fprintln(a.output(), "   Skipped: history too short")
+		return false
+	}
+
+	beforeTokens := a.EstimateTokens()
+	if err := a.CompressHistory(keepRecent); err != nil {
+		yellow.Fprintf(a.output(), "   ⚠️ Auto-compress failed: %v\n", err)
+		return false
+	}
+	afterTokens := a.EstimateTokens()
+
+	// 結果を表示
+	_, _ = fmt.Fprintf(a.output(), "   Before: %s tokens → After: %s tokens\n",
+		formatNumber(beforeTokens), formatNumber(afterTokens))
+	_, _ = fmt.Fprintln(a.output(), "   💡 Disable with: xelyon config set compression.auto_compress false")
+	_, _ = fmt.Fprintln(a.output())
+
+	metrics := OptimizationMetrics{CompactionCount: 1}
+	if costAwareCompress {
+		metrics.CostAwareCompressions = 1
+	}
+	a.addOptimizationMetrics(metrics)
+	return true
+}
+
 // maybeAutoCompress は閾値を超えた場合に自動圧縮を実行
 // 圧縮した場合は true を返す
 func (a *Agent) maybeAutoCompress() bool {
@@ -26,9 +115,22 @@ func (a *Agent) maybeAutoCompress() bool {
 		return false
 	}
 
+	currentTokens := a.EstimateTokens()
+	tokenThreshold := cfg.Compression.TokenThreshold
+	if tokenThreshold <= 0 {
+		tokenThreshold = 100000
+	}
+	if currentTokens >= tokenThreshold {
+		cyan.Fprintf(a.output(),
+			"\n🗜️ Auto-compressing: context %dK exceeds %dK absolute threshold...\n",
+			currentTokens/1000,
+			tokenThreshold/1000,
+		)
+		return a.runAutoCompression(false)
+	}
+
 	// プロバイダ別コスト最適化閾値
 	providerThreshold := GetProviderCompressThreshold(a.ProviderName, a.CurrentModel)
-	currentTokens := a.EstimateTokens()
 	projectedTokens, costAwareCompress := shouldForceCompressForPricingCliff(a.ProviderName, a.CurrentModel, currentTokens, a.Stats)
 	forceCompress := costAwareCompress
 	if !forceCompress && providerThreshold > 0 && currentTokens >= providerThreshold {
@@ -111,57 +213,7 @@ func (a *Agent) maybeAutoCompress() bool {
 		cyan.Fprintf(a.output(), "\n🗜️ Auto-compressing history (%.0f%% threshold reached)...\n", percentage)
 	}
 
-	// Compact API を優先的に使用するか確認
-	if cfg.Compression.PreferCompactAPI {
-		if compactProvider, ok := a.CurrentProvider.(api.CompactCapable); ok {
-			if compactProvider.SupportsCompact() {
-				ctx := context.Background()
-				if err := a.CompressWithCompactAPI(ctx); err == nil {
-					metrics := OptimizationMetrics{CompactionCount: 1}
-					if costAwareCompress {
-						metrics.CostAwareCompressions = 1
-					}
-					a.addOptimizationMetrics(metrics)
-					_, _ = fmt.Fprintln(a.output(), "   💡 Disable with: xelyon config set compression.auto_compress false")
-					_, _ = fmt.Fprintln(a.output())
-					return true
-				}
-				// Compact API 失敗時はLLMサマリーにフォールバック
-				yellow.Fprintf(a.output(), "   ⚠️ Compact API failed, falling back to LLM summary...\n")
-			}
-		}
-	}
-
-	keepRecent := cfg.Compression.KeepRecent
-	if keepRecent == 0 {
-		keepRecent = 10
-	}
-
-	// 履歴が短すぎる場合はスキップ
-	if len(a.History) <= keepRecent {
-		_, _ = fmt.Fprintln(a.output(), "   Skipped: history too short")
-		return false
-	}
-
-	beforeTokens := a.EstimateTokens()
-	if err := a.CompressHistory(keepRecent); err != nil {
-		yellow.Fprintf(a.output(), "   ⚠️ Auto-compress failed: %v\n", err)
-		return false
-	}
-	afterTokens := a.EstimateTokens()
-
-	// 結果を表示
-	_, _ = fmt.Fprintf(a.output(), "   Before: %s tokens → After: %s tokens\n",
-		formatNumber(beforeTokens), formatNumber(afterTokens))
-	_, _ = fmt.Fprintln(a.output(), "   💡 Disable with: xelyon config set compression.auto_compress false")
-	_, _ = fmt.Fprintln(a.output())
-
-	metrics := OptimizationMetrics{CompactionCount: 1}
-	if costAwareCompress {
-		metrics.CostAwareCompressions = 1
-	}
-	a.addOptimizationMetrics(metrics)
-	return true
+	return a.runAutoCompression(costAwareCompress)
 }
 
 // checkTokenWarning はトークン使用率をチェックして警告を表示
