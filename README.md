@@ -102,6 +102,7 @@ Language Server Protocol (LSP) を活用してIDE並みのコード理解を実�
 ### 📊 Context Window 管理
 長時間の会話でもトークン上限を気にせず作業。
 - **`/tokens`**: 現在のトークン使用量と上限を確認
+- **Project Map 自動注入**: 起動時にプロジェクト構造マップを生成し、主要ファイル・関数位置・行数を system prompt に追加
 - **自動圧縮**: Context 100K または 80% 到達で自動的に履歴を圧縮（デフォルトON）
 - **圧縮専用モデル**: OpenAI は GPT-5 Mini、Gemini は Flash-Lite、Claude/Bedrock は Haiku で低コスト圧縮
 - **手動圧縮**: `/compress [N]` で履歴を圧縮（最新N件を保持）
@@ -116,6 +117,7 @@ Language Server Protocol (LSP) を活用してIDE並みのコード理解を実�
 API実測値に基づくトークン使用量とコストをリアルタイム表示。
 - **ステータスバー**: プロンプト直前に `● model │ Mode │ tokens/limit │ ~$cost` を表示
 - **起動時コンテキスト表示**: ツリー形式で初期コンテキストの内訳を表示
+- **ナビゲーション削減**: Project Map により `search_code` / `list_dir` の初期探索回数を減らし、編集に集中
 - **リクエスト完了時**: `✓ In: 1,234 + Out: 567 = 1,801 tok (~$0.002)` で使用量を表示
 - **Ollama対応**: ローカル実行時はコスト表示を非表示
 - **圧縮閾値**: `compression.token_threshold`（デフォルト100K）または `compression.threshold_percent`（デフォルト80%）超過時に自動圧縮/警告
@@ -141,6 +143,7 @@ hooks:                    # config.yaml の hooks を上書き
 - **context**: AI に注入するプロジェクト説明
 - **rules**: 番号付きで system prompt に注入される必須ルール
 - **hooks**: 完了時・ステップ完了時フック（`config.yaml` の hooks より優先）
+- **Project Map**: ファイル一覧や関数目次は起動時に自動生成されるため、`xelyon.yaml` には書かない
 
 ## インストール
 
@@ -164,6 +167,9 @@ export DEEPSEEK_API_KEY="sk-..."  # または他のプロバイダー
 
 ```bash
 xelyon
+
+🗺️  Project map loaded (150 symbols from 42 files)
+📋 Context size: ~9.5k tok
 
 > main.goを読んで、バグがあれば修正して
 ```

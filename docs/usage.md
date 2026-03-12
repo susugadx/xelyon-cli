@@ -119,6 +119,8 @@ xelyon.yaml は AI 用の構造化設定ファイルです。
 - ディレクトリ構造やコードマップの詳細
 - 詳細なドキュメント
 
+> 起動時に Project Map が自動生成されるため、`xelyon.yaml` にファイル一覧や関数目次を書く必要はありません。
+
 ### xelyon.yaml の例
 
 ```yaml
@@ -230,6 +232,19 @@ hooks:
 
 各ターンの最後に現在の状態を表示します。
 
+### 起動時の表示例
+
+```bash
+$ xelyon
+📋 xelyon.yaml loaded
+🗺️  Project map loaded (150 symbols from 42 files)
+📋 Context size: ~9.5k tok
+   ├── Base prompt: ~3.9k
+   ├── Tools (9): ~2.7k
+   ├── Project map (150 symbols, 42 files): ~2.3k
+   └── xelyon.yaml: ~299
+```
+
 - `running`: 実行中
 - `waiting_input`: 入力待ち
 - `waiting_approval`: 承認待ち
@@ -283,4 +298,3 @@ $ xelyon
 ---
 
 ## キャッシュについて
-

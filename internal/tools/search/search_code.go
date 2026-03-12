@@ -469,7 +469,7 @@ func calcMaxCountPerFile(budget int) int {
 // maxCountPerFile はファイルあたりのマッチ上限（ripgrep --max-count に対応）
 func executeSearch(pattern string, opts SearchOptions, maxCountPerFile int) (string, bool, []string, error) {
 	// ripgrep を試行
-	if rgPath, err := exec.LookPath("rg"); err == nil {
+	if common.IsRipgrepAvailable() {
 		args := []string{
 			"--json",
 			"-n",
@@ -500,7 +500,7 @@ func executeSearch(pattern string, opts SearchOptions, maxCountPerFile int) (str
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
-		cmd := exec.CommandContext(ctx, rgPath, args...)
+		cmd := exec.CommandContext(ctx, common.RipgrepPath(), args...)
 		var stdout, stderr bytes.Buffer
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
@@ -513,9 +513,7 @@ func executeSearch(pattern string, opts SearchOptions, maxCountPerFile int) (str
 
 	// grep フォールバック（rg がない環境用）
 	// Note: grep は .gitignore を参照しない。主要ディレクトリは --exclude-dir で除外。rg 推奨。
-	warnings := []string{
-		"Warning: ripgrep (rg) not found; using grep fallback mode.",
-	}
+	var warnings []string
 	args := []string{
 		"-rn",
 		"-I",

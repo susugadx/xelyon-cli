@@ -72,7 +72,9 @@ type Agent struct {
 	isCompactedMode bool            // 圧縮モードフラグ
 
 	// トークン上限エラー処理
-	tokenLimitRetryCount int // トークン上限エラー時のリトライ回数（最大1回）
+	tokenLimitRetryCount  int // トークン上限エラー時のリトライ回数（最大1回）
+	projectMapFileCount   int
+	projectMapSymbolCount int
 
 	// 並列実行用ミューテックス
 	historyMu     sync.Mutex

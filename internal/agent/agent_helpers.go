@@ -3,12 +3,16 @@ package agent
 import (
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
+	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
 	promptplan "github.com/susugadx/xelyon-cli/internal/prompt/plan"
+	"github.com/susugadx/xelyon-cli/internal/repomap"
+	"github.com/susugadx/xelyon-cli/internal/tools/common"
 	"github.com/susugadx/xelyon-cli/internal/version"
 )
 
@@ -172,6 +176,51 @@ func applyProjectConfig(agent *Agent, pc *config.ProjectConfig) {
 	green.Fprintln(agent.output(), "📋 xelyon.yaml loaded")
 }
 
+// injectProjectMap はプロジェクト構造マップをシステムプロンプトに注入する。
+func injectProjectMap(agent *Agent) {
+	if agent == nil {
+		return
+	}
+
+	agent.projectMapFileCount = 0
+	agent.projectMapSymbolCount = 0
+
+	cfg := agent.cfg()
+	if !cfg.ProjectMap.Enabled {
+		return
+	}
+	if !common.IsRipgrepAvailable() {
+		return
+	}
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		return
+	}
+
+	maxTokens := cfg.ProjectMap.MaxTokens
+	if maxTokens <= 0 {
+		maxTokens = 4000
+	}
+
+	pm := repomap.NewProjectMap(cwd, maxTokens, cfg.ProjectMap.AdditionalIgnoreDirs...)
+	if err := pm.Build(); err != nil {
+		yellow.Fprintf(agent.output(), "⚠️ ProjectMap build failed: %v\n", err)
+		return
+	}
+
+	mapStr := pm.Generate()
+	if mapStr == "" {
+		return
+	}
+
+	agent.SystemPrompt += "\n\n" + mapStr
+	agent.projectMapFileCount = pm.GetFileCount()
+	agent.projectMapSymbolCount = pm.GetSymbolCount()
+
+	green.Fprintf(agent.output(), "🗺️  Project map loaded (%d symbols from %d files)\n", agent.projectMapSymbolCount, agent.projectMapFileCount)
+}
+
 // rebuildSystemPromptForCurrentProvider は現在の provider/model に合わせて
 // SystemPrompt をベースから再構築する。
 func (a *Agent) rebuildSystemPromptForCurrentProvider() {
@@ -197,4 +246,20 @@ func (a *Agent) rebuildSystemPromptForCurrentProvider() {
 	}
 
 	a.SystemPrompt = systemPrompt
+	injectProjectMap(a)
+}
+
+func estimateProjectConfigTokens(pc *config.ProjectConfig) int {
+	if pc == nil {
+		return 0
+	}
+
+	total := 0
+	if rulesBlock := prompt.BuildRulesBlockFromList(pc.Rules); rulesBlock != "" {
+		total += token.EstimateTokenCount(rulesBlock)
+	}
+	if pc.Context != "" {
+		total += token.EstimateTokenCount("\n\n## Project Context:\n" + pc.Context)
+	}
+	return total
 }

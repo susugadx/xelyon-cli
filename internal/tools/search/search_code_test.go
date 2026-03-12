@@ -14,6 +14,8 @@ import (
 
 func setupSearchTestMocks(t *testing.T) {
 	t.Helper()
+	common.ResetRipgrepAvailabilityForTest()
+	t.Cleanup(common.ResetRipgrepAvailabilityForTest)
 }
 
 // --- 統合テスト ---
@@ -1070,8 +1072,8 @@ func TestSearchCode_GrepFallback_DoesNotExcludeRootDot(t *testing.T) {
 	if strings.Contains(result, "No matches found") {
 		t.Fatalf("expected grep fallback to find match from root dot, got: %s", result)
 	}
-	if !strings.Contains(result, "Warning: ripgrep (rg) not found; using grep fallback mode.") {
-		t.Fatalf("expected grep fallback warning, got: %s", result)
+	if strings.Contains(result, "Warning: ripgrep (rg) not found; using grep fallback mode.") {
+		t.Fatalf("unexpected per-call grep fallback warning, got: %s", result)
 	}
 	if !strings.Contains(result, "search_target.go") {
 		t.Fatalf("expected file name in result, got: %s", result)

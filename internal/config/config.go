@@ -139,6 +139,11 @@ func DefaultConfig() *Config {
 		ListDir: ListDirConfig{
 			AdditionalIgnoreDirs: []string{},
 		},
+		ProjectMap: ProjectMapConfig{
+			Enabled:              true,
+			MaxTokens:            4000,
+			AdditionalIgnoreDirs: []string{},
+		},
 
 		GitStage: GitStageConfig{
 			BatchConfirm: true,

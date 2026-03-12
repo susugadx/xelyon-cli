@@ -28,6 +28,7 @@ xelyon-cli/
 │   ├── lsp/              # LSP連携
 │   ├── mcp/              # MCP対応
 │   ├── prompt/           # プロンプト管理
+│   ├── repomap/          # 軽量プロジェクト構造マップ
 │   ├── refactor/         # リファクタリング支援
 │   ├── testutil/         # テストユーティリティ
 │   ├── tools/            # ツール実行

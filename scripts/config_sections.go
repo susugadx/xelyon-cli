@@ -209,6 +209,20 @@ var Sections = map[string]SectionInfo{
 			"safety_level": {"strict", "moderate", "permissive"},
 		},
 	},
+	"project_map": {
+		Title: "プロジェクト構造マップ設定",
+		Icon:  "🗺️",
+		Fields: map[string]string{
+			"enabled":                "セッション開始時にプロジェクト構造マップを生成・注入",
+			"max_tokens":             "ProjectMap のトークン上限",
+			"additional_ignore_dirs": "追加除外ディレクトリ（list_dir と共通）",
+		},
+		FieldTypes: map[string]string{
+			"enabled":                "bool",
+			"max_tokens":             "int",
+			"additional_ignore_dirs": "[]string",
+		},
+	},
 
 	"git_stage": {
 		Title: "git_add設定",
@@ -359,6 +373,7 @@ var SectionOrder = []string{
 	"paste",
 	"streaming",
 	"bash",
+	"project_map",
 	"git_stage",
 	"plan_mode",
 	"lsp",
@@ -384,6 +399,7 @@ var CategoryOrder = []string{
 	"paste",
 	"streaming",
 	"bash",
+	"project_map",
 	"git_stage",
 	"plan_mode",
 	"lsp",
@@ -410,6 +426,7 @@ var SectionToCategory = map[string]string{
 	"paste":            "paste",
 	"streaming":        "streaming",
 	"bash":             "bash",
+	"project_map":      "project_map",
 	"git_stage":        "git_stage",
 	"plan_mode":        "plan_mode",
 	"lsp":              "lsp",
@@ -484,6 +501,11 @@ var Categories = map[string]CategoryInfo{
 		DisplayName: "Bash Safety",
 		Icon:        "💻",
 		Sections:    []string{"bash"},
+	},
+	"project_map": {
+		DisplayName: "Project Map",
+		Icon:        "🗺️",
+		Sections:    []string{"project_map"},
 	},
 	"git_stage": {
 		DisplayName: "Git Settings",

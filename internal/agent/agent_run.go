@@ -40,6 +40,7 @@ func RunHeadlessWithConfig(query string, model string, provider api.Provider, cf
 			cfg.Hooks = *resolved
 		}
 	}
+	injectProjectMap(agent)
 
 	// Headless Mode は Normal Mode 相当: planning 系ツールを除外
 	agent.registry().SetExcludedTools(prompt.PlanningToolNames)
@@ -154,6 +155,7 @@ func RunOnceWithConfig(query string, model string, provider api.Provider, cfg *c
 	if pc := loadProjectConfig(); pc != nil {
 		applyProjectConfig(agent, pc)
 	}
+	injectProjectMap(agent)
 
 	// 明示的に1ターンのみ実行（ChatOnce は stdin を読まず、REPL に入らない）
 	return agent.ChatOnce(query)
@@ -201,6 +203,7 @@ func RunOnceWithImageWithConfig(query string, model string, provider api.Provide
 	if pc := loadProjectConfig(); pc != nil {
 		applyProjectConfig(agent, pc)
 	}
+	injectProjectMap(agent)
 
 	_, _ = fmt.Fprintln(agent.output())
 

@@ -88,6 +88,12 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.PlanMode.StepTimeout != 600 {
 		t.Errorf("PlanMode.StepTimeout = %d, want 600", cfg.PlanMode.StepTimeout)
 	}
+	if !cfg.ProjectMap.Enabled {
+		t.Error("ProjectMap.Enabled should default to true")
+	}
+	if cfg.ProjectMap.MaxTokens != 4000 {
+		t.Errorf("ProjectMap.MaxTokens = %d, want 4000", cfg.ProjectMap.MaxTokens)
+	}
 }
 
 func TestLoadConfig_NotExists(t *testing.T) {

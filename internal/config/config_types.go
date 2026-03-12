@@ -19,6 +19,7 @@ type Config struct {
 	Streaming       StreamingConfig                `yaml:"streaming"`
 	Bash            BashConfig                     `yaml:"bash"`
 	ListDir         ListDirConfig                  `yaml:"list_dir"`
+	ProjectMap      ProjectMapConfig               `yaml:"project_map"`
 
 	GitStage  GitStageConfig  `yaml:"git_stage"`
 	PlanMode  PlanModeConfig  `yaml:"plan_mode"`
@@ -116,6 +117,13 @@ type BashConfig struct {
 
 // ListDirConfig は list_dir ツールの設定
 type ListDirConfig struct {
+	AdditionalIgnoreDirs []string `yaml:"additional_ignore_dirs"` // デフォルト除外に追加するディレクトリ名
+}
+
+// ProjectMapConfig はプロジェクト構造マップの設定
+type ProjectMapConfig struct {
+	Enabled              bool     `yaml:"enabled"`                // 起動時に Project Map を生成・注入
+	MaxTokens            int      `yaml:"max_tokens"`             // Project Map のトークン上限
 	AdditionalIgnoreDirs []string `yaml:"additional_ignore_dirs"` // デフォルト除外に追加するディレクトリ名
 }
 

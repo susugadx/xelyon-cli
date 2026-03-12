@@ -14,6 +14,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/audit"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/history"
+	"github.com/susugadx/xelyon-cli/internal/tools/common"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -66,6 +67,8 @@ func RunInteractiveWithConfig(model string, provider api.Provider, cfg *config.C
 	if pc := loadProjectConfig(); pc != nil {
 		applyProjectConfig(agent, pc)
 	}
+	injectProjectMap(agent)
+	checkRipgrepAvailability(agent)
 
 	// コンテキストサイズ表示（ツリー形式）
 	printContextSize(agent)
@@ -152,6 +155,8 @@ func RunInteractiveWithResumeWithConfig(model string, provider api.Provider, cfg
 	if pc := loadProjectConfig(); pc != nil {
 		applyProjectConfig(agent, pc)
 	}
+	injectProjectMap(agent)
+	checkRipgrepAvailability(agent)
 
 	// コンテキストサイズ表示（ツリー形式）
 	printContextSize(agent)
@@ -250,45 +255,92 @@ func setupSignalHandler(agent *Agent) {
 	}()
 }
 
+// checkRipgrepAvailability は ripgrep の有無をチェックし、未インストール時に案内を表示する。
+func checkRipgrepAvailability(agent *Agent) {
+	if agent == nil || common.IsRipgrepAvailable() {
+		return
+	}
+
+	out := agent.output()
+	yellow.Fprintln(out, "⚠️  ripgrep (rg) not found — Project Map disabled, search_code using grep fallback")
+	dim.Fprintln(out, "   Install for better performance:")
+	dim.Fprintln(out, "     Ubuntu/Debian : sudo apt install ripgrep")
+	dim.Fprintln(out, "     macOS         : brew install ripgrep")
+	dim.Fprintln(out, "     Windows       : winget install BurntSushi.ripgrep")
+	dim.Fprintln(out, "     Other         : https://github.com/BurntSushi/ripgrep#installation")
+}
+
 // printContextSize はコンテキストサイズをツリー形式で表示
 func printContextSize(agent *Agent) {
-	basePromptTokens := 0
+	systemPromptTokens := token.EstimateTokenCount(agent.SystemPrompt)
+	basePromptTokens := systemPromptTokens
 	toolsTokens := 0
+	projectMapTokens := estimateProjectMapTokens(agent.SystemPrompt)
 
 	if agent.CurrentProvider != nil && agent.CurrentProvider.IsFunctionCallingEnabled() {
-		basePromptTokens = token.EstimateTokenCount(agent.SystemPrompt)
-		// ツール定義は Registry から JSON 化して推定
 		toolsTokens = agent.estimateToolDefinitionTokens()
-	} else {
-		basePromptTokens = token.EstimateTokenCount(agent.SystemPrompt)
 	}
 
-	// ツール数カウント（builtin / MCP 分類）
 	builtinCount, mcpCount := agent.countToolsByType()
-
-	// プロジェクト設定のトークン数
-	pc := loadProjectConfig()
-	projectTokens := 0
-	if pc != nil {
-		projectTokens = token.EstimateTokenCount(pc.Context)
-		for _, rule := range pc.Rules {
-			projectTokens += token.EstimateTokenCount(rule)
-		}
+	projectTokens := estimateProjectConfigTokens(loadProjectConfig())
+	basePromptTokens -= projectMapTokens + projectTokens
+	if basePromptTokens < 0 {
+		basePromptTokens = 0
 	}
 
-	// 合計
-	total := basePromptTokens + toolsTokens + projectTokens
+	total := systemPromptTokens + toolsTokens
 
-	// ツリー形式で表示
 	out := agent.output()
 	dim.Fprintf(out, "📋 Context size: ~%s tok\n", FormatTokens(total))
-	dim.Fprintf(out, "   ├── Base prompt: ~%s\n", FormatTokens(basePromptTokens))
-	if mcpCount > 0 {
-		dim.Fprintf(out, "   ├── Tools (%d+%d MCP): ~%s\n",
-			builtinCount, mcpCount, FormatTokens(toolsTokens))
-	} else {
-		dim.Fprintf(out, "   ├── Tools (%d): ~%s\n",
-			builtinCount, FormatTokens(toolsTokens))
+
+	lines := []string{
+		fmt.Sprintf("Base prompt: ~%s", FormatTokens(basePromptTokens)),
 	}
-	dim.Fprintf(out, "   └── xelyon.yaml: ~%s\n", FormatTokens(projectTokens))
+	if mcpCount > 0 {
+		lines = append(lines, fmt.Sprintf("Tools (%d+%d MCP): ~%s",
+			builtinCount, mcpCount, FormatTokens(toolsTokens)))
+	} else {
+		lines = append(lines, fmt.Sprintf("Tools (%d): ~%s",
+			builtinCount, FormatTokens(toolsTokens)))
+	}
+	if projectMapTokens > 0 && agent.projectMapFileCount > 0 {
+		lines = append(lines, fmt.Sprintf("Project map (%d symbols, %d files): ~%s",
+			agent.projectMapSymbolCount, agent.projectMapFileCount, FormatTokens(projectMapTokens)))
+	}
+	if projectTokens > 0 {
+		lines = append(lines, fmt.Sprintf("xelyon.yaml: ~%s", FormatTokens(projectTokens)))
+	}
+
+	for i, line := range lines {
+		connector := "├──"
+		if i == len(lines)-1 {
+			connector = "└──"
+		}
+		dim.Fprintf(out, "   %s %s\n", connector, line)
+	}
+}
+
+func estimateProjectMapTokens(systemPrompt string) int {
+	section := extractProjectMapSection(systemPrompt)
+	if section == "" {
+		return 0
+	}
+	return token.EstimateTokenCount(section)
+}
+
+func extractProjectMapSection(systemPrompt string) string {
+	const marker = "## Project Map\n"
+
+	idx := strings.LastIndex(systemPrompt, marker)
+	if idx < 0 {
+		return ""
+	}
+
+	section := systemPrompt[idx:]
+	nextSection := strings.Index(section[len(marker):], "\n## ")
+	if nextSection >= 0 {
+		section = section[:len(marker)+nextSection]
+	}
+
+	return strings.TrimRight(section, "\n")
 }
