@@ -4,11 +4,11 @@
 
 # ビルド
 build:
-	go build -o xelyon
+	go build -tags grammar_set_core -o xelyon
 
 # テスト
 test:
-	go test ./...
+	go test -tags grammar_set_core ./...
 
 # フォーマット
 fmt:
@@ -68,7 +68,7 @@ ci-check:
 	@echo "✓ go mod tidy check passed"
 	@echo ""
 	@echo "=== Building all packages ==="
-	@go build ./...
+	@go build -tags grammar_set_core ./...
 	@echo "✓ Build check passed"
 	@echo ""
 	@echo "=== Running golangci-lint ==="
@@ -76,7 +76,7 @@ ci-check:
 	@echo "✓ Lint check passed"
 	@echo ""
 	@echo "=== Running tests ==="
-	@go test -timeout 120s ./...
+	@go test -tags grammar_set_core -timeout 120s ./...
 	@echo "✓ Tests passed"
 	@echo ""
 	@echo "✅ All CI checks passed!"
@@ -84,7 +84,7 @@ ci-check:
 # インテグレーションテスト含む全テスト
 ci-check-full:
 	@echo "=== Running all tests (including integration) ==="
-	@go test -tags integration -race -timeout 600s ./...
+	@go test -tags "grammar_set_core integration" -race -timeout 600s ./...
 	@echo "✓ All tests passed (including integration)"
 
 # リリース前チェック

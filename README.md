@@ -29,6 +29,7 @@ DeepSeek, OpenAI, Gemini, Claude, Ollama, Groq, OpenRouter, Bedrock をシーム
 ### 🛠️ 23種類の組み込みツール
 - **ファイル操作**: 読み書き、編集、削除、バックアップ復元
 - **コード検索**: grep検索、ファイル検索（結果は非テスト→テスト順・定義優先でソート、不正regexはエラー検出）
+- **AST基盤（実験的）**: `internal/ast` に Pure Go Tree-sitter（gotreesitter）ベースの共通解析基盤を追加。Phase 1 では Go ファイルのパース、シンボル抽出、行分類を検証段階で提供（既存の `search_code` / Project Map 本体は未切替）
 - **開発支援**: bash（git, テスト, フォーマット等すべて対応）
 - **LSP連携**: シンボル検索（定義・参照・実装）
 

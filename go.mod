@@ -13,6 +13,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/mattn/go-runewidth v0.0.19
 	github.com/modelcontextprotocol/go-sdk v1.2.0
+	github.com/odvcencio/gotreesitter v0.6.0
 	github.com/spf13/cobra v1.8.0
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/crypto v0.46.0

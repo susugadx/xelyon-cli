@@ -1,0 +1,50 @@
+# AST 基盤導入 Phase 1（gotreesitter PoC）
+
+`internal/ast` に Pure Go の Tree-sitter ランタイム
+[`github.com/odvcencio/gotreesitter`](https://github.com/odvcencio/gotreesitter)
+を使った共通 AST 基盤を追加しました。
+
+## この Phase で検証すること
+
+- Go ファイルを CGO なしでパースできること
+- 定義シンボルを抽出できること
+- 行単位で `def` / `call` / `ref` / `import` / `comment` / `string` を分類できること
+- `grammar_set_core` ビルドタグで文法セットを削減できること
+- パース速度・シンボル抽出速度・バイナリサイズ差分を測定できること
+
+## 追加ファイル
+
+- `internal/ast/ast.go`
+- `internal/ast/queries.go`
+- `internal/ast/ast_test.go`
+
+## 公開 API
+
+- `IsSupportedFile(path string) bool`
+- `ParseFile(path string) (*gotreesitter.Tree, []byte, error)`
+- `ParseBytes(path string, src []byte) (*gotreesitter.Tree, []byte, error)`
+- `ExtractSymbols(path string) ([]Symbol, error)`
+- `ExtractSymbolsFromBytes(path string, src []byte) ([]Symbol, error)`
+- `ClassifyLine(path string, src []byte, line int, targetName string) (*MatchInfo, error)`
+
+## Phase 1 の制約
+
+- 対応言語は Go のみ
+- 既存の `search_code` / Project Map の regex 実装は未変更
+- まだ本番ルートでは使わず、PoC とベンチマークのための基盤追加に留める
+
+## 検証コマンド
+
+```bash
+go test ./internal/ast/...
+go test -bench=. -benchmem ./internal/ast
+CGO_ENABLED=0 go build ./...
+go build -o xelyon-full .
+go build -tags grammar_set_core -o xelyon-core .
+make ci-check
+```
+
+## 補足
+
+import 文中の `"fmt"` のような文字列リテラルは、通常の string と区別して
+`import` と分類するように実装しています。
