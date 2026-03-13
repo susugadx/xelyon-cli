@@ -15,6 +15,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	internalast "github.com/susugadx/xelyon-cli/internal/ast"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
@@ -25,17 +26,21 @@ type MatchType int
 const (
 	MatchTypeDefinition MatchType = iota // 0: func/type/class 等の定義
 	MatchTypeImport                      // 1: import/require/use 等
-	MatchTypeAssignment                  // 2: := や = による代入
-	MatchTypeUsage                       // 3: その他の参照・使用
-	MatchTypeComment                     // 4: コメント行
+	MatchTypeCall                        // 2: 関数/メソッド呼び出し
+	MatchTypeAssignment                  // 3: := や = による代入
+	MatchTypeRef                         // 4: その他の参照
+	MatchTypeComment                     // 5: コメント行
+	MatchTypeString                      // 6: 文字列リテラル
 )
+
+const MatchTypeUsage MatchType = MatchTypeRef // 後方互換: 旧名称
 
 // lineRangeHint は search_code 結果末尾に付与する str_replace line-range モード推奨ヒント。
 // UI には表示されず、LLM の tool result にのみ含まれる。
 const lineRangeHint = "\n\nTip: Use str_replace line-range mode (old_str empty + start_line/end_line) to edit matched lines directly."
 
 // matchTypeTag はマッチ種別の表示タグ
-var matchTypeTag = [5]string{"[def]", "[import]", "[assign]", "[use]", "[comment]"}
+var matchTypeTag = [7]string{"[def]", "[import]", "[call]", "[assign]", "[ref]", "[comment]", "[string]"}
 
 // BlockInfo はマッチが所属するブロック（関数/クラス）の情報
 type BlockInfo struct {
@@ -146,6 +151,7 @@ func executeSinglePattern(cache tools.ToolCacheInterface, pattern string, opts S
 		results = parseGrepOutput(output, 200)
 	}
 	results = filterResultsByOptions(results, opts)
+	reclassifyWithAST(results, pattern, opts.IsRegex)
 
 	if len(results) == 0 {
 		if len(warnings) > 0 {
@@ -264,6 +270,7 @@ func executeMultiplePatterns(cache tools.ToolCacheInterface, patterns []string, 
 				results = parseGrepOutput(output, maxMatches)
 			}
 			results = filterResultsByOptions(results, opts)
+			reclassifyWithAST(results, pat, opts.IsRegex)
 			results = mergeContextLines(results)
 			results = adaptiveContextTrim(results)
 			sortResultsByPriority(results)
@@ -682,7 +689,7 @@ outer:
 					LineNum: data.LineNumber,
 					Line:    strings.TrimRight(data.Lines.Text, "\n"),
 					IsMatch: false,
-					Type:    MatchTypeUsage,
+					Type:    MatchTypeRef,
 				})
 			}
 
@@ -728,7 +735,7 @@ outer:
 		}
 
 		sr := fileMap[filePath]
-		matchType := MatchTypeUsage
+		matchType := MatchTypeRef
 		if isMatch {
 			matchType = classifyMatch(content)
 		}
@@ -1059,7 +1066,7 @@ func classifyMatch(line string) MatchType {
 		firstWord := parts[0]
 		// 制御構文の場合は即座に Usage を返す（代入と誤判定させない）
 		if controlFlowKeywords[firstWord] {
-			return MatchTypeUsage
+			return MatchTypeRef
 		}
 
 		if len(parts) >= 2 {
@@ -1080,8 +1087,80 @@ func classifyMatch(line string) MatchType {
 		return MatchTypeAssignment
 	}
 
-	// 5. 使用（デフォルト）
-	return MatchTypeUsage
+	// 5. 参照（デフォルト）
+	return MatchTypeRef
+}
+
+// reclassifyWithAST は Go ファイルの検索結果を AST ベースで再分類する。
+// 非 Go ファイル、または targetName を抽出できない regex パターンはスキップする。
+func reclassifyWithAST(results []SearchResult, pattern string, isRegex bool) {
+	targetName := extractTargetName(pattern, isRegex)
+	if targetName == "" {
+		return
+	}
+
+	for i := range results {
+		r := &results[i]
+		if !internalast.IsSupportedFile(r.FilePath) {
+			continue
+		}
+
+		src, err := os.ReadFile(r.FilePath)
+		if err != nil {
+			continue
+		}
+
+		for j := range r.Matches {
+			m := &r.Matches[j]
+			if !m.IsMatch {
+				continue
+			}
+
+			info, err := internalast.ClassifyLine(r.FilePath, src, m.LineNum, targetName)
+			if err != nil {
+				continue
+			}
+
+			m.Type = matchClassToType(info.Class)
+			if info.Scope != "" && info.Scope != "package-level" && info.Class != internalast.ClassDef {
+				m.Block = &BlockInfo{Name: info.Scope}
+			}
+		}
+	}
+}
+
+// extractTargetName は pattern から AST 分類用のターゲット名を抽出する。
+func extractTargetName(pattern string, isRegex bool) string {
+	if pattern == "" {
+		return ""
+	}
+	if !isRegex {
+		return pattern
+	}
+	if strings.ContainsAny(pattern, `\.^$*+?()[]{}|`) {
+		return ""
+	}
+	return pattern
+}
+
+// matchClassToType は AST の MatchClass を search_code の MatchType に変換する。
+func matchClassToType(class internalast.MatchClass) MatchType {
+	switch class {
+	case internalast.ClassDef:
+		return MatchTypeDefinition
+	case internalast.ClassImport:
+		return MatchTypeImport
+	case internalast.ClassCall:
+		return MatchTypeCall
+	case internalast.ClassComment:
+		return MatchTypeComment
+	case internalast.ClassString:
+		return MatchTypeString
+	case internalast.ClassRef:
+		return MatchTypeRef
+	default:
+		return MatchTypeRef
+	}
 }
 
 // isValidIdentifier は関数名などの識別子として妥当か判定する（ジェネリクス <> [] 対応）
@@ -1197,6 +1276,9 @@ func getFileContentWithCache(cache tools.ToolCacheInterface, filePath string) st
 func detectBlocksWithCache(cache tools.ToolCacheInterface, results []SearchResult) {
 	for i := range results {
 		r := &results[i]
+		if internalast.IsSupportedFile(r.FilePath) {
+			continue
+		}
 		content := getFileContentWithCache(cache, r.FilePath)
 		if content == "" {
 			continue
@@ -1205,12 +1287,13 @@ func detectBlocksWithCache(cache tools.ToolCacheInterface, results []SearchResul
 		blocks := common.BuildBlockMap(content, isBrace)
 		for j := range r.Matches {
 			m := &r.Matches[j]
-			if m.IsMatch {
-				m.Block = findBlockForLine(blocks, m.LineNum)
-				// マッチ自身がブロック開始行なら注釈不要
-				if m.Block != nil && m.Block.StartLine == m.LineNum {
-					m.Block = nil
-				}
+			if !m.IsMatch || m.Block != nil {
+				continue
+			}
+			m.Block = findBlockForLine(blocks, m.LineNum)
+			// マッチ自身がブロック開始行なら注釈不要
+			if m.Block != nil && m.Block.StartLine == m.LineNum {
+				m.Block = nil
 			}
 		}
 	}
@@ -1361,7 +1444,11 @@ func formatSearchResultsBody(results []SearchResult, truncated bool, tokenBudget
 			if m.IsMatch {
 				fmt.Fprintf(&sb, "  %-10s> %4d │ %s\n", matchTypeTag[m.Type], m.LineNum, truncateLine(m.Line))
 				if m.Block != nil {
-					fmt.Fprintf(&sb, "  %10s  %4s   ── in %s (L%d)\n", "", "", m.Block.Name, m.Block.StartLine)
+					if m.Block.StartLine > 0 {
+						fmt.Fprintf(&sb, "  %10s  %4s   ── in %s (L%d)\n", "", "", m.Block.Name, m.Block.StartLine)
+					} else {
+						fmt.Fprintf(&sb, "  %10s  %4s   ── in %s\n", "", "", m.Block.Name)
+					}
 				}
 			} else {
 				fmt.Fprintf(&sb, "  %10s  %4d │ %s\n", "", m.LineNum, truncateLine(m.Line))
