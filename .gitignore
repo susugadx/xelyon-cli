@@ -58,3 +58,4 @@ temp_config.yaml
 
 # Claude Code local settings
 .claude/
+.tmp/
