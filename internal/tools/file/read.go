@@ -88,7 +88,7 @@ func ExecuteReadFileBySymbolWithRuntime(out common.Output, cfg *config.Config, c
 
 	if !internalast.IsSupportedFile(absPath) {
 		printReadStatus(out, "📄 Read: %s (symbol mode not supported, falling back to read_file)\n", path)
-		// symbol fallback は通常の read_file と同じ挙動（MaxReadLines 閾値）
+		// symbol fallback は従来互換のため MaxReadLines 閾値で読む（通常 read の DefaultFullLines より広い）
 		return executeReadFileCore(common.NewOutput(io.Discard, io.Discard), cfg, cache, path, 0, 0, MaxReadLines)
 	}
 
