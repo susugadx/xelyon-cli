@@ -41,14 +41,14 @@ func TestExecuteListDir_Success(t *testing.T) {
 	if !strings.Contains(output, tmpDir) {
 		t.Errorf("ExecuteListDir() output should contain directory path, got %v", output)
 	}
-	if !strings.Contains(output, "file1.txt") {
-		t.Error("ExecuteListDir() output should contain 'file1.txt'")
+	if !strings.Contains(output, "summary: depth=1, dirs=1, files=2") {
+		t.Errorf("expected compact summary header, got %s", output)
 	}
-	if !strings.Contains(output, "file2.txt") {
-		t.Error("ExecuteListDir() output should contain 'file2.txt'")
+	if !strings.Contains(output, "dirs: subdir/") {
+		t.Errorf("expected directory summary, got %s", output)
 	}
-	if !strings.Contains(output, "subdir") {
-		t.Error("ExecuteListDir() output should contain 'subdir'")
+	if !strings.Contains(output, "file1.txt") || !strings.Contains(output, "file2.txt") {
+		t.Errorf("expected representative file names, got %s", output)
 	}
 }
 
@@ -59,6 +59,9 @@ func TestExecuteListDir_EmptyDirectory(t *testing.T) {
 
 	if !strings.Contains(output, tmpDir) {
 		t.Errorf("ExecuteListDir() output should contain directory path, got %v", output)
+	}
+	if !strings.Contains(output, "summary: depth=1, dirs=0, files=0") {
+		t.Errorf("expected empty summary, got %s", output)
 	}
 }
 
@@ -161,11 +164,36 @@ func TestExecuteListDir_DepthTwoShowsChildren(t *testing.T) {
 	}
 
 	output := ExecuteListDir(tmpDir, 2)
+	if !strings.Contains(output, "subtrees: 1 shown") {
+		t.Errorf("depth=2 should include subtree summary, got: %s", output)
+	}
+	if !strings.Contains(output, "- a/ -> dirs=1, files=1") {
+		t.Errorf("depth=2 should include child directory summary, got: %s", output)
+	}
 	if !strings.Contains(output, "child.txt") {
 		t.Errorf("depth=2 should include child entries, got: %s", output)
 	}
 	if strings.Contains(output, "grandchild.txt") {
 		t.Errorf("depth=2 should not include depth=3 entries, got: %s", output)
+	}
+}
+
+func TestExecuteListDir_DepthThreeShowsNestedHints(t *testing.T) {
+	tmpDir := t.TempDir()
+	chdirForListDirTest(t, tmpDir)
+	if err := os.MkdirAll(filepath.Join(tmpDir, "a", "b"), 0755); err != nil {
+		t.Fatalf("Failed to create nested directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "a", "b", "grandchild.txt"), []byte("x"), 0644); err != nil {
+		t.Fatalf("Failed to create deeper nested file: %v", err)
+	}
+
+	output := ExecuteListDir(tmpDir, 3)
+	if !strings.Contains(output, "- a/b/ -> dirs=0, files=1") {
+		t.Errorf("depth=3 should include nested subtree hint, got: %s", output)
+	}
+	if !strings.Contains(output, "grandchild.txt") {
+		t.Errorf("depth=3 should include grandchild entry, got: %s", output)
 	}
 }
 
@@ -180,30 +208,40 @@ func TestExecuteListDir_TruncatesEntries(t *testing.T) {
 	}
 
 	output := ExecuteListDir(tmpDir, 1)
-	if !strings.Contains(output, "showing first 200") {
-		t.Errorf("expected truncation message, got: %s", output)
+	if !strings.Contains(output, "files: f000.txt (1 bytes)") {
+		t.Errorf("expected representative files, got: %s", output)
+	}
+	if !strings.Contains(output, "(+202 more)") {
+		t.Errorf("expected compact remainder count, got: %s", output)
+	}
+	if strings.Contains(output, "f209.txt") {
+		t.Errorf("expected compact summary instead of full expansion, got: %s", output)
 	}
 }
 
-func TestExecuteListDir_TreeConnectorWithIgnored(t *testing.T) {
+func TestExecuteListDir_WideDepthTwoKeepsSubtreeHintsCompact(t *testing.T) {
 	tmpDir := t.TempDir()
 	chdirForListDirTest(t, tmpDir)
-	if err := os.WriteFile(filepath.Join(tmpDir, "aaa.txt"), []byte("x"), 0644); err != nil {
-		t.Fatalf("failed to create aaa.txt: %v", err)
-	}
-	if err := os.Mkdir(filepath.Join(tmpDir, "node_modules"), 0755); err != nil {
-		t.Fatalf("failed to create ignored node_modules: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(tmpDir, "bbb.txt"), []byte("x"), 0644); err != nil {
-		t.Fatalf("failed to create bbb.txt: %v", err)
-	}
-	if err := os.Mkdir(filepath.Join(tmpDir, "vendor"), 0755); err != nil {
-		t.Fatalf("failed to create ignored vendor: %v", err)
+	for i := 0; i < 9; i++ {
+		dir := filepath.Join(tmpDir, fmt.Sprintf("dir-%02d", i))
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatalf("failed to create %s: %v", dir, err)
+		}
+		file := filepath.Join(dir, "child.txt")
+		if err := os.WriteFile(file, []byte("x"), 0644); err != nil {
+			t.Fatalf("failed to create %s: %v", file, err)
+		}
 	}
 
-	output := ExecuteListDir(tmpDir, 1)
-	if !strings.Contains(output, "└── 📄 bbb.txt") {
-		t.Errorf("last visible entry should use └── connector, got:\n%s", output)
+	output := ExecuteListDir(tmpDir, 2)
+	if !strings.Contains(output, "dirs: dir-00/, dir-01/, dir-02/, dir-03/, dir-04/, dir-05/, dir-06/, dir-07/, (+1 more)") {
+		t.Errorf("expected compact top-level directory list, got: %s", output)
+	}
+	if !strings.Contains(output, "subtrees: 6 shown (+3 more)") {
+		t.Errorf("expected limited subtree expansion, got: %s", output)
+	}
+	if strings.Contains(output, "- dir-08/ ->") {
+		t.Errorf("expected subtree details to stop after budgeted representative dirs, got: %s", output)
 	}
 }
 
