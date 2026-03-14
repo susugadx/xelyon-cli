@@ -504,6 +504,35 @@ func TestExecuteReadFileBySymbol_NonGoFile(t *testing.T) {
 	}
 }
 
+func TestExecuteReadFileBySymbol_NonGoFile_LargeFullRead(t *testing.T) {
+	setupTestMocks(t)
+	tmpDir := t.TempDir()
+	pyFile := filepath.Join(tmpDir, "large.py")
+
+	// 200行の Python ファイル（DefaultFullLines=100 を超えるが、symbol fallback は full read）
+	var sb strings.Builder
+	for i := 1; i <= 200; i++ {
+		fmt.Fprintf(&sb, "line_%d = %d\n", i, i)
+	}
+	if err := os.WriteFile(pyFile, []byte(sb.String()), 0644); err != nil {
+		t.Fatalf("failed to write Python file: %v", err)
+	}
+
+	output := ExecuteReadFileBySymbol(pyFile, "some_func")
+
+	// symbol fallback は MaxReadLines=300 で full read するため、200行すべて返却される
+	if !strings.Contains(output, "1: line_1 = 1") {
+		t.Fatalf("expected first line in fallback, got: %s", output)
+	}
+	if !strings.Contains(output, "200: line_200 = 200") {
+		t.Fatalf("expected last line in fallback (full read, not outline), got: %s", output)
+	}
+	// outline ガイドメッセージが含まれない
+	if strings.Contains(output, "Use start_line/end_line") {
+		t.Fatalf("symbol fallback should NOT produce outline for 200-line file, got: %s", output)
+	}
+}
+
 func TestExecuteReadFileBySymbol_MethodWithReceiver(t *testing.T) {
 	setupTestMocks(t)
 	tmpDir := t.TempDir()

@@ -53,6 +53,36 @@ func TestFormatToolLine_ReadFile(t *testing.T) {
 	}
 }
 
+func TestFormatToolLine_ReadFile_GoOutline(t *testing.T) {
+	line := FormatToolLine(ToolDisplayInfo{
+		ToolName: "read_file",
+		Args: map[string]string{
+			"path": "server.go",
+		},
+		Result: "1: package main\n\n--- Signatures ---\n  L50  func Build\n\n(200 lines total. Use start_line/end_line or symbol=\"Name\" to read details)\n",
+	})
+
+	want := `📄 read_file: server.go (outline of 200 lines)`
+	if line != want {
+		t.Fatalf("FormatToolLine() = %q, want %q", line, want)
+	}
+}
+
+func TestFormatToolLine_ReadFile_NonGoOutline(t *testing.T) {
+	line := FormatToolLine(ToolDisplayInfo{
+		ToolName: "read_file",
+		Args: map[string]string{
+			"path": "data.txt",
+		},
+		Result: "1: header\n\n--- Last lines ---\n150: end\n\n(150 lines total. Use start_line/end_line to read specific sections)\n",
+	})
+
+	want := `📄 read_file: data.txt (outline of 150 lines)`
+	if line != want {
+		t.Fatalf("FormatToolLine() = %q, want %q", line, want)
+	}
+}
+
 func TestFormatToolLine_StrReplace(t *testing.T) {
 	line := FormatToolLine(ToolDisplayInfo{
 		ToolName: "str_replace",

@@ -51,13 +51,14 @@ func parsePath(entry string) (string, int, int) {
 	return entry, 0, 0
 }
 
-// ReadFilesTotalBudget は read_files 全体の総行数バジェット
-const ReadFilesTotalBudget = 500
+// readFilesBudgetPool は perFileBudget の算出元となるヒューリスティック値。
+// 厳密な total cap ではなく、ファイル数で割ってアウトライン閾値を決めるための基準値。
+const readFilesBudgetPool = 500
 
 // perFileBudget はファイル数に応じた1ファイルあたりのアウトライン閾値を返す。
-// totalBudget / n で算出し、DefaultFullLines を上限、30 を下限とする。
+// readFilesBudgetPool / n で算出し、DefaultFullLines を上限、30 を下限とする。
 func perFileBudget(n int) int {
-	b := ReadFilesTotalBudget / n
+	b := readFilesBudgetPool / n
 	if b > DefaultFullLines {
 		return DefaultFullLines
 	}

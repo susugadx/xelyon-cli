@@ -21,7 +21,7 @@ type ToolDisplayInfo struct {
 
 var (
 	searchSummaryPattern   = regexp.MustCompile(`Found (\d+) match(?:\(es\)|es?) in (\d+) file(?:\(s\)|s?)`)
-	outlineSummaryPattern  = regexp.MustCompile(`\((\d+) lines total\. Use start_line/end_line to read function body\)`)
+	outlineSummaryPattern  = regexp.MustCompile(`\((\d+) lines total\. Use start_line/end_line[^)]*\)`)
 	strReplaceRangePattern = regexp.MustCompile(`lines (\d+)-(\d+)`)
 	strReplaceEditsPattern = regexp.MustCompile(`Successfully applied (\d+) edits`)
 	writeFileLinesPattern  = regexp.MustCompile(`Successfully wrote \d+ bytes \((\d+) lines\) to `)
