@@ -13,6 +13,48 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
+type testReadFileCache struct {
+	getFileFunc  func(path string) (string, bool)
+	setFileCalls []testReadFileCacheSetCall
+}
+
+type testReadFileCacheSetCall struct {
+	path    string
+	content string
+}
+
+func (c *testReadFileCache) GetFile(path string) (string, bool) {
+	if c.getFileFunc != nil {
+		return c.getFileFunc(path)
+	}
+	return "", false
+}
+
+func (c *testReadFileCache) SetFile(path, content string) {
+	c.setFileCalls = append(c.setFileCalls, testReadFileCacheSetCall{
+		path:    path,
+		content: content,
+	})
+}
+
+func (c *testReadFileCache) GetDir(path string) (string, bool) { return "", false }
+
+func (c *testReadFileCache) SetDir(path, result string) {}
+
+func (c *testReadFileCache) InvalidateFile(path string) {}
+
+func (c *testReadFileCache) InvalidateDir(path string) {}
+
+func (c *testReadFileCache) Clear() {}
+
+func (c *testReadFileCache) GetSearch(pattern, path string) (string, bool) { return "", false }
+
+func (c *testReadFileCache) SetSearch(pattern, path, result string, affectedFiles []string) {}
+
+func (c *testReadFileCache) ClearSearchCache() {}
+
+func (c *testReadFileCache) InvalidateSearchCacheForFile(absPath string) {}
+
 func TestExecuteReadFile_Normal(t *testing.T) {
 	setupTestMocks(t)
 
@@ -238,6 +280,190 @@ func TestExecuteReadFile_QuietModeSuppressesStdout(t *testing.T) {
 	}
 }
 
+func TestExecuteReadFileBySymbol_SingleFunction(t *testing.T) {
+	setupTestMocks(t)
+	tmpDir := t.TempDir()
+	goFile := filepath.Join(tmpDir, "sample.go")
+	content := `package main
+
+func helper() {}
+
+// Build creates the server.
+func Build() error {
+	return nil
+}
+
+func after() {}
+`
+	if err := os.WriteFile(goFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write Go file: %v", err)
+	}
+
+	output := ExecuteReadFileBySymbol(goFile, "Build")
+
+	if !strings.Contains(output, "── function Build") {
+		t.Fatalf("expected Build header, got: %s", output)
+	}
+	if !strings.Contains(output, "func Build() error {") {
+		t.Fatalf("expected Build body, got: %s", output)
+	}
+	if !strings.Contains(output, "// Build creates the server.") {
+		t.Fatalf("expected surrounding comment, got: %s", output)
+	}
+	if strings.Contains(output, "func helper() {}") {
+		t.Fatalf("did not expect helper body, got: %s", output)
+	}
+	if strings.Contains(output, "func after() {}") {
+		t.Fatalf("did not expect after body, got: %s", output)
+	}
+}
+
+func TestExecuteReadFileBySymbol_MultipleSymbols(t *testing.T) {
+	setupTestMocks(t)
+	tmpDir := t.TempDir()
+	goFile := filepath.Join(tmpDir, "sample.go")
+	content := `package main
+
+type Config struct {
+	Name string
+}
+
+func Build() error {
+	return nil
+}
+`
+	if err := os.WriteFile(goFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write Go file: %v", err)
+	}
+
+	output := ExecuteReadFileBySymbol(goFile, "Build,Config")
+
+	if !strings.Contains(output, "── struct Config") {
+		t.Fatalf("expected Config header, got: %s", output)
+	}
+	if !strings.Contains(output, "── function Build") {
+		t.Fatalf("expected Build header, got: %s", output)
+	}
+	if strings.Index(output, "── struct Config") > strings.Index(output, "── function Build") {
+		t.Fatalf("expected symbols in file order, got: %s", output)
+	}
+	if !strings.Contains(output, "(2 symbol(s) from "+goFile+")") {
+		t.Fatalf("expected symbol count footer, got: %s", output)
+	}
+}
+
+func TestExecuteReadFileBySymbol_NotFound(t *testing.T) {
+	setupTestMocks(t)
+	tmpDir := t.TempDir()
+	goFile := filepath.Join(tmpDir, "sample.go")
+	content := `package main
+
+func Build() error {
+	return nil
+}
+
+type Config struct{}
+`
+	if err := os.WriteFile(goFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write Go file: %v", err)
+	}
+
+	output := ExecuteReadFileBySymbol(goFile, "Missing")
+
+	if !strings.Contains(output, "Symbol(s) not found") {
+		t.Fatalf("expected not-found message, got: %s", output)
+	}
+	if !strings.Contains(output, "Available symbols:") {
+		t.Fatalf("expected available symbols section, got: %s", output)
+	}
+	if !strings.Contains(output, "Build") || !strings.Contains(output, "Config") {
+		t.Fatalf("expected available symbols to include Build and Config, got: %s", output)
+	}
+}
+
+func TestExecuteReadFileBySymbol_NonGoFile(t *testing.T) {
+	setupTestMocks(t)
+	tmpDir := t.TempDir()
+	pyFile := filepath.Join(tmpDir, "sample.py")
+	content := "def build():\n    return 42\n"
+	if err := os.WriteFile(pyFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write Python file: %v", err)
+	}
+
+	output := ExecuteReadFileBySymbol(pyFile, "build")
+
+	if !strings.Contains(output, "1: def build():") {
+		t.Fatalf("expected fallback full read, got: %s", output)
+	}
+	if !strings.Contains(output, "2:     return 42") {
+		t.Fatalf("expected fallback full read body, got: %s", output)
+	}
+	if strings.Contains(output, "Available symbols:") {
+		t.Fatalf("did not expect symbol listing for non-Go fallback, got: %s", output)
+	}
+}
+
+func TestExecuteReadFileBySymbol_MethodWithReceiver(t *testing.T) {
+	setupTestMocks(t)
+	tmpDir := t.TempDir()
+	goFile := filepath.Join(tmpDir, "server.go")
+	content := `package main
+
+type Server struct{}
+
+func (s *Server) HandleRequest(ctx context.Context) error {
+	return nil
+}
+`
+	if err := os.WriteFile(goFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write Go file: %v", err)
+	}
+
+	output := ExecuteReadFileBySymbol(goFile, "HandleRequest")
+
+	if !strings.Contains(output, "── method HandleRequest") {
+		t.Fatalf("expected method header, got: %s", output)
+	}
+	if !strings.Contains(output, "func (s *Server) HandleRequest(ctx context.Context) error {") {
+		t.Fatalf("expected method body, got: %s", output)
+	}
+}
+
+func TestExecuteReadFileBySymbolWithRuntime_CachesContentOnMiss(t *testing.T) {
+	setupTestMocks(t)
+	tmpDir := t.TempDir()
+	goFile := filepath.Join(tmpDir, "sample.go")
+	content := `package main
+
+func Build() error {
+	return nil
+}
+`
+	if err := os.WriteFile(goFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write Go file: %v", err)
+	}
+
+	cache := &testReadFileCache{}
+	output := ExecuteReadFileBySymbolWithRuntime(common.NewOutput(io.Discard, io.Discard), nil, cache, goFile, "Build")
+
+	if !strings.Contains(output, "func Build() error {") {
+		t.Fatalf("expected symbol output, got: %s", output)
+	}
+	if len(cache.setFileCalls) != 1 {
+		t.Fatalf("SetFile call count = %d, want 1", len(cache.setFileCalls))
+	}
+	absPath, err := filepath.Abs(goFile)
+	if err != nil {
+		t.Fatalf("filepath.Abs() error = %v", err)
+	}
+	if cache.setFileCalls[0].path != absPath {
+		t.Fatalf("SetFile path = %q, want %q", cache.setFileCalls[0].path, absPath)
+	}
+	if !strings.Contains(cache.setFileCalls[0].content, "func Build() error {") {
+		t.Fatalf("SetFile content = %q", cache.setFileCalls[0].content)
+	}
+}
+
 func TestReadFileTool_BatchMode(t *testing.T) {
 	setupTestMocks(t)
 	tmpDir := t.TempDir()
@@ -338,6 +564,82 @@ func TestReadFileTool_PathRequired(t *testing.T) {
 	}
 	if !strings.Contains(result, "Error") {
 		t.Errorf("expected error when neither path nor paths provided, got: %s", result)
+	}
+}
+
+func TestReadFileTool_SymbolMode(t *testing.T) {
+	setupTestMocks(t)
+	tmpDir := t.TempDir()
+	goFile := filepath.Join(tmpDir, "sample.go")
+	content := `package main
+
+func Build() error {
+	return nil
+}
+`
+	if err := os.WriteFile(goFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write Go file: %v", err)
+	}
+
+	tool := &ReadFileTool{}
+	result, fc, err := tool.Run(tools.ExecutionContext{}, map[string]string{
+		"path":   goFile,
+		"symbol": "Build",
+	})
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if fc != nil {
+		t.Fatalf("expected nil FileChange, got: %v", fc)
+	}
+	if !strings.Contains(result, "func Build() error {") {
+		t.Fatalf("expected symbol mode result, got: %s", result)
+	}
+}
+
+func TestReadFileTool_SymbolMode_UsesCache(t *testing.T) {
+	setupTestMocks(t)
+	tmpDir := t.TempDir()
+	goFile := filepath.Join(tmpDir, "sample.go")
+	diskContent := `package main
+
+func DiskOnly() error {
+	return nil
+}
+`
+	if err := os.WriteFile(goFile, []byte(diskContent), 0644); err != nil {
+		t.Fatalf("failed to write Go file: %v", err)
+	}
+
+	cache := &testReadFileCache{
+		getFileFunc: func(path string) (string, bool) {
+			return `package main
+
+func Build() error {
+	return nil
+}
+`, true
+		},
+	}
+
+	tool := &ReadFileTool{}
+	result, _, err := tool.Run(tools.ExecutionContext{ToolCache: cache}, map[string]string{
+		"path":   goFile,
+		"symbol": "Build",
+	})
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(result, "func Build() error {") {
+		t.Fatalf("expected cached symbol output, got: %s", result)
+	}
+	if strings.Contains(result, "DiskOnly") {
+		t.Fatalf("expected cache hit to bypass disk content, got: %s", result)
+	}
+	if len(cache.setFileCalls) != 0 {
+		t.Fatalf("SetFile should not be called on cache hit, got %d calls", len(cache.setFileCalls))
 	}
 }
 

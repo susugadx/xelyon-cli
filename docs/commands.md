@@ -479,13 +479,21 @@ AIが自動で以下のツールを使用します。ユーザーが直接呼び
 
 | ツール名 | 説明 | 主な引数 |
 |---------|------|---------|
-| `read_file` | ファイル内容を読み込む | `path` |
+| `read_file` | ファイル内容を読み込む。Go ファイルは `symbol` で関数/型/メソッド単位の読み出しも可能 | `path`, `symbol`, `start_line`, `end_line`, `paths` |
 | `write_file` | ファイルを新規作成・上書き | `path`, `content` |
 | `str_replace` | 文字列置換でファイル編集（old_str優先。old_str空+start_line/end_line指定で行レンジ置換も可） | `path`, `old_str`, `new_str`, `start_line`, `end_line` |
 | `delete_file` | ファイルを削除 | `path` |
 | `list_dir` | ディレクトリ一覧取得 | `path` |
 
 **Note**: ファイル操作（mkdir, cp, mv, diff等）は `bash` ツールで実行可能です。
+
+`read_file` の `symbol` 例:
+
+```json
+{"tool":"read_file","args":{"path":"internal/agent/agent.go","symbol":"maybeAutoCompress"}}
+```
+
+複数シンボルを読む場合はカンマ区切りで指定します。
 
 ### Git操作
 

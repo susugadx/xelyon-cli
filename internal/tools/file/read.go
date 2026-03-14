@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 
+	internalast "github.com/susugadx/xelyon-cli/internal/ast"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
@@ -49,6 +51,81 @@ func ExecuteReadFile(path string, startLine, endLine int) string {
 // ExecuteReadFileWithOutput は出力先を指定してファイルを読み込む。
 func ExecuteReadFileWithOutput(out common.Output, path string, startLine, endLine int) string {
 	return ExecuteReadFileWithRuntime(out, config.DefaultConfig(), nil, path, startLine, endLine)
+}
+
+// ExecuteReadFileBySymbol は指定シンボルの定義範囲のみを返す。
+// symbolNames はカンマ区切りで複数指定できる。
+// AST 非対応ファイルでは通常の read_file にフォールバックする。
+func ExecuteReadFileBySymbol(path, symbolNames string) string {
+	return ExecuteReadFileBySymbolWithRuntime(common.DefaultOutput(), config.DefaultConfig(), nil, path, symbolNames)
+}
+
+// ExecuteReadFileBySymbolWithOutput は出力先を指定して指定シンボルの定義範囲のみを返す。
+func ExecuteReadFileBySymbolWithOutput(out common.Output, path, symbolNames string) string {
+	return ExecuteReadFileBySymbolWithRuntime(out, config.DefaultConfig(), nil, path, symbolNames)
+}
+
+// ExecuteReadFileBySymbolWithRuntime は runtime 設定と cache を指定して指定シンボルの定義範囲のみを返す。
+func ExecuteReadFileBySymbolWithRuntime(out common.Output, cfg *config.Config, cache tools.ToolCacheInterface, path, symbolNames string) string {
+	if path == "" {
+		return "Error: path is empty"
+	}
+
+	names := splitSymbolNames(symbolNames)
+	if len(names) == 0 {
+		return "Error: symbol is empty"
+	}
+
+	absPath, err := common.ValidatePath(path)
+	if err != nil {
+		out.Red.Printf("🚫 Security: %v\n", err)
+		return fmt.Sprintf("Error: %v", err)
+	}
+
+	if !internalast.IsSupportedFile(absPath) {
+		printReadStatus(out, "📄 Read: %s (symbol mode not supported, falling back to full read)\n", path)
+		return ExecuteReadFileWithRuntime(common.NewOutput(io.Discard, io.Discard), cfg, cache, path, 0, 0)
+	}
+
+	var (
+		content []byte
+	)
+	if cache != nil {
+		if cached, hit := cache.GetFile(absPath); hit {
+			content = []byte(cached)
+		}
+	}
+	if content == nil {
+		content, err = os.ReadFile(absPath)
+		if err != nil {
+			return fmt.Sprintf("Error reading file: %v", err)
+		}
+		if cache != nil {
+			cache.SetFile(absPath, string(content))
+		}
+	}
+
+	checkLen := len(content)
+	if checkLen > 512 {
+		checkLen = 512
+	}
+	if strings.Contains(string(content[:checkLen]), "\x00") {
+		return fmt.Sprintf("Error: %s appears to be a binary file (contains null bytes). Use 'file %s' or 'xxd %s | head' for binary inspection.", path, path, path)
+	}
+
+	symbols, err := internalast.ExtractSymbolsFromBytes(absPath, content)
+	if err != nil {
+		return fmt.Sprintf("Error extracting symbols: %v", err)
+	}
+
+	matched := filterSymbolsByName(symbols, names)
+	if len(matched) == 0 {
+		return formatSymbolNotFound(path, names, symbols)
+	}
+
+	lines := strings.Split(string(content), "\n")
+	printReadStatus(out, "📄 Read: %s (%d symbol(s))\n", path, len(matched))
+	return formatSymbolRanges(path, lines, matched)
 }
 
 // ExecuteReadFileWithRuntime は runtime 設定を指定してファイルを読み込む。
@@ -314,4 +391,82 @@ func readFirstNLines(r io.Reader, n int) (lines []string, totalRead int, hasMore
 		return nil, 0, false, scanErr
 	}
 	return lines, totalRead, false, nil
+}
+
+func splitSymbolNames(s string) []string {
+	parts := strings.Split(s, ",")
+	names := make([]string, 0, len(parts))
+	for _, part := range parts {
+		name := strings.TrimSpace(part)
+		if name == "" {
+			continue
+		}
+		names = append(names, name)
+	}
+	return names
+}
+
+func filterSymbolsByName(symbols []internalast.Symbol, names []string) []internalast.Symbol {
+	nameSet := make(map[string]struct{}, len(names))
+	for _, name := range names {
+		nameSet[name] = struct{}{}
+	}
+
+	matched := make([]internalast.Symbol, 0, len(names))
+	for _, symbol := range symbols {
+		if _, ok := nameSet[symbol.Name]; ok {
+			matched = append(matched, symbol)
+		}
+	}
+
+	sort.SliceStable(matched, func(i, j int) bool {
+		if matched[i].Line != matched[j].Line {
+			return matched[i].Line < matched[j].Line
+		}
+		if matched[i].EndLine != matched[j].EndLine {
+			return matched[i].EndLine < matched[j].EndLine
+		}
+		return matched[i].Name < matched[j].Name
+	})
+
+	return matched
+}
+
+func formatSymbolRanges(path string, lines []string, symbols []internalast.Symbol) string {
+	var sb strings.Builder
+
+	for i, symbol := range symbols {
+		if i > 0 {
+			sb.WriteString("\n")
+		}
+
+		contextStart := symbol.Line - 2
+		if contextStart < 1 {
+			contextStart = 1
+		}
+
+		fmt.Fprintf(&sb, "── %s %s (L%d-L%d) ──\n", symbol.Kind, symbol.Name, symbol.Line, symbol.EndLine)
+		for lineNum := contextStart; lineNum <= symbol.EndLine && lineNum <= len(lines); lineNum++ {
+			fmt.Fprintf(&sb, "%d: %s\n", lineNum, lines[lineNum-1])
+		}
+	}
+
+	fmt.Fprintf(&sb, "\n(%d symbol(s) from %s)\n", len(symbols), path)
+	return sb.String()
+}
+
+func formatSymbolNotFound(path string, requested []string, available []internalast.Symbol) string {
+	var sb strings.Builder
+
+	fmt.Fprintf(&sb, "Symbol(s) not found in %s: %s\n", path, strings.Join(requested, ", "))
+	sb.WriteString("\nAvailable symbols:\n")
+	if len(available) == 0 {
+		sb.WriteString("  (none)\n")
+		return sb.String()
+	}
+
+	for _, symbol := range available {
+		fmt.Fprintf(&sb, "  L%-4d %-10s %s\n", symbol.Line, symbol.Kind, symbol.Name)
+	}
+	return sb.String()
 }

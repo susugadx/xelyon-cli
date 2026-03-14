@@ -4,7 +4,7 @@ package tools
 // GetToolDefinitions() 経由で JSON schema の description に使用。
 var ToolDescriptions = map[string]string{
 	// File Operations
-	"read_file":   "Read file contents (up to 300 lines by default when no range is given). Single: {path} reads from the top of the file; use start_line/end_line only when you already know the target section. Batch: {paths: [\"path1\", \"path2:10-20\"]} for multiple files in one call (max 10). Batch is preferred when reading 2+ files.",
+	"read_file":   "Read file contents. Single: {path} reads up to 300 lines from the top by default; use start_line/end_line only when you already know the target section; use symbol to read specific function/type by name (e.g. symbol=\"Build,HandleRequest\", Go files only). Batch: {paths: [\"path1\", \"path2:10-20\"]} for multiple files in one call (max 10). Batch is preferred when reading 2+ files.",
 	"write_file":  "Create or overwrite a file. Uses 0644 for new files and preserves permissions on overwrite. Use str_replace for partial edits to existing files.",
 	"str_replace": "Edit existing file. PREFERRED: Line-range mode (old_str empty + start_line/end_line) after search_code — no read_file needed. FALLBACK: old_str mode requires read_file first. Batch mode: pass edits=[{old_str,new_str},...] for multiple replacements in one call.",
 	"delete_file": "Delete a file permanently.",
