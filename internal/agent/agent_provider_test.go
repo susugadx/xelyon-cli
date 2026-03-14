@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
 )
 
@@ -57,6 +58,7 @@ func TestAgent_SwitchProvider_ClearCache(t *testing.T) {
 	agent := &Agent{
 		ProviderName: "mock",
 		CurrentModel: "mock-model",
+		session:      history.NewSession("mock-model"),
 	}
 
 	mockProvider := &mockCacheClearableProvider{}
@@ -71,6 +73,7 @@ func TestAgent_SwitchProvider_ClearCache(t *testing.T) {
 	// プロバイダーが切り替わったことを確認
 	assert.Equal(t, "ollama", agent.ProviderName)
 	assert.NotEqual(t, mockProvider, agent.CurrentProvider, "CurrentProvider should be replaced")
+	assert.Equal(t, agent.CurrentModel, agent.session.Model)
 }
 
 func TestAgent_SwitchProvider_RebuildsSystemPrompt(t *testing.T) {

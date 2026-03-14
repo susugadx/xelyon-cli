@@ -8,7 +8,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/susugadx/xelyon-cli/internal/api"
+	_ "github.com/susugadx/xelyon-cli/internal/api/providers/ollama"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -47,9 +49,15 @@ func (m *mockCacheClearableProviderForModel) ClearCache() {
 }
 
 func TestHandleModelCommand_ClearCache(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	if err := config.SaveConfig(config.DefaultConfig()); err != nil {
+		t.Fatalf("failed to save config: %v", err)
+	}
+
 	agent := &Agent{
 		ProviderName: "mock",
 		CurrentModel: "old-model",
+		session:      history.NewSession("old-model"),
 	}
 
 	mockProvider := &mockCacheClearableProviderForModel{}
@@ -63,6 +71,7 @@ func TestHandleModelCommand_ClearCache(t *testing.T) {
 	assert.True(t, result)
 	// モデルが切り替わったことを確認
 	assert.Equal(t, "new-model", agent.CurrentModel)
+	assert.Equal(t, "new-model", agent.session.Model)
 	// ClearCacheが呼ばれたことを確認
 	assert.True(t, mockProvider.cleared, "ClearCache should be called when switching model")
 }
@@ -139,5 +148,35 @@ func TestHandleProvidersCommand_UsesRuntimeOutput(t *testing.T) {
 	}
 	if !strings.Contains(output, "openai") {
 		t.Fatalf("expected runtime output to contain provider list, got %q", output)
+	}
+}
+
+func TestHandleUseCommand_WithExplicitModel_UpdatesSessionModel(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	if err := config.SaveConfig(config.DefaultConfig()); err != nil {
+		t.Fatalf("failed to save config: %v", err)
+	}
+
+	var out bytes.Buffer
+	agent := &Agent{
+		ProviderName:    "openai",
+		CurrentModel:    "gpt-old",
+		CurrentProvider: &mockCacheClearableProviderForModel{name: "openai"},
+		Stats:           NewSessionStats("openai", "gpt-old"),
+		session:         history.NewSession("gpt-old"),
+		Runtime: &AgentRuntime{
+			UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+		},
+	}
+
+	result := handleUseCommand(agent, []string{"ollama", "qwen2.5-coder:14b"})
+	if !result {
+		t.Fatal("handleUseCommand() = false, want true")
+	}
+	if agent.CurrentModel != "qwen2.5-coder:14b" {
+		t.Fatalf("CurrentModel = %q, want %q", agent.CurrentModel, "qwen2.5-coder:14b")
+	}
+	if agent.session == nil || agent.session.Model != "qwen2.5-coder:14b" {
+		t.Fatalf("session.Model = %q, want %q", agent.session.Model, "qwen2.5-coder:14b")
 	}
 }

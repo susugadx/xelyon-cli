@@ -3,10 +3,12 @@ package agent
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/agent/plan"
 	"github.com/susugadx/xelyon-cli/internal/api"
@@ -470,6 +472,23 @@ func (m *sequenceMockProvider) ChatWithImage(ctx context.Context, systemPrompt s
 	return m.ChatWithTools(ctx, systemPrompt, history, model)
 }
 
+type blockingCancelProvider struct{}
+
+func (m *blockingCancelProvider) Name() string { return "blocking-cancel" }
+
+func (m *blockingCancelProvider) SupportsImages() bool { return false }
+
+func (m *blockingCancelProvider) IsFunctionCallingEnabled() bool { return false }
+
+func (m *blockingCancelProvider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
+	<-ctx.Done()
+	return "", fmt.Errorf("API call failed: %w", ctx.Err())
+}
+
+func (m *blockingCancelProvider) ChatWithImage(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {
+	return m.ChatWithTools(ctx, systemPrompt, history, model)
+}
+
 // TestNormalMode_CreatePlanFC は Normal Mode で create_plan ツールコールが FC で来た場合、
 // deprecated 扱いで通常モード継続できることをテスト
 func TestNormalMode_CreatePlanFC(t *testing.T) {
@@ -586,6 +605,73 @@ func TestExecuteStepV2_IgnoresCreatePlan(t *testing.T) {
 
 	if err != nil {
 		t.Errorf("executeStepV2() returned error: %v", err)
+	}
+}
+
+func TestChatCore_SetsAbortedStatusWithActualError(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	var out bytes.Buffer
+	agent := NewAgent("test-model", &mockErrorProvider{}, false)
+	agent.Runtime = &AgentRuntime{
+		UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+	}
+
+	if err := agent.chatCore("please fail", nil, false); err != nil {
+		t.Fatalf("chatCore() error = %v, want nil", err)
+	}
+
+	status := agent.statusRef().getStatus()
+	if status.State != StateAborted {
+		t.Fatalf("status.State = %q, want %q", status.State, StateAborted)
+	}
+	if !strings.Contains(status.ReasonEN, "mock error") {
+		t.Fatalf("status.ReasonEN = %q, want to contain %q", status.ReasonEN, "mock error")
+	}
+	if status.ReasonEN == "Request failed" {
+		t.Fatalf("status.ReasonEN = %q, want concrete error summary", status.ReasonEN)
+	}
+}
+
+func TestChatCore_SetsAbortedStatusWithCancelReason(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	var out bytes.Buffer
+	agent := NewAgent("test-model", &blockingCancelProvider{}, false)
+	agent.Runtime = &AgentRuntime{
+		UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+	}
+
+	done := make(chan struct{})
+	go func() {
+		_ = agent.chatCore("please block", nil, false)
+		close(done)
+	}()
+
+	deadline := time.After(2 * time.Second)
+	for agent.cancelFunc == nil {
+		select {
+		case <-deadline:
+			t.Fatal("cancelFunc was not initialized")
+		default:
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+
+	agent.cancelActiveRequest("signal: interrupt")
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("chatCore did not finish after cancellation")
+	}
+
+	status := agent.statusRef().getStatus()
+	if status.State != StateAborted {
+		t.Fatalf("status.State = %q, want %q", status.State, StateAborted)
+	}
+	if !strings.Contains(status.ReasonEN, "signal: interrupt") {
+		t.Fatalf("status.ReasonEN = %q, want to contain %q", status.ReasonEN, "signal: interrupt")
 	}
 }
 

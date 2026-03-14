@@ -2,10 +2,12 @@ package agent
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -227,5 +229,34 @@ func TestHandleTokensCommand_UsesRuntimeOutput(t *testing.T) {
 	}
 	if !strings.Contains(output, "Current:") {
 		t.Fatalf("expected runtime output to contain current token line, got %q", output)
+	}
+}
+
+func TestGetSessionFileInfo_UsesHistoryJSONLPath(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	storage, err := history.NewStorage()
+	if err != nil {
+		t.Fatalf("NewStorage() error = %v", err)
+	}
+
+	session := history.NewSession("test-model")
+	session.AddMessage("user", "hello", session.Model)
+	if err := storage.Save(session); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	agent := &Agent{
+		session: session,
+		storage: storage,
+	}
+
+	gotPath, gotSize := getSessionFileInfo(agent)
+	wantPath := fmt.Sprintf("~/.xelyon/history/%s.jsonl", session.ID)
+	if gotPath != wantPath {
+		t.Fatalf("getSessionFileInfo() path = %q, want %q", gotPath, wantPath)
+	}
+	if gotSize <= 0 {
+		t.Fatalf("getSessionFileInfo() size = %d, want > 0", gotSize)
 	}
 }

@@ -28,6 +28,7 @@ func (a *Agent) SyncWithRuntimeConfig() {
 	}
 	if resolvedModel != "" {
 		a.CurrentModel = resolvedModel
+		a.syncSessionModel()
 		if a.Stats != nil {
 			a.Stats.Model = resolvedModel
 		}

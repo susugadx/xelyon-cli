@@ -66,6 +66,7 @@ func (a *Agent) SwitchProvider(providerName string) error {
 	a.CurrentProvider = provider
 	a.ProviderName = providerName
 	a.CurrentModel = newModel
+	a.syncSessionModel()
 
 	// 統計情報をリセット（プロバイダー切り替え時）
 	if a.Stats != nil {

@@ -229,7 +229,7 @@ func setupSignalHandler(agent *Agent) {
 	var lastInterrupt time.Time
 	var interruptMu sync.Mutex
 	go func() {
-		for range sigChan {
+		for sig := range sigChan {
 			interruptMu.Lock()
 			now := time.Now()
 
@@ -248,9 +248,7 @@ func setupSignalHandler(agent *Agent) {
 			_, _ = fmt.Fprintln(agent.output(), "\n\n⚠️  Interrupted. Press Ctrl+C again within 3 seconds to exit.")
 
 			// 現在のAPI呼び出しをキャンセル
-			if agent.cancelFunc != nil {
-				agent.cancelFunc()
-			}
+			agent.cancelActiveRequest(fmt.Sprintf("signal: %s", sig))
 		}
 	}()
 }

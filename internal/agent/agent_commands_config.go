@@ -48,6 +48,7 @@ func handleModelCommand(agent *Agent, args []string) bool {
 	// モデルを切り替え
 	oldModel := agent.CurrentModel
 	agent.CurrentModel = newModel
+	agent.syncSessionModel()
 	if agent.Stats != nil {
 		agent.Stats.Model = newModel
 	}
@@ -296,6 +297,7 @@ func handleUseCommand(agent *Agent, args []string) bool {
 		newModel := args[1]
 		oldModel := agent.CurrentModel
 		agent.CurrentModel = newModel
+		agent.syncSessionModel()
 		if agent.Stats != nil {
 			agent.Stats.Model = newModel
 		}

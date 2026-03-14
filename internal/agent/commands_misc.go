@@ -77,11 +77,11 @@ func getSessionFileInfo(agent *Agent) (string, int64) {
 	sessionPath := ""
 	sessionSize := int64(0)
 	if agent.session != nil {
-		sessionPath = fmt.Sprintf("~/.xelyon/sessions/%s.json", agent.session.ID)
+		sessionPath = fmt.Sprintf("~/.xelyon/history/%s.jsonl", agent.session.ID)
 		if agent.storage != nil {
 			homeDir, err := os.UserHomeDir()
 			if err == nil {
-				fullPath := fmt.Sprintf("%s/.xelyon/sessions/%s.json", homeDir, agent.session.ID)
+				fullPath := fmt.Sprintf("%s/.xelyon/history/%s.jsonl", homeDir, agent.session.ID)
 				if size, err := GetSessionFileSize(fullPath); err == nil {
 					sessionSize = size
 				}
@@ -595,6 +595,10 @@ func handleThinkCommand(agent *Agent, args []string) bool {
 		}
 	default:
 		yellow.Fprintln(out, "Usage: /think [on|off|low|medium|high|xhigh]")
+	}
+
+	if isDeepSeek && agent != nil {
+		agent.syncSessionModel()
 	}
 	return true
 }

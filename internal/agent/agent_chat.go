@@ -83,9 +83,16 @@ func (a *Agent) chatCore(input string, image *api.ImageData, oneShot bool) error
 	timeout := time.Duration(cfg.APIRetry.Timeout) * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
+	a.lastCancelReason = ""
 	a.cancelFunc = cancel
 	a.requestCtx = ctx
-	defer func() { a.requestCtx = nil }()
+	a.debugCancelf("request started (timeout=%s, model=%s, provider=%s)", timeout, a.CurrentModel, a.ProviderName)
+	defer func() {
+		a.debugCancelf("request finished (ctx_err=%v, cancel_reason=%q)", ctx.Err(), a.lastCancelReason)
+		a.requestCtx = nil
+		a.cancelFunc = nil
+		a.lastCancelReason = ""
+	}()
 
 	// トークン使用量の警告チェック（API呼び出し前、対話モードのみ）
 	if !oneShot {
@@ -147,7 +154,8 @@ func (a *Agent) chatCore(input string, image *api.ImageData, oneShot bool) error
 			}
 		}
 		a.ui().StopSpinner()
-		a.SetStatus(StateAborted, "Request failed", "リクエスト失敗", "Try again", "再試行してください")
+		reason := a.statusReasonForError(err)
+		a.SetStatus(StateAborted, reason, reason, "Try again", "再試行してください")
 		return nil
 	}
 
