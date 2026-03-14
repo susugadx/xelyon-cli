@@ -493,77 +493,39 @@ func TestFormatInspectResult_NoUpstreamTruncated(t *testing.T) {
 	}
 }
 
-// Regression: ちょうど200件の参照では truncated=false
-func TestFindReferences_Exactly200NotTruncated(t *testing.T) {
-	var refs []Reference
-	for i := range maxRipgrepResults {
-		refs = append(refs, Reference{
-			File: "file.go", Line: i + 1, Snippet: "X()", Class: ast.ClassCall,
-		})
+// Regression 6: 上流検索の異常終了が警告として出力される
+func TestFormatInspectResult_UpstreamIncomplete(t *testing.T) {
+	result := formatInspectResult(InspectResult{
+		Symbol: &SymbolCandidate{
+			Name: "Build", Kind: "function",
+			File: "agent.go", Line: 21, EndLine: 85,
+		},
+		Body:               []string{"21: func Build() {}"},
+		UpstreamIncomplete: true,
+	})
+
+	if !strings.Contains(result, "Warnings:") {
+		t.Errorf("expected warnings section, got: %s", result)
 	}
-	// 200件ちょうどでは truncated にならないことを確認
-	if len(refs) != maxRipgrepResults {
-		t.Fatalf("expected %d refs, got %d", maxRipgrepResults, len(refs))
-	}
-	// findReferences は rg を実行するため直接テストできないが、
-	// ロジックの正確性は以下で検証する:
-	// maxRipgrepResults を超えた時のみ truncated=true になる
-	if maxRipgrepResults < 1 {
-		t.Fatal("maxRipgrepResults must be positive")
+	if !strings.Contains(result, "search incomplete: true") {
+		t.Errorf("expected incomplete search warning, got: %s", result)
 	}
 }
 
-// Regression: 201件以上の参照で truncated=true
-// findReferences の内部ロジックを単体テストするため、
-// parseAndCollectRefs ヘルパーを直接テストする
-func TestTruncationLogic_Exact200(t *testing.T) {
-	// 200 件の模擬入力 → truncated=false
-	refs, truncated := simulateTruncation(maxRipgrepResults)
-	if truncated {
-		t.Errorf("expected truncated=false for exactly %d items", maxRipgrepResults)
-	}
-	if len(refs) != maxRipgrepResults {
-		t.Errorf("expected %d refs, got %d", maxRipgrepResults, len(refs))
-	}
-}
+// Regression 7: 上流検索が完全な場合は incomplete 警告が出力されない
+func TestFormatInspectResult_NoUpstreamIncomplete(t *testing.T) {
+	result := formatInspectResult(InspectResult{
+		Symbol: &SymbolCandidate{
+			Name: "Build", Kind: "function",
+			File: "agent.go", Line: 21, EndLine: 85,
+		},
+		Body:               []string{"21: func Build() {}"},
+		UpstreamIncomplete: false,
+	})
 
-func TestTruncationLogic_Over200(t *testing.T) {
-	// 201 件の模擬入力 → truncated=true, refs は 200 件
-	refs, truncated := simulateTruncation(maxRipgrepResults + 1)
-	if !truncated {
-		t.Errorf("expected truncated=true for %d items", maxRipgrepResults+1)
+	if strings.Contains(result, "search incomplete") {
+		t.Errorf("expected no incomplete warning when search is complete, got: %s", result)
 	}
-	if len(refs) != maxRipgrepResults {
-		t.Errorf("expected %d refs after truncation, got %d", maxRipgrepResults, len(refs))
-	}
-}
-
-func TestTruncationLogic_Under200(t *testing.T) {
-	// 199 件 → truncated=false
-	refs, truncated := simulateTruncation(maxRipgrepResults - 1)
-	if truncated {
-		t.Error("expected truncated=false for under-limit items")
-	}
-	if len(refs) != maxRipgrepResults-1 {
-		t.Errorf("expected %d refs, got %d", maxRipgrepResults-1, len(refs))
-	}
-}
-
-// simulateTruncation は findReferences の truncation ロジックを再現する。
-func simulateTruncation(n int) ([]Reference, bool) {
-	var refs []Reference
-	truncated := false
-	for i := range n {
-		refs = append(refs, Reference{
-			File: "file.go", Line: i + 1, Snippet: "X()", Class: ast.ClassCall,
-		})
-		if len(refs) > maxRipgrepResults {
-			truncated = true
-			refs = refs[:maxRipgrepResults]
-			break
-		}
-	}
-	return refs, truncated
 }
 
 // setupTestGoFiles は複数の Go ファイルを一時ディレクトリに作成し、

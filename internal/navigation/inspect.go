@@ -69,10 +69,11 @@ type InspectResult struct {
 	Candidates []SymbolCandidate
 
 	// 打ち切り情報
-	MoreCallers       bool
-	MoreRefs          bool
-	MoreTests         bool
-	UpstreamTruncated bool // rg 等の上流検索が結果を打ち切ったか
+	MoreCallers        bool
+	MoreRefs           bool
+	MoreTests          bool
+	UpstreamTruncated  bool // rg 等の上流検索が結果を打ち切ったか
+	UpstreamIncomplete bool // rg 等の上流検索が異常終了し結果が不完全か
 }
 
 // Reference はシンボル参照。
@@ -132,8 +133,9 @@ func InspectSymbol(symbol, pathHint, mode string) string {
 	ambiguousFiles := findAmbiguousFiles(symbol, cand)
 
 	// Caller / Reference / Test
-	allRefs, upstreamTruncated := findReferences(symbol)
+	allRefs, upstreamTruncated, upstreamIncomplete := findReferences(symbol)
 	result.UpstreamTruncated = upstreamTruncated
+	result.UpstreamIncomplete = upstreamIncomplete
 	// 候補に安全に帰属できない参照を除外
 	allRefs = filterRefsByCandidate(allRefs, cand, ambiguousFiles)
 	result.Callers, result.MoreCallers = classifyCallers(allRefs, cand, budget.CallerLimit)
@@ -404,6 +406,10 @@ func formatInspectResult(r InspectResult) string {
 	fmt.Fprintf(&sb, "  tests: %t\n", r.MoreTests)
 	if r.UpstreamTruncated {
 		sb.WriteString("  upstream: true (search results were capped; counts may be incomplete)\n")
+	}
+	if r.UpstreamIncomplete {
+		sb.WriteString("\nWarnings:\n")
+		sb.WriteString("  search incomplete: true (upstream reference search ended abnormally; callers/references/tests may be missing)\n")
 	}
 
 	return sb.String()
