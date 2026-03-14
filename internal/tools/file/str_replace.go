@@ -66,19 +66,28 @@ func ExecuteStrReplaceWithPromptIOAndOptions(promptIO ui.PromptIO, options commo
 
 		startLine, endLine, err := parseLineRange(startLineStr, endLineStr)
 		if err != nil {
-			return fmt.Sprintf("Error: %v", err), nil
+			return joinFailureResult(
+				fmt.Sprintf("Error: invalid line range in %s: %v", path, err),
+				"Next: use read_file to confirm start_line/end_line (1-indexed inclusive).",
+			), nil
 		}
 
 		lines := strings.Split(oldContent, "\n")
 		if len(lines) == 0 {
-			return "Error: file is empty", nil
+			return fmt.Sprintf("Error: file is empty: %s", path), nil
 		}
 
 		if startLine > len(lines) {
-			return fmt.Sprintf("Error: start_line is out of range (start_line=%d, file_lines=%d)", startLine, len(lines)), nil
+			return joinFailureResult(
+				fmt.Sprintf("Error: start_line is out of range in %s (start_line=%d, file_lines=%d).", path, startLine, len(lines)),
+				"Next: use read_file to confirm the target range.",
+			), nil
 		}
 		if endLine > len(lines) {
-			return fmt.Sprintf("Error: end_line is out of range (end_line=%d, file_lines=%d)", endLine, len(lines)), nil
+			return joinFailureResult(
+				fmt.Sprintf("Error: end_line is out of range in %s (end_line=%d, file_lines=%d).", path, endLine, len(lines)),
+				"Next: use read_file to confirm the target range.",
+			), nil
 		}
 
 		// 指定レンジを new_str の行で置き換える
@@ -153,25 +162,10 @@ func ExecuteStrReplaceWithPromptIOAndOptions(promptIO ui.PromptIO, options commo
 		case common.ConfirmYes:
 			// continue
 		case common.ConfirmComment:
-			return fmt.Sprintf(`[COMMENT] User provided feedback for str_replace (line range).
-
-Comment:
-%s
-
-Next actions:
-- Use read_file to verify the correct range.
-- Consider using string-based old_str for more precise matching.
-
-IMPORTANT: Do NOT apply the replacement until the user approves.`, strings.TrimSpace(dec.Comment)), nil
+			return buildDeferredStrReplaceResult("[COMMENT]", "line range", path, dec.Comment), nil
 		default:
 			out.Yellow.Println("⚠️  User cancelled the replacement")
-			return fmt.Sprintf(`[CANCELLED] User cancelled str_replace for %s.
-
-Hint: The replacement was not applied. If you need to make this change:
-1. Verify the range with read_file
-2. Double-check start_line/end_line are correct (1-indexed inclusive)
-
-Do not retry the same replacement.`, path), nil
+			return buildDeferredStrReplaceResult("[CANCELLED]", "line range", path, ""), nil
 		}
 
 		syntaxWarning := validateGoSyntaxForReplace(absPath, []byte(newContent))
@@ -209,37 +203,14 @@ Do not retry the same replacement.`, path), nil
 		replacedEndLine = matchStartLine + strings.Count(newStr, "\n")
 		newContent = strings.Replace(oldContent, oldStr, newStr, 1)
 	} else if exactMatch && exactCount > 1 {
-		// 完全一致が複数 → 改善エラー（Candidates + snippet + Next actions + IMPORTANT）
 		lines := strings.Split(oldContent, "\n")
-		cands := findAllOccurrencesLineRanges(oldContent, oldStr, 5)
+		cands := findAllOccurrencesLineRanges(oldContent, oldStr, maxFailureCandidatesToShow)
 
-		var b strings.Builder
-		fmt.Fprintf(&b, "Error: old_str appears %d times in %s (must be unique).\n\n", exactCount, path)
-		b.WriteString("Candidates (1-indexed line ranges, with +/-2 lines context):\n")
-
-		if len(cands) == 0 {
-			b.WriteString("- (could not compute candidates)\n")
-		} else {
-			for _, c := range cands {
-				fmt.Fprintf(&b, "\n- lines %d-%d\n", c.StartLine, c.EndLine)
-				snip := buildLineSnippet(lines, c.StartLine, c.EndLine, 2)
-				b.WriteString(snip)
-			}
-		}
-
-		b.WriteString("\nNext actions:\n")
-		b.WriteString("1) Use read_file to inspect the target area and expand old_str with more surrounding context (e.g. function signature + block).\n")
-		b.WriteString("2) If you intended a line-based edit, use delete_lines / insert_before / insert_after.\n")
-		b.WriteString("3) If you intended to replace a specific line range, set old_str to empty and provide start_line/end_line (1-indexed inclusive).\n")
-		b.WriteString("4) If you want to replace ALL occurrences, use str_replace batch mode: {\"tool\": \"str_replace\", \"args\": {\"path\": \"file.go\", \"edits\": \"[{\\\"old_str\\\":\\\"...\\\",\\\"new_str\\\":\\\"...\\\"},...]\"}}\n\n")
-
-		previewLines := common.Min(50, len(lines))
-		preview := strings.Join(lines[:previewLines], "\n")
-		fmt.Fprintf(&b, "File preview (first %d lines):\n---\n%s\n---\n\n", previewLines, preview)
-
-		b.WriteString("IMPORTANT: Do NOT retry the same str_replace with the same old_str. Make old_str unique first.\n")
-
-		return b.String(), nil
+		return joinFailureResult(
+			fmt.Sprintf("Error: old_str appears %d times in %s (must be unique).", exactCount, path),
+			buildCandidateSummary(lines, cands, exactCount),
+			"Next: use read_file on one candidate and retry with a more specific old_str; use start_line/end_line for a fixed range; use batch edits to replace all matches.",
+		), nil
 	} else {
 		// 完全一致しない → 正規化マッチを試行（従来挙動）
 		if !out.SuppressStdout() {
@@ -248,7 +219,12 @@ Do not retry the same replacement.`, path), nil
 
 		found, startIdxNormalized, endIdx := common.FindWithNormalizedWhitespace(oldContent, oldStr)
 		if !found {
-			return fmt.Sprintf("Error: old_str not found in %s (tried exact and normalized matching).\n\nNext actions:\n1) Use read_file to see the actual content around the target area.\n2) Copy the exact text from read_file output as old_str.\n3) Do not guess or reconstruct old_str from memory.\n4) Alternatively, use line-range mode with start_line/end_line.", path), nil
+			lines := strings.Split(oldContent, "\n")
+			return joinFailureResult(
+				fmt.Sprintf("Error: old_str not found in %s (tried exact and normalized matching).", path),
+				buildHeadPreview(lines, maxFailurePreviewLines),
+				"Next: use read_file/search_code to copy the exact text, then retry; use start_line/end_line if you already know the target range.",
+			), nil
 		}
 
 		actualOldStr := oldContent[startIdxNormalized : endIdx+1]
@@ -353,26 +329,10 @@ Do not retry the same replacement.`, path), nil
 	case common.ConfirmYes:
 		// continue
 	case common.ConfirmComment:
-		return fmt.Sprintf(`[COMMENT] User provided feedback for str_replace.
-
-Comment:
-%s
-
-Next actions:
-- Use read_file to confirm the old_str location.
-- Consider using line-range mode (start_line/end_line) for block replacement.
-
-IMPORTANT: Do NOT apply the replacement until the user approves.`, strings.TrimSpace(dec2.Comment)), nil
+		return buildDeferredStrReplaceResult("[COMMENT]", "", path, dec2.Comment), nil
 	default:
 		out.Yellow.Println("⚠️  User cancelled the replacement")
-		return fmt.Sprintf(`[CANCELLED] User cancelled str_replace for %s.
-
-Hint: The replacement was not applied. If you need to make this change:
-1. Check if the old_str is correct by using read_file
-2. Try a smaller, more specific replacement
-3. Ask the user for clarification
-
-Do not retry the same replacement.`, path), nil
+		return buildDeferredStrReplaceResult("[CANCELLED]", "", path, ""), nil
 	}
 
 	syntaxWarning := validateGoSyntaxForReplace(absPath, []byte(newContent))
@@ -447,14 +407,86 @@ func findAllOccurrencesLineRanges(content, needle string, max int) []lineRange {
 	return res
 }
 
-func buildLineSnippet(lines []string, startLine, endLine, ctx int) string {
+const (
+	maxFailureCandidatesToShow = 2
+	maxFailurePreviewLines     = 3
+	failurePreviewLineWidth    = 72
+)
+
+func joinFailureResult(parts ...string) string {
+	filtered := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		filtered = append(filtered, part)
+	}
+	return strings.Join(filtered, "\n")
+}
+
+func buildDeferredStrReplaceResult(status, mode, path, comment string) string {
+	header := status + " str_replace"
+	if mode != "" {
+		header += " (" + mode + ")"
+	}
+	header += " not applied for " + path + "."
+	if strings.TrimSpace(comment) == "" {
+		return joinFailureResult(
+			header,
+			"Next: review with read_file before retrying; do not repeat the same replacement unchanged.",
+		)
+	}
+	return joinFailureResult(
+		header,
+		"Comment: "+strings.TrimSpace(comment),
+		"Next: review with read_file and retry only after user approval.",
+	)
+}
+
+func buildCandidateSummary(lines []string, cands []lineRange, total int) string {
+	if total <= 0 {
+		return ""
+	}
+	shown := common.Min(len(cands), maxFailureCandidatesToShow)
+	var b strings.Builder
+	fmt.Fprintf(&b, "Candidates: %d total", total)
+	if shown > 0 && shown < total {
+		fmt.Fprintf(&b, " (showing %d)", shown)
+	}
+	for i := 0; i < shown; i++ {
+		c := cands[i]
+		fmt.Fprintf(&b, "\n- lines %d-%d: %s", c.StartLine, c.EndLine, buildInlinePreview(lines, c.StartLine, c.EndLine, 1))
+	}
+	if total > shown {
+		fmt.Fprintf(&b, "\n- ... %d more candidates", total-shown)
+	}
+	return b.String()
+}
+
+func buildHeadPreview(lines []string, limit int) string {
+	if len(lines) == 0 || limit <= 0 {
+		return ""
+	}
+	previewCount := common.Min(limit, len(lines))
+	parts := make([]string, 0, previewCount)
+	for i := 0; i < previewCount; i++ {
+		parts = append(parts, fmt.Sprintf("%d:%s", i+1, compactPreviewLine(lines[i])))
+	}
+	preview := "Preview: " + strings.Join(parts, " | ")
+	if len(lines) > previewCount {
+		preview += fmt.Sprintf(" | ... +%d more lines", len(lines)-previewCount)
+	}
+	return preview
+}
+
+func buildInlinePreview(lines []string, startLine, endLine, ctx int) string {
 	if len(lines) == 0 {
 		return ""
 	}
 	if ctx < 0 {
 		ctx = 0
 	}
-
 	start := startLine - ctx
 	if start < 1 {
 		start = 1
@@ -463,16 +495,27 @@ func buildLineSnippet(lines []string, startLine, endLine, ctx int) string {
 	if end > len(lines) {
 		end = len(lines)
 	}
-
-	var b strings.Builder
+	parts := make([]string, 0, end-start+1)
 	for i := start; i <= end; i++ {
-		prefix := "  "
+		marker := ""
 		if i >= startLine && i <= endLine {
-			prefix = "* "
+			marker = "*"
 		}
-		fmt.Fprintf(&b, "%s%4d: %s\n", prefix, i, lines[i-1])
+		parts = append(parts, fmt.Sprintf("%d%s:%s", i, marker, compactPreviewLine(lines[i-1])))
 	}
-	return b.String()
+	return strings.Join(parts, " | ")
+}
+
+func compactPreviewLine(line string) string {
+	line = strings.ReplaceAll(line, "\t", " ")
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return "∅"
+	}
+	if len(line) <= failurePreviewLineWidth {
+		return line
+	}
+	return line[:failurePreviewLineWidth-3] + "..."
 }
 
 // validateGoSyntaxForReplace は置換結果の Go ファイルを AST 検証し、構文エラー警告を返す。
@@ -548,7 +591,13 @@ func executeBatchEditsWithPromptIOAndOptions(promptIO ui.PromptIO, options commo
 		case count == 1:
 			content = strings.Replace(content, edit.OldStr, edit.NewStr, 1)
 		case count > 1:
-			return fmt.Sprintf("Error: edits[%d].old_str appears %d times in %s (must be unique). Batch aborted, no changes written.", i, count, path), nil
+			lines := strings.Split(content, "\n")
+			cands := findAllOccurrencesLineRanges(content, edit.OldStr, maxFailureCandidatesToShow)
+			return joinFailureResult(
+				fmt.Sprintf("Error: edits[%d].old_str appears %d times in %s (must be unique; batch aborted, no changes written).", i, count, path),
+				buildCandidateSummary(lines, cands, count),
+				fmt.Sprintf("Next: use read_file on one candidate and retry with a more specific edits[%d].old_str; use line-range mode for a fixed block.", i),
+			), nil
 		default:
 			// exact match なし → normalized whitespace fallback
 			if !out.SuppressStdout() {
@@ -556,7 +605,12 @@ func executeBatchEditsWithPromptIOAndOptions(promptIO ui.PromptIO, options commo
 			}
 			found, startIdx, endIdx := common.FindWithNormalizedWhitespace(content, edit.OldStr)
 			if !found {
-				return fmt.Sprintf("Error: edits[%d].old_str not found in %s (tried exact and normalized matching). Batch aborted, no changes written.\n\nNext actions:\n1) Use read_file to see the actual content around the target area.\n2) Copy the exact text from read_file output as old_str.\n3) Do not guess or reconstruct old_str from memory.", i, path), nil
+				lines := strings.Split(content, "\n")
+				return joinFailureResult(
+					fmt.Sprintf("Error: edits[%d].old_str not found in %s (tried exact and normalized matching; batch aborted, no changes written).", i, path),
+					buildHeadPreview(lines, maxFailurePreviewLines),
+					fmt.Sprintf("Next: use read_file/search_code to copy the exact text for edits[%d].old_str, then retry; split the batch if later edits depend on earlier changes.", i),
+				), nil
 			}
 			content = content[:startIdx] + edit.NewStr + content[endIdx+1:]
 		}
@@ -605,27 +659,12 @@ func executeBatchEditsWithPromptIOAndOptions(promptIO ui.PromptIO, options commo
 	dec := common.ConfirmWithAutoApproveDecisionAndOptions(promptIO, options, "str_replace", "Apply batch replacement? / バッチ置換を適用しますか？")
 	switch dec.Action {
 	case common.ConfirmYes:
-		// continue
+	// continue
 	case common.ConfirmComment:
-		return fmt.Sprintf(`[COMMENT] User provided feedback for str_replace (batch).
-
-Comment:
-%s
-
-Next actions:
-- Review the edits and adjust as needed.
-- Use read_file to verify current content.
-
-IMPORTANT: Do NOT apply the replacement until the user approves.`, strings.TrimSpace(dec.Comment)), nil
+		return buildDeferredStrReplaceResult("[COMMENT]", "batch", path, dec.Comment), nil
 	default:
 		out.Yellow.Println("⚠️  User cancelled the batch replacement")
-		return fmt.Sprintf(`[CANCELLED] User cancelled str_replace batch for %s.
-
-Hint: The replacement was not applied. If you need to make these changes:
-1. Verify the content with read_file
-2. Double-check each old_str is unique and correct
-
-Do not retry the same replacement.`, path), nil
+		return buildDeferredStrReplaceResult("[CANCELLED]", "batch", path, ""), nil
 	}
 
 	syntaxWarning := validateGoSyntaxForReplace(absPath, []byte(content))

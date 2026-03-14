@@ -557,3 +557,92 @@ func TestExecuteBatchEdits_SequentialApplication(t *testing.T) {
 	}
 	testutil.AssertFileContent(t, testFile, "hi there")
 }
+
+func TestExecuteStrReplace_MultipleMatches_SummaryFirst(t *testing.T) {
+	setupTestMocks(t)
+
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test.txt")
+	testutil.CreateTempFile(t, tmpDir, "test.txt", "foo\nalpha\nfoo\nbeta\nfoo")
+
+	output, err := executeStrReplaceForTest(testFile, "foo", "REPLACED", "", "")
+	if err != nil {
+		t.Fatalf("ExecuteStrReplace should not return error: %v", err)
+	}
+	if !strings.Contains(output, "Candidates: 3 total (showing 2)") {
+		t.Fatalf("expected compact candidate summary, got: %s", output)
+	}
+	if !strings.Contains(output, "- ... 1 more candidates") {
+		t.Fatalf("expected omitted candidate summary, got: %s", output)
+	}
+	if strings.Contains(output, "File preview (first") {
+		t.Fatalf("did not expect verbose file preview, got: %s", output)
+	}
+	if strings.Contains(output, "Next actions:") {
+		t.Fatalf("did not expect verbose numbered next actions, got: %s", output)
+	}
+}
+
+func TestExecuteStrReplace_NotFound_SummaryFirst(t *testing.T) {
+	setupTestMocks(t)
+
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test.txt")
+	testutil.CreateTempFile(t, tmpDir, "test.txt", "first\nsecond\nthird\nfourth")
+
+	output, err := executeStrReplaceForTest(testFile, "missing", "REPLACED", "", "")
+	if err != nil {
+		t.Fatalf("ExecuteStrReplace should not return error: %v", err)
+	}
+	if !strings.Contains(output, "Preview: 1:first | 2:second | 3:third | ... +1 more lines") {
+		t.Fatalf("expected compact preview, got: %s", output)
+	}
+	if !strings.Contains(output, "Next: use read_file/search_code to copy the exact text") {
+		t.Fatalf("expected concise next action, got: %s", output)
+	}
+	if strings.Contains(output, "1)") {
+		t.Fatalf("did not expect numbered next actions, got: %s", output)
+	}
+}
+
+func TestExecuteStrReplace_LineRangeOutOfRange_SummaryFirst(t *testing.T) {
+	setupTestMocks(t)
+
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test.txt")
+	testutil.CreateTempFile(t, tmpDir, "test.txt", "a\nb\nc")
+
+	output, err := executeStrReplaceForTest(testFile, "", "X", "5", "5")
+	if err != nil {
+		t.Fatalf("ExecuteStrReplace should not return error: %v", err)
+	}
+	if !strings.Contains(output, "Error: start_line is out of range in ") {
+		t.Fatalf("expected range error with path, got: %s", output)
+	}
+	if !strings.Contains(output, "Next: use read_file to confirm the target range.") {
+		t.Fatalf("expected concise range hint, got: %s", output)
+	}
+}
+
+func TestExecuteBatchEdits_AmbiguousMatch_SummaryFirst(t *testing.T) {
+	setupTestMocks(t)
+
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test.txt")
+	testutil.CreateTempFile(t, tmpDir, "test.txt", "foo\nbar\nfoo\nbaz\nfoo")
+
+	editsJSON := `[{"old_str":"foo","new_str":"baz"}]`
+	output, err := executeBatchEditsForTest(testFile, editsJSON)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(output, "Candidates: 3 total (showing 2)") {
+		t.Fatalf("expected compact candidate summary, got: %s", output)
+	}
+	if !strings.Contains(output, "- ... 1 more candidates") {
+		t.Fatalf("expected omitted candidate summary, got: %s", output)
+	}
+	if strings.Contains(output, "Next actions:") {
+		t.Fatalf("did not expect verbose numbered next actions, got: %s", output)
+	}
+}

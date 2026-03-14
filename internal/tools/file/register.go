@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
@@ -150,6 +151,9 @@ func (t *StrReplaceTool) Run(execCtx tools.ExecutionContext, args map[string]str
 		if err != nil {
 			return result, nil, err
 		}
+		if !shouldRecordStrReplaceChange(result) {
+			return result, nil, nil
+		}
 		linesAdded, linesRemoved := 0, 0
 		var edits []EditEntry
 		if json.Unmarshal([]byte(args["edits"]), &edits) == nil {
@@ -173,6 +177,9 @@ func (t *StrReplaceTool) Run(execCtx tools.ExecutionContext, args map[string]str
 	if err != nil {
 		return result, nil, err
 	}
+	if !shouldRecordStrReplaceChange(result) {
+		return result, nil, nil
+	}
 	return result, &tools.FileChange{
 		FilePath:     args["path"],
 		Timestamp:    common.GetCurrentTime(),
@@ -181,6 +188,14 @@ func (t *StrReplaceTool) Run(execCtx tools.ExecutionContext, args map[string]str
 		LinesAdded:   countLines(args["new_str"]),
 		LinesRemoved: countLines(args["old_str"]),
 	}, nil
+}
+
+func shouldRecordStrReplaceChange(result string) bool {
+	return result != "" &&
+		!strings.HasPrefix(result, "Error:") &&
+		!strings.HasPrefix(result, "[CANCELLED]") &&
+		!strings.HasPrefix(result, "[COMMENT]") &&
+		result != "No changes after applying all edits"
 }
 
 // DeleteFileTool wraps delete_file execution
