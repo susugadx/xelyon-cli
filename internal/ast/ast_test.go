@@ -37,6 +37,41 @@ func TestIsSupportedFile(t *testing.T) {
 	}
 }
 
+// TestValidateSyntax_Valid は正常な Go コードで構文エラーが返らないことを確認する。
+func TestValidateSyntax_Valid(t *testing.T) {
+	src := []byte("package main\n\nfunc Build() error {\n\treturn nil\n}\n")
+	errors := ValidateSyntax("main.go", src)
+	if len(errors) != 0 {
+		t.Fatalf("expected no errors, got %d", len(errors))
+	}
+}
+
+// TestValidateSyntax_SyntaxError は閉じ括弧不足で構文エラーが返ることを確認する。
+func TestValidateSyntax_SyntaxError(t *testing.T) {
+	src := []byte("package main\n\nfunc Build() error {\n\treturn nil\n")
+	errors := ValidateSyntax("main.go", src)
+	if len(errors) == 0 {
+		t.Fatal("expected syntax errors")
+	}
+}
+
+// TestValidateSyntax_NonGoFile は非 Go ファイルでは検証をスキップすることを確認する。
+func TestValidateSyntax_NonGoFile(t *testing.T) {
+	errors := ValidateSyntax("main.py", []byte("invalid go code"))
+	if errors != nil {
+		t.Fatalf("expected nil for non-Go file, got %d errors", len(errors))
+	}
+}
+
+// TestValidateSyntax_MissingElement は欠落した構文要素を含むコードで構文エラーが返ることを確認する。
+func TestValidateSyntax_MissingElement(t *testing.T) {
+	src := []byte("package main\n\nfunc Build( error {\n\treturn nil\n}\n")
+	errors := ValidateSyntax("main.go", src)
+	if len(errors) == 0 {
+		t.Fatal("expected syntax errors for malformed function signature")
+	}
+}
+
 // TestExtractSymbols_GoFunction は Go シンボル抽出の基本動作を確認する。
 func TestExtractSymbols_GoFunction(t *testing.T) {
 	src := []byte(`package main

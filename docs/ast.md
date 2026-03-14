@@ -23,6 +23,7 @@
 - `IsSupportedFile(path string) bool`
 - `ParseFile(path string) (*gotreesitter.Tree, []byte, error)`
 - `ParseBytes(path string, src []byte) (*gotreesitter.Tree, []byte, error)`
+- `ValidateSyntax(path string, src []byte) []SyntaxError`
 - `ExtractSymbols(path string) ([]Symbol, error)`
 - `ExtractSymbolsFromBytes(path string, src []byte) ([]Symbol, error)`
 - `ClassifyLine(path string, src []byte, line int, targetName string) (*MatchInfo, error)`
@@ -48,3 +49,6 @@ make ci-check
 
 import 文中の `"fmt"` のような文字列リテラルは、通常の string と区別して
 `import` と分類するように実装しています。
+
+`ValidateSyntax` は Go ファイルの置換結果を Tree-sitter で再パースし、構文エラーがあれば行・列つきの警告を返します。
+現時点では `str_replace` の書き込み前チェックで利用し、警告は返すものの書き込み自体は止めません。

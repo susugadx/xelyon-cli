@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	internalast "github.com/susugadx/xelyon-cli/internal/ast"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -173,12 +174,18 @@ Hint: The replacement was not applied. If you need to make this change:
 Do not retry the same replacement.`, path), nil
 		}
 
+		syntaxWarning := validateGoSyntaxForReplace(absPath, []byte(newContent))
+		if syntaxWarning != "" && !out.SuppressStdout() {
+			out.Yellow.Printf("%s\n", syntaxWarning)
+		}
+
 		if err := os.WriteFile(absPath, []byte(newContent), 0644); err != nil {
 			return fmt.Sprintf("Error writing file: %v", err), nil
 		}
 
 		out.Green.Printf("✅ Replaced lines %d-%d in: %s\n", startLine, endLine, path)
-		return fmt.Sprintf("Successfully replaced lines %d-%d in %s (new range: %d-%d)", startLine, endLine, path, startLine, startLine+len(newStrLines)-1), nil
+		result := fmt.Sprintf("Successfully replaced lines %d-%d in %s (new range: %d-%d)", startLine, endLine, path, startLine, startLine+len(newStrLines)-1)
+		return appendSyntaxWarning(result, syntaxWarning), nil
 	}
 
 	// ========================
@@ -368,15 +375,21 @@ Hint: The replacement was not applied. If you need to make this change:
 Do not retry the same replacement.`, path), nil
 	}
 
+	syntaxWarning := validateGoSyntaxForReplace(absPath, []byte(newContent))
+	if syntaxWarning != "" && !out.SuppressStdout() {
+		out.Yellow.Printf("%s\n", syntaxWarning)
+	}
+
 	if err := os.WriteFile(absPath, []byte(newContent), 0644); err != nil {
 		return fmt.Sprintf("Error writing file: %v", err), nil
 	}
 
 	out.Green.Printf("✅ Replaced in: %s\n", path)
+	result := fmt.Sprintf("Successfully replaced text in %s (lines %d-%d → %d-%d)", path, matchStartLine, matchEndLine, matchStartLine, replacedEndLine)
 	if usedNormalizedMatch {
-		return fmt.Sprintf("Successfully replaced text in %s (lines %d-%d → %d-%d, used normalized whitespace matching)", path, matchStartLine, matchEndLine, matchStartLine, replacedEndLine), nil
+		result = fmt.Sprintf("Successfully replaced text in %s (lines %d-%d → %d-%d, used normalized whitespace matching)", path, matchStartLine, matchEndLine, matchStartLine, replacedEndLine)
 	}
-	return fmt.Sprintf("Successfully replaced text in %s (lines %d-%d → %d-%d)", path, matchStartLine, matchEndLine, matchStartLine, replacedEndLine), nil
+	return appendSyntaxWarning(result, syntaxWarning), nil
 }
 
 type lineRange struct {
@@ -460,6 +473,29 @@ func buildLineSnippet(lines []string, startLine, endLine, ctx int) string {
 		fmt.Fprintf(&b, "%s%4d: %s\n", prefix, i, lines[i-1])
 	}
 	return b.String()
+}
+
+// validateGoSyntaxForReplace は置換結果の Go ファイルを AST 検証し、構文エラー警告を返す。
+func validateGoSyntaxForReplace(path string, content []byte) string {
+	errors := internalast.ValidateSyntax(path, content)
+	if len(errors) == 0 {
+		return ""
+	}
+
+	var b strings.Builder
+	b.WriteString("⚠️  AST syntax check found issues after replacement:\n")
+	for _, syntaxError := range errors {
+		fmt.Fprintf(&b, "   • %s\n", syntaxError.Message)
+	}
+	b.WriteString("   The replacement was still applied. Consider fixing these issues.")
+	return b.String()
+}
+
+func appendSyntaxWarning(result, warning string) string {
+	if warning == "" {
+		return result
+	}
+	return result + "\n\n" + warning
 }
 
 // executeBatchEdits は batch edits モードを実行する。
@@ -592,10 +628,16 @@ Hint: The replacement was not applied. If you need to make these changes:
 Do not retry the same replacement.`, path), nil
 	}
 
+	syntaxWarning := validateGoSyntaxForReplace(absPath, []byte(content))
+	if syntaxWarning != "" && !out.SuppressStdout() {
+		out.Yellow.Printf("%s\n", syntaxWarning)
+	}
+
 	if err := os.WriteFile(absPath, []byte(content), 0644); err != nil {
 		return fmt.Sprintf("Error writing file: %v", err), nil
 	}
 
 	out.Green.Printf("✅ Applied %d edits to: %s\n", len(edits), path)
-	return fmt.Sprintf("Successfully applied %d edits to %s", len(edits), path), nil
+	result := fmt.Sprintf("Successfully applied %d edits to %s", len(edits), path)
+	return appendSyntaxWarning(result, syntaxWarning), nil
 }

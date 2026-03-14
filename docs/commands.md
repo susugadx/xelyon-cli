@@ -481,7 +481,7 @@ AIが自動で以下のツールを使用します。ユーザーが直接呼び
 |---------|------|---------|
 | `read_file` | ファイル内容を読み込む。Go ファイルは `symbol` で関数/型/メソッド単位の読み出しも可能 | `path`, `symbol`, `start_line`, `end_line`, `paths` |
 | `write_file` | ファイルを新規作成・上書き | `path`, `content` |
-| `str_replace` | 文字列置換でファイル編集（old_str優先。old_str空+start_line/end_line指定で行レンジ置換も可） | `path`, `old_str`, `new_str`, `start_line`, `end_line` |
+| `str_replace` | 文字列置換でファイル編集（old_str優先。old_str空+start_line/end_line指定で行レンジ置換も可。Go ファイルは書き込み前に AST 構文チェックを実施） | `path`, `old_str`, `new_str`, `start_line`, `end_line` |
 | `delete_file` | ファイルを削除 | `path` |
 | `list_dir` | ディレクトリ一覧取得 | `path` |
 
@@ -560,6 +560,8 @@ AIは自然言語の指示に基づいてツールを自動選択します。
 **str_replace の補足**
 - `old_str` が非空のときは従来どおり文字列置換を行い、`start_line`/`end_line` は無視されます
 - 行レンジ置換は `old_str: ""` かつ `start_line` と `end_line` を両方指定した場合のみ有効です（1-indexed, inclusive）
+- Go ファイルでは置換後の内容を AST パースし、構文エラーが見つかった場合は警告を表示して tool result にも付与します
+- AST 警告が出ても `str_replace` 自体は停止せず、ユーザー確認済みまたは auto-approve の場合はそのまま書き込みます
 
 ### MCP対応ツール
 
