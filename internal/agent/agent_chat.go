@@ -286,7 +286,7 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 			})
 			a.History = append(a.History, api.Message{
 				Role:    "user",
-				Content: "[SYSTEM] You are in NORMAL MODE. Do NOT output JSON directly. Execute the required changes directly using tools (str_replace, bash, etc).",
+				Content: "[SYSTEM] You are in NORMAL MODE. Do NOT output JSON directly. Execute the required changes directly using tools (read_file, str_replace, etc).",
 			})
 			continue
 		}
@@ -334,7 +334,7 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 					})
 					a.History = append(a.History, api.Message{
 						Role:    "user",
-						Content: "[SYSTEM] STOP planning. Pick the FIRST change and execute it NOW using str_replace or bash. One tool call, no explanation.",
+						Content: "[SYSTEM] STOP planning. Pick the FIRST change and execute it NOW using the appropriate tool (read_file, str_replace, etc). One tool call, no explanation.",
 					})
 					continue
 				}
@@ -348,7 +348,7 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 				})
 				a.History = append(a.History, api.Message{
 					Role:    "user",
-					Content: "[SYSTEM] Do NOT output plans as numbered text. Execute the required changes directly using tools (str_replace, bash, etc).",
+					Content: "[SYSTEM] Do NOT output plans as numbered text. Execute the required changes directly using tools (read_file, str_replace, etc).",
 				})
 				continue
 			}
