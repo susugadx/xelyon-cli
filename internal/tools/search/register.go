@@ -58,7 +58,7 @@ func (t *SearchCodeTool) Parameters() map[string]interface{} {
 			"include_ignored": map[string]interface{}{"type": "boolean", "description": "Include files ignored by .gitignore. Default: false."},
 			"context_lines":   map[string]interface{}{"type": "integer", "description": "Number of context lines around matches (default: 3, max: 10)"},
 			"token_budget":    map[string]interface{}{"type": "integer", "description": "Approximate token budget for results (default: 3000, max: 6000)"},
-			"output_mode":     map[string]interface{}{"type": "string", "description": "Output mode: 'full' (default, with code snippets) or 'manifest' (files and match counts only)"},
+			"output_mode":     map[string]interface{}{"type": "string", "description": "Output mode: omit for smart default (auto-collapses broad results), 'full' (always include code snippets), or 'manifest' (files and match counts only)"},
 		},
 		"required":             []string{"pattern"},
 		"additionalProperties": false,
@@ -97,8 +97,12 @@ func (t *SearchCodeTool) Run(execCtx tools.ExecutionContext, args map[string]str
 			opts.IncludeIgnored = b
 		}
 	}
-	if args["output_mode"] == "manifest" {
+	switch args["output_mode"] {
+	case "manifest":
 		opts.OutputMode = "manifest"
+	case "full":
+		opts.OutputMode = "full"
+		// default: OutputMode stays "" = smart default
 	}
 
 	if args["context_lines"] != "" {

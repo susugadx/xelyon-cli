@@ -72,7 +72,7 @@ type SearchOptions struct {
 	Multiline      bool
 	IncludeHidden  bool
 	IncludeIgnored bool
-	OutputMode     string // "full"（デフォルト）or "manifest"
+	OutputMode     string // ""（smart default）, "full", "manifest"
 }
 
 // ExecuteSearchCode はコード検索を実行し、フォーマット済み結果を返す
@@ -171,7 +171,10 @@ func executeSinglePattern(cache tools.ToolCacheInterface, pattern string, opts S
 	results = adaptiveContextTrim(results)
 	sortResultsByPriority(results)
 
-	results, truncated := truncateToTokenBudget(results, opts.TokenBudget)
+	// smart broad 圧縮はデフォルトモード（OutputMode==""）のみ適用。
+	// explicit "full" では従来の full 契約を維持する。
+	isSmart := opts.OutputMode == ""
+	results, truncated := truncateToTokenBudget(results, opts.TokenBudget, isSmart)
 
 	detectBlocksWithCache(cache, results)
 	collapseBlockMatches(results)
@@ -302,7 +305,8 @@ func executeMultiplePatterns(cache tools.ToolCacheInterface, patterns []string, 
 		if allocatedBudget < 300 {
 			allocatedBudget = 300
 		}
-		collected[i].Results, collected[i].Truncated = truncateToTokenBudget(c.Results, allocatedBudget)
+		isSmartMulti := opts.OutputMode == ""
+		collected[i].Results, collected[i].Truncated = truncateToTokenBudget(c.Results, allocatedBudget, isSmartMulti)
 		detectBlocksWithCache(cache, collected[i].Results)
 		collapseBlockMatches(collected[i].Results)
 	}
