@@ -34,11 +34,31 @@ func TestBuildInvestigationPrompt_BashLimitedToReadOnlyGit(t *testing.T) {
 
 func TestBuildInvestigationPrompt_DedicatedToolsInChecklist(t *testing.T) {
 	prompt := BuildInvestigationPrompt("test request")
-	checks := []string{"inspect_symbol", "search_code", "read_file"}
+	checks := []string{"inspect_symbol", "search_code", "read_file", "list_dir"}
 	for _, tool := range checks {
 		if !strings.Contains(prompt, tool) {
 			t.Errorf("investigation checklist should mention %s", tool)
 		}
+	}
+}
+
+func TestBuildInvestigationPrompt_PrefersInspectSymbolForExactGoSymbols(t *testing.T) {
+	prompt := BuildInvestigationPrompt("test request")
+	if !strings.Contains(prompt, "inspect_symbol first for exact Go symbols instead of search_code+read_file") {
+		t.Error("investigation prompt should prefer inspect_symbol over search_code+read_file for exact Go symbols")
+	}
+}
+
+func TestBuildInvestigationPrompt_PrefersParallelInvestigation(t *testing.T) {
+	prompt := BuildInvestigationPrompt("test request")
+	if !strings.Contains(prompt, "Prefer parallel investigation") {
+		t.Error("investigation prompt should encourage parallel investigation")
+	}
+	if !strings.Contains(prompt, "prefer read_file with paths or parallel reads in the same turn") {
+		t.Error("investigation prompt should prefer batched or parallel read_file usage")
+	}
+	if !strings.Contains(prompt, "prefer one search_code call with comma-separated patterns") {
+		t.Error("investigation prompt should prefer multi-pattern search_code")
 	}
 }
 

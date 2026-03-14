@@ -15,9 +15,13 @@ Modification tools are FORBIDDEN: write_file, str_replace, delete_file
 Allowed: inspect_symbol, search_code, read_file, list_dir, web_search, bash (read-only git commands only: git status, git diff, git log)
 
 ### INVESTIGATION CHECKLIST
--  Use inspect_symbol for known Go symbols (returns definition + callers + refs + tests)
+-  Use inspect_symbol first for exact Go symbols instead of search_code+read_file
 -  Use search_code for broad/regex discovery across the codebase
 -  Use read_file for detailed implementation context
+-  Use list_dir for current filesystem contents and choosing the next file/subtree
+-  Prefer parallel investigation: batch independent read_file/search_code/list_dir steps in one response
+-  Reading 2+ independent files -> prefer read_file with paths or parallel reads in the same turn
+-  Searching multiple independent patterns -> prefer one search_code call with comma-separated patterns
 -  For local changes (single function, local bug fix): read the target, check for immediate dependencies, then plan
 -  For shared changes (interface, public API, config, rename, delete): find ALL usages, dependencies, and tests before planning
 -  Check for existing patterns to follow

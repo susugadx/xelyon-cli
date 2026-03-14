@@ -65,6 +65,45 @@ func TestSystemPrompt_DedicatedToolsExplicit(t *testing.T) {
 	}
 }
 
+func TestSystemPrompt_InspectSymbolPreferredForExactGoSymbols(t *testing.T) {
+	if !strings.Contains(SystemPrompt, "Known exact Go symbol name -> inspect_symbol FIRST") {
+		t.Error("SystemPrompt should prefer inspect_symbol when the exact Go symbol is known")
+	}
+	if !strings.Contains(SystemPrompt, "instead of search_code+read_file") {
+		t.Error("SystemPrompt should state inspect_symbol replaces search_code+read_file for exact Go symbols")
+	}
+	if !strings.Contains(SystemPrompt, "do not read_file the same symbol unless the body is truncated") {
+		t.Error("SystemPrompt should discourage redundant read_file after inspect_symbol")
+	}
+}
+
+func TestSystemPrompt_ListDirPreferredForFilesystemExploration(t *testing.T) {
+	if !strings.Contains(SystemPrompt, "Use list_dir for current filesystem exploration") {
+		t.Error("SystemPrompt should prefer list_dir for filesystem exploration")
+	}
+	if !strings.Contains(SystemPrompt, "Project Map is a hint, not a replacement") {
+		t.Error("SystemPrompt should clarify Project Map does not replace list_dir for current filesystem state")
+	}
+	if !strings.Contains(SystemPrompt, "Directory listing -> list_dir; use it first for current filesystem contents") {
+		t.Error("SystemPrompt should prefer list_dir first for filesystem contents and next file choice")
+	}
+}
+
+func TestSystemPrompt_PrefersParallelInvestigationForIndependentSteps(t *testing.T) {
+	if !strings.Contains(SystemPrompt, "default to parallel reads/searches when the steps do not depend on each other") {
+		t.Error("SystemPrompt should prefer parallel reads/searches for independent steps")
+	}
+	if !strings.Contains(SystemPrompt, "prefer one read_file call with paths, or parallel read_file calls") {
+		t.Error("SystemPrompt should prefer batched or parallel read_file usage")
+	}
+	if !strings.Contains(SystemPrompt, "prefer one search_code call with comma-separated patterns instead of serial searches") {
+		t.Error("SystemPrompt should prefer one multi-pattern search_code call over serial searches")
+	}
+	if !strings.Contains(SystemPrompt, "read/search them in parallel before deciding the edit") {
+		t.Error("SystemPrompt should encourage parallel investigation of target code and nearby tests/callers")
+	}
+}
+
 func TestSystemPrompt_NoPhantomReadFiles(t *testing.T) {
 	// "read_files" が独立ツール名のように出てこないこと
 	// 実在ツールは "read_file" であり、複数読みは paths パラメータで行う

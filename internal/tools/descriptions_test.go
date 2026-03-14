@@ -1,6 +1,9 @@
 package tools
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestToolDescriptions_AllKeysNonEmpty(t *testing.T) {
 	for name, desc := range ToolDescriptions {
@@ -29,5 +32,37 @@ func TestToolDescriptions_KnownToolsExist(t *testing.T) {
 		if _, ok := ToolDescriptions[name]; !ok {
 			t.Errorf("ToolDescriptions missing key %q", name)
 		}
+	}
+}
+
+func TestToolDescriptions_InspectSymbolPreferredForKnownGoSymbols(t *testing.T) {
+	desc := ToolDescriptions["inspect_symbol"]
+	if !strings.Contains(desc, "Preferred for exact Go symbol names") {
+		t.Error("inspect_symbol description should mark it as preferred for exact Go symbols")
+	}
+	if !strings.Contains(desc, "instead of search_code+read_file") {
+		t.Error("inspect_symbol description should explain it replaces search_code+read_file")
+	}
+}
+
+func TestToolDescriptions_ListDirMentionsCompactSummaryAndNextChoice(t *testing.T) {
+	desc := ToolDescriptions["list_dir"]
+	if !strings.Contains(desc, "Preferred for directory exploration") {
+		t.Error("list_dir description should mark it as preferred for directory exploration")
+	}
+	if !strings.Contains(desc, "compact summary") {
+		t.Error("list_dir description should mention compact summary output")
+	}
+	if !strings.Contains(desc, "next file/subtree") {
+		t.Error("list_dir description should mention next file/subtree selection")
+	}
+}
+
+func TestToolDescriptions_ReadFileAndSearchCodeMentionParallelUsage(t *testing.T) {
+	if !strings.Contains(ToolDescriptions["read_file"], "2+ independent files in the same turn") {
+		t.Error("read_file description should encourage batched reads for independent files")
+	}
+	if !strings.Contains(ToolDescriptions["search_code"], "prefer one multi-pattern search over serial searches") {
+		t.Error("search_code description should prefer multi-pattern searches over serial searches")
 	}
 }
