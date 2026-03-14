@@ -45,9 +45,9 @@ const MaxReadLines = 300
 // LargeFileThreshold は「大容量ファイル」と判定するサイズ（1MB）
 const LargeFileThreshold = 1024 * 1024
 
-// ExecuteReadFile はファイルを読み込む（行範囲指定対応）
-// startLine, endLine が指定されている場合はその範囲のみ返す
-// 指定がない場合は最初のMaxReadLines行を返す
+// ExecuteReadFile はファイルを読み込む（行範囲指定対応）。
+// startLine, endLine が指定されている場合はその範囲のみ返す。
+// 指定がない場合は小さいファイルは全文、大きいファイルはアウトラインを返す。
 func ExecuteReadFile(path string, startLine, endLine int) string {
 	return ExecuteReadFileWithOutput(common.DefaultOutput(), path, startLine, endLine)
 }
@@ -87,8 +87,8 @@ func ExecuteReadFileBySymbolWithRuntime(out common.Output, cfg *config.Config, c
 	}
 
 	if !internalast.IsSupportedFile(absPath) {
-		printReadStatus(out, "📄 Read: %s (symbol mode not supported, falling back to full read)\n", path)
-		// symbol fallback は従来どおり MaxReadLines で full-read する
+		printReadStatus(out, "📄 Read: %s (symbol mode not supported, falling back to read_file)\n", path)
+		// symbol fallback は通常の read_file と同じ挙動（MaxReadLines 閾値）
 		return executeReadFileCore(common.NewOutput(io.Discard, io.Discard), cfg, cache, path, 0, 0, MaxReadLines)
 	}
 
