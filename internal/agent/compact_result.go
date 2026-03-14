@@ -21,17 +21,30 @@ const (
 )
 
 // compactToolResult はtool実行結果をHistory格納用に圧縮する。
-// deduplicateToolResult の後に適用し、重複参照文字列はそのまま返す。
-// read_file, search_code は既存の最適化があるため対象外。
+// readTracker によるカウントを先に行い、その後 deduplicateToolResult で重複判定する。
+// dedupe 結果にも必要に応じて guidance を追記する。
 func (a *Agent) compactToolResult(toolCall *tools.ToolCall, result string) string {
-	// 1. 重複チェック（元の全文で判定する必要がある）
+	// 1. read_file の micro-read tracking（dedupe より先にカウントを進める）
+	//    同一ファイルの完全重複 read も「read 行動」としてカウントする。
+	guidance := a.readTracker.record(toolCall)
+
+	// 2. 重複チェック（元の全文で判定する必要がある）
 	deduped := a.deduplicateToolResult(toolCall.Tool, result)
 	if deduped != result {
-		// 重複参照に差し替えられた → 圧縮不要
+		// 重複参照に差し替えられた場合でも、guidance があれば追記する。
+		// dedupe 結果はモデルに返るため、guidance を載せないと soft guard が効かない。
+		if guidance != "" {
+			deduped = appendGuidanceWithConfirm(a.readTracker, toolCall.Args["path"], deduped, guidance)
+		}
 		return deduped
 	}
 
-	// 2. ツール種別に応じた圧縮
+	// 3. guidance の追記（dedupe されなかった通常パス）
+	if guidance != "" {
+		result = appendGuidanceWithConfirm(a.readTracker, toolCall.Args["path"], result, guidance)
+	}
+
+	// 4. ツール種別に応じた圧縮
 	switch toolCall.Tool {
 	case "bash":
 		command := toolCall.Args["command"]

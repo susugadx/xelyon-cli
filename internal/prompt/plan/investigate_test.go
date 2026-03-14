@@ -41,3 +41,16 @@ func TestBuildInvestigationPrompt_DedicatedToolsInChecklist(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildInvestigationPrompt_LocalVsSharedGuidance(t *testing.T) {
+	prompt := BuildInvestigationPrompt("test request")
+	if !strings.Contains(prompt, "local changes") {
+		t.Error("investigation checklist should mention local changes")
+	}
+	if !strings.Contains(prompt, "shared changes") {
+		t.Error("investigation checklist should mention shared changes")
+	}
+	if !strings.Contains(prompt, "Avoid broad exploration") {
+		t.Error("investigation checklist should discourage broad exploration when target is clear")
+	}
+}

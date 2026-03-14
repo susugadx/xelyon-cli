@@ -46,6 +46,9 @@ func (a *Agent) chatCore(input string, image *api.ImageData, oneShot bool) error
 	prevChanges := len(a.changeStack) - a.taskChangeOffset
 	a.taskChangeOffset = len(a.changeStack)
 
+	// read tracker をリセット（新しいタスクで過去のカウントを引き継がない）
+	a.readTracker.reset()
+
 	// completion hook の git diff 空チェック判定用ベースハッシュを記録
 	a.taskBaseCommitHash = ""
 	if out, err := exec.Command("git", "rev-parse", "HEAD").Output(); err == nil {

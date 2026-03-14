@@ -68,6 +68,9 @@ type Agent struct {
 	// str_replace成功後に対象ファイルを追加し、次の非str_replaceアクション時にフラッシュして再診断する。
 	pendingLSPFiles []string
 
+	// readTracker: 同一ファイルの micro-read ループを検出し soft guidance を付与する。
+	readTracker *readTracker
+
 	// OpenAI Compact API 関連
 	compactedItems  []api.InputItem // 圧縮済みアイテム
 	isCompactedMode bool            // 圧縮モードフラグ
@@ -264,6 +267,7 @@ func NewAgentWithRuntime(model string, provider api.Provider, headless bool, run
 		Stats:           NewSessionStats(strings.ToLower(provider.Name()), model),
 		lastOutputs:     []string{},
 		ToolCache:       toolCache,
+		readTracker:     newReadTracker(),
 		status:          statusHolder{status: defaultStatus()},
 	}
 

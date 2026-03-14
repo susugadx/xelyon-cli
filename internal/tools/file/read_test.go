@@ -160,11 +160,11 @@ func TestExecuteReadFile_LargeFile_PlainText(t *testing.T) {
 	}
 }
 
-func TestExecuteReadFile_MediumFile_Outline(t *testing.T) {
+func TestExecuteReadFile_MediumFile_FullContent(t *testing.T) {
 	setupTestMocks(t)
 	tmpDir := t.TempDir()
 
-	// 150行のGoファイル（DefaultFullLines=100 を超える → outline モード）
+	// 150行のGoファイル（DefaultFullLines=200 以下 → 全文返却）
 	var sb strings.Builder
 	sb.WriteString("package main\n\nimport \"fmt\"\n\n")
 	for i := 0; i < 3; i++ {
@@ -178,9 +178,40 @@ func TestExecuteReadFile_MediumFile_Outline(t *testing.T) {
 
 	output := ExecuteReadFile(filepath.Join(tmpDir, "medium.go"), 0, 0)
 
+	// 全文返却の検証（150行 <= DefaultFullLines=200）
+	if strings.Contains(output, "Use start_line/end_line") {
+		t.Errorf("Medium file (150 lines) should NOT have outline guide message, got:\n%s", output)
+	}
+	if !strings.Contains(output, "package main") {
+		t.Errorf("Expected content to contain 'package main'")
+	}
+	// 関数名が本文に含まれる
+	if !strings.Contains(output, "func process0") {
+		t.Errorf("Expected full content to contain function definitions, got:\n%s", output)
+	}
+}
+
+func TestExecuteReadFile_LargerMediumFile_Outline(t *testing.T) {
+	setupTestMocks(t)
+	tmpDir := t.TempDir()
+
+	// 250行のGoファイル（DefaultFullLines=200 を超える → outline モード）
+	var sb strings.Builder
+	sb.WriteString("package main\n\nimport \"fmt\"\n\n")
+	for i := 0; i < 5; i++ {
+		fmt.Fprintf(&sb, "func process%d() {\n", i)
+		for j := 0; j < 45; j++ {
+			fmt.Fprintf(&sb, "\tfmt.Println(%d)\n", j)
+		}
+		sb.WriteString("}\n\n")
+	}
+	testutil.CreateTempFile(t, tmpDir, "larger_medium.go", sb.String())
+
+	output := ExecuteReadFile(filepath.Join(tmpDir, "larger_medium.go"), 0, 0)
+
 	// outline-first モードの検証
 	if !strings.Contains(output, "Use start_line/end_line") {
-		t.Errorf("Expected outline guide message for medium file, got:\n%s", output)
+		t.Errorf("Expected outline guide message for 250-line file, got:\n%s", output)
 	}
 	if !strings.Contains(output, "package main") {
 		t.Errorf("Expected head to contain 'package main'")
@@ -195,7 +226,7 @@ func TestExecuteReadFile_SmallFile_FullContent(t *testing.T) {
 	setupTestMocks(t)
 	tmpDir := t.TempDir()
 
-	// 80行のファイル（DefaultFullLines=100 以下 → 全文返却）
+	// 80行のファイル（DefaultFullLines=200 以下 → 全文返却）
 	var lines []string
 	for i := 1; i <= 80; i++ {
 		lines = append(lines, fmt.Sprintf("line%d", i))
@@ -222,11 +253,12 @@ func TestExecuteReadFile_GoOutline_SymbolHint(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Go ファイルのアウトラインに symbol ヒントがあることを確認
+	// DefaultFullLines=200 を超える 250行以上のファイル
 	var sb strings.Builder
 	sb.WriteString("package main\n\nimport \"fmt\"\n\n")
 	for i := 0; i < 5; i++ {
 		fmt.Fprintf(&sb, "func handler%d() {\n", i)
-		for j := 0; j < 25; j++ {
+		for j := 0; j < 45; j++ {
 			fmt.Fprintf(&sb, "\tfmt.Println(%d)\n", j)
 		}
 		sb.WriteString("}\n\n")
@@ -245,8 +277,9 @@ func TestExecuteReadFile_NonGoOutline_NoSymbolHint(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// 非 Go ファイルのアウトラインに symbol ヒントが含まれないことを確認
+	// DefaultFullLines=200 を超える 300 行のファイル
 	var lines []string
-	for i := 0; i < 200; i++ {
+	for i := 0; i < 300; i++ {
 		lines = append(lines, fmt.Sprintf("data line %d", i))
 	}
 	testutil.CreateTempFile(t, tmpDir, "data.txt", strings.Join(lines, "\n"))
@@ -509,7 +542,7 @@ func TestExecuteReadFileBySymbol_NonGoFile_LargeFullRead(t *testing.T) {
 	tmpDir := t.TempDir()
 	pyFile := filepath.Join(tmpDir, "large.py")
 
-	// 200行の Python ファイル（DefaultFullLines=100 を超えるが、symbol fallback は full read）
+	// 200行の Python ファイル（symbol fallback は MaxReadLines=300 で full read）
 	var sb strings.Builder
 	for i := 1; i <= 200; i++ {
 		fmt.Fprintf(&sb, "line_%d = %d\n", i, i)

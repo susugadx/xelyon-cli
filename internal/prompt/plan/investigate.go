@@ -18,9 +18,10 @@ Allowed: inspect_symbol, search_code, read_file, list_dir, web_search, bash (rea
 -  Use inspect_symbol for known Go symbols (returns definition + callers + refs + tests)
 -  Use search_code for broad/regex discovery across the codebase
 -  Use read_file for detailed implementation context
--  Find related code (search for usages, dependencies)
+-  For local changes (single function, local bug fix): read the target, check for immediate dependencies, then plan
+-  For shared changes (interface, public API, config, rename, delete): find ALL usages, dependencies, and tests before planning
 -  Check for existing patterns to follow
--  Identify potential impacts of changes
+-  Avoid broad exploration when the target is already clear
 
 ### AFTER INVESTIGATION
 When ready, output your implementation plan as text that includes a single JSON object matching the Plan schema.

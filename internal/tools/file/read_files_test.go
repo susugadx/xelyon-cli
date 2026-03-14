@@ -184,9 +184,10 @@ func TestPerFileBudget(t *testing.T) {
 		n    int
 		want int
 	}{
-		{1, DefaultFullLines}, // 500/1=500, capped to 100
-		{2, DefaultFullLines}, // 500/2=250, capped to 100
-		{5, DefaultFullLines}, // 500/5=100, == 100
+		{1, DefaultFullLines}, // 500/1=500, capped to DefaultFullLines(200)
+		{2, DefaultFullLines}, // 500/2=250, capped to DefaultFullLines(200)
+		{3, 166},              // 500/3=166, within range
+		{5, 100},              // 500/5=100, within range
 		{6, 83},               // 500/6=83
 		{10, 50},              // 500/10=50
 		{20, 30},              // 500/20=25, floored to 30
@@ -240,7 +241,7 @@ func TestExecuteReadFiles_SmallFilesFullContent(t *testing.T) {
 	setupTestMocks(t)
 	tmpDir := t.TempDir()
 
-	// 50行のファイルを4個作成（budget=100, 50 < 100 → 全文返却）
+	// 50行のファイルを4個作成（budget=125, 50 < 125 → 全文返却）
 	paths := make([]string, 4)
 	for i := range paths {
 		name := fmt.Sprintf("f%d.txt", i)

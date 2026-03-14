@@ -75,6 +75,50 @@ func TestSystemPrompt_NoPhantomReadFiles(t *testing.T) {
 	}
 }
 
+func TestSystemPrompt_LocalVsSharedChangeGuidance(t *testing.T) {
+	// Local vs shared changes の区別がプロンプトに含まれている
+	if !strings.Contains(SystemPrompt, "Local vs shared changes") {
+		t.Error("SystemPrompt should contain 'Local vs shared changes' guidance")
+	}
+	// shared changes では callers, references, tests の確認を要求
+	if !strings.Contains(SystemPrompt, "shared changes") {
+		t.Error("SystemPrompt should mention shared changes requiring broader investigation")
+	}
+}
+
+func TestSystemPrompt_ImpactAnalysisLocalSharedConsistency(t *testing.T) {
+	// Impact Analysis が local/shared の区分を含む
+	if !strings.Contains(SystemPrompt, "**Shared changes**") {
+		t.Error("Impact Analysis should have **Shared changes** section")
+	}
+	if !strings.Contains(SystemPrompt, "**Local changes**") {
+		t.Error("Impact Analysis should have **Local changes** section")
+	}
+	// Local changes では broad search 不要
+	if !strings.Contains(SystemPrompt, "broad reference search is not required") {
+		t.Error("Impact Analysis should explicitly state broad search is not required for local changes")
+	}
+}
+
+func TestSystemPrompt_NoBroadFirstDefault(t *testing.T) {
+	// "read broadly first" は削除されている
+	if strings.Contains(SystemPrompt, "read broadly first") {
+		t.Error("SystemPrompt should not contain 'read broadly first' — replaced by local/shared distinction")
+	}
+	// "Read enough surrounding context" は削除されている
+	if strings.Contains(SystemPrompt, "Read enough surrounding context") {
+		t.Error("SystemPrompt should not contain 'Read enough surrounding context' — replaced by local/shared distinction")
+	}
+}
+
+func TestSystemPrompt_LocalChangeExamplesSafe(t *testing.T) {
+	// "adding a field" は local change の例に含まれない（波及しやすいため）
+	// local change の例文を検出して "adding a field" が含まれていないことを確認
+	if strings.Contains(SystemPrompt, "local changes (bug fix in one function, adding a field") {
+		t.Error("local change examples should not include 'adding a field' — it can ripple to constructors/tests")
+	}
+}
+
 func TestSystemPrompt_NoBashRecommendations(t *testing.T) {
 	// "bash (grep)" や "Use bash" といった調査用 bash 推奨パターンが含まれていない
 	// NOTE: "bash cat/head/tail/grep/find/sed/awk are FORBIDDEN" のような禁止文は OK

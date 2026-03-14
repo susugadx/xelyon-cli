@@ -37,7 +37,9 @@ func formatFileSize(bytes int64) string {
 
 // DefaultFullLines は行範囲未指定時にアウトラインへ切り替える閾値。
 // この行数以下のファイルは全文を返し、超えるとアウトラインモードになる。
-const DefaultFullLines = 100
+// 200行にすることで、100〜200行の中規模ファイルで outline → range read の
+// 往復ターンを削減する。大きいファイル（200行超）は引き続き outline-first。
+const DefaultFullLines = 200
 
 // MaxReadLines は行範囲指定時のデフォルト最大読み込み行数
 const MaxReadLines = 300
