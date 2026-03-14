@@ -880,6 +880,81 @@ func TestGetThinkingSpinnerMessage(t *testing.T) {
 	}
 }
 
+// ===== ChatWithImage Response Start Timeout Tests =====
+
+func TestChatWithImage_ResponseStartTimeoutRetry(t *testing.T) {
+	// ChatWithImage: response-start timeout → 1回リトライ → 2回目で成功
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		if requestCount == 1 {
+			// 1回目: レスポンスヘッダーを返さずタイムアウトさせる
+			time.Sleep(3 * time.Second)
+			return
+		}
+		// 2回目: 正常レスポンス
+		w.Header().Set("Content-Type", "text/event-stream")
+		resp := GeminiFunctionResponse{
+			Candidates: []GeminiFunctionCandidate{
+				{Content: GeminiFunctionContent{
+					Parts: []GeminiFunctionPart{{Text: "Image analyzed after retry"}},
+				}},
+			},
+		}
+		jsonBytes, _ := json.Marshal(resp)
+		fmt.Fprintf(w, "data: %s\n\n", string(jsonBytes))
+	}))
+	defer server.Close()
+
+	originalURL := os.Getenv("GEMINI_API_URL")
+	defer os.Setenv("GEMINI_API_URL", originalURL)
+	os.Setenv("GEMINI_API_URL", server.URL)
+
+	p := New("test-key")
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.ResponseHeaderTimeout = 1 * time.Second
+	p.httpClient.Transport = transport
+
+	image := &api.ImageData{Base64: "dGVzdA==", MediaType: "image/png"}
+	result, err := p.ChatWithImage(context.Background(), "System", nil, "Describe this", image, "")
+	if err != nil {
+		t.Fatalf("ChatWithImage() error = %v", err)
+	}
+	if result != "Image analyzed after retry" {
+		t.Errorf("ChatWithImage() = %q, want 'Image analyzed after retry'", result)
+	}
+	if requestCount < 2 {
+		t.Errorf("Expected at least 2 requests (timeout + retry), got %d", requestCount)
+	}
+}
+
+func TestChatWithImage_ResponseStartTimeoutExceedsMaxRetries(t *testing.T) {
+	// ChatWithImage: response-start timeout → リトライ上限超過でエラー
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(3 * time.Second)
+	}))
+	defer server.Close()
+
+	originalURL := os.Getenv("GEMINI_API_URL")
+	defer os.Setenv("GEMINI_API_URL", originalURL)
+	os.Setenv("GEMINI_API_URL", server.URL)
+
+	p := New("test-key")
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.ResponseHeaderTimeout = 1 * time.Second
+	p.httpClient.Transport = transport
+
+	image := &api.ImageData{Base64: "dGVzdA==", MediaType: "image/png"}
+	_, err := p.ChatWithImage(context.Background(), "System", nil, "Describe this", image, "")
+	if err == nil {
+		t.Fatal("ChatWithImage() should return error when max retries exceeded")
+	}
+	errMsg := err.Error()
+	if !containsAny(errMsg, "response start timeout", "exceeded max retries") {
+		t.Errorf("error message should mention response start timeout, got: %v", err)
+	}
+}
+
 // containsAny は文字列が指定された部分文字列のいずれかを含むか判定
 func containsAny(s string, substrs ...string) bool {
 	for _, sub := range substrs {
