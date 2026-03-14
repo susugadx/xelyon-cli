@@ -207,6 +207,12 @@ func TestGreet(t *testing.T) {
 	if !strings.Contains(result, "TestGreet") {
 		t.Errorf("expected TestGreet in output, got: %s", result)
 	}
+	if strings.Contains(result, "[test]") {
+		t.Errorf("test refs should be shown only in Related tests, got: %s", result)
+	}
+	if strings.Contains(result, "References (") || strings.Contains(result, "References:") {
+		t.Errorf("test-only references must not appear in References section, got: %s", result)
+	}
 }
 
 func TestFormatMultipleCandidates(t *testing.T) {
@@ -244,7 +250,7 @@ func TestFormatInspectResult(t *testing.T) {
 			{File: "init.go", Line: 30, Snippet: "var defaultBuilder = Build"},
 		},
 		Tests: []TestRef{
-			{File: "agent_test.go", Name: "TestBuild_Normal", Line: 55, EndLine: 80},
+			{File: "agent_test.go", Name: "TestBuild_Normal", Line: 55},
 		},
 	})
 
@@ -259,6 +265,104 @@ func TestFormatInspectResult(t *testing.T) {
 	}
 	if !strings.Contains(result, "Related tests (1)") {
 		t.Error("expected tests section")
+	}
+}
+
+func TestFormatInspectResult_SummaryContractForTruncatedSections(t *testing.T) {
+	result := formatInspectResult(InspectResult{
+		Symbol: &SymbolCandidate{
+			Name: "Build", Kind: "function",
+			File: "agent.go", Line: 21, EndLine: 85,
+		},
+		Body: []string{"21: func Build() {}"},
+		Callers: []Reference{
+			{File: "cmd/root.go", Line: 88, Scope: "func main"},
+			{File: "cmd/serve.go", Line: 42, Scope: "func runServer"},
+		},
+		TotalCallers: 5,
+		MoreCallers:  true,
+		Refs: []Reference{
+			{File: "init.go", Line: 30, Snippet: "var defaultBuilder = Build"},
+		},
+		TotalRefs: 3,
+		MoreRefs:  true,
+		Tests: []TestRef{
+			{File: "agent_test.go", Name: "TestBuild_Normal", Line: 55},
+		},
+		TotalTests: 2,
+		MoreTests:  true,
+	})
+
+	if !strings.Contains(result, "Callers: 2 examples (of 5 found)") {
+		t.Errorf("expected callers shown/total contract, got: %s", result)
+	}
+	if !strings.Contains(result, "References: 1 examples (of 3 found)") {
+		t.Errorf("expected refs shown/total contract, got: %s", result)
+	}
+	if !strings.Contains(result, "Related tests: 1 examples (of 2 found)") {
+		t.Errorf("expected tests shown/total contract, got: %s", result)
+	}
+	if !strings.Contains(result, "(+ more callers. Use mode=\"full\" or search_code)") {
+		t.Errorf("expected callers next action hint, got: %s", result)
+	}
+	if !strings.Contains(result, "(+ more references. Use mode=\"full\" or search_code)") {
+		t.Errorf("expected refs next action hint, got: %s", result)
+	}
+	if !strings.Contains(result, "(+ more tests. Use mode=\"full\" or search_code)") {
+		t.Errorf("expected tests next action hint, got: %s", result)
+	}
+	if strings.Contains(result, "has related tests") {
+		t.Errorf("legacy placeholder style must not appear, got: %s", result)
+	}
+	if !strings.Contains(result, "agent_test.go:55 | func TestBuild_Normal") {
+		t.Errorf("expected related test path/line/name, got: %s", result)
+	}
+}
+
+func TestFormatInspectResult_NextActionHints_OnlyWhenMore(t *testing.T) {
+	result := formatInspectResult(InspectResult{
+		Symbol: &SymbolCandidate{
+			Name: "Build", Kind: "function",
+			File: "agent.go", Line: 21, EndLine: 85,
+		},
+		Body: []string{"21: func Build() {}"},
+		Callers: []Reference{
+			{File: "cmd/root.go", Line: 88, Scope: "func main"},
+		},
+		Refs: []Reference{
+			{File: "init.go", Line: 30, Snippet: "var defaultBuilder = Build"},
+		},
+		Tests: []TestRef{
+			{File: "agent_test.go", Name: "TestBuild_Normal", Line: 55},
+		},
+	})
+
+	if strings.Contains(result, "examples (of") {
+		t.Errorf("shown/total format must not appear when section is complete, got: %s", result)
+	}
+	if strings.Contains(result, "(+ more callers") ||
+		strings.Contains(result, "(+ more references") ||
+		strings.Contains(result, "(+ more tests") {
+		t.Errorf("next action hints must appear only when More* is true, got: %s", result)
+	}
+}
+
+func TestFormatInspectResult_UpstreamIncompletePrecedenceOverTruncated(t *testing.T) {
+	result := formatInspectResult(InspectResult{
+		Symbol: &SymbolCandidate{
+			Name: "Build", Kind: "function",
+			File: "agent.go", Line: 21, EndLine: 85,
+		},
+		Body:               []string{"21: func Build() {}"},
+		UpstreamIncomplete: true,
+		UpstreamTruncated:  true,
+	})
+
+	if !strings.Contains(result, "incomplete due to errors") {
+		t.Errorf("expected incomplete warning, got: %s", result)
+	}
+	if strings.Contains(result, "truncated upstream") {
+		t.Errorf("truncated note must not be emitted when incomplete warning is shown, got: %s", result)
 	}
 }
 
@@ -360,6 +464,9 @@ func TestClassifyRefs(t *testing.T) {
 	if len(classified) != 1 {
 		t.Errorf("expected 1 non-test ref, got %d", len(classified))
 	}
+	if len(classified) > 0 && classified[0].File != "init.go" {
+		t.Errorf("expected surviving reference from init.go, got %s", classified[0].File)
+	}
 }
 
 func TestFilterRefsByCandidate_AmbiguousFileExclusion(t *testing.T) {
@@ -380,6 +487,17 @@ func TestFilterRefsByCandidate_AmbiguousFileExclusion(t *testing.T) {
 	filtered := filterRefsByCandidate(refs, cand, ambiguousFiles)
 	if len(filtered) != 2 {
 		t.Errorf("expected 2 refs after filtering, got %d", len(filtered))
+	}
+
+	gotFiles := map[string]bool{}
+	for _, ref := range filtered {
+		gotFiles[ref.File] = true
+	}
+	if gotFiles["config.go"] {
+		t.Errorf("config.go refs must be filtered out, got: %+v", filtered)
+	}
+	if !gotFiles["main.go"] || !gotFiles["init.go"] {
+		t.Errorf("expected survivors main.go and init.go, got: %+v", filtered)
 	}
 }
 
@@ -405,6 +523,9 @@ func TestFilterRefsByCandidate_ReverseDirection(t *testing.T) {
 	if len(filtered) != 1 {
 		t.Errorf("expected 1 ref (handler.go), got %d", len(filtered))
 	}
+	if len(filtered) > 0 && filtered[0].File != "handler.go" {
+		t.Errorf("expected handler.go survivor, got %+v", filtered[0])
+	}
 }
 
 func TestClassifyCallers_InterfaceAndFuncTypeNotCaller(t *testing.T) {
@@ -420,6 +541,9 @@ func TestClassifyCallers_InterfaceAndFuncTypeNotCaller(t *testing.T) {
 	callers, _, _ := classifyCallers(refs, def, 10)
 	if len(callers) != 1 {
 		t.Errorf("expected 1 caller, got %d", len(callers))
+	}
+	if len(callers) > 0 && callers[0].File != "main.go" {
+		t.Errorf("expected only executable caller main.go, got %+v", callers[0])
 	}
 }
 

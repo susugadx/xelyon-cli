@@ -1,6 +1,7 @@
 package navigation
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/ast"
@@ -24,7 +25,13 @@ func findRelatedTests(symbol string, refs []Reference, limit int) ([]TestRef, in
 	var results []TestRef
 	seen := make(map[string]bool)
 
+	var files []string
 	for f := range testFiles {
+		files = append(files, f)
+	}
+	sort.Strings(files)
+
+	for _, f := range files {
 		// テストファイルからテスト関数を抽出
 		symbols, err := ast.ExtractSymbols(f)
 		if err != nil {
@@ -42,10 +49,9 @@ func findRelatedTests(symbol string, refs []Reference, limit int) ([]TestRef, in
 				}
 				seen[key] = true
 				results = append(results, TestRef{
-					File:      toRelativePath(f),
-					Line:      s.Line,
-					Name:      s.Name,
-					Signature: s.Signature,
+					File: toRelativePath(f),
+					Line: s.Line,
+					Name: s.Name,
 				})
 			}
 		}

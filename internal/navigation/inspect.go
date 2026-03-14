@@ -48,12 +48,11 @@ var FullBudget = Budget{
 
 // SymbolCandidate はシンボル候補。
 type SymbolCandidate struct {
-	Name      string
-	Kind      string
-	File      string // プロジェクトルートからの相対パス
-	Line      int
-	EndLine   int
-	Signature string
+	Name    string
+	Kind    string
+	File    string // プロジェクトルートからの相対パス
+	Line    int
+	EndLine int
 }
 
 // InspectResult は inspect_symbol の結果。
@@ -89,13 +88,11 @@ type Reference struct {
 	Class   ast.MatchClass // AST 分類（ClassCall, ClassRef, ClassDef 等）
 }
 
-// TestRef はテスト参照。
+// TestRef は関連テストの参照情報。
 type TestRef struct {
-	File      string
-	Name      string
-	Line      int
-	EndLine   int
-	Signature string
+	File string
+	Name string
+	Line int
 }
 
 // InspectSymbol は指定シンボルの定義・caller・ref・テストをまとめて返す。
@@ -165,12 +162,11 @@ func resolveSymbolCandidates(symbol, pathHint string) []SymbolCandidate {
 			if s.Name == symbol {
 				relPath := toRelativePath(f)
 				candidates = append(candidates, SymbolCandidate{
-					Name:      s.Name,
-					Kind:      string(s.Kind),
-					File:      relPath,
-					Line:      s.Line,
-					EndLine:   s.EndLine,
-					Signature: s.Signature,
+					Name:    s.Name,
+					Kind:    string(s.Kind),
+					File:    relPath,
+					Line:    s.Line,
+					EndLine: s.EndLine,
 				})
 			}
 		}
@@ -402,11 +398,7 @@ func formatInspectResult(r InspectResult) string {
 			fmt.Fprintf(&sb, "\nRelated tests (%d):\n", len(r.Tests))
 		}
 		for _, t := range r.Tests {
-			if t.Name == "test-file" {
-				fmt.Fprintf(&sb, "  - %s (has related tests)\n", t.File)
-			} else {
-				fmt.Fprintf(&sb, "  - %s:%d | func %s\n", t.File, t.Line, t.Name)
-			}
+			fmt.Fprintf(&sb, "  - %s:%d | func %s\n", t.File, t.Line, t.Name)
 		}
 		if r.MoreTests {
 			sb.WriteString("  (+ more tests. Use mode=\"full\" or search_code)\n")
