@@ -27,8 +27,11 @@ func argsToJSON(args map[string]any) string {
 	return string(b)
 }
 
-func (a *Agent) toolExecutionContext(stdin io.Reader, stdout, stderr io.Writer) tools.ExecutionContext {
+func (a *Agent) toolExecutionContext(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer) tools.ExecutionContext {
 	runtimeUI := a.ui()
+	if ctx == nil {
+		ctx = a.currentRequestContext()
+	}
 	if stdin == nil {
 		stdin = runtimeUI.Input()
 	}
@@ -39,6 +42,7 @@ func (a *Agent) toolExecutionContext(stdin io.Reader, stdout, stderr io.Writer) 
 		stderr = runtimeUI.ErrorOutput()
 	}
 	return tools.ExecutionContext{
+		Context:      ctx,
 		ProviderName: a.ProviderName,
 		Model:        a.CurrentModel,
 		Stdin:        stdin,
@@ -55,7 +59,14 @@ func (a *Agent) toolExecutionContext(stdin io.Reader, stdout, stderr io.Writer) 
 	}
 }
 
-func (a *Agent) executeToolWithSpinner(toolCall *tools.ToolCall) (string, *tools.FileChange) {
+func (a *Agent) currentRequestContext() context.Context {
+	if a != nil && a.requestCtx != nil {
+		return a.requestCtx
+	}
+	return context.Background()
+}
+
+func (a *Agent) executeToolWithSpinner(ctx context.Context, toolCall *tools.ToolCall) (string, *tools.FileChange) {
 	// ネガティブキャッシュチェック（ブロックせずログ表示のみ）
 	if a.ToolCache != nil {
 		if result, hit := a.ToolCache.CheckNegativeCache(toolCall.Tool, toolCall.RawArgs); hit {
@@ -68,7 +79,7 @@ func (a *Agent) executeToolWithSpinner(toolCall *tools.ToolCall) (string, *tools
 	spinner.Start(ui.SpinnerMessageForTool(toolCall.Tool))
 	a.ui().SetSpinner(spinner)
 
-	result, change := tools.ExecuteWithContext(a.toolExecutionContext(nil, nil, nil), toolCall)
+	result, change := tools.ExecuteWithContext(a.toolExecutionContext(ctx, nil, nil, nil), toolCall)
 	a.ui().StopSpinner()
 	a.recordToolResultOptimizations(toolCall.Tool, result)
 
@@ -133,7 +144,7 @@ func (a *Agent) addToolCallsToHistory(response string, toolCalls []*tools.ToolCa
 // addToolCallsToHistory でバッチ化済みの場合に使用する。
 func (a *Agent) executeToolOnly(toolCall *tools.ToolCall) string {
 	// ツール実行
-	result, change := a.executeToolWithSpinner(toolCall)
+	result, change := a.executeToolWithSpinner(a.currentRequestContext(), toolCall)
 
 	// str_replace エラー処理
 	if a.handleStrReplaceErrors(toolCall, result) {
@@ -292,7 +303,7 @@ func (a *Agent) executeToolCallInternal(response string, toolCall *tools.ToolCal
 	a.addToolCallToHistory(response, toolCall)
 
 	// ツール実行
-	result, change := a.executeToolWithSpinner(toolCall)
+	result, change := a.executeToolWithSpinner(a.currentRequestContext(), toolCall)
 
 	// str_replace エラー処理
 	if a.handleStrReplaceErrors(toolCall, result) {
@@ -505,11 +516,8 @@ type toolExecResult struct {
 // cancel の実効性（best effort）:
 //
 //	ctx.Err() を実行前にチェックして早期リターンする。
-//	ただし tools.ExecuteQuietWithContext → Tool.Run() は ctx を受け取らないため、
-//	実行開始後のキャンセルは効かない（best effort）。
-//	Tool interface への ctx 伝播は将来課題。
-//	bash のみ ExecuteBashWithContext(ctx) が存在するが、Registry 経由の
-//	Tool.Run() からは使えない。
+//	Tool.Run() まで request context を伝播するが、各ツールがそれを使うかは個別実装次第。
+//	現状は bash など context-aware なツールが実行中キャンセルを拾える。
 func (a *Agent) executeToolForParallel(ctx context.Context, tc *tools.ToolCall) (string, *tools.FileChange) {
 	if ctx.Err() != nil {
 		return "Error: context cancelled", nil
@@ -523,7 +531,7 @@ func (a *Agent) executeToolForParallel(ctx context.Context, tc *tools.ToolCall) 
 	}
 
 	// ExecuteQuietWithContext: ヘッダー・引数・折りたたみ出力と補助 stdout を抑制（parallel path 用）
-	result, change := tools.ExecuteQuietWithContext(a.toolExecutionContext(strings.NewReader(""), io.Discard, io.Discard), tc)
+	result, change := tools.ExecuteQuietWithContext(a.toolExecutionContext(ctx, strings.NewReader(""), io.Discard, io.Discard), tc)
 	a.recordToolResultOptimizations(tc.Tool, result)
 
 	if a.ToolCache != nil {
@@ -653,6 +661,10 @@ func (a *Agent) executeToolCallsWithParallel(
 	//   実行開始後のキャンセルは効かない（次の goroutine 起動時にスキップされる）。
 	if len(parallelEntries) > 0 {
 		startedAt := time.Now()
+		parallelSpinner := a.ui().NewSpinner()
+		parallelSpinner.Start(parallelGroupSpinnerMessage(allToolCalls, parallelEntries))
+		a.ui().SetSpinner(parallelSpinner)
+
 		sem := make(chan struct{}, tools.MaxParallelTools)
 		var wg sync.WaitGroup
 		var mu sync.Mutex
@@ -677,6 +689,7 @@ func (a *Agent) executeToolCallsWithParallel(
 			}(idx)
 		}
 		wg.Wait()
+		a.ui().StopSpinner()
 		printParallelToolGroup(a.output(), a.cfg(), allToolCalls, parallelEntries, results, time.Since(startedAt))
 	}
 
@@ -686,7 +699,7 @@ func (a *Agent) executeToolCallsWithParallel(
 			results[idx] = toolExecResult{result: "Error: context cancelled"}
 			continue
 		}
-		r, c := a.executeToolWithSpinner(allToolCalls[idx])
+		r, c := a.executeToolWithSpinner(ctx, allToolCalls[idx])
 		results[idx] = toolExecResult{result: r, change: c}
 	}
 
@@ -878,4 +891,37 @@ func formatParallelGroupSummary(allToolCalls []*tools.ToolCall, indices []int, e
 		return fmt.Sprintf("Done (%s)", ui.FormatParallelElapsed(elapsed))
 	}
 	return fmt.Sprintf("Done: %s (%s)", strings.Join(parts, ", "), ui.FormatParallelElapsed(elapsed))
+}
+
+func parallelGroupSpinnerMessage(allToolCalls []*tools.ToolCall, indices []int) string {
+	if len(indices) == 0 {
+		return "Running parallel tools..."
+	}
+
+	counts := make(map[string]int)
+	for _, idx := range indices {
+		switch allToolCalls[idx].Tool {
+		case "read_file", "read_files", "list_dir":
+			counts["reads"]++
+		case "search_code":
+			counts["searches"]++
+		case "inspect_symbol":
+			counts["inspects"]++
+		case "web_search":
+			counts["web"]++
+		default:
+			counts["tools"]++
+		}
+	}
+
+	switch {
+	case counts["reads"] > 0 && len(counts) == 1:
+		return "Reading files..."
+	case counts["searches"] > 0 && len(counts) == 1:
+		return "Searching code..."
+	case counts["inspects"] > 0 && len(counts) == 1:
+		return "Inspecting symbols..."
+	default:
+		return fmt.Sprintf("Running %d parallel tools...", len(indices))
+	}
 }

@@ -32,10 +32,10 @@ type Budget struct {
 
 // SummaryBudget は summary モードの出力上限。
 var SummaryBudget = Budget{
-	BodyLines:   30,
-	CallerLimit: 5,
-	RefLimit:    8,
-	TestLimit:   3,
+	BodyLines:   15,
+	CallerLimit: 2,
+	RefLimit:    2,
+	TestLimit:   1,
 }
 
 // FullBudget は full モードの出力上限。
@@ -69,11 +69,14 @@ type InspectResult struct {
 	Candidates []SymbolCandidate
 
 	// 打ち切り情報
+	TotalCallers       int
+	TotalRefs          int
+	TotalTests         int
 	MoreCallers        bool
 	MoreRefs           bool
 	MoreTests          bool
-	UpstreamTruncated  bool // rg 等の上流検索が結果を打ち切ったか
-	UpstreamIncomplete bool // rg 等の上流検索が異常終了し結果が不完全か
+	UpstreamTruncated  bool
+	UpstreamIncomplete bool
 }
 
 // Reference はシンボル参照。
@@ -88,10 +91,11 @@ type Reference struct {
 
 // TestRef はテスト参照。
 type TestRef struct {
-	File    string
-	Name    string
-	Line    int
-	EndLine int
+	File      string
+	Name      string
+	Line      int
+	EndLine   int
+	Signature string
 }
 
 // InspectSymbol は指定シンボルの定義・caller・ref・テストをまとめて返す。
@@ -136,11 +140,10 @@ func InspectSymbol(symbol, pathHint, mode string) string {
 	allRefs, upstreamTruncated, upstreamIncomplete := findReferences(symbol)
 	result.UpstreamTruncated = upstreamTruncated
 	result.UpstreamIncomplete = upstreamIncomplete
-	// 候補に安全に帰属できない参照を除外
 	allRefs = filterRefsByCandidate(allRefs, cand, ambiguousFiles)
-	result.Callers, result.MoreCallers = classifyCallers(allRefs, cand, budget.CallerLimit)
-	result.Refs, result.MoreRefs = classifyRefs(allRefs, cand, budget.RefLimit)
-	result.Tests, result.MoreTests = findRelatedTests(symbol, allRefs, budget.TestLimit)
+	result.Callers, result.TotalCallers, result.MoreCallers = classifyCallers(allRefs, cand, budget.CallerLimit)
+	result.Refs, result.TotalRefs, result.MoreRefs = classifyRefs(allRefs, cand, budget.RefLimit)
+	result.Tests, result.TotalTests, result.MoreTests = findRelatedTests(symbol, allRefs, budget.TestLimit)
 
 	return formatInspectResult(result)
 }
@@ -355,61 +358,66 @@ func formatInspectResult(r InspectResult) string {
 
 	// Callers
 	if len(r.Callers) > 0 {
-		fmt.Fprintf(&sb, "\nCallers (%d):\n", len(r.Callers))
+		if r.MoreCallers {
+			fmt.Fprintf(&sb, "\nCallers: %d examples (of %d found)\n", len(r.Callers), r.TotalCallers)
+		} else {
+			fmt.Fprintf(&sb, "\nCallers (%d):\n", len(r.Callers))
+		}
 		for _, c := range r.Callers {
 			scope := ""
 			if c.Scope != "" && c.Scope != "package-level" {
 				scope = " in " + c.Scope
 			}
-			fmt.Fprintf(&sb, "  %-45s %s\n",
-				fmt.Sprintf("%s:%d", c.File, c.Line), scope)
+			fmt.Fprintf(&sb, "  - %s:%d%s\n", c.File, c.Line, scope)
 		}
 		if r.MoreCallers {
-			sb.WriteString("  ... (more callers truncated)\n")
+			sb.WriteString("  (+ more callers. Use mode=\"full\" or search_code)\n")
 		}
 	}
 
 	// References
 	if len(r.Refs) > 0 {
-		fmt.Fprintf(&sb, "\nReferences (%d):\n", len(r.Refs))
+		if r.MoreRefs {
+			fmt.Fprintf(&sb, "\nReferences: %d examples (of %d found)\n", len(r.Refs), r.TotalRefs)
+		} else {
+			fmt.Fprintf(&sb, "\nReferences (%d):\n", len(r.Refs))
+		}
 		for _, ref := range r.Refs {
 			label := ""
 			if ref.IsTest {
 				label = " [test]"
 			}
-			fmt.Fprintf(&sb, "  %-45s %s%s\n",
-				fmt.Sprintf("%s:%d", ref.File, ref.Line),
-				strings.TrimSpace(ref.Snippet), label)
+			fmt.Fprintf(&sb, "  - %s:%d | %s%s\n", ref.File, ref.Line, strings.TrimSpace(ref.Snippet), label)
 		}
 		if r.MoreRefs {
-			sb.WriteString("  ... (more references truncated)\n")
+			sb.WriteString("  (+ more references. Use mode=\"full\" or search_code)\n")
 		}
 	}
 
 	// Related tests
 	if len(r.Tests) > 0 {
-		fmt.Fprintf(&sb, "\nRelated tests (%d):\n", len(r.Tests))
+		if r.MoreTests {
+			fmt.Fprintf(&sb, "\nRelated tests: %d examples (of %d found)\n", len(r.Tests), r.TotalTests)
+		} else {
+			fmt.Fprintf(&sb, "\nRelated tests (%d):\n", len(r.Tests))
+		}
 		for _, t := range r.Tests {
-			fmt.Fprintf(&sb, "  %-45s %s (L%d-L%d)\n",
-				fmt.Sprintf("%s:%d", t.File, t.Line),
-				t.Name, t.Line, t.EndLine)
+			if t.Name == "test-file" {
+				fmt.Fprintf(&sb, "  - %s (has related tests)\n", t.File)
+			} else {
+				fmt.Fprintf(&sb, "  - %s:%d | func %s\n", t.File, t.Line, t.Name)
+			}
 		}
 		if r.MoreTests {
-			sb.WriteString("  ... (more tests truncated)\n")
+			sb.WriteString("  (+ more tests. Use mode=\"full\" or search_code)\n")
 		}
 	}
 
-	// Truncation summary
-	sb.WriteString("\nTruncated:\n")
-	fmt.Fprintf(&sb, "  callers: %t\n", r.MoreCallers)
-	fmt.Fprintf(&sb, "  references: %t\n", r.MoreRefs)
-	fmt.Fprintf(&sb, "  tests: %t\n", r.MoreTests)
-	if r.UpstreamTruncated {
-		sb.WriteString("  upstream: true (search results were capped; counts may be incomplete)\n")
-	}
+	// 打ち切り情報（コンパクトな注記）
 	if r.UpstreamIncomplete {
-		sb.WriteString("\nWarnings:\n")
-		sb.WriteString("  search incomplete: true (upstream reference search ended abnormally; callers/references/tests may be missing)\n")
+		sb.WriteString("\nWarning: Upstream search may be incomplete due to errors. Use narrower search scopes.\n")
+	} else if r.UpstreamTruncated {
+		sb.WriteString("\nNote: Some results were truncated upstream. For comprehensive search, use search_code.\n")
 	}
 
 	return sb.String()

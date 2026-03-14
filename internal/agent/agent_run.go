@@ -57,7 +57,7 @@ func RunHeadlessWithConfig(query string, model string, provider api.Provider, cf
 	// イテレーションループ（最大10回で無限ループ防止）
 	const maxIterations = 10
 	var finalResponse string
-	execCtx := agent.toolExecutionContext(nil, nil, nil)
+	execCtx := agent.toolExecutionContext(context.Background(), nil, nil, nil)
 
 	for iteration := 0; iteration < maxIterations; iteration++ {
 		// API呼び出し

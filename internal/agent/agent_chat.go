@@ -84,6 +84,8 @@ func (a *Agent) chatCore(input string, image *api.ImageData, oneShot bool) error
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	a.cancelFunc = cancel
+	a.requestCtx = ctx
+	defer func() { a.requestCtx = nil }()
 
 	// トークン使用量の警告チェック（API呼び出し前、対話モードのみ）
 	if !oneShot {
@@ -426,7 +428,7 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 			if a.Stats != nil {
 				a.Stats.AddToolExecution(toolCall.Tool)
 			}
-			result, _ := a.executeToolWithSpinner(toolCall)
+			result, _ := a.executeToolWithSpinner(ctx, toolCall)
 			a.History = append(a.History, api.Message{
 				Role:             "assistant",
 				Content:          response,

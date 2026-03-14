@@ -2,6 +2,7 @@ package tools
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"os"
 	"strings"
@@ -258,6 +259,10 @@ type testContextIsolationTool struct {
 	release chan struct{}
 }
 
+type testCancelledTool struct {
+	ran bool
+}
+
 func (t *testContextIsolationTool) Name() string {
 	return "context_isolation_test"
 }
@@ -276,6 +281,23 @@ func (t *testContextIsolationTool) Run(execCtx ExecutionContext, args map[string
 	value := execCtx.ProviderName + "/" + execCtx.Model
 	execCtx.Output().Printf("CTX %s\n", value)
 	return value, nil, nil
+}
+
+func (t *testCancelledTool) Name() string {
+	return "cancelled_test"
+}
+
+func (t *testCancelledTool) Description() string {
+	return "cancelled test tool"
+}
+
+func (t *testCancelledTool) Parameters() map[string]interface{} {
+	return map[string]interface{}{}
+}
+
+func (t *testCancelledTool) Run(_ ExecutionContext, _ map[string]string) (string, *FileChange, error) {
+	t.ran = true
+	return "should not run", nil, nil
 }
 
 func TestExecuteQuiet_SuppressesInternalStdout(t *testing.T) {
@@ -508,5 +530,37 @@ func TestExecuteWithContext_ConcurrentContextsRemainIsolated(t *testing.T) {
 				t.Fatalf("output for %s leaked other context %s: %q", key, otherKey, output)
 			}
 		}
+	}
+}
+
+func TestExecuteWithContext_SkipsExecutionWhenContextCanceled(t *testing.T) {
+	origTool := DefaultRegistry.GetTool("cancelled_test")
+	t.Cleanup(func() {
+		restoreRegistryTool("cancelled_test", origTool)
+	})
+
+	tool := &testCancelledTool{}
+	DefaultRegistry.Register(tool)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	result, change := ExecuteWithContext(ExecutionContext{
+		Context: ctx,
+		Stdout:  io.Discard,
+		Stderr:  io.Discard,
+	}, &ToolCall{
+		Tool: "cancelled_test",
+		Args: map[string]string{},
+	})
+
+	if change != nil {
+		t.Fatalf("ExecuteWithContext() returned unexpected change: %+v", change)
+	}
+	if result != "Error: context cancelled" {
+		t.Fatalf("ExecuteWithContext() result = %q, want %q", result, "Error: context cancelled")
+	}
+	if tool.ran {
+		t.Fatal("tool should not run after context cancellation")
 	}
 }

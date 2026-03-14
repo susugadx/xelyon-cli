@@ -8,7 +8,7 @@ import (
 
 // findRelatedTests はテストファイル内のシンボル参照からテスト関数を抽出する。
 // refs は findReferences の結果全体を受け取り、_test.go のものだけを対象にする。
-func findRelatedTests(symbol string, refs []Reference, limit int) ([]TestRef, bool) {
+func findRelatedTests(symbol string, refs []Reference, limit int) ([]TestRef, int, bool) {
 	// テストファイル参照を収集
 	testFiles := make(map[string]bool)
 	for _, ref := range refs {
@@ -18,44 +18,45 @@ func findRelatedTests(symbol string, refs []Reference, limit int) ([]TestRef, bo
 	}
 
 	if len(testFiles) == 0 {
-		return nil, false
+		return nil, 0, false
 	}
 
-	var tests []TestRef
+	var results []TestRef
 	seen := make(map[string]bool)
 
-	for file := range testFiles {
-		absPath := mustAbs(file)
-		symbols, err := ast.ExtractSymbols(absPath)
+	for f := range testFiles {
+		// テストファイルからテスト関数を抽出
+		symbols, err := ast.ExtractSymbols(f)
 		if err != nil {
 			continue
 		}
-
 		for _, s := range symbols {
-			if !isTestFunction(s.Name) {
+			if s.Kind != ast.SymbolFunction || !isTestFunction(s.Name) {
 				continue
 			}
 			// テスト名にシンボル名が含まれるか、テスト本文にシンボルが出現するか
-			if containsSymbolReference(s.Name, symbol, refs, file) {
-				key := file + ":" + s.Name
+			if containsSymbolReference(s.Name, symbol, refs, f) {
+				key := f + ":" + s.Name
 				if seen[key] {
 					continue
 				}
 				seen[key] = true
-				tests = append(tests, TestRef{
-					File:    file,
-					Name:    s.Name,
-					Line:    s.Line,
-					EndLine: s.EndLine,
+				results = append(results, TestRef{
+					File:      toRelativePath(f),
+					Line:      s.Line,
+					Name:      s.Name,
+					Signature: s.Signature,
 				})
 			}
 		}
 	}
 
-	if len(tests) > limit {
-		return tests[:limit], true
+	total := len(results)
+	if total > limit {
+		return results[:limit], total, true
 	}
-	return tests, false
+
+	return results, total, false
 }
 
 // isTestFunction はテスト関数名かどうかを判定する。

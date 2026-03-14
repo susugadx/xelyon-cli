@@ -171,7 +171,7 @@ func parseRipgrepLine(line, symbol string) *Reference {
 
 // classifyCallers は参照一覧からコール箇所を抽出する。
 // AST 分類（ClassCall）を使い、定義行自体・テスト・定義宣言を除外する。
-func classifyCallers(refs []Reference, def SymbolCandidate, limit int) ([]Reference, bool) {
+func classifyCallers(refs []Reference, def SymbolCandidate, limit int) ([]Reference, int, bool) {
 	var callers []Reference
 
 	for _, ref := range refs {
@@ -189,44 +189,41 @@ func classifyCallers(refs []Reference, def SymbolCandidate, limit int) ([]Refere
 		}
 	}
 
-	if len(callers) > limit {
-		return callers[:limit], true
+	total := len(callers)
+	if total > limit {
+		return callers[:limit], total, true
 	}
-	return callers, false
+	return callers, total, false
 }
 
-// classifyRefs は参照一覧から caller でもテストでもないものを抽出する。
-// ClassDef（他シンボルの定義）、ClassCall（callers で扱い済み）、
-// ClassImport、ClassComment、ClassString を除外する。
-// テストファイルの参照は Related tests で扱うため除外する。
-func classifyRefs(refs []Reference, def SymbolCandidate, limit int) ([]Reference, bool) {
-	var filtered []Reference
+// classifyRefs は参照一覧から一般的な参照（変数や型の使用箇所）を抽出する。
+// AST 分類を使い、定義行・テスト・コール箇所を除外する。
+func classifyRefs(refs []Reference, def SymbolCandidate, limit int) ([]Reference, int, bool) {
+	var results []Reference
 
 	for _, ref := range refs {
 		// 定義行自体を除外
 		if ref.File == def.File && ref.Line >= def.Line && ref.Line <= def.EndLine {
 			continue
 		}
-		// caller は callers で扱い済み
-		if ref.Class == ast.ClassCall {
-			continue
-		}
-		// 他シンボルの定義、import、コメント、文字列は除外
-		switch ref.Class {
-		case ast.ClassDef, ast.ClassImport, ast.ClassComment, ast.ClassString:
-			continue
-		}
-		// テストファイルの参照は Related tests で扱う
+		// テストファイルは tests で扱う
 		if ref.IsTest {
 			continue
 		}
-		filtered = append(filtered, ref)
+		// コール、定義宣言、コメント、文字列、インポートは除外
+		switch ref.Class {
+		case ast.ClassDef, ast.ClassCall, ast.ClassImport, ast.ClassComment, ast.ClassString:
+			continue
+		default:
+			results = append(results, ref)
+		}
 	}
 
-	if len(filtered) > limit {
-		return filtered[:limit], true
+	total := len(results)
+	if total > limit {
+		return results[:limit], total, true
 	}
-	return filtered, false
+	return results, total, false
 }
 
 // mustAbs はパスを絶対パスに変換する。エラー時はそのまま返す。

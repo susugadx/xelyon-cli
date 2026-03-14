@@ -91,7 +91,7 @@ func newRuntimeTestAgent(t *testing.T, runtime *AgentRuntime) *Agent {
 }
 
 func executeRuntimeTool(agent *Agent, stdin io.Reader, tc *tools.ToolCall) string {
-	result, _ := tools.ExecuteQuietWithContext(agent.toolExecutionContext(stdin, io.Discard, io.Discard), tc)
+	result, _ := tools.ExecuteQuietWithContext(agent.toolExecutionContext(context.Background(), stdin, io.Discard, io.Discard), tc)
 	return result
 }
 
@@ -459,7 +459,7 @@ func TestAgentRuntime_SeparatesUIRuntimeAndAuditLogger(t *testing.T) {
 		t.Fatalf("runtime B audit log should only contain runtime B execution, got %s", string(dataB))
 	}
 
-	execCtxA := agentA.toolExecutionContext(nil, nil, nil)
+	execCtxA := agentA.toolExecutionContext(context.Background(), nil, nil, nil)
 	if execCtxA.Stdout != runtimeA.UI.Output() || execCtxA.Stderr != runtimeA.UI.ErrorOutput() {
 		t.Fatal("tool execution context should inherit runtime UI writers")
 	}

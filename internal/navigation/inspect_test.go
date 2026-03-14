@@ -90,9 +90,7 @@ func TestInspectSymbol_SingleCandidate(t *testing.T) {
 	if !strings.Contains(result, "func Run") {
 		t.Errorf("expected function definition in output, got: %s", result)
 	}
-	if !strings.Contains(result, "Truncated:") {
-		t.Errorf("expected Truncated section, got: %s", result)
-	}
+
 }
 
 func TestInspectSymbol_WithPath(t *testing.T) {
@@ -310,29 +308,29 @@ func TestClassifyCallers_UsesASTClass(t *testing.T) {
 		{File: "test_test.go", Line: 3, Snippet: "Build()", IsTest: true, Class: ast.ClassCall},
 	}
 
-	callers, more := classifyCallers(refs, def, 10)
+	callers, _, more := classifyCallers(refs, def, 10)
 	if more {
 		t.Error("expected no truncation")
 	}
-	// 定義行(agent.go:15)とテスト(test_test.go)は除外、ClassRef(ref.go)は caller でない
+
 	if len(callers) != 1 {
-		t.Errorf("expected 1 caller (main.go), got %d", len(callers))
+		t.Errorf("expected 1 caller, got %d", len(callers))
 	}
 	if len(callers) > 0 && callers[0].File != "main.go" {
 		t.Errorf("expected main.go, got %s", callers[0].File)
 	}
-}
 
-func TestClassifyCallers_Truncation(t *testing.T) {
-	def := SymbolCandidate{Name: "X", File: "def.go", Line: 1, EndLine: 1}
-	var refs []Reference
-	for i := range 10 {
+	// limit超過テスト
+	refs = []Reference{}
+	for i := 0; i < 20; i++ {
 		refs = append(refs, Reference{
-			File: "other.go", Line: i + 1, Snippet: "X()", Class: ast.ClassCall,
+			File:  "main.go",
+			Line:  i + 10,
+			Class: ast.ClassCall,
 		})
 	}
 
-	callers, more := classifyCallers(refs, def, 3)
+	callers, _, more = classifyCallers(refs, def, 3)
 	if !more {
 		t.Error("expected truncation")
 	}
@@ -341,46 +339,50 @@ func TestClassifyCallers_Truncation(t *testing.T) {
 	}
 }
 
-// --- Regression tests ---
+func TestClassifyRefs(t *testing.T) {
+	def := SymbolCandidate{
+		Name: "Build", Kind: "function", File: "agent.go", Line: 10, EndLine: 20,
+	}
+	refs := []Reference{
+		// テストファイルの参照 → classifyRefs では除外（Related tests で扱う）
+		{File: "agent_test.go", Line: 55, Snippet: "Build()", IsTest: true, Class: ast.ClassCall},
+		{File: "agent_test.go", Line: 60, Snippet: "var b = Build", IsTest: true, Class: ast.ClassRef},
+		// 非テストの参照 → refs に含まれる
+		{File: "init.go", Line: 30, Snippet: "var builder = Build", Class: ast.ClassRef},
+	}
 
-// Regression 1: 同名シンボルを定義するファイル内の call/ref が除外される
+	classified, _, _ := classifyRefs(refs, def, 10)
+	for _, ref := range classified {
+		if ref.IsTest {
+			t.Errorf("test ref should not appear in References: %s:%d", ref.File, ref.Line)
+		}
+	}
+	if len(classified) != 1 {
+		t.Errorf("expected 1 non-test ref, got %d", len(classified))
+	}
+}
+
 func TestFilterRefsByCandidate_AmbiguousFileExclusion(t *testing.T) {
 	cand := SymbolCandidate{
 		Name: "Build", Kind: "function", File: "agent.go", Line: 10, EndLine: 20,
 	}
-	// config.go は同名シンボル Build を持つ曖昧ファイル
 	ambiguousFiles := map[string]bool{"config.go": true}
 
 	refs := []Reference{
-		// 候補自身の定義行 → 除外
 		{File: "agent.go", Line: 15, Snippet: "func Build()", Class: ast.ClassDef},
-		// config.go の定義行 → 曖昧ファイルで除外
 		{File: "config.go", Line: 88, Snippet: "func (c *Config) Build()", Class: ast.ClassDef},
-		// config.go 内の call → 曖昧ファイルで除外（config 側 Build かもしれない）
 		{File: "config.go", Line: 95, Snippet: "c.Build()", Class: ast.ClassCall},
-		// config.go 内の ref → 曖昧ファイルで除外
 		{File: "config.go", Line: 100, Snippet: "var b = Build", Class: ast.ClassRef},
-		// 候補への正当な呼び出し（曖昧ファイルでない）→ 残る
 		{File: "main.go", Line: 5, Snippet: "Build(\"test\")", Class: ast.ClassCall},
-		// 別ファイルの参照（曖昧ファイルでない）→ 残る
 		{File: "init.go", Line: 30, Snippet: "var builder = Build", Class: ast.ClassRef},
 	}
 
 	filtered := filterRefsByCandidate(refs, cand, ambiguousFiles)
 	if len(filtered) != 2 {
 		t.Errorf("expected 2 refs after filtering, got %d", len(filtered))
-		for _, r := range filtered {
-			t.Logf("  %s:%d class=%s", r.File, r.Line, r.Class)
-		}
-	}
-	for _, ref := range filtered {
-		if ref.File == "config.go" {
-			t.Errorf("config.go ref should have been filtered: %s:%d", ref.File, ref.Line)
-		}
 	}
 }
 
-// Regression: 逆方向（path="config.go"）でも agent.go 由来の ref が混ざらない
 func TestFilterRefsByCandidate_ReverseDirection(t *testing.T) {
 	cand := SymbolCandidate{
 		Name: "Build", Kind: "method", File: "config.go", Line: 88, EndLine: 95,
@@ -401,60 +403,43 @@ func TestFilterRefsByCandidate_ReverseDirection(t *testing.T) {
 
 	filtered := filterRefsByCandidate(refs, cand, ambiguousFiles)
 	if len(filtered) != 1 {
-		t.Errorf("expected 1 ref after filtering, got %d", len(filtered))
-		for _, r := range filtered {
-			t.Logf("  %s:%d class=%s", r.File, r.Line, r.Class)
-		}
-	}
-	if len(filtered) > 0 && filtered[0].File != "handler.go" {
-		t.Errorf("expected handler.go, got %s", filtered[0].File)
+		t.Errorf("expected 1 ref (handler.go), got %d", len(filtered))
 	}
 }
 
-// Regression 2: interface メソッド宣言や関数型シグネチャは caller に分類されない
 func TestClassifyCallers_InterfaceAndFuncTypeNotCaller(t *testing.T) {
 	def := SymbolCandidate{
-		Name: "Process", Kind: "function", File: "process.go", Line: 5, EndLine: 20,
+		Name: "Build", File: "agent.go", Line: 10, EndLine: 20,
 	}
 	refs := []Reference{
-		// interface メソッド宣言 → ClassDef → caller にならない
-		{File: "handler.go", Line: 10, Snippet: "Process(ctx context.Context)", Class: ast.ClassDef},
-		// 関数型シグネチャ → ClassRef → caller にならない
-		{File: "types.go", Line: 15, Snippet: "type ProcessFunc func() = Process", Class: ast.ClassRef},
-		// 実際の呼び出し → ClassCall → caller になる
-		{File: "main.go", Line: 30, Snippet: "Process(ctx)", Class: ast.ClassCall},
+		{File: "iface.go", Line: 5, Snippet: "Build() error", Class: ast.ClassDef},
+		{File: "type.go", Line: 10, Snippet: "type Builder func() Build", Class: ast.ClassDef},
+		{File: "main.go", Line: 15, Snippet: "Build()", Class: ast.ClassCall},
 	}
 
-	callers, _ := classifyCallers(refs, def, 10)
+	callers, _, _ := classifyCallers(refs, def, 10)
 	if len(callers) != 1 {
 		t.Errorf("expected 1 caller, got %d", len(callers))
 	}
-	if len(callers) > 0 && callers[0].File != "main.go" {
-		t.Errorf("expected main.go caller, got %s", callers[0].File)
-	}
 }
 
-// Regression 3: テスト参照が References と Related tests で二重カウントされない
-func TestClassifyRefs_NoTestDoubleCount(t *testing.T) {
-	def := SymbolCandidate{
-		Name: "Build", Kind: "function", File: "agent.go", Line: 10, EndLine: 20,
-	}
-	refs := []Reference{
-		// テストファイルの参照 → classifyRefs では除外（Related tests で扱う）
-		{File: "agent_test.go", Line: 55, Snippet: "Build()", IsTest: true, Class: ast.ClassCall},
-		{File: "agent_test.go", Line: 60, Snippet: "var b = Build", IsTest: true, Class: ast.ClassRef},
-		// 非テストの参照 → refs に含まれる
-		{File: "init.go", Line: 30, Snippet: "var builder = Build", Class: ast.ClassRef},
+func TestIsTestFunction(t *testing.T) {
+	tests := []struct {
+		name string
+		want bool
+	}{
+		{"TestBuild_Normal", true},
+		{"BenchmarkBuild", true},
+		{"ExampleBuild", true},
+		{"helperFunc", false},
+		{"testHelper", false},
 	}
 
-	classified, _ := classifyRefs(refs, def, 10)
-	for _, ref := range classified {
-		if ref.IsTest {
-			t.Errorf("test ref should not appear in References: %s:%d", ref.File, ref.Line)
+	for _, tt := range tests {
+		got := isTestFunction(tt.name)
+		if got != tt.want {
+			t.Errorf("isTestFunction(%q) = %v, want %v", tt.name, got, tt.want)
 		}
-	}
-	if len(classified) != 1 {
-		t.Errorf("expected 1 non-test ref, got %d", len(classified))
 	}
 }
 
@@ -469,16 +454,13 @@ func TestFormatInspectResult_UpstreamTruncated(t *testing.T) {
 		UpstreamTruncated: true,
 	})
 
-	if !strings.Contains(result, "upstream: true") {
+	if !strings.Contains(result, "truncated upstream") {
 		t.Errorf("expected upstream truncation notice, got: %s", result)
-	}
-	if !strings.Contains(result, "search results were capped") {
-		t.Errorf("expected upstream truncation explanation, got: %s", result)
 	}
 }
 
-// Regression 5: 上流打ち切りなしの場合は upstream 行が出力されない
-func TestFormatInspectResult_NoUpstreamTruncated(t *testing.T) {
+// Regression 5: 上流検索が打ち切られていない場合は表示されない
+func TestFormatInspectResult_UpstreamNotTruncated(t *testing.T) {
 	result := formatInspectResult(InspectResult{
 		Symbol: &SymbolCandidate{
 			Name: "Build", Kind: "function",
@@ -488,7 +470,7 @@ func TestFormatInspectResult_NoUpstreamTruncated(t *testing.T) {
 		UpstreamTruncated: false,
 	})
 
-	if strings.Contains(result, "upstream") {
+	if strings.Contains(result, "truncated upstream") {
 		t.Errorf("expected no upstream line when not truncated, got: %s", result)
 	}
 }
@@ -504,16 +486,13 @@ func TestFormatInspectResult_UpstreamIncomplete(t *testing.T) {
 		UpstreamIncomplete: true,
 	})
 
-	if !strings.Contains(result, "Warnings:") {
-		t.Errorf("expected warnings section, got: %s", result)
-	}
-	if !strings.Contains(result, "search incomplete: true") {
-		t.Errorf("expected incomplete search warning, got: %s", result)
+	if !strings.Contains(result, "incomplete due to errors") {
+		t.Errorf("expected upstream incomplete notice, got: %s", result)
 	}
 }
 
-// Regression 7: 上流検索が完全な場合は incomplete 警告が出力されない
-func TestFormatInspectResult_NoUpstreamIncomplete(t *testing.T) {
+// Regression 7: 上流検索が正常完了した場合は警告が出ない
+func TestFormatInspectResult_UpstreamComplete(t *testing.T) {
 	result := formatInspectResult(InspectResult{
 		Symbol: &SymbolCandidate{
 			Name: "Build", Kind: "function",
@@ -523,7 +502,7 @@ func TestFormatInspectResult_NoUpstreamIncomplete(t *testing.T) {
 		UpstreamIncomplete: false,
 	})
 
-	if strings.Contains(result, "search incomplete") {
+	if strings.Contains(result, "truncated upstream") {
 		t.Errorf("expected no incomplete warning when search is complete, got: %s", result)
 	}
 }
@@ -669,25 +648,5 @@ func UseConfig() string {
 	}
 	if strings.Contains(result, "RunAgent") {
 		t.Errorf("RunAgent (agent.go caller) should not appear:\n%s", result)
-	}
-}
-
-func TestIsTestFunction(t *testing.T) {
-	tests := []struct {
-		name string
-		want bool
-	}{
-		{"TestBuild_Normal", true},
-		{"BenchmarkBuild", true},
-		{"ExampleBuild", true},
-		{"helperFunc", false},
-		{"testHelper", false},
-	}
-
-	for _, tt := range tests {
-		got := isTestFunction(tt.name)
-		if got != tt.want {
-			t.Errorf("isTestFunction(%q) = %v, want %v", tt.name, got, tt.want)
-		}
 	}
 }

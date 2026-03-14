@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -12,6 +13,25 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
+
+type blockingParallelTool struct {
+	started chan struct{}
+	release chan struct{}
+}
+
+func (t *blockingParallelTool) Name() string { return "read_file" }
+
+func (t *blockingParallelTool) Description() string { return "blocking parallel test tool" }
+
+func (t *blockingParallelTool) Parameters() map[string]interface{} {
+	return map[string]interface{}{}
+}
+
+func (t *blockingParallelTool) Run(_ tools.ExecutionContext, _ map[string]string) (string, *tools.FileChange, error) {
+	t.started <- struct{}{}
+	<-t.release
+	return "ok", nil, nil
+}
 
 // --- Test 1: Loop detection prevents execution of subsequent tools ---
 
@@ -413,6 +433,64 @@ func TestExecuteToolCallsWithParallel_PrintsParallelGroup(t *testing.T) {
 		if !strings.Contains(output, want) {
 			t.Fatalf("parallel group output missing %q:\n%s", want, output)
 		}
+	}
+}
+
+func TestExecuteToolCallsWithParallel_ShowsSpinnerDuringParallelRun(t *testing.T) {
+	provider := &mockProvider{name: "test"}
+	runtime := NewAgentRuntime()
+	runtime.UI = ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
+
+	started := make(chan struct{}, 1)
+	release := make(chan struct{})
+	origTool := runtime.Registry.GetTool("read_file")
+	runtime.Registry.Register(&blockingParallelTool{
+		started: started,
+		release: release,
+	})
+
+	agent := NewAgentWithRuntime("test-model", provider, false, runtime)
+	t.Cleanup(func() {
+		agent.Cleanup()
+		if origTool != nil {
+			runtime.Registry.Register(origTool)
+		}
+	})
+
+	toolCalls := []*tools.ToolCall{{
+		ID:      "c1",
+		Tool:    "read_file",
+		Args:    map[string]string{"path": "a.go"},
+		RawArgs: map[string]any{"path": "a.go"},
+	}}
+
+	done := make(chan struct{})
+	go func() {
+		agent.executeToolCallsWithParallel(context.Background(), toolCalls, nil, nil, func(_ int, _ *tools.ToolCall, _ string, _ *tools.FileChange) {})
+		close(done)
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for parallel tool to start")
+	}
+
+	spinner := agent.ui().CurrentSpinner()
+	if spinner == nil || !spinner.IsActive() {
+		t.Fatal("expected spinner to be active during parallel tool execution")
+	}
+
+	close(release)
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for parallel execution to finish")
+	}
+
+	if spinner := agent.ui().CurrentSpinner(); spinner != nil {
+		t.Fatal("expected spinner to be cleared after parallel execution")
 	}
 }
 

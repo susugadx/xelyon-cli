@@ -58,6 +58,7 @@ type Agent struct {
 	Stats                *SessionStats      // セッション統計情報
 	lastOutputs          []string           // 最後のAI出力履歴（最大10件）
 	cancelFunc           context.CancelFunc // 現在のAPI呼び出しをキャンセルするための関数
+	requestCtx           context.Context    // 現在のリクエストに紐づく context（ツール実行へ伝播）
 	strReplaceErrorCount int                // str_replace連続エラーカウント（old_str not found）
 	PlanModeEnabled      bool               // Plan Mode ON/OFF（デフォルト: false）
 	ToolCache            *ToolCache         // ツール結果キャッシュ（read_file, list_dir）

@@ -1,6 +1,8 @@
 package tools
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -102,6 +104,13 @@ func ExecuteQuietWithContext(execCtx ExecutionContext, tc *ToolCall) (string, *F
 }
 
 func executeCoreWithContext(execCtx ExecutionContext, tc *ToolCall) (string, *FileChange) {
+	if err := execCtx.EffectiveContext().Err(); err != nil {
+		if errors.Is(err, context.Canceled) {
+			return "Error: context cancelled", nil
+		}
+		return fmt.Sprintf("Error: %v", err), nil
+	}
+
 	// デフォルト値の設定（Registry実行前）
 	// list_dir, git_addでpathが空の場合"."を設定
 	if tc.Args["path"] == "" {

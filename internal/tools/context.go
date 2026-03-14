@@ -15,6 +15,7 @@ import (
 // web_search などが現在のプロバイダー/モデルや対話 I/O を参照するために使用する。
 // 各実行経路が明示的に組み立てて注入し、process-global 状態には依存しない。
 type ExecutionContext struct {
+	Context      context.Context
 	ProviderName string
 	Model        string
 	Stdin        io.Reader
@@ -34,6 +35,12 @@ type ExecutionContext struct {
 func (ctx ExecutionContext) Output() common.Output {
 	normalized := normalizeExecutionContext(ctx)
 	return common.NewOutput(normalized.Stdout, normalized.Stderr)
+}
+
+// EffectiveContext は実行時に使う request context を返す。
+func (ctx ExecutionContext) EffectiveContext() context.Context {
+	normalized := normalizeExecutionContext(ctx)
+	return normalized.Context
 }
 
 // PromptIO は対話 UI 用の入出力コンテキストへ変換する。
@@ -83,6 +90,9 @@ func (ctx ExecutionContext) EffectiveAuditLogger() audit.ToolLogger {
 
 func normalizeExecutionContext(ctx ExecutionContext) ExecutionContext {
 	runtime := ui.DefaultRuntime()
+	if ctx.Context == nil {
+		ctx.Context = context.Background()
+	}
 	if ctx.Stdin == nil {
 		ctx.Stdin = runtime.Input()
 	}
