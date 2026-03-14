@@ -14,16 +14,17 @@ const MaxParallelTools = 4
 // parallelSafeTools は静的に parallel-safe と判定されるツール名のセット。
 // read-only かつ副作用のないツールのみ含める。
 var parallelSafeTools = map[string]bool{
-	"read_file":    true,
-	"read_files":   true,
-	"list_dir":     true,
-	"search_code":  true,
-	"web_search":   true,
-	"git_status":   true,
-	"git_log":      true,
-	"git_diff":     true,
-	"git_branch":   true,
-	"git_ls_files": true,
+	"read_file":      true,
+	"read_files":     true,
+	"inspect_symbol": true,
+	"list_dir":       true,
+	"search_code":    true,
+	"web_search":     true,
+	"git_status":     true,
+	"git_log":        true,
+	"git_diff":       true,
+	"git_branch":     true,
+	"git_ls_files":   true,
 }
 
 // IsParallelSafe は ToolCall が並列実行可能かを判定する。

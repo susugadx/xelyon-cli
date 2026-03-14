@@ -507,10 +507,12 @@ bash: git add -A && git commit -m "message"
 bash: git checkout -b feature-branch
 ```
 
-### 検索
+### コード調査・検索
 
 | ツール名 | 説明 | 主な引数 |
 |---------|------|---------|
+| `inspect_symbol` | 既知シンボルの定義・caller・参照・テストをまとめて取得（Go ファイル対応） | `symbol`, `path`, `mode` |
+| `search_code` | コード検索（正規表現・複数パターン・結果分類） | `pattern`, `path`, `file_type` 等 |
 | `web_search` | ネイティブWeb検索（`web_search.provider` で OpenAI / Gemini / Claude を選択可能） | `query` |
 **注意**: メインプロバイダーがネイティブ検索非対応（DeepSeek / Groq / Ollama / OpenRouter など）の場合は、`config.yaml` で `web_search.provider` を設定してください。詳細は[config.md - Web検索](config.md#web検索)を参照してください。
 

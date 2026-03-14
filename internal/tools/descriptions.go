@@ -11,8 +11,9 @@ var ToolDescriptions = map[string]string{
 	"list_dir":    "List files and directories. Returns file sizes and types. Ignores .git, node_modules, vendor by default. Use depth parameter (1-3) for recursive listing.",
 
 	// Search & Discovery
-	"search_code": "Search project code with smart caching and result classification ([def]/[ref]/[call]). Supports multiple comma-separated patterns for parallel search, file_type filtering, fixed-string mode, multiline mode, and hidden/ignored file inclusion. Results are grouped by file with context lines and block annotations, and matched line ranges are marked as read for direct str_replace line-range edits.",
-	"web_search":  "Search the web and return summarized findings plus source URLs, not full page contents. Uses provider-native search. Configure web_search.provider to choose openai, gemini, or claude when the main provider lacks native search support. For deeper coverage, run multiple targeted searches with narrower queries.",
+	"inspect_symbol": "Inspect a known symbol: returns definition body, callers, references, and related tests in one call. Use for known symbol investigation instead of search_code+read_file round-trips. Summary mode (default) is compact; full mode expands limits. Returns line-numbered source for direct str_replace line-range edits. Go files only (Phase 1).",
+	"search_code":    "Search project code with smart caching and result classification ([def]/[ref]/[call]). Supports multiple comma-separated patterns for parallel search, file_type filtering, fixed-string mode, multiline mode, and hidden/ignored file inclusion. Results are grouped by file with context lines and block annotations, and matched line ranges are marked as read for direct str_replace line-range edits.",
+	"web_search":     "Search the web and return summarized findings plus source URLs, not full page contents. Uses provider-native search. Configure web_search.provider to choose openai, gemini, or claude when the main provider lacks native search support. For deeper coverage, run multiple targeted searches with narrower queries.",
 
 	// Development Tools
 	"bash": "Execute a shell command. Use for: git operations, npm/pip install, make, go test, go fmt, curl, compilers. Commands like cat/ls/grep auto-approve. Dangerous commands require confirmation.",

@@ -11,8 +11,8 @@ func TestToolDescriptions_AllKeysNonEmpty(t *testing.T) {
 }
 
 func TestToolDescriptions_ExpectedToolCount(t *testing.T) {
-	// read_files は read_file の paths パラメータに統合されたため 9 エントリ
-	expected := 9
+	// read_files は read_file の paths パラメータに統合、inspect_symbol 追加で 10 エントリ
+	expected := 10
 	if len(ToolDescriptions) != expected {
 		t.Errorf("ToolDescriptions has %d entries, want %d", len(ToolDescriptions), expected)
 	}
@@ -21,7 +21,7 @@ func TestToolDescriptions_ExpectedToolCount(t *testing.T) {
 func TestToolDescriptions_KnownToolsExist(t *testing.T) {
 	knownTools := []string{
 		"read_file", "write_file", "str_replace", "delete_file", "list_dir",
-		"search_code", "web_search",
+		"inspect_symbol", "search_code", "web_search",
 		"bash",
 		"ask_user_question",
 	}

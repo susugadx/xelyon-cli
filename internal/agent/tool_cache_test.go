@@ -337,8 +337,8 @@ func TestToolCache_DeduplicateResult_OnlyTargetTools(t *testing.T) {
 	cache := NewToolCache()
 	content := "some tool output"
 
-	// 対象ツール: read_file, search_code, list_dir
-	for _, tool := range []string{"read_file", "search_code", "list_dir"} {
+	// 対象ツール: read_file, search_code, list_dir, inspect_symbol
+	for _, tool := range []string{"read_file", "search_code", "list_dir", "inspect_symbol"} {
 		ref := cache.DeduplicateResult(tool, content+"_"+tool, 1)
 		if ref != "" {
 			t.Errorf("first call for %s should return empty, got %q", tool, ref)
@@ -405,6 +405,7 @@ func TestIsDeduplicableToolResult(t *testing.T) {
 		{"read_file", true},
 		{"search_code", true},
 		{"list_dir", true},
+		{"inspect_symbol", true},
 		{"bash", false},
 		{"write_file", false},
 		{"str_replace", false},

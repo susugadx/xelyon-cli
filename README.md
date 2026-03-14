@@ -29,6 +29,7 @@ DeepSeek, OpenAI, Gemini, Claude, Ollama, Groq, OpenRouter, Bedrock をシーム
 ### 🛠️ 23種類の組み込みツール
 - **ファイル操作**: 読み書き、編集、削除、バックアップ復元。`read_file` は `symbol` 指定で Go の関数・型・メソッド単位の読み出しに対応
 - **コード検索**: grep検索、ファイル検索（結果は非テスト→テスト順・定義優先でソート、不正regexはエラー検出）
+- **シンボル調査**: `inspect_symbol` で既知シンボルの定義・caller・参照・テストを1回のツール呼び出しで取得（Go ファイル対応）
 - **AST基盤（実験的）**: `internal/ast` に Pure Go Tree-sitter（gotreesitter）ベースの共通解析基盤を追加。Phase 1 では Go ファイルのパース、シンボル抽出、行分類を検証段階で提供し、`read_file(symbol=...)` でシンボル範囲の読み出しに利用。`str_replace` では Go ファイル書き込み前に AST 構文検証を行い、問題があれば警告を返す
 - **開発支援**: bash（git, テスト, フォーマット等すべて対応）
 - **LSP連携**: シンボル検索（定義・参照・実装）
@@ -118,7 +119,7 @@ Language Server Protocol (LSP) を活用してIDE並みのコード理解を実�
 API実測値に基づくトークン使用量とコストをリアルタイム表示。
 - **ステータスバー**: プロンプト直前に `● model │ Mode │ tokens/limit │ ~$cost` を表示
 - **起動時コンテキスト表示**: ツリー形式で初期コンテキストの内訳を表示
-- **ナビゲーション削減**: Project Map により `search_code` / `list_dir` の初期探索回数を減らし、編集に集中
+- **ナビゲーション削減**: Project Map + `inspect_symbol` により `search_code` / `read_file` の往復を減らし、編集に集中
 - **リクエスト完了時**: `✓ In: 1,234 + Out: 567 = 1,801 tok (~$0.002)` で使用量を表示
 - **Ollama対応**: ローカル実行時はコスト表示を非表示
 - **圧縮閾値**: `compression.token_threshold`（デフォルト100K）または `compression.threshold_percent`（デフォルト80%）超過時に自動圧縮/警告

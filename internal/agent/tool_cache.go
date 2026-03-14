@@ -225,7 +225,7 @@ func (c *ToolCache) DeduplicateResult(toolName, content string, turn int) string
 // isDeduplicableToolResult は重複排除対象のツールかどうかを返す
 func isDeduplicableToolResult(toolName string) bool {
 	switch toolName {
-	case "read_file", "search_code", "list_dir":
+	case "read_file", "search_code", "list_dir", "inspect_symbol":
 		return true
 	}
 	return false
