@@ -20,6 +20,9 @@ const goSymbolQuery = `
   name: (type_identifier) @name
   type: [(struct_type) (interface_type)] @type_body) @def
 
+(type_spec
+  name: (type_identifier) @name) @def
+
 (const_spec
   name: (identifier) @name) @def
 

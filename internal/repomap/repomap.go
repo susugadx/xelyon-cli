@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/agent/token"
+	"github.com/susugadx/xelyon-cli/internal/ast"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
@@ -45,8 +46,12 @@ type FileEntry struct {
 
 // Symbol はコード内の定義シンボル。
 type Symbol struct {
+	Name      string `json:"name"`
+	Kind      string `json:"kind,omitempty"`
 	Line      int    `json:"line"`
+	EndLine   int    `json:"end_line,omitempty"`
 	Signature string `json:"signature"`
+	Exported  bool   `json:"exported,omitempty"`
 }
 
 // GitChange は git status の変更ファイル。
@@ -313,9 +318,38 @@ func (pm *ProjectMap) buildFileStates(paths []string, cache *MapCache) ([]fileSt
 }
 
 func (pm *ProjectMap) scanSymbols(states []fileState) (map[string][]Symbol, error) {
+	results := make(map[string][]Symbol)
+
+	for _, state := range states {
+		if state.cached != nil || !state.supportsSym || !ast.IsSupportedFile(state.path) {
+			continue
+		}
+
+		astSymbols, err := ast.ExtractSymbols(state.absPath)
+		if err != nil {
+			continue
+		}
+
+		repoSymbols := make([]Symbol, 0, len(astSymbols))
+		for _, symbol := range astSymbols {
+			repoSymbols = append(repoSymbols, Symbol{
+				Name:      symbol.Name,
+				Kind:      string(symbol.Kind),
+				Line:      symbol.Line,
+				EndLine:   symbol.EndLine,
+				Signature: symbol.Signature,
+				Exported:  symbol.Exported,
+			})
+		}
+		results[state.path] = repoSymbols
+	}
+
 	targetsByExt := make(map[string][]string)
 	for _, state := range states {
 		if state.cached != nil || !state.supportsSym {
+			continue
+		}
+		if _, done := results[state.path]; done {
 			continue
 		}
 		ext := extensionForPath(state.path)
@@ -325,10 +359,10 @@ func (pm *ProjectMap) scanSymbols(states []fileState) (map[string][]Symbol, erro
 		targetsByExt[ext] = append(targetsByExt[ext], state.path)
 	}
 	if len(targetsByExt) == 0 {
-		return map[string][]Symbol{}, nil
+		sortSymbolsByLocation(results)
+		return results, nil
 	}
 
-	results := make(map[string][]Symbol)
 	seen := make(map[string]map[int]struct{})
 
 	for _, def := range defaultPatterns {
@@ -349,11 +383,7 @@ func (pm *ProjectMap) scanSymbols(states []fileState) (map[string][]Symbol, erro
 		}
 	}
 
-	for path := range results {
-		sort.Slice(results[path], func(i, j int) bool {
-			return results[path][i].Line < results[path][j].Line
-		})
-	}
+	sortSymbolsByLocation(results)
 	return results, nil
 }
 
@@ -417,9 +447,14 @@ func (pm *ProjectMap) runRgAndParse(def languagePattern, targets []string, seen 
 		}
 		seen[path][lineNum] = struct{}{}
 
+		signature := normalizeSignature(content)
+		name, kind, exported := signatureMetadataForPath(path, signature)
 		results[path] = append(results[path], Symbol{
+			Name:      name,
+			Kind:      kind,
 			Line:      lineNum,
-			Signature: normalizeSignature(content),
+			Signature: signature,
+			Exported:  exported,
 		})
 	}
 
@@ -517,7 +552,7 @@ func (pm *ProjectMap) render(options []renderOption, omittedFiles int) string {
 				continue
 			}
 			for _, symbol := range file.Symbols {
-				fmt.Fprintf(&b, "%s%d: %s\n", symbolPrefix, symbol.Line, symbol.Signature)
+				writeRenderedSymbol(&b, symbolPrefix, symbol)
 			}
 		}
 	}
@@ -540,6 +575,48 @@ func (pm *ProjectMap) render(options []renderOption, omittedFiles int) string {
 	}
 
 	return strings.TrimRight(b.String(), "\n")
+}
+
+func sortSymbolsByLocation(results map[string][]Symbol) {
+	for path := range results {
+		sort.Slice(results[path], func(i, j int) bool {
+			left := results[path][i]
+			right := results[path][j]
+			if left.Line != right.Line {
+				return left.Line < right.Line
+			}
+			if left.EndLine != right.EndLine {
+				return left.EndLine < right.EndLine
+			}
+			if left.Name != right.Name {
+				return left.Name < right.Name
+			}
+			return left.Signature < right.Signature
+		})
+	}
+}
+
+func writeRenderedSymbol(b *strings.Builder, symbolPrefix string, symbol Symbol) {
+	location := strconv.Itoa(symbol.Line)
+	if symbol.EndLine > 0 && symbol.EndLine != symbol.Line {
+		location = fmt.Sprintf("%d-%d", symbol.Line, symbol.EndLine)
+	}
+
+	lines := strings.Split(symbol.Signature, "\n")
+	if len(lines) == 0 {
+		fmt.Fprintf(b, "%s%s:\n", symbolPrefix, location)
+		return
+	}
+
+	fmt.Fprintf(b, "%s%s: %s\n", symbolPrefix, location, lines[0])
+	if len(lines) == 1 {
+		return
+	}
+
+	padding := strings.Repeat(" ", len(location)+2)
+	for _, line := range lines[1:] {
+		fmt.Fprintf(b, "%s%s%s\n", symbolPrefix, padding, line)
+	}
 }
 
 func (pm *ProjectMap) fitsBudget(text string) bool {

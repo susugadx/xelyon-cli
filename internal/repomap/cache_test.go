@@ -1,6 +1,7 @@
 package repomap
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -140,5 +141,106 @@ func TestCache_NewFile(t *testing.T) {
 	}
 	if extraCached {
 		t.Fatal("expected cache miss for new file extra.go")
+	}
+}
+
+func TestSymbolCache_NewFields(t *testing.T) {
+	setProjectMapTestHome(t)
+
+	root := filepath.Join(t.TempDir(), "repo")
+	modTime := time.Unix(123, 0).UTC()
+
+	type oldSymbol struct {
+		Line      int    `json:"line"`
+		Signature string `json:"signature"`
+	}
+	type oldCacheFile struct {
+		ModTime   time.Time   `json:"mod_time"`
+		LineCount int         `json:"line_count"`
+		Symbols   []oldSymbol `json:"symbols"`
+	}
+	type oldMapCache struct {
+		RootPath  string                   `json:"root_path"`
+		UpdatedAt time.Time                `json:"updated_at"`
+		Files     map[string]*oldCacheFile `json:"files"`
+	}
+
+	cachePath, err := cacheFilePath(root)
+	if err != nil {
+		t.Fatalf("cacheFilePath() error = %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(cachePath), 0755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+
+	oldData, err := json.Marshal(oldMapCache{
+		RootPath:  root,
+		UpdatedAt: modTime,
+		Files: map[string]*oldCacheFile{
+			"main.go": {
+				ModTime:   modTime,
+				LineCount: 42,
+				Symbols: []oldSymbol{
+					{Line: 3, Signature: "func Build() error"},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	if err := os.WriteFile(cachePath, oldData, 0600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	loaded, err := loadMapCache(root)
+	if err != nil {
+		t.Fatalf("loadMapCache() error = %v", err)
+	}
+	oldLoaded := loaded.Files["main.go"].Symbols[0]
+	if oldLoaded.Name != "" || oldLoaded.Kind != "" || oldLoaded.EndLine != 0 || oldLoaded.Exported {
+		t.Fatalf("old cache symbol should load zero values for new fields: %+v", oldLoaded)
+	}
+
+	cache := &MapCache{
+		RootPath: root,
+		Files: map[string]*CacheFile{
+			"main.go": {
+				ModTime:   modTime,
+				LineCount: 42,
+				Symbols: []Symbol{
+					{
+						Name:      "Build",
+						Kind:      "function",
+						Line:      3,
+						EndLine:   7,
+						Signature: "func Build() error",
+						Exported:  true,
+					},
+				},
+			},
+		},
+	}
+
+	if err := saveMapCache(root, cache); err != nil {
+		t.Fatalf("saveMapCache() error = %v", err)
+	}
+
+	reloaded, err := loadMapCache(root)
+	if err != nil {
+		t.Fatalf("loadMapCache() error = %v", err)
+	}
+	got := reloaded.Files["main.go"].Symbols[0]
+	if got.Name != "Build" {
+		t.Fatalf("Name = %q, want Build", got.Name)
+	}
+	if got.Kind != "function" {
+		t.Fatalf("Kind = %q, want function", got.Kind)
+	}
+	if got.EndLine != 7 {
+		t.Fatalf("EndLine = %d, want 7", got.EndLine)
+	}
+	if !got.Exported {
+		t.Fatal("Exported = false, want true")
 	}
 }

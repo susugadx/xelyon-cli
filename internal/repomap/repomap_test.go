@@ -52,12 +52,52 @@ func findFileEntry(t *testing.T, pm *ProjectMap, relPath string) *FileEntry {
 	return nil
 }
 
+func findSymbol(t *testing.T, file *FileEntry, name string) Symbol {
+	t.Helper()
+	for _, symbol := range file.Symbols {
+		if symbol.Name == name {
+			return symbol
+		}
+	}
+	t.Fatalf("symbol %s not found in %s", name, file.Path)
+	return Symbol{}
+}
+
 func signatures(file *FileEntry) []string {
 	result := make([]string, 0, len(file.Symbols))
 	for _, symbol := range file.Symbols {
 		result = append(result, symbol.Signature)
 	}
 	return result
+}
+
+func TestBuild_GoFileUsesAST(t *testing.T) {
+	requireRipgrep(t)
+
+	root := t.TempDir()
+	writeProjectMapTestFile(t, root, "internal/agent/agent.go", "package agent\n\ntype Agent struct{}\n\nfunc (a *Agent) maybeAutoCompress(\n\tctx context.Context,\n) bool {\n\t_ = ctx\n\treturn true\n}\n\ntype Config = map[string]string\n")
+
+	pm := buildProjectMapForTest(t, root, 4000)
+	file := findFileEntry(t, pm, "internal/agent/agent.go")
+
+	method := findSymbol(t, file, "maybeAutoCompress")
+	if method.Kind != "method" {
+		t.Fatalf("method kind = %q, want method", method.Kind)
+	}
+	if method.Line != 5 || method.EndLine != 10 {
+		t.Fatalf("method location = %d-%d, want 5-10", method.Line, method.EndLine)
+	}
+	if method.Exported {
+		t.Fatal("method should not be exported")
+	}
+	if !strings.Contains(method.Signature, "func (a *Agent) maybeAutoCompress(") {
+		t.Fatalf("method signature = %q", method.Signature)
+	}
+
+	alias := findSymbol(t, file, "Config")
+	if alias.Kind != "type" {
+		t.Fatalf("alias kind = %q, want type", alias.Kind)
+	}
 }
 
 func TestBuild_GoProject(t *testing.T) {
@@ -76,6 +116,32 @@ func TestBuild_GoProject(t *testing.T) {
 	}
 }
 
+func TestBuild_NonGoFileUsesRegex(t *testing.T) {
+	requireRipgrep(t)
+
+	root := t.TempDir()
+	writeProjectMapTestFile(t, root, "pkg/tasks.py", "class Builder:\n    pass\n\nasync def build_map():\n    return True\n")
+
+	pm := buildProjectMapForTest(t, root, 4000)
+	file := findFileEntry(t, pm, "pkg/tasks.py")
+
+	classSymbol := findSymbol(t, file, "Builder")
+	if classSymbol.Kind != "class" {
+		t.Fatalf("class kind = %q, want class", classSymbol.Kind)
+	}
+	if classSymbol.EndLine != 0 {
+		t.Fatalf("class EndLine = %d, want 0", classSymbol.EndLine)
+	}
+
+	funcSymbol := findSymbol(t, file, "build_map")
+	if funcSymbol.Kind != "function" {
+		t.Fatalf("function kind = %q, want function", funcSymbol.Kind)
+	}
+	if funcSymbol.Signature != "async def build_map():" {
+		t.Fatalf("function signature = %q", funcSymbol.Signature)
+	}
+}
+
 func TestBuild_TypeScriptProject(t *testing.T) {
 	requireRipgrep(t)
 
@@ -89,6 +155,38 @@ func TestBuild_TypeScriptProject(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Fatalf("TypeScript signatures missing %q from:\n%s", want, got)
 		}
+	}
+}
+
+func TestBuild_MixedProject(t *testing.T) {
+	requireRipgrep(t)
+
+	root := t.TempDir()
+	writeProjectMapTestFile(t, root, "main.go", "package main\n\nfunc Build(\n\tctx context.Context,\n) error {\n\t_ = ctx\n\treturn nil\n}\n")
+	writeProjectMapTestFile(t, root, "pkg/tasks.py", "class TaskRunner:\n    pass\n")
+	writeProjectMapTestFile(t, root, "src/app.ts", "export function buildMap() {}\n")
+
+	pm := buildProjectMapForTest(t, root, 4000)
+
+	goFile := findFileEntry(t, pm, "main.go")
+	goSymbol := findSymbol(t, goFile, "Build")
+	if goSymbol.Kind != "function" {
+		t.Fatalf("Go kind = %q, want function", goSymbol.Kind)
+	}
+	if goSymbol.EndLine != 8 {
+		t.Fatalf("Go EndLine = %d, want 8", goSymbol.EndLine)
+	}
+
+	pyFile := findFileEntry(t, pm, "pkg/tasks.py")
+	pySymbol := findSymbol(t, pyFile, "TaskRunner")
+	if pySymbol.Kind != "class" {
+		t.Fatalf("Python kind = %q, want class", pySymbol.Kind)
+	}
+
+	tsFile := findFileEntry(t, pm, "src/app.ts")
+	tsSymbol := findSymbol(t, tsFile, "buildMap")
+	if tsSymbol.Kind != "function" {
+		t.Fatalf("TypeScript kind = %q, want function", tsSymbol.Kind)
 	}
 }
 
@@ -183,6 +281,29 @@ func TestGenerate_TokenLimit(t *testing.T) {
 	}
 	if !strings.Contains(output, "func BuildOne()") {
 		t.Fatalf("expected implementation symbol to remain:\n%s", output)
+	}
+}
+
+func TestGenerate_EndLineFormat(t *testing.T) {
+	pm := &ProjectMap{
+		Files: []*FileEntry{
+			{
+				Path:      "internal/agent/agent.go",
+				LineCount: 120,
+				Symbols: []Symbol{
+					{Line: 21, EndLine: 85, Signature: "func (a *Agent) maybeAutoCompress() bool"},
+					{Line: 90, Signature: "async def build_map():"},
+				},
+			},
+		},
+	}
+
+	output := pm.Generate()
+	if !strings.Contains(output, "21-85: func (a *Agent) maybeAutoCompress() bool") {
+		t.Fatalf("expected range format in output:\n%s", output)
+	}
+	if !strings.Contains(output, "90: async def build_map():") {
+		t.Fatalf("expected single-line format in output:\n%s", output)
 	}
 }
 

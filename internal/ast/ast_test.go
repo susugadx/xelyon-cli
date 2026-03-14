@@ -85,6 +85,46 @@ var DefaultTimeout = 30
 	}
 }
 
+// TestExtractSymbols_TypeAlias は type alias を type シンボルとして抽出できることを確認する。
+func TestExtractSymbols_TypeAlias(t *testing.T) {
+	src := []byte("package main\n\ntype UserID = string\n")
+	symbols, err := ExtractSymbolsFromBytes("main.go", src)
+	if err != nil {
+		t.Fatalf("ExtractSymbolsFromBytes() error = %v", err)
+	}
+	if len(symbols) != 1 {
+		t.Fatalf("symbols length = %d, want 1", len(symbols))
+	}
+	if symbols[0].Name != "UserID" {
+		t.Fatalf("name = %s, want UserID", symbols[0].Name)
+	}
+	if symbols[0].Kind != SymbolType {
+		t.Fatalf("kind = %s, want %s", symbols[0].Kind, SymbolType)
+	}
+	if symbols[0].Line != 3 || symbols[0].EndLine != 3 {
+		t.Fatalf("location = %d-%d, want 3-3", symbols[0].Line, symbols[0].EndLine)
+	}
+}
+
+// TestExtractSymbols_GroupedTypeAlias は type block 内の複数 alias を抽出できることを確認する。
+func TestExtractSymbols_GroupedTypeAlias(t *testing.T) {
+	src := []byte("package main\n\ntype (\n\tUserID = string\n\tAccountID = int\n)\n")
+	symbols, err := ExtractSymbolsFromBytes("main.go", src)
+	if err != nil {
+		t.Fatalf("ExtractSymbolsFromBytes() error = %v", err)
+	}
+
+	kinds := make(map[string]SymbolKind, len(symbols))
+	for _, symbol := range symbols {
+		kinds[symbol.Name] = symbol.Kind
+	}
+	for _, name := range []string{"UserID", "AccountID"} {
+		if kinds[name] != SymbolType {
+			t.Fatalf("%s kind = %s, want %s", name, kinds[name], SymbolType)
+		}
+	}
+}
+
 // TestExtractSymbols_Exported は Exported 判定を確認する。
 func TestExtractSymbols_Exported(t *testing.T) {
 	src := []byte("package main\n\nfunc Build() {}\nfunc helper() {}\n")
