@@ -184,12 +184,12 @@ func TestPerFileBudget(t *testing.T) {
 		n    int
 		want int
 	}{
-		{1, MaxReadLines},
-		{2, MaxReadLines},
-		{3, 150},
-		{5, 150},
-		{6, 80},
-		{10, 80},
+		{1, DefaultFullLines}, // 500/1=500, capped to 100
+		{2, DefaultFullLines}, // 500/2=250, capped to 100
+		{5, DefaultFullLines}, // 500/5=100, == 100
+		{6, 83},               // 500/6=83
+		{10, 50},              // 500/10=50
+		{20, 30},              // 500/20=25, floored to 30
 	}
 	for _, tt := range tests {
 		got := perFileBudget(tt.n)
@@ -208,48 +208,55 @@ func generateLines(n int) string {
 	return strings.Join(lines, "\n")
 }
 
-func TestExecuteReadFiles_BudgetManyFiles(t *testing.T) {
+func TestExecuteReadFiles_BudgetOutlineMode(t *testing.T) {
 	setupTestMocks(t)
 	tmpDir := t.TempDir()
 
-	// 200行のファイルを6個作成（budget=80 が適用される）
+	// 200行のファイルを6個作成（budget=83, 200 > 83 → outline モード）
 	paths := make([]string, 6)
 	for i := range paths {
-		name := fmt.Sprintf("f%d.go", i)
+		name := fmt.Sprintf("f%d.txt", i)
 		testutil.CreateTempFile(t, tmpDir, name, generateLines(200))
 		paths[i] = filepath.Join(tmpDir, name)
 	}
 
 	output := ExecuteReadFiles(paths)
 
-	// 各ファイルで80行目は含まれ、81行目は含まれないことを確認
-	if !strings.Contains(output, "80: line80") {
-		t.Error("Expected line 80 to be present")
+	// outline モードが適用される（ガイドメッセージが含まれる）
+	if !strings.Contains(output, "Use start_line/end_line") {
+		t.Error("Expected outline mode with guide message")
 	}
-	if strings.Contains(output, "81: line81") {
-		t.Error("Expected line 81 to NOT be present (budget=80)")
+	// 先頭行が含まれる
+	if !strings.Contains(output, "1: line1") {
+		t.Error("Expected head lines to be present")
+	}
+	// 末尾セクションが含まれる
+	if !strings.Contains(output, "Last lines") {
+		t.Error("Expected 'Last lines' section")
 	}
 }
 
-func TestExecuteReadFiles_BudgetMediumFiles(t *testing.T) {
+func TestExecuteReadFiles_SmallFilesFullContent(t *testing.T) {
 	setupTestMocks(t)
 	tmpDir := t.TempDir()
 
-	// 200行のファイルを4個作成（budget=150 が適用される）
+	// 50行のファイルを4個作成（budget=100, 50 < 100 → 全文返却）
 	paths := make([]string, 4)
 	for i := range paths {
-		name := fmt.Sprintf("f%d.go", i)
-		testutil.CreateTempFile(t, tmpDir, name, generateLines(200))
+		name := fmt.Sprintf("f%d.txt", i)
+		testutil.CreateTempFile(t, tmpDir, name, generateLines(50))
 		paths[i] = filepath.Join(tmpDir, name)
 	}
 
 	output := ExecuteReadFiles(paths)
 
-	if !strings.Contains(output, "150: line150") {
-		t.Error("Expected line 150 to be present")
+	// 全文が返却される
+	if !strings.Contains(output, "50: line50") {
+		t.Error("Expected full content with line 50")
 	}
-	if strings.Contains(output, "151: line151") {
-		t.Error("Expected line 151 to NOT be present (budget=150)")
+	// outline ガイドメッセージが含まれない
+	if strings.Contains(output, "Use start_line/end_line") {
+		t.Error("Small files should NOT have outline guide message")
 	}
 }
 
@@ -257,20 +264,20 @@ func TestExecuteReadFiles_BudgetExplicitRangePriority(t *testing.T) {
 	setupTestMocks(t)
 	tmpDir := t.TempDir()
 
-	// 200行のファイルを6個作成（budget=80）
+	// 200行のファイルを6個作成（budget=83）
 	paths := make([]string, 6)
 	for i := 0; i < 5; i++ {
-		name := fmt.Sprintf("f%d.go", i)
+		name := fmt.Sprintf("f%d.txt", i)
 		testutil.CreateTempFile(t, tmpDir, name, generateLines(200))
 		paths[i] = filepath.Join(tmpDir, name)
 	}
-	// 6番目は明示的に行範囲指定（budget より広い範囲）
-	testutil.CreateTempFile(t, tmpDir, "f5.go", generateLines(200))
-	paths[5] = filepath.Join(tmpDir, "f5.go") + ":1-120"
+	// 6番目は明示的に行範囲指定（budget を無視して範囲を返す）
+	testutil.CreateTempFile(t, tmpDir, "f5.txt", generateLines(200))
+	paths[5] = filepath.Join(tmpDir, "f5.txt") + ":1-120"
 
 	output := ExecuteReadFiles(paths)
 
-	// 明示指定のファイルは120行目まで含まれる（budget=80 を無視）
+	// 明示指定のファイルは120行目まで含まれる
 	if !strings.Contains(output, "120: line120") {
 		t.Error("Expected explicit range file to include line 120")
 	}

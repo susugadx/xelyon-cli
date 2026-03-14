@@ -118,7 +118,7 @@ func TestExecuteReadFile_LargeFile_Outline(t *testing.T) {
 	if !strings.Contains(output, "Signatures") {
 		t.Errorf("Expected outline to contain 'Signatures', got:\n%s", output)
 	}
-	if !strings.Contains(output, "Use start_line/end_line to read function body") {
+	if !strings.Contains(output, "Use start_line/end_line") {
 		t.Errorf("Expected guide message, got:\n%s", output)
 	}
 	// 先頭行が含まれる
@@ -149,7 +149,7 @@ func TestExecuteReadFile_LargeFile_PlainText(t *testing.T) {
 	output := ExecuteReadFile(filepath.Join(tmpDir, "large.txt"), 0, 0)
 
 	// シグネチャなしでもアウトラインが動作する
-	if !strings.Contains(output, "Use start_line/end_line to read function body") {
+	if !strings.Contains(output, "Use start_line/end_line") {
 		t.Errorf("Expected guide message, got:\n%s", output)
 	}
 	if !strings.Contains(output, "Last lines") {
@@ -157,6 +157,107 @@ func TestExecuteReadFile_LargeFile_PlainText(t *testing.T) {
 	}
 	if !strings.Contains(output, "log entry 0") {
 		t.Errorf("Expected head to contain first entry")
+	}
+}
+
+func TestExecuteReadFile_MediumFile_Outline(t *testing.T) {
+	setupTestMocks(t)
+	tmpDir := t.TempDir()
+
+	// 150行のGoファイル（DefaultFullLines=100 を超える → outline モード）
+	var sb strings.Builder
+	sb.WriteString("package main\n\nimport \"fmt\"\n\n")
+	for i := 0; i < 3; i++ {
+		fmt.Fprintf(&sb, "func process%d() {\n", i)
+		for j := 0; j < 40; j++ {
+			fmt.Fprintf(&sb, "\tfmt.Println(%d)\n", j)
+		}
+		sb.WriteString("}\n\n")
+	}
+	testutil.CreateTempFile(t, tmpDir, "medium.go", sb.String())
+
+	output := ExecuteReadFile(filepath.Join(tmpDir, "medium.go"), 0, 0)
+
+	// outline-first モードの検証
+	if !strings.Contains(output, "Use start_line/end_line") {
+		t.Errorf("Expected outline guide message for medium file, got:\n%s", output)
+	}
+	if !strings.Contains(output, "package main") {
+		t.Errorf("Expected head to contain 'package main'")
+	}
+	// Go ファイルなので symbol ヒントがある
+	if !strings.Contains(output, "symbol=") {
+		t.Errorf("Expected Go symbol hint in guide message, got:\n%s", output)
+	}
+}
+
+func TestExecuteReadFile_SmallFile_FullContent(t *testing.T) {
+	setupTestMocks(t)
+	tmpDir := t.TempDir()
+
+	// 80行のファイル（DefaultFullLines=100 以下 → 全文返却）
+	var lines []string
+	for i := 1; i <= 80; i++ {
+		lines = append(lines, fmt.Sprintf("line%d", i))
+	}
+	testutil.CreateTempFile(t, tmpDir, "small.txt", strings.Join(lines, "\n"))
+
+	output := ExecuteReadFile(filepath.Join(tmpDir, "small.txt"), 0, 0)
+
+	// 全文が返却される
+	if !strings.Contains(output, "1: line1") {
+		t.Errorf("Expected full content with line 1")
+	}
+	if !strings.Contains(output, "80: line80") {
+		t.Errorf("Expected full content with line 80")
+	}
+	// outline ガイドメッセージが含まれない
+	if strings.Contains(output, "Use start_line/end_line") {
+		t.Errorf("Small file should NOT have outline guide message, got:\n%s", output)
+	}
+}
+
+func TestExecuteReadFile_GoOutline_SymbolHint(t *testing.T) {
+	setupTestMocks(t)
+	tmpDir := t.TempDir()
+
+	// Go ファイルのアウトラインに symbol ヒントがあることを確認
+	var sb strings.Builder
+	sb.WriteString("package main\n\nimport \"fmt\"\n\n")
+	for i := 0; i < 5; i++ {
+		fmt.Fprintf(&sb, "func handler%d() {\n", i)
+		for j := 0; j < 25; j++ {
+			fmt.Fprintf(&sb, "\tfmt.Println(%d)\n", j)
+		}
+		sb.WriteString("}\n\n")
+	}
+	testutil.CreateTempFile(t, tmpDir, "handlers.go", sb.String())
+
+	output := ExecuteReadFile(filepath.Join(tmpDir, "handlers.go"), 0, 0)
+
+	if !strings.Contains(output, `symbol="Name"`) {
+		t.Errorf("Expected Go symbol hint, got:\n%s", output)
+	}
+}
+
+func TestExecuteReadFile_NonGoOutline_NoSymbolHint(t *testing.T) {
+	setupTestMocks(t)
+	tmpDir := t.TempDir()
+
+	// 非 Go ファイルのアウトラインに symbol ヒントが含まれないことを確認
+	var lines []string
+	for i := 0; i < 200; i++ {
+		lines = append(lines, fmt.Sprintf("data line %d", i))
+	}
+	testutil.CreateTempFile(t, tmpDir, "data.txt", strings.Join(lines, "\n"))
+
+	output := ExecuteReadFile(filepath.Join(tmpDir, "data.txt"), 0, 0)
+
+	if strings.Contains(output, "symbol=") {
+		t.Errorf("Non-Go file should NOT have symbol hint, got:\n%s", output)
+	}
+	if !strings.Contains(output, "Use start_line/end_line") {
+		t.Errorf("Expected outline guide message")
 	}
 }
 
@@ -755,7 +856,7 @@ func TestExecuteReadFile_LargeFileStreaming_Outline(t *testing.T) {
 
 	output := ExecuteReadFile(largeFile, 0, 0)
 	// outline-first モードに切り替わる
-	if !strings.Contains(output, "Use start_line/end_line to read function body") {
+	if !strings.Contains(output, "Use start_line/end_line") {
 		t.Fatalf("expected outline guide message for large file, got: %s", output)
 	}
 	if !strings.Contains(output, "1: line 00001") {
@@ -796,7 +897,7 @@ func TestExecuteReadFile_LargeFileStreaming_GoOutline(t *testing.T) {
 	if !strings.Contains(output, "func handler") {
 		t.Fatalf("expected function signatures, got: %s", output)
 	}
-	if !strings.Contains(output, "Use start_line/end_line to read function body") {
+	if !strings.Contains(output, "Use start_line/end_line") {
 		t.Fatalf("expected guide message, got: %s", output)
 	}
 }

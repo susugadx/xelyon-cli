@@ -35,7 +35,11 @@ func formatFileSize(bytes int64) string {
 	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }
 
-// MaxReadLines はデフォルトの最大読み込み行数
+// DefaultFullLines は行範囲未指定時にアウトラインへ切り替える閾値。
+// この行数以下のファイルは全文を返し、超えるとアウトラインモードになる。
+const DefaultFullLines = 100
+
+// MaxReadLines は行範囲指定時のデフォルト最大読み込み行数
 const MaxReadLines = 300
 
 // LargeFileThreshold は「大容量ファイル」と判定するサイズ（1MB）
@@ -130,6 +134,12 @@ func ExecuteReadFileBySymbolWithRuntime(out common.Output, cfg *config.Config, c
 
 // ExecuteReadFileWithRuntime は runtime 設定を指定してファイルを読み込む。
 func ExecuteReadFileWithRuntime(out common.Output, cfg *config.Config, cache tools.ToolCacheInterface, path string, startLine, endLine int) string {
+	return executeReadFileCore(out, cfg, cache, path, startLine, endLine, DefaultFullLines)
+}
+
+// executeReadFileCore は outlineThreshold を指定可能な内部関数。
+// outlineThreshold 行を超えるファイルはアウトラインモードで返す。
+func executeReadFileCore(out common.Output, cfg *config.Config, cache tools.ToolCacheInterface, path string, startLine, endLine, outlineThreshold int) string {
 	if path == "" {
 		return "Error: path is empty"
 	}
@@ -199,30 +209,32 @@ func ExecuteReadFileWithRuntime(out common.Output, cfg *config.Config, cache too
 				return fmt.Sprintf("Error reading file: %v", err)
 			}
 
-			if hasMore {
-				// 推定総行数
-				totalLines := totalRead
-				if totalRead > 0 {
-					avgLineLen := fileInfo.Size() / int64(totalRead)
-					if avgLineLen > 0 {
-						totalLines = int(fileInfo.Size() / avgLineLen)
-					}
+			// 推定総行数
+			totalLines := len(lines)
+			if hasMore && totalRead > 0 {
+				avgLineLen := fileInfo.Size() / int64(totalRead)
+				if avgLineLen > 0 {
+					totalLines = int(fileInfo.Size() / avgLineLen)
 				}
-				// outline-first モード（先頭300行分の content で BuildBlockMap）
-				result := formatOutline(absPath, lines, totalLines)
+			}
+
+			// outlineThreshold 以下かつ全行読めた場合のみ全文返却
+			if !hasMore && len(lines) <= outlineThreshold {
+				result := formatLinesWithNumbers(lines, 1)
 				if showFileInfo && fileSize > 0 {
-					printReadStatus(out, "📄 Read: %s (%s, outline of ~%d lines)\n", path, formatFileSize(fileSize), totalLines)
+					printReadStatus(out, "📄 Read: %s (%s, %d lines)\n", path, formatFileSize(fileSize), len(lines))
 				} else {
-					printReadStatus(out, "📄 Read: %s (outline of ~%d lines)\n", path, totalLines)
+					printReadStatus(out, "📄 Read: %s (%d lines)\n", path, len(lines))
 				}
 				return result
 			}
-			// 300行以下に収まった場合は全行表示
-			result := formatLinesWithNumbers(lines, 1)
+
+			// outline-first モード
+			result := formatOutline(absPath, lines, totalLines)
 			if showFileInfo && fileSize > 0 {
-				printReadStatus(out, "📄 Read: %s (%s, %d lines)\n", path, formatFileSize(fileSize), len(lines))
+				printReadStatus(out, "📄 Read: %s (%s, outline of ~%d lines)\n", path, formatFileSize(fileSize), totalLines)
 			} else {
-				printReadStatus(out, "📄 Read: %s (%d lines)\n", path, len(lines))
+				printReadStatus(out, "📄 Read: %s (outline of ~%d lines)\n", path, totalLines)
 			}
 			return result
 		}
@@ -286,8 +298,8 @@ func ExecuteReadFileWithRuntime(out common.Output, cfg *config.Config, cache too
 		return result
 	}
 
-	// 行範囲指定なし: デフォルトで最初のMaxReadLines行
-	if totalLines <= MaxReadLines {
+	// 行範囲指定なし: outlineThreshold 以下なら全文返却
+	if totalLines <= outlineThreshold {
 		// 全行表示
 		result := formatLinesWithNumbers(lines, 1)
 		if showFileInfo && fileSize > 0 {
@@ -358,8 +370,12 @@ func formatOutline(filePath string, lines []string, totalLines int) string {
 	}
 
 	// 4. ガイドメッセージ
-	// NOTE: この文字列は agent.go の recordToolResultOptimizations で検出に使われている。
-	fmt.Fprintf(&sb, "\n(%d lines total. Use start_line/end_line to read function body)\n", totalLines)
+	// NOTE: "Use start_line/end_line" は agent.go の recordToolResultOptimizations で検出に使われている。
+	if internalast.IsSupportedFile(filePath) {
+		fmt.Fprintf(&sb, "\n(%d lines total. Use start_line/end_line or symbol=\"Name\" to read details)\n", totalLines)
+	} else {
+		fmt.Fprintf(&sb, "\n(%d lines total. Use start_line/end_line to read specific sections)\n", totalLines)
+	}
 
 	return sb.String()
 }

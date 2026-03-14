@@ -51,16 +51,20 @@ func parsePath(entry string) (string, int, int) {
 	return entry, 0, 0
 }
 
-// perFileBudget はファイル数に応じた1ファイルあたりの最大行数を返す
+// ReadFilesTotalBudget は read_files 全体の総行数バジェット
+const ReadFilesTotalBudget = 500
+
+// perFileBudget はファイル数に応じた1ファイルあたりのアウトライン閾値を返す。
+// totalBudget / n で算出し、DefaultFullLines を上限、30 を下限とする。
 func perFileBudget(n int) int {
-	switch {
-	case n <= 2:
-		return MaxReadLines // 300
-	case n <= 5:
-		return 150
-	default:
-		return 80
+	b := ReadFilesTotalBudget / n
+	if b > DefaultFullLines {
+		return DefaultFullLines
 	}
+	if b < 30 {
+		return 30
+	}
+	return b
 }
 
 // ExecuteReadFiles は複数ファイルを一括読み込みする
@@ -96,14 +100,18 @@ func ExecuteReadFilesWithOutput(out common.Output, paths []string) string {
 
 			path, startLine, endLine := parsePath(rawEntry)
 
-			// 明示的な行範囲指定がない場合、バジェットを適用
-			if startLine == 0 && endLine == 0 && budget < MaxReadLines {
-				endLine = budget
+			var result string
+			if startLine > 0 || endLine > 0 {
+				// 明示的な行範囲指定: そのまま読み込み
+				result = executeReadFileCore(out, nil, nil, path, startLine, endLine, DefaultFullLines)
+			} else {
+				// 行範囲なし: budget をアウトライン閾値として適用
+				result = executeReadFileCore(out, nil, nil, path, 0, 0, budget)
 			}
 
 			results[idx] = readResult{
 				entry:  rawEntry,
-				result: ExecuteReadFileWithOutput(out, path, startLine, endLine),
+				result: result,
 			}
 		}(i, entry)
 	}

@@ -22,7 +22,7 @@ func (t *ReadFileTool) Parameters() map[string]interface{} {
 	return map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
-			"path":       map[string]interface{}{"type": "string", "description": "Absolute or relative file path to read. Omitting start_line/end_line reads up to the first 300 lines."},
+			"path":       map[string]interface{}{"type": "string", "description": "Absolute or relative file path to read. Without start_line/end_line, returns full content for small files or an outline with signatures for larger files."},
 			"start_line": map[string]interface{}{"type": "integer", "description": "Start line number (1-indexed). Use only when the target section is already known."},
 			"end_line":   map[string]interface{}{"type": "integer", "description": "End line number (1-indexed). Omit to read up to 300 lines from start_line."},
 			"symbol":     map[string]interface{}{"type": "string", "description": "Read specific symbol(s) by name. Comma-separated for multiple (e.g. \"Build,HandleRequest\"). Returns only the matching function/type body with surrounding context. Go files only (Phase 1). When symbol is provided, start_line/end_line are ignored."},

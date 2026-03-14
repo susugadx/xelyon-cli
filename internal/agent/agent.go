@@ -415,7 +415,7 @@ func (a *Agent) addCompactionMetrics(metrics CompactionMetrics) {
 }
 
 func (a *Agent) recordToolResultOptimizations(toolName, result string) {
-	if toolName == "read_file" && strings.Contains(result, "Use start_line/end_line to read function body") {
+	if toolName == "read_file" && strings.Contains(result, "Use start_line/end_line") {
 		a.addOptimizationMetrics(OptimizationMetrics{OutlineFirstCount: 1})
 	}
 }
