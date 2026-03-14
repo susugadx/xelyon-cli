@@ -52,7 +52,7 @@ type Provider struct {
 
 // defaultResponseHeaderTimeout はHTTPレスポンスヘッダー受信までの最大待機時間
 // Google側でリクエスト処理が詰まった場合に無制限にぶら下がるのを防ぐ
-const defaultResponseHeaderTimeout = 90 * time.Second
+const defaultResponseHeaderTimeout = 60 * time.Second
 
 // New は新しいGeminiProviderを作成
 func New(apiKey string) *Provider {
