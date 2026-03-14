@@ -8,7 +8,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 )
@@ -670,4 +672,220 @@ func TestErrThinkingTimeout_NotMatchedByOtherErrors(t *testing.T) {
 	if !errors.As(wrappedErr, &target) {
 		t.Error("wrapped ErrThinkingTimeout should match")
 	}
+}
+
+// ===== Response Start Timeout Tests =====
+
+func TestErrResponseStartTimeout_ErrorType(t *testing.T) {
+	// ErrResponseStartTimeout が正しく動作する
+	err := &ErrResponseStartTimeout{Message: "response start timeout: no response"}
+	if err.Error() != "response start timeout: no response" {
+		t.Errorf("Error() = %q, want %q", err.Error(), "response start timeout: no response")
+	}
+
+	// errors.As で正しく判定される
+	var target *ErrResponseStartTimeout
+	if !errors.As(err, &target) {
+		t.Fatal("errors.As should identify ErrResponseStartTimeout")
+	}
+
+	// ラップされても判定できる
+	wrappedErr := fmt.Errorf("outer: %w", err)
+	target = nil
+	if !errors.As(wrappedErr, &target) {
+		t.Error("wrapped ErrResponseStartTimeout should match")
+	}
+
+	// 通常エラーはマッチしない
+	normalErr := fmt.Errorf("some error")
+	target = nil
+	if errors.As(normalErr, &target) {
+		t.Error("normal error should not match ErrResponseStartTimeout")
+	}
+
+	// ErrThinkingTimeout とは混ざらない
+	thinkingErr := &ErrThinkingTimeout{Message: "thinking"}
+	target = nil
+	if errors.As(thinkingErr, &target) {
+		t.Error("ErrThinkingTimeout should not match ErrResponseStartTimeout")
+	}
+}
+
+func TestDoRequestWithRetry_ResponseStartTimeout(t *testing.T) {
+	// サーバーがレスポンスヘッダーを返さない場合に ErrResponseStartTimeout が返される
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// レスポンスヘッダーを返す前に長時間待機
+		time.Sleep(3 * time.Second)
+		w.WriteHeader(200)
+	}))
+	defer server.Close()
+
+	originalURL := os.Getenv("GEMINI_API_URL")
+	defer os.Setenv("GEMINI_API_URL", originalURL)
+	os.Setenv("GEMINI_API_URL", server.URL)
+
+	p := New("test-key")
+	// テスト用に短いタイムアウトを設定
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.ResponseHeaderTimeout = 1 * time.Second
+	p.httpClient.Transport = transport
+
+	req, err := http.NewRequestWithContext(context.Background(), "POST", server.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-goog-api-key", "test-key")
+
+	_, err = p.doRequestWithRetry(context.Background(), req, []byte(`{}`))
+	if err == nil {
+		t.Fatal("doRequestWithRetry() should return error for timeout")
+	}
+
+	var responseStartErr *ErrResponseStartTimeout
+	if !errors.As(err, &responseStartErr) {
+		t.Fatalf("error should be ErrResponseStartTimeout, got: %T: %v", err, err)
+	}
+	if responseStartErr.Message == "" {
+		t.Error("ErrResponseStartTimeout.Message should not be empty")
+	}
+}
+
+func TestChatWithTools_ResponseStartTimeoutRetry(t *testing.T) {
+	// Response-start timeout → 1回リトライ → 2回目で成功
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		if requestCount == 1 {
+			// 1回目: レスポンスヘッダーを返さずタイムアウトさせる
+			time.Sleep(3 * time.Second)
+			return
+		}
+		// 2回目: 正常レスポンス
+		w.Header().Set("Content-Type", "text/event-stream")
+		resp := GeminiFunctionResponse{
+			Candidates: []GeminiFunctionCandidate{
+				{Content: GeminiFunctionContent{
+					Parts: []GeminiFunctionPart{{Text: "Success after retry"}},
+				}},
+			},
+		}
+		jsonBytes, _ := json.Marshal(resp)
+		fmt.Fprintf(w, "data: %s\n\n", string(jsonBytes))
+	}))
+	defer server.Close()
+
+	originalURL := os.Getenv("GEMINI_API_URL")
+	originalFC := os.Getenv("GEMINI_FUNCTION_CALLING")
+	defer func() {
+		os.Setenv("GEMINI_API_URL", originalURL)
+		os.Setenv("GEMINI_FUNCTION_CALLING", originalFC)
+	}()
+	os.Setenv("GEMINI_API_URL", server.URL)
+	os.Unsetenv("GEMINI_FUNCTION_CALLING")
+
+	p := New("test-key")
+	// テスト用に短いタイムアウトを設定
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.ResponseHeaderTimeout = 1 * time.Second
+	p.httpClient.Transport = transport
+
+	history := []api.Message{{Role: "user", Content: "Hello"}}
+	result, err := p.ChatWithTools(context.Background(), "System", history, "")
+	if err != nil {
+		t.Fatalf("ChatWithTools() error = %v", err)
+	}
+	if result != "Success after retry" {
+		t.Errorf("ChatWithTools() = %q, want 'Success after retry'", result)
+	}
+	if requestCount < 2 {
+		t.Errorf("Expected at least 2 requests (timeout + retry), got %d", requestCount)
+	}
+}
+
+func TestChatWithTools_ResponseStartTimeoutExceedsMaxRetries(t *testing.T) {
+	// Response-start timeout → リトライ上限を超えるとエラー
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// すべてのリクエストでタイムアウトさせる
+		time.Sleep(3 * time.Second)
+	}))
+	defer server.Close()
+
+	originalURL := os.Getenv("GEMINI_API_URL")
+	originalFC := os.Getenv("GEMINI_FUNCTION_CALLING")
+	defer func() {
+		os.Setenv("GEMINI_API_URL", originalURL)
+		os.Setenv("GEMINI_FUNCTION_CALLING", originalFC)
+	}()
+	os.Setenv("GEMINI_API_URL", server.URL)
+	os.Unsetenv("GEMINI_FUNCTION_CALLING")
+
+	p := New("test-key")
+	// テスト用に短いタイムアウトを設定
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.ResponseHeaderTimeout = 1 * time.Second
+	p.httpClient.Transport = transport
+
+	history := []api.Message{{Role: "user", Content: "Hello"}}
+	_, err := p.ChatWithTools(context.Background(), "System", history, "")
+	if err == nil {
+		t.Fatal("ChatWithTools() should return error when max retries exceeded")
+	}
+
+	// エラーメッセージに "response start timeout" が含まれること
+	if !errors.Is(err, err) { // just checking err is not nil (already done)
+		t.Fatal("unexpected")
+	}
+	errMsg := err.Error()
+	if !containsAny(errMsg, "response start timeout", "exceeded max retries") {
+		t.Errorf("error message should mention response start timeout, got: %v", err)
+	}
+}
+
+func TestIsNetworkTimeout(t *testing.T) {
+	// 通常のエラーは false
+	if isNetworkTimeout(fmt.Errorf("some error")) {
+		t.Error("normal error should not be network timeout")
+	}
+
+	// nil は false
+	if isNetworkTimeout(nil) {
+		t.Error("nil should not be network timeout")
+	}
+}
+
+func TestGetThinkingSpinnerMessage(t *testing.T) {
+	tests := []struct {
+		name    string
+		model   string
+		isImage bool
+		want    string
+	}{
+		{"Gemini 3 Pro", "gemini-3.1-pro-preview", false, "Deep thinking"},
+		{"Gemini 3 Flash no think", "gemini-3-flash", false, "Thinking"},
+		{"Gemini 3 Pro image", "gemini-3.1-pro-preview", true, "Deep thinking (image)"},
+		{"Gemini 3 Flash image no think", "gemini-3-flash", true, "Analyzing image"},
+		{"Gemini 2.5 no think", "gemini-2.5-flash", false, "Thinking"},
+		{"Gemini 2.5 image no think", "gemini-2.5-flash", true, "Analyzing image"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// thinking disabled (default context)
+			got := getThinkingSpinnerMessage(context.Background(), tt.model, tt.isImage)
+			if got != tt.want {
+				t.Errorf("getThinkingSpinnerMessage(%q, %v) = %q, want %q", tt.model, tt.isImage, got, tt.want)
+			}
+		})
+	}
+}
+
+// containsAny は文字列が指定された部分文字列のいずれかを含むか判定
+func containsAny(s string, substrs ...string) bool {
+	for _, sub := range substrs {
+		if strings.Contains(s, sub) {
+			return true
+		}
+	}
+	return false
 }

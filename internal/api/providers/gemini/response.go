@@ -41,8 +41,20 @@ func (e *ErrIdleTimeout) Error() string {
 	return e.Message
 }
 
+// ErrResponseStartTimeout はHTTPレスポンスヘッダー受信前のタイムアウトエラー
+// Google側でリクエスト処理が詰まり、SSEストリームが開始されない場合に発生
+type ErrResponseStartTimeout struct {
+	Message string
+}
+
+// Error はエラーメッセージを返す
+func (e *ErrResponseStartTimeout) Error() string {
+	return e.Message
+}
+
 // handleSSEResponse は streamGenerateContent?alt=sse の SSE ストリームを処理する
-func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
+// thinkingMsg はSSEストリーム開始時にスピナーを切り替えるメッセージ（空なら切り替えなし）
+func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner, thinkingMsg string) (string, error) {
 	debug := os.Getenv("XELYON_DEBUG_GEMINI") == "1"
 	out := api.OutputWriterFromContext(ctx)
 	errOut := api.ErrorWriterFromContext(ctx)
@@ -55,6 +67,7 @@ func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, s
 	var suppressingToolJSON bool // テキストパート内のツールJSON抑制中フラグ
 	var toolJSONDepth int        // ツールJSON の {} ネスト深度
 	var toolJSONInStr bool       // ツールJSON 内の文字列リテラルフラグ
+	var streamStarted bool       // SSEストリーム開始フラグ（スピナー切り替え用）
 
 	// goroutine + channel でスキャン（ctx キャンセル・idle timeout 対応）
 	type scanResult struct {
@@ -162,6 +175,15 @@ loop:
 					fmt.Fprintf(errOut, "[DEBUG Gemini SSE] Failed to unmarshal chunk: %v\n", err)
 				}
 				continue
+			}
+
+			// SSEストリーム開始: "Waiting for Gemini..." → thinking メッセージに切り替え
+			if !streamStarted {
+				streamStarted = true
+				if spinner != nil && thinkingMsg != "" {
+					spinner.Stop()
+					spinner.Start(thinkingMsg)
+				}
 			}
 
 			if chunk.UsageMetadata != nil {

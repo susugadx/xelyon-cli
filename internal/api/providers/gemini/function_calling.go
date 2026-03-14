@@ -11,7 +11,6 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/tools"
-	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // getGeminiFunctionCallingURL は非ストリーミング（generateContent）用の URL を生成
@@ -181,21 +180,10 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-goog-api-key", p.apiKey)
 
-	// スピナー開始
-	// Gemini 3 Flash (minimal) は "Thinking"、Pro または thinking.enabled=true は "Deep thinking"
-	var spinner *ui.Spinner
-	if isGemini3Model(model) {
-		isFlash := strings.Contains(model, "flash")
-		var msg string
-		if isFlash && !api.IsThinkingEnabled(ctx) {
-			msg = "Thinking"
-		} else {
-			msg = "Deep thinking"
-		}
-		spinner = api.StartSpinnerWithMessage(ctx, msg)
-	} else {
-		spinner = api.StartThinkingSpinner(ctx, false, "")
-	}
+	// スピナー開始: レスポンス開始前は "Waiting for Gemini..." を表示
+	// SSEストリーム開始後に thinking メッセージに切り替える
+	thinkingMsg := getThinkingSpinnerMessage(ctx, model, false)
+	spinner := api.StartSpinnerWithMessage(ctx, "Waiting for Gemini...")
 
 	resp, err := p.doRequestWithRetry(ctx, req, jsonBody)
 	if err != nil {
@@ -243,7 +231,7 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 	}
 
 	// Function Calling レスポンスを処理（SSE ストリーミング）
-	return p.handleSSEResponse(ctx, resp, spinner)
+	return p.handleSSEResponse(ctx, resp, spinner, thinkingMsg)
 }
 
 // extractToolNameFromContent はメッセージ内容からツール名を推定

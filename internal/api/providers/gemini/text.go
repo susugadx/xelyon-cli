@@ -7,11 +7,9 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/tools"
-	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // chatWithTextMode はテキストベースのツール呼び出しモード（従来の実装）
@@ -75,21 +73,10 @@ func (p *Provider) chatWithTextMode(ctx context.Context, systemPrompt string, hi
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-goog-api-key", p.apiKey) // APIキーはヘッダーで送信（セキュリティ向上）
 
-	// スピナー開始
-	// Gemini 3 Flash (minimal) は "Thinking"、Pro または thinking.enabled=true は "Deep thinking"
-	var spinner *ui.Spinner
-	if isGemini3Model(model) {
-		isFlash := strings.Contains(model, "flash")
-		var msg string
-		if isFlash && !api.IsThinkingEnabled(ctx) {
-			msg = "Thinking"
-		} else {
-			msg = "Deep thinking"
-		}
-		spinner = api.StartSpinnerWithMessage(ctx, msg)
-	} else {
-		spinner = api.StartThinkingSpinner(ctx, false, "")
-	}
+	// スピナー開始: レスポンス開始前は "Waiting for Gemini..." を表示
+	// SSEストリーム開始後に thinking メッセージに切り替える
+	thinkingMsg := getThinkingSpinnerMessage(ctx, model, false)
+	spinner := api.StartSpinnerWithMessage(ctx, "Waiting for Gemini...")
 
 	// 503 リトライ付き HTTP リクエスト
 	resp, err := p.doRequestWithRetry(ctx, req, jsonBody)
@@ -118,7 +105,7 @@ func (p *Provider) chatWithTextMode(ctx context.Context, systemPrompt string, hi
 
 	// Content-Typeでストリーミング対応を判定
 	// streamGenerateContent?alt=sse を使用しているため、常に SSE パーサーを使用する
-	return p.handleSSEResponse(ctx, resp, spinner)
+	return p.handleSSEResponse(ctx, resp, spinner, thinkingMsg)
 }
 
 // ChatWithImage は画像付きメッセージで会話を行う
@@ -210,21 +197,10 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-goog-api-key", p.apiKey)
 
-	// スピナー開始（画像モード）
-	// Gemini 3 Flash (minimal) は "Analyzing image"、Pro または thinking.enabled=true は "Deep thinking (image)"
-	var spinner *ui.Spinner
-	if isGemini3Model(model) {
-		isFlash := strings.Contains(model, "flash")
-		var msg string
-		if isFlash && !api.IsThinkingEnabled(ctx) {
-			msg = "Analyzing image"
-		} else {
-			msg = "Deep thinking (image)"
-		}
-		spinner = api.StartSpinnerWithMessage(ctx, msg)
-	} else {
-		spinner = api.StartThinkingSpinner(ctx, true, "") // isImage=true
-	}
+	// スピナー開始: レスポンス開始前は "Waiting for Gemini..." を表示
+	// SSEストリーム開始後に thinking メッセージに切り替える
+	thinkingMsg := getThinkingSpinnerMessage(ctx, model, true)
+	spinner := api.StartSpinnerWithMessage(ctx, "Waiting for Gemini...")
 
 	// 503 リトライ付き HTTP リクエスト
 	resp, err := p.doRequestWithRetry(ctx, req, jsonBody)
@@ -251,5 +227,5 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	}
 
 	// 常にストリーミング処理（SSE）
-	return p.handleSSEResponse(ctx, resp, spinner)
+	return p.handleSSEResponse(ctx, resp, spinner, thinkingMsg)
 }

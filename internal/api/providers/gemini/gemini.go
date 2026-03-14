@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -49,12 +50,19 @@ type Provider struct {
 	cacheMap map[string]*cacheEntry // key = model名
 }
 
+// defaultResponseHeaderTimeout はHTTPレスポンスヘッダー受信までの最大待機時間
+// Google側でリクエスト処理が詰まった場合に無制限にぶら下がるのを防ぐ
+const defaultResponseHeaderTimeout = 90 * time.Second
+
 // New は新しいGeminiProviderを作成
 func New(apiKey string) *Provider {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.ResponseHeaderTimeout = defaultResponseHeaderTimeout
 	return &Provider{
 		apiKey: apiKey,
 		httpClient: &http.Client{
-			Timeout: config.DefaultHTTPTimeout,
+			Timeout:   config.DefaultHTTPTimeout,
+			Transport: transport,
 		},
 	}
 }
@@ -190,6 +198,48 @@ const fcErrorRetryKey ctxKey = "gemini_fc_error_retry"
 // maxFCErrorRetries はFC一般エラー時のリトライ上限
 const maxFCErrorRetries = 1
 
+// responseStartTimeoutRetryKey はresponse-start timeoutリトライ回数を追跡するcontext key
+const responseStartTimeoutRetryKey ctxKey = "gemini_response_start_timeout_retry"
+
+// maxResponseStartTimeoutRetries はresponse-start timeout時のリトライ上限
+const maxResponseStartTimeoutRetries = 1
+
+// getThinkingSpinnerMessage はモデルとコンテキストに基づいて thinking スピナーメッセージを返す
+// SSEストリーム開始後に "Waiting for Gemini..." から切り替える際に使用
+func getThinkingSpinnerMessage(ctx context.Context, model string, isImage bool) string {
+	if isImage {
+		if isGemini3Model(model) {
+			isFlash := strings.Contains(model, "flash")
+			if isFlash && !api.IsThinkingEnabled(ctx) {
+				return "Analyzing image"
+			}
+			return "Deep thinking (image)"
+		}
+		if api.IsThinkingEnabled(ctx) {
+			return "Deep thinking (image)"
+		}
+		return "Analyzing image"
+	}
+	if isGemini3Model(model) {
+		isFlash := strings.Contains(model, "flash")
+		if isFlash && !api.IsThinkingEnabled(ctx) {
+			return "Thinking"
+		}
+		return "Deep thinking"
+	}
+	if api.IsThinkingEnabled(ctx) {
+		return "Deep thinking"
+	}
+	return "Thinking"
+}
+
+// isNetworkTimeout はネットワークタイムアウトエラーかどうかを判定する
+// ResponseHeaderTimeout によるタイムアウトを検出するために使用
+func isNetworkTimeout(err error) bool {
+	var netErr net.Error
+	return errors.As(err, &netErr) && netErr.Timeout()
+}
+
 // ChatWithTools は Provider interface の実装（context対応）
 // GEMINI_FUNCTION_CALLING=0の場合のみテキストモードを使用
 // MCPツールもFunction Calling経由で呼び出される
@@ -212,6 +262,23 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		}
 		result, err := p.chatWithFunctionCalling(ctx, systemPrompt, history, model)
 		if err != nil {
+			// Response-start timeout: レスポンスヘッダー受信前にタイムアウト（1回リトライ）
+			var responseStartErr *ErrResponseStartTimeout
+			if errors.As(err, &responseStartErr) {
+				retryCount := 0
+				if v := ctx.Value(responseStartTimeoutRetryKey); v != nil {
+					retryCount = v.(int)
+				}
+				if retryCount >= maxResponseStartTimeoutRetries {
+					return "", fmt.Errorf("response start timeout: exceeded max retries (%d): %w", maxResponseStartTimeoutRetries, err)
+				}
+				retryCount++
+				api.StopSpinnerAndResetTerminal(ctx)
+				fmt.Fprintf(api.ErrorWriterFromContext(ctx), "⚠️ Response start timeout, retrying (%d/%d)...\n", retryCount, maxResponseStartTimeoutRetries)
+				ctx = context.WithValue(ctx, responseStartTimeoutRetryKey, retryCount)
+				return p.ChatWithTools(ctx, systemPrompt, history, model)
+			}
+
 			// Idle timeout: FCモードで1回リトライ → それでもダメならエラー
 			var idleErr *ErrIdleTimeout
 			if errors.As(err, &idleErr) {
@@ -285,6 +352,13 @@ func (p *Provider) doRequestWithRetry(ctx context.Context, req *http.Request, bo
 		req.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 		resp, err := p.httpClient.Do(req)
 		if err != nil {
+			// ResponseHeaderTimeout によるタイムアウトを検出
+			// 親 context のキャンセルではない場合のみ ErrResponseStartTimeout に変換
+			if ctx.Err() == nil && isNetworkTimeout(err) {
+				return nil, &ErrResponseStartTimeout{
+					Message: fmt.Sprintf("response start timeout: no response from Gemini within the timeout period (%v)", err),
+				}
+			}
 			return nil, err
 		}
 		if (resp.StatusCode != 503 && resp.StatusCode != 429) || attempt == maxRetries {
