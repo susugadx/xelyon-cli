@@ -1,7 +1,7 @@
 package navigation
 
 import (
-	"bytes"
+	"bufio"
 	"context"
 	"os"
 	"os/exec"
@@ -19,7 +19,8 @@ import (
 const maxRipgrepResults = 200
 
 // findReferences は ripgrep でシンボル名を検索し、全参照を返す。
-// truncated が true の場合、上流の検索結果が上限に達して打ち切られたことを示す。
+// StdoutPipe + scanner で逐次読み取りし、201件目を検出したら早期停止する。
+// truncated が true の場合、上流の検索結果が上限を超えたことを示す。
 func findReferences(symbol string) (refs []Reference, truncated bool) {
 	if !common.IsRipgrepAvailable() {
 		return nil, false
@@ -39,16 +40,18 @@ func findReferences(symbol string) (refs []Reference, truncated bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, common.RipgrepPath(), args...)
-	var stdout bytes.Buffer
-	cmd.Stdout = &stdout
-	_ = cmd.Run()
 
-	if stdout.Len() == 0 {
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, false
+	}
+	if err := cmd.Start(); err != nil {
 		return nil, false
 	}
 
-	for _, line := range strings.Split(strings.TrimSpace(stdout.String()), "\n") {
-		line = strings.TrimSpace(line)
+	scanner := bufio.NewScanner(stdout)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
 			continue
 		}
@@ -59,13 +62,18 @@ func findReferences(symbol string) (refs []Reference, truncated bool) {
 		}
 		refs = append(refs, *ref)
 
-		// 201件目が見つかったら truncated=true にし、先頭200件のみ保持
+		// 201件目を検出したら truncated=true にし、先頭200件のみ保持して早期停止
 		if len(refs) > maxRipgrepResults {
 			truncated = true
 			refs = refs[:maxRipgrepResults]
+			cancel() // rg プロセスを早期終了
 			break
 		}
 	}
+
+	// プロセス終了を待つ（cancel 済みの場合はすぐ返る）
+	_ = cmd.Wait()
+
 	return refs, truncated
 }
 
