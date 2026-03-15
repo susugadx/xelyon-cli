@@ -8,21 +8,25 @@ import (
 
 func TestCompactWebSearchResult_ShortResult(t *testing.T) {
 	short := "Summary:\nGo 1.24 was released.\n\nSources:\n\n1. Go Blog\n   URL: https://go.dev/blog"
-	got := CompactWebSearchResult(short)
-	if got != short {
-		t.Errorf("short result should be unchanged, got:\n%s", got)
+	got := CompactWebSearchResult("Go 1.24 release", short)
+	// short result should preserve content and prepend query
+	if !strings.Contains(got, "Query: Go 1.24 release") {
+		t.Error("should contain Query: header")
+	}
+	if !strings.Contains(got, "Go 1.24 was released") {
+		t.Error("should preserve original summary")
 	}
 }
 
 func TestCompactWebSearchResult_NoResults(t *testing.T) {
-	got := CompactWebSearchResult("No results found.")
+	got := CompactWebSearchResult("test query", "No results found.")
 	if got != "No results found." {
 		t.Errorf("'No results found.' should be unchanged, got: %s", got)
 	}
 }
 
 func TestCompactWebSearchResult_Empty(t *testing.T) {
-	got := CompactWebSearchResult("")
+	got := CompactWebSearchResult("test query", "")
 	if got != "" {
 		t.Errorf("empty should be unchanged, got: %s", got)
 	}
@@ -41,8 +45,11 @@ func TestCompactWebSearchResult_LongSummaryTruncated(t *testing.T) {
 	lines = append(lines, "   URL: https://example.com")
 
 	result := strings.Join(lines, "\n")
-	got := CompactWebSearchResult(result)
+	got := CompactWebSearchResult("detailed topic", result)
 
+	if !strings.Contains(got, "Query: detailed topic") {
+		t.Error("should contain Query: header")
+	}
 	if !strings.Contains(got, "Summary:") {
 		t.Error("should contain Summary: header")
 	}
@@ -51,9 +58,6 @@ func TestCompactWebSearchResult_LongSummaryTruncated(t *testing.T) {
 	}
 	if !strings.Contains(got, "https://example.com") {
 		t.Error("should preserve source URL")
-	}
-	if len(got) >= len(result) {
-		t.Errorf("compacted (%d bytes) should be shorter than original (%d bytes)", len(got), len(result))
 	}
 }
 
@@ -65,7 +69,7 @@ func TestCompactWebSearchResult_SourcesCompacted(t *testing.T) {
 	}
 
 	result := b.String()
-	got := CompactWebSearchResult(result)
+	got := CompactWebSearchResult("test sources", result)
 
 	// should have compact format
 	if !strings.Contains(got, "Sources:") {
@@ -85,9 +89,9 @@ func TestCompactWebSearchResult_SourcesCompacted(t *testing.T) {
 		t.Error("source 8 should be omitted (max 7)")
 	}
 
-	// should indicate more sources
-	if !strings.Contains(got, "+") {
-		t.Error("should indicate remaining sources")
+	// should indicate exactly 5 more sources (12 - 7 = 5)
+	if !strings.Contains(got, "[+5 more sources]") {
+		t.Errorf("should show [+5 more sources], got:\n%s", got)
 	}
 
 	// compact single-line format
@@ -96,21 +100,49 @@ func TestCompactWebSearchResult_SourcesCompacted(t *testing.T) {
 	}
 }
 
+func TestCompactWebSearchResult_SourcesCompacted_ExactCount(t *testing.T) {
+	// 10 sources, max 7 → exactly 3 omitted
+	var b strings.Builder
+	b.WriteString("Summary:\nFindings about the topic with enough content to exceed the minimum length threshold.\n")
+	b.WriteString(strings.Repeat("Additional context. ", 20))
+	b.WriteString("\n\nSources:\n")
+	for i := 1; i <= 10; i++ {
+		fmt.Fprintf(&b, "\n%d. Title %d\n   URL: https://example.com/%d\n", i, i, i)
+	}
+
+	got := CompactWebSearchResult("count test", b.String())
+
+	if !strings.Contains(got, "[+3 more sources]") {
+		t.Errorf("10 sources with max 7 should show [+3 more sources], got:\n%s", got)
+	}
+}
+
 func TestCompactWebSearchResult_QueryPreserved(t *testing.T) {
 	var b strings.Builder
-	b.WriteString("Summary:\nResults for query about Go generics.\n")
+	b.WriteString("Summary:\nResults about Go generics implementation.\n")
 	for i := 0; i < 20; i++ {
 		fmt.Fprintf(&b, "Detail line %d about generics implementation.\n", i)
 	}
 	b.WriteString("\nSources:\n\n1. Go Blog\n   URL: https://go.dev/blog/generics\n")
 
-	got := CompactWebSearchResult(b.String())
+	query := "Go generics type constraints"
+	got := CompactWebSearchResult(query, b.String())
 
-	if !strings.Contains(got, "Go generics") {
-		t.Error("query context should be preserved in summary")
+	// query must appear as explicit Query: header, not just in summary text
+	if !strings.HasPrefix(got, "Query: Go generics type constraints\n") {
+		t.Errorf("should start with Query: header, got:\n%s", got[:80])
 	}
 	if !strings.Contains(got, "https://go.dev/blog/generics") {
 		t.Error("source URL should be preserved")
+	}
+}
+
+func TestCompactWebSearchResult_QueryPreserved_Short(t *testing.T) {
+	// even short results should have Query: header
+	short := "Summary:\nBrief result."
+	got := CompactWebSearchResult("my search", short)
+	if !strings.HasPrefix(got, "Query: my search\n") {
+		t.Errorf("short result should have Query: header, got:\n%s", got)
 	}
 }
 
@@ -122,7 +154,7 @@ func TestCompactWebSearchResult_FindingsPreserved(t *testing.T) {
 	}
 	b.WriteString("\nSources:\n\n1. React Blog\n   URL: https://react.dev/blog\n")
 
-	got := CompactWebSearchResult(b.String())
+	got := CompactWebSearchResult("React 19 features", b.String())
 
 	if !strings.Contains(got, "server components") {
 		t.Error("key findings should be preserved in first lines of summary")
@@ -143,7 +175,7 @@ func TestCompactWebSearchResult_SourceURLsNotDropped(t *testing.T) {
 		fmt.Fprintf(&b, "\n%d. Source %d\n   URL: %s\n", i+1, i+1, url)
 	}
 
-	got := CompactWebSearchResult(b.String())
+	got := CompactWebSearchResult("python libraries", b.String())
 
 	for _, url := range urls {
 		if !strings.Contains(got, url) {
@@ -156,11 +188,10 @@ func TestCompactWebSearchResult_SourceURLsNotDropped(t *testing.T) {
 
 func TestSplitWebSearchSections(t *testing.T) {
 	tests := []struct {
-		name       string
-		input      string
-		wantSumm   string
-		wantSrc    string
-		hasSources bool
+		name     string
+		input    string
+		wantSumm string
+		wantSrc  string
 	}{
 		{
 			name:     "standard format",

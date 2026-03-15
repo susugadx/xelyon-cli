@@ -65,7 +65,7 @@ func ExecuteWebSearch(execCtx tools.ExecutionContext, query string) string {
 		out.Green.Printf("🔍 Searching the web (%s): %s\n", searchProvider, query)
 	}
 
-	return CompactWebSearchResult(result)
+	return CompactWebSearchResult(query, result)
 }
 
 func searchWithCache(ctx context.Context, cfg *config.Config, provider, query, model string) (string, bool, error) {
@@ -214,14 +214,19 @@ const (
 
 // CompactWebSearchResult はプロバイダーから返された web_search 結果を
 // summary-first / source-preserving な canonical 形式に変換する。
+// query を先頭に付与して、history 上で検索意図が失われないようにする。
 // 全プロバイダーが "Summary:\n..." + "Sources:\n..." 形式を返す前提。
-func CompactWebSearchResult(result string) string {
+func CompactWebSearchResult(query, result string) string {
 	result = strings.TrimSpace(result)
 	if result == "" || result == "No results found." {
 		return result
 	}
+
+	// query ヘッダーを付与（provider result には含まれないため常に追加）
+	queryHeader := fmt.Sprintf("Query: %s\n", query)
+
 	if len(result) < webSearchCompactMinLen {
-		return result
+		return queryHeader + result
 	}
 
 	summary, sourcesBlock := splitWebSearchSections(result)
@@ -233,6 +238,7 @@ func CompactWebSearchResult(result string) string {
 	sourcesBlock = compactWebSearchSources(sourcesBlock)
 
 	var b strings.Builder
+	b.WriteString(queryHeader)
 	if summary != "" {
 		b.WriteString(summary)
 	}
@@ -243,12 +249,7 @@ func CompactWebSearchResult(result string) string {
 		b.WriteString(sourcesBlock)
 	}
 
-	compacted := b.String()
-	// compaction が逆に膨らんだ場合は元を返す
-	if len(compacted) >= len(result) {
-		return result
-	}
-	return compacted
+	return b.String()
 }
 
 // splitWebSearchSections は "Summary:" と "Sources:" のセクションを分離する。
@@ -326,10 +327,9 @@ func compactWebSearchSources(sourcesBlock string) string {
 
 			count++
 			if count > webSearchMaxSources {
-				remaining := countRemainingEntries(lines[i+1:])
-				if remaining > 0 {
-					fmt.Fprintf(&b, "\n[+%d more sources]", remaining)
-				}
+				// current entry (count-th) is already omitted; count remaining after it
+				remaining := 1 + countRemainingEntries(lines[i+1:])
+				fmt.Fprintf(&b, "\n[+%d more sources]", remaining)
 				break
 			}
 
