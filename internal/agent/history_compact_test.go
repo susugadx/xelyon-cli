@@ -506,3 +506,109 @@ func TestCompactOldToolResults_CompactionMetrics(t *testing.T) {
 		t.Fatalf("ErrorCompressions = %d, want 1", metrics.ErrorCompressions)
 	}
 }
+
+// ── ultraCompactToolResult tests ──
+
+func TestUltraCompactToolResult_ReadFile(t *testing.T) {
+	msg := api.Message{
+		Role:     "tool",
+		Content:  strings.Repeat("line\n", 50),
+		ToolName: "read_file",
+	}
+	got := ultraCompactToolResult(msg)
+	if !strings.Contains(got, "Old read_file") {
+		t.Errorf("expected read_file summary, got %q", got)
+	}
+	if !strings.Contains(got, "50 lines") {
+		t.Errorf("expected line count, got %q", got)
+	}
+}
+
+func TestUltraCompactToolResult_SearchCode(t *testing.T) {
+	msg := api.Message{
+		Role:     "tool",
+		Content:  "Found 10 matches in 3 files:\n" + strings.Repeat("  match\n", 50),
+		ToolName: "search_code",
+	}
+	got := ultraCompactToolResult(msg)
+	if !strings.Contains(got, "Found 10 matches") {
+		t.Errorf("expected first line preserved, got %q", got)
+	}
+}
+
+func TestUltraCompactToolResult_ShortContent(t *testing.T) {
+	msg := api.Message{
+		Role:     "tool",
+		Content:  "short",
+		ToolName: "read_file",
+	}
+	got := ultraCompactToolResult(msg)
+	if got != "" {
+		t.Errorf("short content should not be ultra-compacted, got %q", got)
+	}
+}
+
+func TestUltraCompactToolResult_Bash(t *testing.T) {
+	msg := api.Message{
+		Role:     "tool",
+		Content:  strings.Repeat("output line\n", 30),
+		ToolName: "bash",
+	}
+	got := ultraCompactToolResult(msg)
+	if !strings.Contains(got, "Old bash") {
+		t.Errorf("expected bash summary, got %q", got)
+	}
+}
+
+func TestUltraCompactToolResult_EmptyToolName(t *testing.T) {
+	msg := api.Message{
+		Role:    "tool",
+		Content: strings.Repeat("x\n", 30),
+	}
+	got := ultraCompactToolResult(msg)
+	if got != "" {
+		t.Error("empty ToolName should return empty (fallback to graduated truncation)")
+	}
+}
+
+func TestCompactOldToolResults_UltraCompactTier(t *testing.T) {
+	// Build history with a very old tool result (age > ultraCompactAge)
+	var history []api.Message
+
+	// Add many assistant-tool pairs to make the first tool result very old
+	longContent := strings.Repeat("line content here\n", 50)
+	history = append(history, api.Message{
+		Role:       "tool",
+		Content:    longContent,
+		ToolCallID: "old",
+		ToolName:   "read_file",
+	})
+	// Add enough assistant+tool pairs to push age beyond ultraCompactAge
+	for i := 0; i < ultraCompactAge+5; i++ {
+		history = append(history, api.Message{
+			Role:    "assistant",
+			Content: fmt.Sprintf("step %d", i),
+		})
+		history = append(history, api.Message{
+			Role:       "tool",
+			Content:    fmt.Sprintf("result %d", i),
+			ToolCallID: fmt.Sprintf("t%d", i),
+			ToolName:   "read_file",
+		})
+	}
+	// Final assistant to make all tool results "read"
+	history = append(history, api.Message{
+		Role:    "assistant",
+		Content: "final",
+	})
+
+	result, metrics := CompactOldToolResults(history, DefaultMaxLines, DefaultHeadLines, DefaultTailLines)
+
+	// The first (oldest) tool result should be ultra-compacted
+	if !strings.Contains(result[0].Content, "[Old read_file") {
+		t.Errorf("expected ultra-compact summary for oldest tool result, got:\n%s", result[0].Content)
+	}
+	if metrics.TruncationCount == 0 {
+		t.Error("expected at least 1 truncation from ultra-compact")
+	}
+}

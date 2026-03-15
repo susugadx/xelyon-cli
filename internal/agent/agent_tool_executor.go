@@ -131,12 +131,11 @@ func (a *Agent) addToolCallsToHistory(response string, toolCalls []*tools.ToolCa
 		a.session.AddMessageFromAPI(msg, a.CurrentModel)
 	}
 
-	// 統計情報更新: AssistantMessages は1回、ToolExecution は各ツール
+	// 統計情報更新: AssistantMessages は1回カウント。
+	// ToolExecution は Phase 2 で実際に実行された call のみカウントする
+	// （same-turn duplicate や batch merge で省略された call は除外）。
 	if a.Stats != nil {
 		a.Stats.AssistantMessages++
-		for _, tc := range toolCalls {
-			a.Stats.AddToolExecution(tc.Tool)
-		}
 	}
 }
 
@@ -599,10 +598,13 @@ func (a *Agent) executeToolCallsWithParallel(
 		statusExecute   = 0 // 実行対象
 		statusSkip      = 1 // skipFn によりスキップ
 		statusLoopAbort = 2 // ループ検知で中止
+		statusDuplicate = 3 // 同一ターン内の完全重複（canonical メッセージに置換）
+		statusBatched   = 4 // Phase 0.5 で batch 実行済み（結果は results に格納済み）
 	)
 	type entry struct {
-		status  int
-		skipMsg string // statusSkip 時のメッセージ
+		status      int
+		skipMsg     string // statusSkip 時のメッセージ
+		dupFirstIdx int    // statusDuplicate: 最初の出現のインデックス
 	}
 	entries := make([]entry, n)
 	aborted := false
@@ -633,9 +635,92 @@ func (a *Agent) executeToolCallsWithParallel(
 		entries[i] = entry{status: statusExecute}
 	}
 
+	// ── Phase 0.5a: Same-turn duplicate detection ──
+	// 同一レスポンス内の完全重複 tool call（tool名 + 全引数一致）を検出し、
+	// 2回目以降を statusDuplicate にマークする。
+	// read-only かつ冪等なツールのみ対象（isDedupableForTurn で判定）。
+	dupMap := make(map[string]int) // turnDedupKey → first occurrence index
+	for i, e := range entries {
+		if e.status != statusExecute {
+			continue
+		}
+		tc := allToolCalls[i]
+		if !isDedupableForTurn(tc.Tool) {
+			continue
+		}
+		key := turnDedupKey(tc)
+		if firstIdx, ok := dupMap[key]; ok {
+			entries[i] = entry{status: statusDuplicate, dupFirstIdx: firstIdx}
+		} else {
+			dupMap[key] = i
+		}
+	}
+
+	// ── Phase 0.5b: search_code multi-pattern batching ──
+	// 同一 option（pattern 以外の全引数が一致）の search_code call をグループ化し、
+	// pattern をカンマ結合した 1 回の multi-pattern call にまとめて実行する。
+	// 結果を per-pattern section に分割し、各 call に割り当てる。
+	results := make([]toolExecResult, n)
+
+	type searchBatchGroup struct {
+		indices  []int
+		patterns []string
+	}
+	searchGroups := make(map[string]*searchBatchGroup)
+	var searchGroupOrder []string
+
+	for i, e := range entries {
+		if e.status != statusExecute {
+			continue
+		}
+		tc := allToolCalls[i]
+		if tc.Tool != "search_code" || !isSimpleSearchPattern(tc.Args["pattern"]) {
+			continue
+		}
+		optKey := searchCodeOptionsKey(tc)
+		if g, ok := searchGroups[optKey]; ok {
+			g.indices = append(g.indices, i)
+			g.patterns = append(g.patterns, tc.Args["pattern"])
+		} else {
+			searchGroups[optKey] = &searchBatchGroup{
+				indices:  []int{i},
+				patterns: []string{tc.Args["pattern"]},
+			}
+			searchGroupOrder = append(searchGroupOrder, optKey)
+		}
+	}
+
+	for _, optKey := range searchGroupOrder {
+		group := searchGroups[optKey]
+		if len(group.indices) < 2 || len(group.patterns) > maxSearchBatchPatterns {
+			continue
+		}
+		// merged tool call を生成して実行
+		leaderTC := allToolCalls[group.indices[0]]
+		mergedTC := cloneToolCallWithNewPattern(leaderTC, strings.Join(group.patterns, ","))
+		mergedResult, _ := a.executeToolForParallel(ctx, mergedTC)
+
+		// multi-pattern 結果を per-pattern section に分割
+		perPattern := splitMultiPatternResult(mergedResult, group.patterns)
+		if perPattern == nil {
+			// 分割に失敗 → バッチ化しない（個別実行にフォールバック）
+			continue
+		}
+		// 各 call に per-pattern 結果を割り当てて statusBatched にする
+		for j, idx := range group.indices {
+			pattern := group.patterns[j]
+			if section, ok := perPattern[pattern]; ok {
+				results[idx] = toolExecResult{result: section}
+			} else {
+				results[idx] = toolExecResult{result: mergedResult}
+			}
+			entries[idx] = entry{status: statusBatched}
+		}
+		a.recordSearchCodeBatchMerge()
+	}
+
 	// ── Phase 1: 実行 ──
 	// 実行対象のツールを parallel-safe / sequential に分類して実行する。
-	results := make([]toolExecResult, n)
 
 	var parallelEntries, seqEntries []int
 	for i, e := range entries {
@@ -769,7 +854,48 @@ func (a *Agent) executeToolCallsWithParallel(
 				}
 			}
 
+		case statusDuplicate:
+			// Same-turn exact duplicate: append a canonical message to history.
+			// Skip execution/callback, but preserve read_file micro-read guidance
+			// to keep the existing soft-guard behavior.
+			canonicalResult := sameTurnDuplicateMessage(tc.Tool)
+			if guidance := a.readTracker.record(tc); guidance != "" {
+				canonicalResult = appendGuidanceWithConfirm(a.readTracker, tc.Args["path"], canonicalResult, guidance)
+			}
+			if tc.ID != "" {
+				toolMsg := api.Message{
+					Role:       "tool",
+					Content:    canonicalResult,
+					ToolCallID: tc.ID,
+					ToolName:   tc.Tool,
+				}
+				a.History = append(a.History, toolMsg)
+				if a.session != nil {
+					a.session.AddMessageFromAPI(toolMsg, a.CurrentModel)
+				}
+			} else {
+				a.History = append(a.History, api.Message{
+					Role:    "user",
+					Content: fmt.Sprintf("[Tool Result for %s]\n%s", tc.Tool, canonicalResult),
+				})
+			}
+			a.recordSameTurnDuplicate()
+
+		case statusBatched:
+			// Phase 0.5 で batch 実行済み: 結果は results[i] に格納済み。
+			// callback で通常の compaction / history 追加を行う。
+			if a.Stats != nil {
+				a.Stats.AddToolExecution(tc.Tool)
+			}
+			r := results[i]
+			if callback != nil {
+				callback(i, tc, r.result, r.change)
+			}
+
 		case statusExecute:
+			if a.Stats != nil {
+				a.Stats.AddToolExecution(tc.Tool)
+			}
 			r := results[i]
 			if callback != nil {
 				callback(i, tc, r.result, r.change)
@@ -891,6 +1017,24 @@ func formatParallelGroupSummary(allToolCalls []*tools.ToolCall, indices []int, e
 		return fmt.Sprintf("Done (%s)", ui.FormatParallelElapsed(elapsed))
 	}
 	return fmt.Sprintf("Done: %s (%s)", strings.Join(parts, ", "), ui.FormatParallelElapsed(elapsed))
+}
+
+// recordSameTurnDuplicate は同一ターン内の重複抑制をメトリクスに記録する。
+func (a *Agent) recordSameTurnDuplicate() {
+	a.statsMu.Lock()
+	defer a.statsMu.Unlock()
+	if a.Stats != nil {
+		a.Stats.ToolObs.SameTurnDuplicates++
+	}
+}
+
+// recordSearchCodeBatchMerge は search_code batch merge をメトリクスに記録する。
+func (a *Agent) recordSearchCodeBatchMerge() {
+	a.statsMu.Lock()
+	defer a.statsMu.Unlock()
+	if a.Stats != nil {
+		a.Stats.ToolObs.SearchCodeBatchMerges++
+	}
 }
 
 func parallelGroupSpinnerMessage(allToolCalls []*tools.ToolCall, indices []int) string {

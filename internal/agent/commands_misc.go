@@ -241,6 +241,8 @@ func printToolObservabilitySection(out io.Writer, stats *SessionStats) {
 	selTable := ui.NewTable()
 	selTable.AddRow("read_file(batch)", fmt.Sprintf("%d", obs.ReadFileBatchCalls))
 	selTable.AddRow("search_code(multi)", fmt.Sprintf("%d", obs.SearchCodeMultiPatternCalls))
+	selTable.AddRow("search_code(batch merge)", fmt.Sprintf("%d", obs.SearchCodeBatchMerges))
+	selTable.AddRow("same-turn duplicates", fmt.Sprintf("%d", obs.SameTurnDuplicates))
 	selTable.AddRow("read_file empty-path errors", fmt.Sprintf("%d", obs.ReadFileEmptyPathsErrors))
 	_, _ = fmt.Fprint(out, selTable.RenderCompact())
 

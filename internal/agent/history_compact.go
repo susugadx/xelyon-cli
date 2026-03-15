@@ -11,6 +11,7 @@ const (
 	DefaultMaxLines  = 50 // 50行以下はtruncateしない
 	DefaultHeadLines = 20 // 先頭20行を保持
 	DefaultTailLines = 5  // 末尾5行を保持
+	ultraCompactAge  = 20 // この age 以上の tool result は 1行サマリーに圧縮
 )
 
 // CompactionMetrics は履歴圧縮時に発生した圧縮メトリクスを表す。
@@ -74,6 +75,16 @@ func CompactOldToolResults(history []api.Message, maxLines, headLines, tailLines
 			}
 
 			age := toolAge[i]
+
+			// ultra-compact: 非常に古い tool result は 1行サマリーに圧縮
+			if age > ultraCompactAge {
+				if summary := ultraCompactToolResult(result[i]); summary != "" {
+					result[i].Content = summary
+					metrics.TruncationCount++
+					continue
+				}
+			}
+
 			h, t := graduatedTruncateByAge(age, headLines, tailLines)
 			var itemMetrics CompactionMetrics
 			result[i], itemMetrics = truncateToolResult(result[i], maxLines, h, t)
@@ -253,4 +264,47 @@ func truncateToolResult(msg api.Message, maxLines, headLines, tailLines int) (ap
 	result.Content = truncated
 	metrics.TruncationCount++
 	return result, metrics
+}
+
+// ultraCompactToolResult は非常に古い tool result を 1行サマリーに圧縮する。
+// ToolName からツール種別を判定し、Content の先頭行から要点を抽出する。
+// 圧縮できない場合は空文字を返す（呼び出し元は通常の graduated truncation にフォールバック）。
+func ultraCompactToolResult(msg api.Message) string {
+	content := strings.TrimSpace(msg.Content)
+	if content == "" {
+		return ""
+	}
+
+	lines := strings.Split(content, "\n")
+	lineCount := len(lines)
+	// 既に短い結果は ultra-compact 不要
+	if lineCount <= 7 {
+		return ""
+	}
+
+	// ツール名に応じた 1行サマリーを生成
+	switch msg.ToolName {
+	case "read_file":
+		// first line often has path info or content start
+		return fmt.Sprintf("[Old read_file result: %d lines — use read_file again if needed]", lineCount)
+	case "search_code":
+		// first line is typically "Found N matches in M files..."
+		firstLine := lines[0]
+		if strings.HasPrefix(firstLine, "Found ") || strings.HasPrefix(firstLine, "No matches") {
+			return fmt.Sprintf("[Old search_code result: %s]", firstLine)
+		}
+		return fmt.Sprintf("[Old search_code result: %d lines — search again if needed]", lineCount)
+	case "inspect_symbol":
+		return fmt.Sprintf("[Old inspect_symbol result: %d lines — inspect again if needed]", lineCount)
+	case "list_dir":
+		return fmt.Sprintf("[Old list_dir result: %d lines — list again if needed]", lineCount)
+	case "bash":
+		return fmt.Sprintf("[Old bash result: %d lines]", lineCount)
+	default:
+		// ToolName が空（text-based パス）または未知のツール → フォールバック
+		if msg.ToolName == "" {
+			return ""
+		}
+		return fmt.Sprintf("[Old %s result: %d lines]", msg.ToolName, lineCount)
+	}
 }

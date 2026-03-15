@@ -49,8 +49,10 @@ func TestAddToolCallsToHistory_Single(t *testing.T) {
 	if agent.Stats.AssistantMessages != 1 {
 		t.Errorf("AssistantMessages = %d, want 1", agent.Stats.AssistantMessages)
 	}
-	if agent.Stats.ToolExecutions["read_file"] != 1 {
-		t.Errorf("ToolExecutions['read_file'] = %d, want 1", agent.Stats.ToolExecutions["read_file"])
+	// ToolExecutions は addToolCallsToHistory 時点ではカウントしない
+	// （Phase 2 の実行時にカウントされる）
+	if agent.Stats.ToolExecutions["read_file"] != 0 {
+		t.Errorf("ToolExecutions['read_file'] = %d, want 0 (not counted until execution)", agent.Stats.ToolExecutions["read_file"])
 	}
 }
 
@@ -117,12 +119,13 @@ func TestAddToolCallsToHistory_Parallel(t *testing.T) {
 		t.Errorf("AssistantMessages = %d, want 1", agent.Stats.AssistantMessages)
 	}
 
-	// Stats: 各ツールの実行回数
-	if agent.Stats.ToolExecutions["read_file"] != 2 {
-		t.Errorf("ToolExecutions['read_file'] = %d, want 2", agent.Stats.ToolExecutions["read_file"])
+	// ToolExecutions は addToolCallsToHistory 時点ではカウントしない
+	// （Phase 2 の実行時にカウントされる）
+	if agent.Stats.ToolExecutions["read_file"] != 0 {
+		t.Errorf("ToolExecutions['read_file'] = %d, want 0 (not counted until execution)", agent.Stats.ToolExecutions["read_file"])
 	}
-	if agent.Stats.ToolExecutions["bash"] != 1 {
-		t.Errorf("ToolExecutions['bash'] = %d, want 1", agent.Stats.ToolExecutions["bash"])
+	if agent.Stats.ToolExecutions["bash"] != 0 {
+		t.Errorf("ToolExecutions['bash'] = %d, want 0 (not counted until execution)", agent.Stats.ToolExecutions["bash"])
 	}
 }
 
