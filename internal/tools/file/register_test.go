@@ -1,6 +1,7 @@
 package file
 
 import (
+	"encoding/json"
 	"io"
 	"path/filepath"
 	"strings"
@@ -9,6 +10,143 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/testutil"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
+
+func TestReadFileToolRun_PathsFallback(t *testing.T) {
+	setupTestMocks(t)
+	tool := &ReadFileTool{}
+	execCtx := tools.ExecutionContext{
+		Stdin:  strings.NewReader(""),
+		Stdout: io.Discard,
+		Stderr: io.Discard,
+	}
+
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test.go")
+	testutil.CreateTempFile(t, tmpDir, "test.go", "package main\nfunc main() {}")
+	testFileB := filepath.Join(tmpDir, "b.go")
+	testutil.CreateTempFile(t, tmpDir, "b.go", "package b")
+
+	t.Run("single_path_normal", func(t *testing.T) {
+		result, _, err := tool.Run(execCtx, map[string]string{
+			"path": testFile,
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(result, "package main") {
+			t.Fatalf("expected file content, got: %s", result)
+		}
+	})
+
+	t.Run("batch_paths_normal", func(t *testing.T) {
+		pathsJSON, _ := json.Marshal([]string{testFile, testFileB})
+		result, _, err := tool.Run(execCtx, map[string]string{
+			"paths": string(pathsJSON),
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(result, "package main") || !strings.Contains(result, "package b") {
+			t.Fatalf("expected both files, got: %s", result)
+		}
+	})
+
+	t.Run("empty_paths_with_valid_path_falls_through", func(t *testing.T) {
+		// This is the core regression test: path is valid but paths is empty array
+		result, _, err := tool.Run(execCtx, map[string]string{
+			"path":  testFile,
+			"paths": "[]",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if strings.Contains(result, "paths is empty") {
+			t.Fatalf("should NOT get 'paths is empty' when path is valid, got: %s", result)
+		}
+		if !strings.Contains(result, "package main") {
+			t.Fatalf("expected single-file read, got: %s", result)
+		}
+	})
+
+	t.Run("malformed_paths_with_valid_path_falls_through", func(t *testing.T) {
+		result, _, err := tool.Run(execCtx, map[string]string{
+			"path":  testFile,
+			"paths": "not-json",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if strings.Contains(result, "invalid paths format") {
+			t.Fatalf("should fallback to single mode when path is valid, got: %s", result)
+		}
+		if !strings.Contains(result, "package main") {
+			t.Fatalf("expected single-file read, got: %s", result)
+		}
+	})
+
+	t.Run("both_empty_returns_error", func(t *testing.T) {
+		result, _, err := tool.Run(execCtx, map[string]string{
+			"paths": "[]",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(result, "Error:") {
+			t.Fatalf("expected error when both path and paths are empty, got: %s", result)
+		}
+	})
+
+	t.Run("malformed_paths_no_path_returns_error", func(t *testing.T) {
+		result, _, err := tool.Run(execCtx, map[string]string{
+			"paths": "not-json",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(result, "invalid paths format") {
+			t.Fatalf("expected invalid paths error, got: %s", result)
+		}
+	})
+
+	t.Run("null_paths_with_valid_path_falls_through", func(t *testing.T) {
+		// json.Unmarshal("null") succeeds with nil slice (len 0)
+		result, _, err := tool.Run(execCtx, map[string]string{
+			"path":  testFile,
+			"paths": "null",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if strings.Contains(result, "Error") {
+			t.Fatalf("should fallback to single mode, got: %s", result)
+		}
+		if !strings.Contains(result, "package main") {
+			t.Fatalf("expected single-file read, got: %s", result)
+		}
+	})
+
+	t.Run("null_paths_no_path_returns_error", func(t *testing.T) {
+		result, _, err := tool.Run(execCtx, map[string]string{
+			"paths": "null",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(result, "Error:") {
+			t.Fatalf("expected error when path is empty and paths is null, got: %s", result)
+		}
+	})
+
+	t.Run("no_path_no_paths_returns_error", func(t *testing.T) {
+		result, _, err := tool.Run(execCtx, map[string]string{})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(result, "Error:") {
+			t.Fatalf("expected error, got: %s", result)
+		}
+	})
+}
 
 func TestStrReplaceToolRun_FileChangeOnlyOnAppliedEdit(t *testing.T) {
 	setupTestMocks(t)

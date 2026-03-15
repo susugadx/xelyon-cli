@@ -43,12 +43,20 @@ func (t *ReadFileTool) Run(execCtx tools.ExecutionContext, args map[string]strin
 	out := execCtx.Output()
 
 	// バッチモード: paths が指定されている場合
-	if args["paths"] != "" {
+	// paths が空配列や不正 JSON の場合、path が有効なら単体モードにフォールバック
+	if rawPaths := args["paths"]; rawPaths != "" {
 		var paths []string
-		if err := json.Unmarshal([]byte(args["paths"]), &paths); err != nil {
-			return fmt.Sprintf("Error: invalid paths format: %v", err), nil, nil
+		if err := json.Unmarshal([]byte(rawPaths), &paths); err != nil {
+			if args["path"] == "" {
+				return fmt.Sprintf("Error: invalid paths format: %v", err), nil, nil
+			}
+			// path が有効 → 単体モードへフォールスルー
+		} else if len(paths) > 0 {
+			return ExecuteReadFilesWithOutput(out, paths), nil, nil
+		} else if args["path"] == "" {
+			return "Error: path or paths is required", nil, nil
 		}
-		return ExecuteReadFilesWithOutput(out, paths), nil, nil
+		// paths が空/無効 かつ path が有効 → 単体モードへフォールスルー
 	}
 
 	if args["symbol"] != "" && args["path"] != "" {
