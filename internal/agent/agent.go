@@ -420,8 +420,85 @@ func (a *Agent) addCompactionMetrics(metrics CompactionMetrics) {
 	}
 }
 
-func (a *Agent) recordToolResultOptimizations(toolName, result string) {
-	if toolName == "read_file" && strings.Contains(result, "Use start_line/end_line") {
+func (a *Agent) recordToolResultOptimizations(tc *tools.ToolCall, result string) {
+	if tc.Tool == "read_file" && strings.Contains(result, "Use start_line/end_line") {
 		a.addOptimizationMetrics(OptimizationMetrics{OutlineFirstCount: 1})
 	}
+	a.recordToolObservability(tc.Tool, tc.RawArgs, tc.Args, result)
+}
+
+// recordToolObservability はツール実行のobservabilityメトリクスを記録する。
+// rawArgs は FC 経由の場合に map[string]any、XML rescue 経由では nil になるため、
+// stringArgs（ToolCall.Args）をフォールバックとして参照する。
+func (a *Agent) recordToolObservability(toolName string, rawArgs map[string]any, stringArgs map[string]string, result string) {
+	a.statsMu.Lock()
+	defer a.statsMu.Unlock()
+	if a.Stats == nil {
+		return
+	}
+	obs := &a.Stats.ToolObs
+
+	switch toolName {
+	case "read_file":
+		// batch read: paths 引数が2つ以上の有効パスを持つ場合
+		if pathsVal, ok := rawArgs["paths"]; ok {
+			if isBatchPaths(pathsVal) {
+				obs.ReadFileBatchCalls++
+			}
+		} else if pathsStr, ok := stringArgs["paths"]; ok {
+			// XML rescue フォールバック: Args["paths"] は JSON 文字列
+			if isBatchPaths(pathsStr) {
+				obs.ReadFileBatchCalls++
+			}
+		}
+		// empty-path error: canonical error string を検出
+		if result == "Error: paths is empty" {
+			obs.ReadFileEmptyPathsErrors++
+		}
+	case "search_code":
+		// multi-pattern: カンマ区切りで2パターン以上
+		if patternVal, ok := rawArgs["pattern"]; ok {
+			if isMultiPatternArg(patternVal) {
+				obs.SearchCodeMultiPatternCalls++
+			}
+		} else if patternStr, ok := stringArgs["pattern"]; ok {
+			// XML rescue フォールバック
+			if isMultiPatternArg(patternStr) {
+				obs.SearchCodeMultiPatternCalls++
+			}
+		}
+	}
+}
+
+// isBatchPaths は paths 引数が実質的な batch（2パス以上）か判定する。
+// XML rescue 経由ではタグ内に前後空白・改行が含まれるため TrimSpace してから判定する。
+func isBatchPaths(pathsVal any) bool {
+	switch v := pathsVal.(type) {
+	case []any:
+		return len(v) >= 2
+	case string:
+		// JSON 文字列の場合: "[" で始まりカンマを含む → 2要素以上
+		s := strings.TrimSpace(v)
+		return len(s) > 2 && s[0] == '[' && strings.Contains(s, ",")
+	}
+	return false
+}
+
+// isMultiPatternArg は pattern 引数が multi-pattern（カンマ区切り2パターン以上）か判定する。
+// search_code の splitPatterns と同じロジック: \, はリテラルカンマとして除外。
+func isMultiPatternArg(patternVal any) bool {
+	s, ok := patternVal.(string)
+	if !ok || s == "" {
+		return false
+	}
+	// \, をプレースホルダーに置換してからカンマでsplit
+	replaced := strings.ReplaceAll(s, `\,`, "\x00")
+	parts := strings.Split(replaced, ",")
+	count := 0
+	for _, p := range parts {
+		if strings.TrimSpace(p) != "" {
+			count++
+		}
+	}
+	return count >= 2
 }

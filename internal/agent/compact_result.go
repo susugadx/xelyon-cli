@@ -45,21 +45,47 @@ func (a *Agent) compactToolResult(toolCall *tools.ToolCall, result string) strin
 	}
 
 	// 4. ツール種別に応じた圧縮
+	var compacted string
 	switch toolCall.Tool {
 	case "bash":
 		command := toolCall.Args["command"]
-		return compactBash(command, result)
+		compacted = compactBash(command, result)
 	case "read_file":
-		return compactReadFile(toolCall.Args, result)
+		compacted = compactReadFile(toolCall.Args, result)
 	case "search_code":
-		return compactSearchCode(result)
+		compacted = compactSearchCode(result)
 	case "inspect_symbol":
-		return compactInspectSymbol(result)
+		compacted = compactInspectSymbol(result)
 	case "list_dir":
-		return compactListDir(result)
+		compacted = compactListDir(result)
 	default:
-		return result
+		compacted = result
 	}
+
+	// 5. compaction 効果を記録（1文字でも短くなった場合のみ）
+	a.recordCompaction(toolCall.Tool, len(result), len(compacted))
+
+	return compacted
+}
+
+// recordCompaction は compaction の効果を ToolObservability に記録する。
+func (a *Agent) recordCompaction(toolName string, beforeLen, afterLen int) {
+	saved := beforeLen - afterLen
+	if saved <= 0 {
+		return
+	}
+	a.statsMu.Lock()
+	defer a.statsMu.Unlock()
+	if a.Stats == nil {
+		return
+	}
+	obs := &a.Stats.ToolObs
+	obs.CompactedToolResults++
+	obs.CompactedBytesSaved += saved
+	if obs.CompactedByTool == nil {
+		obs.CompactedByTool = make(map[string]int)
+	}
+	obs.CompactedByTool[toolName]++
 }
 
 // compactBash はbashの実行結果を圧縮する。

@@ -3,8 +3,10 @@ package agent
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -187,6 +189,8 @@ func printSessionSections(agent *Agent) {
 		dim.Fprintln(out, "  No token usage data available")
 	}
 
+	printToolObservabilitySection(out, stats)
+
 	_, _ = fmt.Fprintln(out)
 	green.Fprintln(out, "⚡ Optimizations")
 	opt := stats.Optimizations
@@ -226,6 +230,53 @@ func printSessionSections(agent *Agent) {
 	} else {
 		dim.Fprintln(out, "  No optimizations triggered yet")
 	}
+}
+
+// printToolObservabilitySection はツール実行・compaction のobservabilityセクションを表示する。
+func printToolObservabilitySection(out io.Writer, stats *SessionStats) {
+	obs := stats.ToolObs
+
+	_, _ = fmt.Fprintln(out)
+	green.Fprintln(out, "📈 Tool Selection")
+	selTable := ui.NewTable()
+	selTable.AddRow("read_file(batch)", fmt.Sprintf("%d", obs.ReadFileBatchCalls))
+	selTable.AddRow("search_code(multi)", fmt.Sprintf("%d", obs.SearchCodeMultiPatternCalls))
+	selTable.AddRow("read_file empty-path errors", fmt.Sprintf("%d", obs.ReadFileEmptyPathsErrors))
+	_, _ = fmt.Fprint(out, selTable.RenderCompact())
+
+	_, _ = fmt.Fprintln(out)
+	green.Fprintln(out, "🗜️ Compaction")
+	compTable := ui.NewTable()
+	compTable.AddRow("results compacted", fmt.Sprintf("%d", obs.CompactedToolResults))
+	compTable.AddRow("bytes saved", formatNumber(obs.CompactedBytesSaved))
+	if len(obs.CompactedByTool) > 0 {
+		compTable.AddRow("by tool", formatCompactedByTool(obs.CompactedByTool))
+	}
+	_, _ = fmt.Fprint(out, compTable.RenderCompact())
+}
+
+// formatCompactedByTool は map[string]int を "read_file=7, search_code=6" 形式にフォーマットする。
+func formatCompactedByTool(m map[string]int) string {
+	// 降順ソート（回数が多い順）
+	type entry struct {
+		name  string
+		count int
+	}
+	entries := make([]entry, 0, len(m))
+	for k, v := range m {
+		entries = append(entries, entry{k, v})
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].count != entries[j].count {
+			return entries[i].count > entries[j].count
+		}
+		return entries[i].name < entries[j].name
+	})
+	parts := make([]string, len(entries))
+	for i, e := range entries {
+		parts[i] = fmt.Sprintf("%s=%d", e.name, e.count)
+	}
+	return strings.Join(parts, ", ")
 }
 
 // handleStatsCommand は /status の互換エイリアス

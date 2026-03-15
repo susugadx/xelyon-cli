@@ -81,7 +81,7 @@ func (a *Agent) executeToolWithSpinner(ctx context.Context, toolCall *tools.Tool
 
 	result, change := tools.ExecuteWithContext(a.toolExecutionContext(ctx, nil, nil, nil), toolCall)
 	a.ui().StopSpinner()
-	a.recordToolResultOptimizations(toolCall.Tool, result)
+	a.recordToolResultOptimizations(toolCall, result)
 
 	// エラー/空結果をネガティブキャッシュに記録
 	if a.ToolCache != nil {
@@ -532,7 +532,7 @@ func (a *Agent) executeToolForParallel(ctx context.Context, tc *tools.ToolCall) 
 
 	// ExecuteQuietWithContext: ヘッダー・引数・折りたたみ出力と補助 stdout を抑制（parallel path 用）
 	result, change := tools.ExecuteQuietWithContext(a.toolExecutionContext(ctx, strings.NewReader(""), io.Discard, io.Discard), tc)
-	a.recordToolResultOptimizations(tc.Tool, result)
+	a.recordToolResultOptimizations(tc, result)
 
 	if a.ToolCache != nil {
 		a.ToolCache.SetNegativeCache(tc.Tool, tc.RawArgs, result)

@@ -61,6 +61,16 @@ func (m *OptimizationMetrics) hasAny() bool {
 		m.CostAwareCompressions > 0
 }
 
+// ToolObservability はツール実行・compaction の観測メトリクスを保持する。
+type ToolObservability struct {
+	ReadFileEmptyPathsErrors    int            // read_file が paths is empty で失敗した回数
+	ReadFileBatchCalls          int            // read_file(paths=...) の batch 呼び出し回数
+	SearchCodeMultiPatternCalls int            // search_code の multi-pattern 呼び出し回数
+	CompactedToolResults        int            // history 格納前 compaction が発火した回数
+	CompactedBytesSaved         int            // compaction による累計削減文字数
+	CompactedByTool             map[string]int // ツール名ごとの compaction 回数
+}
+
 // SessionStats はセッション統計情報
 type SessionStats struct {
 	StartTime           time.Time
@@ -77,6 +87,7 @@ type SessionStats struct {
 	LastUsage           *api.Usage // 直近のリクエストの使用量
 	AccumulatedCost     float64    // リクエスト単位で計算・累積したコスト
 	Optimizations       OptimizationMetrics
+	ToolObs             ToolObservability // ツール実行・compaction の観測メトリクス
 }
 
 // NewSessionStats は新しいSessionStatsを作成
@@ -91,6 +102,9 @@ func NewSessionStats(provider string, model ...string) *SessionStats {
 		ToolExecutions: make(map[string]int),
 		Provider:       provider,
 		Model:          m,
+		ToolObs: ToolObservability{
+			CompactedByTool: make(map[string]int),
+		},
 	}
 }
 
