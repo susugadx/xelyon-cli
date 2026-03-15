@@ -218,12 +218,16 @@ const (
 // 全プロバイダーが "Summary:\n..." + "Sources:\n..." 形式を返す前提。
 func CompactWebSearchResult(query, result string) string {
 	result = strings.TrimSpace(result)
-	if result == "" || result == "No results found." {
+	if result == "" {
 		return result
 	}
 
 	// query ヘッダーを付与（provider result には含まれないため常に追加）
 	queryHeader := fmt.Sprintf("Query: %s\n", query)
+
+	if result == "No results found." {
+		return queryHeader + result
+	}
 
 	if len(result) < webSearchCompactMinLen {
 		return queryHeader + result

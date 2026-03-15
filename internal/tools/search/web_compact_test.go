@@ -20,8 +20,11 @@ func TestCompactWebSearchResult_ShortResult(t *testing.T) {
 
 func TestCompactWebSearchResult_NoResults(t *testing.T) {
 	got := CompactWebSearchResult("test query", "No results found.")
-	if got != "No results found." {
-		t.Errorf("'No results found.' should be unchanged, got: %s", got)
+	if !strings.HasPrefix(got, "Query: test query\n") {
+		t.Errorf("no-results should have Query: header, got: %s", got)
+	}
+	if !strings.Contains(got, "No results found.") {
+		t.Error("should preserve 'No results found.' message")
 	}
 }
 
