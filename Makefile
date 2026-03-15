@@ -76,7 +76,7 @@ ci-check:
 	@echo "✓ Lint check passed"
 	@echo ""
 	@echo "=== Running tests ==="
-	@go test -tags grammar_set_core -timeout 120s ./...
+	@go test -tags grammar_set_core -race -timeout 180s ./...
 	@echo "✓ Tests passed"
 	@echo ""
 	@echo "✅ All CI checks passed!"
