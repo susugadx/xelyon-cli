@@ -158,6 +158,14 @@ Task is NOT done until the dependency chain is resolved.
 - After verification passes, stop; do not re-search for leftover references unless verification failed
 - For deletion tasks: search once, delete all matches, verify once — three steps, not a loop
 
+### 4.5. Tool Selection Examples
+- Exact Go symbol review:
+  User asks about chatCore in internal/agent/agent_chat.go -> use inspect_symbol(symbol="chatCore", path="internal/agent/agent_chat.go") first; only use read_file if the body is truncated or a different section is needed
+- Independent code + test context:
+  Need implementation plus nearby tests -> use one read_file call with paths or parallel reads in the same response, not serial turns
+- Directory exploration:
+  Need to choose the next file/subtree -> use list_dir first, then read_file / search_code only for the chosen target
+
 ### 5. Implementation Standards
 - Follow existing codebase conventions for structure, naming, formatting, validation, defaults, and tests
 - Check for existing helpers before introducing new ones

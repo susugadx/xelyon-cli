@@ -104,6 +104,21 @@ func TestSystemPrompt_PrefersParallelInvestigationForIndependentSteps(t *testing
 	}
 }
 
+func TestSystemPrompt_ToolSelectionExamplesExist(t *testing.T) {
+	if !strings.Contains(SystemPrompt, "### 4.5. Tool Selection Examples") {
+		t.Error("SystemPrompt should include tool selection examples")
+	}
+	if !strings.Contains(SystemPrompt, "inspect_symbol(symbol=\"chatCore\", path=\"internal/agent/agent_chat.go\")") {
+		t.Error("SystemPrompt should include an inspect_symbol example for an exact Go symbol")
+	}
+	if !strings.Contains(SystemPrompt, "use list_dir first") {
+		t.Error("SystemPrompt should include a list_dir-first exploration example")
+	}
+	if !strings.Contains(SystemPrompt, "one read_file call with paths or parallel reads") {
+		t.Error("SystemPrompt should include a batched/parallel read_file example")
+	}
+}
+
 func TestSystemPrompt_NoPhantomReadFiles(t *testing.T) {
 	// "read_files" が独立ツール名のように出てこないこと
 	// 実在ツールは "read_file" であり、複数読みは paths パラメータで行う

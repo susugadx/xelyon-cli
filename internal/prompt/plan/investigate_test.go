@@ -62,6 +62,19 @@ func TestBuildInvestigationPrompt_PrefersParallelInvestigation(t *testing.T) {
 	}
 }
 
+func TestBuildInvestigationPrompt_ContainsToolSelectionExamples(t *testing.T) {
+	prompt := BuildInvestigationPrompt("test request")
+	if !strings.Contains(prompt, "### EXAMPLES") {
+		t.Error("investigation prompt should include tool selection examples")
+	}
+	if !strings.Contains(prompt, "inspect_symbol(symbol=\"chatCore\", path=\"internal/agent/agent_chat.go\") first") {
+		t.Error("investigation prompt should include an inspect_symbol example")
+	}
+	if !strings.Contains(prompt, "use list_dir first") {
+		t.Error("investigation prompt should include a list_dir-first example")
+	}
+}
+
 func TestBuildInvestigationPrompt_LocalVsSharedGuidance(t *testing.T) {
 	prompt := BuildInvestigationPrompt("test request")
 	if !strings.Contains(prompt, "local changes") {

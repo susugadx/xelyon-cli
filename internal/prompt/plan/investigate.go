@@ -27,6 +27,11 @@ Allowed: inspect_symbol, search_code, read_file, list_dir, web_search, bash (rea
 -  Check for existing patterns to follow
 -  Avoid broad exploration when the target is already clear
 
+### EXAMPLES
+- Exact Go symbol review -> inspect_symbol(symbol="chatCore", path="internal/agent/agent_chat.go") first
+- Need implementation + tests -> prefer one read_file call with paths or parallel reads in the same turn
+- Need next file/subtree choice -> use list_dir first, then inspect only the selected target
+
 ### AFTER INVESTIGATION
 When ready, output your implementation plan as text that includes a single JSON object matching the Plan schema.
 - The runtime extracts it via ExtractPlanJSON/ParsePlan

@@ -49,6 +49,14 @@ func (a *Agent) compactToolResult(toolCall *tools.ToolCall, result string) strin
 	case "bash":
 		command := toolCall.Args["command"]
 		return compactBash(command, result)
+	case "read_file":
+		return compactReadFile(toolCall.Args, result)
+	case "search_code":
+		return compactSearchCode(result)
+	case "inspect_symbol":
+		return compactInspectSymbol(result)
+	case "list_dir":
+		return compactListDir(result)
 	default:
 		return result
 	}
