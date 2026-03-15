@@ -58,6 +58,8 @@ func (a *Agent) compactToolResult(toolCall *tools.ToolCall, result string) strin
 		compacted = compactInspectSymbol(result)
 	case "list_dir":
 		compacted = compactListDir(result)
+	case "web_search":
+		compacted = compactWebSearch(result)
 	default:
 		compacted = result
 	}

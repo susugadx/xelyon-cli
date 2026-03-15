@@ -483,3 +483,73 @@ func compactListDir(result string) string {
 
 	return b.String()
 }
+
+// ── web_search ──
+
+const (
+	// compactWebSearchMinLen は web_search 結果を history compaction する最小バイト数。
+	compactWebSearchMinLen = 800
+
+	// compactWebSearchMaxSummaryLines は history 用に残すサマリー行数上限。
+	compactWebSearchMaxSummaryLines = 10
+
+	// compactWebSearchMaxSources は history 用に残すソース数上限。
+	compactWebSearchMaxSources = 5
+)
+
+// compactWebSearch は web_search の結果を history 格納用に圧縮する。
+// tool-native result で既に CompactWebSearchResult が適用されているが、
+// 長い summary や多数の source が残っている場合の safety net として機能する。
+func compactWebSearch(result string) string {
+	if len(result) < compactWebSearchMinLen {
+		return result
+	}
+
+	// "Summary:" と "Sources:" を分離
+	sourcesIdx := strings.Index(result, "\nSources:")
+	if sourcesIdx < 0 {
+		// Sources がない場合は summary のみ → 行数制限
+		lines := strings.Split(result, "\n")
+		if len(lines) <= compactWebSearchMaxSummaryLines {
+			return result
+		}
+		return strings.Join(lines[:compactWebSearchMaxSummaryLines], "\n") + "\n[... summary truncated for history]"
+	}
+
+	summaryPart := strings.TrimSpace(result[:sourcesIdx])
+	sourcesPart := strings.TrimSpace(result[sourcesIdx+1:])
+
+	// summary truncation
+	summaryLines := strings.Split(summaryPart, "\n")
+	if len(summaryLines) > compactWebSearchMaxSummaryLines {
+		summaryPart = strings.Join(summaryLines[:compactWebSearchMaxSummaryLines], "\n") + "\n[... summary truncated for history]"
+	}
+
+	// sources: keep first N source entries
+	sourceLines := strings.Split(sourcesPart, "\n")
+	var b strings.Builder
+	b.WriteString("Sources:")
+	kept := 0
+	for _, line := range sourceLines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || trimmed == "Sources:" {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "- ") || (len(trimmed) > 2 && trimmed[0] >= '1' && trimmed[0] <= '9') {
+			kept++
+			if kept > compactWebSearchMaxSources {
+				continue
+			}
+		}
+		if kept <= compactWebSearchMaxSources {
+			b.WriteByte('\n')
+			b.WriteString(line)
+		}
+	}
+	omitted := kept - compactWebSearchMaxSources
+	if omitted > 0 {
+		fmt.Fprintf(&b, "\n[+%d more sources omitted for history]", omitted)
+	}
+
+	return summaryPart + "\n\n" + b.String()
+}
