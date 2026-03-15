@@ -472,7 +472,11 @@ func (m *sequenceMockProvider) ChatWithImage(ctx context.Context, systemPrompt s
 	return m.ChatWithTools(ctx, systemPrompt, history, model)
 }
 
-type blockingCancelProvider struct{}
+type blockingCancelProvider struct {
+	// started は ChatWithTools が呼ばれたことを通知するチャネル。
+	// テスト側で cancelFunc 設定済みを安全に検知するために使用する。
+	started chan struct{}
+}
 
 func (m *blockingCancelProvider) Name() string { return "blocking-cancel" }
 
@@ -481,6 +485,13 @@ func (m *blockingCancelProvider) SupportsImages() bool { return false }
 func (m *blockingCancelProvider) IsFunctionCallingEnabled() bool { return false }
 
 func (m *blockingCancelProvider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
+	if m.started != nil {
+		select {
+		case <-m.started:
+		default:
+			close(m.started)
+		}
+	}
 	<-ctx.Done()
 	return "", fmt.Errorf("API call failed: %w", ctx.Err())
 }
@@ -637,7 +648,8 @@ func TestChatCore_SetsAbortedStatusWithCancelReason(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
 	var out bytes.Buffer
-	agent := NewAgent("test-model", &blockingCancelProvider{}, false)
+	provider := &blockingCancelProvider{started: make(chan struct{})}
+	agent := NewAgent("test-model", provider, false)
 	agent.Runtime = &AgentRuntime{
 		UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
 	}
@@ -648,14 +660,11 @@ func TestChatCore_SetsAbortedStatusWithCancelReason(t *testing.T) {
 		close(done)
 	}()
 
-	deadline := time.After(2 * time.Second)
-	for agent.cancelFunc == nil {
-		select {
-		case <-deadline:
-			t.Fatal("cancelFunc was not initialized")
-		default:
-			time.Sleep(10 * time.Millisecond)
-		}
+	// ChatWithTools に到達するまで待機（cancelFunc は設定済み）
+	select {
+	case <-provider.started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("ChatWithTools was not called")
 	}
 
 	agent.cancelActiveRequest("signal: interrupt")

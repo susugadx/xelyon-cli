@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -753,10 +754,10 @@ func TestDoRequestWithRetry_ResponseStartTimeout(t *testing.T) {
 
 func TestChatWithTools_ResponseStartTimeoutRetry(t *testing.T) {
 	// Response-start timeout → 1回リトライ → 2回目で成功
-	requestCount := 0
+	var requestCount atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requestCount++
-		if requestCount == 1 {
+		n := requestCount.Add(1)
+		if n == 1 {
 			// 1回目: レスポンスヘッダーを返さずタイムアウトさせる
 			time.Sleep(3 * time.Second)
 			return
@@ -798,8 +799,8 @@ func TestChatWithTools_ResponseStartTimeoutRetry(t *testing.T) {
 	if result != "Success after retry" {
 		t.Errorf("ChatWithTools() = %q, want 'Success after retry'", result)
 	}
-	if requestCount < 2 {
-		t.Errorf("Expected at least 2 requests (timeout + retry), got %d", requestCount)
+	if requestCount.Load() < 2 {
+		t.Errorf("Expected at least 2 requests (timeout + retry), got %d", requestCount.Load())
 	}
 }
 
@@ -884,10 +885,10 @@ func TestGetThinkingSpinnerMessage(t *testing.T) {
 
 func TestChatWithImage_ResponseStartTimeoutRetry(t *testing.T) {
 	// ChatWithImage: response-start timeout → 1回リトライ → 2回目で成功
-	requestCount := 0
+	var requestCount atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requestCount++
-		if requestCount == 1 {
+		n := requestCount.Add(1)
+		if n == 1 {
 			// 1回目: レスポンスヘッダーを返さずタイムアウトさせる
 			time.Sleep(3 * time.Second)
 			return
@@ -923,8 +924,8 @@ func TestChatWithImage_ResponseStartTimeoutRetry(t *testing.T) {
 	if result != "Image analyzed after retry" {
 		t.Errorf("ChatWithImage() = %q, want 'Image analyzed after retry'", result)
 	}
-	if requestCount < 2 {
-		t.Errorf("Expected at least 2 requests (timeout + retry), got %d", requestCount)
+	if requestCount.Load() < 2 {
+		t.Errorf("Expected at least 2 requests (timeout + retry), got %d", requestCount.Load())
 	}
 }
 
