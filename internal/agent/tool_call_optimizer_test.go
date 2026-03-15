@@ -1031,7 +1031,7 @@ func TestSplitReadFileBatchResult_EmptyResult(t *testing.T) {
 
 func TestBuildReadFileBatchToolCall(t *testing.T) {
 	paths := []string{"/a.go", "/b.go", "/c.go"}
-	tc := buildReadFileBatchToolCall(paths)
+	tc := buildReadFileBatchToolCall(paths, true)
 
 	if tc.Tool != "read_file" {
 		t.Errorf("Tool = %q, want read_file", tc.Tool)
@@ -1050,6 +1050,17 @@ func TestBuildReadFileBatchToolCall(t *testing.T) {
 	}
 	if len(rawPaths) != 3 {
 		t.Errorf("expected 3 paths, got %d", len(rawPaths))
+	}
+	// fullBudget=true → _full_budget flag が設定される
+	if tc.Args["_full_budget"] != "true" {
+		t.Error("fullBudget=true should set _full_budget arg")
+	}
+}
+
+func TestBuildReadFileBatchToolCall_NoFullBudget(t *testing.T) {
+	tc := buildReadFileBatchToolCall([]string{"/a.go", "/b.go"}, false)
+	if tc.Args["_full_budget"] != "" {
+		t.Error("fullBudget=false should not set _full_budget arg")
 	}
 }
 
@@ -1205,5 +1216,145 @@ func TestReadFileBatchMerge_SingleReadNotMerged(t *testing.T) {
 	}
 	if agent.Stats.ToolObs.ReadFileBatchMerges != 0 {
 		t.Errorf("ReadFileBatchMerges = %d, want 0", agent.Stats.ToolObs.ReadFileBatchMerges)
+	}
+}
+
+// ── segmentReadFileBatches tests ──
+
+func TestSegmentReadFileBatches_AllReads(t *testing.T) {
+	// 全て read_file → 1 セグメント
+	tcs := []*tools.ToolCall{
+		{Tool: "read_file", Args: map[string]string{"path": "/a.go"}},
+		{Tool: "read_file", Args: map[string]string{"path": "/b.go"}},
+		{Tool: "read_file", Args: map[string]string{"path": "/c.go"}},
+	}
+	flags := []bool{true, true, true}
+	segs := segmentReadFileBatches(tcs, flags)
+
+	if len(segs) != 1 {
+		t.Fatalf("expected 1 segment, got %d", len(segs))
+	}
+	if len(segs[0].paths) != 3 {
+		t.Errorf("segment should have 3 paths, got %d", len(segs[0].paths))
+	}
+}
+
+func TestSegmentReadFileBatches_SplitAtMutation(t *testing.T) {
+	// read(a) -> write(b) -> read(c) -> read(d)
+	// write で区切り → セグメント 1: [a] (1件なので不採用), セグメント 2: [c, d]
+	tcs := []*tools.ToolCall{
+		{Tool: "read_file", Args: map[string]string{"path": "/a.go"}},
+		{Tool: "write_file", Args: map[string]string{"path": "/b.go", "content": "x"}},
+		{Tool: "read_file", Args: map[string]string{"path": "/c.go"}},
+		{Tool: "read_file", Args: map[string]string{"path": "/d.go"}},
+	}
+	flags := []bool{true, true, true, true}
+	segs := segmentReadFileBatches(tcs, flags)
+
+	if len(segs) != 1 {
+		t.Fatalf("expected 1 segment (only post-mutation pair), got %d", len(segs))
+	}
+	if segs[0].paths[0] != "/c.go" || segs[0].paths[1] != "/d.go" {
+		t.Errorf("segment paths = %v, want [/c.go, /d.go]", segs[0].paths)
+	}
+}
+
+func TestSegmentReadFileBatches_TwoSegments(t *testing.T) {
+	// read(a) -> read(b) -> str_replace(c) -> read(d) -> read(e)
+	// str_replace で区切り → セグメント 1: [a, b], セグメント 2: [d, e]
+	tcs := []*tools.ToolCall{
+		{Tool: "read_file", Args: map[string]string{"path": "/a.go"}},
+		{Tool: "read_file", Args: map[string]string{"path": "/b.go"}},
+		{Tool: "str_replace", Args: map[string]string{"path": "/c.go", "old_str": "x", "new_str": "y"}},
+		{Tool: "read_file", Args: map[string]string{"path": "/d.go"}},
+		{Tool: "read_file", Args: map[string]string{"path": "/e.go"}},
+	}
+	flags := []bool{true, true, true, true, true}
+	segs := segmentReadFileBatches(tcs, flags)
+
+	if len(segs) != 2 {
+		t.Fatalf("expected 2 segments, got %d", len(segs))
+	}
+	if segs[0].paths[0] != "/a.go" || segs[0].paths[1] != "/b.go" {
+		t.Errorf("segment 0 = %v, want [/a.go, /b.go]", segs[0].paths)
+	}
+	if segs[1].paths[0] != "/d.go" || segs[1].paths[1] != "/e.go" {
+		t.Errorf("segment 1 = %v, want [/d.go, /e.go]", segs[1].paths)
+	}
+}
+
+func TestSegmentReadFileBatches_ParallelSafeDoesNotSplit(t *testing.T) {
+	// read(a) -> search_code(foo) -> read(b)
+	// search_code は parallel-safe → 分割しない → 1 セグメント [a, b]
+	tcs := []*tools.ToolCall{
+		{Tool: "read_file", Args: map[string]string{"path": "/a.go"}},
+		{Tool: "search_code", Args: map[string]string{"pattern": "foo"}},
+		{Tool: "read_file", Args: map[string]string{"path": "/b.go"}},
+	}
+	flags := []bool{true, true, true}
+	segs := segmentReadFileBatches(tcs, flags)
+
+	if len(segs) != 1 {
+		t.Fatalf("expected 1 segment (parallel-safe does not split), got %d", len(segs))
+	}
+	if len(segs[0].paths) != 2 {
+		t.Errorf("segment should have 2 paths, got %d", len(segs[0].paths))
+	}
+}
+
+func TestSegmentReadFileBatches_SkippedEntriesIgnored(t *testing.T) {
+	// read(a)[exec] -> read(b)[skip] -> read(c)[exec]
+	// b はスキップ → 1 セグメント [a, c]
+	tcs := []*tools.ToolCall{
+		{Tool: "read_file", Args: map[string]string{"path": "/a.go"}},
+		{Tool: "read_file", Args: map[string]string{"path": "/b.go"}},
+		{Tool: "read_file", Args: map[string]string{"path": "/c.go"}},
+	}
+	flags := []bool{true, false, true}
+	segs := segmentReadFileBatches(tcs, flags)
+
+	if len(segs) != 1 {
+		t.Fatalf("expected 1 segment, got %d", len(segs))
+	}
+	if len(segs[0].paths) != 2 {
+		t.Errorf("segment should have 2 paths, got %d", len(segs[0].paths))
+	}
+	if segs[0].paths[0] != "/a.go" || segs[0].paths[1] != "/c.go" {
+		t.Errorf("segment = %v, want [/a.go, /c.go]", segs[0].paths)
+	}
+}
+
+func TestSegmentReadFileBatches_SingleReadNotBatched(t *testing.T) {
+	// read(a) -> write(b) -> read(c)
+	// 各セグメントに 1 件ずつ → バッチ不要
+	tcs := []*tools.ToolCall{
+		{Tool: "read_file", Args: map[string]string{"path": "/a.go"}},
+		{Tool: "write_file", Args: map[string]string{"path": "/b.go", "content": "x"}},
+		{Tool: "read_file", Args: map[string]string{"path": "/c.go"}},
+	}
+	flags := []bool{true, true, true}
+	segs := segmentReadFileBatches(tcs, flags)
+
+	if len(segs) != 0 {
+		t.Errorf("expected 0 segments (each has only 1 read), got %d", len(segs))
+	}
+}
+
+func TestSegmentReadFileBatches_NonBatchableReadIgnored(t *testing.T) {
+	// read(a) -> read(b, symbol=Foo) -> read(c)
+	// symbol read は非バッチ → セグメント [a, c]
+	tcs := []*tools.ToolCall{
+		{Tool: "read_file", Args: map[string]string{"path": "/a.go"}},
+		{Tool: "read_file", Args: map[string]string{"path": "/b.go", "symbol": "Foo"}},
+		{Tool: "read_file", Args: map[string]string{"path": "/c.go"}},
+	}
+	flags := []bool{true, true, true}
+	segs := segmentReadFileBatches(tcs, flags)
+
+	if len(segs) != 1 {
+		t.Fatalf("expected 1 segment, got %d", len(segs))
+	}
+	if len(segs[0].paths) != 2 {
+		t.Errorf("segment should have 2 paths (a, c), got %d", len(segs[0].paths))
 	}
 }

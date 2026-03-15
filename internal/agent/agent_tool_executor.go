@@ -723,29 +723,25 @@ func (a *Agent) executeToolCallsWithParallel(
 	// 同一ターン内の plain read_file(path=...) を read_file(paths=[...]) にまとめて実行する。
 	// duplicate suppression が先に効いた後の残りが対象。
 	// symbol/range/paths 指定済みの call は isBatchableReadFile で除外される。
-	var readBatchIndices []int
-	var readBatchPaths []string
+	//
+	// 変更系ツール（非 parallel-safe）の前後で区切ることで、
+	// read(a) -> write(b) -> read(b) のような並びで read(b) が更新前の内容を
+	// 読んでしまう問題を防ぐ。
+	execFlags := make([]bool, n)
 	for i, e := range entries {
-		if e.status != statusExecute {
-			continue
-		}
-		tc := allToolCalls[i]
-		if !isBatchableReadFile(tc) {
-			continue
-		}
-		readBatchIndices = append(readBatchIndices, i)
-		readBatchPaths = append(readBatchPaths, tc.Args["path"])
+		execFlags[i] = e.status == statusExecute
 	}
+	readBatchSegments := segmentReadFileBatches(allToolCalls, execFlags)
 
-	if len(readBatchIndices) >= 2 && len(readBatchPaths) <= maxReadFileBatchPaths {
-		mergedTC := buildReadFileBatchToolCall(readBatchPaths)
+	for _, seg := range readBatchSegments {
+		mergedTC := buildReadFileBatchToolCall(seg.paths, true)
 		mergedResult, _ := a.executeToolForParallel(ctx, mergedTC)
 
-		perFile := splitReadFileBatchResult(mergedResult, readBatchPaths)
+		perFile := splitReadFileBatchResult(mergedResult, seg.paths)
 		if perFile != nil {
 			// 分割成功: 各 call に per-file 結果を割り当てて statusBatched にする
-			for j, idx := range readBatchIndices {
-				path := readBatchPaths[j]
+			for j, idx := range seg.indices {
+				path := seg.paths[j]
 				if section, ok := perFile[path]; ok {
 					results[idx] = toolExecResult{result: section}
 				} else {

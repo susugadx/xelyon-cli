@@ -75,6 +75,13 @@ func ExecuteReadFiles(paths []string) string {
 
 // ExecuteReadFilesWithOutput は出力先を指定して複数ファイルを一括読み込みする。
 func ExecuteReadFilesWithOutput(out common.Output, paths []string) string {
+	return ExecuteReadFilesWithBudget(out, paths, 0)
+}
+
+// ExecuteReadFilesWithBudget は出力先とファイルあたりのアウトライン閾値を指定して
+// 複数ファイルを一括読み込みする。budgetOverride が 0 の場合は perFileBudget を使用する。
+// 自動 batch merge では DefaultFullLines を渡し、単発 read と同等の閾値を維持する。
+func ExecuteReadFilesWithBudget(out common.Output, paths []string, budgetOverride int) string {
 	if len(paths) == 0 {
 		return "Error: paths is empty"
 	}
@@ -82,7 +89,10 @@ func ExecuteReadFilesWithOutput(out common.Output, paths []string) string {
 		return fmt.Sprintf("Error: too many paths (max %d), got %d", MaxReadFilesPaths, len(paths))
 	}
 
-	budget := perFileBudget(len(paths))
+	budget := budgetOverride
+	if budget <= 0 {
+		budget = perFileBudget(len(paths))
+	}
 	sem := make(chan struct{}, tools.MaxParallelTools)
 
 	type readResult struct {

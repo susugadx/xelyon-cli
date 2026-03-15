@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/testutil"
+	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
 func TestExecuteReadFiles_Normal(t *testing.T) {
@@ -281,5 +282,38 @@ func TestExecuteReadFiles_BudgetExplicitRangePriority(t *testing.T) {
 	// 明示指定のファイルは120行目まで含まれる
 	if !strings.Contains(output, "120: line120") {
 		t.Error("Expected explicit range file to include line 120")
+	}
+}
+
+// ── ExecuteReadFilesWithBudget regression test ──
+// 自動 batch merge で DefaultFullLines 指定時、3件以上でも単発 read と同じ内容量を返すことを検証。
+
+func TestExecuteReadFilesWithBudget_FullBudgetPreservesContent(t *testing.T) {
+	setupTestMocks(t)
+	tmpDir := t.TempDir()
+
+	// 180行のファイル3個: perFileBudget(3)=166 → outline になる
+	// DefaultFullLines=200 なら 180 < 200 で全文返却
+	paths := make([]string, 3)
+	for i := range paths {
+		name := fmt.Sprintf("f%d.go", i)
+		testutil.CreateTempFile(t, tmpDir, name, generateLines(180))
+		paths[i] = filepath.Join(tmpDir, name)
+	}
+
+	// perFileBudget(3) = 166: 180 > 166 → outline
+	normalOutput := ExecuteReadFiles(paths)
+	if !strings.Contains(normalOutput, "Use start_line/end_line") {
+		t.Fatal("Expected normal 3-file read to use outline mode for 180-line files")
+	}
+
+	// budgetOverride=DefaultFullLines(200): 180 < 200 → 全文
+	fullOutput := ExecuteReadFilesWithBudget(common.DefaultOutput(), paths, DefaultFullLines)
+	if strings.Contains(fullOutput, "Use start_line/end_line") {
+		t.Error("ExecuteReadFilesWithBudget with DefaultFullLines should NOT use outline for 180-line files")
+	}
+	// 全文が返却される
+	if !strings.Contains(fullOutput, "180: line180") {
+		t.Error("Expected full content with line 180")
 	}
 }

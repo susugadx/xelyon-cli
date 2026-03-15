@@ -71,17 +71,63 @@ const maxReadFileBatchPaths = 10
 
 // buildReadFileBatchToolCall は複数の plain read_file call を
 // 1 つの read_file(paths=[...]) call にまとめた ToolCall を生成する。
-func buildReadFileBatchToolCall(paths []string) *tools.ToolCall {
+// fullBudget が true の場合、自動 merge 用フラグ (_full_budget) を付与し、
+// 単発 read_file と同じアウトライン閾値 (DefaultFullLines) で読み込む。
+func buildReadFileBatchToolCall(paths []string, fullBudget bool) *tools.ToolCall {
 	pathsJSON, _ := json.Marshal(paths)
-	return &tools.ToolCall{
-		Tool: "read_file",
-		Args: map[string]string{
-			"paths": string(pathsJSON),
-		},
-		RawArgs: map[string]any{
-			"paths": paths,
-		},
+	args := map[string]string{
+		"paths": string(pathsJSON),
 	}
+	rawArgs := map[string]any{
+		"paths": paths,
+	}
+	if fullBudget {
+		args["_full_budget"] = "true"
+		rawArgs["_full_budget"] = true
+	}
+	return &tools.ToolCall{
+		Tool:    "read_file",
+		Args:    args,
+		RawArgs: rawArgs,
+	}
+}
+
+// readBatchSegment は変更系ツール境界間の batchable read_file 群を表す。
+type readBatchSegment struct {
+	indices []int
+	paths   []string
+}
+
+// segmentReadFileBatches は tool call リストからバッチ可能な read_file のセグメントを収集する。
+// 変更系ツール（非 parallel-safe）で区切り、各セグメント内の batchable read_file を返す。
+// execFlags[i] == true のエントリのみ対象。
+func segmentReadFileBatches(allToolCalls []*tools.ToolCall, execFlags []bool) []readBatchSegment {
+	var segments []readBatchSegment
+	var current readBatchSegment
+
+	for i, tc := range allToolCalls {
+		if !execFlags[i] {
+			continue
+		}
+		if !tools.IsParallelSafe(tc) {
+			// 変更系ツール: 現在のセグメントを確定してリセット
+			if len(current.indices) >= 2 && len(current.paths) <= maxReadFileBatchPaths {
+				segments = append(segments, current)
+			}
+			current = readBatchSegment{}
+			continue
+		}
+		if !isBatchableReadFile(tc) {
+			continue
+		}
+		current.indices = append(current.indices, i)
+		current.paths = append(current.paths, tc.Args["path"])
+	}
+	// 最後のセグメント
+	if len(current.indices) >= 2 && len(current.paths) <= maxReadFileBatchPaths {
+		segments = append(segments, current)
+	}
+	return segments
 }
 
 // readFileBatchHeaderPrefix は read_file(paths=...) の結果でファイル区切りに使われるプレフィックス。
