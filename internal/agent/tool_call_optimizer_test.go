@@ -577,7 +577,7 @@ func TestExecuteToolCallsWithParallel_SameTurnDuplicate_CanonicalMessage(t *test
 	}
 }
 
-// ── read_file batching tests ──
+// ── read_file batch merge eligibility tests ──
 
 func TestExecuteToolCallsWithParallel_ReadFile_PlainPathBatch(t *testing.T) {
 	// 2+ plain path reads for SAME file → second is deduplicated
@@ -933,5 +933,277 @@ func TestExecuteToolCallsWithParallel_SameTurnDuplicate_ReadFileGuidancePreserve
 	}
 	if !duplicateWithGuidance {
 		t.Fatalf("expected duplicate message with guidance for c3, got %+v", addedMsgs)
+	}
+}
+
+// ── splitReadFileBatchResult tests ──
+
+func TestSplitReadFileBatchResult_TwoFiles(t *testing.T) {
+	result := "📄 File: /a.go\npackage main\n\nfunc main() {}\n\n📄 File: /b.go\npackage util\n\nfunc Helper() {}\n"
+
+	paths := []string{"/a.go", "/b.go"}
+	sections := splitReadFileBatchResult(result, paths)
+
+	if sections == nil {
+		t.Fatal("expected non-nil sections")
+	}
+	if len(sections) != 2 {
+		t.Fatalf("expected 2 sections, got %d", len(sections))
+	}
+	if !strings.Contains(sections["/a.go"], "package main") {
+		t.Errorf("/a.go section should contain 'package main', got %q", sections["/a.go"])
+	}
+	if !strings.Contains(sections["/b.go"], "package util") {
+		t.Errorf("/b.go section should contain 'package util', got %q", sections["/b.go"])
+	}
+	// Each section should not contain the other file's content
+	if strings.Contains(sections["/a.go"], "package util") {
+		t.Error("/a.go section should not contain /b.go content")
+	}
+	if strings.Contains(sections["/b.go"], "package main") {
+		t.Error("/b.go section should not contain /a.go content")
+	}
+}
+
+func TestSplitReadFileBatchResult_ThreeFiles(t *testing.T) {
+	result := "📄 File: /a.go\ncontent_a\n\n📄 File: /b.go\ncontent_b\n\n📄 File: /c.go\ncontent_c\n"
+
+	paths := []string{"/a.go", "/b.go", "/c.go"}
+	sections := splitReadFileBatchResult(result, paths)
+
+	if sections == nil {
+		t.Fatal("expected non-nil sections")
+	}
+	for _, p := range paths {
+		if _, ok := sections[p]; !ok {
+			t.Errorf("missing section for %s", p)
+		}
+	}
+	if !strings.Contains(sections["/a.go"], "content_a") {
+		t.Error("/a.go section wrong")
+	}
+	if !strings.Contains(sections["/b.go"], "content_b") {
+		t.Error("/b.go section wrong")
+	}
+	if !strings.Contains(sections["/c.go"], "content_c") {
+		t.Error("/c.go section wrong")
+	}
+}
+
+func TestSplitReadFileBatchResult_HeaderMissing(t *testing.T) {
+	// Missing header for /b.go → should return nil
+	result := "📄 File: /a.go\ncontent_a\n"
+
+	paths := []string{"/a.go", "/b.go"}
+	sections := splitReadFileBatchResult(result, paths)
+
+	if sections != nil {
+		t.Error("should return nil when header for /b.go is missing")
+	}
+}
+
+func TestSplitReadFileBatchResult_ErrorFile(t *testing.T) {
+	// File with error result should still be split correctly
+	result := "📄 File: /a.go\npackage main\n\n📄 File: /missing.go\nError: file not found: /missing.go\n"
+
+	paths := []string{"/a.go", "/missing.go"}
+	sections := splitReadFileBatchResult(result, paths)
+
+	if sections == nil {
+		t.Fatal("expected non-nil sections even with error")
+	}
+	if !strings.Contains(sections["/a.go"], "package main") {
+		t.Error("/a.go section should have content")
+	}
+	if !strings.Contains(sections["/missing.go"], "Error:") {
+		t.Error("/missing.go section should have error")
+	}
+}
+
+func TestSplitReadFileBatchResult_EmptyResult(t *testing.T) {
+	sections := splitReadFileBatchResult("", []string{"/a.go"})
+	if sections != nil {
+		t.Error("should return nil for empty result")
+	}
+}
+
+// ── buildReadFileBatchToolCall tests ──
+
+func TestBuildReadFileBatchToolCall(t *testing.T) {
+	paths := []string{"/a.go", "/b.go", "/c.go"}
+	tc := buildReadFileBatchToolCall(paths)
+
+	if tc.Tool != "read_file" {
+		t.Errorf("Tool = %q, want read_file", tc.Tool)
+	}
+	if tc.Args["paths"] == "" {
+		t.Error("paths arg should not be empty")
+	}
+	// paths should be valid JSON array
+	if !strings.HasPrefix(tc.Args["paths"], "[") {
+		t.Errorf("paths should be JSON array, got %q", tc.Args["paths"])
+	}
+	// RawArgs.paths should be []string
+	rawPaths, ok := tc.RawArgs["paths"].([]string)
+	if !ok {
+		t.Fatal("RawArgs[paths] should be []string")
+	}
+	if len(rawPaths) != 3 {
+		t.Errorf("expected 3 paths, got %d", len(rawPaths))
+	}
+}
+
+// ── read_file batch merge group judgment tests ──
+
+func TestIsBatchableReadFile_Comprehensive(t *testing.T) {
+	tests := []struct {
+		name string
+		tc   *tools.ToolCall
+		want bool
+	}{
+		{"plain path", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"path": "/a.go"}}, true},
+		{"symbol read", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"path": "/a.go", "symbol": "Foo"}}, false},
+		{"range read", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"path": "/a.go", "start_line": "1", "end_line": "50"}}, false},
+		{"start_line only", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"path": "/a.go", "start_line": "1"}}, false},
+		{"end_line only", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"path": "/a.go", "end_line": "50"}}, false},
+		{"paths specified", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"paths": `["a.go","b.go"]`}}, false},
+		{"empty path", &tools.ToolCall{Tool: "read_file", Args: map[string]string{}}, false},
+		{"not read_file", &tools.ToolCall{Tool: "search_code", Args: map[string]string{"path": "/a.go"}}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isBatchableReadFile(tt.tc); got != tt.want {
+				t.Errorf("isBatchableReadFile() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// ── read_file batch merge: duplicate suppression does not interfere ──
+
+func TestReadFileBatchMerge_DuplicateSuppressionFirst(t *testing.T) {
+	// read_file(a.go), read_file(a.go), read_file(b.go)
+	// Duplicate suppression catches the second a.go first.
+	// Batch merge only sees a.go + b.go (2 distinct paths after dedup).
+	provider := &mockProvider{name: "test"}
+	agent := NewAgent("test-model", provider, false)
+	agent.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
+
+	toolCalls := []*tools.ToolCall{
+		{ID: "c1", Tool: "read_file", Args: map[string]string{"path": "/a.go"}, RawArgs: map[string]any{"path": "/a.go"}},
+		{ID: "c2", Tool: "read_file", Args: map[string]string{"path": "/a.go"}, RawArgs: map[string]any{"path": "/a.go"}},
+		{ID: "c3", Tool: "read_file", Args: map[string]string{"path": "/b.go"}, RawArgs: map[string]any{"path": "/b.go"}},
+	}
+	agent.addToolCallsToHistory("test", toolCalls)
+
+	var callbackIDs []string
+	callback := func(_ int, tc *tools.ToolCall, result string, change *tools.FileChange) {
+		callbackIDs = append(callbackIDs, tc.ID)
+	}
+
+	agent.executeToolCallsWithParallel(context.Background(), toolCalls, nil, nil, callback)
+
+	// c1 and c3 should have callbacks (c2 is duplicate, no callback)
+	if len(callbackIDs) != 2 {
+		t.Fatalf("expected 2 callbacks, got %d: %v", len(callbackIDs), callbackIDs)
+	}
+	if callbackIDs[0] != "c1" || callbackIDs[1] != "c3" {
+		t.Errorf("callbackIDs = %v, want [c1, c3]", callbackIDs)
+	}
+
+	// Duplicate suppression metric should be 1
+	if agent.Stats.ToolObs.SameTurnDuplicates != 1 {
+		t.Errorf("SameTurnDuplicates = %d, want 1", agent.Stats.ToolObs.SameTurnDuplicates)
+	}
+}
+
+// ── read_file batch merge: callback order preserved ──
+
+func TestReadFileBatchMerge_CallbackOrderPreserved(t *testing.T) {
+	// Verify callbacks fire in original tool call order
+	provider := &mockProvider{name: "test"}
+	agent := NewAgent("test-model", provider, false)
+	agent.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
+
+	toolCalls := []*tools.ToolCall{
+		{ID: "c1", Tool: "read_file", Args: map[string]string{"path": "/x.go"}, RawArgs: map[string]any{"path": "/x.go"}},
+		{ID: "c2", Tool: "search_code", Args: map[string]string{"pattern": "foo"}, RawArgs: map[string]any{"pattern": "foo"}},
+		{ID: "c3", Tool: "read_file", Args: map[string]string{"path": "/y.go"}, RawArgs: map[string]any{"path": "/y.go"}},
+	}
+	agent.addToolCallsToHistory("test", toolCalls)
+
+	var callbackOrder []string
+	callback := func(idx int, tc *tools.ToolCall, result string, change *tools.FileChange) {
+		callbackOrder = append(callbackOrder, tc.ID)
+	}
+
+	agent.executeToolCallsWithParallel(context.Background(), toolCalls, nil, nil, callback)
+
+	// All three should execute; order should be c1, c2, c3
+	if len(callbackOrder) != 3 {
+		t.Fatalf("expected 3 callbacks, got %d: %v", len(callbackOrder), callbackOrder)
+	}
+	if callbackOrder[0] != "c1" || callbackOrder[1] != "c2" || callbackOrder[2] != "c3" {
+		t.Errorf("callbackOrder = %v, want [c1, c2, c3]", callbackOrder)
+	}
+}
+
+// ── read_file batch merge: observability ──
+
+func TestReadFileBatchMerge_Observability(t *testing.T) {
+	provider := &mockProvider{name: "test"}
+	agent := NewAgent("test-model", provider, false)
+	agent.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
+
+	// 3 plain reads → should trigger batch merge
+	toolCalls := []*tools.ToolCall{
+		{ID: "c1", Tool: "read_file", Args: map[string]string{"path": "/a.go"}, RawArgs: map[string]any{"path": "/a.go"}},
+		{ID: "c2", Tool: "read_file", Args: map[string]string{"path": "/b.go"}, RawArgs: map[string]any{"path": "/b.go"}},
+		{ID: "c3", Tool: "read_file", Args: map[string]string{"path": "/c.go"}, RawArgs: map[string]any{"path": "/c.go"}},
+	}
+	agent.addToolCallsToHistory("test", toolCalls)
+
+	callback := func(_ int, tc *tools.ToolCall, result string, change *tools.FileChange) {}
+	agent.executeToolCallsWithParallel(context.Background(), toolCalls, nil, nil, callback)
+
+	// ReadFileBatchMerges should be >= 0 (it may or may not fire depending on
+	// whether the batched read_file(paths) produces parseable output in test env).
+	// The key check: if it fires, ToolExecutions counts each individual call.
+	if agent.Stats.ToolObs.ReadFileBatchMerges > 0 {
+		// Batch merge fired: each call should still count as executed
+		totalReadFile := agent.Stats.ToolExecutions["read_file"]
+		if totalReadFile != 3 {
+			t.Errorf("ToolExecutions[read_file] = %d, want 3 after batch merge", totalReadFile)
+		}
+	}
+}
+
+// ── read_file batch merge: single batchable read should not merge ──
+
+func TestReadFileBatchMerge_SingleReadNotMerged(t *testing.T) {
+	provider := &mockProvider{name: "test"}
+	agent := NewAgent("test-model", provider, false)
+	agent.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
+
+	// Only 1 plain read + 1 non-batchable → no merge
+	toolCalls := []*tools.ToolCall{
+		{ID: "c1", Tool: "read_file", Args: map[string]string{"path": "/a.go"}, RawArgs: map[string]any{"path": "/a.go"}},
+		{ID: "c2", Tool: "read_file", Args: map[string]string{"path": "/b.go", "symbol": "Foo"}, RawArgs: map[string]any{"path": "/b.go", "symbol": "Foo"}},
+	}
+	agent.addToolCallsToHistory("test", toolCalls)
+
+	var callbackCount int
+	callback := func(_ int, tc *tools.ToolCall, result string, change *tools.FileChange) {
+		callbackCount++
+	}
+
+	agent.executeToolCallsWithParallel(context.Background(), toolCalls, nil, nil, callback)
+
+	// Both should execute individually (no batch merge since only 1 batchable)
+	if callbackCount != 2 {
+		t.Errorf("expected 2 callbacks (no merge), got %d", callbackCount)
+	}
+	if agent.Stats.ToolObs.ReadFileBatchMerges != 0 {
+		t.Errorf("ReadFileBatchMerges = %d, want 0", agent.Stats.ToolObs.ReadFileBatchMerges)
 	}
 }

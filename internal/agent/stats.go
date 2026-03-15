@@ -71,6 +71,7 @@ type ToolObservability struct {
 	CompactedByTool             map[string]int // ツール名ごとの compaction 回数
 	SameTurnDuplicates          int            // 同一ターン内の重複 tool call 抑制回数
 	SearchCodeBatchMerges       int            // search_code multi-pattern batch merge 回数
+	ReadFileBatchMerges         int            // read_file batch merge 回数
 }
 
 // SessionStats はセッション統計情報

@@ -719,6 +719,45 @@ func (a *Agent) executeToolCallsWithParallel(
 		a.recordSearchCodeBatchMerge()
 	}
 
+	// ── Phase 0.5c: read_file batch merge ──
+	// 同一ターン内の plain read_file(path=...) を read_file(paths=[...]) にまとめて実行する。
+	// duplicate suppression が先に効いた後の残りが対象。
+	// symbol/range/paths 指定済みの call は isBatchableReadFile で除外される。
+	var readBatchIndices []int
+	var readBatchPaths []string
+	for i, e := range entries {
+		if e.status != statusExecute {
+			continue
+		}
+		tc := allToolCalls[i]
+		if !isBatchableReadFile(tc) {
+			continue
+		}
+		readBatchIndices = append(readBatchIndices, i)
+		readBatchPaths = append(readBatchPaths, tc.Args["path"])
+	}
+
+	if len(readBatchIndices) >= 2 && len(readBatchPaths) <= maxReadFileBatchPaths {
+		mergedTC := buildReadFileBatchToolCall(readBatchPaths)
+		mergedResult, _ := a.executeToolForParallel(ctx, mergedTC)
+
+		perFile := splitReadFileBatchResult(mergedResult, readBatchPaths)
+		if perFile != nil {
+			// 分割成功: 各 call に per-file 結果を割り当てて statusBatched にする
+			for j, idx := range readBatchIndices {
+				path := readBatchPaths[j]
+				if section, ok := perFile[path]; ok {
+					results[idx] = toolExecResult{result: section}
+				} else {
+					results[idx] = toolExecResult{result: mergedResult}
+				}
+				entries[idx] = entry{status: statusBatched}
+			}
+			a.recordReadFileBatchMerge()
+		}
+		// perFile == nil: 分割失敗 → フォールバック（個別実行のまま）
+	}
+
 	// ── Phase 1: 実行 ──
 	// 実行対象のツールを parallel-safe / sequential に分類して実行する。
 
@@ -1034,6 +1073,15 @@ func (a *Agent) recordSearchCodeBatchMerge() {
 	defer a.statsMu.Unlock()
 	if a.Stats != nil {
 		a.Stats.ToolObs.SearchCodeBatchMerges++
+	}
+}
+
+// recordReadFileBatchMerge は read_file batch merge をメトリクスに記録する。
+func (a *Agent) recordReadFileBatchMerge() {
+	a.statsMu.Lock()
+	defer a.statsMu.Unlock()
+	if a.Stats != nil {
+		a.Stats.ToolObs.ReadFileBatchMerges++
 	}
 }
 
