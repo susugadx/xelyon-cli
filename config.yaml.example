@@ -44,8 +44,8 @@ provider_models:
 general:
     # 表示言語（ja, en）
     language: ja
-    # ツールループ最大回数
-    tool_loop_limit: 80
+    # ツールループ最大回数（0で無制限）
+    tool_loop_limit: 0
 
 # ============================================================
 # 会話履歴圧縮設定

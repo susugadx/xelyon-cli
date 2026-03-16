@@ -20,12 +20,19 @@ import (
 // 並列実行の対象外である。ツールは1つずつ順次実行される。
 func (a *Agent) runInvestigationPhase(ctx context.Context) (*plan.Plan, error) {
 	cfg := a.cfg()
-	maxIterations := cfg.General.ToolLoopLimit
+	hardLimit := normalizeToolLoopLimit(cfg.General.ToolLoopLimit)
 
 	var lastToolCall *tools.ToolCall
 	sameCallCount := 0
 
-	for i := 0; i < maxIterations; i++ {
+	for i := 0; ; i++ {
+		if hardLimit > 0 && i >= hardLimit {
+			return nil, fmt.Errorf("investigation phase exceeded max iterations (%d)", hardLimit)
+		}
+		if hardLimit == 0 {
+			emitLoopWarning(a, i)
+		}
+
 		compactedHistory, metrics := CompactOldToolResults(a.History, DefaultMaxLines, DefaultHeadLines, DefaultTailLines)
 		a.addCompactionMetrics(metrics)
 		response, err := a.CurrentProvider.ChatWithTools(
@@ -121,5 +128,4 @@ func (a *Agent) runInvestigationPhase(ctx context.Context) (*plan.Plan, error) {
 		}
 	}
 
-	return nil, fmt.Errorf("investigation phase exceeded max iterations (%d)", maxIterations)
 }

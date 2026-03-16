@@ -53,7 +53,7 @@ var Sections = map[string]SectionInfo{
 		Icon:  "⚙️",
 		Fields: map[string]string{
 			"language":        "表示言語（ja, en）",
-			"tool_loop_limit": "ツールループ最大回数",
+			"tool_loop_limit": "ツールループ最大回数（0で無制限）",
 		},
 		FieldTypes: map[string]string{
 			"language":        "select",

@@ -143,7 +143,7 @@ var FieldDescriptions = map[string]string{
 	"diff.context_lines":                 "差分表示時のコンテキスト行数",
 	"diff.max_total_lines":               "差分表示の最大行数（0で無制限）",
 	"general.language":                   "表示言語（ja, en）",
-	"general.tool_loop_limit":            "ツールループ最大回数",
+	"general.tool_loop_limit":            "ツールループ最大回数（0で無制限）",
 	"git_stage.batch_confirm":            "複数ファイルをまとめて確認",
 	"hooks.max_retry":                    "フック失敗時の最大リトライ回数（デフォルト: 3）",
 	"hooks.on_completion":                "完了時に実行するコマンド（例: go test ./...）",

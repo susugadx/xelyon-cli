@@ -147,6 +147,34 @@ func TestValidateConfig_RangeValidation(t *testing.T) {
 	}
 }
 
+func TestValidateConfig_NegativeToolLoopLimit(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.General.ToolLoopLimit = -1
+
+	result := ValidateConfig(cfg)
+
+	if result.Valid {
+		t.Fatal("ValidateConfig should be invalid for negative tool_loop_limit")
+	}
+
+	found := false
+	for _, issue := range result.Issues {
+		if issue.Field != "general.tool_loop_limit" {
+			continue
+		}
+		found = true
+		if issue.Severity != "error" {
+			t.Errorf("Severity = %s, want error", issue.Severity)
+		}
+		if issue.FixedValue != 0 {
+			t.Errorf("FixedValue = %v, want 0", issue.FixedValue)
+		}
+	}
+	if !found {
+		t.Fatal("Should have issue for general.tool_loop_limit")
+	}
+}
+
 func TestValidateConfig_InvalidBashSafetyLevel(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Bash.SafetyLevel = "invalid"
@@ -208,19 +236,23 @@ func TestValidateConfig_ProjectMapContextRatio(t *testing.T) {
 func TestApplyAutoFixes(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.DefaultProvider = "invalid"
+	cfg.General.ToolLoopLimit = -1
 	cfg.LoopDetection.Threshold = 100
 	cfg.ProjectMap.ContextRatio = 0.5
 
 	result := ValidateConfig(cfg)
 	fixCount := ApplyAutoFixes(cfg, result)
 
-	if fixCount < 3 {
-		t.Errorf("ApplyAutoFixes should fix at least 3 issues, got %d", fixCount)
+	if fixCount < 4 {
+		t.Errorf("ApplyAutoFixes should fix at least 4 issues, got %d", fixCount)
 	}
 
 	// Verify fixes were applied
 	if cfg.DefaultProvider != "deepseek" {
 		t.Errorf("DefaultProvider should be fixed to 'deepseek', got %q", cfg.DefaultProvider)
+	}
+	if cfg.General.ToolLoopLimit != 0 {
+		t.Errorf("General.ToolLoopLimit should be fixed to 0, got %d", cfg.General.ToolLoopLimit)
 	}
 	if cfg.LoopDetection.Threshold != 3 {
 		t.Errorf("LoopDetection.Threshold should be fixed to 3, got %d", cfg.LoopDetection.Threshold)

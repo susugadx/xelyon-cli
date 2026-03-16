@@ -105,6 +105,19 @@ func ValidateConfig(cfg *Config) ValidationResult {
 		}
 	}
 
+	if cfg.General.ToolLoopLimit < 0 {
+		result.Issues = append(result.Issues, ValidationIssue{
+			Field:      "general.tool_loop_limit",
+			Value:      fmt.Sprintf("%d", cfg.General.ToolLoopLimit),
+			Message:    "0以上を指定してください（0 = 無制限）",
+			Suggestion: "0",
+			Severity:   "error",
+			CanAutoFix: true,
+			FixedValue: 0,
+		})
+		result.Valid = false
+	}
+
 	// 4. 数値範囲チェック
 	validateNumericRange(&result, "loop_detection.threshold", cfg.LoopDetection.Threshold, 1, 10, 3)
 	validateNumericRange(&result, "api_retry.count", cfg.APIRetry.Count, 1, 10, 3)
@@ -297,6 +310,11 @@ func ApplyAutoFixes(cfg *Config, result ValidationResult) int {
 		case "default_provider":
 			if v, ok := issue.FixedValue.(string); ok {
 				cfg.DefaultProvider = v
+				fixCount++
+			}
+		case "general.tool_loop_limit":
+			if v, ok := issue.FixedValue.(int); ok {
+				cfg.General.ToolLoopLimit = v
 				fixCount++
 			}
 		case "loop_detection.threshold":

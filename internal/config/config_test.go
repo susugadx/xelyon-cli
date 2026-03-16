@@ -88,6 +88,9 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.PlanMode.StepTimeout != 600 {
 		t.Errorf("PlanMode.StepTimeout = %d, want 600", cfg.PlanMode.StepTimeout)
 	}
+	if cfg.General.ToolLoopLimit != 0 {
+		t.Errorf("General.ToolLoopLimit = %d, want 0", cfg.General.ToolLoopLimit)
+	}
 	if !cfg.ProjectMap.Enabled {
 		t.Error("ProjectMap.Enabled should default to true")
 	}

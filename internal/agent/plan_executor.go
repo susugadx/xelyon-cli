@@ -84,7 +84,7 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 
 	// ステップ内のツール実行ループ
 	cfg := a.cfg()
-	maxStepIterations := cfg.General.ToolLoopLimit
+	hardLimit := normalizeToolLoopLimit(cfg.General.ToolLoopLimit)
 	maxContinues := config.PlanMaxAutoContinues
 	continueCount := 0
 	var lastFailedResult string
@@ -100,7 +100,14 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 	var lastToolCall *tools.ToolCall
 	var sameCallCount int
 
-	for j := 0; j < maxStepIterations; j++ {
+	for j := 0; ; j++ {
+		if hardLimit > 0 && j >= hardLimit {
+			return fmt.Errorf("step %d exceeded max iterations (%d)", step.ID, hardLimit)
+		}
+		if hardLimit == 0 {
+			emitLoopWarning(a, j)
+		}
+
 		compactedHistory, metrics := CompactOldToolResults(a.History, DefaultMaxLines, DefaultHeadLines, DefaultTailLines)
 		a.addCompactionMetrics(metrics)
 		response, err := a.CurrentProvider.ChatWithTools(
@@ -385,9 +392,6 @@ Please follow these instructions to fix the issue and retry the step.`, comment,
 			}
 		}
 	}
-
-	green.Fprintf(a.output(), "✓ Step %d completed\n", step.ID)
-	return nil
 }
 
 // isAIQuestionWithToolParser は AI が質問しているかを判定する。

@@ -213,7 +213,7 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 	a.History = append(a.History, api.Message{Role: "user", Content: normalModeInput})
 
 	cfg := a.cfg()
-	maxIterations := cfg.General.ToolLoopLimit
+	hardLimit := normalizeToolLoopLimit(cfg.General.ToolLoopLimit)
 	var lastToolCall *tools.ToolCall
 	var sameCallCount int
 
@@ -229,7 +229,17 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 	const maxTextPlanRedirects = 2 // ソフトリダイレクト回数
 	const maxTextPlanHardLimit = 5 // これ以上繰り返したら break（無限ループ防止）
 
-	for i := 0; i < maxIterations; i++ {
+	var reachedHardLimit bool
+
+	for i := 0; ; i++ {
+		if hardLimit > 0 && i >= hardLimit {
+			reachedHardLimit = true
+			break
+		}
+		if hardLimit == 0 {
+			emitLoopWarning(a, i)
+		}
+
 		// API呼び出し
 		var response string
 		var err error
@@ -585,7 +595,9 @@ Do NOT give up. Try again with a different approach.`, lastFailedResult),
 		}
 	}
 
-	yellow.Fprintf(a.output(), "⚠️  Tool loop limit reached (%d iterations)\n", maxIterations)
+	if reachedHardLimit {
+		yellow.Fprintf(a.output(), "⚠️  Tool loop limit reached (%d iterations)\n", hardLimit)
+	}
 	a.showTaskSummary()
 	return nil
 }
