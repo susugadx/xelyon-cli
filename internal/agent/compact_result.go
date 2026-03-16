@@ -70,7 +70,7 @@ func (a *Agent) compactToolResult(toolCall *tools.ToolCall, result string) strin
 	return compacted
 }
 
-// recordCompaction は compaction の効果を ToolObservability に記録する。
+// recordCompaction は compaction の効果を ToolObservability と SavingsMetrics に記録する。
 func (a *Agent) recordCompaction(toolName string, beforeLen, afterLen int) {
 	saved := beforeLen - afterLen
 	if saved <= 0 {
@@ -88,6 +88,12 @@ func (a *Agent) recordCompaction(toolName string, beforeLen, afterLen int) {
 		obs.CompactedByTool = make(map[string]int)
 	}
 	obs.CompactedByTool[toolName]++
+
+	// savings: compaction による入力トークン削減（次回リクエスト以降で効く）
+	savedTokens := saved / 4 // bytes-to-tokens approximation
+	a.Stats.Savings.EstimatedInputTokensSaved += savedTokens
+	pricing := GetPricingInfo(a.Stats.Provider, a.Stats.Model)
+	a.Stats.Savings.EstimatedCostSaved += float64(savedTokens) / 1_000_000.0 * pricing.InputCostPerM
 }
 
 // compactBash はbashの実行結果を圧縮する。

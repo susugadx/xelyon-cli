@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -692,31 +693,42 @@ func (a *Agent) executeToolCallsWithParallel(
 
 	for _, optKey := range searchGroupOrder {
 		group := searchGroups[optKey]
-		if len(group.indices) < 2 || len(group.patterns) > maxSearchBatchPatterns {
+		if len(group.indices) < 2 {
 			continue
 		}
-		// merged tool call を生成して実行
-		leaderTC := allToolCalls[group.indices[0]]
-		mergedTC := cloneToolCallWithNewPattern(leaderTC, strings.Join(group.patterns, ","))
-		mergedResult, _ := a.executeToolForParallel(ctx, mergedTC)
-
-		// multi-pattern 結果を per-pattern section に分割
-		perPattern := splitMultiPatternResult(mergedResult, group.patterns)
-		if perPattern == nil {
-			// 分割に失敗 → バッチ化しない（個別実行にフォールバック）
-			continue
-		}
-		// 各 call に per-pattern 結果を割り当てて statusBatched にする
-		for j, idx := range group.indices {
-			pattern := group.patterns[j]
-			if section, ok := perPattern[pattern]; ok {
-				results[idx] = toolExecResult{result: section}
-			} else {
-				results[idx] = toolExecResult{result: mergedResult}
+		// chunk 分割: maxSearchBatchPatterns 単位で分けて実行
+		for chunkStart := 0; chunkStart < len(group.indices); chunkStart += maxSearchBatchPatterns {
+			chunkEnd := chunkStart + maxSearchBatchPatterns
+			if chunkEnd > len(group.indices) {
+				chunkEnd = len(group.indices)
 			}
-			entries[idx] = entry{status: statusBatched}
+			chunkIndices := group.indices[chunkStart:chunkEnd]
+			chunkPatterns := group.patterns[chunkStart:chunkEnd]
+
+			if len(chunkIndices) < 2 {
+				continue // 単一パターンは merge 不要
+			}
+
+			leaderTC := allToolCalls[chunkIndices[0]]
+			mergedTC := cloneToolCallWithNewPattern(leaderTC, strings.Join(chunkPatterns, ","))
+			a.adjustSearchCodeForHighContext(mergedTC)
+			mergedResult, _ := a.executeToolForParallel(ctx, mergedTC)
+
+			perPattern := splitMultiPatternResult(mergedResult, chunkPatterns)
+			if perPattern == nil {
+				continue // 分割失敗 → 個別実行にフォールバック
+			}
+			for j, idx := range chunkIndices {
+				pattern := chunkPatterns[j]
+				if section, ok := perPattern[pattern]; ok {
+					results[idx] = toolExecResult{result: section}
+				} else {
+					results[idx] = toolExecResult{result: mergedResult}
+				}
+				entries[idx] = entry{status: statusBatched}
+			}
+			a.recordSearchCodeBatchMerge(len(chunkIndices))
 		}
-		a.recordSearchCodeBatchMerge()
 	}
 
 	// ── Phase 0.5c: read_file batch merge ──
@@ -734,24 +746,47 @@ func (a *Agent) executeToolCallsWithParallel(
 	readBatchSegments := segmentReadFileBatches(allToolCalls, execFlags)
 
 	for _, seg := range readBatchSegments {
-		mergedTC := buildReadFileBatchToolCall(seg.paths, true)
-		mergedResult, _ := a.executeToolForParallel(ctx, mergedTC)
-
-		perFile := splitReadFileBatchResult(mergedResult, seg.paths)
-		if perFile != nil {
-			// 分割成功: 各 call に per-file 結果を割り当てて statusBatched にする
-			for j, idx := range seg.indices {
-				path := seg.paths[j]
-				if section, ok := perFile[path]; ok {
-					results[idx] = toolExecResult{result: section}
-				} else {
-					results[idx] = toolExecResult{result: mergedResult}
-				}
-				entries[idx] = entry{status: statusBatched}
+		// chunk 分割: maxReadFileBatchPaths 単位で分けて実行
+		for chunkStart := 0; chunkStart < len(seg.indices); chunkStart += maxReadFileBatchPaths {
+			chunkEnd := chunkStart + maxReadFileBatchPaths
+			if chunkEnd > len(seg.indices) {
+				chunkEnd = len(seg.indices)
 			}
-			a.recordReadFileBatchMerge()
+			chunkIndices := seg.indices[chunkStart:chunkEnd]
+			chunkPaths := seg.paths[chunkStart:chunkEnd]
+
+			if len(chunkIndices) < 2 {
+				continue // 単一ファイルは merge 不要
+			}
+
+			mergedTC := buildReadFileBatchToolCall(chunkPaths, true)
+			mergedResult, _ := a.executeToolForParallel(ctx, mergedTC)
+
+			perFile := splitReadFileBatchResult(mergedResult, chunkPaths)
+			if perFile != nil {
+				for j, idx := range chunkIndices {
+					path := chunkPaths[j]
+					if section, ok := perFile[path]; ok {
+						results[idx] = toolExecResult{result: section}
+					} else {
+						results[idx] = toolExecResult{result: mergedResult}
+					}
+					entries[idx] = entry{status: statusBatched}
+				}
+				a.recordReadFileBatchMerge(len(chunkIndices))
+			}
+			// perFile == nil: 分割失敗 → 個別実行にフォールバック
 		}
-		// perFile == nil: 分割失敗 → フォールバック（個別実行のまま）
+	}
+
+	// ── Phase 0.5d: search_code context-aware budget reduction ──
+	// 高コンテキスト時に search_code の token_budget を縮退させる。
+	// 通常時は何もしない。
+	for i, e := range entries {
+		if e.status != statusExecute {
+			continue
+		}
+		a.adjustSearchCodeForHighContext(allToolCalls[i])
 	}
 
 	// ── Phase 1: 実行 ──
@@ -914,7 +949,7 @@ func (a *Agent) executeToolCallsWithParallel(
 					Content: fmt.Sprintf("[Tool Result for %s]\n%s", tc.Tool, canonicalResult),
 				})
 			}
-			a.recordSameTurnDuplicate()
+			a.recordSameTurnDuplicate(tc.Tool)
 
 		case statusBatched:
 			// Phase 0.5 で batch 実行済み: 結果は results[i] に格納済み。
@@ -1055,16 +1090,30 @@ func formatParallelGroupSummary(allToolCalls []*tools.ToolCall, indices []int, e
 }
 
 // recordSameTurnDuplicate は同一ターン内の重複抑制をメトリクスに記録する。
-func (a *Agent) recordSameTurnDuplicate() {
+// tool_call 自体は assistant message に残り、canonical message が tool result として
+// 履歴に積まれる。API 入力トークンの削減は「本来のフル結果と canonical message の差分」。
+func (a *Agent) recordSameTurnDuplicate(toolName string) {
 	a.statsMu.Lock()
 	defer a.statsMu.Unlock()
 	if a.Stats != nil {
 		a.Stats.ToolObs.SameTurnDuplicates++
+		// savings: フル result vs canonical message (~20 tokens) のサイズ差
+		const canonicalTokens = 20 // sameTurnDupMsgFmt ≈ 80 chars
+		fullResultTokens := estimatedToolResultTokens(toolName)
+		savedTokens := fullResultTokens - canonicalTokens
+		if savedTokens > 0 {
+			a.Stats.Savings.SavedCalls++
+			a.Stats.Savings.EstimatedInputTokensSaved += savedTokens
+			pricing := GetPricingInfo(a.Stats.Provider, a.Stats.Model)
+			a.Stats.Savings.EstimatedCostSaved += float64(savedTokens) / 1_000_000.0 * pricing.InputCostPerM
+		}
 	}
 }
 
 // recordSearchCodeBatchMerge は search_code batch merge をメトリクスに記録する。
-func (a *Agent) recordSearchCodeBatchMerge() {
+// batch merge は tool_call + tool result が個別に履歴に残るため
+// API 入力トークンの削減にはならない（実行最適化のみ）。
+func (a *Agent) recordSearchCodeBatchMerge(mergedCount int) {
 	a.statsMu.Lock()
 	defer a.statsMu.Unlock()
 	if a.Stats != nil {
@@ -1073,12 +1122,60 @@ func (a *Agent) recordSearchCodeBatchMerge() {
 }
 
 // recordReadFileBatchMerge は read_file batch merge をメトリクスに記録する。
-func (a *Agent) recordReadFileBatchMerge() {
+// batch merge は tool_call + tool result が個別に履歴に残るため
+// API 入力トークンの削減にはならない（実行最適化のみ）。
+func (a *Agent) recordReadFileBatchMerge(mergedCount int) {
 	a.statsMu.Lock()
 	defer a.statsMu.Unlock()
 	if a.Stats != nil {
 		a.Stats.ToolObs.ReadFileBatchMerges++
 	}
+}
+
+// adjustSearchCodeForHighContext は高コンテキスト時に search_code の args を縮退させる。
+// token_budget を削減し、85% 超では output_mode を manifest に変更する。
+// 発動条件: コンテキスト使用率 > 70%。
+func (a *Agent) adjustSearchCodeForHighContext(tc *tools.ToolCall) bool {
+	if tc.Tool != "search_code" {
+		return false
+	}
+
+	pct := a.GetTokenUsagePercentage()
+	if pct < 70 {
+		return false
+	}
+
+	maxBudget := 1500
+	if pct > 85 {
+		maxBudget = 1000
+	}
+
+	currentBudget := 3000 // search_code default
+	if tc.Args["token_budget"] != "" {
+		if n, err := strconv.Atoi(tc.Args["token_budget"]); err == nil {
+			currentBudget = n
+		}
+	}
+
+	changed := false
+	if currentBudget > maxBudget {
+		tc.Args["token_budget"] = strconv.Itoa(maxBudget)
+		if tc.RawArgs != nil {
+			tc.RawArgs["token_budget"] = maxBudget
+		}
+		changed = true
+	}
+
+	// 85% 超: broad search は manifest 寄りにする
+	if pct > 85 && tc.Args["output_mode"] == "" {
+		tc.Args["output_mode"] = "manifest"
+		if tc.RawArgs != nil {
+			tc.RawArgs["output_mode"] = "manifest"
+		}
+		changed = true
+	}
+
+	return changed
 }
 
 func parallelGroupSpinnerMessage(allToolCalls []*tools.ToolCall, indices []int) string {

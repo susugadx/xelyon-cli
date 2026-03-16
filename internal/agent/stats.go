@@ -12,6 +12,43 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// ── Savings estimation ──
+
+// estimatedToolResultTokens はツール種別ごとの平均結果トークン数（推定）。
+// 同一ターン重複抑制時に、1回分の実行を回避したときの推定削減量に使う。
+func estimatedToolResultTokens(toolName string) int {
+	switch toolName {
+	case "read_file":
+		return 1000
+	case "search_code":
+		return 800
+	case "list_dir":
+		return 300
+	case "inspect_symbol":
+		return 500
+	default:
+		return 500
+	}
+}
+
+// SavingsMetrics はコスト最適化による削減量の推定値を保持する。
+// 値はすべて推定（estimated）であり、表示時は「~」を付与する。
+type SavingsMetrics struct {
+	SavedCalls                int     // 省略・統合されたツール呼び出し数
+	EstimatedInputTokensSaved int     // 推定入力トークン削減量
+	EstimatedCostSaved        float64 // 推定コスト削減量（USD）
+}
+
+func (m *SavingsMetrics) add(other SavingsMetrics) {
+	m.SavedCalls += other.SavedCalls
+	m.EstimatedInputTokensSaved += other.EstimatedInputTokensSaved
+	m.EstimatedCostSaved += other.EstimatedCostSaved
+}
+
+func (m *SavingsMetrics) hasAny() bool {
+	return m.SavedCalls > 0 || m.EstimatedInputTokensSaved > 0 || m.EstimatedCostSaved > 0
+}
+
 // OptimizationMetrics は最適化機構の発動回数を保持する。
 type OptimizationMetrics struct {
 	DeduplicateCount       int // cache-hit参照化（同一result省略）
@@ -91,6 +128,7 @@ type SessionStats struct {
 	AccumulatedCost     float64    // リクエスト単位で計算・累積したコスト
 	Optimizations       OptimizationMetrics
 	ToolObs             ToolObservability // ツール実行・compaction の観測メトリクス
+	Savings             SavingsMetrics    // コスト最適化による推定削減量
 }
 
 // NewSessionStats は新しいSessionStatsを作成

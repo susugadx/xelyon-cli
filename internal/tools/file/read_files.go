@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
@@ -78,10 +79,22 @@ func ExecuteReadFilesWithOutput(out common.Output, paths []string) string {
 	return ExecuteReadFilesWithBudget(out, paths, 0)
 }
 
+// ExecuteReadFilesWithRuntime は config/cache を指定して複数ファイルを一括読み込みする。
+// 自動 batch merge で使用し、単発 read_file と同じ runtime 文脈（config 反映、cache 反映）を維持する。
+func ExecuteReadFilesWithRuntime(out common.Output, cfg *config.Config, cache tools.ToolCacheInterface, paths []string, budgetOverride int) string {
+	return executeReadFilesCore(out, cfg, cache, paths, budgetOverride)
+}
+
 // ExecuteReadFilesWithBudget は出力先とファイルあたりのアウトライン閾値を指定して
 // 複数ファイルを一括読み込みする。budgetOverride が 0 の場合は perFileBudget を使用する。
 // 自動 batch merge では DefaultFullLines を渡し、単発 read と同等の閾値を維持する。
 func ExecuteReadFilesWithBudget(out common.Output, paths []string, budgetOverride int) string {
+	return executeReadFilesCore(out, nil, nil, paths, budgetOverride)
+}
+
+// executeReadFilesCore は複数ファイル読み込みの内部実装。
+// cfg/cache が nil の場合は単発 read_file のフォールバック動作（設定なし）を使用する。
+func executeReadFilesCore(out common.Output, cfg *config.Config, cache tools.ToolCacheInterface, paths []string, budgetOverride int) string {
 	if len(paths) == 0 {
 		return "Error: paths is empty"
 	}
@@ -113,11 +126,9 @@ func ExecuteReadFilesWithBudget(out common.Output, paths []string, budgetOverrid
 
 			var result string
 			if startLine > 0 || endLine > 0 {
-				// 明示的な行範囲指定: そのまま読み込み
-				result = executeReadFileCore(out, nil, nil, path, startLine, endLine, DefaultFullLines)
+				result = executeReadFileCore(out, cfg, cache, path, startLine, endLine, DefaultFullLines)
 			} else {
-				// 行範囲なし: budget をアウトライン閾値として適用
-				result = executeReadFileCore(out, nil, nil, path, 0, 0, budget)
+				result = executeReadFileCore(out, cfg, cache, path, 0, 0, budget)
 			}
 
 			results[idx] = readResult{

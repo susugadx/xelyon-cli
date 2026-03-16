@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -1029,7 +1030,7 @@ func TestSplitReadFileBatchResult_EmptyResult(t *testing.T) {
 
 // ── buildReadFileBatchToolCall tests ──
 
-func TestBuildReadFileBatchToolCall(t *testing.T) {
+func TestBuildReadFileBatchToolCall_FullBudget(t *testing.T) {
 	paths := []string{"/a.go", "/b.go", "/c.go"}
 	tc := buildReadFileBatchToolCall(paths, true)
 
@@ -1340,6 +1341,29 @@ func TestSegmentReadFileBatches_SingleReadNotBatched(t *testing.T) {
 	}
 }
 
+func TestSegmentReadFileBatches_OverMaxPaths(t *testing.T) {
+	// 15 個の read_file: maxReadFileBatchPaths(10) を超えるが、
+	// segmentReadFileBatches は上限チェックを行わず1セグメントとして返す。
+	// chunk 分割は実行側（executeToolCallsWithParallel）で行う。
+	n := 15
+	tcs := make([]*tools.ToolCall, n)
+	flags := make([]bool, n)
+	for i := 0; i < n; i++ {
+		tcs[i] = &tools.ToolCall{
+			Tool: "read_file",
+			Args: map[string]string{"path": fmt.Sprintf("/f%d.go", i)},
+		}
+		flags[i] = true
+	}
+	segs := segmentReadFileBatches(tcs, flags)
+	if len(segs) != 1 {
+		t.Fatalf("expected 1 segment, got %d", len(segs))
+	}
+	if len(segs[0].indices) != n {
+		t.Errorf("expected %d indices, got %d", n, len(segs[0].indices))
+	}
+}
+
 func TestSegmentReadFileBatches_NonBatchableReadIgnored(t *testing.T) {
 	// read(a) -> read(b, symbol=Foo) -> read(c)
 	// symbol read は非バッチ → セグメント [a, c]
@@ -1356,5 +1380,149 @@ func TestSegmentReadFileBatches_NonBatchableReadIgnored(t *testing.T) {
 	}
 	if len(segs[0].paths) != 2 {
 		t.Errorf("segment should have 2 paths (a, c), got %d", len(segs[0].paths))
+	}
+}
+
+// ── SavingsMetrics tests ──
+
+func TestSavingsMetrics_Add(t *testing.T) {
+	m := SavingsMetrics{SavedCalls: 1, EstimatedInputTokensSaved: 100, EstimatedCostSaved: 0.01}
+	m.add(SavingsMetrics{SavedCalls: 2, EstimatedInputTokensSaved: 200, EstimatedCostSaved: 0.02})
+	if m.SavedCalls != 3 {
+		t.Errorf("SavedCalls = %d, want 3", m.SavedCalls)
+	}
+	if m.EstimatedInputTokensSaved != 300 {
+		t.Errorf("EstimatedInputTokensSaved = %d, want 300", m.EstimatedInputTokensSaved)
+	}
+	if m.EstimatedCostSaved < 0.029 || m.EstimatedCostSaved > 0.031 {
+		t.Errorf("EstimatedCostSaved = %f, want ~0.03", m.EstimatedCostSaved)
+	}
+}
+
+func TestSavingsMetrics_HasAny(t *testing.T) {
+	m := SavingsMetrics{}
+	if m.hasAny() {
+		t.Error("empty metrics should return false")
+	}
+	m.SavedCalls = 1
+	if !m.hasAny() {
+		t.Error("non-zero SavedCalls should return true")
+	}
+}
+
+func TestEstimatedToolResultTokens(t *testing.T) {
+	if estimatedToolResultTokens("read_file") != 1000 {
+		t.Error("read_file should estimate 1000 tokens")
+	}
+	if estimatedToolResultTokens("search_code") != 800 {
+		t.Error("search_code should estimate 800 tokens")
+	}
+	if estimatedToolResultTokens("unknown_tool") != 500 {
+		t.Error("unknown tool should estimate 500 tokens")
+	}
+}
+
+// ── search_code chunk batch test (unit) ──
+
+func TestSearchCodeChunkBatch_GroupsOverLimit(t *testing.T) {
+	// 7 patterns with same options should all be grouped together.
+	// Chunk 分割は executeToolCallsWithParallel 内で行われるが、
+	// グループ化自体はここでテストする。
+	n := 7
+	tcs := make([]*tools.ToolCall, n)
+	for i := 0; i < n; i++ {
+		tcs[i] = &tools.ToolCall{
+			Tool: "search_code",
+			Args: map[string]string{"pattern": fmt.Sprintf("pat%d", i)},
+		}
+	}
+
+	// グループ化ロジックの検証
+	groups := make(map[string][]int)
+	for i, tc := range tcs {
+		if !isSimpleSearchPattern(tc.Args["pattern"]) {
+			continue
+		}
+		key := searchCodeOptionsKey(tc)
+		groups[key] = append(groups[key], i)
+	}
+
+	// 全パターンが1グループになる（options が同一）
+	if len(groups) != 1 {
+		t.Fatalf("expected 1 group, got %d", len(groups))
+	}
+	for _, indices := range groups {
+		if len(indices) != n {
+			t.Errorf("group should have %d indices, got %d", n, len(indices))
+		}
+		// chunk 分割: maxSearchBatchPatterns(5) 単位
+		chunkCount := 0
+		for start := 0; start < len(indices); start += maxSearchBatchPatterns {
+			end := start + maxSearchBatchPatterns
+			if end > len(indices) {
+				end = len(indices)
+			}
+			chunk := indices[start:end]
+			if len(chunk) >= 2 {
+				chunkCount++
+			}
+		}
+		// 7 → chunk [0..4](5) + chunk [5..6](2) = 2 chunks
+		if chunkCount != 2 {
+			t.Errorf("expected 2 merge-eligible chunks, got %d", chunkCount)
+		}
+	}
+}
+
+// ── read_file chunk batch test (unit) ──
+
+func TestReadFileChunkBatch_SegmentOverLimit(t *testing.T) {
+	// 12 plain read_file calls: segmentation returns 1 segment (no max check).
+	// Chunk 分割は executeToolCallsWithParallel 内で maxReadFileBatchPaths 単位で行う。
+	n := 12
+	tcs := make([]*tools.ToolCall, n)
+	flags := make([]bool, n)
+	for i := 0; i < n; i++ {
+		tcs[i] = &tools.ToolCall{
+			Tool: "read_file",
+			Args: map[string]string{"path": fmt.Sprintf("/f%d.go", i)},
+		}
+		flags[i] = true
+	}
+
+	segs := segmentReadFileBatches(tcs, flags)
+	if len(segs) != 1 {
+		t.Fatalf("expected 1 segment, got %d", len(segs))
+	}
+	if len(segs[0].indices) != n {
+		t.Errorf("segment should have %d indices, got %d", n, len(segs[0].indices))
+	}
+
+	// chunk 分割シミュレーション
+	seg := segs[0]
+	chunkCount := 0
+	for start := 0; start < len(seg.indices); start += maxReadFileBatchPaths {
+		end := start + maxReadFileBatchPaths
+		if end > len(seg.indices) {
+			end = len(seg.indices)
+		}
+		chunk := seg.indices[start:end]
+		if len(chunk) >= 2 {
+			chunkCount++
+		}
+	}
+	// 12 → chunk [0..9](10) + chunk [10..11](2) = 2 chunks
+	if chunkCount != 2 {
+		t.Errorf("expected 2 merge-eligible chunks, got %d", chunkCount)
+	}
+}
+
+// ── adjustSearchCodeForHighContext test (unit) ──
+
+func TestAdjustSearchCodeForHighContext_NotSearchCode(t *testing.T) {
+	a := &Agent{}
+	tc := &tools.ToolCall{Tool: "read_file", Args: map[string]string{}}
+	if a.adjustSearchCodeForHighContext(tc) {
+		t.Error("should not adjust non-search_code tool")
 	}
 }

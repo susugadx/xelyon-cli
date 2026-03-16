@@ -111,7 +111,7 @@ func segmentReadFileBatches(allToolCalls []*tools.ToolCall, execFlags []bool) []
 		}
 		if !tools.IsParallelSafe(tc) {
 			// 変更系ツール: 現在のセグメントを確定してリセット
-			if len(current.indices) >= 2 && len(current.paths) <= maxReadFileBatchPaths {
+			if len(current.indices) >= 2 {
 				segments = append(segments, current)
 			}
 			current = readBatchSegment{}
@@ -123,8 +123,8 @@ func segmentReadFileBatches(allToolCalls []*tools.ToolCall, execFlags []bool) []
 		current.indices = append(current.indices, i)
 		current.paths = append(current.paths, tc.Args["path"])
 	}
-	// 最後のセグメント
-	if len(current.indices) >= 2 && len(current.paths) <= maxReadFileBatchPaths {
+	// 最後のセグメント（上限チェックは実行時に chunk 分割する）
+	if len(current.indices) >= 2 {
 		segments = append(segments, current)
 	}
 	return segments

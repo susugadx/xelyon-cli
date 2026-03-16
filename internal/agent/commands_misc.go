@@ -190,6 +190,7 @@ func printSessionSections(agent *Agent) {
 	}
 
 	printToolObservabilitySection(out, stats)
+	printSavingsSection(out, stats)
 
 	_, _ = fmt.Fprintln(out)
 	green.Fprintln(out, "⚡ Optimizations")
@@ -280,6 +281,31 @@ func formatCompactedByTool(m map[string]int) string {
 		parts[i] = fmt.Sprintf("%s=%d", e.name, e.count)
 	}
 	return strings.Join(parts, ", ")
+}
+
+// printSavingsSection は API 入力トークン削減の推定量を表示する。
+// batch merge は tool_call / tool result が個別に履歴に残るため含めない。
+// 含むのは: same-turn duplicate の result サイズ差、compaction による圧縮分。
+func printSavingsSection(out io.Writer, stats *SessionStats) {
+	sav := stats.Savings
+	if !sav.hasAny() {
+		return
+	}
+
+	_, _ = fmt.Fprintln(out)
+	green.Fprintln(out, "💰 Estimated Savings (API input)")
+	savTable := ui.NewTable()
+	if sav.SavedCalls > 0 {
+		savTable.AddRow("Executions skipped", fmt.Sprintf("%d", sav.SavedCalls))
+	}
+	if sav.EstimatedInputTokensSaved > 0 {
+		savTable.AddRow("~Input tokens saved", fmt.Sprintf("~%s", formatNumber(sav.EstimatedInputTokensSaved)))
+	}
+	if sav.EstimatedCostSaved > 0 {
+		savTable.AddRow("~Cost saved", fmt.Sprintf("~$%.4f USD", sav.EstimatedCostSaved))
+	}
+	_, _ = fmt.Fprint(out, savTable.RenderCompact())
+	dim.Fprintln(out, "  (~ = estimated, dedup result diff + compaction)")
 }
 
 // handleStatsCommand は /status の互換エイリアス

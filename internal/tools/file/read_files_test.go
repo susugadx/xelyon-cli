@@ -317,3 +317,49 @@ func TestExecuteReadFilesWithBudget_FullBudgetPreservesContent(t *testing.T) {
 		t.Error("Expected full content with line 180")
 	}
 }
+
+// ── ExecuteReadFilesWithRuntime tests ──
+
+func TestExecuteReadFilesWithRuntime_NilConfigCache(t *testing.T) {
+	// nil config/cache は ExecuteReadFilesWithBudget と同等の動作
+	setupTestMocks(t)
+	tmpDir := t.TempDir()
+
+	testutil.CreateTempFile(t, tmpDir, "a.go", "package main\nfunc main() {}")
+	paths := []string{filepath.Join(tmpDir, "a.go")}
+
+	output := ExecuteReadFilesWithRuntime(common.DefaultOutput(), nil, nil, paths, DefaultFullLines)
+	if !strings.Contains(output, "package main") {
+		t.Errorf("Expected output to contain file content, got: %s", output)
+	}
+}
+
+func TestExecuteReadFilesWithRuntime_ConsistentWithSingleRead(t *testing.T) {
+	// auto-merge 経由の batch read が single read と同等の内容量を返すことを検証
+	setupTestMocks(t)
+	tmpDir := t.TempDir()
+
+	// 150 行のファイルを 3 個作成
+	paths := make([]string, 3)
+	for i := range paths {
+		name := fmt.Sprintf("f%d.go", i)
+		testutil.CreateTempFile(t, tmpDir, name, generateLines(150))
+		paths[i] = filepath.Join(tmpDir, name)
+	}
+
+	// single read: DefaultFullLines(200) → 150 < 200 → 全文
+	singleOutput := ExecuteReadFileWithRuntime(common.DefaultOutput(), nil, nil, paths[0], 0, 0)
+	if strings.Contains(singleOutput, "Use start_line/end_line") {
+		t.Fatal("single read should show full content for 150-line file")
+	}
+
+	// batch read with runtime: DefaultFullLines(200) → 150 < 200 → 全文
+	batchOutput := ExecuteReadFilesWithRuntime(common.DefaultOutput(), nil, nil, paths, DefaultFullLines)
+	if strings.Contains(batchOutput, "Use start_line/end_line") {
+		t.Error("batch read with DefaultFullLines should NOT use outline for 150-line files")
+	}
+	// 全ファイルの全行が含まれる
+	if !strings.Contains(batchOutput, "150: line150") {
+		t.Error("Expected full content with line 150")
+	}
+}

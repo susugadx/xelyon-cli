@@ -53,9 +53,9 @@ func (t *ReadFileTool) Run(execCtx tools.ExecutionContext, args map[string]strin
 			// path が有効 → 単体モードへフォールスルー
 		} else if len(paths) > 0 {
 			// _full_budget: 自動 batch merge 用フラグ。
-			// 単発 read_file と同じアウトライン閾値 (DefaultFullLines) を使用する。
+			// 単発 read_file と同じアウトライン閾値 (DefaultFullLines) + runtime 文脈を使用する。
 			if args["_full_budget"] == "true" {
-				return ExecuteReadFilesWithBudget(out, paths, DefaultFullLines), nil, nil
+				return ExecuteReadFilesWithRuntime(out, execCtx.EffectiveConfig(), execCtx.EffectiveToolCache(), paths, DefaultFullLines), nil, nil
 			}
 			return ExecuteReadFilesWithOutput(out, paths), nil, nil
 		} else if args["path"] == "" {
