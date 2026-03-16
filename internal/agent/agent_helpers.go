@@ -198,16 +198,12 @@ func injectProjectMap(agent *Agent) {
 		return
 	}
 
-	maxTokens := cfg.ProjectMap.MaxTokens
-	if maxTokens <= 0 {
-		maxTokens = 4000
-	}
-
-	pm := repomap.NewProjectMap(cwd, maxTokens, cfg.ProjectMap.AdditionalIgnoreDirs...)
+	pm := repomap.NewProjectMap(cwd, 0, cfg.ProjectMap.AdditionalIgnoreDirs...)
 	if err := pm.Build(); err != nil {
 		yellow.Fprintf(agent.output(), "⚠️ ProjectMap build failed: %v\n", err)
 		return
 	}
+	pm.MaxTokens = calcProjectMapBudget(agent, cfg, pm.GetFileCount(), pm.GetSymbolCount())
 
 	mapStr := pm.Generate()
 	if mapStr == "" {
@@ -219,6 +215,40 @@ func injectProjectMap(agent *Agent) {
 	agent.projectMapSymbolCount = pm.GetSymbolCount()
 
 	green.Fprintf(agent.output(), "🗺️  Project map loaded (%d symbols from %d files)\n", agent.projectMapSymbolCount, agent.projectMapFileCount)
+}
+
+func calcProjectMapBudget(agent *Agent, cfg *config.Config, fileCount, symbolCount int) int {
+	// コンテキストウィンドウサイズを取得
+	contextWindow := token.GetModelTokenLimit(agent.CurrentModel)
+	if contextWindow <= 0 {
+		contextWindow = 128000 // フォールバック
+	}
+
+	ratio := effectiveProjectMapContextRatio(cfg.ProjectMap.ContextRatio, fileCount, symbolCount)
+	budgetCap := int(float64(contextWindow) * ratio)
+
+	if budgetCap < 1 {
+		return 1
+	}
+
+	return budgetCap
+}
+
+func effectiveProjectMapContextRatio(baseRatio float64, fileCount, symbolCount int) float64 {
+	ratio := config.NormalizeProjectMapContextRatio(baseRatio)
+
+	switch {
+	case fileCount >= 400 || symbolCount >= 4000:
+		if ratio < 0.04 {
+			return 0.04
+		}
+	case fileCount >= 200 || symbolCount >= 2000:
+		if ratio < 0.03 {
+			return 0.03
+		}
+	}
+
+	return ratio
 }
 
 // rebuildSystemPromptForCurrentProvider は現在の provider/model に合わせて

@@ -123,7 +123,7 @@ type ListDirConfig struct {
 // ProjectMapConfig はプロジェクト構造マップの設定
 type ProjectMapConfig struct {
 	Enabled              bool     `yaml:"enabled"`                // 起動時に Project Map を生成・注入
-	MaxTokens            int      `yaml:"max_tokens"`             // Project Map のトークン上限
+	ContextRatio         float64  `yaml:"context_ratio"`          // ProjectMap のベース比率（大規模 repo では自動的に引き上げ）
 	AdditionalIgnoreDirs []string `yaml:"additional_ignore_dirs"` // デフォルト除外に追加するディレクトリ名
 }
 

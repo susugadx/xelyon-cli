@@ -141,7 +141,7 @@ func DefaultConfig() *Config {
 		},
 		ProjectMap: ProjectMapConfig{
 			Enabled:              true,
-			MaxTokens:            4000,
+			ContextRatio:         ProjectMapContextRatioDefault,
 			AdditionalIgnoreDirs: []string{},
 		},
 

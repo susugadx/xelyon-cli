@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -188,6 +189,8 @@ func (m *ConfigMenu) EditField(field *config.ConfigField) (interface{}, bool, er
 		return m.editBool(promptIO, field)
 	case config.FieldTypeInt:
 		return m.editInt(promptIO, field)
+	case config.FieldTypeFloat:
+		return m.editFloat(promptIO, field)
 	case config.FieldTypeString:
 		return m.editString(promptIO, field)
 	case config.FieldTypeSelect:
@@ -249,6 +252,41 @@ func (m *ConfigMenu) editInt(promptIO PromptIO, field *config.ConfigField) (inte
 	newVal, err := strconv.Atoi(input)
 	if err != nil {
 		_, _ = fmt.Fprintf(out, "%sInvalid number, keeping current value%s\n", colorDim, colorReset)
+		return current, false, nil
+	}
+
+	return newVal, true, nil
+}
+
+func (m *ConfigMenu) editFloat(promptIO PromptIO, field *config.ConfigField) (interface{}, bool, error) {
+	current := 0.0
+	out := promptIO.Out
+	switch v := field.Current.(type) {
+	case float64:
+		current = v
+	case float32:
+		current = float64(v)
+	case int:
+		current = float64(v)
+	}
+
+	_, _ = fmt.Fprintf(out, "Current value: %g\n", current)
+	_, _ = fmt.Fprint(out, "Enter new value (or Enter to keep): ")
+
+	input := strings.TrimSpace(readLineWithIO(&promptIO))
+	if input == "" {
+		return current, false, nil
+	}
+
+	newVal, err := strconv.ParseFloat(input, 64)
+	if err != nil || math.IsNaN(newVal) || math.IsInf(newVal, 0) {
+		_, _ = fmt.Fprintf(out, "%sInvalid number, keeping current value%s\n", colorDim, colorReset)
+		return current, false, nil
+	}
+	if field.Path == "project_map.context_ratio" &&
+		(newVal < config.ProjectMapContextRatioMin || newVal > config.ProjectMapContextRatioMax) {
+		_, _ = fmt.Fprintf(out, "%sValue must be between %.2f and %.2f, keeping current value%s\n",
+			colorDim, config.ProjectMapContextRatioMin, config.ProjectMapContextRatioMax, colorReset)
 		return current, false, nil
 	}
 

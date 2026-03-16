@@ -41,10 +41,10 @@ var modelTokenLimits = map[string]int{
 	"o1-mini":             128000,
 	"o1-preview":          128000,
 	"o3-mini":             200000,
-	"gpt-5":               200000,
+	"gpt-5":               400000,
 	"gpt-5.4":             1000000,
 	"gpt-5.4-pro":         1000000,
-	"gpt-5.1":             196000,
+	"gpt-5.1":             400000,
 	"gpt-5.2":             400000,
 
 	// === Gemini ===
@@ -63,9 +63,9 @@ var modelTokenLimits = map[string]int{
 	"gemini-pro":                         32768,
 
 	// === DeepSeek ===
-	"deepseek-chat":     64000,
+	"deepseek-chat":     128000,
 	"deepseek-coder":    64000,
-	"deepseek-reasoner": 64000,
+	"deepseek-reasoner": 128000,
 
 	// === Groq ===
 	"llama-3.3-70b-versatile": 128000,
@@ -110,14 +110,18 @@ func GetModelTokenLimit(model string) int {
 		{"gpt-4", 8192},
 		{"gpt-3.5", 16385},
 		{"gpt-5.4", 1000000},
-		{"gpt-5", 200000},
+		{"gpt-5", 400000},
 		{"o1", 200000},
 		{"o3", 200000},
 		{"gemini-3", 1000000},
 		{"gemini-2", 1000000},
 		{"gemini-1.5", 1000000},
 		{"gemini-pro", 32768},
-		{"deepseek", 64000},
+		{"deepseek-chat", 128000},
+		{"deepseek-reasoner", 128000},
+		{"deepseek-v3", 128000},
+		{"deepseek-r1", 128000},
+		{"deepseek-coder", 64000},
 		{"llama-3", 128000},
 		{"llama3", 8192},
 		{"qwen", 32768},

@@ -126,6 +126,7 @@ func TestFieldTypeMap(t *testing.T) {
 		"bash.safety_level":         FieldTypeSelect,
 		"bash.safe_commands":        FieldTypeStringSlice,
 		"command_aliases":           FieldTypeStringMap,
+		"project_map.context_ratio": FieldTypeFloat,
 		"provider_models":           FieldTypeStructMap,
 	}
 
@@ -171,6 +172,7 @@ func TestFieldDescriptions(t *testing.T) {
 		"compression.auto_compress",
 		"api_retry.count",
 		"bash.safety_level",
+		"project_map.context_ratio",
 	}
 
 	for _, path := range requiredFields {

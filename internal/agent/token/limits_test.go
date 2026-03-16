@@ -17,9 +17,10 @@ func TestGetModelTokenLimit_ExactMatch(t *testing.T) {
 		// OpenAI models
 		{"gpt-4.1", 1000000},
 		{"gpt-4.1-mini", 1000000},
+		{"gpt-5", 400000},
 		{"gpt-5.4", 1000000},
 		{"gpt-5.4-pro", 1000000},
-		{"gpt-5.1", 196000},
+		{"gpt-5.1", 400000},
 		{"gpt-5.2", 400000},
 		{"gpt-4o", 128000},
 		{"gpt-4o-mini", 128000},
@@ -34,8 +35,9 @@ func TestGetModelTokenLimit_ExactMatch(t *testing.T) {
 		{"gemini-pro", 32768},
 
 		// DeepSeek models
-		{"deepseek-chat", 64000},
+		{"deepseek-chat", 128000},
 		{"deepseek-coder", 64000},
+		{"deepseek-reasoner", 128000},
 
 		// Groq models
 		{"llama-3.3-70b-versatile", 128000},
@@ -79,7 +81,7 @@ func TestGetModelTokenLimit_PrefixMatch(t *testing.T) {
 
 		// GPT-5 prefix
 		{"gpt-5.4-preview", 1000000},
-		{"gpt-5-preview", 200000},
+		{"gpt-5-preview", 400000},
 
 		// O1/O3 prefix
 		{"o1-2024-12-17", 200000},
@@ -92,7 +94,9 @@ func TestGetModelTokenLimit_PrefixMatch(t *testing.T) {
 		{"gemini-1.5-flash-latest", 1000000},
 
 		// DeepSeek prefix
-		{"deepseek-v3", 64000},
+		{"deepseek-v3", 128000},
+		{"deepseek-r1-2025", 128000},
+		{"deepseek-coder-v3", 64000},
 
 		// Llama 3.x prefix
 		{"llama-3.2-8b", 128000},

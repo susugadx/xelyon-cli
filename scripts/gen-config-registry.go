@@ -31,6 +31,7 @@ const (
 	FieldTypeInt
 	FieldTypeString
 	FieldTypeSelect      // 選択肢付き文字列
+	FieldTypeFloat                    // float64
 	FieldTypeStringSlice // []string
 	FieldTypeStringMap   // map[string]string
 	FieldTypeStructMap   // map[string]struct
@@ -220,6 +221,8 @@ func fieldTypeToConst(t string) string {
 		return "FieldTypeString"
 	case "select":
 		return "FieldTypeSelect"
+	case "float":
+		return "FieldTypeFloat"
 	case "[]string":
 		return "FieldTypeStringSlice"
 	case "map":

@@ -10,6 +10,7 @@ const (
 	FieldTypeInt
 	FieldTypeString
 	FieldTypeSelect      // 選択肢付き文字列
+	FieldTypeFloat       // float64
 	FieldTypeStringSlice // []string
 	FieldTypeStringMap   // map[string]string
 	FieldTypeStructMap   // map[string]struct
@@ -36,7 +37,7 @@ var CategoryDefinitions = []CategoryDef{
 	{Name: "paste", DisplayName: "Paste Mode", Icon: "📋", Fields: []string{"paste.bracketed_paste", "paste.max_bytes", "paste.max_lines", "paste.timeout_seconds"}},
 	{Name: "streaming", DisplayName: "Streaming", Icon: "📺", Fields: []string{"streaming.idle_timeout_seconds", "streaming.show_file_info", "streaming.show_search_progress", "streaming.stream_bash_output"}},
 	{Name: "bash", DisplayName: "Bash Safety", Icon: "💻", Fields: []string{"bash.allow_inline_edit", "bash.allow_pipe", "bash.allow_redirect", "bash.safe_commands", "bash.safety_level"}},
-	{Name: "project_map", DisplayName: "Project Map", Icon: "🗺️", Fields: []string{"project_map.additional_ignore_dirs", "project_map.enabled", "project_map.max_tokens"}},
+	{Name: "project_map", DisplayName: "Project Map", Icon: "🗺️", Fields: []string{"project_map.additional_ignore_dirs", "project_map.context_ratio", "project_map.enabled"}},
 	{Name: "git_stage", DisplayName: "Git Settings", Icon: "📂", Fields: []string{"git_stage.batch_confirm"}},
 	{Name: "plan_mode", DisplayName: "Plan Mode", Icon: "📋", Fields: []string{"plan_mode.max_retry", "plan_mode.step_timeout"}},
 	{Name: "lsp", DisplayName: "LSP Servers", Icon: "🔧", Fields: []string{"lsp.enabled", "lsp.skip_install_prompt"}},
@@ -92,8 +93,8 @@ var FieldTypeMap = map[string]ConfigFieldType{
 	"plan_mode.max_retry":                FieldTypeInt,
 	"plan_mode.step_timeout":             FieldTypeInt,
 	"project_map.additional_ignore_dirs": FieldTypeStringSlice,
+	"project_map.context_ratio":          FieldTypeFloat,
 	"project_map.enabled":                FieldTypeBool,
-	"project_map.max_tokens":             FieldTypeInt,
 	"prompt_cache.enabled":               FieldTypeBool,
 	"provider_models":                    FieldTypeStructMap,
 	"streaming.idle_timeout_seconds":     FieldTypeInt,
@@ -161,8 +162,8 @@ var FieldDescriptions = map[string]string{
 	"plan_mode.max_retry":                "最大リトライ回数",
 	"plan_mode.step_timeout":             "ステップタイムアウト（秒）",
 	"project_map.additional_ignore_dirs": "追加除外ディレクトリ（list_dir と共通）",
+	"project_map.context_ratio":          "ProjectMap のベース比率（0.01-0.10、デフォルト: 0.02。大規模 repo では 0.03-0.04 に自動補正）",
 	"project_map.enabled":                "セッション開始時にプロジェクト構造マップを生成・注入",
-	"project_map.max_tokens":             "ProjectMap のトークン上限",
 	"prompt_cache.enabled":               "有効化（cache_control ブレークポイントを設定）",
 	"provider_models":                    "プロバイダーごとのモデル設定",
 	"streaming.idle_timeout_seconds":     "アイドルタイムアウト（秒）",

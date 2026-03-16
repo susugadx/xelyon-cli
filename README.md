@@ -104,7 +104,7 @@ Language Server Protocol (LSP) を活用してIDE並みのコード理解を実�
 ### 📊 Context Window 管理
 長時間の会話でもトークン上限を気にせず作業。
 - **`/tokens`**: 現在のトークン使用量と上限を確認
-- **Project Map 自動注入**: 起動時にプロジェクト構造マップを生成し、主要ファイル・関数位置・行数を system prompt に追加
+- **Project Map 自動注入**: 起動時にプロジェクト構造マップを生成し、主要ファイル・関数位置・行数を system prompt に追加。大規模 repo では予算を自動で 2%-4% に引き上げ
 - **自動圧縮**: Context 100K または 80% 到達で自動的に履歴を圧縮（デフォルトON）
 - **圧縮専用モデル**: OpenAI は GPT-5 Mini、Gemini は Flash-Lite、Claude/Bedrock は Haiku で低コスト圧縮
 - **手動圧縮**: `/compress [N]` で履歴を圧縮（最新N件を保持）

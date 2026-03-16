@@ -12,7 +12,7 @@ func GetProviderCompressThreshold(provider string, model string) int {
 	case "claude", "bedrock":
 		return 150000 // 200K pricing cliff回避
 	case "deepseek":
-		return 50000 // 64K物理上限前
+		return 50000 // 128K物理上限より十分手前
 	case "openai":
 		lm := strings.ToLower(model)
 		if strings.Contains(lm, "5.4") {

@@ -3,6 +3,8 @@ package config
 import (
 	"fmt"
 	"io"
+	"math"
+	"strconv"
 	"strings"
 
 	"github.com/fatih/color"
@@ -115,6 +117,7 @@ func ValidateConfig(cfg *Config) ValidationResult {
 	validateNumericRange(&result, "paste.max_lines", cfg.Paste.MaxLines, 100, 100000, 10000)
 	validateNumericRange(&result, "paste.timeout_seconds", cfg.Paste.TimeoutSeconds, 10, 600, 60)
 	validateNumericRange(&result, "streaming.idle_timeout_seconds", cfg.Streaming.IdleTimeoutSeconds, 10, 7200, 30)
+	validateProjectMapContextRatio(&result, cfg.ProjectMap.ContextRatio)
 
 	// 5. Bash安全性レベル検証
 	if cfg.Bash.SafetyLevel != "" {
@@ -150,6 +153,35 @@ func validateNumericRange(result *ValidationResult, field string, value, min, ma
 			CanAutoFix: true,
 			FixedValue: defaultVal,
 		})
+	}
+}
+
+func validateProjectMapContextRatio(result *ValidationResult, value float64) {
+	if !math.IsNaN(value) && !math.IsInf(value, 0) && value >= ProjectMapContextRatioMin && value <= ProjectMapContextRatioMax {
+		return
+	}
+
+	result.Issues = append(result.Issues, ValidationIssue{
+		Field:      "project_map.context_ratio",
+		Value:      formatFloatValidationValue(value),
+		Message:    fmt.Sprintf("有効範囲外です (有効: %.2f-%.2f)", ProjectMapContextRatioMin, ProjectMapContextRatioMax),
+		Suggestion: fmt.Sprintf("%.2f", ProjectMapContextRatioDefault),
+		Severity:   "warning",
+		CanAutoFix: true,
+		FixedValue: ProjectMapContextRatioDefault,
+	})
+}
+
+func formatFloatValidationValue(value float64) string {
+	switch {
+	case math.IsNaN(value):
+		return "NaN"
+	case math.IsInf(value, 1):
+		return "+Inf"
+	case math.IsInf(value, -1):
+		return "-Inf"
+	default:
+		return strconv.FormatFloat(value, 'g', -1, 64)
 	}
 }
 
@@ -315,6 +347,11 @@ func ApplyAutoFixes(cfg *Config, result ValidationResult) int {
 		case "streaming.idle_timeout_seconds":
 			if v, ok := issue.FixedValue.(int); ok {
 				cfg.Streaming.IdleTimeoutSeconds = v
+				fixCount++
+			}
+		case "project_map.context_ratio":
+			if v, ok := issue.FixedValue.(float64); ok {
+				cfg.ProjectMap.ContextRatio = v
 				fixCount++
 			}
 		case "bash.safety_level":

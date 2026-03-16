@@ -241,6 +241,8 @@ func (t ConfigFieldType) String() string {
 		return "bool"
 	case FieldTypeInt:
 		return "int"
+	case FieldTypeFloat:
+		return "float"
 	case FieldTypeString:
 		return "string"
 	case FieldTypeSelect:

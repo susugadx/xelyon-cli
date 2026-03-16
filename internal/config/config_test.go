@@ -91,8 +91,8 @@ func TestDefaultConfig(t *testing.T) {
 	if !cfg.ProjectMap.Enabled {
 		t.Error("ProjectMap.Enabled should default to true")
 	}
-	if cfg.ProjectMap.MaxTokens != 4000 {
-		t.Errorf("ProjectMap.MaxTokens = %d, want 4000", cfg.ProjectMap.MaxTokens)
+	if cfg.ProjectMap.ContextRatio != ProjectMapContextRatioDefault {
+		t.Errorf("ProjectMap.ContextRatio = %f, want %f", cfg.ProjectMap.ContextRatio, ProjectMapContextRatioDefault)
 	}
 }
 

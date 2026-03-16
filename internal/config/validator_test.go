@@ -3,6 +3,7 @@ package config
 import (
 	"bytes"
 	"io"
+	"math"
 	"os"
 	"testing"
 
@@ -163,16 +164,58 @@ func TestValidateConfig_InvalidBashSafetyLevel(t *testing.T) {
 	}
 }
 
+func TestValidateConfig_ProjectMapContextRatio(t *testing.T) {
+	tests := []struct {
+		name  string
+		value float64
+		want  string
+	}{
+		{name: "too small", value: 0.005, want: "0.005"},
+		{name: "too large", value: 0.5, want: "0.5"},
+		{name: "nan", value: math.NaN(), want: "NaN"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.ProjectMap.ContextRatio = tt.value
+
+			result := ValidateConfig(cfg)
+
+			found := false
+			for _, issue := range result.Issues {
+				if issue.Field != "project_map.context_ratio" {
+					continue
+				}
+				found = true
+				if issue.Severity != "warning" {
+					t.Errorf("Severity = %s, want warning", issue.Severity)
+				}
+				if issue.Value != tt.want {
+					t.Errorf("Value = %q, want %q", issue.Value, tt.want)
+				}
+				if issue.FixedValue != ProjectMapContextRatioDefault {
+					t.Errorf("FixedValue = %v, want %v", issue.FixedValue, ProjectMapContextRatioDefault)
+				}
+			}
+			if !found {
+				t.Fatal("Should have issue for project_map.context_ratio")
+			}
+		})
+	}
+}
+
 func TestApplyAutoFixes(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.DefaultProvider = "invalid"
 	cfg.LoopDetection.Threshold = 100
+	cfg.ProjectMap.ContextRatio = 0.5
 
 	result := ValidateConfig(cfg)
 	fixCount := ApplyAutoFixes(cfg, result)
 
-	if fixCount < 2 {
-		t.Errorf("ApplyAutoFixes should fix at least 2 issues, got %d", fixCount)
+	if fixCount < 3 {
+		t.Errorf("ApplyAutoFixes should fix at least 3 issues, got %d", fixCount)
 	}
 
 	// Verify fixes were applied
@@ -181,6 +224,9 @@ func TestApplyAutoFixes(t *testing.T) {
 	}
 	if cfg.LoopDetection.Threshold != 3 {
 		t.Errorf("LoopDetection.Threshold should be fixed to 3, got %d", cfg.LoopDetection.Threshold)
+	}
+	if cfg.ProjectMap.ContextRatio != ProjectMapContextRatioDefault {
+		t.Errorf("ProjectMap.ContextRatio should be fixed to %v, got %v", ProjectMapContextRatioDefault, cfg.ProjectMap.ContextRatio)
 	}
 }
 
