@@ -41,8 +41,9 @@ type OutputConfig struct {
 
 // GeneralConfig は一般設定
 type GeneralConfig struct {
-	Language      string `yaml:"language"`        // 表示言語（ja, en）デフォルト: ja
-	ToolLoopLimit int    `yaml:"tool_loop_limit"` // Max tool loop iterations (0 = unlimited, default)
+	Language              string `yaml:"language"`                // 表示言語（ja, en）デフォルト: ja
+	ToolLoopLimit         int    `yaml:"tool_loop_limit"`         // Max tool loop iterations (0 = unlimited, default)
+	ClearAssistantContent bool   `yaml:"clear_assistant_content"` // Clear assistant narration from history on tool calls (currently OpenAI/Gemini)
 }
 
 // CompressionConfig は会話履歴圧縮の設定
@@ -137,8 +138,9 @@ type GitStageConfig struct {
 
 // PlanModeConfig は Plan Mode の設定
 type PlanModeConfig struct {
-	MaxRetry    int `yaml:"max_retry"`    // 自動リトライ回数（デフォルト: 10）
-	StepTimeout int `yaml:"step_timeout"` // ステップタイムアウト秒（デフォルト: 600）
+	MaxRetry               int  `yaml:"max_retry"`                 // 自動リトライ回数（デフォルト: 10）
+	StepTimeout            int  `yaml:"step_timeout"`              // ステップタイムアウト秒（デフォルト: 600）
+	ClearContextOnApproval bool `yaml:"clear_context_on_approval"` // Clear investigation context after plan approval
 }
 
 // OpenAIConfig は OpenAI プロバイダーの設定

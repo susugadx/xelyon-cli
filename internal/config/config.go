@@ -42,8 +42,9 @@ func DefaultConfig() *Config {
 		DefaultProvider: "deepseek",
 		DefaultModel:    "deepseek-chat",
 		General: GeneralConfig{
-			Language:      "ja", // デフォルト: 日本語
-			ToolLoopLimit: 0,    // 0 = unlimited tool loop (default)
+			Language:              "ja", // デフォルト: 日本語
+			ToolLoopLimit:         0,    // 0 = unlimited tool loop (default)
+			ClearAssistantContent: true,
 		},
 		ProviderModels: map[string]ProviderModelConfig{
 			"deepseek": {
@@ -152,8 +153,9 @@ func DefaultConfig() *Config {
 			BatchConfirm: true,
 		},
 		PlanMode: PlanModeConfig{
-			MaxRetry:    10,
-			StepTimeout: 600, // 10分
+			MaxRetry:               10,
+			StepTimeout:            600, // 10分
+			ClearContextOnApproval: true,
 		},
 		LSP: LSPConfig{
 			Enabled: true,

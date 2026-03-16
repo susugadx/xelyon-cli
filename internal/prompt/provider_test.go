@@ -15,6 +15,7 @@ func TestGetProviderPrefix_Gemini(t *testing.T) {
 	checks := []string{
 		"## Provider Notes",
 		"raw JSON",
+		"briefly state what you are about to do",
 	}
 	for _, check := range checks {
 		if !strings.Contains(prefix, check) {
@@ -96,6 +97,9 @@ func TestGetProviderPrefix_OpenAI(t *testing.T) {
 	}
 	if !strings.Contains(prefix, "byte corruption") {
 		t.Error("openai prefix missing byte corruption rule")
+	}
+	if !strings.Contains(prefix, "briefly state what you are about to do") {
+		t.Error("openai prefix missing narration rule")
 	}
 }
 

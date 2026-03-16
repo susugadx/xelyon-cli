@@ -91,6 +91,45 @@ func (st *Storage) Save(session *Session) error {
 	return st.saveMetadata(session)
 }
 
+// Rewrite はセッション全体をJSONLファイルに再書き込みする。
+func (st *Storage) Rewrite(session *Session) error {
+	filePath := st.sessionPath(session.ID)
+
+	if len(session.Messages) == 0 {
+		if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("failed to remove history file: %w", err)
+		}
+		return st.saveMetadata(session)
+	}
+
+	f, err := os.OpenFile(filePath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
+	if err != nil {
+		return fmt.Errorf("failed to rewrite history file: %w", err)
+	}
+	defer f.Close()
+
+	for _, msg := range session.Messages {
+		data, err := json.Marshal(msg)
+		if err != nil {
+			return fmt.Errorf("failed to marshal message: %w", err)
+		}
+
+		if st.encryption {
+			encrypted, err := crypto.EncryptSession(data, st.passphrase)
+			if err != nil {
+				return fmt.Errorf("failed to encrypt message: %w", err)
+			}
+			data = encrypted
+		}
+
+		if _, err := f.Write(append(data, '\n')); err != nil {
+			return fmt.Errorf("failed to rewrite message: %w", err)
+		}
+	}
+
+	return st.saveMetadata(session)
+}
+
 // Load はセッションファイルから読み込み
 func (st *Storage) Load(sessionID string) (*Session, error) {
 	// メタデータを読み込み

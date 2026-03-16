@@ -52,12 +52,14 @@ var Sections = map[string]SectionInfo{
 		Title: "一般設定",
 		Icon:  "⚙️",
 		Fields: map[string]string{
-			"language":        "表示言語（ja, en）",
-			"tool_loop_limit": "ツールループ最大回数（0で無制限）",
+			"language":                "表示言語（ja, en）",
+			"tool_loop_limit":         "ツールループ最大回数（0で無制限）",
+			"clear_assistant_content": "OpenAI / Gemini のツール呼び出し時 assistant 実況テキストを History から除去",
 		},
 		FieldTypes: map[string]string{
-			"language":        "select",
-			"tool_loop_limit": "int",
+			"language":                "select",
+			"tool_loop_limit":         "int",
+			"clear_assistant_content": "bool",
 		},
 		SelectOpts: map[string][]string{
 			"language": {"ja", "en"},
@@ -248,12 +250,14 @@ var Sections = map[string]SectionInfo{
 		Title: "Plan Mode設定",
 		Icon:  "📋",
 		Fields: map[string]string{
-			"max_retry":    "最大リトライ回数",
-			"step_timeout": "ステップタイムアウト（秒）",
+			"max_retry":                 "最大リトライ回数",
+			"step_timeout":              "ステップタイムアウト（秒）",
+			"clear_context_on_approval": "Plan 承認後に調査フェーズの履歴をクリアして実装を開始",
 		},
 		FieldTypes: map[string]string{
-			"max_retry":    "int",
-			"step_timeout": "int",
+			"max_retry":                 "int",
+			"step_timeout":              "int",
+			"clear_context_on_approval": "bool",
 		},
 	},
 	"lsp": {

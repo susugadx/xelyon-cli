@@ -22,7 +22,7 @@ DeepSeek, OpenAI, Gemini, Claude, Ollama, Groq, OpenRouter, Bedrock をシーム
 
 **OpenAI Responses API 対応**: `gpt-5.2-codex` などの Codex モデルを自動検出し、最適なAPIを選択。
 **DeepSeek Reasoner 対応**: `reasoning_content`（思考内容）のストリーミング表示・ツール実行フローでの保持に対応。
-**プロバイダー別プロンプト最適化**: Geminiなど特定モデルのルール遵守を強化するプレフィックスを自動注入。
+**プロバイダー別プロンプト最適化**: OpenAI / Gemini では短い実況を促し、Gemini など特定モデルのルール遵守を強化するプレフィックスを自動注入。
 **Gemini FCリトライ**: FC失敗時にテキストモードではなくFCモードでリトライ（キャッシュ汚染防止）。idle timeout / thinking timeout / 一般エラーそれぞれで上限付きリトライ。
 **FC rescue JSON修復**: テキストモードで抽出されたツールJSONに生制御文字（改行・タブ等）が含まれる場合、自動修復してパース成功させる。
 
@@ -46,7 +46,8 @@ DeepSeek, OpenAI, Gemini, Claude, Ollama, Groq, OpenRouter, Bedrock をシーム
 2. **単純なQ&A**: 調査のみで回答可能な場合はそのまま終了
 3. **計画生成**: 実装が必要な場合、ステップを JSON で出力
 4. **承認**: ユーザーが計画を確認・承認
-5. **実行**: ステップごとに失敗検知・リトライ付きで順次実行
+5. **コンテキスト軽量化**: 承認後は調査フェーズの履歴をクリアし、承認済みプラン要約だけを残して実装に移行
+6. **実行**: ステップごとに失敗検知・リトライ付きで順次実行
 
 デフォルトは通常モード（ツール個別確認）。軽いタスクにはオーバーヘッドなく即座に応答。
 
@@ -111,6 +112,7 @@ Language Server Protocol (LSP) を活用してIDE並みのコード理解を実�
 - **OpenAI Compact API**: `/compress --compact` でOpenAI独自の圧縮（ユーザーメッセージ保持）
 - **80%/90%警告**: 上限接近時に自動で警告表示
 - **トークン上限エラー時の提案**: エラー発生時に `/compress` または `/clear` を案内
+- **Assistant narration clearing**: ツール呼び出し時に表示した短い実況テキストは History 保存時に自動削除し、入力トークンの再送を抑制
 - **ツール結果の自動truncate**: 3ターン以上前のツール結果（50行超）を送信時に自動圧縮（先頭20行+末尾5行を保持）。元の履歴は保持され、API送信時にのみ適用
 - **Claude系の server-side tool clearing**: Claude / Bedrock / OpenRouter(Claude models) では `clear_tool_uses` により古い `tool_use` / `tool_result` ペア構造をサーバー側で削減し、compaction 発動前に入力トークンを節約
 - **プロンプトキャッシュ最適化**: Claude/Bedrock利用時、安定区間の末尾userメッセージにBPを配置し、古い履歴のキャッシュHIT率を向上（`prompt_cache.enabled: true`で有効）。Opus 4.6の最低キャッシュトークン数（4096）に対応するため、system promptの最終ブロックにcache_controlを配置

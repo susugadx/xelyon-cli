@@ -152,6 +152,50 @@ func TestStorage_Save_Append(t *testing.T) {
 	}
 }
 
+func TestStorage_Rewrite(t *testing.T) {
+	tmpDir := t.TempDir()
+	os.Setenv("HOME", tmpDir)
+	defer os.Unsetenv("HOME")
+
+	storage, err := NewStorage()
+	if err != nil {
+		t.Fatalf("NewStorage failed: %v", err)
+	}
+
+	session := NewSession("test-model")
+	session.AddMessage("user", "Message 1", "test-model")
+	if err := storage.Save(session); err != nil {
+		t.Fatalf("initial save failed: %v", err)
+	}
+
+	session.AddMessage("assistant", "Message 2", "test-model")
+	if err := storage.Save(session); err != nil {
+		t.Fatalf("append save failed: %v", err)
+	}
+
+	session.Messages = []MessageEntry{{
+		Timestamp: time.Now(),
+		Role:      "user",
+		Content:   "Cleared context summary",
+		Model:     "test-model",
+	}}
+	if err := storage.Rewrite(session); err != nil {
+		t.Fatalf("Rewrite failed: %v", err)
+	}
+
+	loaded, err := storage.Load(session.ID)
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	if len(loaded.Messages) != 1 {
+		t.Fatalf("Expected 1 message after rewrite, got %d", len(loaded.Messages))
+	}
+	if loaded.Messages[0].Content != "Cleared context summary" {
+		t.Fatalf("loaded message content = %q, want %q", loaded.Messages[0].Content, "Cleared context summary")
+	}
+}
+
 func TestStorage_Save_EmptyMessages(t *testing.T) {
 	tmpDir := t.TempDir()
 	os.Setenv("HOME", tmpDir)

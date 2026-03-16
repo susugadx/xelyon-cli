@@ -371,15 +371,18 @@ func TestCompactOldToolResults_GraduatedCompression(t *testing.T) {
 
 	result, _ := CompactOldToolResults(history, 50, 20, 5)
 
-	aggressive := result[2].Content
+	oldest := result[2].Content
 	medium := result[22].Content
 	recent := result[32].Content
 
-	if !strings.Contains(aggressive, "truncated") || !strings.Contains(medium, "truncated") || !strings.Contains(recent, "truncated") {
-		t.Fatal("expected all tool results to be truncated")
+	if !strings.Contains(oldest, "Old ") {
+		t.Fatalf("expected oldest tool result to be ultra-compacted, got %q", oldest)
 	}
-	if len(aggressive) >= len(medium) {
-		t.Fatalf("expected age 16 truncation to be shorter than age 6 truncation: %d >= %d", len(aggressive), len(medium))
+	if !strings.Contains(medium, "truncated") || !strings.Contains(recent, "truncated") {
+		t.Fatal("expected medium/recent tool results to be truncated")
+	}
+	if len(oldest) >= len(medium) {
+		t.Fatalf("expected age 16 compaction to be shorter than age 6 truncation: %d >= %d", len(oldest), len(medium))
 	}
 	if len(medium) >= len(recent) {
 		t.Fatalf("expected age 6 truncation to be shorter than age 1 truncation: %d >= %d", len(medium), len(recent))
@@ -1004,7 +1007,7 @@ func TestCompactOldToolResults_Phase0TokenReduction(t *testing.T) {
 	if withLen >= withoutLen {
 		t.Fatalf("Phase 0 should reduce compacted size: with=%d without=%d", withLen, withoutLen)
 	}
-	if withoutLen-withLen < 2000 {
+	if withoutLen-withLen < 1500 {
 		t.Fatalf("expected substantial reduction from Phase 0, diff=%d", withoutLen-withLen)
 	}
 	if metrics.Phase0Clears == 0 {

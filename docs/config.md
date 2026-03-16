@@ -96,6 +96,8 @@ general:
     language: ja
     # ツールループ最大回数（0で無制限）
     tool_loop_limit: 0
+    # OpenAI / Gemini のツール呼び出し時 assistant 実況テキストを History から除去
+    clear_assistant_content: true
 
 # ============================================================
 # 会話履歴圧縮設定
@@ -251,6 +253,8 @@ plan_mode:
     max_retry: 10
     # ステップタイムアウト（秒）
     step_timeout: 600
+    # Plan 承認後に調査フェーズの履歴をクリアして実装を開始
+    clear_context_on_approval: true
 
 # ============================================================
 # LSP連携設定

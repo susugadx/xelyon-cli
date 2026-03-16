@@ -13,7 +13,8 @@ var providerPrefixes = map[string]string{
 	"gemini": "## Provider Notes\n" +
 		"### Gemini-specific\n" +
 		"- Tool calls must be raw JSON, not markdown code blocks\n" +
-		"- Edit the original file directly; do not create derivative temp files\n",
+		"- Edit the original file directly; do not create derivative temp files\n" +
+		"- Before each tool call, briefly state what you are about to do and why in one sentence (e.g. 'Reading auth.go to check the validation logic')\n",
 	"deepseek": "## Provider Notes\n" +
 		"### DeepSeek-specific\n" +
 		"- When function calling is enabled, use tool calls for file operations instead of plain-text descriptions\n" +
@@ -26,7 +27,8 @@ var providerPrefixes = map[string]string{
 		"- Tool calls must be raw JSON, not markdown code blocks or XML wrappers\n",
 	"openai": "## Provider Notes\n" +
 		"### OpenAI-specific\n" +
-		"- For str_replace with mixed Japanese, JSON, or backticks, split the change into smaller edits to avoid byte corruption\n",
+		"- For str_replace with mixed Japanese, JSON, or backticks, split the change into smaller edits to avoid byte corruption\n" +
+		"- Before each tool call, briefly state what you are about to do and why in one sentence (e.g. 'Reading auth.go to check the validation logic')\n",
 	"claude": "## Provider Notes\n" +
 		"### Claude-specific\n" +
 		"- Always use dedicated tools (read_file, search_code, list_dir) instead of bash equivalents; tools provide caching, range tracking, and structured output\n" +

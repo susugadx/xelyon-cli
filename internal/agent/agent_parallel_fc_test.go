@@ -1,11 +1,21 @@
 package agent
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
+
+type reasoningMockProvider struct {
+	mockProvider
+	reasoning string
+}
+
+func (m *reasoningMockProvider) LastReasoningContent() string {
+	return m.reasoning
+}
 
 // TestAddToolCallsToHistory_Single は単一ツール呼び出しで assistant メッセージが1つ作られることを確認（回帰テスト）
 func TestAddToolCallsToHistory_Single(t *testing.T) {
@@ -188,6 +198,181 @@ func TestAddToolCallsToHistory_Empty(t *testing.T) {
 
 	if len(agent.History) != initialLen {
 		t.Errorf("addToolCallsToHistory(nil) added %d messages, want 0", len(agent.History)-initialLen)
+	}
+}
+
+func TestClearAssistantContent_Enabled(t *testing.T) {
+	provider := &reasoningMockProvider{
+		mockProvider: mockProvider{name: "openai"},
+		reasoning:    "internal reasoning",
+	}
+	agent := NewAgent("test-model", provider, false)
+	agent.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
+	agent.cfg().General.ClearAssistantContent = true
+
+	toolCalls := []*tools.ToolCall{{
+		ID:      "call_1",
+		Tool:    "read_file",
+		RawArgs: map[string]any{"path": "/auth.go"},
+	}}
+
+	agent.addToolCallsToHistory("Reading auth.go to check the validation logic.", toolCalls)
+
+	msg := agent.History[len(agent.History)-1]
+	if msg.Content != "" {
+		t.Fatalf("Content = %q, want empty", msg.Content)
+	}
+	if msg.ReasoningContent != "" {
+		t.Fatalf("ReasoningContent = %q, want empty", msg.ReasoningContent)
+	}
+}
+
+func TestClearAssistantContent_Disabled(t *testing.T) {
+	provider := &reasoningMockProvider{
+		mockProvider: mockProvider{name: "openai"},
+		reasoning:    "internal reasoning",
+	}
+	agent := NewAgent("test-model", provider, false)
+	agent.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
+	agent.cfg().General.ClearAssistantContent = false
+
+	toolCalls := []*tools.ToolCall{{
+		ID:      "call_1",
+		Tool:    "read_file",
+		RawArgs: map[string]any{"path": "/auth.go"},
+	}}
+
+	explanation := "Reading auth.go to check the validation logic."
+	agent.addToolCallsToHistory(explanation, toolCalls)
+
+	msg := agent.History[len(agent.History)-1]
+	if msg.Content != explanation {
+		t.Fatalf("Content = %q, want %q", msg.Content, explanation)
+	}
+	if msg.ReasoningContent != "internal reasoning" {
+		t.Fatalf("ReasoningContent = %q, want %q", msg.ReasoningContent, "internal reasoning")
+	}
+}
+
+func TestClearAssistantContent_ToolCallsPreserved(t *testing.T) {
+	provider := &mockProvider{name: "openai"}
+	agent := NewAgent("test-model", provider, false)
+	agent.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
+	agent.cfg().General.ClearAssistantContent = true
+
+	toolCalls := []*tools.ToolCall{{
+		ID:      "call_1",
+		Tool:    "read_file",
+		RawArgs: map[string]any{"path": "/auth.go", "start_line": 10},
+	}}
+
+	agent.addToolCallsToHistory("Reading auth.go.", toolCalls)
+
+	msg := agent.History[len(agent.History)-1]
+	if len(msg.ToolCalls) != 1 {
+		t.Fatalf("ToolCalls length = %d, want 1", len(msg.ToolCalls))
+	}
+	tc := msg.ToolCalls[0]
+	if tc.ID != "call_1" {
+		t.Fatalf("ToolCalls[0].ID = %q, want %q", tc.ID, "call_1")
+	}
+	if tc.Function.Name != "read_file" {
+		t.Fatalf("ToolCalls[0].Function.Name = %q, want %q", tc.Function.Name, "read_file")
+	}
+	if !strings.Contains(tc.Function.Arguments, "\"path\":\"/auth.go\"") {
+		t.Fatalf("ToolCalls[0].Function.Arguments = %q, want path preserved", tc.Function.Arguments)
+	}
+	if !strings.Contains(tc.Function.Arguments, "\"start_line\":10") {
+		t.Fatalf("ToolCalls[0].Function.Arguments = %q, want start_line preserved", tc.Function.Arguments)
+	}
+}
+
+func TestClearAssistantContent_ThoughtSignaturePreserved(t *testing.T) {
+	provider := &mockProvider{name: "gemini"}
+	agent := NewAgent("test-model", provider, false)
+	agent.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
+	agent.cfg().General.ClearAssistantContent = true
+
+	toolCalls := []*tools.ToolCall{
+		{
+			ID:               "call_1",
+			Tool:             "read_file",
+			RawArgs:          map[string]any{"path": "/a.go"},
+			ThoughtSignature: "sig-encrypted-abc",
+			ThoughtParts: []map[string]any{
+				{"text": "thinking...", "thought": true},
+			},
+		},
+		{
+			ID:               "call_2",
+			Tool:             "bash",
+			RawArgs:          map[string]any{"command": "ls"},
+			ThoughtSignature: "sig-encrypted-abc",
+		},
+	}
+
+	agent.addToolCallsToHistory("Reading files first.", toolCalls)
+
+	msg := agent.History[len(agent.History)-1]
+	if msg.ToolCalls[0].ThoughtSignature != "sig-encrypted-abc" {
+		t.Fatalf("ToolCalls[0].ThoughtSignature = %q, want %q", msg.ToolCalls[0].ThoughtSignature, "sig-encrypted-abc")
+	}
+	if len(msg.ToolCalls[0].ThoughtParts) != 1 {
+		t.Fatalf("ToolCalls[0].ThoughtParts length = %d, want 1", len(msg.ToolCalls[0].ThoughtParts))
+	}
+	if msg.ToolCalls[1].ThoughtSignature != "" {
+		t.Fatalf("ToolCalls[1].ThoughtSignature = %q, want empty", msg.ToolCalls[1].ThoughtSignature)
+	}
+}
+
+func TestClearAssistantContent_FinalAnswerNotCleared(t *testing.T) {
+	provider := &reasoningMockProvider{
+		mockProvider: mockProvider{name: "openai"},
+		reasoning:    "internal reasoning",
+	}
+	agent := NewAgent("test-model", provider, false)
+	agent.cfg().General.ClearAssistantContent = true
+
+	finalAnswer := api.Message{
+		Role:             "assistant",
+		Content:          "修正完了です。",
+		ReasoningContent: agent.getLastReasoningContent(),
+	}
+	agent.History = append(agent.History, finalAnswer)
+
+	msg := agent.History[len(agent.History)-1]
+	if msg.Content != "修正完了です。" {
+		t.Fatalf("final answer Content = %q, want preserved", msg.Content)
+	}
+	if msg.ReasoningContent != "internal reasoning" {
+		t.Fatalf("final answer ReasoningContent = %q, want preserved", msg.ReasoningContent)
+	}
+}
+
+func TestClearAssistantContent_DeepSeekPreservedByDefault(t *testing.T) {
+	provider := &reasoningMockProvider{
+		mockProvider: mockProvider{name: "deepseek"},
+		reasoning:    "deepseek reasoning",
+	}
+	agent := NewAgent("test-model", provider, false)
+	agent.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
+	agent.cfg().General.ClearAssistantContent = true
+
+	toolCalls := []*tools.ToolCall{{
+		ID:      "call_1",
+		Tool:    "read_file",
+		RawArgs: map[string]any{"path": "/auth.go"},
+	}}
+
+	explanation := "Reading auth.go to inspect the validation flow."
+	agent.addToolCallsToHistory(explanation, toolCalls)
+
+	msg := agent.History[len(agent.History)-1]
+	if msg.Content != explanation {
+		t.Fatalf("Content = %q, want %q for deepseek", msg.Content, explanation)
+	}
+	if msg.ReasoningContent != "deepseek reasoning" {
+		t.Fatalf("ReasoningContent = %q, want %q for deepseek", msg.ReasoningContent, "deepseek reasoning")
 	}
 }
 

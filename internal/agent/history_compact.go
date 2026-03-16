@@ -12,7 +12,7 @@ const (
 	DefaultMaxLines        = 50
 	DefaultHeadLines       = 20
 	DefaultTailLines       = 5
-	ultraCompactAge        = 20
+	ultraCompactAge        = 10
 	phase0ClearAge         = 3
 	phase0ClearAgeCautious = 6
 	phase0MinContentLen    = 200

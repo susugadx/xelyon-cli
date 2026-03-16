@@ -119,10 +119,12 @@ func (a *Agent) addToolCallsToHistory(response string, toolCalls []*tools.ToolCa
 		}
 	}
 
+	historyContent, historyReasoning := a.assistantToolHistoryContent(explanation, reasoningContent)
+
 	a.History = append(a.History, api.Message{
 		Role:             "assistant",
-		Content:          explanation,
-		ReasoningContent: reasoningContent,
+		Content:          historyContent,
+		ReasoningContent: historyReasoning,
 		ToolCalls:        openAIToolCalls,
 	})
 
@@ -137,6 +139,26 @@ func (a *Agent) addToolCallsToHistory(response string, toolCalls []*tools.ToolCa
 	// （same-turn duplicate や batch merge で省略された call は除外）。
 	if a.Stats != nil {
 		a.Stats.AssistantMessages++
+	}
+}
+
+func (a *Agent) assistantToolHistoryContent(explanation, reasoningContent string) (string, string) {
+	if a.shouldClearAssistantToolContent() {
+		return "", ""
+	}
+	return explanation, reasoningContent
+}
+
+func (a *Agent) shouldClearAssistantToolContent() bool {
+	if !a.cfg().General.ClearAssistantContent {
+		return false
+	}
+
+	switch strings.ToLower(a.ProviderName) {
+	case "openai", "gemini":
+		return true
+	default:
+		return false
 	}
 }
 
@@ -198,11 +220,13 @@ func (a *Agent) addToolCallToHistory(response string, toolCall *tools.ToolCall) 
 	// Function Calling: tool_call_id がある場合は OpenAI 形式で履歴に追加
 	isFunctionCalling := toolCall.ID != ""
 	if isFunctionCalling {
+		historyContent, historyReasoning := a.assistantToolHistoryContent(explanation, reasoningContent)
+
 		// assistant メッセージに tool_calls を含める
 		a.History = append(a.History, api.Message{
 			Role:             "assistant",
-			Content:          explanation, // 説明部分のみ（ツール呼び出しは ToolCalls に）
-			ReasoningContent: reasoningContent,
+			Content:          historyContent, // 説明部分のみ（ツール呼び出しは ToolCalls に）
+			ReasoningContent: historyReasoning,
 			ToolCalls: []api.OpenAIToolCall{{
 				ID:               toolCall.ID,
 				Type:             "function",
