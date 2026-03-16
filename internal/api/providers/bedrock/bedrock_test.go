@@ -187,6 +187,73 @@ func TestBedrockRequest_WithAnthropicBeta(t *testing.T) {
 	}
 }
 
+func TestClearToolUses_Bedrock(t *testing.T) {
+	t.Run("WithCompaction", func(t *testing.T) {
+		cfg := config.DefaultConfig()
+
+		contextManagement, betaHeaders := buildBedrockContextManagement(
+			"global.anthropic.claude-sonnet-4-6-v1",
+			cfg.Compression,
+			[]string{"context-1m-2025-08-07"},
+		)
+
+		if contextManagement == nil {
+			t.Fatal("ContextManagement should be set for supported Bedrock Claude models")
+		}
+		if len(contextManagement.Edits) != 2 {
+			t.Fatalf("len(ContextManagement.Edits) = %d, want 2", len(contextManagement.Edits))
+		}
+		if contextManagement.Edits[0].Type != "clear_tool_uses_20250919" {
+			t.Errorf("Edits[0].Type = %q, want clear_tool_uses_20250919", contextManagement.Edits[0].Type)
+		}
+		if contextManagement.Edits[1].Type != "compact_20260112" {
+			t.Errorf("Edits[1].Type = %q, want compact_20260112", contextManagement.Edits[1].Type)
+		}
+		if !containsString(betaHeaders, "context-management-2025-06-27") {
+			t.Errorf("beta headers should include context-management-2025-06-27, got %v", betaHeaders)
+		}
+		if !containsString(betaHeaders, "compact-2026-01-12") {
+			t.Errorf("beta headers should include compact-2026-01-12, got %v", betaHeaders)
+		}
+	})
+
+	t.Run("ClearOnlyWithoutCompaction", func(t *testing.T) {
+		cfg := config.DefaultConfig()
+		cfg.Compression.ClaudeCompaction = false
+
+		contextManagement, betaHeaders := buildBedrockContextManagement(
+			"global.anthropic.claude-3-5-sonnet-v1",
+			cfg.Compression,
+			nil,
+		)
+
+		if contextManagement == nil {
+			t.Fatal("ContextManagement should be set when clear_tool_uses is enabled")
+		}
+		if len(contextManagement.Edits) != 1 {
+			t.Fatalf("len(ContextManagement.Edits) = %d, want 1", len(contextManagement.Edits))
+		}
+		if contextManagement.Edits[0].Type != "clear_tool_uses_20250919" {
+			t.Errorf("Edits[0].Type = %q, want clear_tool_uses_20250919", contextManagement.Edits[0].Type)
+		}
+		if !containsString(betaHeaders, "context-management-2025-06-27") {
+			t.Errorf("beta headers should include context-management-2025-06-27, got %v", betaHeaders)
+		}
+		if containsString(betaHeaders, "compact-2026-01-12") {
+			t.Errorf("beta headers should not include compact-2026-01-12, got %v", betaHeaders)
+		}
+	})
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
 func TestBedrockRequest_ConfigVersion(t *testing.T) {
 	// config から version を取得する場合のテスト
 	customVersion := "bedrock-2024-01-01"

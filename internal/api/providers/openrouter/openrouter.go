@@ -84,6 +84,24 @@ func isCompactionSupported(model string) bool {
 		strings.Contains(model, "sonnet-4-6") || strings.Contains(model, "sonnet-4.6")
 }
 
+func buildOpenRouterClaudeContextManagement(model string, compression config.CompressionConfig, betaHeaders []string) (*claude.ContextManagement, []string) {
+	if !isClaudeModel(model) {
+		return nil, betaHeaders
+	}
+
+	contextManagement := claude.BuildContextManagement(compression, isCompactionSupported(model))
+	if contextManagement == nil {
+		return nil, betaHeaders
+	}
+
+	return contextManagement, claude.MergeAnthropicBetaHeaders(betaHeaders, contextManagement)
+}
+
+func shouldUseOpenRouterClaudeAPI(model string, compression config.CompressionConfig) bool {
+	contextManagement, _ := buildOpenRouterClaudeContextManagement(model, compression, nil)
+	return contextManagement != nil
+}
+
 // getAnthropicSkinURL は OpenAI 互換 URL から Anthropic Skin URL を導出
 func getAnthropicSkinURL(openaiURL string) string {
 	if idx := strings.Index(openaiURL, "/v1/chat/completions"); idx >= 0 {
@@ -146,9 +164,9 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	model = api.GetDefaultModelWithContext(ctx, model, "openrouter", "anthropic/claude-sonnet-4.6")
 	cfg := config.ResolveContext(ctx, p.effectiveConfig())
 
-	// Claude モデル + Compaction 有効時は Anthropic Skin エンドポイントを使用
-	if isClaudeModel(model) && cfg.Compression.ClaudeCompaction && isCompactionSupported(model) {
-		return p.chatWithClaudeAPI(ctx, systemPrompt, history, model, nil)
+	// Claude モデルで context_management が有効なら Anthropic Skin エンドポイントを使用
+	if shouldUseOpenRouterClaudeAPI(model, cfg.Compression) {
+		return p.chatWithClaudeAPI(ctx, systemPrompt, history, "", model, nil)
 	}
 
 	if api.IsThinkingEnabled(ctx) {
@@ -232,9 +250,8 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	model = api.GetDefaultModelWithContext(ctx, model, "openrouter", "anthropic/claude-sonnet-4.6")
 	cfg := config.ResolveContext(ctx, p.effectiveConfig())
 
-	if isClaudeModel(model) && cfg.Compression.ClaudeCompaction && isCompactionSupported(model) {
-		history = append(history, api.Message{Role: "user", Content: userMessage})
-		return p.chatWithClaudeAPI(ctx, systemPrompt, history, model, image)
+	if shouldUseOpenRouterClaudeAPI(model, cfg.Compression) {
+		return p.chatWithClaudeAPI(ctx, systemPrompt, history, userMessage, model, image)
 	}
 
 	return p.chatWithImageRequest(ctx, systemPrompt, history, userMessage, image, model)
@@ -480,7 +497,7 @@ func (p *Provider) ClearToolChoice() {
 }
 
 // chatWithClaudeAPI は Claude モデル用に Anthropic Skin エンドポイントを使用して通信する
-func (p *Provider) chatWithClaudeAPI(ctx context.Context, systemPrompt string, history []api.Message, model string, image *api.ImageData) (string, error) {
+func (p *Provider) chatWithClaudeAPI(ctx context.Context, systemPrompt string, history []api.Message, userMessage, model string, image *api.ImageData) (string, error) {
 	// メッセージを Anthropic 形式に変換
 	anthropicMessages := claude.ConvertToAnthropicMessages(history)
 
@@ -490,6 +507,31 @@ func (p *Provider) chatWithClaudeAPI(ctx context.Context, systemPrompt string, h
 		claude.SetMessageCacheBreakpointsWithConfigAndEnabled(anthropicMessages, cfg, true)
 	}
 
+	var messages []interface{}
+	for _, msg := range anthropicMessages {
+		messages = append(messages, msg)
+	}
+
+	if image != nil && image.Base64 != "" {
+		messages = append(messages, claude.MultimodalMessage{
+			Role: "user",
+			Content: []claude.ContentPart{
+				{
+					Type: "image",
+					Source: &claude.ImageSource{
+						Type:      "base64",
+						MediaType: image.MediaType,
+						Data:      image.Base64,
+					},
+				},
+				{
+					Type: "text",
+					Text: userMessage,
+				},
+			},
+		})
+	}
+
 	// リクエスト構造体（Anthropic Messages API 形式）
 	type claudeRequest struct {
 		Model             string                    `json:"model"`
@@ -497,7 +539,7 @@ func (p *Provider) chatWithClaudeAPI(ctx context.Context, systemPrompt string, h
 		AnthropicBeta     []string                  `json:"anthropic_beta,omitempty"`
 		MaxTokens         int                       `json:"max_tokens"`
 		System            interface{}               `json:"system,omitempty"`
-		Messages          []claude.AnthropicMessage `json:"messages"`
+		Messages          []interface{}             `json:"messages"`
 		Tools             []claude.ClaudeTool       `json:"tools,omitempty"`
 		Stream            bool                      `json:"stream"`
 		ContextManagement *claude.ContextManagement `json:"context_management,omitempty"`
@@ -508,7 +550,7 @@ func (p *Provider) chatWithClaudeAPI(ctx context.Context, systemPrompt string, h
 		AnthropicVersion: "2023-06-01",
 		MaxTokens:        api.GetMaxOutputTokens(ctx, "openrouter", model),
 		System:           api.BuildSystemFieldWithConfig(systemPrompt, cfg),
-		Messages:         anthropicMessages,
+		Messages:         messages,
 		Stream:           true,
 	}
 
@@ -517,22 +559,7 @@ func (p *Provider) chatWithClaudeAPI(ctx context.Context, systemPrompt string, h
 		reqBody.Tools = claude.GetCombinedClaudeToolsWithContext(ctx, p.mcpTools)
 	}
 
-	// Compaction 設定
-	reqBody.ContextManagement = &claude.ContextManagement{
-		Edits: []claude.ContextEdit{
-			{
-				Type: "compact_20260112",
-				Trigger: &claude.CompactTrigger{
-					Type:  "input_tokens",
-					Value: cfg.Compression.CompactionTrigger,
-				},
-			},
-		},
-	}
-	if reqBody.ContextManagement.Edits[0].Trigger.Value == 0 {
-		reqBody.ContextManagement.Edits[0].Trigger.Value = 150000
-	}
-	reqBody.AnthropicBeta = []string{"compact-2026-01-12"}
+	reqBody.ContextManagement, reqBody.AnthropicBeta = buildOpenRouterClaudeContextManagement(model, cfg.Compression, reqBody.AnthropicBeta)
 
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {

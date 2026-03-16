@@ -115,8 +115,16 @@ compression:
     keep_recent: 20
     # プロバイダーのCompact APIを優先使用
     prefer_compact_api: true
+    # Claude系の compact_20260112 を有効化
     claude_compaction: true
+    # compact のトリガー閾値（デフォルト: 150000）
     compaction_trigger: 150000
+    # Claude系の server-side tool clearing を有効化
+    clear_tool_uses: true
+    # clear_tool_uses のトリガー閾値（デフォルト: 80000）
+    clear_tool_uses_trigger: 80000
+    # tool_use 側の入力もクリアする
+    clear_tool_inputs: false
 
 # ============================================================
 # ループ検知設定
@@ -403,6 +411,39 @@ Context Window（コンテキストウィンドウ）を管理し、トークン
 - **補足**: OpenAI Responses API 対応モデル使用時のみ有効
 - **動作**: 自動圧縮時に `/responses/compact` エンドポイントを呼び出し
 - **フォールバック**: Compact API 失敗時は LLM サマリーに自動フォールバック
+
+#### `claude_compaction`
+- **型**: boolean
+- **デフォルト**: `true`
+- **説明**: Claude 系プロバイダーで `compact_20260112` を有効化
+- **補足**: Claude / Bedrock / OpenRouter(Claude models) の対応モデルでのみ有効
+- **補足**: `clear_tool_uses` とは独立設定。`false` でも `clear_tool_uses: true` なら tool clearing は有効
+
+#### `compaction_trigger`
+- **型**: integer
+- **デフォルト**: `150000`
+- **説明**: `compact_20260112` を発動する input token 閾値
+- **補足**: 最小 `50000`。それ未満は runtime で `50000` に補正
+
+#### `clear_tool_uses`
+- **型**: boolean
+- **デフォルト**: `true`
+- **説明**: Claude 系プロバイダーで `clear_tool_uses_20250919` を有効化
+- **補足**: 古い `tool_use` / `tool_result` ペア構造を server-side で削除し、compaction 前に入力トークンを節約
+- **補足**: `claude_compaction` が `false` でも単独で有効化可能
+
+#### `clear_tool_uses_trigger`
+- **型**: integer
+- **デフォルト**: `80000`
+- **説明**: `clear_tool_uses_20250919` を発動する input token 閾値
+- **補足**: 通常は `compaction_trigger` より小さくして、`clear_tool_uses` → `compact` の順で発動させる
+- **補足**: 最小 `50000`。それ未満は runtime で `50000` に補正
+
+#### `clear_tool_inputs`
+- **型**: boolean
+- **デフォルト**: `false`
+- **説明**: `clear_tool_uses` 実行時に `tool_use` 側の入力引数も削除
+- **補足**: デフォルトでは `tool_result` の clearing のみ。セッション再開時の履歴再構築への影響を避けるため、通常は `false` 推奨
 
 **自動圧縮の動作:**
 1. API呼び出し成功後に `token_threshold`（デフォルト100K）を先にチェック

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
@@ -190,6 +191,172 @@ func rateLimitHandler(retryAfter string) http.HandlerFunc {
 	}
 }
 
+func captureClaudeRequest(t *testing.T, cfg *config.Config, model string) (Request, http.Header) {
+	t.Helper()
+
+	var reqBody Request
+	var headers http.Header
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		headers = r.Header.Clone()
+		if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+			t.Fatalf("Failed to decode request: %v", err)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(Response{
+			Content: []Content{{Type: "text", Text: "ok"}},
+		})
+	})
+
+	t.Setenv("ANTHROPIC_API_URL", server.URL)
+
+	p := New("test-key")
+	ctx := config.WithContext(context.Background(), cfg)
+	_, err := p.ChatWithTools(ctx, "System", []api.Message{{Role: "user", Content: "Hello"}}, model)
+	if err != nil {
+		t.Fatalf("ChatWithTools() error = %v", err)
+	}
+
+	return reqBody, headers
+}
+
+func headerHasBetaValue(header http.Header, value string) bool {
+	for _, raw := range strings.Split(header.Get("anthropic-beta"), ",") {
+		if strings.TrimSpace(raw) == value {
+			return true
+		}
+	}
+	return false
+}
+
+func TestClearToolUses_EditsInRequest(t *testing.T) {
+	cfg := config.DefaultConfig()
+
+	reqBody, _ := captureClaudeRequest(t, cfg, "claude-sonnet-4-6")
+	if reqBody.ContextManagement == nil {
+		t.Fatal("ContextManagement should be set")
+	}
+	if len(reqBody.ContextManagement.Edits) != 2 {
+		t.Fatalf("len(ContextManagement.Edits) = %d, want 2", len(reqBody.ContextManagement.Edits))
+	}
+	if reqBody.ContextManagement.Edits[0].Type != clearToolUsesEditType {
+		t.Errorf("Edits[0].Type = %q, want %q", reqBody.ContextManagement.Edits[0].Type, clearToolUsesEditType)
+	}
+	if reqBody.ContextManagement.Edits[1].Type != compactEditType {
+		t.Errorf("Edits[1].Type = %q, want %q", reqBody.ContextManagement.Edits[1].Type, compactEditType)
+	}
+}
+
+func TestClearToolUses_Disabled(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Compression.ClearToolUses = false
+
+	reqBody, _ := captureClaudeRequest(t, cfg, "claude-sonnet-4-6")
+	if reqBody.ContextManagement == nil {
+		t.Fatal("ContextManagement should be set")
+	}
+	if len(reqBody.ContextManagement.Edits) != 1 {
+		t.Fatalf("len(ContextManagement.Edits) = %d, want 1", len(reqBody.ContextManagement.Edits))
+	}
+	if reqBody.ContextManagement.Edits[0].Type != compactEditType {
+		t.Errorf("Edits[0].Type = %q, want %q", reqBody.ContextManagement.Edits[0].Type, compactEditType)
+	}
+}
+
+func TestClearToolUses_IndependentFromCompaction(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Compression.ClaudeCompaction = false
+
+	reqBody, headers := captureClaudeRequest(t, cfg, "claude-3-5-sonnet")
+	if reqBody.ContextManagement == nil {
+		t.Fatal("ContextManagement should be set when clear_tool_uses is enabled")
+	}
+	if len(reqBody.ContextManagement.Edits) != 1 {
+		t.Fatalf("len(ContextManagement.Edits) = %d, want 1", len(reqBody.ContextManagement.Edits))
+	}
+	if reqBody.ContextManagement.Edits[0].Type != clearToolUsesEditType {
+		t.Errorf("Edits[0].Type = %q, want %q", reqBody.ContextManagement.Edits[0].Type, clearToolUsesEditType)
+	}
+	if !headerHasBetaValue(headers, contextManagementBetaHeader) {
+		t.Errorf("anthropic-beta should include %q, got %q", contextManagementBetaHeader, headers.Get("anthropic-beta"))
+	}
+	if headerHasBetaValue(headers, compactBetaHeader) {
+		t.Errorf("anthropic-beta should not include %q when compaction is disabled, got %q", compactBetaHeader, headers.Get("anthropic-beta"))
+	}
+}
+
+func TestClearToolUses_TriggerOrder(t *testing.T) {
+	cfg := config.DefaultConfig()
+
+	reqBody, _ := captureClaudeRequest(t, cfg, "claude-sonnet-4-6")
+	if reqBody.ContextManagement == nil || len(reqBody.ContextManagement.Edits) != 2 {
+		t.Fatal("ContextManagement.Edits should contain clear_tool_uses and compact")
+	}
+
+	clearTrigger := reqBody.ContextManagement.Edits[0].Trigger
+	compactTrigger := reqBody.ContextManagement.Edits[1].Trigger
+	if clearTrigger == nil || compactTrigger == nil {
+		t.Fatal("both edits should include trigger")
+	}
+	if clearTrigger.Value >= compactTrigger.Value {
+		t.Errorf("clear trigger = %d, compact trigger = %d, want clear < compact", clearTrigger.Value, compactTrigger.Value)
+	}
+}
+
+func TestClearToolUses_BetaHeader(t *testing.T) {
+	cfg := config.DefaultConfig()
+
+	_, headers := captureClaudeRequest(t, cfg, "claude-sonnet-4-6")
+	if !headerHasBetaValue(headers, contextManagementBetaHeader) {
+		t.Errorf("anthropic-beta should include %q, got %q", contextManagementBetaHeader, headers.Get("anthropic-beta"))
+	}
+	if !headerHasBetaValue(headers, compactBetaHeader) {
+		t.Errorf("anthropic-beta should include %q, got %q", compactBetaHeader, headers.Get("anthropic-beta"))
+	}
+}
+
+func TestClearToolUses_ClearToolInputs(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Compression.ClearToolInputs = true
+
+	reqBody, _ := captureClaudeRequest(t, cfg, "claude-sonnet-4-6")
+	if reqBody.ContextManagement == nil || len(reqBody.ContextManagement.Edits) == 0 {
+		t.Fatal("ContextManagement.Edits should be set")
+	}
+
+	edit := reqBody.ContextManagement.Edits[0]
+	if edit.Type != clearToolUsesEditType {
+		t.Fatalf("Edits[0].Type = %q, want %q", edit.Type, clearToolUsesEditType)
+	}
+	if edit.ClearToolInputs == nil || !*edit.ClearToolInputs {
+		t.Fatal("clear_tool_inputs should be present and true")
+	}
+}
+
+func TestContextManagement_TriggerMinimum(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Compression.ClaudeCompaction = false
+	cfg.Compression.ClearToolUsesTrigger = 1
+
+	reqBody, _ := captureClaudeRequest(t, cfg, "claude-3-5-sonnet")
+	if reqBody.ContextManagement == nil || len(reqBody.ContextManagement.Edits) != 1 {
+		t.Fatal("ContextManagement should contain one clear_tool_uses edit")
+	}
+	if got := reqBody.ContextManagement.Edits[0].Trigger.Value; got != minimumContextEditTrigger {
+		t.Errorf("clear_tool_uses trigger = %d, want %d", got, minimumContextEditTrigger)
+	}
+
+	cfg = config.DefaultConfig()
+	cfg.Compression.CompactionTrigger = 1
+	reqBody, _ = captureClaudeRequest(t, cfg, "claude-sonnet-4-6")
+	if reqBody.ContextManagement == nil || len(reqBody.ContextManagement.Edits) != 2 {
+		t.Fatal("ContextManagement should contain clear_tool_uses and compact edits")
+	}
+	if got := reqBody.ContextManagement.Edits[1].Trigger.Value; got != minimumContextEditTrigger {
+		t.Errorf("compaction trigger = %d, want %d", got, minimumContextEditTrigger)
+	}
+}
+
 func TestClaudeProvider_ChatWithTools_NonStreaming(t *testing.T) {
 	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
@@ -336,6 +503,68 @@ func TestClaudeProvider_ChatWithImage_WithImage(t *testing.T) {
 	}
 	if result != "Image analysis complete" {
 		t.Errorf("ChatWithImage() = %q, want 'Image analysis complete'", result)
+	}
+}
+
+func TestClaudeProvider_ChatWithImage_ClearToolUsesOnly(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Compression.ClaudeCompaction = false
+
+	var reqBody MultimodalRequest
+	var headers http.Header
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		headers = r.Header.Clone()
+		if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+			t.Fatalf("Failed to decode request: %v", err)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(Response{
+			Content: []Content{{Type: "text", Text: "Image analysis complete"}},
+		})
+	})
+
+	t.Setenv("ANTHROPIC_API_URL", server.URL)
+
+	p := New("test-key")
+	ctx := config.WithContext(context.Background(), cfg)
+	image := &api.ImageData{Base64: "dGVzdA==", MediaType: "image/png"}
+
+	result, err := p.ChatWithImage(ctx, "System", nil, "Describe this", image, "claude-3-5-sonnet")
+	if err != nil {
+		t.Fatalf("ChatWithImage() error = %v", err)
+	}
+	if result != "Image analysis complete" {
+		t.Errorf("ChatWithImage() = %q, want %q", result, "Image analysis complete")
+	}
+	if reqBody.ContextManagement == nil || len(reqBody.ContextManagement.Edits) != 1 {
+		t.Fatal("ContextManagement should contain only clear_tool_uses")
+	}
+	if reqBody.ContextManagement.Edits[0].Type != clearToolUsesEditType {
+		t.Errorf("Edits[0].Type = %q, want %q", reqBody.ContextManagement.Edits[0].Type, clearToolUsesEditType)
+	}
+	if !headerHasBetaValue(headers, contextManagementBetaHeader) {
+		t.Errorf("anthropic-beta should include %q, got %q", contextManagementBetaHeader, headers.Get("anthropic-beta"))
+	}
+	if headerHasBetaValue(headers, compactBetaHeader) {
+		t.Errorf("anthropic-beta should not include %q when compaction is disabled, got %q", compactBetaHeader, headers.Get("anthropic-beta"))
+	}
+
+	messages := reqBody.Messages
+	if len(messages) == 0 {
+		t.Fatal("Messages should not be empty")
+	}
+
+	lastMsg, ok := messages[len(messages)-1].(map[string]interface{})
+	if !ok {
+		t.Fatalf("Last message should be a map, got %T", messages[len(messages)-1])
+	}
+	content, ok := lastMsg["content"].([]interface{})
+	if !ok {
+		t.Fatalf("Last message content should be an array, got %T", lastMsg["content"])
+	}
+	if len(content) != 2 {
+		t.Errorf("Content length = %d, want 2 (image + text)", len(content))
 	}
 }
 

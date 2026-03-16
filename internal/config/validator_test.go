@@ -147,6 +147,38 @@ func TestValidateConfig_RangeValidation(t *testing.T) {
 	}
 }
 
+func TestValidateConfig_ContextTriggerMinimum(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Compression.CompactionTrigger = 1
+	cfg.Compression.ClearToolUsesTrigger = -1
+
+	result := ValidateConfig(cfg)
+
+	expected := map[string]int{
+		"compression.compaction_trigger":      150000,
+		"compression.clear_tool_uses_trigger": 80000,
+	}
+
+	for field, fixedValue := range expected {
+		found := false
+		for _, issue := range result.Issues {
+			if issue.Field != field {
+				continue
+			}
+			found = true
+			if issue.Severity != "warning" {
+				t.Errorf("%s severity = %s, want warning", field, issue.Severity)
+			}
+			if issue.FixedValue != fixedValue {
+				t.Errorf("%s FixedValue = %v, want %d", field, issue.FixedValue, fixedValue)
+			}
+		}
+		if !found {
+			t.Errorf("Should have warning for %s", field)
+		}
+	}
+}
+
 func TestValidateConfig_NegativeToolLoopLimit(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.General.ToolLoopLimit = -1
@@ -239,12 +271,14 @@ func TestApplyAutoFixes(t *testing.T) {
 	cfg.General.ToolLoopLimit = -1
 	cfg.LoopDetection.Threshold = 100
 	cfg.ProjectMap.ContextRatio = 0.5
+	cfg.Compression.CompactionTrigger = 1
+	cfg.Compression.ClearToolUsesTrigger = -1
 
 	result := ValidateConfig(cfg)
 	fixCount := ApplyAutoFixes(cfg, result)
 
-	if fixCount < 4 {
-		t.Errorf("ApplyAutoFixes should fix at least 4 issues, got %d", fixCount)
+	if fixCount < 6 {
+		t.Errorf("ApplyAutoFixes should fix at least 6 issues, got %d", fixCount)
 	}
 
 	// Verify fixes were applied
@@ -259,6 +293,12 @@ func TestApplyAutoFixes(t *testing.T) {
 	}
 	if cfg.ProjectMap.ContextRatio != ProjectMapContextRatioDefault {
 		t.Errorf("ProjectMap.ContextRatio should be fixed to %v, got %v", ProjectMapContextRatioDefault, cfg.ProjectMap.ContextRatio)
+	}
+	if cfg.Compression.CompactionTrigger != 150000 {
+		t.Errorf("Compression.CompactionTrigger should be fixed to 150000, got %d", cfg.Compression.CompactionTrigger)
+	}
+	if cfg.Compression.ClearToolUsesTrigger != 80000 {
+		t.Errorf("Compression.ClearToolUsesTrigger should be fixed to 80000, got %d", cfg.Compression.ClearToolUsesTrigger)
 	}
 }
 

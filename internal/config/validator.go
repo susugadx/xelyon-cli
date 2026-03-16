@@ -11,6 +11,8 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/stdio"
 )
 
+const minimumClaudeContextTrigger = 50000
+
 // ValidProviders は有効なプロバイダー名の一覧
 // internal/api/provider.go の NewProvider() と同期させること
 var ValidProviders = []string{
@@ -125,6 +127,8 @@ func ValidateConfig(cfg *Config) ValidationResult {
 	validateNumericRange(&result, "api_retry.max_delay", cfg.APIRetry.MaxDelay, 1, 300, 30)
 	validateNumericRange(&result, "api_retry.timeout", cfg.APIRetry.Timeout, 30, 7200, 3600)
 	validateNumericRange(&result, "compression.keep_recent", cfg.Compression.KeepRecent, 1, 100, 10)
+	validateNumericMinimum(&result, "compression.compaction_trigger", cfg.Compression.CompactionTrigger, minimumClaudeContextTrigger, 150000)
+	validateNumericMinimum(&result, "compression.clear_tool_uses_trigger", cfg.Compression.ClearToolUsesTrigger, minimumClaudeContextTrigger, 80000)
 	validateNumericRange(&result, "diff.context_lines", cfg.Diff.ContextLines, 0, 100, 10)
 
 	validateNumericRange(&result, "paste.max_lines", cfg.Paste.MaxLines, 100, 100000, 10000)
@@ -161,6 +165,23 @@ func validateNumericRange(result *ValidationResult, field string, value, min, ma
 			Field:      field,
 			Value:      fmt.Sprintf("%d", value),
 			Message:    fmt.Sprintf("推奨範囲外です (推奨: %d-%d)", min, max),
+			Suggestion: fmt.Sprintf("%d", defaultVal),
+			Severity:   "warning",
+			CanAutoFix: true,
+			FixedValue: defaultVal,
+		})
+	}
+}
+
+func validateNumericMinimum(result *ValidationResult, field string, value, min, defaultVal int) {
+	if value == 0 {
+		return
+	}
+	if value < min {
+		result.Issues = append(result.Issues, ValidationIssue{
+			Field:      field,
+			Value:      fmt.Sprintf("%d", value),
+			Message:    fmt.Sprintf("下限未満です (最小: %d)", min),
 			Suggestion: fmt.Sprintf("%d", defaultVal),
 			Severity:   "warning",
 			CanAutoFix: true,
@@ -345,6 +366,16 @@ func ApplyAutoFixes(cfg *Config, result ValidationResult) int {
 		case "compression.keep_recent":
 			if v, ok := issue.FixedValue.(int); ok {
 				cfg.Compression.KeepRecent = v
+				fixCount++
+			}
+		case "compression.compaction_trigger":
+			if v, ok := issue.FixedValue.(int); ok {
+				cfg.Compression.CompactionTrigger = v
+				fixCount++
+			}
+		case "compression.clear_tool_uses_trigger":
+			if v, ok := issue.FixedValue.(int); ok {
+				cfg.Compression.ClearToolUsesTrigger = v
 				fixCount++
 			}
 		case "diff.context_lines":

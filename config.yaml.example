@@ -65,8 +65,16 @@ compression:
     keep_recent: 20
     # プロバイダーのCompact APIを優先使用
     prefer_compact_api: true
+    # Claude系の compact_20260112 を有効化
     claude_compaction: true
+    # compact のトリガー閾値（デフォルト: 150000）
     compaction_trigger: 150000
+    # Claude系の server-side tool clearing を有効化
+    clear_tool_uses: true
+    # clear_tool_uses のトリガー閾値（デフォルト: 80000）
+    clear_tool_uses_trigger: 80000
+    # tool_use 側の入力もクリアする
+    clear_tool_inputs: false
 
 # ============================================================
 # ループ検知設定

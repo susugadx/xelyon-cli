@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
 
 	// ツール登録のための blank import
 	_ "github.com/susugadx/xelyon-cli/internal/tools/dev"
@@ -129,6 +130,88 @@ func rateLimitHandler(retryAfter string) http.HandlerFunc {
 	}
 }
 
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func TestClearToolUses_OpenRouter(t *testing.T) {
+	cfg := config.DefaultConfig()
+
+	t.Run("ClaudeModel", func(t *testing.T) {
+		contextManagement, betaHeaders := buildOpenRouterClaudeContextManagement(
+			"anthropic/claude-sonnet-4.6",
+			cfg.Compression,
+			nil,
+		)
+
+		if contextManagement == nil {
+			t.Fatal("ContextManagement should be set for Claude models")
+		}
+		if len(contextManagement.Edits) != 2 {
+			t.Fatalf("len(ContextManagement.Edits) = %d, want 2", len(contextManagement.Edits))
+		}
+		if contextManagement.Edits[0].Type != "clear_tool_uses_20250919" {
+			t.Errorf("Edits[0].Type = %q, want clear_tool_uses_20250919", contextManagement.Edits[0].Type)
+		}
+		if contextManagement.Edits[1].Type != "compact_20260112" {
+			t.Errorf("Edits[1].Type = %q, want compact_20260112", contextManagement.Edits[1].Type)
+		}
+		if !containsString(betaHeaders, "context-management-2025-06-27") {
+			t.Errorf("beta headers should include context-management-2025-06-27, got %v", betaHeaders)
+		}
+		if !containsString(betaHeaders, "compact-2026-01-12") {
+			t.Errorf("beta headers should include compact-2026-01-12, got %v", betaHeaders)
+		}
+	})
+
+	t.Run("ClearOnlyWithoutCompaction", func(t *testing.T) {
+		cfg := config.DefaultConfig()
+		cfg.Compression.ClaudeCompaction = false
+
+		contextManagement, betaHeaders := buildOpenRouterClaudeContextManagement(
+			"anthropic/claude-3.5-sonnet",
+			cfg.Compression,
+			nil,
+		)
+
+		if contextManagement == nil {
+			t.Fatal("ContextManagement should be set when clear_tool_uses is enabled")
+		}
+		if len(contextManagement.Edits) != 1 {
+			t.Fatalf("len(ContextManagement.Edits) = %d, want 1", len(contextManagement.Edits))
+		}
+		if contextManagement.Edits[0].Type != "clear_tool_uses_20250919" {
+			t.Errorf("Edits[0].Type = %q, want clear_tool_uses_20250919", contextManagement.Edits[0].Type)
+		}
+		if !containsString(betaHeaders, "context-management-2025-06-27") {
+			t.Errorf("beta headers should include context-management-2025-06-27, got %v", betaHeaders)
+		}
+		if containsString(betaHeaders, "compact-2026-01-12") {
+			t.Errorf("beta headers should not include compact-2026-01-12 when compaction is disabled, got %v", betaHeaders)
+		}
+	})
+
+	t.Run("NonClaudeModel", func(t *testing.T) {
+		contextManagement, betaHeaders := buildOpenRouterClaudeContextManagement(
+			"openai/gpt-5.2",
+			cfg.Compression,
+			[]string{"existing-beta"},
+		)
+
+		if contextManagement != nil {
+			t.Fatal("ContextManagement should be nil for non-Claude models")
+		}
+		if len(betaHeaders) != 1 || betaHeaders[0] != "existing-beta" {
+			t.Errorf("beta headers = %v, want [existing-beta]", betaHeaders)
+		}
+	})
+}
+
 func TestProvider_ChatWithTools_NonStreaming(t *testing.T) {
 	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
@@ -152,8 +235,8 @@ func TestProvider_ChatWithTools_NonStreaming(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Fatalf("Failed to decode request: %v", err)
 		}
-		if req.Model != "anthropic/claude-3.5-sonnet" {
-			t.Errorf("Model = %q, want 'anthropic/claude-3.5-sonnet'", req.Model)
+		if req.Model != "openai/gpt-4-turbo" {
+			t.Errorf("Model = %q, want 'openai/gpt-4-turbo'", req.Model)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -172,7 +255,7 @@ func TestProvider_ChatWithTools_NonStreaming(t *testing.T) {
 	p := New("test-key")
 	history := []api.Message{{Role: "user", Content: "Hello"}}
 
-	result, err := p.ChatWithTools(context.Background(), "System prompt", history, "anthropic/claude-3.5-sonnet")
+	result, err := p.ChatWithTools(context.Background(), "System prompt", history, "openai/gpt-4-turbo")
 	if err != nil {
 		t.Fatalf("ChatWithTools() error = %v", err)
 	}
@@ -260,7 +343,7 @@ func TestProvider_ChatWithImage(t *testing.T) {
 	p := New("test-key")
 	image := &api.ImageData{Base64: "dGVzdA==", MediaType: "image/png"}
 
-	result, err := p.ChatWithImage(context.Background(), "System", nil, "Describe this", image, "anthropic/claude-3.5-sonnet")
+	result, err := p.ChatWithImage(context.Background(), "System", nil, "Describe this", image, "openai/gpt-4-turbo")
 	if err != nil {
 		t.Fatalf("ChatWithImage() error = %v", err)
 	}
@@ -285,6 +368,154 @@ func TestProvider_ChatWithImage(t *testing.T) {
 	}
 	if len(content) != 2 {
 		t.Errorf("Content length = %d, want 2 (image + text)", len(content))
+	}
+}
+
+func TestProvider_ChatWithImage_ClearToolUsesUsesAnthropicSkin(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Compression.ClaudeCompaction = false
+
+	var requestPath string
+	var requestBody struct {
+		Model             string        `json:"model"`
+		AnthropicBeta     []string      `json:"anthropic_beta,omitempty"`
+		Messages          []interface{} `json:"messages"`
+		ContextManagement *struct {
+			Edits []struct {
+				Type string `json:"type"`
+			} `json:"edits"`
+		} `json:"context_management,omitempty"`
+	}
+
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		requestPath = r.URL.Path
+		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+			t.Fatalf("Failed to decode request: %v", err)
+		}
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"Hello\"}}\n\n"))
+		_, _ = w.Write([]byte("data: {\"type\":\"message_stop\"}\n\n"))
+	})
+
+	t.Setenv("OPENROUTER_API_URL", server.URL+"/v1/chat/completions")
+
+	p := New("test-key")
+	ctx := config.WithContext(context.Background(), cfg)
+	image := &api.ImageData{Base64: "dGVzdA==", MediaType: "image/png"}
+
+	result, err := p.ChatWithImage(ctx, "System", nil, "Describe this", image, "anthropic/claude-3.5-sonnet")
+	if err != nil {
+		t.Fatalf("ChatWithImage() error = %v", err)
+	}
+	if result != "Hello" {
+		t.Errorf("ChatWithImage() = %q, want %q", result, "Hello")
+	}
+	if requestPath != "/v1/messages" {
+		t.Errorf("request path = %q, want %q", requestPath, "/v1/messages")
+	}
+	if requestBody.Model != "anthropic/claude-3.5-sonnet" {
+		t.Errorf("Model = %q, want %q", requestBody.Model, "anthropic/claude-3.5-sonnet")
+	}
+	if requestBody.ContextManagement == nil || len(requestBody.ContextManagement.Edits) != 1 {
+		t.Fatal("ContextManagement should contain only clear_tool_uses")
+	}
+	if requestBody.ContextManagement.Edits[0].Type != "clear_tool_uses_20250919" {
+		t.Errorf("Edits[0].Type = %q, want clear_tool_uses_20250919", requestBody.ContextManagement.Edits[0].Type)
+	}
+	if !containsString(requestBody.AnthropicBeta, "context-management-2025-06-27") {
+		t.Errorf("anthropic_beta should include context-management-2025-06-27, got %v", requestBody.AnthropicBeta)
+	}
+	if containsString(requestBody.AnthropicBeta, "compact-2026-01-12") {
+		t.Errorf("anthropic_beta should not include compact-2026-01-12, got %v", requestBody.AnthropicBeta)
+	}
+	if len(requestBody.Messages) == 0 {
+		t.Fatal("Messages should not be empty")
+	}
+
+	lastMsg, ok := requestBody.Messages[len(requestBody.Messages)-1].(map[string]interface{})
+	if !ok {
+		t.Fatalf("Last message should be a map, got %T", requestBody.Messages[len(requestBody.Messages)-1])
+	}
+	content, ok := lastMsg["content"].([]interface{})
+	if !ok {
+		t.Fatalf("Content should be an array for multimodal message, got %T", lastMsg["content"])
+	}
+	if len(content) != 2 {
+		t.Fatalf("Content length = %d, want 2 (image + text)", len(content))
+	}
+
+	firstPart, ok := content[0].(map[string]interface{})
+	if !ok {
+		t.Fatalf("First content part should be a map, got %T", content[0])
+	}
+	if firstPart["type"] != "image" {
+		t.Errorf("First content type = %v, want %q", firstPart["type"], "image")
+	}
+
+	secondPart, ok := content[1].(map[string]interface{})
+	if !ok {
+		t.Fatalf("Second content part should be a map, got %T", content[1])
+	}
+	if secondPart["type"] != "text" {
+		t.Errorf("Second content type = %v, want %q", secondPart["type"], "text")
+	}
+	if secondPart["text"] != "Describe this" {
+		t.Errorf("Second content text = %v, want %q", secondPart["text"], "Describe this")
+	}
+}
+
+func TestProvider_ChatWithTools_ClearToolUsesUsesAnthropicSkin(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Compression.ClaudeCompaction = false
+
+	var requestPath string
+	var requestBody struct {
+		Model             string   `json:"model"`
+		AnthropicBeta     []string `json:"anthropic_beta,omitempty"`
+		ContextManagement *struct {
+			Edits []struct {
+				Type string `json:"type"`
+			} `json:"edits"`
+		} `json:"context_management,omitempty"`
+	}
+
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		requestPath = r.URL.Path
+		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+			t.Fatalf("Failed to decode request: %v", err)
+		}
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"Hello\"}}\n\n"))
+		_, _ = w.Write([]byte("data: {\"type\":\"message_stop\"}\n\n"))
+	})
+
+	t.Setenv("OPENROUTER_API_URL", server.URL+"/v1/chat/completions")
+
+	p := New("test-key")
+	ctx := config.WithContext(context.Background(), cfg)
+	result, err := p.ChatWithTools(ctx, "System", []api.Message{{Role: "user", Content: "Hello"}}, "anthropic/claude-3.5-sonnet")
+	if err != nil {
+		t.Fatalf("ChatWithTools() error = %v", err)
+	}
+	if result != "Hello" {
+		t.Errorf("ChatWithTools() = %q, want %q", result, "Hello")
+	}
+	if requestPath != "/v1/messages" {
+		t.Errorf("request path = %q, want %q", requestPath, "/v1/messages")
+	}
+	if requestBody.ContextManagement == nil || len(requestBody.ContextManagement.Edits) != 1 {
+		t.Fatal("ContextManagement should contain only clear_tool_uses")
+	}
+	if requestBody.ContextManagement.Edits[0].Type != "clear_tool_uses_20250919" {
+		t.Errorf("Edits[0].Type = %q, want clear_tool_uses_20250919", requestBody.ContextManagement.Edits[0].Type)
+	}
+	if !containsString(requestBody.AnthropicBeta, "context-management-2025-06-27") {
+		t.Errorf("anthropic_beta should include context-management-2025-06-27, got %v", requestBody.AnthropicBeta)
+	}
+	if containsString(requestBody.AnthropicBeta, "compact-2026-01-12") {
+		t.Errorf("anthropic_beta should not include compact-2026-01-12, got %v", requestBody.AnthropicBeta)
 	}
 }
 

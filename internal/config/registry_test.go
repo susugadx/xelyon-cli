@@ -119,15 +119,18 @@ func TestSetFieldValue(t *testing.T) {
 func TestFieldTypeMap(t *testing.T) {
 	// FieldTypeMap に重要なフィールドが含まれていることを確認
 	requiredFields := map[string]ConfigFieldType{
-		"default_provider":          FieldTypeSelect,
-		"default_model":             FieldTypeString,
-		"compression.auto_compress": FieldTypeBool,
-		"api_retry.count":           FieldTypeInt,
-		"bash.safety_level":         FieldTypeSelect,
-		"bash.safe_commands":        FieldTypeStringSlice,
-		"command_aliases":           FieldTypeStringMap,
-		"project_map.context_ratio": FieldTypeFloat,
-		"provider_models":           FieldTypeStructMap,
+		"default_provider":               FieldTypeSelect,
+		"default_model":                  FieldTypeString,
+		"compression.auto_compress":      FieldTypeBool,
+		"compression.clear_tool_uses":    FieldTypeBool,
+		"compression.clear_tool_inputs":  FieldTypeBool,
+		"compression.compaction_trigger": FieldTypeInt,
+		"api_retry.count":                FieldTypeInt,
+		"bash.safety_level":              FieldTypeSelect,
+		"bash.safe_commands":             FieldTypeStringSlice,
+		"command_aliases":                FieldTypeStringMap,
+		"project_map.context_ratio":      FieldTypeFloat,
+		"provider_models":                FieldTypeStructMap,
 	}
 
 	for path, expectedType := range requiredFields {
@@ -170,6 +173,8 @@ func TestFieldDescriptions(t *testing.T) {
 	requiredFields := []string{
 		"default_provider",
 		"compression.auto_compress",
+		"compression.clear_tool_uses",
+		"compression.clear_tool_inputs",
 		"api_retry.count",
 		"bash.safety_level",
 		"project_map.context_ratio",

@@ -33,6 +33,16 @@ func init() {
 
 const defaultClaudeURL = "https://api.anthropic.com/v1/messages"
 
+const (
+	compactEditType             = "compact_20260112"
+	clearToolUsesEditType       = "clear_tool_uses_20250919"
+	compactBetaHeader           = "compact-2026-01-12"
+	contextManagementBetaHeader = "context-management-2025-06-27"
+	defaultCompactionTrigger    = 150000
+	defaultClearToolUsesTrigger = 80000
+	minimumContextEditTrigger   = 50000
+)
+
 // Provider はClaude (Anthropic) APIのプロバイダー実装
 type Provider struct {
 	api.BaseProvider
@@ -41,21 +51,101 @@ type Provider struct {
 	runtimeConfig *config.Config
 }
 
-// ContextManagement は Compaction API の設定
+// ContextManagement は Claude Context Management API の設定
 type ContextManagement struct {
 	Edits []ContextEdit `json:"edits"`
 }
 
 // ContextEdit は context_management.edits の要素
 type ContextEdit struct {
-	Type    string          `json:"type"` // "compact_20260112"
-	Trigger *CompactTrigger `json:"trigger,omitempty"`
+	Type            string          `json:"type"` // "compact_20260112" or "clear_tool_uses_20250919"
+	Trigger         *CompactTrigger `json:"trigger,omitempty"`
+	ClearToolInputs *bool           `json:"clear_tool_inputs,omitempty"` // clear_tool_uses 用
 }
 
-// CompactTrigger は compaction のトリガー条件
+// CompactTrigger は context edit のトリガー条件
 type CompactTrigger struct {
 	Type  string `json:"type"`  // "input_tokens"
 	Value int    `json:"value"` // トークン数（最低 50000）
+}
+
+// BuildContextManagement は Claude 系プロバイダー向けの context_management を構築する。
+func BuildContextManagement(compression config.CompressionConfig, compactionSupported bool) *ContextManagement {
+	edits := make([]ContextEdit, 0, 2)
+	if compression.ClearToolUses {
+		edit := ContextEdit{
+			Type: clearToolUsesEditType,
+			Trigger: &CompactTrigger{
+				Type:  "input_tokens",
+				Value: normalizeContextEditTrigger(compression.ClearToolUsesTrigger, defaultClearToolUsesTrigger),
+			},
+		}
+		if compression.ClearToolInputs {
+			clearToolInputs := true
+			edit.ClearToolInputs = &clearToolInputs
+		}
+		edits = append(edits, edit)
+	}
+
+	if compression.ClaudeCompaction && compactionSupported {
+		edits = append(edits, ContextEdit{
+			Type: compactEditType,
+			Trigger: &CompactTrigger{
+				Type:  "input_tokens",
+				Value: normalizeContextEditTrigger(compression.CompactionTrigger, defaultCompactionTrigger),
+			},
+		})
+	}
+
+	if len(edits) == 0 {
+		return nil
+	}
+
+	return &ContextManagement{Edits: edits}
+}
+
+// MergeAnthropicBetaHeaders は Claude Context Management に必要な beta ヘッダーを重複なく追加する。
+func MergeAnthropicBetaHeaders(headers []string, contextManagement *ContextManagement) []string {
+	merged := append([]string{}, headers...)
+	if contextManagement == nil {
+		return merged
+	}
+
+	for _, edit := range contextManagement.Edits {
+		switch edit.Type {
+		case compactEditType:
+			merged = appendUniqueStrings(merged, compactBetaHeader)
+		case clearToolUsesEditType:
+			merged = appendUniqueStrings(merged, contextManagementBetaHeader)
+		}
+	}
+	return merged
+}
+
+func normalizeContextEditTrigger(value, defaultValue int) int {
+	if value == 0 {
+		return defaultValue
+	}
+	if value < minimumContextEditTrigger {
+		return minimumContextEditTrigger
+	}
+	return value
+}
+
+func appendUniqueStrings(headers []string, extras ...string) []string {
+	for _, extra := range extras {
+		found := false
+		for _, header := range headers {
+			if header == extra {
+				found = true
+				break
+			}
+		}
+		if !found {
+			headers = append(headers, extra)
+		}
+	}
+	return headers
 }
 
 // New は新しいProviderを作成
@@ -254,7 +344,7 @@ type requestResult struct {
 
 // executeRequest はClaude API呼び出しの共通処理
 // withImage: 画像付きリクエストの場合はtrue（スピナー表示に影響）
-func (p *Provider) executeRequest(ctx context.Context, reqBody interface{}, withImage bool) (*requestResult, error) {
+func (p *Provider) executeRequest(ctx context.Context, reqBody interface{}, contextManagement *ContextManagement, withImage bool) (*requestResult, error) {
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, err
@@ -283,10 +373,7 @@ func (p *Provider) executeRequest(ctx context.Context, reqBody interface{}, with
 	if len(pCfg.AnthropicBeta) > 0 {
 		betaHeaders = append(betaHeaders, pCfg.AnthropicBeta...)
 	}
-	// Compaction が有効な場合は beta ヘッダーを追加
-	if cfg.Compression.ClaudeCompaction {
-		betaHeaders = append(betaHeaders, "compact-2026-01-12")
-	}
+	betaHeaders = MergeAnthropicBetaHeaders(betaHeaders, contextManagement)
 	if len(betaHeaders) > 0 {
 		req.Header.Set("anthropic-beta", strings.Join(betaHeaders, ","))
 	}
@@ -354,6 +441,10 @@ func (p *Provider) supportsClaudeCompactionWithConfig(cfg *config.Config, model 
 	return isCompactionSupported(model)
 }
 
+func buildContextManagementForModel(model string, compression config.CompressionConfig) *ContextManagement {
+	return BuildContextManagement(compression, isCompactionSupported(model))
+}
+
 // ChatWithTools は Provider interface の実装（context対応）
 func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
 	// モデル名を設定（config優先、フォールバックはclaude-sonnet-4-6）
@@ -377,24 +468,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		Stream:    true,
 	}
 
-	// Compaction API（Opus 4.6 のみ）
-	if cfg.Compression.ClaudeCompaction && isCompactionSupported(model) {
-		trigger := cfg.Compression.CompactionTrigger
-		if trigger == 0 {
-			trigger = 150000
-		}
-		reqBody.ContextManagement = &ContextManagement{
-			Edits: []ContextEdit{
-				{
-					Type: "compact_20260112",
-					Trigger: &CompactTrigger{
-						Type:  "input_tokens",
-						Value: trigger,
-					},
-				},
-			},
-		}
-	}
+	reqBody.ContextManagement = buildContextManagementForModel(model, cfg.Compression)
 
 	// Extended Thinking 適用
 	if api.IsThinkingEnabled(ctx) {
@@ -418,7 +492,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		reqBody.Tools = GetCombinedClaudeToolsWithContext(ctx, p.mcpTools)
 	}
 
-	result, err := p.executeRequest(ctx, reqBody, false)
+	result, err := p.executeRequest(ctx, reqBody, reqBody.ContextManagement, false)
 	if err != nil {
 		return "", err
 	}
@@ -682,6 +756,8 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 		Stream:    true,
 	}
 
+	reqBody.ContextManagement = buildContextManagementForModel(model, cfg.Compression)
+
 	// Extended Thinking 適用
 	if api.IsThinkingEnabled(ctx) {
 		if IsAdaptiveThinkingModel(model) {
@@ -704,7 +780,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 		reqBody.Tools = GetCombinedClaudeToolsWithContext(ctx, p.mcpTools)
 	}
 
-	result, err := p.executeRequest(ctx, reqBody, true)
+	result, err := p.executeRequest(ctx, reqBody, reqBody.ContextManagement, true)
 	if err != nil {
 		return "", err
 	}

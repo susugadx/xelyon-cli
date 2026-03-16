@@ -47,15 +47,18 @@ type GeneralConfig struct {
 
 // CompressionConfig は会話履歴圧縮の設定
 type CompressionConfig struct {
-	AutoCompress      bool   `yaml:"auto_compress"`                          // 自動圧縮を有効化（デフォルト: true）
-	ThresholdTokens   int    `yaml:"threshold_tokens"`                       // 自動圧縮のトークン閾値（0 = 使用率ベース）
-	ThresholdPercent  int    `yaml:"threshold_percent"`                      // 自動圧縮の使用率閾値（デフォルト: 80%）
-	TokenThreshold    int    `yaml:"token_threshold" json:"token_threshold"` // Context トークン数の絶対閾値（デフォルト: 100000）
-	Model             string `yaml:"model" json:"model"`                     // 圧縮用モデル名（空 = プロバイダー別デフォルト、main = メインモデル）
-	KeepRecent        int    `yaml:"keep_recent"`                            // 保持する最新メッセージ数
-	PreferCompactAPI  bool   `yaml:"prefer_compact_api"`                     // OpenAI Compact API を優先（デフォルト: true）
-	ClaudeCompaction  bool   `yaml:"claude_compaction"`                      // Claude Compaction API 有効化
-	CompactionTrigger int    `yaml:"compaction_trigger"`                     // トリガー閾値（デフォルト 150000）
+	AutoCompress         bool   `yaml:"auto_compress"`                          // 自動圧縮を有効化（デフォルト: true）
+	ThresholdTokens      int    `yaml:"threshold_tokens"`                       // 自動圧縮のトークン閾値（0 = 使用率ベース）
+	ThresholdPercent     int    `yaml:"threshold_percent"`                      // 自動圧縮の使用率閾値（デフォルト: 80%）
+	TokenThreshold       int    `yaml:"token_threshold" json:"token_threshold"` // Context トークン数の絶対閾値（デフォルト: 100000）
+	Model                string `yaml:"model" json:"model"`                     // 圧縮用モデル名（空 = プロバイダー別デフォルト、main = メインモデル）
+	KeepRecent           int    `yaml:"keep_recent"`                            // 保持する最新メッセージ数
+	PreferCompactAPI     bool   `yaml:"prefer_compact_api"`                     // OpenAI Compact API を優先（デフォルト: true）
+	ClaudeCompaction     bool   `yaml:"claude_compaction"`                      // Claude系の compact_20260112 を有効化（clear_tool_uses とは独立）
+	CompactionTrigger    int    `yaml:"compaction_trigger"`                     // compact のトリガー閾値（デフォルト: 150000）
+	ClearToolUses        bool   `yaml:"clear_tool_uses"`                        // Claude系の server-side tool clearing を有効化（compact とは独立）
+	ClearToolUsesTrigger int    `yaml:"clear_tool_uses_trigger"`                // clear_tool_uses のトリガー閾値（デフォルト: 80000、最小: 50000）
+	ClearToolInputs      bool   `yaml:"clear_tool_inputs"`                      // tool_use 側の入力もクリアする
 }
 
 // LoopDetectionConfig はループ検知の設定

@@ -69,6 +69,15 @@ func isBedrockCompactionSupported(model string) bool {
 		strings.Contains(model, "sonnet-4-6")
 }
 
+func buildBedrockContextManagement(model string, compression config.CompressionConfig, betaHeaders []string) (*claude.ContextManagement, []string) {
+	contextManagement := claude.BuildContextManagement(compression, isBedrockCompactionSupported(model))
+	if contextManagement == nil {
+		return nil, betaHeaders
+	}
+
+	return contextManagement, claude.MergeAnthropicBetaHeaders(betaHeaders, contextManagement)
+}
+
 // SupportsClaudeCompaction は Claude Compaction 対応状況を返す
 func (p *Provider) SupportsClaudeCompaction() bool {
 	return p.supportsClaudeCompactionWithConfig(p.effectiveConfig(), "")
@@ -170,35 +179,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		reqBody.Tools = claude.GetCombinedClaudeToolsWithContext(ctx, p.mcpTools)
 	}
 
-	// Compaction 適用
-	if cfg.Compression.ClaudeCompaction && isBedrockCompactionSupported(model) {
-		trigger := cfg.Compression.CompactionTrigger
-		if trigger == 0 {
-			trigger = 150000
-		}
-		reqBody.ContextManagement = &claude.ContextManagement{
-			Edits: []claude.ContextEdit{
-				{
-					Type: "compact_20260112",
-					Trigger: &claude.CompactTrigger{
-						Type:  "input_tokens",
-						Value: trigger,
-					},
-				},
-			},
-		}
-		// beta 指定のマージ
-		found := false
-		for _, b := range reqBody.AnthropicBeta {
-			if b == "compact-2026-01-12" {
-				found = true
-				break
-			}
-		}
-		if !found {
-			reqBody.AnthropicBeta = append(reqBody.AnthropicBeta, "compact-2026-01-12")
-		}
-	}
+	reqBody.ContextManagement, reqBody.AnthropicBeta = buildBedrockContextManagement(model, cfg.Compression, reqBody.AnthropicBeta)
 
 	return p.invokeStream(ctx, model, reqBody)
 }
@@ -276,35 +257,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 		reqBody.Tools = claude.GetCombinedClaudeToolsWithContext(ctx, p.mcpTools)
 	}
 
-	// Compaction 適用
-	if cfg.Compression.ClaudeCompaction && isBedrockCompactionSupported(model) {
-		trigger := cfg.Compression.CompactionTrigger
-		if trigger == 0 {
-			trigger = 150000
-		}
-		reqBody.ContextManagement = &claude.ContextManagement{
-			Edits: []claude.ContextEdit{
-				{
-					Type: "compact_20260112",
-					Trigger: &claude.CompactTrigger{
-						Type:  "input_tokens",
-						Value: trigger,
-					},
-				},
-			},
-		}
-		// beta 指定のマージ
-		found := false
-		for _, b := range reqBody.AnthropicBeta {
-			if b == "compact-2026-01-12" {
-				found = true
-				break
-			}
-		}
-		if !found {
-			reqBody.AnthropicBeta = append(reqBody.AnthropicBeta, "compact-2026-01-12")
-		}
-	}
+	reqBody.ContextManagement, reqBody.AnthropicBeta = buildBedrockContextManagement(model, cfg.Compression, reqBody.AnthropicBeta)
 
 	return p.invokeStream(ctx, model, reqBody)
 }

@@ -59,6 +59,21 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Compression.PreferCompactAPI != true {
 		t.Error("Compression.PreferCompactAPI should default to true")
 	}
+	if cfg.Compression.ClaudeCompaction != true {
+		t.Error("Compression.ClaudeCompaction should default to true")
+	}
+	if cfg.Compression.CompactionTrigger != 150000 {
+		t.Errorf("Compression.CompactionTrigger = %d, want 150000", cfg.Compression.CompactionTrigger)
+	}
+	if cfg.Compression.ClearToolUses != true {
+		t.Error("Compression.ClearToolUses should default to true")
+	}
+	if cfg.Compression.ClearToolUsesTrigger != 80000 {
+		t.Errorf("Compression.ClearToolUsesTrigger = %d, want 80000", cfg.Compression.ClearToolUsesTrigger)
+	}
+	if cfg.Compression.ClearToolInputs {
+		t.Error("Compression.ClearToolInputs should default to false")
+	}
 
 	// LoopDetection
 	if cfg.LoopDetection.Threshold != 3 {
