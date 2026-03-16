@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -8,14 +9,18 @@ import (
 )
 
 const (
-	DefaultMaxLines  = 50 // 50行以下はtruncateしない
-	DefaultHeadLines = 20 // 先頭20行を保持
-	DefaultTailLines = 5  // 末尾5行を保持
-	ultraCompactAge  = 20 // この age 以上の tool result は 1行サマリーに圧縮
+	DefaultMaxLines        = 50
+	DefaultHeadLines       = 20
+	DefaultTailLines       = 5
+	ultraCompactAge        = 20
+	phase0ClearAge         = 3
+	phase0ClearAgeCautious = 6
+	phase0MinContentLen    = 200
 )
 
 // CompactionMetrics は履歴圧縮時に発生した圧縮メトリクスを表す。
 type CompactionMetrics struct {
+	Phase0Clears           int
 	ErrorCompressions      int
 	FailedPairCompressions int
 	TruncationCount        int
@@ -61,8 +66,8 @@ func CompactOldToolResults(history []api.Message, maxLines, headLines, tailLines
 	}
 
 	toolAge := buildToolAgeMap(history, lastAssistantIdx)
+	argsLookup := buildToolArgsLookup(history, lastAssistantIdx)
 
-	// shallow copy + read tool results only
 	result := make([]api.Message, len(history))
 	copy(result, history)
 
@@ -76,7 +81,12 @@ func CompactOldToolResults(history []api.Message, maxLines, headLines, tailLines
 
 			age := toolAge[i]
 
-			// ultra-compact: 非常に古い tool result は 1行サマリーに圧縮
+			if placeholder, ok := phase0Clear(result[i], age, argsLookup); ok {
+				result[i].Content = placeholder
+				metrics.Phase0Clears++
+				continue
+			}
+
 			if age > ultraCompactAge {
 				if summary := ultraCompactToolResult(result[i]); summary != "" {
 					result[i].Content = summary
@@ -110,6 +120,58 @@ func buildToolAgeMap(history []api.Message, lastAssistantIdx int) map[int]int {
 	return ages
 }
 
+type toolCallInfo struct {
+	ToolName string
+	Args     map[string]string
+}
+
+func buildToolArgsLookup(history []api.Message, lastAssistantIdx int) map[string]toolCallInfo {
+	lookup := make(map[string]toolCallInfo)
+	for i := 0; i <= lastAssistantIdx; i++ {
+		if history[i].Role != "assistant" {
+			continue
+		}
+		for _, tc := range history[i].ToolCalls {
+			if tc.ID == "" {
+				continue
+			}
+			lookup[tc.ID] = toolCallInfo{
+				ToolName: tc.Function.Name,
+				Args:     parseToolArgs(tc.Function.Arguments),
+			}
+		}
+	}
+	return lookup
+}
+
+func parseToolArgs(argsJSON string) map[string]string {
+	result := make(map[string]string)
+	if argsJSON == "" {
+		return result
+	}
+
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(argsJSON), &raw); err != nil {
+		return result
+	}
+
+	for key, val := range raw {
+		switch v := val.(type) {
+		case string:
+			result[key] = v
+		case float64:
+			result[key] = fmt.Sprintf("%g", v)
+		case bool:
+			result[key] = fmt.Sprintf("%v", v)
+		default:
+			if b, err := json.Marshal(v); err == nil {
+				result[key] = string(b)
+			}
+		}
+	}
+	return result
+}
+
 // graduatedTruncateByAge returns truncate parameters based on tool execution age.
 func graduatedTruncateByAge(age, defaultHead, defaultTail int) (headLines, tailLines int) {
 	switch {
@@ -120,6 +182,268 @@ func graduatedTruncateByAge(age, defaultHead, defaultTail int) (headLines, tailL
 	default:
 		return 5, 2
 	}
+}
+
+func phase0Clear(msg api.Message, age int, argsLookup map[string]toolCallInfo) (string, bool) {
+	content := msg.Content
+	if isCompactedToolResult(content) || len(content) < phase0MinContentLen {
+		return "", false
+	}
+
+	threshold := phase0GetAgeThreshold(msg.ToolName)
+	if threshold == 0 || age < threshold {
+		return "", false
+	}
+
+	var args map[string]string
+	if msg.ToolCallID != "" {
+		if info, ok := argsLookup[msg.ToolCallID]; ok && (info.ToolName == "" || info.ToolName == msg.ToolName) {
+			args = info.Args
+		}
+	}
+
+	placeholder := phase0BuildPlaceholder(msg, args, content)
+	if placeholder == "" {
+		return "", false
+	}
+	return placeholder, true
+}
+
+func phase0GetAgeThreshold(toolName string) int {
+	switch toolName {
+	case "read_file", "search_code", "list_dir", "inspect_symbol":
+		return phase0ClearAge
+	case "bash", "web_search":
+		return phase0ClearAgeCautious
+	default:
+		return 0
+	}
+}
+
+func phase0BuildPlaceholder(msg api.Message, args map[string]string, content string) string {
+	lines := countContentLines(content)
+
+	switch msg.ToolName {
+	case "read_file":
+		path := getArg(args, "path", "")
+		if path == "" {
+			path = extractPathFromContentFallback(content)
+		}
+		if path == "" {
+			path = "unknown"
+		}
+		return fmt.Sprintf("[Cleared read_file for %s: %d lines. Re-run read_file if needed.]", path, lines)
+	case "search_code":
+		pattern := getArg(args, "pattern", "")
+		summary := extractSearchSummaryLine(content)
+		switch {
+		case pattern != "" && summary != "":
+			return fmt.Sprintf("[Cleared search_code for %q: %s. Re-run search_code if needed.]", pattern, summary)
+		case summary != "":
+			return fmt.Sprintf("[Cleared search_code result: %s. Re-run search_code if needed.]", summary)
+		case pattern != "":
+			return fmt.Sprintf("[Cleared search_code for %q: %d lines. Re-run search_code if needed.]", pattern, lines)
+		default:
+			return fmt.Sprintf("[Cleared search_code result: %d lines. Re-run search_code if needed.]", lines)
+		}
+	case "list_dir":
+		path := getArg(args, "path", ".")
+		return fmt.Sprintf("[Cleared list_dir for %s: %d entries. Re-run list_dir if needed.]", path, extractListDirEntryCount(content))
+	case "inspect_symbol":
+		symbol := getArg(args, "symbol", "")
+		filePath := getArg(args, "path", "")
+		switch {
+		case symbol != "" && filePath != "":
+			return fmt.Sprintf("[Cleared inspect_symbol for %q in %s. Re-run inspect_symbol if needed.]", symbol, filePath)
+		case symbol != "":
+			return fmt.Sprintf("[Cleared inspect_symbol for %q. Re-run inspect_symbol if needed.]", symbol)
+		}
+		header := extractInspectHeaderFallback(content)
+		if header != "" {
+			return fmt.Sprintf("[Cleared inspect_symbol: %s. Re-run inspect_symbol if needed.]", header)
+		}
+		return fmt.Sprintf("[Cleared inspect_symbol result: %d lines. Re-run inspect_symbol if needed.]", lines)
+	case "bash":
+		command := truncatePlaceholderValue(getArg(args, "command", "..."), 80)
+		status := "exit 0"
+		trimmed := strings.TrimSpace(content)
+		if strings.HasPrefix(trimmed, "Error:") || strings.HasPrefix(trimmed, "Command interrupted.") {
+			status = "error"
+		}
+		return fmt.Sprintf("[Cleared bash result for %q: %d lines, %s. Re-run if needed.]", command, lines, status)
+	case "web_search":
+		query := truncatePlaceholderValue(getArg(args, "query", "..."), 80)
+		if sources := extractWebSearchSourceCount(content); sources > 0 {
+			return fmt.Sprintf("[Cleared web_search for %q: %d sources. Re-run web_search for latest results.]", query, sources)
+		}
+		return fmt.Sprintf("[Cleared web_search for %q: %d lines. Re-run web_search for latest results.]", query, lines)
+	default:
+		return ""
+	}
+}
+
+func getArg(args map[string]string, key, defaultVal string) string {
+	if args == nil {
+		return defaultVal
+	}
+	if v, ok := args[key]; ok && v != "" {
+		return v
+	}
+	return defaultVal
+}
+
+func truncatePlaceholderValue(s string, max int) string {
+	runes := []rune(strings.TrimSpace(s))
+	if len(runes) <= max {
+		return string(runes)
+	}
+	if max <= 3 {
+		return string(runes[:max])
+	}
+	return string(runes[:max-3]) + "..."
+}
+
+func countContentLines(content string) int {
+	trimmed := strings.TrimRight(content, "\n")
+	if trimmed == "" {
+		return 0
+	}
+	return strings.Count(trimmed, "\n") + 1
+}
+
+func isCompactedToolResult(content string) bool {
+	trimmed := strings.TrimSpace(content)
+	return strings.HasPrefix(trimmed, "[Cleared ") ||
+		strings.HasPrefix(trimmed, "[Old ") ||
+		strings.HasPrefix(trimmed, "[Failed:")
+}
+
+func extractPathFromContentFallback(content string) string {
+	lines := strings.Split(content, "\n")
+	limit := len(lines)
+	if limit > 5 {
+		limit = 5
+	}
+	for i := 0; i < limit; i++ {
+		line := strings.TrimSpace(lines[i])
+		if line == "" {
+			continue
+		}
+		for _, prefix := range []string{"File:", "Path:", "Read file:", "Reading file:", "📄"} {
+			if strings.HasPrefix(line, prefix) {
+				line = strings.TrimSpace(strings.TrimPrefix(line, prefix))
+				break
+			}
+		}
+		if candidate := sanitizePathCandidate(line); isLikelyPath(candidate) {
+			return candidate
+		}
+		if idx := strings.Index(line, ": "); idx >= 0 {
+			if candidate := sanitizePathCandidate(line[idx+2:]); isLikelyPath(candidate) {
+				return candidate
+			}
+		}
+	}
+	return ""
+}
+
+func sanitizePathCandidate(s string) string {
+	return strings.Trim(strings.TrimSpace(s), "`\"'<>[]()")
+}
+
+func isLikelyPath(candidate string) bool {
+	if candidate == "" {
+		return false
+	}
+	lower := strings.ToLower(candidate)
+	if strings.Contains(candidate, "/") || strings.Contains(candidate, "\\") {
+		return true
+	}
+	for _, suffix := range []string{
+		".go", ".ts", ".tsx", ".js", ".jsx", ".py", ".rb", ".java", ".rs", ".c", ".cc", ".cpp",
+		".h", ".hpp", ".json", ".yaml", ".yml", ".toml", ".md", ".txt", ".sh",
+	} {
+		if strings.HasSuffix(lower, suffix) {
+			return true
+		}
+	}
+	return false
+}
+
+func extractSearchSummaryLine(content string) string {
+	for _, line := range strings.SplitN(content, "\n", 5) {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "Found ") && strings.Contains(trimmed, "match") {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func extractInspectHeaderFallback(content string) string {
+	for _, line := range strings.SplitN(content, "\n", 3) {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "──") {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func extractListDirEntryCount(content string) int {
+	for _, line := range strings.SplitN(content, "\n", 4) {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "summary:") {
+			continue
+		}
+		dirs := -1
+		files := -1
+		for _, part := range strings.Split(trimmed, ",") {
+			part = strings.TrimSpace(part)
+			switch {
+			case strings.HasPrefix(part, "dirs="):
+				if _, err := fmt.Sscanf(part, "dirs=%d", &dirs); err != nil {
+					dirs = -1
+				}
+			case strings.HasPrefix(part, "files="):
+				if _, err := fmt.Sscanf(part, "files=%d", &files); err != nil {
+					files = -1
+				}
+			}
+		}
+		if dirs >= 0 && files >= 0 {
+			return dirs + files
+		}
+	}
+	return countContentLines(content)
+}
+
+func extractWebSearchSourceCount(content string) int {
+	count := 0
+	inSources := false
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		if trimmed == "Sources:" {
+			inSources = true
+			continue
+		}
+		if !inSources {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "- ") {
+			count++
+			continue
+		}
+		if len(trimmed) > 2 && trimmed[0] >= '1' && trimmed[0] <= '9' {
+			if dotIdx := strings.Index(trimmed, ". "); dotIdx > 0 && dotIdx <= 3 {
+				count++
+			}
+		}
+	}
+	return count
 }
 
 // compressFailedPair は失敗ペアを検出して圧縮する。
@@ -234,6 +558,9 @@ func ToolResultContentRatio(history []api.Message) float64 {
 // エラーパターンは行数に関係なく圧縮する。
 func truncateToolResult(msg api.Message, maxLines, headLines, tailLines int) (api.Message, CompactionMetrics) {
 	var metrics CompactionMetrics
+	if isCompactedToolResult(msg.Content) {
+		return msg, metrics
+	}
 
 	// エラーパターンの圧縮を先に試す
 	if compressed, ok := compressErrorResult(msg.Content); ok {
@@ -271,7 +598,7 @@ func truncateToolResult(msg api.Message, maxLines, headLines, tailLines int) (ap
 // 圧縮できない場合は空文字を返す（呼び出し元は通常の graduated truncation にフォールバック）。
 func ultraCompactToolResult(msg api.Message) string {
 	content := strings.TrimSpace(msg.Content)
-	if content == "" {
+	if content == "" || isCompactedToolResult(content) {
 		return ""
 	}
 

@@ -54,6 +54,7 @@ type OptimizationMetrics struct {
 	DeduplicateCount       int // cache-hit参照化（同一result省略）
 	DeduplicateTokensSaved int // 推定削減トークン数（len(original)/4）
 	NegativeCacheHits      int // ネガティブキャッシュヒット
+	Phase0Clears           int // Phase 0 placeholder clear 発動
 	ErrorCompressions      int // compressErrorResult 発動
 	FailedPairCompressions int // compressFailedPair 発動
 	TruncationCount        int // 段階的truncate発動
@@ -68,6 +69,7 @@ func (m *OptimizationMetrics) add(other OptimizationMetrics) {
 	m.DeduplicateCount += other.DeduplicateCount
 	m.DeduplicateTokensSaved += other.DeduplicateTokensSaved
 	m.NegativeCacheHits += other.NegativeCacheHits
+	m.Phase0Clears += other.Phase0Clears
 	m.ErrorCompressions += other.ErrorCompressions
 	m.FailedPairCompressions += other.FailedPairCompressions
 	m.TruncationCount += other.TruncationCount
@@ -79,6 +81,7 @@ func (m *OptimizationMetrics) add(other OptimizationMetrics) {
 }
 
 func (m *OptimizationMetrics) addCompaction(other CompactionMetrics) {
+	m.Phase0Clears += other.Phase0Clears
 	m.ErrorCompressions += other.ErrorCompressions
 	m.FailedPairCompressions += other.FailedPairCompressions
 	m.TruncationCount += other.TruncationCount
@@ -88,6 +91,7 @@ func (m *OptimizationMetrics) hasAny() bool {
 	return m.DeduplicateCount > 0 ||
 		m.DeduplicateTokensSaved > 0 ||
 		m.NegativeCacheHits > 0 ||
+		m.Phase0Clears > 0 ||
 		m.ErrorCompressions > 0 ||
 		m.FailedPairCompressions > 0 ||
 		m.TruncationCount > 0 ||

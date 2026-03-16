@@ -16,7 +16,7 @@ func makeLargeContent(lines int) string {
 	return b.String()
 }
 
-func makeSingleTurnReadHistory(toolCount, lines int) []api.Message {
+func makeSingleTurnToolHistory(toolCount, lines int, toolName string) []api.Message {
 	history := []api.Message{{Role: "user", Content: "task"}}
 	content := makeLargeContent(lines)
 
@@ -27,13 +27,153 @@ func makeSingleTurnReadHistory(toolCount, lines int) []api.Message {
 				Role:       "tool",
 				Content:    content,
 				ToolCallID: fmt.Sprintf("c%d", i),
-				ToolName:   "read_file",
+				ToolName:   toolName,
 			},
 		)
 	}
 
 	history = append(history, api.Message{Role: "assistant", Content: "done"})
 	return history
+}
+
+func makeSearchCodeContent() string {
+	return "Found 7 matches in 2 files:\n" + strings.Repeat("  internal/agent/foo.go — 1 match\n", 12)
+}
+
+func makeListDirContent() string {
+	return strings.Join([]string{
+		"📂 /tmp/project",
+		"summary: depth=2, dirs=3, files=5",
+		"dirs: cmd/, internal/, docs/",
+		"files: README.md (120 bytes), go.mod (80 bytes), go.sum (60 bytes), Makefile (40 bytes), AGENTS.md (20 bytes)",
+		"subtrees: 2 shown (+1 more)",
+		"- internal -> dirs=2, files=8",
+		"  dirs: agent/, tools/",
+		"  files: compact.go (100 bytes), stats.go (80 bytes), history.go (70 bytes), extra.go (60 bytes), more.go (50 bytes), keep.go (40 bytes)",
+	}, "\n")
+}
+
+func makeInspectContent(symbol, path string) string {
+	return fmt.Sprintf("── func %s (L10-L40) in %s ──\n%s", symbol, path, strings.Repeat("10: body line\n", 30))
+}
+
+func makeWebSearchContent() string {
+	return strings.Join([]string{
+		"Summary:",
+		"- Point one with enough detail to make the result meaningfully long.",
+		"- Point two with additional explanation for the search summary.",
+		"- Point three describing the context around the search results.",
+		"- Point four highlighting another relevant detail from the web.",
+		"- Point five covering the remaining background information.",
+		"Sources:",
+		"1. Example One",
+		"   URL: https://example.com/one",
+		"",
+		"2. Example Two",
+		"   URL: https://example.com/two",
+	}, "\n")
+}
+
+func makePhase0History(toolName, toolCallID, argsJSON, content string, age int) []api.Message {
+	if age < 1 {
+		age = 1
+	}
+
+	history := []api.Message{{Role: "user", Content: "task"}}
+	targetAssistant := api.Message{Role: "assistant", Content: "target"}
+	if toolCallID != "" {
+		targetAssistant.ToolCalls = []api.OpenAIToolCall{{
+			ID: toolCallID,
+			Function: api.OpenAIToolCallFunction{
+				Name:      toolName,
+				Arguments: argsJSON,
+			},
+		}}
+	}
+	history = append(history, targetAssistant, api.Message{
+		Role:       "tool",
+		Content:    content,
+		ToolCallID: toolCallID,
+		ToolName:   toolName,
+	})
+
+	for i := 0; i < age-1; i++ {
+		callID := fmt.Sprintf("fill-%d", i)
+		history = append(history,
+			api.Message{
+				Role:    "assistant",
+				Content: fmt.Sprintf("fill-%d", i),
+				ToolCalls: []api.OpenAIToolCall{{
+					ID: callID,
+					Function: api.OpenAIToolCallFunction{
+						Name:      "str_replace",
+						Arguments: fmt.Sprintf(`{"path":"fill-%d.go"}`, i),
+					},
+				}},
+			},
+			api.Message{
+				Role:       "tool",
+				Content:    makeLargeContent(60),
+				ToolCallID: callID,
+				ToolName:   "str_replace",
+			},
+		)
+	}
+
+	history = append(history, api.Message{Role: "assistant", Content: "done"})
+	return history
+}
+
+func compactOldToolResultsWithoutPhase0(history []api.Message, maxLines, headLines, tailLines int) []api.Message {
+	if len(history) == 0 {
+		return history
+	}
+
+	lastAssistantIdx := -1
+	for i := len(history) - 1; i >= 0; i-- {
+		if history[i].Role == "assistant" {
+			lastAssistantIdx = i
+			break
+		}
+	}
+	if lastAssistantIdx < 0 {
+		result := make([]api.Message, len(history))
+		copy(result, history)
+		return result
+	}
+
+	result := make([]api.Message, len(history))
+	copy(result, history)
+	toolAge := buildToolAgeMap(history, lastAssistantIdx)
+
+	for i := 0; i < lastAssistantIdx; i++ {
+		if result[i].Role != "tool" {
+			continue
+		}
+		if compressed, ok := compressFailedPair(result, i); ok {
+			result[i] = compressed
+			continue
+		}
+		age := toolAge[i]
+		if age > ultraCompactAge {
+			if summary := ultraCompactToolResult(result[i]); summary != "" {
+				result[i].Content = summary
+				continue
+			}
+		}
+		h, t := graduatedTruncateByAge(age, headLines, tailLines)
+		result[i], _ = truncateToolResult(result[i], maxLines, h, t)
+	}
+
+	return result
+}
+
+func compactedContentLen(history []api.Message) int {
+	total := 0
+	for _, msg := range history {
+		total += len(msg.Content)
+	}
+	return total
 }
 
 func TestToolResultContentRatio(t *testing.T) {
@@ -227,7 +367,7 @@ func TestGraduatedTruncateByAge(t *testing.T) {
 }
 
 func TestCompactOldToolResults_GraduatedCompression(t *testing.T) {
-	history := makeSingleTurnReadHistory(16, 100)
+	history := makeSingleTurnToolHistory(16, 100, "str_replace")
 
 	result, _ := CompactOldToolResults(history, 50, 20, 5)
 
@@ -236,7 +376,7 @@ func TestCompactOldToolResults_GraduatedCompression(t *testing.T) {
 	recent := result[32].Content
 
 	if !strings.Contains(aggressive, "truncated") || !strings.Contains(medium, "truncated") || !strings.Contains(recent, "truncated") {
-		t.Fatal("expected all read tool results to be truncated")
+		t.Fatal("expected all tool results to be truncated")
 	}
 	if len(aggressive) >= len(medium) {
 		t.Fatalf("expected age 16 truncation to be shorter than age 6 truncation: %d >= %d", len(aggressive), len(medium))
@@ -496,6 +636,9 @@ func TestCompactOldToolResults_CompactionMetrics(t *testing.T) {
 
 	_, metrics := CompactOldToolResults(history, 50, 20, 5)
 
+	if metrics.Phase0Clears != 0 {
+		t.Fatalf("Phase0Clears = %d, want 0", metrics.Phase0Clears)
+	}
 	if metrics.FailedPairCompressions != 1 {
 		t.Fatalf("FailedPairCompressions = %d, want 1", metrics.FailedPairCompressions)
 	}
@@ -504,6 +647,368 @@ func TestCompactOldToolResults_CompactionMetrics(t *testing.T) {
 	}
 	if metrics.ErrorCompressions != 1 {
 		t.Fatalf("ErrorCompressions = %d, want 1", metrics.ErrorCompressions)
+	}
+}
+
+func TestPhase0Clear_ReadFile_FromArgs(t *testing.T) {
+	history := makePhase0History("read_file", "c1", `{"path":"internal/agent/foo.go"}`, makeLargeContent(60), phase0ClearAge)
+
+	result, metrics := CompactOldToolResults(history, 50, 20, 5)
+
+	want := "[Cleared read_file for internal/agent/foo.go: 60 lines. Re-run read_file if needed.]"
+	if result[2].Content != want {
+		t.Fatalf("Phase 0 placeholder = %q, want %q", result[2].Content, want)
+	}
+	if metrics.Phase0Clears != 1 {
+		t.Fatalf("Phase0Clears = %d, want 1", metrics.Phase0Clears)
+	}
+}
+
+func TestPhase0Clear_ReadFile_FallbackToContent(t *testing.T) {
+	content := "File: internal/agent/fallback.go\n" + strings.Repeat("body line\n", 40)
+	history := makePhase0History("read_file", "", "", content, phase0ClearAge)
+
+	result, _ := CompactOldToolResults(history, 50, 20, 5)
+
+	if !strings.Contains(result[2].Content, "internal/agent/fallback.go") {
+		t.Fatalf("expected fallback path in placeholder, got %q", result[2].Content)
+	}
+}
+
+func TestPhase0Clear_SearchCode_WithPattern(t *testing.T) {
+	history := makePhase0History("search_code", "c1", `{"pattern":"CompactOldToolResults"}`, makeSearchCodeContent(), phase0ClearAge)
+
+	result, _ := CompactOldToolResults(history, 50, 20, 5)
+
+	if !strings.Contains(result[2].Content, `for "CompactOldToolResults"`) {
+		t.Fatalf("expected pattern in placeholder, got %q", result[2].Content)
+	}
+	if !strings.Contains(result[2].Content, "Found 7 matches in 2 files") {
+		t.Fatalf("expected search summary in placeholder, got %q", result[2].Content)
+	}
+}
+
+func TestPhase0Clear_FromParallelAssistantToolCalls(t *testing.T) {
+	large := makeLargeContent(60)
+	history := []api.Message{
+		{Role: "user", Content: "task"},
+		{Role: "assistant", Content: "parallel", ToolCalls: []api.OpenAIToolCall{
+			{
+				ID: "c1",
+				Function: api.OpenAIToolCallFunction{
+					Name:      "read_file",
+					Arguments: `{"path":"internal/agent/parallel.go"}`,
+				},
+			},
+			{
+				ID: "c2",
+				Function: api.OpenAIToolCallFunction{
+					Name:      "search_code",
+					Arguments: `{"pattern":"parallelLookup"}`,
+				},
+			},
+		}},
+		{Role: "tool", Content: large, ToolCallID: "c1", ToolName: "read_file"},
+		{Role: "tool", Content: makeSearchCodeContent(), ToolCallID: "c2", ToolName: "search_code"},
+		{Role: "assistant", Content: "fill-1", ToolCalls: []api.OpenAIToolCall{
+			{ID: "f1", Function: api.OpenAIToolCallFunction{Name: "str_replace", Arguments: `{"path":"fill-1.go"}`}},
+		}},
+		{Role: "tool", Content: large, ToolCallID: "f1", ToolName: "str_replace"},
+		{Role: "assistant", Content: "fill-2", ToolCalls: []api.OpenAIToolCall{
+			{ID: "f2", Function: api.OpenAIToolCallFunction{Name: "str_replace", Arguments: `{"path":"fill-2.go"}`}},
+		}},
+		{Role: "tool", Content: large, ToolCallID: "f2", ToolName: "str_replace"},
+		{Role: "assistant", Content: "done"},
+	}
+
+	result, metrics := CompactOldToolResults(history, 50, 20, 5)
+
+	if result[2].Content != "[Cleared read_file for internal/agent/parallel.go: 60 lines. Re-run read_file if needed.]" {
+		t.Fatalf("read_file placeholder = %q", result[2].Content)
+	}
+	if !strings.Contains(result[3].Content, `for "parallelLookup"`) {
+		t.Fatalf("search_code placeholder should use matching ToolCallID args, got %q", result[3].Content)
+	}
+	if metrics.Phase0Clears != 2 {
+		t.Fatalf("Phase0Clears = %d, want 2", metrics.Phase0Clears)
+	}
+}
+
+func TestPhase0Clear_ListDir(t *testing.T) {
+	history := makePhase0History("list_dir", "c1", `{"path":"/tmp/project"}`, makeListDirContent(), phase0ClearAge)
+
+	result, _ := CompactOldToolResults(history, 50, 20, 5)
+
+	want := "[Cleared list_dir for /tmp/project: 8 entries. Re-run list_dir if needed.]"
+	if result[2].Content != want {
+		t.Fatalf("Phase 0 placeholder = %q, want %q", result[2].Content, want)
+	}
+}
+
+func TestPhase0Clear_InspectSymbol(t *testing.T) {
+	history := makePhase0History("inspect_symbol", "c1", `{"symbol":"Build","path":"internal/agent/foo.go"}`, makeInspectContent("Build", "internal/agent/foo.go"), phase0ClearAge)
+
+	result, _ := CompactOldToolResults(history, 50, 20, 5)
+
+	want := `[Cleared inspect_symbol for "Build" in internal/agent/foo.go. Re-run inspect_symbol if needed.]`
+	if result[2].Content != want {
+		t.Fatalf("Phase 0 placeholder = %q, want %q", result[2].Content, want)
+	}
+}
+
+func TestPhase0Clear_Bash(t *testing.T) {
+	content := "Command interrupted.\nPartial output:\n" + strings.Repeat("line\n", 40)
+	history := makePhase0History("bash", "c1", `{"command":"go test ./... -run TestPhase0"}`, content, phase0ClearAgeCautious)
+
+	result, _ := CompactOldToolResults(history, 50, 20, 5)
+
+	if !strings.Contains(result[2].Content, `for "go test ./... -run TestPhase0"`) {
+		t.Fatalf("expected command in placeholder, got %q", result[2].Content)
+	}
+	if !strings.Contains(result[2].Content, "error") {
+		t.Fatalf("expected error status in placeholder, got %q", result[2].Content)
+	}
+}
+
+func TestPhase0Clear_WebSearch(t *testing.T) {
+	history := makePhase0History("web_search", "c1", `{"query":"golang slices package"}`, makeWebSearchContent(), phase0ClearAgeCautious)
+
+	result, _ := CompactOldToolResults(history, 50, 20, 5)
+
+	want := `[Cleared web_search for "golang slices package": 2 sources. Re-run web_search for latest results.]`
+	if result[2].Content != want {
+		t.Fatalf("Phase 0 placeholder = %q, want %q", result[2].Content, want)
+	}
+}
+
+func TestPhase0Clear_ProtectsRecentResults(t *testing.T) {
+	readHistory := makePhase0History("read_file", "c1", `{"path":"recent.go"}`, makeLargeContent(60), phase0ClearAge-1)
+	readResult, _ := CompactOldToolResults(readHistory, 50, 20, 5)
+	if strings.HasPrefix(readResult[2].Content, "[Cleared ") {
+		t.Fatalf("recent Tier 1 result should not be cleared, got %q", readResult[2].Content)
+	}
+
+	bashHistory := makePhase0History("bash", "c1", `{"command":"ls -la"}`, strings.Repeat("output line\n", 60), phase0ClearAgeCautious-1)
+	bashResult, _ := CompactOldToolResults(bashHistory, 50, 20, 5)
+	if strings.HasPrefix(bashResult[2].Content, "[Cleared ") {
+		t.Fatalf("recent Tier 2 result should not be cleared, got %q", bashResult[2].Content)
+	}
+}
+
+func TestPhase0Clear_ProtectsUnreadResults(t *testing.T) {
+	large := makeLargeContent(60)
+	history := []api.Message{
+		{Role: "user", Content: "task"},
+		{Role: "assistant", Content: "step 1", ToolCalls: []api.OpenAIToolCall{
+			{ID: "c1", Function: api.OpenAIToolCallFunction{Name: "read_file", Arguments: `{"path":"read.go"}`}},
+		}},
+		{Role: "tool", Content: large, ToolCallID: "c1", ToolName: "read_file"},
+		{Role: "assistant", Content: "done"},
+		{Role: "tool", Content: large, ToolCallID: "c2", ToolName: "read_file"},
+	}
+
+	result, _ := CompactOldToolResults(history, 50, 20, 5)
+
+	if result[4].Content != large {
+		t.Fatalf("expected unread tool result to be preserved, got %q", result[4].Content)
+	}
+}
+
+func TestPhase0Clear_ProtectsShortResults(t *testing.T) {
+	content := strings.Repeat("short\n", 20)
+	history := makePhase0History("read_file", "c1", `{"path":"short.go"}`, content, phase0ClearAge)
+
+	result, _ := CompactOldToolResults(history, 50, 20, 5)
+
+	if result[2].Content != content {
+		t.Fatalf("short result should be preserved, got %q", result[2].Content)
+	}
+}
+
+func TestPhase0Clear_ProtectsWriteTools(t *testing.T) {
+	history := makePhase0History("write_file", "c1", `{"path":"out.go"}`, makeLargeContent(60), phase0ClearAge)
+
+	result, _ := CompactOldToolResults(history, 50, 20, 5)
+
+	if strings.HasPrefix(result[2].Content, "[Cleared ") {
+		t.Fatalf("write_file should not be cleared, got %q", result[2].Content)
+	}
+}
+
+func TestPhase0Clear_ProtectsMCPTools(t *testing.T) {
+	history := makePhase0History("mcp__notion__search", "c1", `{"query":"compact"}`, makeLargeContent(60), phase0ClearAge)
+
+	result, _ := CompactOldToolResults(history, 50, 20, 5)
+
+	if strings.HasPrefix(result[2].Content, "[Cleared ") {
+		t.Fatalf("MCP tool should not be cleared, got %q", result[2].Content)
+	}
+}
+
+func TestPhase0Clear_ProtectsUnknownTools(t *testing.T) {
+	history := makePhase0History("custom_tool", "c1", `{"target":"x"}`, makeLargeContent(60), phase0ClearAge)
+
+	result, _ := CompactOldToolResults(history, 50, 20, 5)
+
+	if strings.HasPrefix(result[2].Content, "[Cleared ") {
+		t.Fatalf("unknown tool should not be cleared, got %q", result[2].Content)
+	}
+}
+
+func TestPhase0Clear_FailedPairTakesPriority(t *testing.T) {
+	errorContent := "Error: failed to read file\n" + strings.Repeat("detail line\n", 30)
+	history := []api.Message{
+		{Role: "user", Content: "task"},
+		{Role: "assistant", Content: "try", ToolCalls: []api.OpenAIToolCall{
+			{ID: "c1", Function: api.OpenAIToolCallFunction{Name: "read_file", Arguments: `{"path":"broken.go"}`}},
+		}},
+		{Role: "tool", Content: errorContent, ToolCallID: "c1", ToolName: "read_file"},
+		{Role: "assistant", Content: "retry", ToolCalls: []api.OpenAIToolCall{
+			{ID: "c2", Function: api.OpenAIToolCallFunction{Name: "read_file", Arguments: `{"path":"broken.go"}`}},
+		}},
+		{Role: "tool", Content: makeLargeContent(60), ToolCallID: "c2", ToolName: "read_file"},
+		{Role: "assistant", Content: "fill", ToolCalls: []api.OpenAIToolCall{
+			{ID: "c3", Function: api.OpenAIToolCallFunction{Name: "str_replace", Arguments: `{"path":"fill.go"}`}},
+		}},
+		{Role: "tool", Content: makeLargeContent(60), ToolCallID: "c3", ToolName: "str_replace"},
+		{Role: "assistant", Content: "done"},
+	}
+
+	result, _ := CompactOldToolResults(history, 50, 20, 5)
+
+	if !strings.HasPrefix(result[2].Content, "[Failed: read_file") {
+		t.Fatalf("failed pair should win before Phase 0, got %q", result[2].Content)
+	}
+}
+
+func TestPhase0Clear_ThenPhase1Fallback(t *testing.T) {
+	history := makePhase0History("read_file", "c1", `{"path":"recent.go"}`, makeLargeContent(60), phase0ClearAge-1)
+
+	result, _ := CompactOldToolResults(history, 50, 20, 5)
+
+	if strings.HasPrefix(result[2].Content, "[Cleared ") {
+		t.Fatalf("age-protected result should not be cleared, got %q", result[2].Content)
+	}
+	if !strings.Contains(result[2].Content, "truncated") {
+		t.Fatalf("expected Phase 1 fallback truncation, got %q", result[2].Content)
+	}
+}
+
+func TestPhase0Clear_SkipsAlreadyCleared(t *testing.T) {
+	msg := api.Message{
+		Role:     "tool",
+		ToolName: "read_file",
+		Content:  "[Cleared read_file for internal/agent/foo.go: 30 lines. Re-run read_file if needed.]\n" + strings.Repeat("extra\n", 20),
+	}
+
+	if _, ok := phase0Clear(msg, phase0ClearAge, nil); ok {
+		t.Fatal("already cleared content should not be cleared again")
+	}
+	if got := ultraCompactToolResult(msg); got != "" {
+		t.Fatalf("already cleared content should skip ultra-compact, got %q", got)
+	}
+	truncated, metrics := truncateToolResult(msg, 5, 2, 1)
+	if truncated.Content != msg.Content {
+		t.Fatalf("already cleared content should skip truncate, got %q", truncated.Content)
+	}
+	if metrics != (CompactionMetrics{}) {
+		t.Fatalf("unexpected metrics for already cleared content: %+v", metrics)
+	}
+}
+
+func TestPhase0Clear_MetricsIndependent(t *testing.T) {
+	large := makeLargeContent(60)
+	history := []api.Message{
+		{Role: "user", Content: "task"},
+		{Role: "assistant", Content: "read", ToolCalls: []api.OpenAIToolCall{
+			{ID: "c1", Function: api.OpenAIToolCallFunction{Name: "read_file", Arguments: `{"path":"a.go"}`}},
+		}},
+		{Role: "tool", Content: large, ToolCallID: "c1", ToolName: "read_file"},
+		{Role: "assistant", Content: "search", ToolCalls: []api.OpenAIToolCall{
+			{ID: "c2", Function: api.OpenAIToolCallFunction{Name: "search_code", Arguments: `{"pattern":"foo"}`}},
+		}},
+		{Role: "tool", Content: makeSearchCodeContent(), ToolCallID: "c2", ToolName: "search_code"},
+		{Role: "assistant", Content: "list", ToolCalls: []api.OpenAIToolCall{
+			{ID: "c3", Function: api.OpenAIToolCallFunction{Name: "list_dir", Arguments: `{"path":"."}`}},
+		}},
+		{Role: "tool", Content: makeListDirContent(), ToolCallID: "c3", ToolName: "list_dir"},
+		{Role: "assistant", Content: "edit", ToolCalls: []api.OpenAIToolCall{
+			{ID: "c4", Function: api.OpenAIToolCallFunction{Name: "str_replace"}},
+		}},
+		{Role: "tool", Content: large, ToolCallID: "c4", ToolName: "str_replace"},
+		{Role: "assistant", Content: "custom", ToolCalls: []api.OpenAIToolCall{
+			{ID: "c5", Function: api.OpenAIToolCallFunction{Name: "custom_tool"}},
+		}},
+		{Role: "tool", Content: large, ToolCallID: "c5", ToolName: "custom_tool"},
+		{Role: "assistant", Content: "done"},
+	}
+
+	_, metrics := CompactOldToolResults(history, 50, 20, 5)
+
+	if metrics.Phase0Clears != 3 {
+		t.Fatalf("Phase0Clears = %d, want 3", metrics.Phase0Clears)
+	}
+	if metrics.TruncationCount != 2 {
+		t.Fatalf("TruncationCount = %d, want 2", metrics.TruncationCount)
+	}
+}
+
+func TestCompactOldToolResults_Phase0TokenReduction(t *testing.T) {
+	var history []api.Message
+	history = append(history, api.Message{Role: "user", Content: "task"})
+
+	addTool := func(id, toolName, argsJSON, content string) {
+		history = append(history,
+			api.Message{
+				Role:    "assistant",
+				Content: id,
+				ToolCalls: []api.OpenAIToolCall{{
+					ID: id,
+					Function: api.OpenAIToolCallFunction{
+						Name:      toolName,
+						Arguments: argsJSON,
+					},
+				}},
+			},
+			api.Message{
+				Role:       "tool",
+				Content:    content,
+				ToolCallID: id,
+				ToolName:   toolName,
+			},
+		)
+	}
+
+	for i := 0; i < 8; i++ {
+		addTool(fmt.Sprintf("read-%d", i), "read_file", fmt.Sprintf(`{"path":"file%d.go"}`, i), makeLargeContent(120))
+	}
+	for i := 0; i < 4; i++ {
+		addTool(fmt.Sprintf("search-%d", i), "search_code", fmt.Sprintf(`{"pattern":"pattern-%d"}`, i), makeSearchCodeContent())
+	}
+	for i := 0; i < 4; i++ {
+		addTool(fmt.Sprintf("bash-%d", i), "bash", fmt.Sprintf(`{"command":"printf bash-%d"}`, i), strings.Repeat("bash output line\n", 90))
+	}
+	for i := 0; i < 2; i++ {
+		addTool(fmt.Sprintf("inspect-%d", i), "inspect_symbol", fmt.Sprintf(`{"symbol":"Build%d","path":"internal/agent/foo.go"}`, i), makeInspectContent(fmt.Sprintf("Build%d", i), "internal/agent/foo.go"))
+	}
+	for i := 0; i < 2; i++ {
+		addTool(fmt.Sprintf("edit-%d", i), "str_replace", fmt.Sprintf(`{"path":"edit-%d.go"}`, i), strings.Repeat("ok\n", 30))
+	}
+	history = append(history, api.Message{Role: "assistant", Content: "done"})
+
+	withPhase0, metrics := CompactOldToolResults(history, DefaultMaxLines, DefaultHeadLines, DefaultTailLines)
+	withoutPhase0 := compactOldToolResultsWithoutPhase0(history, DefaultMaxLines, DefaultHeadLines, DefaultTailLines)
+
+	withLen := compactedContentLen(withPhase0)
+	withoutLen := compactedContentLen(withoutPhase0)
+	if withLen >= withoutLen {
+		t.Fatalf("Phase 0 should reduce compacted size: with=%d without=%d", withLen, withoutLen)
+	}
+	if withoutLen-withLen < 2000 {
+		t.Fatalf("expected substantial reduction from Phase 0, diff=%d", withoutLen-withLen)
+	}
+	if metrics.Phase0Clears == 0 {
+		t.Fatal("expected Phase 0 to clear at least one result")
 	}
 }
 
@@ -581,7 +1086,7 @@ func TestCompactOldToolResults_UltraCompactTier(t *testing.T) {
 		Role:       "tool",
 		Content:    longContent,
 		ToolCallID: "old",
-		ToolName:   "read_file",
+		ToolName:   "str_replace",
 	})
 	// Add enough assistant+tool pairs to push age beyond ultraCompactAge
 	for i := 0; i < ultraCompactAge+5; i++ {
@@ -593,7 +1098,7 @@ func TestCompactOldToolResults_UltraCompactTier(t *testing.T) {
 			Role:       "tool",
 			Content:    fmt.Sprintf("result %d", i),
 			ToolCallID: fmt.Sprintf("t%d", i),
-			ToolName:   "read_file",
+			ToolName:   "str_replace",
 		})
 	}
 	// Final assistant to make all tool results "read"
@@ -605,7 +1110,7 @@ func TestCompactOldToolResults_UltraCompactTier(t *testing.T) {
 	result, metrics := CompactOldToolResults(history, DefaultMaxLines, DefaultHeadLines, DefaultTailLines)
 
 	// The first (oldest) tool result should be ultra-compacted
-	if !strings.Contains(result[0].Content, "[Old read_file") {
+	if !strings.Contains(result[0].Content, "[Old str_replace") {
 		t.Errorf("expected ultra-compact summary for oldest tool result, got:\n%s", result[0].Content)
 	}
 	if metrics.TruncationCount == 0 {

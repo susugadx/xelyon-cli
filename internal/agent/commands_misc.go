@@ -203,6 +203,9 @@ func printSessionSections(agent *Agent) {
 		if opt.NegativeCacheHits > 0 {
 			optTable.AddRow("Negative cache", fmt.Sprintf("%d hits", opt.NegativeCacheHits))
 		}
+		if opt.Phase0Clears > 0 {
+			optTable.AddRow("Phase 0 clear", fmt.Sprintf("%d times", opt.Phase0Clears))
+		}
 		if opt.ErrorCompressions > 0 {
 			optTable.AddRow("Error compression", fmt.Sprintf("%d times", opt.ErrorCompressions))
 		}

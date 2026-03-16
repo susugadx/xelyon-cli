@@ -385,6 +385,7 @@ func TestOptimizationMetrics_Add(t *testing.T) {
 		CostAwareCompressions:  1,
 	})
 	metrics.addCompaction(CompactionMetrics{
+		Phase0Clears:           4,
 		ErrorCompressions:      5,
 		FailedPairCompressions: 6,
 		TruncationCount:        7,
@@ -398,6 +399,9 @@ func TestOptimizationMetrics_Add(t *testing.T) {
 	}
 	if metrics.NegativeCacheHits != 6 {
 		t.Fatalf("NegativeCacheHits = %d, want 6", metrics.NegativeCacheHits)
+	}
+	if metrics.Phase0Clears != 4 {
+		t.Fatalf("Phase0Clears = %d, want 4", metrics.Phase0Clears)
 	}
 	if metrics.ErrorCompressions != 5 {
 		t.Fatalf("ErrorCompressions = %d, want 5", metrics.ErrorCompressions)
