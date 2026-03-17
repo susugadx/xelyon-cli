@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/ast"
 )
 
 type stagedErrorReader struct {
@@ -98,6 +100,92 @@ func TestRunReferenceSearch_WaitErrorMarksIncomplete(t *testing.T) {
 	}
 	if len(refs) != 1 {
 		t.Fatalf("expected 1 ref, got %d", len(refs))
+	}
+}
+
+func TestApplySnippetReferenceHints_PromotesSelectorCallFromRef(t *testing.T) {
+	class, nodeType, selectorKind, receiverType := applySnippetReferenceHints(
+		"return pkg.Build()",
+		"Build",
+		ast.ClassRef,
+		"field_identifier",
+		"package",
+		"",
+	)
+
+	if class != ast.ClassCall {
+		t.Fatalf("class = %s, want %s", class, ast.ClassCall)
+	}
+	if nodeType != "field_identifier" {
+		t.Fatalf("nodeType = %q, want field_identifier", nodeType)
+	}
+	if selectorKind != "package" {
+		t.Fatalf("selectorKind = %q, want package", selectorKind)
+	}
+	if receiverType != "" {
+		t.Fatalf("receiverType = %q, want empty", receiverType)
+	}
+}
+
+func TestParseRipgrepLine_UsesGoParserFallbackForScopeAndSelectors(t *testing.T) {
+	setupTestGoFiles(t, map[string]string{
+		"pkg/build.go": `package pkg
+
+		func Build() string {
+			return "pkg"
+		}
+		`,
+		"main.go": `package main
+
+		import "example/pkg"
+
+		type Config struct{}
+
+		func (Config) Build() string {
+			return "method"
+		}
+
+		func UsePkg() string {
+			return pkg.Build()
+		}
+
+		func UseMethod(c Config) string {
+			return c.Build()
+		}
+		`,
+	})
+
+	defRef := parseRipgrepLine("main.go:7:func (Config) Build() string {", "Build")
+	if defRef == nil {
+		t.Fatal("expected method definition line to parse")
+	}
+	if defRef.Class != ast.ClassDef {
+		t.Fatalf("definition class = %s, want %s", defRef.Class, ast.ClassDef)
+	}
+
+	pkgCall := parseRipgrepLine("main.go:12:return pkg.Build()", "Build")
+	if pkgCall == nil {
+		t.Fatal("expected package selector call to parse")
+	}
+	if pkgCall.Scope != "func UsePkg" {
+		t.Fatalf("pkg call scope = %q, want func UsePkg", pkgCall.Scope)
+	}
+	if pkgCall.Class != ast.ClassCall {
+		t.Fatalf("pkg call class = %s, want %s", pkgCall.Class, ast.ClassCall)
+	}
+	if pkgCall.SelectorKind != "package" {
+		t.Fatalf("pkg call selectorKind = %q, want package", pkgCall.SelectorKind)
+	}
+
+	methodCall := parseRipgrepLine("main.go:16:return c.Build()", "Build")
+	if methodCall == nil {
+		t.Fatal("expected method selector call to parse")
+	}
+	if methodCall.Scope != "func UseMethod" {
+		t.Fatalf("method call scope = %q, want func UseMethod", methodCall.Scope)
+	}
+	if methodCall.SelectorKind != "method" {
+		t.Fatalf("method call selectorKind = %q, want method", methodCall.SelectorKind)
 	}
 }
 

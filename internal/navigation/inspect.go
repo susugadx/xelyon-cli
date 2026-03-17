@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -48,11 +49,12 @@ var FullBudget = Budget{
 
 // SymbolCandidate はシンボル候補。
 type SymbolCandidate struct {
-	Name    string
-	Kind    string
-	File    string // プロジェクトルートからの相対パス
-	Line    int
-	EndLine int
+	Name     string
+	Kind     string
+	File     string // プロジェクトルートからの相対パス
+	Line     int
+	EndLine  int
+	Receiver string // メソッド時のレシーバ型（例: *Config, Config）
 }
 
 // InspectResult は inspect_symbol の結果。
@@ -80,12 +82,15 @@ type InspectResult struct {
 
 // Reference はシンボル参照。
 type Reference struct {
-	File    string
-	Line    int
-	Scope   string // 包含関数名
-	Snippet string // マッチ行テキスト
-	IsTest  bool
-	Class   ast.MatchClass // AST 分類（ClassCall, ClassRef, ClassDef 等）
+	File         string
+	Line         int
+	Scope        string // 包含関数名
+	Snippet      string // マッチ行テキスト
+	IsTest       bool
+	Class        ast.MatchClass // AST 分類（ClassCall, ClassRef, ClassDef 等）
+	NodeType     string         // マッチした識別子ノード型（identifier / field_identifier など）
+	SelectorKind string         // selector の種別（package / method / unknown）
+	ReceiverType string         // method selector の推定レシーバ型
 }
 
 // TestRef は関連テストの参照情報。
@@ -100,6 +105,8 @@ func InspectSymbol(symbol, pathHint, mode string) string {
 	if symbol == "" {
 		return "Error: symbol is required"
 	}
+
+	query := parseSymbolQuery(symbol)
 
 	inspectMode := ModeSummary
 	if mode == "full" {
@@ -131,22 +138,24 @@ func InspectSymbol(symbol, pathHint, mode string) string {
 
 	// 同名シンボルを持つ他ファイルを特定（曖昧ファイル）
 	// pathHint で絞った場合でも、プロジェクト全体で同名定義がどこにあるか調べる
-	ambiguousFiles := findAmbiguousFiles(symbol, cand)
+	ambiguousFiles := findAmbiguousFiles(query.BaseName, cand)
 
 	// Caller / Reference / Test
-	allRefs, upstreamTruncated, upstreamIncomplete := findReferences(symbol)
+	allRefs, upstreamTruncated, upstreamIncomplete := findReferences(query.BaseName)
 	result.UpstreamTruncated = upstreamTruncated
 	result.UpstreamIncomplete = upstreamIncomplete
 	allRefs = filterRefsByCandidate(allRefs, cand, ambiguousFiles)
 	result.Callers, result.TotalCallers, result.MoreCallers = classifyCallers(allRefs, cand, budget.CallerLimit)
 	result.Refs, result.TotalRefs, result.MoreRefs = classifyRefs(allRefs, cand, budget.RefLimit)
-	result.Tests, result.TotalTests, result.MoreTests = findRelatedTests(symbol, allRefs, budget.TestLimit)
+	result.Tests, result.TotalTests, result.MoreTests = findRelatedTests(query.BaseName, allRefs, budget.TestLimit)
 
 	return formatInspectResult(result)
 }
 
 // resolveSymbolCandidates はプロジェクト内からシンボル候補を検索する。
 func resolveSymbolCandidates(symbol, pathHint string) []SymbolCandidate {
+	query := parseSymbolQuery(symbol)
+
 	goFiles := listGoFiles(pathHint)
 	if len(goFiles) == 0 {
 		return nil
@@ -159,18 +168,34 @@ func resolveSymbolCandidates(symbol, pathHint string) []SymbolCandidate {
 			continue
 		}
 		for _, s := range symbols {
-			if s.Name == symbol {
-				relPath := toRelativePath(f)
-				candidates = append(candidates, SymbolCandidate{
-					Name:    s.Name,
-					Kind:    string(s.Kind),
-					File:    relPath,
-					Line:    s.Line,
-					EndLine: s.EndLine,
-				})
+			if !symbolQueryMatches(query, s) {
+				continue
 			}
+			relPath := toRelativePath(f)
+			candidates = append(candidates, SymbolCandidate{
+				Name:     s.Name,
+				Kind:     string(s.Kind),
+				File:     relPath,
+				Line:     s.Line,
+				EndLine:  s.EndLine,
+				Receiver: extractMethodReceiver(s.Signature),
+			})
 		}
 	}
+
+	sort.SliceStable(candidates, func(i, j int) bool {
+		if candidates[i].File != candidates[j].File {
+			return candidates[i].File < candidates[j].File
+		}
+		if candidates[i].Line != candidates[j].Line {
+			return candidates[i].Line < candidates[j].Line
+		}
+		if candidates[i].EndLine != candidates[j].EndLine {
+			return candidates[i].EndLine < candidates[j].EndLine
+		}
+		return candidateDisplayName(candidates[i]) < candidateDisplayName(candidates[j])
+	})
+
 	return candidates
 }
 
@@ -295,12 +320,14 @@ func findAmbiguousFiles(symbol string, cand SymbolCandidate) map[string]bool {
 }
 
 // filterRefsByCandidate は、候補に安全に帰属できない参照を除外する。
-// - 候補自身の定義行は除外（本文で表示するため）
-// - 他ファイルの ClassDef は除外
-// - ambiguousFiles（同名シンボルを定義するファイル）内の参照は全て除外
+//   - 候補自身の定義行は除外（本文で表示するため）
+//   - 他ファイルの ClassDef は除外
+//   - ambiguousFiles（同名シンボルを定義するファイル）内では、
+//     selector / receiver で厳密に帰属できる参照だけを残す
 //
-// AST-only では型解決ができないため、同名定義のあるファイル内の call/ref が
-// どのシンボルを指すか判定できない。安全側に倒して除外する。
+// AST-only では完全な型解決はできないため、曖昧ファイル内の plain identifier は
+// 保守的に除外する。一方で package selector や receiver-qualified method は
+// 形状で安全に帰属できるため許可する。
 func filterRefsByCandidate(refs []Reference, cand SymbolCandidate, ambiguousFiles map[string]bool) []Reference {
 	var filtered []Reference
 	for _, ref := range refs {
@@ -308,12 +335,16 @@ func filterRefsByCandidate(refs []Reference, cand SymbolCandidate, ambiguousFile
 		if ref.File == cand.File && ref.Line >= cand.Line && ref.Line <= cand.EndLine {
 			continue
 		}
-		// 同名シンボルを定義するファイル内の参照は除外（誤帰属防止）
-		if ambiguousFiles[ref.File] {
+		// 他ファイルの定義行自体は除外
+		if ref.Class == ast.ClassDef && ref.File != cand.File {
 			continue
 		}
-		// 他ファイルの ClassDef は除外（同名シンボルの定義行自体）
-		if ref.Class == ast.ClassDef && ref.File != cand.File {
+		decision := candidateShapeMatch(ref, cand)
+		if !decision.Matched {
+			continue
+		}
+		// 同名シンボルを定義するファイル内では、厳密に帰属できる参照だけ許可する
+		if ambiguousFiles[ref.File] && !decision.Precise {
 			continue
 		}
 		filtered = append(filtered, ref)
@@ -327,9 +358,9 @@ func formatMultipleCandidates(symbol string, candidates []SymbolCandidate) strin
 	fmt.Fprintf(&sb, "Multiple symbols matched %q:\n", symbol)
 	for i, c := range candidates {
 		fmt.Fprintf(&sb, "  %d. %-40s %s %s (L%d-L%d)\n",
-			i+1, c.File, c.Kind, c.Name, c.Line, c.EndLine)
+			i+1, c.File, c.Kind, candidateDisplayName(c), c.Line, c.EndLine)
 	}
-	sb.WriteString("\nRefine with path to disambiguate.")
+	sb.WriteString("\nRefine with path or receiver-qualified symbol to disambiguate.")
 	return sb.String()
 }
 
@@ -344,7 +375,7 @@ func formatInspectResult(r InspectResult) string {
 
 	// ヘッダー
 	fmt.Fprintf(&sb, "── %s %s (L%d-L%d) in %s ──\n",
-		s.Kind, s.Name, s.Line, s.EndLine, s.File)
+		s.Kind, candidateDisplayName(*s), s.Line, s.EndLine, s.File)
 
 	// 本文
 	for _, line := range r.Body {

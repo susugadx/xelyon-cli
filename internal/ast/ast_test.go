@@ -245,6 +245,33 @@ func TestClassifyLine_SelectorFunctionCall(t *testing.T) {
 	if info.Class != ClassCall {
 		t.Fatalf("class = %s, want call", info.Class)
 	}
+	if info.NodeType != "field_identifier" {
+		t.Fatalf("nodeType = %s, want field_identifier", info.NodeType)
+	}
+	if info.SelectorKind != "package" {
+		t.Fatalf("selectorKind = %s, want package", info.SelectorKind)
+	}
+	if info.ReceiverType != "" {
+		t.Fatalf("receiverType = %q, want empty for package selector", info.ReceiverType)
+	}
+}
+
+// TestClassifyLine_MethodSelectorInfersReceiver は method selector から推定レシーバ型を返すことを確認する。
+func TestClassifyLine_MethodSelectorInfersReceiver(t *testing.T) {
+	src := []byte("package main\n\ntype Config struct{}\n\nfunc use(c Config) string {\n\treturn c.Build()\n}\n")
+	info, err := ClassifyLine("main.go", src, 6, "Build")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Class != ClassCall {
+		t.Fatalf("class = %s, want call", info.Class)
+	}
+	if info.SelectorKind != "method" {
+		t.Fatalf("selectorKind = %s, want method", info.SelectorKind)
+	}
+	if info.ReceiverType != "Config" {
+		t.Fatalf("receiverType = %q, want Config", info.ReceiverType)
+	}
 }
 
 // TestClassifyLine_Comment はコメント内マッチを comment と判定できることを確認する。

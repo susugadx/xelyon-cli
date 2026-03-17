@@ -47,6 +47,9 @@ make ci-check
 
 ## 補足
 
+`ExtractSymbols` が保持する Go シグネチャ情報は、`inspect_symbol` の
+レシーバ付きメソッド指定（例: `Config.Build`, `(*Config).Build`）の候補解決にも利用しています。
+
 import 文中の `"fmt"` のような文字列リテラルは、通常の string と区別して
 `import` と分類するように実装しています。
 

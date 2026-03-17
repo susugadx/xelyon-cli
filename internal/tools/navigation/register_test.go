@@ -1,6 +1,7 @@
 package navigation
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/tools"
@@ -32,6 +33,18 @@ func TestInspectSymbolTool_Schema(t *testing.T) {
 	}
 	if _, ok := props["mode"]; !ok {
 		t.Error("expected 'mode' property")
+	}
+	if symbolProp, ok := props["symbol"].(map[string]interface{}); ok {
+		desc, _ := symbolProp["description"].(string)
+		if !strings.Contains(desc, "Config.Build") {
+			t.Errorf("expected receiver-qualified example in symbol description, got %q", desc)
+		}
+	}
+	if modeProp, ok := props["mode"].(map[string]interface{}); ok {
+		enumVals, ok := modeProp["enum"].([]string)
+		if !ok || len(enumVals) != 2 || enumVals[0] != "summary" || enumVals[1] != "full" {
+			t.Errorf("expected mode enum [summary full], got %#v", modeProp["enum"])
+		}
 	}
 
 	required, ok := params["required"].([]string)

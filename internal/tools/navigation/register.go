@@ -23,7 +23,7 @@ func (t *InspectSymbolTool) Parameters() map[string]interface{} {
 		"properties": map[string]interface{}{
 			"symbol": map[string]interface{}{
 				"type":        "string",
-				"description": "Exact symbol name to inspect (function, type, method, variable, constant)",
+				"description": "Exact symbol name to inspect (for example: Build, Config.Build, (*Config).Build)",
 			},
 			"path": map[string]interface{}{
 				"type":        "string",
@@ -32,6 +32,7 @@ func (t *InspectSymbolTool) Parameters() map[string]interface{} {
 			"mode": map[string]interface{}{
 				"type":        "string",
 				"description": "Output mode: 'summary' (default, compact) or 'full' (expanded limits)",
+				"enum":        []string{"summary", "full"},
 			},
 		},
 		"required":             []string{"symbol"},

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"unicode"
@@ -56,9 +57,11 @@ type Symbol struct {
 
 // MatchInfo は特定行のマッチ分類情報を表す。
 type MatchInfo struct {
-	Class    MatchClass
-	Scope    string
-	NodeType string
+	Class        MatchClass
+	Scope        string
+	NodeType     string
+	SelectorKind string
+	ReceiverType string
 }
 
 // SyntaxError は AST 構文検証で検出した構文エラー情報を表す。
@@ -253,10 +256,13 @@ func classifyLineInTree(tree *gotreesitter.Tree, src []byte, line int, targetNam
 			continue
 		}
 		class := classifyNode(node, absStart, absEnd, lang)
+		selectorKind, receiverType := analyzeSelectorMatch(root, node, src, lang, absStart)
 		return &MatchInfo{
-			Class:    class,
-			Scope:    findEnclosingScope(node, src, lang),
-			NodeType: node.Type(lang),
+			Class:        class,
+			Scope:        findEnclosingScope(node, src, lang),
+			NodeType:     node.Type(lang),
+			SelectorKind: selectorKind,
+			ReceiverType: receiverType,
 		}, nil
 	}
 
@@ -370,6 +376,290 @@ func findEnclosingScope(node *gotreesitter.Node, src []byte, lang *gotreesitter.
 		}
 	}
 	return "package-level"
+}
+
+func analyzeSelectorMatch(root, node *gotreesitter.Node, src []byte, lang *gotreesitter.Language, matchByte uint32) (string, string) {
+	if node == nil || node.Type(lang) != "field_identifier" {
+		return "", ""
+	}
+
+	selector := findAncestorByType(node, lang, "selector_expression")
+	if selector == nil {
+		return "unknown", ""
+	}
+
+	operand := selector.ChildByFieldName("operand", lang)
+	if operand == nil {
+		operand = firstNamedChild(selector)
+	}
+	if operand == nil {
+		return "unknown", ""
+	}
+
+	if selectorOperandIsImportedPackage(root, operand, src, lang, matchByte) {
+		return "package", ""
+	}
+	if receiverType := inferReceiverTypeFromOperand(node, operand, src, lang, matchByte); receiverType != "" {
+		return "method", receiverType
+	}
+	return "unknown", ""
+}
+
+func findAncestorByType(node *gotreesitter.Node, lang *gotreesitter.Language, want string) *gotreesitter.Node {
+	for current := node; current != nil; current = current.Parent() {
+		if current.Type(lang) == want {
+			return current
+		}
+	}
+	return nil
+}
+
+func selectorOperandIsImportedPackage(root, operand *gotreesitter.Node, src []byte, lang *gotreesitter.Language, matchByte uint32) bool {
+	if root == nil || operand == nil || operand.Type(lang) != "identifier" {
+		return false
+	}
+
+	name := strings.TrimSpace(operand.Text(src))
+	if name == "" {
+		return false
+	}
+	if !collectImportedPackageNames(root, src, lang)[name] {
+		return false
+	}
+	return inferIdentifierType(operand, src, lang, matchByte) == ""
+}
+
+func collectImportedPackageNames(root *gotreesitter.Node, src []byte, lang *gotreesitter.Language) map[string]bool {
+	packages := make(map[string]bool)
+	if root == nil {
+		return packages
+	}
+
+	stack := []*gotreesitter.Node{root}
+	for len(stack) > 0 {
+		current := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		if current == nil {
+			continue
+		}
+		if current.Type(lang) == "import_spec" {
+			if name := importNameFromSpec(strings.TrimSpace(current.Text(src))); name != "" {
+				packages[name] = true
+			}
+		}
+		for i := int(current.NamedChildCount()) - 1; i >= 0; i-- {
+			child := current.NamedChild(i)
+			if child != nil {
+				stack = append(stack, child)
+			}
+		}
+	}
+	return packages
+}
+
+func importNameFromSpec(spec string) string {
+	spec = strings.TrimSpace(spec)
+	if spec == "" {
+		return ""
+	}
+
+	fields := strings.Fields(spec)
+	if len(fields) == 0 {
+		return ""
+	}
+
+	if len(fields) == 1 {
+		return defaultImportName(fields[0])
+	}
+
+	alias := strings.TrimSpace(fields[0])
+	if alias == "" || alias == "." || alias == "_" {
+		return ""
+	}
+	return alias
+}
+
+func defaultImportName(pathLiteral string) string {
+	pathLiteral = strings.Trim(pathLiteral, "`\"")
+	if pathLiteral == "" {
+		return ""
+	}
+	if idx := strings.LastIndex(pathLiteral, "/"); idx >= 0 && idx < len(pathLiteral)-1 {
+		return pathLiteral[idx+1:]
+	}
+	return pathLiteral
+}
+
+func inferReceiverTypeFromOperand(node, operand *gotreesitter.Node, src []byte, lang *gotreesitter.Language, matchByte uint32) string {
+	if operand == nil {
+		return ""
+	}
+
+	switch operand.Type(lang) {
+	case "parenthesized_expression":
+		return inferReceiverTypeFromOperand(node, firstNamedChild(operand), src, lang, matchByte)
+	case "unary_expression":
+		return inferReceiverTypeFromOperand(node, lastNamedChild(operand), src, lang, matchByte)
+	case "composite_literal":
+		if typeNode := operand.ChildByFieldName("type", lang); typeNode != nil {
+			return strings.TrimSpace(typeNode.Text(src))
+		}
+		return inferTypeFromCompositeLiteralText(strings.TrimSpace(operand.Text(src)))
+	case "identifier":
+		return inferIdentifierType(operand, src, lang, matchByte)
+	case "type_identifier", "generic_type", "pointer_type", "array_type", "slice_type", "map_type":
+		return strings.TrimSpace(operand.Text(src))
+	default:
+		return inferTypeFromCompositeLiteralText(strings.TrimSpace(operand.Text(src)))
+	}
+}
+
+func inferTypeFromCompositeLiteralText(expr string) string {
+	expr = strings.TrimSpace(strings.TrimPrefix(expr, "&"))
+	if expr == "" {
+		return ""
+	}
+	if idx := strings.Index(expr, "{"); idx > 0 {
+		return strings.TrimSpace(expr[:idx])
+	}
+	return ""
+}
+
+func inferIdentifierType(node *gotreesitter.Node, src []byte, lang *gotreesitter.Language, matchByte uint32) string {
+	if node == nil {
+		return ""
+	}
+
+	name := strings.TrimSpace(node.Text(src))
+	if name == "" {
+		return ""
+	}
+
+	scope := findEnclosingCallable(node, lang)
+	if scope == nil {
+		return ""
+	}
+
+	signature := extractSignature(scope, src, lang)
+	if typ := inferIdentifierTypeFromSignature(signature, name); typ != "" {
+		return typ
+	}
+
+	if matchByte <= scope.StartByte() || matchByte > uint32(len(src)) {
+		return ""
+	}
+	return inferIdentifierTypeFromPrefix(string(src[scope.StartByte():matchByte]), name)
+}
+
+func findEnclosingCallable(node *gotreesitter.Node, lang *gotreesitter.Language) *gotreesitter.Node {
+	for current := node; current != nil; current = current.Parent() {
+		switch current.Type(lang) {
+		case "function_declaration", "method_declaration":
+			return current
+		}
+	}
+	return nil
+}
+
+func inferIdentifierTypeFromSignature(signature, name string) string {
+	signature = strings.TrimSpace(signature)
+	if !strings.HasPrefix(signature, "func") {
+		return ""
+	}
+
+	rest := strings.TrimSpace(strings.TrimPrefix(signature, "func"))
+	if strings.HasPrefix(rest, "(") {
+		receiverSpec, after := splitLeadingGroup(rest)
+		if typ := inferNamedTypeFromSection(receiverSpec, name); typ != "" {
+			return typ
+		}
+		rest = strings.TrimSpace(after)
+	}
+
+	openIdx := strings.Index(rest, "(")
+	if openIdx < 0 || openIdx >= len(rest) {
+		return ""
+	}
+	paramsSpec, _ := splitLeadingGroup(rest[openIdx:])
+	return inferNamedTypeFromSection(paramsSpec, name)
+}
+
+func splitLeadingGroup(s string) (string, string) {
+	s = strings.TrimSpace(s)
+	if !strings.HasPrefix(s, "(") {
+		return "", s
+	}
+
+	depth := 0
+	for i, r := range s {
+		switch r {
+		case '(':
+			depth++
+		case ')':
+			depth--
+			if depth == 0 {
+				return strings.TrimSpace(s[1:i]), strings.TrimSpace(s[i+1:])
+			}
+		}
+	}
+	return "", ""
+}
+
+func inferNamedTypeFromSection(section, name string) string {
+	section = strings.TrimSpace(section)
+	if section == "" || name == "" {
+		return ""
+	}
+
+	pattern := regexp.MustCompile(`(?:^|,)\s*` + regexp.QuoteMeta(name) + `\s+([^,]+)`)
+	matches := pattern.FindStringSubmatch(section)
+	if len(matches) < 2 {
+		return ""
+	}
+	return strings.TrimSpace(matches[1])
+}
+
+func inferIdentifierTypeFromPrefix(prefix, name string) string {
+	if prefix == "" || name == "" {
+		return ""
+	}
+
+	quotedName := regexp.QuoteMeta(name)
+	patterns := []*regexp.Regexp{
+		regexp.MustCompile(`(?m)\b` + quotedName + `\s*:?=\s*&?\s*([A-Za-z_][A-Za-z0-9_]*(?:\[[^\]\n]+\])?)\s*\{`),
+		regexp.MustCompile(`(?m)\bvar\s+` + quotedName + `\s*=\s*&?\s*([A-Za-z_][A-Za-z0-9_]*(?:\[[^\]\n]+\])?)\s*\{`),
+		regexp.MustCompile(`(?m)\bvar\s+` + quotedName + `\s+([*A-Za-z_][A-Za-z0-9_\.\[\]\*]*)`),
+	}
+
+	latestPos := -1
+	latestType := ""
+	for _, pattern := range patterns {
+		matches := pattern.FindAllStringSubmatchIndex(prefix, -1)
+		for _, loc := range matches {
+			if len(loc) < 4 {
+				continue
+			}
+			if loc[0] >= latestPos {
+				latestPos = loc[0]
+				latestType = strings.TrimSpace(prefix[loc[2]:loc[3]])
+			}
+		}
+	}
+	return latestType
+}
+
+func firstNamedChild(node *gotreesitter.Node) *gotreesitter.Node {
+	if node == nil || node.NamedChildCount() == 0 {
+		return nil
+	}
+	return node.NamedChild(0)
+}
+
+func lastNamedChild(node *gotreesitter.Node) *gotreesitter.Node {
+	if node == nil || node.NamedChildCount() == 0 {
+		return nil
+	}
+	return node.NamedChild(int(node.NamedChildCount()) - 1)
 }
 
 func fieldContainsRange(node *gotreesitter.Node, fieldName string, startByte, endByte uint32, lang *gotreesitter.Language) bool {
