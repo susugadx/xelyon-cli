@@ -64,14 +64,15 @@ func TestParseStreamingResponse_ParserError(t *testing.T) {
 		return "", false, errors.New("parse error")
 	}
 
-	// パースエラーは無視されて続行される
 	result, err := ParseStreamingResponse(ctx, resp, spinner, parser)
-	if err != nil {
-		t.Errorf("ParseStreamingResponse() should ignore parser errors, got: %v", err)
+	if err == nil {
+		t.Fatal("ParseStreamingResponse() should return parser error")
 	}
-
 	if result != "" {
-		t.Errorf("ParseStreamingResponse() result = %q, want empty (all lines errored)", result)
+		t.Errorf("ParseStreamingResponse() result = %q, want empty", result)
+	}
+	if !strings.Contains(err.Error(), "parse error") {
+		t.Errorf("ParseStreamingResponse() error = %v, want parse error", err)
 	}
 }
 

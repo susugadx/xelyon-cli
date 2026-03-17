@@ -148,8 +148,11 @@ func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *u
 			// プロバイダー固有のパース処理
 			content, done, err := parser(line)
 			if err != nil {
-				// パースエラーは無視して次の行へ
-				continue
+				spinner.Stop()
+				if !firstChunk {
+					_, _ = fmt.Fprintln(out)
+				}
+				return fullResponse.String(), err
 			}
 
 			if done {

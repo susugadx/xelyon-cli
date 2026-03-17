@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
@@ -300,6 +301,29 @@ func TestOpenAIProvider_ResponsesAPI_Streaming(t *testing.T) {
 	}
 	if result != "Hello from Codex" {
 		t.Errorf("chatWithResponses() = %q, want 'Hello from Codex'", result)
+	}
+}
+
+func TestOpenAIProvider_ResponsesAPI_ErrorEvent(t *testing.T) {
+	chunks := []string{
+		`{"type":"response.created","response":{"id":"resp_err"}}`,
+		`{"type":"error","error":{"code":"server_error","message":"temporary upstream failure"}}`,
+	}
+	server := mockAPIServer(t, streamingHandler(chunks))
+
+	originalURL := os.Getenv("OPENAI_RESPONSES_URL")
+	defer os.Setenv("OPENAI_RESPONSES_URL", originalURL)
+	os.Setenv("OPENAI_RESPONSES_URL", server.URL)
+
+	p := New("test-key")
+	history := []api.Message{{Role: "user", Content: "Hi"}}
+
+	_, err := p.chatWithResponses(context.Background(), "System", history, "gpt-5.2-codex")
+	if err == nil {
+		t.Fatal("chatWithResponses() should return error for error event")
+	}
+	if got := err.Error(); !strings.Contains(got, "temporary upstream failure") {
+		t.Fatalf("chatWithResponses() error = %q, want to contain temporary upstream failure", got)
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/ui"
@@ -19,6 +20,18 @@ type BaseProvider struct {
 	APIKey       string
 	APIURL       string
 	HTTPClient   *http.Client
+}
+
+const defaultResponseHeaderTimeout = 60 * time.Second
+
+func newStreamingHTTPClient() *http.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.ResponseHeaderTimeout = defaultResponseHeaderTimeout
+
+	return &http.Client{
+		Timeout:   config.DefaultHTTPTimeout,
+		Transport: transport,
+	}
 }
 
 // NewBaseProvider は共通のプロバイダー基盤を作成
@@ -34,9 +47,7 @@ func NewBaseProvider(name, apiKey, defaultURL, envURLKey string) BaseProvider {
 		ProviderName: name,
 		APIKey:       apiKey,
 		APIURL:       apiURL,
-		HTTPClient: &http.Client{
-			Timeout: config.DefaultHTTPTimeout,
-		},
+		HTTPClient:   newStreamingHTTPClient(),
 	}
 }
 
