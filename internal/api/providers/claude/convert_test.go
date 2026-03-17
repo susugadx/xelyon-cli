@@ -2,6 +2,7 @@ package claude
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
@@ -472,6 +473,29 @@ func TestSetMessageCacheBreakpoints_MultiBlockUser(t *testing.T) {
 	// ただし候補が2つしかないため、short にも BP が付く
 	if messages[0].Content[0].CacheControl == nil {
 		t.Error("expected cache_control on second tool_result (only 2 candidates)")
+	}
+}
+
+func TestSetMessageCacheBreakpoints_UsesEstimatedTokens(t *testing.T) {
+	largeBytesLowTokens := strings.Repeat("abcd ", 40) // 200 bytes, lower token density
+	smallerBytesHighTokens := strings.Repeat("x", 120) // 120 bytes, higher token density
+
+	messages := []AnthropicMessage{
+		{Role: "user", Content: []AnthropicContentBlock{{Type: "tool_result", ToolUseID: "t1", Content: largeBytesLowTokens}}},
+		{Role: "assistant", Content: []AnthropicContentBlock{{Type: "text", Text: "reply"}}},
+		{Role: "user", Content: []AnthropicContentBlock{{Type: "tool_result", ToolUseID: "t2", Content: smallerBytesHighTokens}}},
+		{Role: "assistant", Content: []AnthropicContentBlock{{Type: "text", Text: "reply"}}},
+		{Role: "user", Content: []AnthropicContentBlock{{Type: "text", Text: "msg1"}}},
+		{Role: "assistant", Content: []AnthropicContentBlock{{Type: "text", Text: "reply"}}},
+		{Role: "user", Content: []AnthropicContentBlock{{Type: "text", Text: "msg2"}}},
+		{Role: "assistant", Content: []AnthropicContentBlock{{Type: "text", Text: "reply"}}},
+		{Role: "user", Content: []AnthropicContentBlock{{Type: "text", Text: "msg3"}}},
+	}
+
+	SetMessageCacheBreakpointsWithConfigAndEnabled(messages, config.DefaultConfig(), true)
+
+	if messages[2].Content[0].CacheControl == nil {
+		t.Fatal("expected token-dense tool_result to receive cache_control")
 	}
 }
 

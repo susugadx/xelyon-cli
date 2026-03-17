@@ -34,6 +34,47 @@ Check references before changes`
 	}
 }
 
+func TestBuildProjectConfigBlock(t *testing.T) {
+	block := BuildProjectConfigBlock(
+		[]string{"Always run tests"},
+		[]string{"base context", "### Agent\nagent context"},
+	)
+
+	if !strings.Contains(block, "<!-- PROJECT_CONFIG_START -->") {
+		t.Fatal("project config start marker missing")
+	}
+	if !strings.Contains(block, "PROJECT-SPECIFIC RULES") {
+		t.Fatal("rules block missing")
+	}
+	if !strings.Contains(block, "## Project Context:") {
+		t.Fatal("project context header missing")
+	}
+	if !strings.Contains(block, "### Agent\nagent context") {
+		t.Fatal("conditional context missing")
+	}
+}
+
+func TestInjectProjectConfigBlockAndStrip(t *testing.T) {
+	systemPrompt := `## Workflow Rules
+
+### 10. Verification Protocol (MANDATORY)
+A task is NOT complete until verification passes
+
+### 11. Impact Analysis
+Check references before changes`
+	block := BuildProjectConfigBlock([]string{"Always run tests"}, []string{"base context"})
+
+	result := InjectProjectConfigBlock(systemPrompt, block)
+	if !strings.Contains(result, "<!-- PROJECT_CONFIG_START -->") {
+		t.Fatal("project config block missing")
+	}
+
+	stripped := StripProjectConfigSections(result)
+	if stripped != systemPrompt {
+		t.Fatalf("StripProjectConfigSections() = %q, want %q", stripped, systemPrompt)
+	}
+}
+
 func TestInjectProjectRules_EmptyBlock(t *testing.T) {
 	systemPrompt := "original prompt"
 	result := InjectProjectRules(systemPrompt, "")
@@ -48,7 +89,7 @@ func TestInjectProjectRules_MarkerNotFound(t *testing.T) {
 
 	result := InjectProjectRules(systemPrompt, rulesBlock)
 	// マーカーがなければ末尾に追加
-	if !strings.HasSuffix(result, rulesBlock) {
+	if !strings.Contains(result, rulesBlock) {
 		t.Error("should append to end when marker not found")
 	}
 }

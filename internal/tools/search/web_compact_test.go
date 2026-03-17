@@ -1,9 +1,14 @@
 package search
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
 func TestCompactWebSearchResult_ShortResult(t *testing.T) {
@@ -236,4 +241,83 @@ func TestCountRemainingEntries(t *testing.T) {
 	if got != 2 {
 		t.Errorf("countRemainingEntries = %d, want 2", got)
 	}
+}
+
+func TestCompactWebSearchResultWithUtilityModel_UsesUtilityResult(t *testing.T) {
+	originalRunUtilityModelTask := runUtilityModelTask
+	t.Cleanup(func() {
+		runUtilityModelTask = originalRunUtilityModelTask
+	})
+
+	called := 0
+	runUtilityModelTask = func(ctx context.Context, cfg *config.Config, task, systemPrompt, userPrompt string) (string, error) {
+		called++
+		if task != "web_search_compaction" {
+			t.Fatalf("task = %q, want web_search_compaction", task)
+		}
+		if !strings.Contains(systemPrompt, "utility model for XELYON") {
+			t.Fatalf("unexpected system prompt: %q", systemPrompt)
+		}
+		if !strings.Contains(userPrompt, "Query: golang release notes") {
+			t.Fatalf("unexpected user prompt: %q", userPrompt)
+		}
+		return "Summary:\nShortened result.\n\nSources:\n- Go Blog (https://go.dev/blog)", nil
+	}
+
+	cfg := config.DefaultConfig()
+	cfg.UtilityModel.Enabled = true
+	cfg.UtilityModel.Provider = "openai"
+	cfg.UtilityModel.Model = "gpt-5.2-mini"
+
+	var b strings.Builder
+	b.WriteString("Summary:\n")
+	for i := 0; i < 80; i++ {
+		b.WriteString("Detailed search result line with enough text to exceed the utility-model threshold.\n")
+	}
+	b.WriteString("\nSources:\n\n1. Go Blog\n   URL: https://go.dev/blog\n")
+
+	got := compactWebSearchResultWithUtilityModel(toolsExecutionContextForTest(cfg), "golang release notes", b.String())
+	if called != 1 {
+		t.Fatalf("utility model should be called once, got %d", called)
+	}
+	if !strings.Contains(got, "Query: golang release notes") {
+		t.Fatalf("result should preserve query header, got %q", got)
+	}
+	if !strings.Contains(got, "Shortened result.") {
+		t.Fatalf("result should use utility-model summary, got %q", got)
+	}
+}
+
+func TestCompactWebSearchResultWithUtilityModel_FallsBackOnError(t *testing.T) {
+	originalRunUtilityModelTask := runUtilityModelTask
+	t.Cleanup(func() {
+		runUtilityModelTask = originalRunUtilityModelTask
+	})
+
+	runUtilityModelTask = func(ctx context.Context, cfg *config.Config, task, systemPrompt, userPrompt string) (string, error) {
+		return "", errors.New("boom")
+	}
+
+	cfg := config.DefaultConfig()
+	cfg.UtilityModel.Enabled = true
+	cfg.UtilityModel.Provider = "openai"
+	cfg.UtilityModel.Model = "gpt-5.2-mini"
+
+	var b strings.Builder
+	b.WriteString("Summary:\n")
+	for i := 0; i < 80; i++ {
+		b.WriteString("Detailed search result line with enough text to exceed the utility-model threshold.\n")
+	}
+	b.WriteString("\nSources:\n\n1. Example\n   URL: https://example.com\n")
+
+	raw := b.String()
+	got := compactWebSearchResultWithUtilityModel(toolsExecutionContextForTest(cfg), "fallback query", raw)
+	want := CompactWebSearchResult("fallback query", raw)
+	if got != want {
+		t.Fatalf("fallback result mismatch\n got: %q\nwant: %q", got, want)
+	}
+}
+
+func toolsExecutionContextForTest(cfg *config.Config) tools.ExecutionContext {
+	return tools.ExecutionContext{Config: cfg}
 }

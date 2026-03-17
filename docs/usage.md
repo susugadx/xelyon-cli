@@ -113,13 +113,15 @@ xelyon.yaml は AI 用の構造化設定ファイルです。
 **書くべきこと:**
 - `context`: プロジェクトの概要（1-2行）
 - `rules`: 開発ルール・コーディング規約
+- `conditional`: 特定パスにだけ適用したい rules/context
+- `ignore`: Project Map / `list_dir` / `search_code` で共有したい ignore パターン
 - `hooks`: 完了時フック・ステップ完了時フック（変更後に実行する検証コマンド）
 
 **書かないこと:**
 - ディレクトリ構造やコードマップの詳細
 - 詳細なドキュメント
 
-> 起動時に Project Map が自動生成されるため、`xelyon.yaml` にファイル一覧や関数目次を書く必要はありません。
+> 起動時は軽量な Project Map manifest が自動生成されるため、`xelyon.yaml` にファイル一覧や関数目次を書く必要はありません。
 
 ### xelyon.yaml の例
 
@@ -135,6 +137,21 @@ rules:
   - "変数名はキャメルケース"
   - "関数コメント必須"
   - "コミットメッセージは日本語で"
+
+conditional:
+  - name: API handlers
+    paths:
+      - "internal/handlers/**/*.go"
+      - "internal/api/**/*.go"
+    rules:
+      - "公開関数・型には日本語コメント必須"
+    context: |
+      HTTP handler は timeout と error handling を必須にします。
+
+ignore:
+  patterns:
+    - "coverage"
+    - "*.generated.go"
 
 hooks:
   on_completion:
@@ -237,12 +254,12 @@ hooks:
 ```bash
 $ xelyon
 📋 xelyon.yaml loaded
-🗺️  Project map loaded (150 symbols from 42 files)
-📋 Context size: ~9.5k tok
+🗺️  Project map loaded (manifest from 42 files)
+📋 Context size: ~8.1k tok
    ├── Base prompt: ~3.9k
    ├── Tools (9): ~2.7k
-   ├── Project map (150 symbols, 42 files): ~2.3k
-   └── xelyon.yaml: ~299
+   ├── Project map manifest (42 files): ~0.9k
+   └── xelyon.yaml: ~0.6k
 ```
 
 - `running`: 実行中

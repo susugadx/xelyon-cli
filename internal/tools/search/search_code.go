@@ -12,6 +12,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/pathmatch"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
@@ -73,15 +75,24 @@ type SearchOptions struct {
 	IncludeHidden  bool
 	IncludeIgnored bool
 	OutputMode     string // ""（smart default）, "full", "manifest"
+
+	ignoreMatcher *pathmatch.Matcher
+	ignoreGlobs   []string
+	ignoreKey     string
 }
 
 // ExecuteSearchCode はコード検索を実行し、フォーマット済み結果を返す
 func ExecuteSearchCode(opts SearchOptions) string {
-	return ExecuteSearchCodeWithCache(nil, opts)
+	return ExecuteSearchCodeWithConfig(nil, nil, opts)
 }
 
 // ExecuteSearchCodeWithCache はキャッシュを指定してコード検索を実行する。
 func ExecuteSearchCodeWithCache(cache tools.ToolCacheInterface, opts SearchOptions) string {
+	return ExecuteSearchCodeWithConfig(nil, cache, opts)
+}
+
+// ExecuteSearchCodeWithConfig は設定とキャッシュを指定してコード検索を実行する。
+func ExecuteSearchCodeWithConfig(cfg *config.Config, cache tools.ToolCacheInterface, opts SearchOptions) string {
 	if opts.Pattern == "" {
 		return "Error: pattern is required"
 	}
@@ -104,6 +115,14 @@ func ExecuteSearchCodeWithCache(cache tools.ToolCacheInterface, opts SearchOptio
 	}
 	if opts.TokenBudget > 6000 {
 		opts.TokenBudget = 6000
+	}
+
+	if !opts.IncludeIgnored {
+		projectCfg := config.LoadProjectConfig()
+		ignorePatterns := config.ResolveSharedIgnorePatterns(cfg, projectCfg)
+		opts.ignoreMatcher = pathmatch.NewMatcher(ignorePatterns)
+		opts.ignoreGlobs = pathmatch.BuildRGIgnoreGlobs(ignorePatterns)
+		opts.ignoreKey = strings.Join(ignorePatterns, ",")
 	}
 
 	patterns := splitPatterns(opts.Pattern)
@@ -336,8 +355,8 @@ func buildMultiCacheKey(patterns []string) string {
 }
 
 func buildSearchCacheKey(opts SearchOptions) string {
-	return fmt.Sprintf("%s|%s|%s|%d|%d|regex=%t|multiline=%t|hidden=%t|ignored=%t|mode=%s",
-		opts.Path, opts.FilePattern, opts.FileType, opts.CtxLines, opts.TokenBudget, opts.IsRegex, opts.Multiline, opts.IncludeHidden, opts.IncludeIgnored, opts.OutputMode)
+	return fmt.Sprintf("%s|%s|%s|%d|%d|regex=%t|multiline=%t|hidden=%t|ignored=%t|mode=%s|ignore=%s",
+		opts.Path, opts.FilePattern, opts.FileType, opts.CtxLines, opts.TokenBudget, opts.IsRegex, opts.Multiline, opts.IncludeHidden, opts.IncludeIgnored, opts.OutputMode, opts.ignoreKey)
 }
 
 func collectFilePaths(results []SearchResult) []string {
@@ -426,6 +445,9 @@ func executeSearch(pattern string, opts SearchOptions, maxCountPerFile int) (str
 		}
 		if opts.IncludeIgnored {
 			args = append(args, "--no-ignore")
+		}
+		for _, glob := range opts.ignoreGlobs {
+			args = append(args, "--glob", glob)
 		}
 		args = append(args, pattern, opts.Path)
 

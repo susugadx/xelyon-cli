@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
@@ -19,7 +20,7 @@ func (a *Agent) CompressHistory(keepRecent int) error {
 	}
 
 	// 圧縮前の統計
-	beforeTokens := estimateTokens(a.History)
+	beforeTokens := estimateTokens(a.CurrentModel, a.History)
 
 	// 圧縮対象のメッセージを抽出（FC ターンペアの分断を防止）
 	splitIdx := adjustSplitForFCPairs(a.History, len(a.History)-keepRecent)
@@ -67,7 +68,7 @@ func (a *Agent) CompressHistory(keepRecent int) error {
 	a.History = newHistory
 
 	// 圧縮後の統計
-	afterTokens := estimateTokens(a.History)
+	afterTokens := estimateTokens(a.CurrentModel, a.History)
 
 	// 結果表示
 	_, _ = fmt.Fprintf(out, "   Before: %s tokens → After: %s tokens\n",
@@ -108,13 +109,11 @@ func adjustSplitForFCPairs(history []api.Message, splitIdx int) int {
 	return splitIdx
 }
 
-// estimateTokens は概算トークン数を計算（英語: 4文字/token、日本語: 2文字/token）
-func estimateTokens(messages []api.Message) int {
-	totalChars := 0
+// estimateTokens は会話履歴の概算トークン数を計算する。
+func estimateTokens(model string, messages []api.Message) int {
+	total := 0
 	for _, msg := range messages {
-		totalChars += len(msg.Content)
+		total += token.EstimateTokenCountForModel(model, msg.Content)
 	}
-
-	// 簡易計算: 平均3文字/token として概算
-	return totalChars / 3
+	return total
 }

@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/agent/token"
@@ -181,8 +180,7 @@ func (a *Agent) parseToolCalls(response string) []*tools.ToolCall {
 func (a *Agent) estimateToolDefinitionTokens() int {
 	total := 0
 	for _, def := range a.registry().GetToolDefinitions() {
-		jsonBytes, _ := json.Marshal(def)
-		total += token.EstimateTokenCount(string(jsonBytes))
+		total += token.EstimateStructuredValueTokenCountForModel(a.CurrentModel, def)
 	}
 	return total
 }

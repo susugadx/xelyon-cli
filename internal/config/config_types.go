@@ -21,15 +21,16 @@ type Config struct {
 	ListDir         ListDirConfig                  `yaml:"list_dir"`
 	ProjectMap      ProjectMapConfig               `yaml:"project_map"`
 
-	GitStage  GitStageConfig  `yaml:"git_stage"`
-	PlanMode  PlanModeConfig  `yaml:"plan_mode"`
-	LSP       LSPConfig       `yaml:"lsp"`
-	OpenAI    OpenAIConfig    `yaml:"openai"`
-	Thinking  ThinkingConfig  `yaml:"thinking"`
-	Output    OutputConfig    `yaml:"output"`
-	WebSearch WebSearchConfig `yaml:"web_search"`
-	MCP       MCPConfig       `yaml:"mcp"`
-	Hooks     HooksConfig     `yaml:"hooks"`
+	GitStage     GitStageConfig     `yaml:"git_stage"`
+	PlanMode     PlanModeConfig     `yaml:"plan_mode"`
+	LSP          LSPConfig          `yaml:"lsp"`
+	OpenAI       OpenAIConfig       `yaml:"openai"`
+	Thinking     ThinkingConfig     `yaml:"thinking"`
+	Output       OutputConfig       `yaml:"output"`
+	WebSearch    WebSearchConfig    `yaml:"web_search"`
+	UtilityModel UtilityModelConfig `yaml:"utility_model"`
+	MCP          MCPConfig          `yaml:"mcp"`
+	Hooks        HooksConfig        `yaml:"hooks"`
 	// 将来の拡張用
 	// Cloud CloudConfig `yaml:"cloud,omitempty"`
 }
@@ -48,18 +49,19 @@ type GeneralConfig struct {
 
 // CompressionConfig は会話履歴圧縮の設定
 type CompressionConfig struct {
-	AutoCompress         bool   `yaml:"auto_compress"`                          // 自動圧縮を有効化（デフォルト: true）
-	ThresholdTokens      int    `yaml:"threshold_tokens"`                       // 自動圧縮のトークン閾値（0 = 使用率ベース）
-	ThresholdPercent     int    `yaml:"threshold_percent"`                      // 自動圧縮の使用率閾値（デフォルト: 80%）
-	TokenThreshold       int    `yaml:"token_threshold" json:"token_threshold"` // Context トークン数の絶対閾値（デフォルト: 100000）
-	Model                string `yaml:"model" json:"model"`                     // 圧縮用モデル名（空 = プロバイダー別デフォルト、main = メインモデル）
-	KeepRecent           int    `yaml:"keep_recent"`                            // 保持する最新メッセージ数
-	PreferCompactAPI     bool   `yaml:"prefer_compact_api"`                     // OpenAI Compact API を優先（デフォルト: true）
-	ClaudeCompaction     bool   `yaml:"claude_compaction"`                      // Claude系の compact_20260112 を有効化（clear_tool_uses とは独立）
-	CompactionTrigger    int    `yaml:"compaction_trigger"`                     // compact のトリガー閾値（デフォルト: 150000）
-	ClearToolUses        bool   `yaml:"clear_tool_uses"`                        // Claude系の server-side tool clearing を有効化（compact とは独立）
-	ClearToolUsesTrigger int    `yaml:"clear_tool_uses_trigger"`                // clear_tool_uses のトリガー閾値（デフォルト: 80000、最小: 50000）
-	ClearToolInputs      bool   `yaml:"clear_tool_inputs"`                      // tool_use 側の入力もクリアする
+	AutoCompress         bool           `yaml:"auto_compress"`                          // 自動圧縮を有効化（デフォルト: true）
+	ThresholdTokens      int            `yaml:"threshold_tokens"`                       // 自動圧縮のトークン閾値（0 = 使用率ベース）
+	ThresholdPercent     int            `yaml:"threshold_percent"`                      // 自動圧縮の使用率閾値（デフォルト: 80%）
+	TokenThreshold       int            `yaml:"token_threshold" json:"token_threshold"` // Context トークン数の絶対閾値（デフォルト: 100000）
+	Model                string         `yaml:"model" json:"model"`                     // 圧縮用モデル名（空 = プロバイダー別デフォルト、main = メインモデル）
+	KeepRecent           int            `yaml:"keep_recent"`                            // 保持する最新メッセージ数
+	PreferCompactAPI     bool           `yaml:"prefer_compact_api"`                     // OpenAI Compact API を優先（デフォルト: true）
+	ClaudeCompaction     bool           `yaml:"claude_compaction"`                      // Claude系の compact_20260112 を有効化（clear_tool_uses とは独立）
+	CompactionTrigger    int            `yaml:"compaction_trigger"`                     // compact のトリガー閾値（デフォルト: 150000）
+	ClearToolUses        bool           `yaml:"clear_tool_uses"`                        // Claude系の server-side tool clearing を有効化（compact とは独立）
+	ClearToolUsesTrigger int            `yaml:"clear_tool_uses_trigger"`                // clear_tool_uses のトリガー閾値（デフォルト: 80000、最小: 50000）
+	ClearToolInputs      bool           `yaml:"clear_tool_inputs"`                      // tool_use 側の入力もクリアする
+	ProviderThresholds   map[string]int `yaml:"provider_thresholds,omitempty"`          // provider/model ごとのコスト最適化閾値
 }
 
 // LoopDetectionConfig はループ検知の設定
@@ -160,6 +162,14 @@ type WebSearchConfig struct {
 	CacheEnabled bool   `yaml:"cache_enabled"`      // キャッシュを有効化（デフォルト: true）
 	CacheTTL     int    `yaml:"cache_ttl"`          // キャッシュTTL秒数（デフォルト: 3600 = 1時間）
 	CacheSize    int    `yaml:"cache_size"`         // 最大キャッシュ数（デフォルト: 50）
+}
+
+// UtilityModelConfig は軽量な補助タスク専用モデルの設定
+type UtilityModelConfig struct {
+	Enabled  bool     `yaml:"enabled"`            // utility model を有効化
+	Provider string   `yaml:"provider,omitempty"` // 使用プロバイダー（openai/gemini/claude 等）
+	Model    string   `yaml:"model,omitempty"`    // 使用モデル（空 = provider_models の default_model）
+	Tasks    []string `yaml:"tasks,omitempty"`    // 許可する軽量タスク
 }
 
 // MCPConfig は MCP (Model Context Protocol) サーバー接続の設定

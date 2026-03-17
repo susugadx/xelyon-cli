@@ -116,7 +116,7 @@ func (t *SearchCodeTool) Run(execCtx tools.ExecutionContext, args map[string]str
 		}
 	}
 
-	result := ExecuteSearchCodeWithCache(execCtx.EffectiveToolCache(), opts)
+	result := ExecuteSearchCodeWithConfig(execCtx.EffectiveConfig(), execCtx.EffectiveToolCache(), opts)
 	return result, nil, nil
 }
 

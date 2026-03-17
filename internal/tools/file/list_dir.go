@@ -8,16 +8,10 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/pathmatch"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
-
-// デフォルト除外ディレクトリ
-var defaultIgnoreDirs = map[string]bool{
-	".git": true, "node_modules": true, "vendor": true,
-	".next": true, "__pycache__": true, ".venv": true,
-	"dist": true, "build": true, ".idea": true, ".vscode": true,
-}
 
 const (
 	maxEntries           = 200
@@ -68,18 +62,13 @@ func ExecuteListDirWithRuntime(cfg *config.Config, cache tools.ToolCacheInterfac
 
 	cachePath := absPath + "::depth=" + strconv.Itoa(depth)
 
-	ignoreDirs := make(map[string]bool, len(defaultIgnoreDirs))
-	for k, v := range defaultIgnoreDirs {
-		ignoreDirs[k] = v
-	}
-	if cfg != nil {
-		for _, d := range cfg.ListDir.AdditionalIgnoreDirs {
-			d = strings.TrimSpace(d)
-			if d == "" {
-				continue
-			}
-			ignoreDirs[d] = true
-		}
+	projectCfg := config.LoadProjectConfig()
+	ignorePatterns := config.ResolveSharedIgnorePatterns(cfg, projectCfg)
+	matcher := pathmatch.NewMatcher(ignorePatterns)
+
+	rootPath := absPath
+	if projectCfg != nil && projectCfg.FilePath != "" {
+		rootPath = filepath.Dir(projectCfg.FilePath)
 	}
 
 	if cache != nil {
@@ -96,7 +85,7 @@ func ExecuteListDirWithRuntime(cfg *config.Config, cache tools.ToolCacheInterfac
 		return fmt.Sprintf("Error: %s is not a directory", absPath)
 	}
 
-	section := summarizeListDir(absPath, "", depth, ignoreDirs, &listDirBudget{remainingEntries: maxEntries}, true)
+	section := summarizeListDir(absPath, rootPath, "", depth, matcher, &listDirBudget{remainingEntries: maxEntries}, true)
 	lines := renderListDirSummary(absPath, depth, section)
 	result := strings.Join(lines, "\n")
 
@@ -111,7 +100,7 @@ type listDirBudget struct {
 	remainingEntries int
 }
 
-func summarizeListDir(dirPath, relPath string, remain int, ignoreDirs map[string]bool, budget *listDirBudget, isRoot bool) *listDirSection {
+func summarizeListDir(dirPath, rootPath, relPath string, remain int, matcher *pathmatch.Matcher, budget *listDirBudget, isRoot bool) *listDirSection {
 	section := &listDirSection{relPath: relPath}
 	if budget.remainingEntries <= 0 {
 		return section
@@ -126,7 +115,9 @@ func summarizeListDir(dirPath, relPath string, remain int, ignoreDirs map[string
 	var dirs []os.DirEntry
 	var files []os.DirEntry
 	for _, entry := range rawEntries {
-		if entry.IsDir() && ignoreDirs[entry.Name()] {
+		childPath := filepath.Join(dirPath, entry.Name())
+		childRelPath, err := filepath.Rel(rootPath, childPath)
+		if err == nil && matcher != nil && matcher.Match(filepath.ToSlash(childRelPath), entry.IsDir()) {
 			continue
 		}
 		if entry.IsDir() {
@@ -161,7 +152,7 @@ func summarizeListDir(dirPath, relPath string, remain int, ignoreDirs map[string
 		dirName := dirs[i].Name()
 		childRelPath := joinListDirRelPath(relPath, dirName)
 		childPath := filepath.Join(dirPath, dirName)
-		section.subtrees = append(section.subtrees, summarizeListDir(childPath, childRelPath, remain-1, ignoreDirs, budget, false))
+		section.subtrees = append(section.subtrees, summarizeListDir(childPath, rootPath, childRelPath, remain-1, matcher, budget, false))
 	}
 	if len(dirs) > len(section.subtrees) {
 		section.moreSubtree = len(dirs) - len(section.subtrees)

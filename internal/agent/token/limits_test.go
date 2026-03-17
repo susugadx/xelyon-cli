@@ -157,7 +157,7 @@ func TestEstimateTokenCount(t *testing.T) {
 		{
 			name:     "short english text",
 			text:     "Hello, world!",
-			minCount: 3,  // At least 3 tokens
+			minCount: 4,  // At least 4 tokens
 			maxCount: 10, // At most 10 tokens
 		},
 		{
@@ -175,8 +175,8 @@ func TestEstimateTokenCount(t *testing.T) {
 		{
 			name:     "japanese text",
 			text:     "こんにちは世界",
-			minCount: 5,
-			maxCount: 15,
+			minCount: 7,
+			maxCount: 20,
 		},
 		{
 			name:     "mixed text",
@@ -197,6 +197,29 @@ func TestEstimateTokenCount(t *testing.T) {
 				t.Errorf("EstimateTokenCount(%q) = %d, want <= %d", tt.text, result, tt.maxCount)
 			}
 		})
+	}
+}
+
+func TestEstimateTokenCountForModel_NonASCIIIsNotUndercounted(t *testing.T) {
+	text := "日本語で長めの説明を書いています。"
+	got := EstimateTokenCountForModel("deepseek-chat", text)
+	if got < len([]rune(text)) {
+		t.Fatalf("EstimateTokenCountForModel() = %d, want >= rune count %d", got, len([]rune(text)))
+	}
+}
+
+func TestEstimateStructuredValueTokenCount(t *testing.T) {
+	value := map[string]any{
+		"name":        "search_code",
+		"description": "Search the repository",
+		"params": map[string]any{
+			"pattern": "*.go",
+		},
+	}
+
+	got := EstimateStructuredValueTokenCountForModel("gpt-4o", value)
+	if got <= 0 {
+		t.Fatal("EstimateStructuredValueTokenCountForModel() should return positive value")
 	}
 }
 

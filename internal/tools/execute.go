@@ -238,6 +238,11 @@ func isBashReadOnly(command string) bool {
 	return false
 }
 
+// IsReadOnlyBashCommand は bash コマンドが read-only かどうかを返す。
+func IsReadOnlyBashCommand(command string) bool {
+	return isBashReadOnly(command)
+}
+
 // PreviewToolCallWithWriter は指定 writer にツール情報を表示する（実行はしない）。
 func PreviewToolCallWithWriter(w io.Writer, tc *ToolCall) {
 	if w == nil {

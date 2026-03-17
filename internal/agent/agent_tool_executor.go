@@ -167,6 +167,7 @@ func (a *Agent) shouldClearAssistantToolContent() bool {
 func (a *Agent) executeToolOnly(toolCall *tools.ToolCall) string {
 	// ツール実行
 	result, change := a.executeToolWithSpinner(a.currentRequestContext(), toolCall)
+	a.noteProjectMapMutation(toolCall, change)
 
 	// str_replace エラー処理
 	if a.handleStrReplaceErrors(toolCall, result) {
@@ -504,6 +505,8 @@ func (a *Agent) handleFileChange(change *tools.FileChange) {
 		return
 	}
 
+	a.invalidateProjectMapManifest()
+
 	a.changeStack = append(a.changeStack, *change)
 	if len(a.changeStack) > config.MaxChangeStack {
 		a.changeStack = a.changeStack[1:]
@@ -515,6 +518,25 @@ func (a *Agent) handleFileChange(change *tools.FileChange) {
 			// エラーログは出すが実行は継続
 			yellow.Fprintf(a.output(), "Warning: Failed to persist change: %v\n", err)
 		}
+	}
+}
+
+func (a *Agent) noteProjectMapMutation(tc *tools.ToolCall, change *tools.FileChange) {
+	if change != nil {
+		a.invalidateProjectMapManifest()
+		return
+	}
+	if tc == nil {
+		return
+	}
+	if tc.Tool == "bash" {
+		if !tools.IsReadOnlyBashCommand(tc.Args["command"]) {
+			a.invalidateProjectMapManifest()
+		}
+		return
+	}
+	if tools.IsWriteTool(tc.Tool) {
+		a.invalidateProjectMapManifest()
 	}
 }
 

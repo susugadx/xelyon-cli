@@ -226,7 +226,7 @@ XELYON CLIで使用できる全コマンドのリファレンスです。
 | map[string]string | エントリ追加/編集/削除 | `command_aliases` |
 | map[string]struct | サブメニューで編集 | `provider_models`, `lsp.servers` |
 
-**18カテゴリ:** Provider & Model, Compression, Loop Detection, API Settings, Diff Display, Tool Confirm, Command Aliases, Prompt Cache, Paste Mode, Streaming, Bash Safety, Code Health, Git Settings, Plan Mode, LSP Servers, OpenAI, Thinking, Output
+**20以上のカテゴリ:** Provider & Model, Compression, Loop Detection, API Settings, Diff Display, Tool Confirm, Command Aliases, Prompt Cache, Paste Mode, Streaming, Bash Safety, Project Map, Git Settings, Plan Mode, LSP Servers, OpenAI, Thinking, Output, Web Search, Utility Model など
 
 **変更は即座に保存:** `~/.xelyon/config.yaml` に自動保存されます。
 
@@ -241,10 +241,13 @@ XELYON CLIで使用できる全コマンドのリファレンスです。
 **テンプレートに含まれるフィールド:**
 - `context` — プロジェクトの概要・背景情報
 - `rules` — 必須ルール（AI が必ず従うルール）
+- `conditional` — `paths` に一致した時だけ注入する rules/context
+- `ignore` — Project Map / `list_dir` / `search_code` で共有する ignore パターン
 - `hooks` — 完了時フック・ステップ完了時フック（省略時は config.yaml の hooks を使用）
 
 **注意:**
 - コード構造の詳細な記載は不要
+- Project Map は起動時に軽量 manifest を自動注入するため、ファイル一覧や関数目次は書かない
 - `hooks.on_completion` を定義すると、AIが変更後に必ず実行します
 - `hooks.on_step_complete` を定義すると、Plan Mode の各ステップ完了時に実行します（テンプレート変数: `{{step_id}}`, `{{step_description}}`, `{{step_status}}`）
 

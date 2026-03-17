@@ -41,6 +41,16 @@ func buildProjectMapForTest(t *testing.T, root string, maxTokens int, ignoreDirs
 	return pm
 }
 
+func buildProjectManifestForTest(t *testing.T, root string, maxTokens int, ignoreDirs ...string) *ProjectMap {
+	t.Helper()
+	setProjectMapTestHome(t)
+	pm := NewProjectMap(root, maxTokens, ignoreDirs...)
+	if err := pm.BuildManifest(); err != nil {
+		t.Fatalf("BuildManifest() error = %v", err)
+	}
+	return pm
+}
+
 func findFileEntry(t *testing.T, pm *ProjectMap, relPath string) *FileEntry {
 	t.Helper()
 	for _, file := range pm.Files {
@@ -253,6 +263,79 @@ func TestBuild_IgnoreDirs(t *testing.T) {
 		if strings.Contains(output, unwanted) {
 			t.Fatalf("unexpected ignored directory %q in output:\n%s", unwanted, output)
 		}
+	}
+}
+
+func TestBuildManifest_GenerateManifest(t *testing.T) {
+	requireRipgrep(t)
+
+	root := t.TempDir()
+	writeProjectMapTestFile(t, root, "README.md", "# test\n")
+	writeProjectMapTestFile(t, root, "main.go", "package main\n")
+	writeProjectMapTestFile(t, root, "internal/agent/compress.go", "package agent\n")
+	writeProjectMapTestFile(t, root, "internal/config/project.go", "package config\n")
+
+	pm := buildProjectManifestForTest(t, root, 4000)
+	output := pm.GenerateManifest([]string{"internal/agent"})
+
+	if !strings.Contains(output, "Top-level directories:") {
+		t.Fatalf("manifest should contain top-level directories:\n%s", output)
+	}
+	if !strings.Contains(output, "- internal/") {
+		t.Fatalf("manifest should contain internal/ directory:\n%s", output)
+	}
+	if !strings.Contains(output, "Top-level files:") || !strings.Contains(output, "- README.md") {
+		t.Fatalf("manifest should contain top-level files:\n%s", output)
+	}
+	if !strings.Contains(output, "Priority files:") || !strings.Contains(output, "internal/agent/compress.go") {
+		t.Fatalf("manifest should contain prioritized file:\n%s", output)
+	}
+	if strings.Contains(output, "func ") {
+		t.Fatalf("manifest should stay lightweight without symbols:\n%s", output)
+	}
+}
+
+func TestBuildManifest_RespectsFileGlobIgnorePatterns(t *testing.T) {
+	requireRipgrep(t)
+
+	root := t.TempDir()
+	writeProjectMapTestFile(t, root, "assets/app.min.js", "console.log('skip')\n")
+	writeProjectMapTestFile(t, root, "assets/app.js", "console.log('keep')\n")
+
+	pm := buildProjectManifestForTest(t, root, 4000, "*.min.js")
+	output := pm.GenerateManifest([]string{"assets"})
+
+	if strings.Contains(output, "app.min.js") {
+		t.Fatalf("file glob ignore should exclude app.min.js:\n%s", output)
+	}
+	if !strings.Contains(output, "app.js") {
+		t.Fatalf("expected non-ignored file to remain:\n%s", output)
+	}
+}
+
+func TestGenerateManifest_StaysWithinBudgetWithManyChanges(t *testing.T) {
+	pm := &ProjectMap{
+		MaxTokens: 40,
+		Files: []*FileEntry{
+			{Path: "README.md"},
+			{Path: "Makefile"},
+			{Path: "internal/agent/compress.go"},
+			{Path: "internal/config/project.go"},
+		},
+	}
+	for i := 0; i < 30; i++ {
+		pm.GitStatus = append(pm.GitStatus, GitChange{
+			Status: "M",
+			Path:   filepath.ToSlash(filepath.Join("internal", "agent", "file"+strconv.Itoa(i)+".go")),
+		})
+	}
+
+	output := pm.GenerateManifest([]string{"internal/agent"})
+	if !pm.fitsBudget(output) {
+		t.Fatalf("manifest must stay within budget, got:\n%s", output)
+	}
+	if strings.Count(output, "\n- M ") >= len(pm.GitStatus) {
+		t.Fatalf("expected uncommitted changes to be trimmed under budget:\n%s", output)
 	}
 }
 

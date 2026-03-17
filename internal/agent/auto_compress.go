@@ -130,7 +130,7 @@ func (a *Agent) maybeAutoCompress() bool {
 	}
 
 	// プロバイダ別コスト最適化閾値
-	providerThreshold := GetProviderCompressThreshold(a.ProviderName, a.CurrentModel)
+	providerThreshold := GetProviderCompressThresholdWithConfig(cfg, a.ProviderName, a.CurrentModel)
 	projectedTokens, costAwareCompress := shouldForceCompressForPricingCliff(a.ProviderName, a.CurrentModel, currentTokens, a.Stats)
 	forceCompress := costAwareCompress
 	if !forceCompress && providerThreshold > 0 && currentTokens >= providerThreshold {

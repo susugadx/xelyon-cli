@@ -45,6 +45,7 @@ var CategoryDefinitions = []CategoryDef{
 	{Name: "thinking", DisplayName: "Thinking", Icon: "🧠", Fields: []string{"thinking.enabled", "thinking.level"}},
 	{Name: "output", DisplayName: "Output", Icon: "📤", Fields: []string{"output.max_lines"}},
 	{Name: "web_search", DisplayName: "Web Search", Icon: "🔍", Fields: []string{"web_search.cache_enabled", "web_search.cache_size", "web_search.cache_ttl", "web_search.provider"}},
+	{Name: "utility_model", DisplayName: "Utility Model", Icon: "🪶", Fields: []string{"utility_model.enabled", "utility_model.model", "utility_model.provider", "utility_model.tasks"}},
 	{Name: "mcp", DisplayName: "MCP Servers", Icon: "🔌", Fields: []string{"mcp.enabled", "mcp.headless"}},
 	{Name: "hooks", DisplayName: "Hooks", Icon: "🏁", Fields: []string{"hooks.max_retry", "hooks.on_completion", "hooks.timeout"}},
 }
@@ -112,6 +113,10 @@ var FieldTypeMap = map[string]ConfigFieldType{
 	"thinking.level":                      FieldTypeSelect,
 	"tool_confirm.auto_approve_medium":    FieldTypeBool,
 	"tool_confirm.auto_approve_safe":      FieldTypeBool,
+	"utility_model.enabled":               FieldTypeBool,
+	"utility_model.model":                 FieldTypeString,
+	"utility_model.provider":              FieldTypeSelect,
+	"utility_model.tasks":                 FieldTypeStringSlice,
 	"web_search.cache_enabled":            FieldTypeBool,
 	"web_search.cache_size":               FieldTypeInt,
 	"web_search.cache_ttl":                FieldTypeInt,
@@ -120,11 +125,12 @@ var FieldTypeMap = map[string]ConfigFieldType{
 
 // SelectOptions は選択型フィールドの選択肢
 var SelectOptions = map[string][]string{
-	"bash.safety_level":   {"strict", "moderate", "permissive"},
-	"default_provider":    {"deepseek", "claude", "openai", "gemini", "groq", "ollama", "openrouter", "bedrock"},
-	"general.language":    {"ja", "en"},
-	"thinking.level":      {"low", "medium", "high", "xhigh"},
-	"web_search.provider": {"openai", "gemini", "claude"},
+	"bash.safety_level":      {"strict", "moderate", "permissive"},
+	"default_provider":       {"deepseek", "claude", "openai", "gemini", "groq", "ollama", "openrouter", "bedrock"},
+	"general.language":       {"ja", "en"},
+	"thinking.level":         {"low", "medium", "high", "xhigh"},
+	"utility_model.provider": {"openai", "gemini", "claude", "deepseek", "openrouter", "groq", "ollama", "bedrock"},
+	"web_search.provider":    {"openai", "gemini", "claude"},
 }
 
 // FieldDescriptions はフィールドの説明
@@ -188,6 +194,10 @@ var FieldDescriptions = map[string]string{
 	"thinking.level":                      "レベル: low / medium / high / xhigh",
 	"tool_confirm.auto_approve_medium":    "中程度のツール（write_file等）を自動承認",
 	"tool_confirm.auto_approve_safe":      "安全なツール（read_file等）を自動承認",
+	"utility_model.enabled":               "utility model を有効化",
+	"utility_model.model":                 "補助タスク用モデル（空 = provider_models の default_model）",
+	"utility_model.provider":              "補助タスク用プロバイダー（openai / gemini / claude など）",
+	"utility_model.tasks":                 "許可する軽量タスク（例: web_search_compaction）",
 	"web_search.cache_enabled":            "キャッシュを有効化（デフォルト: true）",
 	"web_search.cache_size":               "最大キャッシュ数（デフォルト: 50）",
 	"web_search.cache_ttl":                "キャッシュTTL秒数（デフォルト: 3600 = 1時間）",
@@ -216,5 +226,6 @@ var CategoryIcons = map[string]string{
 	"streaming":       "📺",
 	"thinking":        "🧠",
 	"tool_confirm":    "✅",
+	"utility_model":   "🪶",
 	"web_search":      "🔍",
 }

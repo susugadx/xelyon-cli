@@ -17,11 +17,11 @@ func (a *Agent) EstimateTokens() int {
 	total := 0
 
 	// システムプロンプト
-	total += token.EstimateTokenCount(a.SystemPrompt)
+	total += token.EstimateTokenCountForModel(a.CurrentModel, a.SystemPrompt)
 
 	// 会話履歴
 	for _, msg := range a.History {
-		total += token.EstimateTokenCount(msg.Content)
+		total += token.EstimateTokenCountForModel(a.CurrentModel, msg.Content)
 	}
 
 	// FC プロバイダーはツール定義を JSON で別送信 → トークン消費に含める
@@ -35,14 +35,14 @@ func (a *Agent) EstimateTokens() int {
 
 // EstimateSystemPromptTokens はシステムプロンプトのトークン数を推定
 func (a *Agent) EstimateSystemPromptTokens() int {
-	return token.EstimateTokenCount(a.SystemPrompt)
+	return token.EstimateTokenCountForModel(a.CurrentModel, a.SystemPrompt)
 }
 
 // EstimateHistoryTokens は会話履歴のトークン数を推定
 func (a *Agent) EstimateHistoryTokens() int {
 	total := 0
 	for _, msg := range a.History {
-		total += token.EstimateTokenCount(msg.Content)
+		total += token.EstimateTokenCountForModel(a.CurrentModel, msg.Content)
 	}
 	return total
 }

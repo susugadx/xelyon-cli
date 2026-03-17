@@ -1,14 +1,24 @@
 package agent
 
 import (
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"slices"
 	"strings"
+	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/pathmatch"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
 	promptplan "github.com/susugadx/xelyon-cli/internal/prompt/plan"
 	"github.com/susugadx/xelyon-cli/internal/repomap"
@@ -139,21 +149,16 @@ func loadProjectConfig() *config.ProjectConfig {
 }
 
 // injectProjectConfig は ProjectConfig を SystemPrompt に注入する。
-// Rules → InjectProjectRules, Context → 末尾に追加
-func injectProjectConfig(systemPrompt string, pc *config.ProjectConfig) string {
+// 入力内容に一致した rules/context のみを注入する。
+func injectProjectConfig(systemPrompt string, pc *config.ProjectConfig, input string) string {
+	systemPrompt = prompt.StripProjectConfigSections(systemPrompt)
 	if pc == nil {
 		return systemPrompt
 	}
 
-	rulesBlock := prompt.BuildRulesBlockFromList(pc.Rules)
-	if rulesBlock != "" {
-		systemPrompt = prompt.InjectProjectRules(systemPrompt, rulesBlock)
-	}
-	if pc.Context != "" {
-		systemPrompt += "\n\n## Project Context:\n" + pc.Context
-	}
-
-	return systemPrompt
+	selection := config.SelectProjectPromptSelection(pc, input)
+	projectBlock := prompt.BuildProjectConfigBlock(selection.Rules, selection.Contexts)
+	return prompt.InjectProjectConfigBlock(systemPrompt, projectBlock)
 }
 
 // applyProjectConfig はプロジェクト設定をエージェントに適用する統一ヘルパー。
@@ -164,7 +169,7 @@ func applyProjectConfig(agent *Agent, pc *config.ProjectConfig) {
 	}
 
 	// 1. System prompt 注入
-	agent.SystemPrompt = injectProjectConfig(agent.SystemPrompt, pc)
+	agent.SystemPrompt = injectProjectConfig(agent.SystemPrompt, pc, "")
 
 	// 2. hooks 解決（xelyon.yaml 優先、config.yaml フォールバック）
 	if resolved := config.ResolveHooks(agent.cfg(), pc); resolved != nil {
@@ -177,11 +182,12 @@ func applyProjectConfig(agent *Agent, pc *config.ProjectConfig) {
 }
 
 // injectProjectMap はプロジェクト構造マップをシステムプロンプトに注入する。
-func injectProjectMap(agent *Agent) {
+func injectProjectMap(agent *Agent, input string) {
 	if agent == nil {
 		return
 	}
 
+	agent.SystemPrompt = stripProjectMapSection(agent.SystemPrompt)
 	agent.projectMapFileCount = 0
 	agent.projectMapSymbolCount = 0
 
@@ -198,23 +204,77 @@ func injectProjectMap(agent *Agent) {
 		return
 	}
 
-	pm := repomap.NewProjectMap(cwd, 0, cfg.ProjectMap.AdditionalIgnoreDirs...)
-	if err := pm.Build(); err != nil {
-		yellow.Fprintf(agent.output(), "⚠️ ProjectMap build failed: %v\n", err)
+	pc := loadProjectConfig()
+	rootPath := cwd
+	if pc != nil && strings.TrimSpace(pc.FilePath) != "" {
+		rootPath = filepath.Dir(pc.FilePath)
+	}
+	ignorePatterns := config.ResolveSharedIgnorePatterns(cfg, pc)
+	ignoreKey := strings.Join(ignorePatterns, "\x00")
+	priorityPaths := config.ExtractReferencedProjectPathsForRoot(input, rootPath)
+
+	pm, rebuilt := ensureProjectMapManifest(agent, rootPath, ignorePatterns, ignoreKey)
+	if pm == nil {
 		return
 	}
 	pm.MaxTokens = calcProjectMapBudget(agent, cfg, pm.GetFileCount(), pm.GetSymbolCount())
 
-	mapStr := pm.Generate()
+	if !rebuilt && agent.projectMapSection != "" && slices.Equal(agent.projectMapPriority, priorityPaths) && token.EstimateTokenCount(agent.projectMapSection) <= pm.MaxTokens {
+		agent.SystemPrompt += "\n\n" + agent.projectMapSection
+		agent.projectMapFileCount = pm.GetFileCount()
+		agent.projectMapSymbolCount = pm.GetSymbolCount()
+		agent.projectMapDirty = false
+		return
+	}
+	mapStr := pm.GenerateManifest(priorityPaths)
 	if mapStr == "" {
+		agent.projectMapSection = ""
+		agent.projectMapPriority = nil
+		agent.projectMapDirty = false
 		return
 	}
 
 	agent.SystemPrompt += "\n\n" + mapStr
 	agent.projectMapFileCount = pm.GetFileCount()
 	agent.projectMapSymbolCount = pm.GetSymbolCount()
+	agent.projectMapSection = mapStr
+	agent.projectMapPriority = append([]string(nil), priorityPaths...)
+	agent.projectMapDirty = false
 
-	green.Fprintf(agent.output(), "🗺️  Project map loaded (%d symbols from %d files)\n", agent.projectMapSymbolCount, agent.projectMapFileCount)
+	if rebuilt {
+		green.Fprintf(agent.output(), "🗺️  Project map loaded (manifest from %d files)\n", agent.projectMapFileCount)
+	}
+}
+
+func ensureProjectMapManifest(agent *Agent, rootPath string, ignorePatterns []string, ignoreKey string) (*repomap.ProjectMap, bool) {
+	if agent == nil {
+		return nil, false
+	}
+
+	if !agent.projectMapDirty &&
+		agent.projectMapManifest != nil &&
+		agent.projectMapRootPath == rootPath &&
+		agent.projectMapIgnoreKey == ignoreKey {
+		if stateKey := currentProjectMapStateKey(agent, rootPath); stateKey != "" && agent.projectMapStateKey == stateKey {
+			return agent.projectMapManifest, false
+		}
+	}
+
+	pm := repomap.NewProjectMap(rootPath, 0, ignorePatterns...)
+	if err := pm.BuildManifest(); err != nil {
+		yellow.Fprintf(agent.output(), "⚠️ ProjectMap build failed: %v\n", err)
+		return nil, false
+	}
+
+	agent.projectMapManifest = pm
+	agent.projectMapRootPath = rootPath
+	agent.projectMapIgnoreKey = ignoreKey
+	agent.projectMapWatchDirs = nil
+	if !isGitProjectMapAvailable(rootPath) {
+		agent.projectMapWatchDirs = collectProjectMapWatchDirs(rootPath, ignorePatterns)
+	}
+	agent.projectMapStateKey = currentProjectMapStateKey(agent, rootPath)
+	return pm, true
 }
 
 func calcProjectMapBudget(agent *Agent, cfg *config.Config, fileCount, symbolCount int) int {
@@ -268,7 +328,7 @@ func (a *Agent) rebuildSystemPromptForCurrentProvider() {
 	systemPrompt = prompt.BuildProviderSystemPromptWithConfig(systemPrompt, a.CurrentProvider.Name(), a.CurrentModel, a.cfg())
 
 	if pc := loadProjectConfig(); pc != nil {
-		systemPrompt = injectProjectConfig(systemPrompt, pc)
+		systemPrompt = injectProjectConfig(systemPrompt, pc, "")
 	}
 
 	if hadPlanPrompt {
@@ -276,7 +336,7 @@ func (a *Agent) rebuildSystemPromptForCurrentProvider() {
 	}
 
 	a.SystemPrompt = systemPrompt
-	injectProjectMap(a)
+	injectProjectMap(a, "")
 }
 
 func estimateProjectConfigTokens(pc *config.ProjectConfig) int {
@@ -284,14 +344,192 @@ func estimateProjectConfigTokens(pc *config.ProjectConfig) int {
 		return 0
 	}
 
-	total := 0
-	if rulesBlock := prompt.BuildRulesBlockFromList(pc.Rules); rulesBlock != "" {
-		total += token.EstimateTokenCount(rulesBlock)
+	selection := config.SelectProjectPromptSelection(pc, "")
+	return token.EstimateTokenCount(prompt.BuildProjectConfigBlock(selection.Rules, selection.Contexts))
+}
+
+func (a *Agent) refreshProjectPrompt(input string) {
+	if a == nil {
+		return
 	}
-	if pc.Context != "" {
-		total += token.EstimateTokenCount("\n\n## Project Context:\n" + pc.Context)
+
+	systemPrompt := stripProjectMapSection(prompt.StripProjectConfigSections(a.SystemPrompt))
+	if pc := loadProjectConfig(); pc != nil {
+		systemPrompt = injectProjectConfig(systemPrompt, pc, input)
 	}
-	return total
+	a.SystemPrompt = systemPrompt
+	injectProjectMap(a, input)
+}
+
+func (a *Agent) refreshProjectPromptIfDirty(input string) {
+	if a == nil || !a.projectMapDirty {
+		return
+	}
+	a.refreshProjectPrompt(input)
+}
+
+func (a *Agent) invalidateProjectMapManifest() {
+	if a == nil {
+		return
+	}
+
+	a.projectMapManifest = nil
+	a.projectMapRootPath = ""
+	a.projectMapIgnoreKey = ""
+	a.projectMapStateKey = ""
+	a.projectMapWatchDirs = nil
+	a.projectMapSection = ""
+	a.projectMapPriority = nil
+	a.projectMapDirty = true
+}
+
+func currentProjectMapStateKey(agent *Agent, rootPath string) string {
+	head := gitProjectMapHEAD(rootPath)
+	status := gitProjectMapStatusDigest(rootPath)
+	if head != "" || status != "" {
+		return head + ":" + status
+	}
+
+	if digest := nonGitProjectMapWatchDigest(rootPath, projectMapWatchDirs(agent), projectMapIgnorePatterns(agent)); digest != "" {
+		return "dirs:" + digest
+	}
+
+	info, err := os.Stat(rootPath)
+	if err != nil {
+		return ""
+	}
+	return fmt.Sprintf("fs:%d", info.ModTime().UTC().UnixNano())
+}
+
+func gitProjectMapHEAD(rootPath string) string {
+	return gitProjectMapCommandDigest(rootPath, []string{"rev-parse", "HEAD"})
+}
+
+func gitProjectMapStatusDigest(rootPath string) string {
+	return gitProjectMapCommandDigest(rootPath, []string{"status", "--porcelain"})
+}
+
+func gitProjectMapCommandDigest(rootPath string, args []string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd.Dir = rootPath
+
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+	if err := cmd.Run(); err != nil {
+		return ""
+	}
+
+	sum := sha256.Sum256(bytes.TrimSpace(stdout.Bytes()))
+	return hex.EncodeToString(sum[:])
+}
+
+func isGitProjectMapAvailable(rootPath string) bool {
+	return gitProjectMapHEAD(rootPath) != "" || gitProjectMapStatusDigest(rootPath) != ""
+}
+
+func projectMapWatchDirs(agent *Agent) []string {
+	if agent == nil || len(agent.projectMapWatchDirs) == 0 {
+		return []string{"."}
+	}
+
+	dirs := make([]string, len(agent.projectMapWatchDirs))
+	copy(dirs, agent.projectMapWatchDirs)
+	return dirs
+}
+
+func projectMapIgnorePatterns(agent *Agent) []string {
+	if agent == nil || agent.projectMapIgnoreKey == "" {
+		return nil
+	}
+	return pathmatch.NormalizePatterns(strings.Split(agent.projectMapIgnoreKey, "\x00"))
+}
+
+func nonGitProjectMapWatchDigest(rootPath string, watchDirs []string, ignorePatterns []string) string {
+	if len(watchDirs) == 0 {
+		return ""
+	}
+
+	matcher := pathmatch.NewMatcher(ignorePatterns)
+	var state strings.Builder
+	for _, relDir := range watchDirs {
+		relDir = filepath.Clean(filepath.ToSlash(strings.TrimSpace(relDir)))
+		if relDir == "" {
+			relDir = "."
+		}
+
+		absDir := rootPath
+		if relDir != "." {
+			absDir = filepath.Join(rootPath, relDir)
+		}
+
+		entries, err := os.ReadDir(absDir)
+		switch {
+		case err != nil:
+			state.WriteString(relDir)
+			state.WriteString(":missing\n")
+		default:
+			filtered := 0
+			var entryState strings.Builder
+			for _, entry := range entries {
+				entryRelPath := entry.Name()
+				if relDir != "." {
+					entryRelPath = filepath.ToSlash(filepath.Join(relDir, entry.Name()))
+				}
+				if matcher.Match(entryRelPath, entry.IsDir()) {
+					continue
+				}
+				filtered++
+				entryState.WriteString(entry.Name())
+				if entry.IsDir() {
+					entryState.WriteByte('/')
+				}
+				entryState.WriteByte('\n')
+			}
+			_, _ = fmt.Fprintf(&state, "%s:%d\n", relDir, filtered)
+			state.WriteString(entryState.String())
+		}
+	}
+
+	sum := sha256.Sum256([]byte(state.String()))
+	return hex.EncodeToString(sum[:])
+}
+
+func collectProjectMapWatchDirs(rootPath string, ignorePatterns []string) []string {
+	matcher := pathmatch.NewMatcher(ignorePatterns)
+	dirs := []string{"."}
+
+	_ = filepath.WalkDir(rootPath, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			if d != nil && d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !d.IsDir() {
+			return nil
+		}
+
+		relPath, relErr := filepath.Rel(rootPath, path)
+		if relErr != nil {
+			return nil
+		}
+		relPath = filepath.Clean(filepath.ToSlash(relPath))
+		if relPath == "." {
+			return nil
+		}
+		if matcher.Match(relPath, true) {
+			return filepath.SkipDir
+		}
+
+		dirs = append(dirs, relPath)
+		return nil
+	})
+
+	slices.Sort(dirs)
+	return slices.Compact(dirs)
 }
 
 func (a *Agent) syncSessionModel() {

@@ -127,6 +127,15 @@ compression:
     clear_tool_uses_trigger: 80000
     # tool_use 側の入力もクリアする
     clear_tool_inputs: false
+    provider_thresholds:
+        bedrock: 150000
+        claude: 150000
+        deepseek: 80000
+        gemini: 180000
+        openai: 100000
+        openai:gpt-5.4: 260000
+        openai:gpt-5.4-pro: 260000
+        openrouter: 120000
 
 # ============================================================
 # ループ検知設定
@@ -303,6 +312,17 @@ web_search:
     cache_ttl: 3600
     # 最大キャッシュ数（デフォルト: 50）
     cache_size: 50
+
+# ============================================================
+# Utility Model設定
+# ============================================================
+# main 推論や compression.model とは別の軽量補助モデル設定
+# 初期実装では web_search 結果圧縮のような限定タスクだけに使用
+utility_model:
+    # utility model を有効化
+    enabled: false
+    tasks:
+        - web_search_compaction
 
 # ============================================================
 # MCP設定

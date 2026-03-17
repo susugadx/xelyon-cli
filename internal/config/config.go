@@ -95,6 +95,16 @@ func DefaultConfig() *Config {
 			ClearToolUses:        true, // Claude系の tool_use/tool_result clearing を有効化
 			ClearToolUsesTrigger: 80000,
 			ClearToolInputs:      false,
+			ProviderThresholds: map[string]int{
+				"gemini":             180000,
+				"claude":             150000,
+				"bedrock":            150000,
+				"deepseek":           80000, // 128K window に対して出力/推論 headroom を残す安全側の値
+				"openai":             100000,
+				"openai:gpt-5.4":     260000, // 272K pricing cliff 手前
+				"openai:gpt-5.4-pro": 260000,
+				"openrouter":         120000,
+			},
 		},
 		LoopDetection: LoopDetectionConfig{
 			Threshold: 3,
@@ -276,6 +286,12 @@ func DefaultConfig() *Config {
 			CacheEnabled: true,
 			CacheTTL:     3600, // 1時間
 			CacheSize:    50,
+		},
+		UtilityModel: UtilityModelConfig{
+			Enabled:  false,
+			Provider: "",
+			Model:    "",
+			Tasks:    []string{"web_search_compaction"},
 		},
 		MCP: MCPConfig{
 			Enabled:  true,  // デフォルトON - MCP接続有効

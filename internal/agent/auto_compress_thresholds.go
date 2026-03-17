@@ -1,21 +1,48 @@
 package agent
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/config"
+)
+
+// GetProviderCompressThresholdWithConfig は設定を考慮して provider/model ごとの圧縮閾値を返す。
+func GetProviderCompressThresholdWithConfig(cfg *config.Config, provider string, model string) int {
+	if cfg == nil {
+		cfg = config.DefaultConfig()
+	}
+
+	normalizedProvider := strings.ToLower(strings.TrimSpace(provider))
+	normalizedModel := strings.ToLower(strings.TrimSpace(model))
+	if cfg.Compression.ProviderThresholds != nil {
+		if threshold, ok := lookupConfiguredModelThreshold(cfg.Compression.ProviderThresholds, normalizedProvider, normalizedModel); ok {
+			return threshold
+		}
+		if threshold, ok := cfg.Compression.ProviderThresholds[normalizedProvider]; ok {
+			return threshold
+		}
+	}
+
+	return defaultProviderCompressThreshold(normalizedProvider, normalizedModel)
+}
 
 // GetProviderCompressThreshold はプロバイダとモデルに基づく
 // コスト最適化のための絶対トークン閾値を返す。
 // 0 を返した場合は絶対値閾値なし（既存の%ベースを使用）。
 func GetProviderCompressThreshold(provider string, model string) int {
+	return GetProviderCompressThresholdWithConfig(config.DefaultConfig(), provider, model)
+}
+
+func defaultProviderCompressThreshold(provider string, model string) int {
 	switch provider {
 	case "gemini":
 		return 180000 // 200K pricing cliff回避
 	case "claude", "bedrock":
 		return 150000 // 200K pricing cliff回避
 	case "deepseek":
-		return 50000 // 128K物理上限より十分手前
+		return 80000 // 128K window に対して出力/推論 headroom を残す
 	case "openai":
-		lm := strings.ToLower(model)
-		if strings.Contains(lm, "5.4") {
+		if strings.Contains(model, "5.4") {
 			return 260000 // 272K pricing cliff回避（2x課金ライン手前）
 		}
 		return 100000 // キャッシュコスト削減
@@ -24,6 +51,45 @@ func GetProviderCompressThreshold(provider string, model string) int {
 	default:
 		return 0 // 不明なプロバイダは既存ロジックに任せる
 	}
+}
+
+func lookupConfiguredModelThreshold(thresholds map[string]int, provider string, model string) (int, bool) {
+	if len(thresholds) == 0 || provider == "" || model == "" {
+		return 0, false
+	}
+
+	if threshold, ok := thresholds[provider+":"+model]; ok {
+		return threshold, true
+	}
+
+	bestLen := -1
+	bestValue := 0
+	prefix := provider + ":"
+	for key, threshold := range thresholds {
+		if !strings.HasPrefix(key, prefix) {
+			continue
+		}
+
+		pattern := strings.TrimPrefix(key, prefix)
+		if pattern == "" || pattern == model {
+			continue
+		}
+
+		matchPrefix := strings.TrimSuffix(pattern, "*")
+		if matchPrefix == "" || !strings.HasPrefix(model, matchPrefix) {
+			continue
+		}
+
+		if len(matchPrefix) > bestLen {
+			bestLen = len(matchPrefix)
+			bestValue = threshold
+		}
+	}
+
+	if bestLen >= 0 {
+		return bestValue, true
+	}
+	return 0, false
 }
 
 func averageOutputTokens(stats *SessionStats) int {

@@ -150,6 +150,29 @@ func TestExecuteListDir_CustomIgnoreDirs(t *testing.T) {
 	}
 }
 
+func TestExecuteListDir_ProjectIgnorePatterns(t *testing.T) {
+	tmpDir := t.TempDir()
+	chdirForListDirTest(t, tmpDir)
+
+	if err := os.WriteFile(filepath.Join(tmpDir, "xelyon.yaml"), []byte("ignore:\n  patterns:\n    - coverage\n"), 0644); err != nil {
+		t.Fatalf("Failed to create xelyon.yaml: %v", err)
+	}
+	if err := os.Mkdir(filepath.Join(tmpDir, "coverage"), 0755); err != nil {
+		t.Fatalf("Failed to create coverage directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "keep.txt"), []byte("ok"), 0644); err != nil {
+		t.Fatalf("Failed to create keep file: %v", err)
+	}
+
+	output := ExecuteListDirWithRuntime(config.DefaultConfig(), nil, tmpDir, 1)
+	if strings.Contains(output, "coverage") {
+		t.Errorf("coverage should be ignored by xelyon.yaml ignore.patterns, got: %s", output)
+	}
+	if !strings.Contains(output, "keep.txt") {
+		t.Errorf("keep.txt should be listed, got: %s", output)
+	}
+}
+
 func TestExecuteListDir_DepthTwoShowsChildren(t *testing.T) {
 	tmpDir := t.TempDir()
 	chdirForListDirTest(t, tmpDir)

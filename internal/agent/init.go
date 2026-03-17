@@ -22,6 +22,23 @@ rules:
   - "コード変更後は必ず go fmt ./... && go build ./... を実行すること"
   - "テストが通ることを確認してからコミットすること"
 
+# 条件付きルール/コンテキスト（対象パスが会話に出た時だけ注入）
+# conditional:
+#   - name: Go backend
+#     paths:
+#       - "cmd/**/*.go"
+#       - "internal/**/*.go"
+#     rules:
+#       - "公開関数・型には日本語コメントを付けること"
+#     context: |
+#       context.Context を先頭引数に取り、table-driven test を優先します。
+#
+# Project Map / list_dir / search_code で共有する ignore パターン
+# ignore:
+#   patterns:
+#     - "dist"
+#     - "*.min.js"
+#
 # 完了時フック（省略時は config.yaml の hooks を使用）
 # hooks:
 #   on_completion:
@@ -79,8 +96,9 @@ func handleInitCommand(agent *Agent) bool {
 	_, _ = fmt.Fprintln(out)
 	yellow.Fprintln(out, "Next steps:")
 	yellow.Fprintln(out, "  1. Edit xelyon.yaml to add your project context and rules")
-	yellow.Fprintln(out, "  2. Optionally configure hooks.on_completion for verification")
-	yellow.Fprintln(out, "  3. xelyon.yaml will be automatically loaded on next session")
+	yellow.Fprintln(out, "  2. Optionally add conditional rules or shared ignore patterns")
+	yellow.Fprintln(out, "  3. Optionally configure hooks.on_completion for verification")
+	yellow.Fprintln(out, "  4. xelyon.yaml will be automatically loaded on next session")
 
 	return true
 }

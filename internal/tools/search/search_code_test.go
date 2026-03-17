@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
@@ -832,5 +833,48 @@ func TestSearchCode_ManifestMode(t *testing.T) {
 	}
 	if strings.Contains(result, lineRangeHint) {
 		t.Errorf("manifest mode should not include line-range hint, got:\n%s", result)
+	}
+}
+
+func TestExecuteSearchCodeWithConfig_ProjectIgnorePatterns(t *testing.T) {
+	setupSearchTestMocks(t)
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "xelyon.yaml"), []byte("ignore:\n  patterns:\n    - generated\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "generated"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "generated", "skip.go"), []byte("package generated\n\nfunc target() {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "keep.go"), []byte("package main\n\nfunc target() {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	oldwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldwd) })
+
+	result := ExecuteSearchCodeWithConfig(config.DefaultConfig(), nil, SearchOptions{
+		Pattern:     "target",
+		Path:        dir,
+		FilePattern: "*.go",
+		CtxLines:    0,
+		TokenBudget: 3000,
+		IsRegex:     true,
+	})
+
+	if strings.Contains(result, "generated/skip.go") {
+		t.Fatalf("generated/skip.go should be ignored by xelyon.yaml ignore.patterns, got %q", result)
+	}
+	if !strings.Contains(result, "keep.go") {
+		t.Fatalf("keep.go should be included, got %q", result)
 	}
 }

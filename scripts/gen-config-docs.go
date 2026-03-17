@@ -250,6 +250,7 @@ func generateConfigDetails(structs []StructInfo, defaults map[string]interface{}
 		"ThinkingConfig":      "thinking",
 		"LSPConfig":           "lsp",
 		"WebSearchConfig":     "web_search",
+		"UtilityModelConfig":  "utility_model",
 	}
 
 	// 順序を定義
@@ -270,6 +271,7 @@ func generateConfigDetails(structs []StructInfo, defaults map[string]interface{}
 		"LSPConfig",
 		"ThinkingConfig",
 		"WebSearchConfig",
+		"UtilityModelConfig",
 	}
 
 	structMap := make(map[string]StructInfo)

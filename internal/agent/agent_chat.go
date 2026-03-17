@@ -64,6 +64,9 @@ func (a *Agent) chatCore(input string, image *api.ImageData, oneShot bool) error
 	// GitHub MCP ヒントを追加（GitHub関連リクエストの場合）
 	input = a.AddGitHubHint(input)
 
+	// 入力に応じて project rules/context と project map manifest を差し替える。
+	a.refreshProjectPrompt(input)
+
 	// セッションに保存
 	if a.session != nil {
 		a.session.AddMessage("user", input, a.CurrentModel)
@@ -203,9 +206,6 @@ func (a *Agent) chatCore(input string, image *api.ImageData, oneShot bool) error
 // runNormalMode は通常モードでの処理（Plan Mode OFF 時）
 // ツールを個別に確認しながら実行するループ（自動リトライ対応）
 func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.ImageData) error {
-	// Normal Mode 用: planning ツール参照をシステムプロンプトから除去
-	effectivePrompt := prompt.StripPlanningReferences(a.SystemPrompt)
-
 	// 通常モード用の指示を追加（prompt パッケージから取得）
 	normalModeInput := input + promptnormal.NormalModePrompt
 
@@ -239,6 +239,9 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 		if hardLimit == 0 {
 			emitLoopWarning(a, i)
 		}
+
+		a.refreshProjectPromptIfDirty(input)
+		effectivePrompt := prompt.StripPlanningReferences(a.SystemPrompt)
 
 		// API呼び出し
 		var response string
@@ -498,6 +501,8 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 			nil, // Normal Mode ではスキップ対象なし
 			// 各ツール結果の処理
 			func(_ int, tc *tools.ToolCall, result string, change *tools.FileChange) {
+				a.noteProjectMapMutation(tc, change)
+
 				// str_replace エラー処理
 				a.handleStrReplaceErrors(tc, result)
 

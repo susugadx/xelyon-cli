@@ -3,6 +3,8 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
+	"slices"
 	"testing"
 )
 
@@ -130,6 +132,163 @@ hooks:
 	}
 	if pc.Hooks.MaxRetry != 5 {
 		t.Errorf("Hooks.MaxRetry = %d, want 5", pc.Hooks.MaxRetry)
+	}
+}
+
+func TestLoadProjectConfig_WithConditionalAndIgnore(t *testing.T) {
+	dir := t.TempDir()
+	yamlContent := `context: "base context"
+rules:
+  - "base rule"
+conditional:
+  - name: "Agent"
+    paths:
+      - "internal/agent/**"
+    rules:
+      - "agent rule"
+    context: "agent context"
+ignore:
+  patterns:
+    - "coverage"
+    - "*.gen.go"
+`
+	if err := os.WriteFile(filepath.Join(dir, "xelyon.yaml"), []byte(yamlContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	origDir, _ := os.Getwd()
+	defer func() { _ = os.Chdir(origDir) }()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	pc := LoadProjectConfig()
+	if pc == nil {
+		t.Fatal("LoadProjectConfig() returned nil")
+	}
+	if len(pc.Conditional) != 1 {
+		t.Fatalf("Conditional length = %d, want 1", len(pc.Conditional))
+	}
+	if got := pc.Conditional[0].Paths[0]; got != "internal/agent/**" {
+		t.Fatalf("Conditional[0].Paths[0] = %q, want %q", got, "internal/agent/**")
+	}
+	if got := pc.Ignore.Patterns; len(got) != 2 || got[0] != "coverage" || got[1] != "*.gen.go" {
+		t.Fatalf("Ignore.Patterns = %v", got)
+	}
+}
+
+func TestSelectProjectPromptSelection(t *testing.T) {
+	pc := &ProjectConfig{
+		Context: "base context",
+		Rules:   []string{"base rule"},
+		Conditional: []ProjectConditionalBlock{
+			{
+				Name:    "Agent",
+				Paths:   []string{"internal/agent/**"},
+				Rules:   []string{"agent rule"},
+				Context: "agent context",
+			},
+			{
+				Name:    "Config",
+				Paths:   []string{"internal/config/**"},
+				Rules:   []string{"config rule"},
+				Context: "config context",
+			},
+		},
+	}
+
+	got := SelectProjectPromptSelection(pc, "internal/agent/compress.go を直してください")
+	if len(got.Rules) != 2 {
+		t.Fatalf("Rules length = %d, want 2", len(got.Rules))
+	}
+	if got.Rules[0] != "base rule" || got.Rules[1] != "agent rule" {
+		t.Fatalf("Rules = %v", got.Rules)
+	}
+	if len(got.Contexts) != 2 {
+		t.Fatalf("Contexts length = %d, want 2", len(got.Contexts))
+	}
+	if got.Contexts[0] != "base context" {
+		t.Fatalf("Contexts[0] = %q", got.Contexts[0])
+	}
+	if got.Contexts[1] != "### Agent\nagent context" {
+		t.Fatalf("Contexts[1] = %q", got.Contexts[1])
+	}
+}
+
+func TestResolveSharedIgnorePatterns(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.ListDir.AdditionalIgnoreDirs = []string{"coverage"}
+	cfg.ProjectMap.AdditionalIgnoreDirs = []string{"generated"}
+
+	pc := &ProjectConfig{
+		Ignore: ProjectIgnoreConfig{
+			Patterns: []string{"*.gen.go", "coverage"},
+		},
+	}
+
+	patterns := ResolveSharedIgnorePatterns(cfg, pc)
+	for _, want := range []string{".git", "node_modules", "coverage", "generated", "*.gen.go"} {
+		if !slices.Contains(patterns, want) {
+			t.Fatalf("ResolveSharedIgnorePatterns() missing %q in %v", want, patterns)
+		}
+	}
+}
+
+func TestExtractReferencedProjectPaths(t *testing.T) {
+	input := "internal/agent/compress.go:42 と `docs/config.md` を見てください"
+	got := ExtractReferencedProjectPaths(input)
+	want := []string{"internal/agent/compress.go", "docs/config.md"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("ExtractReferencedProjectPaths() = %v, want %v", got, want)
+	}
+}
+
+func TestExtractReferencedProjectPathsForRoot_AbsoluteAndTopLevelFile(t *testing.T) {
+	root := t.TempDir()
+	absPath := filepath.Join(root, "cmd", "tool", "main.go")
+	if err := os.MkdirAll(filepath.Dir(absPath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(absPath, []byte("package main\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "Makefile"), []byte("all:\n\t@true\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	input := absPath + ":12 と Makefile を見てください"
+	got := ExtractReferencedProjectPathsForRoot(input, root)
+	want := []string{"cmd/tool/main.go", "Makefile"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("ExtractReferencedProjectPathsForRoot() = %v, want %v", got, want)
+	}
+}
+
+func TestSelectProjectPromptSelection_UsesProjectRootForAbsolutePath(t *testing.T) {
+	root := t.TempDir()
+	absPath := filepath.Join(root, "cmd", "tool", "main.go")
+	if err := os.MkdirAll(filepath.Dir(absPath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(absPath, []byte("package main\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	pc := &ProjectConfig{
+		FilePath: filepath.Join(root, "xelyon.yaml"),
+		Rules:    []string{"base rule"},
+		Conditional: []ProjectConditionalBlock{
+			{
+				Name:  "CLI",
+				Paths: []string{"cmd/**/*.go"},
+				Rules: []string{"cli rule"},
+			},
+		},
+	}
+
+	got := SelectProjectPromptSelection(pc, absPath+":8 を修正してください")
+	if !slices.Contains(got.Rules, "cli rule") {
+		t.Fatalf("expected cli rule to be selected, got %v", got.Rules)
 	}
 }
 

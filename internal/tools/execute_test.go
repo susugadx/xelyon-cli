@@ -110,9 +110,9 @@ func TestIsBashReadOnly(t *testing.T) {
 		{"grepall foo", false},
 	}
 	for _, tt := range tests {
-		got := isBashReadOnly(tt.command)
+		got := IsReadOnlyBashCommand(tt.command)
 		if got != tt.want {
-			t.Errorf("isBashReadOnly(%q) = %v, want %v", tt.command, got, tt.want)
+			t.Errorf("IsReadOnlyBashCommand(%q) = %v, want %v", tt.command, got, tt.want)
 		}
 	}
 }

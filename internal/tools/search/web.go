@@ -7,17 +7,20 @@ import (
 	"sync"
 	"time"
 
+	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api/websearch"
 	"github.com/susugadx/xelyon-cli/internal/cache"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
+	"github.com/susugadx/xelyon-cli/internal/utilitymodel"
 )
 
 var (
 	webSearchCacheMu       sync.Mutex
 	webSearchCache         *cache.Cache
 	webSearchCacheSettings webSearchCacheConfig
+	runUtilityModelTask    = utilitymodel.Run
 )
 
 type webSearchCacheConfig struct {
@@ -65,7 +68,7 @@ func ExecuteWebSearch(execCtx tools.ExecutionContext, query string) string {
 		out.Green.Printf("🔍 Searching the web (%s): %s\n", searchProvider, query)
 	}
 
-	return CompactWebSearchResult(query, result)
+	return compactWebSearchResultWithUtilityModel(execCtx, query, result)
 }
 
 func searchWithCache(ctx context.Context, cfg *config.Config, provider, query, model string) (string, bool, error) {
@@ -210,7 +213,92 @@ const (
 	// webSearchCompactMinLen は compaction を適用する最小バイト数。
 	// これ未満の結果はそのまま返す。
 	webSearchCompactMinLen = 600
+
+	// webSearchUtilityModelMinTokens は utility model を使う最低入力サイズ。
+	webSearchUtilityModelMinTokens = 1200
 )
+
+func compactWebSearchResultWithUtilityModel(execCtx tools.ExecutionContext, query, result string) string {
+	compacted := CompactWebSearchResult(query, result)
+	if !shouldUseUtilityModelForWebSearch(execCtx.EffectiveConfig(), result) {
+		return compacted
+	}
+
+	systemPrompt, userPrompt := buildWebSearchUtilityPrompts(query, result)
+	utilityResult, err := runUtilityModelTask(execCtx.EffectiveContext(), execCtx.EffectiveConfig(), utilitymodel.TaskWebSearchCompaction, systemPrompt, userPrompt)
+	if err != nil {
+		return compacted
+	}
+
+	utilityResult = normalizeUtilityWebSearchOutput(utilityResult)
+	if utilityResult == "" {
+		return compacted
+	}
+
+	return CompactWebSearchResult(query, utilityResult)
+}
+
+func shouldUseUtilityModelForWebSearch(cfg *config.Config, result string) bool {
+	if !utilitymodel.EnabledForTask(cfg, utilitymodel.TaskWebSearchCompaction) {
+		return false
+	}
+
+	result = strings.TrimSpace(result)
+	if result == "" || result == "No results found." {
+		return false
+	}
+
+	return token.EstimateTokenCount(result) >= webSearchUtilityModelMinTokens
+}
+
+func buildWebSearchUtilityPrompts(query, result string) (systemPrompt, userPrompt string) {
+	systemPrompt = `You are a utility model for XELYON.
+Rewrite raw native web-search output into a shorter canonical result.
+
+Rules:
+- Do not add facts that are not present in the raw result.
+- Preserve dates, numbers, names, and URLs exactly when present.
+- Keep the summary concise and source-preserving.
+- Use exactly this output format when results exist:
+Summary:
+- ...
+Sources:
+- Title (URL)
+- If there are no results, return exactly: No results found.`
+
+	userPrompt = fmt.Sprintf("Query: %s\n\nRaw web search result:\n%s", query, result)
+	return systemPrompt, userPrompt
+}
+
+func normalizeUtilityWebSearchOutput(result string) string {
+	result = strings.TrimSpace(result)
+	if result == "" {
+		return ""
+	}
+
+	if strings.HasPrefix(result, "```") {
+		result = strings.TrimPrefix(result, "```")
+		result = strings.TrimSuffix(result, "```")
+		result = strings.TrimSpace(result)
+		if nl := strings.IndexByte(result, '\n'); nl >= 0 {
+			firstLine := strings.TrimSpace(result[:nl])
+			if !strings.Contains(firstLine, ":") {
+				result = strings.TrimSpace(result[nl+1:])
+			}
+		}
+	}
+
+	if result == "No results found." {
+		return result
+	}
+	if strings.Contains(result, "Summary:") {
+		return result
+	}
+	if strings.Contains(result, "Sources:") {
+		return ""
+	}
+	return "Summary:\n" + result
+}
 
 // CompactWebSearchResult はプロバイダーから返された web_search 結果を
 // summary-first / source-preserving な canonical 形式に変換する。

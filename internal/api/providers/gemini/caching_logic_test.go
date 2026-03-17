@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -24,8 +25,10 @@ func TestEstimateTokens(t *testing.T) {
 	}
 
 	// "You are a helpful assistant." (28) + "Hello" (5) + "Hi there!" (9) = 42
-	expected := 42
-	actual := estimateTokens(systemPrompt, history, nil)
+	expected := token.EstimateTokenCountForModel("gemini-1.5-pro", systemPrompt) +
+		token.EstimateTokenCountForModel("gemini-1.5-pro", "Hello") +
+		token.EstimateTokenCountForModel("gemini-1.5-pro", "Hi there!")
+	actual := estimateTokens("gemini-1.5-pro", systemPrompt, history, nil)
 
 	if actual != expected {
 		t.Errorf("expected %d tokens, got %d", expected, actual)
@@ -34,7 +37,7 @@ func TestEstimateTokens(t *testing.T) {
 
 func TestUpdateOrUseCache(t *testing.T) {
 	// テスト用の閾値設定
-	longContent := strings.Repeat("a", minCacheTokens+100)
+	longContent := cacheEligibleContent()
 
 	tests := []struct {
 		name             string
@@ -201,7 +204,7 @@ func TestProviderClearCache_UsesInjectedRuntime(t *testing.T) {
 
 // TestCacheMapModelIsolation はモデル別キャッシュが独立して管理されることを検証
 func TestCacheMapModelIsolation(t *testing.T) {
-	longContent := strings.Repeat("a", minCacheTokens+100)
+	longContent := cacheEligibleContent()
 	history := []api.Message{
 		{Role: "user", Content: longContent},
 		{Role: "user", Content: "last"},
@@ -318,7 +321,7 @@ func TestInvalidateCacheAll(t *testing.T) {
 
 // TestCacheMapDifferentModelNoReuse は異なるモデルのキャッシュが混在しないことを検証
 func TestCacheMapDifferentModelNoReuse(t *testing.T) {
-	longContent := strings.Repeat("a", minCacheTokens+100)
+	longContent := cacheEligibleContent()
 	history := []api.Message{
 		{Role: "user", Content: longContent},
 		{Role: "user", Content: "last"},
@@ -375,6 +378,11 @@ func makeHistory(longContent string, count int) []api.Message {
 		hist[i] = api.Message{Role: "user", Content: "msg"}
 	}
 	return hist
+}
+
+func cacheEligibleContent() string {
+	// 非 ASCII を使って 1 rune ~= 1 token の安全側推定を満たす。
+	return strings.Repeat("日", minCacheTokens+100)
 }
 
 type mockTransport struct {

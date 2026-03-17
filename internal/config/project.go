@@ -10,11 +10,26 @@ import (
 
 // ProjectConfig はプロジェクト固有の設定（xelyon.yaml）
 type ProjectConfig struct {
-	Context string       `yaml:"context"`         // AI に注入するプロジェクトコンテキスト
-	Rules   []string     `yaml:"rules"`           // 必須ルール（番号付きで system prompt に注入）
-	Hooks   *HooksConfig `yaml:"hooks,omitempty"` // 完了時フック（config.yaml の hooks を上書き）
+	Context     string                    `yaml:"context"`               // AI に注入するプロジェクトコンテキスト
+	Rules       []string                  `yaml:"rules"`                 // 必須ルール（番号付きで system prompt に注入）
+	Conditional []ProjectConditionalBlock `yaml:"conditional,omitempty"` // 条件付きで注入する rules/context
+	Ignore      ProjectIgnoreConfig       `yaml:"ignore,omitempty"`      // repomap/list_dir/search_code で共有する ignore 設定
+	Hooks       *HooksConfig              `yaml:"hooks,omitempty"`       // 完了時フック（config.yaml の hooks を上書き）
 
 	FilePath string `yaml:"-"` // ロード元ファイルパス
+}
+
+// ProjectConditionalBlock は条件に応じて注入する rules/context のまとまり。
+type ProjectConditionalBlock struct {
+	Name    string   `yaml:"name,omitempty"`    // 任意の表示名
+	Paths   []string `yaml:"paths,omitempty"`   // 対象パス glob
+	Rules   []string `yaml:"rules,omitempty"`   // 条件一致時のみ注入するルール
+	Context string   `yaml:"context,omitempty"` // 条件一致時のみ注入するコンテキスト
+}
+
+// ProjectIgnoreConfig はプロジェクト共通 ignore 設定。
+type ProjectIgnoreConfig struct {
+	Patterns []string `yaml:"patterns,omitempty"` // ignore 対象のパターン
 }
 
 // LoadProjectConfig はプロジェクト設定をロードする。

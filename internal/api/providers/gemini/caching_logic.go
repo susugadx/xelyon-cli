@@ -2,13 +2,13 @@ package gemini
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
 )
 
@@ -85,10 +85,9 @@ func (p *Provider) ClearCache() {
 }
 
 const (
-	minCacheTokens    = 32768
-	maxDiffMessages   = 20   // 差分メッセージ数がこれを超えたらキャッシュ再作成
-	defaultCacheTTL   = 1800 // デフォルトキャッシュTTL（秒）= 30分
-	tokenEstimateRate = 1.0  // 1文字あたりのトークン概算（日本語含む）
+	minCacheTokens  = 32768
+	maxDiffMessages = 20   // 差分メッセージ数がこれを超えたらキャッシュ再作成
+	defaultCacheTTL = 1800 // デフォルトキャッシュTTL（秒）= 30分
 )
 
 // getCacheTTL はキャッシュTTL秒数を返す
@@ -103,22 +102,15 @@ func getCacheTTL() int {
 }
 
 // estimateTokens はトークン数を概算する（ツール定義を含む）
-func estimateTokens(systemPrompt string, history []api.Message, tools []api.GeminiToolConfig) int {
-	totalChars := len(systemPrompt)
+func estimateTokens(model string, systemPrompt string, history []api.Message, tools []api.GeminiToolConfig) int {
+	total := token.EstimateTokenCountForModel(model, systemPrompt)
 	for _, msg := range history {
-		totalChars += len(msg.Content)
+		total += token.EstimateTokenCountForModel(model, msg.Content)
 	}
-	// ツール定義のトークン数を概算（JSON構造分を加算）
 	for _, tool := range tools {
-		for _, fd := range tool.FunctionDeclarations {
-			totalChars += len(fd.Name) + len(fd.Description)
-			if fd.Parameters != nil {
-				paramBytes, _ := json.Marshal(fd.Parameters)
-				totalChars += len(paramBytes)
-			}
-		}
+		total += token.EstimateStructuredValueTokenCountForModel(model, tool)
 	}
-	return int(float64(totalChars) * tokenEstimateRate)
+	return total
 }
 
 // updateOrUseCache はキャッシュの状態を確認し、更新または利用する
@@ -137,7 +129,7 @@ func (p *Provider) updateOrUseCache(ctx context.Context, systemPrompt string, hi
 	p.initCacheMap()
 
 	// 現在の総トークン数を概算
-	totalTokens := estimateTokens(systemPrompt, history, tools)
+	totalTokens := estimateTokens(model, systemPrompt, history, tools)
 
 	// 最小トークン数未満ならキャッシュしない
 	if totalTokens < minCacheTokens {

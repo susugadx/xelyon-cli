@@ -7,12 +7,15 @@ import (
 )
 
 func filterResultsByOptions(results []SearchResult, opts SearchOptions) []SearchResult {
-	if opts.FileType == "" && opts.FilePattern == "" {
+	if opts.FileType == "" && opts.FilePattern == "" && opts.ignoreMatcher == nil {
 		return results
 	}
 
 	var filtered []SearchResult
 	for _, result := range results {
+		if opts.ignoreMatcher != nil && opts.ignoreMatcher.Match(result.FilePath, false) {
+			continue
+		}
 		if matchesSearchFileFilter(result.FilePath, opts) {
 			filtered = append(filtered, result)
 		}

@@ -9,20 +9,23 @@ func TestBuildPromptCacheKey_Format(t *testing.T) {
 	key := buildPromptCacheKeyWithCwd("/home/user/project", "gpt-4o", "You are a helpful assistant")
 
 	parts := strings.Split(key, ":")
-	if len(parts) != 4 {
-		t.Fatalf("expected 4 parts separated by ':', got %d: %q", len(parts), key)
+	if len(parts) != 6 {
+		t.Fatalf("expected 6 parts separated by ':', got %d: %q", len(parts), key)
 	}
 	if parts[0] != "xelyon" {
 		t.Errorf("expected prefix 'xelyon', got %q", parts[0])
 	}
-	if len(parts[1]) != 8 {
-		t.Errorf("expected cwd_hash length 8, got %d: %q", len(parts[1]), parts[1])
+	if parts[1] != "v2" {
+		t.Errorf("expected version 'v2', got %q", parts[1])
 	}
-	if parts[2] != "gpt-4o" {
-		t.Errorf("expected model 'gpt-4o', got %q", parts[2])
+	if len(parts[2]) != 8 {
+		t.Errorf("expected cwd_hash length 8, got %d: %q", len(parts[2]), parts[2])
 	}
-	if len(parts[3]) != 8 {
-		t.Errorf("expected prompt_hash length 8, got %d: %q", len(parts[3]), parts[3])
+	if parts[3] != "gpt-4o" {
+		t.Errorf("expected model 'gpt-4o', got %q", parts[3])
+	}
+	if len(parts[4]) != 8 || len(parts[5]) != 8 {
+		t.Errorf("expected hash lengths 8, got %q / %q", parts[4], parts[5])
 	}
 }
 
@@ -62,21 +65,27 @@ func TestBuildPromptCacheKey_SameInputsSameKey(t *testing.T) {
 	}
 }
 
-func TestBuildPromptCacheKey_LongPromptTruncated(t *testing.T) {
-	longPrompt := strings.Repeat("a", 200)
-	// 先頭100文字が同じなら同じキー
-	key1 := buildPromptCacheKeyWithCwd("/p", "m", longPrompt)
-	key2 := buildPromptCacheKeyWithCwd("/p", "m", longPrompt+"extra suffix")
+func TestBuildPromptCacheKey_IgnoresProjectMapSection(t *testing.T) {
+	promptA := "base\n\n## Project Map\nTop-level files:\n- main.go"
+	promptB := "base\n\n## Project Map\nTop-level files:\n- other.go"
+
+	key1 := buildPromptCacheKeyWithCwd("/p", "m", promptA)
+	key2 := buildPromptCacheKeyWithCwd("/p", "m", promptB)
 
 	if key1 != key2 {
-		t.Errorf("prompts with same first 100 chars should produce same key: %q != %q", key1, key2)
+		t.Errorf("project map differences should not change key: %q != %q", key1, key2)
 	}
+}
 
-	// 先頭100文字が異なれば異なるキー
-	differentPrompt := strings.Repeat("b", 100) + strings.Repeat("a", 100)
-	key3 := buildPromptCacheKeyWithCwd("/p", "m", differentPrompt)
-	if key1 == key3 {
-		t.Errorf("prompts with different first 100 chars should produce different keys")
+func TestBuildPromptCacheKey_ProjectConfigChangesKey(t *testing.T) {
+	promptA := "base\n<!-- PROJECT_CONFIG_START -->rule A<!-- PROJECT_CONFIG_END -->"
+	promptB := "base\n<!-- PROJECT_CONFIG_START -->rule B<!-- PROJECT_CONFIG_END -->"
+
+	key1 := buildPromptCacheKeyWithCwd("/p", "m", promptA)
+	key2 := buildPromptCacheKeyWithCwd("/p", "m", promptB)
+
+	if key1 == key2 {
+		t.Errorf("project config differences should change key: %q == %q", key1, key2)
 	}
 }
 
@@ -106,7 +115,7 @@ func TestBuildPromptCacheKey_UsesOsGetwd(t *testing.T) {
 		t.Errorf("expected key to start with 'xelyon:', got %q", key)
 	}
 	parts := strings.Split(key, ":")
-	if len(parts) != 4 {
-		t.Errorf("expected 4 parts, got %d: %q", len(parts), key)
+	if len(parts) != 6 {
+		t.Errorf("expected 6 parts, got %d: %q", len(parts), key)
 	}
 }

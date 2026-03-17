@@ -105,7 +105,7 @@ Language Server Protocol (LSP) を活用してIDE並みのコード理解を実�
 ### 📊 Context Window 管理
 長時間の会話でもトークン上限を気にせず作業。
 - **`/tokens`**: 現在のトークン使用量と上限を確認
-- **Project Map 自動注入**: 起動時にプロジェクト構造マップを生成し、主要ファイル・関数位置・行数を system prompt に追加。大規模 repo では予算を自動で 2%-4% に引き上げ
+- **Project Map 自動注入**: 起動時は root manifest 寄りの軽量マップだけを注入し、詳細シンボルは必要時に取得。大規模 repo でも固定コストを抑制
 - **自動圧縮**: Context 100K または 80% 到達で自動的に履歴を圧縮（デフォルトON）
 - **圧縮専用モデル**: OpenAI は GPT-5 Mini、Gemini は Flash-Lite、Claude/Bedrock は Haiku で低コスト圧縮
 - **手動圧縮**: `/compress [N]` で履歴を圧縮（最新N件を保持）
@@ -136,6 +136,17 @@ context: "Go製CLIツール。Cobraベース。"
 rules:
   - "変更後は make ci-check を実行"
   - "公開関数にはコメント必須"
+conditional:
+  - name: Agent internals
+    paths:
+      - "internal/agent/**/*.go"
+    rules:
+      - "公開関数・型には日本語コメント必須"
+    context: "トークン推定は共通推定器を使う"
+ignore:
+  patterns:
+    - "dist"
+    - "*.min.js"
 hooks:                    # config.yaml の hooks を上書き
   on_completion:
     - "go vet ./... && go test ./..."
@@ -147,8 +158,10 @@ hooks:                    # config.yaml の hooks を上書き
 
 - **context**: AI に注入するプロジェクト説明
 - **rules**: 番号付きで system prompt に注入される必須ルール
+- **conditional**: `paths` に一致した時だけ注入する rules/context
+- **ignore**: Project Map / `list_dir` / `search_code` で共有する ignore パターン
 - **hooks**: 完了時・ステップ完了時フック（`config.yaml` の hooks より優先）
-- **Project Map**: ファイル一覧や関数目次は起動時に自動生成されるため、`xelyon.yaml` には書かない
+- **Project Map**: 起動時は軽量 manifest が自動生成されるため、`xelyon.yaml` にファイル一覧や関数目次は書かない
 
 ## インストール
 
@@ -173,8 +186,8 @@ export DEEPSEEK_API_KEY="sk-..."  # または他のプロバイダー
 ```bash
 xelyon
 
-🗺️  Project map loaded (150 symbols from 42 files)
-📋 Context size: ~9.5k tok
+🗺️  Project map loaded (manifest from 42 files)
+📋 Context size: ~8.1k tok
 
 > main.goを読んで、バグがあれば修正して
 ```
@@ -211,7 +224,17 @@ xelyon --provider gemini --model gemini-2.5-flash
 # ~/.xelyon/config.yaml
 web_search:
   provider: gemini
+
+# 長い web_search 結果だけを軽量モデルで再圧縮（任意）
+utility_model:
+  enabled: true
+  provider: openai
+  model: gpt-5.2-mini
+  tasks:
+    - web_search_compaction
 ```
+
+`utility_model` は検索結果圧縮などの軽量補助タスク専用です。メイン推論や `compression.model` には影響しません。
 
 Gemini API キーは無料で取得できます: https://aistudio.google.com/apikey
 

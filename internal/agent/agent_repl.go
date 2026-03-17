@@ -67,7 +67,7 @@ func RunInteractiveWithConfig(model string, provider api.Provider, cfg *config.C
 	if pc := loadProjectConfig(); pc != nil {
 		applyProjectConfig(agent, pc)
 	}
-	injectProjectMap(agent)
+	injectProjectMap(agent, "")
 	checkRipgrepAvailability(agent)
 
 	// コンテキストサイズ表示（ツリー形式）
@@ -155,7 +155,7 @@ func RunInteractiveWithResumeWithConfig(model string, provider api.Provider, cfg
 	if pc := loadProjectConfig(); pc != nil {
 		applyProjectConfig(agent, pc)
 	}
-	injectProjectMap(agent)
+	injectProjectMap(agent, "")
 	checkRipgrepAvailability(agent)
 
 	// コンテキストサイズ表示（ツリー形式）
@@ -302,8 +302,13 @@ func printContextSize(agent *Agent) {
 			builtinCount, FormatTokens(toolsTokens)))
 	}
 	if projectMapTokens > 0 && agent.projectMapFileCount > 0 {
-		lines = append(lines, fmt.Sprintf("Project map (%d symbols, %d files): ~%s",
-			agent.projectMapSymbolCount, agent.projectMapFileCount, FormatTokens(projectMapTokens)))
+		if agent.projectMapSymbolCount > 0 {
+			lines = append(lines, fmt.Sprintf("Project map (%d symbols, %d files): ~%s",
+				agent.projectMapSymbolCount, agent.projectMapFileCount, FormatTokens(projectMapTokens)))
+		} else {
+			lines = append(lines, fmt.Sprintf("Project map manifest (%d files): ~%s",
+				agent.projectMapFileCount, FormatTokens(projectMapTokens)))
+		}
 	}
 	if projectTokens > 0 {
 		lines = append(lines, fmt.Sprintf("xelyon.yaml: ~%s", FormatTokens(projectTokens)))
@@ -341,4 +346,22 @@ func extractProjectMapSection(systemPrompt string) string {
 	}
 
 	return strings.TrimRight(section, "\n")
+}
+
+func stripProjectMapSection(systemPrompt string) string {
+	section := extractProjectMapSection(systemPrompt)
+	if section == "" {
+		return systemPrompt
+	}
+
+	idx := strings.LastIndex(systemPrompt, section)
+	if idx < 0 {
+		return systemPrompt
+	}
+
+	stripped := strings.TrimRight(systemPrompt[:idx], "\n")
+	if idx+len(section) < len(systemPrompt) {
+		stripped += systemPrompt[idx+len(section):]
+	}
+	return strings.TrimRight(stripped, "\n")
 }

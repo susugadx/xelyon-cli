@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
@@ -186,7 +187,7 @@ func SetMessageCacheBreakpointsWithConfigAndEnabled(messages []AnthropicMessage,
 	type candidate struct {
 		msgIdx   int // messages 配列のインデックス
 		blockIdx int // Content 配列のインデックス
-		length   int // content の文字数
+		tokens   int // content の概算トークン数
 	}
 	var candidates []candidate
 
@@ -199,7 +200,7 @@ func SetMessageCacheBreakpointsWithConfigAndEnabled(messages []AnthropicMessage,
 				candidates = append(candidates, candidate{
 					msgIdx:   i,
 					blockIdx: j,
-					length:   len(block.Content),
+					tokens:   token.EstimateTokenCount(block.Content),
 				})
 			}
 		}
@@ -211,7 +212,7 @@ func SetMessageCacheBreakpointsWithConfigAndEnabled(messages []AnthropicMessage,
 
 	// content 長で降順ソート
 	sort.Slice(candidates, func(a, b int) bool {
-		return candidates[a].length > candidates[b].length
+		return candidates[a].tokens > candidates[b].tokens
 	})
 
 	// 上位2つに cache_control を設定（BP#3, BP#4）

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/history"
@@ -31,11 +32,13 @@ func TestEstimateTokens(t *testing.T) {
 	tests := []struct {
 		name     string
 		messages []api.Message
+		model    string
 		want     int
 	}{
 		{
 			name:     "empty messages",
 			messages: []api.Message{},
+			model:    "gpt-4o",
 			want:     0,
 		},
 		{
@@ -43,29 +46,34 @@ func TestEstimateTokens(t *testing.T) {
 			messages: []api.Message{
 				{Role: "user", Content: "Hello"},
 			},
-			want: 1, // 5 chars / 3 = 1.6 → 1
+			model: "gpt-4o",
+			want:  token.EstimateTokenCountForModel("gpt-4o", "Hello"),
 		},
 		{
 			name: "multiple messages",
 			messages: []api.Message{
-				{Role: "user", Content: "Hello"},       // 5 chars
-				{Role: "assistant", Content: "Hi!"},    // 3 chars
-				{Role: "user", Content: "How are you"}, // 11 chars
+				{Role: "user", Content: "Hello"},
+				{Role: "assistant", Content: "Hi!"},
+				{Role: "user", Content: "How are you"},
 			},
-			want: 6, // (5+3+11) / 3 = 6.3 → 6
+			model: "claude-sonnet-4-6",
+			want: token.EstimateTokenCountForModel("claude-sonnet-4-6", "Hello") +
+				token.EstimateTokenCountForModel("claude-sonnet-4-6", "Hi!") +
+				token.EstimateTokenCountForModel("claude-sonnet-4-6", "How are you"),
 		},
 		{
 			name: "long message",
 			messages: []api.Message{
 				{Role: "user", Content: "This is a very long message with many characters for testing purposes"},
 			},
-			want: 23, // 69 chars / 3 = 23
+			model: "gemini-2.5-pro",
+			want:  token.EstimateTokenCountForModel("gemini-2.5-pro", "This is a very long message with many characters for testing purposes"),
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := estimateTokens(tt.messages)
+			got := estimateTokens(tt.model, tt.messages)
 			if got != tt.want {
 				t.Errorf("estimateTokens() = %v, want %v", got, tt.want)
 			}

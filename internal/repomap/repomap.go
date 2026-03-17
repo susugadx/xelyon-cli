@@ -16,16 +16,11 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/ast"
+	"github.com/susugadx/xelyon-cli/internal/pathmatch"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
 const defaultMaxTokens = 4000
-
-var defaultIgnoreDirs = []string{
-	".git", "node_modules", "vendor",
-	".next", "__pycache__", ".venv",
-	"dist", "build", ".idea", ".vscode",
-}
 
 // ProjectMap はプロジェクトの構造マップ。
 type ProjectMap struct {
@@ -168,6 +163,30 @@ func (pm *ProjectMap) Build() error {
 	return nil
 }
 
+// BuildManifest は軽量な manifest 用にファイル一覧と git status のみを構築する。
+func (pm *ProjectMap) BuildManifest() error {
+	if pm == nil {
+		return fmt.Errorf("project map is nil")
+	}
+	if !common.IsRipgrepAvailable() {
+		return fmt.Errorf("ripgrep (rg) is required")
+	}
+
+	paths, err := pm.listFiles()
+	if err != nil {
+		return err
+	}
+
+	entries := make([]*FileEntry, 0, len(paths))
+	for _, relPath := range paths {
+		entries = append(entries, &FileEntry{Path: relPath})
+	}
+
+	pm.Files = entries
+	pm.GitStatus = pm.loadGitStatus()
+	return nil
+}
+
 // Generate はプロジェクト構造マップを文字列に変換する。
 func (pm *ProjectMap) Generate() string {
 	if pm == nil {
@@ -231,6 +250,46 @@ func (pm *ProjectMap) Generate() string {
 	return pm.render(options, omitted)
 }
 
+// GenerateManifest は root manifest 寄りの軽量な Project Map を生成する。
+func (pm *ProjectMap) GenerateManifest(prioritizedPaths []string) string {
+	if pm == nil || len(pm.Files) == 0 {
+		return ""
+	}
+
+	const (
+		maxTopLevelDirs  = 8
+		maxTopLevelFiles = 8
+		maxPriorityFiles = 10
+	)
+
+	topDirs, topFiles := pm.collectTopLevelEntries()
+	priorityFiles := pm.collectPriorityFiles(prioritizedPaths)
+	dirLimit := minInt(len(topDirs), maxTopLevelDirs)
+	fileLimit := minInt(len(topFiles), maxTopLevelFiles)
+	priorityLimit := minInt(len(priorityFiles), maxPriorityFiles)
+	changeLimit := len(pm.GitStatus)
+
+	for {
+		result := renderManifest(topDirs, dirLimit, topFiles, fileLimit, priorityFiles, priorityLimit, pm.GitStatus, changeLimit)
+		if result == "" || pm.fitsBudget(result) {
+			return result
+		}
+
+		switch {
+		case priorityLimit > 0:
+			priorityLimit--
+		case changeLimit > 0:
+			changeLimit--
+		case fileLimit > 0:
+			fileLimit--
+		case dirLimit > 0:
+			dirLimit--
+		default:
+			return pm.generateManifestFallback(len(pm.Files), len(pm.GitStatus))
+		}
+	}
+}
+
 // GetSymbolCount は保持しているシンボル数を返す。
 func (pm *ProjectMap) GetSymbolCount() int {
 	if pm == nil {
@@ -256,14 +315,8 @@ func (pm *ProjectMap) listFiles() ([]string, error) {
 	defer cancel()
 
 	args := []string{"--files"}
-	for _, dir := range pm.ignoreDirs() {
-		if dir == "" {
-			continue
-		}
-		args = append(args,
-			"--glob", "!"+dir+"/**",
-			"--glob", "!**/"+dir+"/**",
-		)
+	for _, glob := range pathmatch.BuildRGIgnoreGlobs(pm.ignorePatterns()) {
+		args = append(args, "--glob", glob)
 	}
 
 	cmd := exec.CommandContext(ctx, common.RipgrepPath(), args...)
@@ -627,32 +680,186 @@ func (pm *ProjectMap) fitsBudget(text string) bool {
 	return token.EstimateTokenCount(text) <= maxTokens
 }
 
-func (pm *ProjectMap) ignoreDirs() []string {
-	seen := make(map[string]struct{})
-	var dirs []string
-	for _, dir := range defaultIgnoreDirs {
-		dir = normalizeIgnoreDir(dir)
-		if dir == "" {
+func (pm *ProjectMap) ignorePatterns() []string {
+	patterns := append([]string{}, pathmatch.DefaultIgnorePatterns()...)
+	patterns = append(patterns, pm.additionalIgnoreDirs...)
+	return pathmatch.NormalizePatterns(patterns)
+}
+
+func (pm *ProjectMap) collectTopLevelEntries() ([]string, []string) {
+	dirSet := make(map[string]struct{})
+	fileSet := make(map[string]struct{})
+
+	for _, file := range pm.Files {
+		if file == nil || file.Path == "" {
 			continue
 		}
-		if _, ok := seen[dir]; ok {
+		cleanPath := filepath.ToSlash(file.Path)
+		parts := strings.Split(cleanPath, "/")
+		if len(parts) <= 1 {
+			fileSet[cleanPath] = struct{}{}
 			continue
 		}
-		seen[dir] = struct{}{}
-		dirs = append(dirs, dir)
+		dirSet[parts[0]] = struct{}{}
 	}
-	for _, dir := range pm.additionalIgnoreDirs {
-		dir = normalizeIgnoreDir(dir)
-		if dir == "" {
-			continue
-		}
-		if _, ok := seen[dir]; ok {
-			continue
-		}
-		seen[dir] = struct{}{}
-		dirs = append(dirs, dir)
+
+	dirs := make([]string, 0, len(dirSet))
+	for dir := range dirSet {
+		dirs = append(dirs, dir+"/")
 	}
-	return dirs
+	sort.Strings(dirs)
+
+	files := make([]string, 0, len(fileSet))
+	for file := range fileSet {
+		files = append(files, file)
+	}
+	sort.Strings(files)
+
+	return dirs, files
+}
+
+func (pm *ProjectMap) collectPriorityFiles(prioritizedPaths []string) []string {
+	available := make(map[string]struct{}, len(pm.Files))
+	for _, file := range pm.Files {
+		if file == nil || file.Path == "" {
+			continue
+		}
+		available[file.Path] = struct{}{}
+	}
+
+	var priority []string
+	for _, candidate := range prioritizedPaths {
+		candidate = normalizeIgnoreDir(candidate)
+		if candidate == "" {
+			continue
+		}
+		if _, ok := available[candidate]; ok {
+			priority = append(priority, candidate)
+			continue
+		}
+		for path := range available {
+			if strings.HasPrefix(path, candidate+"/") {
+				priority = append(priority, path)
+			}
+		}
+	}
+
+	for _, change := range pm.GitStatus {
+		if _, ok := available[change.Path]; ok {
+			priority = append(priority, change.Path)
+		}
+	}
+
+	for _, candidate := range []string{
+		"README.md",
+		"Makefile",
+		"go.mod",
+		"go.sum",
+		"package.json",
+		"Cargo.toml",
+		"pyproject.toml",
+		"xelyon.yaml",
+		"main.go",
+	} {
+		if _, ok := available[candidate]; ok {
+			priority = append(priority, candidate)
+		}
+	}
+
+	priority = dedupeStrings(priority)
+	return priority
+}
+
+func writeManifestList(b *strings.Builder, title string, values []string, limit int, isDirectory bool) {
+	if len(values) == 0 {
+		return
+	}
+	b.WriteString(title)
+	b.WriteString(":\n")
+	shown := values
+	if len(shown) > limit {
+		shown = shown[:limit]
+	}
+	for _, value := range shown {
+		if isDirectory && !strings.HasSuffix(value, "/") {
+			value += "/"
+		}
+		b.WriteString("- ")
+		b.WriteString(value)
+		b.WriteByte('\n')
+	}
+	if len(values) > len(shown) {
+		fmt.Fprintf(b, "- ... (+%d more)\n", len(values)-len(shown))
+	}
+}
+
+func writeManifestChanges(b *strings.Builder, changes []GitChange, limit int) {
+	if len(changes) == 0 || limit <= 0 {
+		return
+	}
+
+	b.WriteString("Uncommitted changes:\n")
+	shown := changes
+	if len(shown) > limit {
+		shown = shown[:limit]
+	}
+	for _, change := range shown {
+		fmt.Fprintf(b, "- %s %s\n", change.Status, change.Path)
+	}
+	if len(changes) > len(shown) {
+		fmt.Fprintf(b, "- ... (+%d more)\n", len(changes)-len(shown))
+	}
+}
+
+func renderManifest(topDirs []string, dirLimit int, topFiles []string, fileLimit int, priorityFiles []string, priorityLimit int, changes []GitChange, changeLimit int) string {
+	var b strings.Builder
+	b.WriteString("## Project Map\n\n")
+
+	if dirLimit > 0 {
+		writeManifestList(&b, "Top-level directories", topDirs, dirLimit, true)
+	}
+	if fileLimit > 0 {
+		writeManifestList(&b, "Top-level files", topFiles, fileLimit, false)
+	}
+	if priorityLimit > 0 {
+		writeManifestList(&b, "Priority files", priorityFiles, priorityLimit, false)
+	}
+	if changeLimit > 0 {
+		writeManifestChanges(&b, changes, changeLimit)
+	}
+
+	return strings.TrimRight(b.String(), "\n")
+}
+
+func (pm *ProjectMap) generateManifestFallback(fileCount, changeCount int) string {
+	fallback := fmt.Sprintf("## Project Map\n\n- Project map omitted to stay within budget (%d files, %d changes)\n", fileCount, changeCount)
+	if pm.fitsBudget(fallback) {
+		return strings.TrimRight(fallback, "\n")
+	}
+	return ""
+}
+
+func minInt(left, right int) int {
+	if left < right {
+		return left
+	}
+	return right
+}
+
+func dedupeStrings(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
+	}
+	return result
 }
 
 func normalizeIgnoreDir(dir string) string {

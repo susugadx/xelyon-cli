@@ -33,14 +33,14 @@ func RunHeadlessWithConfig(query string, model string, provider api.Provider, cf
 
 	// プロジェクト設定読み込み（xelyon.yaml）
 	if pc := loadProjectConfig(); pc != nil {
-		agent.SystemPrompt = injectProjectConfig(agent.SystemPrompt, pc)
+		agent.SystemPrompt = injectProjectConfig(agent.SystemPrompt, pc, "")
 		// headless では hooks 解決のみ（UI 表示不要）
 		if resolved := config.ResolveHooks(agent.cfg(), pc); resolved != nil {
 			cfg := agent.cfg()
 			cfg.Hooks = *resolved
 		}
 	}
-	injectProjectMap(agent)
+	injectProjectMap(agent, "")
 
 	// Headless Mode は Normal Mode 相当: planning 系ツールを除外
 	agent.registry().SetExcludedTools(prompt.PlanningToolNames)
@@ -62,6 +62,7 @@ func RunHeadlessWithConfig(query string, model string, provider api.Provider, cf
 	for iteration := 0; iteration < maxIterations; iteration++ {
 		// API呼び出し
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+		agent.refreshProjectPromptIfDirty(query)
 
 		response, err := provider.ChatWithTools(agent.requestContext(ctx), agent.SystemPrompt, agent.History, model)
 		cancel()
@@ -84,6 +85,7 @@ func RunHeadlessWithConfig(query string, model string, provider api.Provider, cf
 		var toolOutputs []string
 		for _, tc := range parsedCalls {
 			output, change := tools.ExecuteQuietWithContext(execCtx, tc)
+			agent.noteProjectMapMutation(tc, change)
 
 			// 成功判定（"Error:"を含むかどうかで簡易判定）
 			success := !strings.Contains(output, "Error:")
@@ -155,7 +157,7 @@ func RunOnceWithConfig(query string, model string, provider api.Provider, cfg *c
 	if pc := loadProjectConfig(); pc != nil {
 		applyProjectConfig(agent, pc)
 	}
-	injectProjectMap(agent)
+	injectProjectMap(agent, "")
 
 	// 明示的に1ターンのみ実行（ChatOnce は stdin を読まず、REPL に入らない）
 	return agent.ChatOnce(query)
@@ -203,7 +205,7 @@ func RunOnceWithImageWithConfig(query string, model string, provider api.Provide
 	if pc := loadProjectConfig(); pc != nil {
 		applyProjectConfig(agent, pc)
 	}
-	injectProjectMap(agent)
+	injectProjectMap(agent, "")
 
 	_, _ = fmt.Fprintln(agent.output())
 

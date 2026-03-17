@@ -108,6 +108,8 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 			emitLoopWarning(a, j)
 		}
 
+		a.refreshProjectPromptIfDirty(stepPrompt)
+
 		compactedHistory, metrics := CompactOldToolResults(a.History, DefaultMaxLines, DefaultHeadLines, DefaultTailLines)
 		a.addCompactionMetrics(metrics)
 		response, err := a.CurrentProvider.ChatWithTools(
@@ -248,6 +250,8 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 			skipFn,
 			// 各ツール結果の処理
 			func(_ int, toolCall *tools.ToolCall, result string, change *tools.FileChange) {
+				a.noteProjectMapMutation(toolCall, change)
+
 				// str_replace 成功時: LSP診断遅延バッファにファイルを追加
 				if toolCall.Tool == "str_replace" && !strings.HasPrefix(result, "Error:") &&
 					!strings.HasPrefix(result, "[CANCELLED]") && !strings.HasPrefix(result, "[COMMENT]") {
