@@ -327,6 +327,102 @@ func TestClassifyLine_Import(t *testing.T) {
 	}
 }
 
+// TestClassifyLine_GroupedParamShadowsImport はグループ化パラメータがインポートをシャドーイングする場合を確認する。
+func TestClassifyLine_GroupedParamShadowsImport(t *testing.T) {
+	src := []byte(`package main
+
+import "pkg"
+
+type Config struct{}
+
+func (Config) Build() string {
+	return "method"
+}
+
+func Use(pkg, other Config) string {
+	return pkg.Build()
+}
+`)
+	info, err := ClassifyLine("main.go", src, 12, "Build")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.SelectorKind == "package" {
+		t.Fatal("selectorKind should not be 'package' when import is shadowed by grouped parameter")
+	}
+	if info.Class != ClassCall {
+		t.Fatalf("class = %s, want call", info.Class)
+	}
+}
+
+// TestClassifyLine_ShortVarDeclShadowsImport は短変数宣言がインポートをシャドーイングする場合を確認する。
+func TestClassifyLine_ShortVarDeclShadowsImport(t *testing.T) {
+	src := []byte(`package main
+
+import "pkg"
+
+func Use() string {
+	pkg, _ := getConfig()
+	return pkg.Build()
+}
+
+func getConfig() (interface{}, error) {
+	return nil, nil
+}
+`)
+	info, err := ClassifyLine("main.go", src, 7, "Build")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.SelectorKind == "package" {
+		t.Fatal("selectorKind should not be 'package' when import is shadowed by short var decl")
+	}
+}
+
+// TestClassifyLineWithParsed_CacheReuse は ParseBytesForReuse + ClassifyLineWithParsed の動作を確認する。
+func TestClassifyLineWithParsed_CacheReuse(t *testing.T) {
+	src := []byte(`package main
+
+func Build() string {
+	return ""
+}
+
+func A() string {
+	return Build()
+}
+
+func B() string {
+	return Build()
+}
+`)
+	pf, err := ParseBytesForReuse("main.go", src)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	info1, err := ClassifyLineWithParsed(pf, 8, "Build")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info1.Class != ClassCall {
+		t.Fatalf("line 8 class = %s, want call", info1.Class)
+	}
+	if info1.Scope != "func A" {
+		t.Fatalf("line 8 scope = %q, want func A", info1.Scope)
+	}
+
+	info2, err := ClassifyLineWithParsed(pf, 12, "Build")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info2.Class != ClassCall {
+		t.Fatalf("line 12 class = %s, want call", info2.Class)
+	}
+	if info2.Scope != "func B" {
+		t.Fatalf("line 12 scope = %q, want func B", info2.Scope)
+	}
+}
+
 // BenchmarkParseGoFile は実ファイルのパース速度を測定する。
 func BenchmarkParseGoFile(b *testing.B) {
 	src, err := os.ReadFile(filepath.Join("..", "..", "internal", "tools", "search", "search_code.go"))

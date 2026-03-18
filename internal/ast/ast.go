@@ -64,6 +64,12 @@ type MatchInfo struct {
 	ReceiverType string
 }
 
+// ParsedFile はパース済みファイルの情報を保持する。再利用のためにキャッシュできる。
+type ParsedFile struct {
+	tree *gotreesitter.Tree
+	src  []byte
+}
+
 // SyntaxError は AST 構文検証で検出した構文エラー情報を表す。
 type SyntaxError struct {
 	Line    int
@@ -155,6 +161,24 @@ func ClassifyLine(path string, src []byte, line int, targetName string) (*MatchI
 		return nil, err
 	}
 	return classifyLineInTree(tree, src, line, targetName)
+}
+
+// ParseBytesForReuse はファイルをパースして再利用可能な結果を返す。
+// 同一ファイルの複数行分類でパースコストを削減する。
+func ParseBytesForReuse(path string, src []byte) (*ParsedFile, error) {
+	tree, src, err := ParseBytes(path, src)
+	if err != nil {
+		return nil, err
+	}
+	return &ParsedFile{tree: tree, src: src}, nil
+}
+
+// ClassifyLineWithParsed は事前パース済みのファイルを使って行を分類する。
+func ClassifyLineWithParsed(pf *ParsedFile, line int, targetName string) (*MatchInfo, error) {
+	if pf == nil {
+		return nil, fmt.Errorf("ParsedFile is nil")
+	}
+	return classifyLineInTree(pf.tree, pf.src, line, targetName)
 }
 
 func extractSymbolsFromTree(tree *gotreesitter.Tree, src []byte) ([]Symbol, error) {
@@ -426,7 +450,34 @@ func selectorOperandIsImportedPackage(root, operand *gotreesitter.Node, src []by
 	if !collectImportedPackageNames(root, src, lang)[name] {
 		return false
 	}
-	return inferIdentifierType(operand, src, lang, matchByte) == ""
+	// 型推論でローカル変数を検出
+	if inferIdentifierType(operand, src, lang, matchByte) != "" {
+		return false
+	}
+	// 型が不明でもローカル宣言が存在すればインポートのシャドーイング
+	scope := findEnclosingCallable(operand, lang)
+	if scope != nil && matchByte > scope.StartByte() && matchByte <= uint32(len(src)) {
+		if detectLocalDeclaration(string(src[scope.StartByte():matchByte]), name) {
+			return false
+		}
+	}
+	return true
+}
+
+// detectLocalDeclaration はプレフィックスコード内に name のローカル宣言が存在するか検出する。
+// inferIdentifierType が型を特定できない場合の補完チェック用。
+func detectLocalDeclaration(prefix, name string) bool {
+	quotedName := regexp.QuoteMeta(name)
+	// 複数値の短変数宣言: name, x := or x, name :=
+	shortVarRe := regexp.MustCompile(
+		`(?m)(?:\b\w+[ \t]*,[ \t]*)*\b` + quotedName + `\b(?:[ \t]*,[ \t]*\w+)*[ \t]*:=`)
+	if shortVarRe.MatchString(prefix) {
+		return true
+	}
+	// グループ化 var 宣言: var name, other Type or var ( ... name Type ... )
+	groupedVarRe := regexp.MustCompile(
+		`(?m)\bvar\s+(?:\w+\s*,\s*)*` + quotedName + `\b`)
+	return groupedVarRe.MatchString(prefix)
 }
 
 func collectImportedPackageNames(root *gotreesitter.Node, src []byte, lang *gotreesitter.Language) map[string]bool {
@@ -611,12 +662,59 @@ func inferNamedTypeFromSection(section, name string) string {
 		return ""
 	}
 
-	pattern := regexp.MustCompile(`(?:^|,)\s*` + regexp.QuoteMeta(name) + `\s+([^,]+)`)
-	matches := pattern.FindStringSubmatch(section)
-	if len(matches) < 2 {
-		return ""
+	// カンマで分割してパラメータグループを解析する。
+	// Go の "a, b Config" のようなグループ化パラメータに対応する。
+	entries := splitTopLevelCommas(section)
+	var pendingNames []string
+	for _, entry := range entries {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		fields := strings.Fields(entry)
+		if len(fields) == 1 {
+			// 型なし: グループ内の名前
+			pendingNames = append(pendingNames, fields[0])
+		} else {
+			// "paramName Type" 形式
+			paramName := fields[0]
+			typeName := strings.TrimSpace(entry[len(paramName):])
+			if paramName == name {
+				return typeName
+			}
+			for _, pn := range pendingNames {
+				if pn == name {
+					return typeName
+				}
+			}
+			pendingNames = nil
+		}
 	}
-	return strings.TrimSpace(matches[1])
+	return ""
+}
+
+// splitTopLevelCommas は括弧のネストを考慮してトップレベルのカンマで分割する。
+func splitTopLevelCommas(s string) []string {
+	var parts []string
+	depth := 0
+	start := 0
+	for i, r := range s {
+		switch r {
+		case '(', '[':
+			depth++
+		case ')', ']':
+			if depth > 0 {
+				depth--
+			}
+		case ',':
+			if depth == 0 {
+				parts = append(parts, s[start:i])
+				start = i + 1
+			}
+		}
+	}
+	parts = append(parts, s[start:])
+	return parts
 }
 
 func inferIdentifierTypeFromPrefix(prefix, name string) string {
@@ -645,7 +743,29 @@ func inferIdentifierTypeFromPrefix(prefix, name string) string {
 			}
 		}
 	}
+
+	// グループ化 var 宣言: "var a, name Type"
+	if latestType == "" {
+		latestType = inferTypeFromGroupedVarDecl(prefix, name)
+	}
+
 	return latestType
+}
+
+// inferTypeFromGroupedVarDecl はグループ化 var 宣言 ("var a, b Type") から型を推論する。
+func inferTypeFromGroupedVarDecl(prefix, name string) string {
+	groupedVarRe := regexp.MustCompile(`(?m)\bvar\s+(\w+(?:\s*,\s*\w+)+)\s+([*A-Za-z_][A-Za-z0-9_.\[\]*]*)`)
+	for _, match := range groupedVarRe.FindAllStringSubmatch(prefix, -1) {
+		if len(match) < 3 {
+			continue
+		}
+		for _, n := range strings.Split(match[1], ",") {
+			if strings.TrimSpace(n) == name {
+				return strings.TrimSpace(match[2])
+			}
+		}
+	}
+	return ""
 }
 
 func firstNamedChild(node *gotreesitter.Node) *gotreesitter.Node {
