@@ -20,6 +20,8 @@ func TestGetModelTokenLimit_ExactMatch(t *testing.T) {
 		{"gpt-5", 400000},
 		{"gpt-5.4", 1000000},
 		{"gpt-5.4-pro", 1000000},
+		{"gpt-5.4-mini", 400000},
+		{"gpt-5.4-nano", 400000},
 		{"gpt-5.1", 400000},
 		{"gpt-5.2", 400000},
 		{"gpt-4o", 128000},
@@ -80,6 +82,8 @@ func TestGetModelTokenLimit_PrefixMatch(t *testing.T) {
 		{"gpt-3.5-turbo-0125", 16385},
 
 		// GPT-5 prefix
+		{"gpt-5.4-mini-20260301", 400000},
+		{"gpt-5.4-nano-20260301", 400000},
 		{"gpt-5.4-preview", 1000000},
 		{"gpt-5-preview", 400000},
 

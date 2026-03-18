@@ -419,6 +419,22 @@ func getOpenAIPricing(model string, promptTokenCount int) PricingInfo {
 	}
 
 	switch {
+	case strings.Contains(lm, "5.4-mini"):
+		// GPT-5.4 Mini: $0.75/$4.50 per million tokens
+		return PricingInfo{
+			InputCostPerM:         0.75,
+			OutputCostPerM:        4.50,
+			CachedInputCostPerM:   0.075,
+			CacheCreationCostPerM: 0.75,
+		}
+	case strings.Contains(lm, "5.4-nano"):
+		// GPT-5.4 Nano: $0.20/$1.25 per million tokens
+		return PricingInfo{
+			InputCostPerM:         0.20,
+			OutputCostPerM:        1.25,
+			CachedInputCostPerM:   0.02,
+			CacheCreationCostPerM: 0.20,
+		}
 	case strings.Contains(lm, "nano"):
 		// GPT-5 Nano: $0.05/$0.40 per million tokens
 		return PricingInfo{
@@ -550,6 +566,12 @@ func getGeminiPricing(model string, promptTokenCount int) PricingInfo {
 		return PricingInfo{
 			InputCostPerM: 2.00, OutputCostPerM: 12.00,
 			CachedInputCostPerM: 0.20, CacheCreationCostPerM: 2.00,
+		}
+	case strings.Contains(lm, "3.1-flash-lite"):
+		// Gemini 3.1 Flash-Lite: $0.25/$1.50 per million tokens
+		return PricingInfo{
+			InputCostPerM: 0.25, OutputCostPerM: 1.50,
+			CachedInputCostPerM: 0.025, CacheCreationCostPerM: 0.25,
 		}
 	case strings.Contains(lm, "2.5-flash-lite"):
 		return PricingInfo{

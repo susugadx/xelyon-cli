@@ -917,3 +917,62 @@ func TestGetGeminiPricing_20Flash(t *testing.T) {
 		t.Errorf("Gemini 2.0 Flash-Lite: got input=%f output=%f, want 0.075/0.30", p2.InputCostPerM, p2.OutputCostPerM)
 	}
 }
+
+// === 新規テスト: GPT-5.4-mini / GPT-5.4-nano 専用価格 ===
+
+func TestGetOpenAIPricing_GPT54Mini(t *testing.T) {
+	pricing := GetPricingInfo("openai", "gpt-5.4-mini")
+	if pricing.InputCostPerM != 0.75 {
+		t.Errorf("gpt-5.4-mini input: got %f, want 0.75", pricing.InputCostPerM)
+	}
+	if pricing.CachedInputCostPerM != 0.075 {
+		t.Errorf("gpt-5.4-mini cached input: got %f, want 0.075", pricing.CachedInputCostPerM)
+	}
+	if pricing.OutputCostPerM != 4.50 {
+		t.Errorf("gpt-5.4-mini output: got %f, want 4.50", pricing.OutputCostPerM)
+	}
+}
+
+func TestGetOpenAIPricing_GPT54Nano(t *testing.T) {
+	pricing := GetPricingInfo("openai", "gpt-5.4-nano")
+	if pricing.InputCostPerM != 0.20 {
+		t.Errorf("gpt-5.4-nano input: got %f, want 0.20", pricing.InputCostPerM)
+	}
+	if pricing.CachedInputCostPerM != 0.02 {
+		t.Errorf("gpt-5.4-nano cached input: got %f, want 0.02", pricing.CachedInputCostPerM)
+	}
+	if pricing.OutputCostPerM != 1.25 {
+		t.Errorf("gpt-5.4-nano output: got %f, want 1.25", pricing.OutputCostPerM)
+	}
+}
+
+// === 新規テスト: Gemini 3.1 Flash-Lite Preview 専用価格 ===
+
+func TestGetGeminiPricing_31FlashLite(t *testing.T) {
+	pricing := getGeminiPricing("gemini-3.1-flash-lite-preview", 0)
+	if pricing.InputCostPerM != 0.25 {
+		t.Errorf("gemini-3.1-flash-lite-preview input: got %f, want 0.25", pricing.InputCostPerM)
+	}
+	if pricing.CachedInputCostPerM != 0.025 {
+		t.Errorf("gemini-3.1-flash-lite-preview cached input: got %f, want 0.025", pricing.CachedInputCostPerM)
+	}
+	if pricing.OutputCostPerM != 1.50 {
+		t.Errorf("gemini-3.1-flash-lite-preview output: got %f, want 1.50", pricing.OutputCostPerM)
+	}
+}
+
+// === 新規テスト: 汎用 mini/nano が 5.4 以外では従来通り ===
+
+func TestGetOpenAIPricing_GenericMiniStillWorks(t *testing.T) {
+	pricing := GetPricingInfo("openai", "gpt-4.1-mini")
+	if pricing.InputCostPerM != 0.25 {
+		t.Errorf("gpt-4.1-mini input: got %f, want 0.25 (generic mini)", pricing.InputCostPerM)
+	}
+}
+
+func TestGetOpenAIPricing_GenericNanoStillWorks(t *testing.T) {
+	pricing := GetPricingInfo("openai", "gpt-4.1-nano")
+	if pricing.InputCostPerM != 0.05 {
+		t.Errorf("gpt-4.1-nano input: got %f, want 0.05 (generic nano)", pricing.InputCostPerM)
+	}
+}

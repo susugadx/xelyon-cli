@@ -5,6 +5,18 @@ openai:
     cachedinputcostperm: 0.125
     cachecreationcostperm: 1.25
   rules:
+    - contains: ["5.4-mini"]
+      pricing:
+        inputcostperm: 0.75
+        outputcostperm: 4.50
+        cachedinputcostperm: 0.075
+        cachecreationcostperm: 0.75
+    - contains: ["5.4-nano"]
+      pricing:
+        inputcostperm: 0.20
+        outputcostperm: 1.25
+        cachedinputcostperm: 0.02
+        cachecreationcostperm: 0.20
     - contains: ["nano"]
       pricing:
         inputcostperm: 0.05
@@ -148,6 +160,12 @@ gemini:
           outputcostperm: 18.00
           cachedinputcostperm: 0.40
           cachecreationcostperm: 4.00
+    - contains: ["3.1-flash-lite"]
+      pricing:
+        inputcostperm: 0.25
+        outputcostperm: 1.50
+        cachedinputcostperm: 0.025
+        cachecreationcostperm: 0.25
     - contains: ["2.5-flash-lite"]
       pricing:
         inputcostperm: 0.10
