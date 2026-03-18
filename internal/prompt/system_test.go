@@ -99,8 +99,8 @@ func TestSystemPrompt_PrefersParallelInvestigationForIndependentSteps(t *testing
 	if !strings.Contains(SystemPrompt, "prefer one search_code call with comma-separated patterns instead of serial searches") {
 		t.Error("SystemPrompt should prefer one multi-pattern search_code call over serial searches")
 	}
-	if !strings.Contains(SystemPrompt, "read/search them in parallel before deciding the edit") {
-		t.Error("SystemPrompt should encourage parallel investigation of target code and nearby tests/callers")
+	if !strings.Contains(SystemPrompt, "read target code and its callers/tests in parallel when independent") {
+		t.Error("SystemPrompt should encourage parallel investigation for shared changes")
 	}
 }
 
@@ -170,6 +170,60 @@ func TestSystemPrompt_LocalChangeExamplesSafe(t *testing.T) {
 	// local change の例文を検出して "adding a field" が含まれていないことを確認
 	if strings.Contains(SystemPrompt, "local changes (bug fix in one function, adding a field") {
 		t.Error("local change examples should not include 'adding a field' — it can ripple to constructors/tests")
+	}
+}
+
+func TestSystemPrompt_NarrowFirstStrategy(t *testing.T) {
+	if !strings.Contains(SystemPrompt, "narrow-first") {
+		t.Error("SystemPrompt should contain narrow-first investigation strategy")
+	}
+	if !strings.Contains(SystemPrompt, "Read priority:") {
+		t.Error("SystemPrompt should define read priority order")
+	}
+}
+
+func TestSystemPrompt_HypothesisDrivenInvestigation(t *testing.T) {
+	if !strings.Contains(SystemPrompt, "After 2-4 targeted reads/searches, form a working hypothesis") {
+		t.Error("SystemPrompt should include hypothesis-driven investigation rule with bounded read count")
+	}
+	if !strings.Contains(SystemPrompt, "switch to implementation") {
+		t.Error("SystemPrompt should instruct switching to implementation once hypothesis is clear")
+	}
+}
+
+func TestSystemPrompt_StopExploringRule(t *testing.T) {
+	if !strings.Contains(SystemPrompt, "do not search \"just in case\"") {
+		t.Error("SystemPrompt should explicitly discourage speculative searching")
+	}
+	if !strings.Contains(SystemPrompt, "Do not read neighboring files speculatively") {
+		t.Error("SystemPrompt should discourage speculative neighboring file reads")
+	}
+}
+
+func TestSystemPrompt_TargetedVerification(t *testing.T) {
+	if !strings.Contains(SystemPrompt, "targeted verification first") {
+		t.Error("SystemPrompt should prefer targeted verification before full CI")
+	}
+	if !strings.Contains(SystemPrompt, "Do not rerun the same failing command without a code change") {
+		t.Error("SystemPrompt should forbid rerunning the same failing command without changes")
+	}
+}
+
+func TestSystemPrompt_PhaseBasedNarration(t *testing.T) {
+	if !strings.Contains(SystemPrompt, "phase boundaries") {
+		t.Error("SystemPrompt should describe narration at phase boundaries")
+	}
+	if strings.Contains(SystemPrompt, "briefly state what you are about to do") {
+		t.Error("SystemPrompt should not contain per-tool narration rule")
+	}
+	if !strings.Contains(SystemPrompt, "At most one short progress update per phase") {
+		t.Error("SystemPrompt should limit progress updates to at most one per phase")
+	}
+}
+
+func TestSystemPrompt_FullFileReadUpgradeGuard(t *testing.T) {
+	if !strings.Contains(SystemPrompt, "Do not upgrade from targeted read to full file read unless") {
+		t.Error("SystemPrompt should guard against unnecessary full file read upgrades")
 	}
 }
 
