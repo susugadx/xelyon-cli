@@ -216,14 +216,16 @@ func TestClearAssistantContent_Enabled(t *testing.T) {
 		RawArgs: map[string]any{"path": "/auth.go"},
 	}}
 
-	agent.addToolCallsToHistory("Reading auth.go to check the validation logic.", toolCalls)
+	explanation := "Reading auth.go to check the validation logic."
+	agent.addToolCallsToHistory(explanation, toolCalls)
 
+	// Step1: clear_assistant_content disabled — Content/ReasoningContent が保持される
 	msg := agent.History[len(agent.History)-1]
-	if msg.Content != "" {
-		t.Fatalf("Content = %q, want empty", msg.Content)
+	if msg.Content != explanation {
+		t.Fatalf("Content = %q, want %q", msg.Content, explanation)
 	}
-	if msg.ReasoningContent != "" {
-		t.Fatalf("ReasoningContent = %q, want empty", msg.ReasoningContent)
+	if msg.ReasoningContent != "internal reasoning" {
+		t.Fatalf("ReasoningContent = %q, want %q", msg.ReasoningContent, "internal reasoning")
 	}
 }
 

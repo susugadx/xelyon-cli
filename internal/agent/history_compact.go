@@ -18,6 +18,11 @@ const (
 	phase0MinContentLen    = 200
 )
 
+// historyOptimizationDisabled は履歴圧縮の最適化を無効にするフラグ。
+// Step1: 情報欠落によるターン増加を防止するため全最適化を無効化。
+// TODO: OptimizationProfile で動的に切替可能にする。
+var historyOptimizationDisabled = true
+
 // CompactionMetrics は履歴圧縮時に発生した圧縮メトリクスを表す。
 type CompactionMetrics struct {
 	Phase0Clears           int
@@ -174,6 +179,11 @@ func parseToolArgs(argsJSON string) map[string]string {
 
 // graduatedTruncateByAge returns truncate parameters based on tool execution age.
 func graduatedTruncateByAge(age, defaultHead, defaultTail int) (headLines, tailLines int) {
+	// Step1: graduated truncate disabled — 情報欠落によるターン増加を防止
+	if historyOptimizationDisabled {
+		return defaultHead, defaultTail
+	}
+
 	switch {
 	case age <= 5:
 		return defaultHead, defaultTail
@@ -185,6 +195,11 @@ func graduatedTruncateByAge(age, defaultHead, defaultTail int) (headLines, tailL
 }
 
 func phase0Clear(msg api.Message, age int, argsLookup map[string]toolCallInfo) (string, bool) {
+	// Step1: Phase 0 disabled — 情報欠落によるターン増加を防止
+	if historyOptimizationDisabled {
+		return "", false
+	}
+
 	content := msg.Content
 	if isCompactedToolResult(content) || len(content) < phase0MinContentLen {
 		return "", false
@@ -597,6 +612,11 @@ func truncateToolResult(msg api.Message, maxLines, headLines, tailLines int) (ap
 // ToolName からツール種別を判定し、Content の先頭行から要点を抽出する。
 // 圧縮できない場合は空文字を返す（呼び出し元は通常の graduated truncation にフォールバック）。
 func ultraCompactToolResult(msg api.Message) string {
+	// Step1: ultraCompact disabled — 情報欠落によるターン増加を防止
+	if historyOptimizationDisabled {
+		return ""
+	}
+
 	content := strings.TrimSpace(msg.Content)
 	if content == "" || isCompactedToolResult(content) {
 		return ""

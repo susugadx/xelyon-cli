@@ -342,6 +342,7 @@ func TestBuildToolAgeMap(t *testing.T) {
 }
 
 func TestGraduatedTruncateByAge(t *testing.T) {
+	// Step1: graduated truncate disabled — 全 age でデフォルト値を返す
 	tests := []struct {
 		age      int
 		wantHead int
@@ -349,10 +350,10 @@ func TestGraduatedTruncateByAge(t *testing.T) {
 	}{
 		{age: 1, wantHead: 20, wantTail: 5},
 		{age: 5, wantHead: 20, wantTail: 5},
-		{age: 6, wantHead: 10, wantTail: 3},
-		{age: 15, wantHead: 10, wantTail: 3},
-		{age: 16, wantHead: 5, wantTail: 2},
-		{age: 99, wantHead: 5, wantTail: 2},
+		{age: 6, wantHead: 20, wantTail: 5},
+		{age: 15, wantHead: 20, wantTail: 5},
+		{age: 16, wantHead: 20, wantTail: 5},
+		{age: 99, wantHead: 20, wantTail: 5},
 	}
 
 	for _, tt := range tests {
@@ -375,17 +376,16 @@ func TestCompactOldToolResults_GraduatedCompression(t *testing.T) {
 	medium := result[22].Content
 	recent := result[32].Content
 
-	if !strings.Contains(oldest, "Old ") {
-		t.Fatalf("expected oldest tool result to be ultra-compacted, got %q", oldest)
+	// Step1: graduated truncate / ultraCompact disabled — 全 age で同じ truncation
+	if !strings.Contains(oldest, "truncated") {
+		t.Fatalf("expected oldest tool result to be truncated, got %q", oldest)
 	}
 	if !strings.Contains(medium, "truncated") || !strings.Contains(recent, "truncated") {
 		t.Fatal("expected medium/recent tool results to be truncated")
 	}
-	if len(oldest) >= len(medium) {
-		t.Fatalf("expected age 16 compaction to be shorter than age 6 truncation: %d >= %d", len(oldest), len(medium))
-	}
-	if len(medium) >= len(recent) {
-		t.Fatalf("expected age 6 truncation to be shorter than age 1 truncation: %d >= %d", len(medium), len(recent))
+	// 全 age で同じ head/tail パラメータなので同じ長さ
+	if len(oldest) != len(medium) || len(medium) != len(recent) {
+		t.Fatalf("expected uniform truncation: oldest=%d medium=%d recent=%d", len(oldest), len(medium), len(recent))
 	}
 }
 
@@ -658,12 +658,15 @@ func TestPhase0Clear_ReadFile_FromArgs(t *testing.T) {
 
 	result, metrics := CompactOldToolResults(history, 50, 20, 5)
 
-	want := "[Cleared read_file for internal/agent/foo.go: 60 lines. Re-run read_file if needed.]"
-	if result[2].Content != want {
-		t.Fatalf("Phase 0 placeholder = %q, want %q", result[2].Content, want)
+	// Step1: Phase 0 disabled — truncation にフォールバック
+	if strings.HasPrefix(result[2].Content, "[Cleared ") {
+		t.Fatalf("Phase 0 should be disabled, got placeholder: %q", result[2].Content)
 	}
-	if metrics.Phase0Clears != 1 {
-		t.Fatalf("Phase0Clears = %d, want 1", metrics.Phase0Clears)
+	if !strings.Contains(result[2].Content, "truncated") {
+		t.Fatalf("expected fallback truncation, got %q", result[2].Content)
+	}
+	if metrics.Phase0Clears != 0 {
+		t.Fatalf("Phase0Clears = %d, want 0", metrics.Phase0Clears)
 	}
 }
 
@@ -683,11 +686,12 @@ func TestPhase0Clear_SearchCode_WithPattern(t *testing.T) {
 
 	result, _ := CompactOldToolResults(history, 50, 20, 5)
 
-	if !strings.Contains(result[2].Content, `for "CompactOldToolResults"`) {
-		t.Fatalf("expected pattern in placeholder, got %q", result[2].Content)
+	// Step1: Phase 0 disabled — 元のコンテンツが保持される
+	if strings.HasPrefix(result[2].Content, "[Cleared ") {
+		t.Fatalf("Phase 0 should be disabled, got placeholder: %q", result[2].Content)
 	}
 	if !strings.Contains(result[2].Content, "Found 7 matches in 2 files") {
-		t.Fatalf("expected search summary in placeholder, got %q", result[2].Content)
+		t.Fatalf("expected original content preserved, got %q", result[2].Content)
 	}
 }
 
@@ -726,14 +730,18 @@ func TestPhase0Clear_FromParallelAssistantToolCalls(t *testing.T) {
 
 	result, metrics := CompactOldToolResults(history, 50, 20, 5)
 
-	if result[2].Content != "[Cleared read_file for internal/agent/parallel.go: 60 lines. Re-run read_file if needed.]" {
-		t.Fatalf("read_file placeholder = %q", result[2].Content)
+	// Step1: Phase 0 disabled — read_file は truncation、search_code は short なので as-is
+	if strings.HasPrefix(result[2].Content, "[Cleared ") {
+		t.Fatalf("Phase 0 should be disabled for read_file, got %q", result[2].Content)
 	}
-	if !strings.Contains(result[3].Content, `for "parallelLookup"`) {
-		t.Fatalf("search_code placeholder should use matching ToolCallID args, got %q", result[3].Content)
+	if !strings.Contains(result[2].Content, "truncated") {
+		t.Fatalf("expected read_file fallback truncation, got %q", result[2].Content)
 	}
-	if metrics.Phase0Clears != 2 {
-		t.Fatalf("Phase0Clears = %d, want 2", metrics.Phase0Clears)
+	if strings.HasPrefix(result[3].Content, "[Cleared ") {
+		t.Fatalf("Phase 0 should be disabled for search_code, got %q", result[3].Content)
+	}
+	if metrics.Phase0Clears != 0 {
+		t.Fatalf("Phase0Clears = %d, want 0", metrics.Phase0Clears)
 	}
 }
 
@@ -742,9 +750,9 @@ func TestPhase0Clear_ListDir(t *testing.T) {
 
 	result, _ := CompactOldToolResults(history, 50, 20, 5)
 
-	want := "[Cleared list_dir for /tmp/project: 8 entries. Re-run list_dir if needed.]"
-	if result[2].Content != want {
-		t.Fatalf("Phase 0 placeholder = %q, want %q", result[2].Content, want)
+	// Step1: Phase 0 disabled — short content なので as-is
+	if strings.HasPrefix(result[2].Content, "[Cleared ") {
+		t.Fatalf("Phase 0 should be disabled, got %q", result[2].Content)
 	}
 }
 
@@ -753,9 +761,9 @@ func TestPhase0Clear_InspectSymbol(t *testing.T) {
 
 	result, _ := CompactOldToolResults(history, 50, 20, 5)
 
-	want := `[Cleared inspect_symbol for "Build" in internal/agent/foo.go. Re-run inspect_symbol if needed.]`
-	if result[2].Content != want {
-		t.Fatalf("Phase 0 placeholder = %q, want %q", result[2].Content, want)
+	// Step1: Phase 0 disabled — short content なので as-is
+	if strings.HasPrefix(result[2].Content, "[Cleared ") {
+		t.Fatalf("Phase 0 should be disabled, got %q", result[2].Content)
 	}
 }
 
@@ -765,11 +773,12 @@ func TestPhase0Clear_Bash(t *testing.T) {
 
 	result, _ := CompactOldToolResults(history, 50, 20, 5)
 
-	if !strings.Contains(result[2].Content, `for "go test ./... -run TestPhase0"`) {
-		t.Fatalf("expected command in placeholder, got %q", result[2].Content)
+	// Step1: Phase 0 disabled — 42 lines ≤ 50 なので as-is
+	if strings.HasPrefix(result[2].Content, "[Cleared ") {
+		t.Fatalf("Phase 0 should be disabled, got %q", result[2].Content)
 	}
-	if !strings.Contains(result[2].Content, "error") {
-		t.Fatalf("expected error status in placeholder, got %q", result[2].Content)
+	if !strings.Contains(result[2].Content, "Command interrupted.") {
+		t.Fatalf("expected original content preserved, got %q", result[2].Content)
 	}
 }
 
@@ -778,9 +787,12 @@ func TestPhase0Clear_WebSearch(t *testing.T) {
 
 	result, _ := CompactOldToolResults(history, 50, 20, 5)
 
-	want := `[Cleared web_search for "golang slices package": 2 sources. Re-run web_search for latest results.]`
-	if result[2].Content != want {
-		t.Fatalf("Phase 0 placeholder = %q, want %q", result[2].Content, want)
+	// Step1: Phase 0 disabled — short content なので as-is
+	if strings.HasPrefix(result[2].Content, "[Cleared ") {
+		t.Fatalf("Phase 0 should be disabled, got %q", result[2].Content)
+	}
+	if !strings.Contains(result[2].Content, "Sources:") {
+		t.Fatalf("expected original content preserved, got %q", result[2].Content)
 	}
 }
 
@@ -948,11 +960,12 @@ func TestPhase0Clear_MetricsIndependent(t *testing.T) {
 
 	_, metrics := CompactOldToolResults(history, 50, 20, 5)
 
-	if metrics.Phase0Clears != 3 {
-		t.Fatalf("Phase0Clears = %d, want 3", metrics.Phase0Clears)
+	// Step1: Phase 0 disabled — read_file/str_replace/custom_tool のみ truncation
+	if metrics.Phase0Clears != 0 {
+		t.Fatalf("Phase0Clears = %d, want 0", metrics.Phase0Clears)
 	}
-	if metrics.TruncationCount != 2 {
-		t.Fatalf("TruncationCount = %d, want 2", metrics.TruncationCount)
+	if metrics.TruncationCount != 3 {
+		t.Fatalf("TruncationCount = %d, want 3", metrics.TruncationCount)
 	}
 }
 
@@ -999,19 +1012,17 @@ func TestCompactOldToolResults_Phase0TokenReduction(t *testing.T) {
 	}
 	history = append(history, api.Message{Role: "assistant", Content: "done"})
 
+	// Step1: Phase 0 disabled — 両パスが同等の結果を返す
 	withPhase0, metrics := CompactOldToolResults(history, DefaultMaxLines, DefaultHeadLines, DefaultTailLines)
 	withoutPhase0 := compactOldToolResultsWithoutPhase0(history, DefaultMaxLines, DefaultHeadLines, DefaultTailLines)
 
 	withLen := compactedContentLen(withPhase0)
 	withoutLen := compactedContentLen(withoutPhase0)
-	if withLen >= withoutLen {
-		t.Fatalf("Phase 0 should reduce compacted size: with=%d without=%d", withLen, withoutLen)
+	if withLen != withoutLen {
+		t.Fatalf("Phase 0 disabled: both paths should produce equal size: with=%d without=%d", withLen, withoutLen)
 	}
-	if withoutLen-withLen < 1500 {
-		t.Fatalf("expected substantial reduction from Phase 0, diff=%d", withoutLen-withLen)
-	}
-	if metrics.Phase0Clears == 0 {
-		t.Fatal("expected Phase 0 to clear at least one result")
+	if metrics.Phase0Clears != 0 {
+		t.Fatalf("Phase0Clears = %d, want 0", metrics.Phase0Clears)
 	}
 }
 
@@ -1024,11 +1035,9 @@ func TestUltraCompactToolResult_ReadFile(t *testing.T) {
 		ToolName: "read_file",
 	}
 	got := ultraCompactToolResult(msg)
-	if !strings.Contains(got, "Old read_file") {
-		t.Errorf("expected read_file summary, got %q", got)
-	}
-	if !strings.Contains(got, "50 lines") {
-		t.Errorf("expected line count, got %q", got)
+	// Step1: ultraCompact disabled — 常に空文字を返す
+	if got != "" {
+		t.Errorf("ultraCompact should be disabled, got %q", got)
 	}
 }
 
@@ -1039,8 +1048,9 @@ func TestUltraCompactToolResult_SearchCode(t *testing.T) {
 		ToolName: "search_code",
 	}
 	got := ultraCompactToolResult(msg)
-	if !strings.Contains(got, "Found 10 matches") {
-		t.Errorf("expected first line preserved, got %q", got)
+	// Step1: ultraCompact disabled
+	if got != "" {
+		t.Errorf("ultraCompact should be disabled, got %q", got)
 	}
 }
 
@@ -1063,8 +1073,9 @@ func TestUltraCompactToolResult_Bash(t *testing.T) {
 		ToolName: "bash",
 	}
 	got := ultraCompactToolResult(msg)
-	if !strings.Contains(got, "Old bash") {
-		t.Errorf("expected bash summary, got %q", got)
+	// Step1: ultraCompact disabled
+	if got != "" {
+		t.Errorf("ultraCompact should be disabled, got %q", got)
 	}
 }
 
@@ -1110,13 +1121,13 @@ func TestCompactOldToolResults_UltraCompactTier(t *testing.T) {
 		Content: "final",
 	})
 
-	result, metrics := CompactOldToolResults(history, DefaultMaxLines, DefaultHeadLines, DefaultTailLines)
+	result, _ := CompactOldToolResults(history, DefaultMaxLines, DefaultHeadLines, DefaultTailLines)
 
-	// The first (oldest) tool result should be ultra-compacted
-	if !strings.Contains(result[0].Content, "[Old str_replace") {
-		t.Errorf("expected ultra-compact summary for oldest tool result, got:\n%s", result[0].Content)
+	// Step1: ultraCompact disabled — 50 lines ≤ maxLines なので as-is
+	if strings.Contains(result[0].Content, "[Old str_replace") {
+		t.Error("ultraCompact should be disabled")
 	}
-	if metrics.TruncationCount == 0 {
-		t.Error("expected at least 1 truncation from ultra-compact")
+	if result[0].Content != longContent {
+		t.Errorf("expected original content preserved, got len=%d", len(result[0].Content))
 	}
 }

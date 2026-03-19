@@ -109,8 +109,9 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.General.ToolLoopLimit != 0 {
 		t.Errorf("General.ToolLoopLimit = %d, want 0", cfg.General.ToolLoopLimit)
 	}
-	if !cfg.General.ClearAssistantContent {
-		t.Error("General.ClearAssistantContent should default to true")
+	// Step1: ClearAssistantContent disabled — デフォルト false
+	if cfg.General.ClearAssistantContent {
+		t.Error("General.ClearAssistantContent should default to false (Step1: disabled)")
 	}
 	if !cfg.ProjectMap.Enabled {
 		t.Error("ProjectMap.Enabled should default to true")

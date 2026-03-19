@@ -42,9 +42,9 @@ func DefaultConfig() *Config {
 		DefaultProvider: "deepseek",
 		DefaultModel:    "deepseek-chat",
 		General: GeneralConfig{
-			Language:              "ja", // デフォルト: 日本語
-			ToolLoopLimit:         0,    // 0 = unlimited tool loop (default)
-			ClearAssistantContent: true,
+			Language:              "ja",  // デフォルト: 日本語
+			ToolLoopLimit:         0,     // 0 = unlimited tool loop (default)
+			ClearAssistantContent: false, // Step1: disabled — 情報欠落によるターン増加を防止
 		},
 		ProviderModels: map[string]ProviderModelConfig{
 			"deepseek": {

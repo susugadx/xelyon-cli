@@ -196,6 +196,11 @@ func compactReadFileBody(result string) string {
 // 詳細なマッチ行を省略する。
 // multi-pattern の場合は pattern/file の対応関係を保持する。
 func compactSearchCode(result string) string {
+	// Step1: search_code history compaction disabled — 情報欠落によるターン増加を防止
+	if historyOptimizationDisabled {
+		return result
+	}
+
 	lines := strings.Split(result, "\n")
 	if len(lines) <= compactSearchCodeMinLines {
 		return result
@@ -501,6 +506,11 @@ const (
 // tool-native result で既に CompactWebSearchResult が適用されているが、
 // 長い summary や多数の source が残っている場合の safety net として機能する。
 func compactWebSearch(result string) string {
+	// Step1: web_search history compaction disabled — 情報欠落によるターン増加を防止
+	if historyOptimizationDisabled {
+		return result
+	}
+
 	if len(result) < compactWebSearchMinLen {
 		return result
 	}

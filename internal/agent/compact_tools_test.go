@@ -265,26 +265,9 @@ func TestCompactSearchCode_Large(t *testing.T) {
 
 	got := compactSearchCode(input)
 
-	if !strings.Contains(got, "Found 50 match(es) in 5 file(s)") {
-		t.Error("should contain summary line")
-	}
-	for i := 0; i < 5; i++ {
-		header := fmt.Sprintf("📄 pkg/file%d.go (10 match(es))", i)
-		if !strings.Contains(got, header) {
-			t.Errorf("should contain file header: %s", header)
-		}
-	}
-	if !strings.Contains(got, "Tip:") {
-		t.Error("should contain Tip line")
-	}
-	if strings.Contains(got, "[ref]") {
-		t.Error("should not contain detailed match lines")
-	}
-	if !strings.Contains(got, "Detailed match lines omitted") {
-		t.Error("should contain compaction notice")
-	}
-	if len(got) >= len(input) {
-		t.Errorf("compacted should be shorter: got %d >= original %d", len(got), len(input))
+	// Step1: search_code compaction disabled — 入力がそのまま返る
+	if got != input {
+		t.Errorf("compactSearchCode should return input unchanged, got len=%d want len=%d", len(got), len(input))
 	}
 }
 
@@ -387,32 +370,9 @@ func TestCompactSearchCode_MultiPatternGrouping(t *testing.T) {
 		t.Error("should keep file b.go under pattern 2")
 	}
 
-	// grouping preserved: a.go and c.go appear BEFORE Pattern 2 header;
-	// b.go appears AFTER Pattern 2 header
-	p1Idx := strings.Index(got, "━━ Pattern 1/2")
-	p2Idx := strings.Index(got, "━━ Pattern 2/2")
-	aIdx := strings.Index(got, "📄 a.go")
-	cIdx := strings.Index(got, "📄 c.go")
-	bIdx := strings.Index(got, "📄 b.go")
-
-	if aIdx < p1Idx || aIdx > p2Idx {
-		t.Error("a.go should appear between pattern 1 and pattern 2 headers")
-	}
-	if cIdx < p1Idx || cIdx > p2Idx {
-		t.Error("c.go should appear between pattern 1 and pattern 2 headers")
-	}
-	if bIdx < p2Idx {
-		t.Error("b.go should appear after pattern 2 header")
-	}
-
-	// truncation notice preserved
-	if !strings.Contains(got, "Results truncated") {
-		t.Error("should keep truncation notice")
-	}
-
-	// detail lines omitted
-	if strings.Contains(got, "[ref]") {
-		t.Error("should not contain detailed match lines")
+	// Step1: compaction disabled — 入力がそのまま返る
+	if got != input {
+		t.Errorf("compactSearchCode should return input unchanged, got len=%d want len=%d", len(got), len(input))
 	}
 }
 
@@ -467,51 +427,9 @@ func TestCompactSearchCode_MultiPatternDiagnostics(t *testing.T) {
 
 	got := compactSearchCode(input)
 
-	// pattern headers preserved
-	if !strings.Contains(got, "━━ Pattern 1/3: \"foo\" ━━") {
-		t.Error("should keep pattern 1 header")
-	}
-	if !strings.Contains(got, "━━ Pattern 2/3: \"bad[regex\" ━━") {
-		t.Error("should keep pattern 2 header")
-	}
-	if !strings.Contains(got, "━━ Pattern 3/3: \"nonexistent\" ━━") {
-		t.Error("should keep pattern 3 header")
-	}
-
-	// diagnostics preserved
-	if !strings.Contains(got, "⚠️ Error: regex syntax error") {
-		t.Error("should preserve pattern-level error")
-	}
-	if !strings.Contains(got, "No matches found") {
-		t.Error("should preserve pattern-level 'No matches found'")
-	}
-
-	// file header preserved under pattern 1
-	if !strings.Contains(got, "📄 a.go") {
-		t.Error("should keep file header under pattern 1")
-	}
-
-	// ordering: error should appear after pattern 2 header, before pattern 3 header
-	p2Idx := strings.Index(got, "━━ Pattern 2/3")
-	p3Idx := strings.Index(got, "━━ Pattern 3/3")
-	errIdx := strings.Index(got, "⚠️ Error:")
-	noMatchIdx := strings.Index(got, "No matches found")
-
-	if errIdx < p2Idx || errIdx > p3Idx {
-		t.Error("error should appear between pattern 2 and pattern 3 headers")
-	}
-	if noMatchIdx < p3Idx {
-		t.Error("'No matches found' should appear after pattern 3 header")
-	}
-
-	// detail lines omitted
-	if strings.Contains(got, "[ref]") {
-		t.Error("should not contain detailed match lines")
-	}
-
-	// truncation preserved
-	if !strings.Contains(got, "Results truncated") {
-		t.Error("should preserve truncation notice")
+	// Step1: compaction disabled — 入力がそのまま返る
+	if got != input {
+		t.Errorf("compactSearchCode should return input unchanged, got len=%d want len=%d", len(got), len(input))
 	}
 }
 
@@ -873,7 +791,8 @@ func TestCompactToolResult_DispatchesToSearchCode(t *testing.T) {
 	input := sb.String()
 
 	got := compactSearchCode(input)
-	if !strings.Contains(got, "Detailed match lines omitted") {
-		t.Error("search_code dispatch should compact large results")
+	// Step1: search_code compaction disabled — 入力がそのまま返る
+	if got != input {
+		t.Errorf("compactSearchCode should return input unchanged, got len=%d want len=%d", len(got), len(input))
 	}
 }

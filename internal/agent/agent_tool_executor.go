@@ -150,6 +150,11 @@ func (a *Agent) assistantToolHistoryContent(explanation, reasoningContent string
 }
 
 func (a *Agent) shouldClearAssistantToolContent() bool {
+	// Step1: clear_assistant_content disabled — 情報欠落によるターン増加を防止
+	if historyOptimizationDisabled {
+		return false
+	}
+
 	if !a.cfg().General.ClearAssistantContent {
 		return false
 	}
@@ -1182,6 +1187,11 @@ func (a *Agent) recordReadFileBatchMerge(mergedCount int) {
 // token_budget を削減し、85% 超では output_mode を manifest に変更する。
 // 発動条件: コンテキスト使用率 > 70%。
 func (a *Agent) adjustSearchCodeForHighContext(tc *tools.ToolCall) bool {
+	// Step1: search_code 高コンテキスト縮退 disabled — 情報欠落によるターン増加を防止
+	if historyOptimizationDisabled {
+		return false
+	}
+
 	if tc.Tool != "search_code" {
 		return false
 	}

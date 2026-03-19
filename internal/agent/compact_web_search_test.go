@@ -25,17 +25,9 @@ func TestCompactWebSearch_LongSummaryTruncated(t *testing.T) {
 	result := b.String()
 	got := compactWebSearch(result)
 
-	if !strings.Contains(got, "Summary:") {
-		t.Error("should preserve Summary: header")
-	}
-	if !strings.Contains(got, "truncated for history") {
-		t.Error("should indicate truncation")
-	}
-	if !strings.Contains(got, "https://example.com") {
-		t.Error("should preserve source URL")
-	}
-	if len(got) >= len(result) {
-		t.Errorf("compacted (%d) should be shorter than original (%d)", len(got), len(result))
+	// Step1: web_search compaction disabled — 入力がそのまま返る
+	if got != result {
+		t.Errorf("compactWebSearch should return input unchanged, got len=%d want len=%d", len(got), len(result))
 	}
 }
 
@@ -51,21 +43,9 @@ func TestCompactWebSearch_SourcesCapped(t *testing.T) {
 	result := b.String()
 	got := compactWebSearch(result)
 
-	// first 5 sources should be preserved
-	for i := 1; i <= 5; i++ {
-		url := fmt.Sprintf("https://example.com/%d", i)
-		if !strings.Contains(got, url) {
-			t.Errorf("source %d URL should be preserved", i)
-		}
-	}
-
-	// source 6+ should be omitted
-	if strings.Contains(got, "https://example.com/6") {
-		t.Error("source 6 should be omitted (max 5 in history)")
-	}
-
-	if !strings.Contains(got, "omitted for history") {
-		t.Error("should indicate sources were omitted")
+	// Step1: web_search compaction disabled — 入力がそのまま返る
+	if got != result {
+		t.Errorf("compactWebSearch should return input unchanged, got len=%d want len=%d", len(got), len(result))
 	}
 }
 
@@ -84,11 +64,9 @@ func TestCompactWebSearch_NoSourcesSection(t *testing.T) {
 
 	got := compactWebSearch(result)
 
-	if !strings.Contains(got, "Summary:") {
-		t.Error("should preserve Summary: header")
-	}
-	if !strings.Contains(got, "truncated for history") {
-		t.Error("should truncate long summary-only result")
+	// Step1: web_search compaction disabled — 入力がそのまま返る
+	if got != result {
+		t.Errorf("compactWebSearch should return input unchanged, got len=%d want len=%d", len(got), len(result))
 	}
 }
 
