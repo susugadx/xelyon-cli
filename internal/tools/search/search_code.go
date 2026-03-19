@@ -69,12 +69,12 @@ type SearchOptions struct {
 	FilePattern    string
 	FileType       string
 	CtxLines       int
-	TokenBudget    int
+	TokenBudget    int // 内部固定値（15000）。外部パラメータは廃止。
 	IsRegex        bool
 	Multiline      bool
 	IncludeHidden  bool
 	IncludeIgnored bool
-	OutputMode     string // ""（smart default）, "full", "manifest"
+	OutputMode     string // ""（default）, "full", "manifest"
 
 	ignoreMatcher *pathmatch.Matcher
 	ignoreGlobs   []string
@@ -107,15 +107,10 @@ func ExecuteSearchCodeWithConfig(cfg *config.Config, cache tools.ToolCacheInterf
 		opts.CtxLines = 10
 	}
 
-	if opts.TokenBudget < 0 {
-		opts.TokenBudget = 3000
-	}
-	if opts.TokenBudget < 500 {
-		opts.TokenBudget = 500
-	}
-	if opts.TokenBudget > 6000 {
-		opts.TokenBudget = 6000
-	}
+	// token_budget is fixed internally.
+	// 15000 tokens cover almost all normal searches without truncation.
+	// Only abnormal wide searches should hit this safety valve.
+	opts.TokenBudget = 15000
 
 	if !opts.IncludeIgnored {
 		projectCfg := config.LoadProjectConfig()
@@ -190,10 +185,7 @@ func executeSinglePattern(cache tools.ToolCacheInterface, pattern string, opts S
 	results = adaptiveContextTrim(results)
 	sortResultsByPriority(results)
 
-	// smart broad 圧縮はデフォルトモード（OutputMode==""）のみ適用。
-	// explicit "full" では従来の full 契約を維持する。
-	isSmart := opts.OutputMode == ""
-	results, truncated := truncateToTokenBudget(results, opts.TokenBudget, isSmart)
+	results, truncated := truncateToTokenBudget(results, opts.TokenBudget, false)
 
 	detectBlocksWithCache(cache, results)
 	collapseBlockMatches(results)
@@ -324,8 +316,7 @@ func executeMultiplePatterns(cache tools.ToolCacheInterface, patterns []string, 
 		if allocatedBudget < 300 {
 			allocatedBudget = 300
 		}
-		isSmartMulti := opts.OutputMode == ""
-		collected[i].Results, collected[i].Truncated = truncateToTokenBudget(c.Results, allocatedBudget, isSmartMulti)
+		collected[i].Results, collected[i].Truncated = truncateToTokenBudget(c.Results, allocatedBudget, false)
 		detectBlocksWithCache(cache, collected[i].Results)
 		collapseBlockMatches(collected[i].Results)
 	}

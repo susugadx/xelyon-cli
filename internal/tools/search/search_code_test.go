@@ -129,7 +129,7 @@ func TestSearchCode_TokenBudget(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		var content strings.Builder
 		for j := 0; j < 100; j++ {
-			content.WriteString("var target_budget_check = \"this is a long value for token estimation\"\n")
+			content.WriteString("var target_budget_check = \"" + strings.Repeat("a", 240) + "\"\n")
 		}
 		fname := filepath.Join(dir, "budget"+strings.Repeat("x", i)+".go")
 		if err := os.WriteFile(fname, []byte(content.String()), 0644); err != nil {
@@ -148,12 +148,16 @@ func TestSearchCode_TokenBudget(t *testing.T) {
 	}
 
 	result := ExecuteSearchCode(SearchOptions{Pattern: "target_budget_check", Path: dir, FilePattern: "", FileType: "", CtxLines: 3, TokenBudget: 500, IsRegex: true, Multiline: false})
+	resultWithLargeBudget := ExecuteSearchCode(SearchOptions{Pattern: "target_budget_check", Path: dir, FilePattern: "", FileType: "", CtxLines: 3, TokenBudget: 60000, IsRegex: true, Multiline: false})
 
 	if strings.Contains(result, "No matches found") {
 		t.Error("Expected matches")
 	}
 	if !strings.Contains(result, "truncated") {
-		t.Error("Expected truncation message with small token budget")
+		t.Error("Expected truncation message from the internal safety valve")
+	}
+	if !strings.Contains(resultWithLargeBudget, "truncated") {
+		t.Error("Expected truncation message even when a larger external token_budget is provided")
 	}
 
 	longResult := ExecuteSearchCode(SearchOptions{Pattern: "long_target_budget_check", Path: dir, FilePattern: "", FileType: "", CtxLines: 0, TokenBudget: 3000, IsRegex: true, Multiline: false})
@@ -366,9 +370,11 @@ func TestSearchCode_CacheDifferentParams(t *testing.T) {
 }
 
 type testSearchCache struct {
-	data     map[string]string
-	getCalls int
-	setCalls int
+	data        map[string]string
+	getCalls    int
+	setCalls    int
+	lastGetPath string
+	lastSetPath string
 }
 
 func (c *testSearchCache) GetFile(path string) (string, bool)          { return "", false }
@@ -383,6 +389,7 @@ func (c *testSearchCache) InvalidateSearchCacheForFile(absPath string) {}
 
 func (c *testSearchCache) GetSearch(pattern, path string) (string, bool) {
 	c.getCalls++
+	c.lastGetPath = path
 	key := pattern + "|" + path
 	if v, ok := c.data[key]; ok {
 		return v, true
@@ -392,8 +399,40 @@ func (c *testSearchCache) GetSearch(pattern, path string) (string, bool) {
 
 func (c *testSearchCache) SetSearch(pattern, path, result string, affectedFiles []string) {
 	c.setCalls++
+	c.lastSetPath = path
 	key := pattern + "|" + path
 	c.data[key] = result
+}
+
+func TestSearchCode_CacheKeyUsesInternalTokenBudget(t *testing.T) {
+	setupSearchTestMocks(t)
+
+	dir := t.TempDir()
+	file1 := filepath.Join(dir, "cached.go")
+	if err := os.WriteFile(file1, []byte("func cached_target() {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cache := &testSearchCache{data: make(map[string]string)}
+
+	result1 := ExecuteSearchCodeWithCache(cache, SearchOptions{Pattern: "cached_target", Path: dir, CtxLines: 0, TokenBudget: 500, IsRegex: true})
+	if strings.Contains(result1, "No matches found") {
+		t.Fatal("Expected matches on first search")
+	}
+	if !strings.Contains(cache.lastSetPath, "|15000|") {
+		t.Fatalf("expected cache key to use internal token budget 15000, got: %s", cache.lastSetPath)
+	}
+
+	result2 := ExecuteSearchCodeWithCache(cache, SearchOptions{Pattern: "cached_target", Path: dir, CtxLines: 0, TokenBudget: 99999, IsRegex: true})
+	if result2 != result1 {
+		t.Fatal("Expected second result to be served from the same cache key")
+	}
+	if cache.setCalls != 1 {
+		t.Fatalf("expected one cache write with normalized token budget, got %d", cache.setCalls)
+	}
+	if !strings.Contains(cache.lastGetPath, "|15000|") {
+		t.Fatalf("expected cache lookup key to use internal token budget 15000, got: %s", cache.lastGetPath)
+	}
 }
 
 func TestAdaptiveContextTrim_FewMatches(t *testing.T) {

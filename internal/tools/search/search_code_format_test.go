@@ -186,9 +186,7 @@ func TestFormatMultiResults_WithPatternError(t *testing.T) {
 	}
 }
 
-func TestTruncateToTokenBudget_SmartMode(t *testing.T) {
-	// Create a dummy result with 8 files, each having 8 matches (total 64 > 30)
-	// This exceeds both thresholds: len(results)=8 > 5 && totalMatches=64 > 30
+func TestTruncateToTokenBudget_SmartFlagDoesNotCollapse(t *testing.T) {
 	var results []SearchResult
 	for i := 0; i < 8; i++ {
 		var matches []Match
@@ -206,7 +204,6 @@ func TestTruncateToTokenBudget_SmartMode(t *testing.T) {
 		})
 	}
 
-	// Smart mode enabled, should truncate after 5 files (maxFullFiles = 5)
 	kept, truncated := truncateToTokenBudget(results, 10000, true)
 	if truncated {
 		t.Errorf("expected not to be truncated by budget")
@@ -216,27 +213,17 @@ func TestTruncateToTokenBudget_SmartMode(t *testing.T) {
 		t.Fatalf("expected 8 files, got %d", len(kept))
 	}
 
-	// First 5 files should have code matches
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 8; i++ {
 		if len(kept[i].Matches) != 8 {
 			t.Errorf("file %d: expected 8 code matches, got %d", i, len(kept[i].Matches))
 		}
-	}
-
-	// Remaining files should only have manifest entry (Matches should be empty, but MatchCount preserved)
-	for i := 5; i < 8; i++ {
-		if len(kept[i].Matches) != 0 {
-			t.Errorf("file %d: expected 0 code matches in smart broad mode, got %d", i, len(kept[i].Matches))
-		}
 		if kept[i].MatchCount != 8 {
-			t.Errorf("file %d: expected match count to be preserved as 8, got %d", i, kept[i].MatchCount)
+			t.Errorf("file %d: expected match count to remain 8, got %d", i, kept[i].MatchCount)
 		}
 	}
 }
 
 func TestTruncateToTokenBudget_ExplicitFullNoCollapse(t *testing.T) {
-	// output_mode="full" は isSmart=false で呼ばれるため、
-	// 4+ files でも smart collapse されず全ファイルの code snippets が残る
 	var results []SearchResult
 	for i := 0; i < 6; i++ {
 		var matches []Match
@@ -254,7 +241,6 @@ func TestTruncateToTokenBudget_ExplicitFullNoCollapse(t *testing.T) {
 		})
 	}
 
-	// isSmart=false → broad 判定は無効。全ファイルに code snippets が残る
 	kept, _ := truncateToTokenBudget(results, 10000, false)
 
 	if len(kept) != 6 {
@@ -269,7 +255,6 @@ func TestTruncateToTokenBudget_ExplicitFullNoCollapse(t *testing.T) {
 }
 
 func TestTruncateToTokenBudget_LightSearchNotCollapsed(t *testing.T) {
-	// 4 files / 4 matches の軽い検索は broad 判定にならないこと
 	var results []SearchResult
 	for i := 0; i < 4; i++ {
 		results = append(results, SearchResult{
@@ -281,7 +266,6 @@ func TestTruncateToTokenBudget_LightSearchNotCollapsed(t *testing.T) {
 		})
 	}
 
-	// isSmart=true でも 4 files / 4 matches は broad 判定にならない
 	kept, _ := truncateToTokenBudget(results, 10000, true)
 
 	if len(kept) != 4 {
@@ -295,8 +279,7 @@ func TestTruncateToTokenBudget_LightSearchNotCollapsed(t *testing.T) {
 	}
 }
 
-func TestTruncateToTokenBudget_BroadSearchCollapsesCorrectly(t *testing.T) {
-	// 明らかに broad なケース: 10 files / 50 matches → smart collapse が効く
+func TestTruncateToTokenBudget_BroadSearchDoesNotCollapse(t *testing.T) {
 	var results []SearchResult
 	for i := 0; i < 10; i++ {
 		var matches []Match
@@ -314,24 +297,15 @@ func TestTruncateToTokenBudget_BroadSearchCollapsesCorrectly(t *testing.T) {
 		})
 	}
 
-	// isSmart=true, 10 files, 50 matches → broad 判定される
 	kept, _ := truncateToTokenBudget(results, 10000, true)
 
 	if len(kept) != 10 {
 		t.Fatalf("expected 10 files, got %d", len(kept))
 	}
 
-	// 最初の maxFullFiles(5) 件は code snippets が残る
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 10; i++ {
 		if len(kept[i].Matches) == 0 {
-			t.Errorf("file %d: expected code matches in full files, got 0", i)
-		}
-	}
-
-	// 6件目以降は manifest 化（Matches 空、MatchCount 保持）
-	for i := 5; i < 10; i++ {
-		if len(kept[i].Matches) != 0 {
-			t.Errorf("file %d: expected 0 code matches in collapsed files, got %d", i, len(kept[i].Matches))
+			t.Errorf("file %d: expected code matches to remain visible, got 0", i)
 		}
 		if kept[i].MatchCount != 5 {
 			t.Errorf("file %d: expected match count preserved as 5, got %d", i, kept[i].MatchCount)

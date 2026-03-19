@@ -20,22 +20,13 @@ func truncateLine(line string) string {
 	return line
 }
 
-func truncateToTokenBudget(results []SearchResult, budget int, isSmart bool) ([]SearchResult, bool) {
+func truncateToTokenBudget(results []SearchResult, budget int, _ bool) ([]SearchResult, bool) {
 	headerTokens := 10
 	usedTokens := headerTokens
 	truncated := false
 
-	totalMatches := 0
-	for _, r := range results {
-		totalMatches += r.MatchCount
-	}
-	// broad 判定: ファイル数・マッチ数のいずれも閾値を超える場合のみ smart collapse を適用。
-	// 片方だけ超えるケース（例: 4 files / 4 matches）では従来の full 出力を維持する。
-	isBroad := isSmart && len(results) > 5 && totalMatches > 30
-	maxFullFiles := 5
-
 	var kept []SearchResult
-	for i, r := range results {
+	for _, r := range results {
 		fileHeader := len(r.FilePath)/4 + 5
 		if usedTokens+fileHeader > budget {
 			truncated = true
@@ -46,29 +37,23 @@ func truncateToTokenBudget(results []SearchResult, budget int, isSmart bool) ([]
 		var keptMatches []Match
 		matchCount := 0
 
-		if !isBroad || i < maxFullFiles {
-			for _, m := range r.Matches {
-				lineTokens := estimateTokens(m.Line)
-				if m.IsMatch {
-					lineTokens += 10
-				}
-				if usedTokens+lineTokens > budget {
-					truncated = true
-					break
-				}
-				usedTokens += lineTokens
-				keptMatches = append(keptMatches, m)
-				if m.IsMatch {
-					matchCount++
-				}
+		for _, m := range r.Matches {
+			lineTokens := estimateTokens(m.Line)
+			if m.IsMatch {
+				lineTokens += 10
 			}
-		} else {
-			// In broad search, skip code context for files beyond maxFullFiles
-			// but we still want to keep the true match count for manifest reporting
-			matchCount = r.MatchCount
+			if usedTokens+lineTokens > budget {
+				truncated = true
+				break
+			}
+			usedTokens += lineTokens
+			keptMatches = append(keptMatches, m)
+			if m.IsMatch {
+				matchCount++
+			}
 		}
 
-		if len(keptMatches) > 0 || (isBroad && matchCount > 0) {
+		if len(keptMatches) > 0 {
 			kept = append(kept, SearchResult{
 				FilePath:   r.FilePath,
 				Matches:    keptMatches,
