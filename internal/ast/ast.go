@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"unicode"
 	"unicode/utf8"
 
@@ -77,6 +78,8 @@ type SyntaxError struct {
 	Message string
 }
 
+var goTreeSitterMu sync.Mutex
+
 // IsSupportedFile は AST 解析に対応しているファイルかを返す。
 // Phase 1: Go のみ。Phase 2 で grammars.DetectLanguage に差し替え予定。
 func IsSupportedFile(path string) bool {
@@ -98,6 +101,9 @@ func ParseBytes(path string, src []byte) (*gotreesitter.Tree, []byte, error) {
 		return nil, nil, fmt.Errorf("unsupported language: %s", path)
 	}
 
+	goTreeSitterMu.Lock()
+	defer goTreeSitterMu.Unlock()
+
 	parser := gotreesitter.NewParser(grammars.GoLanguage())
 	tree, err := parser.Parse(src)
 	if err != nil {
@@ -112,6 +118,9 @@ func ValidateSyntax(path string, src []byte) []SyntaxError {
 	if !IsSupportedFile(path) {
 		return nil
 	}
+
+	goTreeSitterMu.Lock()
+	defer goTreeSitterMu.Unlock()
 
 	parser := gotreesitter.NewParser(grammars.GoLanguage())
 	tree, err := parser.Parse(src)

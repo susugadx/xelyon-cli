@@ -306,7 +306,7 @@ func printContextSize(agent *Agent) {
 			lines = append(lines, fmt.Sprintf("Project map (%d symbols, %d files): ~%s",
 				agent.projectMapSymbolCount, agent.projectMapFileCount, FormatTokens(projectMapTokens)))
 		} else {
-			lines = append(lines, fmt.Sprintf("Project map manifest (%d files): ~%s",
+			lines = append(lines, fmt.Sprintf("Project map (%d files): ~%s",
 				agent.projectMapFileCount, FormatTokens(projectMapTokens)))
 		}
 	}

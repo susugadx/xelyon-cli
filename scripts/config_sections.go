@@ -224,7 +224,7 @@ var Sections = map[string]SectionInfo{
 		Icon:  "🗺️",
 		Fields: map[string]string{
 			"enabled":                "セッション開始時にプロジェクト構造マップを生成・注入",
-			"context_ratio":          "ProjectMap のベース比率（0.01-0.10、デフォルト: 0.02。大規模 repo では 0.03-0.04 に自動補正）",
+			"context_ratio":          "ProjectMap のベース比率（0.01-0.20、デフォルト: 0.05。大規模 repo では 0.03-0.04 に自動補正）",
 			"additional_ignore_dirs": "追加除外ディレクトリ（list_dir と共通）",
 		},
 		FieldTypes: map[string]string{

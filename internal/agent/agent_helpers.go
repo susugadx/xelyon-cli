@@ -211,25 +211,23 @@ func injectProjectMap(agent *Agent, input string) {
 	}
 	ignorePatterns := config.ResolveSharedIgnorePatterns(cfg, pc)
 	ignoreKey := strings.Join(ignorePatterns, "\x00")
-	priorityPaths := config.ExtractReferencedProjectPathsForRoot(input, rootPath)
 
-	pm, rebuilt := ensureProjectMapManifest(agent, rootPath, ignorePatterns, ignoreKey)
+	pm, rebuilt := ensureProjectMap(agent, rootPath, ignorePatterns, ignoreKey)
 	if pm == nil {
 		return
 	}
 	pm.MaxTokens = calcProjectMapBudget(agent, cfg, pm.GetFileCount(), pm.GetSymbolCount())
 
-	if !rebuilt && agent.projectMapSection != "" && slices.Equal(agent.projectMapPriority, priorityPaths) && token.EstimateTokenCount(agent.projectMapSection) <= pm.MaxTokens {
+	if !rebuilt && agent.projectMapSection != "" && token.EstimateTokenCount(agent.projectMapSection) <= pm.MaxTokens {
 		agent.SystemPrompt += "\n\n" + agent.projectMapSection
 		agent.projectMapFileCount = pm.GetFileCount()
 		agent.projectMapSymbolCount = pm.GetSymbolCount()
 		agent.projectMapDirty = false
 		return
 	}
-	mapStr := pm.GenerateManifest(priorityPaths)
+	mapStr := pm.Generate()
 	if mapStr == "" {
 		agent.projectMapSection = ""
-		agent.projectMapPriority = nil
 		agent.projectMapDirty = false
 		return
 	}
@@ -238,35 +236,34 @@ func injectProjectMap(agent *Agent, input string) {
 	agent.projectMapFileCount = pm.GetFileCount()
 	agent.projectMapSymbolCount = pm.GetSymbolCount()
 	agent.projectMapSection = mapStr
-	agent.projectMapPriority = append([]string(nil), priorityPaths...)
 	agent.projectMapDirty = false
 
 	if rebuilt {
-		green.Fprintf(agent.output(), "🗺️  Project map loaded (manifest from %d files)\n", agent.projectMapFileCount)
+		green.Fprintf(agent.output(), "🗺️  Project map loaded (%d files, %d symbols)\n", agent.projectMapFileCount, agent.projectMapSymbolCount)
 	}
 }
 
-func ensureProjectMapManifest(agent *Agent, rootPath string, ignorePatterns []string, ignoreKey string) (*repomap.ProjectMap, bool) {
+func ensureProjectMap(agent *Agent, rootPath string, ignorePatterns []string, ignoreKey string) (*repomap.ProjectMap, bool) {
 	if agent == nil {
 		return nil, false
 	}
 
 	if !agent.projectMapDirty &&
-		agent.projectMapManifest != nil &&
+		agent.projectMap != nil &&
 		agent.projectMapRootPath == rootPath &&
 		agent.projectMapIgnoreKey == ignoreKey {
 		if stateKey := currentProjectMapStateKey(agent, rootPath); stateKey != "" && agent.projectMapStateKey == stateKey {
-			return agent.projectMapManifest, false
+			return agent.projectMap, false
 		}
 	}
 
 	pm := repomap.NewProjectMap(rootPath, 0, ignorePatterns...)
-	if err := pm.BuildManifest(); err != nil {
+	if err := pm.Build(); err != nil {
 		yellow.Fprintf(agent.output(), "⚠️ ProjectMap build failed: %v\n", err)
 		return nil, false
 	}
 
-	agent.projectMapManifest = pm
+	agent.projectMap = pm
 	agent.projectMapRootPath = rootPath
 	agent.projectMapIgnoreKey = ignoreKey
 	agent.projectMapWatchDirs = nil
@@ -368,18 +365,17 @@ func (a *Agent) refreshProjectPromptIfDirty(input string) {
 	a.refreshProjectPrompt(input)
 }
 
-func (a *Agent) invalidateProjectMapManifest() {
+func (a *Agent) invalidateProjectMap() {
 	if a == nil {
 		return
 	}
 
-	a.projectMapManifest = nil
+	a.projectMap = nil
 	a.projectMapRootPath = ""
 	a.projectMapIgnoreKey = ""
 	a.projectMapStateKey = ""
 	a.projectMapWatchDirs = nil
 	a.projectMapSection = ""
-	a.projectMapPriority = nil
 	a.projectMapDirty = true
 }
 

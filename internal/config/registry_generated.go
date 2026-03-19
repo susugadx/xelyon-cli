@@ -180,7 +180,7 @@ var FieldDescriptions = map[string]string{
 	"plan_mode.max_retry":                 "最大リトライ回数",
 	"plan_mode.step_timeout":              "ステップタイムアウト（秒）",
 	"project_map.additional_ignore_dirs":  "追加除外ディレクトリ（list_dir と共通）",
-	"project_map.context_ratio":           "ProjectMap のベース比率（0.01-0.10、デフォルト: 0.02。大規模 repo では 0.03-0.04 に自動補正）",
+	"project_map.context_ratio":           "ProjectMap のベース比率（0.01-0.20、デフォルト: 0.05。大規模 repo では 0.03-0.04 に自動補正）",
 	"project_map.enabled":                 "セッション開始時にプロジェクト構造マップを生成・注入",
 	"prompt_cache.enabled":                "有効化（cache_control ブレークポイントを設定）",
 	"provider_models":                     "プロバイダーごとのモデル設定",

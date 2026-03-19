@@ -64,7 +64,7 @@ func (a *Agent) chatCore(input string, image *api.ImageData, oneShot bool) error
 	// GitHub MCP ヒントを追加（GitHub関連リクエストの場合）
 	input = a.AddGitHubHint(input)
 
-	// 入力に応じて project rules/context と project map manifest を差し替える。
+	// 入力に応じて project rules/context と project map を差し替える。
 	a.refreshProjectPrompt(input)
 
 	// セッションに保存

@@ -95,14 +95,14 @@ func TestInjectProjectMap_AppendsProjectMap(t *testing.T) {
 	if agent.projectMapFileCount == 0 {
 		t.Fatal("expected projectMapFileCount to be populated")
 	}
-	if agent.projectMapSymbolCount != 0 {
-		t.Fatalf("expected lightweight manifest without symbols, got %d", agent.projectMapSymbolCount)
+	if agent.projectMapSymbolCount == 0 {
+		t.Fatal("expected full project map with symbols")
 	}
 	if !strings.Contains(out.String(), "Project map loaded") {
 		t.Fatalf("expected load message, got: %s", out.String())
 	}
-	if !strings.Contains(agent.SystemPrompt, "Priority files:") {
-		t.Fatalf("expected manifest priority files, got: %s", agent.SystemPrompt)
+	if !strings.Contains(agent.SystemPrompt, "func Build()") {
+		t.Fatalf("expected project map symbols, got: %s", agent.SystemPrompt)
 	}
 }
 
@@ -144,8 +144,8 @@ func TestRefreshProjectPrompt_ReusesCachedProjectMapWithoutRelogging(t *testing.
 	if count := strings.Count(out.String(), "Project map loaded"); count != 1 {
 		t.Fatalf("project map load message count = %d, want 1; output=%q", count, out.String())
 	}
-	if !strings.Contains(agent.SystemPrompt, "Priority files:") {
-		t.Fatalf("expected refreshed manifest to include priority files:\n%s", agent.SystemPrompt)
+	if !strings.Contains(agent.SystemPrompt, "func Build()") {
+		t.Fatalf("expected refreshed project map to include symbols:\n%s", agent.SystemPrompt)
 	}
 }
 
@@ -259,8 +259,8 @@ func TestRefreshProjectPrompt_RebuildsProjectMapWhenNonGitNestedFileAdded(t *tes
 	if count := strings.Count(out.String(), "Project map loaded"); count != 2 {
 		t.Fatalf("project map should rebuild after nested non-git file add, got count=%d output=%q", count, out.String())
 	}
-	if !strings.Contains(agent.SystemPrompt, "pkg/extra.go") {
-		t.Fatalf("expected rebuilt project map to include pkg/extra.go:\n%s", agent.SystemPrompt)
+	if !strings.Contains(agent.SystemPrompt, "extra.go") {
+		t.Fatalf("expected rebuilt project map to include extra.go:\n%s", agent.SystemPrompt)
 	}
 }
 

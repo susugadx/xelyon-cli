@@ -53,7 +53,7 @@ func TestCalcProjectMapBudget_InvalidRatio(t *testing.T) {
 	}{
 		{"zero", 0},
 		{"negative", -0.5},
-		{"over_max", 0.15},
+		{"over_max", 0.25},
 		{"nan", math.NaN()},
 		{"inf", math.Inf(1)},
 	}
@@ -62,9 +62,9 @@ func TestCalcProjectMapBudget_InvalidRatio(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg.ProjectMap.ContextRatio = tt.ratio
 			got := calcProjectMapBudget(agent, cfg, 50, 500)
-			// デフォルト 0.02 にフォールバック → 200K × 2% = 4000
-			if got != 4000 {
-				t.Errorf("calcProjectMapBudget() = %d, want 4000 (fallback to 0.02)", got)
+			// デフォルト 0.05 にフォールバック → 200K × 5% = 10000
+			if got != 10000 {
+				t.Errorf("calcProjectMapBudget() = %d, want 10000 (fallback to 0.05)", got)
 			}
 		})
 	}

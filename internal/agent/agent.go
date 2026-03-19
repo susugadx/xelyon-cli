@@ -82,13 +82,12 @@ type Agent struct {
 	tokenLimitRetryCount  int // トークン上限エラー時のリトライ回数（最大1回）
 	projectMapFileCount   int
 	projectMapSymbolCount int
-	projectMapManifest    *repomap.ProjectMap
+	projectMap            *repomap.ProjectMap
 	projectMapRootPath    string
 	projectMapIgnoreKey   string
 	projectMapStateKey    string
 	projectMapWatchDirs   []string
 	projectMapSection     string
-	projectMapPriority    []string
 	projectMapDirty       bool
 
 	// 並列実行用ミューテックス

@@ -488,7 +488,7 @@ func (a *Agent) handleFileChange(change *tools.FileChange) {
 		return
 	}
 
-	a.invalidateProjectMapManifest()
+	a.invalidateProjectMap()
 
 	a.changeStack = append(a.changeStack, *change)
 	if len(a.changeStack) > config.MaxChangeStack {
@@ -506,7 +506,7 @@ func (a *Agent) handleFileChange(change *tools.FileChange) {
 
 func (a *Agent) noteProjectMapMutation(tc *tools.ToolCall, change *tools.FileChange) {
 	if change != nil {
-		a.invalidateProjectMapManifest()
+		a.invalidateProjectMap()
 		return
 	}
 	if tc == nil {
@@ -514,12 +514,12 @@ func (a *Agent) noteProjectMapMutation(tc *tools.ToolCall, change *tools.FileCha
 	}
 	if tc.Tool == "bash" {
 		if !tools.IsReadOnlyBashCommand(tc.Args["command"]) {
-			a.invalidateProjectMapManifest()
+			a.invalidateProjectMap()
 		}
 		return
 	}
 	if tools.IsWriteTool(tc.Tool) {
-		a.invalidateProjectMapManifest()
+		a.invalidateProjectMap()
 	}
 }
 

@@ -254,11 +254,11 @@ hooks:
 ```bash
 $ xelyon
 📋 xelyon.yaml loaded
-🗺️  Project map loaded (manifest from 42 files)
-📋 Context size: ~8.1k tok
+🗺️  Project map loaded (42 files, 118 symbols)
+📋 Context size: ~10.8k tok
    ├── Base prompt: ~3.9k
    ├── Tools (9): ~2.7k
-   ├── Project map manifest (42 files): ~0.9k
+   ├── Project map (118 symbols, 42 files): ~3.6k
    └── xelyon.yaml: ~0.6k
 ```
 

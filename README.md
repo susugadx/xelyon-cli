@@ -186,8 +186,8 @@ export DEEPSEEK_API_KEY="sk-..."  # または他のプロバイダー
 ```bash
 xelyon
 
-🗺️  Project map loaded (manifest from 42 files)
-📋 Context size: ~8.1k tok
+🗺️  Project map loaded (42 files, 118 symbols)
+📋 Context size: ~10.8k tok
 
 > main.goを読んで、バグがあれば修正して
 ```

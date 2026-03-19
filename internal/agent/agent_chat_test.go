@@ -650,8 +650,11 @@ func TestChatCore_SetsAbortedStatusWithCancelReason(t *testing.T) {
 	var out bytes.Buffer
 	provider := &blockingCancelProvider{started: make(chan struct{})}
 	agent := NewAgent("test-model", provider, false)
+	cfg := config.DefaultConfig()
+	cfg.ProjectMap.Enabled = false
 	agent.Runtime = &AgentRuntime{
-		UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+		Config: cfg,
+		UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
 	}
 
 	done := make(chan struct{})
