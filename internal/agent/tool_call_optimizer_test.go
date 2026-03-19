@@ -107,24 +107,24 @@ func TestIsBatchableReadFile(t *testing.T) {
 // ── searchCodeOptionsKey tests ──
 
 func TestSearchCodeOptionsKey_SameOptions(t *testing.T) {
-	tc1 := &tools.ToolCall{Tool: "search_code", Args: map[string]string{"pattern": "foo", "path": ".", "file_type": "go"}}
-	tc2 := &tools.ToolCall{Tool: "search_code", Args: map[string]string{"pattern": "bar", "path": ".", "file_type": "go"}}
+	tc1 := &tools.ToolCall{Tool: "search_code", Args: map[string]string{"pattern": "foo", "path": ".", "file_filter": "go"}}
+	tc2 := &tools.ToolCall{Tool: "search_code", Args: map[string]string{"pattern": "bar", "path": ".", "file_filter": "go"}}
 	if searchCodeOptionsKey(tc1) != searchCodeOptionsKey(tc2) {
 		t.Error("same options (different pattern) should produce same key")
 	}
 }
 
 func TestSearchCodeOptionsKey_DifferentOptions(t *testing.T) {
-	tc1 := &tools.ToolCall{Tool: "search_code", Args: map[string]string{"pattern": "foo", "path": ".", "file_type": "go"}}
-	tc2 := &tools.ToolCall{Tool: "search_code", Args: map[string]string{"pattern": "foo", "path": ".", "file_type": "py"}}
+	tc1 := &tools.ToolCall{Tool: "search_code", Args: map[string]string{"pattern": "foo", "path": ".", "file_filter": "go"}}
+	tc2 := &tools.ToolCall{Tool: "search_code", Args: map[string]string{"pattern": "foo", "path": ".", "file_filter": "py"}}
 	if searchCodeOptionsKey(tc1) == searchCodeOptionsKey(tc2) {
-		t.Error("different file_type should produce different key")
+		t.Error("different file_filter should produce different key")
 	}
 }
 
 func TestSearchCodeOptionsKey_EmptyOptionsIgnored(t *testing.T) {
 	tc1 := &tools.ToolCall{Tool: "search_code", Args: map[string]string{"pattern": "foo"}}
-	tc2 := &tools.ToolCall{Tool: "search_code", Args: map[string]string{"pattern": "bar", "file_type": ""}}
+	tc2 := &tools.ToolCall{Tool: "search_code", Args: map[string]string{"pattern": "bar", "file_filter": ""}}
 	if searchCodeOptionsKey(tc1) != searchCodeOptionsKey(tc2) {
 		t.Error("empty options should be ignored in key")
 	}
@@ -327,14 +327,14 @@ func TestCloneToolCallWithNewPattern(t *testing.T) {
 	original := &tools.ToolCall{
 		Tool: "search_code",
 		Args: map[string]string{
-			"pattern":   "foo",
-			"path":      ".",
-			"file_type": "go",
+			"pattern":     "foo",
+			"path":        ".",
+			"file_filter": "go",
 		},
 		RawArgs: map[string]any{
-			"pattern":   "foo",
-			"path":      ".",
-			"file_type": "go",
+			"pattern":     "foo",
+			"path":        ".",
+			"file_filter": "go",
 		},
 	}
 
@@ -713,8 +713,8 @@ func TestExecuteToolCallsWithParallel_ReadFile_BatchResultAndHistory(t *testing.
 
 func TestSearchCodeBatch_SameOptionsGrouped(t *testing.T) {
 	// Two search_code calls with same options but different patterns
-	tc1 := &tools.ToolCall{Tool: "search_code", Args: map[string]string{"pattern": "handleSSE", "path": ".", "file_type": "go"}}
-	tc2 := &tools.ToolCall{Tool: "search_code", Args: map[string]string{"pattern": "parseResponse", "path": ".", "file_type": "go"}}
+	tc1 := &tools.ToolCall{Tool: "search_code", Args: map[string]string{"pattern": "handleSSE", "path": ".", "file_filter": "go"}}
+	tc2 := &tools.ToolCall{Tool: "search_code", Args: map[string]string{"pattern": "parseResponse", "path": ".", "file_filter": "go"}}
 
 	key1 := searchCodeOptionsKey(tc1)
 	key2 := searchCodeOptionsKey(tc2)
@@ -725,14 +725,14 @@ func TestSearchCodeBatch_SameOptionsGrouped(t *testing.T) {
 }
 
 func TestSearchCodeBatch_DifferentOptionsNotGrouped(t *testing.T) {
-	tc1 := &tools.ToolCall{Tool: "search_code", Args: map[string]string{"pattern": "foo", "file_type": "go"}}
-	tc2 := &tools.ToolCall{Tool: "search_code", Args: map[string]string{"pattern": "bar", "file_type": "py"}}
+	tc1 := &tools.ToolCall{Tool: "search_code", Args: map[string]string{"pattern": "foo", "file_filter": "go"}}
+	tc2 := &tools.ToolCall{Tool: "search_code", Args: map[string]string{"pattern": "bar", "file_filter": "py"}}
 
 	key1 := searchCodeOptionsKey(tc1)
 	key2 := searchCodeOptionsKey(tc2)
 
 	if key1 == key2 {
-		t.Error("different file_type should produce different keys")
+		t.Error("different file_filter should produce different keys")
 	}
 }
 

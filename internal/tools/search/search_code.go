@@ -66,15 +66,15 @@ type Match struct {
 type SearchOptions struct {
 	Pattern        string
 	Path           string
-	FilePattern    string
-	FileType       string
-	CtxLines       int
-	TokenBudget    int // 内部固定値（15000）。外部パラメータは廃止。
+	FilePattern    string // file_filter から自動判定。glob 文字を含む場合に設定。
+	FileType       string // file_filter から自動判定。glob 文字を含まない場合に設定。
+	CtxLines       int    // ツール経路では内部固定値（3）。外部パラメータは廃止。
+	TokenBudget    int    // 内部固定値（15000）。外部パラメータは廃止。
 	IsRegex        bool
-	Multiline      bool
-	IncludeHidden  bool
-	IncludeIgnored bool
-	OutputMode     string // ""（default）, "full", "manifest"
+	Multiline      bool   // ツール経路では内部固定値（false）。外部パラメータは廃止。
+	IncludeHidden  bool   // ツール経路では内部固定値（false）。外部パラメータは廃止。
+	IncludeIgnored bool   // ツール経路では内部固定値（false）。外部パラメータは廃止。
+	OutputMode     string // 内部専用。外部パラメータは廃止。
 
 	ignoreMatcher *pathmatch.Matcher
 	ignoreGlobs   []string
@@ -100,12 +100,8 @@ func ExecuteSearchCodeWithConfig(cfg *config.Config, cache tools.ToolCacheInterf
 		opts.Path = "."
 	}
 
-	if opts.CtxLines < 0 {
-		opts.CtxLines = 3
-	}
-	if opts.CtxLines > 10 {
-		opts.CtxLines = 10
-	}
+	// context_lines is fixed internally.
+	opts.CtxLines = 3
 
 	// token_budget is fixed internally.
 	// 15000 tokens cover almost all normal searches without truncation.
@@ -490,7 +486,7 @@ func executeSearch(pattern string, opts SearchOptions, maxCountPerFile int) (str
 		if glob, ok := fileTypeToGlob(opts.FileType); ok {
 			args = append(args, "--include="+glob)
 		} else {
-			warnings = append(warnings, fmt.Sprintf("Warning: file_type=%q is not supported in grep fallback mode (rg not found)", opts.FileType))
+			warnings = append(warnings, fmt.Sprintf("Warning: file_filter=%q is not supported in grep fallback mode as a language type (rg not found)", opts.FileType))
 			if opts.FilePattern != "" {
 				args = append(args, "--include="+opts.FilePattern)
 			}

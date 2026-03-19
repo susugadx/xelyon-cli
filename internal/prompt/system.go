@@ -133,7 +133,6 @@ Task is NOT done until the dependency chain is resolved.
 - Code search / regex / broad discovery -> search_code; use it first only when the symbol name is unknown, ambiguous, non-Go, or pattern-based discovery is required
 - File contents -> read_file; use symbol mode for specific Go functions/types and paths parameter for batch reading multiple files
 - Directory listing -> list_dir; use it first for current filesystem contents, next file/subtree selection, and recursive listing with depth
-- For broad searches hitting 50+ files, use search_code with output_mode="manifest" to get a file-level overview before diving into individual files
 - Avoid overly broad regex (e.g. ".*" or ".+") in search_code; use specific patterns that match the target
 - Same pattern across files -> prefer str_replace batch mode; use bash only when no dedicated tool can handle the change
 - Independent operations -> call multiple tools in one response; default to parallel reads/searches when the steps do not depend on each other

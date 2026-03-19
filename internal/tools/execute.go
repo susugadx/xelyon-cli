@@ -59,7 +59,9 @@ func printToolArgs(w io.Writer, tc *ToolCall) {
 		if tc.Args["path"] != "" {
 			_, _ = fmt.Fprintf(w, "   Path: %s\n", tc.Args["path"])
 		}
-		if tc.Args["file_pattern"] != "" {
+		if tc.Args["file_filter"] != "" {
+			_, _ = fmt.Fprintf(w, "   File filter: %s\n", tc.Args["file_filter"])
+		} else if tc.Args["file_pattern"] != "" {
 			_, _ = fmt.Fprintf(w, "   File pattern: %s\n", tc.Args["file_pattern"])
 		}
 	case "web_search":

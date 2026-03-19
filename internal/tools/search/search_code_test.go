@@ -354,18 +354,18 @@ func TestSearchCode_CacheDifferentParams(t *testing.T) {
 
 	cache := &testSearchCache{data: make(map[string]string)}
 
-	result0 := ExecuteSearchCodeWithCache(cache, SearchOptions{Pattern: "target_param_check", Path: dir, FilePattern: "", FileType: "", CtxLines: 0, TokenBudget: 3000, IsRegex: true, Multiline: false})
-	if strings.Contains(result0, "No matches found") {
-		t.Fatal("Expected matches with context_lines=0")
+	resultDefault := ExecuteSearchCodeWithCache(cache, SearchOptions{Pattern: "target_param_check", Path: dir, FilePattern: "", FileType: "", CtxLines: 0, TokenBudget: 3000, IsRegex: true, Multiline: false})
+	if strings.Contains(resultDefault, "No matches found") {
+		t.Fatal("Expected matches with default output mode")
 	}
 
-	result3 := ExecuteSearchCodeWithCache(cache, SearchOptions{Pattern: "target_param_check", Path: dir, FilePattern: "", FileType: "", CtxLines: 3, TokenBudget: 3000, IsRegex: true, Multiline: false})
-	if strings.Contains(result3, "No matches found") {
-		t.Fatal("Expected matches with context_lines=3")
+	resultManifest := ExecuteSearchCodeWithCache(cache, SearchOptions{Pattern: "target_param_check", Path: dir, FilePattern: "", FileType: "", CtxLines: 3, TokenBudget: 3000, IsRegex: true, Multiline: false, OutputMode: "manifest"})
+	if strings.Contains(resultManifest, "No matches found") {
+		t.Fatal("Expected matches with manifest output mode")
 	}
 
-	if result0 == result3 {
-		t.Error("Results with different context_lines should differ (cache key should include context_lines)")
+	if resultDefault == resultManifest {
+		t.Error("Results with different output_mode should differ (cache key should include output_mode)")
 	}
 }
 
@@ -419,8 +419,8 @@ func TestSearchCode_CacheKeyUsesInternalTokenBudget(t *testing.T) {
 	if strings.Contains(result1, "No matches found") {
 		t.Fatal("Expected matches on first search")
 	}
-	if !strings.Contains(cache.lastSetPath, "|15000|") {
-		t.Fatalf("expected cache key to use internal token budget 15000, got: %s", cache.lastSetPath)
+	if !strings.Contains(cache.lastSetPath, "|3|15000|") {
+		t.Fatalf("expected cache key to use internal defaults for context_lines=3 and token_budget=15000, got: %s", cache.lastSetPath)
 	}
 
 	result2 := ExecuteSearchCodeWithCache(cache, SearchOptions{Pattern: "cached_target", Path: dir, CtxLines: 0, TokenBudget: 99999, IsRegex: true})
@@ -430,8 +430,8 @@ func TestSearchCode_CacheKeyUsesInternalTokenBudget(t *testing.T) {
 	if cache.setCalls != 1 {
 		t.Fatalf("expected one cache write with normalized token budget, got %d", cache.setCalls)
 	}
-	if !strings.Contains(cache.lastGetPath, "|15000|") {
-		t.Fatalf("expected cache lookup key to use internal token budget 15000, got: %s", cache.lastGetPath)
+	if !strings.Contains(cache.lastGetPath, "|3|15000|") {
+		t.Fatalf("expected cache lookup key to use internal defaults for context_lines=3 and token_budget=15000, got: %s", cache.lastGetPath)
 	}
 }
 
