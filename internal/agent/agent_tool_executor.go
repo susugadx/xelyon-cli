@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -143,28 +142,7 @@ func (a *Agent) addToolCallsToHistory(response string, toolCalls []*tools.ToolCa
 }
 
 func (a *Agent) assistantToolHistoryContent(explanation, reasoningContent string) (string, string) {
-	if a.shouldClearAssistantToolContent() {
-		return "", ""
-	}
 	return explanation, reasoningContent
-}
-
-func (a *Agent) shouldClearAssistantToolContent() bool {
-	// Step1: clear_assistant_content disabled — 情報欠落によるターン増加を防止
-	if historyOptimizationDisabled {
-		return false
-	}
-
-	if !a.cfg().General.ClearAssistantContent {
-		return false
-	}
-
-	switch strings.ToLower(a.ProviderName) {
-	case "openai", "gemini":
-		return true
-	default:
-		return false
-	}
 }
 
 // executeToolOnly はツールを実行して結果を履歴に追加する（assistant メッセージは追加しない）。
@@ -762,7 +740,6 @@ func (a *Agent) executeToolCallsWithParallel(
 
 			leaderTC := allToolCalls[chunkIndices[0]]
 			mergedTC := cloneToolCallWithNewPattern(leaderTC, strings.Join(chunkPatterns, ","))
-			a.adjustSearchCodeForHighContext(mergedTC)
 			mergedResult, _ := a.executeToolForParallel(ctx, mergedTC)
 
 			perPattern := splitMultiPatternResult(mergedResult, chunkPatterns)
@@ -828,16 +805,6 @@ func (a *Agent) executeToolCallsWithParallel(
 			}
 			// perFile == nil: 分割失敗 → 個別実行にフォールバック
 		}
-	}
-
-	// ── Phase 0.5d: search_code context-aware budget reduction ──
-	// 高コンテキスト時に search_code の token_budget を縮退させる。
-	// 通常時は何もしない。
-	for i, e := range entries {
-		if e.status != statusExecute {
-			continue
-		}
-		a.adjustSearchCodeForHighContext(allToolCalls[i])
 	}
 
 	// ── Phase 1: 実行 ──
@@ -1181,57 +1148,6 @@ func (a *Agent) recordReadFileBatchMerge(mergedCount int) {
 	if a.Stats != nil {
 		a.Stats.ToolObs.ReadFileBatchMerges++
 	}
-}
-
-// adjustSearchCodeForHighContext は高コンテキスト時に search_code の args を縮退させる。
-// token_budget を削減し、85% 超では output_mode を manifest に変更する。
-// 発動条件: コンテキスト使用率 > 70%。
-func (a *Agent) adjustSearchCodeForHighContext(tc *tools.ToolCall) bool {
-	// Step1: search_code 高コンテキスト縮退 disabled — 情報欠落によるターン増加を防止
-	if historyOptimizationDisabled {
-		return false
-	}
-
-	if tc.Tool != "search_code" {
-		return false
-	}
-
-	pct := a.GetTokenUsagePercentage()
-	if pct < 70 {
-		return false
-	}
-
-	maxBudget := 1500
-	if pct > 85 {
-		maxBudget = 1000
-	}
-
-	currentBudget := 3000 // search_code default
-	if tc.Args["token_budget"] != "" {
-		if n, err := strconv.Atoi(tc.Args["token_budget"]); err == nil {
-			currentBudget = n
-		}
-	}
-
-	changed := false
-	if currentBudget > maxBudget {
-		tc.Args["token_budget"] = strconv.Itoa(maxBudget)
-		if tc.RawArgs != nil {
-			tc.RawArgs["token_budget"] = maxBudget
-		}
-		changed = true
-	}
-
-	// 85% 超: broad search は manifest 寄りにする
-	if pct > 85 && tc.Args["output_mode"] == "" {
-		tc.Args["output_mode"] = "manifest"
-		if tc.RawArgs != nil {
-			tc.RawArgs["output_mode"] = "manifest"
-		}
-		changed = true
-	}
-
-	return changed
 }
 
 func parallelGroupSpinnerMessage(allToolCalls []*tools.ToolCall, indices []int) string {

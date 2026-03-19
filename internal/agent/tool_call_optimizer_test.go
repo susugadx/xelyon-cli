@@ -1516,13 +1516,3 @@ func TestReadFileChunkBatch_SegmentOverLimit(t *testing.T) {
 		t.Errorf("expected 2 merge-eligible chunks, got %d", chunkCount)
 	}
 }
-
-// ── adjustSearchCodeForHighContext test (unit) ──
-
-func TestAdjustSearchCodeForHighContext_NotSearchCode(t *testing.T) {
-	a := &Agent{}
-	tc := &tools.ToolCall{Tool: "read_file", Args: map[string]string{}}
-	if a.adjustSearchCodeForHighContext(tc) {
-		t.Error("should not adjust non-search_code tool")
-	}
-}

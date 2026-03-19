@@ -52,14 +52,12 @@ var Sections = map[string]SectionInfo{
 		Title: "一般設定",
 		Icon:  "⚙️",
 		Fields: map[string]string{
-			"language":                "表示言語（ja, en）",
-			"tool_loop_limit":         "ツールループ最大回数（0で無制限）",
-			"clear_assistant_content": "OpenAI / Gemini のツール呼び出し時 assistant 実況テキストを History から除去",
+			"language":        "表示言語（ja, en）",
+			"tool_loop_limit": "ツールループ最大回数（0で無制限）",
 		},
 		FieldTypes: map[string]string{
-			"language":                "select",
-			"tool_loop_limit":         "int",
-			"clear_assistant_content": "bool",
+			"language":        "select",
+			"tool_loop_limit": "int",
 		},
 		SelectOpts: map[string][]string{
 			"language": {"ja", "en"},

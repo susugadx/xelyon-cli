@@ -129,7 +129,6 @@ func TestFieldTypeMap(t *testing.T) {
 		"bash.safety_level":                   FieldTypeSelect,
 		"bash.safe_commands":                  FieldTypeStringSlice,
 		"command_aliases":                     FieldTypeStringMap,
-		"general.clear_assistant_content":     FieldTypeBool,
 		"plan_mode.clear_context_on_approval": FieldTypeBool,
 		"project_map.context_ratio":           FieldTypeFloat,
 		"provider_models":                     FieldTypeStructMap,
@@ -179,7 +178,6 @@ func TestFieldDescriptions(t *testing.T) {
 		"compression.clear_tool_inputs",
 		"api_retry.count",
 		"bash.safety_level",
-		"general.clear_assistant_content",
 		"plan_mode.clear_context_on_approval",
 		"project_map.context_ratio",
 	}

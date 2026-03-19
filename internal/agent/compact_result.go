@@ -52,14 +52,10 @@ func (a *Agent) compactToolResult(toolCall *tools.ToolCall, result string) strin
 		compacted = compactBash(command, result)
 	case "read_file":
 		compacted = compactReadFile(toolCall.Args, result)
-	case "search_code":
-		compacted = compactSearchCode(result)
 	case "inspect_symbol":
 		compacted = compactInspectSymbol(result)
 	case "list_dir":
 		compacted = compactListDir(result)
-	case "web_search":
-		compacted = compactWebSearch(result)
 	default:
 		compacted = result
 	}

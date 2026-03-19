@@ -46,8 +46,6 @@ general:
     language: ja
     # ツールループ最大回数（0で無制限）
     tool_loop_limit: 0
-    # OpenAI / Gemini のツール呼び出し時 assistant 実況テキストを History から除去
-    clear_assistant_content: true
 
 # ============================================================
 # 会話履歴圧縮設定
