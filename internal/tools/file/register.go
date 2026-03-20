@@ -2,6 +2,7 @@ package file
 
 import (
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -22,9 +23,15 @@ func (t *ReadFileTool) Parameters() map[string]interface{} {
 	return map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
-			"path":       map[string]interface{}{"type": "string", "description": "File path to read. Returns full content for most files. Do not re-read a file already returned in full."},
-			"start_line": map[string]interface{}{"type": "integer", "description": "Start line number (1-indexed). Only for very large files (2000+ lines) or specific sections of unread files."},
-			"end_line":   map[string]interface{}{"type": "integer", "description": "End line number (1-indexed). Omit to read up to 1000 lines from start_line."},
+			"path": map[string]interface{}{"type": "string", "description": "File path. Returns full content. Do not re-read a file already returned."},
+			"paths": map[string]interface{}{
+				"type":        "array",
+				"items":       map[string]interface{}{"type": "string"},
+				"maxItems":    MaxReadFilesPaths,
+				"description": "Read multiple files in one call (max 10). Preferred when reading 2+ independent files.",
+			},
+			"start_line": map[string]interface{}{"type": "integer", "description": "Start line (1-indexed). Only for very large files that were truncated."},
+			"end_line":   map[string]interface{}{"type": "integer", "description": "End line (1-indexed). Only for very large files that were truncated."},
 		},
 		"required":             []string{},
 		"additionalProperties": false,
@@ -34,9 +41,34 @@ func (t *ReadFileTool) Parameters() map[string]interface{} {
 func (t *ReadFileTool) Run(execCtx tools.ExecutionContext, args map[string]string) (string, *tools.FileChange, error) {
 	out := execCtx.Output()
 
-	// 単体モード: 従来の path + start_line/end_line
+	// バッチモード: paths が指定されている場合
+	if rawPaths := args["paths"]; rawPaths != "" {
+		var paths []string
+		if err := json.Unmarshal([]byte(rawPaths), &paths); err != nil {
+			if args["path"] == "" {
+				return fmt.Sprintf("Error: invalid paths format: %v", err), nil, nil
+			}
+			// path が有効 → 単体モードへフォールスルー
+		} else if len(paths) > 0 {
+			budgetOverride := 0
+			if strings.EqualFold(args["_full_budget"], "true") {
+				budgetOverride = DefaultFullLines
+			}
+			return ExecuteReadFilesWithRuntime(
+				out,
+				execCtx.EffectiveConfig(),
+				execCtx.EffectiveToolCache(),
+				paths,
+				budgetOverride,
+			), nil, nil
+		} else if args["path"] == "" {
+			return "Error: path or paths is required", nil, nil
+		}
+	}
+
+	// 単体モード
 	if args["path"] == "" {
-		return "Error: path is required", nil, nil
+		return "Error: path or paths is required", nil, nil
 	}
 	startLine, endLine := 0, 0
 	if args["start_line"] != "" {

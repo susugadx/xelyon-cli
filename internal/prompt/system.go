@@ -86,7 +86,7 @@ const SystemPrompt = `You are XELYON, an autonomous AI coding agent.
 - If Project Map already gives the exact location, go directly to inspect_symbol or read_file; do not search_code first.
 - Go symbol lookup -> inspect_symbol.
 - Unknown string, regex discovery, ambiguous symbols, or non-Go targets -> search_code.
-- read_file without line range returns full content for most files. After receiving full content, do NOT re-read sections of the same file with start_line/end_line. Use line ranges only for very large files (2000+ lines) or previously unread files.
+- read_file uses path for one file and paths for multiple files. Without line ranges, it returns full content unless a file is too large to return in full. After receiving full content, do NOT re-read sections of the same file with start_line/end_line.
 - Use list_dir only when you need current filesystem state that Project Map may not reflect, especially after edits.
 - When the exact edit target is known, prefer inspect_symbol or search_code -> str_replace(line-range).
 - After 2-4 targeted reads or searches, form a working hypothesis and switch to implementation unless evidence conflicts.
@@ -107,7 +107,7 @@ const SystemPrompt = `You are XELYON, an autonomous AI coding agent.
 - bash is ONLY for: build, test, format, lint, git commands, and tasks where no dedicated tool exists.
 - Independent operations -> call multiple tools in one response when the steps do not depend on each other.
 - For shared changes, read target code and its callers/tests in parallel when independent.
-- Reading 2+ independent files -> call multiple read_file tools in the same response.
+- Reading 2+ independent files -> use read_file with paths parameter.
 - Searching multiple independent patterns -> prefer one search_code call with comma-separated patterns instead of serial searches.
 - Avoid overly broad regex like ".*" or ".+" in search_code.
 - Same pattern across files -> prefer str_replace batch mode.

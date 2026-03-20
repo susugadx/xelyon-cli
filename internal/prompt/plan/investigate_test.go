@@ -57,8 +57,8 @@ func TestBuildInvestigationPrompt_PrefersParallelInvestigation(t *testing.T) {
 	if !strings.Contains(prompt, "Prefer parallel investigation") {
 		t.Error("investigation prompt should encourage parallel investigation")
 	}
-	if !strings.Contains(prompt, "call read_file multiple times in the same turn") {
-		t.Error("investigation prompt should prefer multiple read_file calls in the same turn")
+	if !strings.Contains(prompt, "use read_file with paths parameter") {
+		t.Error("investigation prompt should prefer read_file paths for multi-file reads")
 	}
 	if !strings.Contains(prompt, "prefer one search_code call with comma-separated patterns") {
 		t.Error("investigation prompt should prefer multi-pattern search_code")
@@ -72,6 +72,9 @@ func TestBuildInvestigationPrompt_ContainsToolSelectionExamples(t *testing.T) {
 	}
 	if !strings.Contains(prompt, "inspect_symbol(symbol=\"chatCore\", path=\"internal/agent/agent_chat.go\")") {
 		t.Error("investigation prompt should include an inspect_symbol example")
+	}
+	if !strings.Contains(prompt, "use read_file(paths=[...]) when files are independent") {
+		t.Error("investigation prompt should include a read_file paths example")
 	}
 	if !strings.Contains(prompt, "use list_dir first") {
 		t.Error("investigation prompt should include a list_dir-first example")

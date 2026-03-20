@@ -66,7 +66,7 @@ func isBatchableReadFile(tc *tools.ToolCall) bool {
 const maxReadFileBatchPaths = 10
 
 // buildReadFileBatchToolCall は internal batch read 用の synthetic ToolCall を生成する。
-// observability / negative cache 記録では paths を保持するが、公開 read_file schema には含まれない。
+// observability / negative cache 記録のため paths を保持し、internal 用に _full_budget も付与する。
 func buildReadFileBatchToolCall(paths []string, fullBudget bool) *tools.ToolCall {
 	pathsJSON, _ := json.Marshal(paths)
 	args := map[string]string{
