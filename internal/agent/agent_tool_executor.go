@@ -166,8 +166,11 @@ func (a *Agent) executeToolOnly(toolCall *tools.ToolCall) string {
 	// 変更履歴を保存
 	a.handleFileChange(change)
 
-	// 結果を履歴に追加（重複チェック → 入口圧縮）
-	historyContent := a.compactToolResult(toolCall, result)
+	// 結果を履歴に追加
+	historyContent := result
+	if !a.shouldSkipHistoryTruncation() {
+		historyContent = a.compactToolResult(toolCall, result)
+	}
 	if toolCall.ID != "" {
 		// Function Calling: role="tool" で tool_call_id 付きで送信
 		toolMsg := api.Message{
@@ -327,8 +330,11 @@ func (a *Agent) executeToolCallInternal(response string, toolCall *tools.ToolCal
 	// 変更履歴を保存
 	a.handleFileChange(change)
 
-	// 結果を履歴に追加（重複チェック → 入口圧縮）
-	historyContent := a.compactToolResult(toolCall, result)
+	// 結果を履歴に追加
+	historyContent := result
+	if !a.shouldSkipHistoryTruncation() {
+		historyContent = a.compactToolResult(toolCall, result)
+	}
 	if toolCall.ID != "" {
 		// Function Calling: role="tool" で tool_call_id 付きで送信
 		toolMsg := api.Message{
@@ -652,13 +658,11 @@ func (a *Agent) executeToolCallsWithParallel(
 		statusExecute   = 0 // 実行対象
 		statusSkip      = 1 // skipFn によりスキップ
 		statusLoopAbort = 2 // ループ検知で中止
-		statusDuplicate = 3 // 同一ターン内の完全重複（canonical メッセージに置換）
-		statusBatched   = 4 // Phase 0.5 で batch 実行済み（結果は results に格納済み）
+		statusBatched   = 3 // Phase 0.5 で batch 実行済み（結果は results に格納済み）
 	)
 	type entry struct {
-		status      int
-		skipMsg     string // statusSkip 時のメッセージ
-		dupFirstIdx int    // statusDuplicate: 最初の出現のインデックス
+		status  int
+		skipMsg string // statusSkip 時のメッセージ
 	}
 	entries := make([]entry, n)
 	aborted := false
@@ -689,28 +693,7 @@ func (a *Agent) executeToolCallsWithParallel(
 		entries[i] = entry{status: statusExecute}
 	}
 
-	// ── Phase 0.5a: Same-turn duplicate detection ──
-	// 同一レスポンス内の完全重複 tool call（tool名 + 全引数一致）を検出し、
-	// 2回目以降を statusDuplicate にマークする。
-	// read-only かつ冪等なツールのみ対象（isDedupableForTurn で判定）。
-	dupMap := make(map[string]int) // turnDedupKey → first occurrence index
-	for i, e := range entries {
-		if e.status != statusExecute {
-			continue
-		}
-		tc := allToolCalls[i]
-		if !isDedupableForTurn(tc.Tool) {
-			continue
-		}
-		key := turnDedupKey(tc)
-		if firstIdx, ok := dupMap[key]; ok {
-			entries[i] = entry{status: statusDuplicate, dupFirstIdx: firstIdx}
-		} else {
-			dupMap[key] = i
-		}
-	}
-
-	// ── Phase 0.5b: search_code multi-pattern batching ──
+	// ── Phase 0.5: search_code multi-pattern batching ──
 	// 同一 option（pattern 以外の全引数が一致）の search_code call をグループ化し、
 	// pattern をカンマ結合した 1 回の multi-pattern call にまとめて実行する。
 	// 結果を per-pattern section に分割し、各 call に割り当てる。
@@ -978,33 +961,6 @@ func (a *Agent) executeToolCallsWithParallel(
 				}
 			}
 
-		case statusDuplicate:
-			// Same-turn exact duplicate: append a canonical message to history.
-			// Skip execution/callback, but preserve read_file micro-read guidance
-			// to keep the existing soft-guard behavior.
-			canonicalResult := sameTurnDuplicateMessage(tc.Tool)
-			if guidance := a.readTracker.record(tc); guidance != "" {
-				canonicalResult = appendGuidanceWithConfirm(a.readTracker, readFileTrackerKey(tc.Args), canonicalResult, guidance)
-			}
-			if tc.ID != "" {
-				toolMsg := api.Message{
-					Role:       "tool",
-					Content:    canonicalResult,
-					ToolCallID: tc.ID,
-					ToolName:   tc.Tool,
-				}
-				a.History = append(a.History, toolMsg)
-				if a.session != nil {
-					a.session.AddMessageFromAPI(toolMsg, a.CurrentModel)
-				}
-			} else {
-				a.History = append(a.History, api.Message{
-					Role:    "user",
-					Content: fmt.Sprintf("[Tool Result for %s]\n%s", tc.Tool, canonicalResult),
-				})
-			}
-			a.recordSameTurnDuplicate(tc.Tool)
-
 		case statusBatched:
 			// Phase 0.5 で batch 実行済み: 結果は results[i] に格納済み。
 			// callback で通常の compaction / history 追加を行う。
@@ -1141,27 +1097,6 @@ func formatParallelGroupSummary(allToolCalls []*tools.ToolCall, indices []int, e
 		return fmt.Sprintf("Done (%s)", ui.FormatParallelElapsed(elapsed))
 	}
 	return fmt.Sprintf("Done: %s (%s)", strings.Join(parts, ", "), ui.FormatParallelElapsed(elapsed))
-}
-
-// recordSameTurnDuplicate は同一ターン内の重複抑制をメトリクスに記録する。
-// tool_call 自体は assistant message に残り、canonical message が tool result として
-// 履歴に積まれる。API 入力トークンの削減は「本来のフル結果と canonical message の差分」。
-func (a *Agent) recordSameTurnDuplicate(toolName string) {
-	a.statsMu.Lock()
-	defer a.statsMu.Unlock()
-	if a.Stats != nil {
-		a.Stats.ToolObs.SameTurnDuplicates++
-		// savings: フル result vs canonical message (~20 tokens) のサイズ差
-		const canonicalTokens = 20 // sameTurnDupMsgFmt ≈ 80 chars
-		fullResultTokens := estimatedToolResultTokens(toolName)
-		savedTokens := fullResultTokens - canonicalTokens
-		if savedTokens > 0 {
-			a.Stats.Savings.SavedCalls++
-			a.Stats.Savings.EstimatedInputTokensSaved += savedTokens
-			pricing := GetPricingInfo(a.Stats.Provider, a.Stats.Model)
-			a.Stats.Savings.EstimatedCostSaved += float64(savedTokens) / 1_000_000.0 * pricing.InputCostPerM
-		}
-	}
 }
 
 // recordSearchCodeBatchMerge は search_code batch merge をメトリクスに記録する。

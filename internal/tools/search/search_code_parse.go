@@ -84,7 +84,7 @@ outer:
 				})
 				sr.MatchCount++
 				totalMatches++
-				if totalMatches >= maxTotalMatches {
+				if maxTotalMatches > 0 && totalMatches >= maxTotalMatches {
 					break outer
 				}
 			}
@@ -160,7 +160,7 @@ outer:
 		if isMatch {
 			sr.MatchCount++
 			totalMatches++
-			if totalMatches >= maxTotalMatches {
+			if maxTotalMatches > 0 && totalMatches >= maxTotalMatches {
 				break outer
 			}
 		}

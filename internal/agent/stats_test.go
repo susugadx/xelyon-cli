@@ -369,20 +369,14 @@ func TestSessionStats_TotalToolExecutions(t *testing.T) {
 
 func TestOptimizationMetrics_Add(t *testing.T) {
 	metrics := OptimizationMetrics{
-		DeduplicateCount:       1,
-		DeduplicateTokensSaved: 10,
-		NegativeCacheHits:      2,
-		OutlineFirstCount:      1,
+		NegativeCacheHits: 2,
+		OutlineFirstCount: 1,
 	}
 
 	metrics.add(OptimizationMetrics{
-		DeduplicateCount:       3,
-		DeduplicateTokensSaved: 20,
-		NegativeCacheHits:      4,
-		MilestoneDetections:    1,
-		ToolRatioDetections:    2,
-		CompactionCount:        1,
-		CostAwareCompressions:  1,
+		NegativeCacheHits:     4,
+		CompactionCount:       1,
+		CostAwareCompressions: 1,
 	})
 	metrics.addCompaction(CompactionMetrics{
 		ErrorCompressions:      5,
@@ -390,12 +384,6 @@ func TestOptimizationMetrics_Add(t *testing.T) {
 		TruncationCount:        7,
 	})
 
-	if metrics.DeduplicateCount != 4 {
-		t.Fatalf("DeduplicateCount = %d, want 4", metrics.DeduplicateCount)
-	}
-	if metrics.DeduplicateTokensSaved != 30 {
-		t.Fatalf("DeduplicateTokensSaved = %d, want 30", metrics.DeduplicateTokensSaved)
-	}
 	if metrics.NegativeCacheHits != 6 {
 		t.Fatalf("NegativeCacheHits = %d, want 6", metrics.NegativeCacheHits)
 	}
@@ -410,12 +398,6 @@ func TestOptimizationMetrics_Add(t *testing.T) {
 	}
 	if metrics.OutlineFirstCount != 1 {
 		t.Fatalf("OutlineFirstCount = %d, want 1", metrics.OutlineFirstCount)
-	}
-	if metrics.MilestoneDetections != 1 {
-		t.Fatalf("MilestoneDetections = %d, want 1", metrics.MilestoneDetections)
-	}
-	if metrics.ToolRatioDetections != 2 {
-		t.Fatalf("ToolRatioDetections = %d, want 2", metrics.ToolRatioDetections)
 	}
 	if metrics.CompactionCount != 1 {
 		t.Fatalf("CompactionCount = %d, want 1", metrics.CompactionCount)

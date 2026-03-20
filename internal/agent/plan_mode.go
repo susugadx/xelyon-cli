@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/susugadx/xelyon-cli/internal/agent/plan"
 	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	promptplan "github.com/susugadx/xelyon-cli/internal/prompt/plan"
@@ -93,9 +92,6 @@ func (a *Agent) RunPlanMode(ctx context.Context, userRequest string) error {
 	}
 
 	green.Fprintln(out, "✓ Plan approved. Starting implementation...")
-	if a.cfg().PlanMode.ClearContextOnApproval {
-		a.clearContextForImplementation(p, userRequest)
-	}
 	a.SetStatus(StateRunning, "Implementing", "実装中", "Wait for completion", "完了を待ってください")
 
 	// Step 4: 実装フェーズ
@@ -122,85 +118,4 @@ func (a *Agent) RunPlanMode(ctx context.Context, userRequest string) error {
 
 	a.SetStatus(StateWaitingInput, "Ready for input", "入力待ち", "Type your request or /help", "リクエスト、または /help を入力")
 	return nil
-}
-
-func (a *Agent) clearContextForImplementation(p *plan.Plan, userRequest string) {
-	beforeTokens := a.EstimateTokens()
-	planSummary := buildPlanContextSummary(p, userRequest)
-
-	a.History = []api.Message{{
-		Role:    "user",
-		Content: planSummary,
-	}}
-
-	a.compactedItems = nil
-	a.isCompactedMode = false
-	a.readTracker.reset()
-
-	if a.session != nil {
-		a.session.Messages = nil
-		a.session.CompactedItems = nil
-		a.session.IsCompactedMode = false
-		a.session.Model = a.CurrentModel
-		a.session.ResponseID = ""
-		a.session.AddMessageFromAPI(a.History[0], a.CurrentModel)
-	}
-
-	if clearable, ok := a.CurrentProvider.(interface{ ClearResponseID() }); ok {
-		clearable.ClearResponseID()
-	}
-
-	if a.storage != nil && a.session != nil {
-		if err := a.storage.Rewrite(a.session); err != nil {
-			yellow.Fprintf(a.output(), "Warning: Failed to rewrite session after context clear: %v\n", err)
-		}
-	}
-
-	afterTokens := a.EstimateTokens()
-	dim.Fprintf(a.output(), "   Context cleared for implementation (%dK -> %dK)\n", beforeTokens/1000, afterTokens/1000)
-}
-
-func buildPlanContextSummary(p *plan.Plan, userRequest string) string {
-	if p == nil {
-		return "[Approved Implementation Plan]\n\nProceed with implementation step by step."
-	}
-
-	req := strings.TrimSpace(userRequest)
-	if req == "" {
-		req = strings.TrimSpace(p.UserRequest)
-	}
-
-	var b strings.Builder
-	b.WriteString("[Approved Implementation Plan]\n\n")
-
-	if req != "" {
-		b.WriteString("Original request: ")
-		b.WriteString(req)
-		b.WriteString("\n\n")
-	}
-
-	if summary := strings.TrimSpace(p.Summary); summary != "" {
-		b.WriteString("Summary: ")
-		b.WriteString(summary)
-		b.WriteString("\n\n")
-	}
-
-	b.WriteString("Steps:\n")
-	for _, step := range p.Steps {
-		fmt.Fprintf(&b, "  %d. %s\n", step.ID, step.Description)
-		if len(step.Tools) > 0 {
-			fmt.Fprintf(&b, "     Tools: %s\n", strings.Join(step.Tools, ", "))
-		}
-
-		files := step.TargetFiles
-		if len(files) == 0 {
-			files = step.Files
-		}
-		if len(files) > 0 {
-			fmt.Fprintf(&b, "     Files: %s\n", strings.Join(files, ", "))
-		}
-	}
-
-	b.WriteString("\nProceed with implementation step by step.")
-	return b.String()
 }

@@ -21,30 +21,17 @@ const (
 )
 
 // compactToolResult はtool実行結果をHistory格納用に圧縮する。
-// readTracker によるカウントを先に行い、その後 deduplicateToolResult で重複判定する。
-// dedupe 結果にも必要に応じて guidance を追記する。
+// readTracker によるカウントを先に行い、必要に応じて guidance を追記する。
 func (a *Agent) compactToolResult(toolCall *tools.ToolCall, result string) string {
-	// 1. read_file の micro-read tracking（dedupe より先にカウントを進める）
-	//    同一ファイルの完全重複 read も「read 行動」としてカウントする。
+	// 1. read_file の micro-read tracking
 	guidance := a.readTracker.record(toolCall)
 
-	// 2. 重複チェック（元の全文で判定する必要がある）
-	deduped := a.deduplicateToolResult(toolCall.Tool, result)
-	if deduped != result {
-		// 重複参照に差し替えられた場合でも、guidance があれば追記する。
-		// dedupe 結果はモデルに返るため、guidance を載せないと soft guard が効かない。
-		if guidance != "" {
-			deduped = appendGuidanceWithConfirm(a.readTracker, readFileTrackerKey(toolCall.Args), deduped, guidance)
-		}
-		return deduped
-	}
-
-	// 3. guidance の追記（dedupe されなかった通常パス）
+	// 2. guidance の追記
 	if guidance != "" {
 		result = appendGuidanceWithConfirm(a.readTracker, readFileTrackerKey(toolCall.Args), result, guidance)
 	}
 
-	// 4. ツール種別に応じた圧縮
+	// 3. ツール種別に応じた圧縮
 	var compacted string
 	switch toolCall.Tool {
 	case "bash":
@@ -60,7 +47,7 @@ func (a *Agent) compactToolResult(toolCall *tools.ToolCall, result string) strin
 		compacted = result
 	}
 
-	// 5. compaction 効果を記録（1文字でも短くなった場合のみ）
+	// 4. compaction 効果を記録（1文字でも短くなった場合のみ）
 	a.recordCompaction(toolCall.Tool, len(result), len(compacted))
 
 	return compacted

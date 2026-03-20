@@ -1,7 +1,6 @@
 package search
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 
@@ -101,92 +100,5 @@ func detectBlocksWithCache(cache tools.ToolCacheInterface, results []SearchResul
 				m.Block = nil
 			}
 		}
-	}
-}
-
-// collapseBlockMatches は同一ブロック内に3つ以上のマッチがある場合、中間マッチを圧縮する。
-// 先頭マッチの前コンテキスト＋先頭マッチ＋圧縮マーカー＋末尾マッチ＋末尾マッチの後コンテキストだけ残す。
-// 圧縮マーカーは LineNum=-1 の合成 Match で表現する。
-func collapseBlockMatches(results []SearchResult) {
-	for i := range results {
-		r := &results[i]
-		type blockKey struct {
-			Name      string
-			StartLine int
-		}
-		type matchIdx struct {
-			idx     int
-			lineNum int
-		}
-		groups := make(map[blockKey][]matchIdx)
-		var order []blockKey
-
-		for j, m := range r.Matches {
-			if !m.IsMatch || m.Block == nil {
-				continue
-			}
-			key := blockKey{Name: m.Block.Name, StartLine: m.Block.StartLine}
-			if _, exists := groups[key]; !exists {
-				order = append(order, key)
-			}
-			groups[key] = append(groups[key], matchIdx{idx: j, lineNum: m.LineNum})
-		}
-
-		removeSet := make(map[int]bool)
-		type insertion struct {
-			afterIdx int
-			marker   Match
-		}
-		var insertions []insertion
-
-		for _, key := range order {
-			idxs := groups[key]
-			if len(idxs) < 3 {
-				continue
-			}
-
-			first := idxs[0]
-			last := idxs[len(idxs)-1]
-			collapsedCount := len(idxs) - 2
-
-			for _, mi := range idxs[1 : len(idxs)-1] {
-				removeSet[mi.idx] = true
-			}
-
-			for j := first.idx + 1; j < last.idx; j++ {
-				if !r.Matches[j].IsMatch {
-					removeSet[j] = true
-				}
-			}
-
-			insertions = append(insertions, insertion{
-				afterIdx: first.idx,
-				marker: Match{
-					LineNum: -1,
-					Line:    fmt.Sprintf("[+%d more matches in %s]", collapsedCount, key.Name),
-					IsMatch: false,
-				},
-			})
-		}
-
-		if len(removeSet) == 0 {
-			continue
-		}
-
-		insertMap := make(map[int]Match)
-		for _, ins := range insertions {
-			insertMap[ins.afterIdx] = ins.marker
-		}
-
-		newMatches := make([]Match, 0, len(r.Matches))
-		for j, m := range r.Matches {
-			if !removeSet[j] {
-				newMatches = append(newMatches, m)
-			}
-			if marker, ok := insertMap[j]; ok {
-				newMatches = append(newMatches, marker)
-			}
-		}
-		r.Matches = newMatches
 	}
 }

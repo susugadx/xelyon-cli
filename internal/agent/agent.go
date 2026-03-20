@@ -343,34 +343,6 @@ func (a *Agent) GetLSPClient() *lsp.Client {
 	return a.lspClient
 }
 
-// deduplicateToolResult は同一内容の tool result を参照文字列に差し替える（履歴用）。
-// 重複の場合は短い参照文字列を返し、新規の場合は content をそのまま返す。
-func (a *Agent) deduplicateToolResult(toolName, content string) string {
-	if a.ToolCache == nil {
-		return content
-	}
-	turn := countUserTurns(a.History)
-	if ref := a.ToolCache.DeduplicateResult(toolName, content, turn); ref != "" {
-		a.addOptimizationMetrics(OptimizationMetrics{
-			DeduplicateCount:       1,
-			DeduplicateTokensSaved: len(content) / 4,
-		})
-		return ref
-	}
-	return content
-}
-
-// countUserTurns は History 内の user メッセージ数を返す
-func countUserTurns(history []api.Message) int {
-	count := 0
-	for _, msg := range history {
-		if msg.Role == "user" {
-			count++
-		}
-	}
-	return count
-}
-
 // appendHistory は History へスレッドセーフに追加（並列実行時用）
 func (a *Agent) appendHistory(msg api.Message) {
 	a.historyMu.Lock()

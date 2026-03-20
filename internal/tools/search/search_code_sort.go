@@ -92,57 +92,6 @@ func mergeContextLines(results []SearchResult) []SearchResult {
 	return merged
 }
 
-// adaptiveContextTrim はファイルごとのマッチ数に応じてコンテキスト行を削る
-// 5マッチ以下: そのまま、6-15マッチ: 前後1行のみ、16マッチ以上: コンテキスト行なし
-func adaptiveContextTrim(results []SearchResult) []SearchResult {
-	for i, r := range results {
-		matchCount := 0
-		for _, m := range r.Matches {
-			if m.IsMatch {
-				matchCount++
-			}
-		}
-		if matchCount <= 5 {
-			continue
-		}
-
-		maxCtx := 1
-		if matchCount > 15 {
-			maxCtx = 0
-		}
-
-		var trimmed []Match
-		for _, m := range r.Matches {
-			if m.IsMatch {
-				trimmed = append(trimmed, m)
-				continue
-			}
-			if maxCtx == 0 {
-				continue
-			}
-			nearMatch := false
-			for k := range r.Matches {
-				if r.Matches[k].IsMatch && absInt(m.LineNum-r.Matches[k].LineNum) <= maxCtx {
-					nearMatch = true
-					break
-				}
-			}
-			if nearMatch {
-				trimmed = append(trimmed, m)
-			}
-		}
-		results[i].Matches = trimmed
-	}
-	return results
-}
-
-func absInt(x int) int {
-	if x < 0 {
-		return -x
-	}
-	return x
-}
-
 // sortResultsByPriority はファイルを重要度順にソート（非テスト→テスト、定義あり→なし）
 func sortResultsByPriority(results []SearchResult) {
 	sort.SliceStable(results, func(i, j int) bool {

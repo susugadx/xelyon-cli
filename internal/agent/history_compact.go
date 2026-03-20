@@ -164,24 +164,6 @@ func compressErrorResult(content string) (string, bool) {
 	return "", false
 }
 
-// ToolResultContentRatio はHistory内のtool resultコンテンツが全体に占める割合を返す。
-// len(Content) ベースの簡易推定。
-func ToolResultContentRatio(history []api.Message) float64 {
-	total := 0
-	toolTotal := 0
-	for _, msg := range history {
-		n := len(msg.Content)
-		total += n
-		if msg.Role == "tool" {
-			toolTotal += n
-		}
-	}
-	if total == 0 {
-		return 0
-	}
-	return float64(toolTotal) / float64(total)
-}
-
 // truncateToolResult は大きなツール結果を truncate する。
 // エラーパターンは行数に関係なく圧縮する。
 func truncateToolResult(msg api.Message, maxLines, headLines, tailLines int) (api.Message, CompactionMetrics) {

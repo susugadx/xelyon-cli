@@ -180,27 +180,6 @@ func TestParsePath_InvalidRange(t *testing.T) {
 	}
 }
 
-func TestPerFileBudget(t *testing.T) {
-	tests := []struct {
-		n    int
-		want int
-	}{
-		{1, readFilesBudgetPool},
-		{2, 250},
-		{3, 166},
-		{5, 100},
-		{6, 83},
-		{10, 50},
-		{20, 30},
-	}
-	for _, tt := range tests {
-		got := perFileBudget(tt.n)
-		if got != tt.want {
-			t.Errorf("perFileBudget(%d) = %d, want %d", tt.n, got, tt.want)
-		}
-	}
-}
-
 // generateLines は指定行数のテスト用コンテンツを生成する
 func generateLines(n int) string {
 	lines := make([]string, n)
@@ -210,11 +189,11 @@ func generateLines(n int) string {
 	return strings.Join(lines, "\n")
 }
 
-func TestExecuteReadFiles_BudgetOutlineMode(t *testing.T) {
+func TestExecuteReadFiles_DefaultBudgetPreservesFullContent(t *testing.T) {
 	setupTestMocks(t)
 	tmpDir := t.TempDir()
 
-	// 200行のファイルを6個作成（budget=83, 200 > 83 → outline モード）
+	// 200行のファイルを6個作成。複数 path でも常に DefaultFullLines を使う。
 	paths := make([]string, 6)
 	for i := range paths {
 		name := fmt.Sprintf("f%d.txt", i)
@@ -224,14 +203,11 @@ func TestExecuteReadFiles_BudgetOutlineMode(t *testing.T) {
 
 	output := ExecuteReadFiles(paths)
 
-	if !strings.Contains(output, `(200 lines total. For specific sections: paths=["`) {
-		t.Error("Expected outline mode with total-lines footer")
+	if strings.Contains(output, "lines total") {
+		t.Error("Default budget should not switch to outline mode for 200-line files")
 	}
-	if !strings.Contains(output, "1: line1") {
-		t.Error("Expected head lines to be present")
-	}
-	if !strings.Contains(output, "Last lines") {
-		t.Error("Expected 'Last lines' section")
+	if !strings.Contains(output, "200: line200") {
+		t.Error("Expected full content with line 200")
 	}
 }
 
@@ -261,7 +237,7 @@ func TestExecuteReadFiles_BudgetExplicitRangePriority(t *testing.T) {
 	setupTestMocks(t)
 	tmpDir := t.TempDir()
 
-	// 200行のファイルを6個作成（budget=83）
+	// 200行のファイルを6個作成
 	paths := make([]string, 6)
 	for i := 0; i < 5; i++ {
 		name := fmt.Sprintf("f%d.txt", i)
@@ -277,6 +253,9 @@ func TestExecuteReadFiles_BudgetExplicitRangePriority(t *testing.T) {
 	// 明示指定のファイルは120行目まで含まれる
 	if !strings.Contains(output, "120: line120") {
 		t.Error("Expected explicit range file to include line 120")
+	}
+	if strings.Contains(output, "lines total") {
+		t.Error("Default budget should keep full content even when mixing explicit ranges")
 	}
 }
 
@@ -295,8 +274,8 @@ func TestExecuteReadFilesWithBudget_FullBudgetPreservesContent(t *testing.T) {
 	}
 
 	normalOutput := ExecuteReadFiles(paths)
-	if !strings.Contains(normalOutput, `(180 lines total. For specific sections: paths=["`) {
-		t.Fatal("Expected normal 3-file read to use outline mode for 180-line files")
+	if strings.Contains(normalOutput, "lines total") {
+		t.Fatal("Expected normal 3-file read to keep full content for 180-line files")
 	}
 
 	fullOutput := ExecuteReadFilesWithBudget(common.DefaultOutput(), paths, DefaultFullLines)

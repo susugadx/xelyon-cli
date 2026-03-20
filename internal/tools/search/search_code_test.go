@@ -1,7 +1,6 @@
 package search
 
 import (
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -161,11 +160,8 @@ func TestSearchCode_TokenBudget(t *testing.T) {
 	}
 
 	longResult := ExecuteSearchCode(SearchOptions{Pattern: "long_target_budget_check", Path: dir, FilePattern: "", FileType: "", CtxLines: 0, TokenBudget: 3000, IsRegex: true, Multiline: false})
-	if !strings.Contains(longResult, "...") {
-		t.Error("Expected long line to be truncated with ...")
-	}
-	if strings.Contains(longResult, strings.Repeat("a", 1000)) {
-		t.Error("Expected long line to not contain the full 1000 character string")
+	if !strings.Contains(longResult, strings.Repeat("a", 1000)) {
+		t.Error("Expected long line to be preserved without line truncation")
 	}
 
 	jpResult := ExecuteSearchCode(SearchOptions{Pattern: "target_budget_check あ", Path: dir, FilePattern: "", FileType: "", CtxLines: 0, TokenBudget: 3000, IsRegex: true, Multiline: false})
@@ -432,96 +428,6 @@ func TestSearchCode_CacheKeyUsesInternalTokenBudget(t *testing.T) {
 	}
 	if !strings.Contains(cache.lastGetPath, "|3|15000|") {
 		t.Fatalf("expected cache lookup key to use internal defaults for context_lines=3 and token_budget=15000, got: %s", cache.lastGetPath)
-	}
-}
-
-func TestAdaptiveContextTrim_FewMatches(t *testing.T) {
-	matches := make([]Match, 0)
-	for i := 1; i <= 15; i++ {
-		isMatch := i%3 == 0
-		matches = append(matches, Match{
-			LineNum: i,
-			Line:    fmt.Sprintf("line%d", i),
-			IsMatch: isMatch,
-			Type:    MatchTypeUsage,
-		})
-	}
-	results := []SearchResult{{FilePath: "few.go", Matches: matches, MatchCount: 5}}
-	trimmed := adaptiveContextTrim(results)
-
-	if len(trimmed[0].Matches) != len(matches) {
-		t.Errorf("Expected all %d matches preserved, got %d", len(matches), len(trimmed[0].Matches))
-	}
-}
-
-func TestAdaptiveContextTrim_ManyMatches(t *testing.T) {
-	var matches []Match
-	for i := 1; i <= 30; i++ {
-		isMatch := i%3 == 0
-		matches = append(matches, Match{
-			LineNum: i,
-			Line:    fmt.Sprintf("line%d", i),
-			IsMatch: isMatch,
-			Type:    MatchTypeUsage,
-		})
-	}
-	results := []SearchResult{{FilePath: "many.go", Matches: matches, MatchCount: 10}}
-	trimmed := adaptiveContextTrim(results)
-
-	matchCount := 0
-	ctxCount := 0
-	for _, m := range trimmed[0].Matches {
-		if m.IsMatch {
-			matchCount++
-		} else {
-			ctxCount++
-		}
-	}
-	if matchCount != 10 {
-		t.Errorf("Expected 10 match lines, got %d", matchCount)
-	}
-	if ctxCount >= 20 {
-		t.Errorf("Expected context lines to be reduced, but got %d (same as original)", ctxCount)
-	}
-
-	for j, m := range trimmed[0].Matches {
-		if m.IsMatch {
-			continue
-		}
-		hasNearMatch := false
-		for k := max(0, j-1); k <= min(len(trimmed[0].Matches)-1, j+1); k++ {
-			if trimmed[0].Matches[k].IsMatch {
-				hasNearMatch = true
-				break
-			}
-		}
-		if !hasNearMatch {
-			t.Errorf("Context line %d at index %d is not adjacent to any match line", m.LineNum, j)
-		}
-	}
-}
-
-func TestAdaptiveContextTrim_TooManyMatches(t *testing.T) {
-	var matches []Match
-	for i := 1; i <= 60; i++ {
-		isMatch := i%3 == 0
-		matches = append(matches, Match{
-			LineNum: i,
-			Line:    fmt.Sprintf("line%d", i),
-			IsMatch: isMatch,
-			Type:    MatchTypeUsage,
-		})
-	}
-	results := []SearchResult{{FilePath: "toomany.go", Matches: matches, MatchCount: 20}}
-	trimmed := adaptiveContextTrim(results)
-
-	for _, m := range trimmed[0].Matches {
-		if !m.IsMatch {
-			t.Errorf("Expected only match lines, but found context line %d", m.LineNum)
-		}
-	}
-	if len(trimmed[0].Matches) != 20 {
-		t.Errorf("Expected 20 match lines, got %d", len(trimmed[0].Matches))
 	}
 }
 

@@ -10,39 +10,6 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
-// ── Same-turn duplicate suppression ──
-//
-// 同一レスポンス内で完全に同じ tool call（tool名 + 全引数が一致）が
-// 複数回含まれる場合、2回目以降を canonical メッセージに置き換える。
-// read-only かつ冪等なツールのみ対象。write ツールは状態変更するため除外。
-
-// sameTurnDupMsgFmt は同一ターン内の重複 tool call に対する canonical 結果。
-// モデルが「前の結果を参照すべき」と分かる安定文言にする。
-const sameTurnDupMsgFmt = "[Duplicate] Same %s call already executed in this turn; reuse previous result."
-
-// sameTurnDuplicateMessage は同一ターン内の重複 tool call の canonical 結果を返す。
-func sameTurnDuplicateMessage(toolName string) string {
-	return fmt.Sprintf(sameTurnDupMsgFmt, toolName)
-}
-
-// isDedupableForTurn は同一ターン内の重複排除対象ツールかを返す。
-// read-only かつ冪等なツールのみ対象。
-func isDedupableForTurn(toolName string) bool {
-	switch toolName {
-	case "read_file", "search_code", "list_dir", "inspect_symbol":
-		return true
-	}
-	return false
-}
-
-// turnDedupKey は tool call の同一ターン内重複判定用キーを生成する。
-// tool名 + sorted args JSON。Go の json.Marshal は map キーをアルファベット順に
-// ソートするため、同一引数は同一キーになる。
-func turnDedupKey(tc *tools.ToolCall) string {
-	argsJSON, _ := json.Marshal(tc.Args)
-	return tc.Tool + ":" + string(argsJSON)
-}
-
 // ── read_file batching eligibility ──
 
 // isBatchableReadFile は read_file call が batch 対象（range なし read）かを判定する。

@@ -12,25 +12,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// ── Savings estimation ──
-
-// estimatedToolResultTokens はツール種別ごとの平均結果トークン数（推定）。
-// 同一ターン重複抑制時に、1回分の実行を回避したときの推定削減量に使う。
-func estimatedToolResultTokens(toolName string) int {
-	switch toolName {
-	case "read_file":
-		return 1000
-	case "search_code":
-		return 800
-	case "list_dir":
-		return 300
-	case "inspect_symbol":
-		return 500
-	default:
-		return 500
-	}
-}
-
 // SavingsMetrics はコスト最適化による削減量の推定値を保持する。
 // 値はすべて推定（estimated）であり、表示時は「~」を付与する。
 type SavingsMetrics struct {
@@ -51,29 +32,21 @@ func (m *SavingsMetrics) hasAny() bool {
 
 // OptimizationMetrics は最適化機構の発動回数を保持する。
 type OptimizationMetrics struct {
-	DeduplicateCount       int // cache-hit参照化（同一result省略）
-	DeduplicateTokensSaved int // 推定削減トークン数（len(original)/4）
 	NegativeCacheHits      int // ネガティブキャッシュヒット
 	ErrorCompressions      int // compressErrorResult 発動
 	FailedPairCompressions int // compressFailedPair 発動
 	TruncationCount        int // 段階的truncate発動
 	OutlineFirstCount      int // outline-first mode発動
-	MilestoneDetections    int // マイルストーンパターン検出
-	ToolRatioDetections    int // tool出力比率トリガー検出
 	CompactionCount        int // auto-compress実行
 	CostAwareCompressions  int // pricing cliff回避による auto-compress 実行
 }
 
 func (m *OptimizationMetrics) add(other OptimizationMetrics) {
-	m.DeduplicateCount += other.DeduplicateCount
-	m.DeduplicateTokensSaved += other.DeduplicateTokensSaved
 	m.NegativeCacheHits += other.NegativeCacheHits
 	m.ErrorCompressions += other.ErrorCompressions
 	m.FailedPairCompressions += other.FailedPairCompressions
 	m.TruncationCount += other.TruncationCount
 	m.OutlineFirstCount += other.OutlineFirstCount
-	m.MilestoneDetections += other.MilestoneDetections
-	m.ToolRatioDetections += other.ToolRatioDetections
 	m.CompactionCount += other.CompactionCount
 	m.CostAwareCompressions += other.CostAwareCompressions
 }
@@ -85,15 +58,11 @@ func (m *OptimizationMetrics) addCompaction(other CompactionMetrics) {
 }
 
 func (m *OptimizationMetrics) hasAny() bool {
-	return m.DeduplicateCount > 0 ||
-		m.DeduplicateTokensSaved > 0 ||
-		m.NegativeCacheHits > 0 ||
+	return m.NegativeCacheHits > 0 ||
 		m.ErrorCompressions > 0 ||
 		m.FailedPairCompressions > 0 ||
 		m.TruncationCount > 0 ||
 		m.OutlineFirstCount > 0 ||
-		m.MilestoneDetections > 0 ||
-		m.ToolRatioDetections > 0 ||
 		m.CompactionCount > 0 ||
 		m.CostAwareCompressions > 0
 }
@@ -106,7 +75,6 @@ type ToolObservability struct {
 	CompactedToolResults        int            // history 格納前 compaction が発火した回数
 	CompactedBytesSaved         int            // compaction による累計削減文字数
 	CompactedByTool             map[string]int // ツール名ごとの compaction 回数
-	SameTurnDuplicates          int            // 同一ターン内の重複 tool call 抑制回数
 	SearchCodeBatchMerges       int            // search_code multi-pattern batch merge 回数
 	ReadFileBatchMerges         int            // read_file batch merge 回数
 }

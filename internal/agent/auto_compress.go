@@ -8,7 +8,6 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 // ResponseIDCapable は Responses API のキャッシュ機能を持つプロバイダー
@@ -177,18 +176,6 @@ func (a *Agent) maybeAutoCompress() bool {
 			threshold = 80
 		}
 
-		// マイルストーン駆動: 特定パターンで閾値を 60% に下げる
-		if detectMilestonePattern(a.History) {
-			a.addOptimizationMetrics(OptimizationMetrics{MilestoneDetections: 1})
-			threshold = 60
-		}
-
-		// tool出力比率: tool resultが全体の70%以上なら閾値を60%に下げる
-		if ToolResultContentRatio(a.History) > 0.70 {
-			a.addOptimizationMetrics(OptimizationMetrics{ToolRatioDetections: 1})
-			threshold = 60
-		}
-
 		// トークン数ベースの閾値が設定されている場合はそちらを優先
 		if cfg.Compression.ThresholdTokens > 0 {
 			if currentTokens < cfg.Compression.ThresholdTokens {
@@ -243,48 +230,6 @@ func (a *Agent) checkTokenWarning() {
 	} else if percentage > 80 {
 		_, _ = fmt.Fprintln(a.output(), "💡 Token usage is high (80%). /compress available if needed")
 	}
-}
-
-// detectMilestonePattern は直近の履歴から圧縮トリガーとなるパターンを検出する。
-// - bash で成功（Error: なし）かつ出力が OutputTruncateLen 超
-// - 直近3ターンが連続で search_code
-func detectMilestonePattern(history []api.Message) bool {
-	if len(history) == 0 {
-		return false
-	}
-
-	// 末尾から tool 結果を探す
-	lastToolIdx := -1
-	for i := len(history) - 1; i >= 0; i-- {
-		if history[i].Role == "tool" {
-			lastToolIdx = i
-			break
-		}
-	}
-	if lastToolIdx < 0 {
-		return false
-	}
-
-	// パターン1: bash 成功 + 出力大
-	last := history[lastToolIdx]
-	if last.ToolName == "bash" &&
-		!strings.HasPrefix(strings.TrimSpace(last.Content), "Error:") &&
-		len(last.Content) > config.OutputTruncateLen {
-		return true
-	}
-
-	// パターン2: 直近3つの tool 結果が全て search_code
-	searchCount := 0
-	for i := len(history) - 1; i >= 0 && searchCount < 3; i-- {
-		if history[i].Role == "tool" {
-			if history[i].ToolName == "search_code" {
-				searchCount++
-			} else {
-				break // 連続でなければ中断
-			}
-		}
-	}
-	return searchCount >= 3
 }
 
 // handleTokenLimitErrorWithWriter はトークン上限エラー時にユーザーへ案内を表示する。

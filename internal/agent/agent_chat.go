@@ -514,8 +514,11 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 				// 変更履歴を保存
 				a.handleFileChange(change)
 
-				// 結果を履歴に追加（重複チェック → 入口圧縮）
-				historyContent := a.compactToolResult(tc, result)
+				// 結果を履歴に追加
+				historyContent := result
+				if !a.shouldSkipHistoryTruncation() {
+					historyContent = a.compactToolResult(tc, result)
+				}
 				if tc.ID != "" {
 					toolMsg := api.Message{
 						Role:       "tool",

@@ -201,25 +201,13 @@ func normalizeProviderName(providerName string) string {
 	}
 }
 
-// ── web_search result compaction ──
-
 const (
-	// webSearchMaxSummaryLines は tool-native result に残すサマリー行数上限。
-	webSearchMaxSummaryLines = 15
-
-	// webSearchMaxSources は tool-native result に残すソース数上限。
-	webSearchMaxSources = 7
-
-	// webSearchCompactMinLen は compaction を適用する最小バイト数。
-	// これ未満の結果はそのまま返す。
-	webSearchCompactMinLen = 600
-
 	// webSearchUtilityModelMinTokens は utility model を使う最低入力サイズ。
 	webSearchUtilityModelMinTokens = 1200
 )
 
 func compactWebSearchResultWithUtilityModel(execCtx tools.ExecutionContext, query, result string) string {
-	compacted := CompactWebSearchResult(query, result)
+	compacted := result
 	if !shouldUseUtilityModelForWebSearch(execCtx.EffectiveConfig(), result) {
 		return compacted
 	}
@@ -235,7 +223,7 @@ func compactWebSearchResultWithUtilityModel(execCtx tools.ExecutionContext, quer
 		return compacted
 	}
 
-	return CompactWebSearchResult(query, utilityResult)
+	return utilityResult
 }
 
 func shouldUseUtilityModelForWebSearch(cfg *config.Config, result string) bool {
@@ -298,158 +286,4 @@ func normalizeUtilityWebSearchOutput(result string) string {
 		return ""
 	}
 	return "Summary:\n" + result
-}
-
-// CompactWebSearchResult はプロバイダーから返された web_search 結果を
-// summary-first / source-preserving な canonical 形式に変換する。
-// query を先頭に付与して、history 上で検索意図が失われないようにする。
-// 全プロバイダーが "Summary:\n..." + "Sources:\n..." 形式を返す前提。
-func CompactWebSearchResult(query, result string) string {
-	result = strings.TrimSpace(result)
-	if result == "" {
-		return result
-	}
-
-	// query ヘッダーを付与（provider result には含まれないため常に追加）
-	queryHeader := fmt.Sprintf("Query: %s\n", query)
-
-	if result == "No results found." {
-		return queryHeader + result
-	}
-
-	if len(result) < webSearchCompactMinLen {
-		return queryHeader + result
-	}
-
-	summary, sourcesBlock := splitWebSearchSections(result)
-
-	// summary truncation
-	summary = truncateWebSearchSummary(summary)
-
-	// sources compaction
-	sourcesBlock = compactWebSearchSources(sourcesBlock)
-
-	var b strings.Builder
-	b.WriteString(queryHeader)
-	if summary != "" {
-		b.WriteString(summary)
-	}
-	if sourcesBlock != "" {
-		if b.Len() > 0 {
-			b.WriteString("\n\n")
-		}
-		b.WriteString(sourcesBlock)
-	}
-
-	return b.String()
-}
-
-// splitWebSearchSections は "Summary:" と "Sources:" のセクションを分離する。
-func splitWebSearchSections(result string) (summary, sources string) {
-	sourcesIdx := strings.Index(result, "\nSources:\n")
-	if sourcesIdx < 0 {
-		// "Sources:" がない場合は全体を summary として扱う
-		return result, ""
-	}
-	return strings.TrimSpace(result[:sourcesIdx]), strings.TrimSpace(result[sourcesIdx+1:])
-}
-
-// truncateWebSearchSummary はサマリーを最大行数に切り詰める。
-func truncateWebSearchSummary(summary string) string {
-	lines := strings.Split(summary, "\n")
-	if len(lines) <= webSearchMaxSummaryLines {
-		return summary
-	}
-	truncated := strings.Join(lines[:webSearchMaxSummaryLines], "\n")
-	return truncated + "\n[... summary truncated]"
-}
-
-// compactWebSearchSources はソースセクションを compact な単行形式に変換する。
-// 入力形式（全プロバイダー共通）:
-//
-//	Sources:
-//
-//	1. Title
-//	   URL: https://...
-//
-//	2. Title
-//	   URL: https://...
-//
-// 出力形式:
-//
-//	Sources:
-//	- Title (https://...)
-//	- Title (https://...)
-func compactWebSearchSources(sourcesBlock string) string {
-	if sourcesBlock == "" {
-		return ""
-	}
-
-	lines := strings.Split(sourcesBlock, "\n")
-
-	var b strings.Builder
-	b.WriteString("Sources:")
-	count := 0
-
-	for i := 0; i < len(lines); i++ {
-		trimmed := strings.TrimSpace(lines[i])
-
-		// skip header and empty lines
-		if trimmed == "" || trimmed == "Sources:" {
-			continue
-		}
-
-		// numbered entry: "1. Title"
-		if len(trimmed) > 2 && trimmed[0] >= '1' && trimmed[0] <= '9' {
-			dotIdx := strings.Index(trimmed, ". ")
-			if dotIdx < 0 || dotIdx > 3 {
-				continue
-			}
-			title := trimmed[dotIdx+2:]
-
-			// look ahead for URL line
-			url := ""
-			if i+1 < len(lines) {
-				nextTrimmed := strings.TrimSpace(lines[i+1])
-				if strings.HasPrefix(nextTrimmed, "URL: ") {
-					url = strings.TrimPrefix(nextTrimmed, "URL: ")
-					i++ // consume the URL line
-				}
-			}
-
-			count++
-			if count > webSearchMaxSources {
-				// current entry (count-th) is already omitted; count remaining after it
-				remaining := 1 + countRemainingEntries(lines[i+1:])
-				fmt.Fprintf(&b, "\n[+%d more sources]", remaining)
-				break
-			}
-
-			if url != "" {
-				fmt.Fprintf(&b, "\n- %s (%s)", title, url)
-			} else {
-				fmt.Fprintf(&b, "\n- %s", title)
-			}
-		}
-	}
-
-	if count == 0 {
-		return sourcesBlock // couldn't parse → return as-is
-	}
-
-	return b.String()
-}
-
-// countRemainingEntries は残りの行から番号付きエントリの数を数える。
-func countRemainingEntries(lines []string) int {
-	count := 0
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if len(trimmed) > 2 && trimmed[0] >= '1' && trimmed[0] <= '9' {
-			if dotIdx := strings.Index(trimmed, ". "); dotIdx >= 0 && dotIdx <= 3 {
-				count++
-			}
-		}
-	}
-	return count
 }

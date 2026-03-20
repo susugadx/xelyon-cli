@@ -146,15 +146,11 @@ func TestPrintSessionSections_Optimizations(t *testing.T) {
 	stats := NewSessionStats("test")
 	stats.ToolExecutions["read_file"] = 2
 	stats.Optimizations = OptimizationMetrics{
-		DeduplicateCount:       2,
-		DeduplicateTokensSaved: 120,
 		NegativeCacheHits:      3,
 		ErrorCompressions:      4,
 		FailedPairCompressions: 5,
 		TruncationCount:        6,
 		OutlineFirstCount:      7,
-		MilestoneDetections:    8,
-		ToolRatioDetections:    9,
 		CompactionCount:        10,
 		CostAwareCompressions:  4,
 	}
@@ -172,15 +168,11 @@ func TestPrintSessionSections_Optimizations(t *testing.T) {
 
 	for _, want := range []string{
 		"⚡ Optimizations",
-		"Cache-hit dedup",
-		"~120 tokens saved",
 		"Negative cache",
 		"Error compression",
 		"Failed-pair compression",
 		"Graduated truncate",
 		"Outline-first mode",
-		"Milestone triggers",
-		"Tool-ratio triggers",
 		"Auto-compress",
 		"Cost-aware auto-compress",
 	} {

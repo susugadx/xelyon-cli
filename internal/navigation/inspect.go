@@ -41,10 +41,10 @@ var SummaryBudget = Budget{
 
 // FullBudget は full モードの出力上限。
 var FullBudget = Budget{
-	BodyLines:   120,
-	CallerLimit: 12,
-	RefLimit:    16,
-	TestLimit:   6,
+	BodyLines:   999999,
+	CallerLimit: 999999,
+	RefLimit:    999999,
+	TestLimit:   999999,
 }
 
 // SymbolCandidate はシンボル候補。

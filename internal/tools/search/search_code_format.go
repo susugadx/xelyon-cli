@@ -7,17 +7,8 @@ import (
 	"unicode/utf8"
 )
 
-const maxLineLength = 500
-
 func estimateTokens(line string) int {
 	return utf8.RuneCountInString(line)/2 + len(line)/8 + 3
-}
-
-func truncateLine(line string) string {
-	if utf8.RuneCountInString(line) > maxLineLength {
-		return string([]rune(line)[:maxLineLength]) + "..."
-	}
-	return line
 }
 
 func truncateToTokenBudget(results []SearchResult, budget int, _ bool) ([]SearchResult, bool) {
@@ -114,7 +105,7 @@ func formatSearchResultsBody(results []SearchResult, truncated bool, tokenBudget
 			prevLineNum = m.LineNum
 
 			if m.IsMatch {
-				fmt.Fprintf(&sb, "  %-10s> %4d │ %s\n", matchTypeTag[m.Type], m.LineNum, truncateLine(m.Line))
+				fmt.Fprintf(&sb, "  %-10s> %4d │ %s\n", matchTypeTag[m.Type], m.LineNum, m.Line)
 				if m.Block != nil {
 					if m.Block.StartLine > 0 {
 						fmt.Fprintf(&sb, "  %10s  %4s   ── in %s (L%d)\n", "", "", m.Block.Name, m.Block.StartLine)
@@ -123,7 +114,7 @@ func formatSearchResultsBody(results []SearchResult, truncated bool, tokenBudget
 					}
 				}
 			} else {
-				fmt.Fprintf(&sb, "  %10s  %4d │ %s\n", "", m.LineNum, truncateLine(m.Line))
+				fmt.Fprintf(&sb, "  %10s  %4d │ %s\n", "", m.LineNum, m.Line)
 			}
 		}
 	}

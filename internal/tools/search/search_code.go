@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -139,18 +138,16 @@ func executeSinglePattern(cache tools.ToolCacheInterface, pattern string, opts S
 		}
 	}
 
-	maxCountPerFile := calcMaxCountPerFile(opts.TokenBudget)
-
-	output, useRipgrep, warnings, err := executeSearch(pattern, opts, maxCountPerFile)
+	output, useRipgrep, warnings, err := executeSearch(pattern, opts)
 	if err != nil {
 		return fmt.Sprintf("Error: %v", err)
 	}
 
 	var results []SearchResult
 	if useRipgrep {
-		results = parseRipgrepJSON(output, 200)
+		results = parseRipgrepJSON(output, 0)
 	} else {
-		results = parseGrepOutput(output, 200)
+		results = parseGrepOutput(output, 0)
 	}
 	results = filterResultsByOptions(results, opts)
 	reclassifyWithAST(results, pattern, opts.IsRegex)
@@ -178,13 +175,11 @@ func executeSinglePattern(cache tools.ToolCacheInterface, pattern string, opts S
 	}
 
 	results = mergeContextLines(results)
-	results = adaptiveContextTrim(results)
 	sortResultsByPriority(results)
 
 	results, truncated := truncateToTokenBudget(results, opts.TokenBudget, false)
 
 	detectBlocksWithCache(cache, results)
-	collapseBlockMatches(results)
 
 	formatted := formatSearchResults(results, truncated, opts.TokenBudget)
 	finalOutput := formatted
@@ -234,35 +229,23 @@ type patternResult struct {
 
 // executeMultiplePatterns は複数パターンを goroutine 並列で検索する
 func executeMultiplePatterns(cache tools.ToolCacheInterface, patterns []string, opts SearchOptions) string {
-	budgetPerPattern := opts.TokenBudget / len(patterns)
-	if budgetPerPattern < 500 {
-		budgetPerPattern = 500
-	}
-
-	maxCountPerFile := calcMaxCountPerFile(budgetPerPattern)
-
 	ch := make(chan patternResult, len(patterns))
 	for i, p := range patterns {
 		go func(idx int, pat string) {
-			output, useRg, searchWarnings, searchErr := executeSearch(pat, opts, maxCountPerFile)
+			output, useRg, searchWarnings, searchErr := executeSearch(pat, opts)
 			if searchErr != nil {
 				ch <- patternResult{Pattern: pat, Index: idx, Error: searchErr.Error(), Warnings: searchWarnings}
 				return
 			}
-			maxMatches := 200 / len(patterns)
-			if maxMatches < 50 {
-				maxMatches = 50
-			}
 			var results []SearchResult
 			if useRg {
-				results = parseRipgrepJSON(output, maxMatches)
+				results = parseRipgrepJSON(output, 0)
 			} else {
-				results = parseGrepOutput(output, maxMatches)
+				results = parseGrepOutput(output, 0)
 			}
 			results = filterResultsByOptions(results, opts)
 			reclassifyWithAST(results, pat, opts.IsRegex)
 			results = mergeContextLines(results)
-			results = adaptiveContextTrim(results)
 			sortResultsByPriority(results)
 
 			totalMatches := 0
@@ -314,7 +297,6 @@ func executeMultiplePatterns(cache tools.ToolCacheInterface, patterns []string, 
 		}
 		collected[i].Results, collected[i].Truncated = truncateToTokenBudget(c.Results, allocatedBudget, false)
 		detectBlocksWithCache(cache, collected[i].Results)
-		collapseBlockMatches(collected[i].Results)
 	}
 
 	formatted := formatMultiResults(collected, opts.TokenBudget)
@@ -391,30 +373,15 @@ func isGNUGrep() bool {
 	return gnuGrepAvailable
 }
 
-// calcMaxCountPerFile はトークンバジェットからファイルあたりのマッチ上限を計算する
-// 1マッチあたり平均 ~30 トークン（行 + コンテキスト + ブロック注釈）と見積もり
-func calcMaxCountPerFile(budget int) int {
-	n := budget / 30
-	if n < 10 {
-		n = 10
-	}
-	if n > 50 {
-		n = 50
-	}
-	return n
-}
-
 // executeSearch は rg（優先）または grep を実行し、出力と使用ツールを返す
-// maxCountPerFile はファイルあたりのマッチ上限（ripgrep --max-count に対応）
-func executeSearch(pattern string, opts SearchOptions, maxCountPerFile int) (string, bool, []string, error) {
+func executeSearch(pattern string, opts SearchOptions) (string, bool, []string, error) {
 	if common.IsRipgrepAvailable() {
 		args := []string{
 			"--json",
 			"-n",
-			"--max-count", strconv.Itoa(maxCountPerFile),
 		}
 		if opts.CtxLines > 0 {
-			args = append(args, "--context", strconv.Itoa(opts.CtxLines))
+			args = append(args, "--context", fmt.Sprintf("%d", opts.CtxLines))
 		}
 		if opts.FileType != "" {
 			args = append(args, "--type", opts.FileType)
@@ -456,7 +423,6 @@ func executeSearch(pattern string, opts SearchOptions, maxCountPerFile int) (str
 	args := []string{
 		"-rn",
 		"-I",
-		"-m", strconv.Itoa(maxCountPerFile),
 		"--exclude-dir=.git",
 		"--exclude-dir=node_modules",
 		"--exclude-dir=vendor",
@@ -499,7 +465,7 @@ func executeSearch(pattern string, opts SearchOptions, maxCountPerFile int) (str
 		warnings = append(warnings, "Warning: multiline search is not supported in grep fallback mode (rg not found)")
 	}
 	if opts.CtxLines > 0 {
-		args = append(args, "-C", strconv.Itoa(opts.CtxLines))
+		args = append(args, "-C", fmt.Sprintf("%d", opts.CtxLines))
 	}
 	args = append(args, pattern, opts.Path)
 

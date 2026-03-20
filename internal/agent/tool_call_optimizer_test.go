@@ -10,75 +10,6 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
-// ── turnDedupKey tests ──
-
-func TestTurnDedupKey_SameArgs(t *testing.T) {
-	tc1 := &tools.ToolCall{Tool: "read_file", Args: map[string]string{"path": "/a.go"}}
-	tc2 := &tools.ToolCall{Tool: "read_file", Args: map[string]string{"path": "/a.go"}}
-	if turnDedupKey(tc1) != turnDedupKey(tc2) {
-		t.Error("same tool + args should produce same key")
-	}
-}
-
-func TestTurnDedupKey_DifferentArgs(t *testing.T) {
-	tc1 := &tools.ToolCall{Tool: "read_file", Args: map[string]string{"path": "/a.go"}}
-	tc2 := &tools.ToolCall{Tool: "read_file", Args: map[string]string{"path": "/b.go"}}
-	if turnDedupKey(tc1) == turnDedupKey(tc2) {
-		t.Error("different paths should produce different keys")
-	}
-}
-
-func TestTurnDedupKey_DifferentTools(t *testing.T) {
-	tc1 := &tools.ToolCall{Tool: "read_file", Args: map[string]string{"path": "/a.go"}}
-	tc2 := &tools.ToolCall{Tool: "search_code", Args: map[string]string{"path": "/a.go"}}
-	if turnDedupKey(tc1) == turnDedupKey(tc2) {
-		t.Error("different tools should produce different keys")
-	}
-}
-
-func TestTurnDedupKey_RangeRead(t *testing.T) {
-	tc1 := &tools.ToolCall{Tool: "read_file", Args: map[string]string{"path": "/a.go", "start_line": "1", "end_line": "50"}}
-	tc2 := &tools.ToolCall{Tool: "read_file", Args: map[string]string{"path": "/a.go", "start_line": "1", "end_line": "50"}}
-	if turnDedupKey(tc1) != turnDedupKey(tc2) {
-		t.Error("same range read should produce same key")
-	}
-	tc3 := &tools.ToolCall{Tool: "read_file", Args: map[string]string{"path": "/a.go", "start_line": "1", "end_line": "100"}}
-	if turnDedupKey(tc1) == turnDedupKey(tc3) {
-		t.Error("different range should produce different key")
-	}
-}
-
-func TestTurnDedupKey_InspectSymbol(t *testing.T) {
-	tc1 := &tools.ToolCall{Tool: "inspect_symbol", Args: map[string]string{"path": "/a.go", "symbol": "Foo"}}
-	tc2 := &tools.ToolCall{Tool: "inspect_symbol", Args: map[string]string{"path": "/a.go", "symbol": "Foo"}}
-	if turnDedupKey(tc1) != turnDedupKey(tc2) {
-		t.Error("same inspect_symbol call should produce same key")
-	}
-}
-
-// ── isDedupableForTurn tests ──
-
-func TestIsDedupableForTurn(t *testing.T) {
-	tests := []struct {
-		tool string
-		want bool
-	}{
-		{"read_file", true},
-		{"search_code", true},
-		{"list_dir", true},
-		{"inspect_symbol", true},
-		{"write_file", false},
-		{"str_replace", false},
-		{"bash", false},
-		{"delete_file", false},
-	}
-	for _, tt := range tests {
-		if got := isDedupableForTurn(tt.tool); got != tt.want {
-			t.Errorf("isDedupableForTurn(%q) = %v, want %v", tt.tool, got, tt.want)
-		}
-	}
-}
-
 // ── isBatchableReadFile tests ──
 
 func TestIsBatchableReadFile(t *testing.T) {
@@ -355,259 +286,9 @@ func TestCloneToolCallWithNewPattern(t *testing.T) {
 
 // ── Same-turn duplicate suppression integration tests ──
 
-func TestExecuteToolCallsWithParallel_SameTurnDuplicate_ReadFile(t *testing.T) {
-	provider := &mockProvider{name: "test"}
-	agent := NewAgent("test-model", provider, false)
-	agent.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
-
-	// Same read_file(path=/a.go) called twice
-	toolCalls := []*tools.ToolCall{
-		{ID: "c1", Tool: "read_file", Args: map[string]string{"path": "/a.go"}, RawArgs: map[string]any{"path": "/a.go"}},
-		{ID: "c2", Tool: "read_file", Args: map[string]string{"path": "/a.go"}, RawArgs: map[string]any{"path": "/a.go"}},
-		{ID: "c3", Tool: "read_file", Args: map[string]string{"path": "/b.go"}, RawArgs: map[string]any{"path": "/b.go"}},
-	}
-
-	agent.addToolCallsToHistory("test", toolCalls)
-	historyBefore := len(agent.History)
-
-	var executedIDs []string
-	callback := func(_ int, tc *tools.ToolCall, result string, change *tools.FileChange) {
-		executedIDs = append(executedIDs, tc.ID)
-	}
-
-	agent.executeToolCallsWithParallel(context.Background(), toolCalls, nil, nil, callback)
-
-	// c1 and c3 should be executed (different files), c2 should be deduplicated
-	if len(executedIDs) != 2 {
-		t.Fatalf("executed %d tools, want 2; got %v", len(executedIDs), executedIDs)
-	}
-	if executedIDs[0] != "c1" || executedIDs[1] != "c3" {
-		t.Errorf("executedIDs = %v, want [c1, c3]", executedIDs)
-	}
-
-	// c2 should have canonical duplicate message in history
-	addedMsgs := agent.History[historyBefore:]
-	foundDup := false
-	for _, msg := range addedMsgs {
-		if msg.ToolCallID == "c2" && strings.Contains(msg.Content, "[Duplicate]") {
-			foundDup = true
-			break
-		}
-	}
-	if !foundDup {
-		t.Error("expected duplicate message for c2 in history")
-	}
-
-	// Observability
-	if agent.Stats.ToolObs.SameTurnDuplicates != 1 {
-		t.Errorf("SameTurnDuplicates = %d, want 1", agent.Stats.ToolObs.SameTurnDuplicates)
-	}
-}
-
-func TestExecuteToolCallsWithParallel_SameTurnDuplicate_NotSuppressed_DifferentArgs(t *testing.T) {
-	provider := &mockProvider{name: "test"}
-	agent := NewAgent("test-model", provider, false)
-	agent.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
-
-	// Different paths — should NOT be deduplicated
-	toolCalls := []*tools.ToolCall{
-		{ID: "c1", Tool: "read_file", Args: map[string]string{"path": "/a.go"}, RawArgs: map[string]any{"path": "/a.go"}},
-		{ID: "c2", Tool: "read_file", Args: map[string]string{"path": "/b.go"}, RawArgs: map[string]any{"path": "/b.go"}},
-	}
-
-	agent.addToolCallsToHistory("test", toolCalls)
-
-	var executedCount int
-	callback := func(_ int, tc *tools.ToolCall, result string, change *tools.FileChange) {
-		executedCount++
-	}
-
-	agent.executeToolCallsWithParallel(context.Background(), toolCalls, nil, nil, callback)
-
-	if executedCount != 2 {
-		t.Errorf("expected 2 executions for different files, got %d", executedCount)
-	}
-	if agent.Stats.ToolObs.SameTurnDuplicates != 0 {
-		t.Errorf("SameTurnDuplicates = %d, want 0", agent.Stats.ToolObs.SameTurnDuplicates)
-	}
-}
-
-func TestExecuteToolCallsWithParallel_SameTurnDuplicate_InspectSymbolNotBroken(t *testing.T) {
-	provider := &mockProvider{name: "test"}
-	agent := NewAgent("test-model", provider, false)
-	agent.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
-
-	// Same inspect_symbol call twice → should be deduplicated (exact same args)
-	toolCalls := []*tools.ToolCall{
-		{ID: "c1", Tool: "inspect_symbol", Args: map[string]string{"path": "/a.go", "symbol": "Build"}, RawArgs: map[string]any{"path": "/a.go", "symbol": "Build"}},
-		{ID: "c2", Tool: "inspect_symbol", Args: map[string]string{"path": "/a.go", "symbol": "Build"}, RawArgs: map[string]any{"path": "/a.go", "symbol": "Build"}},
-	}
-
-	agent.addToolCallsToHistory("test", toolCalls)
-
-	var executedIDs []string
-	callback := func(_ int, tc *tools.ToolCall, result string, change *tools.FileChange) {
-		executedIDs = append(executedIDs, tc.ID)
-	}
-
-	agent.executeToolCallsWithParallel(context.Background(), toolCalls, nil, nil, callback)
-
-	// c2 is exact duplicate → should be suppressed
-	if len(executedIDs) != 1 || executedIDs[0] != "c1" {
-		t.Errorf("executedIDs = %v, want [c1]", executedIDs)
-	}
-
-	// Different symbol → should NOT be deduplicated
-	toolCalls2 := []*tools.ToolCall{
-		{ID: "d1", Tool: "inspect_symbol", Args: map[string]string{"path": "/a.go", "symbol": "Build"}, RawArgs: map[string]any{"path": "/a.go", "symbol": "Build"}},
-		{ID: "d2", Tool: "inspect_symbol", Args: map[string]string{"path": "/a.go", "symbol": "Run"}, RawArgs: map[string]any{"path": "/a.go", "symbol": "Run"}},
-	}
-	agent2 := NewAgent("test-model", provider, false)
-	agent2.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
-	agent2.addToolCallsToHistory("test", toolCalls2)
-
-	var executedIDs2 []string
-	callback2 := func(_ int, tc *tools.ToolCall, result string, change *tools.FileChange) {
-		executedIDs2 = append(executedIDs2, tc.ID)
-	}
-	agent2.executeToolCallsWithParallel(context.Background(), toolCalls2, nil, nil, callback2)
-
-	if len(executedIDs2) != 2 {
-		t.Errorf("different inspect_symbol calls should both execute, got %d", len(executedIDs2))
-	}
-}
-
-func TestExecuteToolCallsWithParallel_SameTurnDuplicate_WriteToolNotDeduped(t *testing.T) {
-	provider := &mockProvider{name: "test"}
-	agent := NewAgent("test-model", provider, false)
-	agent.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
-
-	// write_file called twice with same args → should NOT be deduplicated
-	toolCalls := []*tools.ToolCall{
-		{ID: "c1", Tool: "write_file", Args: map[string]string{"path": "/a.go", "content": "x"}, RawArgs: map[string]any{"path": "/a.go", "content": "x"}},
-		{ID: "c2", Tool: "write_file", Args: map[string]string{"path": "/a.go", "content": "x"}, RawArgs: map[string]any{"path": "/a.go", "content": "x"}},
-	}
-
-	agent.addToolCallsToHistory("test", toolCalls)
-
-	var executedCount int
-	callback := func(_ int, tc *tools.ToolCall, result string, change *tools.FileChange) {
-		executedCount++
-	}
-
-	agent.executeToolCallsWithParallel(context.Background(), toolCalls, nil, nil, callback)
-
-	if executedCount != 2 {
-		t.Errorf("write tools should not be deduplicated, got %d executions", executedCount)
-	}
-}
-
-func TestExecuteToolCallsWithParallel_SameTurnDuplicate_TextBased(t *testing.T) {
-	provider := &mockProvider{name: "test"}
-	agent := NewAgent("test-model", provider, false)
-	agent.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
-
-	// Text-based (no ID) duplicate
-	toolCalls := []*tools.ToolCall{
-		{Tool: "read_file", Args: map[string]string{"path": "/a.go"}, RawArgs: map[string]any{"path": "/a.go"}},
-		{Tool: "read_file", Args: map[string]string{"path": "/a.go"}, RawArgs: map[string]any{"path": "/a.go"}},
-	}
-
-	var executedCount int
-	callback := func(_ int, tc *tools.ToolCall, result string, change *tools.FileChange) {
-		executedCount++
-	}
-
-	agent.executeToolCallsWithParallel(context.Background(), toolCalls, nil, nil, callback)
-
-	if executedCount != 1 {
-		t.Errorf("expected 1 execution (duplicate suppressed), got %d", executedCount)
-	}
-
-	// Text-based duplicate should add role="user" message
-	foundDup := false
-	for _, msg := range agent.History {
-		if msg.Role == "user" && strings.Contains(msg.Content, "[Duplicate]") {
-			foundDup = true
-			break
-		}
-	}
-	if !foundDup {
-		t.Error("expected text-based duplicate message in history")
-	}
-}
-
-func TestExecuteToolCallsWithParallel_SameTurnDuplicate_MultipleDedup(t *testing.T) {
-	provider := &mockProvider{name: "test"}
-	agent := NewAgent("test-model", provider, false)
-	agent.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
-
-	// Same call 3 times → only first executed
-	toolCalls := []*tools.ToolCall{
-		{ID: "c1", Tool: "search_code", Args: map[string]string{"pattern": "foo"}, RawArgs: map[string]any{"pattern": "foo"}},
-		{ID: "c2", Tool: "search_code", Args: map[string]string{"pattern": "foo"}, RawArgs: map[string]any{"pattern": "foo"}},
-		{ID: "c3", Tool: "search_code", Args: map[string]string{"pattern": "foo"}, RawArgs: map[string]any{"pattern": "foo"}},
-	}
-
-	agent.addToolCallsToHistory("test", toolCalls)
-
-	var executedCount int
-	callback := func(_ int, tc *tools.ToolCall, result string, change *tools.FileChange) {
-		executedCount++
-	}
-
-	agent.executeToolCallsWithParallel(context.Background(), toolCalls, nil, nil, callback)
-
-	if executedCount != 1 {
-		t.Errorf("expected 1 execution (2 duplicates suppressed), got %d", executedCount)
-	}
-	if agent.Stats.ToolObs.SameTurnDuplicates != 2 {
-		t.Errorf("SameTurnDuplicates = %d, want 2", agent.Stats.ToolObs.SameTurnDuplicates)
-	}
-}
-
-func TestExecuteToolCallsWithParallel_SameTurnDuplicate_CanonicalMessage(t *testing.T) {
-	msg := sameTurnDuplicateMessage("read_file")
-	if !strings.Contains(msg, "[Duplicate]") {
-		t.Errorf("canonical message should contain [Duplicate], got %q", msg)
-	}
-	if !strings.Contains(msg, "read_file") {
-		t.Errorf("canonical message should contain tool name, got %q", msg)
-	}
-	if !strings.Contains(msg, "reuse previous result") {
-		t.Errorf("canonical message should contain reuse instruction, got %q", msg)
-	}
-}
-
 // ── read_file batch merge eligibility tests ──
 
-func TestExecuteToolCallsWithParallel_ReadFile_PlainPathBatch(t *testing.T) {
-	// 2+ plain path reads for SAME file → second is deduplicated
-	provider := &mockProvider{name: "test"}
-	agent := NewAgent("test-model", provider, false)
-	agent.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
-
-	toolCalls := []*tools.ToolCall{
-		{ID: "c1", Tool: "read_file", Args: map[string]string{"path": "/a.go"}, RawArgs: map[string]any{"path": "/a.go"}},
-		{ID: "c2", Tool: "read_file", Args: map[string]string{"path": "/a.go"}, RawArgs: map[string]any{"path": "/a.go"}},
-	}
-	agent.addToolCallsToHistory("test", toolCalls)
-
-	var executedIDs []string
-	callback := func(_ int, tc *tools.ToolCall, result string, change *tools.FileChange) {
-		executedIDs = append(executedIDs, tc.ID)
-	}
-
-	agent.executeToolCallsWithParallel(context.Background(), toolCalls, nil, nil, callback)
-
-	// Only c1 should execute; c2 is a same-turn duplicate
-	if len(executedIDs) != 1 || executedIDs[0] != "c1" {
-		t.Errorf("executedIDs = %v, want [c1]", executedIDs)
-	}
-}
-
 func TestExecuteToolCallsWithParallel_ReadFile_RangeNotBatched(t *testing.T) {
-	// Range reads are still dedupable if args are identical
 	provider := &mockProvider{name: "test"}
 	agent := NewAgent("test-model", provider, false)
 	agent.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
@@ -658,7 +339,7 @@ func TestExecuteToolCallsWithParallel_ReadFile_MixedNotBroken(t *testing.T) {
 }
 
 func TestExecuteToolCallsWithParallel_ReadFile_BatchResultAndHistory(t *testing.T) {
-	// Verify history is correct after batch dedup
+	// Verify history is correct after batch execution
 	provider := &mockProvider{name: "test"}
 	agent := NewAgent("test-model", provider, false)
 	agent.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
@@ -686,27 +367,26 @@ func TestExecuteToolCallsWithParallel_ReadFile_BatchResultAndHistory(t *testing.
 
 	// History should have:
 	// - c1 result (from callback)
-	// - c2 duplicate message (from Phase 2 statusDuplicate handling)
+	// - c2 result (from callback)
 	addedMsgs := agent.History[historyBefore:]
 	if len(addedMsgs) != 2 {
 		t.Fatalf("expected 2 history messages, got %d", len(addedMsgs))
 	}
 
-	// c2 should be the duplicate (could be in any order depending on Phase 2)
-	var foundC1, foundC2Dup bool
+	var foundC1, foundC2 bool
 	for _, msg := range addedMsgs {
 		if msg.ToolCallID == "c1" {
 			foundC1 = true
 		}
-		if msg.ToolCallID == "c2" && strings.Contains(msg.Content, "[Duplicate]") {
-			foundC2Dup = true
+		if msg.ToolCallID == "c2" {
+			foundC2 = true
 		}
 	}
 	if !foundC1 {
 		t.Error("expected c1 result in history")
 	}
-	if !foundC2Dup {
-		t.Error("expected c2 duplicate message in history")
+	if !foundC2 {
+		t.Error("expected c2 result in history")
 	}
 }
 
@@ -838,7 +518,7 @@ func TestExecuteToolCallsWithParallel_DedupDoesNotBreakLoopDetection(t *testing.
 	}
 }
 
-func TestExecuteToolCallsWithParallel_DedupDoesNotBreakSkip(t *testing.T) {
+func TestExecuteToolCallsWithParallel_SkipDoesNotBreakRepeatedReads(t *testing.T) {
 	provider := &mockProvider{name: "test"}
 	agent := NewAgent("test-model", provider, false)
 	agent.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
@@ -864,77 +544,9 @@ func TestExecuteToolCallsWithParallel_DedupDoesNotBreakSkip(t *testing.T) {
 
 	agent.executeToolCallsWithParallel(context.Background(), toolCalls, nil, skipFn, callback)
 
-	// c1 executed, c2 skipped, c3 deduplicated
-	if len(executedIDs) != 1 || executedIDs[0] != "c1" {
-		t.Errorf("executedIDs = %v, want [c1]", executedIDs)
-	}
-}
-
-func TestExecuteToolCallsWithParallel_ObservabilityIntact(t *testing.T) {
-	provider := &mockProvider{name: "test"}
-	agent := NewAgent("test-model", provider, false)
-	agent.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
-
-	toolCalls := []*tools.ToolCall{
-		{ID: "c1", Tool: "read_file", Args: map[string]string{"path": "/a.go"}, RawArgs: map[string]any{"path": "/a.go"}},
-		{ID: "c2", Tool: "read_file", Args: map[string]string{"path": "/a.go"}, RawArgs: map[string]any{"path": "/a.go"}},
-		{ID: "c3", Tool: "list_dir", Args: map[string]string{"path": "."}, RawArgs: map[string]any{"path": "."}},
-	}
-	agent.addToolCallsToHistory("test", toolCalls)
-
-	agent.executeToolCallsWithParallel(context.Background(), toolCalls, nil, nil,
-		func(_ int, _ *tools.ToolCall, _ string, _ *tools.FileChange) {})
-
-	// ToolExecutions counts only actually-executed calls (c2 is duplicate → not counted)
-	if agent.Stats.ToolExecutions["read_file"] != 1 {
-		t.Errorf("ToolExecutions[read_file] = %d, want 1 (duplicate not counted)", agent.Stats.ToolExecutions["read_file"])
-	}
-	if agent.Stats.ToolExecutions["list_dir"] != 1 {
-		t.Errorf("ToolExecutions[list_dir] = %d, want 1", agent.Stats.ToolExecutions["list_dir"])
-	}
-	// Dedup observability
-	if agent.Stats.ToolObs.SameTurnDuplicates != 1 {
-		t.Errorf("SameTurnDuplicates = %d, want 1", agent.Stats.ToolObs.SameTurnDuplicates)
-	}
-}
-
-func TestExecuteToolCallsWithParallel_SameTurnDuplicate_ReadFileGuidancePreserved(t *testing.T) {
-	provider := &mockProvider{name: "test"}
-	agent := NewAgent("test-model", provider, false)
-	agent.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
-
-	toolCalls := []*tools.ToolCall{
-		{ID: "c1", Tool: "read_file", Args: map[string]string{"path": "/a.go"}, RawArgs: map[string]any{"path": "/a.go"}},
-		{ID: "c2", Tool: "read_file", Args: map[string]string{"path": "/a.go"}, RawArgs: map[string]any{"path": "/a.go"}},
-		{ID: "c3", Tool: "read_file", Args: map[string]string{"path": "/a.go"}, RawArgs: map[string]any{"path": "/a.go"}},
-	}
-	agent.addToolCallsToHistory("test", toolCalls)
-	historyBefore := len(agent.History)
-
-	callback := func(_ int, tc *tools.ToolCall, result string, change *tools.FileChange) {
-		historyContent := agent.compactToolResult(tc, result)
-		agent.History = append(agent.History, api.Message{
-			Role:       "tool",
-			Content:    historyContent,
-			ToolCallID: tc.ID,
-			ToolName:   tc.Tool,
-		})
-	}
-
-	agent.executeToolCallsWithParallel(context.Background(), toolCalls, nil, nil, callback)
-
-	addedMsgs := agent.History[historyBefore:]
-	var duplicateWithGuidance bool
-	for _, msg := range addedMsgs {
-		if msg.ToolCallID == "c3" &&
-			strings.Contains(msg.Content, "[Duplicate]") &&
-			strings.Contains(msg.Content, "[GUIDANCE]") {
-			duplicateWithGuidance = true
-			break
-		}
-	}
-	if !duplicateWithGuidance {
-		t.Fatalf("expected duplicate message with guidance for c3, got %+v", addedMsgs)
+	// c1/c3 executed, c2 skipped
+	if len(executedIDs) != 2 || executedIDs[0] != "c1" || executedIDs[1] != "c3" {
+		t.Errorf("executedIDs = %v, want [c1 c3]", executedIDs)
 	}
 }
 
@@ -1090,44 +702,6 @@ func TestIsBatchableReadFile_Comprehensive(t *testing.T) {
 				t.Errorf("isBatchableReadFile() = %v, want %v", got, tt.want)
 			}
 		})
-	}
-}
-
-// ── read_file batch merge: duplicate suppression does not interfere ──
-
-func TestReadFileBatchMerge_DuplicateSuppressionFirst(t *testing.T) {
-	// read_file(a.go), read_file(a.go), read_file(b.go)
-	// Duplicate suppression catches the second a.go first.
-	// Batch merge only sees a.go + b.go (2 distinct paths after dedup).
-	provider := &mockProvider{name: "test"}
-	agent := NewAgent("test-model", provider, false)
-	agent.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
-
-	toolCalls := []*tools.ToolCall{
-		{ID: "c1", Tool: "read_file", Args: map[string]string{"path": "/a.go"}, RawArgs: map[string]any{"path": "/a.go"}},
-		{ID: "c2", Tool: "read_file", Args: map[string]string{"path": "/a.go"}, RawArgs: map[string]any{"path": "/a.go"}},
-		{ID: "c3", Tool: "read_file", Args: map[string]string{"path": "/b.go"}, RawArgs: map[string]any{"path": "/b.go"}},
-	}
-	agent.addToolCallsToHistory("test", toolCalls)
-
-	var callbackIDs []string
-	callback := func(_ int, tc *tools.ToolCall, result string, change *tools.FileChange) {
-		callbackIDs = append(callbackIDs, tc.ID)
-	}
-
-	agent.executeToolCallsWithParallel(context.Background(), toolCalls, nil, nil, callback)
-
-	// c1 and c3 should have callbacks (c2 is duplicate, no callback)
-	if len(callbackIDs) != 2 {
-		t.Fatalf("expected 2 callbacks, got %d: %v", len(callbackIDs), callbackIDs)
-	}
-	if callbackIDs[0] != "c1" || callbackIDs[1] != "c3" {
-		t.Errorf("callbackIDs = %v, want [c1, c3]", callbackIDs)
-	}
-
-	// Duplicate suppression metric should be 1
-	if agent.Stats.ToolObs.SameTurnDuplicates != 1 {
-		t.Errorf("SameTurnDuplicates = %d, want 1", agent.Stats.ToolObs.SameTurnDuplicates)
 	}
 }
 
@@ -1409,18 +983,6 @@ func TestSavingsMetrics_HasAny(t *testing.T) {
 	m.SavedCalls = 1
 	if !m.hasAny() {
 		t.Error("non-zero SavedCalls should return true")
-	}
-}
-
-func TestEstimatedToolResultTokens(t *testing.T) {
-	if estimatedToolResultTokens("read_file") != 1000 {
-		t.Error("read_file should estimate 1000 tokens")
-	}
-	if estimatedToolResultTokens("search_code") != 800 {
-		t.Error("search_code should estimate 800 tokens")
-	}
-	if estimatedToolResultTokens("unknown_tool") != 500 {
-		t.Error("unknown tool should estimate 500 tokens")
 	}
 }
 

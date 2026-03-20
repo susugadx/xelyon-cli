@@ -52,23 +52,6 @@ func parsePath(entry string) (string, int, int) {
 	return entry, 0, 0
 }
 
-// readFilesBudgetPool は perFileBudget の算出元となるヒューリスティック値。
-// 厳密な total cap ではなく、ファイル数で割ってアウトライン閾値を決めるための基準値。
-const readFilesBudgetPool = 500
-
-// perFileBudget はファイル数に応じた1ファイルあたりのアウトライン閾値を返す。
-// readFilesBudgetPool / n で算出し、DefaultFullLines を上限、30 を下限とする。
-func perFileBudget(n int) int {
-	b := readFilesBudgetPool / n
-	if b > DefaultFullLines {
-		return DefaultFullLines
-	}
-	if b < 30 {
-		return 30
-	}
-	return b
-}
-
 // ExecuteReadFiles は複数ファイルを一括読み込みする
 func ExecuteReadFiles(paths []string) string {
 	return ExecuteReadFilesWithOutput(common.DefaultOutput(), paths)
@@ -86,7 +69,7 @@ func ExecuteReadFilesWithRuntime(out common.Output, cfg *config.Config, cache to
 }
 
 // ExecuteReadFilesWithBudget は出力先とファイルあたりのアウトライン閾値を指定して
-// 複数ファイルを一括読み込みする。budgetOverride が 0 の場合は perFileBudget を使用する。
+// 複数ファイルを一括読み込みする。budgetOverride が 0 の場合は DefaultFullLines を使用する。
 // 自動 batch merge では DefaultFullLines を渡し、単発 read と同等の閾値を維持する。
 func ExecuteReadFilesWithBudget(out common.Output, paths []string, budgetOverride int) string {
 	return executeReadFilesCore(out, nil, nil, paths, budgetOverride)
@@ -104,7 +87,7 @@ func executeReadFilesCore(out common.Output, cfg *config.Config, cache tools.Too
 
 	budget := budgetOverride
 	if budget <= 0 {
-		budget = perFileBudget(len(paths))
+		budget = DefaultFullLines
 	}
 	sem := make(chan struct{}, tools.MaxParallelTools)
 

@@ -1,7 +1,6 @@
 package agent
 
 import (
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -17,12 +16,11 @@ import (
 // ToolCache はツール結果のキャッシュ
 // read_file, list_dir の結果をキャッシュしてトークン消費を削減
 type ToolCache struct {
-	files        map[string]cacheEntry
-	dirs         map[string]cacheEntry
-	searches     map[string]cacheEntry
-	resultHashes map[string]resultHashEntry // content hash → 既出情報（履歴重複排除用）
-	negatives    map[string]negativeCacheEntry
-	mu           sync.RWMutex
+	files     map[string]cacheEntry
+	dirs      map[string]cacheEntry
+	searches  map[string]cacheEntry
+	negatives map[string]negativeCacheEntry
+	mu        sync.RWMutex
 }
 
 // cacheEntry はキャッシュエントリ
@@ -31,13 +29,6 @@ type cacheEntry struct {
 	ModTime       time.Time
 	AccessedAt    time.Time
 	AffectedFiles []string // 検索キャッシュのみ使用
-}
-
-// resultHashEntry は tool result のハッシュ記録
-type resultHashEntry struct {
-	ToolName   string
-	Turn       int
-	AccessedAt time.Time
 }
 
 // negativeCacheEntry はエラー/空結果のネガティブキャッシュエントリ
@@ -57,17 +48,15 @@ const (
 	MaxFileCacheEntries   = 100
 	MaxDirCacheEntries    = 50
 	MaxSearchCacheEntries = 50
-	MaxResultHashEntries  = 200
 )
 
 // NewToolCache は新しい ToolCache を作成
 func NewToolCache() *ToolCache {
 	return &ToolCache{
-		files:        make(map[string]cacheEntry),
-		dirs:         make(map[string]cacheEntry),
-		searches:     make(map[string]cacheEntry),
-		resultHashes: make(map[string]resultHashEntry),
-		negatives:    make(map[string]negativeCacheEntry),
+		files:     make(map[string]cacheEntry),
+		dirs:      make(map[string]cacheEntry),
+		searches:  make(map[string]cacheEntry),
+		negatives: make(map[string]negativeCacheEntry),
 	}
 }
 
@@ -194,47 +183,7 @@ func (c *ToolCache) Clear() {
 	c.files = make(map[string]cacheEntry)
 	c.dirs = make(map[string]cacheEntry)
 	c.searches = make(map[string]cacheEntry)
-	c.resultHashes = make(map[string]resultHashEntry)
 	c.negatives = make(map[string]negativeCacheEntry)
-}
-
-// DeduplicateResult は同一内容の tool result が既に履歴に存在するか確認し、
-// 重複の場合は参照文字列を返す。新規の場合はハッシュを記録して空文字を返す。
-// 対象ツール: read_file, search_code, list_dir のみ。
-func (c *ToolCache) DeduplicateResult(toolName, content string, turn int) string {
-	if !isDeduplicableToolResult(toolName) {
-		return ""
-	}
-
-	hash := contentHash(content)
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if entry, exists := c.resultHashes[hash]; exists {
-		entry.AccessedAt = time.Now()
-		c.resultHashes[hash] = entry
-		return fmt.Sprintf("[Identical to previous %s result from turn %d — content omitted to save tokens]", entry.ToolName, entry.Turn)
-	}
-
-	c.resultHashes[hash] = resultHashEntry{ToolName: toolName, Turn: turn, AccessedAt: time.Now()}
-	pruneOldestHashEntries(c.resultHashes, MaxResultHashEntries)
-	return ""
-}
-
-// isDeduplicableToolResult は重複排除対象のツールかどうかを返す
-func isDeduplicableToolResult(toolName string) bool {
-	switch toolName {
-	case "read_file", "search_code", "list_dir", "inspect_symbol":
-		return true
-	}
-	return false
-}
-
-// contentHash は content の SHA-256 先頭16文字を返す
-func contentHash(content string) string {
-	h := sha256.Sum256([]byte(content))
-	return fmt.Sprintf("%x", h[:8])
 }
 
 // searchCacheKey は検索キャッシュのキーを生成
@@ -385,32 +334,6 @@ func (c *ToolCache) Stats() (files, dirs, searches int) {
 // インターフェース実装の確認
 var _ tools.ToolCacheInterface = (*ToolCache)(nil)
 
-func pruneOldestHashEntries(m map[string]resultHashEntry, maxEntries int) {
-	if len(m) <= maxEntries {
-		return
-	}
-
-	pruneCount := len(m) - maxEntries + maxEntries/10
-	if pruneCount < 1 {
-		pruneCount = 1
-	}
-
-	type kv struct {
-		key  string
-		time time.Time
-	}
-	items := make([]kv, 0, len(m))
-	for k, v := range m {
-		items = append(items, kv{key: k, time: v.AccessedAt})
-	}
-	sort.Slice(items, func(i, j int) bool {
-		return items[i].time.Before(items[j].time)
-	})
-	for i := 0; i < pruneCount && i < len(items); i++ {
-		delete(m, items[i].key)
-	}
-}
-
 const (
 	toolCacheDir     = ".xelyon/cache"
 	toolCacheFile    = ".xelyon/cache/tool_cache.json"
@@ -430,7 +353,7 @@ type persistedCache struct {
 }
 
 // Save はファイル・ディレクトリキャッシュをディスクに永続化する。
-// searches, resultHashes, negatives はセッション跨ぎで無効になりやすいため永続化しない。
+// searches, negatives はセッション跨ぎで無効になりやすいため永続化しない。
 func (c *ToolCache) Save() error {
 	c.mu.RLock()
 	pc := persistedCache{

@@ -20,7 +20,7 @@ import (
 
 // maxRipgrepResults は findReferences が返す参照の上限。
 // これを超えた場合は truncated=true を返す。
-const maxRipgrepResults = 200
+const maxRipgrepResults = 500
 
 const (
 	ripgrepScannerInitialBufferSize = 64 * 1024

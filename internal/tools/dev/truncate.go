@@ -20,12 +20,9 @@ const (
 )
 
 // TruncateWithFile は長い出力をファイルに保存し、末尾30行を返す。
-// OutputTruncateLen（20000文字）以下の場合はそのまま返す。
+// OutputTruncateLen 以下の場合はそのまま返す。
 // 超過時は .xelyon/artifacts/output_<unixnano>.txt に全文を保存する。
 func TruncateWithFile(output string) string {
-	// 重複行圧縮（OutputTruncateLen 以下でも適用）
-	output = deduplicateLines(output)
-
 	if len(output) <= config.OutputTruncateLen {
 		return output
 	}
@@ -116,54 +113,6 @@ func checkGitignoreWithWriter(w io.Writer) {
 		}
 	}
 	_, _ = fmt.Fprintln(w, "Warning: .xelyon/ is not in .gitignore. Add it to avoid committing artifacts.")
-}
-
-const deduplicatePrefixLen = 10
-
-// deduplicateLines は連続する同一プレフィックス（先頭10文字）の行を圧縮する。
-// 3行以上連続する場合、先頭2行 + 末尾1行を残し、中間を "[... N more similar lines]" に置換する。
-func deduplicateLines(output string) string {
-	lines := strings.Split(output, "\n")
-	if len(lines) < 3 {
-		return output
-	}
-
-	var result []string
-	i := 0
-	for i < len(lines) {
-		prefix := linePrefix(lines[i])
-		// 空行はそのまま残す（圧縮しない）
-		if prefix == "" {
-			result = append(result, lines[i])
-			i++
-			continue
-		}
-		// 同一プレフィックスの連続行数をカウント
-		j := i + 1
-		for j < len(lines) && linePrefix(lines[j]) == prefix {
-			j++
-		}
-		count := j - i
-		if count >= 3 {
-			// 先頭2行 + 圧縮マーカー + 末尾1行
-			result = append(result, lines[i], lines[i+1])
-			result = append(result, fmt.Sprintf("[... %d more similar lines]", count-3))
-			result = append(result, lines[j-1])
-		} else {
-			result = append(result, lines[i:j]...)
-		}
-		i = j
-	}
-	return strings.Join(result, "\n")
-}
-
-// linePrefix は行の先頭 deduplicatePrefixLen 文字を返す。
-// 短い行はそのまま返す。空行は空文字を返す。
-func linePrefix(line string) string {
-	if len(line) <= deduplicatePrefixLen {
-		return line
-	}
-	return line[:deduplicatePrefixLen]
 }
 
 // lastNLines は文字列の末尾N行を返す。

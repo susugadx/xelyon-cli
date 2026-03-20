@@ -5,44 +5,6 @@ import (
 	"testing"
 )
 
-func TestTruncateLine(t *testing.T) {
-	tests := []struct {
-		name     string
-		line     string
-		expected string
-	}{
-		{
-			name:     "500 characters or less",
-			line:     strings.Repeat("a", 500),
-			expected: strings.Repeat("a", 500),
-		},
-		{
-			name:     "501 characters",
-			line:     strings.Repeat("a", 501),
-			expected: strings.Repeat("a", 500) + "...",
-		},
-		{
-			name:     "empty line",
-			line:     "",
-			expected: "",
-		},
-		{
-			name:     "multibyte characters (501 runes)",
-			line:     strings.Repeat("あ", 501),
-			expected: strings.Repeat("あ", 500) + "...",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := truncateLine(tt.line)
-			if result != tt.expected {
-				t.Errorf("truncateLine() len=%d, expected len=%d", len([]rune(result)), len([]rune(tt.expected)))
-			}
-		})
-	}
-}
-
 func TestEstimateTokens(t *testing.T) {
 	tests := []struct {
 		name     string

@@ -42,10 +42,7 @@ func defaultProviderCompressThreshold(provider string, model string) int {
 	case "deepseek":
 		return 80000 // 128K window に対して出力/推論 headroom を残す
 	case "openai":
-		if strings.Contains(model, "5.4") {
-			return 260000 // 272K pricing cliff回避（2x課金ライン手前）
-		}
-		return 100000 // キャッシュコスト削減
+		return 0
 	case "openrouter":
 		return 120000 // モデル依存だが安全な値
 	default:

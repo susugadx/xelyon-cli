@@ -197,9 +197,6 @@ func printSessionSections(agent *Agent) {
 	opt := stats.Optimizations
 	if opt.hasAny() {
 		optTable := ui.NewTable()
-		if opt.DeduplicateCount > 0 {
-			optTable.AddRow("Cache-hit dedup", fmt.Sprintf("%d times (~%s tokens saved)", opt.DeduplicateCount, formatNumber(opt.DeduplicateTokensSaved)))
-		}
 		if opt.NegativeCacheHits > 0 {
 			optTable.AddRow("Negative cache", fmt.Sprintf("%d hits", opt.NegativeCacheHits))
 		}
@@ -214,12 +211,6 @@ func printSessionSections(agent *Agent) {
 		}
 		if opt.OutlineFirstCount > 0 {
 			optTable.AddRow("Outline-first mode", fmt.Sprintf("%d times", opt.OutlineFirstCount))
-		}
-		if opt.MilestoneDetections > 0 {
-			optTable.AddRow("Milestone triggers", fmt.Sprintf("%d times", opt.MilestoneDetections))
-		}
-		if opt.ToolRatioDetections > 0 {
-			optTable.AddRow("Tool-ratio triggers", fmt.Sprintf("%d times", opt.ToolRatioDetections))
 		}
 		if opt.CompactionCount > 0 {
 			optTable.AddRow("Auto-compress", fmt.Sprintf("%d times", opt.CompactionCount))
@@ -244,7 +235,6 @@ func printToolObservabilitySection(out io.Writer, stats *SessionStats) {
 	selTable.AddRow("search_code(multi)", fmt.Sprintf("%d", obs.SearchCodeMultiPatternCalls))
 	selTable.AddRow("search_code(batch merge)", fmt.Sprintf("%d", obs.SearchCodeBatchMerges))
 	selTable.AddRow("read_file(batch merge)", fmt.Sprintf("%d", obs.ReadFileBatchMerges))
-	selTable.AddRow("same-turn duplicates", fmt.Sprintf("%d", obs.SameTurnDuplicates))
 	selTable.AddRow("read_file empty-path errors", fmt.Sprintf("%d", obs.ReadFileEmptyPathsErrors))
 	_, _ = fmt.Fprint(out, selTable.RenderCompact())
 

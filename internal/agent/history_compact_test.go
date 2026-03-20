@@ -16,21 +16,6 @@ func makeLargeContent(lines int) string {
 	return b.String()
 }
 
-func TestToolResultContentRatio(t *testing.T) {
-	toolContent := strings.Repeat("t", 80)
-	userContent := strings.Repeat("u", 20)
-
-	history := []api.Message{
-		{Role: "tool", Content: toolContent},
-		{Role: "user", Content: userContent},
-	}
-
-	ratio := ToolResultContentRatio(history)
-	if ratio <= 0.70 {
-		t.Fatalf("ToolResultContentRatio() = %.2f, want > 0.70", ratio)
-	}
-}
-
 func TestCompactOldToolResults_TruncatesReadLargeResults(t *testing.T) {
 	large := makeLargeContent(60)
 	history := []api.Message{
