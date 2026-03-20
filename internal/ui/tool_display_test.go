@@ -5,7 +5,13 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/fatih/color"
 )
+
+func init() {
+	color.NoColor = true
+}
 
 func TestFormatToolLine_SearchCode(t *testing.T) {
 	line := FormatToolLine(ToolDisplayInfo{
@@ -92,7 +98,22 @@ func TestFormatToolLine_ReadFile_MultiPaths(t *testing.T) {
 		Result: "📄 File: a.go\n1: package main\n\n📄 File: b.go\n1: package util\n",
 	})
 
-	want := "📄 read_file: 2 files"
+	want := "📄 read_file: a.go, b.go"
+	if line != want {
+		t.Fatalf("FormatToolLine() = %q, want %q", line, want)
+	}
+}
+
+func TestFormatToolLine_ReadFiles_MultiPaths(t *testing.T) {
+	line := FormatToolLine(ToolDisplayInfo{
+		ToolName: "read_files",
+		Args: map[string]string{
+			"paths": `["internal/tools/search/web.go","internal/tools/search/register.go","internal/api/websearch/registry.go"]`,
+		},
+		Result: "",
+	})
+
+	want := "📄 read_files: web.go, register.go, registry.go"
 	if line != want {
 		t.Fatalf("FormatToolLine() = %q, want %q", line, want)
 	}
@@ -138,5 +159,42 @@ func TestPrintParallelGroupToWriter_UsesInjectedWriter(t *testing.T) {
 		if !strings.Contains(output, want) {
 			t.Fatalf("expected injected output to contain %q, got %q", want, output)
 		}
+	}
+}
+
+func TestFormatMultiplePathNames(t *testing.T) {
+	tests := []struct {
+		name  string
+		paths []string
+		want  string
+	}{
+		{
+			name:  "no duplicate basenames",
+			paths: []string{"internal/tools/search/web.go", "internal/tools/search/register.go"},
+			want:  "web.go, register.go",
+		},
+		{
+			name:  "duplicate basenames use parent directory",
+			paths: []string{"internal/tools/search/web.go", "internal/api/web.go"},
+			want:  "search/web.go, api/web.go",
+		},
+		{
+			name:  "more than five entries are truncated",
+			paths: []string{"a.go", "b.go", "c.go", "d.go", "e.go", "f.go"},
+			want:  "a.go, b.go, c.go, d.go, e.go ... +1 more",
+		},
+		{
+			name:  "line ranges are stripped before display",
+			paths: []string{"internal/ui/tool_display.go:100-200", "internal/ui/colors.go:1-10"},
+			want:  "tool_display.go, colors.go",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := formatMultiplePathNames(tt.paths); got != tt.want {
+				t.Fatalf("formatMultiplePathNames() = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
