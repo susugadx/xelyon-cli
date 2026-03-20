@@ -201,7 +201,7 @@ func TestExecuteToolOnly_AddsToolResult(t *testing.T) {
 	agent.History = append(agent.History, api.Message{
 		Role: "assistant",
 		ToolCalls: []api.OpenAIToolCall{
-			{ID: "call_1", Type: "function", Function: api.OpenAIToolCallFunction{Name: "read_file", Arguments: `{"path":"/nonexistent.txt"}`}},
+			{ID: "call_1", Type: "function", Function: api.OpenAIToolCallFunction{Name: "read_file", Arguments: `{"paths":["/nonexistent.txt"]}`}},
 		},
 	})
 	historyLenBefore := len(agent.History)
@@ -209,7 +209,7 @@ func TestExecuteToolOnly_AddsToolResult(t *testing.T) {
 	tc := &tools.ToolCall{
 		ID:   "call_1",
 		Tool: "read_file",
-		Args: map[string]string{"path": "/nonexistent.txt"},
+		Args: testReadFileArgs("/nonexistent.txt"),
 	}
 
 	agent.executeToolOnly(tc)
@@ -240,14 +240,14 @@ func TestParallelFC_HistoryStructure(t *testing.T) {
 		{
 			ID:      "call_1",
 			Tool:    "read_file",
-			Args:    map[string]string{"path": "/nonexistent1.txt"},
-			RawArgs: map[string]any{"path": "/nonexistent1.txt"},
+			Args:    testReadFileArgs("/nonexistent1.txt"),
+			RawArgs: testReadFileRawArgs("/nonexistent1.txt"),
 		},
 		{
 			ID:      "call_2",
 			Tool:    "read_file",
-			Args:    map[string]string{"path": "/nonexistent2.txt"},
-			RawArgs: map[string]any{"path": "/nonexistent2.txt"},
+			Args:    testReadFileArgs("/nonexistent2.txt"),
+			RawArgs: testReadFileRawArgs("/nonexistent2.txt"),
 		},
 	}
 
@@ -310,8 +310,8 @@ func TestAdjustSplitForFCPairs_ParallelFC(t *testing.T) {
 	history := []api.Message{
 		{Role: "user", Content: "msg1"},
 		{Role: "assistant", Content: "", ToolCalls: []api.OpenAIToolCall{
-			{ID: "call_1", Function: api.OpenAIToolCallFunction{Name: "read_file", Arguments: `{"path":"/a.go"}`}},
-			{ID: "call_2", Function: api.OpenAIToolCallFunction{Name: "read_file", Arguments: `{"path":"/b.go"}`}},
+			{ID: "call_1", Function: api.OpenAIToolCallFunction{Name: "read_file", Arguments: `{"paths":["/a.go"]}`}},
+			{ID: "call_2", Function: api.OpenAIToolCallFunction{Name: "read_file", Arguments: `{"paths":["/b.go"]}`}},
 		}},
 		{Role: "tool", Content: "file a content", ToolCallID: "call_1"},
 		{Role: "tool", Content: "file b content", ToolCallID: "call_2"},

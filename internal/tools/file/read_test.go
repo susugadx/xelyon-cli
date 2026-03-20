@@ -75,7 +75,7 @@ func TestExecuteReadFile_LargeFile_Outline(t *testing.T) {
 	if !strings.Contains(output, "Signatures") {
 		t.Errorf("Expected outline to contain 'Signatures', got:\n%s", output)
 	}
-	if !strings.Contains(output, "lines total)") {
+	if !strings.Contains(output, `lines total. For specific sections: paths=["`) {
 		t.Errorf("Expected total-lines footer, got:\n%s", output)
 	}
 	if !strings.Contains(output, "package main") {
@@ -101,7 +101,7 @@ func TestExecuteReadFile_LargeFile_PlainText(t *testing.T) {
 
 	output := ExecuteReadFile(filepath.Join(tmpDir, "large.txt"), 0, 0)
 
-	if !strings.Contains(output, "(2200 lines total)") {
+	if !strings.Contains(output, `(2200 lines total. For specific sections: paths=["`) {
 		t.Errorf("Expected total-lines footer, got:\n%s", output)
 	}
 	if !strings.Contains(output, "Last lines") {
@@ -157,7 +157,7 @@ func TestExecuteReadFile_LargerMediumFile_Outline(t *testing.T) {
 
 	output := ExecuteReadFile(filepath.Join(tmpDir, "larger_medium.go"), 0, 0)
 
-	if !strings.Contains(output, "lines total)") {
+	if !strings.Contains(output, `lines total. For specific sections: paths=["`) {
 		t.Errorf("Expected outline footer for large file, got:\n%s", output)
 	}
 	if !strings.Contains(output, "package main") {
@@ -209,11 +209,14 @@ func TestExecuteReadFile_GoOutline_UsesTotalLinesFooter(t *testing.T) {
 
 	output := ExecuteReadFile(filepath.Join(tmpDir, "handlers.go"), 0, 0)
 
-	if !strings.Contains(output, "lines total)") {
+	if !strings.Contains(output, `lines total. For specific sections: paths=["`) {
 		t.Errorf("Expected total-lines footer, got:\n%s", output)
 	}
 	if strings.Contains(output, "Use start_line/end_line") {
 		t.Errorf("Outline footer should not nudge another targeted reread, got:\n%s", output)
+	}
+	if !strings.Contains(output, `paths=["`) {
+		t.Errorf("Outline footer should guide parsePath syntax, got:\n%s", output)
 	}
 	if strings.Contains(output, "symbol=") {
 		t.Errorf("Footer should not mention symbol mode, got:\n%s", output)
@@ -235,7 +238,7 @@ func TestExecuteReadFile_NonGoOutline_NoSymbolHint(t *testing.T) {
 	if strings.Contains(output, "symbol=") {
 		t.Errorf("Non-Go file should NOT have symbol hint, got:\n%s", output)
 	}
-	if !strings.Contains(output, "(2200 lines total)") {
+	if !strings.Contains(output, `(2200 lines total. For specific sections: paths=["`) {
 		t.Errorf("Expected outline footer")
 	}
 }
@@ -428,8 +431,8 @@ func TestReadFileTool_PathRequired(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(result, "Error: path or paths is required") {
-		t.Errorf("expected error when neither path nor paths provided, got: %s", result)
+	if !strings.Contains(result, "Error: paths is required") {
+		t.Errorf("expected error when paths is not provided, got: %s", result)
 	}
 }
 
@@ -477,7 +480,7 @@ func TestFormatOutline_Signatures(t *testing.T) {
 	if !strings.Contains(out, "L") {
 		t.Errorf("expected line numbers in signatures, got:\n%s", out)
 	}
-	if !strings.Contains(out, fmt.Sprintf("(%d lines total)", len(lines))) {
+	if !strings.Contains(out, fmt.Sprintf("(%d lines total. For specific sections: paths=[", len(lines))) {
 		t.Errorf("expected total-lines footer")
 	}
 }
@@ -543,7 +546,7 @@ func TestExecuteReadFile_LargeFileStreaming_Outline(t *testing.T) {
 	}
 
 	output := ExecuteReadFile(largeFile, 0, 0)
-	if !strings.Contains(output, "lines total)") {
+	if !strings.Contains(output, `lines total. For specific sections: paths=["`) {
 		t.Fatalf("expected outline footer for large file, got: %s", output)
 	}
 	if !strings.Contains(output, "1: line 00001") {
@@ -584,7 +587,7 @@ func TestExecuteReadFile_LargeFileStreaming_GoOutline(t *testing.T) {
 	if !strings.Contains(output, "func handler") {
 		t.Fatalf("expected function signatures, got: %s", output)
 	}
-	if !strings.Contains(output, "lines total)") {
+	if !strings.Contains(output, `lines total. For specific sections: paths=["`) {
 		t.Fatalf("expected outline footer, got: %s", output)
 	}
 }

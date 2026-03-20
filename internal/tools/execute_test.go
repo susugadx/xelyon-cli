@@ -22,7 +22,7 @@ func TestPreviewToolCall(t *testing.T) {
 	}{
 		{
 			name: "read_file",
-			tc:   &ToolCall{Tool: "read_file", Args: map[string]string{"path": "test.txt"}},
+			tc:   &ToolCall{Tool: "read_file", Args: map[string]string{"paths": `["test.txt"]`}},
 			want: []string{"File: test.txt"},
 		},
 		{

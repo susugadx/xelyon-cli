@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -18,7 +19,7 @@ import (
 func printToolArgs(w io.Writer, tc *ToolCall) {
 	switch tc.Tool {
 	case "read_file":
-		_, _ = fmt.Fprintf(w, "   File: %s\n", tc.Args["path"])
+		_, _ = fmt.Fprintf(w, "   %s\n", formatReadFilePreviewArg(tc.Args))
 	case "write_file":
 		lines := strings.Split(tc.Args["content"], "\n")
 		_, _ = fmt.Fprintf(w, "   File: %s (%d lines)\n", tc.Args["path"], len(lines))
@@ -75,6 +76,31 @@ func printToolArgs(w io.Writer, tc *ToolCall) {
 		}
 	}
 	_, _ = fmt.Fprintln(w)
+}
+
+func formatReadFilePreviewArg(args map[string]string) string {
+	paths := previewReadFilePaths(args)
+	switch len(paths) {
+	case 0:
+		return "Files: (none)"
+	case 1:
+		return "File: " + paths[0]
+	default:
+		return fmt.Sprintf("Files: %d", len(paths))
+	}
+}
+
+func previewReadFilePaths(args map[string]string) []string {
+	if rawPaths := strings.TrimSpace(args["paths"]); rawPaths != "" {
+		var paths []string
+		if err := json.Unmarshal([]byte(rawPaths), &paths); err == nil {
+			return paths
+		}
+	}
+	if path := strings.TrimSpace(args["path"]); path != "" {
+		return []string{path}
+	}
+	return nil
 }
 
 // ExecuteWithContext は実行コンテキスト付きでツールを実行する。

@@ -343,17 +343,23 @@ func TestResponsesToolFormat(t *testing.T) {
 		t.Fatal("read_file.Parameters.properties is not a map")
 	}
 
-	if _, ok := props["path"]; !ok {
-		t.Error("read_file.Parameters.properties.path not found")
+	if len(props) != 1 {
+		t.Fatalf("read_file.Parameters.properties has %d entries, want 1", len(props))
+	}
+	pathsProp, ok := props["paths"].(map[string]interface{})
+	if !ok {
+		t.Fatal("read_file.Parameters.properties.paths not found")
+	}
+	if pathsProp["type"] != "array" {
+		t.Errorf("read_file.Parameters.properties.paths.type = %v, want array", pathsProp["type"])
 	}
 
 	required, ok := params["required"].([]string)
 	if !ok {
 		t.Fatal("read_file.Parameters.required is not []string")
 	}
-	// paths バッチモード統合により required は空配列（path/paths どちらも省略可能な設計）
-	if len(required) != 0 {
-		t.Errorf("read_file.Parameters.required = %v, want []", required)
+	if len(required) != 1 || required[0] != "paths" {
+		t.Errorf("read_file.Parameters.required = %v, want [paths]", required)
 	}
 }
 
@@ -373,7 +379,7 @@ func TestConvertToolCallToToolJSON(t *testing.T) {
 				Type: "function",
 				Function: api.OpenAIToolCallFunction{
 					Name:      "read_file",
-					Arguments: `{"path":"/test.txt"}`,
+					Arguments: `{"paths":["/test.txt"]}`,
 				},
 			},
 			wantID:   "call_abc123",

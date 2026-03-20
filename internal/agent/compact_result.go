@@ -34,14 +34,14 @@ func (a *Agent) compactToolResult(toolCall *tools.ToolCall, result string) strin
 		// 重複参照に差し替えられた場合でも、guidance があれば追記する。
 		// dedupe 結果はモデルに返るため、guidance を載せないと soft guard が効かない。
 		if guidance != "" {
-			deduped = appendGuidanceWithConfirm(a.readTracker, toolCall.Args["path"], deduped, guidance)
+			deduped = appendGuidanceWithConfirm(a.readTracker, readFileTrackerKey(toolCall.Args), deduped, guidance)
 		}
 		return deduped
 	}
 
 	// 3. guidance の追記（dedupe されなかった通常パス）
 	if guidance != "" {
-		result = appendGuidanceWithConfirm(a.readTracker, toolCall.Args["path"], result, guidance)
+		result = appendGuidanceWithConfirm(a.readTracker, readFileTrackerKey(toolCall.Args), result, guidance)
 	}
 
 	// 4. ツール種別に応じた圧縮

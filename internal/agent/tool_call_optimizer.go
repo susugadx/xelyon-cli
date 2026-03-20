@@ -45,19 +45,19 @@ func turnDedupKey(tc *tools.ToolCall) string {
 
 // ── read_file batching eligibility ──
 
-// isBatchableReadFile は read_file call が batch 対象（plain path read）かを判定する。
-// range read と内部 batch call は対象外。
+// isBatchableReadFile は read_file call が batch 対象（range なし read）かを判定する。
+// targeted read と内部 batch call は対象外。
 func isBatchableReadFile(tc *tools.ToolCall) bool {
 	if tc.Tool != "read_file" {
 		return false
 	}
-	if tc.Args["start_line"] != "" || tc.Args["end_line"] != "" {
+	if strings.EqualFold(tc.Args["_full_budget"], "true") {
 		return false
 	}
-	if tc.Args["paths"] != "" {
+	if readFileHasExplicitRange(tc.Args) {
 		return false
 	}
-	return tc.Args["path"] != ""
+	return len(readFilePathsFromArgs(tc.Args)) > 0
 }
 
 // ── read_file batch merge ──
@@ -88,8 +88,9 @@ func buildReadFileBatchToolCall(paths []string, fullBudget bool) *tools.ToolCall
 
 // readBatchSegment は変更系ツール境界間の batchable read_file 群を表す。
 type readBatchSegment struct {
-	indices []int
-	paths   []string
+	indices    []int
+	paths      []string
+	pathCounts []int
 }
 
 // segmentReadFileBatches は tool call リストからバッチ可能な read_file のセグメントを収集する。
@@ -114,8 +115,13 @@ func segmentReadFileBatches(allToolCalls []*tools.ToolCall, execFlags []bool) []
 		if !isBatchableReadFile(tc) {
 			continue
 		}
+		paths := readFilePathsFromArgs(tc.Args)
+		if len(paths) == 0 {
+			continue
+		}
 		current.indices = append(current.indices, i)
-		current.paths = append(current.paths, tc.Args["path"])
+		current.paths = append(current.paths, paths...)
+		current.pathCounts = append(current.pathCounts, len(paths))
 	}
 	// 最後のセグメント（上限チェックは実行時に chunk 分割する）
 	if len(current.indices) >= 2 {
@@ -178,6 +184,22 @@ func splitReadFileBatchResult(result string, paths []string) map[string]string {
 	}
 
 	return sections
+}
+
+func joinReadFileBatchSections(perFile map[string]string, paths []string) (string, bool) {
+	var sb strings.Builder
+	for i, path := range paths {
+		section, ok := perFile[path]
+		if !ok {
+			return "", false
+		}
+		if i > 0 {
+			sb.WriteString("\n")
+		}
+		fmt.Fprintf(&sb, "%s%s\n", readFileBatchHeaderPrefix, path)
+		sb.WriteString(section)
+	}
+	return sb.String(), true
 }
 
 // ── search_code multi-pattern batching ──

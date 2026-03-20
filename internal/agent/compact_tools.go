@@ -37,23 +37,10 @@ const guidanceTag = "\n\n[GUIDANCE]"
 
 // ── read_file ──
 
-// isTargetedRead は read_file 呼び出しが targeted read（line range 指定）か判定する。
+// isTargetedRead は read_file 呼び出しが targeted read か判定する。
 // targeted read は次の str_replace に必要な正確な内容を含むため、圧縮しない。
-// batch mode（paths 引数）では、1つでも "path:line-range" 形式が含まれていたら targeted と見なす。
 func isTargetedRead(args map[string]string) bool {
-	// single read mode
-	if _, ok := args["start_line"]; ok {
-		return true
-	}
-	if _, ok := args["end_line"]; ok {
-		return true
-	}
-
-	// batch read mode: paths に range 指定が1つでもあれば targeted
-	if pathsJSON := args["paths"]; pathsJSON != "" {
-		return pathsHasRange(pathsJSON)
-	}
-	return false
+	return readFileHasExplicitRange(args)
 }
 
 // pathsHasRange は paths JSON 配列内に "path:N" または "path:N-M" 形式が含まれるか判定する。

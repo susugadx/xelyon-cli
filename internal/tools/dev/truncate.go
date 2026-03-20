@@ -50,8 +50,8 @@ func TruncateWithFile(output string) string {
 	// 末尾30行を取得
 	tail := lastNLines(output, tailLineCount)
 
-	return fmt.Sprintf("Output saved: %s (%d lines, %dKB)\nLast %d lines:\n%s\n\nUse `read_file %s:1-50` to read specific sections.",
-		relPath, lineCount, sizeKB, tailLineCount, tail, relPath)
+	return fmt.Sprintf("Output saved: %s (%d lines, %dKB)\nLast %d lines:\n%s\n\nUse `read_file(paths=[%q])` to read specific sections.",
+		relPath, lineCount, sizeKB, tailLineCount, tail, relPath+":1-50")
 }
 
 // CleanupArtifacts は24時間以上前のartifactファイルを削除する。

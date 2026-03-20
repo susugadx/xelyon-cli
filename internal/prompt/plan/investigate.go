@@ -20,7 +20,7 @@ Allowed: inspect_symbol, search_code, read_file, list_dir, web_search, bash (rea
 -  Use read_file for detailed implementation context
 -  Use list_dir for current filesystem contents and choosing the next file/subtree
 -  Prefer parallel investigation: batch independent read_file/search_code/list_dir steps in one response
--  Reading 2+ independent files -> use read_file with paths parameter
+-  Reading 2+ independent files -> one read_file call with all paths
 -  Searching multiple independent patterns -> prefer one search_code call with comma-separated patterns
 -  For local changes (single function, local bug fix): read the target, check for immediate dependencies, then plan
 -  For shared changes (interface, public API, config, rename, delete): find ALL usages, dependencies, and tests before planning
@@ -29,7 +29,7 @@ Allowed: inspect_symbol, search_code, read_file, list_dir, web_search, bash (rea
 
 ### EXAMPLES
 - Exact Go symbol review -> inspect_symbol(symbol="chatCore", path="internal/agent/agent_chat.go")
-- Need implementation + tests -> use read_file(paths=[...]) when files are independent
+- Need implementation + tests -> read_file(paths=["impl.go", "impl_test.go"])
 - Need next file/subtree choice -> use list_dir first, then inspect only the selected target
 
 ### AFTER INVESTIGATION

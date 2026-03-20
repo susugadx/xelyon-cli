@@ -58,8 +58,8 @@ func TestSystemPrompt_ToolGuidanceMatchesCurrentSchema(t *testing.T) {
 	if !strings.Contains(SystemPrompt, "Go symbol lookup -> inspect_symbol.") {
 		t.Error("SystemPrompt should describe inspect_symbol as Go symbol lookup")
 	}
-	if !strings.Contains(SystemPrompt, "read_file uses path for one file and paths for multiple files") {
-		t.Error("SystemPrompt should describe current read_file path/paths behavior")
+	if !strings.Contains(SystemPrompt, "read_file returns full content for all requested files") {
+		t.Error("SystemPrompt should describe current read_file behavior")
 	}
 	forbidden := []string{
 		"search_code+read_file",
@@ -70,6 +70,10 @@ func TestSystemPrompt_ToolGuidanceMatchesCurrentSchema(t *testing.T) {
 		"token_budget",
 		"summary mode",
 		"full mode",
+		"start_line",
+		"end_line",
+		"line range",
+		"line-range",
 	}
 	for _, s := range forbidden {
 		if strings.Contains(SystemPrompt, s) {
@@ -85,7 +89,7 @@ func TestSystemPrompt_ParallelGuidanceIsConsolidated(t *testing.T) {
 	if !strings.Contains(SystemPrompt, "For shared changes, read target code and its callers/tests in parallel when independent") {
 		t.Error("SystemPrompt should keep shared-change parallel guidance")
 	}
-	if !strings.Contains(SystemPrompt, "Reading 2+ independent files -> use read_file with paths parameter") {
+	if !strings.Contains(SystemPrompt, "Reading 2+ independent files -> pass them all in one read_file call") {
 		t.Error("SystemPrompt should prefer read_file paths for multi-file reads")
 	}
 	if !strings.Contains(SystemPrompt, "prefer one search_code call with comma-separated patterns instead of serial searches") {

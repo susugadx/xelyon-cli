@@ -47,8 +47,8 @@ func TestExecuteToolCallsWithParallel_LoopDetection_PreventsExecution(t *testing
 
 	// 同じ read_file が3回 + 後続の search_code
 	toolCalls := []*tools.ToolCall{
-		{ID: "c1", Tool: "read_file", Args: map[string]string{"path": "/a.go"}, RawArgs: map[string]any{"path": "/a.go"}},
-		{ID: "c2", Tool: "read_file", Args: map[string]string{"path": "/a.go"}, RawArgs: map[string]any{"path": "/a.go"}},
+		{ID: "c1", Tool: "read_file", Args: testReadFileArgs("/a.go"), RawArgs: testReadFileRawArgs("/a.go")},
+		{ID: "c2", Tool: "read_file", Args: testReadFileArgs("/a.go"), RawArgs: testReadFileRawArgs("/a.go")},
 		{ID: "c3", Tool: "search_code", Args: map[string]string{"pattern": "foo"}, RawArgs: map[string]any{"pattern": "foo"}},
 	}
 
@@ -125,7 +125,7 @@ func TestExecuteToolCallsWithParallel_SkipFn_PlanningTools(t *testing.T) {
 
 	toolCalls := []*tools.ToolCall{
 		{ID: "c1", Tool: "create_plan", Args: map[string]string{"title": "Plan"}, RawArgs: map[string]any{"title": "Plan"}},
-		{ID: "c2", Tool: "read_file", Args: map[string]string{"path": "/a.go"}, RawArgs: map[string]any{"path": "/a.go"}},
+		{ID: "c2", Tool: "read_file", Args: testReadFileArgs("/a.go"), RawArgs: testReadFileRawArgs("/a.go")},
 		{ID: "c3", Tool: "update_plan", Args: map[string]string{"step_id": "1"}, RawArgs: map[string]any{"step_id": "1"}},
 	}
 
@@ -183,7 +183,7 @@ func TestExecuteToolCallsWithParallel_DeliveryOrder(t *testing.T) {
 	// parallel: read_file(0), search_code(2), list_dir(4)
 	// sequential: write_file(1), str_replace(3)
 	toolCalls := []*tools.ToolCall{
-		{ID: "c0", Tool: "read_file", Args: map[string]string{"path": "/a.go"}, RawArgs: map[string]any{"path": "/a.go"}},
+		{ID: "c0", Tool: "read_file", Args: testReadFileArgs("/a.go"), RawArgs: testReadFileRawArgs("/a.go")},
 		{ID: "c1", Tool: "write_file", Args: map[string]string{"path": "/b.go"}, RawArgs: map[string]any{"path": "/b.go"}},
 		{ID: "c2", Tool: "search_code", Args: map[string]string{"pattern": "foo"}, RawArgs: map[string]any{"pattern": "foo"}},
 		{ID: "c3", Tool: "str_replace", Args: map[string]string{"path": "/c.go"}, RawArgs: map[string]any{"path": "/c.go"}},
@@ -220,12 +220,12 @@ func TestExecuteToolCallsWithParallel_ContextCancel(t *testing.T) {
 	agent.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
 
 	toolCalls := []*tools.ToolCall{
-		{ID: "c0", Tool: "read_file", Args: map[string]string{"path": "/a.go"}, RawArgs: map[string]any{"path": "/a.go"}},
-		{ID: "c1", Tool: "read_file", Args: map[string]string{"path": "/b.go"}, RawArgs: map[string]any{"path": "/b.go"}},
-		{ID: "c2", Tool: "read_file", Args: map[string]string{"path": "/c.go"}, RawArgs: map[string]any{"path": "/c.go"}},
-		{ID: "c3", Tool: "read_file", Args: map[string]string{"path": "/d.go"}, RawArgs: map[string]any{"path": "/d.go"}},
-		{ID: "c4", Tool: "read_file", Args: map[string]string{"path": "/e.go"}, RawArgs: map[string]any{"path": "/e.go"}},
-		{ID: "c5", Tool: "read_file", Args: map[string]string{"path": "/f.go"}, RawArgs: map[string]any{"path": "/f.go"}},
+		{ID: "c0", Tool: "read_file", Args: testReadFileArgs("/a.go"), RawArgs: testReadFileRawArgs("/a.go")},
+		{ID: "c1", Tool: "read_file", Args: testReadFileArgs("/b.go"), RawArgs: testReadFileRawArgs("/b.go")},
+		{ID: "c2", Tool: "read_file", Args: testReadFileArgs("/c.go"), RawArgs: testReadFileRawArgs("/c.go")},
+		{ID: "c3", Tool: "read_file", Args: testReadFileArgs("/d.go"), RawArgs: testReadFileRawArgs("/d.go")},
+		{ID: "c4", Tool: "read_file", Args: testReadFileArgs("/e.go"), RawArgs: testReadFileRawArgs("/e.go")},
+		{ID: "c5", Tool: "read_file", Args: testReadFileArgs("/f.go"), RawArgs: testReadFileRawArgs("/f.go")},
 	}
 
 	agent.addToolCallsToHistory("test", toolCalls)
@@ -265,8 +265,8 @@ func TestExecuteToolCallsWithParallel_HistoryMessages(t *testing.T) {
 	// 順序: skip(c0) → execute(c1) → loop(c2=c1と同じ) → abort(c3)
 	toolCalls := []*tools.ToolCall{
 		{ID: "c0", Tool: "create_plan", Args: map[string]string{"title": "X"}, RawArgs: map[string]any{"title": "X"}},
-		{ID: "c1", Tool: "read_file", Args: map[string]string{"path": "/a.go"}, RawArgs: map[string]any{"path": "/a.go"}},
-		{ID: "c2", Tool: "read_file", Args: map[string]string{"path": "/a.go"}, RawArgs: map[string]any{"path": "/a.go"}}, // ループ
+		{ID: "c1", Tool: "read_file", Args: testReadFileArgs("/a.go"), RawArgs: testReadFileRawArgs("/a.go")},
+		{ID: "c2", Tool: "read_file", Args: testReadFileArgs("/a.go"), RawArgs: testReadFileRawArgs("/a.go")},             // ループ
 		{ID: "c3", Tool: "search_code", Args: map[string]string{"pattern": "x"}, RawArgs: map[string]any{"pattern": "x"}}, // ループ後スキップ
 	}
 
@@ -368,8 +368,8 @@ func TestExecuteToolCallsWithParallel_AllParallelConcurrency(t *testing.T) {
 		toolCalls[i] = &tools.ToolCall{
 			ID:      fmt.Sprintf("c%d", i),
 			Tool:    "read_file",
-			Args:    map[string]string{"path": fmt.Sprintf("/file%d.go", i)},
-			RawArgs: map[string]any{"path": fmt.Sprintf("/file%d.go", i)},
+			Args:    testReadFileArgs(fmt.Sprintf("/file%d.go", i)),
+			RawArgs: testReadFileRawArgs(fmt.Sprintf("/file%d.go", i)),
 		}
 	}
 
@@ -400,8 +400,8 @@ func TestExecuteToolCallsWithParallel_PrintsParallelGroup(t *testing.T) {
 		{
 			ID:      "c1",
 			Tool:    "read_file",
-			Args:    map[string]string{"path": "auto_compress.go"},
-			RawArgs: map[string]any{"path": "auto_compress.go"},
+			Args:    testReadFileArgs("auto_compress.go"),
+			RawArgs: testReadFileRawArgs("auto_compress.go"),
 		},
 		{
 			ID:   "c2",
@@ -460,8 +460,8 @@ func TestExecuteToolCallsWithParallel_ShowsSpinnerDuringParallelRun(t *testing.T
 	toolCalls := []*tools.ToolCall{{
 		ID:      "c1",
 		Tool:    "read_file",
-		Args:    map[string]string{"path": "a.go"},
-		RawArgs: map[string]any{"path": "a.go"},
+		Args:    testReadFileArgs("a.go"),
+		RawArgs: testReadFileRawArgs("a.go"),
 	}}
 
 	done := make(chan struct{})
@@ -504,7 +504,7 @@ func TestExecuteToolCallsWithParallel_TextBased_Skip(t *testing.T) {
 	// ID が空 = テキストベース
 	toolCalls := []*tools.ToolCall{
 		{Tool: "create_plan", Args: map[string]string{"title": "X"}, RawArgs: map[string]any{"title": "X"}},
-		{Tool: "read_file", Args: map[string]string{"path": "/a.go"}, RawArgs: map[string]any{"path": "/a.go"}},
+		{Tool: "read_file", Args: testReadFileArgs("/a.go"), RawArgs: testReadFileRawArgs("/a.go")},
 	}
 
 	skipFn := func(tc *tools.ToolCall) (bool, string) {
@@ -551,8 +551,8 @@ func TestLoopDetection_FC_MessageConsistency(t *testing.T) {
 	defer func() { cfg.LoopDetection.Threshold = origThreshold }()
 
 	toolCalls := []*tools.ToolCall{
-		{ID: "c1", Tool: "read_file", Args: map[string]string{"path": "/x.go"}, RawArgs: map[string]any{"path": "/x.go"}},
-		{ID: "c2", Tool: "read_file", Args: map[string]string{"path": "/x.go"}, RawArgs: map[string]any{"path": "/x.go"}},
+		{ID: "c1", Tool: "read_file", Args: testReadFileArgs("/x.go"), RawArgs: testReadFileRawArgs("/x.go")},
+		{ID: "c2", Tool: "read_file", Args: testReadFileArgs("/x.go"), RawArgs: testReadFileRawArgs("/x.go")},
 	}
 	agent.addToolCallsToHistory("test", toolCalls)
 	historyBefore := len(agent.History)
@@ -607,8 +607,8 @@ func TestLoopDetection_TextBased_TriggerMessage(t *testing.T) {
 
 	// ID="" = text-based
 	toolCalls := []*tools.ToolCall{
-		{Tool: "read_file", Args: map[string]string{"path": "/x.go"}, RawArgs: map[string]any{"path": "/x.go"}},
-		{Tool: "read_file", Args: map[string]string{"path": "/x.go"}, RawArgs: map[string]any{"path": "/x.go"}},
+		{Tool: "read_file", Args: testReadFileArgs("/x.go"), RawArgs: testReadFileRawArgs("/x.go")},
+		{Tool: "read_file", Args: testReadFileArgs("/x.go"), RawArgs: testReadFileRawArgs("/x.go")},
 	}
 	historyBefore := len(agent.History)
 
@@ -659,8 +659,8 @@ func TestLoopDetection_TextBased_SubsequentNoDummy(t *testing.T) {
 
 	// text-based (ID="") + 後続ツール
 	toolCalls := []*tools.ToolCall{
-		{Tool: "read_file", Args: map[string]string{"path": "/x.go"}, RawArgs: map[string]any{"path": "/x.go"}},
-		{Tool: "read_file", Args: map[string]string{"path": "/x.go"}, RawArgs: map[string]any{"path": "/x.go"}}, // trigger
+		{Tool: "read_file", Args: testReadFileArgs("/x.go"), RawArgs: testReadFileRawArgs("/x.go")},
+		{Tool: "read_file", Args: testReadFileArgs("/x.go"), RawArgs: testReadFileRawArgs("/x.go")},             // trigger
 		{Tool: "search_code", Args: map[string]string{"pattern": "y"}, RawArgs: map[string]any{"pattern": "y"}}, // subsequent
 	}
 	historyBefore := len(agent.History)
@@ -699,7 +699,7 @@ func TestExecuteToolCallsWithParallel_CancelBeforeExecution(t *testing.T) {
 	agent.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
 
 	toolCalls := []*tools.ToolCall{
-		{ID: "c0", Tool: "read_file", Args: map[string]string{"path": "/a.go"}, RawArgs: map[string]any{"path": "/a.go"}},
+		{ID: "c0", Tool: "read_file", Args: testReadFileArgs("/a.go"), RawArgs: testReadFileRawArgs("/a.go")},
 		{ID: "c1", Tool: "write_file", Args: map[string]string{"path": "/b.go"}, RawArgs: map[string]any{"path": "/b.go"}},
 	}
 	agent.addToolCallsToHistory("test", toolCalls)

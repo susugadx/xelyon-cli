@@ -293,7 +293,7 @@ func formatOutline(filePath string, lines []string, totalLines int) string {
 	}
 
 	// 4. Footer
-	fmt.Fprintf(&sb, "\n(%d lines total)\n", totalLines)
+	fmt.Fprintf(&sb, "\n(%d lines total. For specific sections: paths=[%q])\n", totalLines, filePath+":start-end")
 
 	return sb.String()
 }

@@ -99,7 +99,7 @@ func TestRecordToolResultOptimizations_OutlineFooterLegacyFormat(t *testing.T) {
 	a := &Agent{Stats: NewSessionStats("test")}
 	tc := &tools.ToolCall{Tool: "read_file"}
 
-	a.recordToolResultOptimizations(tc, "1: package main\n\n(2200 lines total. Use start_line/end_line to read specific sections)\n")
+	a.recordToolResultOptimizations(tc, "1: package main\n\n(2200 lines total. For specific sections: paths=[\"/tmp/file.go:start-end\"])\n")
 
 	if a.Stats.Optimizations.OutlineFirstCount != 1 {
 		t.Fatalf("OutlineFirstCount = %d, want 1", a.Stats.Optimizations.OutlineFirstCount)

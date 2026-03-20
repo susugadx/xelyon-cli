@@ -784,9 +784,9 @@ func (a *Agent) executeToolCallsWithParallel(
 	}
 
 	// ── Phase 0.5c: read_file batch merge ──
-	// 同一ターン内の plain read_file(path=...) を internal batch read にまとめて実行する。
+	// 同一ターン内の range なし read_file(paths=...) を internal batch read にまとめて実行する。
 	// duplicate suppression が先に効いた後の残りが対象。
-	// range 指定済みの call は isBatchableReadFile で除外される。
+	// targeted read は isBatchableReadFile で除外される。
 	//
 	// 変更系ツール（非 parallel-safe）の前後で区切ることで、
 	// read(a) -> write(b) -> read(b) のような並びで read(b) が更新前の内容を
@@ -798,26 +798,39 @@ func (a *Agent) executeToolCallsWithParallel(
 	readBatchSegments := segmentReadFileBatches(allToolCalls, execFlags)
 
 	for _, seg := range readBatchSegments {
-		// chunk 分割: maxReadFileBatchPaths 単位で分けて実行
-		for chunkStart := 0; chunkStart < len(seg.indices); chunkStart += maxReadFileBatchPaths {
-			chunkEnd := chunkStart + maxReadFileBatchPaths
-			if chunkEnd > len(seg.indices) {
-				chunkEnd = len(seg.indices)
+		// chunk 分割: 1 chunk あたり maxReadFileBatchPaths 件までの paths を含める
+		for callStart, pathStart := 0, 0; callStart < len(seg.indices); {
+			chunkCallStart := callStart
+			chunkPathStart := pathStart
+			chunkPathCount := 0
+
+			for callStart < len(seg.indices) {
+				callPathCount := seg.pathCounts[callStart]
+				if chunkPathCount > 0 && chunkPathCount+callPathCount > maxReadFileBatchPaths {
+					break
+				}
+				chunkPathCount += callPathCount
+				pathStart += callPathCount
+				callStart++
 			}
-			chunkIndices := seg.indices[chunkStart:chunkEnd]
-			chunkPaths := seg.paths[chunkStart:chunkEnd]
+
+			chunkIndices := seg.indices[chunkCallStart:callStart]
+			chunkPathCounts := seg.pathCounts[chunkCallStart:callStart]
+			chunkPaths := seg.paths[chunkPathStart : chunkPathStart+chunkPathCount]
 
 			if len(chunkIndices) < 2 {
-				continue // 単一ファイルは merge 不要
+				continue // 単一 call は merge 不要
 			}
 
 			mergedResult := a.executeReadFileBatch(ctx, chunkPaths)
 
 			perFile := splitReadFileBatchResult(mergedResult, chunkPaths)
 			if perFile != nil {
+				offset := 0
 				for j, idx := range chunkIndices {
-					path := chunkPaths[j]
-					if section, ok := perFile[path]; ok {
+					callPaths := chunkPaths[offset : offset+chunkPathCounts[j]]
+					offset += chunkPathCounts[j]
+					if section, ok := joinReadFileBatchSections(perFile, callPaths); ok {
 						results[idx] = toolExecResult{result: section}
 					} else {
 						results[idx] = toolExecResult{result: mergedResult}
@@ -971,7 +984,7 @@ func (a *Agent) executeToolCallsWithParallel(
 			// to keep the existing soft-guard behavior.
 			canonicalResult := sameTurnDuplicateMessage(tc.Tool)
 			if guidance := a.readTracker.record(tc); guidance != "" {
-				canonicalResult = appendGuidanceWithConfirm(a.readTracker, tc.Args["path"], canonicalResult, guidance)
+				canonicalResult = appendGuidanceWithConfirm(a.readTracker, readFileTrackerKey(tc.Args), canonicalResult, guidance)
 			}
 			if tc.ID != "" {
 				toolMsg := api.Message{

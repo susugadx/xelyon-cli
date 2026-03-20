@@ -57,7 +57,7 @@ func TestShouldAbortToolLoop_SameToolRepeated(t *testing.T) {
 
 	toolCall := &tools.ToolCall{
 		Tool: "read_file",
-		Args: map[string]string{"path": "/test.txt"},
+		Args: testReadFileArgs("/test.txt"),
 	}
 
 	count := 0
@@ -108,7 +108,7 @@ func TestShouldAbortToolLoop_DifferentTools(t *testing.T) {
 
 	toolCall1 := &tools.ToolCall{
 		Tool: "read_file",
-		Args: map[string]string{"path": "/test.txt"},
+		Args: testReadFileArgs("/test.txt"),
 	}
 
 	toolCall2 := &tools.ToolCall{
@@ -144,7 +144,7 @@ func TestExecuteToolCall_UpdatesHistory(t *testing.T) {
 
 	toolCall := &tools.ToolCall{
 		Tool: "read_file",
-		Args: map[string]string{"path": "/nonexistent.txt"},
+		Args: testReadFileArgs("/nonexistent.txt"),
 	}
 
 	agent.executeToolCall("test response", toolCall)
@@ -171,7 +171,7 @@ func TestExecuteToolCall_UpdatesStats(t *testing.T) {
 
 	toolCall := &tools.ToolCall{
 		Tool: "read_file",
-		Args: map[string]string{"path": "/test.txt"},
+		Args: testReadFileArgs("/test.txt"),
 	}
 
 	agent.executeToolCall("test response", toolCall)
@@ -266,7 +266,7 @@ func TestExtractExplanationAndTool_NoToolCall(t *testing.T) {
 }
 
 func TestExtractExplanationAndTool_OnlyToolCall(t *testing.T) {
-	response := `{"tool": "read_file", "args": {"path": "/test.txt"}}`
+	response := `{"tool": "read_file", "args": {"paths": ["/test.txt"]}}`
 
 	explanation, toolJSON := extractExplanationAndTool(response)
 
@@ -282,7 +282,7 @@ func TestExtractExplanationAndTool_OnlyToolCall(t *testing.T) {
 func TestExtractExplanationAndTool_BothParts(t *testing.T) {
 	response := `I'll read the file for you.
 
-{"tool": "read_file", "args": {"path": "/test.txt"}}`
+{"tool": "read_file", "args": {"paths": ["/test.txt"]}}`
 
 	explanation, toolJSON := extractExplanationAndTool(response)
 
@@ -291,7 +291,7 @@ func TestExtractExplanationAndTool_BothParts(t *testing.T) {
 		t.Errorf("extractExplanationAndTool() explanation = %q, want %q", explanation, expectedExplanation)
 	}
 
-	expectedToolJSON := `{"tool": "read_file", "args": {"path": "/test.txt"}}`
+	expectedToolJSON := `{"tool": "read_file", "args": {"paths": ["/test.txt"]}}`
 	if toolJSON != expectedToolJSON {
 		t.Errorf("extractExplanationAndTool() toolJSON = %q, want %q", toolJSON, expectedToolJSON)
 	}
@@ -349,12 +349,12 @@ func TestExtractExplanationAndTool_EscapedQuotes(t *testing.T) {
 
 func TestExtractExplanationAndTool_MultipleJSONObjects(t *testing.T) {
 	// Only the first tool call should be extracted
-	response := `{"tool": "read_file", "args": {"path": "/a.txt"}}
-{"tool": "read_file", "args": {"path": "/b.txt"}}`
+	response := `{"tool": "read_file", "args": {"paths": ["/a.txt"]}}
+{"tool": "read_file", "args": {"paths": ["/b.txt"]}}`
 
 	_, toolJSON := extractExplanationAndTool(response)
 
-	expectedFirst := `{"tool": "read_file", "args": {"path": "/a.txt"}}`
+	expectedFirst := `{"tool": "read_file", "args": {"paths": ["/a.txt"]}}`
 	if toolJSON != expectedFirst {
 		t.Errorf("extractExplanationAndTool() should extract first tool call only, got %q", toolJSON)
 	}
@@ -414,7 +414,7 @@ func TestExecuteToolCallWithResult(t *testing.T) {
 
 	toolCall := &tools.ToolCall{
 		Tool: "read_file",
-		Args: map[string]string{"path": "/nonexistent-file-for-test.txt"},
+		Args: testReadFileArgs("/nonexistent-file-for-test.txt"),
 	}
 
 	result := agent.executeToolCallWithResult("test response", toolCall)

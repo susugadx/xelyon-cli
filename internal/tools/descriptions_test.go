@@ -59,8 +59,8 @@ func TestToolDescriptions_ListDirMentionsCompactSummaryAndNextChoice(t *testing.
 }
 
 func TestToolDescriptions_ReadFileAndSearchCodeDescribeCurrentUsage(t *testing.T) {
-	if !strings.Contains(ToolDescriptions["read_file"], "Use path for one file, paths for multiple files in one call") {
-		t.Error("read_file description should describe path/paths usage")
+	if !strings.Contains(ToolDescriptions["read_file"], "Read files (1-10). Returns full content.") {
+		t.Error("read_file description should describe the simplified paths-only usage")
 	}
 	if !strings.Contains(ToolDescriptions["read_file"], "Do not re-read files already returned") {
 		t.Error("read_file description should discourage rereading returned files")

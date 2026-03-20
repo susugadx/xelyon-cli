@@ -21,23 +21,21 @@ func TestReadFileTool_SchemaAndRun(t *testing.T) {
 	if !ok {
 		t.Fatal("expected properties map")
 	}
-	if len(props) != 4 {
-		t.Fatalf("expected 4 read_file parameters, got %d", len(props))
-	}
-	if _, ok := props["path"]; !ok {
-		t.Fatal("expected path parameter")
+	if len(props) != 1 {
+		t.Fatalf("expected 1 read_file parameter, got %d", len(props))
 	}
 	if _, ok := props["paths"]; !ok {
 		t.Fatal("expected paths parameter")
 	}
-	if _, ok := props["start_line"]; !ok {
-		t.Fatal("expected start_line parameter")
-	}
-	if _, ok := props["end_line"]; !ok {
-		t.Fatal("expected end_line parameter")
-	}
 	if _, ok := props["symbol"]; ok {
 		t.Fatal("symbol parameter should be removed")
+	}
+	required, ok := params["required"].([]string)
+	if !ok {
+		t.Fatal("expected required array")
+	}
+	if len(required) != 1 || required[0] != "paths" {
+		t.Fatalf("expected required=[paths], got %#v", required)
 	}
 	pathsParam, ok := props["paths"].(map[string]interface{})
 	if !ok {
@@ -57,9 +55,14 @@ func TestReadFileTool_SchemaAndRun(t *testing.T) {
 		Stderr: io.Discard,
 	}
 
-	t.Run("single_path_normal", func(t *testing.T) {
+	t.Run("single_path_via_paths", func(t *testing.T) {
+		pathsJSON, err := json.Marshal([]string{testFile})
+		if err != nil {
+			t.Fatalf("json.Marshal() error = %v", err)
+		}
+
 		result, _, err := tool.Run(execCtx, map[string]string{
-			"path": testFile,
+			"paths": string(pathsJSON),
 		})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -146,7 +149,7 @@ func TestReadFileTool_SchemaAndRun(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if strings.Contains(result, "lines total)") {
+		if strings.Contains(result, "lines total") {
 			t.Fatalf("full budget batch should return full content, got: %s", result)
 		}
 		if !strings.Contains(result, "180: line180") {
@@ -154,7 +157,7 @@ func TestReadFileTool_SchemaAndRun(t *testing.T) {
 		}
 	})
 
-	t.Run("invalid_paths_without_path_errors", func(t *testing.T) {
+	t.Run("invalid_paths_errors", func(t *testing.T) {
 		result, _, err := tool.Run(execCtx, map[string]string{
 			"paths": "not-json",
 		})
@@ -166,12 +169,24 @@ func TestReadFileTool_SchemaAndRun(t *testing.T) {
 		}
 	})
 
-	t.Run("path_required", func(t *testing.T) {
+	t.Run("empty_paths_errors", func(t *testing.T) {
+		result, _, err := tool.Run(execCtx, map[string]string{
+			"paths": "[]",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(result, "Error: paths is empty") {
+			t.Fatalf("expected empty paths error, got: %s", result)
+		}
+	})
+
+	t.Run("paths_required", func(t *testing.T) {
 		result, _, err := tool.Run(execCtx, map[string]string{})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if !strings.Contains(result, "Error: path or paths is required") {
+		if !strings.Contains(result, "Error: paths is required") {
 			t.Fatalf("expected error, got: %s", result)
 		}
 	})

@@ -224,7 +224,7 @@ func TestExecuteReadFiles_BudgetOutlineMode(t *testing.T) {
 
 	output := ExecuteReadFiles(paths)
 
-	if !strings.Contains(output, "(200 lines total)") {
+	if !strings.Contains(output, `(200 lines total. For specific sections: paths=["`) {
 		t.Error("Expected outline mode with total-lines footer")
 	}
 	if !strings.Contains(output, "1: line1") {
@@ -252,7 +252,7 @@ func TestExecuteReadFiles_SmallFilesFullContent(t *testing.T) {
 	if !strings.Contains(output, "50: line50") {
 		t.Error("Expected full content with line 50")
 	}
-	if strings.Contains(output, "lines total)") {
+	if strings.Contains(output, "lines total") {
 		t.Error("Small files should NOT have outline footer")
 	}
 }
@@ -295,12 +295,12 @@ func TestExecuteReadFilesWithBudget_FullBudgetPreservesContent(t *testing.T) {
 	}
 
 	normalOutput := ExecuteReadFiles(paths)
-	if !strings.Contains(normalOutput, "(180 lines total)") {
+	if !strings.Contains(normalOutput, `(180 lines total. For specific sections: paths=["`) {
 		t.Fatal("Expected normal 3-file read to use outline mode for 180-line files")
 	}
 
 	fullOutput := ExecuteReadFilesWithBudget(common.DefaultOutput(), paths, DefaultFullLines)
-	if strings.Contains(fullOutput, "lines total)") {
+	if strings.Contains(fullOutput, "lines total") {
 		t.Error("ExecuteReadFilesWithBudget with DefaultFullLines should NOT use outline for 180-line files")
 	}
 	if !strings.Contains(fullOutput, "180: line180") {
@@ -338,12 +338,12 @@ func TestExecuteReadFilesWithRuntime_ConsistentWithSingleRead(t *testing.T) {
 	}
 
 	singleOutput := ExecuteReadFileWithRuntime(common.DefaultOutput(), nil, nil, paths[0], 0, 0)
-	if strings.Contains(singleOutput, "lines total)") {
+	if strings.Contains(singleOutput, "lines total") {
 		t.Fatal("single read should show full content for 150-line file")
 	}
 
 	batchOutput := ExecuteReadFilesWithRuntime(common.DefaultOutput(), nil, nil, paths, DefaultFullLines)
-	if strings.Contains(batchOutput, "lines total)") {
+	if strings.Contains(batchOutput, "lines total") {
 		t.Error("batch read with DefaultFullLines should NOT use outline for 150-line files")
 	}
 	if !strings.Contains(batchOutput, "150: line150") {

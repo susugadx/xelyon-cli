@@ -2,6 +2,7 @@ package ui
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"io"
 	"regexp"
@@ -174,7 +175,9 @@ func toolTarget(info ToolDisplayInfo) string {
 			target += " in " + path
 		}
 		return target
-	case info.ToolName == "read_file", info.ToolName == "write_file", info.ToolName == "str_replace", info.ToolName == "delete_file":
+	case info.ToolName == "read_file":
+		return readFileDisplayTarget(info.Args)
+	case info.ToolName == "write_file", info.ToolName == "str_replace", info.ToolName == "delete_file":
 		return strings.TrimSpace(info.Args["path"])
 	case info.ToolName == "copy_file":
 		src := strings.TrimSpace(info.Args["src"])
@@ -203,7 +206,14 @@ func toolTarget(info ToolDisplayInfo) string {
 }
 
 func formatReadFileSummary(args map[string]string, result string) string {
-	path := strings.TrimSpace(args["path"])
+	paths := readFileArgsPaths(args)
+	if len(paths) > 1 {
+		return fmt.Sprintf("%d files", len(paths))
+	}
+	path := ""
+	if len(paths) == 1 {
+		path = paths[0]
+	}
 
 	if matches := outlineSummaryPattern.FindStringSubmatch(result); len(matches) == 2 {
 		if total, err := strconv.Atoi(matches[1]); err == nil {
@@ -361,33 +371,41 @@ func lineRangeFromResult(result string) (int, int, bool) {
 }
 
 func countPathsArg(paths string) int {
-	paths = strings.TrimSpace(paths)
-	if paths == "" {
-		return 0
-	}
-	if !strings.HasPrefix(paths, "[") || !strings.HasSuffix(paths, "]") {
-		return 0
-	}
+	return len(readFilePathsArg(paths))
+}
 
-	trimmed := strings.Trim(paths, "[]")
-	if strings.TrimSpace(trimmed) == "" {
-		return 0
+func readFileDisplayTarget(args map[string]string) string {
+	paths := readFileArgsPaths(args)
+	switch len(paths) {
+	case 0:
+		return ""
+	case 1:
+		return paths[0]
+	default:
+		return fmt.Sprintf("%d files", len(paths))
 	}
+}
 
-	count := 0
-	inString := false
-	for i := 0; i < len(trimmed); i++ {
-		switch trimmed[i] {
-		case '"':
-			if i == 0 || trimmed[i-1] != '\\' {
-				inString = !inString
-				if !inString {
-					count++
-				}
-			}
-		}
+func readFileArgsPaths(args map[string]string) []string {
+	if paths := readFilePathsArg(args["paths"]); len(paths) > 0 {
+		return paths
 	}
-	return count
+	if path := strings.TrimSpace(args["path"]); path != "" {
+		return []string{path}
+	}
+	return nil
+}
+
+func readFilePathsArg(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	var paths []string
+	if err := json.Unmarshal([]byte(raw), &paths); err != nil {
+		return nil
+	}
+	return paths
 }
 
 func firstNonEmpty(args map[string]string, order ...string) string {

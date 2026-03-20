@@ -10,7 +10,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
-// ReadFileTool needs special handling for optional line range
+// ReadFileTool は1回の呼び出しで1個以上のファイルを読み込むツール。
 type ReadFileTool struct{}
 
 func (t *ReadFileTool) Name() string { return "read_file" }
@@ -23,17 +23,14 @@ func (t *ReadFileTool) Parameters() map[string]interface{} {
 	return map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
-			"path": map[string]interface{}{"type": "string", "description": "File path. Returns full content. Do not re-read a file already returned."},
 			"paths": map[string]interface{}{
 				"type":        "array",
 				"items":       map[string]interface{}{"type": "string"},
 				"maxItems":    MaxReadFilesPaths,
-				"description": "Read multiple files in one call (max 10). Preferred when reading 2+ independent files.",
+				"description": "Files to read (1-10). Returns full content. Do not re-read files already returned.",
 			},
-			"start_line": map[string]interface{}{"type": "integer", "description": "Start line (1-indexed). Only for very large files that were truncated."},
-			"end_line":   map[string]interface{}{"type": "integer", "description": "End line (1-indexed). Only for very large files that were truncated."},
 		},
-		"required":             []string{},
+		"required":             []string{"paths"},
 		"additionalProperties": false,
 	}
 }
@@ -41,47 +38,31 @@ func (t *ReadFileTool) Parameters() map[string]interface{} {
 func (t *ReadFileTool) Run(execCtx tools.ExecutionContext, args map[string]string) (string, *tools.FileChange, error) {
 	out := execCtx.Output()
 
-	// バッチモード: paths が指定されている場合
-	if rawPaths := args["paths"]; rawPaths != "" {
-		var paths []string
-		if err := json.Unmarshal([]byte(rawPaths), &paths); err != nil {
-			if args["path"] == "" {
-				return fmt.Sprintf("Error: invalid paths format: %v", err), nil, nil
-			}
-			// path が有効 → 単体モードへフォールスルー
-		} else if len(paths) > 0 {
-			budgetOverride := 0
-			if strings.EqualFold(args["_full_budget"], "true") {
-				budgetOverride = DefaultFullLines
-			}
-			return ExecuteReadFilesWithRuntime(
-				out,
-				execCtx.EffectiveConfig(),
-				execCtx.EffectiveToolCache(),
-				paths,
-				budgetOverride,
-			), nil, nil
-		} else if args["path"] == "" {
-			return "Error: path or paths is required", nil, nil
-		}
+	rawPaths := args["paths"]
+	if rawPaths == "" {
+		return "Error: paths is required", nil, nil
 	}
 
-	// 単体モード
-	if args["path"] == "" {
-		return "Error: path or paths is required", nil, nil
+	var paths []string
+	if err := json.Unmarshal([]byte(rawPaths), &paths); err != nil {
+		return fmt.Sprintf("Error: invalid paths format: %v", err), nil, nil
 	}
-	startLine, endLine := 0, 0
-	if args["start_line"] != "" {
-		if n, err := strconv.Atoi(args["start_line"]); err == nil {
-			startLine = n
-		}
+	if len(paths) == 0 {
+		return "Error: paths is empty", nil, nil
 	}
-	if args["end_line"] != "" {
-		if n, err := strconv.Atoi(args["end_line"]); err == nil {
-			endLine = n
-		}
+
+	budgetOverride := 0
+	if strings.EqualFold(args["_full_budget"], "true") {
+		budgetOverride = DefaultFullLines
 	}
-	return ExecuteReadFileWithRuntime(out, execCtx.EffectiveConfig(), execCtx.EffectiveToolCache(), args["path"], startLine, endLine), nil, nil
+
+	return ExecuteReadFilesWithRuntime(
+		out,
+		execCtx.EffectiveConfig(),
+		execCtx.EffectiveToolCache(),
+		paths,
+		budgetOverride,
+	), nil, nil
 }
 
 // WriteFileTool wraps write_file execution

@@ -90,7 +90,9 @@ func TestIsBatchableReadFile(t *testing.T) {
 		{"plain path", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"path": "/a.go"}}, true},
 		{"range read", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"path": "/a.go", "start_line": "1", "end_line": "50"}}, false},
 		{"start_line only", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"path": "/a.go", "start_line": "1"}}, false},
-		{"paths specified", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"paths": `["a.go","b.go"]`}}, false},
+		{"paths single", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"paths": `["a.go"]`}}, true},
+		{"paths specified", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"paths": `["a.go","b.go"]`}}, true},
+		{"paths with range", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"paths": `["a.go:1-20","b.go"]`}}, false},
 		{"empty path", &tools.ToolCall{Tool: "read_file", Args: map[string]string{}}, false},
 		{"not read_file", &tools.ToolCall{Tool: "search_code", Args: map[string]string{"path": "/a.go"}}, false},
 	}
@@ -1076,7 +1078,9 @@ func TestIsBatchableReadFile_Comprehensive(t *testing.T) {
 		{"range read", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"path": "/a.go", "start_line": "1", "end_line": "50"}}, false},
 		{"start_line only", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"path": "/a.go", "start_line": "1"}}, false},
 		{"end_line only", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"path": "/a.go", "end_line": "50"}}, false},
-		{"paths specified", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"paths": `["a.go","b.go"]`}}, false},
+		{"paths single", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"paths": `["a.go"]`}}, true},
+		{"paths specified", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"paths": `["a.go","b.go"]`}}, true},
+		{"paths specified with range", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"paths": `["a.go:10-20","b.go"]`}}, false},
 		{"empty path", &tools.ToolCall{Tool: "read_file", Args: map[string]string{}}, false},
 		{"not read_file", &tools.ToolCall{Tool: "search_code", Args: map[string]string{"path": "/a.go"}}, false},
 	}

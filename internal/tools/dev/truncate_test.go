@@ -75,10 +75,10 @@ func TestTruncateWithFile_OverLimit_Format(t *testing.T) {
 	}
 
 	// read_file ヒントが含まれること
-	if !strings.Contains(result, "Use `read_file .xelyon/artifacts/output_") {
+	if !strings.Contains(result, "Use `read_file(paths=[\".xelyon/artifacts/output_") {
 		t.Error("should contain read_file hint")
 	}
-	if !strings.Contains(result, ":1-50` to read specific sections.") {
+	if !strings.Contains(result, ":1-50\"])` to read specific sections.") {
 		t.Error("should contain read_file range hint")
 	}
 }

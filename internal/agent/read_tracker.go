@@ -58,7 +58,7 @@ func (rt *readTracker) record(toolCall *tools.ToolCall) string {
 		return ""
 	}
 
-	path := toolCall.Args["path"]
+	path := readFileTrackerKey(toolCall.Args)
 	if path == "" {
 		return ""
 	}

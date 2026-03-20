@@ -190,7 +190,7 @@ func TestAllBuiltinToolsHaveDefinitions(t *testing.T) {
 
 func TestGeminiFunctionCallStructure(t *testing.T) {
 	// JSON からパースできることを確認
-	jsonData := `{"name": "read_file", "args": {"path": "/test/file.txt", "start_line": 1}}`
+	jsonData := `{"name": "read_file", "args": {"paths": ["/test/file.txt"]}}`
 
 	var fc api.GeminiFunctionCall
 	if err := json.Unmarshal([]byte(jsonData), &fc); err != nil {
@@ -201,13 +201,12 @@ func TestGeminiFunctionCallStructure(t *testing.T) {
 		t.Errorf("Expected name=read_file, got %s", fc.Name)
 	}
 
-	if fc.Args["path"] != "/test/file.txt" {
-		t.Errorf("Expected path=/test/file.txt, got %v", fc.Args["path"])
+	paths, ok := fc.Args["paths"].([]any)
+	if !ok {
+		t.Fatalf("Expected paths to be []any, got %T", fc.Args["paths"])
 	}
-
-	// start_line は数値として解析される
-	if fc.Args["start_line"] != float64(1) {
-		t.Errorf("Expected start_line=1, got %v (type: %T)", fc.Args["start_line"], fc.Args["start_line"])
+	if len(paths) != 1 || paths[0] != "/test/file.txt" {
+		t.Errorf("Expected paths=[/test/file.txt], got %v", paths)
 	}
 }
 

@@ -42,7 +42,7 @@ func TestFormatToolLine_ReadFile(t *testing.T) {
 	line := FormatToolLine(ToolDisplayInfo{
 		ToolName: "read_file",
 		Args: map[string]string{
-			"path": "example.txt",
+			"paths": `["example.txt"]`,
 		},
 		Result: "1: line1\n2: line2\n3: line3\n",
 	})
@@ -57,9 +57,9 @@ func TestFormatToolLine_ReadFile_GoOutline(t *testing.T) {
 	line := FormatToolLine(ToolDisplayInfo{
 		ToolName: "read_file",
 		Args: map[string]string{
-			"path": "server.go",
+			"paths": `["server.go"]`,
 		},
-		Result: "1: package main\n\n--- Signatures ---\n  L50  func Build\n\n(200 lines total)\n",
+		Result: "1: package main\n\n--- Signatures ---\n  L50  func Build\n\n(200 lines total. For specific sections: paths=[\"server.go:start-end\"])\n",
 	})
 
 	want := `📄 read_file: server.go (outline of 200 lines)`
@@ -72,12 +72,27 @@ func TestFormatToolLine_ReadFile_NonGoOutline(t *testing.T) {
 	line := FormatToolLine(ToolDisplayInfo{
 		ToolName: "read_file",
 		Args: map[string]string{
-			"path": "data.txt",
+			"paths": `["data.txt"]`,
 		},
-		Result: "1: header\n\n--- Last lines ---\n150: end\n\n(150 lines total)\n",
+		Result: "1: header\n\n--- Last lines ---\n150: end\n\n(150 lines total. For specific sections: paths=[\"data.txt:start-end\"])\n",
 	})
 
 	want := `📄 read_file: data.txt (outline of 150 lines)`
+	if line != want {
+		t.Fatalf("FormatToolLine() = %q, want %q", line, want)
+	}
+}
+
+func TestFormatToolLine_ReadFile_MultiPaths(t *testing.T) {
+	line := FormatToolLine(ToolDisplayInfo{
+		ToolName: "read_file",
+		Args: map[string]string{
+			"paths": `["a.go","b.go"]`,
+		},
+		Result: "📄 File: a.go\n1: package main\n\n📄 File: b.go\n1: package util\n",
+	})
+
+	want := "📄 read_file: 2 files"
 	if line != want {
 		t.Fatalf("FormatToolLine() = %q, want %q", line, want)
 	}
