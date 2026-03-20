@@ -59,11 +59,11 @@ func TestToolDescriptions_ListDirMentionsCompactSummaryAndNextChoice(t *testing.
 }
 
 func TestToolDescriptions_ReadFileAndSearchCodeDescribeCurrentUsage(t *testing.T) {
-	if !strings.Contains(ToolDescriptions["read_file"], "full content for small files") {
-		t.Error("read_file description should mention full content for small files")
+	if !strings.Contains(ToolDescriptions["read_file"], "full content for most files") {
+		t.Error("read_file description should mention full content for most files")
 	}
-	if !strings.Contains(ToolDescriptions["read_file"], "outline for larger files") {
-		t.Error("read_file description should mention outlines for larger files")
+	if !strings.Contains(ToolDescriptions["read_file"], "Do not re-read a file already returned in full") {
+		t.Error("read_file description should discourage rereading full file content")
 	}
 	if !strings.Contains(ToolDescriptions["search_code"], "prefer one multi-pattern search over serial searches") {
 		t.Error("search_code description should prefer multi-pattern searches over serial searches")

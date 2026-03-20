@@ -185,13 +185,13 @@ func TestPerFileBudget(t *testing.T) {
 		n    int
 		want int
 	}{
-		{1, DefaultFullLines}, // 500/1=500, capped to DefaultFullLines(500)
-		{2, 250},              // 500/2=250
-		{3, 166},              // 500/3=166, within range
-		{5, 100},              // 500/5=100, within range
-		{6, 83},               // 500/6=83
-		{10, 50},              // 500/10=50
-		{20, 30},              // 500/20=25, floored to 30
+		{1, readFilesBudgetPool},
+		{2, 250},
+		{3, 166},
+		{5, 100},
+		{6, 83},
+		{10, 50},
+		{20, 30},
 	}
 	for _, tt := range tests {
 		got := perFileBudget(tt.n)
@@ -224,15 +224,12 @@ func TestExecuteReadFiles_BudgetOutlineMode(t *testing.T) {
 
 	output := ExecuteReadFiles(paths)
 
-	// outline モードが適用される（ガイドメッセージが含まれる）
-	if !strings.Contains(output, "Use start_line/end_line") {
-		t.Error("Expected outline mode with guide message")
+	if !strings.Contains(output, "(200 lines total)") {
+		t.Error("Expected outline mode with total-lines footer")
 	}
-	// 先頭行が含まれる
 	if !strings.Contains(output, "1: line1") {
 		t.Error("Expected head lines to be present")
 	}
-	// 末尾セクションが含まれる
 	if !strings.Contains(output, "Last lines") {
 		t.Error("Expected 'Last lines' section")
 	}
@@ -252,13 +249,11 @@ func TestExecuteReadFiles_SmallFilesFullContent(t *testing.T) {
 
 	output := ExecuteReadFiles(paths)
 
-	// 全文が返却される
 	if !strings.Contains(output, "50: line50") {
 		t.Error("Expected full content with line 50")
 	}
-	// outline ガイドメッセージが含まれない
-	if strings.Contains(output, "Use start_line/end_line") {
-		t.Error("Small files should NOT have outline guide message")
+	if strings.Contains(output, "lines total)") {
+		t.Error("Small files should NOT have outline footer")
 	}
 }
 
@@ -292,8 +287,6 @@ func TestExecuteReadFilesWithBudget_FullBudgetPreservesContent(t *testing.T) {
 	setupTestMocks(t)
 	tmpDir := t.TempDir()
 
-	// 180行のファイル3個: perFileBudget(3)=166 → outline になる
-	// DefaultFullLines=500 なら 180 < 500 で全文返却
 	paths := make([]string, 3)
 	for i := range paths {
 		name := fmt.Sprintf("f%d.go", i)
@@ -301,18 +294,15 @@ func TestExecuteReadFilesWithBudget_FullBudgetPreservesContent(t *testing.T) {
 		paths[i] = filepath.Join(tmpDir, name)
 	}
 
-	// perFileBudget(3) = 166: 180 > 166 → outline
 	normalOutput := ExecuteReadFiles(paths)
-	if !strings.Contains(normalOutput, "Use start_line/end_line") {
+	if !strings.Contains(normalOutput, "(180 lines total)") {
 		t.Fatal("Expected normal 3-file read to use outline mode for 180-line files")
 	}
 
-	// budgetOverride=DefaultFullLines(500): 180 < 500 → 全文
 	fullOutput := ExecuteReadFilesWithBudget(common.DefaultOutput(), paths, DefaultFullLines)
-	if strings.Contains(fullOutput, "Use start_line/end_line") {
+	if strings.Contains(fullOutput, "lines total)") {
 		t.Error("ExecuteReadFilesWithBudget with DefaultFullLines should NOT use outline for 180-line files")
 	}
-	// 全文が返却される
 	if !strings.Contains(fullOutput, "180: line180") {
 		t.Error("Expected full content with line 180")
 	}
@@ -347,18 +337,15 @@ func TestExecuteReadFilesWithRuntime_ConsistentWithSingleRead(t *testing.T) {
 		paths[i] = filepath.Join(tmpDir, name)
 	}
 
-	// single read: DefaultFullLines(500) → 150 < 500 → 全文
 	singleOutput := ExecuteReadFileWithRuntime(common.DefaultOutput(), nil, nil, paths[0], 0, 0)
-	if strings.Contains(singleOutput, "Use start_line/end_line") {
+	if strings.Contains(singleOutput, "lines total)") {
 		t.Fatal("single read should show full content for 150-line file")
 	}
 
-	// batch read with runtime: DefaultFullLines(500) → 150 < 500 → 全文
 	batchOutput := ExecuteReadFilesWithRuntime(common.DefaultOutput(), nil, nil, paths, DefaultFullLines)
-	if strings.Contains(batchOutput, "Use start_line/end_line") {
+	if strings.Contains(batchOutput, "lines total)") {
 		t.Error("batch read with DefaultFullLines should NOT use outline for 150-line files")
 	}
-	// 全ファイルの全行が含まれる
 	if !strings.Contains(batchOutput, "150: line150") {
 		t.Error("Expected full content with line 150")
 	}

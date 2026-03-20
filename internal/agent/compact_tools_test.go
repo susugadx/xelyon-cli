@@ -125,7 +125,7 @@ func TestCompactReadFile_LargeFile(t *testing.T) {
 	for i := 1; i <= 200; i++ {
 		lines = append(lines, fmt.Sprintf("%d: line content %d", i, i))
 	}
-	lines = append(lines, "(200 lines total. Use start_line/end_line to read specific sections)")
+	lines = append(lines, "(200 lines total)")
 	input := strings.Join(lines, "\n")
 
 	args := map[string]string{"path": "foo.go"}

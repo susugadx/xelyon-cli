@@ -22,9 +22,9 @@ func (t *ReadFileTool) Parameters() map[string]interface{} {
 	return map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
-			"path":       map[string]interface{}{"type": "string", "description": "Absolute or relative file path to read. Without start_line/end_line, returns full content for small files or an outline with signatures for larger files."},
-			"start_line": map[string]interface{}{"type": "integer", "description": "Start line number (1-indexed). Use only when the target section is already known."},
-			"end_line":   map[string]interface{}{"type": "integer", "description": "End line number (1-indexed). Omit to read up to 300 lines from start_line."},
+			"path":       map[string]interface{}{"type": "string", "description": "File path to read. Returns full content for most files. Do not re-read a file already returned in full."},
+			"start_line": map[string]interface{}{"type": "integer", "description": "Start line number (1-indexed). Only for very large files (2000+ lines) or specific sections of unread files."},
+			"end_line":   map[string]interface{}{"type": "integer", "description": "End line number (1-indexed). Omit to read up to 1000 lines from start_line."},
 		},
 		"required":             []string{},
 		"additionalProperties": false,

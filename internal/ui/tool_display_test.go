@@ -59,7 +59,7 @@ func TestFormatToolLine_ReadFile_GoOutline(t *testing.T) {
 		Args: map[string]string{
 			"path": "server.go",
 		},
-		Result: "1: package main\n\n--- Signatures ---\n  L50  func Build\n\n(200 lines total. Use start_line/end_line to read specific sections)\n",
+		Result: "1: package main\n\n--- Signatures ---\n  L50  func Build\n\n(200 lines total)\n",
 	})
 
 	want := `📄 read_file: server.go (outline of 200 lines)`
@@ -74,7 +74,7 @@ func TestFormatToolLine_ReadFile_NonGoOutline(t *testing.T) {
 		Args: map[string]string{
 			"path": "data.txt",
 		},
-		Result: "1: header\n\n--- Last lines ---\n150: end\n\n(150 lines total. Use start_line/end_line to read specific sections)\n",
+		Result: "1: header\n\n--- Last lines ---\n150: end\n\n(150 lines total)\n",
 	})
 
 	want := `📄 read_file: data.txt (outline of 150 lines)`

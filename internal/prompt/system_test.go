@@ -58,7 +58,7 @@ func TestSystemPrompt_ToolGuidanceMatchesCurrentSchema(t *testing.T) {
 	if !strings.Contains(SystemPrompt, "Go symbol lookup -> inspect_symbol.") {
 		t.Error("SystemPrompt should describe inspect_symbol as Go symbol lookup")
 	}
-	if !strings.Contains(SystemPrompt, "read_file returns file contents; without a line range it returns full content for files up to 500 lines") {
+	if !strings.Contains(SystemPrompt, "read_file without line range returns full content for most files") {
 		t.Error("SystemPrompt should describe current read_file behavior")
 	}
 	forbidden := []string{
@@ -118,6 +118,9 @@ func TestSystemPrompt_LocalVsSharedGuidance(t *testing.T) {
 func TestSystemPrompt_EfficientExecutionGuidance(t *testing.T) {
 	if !strings.Contains(SystemPrompt, "Do not upgrade from targeted read to full-file read unless") {
 		t.Error("SystemPrompt should guard against unnecessary full-file reads")
+	}
+	if !strings.Contains(SystemPrompt, "NEVER re-read a file already returned in full") {
+		t.Error("SystemPrompt should forbid rereading files already returned in full")
 	}
 	if !strings.Contains(SystemPrompt, "Do not search \"just in case\"") {
 		t.Error("SystemPrompt should discourage speculative searching")

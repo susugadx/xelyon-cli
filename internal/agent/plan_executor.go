@@ -110,7 +110,8 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 
 		a.refreshProjectPromptIfDirty(stepPrompt)
 
-		compactedHistory, metrics := CompactOldToolResults(a.History, DefaultMaxLines, DefaultHeadLines, DefaultTailLines)
+		maxLines, headLines, tailLines := a.getCompactionParams()
+		compactedHistory, metrics := CompactOldToolResults(a.History, maxLines, headLines, tailLines)
 		a.addCompactionMetrics(metrics)
 		response, err := a.CurrentProvider.ChatWithTools(
 			a.requestContext(ctx),

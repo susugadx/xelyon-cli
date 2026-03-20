@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -37,6 +38,8 @@ var (
 	yellow = color.New(color.FgYellow)
 	red    = color.New(color.FgRed)
 	dim    = color.New(color.Faint)
+
+	readFileOutlineFooterPattern = regexp.MustCompile(`\(\d+ lines total(?:\.[^)]*)?\)`)
 )
 
 // Agent はCLIエージェント
@@ -428,8 +431,12 @@ func (a *Agent) addCompactionMetrics(metrics CompactionMetrics) {
 	}
 }
 
+func isReadFileOutlineResult(result string) bool {
+	return readFileOutlineFooterPattern.MatchString(result)
+}
+
 func (a *Agent) recordToolResultOptimizations(tc *tools.ToolCall, result string) {
-	if tc.Tool == "read_file" && strings.Contains(result, "Use start_line/end_line") {
+	if tc.Tool == "read_file" && isReadFileOutlineResult(result) {
 		a.addOptimizationMetrics(OptimizationMetrics{OutlineFirstCount: 1})
 	}
 	a.recordToolObservability(tc.Tool, tc.RawArgs, tc.Args, result)

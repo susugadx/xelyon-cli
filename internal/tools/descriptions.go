@@ -4,7 +4,7 @@ package tools
 // GetToolDefinitions() 経由で JSON schema の description に使用。
 var ToolDescriptions = map[string]string{
 	// File Operations
-	"read_file":   "Read file contents. Use start_line/end_line to read a specific section. Without line range, returns full content for small files or an outline for larger files.",
+	"read_file":   "Read file contents. Without line range, returns full content for most files. Do not re-read a file already returned in full. Use start_line/end_line only for very large files (2000+ lines) or to read a specific section of a new file.",
 	"write_file":  "Create or overwrite a file. Uses 0644 for new files and preserves permissions on overwrite. Use str_replace for partial edits to existing files.",
 	"str_replace": "Edit existing file. PREFERRED: Line-range mode (old_str empty + start_line/end_line) after search_code — no read_file needed. FALLBACK: old_str mode requires read_file first. Batch mode: pass edits=[{old_str,new_str},...] for multiple replacements in one call.",
 	"delete_file": "Delete a file permanently.",

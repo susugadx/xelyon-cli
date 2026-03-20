@@ -13,48 +13,6 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
-type testReadFileCache struct {
-	getFileFunc  func(path string) (string, bool)
-	setFileCalls []testReadFileCacheSetCall
-}
-
-type testReadFileCacheSetCall struct {
-	path    string
-	content string
-}
-
-func (c *testReadFileCache) GetFile(path string) (string, bool) {
-	if c.getFileFunc != nil {
-		return c.getFileFunc(path)
-	}
-	return "", false
-}
-
-func (c *testReadFileCache) SetFile(path, content string) {
-	c.setFileCalls = append(c.setFileCalls, testReadFileCacheSetCall{
-		path:    path,
-		content: content,
-	})
-}
-
-func (c *testReadFileCache) GetDir(path string) (string, bool) { return "", false }
-
-func (c *testReadFileCache) SetDir(path, result string) {}
-
-func (c *testReadFileCache) InvalidateFile(path string) {}
-
-func (c *testReadFileCache) InvalidateDir(path string) {}
-
-func (c *testReadFileCache) Clear() {}
-
-func (c *testReadFileCache) GetSearch(pattern, path string) (string, bool) { return "", false }
-
-func (c *testReadFileCache) SetSearch(pattern, path, result string, affectedFiles []string) {}
-
-func (c *testReadFileCache) ClearSearchCache() {}
-
-func (c *testReadFileCache) InvalidateSearchCacheForFile(absPath string) {}
-
 func TestExecuteReadFile_Normal(t *testing.T) {
 	setupTestMocks(t)
 
@@ -100,10 +58,9 @@ func TestExecuteReadFile_LargeFile_Outline(t *testing.T) {
 	setupTestMocks(t)
 	tmpDir := t.TempDir()
 
-	// 500行超のGoファイル（関数定義を含む）
 	var sb strings.Builder
 	sb.WriteString("package main\n\nimport \"fmt\"\n\n")
-	for i := 0; i < 8; i++ {
+	for i := 0; i < 30; i++ {
 		fmt.Fprintf(&sb, "func handler%d() {\n", i)
 		for j := 0; j < 70; j++ {
 			fmt.Fprintf(&sb, "\tfmt.Println(%d)\n", j)
@@ -118,18 +75,15 @@ func TestExecuteReadFile_LargeFile_Outline(t *testing.T) {
 	if !strings.Contains(output, "Signatures") {
 		t.Errorf("Expected outline to contain 'Signatures', got:\n%s", output)
 	}
-	if !strings.Contains(output, "Use start_line/end_line") {
-		t.Errorf("Expected guide message, got:\n%s", output)
+	if !strings.Contains(output, "lines total)") {
+		t.Errorf("Expected total-lines footer, got:\n%s", output)
 	}
-	// 先頭行が含まれる
 	if !strings.Contains(output, "package main") {
 		t.Errorf("Expected head lines to contain 'package main'")
 	}
-	// シグネチャに関数名が含まれる
 	if !strings.Contains(output, "func handler") {
 		t.Errorf("Expected signatures to contain function names, got:\n%s", output)
 	}
-	// 末尾行セクションが含まれる
 	if !strings.Contains(output, "Last lines") {
 		t.Errorf("Expected 'Last lines' section, got:\n%s", output)
 	}
@@ -139,18 +93,16 @@ func TestExecuteReadFile_LargeFile_PlainText(t *testing.T) {
 	setupTestMocks(t)
 	tmpDir := t.TempDir()
 
-	// 500行超のプレーンテキスト（ブロックなし）
 	var lines []string
-	for i := 0; i < 600; i++ {
+	for i := 0; i < 2200; i++ {
 		lines = append(lines, fmt.Sprintf("log entry %d", i))
 	}
 	testutil.CreateTempFile(t, tmpDir, "large.txt", strings.Join(lines, "\n"))
 
 	output := ExecuteReadFile(filepath.Join(tmpDir, "large.txt"), 0, 0)
 
-	// シグネチャなしでもアウトラインが動作する
-	if !strings.Contains(output, "Use start_line/end_line") {
-		t.Errorf("Expected guide message, got:\n%s", output)
+	if !strings.Contains(output, "(2200 lines total)") {
+		t.Errorf("Expected total-lines footer, got:\n%s", output)
 	}
 	if !strings.Contains(output, "Last lines") {
 		t.Errorf("Expected 'Last lines' section, got:\n%s", output)
@@ -164,7 +116,6 @@ func TestExecuteReadFile_MediumFile_FullContent(t *testing.T) {
 	setupTestMocks(t)
 	tmpDir := t.TempDir()
 
-	// 150行のGoファイル（DefaultFullLines=500 以下 → 全文返却）
 	var sb strings.Builder
 	sb.WriteString("package main\n\nimport \"fmt\"\n\n")
 	for i := 0; i < 3; i++ {
@@ -178,14 +129,12 @@ func TestExecuteReadFile_MediumFile_FullContent(t *testing.T) {
 
 	output := ExecuteReadFile(filepath.Join(tmpDir, "medium.go"), 0, 0)
 
-	// 全文返却の検証（150行 <= DefaultFullLines=500）
-	if strings.Contains(output, "Use start_line/end_line") {
-		t.Errorf("Medium file (150 lines) should NOT have outline guide message, got:\n%s", output)
+	if strings.Contains(output, "lines total") {
+		t.Errorf("Medium file (150 lines) should NOT have outline footer, got:\n%s", output)
 	}
 	if !strings.Contains(output, "package main") {
 		t.Errorf("Expected content to contain 'package main'")
 	}
-	// 関数名が本文に含まれる
 	if !strings.Contains(output, "func process0") {
 		t.Errorf("Expected full content to contain function definitions, got:\n%s", output)
 	}
@@ -195,10 +144,9 @@ func TestExecuteReadFile_LargerMediumFile_Outline(t *testing.T) {
 	setupTestMocks(t)
 	tmpDir := t.TempDir()
 
-	// 500行超のGoファイル（DefaultFullLines=500 を超える → outline モード）
 	var sb strings.Builder
 	sb.WriteString("package main\n\nimport \"fmt\"\n\n")
-	for i := 0; i < 12; i++ {
+	for i := 0; i < 45; i++ {
 		fmt.Fprintf(&sb, "func process%d() {\n", i)
 		for j := 0; j < 45; j++ {
 			fmt.Fprintf(&sb, "\tfmt.Println(%d)\n", j)
@@ -209,9 +157,8 @@ func TestExecuteReadFile_LargerMediumFile_Outline(t *testing.T) {
 
 	output := ExecuteReadFile(filepath.Join(tmpDir, "larger_medium.go"), 0, 0)
 
-	// outline-first モードの検証
-	if !strings.Contains(output, "Use start_line/end_line") {
-		t.Errorf("Expected outline guide message for large file, got:\n%s", output)
+	if !strings.Contains(output, "lines total)") {
+		t.Errorf("Expected outline footer for large file, got:\n%s", output)
 	}
 	if !strings.Contains(output, "package main") {
 		t.Errorf("Expected head to contain 'package main'")
@@ -225,7 +172,6 @@ func TestExecuteReadFile_SmallFile_FullContent(t *testing.T) {
 	setupTestMocks(t)
 	tmpDir := t.TempDir()
 
-	// 80行のファイル（DefaultFullLines=500 以下 → 全文返却）
 	var lines []string
 	for i := 1; i <= 80; i++ {
 		lines = append(lines, fmt.Sprintf("line%d", i))
@@ -241,21 +187,18 @@ func TestExecuteReadFile_SmallFile_FullContent(t *testing.T) {
 	if !strings.Contains(output, "80: line80") {
 		t.Errorf("Expected full content with line 80")
 	}
-	// outline ガイドメッセージが含まれない
-	if strings.Contains(output, "Use start_line/end_line") {
-		t.Errorf("Small file should NOT have outline guide message, got:\n%s", output)
+	if strings.Contains(output, "lines total") {
+		t.Errorf("Small file should NOT have outline footer, got:\n%s", output)
 	}
 }
 
-func TestExecuteReadFile_GoOutline_UsesLineRangeGuide(t *testing.T) {
+func TestExecuteReadFile_GoOutline_UsesTotalLinesFooter(t *testing.T) {
 	setupTestMocks(t)
 	tmpDir := t.TempDir()
 
-	// Go ファイルのアウトラインでも line-range ガイドのみを表示する
-	// DefaultFullLines=500 を超えるファイル
 	var sb strings.Builder
 	sb.WriteString("package main\n\nimport \"fmt\"\n\n")
-	for i := 0; i < 12; i++ {
+	for i := 0; i < 45; i++ {
 		fmt.Fprintf(&sb, "func handler%d() {\n", i)
 		for j := 0; j < 45; j++ {
 			fmt.Fprintf(&sb, "\tfmt.Println(%d)\n", j)
@@ -266,11 +209,14 @@ func TestExecuteReadFile_GoOutline_UsesLineRangeGuide(t *testing.T) {
 
 	output := ExecuteReadFile(filepath.Join(tmpDir, "handlers.go"), 0, 0)
 
-	if !strings.Contains(output, "Use start_line/end_line") {
-		t.Errorf("Expected line-range guide, got:\n%s", output)
+	if !strings.Contains(output, "lines total)") {
+		t.Errorf("Expected total-lines footer, got:\n%s", output)
+	}
+	if strings.Contains(output, "Use start_line/end_line") {
+		t.Errorf("Outline footer should not nudge another targeted reread, got:\n%s", output)
 	}
 	if strings.Contains(output, "symbol=") {
-		t.Errorf("Guide should not mention symbol mode, got:\n%s", output)
+		t.Errorf("Footer should not mention symbol mode, got:\n%s", output)
 	}
 }
 
@@ -278,10 +224,8 @@ func TestExecuteReadFile_NonGoOutline_NoSymbolHint(t *testing.T) {
 	setupTestMocks(t)
 	tmpDir := t.TempDir()
 
-	// 非 Go ファイルのアウトラインにも symbol ヒントが含まれないことを確認
-	// DefaultFullLines=500 を超えるファイル
 	var lines []string
-	for i := 0; i < 600; i++ {
+	for i := 0; i < 2200; i++ {
 		lines = append(lines, fmt.Sprintf("data line %d", i))
 	}
 	testutil.CreateTempFile(t, tmpDir, "data.txt", strings.Join(lines, "\n"))
@@ -291,8 +235,8 @@ func TestExecuteReadFile_NonGoOutline_NoSymbolHint(t *testing.T) {
 	if strings.Contains(output, "symbol=") {
 		t.Errorf("Non-Go file should NOT have symbol hint, got:\n%s", output)
 	}
-	if !strings.Contains(output, "Use start_line/end_line") {
-		t.Errorf("Expected outline guide message")
+	if !strings.Contains(output, "(2200 lines total)") {
+		t.Errorf("Expected outline footer")
 	}
 }
 
@@ -382,6 +326,29 @@ func TestExecuteReadFile_StartLineLargeFile(t *testing.T) {
 	}
 }
 
+func TestExecuteReadFile_StartLineOnly_DefaultMaxReadLines(t *testing.T) {
+	setupTestMocks(t)
+	tmpDir := t.TempDir()
+
+	var lines []string
+	for i := 1; i <= 1500; i++ {
+		lines = append(lines, fmt.Sprintf("line%d", i))
+	}
+	testutil.CreateTempFile(t, tmpDir, "window.txt", strings.Join(lines, "\n"))
+
+	output := ExecuteReadFile(filepath.Join(tmpDir, "window.txt"), 100, 0)
+
+	if !strings.Contains(output, "100: line100") {
+		t.Fatalf("expected output to start at line 100, got: %s", output)
+	}
+	if !strings.Contains(output, "1099: line1099") {
+		t.Fatalf("expected output to include the 1000-line default window, got: %s", output)
+	}
+	if strings.Contains(output, "1100: line1100") {
+		t.Fatalf("expected output to stop at line 1099 when end_line is omitted, got: %s", output)
+	}
+}
+
 func TestExecuteReadFile_QuietModeSuppressesStdout(t *testing.T) {
 	setupTestMocks(t)
 	tmpDir := t.TempDir()
@@ -413,219 +380,6 @@ func TestExecuteReadFile_QuietModeSuppressesStdout(t *testing.T) {
 	}
 	if !strings.Contains(result, "1: line1") {
 		t.Fatalf("ExecuteReadFile() result = %q", result)
-	}
-}
-
-func TestExecuteReadFileBySymbol_SingleFunction(t *testing.T) {
-	setupTestMocks(t)
-	tmpDir := t.TempDir()
-	goFile := filepath.Join(tmpDir, "sample.go")
-	content := `package main
-
-func helper() {}
-
-// Build creates the server.
-func Build() error {
-	return nil
-}
-
-func after() {}
-`
-	if err := os.WriteFile(goFile, []byte(content), 0644); err != nil {
-		t.Fatalf("failed to write Go file: %v", err)
-	}
-
-	output := ExecuteReadFileBySymbol(goFile, "Build")
-
-	if !strings.Contains(output, "── function Build") {
-		t.Fatalf("expected Build header, got: %s", output)
-	}
-	if !strings.Contains(output, "func Build() error {") {
-		t.Fatalf("expected Build body, got: %s", output)
-	}
-	if !strings.Contains(output, "// Build creates the server.") {
-		t.Fatalf("expected surrounding comment, got: %s", output)
-	}
-	if strings.Contains(output, "func helper() {}") {
-		t.Fatalf("did not expect helper body, got: %s", output)
-	}
-	if strings.Contains(output, "func after() {}") {
-		t.Fatalf("did not expect after body, got: %s", output)
-	}
-}
-
-func TestExecuteReadFileBySymbol_MultipleSymbols(t *testing.T) {
-	setupTestMocks(t)
-	tmpDir := t.TempDir()
-	goFile := filepath.Join(tmpDir, "sample.go")
-	content := `package main
-
-type Config struct {
-	Name string
-}
-
-func Build() error {
-	return nil
-}
-`
-	if err := os.WriteFile(goFile, []byte(content), 0644); err != nil {
-		t.Fatalf("failed to write Go file: %v", err)
-	}
-
-	output := ExecuteReadFileBySymbol(goFile, "Build,Config")
-
-	if !strings.Contains(output, "── struct Config") {
-		t.Fatalf("expected Config header, got: %s", output)
-	}
-	if !strings.Contains(output, "── function Build") {
-		t.Fatalf("expected Build header, got: %s", output)
-	}
-	if strings.Index(output, "── struct Config") > strings.Index(output, "── function Build") {
-		t.Fatalf("expected symbols in file order, got: %s", output)
-	}
-	if !strings.Contains(output, "(2 symbol(s) from "+goFile+")") {
-		t.Fatalf("expected symbol count footer, got: %s", output)
-	}
-}
-
-func TestExecuteReadFileBySymbol_NotFound(t *testing.T) {
-	setupTestMocks(t)
-	tmpDir := t.TempDir()
-	goFile := filepath.Join(tmpDir, "sample.go")
-	content := `package main
-
-func Build() error {
-	return nil
-}
-
-type Config struct{}
-`
-	if err := os.WriteFile(goFile, []byte(content), 0644); err != nil {
-		t.Fatalf("failed to write Go file: %v", err)
-	}
-
-	output := ExecuteReadFileBySymbol(goFile, "Missing")
-
-	if !strings.Contains(output, "Symbol(s) not found") {
-		t.Fatalf("expected not-found message, got: %s", output)
-	}
-	if !strings.Contains(output, "Available symbols:") {
-		t.Fatalf("expected available symbols section, got: %s", output)
-	}
-	if !strings.Contains(output, "Build") || !strings.Contains(output, "Config") {
-		t.Fatalf("expected available symbols to include Build and Config, got: %s", output)
-	}
-}
-
-func TestExecuteReadFileBySymbol_NonGoFile(t *testing.T) {
-	setupTestMocks(t)
-	tmpDir := t.TempDir()
-	pyFile := filepath.Join(tmpDir, "sample.py")
-	content := "def build():\n    return 42\n"
-	if err := os.WriteFile(pyFile, []byte(content), 0644); err != nil {
-		t.Fatalf("failed to write Python file: %v", err)
-	}
-
-	output := ExecuteReadFileBySymbol(pyFile, "build")
-
-	if !strings.Contains(output, "1: def build():") {
-		t.Fatalf("expected fallback full read, got: %s", output)
-	}
-	if !strings.Contains(output, "2:     return 42") {
-		t.Fatalf("expected fallback full read body, got: %s", output)
-	}
-	if strings.Contains(output, "Available symbols:") {
-		t.Fatalf("did not expect symbol listing for non-Go fallback, got: %s", output)
-	}
-}
-
-func TestExecuteReadFileBySymbol_NonGoFile_LargeFullRead(t *testing.T) {
-	setupTestMocks(t)
-	tmpDir := t.TempDir()
-	pyFile := filepath.Join(tmpDir, "large.py")
-
-	// 200行の Python ファイル（symbol fallback は MaxReadLines=300 で full read）
-	var sb strings.Builder
-	for i := 1; i <= 200; i++ {
-		fmt.Fprintf(&sb, "line_%d = %d\n", i, i)
-	}
-	if err := os.WriteFile(pyFile, []byte(sb.String()), 0644); err != nil {
-		t.Fatalf("failed to write Python file: %v", err)
-	}
-
-	output := ExecuteReadFileBySymbol(pyFile, "some_func")
-
-	// symbol fallback は MaxReadLines=300 で full read するため、200行すべて返却される
-	if !strings.Contains(output, "1: line_1 = 1") {
-		t.Fatalf("expected first line in fallback, got: %s", output)
-	}
-	if !strings.Contains(output, "200: line_200 = 200") {
-		t.Fatalf("expected last line in fallback (full read, not outline), got: %s", output)
-	}
-	// outline ガイドメッセージが含まれない
-	if strings.Contains(output, "Use start_line/end_line") {
-		t.Fatalf("symbol fallback should NOT produce outline for 200-line file, got: %s", output)
-	}
-}
-
-func TestExecuteReadFileBySymbol_MethodWithReceiver(t *testing.T) {
-	setupTestMocks(t)
-	tmpDir := t.TempDir()
-	goFile := filepath.Join(tmpDir, "server.go")
-	content := `package main
-
-type Server struct{}
-
-func (s *Server) HandleRequest(ctx context.Context) error {
-	return nil
-}
-`
-	if err := os.WriteFile(goFile, []byte(content), 0644); err != nil {
-		t.Fatalf("failed to write Go file: %v", err)
-	}
-
-	output := ExecuteReadFileBySymbol(goFile, "HandleRequest")
-
-	if !strings.Contains(output, "── method HandleRequest") {
-		t.Fatalf("expected method header, got: %s", output)
-	}
-	if !strings.Contains(output, "func (s *Server) HandleRequest(ctx context.Context) error {") {
-		t.Fatalf("expected method body, got: %s", output)
-	}
-}
-
-func TestExecuteReadFileBySymbolWithRuntime_CachesContentOnMiss(t *testing.T) {
-	setupTestMocks(t)
-	tmpDir := t.TempDir()
-	goFile := filepath.Join(tmpDir, "sample.go")
-	content := `package main
-
-func Build() error {
-	return nil
-}
-`
-	if err := os.WriteFile(goFile, []byte(content), 0644); err != nil {
-		t.Fatalf("failed to write Go file: %v", err)
-	}
-
-	cache := &testReadFileCache{}
-	output := ExecuteReadFileBySymbolWithRuntime(common.NewOutput(io.Discard, io.Discard), nil, cache, goFile, "Build")
-
-	if !strings.Contains(output, "func Build() error {") {
-		t.Fatalf("expected symbol output, got: %s", output)
-	}
-	if len(cache.setFileCalls) != 1 {
-		t.Fatalf("SetFile call count = %d, want 1", len(cache.setFileCalls))
-	}
-	absPath, err := filepath.Abs(goFile)
-	if err != nil {
-		t.Fatalf("filepath.Abs() error = %v", err)
-	}
-	if cache.setFileCalls[0].path != absPath {
-		t.Fatalf("SetFile path = %q, want %q", cache.setFileCalls[0].path, absPath)
-	}
-	if !strings.Contains(cache.setFileCalls[0].content, "func Build() error {") {
-		t.Fatalf("SetFile content = %q", cache.setFileCalls[0].content)
 	}
 }
 
@@ -723,9 +477,8 @@ func TestFormatOutline_Signatures(t *testing.T) {
 	if !strings.Contains(out, "L") {
 		t.Errorf("expected line numbers in signatures, got:\n%s", out)
 	}
-	// ガイドメッセージ
-	if !strings.Contains(out, "Use start_line/end_line") {
-		t.Errorf("expected guide message")
+	if !strings.Contains(out, fmt.Sprintf("(%d lines total)", len(lines))) {
+		t.Errorf("expected total-lines footer")
 	}
 }
 
@@ -790,9 +543,8 @@ func TestExecuteReadFile_LargeFileStreaming_Outline(t *testing.T) {
 	}
 
 	output := ExecuteReadFile(largeFile, 0, 0)
-	// outline-first モードに切り替わる
-	if !strings.Contains(output, "Use start_line/end_line") {
-		t.Fatalf("expected outline guide message for large file, got: %s", output)
+	if !strings.Contains(output, "lines total)") {
+		t.Fatalf("expected outline footer for large file, got: %s", output)
 	}
 	if !strings.Contains(output, "1: line 00001") {
 		t.Fatalf("expected first line in output, got: %s", output)
@@ -832,7 +584,7 @@ func TestExecuteReadFile_LargeFileStreaming_GoOutline(t *testing.T) {
 	if !strings.Contains(output, "func handler") {
 		t.Fatalf("expected function signatures, got: %s", output)
 	}
-	if !strings.Contains(output, "Use start_line/end_line") {
-		t.Fatalf("expected guide message, got: %s", output)
+	if !strings.Contains(output, "lines total)") {
+		t.Fatalf("expected outline footer, got: %s", output)
 	}
 }

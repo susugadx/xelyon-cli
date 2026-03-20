@@ -84,6 +84,28 @@ func TestRecordToolObservability_BatchRead(t *testing.T) {
 	}
 }
 
+func TestRecordToolResultOptimizations_OutlineFooter(t *testing.T) {
+	a := &Agent{Stats: NewSessionStats("test")}
+	tc := &tools.ToolCall{Tool: "read_file"}
+
+	a.recordToolResultOptimizations(tc, "1: package main\n\n(2200 lines total)\n")
+
+	if a.Stats.Optimizations.OutlineFirstCount != 1 {
+		t.Fatalf("OutlineFirstCount = %d, want 1", a.Stats.Optimizations.OutlineFirstCount)
+	}
+}
+
+func TestRecordToolResultOptimizations_OutlineFooterLegacyFormat(t *testing.T) {
+	a := &Agent{Stats: NewSessionStats("test")}
+	tc := &tools.ToolCall{Tool: "read_file"}
+
+	a.recordToolResultOptimizations(tc, "1: package main\n\n(2200 lines total. Use start_line/end_line to read specific sections)\n")
+
+	if a.Stats.Optimizations.OutlineFirstCount != 1 {
+		t.Fatalf("OutlineFirstCount = %d, want 1", a.Stats.Optimizations.OutlineFirstCount)
+	}
+}
+
 func TestRecordToolObservability_SingleRead(t *testing.T) {
 	a := &Agent{Stats: NewSessionStats("test")}
 	a.recordToolObservability("read_file", map[string]any{
