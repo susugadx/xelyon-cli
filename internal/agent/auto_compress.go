@@ -50,20 +50,6 @@ func (a *Agent) getCompressionModel() string {
 	return a.CurrentModel
 }
 
-func (a *Agent) shouldSkipHistoryTruncation() bool {
-	if ridProvider, ok := a.CurrentProvider.(ResponseIDCapable); ok {
-		return ridProvider.HasCachedResponseID()
-	}
-	return false
-}
-
-func (a *Agent) getCompactionParams() (maxLines, headLines, tailLines int) {
-	if a.shouldSkipHistoryTruncation() {
-		return 999999, 999999, 999999
-	}
-	return DefaultMaxLines, DefaultHeadLines, DefaultTailLines
-}
-
 func (a *Agent) runAutoCompression(costAwareCompress bool) bool {
 	cfg := a.cfg()
 

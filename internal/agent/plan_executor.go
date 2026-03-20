@@ -110,13 +110,10 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 
 		a.refreshProjectPromptIfDirty(stepPrompt)
 
-		maxLines, headLines, tailLines := a.getCompactionParams()
-		compactedHistory, metrics := CompactOldToolResults(a.History, maxLines, headLines, tailLines)
-		a.addCompactionMetrics(metrics)
 		response, err := a.CurrentProvider.ChatWithTools(
 			a.requestContext(ctx),
 			a.SystemPrompt,
-			compactedHistory,
+			a.History,
 			a.CurrentModel,
 		)
 		if err != nil {
@@ -283,14 +280,10 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 				a.handleFileChange(change)
 
 				// ツール結果を履歴に追加
-				historyContent := result
-				if !a.shouldSkipHistoryTruncation() {
-					historyContent = a.compactToolResult(toolCall, result)
-				}
 				if toolCall.ID != "" {
 					toolMsg := api.Message{
 						Role:       "tool",
-						Content:    historyContent,
+						Content:    result,
 						ToolCallID: toolCall.ID,
 						ToolName:   toolCall.Tool,
 					}
@@ -301,7 +294,7 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 				} else {
 					a.History = append(a.History, api.Message{
 						Role:    "user",
-						Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, historyContent),
+						Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, result),
 					})
 				}
 			},

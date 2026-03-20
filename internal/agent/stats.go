@@ -35,7 +35,6 @@ type OptimizationMetrics struct {
 	NegativeCacheHits      int // ネガティブキャッシュヒット
 	ErrorCompressions      int // compressErrorResult 発動
 	FailedPairCompressions int // compressFailedPair 発動
-	TruncationCount        int // 段階的truncate発動
 	OutlineFirstCount      int // outline-first mode発動
 	CompactionCount        int // auto-compress実行
 	CostAwareCompressions  int // pricing cliff回避による auto-compress 実行
@@ -45,7 +44,6 @@ func (m *OptimizationMetrics) add(other OptimizationMetrics) {
 	m.NegativeCacheHits += other.NegativeCacheHits
 	m.ErrorCompressions += other.ErrorCompressions
 	m.FailedPairCompressions += other.FailedPairCompressions
-	m.TruncationCount += other.TruncationCount
 	m.OutlineFirstCount += other.OutlineFirstCount
 	m.CompactionCount += other.CompactionCount
 	m.CostAwareCompressions += other.CostAwareCompressions
@@ -54,14 +52,12 @@ func (m *OptimizationMetrics) add(other OptimizationMetrics) {
 func (m *OptimizationMetrics) addCompaction(other CompactionMetrics) {
 	m.ErrorCompressions += other.ErrorCompressions
 	m.FailedPairCompressions += other.FailedPairCompressions
-	m.TruncationCount += other.TruncationCount
 }
 
 func (m *OptimizationMetrics) hasAny() bool {
 	return m.NegativeCacheHits > 0 ||
 		m.ErrorCompressions > 0 ||
 		m.FailedPairCompressions > 0 ||
-		m.TruncationCount > 0 ||
 		m.OutlineFirstCount > 0 ||
 		m.CompactionCount > 0 ||
 		m.CostAwareCompressions > 0
@@ -69,14 +65,11 @@ func (m *OptimizationMetrics) hasAny() bool {
 
 // ToolObservability はツール実行・compaction の観測メトリクスを保持する。
 type ToolObservability struct {
-	ReadFileEmptyPathsErrors    int            // read_file が paths is empty で失敗した回数
-	ReadFileBatchCalls          int            // read_file(paths=...) の batch 呼び出し回数
-	SearchCodeMultiPatternCalls int            // search_code の multi-pattern 呼び出し回数
-	CompactedToolResults        int            // history 格納前 compaction が発火した回数
-	CompactedBytesSaved         int            // compaction による累計削減文字数
-	CompactedByTool             map[string]int // ツール名ごとの compaction 回数
-	SearchCodeBatchMerges       int            // search_code multi-pattern batch merge 回数
-	ReadFileBatchMerges         int            // read_file batch merge 回数
+	ReadFileEmptyPathsErrors    int // read_file が paths is empty で失敗した回数
+	ReadFileBatchCalls          int // read_file(paths=...) の batch 呼び出し回数
+	SearchCodeMultiPatternCalls int // search_code の multi-pattern 呼び出し回数
+	SearchCodeBatchMerges       int // search_code multi-pattern batch merge 回数
+	ReadFileBatchMerges         int // read_file batch merge 回数
 }
 
 // SessionStats はセッション統計情報
@@ -111,9 +104,6 @@ func NewSessionStats(provider string, model ...string) *SessionStats {
 		ToolExecutions: make(map[string]int),
 		Provider:       provider,
 		Model:          m,
-		ToolObs: ToolObservability{
-			CompactedByTool: make(map[string]int),
-		},
 	}
 }
 

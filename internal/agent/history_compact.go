@@ -7,20 +7,13 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 )
 
-const (
-	DefaultMaxLines  = 50
-	DefaultHeadLines = 20
-	DefaultTailLines = 5
-)
-
 // CompactionMetrics は履歴圧縮時に発生した圧縮メトリクスを表す。
 type CompactionMetrics struct {
 	ErrorCompressions      int
 	FailedPairCompressions int
-	TruncationCount        int
 }
 
-// CompactOldToolResults は送信前に古いツール結果をtruncateした履歴コピーと圧縮メトリクスを返す。
+// CompactOldToolResults は圧縮前に古いツール結果をtruncateした履歴コピーと圧縮メトリクスを返す。
 // 元の history は変更しない（セッション保存用に原本を保持）。
 //
 // ルール:
@@ -67,7 +60,6 @@ func CompactOldToolResults(history []api.Message, maxLines, headLines, tailLines
 			var itemMetrics CompactionMetrics
 			result[i], itemMetrics = truncateToolResult(result[i], maxLines, headLines, tailLines)
 			metrics.ErrorCompressions += itemMetrics.ErrorCompressions
-			metrics.TruncationCount += itemMetrics.TruncationCount
 		}
 	}
 
@@ -199,7 +191,6 @@ func truncateToolResult(msg api.Message, maxLines, headLines, tailLines int) (ap
 	// shallow copy して Content だけ差し替え
 	result := msg
 	result.Content = truncated
-	metrics.TruncationCount++
 	return result, metrics
 }
 

@@ -364,28 +364,6 @@ func newCompressionTestAgent(t *testing.T, provider *compressionTestProvider, mo
 	return agent, &out
 }
 
-func TestGetCompactionParams_Default(t *testing.T) {
-	agent := &Agent{CurrentProvider: &compressionTestProvider{name: "openai"}}
-
-	maxLines, headLines, tailLines := agent.getCompactionParams()
-
-	if maxLines != DefaultMaxLines || headLines != DefaultHeadLines || tailLines != DefaultTailLines {
-		t.Fatalf("getCompactionParams() = (%d, %d, %d), want (%d, %d, %d)",
-			maxLines, headLines, tailLines, DefaultMaxLines, DefaultHeadLines, DefaultTailLines)
-	}
-}
-
-func TestGetCompactionParams_SkipsWithCachedResponseID(t *testing.T) {
-	agent := &Agent{CurrentProvider: &compressionTestProvider{name: "openai", cachedResponseID: true}}
-
-	maxLines, headLines, tailLines := agent.getCompactionParams()
-
-	if maxLines != 999999 || headLines != 999999 || tailLines != 999999 {
-		t.Fatalf("getCompactionParams() = (%d, %d, %d), want truncation disabled values",
-			maxLines, headLines, tailLines)
-	}
-}
-
 func oversizedCompressionHistory() []api.Message {
 	return []api.Message{
 		{Role: "user", Content: strings.Repeat("x", 260000)},

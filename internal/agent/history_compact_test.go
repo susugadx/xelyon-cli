@@ -416,9 +416,6 @@ func TestCompactOldToolResults_CompactionMetrics(t *testing.T) {
 	if metrics.FailedPairCompressions != 1 {
 		t.Fatalf("FailedPairCompressions = %d, want 1", metrics.FailedPairCompressions)
 	}
-	if metrics.TruncationCount != 1 {
-		t.Fatalf("TruncationCount = %d, want 1", metrics.TruncationCount)
-	}
 	if metrics.ErrorCompressions != 1 {
 		t.Fatalf("ErrorCompressions = %d, want 1", metrics.ErrorCompressions)
 	}

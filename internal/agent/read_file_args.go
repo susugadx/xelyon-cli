@@ -38,17 +38,6 @@ func readFileEntryHasRange(entry string) bool {
 	return suffix != "" && isDigitOrRange(suffix)
 }
 
-func readFileBasePath(entry string) string {
-	if !readFileEntryHasRange(entry) {
-		return entry
-	}
-	lastColon := strings.LastIndex(entry, ":")
-	if lastColon < 0 {
-		return entry
-	}
-	return entry[:lastColon]
-}
-
 func readFileHasExplicitRange(args map[string]string) bool {
 	if args == nil {
 		return false
@@ -64,10 +53,17 @@ func readFileHasExplicitRange(args map[string]string) bool {
 	return false
 }
 
-func readFileTrackerKey(args map[string]string) string {
-	paths := readFilePathsFromArgs(args)
-	if len(paths) != 1 {
-		return ""
+func isDigitOrRange(s string) bool {
+	dashSeen := false
+	for i, c := range s {
+		if c >= '0' && c <= '9' {
+			continue
+		}
+		if c == '-' && !dashSeen && i > 0 && i < len(s)-1 {
+			dashSeen = true
+			continue
+		}
+		return false
 	}
-	return readFileBasePath(paths[0])
+	return len(s) > 0
 }

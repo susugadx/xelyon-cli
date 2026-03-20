@@ -167,15 +167,11 @@ func (a *Agent) executeToolOnly(toolCall *tools.ToolCall) string {
 	a.handleFileChange(change)
 
 	// 結果を履歴に追加
-	historyContent := result
-	if !a.shouldSkipHistoryTruncation() {
-		historyContent = a.compactToolResult(toolCall, result)
-	}
 	if toolCall.ID != "" {
 		// Function Calling: role="tool" で tool_call_id 付きで送信
 		toolMsg := api.Message{
 			Role:       "tool",
-			Content:    historyContent,
+			Content:    result,
 			ToolCallID: toolCall.ID,
 			ToolName:   toolCall.Tool,
 		}
@@ -189,7 +185,7 @@ func (a *Agent) executeToolOnly(toolCall *tools.ToolCall) string {
 		// テキストベース: role="user" で送信（従来方式）
 		a.History = append(a.History, api.Message{
 			Role:    "user",
-			Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, historyContent),
+			Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, result),
 		})
 	}
 
@@ -331,15 +327,11 @@ func (a *Agent) executeToolCallInternal(response string, toolCall *tools.ToolCal
 	a.handleFileChange(change)
 
 	// 結果を履歴に追加
-	historyContent := result
-	if !a.shouldSkipHistoryTruncation() {
-		historyContent = a.compactToolResult(toolCall, result)
-	}
 	if toolCall.ID != "" {
 		// Function Calling: role="tool" で tool_call_id 付きで送信
 		toolMsg := api.Message{
 			Role:       "tool",
-			Content:    historyContent,
+			Content:    result,
 			ToolCallID: toolCall.ID,
 			ToolName:   toolCall.Tool,
 		}
@@ -353,7 +345,7 @@ func (a *Agent) executeToolCallInternal(response string, toolCall *tools.ToolCal
 		// テキストベース: role="user" で送信（従来方式）
 		a.History = append(a.History, api.Message{
 			Role:    "user",
-			Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, historyContent),
+			Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, result),
 		})
 	}
 

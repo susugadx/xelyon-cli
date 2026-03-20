@@ -2,7 +2,6 @@ package agent
 
 import (
 	"bytes"
-	"fmt"
 	"strings"
 	"testing"
 
@@ -209,145 +208,11 @@ func TestRecordToolObservability_XMLRescue_SinglePattern(t *testing.T) {
 	}
 }
 
-// ── recordCompaction ──
-
-func TestRecordCompaction_Shortened(t *testing.T) {
-	a := &Agent{Stats: NewSessionStats("test")}
-	a.recordCompaction("read_file", 1000, 500)
-
-	obs := a.Stats.ToolObs
-	if obs.CompactedToolResults != 1 {
-		t.Errorf("CompactedToolResults = %d, want 1", obs.CompactedToolResults)
-	}
-	if obs.CompactedBytesSaved != 500 {
-		t.Errorf("CompactedBytesSaved = %d, want 500", obs.CompactedBytesSaved)
-	}
-	if obs.CompactedByTool["read_file"] != 1 {
-		t.Errorf("CompactedByTool[read_file] = %d, want 1", obs.CompactedByTool["read_file"])
-	}
-}
-
-func TestRecordCompaction_NoChange(t *testing.T) {
-	a := &Agent{Stats: NewSessionStats("test")}
-	a.recordCompaction("read_file", 500, 500)
-
-	obs := a.Stats.ToolObs
-	if obs.CompactedToolResults != 0 {
-		t.Errorf("CompactedToolResults = %d, want 0 when no change", obs.CompactedToolResults)
-	}
-	if obs.CompactedBytesSaved != 0 {
-		t.Errorf("CompactedBytesSaved = %d, want 0 when no change", obs.CompactedBytesSaved)
-	}
-}
-
-func TestRecordCompaction_Longer(t *testing.T) {
-	// guidance 追加等で長くなるケースはカウントしない
-	a := &Agent{Stats: NewSessionStats("test")}
-	a.recordCompaction("read_file", 500, 600)
-
-	obs := a.Stats.ToolObs
-	if obs.CompactedToolResults != 0 {
-		t.Errorf("CompactedToolResults = %d, want 0 when result got longer", obs.CompactedToolResults)
-	}
-}
-
-func TestRecordCompaction_MultipleTools(t *testing.T) {
-	a := &Agent{Stats: NewSessionStats("test")}
-	a.recordCompaction("read_file", 1000, 500)
-	a.recordCompaction("search_code", 2000, 800)
-	a.recordCompaction("read_file", 800, 400)
-
-	obs := a.Stats.ToolObs
-	if obs.CompactedToolResults != 3 {
-		t.Errorf("CompactedToolResults = %d, want 3", obs.CompactedToolResults)
-	}
-	if obs.CompactedBytesSaved != 500+1200+400 {
-		t.Errorf("CompactedBytesSaved = %d, want %d", obs.CompactedBytesSaved, 500+1200+400)
-	}
-	if obs.CompactedByTool["read_file"] != 2 {
-		t.Errorf("CompactedByTool[read_file] = %d, want 2", obs.CompactedByTool["read_file"])
-	}
-	if obs.CompactedByTool["search_code"] != 1 {
-		t.Errorf("CompactedByTool[search_code] = %d, want 1", obs.CompactedByTool["search_code"])
-	}
-}
-
-// ── compactToolResult による統合テスト ──
-
-func TestCompactToolResult_RecordsCompaction(t *testing.T) {
-	a := &Agent{Stats: NewSessionStats("test")}
-
-	// 長い read_file 結果（compactReadFileMinLines を超える）を生成
-	var lines []string
-	for i := 0; i < 200; i++ {
-		lines = append(lines, fmt.Sprintf("line %d: some code here", i))
-	}
-	longResult := strings.Join(lines, "\n")
-
-	tc := &tools.ToolCall{
-		Tool: "read_file",
-		Args: map[string]string{"path": "/tmp/test.go"},
-	}
-	compacted := a.compactToolResult(tc, longResult)
-
-	if len(compacted) >= len(longResult) {
-		t.Error("compactToolResult should shorten long read_file result")
-	}
-	if a.Stats.ToolObs.CompactedToolResults != 1 {
-		t.Errorf("CompactedToolResults = %d, want 1", a.Stats.ToolObs.CompactedToolResults)
-	}
-	if a.Stats.ToolObs.CompactedBytesSaved <= 0 {
-		t.Error("CompactedBytesSaved should be > 0")
-	}
-	if a.Stats.ToolObs.CompactedByTool["read_file"] != 1 {
-		t.Errorf("CompactedByTool[read_file] = %d, want 1", a.Stats.ToolObs.CompactedByTool["read_file"])
-	}
-}
-
-func TestCompactToolResult_NoCompactionForShort(t *testing.T) {
-	a := &Agent{Stats: NewSessionStats("test")}
-
-	tc := &tools.ToolCall{
-		Tool: "read_file",
-		Args: map[string]string{"path": "/tmp/test.go"},
-	}
-	a.compactToolResult(tc, "short content")
-
-	if a.Stats.ToolObs.CompactedToolResults != 0 {
-		t.Errorf("CompactedToolResults = %d, want 0 for short content", a.Stats.ToolObs.CompactedToolResults)
-	}
-}
-
-// ── /status 表示 ──
-
-func TestFormatCompactedByTool(t *testing.T) {
-	m := map[string]int{
-		"read_file":   7,
-		"search_code": 6,
-		"list_dir":    2,
-	}
-	got := formatCompactedByTool(m)
-	// 降順ソート
-	if !strings.Contains(got, "read_file=7") {
-		t.Errorf("should contain read_file=7, got: %s", got)
-	}
-	if !strings.Contains(got, "search_code=6") {
-		t.Errorf("should contain search_code=6, got: %s", got)
-	}
-	if !strings.Contains(got, "list_dir=2") {
-		t.Errorf("should contain list_dir=2, got: %s", got)
-	}
-}
-
 func TestPrintToolObservabilitySection(t *testing.T) {
 	stats := NewSessionStats("test")
 	stats.ToolObs.ReadFileBatchCalls = 12
 	stats.ToolObs.SearchCodeMultiPatternCalls = 7
 	stats.ToolObs.ReadFileEmptyPathsErrors = 3
-	stats.ToolObs.CompactedToolResults = 18
-	stats.ToolObs.CompactedBytesSaved = 12450
-	stats.ToolObs.CompactedByTool["read_file"] = 7
-	stats.ToolObs.CompactedByTool["search_code"] = 6
 
 	var buf bytes.Buffer
 	printToolObservabilitySection(&buf, stats)
@@ -366,20 +231,6 @@ func TestPrintToolObservabilitySection(t *testing.T) {
 	if !strings.Contains(output, "3") {
 		t.Error("should contain empty-path error count 3")
 	}
-
-	// Compaction セクション
-	if !strings.Contains(output, "Compaction") {
-		t.Error("should contain Compaction header")
-	}
-	if !strings.Contains(output, "18") {
-		t.Error("should contain compacted results count 18")
-	}
-	if !strings.Contains(output, "12,450") {
-		t.Error("should contain bytes saved 12,450")
-	}
-	if !strings.Contains(output, "read_file=7") {
-		t.Error("should contain by-tool read_file=7")
-	}
 }
 
 func TestPrintToolObservabilitySection_AllZero(t *testing.T) {
@@ -392,12 +243,5 @@ func TestPrintToolObservabilitySection_AllZero(t *testing.T) {
 	// 全て0でもセクションは表示される
 	if !strings.Contains(output, "Tool Selection") {
 		t.Error("should show Tool Selection even with all zeros")
-	}
-	if !strings.Contains(output, "Compaction") {
-		t.Error("should show Compaction even with all zeros")
-	}
-	// by tool は0件なら表示しない
-	if strings.Contains(output, "by tool") {
-		t.Error("should not show by-tool when map is empty")
 	}
 }

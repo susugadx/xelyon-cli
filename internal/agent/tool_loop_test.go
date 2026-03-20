@@ -56,7 +56,6 @@ func newLoopTestAgent(provider *sequenceMockProvider, cfg *config.Config, out *b
 			Registry: registry,
 			UI:       ui.NewRuntime(strings.NewReader(""), out, out),
 		},
-		readTracker: newReadTracker(),
 	}
 }
 

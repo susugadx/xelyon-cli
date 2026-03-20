@@ -8,6 +8,12 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/history"
 )
 
+const (
+	compactAPIPreprocessMaxLines  = 50
+	compactAPIPreprocessHeadLines = 20
+	compactAPIPreprocessTailLines = 5
+)
+
 // CompressWithCompactAPI は OpenAI Compact API で会話履歴を圧縮
 func (a *Agent) CompressWithCompactAPI(ctx context.Context) error {
 	out := a.output()
@@ -71,7 +77,7 @@ func (a *Agent) buildFullInputItems() []api.InputItem {
 	}
 
 	// 古いツール結果を截断してから InputItem に変換（トークン節約）
-	pruned, metrics := CompactOldToolResults(a.History, DefaultMaxLines, DefaultHeadLines, DefaultTailLines)
+	pruned, metrics := CompactOldToolResults(a.History, compactAPIPreprocessMaxLines, compactAPIPreprocessHeadLines, compactAPIPreprocessTailLines)
 	a.addCompactionMetrics(metrics)
 	return api.ConvertHistoryToInputItems(pruned)
 }

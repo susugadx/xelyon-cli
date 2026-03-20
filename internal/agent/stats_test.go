@@ -381,7 +381,6 @@ func TestOptimizationMetrics_Add(t *testing.T) {
 	metrics.addCompaction(CompactionMetrics{
 		ErrorCompressions:      5,
 		FailedPairCompressions: 6,
-		TruncationCount:        7,
 	})
 
 	if metrics.NegativeCacheHits != 6 {
@@ -392,9 +391,6 @@ func TestOptimizationMetrics_Add(t *testing.T) {
 	}
 	if metrics.FailedPairCompressions != 6 {
 		t.Fatalf("FailedPairCompressions = %d, want 6", metrics.FailedPairCompressions)
-	}
-	if metrics.TruncationCount != 7 {
-		t.Fatalf("TruncationCount = %d, want 7", metrics.TruncationCount)
 	}
 	if metrics.OutlineFirstCount != 1 {
 		t.Fatalf("OutlineFirstCount = %d, want 1", metrics.OutlineFirstCount)

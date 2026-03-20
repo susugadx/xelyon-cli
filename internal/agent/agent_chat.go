@@ -46,9 +46,6 @@ func (a *Agent) chatCore(input string, image *api.ImageData, oneShot bool) error
 	prevChanges := len(a.changeStack) - a.taskChangeOffset
 	a.taskChangeOffset = len(a.changeStack)
 
-	// read tracker をリセット（新しいタスクで過去のカウントを引き継がない）
-	a.readTracker.reset()
-
 	// completion hook の git diff 空チェック判定用ベースハッシュを記録
 	a.taskBaseCommitHash = ""
 	if out, err := exec.Command("git", "rev-parse", "HEAD").Output(); err == nil {
@@ -249,20 +246,14 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 		requestCtx := a.requestContext(ctx)
 		if i == 0 && image != nil {
 			inputWithPrompt := input + promptnormal.NormalModePrompt
-			maxLines, headLines, tailLines := a.getCompactionParams()
-			compactedHistory, metrics := CompactOldToolResults(a.History[:len(a.History)-1], maxLines, headLines, tailLines)
-			a.addCompactionMetrics(metrics)
 			response, err = a.CurrentProvider.ChatWithImage(
-				requestCtx, effectivePrompt, compactedHistory, inputWithPrompt, image, a.CurrentModel,
+				requestCtx, effectivePrompt, a.History[:len(a.History)-1], inputWithPrompt, image, a.CurrentModel,
 			)
 		} else {
-			maxLines, headLines, tailLines := a.getCompactionParams()
-			compactedHistory, metrics := CompactOldToolResults(a.History, maxLines, headLines, tailLines)
-			a.addCompactionMetrics(metrics)
 			response, err = a.CurrentProvider.ChatWithTools(
 				requestCtx,
 				effectivePrompt,
-				compactedHistory,
+				a.History,
 				a.CurrentModel,
 			)
 			// tool_choice が設定されていた場合は解除
@@ -515,14 +506,10 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 				a.handleFileChange(change)
 
 				// 結果を履歴に追加
-				historyContent := result
-				if !a.shouldSkipHistoryTruncation() {
-					historyContent = a.compactToolResult(tc, result)
-				}
 				if tc.ID != "" {
 					toolMsg := api.Message{
 						Role:       "tool",
-						Content:    historyContent,
+						Content:    result,
 						ToolCallID: tc.ID,
 						ToolName:   tc.Tool,
 					}
@@ -533,7 +520,7 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 				} else {
 					a.History = append(a.History, api.Message{
 						Role:    "user",
-						Content: fmt.Sprintf("[Tool Result for %s]\n%s", tc.Tool, historyContent),
+						Content: fmt.Sprintf("[Tool Result for %s]\n%s", tc.Tool, result),
 					})
 				}
 				_, _ = fmt.Fprintln(a.output())

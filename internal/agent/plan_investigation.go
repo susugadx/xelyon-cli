@@ -33,13 +33,10 @@ func (a *Agent) runInvestigationPhase(ctx context.Context) (*plan.Plan, error) {
 			emitLoopWarning(a, i)
 		}
 
-		maxLines, headLines, tailLines := a.getCompactionParams()
-		compactedHistory, metrics := CompactOldToolResults(a.History, maxLines, headLines, tailLines)
-		a.addCompactionMetrics(metrics)
 		response, err := a.CurrentProvider.ChatWithTools(
 			a.requestContext(ctx),
 			a.SystemPrompt,
-			compactedHistory,
+			a.History,
 			a.CurrentModel,
 		)
 		if err != nil {

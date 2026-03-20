@@ -11,6 +11,12 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/prompt"
 )
 
+const (
+	manualCompressMaxLines  = 50
+	manualCompressHeadLines = 20
+	manualCompressTailLines = 5
+)
+
 // CompressHistory は会話履歴を圧縮する
 func (a *Agent) CompressHistory(keepRecent int) error {
 	out := a.output()
@@ -33,7 +39,7 @@ func (a *Agent) CompressHistory(keepRecent int) error {
 
 	// サマリー生成プロンプト
 	// 古いツール結果を截断してトークン節約（サマリー生成の入力を削減）
-	prunedCompress, metrics := CompactOldToolResults(toCompress, DefaultMaxLines, DefaultHeadLines, DefaultTailLines)
+	prunedCompress, metrics := CompactOldToolResults(toCompress, manualCompressMaxLines, manualCompressHeadLines, manualCompressTailLines)
 	a.addCompactionMetrics(metrics)
 	// api.Message を prompt.Message に変換
 	promptMessages := make([]prompt.Message, len(prunedCompress))
