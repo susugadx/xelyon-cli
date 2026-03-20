@@ -584,12 +584,12 @@ func handleTokensCommand(agent *Agent) bool {
 		if thresholdPercent == 0 {
 			thresholdPercent = 80
 		}
-		tokenThreshold := cfg.Compression.TokenThreshold
-		if tokenThreshold <= 0 {
-			tokenThreshold = 100000
+		customThreshold := "disabled"
+		if cfg.Compression.TokenThreshold > 0 {
+			customThreshold = formatNumber(cfg.Compression.TokenThreshold) + " tokens"
 		}
-		_, _ = fmt.Fprintf(out, "    ON (absolute: %s tokens, percent: %d%%, model: %s)\n",
-			formatNumber(tokenThreshold), thresholdPercent, agent.getCompressionModel())
+		_, _ = fmt.Fprintf(out, "    ON (custom: %s, percent: %d%%, model: %s)\n",
+			customThreshold, thresholdPercent, agent.getCompressionModel())
 	} else {
 		_, _ = fmt.Fprintln(out, "    OFF")
 	}

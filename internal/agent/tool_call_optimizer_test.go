@@ -48,11 +48,11 @@ func TestTurnDedupKey_RangeRead(t *testing.T) {
 	}
 }
 
-func TestTurnDedupKey_SymbolRead(t *testing.T) {
-	tc1 := &tools.ToolCall{Tool: "read_file", Args: map[string]string{"path": "/a.go", "symbol": "Foo"}}
-	tc2 := &tools.ToolCall{Tool: "read_file", Args: map[string]string{"path": "/a.go", "symbol": "Foo"}}
+func TestTurnDedupKey_InspectSymbol(t *testing.T) {
+	tc1 := &tools.ToolCall{Tool: "inspect_symbol", Args: map[string]string{"path": "/a.go", "symbol": "Foo"}}
+	tc2 := &tools.ToolCall{Tool: "inspect_symbol", Args: map[string]string{"path": "/a.go", "symbol": "Foo"}}
 	if turnDedupKey(tc1) != turnDedupKey(tc2) {
-		t.Error("same symbol read should produce same key")
+		t.Error("same inspect_symbol call should produce same key")
 	}
 }
 
@@ -88,7 +88,6 @@ func TestIsBatchableReadFile(t *testing.T) {
 		want bool
 	}{
 		{"plain path", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"path": "/a.go"}}, true},
-		{"symbol read", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"path": "/a.go", "symbol": "Foo"}}, false},
 		{"range read", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"path": "/a.go", "start_line": "1", "end_line": "50"}}, false},
 		{"start_line only", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"path": "/a.go", "start_line": "1"}}, false},
 		{"paths specified", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"paths": `["a.go","b.go"]`}}, false},
@@ -431,15 +430,15 @@ func TestExecuteToolCallsWithParallel_SameTurnDuplicate_NotSuppressed_DifferentA
 	}
 }
 
-func TestExecuteToolCallsWithParallel_SameTurnDuplicate_TargetedReadNotBroken(t *testing.T) {
+func TestExecuteToolCallsWithParallel_SameTurnDuplicate_InspectSymbolNotBroken(t *testing.T) {
 	provider := &mockProvider{name: "test"}
 	agent := NewAgent("test-model", provider, false)
 	agent.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
 
-	// Same symbol read twice → should be deduplicated (exact same args)
+	// Same inspect_symbol call twice → should be deduplicated (exact same args)
 	toolCalls := []*tools.ToolCall{
-		{ID: "c1", Tool: "read_file", Args: map[string]string{"path": "/a.go", "symbol": "Build"}, RawArgs: map[string]any{"path": "/a.go", "symbol": "Build"}},
-		{ID: "c2", Tool: "read_file", Args: map[string]string{"path": "/a.go", "symbol": "Build"}, RawArgs: map[string]any{"path": "/a.go", "symbol": "Build"}},
+		{ID: "c1", Tool: "inspect_symbol", Args: map[string]string{"path": "/a.go", "symbol": "Build"}, RawArgs: map[string]any{"path": "/a.go", "symbol": "Build"}},
+		{ID: "c2", Tool: "inspect_symbol", Args: map[string]string{"path": "/a.go", "symbol": "Build"}, RawArgs: map[string]any{"path": "/a.go", "symbol": "Build"}},
 	}
 
 	agent.addToolCallsToHistory("test", toolCalls)
@@ -458,8 +457,8 @@ func TestExecuteToolCallsWithParallel_SameTurnDuplicate_TargetedReadNotBroken(t 
 
 	// Different symbol → should NOT be deduplicated
 	toolCalls2 := []*tools.ToolCall{
-		{ID: "d1", Tool: "read_file", Args: map[string]string{"path": "/a.go", "symbol": "Build"}, RawArgs: map[string]any{"path": "/a.go", "symbol": "Build"}},
-		{ID: "d2", Tool: "read_file", Args: map[string]string{"path": "/a.go", "symbol": "Run"}, RawArgs: map[string]any{"path": "/a.go", "symbol": "Run"}},
+		{ID: "d1", Tool: "inspect_symbol", Args: map[string]string{"path": "/a.go", "symbol": "Build"}, RawArgs: map[string]any{"path": "/a.go", "symbol": "Build"}},
+		{ID: "d2", Tool: "inspect_symbol", Args: map[string]string{"path": "/a.go", "symbol": "Run"}, RawArgs: map[string]any{"path": "/a.go", "symbol": "Run"}},
 	}
 	agent2 := NewAgent("test-model", provider, false)
 	agent2.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
@@ -472,7 +471,7 @@ func TestExecuteToolCallsWithParallel_SameTurnDuplicate_TargetedReadNotBroken(t 
 	agent2.executeToolCallsWithParallel(context.Background(), toolCalls2, nil, nil, callback2)
 
 	if len(executedIDs2) != 2 {
-		t.Errorf("different symbols should both execute, got %d", len(executedIDs2))
+		t.Errorf("different inspect_symbol calls should both execute, got %d", len(executedIDs2))
 	}
 }
 
@@ -631,14 +630,14 @@ func TestExecuteToolCallsWithParallel_ReadFile_RangeNotBatched(t *testing.T) {
 }
 
 func TestExecuteToolCallsWithParallel_ReadFile_MixedNotBroken(t *testing.T) {
-	// Mixed: plain + symbol + range → each treated independently
+	// Mixed: plain read + inspect_symbol + range read → each treated independently
 	provider := &mockProvider{name: "test"}
 	agent := NewAgent("test-model", provider, false)
 	agent.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
 
 	toolCalls := []*tools.ToolCall{
 		{ID: "c1", Tool: "read_file", Args: map[string]string{"path": "/a.go"}, RawArgs: map[string]any{"path": "/a.go"}},
-		{ID: "c2", Tool: "read_file", Args: map[string]string{"path": "/a.go", "symbol": "Build"}, RawArgs: map[string]any{"path": "/a.go", "symbol": "Build"}},
+		{ID: "c2", Tool: "inspect_symbol", Args: map[string]string{"path": "/a.go", "symbol": "Build"}, RawArgs: map[string]any{"path": "/a.go", "symbol": "Build"}},
 		{ID: "c3", Tool: "read_file", Args: map[string]string{"path": "/a.go", "start_line": "1", "end_line": "50"}, RawArgs: map[string]any{"path": "/a.go", "start_line": 1, "end_line": 50}},
 	}
 	agent.addToolCallsToHistory("test", toolCalls)
@@ -650,7 +649,7 @@ func TestExecuteToolCallsWithParallel_ReadFile_MixedNotBroken(t *testing.T) {
 
 	agent.executeToolCallsWithParallel(context.Background(), toolCalls, nil, nil, callback)
 
-	// All three have different args → all should execute (no dedup)
+	// All three should execute without deduplication conflicts
 	if executedCount != 3 {
 		t.Errorf("mixed call types should all execute, got %d", executedCount)
 	}
@@ -1074,7 +1073,6 @@ func TestIsBatchableReadFile_Comprehensive(t *testing.T) {
 		want bool
 	}{
 		{"plain path", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"path": "/a.go"}}, true},
-		{"symbol read", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"path": "/a.go", "symbol": "Foo"}}, false},
 		{"range read", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"path": "/a.go", "start_line": "1", "end_line": "50"}}, false},
 		{"start_line only", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"path": "/a.go", "start_line": "1"}}, false},
 		{"end_line only", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"path": "/a.go", "end_line": "50"}}, false},
@@ -1197,10 +1195,10 @@ func TestReadFileBatchMerge_SingleReadNotMerged(t *testing.T) {
 	agent := NewAgent("test-model", provider, false)
 	agent.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
 
-	// Only 1 plain read + 1 non-batchable → no merge
+	// Only 1 plain read + 1 range read → no merge
 	toolCalls := []*tools.ToolCall{
 		{ID: "c1", Tool: "read_file", Args: map[string]string{"path": "/a.go"}, RawArgs: map[string]any{"path": "/a.go"}},
-		{ID: "c2", Tool: "read_file", Args: map[string]string{"path": "/b.go", "symbol": "Foo"}, RawArgs: map[string]any{"path": "/b.go", "symbol": "Foo"}},
+		{ID: "c2", Tool: "read_file", Args: map[string]string{"path": "/b.go", "start_line": "10", "end_line": "20"}, RawArgs: map[string]any{"path": "/b.go", "start_line": 10, "end_line": 20}},
 	}
 	agent.addToolCallsToHistory("test", toolCalls)
 
@@ -1365,11 +1363,11 @@ func TestSegmentReadFileBatches_OverMaxPaths(t *testing.T) {
 }
 
 func TestSegmentReadFileBatches_NonBatchableReadIgnored(t *testing.T) {
-	// read(a) -> read(b, symbol=Foo) -> read(c)
-	// symbol read は非バッチ → セグメント [a, c]
+	// read(a) -> read(b, start_line/end_line) -> read(c)
+	// range read は非バッチ → セグメント [a, c]
 	tcs := []*tools.ToolCall{
 		{Tool: "read_file", Args: map[string]string{"path": "/a.go"}},
-		{Tool: "read_file", Args: map[string]string{"path": "/b.go", "symbol": "Foo"}},
+		{Tool: "read_file", Args: map[string]string{"path": "/b.go", "start_line": "10", "end_line": "20"}},
 		{Tool: "read_file", Args: map[string]string{"path": "/c.go"}},
 	}
 	flags := []bool{true, true, true}

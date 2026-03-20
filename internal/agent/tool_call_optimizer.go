@@ -46,12 +46,9 @@ func turnDedupKey(tc *tools.ToolCall) string {
 // ── read_file batching eligibility ──
 
 // isBatchableReadFile は read_file call が batch 対象（plain path read）かを判定する。
-// symbol read / range read / paths 指定済みの call は対象外。
+// range read と内部 batch call は対象外。
 func isBatchableReadFile(tc *tools.ToolCall) bool {
 	if tc.Tool != "read_file" {
-		return false
-	}
-	if tc.Args["symbol"] != "" {
 		return false
 	}
 	if tc.Args["start_line"] != "" || tc.Args["end_line"] != "" {
@@ -66,13 +63,10 @@ func isBatchableReadFile(tc *tools.ToolCall) bool {
 // ── read_file batch merge ──
 
 // maxReadFileBatchPaths は read_file batch merge のパス上限。
-// read_file(paths=...) の MaxReadFilesPaths に合わせる。
 const maxReadFileBatchPaths = 10
 
-// buildReadFileBatchToolCall は複数の plain read_file call を
-// 1 つの read_file(paths=[...]) call にまとめた ToolCall を生成する。
-// fullBudget が true の場合、自動 merge 用フラグ (_full_budget) を付与し、
-// 単発 read_file と同じアウトライン閾値 (DefaultFullLines) で読み込む。
+// buildReadFileBatchToolCall は internal batch read 用の synthetic ToolCall を生成する。
+// observability / negative cache 記録では paths を保持するが、公開 read_file schema には含まれない。
 func buildReadFileBatchToolCall(paths []string, fullBudget bool) *tools.ToolCall {
 	pathsJSON, _ := json.Marshal(paths)
 	args := map[string]string{
@@ -130,10 +124,10 @@ func segmentReadFileBatches(allToolCalls []*tools.ToolCall, execFlags []bool) []
 	return segments
 }
 
-// readFileBatchHeaderPrefix は read_file(paths=...) の結果でファイル区切りに使われるプレフィックス。
+// readFileBatchHeaderPrefix は internal batch read の結果でファイル区切りに使われるプレフィックス。
 const readFileBatchHeaderPrefix = "📄 File: "
 
-// splitReadFileBatchResult は read_file(paths=...) の結果をファイルパスごとに分割する。
+// splitReadFileBatchResult は internal batch read の結果をファイルパスごとに分割する。
 // paths は merge 時の順序と一致していなければならない。
 // 分割に失敗した場合は nil を返す。
 func splitReadFileBatchResult(result string, paths []string) map[string]string {

@@ -35,11 +35,9 @@ func formatFileSize(bytes int64) string {
 	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }
 
-// DefaultFullLines は行範囲未指定時にアウトラインへ切り替える閾値。
-// この行数以下のファイルは全文を返し、超えるとアウトラインモードになる。
-// 200行にすることで、100〜200行の中規模ファイルで outline → range read の
-// 往復ターンを削減する。大きいファイル（200行超）は引き続き outline-first。
-const DefaultFullLines = 200
+// DefaultFullLines is the threshold for switching from full content to outline mode.
+// Files up to this size are returned in full when no line range is specified.
+const DefaultFullLines = 500
 
 // MaxReadLines は行範囲指定時のデフォルト最大読み込み行数
 const MaxReadLines = 300
@@ -373,12 +371,8 @@ func formatOutline(filePath string, lines []string, totalLines int) string {
 	}
 
 	// 4. ガイドメッセージ
-	// NOTE: "Use start_line/end_line" は agent.go の recordToolResultOptimizations で検出に使われている。
-	if internalast.IsSupportedFile(filePath) {
-		fmt.Fprintf(&sb, "\n(%d lines total. Use start_line/end_line or symbol=\"Name\" to read details)\n", totalLines)
-	} else {
-		fmt.Fprintf(&sb, "\n(%d lines total. Use start_line/end_line to read specific sections)\n", totalLines)
-	}
+	// NOTE: "Use start_line/end_line" is detected by agent.go for observability.
+	fmt.Fprintf(&sb, "\n(%d lines total. Use start_line/end_line to read specific sections)\n", totalLines)
 
 	return sb.String()
 }

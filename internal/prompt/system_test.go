@@ -8,17 +8,14 @@ import (
 func TestStripPlanningReferences(t *testing.T) {
 	result := StripPlanningReferences(SystemPrompt)
 
-	// create_plan / update_plan への参照が除去されていること
 	if strings.Contains(result, "create_plan") {
 		t.Error("StripPlanningReferences should remove all create_plan references")
 	}
 	if strings.Contains(result, "update_plan") {
 		t.Error("StripPlanningReferences should remove all update_plan references")
 	}
-
-	// Workflow Rules 全体は残っていること
 	if !strings.Contains(result, "## Workflow Rules") {
-		t.Error("StripPlanningReferences should preserve ## Workflow Rules")
+		t.Error("StripPlanningReferences should preserve workflow rules")
 	}
 }
 
@@ -30,217 +27,139 @@ func TestStripPlanningReferences_Idempotent(t *testing.T) {
 	}
 }
 
-func TestSystemPrompt_BashForbiddenForCodeInvestigation(t *testing.T) {
-	// bash がコード調査に使用禁止であることが明記されている
+func TestSystemPrompt_BashRules(t *testing.T) {
 	if !strings.Contains(SystemPrompt, "NEVER use bash for code investigation") {
-		t.Error("SystemPrompt should explicitly forbid bash for code investigation")
+		t.Error("SystemPrompt should forbid bash for code investigation")
+	}
+	if !strings.Contains(SystemPrompt, "bash is ONLY for: build, test, format, lint, git") {
+		t.Error("SystemPrompt should restrict bash to build/test/format/lint/git")
 	}
 	if !strings.Contains(SystemPrompt, "FORBIDDEN") {
-		t.Error("SystemPrompt should use FORBIDDEN for bash code investigation tools")
+		t.Error("SystemPrompt should use FORBIDDEN for bash investigation rules")
 	}
 }
 
-func TestSystemPrompt_BashAllowedForBuildTestGit(t *testing.T) {
-	// bash がビルド・テスト・git 用途では許可されている
-	if !strings.Contains(SystemPrompt, "bash is ONLY for: build, test, format, lint, git") {
-		t.Error("SystemPrompt should specify bash is only for build/test/format/lint/git")
+func TestSystemPrompt_ProjectMapGuidance(t *testing.T) {
+	if !strings.Contains(SystemPrompt, "If Project Map is available, check it first") {
+		t.Error("SystemPrompt should prefer Project Map first")
+	}
+	if !strings.Contains(SystemPrompt, "function locations, line counts, and symbol signatures") {
+		t.Error("SystemPrompt should mention Project Map symbol signatures")
+	}
+	if !strings.Contains(SystemPrompt, "go directly to inspect_symbol or read_file; do not search_code first") {
+		t.Error("SystemPrompt should skip search_code when Project Map already gives the target location")
+	}
+	if !strings.Contains(SystemPrompt, "Use list_dir only when you need current filesystem state") {
+		t.Error("SystemPrompt should weaken list_dir to current-state checks")
 	}
 }
 
-func TestSystemPrompt_DedicatedToolsExplicit(t *testing.T) {
-	// 各専用ツールが明示されている
-	checks := []struct {
-		tool string
-		desc string
-	}{
-		{"inspect_symbol", "known symbol investigation"},
-		{"search_code", "code search / regex discovery"},
-		{"read_file", "file contents"},
-		{"list_dir", "directory listing"},
+func TestSystemPrompt_ToolGuidanceMatchesCurrentSchema(t *testing.T) {
+	if !strings.Contains(SystemPrompt, "Go symbol lookup -> inspect_symbol.") {
+		t.Error("SystemPrompt should describe inspect_symbol as Go symbol lookup")
 	}
-	for _, c := range checks {
-		if !strings.Contains(SystemPrompt, c.tool) {
-			t.Errorf("SystemPrompt should mention %s for %s", c.tool, c.desc)
+	if !strings.Contains(SystemPrompt, "read_file returns file contents; without a line range it returns full content for files up to 500 lines") {
+		t.Error("SystemPrompt should describe current read_file behavior")
+	}
+	forbidden := []string{
+		"search_code+read_file",
+		"read_file with symbol parameter",
+		"do not read_file the same symbol unless the body is truncated",
+		"with paths",
+		"output_mode",
+		"manifest",
+		"token_budget",
+		"summary mode",
+		"full mode",
+	}
+	for _, s := range forbidden {
+		if strings.Contains(SystemPrompt, s) {
+			t.Errorf("SystemPrompt should not mention removed or stale behavior: %q", s)
 		}
 	}
 }
 
-func TestSystemPrompt_InspectSymbolPreferredForExactGoSymbols(t *testing.T) {
-	if !strings.Contains(SystemPrompt, "Known exact Go symbol name -> inspect_symbol FIRST") {
-		t.Error("SystemPrompt should prefer inspect_symbol when the exact Go symbol is known")
+func TestSystemPrompt_ParallelGuidanceIsConsolidated(t *testing.T) {
+	if !strings.Contains(SystemPrompt, "Independent operations -> call multiple tools in one response") {
+		t.Error("SystemPrompt should keep one general parallel guidance rule")
 	}
-	if !strings.Contains(SystemPrompt, "instead of search_code+read_file") {
-		t.Error("SystemPrompt should state inspect_symbol replaces search_code+read_file for exact Go symbols")
+	if !strings.Contains(SystemPrompt, "For shared changes, read target code and its callers/tests in parallel when independent") {
+		t.Error("SystemPrompt should keep shared-change parallel guidance")
 	}
-	if !strings.Contains(SystemPrompt, "do not read_file the same symbol unless the body is truncated") {
-		t.Error("SystemPrompt should discourage redundant read_file after inspect_symbol")
-	}
-}
-
-func TestSystemPrompt_ListDirPreferredForFilesystemExploration(t *testing.T) {
-	if !strings.Contains(SystemPrompt, "Use list_dir for current filesystem exploration") {
-		t.Error("SystemPrompt should prefer list_dir for filesystem exploration")
-	}
-	if !strings.Contains(SystemPrompt, "Project Map is a hint, not a replacement") {
-		t.Error("SystemPrompt should clarify Project Map does not replace list_dir for current filesystem state")
-	}
-	if !strings.Contains(SystemPrompt, "Directory listing -> list_dir; use it first for current filesystem contents") {
-		t.Error("SystemPrompt should prefer list_dir first for filesystem contents and next file choice")
-	}
-}
-
-func TestSystemPrompt_PrefersParallelInvestigationForIndependentSteps(t *testing.T) {
-	if !strings.Contains(SystemPrompt, "default to parallel reads/searches when the steps do not depend on each other") {
-		t.Error("SystemPrompt should prefer parallel reads/searches for independent steps")
-	}
-	if !strings.Contains(SystemPrompt, "prefer one read_file call with paths, or parallel read_file calls") {
-		t.Error("SystemPrompt should prefer batched or parallel read_file usage")
+	if !strings.Contains(SystemPrompt, "Reading 2+ independent files -> call multiple read_file tools in the same response") {
+		t.Error("SystemPrompt should simplify multi-file read guidance")
 	}
 	if !strings.Contains(SystemPrompt, "prefer one search_code call with comma-separated patterns instead of serial searches") {
-		t.Error("SystemPrompt should prefer one multi-pattern search_code call over serial searches")
-	}
-	if !strings.Contains(SystemPrompt, "read target code and its callers/tests in parallel when independent") {
-		t.Error("SystemPrompt should encourage parallel investigation for shared changes")
+		t.Error("SystemPrompt should keep multi-pattern search_code guidance")
 	}
 }
 
-func TestSystemPrompt_ToolSelectionExamplesExist(t *testing.T) {
-	if !strings.Contains(SystemPrompt, "### 4.5. Tool Selection Examples") {
-		t.Error("SystemPrompt should include tool selection examples")
-	}
-	if !strings.Contains(SystemPrompt, "inspect_symbol(symbol=\"chatCore\", path=\"internal/agent/agent_chat.go\")") {
-		t.Error("SystemPrompt should include an inspect_symbol example for an exact Go symbol")
-	}
-	if !strings.Contains(SystemPrompt, "use list_dir first") {
-		t.Error("SystemPrompt should include a list_dir-first exploration example")
-	}
-	if !strings.Contains(SystemPrompt, "one read_file call with paths or parallel reads") {
-		t.Error("SystemPrompt should include a batched/parallel read_file example")
+func TestSystemPrompt_NoToolSelectionExamples(t *testing.T) {
+	if strings.Contains(SystemPrompt, "Tool Selection Examples") {
+		t.Error("SystemPrompt should not include tool selection examples")
 	}
 }
 
-func TestSystemPrompt_NoPhantomReadFiles(t *testing.T) {
-	// "read_files" が独立ツール名のように出てこないこと
-	// 実在ツールは "read_file" であり、複数読みは paths パラメータで行う
-	// "read_file" の直後に "s" が続く箇所を探す（"read_files" 単独出現）
-	// ただし "read_file symbol" のような正当な表現は除外する
-	if strings.Contains(SystemPrompt, "read_files") {
-		t.Error("SystemPrompt should not mention 'read_files' as an independent tool — use 'read_file with paths' instead")
-	}
-}
-
-func TestSystemPrompt_LocalVsSharedChangeGuidance(t *testing.T) {
-	// Local vs shared changes の区別がプロンプトに含まれている
+func TestSystemPrompt_LocalVsSharedGuidance(t *testing.T) {
 	if !strings.Contains(SystemPrompt, "Local vs shared changes") {
-		t.Error("SystemPrompt should contain 'Local vs shared changes' guidance")
+		t.Error("SystemPrompt should distinguish local and shared changes")
 	}
-	// shared changes では callers, references, tests の確認を要求
-	if !strings.Contains(SystemPrompt, "shared changes") {
-		t.Error("SystemPrompt should mention shared changes requiring broader investigation")
-	}
-}
-
-func TestSystemPrompt_ImpactAnalysisLocalSharedConsistency(t *testing.T) {
-	// Impact Analysis が local/shared の区分を含む
 	if !strings.Contains(SystemPrompt, "**Shared changes**") {
-		t.Error("Impact Analysis should have **Shared changes** section")
+		t.Error("SystemPrompt should include shared changes guidance")
 	}
 	if !strings.Contains(SystemPrompt, "**Local changes**") {
-		t.Error("Impact Analysis should have **Local changes** section")
+		t.Error("SystemPrompt should include local changes guidance")
 	}
-	// Local changes では broad search 不要
-	if !strings.Contains(SystemPrompt, "broad reference search is not required") {
-		t.Error("Impact Analysis should explicitly state broad search is not required for local changes")
-	}
-}
-
-func TestSystemPrompt_NoBroadFirstDefault(t *testing.T) {
-	// "read broadly first" は削除されている
-	if strings.Contains(SystemPrompt, "read broadly first") {
-		t.Error("SystemPrompt should not contain 'read broadly first' — replaced by local/shared distinction")
-	}
-	// "Read enough surrounding context" は削除されている
-	if strings.Contains(SystemPrompt, "Read enough surrounding context") {
-		t.Error("SystemPrompt should not contain 'Read enough surrounding context' — replaced by local/shared distinction")
+	if !strings.Contains(SystemPrompt, "Broad reference search is not required") {
+		t.Error("SystemPrompt should keep the local-change broad-search guard")
 	}
 }
 
-func TestSystemPrompt_LocalChangeExamplesSafe(t *testing.T) {
-	// "adding a field" は local change の例に含まれない（波及しやすいため）
-	// local change の例文を検出して "adding a field" が含まれていないことを確認
-	if strings.Contains(SystemPrompt, "local changes (bug fix in one function, adding a field") {
-		t.Error("local change examples should not include 'adding a field' — it can ripple to constructors/tests")
+func TestSystemPrompt_EfficientExecutionGuidance(t *testing.T) {
+	if !strings.Contains(SystemPrompt, "Do not upgrade from targeted read to full-file read unless") {
+		t.Error("SystemPrompt should guard against unnecessary full-file reads")
+	}
+	if !strings.Contains(SystemPrompt, "Do not search \"just in case\"") {
+		t.Error("SystemPrompt should discourage speculative searching")
+	}
+	if !strings.Contains(SystemPrompt, "read neighboring files speculatively") {
+		t.Error("SystemPrompt should discourage speculative neighboring reads")
+	}
+	if !strings.Contains(SystemPrompt, "str_replace old_str must come from actual inspect_symbol, read_file, or search_code output") {
+		t.Error("SystemPrompt should require exact old_str provenance")
 	}
 }
 
-func TestSystemPrompt_NarrowFirstStrategy(t *testing.T) {
-	if !strings.Contains(SystemPrompt, "narrow-first") {
-		t.Error("SystemPrompt should contain narrow-first investigation strategy")
+func TestSystemPrompt_VerificationAndOutputGuidance(t *testing.T) {
+	if !strings.Contains(SystemPrompt, "make ci-check") {
+		t.Error("SystemPrompt should mention project-defined verification commands")
 	}
-	if !strings.Contains(SystemPrompt, "Read priority:") {
-		t.Error("SystemPrompt should define read priority order")
-	}
-}
-
-func TestSystemPrompt_HypothesisDrivenInvestigation(t *testing.T) {
-	if !strings.Contains(SystemPrompt, "After 2-4 targeted reads/searches, form a working hypothesis") {
-		t.Error("SystemPrompt should include hypothesis-driven investigation rule with bounded read count")
-	}
-	if !strings.Contains(SystemPrompt, "switch to implementation") {
-		t.Error("SystemPrompt should instruct switching to implementation once hypothesis is clear")
-	}
-}
-
-func TestSystemPrompt_StopExploringRule(t *testing.T) {
-	if !strings.Contains(SystemPrompt, "do not search \"just in case\"") {
-		t.Error("SystemPrompt should explicitly discourage speculative searching")
-	}
-	if !strings.Contains(SystemPrompt, "Do not read neighboring files speculatively") {
-		t.Error("SystemPrompt should discourage speculative neighboring file reads")
-	}
-}
-
-func TestSystemPrompt_TargetedVerification(t *testing.T) {
-	if !strings.Contains(SystemPrompt, "targeted verification first") {
-		t.Error("SystemPrompt should prefer targeted verification before full CI")
+	if !strings.Contains(SystemPrompt, "Prefer targeted verification first") {
+		t.Error("SystemPrompt should prefer targeted verification first")
 	}
 	if !strings.Contains(SystemPrompt, "Do not rerun the same failing command without a code change") {
-		t.Error("SystemPrompt should forbid rerunning the same failing command without changes")
+		t.Error("SystemPrompt should forbid rerunning failing commands unchanged")
 	}
-}
-
-func TestSystemPrompt_PhaseBasedNarration(t *testing.T) {
-	if !strings.Contains(SystemPrompt, "phase boundaries") {
-		t.Error("SystemPrompt should describe narration at phase boundaries")
-	}
-	if strings.Contains(SystemPrompt, "briefly state what you are about to do") {
-		t.Error("SystemPrompt should not contain per-tool narration rule")
+	if !strings.Contains(SystemPrompt, "Give one short progress update only at phase boundaries") {
+		t.Error("SystemPrompt should limit progress updates to phase boundaries")
 	}
 	if !strings.Contains(SystemPrompt, "At most one short progress update per phase") {
-		t.Error("SystemPrompt should limit progress updates to at most one per phase")
-	}
-}
-
-func TestSystemPrompt_FullFileReadUpgradeGuard(t *testing.T) {
-	if !strings.Contains(SystemPrompt, "Do not upgrade from targeted read to full file read unless") {
-		t.Error("SystemPrompt should guard against unnecessary full file read upgrades")
+		t.Error("SystemPrompt should cap progress updates per phase")
 	}
 }
 
 func TestSystemPrompt_NoBashRecommendations(t *testing.T) {
-	// "bash (grep)" や "Use bash" といった調査用 bash 推奨パターンが含まれていない
-	// NOTE: "bash cat/head/tail/grep/find/sed/awk are FORBIDDEN" のような禁止文は OK
 	forbidden := []string{
-		"bash (grep)",           // str_replace recovery で使われていた旧パターン
-		"NOT bash cat",          // 旧 "read_file, NOT bash cat/head/tail/sed" パターン
-		"NOT bash ls",           // 旧 "list_dir, NOT bash ls/find" パターン
-		"Use bash (grep)",       // 旧 recovery guidance
-		"Use bash (find",        // 旧 investigation guidance
-		"bash (find/read-only)", // 旧 investigation allowed list
+		"bash (grep)",
+		"NOT bash cat",
+		"NOT bash ls",
+		"Use bash (grep)",
+		"Use bash (find",
+		"bash (find/read-only)",
 	}
 	for _, f := range forbidden {
 		if strings.Contains(SystemPrompt, f) {
-			t.Errorf("SystemPrompt should not contain %q — use dedicated tool names instead", f)
+			t.Errorf("SystemPrompt should not recommend bash investigation patterns: %q", f)
 		}
 	}
 }

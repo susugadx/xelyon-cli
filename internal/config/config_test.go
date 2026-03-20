@@ -47,8 +47,8 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Compression.ThresholdPercent != 80 {
 		t.Errorf("Compression.ThresholdPercent = %d, want 80", cfg.Compression.ThresholdPercent)
 	}
-	if cfg.Compression.TokenThreshold != 100000 {
-		t.Errorf("Compression.TokenThreshold = %d, want 100000", cfg.Compression.TokenThreshold)
+	if cfg.Compression.TokenThreshold != 0 {
+		t.Errorf("Compression.TokenThreshold = %d, want 0", cfg.Compression.TokenThreshold)
 	}
 	if cfg.Compression.Model != "" {
 		t.Errorf("Compression.Model = %q, want empty string", cfg.Compression.Model)
@@ -239,8 +239,8 @@ func TestLoadConfig_Partial(t *testing.T) {
 	if cfg.APIRetry.Count != 3 {
 		t.Errorf("APIRetry.Count should default to 3, got %d", cfg.APIRetry.Count)
 	}
-	if cfg.Compression.TokenThreshold != 100000 {
-		t.Errorf("Compression.TokenThreshold should default to 100000, got %d", cfg.Compression.TokenThreshold)
+	if cfg.Compression.TokenThreshold != 0 {
+		t.Errorf("Compression.TokenThreshold should default to 0, got %d", cfg.Compression.TokenThreshold)
 	}
 	if cfg.Compression.Model != "" {
 		t.Errorf("Compression.Model should default to empty string, got %q", cfg.Compression.Model)

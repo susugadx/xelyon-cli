@@ -115,21 +115,8 @@ func (a *Agent) maybeAutoCompress() bool {
 		return false
 	}
 
-	currentTokens := a.EstimateTokens()
-	tokenThreshold := cfg.Compression.TokenThreshold
-	if tokenThreshold <= 0 {
-		tokenThreshold = 100000
-	}
-	if currentTokens >= tokenThreshold {
-		cyan.Fprintf(a.output(),
-			"\n🗜️ Auto-compressing: context %dK exceeds %dK absolute threshold...\n",
-			currentTokens/1000,
-			tokenThreshold/1000,
-		)
-		return a.runAutoCompression(false)
-	}
-
 	// プロバイダ別コスト最適化閾値
+	currentTokens := a.EstimateTokens()
 	providerThreshold := GetProviderCompressThresholdWithConfig(cfg, a.ProviderName, a.CurrentModel)
 	projectedTokens, costAwareCompress := shouldForceCompressForPricingCliff(a.ProviderName, a.CurrentModel, currentTokens, a.Stats)
 	forceCompress := costAwareCompress
@@ -157,6 +144,15 @@ func (a *Agent) maybeAutoCompress() bool {
 			if compactionProvider.SupportsClaudeCompaction() {
 				return false
 			}
+		}
+
+		if cfg.Compression.TokenThreshold > 0 && currentTokens >= cfg.Compression.TokenThreshold {
+			cyan.Fprintf(a.output(),
+				"\n🗜️ Auto-compressing: context %dK exceeds %dK custom threshold...\n",
+				currentTokens/1000,
+				cfg.Compression.TokenThreshold/1000,
+			)
+			return a.runAutoCompression(false)
 		}
 
 		percentage := a.GetTokenUsagePercentage()

@@ -454,13 +454,13 @@ func TestFormatInspectResult_SummaryContractForTruncatedSections(t *testing.T) {
 	if !strings.Contains(result, "Related tests: 1 examples (of 2 found)") {
 		t.Errorf("expected tests shown/total contract, got: %s", result)
 	}
-	if !strings.Contains(result, "(+ more callers. Use mode=\"full\" or search_code)") {
+	if !strings.Contains(result, "(+ more callers. Use search_code for more results)") {
 		t.Errorf("expected callers next action hint, got: %s", result)
 	}
-	if !strings.Contains(result, "(+ more references. Use mode=\"full\" or search_code)") {
+	if !strings.Contains(result, "(+ more references. Use search_code for more results)") {
 		t.Errorf("expected refs next action hint, got: %s", result)
 	}
-	if !strings.Contains(result, "(+ more tests. Use mode=\"full\" or search_code)") {
+	if !strings.Contains(result, "(+ more tests. Use search_code for more results)") {
 		t.Errorf("expected tests next action hint, got: %s", result)
 	}
 	if strings.Contains(result, "has related tests") {

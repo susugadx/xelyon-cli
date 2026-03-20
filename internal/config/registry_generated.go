@@ -154,7 +154,7 @@ var FieldDescriptions = map[string]string{
 	"compression.prefer_compact_api":      "プロバイダーのCompact APIを優先使用",
 	"compression.threshold_percent":       "トークン使用率の閾値（%）",
 	"compression.threshold_tokens":        "トークン数の閾値（0 = 使用しない）",
-	"compression.token_threshold":         "絶対トークン閾値（デフォルト100000、キャッシュ有無に関係なく発動）",
+	"compression.token_threshold":         "カスタム絶対トークン閾値（デフォルト0 = 無効、明示設定時のみ有効）",
 	"default_model":                       "デフォルトで使用するモデル",
 	"default_provider":                    "デフォルトで使用するLLMプロバイダー",
 	"diff.context_lines":                  "差分表示時のコンテキスト行数",

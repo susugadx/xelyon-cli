@@ -8,21 +8,6 @@ import (
 
 // ── read_file: targeted read ──
 
-func TestCompactReadFile_TargetedSymbolRead(t *testing.T) {
-	// symbol mode read は圧縮しない（str_replace に必要な exact content を保持）
-	var lines []string
-	for i := 1; i <= 200; i++ {
-		lines = append(lines, fmt.Sprintf("%d: func code line %d", i, i))
-	}
-	input := strings.Join(lines, "\n")
-
-	args := map[string]string{"path": "foo.go", "symbol": "ProcessData"}
-	got := compactReadFile(args, input)
-	if got != input {
-		t.Error("symbol mode read should not be compacted")
-	}
-}
-
 func TestCompactReadFile_TargetedStartLine(t *testing.T) {
 	// start_line 指定 read は圧縮しない
 	var lines []string
@@ -190,7 +175,7 @@ func TestCompactReadFile_GuidancePreserved(t *testing.T) {
 	}
 	body := strings.Join(lines, "\n")
 	guidance := "\n\n[GUIDANCE] You have read this file 3 times in this session. " +
-		"Consider reading a larger range or using symbol mode instead of multiple micro-reads."
+		"Consider reading a larger range or using inspect_symbol for exact Go symbols instead of multiple micro-reads."
 	input := body + guidance
 
 	args := map[string]string{"path": "foo.go"}
@@ -234,7 +219,7 @@ func TestCompactReadFile_GuidanceOnTargetedRead(t *testing.T) {
 	guidance := "\n\n[GUIDANCE] You have read this file 5 times."
 	input := body + guidance
 
-	args := map[string]string{"path": "foo.go", "symbol": "MyFunc"}
+	args := map[string]string{"path": "foo.go", "start_line": "1", "end_line": "200"}
 	got := compactReadFile(args, input)
 	if got != input {
 		t.Error("targeted read with guidance should return as-is")
@@ -286,7 +271,7 @@ func TestCompactInspectSymbol_Large(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		fmt.Fprintf(&sb, "  - caller%d.go:%d in funcCaller%d\n", i, i*10+1, i)
 	}
-	sb.WriteString("  (+ more callers. Use mode=\"full\" or search_code)\n")
+	sb.WriteString("  (+ more callers. Use search_code for more results)\n")
 	sb.WriteString("\nReferences (8):\n")
 	for i := 0; i < 8; i++ {
 		fmt.Fprintf(&sb, "  - ref%d.go:%d | some reference code\n", i, i*5+1)
@@ -387,7 +372,6 @@ func TestIsTargetedRead(t *testing.T) {
 		want bool
 	}{
 		{"broad read", map[string]string{"path": "foo.go"}, false},
-		{"symbol mode", map[string]string{"path": "foo.go", "symbol": "Foo"}, true},
 		{"start_line", map[string]string{"path": "foo.go", "start_line": "10"}, true},
 		{"end_line", map[string]string{"path": "foo.go", "end_line": "50"}, true},
 		{"range", map[string]string{"path": "foo.go", "start_line": "10", "end_line": "50"}, true},

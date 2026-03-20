@@ -29,11 +29,6 @@ func (t *InspectSymbolTool) Parameters() map[string]interface{} {
 				"type":        "string",
 				"description": "Optional file or directory path to narrow candidates",
 			},
-			"mode": map[string]interface{}{
-				"type":        "string",
-				"description": "Output mode: 'summary' (default, compact) or 'full' (expanded limits)",
-				"enum":        []string{"summary", "full"},
-			},
 		},
 		"required":             []string{"symbol"},
 		"additionalProperties": false,
@@ -44,9 +39,7 @@ func (t *InspectSymbolTool) Parameters() map[string]interface{} {
 func (t *InspectSymbolTool) Run(execCtx tools.ExecutionContext, args map[string]string) (string, *tools.FileChange, error) {
 	symbol := args["symbol"]
 	path := args["path"]
-	mode := args["mode"]
-
-	result := navigation.InspectSymbol(symbol, path, mode)
+	result := navigation.InspectSymbol(symbol, path, "full")
 	return result, nil, nil
 }
 

@@ -75,9 +75,9 @@ func (rt *readTracker) record(toolCall *tools.ToolCall) string {
 		return ""
 	}
 
-	// soft guidance: read_file symbol mode や broader range を促す
+	// soft guidance: broader range or inspect_symbol を促す
 	return fmt.Sprintf("\n\n[GUIDANCE] You have read this file %d times in this session. "+
-		"Consider reading a larger range or using symbol mode instead of multiple micro-reads. "+
+		"Consider reading a larger range or using inspect_symbol for exact Go symbols instead of multiple micro-reads. "+
 		"If you already have enough context, proceed to edit.", count)
 }
 

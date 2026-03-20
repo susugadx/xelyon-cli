@@ -2,7 +2,6 @@ package file
 
 import (
 	"encoding/json"
-	"fmt"
 	"strconv"
 	"strings"
 
@@ -26,13 +25,6 @@ func (t *ReadFileTool) Parameters() map[string]interface{} {
 			"path":       map[string]interface{}{"type": "string", "description": "Absolute or relative file path to read. Without start_line/end_line, returns full content for small files or an outline with signatures for larger files."},
 			"start_line": map[string]interface{}{"type": "integer", "description": "Start line number (1-indexed). Use only when the target section is already known."},
 			"end_line":   map[string]interface{}{"type": "integer", "description": "End line number (1-indexed). Omit to read up to 300 lines from start_line."},
-			"symbol":     map[string]interface{}{"type": "string", "description": "Read specific symbol(s) by name. Comma-separated for multiple (e.g. \"Build,HandleRequest\"). Returns only the matching function/type body with surrounding context. Go files only (Phase 1). When symbol is provided, start_line/end_line are ignored."},
-			"paths": map[string]interface{}{
-				"type":        "array",
-				"items":       map[string]interface{}{"type": "string"},
-				"maxItems":    MaxReadFilesPaths,
-				"description": "Read multiple files in one call (max 10). Format: \"path\" or \"path:start-end\". Prefer plain \"path\" when investigating; add ranges only for known sections. When paths is provided, path/start_line/end_line are ignored.",
-			},
 		},
 		"required":             []string{},
 		"additionalProperties": false,
@@ -42,35 +34,9 @@ func (t *ReadFileTool) Parameters() map[string]interface{} {
 func (t *ReadFileTool) Run(execCtx tools.ExecutionContext, args map[string]string) (string, *tools.FileChange, error) {
 	out := execCtx.Output()
 
-	// バッチモード: paths が指定されている場合
-	// paths が空配列や不正 JSON の場合、path が有効なら単体モードにフォールバック
-	if rawPaths := args["paths"]; rawPaths != "" {
-		var paths []string
-		if err := json.Unmarshal([]byte(rawPaths), &paths); err != nil {
-			if args["path"] == "" {
-				return fmt.Sprintf("Error: invalid paths format: %v", err), nil, nil
-			}
-			// path が有効 → 単体モードへフォールスルー
-		} else if len(paths) > 0 {
-			// _full_budget: 自動 batch merge 用フラグ。
-			// 単発 read_file と同じアウトライン閾値 (DefaultFullLines) + runtime 文脈を使用する。
-			if args["_full_budget"] == "true" {
-				return ExecuteReadFilesWithRuntime(out, execCtx.EffectiveConfig(), execCtx.EffectiveToolCache(), paths, DefaultFullLines), nil, nil
-			}
-			return ExecuteReadFilesWithOutput(out, paths), nil, nil
-		} else if args["path"] == "" {
-			return "Error: path or paths is required", nil, nil
-		}
-		// paths が空/無効 かつ path が有効 → 単体モードへフォールスルー
-	}
-
-	if args["symbol"] != "" && args["path"] != "" {
-		return ExecuteReadFileBySymbolWithRuntime(out, execCtx.EffectiveConfig(), execCtx.EffectiveToolCache(), args["path"], args["symbol"]), nil, nil
-	}
-
 	// 単体モード: 従来の path + start_line/end_line
 	if args["path"] == "" {
-		return "Error: path or paths is required", nil, nil
+		return "Error: path is required", nil, nil
 	}
 	startLine, endLine := 0, 0
 	if args["start_line"] != "" {

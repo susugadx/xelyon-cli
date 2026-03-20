@@ -82,14 +82,14 @@ func DefaultConfig() *Config {
 			},
 		},
 		Compression: CompressionConfig{
-			AutoCompress:         true,   // デフォルトON - コスト削減のため
-			ThresholdTokens:      0,      // 0 = 使用率ベース
-			ThresholdPercent:     80,     // 80%で自動圧縮
-			TokenThreshold:       100000, // Context 100K で絶対圧縮
-			Model:                "",     // 空 = プロバイダー別デフォルト圧縮モデル
-			KeepRecent:           20,     // 履歴を多めに保持
-			PreferCompactAPI:     true,   // OpenAI Compact API 優先
-			ClaudeCompaction:     true,   // Claude Compaction 優先
+			AutoCompress:         true, // デフォルトON - コスト削減のため
+			ThresholdTokens:      0,    // 0 = 使用率ベース
+			ThresholdPercent:     80,   // 80%で自動圧縮
+			TokenThreshold:       0,    // 0 = カスタム絶対閾値を無効化
+			Model:                "",   // 空 = プロバイダー別デフォルト圧縮モデル
+			KeepRecent:           20,   // 履歴を多めに保持
+			PreferCompactAPI:     true, // OpenAI Compact API 優先
+			ClaudeCompaction:     true, // Claude Compaction 優先
 			CompactionTrigger:    150000,
 			ClearToolUses:        true, // Claude系の tool_use/tool_result clearing を有効化
 			ClearToolUsesTrigger: 80000,

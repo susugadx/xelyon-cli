@@ -37,14 +37,11 @@ const guidanceTag = "\n\n[GUIDANCE]"
 
 // ── read_file ──
 
-// isTargetedRead は read_file 呼び出しが targeted read（range/symbol 指定）か判定する。
+// isTargetedRead は read_file 呼び出しが targeted read（line range 指定）か判定する。
 // targeted read は次の str_replace に必要な正確な内容を含むため、圧縮しない。
 // batch mode（paths 引数）では、1つでも "path:line-range" 形式が含まれていたら targeted と見なす。
 func isTargetedRead(args map[string]string) bool {
 	// single read mode
-	if _, ok := args["symbol"]; ok {
-		return true
-	}
 	if _, ok := args["start_line"]; ok {
 		return true
 	}
@@ -110,7 +107,7 @@ func extractGuidance(result string) (body, guidance string) {
 }
 
 // compactReadFile は read_file の結果を history 格納用に圧縮する。
-// targeted read（symbol / start_line / end_line 指定）は圧縮しない。
+// targeted read（start_line / end_line 指定）は圧縮しない。
 // アウトライン形式（"--- Signatures ---" を含む）は既にコンパクトなのでそのまま返す。
 // broad read（全文読み込み）のみ head + tail + 行数サマリーに変換する。
 // [GUIDANCE] が付いている場合は圧縮後も保持する。

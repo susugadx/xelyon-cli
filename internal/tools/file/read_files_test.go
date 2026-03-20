@@ -185,8 +185,8 @@ func TestPerFileBudget(t *testing.T) {
 		n    int
 		want int
 	}{
-		{1, DefaultFullLines}, // 500/1=500, capped to DefaultFullLines(200)
-		{2, DefaultFullLines}, // 500/2=250, capped to DefaultFullLines(200)
+		{1, DefaultFullLines}, // 500/1=500, capped to DefaultFullLines(500)
+		{2, 250},              // 500/2=250
 		{3, 166},              // 500/3=166, within range
 		{5, 100},              // 500/5=100, within range
 		{6, 83},               // 500/6=83
@@ -293,7 +293,7 @@ func TestExecuteReadFilesWithBudget_FullBudgetPreservesContent(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// 180行のファイル3個: perFileBudget(3)=166 → outline になる
-	// DefaultFullLines=200 なら 180 < 200 で全文返却
+	// DefaultFullLines=500 なら 180 < 500 で全文返却
 	paths := make([]string, 3)
 	for i := range paths {
 		name := fmt.Sprintf("f%d.go", i)
@@ -307,7 +307,7 @@ func TestExecuteReadFilesWithBudget_FullBudgetPreservesContent(t *testing.T) {
 		t.Fatal("Expected normal 3-file read to use outline mode for 180-line files")
 	}
 
-	// budgetOverride=DefaultFullLines(200): 180 < 200 → 全文
+	// budgetOverride=DefaultFullLines(500): 180 < 500 → 全文
 	fullOutput := ExecuteReadFilesWithBudget(common.DefaultOutput(), paths, DefaultFullLines)
 	if strings.Contains(fullOutput, "Use start_line/end_line") {
 		t.Error("ExecuteReadFilesWithBudget with DefaultFullLines should NOT use outline for 180-line files")
@@ -347,13 +347,13 @@ func TestExecuteReadFilesWithRuntime_ConsistentWithSingleRead(t *testing.T) {
 		paths[i] = filepath.Join(tmpDir, name)
 	}
 
-	// single read: DefaultFullLines(200) → 150 < 200 → 全文
+	// single read: DefaultFullLines(500) → 150 < 500 → 全文
 	singleOutput := ExecuteReadFileWithRuntime(common.DefaultOutput(), nil, nil, paths[0], 0, 0)
 	if strings.Contains(singleOutput, "Use start_line/end_line") {
 		t.Fatal("single read should show full content for 150-line file")
 	}
 
-	// batch read with runtime: DefaultFullLines(200) → 150 < 200 → 全文
+	// batch read with runtime: DefaultFullLines(500) → 150 < 500 → 全文
 	batchOutput := ExecuteReadFilesWithRuntime(common.DefaultOutput(), nil, nil, paths, DefaultFullLines)
 	if strings.Contains(batchOutput, "Use start_line/end_line") {
 		t.Error("batch read with DefaultFullLines should NOT use outline for 150-line files")

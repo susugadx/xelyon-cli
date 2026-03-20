@@ -398,7 +398,7 @@ func formatInspectResult(r InspectResult) string {
 			fmt.Fprintf(&sb, "  - %s:%d%s\n", c.File, c.Line, scope)
 		}
 		if r.MoreCallers {
-			sb.WriteString("  (+ more callers. Use mode=\"full\" or search_code)\n")
+			sb.WriteString("  (+ more callers. Use search_code for more results)\n")
 		}
 	}
 
@@ -417,7 +417,7 @@ func formatInspectResult(r InspectResult) string {
 			fmt.Fprintf(&sb, "  - %s:%d | %s%s\n", ref.File, ref.Line, strings.TrimSpace(ref.Snippet), label)
 		}
 		if r.MoreRefs {
-			sb.WriteString("  (+ more references. Use mode=\"full\" or search_code)\n")
+			sb.WriteString("  (+ more references. Use search_code for more results)\n")
 		}
 	}
 
@@ -432,7 +432,7 @@ func formatInspectResult(r InspectResult) string {
 			fmt.Fprintf(&sb, "  - %s:%d | func %s\n", t.File, t.Line, t.Name)
 		}
 		if r.MoreTests {
-			sb.WriteString("  (+ more tests. Use mode=\"full\" or search_code)\n")
+			sb.WriteString("  (+ more tests. Use search_code for more results)\n")
 		}
 	}
 

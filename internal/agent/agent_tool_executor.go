@@ -12,6 +12,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
+	filetool "github.com/susugadx/xelyon-cli/internal/tools/file"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -570,6 +571,29 @@ func (a *Agent) executeToolForParallel(ctx context.Context, tc *tools.ToolCall) 
 	return result, change
 }
 
+func (a *Agent) executeReadFileBatch(ctx context.Context, paths []string) string {
+	tc := buildReadFileBatchToolCall(paths, true)
+	if ctx.Err() != nil {
+		return "Error: context cancelled"
+	}
+
+	if a.ToolCache != nil {
+		if _, hit := a.ToolCache.CheckNegativeCache(tc.Tool, tc.RawArgs); hit {
+			a.addOptimizationMetrics(OptimizationMetrics{NegativeCacheHits: 1})
+		}
+	}
+
+	execCtx := a.toolExecutionContext(ctx, strings.NewReader(""), io.Discard, io.Discard)
+	result := filetool.ExecuteReadFilesWithRuntime(execCtx.Output(), execCtx.EffectiveConfig(), execCtx.EffectiveToolCache(), paths, filetool.DefaultFullLines)
+	a.recordToolResultOptimizations(tc, result)
+
+	if a.ToolCache != nil {
+		a.ToolCache.SetNegativeCache(tc.Tool, tc.RawArgs, result)
+	}
+
+	return result
+}
+
 // executeToolCallsWithParallel は parallel-safe なツールを並列実行し、sequential なツールを順次実行する。
 // 通常モードと Plan Mode の両方で使用する共通 executor。
 //
@@ -760,9 +784,9 @@ func (a *Agent) executeToolCallsWithParallel(
 	}
 
 	// ── Phase 0.5c: read_file batch merge ──
-	// 同一ターン内の plain read_file(path=...) を read_file(paths=[...]) にまとめて実行する。
+	// 同一ターン内の plain read_file(path=...) を internal batch read にまとめて実行する。
 	// duplicate suppression が先に効いた後の残りが対象。
-	// symbol/range/paths 指定済みの call は isBatchableReadFile で除外される。
+	// range 指定済みの call は isBatchableReadFile で除外される。
 	//
 	// 変更系ツール（非 parallel-safe）の前後で区切ることで、
 	// read(a) -> write(b) -> read(b) のような並びで read(b) が更新前の内容を
@@ -787,8 +811,7 @@ func (a *Agent) executeToolCallsWithParallel(
 				continue // 単一ファイルは merge 不要
 			}
 
-			mergedTC := buildReadFileBatchToolCall(chunkPaths, true)
-			mergedResult, _ := a.executeToolForParallel(ctx, mergedTC)
+			mergedResult := a.executeReadFileBatch(ctx, chunkPaths)
 
 			perFile := splitReadFileBatchResult(mergedResult, chunkPaths)
 			if perFile != nil {

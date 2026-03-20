@@ -15,12 +15,12 @@ Modification tools are FORBIDDEN: write_file, str_replace, delete_file
 Allowed: inspect_symbol, search_code, read_file, list_dir, web_search, bash (read-only git commands only: git status, git diff, git log)
 
 ### INVESTIGATION CHECKLIST
--  Use inspect_symbol first for exact Go symbols instead of search_code+read_file
+-  Use inspect_symbol for Go symbol lookup
 -  Use search_code for broad/regex discovery across the codebase
 -  Use read_file for detailed implementation context
 -  Use list_dir for current filesystem contents and choosing the next file/subtree
 -  Prefer parallel investigation: batch independent read_file/search_code/list_dir steps in one response
--  Reading 2+ independent files -> prefer read_file with paths or parallel reads in the same turn
+-  Reading 2+ independent files -> call read_file multiple times in the same turn
 -  Searching multiple independent patterns -> prefer one search_code call with comma-separated patterns
 -  For local changes (single function, local bug fix): read the target, check for immediate dependencies, then plan
 -  For shared changes (interface, public API, config, rename, delete): find ALL usages, dependencies, and tests before planning
@@ -28,8 +28,8 @@ Allowed: inspect_symbol, search_code, read_file, list_dir, web_search, bash (rea
 -  Avoid broad exploration when the target is already clear
 
 ### EXAMPLES
-- Exact Go symbol review -> inspect_symbol(symbol="chatCore", path="internal/agent/agent_chat.go") first
-- Need implementation + tests -> prefer one read_file call with paths or parallel reads in the same turn
+- Exact Go symbol review -> inspect_symbol(symbol="chatCore", path="internal/agent/agent_chat.go")
+- Need implementation + tests -> call read_file multiple times in the same turn
 - Need next file/subtree choice -> use list_dir first, then inspect only the selected target
 
 ### AFTER INVESTIGATION

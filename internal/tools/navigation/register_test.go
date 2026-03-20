@@ -24,6 +24,9 @@ func TestInspectSymbolTool_Schema(t *testing.T) {
 	if !ok {
 		t.Fatal("expected properties map")
 	}
+	if len(props) != 2 {
+		t.Fatalf("expected 2 parameters, got %d", len(props))
+	}
 
 	if _, ok := props["symbol"]; !ok {
 		t.Error("expected 'symbol' property")
@@ -31,19 +34,13 @@ func TestInspectSymbolTool_Schema(t *testing.T) {
 	if _, ok := props["path"]; !ok {
 		t.Error("expected 'path' property")
 	}
-	if _, ok := props["mode"]; !ok {
-		t.Error("expected 'mode' property")
+	if _, ok := props["mode"]; ok {
+		t.Error("mode property should be removed")
 	}
 	if symbolProp, ok := props["symbol"].(map[string]interface{}); ok {
 		desc, _ := symbolProp["description"].(string)
 		if !strings.Contains(desc, "Config.Build") {
 			t.Errorf("expected receiver-qualified example in symbol description, got %q", desc)
-		}
-	}
-	if modeProp, ok := props["mode"].(map[string]interface{}); ok {
-		enumVals, ok := modeProp["enum"].([]string)
-		if !ok || len(enumVals) != 2 || enumVals[0] != "summary" || enumVals[1] != "full" {
-			t.Errorf("expected mode enum [summary full], got %#v", modeProp["enum"])
 		}
 	}
 

@@ -473,7 +473,7 @@ func oversizedCompressionHistory() []api.Message {
 	}
 }
 
-func TestAbsoluteTokenThreshold_TriggersBeforePercentage(t *testing.T) {
+func TestCustomTokenThreshold_TriggersBeforePercentage(t *testing.T) {
 	provider := &compressionTestProvider{name: "openai", summary: "compressed summary"}
 	cfg := config.DefaultConfig()
 	cfg.Compression.TokenThreshold = 100000
@@ -490,17 +490,36 @@ func TestAbsoluteTokenThreshold_TriggersBeforePercentage(t *testing.T) {
 	}
 
 	if !agent.maybeAutoCompress() {
-		t.Fatal("maybeAutoCompress() = false, want true when absolute threshold is exceeded")
+		t.Fatal("maybeAutoCompress() = false, want true when custom threshold is exceeded")
 	}
 	if provider.chatCalls != 1 {
 		t.Fatalf("ChatWithTools call count = %d, want 1", provider.chatCalls)
 	}
-	if !strings.Contains(out.String(), "absolute threshold") {
-		t.Fatalf("output %q does not mention absolute threshold", out.String())
+	if !strings.Contains(out.String(), "custom threshold") {
+		t.Fatalf("output %q does not mention custom threshold", out.String())
 	}
 }
 
-func TestAbsoluteTokenThreshold_IgnoresCacheSkip(t *testing.T) {
+func TestDefaultTokenThresholdZero_DoesNotFallbackTo100K(t *testing.T) {
+	provider := &compressionTestProvider{name: "openai", summary: "compressed summary"}
+	cfg := config.DefaultConfig()
+	cfg.Compression.TokenThreshold = 0
+	cfg.Compression.ThresholdPercent = 99
+	cfg.Compression.KeepRecent = 1
+	cfg.Compression.PreferCompactAPI = false
+
+	agent, _ := newCompressionTestAgent(t, provider, "gpt-5.4", cfg)
+	agent.History = oversizedCompressionHistory()
+
+	if agent.maybeAutoCompress() {
+		t.Fatal("maybeAutoCompress() = true, want false when only removed 100K fallback would have triggered")
+	}
+	if provider.chatCalls != 0 {
+		t.Fatalf("ChatWithTools call count = %d, want 0", provider.chatCalls)
+	}
+}
+
+func TestCustomTokenThreshold_RespectsCacheSkip(t *testing.T) {
 	provider := &compressionTestProvider{
 		name:             "openai",
 		summary:          "compressed summary",
@@ -516,11 +535,11 @@ func TestAbsoluteTokenThreshold_IgnoresCacheSkip(t *testing.T) {
 	agent, _ := newCompressionTestAgent(t, provider, "gpt-5.4", cfg)
 	agent.History = oversizedCompressionHistory()
 
-	if !agent.maybeAutoCompress() {
-		t.Fatal("maybeAutoCompress() = false, want true even when response cache is active")
+	if agent.maybeAutoCompress() {
+		t.Fatal("maybeAutoCompress() = true, want false when response cache is active")
 	}
-	if provider.chatCalls != 1 {
-		t.Fatalf("ChatWithTools call count = %d, want 1", provider.chatCalls)
+	if provider.chatCalls != 0 {
+		t.Fatalf("ChatWithTools call count = %d, want 0", provider.chatCalls)
 	}
 }
 

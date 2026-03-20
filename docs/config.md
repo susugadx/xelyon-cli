@@ -107,8 +107,8 @@ compression:
     threshold_tokens: 0
     # トークン使用率の閾値（%）
     threshold_percent: 80
-    # 絶対トークン閾値（デフォルト100000、キャッシュ有無に関係なく発動）
-    token_threshold: 100000
+    # カスタム絶対トークン閾値（0=無効、デフォルト。明示設定時のみ有効）
+    token_threshold: 0
     # 圧縮用モデル（空 = プロバイダー別デフォルト、main = メインモデル）
     model: ""
     # 圧縮時に保持する直近メッセージ数
@@ -411,9 +411,9 @@ Context Window（コンテキストウィンドウ）を管理し、トークン
 
 #### `token_threshold`
 - **型**: integer
-- **デフォルト**: `100000`
-- **説明**: Context トークン数の絶対閾値
-- **補足**: キャッシュ有無に関係なく、この閾値を超えたら自動圧縮を実行
+- **デフォルト**: `0`
+- **説明**: Context トークン数のカスタム絶対閾値
+- **補足**: `0` = 無効。明示設定した場合のみ安全弁として使用
 
 #### `model`
 - **型**: string
@@ -468,13 +468,14 @@ Context Window（コンテキストウィンドウ）を管理し、トークン
 - **補足**: デフォルトでは `tool_result` の clearing のみ。セッション再開時の履歴再構築への影響を避けるため、通常は `false` 推奨
 
 **自動圧縮の動作:**
-1. API呼び出し成功後に `token_threshold`（デフォルト100K）を先にチェック
-2. 100K 未満の場合は `threshold_percent`（デフォルト80%）やプロバイダー別閾値を評価
-3. 圧縮時に通知を表示（無言で実行しない）
-4. 無効化方法も案内
+1. API呼び出し成功後に pricing cliff とプロバイダー別閾値を評価
+2. `previous_response_id` や Claude Compaction が使える場合は自動圧縮をスキップ
+3. `token_threshold` を明示設定している場合のみ、その値を追加の安全弁として評価
+4. それ以外は `threshold_percent`（デフォルト80%）や `threshold_tokens` を評価
+5. 圧縮時に通知を表示し、無効化方法も案内
 
 ```
-🗜️ Auto-compressing: context 104K exceeds 100K absolute threshold...
+🗜️ Auto-compressing: context 151K exceeds 150K custom threshold...
    Before: 162,000 tokens → After: 45,000 tokens
    💡 Disable with: xelyon config set compression.auto_compress false
 ```
@@ -1122,7 +1123,7 @@ xelyon  # 次回起動時にデフォルト設定が再作成される
 ```yaml
 compression:
   auto_compress: true       # デフォルトON
-  token_threshold: 100000   # Context 100K で圧縮
+  token_threshold: 150000   # 明示設定した場合のみ custom threshold として使用
   threshold_percent: 70     # 70%でも圧縮（保険として残す）
   model: ""                # プロバイダー別デフォルト圧縮モデル
   keep_recent: 15           # 最新15件を保持

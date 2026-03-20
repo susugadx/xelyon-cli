@@ -59,7 +59,7 @@ func TestFormatToolLine_ReadFile_GoOutline(t *testing.T) {
 		Args: map[string]string{
 			"path": "server.go",
 		},
-		Result: "1: package main\n\n--- Signatures ---\n  L50  func Build\n\n(200 lines total. Use start_line/end_line or symbol=\"Name\" to read details)\n",
+		Result: "1: package main\n\n--- Signatures ---\n  L50  func Build\n\n(200 lines total. Use start_line/end_line to read specific sections)\n",
 	})
 
 	want := `📄 read_file: server.go (outline of 200 lines)`

@@ -100,10 +100,10 @@ func TestExecuteReadFile_LargeFile_Outline(t *testing.T) {
 	setupTestMocks(t)
 	tmpDir := t.TempDir()
 
-	// 400行のGoファイル（関数定義を含む）
+	// 500行超のGoファイル（関数定義を含む）
 	var sb strings.Builder
 	sb.WriteString("package main\n\nimport \"fmt\"\n\n")
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 8; i++ {
 		fmt.Fprintf(&sb, "func handler%d() {\n", i)
 		for j := 0; j < 70; j++ {
 			fmt.Fprintf(&sb, "\tfmt.Println(%d)\n", j)
@@ -139,9 +139,9 @@ func TestExecuteReadFile_LargeFile_PlainText(t *testing.T) {
 	setupTestMocks(t)
 	tmpDir := t.TempDir()
 
-	// 400行のプレーンテキスト（ブロックなし）
+	// 500行超のプレーンテキスト（ブロックなし）
 	var lines []string
-	for i := 0; i < 400; i++ {
+	for i := 0; i < 600; i++ {
 		lines = append(lines, fmt.Sprintf("log entry %d", i))
 	}
 	testutil.CreateTempFile(t, tmpDir, "large.txt", strings.Join(lines, "\n"))
@@ -164,7 +164,7 @@ func TestExecuteReadFile_MediumFile_FullContent(t *testing.T) {
 	setupTestMocks(t)
 	tmpDir := t.TempDir()
 
-	// 150行のGoファイル（DefaultFullLines=200 以下 → 全文返却）
+	// 150行のGoファイル（DefaultFullLines=500 以下 → 全文返却）
 	var sb strings.Builder
 	sb.WriteString("package main\n\nimport \"fmt\"\n\n")
 	for i := 0; i < 3; i++ {
@@ -178,7 +178,7 @@ func TestExecuteReadFile_MediumFile_FullContent(t *testing.T) {
 
 	output := ExecuteReadFile(filepath.Join(tmpDir, "medium.go"), 0, 0)
 
-	// 全文返却の検証（150行 <= DefaultFullLines=200）
+	// 全文返却の検証（150行 <= DefaultFullLines=500）
 	if strings.Contains(output, "Use start_line/end_line") {
 		t.Errorf("Medium file (150 lines) should NOT have outline guide message, got:\n%s", output)
 	}
@@ -195,10 +195,10 @@ func TestExecuteReadFile_LargerMediumFile_Outline(t *testing.T) {
 	setupTestMocks(t)
 	tmpDir := t.TempDir()
 
-	// 250行のGoファイル（DefaultFullLines=200 を超える → outline モード）
+	// 500行超のGoファイル（DefaultFullLines=500 を超える → outline モード）
 	var sb strings.Builder
 	sb.WriteString("package main\n\nimport \"fmt\"\n\n")
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 12; i++ {
 		fmt.Fprintf(&sb, "func process%d() {\n", i)
 		for j := 0; j < 45; j++ {
 			fmt.Fprintf(&sb, "\tfmt.Println(%d)\n", j)
@@ -211,14 +211,13 @@ func TestExecuteReadFile_LargerMediumFile_Outline(t *testing.T) {
 
 	// outline-first モードの検証
 	if !strings.Contains(output, "Use start_line/end_line") {
-		t.Errorf("Expected outline guide message for 250-line file, got:\n%s", output)
+		t.Errorf("Expected outline guide message for large file, got:\n%s", output)
 	}
 	if !strings.Contains(output, "package main") {
 		t.Errorf("Expected head to contain 'package main'")
 	}
-	// Go ファイルなので symbol ヒントがある
-	if !strings.Contains(output, "symbol=") {
-		t.Errorf("Expected Go symbol hint in guide message, got:\n%s", output)
+	if strings.Contains(output, "symbol=") {
+		t.Errorf("Outline guide should not mention symbol mode, got:\n%s", output)
 	}
 }
 
@@ -226,7 +225,7 @@ func TestExecuteReadFile_SmallFile_FullContent(t *testing.T) {
 	setupTestMocks(t)
 	tmpDir := t.TempDir()
 
-	// 80行のファイル（DefaultFullLines=200 以下 → 全文返却）
+	// 80行のファイル（DefaultFullLines=500 以下 → 全文返却）
 	var lines []string
 	for i := 1; i <= 80; i++ {
 		lines = append(lines, fmt.Sprintf("line%d", i))
@@ -248,15 +247,15 @@ func TestExecuteReadFile_SmallFile_FullContent(t *testing.T) {
 	}
 }
 
-func TestExecuteReadFile_GoOutline_SymbolHint(t *testing.T) {
+func TestExecuteReadFile_GoOutline_UsesLineRangeGuide(t *testing.T) {
 	setupTestMocks(t)
 	tmpDir := t.TempDir()
 
-	// Go ファイルのアウトラインに symbol ヒントがあることを確認
-	// DefaultFullLines=200 を超える 250行以上のファイル
+	// Go ファイルのアウトラインでも line-range ガイドのみを表示する
+	// DefaultFullLines=500 を超えるファイル
 	var sb strings.Builder
 	sb.WriteString("package main\n\nimport \"fmt\"\n\n")
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 12; i++ {
 		fmt.Fprintf(&sb, "func handler%d() {\n", i)
 		for j := 0; j < 45; j++ {
 			fmt.Fprintf(&sb, "\tfmt.Println(%d)\n", j)
@@ -267,8 +266,11 @@ func TestExecuteReadFile_GoOutline_SymbolHint(t *testing.T) {
 
 	output := ExecuteReadFile(filepath.Join(tmpDir, "handlers.go"), 0, 0)
 
-	if !strings.Contains(output, `symbol="Name"`) {
-		t.Errorf("Expected Go symbol hint, got:\n%s", output)
+	if !strings.Contains(output, "Use start_line/end_line") {
+		t.Errorf("Expected line-range guide, got:\n%s", output)
+	}
+	if strings.Contains(output, "symbol=") {
+		t.Errorf("Guide should not mention symbol mode, got:\n%s", output)
 	}
 }
 
@@ -276,10 +278,10 @@ func TestExecuteReadFile_NonGoOutline_NoSymbolHint(t *testing.T) {
 	setupTestMocks(t)
 	tmpDir := t.TempDir()
 
-	// 非 Go ファイルのアウトラインに symbol ヒントが含まれないことを確認
-	// DefaultFullLines=200 を超える 300 行のファイル
+	// 非 Go ファイルのアウトラインにも symbol ヒントが含まれないことを確認
+	// DefaultFullLines=500 を超えるファイル
 	var lines []string
-	for i := 0; i < 300; i++ {
+	for i := 0; i < 600; i++ {
 		lines = append(lines, fmt.Sprintf("data line %d", i))
 	}
 	testutil.CreateTempFile(t, tmpDir, "data.txt", strings.Join(lines, "\n"))
@@ -627,35 +629,6 @@ func Build() error {
 	}
 }
 
-func TestReadFileTool_BatchMode(t *testing.T) {
-	setupTestMocks(t)
-	tmpDir := t.TempDir()
-
-	testutil.CreateTempFile(t, tmpDir, "file1.txt", "hello from file1")
-	testutil.CreateTempFile(t, tmpDir, "file2.txt", "hello from file2")
-
-	file1 := filepath.Join(tmpDir, "file1.txt")
-	file2 := filepath.Join(tmpDir, "file2.txt")
-
-	tool := &ReadFileTool{}
-	result, fc, err := tool.Run(tools.ExecutionContext{}, map[string]string{
-		"paths": `["` + file1 + `", "` + file2 + `"]`,
-	})
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if fc != nil {
-		t.Errorf("expected nil FileChange, got: %v", fc)
-	}
-	if !strings.Contains(result, "hello from file1") {
-		t.Errorf("expected result to contain file1 content, got: %s", result)
-	}
-	if !strings.Contains(result, "hello from file2") {
-		t.Errorf("expected result to contain file2 content, got: %s", result)
-	}
-}
-
 func TestExecuteReadFiles_QuietModeSuppressesStdout(t *testing.T) {
 	setupTestMocks(t)
 	tmpDir := t.TempDir()
@@ -694,30 +667,6 @@ func TestExecuteReadFiles_QuietModeSuppressesStdout(t *testing.T) {
 	}
 }
 
-func TestReadFileTool_BatchMode_LineRange(t *testing.T) {
-	setupTestMocks(t)
-	tmpDir := t.TempDir()
-
-	testutil.CreateTempFile(t, tmpDir, "range.txt", "line1\nline2\nline3\nline4\nline5")
-
-	file := filepath.Join(tmpDir, "range.txt")
-
-	tool := &ReadFileTool{}
-	result, _, err := tool.Run(tools.ExecutionContext{}, map[string]string{
-		"paths": `["` + file + `:2-3"]`,
-	})
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !strings.Contains(result, "line2") {
-		t.Errorf("expected result to contain line2, got: %s", result)
-	}
-	if strings.Contains(result, "line4") {
-		t.Errorf("result should NOT contain line4, got: %s", result)
-	}
-}
-
 func TestReadFileTool_PathRequired(t *testing.T) {
 	tool := &ReadFileTool{}
 	result, _, err := tool.Run(tools.ExecutionContext{}, map[string]string{})
@@ -725,84 +674,8 @@ func TestReadFileTool_PathRequired(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(result, "Error") {
+	if !strings.Contains(result, "Error: path is required") {
 		t.Errorf("expected error when neither path nor paths provided, got: %s", result)
-	}
-}
-
-func TestReadFileTool_SymbolMode(t *testing.T) {
-	setupTestMocks(t)
-	tmpDir := t.TempDir()
-	goFile := filepath.Join(tmpDir, "sample.go")
-	content := `package main
-
-func Build() error {
-	return nil
-}
-`
-	if err := os.WriteFile(goFile, []byte(content), 0644); err != nil {
-		t.Fatalf("failed to write Go file: %v", err)
-	}
-
-	tool := &ReadFileTool{}
-	result, fc, err := tool.Run(tools.ExecutionContext{}, map[string]string{
-		"path":   goFile,
-		"symbol": "Build",
-	})
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if fc != nil {
-		t.Fatalf("expected nil FileChange, got: %v", fc)
-	}
-	if !strings.Contains(result, "func Build() error {") {
-		t.Fatalf("expected symbol mode result, got: %s", result)
-	}
-}
-
-func TestReadFileTool_SymbolMode_UsesCache(t *testing.T) {
-	setupTestMocks(t)
-	tmpDir := t.TempDir()
-	goFile := filepath.Join(tmpDir, "sample.go")
-	diskContent := `package main
-
-func DiskOnly() error {
-	return nil
-}
-`
-	if err := os.WriteFile(goFile, []byte(diskContent), 0644); err != nil {
-		t.Fatalf("failed to write Go file: %v", err)
-	}
-
-	cache := &testReadFileCache{
-		getFileFunc: func(path string) (string, bool) {
-			return `package main
-
-func Build() error {
-	return nil
-}
-`, true
-		},
-	}
-
-	tool := &ReadFileTool{}
-	result, _, err := tool.Run(tools.ExecutionContext{ToolCache: cache}, map[string]string{
-		"path":   goFile,
-		"symbol": "Build",
-	})
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !strings.Contains(result, "func Build() error {") {
-		t.Fatalf("expected cached symbol output, got: %s", result)
-	}
-	if strings.Contains(result, "DiskOnly") {
-		t.Fatalf("expected cache hit to bypass disk content, got: %s", result)
-	}
-	if len(cache.setFileCalls) != 0 {
-		t.Fatalf("SetFile should not be called on cache hit, got %d calls", len(cache.setFileCalls))
 	}
 }
 

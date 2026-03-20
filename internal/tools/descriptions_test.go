@@ -35,13 +35,13 @@ func TestToolDescriptions_KnownToolsExist(t *testing.T) {
 	}
 }
 
-func TestToolDescriptions_InspectSymbolPreferredForKnownGoSymbols(t *testing.T) {
+func TestToolDescriptions_InspectSymbolMentionsGoSymbolLookup(t *testing.T) {
 	desc := ToolDescriptions["inspect_symbol"]
-	if !strings.Contains(desc, "Preferred for exact Go symbol names") {
-		t.Error("inspect_symbol description should mark it as preferred for exact Go symbols")
+	if !strings.Contains(desc, "Look up a Go symbol by name") {
+		t.Error("inspect_symbol description should describe Go symbol lookup")
 	}
-	if !strings.Contains(desc, "instead of search_code+read_file") {
-		t.Error("inspect_symbol description should explain it replaces search_code+read_file")
+	if strings.Contains(desc, "search_code+read_file") {
+		t.Error("inspect_symbol description should not compare itself against read_file/search_code")
 	}
 }
 
@@ -58,9 +58,12 @@ func TestToolDescriptions_ListDirMentionsCompactSummaryAndNextChoice(t *testing.
 	}
 }
 
-func TestToolDescriptions_ReadFileAndSearchCodeMentionParallelUsage(t *testing.T) {
-	if !strings.Contains(ToolDescriptions["read_file"], "2+ independent files in the same turn") {
-		t.Error("read_file description should encourage batched reads for independent files")
+func TestToolDescriptions_ReadFileAndSearchCodeDescribeCurrentUsage(t *testing.T) {
+	if !strings.Contains(ToolDescriptions["read_file"], "full content for small files") {
+		t.Error("read_file description should mention full content for small files")
+	}
+	if !strings.Contains(ToolDescriptions["read_file"], "outline for larger files") {
+		t.Error("read_file description should mention outlines for larger files")
 	}
 	if !strings.Contains(ToolDescriptions["search_code"], "prefer one multi-pattern search over serial searches") {
 		t.Error("search_code description should prefer multi-pattern searches over serial searches")
