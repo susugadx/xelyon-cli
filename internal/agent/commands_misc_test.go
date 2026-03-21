@@ -137,6 +137,46 @@ func TestRequestCacheMode(t *testing.T) {
 	}
 }
 
+func TestBuildLastRequestTable_UsesCostOverride(t *testing.T) {
+	usage := &api.Usage{
+		InputTokens:       1000,
+		CachedInputTokens: 600,
+		OutputTokens:      200,
+	}
+	cost := 0.1234
+
+	table := buildLastRequestTable("openai", "gpt-5.4", usage, &cost)
+	if table == nil {
+		t.Fatal("buildLastRequestTable() = nil, want table")
+	}
+
+	output := table.RenderCompact()
+	for _, want := range []string{"Cache Mode", "read", "Cached", "Hit Rate", "$0.1234 USD"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("buildLastRequestTable() output missing %q:\n%s", want, output)
+		}
+	}
+}
+
+func TestLastRequestUsageForStatus_PrefersLastTurnUsage(t *testing.T) {
+	stats := NewSessionStats("openai", "gpt-5.4")
+	stats.LastUsage = &api.Usage{InputTokens: 100, OutputTokens: 10}
+	stats.LastTurnUsage = &api.Usage{
+		InputTokens:       200,
+		CachedInputTokens: 120,
+		OutputTokens:      20,
+	}
+	stats.LastTurnCost = 0.0456
+
+	usage, cost := lastRequestUsageForStatus(stats)
+	if usage != stats.LastTurnUsage {
+		t.Fatal("expected last turn usage to be returned")
+	}
+	if cost == nil || *cost != 0.0456 {
+		t.Fatalf("cost override = %v, want 0.0456", cost)
+	}
+}
+
 func TestRequestCacheHitRate(t *testing.T) {
 	usage := api.Usage{InputTokens: 200, CachedInputTokens: 50}
 	if got := requestCacheHitRate(usage); got != 25.0 {

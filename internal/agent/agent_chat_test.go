@@ -690,20 +690,26 @@ func TestChatCore_SetsAbortedStatusWithCancelReason(t *testing.T) {
 func TestPrintTaskUsage(t *testing.T) {
 	provider := &mockProvider{name: "test"}
 	agent := NewAgent("test-model", provider, false)
-	agent.Stats = NewSessionStats("test", "test-model")
-	agent.ProviderName = "test"
+	agent.Stats = NewSessionStats("openai", "gpt-5.4")
+	agent.ProviderName = "openai"
 
 	// Mock start stats (100 in, 50 out)
 	startStats := SessionStats{
-		InputTokens:  100,
-		OutputTokens: 50,
-		Provider:     "test",
-		Model:        "test-model",
+		InputTokens:       100,
+		OutputTokens:      50,
+		ThinkingTokens:    20,
+		CachedInputTokens: 40,
+		Provider:          "openai",
+		Model:             "gpt-5.4",
+		AccumulatedCost:   0.0100,
 	}
 
 	// Mock current stats (200 in, 100 out) -> Diff: 100 in, 50 out
 	agent.Stats.InputTokens = 200
 	agent.Stats.OutputTokens = 100
+	agent.Stats.ThinkingTokens = 35
+	agent.Stats.CachedInputTokens = 90
+	agent.Stats.AccumulatedCost = 0.0325
 
 	var out bytes.Buffer
 	agent.Runtime = &AgentRuntime{
@@ -720,5 +726,20 @@ func TestPrintTaskUsage(t *testing.T) {
 
 	if !strings.Contains(output, expectedIn) || !strings.Contains(output, expectedOut) || !strings.Contains(output, expectedTotal) {
 		t.Errorf("printTaskUsage output incorrect. Expected containing In: %s, Out: %s, Total: %s, but got: %s", expectedIn, expectedOut, expectedTotal, output)
+	}
+	if agent.Stats.LastTurnUsage == nil {
+		t.Fatal("LastTurnUsage should be recorded")
+	}
+	if agent.Stats.LastTurnUsage.InputTokens != 100 {
+		t.Fatalf("LastTurnUsage.InputTokens = %d, want 100", agent.Stats.LastTurnUsage.InputTokens)
+	}
+	if agent.Stats.LastTurnUsage.CachedInputTokens != 50 {
+		t.Fatalf("LastTurnUsage.CachedInputTokens = %d, want 50", agent.Stats.LastTurnUsage.CachedInputTokens)
+	}
+	if agent.Stats.LastTurnUsage.ThinkingTokens != 15 {
+		t.Fatalf("LastTurnUsage.ThinkingTokens = %d, want 15", agent.Stats.LastTurnUsage.ThinkingTokens)
+	}
+	if agent.Stats.LastTurnCost < 0.0224 || agent.Stats.LastTurnCost > 0.0226 {
+		t.Fatalf("LastTurnCost = %.4f, want about 0.0225", agent.Stats.LastTurnCost)
 	}
 }

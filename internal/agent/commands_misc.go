@@ -45,7 +45,7 @@ func requestUsageCost(provider, model string, usage api.Usage) float64 {
 	return CalculateRequestCostWithCache(provider, model, usage) + usage.StorageCost
 }
 
-func buildLastRequestTable(provider, model string, usage *api.Usage) *ui.Table {
+func buildLastRequestTable(provider, model string, usage *api.Usage, costOverride *float64) *ui.Table {
 	if usage == nil {
 		return nil
 	}
@@ -66,6 +66,9 @@ func buildLastRequestTable(provider, model string, usage *api.Usage) *ui.Table {
 	}
 
 	cost := requestUsageCost(provider, model, *usage)
+	if costOverride != nil {
+		cost = *costOverride
+	}
 	if cost > 0 {
 		table.AddRow("Cost", fmt.Sprintf("$%.4f USD", cost))
 	} else {
@@ -73,6 +76,17 @@ func buildLastRequestTable(provider, model string, usage *api.Usage) *ui.Table {
 	}
 
 	return table
+}
+
+func lastRequestUsageForStatus(stats *SessionStats) (*api.Usage, *float64) {
+	if stats == nil {
+		return nil, nil
+	}
+	if stats.LastTurnUsage != nil {
+		cost := stats.LastTurnCost
+		return stats.LastTurnUsage, &cost
+	}
+	return stats.LastUsage, nil
 }
 
 func getSessionFileInfo(agent *Agent) (string, int64) {

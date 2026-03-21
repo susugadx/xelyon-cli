@@ -177,7 +177,8 @@ func handleStatusCommand(agent *Agent) bool {
 	_, _ = fmt.Fprintln(out)
 	green.Fprintln(out, "🧾 Last Request")
 	if agent.Stats != nil {
-		if table := buildLastRequestTable(agent.ProviderName, agent.CurrentModel, agent.Stats.LastUsage); table != nil {
+		usage, costOverride := lastRequestUsageForStatus(agent.Stats)
+		if table := buildLastRequestTable(agent.ProviderName, agent.CurrentModel, usage, costOverride); table != nil {
 			_, _ = fmt.Fprint(out, table.RenderCompact())
 		} else {
 			dim.Fprintln(out, "  No request usage data available")

@@ -86,6 +86,8 @@ type SessionStats struct {
 	Provider            string     // "deepseek", "openai", "claude", "gemini", "groq", "ollama"
 	Model               string     // 現在のモデル名（料金計算に使用）
 	LastUsage           *api.Usage // 直近のリクエストの使用量
+	LastTurnUsage       *api.Usage // 直近のユーザーリクエスト全体の使用量
+	LastTurnCost        float64    // 直近のユーザーリクエスト全体の正確なコスト
 	AccumulatedCost     float64    // リクエスト単位で計算・累積したコスト
 	Optimizations       OptimizationMetrics
 	ToolObs             ToolObservability // ツール実行・compaction の観測メトリクス

@@ -80,6 +80,8 @@ func (a *Agent) SwitchProvider(providerName string) error {
 		a.Stats.ThinkingTokens = 0
 		a.Stats.ToolExecutions = make(map[string]int)
 		a.Stats.LastUsage = nil
+		a.Stats.LastTurnUsage = nil
+		a.Stats.LastTurnCost = 0
 		a.statsMu.Unlock()
 	}
 

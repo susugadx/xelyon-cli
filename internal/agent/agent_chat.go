@@ -644,9 +644,18 @@ func (a *Agent) printTaskUsage(startStats SessionStats) {
 		return
 	}
 
-	inDiff := a.Stats.InputTokens - startStats.InputTokens
-	outDiff := a.Stats.OutputTokens - startStats.OutputTokens
+	turnUsage := api.Usage{
+		InputTokens:         a.Stats.InputTokens - startStats.InputTokens,
+		OutputTokens:        a.Stats.OutputTokens - startStats.OutputTokens,
+		ThinkingTokens:      a.Stats.ThinkingTokens - startStats.ThinkingTokens,
+		CachedInputTokens:   a.Stats.CachedInputTokens - startStats.CachedInputTokens,
+		CacheCreationTokens: a.Stats.CacheCreationTokens - startStats.CacheCreationTokens,
+	}
 	costDiff := a.Stats.EstimatedCost() - startStats.EstimatedCost()
+	a.Stats.LastTurnUsage = &turnUsage
+	a.Stats.LastTurnCost = costDiff
+	inDiff := turnUsage.InputTokens
+	outDiff := turnUsage.OutputTokens
 	a.statsMu.Unlock()
 
 	total := inDiff + outDiff
