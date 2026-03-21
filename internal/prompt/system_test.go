@@ -116,6 +116,9 @@ func TestSystemPrompt_ParallelGuidanceIsConsolidated(t *testing.T) {
 	if !strings.Contains(SystemPrompt, "Fall back to direct tool use ONLY when ALL sub-agents fail") {
 		t.Error("SystemPrompt should restrict direct-tool fallback after delegation")
 	}
+	if !strings.Contains(SystemPrompt, "SINGLE response as parallel tool calls") {
+		t.Error("SystemPrompt should require all spawn_agent calls in a single response")
+	}
 }
 
 func TestSystemPrompt_NoToolSelectionExamples(t *testing.T) {
