@@ -172,7 +172,7 @@ hooks:
 XELYON は探索・調査タスクを `spawn_agent` / `wait_agent` でサブエージェントへ委譲できます。
 
 - 親に返るのはサブの最終レポートだけで、中間の `read_file` / `search_code` 出力は親コンテキストへ残りません
-- 既定モデルは `gpt-5.4-nano`、推論強度は off、同時実行数は 5 です
+- `sub_agent.default_model` が空ならメイン provider の最安モデルを自動選択し、推論強度は off、同時実行数は 5 です
 - サブエージェント自身には `spawn_agent` / `wait_agent` を渡さないため、再帰的な spawn は行いません
 
 設定例:
@@ -181,7 +181,7 @@ XELYON は探索・調査タスクを `spawn_agent` / `wait_agent` でサブエ�
 # ~/.xelyon/config.yaml
 sub_agent:
   enabled: true
-  default_model: gpt-5.4-nano
+  default_model: ""
   default_effort: off
   max_concurrent: 5
 ```

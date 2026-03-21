@@ -288,7 +288,7 @@ func DefaultConfig() *Config {
 		},
 		SubAgent: SubAgentConfig{
 			Enabled:       true,
-			DefaultModel:  "gpt-5.4-nano",
+			DefaultModel:  "",
 			DefaultEffort: "",
 			MaxConcurrent: 5,
 		},

@@ -269,8 +269,8 @@ web_search:
 sub_agent:
     # サブエージェント機能を有効化
     enabled: true
-    # 既定モデル（デフォルト: gpt-5.4-nano）
-    default_model: gpt-5.4-nano
+    # 既定モデル（空でメイン provider の最安モデルを自動選択）
+    default_model: ""
     # 既定推論強度（off / low / medium / high）
     default_effort: ""
     # 同時実行上限（デフォルト: 5）

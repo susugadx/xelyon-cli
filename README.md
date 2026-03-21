@@ -81,7 +81,7 @@ LLMが1回の応答で複数のread-onlyツールを返した場合、並列実�
 ### 🤖 サブエージェント委譲
 探索・調査タスクは `spawn_agent` / `wait_agent` で軽量サブエージェントへ委譲できます。
 - **コンテキスト分離**: 親に返るのはサブの最終レポートだけ。`read_file` 全文や `search_code` の中間結果は親コンテキストへ再注入されません
-- **既定モデル**: `gpt-5.4-nano`（`sub_agent.default_model` で変更可能）
+- **既定モデル**: `sub_agent.default_model` が空ならメイン provider の最安モデルを自動選択します。明示設定するとそのモデルを優先します
 - **推論強度**: 既定は off（`sub_agent.default_effort` で low / medium / high を指定可能）
 - **同時実行数**: 既定 5（`sub_agent.max_concurrent`）
 - **再帰禁止**: サブエージェント自身には `spawn_agent` / `wait_agent` を渡しません
@@ -258,12 +258,12 @@ Gemini API キーは無料で取得できます: https://aistudio.google.com/api
 # ~/.xelyon/config.yaml
 sub_agent:
   enabled: true
-  default_model: gpt-5.4-nano
+  default_model: ""
   default_effort: off
   max_concurrent: 5
 ```
 
-`sub_agent` は探索専用の委譲先を制御します。親モデルの `default_model` や `thinking` 設定は直接上書きしません。
+`sub_agent.default_model` が空の場合は、メイン provider に応じて OpenAI は `gpt-5.4-nano`、Claude は `claude-haiku-4-5-20251001`、Gemini は `gemini-3.1-flash-lite-preview` などの低コストモデルを自動選択します。親モデルの `default_model` や `thinking` 設定は直接上書きしません。
 
 ### 最大出力トークン数の設定
 

@@ -43,6 +43,29 @@ func TestNewManager(t *testing.T) {
 	}
 }
 
+// TestInferSubAgentModel は provider ごとの既定サブエージェントモデルを確認します。
+func TestInferSubAgentModel(t *testing.T) {
+	tests := []struct {
+		provider string
+		want     string
+	}{
+		{provider: "openai", want: "gpt-5.4-nano"},
+		{provider: "claude", want: "claude-haiku-4-5-20251001"},
+		{provider: "anthropic", want: "claude-haiku-4-5-20251001"},
+		{provider: "gemini", want: "gemini-3.1-flash-lite-preview"},
+		{provider: "deepseek", want: "deepseek-chat"},
+		{provider: "groq", want: "llama-3.3-70b-versatile"},
+		{provider: "openrouter", want: "openai/gpt-5.4-nano"},
+		{provider: "unknown", want: ""},
+	}
+
+	for _, tt := range tests {
+		if got := inferSubAgentModel(tt.provider); got != tt.want {
+			t.Errorf("inferSubAgentModel(%q) = %q, want %q", tt.provider, got, tt.want)
+		}
+	}
+}
+
 // TestManagerSpawnWaitCompleted は spawn -> wait の基本フローを確認します。
 func TestManagerSpawnWaitCompleted(t *testing.T) {
 	cfg := config.DefaultConfig()
@@ -92,6 +115,110 @@ func TestManagerSpawnWaitCompleted(t *testing.T) {
 	}
 	if gotCfg.Thinking.Enabled {
 		t.Fatal("expected default sub-agent reasoning to be disabled")
+	}
+}
+
+// TestManagerSpawn_DefaultModelFollowsMainProvider は DefaultModel 未設定時にメイン provider の最安モデルを選ぶことを確認します。
+func TestManagerSpawn_DefaultModelFollowsMainProvider(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.SubAgent.DefaultModel = ""
+	provider := &managerTestProvider{name: "claude"}
+
+	var gotModel string
+	var gotProvider api.Provider
+	manager := NewManagerWithOptions(ManagerOptions{
+		RunHeadless: func(_ context.Context, _ string, model string, provider api.Provider, _ *config.Config) *RunResult {
+			gotModel = model
+			gotProvider = provider
+			return &RunResult{Status: "completed", Response: "ok"}
+		},
+	})
+
+	id, err := manager.Spawn(context.Background(), "read files", "", "", provider, cfg)
+	if err != nil {
+		t.Fatalf("Spawn() error = %v", err)
+	}
+	_ = manager.Wait([]string{id}, 0)
+
+	if gotModel != "claude-haiku-4-5-20251001" {
+		t.Fatalf("resolved model = %q, want claude-haiku-4-5-20251001", gotModel)
+	}
+	if gotProvider != provider {
+		t.Fatal("expected current provider to be reused")
+	}
+}
+
+// TestManagerSpawn_DefaultModelExplicitOverride は明示設定モデルが provider 推定より優先されることを確認します。
+func TestManagerSpawn_DefaultModelExplicitOverride(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.SubAgent.DefaultModel = "gpt-5.4-nano"
+	currentProvider := &managerTestProvider{name: "gemini"}
+	createdProvider := &managerTestProvider{name: "openai"}
+
+	var gotModel string
+	var gotProvider api.Provider
+	manager := NewManagerWithOptions(ManagerOptions{
+		RunHeadless: func(_ context.Context, _ string, model string, provider api.Provider, _ *config.Config) *RunResult {
+			gotModel = model
+			gotProvider = provider
+			return &RunResult{Status: "completed", Response: "ok"}
+		},
+		ProviderFactory: func(providerName string) (api.Provider, error) {
+			if providerName != "openai" {
+				t.Fatalf("ProviderFactory providerName = %q, want openai", providerName)
+			}
+			return createdProvider, nil
+		},
+	})
+
+	id, err := manager.Spawn(context.Background(), "inspect files", "", "", currentProvider, cfg)
+	if err != nil {
+		t.Fatalf("Spawn() error = %v", err)
+	}
+	_ = manager.Wait([]string{id}, 0)
+
+	if gotModel != "gpt-5.4-nano" {
+		t.Fatalf("resolved model = %q, want gpt-5.4-nano", gotModel)
+	}
+	if gotProvider != createdProvider {
+		t.Fatal("expected provider factory result to be used")
+	}
+}
+
+// TestManagerSpawn_DefaultModelUnknownProviderFallback は不明 provider で OpenAI nano にフォールバックすることを確認します。
+func TestManagerSpawn_DefaultModelUnknownProviderFallback(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.SubAgent.DefaultModel = ""
+	currentProvider := &managerTestProvider{name: "custom"}
+	createdProvider := &managerTestProvider{name: "openai"}
+
+	var gotModel string
+	var gotProvider api.Provider
+	manager := NewManagerWithOptions(ManagerOptions{
+		RunHeadless: func(_ context.Context, _ string, model string, provider api.Provider, _ *config.Config) *RunResult {
+			gotModel = model
+			gotProvider = provider
+			return &RunResult{Status: "completed", Response: "ok"}
+		},
+		ProviderFactory: func(providerName string) (api.Provider, error) {
+			if providerName != "openai" {
+				t.Fatalf("ProviderFactory providerName = %q, want openai", providerName)
+			}
+			return createdProvider, nil
+		},
+	})
+
+	id, err := manager.Spawn(context.Background(), "inspect files", "", "", currentProvider, cfg)
+	if err != nil {
+		t.Fatalf("Spawn() error = %v", err)
+	}
+	_ = manager.Wait([]string{id}, 0)
+
+	if gotModel != "gpt-5.4-nano" {
+		t.Fatalf("resolved model = %q, want gpt-5.4-nano", gotModel)
+	}
+	if gotProvider != createdProvider {
+		t.Fatal("expected fallback provider factory result to be used")
 	}
 }
 

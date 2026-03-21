@@ -168,7 +168,7 @@ type WebSearchConfig struct {
 // SubAgentConfig はサブエージェント設定
 type SubAgentConfig struct {
 	Enabled       bool   `yaml:"enabled"`        // サブエージェント機能を有効化（デフォルト: true）
-	DefaultModel  string `yaml:"default_model"`  // サブエージェント既定モデル
+	DefaultModel  string `yaml:"default_model"`  // サブエージェント既定モデル（空でメイン provider の最安モデルを自動選択）
 	DefaultEffort string `yaml:"default_effort"` // サブエージェント既定推論強度（空または off で無効）
 	MaxConcurrent int    `yaml:"max_concurrent"` // 同時実行上限
 }

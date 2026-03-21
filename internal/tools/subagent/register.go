@@ -34,7 +34,7 @@ func (t *SpawnAgentTool) Parameters() map[string]interface{} {
 			},
 			"model": map[string]interface{}{
 				"type":        "string",
-				"description": "Model override (default: gpt-5.4-nano). Use larger models for complex analysis.",
+				"description": "Model override (default: sub_agent.default_model, or the cheapest model for the current provider when unset). Use larger models for complex analysis.",
 			},
 			"reasoning_effort": map[string]interface{}{
 				"type":        "string",

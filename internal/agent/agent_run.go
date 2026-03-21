@@ -90,6 +90,7 @@ func RunHeadlessWithConfig(ctx context.Context, query string, model string, prov
 
 		// ツール呼び出し解析
 		parsedCalls := agent.parseToolCalls(response)
+		assignHeadlessRescueToolCallIDs(parsedCalls)
 
 		// ツール呼び出しがなければ最終レスポンスとして終了
 		if len(parsedCalls) == 0 {
@@ -97,14 +98,18 @@ func RunHeadlessWithConfig(ctx context.Context, query string, model string, prov
 			break
 		}
 
+		appendHeadlessToolCallsToHistory(agent, response, parsedCalls)
+
 		// ツール実行と結果収集
-		var toolOutputs []string
 		for _, tc := range parsedCalls {
 			output, change := tools.ExecuteQuietWithContext(execCtx, tc)
 			agent.noteProjectMapMutation(tc, change)
 
 			// 成功判定（"Error:"を含むかどうかで簡易判定）
 			success := !strings.Contains(output, "Error:")
+			if agent.Stats != nil {
+				agent.Stats.AddToolExecution(tc.Tool)
+			}
 
 			allToolCalls = append(allToolCalls, ToolCallResult{
 				Tool:    tc.Tool,
@@ -112,27 +117,13 @@ func RunHeadlessWithConfig(ctx context.Context, query string, model string, prov
 				Output:  output,
 				Success: success,
 			})
-
-			toolOutputs = append(toolOutputs, fmt.Sprintf("[%s result]\n%s", tc.Tool, output))
+			appendHeadlessToolResultToHistory(agent, tc, output)
 
 			// ファイル変更履歴を記録
 			if change != nil {
 				agent.changeStack = append(agent.changeStack, *change)
 			}
 		}
-
-		// アシスタントメッセージをHistoryに追加
-		agent.History = append(agent.History, api.Message{
-			Role:    "assistant",
-			Content: response,
-		})
-
-		// ツール結果をユーザーメッセージとしてHistoryに追加
-		toolResultsMsg := strings.Join(toolOutputs, "\n\n")
-		agent.History = append(agent.History, api.Message{
-			Role:    "user",
-			Content: toolResultsMsg,
-		})
 
 		finalResponse = response // 最大イテレーション到達時のフォールバック
 	}
@@ -158,6 +149,71 @@ func attachHeadlessStats(agent *Agent, result *HeadlessResult) *HeadlessResult {
 	}
 	result.Cost = agent.Stats.EstimatedCost()
 	return result
+}
+
+func assignHeadlessRescueToolCallIDs(toolCalls []*tools.ToolCall) {
+	for i, tc := range toolCalls {
+		if tc == nil || tc.ID != "" {
+			continue
+		}
+		toolCalls[i].ID = fmt.Sprintf("call_rescue_%03d", i+1)
+	}
+}
+
+func appendHeadlessToolCallsToHistory(agent *Agent, response string, toolCalls []*tools.ToolCall) {
+	if agent == nil || len(toolCalls) == 0 {
+		return
+	}
+
+	explanation, _ := extractExplanationAndTool(response)
+	reasoningContent := agent.getLastReasoningContent()
+	historyContent, historyReasoning := agent.assistantToolHistoryContent(explanation, reasoningContent)
+
+	openAIToolCalls := make([]api.OpenAIToolCall, len(toolCalls))
+	for i, tc := range toolCalls {
+		openAIToolCalls[i] = api.OpenAIToolCall{
+			ID:   tc.ID,
+			Type: "function",
+			Function: api.OpenAIToolCallFunction{
+				Name:      tc.Tool,
+				Arguments: argsToJSON(tc.RawArgs),
+			},
+		}
+		if i == 0 {
+			openAIToolCalls[i].ThoughtSignature = tc.ThoughtSignature
+			openAIToolCalls[i].ThoughtParts = tc.ThoughtParts
+		}
+	}
+
+	agent.History = append(agent.History, api.Message{
+		Role:             "assistant",
+		Content:          historyContent,
+		ReasoningContent: historyReasoning,
+		ToolCalls:        openAIToolCalls,
+	})
+	if agent.Stats != nil {
+		agent.Stats.AssistantMessages++
+	}
+}
+
+func appendHeadlessToolResultToHistory(agent *Agent, toolCall *tools.ToolCall, result string) {
+	if agent == nil || toolCall == nil {
+		return
+	}
+	if toolCall.ID != "" {
+		agent.History = append(agent.History, api.Message{
+			Role:       "tool",
+			Content:    result,
+			ToolCallID: toolCall.ID,
+			ToolName:   toolCall.Tool,
+		})
+		return
+	}
+
+	agent.History = append(agent.History, api.Message{
+		Role:    "user",
+		Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, result),
+	})
 }
 
 // RunOnceWithConfig は指定設定で単一クエリを1ターンだけ実行して終了する。

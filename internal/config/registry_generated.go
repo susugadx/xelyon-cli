@@ -195,7 +195,7 @@ var FieldDescriptions = map[string]string{
 	"streaming.show_search_progress":      "検索時に進捗を表示",
 	"streaming.stream_bash_output":        "bashコマンドの出力をリアルタイム表示",
 	"sub_agent.default_effort":            "既定推論強度（off / low / medium / high）",
-	"sub_agent.default_model":             "既定モデル（デフォルト: gpt-5.4-nano）",
+	"sub_agent.default_model":             "既定モデル（空でメイン provider の最安モデルを自動選択）",
 	"sub_agent.enabled":                   "サブエージェント機能を有効化",
 	"sub_agent.max_concurrent":            "同時実行上限（デフォルト: 5）",
 	"thinking.enabled":                    "有効化",

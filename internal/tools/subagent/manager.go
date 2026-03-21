@@ -138,16 +138,17 @@ func (m *Manager) Spawn(ctx context.Context, message, model, reasoningEffort str
 	if strings.TrimSpace(message) == "" {
 		return "", fmt.Errorf("message is required")
 	}
+	if provider == nil {
+		return "", fmt.Errorf("provider is required")
+	}
 
-	subCfg, resolvedModel, err := cloneConfigForSub(cfg, model, reasoningEffort)
+	mainProvider := normalizeProviderName(provider.Name())
+	subCfg, resolvedModel, err := cloneConfigForSub(cfg, mainProvider, model, reasoningEffort)
 	if err != nil {
 		return "", err
 	}
 	if !subCfg.SubAgent.Enabled {
 		return "", fmt.Errorf("sub-agent is disabled")
-	}
-	if provider == nil {
-		return "", fmt.Errorf("provider is required")
 	}
 
 	m.mu.Lock()
@@ -384,7 +385,7 @@ func (m *Manager) snapshotOrTimeout(sub *managedSubAgent, timeout bool) WaitResu
 	}
 }
 
-func cloneConfigForSub(cfg *config.Config, model, reasoningEffort string) (*config.Config, string, error) {
+func cloneConfigForSub(cfg *config.Config, mainProvider, model, reasoningEffort string) (*config.Config, string, error) {
 	cloned := config.CloneConfig(cfg)
 	if cloned == nil {
 		cloned = config.DefaultConfig()
@@ -393,6 +394,9 @@ func cloneConfigForSub(cfg *config.Config, model, reasoningEffort string) (*conf
 	resolvedModel := strings.TrimSpace(model)
 	if resolvedModel == "" {
 		resolvedModel = strings.TrimSpace(cloned.SubAgent.DefaultModel)
+	}
+	if resolvedModel == "" {
+		resolvedModel = inferSubAgentModel(mainProvider)
 	}
 	if resolvedModel == "" {
 		resolvedModel = defaultSubAgentModel
@@ -409,6 +413,25 @@ func cloneConfigForSub(cfg *config.Config, model, reasoningEffort string) (*conf
 
 	cloned.SubAgentPrompt = SubAgentSystemPrompt
 	return cloned, resolvedModel, nil
+}
+
+func inferSubAgentModel(provider string) string {
+	switch normalizeProviderName(provider) {
+	case "openai":
+		return "gpt-5.4-nano"
+	case "claude":
+		return "claude-haiku-4-5-20251001"
+	case "gemini":
+		return "gemini-3.1-flash-lite-preview"
+	case "deepseek":
+		return "deepseek-chat"
+	case "groq":
+		return "llama-3.3-70b-versatile"
+	case "openrouter":
+		return "openai/gpt-5.4-nano"
+	default:
+		return ""
+	}
 }
 
 func applyReasoningEffort(cfg *config.Config, effort string) error {

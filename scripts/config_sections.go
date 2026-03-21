@@ -343,7 +343,7 @@ var Sections = map[string]SectionInfo{
 		},
 		Fields: map[string]string{
 			"enabled":        "サブエージェント機能を有効化",
-			"default_model":  "既定モデル（デフォルト: gpt-5.4-nano）",
+			"default_model":  "既定モデル（空でメイン provider の最安モデルを自動選択）",
 			"default_effort": "既定推論強度（off / low / medium / high）",
 			"max_concurrent": "同時実行上限（デフォルト: 5）",
 		},

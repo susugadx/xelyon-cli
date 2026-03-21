@@ -2,11 +2,16 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	openai "github.com/susugadx/xelyon-cli/internal/api/providers/openai"
 )
 
 // testSubDir はカレントディレクトリ配下にテスト用サブディレクトリを作成し、
@@ -413,5 +418,88 @@ func TestHeadless_HistoryAccumulation(t *testing.T) {
 	// Providerの呼び出し回数を検証（3ツール + 1最終レスポンス = 4回）
 	if provider.callCount != 4 {
 		t.Errorf("expected provider to be called 4 times, got %d", provider.callCount)
+	}
+}
+
+func TestHeadless_OpenAIResponsesUsesPreviousResponseIDAfterToolCall(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	dir := testSubDir(t)
+	testFile := filepath.Join(dir, "cache.txt")
+	if err := os.WriteFile(testFile, []byte("cached content\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	var requests []openai.ResponsesRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req openai.ResponsesRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("failed to decode request: %v", err)
+		}
+		requests = append(requests, req)
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			t.Fatal("streaming unsupported")
+		}
+
+		if len(requests) == 1 {
+			fmt.Fprintf(w, "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_first\"}}\n\n")
+			fmt.Fprintf(w, "data: {\"type\":\"response.output_item.added\",\"item\":{\"type\":\"function_call\",\"call_id\":\"call_1\",\"name\":\"read_file\"}}\n\n")
+			fmt.Fprintf(w, "data: {\"type\":\"response.function_call_arguments.done\",\"item\":{\"call_id\":\"call_1\",\"arguments\":%q}}\n\n", fmt.Sprintf("{\"paths\":[%q]}", testFile))
+			fmt.Fprintf(w, "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_first\"}}\n\n")
+		} else {
+			fmt.Fprintf(w, "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_second\"}}\n\n")
+			fmt.Fprintf(w, "data: {\"type\":\"response.output_text.delta\",\"delta\":\"done\"}\n\n")
+			fmt.Fprintf(w, "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_second\"}}\n\n")
+		}
+		fmt.Fprintf(w, "data: [DONE]\n\n")
+		flusher.Flush()
+	}))
+	t.Cleanup(server.Close)
+	t.Setenv("OPENAI_RESPONSES_URL", server.URL)
+
+	result := RunHeadlessWithConfig(
+		context.Background(),
+		"Read the cache file",
+		"gpt-5.4-nano",
+		openai.New("test-key"),
+		newProjectMapDisabledConfig(),
+	)
+
+	if result.Status != "success" {
+		t.Fatalf("expected success, got %q (%v)", result.Status, result.Error)
+	}
+	if len(requests) != 2 {
+		t.Fatalf("request count = %d, want 2", len(requests))
+	}
+
+	secondReq := requests[1]
+	if secondReq.PreviousResponseID != "resp_first" {
+		t.Fatalf("PreviousResponseID = %q, want resp_first", secondReq.PreviousResponseID)
+	}
+
+	inputItems, ok := secondReq.Input.([]interface{})
+	if !ok {
+		t.Fatalf("second request input type = %T, want []interface{}", secondReq.Input)
+	}
+	if len(inputItems) != 1 {
+		t.Fatalf("second request input length = %d, want 1", len(inputItems))
+	}
+
+	item, ok := inputItems[0].(map[string]interface{})
+	if !ok {
+		t.Fatalf("second request input[0] type = %T, want map[string]interface{}", inputItems[0])
+	}
+	if item["type"] != "function_call_output" {
+		t.Fatalf("input[0].type = %v, want function_call_output", item["type"])
+	}
+	if item["call_id"] != "call_1" {
+		t.Fatalf("input[0].call_id = %v, want call_1", item["call_id"])
+	}
+	output, _ := item["output"].(string)
+	if !strings.Contains(output, "cached content") {
+		t.Fatalf("input[0].output = %q, want read_file output", output)
 	}
 }

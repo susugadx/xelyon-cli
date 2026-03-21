@@ -130,8 +130,8 @@ func TestDefaultConfig(t *testing.T) {
 	if !cfg.SubAgent.Enabled {
 		t.Error("SubAgent.Enabled should default to true")
 	}
-	if cfg.SubAgent.DefaultModel != "gpt-5.4-nano" {
-		t.Errorf("SubAgent.DefaultModel = %q, want gpt-5.4-nano", cfg.SubAgent.DefaultModel)
+	if cfg.SubAgent.DefaultModel != "" {
+		t.Errorf("SubAgent.DefaultModel = %q, want empty string", cfg.SubAgent.DefaultModel)
 	}
 	if cfg.SubAgent.DefaultEffort != "" {
 		t.Errorf("SubAgent.DefaultEffort = %q, want empty string", cfg.SubAgent.DefaultEffort)
