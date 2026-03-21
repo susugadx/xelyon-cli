@@ -78,7 +78,11 @@ func (a *Agent) executeToolWithSpinner(ctx context.Context, toolCall *tools.Tool
 	}
 
 	spinner := a.ui().NewSpinner()
-	spinner.Start(ui.SpinnerMessageForTool(toolCall.Tool))
+	spinnerMsg := ui.SpinnerMessageForTool(toolCall.Tool)
+	if toolCall.Tool == "wait_agent" {
+		spinnerMsg = waitAgentSpinnerMessage(toolCall.Args)
+	}
+	spinner.Start(spinnerMsg)
 	a.ui().SetSpinner(spinner)
 
 	result, change := tools.ExecuteWithContext(a.toolExecutionContext(ctx, nil, nil, nil), toolCall)
@@ -91,6 +95,18 @@ func (a *Agent) executeToolWithSpinner(ctx context.Context, toolCall *tools.Tool
 	}
 
 	return result, change
+}
+
+// waitAgentSpinnerMessage は wait_agent 用のスピナーメッセージを生成する。
+// エージェント数を表示して待機中であることを明示する。
+func waitAgentSpinnerMessage(args map[string]string) string {
+	if raw := args["ids"]; raw != "" {
+		var ids []string
+		if err := json.Unmarshal([]byte(raw), &ids); err == nil && len(ids) > 0 {
+			return fmt.Sprintf("Waiting for %d agents...", len(ids))
+		}
+	}
+	return "Waiting for agents..."
 }
 
 // addToolCallsToHistory はパラレル FC の全ツール呼び出しを1つの assistant メッセージにまとめて履歴に追加する。

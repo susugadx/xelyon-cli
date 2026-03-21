@@ -108,6 +108,12 @@ func ExecuteWithContext(execCtx ExecutionContext, tc *ToolCall) (string, *FileCh
 	execCtx = normalizeExecutionContext(execCtx)
 	result, change := executeCoreWithContext(execCtx, tc)
 
+	// ツール実行完了後、結果表示前にスピナーを停止してクリア
+	// （wait_agent のような長時間ブロックツールで表示が混ざるのを防ぐ）
+	if execCtx.Runtime != nil {
+		execCtx.Runtime.StopSpinner()
+	}
+
 	_, _ = fmt.Fprintln(execCtx.Stdout, ui.FormatToolLine(ui.ToolDisplayInfo{
 		ToolName: tc.Tool,
 		Args:     tc.Args,

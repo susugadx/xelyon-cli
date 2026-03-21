@@ -725,3 +725,45 @@ func TestExecuteToolCallsWithParallel_CancelBeforeExecution(t *testing.T) {
 		}
 	}
 }
+
+func TestWaitAgentSpinnerMessage(t *testing.T) {
+	tests := []struct {
+		name string
+		args map[string]string
+		want string
+	}{
+		{
+			name: "3 agents",
+			args: map[string]string{"ids": `["a","b","c"]`},
+			want: "Waiting for 3 agents...",
+		},
+		{
+			name: "1 agent",
+			args: map[string]string{"ids": `["x"]`},
+			want: "Waiting for 1 agents...",
+		},
+		{
+			name: "empty ids",
+			args: map[string]string{"ids": `[]`},
+			want: "Waiting for agents...",
+		},
+		{
+			name: "invalid json",
+			args: map[string]string{"ids": "not-json"},
+			want: "Waiting for agents...",
+		},
+		{
+			name: "no ids key",
+			args: map[string]string{},
+			want: "Waiting for agents...",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := waitAgentSpinnerMessage(tt.args)
+			if got != tt.want {
+				t.Errorf("waitAgentSpinnerMessage() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
