@@ -85,6 +85,7 @@ LLMが1回の応答で複数のread-onlyツールを返した場合、並列実�
 - **推論強度**: 既定は off（`sub_agent.default_effort` で low / medium / high を指定可能）
 - **同時実行数**: 既定 5（`sub_agent.max_concurrent`）
 - **再帰禁止**: サブエージェント自身には `spawn_agent` / `wait_agent` を渡しません
+- **コスト透明性**: `/status` で親セッションとサブエージェントのトークン使用量・コストを分離表示し、合算コストも確認できます
 
 ### 🔍 コードレビュー & リファクタリング
 `/review` でセキュリティ・テストカバレッジをチェック。

@@ -16,6 +16,7 @@ type HeadlessResult struct {
 	DurationMs int64            `json:"duration_ms"`          // 実行時間（ミリ秒）
 	Timestamp  string           `json:"timestamp"`            // タイムスタンプ（RFC3339）
 	Error      *ErrorInfo       `json:"error,omitempty"`      // エラー情報
+	Cost       float64          `json:"cost"`                 // 推定コスト（USD）
 }
 
 // ToolCallResult は個別のツール呼び出し結果
@@ -28,9 +29,11 @@ type ToolCallResult struct {
 
 // TokenUsage はトークン使用量
 type TokenUsage struct {
-	Input  int `json:"input"`  // 入力トークン数
-	Output int `json:"output"` // 出力トークン数
-	Total  int `json:"total"`  // 合計トークン数
+	Input    int `json:"input"`    // 入力トークン数
+	Cached   int `json:"cached"`   // キャッシュヒット入力トークン数
+	Output   int `json:"output"`   // 出力トークン数
+	Thinking int `json:"thinking"` // Thinking トークン数
+	Total    int `json:"total"`    // 合計トークン数
 }
 
 // ErrorInfo はエラー情報

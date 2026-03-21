@@ -3,11 +3,13 @@ package agent
 import (
 	"bytes"
 	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/history"
+	"github.com/susugadx/xelyon-cli/internal/tools/subagent"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -197,6 +199,93 @@ func TestPrintSessionSections_NoOptimizations(t *testing.T) {
 
 	if !strings.Contains(output, "No optimizations triggered yet") {
 		t.Fatalf("printSessionSections() output missing empty optimization message:\n%s", output)
+	}
+	if strings.Contains(output, "🤖 Sub-agents") {
+		t.Fatalf("printSessionSections() should not show sub-agent section without spawned agents:\n%s", output)
+	}
+}
+
+func TestBuildSessionTokenTable_WithSubAgentCosts(t *testing.T) {
+	stats := NewSessionStats("openai", "gpt-5.4")
+	stats.InputTokens = 1200
+	stats.OutputTokens = 400
+	stats.AccumulatedCost = 0.0900
+
+	agent := &Agent{
+		CurrentModel: "gpt-5.4",
+		ProviderName: "openai",
+	}
+	summary := &subagent.SubAgentSummary{
+		TotalSpawned: 2,
+		TotalCost:    0.0052,
+	}
+
+	table := buildSessionTokenTable(agent, stats, summary)
+	if table == nil {
+		t.Fatal("buildSessionTokenTable() = nil, want table")
+	}
+
+	output := table.RenderCompact()
+	for _, want := range []string{
+		"Parent Cost",
+		"Sub-agent Cost",
+		"Total Cost",
+		"$0.0900 USD",
+		"$0.0052 USD",
+		"$0.0952 USD",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("buildSessionTokenTable() output missing %q:\n%s", want, output)
+		}
+	}
+}
+
+func TestPrintSubAgentStats_RunningUsesDash(t *testing.T) {
+	summary := subagent.SubAgentSummary{
+		Agents: []subagent.SubAgentStats{
+			{
+				ID:             "sub-001",
+				Model:          "gpt-5.4-nano",
+				Status:         "completed",
+				InputTokens:    20555,
+				CachedTokens:   15872,
+				OutputTokens:   1164,
+				ThinkingTokens: 0,
+				Cost:           0.0027,
+				ToolExecutions: 1,
+			},
+			{
+				ID:     "sub-002",
+				Model:  "gpt-5.4-nano",
+				Status: "running",
+			},
+		},
+		TotalSpawned:   2,
+		TotalCompleted: 1,
+		TotalRunning:   1,
+		TotalInput:     20555,
+		TotalCached:    15872,
+		TotalOutput:    1164,
+		TotalCost:      0.0027,
+		TotalTools:     1,
+	}
+
+	var out bytes.Buffer
+	printSubAgentStats(&out, summary)
+	output := out.String()
+
+	if !strings.Contains(output, "🤖 Sub-agents") {
+		t.Fatalf("printSubAgentStats() output missing header:\n%s", output)
+	}
+	if !strings.Contains(output, "sub-001") || !strings.Contains(output, "sub-002") {
+		t.Fatalf("printSubAgentStats() output missing agent ids:\n%s", output)
+	}
+	if !strings.Contains(output, "$0.0027") {
+		t.Fatalf("printSubAgentStats() output missing cost:\n%s", output)
+	}
+	runningRow := regexp.MustCompile(`running\s*│\s*-\s*│\s*-\s*│\s*-\s*│\s*-\s*│\s*-\s*│\s*-\s*`)
+	if !runningRow.MatchString(output) {
+		t.Fatalf("printSubAgentStats() running row should use '-':\n%s", output)
 	}
 }
 

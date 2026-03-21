@@ -70,7 +70,7 @@ func RunHeadlessWithConfig(ctx context.Context, query string, model string, prov
 		// 親 context がキャンセルされた場合は即終了
 		if ctx.Err() != nil {
 			duration := time.Since(startTime).Milliseconds()
-			return NewErrorResult(provider.Name(), model, "cancelled", ctx.Err().Error(), duration)
+			return attachHeadlessStats(agent, NewErrorResult(provider.Name(), model, "cancelled", ctx.Err().Error(), duration))
 		}
 		// API呼び出し
 		timeout := time.Duration(agent.cfg().APIRetry.Timeout) * time.Second
@@ -85,7 +85,7 @@ func RunHeadlessWithConfig(ctx context.Context, query string, model string, prov
 
 		if err != nil {
 			duration := time.Since(startTime).Milliseconds()
-			return NewErrorResult(provider.Name(), model, "api_error", err.Error(), duration)
+			return attachHeadlessStats(agent, NewErrorResult(provider.Name(), model, "api_error", err.Error(), duration))
 		}
 
 		// ツール呼び出し解析
@@ -138,7 +138,26 @@ func RunHeadlessWithConfig(ctx context.Context, query string, model string, prov
 	}
 
 	duration := time.Since(startTime).Milliseconds()
-	return NewSuccessResult(provider.Name(), model, finalResponse, allToolCalls, duration)
+	return attachHeadlessStats(agent, NewSuccessResult(provider.Name(), model, finalResponse, allToolCalls, duration))
+}
+
+func attachHeadlessStats(agent *Agent, result *HeadlessResult) *HeadlessResult {
+	if agent == nil || result == nil || agent.Stats == nil {
+		return result
+	}
+
+	agent.statsMu.Lock()
+	defer agent.statsMu.Unlock()
+
+	result.Tokens = &TokenUsage{
+		Input:    agent.Stats.InputTokens,
+		Cached:   agent.Stats.CachedInputTokens,
+		Output:   agent.Stats.OutputTokens,
+		Thinking: agent.Stats.ThinkingTokens,
+		Total:    agent.Stats.TotalTokens(),
+	}
+	result.Cost = agent.Stats.EstimatedCost()
+	return result
 }
 
 // RunOnceWithConfig は指定設定で単一クエリを1ターンだけ実行して終了する。

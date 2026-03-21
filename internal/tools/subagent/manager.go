@@ -3,6 +3,7 @@ package subagent
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -19,9 +20,17 @@ const (
 
 // RunResult はサブエージェント実行結果の最小表現です。
 type RunResult struct {
-	Status       string
-	Response     string
-	ErrorMessage string
+	Status         string
+	Model          string
+	Response       string
+	ErrorMessage   string
+	InputTokens    int
+	CachedTokens   int
+	OutputTokens   int
+	ThinkingTokens int
+	Cost           float64
+	ToolExecutions int
+	DurationMs     int64
 }
 
 // Runner はサブエージェント実行関数です。
@@ -47,6 +56,7 @@ type Manager struct {
 
 type managedSubAgent struct {
 	id        string
+	model     string
 	status    string
 	result    *RunResult
 	done      chan struct{}
@@ -64,6 +74,35 @@ type WaitResult struct {
 type WaitResponse struct {
 	Results []WaitResult `json:"results"`
 	Status  string       `json:"status"`
+}
+
+// SubAgentStats はサブエージェント 1 件分の統計です。
+type SubAgentStats struct {
+	ID             string  `json:"id"`
+	Model          string  `json:"model"`
+	Status         string  `json:"status"`
+	InputTokens    int     `json:"input_tokens"`
+	CachedTokens   int     `json:"cached_tokens"`
+	OutputTokens   int     `json:"output_tokens"`
+	ThinkingTokens int     `json:"thinking_tokens"`
+	Cost           float64 `json:"cost"`
+	ToolExecutions int     `json:"tool_executions"`
+	DurationMs     int64   `json:"duration_ms"`
+}
+
+// SubAgentSummary は全サブエージェントの集約統計です。
+type SubAgentSummary struct {
+	Agents         []SubAgentStats `json:"agents"`
+	TotalSpawned   int             `json:"total_spawned"`
+	TotalCompleted int             `json:"total_completed"`
+	TotalErrors    int             `json:"total_errors"`
+	TotalRunning   int             `json:"total_running"`
+	TotalInput     int             `json:"total_input"`
+	TotalCached    int             `json:"total_cached"`
+	TotalOutput    int             `json:"total_output"`
+	TotalThinking  int             `json:"total_thinking"`
+	TotalCost      float64         `json:"total_cost"`
+	TotalTools     int             `json:"total_tools"`
 }
 
 // NewManager は新しい Manager を作成します。
@@ -119,6 +158,7 @@ func (m *Manager) Spawn(ctx context.Context, message, model, reasoningEffort str
 	id := fmt.Sprintf("sub-%03d", m.counter.Add(1))
 	sub := &managedSubAgent{
 		id:        id,
+		model:     resolvedModel,
 		status:    "running",
 		done:      make(chan struct{}),
 		startTime: time.Now(),
@@ -232,6 +272,67 @@ func (m *Manager) Wait(ids []string, timeoutMs int) WaitResponse {
 		Results: results,
 		Status:  status,
 	}
+}
+
+// GetSummary は全サブエージェントの統計サマリーを返します。
+func (m *Manager) GetSummary() SubAgentSummary {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	summary := SubAgentSummary{
+		Agents:       make([]SubAgentStats, 0, len(m.agents)),
+		TotalSpawned: len(m.agents),
+	}
+	if len(m.agents) == 0 {
+		return summary
+	}
+
+	ids := make([]string, 0, len(m.agents))
+	for id := range m.agents {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+
+	for _, id := range ids {
+		sub := m.agents[id]
+		stats := SubAgentStats{
+			ID:     sub.id,
+			Model:  sub.model,
+			Status: sub.status,
+		}
+		if sub.result != nil {
+			if sub.result.Model != "" {
+				stats.Model = sub.result.Model
+			}
+			stats.InputTokens = sub.result.InputTokens
+			stats.CachedTokens = sub.result.CachedTokens
+			stats.OutputTokens = sub.result.OutputTokens
+			stats.ThinkingTokens = sub.result.ThinkingTokens
+			stats.Cost = sub.result.Cost
+			stats.ToolExecutions = sub.result.ToolExecutions
+			stats.DurationMs = sub.result.DurationMs
+
+			summary.TotalInput += stats.InputTokens
+			summary.TotalCached += stats.CachedTokens
+			summary.TotalOutput += stats.OutputTokens
+			summary.TotalThinking += stats.ThinkingTokens
+			summary.TotalCost += stats.Cost
+			summary.TotalTools += stats.ToolExecutions
+		}
+
+		switch sub.status {
+		case "completed":
+			summary.TotalCompleted++
+		case "error":
+			summary.TotalErrors++
+		case "running":
+			summary.TotalRunning++
+		}
+
+		summary.Agents = append(summary.Agents, stats)
+	}
+
+	return summary
 }
 
 func (m *Manager) runningCountLocked() int {

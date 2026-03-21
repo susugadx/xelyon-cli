@@ -53,6 +53,36 @@ func (p *headlessToolSetProbeProvider) ChatWithImage(ctx context.Context, system
 	return p.ChatWithTools(ctx, systemPrompt, history, model)
 }
 
+type headlessUsageProvider struct {
+	usageCallback api.UsageCallback
+}
+
+func (p *headlessUsageProvider) Name() string { return "openai" }
+
+func (p *headlessUsageProvider) SupportsImages() bool { return false }
+
+func (p *headlessUsageProvider) IsFunctionCallingEnabled() bool { return true }
+
+func (p *headlessUsageProvider) SetUsageCallback(callback api.UsageCallback) {
+	p.usageCallback = callback
+}
+
+func (p *headlessUsageProvider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
+	if p.usageCallback != nil {
+		p.usageCallback(api.Usage{
+			InputTokens:       1000,
+			CachedInputTokens: 200,
+			OutputTokens:      300,
+			ThinkingTokens:    50,
+		})
+	}
+	return "done", nil
+}
+
+func (p *headlessUsageProvider) ChatWithImage(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {
+	return p.ChatWithTools(ctx, systemPrompt, history, model)
+}
+
 func hasToolName(names []string, target string) bool {
 	for _, name := range names {
 		if name == target {
@@ -259,10 +289,13 @@ func TestTokenUsage(t *testing.T) {
 		DurationMs: 2000,
 		Timestamp:  time.Now().Format(time.RFC3339),
 		Tokens: &TokenUsage{
-			Input:  100,
-			Output: 50,
-			Total:  150,
+			Input:    100,
+			Cached:   25,
+			Output:   50,
+			Thinking: 10,
+			Total:    160,
 		},
+		Cost: 0.1234,
 	}
 
 	jsonStr, err := result.ToJSON()
@@ -276,11 +309,58 @@ func TestTokenUsage(t *testing.T) {
 	if !strings.Contains(jsonStr, `"input": 100`) {
 		t.Error("Expected JSON to contain input token count")
 	}
+	if !strings.Contains(jsonStr, `"cached": 25`) {
+		t.Error("Expected JSON to contain cached token count")
+	}
 	if !strings.Contains(jsonStr, `"output": 50`) {
 		t.Error("Expected JSON to contain output token count")
 	}
-	if !strings.Contains(jsonStr, `"total": 150`) {
+	if !strings.Contains(jsonStr, `"thinking": 10`) {
+		t.Error("Expected JSON to contain thinking token count")
+	}
+	if !strings.Contains(jsonStr, `"total": 160`) {
 		t.Error("Expected JSON to contain total token count")
+	}
+	if !strings.Contains(jsonStr, `"cost": 0.1234`) {
+		t.Error("Expected JSON to contain cost")
+	}
+}
+
+func TestRunHeadlessWithConfig_CollectsTokenUsageAndCost(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	provider := &headlessUsageProvider{}
+	result := RunHeadlessWithConfig(context.Background(), "probe", "gpt-5.4-nano", provider, newProjectMapDisabledConfig())
+	if result.Status != "success" {
+		t.Fatalf("result.Status = %q, want success", result.Status)
+	}
+	if result.Tokens == nil {
+		t.Fatal("result.Tokens = nil, want usage summary")
+	}
+	if result.Tokens.Input != 1000 {
+		t.Fatalf("result.Tokens.Input = %d, want 1000", result.Tokens.Input)
+	}
+	if result.Tokens.Cached != 200 {
+		t.Fatalf("result.Tokens.Cached = %d, want 200", result.Tokens.Cached)
+	}
+	if result.Tokens.Output != 300 {
+		t.Fatalf("result.Tokens.Output = %d, want 300", result.Tokens.Output)
+	}
+	if result.Tokens.Thinking != 50 {
+		t.Fatalf("result.Tokens.Thinking = %d, want 50", result.Tokens.Thinking)
+	}
+	if result.Tokens.Total != 1350 {
+		t.Fatalf("result.Tokens.Total = %d, want 1350", result.Tokens.Total)
+	}
+
+	expectedCost := CalculateRequestCostWithCache("openai", "gpt-5.4-nano", api.Usage{
+		InputTokens:       1000,
+		CachedInputTokens: 200,
+		OutputTokens:      300,
+		ThinkingTokens:    50,
+	})
+	if result.Cost != expectedCost {
+		t.Fatalf("result.Cost = %f, want %f", result.Cost, expectedCost)
 	}
 }
 

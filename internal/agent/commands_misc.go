@@ -12,6 +12,7 @@ import (
 	"github.com/atotto/clipboard"
 	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/tools/subagent"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -117,8 +118,9 @@ func buildSessionOverviewTable(agent *Agent, stats *SessionStats) *ui.Table {
 	return table
 }
 
-func buildSessionTokenTable(agent *Agent, stats *SessionStats) *ui.Table {
-	if stats.TotalTokens() <= 0 {
+func buildSessionTokenTable(agent *Agent, stats *SessionStats, subSummary *subagent.SubAgentSummary) *ui.Table {
+	hasSubAgents := subSummary != nil && subSummary.TotalSpawned > 0
+	if stats.TotalTokens() <= 0 && !hasSubAgents {
 		return nil
 	}
 
@@ -130,24 +132,30 @@ func buildSessionTokenTable(agent *Agent, stats *SessionStats) *ui.Table {
 		tokenTable.AddRow("Context", fmt.Sprintf("%s / %s (%.1f%%)", formatNumber(currentTokens), formatNumber(limit), contextPct))
 	}
 
-	tokenTable.AddRow("Input", formatNumber(stats.InputTokens)+" tokens")
-
-	if stats.CachedInputTokens > 0 || stats.CacheCreationTokens > 0 {
-		tokenTable.AddRow("Cached", formatNumber(stats.CachedInputTokens)+" tokens").
-			AddRow("Cache Creation", formatNumber(stats.CacheCreationTokens)+" tokens").
-			AddRow("Hit Rate", fmt.Sprintf("%.1f%%", sessionCacheHitRate(stats)))
-	}
-
-	tokenTable.AddRow("Output", formatNumber(stats.OutputTokens)+" tokens")
-	if stats.ThinkingTokens > 0 {
-		tokenTable.AddRow("Thinking", formatNumber(stats.ThinkingTokens)+" tokens")
-	}
-
-	tokenTable.AddRow("Total", formatNumber(stats.TotalTokens())+" tokens")
-
 	cost := stats.EstimatedCost()
-	if cost > 0 {
-		tokenTable.AddRow("Cost", fmt.Sprintf("$%.4f USD", cost))
+	if stats.TotalTokens() > 0 {
+		tokenTable.AddRow("Input", formatNumber(stats.InputTokens)+" tokens")
+
+		if stats.CachedInputTokens > 0 || stats.CacheCreationTokens > 0 {
+			tokenTable.AddRow("Cached", formatNumber(stats.CachedInputTokens)+" tokens").
+				AddRow("Cache Creation", formatNumber(stats.CacheCreationTokens)+" tokens").
+				AddRow("Hit Rate", fmt.Sprintf("%.1f%%", sessionCacheHitRate(stats)))
+		}
+
+		tokenTable.AddRow("Output", formatNumber(stats.OutputTokens)+" tokens")
+		if stats.ThinkingTokens > 0 {
+			tokenTable.AddRow("Thinking", formatNumber(stats.ThinkingTokens)+" tokens")
+		}
+
+		tokenTable.AddRow("Total", formatNumber(stats.TotalTokens())+" tokens")
+	}
+
+	if hasSubAgents {
+		tokenTable.AddRow("Parent Cost", formatParentCost(agent.ProviderName, cost)).
+			AddRow("Sub-agent Cost", formatUSDWithSuffix(subSummary.TotalCost)).
+			AddRow("Total Cost", formatUSDWithSuffix(cost+subSummary.TotalCost))
+	} else if cost > 0 {
+		tokenTable.AddRow("Cost", formatUSDWithSuffix(cost))
 	} else {
 		tokenTable.AddRow("Cost", "Free (local)")
 	}
@@ -162,6 +170,13 @@ func printSessionSections(agent *Agent) {
 	}
 
 	stats := agent.Stats
+	var subSummary *subagent.SubAgentSummary
+	if manager := agent.subAgentManager(); manager != nil {
+		summary := manager.GetSummary()
+		if summary.TotalSpawned > 0 {
+			subSummary = &summary
+		}
+	}
 
 	_, _ = fmt.Fprintln(out)
 	green.Fprintln(out, "📚 Session")
@@ -182,10 +197,14 @@ func printSessionSections(agent *Agent) {
 
 	_, _ = fmt.Fprintln(out)
 	green.Fprintln(out, "💰 Session Tokens & Cost")
-	if tokenTable := buildSessionTokenTable(agent, stats); tokenTable != nil {
+	if tokenTable := buildSessionTokenTable(agent, stats, subSummary); tokenTable != nil {
 		_, _ = fmt.Fprint(out, tokenTable.RenderCompact())
 	} else {
 		dim.Fprintln(out, "  No token usage data available")
+	}
+
+	if subSummary != nil {
+		printSubAgentStats(out, *subSummary)
 	}
 
 	printToolObservabilitySection(out, stats)
@@ -218,6 +237,78 @@ func printSessionSections(agent *Agent) {
 	} else {
 		dim.Fprintln(out, "  No optimizations triggered yet")
 	}
+}
+
+func formatUSD(value float64) string {
+	return fmt.Sprintf("$%.4f", value)
+}
+
+func formatUSDWithSuffix(value float64) string {
+	return fmt.Sprintf("%s USD", formatUSD(value))
+}
+
+func formatParentCost(providerName string, cost float64) string {
+	if strings.EqualFold(providerName, "ollama") && cost == 0 {
+		return "Free (local)"
+	}
+	return formatUSDWithSuffix(cost)
+}
+
+func formatSubAgentNumber(value int, pending bool) string {
+	if pending {
+		return "-"
+	}
+	return formatNumber(value)
+}
+
+func formatSubAgentCost(cost float64, pending bool) string {
+	if pending {
+		return "-"
+	}
+	return formatUSD(cost)
+}
+
+func printSubAgentStats(out io.Writer, summary subagent.SubAgentSummary) {
+	if summary.TotalSpawned == 0 {
+		return
+	}
+
+	_, _ = fmt.Fprintln(out)
+	green.Fprintln(out, "🤖 Sub-agents")
+
+	table := ui.NewTable().SetHeaders("ID", "Model", "Status", "Input", "Cached", "Output", "Thinking", "Cost", "Tools")
+	for _, agentStats := range summary.Agents {
+		pending := agentStats.Status == "running"
+		model := agentStats.Model
+		if model == "" {
+			model = "-"
+		}
+		table.AddRow(
+			agentStats.ID,
+			model,
+			agentStats.Status,
+			formatSubAgentNumber(agentStats.InputTokens, pending),
+			formatSubAgentNumber(agentStats.CachedTokens, pending),
+			formatSubAgentNumber(agentStats.OutputTokens, pending),
+			formatSubAgentNumber(agentStats.ThinkingTokens, pending),
+			formatSubAgentCost(agentStats.Cost, pending),
+			formatSubAgentNumber(agentStats.ToolExecutions, pending),
+		)
+	}
+
+	table.AddRow(
+		"Total",
+		formatNumber(summary.TotalSpawned),
+		"",
+		formatNumber(summary.TotalInput),
+		formatNumber(summary.TotalCached),
+		formatNumber(summary.TotalOutput),
+		formatNumber(summary.TotalThinking),
+		formatUSD(summary.TotalCost),
+		formatNumber(summary.TotalTools),
+	)
+
+	_, _ = fmt.Fprint(out, table.RenderCompact())
 }
 
 // printToolObservabilitySection はツール選択のobservabilityセクションを表示する。

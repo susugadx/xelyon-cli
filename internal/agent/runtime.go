@@ -125,22 +125,35 @@ func newSubAgentManager() *subagent.Manager {
 				}
 			}
 			if result.Status == "success" {
-				return &subagent.RunResult{
-					Status:   "completed",
-					Response: result.Response,
-				}
+				return headlessResultToSubAgentResult("completed", result)
 			}
 			errorMessage := ""
 			if result.Error != nil {
 				errorMessage = result.Error.Message
 			}
-			return &subagent.RunResult{
-				Status:       "error",
-				Response:     result.Response,
-				ErrorMessage: errorMessage,
-			}
+			subResult := headlessResultToSubAgentResult("error", result)
+			subResult.ErrorMessage = errorMessage
+			return subResult
 		},
 	})
+}
+
+func headlessResultToSubAgentResult(status string, result *HeadlessResult) *subagent.RunResult {
+	subResult := &subagent.RunResult{
+		Status:         status,
+		Model:          result.Model,
+		Response:       result.Response,
+		Cost:           result.Cost,
+		ToolExecutions: len(result.ToolCalls),
+		DurationMs:     result.DurationMs,
+	}
+	if result.Tokens != nil {
+		subResult.InputTokens = result.Tokens.Input
+		subResult.CachedTokens = result.Tokens.Cached
+		subResult.OutputTokens = result.Tokens.Output
+		subResult.ThinkingTokens = result.Tokens.Thinking
+	}
+	return subResult
 }
 
 func registerRuntimeSubAgentTools(runtime *AgentRuntime) {
@@ -170,6 +183,13 @@ func (a *Agent) registry() *tools.Registry {
 		return tools.DefaultRegistry
 	}
 	return a.Runtime.effectiveRegistry()
+}
+
+func (a *Agent) subAgentManager() *subagent.Manager {
+	if a == nil || a.Runtime == nil {
+		return nil
+	}
+	return a.Runtime.SubAgentManager
 }
 
 func (a *Agent) autoApprove() bool {
