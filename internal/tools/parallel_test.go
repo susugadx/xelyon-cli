@@ -23,6 +23,8 @@ func TestIsParallelSafe_StaticTools(t *testing.T) {
 		{"git_status", true},
 		{"git_log", true},
 		{"git_diff", true},
+		{"spawn_agent", true},
+		{"wait_agent", true},
 		{"write_file", false},
 		{"str_replace", false},
 		{"delete_file", false},

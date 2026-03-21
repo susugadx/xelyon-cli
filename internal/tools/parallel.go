@@ -25,6 +25,8 @@ var parallelSafeTools = map[string]bool{
 	"git_diff":       true,
 	"git_branch":     true,
 	"git_ls_files":   true,
+	"spawn_agent":    true,
+	"wait_agent":     true,
 }
 
 // IsParallelSafe は ToolCall が並列実行可能かを判定する。
