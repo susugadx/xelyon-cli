@@ -409,8 +409,8 @@ func TestCompressHistory_UsesCompressionModelDefault(t *testing.T) {
 	if err := agent.CompressHistory(1); err != nil {
 		t.Fatalf("CompressHistory() error = %v", err)
 	}
-	if provider.capturedChatModel != "gpt-5-mini" {
-		t.Fatalf("CompressHistory() model = %q, want %q", provider.capturedChatModel, "gpt-5-mini")
+	if provider.capturedChatModel != "gpt-5.4-mini" {
+		t.Fatalf("CompressHistory() model = %q, want %q", provider.capturedChatModel, "gpt-5.4-mini")
 	}
 }
 
@@ -425,8 +425,8 @@ func TestCompressWithCompactAPI_UsesCompressionModel(t *testing.T) {
 	if err := agent.CompressWithCompactAPI(context.Background()); err != nil {
 		t.Fatalf("CompressWithCompactAPI() error = %v", err)
 	}
-	if provider.capturedCompactModel != "gpt-5-mini" {
-		t.Fatalf("CompressWithCompactAPI() model = %q, want %q", provider.capturedCompactModel, "gpt-5-mini")
+	if provider.capturedCompactModel != "gpt-5.4-mini" {
+		t.Fatalf("CompressWithCompactAPI() model = %q, want %q", provider.capturedCompactModel, "gpt-5.4-mini")
 	}
 }
 

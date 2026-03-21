@@ -60,13 +60,13 @@ func TestInferSubAgentModel(t *testing.T) {
 		provider string
 		want     string
 	}{
-		{provider: "openai", want: "gpt-5.4-nano"},
+		{provider: "openai", want: "gpt-5.4-mini"},
 		{provider: "claude", want: "claude-haiku-4-5-20251001"},
 		{provider: "anthropic", want: "claude-haiku-4-5-20251001"},
 		{provider: "gemini", want: "gemini-3.1-flash-lite-preview"},
 		{provider: "deepseek", want: "deepseek-chat"},
 		{provider: "groq", want: "llama-3.3-70b-versatile"},
-		{provider: "openrouter", want: "openai/gpt-5.4-nano"},
+		{provider: "openrouter", want: "openai/gpt-5.4-mini"},
 		{provider: "unknown", want: ""},
 	}
 
@@ -87,7 +87,7 @@ func TestNormalizeSubAgentModel(t *testing.T) {
 		{input: "   ", want: ""},
 		{input: "sub_agent.default_model", want: ""},
 		{input: "SUB_AGENT.DEFAULT_MODEL", want: ""},
-		{input: "gpt-5.4-nano", want: "gpt-5.4-nano"},
+		{input: "gpt-5.4-mini", want: "gpt-5.4-mini"},
 	}
 
 	for _, tt := range tests {
@@ -139,8 +139,8 @@ func TestManagerSpawnWaitCompleted(t *testing.T) {
 	if response.Results[0].Output != "sub-agent done" {
 		t.Fatalf("Wait().Results[0].Output = %q, want %q", response.Results[0].Output, "sub-agent done")
 	}
-	if gotModel != "gpt-5.4-nano" {
-		t.Fatalf("resolved model = %q, want gpt-5.4-nano", gotModel)
+	if gotModel != "gpt-5.4-mini" {
+		t.Fatalf("resolved model = %q, want gpt-5.4-mini", gotModel)
 	}
 	if gotProvider != createdProvider {
 		t.Fatal("expected fresh provider instance to be used")
@@ -263,7 +263,7 @@ func TestManagerSpawn_PlaceholderConfigFallsBackToMainProvider(t *testing.T) {
 // TestManagerSpawn_DefaultModelExplicitOverride は明示設定モデルが provider 推定より優先されることを確認します。
 func TestManagerSpawn_DefaultModelExplicitOverride(t *testing.T) {
 	cfg := config.DefaultConfig()
-	cfg.SubAgent.DefaultModel = "gpt-5.4-nano"
+	cfg.SubAgent.DefaultModel = "gpt-5.4-mini"
 	currentProvider := &managerTestProvider{name: "gemini"}
 	createdProvider := &managerTestProvider{name: "openai"}
 
@@ -289,8 +289,8 @@ func TestManagerSpawn_DefaultModelExplicitOverride(t *testing.T) {
 	}
 	_ = manager.Wait([]string{id}, 0)
 
-	if gotModel != "gpt-5.4-nano" {
-		t.Fatalf("resolved model = %q, want gpt-5.4-nano", gotModel)
+	if gotModel != "gpt-5.4-mini" {
+		t.Fatalf("resolved model = %q, want gpt-5.4-mini", gotModel)
 	}
 	if gotProvider != createdProvider {
 		t.Fatal("expected provider factory result to be used")
@@ -326,8 +326,8 @@ func TestManagerSpawn_DefaultModelUnknownProviderFallback(t *testing.T) {
 	}
 	_ = manager.Wait([]string{id}, 0)
 
-	if gotModel != "gpt-5.4-nano" {
-		t.Fatalf("resolved model = %q, want gpt-5.4-nano", gotModel)
+	if gotModel != "gpt-5.4-mini" {
+		t.Fatalf("resolved model = %q, want gpt-5.4-mini", gotModel)
 	}
 	if gotProvider != createdProvider {
 		t.Fatal("expected fallback provider factory result to be used")
@@ -626,8 +626,8 @@ func TestManagerGetSummary(t *testing.T) {
 	if summary.Agents[1].Status != "running" {
 		t.Fatalf("summary.Agents[1].Status = %q, want running", summary.Agents[1].Status)
 	}
-	if summary.Agents[1].Model != "gpt-5.4-nano" {
-		t.Fatalf("summary.Agents[1].Model = %q, want gpt-5.4-nano", summary.Agents[1].Model)
+	if summary.Agents[1].Model != "gpt-5.4-mini" {
+		t.Fatalf("summary.Agents[1].Model = %q, want gpt-5.4-mini", summary.Agents[1].Model)
 	}
 
 	close(release)

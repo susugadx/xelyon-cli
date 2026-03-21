@@ -442,8 +442,8 @@ func TestCustomTokenThreshold_RespectsCacheSkip(t *testing.T) {
 }
 
 func TestDefaultCompressionModel_OpenAI(t *testing.T) {
-	if got := defaultCompressionModel("openai"); got != "gpt-5-mini" {
-		t.Fatalf("defaultCompressionModel(openai) = %q, want %q", got, "gpt-5-mini")
+	if got := defaultCompressionModel("openai"); got != "gpt-5.4-mini" {
+		t.Fatalf("defaultCompressionModel(openai) = %q, want %q", got, "gpt-5.4-mini")
 	}
 }
 

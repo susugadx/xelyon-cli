@@ -22,7 +22,7 @@ type ResponseIDCapable interface {
 func defaultCompressionModel(providerName string) string {
 	switch strings.ToLower(providerName) {
 	case "openai":
-		return "gpt-5-mini"
+		return "gpt-5.4-mini"
 	case "gemini":
 		return "gemini-3.1-flash-lite-preview"
 	case "claude", "anthropic", "bedrock":

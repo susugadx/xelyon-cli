@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	defaultSubAgentModel         = "gpt-5.4-nano"
+	defaultSubAgentModel         = "gpt-5.4-mini"
 	defaultSubAgentMaxConcurrent = 5
 )
 
@@ -428,7 +428,7 @@ func normalizeSubAgentModel(model string) string {
 func inferSubAgentModel(provider string) string {
 	switch normalizeProviderName(provider) {
 	case "openai":
-		return "gpt-5.4-nano"
+		return "gpt-5.4-mini"
 	case "claude":
 		return "claude-haiku-4-5-20251001"
 	case "gemini":
@@ -438,7 +438,7 @@ func inferSubAgentModel(provider string) string {
 	case "groq":
 		return "llama-3.3-70b-versatile"
 	case "openrouter":
-		return "openai/gpt-5.4-nano"
+		return "openai/gpt-5.4-mini"
 	default:
 		return ""
 	}

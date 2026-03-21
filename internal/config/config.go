@@ -51,7 +51,7 @@ func DefaultConfig() *Config {
 				MaxOutputTokens: 16384,
 			},
 			"openai": {
-				DefaultModel:    "gpt-5.2",
+				DefaultModel:    "gpt-5.4",
 				MaxOutputTokens: 16384,
 			},
 			"gemini": {
@@ -288,7 +288,7 @@ func DefaultConfig() *Config {
 		},
 		SubAgent: SubAgentConfig{
 			Enabled:       true,
-			DefaultModel:  "",
+			DefaultModel:  "gpt-5.4-mini",
 			DefaultEffort: "",
 			MaxConcurrent: 5,
 		},
