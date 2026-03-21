@@ -104,8 +104,12 @@ func (a *Agent) PrintStatusFooter() {
 	tokens := a.Stats.TotalTokens()
 	tokenStr := FormatTokens(tokens)
 
-	// コスト
+	// コスト（親 + サブエージェント累計）
 	cost := a.Stats.EstimatedCost()
+	if manager := a.subAgentManager(); manager != nil {
+		summary := manager.GetSummary()
+		cost += summary.TotalCost
+	}
 
 	// セパレータ（dim色）
 	sep := statusDim.Sprint("│")
@@ -175,7 +179,7 @@ func handleStatusCommand(agent *Agent) bool {
 	_, _ = fmt.Fprint(out, statusTable.RenderCompact())
 
 	_, _ = fmt.Fprintln(out)
-	green.Fprintln(out, "🧾 Last Request")
+	green.Fprintln(out, "🧾 Last Turn")
 	if agent.Stats != nil {
 		usage, costOverride := lastRequestUsageForStatus(agent.Stats)
 		if table := buildLastRequestTable(agent.ProviderName, agent.CurrentModel, usage, costOverride); table != nil {

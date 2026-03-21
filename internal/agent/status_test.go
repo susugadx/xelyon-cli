@@ -2,9 +2,13 @@ package agent
 
 import (
 	"bytes"
+	"context"
 	"strings"
 	"testing"
 
+	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/tools/subagent"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -204,5 +208,46 @@ func TestPrintStatusFooter_UsesRuntimeOutput(t *testing.T) {
 	}
 	if !strings.Contains(outB.String(), "model-b") {
 		t.Fatalf("agent B output should contain model-b: %q", outB.String())
+	}
+}
+
+func TestPrintStatusFooter_IncludesSubAgentCost(t *testing.T) {
+	var out bytes.Buffer
+
+	// サブエージェント完了時にコスト 0.050 を返すマネージャー
+	manager := subagent.NewManagerWithOptions(subagent.ManagerOptions{
+		RunHeadless: func(_ context.Context, _, model string, _ api.Provider, _ *config.Config) *subagent.RunResult {
+			return &subagent.RunResult{
+				Status: "completed",
+				Model:  model,
+				Cost:   0.050,
+			}
+		},
+	})
+	cfg := config.DefaultConfig()
+	provider := &mockProvider{name: "openai"}
+	id, err := manager.Spawn(context.Background(), "task", "gpt-5.4", "", provider, cfg)
+	if err != nil {
+		t.Fatalf("Spawn() error = %v", err)
+	}
+	_ = manager.Wait([]string{id}, 0)
+
+	agent := &Agent{
+		CurrentModel: "gpt-5.4",
+		ProviderName: "openai",
+		Stats:        NewSessionStats("openai", "gpt-5.4"),
+		Runtime: &AgentRuntime{
+			UI:              ui.NewRuntime(strings.NewReader(""), &out, &out),
+			SubAgentManager: manager,
+		},
+	}
+	agent.Stats.AccumulatedCost = 0.100
+
+	agent.PrintStatusFooter()
+
+	output := out.String()
+	// 親 0.100 + サブ 0.050 = 0.150
+	if !strings.Contains(output, "~$0.150") {
+		t.Fatalf("PrintStatusFooter() should include sub-agent cost, got:\n%s", output)
 	}
 }
