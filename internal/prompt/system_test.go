@@ -107,6 +107,9 @@ func TestSystemPrompt_ParallelGuidanceIsConsolidated(t *testing.T) {
 	if !strings.Contains(SystemPrompt, "message must be concise") {
 		t.Error("SystemPrompt should require concise sub-agent messages")
 	}
+	if !strings.Contains(SystemPrompt, "NEVER set timeout_ms in wait_agent") {
+		t.Error("SystemPrompt should forbid short-circuit wait_agent timeouts")
+	}
 	if !strings.Contains(SystemPrompt, "do NOT use read_file/search_code/inspect_symbol yourself for the same delegated task") {
 		t.Error("SystemPrompt should forbid duplicate local exploration after delegation")
 	}

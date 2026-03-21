@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
@@ -72,6 +73,7 @@ func TestSpawnAgentToolParameters(t *testing.T) {
 	if !strings.Contains(effortDescription, "DO NOT set this field") {
 		t.Fatalf("reasoning_effort description should strongly discourage manual override: %q", effortDescription)
 	}
+
 }
 
 // TestSpawnAgentToolRunEmptyMessage は空 message を拒否することを確認します。
@@ -141,6 +143,28 @@ func TestWaitAgentToolRunEmptyIDs(t *testing.T) {
 	}
 }
 
+// TestWaitAgentToolParameters は schema を確認します。
+func TestWaitAgentToolParameters(t *testing.T) {
+	tool := NewWaitAgentTool(NewManager())
+	params := tool.Parameters()
+
+	properties, ok := params["properties"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected properties map, got %T", params["properties"])
+	}
+	timeoutParam, ok := properties["timeout_ms"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("timeout_ms parameter should be an object, got %T", properties["timeout_ms"])
+	}
+	timeoutDescription, ok := timeoutParam["description"].(string)
+	if !ok {
+		t.Fatalf("timeout_ms description should be a string, got %T", timeoutParam["description"])
+	}
+	if !strings.Contains(timeoutDescription, "DO NOT set this field") {
+		t.Fatalf("timeout_ms description should strongly discourage manual override: %q", timeoutDescription)
+	}
+}
+
 // TestWaitAgentToolRun は wait_agent の JSON 応答を確認します。
 func TestWaitAgentToolRun(t *testing.T) {
 	manager := NewManagerWithOptions(ManagerOptions{
@@ -175,6 +199,52 @@ func TestWaitAgentToolRun(t *testing.T) {
 		t.Fatalf("parsed.Status = %q, want completed", parsed.Status)
 	}
 	if len(parsed.Results) != 1 || parsed.Results[0].Output != "done" {
+		t.Fatalf("unexpected parsed results: %+v", parsed.Results)
+	}
+}
+
+// TestWaitAgentToolRun_ShortTimeoutIgnored は短すぎる timeout_ms を無制限待機へフォールバックすることを確認します。
+func TestWaitAgentToolRun_ShortTimeoutIgnored(t *testing.T) {
+	release := make(chan struct{})
+	manager := NewManagerWithOptions(ManagerOptions{
+		RunHeadless: func(_ context.Context, _ string, _ string, _ api.Provider, _ *config.Config) *RunResult {
+			<-release
+			return &RunResult{Status: "completed", Response: "done"}
+		},
+		ProviderFactory: func(providerName string) (api.Provider, error) {
+			return &registerTestProvider{}, nil
+		},
+	})
+	id, err := manager.Spawn(context.Background(), "inspect files", "", "", &registerTestProvider{}, config.DefaultConfig())
+	if err != nil {
+		t.Fatalf("Spawn() error = %v", err)
+	}
+
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		close(release)
+	}()
+
+	tool := NewWaitAgentTool(manager)
+	result, change, err := tool.Run(tools.ExecutionContext{}, map[string]string{
+		"ids":        `["` + id + `"]`,
+		"timeout_ms": "10",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if change != nil {
+		t.Fatal("change should be nil")
+	}
+
+	var parsed WaitResponse
+	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
+		t.Fatalf("invalid JSON result: %v", err)
+	}
+	if parsed.Status != "completed" {
+		t.Fatalf("parsed.Status = %q, want completed", parsed.Status)
+	}
+	if len(parsed.Results) != 1 || parsed.Results[0].Status != "completed" {
 		t.Fatalf("unexpected parsed results: %+v", parsed.Results)
 	}
 }

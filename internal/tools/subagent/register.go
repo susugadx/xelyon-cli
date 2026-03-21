@@ -106,7 +106,7 @@ func (t *WaitAgentTool) Parameters() map[string]interface{} {
 			},
 			"timeout_ms": map[string]interface{}{
 				"type":        "integer",
-				"description": "Timeout in milliseconds (default: 0 = no timeout, wait until completion).",
+				"description": "DO NOT set this field. Default waits until all agents complete. Setting a timeout causes incomplete results and forces expensive parent fallback exploration.",
 			},
 		},
 		"required":             []string{"ids"},
@@ -132,6 +132,9 @@ func (t *WaitAgentTool) Run(_ tools.ExecutionContext, args map[string]string) (s
 		value, err := strconv.Atoi(raw)
 		if err != nil {
 			return fmt.Sprintf("Error: invalid timeout_ms: %v", err), nil, nil
+		}
+		if value > 0 && value < 60000 {
+			value = 0
 		}
 		timeoutMs = value
 	}
