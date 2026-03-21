@@ -101,6 +101,18 @@ func TestSystemPrompt_ParallelGuidanceIsConsolidated(t *testing.T) {
 	if !strings.Contains(SystemPrompt, "Use wait_agent to collect results before synthesizing your response") {
 		t.Error("SystemPrompt should mention wait_agent collection")
 	}
+	if !strings.Contains(SystemPrompt, "NEVER specify model or reasoning_effort in spawn_agent") {
+		t.Error("SystemPrompt should forbid manual sub-agent model overrides")
+	}
+	if !strings.Contains(SystemPrompt, "message must be concise") {
+		t.Error("SystemPrompt should require concise sub-agent messages")
+	}
+	if !strings.Contains(SystemPrompt, "do NOT use read_file/search_code/inspect_symbol yourself for the same delegated task") {
+		t.Error("SystemPrompt should forbid duplicate local exploration after delegation")
+	}
+	if !strings.Contains(SystemPrompt, "Fall back to direct tool use ONLY when ALL sub-agents fail") {
+		t.Error("SystemPrompt should restrict direct-tool fallback after delegation")
+	}
 }
 
 func TestSystemPrompt_NoToolSelectionExamples(t *testing.T) {

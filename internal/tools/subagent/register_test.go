@@ -57,8 +57,20 @@ func TestSpawnAgentToolParameters(t *testing.T) {
 	if !ok {
 		t.Fatalf("model description should be a string, got %T", modelParam["description"])
 	}
-	if strings.Contains(description, "default: sub_agent.default_model") {
-		t.Fatalf("model description should not encourage literal placeholder usage: %q", description)
+	if !strings.Contains(description, "DO NOT set this field") {
+		t.Fatalf("model description should strongly discourage manual override: %q", description)
+	}
+
+	effortParam, ok := properties["reasoning_effort"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("reasoning_effort parameter should be an object, got %T", properties["reasoning_effort"])
+	}
+	effortDescription, ok := effortParam["description"].(string)
+	if !ok {
+		t.Fatalf("reasoning_effort description should be a string, got %T", effortParam["description"])
+	}
+	if !strings.Contains(effortDescription, "DO NOT set this field") {
+		t.Fatalf("reasoning_effort description should strongly discourage manual override: %q", effortDescription)
 	}
 }
 
@@ -82,6 +94,9 @@ func TestSpawnAgentToolRun(t *testing.T) {
 	manager := NewManagerWithOptions(ManagerOptions{
 		RunHeadless: func(_ context.Context, _ string, _ string, _ api.Provider, _ *config.Config) *RunResult {
 			return &RunResult{Status: "completed", Response: "done"}
+		},
+		ProviderFactory: func(providerName string) (api.Provider, error) {
+			return &registerTestProvider{}, nil
 		},
 	})
 	tool := NewSpawnAgentTool(manager)
@@ -131,6 +146,9 @@ func TestWaitAgentToolRun(t *testing.T) {
 	manager := NewManagerWithOptions(ManagerOptions{
 		RunHeadless: func(_ context.Context, _ string, _ string, _ api.Provider, _ *config.Config) *RunResult {
 			return &RunResult{Status: "completed", Response: "done"}
+		},
+		ProviderFactory: func(providerName string) (api.Provider, error) {
+			return &registerTestProvider{}, nil
 		},
 	})
 	id, err := manager.Spawn(context.Background(), "inspect files", "", "", &registerTestProvider{}, config.DefaultConfig())

@@ -223,6 +223,9 @@ func TestPrintStatusFooter_IncludesSubAgentCost(t *testing.T) {
 				Cost:   0.050,
 			}
 		},
+		ProviderFactory: func(providerName string) (api.Provider, error) {
+			return &mockProvider{name: providerName}, nil
+		},
 	})
 	cfg := config.DefaultConfig()
 	provider := &mockProvider{name: "openai"}

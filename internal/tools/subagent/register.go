@@ -34,11 +34,11 @@ func (t *SpawnAgentTool) Parameters() map[string]interface{} {
 			},
 			"model": map[string]interface{}{
 				"type":        "string",
-				"description": "Optional explicit model name. Omit this field to use sub_agent.default_model or automatically pick the cheapest model for the current provider when unset.",
+				"description": "DO NOT set this field. The system automatically selects the optimal low-cost model for the current provider. Manual selection wastes money and is almost never needed.",
 			},
 			"reasoning_effort": map[string]interface{}{
 				"type":        "string",
-				"description": "Reasoning effort override (default: off). Options: off, low, medium, high.",
+				"description": "DO NOT set this field. The default (off) is optimal for sub-agent exploration tasks. Manual selection increases cost with no quality benefit.",
 			},
 		},
 		"required":             []string{"message"},

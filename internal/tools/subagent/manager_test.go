@@ -12,7 +12,9 @@ import (
 )
 
 type managerTestProvider struct {
-	name string
+	name       string
+	responseID string
+	cleared    bool
 }
 
 func (p *managerTestProvider) Name() string { return p.name }
@@ -28,6 +30,15 @@ func (p *managerTestProvider) ChatWithImage(context.Context, string, []api.Messa
 }
 
 func (p *managerTestProvider) IsFunctionCallingEnabled() bool { return true }
+
+func (p *managerTestProvider) ClearCache() {
+	p.cleared = true
+	p.responseID = ""
+}
+
+func (p *managerTestProvider) SetResponseID(id string) {
+	p.responseID = id
+}
 
 // TestNewManager は既定依存で Manager が生成されることを確認します。
 func TestNewManager(t *testing.T) {
@@ -90,6 +101,7 @@ func TestNormalizeSubAgentModel(t *testing.T) {
 func TestManagerSpawnWaitCompleted(t *testing.T) {
 	cfg := config.DefaultConfig()
 	provider := &managerTestProvider{name: "openai"}
+	createdProvider := &managerTestProvider{name: "openai"}
 
 	var gotModel string
 	var gotProvider api.Provider
@@ -100,6 +112,12 @@ func TestManagerSpawnWaitCompleted(t *testing.T) {
 			gotProvider = provider
 			gotCfg = cfg
 			return &RunResult{Status: "completed", Response: "sub-agent done"}
+		},
+		ProviderFactory: func(providerName string) (api.Provider, error) {
+			if providerName != "openai" {
+				t.Fatalf("ProviderFactory providerName = %q, want openai", providerName)
+			}
+			return createdProvider, nil
 		},
 	})
 
@@ -124,8 +142,8 @@ func TestManagerSpawnWaitCompleted(t *testing.T) {
 	if gotModel != "gpt-5.4-nano" {
 		t.Fatalf("resolved model = %q, want gpt-5.4-nano", gotModel)
 	}
-	if gotProvider != provider {
-		t.Fatal("expected current provider to be reused")
+	if gotProvider != createdProvider {
+		t.Fatal("expected fresh provider instance to be used")
 	}
 	if gotCfg == nil {
 		t.Fatal("expected cloned config to be passed to runner")
@@ -136,6 +154,9 @@ func TestManagerSpawnWaitCompleted(t *testing.T) {
 	if gotCfg.Thinking.Enabled {
 		t.Fatal("expected default sub-agent reasoning to be disabled")
 	}
+	if !createdProvider.cleared {
+		t.Fatal("expected fresh provider cache/response chain to be cleared")
+	}
 }
 
 // TestManagerSpawn_DefaultModelFollowsMainProvider は DefaultModel 未設定時にメイン provider の最安モデルを選ぶことを確認します。
@@ -143,6 +164,7 @@ func TestManagerSpawn_DefaultModelFollowsMainProvider(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.SubAgent.DefaultModel = ""
 	provider := &managerTestProvider{name: "claude"}
+	createdProvider := &managerTestProvider{name: "claude"}
 
 	var gotModel string
 	var gotProvider api.Provider
@@ -151,6 +173,12 @@ func TestManagerSpawn_DefaultModelFollowsMainProvider(t *testing.T) {
 			gotModel = model
 			gotProvider = provider
 			return &RunResult{Status: "completed", Response: "ok"}
+		},
+		ProviderFactory: func(providerName string) (api.Provider, error) {
+			if providerName != "claude" {
+				t.Fatalf("ProviderFactory providerName = %q, want claude", providerName)
+			}
+			return createdProvider, nil
 		},
 	})
 
@@ -163,8 +191,8 @@ func TestManagerSpawn_DefaultModelFollowsMainProvider(t *testing.T) {
 	if gotModel != "claude-haiku-4-5-20251001" {
 		t.Fatalf("resolved model = %q, want claude-haiku-4-5-20251001", gotModel)
 	}
-	if gotProvider != provider {
-		t.Fatal("expected current provider to be reused")
+	if gotProvider != createdProvider {
+		t.Fatal("expected fresh provider instance to be used")
 	}
 }
 
@@ -173,12 +201,19 @@ func TestManagerSpawn_PlaceholderModelFallsBackToMainProvider(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.SubAgent.DefaultModel = ""
 	provider := &managerTestProvider{name: "gemini"}
+	createdProvider := &managerTestProvider{name: "gemini"}
 
 	var gotModel string
 	manager := NewManagerWithOptions(ManagerOptions{
 		RunHeadless: func(_ context.Context, _ string, model string, _ api.Provider, _ *config.Config) *RunResult {
 			gotModel = model
 			return &RunResult{Status: "completed", Response: "ok"}
+		},
+		ProviderFactory: func(providerName string) (api.Provider, error) {
+			if providerName != "gemini" {
+				t.Fatalf("ProviderFactory providerName = %q, want gemini", providerName)
+			}
+			return createdProvider, nil
 		},
 	})
 
@@ -198,12 +233,19 @@ func TestManagerSpawn_PlaceholderConfigFallsBackToMainProvider(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.SubAgent.DefaultModel = "sub_agent.default_model"
 	provider := &managerTestProvider{name: "claude"}
+	createdProvider := &managerTestProvider{name: "claude"}
 
 	var gotModel string
 	manager := NewManagerWithOptions(ManagerOptions{
 		RunHeadless: func(_ context.Context, _ string, model string, _ api.Provider, _ *config.Config) *RunResult {
 			gotModel = model
 			return &RunResult{Status: "completed", Response: "ok"}
+		},
+		ProviderFactory: func(providerName string) (api.Provider, error) {
+			if providerName != "claude" {
+				t.Fatalf("ProviderFactory providerName = %q, want claude", providerName)
+			}
+			return createdProvider, nil
 		},
 	})
 
@@ -316,6 +358,9 @@ func TestManagerSpawnParallel(t *testing.T) {
 			atomic.AddInt32(&current, -1)
 			return &RunResult{Status: "completed", Response: "ok"}
 		},
+		ProviderFactory: func(providerName string) (api.Provider, error) {
+			return &managerTestProvider{name: providerName}, nil
+		},
 	})
 
 	idA, err := manager.Spawn(context.Background(), "task A", "", "", provider, cfg)
@@ -355,6 +400,9 @@ func TestManagerWaitTimeout(t *testing.T) {
 		RunHeadless: func(_ context.Context, _ string, _ string, _ api.Provider, _ *config.Config) *RunResult {
 			<-release
 			return &RunResult{Status: "completed", Response: "late"}
+		},
+		ProviderFactory: func(providerName string) (api.Provider, error) {
+			return &managerTestProvider{name: providerName}, nil
 		},
 	})
 
@@ -401,6 +449,9 @@ func TestManagerSpawnMaxConcurrent(t *testing.T) {
 		RunHeadless: func(_ context.Context, _ string, _ string, _ api.Provider, _ *config.Config) *RunResult {
 			<-release
 			return &RunResult{Status: "completed", Response: "ok"}
+		},
+		ProviderFactory: func(providerName string) (api.Provider, error) {
+			return &managerTestProvider{name: providerName}, nil
 		},
 	})
 
@@ -452,6 +503,46 @@ func TestManagerSpawnSwitchesProviderForModel(t *testing.T) {
 	}
 }
 
+// TestManagerSpawn_SameProviderGetsFreshInstance は同一 provider でも親インスタンスを再利用しないことを確認します。
+func TestManagerSpawn_SameProviderGetsFreshInstance(t *testing.T) {
+	cfg := config.DefaultConfig()
+	parentProvider := &managerTestProvider{name: "openai", responseID: "resp_parent"}
+	subProvider := &managerTestProvider{name: "openai", responseID: "resp_stale"}
+
+	var gotProvider api.Provider
+	manager := NewManagerWithOptions(ManagerOptions{
+		RunHeadless: func(_ context.Context, _ string, _ string, provider api.Provider, _ *config.Config) *RunResult {
+			gotProvider = provider
+			return &RunResult{Status: "completed", Response: "ok"}
+		},
+		ProviderFactory: func(providerName string) (api.Provider, error) {
+			if providerName != "openai" {
+				t.Fatalf("ProviderFactory providerName = %q, want openai", providerName)
+			}
+			return subProvider, nil
+		},
+	})
+
+	id, err := manager.Spawn(context.Background(), "inspect files", "", "", parentProvider, cfg)
+	if err != nil {
+		t.Fatalf("Spawn() error = %v", err)
+	}
+	_ = manager.Wait([]string{id}, 0)
+
+	if gotProvider != subProvider {
+		t.Fatal("expected sub-agent to receive the fresh provider instance")
+	}
+	if parentProvider.responseID != "resp_parent" {
+		t.Fatalf("parent responseID = %q, want resp_parent", parentProvider.responseID)
+	}
+	if subProvider.responseID != "" {
+		t.Fatalf("sub provider responseID = %q, want empty", subProvider.responseID)
+	}
+	if !subProvider.cleared {
+		t.Fatal("expected sub provider state to be cleared before execution")
+	}
+}
+
 // TestManagerGetSummary は集計結果に completed / running / コストが反映されることを確認します。
 func TestManagerGetSummary(t *testing.T) {
 	cfg := config.DefaultConfig()
@@ -476,6 +567,9 @@ func TestManagerGetSummary(t *testing.T) {
 				ToolExecutions: 2,
 				DurationMs:     250,
 			}
+		},
+		ProviderFactory: func(providerName string) (api.Provider, error) {
+			return &managerTestProvider{name: providerName}, nil
 		},
 	})
 
@@ -551,6 +645,9 @@ func TestManagerGetSummary_ErrorMessage(t *testing.T) {
 				Model:        model,
 				ErrorMessage: "provider timeout",
 			}
+		},
+		ProviderFactory: func(providerName string) (api.Provider, error) {
+			return &managerTestProvider{name: providerName}, nil
 		},
 	})
 

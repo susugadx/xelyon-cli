@@ -469,8 +469,8 @@ func resolveSubProvider(current api.Provider, cfg *config.Config, model string, 
 
 	currentName := normalizeProviderName(current.Name())
 	target := inferProviderFromModel(cfg, currentName, model)
-	if target == "" || target == currentName {
-		return current, nil
+	if target == "" {
+		target = currentName
 	}
 	if factory == nil {
 		factory = api.NewProvider
@@ -479,7 +479,21 @@ func resolveSubProvider(current api.Provider, cfg *config.Config, model string, 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create provider %s: %w", target, err)
 	}
+	resetSubProviderState(provider)
 	return provider, nil
+}
+
+func resetSubProviderState(provider api.Provider) {
+	if provider == nil {
+		return
+	}
+	if cacheClearable, ok := provider.(api.CacheClearable); ok {
+		cacheClearable.ClearCache()
+		return
+	}
+	if responseIDSetter, ok := provider.(interface{ SetResponseID(string) }); ok {
+		responseIDSetter.SetResponseID("")
+	}
 }
 
 func inferProviderFromModel(cfg *config.Config, currentProvider, model string) string {
