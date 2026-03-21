@@ -2,7 +2,11 @@
 
 AI搭載のコーディングアシスタントCLI
 
-[![CI](https://github.com/susugadx/xelyon-cli/workflows/CI/badge.svg)](https://github.com/susugadx/xelyon-cli/actions)
+[![CI](https://github.com/susugadx/xelyon-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/susugadx/xelyon-cli/actions/workflows/ci.yml)
+[![E2E](https://github.com/susugadx/xelyon-cli/actions/workflows/e2e.yml/badge.svg)](https://github.com/susugadx/xelyon-cli/actions/workflows/e2e.yml)
+[![codecov](https://codecov.io/gh/susugadx/xelyon-cli/branch/main/graph/badge.svg)](https://codecov.io/gh/susugadx/xelyon-cli)
+[![Go Version](https://img.shields.io/github/go-mod-go-version/susugadx/xelyon-cli)](https://go.dev/)
+[![Release](https://img.shields.io/github/v/release/susugadx/xelyon-cli)](https://github.com/susugadx/xelyon-cli/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## 特徴

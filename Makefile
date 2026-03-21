@@ -1,6 +1,6 @@
 # XELYON CLI Makefile
 
-.PHONY: build test fmt lint gen-config gen-docs gen-registry gen-help gen-all clean check ci-check ci-check-full release-check
+.PHONY: build test fmt lint gen-config gen-docs gen-registry gen-help gen-all clean check ci-check ci-check-full e2e release-check
 
 # ビルド
 build:
@@ -86,6 +86,10 @@ ci-check-full:
 	@echo "=== Running all tests (including integration) ==="
 	@go test -tags "grammar_set_core integration" -race -timeout 600s ./...
 	@echo "✓ All tests passed (including integration)"
+
+# E2Eテスト（実際のLLM APIを使用、OPENAI_API_KEY必須）
+e2e:
+	XELYON_E2E=1 go test ./e2e/ -v -timeout 300s
 
 # リリース前チェック
 release-check: fmt test lint build
