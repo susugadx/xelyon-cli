@@ -339,6 +339,7 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 	scanner := bufio.NewScanner(resp.Body)
 	firstChunk := true
 	var lastUsage *api.Usage
+	var contentNewlineEmitted bool // スピナー上書き防止用
 
 	for scanner.Scan() {
 		select {
@@ -384,6 +385,10 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 						if tc.Function.Arguments != "" {
 							// スピナーを再表示
 							if !spinner.IsActive() {
+								if !firstChunk && !contentNewlineEmitted {
+									_, _ = fmt.Fprintln(out)
+									contentNewlineEmitted = true
+								}
 								spinner.Start(ui.SpinnerMessageForTool(toolCalls[index].Name))
 							}
 							toolCalls[index].Arguments.WriteString(tc.Function.Arguments)
@@ -432,14 +437,15 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 
 	content := fullResponse.String()
 	if toolCallsOutput.Len() > 0 {
-		if content != "" {
+		if content != "" && !contentNewlineEmitted {
 			_, _ = fmt.Fprintln(out)
-			return content + toolCallsOutput.String(), nil
 		}
-		return toolCallsOutput.String(), nil
+		return content + toolCallsOutput.String(), nil
 	}
 
-	_, _ = fmt.Fprintln(out)
+	if !contentNewlineEmitted {
+		_, _ = fmt.Fprintln(out)
+	}
 	return content, nil
 }
 

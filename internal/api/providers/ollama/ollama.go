@@ -201,6 +201,7 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 	toolCalls := make(map[int]*toolCallAccumulator)
 	scanner := bufio.NewScanner(resp.Body)
 	firstChunk := true
+	var contentNewlineEmitted bool // スピナー上書き防止用
 
 	for scanner.Scan() {
 		// contextキャンセルチェック
@@ -239,6 +240,10 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 			if tc.Function.Arguments != "" {
 				// スピナーを再表示
 				if !spinner.IsActive() {
+					if !firstChunk && !contentNewlineEmitted {
+						_, _ = fmt.Fprintln(out)
+						contentNewlineEmitted = true
+					}
 					spinner.Start(ui.SpinnerMessageForTool(acc.Name))
 				}
 				acc.Arguments.Reset() // Ollama は累積ではなく完全な引数を送る
@@ -301,14 +306,15 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 	// tool_calls がある場合はそれを返す
 	if toolCallsOutput.Len() > 0 {
 		spinner.Stop()
-		if fullResponse.Len() > 0 {
+		if fullResponse.Len() > 0 && !contentNewlineEmitted {
 			_, _ = fmt.Fprintln(out)
-			return fullResponse.String() + toolCallsOutput.String(), nil
 		}
-		return toolCallsOutput.String(), nil
+		return fullResponse.String() + toolCallsOutput.String(), nil
 	}
 
-	_, _ = fmt.Fprintln(out)
+	if !contentNewlineEmitted {
+		_, _ = fmt.Fprintln(out)
+	}
 	return fullResponse.String(), nil
 }
 

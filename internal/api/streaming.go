@@ -54,11 +54,12 @@ func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *u
 
 	var fullResponse strings.Builder
 	firstChunk := true
-	inToolJSON := false     // ツールJSON内にいるか
-	jsonDepth := 0          // JSONのネスト深度
-	inString := false       // JSON文字列リテラル内にいるか
-	var prevChar rune       // 前の文字（エスケープ検出用）
-	var pendingChunk string // チャンク分割対応: パターンプレフィックスが末尾にある場合に保留
+	inToolJSON := false            // ツールJSON内にいるか
+	jsonDepth := 0                 // JSONのネスト深度
+	inString := false              // JSON文字列リテラル内にいるか
+	var prevChar rune              // 前の文字（エスケープ検出用）
+	var pendingChunk string        // チャンク分割対応: パターンプレフィックスが末尾にある場合に保留
+	var contentNewlineEmitted bool // 表示済みテキストの後に改行を出力済みか（スピナー上書き防止用）
 
 	// チャンネル経由でスキャン結果を受け取る
 	type scanResult struct {
@@ -96,7 +97,7 @@ func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *u
 			partialResponse := fullResponse.String()
 			if partialResponse != "" {
 				// 部分結果がある場合は警告と共に返す
-				if !firstChunk {
+				if !firstChunk && !contentNewlineEmitted {
 					_, _ = fmt.Fprintln(out) // 改行
 				}
 				yellow.Fprintln(errOut, "\n⚠️  Response interrupted. Partial result returned.")
@@ -113,7 +114,7 @@ func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *u
 			if !ok {
 				// チャンネルクローズ（予期しない終了）
 				spinner.Stop()
-				if !firstChunk {
+				if !firstChunk && !contentNewlineEmitted {
 					_, _ = fmt.Fprintln(out)
 				}
 				return fullResponse.String(), nil
@@ -134,7 +135,7 @@ func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *u
 				if result.err != nil {
 					return fullResponse.String(), fmt.Errorf("scanner error: %w", result.err)
 				}
-				if !firstChunk {
+				if !firstChunk && !contentNewlineEmitted {
 					_, _ = fmt.Fprintln(out)
 				}
 				return fullResponse.String(), nil
@@ -147,9 +148,17 @@ func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *u
 
 			// プロバイダー固有のパース処理
 			content, done, err := parser(line)
+
+			// parser 内でスピナーが開始された場合（FC tool_calls 等）、
+			// 表示済みテキストの後に改行を入れてスピナーの \r による上書きを防ぐ
+			if !firstChunk && spinner.IsActive() && !contentNewlineEmitted {
+				_, _ = fmt.Fprintln(out)
+				contentNewlineEmitted = true
+			}
+
 			if err != nil {
 				spinner.Stop()
-				if !firstChunk {
+				if !firstChunk && !contentNewlineEmitted {
 					_, _ = fmt.Fprintln(out)
 				}
 				return fullResponse.String(), err
@@ -160,8 +169,9 @@ func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *u
 				// チャンク分割対応: 保留分を flush（パターンが完成しなかった = テキスト）
 				if pendingChunk != "" {
 					_, _ = fmt.Fprint(out, pendingChunk)
+					contentNewlineEmitted = false // pending flush 後は改行が必要
 				}
-				if !firstChunk {
+				if !firstChunk && !contentNewlineEmitted {
 					_, _ = fmt.Fprintln(out)
 				}
 				return fullResponse.String(), nil
@@ -190,6 +200,11 @@ func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *u
 
 				// ツールJSON開始時にスピナーを表示
 				if inToolJSON && spinner != nil && !spinner.IsActive() {
+					// 表示済みテキストの後に改行を入れてスピナーの \r による上書きを防ぐ
+					if !firstChunk && !contentNewlineEmitted {
+						_, _ = fmt.Fprintln(out)
+						contentNewlineEmitted = true
+					}
 					msg := "Preparing..."
 					responseStr := fullResponse.String()
 					if strings.Contains(responseStr, "write_file") {

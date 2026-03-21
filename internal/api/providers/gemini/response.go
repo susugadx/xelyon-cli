@@ -63,6 +63,7 @@ func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, s
 	var thoughtParts []map[string]any // Gemini 3: thought パートを収集（次リクエストに返す）
 	var rescuedToolJSONs []string     // FC救済: コードブロックから抽出したツールJSON
 	var headerPrinted bool            // テキスト応答時のAIヘッダー表示済みフラグ
+	var contentNewlineEmitted bool    // スピナー上書き防止用
 	var usage *GeminiUsageMetadata
 	var suppressingToolJSON bool // テキストパート内のツールJSON抑制中フラグ
 	var toolJSONDepth int        // ツールJSON の {} ネスト深度
@@ -240,6 +241,10 @@ loop:
 						}
 						if spinner != nil {
 							spinner.Stop()
+							if headerPrinted && !contentNewlineEmitted {
+								_, _ = fmt.Fprintln(out)
+								contentNewlineEmitted = true
+							}
 							spinner.Start(ui.SpinnerMessageForTool(part.FunctionCall.Name))
 						}
 						part.FunctionCall.ThoughtSignature = part.ThoughtSignature
@@ -318,6 +323,10 @@ loop:
 					// テキスト表示後にFCが来た場合、ツール準備中スピナーを再開
 					if spinner != nil {
 						spinner.Stop()
+						if headerPrinted && !contentNewlineEmitted {
+							_, _ = fmt.Fprintln(out)
+							contentNewlineEmitted = true
+						}
 						spinner.Start(ui.SpinnerMessageForTool(part.FunctionCall.Name))
 					}
 					part.FunctionCall.ThoughtSignature = part.ThoughtSignature
@@ -391,7 +400,9 @@ loop:
 		return "", fmt.Errorf("no content in Gemini SSE response (stream ended without generating any text or function calls)")
 	}
 
-	_, _ = fmt.Fprintln(out)
+	if !contentNewlineEmitted {
+		_, _ = fmt.Fprintln(out)
+	}
 	return fullResponse.String(), nil
 }
 
