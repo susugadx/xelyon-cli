@@ -66,6 +66,26 @@ func TestInferSubAgentModel(t *testing.T) {
 	}
 }
 
+// TestNormalizeSubAgentModel はプレースホルダ文字列を未設定として扱うことを確認します。
+func TestNormalizeSubAgentModel(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{input: "", want: ""},
+		{input: "   ", want: ""},
+		{input: "sub_agent.default_model", want: ""},
+		{input: "SUB_AGENT.DEFAULT_MODEL", want: ""},
+		{input: "gpt-5.4-nano", want: "gpt-5.4-nano"},
+	}
+
+	for _, tt := range tests {
+		if got := normalizeSubAgentModel(tt.input); got != tt.want {
+			t.Errorf("normalizeSubAgentModel(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
 // TestManagerSpawnWaitCompleted は spawn -> wait の基本フローを確認します。
 func TestManagerSpawnWaitCompleted(t *testing.T) {
 	cfg := config.DefaultConfig()
@@ -145,6 +165,56 @@ func TestManagerSpawn_DefaultModelFollowsMainProvider(t *testing.T) {
 	}
 	if gotProvider != provider {
 		t.Fatal("expected current provider to be reused")
+	}
+}
+
+// TestManagerSpawn_PlaceholderModelFallsBackToMainProvider はプレースホルダ文字列指定時に provider 推定へフォールバックすることを確認します。
+func TestManagerSpawn_PlaceholderModelFallsBackToMainProvider(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.SubAgent.DefaultModel = ""
+	provider := &managerTestProvider{name: "gemini"}
+
+	var gotModel string
+	manager := NewManagerWithOptions(ManagerOptions{
+		RunHeadless: func(_ context.Context, _ string, model string, _ api.Provider, _ *config.Config) *RunResult {
+			gotModel = model
+			return &RunResult{Status: "completed", Response: "ok"}
+		},
+	})
+
+	id, err := manager.Spawn(context.Background(), "inspect files", "sub_agent.default_model", "", provider, cfg)
+	if err != nil {
+		t.Fatalf("Spawn() error = %v", err)
+	}
+	_ = manager.Wait([]string{id}, 0)
+
+	if gotModel != "gemini-3.1-flash-lite-preview" {
+		t.Fatalf("resolved model = %q, want gemini-3.1-flash-lite-preview", gotModel)
+	}
+}
+
+// TestManagerSpawn_PlaceholderConfigFallsBackToMainProvider は設定値がプレースホルダ文字列でも provider 推定へフォールバックすることを確認します。
+func TestManagerSpawn_PlaceholderConfigFallsBackToMainProvider(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.SubAgent.DefaultModel = "sub_agent.default_model"
+	provider := &managerTestProvider{name: "claude"}
+
+	var gotModel string
+	manager := NewManagerWithOptions(ManagerOptions{
+		RunHeadless: func(_ context.Context, _ string, model string, _ api.Provider, _ *config.Config) *RunResult {
+			gotModel = model
+			return &RunResult{Status: "completed", Response: "ok"}
+		},
+	})
+
+	id, err := manager.Spawn(context.Background(), "inspect files", "", "", provider, cfg)
+	if err != nil {
+		t.Fatalf("Spawn() error = %v", err)
+	}
+	_ = manager.Wait([]string{id}, 0)
+
+	if gotModel != "claude-haiku-4-5-20251001" {
+		t.Fatalf("resolved model = %q, want claude-haiku-4-5-20251001", gotModel)
 	}
 }
 

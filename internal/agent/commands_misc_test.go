@@ -208,7 +208,9 @@ func TestPrintSessionSections_NoOptimizations(t *testing.T) {
 func TestBuildSessionTokenTable_WithSubAgentCosts(t *testing.T) {
 	stats := NewSessionStats("openai", "gpt-5.4")
 	stats.InputTokens = 1200
+	stats.CachedInputTokens = 300
 	stats.OutputTokens = 400
+	stats.ThinkingTokens = 50
 	stats.AccumulatedCost = 0.0900
 
 	agent := &Agent{
@@ -216,8 +218,12 @@ func TestBuildSessionTokenTable_WithSubAgentCosts(t *testing.T) {
 		ProviderName: "openai",
 	}
 	summary := &subagent.SubAgentSummary{
-		TotalSpawned: 2,
-		TotalCost:    0.0052,
+		TotalSpawned:  2,
+		TotalInput:    41855,
+		TotalCached:   31972,
+		TotalOutput:   2144,
+		TotalThinking: 17,
+		TotalCost:     0.0052,
 	}
 
 	table := buildSessionTokenTable(agent, stats, summary)
@@ -227,12 +233,30 @@ func TestBuildSessionTokenTable_WithSubAgentCosts(t *testing.T) {
 
 	output := table.RenderCompact()
 	for _, want := range []string{
+		"Parent Context",
+		"Parent Input",
+		"Parent Cached",
+		"Parent Hit Rate",
+		"Parent Output",
+		"Parent Thinking",
+		"Parent Total",
+		"Sub-agent Input",
+		"Sub-agent Cached",
+		"Sub-agent Hit Rate",
+		"Sub-agent Output",
+		"Sub-agent Thinking",
+		"Sub-agent Total",
 		"Parent Cost",
 		"Sub-agent Cost",
 		"Total Cost",
 		"$0.0900 USD",
 		"$0.0052 USD",
 		"$0.0952 USD",
+		"41,855 tokens",
+		"31,972 tokens",
+		"2,144 tokens",
+		"17 tokens",
+		"44,016 tokens",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("buildSessionTokenTable() output missing %q:\n%s", want, output)

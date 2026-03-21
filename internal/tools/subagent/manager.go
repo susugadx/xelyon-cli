@@ -391,9 +391,9 @@ func cloneConfigForSub(cfg *config.Config, mainProvider, model, reasoningEffort 
 		cloned = config.DefaultConfig()
 	}
 
-	resolvedModel := strings.TrimSpace(model)
+	resolvedModel := normalizeSubAgentModel(model)
 	if resolvedModel == "" {
-		resolvedModel = strings.TrimSpace(cloned.SubAgent.DefaultModel)
+		resolvedModel = normalizeSubAgentModel(cloned.SubAgent.DefaultModel)
 	}
 	if resolvedModel == "" {
 		resolvedModel = inferSubAgentModel(mainProvider)
@@ -413,6 +413,16 @@ func cloneConfigForSub(cfg *config.Config, mainProvider, model, reasoningEffort 
 
 	cloned.SubAgentPrompt = SubAgentSystemPrompt
 	return cloned, resolvedModel, nil
+}
+
+func normalizeSubAgentModel(model string) string {
+	model = strings.TrimSpace(model)
+	switch strings.ToLower(model) {
+	case "", "sub_agent.default_model":
+		return ""
+	default:
+		return model
+	}
 }
 
 func inferSubAgentModel(provider string) string {

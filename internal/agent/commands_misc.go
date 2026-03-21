@@ -129,25 +129,40 @@ func buildSessionTokenTable(agent *Agent, stats *SessionStats, subSummary *subag
 	limit := token.GetModelTokenLimit(agent.CurrentModel)
 	if limit > 0 {
 		contextPct := float64(currentTokens) / float64(limit) * 100
-		tokenTable.AddRow("Context", fmt.Sprintf("%s / %s (%.1f%%)", formatNumber(currentTokens), formatNumber(limit), contextPct))
+		tokenTable.AddRow(tokenRowLabel(hasSubAgents, "Parent", "Context"), fmt.Sprintf("%s / %s (%.1f%%)", formatNumber(currentTokens), formatNumber(limit), contextPct))
 	}
 
 	cost := stats.EstimatedCost()
 	if stats.TotalTokens() > 0 {
-		tokenTable.AddRow("Input", formatNumber(stats.InputTokens)+" tokens")
+		tokenTable.AddRow(tokenRowLabel(hasSubAgents, "Parent", "Input"), formatNumber(stats.InputTokens)+" tokens")
 
 		if stats.CachedInputTokens > 0 || stats.CacheCreationTokens > 0 {
-			tokenTable.AddRow("Cached", formatNumber(stats.CachedInputTokens)+" tokens").
-				AddRow("Cache Creation", formatNumber(stats.CacheCreationTokens)+" tokens").
-				AddRow("Hit Rate", fmt.Sprintf("%.1f%%", sessionCacheHitRate(stats)))
+			tokenTable.AddRow(tokenRowLabel(hasSubAgents, "Parent", "Cached"), formatNumber(stats.CachedInputTokens)+" tokens").
+				AddRow(tokenRowLabel(hasSubAgents, "Parent", "Cache Creation"), formatNumber(stats.CacheCreationTokens)+" tokens").
+				AddRow(tokenRowLabel(hasSubAgents, "Parent", "Hit Rate"), fmt.Sprintf("%.1f%%", sessionCacheHitRate(stats)))
 		}
 
-		tokenTable.AddRow("Output", formatNumber(stats.OutputTokens)+" tokens")
+		tokenTable.AddRow(tokenRowLabel(hasSubAgents, "Parent", "Output"), formatNumber(stats.OutputTokens)+" tokens")
 		if stats.ThinkingTokens > 0 {
-			tokenTable.AddRow("Thinking", formatNumber(stats.ThinkingTokens)+" tokens")
+			tokenTable.AddRow(tokenRowLabel(hasSubAgents, "Parent", "Thinking"), formatNumber(stats.ThinkingTokens)+" tokens")
 		}
 
-		tokenTable.AddRow("Total", formatNumber(stats.TotalTokens())+" tokens")
+		tokenTable.AddRow(tokenRowLabel(hasSubAgents, "Parent", "Total"), formatNumber(stats.TotalTokens())+" tokens")
+	}
+
+	if hasSubAgents {
+		tokenTable.AddRow("Sub-agent Input", formatNumber(subSummary.TotalInput)+" tokens")
+		if subSummary.TotalCached > 0 {
+			tokenTable.AddRow("Sub-agent Cached", formatNumber(subSummary.TotalCached)+" tokens")
+			if subSummary.TotalInput > 0 {
+				tokenTable.AddRow("Sub-agent Hit Rate", fmt.Sprintf("%.1f%%", subAgentCacheHitRate(*subSummary)))
+			}
+		}
+		tokenTable.AddRow("Sub-agent Output", formatNumber(subSummary.TotalOutput)+" tokens")
+		if subSummary.TotalThinking > 0 {
+			tokenTable.AddRow("Sub-agent Thinking", formatNumber(subSummary.TotalThinking)+" tokens")
+		}
+		tokenTable.AddRow("Sub-agent Total", formatNumber(subAgentTotalTokens(*subSummary))+" tokens")
 	}
 
 	if hasSubAgents {
@@ -160,6 +175,24 @@ func buildSessionTokenTable(agent *Agent, stats *SessionStats, subSummary *subag
 		tokenTable.AddRow("Cost", "Free (local)")
 	}
 	return tokenTable
+}
+
+func tokenRowLabel(hasSubAgents bool, scope, label string) string {
+	if !hasSubAgents {
+		return label
+	}
+	return scope + " " + label
+}
+
+func subAgentCacheHitRate(summary subagent.SubAgentSummary) float64 {
+	if summary.TotalInput <= 0 {
+		return 0
+	}
+	return float64(summary.TotalCached) / float64(summary.TotalInput) * 100.0
+}
+
+func subAgentTotalTokens(summary subagent.SubAgentSummary) int {
+	return summary.TotalInput + summary.TotalOutput + summary.TotalThinking
 }
 
 func printSessionSections(agent *Agent) {

@@ -48,6 +48,18 @@ func TestSpawnAgentToolParameters(t *testing.T) {
 	if _, ok := properties["reasoning_effort"]; !ok {
 		t.Fatal("reasoning_effort parameter is missing")
 	}
+
+	modelParam, ok := properties["model"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("model parameter should be an object, got %T", properties["model"])
+	}
+	description, ok := modelParam["description"].(string)
+	if !ok {
+		t.Fatalf("model description should be a string, got %T", modelParam["description"])
+	}
+	if strings.Contains(description, "default: sub_agent.default_model") {
+		t.Fatalf("model description should not encourage literal placeholder usage: %q", description)
+	}
 }
 
 // TestSpawnAgentToolRunEmptyMessage は空 message を拒否することを確認します。
