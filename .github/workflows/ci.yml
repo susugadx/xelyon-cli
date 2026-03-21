@@ -75,13 +75,13 @@ jobs:
         run: go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
 
       # カバレッジ閾値チェック
-      # 47% 未満は CI 失敗
+      # 60% 未満は CI 失敗
       - name: Check coverage threshold
         run: |
           coverage=$(go tool cover -func=coverage.txt | grep total | awk '{print $3}' | sed 's/%//')
           echo "Total coverage: $coverage%"
-          if [ $(echo "$coverage < 47" | bc -l) -eq 1 ]; then
-            echo "::error::Coverage $coverage% is below 47% threshold"
+          if [ $(echo "$coverage < 60" | bc -l) -eq 1 ]; then
+            echo "::error::Coverage $coverage% is below 60% threshold"
             exit 1
           fi
 
