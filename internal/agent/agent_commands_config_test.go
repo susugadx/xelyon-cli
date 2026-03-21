@@ -50,7 +50,8 @@ func (m *mockCacheClearableProviderForModel) ClearCache() {
 
 func TestHandleModelCommand_ClearCache(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	if err := config.SaveConfig(config.DefaultConfig()); err != nil {
+	cfg := newProjectMapDisabledConfig()
+	if err := config.SaveConfig(cfg); err != nil {
 		t.Fatalf("failed to save config: %v", err)
 	}
 
@@ -58,6 +59,7 @@ func TestHandleModelCommand_ClearCache(t *testing.T) {
 		ProviderName: "mock",
 		CurrentModel: "old-model",
 		session:      history.NewSession("old-model"),
+		Runtime:      NewAgentRuntimeWithConfig(cfg),
 	}
 
 	mockProvider := &mockCacheClearableProviderForModel{}
@@ -79,7 +81,7 @@ func TestHandleModelCommand_ClearCache(t *testing.T) {
 func TestHandleModelCommand_RebuildsClaudePromptForOpus(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
-	cfg := config.DefaultConfig()
+	cfg := newProjectMapDisabledConfig()
 	cfg.PromptCache.Enabled = true
 	if err := config.SaveConfig(cfg); err != nil {
 		t.Fatalf("failed to save config: %v", err)
@@ -153,7 +155,8 @@ func TestHandleProvidersCommand_UsesRuntimeOutput(t *testing.T) {
 
 func TestHandleUseCommand_WithExplicitModel_UpdatesSessionModel(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	if err := config.SaveConfig(config.DefaultConfig()); err != nil {
+	cfg := newProjectMapDisabledConfig()
+	if err := config.SaveConfig(cfg); err != nil {
 		t.Fatalf("failed to save config: %v", err)
 	}
 
@@ -165,7 +168,8 @@ func TestHandleUseCommand_WithExplicitModel_UpdatesSessionModel(t *testing.T) {
 		Stats:           NewSessionStats("openai", "gpt-old"),
 		session:         history.NewSession("gpt-old"),
 		Runtime: &AgentRuntime{
-			UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+			Config: cfg,
+			UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
 		},
 	}
 

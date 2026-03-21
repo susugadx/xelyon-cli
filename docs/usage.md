@@ -7,6 +7,7 @@
 - [複数行入力](#複数行入力)
 - [画像入力（マルチモーダル）](#画像入力マルチモーダル)
 - [プロジェクト設定ファイル（xelyon.yaml）](#プロジェクト設定ファイルxelyonyaml)
+- [サブエージェント委譲](#サブエージェント委譲)
 - [コードレビュー](#コードレビュー)
 - [リファクタリング](#リファクタリング)
 - [確認UI（y/n/c）](#確認uiync)
@@ -163,6 +164,29 @@ hooks:
 ```
 
 > **Note:** `hooks.on_completion` を定義すると、AI がコード変更後に自動でそのコマンドを実行します。`hooks.on_step_complete` を定義すると、Plan Mode の各ステップ完了時にコマンドを実行します（テンプレート変数: `{{step_id}}`, `{{step_description}}`, `{{step_status}}`）。省略時は `config.yaml` の hooks 設定が使われます。
+
+---
+
+## サブエージェント委譲
+
+XELYON は探索・調査タスクを `spawn_agent` / `wait_agent` でサブエージェントへ委譲できます。
+
+- 親に返るのはサブの最終レポートだけで、中間の `read_file` / `search_code` 出力は親コンテキストへ残りません
+- 既定モデルは `gpt-5.4-nano`、推論強度は off、同時実行数は 5 です
+- サブエージェント自身には `spawn_agent` / `wait_agent` を渡さないため、再帰的な spawn は行いません
+
+設定例:
+
+```yaml
+# ~/.xelyon/config.yaml
+sub_agent:
+  enabled: true
+  default_model: gpt-5.4-nano
+  default_effort: off
+  max_concurrent: 5
+```
+
+サブエージェントは内部ツールなので、通常は自然言語の指示から自動で使われます。探索対象のファイルパスや観点を明示すると、より短い往復で結果が返ります。
 
 ---
 

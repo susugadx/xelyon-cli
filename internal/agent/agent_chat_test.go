@@ -205,7 +205,8 @@ func TestAgent_SwitchProvider_Success(t *testing.T) {
 	defer os.Unsetenv("DEEPSEEK_API_KEY")
 
 	provider := &mockProvider{name: "test"}
-	agent := NewAgent("test-model", provider, false)
+	runtime := NewAgentRuntimeWithConfig(newProjectMapDisabledConfig())
+	agent := NewAgentWithRuntime("test-model", provider, false, runtime)
 	agent.ProviderName = "test"
 
 	// Statsを初期化
@@ -623,10 +624,9 @@ func TestChatCore_SetsAbortedStatusWithActualError(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
 	var out bytes.Buffer
-	agent := NewAgent("test-model", &mockErrorProvider{}, false)
-	agent.Runtime = &AgentRuntime{
-		UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
-	}
+	runtime := NewAgentRuntimeWithConfig(newProjectMapDisabledConfig())
+	runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, &out)
+	agent := NewAgentWithRuntime("test-model", &mockErrorProvider{}, false, runtime)
 
 	if err := agent.chatCore("please fail", nil, false); err != nil {
 		t.Fatalf("chatCore() error = %v, want nil", err)

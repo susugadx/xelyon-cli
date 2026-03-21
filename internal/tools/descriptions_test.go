@@ -14,8 +14,7 @@ func TestToolDescriptions_AllKeysNonEmpty(t *testing.T) {
 }
 
 func TestToolDescriptions_ExpectedToolCount(t *testing.T) {
-	// read_files は read_file の paths パラメータに統合、inspect_symbol 追加で 10 エントリ
-	expected := 10
+	expected := 12
 	if len(ToolDescriptions) != expected {
 		t.Errorf("ToolDescriptions has %d entries, want %d", len(ToolDescriptions), expected)
 	}
@@ -27,6 +26,7 @@ func TestToolDescriptions_KnownToolsExist(t *testing.T) {
 		"inspect_symbol", "search_code", "web_search",
 		"bash",
 		"ask_user_question",
+		"spawn_agent", "wait_agent",
 	}
 	for _, name := range knownTools {
 		if _, ok := ToolDescriptions[name]; !ok {

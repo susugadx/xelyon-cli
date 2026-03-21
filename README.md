@@ -30,10 +30,11 @@ DeepSeek, OpenAI, Gemini, Claude, Ollama, Groq, OpenRouter, Bedrock をシーム
 **Gemini FCリトライ**: FC失敗時にテキストモードではなくFCモードでリトライ（キャッシュ汚染防止）。idle timeout / thinking timeout / 一般エラーそれぞれで上限付きリトライ。
 **FC rescue JSON修復**: テキストモードで抽出されたツールJSONに生制御文字（改行・タブ等）が含まれる場合、自動修復してパース成功させる。
 
-### 🛠️ 23種類の組み込みツール
+### 🛠️ 25種類の組み込みツール
 - **ファイル操作**: 読み書き、編集、削除、バックアップ復元。`read_file` は `symbol` 指定で Go の関数・型・メソッド単位の読み出しに対応
 - **コード検索**: grep検索、ファイル検索（結果は非テスト→テスト順・定義優先でソート、不正regexはエラー検出）
 - **シンボル調査**: `inspect_symbol` で既知シンボルの定義・caller・参照・テストを1回のツール呼び出しで取得（Go ファイル対応、`Config.Build` / `(*Config).Build` のようなレシーバ指定メソッドも可）
+- **サブエージェント委譲**: `spawn_agent` / `wait_agent` で探索タスクを別コンテキストの軽量モデルへ委譲し、親には最終レポートだけを返す
 - **AST基盤（実験的）**: `internal/ast` に Pure Go Tree-sitter（gotreesitter）ベースの共通解析基盤を追加。Phase 1 では Go ファイルのパース、シンボル抽出、行分類を検証段階で提供し、`read_file(symbol=...)` でシンボル範囲の読み出しに利用。`str_replace` では Go ファイル書き込み前に AST 構文検証を行い、問題があれば警告を返す
 - **開発支援**: bash（git, テスト, フォーマット等すべて対応）
 - **LSP連携**: シンボル検索（定義・参照・実装）
@@ -76,6 +77,14 @@ LLMが1回の応答で複数のread-onlyツールを返した場合、並列実�
 - **キャンセル（best effort）**: `context.Context` は goroutine 起動前・実行前にチェック。`Tool.Run()` は ctx を受け取らないため、実行開始後の中断は不可。cancel は best effort であり、fully cancellable ではない
 - **ExecutionContext**: process-global 単一変数（`sync.RWMutex` で race-safe）。並列 batch 開始前に Set → goroutine は Read のみ → batch 完了後に Clear。ただし race-safe であることと multi-owner-safe であることは異なり、同一プロセス内で複数 Agent が同時に異なる ExecutionContext を必要とする設計には対応していない。single-agent CLI 前提で許容
 - **FC / text-based 差異**: FC（tool_call_id あり）はループ中断時に role=tool で応答。text-based は role=user。text-based の後続ツールにはダミーメッセージを追加しない（intentional spec — 旧 sequential 実装との互換性を by design で維持）
+
+### 🤖 サブエージェント委譲
+探索・調査タスクは `spawn_agent` / `wait_agent` で軽量サブエージェントへ委譲できます。
+- **コンテキスト分離**: 親に返るのはサブの最終レポートだけ。`read_file` 全文や `search_code` の中間結果は親コンテキストへ再注入されません
+- **既定モデル**: `gpt-5.4-nano`（`sub_agent.default_model` で変更可能）
+- **推論強度**: 既定は off（`sub_agent.default_effort` で low / medium / high を指定可能）
+- **同時実行数**: 既定 5（`sub_agent.max_concurrent`）
+- **再帰禁止**: サブエージェント自身には `spawn_agent` / `wait_agent` を渡しません
 
 ### 🔍 コードレビュー & リファクタリング
 `/review` でセキュリティ・テストカバレッジをチェック。
@@ -241,6 +250,19 @@ utility_model:
 `utility_model` は検索結果圧縮などの軽量補助タスク専用です。メイン推論や `compression.model` には影響しません。
 
 Gemini API キーは無料で取得できます: https://aistudio.google.com/apikey
+
+### サブエージェント設定
+
+```yaml
+# ~/.xelyon/config.yaml
+sub_agent:
+  enabled: true
+  default_model: gpt-5.4-nano
+  default_effort: off
+  max_concurrent: 5
+```
+
+`sub_agent` は探索専用の委譲先を制御します。親モデルの `default_model` や `thinking` 設定は直接上書きしません。
 
 ### 最大出力トークン数の設定
 

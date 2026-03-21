@@ -20,4 +20,8 @@ var ToolDescriptions = map[string]string{
 
 	// Planning Tools
 	"ask_user_question": "Ask the user a clarification question before planning. Use only when requirements are ambiguous.",
+
+	// Sub-agent Tools
+	"spawn_agent": "Spawn a sub-agent for a well-scoped task. Use for exploration, file reading, and analysis. Sub-agents run in isolated context and return only their final report.",
+	"wait_agent":  "Wait for sub-agents to complete and receive their results.",
 }

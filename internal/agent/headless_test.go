@@ -11,7 +11,8 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/tools"
+	toolsubagent "github.com/susugadx/xelyon-cli/internal/tools/subagent"
 )
 
 // mockErrorProvider は常にエラーを返すプロバイダー
@@ -25,6 +26,40 @@ func (m *mockErrorProvider) ChatWithTools(ctx context.Context, systemPrompt stri
 }
 func (m *mockErrorProvider) ChatWithImage(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {
 	return "", fmt.Errorf("mock error")
+}
+
+type headlessToolSetProbeProvider struct {
+	systemPrompt string
+	toolNames    []string
+}
+
+func (p *headlessToolSetProbeProvider) Name() string { return "openai" }
+
+func (p *headlessToolSetProbeProvider) SupportsImages() bool { return false }
+
+func (p *headlessToolSetProbeProvider) IsFunctionCallingEnabled() bool { return true }
+
+func (p *headlessToolSetProbeProvider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
+	p.systemPrompt = systemPrompt
+	defs := tools.RegistryFromContext(ctx).GetToolDefinitions()
+	p.toolNames = make([]string, len(defs))
+	for i, def := range defs {
+		p.toolNames[i] = def.Name
+	}
+	return "done", nil
+}
+
+func (p *headlessToolSetProbeProvider) ChatWithImage(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {
+	return p.ChatWithTools(ctx, systemPrompt, history, model)
+}
+
+func hasToolName(names []string, target string) bool {
+	for _, name := range names {
+		if name == target {
+			return true
+		}
+	}
+	return false
 }
 
 func TestHeadlessResult_ToJSON(t *testing.T) {
@@ -249,6 +284,55 @@ func TestTokenUsage(t *testing.T) {
 	}
 }
 
+func TestRunHeadlessWithConfig_SubAgentModeUsesSubPromptAndExcludesSubAgentTools(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	cfg := newProjectMapDisabledConfig()
+	cfg.SubAgentPrompt = toolsubagent.SubAgentSystemPrompt
+	provider := &headlessToolSetProbeProvider{}
+
+	result := RunHeadlessWithConfig("probe", "gpt-5.4-nano", provider, cfg)
+	if result.Status != "success" {
+		t.Fatalf("result.Status = %q, want success", result.Status)
+	}
+	if !strings.Contains(provider.systemPrompt, "You are a sub-agent executing a specific task assigned by the orchestrator.") {
+		t.Fatalf("systemPrompt should contain sub-agent prompt, got %q", provider.systemPrompt)
+	}
+	if strings.Contains(provider.systemPrompt, "## Core Identity") {
+		t.Fatalf("systemPrompt should not keep the parent prompt, got %q", provider.systemPrompt)
+	}
+	if hasToolName(provider.toolNames, "spawn_agent") {
+		t.Fatal("sub-agent headless mode should exclude spawn_agent")
+	}
+	if hasToolName(provider.toolNames, "wait_agent") {
+		t.Fatal("sub-agent headless mode should exclude wait_agent")
+	}
+	if hasToolName(provider.toolNames, "ask_user_question") {
+		t.Fatal("sub-agent headless mode should exclude planning tools")
+	}
+}
+
+func TestRunHeadlessWithConfig_NormalHeadlessKeepsSubAgentTools(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	cfg := newProjectMapDisabledConfig()
+	provider := &headlessToolSetProbeProvider{}
+
+	result := RunHeadlessWithConfig("probe", "gpt-5.4", provider, cfg)
+	if result.Status != "success" {
+		t.Fatalf("result.Status = %q, want success", result.Status)
+	}
+	if !hasToolName(provider.toolNames, "spawn_agent") {
+		t.Fatal("normal headless mode should expose spawn_agent")
+	}
+	if !hasToolName(provider.toolNames, "wait_agent") {
+		t.Fatal("normal headless mode should expose wait_agent")
+	}
+	if hasToolName(provider.toolNames, "ask_user_question") {
+		t.Fatal("normal headless mode should still exclude planning tools")
+	}
+}
+
 func TestErrorInfo(t *testing.T) {
 	error := &ErrorInfo{
 		Type:    "tool_error",
@@ -334,7 +418,7 @@ func TestRunHeadless_CallsCleanup(t *testing.T) {
 	defer func() { cleanupHook = nil }()
 
 	provider := &mockProvider{name: "test"}
-	_ = RunHeadlessWithConfig("hello", "test-model", provider, config.DefaultConfig())
+	_ = RunHeadlessWithConfig("hello", "test-model", provider, newProjectMapDisabledConfig())
 
 	if called.Load() != 1 {
 		t.Errorf("Cleanup was called %d times, want 1", called.Load())
@@ -347,7 +431,7 @@ func TestRunHeadless_CallsCleanupOnError(t *testing.T) {
 	defer func() { cleanupHook = nil }()
 
 	provider := &mockErrorProvider{}
-	result := RunHeadlessWithConfig("hello", "test-model", provider, config.DefaultConfig())
+	result := RunHeadlessWithConfig("hello", "test-model", provider, newProjectMapDisabledConfig())
 
 	if result.Status != "error" {
 		t.Errorf("Expected error status, got %s", result.Status)
@@ -364,7 +448,7 @@ func TestRunHeadless_RepeatedInvocations(t *testing.T) {
 
 	provider := &mockProvider{name: "test"}
 	for i := 0; i < 5; i++ {
-		_ = RunHeadlessWithConfig("hello", "test-model", provider, config.DefaultConfig())
+		_ = RunHeadlessWithConfig("hello", "test-model", provider, newProjectMapDisabledConfig())
 	}
 
 	if called.Load() != 5 {
@@ -384,7 +468,7 @@ func TestRunHeadless_NoLeakOnRepeatedInvocations(t *testing.T) {
 	baseGoroutines := runtime.NumGoroutine()
 
 	for i := 0; i < iterations; i++ {
-		res := RunHeadlessWithConfig("test query", "mock-model", provider, config.DefaultConfig())
+		res := RunHeadlessWithConfig("test query", "mock-model", provider, newProjectMapDisabledConfig())
 		if res.Status != "success" {
 			t.Fatalf("iteration %d: RunHeadless failed: %v", i, res.Error)
 		}

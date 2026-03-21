@@ -7,7 +7,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
 )
@@ -59,6 +58,7 @@ func TestAgent_SwitchProvider_ClearCache(t *testing.T) {
 		ProviderName: "mock",
 		CurrentModel: "mock-model",
 		session:      history.NewSession("mock-model"),
+		Runtime:      NewAgentRuntimeWithConfig(newProjectMapDisabledConfig()),
 	}
 
 	mockProvider := &mockCacheClearableProvider{}
@@ -79,7 +79,7 @@ func TestAgent_SwitchProvider_ClearCache(t *testing.T) {
 func TestAgent_SwitchProvider_RebuildsSystemPrompt(t *testing.T) {
 	t.Setenv("DEEPSEEK_API_KEY", "test-key")
 
-	cfg := config.DefaultConfig()
+	cfg := newProjectMapDisabledConfig()
 	runtime := NewAgentRuntimeWithConfig(cfg)
 
 	agent := &Agent{

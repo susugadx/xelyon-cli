@@ -26,6 +26,8 @@ var ToolSafetyLevels = map[string]ToolSafety{
 	"git_log":           SafetyHigh,
 	"git_diff":          SafetyHigh,
 	"ask_user_question": SafetyHigh,
+	"spawn_agent":       SafetyHigh,
+	"wait_agent":        SafetyHigh,
 
 	// SafetyMedium: 外部検索APIコール（確認対象）
 	"web_search": SafetyMedium,

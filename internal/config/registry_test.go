@@ -132,6 +132,7 @@ func TestFieldTypeMap(t *testing.T) {
 		"plan_mode.clear_context_on_approval": FieldTypeBool,
 		"project_map.context_ratio":           FieldTypeFloat,
 		"provider_models":                     FieldTypeStructMap,
+		"sub_agent.max_concurrent":            FieldTypeInt,
 	}
 
 	for path, expectedType := range requiredFields {
@@ -180,6 +181,7 @@ func TestFieldDescriptions(t *testing.T) {
 		"bash.safety_level",
 		"plan_mode.clear_context_on_approval",
 		"project_map.context_ratio",
+		"sub_agent.default_model",
 	}
 
 	for _, path := range requiredFields {

@@ -127,6 +127,18 @@ func TestDefaultConfig(t *testing.T) {
 	if len(cfg.UtilityModel.Tasks) != 1 || cfg.UtilityModel.Tasks[0] != "web_search_compaction" {
 		t.Errorf("UtilityModel.Tasks = %#v, want [web_search_compaction]", cfg.UtilityModel.Tasks)
 	}
+	if !cfg.SubAgent.Enabled {
+		t.Error("SubAgent.Enabled should default to true")
+	}
+	if cfg.SubAgent.DefaultModel != "gpt-5.4-nano" {
+		t.Errorf("SubAgent.DefaultModel = %q, want gpt-5.4-nano", cfg.SubAgent.DefaultModel)
+	}
+	if cfg.SubAgent.DefaultEffort != "" {
+		t.Errorf("SubAgent.DefaultEffort = %q, want empty string", cfg.SubAgent.DefaultEffort)
+	}
+	if cfg.SubAgent.MaxConcurrent != 5 {
+		t.Errorf("SubAgent.MaxConcurrent = %d, want 5", cfg.SubAgent.MaxConcurrent)
+	}
 }
 
 func TestLoadConfig_NotExists(t *testing.T) {

@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 // testSubDir はカレントディレクトリ配下にテスト用サブディレクトリを作成し、
@@ -30,7 +28,7 @@ func testSubDir(t *testing.T) string {
 func TestHeadless_SimpleResponse(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
-	cfg := config.DefaultConfig()
+	cfg := newProjectMapDisabledConfig()
 	provider := &sequenceMockProvider{
 		name:      "test-provider",
 		responses: []string{"Hello, this is a simple response without any tool calls."},
@@ -72,7 +70,7 @@ func TestHeadless_SearchCodeTool(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg := config.DefaultConfig()
+	cfg := newProjectMapDisabledConfig()
 	provider := &sequenceMockProvider{
 		name: "test-provider",
 		responses: []string{
@@ -117,7 +115,7 @@ func TestHeadless_ReadFileTool(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg := config.DefaultConfig()
+	cfg := newProjectMapDisabledConfig()
 	provider := &sequenceMockProvider{
 		name: "test-provider",
 		responses: []string{
@@ -161,7 +159,7 @@ func TestHeadless_ListDirTool(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg := config.DefaultConfig()
+	cfg := newProjectMapDisabledConfig()
 	provider := &sequenceMockProvider{
 		name: "test-provider",
 		responses: []string{
@@ -203,7 +201,7 @@ func TestHeadless_MultipleToolCalls(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg := config.DefaultConfig()
+	cfg := newProjectMapDisabledConfig()
 	provider := &sequenceMockProvider{
 		name: "test-provider",
 		responses: []string{
@@ -242,7 +240,7 @@ func TestHeadless_MultipleToolCalls(t *testing.T) {
 func TestHeadless_APIError(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
-	cfg := config.DefaultConfig()
+	cfg := newProjectMapDisabledConfig()
 	// mockErrorProvider は headless_test.go で定義済み（常にエラーを返す）
 	provider := &mockErrorProvider{}
 
@@ -272,8 +270,9 @@ func TestHeadless_APIError(t *testing.T) {
 func TestHeadless_MaxIterationsReached(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
-	cfg := config.DefaultConfig()
-	// 全てのレスポンスがツール呼び出し → 最大10回でループ終了
+	cfg := newProjectMapDisabledConfig()
+	cfg.General.ToolLoopLimit = 10
+	// 全てのレスポンスがツール呼び出し → 設定した最大10回でループ終了
 	// list_dir に "." を指定してパスエスケープを回避
 	responses := make([]string, 15)
 	for i := range responses {
@@ -312,7 +311,7 @@ func TestHeadless_ToolError(t *testing.T) {
 	dir := testSubDir(t)
 	nonExistentFile := filepath.Join(dir, "does_not_exist.txt")
 
-	cfg := config.DefaultConfig()
+	cfg := newProjectMapDisabledConfig()
 	provider := &sequenceMockProvider{
 		name: "test-provider",
 		responses: []string{
@@ -357,7 +356,7 @@ func TestHeadless_HistoryAccumulation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg := config.DefaultConfig()
+	cfg := newProjectMapDisabledConfig()
 	provider := &sequenceMockProvider{
 		name: "test-provider",
 		responses: []string{

@@ -79,6 +79,7 @@ func newIsolatedRuntime() *AgentRuntime {
 	runtime := NewAgentRuntime()
 	runtime.Registry = tools.DefaultRegistry.Clone()
 	runtime.ToolCache = NewToolCache()
+	runtime.Config.ProjectMap.Enabled = false
 	return runtime
 }
 

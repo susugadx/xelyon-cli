@@ -5,20 +5,23 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/agent/token"
+	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/audit"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/tools/subagent"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // AgentRuntime は agent/session 単位で保持する実行時 state を束ねる。
 type AgentRuntime struct {
-	Registry    *tools.Registry
-	ToolCache   *ToolCache
-	Config      *config.Config
-	AutoApprove bool
-	UI          *ui.Runtime
-	AuditLogger audit.ToolLogger
+	Registry        *tools.Registry
+	ToolCache       *ToolCache
+	Config          *config.Config
+	AutoApprove     bool
+	UI              *ui.Runtime
+	AuditLogger     audit.ToolLogger
+	SubAgentManager *subagent.Manager
 }
 
 // NewAgentRuntime は CLI 互換の初期値を持つ runtime を返す。
@@ -54,6 +57,10 @@ func normalizeAgentRuntime(runtime *AgentRuntime) *AgentRuntime {
 	if runtime.AuditLogger == nil {
 		runtime.AuditLogger = audit.NewDisabledLogger()
 	}
+	if runtime.SubAgentManager == nil {
+		runtime.SubAgentManager = newSubAgentManager()
+	}
+	registerRuntimeSubAgentTools(runtime)
 	return runtime
 }
 
@@ -105,6 +112,50 @@ func (r *AgentRuntime) effectiveAutoApprove() bool {
 		return false
 	}
 	return r.AutoApprove
+}
+
+func newSubAgentManager() *subagent.Manager {
+	return subagent.NewManagerWithOptions(subagent.ManagerOptions{
+		RunHeadless: func(message, model string, provider api.Provider, cfg *config.Config) *subagent.RunResult {
+			result := RunHeadlessWithConfig(message, model, provider, cfg)
+			if result == nil {
+				return &subagent.RunResult{
+					Status:       "error",
+					ErrorMessage: "headless run returned nil result",
+				}
+			}
+			if result.Status == "success" {
+				return &subagent.RunResult{
+					Status:   "completed",
+					Response: result.Response,
+				}
+			}
+			errorMessage := ""
+			if result.Error != nil {
+				errorMessage = result.Error.Message
+			}
+			return &subagent.RunResult{
+				Status:       "error",
+				Response:     result.Response,
+				ErrorMessage: errorMessage,
+			}
+		},
+	})
+}
+
+func registerRuntimeSubAgentTools(runtime *AgentRuntime) {
+	if runtime == nil || runtime.Registry == nil || runtime.SubAgentManager == nil || runtime.Config == nil {
+		return
+	}
+	if !runtime.Config.SubAgent.Enabled {
+		return
+	}
+	if !runtime.Registry.HasTool("spawn_agent") {
+		runtime.Registry.Register(subagent.NewSpawnAgentTool(runtime.SubAgentManager))
+	}
+	if !runtime.Registry.HasTool("wait_agent") {
+		runtime.Registry.Register(subagent.NewWaitAgentTool(runtime.SubAgentManager))
+	}
 }
 
 func (a *Agent) cfg() *config.Config {

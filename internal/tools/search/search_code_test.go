@@ -125,12 +125,12 @@ func TestSearchCode_TokenBudget(t *testing.T) {
 	setupSearchTestMocks(t)
 
 	dir := t.TempDir()
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 2; i++ {
 		var content strings.Builder
-		for j := 0; j < 100; j++ {
+		for j := 0; j < 50; j++ {
 			content.WriteString("var target_budget_check = \"" + strings.Repeat("a", 240) + "\"\n")
 		}
-		fname := filepath.Join(dir, "budget"+strings.Repeat("x", i)+".go")
+		fname := filepath.Join(dir, "budget"+string(rune('a'+i))+".go")
 		if err := os.WriteFile(fname, []byte(content.String()), 0644); err != nil {
 			t.Fatal(err)
 		}

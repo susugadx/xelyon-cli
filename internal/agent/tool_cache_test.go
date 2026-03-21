@@ -28,6 +28,11 @@ func TestToolCache_FileCache(t *testing.T) {
 
 	// キャッシュに保存
 	cache.SetFile(testFile, content)
+	info, err := os.Stat(testFile)
+	if err != nil {
+		t.Fatalf("Failed to stat test file: %v", err)
+	}
+	futureModTime := info.ModTime().Add(time.Second)
 
 	// キャッシュヒット
 	cached, hit := cache.GetFile(testFile)
@@ -39,10 +44,12 @@ func TestToolCache_FileCache(t *testing.T) {
 	}
 
 	// ファイル変更後はキャッシュ無効
-	time.Sleep(10 * time.Millisecond) // mtimeの変化を確実に
 	newContent := "Updated content"
 	if err := os.WriteFile(testFile, []byte(newContent), 0644); err != nil {
 		t.Fatalf("Failed to update test file: %v", err)
+	}
+	if err := os.Chtimes(testFile, futureModTime, futureModTime); err != nil {
+		t.Fatalf("Failed to update file modtime: %v", err)
 	}
 
 	_, hit = cache.GetFile(testFile)
@@ -66,6 +73,11 @@ func TestToolCache_DirCache(t *testing.T) {
 
 	// キャッシュに保存
 	cache.SetDir(tmpDir, result)
+	info, err := os.Stat(tmpDir)
+	if err != nil {
+		t.Fatalf("Failed to stat temp dir: %v", err)
+	}
+	futureModTime := info.ModTime().Add(time.Second)
 
 	// キャッシュヒット
 	cached, hit := cache.GetDir(tmpDir)
@@ -77,10 +89,12 @@ func TestToolCache_DirCache(t *testing.T) {
 	}
 
 	// ディレクトリ変更後はキャッシュ無効（ファイル追加）
-	time.Sleep(10 * time.Millisecond)
 	newFile := filepath.Join(tmpDir, "new.txt")
 	if err := os.WriteFile(newFile, []byte("new"), 0644); err != nil {
 		t.Fatalf("Failed to create new file: %v", err)
+	}
+	if err := os.Chtimes(tmpDir, futureModTime, futureModTime); err != nil {
+		t.Fatalf("Failed to update dir modtime: %v", err)
 	}
 
 	_, hit = cache.GetDir(tmpDir)
@@ -537,10 +551,17 @@ func TestToolCache_Load_InvalidatesModified(t *testing.T) {
 	if err := cache1.Save(); err != nil {
 		t.Fatal(err)
 	}
+	info, err := os.Stat(testFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	futureModTime := info.ModTime().Add(time.Second)
 
 	// ファイルを変更
-	time.Sleep(10 * time.Millisecond) // mtime が確実に変わるように
 	if err := os.WriteFile(testFile, []byte("new content"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(testFile, futureModTime, futureModTime); err != nil {
 		t.Fatal(err)
 	}
 

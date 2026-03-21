@@ -29,7 +29,7 @@ func (m *MockProvider) IsFunctionCallingEnabled() bool { return false }
 
 func TestSyncWithRuntimeConfig_ModelUpdate(t *testing.T) {
 	// Setup
-	cfg := config.DefaultConfig()
+	cfg := newProjectMapDisabledConfig()
 	cfg.DefaultProvider = "openai"
 	cfg.ProviderModels["openai"] = config.ProviderModelConfig{
 		DefaultModel: "gpt-old",
@@ -57,7 +57,7 @@ func TestSyncWithRuntimeConfig_ModelUpdate(t *testing.T) {
 
 func TestSyncWithRuntimeConfig_DefaultModelShadowing(t *testing.T) {
 	// Setup
-	cfg := config.DefaultConfig()
+	cfg := newProjectMapDisabledConfig()
 	cfg.DefaultProvider = "openai"
 	cfg.DefaultModel = "gpt-default-old"
 	cfg.ProviderModels["openai"] = config.ProviderModelConfig{
@@ -87,7 +87,7 @@ func TestSyncWithRuntimeConfig_DefaultModelShadowing(t *testing.T) {
 
 func TestSyncWithRuntimeConfig_DefaultModelUpdate_WhenNoProviderOverride(t *testing.T) {
 	// Setup
-	cfg := config.DefaultConfig()
+	cfg := newProjectMapDisabledConfig()
 	cfg.DefaultProvider = "openai"
 	cfg.DefaultModel = "gpt-default-old"
 	// Clear provider override for openai
@@ -112,7 +112,7 @@ func TestSyncWithRuntimeConfig_DefaultModelUpdate_WhenNoProviderOverride(t *test
 }
 
 func TestSyncWithRuntimeConfig_RebuildsPromptForClaudeOpus(t *testing.T) {
-	cfg := config.DefaultConfig()
+	cfg := newProjectMapDisabledConfig()
 	cfg.PromptCache.Enabled = true
 	cfg.DefaultProvider = "claude"
 	cfg.ProviderModels["claude"] = config.ProviderModelConfig{
@@ -139,6 +139,7 @@ func TestSyncWithRuntimeConfig_UsesRuntimeOutputForSwitchWarning(t *testing.T) {
 	var out bytes.Buffer
 	runtime := NewAgentRuntime()
 	runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, &out)
+	runtime.Config.ProjectMap.Enabled = false
 	runtime.Config.DefaultProvider = "missing-provider"
 
 	a := &Agent{

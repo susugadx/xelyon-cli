@@ -109,6 +109,10 @@ func toolIcon(toolName string) string {
 		return "📋"
 	case "web_search":
 		return "🌐"
+	case "spawn_agent":
+		return "🤖"
+	case "wait_agent":
+		return "⏳"
 	case "lint":
 		return "🔎"
 	case "format":
@@ -142,6 +146,10 @@ func formatToolSummary(info ToolDisplayInfo, trimmed string) string {
 		if q := strings.TrimSpace(info.Args["query"]); q != "" {
 			return fmt.Sprintf("%q", q)
 		}
+	case info.ToolName == "spawn_agent":
+		return truncateText(info.Args["message"], 60)
+	case info.ToolName == "wait_agent":
+		return formatWaitAgentSummary(info.Args["ids"])
 	case info.ToolName == "lint":
 		if path := defaultPath(info.Args["path"]); path != "" {
 			if info.Args["auto_fix"] == "true" {
@@ -267,6 +275,18 @@ func formatSearchCodeSummary(args map[string]string, result string) string {
 		return target + " → No matches found"
 	}
 	return target
+}
+
+func formatWaitAgentSummary(rawIDs string) string {
+	count := countPathsArg(rawIDs)
+	switch count {
+	case 0:
+		return "0 agents"
+	case 1:
+		return "1 agent"
+	default:
+		return fmt.Sprintf("%d agents", count)
+	}
 }
 
 func formatStrReplaceSummary(args map[string]string, result string) string {

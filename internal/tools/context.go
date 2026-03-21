@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 
+	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/audit"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	lsplib "github.com/susugadx/xelyon-cli/internal/lsp"
@@ -16,6 +17,7 @@ import (
 // 各実行経路が明示的に組み立てて注入し、process-global 状態には依存しない。
 type ExecutionContext struct {
 	Context      context.Context
+	Provider     api.Provider
 	ProviderName string
 	Model        string
 	Stdin        io.Reader
@@ -80,6 +82,12 @@ func (ctx ExecutionContext) EffectiveLSPClient() *lsplib.Client {
 func (ctx ExecutionContext) EffectiveConfig() *config.Config {
 	normalized := normalizeExecutionContext(ctx)
 	return normalized.Config
+}
+
+// EffectiveProvider は実行時に使う Provider を返す。
+func (ctx ExecutionContext) EffectiveProvider() api.Provider {
+	normalized := normalizeExecutionContext(ctx)
+	return normalized.Provider
 }
 
 // EffectiveAuditLogger は実行時に使う監査ロガーを返す。

@@ -334,6 +334,29 @@ var Sections = map[string]SectionInfo{
 			"provider": {"openai", "gemini", "claude"},
 		},
 	},
+	"sub_agent": {
+		Title: "サブエージェント設定",
+		Icon:  "🤖",
+		Comments: []string{
+			"探索・調査タスクを低コストモデルへ委譲する設定",
+			"spawn_agent / wait_agent の既定値と同時実行数を制御",
+		},
+		Fields: map[string]string{
+			"enabled":        "サブエージェント機能を有効化",
+			"default_model":  "既定モデル（デフォルト: gpt-5.4-nano）",
+			"default_effort": "既定推論強度（off / low / medium / high）",
+			"max_concurrent": "同時実行上限（デフォルト: 5）",
+		},
+		FieldTypes: map[string]string{
+			"enabled":        "bool",
+			"default_model":  "string",
+			"default_effort": "select",
+			"max_concurrent": "int",
+		},
+		SelectOpts: map[string][]string{
+			"default_effort": {"off", "low", "medium", "high"},
+		},
+	},
 	"utility_model": {
 		Title: "Utility Model設定",
 		Icon:  "🪶",
@@ -416,6 +439,7 @@ var SectionOrder = []string{
 	"thinking",
 	"output",
 	"web_search",
+	"sub_agent",
 	"utility_model",
 	"mcp",
 	"hooks",
@@ -443,6 +467,7 @@ var CategoryOrder = []string{
 	"thinking",
 	"output",
 	"web_search",
+	"sub_agent",
 	"utility_model",
 	"mcp",
 	"hooks",
@@ -471,6 +496,7 @@ var SectionToCategory = map[string]string{
 	"thinking":         "thinking",
 	"output":           "output",
 	"web_search":       "web_search",
+	"sub_agent":        "sub_agent",
 	"utility_model":    "utility_model",
 	"mcp":              "mcp",
 	"hooks":            "hooks",
@@ -579,6 +605,11 @@ var Categories = map[string]CategoryInfo{
 		DisplayName: "Web Search",
 		Icon:        "🔍",
 		Sections:    []string{"web_search"},
+	},
+	"sub_agent": {
+		DisplayName: "Sub-agent",
+		Icon:        "🤖",
+		Sections:    []string{"sub_agent"},
 	},
 	"utility_model": {
 		DisplayName: "Utility Model",

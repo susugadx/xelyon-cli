@@ -21,16 +21,18 @@ type Config struct {
 	ListDir         ListDirConfig                  `yaml:"list_dir"`
 	ProjectMap      ProjectMapConfig               `yaml:"project_map"`
 
-	GitStage     GitStageConfig     `yaml:"git_stage"`
-	PlanMode     PlanModeConfig     `yaml:"plan_mode"`
-	LSP          LSPConfig          `yaml:"lsp"`
-	OpenAI       OpenAIConfig       `yaml:"openai"`
-	Thinking     ThinkingConfig     `yaml:"thinking"`
-	Output       OutputConfig       `yaml:"output"`
-	WebSearch    WebSearchConfig    `yaml:"web_search"`
-	UtilityModel UtilityModelConfig `yaml:"utility_model"`
-	MCP          MCPConfig          `yaml:"mcp"`
-	Hooks        HooksConfig        `yaml:"hooks"`
+	GitStage       GitStageConfig     `yaml:"git_stage"`
+	PlanMode       PlanModeConfig     `yaml:"plan_mode"`
+	LSP            LSPConfig          `yaml:"lsp"`
+	OpenAI         OpenAIConfig       `yaml:"openai"`
+	Thinking       ThinkingConfig     `yaml:"thinking"`
+	Output         OutputConfig       `yaml:"output"`
+	WebSearch      WebSearchConfig    `yaml:"web_search"`
+	SubAgent       SubAgentConfig     `yaml:"sub_agent"`
+	UtilityModel   UtilityModelConfig `yaml:"utility_model"`
+	MCP            MCPConfig          `yaml:"mcp"`
+	Hooks          HooksConfig        `yaml:"hooks"`
+	SubAgentPrompt string             `yaml:"-"`
 	// 将来の拡張用
 	// Cloud CloudConfig `yaml:"cloud,omitempty"`
 }
@@ -161,6 +163,14 @@ type WebSearchConfig struct {
 	CacheEnabled bool   `yaml:"cache_enabled"`      // キャッシュを有効化（デフォルト: true）
 	CacheTTL     int    `yaml:"cache_ttl"`          // キャッシュTTL秒数（デフォルト: 3600 = 1時間）
 	CacheSize    int    `yaml:"cache_size"`         // 最大キャッシュ数（デフォルト: 50）
+}
+
+// SubAgentConfig はサブエージェント設定
+type SubAgentConfig struct {
+	Enabled       bool   `yaml:"enabled"`        // サブエージェント機能を有効化（デフォルト: true）
+	DefaultModel  string `yaml:"default_model"`  // サブエージェント既定モデル
+	DefaultEffort string `yaml:"default_effort"` // サブエージェント既定推論強度（空または off で無効）
+	MaxConcurrent int    `yaml:"max_concurrent"` // 同時実行上限
 }
 
 // UtilityModelConfig は軽量な補助タスク専用モデルの設定

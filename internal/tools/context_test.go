@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
@@ -37,3 +38,28 @@ func TestExecutionContext_EffectiveContextPreservesInjectedContext(t *testing.T)
 		t.Fatal("expected injected context to be preserved")
 	}
 }
+
+func TestExecutionContext_EffectiveProviderPreservesInjectedProvider(t *testing.T) {
+	provider := &contextTestProvider{}
+	ctx := ExecutionContext{Provider: provider}
+
+	if got := ctx.EffectiveProvider(); got != provider {
+		t.Fatal("expected injected provider to be preserved")
+	}
+}
+
+type contextTestProvider struct{}
+
+func (p *contextTestProvider) Name() string { return "context-test" }
+
+func (p *contextTestProvider) ChatWithTools(context.Context, string, []api.Message, string) (string, error) {
+	return "", nil
+}
+
+func (p *contextTestProvider) SupportsImages() bool { return false }
+
+func (p *contextTestProvider) ChatWithImage(context.Context, string, []api.Message, string, *api.ImageData, string) (string, error) {
+	return "", nil
+}
+
+func (p *contextTestProvider) IsFunctionCallingEnabled() bool { return true }

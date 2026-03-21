@@ -286,6 +286,12 @@ func DefaultConfig() *Config {
 			CacheTTL:     3600, // 1時間
 			CacheSize:    50,
 		},
+		SubAgent: SubAgentConfig{
+			Enabled:       true,
+			DefaultModel:  "gpt-5.4-nano",
+			DefaultEffort: "",
+			MaxConcurrent: 5,
+		},
 		UtilityModel: UtilityModelConfig{
 			Enabled:  false,
 			Provider: "",

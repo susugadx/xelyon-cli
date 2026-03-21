@@ -44,6 +44,7 @@ func (a *Agent) toolExecutionContext(ctx context.Context, stdin io.Reader, stdou
 	}
 	return tools.ExecutionContext{
 		Context:      ctx,
+		Provider:     a.CurrentProvider,
 		ProviderName: a.ProviderName,
 		Model:        a.CurrentModel,
 		Stdin:        stdin,

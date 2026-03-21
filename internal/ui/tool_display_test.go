@@ -134,6 +134,36 @@ func TestFormatToolLine_StrReplace(t *testing.T) {
 	}
 }
 
+func TestFormatToolLine_SpawnAgent(t *testing.T) {
+	line := FormatToolLine(ToolDisplayInfo{
+		ToolName: "spawn_agent",
+		Args: map[string]string{
+			"message": "register.goとweb.goを読んで差分を報告しろ",
+		},
+		Result: `{"agent_id":"sub-001","status":"running"}`,
+	})
+
+	want := "🤖 spawn_agent: register.goとweb.goを読んで差分を報告しろ"
+	if line != want {
+		t.Fatalf("FormatToolLine() = %q, want %q", line, want)
+	}
+}
+
+func TestFormatToolLine_WaitAgent(t *testing.T) {
+	line := FormatToolLine(ToolDisplayInfo{
+		ToolName: "wait_agent",
+		Args: map[string]string{
+			"ids": `["sub-001","sub-002"]`,
+		},
+		Result: `{"status":"completed","results":[]}`,
+	})
+
+	want := "⏳ wait_agent: 2 agents"
+	if line != want {
+		t.Fatalf("FormatToolLine() = %q, want %q", line, want)
+	}
+}
+
 func TestFormatParallelElapsed(t *testing.T) {
 	if got := FormatParallelElapsed(250 * time.Millisecond); got != "250ms" {
 		t.Fatalf("FormatParallelElapsed(250ms) = %q, want %q", got, "250ms")

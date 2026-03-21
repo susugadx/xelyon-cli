@@ -12,7 +12,7 @@ func TestHandleModelCommand_UpdatesProviderModel(t *testing.T) {
 	t.Setenv("HOME", tmpDir)
 
 	// Initialize config
-	cfg := config.DefaultConfig()
+	cfg := newProjectMapDisabledConfig()
 	cfg.ProviderModels["openai"] = config.ProviderModelConfig{
 		DefaultModel: "gpt-original",
 	}
@@ -24,6 +24,7 @@ func TestHandleModelCommand_UpdatesProviderModel(t *testing.T) {
 		ProviderName:    "openai",
 		CurrentModel:    "gpt-original",
 		CurrentProvider: &MockProvider{name: "openai"},
+		Runtime:         NewAgentRuntimeWithConfig(cfg),
 	}
 
 	// Execute /model command
@@ -59,7 +60,7 @@ func TestHandleConfigCommand_Model_UpdatesProviderModel(t *testing.T) {
 	t.Setenv("HOME", tmpDir)
 
 	// Initialize config
-	cfg := config.DefaultConfig()
+	cfg := newProjectMapDisabledConfig()
 	cfg.DefaultProvider = "openai"
 	cfg.ProviderModels["openai"] = config.ProviderModelConfig{
 		DefaultModel: "gpt-original",
@@ -72,6 +73,7 @@ func TestHandleConfigCommand_Model_UpdatesProviderModel(t *testing.T) {
 		ProviderName:    "openai",
 		CurrentModel:    "gpt-original",
 		CurrentProvider: &MockProvider{name: "openai"},
+		Runtime:         NewAgentRuntimeWithConfig(cfg),
 	}
 
 	// Execute /config model command

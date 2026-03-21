@@ -44,6 +44,16 @@ func TestGetToolSafety(t *testing.T) {
 			want:     SafetyHigh,
 		},
 		{
+			name:     "spawn_agent is SafetyHigh",
+			toolName: "spawn_agent",
+			want:     SafetyHigh,
+		},
+		{
+			name:     "wait_agent is SafetyHigh",
+			toolName: "wait_agent",
+			want:     SafetyHigh,
+		},
+		{
 			name:     "unknown tool defaults to SafetyMedium",
 			toolName: "unknown_tool",
 			want:     SafetyMedium,

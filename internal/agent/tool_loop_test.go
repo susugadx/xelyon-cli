@@ -189,7 +189,8 @@ func TestToolLoop_NonInteractiveKeepsLimit(t *testing.T) {
 	disableColors(t)
 	t.Setenv("HOME", t.TempDir())
 
-	cfg := config.DefaultConfig()
+	cfg := newProjectMapDisabledConfig()
+	cfg.General.ToolLoopLimit = 10
 	responses := make([]string, 20)
 	for i := range responses {
 		responses[i] = `{"tool": "list_dir", "args": {"path": "."}}`

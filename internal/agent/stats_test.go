@@ -305,7 +305,7 @@ func TestSessionStats_EstimatedCost_UnknownProvider(t *testing.T) {
 
 func TestSessionStats_ElapsedTime(t *testing.T) {
 	stats := NewSessionStats("test")
-	time.Sleep(100 * time.Millisecond)
+	stats.StartTime = time.Now().Add(-100 * time.Millisecond)
 
 	elapsed := stats.ElapsedTime()
 	if elapsed < 100*time.Millisecond {

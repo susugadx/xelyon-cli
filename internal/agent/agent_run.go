@@ -30,6 +30,9 @@ func RunHeadlessWithConfig(query string, model string, provider api.Provider, cf
 	agent := NewAgentWithRuntime(model, provider, true, runtime)
 	defer agent.Cleanup()
 	agent.setAutoApprove(true) // Headlessモードは自動承認（SafetyLow以外）
+	if cfg != nil && cfg.SubAgentPrompt != "" {
+		agent.SystemPrompt = prompt.BuildProviderSystemPromptWithConfig(cfg.SubAgentPrompt, provider.Name(), model, agent.cfg())
+	}
 
 	// プロジェクト設定読み込み（xelyon.yaml）
 	if pc := loadProjectConfig(); pc != nil {
@@ -43,7 +46,11 @@ func RunHeadlessWithConfig(query string, model string, provider api.Provider, cf
 	injectProjectMap(agent, "")
 
 	// Headless Mode は Normal Mode 相当: planning 系ツールを除外
-	agent.registry().SetExcludedTools(prompt.PlanningToolNames)
+	excludedTools := append([]string{}, prompt.PlanningToolNames...)
+	if cfg != nil && cfg.SubAgentPrompt != "" {
+		excludedTools = append(excludedTools, "spawn_agent", "wait_agent")
+	}
+	agent.registry().SetExcludedTools(excludedTools)
 
 	// ツール呼び出し結果を記録
 	var allToolCalls []ToolCallResult
@@ -54,14 +61,14 @@ func RunHeadlessWithConfig(query string, model string, provider api.Provider, cf
 		Content: query,
 	})
 
-	// イテレーションループ（最大10回で無限ループ防止）
-	const maxIterations = 10
+	maxIterations := normalizeToolLoopLimit(agent.cfg().General.ToolLoopLimit)
 	var finalResponse string
 	execCtx := agent.toolExecutionContext(context.Background(), nil, nil, nil)
 
-	for iteration := 0; iteration < maxIterations; iteration++ {
+	for iteration := 0; maxIterations == 0 || iteration < maxIterations; iteration++ {
 		// API呼び出し
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+		timeout := time.Duration(agent.cfg().APIRetry.Timeout) * time.Second
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		agent.refreshProjectPromptIfDirty(query)
 
 		response, err := provider.ChatWithTools(agent.requestContext(ctx), agent.SystemPrompt, agent.History, model)
