@@ -88,9 +88,10 @@ jobs:
       # Codecov にカバレッジをアップロード
       # PR でカバレッジの増減が見れる
       - name: Upload coverage
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           files: ./coverage.txt
+          token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false # Codecov 障害時も CI は続行
 
   # ============================================
