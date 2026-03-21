@@ -81,6 +81,7 @@ type SubAgentStats struct {
 	ID             string  `json:"id"`
 	Model          string  `json:"model"`
 	Status         string  `json:"status"`
+	ErrorMessage   string  `json:"error_message"`
 	InputTokens    int     `json:"input_tokens"`
 	CachedTokens   int     `json:"cached_tokens"`
 	OutputTokens   int     `json:"output_tokens"`
@@ -304,6 +305,7 @@ func (m *Manager) GetSummary() SubAgentSummary {
 			if sub.result.Model != "" {
 				stats.Model = sub.result.Model
 			}
+			stats.ErrorMessage = sub.result.ErrorMessage
 			stats.InputTokens = sub.result.InputTokens
 			stats.CachedTokens = sub.result.CachedTokens
 			stats.OutputTokens = sub.result.OutputTokens

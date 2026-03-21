@@ -66,7 +66,7 @@ func (a *Agent) chatCore(input string, image *api.ImageData, oneShot bool) error
 
 	// セッションに保存
 	if a.session != nil {
-		a.session.AddMessage("user", input, a.CurrentModel)
+		a.appendSessionMessage("user", input, a.CurrentModel)
 	}
 
 	// 統計情報更新: Userメッセージ数をカウント
@@ -443,15 +443,19 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 				a.Stats.AddToolExecution(toolCall.Tool)
 			}
 			result, _ := a.executeToolWithSpinner(ctx, toolCall)
+			a.appendSessionToolExecution(toolCall, result)
 			a.History = append(a.History, api.Message{
 				Role:             "assistant",
 				Content:          response,
 				ReasoningContent: a.getLastReasoningContent(),
 			})
-			a.History = append(a.History, api.Message{
+			a.appendSessionMessage("assistant", response, a.CurrentModel)
+			toolResultMsg := api.Message{
 				Role:    "user",
 				Content: fmt.Sprintf("[Tool Result for create_plan]\n%s", result),
-			})
+			}
+			a.History = append(a.History, toolResultMsg)
+			a.appendSessionMessage(toolResultMsg.Role, toolResultMsg.Content, a.CurrentModel)
 
 			yellow.Fprintln(a.output(), "⚠️  create_plan is deprecated, continuing in normal mode...")
 		}
@@ -495,6 +499,7 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 			// 各ツール結果の処理
 			func(_ int, tc *tools.ToolCall, result string, change *tools.FileChange) {
 				a.noteProjectMapMutation(tc, change)
+				a.appendSessionToolExecution(tc, result)
 
 				// str_replace エラー処理
 				a.handleStrReplaceErrors(tc, result)
@@ -514,14 +519,14 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 						ToolName:   tc.Tool,
 					}
 					a.History = append(a.History, toolMsg)
-					if a.session != nil {
-						a.session.AddMessageFromAPI(toolMsg, a.CurrentModel)
-					}
+					a.appendSessionMessageFromAPI(toolMsg, a.CurrentModel)
 				} else {
-					a.History = append(a.History, api.Message{
+					toolResultMsg := api.Message{
 						Role:    "user",
 						Content: fmt.Sprintf("[Tool Result for %s]\n%s", tc.Tool, result),
-					})
+					}
+					a.History = append(a.History, toolResultMsg)
+					a.appendSessionMessage(toolResultMsg.Role, toolResultMsg.Content, a.CurrentModel)
 				}
 				_, _ = fmt.Fprintln(a.output())
 

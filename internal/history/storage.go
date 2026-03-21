@@ -52,10 +52,14 @@ func NewStorage() (*Storage, error) {
 	}, nil
 }
 
-// Save はメッセージをJSONLファイルに追記
+// Save は未保存のメッセージをJSONLファイルに追記
 func (st *Storage) Save(session *Session) error {
-	if len(session.Messages) == 0 {
+	if session == nil {
 		return nil
+	}
+	unsaved := session.unsavedMessages()
+	if len(unsaved) == 0 {
+		return st.saveMetadata(session)
 	}
 
 	filePath := st.sessionPath(session.ID)
@@ -67,25 +71,26 @@ func (st *Storage) Save(session *Session) error {
 	}
 	defer f.Close()
 
-	// 最後のメッセージをJSONLとして書き込み
-	lastMsg := session.Messages[len(session.Messages)-1]
-	data, err := json.Marshal(lastMsg)
-	if err != nil {
-		return fmt.Errorf("failed to marshal message: %w", err)
-	}
-
-	// 暗号化が有効な場合は暗号化
-	if st.encryption {
-		encrypted, err := crypto.EncryptSession(data, st.passphrase)
+	for _, msg := range unsaved {
+		data, err := json.Marshal(msg)
 		if err != nil {
-			return fmt.Errorf("failed to encrypt message: %w", err)
+			return fmt.Errorf("failed to marshal message: %w", err)
 		}
-		data = encrypted
-	}
 
-	if _, err := f.Write(append(data, '\n')); err != nil {
-		return fmt.Errorf("failed to write message: %w", err)
+		// 暗号化が有効な場合は暗号化
+		if st.encryption {
+			encrypted, err := crypto.EncryptSession(data, st.passphrase)
+			if err != nil {
+				return fmt.Errorf("failed to encrypt message: %w", err)
+			}
+			data = encrypted
+		}
+
+		if _, err := f.Write(append(data, '\n')); err != nil {
+			return fmt.Errorf("failed to write message: %w", err)
+		}
 	}
+	session.markPersisted()
 
 	// メタデータを更新
 	return st.saveMetadata(session)
@@ -126,6 +131,7 @@ func (st *Storage) Rewrite(session *Session) error {
 			return fmt.Errorf("failed to rewrite message: %w", err)
 		}
 	}
+	session.markPersisted()
 
 	return st.saveMetadata(session)
 }
@@ -175,6 +181,7 @@ func (st *Storage) Load(sessionID string) (*Session, error) {
 		}
 		session.Messages = append(session.Messages, msg)
 	}
+	session.markPersisted()
 
 	return session, nil
 }
@@ -260,7 +267,7 @@ func (st *Storage) saveMetadata(session *Session) error {
 		Model:        session.Model,
 		StartTime:    session.StartTime,
 		LastModified: session.LastModified,
-		MessageCount: len(session.Messages),
+		MessageCount: session.conversationMessageCount(),
 		Preview:      preview,
 	}
 

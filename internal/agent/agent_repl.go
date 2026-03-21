@@ -150,7 +150,7 @@ func RunInteractiveWithResumeWithConfig(model string, provider api.Provider, cfg
 
 	printHeaderToWriter(runtimeUI.Output(), model, provider)
 	printModeInfoToWriter(runtimeUI.Output(), autoApprove, false)
-	green.Fprintf(runtimeUI.Output(), "📂 Resumed session %s (%d messages)\n", sessionID, len(session.Messages))
+	green.Fprintf(runtimeUI.Output(), "📂 Resumed session %s (%d messages)\n", sessionID, len(session.ToAPIMessages()))
 
 	if pc := loadProjectConfig(); pc != nil {
 		applyProjectConfig(agent, pc)

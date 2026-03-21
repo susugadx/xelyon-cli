@@ -240,7 +240,7 @@ func TestBuildSessionTokenTable_WithSubAgentCosts(t *testing.T) {
 	}
 }
 
-func TestPrintSubAgentStats_RunningUsesDash(t *testing.T) {
+func TestPrintSubAgentStats_ErrorShowsMessage(t *testing.T) {
 	summary := subagent.SubAgentSummary{
 		Agents: []subagent.SubAgentStats{
 			{
@@ -255,14 +255,15 @@ func TestPrintSubAgentStats_RunningUsesDash(t *testing.T) {
 				ToolExecutions: 1,
 			},
 			{
-				ID:     "sub-002",
-				Model:  "gpt-5.4-nano",
-				Status: "running",
+				ID:           "sub-002",
+				Model:        "gpt-5.4-nano",
+				Status:       "error",
+				ErrorMessage: "provider timeout while fetching result\nwith extra details",
 			},
 		},
 		TotalSpawned:   2,
 		TotalCompleted: 1,
-		TotalRunning:   1,
+		TotalErrors:    1,
 		TotalInput:     20555,
 		TotalCached:    15872,
 		TotalOutput:    1164,
@@ -283,7 +284,33 @@ func TestPrintSubAgentStats_RunningUsesDash(t *testing.T) {
 	if !strings.Contains(output, "$0.0027") {
 		t.Fatalf("printSubAgentStats() output missing cost:\n%s", output)
 	}
-	runningRow := regexp.MustCompile(`running\s*│\s*-\s*│\s*-\s*│\s*-\s*│\s*-\s*│\s*-\s*│\s*-\s*`)
+	errorRow := regexp.MustCompile(`error\s*│\s*0\s*│\s*0\s*│\s*0\s*│\s*0\s*│\s*\$0\.0000\s*│\s*0\s*│\s*provider timeout while fetching result`)
+	if !errorRow.MatchString(output) {
+		t.Fatalf("printSubAgentStats() error row should show message:\n%s", output)
+	}
+	if !strings.Contains(output, "Error") {
+		t.Fatalf("printSubAgentStats() output missing error column:\n%s", output)
+	}
+}
+
+func TestPrintSubAgentStats_RunningUsesDash(t *testing.T) {
+	summary := subagent.SubAgentSummary{
+		Agents: []subagent.SubAgentStats{
+			{
+				ID:     "sub-001",
+				Model:  "gpt-5.4-nano",
+				Status: "running",
+			},
+		},
+		TotalSpawned: 1,
+		TotalRunning: 1,
+	}
+
+	var out bytes.Buffer
+	printSubAgentStats(&out, summary)
+	output := out.String()
+
+	runningRow := regexp.MustCompile(`running\s*│\s*-\s*│\s*-\s*│\s*-\s*│\s*-\s*│\s*-\s*│\s*-\s*│`)
 	if !runningRow.MatchString(output) {
 		t.Fatalf("printSubAgentStats() running row should use '-':\n%s", output)
 	}

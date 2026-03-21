@@ -132,7 +132,7 @@ func (a *Agent) addToolCallsToHistory(response string, toolCalls []*tools.ToolCa
 	// セッションに保存（1回のみ）
 	if a.session != nil {
 		msg := a.History[len(a.History)-1]
-		a.session.AddMessageFromAPI(msg, a.CurrentModel)
+		a.appendSessionMessageFromAPI(msg, a.CurrentModel)
 	}
 
 	// 統計情報更新: AssistantMessages は1回カウント。
@@ -153,6 +153,7 @@ func (a *Agent) executeToolOnly(toolCall *tools.ToolCall) string {
 	// ツール実行
 	result, change := a.executeToolWithSpinner(a.currentRequestContext(), toolCall)
 	a.noteProjectMapMutation(toolCall, change)
+	a.appendSessionToolExecution(toolCall, result)
 
 	// str_replace エラー処理
 	if a.handleStrReplaceErrors(toolCall, result) {
@@ -179,15 +180,15 @@ func (a *Agent) executeToolOnly(toolCall *tools.ToolCall) string {
 		a.History = append(a.History, toolMsg)
 
 		// セッションに tool result を保存
-		if a.session != nil {
-			a.session.AddMessageFromAPI(toolMsg, a.CurrentModel)
-		}
+		a.appendSessionMessageFromAPI(toolMsg, a.CurrentModel)
 	} else {
 		// テキストベース: role="user" で送信（従来方式）
-		a.History = append(a.History, api.Message{
+		toolResultMsg := api.Message{
 			Role:    "user",
 			Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, result),
-		})
+		}
+		a.History = append(a.History, toolResultMsg)
+		a.appendSessionMessage(toolResultMsg.Role, toolResultMsg.Content, a.CurrentModel)
 	}
 
 	_, _ = fmt.Fprintln(a.output())
@@ -235,7 +236,7 @@ func (a *Agent) addToolCallToHistory(response string, toolCall *tools.ToolCall) 
 	// FC パスの場合、セッションに assistant+ToolCalls を保存
 	if isFunctionCalling && a.session != nil {
 		msg := a.History[len(a.History)-1]
-		a.session.AddMessageFromAPI(msg, a.CurrentModel)
+		a.appendSessionMessageFromAPI(msg, a.CurrentModel)
 	}
 
 	// 統計情報更新: Assistantメッセージ数とツール実行回数をカウント
@@ -313,6 +314,7 @@ func (a *Agent) executeToolCallInternal(response string, toolCall *tools.ToolCal
 
 	// ツール実行
 	result, change := a.executeToolWithSpinner(a.currentRequestContext(), toolCall)
+	a.appendSessionToolExecution(toolCall, result)
 
 	// str_replace エラー処理
 	if a.handleStrReplaceErrors(toolCall, result) {
@@ -339,15 +341,15 @@ func (a *Agent) executeToolCallInternal(response string, toolCall *tools.ToolCal
 		a.History = append(a.History, toolMsg)
 
 		// セッションに tool result を保存
-		if a.session != nil {
-			a.session.AddMessageFromAPI(toolMsg, a.CurrentModel)
-		}
+		a.appendSessionMessageFromAPI(toolMsg, a.CurrentModel)
 	} else {
 		// テキストベース: role="user" で送信（従来方式）
-		a.History = append(a.History, api.Message{
+		toolResultMsg := api.Message{
 			Role:    "user",
 			Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, result),
-		})
+		}
+		a.History = append(a.History, toolResultMsg)
+		a.appendSessionMessage(toolResultMsg.Role, toolResultMsg.Content, a.CurrentModel)
 	}
 
 	_, _ = fmt.Fprintln(a.output())
@@ -909,15 +911,15 @@ func (a *Agent) executeToolCallsWithParallel(
 					ToolName:   tc.Tool,
 				}
 				a.History = append(a.History, toolMsg)
-				if a.session != nil {
-					a.session.AddMessageFromAPI(toolMsg, a.CurrentModel)
-				}
+				a.appendSessionMessageFromAPI(toolMsg, a.CurrentModel)
 			} else {
 				// text-based: role="user"
-				a.History = append(a.History, api.Message{
+				toolResultMsg := api.Message{
 					Role:    "user",
 					Content: fmt.Sprintf("[Tool Result for %s]\n%s", tc.Tool, e.skipMsg),
-				})
+				}
+				a.History = append(a.History, toolResultMsg)
+				a.appendSessionMessage(toolResultMsg.Role, toolResultMsg.Content, a.CurrentModel)
 			}
 
 		case statusLoopAbort:

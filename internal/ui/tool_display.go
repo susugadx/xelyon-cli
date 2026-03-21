@@ -147,7 +147,7 @@ func formatToolSummary(info ToolDisplayInfo, trimmed string) string {
 			return fmt.Sprintf("%q", q)
 		}
 	case info.ToolName == "spawn_agent":
-		return truncateText(info.Args["message"], 60)
+		return formatSpawnAgentSummary(info.Args["message"])
 	case info.ToolName == "wait_agent":
 		return formatWaitAgentSummary(info.Args["ids"])
 	case info.ToolName == "lint":
@@ -355,6 +355,10 @@ func firstLine(s string) string {
 		return s[:idx]
 	}
 	return s
+}
+
+func formatSpawnAgentSummary(message string) string {
+	return truncateText(firstLine(message), 200)
 }
 
 func truncateText(s string, maxLen int) string {

@@ -117,6 +117,41 @@ func (a *Agent) errorOutput() io.Writer {
 	return a.ui().ErrorOutput()
 }
 
+func (a *Agent) appendSessionMessage(role, content, model string) {
+	if a == nil || a.session == nil {
+		return
+	}
+	a.session.AddMessage(role, content, model)
+	a.persistSession()
+}
+
+func (a *Agent) appendSessionMessageFromAPI(msg api.Message, model string) {
+	if a == nil || a.session == nil {
+		return
+	}
+	a.session.AddMessageFromAPI(msg, model)
+	a.persistSession()
+}
+
+func (a *Agent) appendSessionToolExecution(toolCall *tools.ToolCall, result string) {
+	if a == nil || a.session == nil || toolCall == nil {
+		return
+	}
+	success := !strings.HasPrefix(strings.TrimSpace(result), "Error:")
+	a.session.AddToolExecution(toolCall.Tool, toolCall.Args, result, success, a.CurrentModel)
+	a.persistSession()
+}
+
+func (a *Agent) persistSession() {
+	if a == nil || a.session == nil || a.storage == nil {
+		return
+	}
+	a.syncResponseIDToSession()
+	if err := a.storage.Save(a.session); err != nil {
+		yellow.Fprintf(a.output(), "⚠️  Warning: Failed to save session: %v\n", err)
+	}
+}
+
 // NewAgent は新しいAgentを作成
 func NewAgent(model string, provider api.Provider, headless bool) *Agent {
 	return NewAgentWithRuntime(model, provider, headless, NewAgentRuntimeWithConfig(config.DefaultConfig()))

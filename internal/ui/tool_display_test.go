@@ -149,6 +149,22 @@ func TestFormatToolLine_SpawnAgent(t *testing.T) {
 	}
 }
 
+func TestFormatToolLine_SpawnAgent_FirstLineAndLongerLimit(t *testing.T) {
+	message := strings.Repeat("a", 80) + "\n" + strings.Repeat("b", 80)
+	line := FormatToolLine(ToolDisplayInfo{
+		ToolName: "spawn_agent",
+		Args: map[string]string{
+			"message": message,
+		},
+		Result: `{"agent_id":"sub-001","status":"running"}`,
+	})
+
+	want := "🚀 spawn_agent: " + strings.Repeat("a", 80)
+	if line != want {
+		t.Fatalf("FormatToolLine() = %q, want %q", line, want)
+	}
+}
+
 func TestFormatToolLine_WaitAgent(t *testing.T) {
 	line := FormatToolLine(ToolDisplayInfo{
 		ToolName: "wait_agent",

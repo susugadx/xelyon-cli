@@ -268,6 +268,34 @@ func formatSubAgentCost(cost float64, pending bool) string {
 	return formatUSD(cost)
 }
 
+func formatSubAgentError(status, message string) string {
+	if status == "running" {
+		return ""
+	}
+	if status != "error" {
+		return ""
+	}
+	message = firstStatusLine(strings.TrimSpace(message))
+	if message == "" {
+		return "unknown error"
+	}
+	return truncateStatusText(message, 120)
+}
+
+func firstStatusLine(s string) string {
+	if idx := strings.IndexByte(s, '\n'); idx >= 0 {
+		return s[:idx]
+	}
+	return s
+}
+
+func truncateStatusText(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
+}
+
 func printSubAgentStats(out io.Writer, summary subagent.SubAgentSummary) {
 	if summary.TotalSpawned == 0 {
 		return
@@ -276,7 +304,7 @@ func printSubAgentStats(out io.Writer, summary subagent.SubAgentSummary) {
 	_, _ = fmt.Fprintln(out)
 	green.Fprintln(out, "🤖 Sub-agents")
 
-	table := ui.NewTable().SetHeaders("ID", "Model", "Status", "Input", "Cached", "Output", "Thinking", "Cost", "Tools")
+	table := ui.NewTable().SetHeaders("ID", "Model", "Status", "Input", "Cached", "Output", "Thinking", "Cost", "Tools", "Error")
 	for _, agentStats := range summary.Agents {
 		pending := agentStats.Status == "running"
 		model := agentStats.Model
@@ -293,6 +321,7 @@ func printSubAgentStats(out io.Writer, summary subagent.SubAgentSummary) {
 			formatSubAgentNumber(agentStats.ThinkingTokens, pending),
 			formatSubAgentCost(agentStats.Cost, pending),
 			formatSubAgentNumber(agentStats.ToolExecutions, pending),
+			formatSubAgentError(agentStats.Status, agentStats.ErrorMessage),
 		)
 	}
 
@@ -306,6 +335,7 @@ func printSubAgentStats(out io.Writer, summary subagent.SubAgentSummary) {
 		formatNumber(summary.TotalThinking),
 		formatUSD(summary.TotalCost),
 		formatNumber(summary.TotalTools),
+		"",
 	)
 
 	_, _ = fmt.Fprint(out, table.RenderCompact())

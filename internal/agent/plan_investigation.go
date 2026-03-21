@@ -49,7 +49,7 @@ func (a *Agent) runInvestigationPhase(ctx context.Context) (*plan.Plan, error) {
 		assistantMsg := api.Message{Role: "assistant", Content: response, ReasoningContent: a.getLastReasoningContent()}
 		a.History = append(a.History, assistantMsg)
 		if a.session != nil {
-			a.session.AddMessageFromAPI(assistantMsg, a.CurrentModel)
+			a.appendSessionMessageFromAPI(assistantMsg, a.CurrentModel)
 		}
 		if a.Stats != nil {
 			a.Stats.AssistantMessages++

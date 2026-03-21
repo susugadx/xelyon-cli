@@ -64,7 +64,7 @@ func handleLoadCommand(agent *Agent, args []string) bool {
 		}
 	}
 
-	green.Fprintf(out, "📂 Loaded session %s (%d messages)\n", sessionID, len(session.Messages))
+	green.Fprintf(out, "📂 Loaded session %s (%d messages)\n", sessionID, len(session.ToAPIMessages()))
 	return true
 }
 

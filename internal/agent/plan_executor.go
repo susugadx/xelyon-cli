@@ -148,7 +148,7 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 
 			// セッションに保存
 			if a.session != nil {
-				a.session.AddMessageFromAPI(assistantMsg, a.CurrentModel)
+				a.appendSessionMessageFromAPI(assistantMsg, a.CurrentModel)
 			}
 
 			if a.Stats != nil {
@@ -249,6 +249,7 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 			// 各ツール結果の処理
 			func(_ int, toolCall *tools.ToolCall, result string, change *tools.FileChange) {
 				a.noteProjectMapMutation(toolCall, change)
+				a.appendSessionToolExecution(toolCall, result)
 
 				// str_replace 成功時: LSP診断遅延バッファにファイルを追加
 				if toolCall.Tool == "str_replace" && !strings.HasPrefix(result, "Error:") &&
@@ -288,14 +289,14 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 						ToolName:   toolCall.Tool,
 					}
 					a.History = append(a.History, toolMsg)
-					if a.session != nil {
-						a.session.AddMessageFromAPI(toolMsg, a.CurrentModel)
-					}
+					a.appendSessionMessageFromAPI(toolMsg, a.CurrentModel)
 				} else {
-					a.History = append(a.History, api.Message{
+					toolResultMsg := api.Message{
 						Role:    "user",
 						Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, result),
-					})
+					}
+					a.History = append(a.History, toolResultMsg)
+					a.appendSessionMessage(toolResultMsg.Role, toolResultMsg.Content, a.CurrentModel)
 				}
 			},
 		)

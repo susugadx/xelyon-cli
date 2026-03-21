@@ -342,3 +342,32 @@ func TestManagerGetSummary(t *testing.T) {
 	close(release)
 	_ = manager.Wait([]string{runningID}, 0)
 }
+
+// TestManagerGetSummary_ErrorMessage はエラー詳細がサマリーへ反映されることを確認します。
+func TestManagerGetSummary_ErrorMessage(t *testing.T) {
+	cfg := config.DefaultConfig()
+	provider := &managerTestProvider{name: "openai"}
+	manager := NewManagerWithOptions(ManagerOptions{
+		RunHeadless: func(_ context.Context, _ string, model string, _ api.Provider, _ *config.Config) *RunResult {
+			return &RunResult{
+				Status:       "error",
+				Model:        model,
+				ErrorMessage: "provider timeout",
+			}
+		},
+	})
+
+	id, err := manager.Spawn(context.Background(), "failing task", "", "", provider, cfg)
+	if err != nil {
+		t.Fatalf("Spawn() error = %v", err)
+	}
+	_ = manager.Wait([]string{id}, 0)
+
+	summary := manager.GetSummary()
+	if len(summary.Agents) != 1 {
+		t.Fatalf("len(summary.Agents) = %d, want 1", len(summary.Agents))
+	}
+	if summary.Agents[0].ErrorMessage != "provider timeout" {
+		t.Fatalf("summary.Agents[0].ErrorMessage = %q, want %q", summary.Agents[0].ErrorMessage, "provider timeout")
+	}
+}
