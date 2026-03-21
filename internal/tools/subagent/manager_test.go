@@ -52,7 +52,7 @@ func TestManagerSpawnWaitCompleted(t *testing.T) {
 	var gotProvider api.Provider
 	var gotCfg *config.Config
 	manager := NewManagerWithOptions(ManagerOptions{
-		RunHeadless: func(_ string, model string, provider api.Provider, cfg *config.Config) *RunResult {
+		RunHeadless: func(_ context.Context, _ string, model string, provider api.Provider, cfg *config.Config) *RunResult {
 			gotModel = model
 			gotProvider = provider
 			gotCfg = cfg
@@ -60,7 +60,7 @@ func TestManagerSpawnWaitCompleted(t *testing.T) {
 		},
 	})
 
-	id, err := manager.Spawn("read files", "", "", provider, cfg)
+	id, err := manager.Spawn(context.Background(), "read files", "", "", provider, cfg)
 	if err != nil {
 		t.Fatalf("Spawn() error = %v", err)
 	}
@@ -106,7 +106,7 @@ func TestManagerSpawnParallel(t *testing.T) {
 	var maxSeen int32
 
 	manager := NewManagerWithOptions(ManagerOptions{
-		RunHeadless: func(_ string, _ string, _ api.Provider, _ *config.Config) *RunResult {
+		RunHeadless: func(_ context.Context, _ string, _ string, _ api.Provider, _ *config.Config) *RunResult {
 			value := atomic.AddInt32(&current, 1)
 			for {
 				prev := atomic.LoadInt32(&maxSeen)
@@ -121,11 +121,11 @@ func TestManagerSpawnParallel(t *testing.T) {
 		},
 	})
 
-	idA, err := manager.Spawn("task A", "", "", provider, cfg)
+	idA, err := manager.Spawn(context.Background(), "task A", "", "", provider, cfg)
 	if err != nil {
 		t.Fatalf("Spawn(task A) error = %v", err)
 	}
-	idB, err := manager.Spawn("task B", "", "", provider, cfg)
+	idB, err := manager.Spawn(context.Background(), "task B", "", "", provider, cfg)
 	if err != nil {
 		t.Fatalf("Spawn(task B) error = %v", err)
 	}
@@ -155,13 +155,13 @@ func TestManagerWaitTimeout(t *testing.T) {
 	release := make(chan struct{})
 
 	manager := NewManagerWithOptions(ManagerOptions{
-		RunHeadless: func(_ string, _ string, _ api.Provider, _ *config.Config) *RunResult {
+		RunHeadless: func(_ context.Context, _ string, _ string, _ api.Provider, _ *config.Config) *RunResult {
 			<-release
 			return &RunResult{Status: "completed", Response: "late"}
 		},
 	})
 
-	id, err := manager.Spawn("slow task", "", "", provider, cfg)
+	id, err := manager.Spawn(context.Background(), "slow task", "", "", provider, cfg)
 	if err != nil {
 		t.Fatalf("Spawn() error = %v", err)
 	}
@@ -201,18 +201,18 @@ func TestManagerSpawnMaxConcurrent(t *testing.T) {
 	release := make(chan struct{})
 
 	manager := NewManagerWithOptions(ManagerOptions{
-		RunHeadless: func(_ string, _ string, _ api.Provider, _ *config.Config) *RunResult {
+		RunHeadless: func(_ context.Context, _ string, _ string, _ api.Provider, _ *config.Config) *RunResult {
 			<-release
 			return &RunResult{Status: "completed", Response: "ok"}
 		},
 	})
 
-	id, err := manager.Spawn("first", "", "", provider, cfg)
+	id, err := manager.Spawn(context.Background(), "first", "", "", provider, cfg)
 	if err != nil {
 		t.Fatalf("Spawn(first) error = %v", err)
 	}
 
-	_, err = manager.Spawn("second", "", "", provider, cfg)
+	_, err = manager.Spawn(context.Background(), "second", "", "", provider, cfg)
 	if err == nil {
 		t.Fatal("expected max concurrent error")
 	}
@@ -232,7 +232,7 @@ func TestManagerSpawnSwitchesProviderForModel(t *testing.T) {
 
 	var gotProvider api.Provider
 	manager := NewManagerWithOptions(ManagerOptions{
-		RunHeadless: func(_ string, _ string, provider api.Provider, _ *config.Config) *RunResult {
+		RunHeadless: func(_ context.Context, _ string, _ string, provider api.Provider, _ *config.Config) *RunResult {
 			gotProvider = provider
 			return &RunResult{Status: "completed", Response: "ok"}
 		},
@@ -244,7 +244,7 @@ func TestManagerSpawnSwitchesProviderForModel(t *testing.T) {
 		},
 	})
 
-	id, err := manager.Spawn("compare", "claude-sonnet-4-6", "", currentProvider, cfg)
+	id, err := manager.Spawn(context.Background(), "compare", "claude-sonnet-4-6", "", currentProvider, cfg)
 	if err != nil {
 		t.Fatalf("Spawn() error = %v", err)
 	}

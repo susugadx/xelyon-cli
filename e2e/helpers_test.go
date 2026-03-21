@@ -1,6 +1,7 @@
 package e2e
 
 import (
+	"context"
 	"os"
 	"testing"
 
@@ -38,7 +39,7 @@ func e2eProvider(t *testing.T) api.Provider {
 func runHeadless(t *testing.T, query string) *agent.HeadlessResult {
 	t.Helper()
 	provider := e2eProvider(t)
-	result := agent.RunHeadlessWithConfig(query, e2eModel, provider, e2eConfig())
+	result := agent.RunHeadlessWithConfig(context.Background(), query, e2eModel, provider, e2eConfig())
 	if result == nil {
 		t.Fatal("RunHeadlessWithConfig returned nil")
 	}

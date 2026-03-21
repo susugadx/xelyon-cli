@@ -1,6 +1,7 @@
 package subagent
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"sync"
@@ -24,7 +25,7 @@ type RunResult struct {
 }
 
 // Runner はサブエージェント実行関数です。
-type Runner func(message, model string, provider api.Provider, cfg *config.Config) *RunResult
+type Runner func(ctx context.Context, message, model string, provider api.Provider, cfg *config.Config) *RunResult
 
 // ProviderFactory はプロバイダー生成関数です。
 type ProviderFactory func(providerName string) (api.Provider, error)
@@ -74,7 +75,7 @@ func NewManager() *Manager {
 func NewManagerWithOptions(opts ManagerOptions) *Manager {
 	manager := &Manager{
 		agents: make(map[string]*managedSubAgent),
-		runHeadless: func(string, string, api.Provider, *config.Config) *RunResult {
+		runHeadless: func(context.Context, string, string, api.Provider, *config.Config) *RunResult {
 			return &RunResult{
 				Status:       "error",
 				ErrorMessage: "sub-agent runner is not configured",
@@ -92,7 +93,8 @@ func NewManagerWithOptions(opts ManagerOptions) *Manager {
 }
 
 // Spawn はサブエージェントを起動し、agent_id を返します。
-func (m *Manager) Spawn(message, model, reasoningEffort string, provider api.Provider, cfg *config.Config) (string, error) {
+// ctx がキャンセルされるとサブエージェントの実行も中断されます。
+func (m *Manager) Spawn(ctx context.Context, message, model, reasoningEffort string, provider api.Provider, cfg *config.Config) (string, error) {
 	if strings.TrimSpace(message) == "" {
 		return "", fmt.Errorf("message is required")
 	}
@@ -146,7 +148,7 @@ func (m *Manager) Spawn(message, model, reasoningEffort string, provider api.Pro
 			}
 		}()
 
-		result := m.runHeadless(message, resolvedModel, subProvider, subCfg)
+		result := m.runHeadless(ctx, message, resolvedModel, subProvider, subCfg)
 		if result == nil {
 			result = &RunResult{
 				Status:       "error",

@@ -68,7 +68,7 @@ func TestSpawnAgentToolRunEmptyMessage(t *testing.T) {
 // TestSpawnAgentToolRun は JSON 応答を返すことを確認します。
 func TestSpawnAgentToolRun(t *testing.T) {
 	manager := NewManagerWithOptions(ManagerOptions{
-		RunHeadless: func(_ string, _ string, _ api.Provider, _ *config.Config) *RunResult {
+		RunHeadless: func(_ context.Context, _ string, _ string, _ api.Provider, _ *config.Config) *RunResult {
 			return &RunResult{Status: "completed", Response: "done"}
 		},
 	})
@@ -117,11 +117,11 @@ func TestWaitAgentToolRunEmptyIDs(t *testing.T) {
 // TestWaitAgentToolRun は wait_agent の JSON 応答を確認します。
 func TestWaitAgentToolRun(t *testing.T) {
 	manager := NewManagerWithOptions(ManagerOptions{
-		RunHeadless: func(_ string, _ string, _ api.Provider, _ *config.Config) *RunResult {
+		RunHeadless: func(_ context.Context, _ string, _ string, _ api.Provider, _ *config.Config) *RunResult {
 			return &RunResult{Status: "completed", Response: "done"}
 		},
 	})
-	id, err := manager.Spawn("inspect files", "", "", &registerTestProvider{}, config.DefaultConfig())
+	id, err := manager.Spawn(context.Background(), "inspect files", "", "", &registerTestProvider{}, config.DefaultConfig())
 	if err != nil {
 		t.Fatalf("Spawn() error = %v", err)
 	}

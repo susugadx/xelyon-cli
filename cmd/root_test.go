@@ -91,7 +91,7 @@ func TestRootCommand_PositionalQueryDefaultsToOnce(t *testing.T) {
 	runInteractiveWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
 		interactiveCalled = true
 	}
-	runHeadless = func(query string, model string, provider api.Provider, cfg *config.Config) *agent.HeadlessResult {
+	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config) *agent.HeadlessResult {
 		interactiveCalled = true
 		return agent.NewSuccessResult(provider.Name(), model, "", nil, 0)
 	}
@@ -144,7 +144,7 @@ func TestRootCommand_OnceExecutesSingleTurn(t *testing.T) {
 	runInteractiveWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
 		interactiveCalled = true
 	}
-	runHeadless = func(query string, model string, provider api.Provider, cfg *config.Config) *agent.HeadlessResult {
+	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config) *agent.HeadlessResult {
 		interactiveCalled = true
 		return nil
 	}
@@ -384,7 +384,7 @@ func TestRootCommand_PositionalQueryUsesHeadlessInJSONMode(t *testing.T) {
 	headlessCalled := false
 	onceCalled := false
 	interactiveCalled := false
-	runHeadless = func(query string, model string, provider api.Provider, cfg *config.Config) *agent.HeadlessResult {
+	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config) *agent.HeadlessResult {
 		headlessCalled = true
 		if query != "hello" {
 			t.Fatalf("query = %q, want hello", query)
@@ -439,8 +439,8 @@ func TestRootCommand_HeadlessJSONStdoutIsPureJSON(t *testing.T) {
 		},
 	}
 
-	runHeadless = func(query string, model string, providerArg api.Provider, cfg *config.Config) *agent.HeadlessResult {
-		return agent.RunHeadlessWithConfig(query, model, provider, cfg)
+	runHeadless = func(ctx context.Context, query string, model string, providerArg api.Provider, cfg *config.Config) *agent.HeadlessResult {
+		return agent.RunHeadlessWithConfig(ctx, query, model, provider, cfg)
 	}
 
 	oldStdout := os.Stdout

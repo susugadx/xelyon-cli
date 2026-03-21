@@ -143,7 +143,7 @@ func TestFormatToolLine_SpawnAgent(t *testing.T) {
 		Result: `{"agent_id":"sub-001","status":"running"}`,
 	})
 
-	want := "🤖 spawn_agent: register.goとweb.goを読んで差分を報告しろ"
+	want := "🚀 spawn_agent: register.goとweb.goを読んで差分を報告しろ"
 	if line != want {
 		t.Fatalf("FormatToolLine() = %q, want %q", line, want)
 	}

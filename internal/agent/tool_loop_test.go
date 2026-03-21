@@ -201,7 +201,7 @@ func TestToolLoop_NonInteractiveKeepsLimit(t *testing.T) {
 		responses: responses,
 	}
 
-	result := RunHeadlessWithConfig("loop", "test-model", provider, cfg)
+	result := RunHeadlessWithConfig(context.Background(), "loop", "test-model", provider, cfg)
 
 	if result.Status != "success" {
 		t.Fatalf("result.Status = %q, want success", result.Status)

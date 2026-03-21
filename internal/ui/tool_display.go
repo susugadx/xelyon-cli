@@ -110,7 +110,7 @@ func toolIcon(toolName string) string {
 	case "web_search":
 		return "🌐"
 	case "spawn_agent":
-		return "🤖"
+		return "🚀"
 	case "wait_agent":
 		return "⏳"
 	case "lint":

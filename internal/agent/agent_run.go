@@ -17,7 +17,8 @@ import (
 )
 
 // RunHeadlessWithConfig は指定設定で Headless モードのクエリを実行する。
-func RunHeadlessWithConfig(query string, model string, provider api.Provider, cfg *config.Config) *HeadlessResult {
+// ctx が Done になるとサブエージェント含め処理を中断する。
+func RunHeadlessWithConfig(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config) *HeadlessResult {
 	startTime := time.Now()
 
 	// Agent初期化
@@ -63,15 +64,23 @@ func RunHeadlessWithConfig(query string, model string, provider api.Provider, cf
 
 	maxIterations := normalizeToolLoopLimit(agent.cfg().General.ToolLoopLimit)
 	var finalResponse string
-	execCtx := agent.toolExecutionContext(context.Background(), nil, nil, nil)
+	execCtx := agent.toolExecutionContext(ctx, nil, nil, nil)
 
 	for iteration := 0; maxIterations == 0 || iteration < maxIterations; iteration++ {
+		// 親 context がキャンセルされた場合は即終了
+		if ctx.Err() != nil {
+			duration := time.Since(startTime).Milliseconds()
+			return NewErrorResult(provider.Name(), model, "cancelled", ctx.Err().Error(), duration)
+		}
 		// API呼び出し
 		timeout := time.Duration(agent.cfg().APIRetry.Timeout) * time.Second
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		if timeout <= 0 {
+			timeout = 3600 * time.Second
+		}
+		reqCtx, cancel := context.WithTimeout(ctx, timeout)
 		agent.refreshProjectPromptIfDirty(query)
 
-		response, err := provider.ChatWithTools(agent.requestContext(ctx), agent.SystemPrompt, agent.History, model)
+		response, err := provider.ChatWithTools(agent.requestContext(reqCtx), agent.SystemPrompt, agent.History, model)
 		cancel()
 
 		if err != nil {

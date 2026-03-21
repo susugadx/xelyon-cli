@@ -116,8 +116,8 @@ func (r *AgentRuntime) effectiveAutoApprove() bool {
 
 func newSubAgentManager() *subagent.Manager {
 	return subagent.NewManagerWithOptions(subagent.ManagerOptions{
-		RunHeadless: func(message, model string, provider api.Provider, cfg *config.Config) *subagent.RunResult {
-			result := RunHeadlessWithConfig(message, model, provider, cfg)
+		RunHeadless: func(ctx context.Context, message, model string, provider api.Provider, cfg *config.Config) *subagent.RunResult {
+			result := RunHeadlessWithConfig(ctx, message, model, provider, cfg)
 			if result == nil {
 				return &subagent.RunResult{
 					Status:       "error",

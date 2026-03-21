@@ -291,7 +291,7 @@ func TestRunHeadlessWithConfig_SubAgentModeUsesSubPromptAndExcludesSubAgentTools
 	cfg.SubAgentPrompt = toolsubagent.SubAgentSystemPrompt
 	provider := &headlessToolSetProbeProvider{}
 
-	result := RunHeadlessWithConfig("probe", "gpt-5.4-nano", provider, cfg)
+	result := RunHeadlessWithConfig(context.Background(), "probe", "gpt-5.4-nano", provider, cfg)
 	if result.Status != "success" {
 		t.Fatalf("result.Status = %q, want success", result.Status)
 	}
@@ -318,7 +318,7 @@ func TestRunHeadlessWithConfig_NormalHeadlessKeepsSubAgentTools(t *testing.T) {
 	cfg := newProjectMapDisabledConfig()
 	provider := &headlessToolSetProbeProvider{}
 
-	result := RunHeadlessWithConfig("probe", "gpt-5.4", provider, cfg)
+	result := RunHeadlessWithConfig(context.Background(), "probe", "gpt-5.4", provider, cfg)
 	if result.Status != "success" {
 		t.Fatalf("result.Status = %q, want success", result.Status)
 	}
@@ -418,7 +418,7 @@ func TestRunHeadless_CallsCleanup(t *testing.T) {
 	defer func() { cleanupHook = nil }()
 
 	provider := &mockProvider{name: "test"}
-	_ = RunHeadlessWithConfig("hello", "test-model", provider, newProjectMapDisabledConfig())
+	_ = RunHeadlessWithConfig(context.Background(), "hello", "test-model", provider, newProjectMapDisabledConfig())
 
 	if called.Load() != 1 {
 		t.Errorf("Cleanup was called %d times, want 1", called.Load())
@@ -431,7 +431,7 @@ func TestRunHeadless_CallsCleanupOnError(t *testing.T) {
 	defer func() { cleanupHook = nil }()
 
 	provider := &mockErrorProvider{}
-	result := RunHeadlessWithConfig("hello", "test-model", provider, newProjectMapDisabledConfig())
+	result := RunHeadlessWithConfig(context.Background(), "hello", "test-model", provider, newProjectMapDisabledConfig())
 
 	if result.Status != "error" {
 		t.Errorf("Expected error status, got %s", result.Status)
@@ -448,7 +448,7 @@ func TestRunHeadless_RepeatedInvocations(t *testing.T) {
 
 	provider := &mockProvider{name: "test"}
 	for i := 0; i < 5; i++ {
-		_ = RunHeadlessWithConfig("hello", "test-model", provider, newProjectMapDisabledConfig())
+		_ = RunHeadlessWithConfig(context.Background(), "hello", "test-model", provider, newProjectMapDisabledConfig())
 	}
 
 	if called.Load() != 5 {
@@ -468,7 +468,7 @@ func TestRunHeadless_NoLeakOnRepeatedInvocations(t *testing.T) {
 	baseGoroutines := runtime.NumGoroutine()
 
 	for i := 0; i < iterations; i++ {
-		res := RunHeadlessWithConfig("test query", "mock-model", provider, newProjectMapDisabledConfig())
+		res := RunHeadlessWithConfig(context.Background(), "test query", "mock-model", provider, newProjectMapDisabledConfig())
 		if res.Status != "success" {
 			t.Fatalf("iteration %d: RunHeadless failed: %v", i, res.Error)
 		}

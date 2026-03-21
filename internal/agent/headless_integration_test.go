@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -34,7 +35,7 @@ func TestHeadless_SimpleResponse(t *testing.T) {
 		responses: []string{"Hello, this is a simple response without any tool calls."},
 	}
 
-	result := RunHeadlessWithConfig("Say hello", "test-model", provider, cfg)
+	result := RunHeadlessWithConfig(context.Background(), "Say hello", "test-model", provider, cfg)
 
 	if result.Status != "success" {
 		t.Fatalf("expected status 'success', got %q", result.Status)
@@ -79,7 +80,7 @@ func TestHeadless_SearchCodeTool(t *testing.T) {
 		},
 	}
 
-	result := RunHeadlessWithConfig("Find the main function", "test-model", provider, cfg)
+	result := RunHeadlessWithConfig(context.Background(), "Find the main function", "test-model", provider, cfg)
 
 	if result.Status != "success" {
 		t.Fatalf("expected status 'success', got %q", result.Status)
@@ -124,7 +125,7 @@ func TestHeadless_ReadFileTool(t *testing.T) {
 		},
 	}
 
-	result := RunHeadlessWithConfig("Read the hello file", "test-model", provider, cfg)
+	result := RunHeadlessWithConfig(context.Background(), "Read the hello file", "test-model", provider, cfg)
 
 	if result.Status != "success" {
 		t.Fatalf("expected status 'success', got %q", result.Status)
@@ -168,7 +169,7 @@ func TestHeadless_ListDirTool(t *testing.T) {
 		},
 	}
 
-	result := RunHeadlessWithConfig("List directory contents", "test-model", provider, cfg)
+	result := RunHeadlessWithConfig(context.Background(), "List directory contents", "test-model", provider, cfg)
 
 	if result.Status != "success" {
 		t.Fatalf("expected status 'success', got %q", result.Status)
@@ -211,7 +212,7 @@ func TestHeadless_MultipleToolCalls(t *testing.T) {
 		},
 	}
 
-	result := RunHeadlessWithConfig("List dir then read file", "test-model", provider, cfg)
+	result := RunHeadlessWithConfig(context.Background(), "List dir then read file", "test-model", provider, cfg)
 
 	if result.Status != "success" {
 		t.Fatalf("expected status 'success', got %q", result.Status)
@@ -244,7 +245,7 @@ func TestHeadless_APIError(t *testing.T) {
 	// mockErrorProvider は headless_test.go で定義済み（常にエラーを返す）
 	provider := &mockErrorProvider{}
 
-	result := RunHeadlessWithConfig("This should fail", "test-model", provider, cfg)
+	result := RunHeadlessWithConfig(context.Background(), "This should fail", "test-model", provider, cfg)
 
 	if result.Status != "error" {
 		t.Fatalf("expected status 'error', got %q", result.Status)
@@ -283,7 +284,7 @@ func TestHeadless_MaxIterationsReached(t *testing.T) {
 		responses: responses,
 	}
 
-	result := RunHeadlessWithConfig("Keep calling tools forever", "test-model", provider, cfg)
+	result := RunHeadlessWithConfig(context.Background(), "Keep calling tools forever", "test-model", provider, cfg)
 
 	if result.Status != "success" {
 		t.Fatalf("expected status 'success', got %q", result.Status)
@@ -320,7 +321,7 @@ func TestHeadless_ToolError(t *testing.T) {
 		},
 	}
 
-	result := RunHeadlessWithConfig("Read a non-existent file", "test-model", provider, cfg)
+	result := RunHeadlessWithConfig(context.Background(), "Read a non-existent file", "test-model", provider, cfg)
 
 	if result.Status != "success" {
 		t.Fatalf("expected status 'success', got %q", result.Status)
@@ -367,7 +368,7 @@ func TestHeadless_HistoryAccumulation(t *testing.T) {
 		},
 	}
 
-	result := RunHeadlessWithConfig("List then read all files", "test-model", provider, cfg)
+	result := RunHeadlessWithConfig(context.Background(), "List then read all files", "test-model", provider, cfg)
 
 	if result.Status != "success" {
 		t.Fatalf("expected status 'success', got %q", result.Status)

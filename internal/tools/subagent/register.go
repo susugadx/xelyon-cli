@@ -61,6 +61,7 @@ func (t *SpawnAgentTool) Run(execCtx tools.ExecutionContext, args map[string]str
 	}
 
 	id, err := t.manager.Spawn(
+		execCtx.EffectiveContext(),
 		message,
 		args["model"],
 		args["reasoning_effort"],

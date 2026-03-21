@@ -336,7 +336,7 @@ var Sections = map[string]SectionInfo{
 	},
 	"sub_agent": {
 		Title: "サブエージェント設定",
-		Icon:  "🤖",
+		Icon:  "🚀",
 		Comments: []string{
 			"探索・調査タスクを低コストモデルへ委譲する設定",
 			"spawn_agent / wait_agent の既定値と同時実行数を制御",
@@ -608,7 +608,7 @@ var Categories = map[string]CategoryInfo{
 	},
 	"sub_agent": {
 		DisplayName: "Sub-agent",
-		Icon:        "🤖",
+		Icon:        "🚀",
 		Sections:    []string{"sub_agent"},
 	},
 	"utility_model": {

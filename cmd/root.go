@@ -158,7 +158,7 @@ Examples:
 			if len(args) == 0 {
 				return fmt.Errorf("query argument is required in headless mode")
 			}
-			result := runHeadless(strings.Join(args, " "), model, provider, cfg)
+			result := runHeadless(cmd.Context(), strings.Join(args, " "), model, provider, cfg)
 			jsonBytes, _ := json.MarshalIndent(result, "", "  ")
 			fmt.Println(string(jsonBytes))
 			if result.Status == "error" {
