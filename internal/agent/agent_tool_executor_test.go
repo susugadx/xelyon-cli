@@ -767,3 +767,47 @@ func TestWaitAgentSpinnerMessage(t *testing.T) {
 		})
 	}
 }
+
+func TestParallelGroupSpinnerMessage_SpawnAndWait(t *testing.T) {
+	tests := []struct {
+		name  string
+		calls []*tools.ToolCall
+		want  string
+	}{
+		{
+			name: "spawn_agent x3",
+			calls: []*tools.ToolCall{
+				{Tool: "spawn_agent"},
+				{Tool: "spawn_agent"},
+				{Tool: "spawn_agent"},
+			},
+			want: "Spawning 3 sub-agents...",
+		},
+		{
+			name: "wait_agent with 5 ids",
+			calls: []*tools.ToolCall{
+				{Tool: "wait_agent", Args: map[string]string{"ids": `["a","b","c","d","e"]`}},
+			},
+			want: "Waiting for 5 agents...",
+		},
+		{
+			name: "wait_agent without ids",
+			calls: []*tools.ToolCall{
+				{Tool: "wait_agent", Args: map[string]string{}},
+			},
+			want: "Waiting for agents...",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			indices := make([]int, len(tt.calls))
+			for i := range indices {
+				indices[i] = i
+			}
+			got := parallelGroupSpinnerMessage(tt.calls, indices)
+			if got != tt.want {
+				t.Errorf("parallelGroupSpinnerMessage() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

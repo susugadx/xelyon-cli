@@ -1148,6 +1148,10 @@ func parallelGroupSpinnerMessage(allToolCalls []*tools.ToolCall, indices []int) 
 			counts["inspects"]++
 		case "web_search":
 			counts["web"]++
+		case "spawn_agent":
+			counts["spawn"]++
+		case "wait_agent":
+			counts["wait"]++
 		default:
 			counts["tools"]++
 		}
@@ -1160,6 +1164,10 @@ func parallelGroupSpinnerMessage(allToolCalls []*tools.ToolCall, indices []int) 
 		return "Searching code..."
 	case counts["inspects"] > 0 && len(counts) == 1:
 		return "Inspecting symbols..."
+	case counts["spawn"] > 0 && len(counts) == 1:
+		return fmt.Sprintf("Spawning %d sub-agents...", counts["spawn"])
+	case counts["wait"] > 0 && len(counts) == 1:
+		return waitAgentSpinnerMessage(allToolCalls[indices[0]].Args)
 	default:
 		return fmt.Sprintf("Running %d parallel tools...", len(indices))
 	}
