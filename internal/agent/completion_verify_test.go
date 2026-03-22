@@ -112,6 +112,21 @@ func TestGetTaskChangedFiles(t *testing.T) {
 			wantFiles: []string{"/src/a.go", "/src/b.go"},
 		},
 		{
+			name: "multi_file_details",
+			stack: []tools.FileChange{
+				{
+					Details: []tools.FileChangeDetail{
+						{FilePath: "/src/a.go"},
+						{FilePath: "/src/b.go"},
+						{FilePath: "/src/a.go"},
+					},
+				},
+			},
+			offset:    0,
+			wantCount: 2,
+			wantFiles: []string{"/src/a.go", "/src/b.go"},
+		},
+		{
 			name: "respects_task_offset",
 			stack: []tools.FileChange{
 				{FilePath: "/old/prev1.go"},

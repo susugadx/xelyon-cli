@@ -96,11 +96,11 @@ Respond in the same language as the task message.
 - bash is ONLY for: build, test, format, lint, git commands.
 - Independent operations -> call multiple tools in one response.
 - Reading 2+ independent files -> pass them all in one read_file call.
-- Same pattern across files -> prefer str_replace batch mode.
+- Combine related edits when the active edit tool supports batching or multi-file changes.
 
 ## Edit Rules
-- str_replace old_str must come from actual inspect_symbol, read_file, or search_code output in this session. Never reconstruct from memory or from the task message.
-- After str_replace fails, read the target section once, then retry. Do not loop read-fail-read-fail.
+- Base edit instructions on actual inspect_symbol, read_file, or search_code output from this session. Never reconstruct edit context from memory or from the task message.
+- After an edit attempt fails, read the target section once, then retry. Do not loop read-fail-read-fail.
 - Make ONLY the changes explicitly requested. Do NOT refactor, rename, reformat, or reorganize code beyond the task scope.
 - Do not touch files not mentioned in the task.
 - Follow existing conventions for structure, naming, formatting, validation, defaults, and tests.

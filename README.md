@@ -30,12 +30,12 @@ DeepSeek, OpenAI, Gemini, Claude, Ollama, Groq, OpenRouter, Bedrock をシーム
 **Gemini FCリトライ**: FC失敗時にテキストモードではなくFCモードでリトライ（キャッシュ汚染防止）。idle timeout / thinking timeout / 一般エラーそれぞれで上限付きリトライ。
 **FC rescue JSON修復**: テキストモードで抽出されたツールJSONに生制御文字（改行・タブ等）が含まれる場合、自動修復してパース成功させる。
 
-### 🛠️ 25種類の組み込みツール
-- **ファイル操作**: 読み書き、編集、削除、バックアップ復元。`read_file` は `symbol` 指定で Go の関数・型・メソッド単位の読み出しに対応
+### 🛠️ 組み込みツール
+- **ファイル操作**: 既定の編集ツールは Codex 互換の `apply_patch`。1回で複数ファイルの作成・更新・削除を扱えます。`XELYON_EDIT_TOOL=str_replace` を付けて起動すると、開発デバッグ用に旧 `str_replace` / `write_file` / `delete_file` へ戻せます
 - **コード検索**: grep検索、ファイル検索（結果は非テスト→テスト順・定義優先でソート、不正regexはエラー検出）
 - **シンボル調査**: `inspect_symbol` で既知シンボルの定義・caller・参照・テストを1回のツール呼び出しで取得（Go ファイル対応、`Config.Build` / `(*Config).Build` のようなレシーバ指定メソッドも可）
 - **サブエージェント委譲**: `spawn_agent` / `wait_agent` で探索タスクを別コンテキストの軽量モデルへ委譲し、親には最終レポートだけを返す
-- **AST基盤（実験的）**: `internal/ast` に Pure Go Tree-sitter（gotreesitter）ベースの共通解析基盤を追加。Phase 1 では Go ファイルのパース、シンボル抽出、行分類を検証段階で提供し、`read_file(symbol=...)` でシンボル範囲の読み出しに利用。`str_replace` では Go ファイル書き込み前に AST 構文検証を行い、問題があれば警告を返す
+- **AST基盤（実験的）**: `internal/ast` に Pure Go Tree-sitter（gotreesitter）ベースの共通解析基盤を追加。Phase 1 では Go ファイルのパース、シンボル抽出、行分類を検証段階で提供し、`read_file(symbol=...)` でシンボル範囲の読み出しに利用。legacy `str_replace` では Go ファイル書き込み前に AST 構文検証を行い、問題があれば警告を返す
 - **開発支援**: bash（git, テスト, フォーマット等すべて対応）
 - **LSP連携**: シンボル検索（定義・参照・実装）
 
@@ -43,7 +43,7 @@ DeepSeek, OpenAI, Gemini, Claude, Ollama, Groq, OpenRouter, Bedrock をシーム
 - 安全なツール（ファイル読み取り等）は自動実行
 - 危険なツール（ファイル編集、bash、Web検索等）は毎回確認
 - `--auto-approve`で信頼環境向け全ツール自動承認（SafetyLow含む）
-- **Read-Before-Write ガード**: `read_file` せずに `str_replace`(old_str) / `write_file` を実行しようとするとブロック（AI の盲目的な編集を防止）。`search_code` 後は結果の行範囲に対して `str_replace`(line-range) で直接編集可能
+- **既定編集フロー**: `search_code` / `inspect_symbol` / `read_file` で文脈を集めてから `apply_patch` を構築し、差分確認のうえで適用。legacy edit mode では従来どおり `str_replace` / `write_file` / `delete_file` を使用可能
 
 ### 📋 Plan Mode（オプショナル）
 `/plan on` で有効化するとPlan Mode経由で処理されます。
@@ -68,7 +68,7 @@ DeepSeek, OpenAI, Gemini, Claude, Ollama, Groq, OpenRouter, Bedrock をシーム
 LLMが1回の応答で複数のread-onlyツールを返した場合、並列実行してレイテンシを削減します。
 - **parallel-safe ツール**: `read_file`, `list_dir`, `search_code`, `web_search`, `git_status` 等
 - **bash**: `ls`, `find`, `rg`, `grep`, `cat`, `git status`, `git diff`, `git log` 等のread-onlyコマンド（allowlist ベース）のみ並列化
-- **sequential ツール**: `write_file`, `str_replace`, `delete_file`, MCP ツール等の副作用ありツールは従来通り順次実行
+- **sequential ツール**: `apply_patch`, `write_file`, `str_replace`, `delete_file`, MCP ツール等の副作用ありツールは従来通り順次実行
 - mixed case: parallel-safe 群を先に並列実行 → sequential 群を順次実行 → 結果は元の tool call 順で配送
 - 最大並列数: 4（セマフォ制御、固定値）
 - 通常モード・Plan Mode 両方で同じポリシーを適用（`executeToolCallsWithParallel` 共通 executor）
@@ -81,7 +81,7 @@ LLMが1回の応答で複数のread-onlyツールを返した場合、並列実�
 ### 🤖 サブエージェント委譲
 探索・調査タスクは `spawn_agent` / `wait_agent` で軽量サブエージェントへ委譲できます。
 - **コンテキスト分離**: 親に返るのはサブの最終レポートだけ。`read_file` 全文や `search_code` の中間結果は親コンテキストへ再注入されません
-- **リアルタイム可視化**: `wait_agent` 実行中はサブエージェントのツール実行を親UIへ逐次表示し、`str_replace` は色付き diff 付きで追跡できます
+- **リアルタイム可視化**: `wait_agent` 実行中はサブエージェントのツール実行を親UIへ逐次表示し、編集系ツールの適用結果も追跡できます
 - **既定モデル**: `sub_agent.default_model` が空ならメイン provider の最安モデルを自動選択します。明示設定するとそのモデルを優先します
 - **推論強度**: 既定は off（`sub_agent.default_effort` で low / medium / high を指定可能）
 - **同時実行数**: 既定 5（`sub_agent.max_concurrent`）

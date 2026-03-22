@@ -479,14 +479,18 @@ xelyon
 
 AIが自動で以下のツールを使用します。ユーザーが直接呼び出す必要はありません。
 
+デフォルトでは編集系ツールとして `apply_patch` のみを公開します。
+開発デバッグ用に `XELYON_EDIT_TOOL=str_replace xelyon` で起動すると、legacy `str_replace` / `write_file` / `delete_file` を再度公開できます。
+
 ### ファイル操作
 
 | ツール名 | 説明 | 主な引数 |
 |---------|------|---------|
+| `apply_patch` | Codex 互換の差分パッチでファイルを作成・更新・削除する既定編集ツール。1回で複数ファイルを扱える | `patch` |
 | `read_file` | ファイル内容を読み込む。Go ファイルは `symbol` で関数/型/メソッド単位の読み出しも可能 | `path`, `symbol`, `start_line`, `end_line`, `paths` |
-| `write_file` | ファイルを新規作成・上書き | `path`, `content` |
-| `str_replace` | 文字列置換でファイル編集（old_str優先。old_str空+start_line/end_line指定で行レンジ置換も可。Go ファイルは書き込み前に AST 構文チェックを実施） | `path`, `old_str`, `new_str`, `start_line`, `end_line` |
-| `delete_file` | ファイルを削除 | `path` |
+| `write_file` | legacy edit mode 用。ファイルを新規作成・上書き | `path`, `content` |
+| `str_replace` | legacy edit mode 用。文字列置換でファイル編集（old_str優先。old_str空+start_line/end_line指定で行レンジ置換も可。Go ファイルは書き込み前に AST 構文チェックを実施） | `path`, `old_str`, `new_str`, `start_line`, `end_line` |
+| `delete_file` | legacy edit mode 用。ファイルを削除 | `path` |
 | `list_dir` | ディレクトリ一覧取得 | `path` |
 
 **Note**: ファイル操作（mkdir, cp, mv, diff等）は `bash` ツールで実行可能です。
@@ -548,10 +552,10 @@ AIは自然言語の指示に基づいてツールを自動選択します。
 # → read_file が実行される
 
 > バグを修正して
-# → read_file → str_replace → write_file が実行される
+# → read_file / search_code → apply_patch が実行される
 
-> 10-20行目を指定の内容に置き換えて
-# → str_replace（old_str を空にして start_line/end_line を指定） が実行される
+> 複数ファイルをまとめて編集して
+# → apply_patch が1回で複数ファイルに適用される
 
 > git statusを見せて
 # → bash で git status が実行される
@@ -560,10 +564,17 @@ AIは自然言語の指示に基づいてツールを自動選択します。
 # → bash で go test が実行される
 
 > TODOを探して
-# → bash (grep -rn "TODO" .) が実行される
+# → search_code が実行される
 ```
 
-**str_replace の補足**
+**apply_patch の補足**
+- `*** Begin Patch` / `*** End Patch` の境界が必須です
+- `*** Add File:` / `*** Update File:` / `*** Delete File:` を1つ以上含めます
+- `@@` と前後3行のコンテキストで変更位置を特定します
+- 1つの patch で複数ファイルの追加・更新・削除をまとめて実行できます
+- パスは相対パスのみを使います
+
+**legacy str_replace の補足**
 - `old_str` が非空のときは従来どおり文字列置換を行い、`start_line`/`end_line` は無視されます
 - 行レンジ置換は `old_str: ""` かつ `start_line` と `end_line` を両方指定した場合のみ有効です（1-indexed, inclusive）
 - Go ファイルでは置換後の内容を AST パースし、構文エラーが見つかった場合は警告を表示して tool result にも付与します

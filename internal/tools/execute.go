@@ -23,6 +23,9 @@ func printToolArgs(w io.Writer, tc *ToolCall) {
 	case "write_file":
 		lines := strings.Split(tc.Args["content"], "\n")
 		_, _ = fmt.Fprintf(w, "   File: %s (%d lines)\n", tc.Args["path"], len(lines))
+	case "apply_patch":
+		lines := strings.Split(tc.Args["patch"], "\n")
+		_, _ = fmt.Fprintf(w, "   Patch: %d lines\n", len(lines))
 	case "str_replace":
 		_, _ = fmt.Fprintf(w, "   File: %s\n", tc.Args["path"])
 	case "bash":
@@ -177,6 +180,9 @@ func invalidateToolCache(execCtx ExecutionContext, tc *ToolCall) {
 
 	switch tc.Tool {
 	// ファイル内容を変更するツール → ファイルキャッシュ＆検索キャッシュ無効化
+	case "apply_patch":
+		cache.Clear()
+
 	case "write_file", "str_replace", "format", "lint":
 		if path := tc.Args["path"]; path != "" {
 			if absPath, err := filepath.Abs(path); err == nil {

@@ -68,6 +68,15 @@ func (a *Agent) getTaskChangedFiles() []string {
 	seen := make(map[string]bool, len(taskChanges))
 	var files []string
 	for _, change := range taskChanges {
+		if len(change.Details) > 0 {
+			for _, detail := range change.Details {
+				if detail.FilePath != "" && !seen[detail.FilePath] {
+					seen[detail.FilePath] = true
+					files = append(files, detail.FilePath)
+				}
+			}
+			continue
+		}
 		if change.FilePath != "" && !seen[change.FilePath] {
 			seen[change.FilePath] = true
 			files = append(files, change.FilePath)

@@ -1,0 +1,189 @@
+package applypatch
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/tools/common"
+)
+
+func init() {
+	tools.DefaultRegistry.Register(&ApplyPatchTool{})
+}
+
+// ApplyPatchTool は apply_patch ツールを登録する。
+type ApplyPatchTool struct{}
+
+func (t *ApplyPatchTool) Name() string { return "apply_patch" }
+
+func (t *ApplyPatchTool) Description() string { return applyPatchDescription }
+
+func (t *ApplyPatchTool) Parameters() map[string]interface{} {
+	return map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"patch": map[string]interface{}{
+				"type":        "string",
+				"description": "The patch text. Must start with '*** Begin Patch' and end with '*** End Patch'.",
+			},
+		},
+		"required":             []string{"patch"},
+		"additionalProperties": false,
+	}
+}
+
+func (t *ApplyPatchTool) Run(execCtx tools.ExecutionContext, args map[string]string) (string, *tools.FileChange, error) {
+	patchText := args["patch"]
+	if patchText == "" {
+		return "Error: patch is required", nil, nil
+	}
+
+	parsed, err := ParsePatch(patchText)
+	if err != nil {
+		return "", nil, err
+	}
+
+	showApplyPatchPreview(execCtx.Output(), parsed.Hunks)
+
+	decision := confirmApplyPatch(execCtx, parsed)
+
+	switch decision.Action {
+	case common.ConfirmYes:
+	case common.ConfirmComment:
+		return fmt.Sprintf(`[COMMENT] User provided feedback for apply_patch.
+
+Comment:
+%s
+
+Next actions:
+- Read the affected files or patch context again.
+- Revise the patch and ask for approval before applying it.
+
+IMPORTANT: Do NOT apply the patch until the user approves.`, strings.TrimSpace(decision.Comment)), nil, nil
+	default:
+		return "[CANCELLED] apply_patch was not approved", nil, nil
+	}
+
+	result, err := applyParsedPatch(parsed)
+	if err != nil {
+		return "", nil, err
+	}
+
+	return formatApplyResult(result), buildApplyPatchFileChange(result), nil
+}
+
+func confirmApplyPatch(execCtx tools.ExecutionContext, parsed *ParsedPatch) common.ConfirmDecision {
+	const message = "Apply this patch? / このパッチを適用しますか？"
+
+	options := execCtx.ConfirmOptions()
+	safety := getApplyPatchSafety(parsed)
+
+	if common.IsAutoApprovable("apply_patch", options.AutoApprove) {
+		execCtx.Output().Green.Printf("Auto-approved (%s): %s\n", common.GetSafetyDescription(safety), "apply_patch")
+		return common.ConfirmDecision{Action: common.ConfirmYes}
+	}
+
+	if cfg := options.Config; cfg != nil && cfg.ToolConfirm.AutoApproveMedium && safety == common.SafetyMedium {
+		execCtx.Output().Green.Printf("Auto-approved (%s): %s\n", common.GetSafetyDescription(safety), "apply_patch")
+		return common.ConfirmDecision{Action: common.ConfirmYes}
+	}
+
+	return common.ConfirmWithIO(execCtx.PromptIO(), message)
+}
+
+func getApplyPatchSafety(parsed *ParsedPatch) common.ToolSafety {
+	if parsed == nil {
+		return common.SafetyLow
+	}
+
+	for _, hunk := range parsed.Hunks {
+		if hunk.Type == "delete" {
+			return common.SafetyLow
+		}
+		if hunk.Type == "update" && hunk.MovePath != "" {
+			srcPath, srcErr := common.ValidatePath(hunk.Path)
+			dstPath, dstErr := common.ValidatePath(hunk.MovePath)
+			if srcErr != nil || dstErr != nil || srcPath != dstPath {
+				return common.SafetyLow
+			}
+		}
+	}
+
+	return common.SafetyMedium
+}
+
+func showApplyPatchPreview(out common.Output, hunks []Hunk) {
+	if out.SuppressStdout() {
+		return
+	}
+
+	out.Cyan.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	out.Cyan.Printf("🩹 apply_patch (%d file operation(s))\n", len(hunks))
+	out.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	for _, hunk := range hunks {
+		switch hunk.Type {
+		case "add":
+			out.Printf("  A %s\n", hunk.Path)
+		case "delete":
+			out.Printf("  D %s\n", hunk.Path)
+		case "update":
+			if hunk.MovePath != "" {
+				out.Printf("  M %s -> %s\n", hunk.Path, hunk.MovePath)
+			} else {
+				out.Printf("  M %s\n", hunk.Path)
+			}
+		}
+	}
+	out.Println()
+}
+
+func formatApplyResult(result *ApplyResult) string {
+	return fmt.Sprintf(
+		"Added: %s\nModified: %s\nDeleted: %s",
+		formatApplyPaths(result.Added),
+		formatApplyPaths(result.Modified),
+		formatApplyPaths(result.Deleted),
+	)
+}
+
+func formatApplyPaths(paths []string) string {
+	if len(paths) == 0 {
+		return "(none)"
+	}
+	return strings.Join(paths, ", ")
+}
+
+func buildApplyPatchFileChange(result *ApplyResult) *tools.FileChange {
+	if result == nil {
+		return nil
+	}
+
+	if len(result.details) == 0 {
+		return nil
+	}
+
+	change := &tools.FileChange{
+		Timestamp: common.GetCurrentTime(),
+		Tool:      "apply_patch",
+		Details:   make([]tools.FileChangeDetail, 0, len(result.details)),
+	}
+
+	for _, detail := range result.details {
+		change.Details = append(change.Details, tools.FileChangeDetail{
+			FilePath:     detail.Path,
+			Action:       detail.Action,
+			LinesAdded:   detail.LinesAdded,
+			LinesRemoved: detail.LinesRemoved,
+		})
+	}
+	change.FilePath = result.details[0].Path
+
+	if len(result.details) == 1 {
+		change.Description = "Patched file " + result.details[0].Path
+	} else {
+		change.Description = fmt.Sprintf("Patched %d files", len(result.details))
+	}
+
+	return change
+}

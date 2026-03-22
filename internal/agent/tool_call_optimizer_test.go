@@ -100,7 +100,7 @@ func TestIsSimpleSearchPattern(t *testing.T) {
 func TestSplitMultiPatternResult_TipAppendedToAllSections(t *testing.T) {
 	// lineRangeHint は multi-pattern 結果の末尾に 1 回だけ付く。
 	// splitMultiPatternResult は各 section に Tip を付与すべき。
-	tip := "\n\nTip: Use str_replace line-range mode (old_str empty + start_line/end_line) to edit matched lines directly."
+	tip := "\n\nTip: Use the active edit tool with the matched lines plus surrounding context to make exact edits."
 	result := `Found 5 matches across 2 patterns:
 
 ━━ Pattern 1/2: "foo" ━━
@@ -128,7 +128,7 @@ func TestSplitMultiPatternResult_TipAppendedToAllSections(t *testing.T) {
 
 func TestSplitMultiPatternResult_ErrorSectionNoTip(t *testing.T) {
 	// Error section should NOT get the Tip
-	tip := "\n\nTip: Use str_replace line-range mode."
+	tip := "\n\nTip: Use the active edit tool."
 	result := `Found 5 matches across 2 patterns:
 
 ━━ Pattern 1/2: "ok" ━━
@@ -153,7 +153,7 @@ func TestSplitMultiPatternResult_ErrorSectionNoTip(t *testing.T) {
 }
 
 func TestSplitMultiPatternResult_NoMatchesSectionNoTip(t *testing.T) {
-	tip := "\n\nTip: Use str_replace line-range mode."
+	tip := "\n\nTip: Use the active edit tool."
 	result := `Found 1 match(es) across 1/2 patterns
 
 ━━ Pattern 1/2: "hit" ━━

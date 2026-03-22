@@ -288,6 +288,95 @@ func TestAgentRuntime_RequestContextSeparatesProviderView(t *testing.T) {
 	}
 }
 
+func TestNewAgentWithRuntime_DefaultEditToolVisibility(t *testing.T) {
+	runtime := newIsolatedRuntime()
+	agent := newRuntimeTestAgent(t, runtime)
+
+	defs := agent.registry().GetToolDefinitions()
+	if !hasToolDefinition(defs, "apply_patch") {
+		t.Fatal("default mode should expose apply_patch")
+	}
+	for _, name := range []string{"str_replace", "write_file", "delete_file"} {
+		if hasToolDefinition(defs, name) {
+			t.Fatalf("default mode should exclude %s", name)
+		}
+	}
+}
+
+func TestNewAgentWithRuntime_LegacyEditToolVisibility(t *testing.T) {
+	t.Setenv("XELYON_EDIT_TOOL", "str_replace")
+
+	runtime := newIsolatedRuntime()
+	agent := newRuntimeTestAgent(t, runtime)
+
+	defs := agent.registry().GetToolDefinitions()
+	if hasToolDefinition(defs, "apply_patch") {
+		t.Fatal("legacy mode should exclude apply_patch")
+	}
+	for _, name := range []string{"str_replace", "write_file", "delete_file"} {
+		if !hasToolDefinition(defs, name) {
+			t.Fatalf("legacy mode should expose %s", name)
+		}
+	}
+}
+
+func TestChatOnce_DefaultEditToolVisibility(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	runtime := newIsolatedRuntime()
+	runtime.UI = ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
+	provider := &headlessToolSetProbeProvider{}
+	agent := NewAgentWithRuntime("gpt-5.4", provider, false, runtime)
+	t.Cleanup(agent.Cleanup)
+
+	if err := agent.ChatOnce("probe"); err != nil {
+		t.Fatalf("ChatOnce() error = %v", err)
+	}
+	if !hasToolName(provider.toolNames, "apply_patch") {
+		t.Fatal("interactive normal mode should expose apply_patch")
+	}
+	for _, name := range []string{"str_replace", "write_file", "delete_file", "ask_user_question"} {
+		if hasToolName(provider.toolNames, name) {
+			t.Fatalf("interactive normal mode should exclude %s", name)
+		}
+	}
+}
+
+func TestChatOnce_LegacyEditToolVisibility(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XELYON_EDIT_TOOL", "str_replace")
+
+	runtime := newIsolatedRuntime()
+	runtime.UI = ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
+	provider := &headlessToolSetProbeProvider{}
+	agent := NewAgentWithRuntime("gpt-5.4", provider, false, runtime)
+	t.Cleanup(agent.Cleanup)
+
+	if err := agent.ChatOnce("probe"); err != nil {
+		t.Fatalf("ChatOnce() error = %v", err)
+	}
+	if hasToolName(provider.toolNames, "apply_patch") {
+		t.Fatal("interactive legacy mode should exclude apply_patch")
+	}
+	if hasToolName(provider.toolNames, "ask_user_question") {
+		t.Fatal("interactive normal mode should exclude ask_user_question")
+	}
+	for _, name := range []string{"str_replace", "write_file", "delete_file"} {
+		if !hasToolName(provider.toolNames, name) {
+			t.Fatalf("interactive legacy mode should expose %s", name)
+		}
+	}
+}
+
+func hasToolDefinition(defs []tools.ToolDefinition, name string) bool {
+	for _, def := range defs {
+		if def.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
 func TestAgentRuntime_SeparatesClaudeCompactionCapability(t *testing.T) {
 	runtimeA := newIsolatedRuntime()
 	runtimeB := newIsolatedRuntime()

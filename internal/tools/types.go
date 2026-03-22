@@ -98,9 +98,18 @@ func looksLikeFilePath(s string) bool {
 	return false
 }
 
+// FileChangeDetail は1件のツール実行に含まれる個別ファイル変更を表す。
+type FileChangeDetail struct {
+	FilePath     string
+	Action       string
+	LinesAdded   int
+	LinesRemoved int
+}
+
 // FileChange はファイル変更履歴
 type FileChange struct {
 	FilePath     string
+	Details      []FileChangeDetail
 	Timestamp    time.Time
 	Tool         string
 	Description  string

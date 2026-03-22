@@ -25,6 +25,7 @@ func TestIsParallelSafe_StaticTools(t *testing.T) {
 		{"git_diff", true},
 		{"spawn_agent", true},
 		{"wait_agent", true},
+		{"apply_patch", false},
 		{"write_file", false},
 		{"str_replace", false},
 		{"delete_file", false},
@@ -114,19 +115,20 @@ func TestIsParallelSafe_BashFromRawArgs(t *testing.T) {
 
 func TestClassifyToolCalls(t *testing.T) {
 	toolCalls := []*ToolCall{
-		{Tool: "read_file", Args: map[string]string{"path": "a.go"}},                     // 0: parallel
-		{Tool: "write_file", Args: map[string]string{"path": "b.go"}},                    // 1: sequential
-		{Tool: "search_code", Args: map[string]string{"pattern": "foo"}},                 // 2: parallel
-		{Tool: "bash", Args: map[string]string{"command": "git status"}},                 // 3: parallel (read-only bash)
-		{Tool: "bash", Args: map[string]string{"command": "go build ./..."}},             // 4: sequential (non-read-only bash)
-		{Tool: "list_dir", Args: map[string]string{"path": "."}},                         // 5: parallel
-		{Tool: "str_replace", Args: map[string]string{"path": "c.go", "old_str": "foo"}}, // 6: sequential
+		{Tool: "read_file", Args: map[string]string{"path": "a.go"}},                              // 0: parallel
+		{Tool: "write_file", Args: map[string]string{"path": "b.go"}},                             // 1: sequential
+		{Tool: "search_code", Args: map[string]string{"pattern": "foo"}},                          // 2: parallel
+		{Tool: "bash", Args: map[string]string{"command": "git status"}},                          // 3: parallel (read-only bash)
+		{Tool: "bash", Args: map[string]string{"command": "go build ./..."}},                      // 4: sequential (non-read-only bash)
+		{Tool: "list_dir", Args: map[string]string{"path": "."}},                                  // 5: parallel
+		{Tool: "str_replace", Args: map[string]string{"path": "c.go", "old_str": "foo"}},          // 6: sequential
+		{Tool: "apply_patch", Args: map[string]string{"patch": "*** Begin Patch\n*** End Patch"}}, // 7: sequential
 	}
 
 	parallelIdx, seqIdx := ClassifyToolCalls(toolCalls)
 
 	expectedParallel := []int{0, 2, 3, 5}
-	expectedSeq := []int{1, 4, 6}
+	expectedSeq := []int{1, 4, 6, 7}
 
 	if len(parallelIdx) != len(expectedParallel) {
 		t.Fatalf("parallel count = %d, want %d", len(parallelIdx), len(expectedParallel))

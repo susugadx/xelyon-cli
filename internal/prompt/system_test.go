@@ -61,6 +61,9 @@ func TestSystemPrompt_ToolGuidanceMatchesCurrentSchema(t *testing.T) {
 	if !strings.Contains(SystemPrompt, "read_file returns full content for all requested files") {
 		t.Error("SystemPrompt should describe current read_file behavior")
 	}
+	if !strings.Contains(SystemPrompt, "### apply_patch (edit tool)") {
+		t.Error("default SystemPrompt should include the apply_patch guide")
+	}
 	forbidden := []string{
 		"search_code+read_file",
 		"read_file with symbol parameter",
@@ -155,8 +158,20 @@ func TestSystemPrompt_EfficientExecutionGuidance(t *testing.T) {
 	if !strings.Contains(SystemPrompt, "read neighboring files speculatively") {
 		t.Error("SystemPrompt should discourage speculative neighboring reads")
 	}
-	if !strings.Contains(SystemPrompt, "str_replace old_str must come from actual inspect_symbol, read_file, or search_code output") {
-		t.Error("SystemPrompt should require exact old_str provenance")
+	if !strings.Contains(SystemPrompt, "Use exact context from actual inspect_symbol, read_file, or search_code output") {
+		t.Error("SystemPrompt should require exact edit-context provenance")
+	}
+}
+
+func TestCurrentSystemPrompt_LegacyEditToolMode(t *testing.T) {
+	t.Setenv("XELYON_EDIT_TOOL", "str_replace")
+
+	prompt := CurrentSystemPrompt()
+	if !strings.Contains(prompt, "### Legacy edit tools") {
+		t.Error("legacy mode prompt should include legacy edit tool guidance")
+	}
+	if strings.Contains(prompt, "### apply_patch (edit tool)") {
+		t.Error("legacy mode prompt should not include apply_patch guide")
 	}
 }
 

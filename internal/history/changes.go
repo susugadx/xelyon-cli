@@ -62,27 +62,40 @@ func (cs *ChangeStorage) AppendChange(sessionID string, change tools.FileChange)
 	}
 	defer file.Close()
 
-	// PersistentChangeに変換
-	pc := PersistentChange{
-		SessionID:   sessionID,
-		Timestamp:   change.Timestamp,
-		Tool:        change.Tool,
-		FilePath:    change.FilePath,
-		Description: change.Description,
+	paths := make([]string, 0, len(change.Details))
+	if len(change.Details) > 0 {
+		for _, detail := range change.Details {
+			if detail.FilePath != "" {
+				paths = append(paths, detail.FilePath)
+			}
+		}
+	}
+	if len(paths) == 0 && change.FilePath != "" {
+		paths = append(paths, change.FilePath)
+	}
+	if len(paths) == 0 {
+		return nil
 	}
 
-	// JSON化
-	data, err := json.Marshal(pc)
-	if err != nil {
-		return fmt.Errorf("failed to marshal change: %w", err)
-	}
+	for _, path := range paths {
+		pc := PersistentChange{
+			SessionID:   sessionID,
+			Timestamp:   change.Timestamp,
+			Tool:        change.Tool,
+			FilePath:    path,
+			Description: change.Description,
+		}
 
-	// 書き込み
-	if _, err := file.Write(data); err != nil {
-		return fmt.Errorf("failed to write change: %w", err)
-	}
-	if _, err := file.WriteString("\n"); err != nil {
-		return fmt.Errorf("failed to write newline: %w", err)
+		data, err := json.Marshal(pc)
+		if err != nil {
+			return fmt.Errorf("failed to marshal change: %w", err)
+		}
+		if _, err := file.Write(data); err != nil {
+			return fmt.Errorf("failed to write change: %w", err)
+		}
+		if _, err := file.WriteString("\n"); err != nil {
+			return fmt.Errorf("failed to write newline: %w", err)
+		}
 	}
 
 	return nil

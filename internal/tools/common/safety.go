@@ -41,6 +41,7 @@ var ToolSafetyLevels = map[string]ToolSafety{
 	"git_reset_soft": SafetyMedium,
 
 	// SafetyLow: 破壊的操作（--auto-approve で自動承認可、通常は確認必須）
+	"apply_patch":    SafetyLow,
 	"delete_file":    SafetyLow,
 	"git_push":       SafetyLow,
 	"git_branch":     SafetyLow,

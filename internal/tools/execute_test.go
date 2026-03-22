@@ -31,6 +31,11 @@ func TestPreviewToolCall(t *testing.T) {
 			want: []string{"File: test.txt (2 lines)"},
 		},
 		{
+			name: "apply_patch",
+			tc:   &ToolCall{Tool: "apply_patch", Args: map[string]string{"patch": "*** Begin Patch\n*** Add File: test.txt\n+hello\n*** End Patch"}},
+			want: []string{"Patch: 4 lines"},
+		},
+		{
 			name: "bash",
 			tc:   &ToolCall{Tool: "bash", Args: map[string]string{"command": "ls -la"}},
 			want: []string{"Command: ls -la"},
@@ -118,7 +123,7 @@ func TestIsBashReadOnly(t *testing.T) {
 }
 
 func TestIsWriteToolConsistency(t *testing.T) {
-	writeTools := []string{"write_file", "str_replace", "delete_file"}
+	writeTools := []string{"apply_patch", "write_file", "str_replace", "delete_file"}
 	for _, tool := range writeTools {
 		if !IsWriteTool(tool) {
 			t.Errorf("IsWriteTool(%q) = false, want true", tool)

@@ -18,7 +18,7 @@ var providerPrefixes = map[string]string{
 		"### DeepSeek-specific\n" +
 		"- When function calling is enabled, use tool calls for file operations instead of plain-text descriptions\n" +
 		"- Fix errors completely; do not leave TODO-style excuses such as \"for brevity\" or \"due to time constraints\"\n" +
-		"- After str_replace, remove any unused imports introduced by the edit before moving on\n" +
+		"- After a file edit changes imports, remove any newly unused imports before moving on\n" +
 		"- After read_file, either edit or gather more context; do not echo file contents back to the user\n" +
 		"- You are already in the project root directory; do not prefix commands with `cd /path &&`\n",
 	"groq": "## Provider Notes\n" +
@@ -26,7 +26,7 @@ var providerPrefixes = map[string]string{
 		"- Tool calls must be raw JSON, not markdown code blocks or XML wrappers\n",
 	"openai": "## Provider Notes\n" +
 		"### OpenAI-specific\n" +
-		"- For str_replace with mixed Japanese, JSON, or backticks, split the change into smaller edits to avoid byte corruption\n",
+		"- For edits containing mixed Japanese, JSON, or backticks, split the change into smaller precise chunks to avoid byte corruption\n",
 	"claude": "## Provider Notes\n" +
 		"### Claude-specific\n" +
 		"- Always use dedicated tools (read_file, search_code, list_dir) instead of bash equivalents; tools provide caching, range tracking, and structured output\n" +

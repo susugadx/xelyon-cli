@@ -43,7 +43,7 @@ func TestBuildSystemPrompt_EmptyBase(t *testing.T) {
 }
 
 func TestBuildSystemPrompt_SystemPromptConstant(t *testing.T) {
-	// SystemPrompt 定数を base として使えること
+	// SystemPrompt を base として使えること
 	result := BuildSystemPrompt(SystemPrompt, false)
 	if result != SystemPrompt {
 		t.Error("BuildSystemPrompt(SystemPrompt, false) should return SystemPrompt unchanged")

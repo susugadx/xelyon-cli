@@ -32,9 +32,9 @@ const (
 
 const MatchTypeUsage MatchType = MatchTypeRef // 後方互換: 旧名称
 
-// lineRangeHint は search_code 結果末尾に付与する str_replace line-range モード推奨ヒント。
+// lineRangeHint は search_code 結果末尾に付与する編集ヒント。
 // UI には表示されず、LLM の tool result にのみ含まれる。
-const lineRangeHint = "\n\nTip: Use str_replace line-range mode (old_str empty + start_line/end_line) to edit matched lines directly."
+const lineRangeHint = "\n\nTip: Use the active edit tool with the matched lines plus surrounding context to make exact edits."
 
 // matchTypeTag はマッチ種別の表示タグ
 var matchTypeTag = [7]string{"[def]", "[import]", "[call]", "[assign]", "[ref]", "[comment]", "[string]"}

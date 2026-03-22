@@ -53,6 +53,7 @@ func RunHeadlessWithConfig(ctx context.Context, query string, model string, prov
 	if cfg != nil && cfg.SubAgentPrompt != "" {
 		excludedTools = append(excludedTools, "spawn_agent", "wait_agent")
 	}
+	excludedTools = appendDefaultEditToolExclusions(excludedTools)
 	agent.registry().SetExcludedTools(excludedTools)
 
 	// ツール呼び出し結果を記録

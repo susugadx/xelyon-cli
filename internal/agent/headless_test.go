@@ -451,6 +451,47 @@ func TestRunHeadlessWithConfig_NormalHeadlessKeepsSubAgentTools(t *testing.T) {
 	}
 }
 
+func TestRunHeadlessWithConfig_DefaultEditToolVisibility(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	cfg := newProjectMapDisabledConfig()
+	provider := &headlessToolSetProbeProvider{}
+
+	result := RunHeadlessWithConfig(context.Background(), "probe", "gpt-5.4", provider, cfg)
+	if result.Status != "success" {
+		t.Fatalf("result.Status = %q, want success", result.Status)
+	}
+	if !hasToolName(provider.toolNames, "apply_patch") {
+		t.Fatal("default headless mode should expose apply_patch")
+	}
+	for _, name := range []string{"str_replace", "write_file", "delete_file"} {
+		if hasToolName(provider.toolNames, name) {
+			t.Fatalf("default headless mode should exclude %s", name)
+		}
+	}
+}
+
+func TestRunHeadlessWithConfig_LegacyEditToolVisibility(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XELYON_EDIT_TOOL", "str_replace")
+
+	cfg := newProjectMapDisabledConfig()
+	provider := &headlessToolSetProbeProvider{}
+
+	result := RunHeadlessWithConfig(context.Background(), "probe", "gpt-5.4", provider, cfg)
+	if result.Status != "success" {
+		t.Fatalf("result.Status = %q, want success", result.Status)
+	}
+	if hasToolName(provider.toolNames, "apply_patch") {
+		t.Fatal("legacy headless mode should exclude apply_patch")
+	}
+	for _, name := range []string{"str_replace", "write_file", "delete_file"} {
+		if !hasToolName(provider.toolNames, name) {
+			t.Fatalf("legacy headless mode should expose %s", name)
+		}
+	}
+}
+
 func TestErrorInfo(t *testing.T) {
 	error := &ErrorInfo{
 		Type:    "tool_error",

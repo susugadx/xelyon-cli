@@ -840,7 +840,7 @@ OpenAI Codex モデル（`gpt-5.2-codex`, `gpt-5.1-codex` 等）は reasoning �
 ```yaml
 tool_confirm:
   auto_approve_safe: true    # SafetyHigh（read_file等）を確認なしで実行
-  auto_approve_medium: false # SafetyMedium（str_replace等）を確認なしで実行
+  auto_approve_medium: false # SafetyMedium（apply_patch等）を確認なしで実行
 ```
 
 #### `auto_approve_safe`
@@ -851,14 +851,14 @@ tool_confirm:
 #### `auto_approve_medium`
 - **型**: boolean
 - **デフォルト**: `false`
-- **説明**: SafetyMedium ツール（str_replace, write_file, web_search 等）を確認なしで実行
+- **説明**: SafetyMedium ツール（apply_patch, str_replace, write_file, web_search 等）を確認なしで実行
 
 **安全性レベル一覧:**
 
 | レベル | ツール例 | 説明 |
 |--------|---------|------|
 | SafetyHigh | read_file, list_dir, search_* | 読み取り専用 |
-| SafetyMedium | str_replace, write_file | 書き込み（リカバリ可能） |
+| SafetyMedium | apply_patch, str_replace, write_file | 書き込み（リカバリ可能） |
 | SafetyLow | delete_file, bash, git_push | 破壊的操作（常に確認必須） |
 
 ### プロンプトキャッシュ設定 (`prompt_cache`)

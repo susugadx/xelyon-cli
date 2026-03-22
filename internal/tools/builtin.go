@@ -50,6 +50,7 @@ func (t *FileModifyingTool) Run(_ ExecutionContext, args map[string]string) (str
 
 // RegisterBuiltinTools はすべての組み込みツールを登録
 // NOTE: All tools are now registered by subpackages:
+//   - tools/applypatch: apply_patch
 //   - tools/file: read_file, write_file, str_replace, delete_file, list_dir
 //   - tools/search: web_search, search_code
 //   - tools/dev: bash

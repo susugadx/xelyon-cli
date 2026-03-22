@@ -107,12 +107,12 @@ func (a *Agent) chatCore(input string, image *api.ImageData, oneShot bool) error
 
 	var err error
 	if a.PlanModeEnabled {
-		// Plan Mode: planning 系ツールを有効化
-		a.registry().ClearExcludedTools()
+		// Plan Mode: planning 系ツールを有効化しつつ、編集ツールの排他制御は維持
+		a.registry().SetExcludedTools(planModeExcludedTools())
 		err = a.RunPlanMode(ctx, input)
 	} else {
-		// Normal Mode: planning 系ツールを除外（FC 定義から非表示）
-		a.registry().SetExcludedTools(prompt.PlanningToolNames)
+		// Normal Mode: planning 系ツールを除外しつつ、編集ツールの排他制御を維持
+		a.registry().SetExcludedTools(normalModeExcludedTools())
 		err = a.runNormalMode(ctx, input, image)
 	}
 
@@ -614,6 +614,16 @@ func (a *Agent) showTaskSummary() {
 
 	ts := ui.NewTaskSummary()
 	for _, change := range taskChanges {
+		if len(change.Details) > 0 {
+			for _, detail := range change.Details {
+				action := detail.Action
+				if action == "" {
+					action = ui.InferAction(change.Tool)
+				}
+				ts.AddChange(detail.FilePath, action, detail.LinesAdded, detail.LinesRemoved)
+			}
+			continue
+		}
 		action := ui.InferAction(change.Tool)
 		ts.AddChange(change.FilePath, action, change.LinesAdded, change.LinesRemoved)
 	}

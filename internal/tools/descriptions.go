@@ -5,14 +5,14 @@ package tools
 var ToolDescriptions = map[string]string{
 	// File Operations
 	"read_file":   "Read files (1-10). Returns full content. Do not re-read files already returned.",
-	"write_file":  "Create or overwrite a file. Uses 0644 for new files and preserves permissions on overwrite. Use str_replace for partial edits to existing files.",
+	"write_file":  "Create or overwrite a file. Uses 0644 for new files and preserves permissions on overwrite. Prefer the primary edit tool for partial edits to existing files.",
 	"str_replace": "Edit existing file. PREFERRED: Line-range mode (old_str empty + start_line/end_line) after search_code — no read_file needed. FALLBACK: old_str mode requires read_file first. Batch mode: pass edits=[{old_str,new_str},...] for multiple replacements in one call.",
 	"delete_file": "Delete a file permanently.",
 	"list_dir":    "Preferred for directory exploration and choosing the next file/subtree. Returns a compact summary with representative names, counts, and types. Ignores .git, node_modules, vendor by default. Use depth parameter (1-3) for recursive listing.",
 
 	// Search & Discovery
-	"inspect_symbol": "Look up a Go symbol by name. Returns definition body, callers, references, and related tests in one call. Supports receiver-qualified queries such as Config.Build or (*Config).Build. Returns line-numbered source for direct str_replace line-range edits. Go files only.",
-	"search_code":    "Search project code with smart caching and result classification ([def]/[ref]/[call]). Supports multiple comma-separated patterns for parallel search; prefer one multi-pattern search over serial searches when the patterns are independent. Also supports file filtering (e.g. go, *_test.go) and fixed-string mode. Results are grouped by file with context lines and block annotations. Returns line-numbered matches for direct str_replace line-range edits.",
+	"inspect_symbol": "Look up a Go symbol by name. Returns definition body, callers, references, and related tests in one call. Supports receiver-qualified queries such as Config.Build or (*Config).Build. Returns line-numbered source and surrounding context to support exact edits. Go files only.",
+	"search_code":    "Search project code with smart caching and result classification ([def]/[ref]/[call]). Supports multiple comma-separated patterns for parallel search; prefer one multi-pattern search over serial searches when the patterns are independent. Also supports file filtering (e.g. go, *_test.go) and fixed-string mode. Results are grouped by file with context lines and block annotations to support exact edits.",
 	"web_search":     "Search the web and return summarized findings plus source URLs, not full page contents. Uses provider-native search. Configure web_search.provider to choose openai, gemini, or claude when the main provider lacks native search support. For deeper coverage, run multiple targeted searches with narrower queries.",
 
 	// Development Tools
