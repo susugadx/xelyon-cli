@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 
@@ -201,6 +202,23 @@ func TestProvider_ListModels_APIError(t *testing.T) {
 	_, err := p.ListModels()
 	if err == nil {
 		t.Error("ListModels() should return error for 500 status")
+	}
+}
+
+func TestProvider_ListModels_Timeout(t *testing.T) {
+	// Slow server that exceeds the 10s timeout in ListModels
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Block until the request is cancelled by timeout
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+
+	p := New(server.URL)
+	// Override with a very short timeout client to speed up the test
+	p.httpClient = &http.Client{Timeout: 50 * time.Millisecond}
+	_, err := p.ListModels()
+	if err == nil {
+		t.Error("ListModels() should return error on timeout")
 	}
 }
 

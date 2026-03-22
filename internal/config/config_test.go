@@ -503,6 +503,60 @@ func TestApplyEnvironmentOverrides(t *testing.T) {
 	}
 }
 
+func TestApplyEnvironmentOverrides_InvalidValues_Warn(t *testing.T) {
+	tests := []struct {
+		name   string
+		envKey string
+		envVal string
+	}{
+		{"non-numeric loop threshold", "XELYON_LOOP_THRESHOLD", "abc"},
+		{"negative loop threshold", "XELYON_LOOP_THRESHOLD", "-1"},
+		{"zero loop threshold", "XELYON_LOOP_THRESHOLD", "0"},
+		{"non-numeric retry count", "XELYON_API_RETRY_COUNT", "xyz"},
+		{"negative retry count", "XELYON_API_RETRY_COUNT", "-5"},
+		{"non-numeric retry delay", "XELYON_API_RETRY_INITIAL_DELAY", "fast"},
+		{"non-numeric diff lines", "XELYON_DIFF_CONTEXT_LINES", "many"},
+		{"negative diff lines", "XELYON_DIFF_CONTEXT_LINES", "-1"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv(tt.envKey, tt.envVal)
+
+			// Capture stderr
+			oldStderr := os.Stderr
+			r, w, _ := os.Pipe()
+			os.Stderr = w
+
+			cfg := DefaultConfig()
+			cfg.ApplyEnvironmentOverrides()
+
+			w.Close()
+			os.Stderr = oldStderr
+
+			var buf [1024]byte
+			n, _ := r.Read(buf[:])
+			r.Close()
+			output := string(buf[:n])
+
+			if !strings.Contains(output, "Warning") || !strings.Contains(output, tt.envKey) {
+				t.Errorf("Expected warning for %s=%q on stderr, got: %q", tt.envKey, tt.envVal, output)
+			}
+		})
+	}
+}
+
+func TestApplyEnvironmentOverrides_ZeroRetryCount_Accepted(t *testing.T) {
+	t.Setenv("XELYON_API_RETRY_COUNT", "0")
+
+	cfg := DefaultConfig()
+	cfg.ApplyEnvironmentOverrides()
+
+	if cfg.APIRetry.Count != 0 {
+		t.Errorf("APIRetry.Count should accept 0 via env var, got %d", cfg.APIRetry.Count)
+	}
+}
+
 func TestApplyFlagOverrides(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -552,6 +606,19 @@ func TestApplyFlagOverrides(t *testing.T) {
 			checkFn: func(t *testing.T, cfg *Config) {
 				if cfg.Diff.ContextLines != 0 {
 					t.Errorf("Diff.ContextLines should accept 0, got %d", cfg.Diff.ContextLines)
+				}
+			},
+		},
+		{
+			name:          "apiRetry = 0 disables retries",
+			apiRetry:      func() *int { v := 0; return &v }(),
+			apiRetryDelay: func() *int { v := 0; return &v }(),
+			checkFn: func(t *testing.T, cfg *Config) {
+				if cfg.APIRetry.Count != 0 {
+					t.Errorf("APIRetry.Count should accept 0, got %d", cfg.APIRetry.Count)
+				}
+				if cfg.APIRetry.InitialDelay != 0 {
+					t.Errorf("APIRetry.InitialDelay should accept 0, got %d", cfg.APIRetry.InitialDelay)
 				}
 			},
 		},

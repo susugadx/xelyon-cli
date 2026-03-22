@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/api"
@@ -320,8 +321,15 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 
 // ListModels はインストール済みモデルを取得
 func (p *Provider) ListModels() ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	url := p.baseURL + "/api/tags"
-	resp, err := p.httpClient.Get(url)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	resp, err := p.httpClient.Do(req)
 	if err != nil {
 		if strings.Contains(err.Error(), "connection refused") {
 			return nil, fmt.Errorf("ollama is not running. Please start it with `ollama serve`")

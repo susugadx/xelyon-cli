@@ -110,6 +110,17 @@ func adjustSplitForFCPairs(history []api.Message, splitIdx int) int {
 	}
 
 	if splitIdx <= 0 {
+		// history[0] が FC ペアの場合、ペアごと toCompress に含める
+		if len(history) > 0 && len(history[0].ToolCalls) > 0 {
+			i := 1
+			for i < len(history) && history[i].Role == "tool" {
+				i++
+			}
+			if i >= len(history) {
+				return 0 // 全体が1つの FC ペア → 分割不可
+			}
+			return i
+		}
 		return 1
 	}
 	return splitIdx

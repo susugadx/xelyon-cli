@@ -298,11 +298,11 @@ func testFilterToolJSON(chunks []string) string {
 	inToolJSON := false
 	jsonDepth := 0
 	inString := false
-	var prevChar rune
+	escaped := false
 
 	var output strings.Builder
 	for _, chunk := range chunks {
-		result := filterToolJSON(chunk, &inToolJSON, &jsonDepth, &inString, &prevChar)
+		result := filterToolJSON(chunk, &inToolJSON, &jsonDepth, &inString, &escaped)
 		output.WriteString(result)
 	}
 
@@ -443,6 +443,65 @@ func TestFilterToolJSON_NestedJSON(t *testing.T) {
 			name:     "braces in string across chunks",
 			chunks:   []string{`{"tool": "bash", "args": {"command": "echo `, `}"}}`},
 			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := testFilterToolJSON(tt.chunks)
+			if result != tt.expected {
+				t.Errorf("filterToolJSON(%v) = %q, want %q", tt.chunks, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestFilterToolJSON_EscapedBackslash(t *testing.T) {
+	tests := []struct {
+		name     string
+		chunks   []string
+		expected string
+	}{
+		{
+			name: "escaped backslash before closing quote",
+			// JSON: {"tool": "write", "args": {"path": "C:\\"}}
+			// The \\ is an escaped backslash, so the " after it closes the string.
+			chunks:   []string{`{"tool": "write", "args": {"path": "C:\\"}}`},
+			expected: "",
+		},
+		{
+			name: "escaped backslash in path",
+			// JSON with Windows-style path: C:\\Users\\foo
+			chunks:   []string{`{"tool": "write", "args": {"path": "C:\\Users\\foo"}}`},
+			expected: "",
+		},
+		{
+			name: "escaped backslash followed by brace in string",
+			// The \\ is an escaped backslash, then } is a literal char in the string
+			chunks:   []string{`{"tool": "bash", "args": {"cmd": "echo \\}"}}`},
+			expected: "",
+		},
+		{
+			name: "multiple escaped backslashes",
+			// Four backslashes = two literal backslashes in JSON
+			chunks:   []string{`{"tool": "write", "args": {"path": "C:\\\\server\\\\share"}}`},
+			expected: "",
+		},
+		{
+			name: "escaped backslash then escaped quote",
+			// \\\\" = escaped backslash + escaped quote
+			chunks:   []string{`{"tool": "bash", "args": {"cmd": "echo \\\"done\\\""}}`},
+			expected: "",
+		},
+		{
+			name:     "escaped backslash across chunks",
+			chunks:   []string{`{"tool": "write", "args": {"path": "C:\`, `\"}}`},
+			expected: "",
+		},
+		{
+			name:     "text after tool JSON with escaped backslash",
+			chunks:   []string{`Hello {"tool": "write", "args": {"path": "C:\\"}} World`},
+			expected: "Hello  World",
 		},
 	}
 

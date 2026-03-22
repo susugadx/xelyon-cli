@@ -57,7 +57,7 @@ func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *u
 	inToolJSON := false            // ツールJSON内にいるか
 	jsonDepth := 0                 // JSONのネスト深度
 	inString := false              // JSON文字列リテラル内にいるか
-	var prevChar rune              // 前の文字（エスケープ検出用）
+	escaped := false               // JSON文字列内のエスケープ状態
 	var pendingChunk string        // チャンク分割対応: パターンプレフィックスが末尾にある場合に保留
 	var contentNewlineEmitted bool // 表示済みテキストの後に改行を出力済みか（スピナー上書き防止用）
 
@@ -196,7 +196,7 @@ func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *u
 				}
 
 				// ツールJSON検出・非表示処理
-				displayContent := filterToolJSON(content, &inToolJSON, &jsonDepth, &inString, &prevChar)
+				displayContent := filterToolJSON(content, &inToolJSON, &jsonDepth, &inString, &escaped)
 
 				// ツールJSON開始時にスピナーを表示
 				if inToolJSON && spinner != nil && !spinner.IsActive() {
@@ -250,8 +250,8 @@ func matchesPatternPrefix(content string) int {
 // - inToolJSON が true の間は全て非表示
 // - strings.Index でパターンを検出（チャンク単位でシンプルに判定）
 // - inString: JSON文字列リテラル内かどうかを追跡（文字列内の{}を無視するため）
-// - prevChar: エスケープシーケンス検出用（\"を無視するため）
-func filterToolJSON(content string, inToolJSON *bool, jsonDepth *int, inString *bool, prevChar *rune) string {
+// - escaped: JSON文字列内のエスケープシーケンス追跡用（\\ や \" を正しく処理する）
+func filterToolJSON(content string, inToolJSON *bool, jsonDepth *int, inString *bool, escaped *bool) string {
 	var result strings.Builder
 	remaining := content
 
@@ -260,23 +260,32 @@ func filterToolJSON(content string, inToolJSON *bool, jsonDepth *int, inString *
 			// ツールJSON内: 終了位置を探しながら非表示
 			endIdx := -1
 			for i, ch := range remaining {
-				if ch == '"' && *prevChar != '\\' {
-					*inString = !*inString
-				} else if !*inString {
-					if ch == '{' {
+				if *inString {
+					if *escaped {
+						// escape sequence consumed
+						*escaped = false
+					} else if ch == '\\' {
+						*escaped = true
+					} else if ch == '"' {
+						*inString = false
+					}
+				} else {
+					if ch == '"' {
+						*inString = true
+						*escaped = false
+					} else if ch == '{' {
 						*jsonDepth++
 					} else if ch == '}' {
 						*jsonDepth--
 						if *jsonDepth == 0 {
 							*inToolJSON = false
 							*inString = false
+							*escaped = false
 							endIdx = i + 1 // '}' の次の位置
-							*prevChar = ch
 							break
 						}
 					}
 				}
-				*prevChar = ch
 			}
 
 			if endIdx == -1 {
@@ -315,7 +324,7 @@ func filterToolJSON(content string, inToolJSON *bool, jsonDepth *int, inString *
 		*inToolJSON = true
 		*jsonDepth = 1 // パターンに含まれる最初の '{' をカウントした状態から開始
 		*inString = false
-		*prevChar = 0
+		*escaped = false
 	}
 
 	return result.String()

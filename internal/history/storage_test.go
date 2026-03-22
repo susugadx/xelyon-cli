@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func TestNewStorage(t *testing.T) {
@@ -482,6 +483,52 @@ func TestStorage_SaveMetadata(t *testing.T) {
 
 	if !strings.HasSuffix(meta.Preview, "...") {
 		t.Error("Expected preview to end with '...'")
+	}
+}
+
+func TestStorage_SaveMetadata_MultibyteTruncation(t *testing.T) {
+	tmpDir := t.TempDir()
+	os.Setenv("HOME", tmpDir)
+	defer os.Unsetenv("HOME")
+
+	storage, err := NewStorage()
+	if err != nil {
+		t.Fatalf("NewStorage failed: %v", err)
+	}
+
+	// 90 runes of Japanese text (each rune = 3 bytes, total = 270 bytes)
+	// Byte-level truncation at 80 would split a multi-byte character.
+	longJapanese := strings.Repeat("あ", 90) // 90 runes, 270 bytes
+	session := NewSession("test-model")
+	session.AddMessage("user", longJapanese, "test-model")
+
+	if err := storage.Save(session); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	metaPath := storage.metadataPath(session.ID)
+	data, err := os.ReadFile(metaPath)
+	if err != nil {
+		t.Fatalf("Failed to read metadata: %v", err)
+	}
+
+	var meta SessionMetadata
+	if err := json.Unmarshal(data, &meta); err != nil {
+		t.Fatalf("Failed to unmarshal metadata (possibly invalid UTF-8): %v", err)
+	}
+
+	if !utf8.ValidString(meta.Preview) {
+		t.Error("Preview contains invalid UTF-8 after truncation")
+	}
+
+	if !strings.HasSuffix(meta.Preview, "...") {
+		t.Error("Expected preview to end with '...'")
+	}
+
+	// Should be 80 runes + "..." (3 runes) = 83 runes total
+	runeCount := utf8.RuneCountInString(meta.Preview)
+	if runeCount != 83 {
+		t.Errorf("Expected 83 runes (80 + '...'), got %d", runeCount)
 	}
 }
 

@@ -497,31 +497,35 @@ func (c *Config) ApplyEnvironmentOverrides() {
 	if val := os.Getenv("XELYON_BRACKETED_PASTE"); val == "0" || val == "false" {
 		c.Paste.BracketedPaste = false
 	}
-	if val := os.Getenv("XELYON_LOOP_THRESHOLD"); val != "" {
-		if n, err := strconv.Atoi(val); err == nil && n > 0 {
-			c.LoopDetection.Threshold = n
-		}
+	applyEnvInt("XELYON_LOOP_THRESHOLD", func(n int) bool { return n > 0 },
+		func(n int) { c.LoopDetection.Threshold = n }, "positive integer")
+	applyEnvInt("XELYON_API_RETRY_COUNT", func(n int) bool { return n >= 0 },
+		func(n int) { c.APIRetry.Count = n }, "non-negative integer")
+	applyEnvInt("XELYON_API_RETRY_INITIAL_DELAY", func(n int) bool { return n >= 0 },
+		func(n int) { c.APIRetry.InitialDelay = n }, "non-negative integer")
+	applyEnvInt("XELYON_API_RETRY_MAX_DELAY", func(n int) bool { return n >= 0 },
+		func(n int) { c.APIRetry.MaxDelay = n }, "non-negative integer")
+	applyEnvInt("XELYON_DIFF_CONTEXT_LINES", func(n int) bool { return n >= 0 },
+		func(n int) { c.Diff.ContextLines = n }, "non-negative integer")
+}
+
+// applyEnvInt は環境変数を整数として読み込み、バリデーション後に適用する。
+// 不正な値の場合は stderr に警告を出力する。
+func applyEnvInt(envKey string, valid func(int) bool, apply func(int), expect string) {
+	val := os.Getenv(envKey)
+	if val == "" {
+		return
 	}
-	if val := os.Getenv("XELYON_API_RETRY_COUNT"); val != "" {
-		if n, err := strconv.Atoi(val); err == nil && n > 0 {
-			c.APIRetry.Count = n
-		}
+	n, err := strconv.Atoi(val)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: invalid %s=%q (expected %s)\n", envKey, val, expect)
+		return
 	}
-	if val := os.Getenv("XELYON_API_RETRY_INITIAL_DELAY"); val != "" {
-		if n, err := strconv.Atoi(val); err == nil && n > 0 {
-			c.APIRetry.InitialDelay = n
-		}
+	if !valid(n) {
+		fmt.Fprintf(os.Stderr, "Warning: invalid %s=%q (expected %s)\n", envKey, val, expect)
+		return
 	}
-	if val := os.Getenv("XELYON_API_RETRY_MAX_DELAY"); val != "" {
-		if n, err := strconv.Atoi(val); err == nil && n > 0 {
-			c.APIRetry.MaxDelay = n
-		}
-	}
-	if val := os.Getenv("XELYON_DIFF_CONTEXT_LINES"); val != "" {
-		if n, err := strconv.Atoi(val); err == nil && n >= 0 {
-			c.Diff.ContextLines = n
-		}
-	}
+	apply(n)
 }
 
 // ApplyFlagOverrides はCLIフラグで設定を上書き
@@ -529,10 +533,10 @@ func (c *Config) ApplyFlagOverrides(loopThreshold, apiRetry, apiRetryDelay, diff
 	if loopThreshold != nil && *loopThreshold > 0 {
 		c.LoopDetection.Threshold = *loopThreshold
 	}
-	if apiRetry != nil && *apiRetry > 0 {
+	if apiRetry != nil && *apiRetry >= 0 {
 		c.APIRetry.Count = *apiRetry
 	}
-	if apiRetryDelay != nil && *apiRetryDelay > 0 {
+	if apiRetryDelay != nil && *apiRetryDelay >= 0 {
 		c.APIRetry.InitialDelay = *apiRetryDelay
 	}
 	if diffLines != nil && *diffLines >= 0 {

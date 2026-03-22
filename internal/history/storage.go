@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/susugadx/xelyon-cli/internal/crypto"
 )
@@ -255,8 +256,8 @@ func (st *Storage) saveMetadata(session *Session) error {
 	for _, msg := range session.Messages {
 		if msg.Role == "user" {
 			preview = msg.Content
-			if len(preview) > 80 {
-				preview = preview[:80] + "..."
+			if utf8.RuneCountInString(preview) > 80 {
+				preview = truncateRunes(preview, 80) + "..."
 			}
 			break
 		}

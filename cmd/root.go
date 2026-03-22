@@ -85,9 +85,11 @@ Examples:
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// バージョンチェック（--no-update-check または --headless でない場合）
 		if !noUpdateCheck && !headless && outputFormat != "json" {
-			configDir := filepath.Join(os.Getenv("HOME"), ".xelyon")
-			if result, _ := version.CheckForUpdates(configDir); result != nil {
-				fmt.Print(version.FormatUpdateNotification(result))
+			if home, err := os.UserHomeDir(); err == nil {
+				configDir := filepath.Join(home, ".xelyon")
+				if result, _ := version.CheckForUpdates(configDir); result != nil {
+					fmt.Print(version.FormatUpdateNotification(result))
+				}
 			}
 		}
 
@@ -134,18 +136,18 @@ Examples:
 		// 環境変数で上書き
 		cfg.ApplyEnvironmentOverrides()
 
-		// CLIフラグで上書き（0や-1の場合は設定しない）
+		// CLIフラグで上書き（明示的に指定されたもののみ）
 		var loopPtr, retryPtr, delayPtr, diffPtr *int
-		if loopThreshold > 0 {
+		if cmd.Flags().Changed("loop-threshold") {
 			loopPtr = &loopThreshold
 		}
-		if apiRetry > 0 {
+		if cmd.Flags().Changed("api-retry") {
 			retryPtr = &apiRetry
 		}
-		if apiRetryDelay > 0 {
+		if cmd.Flags().Changed("api-retry-delay") {
 			delayPtr = &apiRetryDelay
 		}
-		if diffLines >= 0 {
+		if cmd.Flags().Changed("diff-lines") {
 			diffPtr = &diffLines
 		}
 		cfg.ApplyFlagOverrides(loopPtr, retryPtr, delayPtr, diffPtr)

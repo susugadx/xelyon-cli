@@ -254,7 +254,7 @@ func TestAdjustSplitForFCPairs_ZeroBoundary(t *testing.T) {
 }
 
 func TestAdjustSplitForFCPairs_MinBoundaryWithTool(t *testing.T) {
-	// splitIdx=1 で tool → 1 が返ること（最小境界）
+	// splitIdx=1 で tool → FC ペアごと toCompress に含めるため 2 が返ること
 	history := []api.Message{
 		{Role: "assistant", Content: "", ToolCalls: []api.OpenAIToolCall{
 			{ID: "call_1", Function: api.OpenAIToolCallFunction{Name: "read_file", Arguments: `{}`}},
@@ -263,10 +263,45 @@ func TestAdjustSplitForFCPairs_MinBoundaryWithTool(t *testing.T) {
 		{Role: "user", Content: "msg"},
 	}
 
-	// splitIdx=1 → history[1] = role:"tool" → 巻き戻し → splitIdx=0 → assistant(ToolCalls) → さらに戻る → ≤0 → return 1
+	// splitIdx=1 → history[1] = role:"tool" → 巻き戻し → splitIdx=0
+	// → history[0] は assistant(ToolCalls) → FC ペアごと含める → return 2
 	got := adjustSplitForFCPairs(history, 1)
-	if got != 1 {
-		t.Errorf("Expected splitIdx=1 (min boundary), got %d", got)
+	if got != 2 {
+		t.Errorf("Expected splitIdx=2 (FC pair preserved in toCompress), got %d", got)
+	}
+}
+
+func TestAdjustSplitForFCPairs_EntireHistoryIsOneFC(t *testing.T) {
+	// 全体が1つの FC ペア → 分割不可 → 0 を返す
+	history := []api.Message{
+		{Role: "assistant", Content: "", ToolCalls: []api.OpenAIToolCall{
+			{ID: "call_1", Function: api.OpenAIToolCallFunction{Name: "bash", Arguments: `{}`}},
+		}},
+		{Role: "tool", Content: "result", ToolCallID: "call_1"},
+	}
+
+	got := adjustSplitForFCPairs(history, 1)
+	if got != 0 {
+		t.Errorf("Expected splitIdx=0 (unsplittable), got %d", got)
+	}
+}
+
+func TestAdjustSplitForFCPairs_ParallelToolsAtHead(t *testing.T) {
+	// history[0] = assistant(TC) with parallel tool responses
+	history := []api.Message{
+		{Role: "assistant", Content: "", ToolCalls: []api.OpenAIToolCall{
+			{ID: "call_1", Function: api.OpenAIToolCallFunction{Name: "bash", Arguments: `{}`}},
+			{ID: "call_2", Function: api.OpenAIToolCallFunction{Name: "read_file", Arguments: `{}`}},
+		}},
+		{Role: "tool", Content: "result1", ToolCallID: "call_1"},
+		{Role: "tool", Content: "result2", ToolCallID: "call_2"},
+		{Role: "user", Content: "next"},
+	}
+
+	// splitIdx=1 → tool → back to 0 → assistant(TC) → include FC pair → return 3
+	got := adjustSplitForFCPairs(history, 1)
+	if got != 3 {
+		t.Errorf("Expected splitIdx=3 (parallel FC pair preserved), got %d", got)
 	}
 }
 
