@@ -2,8 +2,6 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"io"
 	"os"
 	"regexp"
@@ -241,52 +239,7 @@ func NewAgentWithRuntime(model string, provider api.Provider, headless bool, run
 
 	// MCPProviderインターフェースを実装するプロバイダーにMCPツールを設定
 	// （Function Calling経由で呼び出し可能にする）
-	if len(mcpManager.GetTools()) > 0 {
-		// MCP ツール設定
-		if mcpProvider, ok := provider.(api.MCPProvider); ok {
-			debug := os.Getenv("XELYON_DEBUG_GEMINI") == "1"
-			var mcpTools []api.ToolDefinition
-			for _, t := range mcpManager.GetTools() {
-				// ツール名: mcp_{serverName}_{toolName}
-				name := fmt.Sprintf("mcp_%s_%s", sanitizeToolName(t.ServerName), sanitizeToolName(t.Name))
-				// デバッグログ
-				if debug {
-					_, _ = fmt.Fprintf(errOut, "[DEBUG Gemini] MCP tool registered: %s\n", name)
-				}
-				// InputSchema を map[string]interface{} に変換
-				var params map[string]interface{}
-				if len(t.InputSchema) > 0 {
-					if err := json.Unmarshal(t.InputSchema, &params); err != nil {
-						// 変換失敗時は空のパラメータを使用
-						params = nil
-					}
-				}
-				mcpTools = append(mcpTools, api.ToolDefinition{
-					Name:        name,
-					Description: t.Description,
-					Parameters:  params,
-				})
-			}
-			mcpProvider.SetMCPTools(mcpTools)
-		}
-
-		// MCP ツール設定（OpenAI用）
-		if openaiMCPProvider, ok := provider.(api.MCPProvider); ok {
-			debug := os.Getenv("XELYON_DEBUG_OPENAI") == "1"
-			var mcpFunctions []api.ToolDefinition
-			for _, t := range mcpManager.GetTools() {
-				name := fmt.Sprintf("mcp_%s_%s", sanitizeToolName(t.ServerName), sanitizeToolName(t.Name))
-				fn := api.ConvertMCPToolToToolDefinition(name, t.Description, t.InputSchema)
-				mcpFunctions = append(mcpFunctions, fn)
-
-				// デバッグログ
-				if debug {
-					_, _ = fmt.Fprintf(errOut, "[DEBUG OpenAI] MCP tool registered: %s\n", name)
-				}
-			}
-			openaiMCPProvider.SetMCPTools(mcpFunctions)
-		}
-	}
+	configureMCPTools(provider, mcpManager.GetTools(), errOut)
 
 	// プロバイダー別プレフィックスを Workflow Rules の直前に注入
 	systemPrompt = prompt.BuildProviderSystemPromptWithConfig(systemPrompt, provider.Name(), model, runtime.effectiveConfig())
