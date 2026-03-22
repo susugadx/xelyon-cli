@@ -290,7 +290,7 @@ func DefaultConfig() *Config {
 			Enabled:       true,
 			DefaultModel:  "gpt-5.4-mini",
 			DefaultEffort: "",
-			MaxConcurrent: 5,
+			MaxConcurrent: 1,
 		},
 		UtilityModel: UtilityModelConfig{
 			Enabled:  false,

@@ -136,8 +136,8 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.SubAgent.DefaultEffort != "" {
 		t.Errorf("SubAgent.DefaultEffort = %q, want empty string", cfg.SubAgent.DefaultEffort)
 	}
-	if cfg.SubAgent.MaxConcurrent != 5 {
-		t.Errorf("SubAgent.MaxConcurrent = %d, want 5", cfg.SubAgent.MaxConcurrent)
+	if cfg.SubAgent.MaxConcurrent != 1 {
+		t.Errorf("SubAgent.MaxConcurrent = %d, want 1", cfg.SubAgent.MaxConcurrent)
 	}
 }
 

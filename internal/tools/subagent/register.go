@@ -32,6 +32,11 @@ func (t *SpawnAgentTool) Parameters() map[string]interface{} {
 				"type":        "string",
 				"description": "Task instruction for the sub-agent. Include file paths and specific requirements.",
 			},
+			"task_type": map[string]interface{}{
+				"type":        "string",
+				"enum":        []string{"explore", "edit", "verify"},
+				"description": "Task type: explore (read-only investigation, default), edit (file modifications), verify (run build/test/lint).",
+			},
 			"model": map[string]interface{}{
 				"type":        "string",
 				"description": "DO NOT set this field. The system automatically selects the optimal low-cost model for the current provider. Manual selection wastes money and is almost never needed.",
@@ -60,9 +65,15 @@ func (t *SpawnAgentTool) Run(execCtx tools.ExecutionContext, args map[string]str
 		return "Error: provider is not available", nil, nil
 	}
 
+	taskType := args["task_type"]
+	if taskType == "" {
+		taskType = "explore"
+	}
+
 	id, err := t.manager.Spawn(
 		execCtx.EffectiveContext(),
 		message,
+		taskType,
 		args["model"],
 		args["reasoning_effort"],
 		provider,

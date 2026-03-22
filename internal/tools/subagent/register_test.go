@@ -37,11 +37,14 @@ func TestSpawnAgentToolParameters(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected properties map, got %T", params["properties"])
 	}
-	if len(properties) != 3 {
-		t.Fatalf("len(properties) = %d, want 3", len(properties))
+	if len(properties) != 4 {
+		t.Fatalf("len(properties) = %d, want 4", len(properties))
 	}
 	if _, ok := properties["message"]; !ok {
 		t.Fatal("message parameter is missing")
+	}
+	if _, ok := properties["task_type"]; !ok {
+		t.Fatal("task_type parameter is missing")
 	}
 	if _, ok := properties["model"]; !ok {
 		t.Fatal("model parameter is missing")
@@ -175,7 +178,7 @@ func TestWaitAgentToolRun(t *testing.T) {
 			return &registerTestProvider{}, nil
 		},
 	})
-	id, err := manager.Spawn(context.Background(), "inspect files", "", "", &registerTestProvider{}, config.DefaultConfig())
+	id, err := manager.Spawn(context.Background(), "inspect files", "", "", "", &registerTestProvider{}, config.DefaultConfig())
 	if err != nil {
 		t.Fatalf("Spawn() error = %v", err)
 	}
@@ -215,7 +218,7 @@ func TestWaitAgentToolRun_ShortTimeoutIgnored(t *testing.T) {
 			return &registerTestProvider{}, nil
 		},
 	})
-	id, err := manager.Spawn(context.Background(), "inspect files", "", "", &registerTestProvider{}, config.DefaultConfig())
+	id, err := manager.Spawn(context.Background(), "inspect files", "", "", "", &registerTestProvider{}, config.DefaultConfig())
 	if err != nil {
 		t.Fatalf("Spawn() error = %v", err)
 	}

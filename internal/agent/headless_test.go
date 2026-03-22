@@ -406,14 +406,14 @@ func TestRunHeadlessWithConfig_SubAgentModeUsesSubPromptAndExcludesSubAgentTools
 	t.Setenv("HOME", t.TempDir())
 
 	cfg := newProjectMapDisabledConfig()
-	cfg.SubAgentPrompt = toolsubagent.SubAgentSystemPrompt
+	cfg.SubAgentPrompt = toolsubagent.ExplorePrompt
 	provider := &headlessToolSetProbeProvider{}
 
 	result := RunHeadlessWithConfig(context.Background(), "probe", "gpt-5.4-nano", provider, cfg)
 	if result.Status != "success" {
 		t.Fatalf("result.Status = %q, want success", result.Status)
 	}
-	if !strings.Contains(provider.systemPrompt, "You are a sub-agent executing a specific task assigned by the orchestrator.") {
+	if !strings.Contains(provider.systemPrompt, "You are a sub-agent executing a specific exploration task assigned by the orchestrator.") {
 		t.Fatalf("systemPrompt should contain sub-agent prompt, got %q", provider.systemPrompt)
 	}
 	if strings.Contains(provider.systemPrompt, "## Core Identity") {

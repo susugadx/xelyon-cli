@@ -15,7 +15,7 @@ import (
 
 const (
 	defaultSubAgentModel         = "gpt-5.4-mini"
-	defaultSubAgentMaxConcurrent = 5
+	defaultSubAgentMaxConcurrent = 1
 )
 
 // RunResult はサブエージェント実行結果の最小表現です。
@@ -134,16 +134,19 @@ func NewManagerWithOptions(opts ManagerOptions) *Manager {
 
 // Spawn はサブエージェントを起動し、agent_id を返します。
 // ctx がキャンセルされるとサブエージェントの実行も中断されます。
-func (m *Manager) Spawn(ctx context.Context, message, model, reasoningEffort string, provider api.Provider, cfg *config.Config) (string, error) {
+func (m *Manager) Spawn(ctx context.Context, message, taskType, model, reasoningEffort string, provider api.Provider, cfg *config.Config) (string, error) {
 	if strings.TrimSpace(message) == "" {
 		return "", fmt.Errorf("message is required")
 	}
 	if provider == nil {
 		return "", fmt.Errorf("provider is required")
 	}
+	if !ValidTaskType(taskType) {
+		taskType = TaskTypeExplore
+	}
 
 	mainProvider := normalizeProviderName(provider.Name())
-	subCfg, resolvedModel, err := cloneConfigForSub(cfg, mainProvider, model, reasoningEffort)
+	subCfg, resolvedModel, err := cloneConfigForSub(cfg, mainProvider, taskType, model, reasoningEffort)
 	if err != nil {
 		return "", err
 	}
@@ -385,10 +388,13 @@ func (m *Manager) snapshotOrTimeout(sub *managedSubAgent, timeout bool) WaitResu
 	}
 }
 
-func cloneConfigForSub(cfg *config.Config, mainProvider, model, reasoningEffort string) (*config.Config, string, error) {
+func cloneConfigForSub(cfg *config.Config, mainProvider, taskType, model, reasoningEffort string) (*config.Config, string, error) {
 	cloned := config.CloneConfig(cfg)
 	if cloned == nil {
 		cloned = config.DefaultConfig()
+	}
+	if !ValidTaskType(taskType) {
+		taskType = TaskTypeExplore
 	}
 
 	resolvedModel := normalizeSubAgentModel(model)
@@ -404,6 +410,9 @@ func cloneConfigForSub(cfg *config.Config, mainProvider, model, reasoningEffort 
 
 	effort := strings.TrimSpace(reasoningEffort)
 	if effort == "" {
+		effort = DefaultEffortForTaskType(taskType)
+	}
+	if effort == "" {
 		effort = strings.TrimSpace(cloned.SubAgent.DefaultEffort)
 	}
 
@@ -411,7 +420,7 @@ func cloneConfigForSub(cfg *config.Config, mainProvider, model, reasoningEffort 
 		return nil, "", err
 	}
 
-	cloned.SubAgentPrompt = SubAgentSystemPrompt
+	cloned.SubAgentPrompt = PromptForTaskType(taskType)
 	return cloned, resolvedModel, nil
 }
 

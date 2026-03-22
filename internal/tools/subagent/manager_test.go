@@ -121,7 +121,7 @@ func TestManagerSpawnWaitCompleted(t *testing.T) {
 		},
 	})
 
-	id, err := manager.Spawn(context.Background(), "read files", "", "", provider, cfg)
+	id, err := manager.Spawn(context.Background(), "read files", "", "", "", provider, cfg)
 	if err != nil {
 		t.Fatalf("Spawn() error = %v", err)
 	}
@@ -148,11 +148,14 @@ func TestManagerSpawnWaitCompleted(t *testing.T) {
 	if gotCfg == nil {
 		t.Fatal("expected cloned config to be passed to runner")
 	}
-	if gotCfg.SubAgentPrompt != SubAgentSystemPrompt {
-		t.Fatal("expected sub-agent prompt to be injected into config")
+	if gotCfg.SubAgentPrompt != ExplorePrompt {
+		t.Fatal("expected explore prompt to be injected into config for default task type")
 	}
-	if gotCfg.Thinking.Enabled {
-		t.Fatal("expected default sub-agent reasoning to be disabled")
+	if !gotCfg.Thinking.Enabled {
+		t.Fatal("expected explore task type to enable default reasoning")
+	}
+	if gotCfg.Thinking.Level != "high" {
+		t.Fatalf("gotCfg.Thinking.Level = %q, want high", gotCfg.Thinking.Level)
 	}
 	if !createdProvider.cleared {
 		t.Fatal("expected fresh provider cache/response chain to be cleared")
@@ -182,7 +185,7 @@ func TestManagerSpawn_DefaultModelFollowsMainProvider(t *testing.T) {
 		},
 	})
 
-	id, err := manager.Spawn(context.Background(), "read files", "", "", provider, cfg)
+	id, err := manager.Spawn(context.Background(), "read files", "", "", "", provider, cfg)
 	if err != nil {
 		t.Fatalf("Spawn() error = %v", err)
 	}
@@ -217,7 +220,7 @@ func TestManagerSpawn_PlaceholderModelFallsBackToMainProvider(t *testing.T) {
 		},
 	})
 
-	id, err := manager.Spawn(context.Background(), "inspect files", "sub_agent.default_model", "", provider, cfg)
+	id, err := manager.Spawn(context.Background(), "inspect files", "", "sub_agent.default_model", "", provider, cfg)
 	if err != nil {
 		t.Fatalf("Spawn() error = %v", err)
 	}
@@ -249,7 +252,7 @@ func TestManagerSpawn_PlaceholderConfigFallsBackToMainProvider(t *testing.T) {
 		},
 	})
 
-	id, err := manager.Spawn(context.Background(), "inspect files", "", "", provider, cfg)
+	id, err := manager.Spawn(context.Background(), "inspect files", "", "", "", provider, cfg)
 	if err != nil {
 		t.Fatalf("Spawn() error = %v", err)
 	}
@@ -283,7 +286,7 @@ func TestManagerSpawn_DefaultModelExplicitOverride(t *testing.T) {
 		},
 	})
 
-	id, err := manager.Spawn(context.Background(), "inspect files", "", "", currentProvider, cfg)
+	id, err := manager.Spawn(context.Background(), "inspect files", "", "", "", currentProvider, cfg)
 	if err != nil {
 		t.Fatalf("Spawn() error = %v", err)
 	}
@@ -320,7 +323,7 @@ func TestManagerSpawn_DefaultModelUnknownProviderFallback(t *testing.T) {
 		},
 	})
 
-	id, err := manager.Spawn(context.Background(), "inspect files", "", "", currentProvider, cfg)
+	id, err := manager.Spawn(context.Background(), "inspect files", "", "", "", currentProvider, cfg)
 	if err != nil {
 		t.Fatalf("Spawn() error = %v", err)
 	}
@@ -337,6 +340,7 @@ func TestManagerSpawn_DefaultModelUnknownProviderFallback(t *testing.T) {
 // TestManagerSpawnParallel は複数サブエージェントが並列実行されることを確認します。
 func TestManagerSpawnParallel(t *testing.T) {
 	cfg := config.DefaultConfig()
+	cfg.SubAgent.MaxConcurrent = 2
 	provider := &managerTestProvider{name: "openai"}
 
 	started := make(chan struct{}, 2)
@@ -363,11 +367,11 @@ func TestManagerSpawnParallel(t *testing.T) {
 		},
 	})
 
-	idA, err := manager.Spawn(context.Background(), "task A", "", "", provider, cfg)
+	idA, err := manager.Spawn(context.Background(), "task A", "", "", "", provider, cfg)
 	if err != nil {
 		t.Fatalf("Spawn(task A) error = %v", err)
 	}
-	idB, err := manager.Spawn(context.Background(), "task B", "", "", provider, cfg)
+	idB, err := manager.Spawn(context.Background(), "task B", "", "", "", provider, cfg)
 	if err != nil {
 		t.Fatalf("Spawn(task B) error = %v", err)
 	}
@@ -406,7 +410,7 @@ func TestManagerWaitTimeout(t *testing.T) {
 		},
 	})
 
-	id, err := manager.Spawn(context.Background(), "slow task", "", "", provider, cfg)
+	id, err := manager.Spawn(context.Background(), "slow task", "", "", "", provider, cfg)
 	if err != nil {
 		t.Fatalf("Spawn() error = %v", err)
 	}
@@ -455,12 +459,12 @@ func TestManagerSpawnMaxConcurrent(t *testing.T) {
 		},
 	})
 
-	id, err := manager.Spawn(context.Background(), "first", "", "", provider, cfg)
+	id, err := manager.Spawn(context.Background(), "first", "", "", "", provider, cfg)
 	if err != nil {
 		t.Fatalf("Spawn(first) error = %v", err)
 	}
 
-	_, err = manager.Spawn(context.Background(), "second", "", "", provider, cfg)
+	_, err = manager.Spawn(context.Background(), "second", "", "", "", provider, cfg)
 	if err == nil {
 		t.Fatal("expected max concurrent error")
 	}
@@ -492,7 +496,7 @@ func TestManagerSpawnSwitchesProviderForModel(t *testing.T) {
 		},
 	})
 
-	id, err := manager.Spawn(context.Background(), "compare", "claude-sonnet-4-6", "", currentProvider, cfg)
+	id, err := manager.Spawn(context.Background(), "compare", "", "claude-sonnet-4-6", "", currentProvider, cfg)
 	if err != nil {
 		t.Fatalf("Spawn() error = %v", err)
 	}
@@ -523,7 +527,7 @@ func TestManagerSpawn_SameProviderGetsFreshInstance(t *testing.T) {
 		},
 	})
 
-	id, err := manager.Spawn(context.Background(), "inspect files", "", "", parentProvider, cfg)
+	id, err := manager.Spawn(context.Background(), "inspect files", "", "", "", parentProvider, cfg)
 	if err != nil {
 		t.Fatalf("Spawn() error = %v", err)
 	}
@@ -573,7 +577,7 @@ func TestManagerGetSummary(t *testing.T) {
 		},
 	})
 
-	completedID, err := manager.Spawn(context.Background(), "completed task", "", "", provider, cfg)
+	completedID, err := manager.Spawn(context.Background(), "completed task", "", "", "", provider, cfg)
 	if err != nil {
 		t.Fatalf("Spawn(completed task) error = %v", err)
 	}
@@ -581,7 +585,7 @@ func TestManagerGetSummary(t *testing.T) {
 		t.Fatalf("Wait(completed task).Status = %q, want completed", response.Status)
 	}
 
-	runningID, err := manager.Spawn(context.Background(), "running task", "", "", provider, cfg)
+	runningID, err := manager.Spawn(context.Background(), "running task", "", "", "", provider, cfg)
 	if err != nil {
 		t.Fatalf("Spawn(running task) error = %v", err)
 	}
@@ -651,7 +655,7 @@ func TestManagerGetSummary_ErrorMessage(t *testing.T) {
 		},
 	})
 
-	id, err := manager.Spawn(context.Background(), "failing task", "", "", provider, cfg)
+	id, err := manager.Spawn(context.Background(), "failing task", "", "", "", provider, cfg)
 	if err != nil {
 		t.Fatalf("Spawn() error = %v", err)
 	}

@@ -95,7 +95,7 @@ func TestSystemPrompt_ParallelGuidanceIsConsolidated(t *testing.T) {
 	if !strings.Contains(SystemPrompt, "prefer one search_code call with comma-separated patterns instead of serial searches") {
 		t.Error("SystemPrompt should keep multi-pattern search_code guidance")
 	}
-	if !strings.Contains(SystemPrompt, "delegate to sub-agents via spawn_agent") {
+	if !strings.Contains(SystemPrompt, "sub-agents via spawn_agent") {
 		t.Error("SystemPrompt should guide spawn_agent delegation")
 	}
 	if !strings.Contains(SystemPrompt, "Use wait_agent to collect results before synthesizing your response") {

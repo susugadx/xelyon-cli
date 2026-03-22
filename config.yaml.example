@@ -271,10 +271,10 @@ sub_agent:
     enabled: true
     # 既定モデル（空でメイン provider の最安モデルを自動選択）
     default_model: ""
-    # 既定推論強度（off / low / medium / high）
+    # 既定推論強度（空で task_type 別デフォルトを使用: explore=high, edit=config依存, verify=off）
     default_effort: ""
-    # 同時実行上限（デフォルト: 5）
-    max_concurrent: 5
+    # 同時実行上限（デフォルト: 1。並列調査が必要な場合のみ増やす）
+    max_concurrent: 1
 
 # ============================================================
 # Utility Model設定

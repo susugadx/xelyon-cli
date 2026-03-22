@@ -229,7 +229,7 @@ func TestPrintStatusFooter_IncludesSubAgentCost(t *testing.T) {
 	})
 	cfg := config.DefaultConfig()
 	provider := &mockProvider{name: "openai"}
-	id, err := manager.Spawn(context.Background(), "task", "gpt-5.4", "", provider, cfg)
+	id, err := manager.Spawn(context.Background(), "task", "", "gpt-5.4", "", provider, cfg)
 	if err != nil {
 		t.Fatalf("Spawn() error = %v", err)
 	}
