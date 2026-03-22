@@ -781,6 +781,11 @@ type toolExecResult struct {
 //	Tool.Run() まで request context を伝播するが、各ツールがそれを使うかは個別実装次第。
 //	現状は bash など context-aware なツールが実行中キャンセルを拾える。
 func (a *Agent) executeToolForParallel(ctx context.Context, tc *tools.ToolCall) (string, *tools.FileChange) {
+	// wait_agent はリアルタイムイベント表示を使用（parallel path でも live view を優先）
+	if tc.Tool == "wait_agent" {
+		return a.executeWaitAgentWithLiveView(ctx, tc)
+	}
+
 	if ctx.Err() != nil {
 		return "Error: context cancelled", nil
 	}
