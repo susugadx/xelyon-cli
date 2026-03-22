@@ -60,6 +60,7 @@ type Manager struct {
 	counter         atomic.Int64
 	runHeadless     Runner
 	providerFactory ProviderFactory
+	eventCh         chan SubAgentEvent
 }
 
 type managedSubAgent struct {
@@ -87,19 +88,19 @@ type WaitResponse struct {
 
 // SubAgentStats はサブエージェント 1 件分の統計です。
 type SubAgentStats struct {
-	ID             string  `json:"id"`
-	Model          string  `json:"model"`
-	TaskType       string  `json:"task_type"`
-	Status         string  `json:"status"`
-	ErrorMessage   string  `json:"error_message"`
-	InputTokens    int     `json:"input_tokens"`
-	CachedTokens   int     `json:"cached_tokens"`
-	OutputTokens   int     `json:"output_tokens"`
-	ThinkingTokens int     `json:"thinking_tokens"`
-	Cost           float64 `json:"cost"`
-	ToolExecutions int                `json:"tool_executions"`
+	ID             string               `json:"id"`
+	Model          string               `json:"model"`
+	TaskType       string               `json:"task_type"`
+	Status         string               `json:"status"`
+	ErrorMessage   string               `json:"error_message"`
+	InputTokens    int                  `json:"input_tokens"`
+	CachedTokens   int                  `json:"cached_tokens"`
+	OutputTokens   int                  `json:"output_tokens"`
+	ThinkingTokens int                  `json:"thinking_tokens"`
+	Cost           float64              `json:"cost"`
+	ToolExecutions int                  `json:"tool_executions"`
 	ToolBreakdown  []ToolBreakdownEntry `json:"tool_breakdown,omitempty"`
-	DurationMs     int64              `json:"duration_ms"`
+	DurationMs     int64                `json:"duration_ms"`
 }
 
 // SubAgentSummary は全サブエージェントの集約統計です。
@@ -133,6 +134,7 @@ func NewManagerWithOptions(opts ManagerOptions) *Manager {
 			}
 		},
 		providerFactory: api.NewProvider,
+		eventCh:         make(chan SubAgentEvent, 256),
 	}
 	if opts.RunHeadless != nil {
 		manager.runHeadless = opts.RunHeadless
@@ -141,6 +143,14 @@ func NewManagerWithOptions(opts ManagerOptions) *Manager {
 		manager.providerFactory = opts.ProviderFactory
 	}
 	return manager
+}
+
+// Events はイベントの読み取り専用チャネルを返します。
+func (m *Manager) Events() <-chan SubAgentEvent {
+	if m == nil {
+		return nil
+	}
+	return m.eventCh
 }
 
 // Spawn はサブエージェントを起動し、agent_id を返します。
@@ -194,6 +204,19 @@ func (m *Manager) Spawn(ctx context.Context, message, taskType, model, reasoning
 	go func() {
 		defer close(sub.done)
 		defer func() {
+			m.mu.Lock()
+			status := sub.status
+			result := sub.result
+			m.mu.Unlock()
+
+			EmitEvent(ctx, SubAgentEvent{
+				Tool:    "_completed",
+				Phase:   "end",
+				Output:  formatCompletionEventOutput(status, result),
+				Success: status == "completed",
+			})
+		}()
+		defer func() {
 			if recovered := recover(); recovered != nil {
 				m.mu.Lock()
 				sub.status = "error"
@@ -204,6 +227,9 @@ func (m *Manager) Spawn(ctx context.Context, message, taskType, model, reasoning
 				m.mu.Unlock()
 			}
 		}()
+
+		ctx = WithEventChannel(ctx, m.eventCh)
+		ctx = WithAgentID(ctx, id)
 
 		result := m.runHeadless(ctx, message, resolvedModel, subProvider, subCfg)
 		if result == nil {
@@ -231,6 +257,51 @@ func (m *Manager) Spawn(ctx context.Context, message, taskType, model, reasoning
 	}()
 
 	return id, nil
+}
+
+func formatCompletionEventOutput(status string, result *RunResult) string {
+	if result == nil {
+		if status == "" {
+			return "unknown"
+		}
+		return status
+	}
+	if status != "completed" {
+		if result.ErrorMessage != "" {
+			return result.ErrorMessage
+		}
+		if status != "" {
+			return status
+		}
+		return "error"
+	}
+
+	parts := make([]string, 0, 2)
+	if result.ToolExecutions > 0 {
+		label := "tools"
+		if result.ToolExecutions == 1 {
+			label = "tool"
+		}
+		parts = append(parts, fmt.Sprintf("%d %s", result.ToolExecutions, label))
+	}
+	if result.DurationMs > 0 {
+		parts = append(parts, formatEventDuration(result.DurationMs))
+	}
+	if len(parts) == 0 {
+		return "completed"
+	}
+	return fmt.Sprintf("completed (%s)", strings.Join(parts, ", "))
+}
+
+func formatEventDuration(durationMs int64) string {
+	if durationMs < 1000 {
+		return fmt.Sprintf("%dms", durationMs)
+	}
+	seconds := float64(durationMs) / 1000
+	if durationMs%1000 == 0 {
+		return fmt.Sprintf("%.0fs", seconds)
+	}
+	return fmt.Sprintf("%.1fs", seconds)
 }
 
 // Wait は指定されたサブエージェントの完了を待ちます。

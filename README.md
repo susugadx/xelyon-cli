@@ -81,6 +81,7 @@ LLMが1回の応答で複数のread-onlyツールを返した場合、並列実�
 ### 🤖 サブエージェント委譲
 探索・調査タスクは `spawn_agent` / `wait_agent` で軽量サブエージェントへ委譲できます。
 - **コンテキスト分離**: 親に返るのはサブの最終レポートだけ。`read_file` 全文や `search_code` の中間結果は親コンテキストへ再注入されません
+- **リアルタイム可視化**: `wait_agent` 実行中はサブエージェントのツール実行を親UIへ逐次表示し、`str_replace` は色付き diff 付きで追跡できます
 - **既定モデル**: `sub_agent.default_model` が空ならメイン provider の最安モデルを自動選択します。明示設定するとそのモデルを優先します
 - **推論強度**: 既定は off（`sub_agent.default_effort` で low / medium / high を指定可能）
 - **同時実行数**: 既定 5（`sub_agent.max_concurrent`）

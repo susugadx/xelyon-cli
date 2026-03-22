@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
 	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/tools/subagent"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -102,6 +104,14 @@ func RunHeadlessWithConfig(ctx context.Context, query string, model string, prov
 
 		// ツール実行と結果収集
 		for _, tc := range parsedCalls {
+			toolCount := len(allToolCalls) + 1
+			subagent.EmitEvent(ctx, subagent.SubAgentEvent{
+				Tool:      tc.Tool,
+				Phase:     "start",
+				FilePath:  extractToolFilePath(tc),
+				ToolIndex: toolCount,
+			})
+
 			output, change := tools.ExecuteQuietWithContext(execCtx, tc)
 			agent.noteProjectMapMutation(tc, change)
 
@@ -117,6 +127,19 @@ func RunHeadlessWithConfig(ctx context.Context, query string, model string, prov
 				Output:  output,
 				Success: success,
 			})
+			event := subagent.SubAgentEvent{
+				Tool:      tc.Tool,
+				Phase:     "end",
+				FilePath:  extractToolFilePath(tc),
+				Success:   success,
+				Output:    truncateEventOutput(output, 200),
+				ToolIndex: toolCount,
+			}
+			if tc.Tool == "str_replace" {
+				event.OldStr = tc.Args["old_str"]
+				event.NewStr = tc.Args["new_str"]
+			}
+			subagent.EmitEvent(ctx, event)
 			appendHeadlessToolResultToHistory(agent, tc, output)
 
 			// ファイル変更履歴を記録
@@ -214,6 +237,67 @@ func appendHeadlessToolResultToHistory(agent *Agent, toolCall *tools.ToolCall, r
 		Role:    "user",
 		Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, result),
 	})
+}
+
+// extractToolFilePath はツール呼び出しから表示用ターゲットを抽出する。
+func extractToolFilePath(tc *tools.ToolCall) string {
+	if tc == nil {
+		return ""
+	}
+
+	switch tc.Tool {
+	case "read_file", "write_file", "str_replace", "delete_file", "list_dir", "lint", "format":
+		if path := tc.Args["path"]; path != "" {
+			return path
+		}
+	case "search_code":
+		if pattern := tc.Args["pattern"]; pattern != "" {
+			return fmt.Sprintf("%q", pattern)
+		}
+		if path := tc.Args["path"]; path != "" {
+			return path
+		}
+	case "inspect_symbol":
+		if symbol := tc.Args["symbol"]; symbol != "" {
+			return symbol
+		}
+	case "bash":
+		if cmd := tc.Args["command"]; cmd != "" {
+			return truncateEventOutput(cmd, 40)
+		}
+	}
+
+	if rawPaths := tc.Args["paths"]; rawPaths != "" {
+		var paths []string
+		if err := json.Unmarshal([]byte(rawPaths), &paths); err == nil && len(paths) > 0 {
+			if len(paths) == 1 {
+				return paths[0]
+			}
+			return fmt.Sprintf("%s (+%d files)", paths[0], len(paths)-1)
+		}
+	}
+	if path := tc.Args["path"]; path != "" {
+		return path
+	}
+	if pattern := tc.Args["pattern"]; pattern != "" {
+		return pattern
+	}
+	if symbol := tc.Args["symbol"]; symbol != "" {
+		return symbol
+	}
+	return ""
+}
+
+// truncateEventOutput はイベント出力を制限する。
+func truncateEventOutput(s string, maxLen int) string {
+	if maxLen <= 0 {
+		return ""
+	}
+	runes := []rune(s)
+	if len(runes) <= maxLen {
+		return s
+	}
+	return string(runes[:maxLen]) + "..."
 }
 
 // RunOnceWithConfig は指定設定で単一クエリを1ターンだけ実行して終了する。

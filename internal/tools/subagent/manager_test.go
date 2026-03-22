@@ -52,6 +52,9 @@ func TestNewManager(t *testing.T) {
 	if manager.providerFactory == nil {
 		t.Fatal("providerFactory should be configured")
 	}
+	if manager.Events() == nil {
+		t.Fatal("event channel should be configured")
+	}
 }
 
 // TestInferSubAgentModel は provider ごとの既定サブエージェントモデルを確認します。
@@ -159,6 +162,52 @@ func TestManagerSpawnWaitCompleted(t *testing.T) {
 	}
 	if !createdProvider.cleared {
 		t.Fatal("expected fresh provider cache/response chain to be cleared")
+	}
+}
+
+// TestManagerSpawn_EmitsCompletionEvent は完了イベントが発行されることを確認します。
+func TestManagerSpawn_EmitsCompletionEvent(t *testing.T) {
+	cfg := config.DefaultConfig()
+	provider := &managerTestProvider{name: "openai"}
+	manager := NewManagerWithOptions(ManagerOptions{
+		RunHeadless: func(ctx context.Context, _ string, _ string, _ api.Provider, _ *config.Config) *RunResult {
+			EmitEvent(ctx, SubAgentEvent{Tool: "read_file", Phase: "start", FilePath: "manager.go"})
+			return &RunResult{
+				Status:         "completed",
+				Response:       "ok",
+				ToolExecutions: 1,
+				DurationMs:     1200,
+			}
+		},
+		ProviderFactory: func(providerName string) (api.Provider, error) {
+			return &managerTestProvider{name: providerName}, nil
+		},
+	})
+
+	id, err := manager.Spawn(context.Background(), "read files", "", "", "", provider, cfg)
+	if err != nil {
+		t.Fatalf("Spawn() error = %v", err)
+	}
+	_ = manager.Wait([]string{id}, 0)
+
+	events := manager.Events()
+	start := <-events
+	if start.AgentID != id {
+		t.Fatalf("start.AgentID = %q, want %q", start.AgentID, id)
+	}
+	if start.Tool != "read_file" || start.Phase != "start" {
+		t.Fatalf("unexpected start event: %+v", start)
+	}
+
+	completed := <-events
+	if completed.Tool != "_completed" || completed.Phase != "end" {
+		t.Fatalf("unexpected completion event: %+v", completed)
+	}
+	if !completed.Success {
+		t.Fatal("completion event should be successful")
+	}
+	if !strings.Contains(completed.Output, "completed") {
+		t.Fatalf("completed.Output = %q, want completion summary", completed.Output)
 	}
 }
 

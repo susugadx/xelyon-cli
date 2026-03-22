@@ -10,7 +10,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fatih/color"
+	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/tools/subagent"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -722,6 +726,82 @@ func TestExecuteToolCallsWithParallel_CancelBeforeExecution(t *testing.T) {
 	for i, r := range callbackResults {
 		if !strings.Contains(r, "cancel") {
 			t.Errorf("callbackResults[%d] = %q, want containing 'cancel'", i, r)
+		}
+	}
+}
+
+func TestExecuteToolWithSpinner_WaitAgentLiveView(t *testing.T) {
+	prevNoColor := color.NoColor
+	color.NoColor = true
+	defer func() { color.NoColor = prevNoColor }()
+
+	provider := &mockProvider{name: "openai"}
+	cfg := config.DefaultConfig()
+	var out bytes.Buffer
+	manager := subagent.NewManagerWithOptions(subagent.ManagerOptions{
+		RunHeadless: func(ctx context.Context, _ string, _ string, _ api.Provider, _ *config.Config) *subagent.RunResult {
+			subagent.EmitEvent(ctx, subagent.SubAgentEvent{
+				Tool:     "read_file",
+				Phase:    "start",
+				FilePath: "manager.go",
+			})
+			subagent.EmitEvent(ctx, subagent.SubAgentEvent{
+				Tool:     "str_replace",
+				Phase:    "start",
+				FilePath: "manager.go",
+			})
+			subagent.EmitEvent(ctx, subagent.SubAgentEvent{
+				Tool:     "str_replace",
+				Phase:    "end",
+				FilePath: "manager.go",
+				Success:  true,
+				Output:   "Successfully replaced text in manager.go (lines 58-59 → 58-60)",
+				OldStr:   "id        string\nstatus    string",
+				NewStr:   "id        string\ntaskType  string\nstatus    string",
+			})
+			return &subagent.RunResult{
+				Status:         "completed",
+				Response:       "done",
+				ToolExecutions: 2,
+				DurationMs:     1200,
+			}
+		},
+		ProviderFactory: func(providerName string) (api.Provider, error) {
+			return &mockProvider{name: providerName}, nil
+		},
+	})
+
+	id, err := manager.Spawn(context.Background(), "inspect", "", "", "", provider, cfg)
+	if err != nil {
+		t.Fatalf("Spawn() error = %v", err)
+	}
+
+	runtime := &AgentRuntime{
+		Config:          cfg,
+		UI:              ui.NewRuntime(strings.NewReader(""), &out, &out),
+		SubAgentManager: manager,
+	}
+	agent := NewAgentWithRuntime("test-model", provider, false, runtime)
+	t.Cleanup(agent.Cleanup)
+
+	toolCall := &tools.ToolCall{
+		Tool:    "wait_agent",
+		Args:    map[string]string{"ids": fmt.Sprintf(`["%s"]`, id)},
+		RawArgs: map[string]any{"ids": []string{id}},
+	}
+
+	_, _ = agent.executeToolWithSpinner(context.Background(), toolCall)
+
+	output := out.String()
+	for _, want := range []string{
+		fmt.Sprintf("%s │ 📖 read_file manager.go", id),
+		fmt.Sprintf("%s │ 🔧 str_replace manager.go", id),
+		"+ taskType  string",
+		fmt.Sprintf("%s │ ✅ completed (2 tools, 1.2s)", id),
+		"⏳ wait_agent: 1 agent",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("output missing %q:\n%s", want, output)
 		}
 	}
 }
