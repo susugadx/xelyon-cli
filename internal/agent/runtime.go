@@ -153,6 +153,40 @@ func headlessResultToSubAgentResult(status string, result *HeadlessResult) *suba
 		subResult.OutputTokens = result.Tokens.Output
 		subResult.ThinkingTokens = result.Tokens.Thinking
 	}
+
+	// ToolCalls からツール別の成功/失敗回数を集計
+	if len(result.ToolCalls) > 0 {
+		type toolCount struct {
+			success  int
+			failures int
+		}
+		counts := make(map[string]*toolCount)
+		order := make([]string, 0)
+		for _, tc := range result.ToolCalls {
+			c, exists := counts[tc.Tool]
+			if !exists {
+				c = &toolCount{}
+				counts[tc.Tool] = c
+				order = append(order, tc.Tool)
+			}
+			if tc.Success {
+				c.success++
+			} else {
+				c.failures++
+			}
+		}
+		breakdown := make([]subagent.ToolBreakdownEntry, 0, len(order))
+		for _, tool := range order {
+			c := counts[tool]
+			breakdown = append(breakdown, subagent.ToolBreakdownEntry{
+				Tool:     tool,
+				Success:  c.success,
+				Failures: c.failures,
+			})
+		}
+		subResult.ToolBreakdown = breakdown
+	}
+
 	return subResult
 }
 

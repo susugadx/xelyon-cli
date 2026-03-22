@@ -386,6 +386,40 @@ func printSubAgentStats(out io.Writer, summary subagent.SubAgentSummary) {
 	)
 
 	_, _ = fmt.Fprint(out, table.RenderCompact())
+
+	// ツール内訳（ToolBreakdown がある場合のみ表示）
+	hasBreakdown := false
+	for _, agentStats := range summary.Agents {
+		if len(agentStats.ToolBreakdown) > 0 {
+			hasBreakdown = true
+			break
+		}
+	}
+	if hasBreakdown {
+		_, _ = fmt.Fprintln(out)
+		green.Fprintln(out, "🔧 Sub-agent Tool Breakdown")
+		for _, agentStats := range summary.Agents {
+			if len(agentStats.ToolBreakdown) == 0 {
+				continue
+			}
+			_, _ = fmt.Fprintf(out, "  %s (%s):\n", agentStats.ID, agentStats.Model)
+			bdTable := ui.NewTable().SetHeaders("Tool", "✓", "✗", "Total")
+			for _, entry := range agentStats.ToolBreakdown {
+				total := entry.Success + entry.Failures
+				failStr := fmt.Sprintf("%d", entry.Failures)
+				if entry.Failures > 0 {
+					failStr = red.Sprintf("%d", entry.Failures)
+				}
+				bdTable.AddRow(
+					entry.Tool,
+					fmt.Sprintf("%d", entry.Success),
+					failStr,
+					fmt.Sprintf("%d", total),
+				)
+			}
+			_, _ = fmt.Fprint(out, bdTable.RenderCompact())
+		}
+	}
 }
 
 // printToolObservabilitySection はツール選択のobservabilityセクションを表示する。

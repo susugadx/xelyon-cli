@@ -18,6 +18,13 @@ const (
 	defaultSubAgentMaxConcurrent = 1
 )
 
+// ToolBreakdownEntry はツール別の成功/失敗回数です。
+type ToolBreakdownEntry struct {
+	Tool     string `json:"tool"`
+	Success  int    `json:"success"`
+	Failures int    `json:"failures"`
+}
+
 // RunResult はサブエージェント実行結果の最小表現です。
 type RunResult struct {
 	Status         string
@@ -30,6 +37,7 @@ type RunResult struct {
 	ThinkingTokens int
 	Cost           float64
 	ToolExecutions int
+	ToolBreakdown  []ToolBreakdownEntry
 	DurationMs     int64
 }
 
@@ -57,6 +65,7 @@ type Manager struct {
 type managedSubAgent struct {
 	id        string
 	model     string
+	taskType  string
 	status    string
 	result    *RunResult
 	done      chan struct{}
@@ -80,6 +89,7 @@ type WaitResponse struct {
 type SubAgentStats struct {
 	ID             string  `json:"id"`
 	Model          string  `json:"model"`
+	TaskType       string  `json:"task_type"`
 	Status         string  `json:"status"`
 	ErrorMessage   string  `json:"error_message"`
 	InputTokens    int     `json:"input_tokens"`
@@ -87,8 +97,9 @@ type SubAgentStats struct {
 	OutputTokens   int     `json:"output_tokens"`
 	ThinkingTokens int     `json:"thinking_tokens"`
 	Cost           float64 `json:"cost"`
-	ToolExecutions int     `json:"tool_executions"`
-	DurationMs     int64   `json:"duration_ms"`
+	ToolExecutions int                `json:"tool_executions"`
+	ToolBreakdown  []ToolBreakdownEntry `json:"tool_breakdown,omitempty"`
+	DurationMs     int64              `json:"duration_ms"`
 }
 
 // SubAgentSummary は全サブエージェントの集約統計です。
@@ -164,6 +175,7 @@ func (m *Manager) Spawn(ctx context.Context, message, taskType, model, reasoning
 	sub := &managedSubAgent{
 		id:        id,
 		model:     resolvedModel,
+		taskType:  taskType,
 		status:    "running",
 		done:      make(chan struct{}),
 		startTime: time.Now(),
@@ -301,9 +313,10 @@ func (m *Manager) GetSummary() SubAgentSummary {
 	for _, id := range ids {
 		sub := m.agents[id]
 		stats := SubAgentStats{
-			ID:     sub.id,
-			Model:  sub.model,
-			Status: sub.status,
+			ID:       sub.id,
+			Model:    sub.model,
+			TaskType: sub.taskType,
+			Status:   sub.status,
 		}
 		if sub.result != nil {
 			if sub.result.Model != "" {
@@ -316,6 +329,7 @@ func (m *Manager) GetSummary() SubAgentSummary {
 			stats.ThinkingTokens = sub.result.ThinkingTokens
 			stats.Cost = sub.result.Cost
 			stats.ToolExecutions = sub.result.ToolExecutions
+			stats.ToolBreakdown = sub.result.ToolBreakdown
 			stats.DurationMs = sub.result.DurationMs
 
 			summary.TotalInput += stats.InputTokens

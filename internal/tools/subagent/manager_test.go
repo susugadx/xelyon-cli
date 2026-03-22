@@ -577,7 +577,7 @@ func TestManagerGetSummary(t *testing.T) {
 		},
 	})
 
-	completedID, err := manager.Spawn(context.Background(), "completed task", "", "", "", provider, cfg)
+	completedID, err := manager.Spawn(context.Background(), "completed task", TaskTypeEdit, "", "", provider, cfg)
 	if err != nil {
 		t.Fatalf("Spawn(completed task) error = %v", err)
 	}
@@ -585,7 +585,7 @@ func TestManagerGetSummary(t *testing.T) {
 		t.Fatalf("Wait(completed task).Status = %q, want completed", response.Status)
 	}
 
-	runningID, err := manager.Spawn(context.Background(), "running task", "", "", "", provider, cfg)
+	runningID, err := manager.Spawn(context.Background(), "running task", TaskTypeVerify, "", "", provider, cfg)
 	if err != nil {
 		t.Fatalf("Spawn(running task) error = %v", err)
 	}
@@ -624,6 +624,9 @@ func TestManagerGetSummary(t *testing.T) {
 	if summary.Agents[0].ID != completedID {
 		t.Fatalf("summary.Agents[0].ID = %q, want %q", summary.Agents[0].ID, completedID)
 	}
+	if summary.Agents[0].TaskType != TaskTypeEdit {
+		t.Fatalf("summary.Agents[0].TaskType = %q, want %q", summary.Agents[0].TaskType, TaskTypeEdit)
+	}
 	if summary.Agents[1].ID != runningID {
 		t.Fatalf("summary.Agents[1].ID = %q, want %q", summary.Agents[1].ID, runningID)
 	}
@@ -632,6 +635,9 @@ func TestManagerGetSummary(t *testing.T) {
 	}
 	if summary.Agents[1].Model != "gpt-5.4-mini" {
 		t.Fatalf("summary.Agents[1].Model = %q, want gpt-5.4-mini", summary.Agents[1].Model)
+	}
+	if summary.Agents[1].TaskType != TaskTypeVerify {
+		t.Fatalf("summary.Agents[1].TaskType = %q, want %q", summary.Agents[1].TaskType, TaskTypeVerify)
 	}
 
 	close(release)

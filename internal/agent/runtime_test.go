@@ -17,6 +17,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
+	"github.com/susugadx/xelyon-cli/internal/tools/subagent"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -463,5 +464,46 @@ func TestAgentRuntime_SeparatesUIRuntimeAndAuditLogger(t *testing.T) {
 	execCtxA := agentA.toolExecutionContext(context.Background(), nil, nil, nil)
 	if execCtxA.Stdout != runtimeA.UI.Output() || execCtxA.Stderr != runtimeA.UI.ErrorOutput() {
 		t.Fatal("tool execution context should inherit runtime UI writers")
+	}
+}
+
+func TestHeadlessResultToSubAgentResult_ToolBreakdownEmpty(t *testing.T) {
+	result := &HeadlessResult{
+		Model:    "test-model",
+		Response: "done",
+	}
+	sub := headlessResultToSubAgentResult("completed", result)
+	if sub.ToolBreakdown != nil {
+		t.Errorf("ToolBreakdown should be nil for empty ToolCalls, got %v", sub.ToolBreakdown)
+	}
+}
+
+func TestHeadlessResultToSubAgentResult_ToolBreakdown(t *testing.T) {
+	result := &HeadlessResult{
+		Model:    "test-model",
+		Response: "done",
+		ToolCalls: []ToolCallResult{
+			{Tool: "read_file", Success: true},
+			{Tool: "str_replace", Success: true},
+			{Tool: "read_file", Success: true},
+			{Tool: "str_replace", Success: false},
+			{Tool: "bash", Success: true},
+			{Tool: "str_replace", Success: true},
+		},
+	}
+	sub := headlessResultToSubAgentResult("completed", result)
+
+	want := []subagent.ToolBreakdownEntry{
+		{Tool: "read_file", Success: 2, Failures: 0},
+		{Tool: "str_replace", Success: 2, Failures: 1},
+		{Tool: "bash", Success: 1, Failures: 0},
+	}
+	if len(sub.ToolBreakdown) != len(want) {
+		t.Fatalf("ToolBreakdown len = %d, want %d", len(sub.ToolBreakdown), len(want))
+	}
+	for i, got := range sub.ToolBreakdown {
+		if got != want[i] {
+			t.Errorf("ToolBreakdown[%d] = %+v, want %+v", i, got, want[i])
+		}
 	}
 }
