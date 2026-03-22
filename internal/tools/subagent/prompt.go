@@ -1,5 +1,7 @@
 package subagent
 
+import "os"
+
 // TaskType はサブエージェントのタスク種別です。
 const (
 	TaskTypeExplore = "explore"
@@ -21,12 +23,20 @@ func ValidTaskType(t string) bool {
 func PromptForTaskType(taskType string) string {
 	switch taskType {
 	case TaskTypeEdit:
-		return EditPrompt
+		return EditPromptForEditTool(os.Getenv("XELYON_EDIT_TOOL"))
 	case TaskTypeVerify:
 		return VerifyPrompt
 	default:
 		return ExplorePrompt
 	}
+}
+
+// EditPromptForEditTool は編集ツールに応じた EditPrompt を返す。
+func EditPromptForEditTool(editTool string) string {
+	if editTool == "str_replace" {
+		return editPromptBase + legacyEditSection
+	}
+	return editPromptBase + applyPatchSection
 }
 
 // DefaultEffortForTaskType はタスクタイプに応じたデフォルト reasoning_effort を返します。
@@ -50,13 +60,19 @@ const ExplorePrompt = `You are a sub-agent executing a specific exploration task
 Respond in the same language as the task message.
 
 ## Investigation Rules
-- Investigate narrow-first: prefer Project Map, inspect_symbol, and search_code before reading files.
-- Read priority: (1) Project Map / inspect_symbol / targeted read_file / search_code -> (2) full read_file when surrounding context is required -> (3) neighboring files only when current evidence is insufficient.
+### Project Map First
+Project Map lists file paths, symbol definitions with line ranges for the project.
+- Symbol location is in Project Map → use read_file with range syntax directly.
+- Do NOT call search_code for symbols already listed.
+- For callers and references, use inspect_symbol.
+- If needed information is missing from Project Map, fall back to search_code.
+### When to use tools
+- inspect_symbol: Go symbol caller/reference investigation.
+- search_code: for string patterns, non-Go references, or cross-file patterns not covered by inspect_symbol.
+- read_file: to read actual contents. Use line ranges from Project Map.
 - Never guess file paths or APIs. If the task gives a path, use it directly.
-- If Project Map is available, check it first for file paths, function locations, line counts, and symbol signatures.
-- Go symbol lookup -> inspect_symbol. Unknown string, regex discovery, ambiguous symbols, or non-Go targets -> search_code.
 - Do not re-read files already returned in full in this session.
-- After 2-4 targeted reads or searches, form a working hypothesis and report. Do not search "just in case".
+- After 2-3 targeted reads, form a working hypothesis and report. Do not search "just in case".
 
 ## Tool Rules
 - NEVER use bash for code investigation: cat/head/tail/grep/find/sed/awk are FORBIDDEN.
@@ -74,16 +90,17 @@ Respond in the same language as the task message.
 - If a tool fails, analyze why and change approach; do not blindly rerun it.
 - STOP and reassess if 10+ tool calls show no progress.`
 
-// EditPrompt は編集タスク用のシステムプロンプト。
-// 親プロンプトの §1-§5, §7 の必須ルールを含む。
-const EditPrompt = `You are a sub-agent executing a specific edit task assigned by the orchestrator.
+const editPromptBase = `You are a sub-agent executing a specific edit task assigned by the orchestrator.
 Respond in the same language as the task message.
 
 ## Investigation Rules
-- Investigate narrow-first: prefer Project Map, inspect_symbol, and search_code before reading files.
-- Read priority: (1) Project Map / inspect_symbol / targeted read_file / search_code -> (2) full read_file when surrounding context is required.
+### Project Map First
+Project Map lists file paths, symbol definitions with line ranges.
+- Symbol location is in Project Map → use read_file with range syntax directly.
+- For callers and references, use inspect_symbol.
+- search_code: for string patterns, non-Go references, or cross-file patterns not covered by inspect_symbol.
+- read_file: to read actual contents. Use line ranges from Project Map.
 - Never guess file paths or APIs.
-- Go symbol lookup -> inspect_symbol. Unknown string, regex, or non-Go -> search_code.
 - Do not re-read files already returned in full in this session.
 
 ## Impact Analysis
@@ -107,6 +124,32 @@ Respond in the same language as the task message.
 - Check for existing helpers before introducing new ones.
 - Propagate errors explicitly and keep type safety.
 - Config safety: keep unrelated fields intact when editing config files.
+`
+
+const applyPatchSection = `### apply_patch format
+When apply_patch is available, use it for ALL edits, file creations, and deletions in one call:
+*** Begin Patch
+*** Update File: <path>
+@@ <function or class>
+ <3 lines context>
+-<old line>
++<new line>
+ <3 lines context>
+*** Add File: <path>
++<content>
+*** Delete File: <path>
+*** End Patch
+Prefix: space=context, -=remove, +=add. Use @@ to jump to the target function/class. File paths must be relative.
+
+## Output Rules
+- Be concise. Report every file you modified with the specific lines changed.
+- If a tool fails, analyze why and change approach; do not blindly rerun it.
+- STOP and reassess if 10+ tool calls show no progress.`
+
+const legacyEditSection = `### Legacy edit tools
+Use str_replace / write_file / delete_file for edits.
+- str_replace old_str must come from actual inspect_symbol, read_file, or search_code output in this session.
+- After str_replace fails, read the target section once, then retry. Do not loop read-fail-read-fail.
 
 ## Output Rules
 - Be concise. Report every file you modified with the specific lines changed.

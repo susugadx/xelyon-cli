@@ -21,7 +21,7 @@ type MapCache struct {
 type CacheFile struct {
 	ModTime   time.Time `json:"mod_time"`
 	LineCount int       `json:"line_count"`
-	Symbols   []Symbol  `json:"symbols"`
+	Symbols   []Symbol  `json:"symbols,omitempty"`
 }
 
 func loadMapCache(rootPath string) (*MapCache, error) {

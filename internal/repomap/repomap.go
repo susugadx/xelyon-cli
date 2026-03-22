@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/susugadx/xelyon-cli/internal/agent/token"
+	agenttoken "github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/ast"
 	"github.com/susugadx/xelyon-cli/internal/pathmatch"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
@@ -93,7 +93,6 @@ func (pm *ProjectMap) Build() error {
 	if !common.IsRipgrepAvailable() {
 		return fmt.Errorf("ripgrep (rg) is required")
 	}
-
 	paths, err := pm.listFiles()
 	if err != nil {
 		return err
@@ -662,13 +661,11 @@ func writeRenderedSymbol(b *strings.Builder, symbolPrefix string, symbol Symbol)
 	}
 
 	fmt.Fprintf(b, "%s%s: %s\n", symbolPrefix, location, lines[0])
-	if len(lines) == 1 {
-		return
-	}
-
-	padding := strings.Repeat(" ", len(location)+2)
-	for _, line := range lines[1:] {
-		fmt.Fprintf(b, "%s%s%s\n", symbolPrefix, padding, line)
+	if len(lines) > 1 {
+		padding := strings.Repeat(" ", len(location)+2)
+		for _, line := range lines[1:] {
+			fmt.Fprintf(b, "%s%s%s\n", symbolPrefix, padding, line)
+		}
 	}
 }
 
@@ -677,7 +674,7 @@ func (pm *ProjectMap) fitsBudget(text string) bool {
 	if maxTokens <= 0 {
 		maxTokens = defaultMaxTokens
 	}
-	return token.EstimateTokenCount(text) <= maxTokens
+	return agenttoken.EstimateTokenCount(text) <= maxTokens
 }
 
 func (pm *ProjectMap) ignorePatterns() []string {

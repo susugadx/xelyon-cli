@@ -48,6 +48,12 @@ func TestBuildSystemPrompt_SystemPromptConstant(t *testing.T) {
 	if result != SystemPrompt {
 		t.Error("BuildSystemPrompt(SystemPrompt, false) should return SystemPrompt unchanged")
 	}
+	if strings.Contains(result, "start_line") || strings.Contains(result, "end_line") {
+		t.Error("result should not describe read_file with start_line/end_line parameters")
+	}
+	if strings.Contains(result, "ALL file paths") {
+		t.Error("result should not claim Project Map has complete coverage")
+	}
 
 	result = BuildSystemPrompt(SystemPrompt, true)
 	if !strings.Contains(result, "## Workflow Rules") {
@@ -58,5 +64,8 @@ func TestBuildSystemPrompt_SystemPromptConstant(t *testing.T) {
 	}
 	if !strings.Contains(result, "Plan Mode") {
 		t.Error("result should append Plan Mode content")
+	}
+	if !strings.Contains(result, `paths=["agent.go:161-328"]`) {
+		t.Error("result should preserve read_file range syntax guidance")
 	}
 }

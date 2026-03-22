@@ -40,29 +40,32 @@ func TestSystemPrompt_BashRules(t *testing.T) {
 }
 
 func TestSystemPrompt_ProjectMapGuidance(t *testing.T) {
-	if !strings.Contains(SystemPrompt, "If Project Map is available, check it first") {
-		t.Error("SystemPrompt should prefer Project Map first")
+	if !strings.Contains(SystemPrompt, "Project Map lists file paths, symbol definitions with line ranges for the project.") {
+		t.Error("SystemPrompt should describe Project Map as structure index")
 	}
-	if !strings.Contains(SystemPrompt, "function locations, line counts, and symbol signatures") {
-		t.Error("SystemPrompt should mention Project Map symbol signatures")
+	if !strings.Contains(SystemPrompt, "Do NOT call search_code to find symbols already listed in Project Map") {
+		t.Error("SystemPrompt should skip search_code when symbol is in Project Map")
 	}
-	if !strings.Contains(SystemPrompt, "go directly to inspect_symbol or read_file; do not search_code first") {
-		t.Error("SystemPrompt should skip search_code when Project Map already gives the target location")
+	if !strings.Contains(SystemPrompt, "inspect_symbol: Go symbol caller/reference investigation") {
+		t.Error("SystemPrompt should direct to inspect_symbol for callers/refs")
 	}
-	if !strings.Contains(SystemPrompt, "Use list_dir only when you need current filesystem state") {
-		t.Error("SystemPrompt should weaken list_dir to current-state checks")
+	if strings.Contains(SystemPrompt, "imports") || strings.Contains(SystemPrompt, "← refs") {
+		t.Error("SystemPrompt should not mention imports or refs in Project Map")
 	}
 }
 
 func TestSystemPrompt_ToolGuidanceMatchesCurrentSchema(t *testing.T) {
-	if !strings.Contains(SystemPrompt, "Go symbol lookup -> inspect_symbol.") {
-		t.Error("SystemPrompt should describe inspect_symbol as Go symbol lookup")
+	if !strings.Contains(SystemPrompt, "inspect_symbol: Go symbol caller/reference investigation") {
+		t.Error("SystemPrompt should describe inspect_symbol for callers and references")
 	}
-	if !strings.Contains(SystemPrompt, "read_file returns full content for all requested files") {
+	if !strings.Contains(SystemPrompt, "read_file: to read actual file contents. Use line ranges from Project Map.") {
 		t.Error("SystemPrompt should describe current read_file behavior")
 	}
 	if !strings.Contains(SystemPrompt, "### apply_patch (edit tool)") {
 		t.Error("default SystemPrompt should include the apply_patch guide")
+	}
+	if strings.Contains(SystemPrompt, "start_line") || strings.Contains(SystemPrompt, "end_line") {
+		t.Error("SystemPrompt should not describe read_file with start_line/end_line parameters")
 	}
 	forbidden := []string{
 		"search_code+read_file",
@@ -73,9 +76,6 @@ func TestSystemPrompt_ToolGuidanceMatchesCurrentSchema(t *testing.T) {
 		"token_budget",
 		"summary mode",
 		"full mode",
-		"start_line",
-		"end_line",
-		"line range",
 		"line-range",
 	}
 	for _, s := range forbidden {
