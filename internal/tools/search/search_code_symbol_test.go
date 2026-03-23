@@ -348,6 +348,45 @@ func TestContainsRegexMeta(t *testing.T) {
 	}
 }
 
+// ── multi-pattern + symbol fast path テスト ──
+
+func TestSearchCode_MultiPatternGoSymbol(t *testing.T) {
+	setupSymbolTestDir(t, "agent.go", symbolTestSource)
+
+	// カンマ区切りで Go シンボル2つ → 両方 symbol 解決される
+	result := ExecuteSearchCode(SearchOptions{Pattern: "NewAgent,Run", Path: "."})
+	if !strings.Contains(result, "Pattern 1/2") {
+		t.Error("expected Pattern 1/2 header")
+	}
+	if !strings.Contains(result, "Pattern 2/2") {
+		t.Error("expected Pattern 2/2 header")
+	}
+	if !strings.Contains(result, "NewAgent") {
+		t.Error("expected NewAgent in result")
+	}
+	if !strings.Contains(result, "Run") {
+		t.Error("expected Run in result")
+	}
+}
+
+func TestSearchCode_MultiPatternPythonSymbol(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"models.py": pythonTestSource,
+		"views.py":  pythonTestUsageSource,
+	})
+
+	result := ExecuteSearchCode(SearchOptions{Pattern: "authenticate,login_view", Path: dir, FileType: "py"})
+	if !strings.Contains(result, "Pattern 1/2") {
+		t.Error("expected Pattern 1/2 header")
+	}
+	if !strings.Contains(result, "authenticate") {
+		t.Error("expected authenticate in result")
+	}
+	if !strings.Contains(result, "login_view") {
+		t.Error("expected login_view in result")
+	}
+}
+
 func TestIsSymbolResolvableLanguage(t *testing.T) {
 	supported := []string{"py", "python", "ts", "tsx", "js", "jsx", "mjs", "rs", "rust", "java", "kt", "rb", "ruby", "php", "c", "cpp", "swift", "scala", "sh", "bash"}
 	for _, lang := range supported {

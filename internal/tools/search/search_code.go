@@ -263,92 +263,52 @@ type patternResult struct {
 	Warnings     []string
 }
 
-// executeMultiplePatterns は複数パターンを goroutine 並列で検索する
+// executeMultiplePatterns は複数パターンを goroutine 並列で検索する。
+// 各パターンは executeSinglePattern に委譲し、symbol fast path + キャッシュが自動で効く。
 func executeMultiplePatterns(cache tools.ToolCacheInterface, patterns []string, opts SearchOptions) string {
-	ch := make(chan patternResult, len(patterns))
+	type formattedResult struct {
+		Pattern   string
+		Index     int
+		Formatted string
+	}
+
+	ch := make(chan formattedResult, len(patterns))
 	for i, p := range patterns {
 		go func(idx int, pat string) {
-			output, useRg, searchWarnings, searchErr := executeSearch(pat, opts)
-			if searchErr != nil {
-				ch <- patternResult{Pattern: pat, Index: idx, Error: searchErr.Error(), Warnings: searchWarnings}
-				return
-			}
-			var results []SearchResult
-			if useRg {
-				results = parseRipgrepJSON(output, 0)
-			} else {
-				results = parseGrepOutput(output, 0)
-			}
-			results = filterResultsByOptions(results, opts)
-			reclassifyWithAST(results, pat, opts.IsRegex)
-			results = mergeContextLines(results)
-			sortResultsByPriority(results)
-
-			totalMatches := 0
-			for _, r := range results {
-				totalMatches += r.MatchCount
-			}
-
-			ch <- patternResult{Pattern: pat, Results: results, Index: idx, TotalMatches: totalMatches, Warnings: searchWarnings}
+			result := executeSinglePattern(cache, pat, opts)
+			// lineRangeHint は最後に1回だけ付与するため個別結果からは除去
+			result = strings.TrimSuffix(result, lineRangeHint)
+			ch <- formattedResult{Pattern: pat, Index: idx, Formatted: result}
 		}(i, p)
 	}
 
-	collected := make([]patternResult, len(patterns))
+	collected := make([]formattedResult, len(patterns))
 	for range patterns {
 		r := <-ch
 		collected[r.Index] = r
 	}
 
-	totalAllMatches := 0
-	for _, c := range collected {
-		totalAllMatches += c.TotalMatches
-	}
-	if opts.OutputMode == "manifest" {
-		for i := range collected {
-			detectBlocksWithCache(cache, collected[i].Results)
+	var sb strings.Builder
+	for i, pr := range collected {
+		if i > 0 {
+			sb.WriteString("\n")
 		}
-		formatted := formatManifestMultiResults(collected)
-
-		if cache != nil {
-			multiKey := buildMultiCacheKey(patterns)
-			cacheKey := buildSearchCacheKey(opts)
-			allFiles := make([]string, 0)
-			for _, c := range collected {
-				allFiles = append(allFiles, collectFilePaths(c.Results)...)
-			}
-			cache.SetSearch(multiKey, cacheKey, formatted, dedupePaths(allFiles))
+		fmt.Fprintf(&sb, "━━ Pattern %d/%d: %q ━━\n", i+1, len(patterns), pr.Pattern)
+		sb.WriteString(pr.Formatted)
+		if !strings.HasSuffix(pr.Formatted, "\n") {
+			sb.WriteString("\n")
 		}
-		return formatted
 	}
 
-	for i, c := range collected {
-		var allocatedBudget int
-		if totalAllMatches == 0 {
-			allocatedBudget = opts.TokenBudget / len(patterns)
-		} else {
-			allocatedBudget = opts.TokenBudget * c.TotalMatches / totalAllMatches
-		}
-		if allocatedBudget < 300 {
-			allocatedBudget = 300
-		}
-		collected[i].Results, collected[i].Truncated = truncateToTokenBudget(c.Results, allocatedBudget, false)
-		detectBlocksWithCache(cache, collected[i].Results)
-	}
-
-	formatted := formatMultiResults(collected, opts.TokenBudget)
-	formattedWithHint := formatted + lineRangeHint
+	output := sb.String() + lineRangeHint
 
 	if cache != nil {
 		multiKey := buildMultiCacheKey(patterns)
 		cacheKey := buildSearchCacheKey(opts)
-		allFiles := make([]string, 0)
-		for _, c := range collected {
-			allFiles = append(allFiles, collectFilePaths(c.Results)...)
-		}
-		cache.SetSearch(multiKey, cacheKey, formattedWithHint, dedupePaths(allFiles))
+		cache.SetSearch(multiKey, cacheKey, output, nil)
 	}
 
-	return formattedWithHint
+	return output
 }
 
 // buildMultiCacheKey は複数パターンからソート済みキャッシュキーを構築する

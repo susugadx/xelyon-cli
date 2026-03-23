@@ -471,7 +471,7 @@ func TestExecuteSearchCode_MultiplePatterns(t *testing.T) {
 
 	result := ExecuteSearchCode(SearchOptions{Pattern: "func_a,func_b", Path: dir, FilePattern: "*.go", FileType: "", CtxLines: 0, TokenBudget: 3000, IsRegex: true, Multiline: false})
 
-	if !strings.Contains(result, "patterns") {
+	if !strings.Contains(result, "Pattern") {
 		t.Errorf("Expected multi-pattern header, got:\n%s", result)
 	}
 	if !strings.Contains(result, "Pattern 1/2") {
