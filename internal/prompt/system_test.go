@@ -98,20 +98,11 @@ func TestSystemPrompt_ParallelGuidanceIsConsolidated(t *testing.T) {
 	if !strings.Contains(SystemPrompt, "prefer one search_code call with comma-separated patterns instead of serial searches") {
 		t.Error("SystemPrompt should keep multi-pattern search_code guidance")
 	}
-	if !strings.Contains(SystemPrompt, "sub-agents via spawn_agent") {
-		t.Error("SystemPrompt should guide spawn_agent delegation")
+	if !strings.Contains(SystemPrompt, "Sub-agents are fetch tools, not decision-makers") {
+		t.Error("SystemPrompt should clarify sub-agent role")
 	}
 	if !strings.Contains(SystemPrompt, "Use wait_agent to collect results before synthesizing your response") {
 		t.Error("SystemPrompt should mention wait_agent collection")
-	}
-	if !strings.Contains(SystemPrompt, "NEVER specify model or reasoning_effort in spawn_agent") {
-		t.Error("SystemPrompt should forbid manual sub-agent model overrides")
-	}
-	if !strings.Contains(SystemPrompt, "message must be concise") {
-		t.Error("SystemPrompt should require concise sub-agent messages")
-	}
-	if !strings.Contains(SystemPrompt, "NEVER set timeout_ms in wait_agent") {
-		t.Error("SystemPrompt should forbid short-circuit wait_agent timeouts")
 	}
 	if !strings.Contains(SystemPrompt, "do NOT use read_file/search_code yourself for the same delegated task") {
 		t.Error("SystemPrompt should forbid duplicate local exploration after delegation")
@@ -121,6 +112,12 @@ func TestSystemPrompt_ParallelGuidanceIsConsolidated(t *testing.T) {
 	}
 	if !strings.Contains(SystemPrompt, "SINGLE response as parallel tool calls") {
 		t.Error("SystemPrompt should require all spawn_agent calls in a single response")
+	}
+	if !strings.Contains(SystemPrompt, "Skip sub-agents for simple tasks") {
+		t.Error("SystemPrompt should guide when to skip sub-agents")
+	}
+	if !strings.Contains(SystemPrompt, "Fetch") {
+		t.Error("SystemPrompt should use Fetch terminology in Staged Delegation Protocol")
 	}
 }
 
