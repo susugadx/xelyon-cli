@@ -139,9 +139,12 @@ func (a *Agent) executeWaitAgentWithLiveView(ctx context.Context, toolCall *tool
 		select {
 		case event, ok := <-eventCh:
 			if ok {
+				// スピナー行をクリアしてからイベントを表示（スピナーとの混在防止）
+				fmt.Fprint(out, "\r\033[K")
 				printSubAgentEvent(out, event)
 			}
 		case result := <-resultCh:
+			fmt.Fprint(out, "\r\033[K")
 			drainEvents(out, eventCh)
 			if result.display != "" {
 				_, _ = io.WriteString(out, result.display)
