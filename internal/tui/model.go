@@ -74,11 +74,21 @@ func NewModel(agent AgentInterface, initialContent string) Model {
 	return m
 }
 
+// enableMouseWheel は mode 1000 + SGR 1006 を手動で有効化する tea.Cmd。
+// bubbletea の WithMouseAllMotion/WithMouseCellMotion は使わず、
+// ホイールイベントのみキャプチャしてネイティブテキスト選択を維持する。
+func enableMouseWheel() tea.Msg {
+	// stdout に直接書き込み（bubbletea のレンダラーを経由しない）
+	_, _ = fmt.Fprint(os.Stdout, enableMouseWheelSeq)
+	return nil
+}
+
 // Init は bubbletea の Init を実装する。
 func (m Model) Init() tea.Cmd {
 	return tea.Batch(
 		textinput.Blink,
 		m.tickStatus(),
+		enableMouseWheel,
 	)
 }
 
@@ -118,9 +128,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.textInput.Width = m.width - 4 // "> " prefix + padding
 
 	case tea.MouseMsg:
-		var cmd tea.Cmd
-		m.viewport, cmd = m.viewport.Update(msg)
-		cmds = append(cmds, cmd)
+		// mode 1000 はクリック/リリース/ホイールを全て送信するが、
+		// ホイールのみ viewport に渡す。クリック/リリースは無視して
+		// ネイティブテキスト選択（Shift+ドラッグ）との干渉を最小化。
+		if tea.MouseEvent(msg).IsWheel() {
+			var cmd tea.Cmd
+			m.viewport, cmd = m.viewport.Update(msg)
+			cmds = append(cmds, cmd)
+		}
 		return m, tea.Batch(cmds...)
 
 	case AppendMessageMsg:
