@@ -43,7 +43,7 @@ type Model struct {
 	viewport      viewport.Model
 	textInput     textinput.Model
 	messages      []ChatMessage
-	content       strings.Builder // viewport に表示するテキスト全体
+	content       *strings.Builder // viewport に表示するテキスト全体（ポインタ: bubbletea の値コピーで panic 回避）
 	statusLine    string
 	width         int
 	height        int
@@ -64,6 +64,7 @@ func NewModel(agent AgentInterface, initialContent string) Model {
 	m := Model{
 		agent:      agent,
 		textInput:  ti,
+		content:    &strings.Builder{},
 		messages:   []ChatMessage{},
 		statusLine: agent.GetStatusLine(),
 	}
