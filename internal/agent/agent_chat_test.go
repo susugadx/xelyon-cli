@@ -653,8 +653,9 @@ func TestChatCore_SetsAbortedStatusWithCancelReason(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.ProjectMap.Enabled = false
 	agent.Runtime = &AgentRuntime{
-		Config: cfg,
-		UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
+		Config:   cfg,
+		Registry: tools.DefaultRegistry.Clone(),
+		UI:       ui.NewRuntime(strings.NewReader(""), &out, &out),
 	}
 
 	done := make(chan struct{})

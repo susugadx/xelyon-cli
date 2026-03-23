@@ -278,6 +278,17 @@ func TestSessionStats_EstimatedCost_OpenRouter_Llama(t *testing.T) {
 	}
 }
 
+func TestSessionStats_EstimatedCost_OpenRouter_GLM5(t *testing.T) {
+	stats := NewSessionStats("openrouter", "zhipu/glm-5")
+	stats.AddTokens(790000, 0)
+
+	cost := stats.EstimatedCost()
+	expected := 0.72 * 0.79
+	if cost < expected-0.001 || cost > expected+0.001 {
+		t.Errorf("EstimatedCost() for openrouter glm-5 = %f, want %f", cost, expected)
+	}
+}
+
 func TestSessionStats_EstimatedCost_OpenRouter_Default(t *testing.T) {
 	stats := NewSessionStats("openrouter", "unknown/some-model")
 	stats.AddTokens(1000000, 1000000)

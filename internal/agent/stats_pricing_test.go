@@ -191,6 +191,19 @@ func TestGetPricingInfo_UnknownProviderFallback(t *testing.T) {
 	}
 }
 
+func TestGetPricingInfo_OpenRouter_GLM5(t *testing.T) {
+	pricing := GetPricingInfo("openrouter", "zhipu/glm-5")
+	if pricing.InputCostPerM != 0.72 {
+		t.Errorf("openrouter glm-5 InputCostPerM = %f, want 0.72", pricing.InputCostPerM)
+	}
+	if pricing.OutputCostPerM != 2.30 {
+		t.Errorf("openrouter glm-5 OutputCostPerM = %f, want 2.30", pricing.OutputCostPerM)
+	}
+	if pricing.CachedInputCostPerM != 0.072 {
+		t.Errorf("openrouter glm-5 CachedInputCostPerM = %f, want 0.072", pricing.CachedInputCostPerM)
+	}
+}
+
 // --- CalculateRequestCost tests ---
 
 func TestCalculateRequestCost_BasicCost(t *testing.T) {

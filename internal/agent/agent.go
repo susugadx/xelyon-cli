@@ -242,10 +242,7 @@ func NewAgentWithRuntime(model string, provider api.Provider, headless bool, run
 	// （Function Calling経由で呼び出し可能にする）
 	configureMCPTools(provider, mcpManager.GetTools(), errOut)
 
-	currentExcluded := runtime.effectiveRegistry().GetExcludedTools()
-	excluded := normalModeExcludedTools()
-	excluded = appendUniqueStrings(excluded, currentExcluded...)
-	runtime.effectiveRegistry().SetExcludedTools(excluded)
+	runtime.effectiveRegistry().SetExcludedTools(normalModeExcludedTools())
 
 	// プロバイダー別プレフィックスを Workflow Rules の直前に注入
 	systemPrompt = prompt.BuildProviderSystemPromptWithConfig(systemPrompt, provider.Name(), model, runtime.effectiveConfig())

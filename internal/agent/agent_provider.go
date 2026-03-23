@@ -62,6 +62,16 @@ func (a *Agent) SwitchProvider(providerName string) error {
 	// プロバイダー切り替え
 	oldProvider := a.ProviderName
 	oldModel := a.CurrentModel
+	if oldProvider != "" && oldProvider != providerName {
+		// プロバイダー切り替え時は tool_calls のフォーマットが互換でない場合があるため、履歴を破棄する
+		a.historyMu.Lock()
+		hadHistory := len(a.History) > 0
+		a.History = []api.Message{}
+		a.historyMu.Unlock()
+		if hadHistory {
+			yellow.Fprintln(out, "🗑️  History cleared after provider switch to avoid incompatible tool-call history")
+		}
+	}
 	a.CurrentProvider = provider
 	a.ProviderName = providerName
 	a.CurrentModel = newModel

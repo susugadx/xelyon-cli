@@ -261,6 +261,8 @@ func GetPricingInfo(provider string, model string, promptTokenCount ...int) Pric
 			return PricingInfo{InputCostPerM: 0.20, OutputCostPerM: 0.80, CachedInputCostPerM: 0.02, CacheCreationCostPerM: 0.20}
 		case strings.Contains(lm, "qwen"):
 			return PricingInfo{InputCostPerM: 0.15, OutputCostPerM: 0.60, CachedInputCostPerM: 0.015, CacheCreationCostPerM: 0.15}
+		case strings.Contains(lm, "glm-5"):
+			return PricingInfo{InputCostPerM: 0.72, OutputCostPerM: 2.30, CachedInputCostPerM: 0.072, CacheCreationCostPerM: 0.72}
 		default:
 			return getDeepSeekPricing(model)
 		}

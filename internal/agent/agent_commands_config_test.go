@@ -167,6 +167,29 @@ func TestHandleUseCommand_WithExplicitModel_UpdatesSessionModel(t *testing.T) {
 		CurrentProvider: &mockCacheClearableProviderForModel{name: "openai"},
 		Stats:           NewSessionStats("openai", "gpt-old"),
 		session:         history.NewSession("gpt-old"),
+		History: []api.Message{
+			{
+				Role:    "assistant",
+				Content: "tool call",
+				ToolCalls: []api.OpenAIToolCall{
+					{
+						Index: 0,
+						ID:    "tc1",
+						Type:  "function",
+						Function: api.OpenAIToolCallFunction{
+							Name:      "read_file",
+							Arguments: "{}",
+						},
+					},
+				},
+			},
+			{
+				Role:       "tool",
+				Content:    "tool response",
+				ToolCallID: "tc1",
+				ToolName:   "read_file",
+			},
+		},
 		Runtime: &AgentRuntime{
 			Config: cfg,
 			UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
@@ -182,5 +205,11 @@ func TestHandleUseCommand_WithExplicitModel_UpdatesSessionModel(t *testing.T) {
 	}
 	if agent.session == nil || agent.session.Model != "qwen2.5-coder:14b" {
 		t.Fatalf("session.Model = %q, want %q", agent.session.Model, "qwen2.5-coder:14b")
+	}
+	if len(agent.History) != 0 {
+		t.Fatalf("len(agent.History) = %d, want 0", len(agent.History))
+	}
+	if !strings.Contains(out.String(), "History cleared after provider switch") {
+		t.Fatalf("expected output to contain history cleared notification, got %q", out.String())
 	}
 }

@@ -1,14 +1,17 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // mockCacheClearableProvider はキャッシュクリアと Provider を実装したモック
@@ -74,6 +77,57 @@ func TestAgent_SwitchProvider_ClearCache(t *testing.T) {
 	assert.Equal(t, "ollama", agent.ProviderName)
 	assert.NotEqual(t, mockProvider, agent.CurrentProvider, "CurrentProvider should be replaced")
 	assert.Equal(t, agent.CurrentModel, agent.session.Model)
+}
+
+func TestAgent_SwitchProvider_ClearHistoryAndNotify(t *testing.T) {
+	// APIキー存在チェックのため、OLLAMA_BASE_URL を用意
+	t.Setenv("OLLAMA_BASE_URL", "http://localhost:11434")
+
+	// テスト用にモックプロバイダーを登録
+	api.RegisterProvider("ollama", func(apiKey string) (api.Provider, error) {
+		return &mockCacheClearableProvider{}, nil
+	})
+
+	var out bytes.Buffer
+	runtime := NewAgentRuntimeWithConfig(newProjectMapDisabledConfig())
+	runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, &out)
+
+	agent := &Agent{
+		ProviderName:    "mock",
+		CurrentModel:    "mock-model",
+		CurrentProvider: &mockCacheClearableProvider{},
+		session:         history.NewSession("mock-model"),
+		Runtime:         runtime,
+		History: []api.Message{
+			{
+				Role:    "assistant",
+				Content: "tool call",
+				ToolCalls: []api.OpenAIToolCall{
+					{
+						Index: 0,
+						ID:    "tc1",
+						Type:  "function",
+						Function: api.OpenAIToolCallFunction{
+							Name:      "read_file",
+							Arguments: "{}",
+						},
+					},
+				},
+			},
+			{
+				Role:       "tool",
+				Content:    "tool response",
+				ToolCallID: "tc1",
+				ToolName:   "read_file",
+			},
+		},
+	}
+
+	err := agent.SwitchProvider("ollama")
+	assert.NoError(t, err)
+
+	assert.Equal(t, 0, len(agent.History))
+	assert.Contains(t, out.String(), "History cleared after provider switch")
 }
 
 func TestAgent_SwitchProvider_RebuildsSystemPrompt(t *testing.T) {
