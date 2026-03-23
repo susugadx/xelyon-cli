@@ -23,9 +23,25 @@ func RunTUIWithConfig(model string, provider api.Provider, cfg *config.Config, a
 	adapter := NewTUIAdapter(ag, nil)
 
 	tui.Run(adapter, initialContent, func(p *tea.Program) {
-		// capture writer に p.Send を接続
+		// capture writer に p.Send を非同期チャネル経由で接続
+		// tea.Cmd goroutine 内から p.Send() を直接呼ぶとデッドロックするため、
+		// バッファ付きチャネルと drain goroutine を経由させる。
+		msgCh := make(chan tui.AppendMessageMsg, 256)
+
+		// drain goroutine: チャネルから読み出して p.Send() を呼ぶ
+		go func() {
+			for msg := range msgCh {
+				p.Send(msg)
+			}
+		}()
+
 		adapter.sendMsg = func(msg tui.AppendMessageMsg) {
-			p.Send(msg)
+			// 非ブロッキング送信: チャネルが満杯ならドロップ（安全策）
+			select {
+			case msgCh <- msg:
+			default:
+				// バッファ満杯時はドロップ（画面表示が欠落するが、デッドロックは回避）
+			}
 		}
 		adapter.SetOutputCapture()
 	})
