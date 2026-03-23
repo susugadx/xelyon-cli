@@ -13,7 +13,9 @@ const applyPatchDescription = "## `apply_patch`\n\n" +
 	"*** Delete File: <path> - remove an existing file. Nothing follows.\n" +
 	"*** Update File: <path> - patch an existing file in place (optionally with a rename).\n\n" +
 	"May be immediately followed by *** Move to: <new path> if you want to rename the file.\n" +
-	"Then one or more \"hunks\", each introduced by @@ (optionally followed by a hunk header).\n" +
+	"Then one or more \"hunks\", each introduced by @@ followed by a text snippet that exists in the file (e.g. a function signature or class definition). " +
+	"This is NOT unified diff — do NOT use line numbers like @@ -274,6 +274,32 @@. " +
+	"Instead, write a code fragment that uniquely identifies the location, e.g. @@ func BuildProjectMap or @@ class Config.\n" +
 	"Within a hunk each line starts with:\n\n" +
 	"For instructions on [context_before] and [context_after]:\n" +
 	"- By default, show 3 lines of code immediately above and 3 lines immediately below each change. If a change is within 3 lines of a previous change, do NOT duplicate the first change's [context_after] lines in the second change's [context_before] lines.\n" +
@@ -39,7 +41,7 @@ const applyPatchDescription = "## `apply_patch`\n\n" +
 	"DeleteFile := \"*** Delete File: \" path NEWLINE\n" +
 	"UpdateFile := \"*** Update File: \" path NEWLINE [ MoveTo ] { Hunk }\n" +
 	"MoveTo := \"*** Move to: \" newPath NEWLINE\n" +
-	"Hunk := \"@@\" [ header ] NEWLINE { HunkLine } [ \"*** End of File\" NEWLINE ]\n" +
+	"Hunk := \"@@\" [ text_to_search ] NEWLINE { HunkLine } [ \"*** End of File\" NEWLINE ]  ; text_to_search is a code fragment, NOT line numbers\n" +
 	"HunkLine := (\" \" | \"-\" | \"+\") text NEWLINE\n\n" +
 	"A full patch can combine several operations:\n\n" +
 	"*** Begin Patch\n" +

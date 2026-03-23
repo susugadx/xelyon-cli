@@ -132,6 +132,8 @@ func formatToolSummary(info ToolDisplayInfo, trimmed string) string {
 		return formatSearchCodeSummary(info.Args, trimmed)
 	case info.ToolName == "bash":
 		return truncateText(info.Args["command"], 60)
+	case info.ToolName == "apply_patch":
+		return formatApplyPatchSummary(info.Args, trimmed)
 	case info.ToolName == "str_replace":
 		return formatStrReplaceSummary(info.Args, trimmed)
 	case info.ToolName == "list_dir":
@@ -287,6 +289,46 @@ func formatWaitAgentSummary(rawIDs string) string {
 	default:
 		return fmt.Sprintf("%d agents", count)
 	}
+}
+
+func formatApplyPatchSummary(args map[string]string, result string) string {
+	var added, modified, deleted int
+
+	lines := strings.Split(result, "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(line, "Added: ") {
+			added = countApplyPaths(strings.TrimPrefix(line, "Added: "))
+		} else if strings.HasPrefix(line, "Modified: ") {
+			modified = countApplyPaths(strings.TrimPrefix(line, "Modified: "))
+		} else if strings.HasPrefix(line, "Deleted: ") {
+			deleted = countApplyPaths(strings.TrimPrefix(line, "Deleted: "))
+		}
+	}
+
+	total := added + modified + deleted
+	if total == 0 {
+		return "No files changed"
+	}
+
+	var parts []string
+	if modified > 0 {
+		parts = append(parts, fmt.Sprintf("%d modified", modified))
+	}
+	if added > 0 {
+		parts = append(parts, fmt.Sprintf("%d added", added))
+	}
+	if deleted > 0 {
+		parts = append(parts, fmt.Sprintf("%d deleted", deleted))
+	}
+
+	return fmt.Sprintf("%d files (%s)", total, strings.Join(parts, ", "))
+}
+
+func countApplyPaths(pathsStr string) int {
+	if pathsStr == "(none)" || pathsStr == "" {
+		return 0
+	}
+	return len(strings.Split(pathsStr, ","))
 }
 
 func formatStrReplaceSummary(args map[string]string, result string) string {

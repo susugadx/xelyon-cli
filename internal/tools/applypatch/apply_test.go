@@ -450,3 +450,48 @@ func sameStrings(got, want []string) bool {
 	}
 	return true
 }
+
+func TestLooksLikeUnifiedDiffHeader(t *testing.T) {
+	tests := []struct {
+		input string
+		want  bool
+	}{
+		{"-274,6 +274,32 @@", true},
+		{"-43,7 +43,7 @@", true},
+		{"-1,3 +1,5", true},
+		{"func BuildProjectMap", false},
+		{"class Config", false},
+		{`case "openrouter":`, false},
+		{"", false},
+		{"def greet():", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := looksLikeUnifiedDiffHeader(tt.input)
+			if got != tt.want {
+				t.Errorf("looksLikeUnifiedDiffHeader(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestApplyPatch_UnifiedDiffHeaderError(t *testing.T) {
+	withTempWorkdir(t, func() {
+		writeTestFile(t, "target.go", "package main\n\nfunc main() {\n\tfmt.Println(\"hello\")\n}\n")
+
+		patch := "*** Begin Patch\n" +
+			"*** Update File: target.go\n" +
+			"@@ -1,3 +1,5 @@\n" +
+			" package main\n" +
+			"+import \"os\"\n" +
+			"*** End Patch\n"
+
+		_, err := ApplyPatch(patch)
+		if err == nil {
+			t.Fatal("expected error for unified diff header")
+		}
+		if !strings.Contains(err.Error(), "not unified diff line numbers") {
+			t.Errorf("error should mention unified diff line numbers, got: %v", err)
+		}
+	})
+}

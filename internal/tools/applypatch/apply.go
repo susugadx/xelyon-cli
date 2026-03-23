@@ -332,6 +332,12 @@ func computeReplacements(originalLines []string, path string, chunks []UpdateFil
 		if chunk.ChangeContext != "" {
 			idx, ok := SeekSequence(originalLines, []string{chunk.ChangeContext}, lineIndex, false)
 			if !ok {
+				if looksLikeUnifiedDiffHeader(chunk.ChangeContext) {
+					return nil, fmt.Errorf(
+						"@@ header must be a code fragment (e.g. @@ func name), not unified diff line numbers — got: @@ %s",
+						chunk.ChangeContext,
+					)
+				}
 				return nil, fmt.Errorf("failed to find context '%s' in %s", chunk.ChangeContext, path)
 			}
 			lineIndex = idx + 1
@@ -399,4 +405,14 @@ func applyReplacements(lines []string, replacements []replacement) []string {
 	}
 
 	return current
+}
+
+// looksLikeUnifiedDiffHeader は @@ の後のテキストが unified diff の行番号形式かを判定する。
+// 例: "-274,6 +274,32 @@", "-43,7 +43,7 @@"
+func looksLikeUnifiedDiffHeader(header string) bool {
+	trimmed := strings.TrimSpace(header)
+	if !strings.HasPrefix(trimmed, "-") {
+		return false
+	}
+	return strings.ContainsAny(trimmed, "0123456789") && strings.Contains(trimmed, ",")
 }

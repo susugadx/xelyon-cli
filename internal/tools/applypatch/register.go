@@ -6,6 +6,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 func init() {
@@ -44,7 +45,7 @@ func (t *ApplyPatchTool) Run(execCtx tools.ExecutionContext, args map[string]str
 		return "", nil, err
 	}
 
-	showApplyPatchPreview(execCtx.Output(), parsed.Hunks)
+	showApplyPatchPreview(execCtx.Output(), patchText, parsed.Hunks)
 
 	decision := confirmApplyPatch(execCtx, parsed)
 
@@ -113,29 +114,65 @@ func getApplyPatchSafety(parsed *ParsedPatch) common.ToolSafety {
 	return common.SafetyMedium
 }
 
-func showApplyPatchPreview(out common.Output, hunks []Hunk) {
+func showApplyPatchPreview(out common.Output, patchText string, hunks []Hunk) {
 	if out.SuppressStdout() {
 		return
 	}
+
+	ui.ShowPatchToWriter(out.StdoutWriter(), patchText)
+
+	counts := countLinesPerPath(patchText)
 
 	out.Cyan.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	out.Cyan.Printf("🩹 apply_patch (%d file operation(s))\n", len(hunks))
 	out.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	for _, hunk := range hunks {
+		c := counts[hunk.Path]
+		linesInfo := ""
+		if c[0] > 0 || c[1] > 0 {
+			linesInfo = fmt.Sprintf(" (+%d, -%d)", c[0], c[1])
+		}
 		switch hunk.Type {
 		case "add":
-			out.Printf("  A %s\n", hunk.Path)
+			out.Printf("  A %s%s\n", hunk.Path, linesInfo)
 		case "delete":
 			out.Printf("  D %s\n", hunk.Path)
 		case "update":
 			if hunk.MovePath != "" {
-				out.Printf("  M %s -> %s\n", hunk.Path, hunk.MovePath)
+				out.Printf("  M %s -> %s%s\n", hunk.Path, hunk.MovePath, linesInfo)
 			} else {
-				out.Printf("  M %s\n", hunk.Path)
+				out.Printf("  M %s%s\n", hunk.Path, linesInfo)
 			}
 		}
 	}
 	out.Println()
+}
+
+func countLinesPerPath(patchText string) map[string][2]int {
+	counts := make(map[string][2]int) // path -> [added, removed]
+	lines := strings.Split(patchText, "\n")
+	var currentPath string
+
+	for _, line := range lines {
+		if strings.HasPrefix(line, "*** Add File: ") {
+			currentPath = strings.TrimSpace(strings.TrimPrefix(line, "*** Add File: "))
+		} else if strings.HasPrefix(line, "*** Update File: ") {
+			currentPath = strings.TrimSpace(strings.TrimPrefix(line, "*** Update File: "))
+		} else if strings.HasPrefix(line, "*** Delete File: ") {
+			currentPath = strings.TrimSpace(strings.TrimPrefix(line, "*** Delete File: "))
+		} else if strings.HasPrefix(line, "*** Move to: ") {
+			// Move doesn't change currentPath reference for + / - counting
+		} else if strings.HasPrefix(line, "+") && currentPath != "" {
+			c := counts[currentPath]
+			c[0]++
+			counts[currentPath] = c
+		} else if strings.HasPrefix(line, "-") && currentPath != "" {
+			c := counts[currentPath]
+			c[1]++
+			counts[currentPath] = c
+		}
+	}
+	return counts
 }
 
 func formatApplyResult(result *ApplyResult) string {

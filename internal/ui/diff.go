@@ -273,6 +273,32 @@ func ShowUnifiedDiffWithRuntime(runtime *Runtime, diffOutput string) {
 	ShowUnifiedDiffToWriter(runtimeOrDefault(runtime).Output(), diffOutput)
 }
 
+// ShowPatchToWriter は指定 writer へ apply_patch 形式のパッチを表示する。
+func ShowPatchToWriter(out io.Writer, patchOutput string) {
+	p := newDiffPrinter(out)
+	lines := strings.Split(patchOutput, "\n")
+
+	for _, line := range lines {
+		if line == "" {
+			p.println()
+			continue
+		}
+
+		switch {
+		case strings.HasPrefix(line, "***"):
+			p.colorPrintln([]color.Attribute{color.Bold, color.FgCyan}, line)
+		case strings.HasPrefix(line, "@@"):
+			p.colorPrintln([]color.Attribute{color.FgCyan}, line)
+		case strings.HasPrefix(line, "-"):
+			p.colorPrintln([]color.Attribute{color.FgRed}, line)
+		case strings.HasPrefix(line, "+"):
+			p.colorPrintln([]color.Attribute{color.FgGreen}, line)
+		default:
+			p.println(line)
+		}
+	}
+}
+
 // ShowUnifiedDiffToWriter は指定 writer へ Unified Diff を表示する。
 func ShowUnifiedDiffToWriter(out io.Writer, diffOutput string) {
 	p := newDiffPrinter(out)
