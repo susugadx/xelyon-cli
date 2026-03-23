@@ -212,6 +212,14 @@ const svc = new UserService(db)
 const user = svc.getUser("123")
 `
 
+const tsArrowTestSource = `const buildMap = async (): Promise<Map<string, string>> => {
+  return new Map<string, string>()
+}
+`
+
+const tsArrowUsageSource = `const mapPromise = buildMap()
+`
+
 func TestSearchCode_TypeScriptSymbolSingleHit(t *testing.T) {
 	dir := setupMultiLangDir(t, map[string]string{
 		"service.ts": tsTestSource,
@@ -227,6 +235,27 @@ func TestSearchCode_TypeScriptSymbolSingleHit(t *testing.T) {
 	}
 	if !strings.Contains(result, "class") {
 		t.Error("expected kind 'class' in result")
+	}
+}
+
+func TestSearchCode_TypeScriptArrowFunctionSymbolSingleHit(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"service.ts": tsArrowTestSource,
+		"app.ts":     tsArrowUsageSource,
+	})
+
+	result := ExecuteSearchCode(SearchOptions{Pattern: "buildMap", Path: dir, FileType: "ts"})
+	if strings.Contains(result, "No matches found") {
+		t.Fatal("expected symbol hit for TypeScript arrow function")
+	}
+	if !strings.Contains(result, "buildMap") {
+		t.Error("expected symbol name in result")
+	}
+	if !strings.Contains(result, "function") {
+		t.Error("expected kind 'function' in result")
+	}
+	if strings.Contains(result, lineRangeHint) {
+		t.Error("symbol result should not contain lineRangeHint")
 	}
 }
 

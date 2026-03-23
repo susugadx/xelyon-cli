@@ -129,12 +129,14 @@ var signaturePatterns = []signaturePattern{
 	{re: regexp.MustCompile(`^export\s+default\s+class\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "class", lang: "js"},
 	{re: regexp.MustCompile(`^export\s+(?:abstract\s+class|class)\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "class", lang: "js"},
 	{re: regexp.MustCompile(`^export\s+function\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "function", lang: "js"},
+	{re: regexp.MustCompile(`^export\s+const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:async\s+)?\([^)]*\)(?:\s*:\s*.+)?\s*=>`), kind: "function", lang: "js"},
 	{re: regexp.MustCompile(`^export\s+const\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "const", lang: "js"},
 	{re: regexp.MustCompile(`^export\s+interface\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "interface", lang: "js"},
 	{re: regexp.MustCompile(`^export\s+type\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "type", lang: "js"},
 	{re: regexp.MustCompile(`^export\s+enum\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "enum", lang: "js"},
 	{re: regexp.MustCompile(`^(?:async\s+)?function\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "function", lang: "js"},
 	{re: regexp.MustCompile(`^class\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "class", lang: "js"},
+	{re: regexp.MustCompile(`^(?:const|let)\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:async\s+)?\([^)]*\)(?:\s*:\s*.+)?\s*=>`), kind: "function", lang: "js"},
 	{re: regexp.MustCompile(`^(?:const|let)\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "var", lang: "js"},
 	{re: regexp.MustCompile(`^interface\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "interface", lang: "js"},
 	// Python
@@ -266,7 +268,7 @@ func normalizeSignature(line string) string {
 }
 
 func signatureMetadataForPath(path, sig string) (string, string, bool) {
-	name, kind, ok := extractSignatureMetadata(sig)
+	name, kind, ok := extractSignatureMetadataForLang(sig, patternLangForPath(path))
 	if !ok {
 		return "", "", false
 	}
@@ -275,10 +277,21 @@ func signatureMetadataForPath(path, sig string) (string, string, bool) {
 }
 
 func extractSignatureMetadata(sig string) (string, string, bool) {
+	if strings.Contains(sig, "=>") {
+		if name, kind, ok := extractSignatureMetadataForLang(sig, "js"); ok {
+			return name, kind, true
+		}
+	}
 	return extractSignatureMetadataForLang(sig, "")
 }
 
 func extractSignatureMetadataForLang(sig, lang string) (string, string, bool) {
+	if lang == "" || lang == "js" {
+		if name, kind, ok := extractJSArrowFunctionMetadata(sig); ok {
+			return name, kind, true
+		}
+	}
+
 	for _, pattern := range signaturePatterns {
 		if lang != "" && pattern.lang != "" && pattern.lang != lang {
 			continue
@@ -294,6 +307,83 @@ func extractSignatureMetadataForLang(sig, lang string) (string, string, bool) {
 		return name, pattern.kind, true
 	}
 	return "", "", false
+}
+
+func extractJSArrowFunctionMetadata(sig string) (string, string, bool) {
+	trimmed := strings.TrimSpace(sig)
+	for _, prefix := range []string{"export const ", "const ", "let "} {
+		if !strings.HasPrefix(trimmed, prefix) {
+			continue
+		}
+
+		rest := strings.TrimSpace(strings.TrimPrefix(trimmed, prefix))
+		nameEnd := 0
+		for i, r := range rest {
+			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9' && i > 0) || r == '_' {
+				nameEnd = i + 1
+				continue
+			}
+			break
+		}
+		if nameEnd == 0 {
+			return "", "", false
+		}
+
+		name := rest[:nameEnd]
+		rest = strings.TrimSpace(rest[nameEnd:])
+		if !strings.HasPrefix(rest, "=") {
+			return "", "", false
+		}
+
+		rest = strings.TrimSpace(strings.TrimPrefix(rest, "="))
+		if strings.HasPrefix(rest, "async ") {
+			rest = strings.TrimSpace(strings.TrimPrefix(rest, "async "))
+		}
+		if !strings.HasPrefix(rest, "(") {
+			return "", "", false
+		}
+
+		closeIdx := strings.Index(rest, ")")
+		if closeIdx < 0 {
+			return "", "", false
+		}
+		if !strings.Contains(rest[closeIdx+1:], "=>") {
+			return "", "", false
+		}
+
+		return name, "function", true
+	}
+
+	return "", "", false
+}
+
+func patternLangForPath(path string) string {
+	switch extensionForPath(path) {
+	case ".go":
+		return "go"
+	case ".py":
+		return "py"
+	case ".ts", ".tsx", ".js", ".jsx", ".mjs":
+		return "js"
+	case ".rs":
+		return "rs"
+	case ".java", ".kt", ".kts":
+		return "java"
+	case ".rb":
+		return "rb"
+	case ".php":
+		return "php"
+	case ".c", ".cpp", ".cc", ".h", ".hpp":
+		return "c"
+	case ".swift":
+		return "swift"
+	case ".scala":
+		return "scala"
+	case ".sh", ".bash", ".zsh":
+		return "sh"
+	default:
+		return ""
+	}
 }
 
 func isExportedName(name string) bool {

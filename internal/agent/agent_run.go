@@ -80,7 +80,10 @@ func RunHeadlessWithConfig(ctx context.Context, query string, model string, prov
 			timeout = 3600 * time.Second
 		}
 		reqCtx, cancel := context.WithTimeout(ctx, timeout)
-		agent.refreshProjectPromptIfDirty(query)
+		// ツールループ初回のみ Project Map を更新。ループ中の再生成はキャッシュを破壊する。
+		if iteration == 0 {
+			agent.refreshProjectPromptIfDirty(query)
+		}
 
 		response, err := provider.ChatWithTools(agent.requestContext(reqCtx), agent.SystemPrompt, agent.History, model)
 		cancel()

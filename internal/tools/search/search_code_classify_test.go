@@ -37,6 +37,7 @@ func TestClassifyMatch(t *testing.T) {
 		{"export function doSomething() {", MatchTypeDefinition},
 		{"export default function doSomething() {", MatchTypeDefinition},
 		{"async export const getUser = () => {", MatchTypeDefinition},
+		{"impl Builder {", MatchTypeDefinition},
 		{"static void main()", MatchTypeDefinition},
 		{"public int getValue()", MatchTypeDefinition},
 		{"private string ToString()", MatchTypeDefinition},

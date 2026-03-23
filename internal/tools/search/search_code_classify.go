@@ -37,7 +37,7 @@ func classifyMatch(line string) MatchType {
 
 	defKeywords := []string{
 		"func ", "fn ", "def ", "function ", "sub ", "method ",
-		"type ", "class ", "struct ", "interface ", "enum ", "trait ",
+		"type ", "class ", "struct ", "interface ", "enum ", "trait ", "impl ",
 		"const ", "var ", "let ", "static ", "pub ", "export ",
 		"module ", "namespace ", "package ",
 	}

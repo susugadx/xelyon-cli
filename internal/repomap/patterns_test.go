@@ -18,6 +18,12 @@ func TestPatterns_TypeScript(t *testing.T) {
 	if !matchesSymbolPattern("app.ts", "export function buildMap() {") {
 		t.Fatal("TypeScript export function pattern did not match")
 	}
+	if !matchesSymbolPattern("app.ts", "const buildArrow = () => {") {
+		t.Fatal("TypeScript arrow function pattern did not match")
+	}
+	if !matchesSymbolPattern("app.ts", "const buildAsyncArrow = async () => {") {
+		t.Fatal("TypeScript async arrow function pattern did not match")
+	}
 	if !matchesSymbolPattern("app.ts", "interface Config {") {
 		t.Fatal("TypeScript interface pattern did not match")
 	}
@@ -110,6 +116,12 @@ func TestExtractSignatureMetadata(t *testing.T) {
 			wantName: "Config",
 			wantKind: "interface",
 		},
+		{
+			name:     "TypeScript async arrow function",
+			sig:      "const buildMap = async (): Promise<Map<string, string>> => {",
+			wantName: "buildMap",
+			wantKind: "function",
+		},
 	}
 
 	for _, tt := range tests {
@@ -117,6 +129,74 @@ func TestExtractSignatureMetadata(t *testing.T) {
 			gotName, gotKind, ok := extractSignatureMetadata(tt.sig)
 			if !ok {
 				t.Fatalf("extractSignatureMetadata(%q) returned ok=false", tt.sig)
+			}
+			if gotName != tt.wantName {
+				t.Fatalf("name = %q, want %q", gotName, tt.wantName)
+			}
+			if gotKind != tt.wantKind {
+				t.Fatalf("kind = %q, want %q", gotKind, tt.wantKind)
+			}
+		})
+	}
+}
+
+func TestSignatureMetadataForPath_TypeScriptArrowFunction(t *testing.T) {
+	gotName, gotKind, exported := signatureMetadataForPath("app.ts", "const buildMap = async (): Promise<Map<string, string>> =>")
+	if gotName != "buildMap" {
+		t.Fatalf("name = %q, want %q", gotName, "buildMap")
+	}
+	if gotKind != "function" {
+		t.Fatalf("kind = %q, want %q", gotKind, "function")
+	}
+	if exported {
+		t.Fatal("exported = true, want false")
+	}
+}
+
+func TestExtractJSArrowFunctionMetadata(t *testing.T) {
+	tests := []struct {
+		name     string
+		sig      string
+		wantName string
+		wantKind string
+		wantOK   bool
+	}{
+		{
+			name:     "const arrow",
+			sig:      "const buildMap = () => {",
+			wantName: "buildMap",
+			wantKind: "function",
+			wantOK:   true,
+		},
+		{
+			name:     "const async arrow with return type",
+			sig:      "const buildMap = async (): Promise<Map<string, string>> => {",
+			wantName: "buildMap",
+			wantKind: "function",
+			wantOK:   true,
+		},
+		{
+			name:     "export const async arrow",
+			sig:      "export const buildMap = async () => {",
+			wantName: "buildMap",
+			wantKind: "function",
+			wantOK:   true,
+		},
+		{
+			name:   "plain const value",
+			sig:    "const buildMap = new Map()",
+			wantOK: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotName, gotKind, ok := extractJSArrowFunctionMetadata(tt.sig)
+			if ok != tt.wantOK {
+				t.Fatalf("ok = %v, want %v", ok, tt.wantOK)
+			}
+			if !tt.wantOK {
+				return
 			}
 			if gotName != tt.wantName {
 				t.Fatalf("name = %q, want %q", gotName, tt.wantName)

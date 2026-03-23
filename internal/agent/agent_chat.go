@@ -237,7 +237,10 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 			emitLoopWarning(a, i)
 		}
 
-		a.refreshProjectPromptIfDirty(input)
+		// ツールループ初回のみ Project Map を更新。ループ中の再生成はキャッシュを破壊する。
+		if i == 0 {
+			a.refreshProjectPromptIfDirty(input)
+		}
 		effectivePrompt := prompt.StripPlanningReferences(a.SystemPrompt)
 
 		// API呼び出し
@@ -565,19 +568,19 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 				red.Fprintf(a.output(), "❌ Failed (retry %d/%d)\n", retryCount, autoRetryMax)
 				yellow.Fprintf(a.output(), "🔄 Retrying...\n")
 
-				// リトライ用プロンプトを追加
+				// リトライ用プロンプトを追加（段階的エスカレーション）
+				var retryInstruction string
+				switch {
+				case retryCount <= 1:
+					retryInstruction = "Fix the immediate error."
+				case retryCount == 2:
+					retryInstruction = "Previous fix did not work. Write a minimal test via bash to reproduce and diagnose the root cause before attempting another fix."
+				default:
+					retryInstruction = "Multiple retries have failed. Your current approach is wrong. Change strategy fundamentally — use a completely different algorithm or technique."
+				}
 				a.History = append(a.History, api.Message{
-					Role: "user",
-					Content: fmt.Sprintf(`The previous tool execution FAILED with the following error:
-
-%s
-
-Please:
-1. Analyze the error carefully
-2. Identify the root cause
-3. Try a different approach to fix this
-
-Do NOT give up. Try again with a different approach.`, lastFailedResult),
+					Role:    "user",
+					Content: fmt.Sprintf("The previous tool execution FAILED (attempt %d/%d):\n\n%s\n\n%s", retryCount, autoRetryMax, lastFailedResult, retryInstruction),
 				})
 				continue
 			}
