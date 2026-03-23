@@ -33,19 +33,9 @@ func TestReadFileTool_Parameters(t *testing.T) {
 		t.Error("ReadFileTool.Parameters() should have 'paths' key in properties")
 	}
 
-	required, ok := params["required"].([]string)
-	if !ok {
-		t.Fatal("ReadFileTool.Parameters() should have required array")
-	}
-	found := false
-	for _, r := range required {
-		if r == "paths" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Error("ReadFileTool.Parameters() required should include 'paths'")
+	// paths と targets は排他的（Runでバリデーション）なため required は未設定
+	if _, ok := props["targets"]; !ok {
+		t.Error("ReadFileTool.Parameters() should have 'targets' key in properties")
 	}
 }
 

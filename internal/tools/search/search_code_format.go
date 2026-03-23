@@ -5,6 +5,8 @@ import (
 	"sort"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/susugadx/xelyon-cli/internal/locator"
 )
 
 func estimateTokens(line string) int {
@@ -60,7 +62,7 @@ func truncateToTokenBudget(results []SearchResult, budget int, _ bool) ([]Search
 	return kept, truncated
 }
 
-func formatSearchResults(results []SearchResult, truncated bool, tokenBudget int) string {
+func formatSearchResults(results []SearchResult, truncated bool, tokenBudget int, reg *locator.Registry) string {
 	totalMatches := 0
 	for _, r := range results {
 		totalMatches += r.MatchCount
@@ -68,17 +70,22 @@ func formatSearchResults(results []SearchResult, truncated bool, tokenBudget int
 
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "Found %d match(es) in %d file(s)\n", totalMatches, len(results))
-	sb.WriteString(formatSearchResultsBody(results, truncated, tokenBudget))
+	sb.WriteString(formatSearchResultsBody(results, truncated, tokenBudget, reg))
 	return sb.String()
 }
 
 // formatSearchResultsBody はファイルごとの結果部分のみをフォーマットする
 // formatSearchResults と formatMultiResults の両方から呼ばれる
-func formatSearchResultsBody(results []SearchResult, truncated bool, tokenBudget int) string {
+func formatSearchResultsBody(results []SearchResult, truncated bool, tokenBudget int, reg *locator.Registry) string {
 	var sb strings.Builder
 
 	for _, r := range results {
-		fmt.Fprintf(&sb, "\n📄 %s (%d match(es))\n", r.FilePath, r.MatchCount)
+		fileHeader := fmt.Sprintf("\n📄 %s (%d match(es))", r.FilePath, r.MatchCount)
+		if reg != nil {
+			id := reg.Register(locator.Location{FilePath: r.FilePath})
+			fileHeader += " " + id
+		}
+		fmt.Fprintf(&sb, "%s\n", fileHeader)
 
 		blocks := buildMatchBlocks(r.Matches)
 		sort.SliceStable(blocks, func(i, j int) bool {
@@ -107,11 +114,21 @@ func formatSearchResultsBody(results []SearchResult, truncated bool, tokenBudget
 			if m.IsMatch {
 				fmt.Fprintf(&sb, "  %-10s> %4d │ %s\n", matchTypeTag[m.Type], m.LineNum, m.Line)
 				if m.Block != nil {
+					blockLine := ""
 					if m.Block.StartLine > 0 {
-						fmt.Fprintf(&sb, "  %10s  %4s   ── in %s (L%d)\n", "", "", m.Block.Name, m.Block.StartLine)
+						blockLine = fmt.Sprintf("  %10s  %4s   ── in %s (L%d)", "", "", m.Block.Name, m.Block.StartLine)
 					} else {
-						fmt.Fprintf(&sb, "  %10s  %4s   ── in %s\n", "", "", m.Block.Name)
+						blockLine = fmt.Sprintf("  %10s  %4s   ── in %s", "", "", m.Block.Name)
 					}
+					if reg != nil && m.Block.StartLine > 0 {
+						id := reg.Register(locator.Location{
+							FilePath: r.FilePath,
+							Line:     m.Block.StartLine,
+							Name:     m.Block.Name,
+						})
+						blockLine += " " + id
+					}
+					fmt.Fprintf(&sb, "%s\n", blockLine)
 				}
 			} else {
 				fmt.Fprintf(&sb, "  %10s  %4d │ %s\n", "", m.LineNum, m.Line)
@@ -166,7 +183,7 @@ func formatMultiResults(collected []patternResult, tokenBudget int) string {
 			continue
 		}
 
-		b.WriteString(formatSearchResultsBody(pr.Results, pr.Truncated, budgetPerPattern))
+		b.WriteString(formatSearchResultsBody(pr.Results, pr.Truncated, budgetPerPattern, nil))
 		b.WriteString("\n")
 	}
 
@@ -175,12 +192,19 @@ func formatMultiResults(collected []patternResult, tokenBudget int) string {
 
 // formatManifestLine はファイル1つ分のマニフェスト行を生成する。
 // ブロック名を最大3つまで付記する。
-func formatManifestLine(r SearchResult) string {
+func formatManifestLine(r SearchResult, reg *locator.Registry) string {
 	blockNames := collectUniqueBlockNames(r.Matches, 3)
+	var line string
 	if len(blockNames) > 0 {
-		return fmt.Sprintf("  %-40s — %d matches (%s)", r.FilePath, r.MatchCount, strings.Join(blockNames, ", "))
+		line = fmt.Sprintf("  %-40s — %d matches (%s)", r.FilePath, r.MatchCount, strings.Join(blockNames, ", "))
+	} else {
+		line = fmt.Sprintf("  %-40s — %d matches", r.FilePath, r.MatchCount)
 	}
-	return fmt.Sprintf("  %-40s — %d matches", r.FilePath, r.MatchCount)
+	if reg != nil {
+		id := reg.Register(locator.Location{FilePath: r.FilePath})
+		line += " " + id
+	}
+	return line
 }
 
 // collectUniqueBlockNames はマッチ群からユニークなブロック名を出現順で最大 limit 個返す
@@ -203,7 +227,7 @@ func collectUniqueBlockNames(matches []Match, limit int) []string {
 }
 
 // formatManifestResults は単一パターンのマニフェスト出力を生成する
-func formatManifestResults(results []SearchResult) string {
+func formatManifestResults(results []SearchResult, reg *locator.Registry) string {
 	totalMatches := 0
 	for _, r := range results {
 		totalMatches += r.MatchCount
@@ -211,14 +235,14 @@ func formatManifestResults(results []SearchResult) string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "Found %d matches in %d files:\n", totalMatches, len(results))
 	for _, r := range results {
-		sb.WriteString(formatManifestLine(r))
+		sb.WriteString(formatManifestLine(r, reg))
 		sb.WriteString("\n")
 	}
 	return sb.String()
 }
 
 // formatManifestMultiResults は複数パターンのマニフェスト出力を生成する
-func formatManifestMultiResults(collected []patternResult) string {
+func formatManifestMultiResults(collected []patternResult, reg *locator.Registry) string {
 	var sb strings.Builder
 	totalMatches := 0
 	for _, pr := range collected {
@@ -242,7 +266,7 @@ func formatManifestMultiResults(collected []patternResult) string {
 			continue
 		}
 		for _, r := range pr.Results {
-			sb.WriteString(formatManifestLine(r))
+			sb.WriteString(formatManifestLine(r, reg))
 			sb.WriteString("\n")
 		}
 		sb.WriteString("\n")

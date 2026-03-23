@@ -1,5 +1,7 @@
 package navigation
 
+import "github.com/susugadx/xelyon-cli/internal/locator"
+
 // SymbolAutoStatus はシンボル自動解決の結果種別。
 type SymbolAutoStatus string
 
@@ -13,7 +15,8 @@ const (
 // single: 単一候補が見つかった → summary 形式の結果を返す
 // multiple: 複数候補 → 候補一覧を返す
 // none: 見つからない → 空文字を返す（呼び出し側で text search にフォールバック）
-func InspectSymbolAuto(symbol, pathHint string) (output string, status SymbolAutoStatus) {
+// reg が nil でない場合、出力に Locator ID を付与する。
+func InspectSymbolAuto(symbol, pathHint string, reg *locator.Registry) (output string, status SymbolAutoStatus) {
 	if symbol == "" {
 		return "", SymbolAutoNone
 	}
@@ -26,7 +29,7 @@ func InspectSymbolAuto(symbol, pathHint string) (output string, status SymbolAut
 	}
 
 	if len(candidates) > 1 {
-		return formatMultipleCandidates(symbol, candidates), SymbolAutoMultiple
+		return formatMultipleCandidates(symbol, candidates, reg), SymbolAutoMultiple
 	}
 
 	// 単一候補 → SummaryBudget で結果を生成
@@ -44,5 +47,5 @@ func InspectSymbolAuto(symbol, pathHint string) (output string, status SymbolAut
 	result.Refs, result.TotalRefs, result.MoreRefs = classifyRefs(allRefs, cand, SummaryBudget.RefLimit)
 	result.Tests, result.TotalTests, result.MoreTests = findRelatedTests(query.BaseName, allRefs, SummaryBudget.TestLimit)
 
-	return formatInspectResult(result), SymbolAutoSingle
+	return formatInspectResult(result, reg), SymbolAutoSingle
 }

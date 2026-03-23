@@ -360,7 +360,7 @@ func TestFormatMultipleCandidates(t *testing.T) {
 		{Name: "Build", Kind: "function", File: "internal/agent/agent.go", Line: 21, EndLine: 85},
 		{Name: "Build", Kind: "method", File: "internal/config/config.go", Line: 88, EndLine: 120, Receiver: "*Config"},
 	}
-	result := formatMultipleCandidates("Build", candidates)
+	result := formatMultipleCandidates("Build", candidates, nil)
 	if !strings.Contains(result, "Multiple symbols matched") {
 		t.Errorf("expected multiple candidates header, got: %s", result)
 	}
@@ -378,7 +378,7 @@ func TestFormatMultipleCandidates_UsesQualifiedMethodNames(t *testing.T) {
 		{Name: "Build", Kind: "method", File: "internal/config/config.go", Line: 88, EndLine: 120, Receiver: "*Config"},
 	}
 
-	result := formatMultipleCandidates("Build", candidates)
+	result := formatMultipleCandidates("Build", candidates, nil)
 	if !strings.Contains(result, "(*Config).Build") {
 		t.Fatalf("expected receiver-qualified method name in candidate list, got: %s", result)
 	}
@@ -404,7 +404,7 @@ func TestFormatInspectResult(t *testing.T) {
 		Tests: []TestRef{
 			{File: "agent_test.go", Name: "TestBuild_Normal", Line: 55},
 		},
-	})
+	}, nil)
 
 	if !strings.Contains(result, "── function Build") {
 		t.Error("expected header")
@@ -443,7 +443,7 @@ func TestFormatInspectResult_SummaryContractForTruncatedSections(t *testing.T) {
 		},
 		TotalTests: 2,
 		MoreTests:  true,
-	})
+	}, nil)
 
 	if !strings.Contains(result, "Callers: 2 examples (of 5 found)") {
 		t.Errorf("expected callers shown/total contract, got: %s", result)
@@ -487,7 +487,7 @@ func TestFormatInspectResult_NextActionHints_OnlyWhenMore(t *testing.T) {
 		Tests: []TestRef{
 			{File: "agent_test.go", Name: "TestBuild_Normal", Line: 55},
 		},
-	})
+	}, nil)
 
 	if strings.Contains(result, "examples (of") {
 		t.Errorf("shown/total format must not appear when section is complete, got: %s", result)
@@ -508,7 +508,7 @@ func TestFormatInspectResult_UpstreamIncompletePrecedenceOverTruncated(t *testin
 		Body:               []string{"21: func Build() {}"},
 		UpstreamIncomplete: true,
 		UpstreamTruncated:  true,
-	})
+	}, nil)
 
 	if !strings.Contains(result, "incomplete due to errors") {
 		t.Errorf("expected incomplete warning, got: %s", result)
@@ -815,7 +815,7 @@ func TestFormatInspectResult_UpstreamTruncated(t *testing.T) {
 		},
 		Body:              []string{"21: func Build() {}"},
 		UpstreamTruncated: true,
-	})
+	}, nil)
 
 	if !strings.Contains(result, "truncated upstream") {
 		t.Errorf("expected upstream truncation notice, got: %s", result)
@@ -831,7 +831,7 @@ func TestFormatInspectResult_UpstreamNotTruncated(t *testing.T) {
 		},
 		Body:              []string{"21: func Build() {}"},
 		UpstreamTruncated: false,
-	})
+	}, nil)
 
 	if strings.Contains(result, "truncated upstream") {
 		t.Errorf("expected no upstream line when not truncated, got: %s", result)
@@ -847,7 +847,7 @@ func TestFormatInspectResult_UpstreamIncomplete(t *testing.T) {
 		},
 		Body:               []string{"21: func Build() {}"},
 		UpstreamIncomplete: true,
-	})
+	}, nil)
 
 	if !strings.Contains(result, "incomplete due to errors") {
 		t.Errorf("expected upstream incomplete notice, got: %s", result)
@@ -863,7 +863,7 @@ func TestFormatInspectResult_UpstreamComplete(t *testing.T) {
 		},
 		Body:               []string{"21: func Build() {}"},
 		UpstreamIncomplete: false,
-	})
+	}, nil)
 
 	if strings.Contains(result, "truncated upstream") {
 		t.Errorf("expected no incomplete warning when search is complete, got: %s", result)

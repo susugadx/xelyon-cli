@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/susugadx/xelyon-cli/internal/locator"
 	"github.com/susugadx/xelyon-cli/internal/repomap"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
@@ -169,7 +170,7 @@ func resolveGenericSymbol(symbol string, opts SearchOptions) (string, genericSym
 
 	// Step 2: 複数候補
 	if len(defs) > 1 {
-		return formatGenericMultipleDefs(symbol, defs), genericSymbolMultiple
+		return formatGenericMultipleDefs(symbol, defs, opts.LocatorRegistry), genericSymbolMultiple
 	}
 
 	// Step 3: 単一候補 → 参照箇所を検索
@@ -187,7 +188,7 @@ func resolveGenericSymbol(symbol string, opts SearchOptions) (string, genericSym
 		}
 	}
 
-	return formatGenericSymbolResult(def, normalRefs, testRefs), genericSymbolSingle
+	return formatGenericSymbolResult(def, normalRefs, testRefs, opts.LocatorRegistry), genericSymbolSingle
 }
 
 // findGenericDefinitions は ripgrep + signaturePatterns でシンボルの定義行を見つける。
@@ -360,11 +361,16 @@ func normalizeRgType(fileType string) string {
 
 // ── フォーマッター ──
 
-func formatGenericMultipleDefs(symbol string, defs []genericSymbolDef) string {
+func formatGenericMultipleDefs(symbol string, defs []genericSymbolDef, reg *locator.Registry) string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "Multiple definitions found for %q:\n", symbol)
 	for i, d := range defs {
-		fmt.Fprintf(&sb, "  %d. %s %s (L%d) in %s\n", i+1, d.Kind, d.Name, d.Line, d.File)
+		line := fmt.Sprintf("  %d. %s %s (L%d) in %s", i+1, d.Kind, d.Name, d.Line, d.File)
+		if reg != nil {
+			id := reg.Register(locator.Location{FilePath: d.File, Line: d.Line, Name: fmt.Sprintf("%s %s", d.Kind, d.Name)})
+			line += " " + id
+		}
+		fmt.Fprintf(&sb, "%s\n", line)
 	}
 	sb.WriteString("\nRefine with path to disambiguate (e.g. path=\"src/models/\").")
 	return sb.String()
@@ -375,10 +381,15 @@ const (
 	genericTestLimit = 5
 )
 
-func formatGenericSymbolResult(def genericSymbolDef, refs, tests []genericSymbolRef) string {
+func formatGenericSymbolResult(def genericSymbolDef, refs, tests []genericSymbolRef, reg *locator.Registry) string {
 	var sb strings.Builder
 
-	fmt.Fprintf(&sb, "── %s %s (L%d) in %s ──\n", def.Kind, def.Name, def.Line, def.File)
+	header := fmt.Sprintf("── %s %s (L%d) in %s", def.Kind, def.Name, def.Line, def.File)
+	if reg != nil {
+		id := reg.Register(locator.Location{FilePath: def.File, Line: def.Line, Name: fmt.Sprintf("%s %s", def.Kind, def.Name)})
+		header += " " + id
+	}
+	fmt.Fprintf(&sb, "%s ──\n", header)
 	fmt.Fprintf(&sb, "%d: %s\n", def.Line, def.Signature)
 
 	if len(refs) > 0 {
@@ -388,7 +399,12 @@ func formatGenericSymbolResult(def genericSymbolDef, refs, tests []genericSymbol
 				fmt.Fprintf(&sb, "  ... (%d more references)\n", len(refs)-genericRefLimit)
 				break
 			}
-			fmt.Fprintf(&sb, "  %s:%d  %s\n", ref.File, ref.Line, ref.Snippet)
+			line := fmt.Sprintf("  %s:%d  %s", ref.File, ref.Line, ref.Snippet)
+			if reg != nil {
+				id := reg.Register(locator.Location{FilePath: ref.File, Line: ref.Line})
+				line += " " + id
+			}
+			fmt.Fprintf(&sb, "%s\n", line)
 		}
 	}
 
@@ -399,7 +415,12 @@ func formatGenericSymbolResult(def genericSymbolDef, refs, tests []genericSymbol
 				fmt.Fprintf(&sb, "  ... (%d more tests)\n", len(tests)-genericTestLimit)
 				break
 			}
-			fmt.Fprintf(&sb, "  %s:%d  %s\n", test.File, test.Line, test.Snippet)
+			line := fmt.Sprintf("  %s:%d  %s", test.File, test.Line, test.Snippet)
+			if reg != nil {
+				id := reg.Register(locator.Location{FilePath: test.File, Line: test.Line})
+				line += " " + id
+			}
+			fmt.Fprintf(&sb, "%s\n", line)
 		}
 	}
 

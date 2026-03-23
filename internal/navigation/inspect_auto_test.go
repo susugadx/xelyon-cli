@@ -8,7 +8,7 @@ import (
 )
 
 func TestInspectSymbolAuto_Empty(t *testing.T) {
-	output, status := InspectSymbolAuto("", "")
+	output, status := InspectSymbolAuto("", "", nil)
 	if status != SymbolAutoNone {
 		t.Fatalf("expected SymbolAutoNone, got %s", status)
 	}
@@ -23,7 +23,7 @@ func TestInspectSymbolAuto_NotFound(t *testing.T) {
 	}
 	setupTestGoFile(t, "example.go", testGoSource)
 
-	output, status := InspectSymbolAuto("NonExistentXYZ12345", "")
+	output, status := InspectSymbolAuto("NonExistentXYZ12345", "", nil)
 	if status != SymbolAutoNone {
 		t.Fatalf("expected SymbolAutoNone, got %s", status)
 	}
@@ -38,7 +38,7 @@ func TestInspectSymbolAuto_SingleCandidate(t *testing.T) {
 	}
 	setupTestGoFile(t, "example.go", testGoSource)
 
-	output, status := InspectSymbolAuto("Run", "")
+	output, status := InspectSymbolAuto("Run", "", nil)
 	if status != SymbolAutoSingle {
 		t.Fatalf("expected SymbolAutoSingle, got %s", status)
 	}
@@ -56,7 +56,7 @@ func TestInspectSymbolAuto_MultipleCandidates(t *testing.T) {
 	}
 	setupTestGoFile(t, "example.go", testGoSource)
 
-	output, status := InspectSymbolAuto("Build", "")
+	output, status := InspectSymbolAuto("Build", "", nil)
 	if status != SymbolAutoMultiple {
 		t.Fatalf("expected SymbolAutoMultiple, got %s", status)
 	}

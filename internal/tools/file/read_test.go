@@ -431,7 +431,7 @@ func TestReadFileTool_PathRequired(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(result, "Error: paths is required") {
+	if !strings.Contains(result, "Error: either paths or targets is required") {
 		t.Errorf("expected error when paths is not provided, got: %s", result)
 	}
 }

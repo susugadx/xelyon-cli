@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/ast"
+	"github.com/susugadx/xelyon-cli/internal/locator"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
@@ -126,7 +127,7 @@ func InspectSymbol(symbol, pathHint, mode string) string {
 
 	// 2. 複数候補 → 一覧のみ
 	if len(candidates) > 1 {
-		return formatMultipleCandidates(symbol, candidates)
+		return formatMultipleCandidates(symbol, candidates, nil)
 	}
 
 	// 3. 単一候補 → 詳細取得
@@ -149,7 +150,7 @@ func InspectSymbol(symbol, pathHint, mode string) string {
 	result.Refs, result.TotalRefs, result.MoreRefs = classifyRefs(allRefs, cand, budget.RefLimit)
 	result.Tests, result.TotalTests, result.MoreTests = findRelatedTests(query.BaseName, allRefs, budget.TestLimit)
 
-	return formatInspectResult(result)
+	return formatInspectResult(result, nil)
 }
 
 // resolveSymbolCandidates はプロジェクト内からシンボル候補を検索する。
@@ -353,19 +354,30 @@ func filterRefsByCandidate(refs []Reference, cand SymbolCandidate, ambiguousFile
 }
 
 // formatMultipleCandidates は複数候補の一覧を整形する。
-func formatMultipleCandidates(symbol string, candidates []SymbolCandidate) string {
+func formatMultipleCandidates(symbol string, candidates []SymbolCandidate, reg *locator.Registry) string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "Multiple symbols matched %q:\n", symbol)
 	for i, c := range candidates {
-		fmt.Fprintf(&sb, "  %d. %-40s %s %s (L%d-L%d)\n",
+		line := fmt.Sprintf("  %d. %-40s %s %s (L%d-L%d)",
 			i+1, c.File, c.Kind, candidateDisplayName(c), c.Line, c.EndLine)
+		if reg != nil {
+			id := reg.Register(locator.Location{
+				FilePath: c.File,
+				Line:     c.Line,
+				EndLine:  c.EndLine,
+				Name:     fmt.Sprintf("%s %s", c.Kind, candidateDisplayName(c)),
+			})
+			line += " " + id
+		}
+		fmt.Fprintf(&sb, "%s\n", line)
 	}
 	sb.WriteString("\nRefine with path or receiver-qualified symbol to disambiguate.")
 	return sb.String()
 }
 
 // formatInspectResult は単一候補の結果を整形する。
-func formatInspectResult(r InspectResult) string {
+// reg が nil でない場合、ヘッダーと参照行に Locator ID を付与する。
+func formatInspectResult(r InspectResult, reg *locator.Registry) string {
 	if r.Symbol == nil {
 		return ""
 	}
@@ -374,8 +386,18 @@ func formatInspectResult(r InspectResult) string {
 	s := r.Symbol
 
 	// ヘッダー
-	fmt.Fprintf(&sb, "── %s %s (L%d-L%d) in %s ──\n",
+	header := fmt.Sprintf("── %s %s (L%d-L%d) in %s",
 		s.Kind, candidateDisplayName(*s), s.Line, s.EndLine, s.File)
+	if reg != nil {
+		id := reg.Register(locator.Location{
+			FilePath: s.File,
+			Line:     s.Line,
+			EndLine:  s.EndLine,
+			Name:     fmt.Sprintf("%s %s", s.Kind, candidateDisplayName(*s)),
+		})
+		header += " " + id
+	}
+	fmt.Fprintf(&sb, "%s ──\n", header)
 
 	// 本文
 	for _, line := range r.Body {
@@ -395,7 +417,12 @@ func formatInspectResult(r InspectResult) string {
 			if c.Scope != "" && c.Scope != "package-level" {
 				scope = " in " + c.Scope
 			}
-			fmt.Fprintf(&sb, "  - %s:%d%s\n", c.File, c.Line, scope)
+			line := fmt.Sprintf("  - %s:%d%s", c.File, c.Line, scope)
+			if reg != nil {
+				id := reg.Register(locator.Location{FilePath: c.File, Line: c.Line})
+				line += " " + id
+			}
+			fmt.Fprintf(&sb, "%s\n", line)
 		}
 		if r.MoreCallers {
 			sb.WriteString("  (+ more callers. Use search_code for more results)\n")
@@ -414,7 +441,12 @@ func formatInspectResult(r InspectResult) string {
 			if ref.IsTest {
 				label = " [test]"
 			}
-			fmt.Fprintf(&sb, "  - %s:%d | %s%s\n", ref.File, ref.Line, strings.TrimSpace(ref.Snippet), label)
+			line := fmt.Sprintf("  - %s:%d | %s%s", ref.File, ref.Line, strings.TrimSpace(ref.Snippet), label)
+			if reg != nil {
+				id := reg.Register(locator.Location{FilePath: ref.File, Line: ref.Line})
+				line += " " + id
+			}
+			fmt.Fprintf(&sb, "%s\n", line)
 		}
 		if r.MoreRefs {
 			sb.WriteString("  (+ more references. Use search_code for more results)\n")
@@ -429,7 +461,12 @@ func formatInspectResult(r InspectResult) string {
 			fmt.Fprintf(&sb, "\nRelated tests (%d):\n", len(r.Tests))
 		}
 		for _, t := range r.Tests {
-			fmt.Fprintf(&sb, "  - %s:%d | func %s\n", t.File, t.Line, t.Name)
+			line := fmt.Sprintf("  - %s:%d | func %s", t.File, t.Line, t.Name)
+			if reg != nil {
+				id := reg.Register(locator.Location{FilePath: t.File, Line: t.Line, Name: "func " + t.Name})
+				line += " " + id
+			}
+			fmt.Fprintf(&sb, "%s\n", line)
 		}
 		if r.MoreTests {
 			sb.WriteString("  (+ more tests. Use search_code for more results)\n")

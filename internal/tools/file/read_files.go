@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/locator"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
@@ -65,19 +66,26 @@ func ExecuteReadFilesWithOutput(out common.Output, paths []string) string {
 // ExecuteReadFilesWithRuntime は config/cache を指定して複数ファイルを一括読み込みする。
 // 自動 batch merge で使用し、単発 read_file と同じ runtime 文脈（config 反映、cache 反映）を維持する。
 func ExecuteReadFilesWithRuntime(out common.Output, cfg *config.Config, cache tools.ToolCacheInterface, paths []string, budgetOverride int) string {
-	return executeReadFilesCore(out, cfg, cache, paths, budgetOverride)
+	return executeReadFilesCore(out, cfg, cache, paths, budgetOverride, nil)
+}
+
+// ExecuteReadFilesWithLocator は Locator Registry 付きで複数ファイルを一括読み込みする。
+// reg が nil でない場合、ファイルヘッダーに Locator ID を付与する。
+func ExecuteReadFilesWithLocator(out common.Output, cfg *config.Config, cache tools.ToolCacheInterface, paths []string, budgetOverride int, reg *locator.Registry) string {
+	return executeReadFilesCore(out, cfg, cache, paths, budgetOverride, reg)
 }
 
 // ExecuteReadFilesWithBudget は出力先とファイルあたりのアウトライン閾値を指定して
 // 複数ファイルを一括読み込みする。budgetOverride が 0 の場合は DefaultFullLines を使用する。
 // 自動 batch merge では DefaultFullLines を渡し、単発 read と同等の閾値を維持する。
 func ExecuteReadFilesWithBudget(out common.Output, paths []string, budgetOverride int) string {
-	return executeReadFilesCore(out, nil, nil, paths, budgetOverride)
+	return executeReadFilesCore(out, nil, nil, paths, budgetOverride, nil)
 }
 
 // executeReadFilesCore は複数ファイル読み込みの内部実装。
 // cfg/cache が nil の場合は単発 read_file のフォールバック動作（設定なし）を使用する。
-func executeReadFilesCore(out common.Output, cfg *config.Config, cache tools.ToolCacheInterface, paths []string, budgetOverride int) string {
+// reg が nil でない場合、ファイルヘッダーに Locator ID を付与する。
+func executeReadFilesCore(out common.Output, cfg *config.Config, cache tools.ToolCacheInterface, paths []string, budgetOverride int, reg *locator.Registry) string {
 	if len(paths) == 0 {
 		return "Error: paths is empty"
 	}
@@ -127,7 +135,17 @@ func executeReadFilesCore(out common.Output, cfg *config.Config, cache tools.Too
 		if i > 0 {
 			sb.WriteString("\n")
 		}
-		fmt.Fprintf(&sb, "📄 File: %s\n", result.entry)
+		header := fmt.Sprintf("📄 File: %s", result.entry)
+		if reg != nil {
+			path, startLine, endLine := parsePath(result.entry)
+			id := reg.Register(locator.Location{
+				FilePath: path,
+				Line:     startLine,
+				EndLine:  endLine,
+			})
+			header += " " + id
+		}
+		fmt.Fprintf(&sb, "%s\n", header)
 		sb.WriteString(result.result)
 	}
 

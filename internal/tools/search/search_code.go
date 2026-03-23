@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/locator"
 	"github.com/susugadx/xelyon-cli/internal/navigation"
 	"github.com/susugadx/xelyon-cli/internal/pathmatch"
 	"github.com/susugadx/xelyon-cli/internal/tools"
@@ -75,6 +76,8 @@ type SearchOptions struct {
 	IncludeHidden  bool   // ツール経路では内部固定値（false）。外部パラメータは廃止。
 	IncludeIgnored bool   // ツール経路では内部固定値（false）。外部パラメータは廃止。
 	OutputMode     string // 内部専用。外部パラメータは廃止。
+
+	LocatorRegistry *locator.Registry // Locator ID レジストリ（nilの場合はID付与しない）
 
 	ignoreMatcher *pathmatch.Matcher
 	ignoreGlobs   []string
@@ -145,7 +148,7 @@ func executeSinglePattern(cache tools.ToolCacheInterface, pattern string, opts S
 
 		if lang == "go" {
 			// Go: AST ベースの正確な解決
-			symbolOutput, status := navigation.InspectSymbolAuto(pattern, opts.Path)
+			symbolOutput, status := navigation.InspectSymbolAuto(pattern, opts.Path, opts.LocatorRegistry)
 			switch status {
 			case navigation.SymbolAutoSingle:
 				if cache != nil {
@@ -198,7 +201,7 @@ func executeSinglePattern(cache tools.ToolCacheInterface, pattern string, opts S
 	if opts.OutputMode == "manifest" {
 		sortResultsByPriority(results)
 		detectBlocksWithCache(cache, results)
-		formatted := formatManifestResults(results)
+		formatted := formatManifestResults(results, opts.LocatorRegistry)
 		finalOutput := formatted
 		if len(warnings) > 0 {
 			finalOutput = strings.Join(warnings, "\n") + "\n" + formatted
@@ -217,7 +220,7 @@ func executeSinglePattern(cache tools.ToolCacheInterface, pattern string, opts S
 
 	detectBlocksWithCache(cache, results)
 
-	formatted := formatSearchResults(results, truncated, opts.TokenBudget)
+	formatted := formatSearchResults(results, truncated, opts.TokenBudget, opts.LocatorRegistry)
 	finalOutput := formatted
 	if len(warnings) > 0 {
 		finalOutput = strings.Join(warnings, "\n") + "\n" + formatted

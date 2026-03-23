@@ -61,7 +61,7 @@ func TestFormatManifestResults_WithBlocks(t *testing.T) {
 		},
 	}
 
-	out := formatManifestResults(results)
+	out := formatManifestResults(results, nil)
 
 	if !strings.Contains(out, "Found 7 matches in 2 files") {
 		t.Errorf("expected header, got:\n%s", out)
@@ -96,7 +96,7 @@ func TestFormatManifestResults_NoBlocks(t *testing.T) {
 		},
 	}}
 
-	out := formatManifestResults(results)
+	out := formatManifestResults(results, nil)
 	if !strings.Contains(out, "3 matches") {
 		t.Errorf("expected 3 matches, got:\n%s", out)
 	}
@@ -125,7 +125,7 @@ func TestFormatManifestMultiResults(t *testing.T) {
 		},
 	}
 
-	out := formatManifestMultiResults(collected)
+	out := formatManifestMultiResults(collected, nil)
 	if !strings.Contains(out, "handleSSE") {
 		t.Errorf("expected pattern name")
 	}

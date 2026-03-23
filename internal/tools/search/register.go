@@ -79,6 +79,7 @@ func (t *SearchCodeTool) Run(execCtx tools.ExecutionContext, args map[string]str
 		}
 	}
 
+	opts.LocatorRegistry = execCtx.EffectiveLocatorRegistry()
 	result := ExecuteSearchCodeWithConfig(execCtx.EffectiveConfig(), execCtx.EffectiveToolCache(), opts)
 	return result, nil, nil
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/history"
+	"github.com/susugadx/xelyon-cli/internal/locator"
 	"github.com/susugadx/xelyon-cli/internal/lsp"
 	"github.com/susugadx/xelyon-cli/internal/mcp"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
@@ -66,6 +67,7 @@ type Agent struct {
 	strReplaceErrorCount int                // str_replace連続エラーカウント（old_str not found）
 	PlanModeEnabled      bool               // Plan Mode ON/OFF（デフォルト: false）
 	ToolCache            *ToolCache         // ツール結果キャッシュ（read_file, list_dir）
+	LocatorRegistry      *locator.Registry  // Locator ID レジストリ（セッション内追記のみ）
 	taskBaseCommitHash   string             // タスク開始時のHEADコミットハッシュ（completion hook の diff 空チェック判定用）
 	status               statusHolder
 
@@ -268,6 +270,7 @@ func NewAgentWithRuntime(model string, provider api.Provider, headless bool, run
 		Stats:           NewSessionStats(strings.ToLower(provider.Name()), model),
 		lastOutputs:     []string{},
 		ToolCache:       toolCache,
+		LocatorRegistry: locator.NewRegistry(),
 		status:          statusHolder{status: defaultStatus()},
 	}
 

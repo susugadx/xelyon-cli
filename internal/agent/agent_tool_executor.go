@@ -49,21 +49,22 @@ func (a *Agent) toolExecutionContext(ctx context.Context, stdin io.Reader, stdou
 		stderr = runtimeUI.ErrorOutput()
 	}
 	return tools.ExecutionContext{
-		Context:      ctx,
-		Provider:     a.CurrentProvider,
-		ProviderName: a.ProviderName,
-		Model:        a.CurrentModel,
-		Stdin:        stdin,
-		Stdout:       stdout,
-		Stderr:       stderr,
-		PromptReader: runtimeUI.PromptReader(),
-		Runtime:      runtimeUI,
-		Registry:     a.registry(),
-		ToolCache:    a.ToolCache,
-		LSPClient:    a.GetLSPClient(),
-		Config:       a.cfg(),
-		AutoApprove:  a.autoApprove(),
-		AuditLogger:  a.auditLogger(),
+		Context:         ctx,
+		Provider:        a.CurrentProvider,
+		ProviderName:    a.ProviderName,
+		Model:           a.CurrentModel,
+		Stdin:           stdin,
+		Stdout:          stdout,
+		Stderr:          stderr,
+		PromptReader:    runtimeUI.PromptReader(),
+		Runtime:         runtimeUI,
+		Registry:        a.registry(),
+		ToolCache:       a.ToolCache,
+		LSPClient:       a.GetLSPClient(),
+		Config:          a.cfg(),
+		AutoApprove:     a.autoApprove(),
+		AuditLogger:     a.auditLogger(),
+		LocatorRegistry: a.LocatorRegistry,
 	}
 }
 
@@ -824,7 +825,7 @@ func (a *Agent) executeReadFileBatch(ctx context.Context, paths []string) string
 	}
 
 	execCtx := a.toolExecutionContext(ctx, strings.NewReader(""), io.Discard, io.Discard)
-	result := filetool.ExecuteReadFilesWithRuntime(execCtx.Output(), execCtx.EffectiveConfig(), execCtx.EffectiveToolCache(), paths, filetool.DefaultFullLines)
+	result := filetool.ExecuteReadFilesWithLocator(execCtx.Output(), execCtx.EffectiveConfig(), execCtx.EffectiveToolCache(), paths, filetool.DefaultFullLines, execCtx.EffectiveLocatorRegistry())
 	a.recordToolResultOptimizations(tc, result)
 
 	if a.ToolCache != nil {

@@ -343,8 +343,8 @@ func TestResponsesToolFormat(t *testing.T) {
 		t.Fatal("read_file.Parameters.properties is not a map")
 	}
 
-	if len(props) != 1 {
-		t.Fatalf("read_file.Parameters.properties has %d entries, want 1", len(props))
+	if len(props) != 2 {
+		t.Fatalf("read_file.Parameters.properties has %d entries, want 2", len(props))
 	}
 	pathsProp, ok := props["paths"].(map[string]interface{})
 	if !ok {
@@ -354,12 +354,9 @@ func TestResponsesToolFormat(t *testing.T) {
 		t.Errorf("read_file.Parameters.properties.paths.type = %v, want array", pathsProp["type"])
 	}
 
-	required, ok := params["required"].([]string)
-	if !ok {
-		t.Fatal("read_file.Parameters.required is not []string")
-	}
-	if len(required) != 1 || required[0] != "paths" {
-		t.Errorf("read_file.Parameters.required = %v, want [paths]", required)
+	// paths と targets は排他的なため required は未設定
+	if _, hasRequired := params["required"]; hasRequired {
+		t.Fatal("read_file.Parameters should not have required (paths and targets are mutually exclusive)")
 	}
 }
 

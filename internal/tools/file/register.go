@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/susugadx/xelyon-cli/internal/locator"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
@@ -29,8 +30,11 @@ func (t *ReadFileTool) Parameters() map[string]interface{} {
 				"maxItems":    MaxReadFilesPaths,
 				"description": "Files to read (1-10). Returns full content. Do not re-read files already returned.",
 			},
+			"targets": map[string]interface{}{
+				"type":        "string",
+				"description": "Locator IDs to read (e.g. '[L1,L5]'). Alternative to paths.",
+			},
 		},
-		"required":             []string{"paths"},
 		"additionalProperties": false,
 	}
 }
@@ -38,17 +42,38 @@ func (t *ReadFileTool) Parameters() map[string]interface{} {
 func (t *ReadFileTool) Run(execCtx tools.ExecutionContext, args map[string]string) (string, *tools.FileChange, error) {
 	out := execCtx.Output()
 
+	rawTargets := args["targets"]
 	rawPaths := args["paths"]
-	if rawPaths == "" {
-		return "Error: paths is required", nil, nil
-	}
 
 	var paths []string
-	if err := json.Unmarshal([]byte(rawPaths), &paths); err != nil {
-		return fmt.Sprintf("Error: invalid paths format: %v", err), nil, nil
+
+	// targets が指定されている場合はLocator IDから解決
+	if rawTargets != "" {
+		reg := execCtx.EffectiveLocatorRegistry()
+		locs := reg.ResolveMulti(rawTargets)
+		if len(locs) == 0 {
+			return fmt.Sprintf("Error: no valid locator IDs found in targets: %s", rawTargets), nil, nil
+		}
+		for _, loc := range locs {
+			if loc.EndLine > 0 && loc.Line > 0 {
+				// 行範囲付き: "path:startLine-endLine" 形式に変換
+				paths = append(paths, fmt.Sprintf("%s:%d-%d", loc.FilePath, loc.Line, loc.EndLine))
+			} else if loc.Line > 0 {
+				// 行番号のみ: シンボル周辺のコンテキストを付与
+				paths = append(paths, fmt.Sprintf("%s:%d-%d", loc.FilePath, max(1, loc.Line-5), loc.Line+50))
+			} else {
+				// ファイル全体
+				paths = append(paths, loc.FilePath)
+			}
+		}
+	} else if rawPaths != "" {
+		if err := json.Unmarshal([]byte(rawPaths), &paths); err != nil {
+			return fmt.Sprintf("Error: invalid paths format: %v", err), nil, nil
+		}
 	}
+
 	if len(paths) == 0 {
-		return "Error: paths is empty", nil, nil
+		return "Error: either paths or targets is required", nil, nil
 	}
 
 	budgetOverride := 0
@@ -56,12 +81,19 @@ func (t *ReadFileTool) Run(execCtx tools.ExecutionContext, args map[string]strin
 		budgetOverride = DefaultFullLines
 	}
 
-	return ExecuteReadFilesWithRuntime(
+	// targets 経由の場合は ID が既に Registry に登録済みなので再登録しない
+	var reg *locator.Registry
+	if rawTargets == "" {
+		reg = execCtx.EffectiveLocatorRegistry()
+	}
+
+	return ExecuteReadFilesWithLocator(
 		out,
 		execCtx.EffectiveConfig(),
 		execCtx.EffectiveToolCache(),
 		paths,
 		budgetOverride,
+		reg,
 	), nil, nil
 }
 

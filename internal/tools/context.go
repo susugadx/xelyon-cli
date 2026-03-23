@@ -7,6 +7,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/audit"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/locator"
 	lsplib "github.com/susugadx/xelyon-cli/internal/lsp"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 	"github.com/susugadx/xelyon-cli/internal/ui"
@@ -16,21 +17,22 @@ import (
 // web_search などが現在のプロバイダー/モデルや対話 I/O を参照するために使用する。
 // 各実行経路が明示的に組み立てて注入し、process-global 状態には依存しない。
 type ExecutionContext struct {
-	Context      context.Context
-	Provider     api.Provider
-	ProviderName string
-	Model        string
-	Stdin        io.Reader
-	Stdout       io.Writer
-	Stderr       io.Writer
-	PromptReader *ui.MultilineReader
-	Runtime      *ui.Runtime // スピナー停止に使用する UI Runtime
-	Registry     *Registry
-	ToolCache    ToolCacheInterface
-	LSPClient    *lsplib.Client
-	Config       *config.Config
-	AutoApprove  bool
-	AuditLogger  audit.ToolLogger
+	Context         context.Context
+	Provider        api.Provider
+	ProviderName    string
+	Model           string
+	Stdin           io.Reader
+	Stdout          io.Writer
+	Stderr          io.Writer
+	PromptReader    *ui.MultilineReader
+	Runtime         *ui.Runtime // スピナー停止に使用する UI Runtime
+	Registry        *Registry
+	ToolCache       ToolCacheInterface
+	LSPClient       *lsplib.Client
+	Config          *config.Config
+	AutoApprove     bool
+	AuditLogger     audit.ToolLogger
+	LocatorRegistry *locator.Registry
 }
 
 // Output は common.Output へ変換する。
@@ -96,6 +98,12 @@ func (ctx ExecutionContext) EffectiveAuditLogger() audit.ToolLogger {
 	return normalized.AuditLogger
 }
 
+// EffectiveLocatorRegistry は実行時に使う Locator Registry を返す。
+func (ctx ExecutionContext) EffectiveLocatorRegistry() *locator.Registry {
+	normalized := normalizeExecutionContext(ctx)
+	return normalized.LocatorRegistry
+}
+
 func normalizeExecutionContext(ctx ExecutionContext) ExecutionContext {
 	runtime := ui.DefaultRuntime()
 	if ctx.Context == nil {
@@ -118,6 +126,9 @@ func normalizeExecutionContext(ctx ExecutionContext) ExecutionContext {
 	}
 	if ctx.AuditLogger == nil {
 		ctx.AuditLogger = audit.NewDisabledLogger()
+	}
+	if ctx.LocatorRegistry == nil {
+		ctx.LocatorRegistry = locator.NewRegistry()
 	}
 	return ctx
 }

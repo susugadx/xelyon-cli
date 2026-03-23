@@ -21,8 +21,8 @@ func TestReadFileTool_SchemaAndRun(t *testing.T) {
 	if !ok {
 		t.Fatal("expected properties map")
 	}
-	if len(props) != 1 {
-		t.Fatalf("expected 1 read_file parameter, got %d", len(props))
+	if len(props) != 2 {
+		t.Fatalf("expected 2 read_file parameters, got %d", len(props))
 	}
 	if _, ok := props["paths"]; !ok {
 		t.Fatal("expected paths parameter")
@@ -30,12 +30,9 @@ func TestReadFileTool_SchemaAndRun(t *testing.T) {
 	if _, ok := props["symbol"]; ok {
 		t.Fatal("symbol parameter should be removed")
 	}
-	required, ok := params["required"].([]string)
-	if !ok {
-		t.Fatal("expected required array")
-	}
-	if len(required) != 1 || required[0] != "paths" {
-		t.Fatalf("expected required=[paths], got %#v", required)
+	// paths と targets は排他的なため required は未設定
+	if _, hasRequired := params["required"]; hasRequired {
+		t.Fatal("expected no required array (paths and targets are mutually exclusive)")
 	}
 	pathsParam, ok := props["paths"].(map[string]interface{})
 	if !ok {
@@ -176,7 +173,7 @@ func TestReadFileTool_SchemaAndRun(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if !strings.Contains(result, "Error: paths is empty") {
+		if !strings.Contains(result, "Error: either paths or targets is required") {
 			t.Fatalf("expected empty paths error, got: %s", result)
 		}
 	})
@@ -186,7 +183,7 @@ func TestReadFileTool_SchemaAndRun(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if !strings.Contains(result, "Error: paths is required") {
+		if !strings.Contains(result, "Error: either paths or targets is required") {
 			t.Fatalf("expected error, got: %s", result)
 		}
 	})
