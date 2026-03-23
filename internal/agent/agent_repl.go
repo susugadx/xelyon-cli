@@ -18,29 +18,13 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
-// RunInteractiveWithConfig は指定設定でインタラクティブモードを実行する。
-func RunInteractiveWithConfig(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
-	runtime := NewAgentRuntimeWithConfig(cfg)
+// initInteractiveAgentWithRuntime は、事前に用意した runtime を使ってインタラクティブ用 Agent を初期化する。
+func initInteractiveAgentWithRuntime(runtime *AgentRuntime, model string, provider api.Provider, autoApprove bool) *Agent {
+	runtime = normalizeAgentRuntime(runtime)
 	runtime.AutoApprove = autoApprove
-	runtimeUI := runtime.effectiveUI()
-
-	// Bracketed Paste Mode を最初に有効化（Windows Terminal の警告回避のため）
-	// 他の出力より前に送信する必要がある
-	mlReader := ui.NewMultilineReaderWithRuntime(runtimeUI)
-	runtimeUI.SetPromptReader(mlReader)
-	runtimeCfg := runtime.effectiveConfig()
-
-	// Debug: XELYON_DEBUG_PASTE=1 で詳細表示
-	if os.Getenv("XELYON_DEBUG_PASTE") == "1" {
-		_, _ = fmt.Fprintf(runtimeUI.ErrorOutput(), "[DEBUG] cfg.Paste.BracketedPaste = %v\n", runtimeCfg.Paste.BracketedPaste)
-	}
-
-	if runtimeCfg.Paste.BracketedPaste {
-		mlReader.EnableBracketedPaste()
-		defer mlReader.DisableBracketedPaste()
-	}
 
 	// 監査ログ初期化（環境変数で制御: XELYON_AUDIT_LOG=1 で有効化）
+	runtimeUI := runtime.effectiveUI()
 	auditEnabled := os.Getenv("XELYON_AUDIT_LOG") == "1"
 	logger, err := audit.NewDefaultLogger(auditEnabled)
 	if err != nil {
@@ -54,14 +38,9 @@ func RunInteractiveWithConfig(model string, provider api.Provider, cfg *config.C
 
 	agent := NewAgentWithRuntime(model, provider, false, runtime)
 	agent.setAutoApprove(autoApprove)
-	defer agent.Cleanup() // グレースフルシャットダウン
 
 	// シグナルハンドリング（Ctrl+C 2回で終了、1回目はAI応答中断）
 	setupSignalHandler(agent)
-
-	// ヘッダー表示
-	printHeaderToWriter(runtimeUI.Output(), model, provider)
-	printModeInfoToWriter(runtimeUI.Output(), autoApprove, false)
 
 	// プロジェクト設定読み込み（xelyon.yaml）
 	if pc := loadProjectConfig(); pc != nil {
@@ -69,6 +48,44 @@ func RunInteractiveWithConfig(model string, provider api.Provider, cfg *config.C
 	}
 	injectProjectMap(agent, "")
 	checkRipgrepAvailability(agent)
+
+	return agent
+}
+
+// InitInteractiveAgent はインタラクティブモード用のAgentを初期化する。
+// TUIモードと従来REPLモードの両方から呼ばれる。
+func InitInteractiveAgent(model string, provider api.Provider, cfg *config.Config, autoApprove bool) *Agent {
+	runtime := NewAgentRuntimeWithConfig(cfg)
+	return initInteractiveAgentWithRuntime(runtime, model, provider, autoApprove)
+}
+
+// RunInteractiveWithConfig は指定設定でインタラクティブモードを実行する。
+func RunInteractiveWithConfig(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
+	runtime := NewAgentRuntimeWithConfig(cfg)
+	runtime.AutoApprove = autoApprove
+
+	runtimeUI := runtime.effectiveUI()
+	mlReader := ui.NewMultilineReaderWithRuntime(runtimeUI)
+	runtimeUI.SetPromptReader(mlReader)
+	runtimeCfg := runtime.effectiveConfig()
+
+	// Bracketed Paste Mode を最初に有効化（Windows Terminal の警告回避のため）
+	// 他の出力より前に送信する必要がある
+	if os.Getenv("XELYON_DEBUG_PASTE") == "1" {
+		_, _ = fmt.Fprintf(runtimeUI.ErrorOutput(), "[DEBUG] cfg.Paste.BracketedPaste = %v\n", runtimeCfg.Paste.BracketedPaste)
+	}
+
+	if runtimeCfg.Paste.BracketedPaste {
+		mlReader.EnableBracketedPaste()
+		defer mlReader.DisableBracketedPaste()
+	}
+
+	agent := initInteractiveAgentWithRuntime(runtime, model, provider, autoApprove)
+	defer agent.Cleanup() // グレースフルシャットダウン
+
+	// ヘッダー表示
+	printHeaderToWriter(runtimeUI.Output(), agent.Model, provider)
+	printModeInfoToWriter(runtimeUI.Output(), autoApprove, false)
 
 	// コンテキストサイズ表示（ツリー形式）
 	printContextSize(agent)
@@ -98,17 +115,6 @@ func RunInteractiveWithResumeWithConfig(model string, provider api.Provider, cfg
 		defer mlReader.DisableBracketedPaste()
 	}
 
-	auditEnabled := os.Getenv("XELYON_AUDIT_LOG") == "1"
-	logger, err := audit.NewDefaultLogger(auditEnabled)
-	if err != nil {
-		yellow.Fprintf(runtimeUI.Output(), "Warning: Failed to initialize audit log: %v\n", err)
-	} else {
-		runtime.AuditLogger = logger
-	}
-	if auditEnabled {
-		green.Fprintln(runtimeUI.Output(), "📝 Audit logging enabled")
-	}
-
 	storage, err := history.NewStorage()
 	if err != nil {
 		red.Fprintf(runtimeUI.Output(), "Failed to initialize storage: %v\n", err)
@@ -131,8 +137,7 @@ func RunInteractiveWithResumeWithConfig(model string, provider api.Provider, cfg
 	}
 
 	// ロード済みセッションでAgent作成
-	agent := NewAgentWithRuntime(model, provider, false, runtime)
-	agent.setAutoApprove(autoApprove)
+	agent := initInteractiveAgentWithRuntime(runtime, model, provider, autoApprove)
 	agent.session = session
 	agent.History = session.ToAPIMessages()
 	// Compacted 状態を復元（Compact API で圧縮済みの場合）
@@ -145,18 +150,9 @@ func RunInteractiveWithResumeWithConfig(model string, provider api.Provider, cfg
 	}
 	defer agent.Cleanup() // グレースフルシャットダウン
 
-	// シグナルハンドリング（Ctrl+C 2回で終了、1回目はAI応答中断）
-	setupSignalHandler(agent)
-
 	printHeaderToWriter(runtimeUI.Output(), model, provider)
 	printModeInfoToWriter(runtimeUI.Output(), autoApprove, false)
 	green.Fprintf(runtimeUI.Output(), "📂 Resumed session %s (%d messages)\n", sessionID, len(session.ToAPIMessages()))
-
-	if pc := loadProjectConfig(); pc != nil {
-		applyProjectConfig(agent, pc)
-	}
-	injectProjectMap(agent, "")
-	checkRipgrepAvailability(agent)
 
 	// コンテキストサイズ表示（ツリー形式）
 	printContextSize(agent)

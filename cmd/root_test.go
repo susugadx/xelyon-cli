@@ -64,6 +64,7 @@ func resetRootFlagsForTest() {
 	headless = false
 	noUpdateCheck = false
 	imageFlag = ""
+	noTUI = false
 }
 
 func TestRootCommand_PositionalQueryDefaultsToOnce(t *testing.T) {
@@ -176,9 +177,11 @@ func TestRootCommand_InteractiveFlagForcesREPLWithPositionalQuery(t *testing.T) 
 	resetRootFlagsForTest()
 
 	origRunInteractive := runInteractive
+	origRunTUI := runTUI
 	origRunOnce := runOnce
 	t.Cleanup(func() {
 		runInteractive = origRunInteractive
+		runTUI = origRunTUI
 		runOnce = origRunOnce
 		resetRootFlagsForTest()
 	})
@@ -186,6 +189,9 @@ func TestRootCommand_InteractiveFlagForcesREPLWithPositionalQuery(t *testing.T) 
 	interactiveCalled := false
 	onceCalled := false
 	runInteractive = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
+		interactiveCalled = true
+	}
+	runTUI = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
 		interactiveCalled = true
 	}
 	runOnce = func(query string, model string, provider api.Provider, cfg *config.Config, autoApprove bool, quiet bool) error {

@@ -88,64 +88,59 @@ func (a *Agent) statusRef() *statusHolder {
 	return &a.status
 }
 
-// PrintStatusFooter prints a status bar with divider lines.
+// FormatStatusLine はステータスバーに表示する文字列を返す。
 // Format: ● model │ Mode │ tokens │ ~$cost
-// This should be called right before showing the input prompt.
-func (a *Agent) PrintStatusFooter() {
-	const dividerLine = "────────────────────────────────────────────"
-
-	// Mode 表示
+func (a *Agent) FormatStatusLine() string {
 	modeText := "Normal"
 	if a.PlanModeEnabled {
 		modeText = "Plan"
 	}
 
-	// トークン使用量（API実測値・累計のみ）
 	tokens := a.Stats.TotalTokens()
 	tokenStr := FormatTokens(tokens)
 
-	// コスト（親 + サブエージェント累計）
 	cost := a.Stats.EstimatedCost()
 	if manager := a.subAgentManager(); manager != nil {
 		summary := manager.GetSummary()
 		cost += summary.TotalCost
 	}
 
-	// セパレータ（dim色）
 	sep := statusDim.Sprint("│")
-
-	// インジケーター（常に緑）
 	indicator := statusGreen.Sprint("●")
-	out := a.output()
 
-	// 区切り線（dim色）
-	_, _ = fmt.Fprintln(out)
-	statusDim.Fprintln(out, dividerLine)
-
-	// ステータス行: ● model │ Mode │ tokens │ ~$cost
-	// Ollama の場合はコスト非表示
 	providerLower := strings.ToLower(a.ProviderName)
 	if providerLower == "ollama" {
-		_, _ = fmt.Fprintf(out, "%s %s %s %s %s %s\n",
+		return fmt.Sprintf("%s %s %s %s %s %s",
 			indicator,
 			statusCyan.Sprint(a.CurrentModel),
 			sep,
 			modeText,
 			sep,
 			tokenStr)
-	} else {
-		_, _ = fmt.Fprintf(out, "%s %s %s %s %s %s %s ~$%.3f\n",
-			indicator,
-			statusCyan.Sprint(a.CurrentModel),
-			sep,
-			modeText,
-			sep,
-			tokenStr,
-			sep,
-			cost)
 	}
+	return fmt.Sprintf("%s %s %s %s %s %s %s ~$%.3f",
+		indicator,
+		statusCyan.Sprint(a.CurrentModel),
+		sep,
+		modeText,
+		sep,
+		tokenStr,
+		sep,
+		cost)
+}
 
-	// 下の区切り線
+// PrintStatusFooter prints a status bar with divider lines.
+// Format: ● model │ Mode │ tokens │ ~$cost
+// This should be called right before showing the input prompt.
+func (a *Agent) PrintStatusFooter() {
+	const dividerLine = "────────────────────────────────────────────"
+
+	out := a.output()
+
+	// 区切り線（dim色）
+	_, _ = fmt.Fprintln(out)
+	statusDim.Fprintln(out, dividerLine)
+	_, _ = fmt.Fprintln(out, a.FormatStatusLine())
 	statusDim.Fprintln(out, dividerLine)
 }
 

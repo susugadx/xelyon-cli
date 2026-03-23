@@ -40,9 +40,11 @@ var (
 	headless      bool
 	noUpdateCheck bool
 	imageFlag     string
+	noTUI         bool
 
 	runInteractive           = agent.RunInteractiveWithConfig
 	runInteractiveWithResume = agent.RunInteractiveWithResumeWithConfig
+	runTUI                   = agent.RunTUIWithConfig
 	runHeadless              = agent.RunHeadlessWithConfig
 	runOnce                  = agent.RunOnceWithConfig
 	runOnceWithImage         = agent.RunOnceWithImageWithConfig
@@ -175,13 +177,18 @@ Examples:
 
 		// --resume フラグチェック
 		if resume && len(args) == 0 {
+			// TODO: TUI resume 対応（Phase 2）、現状は従来REPLモードで起動する。
 			runInteractiveWithResume(model, provider, cfg, autoApprove)
 			return nil
 		}
 
 		// 引数なし & 画像指定なし → 対話モード
 		if len(args) == 0 && imageFlag == "" {
-			runInteractive(model, provider, cfg, autoApprove)
+			if noTUI {
+				runInteractive(model, provider, cfg, autoApprove)
+			} else {
+				runTUI(model, provider, cfg, autoApprove)
+			}
 			return nil
 		}
 
@@ -201,7 +208,11 @@ Examples:
 		}
 
 		// クエリ引数付き + --interactive → 対話モード
-		runInteractive(model, provider, cfg, autoApprove)
+		if noTUI {
+			runInteractive(model, provider, cfg, autoApprove)
+		} else {
+			runTUI(model, provider, cfg, autoApprove)
+		}
 		return nil
 	},
 }
@@ -239,6 +250,9 @@ func init() {
 
 	// 新規: -i/--image フラグ（画像入力）
 	rootCmd.Flags().StringVarP(&imageFlag, "image", "i", "", "Image file to include (for multimodal models: gemini, claude, openai)")
+
+	// 新規: --no-tui フラグ（TUI無効化）
+	rootCmd.Flags().BoolVar(&noTUI, "no-tui", false, "Disable alternate screen TUI (use classic REPL)")
 }
 
 func Execute() {

@@ -100,6 +100,26 @@ func (r *Runtime) ErrorOutput() io.Writer {
 	return r.err
 }
 
+// SetOutput は runtime の出力先を差し替える（TUIモード用）。
+func (r *Runtime) SetOutput(w io.Writer) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.out = w
+}
+
+// SetErrorOutput は runtime のエラー出力先を差し替える（TUIモード用）。
+func (r *Runtime) SetErrorOutput(w io.Writer) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.err = w
+}
+
 // SetLogLevel は runtime のログレベルを設定する。
 func (r *Runtime) SetLogLevel(level LogLevel) {
 	if r == nil {
