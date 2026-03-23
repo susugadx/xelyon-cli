@@ -100,3 +100,59 @@ func newApplyPatchExecContext(cfg *config.Config, stdin string) tools.ExecutionC
 		Config: cfg,
 	}
 }
+
+func TestCountLinesPerPath(t *testing.T) {
+	tests := []struct {
+		name  string
+		patch string
+		want  map[string][2]int
+	}{
+		{
+			name:  "single file modification",
+			patch: "*** Begin Patch\n*** Update File: test.go\n@@ func main()\n-line1\n+new line1\n-line2\n+new line2\n*** End Patch",
+			want: map[string][2]int{
+				"test.go": {2, 2},
+			},
+		},
+		{
+			name:  "multiple files",
+			patch: "*** Begin Patch\n*** Update File: a.go\n@@ func a()\n-old a\n+new a\n*** Add File: b.go\n+line1\n+line2\n*** Delete File: c.go\n*** End Patch",
+			want: map[string][2]int{
+				"a.go": {1, 1},
+				"b.go": {2, 0},
+			},
+		},
+		{
+			name:  "with move operation",
+			patch: "*** Begin Patch\n*** Update File: old.txt\n*** Move to: new.txt\n@@\n-old content\n+new content\n*** End Patch",
+			want: map[string][2]int{
+				"old.txt": {1, 1},
+			},
+		},
+		{
+			name: "empty patch",
+			patch: `*** Begin Patch
+*** End Patch`,
+			want: map[string][2]int{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := countLinesPerPath(tt.patch)
+			if len(got) != len(tt.want) {
+				t.Errorf("countLinesPerPath() map length = %d, want %d", len(got), len(tt.want))
+			}
+			for path, wantCounts := range tt.want {
+				gotCounts, ok := got[path]
+				if !ok {
+					t.Errorf("countLinesPerPath() missing path %q", path)
+					continue
+				}
+				if gotCounts[0] != wantCounts[0] || gotCounts[1] != wantCounts[1] {
+					t.Errorf("countLinesPerPath()[%q] = %v, want %v", path, gotCounts, wantCounts)
+				}
+			}
+		})
+	}
+}

@@ -244,3 +244,56 @@ func TestFormatMultiplePathNames(t *testing.T) {
 		})
 	}
 }
+
+func TestFormatApplyPatchSummary(t *testing.T) {
+	tests := []struct {
+		name   string
+		result string
+		want   string
+	}{
+		{
+			name:   "no files changed",
+			result: "",
+			want:   "No files changed",
+		},
+		{
+			name:   "modified files only",
+			result: "Modified: a.go, b.go\n",
+			want:   "2 files (2 modified)",
+		},
+		{
+			name:   "added files only",
+			result: "Added: new1.txt, new2.txt, new3.txt\n",
+			want:   "3 files (3 added)",
+		},
+		{
+			name:   "deleted files only",
+			result: "Deleted: old.txt\n",
+			want:   "1 files (1 deleted)",
+		},
+		{
+			name:   "mixed changes",
+			result: "Added: new.txt\nModified: a.go, b.go\nDeleted: old.txt\n",
+			want:   "4 files (2 modified, 1 added, 1 deleted)",
+		},
+		{
+			name:   "none for each type",
+			result: "Added: (none)\nModified: (none)\nDeleted: (none)\n",
+			want:   "No files changed",
+		},
+		{
+			name:   "empty paths string",
+			result: "Added: \nModified: \nDeleted: \n",
+			want:   "No files changed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := formatApplyPatchSummary(nil, tt.result)
+			if got != tt.want {
+				t.Errorf("formatApplyPatchSummary() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

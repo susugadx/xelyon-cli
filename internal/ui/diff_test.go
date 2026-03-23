@@ -361,3 +361,51 @@ func TestShowInlineDiff_SkipContext(t *testing.T) {
 		t.Errorf("Expected '...' for skipped context, got: %s", output)
 	}
 }
+
+func TestShowPatchToWriter(t *testing.T) {
+	patchOutput := `*** Begin Patch
+*** Update File: test.go
+@@ func main()
+ -old line
+ +new line
+*** Add File: new.txt
++new file content
+*** Delete File: old.txt
+*** End Patch`
+
+	output := captureOutput(func(w io.Writer) {
+		ShowPatchToWriter(w, patchOutput)
+	})
+
+	// ***行が存在すること（ボールドシアン）
+	if !strings.Contains(output, "*** Begin Patch") {
+		t.Errorf("Expected '*** Begin Patch' header, got: %s", output)
+	}
+	if !strings.Contains(output, "*** Update File: test.go") {
+		t.Errorf("Expected '*** Update File: test.go', got: %s", output)
+	}
+	if !strings.Contains(output, "*** Add File: new.txt") {
+		t.Errorf("Expected '*** Add File: new.txt', got: %s", output)
+	}
+	if !strings.Contains(output, "*** Delete File: old.txt") {
+		t.Errorf("Expected '*** Delete File: old.txt', got: %s", output)
+	}
+
+	// @@行が存在すること（シアン）
+	if !strings.Contains(output, "@@ func main()") {
+		t.Errorf("Expected '@@ func main()' hunk header, got: %s", output)
+	}
+
+	// -行が存在すること（赤）
+	if !strings.Contains(output, "-old line") {
+		t.Errorf("Expected '-old line' removed line, got: %s", output)
+	}
+
+	// +行が存在すること（緑）
+	if !strings.Contains(output, "+new line") {
+		t.Errorf("Expected '+new line' added line, got: %s", output)
+	}
+	if !strings.Contains(output, "+new file content") {
+		t.Errorf("Expected '+new file content' added line, got: %s", output)
+	}
+}
