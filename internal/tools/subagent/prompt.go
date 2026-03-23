@@ -64,11 +64,9 @@ Respond in the same language as the task message.
 Project Map lists file paths, symbol definitions with line ranges for the project.
 - Symbol location is in Project Map → use read_file with range syntax directly.
 - Do NOT call search_code for symbols already listed.
-- For callers and references, use inspect_symbol.
 - If needed information is missing from Project Map, fall back to search_code.
 ### When to use tools
-- inspect_symbol: Go symbol caller/reference investigation.
-- search_code: for string patterns, non-Go references, or cross-file patterns not covered by inspect_symbol.
+- search_code: for all code discovery. For Go symbols, automatically returns callers and references. For string patterns, returns matches with context.
 - read_file: to read actual contents. Use line ranges from Project Map.
 - Never guess file paths or APIs. If the task gives a path, use it directly.
 - Do not re-read files already returned in full in this session.
@@ -97,14 +95,13 @@ Respond in the same language as the task message.
 ### Project Map First
 Project Map lists file paths, symbol definitions with line ranges.
 - Symbol location is in Project Map → use read_file with range syntax directly.
-- For callers and references, use inspect_symbol.
-- search_code: for string patterns, non-Go references, or cross-file patterns not covered by inspect_symbol.
+- search_code: for all code discovery. For Go symbols, automatically returns callers and references. For string patterns, returns matches with context.
 - read_file: to read actual contents. Use line ranges from Project Map.
 - Never guess file paths or APIs.
 - Do not re-read files already returned in full in this session.
 
 ## Impact Analysis
-- Shared changes (function signature, struct, interface, constant, config, rename, delete, cross-file refactor): MUST use inspect_symbol or search_code to find ALL references before editing. Modifying shared code without checking references is FORBIDDEN.
+- Shared changes (function signature, struct, interface, constant, config, rename, delete, cross-file refactor): MUST use search_code to find ALL references before editing. Modifying shared code without checking references is FORBIDDEN.
 - Local changes (internal logic, local variable, condition within one function): Read the target once, edit, and verify.
 - After any change, follow the dependency chain: changed struct -> update constructors, initializers, tests. Changed function signature -> update all callers. Changed interface -> update all implementations.
 
@@ -116,7 +113,7 @@ Project Map lists file paths, symbol definitions with line ranges.
 - Combine related edits when the active edit tool supports batching or multi-file changes.
 
 ## Edit Rules
-- Base edit instructions on actual inspect_symbol, read_file, or search_code output from this session. Never reconstruct edit context from memory or from the task message.
+- Base edit instructions on actual read_file or search_code output from this session. Never reconstruct edit context from memory or from the task message.
 - After an edit attempt fails, read the target section once, then retry. Do not loop read-fail-read-fail.
 - Make ONLY the changes explicitly requested. Do NOT refactor, rename, reformat, or reorganize code beyond the task scope.
 - Do not touch files not mentioned in the task.
@@ -148,7 +145,7 @@ Prefix: space=context, -=remove, +=add. Use @@ to jump to the target function/cl
 
 const legacyEditSection = `### Legacy edit tools
 Use str_replace / write_file / delete_file for edits.
-- str_replace old_str must come from actual inspect_symbol, read_file, or search_code output in this session.
+- str_replace old_str must come from actual read_file or search_code output in this session.
 - After str_replace fails, read the target section once, then retry. Do not loop read-fail-read-fail.
 
 ## Output Rules

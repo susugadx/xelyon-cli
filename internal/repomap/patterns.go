@@ -112,69 +112,82 @@ var compiledPatterns = compilePatterns()
 type signaturePattern struct {
 	re   *regexp.Regexp
 	kind string
+	lang string // 対象言語（"go","js","py","rs","java","rb","php","c","swift","scala","sh"、"" で全言語）
 }
 
 var signaturePatterns = []signaturePattern{
-	{re: regexp.MustCompile(`^func\s+\([^)]*\)\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:\[[^\]]+\])?\s*\(`), kind: "method"},
-	{re: regexp.MustCompile(`^func\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:\[[^\]]+\])?\s*\(`), kind: "function"},
-	{re: regexp.MustCompile(`^type\s+([A-Za-z_][A-Za-z0-9_]*)\s+struct\b`), kind: "struct"},
-	{re: regexp.MustCompile(`^type\s+([A-Za-z_][A-Za-z0-9_]*)\s+interface\b`), kind: "interface"},
-	{re: regexp.MustCompile(`^type\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "type"},
-	{re: regexp.MustCompile(`^const\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "const"},
-	{re: regexp.MustCompile(`^var\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "var"},
-	{re: regexp.MustCompile(`^export\s+default\s+function\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "function"},
-	{re: regexp.MustCompile(`^export\s+default\s+class\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "class"},
-	{re: regexp.MustCompile(`^export\s+(?:abstract\s+class|class)\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "class"},
-	{re: regexp.MustCompile(`^export\s+function\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "function"},
-	{re: regexp.MustCompile(`^export\s+const\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "const"},
-	{re: regexp.MustCompile(`^export\s+interface\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "interface"},
-	{re: regexp.MustCompile(`^export\s+type\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "type"},
-	{re: regexp.MustCompile(`^export\s+enum\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "enum"},
-	{re: regexp.MustCompile(`^(?:async\s+)?function\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "function"},
-	{re: regexp.MustCompile(`^class\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "class"},
-	{re: regexp.MustCompile(`^(?:const|let)\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "var"},
-	{re: regexp.MustCompile(`^interface\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "interface"},
-	{re: regexp.MustCompile(`^(?:async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(`), kind: "function"},
-	{re: regexp.MustCompile(`^(?:pub\s+)?(?:async\s+)?fn\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "function"},
-	{re: regexp.MustCompile(`^(?:pub\s+)?struct\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "struct"},
-	{re: regexp.MustCompile(`^(?:pub\s+)?enum\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "enum"},
-	{re: regexp.MustCompile(`^(?:pub\s+)?trait\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "trait"},
-	{re: regexp.MustCompile(`^impl(?:<[^>]*>)?\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "impl"},
-	{re: regexp.MustCompile(`^(?:public |private |protected )?(?:static )?(?:abstract )?(?:class|record) ([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "class"},
-	{re: regexp.MustCompile(`^(?:public |private |protected )?(?:static )?(?:abstract )?interface ([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "interface"},
-	{re: regexp.MustCompile(`^(?:public |private |protected )?(?:static )?(?:abstract )?enum ([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "enum"},
-	{re: regexp.MustCompile(`^(?:public |private |protected )?(?:static )?(?:abstract )?[A-Za-z0-9_<>,\[\]?]+\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(`), kind: "function"},
-	{re: regexp.MustCompile(`^(?:suspend\s+)?fun\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "function"},
-	{re: regexp.MustCompile(`^(?:data |sealed |value )?class\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "class"},
-	{re: regexp.MustCompile(`^object\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "object"},
-	{re: regexp.MustCompile(`^\s*def\s+([A-Za-z_][A-Za-z0-9_]*[!?=]?)\b`), kind: "function"},
-	{re: regexp.MustCompile(`^\s*class\s+([A-Za-z_][A-Za-z0-9_:]*)\b`), kind: "class"},
-	{re: regexp.MustCompile(`^\s*module\s+([A-Za-z_][A-Za-z0-9_:]*)\b`), kind: "module"},
-	{re: regexp.MustCompile(`^\s*(?:public |private |protected )?(?:static )?function\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "function"},
-	{re: regexp.MustCompile(`^\s*(?:abstract )?class\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "class"},
-	{re: regexp.MustCompile(`^\s*(?:abstract )?interface\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "interface"},
-	{re: regexp.MustCompile(`^\s*trait\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "trait"},
-	{re: regexp.MustCompile(`^\s*enum\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "enum"},
-	{re: regexp.MustCompile(`^(?:typedef\s+)?struct\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "struct"},
-	{re: regexp.MustCompile(`^(?:typedef\s+)?class\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "class"},
-	{re: regexp.MustCompile(`^(?:typedef\s+)?(?:enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "type"},
-	{re: regexp.MustCompile(`^#define\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "const"},
-	{re: regexp.MustCompile(`^namespace\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "namespace"},
-	{re: regexp.MustCompile(`^\s*(?:public |private |internal |open )?func\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "function"},
-	{re: regexp.MustCompile(`^\s*(?:public |private |internal |open )?class\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "class"},
-	{re: regexp.MustCompile(`^\s*(?:public |private |internal |open )?struct\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "struct"},
-	{re: regexp.MustCompile(`^\s*(?:public |private |internal |open )?enum\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "enum"},
-	{re: regexp.MustCompile(`^\s*(?:public |private |internal |open )?protocol\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "interface"},
-	{re: regexp.MustCompile(`^\s*(?:public |private |internal |open )?extension\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "impl"},
-	{re: regexp.MustCompile(`^\s*def\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "function"},
-	{re: regexp.MustCompile(`^\s*class\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "class"},
-	{re: regexp.MustCompile(`^\s*object\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "object"},
-	{re: regexp.MustCompile(`^\s*trait\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "trait"},
-	{re: regexp.MustCompile(`^\s*case\s+class\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "class"},
-	{re: regexp.MustCompile(`^\s*case\s+object\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "object"},
-	{re: regexp.MustCompile(`^\s*sealed\s+trait\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "trait"},
-	{re: regexp.MustCompile(`^([A-Za-z_][A-Za-z0-9_]*)\s*\(\)`), kind: "function"},
-	{re: regexp.MustCompile(`^function\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "function"},
+	// Go
+	{re: regexp.MustCompile(`^func\s+\([^)]*\)\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:\[[^\]]+\])?\s*\(`), kind: "method", lang: "go"},
+	{re: regexp.MustCompile(`^func\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:\[[^\]]+\])?\s*\(`), kind: "function", lang: "go"},
+	{re: regexp.MustCompile(`^type\s+([A-Za-z_][A-Za-z0-9_]*)\s+struct\b`), kind: "struct", lang: "go"},
+	{re: regexp.MustCompile(`^type\s+([A-Za-z_][A-Za-z0-9_]*)\s+interface\b`), kind: "interface", lang: "go"},
+	{re: regexp.MustCompile(`^type\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "type", lang: "go"},
+	{re: regexp.MustCompile(`^const\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "const", lang: "go"},
+	{re: regexp.MustCompile(`^var\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "var", lang: "go"},
+	// JS/TS
+	{re: regexp.MustCompile(`^export\s+default\s+function\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "function", lang: "js"},
+	{re: regexp.MustCompile(`^export\s+default\s+class\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "class", lang: "js"},
+	{re: regexp.MustCompile(`^export\s+(?:abstract\s+class|class)\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "class", lang: "js"},
+	{re: regexp.MustCompile(`^export\s+function\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "function", lang: "js"},
+	{re: regexp.MustCompile(`^export\s+const\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "const", lang: "js"},
+	{re: regexp.MustCompile(`^export\s+interface\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "interface", lang: "js"},
+	{re: regexp.MustCompile(`^export\s+type\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "type", lang: "js"},
+	{re: regexp.MustCompile(`^export\s+enum\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "enum", lang: "js"},
+	{re: regexp.MustCompile(`^(?:async\s+)?function\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "function", lang: "js"},
+	{re: regexp.MustCompile(`^class\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "class", lang: "js"},
+	{re: regexp.MustCompile(`^(?:const|let)\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "var", lang: "js"},
+	{re: regexp.MustCompile(`^interface\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "interface", lang: "js"},
+	// Python
+	{re: regexp.MustCompile(`^(?:async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(`), kind: "function", lang: "py"},
+	{re: regexp.MustCompile(`^\s*class\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "class", lang: "py"},
+	// Rust
+	{re: regexp.MustCompile(`^(?:pub\s+)?(?:async\s+)?fn\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "function", lang: "rs"},
+	{re: regexp.MustCompile(`^(?:pub\s+)?struct\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "struct", lang: "rs"},
+	{re: regexp.MustCompile(`^(?:pub\s+)?enum\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "enum", lang: "rs"},
+	{re: regexp.MustCompile(`^(?:pub\s+)?trait\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "trait", lang: "rs"},
+	{re: regexp.MustCompile(`^impl(?:<[^>]*>)?\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "impl", lang: "rs"},
+	// Java/Kotlin
+	{re: regexp.MustCompile(`^(?:public |private |protected )?(?:static )?(?:abstract )?(?:class|record) ([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "class", lang: "java"},
+	{re: regexp.MustCompile(`^(?:public |private |protected )?(?:static )?(?:abstract )?interface ([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "interface", lang: "java"},
+	{re: regexp.MustCompile(`^(?:public |private |protected )?(?:static )?(?:abstract )?enum ([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "enum", lang: "java"},
+	{re: regexp.MustCompile(`^(?:public |private |protected )?(?:static )?(?:abstract )?[A-Za-z0-9_<>,\[\]?]+\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(`), kind: "function", lang: "java"},
+	{re: regexp.MustCompile(`^(?:suspend\s+)?fun\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "function", lang: "java"},
+	{re: regexp.MustCompile(`^(?:data |sealed |value )?class\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "class", lang: "java"},
+	{re: regexp.MustCompile(`^object\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "object", lang: "java"},
+	// Ruby
+	{re: regexp.MustCompile(`^\s*def\s+([A-Za-z_][A-Za-z0-9_]*[!?=]?)\b`), kind: "function", lang: "rb"},
+	{re: regexp.MustCompile(`^\s*class\s+([A-Za-z_][A-Za-z0-9_:]*)\b`), kind: "class", lang: "rb"},
+	{re: regexp.MustCompile(`^\s*module\s+([A-Za-z_][A-Za-z0-9_:]*)\b`), kind: "module", lang: "rb"},
+	// PHP
+	{re: regexp.MustCompile(`^\s*(?:public |private |protected )?(?:static )?function\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "function", lang: "php"},
+	{re: regexp.MustCompile(`^\s*(?:abstract )?class\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "class", lang: "php"},
+	{re: regexp.MustCompile(`^\s*(?:abstract )?interface\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "interface", lang: "php"},
+	{re: regexp.MustCompile(`^\s*trait\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "trait", lang: "php"},
+	{re: regexp.MustCompile(`^\s*enum\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "enum", lang: "php"},
+	// C/C++
+	{re: regexp.MustCompile(`^(?:typedef\s+)?struct\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "struct", lang: "c"},
+	{re: regexp.MustCompile(`^(?:typedef\s+)?class\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "class", lang: "c"},
+	{re: regexp.MustCompile(`^(?:typedef\s+)?(?:enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "type", lang: "c"},
+	{re: regexp.MustCompile(`^#define\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "const", lang: "c"},
+	{re: regexp.MustCompile(`^namespace\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "namespace", lang: "c"},
+	// Swift
+	{re: regexp.MustCompile(`^\s*(?:public |private |internal |open )?func\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "function", lang: "swift"},
+	{re: regexp.MustCompile(`^\s*(?:public |private |internal |open )?class\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "class", lang: "swift"},
+	{re: regexp.MustCompile(`^\s*(?:public |private |internal |open )?struct\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "struct", lang: "swift"},
+	{re: regexp.MustCompile(`^\s*(?:public |private |internal |open )?enum\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "enum", lang: "swift"},
+	{re: regexp.MustCompile(`^\s*(?:public |private |internal |open )?protocol\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "interface", lang: "swift"},
+	{re: regexp.MustCompile(`^\s*(?:public |private |internal |open )?extension\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "impl", lang: "swift"},
+	// Scala
+	{re: regexp.MustCompile(`^\s*def\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "function", lang: "scala"},
+	{re: regexp.MustCompile(`^\s*class\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "class", lang: "scala"},
+	{re: regexp.MustCompile(`^\s*object\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "object", lang: "scala"},
+	{re: regexp.MustCompile(`^\s*trait\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "trait", lang: "scala"},
+	{re: regexp.MustCompile(`^\s*case\s+class\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "class", lang: "scala"},
+	{re: regexp.MustCompile(`^\s*case\s+object\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "object", lang: "scala"},
+	{re: regexp.MustCompile(`^\s*sealed\s+trait\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "trait", lang: "scala"},
+	// Shell
+	{re: regexp.MustCompile(`^([A-Za-z_][A-Za-z0-9_]*)\s*\(\)`), kind: "function", lang: "sh"},
+	{re: regexp.MustCompile(`^function\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "function", lang: "sh"},
 }
 
 func compilePatterns() map[string][]*regexp.Regexp {
@@ -262,7 +275,14 @@ func signatureMetadataForPath(path, sig string) (string, string, bool) {
 }
 
 func extractSignatureMetadata(sig string) (string, string, bool) {
+	return extractSignatureMetadataForLang(sig, "")
+}
+
+func extractSignatureMetadataForLang(sig, lang string) (string, string, bool) {
 	for _, pattern := range signaturePatterns {
+		if lang != "" && pattern.lang != "" && pattern.lang != lang {
+			continue
+		}
 		matches := pattern.re.FindStringSubmatch(sig)
 		if len(matches) != 2 {
 			continue
@@ -300,6 +320,23 @@ func isTestFile(path string) bool {
 	default:
 		return false
 	}
+}
+
+// ExtractSignatureMetadata は行テキストからシンボル名と種別を抽出する（全言語）。
+// Project Map 生成用。
+func ExtractSignatureMetadata(sig string) (string, string, bool) {
+	return extractSignatureMetadata(sig)
+}
+
+// ExtractSignatureMetadataForLang は指定言語に限定してシンボル名と種別を抽出する。
+// search_code の多言語シンボル解決用。lang が空の場合は全言語パターンを適用する。
+func ExtractSignatureMetadataForLang(sig, lang string) (string, string, bool) {
+	return extractSignatureMetadataForLang(sig, lang)
+}
+
+// IsTestFile はテストファイルかどうかを返す。
+func IsTestFile(path string) bool {
+	return isTestFile(path)
 }
 
 func testSortBase(name string) string {

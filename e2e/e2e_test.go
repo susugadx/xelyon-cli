@@ -87,14 +87,14 @@ func TestE2E_ReadFileBatch(t *testing.T) {
 	}
 }
 
-// TestE2E_InspectSymbol はinspect_symbolツールが正常に実行されることを確認する
-func TestE2E_InspectSymbol(t *testing.T) {
+// TestE2E_SearchCodeSymbolResolve はsearch_codeのシンボル自動解決が正常に実行されることを確認する
+func TestE2E_SearchCodeSymbolResolve(t *testing.T) {
 	t.Parallel()
 	result := runHeadless(t,
-		`Use the inspect_symbol tool to inspect the symbol "main" and report what you found. Do not use any other tools.`)
+		`Use the search_code tool to search for the symbol "main" and report what you found. Do not use any other tools.`)
 
 	assertSuccess(t, result)
-	assertToolUsed(t, result, "inspect_symbol")
+	assertToolUsed(t, result, "search_code")
 }
 
 // TestE2E_SimpleQuery は簡単な調査タスクが完了することを確認する

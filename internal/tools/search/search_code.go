@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/navigation"
 	"github.com/susugadx/xelyon-cli/internal/pathmatch"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
@@ -135,6 +136,41 @@ func executeSinglePattern(cache tools.ToolCacheInterface, pattern string, opts S
 	if cache != nil {
 		if cached, ok := cache.GetSearch(pattern, cacheKey); ok {
 			return cached
+		}
+	}
+
+	// ── Symbol fast path ──
+	if shouldTrySymbolResolve(pattern, opts) {
+		lang := resolveLanguage(opts)
+
+		if lang == "go" {
+			// Go: AST ベースの正確な解決
+			symbolOutput, status := navigation.InspectSymbolAuto(pattern, opts.Path)
+			switch status {
+			case navigation.SymbolAutoSingle:
+				if cache != nil {
+					cache.SetSearch(pattern, cacheKey, symbolOutput, nil)
+				}
+				return symbolOutput
+			case navigation.SymbolAutoMultiple:
+				return symbolOutput
+			case navigation.SymbolAutoNone:
+				// フォールバック
+			}
+		} else {
+			// 他言語: パターンベースのベストエフォート解決
+			symbolOutput, status := resolveGenericSymbol(pattern, opts)
+			switch status {
+			case genericSymbolSingle:
+				if cache != nil {
+					cache.SetSearch(pattern, cacheKey, symbolOutput, nil)
+				}
+				return symbolOutput
+			case genericSymbolMultiple:
+				return symbolOutput
+			case genericSymbolNone:
+				// フォールバック
+			}
 		}
 	}
 

@@ -35,6 +35,24 @@ func TestPlanModeExcludedTools_LegacyEditTool(t *testing.T) {
 	}
 }
 
+func TestNormalModeExcludedTools_IncludesInspectAndListDir(t *testing.T) {
+	excluded := normalModeExcludedTools()
+	for _, name := range []string{"inspect_symbol", "list_dir"} {
+		if !containsString(excluded, name) {
+			t.Fatalf("normal mode should exclude %s", name)
+		}
+	}
+}
+
+func TestPlanModeExcludedTools_IncludesInspectAndListDir(t *testing.T) {
+	excluded := planModeExcludedTools()
+	for _, name := range []string{"inspect_symbol", "list_dir"} {
+		if !containsString(excluded, name) {
+			t.Fatalf("plan mode should exclude %s", name)
+		}
+	}
+}
+
 func containsString(values []string, target string) bool {
 	for _, value := range values {
 		if value == target {

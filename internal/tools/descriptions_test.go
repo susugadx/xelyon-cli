@@ -65,7 +65,7 @@ func TestToolDescriptions_ReadFileAndSearchCodeDescribeCurrentUsage(t *testing.T
 	if !strings.Contains(ToolDescriptions["read_file"], "Do not re-read files already returned") {
 		t.Error("read_file description should discourage rereading returned files")
 	}
-	if !strings.Contains(ToolDescriptions["search_code"], "prefer one multi-pattern search over serial searches") {
-		t.Error("search_code description should prefer multi-pattern searches over serial searches")
+	if !strings.Contains(ToolDescriptions["search_code"], "comma-separated patterns for parallel multi-search") {
+		t.Error("search_code description should mention comma-separated parallel multi-search")
 	}
 }

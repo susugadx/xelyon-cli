@@ -5,10 +5,18 @@ import (
 	"testing"
 )
 
-func TestBuildInvestigationPrompt_ContainsInspectSymbol(t *testing.T) {
+func TestBuildInvestigationPrompt_ContainsSearchCode(t *testing.T) {
 	prompt := BuildInvestigationPrompt("test request")
-	if !strings.Contains(prompt, "inspect_symbol") {
-		t.Error("investigation prompt should mention inspect_symbol as an allowed tool")
+	if !strings.Contains(prompt, "search_code") {
+		t.Error("investigation prompt should mention search_code as an allowed tool")
+	}
+	// inspect_symbol は search_code に統合済みなので参照しない
+	if strings.Contains(prompt, "inspect_symbol") {
+		t.Error("investigation prompt should not mention inspect_symbol (integrated into search_code)")
+	}
+	// list_dir は除外済みなので参照しない
+	if strings.Contains(prompt, "list_dir") {
+		t.Error("investigation prompt should not mention list_dir (excluded from registry)")
 	}
 }
 
@@ -34,7 +42,7 @@ func TestBuildInvestigationPrompt_BashLimitedToReadOnlyGit(t *testing.T) {
 
 func TestBuildInvestigationPrompt_DedicatedToolsInChecklist(t *testing.T) {
 	prompt := BuildInvestigationPrompt("test request")
-	checks := []string{"inspect_symbol", "search_code", "read_file", "list_dir"}
+	checks := []string{"search_code", "read_file"}
 	for _, tool := range checks {
 		if !strings.Contains(prompt, tool) {
 			t.Errorf("investigation checklist should mention %s", tool)
@@ -42,13 +50,13 @@ func TestBuildInvestigationPrompt_DedicatedToolsInChecklist(t *testing.T) {
 	}
 }
 
-func TestBuildInvestigationPrompt_UsesInspectSymbolForGoSymbols(t *testing.T) {
+func TestBuildInvestigationPrompt_SearchCodeForGoSymbols(t *testing.T) {
 	prompt := BuildInvestigationPrompt("test request")
-	if !strings.Contains(prompt, "Use inspect_symbol for Go symbol lookup") {
-		t.Error("investigation prompt should describe inspect_symbol as the Go symbol lookup tool")
+	if !strings.Contains(prompt, "For Go symbols, it automatically returns callers, references, and tests") {
+		t.Error("investigation prompt should describe search_code Go symbol auto-resolution")
 	}
 	if strings.Contains(prompt, "search_code+read_file") {
-		t.Error("investigation prompt should not compare inspect_symbol against search_code+read_file")
+		t.Error("investigation prompt should not compare search_code against search_code+read_file")
 	}
 }
 
@@ -70,14 +78,11 @@ func TestBuildInvestigationPrompt_ContainsToolSelectionExamples(t *testing.T) {
 	if !strings.Contains(prompt, "### EXAMPLES") {
 		t.Error("investigation prompt should include tool selection examples")
 	}
-	if !strings.Contains(prompt, "inspect_symbol(symbol=\"chatCore\", path=\"internal/agent/agent_chat.go\")") {
-		t.Error("investigation prompt should include an inspect_symbol example")
+	if !strings.Contains(prompt, `search_code(pattern="chatCore"`) {
+		t.Error("investigation prompt should include a search_code example")
 	}
 	if !strings.Contains(prompt, `read_file(paths=["impl.go", "impl_test.go"])`) {
 		t.Error("investigation prompt should include a read_file paths example")
-	}
-	if !strings.Contains(prompt, "use list_dir first") {
-		t.Error("investigation prompt should include a list_dir-first example")
 	}
 }
 

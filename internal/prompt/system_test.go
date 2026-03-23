@@ -46,8 +46,8 @@ func TestSystemPrompt_ProjectMapGuidance(t *testing.T) {
 	if !strings.Contains(SystemPrompt, "Do NOT call search_code to find symbols already listed in Project Map") {
 		t.Error("SystemPrompt should skip search_code when symbol is in Project Map")
 	}
-	if !strings.Contains(SystemPrompt, "inspect_symbol: Go symbol caller/reference investigation") {
-		t.Error("SystemPrompt should direct to inspect_symbol for callers/refs")
+	if !strings.Contains(SystemPrompt, "search_code: code discovery tool") {
+		t.Error("SystemPrompt should describe search_code as code discovery tool")
 	}
 	if strings.Contains(SystemPrompt, "imports") || strings.Contains(SystemPrompt, "← refs") {
 		t.Error("SystemPrompt should not mention imports or refs in Project Map")
@@ -55,8 +55,8 @@ func TestSystemPrompt_ProjectMapGuidance(t *testing.T) {
 }
 
 func TestSystemPrompt_ToolGuidanceMatchesCurrentSchema(t *testing.T) {
-	if !strings.Contains(SystemPrompt, "inspect_symbol: Go symbol caller/reference investigation") {
-		t.Error("SystemPrompt should describe inspect_symbol for callers and references")
+	if !strings.Contains(SystemPrompt, "search_code: code discovery tool") {
+		t.Error("SystemPrompt should describe search_code as code discovery tool")
 	}
 	if !strings.Contains(SystemPrompt, "read_file: to read actual file contents. Use line ranges from Project Map.") {
 		t.Error("SystemPrompt should describe current read_file behavior")
@@ -113,7 +113,7 @@ func TestSystemPrompt_ParallelGuidanceIsConsolidated(t *testing.T) {
 	if !strings.Contains(SystemPrompt, "NEVER set timeout_ms in wait_agent") {
 		t.Error("SystemPrompt should forbid short-circuit wait_agent timeouts")
 	}
-	if !strings.Contains(SystemPrompt, "do NOT use read_file/search_code/inspect_symbol yourself for the same delegated task") {
+	if !strings.Contains(SystemPrompt, "do NOT use read_file/search_code yourself for the same delegated task") {
 		t.Error("SystemPrompt should forbid duplicate local exploration after delegation")
 	}
 	if !strings.Contains(SystemPrompt, "Fall back to direct tool use ONLY when ALL sub-agents fail") {
@@ -158,7 +158,7 @@ func TestSystemPrompt_EfficientExecutionGuidance(t *testing.T) {
 	if !strings.Contains(SystemPrompt, "read neighboring files speculatively") {
 		t.Error("SystemPrompt should discourage speculative neighboring reads")
 	}
-	if !strings.Contains(SystemPrompt, "Use exact context from actual inspect_symbol, read_file, or search_code output") {
+	if !strings.Contains(SystemPrompt, "Use exact context from actual read_file or search_code output") {
 		t.Error("SystemPrompt should require exact edit-context provenance")
 	}
 }
