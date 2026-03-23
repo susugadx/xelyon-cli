@@ -54,9 +54,12 @@ const applyPatchDescription = "## `apply_patch`\n\n" +
 	"+print(\"Hello, world!\")\n" +
 	"*** Delete File: obsolete.txt\n" +
 	"*** End Patch\n\n" +
-	"It is important to remember:\n\n" +
-	"- You must include a header with your intended action (Add/Delete/Update)\n" +
-	"- You must prefix new lines with `+` even when creating a new file\n" +
+	"CRITICAL rules:\n\n" +
+	"- Always end the patch with *** End Patch on its own line.\n" +
+	"- @@ text must be copied verbatim from read_file output. Do NOT write it from memory.\n" +
+	"- Every hunk line MUST start with a prefix: ` ` (space) for context, `-` for removal, `+` for addition. Lines without a prefix are invalid.\n" +
+	"- You must include a header with your intended action (Add/Delete/Update).\n" +
+	"- You must prefix new lines with `+` even when creating a new file.\n" +
 	"- File references can only be relative, NEVER ABSOLUTE.\n\n" +
 	"You can invoke apply_patch like:\n\n" +
 	"```\n" +
