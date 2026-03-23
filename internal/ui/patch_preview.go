@@ -7,8 +7,6 @@ import (
 	"github.com/fatih/color"
 )
 
-const patchPreviewLineLimit = 10
-
 // PatchPreviewLine はパッチプレビュー内の1行を表す。
 type PatchPreviewLine struct {
 	Type    rune
@@ -53,7 +51,7 @@ func showPatchFilePreview(out io.Writer, bold, green, red, dim *color.Color, pre
 		return
 	case "add", "created":
 		if len(preview.Hunks) > 0 {
-			renderPatchLines(out, green, red, dim, preview.Hunks[0].Lines, patchPreviewLineLimit)
+			renderPatchLines(out, green, red, dim, preview.Hunks[0].Lines)
 		}
 		fmt.Fprintln(out)
 		return
@@ -62,7 +60,7 @@ func showPatchFilePreview(out io.Writer, bold, green, red, dim *color.Color, pre
 			if i > 0 {
 				dim.Fprintf(out, "     :\n")
 			}
-			renderPatchLines(out, green, red, dim, hunk.Lines, 0)
+			renderPatchLines(out, green, red, dim, hunk.Lines)
 		}
 		fmt.Fprintln(out)
 	}
@@ -76,13 +74,8 @@ func showPatchFileHeader(out io.Writer, bold, dim *color.Color, action, path, mo
 	dim.Fprintln(out)
 }
 
-func renderPatchLines(out io.Writer, green, red, dim *color.Color, lines []PatchPreviewLine, limit int) {
-	for i, line := range lines {
-		if limit > 0 && i >= limit {
-			dim.Fprintf(out, "     : ... (%d more lines)\n", len(lines)-limit)
-			return
-		}
-
+func renderPatchLines(out io.Writer, green, red, dim *color.Color, lines []PatchPreviewLine) {
+	for _, line := range lines {
 		switch line.Type {
 		case '-':
 			red.Fprintf(out, "  %4d - %s\n", line.LineNum, line.Text)

@@ -51,7 +51,7 @@ func showAddedFile(out io.Writer, bold, green, dim *color.Color, f PatchFileDisp
 			Text:    line,
 		})
 	}
-	renderPatchLines(out, green, color.New(color.FgRed), dim, previewLines, patchPreviewLineLimit)
+	renderPatchLines(out, green, color.New(color.FgRed), dim, previewLines)
 	fmt.Fprintln(out)
 }
 
@@ -91,7 +91,7 @@ func showModifiedFile(out io.Writer, bold, green, red, dim *color.Color, f Patch
 				previewLines = append(previewLines, PatchPreviewLine{Type: '+', LineNum: dl.NewLineNum, Text: dl.Text})
 			}
 		}
-		renderPatchLines(out, green, red, dim, previewLines, 0)
+		renderPatchLines(out, green, red, dim, previewLines)
 	}
 	fmt.Fprintln(out)
 }
