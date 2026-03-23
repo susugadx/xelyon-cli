@@ -92,13 +92,19 @@ func TestGetApplyPatchSafety_SamePathMoveIsMedium(t *testing.T) {
 }
 
 func newApplyPatchExecContext(cfg *config.Config, stdin string) tools.ExecutionContext {
+	execCtx, _ := newApplyPatchExecContextWithOutput(cfg, stdin, false)
+	return execCtx
+}
+
+func newApplyPatchExecContextWithOutput(cfg *config.Config, stdin string, autoApprove bool) (tools.ExecutionContext, *bytes.Buffer) {
 	var out bytes.Buffer
 	return tools.ExecutionContext{
-		Stdin:  strings.NewReader(stdin),
-		Stdout: &out,
-		Stderr: io.Discard,
-		Config: cfg,
-	}
+		Stdin:       strings.NewReader(stdin),
+		Stdout:      &out,
+		Stderr:      io.Discard,
+		Config:      cfg,
+		AutoApprove: autoApprove,
+	}, &out
 }
 
 func TestCountLinesPerPath(t *testing.T) {
@@ -166,4 +172,117 @@ func TestFormatApplyResult_ContainsSuccessMarker(t *testing.T) {
 	if !strings.Contains(output, "✓ Patch applied successfully.") {
 		t.Fatalf("formatApplyResult() = %q, want success marker", output)
 	}
+}
+
+func TestApplyPatch_PreviewWithLineNumbers(t *testing.T) {
+	t.Setenv("XELYON_INTERACTIVE_CONFIRM", "0")
+
+	withTempWorkdir(t, func() {
+		writeTestFile(t, "target.go", "package main\n\nfunc target() {\n\tprintln(\"old\")\n\tprintln(\"keep\")\n}\n")
+
+		patch := "*** Begin Patch\n" +
+			"*** Update File: target.go\n" +
+			"@@ func target() {\n" +
+			" \tprintln(\"old\")\n" +
+			"-\tprintln(\"keep\")\n" +
+			"+\tprintln(\"new\")\n" +
+			" }\n" +
+			"*** End Patch"
+
+		tool := &ApplyPatchTool{}
+		execCtx, out := newApplyPatchExecContextWithOutput(config.DefaultConfig(), "n\n", false)
+
+		result, _, err := tool.Run(execCtx, map[string]string{"patch": patch})
+		if err != nil {
+			t.Fatalf("Run() error = %v", err)
+		}
+		if result != "[CANCELLED] apply_patch was not approved" {
+			t.Fatalf("Run() = %q, want cancelled output", result)
+		}
+
+		output := out.String()
+		if !strings.Contains(output, "🩹 apply_patch (1 file operation(s))") {
+			t.Fatalf("stdout = %q, want patch header", output)
+		}
+		if !strings.Contains(output, "Editing target.go (+1, -1)") {
+			t.Fatalf("stdout = %q, want codex-style file header", output)
+		}
+		if !strings.Contains(output, "5 - \tprintln(\"keep\")") {
+			t.Fatalf("stdout = %q, want removed line number", output)
+		}
+		if !strings.Contains(output, "5 + \tprintln(\"new\")") {
+			t.Fatalf("stdout = %q, want added line number", output)
+		}
+		if strings.Contains(output, "*** Update File:") {
+			t.Fatalf("stdout = %q, want no fallback patch display", output)
+		}
+	})
+}
+
+func TestApplyPatch_PostApplyDisplay(t *testing.T) {
+	withTempWorkdir(t, func() {
+		writeTestFile(t, "target.go", "package main\n\nfunc target() {\n\tprintln(\"old\")\n\tprintln(\"keep\")\n}\n")
+
+		patch := "*** Begin Patch\n" +
+			"*** Update File: target.go\n" +
+			"@@ func target() {\n" +
+			" \tprintln(\"old\")\n" +
+			"-\tprintln(\"keep\")\n" +
+			"+\tprintln(\"new\")\n" +
+			" }\n" +
+			"*** End Patch"
+
+		tool := &ApplyPatchTool{}
+		execCtx, out := newApplyPatchExecContextWithOutput(config.DefaultConfig(), "", true)
+
+		if _, _, err := tool.Run(execCtx, map[string]string{"patch": patch}); err != nil {
+			t.Fatalf("Run() error = %v", err)
+		}
+
+		output := out.String()
+		if !strings.Contains(output, "🩹 apply_patch (1 file operation(s))") {
+			t.Fatalf("stdout = %q, want patch header", output)
+		}
+		if !strings.Contains(output, "Editing target.go (+1, -1)") {
+			t.Fatalf("stdout = %q, want codex-style result header", output)
+		}
+		if !strings.Contains(output, "5 + \tprintln(\"new\")") {
+			t.Fatalf("stdout = %q, want added line in result display", output)
+		}
+		assertFileContent(t, "target.go", "package main\n\nfunc target() {\n\tprintln(\"old\")\n\tprintln(\"new\")\n}\n")
+	})
+}
+
+func TestApplyPatch_PreviewFallbackOnLineNumberMiss(t *testing.T) {
+	t.Setenv("XELYON_INTERACTIVE_CONFIRM", "0")
+
+	withTempWorkdir(t, func() {
+		writeTestFile(t, "target.go", "package main\n\nfunc target() {}\n")
+
+		patch := "*** Begin Patch\n" +
+			"*** Update File: target.go\n" +
+			"@@ missing()\n" +
+			"-func target() {}\n" +
+			"+func target() { println(\"x\") }\n" +
+			"*** End Patch"
+
+		tool := &ApplyPatchTool{}
+		execCtx, out := newApplyPatchExecContextWithOutput(config.DefaultConfig(), "n\n", false)
+
+		result, _, err := tool.Run(execCtx, map[string]string{"patch": patch})
+		if err != nil {
+			t.Fatalf("Run() error = %v", err)
+		}
+		if result != "[CANCELLED] apply_patch was not approved" {
+			t.Fatalf("Run() = %q, want cancelled output", result)
+		}
+
+		output := out.String()
+		if !strings.Contains(output, "*** Update File: target.go") {
+			t.Fatalf("stdout = %q, want fallback patch text", output)
+		}
+		if !strings.Contains(output, "@@ missing()") {
+			t.Fatalf("stdout = %q, want missing context header in fallback", output)
+		}
+	})
 }

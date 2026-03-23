@@ -255,7 +255,23 @@ func assertParseError(t *testing.T, err error, message string, lineNumber int) {
 
 func assertHunksEqual(t *testing.T, got []Hunk, want []Hunk) {
 	t.Helper()
-	if !reflect.DeepEqual(got, want) {
+	if !reflect.DeepEqual(normalizeHunks(got), normalizeHunks(want)) {
 		t.Fatalf("hunks mismatch:\n got: %#v\nwant: %#v", got, want)
 	}
+}
+
+func normalizeHunks(hunks []Hunk) []Hunk {
+	cloned := make([]Hunk, len(hunks))
+	for i, hunk := range hunks {
+		cloned[i] = hunk
+		if len(hunk.Chunks) == 0 {
+			continue
+		}
+		cloned[i].Chunks = make([]UpdateFileChunk, len(hunk.Chunks))
+		copy(cloned[i].Chunks, hunk.Chunks)
+		for j := range cloned[i].Chunks {
+			cloned[i].Chunks[j].previewLines = nil
+		}
+	}
+	return cloned
 }

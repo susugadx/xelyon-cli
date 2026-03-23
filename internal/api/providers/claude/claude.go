@@ -453,6 +453,41 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	// Anthropic Messages API 形式に変換（role:"tool" → role:"user"+tool_result 等）
 	messages := ConvertToAnthropicMessages(history)
 
+	// デバッグ: tool_use/tool_result の整合性チェック
+	if os.Getenv("XELYON_DEBUG_CLAUDE") == "1" {
+		errOut := api.ErrorWriterFromContext(ctx)
+		fmt.Fprintf(errOut, "[DEBUG Claude] === History (%d messages) ===\n", len(history))
+		for i, m := range history {
+			tcIDs := make([]string, len(m.ToolCalls))
+			for j, tc := range m.ToolCalls {
+				tcIDs[j] = tc.ID
+			}
+			if len(tcIDs) > 0 {
+				fmt.Fprintf(errOut, "[DEBUG Claude] history[%d] role=%s tool_calls=%v\n", i, m.Role, tcIDs)
+			} else if m.ToolCallID != "" {
+				fmt.Fprintf(errOut, "[DEBUG Claude] history[%d] role=%s tool_call_id=%s\n", i, m.Role, m.ToolCallID)
+			} else {
+				fmt.Fprintf(errOut, "[DEBUG Claude] history[%d] role=%s content_len=%d\n", i, m.Role, len(m.Content))
+			}
+		}
+		fmt.Fprintf(errOut, "[DEBUG Claude] === Converted (%d messages) ===\n", len(messages))
+		for i, m := range messages {
+			var types []string
+			for _, b := range m.Content {
+				switch b.Type {
+				case "tool_use":
+					types = append(types, "tool_use:"+b.ID)
+				case "tool_result":
+					types = append(types, "tool_result:"+b.ToolUseID)
+				default:
+					types = append(types, b.Type)
+				}
+			}
+			fmt.Fprintf(errOut, "[DEBUG Claude] messages[%d] role=%s content=%v\n", i, m.Role, types)
+		}
+		validateAnthropicToolPairs(messages, errOut)
+	}
+
 	cfg := config.ResolveContext(ctx, p.effectiveConfig())
 
 	// プロンプトキャッシュ: 安定区間+最新userにブレークポイント設定

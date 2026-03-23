@@ -67,3 +67,14 @@ func TestSeekSequence_UnicodeNormalization(t *testing.T) {
 		t.Fatalf("SeekSequence() = (%d, %v), want (0, true)", got, ok)
 	}
 }
+
+func TestFindLineNumber(t *testing.T) {
+	content := "first\nfunc target() {\n}\n"
+
+	if got := FindLineNumber(content, "func target() {"); got != 2 {
+		t.Fatalf("FindLineNumber() = %d, want 2", got)
+	}
+	if got := FindLineNumber(content, "missing"); got != -1 {
+		t.Fatalf("FindLineNumber() = %d, want -1", got)
+	}
+}

@@ -2,6 +2,7 @@ package applypatch
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/tools"
@@ -45,7 +46,10 @@ func (t *ApplyPatchTool) Run(execCtx tools.ExecutionContext, args map[string]str
 		return "", nil, err
 	}
 
-	showApplyPatchPreview(execCtx.Output(), patchText, parsed.Hunks)
+	autoApproved := shouldAutoApproveApplyPatch(execCtx, parsed)
+	if !autoApproved {
+		showApplyPatchPreview(execCtx.Output(), patchText, parsed.Hunks)
+	}
 
 	decision := confirmApplyPatch(execCtx, parsed)
 
@@ -71,7 +75,9 @@ IMPORTANT: Do NOT apply the patch until the user approves.`, strings.TrimSpace(d
 		return "", nil, err
 	}
 
-	showCodexStyleResult(execCtx.Output(), result)
+	if autoApproved {
+		showCodexStyleResult(execCtx.Output(), result)
+	}
 
 	return formatApplyResult(result), buildApplyPatchFileChange(result), nil
 }
@@ -79,20 +85,27 @@ IMPORTANT: Do NOT apply the patch until the user approves.`, strings.TrimSpace(d
 func confirmApplyPatch(execCtx tools.ExecutionContext, parsed *ParsedPatch) common.ConfirmDecision {
 	const message = "Apply this patch? / このパッチを適用しますか？"
 
-	options := execCtx.ConfirmOptions()
-	safety := getApplyPatchSafety(parsed)
-
-	if common.IsAutoApprovable("apply_patch", options.AutoApprove) {
-		execCtx.Output().Green.Printf("Auto-approved (%s): %s\n", common.GetSafetyDescription(safety), "apply_patch")
-		return common.ConfirmDecision{Action: common.ConfirmYes}
-	}
-
-	if cfg := options.Config; cfg != nil && cfg.ToolConfirm.AutoApproveMedium && safety == common.SafetyMedium {
+	if shouldAutoApproveApplyPatch(execCtx, parsed) {
+		safety := getApplyPatchSafety(parsed)
 		execCtx.Output().Green.Printf("Auto-approved (%s): %s\n", common.GetSafetyDescription(safety), "apply_patch")
 		return common.ConfirmDecision{Action: common.ConfirmYes}
 	}
 
 	return common.ConfirmWithIO(execCtx.PromptIO(), message)
+}
+
+func shouldAutoApproveApplyPatch(execCtx tools.ExecutionContext, parsed *ParsedPatch) bool {
+	options := execCtx.ConfirmOptions()
+	if common.IsAutoApprovable("apply_patch", options.AutoApprove) {
+		return true
+	}
+
+	safety := getApplyPatchSafety(parsed)
+	if cfg := options.Config; cfg != nil && cfg.ToolConfirm.AutoApproveMedium && safety == common.SafetyMedium {
+		return true
+	}
+
+	return false
 }
 
 func getApplyPatchSafety(parsed *ParsedPatch) common.ToolSafety {
@@ -121,6 +134,8 @@ func showCodexStyleResult(out common.Output, result *ApplyResult) {
 		return
 	}
 
+	showApplyPatchHeader(out, len(result.details))
+
 	var files []ui.PatchFileDisplay
 	for _, d := range result.details {
 		files = append(files, ui.PatchFileDisplay{
@@ -139,10 +154,25 @@ func showApplyPatchPreview(out common.Output, patchText string, hunks []Hunk) {
 		return
 	}
 
-	out.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	out.Cyan.Printf("🩹 apply_patch (%d file operation(s))\n", len(hunks))
-	out.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	previews, err := BuildPatchPreview(patchText, os.ReadFile)
+	if err != nil {
+		showApplyPatchPreviewFallback(out, patchText, hunks)
+		return
+	}
 
+	showApplyPatchHeader(out, len(hunks))
+	ui.ShowPatchPreview(out.StdoutWriter(), previews)
+}
+
+func showApplyPatchHeader(out common.Output, operations int) {
+	out.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	out.Cyan.Printf("🩹 apply_patch (%d file operation(s))\n", operations)
+	out.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	out.Println()
+}
+
+func showApplyPatchPreviewFallback(out common.Output, patchText string, hunks []Hunk) {
+	showApplyPatchHeader(out, len(hunks))
 	ui.ShowPatchToWriter(out.StdoutWriter(), patchText)
 
 	counts := countLinesPerPath(patchText)

@@ -22,7 +22,6 @@ func ShowCodexStyleDiff(out io.Writer, files []PatchFileDisplay) {
 	green := color.New(color.FgGreen)
 	red := color.New(color.FgRed)
 	dim := color.New(color.Faint)
-	cyan := color.New(color.FgCyan)
 
 	for _, f := range files {
 		switch f.Action {
@@ -31,7 +30,7 @@ func ShowCodexStyleDiff(out io.Writer, files []PatchFileDisplay) {
 		case "deleted":
 			showDeletedFile(out, bold, red, dim, f)
 		case "modified", "moved":
-			showModifiedFile(out, bold, green, red, dim, cyan, f)
+			showModifiedFile(out, bold, green, red, dim, f)
 		}
 	}
 }
@@ -42,40 +41,38 @@ func showAddedFile(out io.Writer, bold, green, dim *color.Color, f PatchFileDisp
 	if added > 0 && lines[added-1] == "" {
 		added--
 	}
-	bold.Fprintf(out, "  • Added %s", f.Path)
-	dim.Fprintf(out, " (+%d)\n", added)
+	showPatchFileHeader(out, bold, dim, f.Action, f.Path, "", added, 0)
 
-	// 最初の数行だけ表示
-	limit := 10
-	for i, line := range lines {
-		if i >= limit {
-			dim.Fprintf(out, "     : ... (%d more lines)\n", added-limit)
-			break
-		}
-		green.Fprintf(out, "  %4d + %s\n", i+1, line)
+	previewLines := make([]PatchPreviewLine, 0, added)
+	for i, line := range lines[:added] {
+		previewLines = append(previewLines, PatchPreviewLine{
+			Type:    '+',
+			LineNum: i + 1,
+			Text:    line,
+		})
 	}
+	renderPatchLines(out, green, color.New(color.FgRed), dim, previewLines, patchPreviewLineLimit)
 	fmt.Fprintln(out)
 }
 
 func showDeletedFile(out io.Writer, bold, red, dim *color.Color, f PatchFileDisplay) {
+	_ = red
 	lines := strings.Split(f.OldContent, "\n")
 	deleted := len(lines)
 	if deleted > 0 && lines[deleted-1] == "" {
 		deleted--
 	}
-	bold.Fprintf(out, "  • Deleted %s", f.Path)
-	dim.Fprintf(out, " (-%d)\n", deleted)
+	showPatchFileHeader(out, bold, dim, f.Action, f.Path, "", 0, deleted)
 	fmt.Fprintln(out)
 }
 
-func showModifiedFile(out io.Writer, bold, green, red, dim, cyan *color.Color, f PatchFileDisplay) {
+func showModifiedFile(out io.Writer, bold, green, red, dim *color.Color, f PatchFileDisplay) {
 	oldLines := strings.Split(f.OldContent, "\n")
 	newLines := strings.Split(f.NewContent, "\n")
 
 	// 追加/削除行数を計算
 	added, removed := countDiffLines(oldLines, newLines)
-	bold.Fprintf(out, "  • Edited %s", f.Path)
-	dim.Fprintf(out, " (+%d, -%d)\n", added, removed)
+	showPatchFileHeader(out, bold, dim, f.Action, f.Path, "", added, removed)
 
 	// unified diff を生成して表示
 	hunks := computeHunks(oldLines, newLines, 3) // コンテキスト3行
@@ -83,16 +80,18 @@ func showModifiedFile(out io.Writer, bold, green, red, dim, cyan *color.Color, f
 		if i > 0 {
 			dim.Fprintf(out, "     :\n") // hunk間の省略
 		}
+		previewLines := make([]PatchPreviewLine, 0, len(hunk.Lines))
 		for _, dl := range hunk.Lines {
 			switch dl.Type {
 			case diffContext:
-				dim.Fprintf(out, "  %4d   %s\n", dl.NewLineNum, dl.Text)
+				previewLines = append(previewLines, PatchPreviewLine{Type: ' ', LineNum: dl.NewLineNum, Text: dl.Text})
 			case diffRemoved:
-				red.Fprintf(out, "  %4d - %s\n", dl.OldLineNum, dl.Text)
+				previewLines = append(previewLines, PatchPreviewLine{Type: '-', LineNum: dl.OldLineNum, Text: dl.Text})
 			case diffAdded:
-				green.Fprintf(out, "  %4d + %s\n", dl.NewLineNum, dl.Text)
+				previewLines = append(previewLines, PatchPreviewLine{Type: '+', LineNum: dl.NewLineNum, Text: dl.Text})
 			}
 		}
+		renderPatchLines(out, green, red, dim, previewLines, 0)
 	}
 	fmt.Fprintln(out)
 }

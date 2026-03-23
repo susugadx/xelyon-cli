@@ -72,6 +72,29 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	}
 	messages = append(messages, history...)
 
+	// デバッグ: メッセージ構造をダンプ
+	if os.Getenv("XELYON_DEBUG_DEEPSEEK") == "1" {
+		errOut := api.ErrorWriterFromContext(ctx)
+		fmt.Fprintf(errOut, "[DEBUG DeepSeek] === Messages (%d) ===\n", len(messages))
+		for i, m := range messages {
+			if i == 0 {
+				fmt.Fprintf(errOut, "[DEBUG DeepSeek] [%d] role=%s (system, len=%d)\n", i, m.Role, len(m.Content))
+				continue
+			}
+			tcIDs := make([]string, len(m.ToolCalls))
+			for j, tc := range m.ToolCalls {
+				tcIDs[j] = tc.ID
+			}
+			if len(tcIDs) > 0 {
+				fmt.Fprintf(errOut, "[DEBUG DeepSeek] [%d] role=%s tool_calls=%v content_len=%d\n", i, m.Role, tcIDs, len(m.Content))
+			} else if m.ToolCallID != "" {
+				fmt.Fprintf(errOut, "[DEBUG DeepSeek] [%d] role=%s tool_call_id=%s\n", i, m.Role, m.ToolCallID)
+			} else {
+				fmt.Fprintf(errOut, "[DEBUG DeepSeek] [%d] role=%s content_len=%d\n", i, m.Role, len(m.Content))
+			}
+		}
+	}
+
 	// モデル名を設定（config優先、フォールバックはdeepseek-chat）
 	model = api.GetDefaultModelWithContext(ctx, model, "deepseek", "deepseek-chat")
 

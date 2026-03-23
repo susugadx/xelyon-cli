@@ -660,7 +660,7 @@ IMPORTANT: Do NOT retry str_replace with the same or similar old_str pattern. Ta
 // ツール側が [COMMENT] シグナルを返した場合、コメントを履歴に入れて再提案を依頼
 // 処理済みの場合は true を返す
 func (a *Agent) handleCommentFlow(toolCall *tools.ToolCall, result string) bool {
-	if !strings.Contains(result, "[COMMENT]") {
+	if !strings.HasPrefix(result, "[COMMENT]") {
 		return false
 	}
 

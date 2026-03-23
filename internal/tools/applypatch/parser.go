@@ -63,6 +63,12 @@ type UpdateFileChunk struct {
 	OldLines      []string
 	NewLines      []string
 	IsEndOfFile   bool
+	previewLines  []patchLine
+}
+
+type patchLine struct {
+	Type rune
+	Text string
 }
 
 type parseMode int
@@ -298,6 +304,7 @@ func parseUpdateFileChunk(lines []string, lineNumber int, allowMissingContext bo
 		ChangeContext: changeContext,
 		OldLines:      make([]string, 0),
 		NewLines:      make([]string, 0),
+		previewLines:  make([]patchLine, 0),
 	}
 	parsedLines := 0
 
@@ -313,16 +320,20 @@ func parseUpdateFileChunk(lines []string, lineNumber int, allowMissingContext bo
 		case "":
 			chunk.OldLines = append(chunk.OldLines, "")
 			chunk.NewLines = append(chunk.NewLines, "")
+			chunk.previewLines = append(chunk.previewLines, patchLine{Type: ' ', Text: ""})
 			parsedLines++
 		default:
 			switch line[0] {
 			case ' ':
 				chunk.OldLines = append(chunk.OldLines, line[1:])
 				chunk.NewLines = append(chunk.NewLines, line[1:])
+				chunk.previewLines = append(chunk.previewLines, patchLine{Type: ' ', Text: line[1:]})
 			case '+':
 				chunk.NewLines = append(chunk.NewLines, line[1:])
+				chunk.previewLines = append(chunk.previewLines, patchLine{Type: '+', Text: line[1:]})
 			case '-':
 				chunk.OldLines = append(chunk.OldLines, line[1:])
+				chunk.previewLines = append(chunk.previewLines, patchLine{Type: '-', Text: line[1:]})
 			default:
 				if parsedLines == 0 {
 					return UpdateFileChunk{}, 0, newInvalidHunkError(

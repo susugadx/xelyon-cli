@@ -2,6 +2,21 @@ package applypatch
 
 import "strings"
 
+// FindLineNumber は fileContent から changeContext の開始行番号を 1-based で返す。
+// 見つからない場合は -1 を返す。
+func FindLineNumber(fileContent string, changeContext string) int {
+	lines := strings.Split(fileContent, "\n")
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+
+	idx, ok := SeekSequence(lines, []string{changeContext}, 0, false)
+	if !ok {
+		return -1
+	}
+	return idx + 1
+}
+
 // SeekSequence はファイル内の lines から pattern を検索する。
 // start 以降で最初にマッチした位置のインデックスを返す。
 // eof が true の場合、ファイル末尾からの検索を優先する。

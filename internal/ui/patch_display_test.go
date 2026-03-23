@@ -16,7 +16,7 @@ func TestShowCodexStyleDiff_Added(t *testing.T) {
 	ShowCodexStyleDiff(&buf, []PatchFileDisplay{f})
 
 	out := buf.String()
-	if !strings.Contains(out, "Added test.txt (+3)") {
+	if !strings.Contains(out, "Creating test.txt (+3)") {
 		t.Errorf("Expected added header, got:\n%s", out)
 	}
 	if !strings.Contains(out, "+ line1") {
@@ -34,7 +34,7 @@ func TestShowCodexStyleDiff_Deleted(t *testing.T) {
 	ShowCodexStyleDiff(&buf, []PatchFileDisplay{f})
 
 	out := buf.String()
-	if !strings.Contains(out, "Deleted test.txt (-3)") {
+	if !strings.Contains(out, "Deleting test.txt (-3)") {
 		t.Errorf("Expected deleted header, got:\n%s", out)
 	}
 }
@@ -53,7 +53,7 @@ func TestShowCodexStyleDiff_Modified(t *testing.T) {
 	ShowCodexStyleDiff(&buf, []PatchFileDisplay{f})
 
 	out := buf.String()
-	if !strings.Contains(out, "Edited test.txt (+1, -1)") {
+	if !strings.Contains(out, "Editing test.txt (+1, -1)") {
 		t.Errorf("Expected edited header, got:\n%s", out)
 	}
 	if !strings.Contains(out, "- line3") {

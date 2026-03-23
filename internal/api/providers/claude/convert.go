@@ -2,6 +2,8 @@ package claude
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
 	"sort"
 	"strings"
 
@@ -245,4 +247,52 @@ func extractCompaction(content string) (string, string) {
 	textContent := strings.TrimSpace(content[:startIdx] + content[endIdx+len(endMarker):])
 
 	return compactionSummary, textContent
+}
+
+// validateAnthropicToolPairs は変換後のメッセージで tool_use/tool_result の整合性を検証し、
+// 不整合がある場合にデバッグ情報を出力する。
+func validateAnthropicToolPairs(messages []AnthropicMessage, out io.Writer) {
+	for i, msg := range messages {
+		if msg.Role != "user" {
+			continue
+		}
+		// この user メッセージに tool_result があるか確認
+		var toolResultIDs []string
+		for _, block := range msg.Content {
+			if block.Type == "tool_result" {
+				toolResultIDs = append(toolResultIDs, block.ToolUseID)
+			}
+		}
+		if len(toolResultIDs) == 0 {
+			continue
+		}
+
+		// 直前の assistant メッセージの tool_use IDs を収集
+		var toolUseIDs []string
+		if i > 0 && messages[i-1].Role == "assistant" {
+			for _, block := range messages[i-1].Content {
+				if block.Type == "tool_use" {
+					toolUseIDs = append(toolUseIDs, block.ID)
+				}
+			}
+		}
+
+		// tool_result の ID が tool_use に全て含まれているか
+		useIDSet := make(map[string]bool)
+		for _, id := range toolUseIDs {
+			useIDSet[id] = true
+		}
+		for j, resultID := range toolResultIDs {
+			if !useIDSet[resultID] {
+				fmt.Fprintf(out, "[DEBUG Claude] ❌ messages[%d].content[%d]: tool_result.tool_use_id=%q NOT in preceding assistant tool_use IDs %v\n",
+					i, j, resultID, toolUseIDs)
+			}
+		}
+
+		// 数の不一致もチェック
+		if len(toolResultIDs) != len(toolUseIDs) {
+			fmt.Fprintf(out, "[DEBUG Claude] ⚠️  messages[%d]: %d tool_results vs %d tool_uses in messages[%d]\n",
+				i, len(toolResultIDs), len(toolUseIDs), i-1)
+		}
+	}
 }

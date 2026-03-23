@@ -504,11 +504,15 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 				a.noteProjectMapMutation(tc, change)
 				a.appendSessionToolExecution(tc, result)
 
-				// str_replace エラー処理
-				a.handleStrReplaceErrors(tc, result)
+				// str_replace エラー処理（履歴追加済みなら早期リターン）
+				if a.handleStrReplaceErrors(tc, result) {
+					return
+				}
 
-				// comment 継続フロー処理
-				a.handleCommentFlow(tc, result)
+				// comment 継続フロー処理（履歴追加済みなら早期リターン）
+				if a.handleCommentFlow(tc, result) {
+					return
+				}
 
 				// 変更履歴を保存
 				a.handleFileChange(change)
