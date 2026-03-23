@@ -1,3 +1,4 @@
+// colors はターミナルUI出力用の共有カラー定数を定義する。
 package ui
 
 import "github.com/fatih/color"

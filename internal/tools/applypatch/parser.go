@@ -6,16 +6,16 @@ import (
 )
 
 const (
-	beginPatchMarker        = "*** Begin Patch"
-	endPatchMarker          = "*** End Patch"
-	addFileMarker           = "*** Add File: "
-	deleteFileMarker        = "*** Delete File: "
-	updateFileMarker        = "*** Update File: "
-	moveToMarker            = "*** Move to: "
-	eofMarker               = "*** End of File"
-	changeContextMarker     = "@@ "
-	emptyChangeContextMaker = "@@"
-	parseInStrictMode       = false
+	beginPatchMarker         = "*** Begin Patch"
+	endPatchMarker           = "*** End Patch"
+	addFileMarker            = "*** Add File: "
+	deleteFileMarker         = "*** Delete File: "
+	updateFileMarker         = "*** Update File: "
+	moveToMarker             = "*** Move to: "
+	eofMarker                = "*** End of File"
+	changeContextMarker      = "@@ "
+	emptyChangeContextMarker = "@@"
+	parseInStrictMode        = false
 )
 
 // ParsedPatch はパース済みのパッチ全体を表す。
@@ -282,7 +282,7 @@ func parseUpdateFileChunk(lines []string, lineNumber int, allowMissingContext bo
 	changeContext := ""
 	startIndex := 0
 	switch {
-	case lines[0] == emptyChangeContextMaker:
+	case lines[0] == emptyChangeContextMarker:
 		startIndex = 1
 	case strings.HasPrefix(lines[0], changeContextMarker):
 		changeContext = strings.TrimPrefix(lines[0], changeContextMarker)

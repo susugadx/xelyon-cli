@@ -289,10 +289,37 @@ func writeFileWithPerm(path string, contents []byte, perm os.FileMode) error {
 	if perm == 0 {
 		perm = 0o644
 	}
-	if err := os.WriteFile(path, contents, perm); err != nil {
+
+	// 同じディレクトリにtempファイルを作る（同一FS上でrenameがアトミックになる）
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, ".xelyon-patch-*")
+	if err != nil {
 		return err
 	}
-	return os.Chmod(path, perm)
+	tmpPath := tmp.Name()
+
+	success := false
+	defer func() {
+		if !success {
+			tmp.Close()
+			_ = os.Remove(tmpPath) //nolint:errcheck // クリーンアップ失敗は無視
+		}
+	}()
+
+	if _, err := tmp.Write(contents); err != nil {
+		return err
+	}
+	if err := tmp.Chmod(perm); err != nil {
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		return err
+	}
+	success = true
+	return nil
 }
 
 func rollbackSnapshots(snapshots map[string]fileSnapshot) error {
@@ -335,57 +362,23 @@ func countContentLines(s string) int {
 func computeReplacements(originalLines []string, path string, chunks []UpdateFileChunk) ([]replacement, error) {
 	replacements := make([]replacement, 0, len(chunks))
 	lineIndex := 0
+	prevChunkEnd := 0
 
 	for _, chunk := range chunks {
-		if chunk.ChangeContext != "" {
-			idx, ok := SeekSequence(originalLines, []string{chunk.ChangeContext}, lineIndex, false)
-			if !ok {
-				if looksLikeUnifiedDiffHeader(chunk.ChangeContext) {
-					return nil, fmt.Errorf(
-						"@@ header must be a code fragment (e.g. @@ func name), not unified diff line numbers — got: @@ %s",
-						chunk.ChangeContext,
-					)
-				}
-				return nil, fmt.Errorf("failed to find context '%s' in %s", chunk.ChangeContext, path)
-			}
-			lineIndex = idx + 1
-		}
-
-		if len(chunk.OldLines) == 0 {
-			insertionIdx := len(originalLines)
-			if len(originalLines) > 0 && originalLines[len(originalLines)-1] == "" {
-				insertionIdx = len(originalLines) - 1
-			}
-			replacements = append(replacements, replacement{
-				StartIndex: insertionIdx,
-				OldLen:     0,
-				NewLines:   append([]string(nil), chunk.NewLines...),
-			})
-			continue
-		}
-
-		pattern := chunk.OldLines
-		newSlice := chunk.NewLines
-		startIdx, ok := SeekSequence(originalLines, pattern, lineIndex, chunk.IsEndOfFile)
-
-		if !ok && len(pattern) > 0 && pattern[len(pattern)-1] == "" {
-			pattern = pattern[:len(pattern)-1]
-			if len(newSlice) > 0 && newSlice[len(newSlice)-1] == "" {
-				newSlice = newSlice[:len(newSlice)-1]
-			}
-			startIdx, ok = SeekSequence(originalLines, pattern, lineIndex, chunk.IsEndOfFile)
-		}
-
-		if !ok {
-			return nil, fmt.Errorf("failed to find expected lines in %s:\n%s", path, strings.Join(chunk.OldLines, "\n"))
+		result, err := LocateChunk(originalLines, path, chunk, lineIndex, prevChunkEnd)
+		if err != nil {
+			return nil, err
 		}
 
 		replacements = append(replacements, replacement{
-			StartIndex: startIdx,
-			OldLen:     len(pattern),
-			NewLines:   append([]string(nil), newSlice...),
+			StartIndex: result.StartIdx,
+			OldLen:     len(result.Pattern),
+			NewLines:   append([]string(nil), result.NewLines...),
 		})
-		lineIndex = startIdx + len(pattern)
+		lineIndex = result.NextIndex
+		if len(result.Pattern) > 0 {
+			prevChunkEnd = result.StartIdx + len(result.Pattern)
+		}
 	}
 
 	sort.Slice(replacements, func(i, j int) bool {

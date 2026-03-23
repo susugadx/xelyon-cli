@@ -1,6 +1,81 @@
 package applypatch
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
+
+// LocateResult はチャンク検索の結果を保持する。
+type LocateResult struct {
+	StartIdx  int      // マッチした開始行インデックス
+	Pattern   []string // 実際にマッチしたパターン（末尾空行トリム後の場合あり）
+	NewLines  []string // 対応するNewLines（末尾空行トリム後の場合あり）
+	NextIndex int      // 次のチャンクの検索開始位置
+}
+
+// LocateChunk は1つのチャンクの適用位置を特定する。
+// prevChunkEnd は前のチャンクの終了位置（オーバーラップ検出用、最初のチャンクは0）。
+func LocateChunk(originalLines []string, path string, chunk UpdateFileChunk, lineIndex int, prevChunkEnd int) (LocateResult, error) {
+	searchIndex := lineIndex
+	if chunk.ChangeContext != "" {
+		idx, ok := SeekSequence(originalLines, []string{chunk.ChangeContext}, lineIndex, false)
+		if !ok {
+			if looksLikeUnifiedDiffHeader(chunk.ChangeContext) {
+				return LocateResult{}, fmt.Errorf(
+					"@@ header must be a code fragment (e.g. @@ func name), not unified diff line numbers — got: @@ %s",
+					chunk.ChangeContext,
+				)
+			}
+			return LocateResult{}, fmt.Errorf("failed to find context '%s' in %s", chunk.ChangeContext, path)
+		}
+		searchIndex = idx + 1
+	}
+
+	pattern := chunk.OldLines
+	newSlice := chunk.NewLines
+	if len(pattern) == 0 {
+		insertionIdx := len(originalLines)
+		if len(originalLines) > 0 && originalLines[len(originalLines)-1] == "" {
+			insertionIdx = len(originalLines) - 1
+		}
+		return LocateResult{
+			StartIdx:  insertionIdx,
+			Pattern:   pattern,
+			NewLines:  newSlice,
+			NextIndex: searchIndex,
+		}, nil
+	}
+
+	startIdx, ok := SeekSequence(originalLines, pattern, searchIndex, chunk.IsEndOfFile)
+
+	if !ok && len(pattern) > 0 && pattern[len(pattern)-1] == "" {
+		pattern = pattern[:len(pattern)-1]
+		if len(newSlice) > 0 && newSlice[len(newSlice)-1] == "" {
+			newSlice = newSlice[:len(newSlice)-1]
+		}
+		startIdx, ok = SeekSequence(originalLines, pattern, searchIndex, chunk.IsEndOfFile)
+	}
+
+	// フォールバック: @@コンテキストが変更対象より後ろにある場合（先頭行変更など）、
+	// 先頭から再検索する。ただし前のチャンクとの重複は禁止する。
+	if !ok && searchIndex > 0 {
+		startIdx, ok = SeekSequence(originalLines, pattern, 0, chunk.IsEndOfFile)
+		if ok && startIdx < prevChunkEnd {
+			ok = false
+		}
+	}
+
+	if !ok {
+		return LocateResult{}, fmt.Errorf("failed to find expected lines in %s:\n%s", path, strings.Join(chunk.OldLines, "\n"))
+	}
+
+	return LocateResult{
+		StartIdx:  startIdx,
+		Pattern:   pattern,
+		NewLines:  newSlice,
+		NextIndex: startIdx + len(pattern),
+	}, nil
+}
 
 // FindLineNumber は fileContent から changeContext の開始行番号を 1-based で返す。
 // 見つからない場合は -1 を返す。

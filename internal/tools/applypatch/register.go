@@ -51,7 +51,7 @@ func (t *ApplyPatchTool) Run(execCtx tools.ExecutionContext, args map[string]str
 		showApplyPatchPreview(execCtx.Output(), patchText, parsed.Hunks)
 	}
 
-	decision := confirmApplyPatch(execCtx, parsed)
+	decision := confirmApplyPatch(execCtx, parsed, autoApproved)
 
 	switch decision.Action {
 	case common.ConfirmYes:
@@ -82,10 +82,10 @@ IMPORTANT: Do NOT apply the patch until the user approves.`, strings.TrimSpace(d
 	return formatApplyResult(result), buildApplyPatchFileChange(result), nil
 }
 
-func confirmApplyPatch(execCtx tools.ExecutionContext, parsed *ParsedPatch) common.ConfirmDecision {
+func confirmApplyPatch(execCtx tools.ExecutionContext, parsed *ParsedPatch, autoApproved bool) common.ConfirmDecision {
 	const message = "Apply this patch? / このパッチを適用しますか？"
 
-	if shouldAutoApproveApplyPatch(execCtx, parsed) {
+	if autoApproved {
 		safety := getApplyPatchSafety(parsed)
 		execCtx.Output().Green.Printf("Auto-approved (%s): %s\n", common.GetSafetyDescription(safety), "apply_patch")
 		return common.ConfirmDecision{Action: common.ConfirmYes}

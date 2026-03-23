@@ -106,8 +106,9 @@ func buildUpdateFilePreview(hunk Hunk, readFile func(path string) ([]byte, error
 
 	lineIndex := 0
 	lineDelta := 0
+	prevChunkEnd := 0
 	for _, chunk := range hunk.Chunks {
-		startIdx, pattern, newSlice, nextLineIndex, err := locateChunkPreview(originalLines, hunk.Path, chunk, lineIndex)
+		result, err := LocateChunk(originalLines, hunk.Path, chunk, lineIndex, prevChunkEnd)
 		if err != nil {
 			return ui.PatchFilePreview{}, err
 		}
@@ -115,54 +116,16 @@ func buildUpdateFilePreview(hunk Hunk, readFile func(path string) ([]byte, error
 		added, removed := countPreviewLines(chunk.previewLines)
 		preview.Added += added
 		preview.Removed += removed
-		preview.Hunks = append(preview.Hunks, buildChunkPreview(startIdx, lineDelta, chunk.previewLines))
+		preview.Hunks = append(preview.Hunks, buildChunkPreview(result.StartIdx, lineDelta, chunk.previewLines))
 
-		lineIndex = nextLineIndex
-		lineDelta += len(newSlice) - len(pattern)
+		lineIndex = result.NextIndex
+		if len(result.Pattern) > 0 {
+			prevChunkEnd = result.StartIdx + len(result.Pattern)
+		}
+		lineDelta += len(result.NewLines) - len(result.Pattern)
 	}
 
 	return preview, nil
-}
-
-func locateChunkPreview(originalLines []string, path string, chunk UpdateFileChunk, lineIndex int) (int, []string, []string, int, error) {
-	searchIndex := lineIndex
-	if chunk.ChangeContext != "" {
-		idx, ok := SeekSequence(originalLines, []string{chunk.ChangeContext}, lineIndex, false)
-		if !ok {
-			if looksLikeUnifiedDiffHeader(chunk.ChangeContext) {
-				return 0, nil, nil, 0, fmt.Errorf(
-					"@@ header must be a code fragment (e.g. @@ func name), not unified diff line numbers — got: @@ %s",
-					chunk.ChangeContext,
-				)
-			}
-			return 0, nil, nil, 0, fmt.Errorf("failed to find context '%s' in %s", chunk.ChangeContext, path)
-		}
-		searchIndex = idx + 1
-	}
-
-	pattern := chunk.OldLines
-	newSlice := chunk.NewLines
-	if len(pattern) == 0 {
-		insertionIdx := len(originalLines)
-		if len(originalLines) > 0 && originalLines[len(originalLines)-1] == "" {
-			insertionIdx = len(originalLines) - 1
-		}
-		return insertionIdx, pattern, newSlice, searchIndex, nil
-	}
-
-	startIdx, ok := SeekSequence(originalLines, pattern, searchIndex, chunk.IsEndOfFile)
-	if !ok && len(pattern) > 0 && pattern[len(pattern)-1] == "" {
-		pattern = pattern[:len(pattern)-1]
-		if len(newSlice) > 0 && newSlice[len(newSlice)-1] == "" {
-			newSlice = newSlice[:len(newSlice)-1]
-		}
-		startIdx, ok = SeekSequence(originalLines, pattern, searchIndex, chunk.IsEndOfFile)
-	}
-	if !ok {
-		return 0, nil, nil, 0, fmt.Errorf("failed to find expected lines in %s:\n%s", path, strings.Join(chunk.OldLines, "\n"))
-	}
-
-	return startIdx, pattern, newSlice, startIdx + len(pattern), nil
 }
 
 func buildChunkPreview(startIdx, lineDelta int, lines []patchLine) ui.PatchHunkPreview {
