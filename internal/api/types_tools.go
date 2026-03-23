@@ -20,7 +20,7 @@ type ToolDefinition struct {
 // OpenAIToolCall はレスポンスの tool_calls フィールド
 // ストリーミングでは複数チャンクに分割されて送信される
 type OpenAIToolCall struct {
-	Index            int                    `json:"index"`                       // ストリーミング用インデックス
+	Index            int                    `json:"index,omitempty"`             // ストリーミング用インデックス（履歴送信時は省略）
 	ID               string                 `json:"id"`                          // ツール呼び出しID
 	Type             string                 `json:"type"`                        // "function"
 	Function         OpenAIToolCallFunction `json:"function"`                    // 関数呼び出し情報

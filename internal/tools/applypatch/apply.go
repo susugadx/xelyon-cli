@@ -29,6 +29,8 @@ type applyResultDetail struct {
 	Action       string
 	LinesAdded   int
 	LinesRemoved int
+	OldContent   string
+	NewContent   string
 }
 
 type fileSnapshot struct {
@@ -105,6 +107,7 @@ func buildPlannedFileOps(parsed *ParsedPatch) ([]plannedFileOp, map[string]fileS
 				Path:       hunk.Path,
 				Action:     "created",
 				LinesAdded: countContentLines(hunk.Contents),
+				NewContent: string(hunk.Contents),
 			})
 		case "delete":
 			absPath, err := common.ValidatePath(hunk.Path)
@@ -128,6 +131,7 @@ func buildPlannedFileOps(parsed *ParsedPatch) ([]plannedFileOp, map[string]fileS
 				Path:         hunk.Path,
 				Action:       "deleted",
 				LinesRemoved: countContentLines(string(snapshot.Contents)),
+				OldContent:   string(snapshot.Contents),
 			})
 		case "update":
 			absPath, err := common.ValidatePath(hunk.Path)
@@ -175,8 +179,10 @@ func buildPlannedFileOps(parsed *ParsedPatch) ([]plannedFileOp, map[string]fileS
 					)
 					result.Modified = append(result.Modified, hunk.MovePath)
 					result.details = append(result.details, applyResultDetail{
-						Path:   hunk.MovePath,
-						Action: "moved",
+						Path:       hunk.MovePath,
+						Action:     "moved",
+						OldContent: string(snapshot.Contents),
+						NewContent: newContents,
 					})
 					continue
 				}
@@ -190,8 +196,10 @@ func buildPlannedFileOps(parsed *ParsedPatch) ([]plannedFileOp, map[string]fileS
 			})
 			result.Modified = append(result.Modified, hunk.Path)
 			result.details = append(result.details, applyResultDetail{
-				Path:   hunk.Path,
-				Action: "modified",
+				Path:       hunk.Path,
+				Action:     "modified",
+				OldContent: string(snapshot.Contents),
+				NewContent: newContents,
 			})
 		default:
 			return nil, nil, nil, fmt.Errorf("unsupported hunk type: %s", hunk.Type)

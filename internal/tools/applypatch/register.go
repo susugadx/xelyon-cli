@@ -71,6 +71,8 @@ IMPORTANT: Do NOT apply the patch until the user approves.`, strings.TrimSpace(d
 		return "", nil, err
 	}
 
+	showCodexStyleResult(execCtx.Output(), result)
+
 	return formatApplyResult(result), buildApplyPatchFileChange(result), nil
 }
 
@@ -114,18 +116,37 @@ func getApplyPatchSafety(parsed *ParsedPatch) common.ToolSafety {
 	return common.SafetyMedium
 }
 
+func showCodexStyleResult(out common.Output, result *ApplyResult) {
+	if out.SuppressStdout() {
+		return
+	}
+
+	var files []ui.PatchFileDisplay
+	for _, d := range result.details {
+		files = append(files, ui.PatchFileDisplay{
+			Path:       d.Path,
+			Action:     d.Action,
+			OldContent: d.OldContent,
+			NewContent: d.NewContent,
+		})
+	}
+
+	ui.ShowCodexStyleDiff(out.StdoutWriter(), files)
+}
+
 func showApplyPatchPreview(out common.Output, patchText string, hunks []Hunk) {
 	if out.SuppressStdout() {
 		return
 	}
 
+	out.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	out.Cyan.Printf("🩹 apply_patch (%d file operation(s))\n", len(hunks))
+	out.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
 	ui.ShowPatchToWriter(out.StdoutWriter(), patchText)
 
 	counts := countLinesPerPath(patchText)
 
-	out.Cyan.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	out.Cyan.Printf("🩹 apply_patch (%d file operation(s))\n", len(hunks))
-	out.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	for _, hunk := range hunks {
 		c := counts[hunk.Path]
 		linesInfo := ""
@@ -177,7 +198,7 @@ func countLinesPerPath(patchText string) map[string][2]int {
 
 func formatApplyResult(result *ApplyResult) string {
 	return fmt.Sprintf(
-		"Added: %s\nModified: %s\nDeleted: %s",
+		"✓ Patch applied successfully.\nAdded: %s\nModified: %s\nDeleted: %s",
 		formatApplyPaths(result.Added),
 		formatApplyPaths(result.Modified),
 		formatApplyPaths(result.Deleted),

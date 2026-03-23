@@ -273,13 +273,10 @@ func ShowUnifiedDiffWithRuntime(runtime *Runtime, diffOutput string) {
 	ShowUnifiedDiffToWriter(runtimeOrDefault(runtime).Output(), diffOutput)
 }
 
-// ShowPatchToWriter は指定 writer へ apply_patch 形式のパッチを行番号付きで表示する。
+// ShowPatchToWriter は指定 writer へ apply_patch 形式のパッチを行番号なしの色付きテキストで表示する。
 func ShowPatchToWriter(out io.Writer, patchOutput string) {
 	p := newDiffPrinter(out)
 	lines := strings.Split(patchOutput, "\n")
-
-	dim := color.New(color.Faint)
-	var oldLine, newLine int // ファイル内行番号（0 = 未設定）
 
 	for _, line := range lines {
 		if line == "" {
@@ -291,26 +288,16 @@ func ShowPatchToWriter(out io.Writer, patchOutput string) {
 		case strings.HasPrefix(line, "*** Add File:"), strings.HasPrefix(line, "*** Update File:"),
 			strings.HasPrefix(line, "*** Delete File:"), strings.HasPrefix(line, "*** Move to:"),
 			strings.HasPrefix(line, "*** Begin"), strings.HasPrefix(line, "*** End"):
-			oldLine, newLine = 0, 0
 			p.colorPrintln([]color.Attribute{color.Bold, color.FgCyan}, line)
 		case strings.HasPrefix(line, "@@"):
-			oldLine, newLine = 0, 0
 			p.colorPrintln([]color.Attribute{color.FgCyan}, line)
 		case strings.HasPrefix(line, "-"):
-			oldLine++
-			prefix := dim.Sprintf("  %4d      │ ", oldLine)
-			fmt.Fprint(out, prefix)
 			p.colorPrintln([]color.Attribute{color.FgRed}, line)
 		case strings.HasPrefix(line, "+"):
-			newLine++
-			prefix := dim.Sprintf("       %4d │ ", newLine)
-			fmt.Fprint(out, prefix)
 			p.colorPrintln([]color.Attribute{color.FgGreen}, line)
+		case strings.HasPrefix(line, " "):
+			p.println(line)
 		default:
-			oldLine++
-			newLine++
-			prefix := dim.Sprintf("  %4d %4d │ ", oldLine, newLine)
-			fmt.Fprint(out, prefix)
 			p.println(line)
 		}
 	}

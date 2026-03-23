@@ -85,9 +85,9 @@ func (p *Provider) ClearCache() {
 }
 
 const (
-	minCacheTokens  = 32768
-	maxDiffMessages = 20   // 差分メッセージ数がこれを超えたらキャッシュ再作成
-	defaultCacheTTL = 1800 // デフォルトキャッシュTTL（秒）= 30分
+	minCacheTokens  = 4096
+	maxDiffMessages = 200  // 差分メッセージ数がこれを超えたらキャッシュ再作成
+	defaultCacheTTL = 3600 // デフォルトキャッシュTTL（秒）= 1時間
 )
 
 // getCacheTTL はキャッシュTTL秒数を返す
@@ -215,7 +215,7 @@ func (p *Provider) updateOrUseCache(ctx context.Context, systemPrompt string, hi
 		model:        model,
 		tokenCount:   totalTokens,
 		messageCount: len(cacheHistory),
-		expireTime:   time.Now().Add(time.Duration(ttl) * time.Second * 9 / 10),
+		expireTime:   time.Now().Add(time.Duration(ttl)*time.Second - 60*time.Second),
 	}
 
 	// ストレージ料金を概算して通知

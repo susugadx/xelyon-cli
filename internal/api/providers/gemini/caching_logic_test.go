@@ -35,6 +35,31 @@ func TestEstimateTokens(t *testing.T) {
 	}
 }
 
+func TestCacheConstants(t *testing.T) {
+	if minCacheTokens != 4096 {
+		t.Fatalf("minCacheTokens = %d, want 4096", minCacheTokens)
+	}
+	if maxDiffMessages != 200 {
+		t.Fatalf("maxDiffMessages = %d, want 200", maxDiffMessages)
+	}
+	if defaultCacheTTL != 3600 {
+		t.Fatalf("defaultCacheTTL = %d, want 3600", defaultCacheTTL)
+	}
+}
+
+func TestCacheExpireTime_SafetyMargin(t *testing.T) {
+	before := time.Now()
+	ttl := getCacheTTL()
+	expireTime := time.Now().Add(time.Duration(ttl)*time.Second - 60*time.Second)
+	after := time.Now()
+
+	wantMin := before.Add(time.Duration(ttl)*time.Second - 60*time.Second)
+	wantMax := after.Add(time.Duration(ttl)*time.Second - 60*time.Second)
+	if expireTime.Before(wantMin) || expireTime.After(wantMax) {
+		t.Fatalf("expireTime = %v, want between %v and %v", expireTime, wantMin, wantMax)
+	}
+}
+
 func TestUpdateOrUseCache(t *testing.T) {
 	// テスト用の閾値設定
 	longContent := cacheEligibleContent()

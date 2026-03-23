@@ -156,3 +156,14 @@ func TestCountLinesPerPath(t *testing.T) {
 		})
 	}
 }
+
+func TestFormatApplyResult_ContainsSuccessMarker(t *testing.T) {
+	result := &ApplyResult{
+		Modified: []string{"test.go"},
+	}
+
+	output := formatApplyResult(result)
+	if !strings.Contains(output, "✓ Patch applied successfully.") {
+		t.Fatalf("formatApplyResult() = %q, want success marker", output)
+	}
+}
