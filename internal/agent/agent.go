@@ -243,7 +243,9 @@ func NewAgentWithRuntime(model string, provider api.Provider, headless bool, run
 	configureMCPTools(provider, mcpManager.GetTools(), errOut)
 
 	currentExcluded := runtime.effectiveRegistry().GetExcludedTools()
-	runtime.effectiveRegistry().SetExcludedTools(appendDefaultEditToolExclusions(currentExcluded))
+	excluded := normalModeExcludedTools()
+	excluded = appendUniqueStrings(excluded, currentExcluded...)
+	runtime.effectiveRegistry().SetExcludedTools(excluded)
 
 	// プロバイダー別プレフィックスを Workflow Rules の直前に注入
 	systemPrompt = prompt.BuildProviderSystemPromptWithConfig(systemPrompt, provider.Name(), model, runtime.effectiveConfig())

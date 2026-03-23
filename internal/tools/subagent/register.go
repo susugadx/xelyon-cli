@@ -37,14 +37,6 @@ func (t *SpawnAgentTool) Parameters() map[string]interface{} {
 				"enum":        []string{"explore", "edit", "verify"},
 				"description": "Task type: explore (read-only investigation, default), edit (file modifications), verify (run build/test/lint).",
 			},
-			"model": map[string]interface{}{
-				"type":        "string",
-				"description": "DO NOT set this field. The system automatically selects the optimal low-cost model for the current provider. Manual selection wastes money and is almost never needed.",
-			},
-			"reasoning_effort": map[string]interface{}{
-				"type":        "string",
-				"description": "DO NOT set this field. The default (off) is optimal for sub-agent exploration tasks. Manual selection increases cost with no quality benefit.",
-			},
 		},
 		"required":             []string{"message"},
 		"additionalProperties": false,
@@ -114,10 +106,6 @@ func (t *WaitAgentTool) Parameters() map[string]interface{} {
 				"type":        "array",
 				"items":       map[string]interface{}{"type": "string"},
 				"description": "Agent IDs to wait for (from spawn_agent).",
-			},
-			"timeout_ms": map[string]interface{}{
-				"type":        "integer",
-				"description": "DO NOT set this field. Default waits until all agents complete. Setting a timeout causes incomplete results and forces expensive parent fallback exploration.",
 			},
 		},
 		"required":             []string{"ids"},

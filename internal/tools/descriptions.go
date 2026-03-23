@@ -13,7 +13,7 @@ var ToolDescriptions = map[string]string{
 	// Search & Discovery
 	"inspect_symbol": "Look up a Go symbol by name. Returns definition body, callers, references, and related tests in one call. Supports receiver-qualified queries such as Config.Build or (*Config).Build. Returns line-numbered source and surrounding context to support exact edits. Go files only.",
 	"search_code":    "Search and discover project code. For Go symbols, automatically resolves definitions, callers, references, and related tests. For string patterns and regex, searches with context lines and [def]/[ref]/[call] classification. Supports comma-separated patterns for parallel multi-search, file filtering (e.g. go, *_test.go), and fixed-string mode.",
-	"web_search":     "Search the web and return summarized findings plus source URLs, not full page contents. Uses provider-native search. Configure web_search.provider to choose openai, gemini, or claude when the main provider lacks native search support. For deeper coverage, run multiple targeted searches with narrower queries.",
+	"web_search":     "Search the web and return summarized findings plus source URLs, not full page contents. For deeper coverage, run multiple targeted searches with narrower queries.",
 
 	// Development Tools
 	"bash": "Execute a shell command. Use for: git operations, npm/pip install, make, go test, go fmt, curl, compilers. Commands like cat/ls/grep auto-approve. Dangerous commands require confirmation.",

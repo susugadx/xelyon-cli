@@ -37,8 +37,8 @@ func TestSpawnAgentToolParameters(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected properties map, got %T", params["properties"])
 	}
-	if len(properties) != 4 {
-		t.Fatalf("len(properties) = %d, want 4", len(properties))
+	if len(properties) != 2 {
+		t.Fatalf("len(properties) = %d, want 2", len(properties))
 	}
 	if _, ok := properties["message"]; !ok {
 		t.Fatal("message parameter is missing")
@@ -46,37 +46,13 @@ func TestSpawnAgentToolParameters(t *testing.T) {
 	if _, ok := properties["task_type"]; !ok {
 		t.Fatal("task_type parameter is missing")
 	}
-	if _, ok := properties["model"]; !ok {
-		t.Fatal("model parameter is missing")
+	// model, reasoning_effort はスキーマに含めない（LLMに送るトークン削減）
+	if _, ok := properties["model"]; ok {
+		t.Fatal("model parameter should not be in schema")
 	}
-	if _, ok := properties["reasoning_effort"]; !ok {
-		t.Fatal("reasoning_effort parameter is missing")
+	if _, ok := properties["reasoning_effort"]; ok {
+		t.Fatal("reasoning_effort parameter should not be in schema")
 	}
-
-	modelParam, ok := properties["model"].(map[string]interface{})
-	if !ok {
-		t.Fatalf("model parameter should be an object, got %T", properties["model"])
-	}
-	description, ok := modelParam["description"].(string)
-	if !ok {
-		t.Fatalf("model description should be a string, got %T", modelParam["description"])
-	}
-	if !strings.Contains(description, "DO NOT set this field") {
-		t.Fatalf("model description should strongly discourage manual override: %q", description)
-	}
-
-	effortParam, ok := properties["reasoning_effort"].(map[string]interface{})
-	if !ok {
-		t.Fatalf("reasoning_effort parameter should be an object, got %T", properties["reasoning_effort"])
-	}
-	effortDescription, ok := effortParam["description"].(string)
-	if !ok {
-		t.Fatalf("reasoning_effort description should be a string, got %T", effortParam["description"])
-	}
-	if !strings.Contains(effortDescription, "DO NOT set this field") {
-		t.Fatalf("reasoning_effort description should strongly discourage manual override: %q", effortDescription)
-	}
-
 }
 
 // TestSpawnAgentToolRunEmptyMessage は空 message を拒否することを確認します。
@@ -155,16 +131,15 @@ func TestWaitAgentToolParameters(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected properties map, got %T", params["properties"])
 	}
-	timeoutParam, ok := properties["timeout_ms"].(map[string]interface{})
-	if !ok {
-		t.Fatalf("timeout_ms parameter should be an object, got %T", properties["timeout_ms"])
+	if len(properties) != 1 {
+		t.Fatalf("len(properties) = %d, want 1", len(properties))
 	}
-	timeoutDescription, ok := timeoutParam["description"].(string)
-	if !ok {
-		t.Fatalf("timeout_ms description should be a string, got %T", timeoutParam["description"])
+	if _, ok := properties["ids"]; !ok {
+		t.Fatal("ids parameter is missing")
 	}
-	if !strings.Contains(timeoutDescription, "DO NOT set this field") {
-		t.Fatalf("timeout_ms description should strongly discourage manual override: %q", timeoutDescription)
+	// timeout_ms はスキーマに含めない（LLMに送るトークン削減）
+	if _, ok := properties["timeout_ms"]; ok {
+		t.Fatal("timeout_ms parameter should not be in schema")
 	}
 }
 
