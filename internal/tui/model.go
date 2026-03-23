@@ -2,6 +2,8 @@ package tui
 
 import (
 	"fmt"
+	"log"
+	"os"
 	"strings"
 	"time"
 
@@ -16,6 +18,24 @@ const (
 	inputHeight     = 1
 	chromeHeight    = statusBarHeight + inputHeight
 )
+
+// debugLog は TUI デバッグログ用のロガー（XELYON_TUI_DEBUG=1 で有効化）
+var debugLog *log.Logger
+
+func init() {
+	if os.Getenv("XELYON_TUI_DEBUG") == "1" {
+		f, err := os.OpenFile("/tmp/xelyon-tui.log", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+		if err == nil {
+			debugLog = log.New(f, "[TUI] ", log.Ltime|log.Lmicroseconds)
+		}
+	}
+}
+
+func tuiDebugf(format string, args ...any) {
+	if debugLog != nil {
+		debugLog.Printf(format, args...)
+	}
+}
 
 // Model は bubbletea の Model インターフェースを実装する TUI のメインモデル。
 type Model struct {
@@ -34,19 +54,23 @@ type Model struct {
 }
 
 // NewModel は TUI Model を作成する。
-func NewModel(agent AgentInterface) Model {
+func NewModel(agent AgentInterface, initialContent string) Model {
 	ti := textinput.New()
 	ti.Placeholder = "Type your message..."
 	ti.Focus()
 	ti.CharLimit = 0 // 無制限
 	ti.Width = 80    // 後で WindowSize で更新
 
-	return Model{
+	m := Model{
 		agent:      agent,
 		textInput:  ti,
 		messages:   []ChatMessage{},
 		statusLine: agent.GetStatusLine(),
 	}
+	if initialContent != "" {
+		m.content.WriteString(initialContent)
+	}
+	return m
 }
 
 // Init は bubbletea の Init を実装する。
@@ -137,10 +161,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+// isEnterKey は Enter キーかどうかを判定する。
+// WSL2/Windows Terminal 環境で tea.KeyEnter が正しく認識されない場合の回避策を含む。
+func isEnterKey(msg tea.KeyMsg) bool {
+	if msg.Type == tea.KeyEnter {
+		return true
+	}
+	// フォールバック: 文字列比較
+	s := msg.String()
+	return s == "enter" || s == "\r" || s == "\n"
+}
+
 // handleKeyMsg はキー入力を処理する。
 func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyCtrlC:
+	tuiDebugf("KeyMsg: Type=%d(%s) Runes=%v String=%q", msg.Type, msg.Type, msg.Runes, msg.String())
+
+	switch {
+	case msg.Type == tea.KeyCtrlC:
 		if m.agent.IsProcessing() {
 			m.agent.Cancel()
 			m.appendSystemInfo("⚠️  Interrupted. Press Ctrl+C again to exit.")
@@ -156,7 +193,8 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.appendSystemInfo("⚠️  Interrupted. Press Ctrl+C again within 3 seconds to exit.")
 		return m, nil
 
-	case tea.KeyEnter:
+	case isEnterKey(msg):
+		tuiDebugf("Enter detected, textInput value=%q", m.textInput.Value())
 		input := strings.TrimSpace(m.textInput.Value())
 		if input == "" {
 			return m, nil
@@ -186,7 +224,8 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// AIに送信（goroutine）
 		return m, m.sendChat(input)
 
-	case tea.KeyUp, tea.KeyDown, tea.KeyPgUp, tea.KeyPgDown:
+	case msg.Type == tea.KeyUp, msg.Type == tea.KeyDown,
+		msg.Type == tea.KeyPgUp, msg.Type == tea.KeyPgDown:
 		var cmd tea.Cmd
 		m.viewport, cmd = m.viewport.Update(msg)
 		return m, cmd

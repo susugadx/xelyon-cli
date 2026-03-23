@@ -9,9 +9,10 @@ import (
 
 // Run は TUI モードでアプリケーションを起動する。
 // agent は tui.AgentInterface を満たす必要がある。
+// initialContent は起動時に viewport に表示する初期テキスト（ヘッダー等）。
 // onProgram はProgram作成後に呼ばれるコールバック（出力キャプチャ設定用）。
-func Run(agent AgentInterface, onProgram func(*tea.Program)) {
-	m := NewModel(agent)
+func Run(agent AgentInterface, initialContent string, onProgram func(*tea.Program)) {
+	m := NewModel(agent, initialContent)
 
 	p := tea.NewProgram(
 		m,

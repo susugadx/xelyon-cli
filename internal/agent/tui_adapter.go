@@ -2,12 +2,22 @@ package agent
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
 
 	"github.com/susugadx/xelyon-cli/internal/tui"
 )
+
+// tuiBlockingCommands は TUI モードで stdin を読もうとしてデッドロックするコマンド一覧。
+// bubbletea が stdin を占有しているため、これらは TUI モードでは実行不可。
+var tuiBlockingCommands = map[string]string{
+	"/config":  "Use --no-tui mode or edit ~/.xelyon/config.yaml directly",
+	"/project": "Use --no-tui mode or edit xelyon.yaml directly",
+	"/init":    "Use --no-tui mode: xelyon --no-tui then /init",
+	"/paste":   "Paste text directly into the input field",
+}
 
 // TUIAdapter は Agent を tui.AgentInterface に適合させるアダプタ
 type TUIAdapter struct {
@@ -67,7 +77,26 @@ func (a *TUIAdapter) Chat(input string) {
 }
 
 // HandleCommand は特殊コマンドを処理する。処理した場合 true を返す。
+// TUI モードでは stdin ブロッキングコマンドを検出して拒否する。
 func (a *TUIAdapter) HandleCommand(cmd string) bool {
+	parts := splitCommand(cmd)
+	if len(parts) == 0 {
+		return false
+	}
+	baseCmd := resolveCommandAliasWithConfig(parts[0], a.agent.cfg())
+
+	// /compress, /lsp install は引数次第でブロッキングになるが、
+	// 安全のために常時許可し、確認プロンプト到達時にEOFでスキップされる。
+	// ただし明確にブロッキングなコマンドは事前に拒否する。
+	if hint, blocked := tuiBlockingCommands[baseCmd]; blocked {
+		// /config <key> <value> のように引数付きの場合は非ブロッキングなのでOK
+		if baseCmd == "/config" && len(parts) >= 2 {
+			return handleSpecialCommand(cmd, a.agent)
+		}
+		_, _ = fmt.Fprintf(a.agent.output(), "⚠️  %s is not available in TUI mode.\n   %s\n", baseCmd, hint)
+		return true
+	}
+
 	return handleSpecialCommand(cmd, a.agent)
 }
 

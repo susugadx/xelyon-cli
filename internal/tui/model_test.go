@@ -30,7 +30,7 @@ func (s *stubAgent) IsProcessing() bool { return s.processing }
 
 func TestModel_Update_MouseMsgScrollsOnce(t *testing.T) {
 	agent := &stubAgent{statusLine: "ready"}
-	m := NewModel(agent)
+	m := NewModel(agent, "")
 	m.ready = true
 	m.viewport = viewport.New(10, 5)
 	m.viewport.SetContent(strings.Repeat("line\n", 20))
@@ -45,7 +45,7 @@ func TestModel_Update_MouseMsgScrollsOnce(t *testing.T) {
 
 func TestModel_HandleKeyMsg_CtrlCRequiresTwoPresses(t *testing.T) {
 	agent := &stubAgent{statusLine: "ready"}
-	m := NewModel(agent)
+	m := NewModel(agent, "")
 
 	updated, cmd := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyCtrlC})
 	m1 := updated.(Model)
@@ -81,7 +81,7 @@ func TestModel_HandleKeyMsg_CtrlCRequiresTwoPresses(t *testing.T) {
 
 func TestModel_HandleKeyMsg_CtrlCRestartsWindow(t *testing.T) {
 	agent := &stubAgent{statusLine: "ready"}
-	m := NewModel(agent)
+	m := NewModel(agent, "")
 
 	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyCtrlC})
 	m1 := updated.(Model)
