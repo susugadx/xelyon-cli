@@ -8,16 +8,23 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tui"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 	"github.com/susugadx/xelyon-cli/internal/version"
 )
 
 // RunTUIWithConfig は TUI モードでインタラクティブセッションを起動する。
 func RunTUIWithConfig(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
-	ag := InitInteractiveAgent(model, provider, cfg, autoApprove)
+	// Agent 初期化中の stdout 出力をキャプチャするバッファ。
+	// Normal Screen に何も残さず、全てを Alt Screen の viewport に表示する。
+	var captureBuf bytes.Buffer
+	runtime := NewAgentRuntimeWithConfig(cfg)
+	runtime.UI = ui.NewRuntime(nil, &captureBuf, &captureBuf)
+
+	ag := initInteractiveAgentWithRuntime(runtime, model, provider, autoApprove)
 	defer ag.Cleanup()
 
-	// ヘッダー情報をキャプチャして初期コンテンツにする
-	initialContent := buildTUIHeader(ag, model, provider, autoApprove)
+	// ヘッダー + キャプチャした初期化出力を結合して初期コンテンツにする
+	initialContent := buildTUIHeader(model, provider, autoApprove) + captureBuf.String()
 
 	// TUIAdapter を作成（sendMsg は後で p.Send 経由で接続）
 	adapter := NewTUIAdapter(ag, nil)
@@ -40,7 +47,6 @@ func RunTUIWithConfig(model string, provider api.Provider, cfg *config.Config, a
 			select {
 			case msgCh <- msg:
 			default:
-				// バッファ満杯時はドロップ（画面表示が欠落するが、デッドロックは回避）
 			}
 		}
 		adapter.SetOutputCapture()
@@ -48,10 +54,9 @@ func RunTUIWithConfig(model string, provider api.Provider, cfg *config.Config, a
 }
 
 // buildTUIHeader は TUI 起動時に表示するヘッダー情報を構築する。
-func buildTUIHeader(ag *Agent, model string, provider api.Provider, autoApprove bool) string {
+func buildTUIHeader(model string, provider api.Provider, autoApprove bool) string {
 	var buf bytes.Buffer
 
-	// バージョン + モデル情報
 	fmt.Fprintf(&buf, "🚀 XELYON CLI v%s\n", version.GetVersion())
 	fmt.Fprintf(&buf, "   Provider: %s | Model: %s\n", provider.Name(), model)
 	if autoApprove {
