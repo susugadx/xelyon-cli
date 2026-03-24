@@ -24,7 +24,7 @@ func RunTUIWithConfig(model string, provider api.Provider, cfg *config.Config, a
 	ag := initInteractiveAgentWithRuntime(runtime, model, provider, autoApprove)
 	defer ag.Cleanup()
 
-	// SIGTERM 時に Alt Screen を復旧するフックを登録（P1-1対応）
+	// SIGTERM 時に Alt Screen を復旧するフックを登録
 	ag.exitHook = tui.RestoreTerminal
 
 	// ヘッダー + キャプチャした初期化出力を結合して初期コンテンツにする
@@ -38,6 +38,7 @@ func RunTUIWithConfig(model string, provider api.Provider, cfg *config.Config, a
 		// tea.Cmd goroutine 内から p.Send() を直接呼ぶとデッドロックするため、
 		// バッファ付きチャネルと drain goroutine を経由させる。
 		msgCh := make(chan tui.AppendMessageMsg, 4096)
+		var closed atomic.Bool
 		var dropCount atomic.Int64
 
 		// drain goroutine: チャネルから読み出して p.Send() を呼ぶ
@@ -47,28 +48,30 @@ func RunTUIWithConfig(model string, provider api.Provider, cfg *config.Config, a
 			}
 		}()
 
-		// tui.Run 終了時に drain goroutine を停止（P1-2対応）
-		tui.OnExit(func() {
-			close(msgCh)
-			if n := dropCount.Load(); n > 0 {
-				tuiDebugf("TUI message channel: %d messages dropped", n)
-			}
-		})
-
 		adapter.sendMsg = func(msg tui.AppendMessageMsg) {
+			// closed フラグで closed channel への send panic を回避。
+			// close(msgCh) ではなくフラグで制御し、drain goroutine は
+			// プロセス終了で自然に回収される。
+			if closed.Load() {
+				return
+			}
 			select {
 			case msgCh <- msg:
 			default:
 				dropCount.Add(1)
 			}
 		}
+
+		// tui.Run 終了時: sendMsg を停止し、ドロップ統計をログ出力
+		tui.OnExit(func() {
+			closed.Store(true)
+			if n := dropCount.Load(); n > 0 {
+				tui.DebugLog("TUI message channel: %d messages dropped", n)
+			}
+		})
+
 		adapter.SetOutputCapture()
 	})
-}
-
-// tuiDebugf は TUI デバッグログに出力する（agent パッケージから呼ぶ用）
-func tuiDebugf(format string, args ...any) {
-	tui.DebugLog(format, args...)
 }
 
 // buildTUIHeader は TUI 起動時に表示するヘッダー情報を構築する。

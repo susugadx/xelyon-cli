@@ -55,6 +55,7 @@ func DebugLog(format string, args ...any) {
 
 // Run は TUI モードでアプリケーションを起動する。
 func Run(agent AgentInterface, initialContent string, onProgram func(*tea.Program)) {
+	// defer は LIFO: runExitCallbacks (チャネル停止) → RestoreTerminal (画面復旧) の順で実行
 	defer RestoreTerminal()
 	defer runExitCallbacks()
 
