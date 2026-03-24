@@ -28,18 +28,21 @@ func (s *stubAgent) Cleanup() { s.cleanupCalls++ }
 
 func (s *stubAgent) IsProcessing() bool { return s.processing }
 
-func TestModel_Update_MouseMsgScrollsOnce(t *testing.T) {
+// TestModel_KeyDownScrollsViewport は Alternate Scroll Mode (1007) で
+// ホイールがカーソルキーに変換された場合に viewport がスクロールすることを検証。
+func TestModel_KeyDownScrollsViewport(t *testing.T) {
 	agent := &stubAgent{statusLine: "ready"}
 	m := NewModel(agent, "")
 	m.ready = true
 	m.viewport = viewport.New(10, 5)
 	m.viewport.SetContent(strings.Repeat("line\n", 20))
 
-	updated, _ := m.Update(tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonWheelDown})
+	// KeyDown → viewport.LineDown (1行スクロール)
+	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyDown})
 	got := updated.(Model)
 
-	if got.viewport.YOffset != 3 {
-		t.Fatalf("YOffset = %d, want 3", got.viewport.YOffset)
+	if got.viewport.YOffset != 1 {
+		t.Fatalf("YOffset = %d, want 1", got.viewport.YOffset)
 	}
 }
 

@@ -74,12 +74,11 @@ func NewModel(agent AgentInterface, initialContent string) Model {
 	return m
 }
 
-// enableMouseWheel は mode 1000 + SGR 1006 を手動で有効化する tea.Cmd。
-// bubbletea の WithMouseAllMotion/WithMouseCellMotion は使わず、
-// ホイールイベントのみキャプチャしてネイティブテキスト選択を維持する。
-func enableMouseWheel() tea.Msg {
-	// stdout に直接書き込み（bubbletea のレンダラーを経由しない）
-	_, _ = fmt.Fprint(os.Stdout, enableMouseWheelSeq)
+// enableAltScroll は Alternate Scroll Mode (DECSET 1007) を有効化する tea.Cmd。
+// マウスホイールがカーソルキー(Up/Down)に変換され、viewport でスクロール処理される。
+// マウストラッキングを使わないため、ネイティブのテキスト選択/コピペが完全に動作する。
+func enableAltScroll() tea.Msg {
+	_, _ = fmt.Fprint(os.Stdout, enableAltScrollSeq)
 	return nil
 }
 
@@ -88,7 +87,7 @@ func (m Model) Init() tea.Cmd {
 	return tea.Batch(
 		textinput.Blink,
 		m.tickStatus(),
-		enableMouseWheel,
+		enableAltScroll,
 	)
 }
 
@@ -126,17 +125,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport.Height = viewportHeight
 		}
 		m.textInput.Width = m.width - 4 // "> " prefix + padding
-
-	case tea.MouseMsg:
-		// mode 1000 はクリック/リリース/ホイールを全て送信するが、
-		// ホイールのみ viewport に渡す。クリック/リリースは無視して
-		// ネイティブテキスト選択（Shift+ドラッグ）との干渉を最小化。
-		if tea.MouseEvent(msg).IsWheel() {
-			var cmd tea.Cmd
-			m.viewport, cmd = m.viewport.Update(msg)
-			cmds = append(cmds, cmd)
-		}
-		return m, tea.Batch(cmds...)
 
 	case AppendMessageMsg:
 		m.appendMessage(msg.Message)
