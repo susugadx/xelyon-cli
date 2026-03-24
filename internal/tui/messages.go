@@ -6,7 +6,7 @@ import "time"
 type ChatMessage struct {
 	Role      string       // "user", "assistant", "tool_header", "system_info"
 	Content   string       // テキスト内容（ANSIカラー付き可）
-	Tools     []ToolResult // このターンで実行されたツール結果
+	Tools     []ToolResult // Phase 2 以降: ツール結果の折りたたみ/展開表示用
 	Timestamp time.Time
 }
 

@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"os"
+	"sync"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -17,15 +18,45 @@ const (
 	disableAltScrollSeq = "\x1b[?1007l"
 )
 
-// restoreTerminal は Alt Screen を抜けてターミナルを復旧する。
-// panic や異常終了時に defer で呼ばれる。
-func restoreTerminal() {
+// exitCallbacks は Run 終了時に呼ばれるコールバック群
+var (
+	exitMu        sync.Mutex
+	exitCallbacks []func()
+)
+
+// OnExit は TUI 終了時に呼ばれるコールバックを登録する。
+// チャネルのクローズ等のリソース解放に使用。
+func OnExit(fn func()) {
+	exitMu.Lock()
+	defer exitMu.Unlock()
+	exitCallbacks = append(exitCallbacks, fn)
+}
+
+func runExitCallbacks() {
+	exitMu.Lock()
+	cbs := exitCallbacks
+	exitCallbacks = nil
+	exitMu.Unlock()
+	for _, fn := range cbs {
+		fn()
+	}
+}
+
+// RestoreTerminal は Alt Screen を抜けてターミナルを復旧する。
+// SIGTERM ハンドラ等の外部から呼べるように公開。
+func RestoreTerminal() {
 	fmt.Fprint(os.Stdout, disableAltScrollSeq+"\033[?1049l\033[?25h")
+}
+
+// DebugLog は TUI デバッグログに出力する。外部パッケージから呼べるように公開。
+func DebugLog(format string, args ...any) {
+	tuiDebugf(format, args...)
 }
 
 // Run は TUI モードでアプリケーションを起動する。
 func Run(agent AgentInterface, initialContent string, onProgram func(*tea.Program)) {
-	defer restoreTerminal()
+	defer RestoreTerminal()
+	defer runExitCallbacks()
 
 	m := NewModel(agent, initialContent)
 

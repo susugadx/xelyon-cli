@@ -91,6 +91,9 @@ type Agent struct {
 	projectMapSection     string
 	projectMapDirty       bool
 
+	// exitHook は os.Exit 前に呼ばれるフック（TUI モードのターミナル復旧等）
+	exitHook func()
+
 	// 並列実行用ミューテックス
 	historyMu     sync.Mutex
 	changeStackMu sync.Mutex

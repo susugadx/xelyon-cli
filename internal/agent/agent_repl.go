@@ -20,7 +20,8 @@ import (
 
 // initInteractiveAgentWithRuntime は、事前に用意した runtime を使ってインタラクティブ用 Agent を初期化する。
 func initInteractiveAgentWithRuntime(runtime *AgentRuntime, model string, provider api.Provider, autoApprove bool) *Agent {
-	runtime = normalizeAgentRuntime(runtime)
+	// normalizeAgentRuntime は NewAgentWithRuntime 内部で呼ばれるためここでは不要。
+	// ただし AutoApprove は normalize 前に設定する必要がある。
 	runtime.AutoApprove = autoApprove
 
 	// 監査ログ初期化（環境変数で制御: XELYON_AUDIT_LOG=1 で有効化）
@@ -50,13 +51,6 @@ func initInteractiveAgentWithRuntime(runtime *AgentRuntime, model string, provid
 	checkRipgrepAvailability(agent)
 
 	return agent
-}
-
-// InitInteractiveAgent はインタラクティブモード用のAgentを初期化する。
-// TUIモードと従来REPLモードの両方から呼ばれる。
-func InitInteractiveAgent(model string, provider api.Provider, cfg *config.Config, autoApprove bool) *Agent {
-	runtime := NewAgentRuntimeWithConfig(cfg)
-	return initInteractiveAgentWithRuntime(runtime, model, provider, autoApprove)
 }
 
 // RunInteractiveWithConfig は指定設定でインタラクティブモードを実行する。
@@ -232,6 +226,9 @@ func setupSignalHandler(agent *Agent) {
 			if now.Sub(lastInterrupt) < 3*time.Second {
 				// 2回目（3秒以内）: アプリ終了
 				interruptMu.Unlock()
+				if agent.exitHook != nil {
+					agent.exitHook()
+				}
 				_, _ = fmt.Fprintln(agent.output(), "\n\n👋 Gracefully shutting down...")
 				agent.Cleanup()
 				os.Exit(0)

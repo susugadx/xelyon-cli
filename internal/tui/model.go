@@ -77,6 +77,8 @@ func NewModel(agent AgentInterface, initialContent string) Model {
 // enableAltScroll は Alternate Scroll Mode (DECSET 1007) を有効化する tea.Cmd。
 // マウスホイールがカーソルキー(Up/Down)に変換され、viewport でスクロール処理される。
 // マウストラッキングを使わないため、ネイティブのテキスト選択/コピペが完全に動作する。
+// NOTE: bubbletea 自身も Init 段階で Alt Screen (\x1b[?1049h) を stdout に直接書くため、
+// 同タイミングでの stdout 書き込みは安全。レンダリングループ中は避けること。
 func enableAltScroll() tea.Msg {
 	_, _ = fmt.Fprint(os.Stdout, enableAltScrollSeq)
 	return nil
