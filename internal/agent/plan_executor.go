@@ -251,11 +251,16 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 				a.noteProjectMapMutation(toolCall, change)
 				a.appendSessionToolExecution(toolCall, result)
 
-				// str_replace 成功時: LSP診断遅延バッファにファイルを追加
-				if toolCall.Tool == "str_replace" && !strings.HasPrefix(result, "Error:") &&
+				// 編集ツール成功時: LSP診断遅延バッファにファイルを追加
+				if !strings.HasPrefix(result, "Error:") &&
 					!strings.HasPrefix(result, "[CANCELLED]") && !strings.HasPrefix(result, "[COMMENT]") {
-					if path := toolCall.Args["path"]; path != "" {
-						a.addPendingLSPFile(path)
+					switch toolCall.Tool {
+					case "str_replace":
+						if path := toolCall.Args["path"]; path != "" {
+							a.addPendingLSPFile(path)
+						}
+					case "apply_patch":
+						a.addPendingLSPFilesFromChange(change)
 					}
 				}
 

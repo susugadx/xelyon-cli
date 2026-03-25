@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/tools"
 	toolslsp "github.com/susugadx/xelyon-cli/internal/tools/lsp"
 )
 
@@ -248,8 +249,8 @@ Please fix these errors before declaring completion. Do NOT skip these issues.`,
 	return false, ""
 }
 
-// addPendingLSPFile は str_replace 成功後に対象ファイルを遅延診断バッファへ追加する。
-// 重複ファイルは追加しない（連続 str_replace で同一ファイルを複数回編集した場合も1エントリ）。
+// addPendingLSPFile は編集ツール成功後に対象ファイルを遅延診断バッファへ追加する。
+// 重複ファイルは追加しない（連続編集で同一ファイルを複数回編集した場合も1エントリ）。
 func (a *Agent) addPendingLSPFile(path string) {
 	if path == "" {
 		return
@@ -260,6 +261,17 @@ func (a *Agent) addPendingLSPFile(path string) {
 		}
 	}
 	a.pendingLSPFiles = append(a.pendingLSPFiles, path)
+}
+
+// addPendingLSPFilesFromChange は FileChange 内の全ファイルを遅延診断バッファへ追加する。
+// apply_patch のように複数ファイルを一度に変更するツール向け。
+func (a *Agent) addPendingLSPFilesFromChange(change *tools.FileChange) {
+	if change == nil {
+		return
+	}
+	for _, d := range change.Details {
+		a.addPendingLSPFile(d.FilePath)
+	}
 }
 
 // flushLSPDiagnostics はバッファ内の全ファイルに対して LSP 診断を実行し、

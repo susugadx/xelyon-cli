@@ -537,11 +537,16 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 				}
 				_, _ = fmt.Fprintln(a.output())
 
-				// str_replace 成功時: LSP診断遅延バッファにファイルを追加
-				if tc.Tool == "str_replace" && !strings.HasPrefix(result, "Error:") &&
+				// 編集ツール成功時: LSP診断遅延バッファにファイルを追加
+				if !strings.HasPrefix(result, "Error:") &&
 					!strings.HasPrefix(result, "[CANCELLED]") && !strings.HasPrefix(result, "[COMMENT]") {
-					if path := tc.Args["path"]; path != "" {
-						a.addPendingLSPFile(path)
+					switch tc.Tool {
+					case "str_replace":
+						if path := tc.Args["path"]; path != "" {
+							a.addPendingLSPFile(path)
+						}
+					case "apply_patch":
+						a.addPendingLSPFilesFromChange(change)
 					}
 				}
 
