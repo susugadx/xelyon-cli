@@ -243,8 +243,6 @@ func toolStartIcon(tool string) string {
 		return "📖"
 	case "search_code":
 		return "🔍"
-	case "inspect_symbol":
-		return "🔎"
 	case "str_replace":
 		return "🔧"
 	case "write_file":
@@ -1368,8 +1366,6 @@ func parallelGroupSpinnerMessage(allToolCalls []*tools.ToolCall, indices []int) 
 			counts["reads"]++
 		case "search_code":
 			counts["searches"]++
-		case "inspect_symbol":
-			counts["inspects"]++
 		case "web_search":
 			counts["web"]++
 		case "spawn_agent":
@@ -1386,8 +1382,6 @@ func parallelGroupSpinnerMessage(allToolCalls []*tools.ToolCall, indices []int) 
 		return "Reading files..."
 	case counts["searches"] > 0 && len(counts) == 1:
 		return "Searching code..."
-	case counts["inspects"] > 0 && len(counts) == 1:
-		return "Inspecting symbols..."
 	case counts["spawn"] > 0 && len(counts) == 1:
 		return fmt.Sprintf("Spawning %d sub-agents...", counts["spawn"])
 	case counts["wait"] > 0 && len(counts) == 1:

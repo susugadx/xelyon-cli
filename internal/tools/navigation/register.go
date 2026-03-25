@@ -5,7 +5,8 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
-// InspectSymbolTool は inspect_symbol ツール。
+// InspectSymbolTool は inspect_symbol のツールラッパー（テスト専用）。
+// production では search_code が navigation.InspectSymbolAuto を直接呼ぶため、この型は使用されない。
 type InspectSymbolTool struct{}
 
 // Name はツール名を返す。
@@ -13,7 +14,7 @@ func (t *InspectSymbolTool) Name() string { return "inspect_symbol" }
 
 // Description はツールの説明を返す。
 func (t *InspectSymbolTool) Description() string {
-	return tools.ToolDescriptions[t.Name()]
+	return "Internal: Go symbol lookup used by search_code fast path."
 }
 
 // Parameters はツールのパラメータ定義を返す。
@@ -43,11 +44,8 @@ func (t *InspectSymbolTool) Run(execCtx tools.ExecutionContext, args map[string]
 	return result, nil, nil
 }
 
-// RegisterTools は navigation ツールをレジストリに登録する。
+// RegisterTools は inspect_symbol をレジストリに登録する（テスト用）。
+// 公開ツールとしては廃止済みのため DefaultRegistry には登録しない。
 func RegisterTools(registry *tools.Registry) {
 	registry.Register(&InspectSymbolTool{})
-}
-
-func init() {
-	RegisterTools(tools.DefaultRegistry)
 }

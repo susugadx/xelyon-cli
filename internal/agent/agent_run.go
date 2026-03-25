@@ -260,10 +260,6 @@ func extractToolFilePath(tc *tools.ToolCall) string {
 		if path := tc.Args["path"]; path != "" {
 			return path
 		}
-	case "inspect_symbol":
-		if symbol := tc.Args["symbol"]; symbol != "" {
-			return symbol
-		}
 	case "bash":
 		if cmd := tc.Args["command"]; cmd != "" {
 			return truncateEventOutput(cmd, 40)

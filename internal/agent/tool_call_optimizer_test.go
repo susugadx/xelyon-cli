@@ -313,14 +313,14 @@ func TestExecuteToolCallsWithParallel_ReadFile_RangeNotBatched(t *testing.T) {
 }
 
 func TestExecuteToolCallsWithParallel_ReadFile_MixedNotBroken(t *testing.T) {
-	// Mixed: plain read + inspect_symbol + range read → each treated independently
+	// Mixed: plain read + search_code + range read → each treated independently
 	provider := &mockProvider{name: "test"}
 	agent := NewAgent("test-model", provider, false)
 	agent.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
 
 	toolCalls := []*tools.ToolCall{
 		{ID: "c1", Tool: "read_file", Args: map[string]string{"path": "/a.go"}, RawArgs: map[string]any{"path": "/a.go"}},
-		{ID: "c2", Tool: "inspect_symbol", Args: map[string]string{"path": "/a.go", "symbol": "Build"}, RawArgs: map[string]any{"path": "/a.go", "symbol": "Build"}},
+		{ID: "c2", Tool: "search_code", Args: map[string]string{"pattern": "Build"}, RawArgs: map[string]any{"pattern": "Build"}},
 		{ID: "c3", Tool: "read_file", Args: map[string]string{"path": "/a.go", "start_line": "1", "end_line": "50"}, RawArgs: map[string]any{"path": "/a.go", "start_line": 1, "end_line": 50}},
 	}
 	agent.addToolCallsToHistory("test", toolCalls)

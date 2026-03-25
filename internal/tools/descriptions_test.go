@@ -14,7 +14,7 @@ func TestToolDescriptions_AllKeysNonEmpty(t *testing.T) {
 }
 
 func TestToolDescriptions_ExpectedToolCount(t *testing.T) {
-	expected := 12
+	expected := 11
 	if len(ToolDescriptions) != expected {
 		t.Errorf("ToolDescriptions has %d entries, want %d", len(ToolDescriptions), expected)
 	}
@@ -23,7 +23,7 @@ func TestToolDescriptions_ExpectedToolCount(t *testing.T) {
 func TestToolDescriptions_KnownToolsExist(t *testing.T) {
 	knownTools := []string{
 		"read_file", "write_file", "str_replace", "delete_file", "list_dir",
-		"inspect_symbol", "search_code", "web_search",
+		"search_code", "web_search",
 		"bash",
 		"ask_user_question",
 		"spawn_agent", "wait_agent",
@@ -35,13 +35,9 @@ func TestToolDescriptions_KnownToolsExist(t *testing.T) {
 	}
 }
 
-func TestToolDescriptions_InspectSymbolMentionsGoSymbolLookup(t *testing.T) {
-	desc := ToolDescriptions["inspect_symbol"]
-	if !strings.Contains(desc, "Look up a Go symbol by name") {
-		t.Error("inspect_symbol description should describe Go symbol lookup")
-	}
-	if strings.Contains(desc, "search_code+read_file") {
-		t.Error("inspect_symbol description should not compare itself against read_file/search_code")
+func TestToolDescriptions_InspectSymbolNotPublic(t *testing.T) {
+	if _, ok := ToolDescriptions["inspect_symbol"]; ok {
+		t.Error("inspect_symbol should not be in ToolDescriptions (integrated into search_code)")
 	}
 }
 

@@ -35,21 +35,24 @@ func TestPlanModeExcludedTools_LegacyEditTool(t *testing.T) {
 	}
 }
 
-func TestNormalModeExcludedTools_IncludesInspectAndListDir(t *testing.T) {
+func TestNormalModeExcludedTools_IncludesListDir(t *testing.T) {
 	excluded := normalModeExcludedTools()
-	for _, name := range []string{"inspect_symbol", "list_dir"} {
-		if !containsString(excluded, name) {
-			t.Fatalf("normal mode should exclude %s", name)
-		}
+	if !containsString(excluded, "list_dir") {
+		t.Fatal("normal mode should exclude list_dir")
+	}
+	// inspect_symbol は公開ツールとして廃止済み（search_code に統合）
+	if containsString(excluded, "inspect_symbol") {
+		t.Fatal("inspect_symbol is no longer a public tool, should not appear in excluded list")
 	}
 }
 
-func TestPlanModeExcludedTools_IncludesInspectAndListDir(t *testing.T) {
+func TestPlanModeExcludedTools_IncludesListDir(t *testing.T) {
 	excluded := planModeExcludedTools()
-	for _, name := range []string{"inspect_symbol", "list_dir"} {
-		if !containsString(excluded, name) {
-			t.Fatalf("plan mode should exclude %s", name)
-		}
+	if !containsString(excluded, "list_dir") {
+		t.Fatal("plan mode should exclude list_dir")
+	}
+	if containsString(excluded, "inspect_symbol") {
+		t.Fatal("inspect_symbol is no longer a public tool, should not appear in excluded list")
 	}
 }
 

@@ -18,6 +18,9 @@ func TestInspectSymbolTool_Schema(t *testing.T) {
 	if desc == "" {
 		t.Error("expected non-empty description")
 	}
+	if !strings.Contains(desc, "Internal") {
+		t.Error("description should indicate internal-only usage")
+	}
 
 	params := tool.Parameters()
 	props, ok := params["properties"].(map[string]interface{})
@@ -34,31 +37,14 @@ func TestInspectSymbolTool_Schema(t *testing.T) {
 	if _, ok := props["path"]; !ok {
 		t.Error("expected 'path' property")
 	}
-	if _, ok := props["mode"]; ok {
-		t.Error("mode property should be removed")
-	}
-	if symbolProp, ok := props["symbol"].(map[string]interface{}); ok {
-		desc, _ := symbolProp["description"].(string)
-		if !strings.Contains(desc, "Config.Build") {
-			t.Errorf("expected receiver-qualified example in symbol description, got %q", desc)
-		}
-	}
-
-	required, ok := params["required"].([]string)
-	if !ok {
-		t.Fatal("expected required array")
-	}
-	if len(required) != 1 || required[0] != "symbol" {
-		t.Errorf("expected required=[symbol], got %v", required)
-	}
 }
 
-func TestInspectSymbolTool_Registration(t *testing.T) {
+func TestInspectSymbolTool_ExplicitRegistration(t *testing.T) {
 	registry := tools.NewRegistry()
 	RegisterTools(registry)
 
 	if !registry.HasTool("inspect_symbol") {
-		t.Error("expected inspect_symbol to be registered")
+		t.Error("expected inspect_symbol to be registered via RegisterTools")
 	}
 }
 
@@ -78,9 +64,9 @@ func TestInspectSymbolTool_Run_EmptySymbol(t *testing.T) {
 	}
 }
 
-func TestInspectSymbolTool_DefaultRegistration(t *testing.T) {
-	// init() により DefaultRegistry に登録されている
-	if !tools.DefaultRegistry.HasTool("inspect_symbol") {
-		t.Error("expected inspect_symbol in DefaultRegistry")
+func TestInspectSymbolTool_NotInDefaultRegistry(t *testing.T) {
+	// inspect_symbol は公開ツールとして廃止済み — DefaultRegistry に登録されていないこと
+	if tools.DefaultRegistry.HasTool("inspect_symbol") {
+		t.Error("inspect_symbol should NOT be in DefaultRegistry (integrated into search_code)")
 	}
 }

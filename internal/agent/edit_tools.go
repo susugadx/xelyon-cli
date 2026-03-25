@@ -16,13 +16,13 @@ func appendDefaultEditToolExclusions(excluded []string) []string {
 
 func normalModeExcludedTools() []string {
 	excluded := appendDefaultEditToolExclusions(prompt.PlanningToolNames)
-	// inspect_symbol は search_code に統合済み、list_dir は内部フォールバック用
-	return appendUniqueStrings(excluded, "inspect_symbol", "list_dir")
+	// list_dir は内部フォールバック用
+	return appendUniqueStrings(excluded, "list_dir")
 }
 
 func planModeExcludedTools() []string {
 	excluded := appendDefaultEditToolExclusions(nil)
-	return appendUniqueStrings(excluded, "inspect_symbol", "list_dir")
+	return appendUniqueStrings(excluded, "list_dir")
 }
 
 func appendUniqueStrings(values []string, extras ...string) []string {
