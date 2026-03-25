@@ -119,10 +119,13 @@ func (a *Agent) handleNormalResponse(response string) {
 	}
 
 	// 最後の出力を記録（最大保存数: config.MaxLastOutputs）
+	// CopyLastOutput (TUI goroutine) と data race しないように historyMu で保護
+	a.historyMu.Lock()
 	a.lastOutputs = append(a.lastOutputs, displayResponse)
 	if len(a.lastOutputs) > config.MaxLastOutputs {
 		a.lastOutputs = a.lastOutputs[1:]
 	}
+	a.historyMu.Unlock()
 
 	// セッションに保存
 	if a.session != nil {

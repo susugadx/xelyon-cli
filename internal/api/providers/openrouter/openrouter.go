@@ -507,11 +507,7 @@ func (p *Provider) chatWithClaudeAPI(ctx context.Context, systemPrompt string, h
 	// メッセージを Anthropic 形式に変換
 	anthropicMessages := claude.ConvertToAnthropicMessages(history)
 
-	// プロンプトキャッシュ: 安定区間+最新userにブレークポイント設定
 	cfg := config.ResolveContext(ctx, p.effectiveConfig())
-	if cfg != nil && cfg.PromptCache.Enabled {
-		claude.SetMessageCacheBreakpointsWithConfigAndEnabled(anthropicMessages, cfg, true)
-	}
 
 	var messages []interface{}
 	for _, msg := range anthropicMessages {
@@ -543,6 +539,7 @@ func (p *Provider) chatWithClaudeAPI(ctx context.Context, systemPrompt string, h
 		Model             string                    `json:"model"`
 		AnthropicVersion  string                    `json:"anthropic_version"`
 		AnthropicBeta     []string                  `json:"anthropic_beta,omitempty"`
+		CacheControl      *api.CacheControl         `json:"cache_control,omitempty"`
 		MaxTokens         int                       `json:"max_tokens"`
 		System            interface{}               `json:"system,omitempty"`
 		Messages          []interface{}             `json:"messages"`
@@ -558,6 +555,9 @@ func (p *Provider) chatWithClaudeAPI(ctx context.Context, systemPrompt string, h
 		System:           api.BuildSystemFieldWithConfig(systemPrompt, cfg),
 		Messages:         messages,
 		Stream:           true,
+	}
+	if cfg != nil && cfg.PromptCache.Enabled {
+		reqBody.CacheControl = api.NewCacheControlWithConfig(cfg)
 	}
 
 	// Tool Use 設定

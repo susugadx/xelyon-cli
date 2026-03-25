@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -13,20 +12,20 @@ type stubAgent struct {
 	processing   bool
 	cancelCalls  int
 	cleanupCalls int
+	copyCalls    int
 	statusLine   string
 }
 
-func (s *stubAgent) Chat(input string) {}
-
+func (s *stubAgent) Chat(input string)             {}
 func (s *stubAgent) HandleCommand(cmd string) bool { return false }
-
-func (s *stubAgent) GetStatusLine() string { return s.statusLine }
-
-func (s *stubAgent) Cancel() { s.cancelCalls++ }
-
-func (s *stubAgent) Cleanup() { s.cleanupCalls++ }
-
-func (s *stubAgent) IsProcessing() bool { return s.processing }
+func (s *stubAgent) GetStatusLine() string         { return s.statusLine }
+func (s *stubAgent) Cancel()                       { s.cancelCalls++ }
+func (s *stubAgent) Cleanup()                      { s.cleanupCalls++ }
+func (s *stubAgent) IsProcessing() bool            { return s.processing }
+func (s *stubAgent) CopyLastOutput() (string, error) {
+	s.copyCalls++
+	return "Copied 5 lines", nil
+}
 
 // TestModel_KeyDownScrollsViewport は Alternate Scroll Mode (1007) で
 // ホイールがカーソルキーに変換された場合に viewport がスクロールすることを検証。
@@ -34,15 +33,33 @@ func TestModel_KeyDownScrollsViewport(t *testing.T) {
 	agent := &stubAgent{statusLine: "ready"}
 	m := NewModel(agent, "")
 	m.ready = true
-	m.viewport = viewport.New(10, 5)
-	m.viewport.SetContent(strings.Repeat("line\n", 20))
+	m.vp = lightViewport{width: 10, height: 5}
+	m.vp.setContent(strings.Repeat("line\n", 20))
 
-	// KeyDown → viewport.LineDown (1行スクロール)
+	// KeyDown → 1行スクロール
 	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyDown})
 	got := updated.(Model)
 
-	if got.viewport.YOffset != 1 {
-		t.Fatalf("YOffset = %d, want 1", got.viewport.YOffset)
+	if got.vp.yOffset != 1 {
+		t.Fatalf("yOffset = %d, want 1", got.vp.yOffset)
+	}
+}
+
+func TestModel_MouseWheelScrollsViewport(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+	m.ready = true
+	m.vp = lightViewport{width: 10, height: 5}
+	m.vp.setContent(strings.Repeat("line\n", 20))
+
+	updated, _ := m.Update(tea.MouseMsg{
+		Button: tea.MouseButtonWheelDown,
+		Action: tea.MouseActionPress,
+	})
+	got := updated.(Model)
+
+	if got.vp.yOffset != 3 {
+		t.Fatalf("yOffset = %d, want 3", got.vp.yOffset)
 	}
 }
 
@@ -96,5 +113,253 @@ func TestModel_HandleKeyMsg_CtrlCRestartsWindow(t *testing.T) {
 	}
 	if agent.cleanupCalls != 0 {
 		t.Fatalf("cleanupCalls = %d, want 0", agent.cleanupCalls)
+	}
+}
+
+func TestNewModel_ClearsTextInputPrompt(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+
+	if m.textInput.Prompt != "" {
+		t.Fatalf("textInput.Prompt = %q, want empty string", m.textInput.Prompt)
+	}
+}
+
+func TestModel_View_RendersSinglePromptAndContainsInput(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+	m.ready = true
+	m.width = 80
+	m.height = 3
+	m.vp = lightViewport{width: m.width, height: 1}
+	m.vp.setContent("body")
+	m.textInput.SetValue("hello")
+	m.padLineCache = strings.Repeat(" ", m.width)
+	m.rebuildChrome()
+
+	view := m.View()
+	lines := strings.Split(view, "\n")
+	if len(lines) < 3 {
+		t.Fatalf("view should have at least 3 lines, got %d: %q", len(lines), view)
+	}
+
+	// プロンプトが1つだけ表示される
+	if strings.Count(view, inputPrompt) != 1 {
+		t.Fatalf("prompt count = %d, want 1; view=%q", strings.Count(view, inputPrompt), view)
+	}
+
+	// ステータスバーにステータス文字列が含まれる
+	if !strings.Contains(view, "ready") {
+		t.Fatalf("view should contain status line, got %q", view)
+	}
+
+	// 入力欄に入力値が含まれる
+	if !strings.Contains(view, "hello") {
+		t.Fatalf("view should contain input value, got %q", view)
+	}
+
+	if !strings.Contains(view, "/copy") {
+		t.Fatalf("view should contain copy hint, got %q", view)
+	}
+}
+
+func TestModel_WindowResizeRestoresFullLineFromRawContent(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 5, Height: 8})
+	m = updated.(Model)
+
+	updated, _ = m.Update(AppendMessageMsg{
+		Message: ChatMessage{Role: "assistant", Content: "123456789"},
+	})
+	m = updated.(Model)
+
+	if got := m.renderedLines[len(m.renderedLines)-1]; got != "12345" {
+		t.Fatalf("narrow render = %q, want %q", got, "12345")
+	}
+
+	updated, _ = m.Update(tea.WindowSizeMsg{Width: 12, Height: 8})
+	m = updated.(Model)
+
+	if got := m.rawLines[len(m.rawLines)-1]; got != "123456789" {
+		t.Fatalf("raw line = %q, want %q", got, "123456789")
+	}
+	if got := m.renderedLines[len(m.renderedLines)-1]; got != "123456789" {
+		t.Fatalf("wide render = %q, want %q", got, "123456789")
+	}
+}
+
+func TestModel_AppendMessageKeepsViewportAtBottom(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 10, Height: 8})
+	m = updated.(Model)
+
+	for i := 0; i < 8; i++ {
+		updated, _ = m.Update(AppendMessageMsg{
+			Message: ChatMessage{Role: "assistant", Content: "line"},
+		})
+		m = updated.(Model)
+	}
+
+	if !m.vp.atBottom() {
+		t.Fatal("viewport should stay pinned to bottom after appends")
+	}
+}
+
+// --- Navigation Mode tests ---
+
+func TestNavMode_EscEntersNavWhenInputEmpty(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+	m.ready = true
+
+	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyEsc})
+	got := updated.(Model)
+	if !got.navigationMode {
+		t.Fatal("Esc with empty input should enter navigation mode")
+	}
+}
+
+func TestNavMode_EscDoesNotEnterNavWhenInputHasText(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+	m.ready = true
+	m.textInput.SetValue("hello")
+
+	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyEsc})
+	got := updated.(Model)
+	if got.navigationMode {
+		t.Fatal("Esc with text in input should NOT enter navigation mode")
+	}
+}
+
+func TestNavMode_QExitsNav(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+	m.navigationMode = true
+
+	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	got := updated.(Model)
+	if got.navigationMode {
+		t.Fatal("q should exit navigation mode")
+	}
+}
+
+func TestNavMode_JKScrolls(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+	m.ready = true
+	m.navigationMode = true
+	m.vp = lightViewport{width: 10, height: 5}
+	m.vp.setContent(strings.Repeat("line\n", 20))
+
+	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	got := updated.(Model)
+	if got.vp.yOffset != 1 {
+		t.Fatalf("j: yOffset = %d, want 1", got.vp.yOffset)
+	}
+
+	updated, _ = got.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	got = updated.(Model)
+	if got.vp.yOffset != 0 {
+		t.Fatalf("k: yOffset = %d, want 0", got.vp.yOffset)
+	}
+}
+
+func TestNavMode_DUHalfPage(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+	m.ready = true
+	m.navigationMode = true
+	m.vp = lightViewport{width: 10, height: 10}
+	m.vp.setContent(strings.Repeat("line\n", 40))
+
+	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	got := updated.(Model)
+	if got.vp.yOffset != 5 {
+		t.Fatalf("d: yOffset = %d, want 5", got.vp.yOffset)
+	}
+
+	updated, _ = got.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'u'}})
+	got = updated.(Model)
+	if got.vp.yOffset != 0 {
+		t.Fatalf("u: yOffset = %d, want 0", got.vp.yOffset)
+	}
+}
+
+func TestNavMode_GGAndG(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+	m.ready = true
+	m.navigationMode = true
+	m.vp = lightViewport{width: 10, height: 5}
+	m.vp.setContent(strings.Repeat("line\n", 20))
+
+	// G → gotoBottom
+	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
+	got := updated.(Model)
+	if !got.vp.atBottom() {
+		t.Fatal("G should go to bottom")
+	}
+
+	// gg → gotoTop
+	updated, _ = got.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	got = updated.(Model)
+	if !got.gPressed {
+		t.Fatal("first g should set gPressed")
+	}
+	updated, _ = got.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	got = updated.(Model)
+	if got.vp.yOffset != 0 {
+		t.Fatalf("gg: yOffset = %d, want 0", got.vp.yOffset)
+	}
+	if got.gPressed {
+		t.Fatal("gPressed should be reset after gg")
+	}
+}
+
+func TestNavMode_GFollowedByOtherKeyResetsG(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+	m.navigationMode = true
+	m.gPressed = true
+
+	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	got := updated.(Model)
+	if got.gPressed {
+		t.Fatal("gPressed should be reset after non-g key")
+	}
+}
+
+func TestNavMode_CtrlCWorksInNav(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+	m.navigationMode = true
+
+	updated, cmd := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyCtrlC})
+	got := updated.(Model)
+	if cmd != nil {
+		t.Fatal("first ctrl+c should not quit")
+	}
+	if !got.lastInterrupt.After(time.Now().Add(-time.Second)) {
+		t.Fatal("lastInterrupt should be set")
+	}
+}
+
+func TestNavMode_YCallsCopy(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+	m.navigationMode = true
+
+	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	got := updated.(Model)
+	if agent.copyCalls != 1 {
+		t.Fatalf("copyCalls = %d, want 1", agent.copyCalls)
+	}
+	if got.transientStatus == "" {
+		t.Fatal("transientStatus should be set after copy")
 	}
 }

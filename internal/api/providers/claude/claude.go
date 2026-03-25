@@ -202,6 +202,7 @@ type Request struct {
 	Messages []AnthropicMessage `json:"messages"`
 	// System can be either string (legacy) or []api.SystemBlock (prompt caching).
 	System            interface{}        `json:"system,omitempty"`
+	CacheControl      *api.CacheControl  `json:"cache_control,omitempty"`
 	MaxTokens         int                `json:"max_tokens"`
 	Stream            bool               `json:"stream"`
 	Thinking          *ThinkingConfig    `json:"thinking,omitempty"`
@@ -322,6 +323,7 @@ type MultimodalRequest struct {
 	Messages []interface{} `json:"messages"` // Message or MultimodalMessage
 	// System can be either string (legacy) or []api.SystemBlock (prompt caching).
 	System            interface{}        `json:"system,omitempty"`
+	CacheControl      *api.CacheControl  `json:"cache_control,omitempty"`
 	MaxTokens         int                `json:"max_tokens"`
 	Stream            bool               `json:"stream"`
 	Thinking          *ThinkingConfig    `json:"thinking,omitempty"`
@@ -332,8 +334,9 @@ type MultimodalRequest struct {
 
 // Response は通常レスポンス
 type Response struct {
-	Content    []Content `json:"content"`
-	StopReason string    `json:"stop_reason,omitempty"` // "end_turn", "tool_use" など
+	Content    []Content   `json:"content"`
+	StopReason string      `json:"stop_reason,omitempty"` // "end_turn", "tool_use" など
+	Usage      StreamUsage `json:"usage"`                 // トークン使用量（キャッシュ含む）
 }
 
 // requestResult はexecuteRequestの結果を格納
@@ -490,17 +493,18 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 
 	cfg := config.ResolveContext(ctx, p.effectiveConfig())
 
-	// プロンプトキャッシュ: 安定区間+最新userにブレークポイント設定
-	if cfg != nil && cfg.PromptCache.Enabled {
-		SetMessageCacheBreakpointsWithConfigAndEnabled(messages, cfg, true)
-	}
-
 	reqBody := Request{
 		Model:     model,
 		Messages:  messages,
 		System:    api.BuildSystemFieldWithConfig(systemPrompt, cfg),
 		MaxTokens: api.GetMaxOutputTokens(ctx, "claude", model),
 		Stream:    true,
+	}
+	if cfg != nil && cfg.PromptCache.Enabled {
+		// Anthropic automatic caching advances the breakpoint with conversation growth.
+		// Keep explicit breakpoints on system/tools, and let the request-level cache
+		// capture the latest conversation prefix from the second turn onward.
+		reqBody.CacheControl = api.NewCacheControlWithConfig(cfg)
 	}
 
 	reqBody.ContextManagement = buildContextManagementForModel(model, cfg.Compression)
@@ -701,6 +705,17 @@ func (p *Provider) handleNonStreamingResponse(ctx context.Context, resp *http.Re
 
 	spinner.Stop()
 
+	// usage コールバック呼び出し（キャッシュヒット情報含む）
+	if p.usageCallback != nil {
+		u := result.Usage
+		p.usageCallback(api.Usage{
+			InputTokens:         u.InputTokens + u.CacheReadInputTokens + u.CacheCreationInputTokens,
+			OutputTokens:        u.OutputTokens,
+			CachedInputTokens:   u.CacheReadInputTokens,
+			CacheCreationTokens: u.CacheCreationInputTokens,
+		})
+	}
+
 	if len(result.Content) == 0 {
 		return "", fmt.Errorf("no response from API")
 	}
@@ -749,14 +764,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	// Anthropic Messages API 形式に変換（role:"tool" → role:"user"+tool_result 等）
 	converted := ConvertToAnthropicMessages(history)
 
-	// プロンプトキャッシュ: 履歴部分にブレークポイント設定
-	// multimodalMessage（画像付き新規入力）は converted に含まれないため BP 対象外。
-	// 画像ターンでは実質 BP が system+tools+履歴の3個になるが、
-	// 次ターンで multimodalMessage も履歴に含まれキャッシュされる。
 	cfg := config.ResolveContext(ctx, p.effectiveConfig())
-	if cfg != nil && cfg.PromptCache.Enabled {
-		SetMessageCacheBreakpointsWithConfigAndEnabled(converted, cfg, true)
-	}
 
 	var messages []interface{}
 	for _, msg := range converted {
@@ -789,6 +797,9 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 		System:    api.BuildSystemFieldWithConfig(systemPrompt, cfg),
 		MaxTokens: api.GetMaxOutputTokens(ctx, "claude", model),
 		Stream:    true,
+	}
+	if cfg != nil && cfg.PromptCache.Enabled {
+		reqBody.CacheControl = api.NewCacheControlWithConfig(cfg)
 	}
 
 	reqBody.ContextManagement = buildContextManagementForModel(model, cfg.Compression)

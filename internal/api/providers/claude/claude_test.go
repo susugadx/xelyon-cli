@@ -229,6 +229,29 @@ func headerHasBetaValue(header http.Header, value string) bool {
 	return false
 }
 
+func TestChatWithTools_SetsTopLevelCacheControlWhenPromptCacheEnabled(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.PromptCache.Enabled = true
+
+	reqBody, _ := captureClaudeRequest(t, cfg, "claude-opus-4-6")
+	if reqBody.CacheControl == nil {
+		t.Fatal("expected top-level cache_control when prompt cache is enabled")
+	}
+	if reqBody.CacheControl.Type != "ephemeral" {
+		t.Fatalf("cache_control.type = %q, want %q", reqBody.CacheControl.Type, "ephemeral")
+	}
+}
+
+func TestChatWithTools_OmitsTopLevelCacheControlWhenPromptCacheDisabled(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.PromptCache.Enabled = false
+
+	reqBody, _ := captureClaudeRequest(t, cfg, "claude-opus-4-6")
+	if reqBody.CacheControl != nil {
+		t.Fatalf("expected no top-level cache_control when prompt cache is disabled, got %+v", reqBody.CacheControl)
+	}
+}
+
 func TestClearToolUses_EditsInRequest(t *testing.T) {
 	cfg := config.DefaultConfig()
 

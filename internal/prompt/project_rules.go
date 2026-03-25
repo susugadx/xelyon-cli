@@ -87,3 +87,10 @@ func InjectProjectRules(systemPrompt, rulesBlock string) string {
 func StripProjectConfigSections(systemPrompt string) string {
 	return projectConfigBlockRe.ReplaceAllString(systemPrompt, "")
 }
+
+// ExtractProjectConfigBlock は system prompt から project config ブロックを抽出する。
+// 見つからなければ空文字を返す。
+func ExtractProjectConfigBlock(systemPrompt string) string {
+	match := projectConfigBlockRe.FindString(systemPrompt)
+	return strings.TrimSpace(match)
+}

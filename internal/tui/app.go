@@ -8,16 +8,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// Alternate Scroll Mode (DECSET 1007)
-// Alt Screen 時にマウスホイールをカーソルキー(Up/Down)に変換するターミナル機能。
-// マウストラッキング(mode 1000/1002/1003)を一切使わないため、
-// クリック/ドラッグによるネイティブテキスト選択・コピペが完全に動作する。
-// 対応: xterm, VTE (GNOME Terminal), Windows Terminal, iTerm2, kitty, Alacritty
-const (
-	enableAltScrollSeq  = "\x1b[?1007h"
-	disableAltScrollSeq = "\x1b[?1007l"
-)
-
 // exitCallbacks は Run 終了時に呼ばれるコールバック群
 var (
 	exitMu        sync.Mutex
@@ -45,7 +35,7 @@ func runExitCallbacks() {
 // RestoreTerminal は Alt Screen を抜けてターミナルを復旧する。
 // SIGTERM ハンドラ等の外部から呼べるように公開。
 func RestoreTerminal() {
-	fmt.Fprint(os.Stdout, disableAltScrollSeq+"\033[?1049l\033[?25h")
+	fmt.Fprint(os.Stdout, "\033[?1049l\033[?25h")
 }
 
 // DebugLog は TUI デバッグログに出力する。外部パッケージから呼べるように公開。
@@ -61,13 +51,13 @@ func Run(agent AgentInterface, initialContent string, onProgram func(*tea.Progra
 
 	m := NewModel(agent, initialContent)
 
-	// マウスオプションは一切使わない。
-	// ホイールスクロールは Alternate Scroll Mode (1007) で
-	// カーソルキーに変換され、viewport の KeyUp/KeyDown で処理される。
-	// ネイティブのテキスト選択/コピペはそのまま動作する。
+	// マウスホイールを直接処理（mode 1007 経由のキー変換より低遅延）。
+	// ネイティブのテキスト選択は Shift+ドラッグで可能。
+	// コピペは /copy コマンドで対応。
 	p := tea.NewProgram(
 		m,
 		tea.WithAltScreen(),
+		tea.WithMouseCellMotion(),
 	)
 
 	if onProgram != nil {

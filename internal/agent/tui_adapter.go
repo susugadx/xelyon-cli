@@ -120,6 +120,24 @@ func (a *TUIAdapter) IsProcessing() bool {
 	return a.processing.Load()
 }
 
+// CopyLastOutput は直近のAI出力をクリップボードにコピーする。
+// historyMu でロックし、chat goroutine との data race を防ぐ。
+func (a *TUIAdapter) CopyLastOutput() (string, error) {
+	a.agent.historyMu.Lock()
+	if len(a.agent.lastOutputs) == 0 {
+		a.agent.historyMu.Unlock()
+		return "", fmt.Errorf("no AI output to copy yet")
+	}
+	output := a.agent.lastOutputs[len(a.agent.lastOutputs)-1]
+	a.agent.historyMu.Unlock()
+
+	if err := clipboardWriteAll(output); err != nil {
+		return "", err
+	}
+	lines := strings.Count(output, "\n") + 1
+	return fmt.Sprintf("Copied %d lines", lines), nil
+}
+
 // tuiCaptureWriter は agent の出力をキャプチャし TUI に送信する io.Writer
 type tuiCaptureWriter struct {
 	mu     sync.Mutex
@@ -131,25 +149,38 @@ func newTUICaptureWriter(sendFn func(string)) *tuiCaptureWriter {
 	return &tuiCaptureWriter{sendFn: sendFn}
 }
 
-// Write は書き込まれた内容を改行区切りでフラッシュする。
+// Write は書き込まれた内容をバッファに追加し、改行区切りでバッチフラッシュする。
+// \r を含む書き込みはスピナー等の行上書きアニメーションなのでドロップする。
+// 複数行が一度に届いた場合は1回の sendFn 呼び出しにまとめて Update+View サイクルを削減する。
 func (w *tuiCaptureWriter) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
+	// \r を含む書き込みはスピナー → ドロップ
+	if bytes.Contains(p, []byte("\r")) {
+		return len(p), nil
+	}
+
 	n, err := w.buf.Write(p)
 
-	// 改行を含む場合、行ごとにフラッシュ
-	for {
-		line, readErr := w.buf.ReadString('\n')
-		if readErr != nil {
-			// 改行が見つからなかった → 残りをバッファに戻す
-			if line != "" {
-				w.buf.WriteString(line)
+	// 改行を含む場合、全行をまとめて1回の sendFn で送る
+	if bytes.Contains(p, []byte("\n")) {
+		var batch strings.Builder
+		for {
+			line, readErr := w.buf.ReadString('\n')
+			if readErr != nil {
+				if line != "" {
+					w.buf.WriteString(line)
+				}
+				break
 			}
-			break
+			if batch.Len() > 0 {
+				batch.WriteByte('\n')
+			}
+			batch.WriteString(strings.TrimRight(line, "\n"))
 		}
-		if w.sendFn != nil {
-			w.sendFn(strings.TrimRight(line, "\n"))
+		if batch.Len() > 0 && w.sendFn != nil {
+			w.sendFn(batch.String())
 		}
 	}
 

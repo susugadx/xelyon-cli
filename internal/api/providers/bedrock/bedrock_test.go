@@ -187,6 +187,36 @@ func TestBedrockRequest_WithAnthropicBeta(t *testing.T) {
 	}
 }
 
+func TestBedrockRequest_WithTopLevelCacheControl(t *testing.T) {
+	req := BedrockRequest{
+		AnthropicVersion: bedrockAnthropicVersion,
+		CacheControl:     &api.CacheControl{Type: "ephemeral"},
+		MaxTokens:        4096,
+		System:           "System prompt",
+		Messages: []claude.AnthropicMessage{
+			{Role: "user", Content: []claude.AnthropicContentBlock{{Type: "text", Text: "Hello"}}},
+		},
+	}
+
+	jsonBytes, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("json.Marshal failed: %v", err)
+	}
+
+	var raw map[string]interface{}
+	if err := json.Unmarshal(jsonBytes, &raw); err != nil {
+		t.Fatalf("json.Unmarshal failed: %v", err)
+	}
+
+	cacheControl, ok := raw["cache_control"].(map[string]interface{})
+	if !ok {
+		t.Fatal("cache_control field missing or wrong type")
+	}
+	if cacheControl["type"] != "ephemeral" {
+		t.Errorf("cache_control.type = %q, want %q", cacheControl["type"], "ephemeral")
+	}
+}
+
 func TestClearToolUses_Bedrock(t *testing.T) {
 	t.Run("WithCompaction", func(t *testing.T) {
 		cfg := config.DefaultConfig()

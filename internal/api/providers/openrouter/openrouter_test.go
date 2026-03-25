@@ -377,9 +377,10 @@ func TestProvider_ChatWithImage_ClearToolUsesUsesAnthropicSkin(t *testing.T) {
 
 	var requestPath string
 	var requestBody struct {
-		Model             string        `json:"model"`
-		AnthropicBeta     []string      `json:"anthropic_beta,omitempty"`
-		Messages          []interface{} `json:"messages"`
+		Model             string            `json:"model"`
+		AnthropicBeta     []string          `json:"anthropic_beta,omitempty"`
+		CacheControl      *api.CacheControl `json:"cache_control,omitempty"`
+		Messages          []interface{}     `json:"messages"`
 		ContextManagement *struct {
 			Edits []struct {
 				Type string `json:"type"`
@@ -422,6 +423,9 @@ func TestProvider_ChatWithImage_ClearToolUsesUsesAnthropicSkin(t *testing.T) {
 	}
 	if requestBody.ContextManagement.Edits[0].Type != "clear_tool_uses_20250919" {
 		t.Errorf("Edits[0].Type = %q, want clear_tool_uses_20250919", requestBody.ContextManagement.Edits[0].Type)
+	}
+	if requestBody.CacheControl == nil || requestBody.CacheControl.Type != "ephemeral" {
+		t.Fatalf("cache_control = %+v, want top-level ephemeral cache_control", requestBody.CacheControl)
 	}
 	if !containsString(requestBody.AnthropicBeta, "context-management-2025-06-27") {
 		t.Errorf("anthropic_beta should include context-management-2025-06-27, got %v", requestBody.AnthropicBeta)
@@ -471,8 +475,9 @@ func TestProvider_ChatWithTools_ClearToolUsesUsesAnthropicSkin(t *testing.T) {
 
 	var requestPath string
 	var requestBody struct {
-		Model             string   `json:"model"`
-		AnthropicBeta     []string `json:"anthropic_beta,omitempty"`
+		Model             string            `json:"model"`
+		AnthropicBeta     []string          `json:"anthropic_beta,omitempty"`
+		CacheControl      *api.CacheControl `json:"cache_control,omitempty"`
 		ContextManagement *struct {
 			Edits []struct {
 				Type string `json:"type"`
@@ -510,6 +515,9 @@ func TestProvider_ChatWithTools_ClearToolUsesUsesAnthropicSkin(t *testing.T) {
 	}
 	if requestBody.ContextManagement.Edits[0].Type != "clear_tool_uses_20250919" {
 		t.Errorf("Edits[0].Type = %q, want clear_tool_uses_20250919", requestBody.ContextManagement.Edits[0].Type)
+	}
+	if requestBody.CacheControl == nil || requestBody.CacheControl.Type != "ephemeral" {
+		t.Fatalf("cache_control = %+v, want top-level ephemeral cache_control", requestBody.CacheControl)
 	}
 	if !containsString(requestBody.AnthropicBeta, "context-management-2025-06-27") {
 		t.Errorf("anthropic_beta should include context-management-2025-06-27, got %v", requestBody.AnthropicBeta)

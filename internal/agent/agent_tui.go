@@ -2,7 +2,6 @@ package agent
 
 import (
 	"bytes"
-	"fmt"
 	"sync/atomic"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -10,25 +9,41 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tui"
 	"github.com/susugadx/xelyon-cli/internal/ui"
-	"github.com/susugadx/xelyon-cli/internal/version"
 )
+
+// tuiAutoApproveReader は TUI モードで stdin を読む確認ダイアログに対して
+// 常に "y\n" を返す io.Reader。bubbletea が stdin を占有するため、
+// 全ツール確認を自動承認する。
+type tuiAutoApproveReader struct{}
+
+func (tuiAutoApproveReader) Read(p []byte) (int, error) {
+	data := []byte("y\n")
+	n := copy(p, data)
+	return n, nil
+}
 
 // RunTUIWithConfig は TUI モードでインタラクティブセッションを起動する。
 func RunTUIWithConfig(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
+	// TUI モードでは確認ダイアログが動作しないため、全ツールを auto-approve する。
+	// - autoApprove=true: apply_patch, write_file 等の ConfirmWithAutoApproveDecisionAndOptions 系
+	// - tuiAutoApproveReader: bash の ConfirmWithIO（stdin から直接読む）系
+	// Phase 2 で確認ダイアログを bubbletea 内に実装した後、bash の確認を復活させる。
+
 	// Agent 初期化中の stdout 出力をキャプチャするバッファ。
 	// Normal Screen に何も残さず、全てを Alt Screen の viewport に表示する。
 	var captureBuf bytes.Buffer
 	runtime := NewAgentRuntimeWithConfig(cfg)
-	runtime.UI = ui.NewRuntime(nil, &captureBuf, &captureBuf)
+	runtime.UI = ui.NewRuntime(tuiAutoApproveReader{}, &captureBuf, &captureBuf)
+	runtime.AutoApprove = true
 
-	ag := initInteractiveAgentWithRuntime(runtime, model, provider, autoApprove)
+	ag := initInteractiveAgentWithRuntime(runtime, model, provider, true)
 	defer ag.Cleanup()
 
 	// SIGTERM 時に Alt Screen を復旧するフックを登録
 	ag.exitHook = tui.RestoreTerminal
 
 	// ヘッダー + キャプチャした初期化出力を結合して初期コンテンツにする
-	initialContent := buildTUIHeader(model, provider, autoApprove) + captureBuf.String()
+	initialContent := buildTUIHeader() + captureBuf.String()
 
 	// TUIAdapter を作成（sendMsg は後で p.Send 経由で接続）
 	adapter := NewTUIAdapter(ag, nil)
@@ -74,16 +89,7 @@ func RunTUIWithConfig(model string, provider api.Provider, cfg *config.Config, a
 	})
 }
 
-// buildTUIHeader は TUI 起動時に表示するヘッダー情報を構築する。
-func buildTUIHeader(model string, provider api.Provider, autoApprove bool) string {
-	var buf bytes.Buffer
-
-	fmt.Fprintf(&buf, "🚀 XELYON CLI v%s\n", version.GetVersion())
-	fmt.Fprintf(&buf, "   Provider: %s | Model: %s\n", provider.Name(), model)
-	if autoApprove {
-		fmt.Fprintf(&buf, "   Mode: Auto-approve (safe/medium)\n")
-	}
-	fmt.Fprintf(&buf, "\n")
-
-	return buf.String()
+// buildTUIHeader は TUI 起動時のグラデーションロゴヘッダーを返す。
+func buildTUIHeader() string {
+	return buildGradientHeader()
 }

@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/signal"
@@ -263,7 +264,12 @@ func checkRipgrepAvailability(agent *Agent) {
 
 // printContextSize はコンテキストサイズをツリー形式で表示
 func printContextSize(agent *Agent) {
-	systemPromptTokens := token.EstimateTokenCount(agent.SystemPrompt)
+	out := agent.output()
+	dim.Fprint(out, buildContextSizeBlock(agent))
+}
+
+func buildContextSizeBlock(agent *Agent) string {
+	systemPromptTokens := agent.EstimateSystemPromptTokens()
 	basePromptTokens := systemPromptTokens
 	toolsTokens := 0
 	projectMapTokens := estimateProjectMapTokens(agent.SystemPrompt)
@@ -281,8 +287,8 @@ func printContextSize(agent *Agent) {
 
 	total := systemPromptTokens + toolsTokens
 
-	out := agent.output()
-	dim.Fprintf(out, "📋 Context size: ~%s tok\n", FormatTokens(total))
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "📋 Context size: ~%s tok\n", FormatTokens(total))
 
 	lines := []string{
 		fmt.Sprintf("Base prompt: ~%s", FormatTokens(basePromptTokens)),
@@ -312,8 +318,10 @@ func printContextSize(agent *Agent) {
 		if i == len(lines)-1 {
 			connector = "└──"
 		}
-		dim.Fprintf(out, "   %s %s\n", connector, line)
+		fmt.Fprintf(&buf, "   %s %s\n", connector, line)
 	}
+
+	return buf.String()
 }
 
 func estimateProjectMapTokens(systemPrompt string) int {

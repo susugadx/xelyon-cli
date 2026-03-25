@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/atotto/clipboard"
 	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/tools/subagent"
@@ -479,16 +478,9 @@ func formatNumber(n int) string {
 func handleCopyCommand(agent *Agent, args []string) bool {
 	out := agent.output()
 
-	if len(agent.lastOutputs) == 0 {
-		yellow.Fprintln(out, "No AI output to copy yet")
-		return true
-	}
-
-	// デフォルト: 最後の出力
-	outputIndex := len(agent.lastOutputs) - 1
+	// 引数解析（ロック不要な部分を先に処理）
 	codeOnly := false
-
-	// 引数解析
+	requestedN := 0 // 0 = デフォルト（最後の出力）
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		switch arg {
@@ -501,12 +493,8 @@ func handleCopyCommand(agent *Agent, args []string) bool {
 					red.Fprintf(out, "Invalid number: %s\n", args[i+1])
 					return true
 				}
-				if n < 1 || n > len(agent.lastOutputs) {
-					red.Fprintf(out, "Index out of range (1-%d): %d\n", len(agent.lastOutputs), n)
-					return true
-				}
-				outputIndex = len(agent.lastOutputs) - n
-				i++ // skip next arg
+				requestedN = n
+				i++
 			} else {
 				red.Fprintln(out, "Missing value for -n flag")
 				return true
@@ -518,7 +506,25 @@ func handleCopyCommand(agent *Agent, args []string) bool {
 		}
 	}
 
+	// lastOutputs を1回のロックでスナップショット取得（TOCTOU 回避）
+	agent.historyMu.Lock()
+	outputCount := len(agent.lastOutputs)
+	if outputCount == 0 {
+		agent.historyMu.Unlock()
+		yellow.Fprintln(out, "No AI output to copy yet")
+		return true
+	}
+	outputIndex := outputCount - 1
+	if requestedN > 0 {
+		if requestedN < 1 || requestedN > outputCount {
+			agent.historyMu.Unlock()
+			red.Fprintf(out, "Index out of range (1-%d): %d\n", outputCount, requestedN)
+			return true
+		}
+		outputIndex = outputCount - requestedN
+	}
 	output := agent.lastOutputs[outputIndex]
+	agent.historyMu.Unlock()
 
 	// コードブロックのみ抽出
 	if codeOnly {
@@ -531,10 +537,11 @@ func handleCopyCommand(agent *Agent, args []string) bool {
 	}
 
 	// クリップボードにコピー
-	if err := clipboard.WriteAll(output); err != nil {
+	if err := clipboardWriteAll(output); err != nil {
 		red.Fprintf(out, "Failed to copy to clipboard: %v\n", err)
-		if strings.Contains(err.Error(), "xclip") || strings.Contains(err.Error(), "xsel") {
-			yellow.Fprintln(out, "\nLinux requires xclip or xsel:")
+		errText := strings.ToLower(err.Error())
+		if strings.Contains(errText, "xclip") || strings.Contains(errText, "xsel") || strings.Contains(errText, "wl-copy") {
+			yellow.Fprintln(out, "\nLinux requires a clipboard utility:")
 			yellow.Fprintln(out, "  Ubuntu/Debian: sudo apt-get install xclip")
 			yellow.Fprintln(out, "  Fedora/RHEL:   sudo dnf install xclip")
 			yellow.Fprintln(out, "  Arch:          sudo pacman -S xclip")

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
@@ -146,6 +147,81 @@ func TestRefreshProjectPrompt_ReusesCachedProjectMapWithoutRelogging(t *testing.
 	}
 	if !strings.Contains(agent.SystemPrompt, "func Build()") {
 		t.Fatalf("expected refreshed project map to include symbols:\n%s", agent.SystemPrompt)
+	}
+}
+
+func TestRefreshProjectPrompt_ProjectMapStaysInDynamicSystemBlock(t *testing.T) {
+	common.ResetRipgrepAvailabilityForTest()
+	t.Cleanup(common.ResetRipgrepAvailabilityForTest)
+
+	if _, err := exec.LookPath("rg"); err != nil {
+		t.Skip("ripgrep (rg) not available")
+	}
+
+	root := t.TempDir()
+	oldwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldwd) })
+
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n\nfunc Build() {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := config.DefaultConfig()
+	cfg.PromptCache.Enabled = true
+
+	var out bytes.Buffer
+	runtime := NewAgentRuntimeWithConfig(cfg)
+	runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, io.Discard)
+	agent := &Agent{
+		Runtime:      runtime,
+		SystemPrompt: "base prompt",
+		CurrentModel: "claude-opus-4-6",
+	}
+
+	injectProjectMap(agent, "")
+	firstPrompt := agent.SystemPrompt
+
+	if !strings.Contains(firstPrompt, api.SystemPromptCacheBoundary) {
+		t.Fatalf("expected project map cache boundary in system prompt:\n%s", firstPrompt)
+	}
+
+	firstField := api.BuildSystemFieldWithConfig(firstPrompt, cfg)
+	firstBlocks, ok := firstField.([]api.SystemBlock)
+	if !ok {
+		t.Fatalf("expected []api.SystemBlock, got %T", firstField)
+	}
+	if len(firstBlocks) != 2 {
+		t.Fatalf("expected 2 system blocks after project map injection, got %d", len(firstBlocks))
+	}
+
+	if err := os.WriteFile(filepath.Join(root, "extra.go"), []byte("package main\n\nfunc Extra() {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	agent.refreshProjectPrompt("extra.go を見て")
+	secondField := api.BuildSystemFieldWithConfig(agent.SystemPrompt, cfg)
+	secondBlocks, ok := secondField.([]api.SystemBlock)
+	if !ok {
+		t.Fatalf("expected []api.SystemBlock, got %T", secondField)
+	}
+	if len(secondBlocks) != 2 {
+		t.Fatalf("expected 2 system blocks after project map refresh, got %d", len(secondBlocks))
+	}
+
+	if firstBlocks[0].Text != secondBlocks[0].Text {
+		t.Fatalf("expected static cache block to remain stable after project map change")
+	}
+	if firstBlocks[1].Text == secondBlocks[1].Text {
+		t.Fatalf("expected dynamic project map block to change after repo update")
+	}
+	if secondBlocks[1].CacheControl == nil {
+		t.Fatal("expected cache_control on dynamic project map block")
 	}
 }
 

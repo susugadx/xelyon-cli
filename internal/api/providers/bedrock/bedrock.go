@@ -117,6 +117,7 @@ func (p *Provider) IsFunctionCallingEnabled() bool {
 type BedrockRequest struct {
 	AnthropicVersion  string                    `json:"anthropic_version"`
 	AnthropicBeta     []string                  `json:"anthropic_beta,omitempty"`
+	CacheControl      *api.CacheControl         `json:"cache_control,omitempty"`
 	MaxTokens         int                       `json:"max_tokens"`
 	System            interface{}               `json:"system,omitempty"` // can be string or []api.SystemBlock
 	Messages          []claude.AnthropicMessage `json:"messages"`
@@ -129,6 +130,7 @@ type BedrockRequest struct {
 type BedrockMultimodalRequest struct {
 	AnthropicVersion  string                    `json:"anthropic_version"`
 	AnthropicBeta     []string                  `json:"anthropic_beta,omitempty"`
+	CacheControl      *api.CacheControl         `json:"cache_control,omitempty"`
 	MaxTokens         int                       `json:"max_tokens"`
 	System            interface{}               `json:"system,omitempty"`
 	Messages          []interface{}             `json:"messages"`
@@ -145,10 +147,8 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	messages := claude.ConvertToAnthropicMessages(history)
 
 	cfg := config.ResolveContext(ctx, p.effectiveConfig())
-
-	// プロンプトキャッシュ: 安定区間+最新userにブレークポイント設定
-	if cfg != nil && cfg.PromptCache.Enabled {
-		claude.SetMessageCacheBreakpointsWithConfigAndEnabled(messages, cfg, true)
+	if cfg == nil {
+		cfg = config.DefaultConfig()
 	}
 	pCfg := cfg.ProviderModels["bedrock"]
 
@@ -164,6 +164,9 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		MaxTokens:        api.GetMaxOutputTokens(ctx, "bedrock", model),
 		System:           api.BuildSystemFieldWithConfig(systemPrompt, cfg),
 		Messages:         messages,
+	}
+	if cfg.PromptCache.Enabled {
+		reqBody.CacheControl = api.NewCacheControlWithConfig(cfg)
 	}
 
 	// Extended Thinking 適用
@@ -197,10 +200,9 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	// Anthropic Messages API 形式に変換（role:"tool" → role:"user"+tool_result 等）
 	converted := claude.ConvertToAnthropicMessages(history)
 
-	// プロンプトキャッシュ: 履歴部分にブレークポイント設定
 	cfg := config.ResolveContext(ctx, p.effectiveConfig())
-	if cfg != nil && cfg.PromptCache.Enabled {
-		claude.SetMessageCacheBreakpointsWithConfigAndEnabled(converted, cfg, true)
+	if cfg == nil {
+		cfg = config.DefaultConfig()
 	}
 
 	var messages []interface{}
@@ -242,6 +244,9 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 		MaxTokens:        api.GetMaxOutputTokens(ctx, "bedrock", model),
 		System:           api.BuildSystemFieldWithConfig(systemPrompt, cfg),
 		Messages:         messages,
+	}
+	if cfg.PromptCache.Enabled {
+		reqBody.CacheControl = api.NewCacheControlWithConfig(cfg)
 	}
 
 	// Extended Thinking 適用

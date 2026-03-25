@@ -94,54 +94,6 @@ func TestIsSameToolCall(t *testing.T) {
 	}
 }
 
-func TestModelDisplayName(t *testing.T) {
-	tests := []struct {
-		name  string
-		model string
-		want  string
-	}{
-		{
-			name:  "deepseek-chat",
-			model: "deepseek-chat",
-			want:  "DeepSeek V3 (balanced)",
-		},
-		{
-			name:  "deepseek-coder",
-			model: "deepseek-coder",
-			want:  "DeepSeek Coder (code-focused)",
-		},
-		{
-			name:  "deepseek-reasoner",
-			model: "deepseek-reasoner",
-			want:  "DeepSeek R1 (reasoning)",
-		},
-		{
-			name:  "claude",
-			model: "claude",
-			want:  "Claude (Vertex AI)",
-		},
-		{
-			name:  "unknown model",
-			model: "gpt-4",
-			want:  "gpt-4",
-		},
-		{
-			name:  "custom model",
-			model: "my-custom-model",
-			want:  "my-custom-model",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := modelDisplayName(tt.model)
-			if got != tt.want {
-				t.Errorf("modelDisplayName(%q) = %q, want %q", tt.model, got, tt.want)
-			}
-		})
-	}
-}
-
 // TestNewAgent is skipped because NewAgent requires a valid provider
 // and performs significant initialization (MCP, storage, etc.)
 // These are better tested via integration tests.

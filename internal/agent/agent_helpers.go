@@ -23,7 +23,6 @@ import (
 	promptplan "github.com/susugadx/xelyon-cli/internal/prompt/plan"
 	"github.com/susugadx/xelyon-cli/internal/repomap"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
-	"github.com/susugadx/xelyon-cli/internal/version"
 )
 
 // parseImageInputWithWriter は入力から画像パスを抽出する。
@@ -67,46 +66,10 @@ func parseImageInputWithWriter(out io.Writer, input string) (text string, image 
 	return text, img
 }
 
-// ANSI color codes for gradient (blue -> cyan)
-const (
-	colorBlue1 = "\033[38;5;27m" // Deep blue
-	colorBlue2 = "\033[38;5;33m" // Blue
-	colorCyan1 = "\033[38;5;39m" // Light blue
-	colorCyan2 = "\033[38;5;45m" // Cyan
-	colorCyan3 = "\033[38;5;51m" // Bright cyan
-	colorReset = "\033[0m"
-	colorDim   = "\033[2m"
-)
-
-// printHeaderToWriter はセッション開始時のヘッダーを表示
+// printHeaderToWriter はセッション開始時のグラデーションロゴ + Provider/Model 情報を表示する。
 func printHeaderToWriter(out io.Writer, model string, provider api.Provider) {
-	// ASCII logo with info on the right side
-	// Logo lines paired with info text
-	type lineInfo struct {
-		color string
-		logo  string
-		info  string
-	}
-
-	lines := []lineInfo{
-		{colorBlue1, `██╗  ██╗`, ""},
-		{colorBlue1, `╚██╗██╔╝`, fmt.Sprintf("%sXELYON%s v%s", colorCyan2, colorReset, version.GetVersion())},
-		{colorBlue2, ` ╚███╔╝ `, fmt.Sprintf("%sAI-powered coding agent%s", colorDim, colorReset)},
-		{colorCyan1, ` ██╔██╗ `, ""},
-		{colorCyan2, `██╔╝ ██╗`, fmt.Sprintf("Provider: %s", provider.Name())},
-		{colorCyan3, `╚═╝  ╚═╝`, fmt.Sprintf("Model: %s", modelDisplayName(model))},
-	}
-
-	// Print logo with info
-	_, _ = fmt.Fprintln(out)
-	for _, l := range lines {
-		if l.info == "" {
-			_, _ = fmt.Fprintf(out, "  %s%s%s\n", l.color, l.logo, colorReset)
-		} else {
-			_, _ = fmt.Fprintf(out, "  %s%s%s   %s\n", l.color, l.logo, colorReset, l.info)
-		}
-	}
-	_, _ = fmt.Fprintln(out)
+	_, _ = fmt.Fprint(out, buildGradientHeader())
+	dim.Fprintf(out, "  Provider: %s | Model: %s\n", provider.Name(), model)
 }
 
 func printModeInfoToWriter(out io.Writer, autoApprove, dryRun bool) {
@@ -118,28 +81,8 @@ func printModeInfoToWriter(out io.Writer, autoApprove, dryRun bool) {
 		modes = append(modes, "Dry-run")
 	}
 
-	// 特殊モードのときだけ表示
 	if len(modes) > 0 {
-		yellow.Fprintf(out, "  Mode: %s\n\n", strings.Join(modes, ", "))
-	}
-
-	cyan.Fprintln(out, "  ─────────────────────────────────────────")
-	yellow.Fprintln(out, "  Type /help for commands, /exit to quit")
-}
-
-// modelDisplayName はモデル名を表示用にフォーマット
-func modelDisplayName(model string) string {
-	switch model {
-	case "deepseek-chat":
-		return "DeepSeek V3 (balanced)"
-	case "deepseek-coder":
-		return "DeepSeek Coder (code-focused)"
-	case "deepseek-reasoner":
-		return "DeepSeek R1 (reasoning)"
-	case "claude":
-		return "Claude (Vertex AI)"
-	default:
-		return model
+		yellow.Fprintf(out, "  Mode: %s\n", strings.Join(modes, ", "))
 	}
 }
 
@@ -219,7 +162,7 @@ func injectProjectMap(agent *Agent, input string) {
 	pm.MaxTokens = calcProjectMapBudget(agent, cfg, pm.GetFileCount(), pm.GetSymbolCount())
 
 	if !rebuilt && agent.projectMapSection != "" && token.EstimateTokenCount(agent.projectMapSection) <= pm.MaxTokens {
-		agent.SystemPrompt += "\n\n" + agent.projectMapSection
+		agent.SystemPrompt = appendProjectMapSection(agent.SystemPrompt, agent.projectMapSection)
 		agent.projectMapFileCount = pm.GetFileCount()
 		agent.projectMapSymbolCount = pm.GetSymbolCount()
 		agent.projectMapDirty = false
@@ -232,7 +175,7 @@ func injectProjectMap(agent *Agent, input string) {
 		return
 	}
 
-	agent.SystemPrompt += "\n\n" + mapStr
+	agent.SystemPrompt = appendProjectMapSection(agent.SystemPrompt, mapStr)
 	agent.projectMapFileCount = pm.GetFileCount()
 	agent.projectMapSymbolCount = pm.GetSymbolCount()
 	agent.projectMapSection = mapStr
@@ -241,6 +184,21 @@ func injectProjectMap(agent *Agent, input string) {
 	if rebuilt {
 		green.Fprintf(agent.output(), "🗺️  Project map loaded (%d files, %d symbols)\n", agent.projectMapFileCount, agent.projectMapSymbolCount)
 	}
+}
+
+func appendProjectMapSection(systemPrompt, section string) string {
+	if strings.TrimSpace(section) == "" {
+		return systemPrompt
+	}
+
+	// Project Map is the most volatile part of the system prompt.
+	// Put it behind a cache boundary so Claude can reuse the stable prefix
+	// even when the map changes after edits or repo-state updates.
+	if !strings.Contains(systemPrompt, api.SystemPromptCacheBoundary) {
+		return systemPrompt + api.SystemPromptCacheBoundary + section
+	}
+
+	return systemPrompt + "\n\n" + section
 }
 
 func ensureProjectMap(agent *Agent, rootPath string, ignorePatterns []string, ignoreKey string) (*repomap.ProjectMap, bool) {
@@ -350,11 +308,28 @@ func (a *Agent) refreshProjectPrompt(input string) {
 		return
 	}
 
-	systemPrompt := stripProjectMapSection(prompt.StripProjectConfigSections(a.SystemPrompt))
-	if pc := loadProjectConfig(); pc != nil {
-		systemPrompt = injectProjectConfig(systemPrompt, pc, input)
+	// project config の選択結果を構築（入力依存の conditional ブロック含む）
+	pc := loadProjectConfig()
+	var newConfigBlock string
+	if pc != nil {
+		selection := config.SelectProjectPromptSelection(pc, input)
+		newConfigBlock = prompt.BuildProjectConfigBlock(selection.Rules, selection.Contexts)
 	}
-	a.SystemPrompt = systemPrompt
+
+	// project config が前回と同じなら strip → inject の再構築をスキップ。
+	// 繰り返しで改行数が変わりキャッシュ prefix が無効化されるのを回避。
+	oldConfigBlock := prompt.ExtractProjectConfigBlock(a.SystemPrompt)
+	if strings.TrimSpace(newConfigBlock) != strings.TrimSpace(oldConfigBlock) {
+		// project config が変わった → system prompt を再構築
+		systemPrompt := stripProjectMapSection(prompt.StripProjectConfigSections(a.SystemPrompt))
+		if newConfigBlock != "" {
+			systemPrompt = prompt.InjectProjectConfigBlock(systemPrompt, newConfigBlock)
+		}
+		a.SystemPrompt = systemPrompt
+	} else {
+		// project config は同じ → project map 部分のみ更新
+		a.SystemPrompt = stripProjectMapSection(a.SystemPrompt)
+	}
 	injectProjectMap(a, input)
 }
 

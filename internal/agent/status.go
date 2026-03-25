@@ -96,10 +96,13 @@ func (a *Agent) FormatStatusLine() string {
 		modeText = "Plan"
 	}
 
+	// TUI の spinner tick goroutine と agent.chat goroutine から同時にアクセスされるためロック
+	a.statsMu.Lock()
 	tokens := a.Stats.TotalTokens()
 	tokenStr := FormatTokens(tokens)
-
 	cost := a.Stats.EstimatedCost()
+	a.statsMu.Unlock()
+
 	if manager := a.subAgentManager(); manager != nil {
 		summary := manager.GetSummary()
 		cost += summary.TotalCost
@@ -108,19 +111,24 @@ func (a *Agent) FormatStatusLine() string {
 	sep := statusDim.Sprint("│")
 	indicator := statusGreen.Sprint("●")
 
-	providerLower := strings.ToLower(a.ProviderName)
+	providerDisplay := a.ProviderName
+	providerLower := strings.ToLower(providerDisplay)
 	if providerLower == "ollama" {
-		return fmt.Sprintf("%s %s %s %s %s %s",
+		return fmt.Sprintf("%s %s %s %s %s %s %s %s",
 			indicator,
 			statusCyan.Sprint(a.CurrentModel),
+			sep,
+			providerDisplay,
 			sep,
 			modeText,
 			sep,
 			tokenStr)
 	}
-	return fmt.Sprintf("%s %s %s %s %s %s %s ~$%.3f",
+	return fmt.Sprintf("%s %s %s %s %s %s %s %s %s ~$%.3f",
 		indicator,
 		statusCyan.Sprint(a.CurrentModel),
+		sep,
+		providerDisplay,
 		sep,
 		modeText,
 		sep,

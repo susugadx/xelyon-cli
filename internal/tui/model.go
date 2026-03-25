@@ -1,23 +1,33 @@
 package tui
 
 import (
-	"fmt"
 	"log"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
-	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
 const (
-	statusBarHeight = 1
-	inputHeight     = 1
-	chromeHeight    = statusBarHeight + inputHeight
+	statusBarHeight  = 1
+	inputHeight      = 3 // 上パディング1 + 入力行1 + 下パディング1
+	chromeHeight     = statusBarHeight + inputHeight
+	inputPrompt      = "› "
+	inputPromptWidth = 2 // lipgloss.Width(inputPrompt) の事前計算値
 )
+
+var statusHintsNormal = []string{
+	"Esc:NAV • /copy • Shift+drag",
+	"Esc:NAV • /copy",
+}
+var statusHintsNav = []string{
+	"y:copy • gg/G • d/u • j/k • i/Esc:back",
+	"y • gg/G • d/u • i/Esc",
+}
 
 // debugLog は TUI デバッグログ用のロガー（XELYON_TUI_DEBUG=1 で有効化）
 var debugLog *log.Logger
@@ -39,67 +49,63 @@ func tuiDebugf(format string, args ...any) {
 
 // Model は bubbletea の Model インターフェースを実装する TUI のメインモデル。
 type Model struct {
-	agent         AgentInterface
-	viewport      viewport.Model
-	textInput     textinput.Model
-	messages      []ChatMessage
-	content       *strings.Builder // viewport に表示するテキスト全体（ポインタ: bubbletea の値コピーで panic 回避）
-	statusLine    string
-	width         int
-	height        int
-	newOutput     bool // 上スクロール中に新出力があったか
-	ready         bool // viewport 初期化済みか
-	quitting      bool
-	lastInterrupt time.Time
+	agent                AgentInterface
+	vp                   lightViewport // 軽量 viewport（bubbles/viewport は lipgloss が重いため自前実装）
+	textInput            textinput.Model
+	spinner              spinner.Model
+	messages             []ChatMessage
+	rawLines             []string // 元の行データ。リサイズ時はこれを再レンダリングする
+	renderedLines        []string // viewport に渡す現在幅向けの行データ
+	statusLine           string
+	padLineCache         string // View() 用の背景パディング行キャッシュ
+	chromeCache          string // View() 用の chrome 部分キャッシュ（入力欄+ステータス）
+	chromeDirty          bool   // chrome 再構築が必要か
+	width                int
+	height               int
+	newOutput            bool // 上スクロール中に新出力があったか
+	ready                bool // viewport 初期化済みか
+	quitting             bool
+	navigationMode       bool      // Vim ナビゲーションモード
+	gPressed             bool      // g キーが1回押された状態
+	transientStatus      string    // 一時通知メッセージ
+	transientStatusUntil time.Time // 一時通知の有効期限
+	lastInterrupt        time.Time
 }
 
 // NewModel は TUI Model を作成する。
 func NewModel(agent AgentInterface, initialContent string) Model {
 	ti := textinput.New()
+	ti.Prompt = ""
 	ti.Placeholder = "Type your message..."
 	ti.Focus()
 	ti.CharLimit = 0 // 無制限
 	ti.Width = 80    // 後で WindowSize で更新
 
-	m := Model{
+	// XELYON ブランドカラーのスピナー（processing中にステータスバーに表示）
+	sp := spinner.New()
+	sp.Spinner = spinner.Dot
+	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
+
+	initLines := []string{}
+	if initialContent != "" {
+		initLines = strings.Split(initialContent, "\n")
+	}
+	return Model{
 		agent:      agent,
 		textInput:  ti,
-		content:    &strings.Builder{},
+		spinner:    sp,
+		rawLines:   append([]string(nil), initLines...),
 		messages:   []ChatMessage{},
 		statusLine: agent.GetStatusLine(),
 	}
-	if initialContent != "" {
-		m.content.WriteString(initialContent)
-	}
-	return m
-}
-
-// enableAltScroll は Alternate Scroll Mode (DECSET 1007) を有効化する tea.Cmd。
-// マウスホイールがカーソルキー(Up/Down)に変換され、viewport でスクロール処理される。
-// マウストラッキングを使わないため、ネイティブのテキスト選択/コピペが完全に動作する。
-// NOTE: bubbletea 自身も Init 段階で Alt Screen (\x1b[?1049h) を stdout に直接書くため、
-// 同タイミングでの stdout 書き込みは安全。レンダリングループ中は避けること。
-func enableAltScroll() tea.Msg {
-	_, _ = fmt.Fprint(os.Stdout, enableAltScrollSeq)
-	return nil
 }
 
 // Init は bubbletea の Init を実装する。
 func (m Model) Init() tea.Cmd {
 	return tea.Batch(
 		textinput.Blink,
-		m.tickStatus(),
-		enableAltScroll,
+		m.spinner.Tick,
 	)
-}
-
-// tickStatusMsg はステータスバー定期更新用の Msg
-type tickStatusMsg time.Time
-
-func (m Model) tickStatus() tea.Cmd {
-	return tea.Tick(time.Second, func(t time.Time) tea.Msg {
-		return tickStatusMsg(t)
-	})
 }
 
 // Update は bubbletea の Update を実装する。
@@ -107,10 +113,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
+	case tea.MouseMsg:
+		// ホイールイベントのみ viewport スクロール。それ以外は完全に無視。
+		// textInput に MouseMsg を渡すと挙動がおかしくなるため即 return。
+		switch msg.Button {
+		case tea.MouseButtonWheelUp:
+			m.vp.scrollUp(3)
+		case tea.MouseButtonWheelDown:
+			m.vp.scrollDown(3)
+		}
+		return m, nil
+
 	case tea.KeyMsg:
 		return m.handleKeyMsg(msg)
 
 	case tea.WindowSizeMsg:
+		wasAtBottom := m.ready && m.vp.atBottom()
+		widthChanged := m.width != msg.Width
 		m.width = msg.Width
 		m.height = msg.Height
 		viewportHeight := m.height - chromeHeight
@@ -118,50 +137,68 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			viewportHeight = 1
 		}
 		if !m.ready {
-			m.viewport = viewport.New(m.width, viewportHeight)
-			m.viewport.SetContent(m.content.String())
-			m.viewport.GotoBottom()
+			m.vp = lightViewport{width: m.width, height: viewportHeight}
+			m.rebuildRenderedLines()
+			m.vp.setLines(m.renderedLines)
+			m.vp.gotoBottom()
 			m.ready = true
 		} else {
-			m.viewport.Width = m.width
-			m.viewport.Height = viewportHeight
+			m.vp.width = m.width
+			m.vp.height = viewportHeight
+			if widthChanged {
+				m.rebuildRenderedLines()
+			}
+			m.vp.setLines(m.renderedLines)
+			if wasAtBottom {
+				m.vp.gotoBottom()
+			}
 		}
-		m.textInput.Width = m.width - 4 // "> " prefix + padding
+		m.textInput.Width = max(0, m.width-inputPromptWidth-1)
+		m.padLineCache = "\033[48;5;236m" + strings.Repeat(" ", m.width) + "\033[0m"
+		m.chromeDirty = true
 
 	case AppendMessageMsg:
-		m.appendMessage(msg.Message)
+		cmds = append(cmds, m.appendMessage(msg.Message))
 
 	case StreamTextMsg:
-		m.appendStreamText(msg.Text)
+		cmds = append(cmds, m.appendStreamText(msg.Text))
 		if msg.Done {
 			m.statusLine = m.agent.GetStatusLine()
+			m.chromeDirty = true
 		}
 
 	case UpdateStatusMsg:
 		m.statusLine = msg.Line
+		m.chromeDirty = true
 
 	case AgentDoneMsg:
 		m.statusLine = m.agent.GetStatusLine()
+		m.chromeDirty = true
 
-	case tickStatusMsg:
+	case spinner.TickMsg:
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		cmds = append(cmds, cmd)
 		if m.agent.IsProcessing() {
 			m.statusLine = m.agent.GetStatusLine()
 		}
-		cmds = append(cmds, m.tickStatus())
+		m.chromeDirty = true // スピナーフレーム変化
 	}
 
-	// viewport の更新
-	if m.ready {
-		var cmd tea.Cmd
-		m.viewport, cmd = m.viewport.Update(msg)
-		cmds = append(cmds, cmd)
-	}
+	// lightViewport は状態を持たないので、キー以外のイベントでの Update は不要
 
 	// textInput の更新（KeyMsg 以外）
 	if _, ok := msg.(tea.KeyMsg); !ok {
 		var cmd tea.Cmd
 		m.textInput, cmd = m.textInput.Update(msg)
 		cmds = append(cmds, cmd)
+	}
+
+	// chrome（入力欄+ステータスバー）を再構築。
+	// スクロール時は chromeDirty=false なのでスキップされ、bubbletea の diff で変化なし→描画スキップ。
+	if m.chromeDirty {
+		m.chromeDirty = false
+		m.rebuildChrome()
 	}
 
 	return m, tea.Batch(cmds...)
@@ -182,8 +219,8 @@ func isEnterKey(msg tea.KeyMsg) bool {
 func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	tuiDebugf("KeyMsg: Type=%d(%s) Runes=%v String=%q", msg.Type, msg.Type, msg.Runes, msg.String())
 
-	switch {
-	case msg.Type == tea.KeyCtrlC:
+	// Ctrl+C は常に最優先
+	if msg.Type == tea.KeyCtrlC {
 		if m.agent.IsProcessing() {
 			m.agent.Cancel()
 			m.appendSystemInfo("⚠️  Interrupted. Press Ctrl+C again to exit.")
@@ -198,6 +235,23 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.lastInterrupt = now
 		m.appendSystemInfo("⚠️  Interrupted. Press Ctrl+C again within 3 seconds to exit.")
 		return m, nil
+	}
+
+	// ナビゲーションモード
+	if m.navigationMode {
+		return m.handleNavigationKey(msg)
+	}
+
+	// 入力モード
+	switch {
+	case msg.Type == tea.KeyEsc:
+		// 入力欄が空の場合のみ NAV モードに入る
+		if strings.TrimSpace(m.textInput.Value()) == "" {
+			m.navigationMode = true
+			m.textInput.Blur()
+			m.chromeDirty = true
+			return m, nil
+		}
 
 	case isEnterKey(msg):
 		tuiDebugf("Enter detected, textInput value=%q", m.textInput.Value())
@@ -207,14 +261,12 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.textInput.Reset()
 
-		// ユーザー入力を会話ログに追加
 		m.appendMessage(ChatMessage{
 			Role:      "user",
 			Content:   input,
 			Timestamp: time.Now(),
 		})
 
-		// コマンドチェック
 		if strings.HasPrefix(input, "/") {
 			if input == "/exit" || input == "/quit" {
 				m.quitting = true
@@ -227,20 +279,95 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		// AIに送信（goroutine）
 		return m, m.sendChat(input)
 
-	case msg.Type == tea.KeyUp, msg.Type == tea.KeyDown,
-		msg.Type == tea.KeyPgUp, msg.Type == tea.KeyPgDown:
-		var cmd tea.Cmd
-		m.viewport, cmd = m.viewport.Update(msg)
-		return m, cmd
+	case msg.Type == tea.KeyUp:
+		m.vp.scrollUp(1)
+		return m, nil
+	case msg.Type == tea.KeyDown:
+		m.vp.scrollDown(1)
+		return m, nil
+	case msg.Type == tea.KeyPgUp:
+		m.vp.scrollUp(m.vp.height)
+		return m, nil
+	case msg.Type == tea.KeyPgDown:
+		m.vp.scrollDown(m.vp.height)
+		return m, nil
 	}
 
 	// その他のキーは textInput に渡す
 	var cmd tea.Cmd
 	m.textInput, cmd = m.textInput.Update(msg)
+	m.chromeDirty = true
 	return m, cmd
+}
+
+// handleNavigationKey はナビゲーションモードのキー処理。
+func (m Model) handleNavigationKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// 入力モードに戻るキー
+	switch msg.Type {
+	case tea.KeyEsc, tea.KeyEnter:
+		m.navigationMode = false
+		m.gPressed = false
+		m.textInput.Focus()
+		m.chromeDirty = true
+		return m, nil
+	}
+
+	s := msg.String()
+
+	// g の2回押し判定
+	if m.gPressed {
+		m.gPressed = false
+		if s == "g" {
+			m.vp.gotoTop()
+			return m, nil
+		}
+		// g + 別キー → リセットして通常ナビ処理に落とす
+	}
+
+	switch s {
+	case "q", "i":
+		m.navigationMode = false
+		m.gPressed = false
+		m.textInput.Focus()
+		m.chromeDirty = true
+		return m, nil
+	case "j":
+		m.vp.scrollDown(1)
+	case "k":
+		m.vp.scrollUp(1)
+	case "d":
+		m.vp.halfPageDown()
+	case "u":
+		m.vp.halfPageUp()
+	case "G":
+		m.vp.gotoBottom()
+	case "g":
+		m.gPressed = true
+	case "y":
+		summary, err := m.agent.CopyLastOutput()
+		m.chromeDirty = true
+		if err != nil {
+			m.transientStatus = "Copy failed: " + err.Error()
+		} else {
+			m.transientStatus = "✅ " + summary
+		}
+		m.transientStatusUntil = time.Now().Add(2 * time.Second)
+	default:
+		// スクロールキーもサポート
+		switch msg.Type {
+		case tea.KeyUp:
+			m.vp.scrollUp(1)
+		case tea.KeyDown:
+			m.vp.scrollDown(1)
+		case tea.KeyPgUp:
+			m.vp.scrollUp(m.vp.height)
+		case tea.KeyPgDown:
+			m.vp.scrollDown(m.vp.height)
+		}
+	}
+	return m, nil
 }
 
 // sendChat は goroutine で agent.Chat を呼び出す tea.Cmd を返す。
@@ -252,56 +379,170 @@ func (m Model) sendChat(input string) tea.Cmd {
 }
 
 // appendMessage は会話ログにメッセージを追加する。
-func (m *Model) appendMessage(msg ChatMessage) {
+func (m *Model) appendMessage(msg ChatMessage) tea.Cmd {
 	m.messages = append(m.messages, msg)
 
-	// viewport の content に追加
-	var line string
 	switch msg.Role {
 	case "user":
-		line = fmt.Sprintf("\n> %s\n", msg.Content)
-	case "assistant":
-		line = msg.Content + "\n"
-	case "system_info":
-		line = msg.Content + "\n"
+		return m.appendContentLines("", "> "+msg.Content, "")
 	default:
-		line = msg.Content + "\n"
+		return m.appendContentLines(strings.Split(msg.Content, "\n")...)
 	}
-
-	m.content.WriteString(line)
-	m.updateViewport()
 }
 
 // appendStreamText はストリーミングテキストを追加する。
-func (m *Model) appendStreamText(text string) {
-	m.content.WriteString(text)
-	m.updateViewport()
+func (m *Model) appendStreamText(text string) tea.Cmd {
+	if text == "" {
+		return nil
+	}
+	return m.appendContentLines(strings.Split(text, "\n")...)
 }
 
 // appendSystemInfo はシステム情報メッセージを追加する。
-func (m *Model) appendSystemInfo(text string) {
-	m.appendMessage(ChatMessage{
+func (m *Model) appendSystemInfo(text string) tea.Cmd {
+	return m.appendMessage(ChatMessage{
 		Role:      "system_info",
 		Content:   text,
 		Timestamp: time.Now(),
 	})
 }
 
-// updateViewport は viewport の内容を更新し、必要に応じて最下部に追従する。
-func (m *Model) updateViewport() {
-	if !m.ready {
-		return
+// appendContentLines は生ログと描画済みログの両方に新しい行を追加する。
+func (m *Model) appendContentLines(lines ...string) tea.Cmd {
+	if len(lines) == 0 {
+		return nil
 	}
-	atBottom := m.viewport.AtBottom()
-	m.viewport.SetContent(m.content.String())
-	if atBottom {
-		m.viewport.GotoBottom()
-		m.newOutput = false
-	} else {
-		m.newOutput = true
+	m.rawLines = append(m.rawLines, lines...)
+	for _, line := range lines {
+		m.renderedLines = append(m.renderedLines, m.renderLine(line))
+	}
+	if m.ready {
+		atBottom := m.vp.atBottom()
+		m.vp.setLines(m.renderedLines)
+		if atBottom {
+			m.vp.gotoBottom()
+			m.newOutput = false
+		} else {
+			m.newOutput = true
+		}
+	}
+	return nil
+}
+
+// rebuildRenderedLines は現在幅に合わせて表示用の行キャッシュを再構築する。
+func (m *Model) rebuildRenderedLines() {
+	m.renderedLines = make([]string, len(m.rawLines))
+	for i, line := range m.rawLines {
+		m.renderedLines[i] = m.renderLine(line)
 	}
 }
 
+// renderLine は現在幅に合わせて1行だけ表示用に切り詰める。
+func (m *Model) renderLine(line string) string {
+	if m.width <= 0 || len(line) <= m.width {
+		return line
+	}
+	if lipgloss.Width(line) <= m.width {
+		return line
+	}
+	return truncateWithANSI(line, m.width)
+}
+
+// truncateWithANSI は ANSI エスケープを保持しつつ表示幅を制限する。
+// CJK 全角文字（幅2）を正しくカウントする。
+func truncateWithANSI(s string, maxWidth int) string {
+	var result strings.Builder
+	width := 0
+	inEscape := false
+	for _, r := range s {
+		if r == '\033' {
+			inEscape = true
+			result.WriteRune(r)
+			continue
+		}
+		if inEscape {
+			result.WriteRune(r)
+			if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') {
+				inEscape = false
+			}
+			continue
+		}
+		w := runeWidth(r)
+		if width+w > maxWidth {
+			break
+		}
+		result.WriteRune(r)
+		width += w
+	}
+	return result.String()
+}
+
+// runeWidth は文字の表示幅を返す（CJK 全角 = 2、それ以外 = 1）。
+func runeWidth(r rune) int {
+	// CJK Unified Ideographs, Hiragana, Katakana, Fullwidth Forms, etc.
+	if r >= 0x1100 && // Korean Jamo
+		(r <= 0x115F || r == 0x2329 || r == 0x232A ||
+			(r >= 0x2E80 && r <= 0x303E) || // CJK Radicals, Kangxi, CJK Symbols
+			(r >= 0x3040 && r <= 0x33BF) || // Hiragana, Katakana, Bopomofo, etc.
+			(r >= 0x3400 && r <= 0x4DBF) || // CJK Unified Ideographs Extension A
+			(r >= 0x4E00 && r <= 0xA4CF) || // CJK Unified Ideographs, Yi
+			(r >= 0xA960 && r <= 0xA97C) || // Hangul Jamo Extended-A
+			(r >= 0xAC00 && r <= 0xD7A3) || // Hangul Syllables
+			(r >= 0xF900 && r <= 0xFAFF) || // CJK Compatibility Ideographs
+			(r >= 0xFE10 && r <= 0xFE6F) || // Vertical forms, CJK Compatibility Forms
+			(r >= 0xFF01 && r <= 0xFF60) || // Fullwidth Forms
+			(r >= 0xFFE0 && r <= 0xFFE6) || // Fullwidth Signs
+			(r >= 0x1F000 && r <= 0x1FFFF) || // Emoji, Mahjong, etc.
+			(r >= 0x20000 && r <= 0x3FFFF)) { // CJK Unified Ideographs Extensions
+		return 2
+	}
+	return 1
+}
+
+// rebuildChrome は入力欄+ステータスバーを再構築する。
+// Update() 内で chromeDirty 時のみ呼ばれる（View() は値レシーバーなので書き込み不可）。
+func (m *Model) rebuildChrome() {
+	const inputBg = "\033[48;5;236m"
+	const hintColor = "\033[38;5;244m"
+	tiView := strings.ReplaceAll(m.textInput.View(), "\033[0m", "\033[0m"+inputBg)
+	inputLine := inputBg + " \033[38;5;46m" + inputPrompt + "\033[38;5;252m" + tiView + "\033[0m"
+
+	var statusText string
+	if m.navigationMode {
+		statusText = " \033[48;5;33;38;5;255m NAV \033[0m " + m.statusLine
+	} else if m.agent.IsProcessing() {
+		statusText = " " + m.spinner.View() + " " + m.statusLine
+	} else {
+		statusText = " " + m.statusLine
+	}
+
+	// スクロールアップ中の新出力通知
+	if m.newOutput && !m.vp.atBottom() {
+		statusText += "  \033[48;5;63;38;5;230m ↓ New output \033[0m"
+	}
+
+	// 一時通知があればステータスに上書き表示
+	if m.transientStatus != "" && time.Now().Before(m.transientStatusUntil) {
+		statusText += "  \033[38;5;82m" + m.transientStatus + "\033[0m"
+	}
+
+	hints := statusHintsNormal
+	if m.navigationMode {
+		hints = statusHintsNav
+	}
+	statusBar := statusText
+	for _, hint := range hints {
+		padding := m.width - lipgloss.Width(statusText) - lipgloss.Width(hint)
+		if padding >= 2 {
+			statusBar = statusText + strings.Repeat(" ", padding) + hintColor + hint + "\033[0m"
+			break
+		}
+	}
+
+	m.chromeCache = m.padLineCache + "\n" + inputLine + "\n" + m.padLineCache + "\n" + statusBar
+}
+
+// syncViewport は高速スクロール領域全体を再描画する。
 // View は bubbletea の View を実装する。
 func (m Model) View() string {
 	if m.quitting {
@@ -310,36 +551,5 @@ func (m Model) View() string {
 	if !m.ready {
 		return "Initializing..."
 	}
-
-	// Viewport
-	viewportView := m.viewport.View()
-
-	// 上スクロール中の「↓ New output」バッジ
-	if m.newOutput && !m.viewport.AtBottom() {
-		badge := newOutputBadge.Render("↓ New output")
-		// viewport の最終行に右寄せでオーバーレイ
-		lines := strings.Split(viewportView, "\n")
-		if len(lines) > 0 {
-			lastIdx := len(lines) - 1
-			padding := m.width - lipgloss.Width(badge)
-			if padding < 0 {
-				padding = 0
-			}
-			lines[lastIdx] = strings.Repeat(" ", padding) + badge
-			viewportView = strings.Join(lines, "\n")
-		}
-	}
-
-	// ステータスバー
-	statusBar := statusBarStyle.Width(m.width).Render(m.statusLine)
-
-	// 入力欄
-	inputView := inputPrefixStyle.Render("> ") + m.textInput.View()
-
-	return lipgloss.JoinVertical(
-		lipgloss.Left,
-		viewportView,
-		statusBar,
-		inputView,
-	)
+	return m.vp.view() + "\n" + m.chromeCache
 }

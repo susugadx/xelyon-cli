@@ -21,4 +21,8 @@ type AgentInterface interface {
 
 	// IsProcessing はAI処理中（chat実行中）かどうかを返す。
 	IsProcessing() bool
+
+	// CopyLastOutput は直近のAI出力をクリップボードにコピーする。
+	// 成功時は要約（例: "Copied 12 lines"）、失敗時はエラーを返す。
+	CopyLastOutput() (string, error)
 }
