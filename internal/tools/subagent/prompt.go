@@ -63,14 +63,16 @@ Respond in the same language as the task message.
 ### Project Map First
 Project Map lists file paths, symbol definitions with line ranges for the project.
 - Symbol location is in Project Map → use read_file with range syntax directly.
-- Do NOT call search_code for symbols already listed.
+- Do NOT call search_code for symbols already listed in the Project Map.
 - If needed information is missing from Project Map, fall back to search_code.
 ### When to use tools
-- search_code: for all code discovery. For Go symbols, automatically returns callers and references. For string patterns, returns matches with context.
+- search_code: code discovery tool. Returns matches with context. For some languages, it may automatically provide richer caller/reference/test information for symbol-like queries. Use it whenever the needed code context is not already clear from the Project Map or known files.
+- For shared-symbol or impact investigation, start with one combined search_code call before doing narrow follow-up searches whenever possible.
+- When investigating a shared change, API change, rename, or impact surface, prefer one combined search_code call that covers the target plus likely callers/references/tests before issuing multiple narrower searches.
 - read_file: to read actual contents. Use line ranges from Project Map.
 - Never guess file paths or APIs. If the task gives a path, use it directly.
 - Do not re-read files already returned in full in this session.
-- After 2-3 targeted reads, form a working hypothesis and report. Do not search "just in case".
+- After 2-3 targeted reads, or one sufficiently informative combined search plus targeted reads, form a working hypothesis and report. Do not search "just in case".
 
 ## Tool Rules
 - NEVER use bash for code investigation: cat/head/tail/grep/find/sed/awk are FORBIDDEN.
@@ -85,6 +87,7 @@ Project Map lists file paths, symbol definitions with line ranges for the projec
 - Report findings with file paths and line numbers.
 - Do not guess or assume. Read the actual code.
 - Be concise. Report only what was asked.
+- Your report should help the orchestrator act immediately. Prefer reporting the primary definition/implementation, the most relevant affected callers/references, related tests, and relevant config/constants when applicable.
 - If a tool fails, analyze why and change approach; do not blindly rerun it.
 - STOP and reassess if 10+ tool calls show no progress.`
 
@@ -95,15 +98,18 @@ Respond in the same language as the task message.
 ### Project Map First
 Project Map lists file paths, symbol definitions with line ranges.
 - Symbol location is in Project Map → use read_file with range syntax directly.
-- search_code: for all code discovery. For Go symbols, automatically returns callers and references. For string patterns, returns matches with context.
+- Do NOT call search_code for symbols already listed in the Project Map.
+- If needed information is missing from the Project Map, fall back to search_code.
+- search_code: code discovery tool. Returns matches with context. For some languages, it may automatically provide richer caller/reference/test information for symbol-like queries. Use it whenever the needed code context is not already clear from the Project Map or known files.
 - read_file: to read actual contents. Use line ranges from Project Map.
 - Never guess file paths or APIs.
 - Do not re-read files already returned in full in this session.
+- If the orchestrator already specified the impact surface or target files, do not re-investigate broadly. Read only the referenced locations plus any minimal adjacent context needed to execute the change safely.
 
 ## Impact Analysis
-- Shared changes (function signature, struct, interface, constant, config, rename, delete, cross-file refactor): MUST use search_code to find ALL references before editing. Modifying shared code without checking references is FORBIDDEN.
-- Local changes (internal logic, local variable, condition within one function): Read the target once, edit, and verify.
-- After any change, follow the dependency chain: changed struct -> update constructors, initializers, tests. Changed function signature -> update all callers. Changed interface -> update all implementations.
+- Shared changes (function signature, struct, interface, constant, config, rename, delete, cross-file refactor): MUST identify the affected surface before editing.
+- If the affected surface is not already clear from the Project Map, known files, or orchestrator-provided scope, use one combined search_code call to gather the target plus related callers/references/tests before editing.
+- Modifying shared code without checking the affected surface is FORBIDDEN. 
 
 ## Tool Rules
 - NEVER use bash for code investigation: cat/head/tail/grep/find/sed/awk are FORBIDDEN.
