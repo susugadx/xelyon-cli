@@ -25,8 +25,12 @@ var statusHintsNormal = []string{
 	"Esc:NAV • /copy",
 }
 var statusHintsNav = []string{
-	"y:copy • gg/G • d/u • j/k • i/Esc:back",
-	"y • gg/G • d/u • i/Esc",
+	"y:copy • gg/G • d/u • j/k • Tab:blocks • i/Esc:back",
+	"y • gg/G • d/u • Tab:blocks • i/Esc",
+}
+var statusHintsBlockFocus = []string{
+	"Tab/Enter:toggle • j/k:blocks • y:copy • Esc:unfocus",
+	"Tab • j/k • y • Esc",
 }
 
 // debugLog は TUI デバッグログ用のロガー（XELYON_TUI_DEBUG=1 で有効化）
@@ -47,6 +51,13 @@ func tuiDebugf(format string, args ...any) {
 	}
 }
 
+// toolBlockInfo は表示上のツール結果ブロックを追跡する。
+type toolBlockInfo struct {
+	lineStart int        // rawLines でのブロック開始行インデックス
+	lineCount int        // ブロックが占める行数
+	tool      ToolResult // ツール結果データ
+}
+
 // Model は bubbletea の Model インターフェースを実装する TUI のメインモデル。
 type Model struct {
 	agent                AgentInterface
@@ -54,8 +65,10 @@ type Model struct {
 	textInput            textinput.Model
 	spinner              spinner.Model
 	messages             []ChatMessage
-	rawLines             []string // 元の行データ。リサイズ時はこれを再レンダリングする
-	renderedLines        []string // viewport に渡す現在幅向けの行データ
+	rawLines             []string        // 元の行データ。リサイズ時はこれを再レンダリングする
+	renderedLines        []string        // viewport に渡す現在幅向けの行データ
+	toolBlocks           []toolBlockInfo // ツール結果ブロック
+	focusedBlock         int             // NAVモードでフォーカス中のツールブロックインデックス（-1=なし）
 	statusLine           string
 	padLineCache         string // View() 用の背景パディング行キャッシュ
 	chromeCache          string // View() 用の chrome 部分キャッシュ（入力欄+ステータス）
@@ -91,12 +104,13 @@ func NewModel(agent AgentInterface, initialContent string) Model {
 		initLines = strings.Split(initialContent, "\n")
 	}
 	return Model{
-		agent:      agent,
-		textInput:  ti,
-		spinner:    sp,
-		rawLines:   append([]string(nil), initLines...),
-		messages:   []ChatMessage{},
-		statusLine: agent.GetStatusLine(),
+		agent:        agent,
+		textInput:    ti,
+		spinner:      sp,
+		rawLines:     append([]string(nil), initLines...),
+		messages:     []ChatMessage{},
+		focusedBlock: -1,
+		statusLine:   agent.GetStatusLine(),
 	}
 }
 
@@ -159,6 +173,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case AppendMessageMsg:
 		cmds = append(cmds, m.appendMessage(msg.Message))
+
+	case AppendToolResultMsg:
+		cmds = append(cmds, m.appendToolResult(msg.Tool))
 
 	case StreamTextMsg:
 		cmds = append(cmds, m.appendStreamText(msg.Text))
@@ -304,13 +321,40 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // handleNavigationKey はナビゲーションモードのキー処理。
 func (m Model) handleNavigationKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// 入力モードに戻るキー
 	switch msg.Type {
-	case tea.KeyEsc, tea.KeyEnter:
+	case tea.KeyEsc:
+		// ブロックフォーカス中 → フォーカス解除
+		if m.focusedBlock >= 0 {
+			m.clearBlockFocus()
+			m.chromeDirty = true
+			return m, nil
+		}
+		// NAVモード終了
 		m.navigationMode = false
 		m.gPressed = false
 		m.textInput.Focus()
 		m.chromeDirty = true
+		return m, nil
+	case tea.KeyEnter:
+		// ブロックフォーカス中 → 折りたたみトグル
+		if m.focusedBlock >= 0 && m.focusedBlock < len(m.toolBlocks) {
+			m.toggleToolBlock(m.focusedBlock)
+			return m, nil
+		}
+		// NAVモード終了
+		m.navigationMode = false
+		m.gPressed = false
+		m.textInput.Focus()
+		m.chromeDirty = true
+		return m, nil
+	case tea.KeyTab:
+		// Tab: フォーカス中 → トグル、未フォーカス → 最後のブロックにフォーカス
+		if m.focusedBlock >= 0 && m.focusedBlock < len(m.toolBlocks) {
+			m.toggleToolBlock(m.focusedBlock)
+		} else if len(m.toolBlocks) > 0 {
+			m.setBlockFocus(len(m.toolBlocks) - 1)
+			m.chromeDirty = true
+		}
 		return m, nil
 	}
 
@@ -328,15 +372,26 @@ func (m Model) handleNavigationKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch s {
 	case "q", "i":
+		if m.focusedBlock >= 0 {
+			m.clearBlockFocus()
+		}
 		m.navigationMode = false
 		m.gPressed = false
 		m.textInput.Focus()
 		m.chromeDirty = true
 		return m, nil
 	case "j":
-		m.vp.scrollDown(1)
+		if m.focusedBlock >= 0 && len(m.toolBlocks) > 0 {
+			m.moveBlockFocus(m.focusedBlock + 1)
+		} else {
+			m.vp.scrollDown(1)
+		}
 	case "k":
-		m.vp.scrollUp(1)
+		if m.focusedBlock >= 0 && len(m.toolBlocks) > 0 {
+			m.moveBlockFocus(m.focusedBlock - 1)
+		} else {
+			m.vp.scrollUp(1)
+		}
 	case "d":
 		m.vp.halfPageDown()
 	case "u":
@@ -346,14 +401,22 @@ func (m Model) handleNavigationKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "g":
 		m.gPressed = true
 	case "y":
-		summary, err := m.agent.CopyLastOutput()
-		m.chromeDirty = true
-		if err != nil {
-			m.transientStatus = "Copy failed: " + err.Error()
+		if m.focusedBlock >= 0 && m.focusedBlock < len(m.toolBlocks) {
+			// フォーカス中のブロック内容をコピー
+			content := m.toolBlocks[m.focusedBlock].tool.Detail
+			if err := m.agent.CopyText(content); err == nil {
+				m.setTransientStatus("✅ Copied block to clipboard")
+			} else {
+				m.setTransientStatus("Copy failed: " + err.Error())
+			}
 		} else {
-			m.transientStatus = "✅ " + summary
+			summary, err := m.agent.CopyLastOutput()
+			if err != nil {
+				m.setTransientStatus("Copy failed: " + err.Error())
+			} else {
+				m.setTransientStatus("✅ " + summary)
+			}
 		}
-		m.transientStatusUntil = time.Now().Add(2 * time.Second)
 	default:
 		// スクロールキーもサポート
 		switch msg.Type {
@@ -427,6 +490,165 @@ func (m *Model) appendContentLines(lines ...string) tea.Cmd {
 		}
 	}
 	return nil
+}
+
+// appendToolResult はツール結果ブロックを追加する。
+func (m *Model) appendToolResult(tool ToolResult) tea.Cmd {
+	blockIdx := len(m.toolBlocks)
+	lineStart := len(m.rawLines)
+
+	block := toolBlockInfo{
+		lineStart: lineStart,
+		tool:      tool,
+	}
+	m.toolBlocks = append(m.toolBlocks, block)
+
+	lines := m.buildToolBlockLines(blockIdx)
+	m.toolBlocks[blockIdx].lineCount = len(lines)
+
+	return m.appendContentLines(lines...)
+}
+
+// buildToolBlockLines はツールブロックの表示行を生成する。
+func (m *Model) buildToolBlockLines(blockIdx int) []string {
+	block := &m.toolBlocks[blockIdx]
+	focused := m.focusedBlock == blockIdx
+
+	indicator := " "
+	if focused {
+		indicator = "→"
+	}
+
+	prefix := "▶"
+	if !block.tool.Collapsed {
+		prefix = "▼"
+	}
+
+	summary := indicator + prefix + " " + block.tool.Summary
+
+	if block.tool.Collapsed {
+		return []string{summary}
+	}
+
+	// 展開状態: サマリー + インデント済み詳細行
+	lines := []string{summary}
+	for _, line := range strings.Split(block.tool.Detail, "\n") {
+		lines = append(lines, "  "+line)
+	}
+	return lines
+}
+
+// toggleToolBlock はツールブロックの折りたたみ/展開をトグルする。
+func (m *Model) toggleToolBlock(blockIdx int) {
+	if blockIdx < 0 || blockIdx >= len(m.toolBlocks) {
+		return
+	}
+	block := &m.toolBlocks[blockIdx]
+	block.tool.Collapsed = !block.tool.Collapsed
+
+	newLines := m.buildToolBlockLines(blockIdx)
+	oldCount := block.lineCount
+	newCount := len(newLines)
+
+	// rawLines をスプライス: 旧行を除去して新行を挿入
+	after := make([]string, len(m.rawLines[block.lineStart+oldCount:]))
+	copy(after, m.rawLines[block.lineStart+oldCount:])
+	m.rawLines = append(m.rawLines[:block.lineStart], newLines...)
+	m.rawLines = append(m.rawLines, after...)
+
+	block.lineCount = newCount
+
+	// 後続ブロックの位置を更新
+	delta := newCount - oldCount
+	for i := blockIdx + 1; i < len(m.toolBlocks); i++ {
+		m.toolBlocks[i].lineStart += delta
+	}
+
+	// 描画行を再構築して viewport に反映
+	m.rebuildRenderedLines()
+	if m.ready {
+		m.vp.setLines(m.renderedLines)
+	}
+}
+
+// setBlockFocus はブロックフォーカスを設定する。
+func (m *Model) setBlockFocus(blockIdx int) {
+	if blockIdx < 0 || blockIdx >= len(m.toolBlocks) {
+		return
+	}
+	old := m.focusedBlock
+	m.focusedBlock = blockIdx
+	m.updateBlockIndicator(old)
+	m.updateBlockIndicator(m.focusedBlock)
+	m.scrollToBlock(m.focusedBlock)
+}
+
+// clearBlockFocus はブロックフォーカスを解除する。
+func (m *Model) clearBlockFocus() {
+	old := m.focusedBlock
+	m.focusedBlock = -1
+	m.updateBlockIndicator(old)
+}
+
+// moveBlockFocus はブロックフォーカスを移動する。
+func (m *Model) moveBlockFocus(newIdx int) {
+	newIdx = max(0, min(newIdx, len(m.toolBlocks)-1))
+	if newIdx == m.focusedBlock {
+		return
+	}
+	m.setBlockFocus(newIdx)
+}
+
+// updateBlockIndicator はブロックのフォーカスインジケータを更新する。
+func (m *Model) updateBlockIndicator(blockIdx int) {
+	if blockIdx < 0 || blockIdx >= len(m.toolBlocks) {
+		return
+	}
+	block := &m.toolBlocks[blockIdx]
+	focused := m.focusedBlock == blockIdx
+
+	indicator := " "
+	if focused {
+		indicator = "→"
+	}
+
+	prefix := "▶"
+	if !block.tool.Collapsed {
+		prefix = "▼"
+	}
+
+	newFirstLine := indicator + prefix + " " + block.tool.Summary
+	if block.lineStart < len(m.rawLines) {
+		m.rawLines[block.lineStart] = newFirstLine
+		if block.lineStart < len(m.renderedLines) {
+			m.renderedLines[block.lineStart] = m.renderLine(newFirstLine)
+		}
+		if m.ready {
+			m.vp.setLines(m.renderedLines)
+		}
+	}
+}
+
+// scrollToBlock はブロックの先頭行が表示されるようにスクロールする。
+func (m *Model) scrollToBlock(blockIdx int) {
+	if blockIdx < 0 || blockIdx >= len(m.toolBlocks) {
+		return
+	}
+	block := &m.toolBlocks[blockIdx]
+	// ブロックの先頭行をビューポートの上部付近に配置
+	target := max(0, block.lineStart-2)
+	maxOffset := m.vp.maxYOffset()
+	if target > maxOffset {
+		target = maxOffset
+	}
+	m.vp.yOffset = target
+}
+
+// setTransientStatus は一時通知メッセージを設定する。
+func (m *Model) setTransientStatus(text string) {
+	m.transientStatus = text
+	m.transientStatusUntil = time.Now().Add(2 * time.Second)
+	m.chromeDirty = true
 }
 
 // rebuildRenderedLines は現在幅に合わせて表示用の行キャッシュを再構築する。
@@ -528,7 +750,11 @@ func (m *Model) rebuildChrome() {
 
 	hints := statusHintsNormal
 	if m.navigationMode {
-		hints = statusHintsNav
+		if m.focusedBlock >= 0 {
+			hints = statusHintsBlockFocus
+		} else {
+			hints = statusHintsNav
+		}
 	}
 	statusBar := statusText
 	for _, hint := range hints {

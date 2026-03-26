@@ -48,7 +48,7 @@ func (a *Agent) toolExecutionContext(ctx context.Context, stdin io.Reader, stdou
 	if stderr == nil {
 		stderr = runtimeUI.ErrorOutput()
 	}
-	return tools.ExecutionContext{
+	ec := tools.ExecutionContext{
 		Context:         ctx,
 		Provider:        a.CurrentProvider,
 		ProviderName:    a.ProviderName,
@@ -66,6 +66,23 @@ func (a *Agent) toolExecutionContext(ctx context.Context, stdin io.Reader, stdou
 		AuditLogger:     a.auditLogger(),
 		LocatorRegistry: a.LocatorRegistry,
 	}
+
+	// TUIモードの場合、ToolResultCallbackを設定。
+	// closed チェック + select default で TUI 終了後の deadlock を回避。
+	if a.tuiToolResultCh != nil {
+		ch := a.tuiToolResultCh
+		ec.ToolResultCallback = func(info tools.ToolResultInfo) {
+			if a.tuiToolResultClosed.Load() {
+				return
+			}
+			select {
+			case ch <- info:
+			default:
+			}
+		}
+	}
+
+	return ec
 }
 
 func (a *Agent) currentRequestContext() context.Context {
@@ -1115,7 +1132,12 @@ func (a *Agent) executeToolCallsWithParallel(
 		}
 		wg.Wait()
 		a.ui().StopSpinner()
-		printParallelToolGroup(a.output(), a.cfg(), allToolCalls, parallelEntries, results, time.Since(startedAt))
+		if a.tuiToolResultCh != nil {
+			// TUIモード: 個別にToolResultInfoを送信
+			a.sendParallelToolResults(allToolCalls, parallelEntries, results, time.Since(startedAt))
+		} else {
+			printParallelToolGroup(a.output(), a.cfg(), allToolCalls, parallelEntries, results, time.Since(startedAt))
+		}
 	}
 
 	// Phase 1b: sequential 群を順次実行（spinner あり）
@@ -1330,6 +1352,28 @@ func formatParallelGroupSummary(allToolCalls []*tools.ToolCall, indices []int, e
 		return fmt.Sprintf("Done (%s)", ui.FormatParallelElapsed(elapsed))
 	}
 	return fmt.Sprintf("Done: %s (%s)", strings.Join(parts, ", "), ui.FormatParallelElapsed(elapsed))
+}
+
+// sendParallelToolResults は TUI モードで並列実行結果を個別にチャネルへ送信する。
+// ToolResultCallback と同じ二重保護（closed チェック + select default）を適用する。
+func (a *Agent) sendParallelToolResults(allToolCalls []*tools.ToolCall, indices []int, results []toolExecResult, elapsed time.Duration) {
+	ch := a.tuiToolResultCh
+	for _, idx := range indices {
+		if a.tuiToolResultClosed.Load() {
+			return
+		}
+		tc := allToolCalls[idx]
+		select {
+		case ch <- tools.ToolResultInfo{
+			ToolName: tc.Tool,
+			Args:     tc.Args,
+			Result:   results[idx].result,
+			Error:    strings.HasPrefix(strings.TrimSpace(results[idx].result), "Error:"),
+			Duration: elapsed,
+		}:
+		default:
+		}
+	}
 }
 
 // recordSearchCodeBatchMerge は search_code batch merge をメトリクスに記録する。

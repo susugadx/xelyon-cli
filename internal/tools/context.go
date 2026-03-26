@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"io"
+	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/audit"
@@ -12,6 +13,16 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
+
+// ToolResultInfo はツール実行結果の構造化データ。
+// TUIモードで ToolResultCallback 経由で通知される。
+type ToolResultInfo struct {
+	ToolName string
+	Args     map[string]string
+	Result   string        // ツール出力全文
+	Error    bool          // エラーかどうか
+	Duration time.Duration // 実行時間
+}
 
 // ExecutionContext はツール実行時の周辺コンテキストを保持する。
 // web_search などが現在のプロバイダー/モデルや対話 I/O を参照するために使用する。
@@ -33,6 +44,10 @@ type ExecutionContext struct {
 	AutoApprove     bool
 	AuditLogger     audit.ToolLogger
 	LocatorRegistry *locator.Registry
+
+	// ToolResultCallback はツール実行結果を構造化データとして通知するコールバック。
+	// TUIモードで設定される。nilの場合はstdoutに従来形式で出力する。
+	ToolResultCallback func(ToolResultInfo)
 }
 
 // Output は common.Output へ変換する。

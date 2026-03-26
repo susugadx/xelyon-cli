@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tui"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -45,6 +46,10 @@ func RunTUIWithConfig(model string, provider api.Provider, cfg *config.Config, a
 	// ヘッダー + キャプチャした初期化出力を結合して初期コンテンツにする
 	initialContent := buildTUIHeader() + captureBuf.String()
 
+	// ツール結果チャネルを作成し、Agent に設定
+	toolResultCh := make(chan tools.ToolResultInfo, 4096)
+	ag.tuiToolResultCh = toolResultCh
+
 	// TUIAdapter を作成（sendMsg は後で p.Send 経由で接続）
 	adapter := NewTUIAdapter(ag, nil)
 
@@ -56,17 +61,39 @@ func RunTUIWithConfig(model string, provider api.Provider, cfg *config.Config, a
 		var closed atomic.Bool
 		var dropCount atomic.Int64
 
-		// drain goroutine: チャネルから読み出して p.Send() を呼ぶ
+		// drain goroutine: メッセージチャネルから読み出して p.Send() を呼ぶ
 		go func() {
 			for msg := range msgCh {
 				p.Send(msg)
 			}
 		}()
 
+		// drain goroutine: ツール結果チャネルから読み出して AppendToolResultMsg を p.Send()
+		go func() {
+			for info := range toolResultCh {
+				if closed.Load() {
+					return
+				}
+				summary := ui.FormatToolLine(ui.ToolDisplayInfo{
+					ToolName: info.ToolName,
+					Args:     info.Args,
+					Result:   info.Result,
+					Error:    info.Error,
+				})
+				p.Send(tui.AppendToolResultMsg{
+					Tool: tui.ToolResult{
+						Name:      info.ToolName,
+						Summary:   summary,
+						Detail:    info.Result,
+						Collapsed: defaultToolCollapsed(info.ToolName, info.Result, info.Error),
+						Error:     info.Error,
+					},
+				})
+			}
+		}()
+
 		adapter.sendMsg = func(msg tui.AppendMessageMsg) {
 			// closed フラグで closed channel への send panic を回避。
-			// close(msgCh) ではなくフラグで制御し、drain goroutine は
-			// プロセス終了で自然に回収される。
 			if closed.Load() {
 				return
 			}
@@ -80,6 +107,7 @@ func RunTUIWithConfig(model string, provider api.Provider, cfg *config.Config, a
 		// tui.Run 終了時: sendMsg を停止し、ドロップ統計をログ出力
 		tui.OnExit(func() {
 			closed.Store(true)
+			ag.tuiToolResultClosed.Store(true)
 			if n := dropCount.Load(); n > 0 {
 				tui.DebugLog("TUI message channel: %d messages dropped", n)
 			}
@@ -87,6 +115,27 @@ func RunTUIWithConfig(model string, provider api.Provider, cfg *config.Config, a
 
 		adapter.SetOutputCapture()
 	})
+}
+
+// defaultToolCollapsed はツール種別に応じたデフォルトの折りたたみ状態を返す。
+func defaultToolCollapsed(toolName, result string, isError bool) bool {
+	// エラーは常に展開
+	if isError {
+		return false
+	}
+
+	switch toolName {
+	case "apply_patch":
+		return false // diff は見たい → 展開
+	case "bash":
+		return true // 成功は折りたたみ
+	case "search_code", "read_file", "read_files":
+		return true // 結果が長い → 折りたたみ
+	case "web_search":
+		return true // 結果が長い → 折りたたみ
+	default:
+		return true // デフォルトは折りたたみ
+	}
 }
 
 // buildTUIHeader は TUI 起動時のグラデーションロゴヘッダーを返す。

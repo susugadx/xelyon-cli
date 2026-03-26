@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/api"
@@ -93,6 +94,11 @@ type Agent struct {
 
 	// exitHook は os.Exit 前に呼ばれるフック（TUI モードのターミナル復旧等）
 	exitHook func()
+
+	// tuiToolResultCh は TUI モードでツール実行結果を構造化データとして送信するチャネル。
+	// nil の場合は従来の stdout 出力を使用する。
+	tuiToolResultCh     chan tools.ToolResultInfo
+	tuiToolResultClosed atomic.Bool // TUI 終了後の send panic / deadlock 防止
 
 	// 並列実行用ミューテックス
 	historyMu     sync.Mutex

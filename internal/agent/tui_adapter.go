@@ -120,6 +120,11 @@ func (a *TUIAdapter) IsProcessing() bool {
 	return a.processing.Load()
 }
 
+// CopyText は指定テキストをクリップボードにコピーする。
+func (a *TUIAdapter) CopyText(text string) error {
+	return clipboardWriteAll(text)
+}
+
 // CopyLastOutput は直近のAI出力をクリップボードにコピーする。
 // historyMu でロックし、chat goroutine との data race を防ぐ。
 func (a *TUIAdapter) CopyLastOutput() (string, error) {

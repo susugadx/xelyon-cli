@@ -26,6 +26,7 @@ func (s *stubAgent) CopyLastOutput() (string, error) {
 	s.copyCalls++
 	return "Copied 5 lines", nil
 }
+func (s *stubAgent) CopyText(text string) error { return nil }
 
 // TestModel_KeyDownScrollsViewport は Alternate Scroll Mode (1007) で
 // ホイールがカーソルキーに変換された場合に viewport がスクロールすることを検証。
@@ -361,5 +362,250 @@ func TestNavMode_YCallsCopy(t *testing.T) {
 	}
 	if got.transientStatus == "" {
 		t.Fatal("transientStatus should be set after copy")
+	}
+}
+
+// --- Tool Block tests ---
+
+func newModelWithViewport(agent AgentInterface) Model {
+	m := NewModel(agent, "")
+	m.ready = true
+	m.width = 80
+	m.height = 30
+	m.vp = lightViewport{width: 80, height: 26}
+	m.padLineCache = strings.Repeat(" ", 80)
+	return m
+}
+
+func TestToolBlock_AppendToolResultTracksLineStart(t *testing.T) {
+	m := newModelWithViewport(&stubAgent{statusLine: "ready"})
+
+	// 先にテキスト行を追加
+	m.appendContentLines("line1", "line2", "line3")
+	baseLines := len(m.rawLines)
+
+	m.appendToolResult(ToolResult{
+		Name:      "search_code",
+		Summary:   "🔍 search_code: test",
+		Detail:    "match1\nmatch2",
+		Collapsed: true,
+	})
+
+	if len(m.toolBlocks) != 1 {
+		t.Fatalf("toolBlocks len = %d, want 1", len(m.toolBlocks))
+	}
+	block := m.toolBlocks[0]
+	if block.lineStart != baseLines {
+		t.Fatalf("lineStart = %d, want %d", block.lineStart, baseLines)
+	}
+	if block.lineCount != 1 {
+		t.Fatalf("collapsed lineCount = %d, want 1", block.lineCount)
+	}
+}
+
+func TestToolBlock_ToggleExpandsAndCollapses(t *testing.T) {
+	m := newModelWithViewport(&stubAgent{statusLine: "ready"})
+
+	m.appendToolResult(ToolResult{
+		Name:      "search_code",
+		Summary:   "🔍 search_code: test",
+		Detail:    "match1\nmatch2\nmatch3",
+		Collapsed: true,
+	})
+
+	initialLineCount := len(m.rawLines)
+	if m.toolBlocks[0].lineCount != 1 {
+		t.Fatalf("collapsed lineCount = %d, want 1", m.toolBlocks[0].lineCount)
+	}
+
+	// 展開
+	m.toggleToolBlock(0)
+	if m.toolBlocks[0].tool.Collapsed {
+		t.Fatal("block should be expanded after toggle")
+	}
+	expandedLineCount := m.toolBlocks[0].lineCount
+	if expandedLineCount != 4 { // summary + 3 detail lines
+		t.Fatalf("expanded lineCount = %d, want 4", expandedLineCount)
+	}
+	if len(m.rawLines) != initialLineCount+(expandedLineCount-1) {
+		t.Fatalf("rawLines len = %d, want %d", len(m.rawLines), initialLineCount+(expandedLineCount-1))
+	}
+
+	// 折りたたみ
+	m.toggleToolBlock(0)
+	if !m.toolBlocks[0].tool.Collapsed {
+		t.Fatal("block should be collapsed after second toggle")
+	}
+	if len(m.rawLines) != initialLineCount {
+		t.Fatalf("rawLines len after re-collapse = %d, want %d", len(m.rawLines), initialLineCount)
+	}
+}
+
+func TestToolBlock_MultipleBlocksLineStartUpdated(t *testing.T) {
+	m := newModelWithViewport(&stubAgent{statusLine: "ready"})
+
+	m.appendToolResult(ToolResult{
+		Name: "read_file", Summary: "📄 read_file: a.go",
+		Detail: "content1\ncontent2", Collapsed: true,
+	})
+	m.appendToolResult(ToolResult{
+		Name: "search_code", Summary: "🔍 search_code: test",
+		Detail: "match1", Collapsed: true,
+	})
+
+	block1Start := m.toolBlocks[1].lineStart
+	if block1Start != m.toolBlocks[0].lineStart+1 {
+		t.Fatalf("second block lineStart = %d, want %d", block1Start, m.toolBlocks[0].lineStart+1)
+	}
+
+	// 最初のブロックを展開 → 2番目のブロックの lineStart が更新される
+	m.toggleToolBlock(0)
+	delta := m.toolBlocks[0].lineCount - 1 // 1行 → N行
+	expectedStart := block1Start + delta
+	if m.toolBlocks[1].lineStart != expectedStart {
+		t.Fatalf("after expand: second block lineStart = %d, want %d", m.toolBlocks[1].lineStart, expectedStart)
+	}
+
+	// 折りたたみ → 元に戻る
+	m.toggleToolBlock(0)
+	if m.toolBlocks[1].lineStart != block1Start {
+		t.Fatalf("after collapse: second block lineStart = %d, want %d", m.toolBlocks[1].lineStart, block1Start)
+	}
+}
+
+func TestToolBlock_MoveBlockFocusClampsRange(t *testing.T) {
+	m := newModelWithViewport(&stubAgent{statusLine: "ready"})
+
+	m.appendToolResult(ToolResult{Name: "a", Summary: "a", Detail: "a", Collapsed: true})
+	m.appendToolResult(ToolResult{Name: "b", Summary: "b", Detail: "b", Collapsed: true})
+	m.appendToolResult(ToolResult{Name: "c", Summary: "c", Detail: "c", Collapsed: true})
+
+	m.setBlockFocus(1)
+	if m.focusedBlock != 1 {
+		t.Fatalf("focusedBlock = %d, want 1", m.focusedBlock)
+	}
+
+	// 範囲下限クランプ
+	m.moveBlockFocus(-1)
+	if m.focusedBlock != 0 {
+		t.Fatalf("after move to -1: focusedBlock = %d, want 0", m.focusedBlock)
+	}
+	m.moveBlockFocus(-1)
+	if m.focusedBlock != 0 {
+		t.Fatalf("after move to -1 again: focusedBlock = %d, want 0 (clamped)", m.focusedBlock)
+	}
+
+	// 範囲上限クランプ
+	m.moveBlockFocus(100)
+	if m.focusedBlock != 2 {
+		t.Fatalf("after move to 100: focusedBlock = %d, want 2 (clamped)", m.focusedBlock)
+	}
+}
+
+func TestToolBlock_FocusIndicatorReflected(t *testing.T) {
+	m := newModelWithViewport(&stubAgent{statusLine: "ready"})
+
+	m.appendToolResult(ToolResult{Name: "a", Summary: "test-summary", Detail: "d", Collapsed: true})
+
+	// フォーカスなし → スペースインジケータ
+	firstLine := m.rawLines[m.toolBlocks[0].lineStart]
+	if firstLine[0] != ' ' {
+		t.Fatalf("unfocused indicator = %q, want space", string(firstLine[0]))
+	}
+
+	// フォーカス設定 → → インジケータ
+	m.setBlockFocus(0)
+	firstLine = m.rawLines[m.toolBlocks[0].lineStart]
+	if !strings.HasPrefix(firstLine, "→") {
+		t.Fatalf("focused line = %q, want → prefix", firstLine)
+	}
+
+	// フォーカス解除 → スペースに戻る
+	m.clearBlockFocus()
+	firstLine = m.rawLines[m.toolBlocks[0].lineStart]
+	if firstLine[0] != ' ' {
+		t.Fatalf("after clear: indicator = %q, want space", string(firstLine[0]))
+	}
+}
+
+func TestToolBlock_TabKeyEntersFocusAndToggles(t *testing.T) {
+	m := newModelWithViewport(&stubAgent{statusLine: "ready"})
+	m.navigationMode = true
+
+	m.appendToolResult(ToolResult{
+		Name: "search_code", Summary: "🔍 search_code: test",
+		Detail: "match1\nmatch2", Collapsed: true,
+	})
+
+	// Tab → 最後のブロックにフォーカス
+	updated, _ := m.handleNavigationKey(tea.KeyMsg{Type: tea.KeyTab})
+	m = updated.(Model)
+	if m.focusedBlock != 0 {
+		t.Fatalf("after first Tab: focusedBlock = %d, want 0", m.focusedBlock)
+	}
+
+	// Tab → トグル（展開）
+	updated, _ = m.handleNavigationKey(tea.KeyMsg{Type: tea.KeyTab})
+	m = updated.(Model)
+	if m.toolBlocks[0].tool.Collapsed {
+		t.Fatal("after second Tab: block should be expanded")
+	}
+}
+
+func TestToolBlock_EscClearsBlockFocusBeforeExitingNav(t *testing.T) {
+	m := newModelWithViewport(&stubAgent{statusLine: "ready"})
+	m.navigationMode = true
+
+	m.appendToolResult(ToolResult{Name: "a", Summary: "a", Detail: "d", Collapsed: true})
+	m.setBlockFocus(0)
+
+	// Esc → フォーカス解除（NAVモードは維持）
+	updated, _ := m.handleNavigationKey(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updated.(Model)
+	if m.focusedBlock != -1 {
+		t.Fatalf("after Esc: focusedBlock = %d, want -1", m.focusedBlock)
+	}
+	if !m.navigationMode {
+		t.Fatal("after Esc with focus: should still be in NAV mode")
+	}
+
+	// もう一度 Esc → NAVモード終了
+	updated, _ = m.handleNavigationKey(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updated.(Model)
+	if m.navigationMode {
+		t.Fatal("after second Esc: should exit NAV mode")
+	}
+}
+
+func TestToolBlock_ScrollToBlock(t *testing.T) {
+	m := newModelWithViewport(&stubAgent{statusLine: "ready"})
+
+	// 多数の行を追加してスクロール可能にする
+	for i := 0; i < 50; i++ {
+		m.appendContentLines("padding line")
+	}
+	m.appendToolResult(ToolResult{Name: "a", Summary: "target", Detail: "d", Collapsed: true})
+	m.vp.setLines(m.renderedLines)
+
+	// 先頭にスクロール
+	m.vp.gotoTop()
+	if m.vp.yOffset != 0 {
+		t.Fatalf("yOffset after gotoTop = %d, want 0", m.vp.yOffset)
+	}
+
+	// ブロックにスクロール
+	m.scrollToBlock(0)
+	blockStart := m.toolBlocks[0].lineStart
+	target := max(0, blockStart-2)
+	maxY := m.vp.maxYOffset()
+	if target > maxY {
+		target = maxY
+	}
+	if m.vp.yOffset != target {
+		t.Fatalf("yOffset after scrollToBlock = %d, want %d", m.vp.yOffset, target)
+	}
+	// ブロック先頭行がビューポート内に表示されていることを確認
+	if m.vp.yOffset > blockStart || m.vp.yOffset+m.vp.height <= blockStart {
+		t.Fatalf("block at line %d not visible in viewport [%d, %d)", blockStart, m.vp.yOffset, m.vp.yOffset+m.vp.height)
 	}
 }

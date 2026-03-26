@@ -25,4 +25,7 @@ type AgentInterface interface {
 	// CopyLastOutput は直近のAI出力をクリップボードにコピーする。
 	// 成功時は要約（例: "Copied 12 lines"）、失敗時はエラーを返す。
 	CopyLastOutput() (string, error)
+
+	// CopyText は指定テキストをクリップボードにコピーする。
+	CopyText(text string) error
 }

@@ -8,6 +8,7 @@ import (
 	"io"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/config"
@@ -109,7 +110,10 @@ func previewReadFilePaths(args map[string]string) []string {
 // ExecuteWithContext は実行コンテキスト付きでツールを実行する。
 func ExecuteWithContext(execCtx ExecutionContext, tc *ToolCall) (string, *FileChange) {
 	execCtx = normalizeExecutionContext(execCtx)
+
+	startTime := time.Now()
 	result, change := executeCoreWithContext(execCtx, tc)
+	elapsed := time.Since(startTime)
 
 	// ツール実行完了後、結果表示前にスピナーを停止してクリア
 	// （wait_agent のような長時間ブロックツールで表示が混ざるのを防ぐ）
@@ -117,16 +121,30 @@ func ExecuteWithContext(execCtx ExecutionContext, tc *ToolCall) (string, *FileCh
 		execCtx.Runtime.StopSpinner()
 	}
 
-	_, _ = fmt.Fprintln(execCtx.Stdout, ui.FormatToolLine(ui.ToolDisplayInfo{
-		ToolName: tc.Tool,
-		Args:     tc.Args,
-		Result:   result,
-		Error:    strings.HasPrefix(strings.TrimSpace(result), "Error:"),
-	}))
+	isError := strings.HasPrefix(strings.TrimSpace(result), "Error:")
 
-	// ツール出力の折りたたみ表示（bashはストリーミング表示済みなので除外）
-	if !isStreamingTool(tc.Tool) && shouldShowCollapsedOutput(result) {
-		displayCollapsedOutput(execCtx.Stdout, result, execCtx.EffectiveConfig())
+	if execCtx.ToolResultCallback != nil {
+		// TUIモード: 構造化データをコールバックで送信
+		execCtx.ToolResultCallback(ToolResultInfo{
+			ToolName: tc.Tool,
+			Args:     tc.Args,
+			Result:   result,
+			Error:    isError,
+			Duration: elapsed,
+		})
+	} else {
+		// 従来モード: stdoutにテキスト出力
+		_, _ = fmt.Fprintln(execCtx.Stdout, ui.FormatToolLine(ui.ToolDisplayInfo{
+			ToolName: tc.Tool,
+			Args:     tc.Args,
+			Result:   result,
+			Error:    isError,
+		}))
+
+		// ツール出力の折りたたみ表示（bashはストリーミング表示済みなので除外）
+		if !isStreamingTool(tc.Tool) && shouldShowCollapsedOutput(result) {
+			displayCollapsedOutput(execCtx.Stdout, result, execCtx.EffectiveConfig())
+		}
 	}
 
 	return result, change
