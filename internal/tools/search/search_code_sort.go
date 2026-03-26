@@ -3,7 +3,8 @@ package search
 import (
 	"path/filepath"
 	"sort"
-	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/repomap"
 )
 
 func filterResultsByOptions(results []SearchResult, opts SearchOptions) []SearchResult {
@@ -119,13 +120,8 @@ func hasDefinitionMatch(r SearchResult) bool {
 	return false
 }
 
-// isTestFile はファイルパスがテストファイルかどうか判定する
+// isTestFile はファイルパスがテストファイルかどうか判定する。
+// repomap.IsTestFile に委譲して全言語のテスト検出を一元化する。
 func isTestFile(path string) bool {
-	base := filepath.Base(path)
-	return strings.HasSuffix(base, "_test.go") ||
-		strings.HasSuffix(base, ".test.js") ||
-		strings.HasSuffix(base, ".test.ts") ||
-		strings.HasSuffix(base, ".spec.js") ||
-		strings.HasSuffix(base, ".spec.ts") ||
-		strings.Contains(base, "test_")
+	return repomap.IsTestFile(path)
 }

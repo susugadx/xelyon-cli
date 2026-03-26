@@ -125,10 +125,10 @@ var signaturePatterns = []signaturePattern{
 	{re: regexp.MustCompile(`^const\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "const", lang: "go"},
 	{re: regexp.MustCompile(`^var\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "var", lang: "go"},
 	// JS/TS
-	{re: regexp.MustCompile(`^export\s+default\s+function\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "function", lang: "js"},
+	{re: regexp.MustCompile(`^export\s+default\s+(?:async\s+)?function\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "function", lang: "js"},
 	{re: regexp.MustCompile(`^export\s+default\s+class\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "class", lang: "js"},
 	{re: regexp.MustCompile(`^export\s+(?:abstract\s+class|class)\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "class", lang: "js"},
-	{re: regexp.MustCompile(`^export\s+function\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "function", lang: "js"},
+	{re: regexp.MustCompile(`^export\s+(?:async\s+)?function\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "function", lang: "js"},
 	{re: regexp.MustCompile(`^export\s+const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:async\s+)?\([^)]*\)(?:\s*:\s*.+)?\s*=>`), kind: "function", lang: "js"},
 	{re: regexp.MustCompile(`^export\s+const\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "const", lang: "js"},
 	{re: regexp.MustCompile(`^export\s+interface\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "interface", lang: "js"},
@@ -166,6 +166,12 @@ var signaturePatterns = []signaturePattern{
 	{re: regexp.MustCompile(`^\s*(?:abstract )?interface\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "interface", lang: "php"},
 	{re: regexp.MustCompile(`^\s*trait\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "trait", lang: "php"},
 	{re: regexp.MustCompile(`^\s*enum\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "enum", lang: "php"},
+	// C#
+	{re: regexp.MustCompile(`^\s*(?:public |private |protected |internal )?(?:(?:static |abstract |sealed |partial )*)?class\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "class", lang: "csharp"},
+	{re: regexp.MustCompile(`^\s*(?:public |private |protected |internal )?(?:static )?interface\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "interface", lang: "csharp"},
+	{re: regexp.MustCompile(`^\s*(?:public |private |protected |internal )?enum\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "enum", lang: "csharp"},
+	{re: regexp.MustCompile(`^\s*(?:public |private |protected |internal )?(?:readonly )?struct\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "struct", lang: "csharp"},
+	{re: regexp.MustCompile(`^\s*(?:public |private |protected |internal )?(?:(?:static |virtual |abstract |override |async )*)?[A-Za-z0-9_<>,\[\]?]+\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(`), kind: "function", lang: "csharp"},
 	// C/C++
 	{re: regexp.MustCompile(`^(?:typedef\s+)?struct\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "struct", lang: "c"},
 	{re: regexp.MustCompile(`^(?:typedef\s+)?class\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "class", lang: "c"},
@@ -187,6 +193,15 @@ var signaturePatterns = []signaturePattern{
 	{re: regexp.MustCompile(`^\s*case\s+class\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "class", lang: "scala"},
 	{re: regexp.MustCompile(`^\s*case\s+object\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "object", lang: "scala"},
 	{re: regexp.MustCompile(`^\s*sealed\s+trait\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "trait", lang: "scala"},
+	// Elixir
+	{re: regexp.MustCompile(`^\s*defmodule\s+([A-Za-z_][A-Za-z0-9_.]*)\b`), kind: "module", lang: "elixir"},
+	{re: regexp.MustCompile(`^\s*def\s+([A-Za-z_][A-Za-z0-9_!?]*)\b`), kind: "function", lang: "elixir"},
+	{re: regexp.MustCompile(`^\s*defp\s+([A-Za-z_][A-Za-z0-9_!?]*)\b`), kind: "function", lang: "elixir"},
+	{re: regexp.MustCompile(`^\s*defprotocol\s+([A-Za-z_][A-Za-z0-9_.]*)\b`), kind: "protocol", lang: "elixir"},
+	{re: regexp.MustCompile(`^\s*defmacro\s+([A-Za-z_][A-Za-z0-9_!?]*)\b`), kind: "macro", lang: "elixir"},
+	// Lua
+	{re: regexp.MustCompile(`^(?:local\s+)?function\s+([A-Za-z_][A-Za-z0-9_.]*)\s*\(`), kind: "function", lang: "lua"},
+	{re: regexp.MustCompile(`^(?:local\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*function\s*\(`), kind: "function", lang: "lua"},
 	// Shell
 	{re: regexp.MustCompile(`^([A-Za-z_][A-Za-z0-9_]*)\s*\(\)`), kind: "function", lang: "sh"},
 	{re: regexp.MustCompile(`^function\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "function", lang: "sh"},
@@ -379,6 +394,10 @@ func patternLangForPath(path string) string {
 		return "swift"
 	case ".scala":
 		return "scala"
+	case ".ex", ".exs":
+		return "elixir"
+	case ".lua":
+		return "lua"
 	case ".sh", ".bash", ".zsh":
 		return "sh"
 	default:
@@ -395,21 +414,71 @@ func isExportedName(name string) bool {
 }
 
 func isTestFile(path string) bool {
-	base := strings.ToLower(filepath.Base(path))
+	origBase := filepath.Base(path)
+	base := strings.ToLower(origBase)
 	ext := strings.ToLower(filepath.Ext(base))
 	switch {
 	case strings.HasSuffix(base, "_test.go"):
 		return true
 	case strings.HasPrefix(base, "test_") && ext == ".py":
 		return true
+	case strings.HasSuffix(base, "_test.py"):
+		return true
+	case base == "conftest.py":
+		return true
 	case strings.HasSuffix(base, ".test.ts"), strings.HasSuffix(base, ".test.tsx"),
 		strings.HasSuffix(base, ".test.js"), strings.HasSuffix(base, ".test.jsx"),
 		strings.HasSuffix(base, ".spec.ts"), strings.HasSuffix(base, ".spec.tsx"),
 		strings.HasSuffix(base, ".spec.js"), strings.HasSuffix(base, ".spec.jsx"):
 		return true
+	case isInTestsDir(path):
+		return true
+	case ext == ".java" && isTestSuffixName(origBase):
+		return true
+	case ext == ".kt" && isTestSuffixName(origBase):
+		return true
+	case ext == ".cs" && isTestSuffixName(origBase):
+		return true
+	case ext == ".swift" && isTestSuffixName(origBase):
+		return true
+	case ext == ".scala" && isTestSuffixName(origBase):
+		return true
+	case ext == ".php" && isTestSuffixName(origBase):
+		return true
+	case ext == ".rb" && (strings.HasSuffix(base, "_spec.rb") || strings.HasSuffix(base, "_test.rb")):
+		return true
+	case ext == ".exs" && strings.HasSuffix(base, "_test.exs"):
+		return true
+	case ext == ".lua" && (strings.HasSuffix(base, "_test.lua") || strings.HasSuffix(base, "_spec.lua")):
+		return true
+	case (ext == ".c" || ext == ".cpp" || ext == ".cc") && isTestSuffixName(origBase):
+		return true
 	default:
 		return false
 	}
+}
+
+// isTestSuffixName は *Test.ext / *Tests.ext / *Spec.ext のパターンを判定する。
+// origBase は大文字小文字を保持した元のファイル名（PascalCase 判定に必要）。
+func isTestSuffixName(origBase string) bool {
+	ext := filepath.Ext(origBase)
+	nameNoExt := strings.TrimSuffix(origBase, ext)
+	// PascalCase: UserServiceTest, UserServiceTests, UserServiceSpec
+	if strings.HasSuffix(nameNoExt, "Test") || strings.HasSuffix(nameNoExt, "Tests") || strings.HasSuffix(nameNoExt, "Spec") {
+		return true
+	}
+	// snake_case: user_service_test, user_service_spec
+	lower := strings.ToLower(nameNoExt)
+	return strings.HasSuffix(lower, "_test") || strings.HasSuffix(lower, "_tests") || strings.HasSuffix(lower, "_spec")
+}
+
+// isInTestsDir はファイルパスが tests/ または test/ ディレクトリ配下かどうか判定する。
+func isInTestsDir(path string) bool {
+	normalized := filepath.ToSlash(path)
+	return strings.HasPrefix(normalized, "tests/") ||
+		strings.HasPrefix(normalized, "test/") ||
+		strings.Contains(normalized, "/tests/") ||
+		strings.Contains(normalized, "/test/")
 }
 
 // ExtractSignatureMetadata は行テキストからシンボル名と種別を抽出する（全言語）。
@@ -436,6 +505,8 @@ func testSortBase(name string) string {
 		return strings.TrimSuffix(lower, "_test.go") + ".go"
 	case strings.HasPrefix(lower, "test_") && strings.HasSuffix(lower, ".py"):
 		return strings.TrimPrefix(lower, "test_")
+	case strings.HasSuffix(lower, "_test.py"):
+		return strings.TrimSuffix(lower, "_test.py") + ".py"
 	case strings.HasSuffix(lower, ".test.ts"):
 		return strings.TrimSuffix(lower, ".test.ts") + ".ts"
 	case strings.HasSuffix(lower, ".test.tsx"):
@@ -453,6 +524,36 @@ func testSortBase(name string) string {
 	case strings.HasSuffix(lower, ".spec.jsx"):
 		return strings.TrimSuffix(lower, ".spec.jsx") + ".jsx"
 	default:
+		ext := filepath.Ext(name)
+		switch strings.ToLower(ext) {
+		case ".java", ".kt", ".cs", ".php", ".swift", ".scala", ".c", ".cpp", ".cc":
+			if base, ok := stripTestSuffixName(strings.TrimSuffix(name, ext)); ok {
+				return strings.ToLower(base) + strings.ToLower(ext)
+			}
+		}
 		return lower
+	}
+}
+
+func stripTestSuffixName(name string) (string, bool) {
+	switch {
+	case strings.HasSuffix(name, "Tests"):
+		return strings.TrimSuffix(name, "Tests"), true
+	case strings.HasSuffix(name, "Test"):
+		return strings.TrimSuffix(name, "Test"), true
+	case strings.HasSuffix(name, "Spec"):
+		return strings.TrimSuffix(name, "Spec"), true
+	}
+
+	lower := strings.ToLower(name)
+	switch {
+	case strings.HasSuffix(lower, "_tests"):
+		return name[:len(name)-len("_tests")], true
+	case strings.HasSuffix(lower, "_test"):
+		return name[:len(name)-len("_test")], true
+	case strings.HasSuffix(lower, "_spec"):
+		return name[:len(name)-len("_spec")], true
+	default:
+		return "", false
 	}
 }

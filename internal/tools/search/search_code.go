@@ -161,8 +161,37 @@ func executeSinglePattern(cache tools.ToolCacheInterface, pattern string, opts S
 				// フォールバック
 			}
 		} else {
-			// 他言語: パターンベースのベストエフォート解決
-			symbolOutput, status := resolveGenericSymbol(pattern, opts)
+			// 他言語: パターンベースのシンボル解決（言語別参照分類付き）
+			var symbolOutput string
+			var status genericSymbolStatus
+			switch lang {
+			case "js":
+				symbolOutput, status = resolveJSSymbol(pattern, opts)
+			case "python":
+				symbolOutput, status = resolvePythonSymbol(pattern, opts)
+			case "rust":
+				symbolOutput, status = resolveRustSymbol(pattern, opts)
+			case "java":
+				symbolOutput, status = resolveJavaSymbol(pattern, opts)
+			case "csharp":
+				symbolOutput, status = resolveCSharpSymbol(pattern, opts)
+			case "php":
+				symbolOutput, status = resolvePHPSymbol(pattern, opts)
+			case "ruby":
+				symbolOutput, status = resolveRubySymbol(pattern, opts)
+			case "swift":
+				symbolOutput, status = resolveSwiftSymbol(pattern, opts)
+			case "scala":
+				symbolOutput, status = resolveScalaSymbol(pattern, opts)
+			case "elixir":
+				symbolOutput, status = resolveElixirSymbol(pattern, opts)
+			case "lua":
+				symbolOutput, status = resolveLuaSymbol(pattern, opts)
+			case "cpp":
+				symbolOutput, status = resolveCppSymbol(pattern, opts)
+			default:
+				symbolOutput, status = resolveGenericSymbol(pattern, opts)
+			}
 			switch status {
 			case genericSymbolSingle:
 				if cache != nil {
@@ -237,7 +266,7 @@ func executeSinglePattern(cache tools.ToolCacheInterface, pattern string, opts S
 const escapedCommaPlaceholder = "\x00COMMA\x00"
 
 // splitPatterns はカンマ区切りのパターン文字列を分割する。
-// \, はリテラルカンマとして扱う。空文字除外、TrimSpace、最大 5 パターン。
+// \, はリテラルカンマとして扱う。空文字除外、TrimSpace、最大 10 パターン。
 func splitPatterns(pattern string) []string {
 	s := strings.ReplaceAll(pattern, `\,`, escapedCommaPlaceholder)
 	parts := strings.Split(s, ",")
@@ -249,8 +278,8 @@ func splitPatterns(pattern string) []string {
 			result = append(result, p)
 		}
 	}
-	if len(result) > 5 {
-		result = result[:5]
+	if len(result) > 10 {
+		result = result[:10]
 	}
 	return result
 }
@@ -303,6 +332,17 @@ func executeMultiplePatterns(cache tools.ToolCacheInterface, patterns []string, 
 		}
 	}
 
+	// Cross-pattern file index
+	pats := make([]string, len(collected))
+	outs := make([]string, len(collected))
+	for i, c := range collected {
+		pats[i] = c.Pattern
+		outs[i] = c.Formatted
+	}
+	if idx := buildCrossPatternIndex(pats, outs, opts.LocatorRegistry); idx != "" {
+		sb.WriteString(idx)
+	}
+
 	output := sb.String() + lineRangeHint
 
 	if cache != nil {
@@ -312,6 +352,160 @@ func executeMultiplePatterns(cache tools.ToolCacheInterface, patterns []string, 
 	}
 
 	return output
+}
+
+// extractPrimaryFilePaths は整形済み検索結果から主要ファイルパスを抽出する。
+// 📄 ヘッダー（通常検索）と ── ... in filepath ──（シンボル解決）の両方を認識する。
+func extractPrimaryFilePaths(output string) []string {
+	var paths []string
+	seen := make(map[string]bool)
+	add := func(p string) {
+		p = strings.TrimSpace(p)
+		if p != "" && !seen[p] {
+			seen[p] = true
+			paths = append(paths, p)
+		}
+	}
+	for _, line := range strings.Split(output, "\n") {
+		trimmed := strings.TrimSpace(line)
+		// Regular search: "📄 path/to/file (N match(es))"
+		if strings.HasPrefix(trimmed, "📄 ") {
+			rest := strings.TrimPrefix(trimmed, "📄 ")
+			if idx := strings.Index(rest, " ("); idx > 0 {
+				add(rest[:idx])
+			}
+			continue
+		}
+		// Symbol definition: "── kind Name (LN) in filepath ──" or "── kind Name (LN-LN) in filepath @locN ──"
+		if strings.HasPrefix(trimmed, "── ") && strings.Contains(trimmed, " in ") && strings.HasSuffix(trimmed, "──") {
+			inIdx := strings.LastIndex(trimmed, " in ")
+			rest := trimmed[inIdx+4:]
+			rest = strings.TrimSuffix(rest, "──")
+			rest = strings.TrimSpace(rest)
+			// Remove trailing "@locN"
+			if atIdx := strings.LastIndex(rest, " @"); atIdx > 0 {
+				rest = rest[:atIdx]
+			}
+			add(rest)
+		}
+	}
+	return paths
+}
+
+// classifyFilePath はファイルパスをカテゴリ（impl/test/config）に分類する。
+func classifyFilePath(path string) string {
+	base := filepath.Base(path)
+	if strings.HasSuffix(base, "_test.go") || strings.Contains(base, ".test.") ||
+		strings.Contains(base, ".spec.") || strings.HasPrefix(base, "test_") {
+		return "test"
+	}
+	switch filepath.Ext(base) {
+	case ".yaml", ".yml", ".toml", ".env", ".ini", ".cfg", ".conf":
+		return "config"
+	}
+	return "impl"
+}
+
+// buildCrossPatternIndex は複数パターン検索結果のファイル横断インデックスを生成する。
+// パターンごとの出力からファイルパスを抽出し、カテゴリ別に分類して一覧にする。
+// 複数パターンに出現するファイルには ★N マークを付与する。
+// reg が non-nil の場合、各ファイルに locator ID を付与する。
+//
+// 出力条件: hotspot（複数パターンにマッチしたファイル）があるか、
+// 複数カテゴリに分散しているか、unique files が 3 以上の場合のみ出力する。
+func buildCrossPatternIndex(patterns, outputs []string, reg *locator.Registry) string {
+	type fileEntry struct {
+		patternCount int
+		category     string
+	}
+
+	fileMap := make(map[string]*fileEntry)
+	var order []string
+
+	for i, output := range outputs {
+		if i >= len(patterns) {
+			break
+		}
+		for _, p := range extractPrimaryFilePaths(output) {
+			if entry, ok := fileMap[p]; ok {
+				entry.patternCount++
+			} else {
+				fileMap[p] = &fileEntry{
+					patternCount: 1,
+					category:     classifyFilePath(p),
+				}
+				order = append(order, p)
+			}
+		}
+	}
+
+	if len(order) == 0 {
+		return ""
+	}
+
+	var impl, test, cfg []string
+	for _, p := range order {
+		switch fileMap[p].category {
+		case "test":
+			test = append(test, p)
+		case "config":
+			cfg = append(cfg, p)
+		default:
+			impl = append(impl, p)
+		}
+	}
+
+	// 出力条件: hotspot / 複数カテゴリ / unique files ≥ 3
+	hasHotspot := false
+	for _, e := range fileMap {
+		if e.patternCount > 1 {
+			hasHotspot = true
+			break
+		}
+	}
+	categoryCount := 0
+	if len(impl) > 0 {
+		categoryCount++
+	}
+	if len(test) > 0 {
+		categoryCount++
+	}
+	if len(cfg) > 0 {
+		categoryCount++
+	}
+	if !hasHotspot && categoryCount < 2 && len(order) < 3 {
+		return ""
+	}
+
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "\n━━ File Index (%d unique files) ━━\n", len(order))
+
+	writeGroup := func(label string, paths []string) {
+		if len(paths) == 0 {
+			return
+		}
+		fmt.Fprintf(&sb, "%s:\n", label)
+		for _, p := range paths {
+			e := fileMap[p]
+			var line string
+			if e.patternCount > 1 {
+				line = fmt.Sprintf("  %s (★%d patterns)", p, e.patternCount)
+			} else {
+				line = fmt.Sprintf("  %s", p)
+			}
+			if reg != nil {
+				id := reg.Register(locator.Location{FilePath: p})
+				line += " " + id
+			}
+			fmt.Fprintf(&sb, "%s\n", line)
+		}
+	}
+
+	writeGroup("Impl", impl)
+	writeGroup("Test", test)
+	writeGroup("Config", cfg)
+
+	return sb.String()
 }
 
 // buildMultiCacheKey は複数パターンからソート済みキャッシュキーを構築する
@@ -383,7 +577,7 @@ func executeSearch(pattern string, opts SearchOptions) (string, bool, []string, 
 			args = append(args, "--context", fmt.Sprintf("%d", opts.CtxLines))
 		}
 		if opts.FileType != "" {
-			args = append(args, "--type", opts.FileType)
+			args = append(args, "--type", normalizeRgType(opts.FileType))
 		} else if opts.FilePattern != "" {
 			args = append(args, "--glob", opts.FilePattern)
 		}

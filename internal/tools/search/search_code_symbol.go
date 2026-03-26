@@ -95,6 +95,8 @@ func isSymbolResolvableLanguage(fileType string) bool {
 		return true
 	case "java", "kt", "kts", "kotlin":
 		return true
+	case "cs", "csharp":
+		return true
 	case "rb", "ruby":
 		return true
 	case "php":
@@ -104,6 +106,10 @@ func isSymbolResolvableLanguage(fileType string) bool {
 	case "swift":
 		return true
 	case "scala":
+		return true
+	case "ex", "exs", "elixir":
+		return true
+	case "lua":
 		return true
 	case "sh", "bash", "zsh":
 		return true
@@ -126,8 +132,22 @@ func resolveLanguage(opts SearchOptions) string {
 		return "rust"
 	case "java", "kt", "kts", "kotlin":
 		return "java"
+	case "cs", "csharp":
+		return "csharp"
+	case "php":
+		return "php"
 	case "rb", "ruby":
 		return "ruby"
+	case "c", "cpp", "cc", "h", "hpp":
+		return "cpp"
+	case "swift":
+		return "swift"
+	case "scala":
+		return "scala"
+	case "ex", "exs", "elixir":
+		return "elixir"
+	case "lua":
+		return "lua"
 	default:
 		return opts.FileType
 	}
@@ -314,6 +334,8 @@ func resolvePatternLang(fileType string) string {
 		return "rs"
 	case "java", "kt", "kts", "kotlin":
 		return "java"
+	case "cs", "csharp":
+		return "csharp"
 	case "rb", "ruby":
 		return "rb"
 	case "php":
@@ -324,6 +346,10 @@ func resolvePatternLang(fileType string) string {
 		return "swift"
 	case "scala":
 		return "scala"
+	case "ex", "exs", "elixir":
+		return "elixir"
+	case "lua":
+		return "lua"
 	case "sh", "bash", "zsh":
 		return "sh"
 	default:
@@ -348,11 +374,17 @@ func normalizeRgType(fileType string) string {
 		return "py"
 	case "typescript", "tsx", "jsx", "mjs":
 		return "ts"
-	case "rust":
+	case "rs", "rust":
 		return "rust"
-	case "kotlin", "kts":
+	case "kt", "kotlin", "kts":
 		return "kotlin"
-	case "ruby":
+	case "cs", "csharp":
+		return "csharp"
+	case "cc", "hpp":
+		return "cpp"
+	case "ex", "exs", "elixir":
+		return "elixir"
+	case "rb", "ruby":
 		return "ruby"
 	default:
 		return fileType

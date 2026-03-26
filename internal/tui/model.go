@@ -1,8 +1,10 @@
 package tui
 
 import (
+	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -25,8 +27,12 @@ var statusHintsNormal = []string{
 	"Esc:NAV • /copy",
 }
 var statusHintsNav = []string{
-	"y:copy • gg/G • d/u • j/k • Tab:blocks • i/Esc:back",
-	"y • gg/G • d/u • Tab:blocks • i/Esc",
+	"j/k:move • v:select • yy:copy line • Tab:blocks • gg/G • q:back",
+	"j/k • v • yy • Tab • gg/G • q",
+}
+var statusHintsVisual = []string{
+	"j/k:extend • y:copy • Esc:cancel",
+	"j/k • y • Esc",
 }
 var statusHintsBlockFocus = []string{
 	"Tab/Enter:toggle • j/k:blocks • y:copy • Esc:unfocus",
@@ -80,6 +86,9 @@ type Model struct {
 	quitting             bool
 	navigationMode       bool      // Vim ナビゲーションモード
 	gPressed             bool      // g キーが1回押された状態
+	yPressed             bool      // y キーが1回押された状態（yy用）
+	cursorLine           int       // NAVモードの現在行（rawLines基準）
+	visualStart          int       // ビジュアルモード開始行（-1=OFF）
 	transientStatus      string    // 一時通知メッセージ
 	transientStatusUntil time.Time // 一時通知の有効期限
 	lastInterrupt        time.Time
@@ -110,6 +119,7 @@ func NewModel(agent AgentInterface, initialContent string) Model {
 		rawLines:     append([]string(nil), initLines...),
 		messages:     []ChatMessage{},
 		focusedBlock: -1,
+		visualStart:  -1,
 		statusLine:   agent.GetStatusLine(),
 	}
 }
@@ -135,6 +145,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.vp.scrollUp(3)
 		case tea.MouseButtonWheelDown:
 			m.vp.scrollDown(3)
+		}
+		if m.navigationMode && m.focusedBlock < 0 {
+			m.syncCursorToViewport()
 		}
 		return m, nil
 
@@ -265,6 +278,8 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// 入力欄が空の場合のみ NAV モードに入る
 		if strings.TrimSpace(m.textInput.Value()) == "" {
 			m.navigationMode = true
+			m.clampCursorLine()
+			m.ensureCursorVisible()
 			m.textInput.Blur()
 			m.chromeDirty = true
 			return m, nil
@@ -323,6 +338,11 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m Model) handleNavigationKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyEsc:
+		if m.visualStart >= 0 {
+			m.clearVisualSelection()
+			m.chromeDirty = true
+			return m, nil
+		}
 		// ブロックフォーカス中 → フォーカス解除
 		if m.focusedBlock >= 0 {
 			m.clearBlockFocus()
@@ -330,8 +350,9 @@ func (m Model) handleNavigationKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		// NAVモード終了
+		m.clearVisualSelection()
 		m.navigationMode = false
-		m.gPressed = false
+		m.resetNavPending()
 		m.textInput.Focus()
 		m.chromeDirty = true
 		return m, nil
@@ -342,12 +363,19 @@ func (m Model) handleNavigationKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		// NAVモード終了
+		m.clearVisualSelection()
+		if m.focusedBlock >= 0 {
+			m.clearBlockFocus()
+		}
 		m.navigationMode = false
-		m.gPressed = false
+		m.resetNavPending()
 		m.textInput.Focus()
 		m.chromeDirty = true
 		return m, nil
 	case tea.KeyTab:
+		if m.visualStart >= 0 {
+			return m, nil
+		}
 		// Tab: フォーカス中 → トグル、未フォーカス → 最後のブロックにフォーカス
 		if m.focusedBlock >= 0 && m.focusedBlock < len(m.toolBlocks) {
 			m.toggleToolBlock(m.focusedBlock)
@@ -360,11 +388,21 @@ func (m Model) handleNavigationKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	s := msg.String()
 
+	if m.yPressed {
+		m.yPressed = false
+		if s == "y" && m.focusedBlock < 0 && m.visualStart < 0 {
+			m.copyCursorLine()
+			return m, nil
+		}
+	}
+
 	// g の2回押し判定
 	if m.gPressed {
 		m.gPressed = false
-		if s == "g" {
+		if s == "g" && m.focusedBlock < 0 {
+			m.cursorLine = 0
 			m.vp.gotoTop()
+			m.ensureCursorVisible()
 			return m, nil
 		}
 		// g + 別キー → リセットして通常ナビ処理に落とす
@@ -372,11 +410,12 @@ func (m Model) handleNavigationKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch s {
 	case "q", "i":
+		m.clearVisualSelection()
 		if m.focusedBlock >= 0 {
 			m.clearBlockFocus()
 		}
 		m.navigationMode = false
-		m.gPressed = false
+		m.resetNavPending()
 		m.textInput.Focus()
 		m.chromeDirty = true
 		return m, nil
@@ -384,24 +423,44 @@ func (m Model) handleNavigationKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.focusedBlock >= 0 && len(m.toolBlocks) > 0 {
 			m.moveBlockFocus(m.focusedBlock + 1)
 		} else {
-			m.vp.scrollDown(1)
+			m.moveCursor(1)
 		}
 	case "k":
 		if m.focusedBlock >= 0 && len(m.toolBlocks) > 0 {
 			m.moveBlockFocus(m.focusedBlock - 1)
 		} else {
-			m.vp.scrollUp(1)
+			m.moveCursor(-1)
 		}
 	case "d":
-		m.vp.halfPageDown()
+		if m.focusedBlock < 0 {
+			m.moveCursor(max(1, m.vp.height/2))
+		}
 	case "u":
-		m.vp.halfPageUp()
+		if m.focusedBlock < 0 {
+			m.moveCursor(-max(1, m.vp.height/2))
+		}
 	case "G":
-		m.vp.gotoBottom()
+		if m.focusedBlock < 0 {
+			if len(m.rawLines) > 0 {
+				m.cursorLine = len(m.rawLines) - 1
+			}
+			m.vp.gotoBottom()
+			m.ensureCursorVisible()
+		}
 	case "g":
-		m.gPressed = true
+		if m.focusedBlock < 0 {
+			m.gPressed = true
+		}
+	case "v", "V":
+		if m.focusedBlock < 0 {
+			m.visualStart = m.cursorLine
+			m.yPressed = false
+			m.chromeDirty = true
+		}
 	case "y":
-		if m.focusedBlock >= 0 && m.focusedBlock < len(m.toolBlocks) {
+		if m.visualStart >= 0 {
+			m.copyVisualSelection()
+		} else if m.focusedBlock >= 0 && m.focusedBlock < len(m.toolBlocks) {
 			// フォーカス中のブロック内容をコピー
 			content := m.toolBlocks[m.focusedBlock].tool.Detail
 			if err := m.agent.CopyText(content); err == nil {
@@ -410,24 +469,31 @@ func (m Model) handleNavigationKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.setTransientStatus("Copy failed: " + err.Error())
 			}
 		} else {
-			summary, err := m.agent.CopyLastOutput()
-			if err != nil {
-				m.setTransientStatus("Copy failed: " + err.Error())
-			} else {
-				m.setTransientStatus("✅ " + summary)
-			}
+			m.yPressed = true
 		}
 	default:
 		// スクロールキーもサポート
 		switch msg.Type {
 		case tea.KeyUp:
-			m.vp.scrollUp(1)
+			if m.focusedBlock >= 0 && len(m.toolBlocks) > 0 {
+				m.moveBlockFocus(m.focusedBlock - 1)
+			} else {
+				m.moveCursor(-1)
+			}
 		case tea.KeyDown:
-			m.vp.scrollDown(1)
+			if m.focusedBlock >= 0 && len(m.toolBlocks) > 0 {
+				m.moveBlockFocus(m.focusedBlock + 1)
+			} else {
+				m.moveCursor(1)
+			}
 		case tea.KeyPgUp:
-			m.vp.scrollUp(m.vp.height)
+			if m.focusedBlock < 0 {
+				m.moveCursor(-m.vp.height)
+			}
 		case tea.KeyPgDown:
-			m.vp.scrollDown(m.vp.height)
+			if m.focusedBlock < 0 {
+				m.moveCursor(m.vp.height)
+			}
 		}
 	}
 	return m, nil
@@ -479,6 +545,7 @@ func (m *Model) appendContentLines(lines ...string) tea.Cmd {
 	for _, line := range lines {
 		m.renderedLines = append(m.renderedLines, m.renderLine(line))
 	}
+	m.clampCursorLine()
 	if m.ready {
 		atBottom := m.vp.atBottom()
 		m.vp.setLines(m.renderedLines)
@@ -576,8 +643,10 @@ func (m *Model) setBlockFocus(blockIdx int) {
 	if blockIdx < 0 || blockIdx >= len(m.toolBlocks) {
 		return
 	}
+	m.clearVisualSelection()
 	old := m.focusedBlock
 	m.focusedBlock = blockIdx
+	m.cursorLine = m.toolBlocks[blockIdx].lineStart
 	m.updateBlockIndicator(old)
 	m.updateBlockIndicator(m.focusedBlock)
 	m.scrollToBlock(m.focusedBlock)
@@ -651,6 +720,119 @@ func (m *Model) setTransientStatus(text string) {
 	m.chromeDirty = true
 }
 
+func (m *Model) resetNavPending() {
+	m.gPressed = false
+	m.yPressed = false
+}
+
+func (m *Model) clearVisualSelection() {
+	m.visualStart = -1
+	m.yPressed = false
+}
+
+func (m *Model) clampCursorLine() {
+	if len(m.rawLines) == 0 {
+		m.cursorLine = 0
+		return
+	}
+	if m.cursorLine < 0 {
+		m.cursorLine = 0
+	}
+	if m.cursorLine >= len(m.rawLines) {
+		m.cursorLine = len(m.rawLines) - 1
+	}
+}
+
+func (m *Model) syncCursorToViewport() {
+	if len(m.rawLines) == 0 {
+		m.cursorLine = 0
+		return
+	}
+	m.cursorLine = max(0, min(m.vp.yOffset, len(m.rawLines)-1))
+}
+
+func (m *Model) ensureCursorVisible() {
+	m.clampCursorLine()
+	if m.vp.height <= 0 {
+		return
+	}
+	if m.cursorLine < m.vp.yOffset {
+		m.vp.yOffset = m.cursorLine
+	}
+	if m.cursorLine >= m.vp.yOffset+m.vp.height {
+		m.vp.yOffset = m.cursorLine - m.vp.height + 1
+	}
+	if m.vp.yOffset > m.vp.maxYOffset() {
+		m.vp.yOffset = m.vp.maxYOffset()
+	}
+	if m.vp.yOffset < 0 {
+		m.vp.yOffset = 0
+	}
+}
+
+func (m *Model) moveCursor(delta int) {
+	if len(m.rawLines) == 0 {
+		return
+	}
+	m.cursorLine += delta
+	m.clampCursorLine()
+	m.ensureCursorVisible()
+}
+
+func (m Model) selectionRange() (start, end int, ok bool) {
+	if m.visualStart < 0 {
+		return 0, 0, false
+	}
+	start = min(m.visualStart, m.cursorLine)
+	end = max(m.visualStart, m.cursorLine)
+	return start, end, true
+}
+
+func (m *Model) copyCursorLine() {
+	if err := m.copyRawRangePlain(m.cursorLine, m.cursorLine); err != nil {
+		m.setTransientStatus("Copy failed: " + err.Error())
+		return
+	}
+	m.setTransientStatus("✅ Copied 1 line")
+}
+
+func (m *Model) copyVisualSelection() {
+	start, end, ok := m.selectionRange()
+	if !ok {
+		return
+	}
+	if err := m.copyRawRangePlain(start, end); err != nil {
+		m.setTransientStatus("Copy failed: " + err.Error())
+		return
+	}
+	m.clearVisualSelection()
+	m.setTransientStatus("✅ Copied " + lineLabel(end-start+1))
+}
+
+func (m Model) copyRawRangePlain(start, end int) error {
+	if len(m.rawLines) == 0 {
+		return fmt.Errorf("no lines to copy")
+	}
+	start = max(0, start)
+	end = min(len(m.rawLines)-1, end)
+	if start > end {
+		return nil
+	}
+
+	lines := make([]string, 0, end-start+1)
+	for _, line := range m.rawLines[start : end+1] {
+		lines = append(lines, stripANSI(line))
+	}
+	return m.agent.CopyText(strings.Join(lines, "\n"))
+}
+
+func lineLabel(n int) string {
+	if n == 1 {
+		return "1 line"
+	}
+	return strconv.Itoa(n) + " lines"
+}
+
 // rebuildRenderedLines は現在幅に合わせて表示用の行キャッシュを再構築する。
 func (m *Model) rebuildRenderedLines() {
 	m.renderedLines = make([]string, len(m.rawLines))
@@ -721,6 +903,77 @@ func runeWidth(r rune) int {
 	return 1
 }
 
+func stripANSI(s string) string {
+	var result strings.Builder
+	inEscape := false
+	for _, r := range s {
+		if r == '\033' {
+			inEscape = true
+			continue
+		}
+		if inEscape {
+			if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') {
+				inEscape = false
+			}
+			continue
+		}
+		result.WriteRune(r)
+	}
+	return result.String()
+}
+
+func decorateViewportLine(line string, width int, bg string) string {
+	if bg == "" {
+		return line
+	}
+	padded := strings.ReplaceAll(line, "\033[0m", "\033[0m"+bg)
+	padding := max(0, width-lipgloss.Width(line))
+	return bg + padded + strings.Repeat(" ", padding) + "\033[0m"
+}
+
+func (m Model) viewportView() string {
+	if !m.navigationMode || m.focusedBlock >= 0 {
+		return m.vp.view()
+	}
+
+	const cursorBg = "\033[48;5;238m"
+	const visualBg = "\033[48;5;236m"
+	const visualCursorBg = "\033[48;5;60m"
+
+	visible := m.vp.visibleLines()
+	var sb strings.Builder
+	sb.Grow(m.vp.height * (m.vp.width + 1))
+
+	selectionStart, selectionEnd, hasSelection := m.selectionRange()
+
+	for i := 0; i < m.vp.height; i++ {
+		if i > 0 {
+			sb.WriteByte('\n')
+		}
+		if i >= len(visible) {
+			continue
+		}
+
+		rawIdx := m.vp.yOffset + i
+		line := visible[i]
+		bg := ""
+
+		if rawIdx == m.cursorLine {
+			bg = cursorBg
+		}
+		if hasSelection && rawIdx >= selectionStart && rawIdx <= selectionEnd {
+			bg = visualBg
+			if rawIdx == m.cursorLine {
+				bg = visualCursorBg
+			}
+		}
+
+		sb.WriteString(decorateViewportLine(line, m.vp.width, bg))
+	}
+
+	return sb.String()
+}
+
 // rebuildChrome は入力欄+ステータスバーを再構築する。
 // Update() 内で chromeDirty 時のみ呼ばれる（View() は値レシーバーなので書き込み不可）。
 func (m *Model) rebuildChrome() {
@@ -750,7 +1003,9 @@ func (m *Model) rebuildChrome() {
 
 	hints := statusHintsNormal
 	if m.navigationMode {
-		if m.focusedBlock >= 0 {
+		if m.visualStart >= 0 {
+			hints = statusHintsVisual
+		} else if m.focusedBlock >= 0 {
 			hints = statusHintsBlockFocus
 		} else {
 			hints = statusHintsNav
@@ -777,5 +1032,5 @@ func (m Model) View() string {
 	if !m.ready {
 		return "Initializing..."
 	}
-	return m.vp.view() + "\n" + m.chromeCache
+	return m.viewportView() + "\n" + m.chromeCache
 }

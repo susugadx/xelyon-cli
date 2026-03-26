@@ -17,6 +17,41 @@ func TestIsTestFile(t *testing.T) {
 		{"app.spec.ts", true},
 		{"test_helper.py", true},
 		{"utils.py", false},
+		// Python
+		{"models_test.py", true},
+		{"conftest.py", true},
+		{"tests/test_models.py", true},
+		// Rust
+		{"tests/integration.rs", true},
+		{"src/lib.rs", false},
+		// Java/Kotlin
+		{"UserServiceTest.java", true},
+		{"UserServiceTests.java", true},
+		{"ConfigSpec.kt", true},
+		// Java false positives
+		{"contest.java", false},
+		{"protest.java", false},
+		{"manifest.java", false},
+		// C#
+		{"OrderServiceTests.cs", true},
+		// PHP
+		{"UserRepositoryTest.php", true},
+		// Ruby
+		{"user_spec.rb", true},
+		{"user_test.rb", true},
+		{"user.rb", false},
+		// Swift
+		{"ConfigTests.swift", true},
+		// Scala
+		{"ConfigSpec.scala", true},
+		// Elixir
+		{"user_test.exs", true},
+		// Lua
+		{"utils_test.lua", true},
+		// C/C++
+		{"config_test.cpp", true},
+		{"tests/main.cpp", true},
+		{"src/main.cpp", false},
 	}
 	for _, tt := range tests {
 		got := isTestFile(tt.path)

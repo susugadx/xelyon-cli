@@ -94,13 +94,3 @@ func (v *lightViewport) scrollDown(n int) {
 func (v *lightViewport) gotoTop() {
 	v.yOffset = 0
 }
-
-// halfPageUp は半ページ上にスクロールする。
-func (v *lightViewport) halfPageUp() {
-	v.scrollUp(max(1, v.height/2))
-}
-
-// halfPageDown は半ページ下にスクロールする。
-func (v *lightViewport) halfPageDown() {
-	v.scrollDown(max(1, v.height/2))
-}
