@@ -68,6 +68,8 @@ func TestModel_MouseWheelScrollsViewport(t *testing.T) {
 	m.ready = true
 	m.vp = lightViewport{width: 10, height: 5}
 	m.vp.setContent(strings.Repeat("line\n", 20))
+	m.navigationMode = true
+	m.cursorLine = 7
 
 	updated, _ := m.Update(tea.MouseMsg{
 		Button: tea.MouseButtonWheelDown,
@@ -77,6 +79,9 @@ func TestModel_MouseWheelScrollsViewport(t *testing.T) {
 
 	if got.vp.yOffset != 3 {
 		t.Fatalf("yOffset = %d, want 3", got.vp.yOffset)
+	}
+	if got.cursorLine != 7 {
+		t.Fatalf("cursorLine = %d, want 7", got.cursorLine)
 	}
 }
 
@@ -232,11 +237,16 @@ func TestNavMode_EscEntersNavWhenInputEmpty(t *testing.T) {
 	agent := &stubAgent{statusLine: "ready"}
 	m := NewModel(agent, "")
 	m.ready = true
+	m.vp = lightViewport{width: 10, height: 5, yOffset: 3}
+	setModelRawLines(&m, 20)
 
 	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyEsc})
 	got := updated.(Model)
 	if !got.navigationMode {
 		t.Fatal("Esc with empty input should enter navigation mode")
+	}
+	if got.cursorLine != 3 {
+		t.Fatalf("cursorLine = %d, want 3", got.cursorLine)
 	}
 }
 
@@ -406,8 +416,11 @@ func TestNavMode_VisualSelectionCopiesPlainText(t *testing.T) {
 
 	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'V'}})
 	m = updated.(Model)
-	if m.visualStart != 0 {
-		t.Fatalf("visualStart = %d, want 0", m.visualStart)
+	if m.visualMode != visualModeLine {
+		t.Fatalf("visualMode = %d, want %d", m.visualMode, visualModeLine)
+	}
+	if m.visualStart.line != 0 {
+		t.Fatalf("visualStart.line = %d, want 0", m.visualStart.line)
 	}
 
 	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
@@ -418,8 +431,8 @@ func TestNavMode_VisualSelectionCopiesPlainText(t *testing.T) {
 
 	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
 	m = updated.(Model)
-	if m.visualStart != -1 {
-		t.Fatalf("visualStart after copy = %d, want -1", m.visualStart)
+	if m.visualMode != visualModeOff {
+		t.Fatalf("visualMode after copy = %d, want %d", m.visualMode, visualModeOff)
 	}
 	if len(agent.copyTexts) != 1 {
 		t.Fatalf("copyTexts len = %d, want 1", len(agent.copyTexts))
@@ -433,16 +446,95 @@ func TestNavMode_EscCancelsVisualSelection(t *testing.T) {
 	agent := &stubAgent{statusLine: "ready"}
 	m := NewModel(agent, "")
 	m.navigationMode = true
-	m.visualStart = 1
+	m.visualMode = visualModeLine
+	m.visualStart = visualPosition{line: 1, col: 0}
 	m.cursorLine = 2
 
 	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyEsc})
 	got := updated.(Model)
-	if got.visualStart != -1 {
-		t.Fatalf("visualStart = %d, want -1", got.visualStart)
+	if got.visualMode != visualModeOff {
+		t.Fatalf("visualMode = %d, want %d", got.visualMode, visualModeOff)
 	}
 	if !got.navigationMode {
 		t.Fatal("Esc in visual mode should stay in navigation mode")
+	}
+}
+
+func TestNavMode_CharVisualSelectionCopiesRange(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+	m.navigationMode = true
+	m.vp = lightViewport{width: 20, height: 5}
+	m.rawLines = []string{"hello", "world"}
+	m.rebuildRenderedLines()
+	m.vp.setLines(m.renderedLines)
+	m.cursorLine = 0
+	m.cursorCol = 1
+
+	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+	m = updated.(Model)
+	if m.visualMode != visualModeChar {
+		t.Fatalf("visualMode = %d, want %d", m.visualMode, visualModeChar)
+	}
+
+	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	m = updated.(Model)
+	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	m = updated.(Model)
+	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	m = updated.(Model)
+
+	if len(agent.copyTexts) != 1 {
+		t.Fatalf("copyTexts len = %d, want 1", len(agent.copyTexts))
+	}
+	if agent.copyTexts[0] != "ell" {
+		t.Fatalf("copied text = %q, want %q", agent.copyTexts[0], "ell")
+	}
+	if m.visualMode != visualModeOff {
+		t.Fatalf("visualMode after copy = %d, want %d", m.visualMode, visualModeOff)
+	}
+}
+
+func TestNavMode_CharVisualSelectionSupportsLineMoveAndColumnClamp(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+	m.navigationMode = true
+	m.vp = lightViewport{width: 20, height: 5}
+	m.rawLines = []string{"abcdef", "xy"}
+	m.rebuildRenderedLines()
+	m.vp.setLines(m.renderedLines)
+	m.cursorCol = 4
+
+	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+	m = updated.(Model)
+	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m = updated.(Model)
+
+	if m.cursorLine != 1 {
+		t.Fatalf("cursorLine = %d, want 1", m.cursorLine)
+	}
+	if m.cursorCol != 1 {
+		t.Fatalf("cursorCol = %d, want 1", m.cursorCol)
+	}
+}
+
+func TestNavMode_PendingYFallsBackToCopyLastOutput(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+	m.navigationMode = true
+	m.vp = lightViewport{width: 10, height: 5}
+	setModelRawLines(&m, 5)
+
+	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	m = updated.(Model)
+	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m = updated.(Model)
+
+	if agent.copyCalls != 1 {
+		t.Fatalf("copyCalls = %d, want 1", agent.copyCalls)
+	}
+	if m.cursorLine != 1 {
+		t.Fatalf("cursorLine = %d, want 1", m.cursorLine)
 	}
 }
 
