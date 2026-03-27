@@ -7,42 +7,8 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
-
-type stubAgent struct {
-	processing   bool
-	cancelCalls  int
-	cleanupCalls int
-	copyCalls    int
-	copyTexts    []string
-	statusLine   string
-}
-
-func (s *stubAgent) Chat(input string)             {}
-func (s *stubAgent) HandleCommand(cmd string) bool { return false }
-func (s *stubAgent) GetStatusLine() string         { return s.statusLine }
-func (s *stubAgent) Cancel()                       { s.cancelCalls++ }
-func (s *stubAgent) Cleanup()                      { s.cleanupCalls++ }
-func (s *stubAgent) IsProcessing() bool            { return s.processing }
-func (s *stubAgent) CopyLastOutput() (string, error) {
-	s.copyCalls++
-	return "Copied 5 lines", nil
-}
-func (s *stubAgent) CopyText(text string) error {
-	s.copyCalls++
-	s.copyTexts = append(s.copyTexts, text)
-	return nil
-}
-
-func setModelRawLines(m *Model, count int) {
-	lines := make([]string, count)
-	for i := 0; i < count; i++ {
-		lines[i] = fmt.Sprintf("line%d", i)
-	}
-	m.rawLines = append([]string(nil), lines...)
-	m.rebuildRenderedLines()
-	m.vp.setLines(m.renderedLines)
-}
 
 // TestModel_KeyDownScrollsViewport は Alternate Scroll Mode (1007) で
 // ホイールがカーソルキーに変換された場合に viewport がスクロールすることを検証。
@@ -53,7 +19,6 @@ func TestModel_KeyDownScrollsViewport(t *testing.T) {
 	m.vp = lightViewport{width: 10, height: 5}
 	m.vp.setContent(strings.Repeat("line\n", 20))
 
-	// KeyDown → 1行スクロール
 	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyDown})
 	got := updated.(Model)
 
@@ -67,9 +32,9 @@ func TestModel_MouseWheelScrollsViewport(t *testing.T) {
 	m := NewModel(agent, "")
 	m.ready = true
 	m.vp = lightViewport{width: 10, height: 5}
-	m.vp.setContent(strings.Repeat("line\n", 20))
+	setModelRawLines(&m, 20)
 	m.navigationMode = true
-	m.cursorLine = 7
+	m.cursorLine = 0
 
 	updated, _ := m.Update(tea.MouseMsg{
 		Button: tea.MouseButtonWheelDown,
@@ -80,8 +45,48 @@ func TestModel_MouseWheelScrollsViewport(t *testing.T) {
 	if got.vp.yOffset != 3 {
 		t.Fatalf("yOffset = %d, want 3", got.vp.yOffset)
 	}
-	if got.cursorLine != 7 {
-		t.Fatalf("cursorLine = %d, want 7", got.cursorLine)
+	if got.cursorLine != 3 {
+		t.Fatalf("cursorLine = %d, want 3", got.cursorLine)
+	}
+	if got.cursorLine < got.vp.yOffset || got.cursorLine >= got.vp.yOffset+got.vp.height {
+		t.Fatalf("cursorLine = %d should stay visible in viewport [%d, %d)", got.cursorLine, got.vp.yOffset, got.vp.yOffset+got.vp.height)
+	}
+}
+
+func TestModel_MouseWheelToBottomClearsNewOutputBadge(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := newModelWithViewport(agent)
+
+	for i := 0; i < 40; i++ {
+		m.appendContentLines(fmt.Sprintf("line %d", i))
+	}
+
+	m.vp.gotoTop()
+	m.appendContentLines("new line")
+	m.chromeDirty = true
+	m.rebuildChrome()
+	if !strings.Contains(m.chromeCache, "New output") {
+		t.Fatalf("chromeCache should include new output badge, got %q", m.chromeCache)
+	}
+
+	updated, _ := m.Update(tea.MouseMsg{
+		Button: tea.MouseButtonWheelDown,
+		Action: tea.MouseActionPress,
+	})
+	m = updated.(Model)
+	for !m.vp.atBottom() {
+		updated, _ = m.Update(tea.MouseMsg{
+			Button: tea.MouseButtonWheelDown,
+			Action: tea.MouseActionPress,
+		})
+		m = updated.(Model)
+	}
+
+	if m.newOutput {
+		t.Fatal("newOutput should be cleared after mouse scrolling to bottom")
+	}
+	if strings.Contains(m.chromeCache, "New output") {
+		t.Fatalf("chromeCache should clear new output badge, got %q", m.chromeCache)
 	}
 }
 
@@ -165,21 +170,15 @@ func TestModel_View_RendersSinglePromptAndContainsInput(t *testing.T) {
 		t.Fatalf("view should have at least 3 lines, got %d: %q", len(lines), view)
 	}
 
-	// プロンプトが1つだけ表示される
 	if strings.Count(view, inputPrompt) != 1 {
 		t.Fatalf("prompt count = %d, want 1; view=%q", strings.Count(view, inputPrompt), view)
 	}
-
-	// ステータスバーにステータス文字列が含まれる
 	if !strings.Contains(view, "ready") {
 		t.Fatalf("view should contain status line, got %q", view)
 	}
-
-	// 入力欄に入力値が含まれる
 	if !strings.Contains(view, "hello") {
 		t.Fatalf("view should contain input value, got %q", view)
 	}
-
 	if !strings.Contains(view, "/copy") {
 		t.Fatalf("view should contain copy hint, got %q", view)
 	}
@@ -212,6 +211,82 @@ func TestModel_WindowResizeRestoresFullLineFromRawContent(t *testing.T) {
 	}
 }
 
+func TestModel_WindowResizeKeepsCharVisualSelectionState(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 6, Height: 8})
+	m = updated.(Model)
+	m.navigationMode = true
+	m.rawLines = []string{"abcdefghij"}
+	m.rebuildRenderedLines()
+	m.vp.setLines(m.renderedLines)
+	m.cursorLine = 0
+	m.cursorCol = 1
+
+	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+	m = updated.(Model)
+	m.cursorCol = 7
+	m.rebuildChrome()
+
+	before := m.View()
+	if !strings.Contains(before, "\033[48;5;255;38;5;16mf") {
+		t.Fatalf("narrow view should keep cursor visible before resize, got %q", before)
+	}
+
+	updated, _ = m.Update(tea.WindowSizeMsg{Width: 12, Height: 8})
+	m = updated.(Model)
+	after := m.View()
+
+	if m.visualMode != visualModeChar {
+		t.Fatalf("visualMode = %d, want %d", m.visualMode, visualModeChar)
+	}
+	if m.visualStart != (visualPosition{line: 0, col: 1}) {
+		t.Fatalf("visualStart = %+v, want {line:0 col:1}", m.visualStart)
+	}
+	if m.cursorCol != 7 {
+		t.Fatalf("cursorCol = %d, want 7", m.cursorCol)
+	}
+	if !strings.Contains(stripANSI(after), "abcdefgh") {
+		t.Fatalf("wide view should restore full visible selection context, got %q", after)
+	}
+}
+
+func TestModel_WindowResizeKeepsLineVisualSelectionState(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 8, Height: 8})
+	m = updated.(Model)
+	m.navigationMode = true
+	setModelRawLines(&m, 20)
+	m.cursorLine = 2
+
+	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'V'}})
+	m = updated.(Model)
+	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m = updated.(Model)
+	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m = updated.(Model)
+
+	updated, _ = m.Update(tea.WindowSizeMsg{Width: 20, Height: 10})
+	m = updated.(Model)
+
+	if m.visualMode != visualModeLine {
+		t.Fatalf("visualMode = %d, want %d", m.visualMode, visualModeLine)
+	}
+	if m.visualStart.line != 2 {
+		t.Fatalf("visualStart.line = %d, want 2", m.visualStart.line)
+	}
+	if m.cursorLine != 4 {
+		t.Fatalf("cursorLine = %d, want 4", m.cursorLine)
+	}
+	view := m.View()
+	if !strings.Contains(view, "\033[48;5;240m") {
+		t.Fatalf("line visual selection should remain highlighted after resize, got %q", view)
+	}
+}
+
 func TestModel_AppendMessageKeepsViewportAtBottom(t *testing.T) {
 	agent := &stubAgent{statusLine: "ready"}
 	m := NewModel(agent, "")
@@ -231,788 +306,101 @@ func TestModel_AppendMessageKeepsViewportAtBottom(t *testing.T) {
 	}
 }
 
-// --- Navigation Mode tests ---
-
-func TestNavMode_EscEntersNavWhenInputEmpty(t *testing.T) {
+func TestModel_StreamTextMergesChunksAcrossMessages(t *testing.T) {
 	agent := &stubAgent{statusLine: "ready"}
 	m := NewModel(agent, "")
-	m.ready = true
-	m.vp = lightViewport{width: 10, height: 5, yOffset: 3}
-	setModelRawLines(&m, 20)
 
-	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyEsc})
-	got := updated.(Model)
-	if !got.navigationMode {
-		t.Fatal("Esc with empty input should enter navigation mode")
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 20, Height: 8})
+	m = updated.(Model)
+
+	updated, _ = m.Update(StreamTextMsg{Text: "hello", Done: false})
+	m = updated.(Model)
+	updated, _ = m.Update(StreamTextMsg{Text: "\nworld", Done: true})
+	m = updated.(Model)
+
+	if len(m.rawLines) != 2 {
+		t.Fatalf("rawLines len = %d, want 2", len(m.rawLines))
 	}
-	if got.cursorLine != 3 {
-		t.Fatalf("cursorLine = %d, want 3", got.cursorLine)
+	if m.rawLines[0] != "hello" || m.rawLines[1] != "world" {
+		t.Fatalf("rawLines = %#v, want [hello world]", m.rawLines)
+	}
+	if m.streamingActive {
+		t.Fatal("streamingActive should be reset after done")
 	}
 }
 
-func TestNavMode_EscDoesNotEnterNavWhenInputHasText(t *testing.T) {
-	agent := &stubAgent{statusLine: "ready"}
-	m := NewModel(agent, "")
-	m.ready = true
-	m.textInput.SetValue("hello")
-
-	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyEsc})
-	got := updated.(Model)
-	if got.navigationMode {
-		t.Fatal("Esc with text in input should NOT enter navigation mode")
-	}
-}
-
-func TestNavMode_QExitsNav(t *testing.T) {
-	agent := &stubAgent{statusLine: "ready"}
-	m := NewModel(agent, "")
-	m.navigationMode = true
-
-	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
-	got := updated.(Model)
-	if got.navigationMode {
-		t.Fatal("q should exit navigation mode")
-	}
-}
-
-func TestNavMode_JKScrolls(t *testing.T) {
-	agent := &stubAgent{statusLine: "ready"}
-	m := NewModel(agent, "")
-	m.ready = true
-	m.navigationMode = true
-	m.vp = lightViewport{width: 10, height: 5}
-	setModelRawLines(&m, 20)
-
-	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-	got := updated.(Model)
-	if got.cursorLine != 1 {
-		t.Fatalf("j: cursorLine = %d, want 1", got.cursorLine)
-	}
-
-	updated, _ = got.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
-	got = updated.(Model)
-	if got.cursorLine != 0 {
-		t.Fatalf("k: cursorLine = %d, want 0", got.cursorLine)
-	}
-}
-
-func TestNavMode_DUHalfPage(t *testing.T) {
-	agent := &stubAgent{statusLine: "ready"}
-	m := NewModel(agent, "")
-	m.ready = true
-	m.navigationMode = true
-	m.vp = lightViewport{width: 10, height: 10}
-	setModelRawLines(&m, 40)
-
-	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
-	got := updated.(Model)
-	if got.cursorLine != 5 {
-		t.Fatalf("d: cursorLine = %d, want 5", got.cursorLine)
-	}
-
-	updated, _ = got.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'u'}})
-	got = updated.(Model)
-	if got.cursorLine != 0 {
-		t.Fatalf("u: cursorLine = %d, want 0", got.cursorLine)
-	}
-}
-
-func TestNavMode_CountPrefixAppliesToMoves(t *testing.T) {
-	agent := &stubAgent{statusLine: "ready"}
-	m := NewModel(agent, "")
-	m.ready = true
-	m.navigationMode = true
-	m.vp = lightViewport{width: 10, height: 10}
-	setModelRawLines(&m, 40)
-
-	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'3'}})
-	m = updated.(Model)
-	if m.pendingCount != 3 {
-		t.Fatalf("pendingCount = %d, want 3", m.pendingCount)
-	}
-
-	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-	m = updated.(Model)
-	if m.cursorLine != 3 {
-		t.Fatalf("cursorLine = %d, want 3", m.cursorLine)
-	}
-	if m.pendingCount != 0 {
-		t.Fatalf("pendingCount = %d, want 0", m.pendingCount)
-	}
-
-	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'2'}})
-	m = updated.(Model)
-	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
-	m = updated.(Model)
-	if m.cursorLine != 13 {
-		t.Fatalf("cursorLine after 2d = %d, want 13", m.cursorLine)
-	}
-}
-
-func TestNavMode_GGAndG(t *testing.T) {
-	agent := &stubAgent{statusLine: "ready"}
-	m := NewModel(agent, "")
-	m.ready = true
-	m.navigationMode = true
-	m.vp = lightViewport{width: 10, height: 5}
-	setModelRawLines(&m, 20)
-
-	// G → gotoBottom
-	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
-	got := updated.(Model)
-	if got.cursorLine != 19 {
-		t.Fatalf("G: cursorLine = %d, want 19", got.cursorLine)
-	}
-
-	// gg → gotoTop
-	updated, _ = got.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
-	got = updated.(Model)
-	if !got.gPressed {
-		t.Fatal("first g should set gPressed")
-	}
-	updated, _ = got.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
-	got = updated.(Model)
-	if got.cursorLine != 0 {
-		t.Fatalf("gg: cursorLine = %d, want 0", got.cursorLine)
-	}
-	if got.gPressed {
-		t.Fatal("gPressed should be reset after gg")
-	}
-}
-
-func TestNavMode_CountPrefixAppliesToGGAndG(t *testing.T) {
-	agent := &stubAgent{statusLine: "ready"}
-	m := NewModel(agent, "")
-	m.ready = true
-	m.navigationMode = true
-	m.vp = lightViewport{width: 10, height: 5}
-	setModelRawLines(&m, 20)
-
-	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'1'}})
-	m = updated.(Model)
-	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'2'}})
-	m = updated.(Model)
-	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
-	m = updated.(Model)
-	if m.cursorLine != 11 {
-		t.Fatalf("cursorLine after 12G = %d, want 11", m.cursorLine)
-	}
-
-	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'3'}})
-	m = updated.(Model)
-	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
-	m = updated.(Model)
-	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
-	m = updated.(Model)
-	if m.cursorLine != 2 {
-		t.Fatalf("cursorLine after 3gg = %d, want 2", m.cursorLine)
-	}
-}
-
-func TestNavMode_GFollowedByOtherKeyResetsG(t *testing.T) {
-	agent := &stubAgent{statusLine: "ready"}
-	m := NewModel(agent, "")
-	m.navigationMode = true
-	m.gPressed = true
-
-	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-	got := updated.(Model)
-	if got.gPressed {
-		t.Fatal("gPressed should be reset after non-g key")
-	}
-}
-
-func TestNavMode_CtrlCWorksInNav(t *testing.T) {
-	agent := &stubAgent{statusLine: "ready"}
-	m := NewModel(agent, "")
-	m.navigationMode = true
-
-	updated, cmd := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyCtrlC})
-	got := updated.(Model)
-	if cmd != nil {
-		t.Fatal("first ctrl+c should not quit")
-	}
-	if !got.lastInterrupt.After(time.Now().Add(-time.Second)) {
-		t.Fatal("lastInterrupt should be set")
-	}
-}
-
-func TestNavMode_YCallsCopy(t *testing.T) {
-	agent := &stubAgent{statusLine: "ready"}
-	m := NewModel(agent, "")
-	m.navigationMode = true
-	m.vp = lightViewport{width: 10, height: 5}
-	setModelRawLines(&m, 5)
-
-	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
-	got := updated.(Model)
-	if agent.copyCalls != 0 {
-		t.Fatalf("first y should wait for yy, copyCalls = %d", agent.copyCalls)
-	}
-	if !got.yPressed {
-		t.Fatal("first y should set yPressed")
-	}
-
-	updated, _ = got.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
-	got = updated.(Model)
-	if agent.copyCalls != 1 {
-		t.Fatalf("copyCalls = %d, want 1", agent.copyCalls)
-	}
-	if len(agent.copyTexts) != 1 || agent.copyTexts[0] != "line0" {
-		t.Fatalf("copied text = %#v, want [line0]", agent.copyTexts)
-	}
-	if got.transientStatus == "" {
-		t.Fatal("transientStatus should be set after copy")
-	}
-}
-
-func TestNavMode_VisualSelectionCopiesPlainText(t *testing.T) {
-	agent := &stubAgent{statusLine: "ready"}
-	m := NewModel(agent, "")
-	m.navigationMode = true
-	m.vp = lightViewport{width: 20, height: 5}
-	m.rawLines = []string{"one", "\033[31m二行目\033[0m", "three"}
-	m.rebuildRenderedLines()
-	m.vp.setLines(m.renderedLines)
-
-	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'V'}})
-	m = updated.(Model)
-	if m.visualMode != visualModeLine {
-		t.Fatalf("visualMode = %d, want %d", m.visualMode, visualModeLine)
-	}
-	if m.visualStart.line != 0 {
-		t.Fatalf("visualStart.line = %d, want 0", m.visualStart.line)
-	}
-
-	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-	m = updated.(Model)
-	if m.cursorLine != 1 {
-		t.Fatalf("cursorLine = %d, want 1", m.cursorLine)
-	}
-
-	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
-	m = updated.(Model)
-	if m.visualMode != visualModeOff {
-		t.Fatalf("visualMode after copy = %d, want %d", m.visualMode, visualModeOff)
-	}
-	if len(agent.copyTexts) != 1 {
-		t.Fatalf("copyTexts len = %d, want 1", len(agent.copyTexts))
-	}
-	if agent.copyTexts[0] != "one\n二行目" {
-		t.Fatalf("copied text = %q, want %q", agent.copyTexts[0], "one\n二行目")
-	}
-}
-
-func TestNavMode_EscCancelsVisualSelection(t *testing.T) {
-	agent := &stubAgent{statusLine: "ready"}
-	m := NewModel(agent, "")
-	m.navigationMode = true
-	m.visualMode = visualModeLine
-	m.visualStart = visualPosition{line: 1, col: 0}
-	m.cursorLine = 2
-
-	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyEsc})
-	got := updated.(Model)
-	if got.visualMode != visualModeOff {
-		t.Fatalf("visualMode = %d, want %d", got.visualMode, visualModeOff)
-	}
-	if !got.navigationMode {
-		t.Fatal("Esc in visual mode should stay in navigation mode")
-	}
-}
-
-func TestNavMode_CharVisualSelectionCopiesRange(t *testing.T) {
-	agent := &stubAgent{statusLine: "ready"}
-	m := NewModel(agent, "")
-	m.navigationMode = true
-	m.vp = lightViewport{width: 20, height: 5}
-	m.rawLines = []string{"hello", "world"}
-	m.rebuildRenderedLines()
-	m.vp.setLines(m.renderedLines)
-	m.cursorLine = 0
-	m.cursorCol = 1
-
-	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
-	m = updated.(Model)
-	if m.visualMode != visualModeChar {
-		t.Fatalf("visualMode = %d, want %d", m.visualMode, visualModeChar)
-	}
-	if m.visualStart.col != 1 {
-		t.Fatalf("visualStart.col = %d, want 1", m.visualStart.col)
-	}
-
-	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
-	m = updated.(Model)
-	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
-	m = updated.(Model)
-	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
-	m = updated.(Model)
-
-	if len(agent.copyTexts) != 1 {
-		t.Fatalf("copyTexts len = %d, want 1", len(agent.copyTexts))
-	}
-	if agent.copyTexts[0] != "ell" {
-		t.Fatalf("copied text = %q, want %q", agent.copyTexts[0], "ell")
-	}
-	if m.visualMode != visualModeOff {
-		t.Fatalf("visualMode after copy = %d, want %d", m.visualMode, visualModeOff)
-	}
-}
-
-func TestNavMode_CharVisualSelectionSupportsLineMoveAndColumnClamp(t *testing.T) {
-	agent := &stubAgent{statusLine: "ready"}
-	m := NewModel(agent, "")
-	m.navigationMode = true
-	m.vp = lightViewport{width: 20, height: 5}
-	m.rawLines = []string{"abcdef", "xy"}
-	m.rebuildRenderedLines()
-	m.vp.setLines(m.renderedLines)
-	m.cursorCol = 4
-
-	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
-	m = updated.(Model)
-	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-	m = updated.(Model)
-
-	if m.cursorLine != 1 {
-		t.Fatalf("cursorLine = %d, want 1", m.cursorLine)
-	}
-	if m.cursorCol != 1 {
-		t.Fatalf("cursorCol = %d, want 1", m.cursorCol)
-	}
-}
-
-func TestNavMode_HLMoveCursorColWithoutVisualMode(t *testing.T) {
-	agent := &stubAgent{statusLine: "ready"}
-	m := NewModel(agent, "")
-	m.navigationMode = true
-	m.vp = lightViewport{width: 20, height: 5}
-	m.rawLines = []string{"hello"}
-	m.rebuildRenderedLines()
-	m.vp.setLines(m.renderedLines)
-
-	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
-	m = updated.(Model)
-	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
-	m = updated.(Model)
-	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
-	m = updated.(Model)
-
-	if m.cursorCol != 1 {
-		t.Fatalf("cursorCol = %d, want 1", m.cursorCol)
-	}
-
-	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
-	m = updated.(Model)
-	if m.visualStart.col != 1 {
-		t.Fatalf("visualStart.col = %d, want 1", m.visualStart.col)
-	}
-}
-
-func TestNavMode_ZeroMovesToLineStartWithoutCount(t *testing.T) {
-	agent := &stubAgent{statusLine: "ready"}
-	m := NewModel(agent, "")
-	m.navigationMode = true
-	m.vp = lightViewport{width: 20, height: 5}
-	m.rawLines = []string{"hello world"}
-	m.rebuildRenderedLines()
-	m.vp.setLines(m.renderedLines)
-	m.cursorCol = 5
-
-	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'0'}})
-	m = updated.(Model)
-	if m.cursorCol != 0 {
-		t.Fatalf("cursorCol = %d, want 0", m.cursorCol)
-	}
-}
-
-func TestNavMode_CountCanIncludeZero(t *testing.T) {
-	agent := &stubAgent{statusLine: "ready"}
-	m := NewModel(agent, "")
-	m.ready = true
-	m.navigationMode = true
-	m.vp = lightViewport{width: 10, height: 5}
-	setModelRawLines(&m, 20)
-
-	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'1'}})
-	m = updated.(Model)
-	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'0'}})
-	m = updated.(Model)
-	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-	m = updated.(Model)
-	if m.cursorLine != 10 {
-		t.Fatalf("cursorLine = %d, want 10", m.cursorLine)
-	}
-}
-
-func TestNavMode_WBEWordMotions(t *testing.T) {
-	agent := &stubAgent{statusLine: "ready"}
-	m := NewModel(agent, "")
-	m.navigationMode = true
-	m.vp = lightViewport{width: 30, height: 5}
-	m.rawLines = []string{"alpha beta gamma"}
-	m.rebuildRenderedLines()
-	m.vp.setLines(m.renderedLines)
-
-	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'w'}})
-	m = updated.(Model)
-	if m.cursorCol != 6 {
-		t.Fatalf("cursorCol after w = %d, want 6", m.cursorCol)
-	}
-
-	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
-	m = updated.(Model)
-	if m.cursorCol != 9 {
-		t.Fatalf("cursorCol after e = %d, want 9", m.cursorCol)
-	}
-
-	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'b'}})
-	m = updated.(Model)
-	if m.cursorCol != 6 {
-		t.Fatalf("cursorCol after b = %d, want 6", m.cursorCol)
-	}
-}
-
-func TestNavMode_WordMotionsWorkInVisualMode(t *testing.T) {
-	agent := &stubAgent{statusLine: "ready"}
-	m := NewModel(agent, "")
-	m.navigationMode = true
-	m.vp = lightViewport{width: 30, height: 5}
-	m.rawLines = []string{"alpha beta gamma"}
-	m.rebuildRenderedLines()
-	m.vp.setLines(m.renderedLines)
-
-	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
-	m = updated.(Model)
-	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'w'}})
-	m = updated.(Model)
-	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
-	m = updated.(Model)
-	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
-	m = updated.(Model)
-
-	if len(agent.copyTexts) != 1 {
-		t.Fatalf("copyTexts len = %d, want 1", len(agent.copyTexts))
-	}
-	if agent.copyTexts[0] != "alpha beta" {
-		t.Fatalf("copied text = %q, want %q", agent.copyTexts[0], "alpha beta")
-	}
-}
-
-func TestNavMode_LineStartAndEndMotions(t *testing.T) {
-	agent := &stubAgent{statusLine: "ready"}
-	m := NewModel(agent, "")
-	m.navigationMode = true
-	m.vp = lightViewport{width: 30, height: 5}
-	m.rawLines = []string{"  alpha", " beta", "gamma"}
-	m.rebuildRenderedLines()
-	m.vp.setLines(m.renderedLines)
-
-	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'^'}})
-	m = updated.(Model)
-	if m.cursorCol != 2 {
-		t.Fatalf("cursorCol after ^ = %d, want 2", m.cursorCol)
-	}
-
-	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'$'}})
-	m = updated.(Model)
-	if m.cursorCol != 6 {
-		t.Fatalf("cursorCol after $ = %d, want 6", m.cursorCol)
-	}
-
-	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'2'}})
-	m = updated.(Model)
-	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'$'}})
-	m = updated.(Model)
-	if m.cursorLine != 1 {
-		t.Fatalf("cursorLine after 2$ = %d, want 1", m.cursorLine)
-	}
-	if m.cursorCol != 4 {
-		t.Fatalf("cursorCol after 2$ = %d, want 4", m.cursorCol)
-	}
-}
-
-func TestNavMode_ViewShowsColumnCursorInNormalMode(t *testing.T) {
+func TestModel_UpdateKeyMsgRebuildsChrome(t *testing.T) {
 	agent := &stubAgent{statusLine: "ready"}
 	m := newModelWithViewport(agent)
-	m.navigationMode = true
-	m.rawLines = []string{"hello"}
-	m.rebuildRenderedLines()
-	m.vp.setLines(m.renderedLines)
-	m.cursorLine = 0
-	m.cursorCol = 2
 	m.rebuildChrome()
 
-	view := m.View()
-	if !strings.Contains(view, "\033[48;5;255;38;5;16ml") {
-		t.Fatalf("view should contain highlighted cursor character, got %q", view)
-	}
-	if !strings.Contains(view, "\033[48;5;236m                                                                           \033[0m") {
-		t.Fatalf("view should extend line highlight into padding, got %q", view)
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+	m = updated.(Model)
+
+	if !strings.Contains(m.chromeCache, "a") {
+		t.Fatalf("chromeCache should include typed input, got %q", m.chromeCache)
 	}
 }
 
-func TestNavMode_PendingYFallsBackToCopyLastOutput(t *testing.T) {
-	agent := &stubAgent{statusLine: "ready"}
-	m := NewModel(agent, "")
-	m.navigationMode = true
-	m.vp = lightViewport{width: 10, height: 5}
-	setModelRawLines(&m, 5)
-
-	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
-	m = updated.(Model)
-	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-	m = updated.(Model)
-
-	if agent.copyCalls != 1 {
-		t.Fatalf("copyCalls = %d, want 1", agent.copyCalls)
-	}
-	if m.cursorLine != 1 {
-		t.Fatalf("cursorLine = %d, want 1", m.cursorLine)
-	}
-}
-
-// --- Tool Block tests ---
-
-func newModelWithViewport(agent AgentInterface) Model {
+func TestModel_StatusBarClampedToWidth(t *testing.T) {
+	agent := &stubAgent{statusLine: strings.Repeat("status ", 20)}
 	m := NewModel(agent, "")
 	m.ready = true
-	m.width = 80
-	m.height = 30
-	m.vp = lightViewport{width: 80, height: 26}
-	m.padLineCache = strings.Repeat(" ", 80)
-	return m
-}
+	m.width = 20
+	m.height = 8
+	m.vp = lightViewport{width: 20, height: 4}
+	m.padLineCache = strings.Repeat(" ", 20)
+	m.rebuildChrome()
 
-func TestToolBlock_AppendToolResultTracksLineStart(t *testing.T) {
-	m := newModelWithViewport(&stubAgent{statusLine: "ready"})
-
-	// 先にテキスト行を追加
-	m.appendContentLines("line1", "line2", "line3")
-	baseLines := len(m.rawLines)
-
-	m.appendToolResult(ToolResult{
-		Name:      "search_code",
-		Summary:   "🔍 search_code: test",
-		Detail:    "match1\nmatch2",
-		Collapsed: true,
-	})
-
-	if len(m.toolBlocks) != 1 {
-		t.Fatalf("toolBlocks len = %d, want 1", len(m.toolBlocks))
+	lines := strings.Split(m.chromeCache, "\n")
+	if len(lines) != 4 {
+		t.Fatalf("chromeCache lines = %d, want 4", len(lines))
 	}
-	block := m.toolBlocks[0]
-	if block.lineStart != baseLines {
-		t.Fatalf("lineStart = %d, want %d", block.lineStart, baseLines)
-	}
-	if block.lineCount != 1 {
-		t.Fatalf("collapsed lineCount = %d, want 1", block.lineCount)
+
+	statusLine := stripANSI(lines[len(lines)-1])
+	if got := lipgloss.Width(statusLine); got != m.width {
+		t.Fatalf("status line width = %d, want %d; line=%q", got, m.width, statusLine)
 	}
 }
 
-func TestToolBlock_ToggleExpandsAndCollapses(t *testing.T) {
-	m := newModelWithViewport(&stubAgent{statusLine: "ready"})
+func TestTruncateWithANSI_AppendsResetWhenTruncated(t *testing.T) {
+	got := truncateWithANSI("\033[31mabcdef", 3)
 
-	m.appendToolResult(ToolResult{
-		Name:      "search_code",
-		Summary:   "🔍 search_code: test",
-		Detail:    "match1\nmatch2\nmatch3",
-		Collapsed: true,
-	})
-
-	initialLineCount := len(m.rawLines)
-	if m.toolBlocks[0].lineCount != 1 {
-		t.Fatalf("collapsed lineCount = %d, want 1", m.toolBlocks[0].lineCount)
+	if !strings.HasSuffix(got, "\033[0m") {
+		t.Fatalf("truncated line should end with reset, got %q", got)
 	}
-
-	// 展開
-	m.toggleToolBlock(0)
-	if m.toolBlocks[0].tool.Collapsed {
-		t.Fatal("block should be expanded after toggle")
-	}
-	expandedLineCount := m.toolBlocks[0].lineCount
-	if expandedLineCount != 4 { // summary + 3 detail lines
-		t.Fatalf("expanded lineCount = %d, want 4", expandedLineCount)
-	}
-	if len(m.rawLines) != initialLineCount+(expandedLineCount-1) {
-		t.Fatalf("rawLines len = %d, want %d", len(m.rawLines), initialLineCount+(expandedLineCount-1))
-	}
-
-	// 折りたたみ
-	m.toggleToolBlock(0)
-	if !m.toolBlocks[0].tool.Collapsed {
-		t.Fatal("block should be collapsed after second toggle")
-	}
-	if len(m.rawLines) != initialLineCount {
-		t.Fatalf("rawLines len after re-collapse = %d, want %d", len(m.rawLines), initialLineCount)
+	if width := lipgloss.Width(got); width != 3 {
+		t.Fatalf("rendered width = %d, want 3", width)
 	}
 }
 
-func TestToolBlock_MultipleBlocksLineStartUpdated(t *testing.T) {
-	m := newModelWithViewport(&stubAgent{statusLine: "ready"})
+func TestModel_ScrollingToBottomClearsNewOutputBadge(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := newModelWithViewport(agent)
 
-	m.appendToolResult(ToolResult{
-		Name: "read_file", Summary: "📄 read_file: a.go",
-		Detail: "content1\ncontent2", Collapsed: true,
-	})
-	m.appendToolResult(ToolResult{
-		Name: "search_code", Summary: "🔍 search_code: test",
-		Detail: "match1", Collapsed: true,
-	})
-
-	block1Start := m.toolBlocks[1].lineStart
-	if block1Start != m.toolBlocks[0].lineStart+1 {
-		t.Fatalf("second block lineStart = %d, want %d", block1Start, m.toolBlocks[0].lineStart+1)
+	for i := 0; i < 40; i++ {
+		m.appendContentLines(fmt.Sprintf("line %d", i))
 	}
 
-	// 最初のブロックを展開 → 2番目のブロックの lineStart が更新される
-	m.toggleToolBlock(0)
-	delta := m.toolBlocks[0].lineCount - 1 // 1行 → N行
-	expectedStart := block1Start + delta
-	if m.toolBlocks[1].lineStart != expectedStart {
-		t.Fatalf("after expand: second block lineStart = %d, want %d", m.toolBlocks[1].lineStart, expectedStart)
-	}
-
-	// 折りたたみ → 元に戻る
-	m.toggleToolBlock(0)
-	if m.toolBlocks[1].lineStart != block1Start {
-		t.Fatalf("after collapse: second block lineStart = %d, want %d", m.toolBlocks[1].lineStart, block1Start)
-	}
-}
-
-func TestToolBlock_MoveBlockFocusClampsRange(t *testing.T) {
-	m := newModelWithViewport(&stubAgent{statusLine: "ready"})
-
-	m.appendToolResult(ToolResult{Name: "a", Summary: "a", Detail: "a", Collapsed: true})
-	m.appendToolResult(ToolResult{Name: "b", Summary: "b", Detail: "b", Collapsed: true})
-	m.appendToolResult(ToolResult{Name: "c", Summary: "c", Detail: "c", Collapsed: true})
-
-	m.setBlockFocus(1)
-	if m.focusedBlock != 1 {
-		t.Fatalf("focusedBlock = %d, want 1", m.focusedBlock)
-	}
-
-	// 範囲下限クランプ
-	m.moveBlockFocus(-1)
-	if m.focusedBlock != 0 {
-		t.Fatalf("after move to -1: focusedBlock = %d, want 0", m.focusedBlock)
-	}
-	m.moveBlockFocus(-1)
-	if m.focusedBlock != 0 {
-		t.Fatalf("after move to -1 again: focusedBlock = %d, want 0 (clamped)", m.focusedBlock)
-	}
-
-	// 範囲上限クランプ
-	m.moveBlockFocus(100)
-	if m.focusedBlock != 2 {
-		t.Fatalf("after move to 100: focusedBlock = %d, want 2 (clamped)", m.focusedBlock)
-	}
-}
-
-func TestToolBlock_FocusIndicatorReflected(t *testing.T) {
-	m := newModelWithViewport(&stubAgent{statusLine: "ready"})
-
-	m.appendToolResult(ToolResult{Name: "a", Summary: "test-summary", Detail: "d", Collapsed: true})
-
-	// フォーカスなし → スペースインジケータ
-	firstLine := m.rawLines[m.toolBlocks[0].lineStart]
-	if firstLine[0] != ' ' {
-		t.Fatalf("unfocused indicator = %q, want space", string(firstLine[0]))
-	}
-
-	// フォーカス設定 → → インジケータ
-	m.setBlockFocus(0)
-	firstLine = m.rawLines[m.toolBlocks[0].lineStart]
-	if !strings.HasPrefix(firstLine, "→") {
-		t.Fatalf("focused line = %q, want → prefix", firstLine)
-	}
-
-	// フォーカス解除 → スペースに戻る
-	m.clearBlockFocus()
-	firstLine = m.rawLines[m.toolBlocks[0].lineStart]
-	if firstLine[0] != ' ' {
-		t.Fatalf("after clear: indicator = %q, want space", string(firstLine[0]))
-	}
-}
-
-func TestToolBlock_TabKeyEntersFocusAndToggles(t *testing.T) {
-	m := newModelWithViewport(&stubAgent{statusLine: "ready"})
-	m.navigationMode = true
-
-	m.appendToolResult(ToolResult{
-		Name: "search_code", Summary: "🔍 search_code: test",
-		Detail: "match1\nmatch2", Collapsed: true,
-	})
-
-	// Tab → 最後のブロックにフォーカス
-	updated, _ := m.handleNavigationKey(tea.KeyMsg{Type: tea.KeyTab})
-	m = updated.(Model)
-	if m.focusedBlock != 0 {
-		t.Fatalf("after first Tab: focusedBlock = %d, want 0", m.focusedBlock)
-	}
-
-	// Tab → トグル（展開）
-	updated, _ = m.handleNavigationKey(tea.KeyMsg{Type: tea.KeyTab})
-	m = updated.(Model)
-	if m.toolBlocks[0].tool.Collapsed {
-		t.Fatal("after second Tab: block should be expanded")
-	}
-}
-
-func TestToolBlock_EscClearsBlockFocusBeforeExitingNav(t *testing.T) {
-	m := newModelWithViewport(&stubAgent{statusLine: "ready"})
-	m.navigationMode = true
-
-	m.appendToolResult(ToolResult{Name: "a", Summary: "a", Detail: "d", Collapsed: true})
-	m.setBlockFocus(0)
-
-	// Esc → フォーカス解除（NAVモードは維持）
-	updated, _ := m.handleNavigationKey(tea.KeyMsg{Type: tea.KeyEsc})
-	m = updated.(Model)
-	if m.focusedBlock != -1 {
-		t.Fatalf("after Esc: focusedBlock = %d, want -1", m.focusedBlock)
-	}
-	if !m.navigationMode {
-		t.Fatal("after Esc with focus: should still be in NAV mode")
-	}
-
-	// もう一度 Esc → NAVモード終了
-	updated, _ = m.handleNavigationKey(tea.KeyMsg{Type: tea.KeyEsc})
-	m = updated.(Model)
-	if m.navigationMode {
-		t.Fatal("after second Esc: should exit NAV mode")
-	}
-}
-
-func TestToolBlock_ScrollToBlock(t *testing.T) {
-	m := newModelWithViewport(&stubAgent{statusLine: "ready"})
-
-	// 多数の行を追加してスクロール可能にする
-	for i := 0; i < 50; i++ {
-		m.appendContentLines("padding line")
-	}
-	m.appendToolResult(ToolResult{Name: "a", Summary: "target", Detail: "d", Collapsed: true})
-	m.vp.setLines(m.renderedLines)
-
-	// 先頭にスクロール
 	m.vp.gotoTop()
-	if m.vp.yOffset != 0 {
-		t.Fatalf("yOffset after gotoTop = %d, want 0", m.vp.yOffset)
+	m.appendContentLines("new line")
+	m.chromeDirty = true
+	m.rebuildChrome()
+	if !strings.Contains(m.chromeCache, "New output") {
+		t.Fatalf("chromeCache should include new output badge, got %q", m.chromeCache)
 	}
 
-	// ブロックにスクロール
-	m.scrollToBlock(0)
-	blockStart := m.toolBlocks[0].lineStart
-	target := max(0, blockStart-2)
-	maxY := m.vp.maxYOffset()
-	if target > maxY {
-		target = maxY
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+	m = updated.(Model)
+	for !m.vp.atBottom() {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+		m = updated.(Model)
 	}
-	if m.vp.yOffset != target {
-		t.Fatalf("yOffset after scrollToBlock = %d, want %d", m.vp.yOffset, target)
+
+	if m.newOutput {
+		t.Fatal("newOutput should be cleared after scrolling to bottom")
 	}
-	// ブロック先頭行がビューポート内に表示されていることを確認
-	if m.vp.yOffset > blockStart || m.vp.yOffset+m.vp.height <= blockStart {
-		t.Fatalf("block at line %d not visible in viewport [%d, %d)", blockStart, m.vp.yOffset, m.vp.yOffset+m.vp.height)
+	if strings.Contains(m.chromeCache, "New output") {
+		t.Fatalf("chromeCache should clear new output badge, got %q", m.chromeCache)
 	}
 }
