@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -27,12 +28,12 @@ var statusHintsNormal = []string{
 	"Esc:NAV • /copy",
 }
 var statusHintsNav = []string{
-	"j/k:move • v:visual • V:lines • yy:copy • Tab:blocks • q:back",
-	"j/k • v • V • yy • Tab • q",
+	"count+j/k/h/l • w/b/e • 0/^/$ • v:visual • yy:copy • Tab:blocks • q:back",
+	"count+j/k • w/b/e • 0/$ • v • yy",
 }
 var statusHintsVisual = []string{
-	"-- VISUAL -- j/k:lines • h/l:chars • y:copy • Esc:cancel",
-	"-- VISUAL -- y • Esc",
+	"-- VISUAL -- count+j/k/h/l • w/b/e • 0/^/$ • y:copy • Esc:cancel",
+	"-- VISUAL -- w/b/e • 0/$ • y • Esc",
 }
 var statusHintsVisualLine = []string{
 	"-- VISUAL LINE -- j/k:select • y:copy • Esc:cancel",
@@ -101,6 +102,7 @@ type Model struct {
 	quitting             bool
 	navigationMode       bool // Vim ナビゲーションモード
 	gPressed             bool // g キーが1回押された状態
+	pendingCount         int  // 数字プレフィックスで入力中の移動回数
 	yPressed             bool // y キーが1回押された状態（yy用）
 	cursorLine           int  // NAVモードの現在行（rawLines基準）
 	cursorCol            int  // NAVモードの現在列（表示幅基準）
@@ -417,12 +419,26 @@ func (m Model) handleNavigationKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.gPressed {
 		m.gPressed = false
 		if s == "g" && m.focusedBlock < 0 {
-			m.cursorLine = 0
-			m.vp.gotoTop()
-			m.ensureCursorVisible()
+			targetLine := 0
+			if m.pendingCount > 0 {
+				targetLine = min(m.pendingCount-1, max(0, len(m.rawLines)-1))
+				m.pendingCount = 0
+			}
+			m.moveCursorTo(targetLine)
 			return m, nil
 		}
 		// g + 別キー → リセットして通常ナビ処理に落とす
+	}
+
+	if m.focusedBlock < 0 && m.visualMode == visualModeOff && len(s) == 1 && s[0] >= '1' && s[0] <= '9' {
+		m.pendingCount = m.pendingCount*10 + int(s[0]-'0')
+		m.chromeDirty = true
+		return m, nil
+	}
+	if m.focusedBlock < 0 && m.visualMode == visualModeOff && len(s) == 1 && s[0] == '0' && m.pendingCount > 0 {
+		m.pendingCount *= 10
+		m.chromeDirty = true
+		return m, nil
 	}
 
 	switch s {
@@ -440,37 +456,66 @@ func (m Model) handleNavigationKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.focusedBlock >= 0 && len(m.toolBlocks) > 0 {
 			m.moveBlockFocus(m.focusedBlock + 1)
 		} else {
-			m.moveCursorTo(m.cursorLine + 1)
+			m.moveCursorTo(m.cursorLine + m.consumePendingCountOr(1))
 		}
 	case "k":
 		if m.focusedBlock >= 0 && len(m.toolBlocks) > 0 {
 			m.moveBlockFocus(m.focusedBlock - 1)
 		} else {
-			m.moveCursorTo(m.cursorLine - 1)
+			m.moveCursorTo(m.cursorLine - m.consumePendingCountOr(1))
 		}
 	case "h":
 		if m.focusedBlock < 0 {
-			m.moveCursorCol(-1)
+			m.moveCursorCol(-m.consumePendingCountOr(1))
 		}
 	case "l":
 		if m.focusedBlock < 0 {
-			m.moveCursorCol(1)
+			m.moveCursorCol(m.consumePendingCountOr(1))
 		}
 	case "d":
 		if m.focusedBlock < 0 {
-			m.moveCursorTo(m.cursorLine + max(1, m.vp.height/2))
+			m.moveCursorTo(m.cursorLine + max(1, m.vp.height/2)*m.consumePendingCountOr(1))
 		}
 	case "u":
 		if m.focusedBlock < 0 {
-			m.moveCursorTo(m.cursorLine - max(1, m.vp.height/2))
+			m.moveCursorTo(m.cursorLine - max(1, m.vp.height/2)*m.consumePendingCountOr(1))
 		}
 	case "G":
 		if m.focusedBlock < 0 {
-			m.moveCursorTo(len(m.rawLines) - 1)
+			if m.pendingCount > 0 {
+				m.moveCursorTo(m.pendingCount - 1)
+				m.pendingCount = 0
+			} else {
+				m.moveCursorTo(len(m.rawLines) - 1)
+			}
 		}
 	case "g":
 		if m.focusedBlock < 0 {
 			m.gPressed = true
+		}
+	case "w":
+		if m.focusedBlock < 0 {
+			m.moveCursorToNextWordStart(m.consumePendingCountOr(1))
+		}
+	case "b":
+		if m.focusedBlock < 0 {
+			m.moveCursorToPrevWordStart(m.consumePendingCountOr(1))
+		}
+	case "e":
+		if m.focusedBlock < 0 {
+			m.moveCursorToWordEnd(m.consumePendingCountOr(1))
+		}
+	case "0":
+		if m.focusedBlock < 0 {
+			m.moveCursorToLineStart(false, 1)
+		}
+	case "^":
+		if m.focusedBlock < 0 {
+			m.moveCursorToLineStart(true, m.consumePendingCountOr(1))
+		}
+	case "$":
+		if m.focusedBlock < 0 {
+			m.moveCursorToLineEnd(m.consumePendingCountOr(1))
 		}
 	case "v":
 		if m.focusedBlock < 0 {
@@ -751,6 +796,7 @@ func (m *Model) setTransientStatus(text string) {
 
 func (m *Model) resetNavPending() {
 	m.gPressed = false
+	m.pendingCount = 0
 	m.yPressed = false
 }
 
@@ -826,6 +872,15 @@ func (m *Model) moveCursorCol(delta int) {
 	m.chromeDirty = true
 }
 
+func (m *Model) consumePendingCountOr(fallback int) int {
+	if m.pendingCount > 0 {
+		count := m.pendingCount
+		m.pendingCount = 0
+		return count
+	}
+	return fallback
+}
+
 func (m *Model) clampCursorCol() {
 	maxCol := m.maxCursorColForLine(m.cursorLine)
 	if m.cursorCol < 0 {
@@ -845,6 +900,175 @@ func (m Model) maxCursorColForLine(line int) int {
 		return 0
 	}
 	return width - 1
+}
+
+func (m *Model) moveCursorToLineStart(firstNonBlank bool, count int) {
+	if len(m.rawLines) == 0 {
+		m.cursorLine = 0
+		m.cursorCol = 0
+		return
+	}
+	if count < 1 {
+		count = 1
+	}
+	targetLine := min(m.cursorLine+count-1, len(m.rawLines)-1)
+	m.cursorLine = targetLine
+	line := stripANSI(m.rawLines[targetLine])
+	m.cursorCol = 0
+	if firstNonBlank {
+		for _, r := range line {
+			if !unicode.IsSpace(r) {
+				break
+			}
+			m.cursorCol += runeWidth(r)
+		}
+	}
+	m.clampCursorCol()
+	m.ensureCursorVisible()
+	m.chromeDirty = true
+}
+
+func (m *Model) moveCursorToLineEnd(count int) {
+	if len(m.rawLines) == 0 {
+		m.cursorLine = 0
+		m.cursorCol = 0
+		return
+	}
+	if count < 1 {
+		count = 1
+	}
+	targetLine := min(m.cursorLine+count-1, len(m.rawLines)-1)
+	m.cursorLine = targetLine
+	m.cursorCol = m.maxCursorColForLine(targetLine)
+	m.ensureCursorVisible()
+	m.chromeDirty = true
+}
+
+func (m *Model) moveCursorToNextWordStart(count int) {
+	if len(m.rawLines) == 0 {
+		return
+	}
+	line, col := m.cursorLine, m.cursorCol
+	for range count {
+		line, col = m.findNextWordStart(line, col)
+	}
+	m.cursorLine = line
+	m.cursorCol = col
+	m.ensureCursorVisible()
+	m.chromeDirty = true
+}
+
+func (m *Model) moveCursorToPrevWordStart(count int) {
+	if len(m.rawLines) == 0 {
+		return
+	}
+	line, col := m.cursorLine, m.cursorCol
+	for range count {
+		line, col = m.findPrevWordStart(line, col)
+	}
+	m.cursorLine = line
+	m.cursorCol = col
+	m.ensureCursorVisible()
+	m.chromeDirty = true
+}
+
+func (m *Model) moveCursorToWordEnd(count int) {
+	if len(m.rawLines) == 0 {
+		return
+	}
+	line, col := m.cursorLine, m.cursorCol
+	for range count {
+		line, col = m.findWordEnd(line, col)
+	}
+	m.cursorLine = line
+	m.cursorCol = col
+	m.ensureCursorVisible()
+	m.chromeDirty = true
+}
+
+func (m Model) findNextWordStart(line, col int) (int, int) {
+	inWord := false
+	for lineIdx := line; lineIdx < len(m.rawLines); lineIdx++ {
+		text := stripANSI(m.rawLines[lineIdx])
+		runes := []rune(text)
+		start := 0
+		if lineIdx == line {
+			start = displayColToRuneIndex(text, col)
+			if start < len(runes) {
+				inWord = isWordRune(runes[start])
+				start++
+			}
+		}
+		for idx := start; idx < len(runes); idx++ {
+			if isWordRune(runes[idx]) {
+				if !inWord || idx == 0 || !isWordRune(runes[idx-1]) {
+					return lineIdx, runeIndexToDisplayCol(text, idx)
+				}
+			} else {
+				inWord = false
+			}
+		}
+		inWord = false
+	}
+	lastLine := len(m.rawLines) - 1
+	return lastLine, m.maxCursorColForLine(lastLine)
+}
+
+func (m Model) findPrevWordStart(line, col int) (int, int) {
+	for lineIdx := line; lineIdx >= 0; lineIdx-- {
+		text := stripANSI(m.rawLines[lineIdx])
+		runes := []rune(text)
+		if len(runes) == 0 {
+			continue
+		}
+		idx := len(runes) - 1
+		if lineIdx == line {
+			idx = displayColToRuneIndex(text, col)
+			if idx >= len(runes) {
+				idx = len(runes) - 1
+			}
+		}
+		for idx >= 0 && !isWordRune(runes[idx]) {
+			idx--
+		}
+		for idx >= 0 && isWordRune(runes[idx]) {
+			if idx == 0 || !isWordRune(runes[idx-1]) {
+				return lineIdx, runeIndexToDisplayCol(text, idx)
+			}
+			idx--
+		}
+	}
+	return 0, 0
+}
+
+func (m Model) findWordEnd(line, col int) (int, int) {
+	inWord := false
+	for lineIdx := line; lineIdx < len(m.rawLines); lineIdx++ {
+		text := stripANSI(m.rawLines[lineIdx])
+		runes := []rune(text)
+		start := 0
+		if lineIdx == line {
+			start = displayColToRuneIndex(text, col)
+			if start < len(runes) && isWordRune(runes[start]) {
+				inWord = true
+			}
+		}
+		for idx := start; idx < len(runes); idx++ {
+			if isWordRune(runes[idx]) {
+				inWord = true
+				if idx == len(runes)-1 || !isWordRune(runes[idx+1]) {
+					return lineIdx, runeIndexToDisplayCol(text, idx)
+				}
+				continue
+			}
+			if inWord {
+				inWord = false
+			}
+		}
+		inWord = false
+	}
+	lastLine := len(m.rawLines) - 1
+	return lastLine, m.maxCursorColForLine(lastLine)
 }
 
 func (m Model) lineSelectionRange() (start, end int, ok bool) {
@@ -1087,6 +1311,24 @@ func displayColToRuneIndexAfter(s string, col int) int {
 		width = next
 	}
 	return len([]rune(s))
+}
+
+func runeIndexToDisplayCol(s string, idx int) int {
+	if idx <= 0 {
+		return 0
+	}
+	width := 0
+	for i, r := range []rune(s) {
+		if i >= idx {
+			break
+		}
+		width += runeWidth(r)
+	}
+	return width
+}
+
+func isWordRune(r rune) bool {
+	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_'
 }
 
 func stylePlainTextRange(s string, startCol, endCol int, bg string) string {

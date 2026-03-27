@@ -317,6 +317,38 @@ func TestNavMode_DUHalfPage(t *testing.T) {
 	}
 }
 
+func TestNavMode_CountPrefixAppliesToMoves(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+	m.ready = true
+	m.navigationMode = true
+	m.vp = lightViewport{width: 10, height: 10}
+	setModelRawLines(&m, 40)
+
+	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'3'}})
+	m = updated.(Model)
+	if m.pendingCount != 3 {
+		t.Fatalf("pendingCount = %d, want 3", m.pendingCount)
+	}
+
+	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m = updated.(Model)
+	if m.cursorLine != 3 {
+		t.Fatalf("cursorLine = %d, want 3", m.cursorLine)
+	}
+	if m.pendingCount != 0 {
+		t.Fatalf("pendingCount = %d, want 0", m.pendingCount)
+	}
+
+	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'2'}})
+	m = updated.(Model)
+	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	m = updated.(Model)
+	if m.cursorLine != 13 {
+		t.Fatalf("cursorLine after 2d = %d, want 13", m.cursorLine)
+	}
+}
+
 func TestNavMode_GGAndG(t *testing.T) {
 	agent := &stubAgent{statusLine: "ready"}
 	m := NewModel(agent, "")
@@ -345,6 +377,35 @@ func TestNavMode_GGAndG(t *testing.T) {
 	}
 	if got.gPressed {
 		t.Fatal("gPressed should be reset after gg")
+	}
+}
+
+func TestNavMode_CountPrefixAppliesToGGAndG(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+	m.ready = true
+	m.navigationMode = true
+	m.vp = lightViewport{width: 10, height: 5}
+	setModelRawLines(&m, 20)
+
+	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'1'}})
+	m = updated.(Model)
+	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'2'}})
+	m = updated.(Model)
+	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
+	m = updated.(Model)
+	if m.cursorLine != 11 {
+		t.Fatalf("cursorLine after 12G = %d, want 11", m.cursorLine)
+	}
+
+	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'3'}})
+	m = updated.(Model)
+	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	m = updated.(Model)
+	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	m = updated.(Model)
+	if m.cursorLine != 2 {
+		t.Fatalf("cursorLine after 3gg = %d, want 2", m.cursorLine)
 	}
 }
 
@@ -545,6 +606,129 @@ func TestNavMode_HLMoveCursorColWithoutVisualMode(t *testing.T) {
 	m = updated.(Model)
 	if m.visualStart.col != 1 {
 		t.Fatalf("visualStart.col = %d, want 1", m.visualStart.col)
+	}
+}
+
+func TestNavMode_ZeroMovesToLineStartWithoutCount(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+	m.navigationMode = true
+	m.vp = lightViewport{width: 20, height: 5}
+	m.rawLines = []string{"hello world"}
+	m.rebuildRenderedLines()
+	m.vp.setLines(m.renderedLines)
+	m.cursorCol = 5
+
+	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'0'}})
+	m = updated.(Model)
+	if m.cursorCol != 0 {
+		t.Fatalf("cursorCol = %d, want 0", m.cursorCol)
+	}
+}
+
+func TestNavMode_CountCanIncludeZero(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+	m.ready = true
+	m.navigationMode = true
+	m.vp = lightViewport{width: 10, height: 5}
+	setModelRawLines(&m, 20)
+
+	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'1'}})
+	m = updated.(Model)
+	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'0'}})
+	m = updated.(Model)
+	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m = updated.(Model)
+	if m.cursorLine != 10 {
+		t.Fatalf("cursorLine = %d, want 10", m.cursorLine)
+	}
+}
+
+func TestNavMode_WBEWordMotions(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+	m.navigationMode = true
+	m.vp = lightViewport{width: 30, height: 5}
+	m.rawLines = []string{"alpha beta gamma"}
+	m.rebuildRenderedLines()
+	m.vp.setLines(m.renderedLines)
+
+	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'w'}})
+	m = updated.(Model)
+	if m.cursorCol != 6 {
+		t.Fatalf("cursorCol after w = %d, want 6", m.cursorCol)
+	}
+
+	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
+	m = updated.(Model)
+	if m.cursorCol != 9 {
+		t.Fatalf("cursorCol after e = %d, want 9", m.cursorCol)
+	}
+
+	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'b'}})
+	m = updated.(Model)
+	if m.cursorCol != 6 {
+		t.Fatalf("cursorCol after b = %d, want 6", m.cursorCol)
+	}
+}
+
+func TestNavMode_WordMotionsWorkInVisualMode(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+	m.navigationMode = true
+	m.vp = lightViewport{width: 30, height: 5}
+	m.rawLines = []string{"alpha beta gamma"}
+	m.rebuildRenderedLines()
+	m.vp.setLines(m.renderedLines)
+
+	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+	m = updated.(Model)
+	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'w'}})
+	m = updated.(Model)
+	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
+	m = updated.(Model)
+	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	m = updated.(Model)
+
+	if len(agent.copyTexts) != 1 {
+		t.Fatalf("copyTexts len = %d, want 1", len(agent.copyTexts))
+	}
+	if agent.copyTexts[0] != "alpha beta" {
+		t.Fatalf("copied text = %q, want %q", agent.copyTexts[0], "alpha beta")
+	}
+}
+
+func TestNavMode_LineStartAndEndMotions(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+	m.navigationMode = true
+	m.vp = lightViewport{width: 30, height: 5}
+	m.rawLines = []string{"  alpha", " beta", "gamma"}
+	m.rebuildRenderedLines()
+	m.vp.setLines(m.renderedLines)
+
+	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'^'}})
+	m = updated.(Model)
+	if m.cursorCol != 2 {
+		t.Fatalf("cursorCol after ^ = %d, want 2", m.cursorCol)
+	}
+
+	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'$'}})
+	m = updated.(Model)
+	if m.cursorCol != 6 {
+		t.Fatalf("cursorCol after $ = %d, want 6", m.cursorCol)
+	}
+
+	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'2'}})
+	m = updated.(Model)
+	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'$'}})
+	m = updated.(Model)
+	if m.cursorLine != 1 {
+		t.Fatalf("cursorLine after 2$ = %d, want 1", m.cursorLine)
+	}
+	if m.cursorCol != 4 {
+		t.Fatalf("cursorCol after 2$ = %d, want 4", m.cursorCol)
 	}
 }
 
