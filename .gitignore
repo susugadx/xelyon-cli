@@ -59,3 +59,4 @@ temp_config.yaml
 # Claude Code local settings
 .claude/
 .tmp/
+internal/agent/headless_integ_4037465351/

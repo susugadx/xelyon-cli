@@ -3,6 +3,7 @@ package navigation
 import (
 	"bufio"
 	"context"
+	"fmt"
 	goast "go/ast"
 	"go/parser"
 	"go/token"
@@ -25,6 +26,7 @@ const maxRipgrepResults = 500
 const (
 	ripgrepScannerInitialBufferSize = 64 * 1024
 	ripgrepScannerMaxBufferSize     = 1024 * 1024
+	lspReferenceTimeout             = 5 * time.Second
 )
 
 // referenceSearchResult は ripgrep 参照検索の内部状態を保持する。
@@ -186,6 +188,190 @@ func runReferenceSearch(reader io.Reader, symbol string, cancel func(), wait fun
 		}
 	}
 	return result.Refs, result.Truncated, result.Incomplete
+}
+
+// findReferencesWithFallback runs the existing ripgrep-based search path and filters noisy matches.
+func findReferencesWithFallback(baseName string, cand SymbolCandidate) ([]Reference, bool, bool) {
+	ambiguousFiles := findAmbiguousFiles(baseName, cand)
+	allRefs, truncated, incomplete := findReferences(baseName)
+	return filterRefsByCandidate(allRefs, cand, ambiguousFiles), truncated, incomplete
+}
+
+// findReferencesViaLSP resolves references through the LSP client and converts them to Reference values.
+func findReferencesViaLSP(client LSPClient, cand SymbolCandidate) ([]Reference, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), lspReferenceTimeout)
+	defer cancel()
+
+	col, err := findSymbolColumn(cand)
+	if err != nil {
+		return nil, err
+	}
+
+	locations, err := client.FindReferences(ctx, cand.File, cand.Line, col, false)
+	if err != nil {
+		return nil, err
+	}
+
+	refs := make([]Reference, 0, len(locations))
+	for _, loc := range locations {
+		refs = append(refs, Reference{
+			File:    loc.File,
+			Line:    loc.Line,
+			Scope:   findEnclosingFunction(loc.File, loc.Line),
+			Snippet: readLineSnippet(loc.File, loc.Line),
+			IsTest:  isTestFile(loc.File),
+			Class:   classifyLineByAST(loc.File, loc.Line, cand.Name),
+		})
+	}
+	return refs, nil
+}
+
+// findImplementationsViaLSP resolves interface implementations through the LSP client.
+func findImplementationsViaLSP(client LSPClient, cand SymbolCandidate) ([]ImplementationRef, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), lspReferenceTimeout)
+	defer cancel()
+
+	col, err := findSymbolColumn(cand)
+	if err != nil {
+		return nil, err
+	}
+
+	locations, err := client.GotoImplementation(ctx, cand.File, cand.Line, col)
+	if err != nil {
+		return nil, err
+	}
+
+	impls := make([]ImplementationRef, 0, len(locations))
+	for _, loc := range locations {
+		impls = append(impls, ImplementationRef{
+			File: loc.File,
+			Line: loc.Line,
+			Name: findTypeNameAtLine(loc.File, loc.Line),
+		})
+	}
+	return impls, nil
+}
+
+// findSymbolColumn returns the 1-indexed column of the symbol name on the candidate line.
+func findSymbolColumn(cand SymbolCandidate) (int, error) {
+	absPath, err := filepath.Abs(cand.File)
+	if err != nil {
+		absPath = cand.File
+	}
+
+	content, err := os.ReadFile(absPath)
+	if err != nil {
+		return 1, err
+	}
+
+	lines := strings.Split(string(content), "\n")
+	if cand.Line < 1 || cand.Line > len(lines) {
+		return 1, fmt.Errorf("line %d out of range for %s", cand.Line, cand.File)
+	}
+
+	name := cand.Name
+	if idx := strings.LastIndex(name, "."); idx >= 0 {
+		name = name[idx+1:]
+	}
+	line := lines[cand.Line-1]
+	if idx := strings.LastIndex(line, name); idx >= 0 {
+		return idx + 1, nil
+	}
+	return 1, nil
+}
+
+// findEnclosingFunction returns the enclosing function name for a file/line pair.
+func findEnclosingFunction(filePath string, line int) string {
+	absPath, err := filepath.Abs(filePath)
+	if err != nil {
+		absPath = filePath
+	}
+
+	symbols, err := ast.ExtractSymbols(absPath)
+	if err != nil {
+		return "package-level"
+	}
+	for _, s := range symbols {
+		if line < s.Line || line > s.EndLine {
+			continue
+		}
+		switch s.Kind {
+		case ast.SymbolFunction:
+			return "func " + s.Name
+		case ast.SymbolMethod:
+			return "method " + s.Name
+		}
+	}
+	return "package-level"
+}
+
+// findTypeNameAtLine returns the most likely type name declared at the provided location.
+func findTypeNameAtLine(filePath string, line int) string {
+	absPath, err := filepath.Abs(filePath)
+	if err != nil {
+		absPath = filePath
+	}
+
+	symbols, err := ast.ExtractSymbols(absPath)
+	if err == nil {
+		for _, s := range symbols {
+			if s.Line != line {
+				continue
+			}
+			switch s.Kind {
+			case ast.SymbolType, ast.SymbolStruct, ast.SymbolInterface, ast.SymbolClass, ast.SymbolEnum, ast.SymbolTrait, ast.SymbolImpl:
+				if s.Name != "" {
+					return s.Name
+				}
+			}
+		}
+	}
+
+	base := filepath.Base(absPath)
+	return strings.TrimSuffix(base, filepath.Ext(base))
+}
+
+// isTestFile reports whether the file is a Go test file.
+func isTestFile(filePath string) bool {
+	return strings.HasSuffix(filePath, "_test.go")
+}
+
+// readLineSnippet returns the trimmed contents of the given line.
+func readLineSnippet(filePath string, line int) string {
+	absPath, err := filepath.Abs(filePath)
+	if err != nil {
+		absPath = filePath
+	}
+
+	data, err := os.ReadFile(absPath)
+	if err != nil {
+		return ""
+	}
+
+	lines := strings.Split(string(data), "\n")
+	if line < 1 || line > len(lines) {
+		return ""
+	}
+	return strings.TrimSpace(lines[line-1])
+}
+
+// classifyLineByAST classifies a single Go line using the existing AST heuristics.
+func classifyLineByAST(filePath string, line int, symbol string) ast.MatchClass {
+	absPath, err := filepath.Abs(filePath)
+	if err != nil {
+		absPath = filePath
+	}
+
+	src, err := os.ReadFile(absPath)
+	if err != nil {
+		return ast.ClassUnknown
+	}
+
+	info, err := ast.ClassifyLine(absPath, src, line, symbol)
+	if err != nil || info == nil {
+		return ast.ClassUnknown
+	}
+	return info.Class
 }
 
 // parseRipgrepLine は "file:line:content" 形式の行をパースする。

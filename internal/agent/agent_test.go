@@ -215,6 +215,20 @@ func TestIsAPIKeyAvailable(t *testing.T) {
 	}
 }
 
+func TestShouldSkipLSPWarmup(t *testing.T) {
+	t.Setenv("XELYON_DISABLE_LSP_WARMUP", "")
+
+	if shouldSkipLSPWarmup() {
+		t.Fatal("shouldSkipLSPWarmup() = true, want false when env var is empty")
+	}
+
+	t.Setenv("XELYON_DISABLE_LSP_WARMUP", "1")
+
+	if !shouldSkipLSPWarmup() {
+		t.Fatal("shouldSkipLSPWarmup() = false, want true when env var is set")
+	}
+}
+
 func TestParseImageInput_NoImage(t *testing.T) {
 	input := "Hello world"
 	text, image := parseImageInputWithWriter(io.Discard, input)

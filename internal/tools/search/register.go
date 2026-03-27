@@ -1,9 +1,11 @@
 package search
 
 import (
+	"os"
 	"strconv"
 	"strings"
 
+	"github.com/susugadx/xelyon-cli/internal/navigation"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
@@ -80,6 +82,11 @@ func (t *SearchCodeTool) Run(execCtx tools.ExecutionContext, args map[string]str
 	}
 
 	opts.LocatorRegistry = execCtx.EffectiveLocatorRegistry()
+	if lspClient := execCtx.EffectiveLSPClient(); lspClient != nil {
+		if cwd, err := os.Getwd(); err == nil {
+			opts.LSPClient = navigation.NewLSPAdapter(lspClient, cwd)
+		}
+	}
 	result := ExecuteSearchCodeWithConfig(execCtx.EffectiveConfig(), execCtx.EffectiveToolCache(), opts)
 	return result, nil, nil
 }

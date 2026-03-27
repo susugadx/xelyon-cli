@@ -89,11 +89,23 @@ type ClientCapabilities struct {
 
 // TextDocumentClientCapabilities represents text document capabilities
 type TextDocumentClientCapabilities struct {
-	References *ReferencesCapability `json:"references,omitempty"`
+	References     *ReferencesCapability     `json:"references,omitempty"`
+	Definition     *DefinitionCapability     `json:"definition,omitempty"`
+	Implementation *ImplementationCapability `json:"implementation,omitempty"`
 }
 
 // ReferencesCapability represents references capability
 type ReferencesCapability struct {
+	DynamicRegistration bool `json:"dynamicRegistration,omitempty"`
+}
+
+// DefinitionCapability represents definition capability.
+type DefinitionCapability struct {
+	DynamicRegistration bool `json:"dynamicRegistration,omitempty"`
+}
+
+// ImplementationCapability represents implementation capability.
+type ImplementationCapability struct {
 	DynamicRegistration bool `json:"dynamicRegistration,omitempty"`
 }
 

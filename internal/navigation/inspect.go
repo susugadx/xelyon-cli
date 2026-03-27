@@ -61,11 +61,13 @@ type SymbolCandidate struct {
 // InspectResult は inspect_symbol の結果。
 type InspectResult struct {
 	// 単一候補の場合
-	Symbol  *SymbolCandidate
-	Body    []string // 行番号付き本文
-	Callers []Reference
-	Refs    []Reference
-	Tests   []TestRef
+	Symbol          *SymbolCandidate
+	Body            []string // 行番号付き本文
+	Callers         []Reference
+	Refs            []Reference
+	Tests           []TestRef
+	ResolvedViaLSP  bool
+	Implementations []ImplementationRef
 
 	// 複数候補の場合
 	Candidates []SymbolCandidate
@@ -79,6 +81,13 @@ type InspectResult struct {
 	MoreTests          bool
 	UpstreamTruncated  bool
 	UpstreamIncomplete bool
+}
+
+// ImplementationRef describes an interface implementation discovered via LSP.
+type ImplementationRef struct {
+	File string
+	Line int
+	Name string
 }
 
 // Reference はシンボル参照。
@@ -473,11 +482,32 @@ func formatInspectResult(r InspectResult, reg *locator.Registry) string {
 		}
 	}
 
+	// Implementations
+	if len(r.Implementations) > 0 {
+		fmt.Fprintf(&sb, "\nImplementations (%d):\n", len(r.Implementations))
+		for _, impl := range r.Implementations {
+			line := fmt.Sprintf("  - %s:%d %s", impl.File, impl.Line, impl.Name)
+			if reg != nil {
+				id := reg.Register(locator.Location{FilePath: impl.File, Line: impl.Line})
+				line += " " + id
+			}
+			fmt.Fprintf(&sb, "%s\n", line)
+		}
+	}
+
 	// 打ち切り情報（コンパクトな注記）
 	if r.UpstreamIncomplete {
 		sb.WriteString("\nWarning: Upstream search may be incomplete due to errors. Use narrower search scopes.\n")
 	} else if r.UpstreamTruncated {
 		sb.WriteString("\nNote: Some results were truncated upstream. For comprehensive search, use search_code.\n")
+	}
+
+	if r.ResolvedViaLSP {
+		fmt.Fprintf(&sb, "\n(resolved via gopls · %d callers, %d refs", r.TotalCallers, r.TotalRefs)
+		if len(r.Implementations) > 0 {
+			fmt.Fprintf(&sb, ", %d impls", len(r.Implementations))
+		}
+		sb.WriteString(")\n")
 	}
 
 	return sb.String()

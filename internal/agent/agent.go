@@ -2,12 +2,14 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/api"
@@ -244,6 +246,16 @@ func NewAgentWithRuntime(model string, provider api.Provider, headless bool, run
 			}
 			lspClient.SetConfigs(servers)
 
+			if lspClient != nil && !shouldSkipLSPWarmup() {
+				go func() {
+					warmCtx, warmCancel := context.WithTimeout(context.Background(), 15*time.Second)
+					defer warmCancel()
+					if _, err := lspClient.GetServer(warmCtx, "go"); err != nil {
+						fmt.Fprintf(errOut, "LSP warm-up: gopls not available (%v)\n", err)
+					}
+				}()
+			}
+
 			// LSPツールはinit()で自動登録済み
 			// LSPドキュメントはSystemPromptのWorkflow Rulesに統合済み
 		}
@@ -293,6 +305,11 @@ func NewAgentWithRuntime(model string, provider api.Provider, headless bool, run
 	}
 
 	return agent
+}
+
+// shouldSkipLSPWarmup は環境変数指定時に warm up を無効化する。
+func shouldSkipLSPWarmup() bool {
+	return os.Getenv("XELYON_DISABLE_LSP_WARMUP") == "1"
 }
 
 // cleanupHook はテスト用フック（非nil時にCleanupから呼ばれる）

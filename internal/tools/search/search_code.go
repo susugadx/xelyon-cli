@@ -78,6 +78,7 @@ type SearchOptions struct {
 	OutputMode     string // 内部専用。外部パラメータは廃止。
 
 	LocatorRegistry *locator.Registry // Locator ID レジストリ（nilの場合はID付与しない）
+	LSPClient       navigation.LSPClient
 
 	ignoreMatcher *pathmatch.Matcher
 	ignoreGlobs   []string
@@ -148,7 +149,7 @@ func executeSinglePattern(cache tools.ToolCacheInterface, pattern string, opts S
 
 		if lang == "go" {
 			// Go: AST ベースの正確な解決
-			symbolOutput, status := navigation.InspectSymbolAuto(pattern, opts.Path, opts.LocatorRegistry)
+			symbolOutput, status := navigation.InspectSymbolAuto(pattern, opts.Path, opts.LocatorRegistry, opts.LSPClient)
 			switch status {
 			case navigation.SymbolAutoSingle:
 				if cache != nil {

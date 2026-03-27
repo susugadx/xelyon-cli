@@ -4,8 +4,15 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"strings"
 	"testing"
 )
+
+type nopWriteCloser struct {
+	*bytes.Buffer
+}
+
+func (n nopWriteCloser) Close() error { return nil }
 
 func TestNewServer(t *testing.T) {
 	s := NewServer("gopls")
@@ -46,6 +53,32 @@ func TestServer_SetDebugOutput(t *testing.T) {
 	s.SetDebugOutput(nil)
 	if s.debugOut != io.Discard {
 		t.Error("SetDebugOutput(nil) should normalize to io.Discard")
+	}
+}
+
+func TestServer_OpenDocument_SendsDidOpenOncePerURI(t *testing.T) {
+	s := NewServer("test")
+	var buf bytes.Buffer
+	s.stdin = nopWriteCloser{Buffer: &buf}
+
+	if err := s.OpenDocument("/tmp/example.go", "go", "package main\n"); err != nil {
+		t.Fatalf("OpenDocument() error = %v", err)
+	}
+	if err := s.OpenDocument("/tmp/example.go", "go", "package main\n"); err != nil {
+		t.Fatalf("second OpenDocument() error = %v", err)
+	}
+	if got := strings.Count(buf.String(), "textDocument/didOpen"); got != 1 {
+		t.Fatalf("didOpen count = %d, want 1", got)
+	}
+
+	if err := s.CloseDocument("/tmp/example.go"); err != nil {
+		t.Fatalf("CloseDocument() error = %v", err)
+	}
+	if err := s.OpenDocument("/tmp/example.go", "go", "package main\n"); err != nil {
+		t.Fatalf("reopen OpenDocument() error = %v", err)
+	}
+	if got := strings.Count(buf.String(), "textDocument/didOpen"); got != 2 {
+		t.Fatalf("didOpen count after reopen = %d, want 2", got)
 	}
 }
 

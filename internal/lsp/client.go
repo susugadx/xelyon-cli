@@ -173,24 +173,10 @@ func (c *Client) Status() map[string]string {
 
 // FindReferences finds all references to a symbol
 func (c *Client) FindReferences(ctx context.Context, filePath string, line, character int, includeDeclaration bool) ([]Location, error) {
-	server, err := c.GetServerForFile(ctx, filePath)
+	server, err := c.ensureDocumentOpen(ctx, filePath)
 	if err != nil {
 		return nil, err
 	}
-
-	// Read file content and open document
-	content, err := os.ReadFile(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read file: %w", err)
-	}
-
-	language := DetectLanguage(filePath)
-	if err := server.OpenDocument(filePath, language, string(content)); err != nil {
-		return nil, fmt.Errorf("failed to open document: %w", err)
-	}
-
-	// Wait for server to process the document
-	server.WaitForDocumentReady(ctx, FileToURI(filePath), 100*time.Millisecond)
 
 	params := ReferenceParams{
 		TextDocument: TextDocumentIdentifier{URI: FileToURI(filePath)},
@@ -214,6 +200,70 @@ func (c *Client) FindReferences(ctx context.Context, filePath string, line, char
 	var locations []Location
 	if err := json.Unmarshal(resp.Result, &locations); err != nil {
 		return nil, fmt.Errorf("failed to parse references result: %w", err)
+	}
+
+	return locations, nil
+}
+
+// GotoDefinition finds the definition location for a symbol.
+func (c *Client) GotoDefinition(ctx context.Context, filePath string, line, character int) ([]Location, error) {
+	return c.callPositionMethod(ctx, "textDocument/definition", filePath, line, character)
+}
+
+// GotoImplementation finds implementation locations for an interface symbol.
+func (c *Client) GotoImplementation(ctx context.Context, filePath string, line, character int) ([]Location, error) {
+	return c.callPositionMethod(ctx, "textDocument/implementation", filePath, line, character)
+}
+
+// ensureDocumentOpen opens a document on the matching server and waits until it is ready.
+func (c *Client) ensureDocumentOpen(ctx context.Context, filePath string) (*Server, error) {
+	server, err := c.GetServerForFile(ctx, filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file: %w", err)
+	}
+
+	language := DetectLanguage(filePath)
+	if err := server.OpenDocument(filePath, language, string(content)); err != nil {
+		return nil, fmt.Errorf("failed to open document: %w", err)
+	}
+
+	server.WaitForDocumentReady(ctx, FileToURI(filePath), 100*time.Millisecond)
+	return server, nil
+}
+
+// callPositionMethod executes a position-based LSP method and decodes the resulting locations.
+func (c *Client) callPositionMethod(ctx context.Context, method, filePath string, line, character int) ([]Location, error) {
+	server, err := c.ensureDocumentOpen(ctx, filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	params := TextDocumentPositionParams{
+		TextDocument: TextDocumentIdentifier{URI: FileToURI(filePath)},
+		Position:     Position{Line: line - 1, Character: character - 1},
+	}
+
+	resp, err := server.Call(ctx, method, params)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.Error != nil {
+		return nil, fmt.Errorf("LSP error: %s", resp.Error.Message)
+	}
+
+	if resp.Result == nil || string(resp.Result) == "null" {
+		return []Location{}, nil
+	}
+
+	var locations []Location
+	if err := json.Unmarshal(resp.Result, &locations); err != nil {
+		return nil, fmt.Errorf("failed to parse %s result: %w", method, err)
 	}
 
 	return locations, nil

@@ -32,6 +32,7 @@ type Server struct {
 	// Diagnostics storage (URI -> diagnostics)
 	diagMu      sync.RWMutex
 	diagnostics map[string][]Diagnostic
+	openDocs    map[string]struct{}
 
 	// Graceful shutdown
 	done      chan struct{}
@@ -45,6 +46,7 @@ func NewServer(name string) *Server {
 		debugOut:    io.Discard,
 		pending:     make(map[int]chan *Response),
 		diagnostics: make(map[string][]Diagnostic),
+		openDocs:    make(map[string]struct{}),
 		done:        make(chan struct{}),
 	}
 }
@@ -138,7 +140,9 @@ func (s *Server) initialize(ctx context.Context) error {
 		RootURI:   s.rootURI,
 		Capabilities: ClientCapabilities{
 			TextDocument: TextDocumentClientCapabilities{
-				References: &ReferencesCapability{DynamicRegistration: false},
+				References:     &ReferencesCapability{DynamicRegistration: false},
+				Definition:     &DefinitionCapability{DynamicRegistration: false},
+				Implementation: &ImplementationCapability{DynamicRegistration: false},
 			},
 		},
 	}
@@ -331,22 +335,44 @@ func (s *Server) send(msg interface{}) error {
 
 // OpenDocument sends a textDocument/didOpen notification
 func (s *Server) OpenDocument(path, languageID, content string) error {
+	uri := FileToURI(path)
+
+	s.mu.Lock()
+	if _, ok := s.openDocs[uri]; ok {
+		s.mu.Unlock()
+		return nil
+	}
+	s.openDocs[uri] = struct{}{}
+	s.mu.Unlock()
+
 	params := DidOpenTextDocumentParams{
 		TextDocument: TextDocumentItem{
-			URI:        FileToURI(path),
+			URI:        uri,
 			LanguageID: languageID,
 			Version:    1,
 			Text:       content,
 		},
 	}
-	return s.notify("textDocument/didOpen", params)
+	if err := s.notify("textDocument/didOpen", params); err != nil {
+		s.mu.Lock()
+		delete(s.openDocs, uri)
+		s.mu.Unlock()
+		return err
+	}
+	return nil
 }
 
 // CloseDocument sends a textDocument/didClose notification
 func (s *Server) CloseDocument(path string) error {
+	uri := FileToURI(path)
+
+	s.mu.Lock()
+	delete(s.openDocs, uri)
+	s.mu.Unlock()
+
 	params := DidCloseTextDocumentParams{
 		TextDocument: TextDocumentIdentifier{
-			URI: FileToURI(path),
+			URI: uri,
 		},
 	}
 	return s.notify("textDocument/didClose", params)
@@ -393,6 +419,7 @@ func (s *Server) cleanupLocked() {
 		s.stdin = nil
 	}
 	s.initialized = false
+	s.openDocs = make(map[string]struct{})
 }
 
 // IsRunning returns true if the server is initialized and running

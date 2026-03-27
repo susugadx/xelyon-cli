@@ -36,5 +36,17 @@ func TestMain(m *testing.M) {
 		_ = os.Setenv("XELYON_DISABLE_MCP", originalDisableMCP)
 	}()
 
+	originalDisableLSPWarmup := os.Getenv("XELYON_DISABLE_LSP_WARMUP")
+	if err := os.Setenv("XELYON_DISABLE_LSP_WARMUP", "1"); err != nil {
+		panic(err)
+	}
+	defer func() {
+		if originalDisableLSPWarmup == "" {
+			_ = os.Unsetenv("XELYON_DISABLE_LSP_WARMUP")
+			return
+		}
+		_ = os.Setenv("XELYON_DISABLE_LSP_WARMUP", originalDisableLSPWarmup)
+	}()
+
 	os.Exit(m.Run())
 }

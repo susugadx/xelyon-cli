@@ -16,7 +16,7 @@ const (
 // multiple: 複数候補 → 候補一覧を返す
 // none: 見つからない → 空文字を返す（呼び出し側で text search にフォールバック）
 // reg が nil でない場合、出力に Locator ID を付与する。
-func InspectSymbolAuto(symbol, pathHint string, reg *locator.Registry) (output string, status SymbolAutoStatus) {
+func InspectSymbolAuto(symbol, pathHint string, reg *locator.Registry, lspClient LSPClient) (output string, status SymbolAutoStatus) {
 	if symbol == "" {
 		return "", SymbolAutoNone
 	}
@@ -38,11 +38,23 @@ func InspectSymbolAuto(symbol, pathHint string, reg *locator.Registry) (output s
 
 	result.Body = readDefinitionBody(cand, SummaryBudget.BodyLines)
 
-	ambiguousFiles := findAmbiguousFiles(query.BaseName, cand)
-	allRefs, truncated, incomplete := findReferences(query.BaseName)
-	result.UpstreamTruncated = truncated
-	result.UpstreamIncomplete = incomplete
-	allRefs = filterRefsByCandidate(allRefs, cand, ambiguousFiles)
+	var allRefs []Reference
+	if lspClient != nil {
+		lspRefs, err := findReferencesViaLSP(lspClient, cand)
+		if err == nil && len(lspRefs) > 0 {
+			allRefs = lspRefs
+			result.ResolvedViaLSP = true
+		} else {
+			allRefs, result.UpstreamTruncated, result.UpstreamIncomplete = findReferencesWithFallback(query.BaseName, cand)
+		}
+		if cand.Kind == "interface" {
+			if impls, err := findImplementationsViaLSP(lspClient, cand); err == nil {
+				result.Implementations = impls
+			}
+		}
+	} else {
+		allRefs, result.UpstreamTruncated, result.UpstreamIncomplete = findReferencesWithFallback(query.BaseName, cand)
+	}
 	result.Callers, result.TotalCallers, result.MoreCallers = classifyCallers(allRefs, cand, SummaryBudget.CallerLimit)
 	result.Refs, result.TotalRefs, result.MoreRefs = classifyRefs(allRefs, cand, SummaryBudget.RefLimit)
 	result.Tests, result.TotalTests, result.MoreTests = findRelatedTests(query.BaseName, allRefs, SummaryBudget.TestLimit)
