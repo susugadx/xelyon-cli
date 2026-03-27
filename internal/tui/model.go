@@ -449,11 +449,11 @@ func (m Model) handleNavigationKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.moveCursorTo(m.cursorLine - 1)
 		}
 	case "h":
-		if m.focusedBlock < 0 && m.visualMode == visualModeChar {
+		if m.focusedBlock < 0 {
 			m.moveCursorCol(-1)
 		}
 	case "l":
-		if m.focusedBlock < 0 && m.visualMode == visualModeChar {
+		if m.focusedBlock < 0 {
 			m.moveCursorCol(1)
 		}
 	case "d":

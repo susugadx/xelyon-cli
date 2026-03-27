@@ -476,6 +476,9 @@ func TestNavMode_CharVisualSelectionCopiesRange(t *testing.T) {
 	if m.visualMode != visualModeChar {
 		t.Fatalf("visualMode = %d, want %d", m.visualMode, visualModeChar)
 	}
+	if m.visualStart.col != 1 {
+		t.Fatalf("visualStart.col = %d, want 1", m.visualStart.col)
+	}
 
 	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
 	m = updated.(Model)
@@ -515,6 +518,33 @@ func TestNavMode_CharVisualSelectionSupportsLineMoveAndColumnClamp(t *testing.T)
 	}
 	if m.cursorCol != 1 {
 		t.Fatalf("cursorCol = %d, want 1", m.cursorCol)
+	}
+}
+
+func TestNavMode_HLMoveCursorColWithoutVisualMode(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+	m.navigationMode = true
+	m.vp = lightViewport{width: 20, height: 5}
+	m.rawLines = []string{"hello"}
+	m.rebuildRenderedLines()
+	m.vp.setLines(m.renderedLines)
+
+	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	m = updated.(Model)
+	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	m = updated.(Model)
+	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
+	m = updated.(Model)
+
+	if m.cursorCol != 1 {
+		t.Fatalf("cursorCol = %d, want 1", m.cursorCol)
+	}
+
+	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+	m = updated.(Model)
+	if m.visualStart.col != 1 {
+		t.Fatalf("visualStart.col = %d, want 1", m.visualStart.col)
 	}
 }
 
