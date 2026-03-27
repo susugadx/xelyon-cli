@@ -632,7 +632,7 @@ func TestSearchCode_FixedStrings(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result := ExecuteSearchCode(SearchOptions{Pattern: "a+b", Path: dir, FilePattern: "*.go", FileType: "", CtxLines: 0, TokenBudget: 3000, IsRegex: false, Multiline: false})
+	result := ExecuteSearchCode(SearchOptions{Pattern: "a+b", Mode: string(SearchModeLiteral), Path: dir, FilePattern: "*.go", FileType: "", CtxLines: 0, TokenBudget: 3000, IsRegex: false, Multiline: false})
 	if strings.Contains(result, "No matches found") || !strings.Contains(result, "a+b") {
 		t.Fatalf("expected literal match with is_regex=false, got: %s", result)
 	}

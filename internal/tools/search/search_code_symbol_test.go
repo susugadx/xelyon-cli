@@ -106,8 +106,8 @@ func TestSearchCode_SymbolFallbackToText(t *testing.T) {
 func TestSearchCode_RegexSkipsSymbol(t *testing.T) {
 	setupSymbolTestDir(t, "agent.go", symbolTestSource)
 
-	// is_regex=true → symbol auto をスキップ → text search
-	result := ExecuteSearchCode(SearchOptions{Pattern: "NewAgent", Path: ".", IsRegex: true})
+	// explicit mode=regex → symbol rescue/resolve をスキップ → text search
+	result := ExecuteSearchCode(SearchOptions{Pattern: "NewAgent", Path: ".", Mode: string(SearchModeRegex)})
 	// text search 結果は lineRangeHint を含む（symbol auto は IsRegex=true で完全スキップ）
 	if !strings.Contains(result, lineRangeHint) {
 		t.Error("regex search should fall back to text search with lineRangeHint")

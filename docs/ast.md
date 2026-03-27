@@ -31,7 +31,7 @@
 ## Phase 1 の制約
 
 - 対応言語は Go のみ
-- 既存の `search_code` / Project Map の regex 実装は未変更
+- `search_code` は引き続き Project Map と併用するが、公開契約は `mode=auto | symbol | literal | regex` の router ベースへ移行済み
 - まだ本番ルートでは使わず、PoC とベンチマークのための基盤追加に留める
 
 ## 検証コマンド
@@ -47,8 +47,8 @@ make ci-check
 
 ## 補足
 
-`ExtractSymbols` が保持する Go シグネチャ情報は、`search_code` の Go symbol fast path（内部で `InspectSymbolAuto` を使用）の
-レシーバ付きメソッド指定（例: `Config.Build`, `(*Config).Build`）の候補解決にも利用しています。
+`ExtractSymbols` が保持する Go シグネチャ情報は、`search_code` の Go symbol resolver（内部で `InspectSymbolAuto` を使用）の
+レシーバ付きメソッド指定（例: `Config.Build`, `(*Config).Build`）や auto-mode rescue の候補解決にも利用しています。
 
 import 文中の `"fmt"` のような文字列リテラルは、通常の string と区別して
 `import` と分類するように実装しています。

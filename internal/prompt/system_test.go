@@ -49,8 +49,17 @@ func TestSystemPrompt_ProjectMapGuidance(t *testing.T) {
 	if !strings.Contains(SystemPrompt, "search_code: code discovery tool") {
 		t.Error("SystemPrompt should describe search_code as code discovery tool")
 	}
+	if !strings.Contains(SystemPrompt, "Uses language-aware routing across symbol-aware resolution, literal search, and regex search") {
+		t.Error("SystemPrompt should describe language-aware search_code routing")
+	}
+	if !strings.Contains(SystemPrompt, "Prefer mode=auto") {
+		t.Error("SystemPrompt should prefer mode=auto for search_code")
+	}
 	if strings.Contains(SystemPrompt, "imports") || strings.Contains(SystemPrompt, "← refs") {
 		t.Error("SystemPrompt should not mention imports or refs in Project Map")
+	}
+	if strings.Contains(SystemPrompt, "For Go symbols") {
+		t.Error("SystemPrompt should not hardcode Go-specific search_code guidance")
 	}
 }
 

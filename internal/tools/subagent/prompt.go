@@ -66,7 +66,7 @@ Project Map lists file paths, symbol definitions with line ranges for the projec
 - Do NOT call search_code for symbols already listed in the Project Map.
 - If needed information is missing from Project Map, fall back to search_code.
 ### When to use tools
-- search_code: code discovery tool. Returns matches with context. For some languages, it may automatically provide richer caller/reference/test information for symbol-like queries. Use it whenever the needed code context is not already clear from the Project Map or known files.
+- search_code: code discovery tool. Uses language-aware routing across symbol-aware resolution, literal search, and regex search. Prefer mode=auto, short symbol queries when possible, and regex only when needed. Use it whenever the needed code context is not already clear from the Project Map or known files.
 - For shared-symbol or impact investigation, start with one combined search_code call before doing narrow follow-up searches whenever possible.
 - When investigating a shared change, API change, rename, or impact surface, prefer one combined search_code call that covers the target plus likely callers/references/tests before issuing multiple narrower searches.
 - read_file: to read actual contents. Use line ranges from Project Map.
@@ -100,7 +100,7 @@ Project Map lists file paths, symbol definitions with line ranges.
 - Symbol location is in Project Map → use read_file with range syntax directly.
 - Do NOT call search_code for symbols already listed in the Project Map.
 - If needed information is missing from the Project Map, fall back to search_code.
-- search_code: code discovery tool. Returns matches with context. For some languages, it may automatically provide richer caller/reference/test information for symbol-like queries. Use it whenever the needed code context is not already clear from the Project Map or known files.
+- search_code: code discovery tool. Uses language-aware routing across symbol-aware resolution, literal search, and regex search. Prefer mode=auto, short symbol queries when possible, and regex only when needed. Use it whenever the needed code context is not already clear from the Project Map or known files.
 - read_file: to read actual contents. Use line ranges from Project Map.
 - Never guess file paths or APIs.
 - Do not re-read files already returned in full in this session.

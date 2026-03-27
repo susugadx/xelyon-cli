@@ -5,36 +5,102 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/locator"
+	"github.com/susugadx/xelyon-cli/internal/navigation"
 	"github.com/susugadx/xelyon-cli/internal/repomap"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
-// shouldTrySymbolResolve は symbol 自動解決を試みるべきか判定する。
-func shouldTrySymbolResolve(pattern string, opts SearchOptions) bool {
-	// 明示的に regex 指定されている場合はスキップ
-	if opts.IsRegex {
-		return false
+type symbolResolveStatus string
+
+const (
+	symbolResolveSingle   symbolResolveStatus = "single"
+	symbolResolveMultiple symbolResolveStatus = "multiple"
+	symbolResolveNone     symbolResolveStatus = "none"
+)
+
+type symbolResolver interface {
+	Resolve(symbol string, opts SearchOptions) (string, symbolResolveStatus)
+}
+
+type goSymbolResolver struct{}
+
+func (goSymbolResolver) Resolve(symbol string, opts SearchOptions) (string, symbolResolveStatus) {
+	output, status := navigation.InspectSymbolAuto(symbol, opts.Path, opts.LocatorRegistry, opts.LSPClient)
+	switch status {
+	case navigation.SymbolAutoSingle:
+		return output, symbolResolveSingle
+	case navigation.SymbolAutoMultiple:
+		return output, symbolResolveMultiple
+	default:
+		return "", symbolResolveNone
 	}
-	if opts.FilePattern != "" {
-		return false // glob 指定は text search
-	}
-	if !looksLikeIdentifier(pattern) {
-		return false
+}
+
+type genericLanguageResolver struct {
+	lang string
+}
+
+func (r genericLanguageResolver) Resolve(symbol string, opts SearchOptions) (string, symbolResolveStatus) {
+	var output string
+	var status genericSymbolStatus
+	switch r.lang {
+	case "js":
+		output, status = resolveJSSymbol(symbol, opts)
+	case "python":
+		output, status = resolvePythonSymbol(symbol, opts)
+	case "rust":
+		output, status = resolveRustSymbol(symbol, opts)
+	case "java":
+		output, status = resolveJavaSymbol(symbol, opts)
+	case "csharp":
+		output, status = resolveCSharpSymbol(symbol, opts)
+	case "php":
+		output, status = resolvePHPSymbol(symbol, opts)
+	case "ruby":
+		output, status = resolveRubySymbol(symbol, opts)
+	case "swift":
+		output, status = resolveSwiftSymbol(symbol, opts)
+	case "scala":
+		output, status = resolveScalaSymbol(symbol, opts)
+	case "elixir":
+		output, status = resolveElixirSymbol(symbol, opts)
+	case "lua":
+		output, status = resolveLuaSymbol(symbol, opts)
+	case "cpp":
+		output, status = resolveCppSymbol(symbol, opts)
+	default:
+		output, status = resolveGenericSymbol(symbol, opts)
 	}
 
-	// Go: AST ベースの正確な解決（Phase 1）
-	if opts.FileType == "" || opts.FileType == "go" {
-		return true
+	switch status {
+	case genericSymbolSingle:
+		return output, symbolResolveSingle
+	case genericSymbolMultiple:
+		return output, symbolResolveMultiple
+	default:
+		return "", symbolResolveNone
 	}
+}
 
-	// 他言語: signaturePatterns に対応している言語なら試みる
-	return isSymbolResolvableLanguage(opts.FileType)
+func resolverForLanguage(lang string) symbolResolver {
+	switch lang {
+	case "go":
+		return goSymbolResolver{}
+	case "js", "python", "rust", "java", "csharp", "php", "ruby", "swift", "scala", "elixir", "lua", "cpp":
+		return genericLanguageResolver{lang: lang}
+	case "":
+		return genericLanguageResolver{lang: ""}
+	default:
+		return nil
+	}
 }
 
 // looksLikeIdentifier は文字列がシンボル名に見えるか判定する。
@@ -87,9 +153,11 @@ func containsRegexMeta(s string) bool {
 // isSymbolResolvableLanguage は指定言語でシンボル解決が可能か返す。
 func isSymbolResolvableLanguage(fileType string) bool {
 	switch fileType {
+	case "go":
+		return true
 	case "py", "python":
 		return true
-	case "ts", "tsx", "js", "jsx", "mjs":
+	case "ts", "tsx", "js", "jsx", "mjs", "javascript":
 		return true
 	case "rs", "rust":
 		return true
@@ -120,37 +188,130 @@ func isSymbolResolvableLanguage(fileType string) bool {
 
 // resolveLanguage は SearchOptions から正規化された言語名を返す。
 func resolveLanguage(opts SearchOptions) string {
-	if opts.FileType == "" {
+	if opts.FileType != "" {
+		switch opts.FileType {
+		case "go":
+			return "go"
+		case "py", "python":
+			return "python"
+		case "ts", "tsx", "js", "jsx", "mjs", "typescript", "javascript":
+			return "js"
+		case "rs", "rust":
+			return "rust"
+		case "java", "kt", "kts", "kotlin":
+			return "java"
+		case "cs", "csharp":
+			return "csharp"
+		case "php":
+			return "php"
+		case "rb", "ruby":
+			return "ruby"
+		case "c", "cpp", "cc", "h", "hpp":
+			return "cpp"
+		case "swift":
+			return "swift"
+		case "scala":
+			return "scala"
+		case "ex", "exs", "elixir":
+			return "elixir"
+		case "lua":
+			return "lua"
+		default:
+			return ""
+		}
+	}
+
+	if lang := resolveLanguageFromPath(opts.Path); lang != "" {
+		return lang
+	}
+
+	switch opts.FilePattern {
+	case "*.go":
 		return "go"
 	}
-	switch opts.FileType {
-	case "py", "python":
-		return "python"
-	case "ts", "tsx", "js", "jsx", "mjs":
-		return "js"
-	case "rs", "rust":
-		return "rust"
-	case "java", "kt", "kts", "kotlin":
-		return "java"
-	case "cs", "csharp":
-		return "csharp"
-	case "php":
-		return "php"
-	case "rb", "ruby":
-		return "ruby"
-	case "c", "cpp", "cc", "h", "hpp":
-		return "cpp"
-	case "swift":
-		return "swift"
-	case "scala":
-		return "scala"
-	case "ex", "exs", "elixir":
-		return "elixir"
-	case "lua":
-		return "lua"
-	default:
-		return opts.FileType
+
+	return ""
+}
+
+func resolveLanguageFromPath(path string) string {
+	trimmed := strings.TrimSpace(path)
+	if trimmed == "" {
+		return ""
 	}
+
+	if ext := strings.TrimPrefix(filepath.Ext(trimmed), "."); ext != "" {
+		switch ext {
+		case "go":
+			return "go"
+		case "py":
+			return "python"
+		case "ts", "tsx", "js", "jsx":
+			return "js"
+		case "rs":
+			return "rust"
+		case "java", "kt":
+			return "java"
+		case "cs":
+			return "csharp"
+		case "php":
+			return "php"
+		case "rb":
+			return "ruby"
+		case "swift":
+			return "swift"
+		}
+	}
+
+	dir := trimmed
+	if info, err := os.Stat(trimmed); err == nil && !info.IsDir() {
+		dir = filepath.Dir(trimmed)
+	}
+	if dir == "" {
+		dir = "."
+	}
+	if hasGoModuleMarkerUpward(dir) {
+		return "go"
+	}
+	if hasGoSourceFileDirectly(dir) {
+		return "go"
+	}
+
+	return ""
+}
+
+func hasGoModuleMarkerUpward(dir string) bool {
+	start := dir
+	if start == "" {
+		start = "."
+	}
+	for {
+		for _, marker := range []string{"go.mod", "go.work"} {
+			if _, err := os.Stat(filepath.Join(start, marker)); err == nil {
+				return true
+			}
+		}
+		parent := filepath.Dir(start)
+		if parent == start {
+			return false
+		}
+		start = parent
+	}
+}
+
+func hasGoSourceFileDirectly(dir string) bool {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		if strings.HasSuffix(strings.ToLower(entry.Name()), ".go") {
+			return true
+		}
+	}
+	return false
 }
 
 // ── 多言語シンボル解決 ──

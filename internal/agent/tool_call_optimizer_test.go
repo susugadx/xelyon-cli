@@ -62,6 +62,20 @@ func TestSearchCodeOptionsKey_EmptyOptionsIgnored(t *testing.T) {
 	}
 }
 
+func TestSearchCodeOptionsKey_NormalizesModeAndLegacyRegex(t *testing.T) {
+	autoImplicit := &tools.ToolCall{Tool: "search_code", Args: map[string]string{"pattern": "foo"}}
+	autoExplicit := &tools.ToolCall{Tool: "search_code", Args: map[string]string{"pattern": "bar", "mode": "auto"}}
+	if searchCodeOptionsKey(autoImplicit) != searchCodeOptionsKey(autoExplicit) {
+		t.Error("implicit auto and explicit auto should produce same key")
+	}
+
+	regexLegacy := &tools.ToolCall{Tool: "search_code", Args: map[string]string{"pattern": "foo", "is_regex": "true"}}
+	regexMode := &tools.ToolCall{Tool: "search_code", Args: map[string]string{"pattern": "bar", "mode": "regex"}}
+	if searchCodeOptionsKey(regexLegacy) != searchCodeOptionsKey(regexMode) {
+		t.Error("legacy is_regex=true and mode=regex should produce same key")
+	}
+}
+
 func TestSearchCodeOptionsKey_NotSearchCode(t *testing.T) {
 	tc := &tools.ToolCall{Tool: "read_file", Args: map[string]string{"path": "/a.go"}}
 	if searchCodeOptionsKey(tc) != "" {

@@ -88,11 +88,11 @@ func refBuild() {
 
 	result := ExecuteSearchCode(SearchOptions{
 		Pattern:     "Build",
+		Mode:        string(SearchModeLiteral),
 		Path:        dir,
 		FilePattern: "*.go",
 		CtxLines:    0,
 		TokenBudget: 3000,
-		IsRegex:     false,
 		Multiline:   false,
 	})
 
@@ -124,11 +124,11 @@ func TestReclassifyWithAST_NonGoFile(t *testing.T) {
 
 	result := ExecuteSearchCode(SearchOptions{
 		Pattern:     "Build",
+		Mode:        string(SearchModeLiteral),
 		Path:        dir,
 		FilePattern: "*.py",
 		CtxLines:    0,
 		TokenBudget: 3000,
-		IsRegex:     false,
 		Multiline:   false,
 	})
 
@@ -159,11 +159,11 @@ func callBuild() {
 
 	result := ExecuteSearchCode(SearchOptions{
 		Pattern:     "Build,callBuild",
+		Mode:        string(SearchModeLiteral),
 		Path:        dir,
 		FilePattern: "*.go",
 		CtxLines:    0,
 		TokenBudget: 3000,
-		IsRegex:     false,
 		Multiline:   false,
 	})
 

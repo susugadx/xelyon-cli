@@ -73,7 +73,7 @@ Project Map lists file paths, symbol definitions with line ranges for the projec
 - Do NOT call search_code to find symbols already listed in Project Map.
 - If needed information is missing from Project Map, fall back to search_code.
 #### When to use investigation tools
-- search_code: code discovery tool. Returns matches with context. For some languages, it may automatically provide richer caller/reference/test information for symbol-like queries. Use it whenever the needed code context is not already clear from the Project Map or known files.
+- search_code: code discovery tool. Uses language-aware routing across symbol-aware resolution, literal search, and regex search. Prefer mode=auto, short symbol queries when possible, and regex only when needed. Use it whenever the needed code context is not already clear from the Project Map or known files.
 - read_file: to read actual file contents. Use line ranges from Project Map.
 #### Investigation rules
 - Never guess file paths or APIs. If the user gives a path, use it directly.
@@ -87,7 +87,7 @@ Project Map lists file paths, symbol definitions with line ranges for the projec
 - Before issuing a second search_code for the same change, check whether the first search should have been a combined multi-pattern search instead.
 - Modifying shared code without checking the affected surface is FORBIDDEN.
 Notes:
-- search_code may automatically provide richer symbol-aware results for some languages and repositories.
+- search_code may automatically provide richer symbol-aware results for supported languages and repositories.
 - Treat those richer results as a bonus, not a reason to skip the default investigation flow.
 **Local changes** (internal logic, local variable, message text, condition within one function):
 - Read the target once, edit, and verify. Broad reference search is not required.

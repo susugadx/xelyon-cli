@@ -65,17 +65,19 @@ type Match struct {
 
 // SearchOptions はコード検索のオプション
 type SearchOptions struct {
-	Pattern        string
-	Path           string
-	FilePattern    string // file_filter から自動判定。glob 文字を含む場合に設定。
-	FileType       string // file_filter から自動判定。glob 文字を含まない場合に設定。
-	CtxLines       int    // ツール経路では内部固定値（3）。外部パラメータは廃止。
-	TokenBudget    int    // 内部固定値（15000）。外部パラメータは廃止。
-	IsRegex        bool
-	Multiline      bool   // ツール経路では内部固定値（false）。外部パラメータは廃止。
-	IncludeHidden  bool   // ツール経路では内部固定値（false）。外部パラメータは廃止。
-	IncludeIgnored bool   // ツール経路では内部固定値（false）。外部パラメータは廃止。
-	OutputMode     string // 内部専用。外部パラメータは廃止。
+	Pattern          string
+	Mode             string
+	Path             string
+	FilePattern      string // file_filter から自動判定。glob 文字を含む場合に設定。
+	FileType         string // file_filter から自動判定。glob 文字を含まない場合に設定。
+	CtxLines         int    // ツール経路では内部固定値（3）。外部パラメータは廃止。
+	TokenBudget      int    // 内部固定値（15000）。外部パラメータは廃止。
+	IsRegex          bool
+	Multiline        bool   // ツール経路では内部固定値（false）。外部パラメータは廃止。
+	IncludeHidden    bool   // ツール経路では内部固定値（false）。外部パラメータは廃止。
+	IncludeIgnored   bool   // ツール経路では内部固定値（false）。外部パラメータは廃止。
+	OutputMode       string // 内部専用。外部パラメータは廃止。
+	LegacyIsRegexSet bool
 
 	LocatorRegistry *locator.Registry // Locator ID レジストリ（nilの場合はID付与しない）
 	LSPClient       navigation.LSPClient
@@ -100,6 +102,11 @@ func ExecuteSearchCodeWithConfig(cfg *config.Config, cache tools.ToolCacheInterf
 	if opts.Pattern == "" {
 		return "Error: pattern is required"
 	}
+	var ok bool
+	opts, ok = normalizeSearchOptions(opts)
+	if !ok {
+		return "Error: invalid mode (expected auto, symbol, literal, or regex)"
+	}
 	if opts.Path == "" {
 		opts.Path = "."
 	}
@@ -123,7 +130,7 @@ func ExecuteSearchCodeWithConfig(cfg *config.Config, cache tools.ToolCacheInterf
 	patterns := splitPatterns(opts.Pattern)
 	if len(patterns) > 1 {
 		multiKey := buildMultiCacheKey(patterns)
-		cacheKey := buildSearchCacheKey(opts)
+		cacheKey := buildMultiSearchCacheKey(opts, patterns)
 		if cache != nil {
 			if cached, ok := cache.GetSearch(multiKey, cacheKey); ok {
 				return cached
@@ -136,80 +143,54 @@ func ExecuteSearchCodeWithConfig(cfg *config.Config, cache tools.ToolCacheInterf
 
 // executeSinglePattern は単一パターンの検索処理（キャッシュ・検索・パース・マージ・トランケート・ブロック認識・フォーマット・キャッシュ保存）
 func executeSinglePattern(cache tools.ToolCacheInterface, pattern string, opts SearchOptions) string {
-	cacheKey := buildSearchCacheKey(opts)
+	result, _ := executeSinglePatternWithTrace(cache, pattern, opts)
+	return result
+}
+
+func executeSinglePatternWithTrace(cache tools.ToolCacheInterface, pattern string, opts SearchOptions) (string, searchRouteTrace) {
+	route := planSearchRoute(pattern, opts)
+	cacheKey := buildSearchCacheKeyWithRoute(opts, route.cacheSignature())
 	if cache != nil {
 		if cached, ok := cache.GetSearch(pattern, cacheKey); ok {
-			return cached
+			return cached, route
 		}
 	}
 
-	// ── Symbol fast path ──
-	if shouldTrySymbolResolve(pattern, opts) {
-		lang := resolveLanguage(opts)
-
-		if lang == "go" {
-			// Go: AST ベースの正確な解決
-			symbolOutput, status := navigation.InspectSymbolAuto(pattern, opts.Path, opts.LocatorRegistry, opts.LSPClient)
+	if route.InitialLane == searchLaneSymbol {
+		route.SymbolAttempted = true
+		resolver := resolverForLanguage(route.Language)
+		if resolver != nil {
+			symbolOutput, status := resolver.Resolve(route.SymbolQuery, opts)
 			switch status {
-			case navigation.SymbolAutoSingle:
+			case symbolResolveSingle:
+				route.FinalLane = searchLaneSymbol
+				route.SymbolResolved = true
 				if cache != nil {
 					cache.SetSearch(pattern, cacheKey, symbolOutput, nil)
 				}
-				return symbolOutput
-			case navigation.SymbolAutoMultiple:
-				return symbolOutput
-			case navigation.SymbolAutoNone:
-				// フォールバック
-			}
-		} else {
-			// 他言語: パターンベースのシンボル解決（言語別参照分類付き）
-			var symbolOutput string
-			var status genericSymbolStatus
-			switch lang {
-			case "js":
-				symbolOutput, status = resolveJSSymbol(pattern, opts)
-			case "python":
-				symbolOutput, status = resolvePythonSymbol(pattern, opts)
-			case "rust":
-				symbolOutput, status = resolveRustSymbol(pattern, opts)
-			case "java":
-				symbolOutput, status = resolveJavaSymbol(pattern, opts)
-			case "csharp":
-				symbolOutput, status = resolveCSharpSymbol(pattern, opts)
-			case "php":
-				symbolOutput, status = resolvePHPSymbol(pattern, opts)
-			case "ruby":
-				symbolOutput, status = resolveRubySymbol(pattern, opts)
-			case "swift":
-				symbolOutput, status = resolveSwiftSymbol(pattern, opts)
-			case "scala":
-				symbolOutput, status = resolveScalaSymbol(pattern, opts)
-			case "elixir":
-				symbolOutput, status = resolveElixirSymbol(pattern, opts)
-			case "lua":
-				symbolOutput, status = resolveLuaSymbol(pattern, opts)
-			case "cpp":
-				symbolOutput, status = resolveCppSymbol(pattern, opts)
-			default:
-				symbolOutput, status = resolveGenericSymbol(pattern, opts)
-			}
-			switch status {
-			case genericSymbolSingle:
-				if cache != nil {
-					cache.SetSearch(pattern, cacheKey, symbolOutput, nil)
-				}
-				return symbolOutput
-			case genericSymbolMultiple:
-				return symbolOutput
-			case genericSymbolNone:
-				// フォールバック
+				return symbolOutput, route
+			case symbolResolveMultiple:
+				route.FinalLane = searchLaneSymbol
+				route.SymbolResolved = true
+				return symbolOutput, route
+			case symbolResolveNone:
+				route.SymbolResolved = false
 			}
 		}
+		if route.FallbackLane != "" {
+			route.FallbackUsed = true
+			route.FinalLane = route.FallbackLane
+		}
+	}
+	if route.FinalLane == "" {
+		route.FinalLane = route.InitialLane
 	}
 
-	output, useRipgrep, warnings, err := executeSearch(pattern, opts)
+	textOpts := opts
+	textOpts.IsRegex = route.textIsRegex()
+	output, useRipgrep, warnings, err := executeSearch(pattern, textOpts)
 	if err != nil {
-		return fmt.Sprintf("Error: %v", err)
+		return fmt.Sprintf("Error: %v", err), route
 	}
 
 	var results []SearchResult
@@ -218,14 +199,14 @@ func executeSinglePattern(cache tools.ToolCacheInterface, pattern string, opts S
 	} else {
 		results = parseGrepOutput(output, 0)
 	}
-	results = filterResultsByOptions(results, opts)
-	reclassifyWithAST(results, pattern, opts.IsRegex)
+	results = filterResultsByOptions(results, textOpts)
+	reclassifyWithAST(results, pattern, textOpts.IsRegex)
 
 	if len(results) == 0 {
 		if len(warnings) > 0 {
-			return strings.Join(warnings, "\n") + "\nNo matches found"
+			return strings.Join(warnings, "\n") + "\nNo matches found", route
 		}
-		return "No matches found"
+		return "No matches found", route
 	}
 
 	if opts.OutputMode == "manifest" {
@@ -240,7 +221,7 @@ func executeSinglePattern(cache tools.ToolCacheInterface, pattern string, opts S
 		if cache != nil {
 			cache.SetSearch(pattern, cacheKey, finalOutput, collectFilePaths(results))
 		}
-		return finalOutput
+		return finalOutput, route
 	}
 
 	results = mergeContextLines(results)
@@ -261,7 +242,7 @@ func executeSinglePattern(cache tools.ToolCacheInterface, pattern string, opts S
 		cache.SetSearch(pattern, cacheKey, finalOutput, collectFilePaths(results))
 	}
 
-	return finalOutput
+	return finalOutput, route
 }
 
 const escapedCommaPlaceholder = "\x00COMMA\x00"
@@ -348,7 +329,7 @@ func executeMultiplePatterns(cache tools.ToolCacheInterface, patterns []string, 
 
 	if cache != nil {
 		multiKey := buildMultiCacheKey(patterns)
-		cacheKey := buildSearchCacheKey(opts)
+		cacheKey := buildMultiSearchCacheKey(opts, patterns)
 		cache.SetSearch(multiKey, cacheKey, output, nil)
 	}
 
@@ -517,9 +498,18 @@ func buildMultiCacheKey(patterns []string) string {
 	return strings.Join(sorted, "|")
 }
 
-func buildSearchCacheKey(opts SearchOptions) string {
-	return fmt.Sprintf("%s|%s|%s|%d|%d|regex=%t|multiline=%t|hidden=%t|ignored=%t|mode=%s|ignore=%s",
-		opts.Path, opts.FilePattern, opts.FileType, opts.CtxLines, opts.TokenBudget, opts.IsRegex, opts.Multiline, opts.IncludeHidden, opts.IncludeIgnored, opts.OutputMode, opts.ignoreKey)
+func buildSearchCacheKeyWithRoute(opts SearchOptions, routeSignature string) string {
+	return fmt.Sprintf("%s|%s|%s|%d|%d|mode=%s|regex=%t|multiline=%t|hidden=%t|ignored=%t|output=%s|ignore=%s|route=%s",
+		opts.Path, opts.FilePattern, opts.FileType, opts.CtxLines, opts.TokenBudget, opts.Mode, opts.IsRegex, opts.Multiline, opts.IncludeHidden, opts.IncludeIgnored, opts.OutputMode, opts.ignoreKey, routeSignature)
+}
+
+func buildMultiSearchCacheKey(opts SearchOptions, patterns []string) string {
+	signatures := make([]string, 0, len(patterns))
+	for _, pattern := range patterns {
+		signatures = append(signatures, planSearchRoute(pattern, opts).cacheSignature())
+	}
+	sort.Strings(signatures)
+	return buildSearchCacheKeyWithRoute(opts, strings.Join(signatures, ";"))
 }
 
 func collectFilePaths(results []SearchResult) []string {

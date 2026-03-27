@@ -50,13 +50,19 @@ func TestBuildInvestigationPrompt_DedicatedToolsInChecklist(t *testing.T) {
 	}
 }
 
-func TestBuildInvestigationPrompt_SearchCodeForGoSymbols(t *testing.T) {
+func TestBuildInvestigationPrompt_SearchCodeRoutingGuidance(t *testing.T) {
 	prompt := BuildInvestigationPrompt("test request")
-	if !strings.Contains(prompt, "For Go symbols, it automatically returns callers, references, and tests") {
-		t.Error("investigation prompt should describe search_code Go symbol auto-resolution")
+	if !strings.Contains(prompt, "language-aware routing across symbol-aware resolution, literal search, and regex search") {
+		t.Error("investigation prompt should describe language-aware search_code routing")
+	}
+	if !strings.Contains(prompt, "Prefer mode=auto") {
+		t.Error("investigation prompt should prefer mode=auto")
 	}
 	if strings.Contains(prompt, "search_code+read_file") {
 		t.Error("investigation prompt should not compare search_code against search_code+read_file")
+	}
+	if strings.Contains(prompt, "For Go symbols") {
+		t.Error("investigation prompt should not hardcode Go-specific search_code guidance")
 	}
 }
 

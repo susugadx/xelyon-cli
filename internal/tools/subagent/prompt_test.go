@@ -21,9 +21,11 @@ func TestExplorePrompt_SearchCodeNotOverlyRestricted(t *testing.T) {
 	if strings.Contains(ExplorePrompt, "ONLY for patterns NOT in Project Map") {
 		t.Error("search_code guidance should not be overly restrictive")
 	}
-	// search_code の説明は言語非依存に汎用化済み
-	if !strings.Contains(ExplorePrompt, "richer caller/reference/test information") {
-		t.Error("search_code should describe language-aware symbol resolution as a possibility")
+	if !strings.Contains(ExplorePrompt, "Uses language-aware routing across symbol-aware resolution, literal search, and regex search") {
+		t.Error("search_code should describe language-aware routing")
+	}
+	if !strings.Contains(ExplorePrompt, "Prefer mode=auto") {
+		t.Error("search_code should prefer mode=auto")
 	}
 }
 

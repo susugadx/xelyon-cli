@@ -15,7 +15,7 @@ Modification tools are FORBIDDEN: apply_patch, write_file, str_replace, delete_f
 Allowed: search_code, read_file, web_search, bash (read-only git commands only: git status, git diff, git log)
 
 ### INVESTIGATION CHECKLIST
--  Use search_code for code discovery. For Go symbols, it automatically returns callers, references, and tests. For string patterns and regex, it returns matches with context.
+-  Use search_code for code discovery. It uses language-aware routing across symbol-aware resolution, literal search, and regex search. Prefer mode=auto, short symbol queries when possible, and regex only when needed.
 -  Use read_file for detailed implementation context
 -  Prefer parallel investigation: batch independent read_file/search_code steps in one response
 -  Reading 2+ independent files -> one read_file call with all paths
@@ -26,7 +26,7 @@ Allowed: search_code, read_file, web_search, bash (read-only git commands only: 
 -  Avoid broad exploration when the target is already clear
 
 ### EXAMPLES
-- Go symbol review -> search_code(pattern="chatCore", path="internal/agent/agent_chat.go")
+- Symbol review -> search_code(pattern="chatCore", path="internal/agent/agent_chat.go")
 - Need implementation + tests -> read_file(paths=["impl.go", "impl_test.go"])
 - Broad pattern search -> search_code(pattern="handleError,validateInput")
 

@@ -182,9 +182,25 @@ func searchCodeOptionsKey(tc *tools.ToolCall) string {
 	if tc.Tool != "search_code" {
 		return ""
 	}
+	mode := strings.TrimSpace(strings.ToLower(tc.Args["mode"]))
+	if mode == "" {
+		if legacy, ok := tc.Args["is_regex"]; ok && legacy != "" {
+			if strings.EqualFold(legacy, "true") {
+				mode = "regex"
+			} else {
+				mode = "literal"
+			}
+		} else {
+			mode = "auto"
+		}
+	}
+
 	var parts []string
 	for k, v := range tc.Args {
 		if k == "pattern" {
+			continue
+		}
+		if k == "mode" || k == "is_regex" {
 			continue
 		}
 		if v == "" {
@@ -192,6 +208,7 @@ func searchCodeOptionsKey(tc *tools.ToolCall) string {
 		}
 		parts = append(parts, k+"="+v)
 	}
+	parts = append(parts, "mode="+mode)
 	sort.Strings(parts)
 	return strings.Join(parts, "&")
 }
