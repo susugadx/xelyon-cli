@@ -1109,6 +1109,29 @@ func stylePlainTextRange(s string, startCol, endCol int, bg string) string {
 	return result.String()
 }
 
+func stylePlainTextRangeWithCursor(s string, startCol, endCol int, rangeBg string, cursorCol int, cursorBg string, lineBg string) string {
+	var result strings.Builder
+	width := 0
+	cursorPainted := false
+	for _, r := range s {
+		rw := runeWidth(r)
+		if lineBg != "" {
+			result.WriteString(lineBg)
+		}
+		if rangeBg != "" && startCol < endCol && width < endCol && width+rw > startCol {
+			result.WriteString(rangeBg)
+		}
+		if !cursorPainted && cursorCol < width+rw {
+			result.WriteString(cursorBg)
+			cursorPainted = true
+		}
+		result.WriteRune(r)
+		result.WriteString("\033[0m")
+		width += rw
+	}
+	return result.String()
+}
+
 func (m Model) charSelectionColumnsForLine(line int) (startCol, endCol int, ok bool) {
 	start, end, ok := m.normalizedCharSelection()
 	if !ok || line < start.line || line > end.line {
@@ -1143,8 +1166,10 @@ func (m Model) viewportView() string {
 		return m.vp.view()
 	}
 
-	const cursorBg = "\033[48;5;237m"
+	const cursorLineBg = "\033[48;5;236m"
+	const cursorCharBg = "\033[48;5;255;38;5;16m"
 	const visualBg = "\033[48;5;240m"
+	const visualCursorBg = "\033[48;5;255;38;5;16m"
 
 	visible := m.vp.visibleLines()
 	var sb strings.Builder
@@ -1165,18 +1190,33 @@ func (m Model) viewportView() string {
 		case visualModeChar:
 			if startCol, endCol, ok := m.charSelectionColumnsForLine(rawIdx); ok {
 				plain := stripANSI(line)
-				sb.WriteString(decorateViewportLine(stylePlainTextRange(plain, startCol, endCol, visualBg), m.vp.width, ""))
+				styled := stylePlainTextRange(plain, startCol, endCol, visualBg)
+				if rawIdx == m.cursorLine {
+					styled = stylePlainTextRangeWithCursor(plain, startCol, endCol, visualBg, m.cursorCol, visualCursorBg, "")
+				}
+				sb.WriteString(decorateViewportLine(styled, m.vp.width, ""))
+				continue
+			}
+			if rawIdx == m.cursorLine {
+				plain := stripANSI(line)
+				sb.WriteString(decorateViewportLine(stylePlainTextRangeWithCursor(plain, 0, 0, "", m.cursorCol, visualCursorBg, ""), m.vp.width, ""))
 				continue
 			}
 		case visualModeLine:
 			if start, end, ok := m.lineSelectionRange(); ok && rawIdx >= start && rawIdx <= end {
+				if rawIdx == m.cursorLine {
+					plain := stripANSI(line)
+					sb.WriteString(decorateViewportLine(stylePlainTextRangeWithCursor(plain, 0, lipgloss.Width(plain), visualBg, m.cursorCol, visualCursorBg, ""), m.vp.width, visualBg))
+					continue
+				}
 				sb.WriteString(decorateViewportLine(line, m.vp.width, visualBg))
 				continue
 			}
 		}
 
 		if rawIdx == m.cursorLine {
-			sb.WriteString(decorateViewportLine(line, m.vp.width, cursorBg))
+			plain := stripANSI(line)
+			sb.WriteString(decorateViewportLine(stylePlainTextRangeWithCursor(plain, 0, 0, "", m.cursorCol, cursorCharBg, cursorLineBg), m.vp.width, cursorLineBg))
 			continue
 		}
 

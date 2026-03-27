@@ -548,6 +548,26 @@ func TestNavMode_HLMoveCursorColWithoutVisualMode(t *testing.T) {
 	}
 }
 
+func TestNavMode_ViewShowsColumnCursorInNormalMode(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := newModelWithViewport(agent)
+	m.navigationMode = true
+	m.rawLines = []string{"hello"}
+	m.rebuildRenderedLines()
+	m.vp.setLines(m.renderedLines)
+	m.cursorLine = 0
+	m.cursorCol = 2
+	m.rebuildChrome()
+
+	view := m.View()
+	if !strings.Contains(view, "\033[48;5;255;38;5;16ml") {
+		t.Fatalf("view should contain highlighted cursor character, got %q", view)
+	}
+	if !strings.Contains(view, "\033[48;5;236m                                                                           \033[0m") {
+		t.Fatalf("view should extend line highlight into padding, got %q", view)
+	}
+}
+
 func TestNavMode_PendingYFallsBackToCopyLastOutput(t *testing.T) {
 	agent := &stubAgent{statusLine: "ready"}
 	m := NewModel(agent, "")
