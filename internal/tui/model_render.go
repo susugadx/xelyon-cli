@@ -220,21 +220,24 @@ func (m Model) charSelectionColumnsForLine(line int) (startCol, endCol int, ok b
 }
 
 func decorateViewportLine(line string, width int, bg string) string {
-	if bg == "" {
-		return line
-	}
-	padded := strings.ReplaceAll(line, "\033[0m", "\033[0m"+bg)
-	padding := max(0, width-lipgloss.Width(line))
-	return bg + padded + strings.Repeat(" ", padding) + "\033[0m"
+	return fillANSITextWidth(line, width, bg)
 }
 
 func fitANSITextWidth(line string, width int) string {
+	return fillANSITextWidth(line, width, "")
+}
+
+func fillANSITextWidth(line string, width int, bg string) string {
 	if width <= 0 {
 		return ""
 	}
 	line = truncateWithANSI(line, width)
 	padding := max(0, width-lipgloss.Width(line))
-	return line + strings.Repeat(" ", padding)
+	if bg == "" {
+		return line + strings.Repeat(" ", padding)
+	}
+	line = strings.ReplaceAll(line, "\033[0m", "\033[0m"+bg)
+	return bg + line + strings.Repeat(" ", padding) + "\033[0m"
 }
 
 func (m Model) viewportView() string {
@@ -356,7 +359,7 @@ func (m *Model) rebuildChrome() {
 	const inputBg = "\033[48;5;236m"
 	const hintColor = "\033[38;5;244m"
 	tiView := strings.ReplaceAll(m.textInput.View(), "\033[0m", "\033[0m"+inputBg)
-	inputLine := inputBg + " \033[38;5;46m" + inputPrompt + "\033[38;5;252m" + tiView + "\033[0m"
+	inputLine := fillANSITextWidth(inputBg+" \033[38;5;46m"+inputPrompt+"\033[38;5;252m"+tiView+"\033[0m", m.width, inputBg)
 
 	var statusText string
 	if m.navigationMode {

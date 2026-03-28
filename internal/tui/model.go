@@ -205,7 +205,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		m.textInput.Width = max(0, m.width-inputPromptWidth-1)
-		m.padLineCache = "\033[48;5;236m" + strings.Repeat(" ", m.width) + "\033[0m"
+		m.padLineCache = fillANSITextWidth("", m.width, "\033[48;5;236m")
 		m.chromeDirty = true
 
 	case AppendMessageMsg:
