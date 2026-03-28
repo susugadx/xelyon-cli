@@ -3,7 +3,6 @@ package search
 import (
 	"fmt"
 	"regexp"
-	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/locator"
 )
@@ -17,13 +16,13 @@ const (
 
 // resolveJavaSymbol は Java / Kotlin 向けの enhanced symbol fast path。
 // 参照を import / caller / annotation / inheritance / other に分類する。
-func resolveJavaSymbol(symbol string, opts SearchOptions) (string, genericSymbolStatus) {
+func resolveJavaSymbol(symbol string, opts SearchOptions) genericResolveResult {
 	defs := findGenericDefinitions(symbol, opts)
 	if len(defs) == 0 {
-		return "", genericSymbolNone
+		return genericResolveResult{Status: genericSymbolNone}
 	}
 	if len(defs) > 1 {
-		return formatGenericMultipleDefs(symbol, defs, opts.LocatorRegistry), genericSymbolMultiple
+		return genericResolveResult{Output: formatGenericMultipleDefs(symbol, defs, opts.LocatorRegistry), Status: genericSymbolMultiple}
 	}
 
 	def := defs[0]
@@ -40,7 +39,17 @@ func resolveJavaSymbol(symbol string, opts SearchOptions) (string, genericSymbol
 	}
 
 	imports, callers, annotations, inheritance, otherRefs := classifyJavaRefs(normalRefs, symbol)
-	return formatJavaSymbolResult(def, imports, callers, annotations, inheritance, otherRefs, testRefs, opts.LocatorRegistry), genericSymbolSingle
+	bundle := buildGenericSymbolBundle("java", symbol, def, []string{
+		fmt.Sprintf("%d: %s", def.Line, def.Signature),
+	}, []symbolBundleSectionInput{
+		{Kind: "imports", Title: "Imports", Items: imports, Limit: javaImportLimit},
+		{Kind: "callers", Title: "Callers", Items: callers, Limit: javaCallerLimit},
+		{Kind: "annotations", Title: "Annotations", Items: annotations, Limit: javaAnnotationLimit},
+		{Kind: "inheritance", Title: "Inheritance", Items: inheritance, Limit: javaInheritanceLimit},
+		{Kind: "references", Title: "References", Items: otherRefs, Limit: genericRefLimit},
+		{Kind: "tests", Title: "Related Tests", Items: testRefs, Limit: genericTestLimit, IsTest: true},
+	})
+	return genericResolveResult{Output: formatJavaSymbolResult(bundle, opts.LocatorRegistry), Status: genericSymbolSingle, Bundle: bundle}
 }
 
 // classifyJavaRefs は Java/Kotlin の参照を分類する。
@@ -71,32 +80,6 @@ func classifyJavaRefs(refs []genericSymbolRef, symbol string) (imports, callers,
 }
 
 // formatJavaSymbolResult は Java/Kotlin の分類済みシンボル結果をフォーマットする。
-func formatJavaSymbolResult(def genericSymbolDef, imports, callers, annotations, inheritance, otherRefs, tests []genericSymbolRef, reg *locator.Registry) string {
-	var sb strings.Builder
-
-	header := fmt.Sprintf("── %s %s (L%d) in %s", def.Kind, def.Name, def.Line, def.File)
-	if reg != nil {
-		id := reg.Register(locator.Location{
-			FilePath: def.File,
-			Line:     def.Line,
-			Name:     fmt.Sprintf("%s %s", def.Kind, def.Name),
-		})
-		header += " " + id
-	}
-	fmt.Fprintf(&sb, "%s ──\n", header)
-	fmt.Fprintf(&sb, "%d: %s\n", def.Line, def.Signature)
-
-	writeRefSection(&sb, "Imports", imports, javaImportLimit, reg)
-	writeRefSection(&sb, "Callers", callers, javaCallerLimit, reg)
-	writeRefSection(&sb, "Annotations", annotations, javaAnnotationLimit, reg)
-	writeRefSection(&sb, "Inheritance", inheritance, javaInheritanceLimit, reg)
-	writeRefSection(&sb, "References", otherRefs, genericRefLimit, reg)
-	writeRefSection(&sb, "Related Tests", tests, genericTestLimit, reg)
-
-	total := len(imports) + len(callers) + len(annotations) + len(inheritance) + len(otherRefs) + len(tests)
-	if total == 0 {
-		sb.WriteString("\nNo references found.\n")
-	}
-
-	return sb.String()
+func formatJavaSymbolResult(bundle *SymbolBundle, reg *locator.Registry) string {
+	return formatSymbolBundle(bundle, reg, nil)
 }

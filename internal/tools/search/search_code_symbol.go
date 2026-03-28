@@ -26,21 +26,46 @@ const (
 	symbolResolveNone     symbolResolveStatus = "none"
 )
 
+type symbolResolveResult struct {
+	Output string
+	Status symbolResolveStatus
+	Bundle *SymbolBundle
+}
+
 type symbolResolver interface {
-	Resolve(symbol string, opts SearchOptions) (string, symbolResolveStatus)
+	Resolve(symbol string, opts SearchOptions) symbolResolveResult
 }
 
 type goSymbolResolver struct{}
 
-func (goSymbolResolver) Resolve(symbol string, opts SearchOptions) (string, symbolResolveStatus) {
-	output, status := navigation.InspectSymbolAuto(symbol, opts.Path, opts.LocatorRegistry, opts.LSPClient)
+func (goSymbolResolver) Resolve(symbol string, opts SearchOptions) symbolResolveResult {
+	result, output, status := navigation.ResolveInspectSymbolAuto(symbol, opts.Path, navigation.InspectSymbolAutoOptions{
+		Budget:    searchCodeGoSymbolBudget,
+		Registry:  nil,
+		LSPClient: opts.LSPClient,
+	})
 	switch status {
 	case navigation.SymbolAutoSingle:
-		return output, symbolResolveSingle
+		bundle := buildGoSymbolBundle(symbol, result)
+		if bundle == nil {
+			return symbolResolveResult{Status: symbolResolveNone}
+		}
+		return symbolResolveResult{
+			Output: formatSymbolBundle(bundle, opts.LocatorRegistry, nil),
+			Status: symbolResolveSingle,
+			Bundle: bundle,
+		}
 	case navigation.SymbolAutoMultiple:
-		return output, symbolResolveMultiple
+		if opts.LocatorRegistry != nil {
+			_, output, _ = navigation.ResolveInspectSymbolAuto(symbol, opts.Path, navigation.InspectSymbolAutoOptions{
+				Budget:    searchCodeGoSymbolBudget,
+				Registry:  opts.LocatorRegistry,
+				LSPClient: opts.LSPClient,
+			})
+		}
+		return symbolResolveResult{Output: output, Status: symbolResolveMultiple}
 	default:
-		return "", symbolResolveNone
+		return symbolResolveResult{Status: symbolResolveNone}
 	}
 }
 
@@ -48,45 +73,44 @@ type genericLanguageResolver struct {
 	lang string
 }
 
-func (r genericLanguageResolver) Resolve(symbol string, opts SearchOptions) (string, symbolResolveStatus) {
-	var output string
-	var status genericSymbolStatus
+func (r genericLanguageResolver) Resolve(symbol string, opts SearchOptions) symbolResolveResult {
+	var result genericResolveResult
 	switch r.lang {
 	case "js":
-		output, status = resolveJSSymbol(symbol, opts)
+		result = resolveJSSymbol(symbol, opts)
 	case "python":
-		output, status = resolvePythonSymbol(symbol, opts)
+		result = resolvePythonSymbol(symbol, opts)
 	case "rust":
-		output, status = resolveRustSymbol(symbol, opts)
+		result = resolveRustSymbol(symbol, opts)
 	case "java":
-		output, status = resolveJavaSymbol(symbol, opts)
+		result = resolveJavaSymbol(symbol, opts)
 	case "csharp":
-		output, status = resolveCSharpSymbol(symbol, opts)
+		result = resolveCSharpSymbol(symbol, opts)
 	case "php":
-		output, status = resolvePHPSymbol(symbol, opts)
+		result = resolvePHPSymbol(symbol, opts)
 	case "ruby":
-		output, status = resolveRubySymbol(symbol, opts)
+		result = resolveRubySymbol(symbol, opts)
 	case "swift":
-		output, status = resolveSwiftSymbol(symbol, opts)
+		result = resolveSwiftSymbol(symbol, opts)
 	case "scala":
-		output, status = resolveScalaSymbol(symbol, opts)
+		result = resolveScalaSymbol(symbol, opts)
 	case "elixir":
-		output, status = resolveElixirSymbol(symbol, opts)
+		result = resolveElixirSymbol(symbol, opts)
 	case "lua":
-		output, status = resolveLuaSymbol(symbol, opts)
+		result = resolveLuaSymbol(symbol, opts)
 	case "cpp":
-		output, status = resolveCppSymbol(symbol, opts)
+		result = resolveCppSymbol(symbol, opts)
 	default:
-		output, status = resolveGenericSymbol(symbol, opts)
+		result = resolveGenericSymbol(symbol, opts)
 	}
 
-	switch status {
+	switch result.Status {
 	case genericSymbolSingle:
-		return output, symbolResolveSingle
+		return symbolResolveResult{Output: result.Output, Status: symbolResolveSingle, Bundle: result.Bundle}
 	case genericSymbolMultiple:
-		return output, symbolResolveMultiple
+		return symbolResolveResult{Output: result.Output, Status: symbolResolveMultiple}
 	default:
-		return "", symbolResolveNone
+		return symbolResolveResult{Status: symbolResolveNone}
 	}
 }
 
@@ -324,6 +348,12 @@ const (
 	genericSymbolNone     genericSymbolStatus = "none"
 )
 
+type genericResolveResult struct {
+	Output string
+	Status genericSymbolStatus
+	Bundle *SymbolBundle
+}
+
 // genericSymbolDef は多言語のシンボル定義候補。
 type genericSymbolDef struct {
 	Name      string
@@ -342,16 +372,19 @@ type genericSymbolRef struct {
 }
 
 // resolveGenericSymbol は Go 以外の言語でシンボル解決を試みる。
-func resolveGenericSymbol(symbol string, opts SearchOptions) (string, genericSymbolStatus) {
+func resolveGenericSymbol(symbol string, opts SearchOptions) genericResolveResult {
 	// Step 1: 定義を見つける（signaturePatterns を使う）
 	defs := findGenericDefinitions(symbol, opts)
 	if len(defs) == 0 {
-		return "", genericSymbolNone
+		return genericResolveResult{Status: genericSymbolNone}
 	}
 
 	// Step 2: 複数候補
 	if len(defs) > 1 {
-		return formatGenericMultipleDefs(symbol, defs, opts.LocatorRegistry), genericSymbolMultiple
+		return genericResolveResult{
+			Output: formatGenericMultipleDefs(symbol, defs, opts.LocatorRegistry),
+			Status: genericSymbolMultiple,
+		}
 	}
 
 	// Step 3: 単一候補 → 参照箇所を検索
@@ -369,7 +402,17 @@ func resolveGenericSymbol(symbol string, opts SearchOptions) (string, genericSym
 		}
 	}
 
-	return formatGenericSymbolResult(def, normalRefs, testRefs, opts.LocatorRegistry), genericSymbolSingle
+	bundle := buildGenericSymbolBundle(resolveLanguage(opts), symbol, def, []string{
+		fmt.Sprintf("%d: %s", def.Line, def.Signature),
+	}, []symbolBundleSectionInput{
+		{Kind: "references", Title: "References", Items: normalRefs, Limit: genericRefLimit},
+		{Kind: "tests", Title: "Related Tests", Items: testRefs, Limit: genericTestLimit, IsTest: true},
+	})
+	return genericResolveResult{
+		Output: formatSymbolBundle(bundle, opts.LocatorRegistry, nil),
+		Status: genericSymbolSingle,
+		Bundle: bundle,
+	}
 }
 
 // findGenericDefinitions は ripgrep + signaturePatterns でシンボルの定義行を見つける。
@@ -574,52 +617,6 @@ const (
 	genericTestLimit = 5
 )
 
-func formatGenericSymbolResult(def genericSymbolDef, refs, tests []genericSymbolRef, reg *locator.Registry) string {
-	var sb strings.Builder
-
-	header := fmt.Sprintf("── %s %s (L%d) in %s", def.Kind, def.Name, def.Line, def.File)
-	if reg != nil {
-		id := reg.Register(locator.Location{FilePath: def.File, Line: def.Line, Name: fmt.Sprintf("%s %s", def.Kind, def.Name)})
-		header += " " + id
-	}
-	fmt.Fprintf(&sb, "%s ──\n", header)
-	fmt.Fprintf(&sb, "%d: %s\n", def.Line, def.Signature)
-
-	if len(refs) > 0 {
-		sb.WriteString("\n── References ──\n")
-		for i, ref := range refs {
-			if i >= genericRefLimit {
-				fmt.Fprintf(&sb, "  ... (%d more references)\n", len(refs)-genericRefLimit)
-				break
-			}
-			line := fmt.Sprintf("  %s:%d  %s", ref.File, ref.Line, ref.Snippet)
-			if reg != nil {
-				id := reg.Register(locator.Location{FilePath: ref.File, Line: ref.Line})
-				line += " " + id
-			}
-			fmt.Fprintf(&sb, "%s\n", line)
-		}
-	}
-
-	if len(tests) > 0 {
-		sb.WriteString("\n── Related Tests ──\n")
-		for i, test := range tests {
-			if i >= genericTestLimit {
-				fmt.Fprintf(&sb, "  ... (%d more tests)\n", len(tests)-genericTestLimit)
-				break
-			}
-			line := fmt.Sprintf("  %s:%d  %s", test.File, test.Line, test.Snippet)
-			if reg != nil {
-				id := reg.Register(locator.Location{FilePath: test.File, Line: test.Line})
-				line += " " + id
-			}
-			fmt.Fprintf(&sb, "%s\n", line)
-		}
-	}
-
-	if len(refs) == 0 && len(tests) == 0 {
-		sb.WriteString("\nNo references found.\n")
-	}
-
-	return sb.String()
+func formatGenericSymbolResult(bundle *SymbolBundle, reg *locator.Registry) string {
+	return formatSymbolBundle(bundle, reg, nil)
 }

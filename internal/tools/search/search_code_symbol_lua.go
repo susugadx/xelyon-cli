@@ -3,7 +3,6 @@ package search
 import (
 	"fmt"
 	"regexp"
-	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/locator"
 )
@@ -14,13 +13,13 @@ const (
 )
 
 // resolveLuaSymbol は Lua 向けの enhanced symbol fast path。
-func resolveLuaSymbol(symbol string, opts SearchOptions) (string, genericSymbolStatus) {
+func resolveLuaSymbol(symbol string, opts SearchOptions) genericResolveResult {
 	defs := findGenericDefinitions(symbol, opts)
 	if len(defs) == 0 {
-		return "", genericSymbolNone
+		return genericResolveResult{Status: genericSymbolNone}
 	}
 	if len(defs) > 1 {
-		return formatGenericMultipleDefs(symbol, defs, opts.LocatorRegistry), genericSymbolMultiple
+		return genericResolveResult{Output: formatGenericMultipleDefs(symbol, defs, opts.LocatorRegistry), Status: genericSymbolMultiple}
 	}
 
 	def := defs[0]
@@ -37,7 +36,15 @@ func resolveLuaSymbol(symbol string, opts SearchOptions) (string, genericSymbolS
 	}
 
 	requires, callers, otherRefs := classifyLuaRefs(normalRefs, symbol)
-	return formatLuaSymbolResult(def, requires, callers, otherRefs, testRefs, opts.LocatorRegistry), genericSymbolSingle
+	bundle := buildGenericSymbolBundle("lua", symbol, def, []string{
+		fmt.Sprintf("%d: %s", def.Line, def.Signature),
+	}, []symbolBundleSectionInput{
+		{Kind: "requires", Title: "Requires", Items: requires, Limit: luaRequireLimit},
+		{Kind: "callers", Title: "Callers", Items: callers, Limit: luaCallerLimit},
+		{Kind: "references", Title: "References", Items: otherRefs, Limit: genericRefLimit},
+		{Kind: "tests", Title: "Related Tests", Items: testRefs, Limit: genericTestLimit, IsTest: true},
+	})
+	return genericResolveResult{Output: formatLuaSymbolResult(bundle, opts.LocatorRegistry), Status: genericSymbolSingle, Bundle: bundle}
 }
 
 // classifyLuaRefs は Lua の参照を分類する。
@@ -61,25 +68,6 @@ func classifyLuaRefs(refs []genericSymbolRef, symbol string) (requires, callers,
 }
 
 // formatLuaSymbolResult は Lua の分類済みシンボル結果をフォーマットする。
-func formatLuaSymbolResult(def genericSymbolDef, requires, callers, otherRefs, tests []genericSymbolRef, reg *locator.Registry) string {
-	var sb strings.Builder
-
-	header := fmt.Sprintf("── %s %s (L%d) in %s", def.Kind, def.Name, def.Line, def.File)
-	if reg != nil {
-		id := reg.Register(locator.Location{FilePath: def.File, Line: def.Line, Name: fmt.Sprintf("%s %s", def.Kind, def.Name)})
-		header += " " + id
-	}
-	fmt.Fprintf(&sb, "%s ──\n", header)
-	fmt.Fprintf(&sb, "%d: %s\n", def.Line, def.Signature)
-
-	writeRefSection(&sb, "Requires", requires, luaRequireLimit, reg)
-	writeRefSection(&sb, "Callers", callers, luaCallerLimit, reg)
-	writeRefSection(&sb, "References", otherRefs, genericRefLimit, reg)
-	writeRefSection(&sb, "Related Tests", tests, genericTestLimit, reg)
-
-	total := len(requires) + len(callers) + len(otherRefs) + len(tests)
-	if total == 0 {
-		sb.WriteString("\nNo references found.\n")
-	}
-	return sb.String()
+func formatLuaSymbolResult(bundle *SymbolBundle, reg *locator.Registry) string {
+	return formatSymbolBundle(bundle, reg, nil)
 }

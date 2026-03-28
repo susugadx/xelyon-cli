@@ -1,13 +1,36 @@
 package search
 
 import (
+	"context"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/susugadx/xelyon-cli/internal/locator"
+	"github.com/susugadx/xelyon-cli/internal/navigation"
+	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
+
+type mockGoSymbolLSPClient struct {
+	refs  []navigation.LSPLocation
+	impls []navigation.LSPLocation
+}
+
+func (m *mockGoSymbolLSPClient) FindReferences(context.Context, string, int, int, bool) ([]navigation.LSPLocation, error) {
+	return m.refs, nil
+}
+
+func (m *mockGoSymbolLSPClient) GotoDefinition(context.Context, string, int, int) ([]navigation.LSPLocation, error) {
+	return nil, nil
+}
+
+func (m *mockGoSymbolLSPClient) GotoImplementation(context.Context, string, int, int) ([]navigation.LSPLocation, error) {
+	return m.impls, nil
+}
 
 const symbolTestSource = `package example
 
@@ -1115,6 +1138,673 @@ func TestSearchCode_MultiPatternPythonSymbol(t *testing.T) {
 	if !strings.Contains(result, "login_view") {
 		t.Error("expected login_view in result")
 	}
+}
+
+func TestBuildGoSymbolBundleIncludesEditSurface(t *testing.T) {
+	bundle := buildGoSymbolBundle("Close", navigation.InspectResult{
+		Symbol: &navigation.SymbolCandidate{
+			Name:     "Close",
+			Kind:     "method",
+			File:     "agent.go",
+			Line:     10,
+			EndLine:  14,
+			Receiver: "*Agent",
+		},
+		Body: []string{
+			"10: func (a *Agent) Close() error {",
+			"11: \treturn nil",
+			"12: }",
+		},
+		Callers: []navigation.Reference{
+			{File: "runner.go", Line: 22, Scope: "shutdown", Snippet: "return agent.Close()"},
+		},
+		TotalCallers: 1,
+		Tests: []navigation.TestRef{
+			{File: "agent_test.go", Line: 8, Name: "TestClose"},
+		},
+		TotalTests: 1,
+	})
+	result := formatSymbolBundle(bundle, nil, nil)
+
+	if !strings.Contains(result, "Definition:") {
+		t.Errorf("expected Definition section, got:\n%s", result)
+	}
+	if !strings.Contains(result, "Callers (1):") {
+		t.Errorf("expected Callers section, got:\n%s", result)
+	}
+	if !strings.Contains(result, "Related Tests (1):") {
+		t.Errorf("expected Related Tests section, got:\n%s", result)
+	}
+}
+
+func TestBuildGoSymbolBundleCarriesDiagnostics(t *testing.T) {
+	bundle := buildGoSymbolBundle("Run", navigation.InspectResult{
+		Symbol: &navigation.SymbolCandidate{
+			Name:    "Run",
+			Kind:    "function",
+			File:    "run.go",
+			Line:    10,
+			EndLine: 12,
+		},
+		Body: []string{
+			"10: func Run() {",
+			"11: }",
+		},
+		ResolvedViaLSP:     true,
+		UpstreamIncomplete: true,
+	})
+	result := formatSymbolBundle(bundle, nil, nil)
+	if !strings.Contains(result, "Warning: upstream search may be incomplete.") {
+		t.Fatalf("expected incomplete warning in bundle output, got:\n%s", result)
+	}
+	if !strings.Contains(result, "Note: resolved via gopls.") {
+		t.Fatalf("expected LSP note in bundle output, got:\n%s", result)
+	}
+}
+
+func TestBuildGoSymbolBundleCarriesTruncatedDiagnostic(t *testing.T) {
+	bundle := buildGoSymbolBundle("Run", navigation.InspectResult{
+		Symbol: &navigation.SymbolCandidate{
+			Name:    "Run",
+			Kind:    "function",
+			File:    "run.go",
+			Line:    10,
+			EndLine: 12,
+		},
+		Body: []string{
+			"10: func Run() {",
+			"11: }",
+		},
+		UpstreamTruncated: true,
+	})
+	result := formatSymbolBundle(bundle, nil, nil)
+	if !strings.Contains(result, "Note: upstream results were truncated.") {
+		t.Fatalf("expected truncation note in bundle output, got:\n%s", result)
+	}
+}
+
+func TestGoSymbolResolver_UsesBundleDiagnostics(t *testing.T) {
+	setupSymbolTestDir(t, "example.go", `package example
+
+func Run() {}
+`)
+
+	resolved := goSymbolResolver{}.Resolve("Run", SearchOptions{
+		Path:            ".",
+		LSPClient:       &mockGoSymbolLSPClient{refs: []navigation.LSPLocation{{File: "example.go", Line: 3, Character: 1, EndLine: 3, EndChar: 5}}},
+		LocatorRegistry: nil,
+	})
+	if resolved.Status != symbolResolveSingle {
+		t.Fatalf("expected single symbol resolution, got %s", resolved.Status)
+	}
+	if resolved.Bundle == nil {
+		t.Fatal("expected bundle in go symbol resolution")
+	}
+	if !strings.Contains(resolved.Output, "Note: resolved via gopls.") {
+		t.Fatalf("expected LSP note in go symbol output, got:\n%s", resolved.Output)
+	}
+}
+
+func TestGoSymbolResolver_LocatorRegistryDoesNotRegisterHiddenIDs(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"builder.go": `package example
+
+type Builder interface {
+	Build() string
+}
+`,
+		"builder_impl.go": `package example
+
+type FileBuilder struct{}
+
+func (FileBuilder) Build() string { return "" }
+`,
+		"builder_test.go": `package example
+
+func TestBuild(t *testing.T) {
+	var b FileBuilder
+	_ = b.Build()
+}
+`,
+	})
+
+	reg := locator.NewRegistry()
+	resolved := goSymbolResolver{}.Resolve("Builder", SearchOptions{
+		Path:            dir,
+		LocatorRegistry: reg,
+		LSPClient: &mockGoSymbolLSPClient{
+			refs:  []navigation.LSPLocation{{File: "builder_test.go", Line: 5, Character: 1, EndLine: 5, EndChar: 6}},
+			impls: []navigation.LSPLocation{{File: "builder_impl.go", Line: 3, Character: 1, EndLine: 3, EndChar: 11}},
+		},
+	})
+	if resolved.Status != symbolResolveSingle {
+		t.Fatalf("expected single symbol resolution, got %s", resolved.Status)
+	}
+
+	ids := visibleLocatorIDs(resolved.Output)
+	if len(ids) == 0 {
+		t.Fatalf("expected visible locator IDs in output, got:\n%s", resolved.Output)
+	}
+	for i, id := range ids {
+		want := "[L" + strconv.Itoa(i+1) + "]"
+		if id != want {
+			t.Fatalf("expected sequential locator %s, got %s in output:\n%s", want, id, resolved.Output)
+		}
+	}
+	if _, ok := reg.Resolve("[L" + strconv.Itoa(len(ids)+1) + "]"); ok {
+		t.Fatalf("expected no hidden locator beyond visible IDs, got extra registry entry after %d visible IDs", len(ids))
+	}
+}
+
+func TestGoSymbolResolver_LocatorRegistryMatchesImplementation(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"builder.go": `package example
+
+type Builder interface {
+	Build() string
+}
+`,
+		"builder_impl.go": `package example
+
+type FileBuilder struct{}
+
+func (FileBuilder) Build() string { return "" }
+`,
+	})
+
+	reg := locator.NewRegistry()
+	resolved := goSymbolResolver{}.Resolve("Builder", SearchOptions{
+		Path:            dir,
+		LocatorRegistry: reg,
+		LSPClient: &mockGoSymbolLSPClient{
+			refs:  []navigation.LSPLocation{{File: "builder_test.go", Line: 5, Character: 1, EndLine: 5, EndChar: 6}},
+			impls: []navigation.LSPLocation{{File: "builder_impl.go", Line: 3, Character: 1, EndLine: 3, EndChar: 11}},
+		},
+	})
+	if resolved.Status != symbolResolveSingle {
+		t.Fatalf("expected single symbol resolution, got %s", resolved.Status)
+	}
+
+	implID := locatorIDForLine(t, resolved.Output, "builder_impl.go:3")
+	implLoc, ok := reg.Resolve(implID)
+	if !ok {
+		t.Fatalf("expected implementation locator %s to resolve", implID)
+	}
+	if implLoc.FilePath != "builder_impl.go" || implLoc.Line != 3 {
+		t.Fatalf("unexpected implementation locator target: %+v", implLoc)
+	}
+}
+
+func TestFormatSymbolBundle_LocatorRegistryMatchesRelatedTest(t *testing.T) {
+	reg := locator.NewRegistry()
+	bundle := buildGoSymbolBundle("Close", navigation.InspectResult{
+		Symbol: &navigation.SymbolCandidate{
+			Name:     "Close",
+			Kind:     "method",
+			File:     "agent.go",
+			Line:     5,
+			EndLine:  7,
+			Receiver: "*Agent",
+		},
+		Body: []string{
+			"5: func (a *Agent) Close() error {",
+			"6: \treturn nil",
+			"7: }",
+		},
+		Tests: []navigation.TestRef{
+			{File: "agent_test.go", Line: 4, Name: "TestClose"},
+		},
+		TotalTests: 1,
+	})
+	output := formatSymbolBundle(bundle, reg, nil)
+
+	testID := locatorIDForLine(t, output, "agent_test.go:4")
+	testLoc, ok := reg.Resolve(testID)
+	if !ok {
+		t.Fatalf("expected test locator %s to resolve", testID)
+	}
+	if testLoc.FilePath != "agent_test.go" || testLoc.Line != 4 {
+		t.Fatalf("unexpected test locator target: %+v", testLoc)
+	}
+}
+
+func TestSearchCode_MultiPatternGoSymbolPreservesDiagnostics(t *testing.T) {
+	setupSymbolTestDir(t, "example.go", `package example
+
+type Agent struct{}
+
+func (a *Agent) Close() error { return nil }
+
+func run(a *Agent) error {
+	return a.Close()
+}
+`)
+
+	result := ExecuteSearchCode(SearchOptions{
+		Pattern: "Close,(*Agent).Close,\\.Close\\(\\)",
+		Path:    ".",
+		LSPClient: &mockGoSymbolLSPClient{
+			refs: []navigation.LSPLocation{{File: "example.go", Line: 5, Character: 1, EndLine: 5, EndChar: 10}},
+		},
+	})
+
+	if !strings.Contains(result, "Matched patterns:") {
+		t.Fatalf("expected multi-pattern bundle output, got:\n%s", result)
+	}
+	if !strings.Contains(result, "Note: resolved via gopls.") {
+		t.Fatalf("expected LSP note in multi-pattern output, got:\n%s", result)
+	}
+}
+
+func TestBuildGoSymbolBundleLimitsImplementations(t *testing.T) {
+	bundle := buildGoSymbolBundle("Closer", navigation.InspectResult{
+		Symbol: &navigation.SymbolCandidate{
+			Name:    "Closer",
+			Kind:    "interface",
+			File:    "closer.go",
+			Line:    5,
+			EndLine: 7,
+		},
+		Body: []string{
+			"5: type Closer interface {",
+			"6: \tClose() error",
+			"7: }",
+		},
+		Implementations: []navigation.ImplementationRef{
+			{File: "agent.go", Line: 10, Name: "Agent"},
+			{File: "service.go", Line: 20, Name: "Service"},
+			{File: "worker.go", Line: 30, Name: "Worker"},
+			{File: "job.go", Line: 40, Name: "Job"},
+			{File: "task.go", Line: 50, Name: "Task"},
+		},
+	})
+
+	var implSection *SymbolBundleSection
+	for i := range bundle.Sections {
+		if bundle.Sections[i].Kind == "implementations" {
+			implSection = &bundle.Sections[i]
+			break
+		}
+	}
+	if implSection == nil {
+		t.Fatal("expected implementations section")
+	}
+	if len(implSection.Items) != goImplementationLimit {
+		t.Fatalf("expected %d implementation items, got %d", goImplementationLimit, len(implSection.Items))
+	}
+	if implSection.Total != 5 {
+		t.Fatalf("expected Total=5, got %d", implSection.Total)
+	}
+	if !implSection.More {
+		t.Fatal("expected More=true when implementations are truncated")
+	}
+}
+
+func TestBuildGoSymbolBundleKeepsAllImplementationsWhenUnderLimit(t *testing.T) {
+	bundle := buildGoSymbolBundle("Closer", navigation.InspectResult{
+		Symbol: &navigation.SymbolCandidate{
+			Name:    "Closer",
+			Kind:    "interface",
+			File:    "closer.go",
+			Line:    5,
+			EndLine: 7,
+		},
+		Body: []string{
+			"5: type Closer interface {",
+			"6: \tClose() error",
+			"7: }",
+		},
+		Implementations: []navigation.ImplementationRef{
+			{File: "agent.go", Line: 10, Name: "Agent"},
+			{File: "service.go", Line: 20, Name: "Service"},
+		},
+	})
+
+	var implSection *SymbolBundleSection
+	for i := range bundle.Sections {
+		if bundle.Sections[i].Kind == "implementations" {
+			implSection = &bundle.Sections[i]
+			break
+		}
+	}
+	if implSection == nil {
+		t.Fatal("expected implementations section")
+	}
+	if len(implSection.Items) != 2 {
+		t.Fatalf("expected 2 implementation items, got %d", len(implSection.Items))
+	}
+	if implSection.Total != 2 {
+		t.Fatalf("expected Total=2, got %d", implSection.Total)
+	}
+	if implSection.More {
+		t.Fatal("expected More=false when implementations are not truncated")
+	}
+}
+
+func TestResolvePythonSymbol_UsesBundleAsOutputSource(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"models.py": pythonTestSource,
+		"views.py":  pythonTestUsageSource,
+	})
+
+	result := resolvePythonSymbol("authenticate", SearchOptions{Path: dir, FileType: "py"})
+	if result.Status != genericSymbolSingle {
+		t.Fatalf("expected genericSymbolSingle, got %s", result.Status)
+	}
+	if result.Bundle == nil {
+		t.Fatal("expected bundle in resolve result")
+	}
+	want := formatSymbolBundle(result.Bundle, nil, nil)
+	if result.Output != want {
+		t.Fatalf("expected output to be formatted from the returned bundle\nwant:\n%s\n\ngot:\n%s", want, result.Output)
+	}
+}
+
+func TestPrioritizeGenericRefs_PrefersRepresentativeFiles(t *testing.T) {
+	def := genericSymbolDef{Name: "Close", File: "pkg/agent.go", Line: 10}
+	refs := []genericSymbolRef{
+		{File: "pkg/agent.go", Line: 20, Snippet: "a.Close()"},
+		{File: "pkg/agent.go", Line: 30, Snippet: "a.Close()"},
+		{File: "pkg/handler.go", Line: 40, Snippet: "svc.Close()"},
+		{File: "pkg/controller.go", Line: 50, Snippet: "svc.Close()"},
+		{File: "pkg/ui.go", Line: 60, Snippet: "svc.Close()"},
+	}
+
+	selected := prioritizeGenericRefs(def, refs, 3, false)
+	if len(selected) != 3 {
+		t.Fatalf("expected 3 representative refs, got %d", len(selected))
+	}
+
+	seenFiles := make(map[string]bool)
+	for _, ref := range selected {
+		if seenFiles[ref.File] {
+			t.Fatalf("expected file diversity in prioritized refs, got duplicate file %q in %+v", ref.File, selected)
+		}
+		seenFiles[ref.File] = true
+	}
+}
+
+func TestSearchCode_MultiPatternGoSymbolBundleDedupe(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"agent.go": `package example
+
+type Agent struct{}
+
+func (a *Agent) Close() error {
+	return nil
+}
+
+func run(a *Agent) error {
+	return a.Close()
+}
+`,
+		"agent_test.go": `package example
+
+func TestClose() {
+	var a Agent
+	_ = a.Close()
+}
+`,
+	})
+
+	result := ExecuteSearchCode(SearchOptions{Pattern: `Close,(*Agent).Close,\.Close\(\)`, Path: dir})
+	if count := strings.Count(result, "━━ Symbol Bundle:"); count != 1 {
+		t.Fatalf("expected a single deduped symbol bundle header, got %d:\n%s", count, result)
+	}
+	for _, want := range []string{"Matched patterns:", "Close", "(*Agent).Close", `\.Close\(\)`} {
+		if !strings.Contains(result, want) {
+			t.Errorf("expected %q in deduped bundle output, got:\n%s", want, result)
+		}
+	}
+}
+
+func TestSearchCode_MultiPatternGoSymbolBundleDedupeOnWarmSinglePatternCache(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"agent.go": `package example
+
+type Agent struct{}
+
+func (a *Agent) Close() error {
+	return nil
+}
+
+func run(a *Agent) error {
+	return a.Close()
+}
+`,
+		"agent_test.go": `package example
+
+func TestClose() {
+	var a Agent
+	_ = a.Close()
+}
+`,
+	})
+
+	cache := &testSearchCache{data: make(map[string]string)}
+	opts := SearchOptions{Pattern: `Close,(*Agent).Close,\.Close\(\)`, Path: dir}
+
+	coldResult := ExecuteSearchCodeWithCache(cache, opts)
+	if count := strings.Count(coldResult, "━━ Symbol Bundle:"); count != 1 {
+		t.Fatalf("expected a single deduped symbol bundle header on cold cache, got %d:\n%s", count, coldResult)
+	}
+
+	patterns := splitPatterns(opts.Pattern)
+	delete(cache.data, buildMultiCacheKey(patterns)+"|"+buildMultiSearchCacheKey(opts, patterns))
+
+	warmResult := ExecuteSearchCodeWithCache(cache, opts)
+	if count := strings.Count(warmResult, "━━ Symbol Bundle:"); count != 1 {
+		t.Fatalf("expected a single deduped symbol bundle header on warm single-pattern cache, got %d:\n%s", count, warmResult)
+	}
+	for _, want := range []string{"Matched patterns:", "Close", "(*Agent).Close", `\.Close\(\)`} {
+		if !strings.Contains(warmResult, want) {
+			t.Errorf("expected %q in warm-cache deduped bundle output, got:\n%s", want, warmResult)
+		}
+	}
+}
+
+func TestSearchCode_MultiPatternDedupeUnaffectedByUnrelatedInvalidation(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"agent.go": `package example
+
+type Agent struct{}
+
+func (a *Agent) Close() error {
+	return nil
+}
+
+func run(a *Agent) error {
+	return a.Close()
+}
+`,
+		"agent_test.go": `package example
+
+func TestClose() {
+	var a Agent
+	_ = a.Close()
+}
+`,
+		"unrelated.go": `package example
+
+func noop() {}
+`,
+	})
+
+	cache := &testSearchCache{data: make(map[string]string)}
+	opts := SearchOptions{Pattern: `Close,(*Agent).Close,\.Close\(\)`, Path: dir}
+
+	coldResult := ExecuteSearchCodeWithCache(cache, opts)
+	if count := strings.Count(coldResult, "━━ Symbol Bundle:"); count != 1 {
+		t.Fatalf("expected a single deduped symbol bundle header on cold cache, got %d:\n%s", count, coldResult)
+	}
+
+	patterns := splitPatterns(opts.Pattern)
+	delete(cache.data, buildMultiCacheKey(patterns)+"|"+buildMultiSearchCacheKey(opts, patterns))
+
+	cache.InvalidateSearchCacheForFile(filepath.Join(dir, "unrelated.go"))
+
+	warmResult := ExecuteSearchCodeWithCache(cache, opts)
+	if count := strings.Count(warmResult, "━━ Symbol Bundle:"); count != 1 {
+		t.Fatalf("expected deduped symbol bundle after unrelated invalidation, got %d:\n%s", count, warmResult)
+	}
+}
+
+func TestSinglePatternBundleCacheClearedWithSearchCache(t *testing.T) {
+	clearSinglePatternBundleCache()
+	t.Cleanup(clearSinglePatternBundleCache)
+
+	dir := setupMultiLangDir(t, map[string]string{
+		"agent.go": `package example
+
+type Agent struct{}
+
+func (a *Agent) Close() error {
+	return nil
+}
+`,
+	})
+
+	cache := &testSearchCache{data: make(map[string]string)}
+	opts := SearchOptions{Pattern: "Close", Path: dir}
+	ExecuteSearchCodeWithCache(cache, opts)
+
+	if got := countSinglePatternBundleCacheEntries(); got == 0 {
+		t.Fatal("expected bundle cache entry before clear")
+	}
+
+	cache.ClearSearchCache()
+
+	if got := countSinglePatternBundleCacheEntries(); got != 0 {
+		t.Fatalf("expected bundle cache to be cleared, got %d entries", got)
+	}
+}
+
+func TestSinglePatternBundleCacheInvalidatedWithFileInvalidation(t *testing.T) {
+	clearSinglePatternBundleCache()
+	t.Cleanup(clearSinglePatternBundleCache)
+
+	dir := setupMultiLangDir(t, map[string]string{
+		"agent.go": `package example
+
+type Agent struct{}
+
+func (a *Agent) Close() error {
+	return nil
+}
+`,
+	})
+
+	cache := &testSearchCache{data: make(map[string]string)}
+	opts := SearchOptions{Pattern: "Close", Path: dir}
+	normOpts, ok := normalizeSearchOptions(opts)
+	if !ok {
+		t.Fatal("expected normalized options")
+	}
+	normOpts.CtxLines = 3
+	normOpts.TokenBudget = 15000
+	cacheKey := buildSearchCacheKeyWithRoute(normOpts, planSearchRoute("Close", normOpts).cacheSignature())
+
+	storeSinglePatternBundle("Close", cacheKey, &SymbolBundle{
+		Identity: SymbolBundleIdentity{Language: "go", Query: "Close", Canonical: "go|agent.go|5|Close", DisplayName: "Close", Kind: "function", File: "agent.go", Line: 5, EndLine: 7},
+	})
+	otherKey := buildSearchCacheKeyWithRoute(normOpts, planSearchRoute("OtherClose", normOpts).cacheSignature())
+	storeSinglePatternBundle("OtherClose", otherKey, &SymbolBundle{
+		Identity: SymbolBundleIdentity{Language: "go", Query: "OtherClose", Canonical: "go|other.go|5|OtherClose", DisplayName: "OtherClose", Kind: "function", File: "other.go", Line: 5, EndLine: 7},
+	})
+	cache.SetSearch("Close", cacheKey, "cached", []string{filepath.Join(dir, "agent.go")})
+	cache.SetSearch("OtherClose", otherKey, "cached", []string{filepath.Join(dir, "other.go")})
+
+	if got := countSinglePatternBundleCacheEntries(); got != 2 {
+		t.Fatalf("expected 2 bundle cache entries before invalidate, got %d", got)
+	}
+
+	cache.InvalidateSearchCacheForFile(filepath.Join(dir, "agent.go"))
+
+	if got := countSinglePatternBundleCacheEntries(); got != 1 {
+		t.Fatalf("expected targeted bundle cache invalidation, got %d entries", got)
+	}
+	if loadSinglePatternBundle("OtherClose", otherKey) == nil {
+		t.Fatal("expected unrelated bundle cache entry to remain")
+	}
+}
+
+func TestSinglePatternBundleCacheClearedOnSearchCacheEviction(t *testing.T) {
+	clearSinglePatternBundleCache()
+	t.Cleanup(clearSinglePatternBundleCache)
+
+	storeSinglePatternBundle("keep", "key", &SymbolBundle{Identity: SymbolBundleIdentity{Canonical: "keep"}})
+	storeSinglePatternBundle("drop", "key", &SymbolBundle{Identity: SymbolBundleIdentity{Canonical: "drop"}})
+
+	if got := countSinglePatternBundleCacheEntries(); got != 2 {
+		t.Fatalf("expected 2 bundle cache entries before eviction, got %d", got)
+	}
+
+	tools.NotifySearchCacheEvicted([]string{singlePatternBundleCacheKey("drop", "key")})
+
+	if got := countSinglePatternBundleCacheEntries(); got != 1 {
+		t.Fatalf("expected targeted bundle cache eviction, got %d entries", got)
+	}
+	if loadSinglePatternBundle("keep", "key") == nil {
+		t.Fatal("expected unrelated bundle cache entry to remain after eviction")
+	}
+}
+
+func TestSinglePatternBundleCachePreservesUnrelatedKeysOnTargetedInvalidation(t *testing.T) {
+	clearSinglePatternBundleCache()
+	t.Cleanup(clearSinglePatternBundleCache)
+
+	storeSinglePatternBundle("keep", "key", &SymbolBundle{Identity: SymbolBundleIdentity{Canonical: "keep"}})
+	storeSinglePatternBundle("drop", "key", &SymbolBundle{Identity: SymbolBundleIdentity{Canonical: "drop"}})
+
+	tools.NotifySearchCacheInvalidatedKeys([]string{singlePatternBundleCacheKey("drop", "key")})
+
+	if loadSinglePatternBundle("keep", "key") == nil {
+		t.Fatal("expected unrelated bundle cache entry to remain after targeted invalidation")
+	}
+	if loadSinglePatternBundle("drop", "key") != nil {
+		t.Fatal("expected targeted bundle cache entry to be removed")
+	}
+}
+
+func countSinglePatternBundleCacheEntries() int {
+	count := 0
+	singlePatternBundleCache.Range(func(key, value any) bool {
+		count++
+		return true
+	})
+	return count
+}
+
+func visibleLocatorIDs(output string) []string {
+	re := regexp.MustCompile(`\[L\d+\]`)
+	matches := re.FindAllString(output, -1)
+	seen := make(map[string]bool)
+	ids := make([]string, 0, len(matches))
+	for _, id := range matches {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+func locatorIDForLine(t *testing.T, output, needle string) string {
+	t.Helper()
+	re := regexp.MustCompile(`\[L\d+\]`)
+	for _, line := range strings.Split(output, "\n") {
+		if !strings.Contains(line, needle) {
+			continue
+		}
+		id := re.FindString(line)
+		if id == "" {
+			t.Fatalf("expected locator ID on line containing %q in output:\n%s", needle, output)
+		}
+		return id
+	}
+	t.Fatalf("expected line containing %q in output:\n%s", needle, output)
+	return ""
 }
 
 func TestIsSymbolResolvableLanguage(t *testing.T) {

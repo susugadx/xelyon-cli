@@ -179,11 +179,12 @@ func (c *ToolCache) InvalidateDir(path string) {
 // Clear は全キャッシュをクリア
 func (c *ToolCache) Clear() {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	c.files = make(map[string]cacheEntry)
 	c.dirs = make(map[string]cacheEntry)
 	c.searches = make(map[string]cacheEntry)
 	c.negatives = make(map[string]negativeCacheEntry)
+	c.mu.Unlock()
+	tools.NotifySearchCacheCleared()
 }
 
 // searchCacheKey は検索キャッシュのキーを生成
@@ -215,35 +216,43 @@ func (c *ToolCache) SetSearch(pattern, path, result string, affectedFiles []stri
 	key := searchCacheKey(pattern, path)
 
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	c.searches[key] = cacheEntry{
 		Content:       result,
 		AccessedAt:    time.Now(),
 		AffectedFiles: append([]string(nil), affectedFiles...),
 		// 検索キャッシュはmtimeチェック不要（全クリア方式）
 	}
-	pruneOldestEntries(c.searches, MaxSearchCacheEntries)
+	evicted := pruneOldestEntries(c.searches, MaxSearchCacheEntries)
+	c.mu.Unlock()
+	if len(evicted) > 0 {
+		tools.NotifySearchCacheEvicted(evicted)
+	}
 }
 
 // ClearSearchCache は検索キャッシュをクリア
 func (c *ToolCache) ClearSearchCache() {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	c.searches = make(map[string]cacheEntry)
+	c.mu.Unlock()
+	tools.NotifySearchCacheCleared()
 }
 
 // InvalidateSearchCacheForFile は指定ファイルパスを含む検索キャッシュエントリを無効化
 func (c *ToolCache) InvalidateSearchCacheForFile(absPath string) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
+	deletedKeys := make([]string, 0)
 	for key, entry := range c.searches {
 		for _, fp := range entry.AffectedFiles {
 			if fp == absPath {
 				delete(c.searches, key)
+				deletedKeys = append(deletedKeys, key)
 				break
 			}
 		}
+	}
+	c.mu.Unlock()
+	if len(deletedKeys) > 0 {
+		tools.NotifySearchCacheInvalidatedKeys(deletedKeys)
 	}
 }
 
@@ -462,9 +471,9 @@ func (c *ToolCache) Load() error {
 	return nil
 }
 
-func pruneOldestEntries(m map[string]cacheEntry, maxEntries int) {
+func pruneOldestEntries(m map[string]cacheEntry, maxEntries int) []string {
 	if len(m) <= maxEntries {
-		return
+		return nil
 	}
 
 	// 超過数 + 10% をまとめて削除（頻繁な prune を回避）
@@ -484,7 +493,10 @@ func pruneOldestEntries(m map[string]cacheEntry, maxEntries int) {
 	sort.Slice(items, func(i, j int) bool {
 		return items[i].time.Before(items[j].time)
 	})
+	deletedKeys := make([]string, 0, pruneCount)
 	for i := 0; i < pruneCount && i < len(items); i++ {
 		delete(m, items[i].key)
+		deletedKeys = append(deletedKeys, items[i].key)
 	}
+	return deletedKeys
 }

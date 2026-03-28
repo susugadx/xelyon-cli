@@ -143,16 +143,97 @@ func ExecuteSearchCodeWithConfig(cfg *config.Config, cache tools.ToolCacheInterf
 
 // executeSinglePattern は単一パターンの検索処理（キャッシュ・検索・パース・マージ・トランケート・ブロック認識・フォーマット・キャッシュ保存）
 func executeSinglePattern(cache tools.ToolCacheInterface, pattern string, opts SearchOptions) string {
-	result, _ := executeSinglePatternWithTrace(cache, pattern, opts)
-	return result
+	return executeSinglePatternDetailed(cache, pattern, opts).Output
 }
 
 func executeSinglePatternWithTrace(cache tools.ToolCacheInterface, pattern string, opts SearchOptions) (string, searchRouteTrace) {
+	result := executeSinglePatternDetailed(cache, pattern, opts)
+	return result.Output, result.Route
+}
+
+type singlePatternExecution struct {
+	Pattern string
+	Output  string
+	Route   searchRouteTrace
+	Bundle  *SymbolBundle
+}
+
+var singlePatternBundleCache sync.Map
+
+func init() {
+	tools.RegisterSearchCacheLifecycleHooks(clearSinglePatternBundleCache, invalidateSinglePatternBundleCacheKeys, invalidateSinglePatternBundleCacheKeys)
+}
+
+func singlePatternBundleCacheKey(pattern, cacheKey string) string {
+	return pattern + "::" + cacheKey
+}
+
+func clearSinglePatternBundleCache() {
+	singlePatternBundleCache.Range(func(key, value any) bool {
+		singlePatternBundleCache.Delete(key)
+		return true
+	})
+}
+
+func invalidateSinglePatternBundleCacheKeys(keys []string) {
+	for _, key := range keys {
+		if strings.TrimSpace(key) == "" {
+			continue
+		}
+		singlePatternBundleCache.Delete(key)
+	}
+}
+
+func loadSinglePatternBundle(pattern, cacheKey string) *SymbolBundle {
+	value, ok := singlePatternBundleCache.Load(singlePatternBundleCacheKey(pattern, cacheKey))
+	if !ok {
+		return nil
+	}
+	bundle, _ := value.(*SymbolBundle)
+	return cloneSymbolBundle(bundle)
+}
+
+func storeSinglePatternBundle(pattern, cacheKey string, bundle *SymbolBundle) {
+	if bundle == nil {
+		return
+	}
+	singlePatternBundleCache.Store(singlePatternBundleCacheKey(pattern, cacheKey), cloneSymbolBundle(bundle))
+}
+
+func cloneSymbolBundle(bundle *SymbolBundle) *SymbolBundle {
+	if bundle == nil {
+		return nil
+	}
+	cloned := *bundle
+	if bundle.Definition.Body != nil {
+		cloned.Definition.Body = append([]string(nil), bundle.Definition.Body...)
+	}
+	if bundle.Sections != nil {
+		cloned.Sections = make([]SymbolBundleSection, len(bundle.Sections))
+		for i := range bundle.Sections {
+			cloned.Sections[i] = bundle.Sections[i]
+			if bundle.Sections[i].Items != nil {
+				cloned.Sections[i].Items = append([]SymbolBundleItem(nil), bundle.Sections[i].Items...)
+			}
+		}
+	}
+	if bundle.Debug.MatchedPatterns != nil {
+		cloned.Debug.MatchedPatterns = append([]string(nil), bundle.Debug.MatchedPatterns...)
+	}
+	return &cloned
+}
+
+func executeSinglePatternDetailed(cache tools.ToolCacheInterface, pattern string, opts SearchOptions) singlePatternExecution {
 	route := planSearchRoute(pattern, opts)
 	cacheKey := buildSearchCacheKeyWithRoute(opts, route.cacheSignature())
 	if cache != nil {
 		if cached, ok := cache.GetSearch(pattern, cacheKey); ok {
-			return cached, route
+			return singlePatternExecution{
+				Pattern: pattern,
+				Output:  cached,
+				Route:   route,
+				Bundle:  loadSinglePatternBundle(pattern, cacheKey),
+			}
 		}
 	}
 
@@ -160,19 +241,26 @@ func executeSinglePatternWithTrace(cache tools.ToolCacheInterface, pattern strin
 		route.SymbolAttempted = true
 		resolver := resolverForLanguage(route.Language)
 		if resolver != nil {
-			symbolOutput, status := resolver.Resolve(route.SymbolQuery, opts)
-			switch status {
+			resolved := resolver.Resolve(route.SymbolQuery, opts)
+			switch resolved.Status {
 			case symbolResolveSingle:
 				route.FinalLane = searchLaneSymbol
 				route.SymbolResolved = true
+				resolved.Bundle = attachBundleRoute(resolved.Bundle, route)
 				if cache != nil {
-					cache.SetSearch(pattern, cacheKey, symbolOutput, nil)
+					cache.SetSearch(pattern, cacheKey, resolved.Output, nil)
+					storeSinglePatternBundle(pattern, cacheKey, resolved.Bundle)
 				}
-				return symbolOutput, route
+				return singlePatternExecution{
+					Pattern: pattern,
+					Output:  resolved.Output,
+					Route:   route,
+					Bundle:  resolved.Bundle,
+				}
 			case symbolResolveMultiple:
 				route.FinalLane = searchLaneSymbol
 				route.SymbolResolved = true
-				return symbolOutput, route
+				return singlePatternExecution{Pattern: pattern, Output: resolved.Output, Route: route}
 			case symbolResolveNone:
 				route.SymbolResolved = false
 			}
@@ -190,7 +278,7 @@ func executeSinglePatternWithTrace(cache tools.ToolCacheInterface, pattern strin
 	textOpts.IsRegex = route.textIsRegex()
 	output, useRipgrep, warnings, err := executeSearch(pattern, textOpts)
 	if err != nil {
-		return fmt.Sprintf("Error: %v", err), route
+		return singlePatternExecution{Pattern: pattern, Output: fmt.Sprintf("Error: %v", err), Route: route}
 	}
 
 	var results []SearchResult
@@ -204,9 +292,9 @@ func executeSinglePatternWithTrace(cache tools.ToolCacheInterface, pattern strin
 
 	if len(results) == 0 {
 		if len(warnings) > 0 {
-			return strings.Join(warnings, "\n") + "\nNo matches found", route
+			return singlePatternExecution{Pattern: pattern, Output: strings.Join(warnings, "\n") + "\nNo matches found", Route: route}
 		}
-		return "No matches found", route
+		return singlePatternExecution{Pattern: pattern, Output: "No matches found", Route: route}
 	}
 
 	if opts.OutputMode == "manifest" {
@@ -221,7 +309,7 @@ func executeSinglePatternWithTrace(cache tools.ToolCacheInterface, pattern strin
 		if cache != nil {
 			cache.SetSearch(pattern, cacheKey, finalOutput, collectFilePaths(results))
 		}
-		return finalOutput, route
+		return singlePatternExecution{Pattern: pattern, Output: finalOutput, Route: route}
 	}
 
 	results = mergeContextLines(results)
@@ -242,7 +330,7 @@ func executeSinglePatternWithTrace(cache tools.ToolCacheInterface, pattern strin
 		cache.SetSearch(pattern, cacheKey, finalOutput, collectFilePaths(results))
 	}
 
-	return finalOutput, route
+	return singlePatternExecution{Pattern: pattern, Output: finalOutput, Route: route}
 }
 
 const escapedCommaPlaceholder = "\x00COMMA\x00"
@@ -277,39 +365,54 @@ type patternResult struct {
 	Warnings     []string
 }
 
+type formattedPatternExecution struct {
+	Index int
+	singlePatternExecution
+}
+
 // executeMultiplePatterns は複数パターンを goroutine 並列で検索する。
 // 各パターンは executeSinglePattern に委譲し、symbol fast path + キャッシュが自動で効く。
 func executeMultiplePatterns(cache tools.ToolCacheInterface, patterns []string, opts SearchOptions) string {
-	type formattedResult struct {
-		Pattern   string
-		Index     int
-		Formatted string
-	}
-
-	ch := make(chan formattedResult, len(patterns))
+	ch := make(chan formattedPatternExecution, len(patterns))
 	for i, p := range patterns {
 		go func(idx int, pat string) {
-			result := executeSinglePattern(cache, pat, opts)
+			result := executeSinglePatternDetailed(cache, pat, opts)
 			// lineRangeHint は最後に1回だけ付与するため個別結果からは除去
-			result = strings.TrimSuffix(result, lineRangeHint)
-			ch <- formattedResult{Pattern: pat, Index: idx, Formatted: result}
+			result.Output = strings.TrimSuffix(result.Output, lineRangeHint)
+			ch <- formattedPatternExecution{Index: idx, singlePatternExecution: result}
 		}(i, p)
 	}
 
-	collected := make([]formattedResult, len(patterns))
+	collected := make([]formattedPatternExecution, len(patterns))
 	for range patterns {
 		r := <-ch
 		collected[r.Index] = r
 	}
 
 	var sb strings.Builder
+	grouped := groupPatternSymbolBundles(collected)
 	for i, pr := range collected {
-		if i > 0 {
+		if sb.Len() > 0 {
 			sb.WriteString("\n")
 		}
+		if pr.Bundle != nil {
+			if group, ok := grouped[pr.Bundle.Identity.Canonical]; ok && len(group.Patterns) > 1 {
+				if group.Emitted {
+					continue
+				}
+				group.Emitted = true
+				grouped[pr.Bundle.Identity.Canonical] = group
+				fmt.Fprintf(&sb, "━━ Symbol Bundle: %q ━━\n", group.Bundle.Identity.DisplayName)
+				sb.WriteString(formatSymbolBundle(group.Bundle, opts.LocatorRegistry, group.Patterns))
+				if !strings.HasSuffix(sb.String(), "\n") {
+					sb.WriteString("\n")
+				}
+				continue
+			}
+		}
 		fmt.Fprintf(&sb, "━━ Pattern %d/%d: %q ━━\n", i+1, len(patterns), pr.Pattern)
-		sb.WriteString(pr.Formatted)
-		if !strings.HasSuffix(pr.Formatted, "\n") {
+		sb.WriteString(pr.Output)
+		if !strings.HasSuffix(pr.Output, "\n") {
 			sb.WriteString("\n")
 		}
 	}
@@ -319,7 +422,7 @@ func executeMultiplePatterns(cache tools.ToolCacheInterface, patterns []string, 
 	outs := make([]string, len(collected))
 	for i, c := range collected {
 		pats[i] = c.Pattern
-		outs[i] = c.Formatted
+		outs[i] = c.Output
 	}
 	if idx := buildCrossPatternIndex(pats, outs, opts.LocatorRegistry); idx != "" {
 		sb.WriteString(idx)
@@ -334,6 +437,45 @@ func executeMultiplePatterns(cache tools.ToolCacheInterface, patterns []string, 
 	}
 
 	return output
+}
+
+type patternSymbolBundleGroup struct {
+	Bundle   *SymbolBundle
+	Patterns []string
+	Emitted  bool
+}
+
+func groupPatternSymbolBundles(collected []formattedPatternExecution) map[string]patternSymbolBundleGroup {
+	groups := make(map[string]patternSymbolBundleGroup)
+	for _, item := range collected {
+		if item.Bundle == nil {
+			continue
+		}
+		key := item.Bundle.Identity.Canonical
+		group := groups[key]
+		if group.Bundle == nil {
+			group.Bundle = item.Bundle
+		}
+		group.Patterns = appendPatternIfMissing(group.Patterns, item.Pattern)
+		for _, candidate := range item.Route.SymbolCandidates {
+			group.Patterns = appendPatternIfMissing(group.Patterns, candidate)
+		}
+		groups[key] = group
+	}
+	return groups
+}
+
+func appendPatternIfMissing(patterns []string, pattern string) []string {
+	pattern = strings.TrimSpace(pattern)
+	if pattern == "" {
+		return patterns
+	}
+	for _, existing := range patterns {
+		if existing == pattern {
+			return patterns
+		}
+	}
+	return append(patterns, pattern)
 }
 
 // extractPrimaryFilePaths は整形済み検索結果から主要ファイルパスを抽出する。

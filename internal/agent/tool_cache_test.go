@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
 func TestToolCache_FileCache(t *testing.T) {
@@ -314,6 +316,64 @@ func TestToolCache_InvalidateSearchCacheForFile(t *testing.T) {
 	_, ok2 := c.GetSearch("pattern2", "/project")
 	if !ok2 {
 		t.Error("expected cache hit for pattern2 (only contains utils.go)")
+	}
+}
+
+func TestToolCache_InvalidateSearchCacheForFile_NotifiesOnlyWhenDeleted(t *testing.T) {
+	tools.RegisterSearchCacheLifecycleHooks(nil, nil, nil)
+	t.Cleanup(func() {
+		tools.RegisterSearchCacheLifecycleHooks(nil, nil, nil)
+	})
+
+	invalidateCount := 0
+	var invalidatedKeys []string
+	tools.RegisterSearchCacheLifecycleHooks(nil, func(keys []string) {
+		invalidateCount++
+		invalidatedKeys = append([]string(nil), keys...)
+	}, nil)
+
+	c := NewToolCache()
+	c.SetSearch("pattern-main", "/project", "result-main", []string{"/project/main.go"})
+
+	// unrelated path: no entry deleted -> no notification
+	c.InvalidateSearchCacheForFile("/project/unrelated.go")
+	if invalidateCount != 0 {
+		t.Fatalf("expected no invalidate hook calls for unrelated path, got %d", invalidateCount)
+	}
+
+	// related path: entry deleted -> notification should fire once
+	c.InvalidateSearchCacheForFile("/project/main.go")
+	if invalidateCount != 1 {
+		t.Fatalf("expected one invalidate hook call for related path, got %d", invalidateCount)
+	}
+	if len(invalidatedKeys) != 1 || invalidatedKeys[0] != searchCacheKey("pattern-main", "/project") {
+		t.Fatalf("unexpected invalidated keys: %v", invalidatedKeys)
+	}
+}
+
+func TestToolCache_SearchEvictionTriggersBundleCacheHook(t *testing.T) {
+	tools.RegisterSearchCacheLifecycleHooks(nil, nil, nil)
+	t.Cleanup(func() {
+		tools.RegisterSearchCacheLifecycleHooks(nil, nil, nil)
+	})
+
+	evicted := 0
+	var evictedKeys []string
+	tools.RegisterSearchCacheLifecycleHooks(nil, nil, func(keys []string) {
+		evicted++
+		evictedKeys = append(evictedKeys, keys...)
+	})
+
+	cache := NewToolCache()
+	for i := 0; i < MaxSearchCacheEntries+1; i++ {
+		cache.SetSearch(fmt.Sprintf("pattern-%d", i), "/project", "result", nil)
+	}
+
+	if evicted == 0 {
+		t.Fatal("expected eviction hook to be triggered")
+	}
+	if len(evictedKeys) == 0 {
+		t.Fatal("expected evicted keys to be reported")
 	}
 }
 

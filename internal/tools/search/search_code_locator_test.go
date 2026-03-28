@@ -85,8 +85,13 @@ func TestFormatGenericSymbolResult_WithLocatorID(t *testing.T) {
 	refs := []genericSymbolRef{
 		{File: "main.go", Line: 10, Snippet: "MyFunc()"},
 	}
+	bundle := buildGenericSymbolBundle("python", "MyFunc", def, []string{
+		"42: def MyFunc():",
+	}, []symbolBundleSectionInput{
+		{Kind: "references", Title: "References", Items: refs, Limit: genericRefLimit},
+	})
 
-	out := formatGenericSymbolResult(def, refs, nil, reg)
+	out := formatGenericSymbolResult(bundle, reg)
 
 	// 定義ヘッダーにLocator IDが付与される
 	if !strings.Contains(out, "[L1]") {

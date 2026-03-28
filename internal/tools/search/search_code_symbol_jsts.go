@@ -3,7 +3,6 @@ package search
 import (
 	"fmt"
 	"regexp"
-	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/locator"
 )
@@ -17,13 +16,13 @@ const (
 // resolveJSSymbol は TS/JS 向けの enhanced symbol fast path。
 // 参照を import / caller / type ref / other に分類し、Go fast path に近い構造化結果を返す。
 // フォールバック: 定義が見つからなければ genericSymbolNone を返し、text search に委譲する。
-func resolveJSSymbol(symbol string, opts SearchOptions) (string, genericSymbolStatus) {
+func resolveJSSymbol(symbol string, opts SearchOptions) genericResolveResult {
 	defs := findGenericDefinitions(symbol, opts)
 	if len(defs) == 0 {
-		return "", genericSymbolNone
+		return genericResolveResult{Status: genericSymbolNone}
 	}
 	if len(defs) > 1 {
-		return formatGenericMultipleDefs(symbol, defs, opts.LocatorRegistry), genericSymbolMultiple
+		return genericResolveResult{Output: formatGenericMultipleDefs(symbol, defs, opts.LocatorRegistry), Status: genericSymbolMultiple}
 	}
 
 	def := defs[0]
@@ -40,7 +39,16 @@ func resolveJSSymbol(symbol string, opts SearchOptions) (string, genericSymbolSt
 	}
 
 	imports, callers, typeRefs, otherRefs := classifyJSRefs(normalRefs, symbol)
-	return formatJSSymbolResult(def, imports, callers, typeRefs, otherRefs, testRefs, opts.LocatorRegistry), genericSymbolSingle
+	bundle := buildGenericSymbolBundle("js", symbol, def, []string{
+		fmt.Sprintf("%d: %s", def.Line, def.Signature),
+	}, []symbolBundleSectionInput{
+		{Kind: "imports", Title: "Imports", Items: imports, Limit: jsImportLimit},
+		{Kind: "callers", Title: "Callers", Items: callers, Limit: jsCallerLimit},
+		{Kind: "type_refs", Title: "Type References", Items: typeRefs, Limit: jsTypeRefLimit},
+		{Kind: "references", Title: "References", Items: otherRefs, Limit: genericRefLimit},
+		{Kind: "tests", Title: "Related Tests", Items: testRefs, Limit: genericTestLimit, IsTest: true},
+	})
+	return genericResolveResult{Output: formatJSSymbolResult(bundle, opts.LocatorRegistry), Status: genericSymbolSingle, Bundle: bundle}
 }
 
 // classifyJSRefs は TS/JS の参照を import / caller / type ref / other に分類する。
@@ -69,56 +77,6 @@ func classifyJSRefs(refs []genericSymbolRef, symbol string) (imports, callers, t
 
 // formatJSSymbolResult は TS/JS の分類済みシンボル結果をフォーマットする。
 // 出力形式は Go fast path と同様のセクション構造で、locator ID を付与する。
-func formatJSSymbolResult(def genericSymbolDef, imports, callers, typeRefs, otherRefs, tests []genericSymbolRef, reg *locator.Registry) string {
-	var sb strings.Builder
-
-	header := fmt.Sprintf("── %s %s (L%d) in %s", def.Kind, def.Name, def.Line, def.File)
-	if reg != nil {
-		id := reg.Register(locator.Location{
-			FilePath: def.File,
-			Line:     def.Line,
-			Name:     fmt.Sprintf("%s %s", def.Kind, def.Name),
-		})
-		header += " " + id
-	}
-	fmt.Fprintf(&sb, "%s ──\n", header)
-	fmt.Fprintf(&sb, "%d: %s\n", def.Line, def.Signature)
-
-	writeRefSection(&sb, "Imports", imports, jsImportLimit, reg)
-	writeRefSection(&sb, "Callers", callers, jsCallerLimit, reg)
-	writeRefSection(&sb, "Type References", typeRefs, jsTypeRefLimit, reg)
-	writeRefSection(&sb, "References", otherRefs, genericRefLimit, reg)
-	writeRefSection(&sb, "Related Tests", tests, genericTestLimit, reg)
-
-	total := len(imports) + len(callers) + len(typeRefs) + len(otherRefs) + len(tests)
-	if total == 0 {
-		sb.WriteString("\nNo references found.\n")
-	}
-
-	return sb.String()
-}
-
-// writeRefSection は参照セクションを書き出す共通ヘルパー。
-// Python / Rust 拡張時にも再利用できる。
-func writeRefSection(sb *strings.Builder, title string, refs []genericSymbolRef, limit int, reg *locator.Registry) {
-	if len(refs) == 0 {
-		return
-	}
-	if len(refs) > limit {
-		fmt.Fprintf(sb, "\n── %s: %d shown (of %d) ──\n", title, limit, len(refs))
-	} else {
-		fmt.Fprintf(sb, "\n── %s (%d) ──\n", title, len(refs))
-	}
-	for i, ref := range refs {
-		if i >= limit {
-			fmt.Fprintf(sb, "  ... (%d more)\n", len(refs)-limit)
-			break
-		}
-		line := fmt.Sprintf("  %s:%d  %s", ref.File, ref.Line, ref.Snippet)
-		if reg != nil {
-			id := reg.Register(locator.Location{FilePath: ref.File, Line: ref.Line})
-			line += " " + id
-		}
-		fmt.Fprintf(sb, "%s\n", line)
-	}
+func formatJSSymbolResult(bundle *SymbolBundle, reg *locator.Registry) string {
+	return formatSymbolBundle(bundle, reg, nil)
 }

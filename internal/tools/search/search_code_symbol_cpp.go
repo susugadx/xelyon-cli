@@ -3,7 +3,6 @@ package search
 import (
 	"fmt"
 	"regexp"
-	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/locator"
 )
@@ -15,13 +14,13 @@ const (
 )
 
 // resolveCppSymbol は C/C++ 向けの enhanced symbol fast path。
-func resolveCppSymbol(symbol string, opts SearchOptions) (string, genericSymbolStatus) {
+func resolveCppSymbol(symbol string, opts SearchOptions) genericResolveResult {
 	defs := findGenericDefinitions(symbol, opts)
 	if len(defs) == 0 {
-		return "", genericSymbolNone
+		return genericResolveResult{Status: genericSymbolNone}
 	}
 	if len(defs) > 1 {
-		return formatGenericMultipleDefs(symbol, defs, opts.LocatorRegistry), genericSymbolMultiple
+		return genericResolveResult{Output: formatGenericMultipleDefs(symbol, defs, opts.LocatorRegistry), Status: genericSymbolMultiple}
 	}
 
 	def := defs[0]
@@ -38,7 +37,16 @@ func resolveCppSymbol(symbol string, opts SearchOptions) (string, genericSymbolS
 	}
 
 	includes, callers, inheritance, otherRefs := classifyCppRefs(normalRefs, symbol)
-	return formatCppSymbolResult(def, includes, callers, inheritance, otherRefs, testRefs, opts.LocatorRegistry), genericSymbolSingle
+	bundle := buildGenericSymbolBundle("cpp", symbol, def, []string{
+		fmt.Sprintf("%d: %s", def.Line, def.Signature),
+	}, []symbolBundleSectionInput{
+		{Kind: "includes", Title: "Includes", Items: includes, Limit: cppIncludeLimit},
+		{Kind: "callers", Title: "Callers", Items: callers, Limit: cppCallerLimit},
+		{Kind: "inheritance", Title: "Inheritance", Items: inheritance, Limit: cppInheritanceLimit},
+		{Kind: "references", Title: "References", Items: otherRefs, Limit: genericRefLimit},
+		{Kind: "tests", Title: "Related Tests", Items: testRefs, Limit: genericTestLimit, IsTest: true},
+	})
+	return genericResolveResult{Output: formatCppSymbolResult(bundle, opts.LocatorRegistry), Status: genericSymbolSingle, Bundle: bundle}
 }
 
 // classifyCppRefs は C/C++ の参照を分類する。
@@ -65,26 +73,6 @@ func classifyCppRefs(refs []genericSymbolRef, symbol string) (includes, callers,
 }
 
 // formatCppSymbolResult は C/C++ の分類済みシンボル結果をフォーマットする。
-func formatCppSymbolResult(def genericSymbolDef, includes, callers, inheritance, otherRefs, tests []genericSymbolRef, reg *locator.Registry) string {
-	var sb strings.Builder
-
-	header := fmt.Sprintf("── %s %s (L%d) in %s", def.Kind, def.Name, def.Line, def.File)
-	if reg != nil {
-		id := reg.Register(locator.Location{FilePath: def.File, Line: def.Line, Name: fmt.Sprintf("%s %s", def.Kind, def.Name)})
-		header += " " + id
-	}
-	fmt.Fprintf(&sb, "%s ──\n", header)
-	fmt.Fprintf(&sb, "%d: %s\n", def.Line, def.Signature)
-
-	writeRefSection(&sb, "Includes", includes, cppIncludeLimit, reg)
-	writeRefSection(&sb, "Callers", callers, cppCallerLimit, reg)
-	writeRefSection(&sb, "Inheritance", inheritance, cppInheritanceLimit, reg)
-	writeRefSection(&sb, "References", otherRefs, genericRefLimit, reg)
-	writeRefSection(&sb, "Related Tests", tests, genericTestLimit, reg)
-
-	total := len(includes) + len(callers) + len(inheritance) + len(otherRefs) + len(tests)
-	if total == 0 {
-		sb.WriteString("\nNo references found.\n")
-	}
-	return sb.String()
+func formatCppSymbolResult(bundle *SymbolBundle, reg *locator.Registry) string {
+	return formatSymbolBundle(bundle, reg, nil)
 }

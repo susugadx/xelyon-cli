@@ -3,7 +3,6 @@ package search
 import (
 	"fmt"
 	"regexp"
-	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/locator"
 )
@@ -16,13 +15,13 @@ const (
 
 // resolvePythonSymbol は Python 向けの enhanced symbol fast path。
 // 参照を import / caller / decorator / other に分類する。
-func resolvePythonSymbol(symbol string, opts SearchOptions) (string, genericSymbolStatus) {
+func resolvePythonSymbol(symbol string, opts SearchOptions) genericResolveResult {
 	defs := findGenericDefinitions(symbol, opts)
 	if len(defs) == 0 {
-		return "", genericSymbolNone
+		return genericResolveResult{Status: genericSymbolNone}
 	}
 	if len(defs) > 1 {
-		return formatGenericMultipleDefs(symbol, defs, opts.LocatorRegistry), genericSymbolMultiple
+		return genericResolveResult{Output: formatGenericMultipleDefs(symbol, defs, opts.LocatorRegistry), Status: genericSymbolMultiple}
 	}
 
 	def := defs[0]
@@ -39,7 +38,16 @@ func resolvePythonSymbol(symbol string, opts SearchOptions) (string, genericSymb
 	}
 
 	imports, callers, decorators, otherRefs := classifyPythonRefs(normalRefs, symbol)
-	return formatPythonSymbolResult(def, imports, callers, decorators, otherRefs, testRefs, opts.LocatorRegistry), genericSymbolSingle
+	bundle := buildGenericSymbolBundle("python", symbol, def, []string{
+		fmt.Sprintf("%d: %s", def.Line, def.Signature),
+	}, []symbolBundleSectionInput{
+		{Kind: "imports", Title: "Imports", Items: imports, Limit: pyImportLimit},
+		{Kind: "callers", Title: "Callers", Items: callers, Limit: pyCallerLimit},
+		{Kind: "decorators", Title: "Decorators", Items: decorators, Limit: pyDecoratorLimit},
+		{Kind: "references", Title: "References", Items: otherRefs, Limit: genericRefLimit},
+		{Kind: "tests", Title: "Related Tests", Items: testRefs, Limit: genericTestLimit, IsTest: true},
+	})
+	return genericResolveResult{Output: formatPythonSymbolResult(bundle, opts.LocatorRegistry), Status: genericSymbolSingle, Bundle: bundle}
 }
 
 // classifyPythonRefs は Python の参照を import / caller / decorator / other に分類する。
@@ -67,31 +75,6 @@ func classifyPythonRefs(refs []genericSymbolRef, symbol string) (imports, caller
 }
 
 // formatPythonSymbolResult は Python の分類済みシンボル結果をフォーマットする。
-func formatPythonSymbolResult(def genericSymbolDef, imports, callers, decorators, otherRefs, tests []genericSymbolRef, reg *locator.Registry) string {
-	var sb strings.Builder
-
-	header := fmt.Sprintf("── %s %s (L%d) in %s", def.Kind, def.Name, def.Line, def.File)
-	if reg != nil {
-		id := reg.Register(locator.Location{
-			FilePath: def.File,
-			Line:     def.Line,
-			Name:     fmt.Sprintf("%s %s", def.Kind, def.Name),
-		})
-		header += " " + id
-	}
-	fmt.Fprintf(&sb, "%s ──\n", header)
-	fmt.Fprintf(&sb, "%d: %s\n", def.Line, def.Signature)
-
-	writeRefSection(&sb, "Imports", imports, pyImportLimit, reg)
-	writeRefSection(&sb, "Callers", callers, pyCallerLimit, reg)
-	writeRefSection(&sb, "Decorators", decorators, pyDecoratorLimit, reg)
-	writeRefSection(&sb, "References", otherRefs, genericRefLimit, reg)
-	writeRefSection(&sb, "Related Tests", tests, genericTestLimit, reg)
-
-	total := len(imports) + len(callers) + len(decorators) + len(otherRefs) + len(tests)
-	if total == 0 {
-		sb.WriteString("\nNo references found.\n")
-	}
-
-	return sb.String()
+func formatPythonSymbolResult(bundle *SymbolBundle, reg *locator.Registry) string {
+	return formatSymbolBundle(bundle, reg, nil)
 }

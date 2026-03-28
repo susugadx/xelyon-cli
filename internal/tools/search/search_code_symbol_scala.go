@@ -3,7 +3,6 @@ package search
 import (
 	"fmt"
 	"regexp"
-	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/locator"
 )
@@ -15,13 +14,13 @@ const (
 )
 
 // resolveScalaSymbol は Scala 向けの enhanced symbol fast path。
-func resolveScalaSymbol(symbol string, opts SearchOptions) (string, genericSymbolStatus) {
+func resolveScalaSymbol(symbol string, opts SearchOptions) genericResolveResult {
 	defs := findGenericDefinitions(symbol, opts)
 	if len(defs) == 0 {
-		return "", genericSymbolNone
+		return genericResolveResult{Status: genericSymbolNone}
 	}
 	if len(defs) > 1 {
-		return formatGenericMultipleDefs(symbol, defs, opts.LocatorRegistry), genericSymbolMultiple
+		return genericResolveResult{Output: formatGenericMultipleDefs(symbol, defs, opts.LocatorRegistry), Status: genericSymbolMultiple}
 	}
 
 	def := defs[0]
@@ -38,7 +37,16 @@ func resolveScalaSymbol(symbol string, opts SearchOptions) (string, genericSymbo
 	}
 
 	imports, callers, inheritance, otherRefs := classifyScalaRefs(normalRefs, symbol)
-	return formatScalaSymbolResult(def, imports, callers, inheritance, otherRefs, testRefs, opts.LocatorRegistry), genericSymbolSingle
+	bundle := buildGenericSymbolBundle("scala", symbol, def, []string{
+		fmt.Sprintf("%d: %s", def.Line, def.Signature),
+	}, []symbolBundleSectionInput{
+		{Kind: "imports", Title: "Imports", Items: imports, Limit: scalaImportLimit},
+		{Kind: "callers", Title: "Callers", Items: callers, Limit: scalaCallerLimit},
+		{Kind: "inheritance", Title: "Inheritance", Items: inheritance, Limit: scalaInheritanceLimit},
+		{Kind: "references", Title: "References", Items: otherRefs, Limit: genericRefLimit},
+		{Kind: "tests", Title: "Related Tests", Items: testRefs, Limit: genericTestLimit, IsTest: true},
+	})
+	return genericResolveResult{Output: formatScalaSymbolResult(bundle, opts.LocatorRegistry), Status: genericSymbolSingle, Bundle: bundle}
 }
 
 // classifyScalaRefs は Scala の参照を分類する。
@@ -65,26 +73,6 @@ func classifyScalaRefs(refs []genericSymbolRef, symbol string) (imports, callers
 }
 
 // formatScalaSymbolResult は Scala の分類済みシンボル結果をフォーマットする。
-func formatScalaSymbolResult(def genericSymbolDef, imports, callers, inheritance, otherRefs, tests []genericSymbolRef, reg *locator.Registry) string {
-	var sb strings.Builder
-
-	header := fmt.Sprintf("── %s %s (L%d) in %s", def.Kind, def.Name, def.Line, def.File)
-	if reg != nil {
-		id := reg.Register(locator.Location{FilePath: def.File, Line: def.Line, Name: fmt.Sprintf("%s %s", def.Kind, def.Name)})
-		header += " " + id
-	}
-	fmt.Fprintf(&sb, "%s ──\n", header)
-	fmt.Fprintf(&sb, "%d: %s\n", def.Line, def.Signature)
-
-	writeRefSection(&sb, "Imports", imports, scalaImportLimit, reg)
-	writeRefSection(&sb, "Callers", callers, scalaCallerLimit, reg)
-	writeRefSection(&sb, "Inheritance", inheritance, scalaInheritanceLimit, reg)
-	writeRefSection(&sb, "References", otherRefs, genericRefLimit, reg)
-	writeRefSection(&sb, "Related Tests", tests, genericTestLimit, reg)
-
-	total := len(imports) + len(callers) + len(inheritance) + len(otherRefs) + len(tests)
-	if total == 0 {
-		sb.WriteString("\nNo references found.\n")
-	}
-	return sb.String()
+func formatScalaSymbolResult(bundle *SymbolBundle, reg *locator.Registry) string {
+	return formatSymbolBundle(bundle, reg, nil)
 }

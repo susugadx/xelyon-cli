@@ -3,7 +3,6 @@ package search
 import (
 	"fmt"
 	"regexp"
-	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/locator"
 )
@@ -15,13 +14,13 @@ const (
 )
 
 // resolveElixirSymbol は Elixir 向けの enhanced symbol fast path。
-func resolveElixirSymbol(symbol string, opts SearchOptions) (string, genericSymbolStatus) {
+func resolveElixirSymbol(symbol string, opts SearchOptions) genericResolveResult {
 	defs := findGenericDefinitions(symbol, opts)
 	if len(defs) == 0 {
-		return "", genericSymbolNone
+		return genericResolveResult{Status: genericSymbolNone}
 	}
 	if len(defs) > 1 {
-		return formatGenericMultipleDefs(symbol, defs, opts.LocatorRegistry), genericSymbolMultiple
+		return genericResolveResult{Output: formatGenericMultipleDefs(symbol, defs, opts.LocatorRegistry), Status: genericSymbolMultiple}
 	}
 
 	def := defs[0]
@@ -38,7 +37,16 @@ func resolveElixirSymbol(symbol string, opts SearchOptions) (string, genericSymb
 	}
 
 	aliases, callers, behaviours, otherRefs := classifyElixirRefs(normalRefs, symbol)
-	return formatElixirSymbolResult(def, aliases, callers, behaviours, otherRefs, testRefs, opts.LocatorRegistry), genericSymbolSingle
+	bundle := buildGenericSymbolBundle("elixir", symbol, def, []string{
+		fmt.Sprintf("%d: %s", def.Line, def.Signature),
+	}, []symbolBundleSectionInput{
+		{Kind: "aliases", Title: "Aliases/Imports", Items: aliases, Limit: exAliasLimit},
+		{Kind: "callers", Title: "Callers", Items: callers, Limit: exCallerLimit},
+		{Kind: "behaviours", Title: "Behaviours", Items: behaviours, Limit: exBehaviourLimit},
+		{Kind: "references", Title: "References", Items: otherRefs, Limit: genericRefLimit},
+		{Kind: "tests", Title: "Related Tests", Items: testRefs, Limit: genericTestLimit, IsTest: true},
+	})
+	return genericResolveResult{Output: formatElixirSymbolResult(bundle, opts.LocatorRegistry), Status: genericSymbolSingle, Bundle: bundle}
 }
 
 // classifyElixirRefs は Elixir の参照を分類する。
@@ -65,26 +73,6 @@ func classifyElixirRefs(refs []genericSymbolRef, symbol string) (aliases, caller
 }
 
 // formatElixirSymbolResult は Elixir の分類済みシンボル結果をフォーマットする。
-func formatElixirSymbolResult(def genericSymbolDef, aliases, callers, behaviours, otherRefs, tests []genericSymbolRef, reg *locator.Registry) string {
-	var sb strings.Builder
-
-	header := fmt.Sprintf("── %s %s (L%d) in %s", def.Kind, def.Name, def.Line, def.File)
-	if reg != nil {
-		id := reg.Register(locator.Location{FilePath: def.File, Line: def.Line, Name: fmt.Sprintf("%s %s", def.Kind, def.Name)})
-		header += " " + id
-	}
-	fmt.Fprintf(&sb, "%s ──\n", header)
-	fmt.Fprintf(&sb, "%d: %s\n", def.Line, def.Signature)
-
-	writeRefSection(&sb, "Aliases/Imports", aliases, exAliasLimit, reg)
-	writeRefSection(&sb, "Callers", callers, exCallerLimit, reg)
-	writeRefSection(&sb, "Behaviours", behaviours, exBehaviourLimit, reg)
-	writeRefSection(&sb, "References", otherRefs, genericRefLimit, reg)
-	writeRefSection(&sb, "Related Tests", tests, genericTestLimit, reg)
-
-	total := len(aliases) + len(callers) + len(behaviours) + len(otherRefs) + len(tests)
-	if total == 0 {
-		sb.WriteString("\nNo references found.\n")
-	}
-	return sb.String()
+func formatElixirSymbolResult(bundle *SymbolBundle, reg *locator.Registry) string {
+	return formatSymbolBundle(bundle, reg, nil)
 }

@@ -3,7 +3,6 @@ package search
 import (
 	"fmt"
 	"regexp"
-	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/locator"
 )
@@ -16,13 +15,13 @@ const (
 
 // resolvePHPSymbol は PHP 向けの enhanced symbol fast path。
 // 参照を use / caller / inheritance / other に分類する。
-func resolvePHPSymbol(symbol string, opts SearchOptions) (string, genericSymbolStatus) {
+func resolvePHPSymbol(symbol string, opts SearchOptions) genericResolveResult {
 	defs := findGenericDefinitions(symbol, opts)
 	if len(defs) == 0 {
-		return "", genericSymbolNone
+		return genericResolveResult{Status: genericSymbolNone}
 	}
 	if len(defs) > 1 {
-		return formatGenericMultipleDefs(symbol, defs, opts.LocatorRegistry), genericSymbolMultiple
+		return genericResolveResult{Output: formatGenericMultipleDefs(symbol, defs, opts.LocatorRegistry), Status: genericSymbolMultiple}
 	}
 
 	def := defs[0]
@@ -39,7 +38,16 @@ func resolvePHPSymbol(symbol string, opts SearchOptions) (string, genericSymbolS
 	}
 
 	uses, callers, inheritance, otherRefs := classifyPHPRefs(normalRefs, symbol)
-	return formatPHPSymbolResult(def, uses, callers, inheritance, otherRefs, testRefs, opts.LocatorRegistry), genericSymbolSingle
+	bundle := buildGenericSymbolBundle("php", symbol, def, []string{
+		fmt.Sprintf("%d: %s", def.Line, def.Signature),
+	}, []symbolBundleSectionInput{
+		{Kind: "uses", Title: "Uses", Items: uses, Limit: phpUseLimit},
+		{Kind: "callers", Title: "Callers", Items: callers, Limit: phpCallerLimit},
+		{Kind: "inheritance", Title: "Inheritance", Items: inheritance, Limit: phpInheritanceLimit},
+		{Kind: "references", Title: "References", Items: otherRefs, Limit: genericRefLimit},
+		{Kind: "tests", Title: "Related Tests", Items: testRefs, Limit: genericTestLimit, IsTest: true},
+	})
+	return genericResolveResult{Output: formatPHPSymbolResult(bundle, opts.LocatorRegistry), Status: genericSymbolSingle, Bundle: bundle}
 }
 
 // classifyPHPRefs は PHP の参照を分類する。
@@ -67,31 +75,6 @@ func classifyPHPRefs(refs []genericSymbolRef, symbol string) (uses, callers, inh
 }
 
 // formatPHPSymbolResult は PHP の分類済みシンボル結果をフォーマットする。
-func formatPHPSymbolResult(def genericSymbolDef, uses, callers, inheritance, otherRefs, tests []genericSymbolRef, reg *locator.Registry) string {
-	var sb strings.Builder
-
-	header := fmt.Sprintf("── %s %s (L%d) in %s", def.Kind, def.Name, def.Line, def.File)
-	if reg != nil {
-		id := reg.Register(locator.Location{
-			FilePath: def.File,
-			Line:     def.Line,
-			Name:     fmt.Sprintf("%s %s", def.Kind, def.Name),
-		})
-		header += " " + id
-	}
-	fmt.Fprintf(&sb, "%s ──\n", header)
-	fmt.Fprintf(&sb, "%d: %s\n", def.Line, def.Signature)
-
-	writeRefSection(&sb, "Uses", uses, phpUseLimit, reg)
-	writeRefSection(&sb, "Callers", callers, phpCallerLimit, reg)
-	writeRefSection(&sb, "Inheritance", inheritance, phpInheritanceLimit, reg)
-	writeRefSection(&sb, "References", otherRefs, genericRefLimit, reg)
-	writeRefSection(&sb, "Related Tests", tests, genericTestLimit, reg)
-
-	total := len(uses) + len(callers) + len(inheritance) + len(otherRefs) + len(tests)
-	if total == 0 {
-		sb.WriteString("\nNo references found.\n")
-	}
-
-	return sb.String()
+func formatPHPSymbolResult(bundle *SymbolBundle, reg *locator.Registry) string {
+	return formatSymbolBundle(bundle, reg, nil)
 }

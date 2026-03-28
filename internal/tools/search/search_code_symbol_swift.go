@@ -3,7 +3,6 @@ package search
 import (
 	"fmt"
 	"regexp"
-	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/locator"
 )
@@ -15,13 +14,13 @@ const (
 )
 
 // resolveSwiftSymbol は Swift 向けの enhanced symbol fast path。
-func resolveSwiftSymbol(symbol string, opts SearchOptions) (string, genericSymbolStatus) {
+func resolveSwiftSymbol(symbol string, opts SearchOptions) genericResolveResult {
 	defs := findGenericDefinitions(symbol, opts)
 	if len(defs) == 0 {
-		return "", genericSymbolNone
+		return genericResolveResult{Status: genericSymbolNone}
 	}
 	if len(defs) > 1 {
-		return formatGenericMultipleDefs(symbol, defs, opts.LocatorRegistry), genericSymbolMultiple
+		return genericResolveResult{Output: formatGenericMultipleDefs(symbol, defs, opts.LocatorRegistry), Status: genericSymbolMultiple}
 	}
 
 	def := defs[0]
@@ -38,7 +37,16 @@ func resolveSwiftSymbol(symbol string, opts SearchOptions) (string, genericSymbo
 	}
 
 	imports, callers, inheritance, otherRefs := classifySwiftRefs(normalRefs, symbol)
-	return formatSwiftSymbolResult(def, imports, callers, inheritance, otherRefs, testRefs, opts.LocatorRegistry), genericSymbolSingle
+	bundle := buildGenericSymbolBundle("swift", symbol, def, []string{
+		fmt.Sprintf("%d: %s", def.Line, def.Signature),
+	}, []symbolBundleSectionInput{
+		{Kind: "imports", Title: "Imports", Items: imports, Limit: swiftImportLimit},
+		{Kind: "callers", Title: "Callers", Items: callers, Limit: swiftCallerLimit},
+		{Kind: "inheritance", Title: "Protocol/Inheritance", Items: inheritance, Limit: swiftInheritanceLimit},
+		{Kind: "references", Title: "References", Items: otherRefs, Limit: genericRefLimit},
+		{Kind: "tests", Title: "Related Tests", Items: testRefs, Limit: genericTestLimit, IsTest: true},
+	})
+	return genericResolveResult{Output: formatSwiftSymbolResult(bundle, opts.LocatorRegistry), Status: genericSymbolSingle, Bundle: bundle}
 }
 
 // classifySwiftRefs は Swift の参照を分類する。
@@ -65,26 +73,6 @@ func classifySwiftRefs(refs []genericSymbolRef, symbol string) (imports, callers
 }
 
 // formatSwiftSymbolResult は Swift の分類済みシンボル結果をフォーマットする。
-func formatSwiftSymbolResult(def genericSymbolDef, imports, callers, inheritance, otherRefs, tests []genericSymbolRef, reg *locator.Registry) string {
-	var sb strings.Builder
-
-	header := fmt.Sprintf("── %s %s (L%d) in %s", def.Kind, def.Name, def.Line, def.File)
-	if reg != nil {
-		id := reg.Register(locator.Location{FilePath: def.File, Line: def.Line, Name: fmt.Sprintf("%s %s", def.Kind, def.Name)})
-		header += " " + id
-	}
-	fmt.Fprintf(&sb, "%s ──\n", header)
-	fmt.Fprintf(&sb, "%d: %s\n", def.Line, def.Signature)
-
-	writeRefSection(&sb, "Imports", imports, swiftImportLimit, reg)
-	writeRefSection(&sb, "Callers", callers, swiftCallerLimit, reg)
-	writeRefSection(&sb, "Protocol/Inheritance", inheritance, swiftInheritanceLimit, reg)
-	writeRefSection(&sb, "References", otherRefs, genericRefLimit, reg)
-	writeRefSection(&sb, "Related Tests", tests, genericTestLimit, reg)
-
-	total := len(imports) + len(callers) + len(inheritance) + len(otherRefs) + len(tests)
-	if total == 0 {
-		sb.WriteString("\nNo references found.\n")
-	}
-	return sb.String()
+func formatSwiftSymbolResult(bundle *SymbolBundle, reg *locator.Registry) string {
+	return formatSymbolBundle(bundle, reg, nil)
 }

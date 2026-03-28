@@ -3,7 +3,6 @@ package search
 import (
 	"fmt"
 	"regexp"
-	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/locator"
 )
@@ -15,13 +14,13 @@ const (
 )
 
 // resolveRubySymbol は Ruby 向けの enhanced symbol fast path。
-func resolveRubySymbol(symbol string, opts SearchOptions) (string, genericSymbolStatus) {
+func resolveRubySymbol(symbol string, opts SearchOptions) genericResolveResult {
 	defs := findGenericDefinitions(symbol, opts)
 	if len(defs) == 0 {
-		return "", genericSymbolNone
+		return genericResolveResult{Status: genericSymbolNone}
 	}
 	if len(defs) > 1 {
-		return formatGenericMultipleDefs(symbol, defs, opts.LocatorRegistry), genericSymbolMultiple
+		return genericResolveResult{Output: formatGenericMultipleDefs(symbol, defs, opts.LocatorRegistry), Status: genericSymbolMultiple}
 	}
 
 	def := defs[0]
@@ -38,7 +37,16 @@ func resolveRubySymbol(symbol string, opts SearchOptions) (string, genericSymbol
 	}
 
 	requires, callers, mixins, otherRefs := classifyRubyRefs(normalRefs, symbol)
-	return formatRubySymbolResult(def, requires, callers, mixins, otherRefs, testRefs, opts.LocatorRegistry), genericSymbolSingle
+	bundle := buildGenericSymbolBundle("ruby", symbol, def, []string{
+		fmt.Sprintf("%d: %s", def.Line, def.Signature),
+	}, []symbolBundleSectionInput{
+		{Kind: "requires", Title: "Requires", Items: requires, Limit: rbRequireLimit},
+		{Kind: "callers", Title: "Callers", Items: callers, Limit: rbCallerLimit},
+		{Kind: "mixins", Title: "Mixins/Inheritance", Items: mixins, Limit: rbMixinLimit},
+		{Kind: "references", Title: "References", Items: otherRefs, Limit: genericRefLimit},
+		{Kind: "tests", Title: "Related Tests", Items: testRefs, Limit: genericTestLimit, IsTest: true},
+	})
+	return genericResolveResult{Output: formatRubySymbolResult(bundle, opts.LocatorRegistry), Status: genericSymbolSingle, Bundle: bundle}
 }
 
 // classifyRubyRefs は Ruby の参照を分類する。
@@ -65,26 +73,6 @@ func classifyRubyRefs(refs []genericSymbolRef, symbol string) (requires, callers
 }
 
 // formatRubySymbolResult は Ruby の分類済みシンボル結果をフォーマットする。
-func formatRubySymbolResult(def genericSymbolDef, requires, callers, mixins, otherRefs, tests []genericSymbolRef, reg *locator.Registry) string {
-	var sb strings.Builder
-
-	header := fmt.Sprintf("── %s %s (L%d) in %s", def.Kind, def.Name, def.Line, def.File)
-	if reg != nil {
-		id := reg.Register(locator.Location{FilePath: def.File, Line: def.Line, Name: fmt.Sprintf("%s %s", def.Kind, def.Name)})
-		header += " " + id
-	}
-	fmt.Fprintf(&sb, "%s ──\n", header)
-	fmt.Fprintf(&sb, "%d: %s\n", def.Line, def.Signature)
-
-	writeRefSection(&sb, "Requires", requires, rbRequireLimit, reg)
-	writeRefSection(&sb, "Callers", callers, rbCallerLimit, reg)
-	writeRefSection(&sb, "Mixins/Inheritance", mixins, rbMixinLimit, reg)
-	writeRefSection(&sb, "References", otherRefs, genericRefLimit, reg)
-	writeRefSection(&sb, "Related Tests", tests, genericTestLimit, reg)
-
-	total := len(requires) + len(callers) + len(mixins) + len(otherRefs) + len(tests)
-	if total == 0 {
-		sb.WriteString("\nNo references found.\n")
-	}
-	return sb.String()
+func formatRubySymbolResult(bundle *SymbolBundle, reg *locator.Registry) string {
+	return formatSymbolBundle(bundle, reg, nil)
 }

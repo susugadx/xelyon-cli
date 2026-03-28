@@ -3,7 +3,6 @@ package search
 import (
 	"fmt"
 	"regexp"
-	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/locator"
 )
@@ -16,13 +15,13 @@ const (
 
 // resolveRustSymbol は Rust 向けの enhanced symbol fast path。
 // 参照を use / caller / impl / other に分類する。
-func resolveRustSymbol(symbol string, opts SearchOptions) (string, genericSymbolStatus) {
+func resolveRustSymbol(symbol string, opts SearchOptions) genericResolveResult {
 	defs := findGenericDefinitions(symbol, opts)
 	if len(defs) == 0 {
-		return "", genericSymbolNone
+		return genericResolveResult{Status: genericSymbolNone}
 	}
 	if len(defs) > 1 {
-		return formatGenericMultipleDefs(symbol, defs, opts.LocatorRegistry), genericSymbolMultiple
+		return genericResolveResult{Output: formatGenericMultipleDefs(symbol, defs, opts.LocatorRegistry), Status: genericSymbolMultiple}
 	}
 
 	def := defs[0]
@@ -39,7 +38,16 @@ func resolveRustSymbol(symbol string, opts SearchOptions) (string, genericSymbol
 	}
 
 	uses, callers, implRefs, otherRefs := classifyRustRefs(normalRefs, symbol)
-	return formatRustSymbolResult(def, uses, callers, implRefs, otherRefs, testRefs, opts.LocatorRegistry), genericSymbolSingle
+	bundle := buildGenericSymbolBundle("rust", symbol, def, []string{
+		fmt.Sprintf("%d: %s", def.Line, def.Signature),
+	}, []symbolBundleSectionInput{
+		{Kind: "uses", Title: "Uses", Items: uses, Limit: rsUseLimit},
+		{Kind: "callers", Title: "Callers", Items: callers, Limit: rsCallerLimit},
+		{Kind: "impl_refs", Title: "Impl/Trait", Items: implRefs, Limit: rsImplLimit},
+		{Kind: "references", Title: "References", Items: otherRefs, Limit: genericRefLimit},
+		{Kind: "tests", Title: "Related Tests", Items: testRefs, Limit: genericTestLimit, IsTest: true},
+	})
+	return genericResolveResult{Output: formatRustSymbolResult(bundle, opts.LocatorRegistry), Status: genericSymbolSingle, Bundle: bundle}
 }
 
 // classifyRustRefs は Rust の参照を use / caller / impl / other に分類する。
@@ -67,31 +75,6 @@ func classifyRustRefs(refs []genericSymbolRef, symbol string) (uses, callers, im
 }
 
 // formatRustSymbolResult は Rust の分類済みシンボル結果をフォーマットする。
-func formatRustSymbolResult(def genericSymbolDef, uses, callers, implRefs, otherRefs, tests []genericSymbolRef, reg *locator.Registry) string {
-	var sb strings.Builder
-
-	header := fmt.Sprintf("── %s %s (L%d) in %s", def.Kind, def.Name, def.Line, def.File)
-	if reg != nil {
-		id := reg.Register(locator.Location{
-			FilePath: def.File,
-			Line:     def.Line,
-			Name:     fmt.Sprintf("%s %s", def.Kind, def.Name),
-		})
-		header += " " + id
-	}
-	fmt.Fprintf(&sb, "%s ──\n", header)
-	fmt.Fprintf(&sb, "%d: %s\n", def.Line, def.Signature)
-
-	writeRefSection(&sb, "Uses", uses, rsUseLimit, reg)
-	writeRefSection(&sb, "Callers", callers, rsCallerLimit, reg)
-	writeRefSection(&sb, "Impl/Trait", implRefs, rsImplLimit, reg)
-	writeRefSection(&sb, "References", otherRefs, genericRefLimit, reg)
-	writeRefSection(&sb, "Related Tests", tests, genericTestLimit, reg)
-
-	total := len(uses) + len(callers) + len(implRefs) + len(otherRefs) + len(tests)
-	if total == 0 {
-		sb.WriteString("\nNo references found.\n")
-	}
-
-	return sb.String()
+func formatRustSymbolResult(bundle *SymbolBundle, reg *locator.Registry) string {
+	return formatSymbolBundle(bundle, reg, nil)
 }
