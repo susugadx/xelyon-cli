@@ -54,8 +54,10 @@ func (v *lightViewport) view() string {
 			sb.WriteByte('\n')
 		}
 		if i < len(visible) {
-			sb.WriteString(visible[i])
+			sb.WriteString(fitANSITextWidth(visible[i], v.width))
+			continue
 		}
+		sb.WriteString(strings.Repeat(" ", max(0, v.width)))
 	}
 	return sb.String()
 }

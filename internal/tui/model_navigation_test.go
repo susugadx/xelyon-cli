@@ -690,6 +690,57 @@ func TestNavMode_ViewShowsCursorOnEmptyLine(t *testing.T) {
 	}
 }
 
+func TestNavMode_ViewportViewPadsTrailingBlankRowsToWidth(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+	m.ready = true
+	m.navigationMode = true
+	m.width = 8
+	m.height = 8
+	m.vp = lightViewport{width: 8, height: 4}
+	m.rawLines = []string{"line1", "line2"}
+	m.rebuildRenderedLines()
+	m.vp.setLines(m.renderedLines)
+	m.vp.gotoBottom()
+
+	lines := strings.Split(m.viewportView(), "\n")
+	if len(lines) != m.vp.height {
+		t.Fatalf("viewport lines = %d, want %d", len(lines), m.vp.height)
+	}
+
+	for i, line := range lines {
+		if got := lipgloss.Width(line); got != m.vp.width {
+			t.Fatalf("line %d width = %d, want %d; line=%q", i, got, m.vp.width, line)
+		}
+	}
+}
+
+func TestNavMode_LineVisualSelectionPadsTrailingBlankRowsToWidth(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+	m.ready = true
+	m.navigationMode = true
+	m.width = 10
+	m.height = 8
+	m.vp = lightViewport{width: 10, height: 4}
+	m.rawLines = []string{"\033[31m日本語\033[0m", "tail"}
+	m.rebuildRenderedLines()
+	m.vp.setLines(m.renderedLines)
+
+	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'V'}})
+	m = updated.(Model)
+	lines := strings.Split(m.viewportView(), "\n")
+	if len(lines) != m.vp.height {
+		t.Fatalf("viewport lines = %d, want %d", len(lines), m.vp.height)
+	}
+
+	for i, line := range lines {
+		if got := lipgloss.Width(line); got != m.vp.width {
+			t.Fatalf("line %d width = %d, want %d; line=%q", i, got, m.vp.width, line)
+		}
+	}
+}
+
 func TestNavMode_PendingYFallsBackToCopyLastOutput(t *testing.T) {
 	agent := &stubAgent{statusLine: "ready"}
 	m := NewModel(agent, "")

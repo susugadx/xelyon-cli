@@ -374,6 +374,55 @@ func TestTruncateWithANSI_AppendsResetWhenTruncated(t *testing.T) {
 	}
 }
 
+func TestLightViewport_ViewPadsRowsToWidth(t *testing.T) {
+	v := lightViewport{
+		width:  8,
+		height: 3,
+		lines: []string{
+			"\033[31mabc\033[0m",
+			"日本a",
+		},
+	}
+
+	lines := strings.Split(v.view(), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("view lines = %d, want 3", len(lines))
+	}
+
+	for i, line := range lines {
+		if got := lipgloss.Width(line); got != v.width {
+			t.Fatalf("line %d width = %d, want %d; line=%q", i, got, v.width, line)
+		}
+	}
+}
+
+func TestModel_ViewPadsScrolledRowsToViewportWidth(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 10, Height: 8})
+	m = updated.(Model)
+
+	m.appendContentLines(
+		"0123456789",
+		"shrt",
+		"\033[32mgo test ./...\033[0m",
+		"日本語mix",
+	)
+	m.vp.gotoTop()
+
+	body := strings.Split(m.viewportView(), "\n")
+	if len(body) != m.vp.height {
+		t.Fatalf("body lines = %d, want %d", len(body), m.vp.height)
+	}
+
+	for i, line := range body {
+		if got := lipgloss.Width(line); got != m.vp.width {
+			t.Fatalf("body line %d width = %d, want %d; line=%q", i, got, m.vp.width, line)
+		}
+	}
+}
+
 func TestModel_ScrollingToBottomClearsNewOutputBadge(t *testing.T) {
 	agent := &stubAgent{statusLine: "ready"}
 	m := newModelWithViewport(agent)

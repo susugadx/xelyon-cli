@@ -260,6 +260,7 @@ func (m Model) viewportView() string {
 			sb.WriteByte('\n')
 		}
 		if i >= len(visible) {
+			sb.WriteString(strings.Repeat(" ", max(0, m.vp.width)))
 			continue
 		}
 
@@ -300,7 +301,7 @@ func (m Model) viewportView() string {
 			continue
 		}
 
-		sb.WriteString(line)
+		sb.WriteString(fitANSITextWidth(line, m.vp.width))
 	}
 
 	return sb.String()
