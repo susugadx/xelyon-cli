@@ -23,8 +23,8 @@ func TestTUIIntegration_NavigationVisualWheelResizeSequence(t *testing.T) {
 		"fifth line",
 		"sixth line",
 	}
-	m.rebuildRenderedLines()
-	m.vp.setLines(m.renderedLines)
+	m.rebuildLayout()
+	m.vp.setLines(m.getVisualRowContents())
 	m.cursorLine = 0
 	m.cursorCol = 0
 

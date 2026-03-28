@@ -307,7 +307,7 @@ func TestToolBlock_ScrollToBlock(t *testing.T) {
 		m.appendContentLines("padding line")
 	}
 	m.appendToolResult(ToolResult{Name: "a", Summary: "target", Detail: "d", Collapsed: true})
-	m.vp.setLines(m.renderedLines)
+	m.vp.setLines(m.getVisualRowContents())
 
 	m.vp.gotoTop()
 	if m.vp.yOffset != 0 {

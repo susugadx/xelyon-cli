@@ -21,6 +21,7 @@ func TestTUIProgramE2E_NavigationVisualSequence(t *testing.T) {
 	final := setup(8, 12).
 		nav().
 		build().
+		appendScript(keys("gg")).
 		appendScript(keys("wvj")).
 		appendScript(keys("<WheelDown>")).
 		append(sendMsg(resize(14, 10))).

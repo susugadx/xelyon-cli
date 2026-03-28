@@ -70,8 +70,8 @@ func setModelRawLines(m *Model, count int) {
 		lines[i] = fmt.Sprintf("line%d", i)
 	}
 	m.rawLines = append([]string(nil), lines...)
-	m.rebuildRenderedLines()
-	m.vp.setLines(m.renderedLines)
+	m.rebuildLayout()
+	m.vp.setLines(m.getVisualRowContents())
 }
 
 func newModelWithViewport(agent AgentInterface) Model {

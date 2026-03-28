@@ -85,7 +85,7 @@ type Model struct {
 	spinner              spinner.Model
 	messages             []ChatMessage
 	rawLines             []string        // 元の行データ。リサイズ時はこれを再レンダリングする
-	renderedLines        []string        // viewport に渡す現在幅向けの行データ
+	layout               *Layout         // 表示幅に応じたvisual rowレイアウト
 	toolBlocks           []toolBlockInfo // ツール結果ブロック
 	focusedBlock         int             // NAVモードでフォーカス中のツールブロックインデックス（-1=なし）
 	statusLine           string
@@ -189,17 +189,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if !m.ready {
 			m.vp = lightViewport{width: m.width, height: viewportHeight}
-			m.rebuildRenderedLines()
-			m.vp.setLines(m.renderedLines)
+			m.rebuildLayout()
+			m.vp.setLines(m.getVisualRowContents())
 			m.vp.gotoBottom()
 			m.ready = true
 		} else {
 			m.vp.width = m.width
 			m.vp.height = viewportHeight
 			if widthChanged {
-				m.rebuildRenderedLines()
+				m.rebuildLayout()
 			}
-			m.vp.setLines(m.renderedLines)
+			m.vp.setLines(m.getVisualRowContents())
 			if wasAtBottom {
 				m.vp.gotoBottom()
 			}

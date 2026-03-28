@@ -196,8 +196,8 @@ func TestModel_WindowResizeRestoresFullLineFromRawContent(t *testing.T) {
 	})
 	m = updated.(Model)
 
-	if got := m.renderedLines[len(m.renderedLines)-1]; got != "12345" {
-		t.Fatalf("narrow render = %q, want %q", got, "12345")
+	if got := m.getVisualRowContents()[len(m.getVisualRowContents())-1]; got != "6789" {
+		t.Fatalf("narrow render last row = %q, want %q", got, "6789")
 	}
 
 	updated, _ = m.Update(tea.WindowSizeMsg{Width: 12, Height: 8})
@@ -206,7 +206,7 @@ func TestModel_WindowResizeRestoresFullLineFromRawContent(t *testing.T) {
 	if got := m.rawLines[len(m.rawLines)-1]; got != "123456789" {
 		t.Fatalf("raw line = %q, want %q", got, "123456789")
 	}
-	if got := m.renderedLines[len(m.renderedLines)-1]; got != "123456789" {
+	if got := m.getVisualRowContents()[len(m.getVisualRowContents())-1]; got != "123456789" {
 		t.Fatalf("wide render = %q, want %q", got, "123456789")
 	}
 }
@@ -219,8 +219,8 @@ func TestModel_WindowResizeKeepsCharVisualSelectionState(t *testing.T) {
 	m = updated.(Model)
 	m.navigationMode = true
 	m.rawLines = []string{"abcdefghij"}
-	m.rebuildRenderedLines()
-	m.vp.setLines(m.renderedLines)
+	m.rebuildLayout()
+	m.vp.setLines(m.getVisualRowContents())
 	m.cursorLine = 0
 	m.cursorCol = 1
 
@@ -230,7 +230,7 @@ func TestModel_WindowResizeKeepsCharVisualSelectionState(t *testing.T) {
 	m.rebuildChrome()
 
 	before := m.View()
-	if !strings.Contains(before, "\033[48;5;255;38;5;16mf") {
+	if !strings.Contains(before, "\033[48;5;255;38;5;16mh") {
 		t.Fatalf("narrow view should keep cursor visible before resize, got %q", before)
 	}
 

@@ -75,9 +75,9 @@ func (m *Model) toggleToolBlock(blockIdx int) {
 		m.toolBlocks[i].lineStart += delta
 	}
 
-	m.rebuildRenderedLines()
+	m.rebuildLayout()
 	if m.ready {
-		m.vp.setLines(m.renderedLines)
+		m.vp.setLines(m.getVisualRowContents())
 	}
 }
 
@@ -132,11 +132,9 @@ func (m *Model) updateBlockIndicator(blockIdx int) {
 	newFirstLine := indicator + prefix + " " + block.tool.Summary
 	if block.lineStart < len(m.rawLines) {
 		m.rawLines[block.lineStart] = newFirstLine
-		if block.lineStart < len(m.renderedLines) {
-			m.renderedLines[block.lineStart] = m.renderLine(newFirstLine)
-		}
+		m.rebuildLayout()
 		if m.ready {
-			m.vp.setLines(m.renderedLines)
+			m.vp.setLines(m.getVisualRowContents())
 		}
 	}
 }
@@ -147,7 +145,10 @@ func (m *Model) scrollToBlock(blockIdx int) {
 		return
 	}
 	block := &m.toolBlocks[blockIdx]
-	target := max(0, block.lineStart-2)
+	target := 0
+	if m.layout != nil && block.lineStart < len(m.layout.LineToRowMap) {
+		target = max(0, m.layout.LineToRowMap[block.lineStart]-2)
+	}
 	maxOffset := m.vp.maxYOffset()
 	if target > maxOffset {
 		target = maxOffset

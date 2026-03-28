@@ -60,7 +60,11 @@ func (m *Model) syncCursorToViewportTop() {
 		m.cursorCol = 0
 		return
 	}
-	m.cursorLine = max(0, min(m.vp.yOffset, len(m.rawLines)-1))
+	if m.layout != nil && m.vp.yOffset < len(m.layout.Rows) {
+		m.cursorLine = m.layout.Rows[m.vp.yOffset].RawLineIdx
+	} else {
+		m.cursorLine = 0
+	}
 	m.clampCursorCol()
 }
 
@@ -69,11 +73,20 @@ func (m *Model) ensureCursorVisible() {
 	if m.vp.height <= 0 {
 		return
 	}
-	if m.cursorLine < m.vp.yOffset {
-		m.vp.yOffset = m.cursorLine
+
+	cursorRowIdx, _ := -1, -1
+	if m.layout != nil {
+		cursorRowIdx, _ = m.layout.GetVisualCursor(m.cursorLine, m.cursorCol)
 	}
-	if m.cursorLine >= m.vp.yOffset+m.vp.height {
-		m.vp.yOffset = m.cursorLine - m.vp.height + 1
+	if cursorRowIdx < 0 {
+		return
+	}
+
+	if cursorRowIdx < m.vp.yOffset {
+		m.vp.yOffset = cursorRowIdx
+	}
+	if cursorRowIdx >= m.vp.yOffset+m.vp.height {
+		m.vp.yOffset = cursorRowIdx - m.vp.height + 1
 	}
 	if m.vp.yOffset > m.vp.maxYOffset() {
 		m.vp.yOffset = m.vp.maxYOffset()
@@ -133,29 +146,6 @@ func (m Model) maxCursorColForLine(line int) int {
 		return 0
 	}
 	return width - 1
-}
-
-func (m Model) maxVisibleCursorColForLine(line int) int {
-	if line < 0 || line >= len(m.rawLines) {
-		return 0
-	}
-	rendered := stripANSI(m.renderLine(m.rawLines[line]))
-	width := lipgloss.Width(rendered)
-	if width <= 0 {
-		return 0
-	}
-	return width - 1
-}
-
-func (m Model) visibleCursorColForLine(line, cursorCol int) int {
-	maxCol := m.maxVisibleCursorColForLine(line)
-	if cursorCol < 0 {
-		return 0
-	}
-	if cursorCol > maxCol {
-		return maxCol
-	}
-	return cursorCol
 }
 
 func (m *Model) moveCursorToLineStart(firstNonBlank bool, count int) {

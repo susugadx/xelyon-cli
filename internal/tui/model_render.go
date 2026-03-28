@@ -8,23 +8,19 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// rebuildRenderedLines は現在幅に合わせて表示用の行キャッシュを再構築する。
-func (m *Model) rebuildRenderedLines() {
-	m.renderedLines = make([]string, len(m.rawLines))
-	for i, line := range m.rawLines {
-		m.renderedLines[i] = m.renderLine(line)
-	}
+func (m *Model) rebuildLayout() {
+	m.layout = BuildLayout(m.rawLines, m.width)
 }
 
-// renderLine は現在幅に合わせて1行だけ表示用に切り詰める。
-func (m *Model) renderLine(line string) string {
-	if m.width <= 0 || len(line) <= m.width {
-		return line
+func (m *Model) getVisualRowContents() []string {
+	if m.layout == nil {
+		return nil
 	}
-	if lipgloss.Width(line) <= m.width {
-		return line
+	res := make([]string, len(m.layout.Rows))
+	for i, r := range m.layout.Rows {
+		res[i] = r.Content
 	}
-	return truncateWithANSI(line, m.width)
+	return res
 }
 
 // truncateWithANSI は ANSI エスケープを保持しつつ表示幅を制限する。
@@ -264,30 +260,52 @@ func (m Model) viewportView() string {
 			continue
 		}
 
-		rawIdx := m.vp.yOffset + i
+		visIdx := m.vp.yOffset + i
+		rawIdx := visIdx
+		if m.layout != nil && visIdx < len(m.layout.Rows) {
+			rawIdx = m.layout.Rows[visIdx].RawLineIdx
+		}
+
 		line := visible[i]
 
 		switch m.visualMode {
 		case visualModeChar:
 			if startCol, endCol, ok := m.charSelectionColumnsForLine(rawIdx); ok {
 				plain := stripANSI(line)
-				styled := stylePlainTextRange(plain, startCol, endCol, visualBg)
-				if rawIdx == m.cursorLine {
-					styled = stylePlainTextRangeWithCursor(plain, startCol, endCol, visualBg, m.visibleCursorColForLine(rawIdx, m.cursorCol), visualCursorBg, "")
+
+				// Local coordinate bounds
+				localStartCol := startCol
+				localEndCol := endCol
+				if m.layout != nil && visIdx < len(m.layout.Rows) {
+					// Map global char selection into this visual row
+					// This is a naive approximation; proper handling requires a layout-aware char offset.
+					// For now, we apply style across the whole row if we are inside the selection block
+					if rawIdx > m.visualStart.line && rawIdx < m.cursorLine || rawIdx > m.cursorLine && rawIdx < m.visualStart.line {
+						localStartCol = 0
+						localEndCol = 9999
+					}
+				}
+
+				styled := stylePlainTextRange(plain, localStartCol, localEndCol, visualBg)
+				if rawIdx == m.cursorLine && isCursorInVisualRow(m.layout, visIdx, rawIdx, m.cursorCol) {
+					localCursorCol := getLocalCursorCol(m.layout, visIdx, rawIdx, m.cursorCol)
+					styled = stylePlainTextRangeWithCursor(plain, localStartCol, localEndCol, visualBg, localCursorCol, visualCursorBg, "")
 				}
 				sb.WriteString(decorateViewportLine(styled, m.vp.width, ""))
 				continue
 			}
-			if rawIdx == m.cursorLine {
+			if rawIdx == m.cursorLine && isCursorInVisualRow(m.layout, visIdx, rawIdx, m.cursorCol) {
 				plain := stripANSI(line)
-				sb.WriteString(decorateViewportLine(stylePlainTextRangeWithCursor(plain, 0, 0, "", m.visibleCursorColForLine(rawIdx, m.cursorCol), visualCursorBg, ""), m.vp.width, ""))
+				localCursorCol := getLocalCursorCol(m.layout, visIdx, rawIdx, m.cursorCol)
+				sb.WriteString(decorateViewportLine(stylePlainTextRangeWithCursor(plain, 0, 0, "", localCursorCol, visualCursorBg, ""), m.vp.width, ""))
 				continue
 			}
 		case visualModeLine:
 			if start, end, ok := m.lineSelectionRange(); ok && rawIdx >= start && rawIdx <= end {
-				if rawIdx == m.cursorLine {
+				if rawIdx == m.cursorLine && isCursorInVisualRow(m.layout, visIdx, rawIdx, m.cursorCol) {
 					plain := stripANSI(line)
-					sb.WriteString(decorateViewportLine(stylePlainTextRangeWithCursor(plain, 0, lipgloss.Width(plain), visualBg, m.visibleCursorColForLine(rawIdx, m.cursorCol), visualCursorBg, ""), m.vp.width, visualBg))
+					localCursorCol := getLocalCursorCol(m.layout, visIdx, rawIdx, m.cursorCol)
+					sb.WriteString(decorateViewportLine(stylePlainTextRangeWithCursor(plain, 0, lipgloss.Width(plain), visualBg, localCursorCol, visualCursorBg, ""), m.vp.width, visualBg))
 					continue
 				}
 				sb.WriteString(decorateViewportLine(line, m.vp.width, visualBg))
@@ -295,9 +313,10 @@ func (m Model) viewportView() string {
 			}
 		}
 
-		if rawIdx == m.cursorLine {
+		if rawIdx == m.cursorLine && isCursorInVisualRow(m.layout, visIdx, rawIdx, m.cursorCol) {
 			plain := stripANSI(line)
-			sb.WriteString(decorateViewportLine(stylePlainTextRangeWithCursor(plain, 0, 0, "", m.visibleCursorColForLine(rawIdx, m.cursorCol), cursorCharBg, cursorLineBg), m.vp.width, cursorLineBg))
+			localCursorCol := getLocalCursorCol(m.layout, visIdx, rawIdx, m.cursorCol)
+			sb.WriteString(decorateViewportLine(stylePlainTextRangeWithCursor(plain, 0, 0, "", localCursorCol, cursorCharBg, cursorLineBg), m.vp.width, cursorLineBg))
 			continue
 		}
 

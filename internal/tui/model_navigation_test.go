@@ -246,8 +246,8 @@ func TestNavMode_VisualSelectionCopiesPlainText(t *testing.T) {
 	m.navigationMode = true
 	m.vp = lightViewport{width: 20, height: 5}
 	m.rawLines = []string{"one", "\033[31m二行目\033[0m", "three"}
-	m.rebuildRenderedLines()
-	m.vp.setLines(m.renderedLines)
+	m.rebuildLayout()
+	m.vp.setLines(m.getVisualRowContents())
 
 	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'V'}})
 	m = updated.(Model)
@@ -301,8 +301,8 @@ func TestNavMode_CharVisualSelectionCopiesRange(t *testing.T) {
 	m.navigationMode = true
 	m.vp = lightViewport{width: 20, height: 5}
 	m.rawLines = []string{"hello", "world"}
-	m.rebuildRenderedLines()
-	m.vp.setLines(m.renderedLines)
+	m.rebuildLayout()
+	m.vp.setLines(m.getVisualRowContents())
 	m.cursorLine = 0
 	m.cursorCol = 1
 
@@ -339,8 +339,8 @@ func TestNavMode_CharVisualSelectionSupportsLineMoveAndColumnClamp(t *testing.T)
 	m.navigationMode = true
 	m.vp = lightViewport{width: 20, height: 5}
 	m.rawLines = []string{"abcdef", "xy"}
-	m.rebuildRenderedLines()
-	m.vp.setLines(m.renderedLines)
+	m.rebuildLayout()
+	m.vp.setLines(m.getVisualRowContents())
 	m.cursorCol = 4
 
 	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
@@ -362,8 +362,8 @@ func TestNavMode_HLMoveCursorColWithoutVisualMode(t *testing.T) {
 	m.navigationMode = true
 	m.vp = lightViewport{width: 20, height: 5}
 	m.rawLines = []string{"hello"}
-	m.rebuildRenderedLines()
-	m.vp.setLines(m.renderedLines)
+	m.rebuildLayout()
+	m.vp.setLines(m.getVisualRowContents())
 
 	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
 	m = updated.(Model)
@@ -389,8 +389,8 @@ func TestNavMode_ZeroMovesToLineStartWithoutCount(t *testing.T) {
 	m.navigationMode = true
 	m.vp = lightViewport{width: 20, height: 5}
 	m.rawLines = []string{"hello world"}
-	m.rebuildRenderedLines()
-	m.vp.setLines(m.renderedLines)
+	m.rebuildLayout()
+	m.vp.setLines(m.getVisualRowContents())
 	m.cursorCol = 5
 
 	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'0'}})
@@ -425,8 +425,8 @@ func TestNavMode_WBEWordMotions(t *testing.T) {
 	m.navigationMode = true
 	m.vp = lightViewport{width: 30, height: 5}
 	m.rawLines = []string{"alpha beta gamma"}
-	m.rebuildRenderedLines()
-	m.vp.setLines(m.renderedLines)
+	m.rebuildLayout()
+	m.vp.setLines(m.getVisualRowContents())
 
 	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'w'}})
 	m = updated.(Model)
@@ -453,8 +453,8 @@ func TestNavMode_WordMotionsWorkInVisualMode(t *testing.T) {
 	m.navigationMode = true
 	m.vp = lightViewport{width: 30, height: 5}
 	m.rawLines = []string{"alpha beta gamma"}
-	m.rebuildRenderedLines()
-	m.vp.setLines(m.renderedLines)
+	m.rebuildLayout()
+	m.vp.setLines(m.getVisualRowContents())
 
 	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
 	m = updated.(Model)
@@ -479,8 +479,8 @@ func TestNavMode_LineStartAndEndMotions(t *testing.T) {
 	m.navigationMode = true
 	m.vp = lightViewport{width: 30, height: 5}
 	m.rawLines = []string{"  alpha", " beta", "gamma"}
-	m.rebuildRenderedLines()
-	m.vp.setLines(m.renderedLines)
+	m.rebuildLayout()
+	m.vp.setLines(m.getVisualRowContents())
 
 	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'^'}})
 	m = updated.(Model)
@@ -511,8 +511,8 @@ func TestNavMode_ViewShowsColumnCursorInNormalMode(t *testing.T) {
 	m := newModelWithViewport(agent)
 	m.navigationMode = true
 	m.rawLines = []string{"hello"}
-	m.rebuildRenderedLines()
-	m.vp.setLines(m.renderedLines)
+	m.rebuildLayout()
+	m.vp.setLines(m.getVisualRowContents())
 	m.cursorLine = 0
 	m.cursorCol = 2
 	m.rebuildChrome()
@@ -535,8 +535,8 @@ func TestNavMode_VerticalMoveClampsCursorToVisibleWidth(t *testing.T) {
 	m.height = 8
 	m.vp = lightViewport{width: 5, height: 4}
 	m.rawLines = []string{"abcdefghij", "klmnopqrst"}
-	m.rebuildRenderedLines()
-	m.vp.setLines(m.renderedLines)
+	m.rebuildLayout()
+	m.vp.setLines(m.getVisualRowContents())
 	m.cursorLine = 0
 	m.cursorCol = 4
 
@@ -563,7 +563,7 @@ func TestNavMode_VerticalMoveClampsCursorToVisibleWidth(t *testing.T) {
 
 	m.rebuildChrome()
 	view := m.View()
-	if !strings.Contains(view, "\033[48;5;255;38;5;16me") {
+	if !strings.Contains(view, "\033[48;5;255;38;5;16mi") {
 		t.Fatalf("view should contain visible cursor after vertical move, got %q", view)
 	}
 }
@@ -577,8 +577,8 @@ func TestNavMode_WordMotionKeepsLogicalColumnOnLongLine(t *testing.T) {
 	m.height = 8
 	m.vp = lightViewport{width: 5, height: 4}
 	m.rawLines = []string{"abcde fg", "tail"}
-	m.rebuildRenderedLines()
-	m.vp.setLines(m.renderedLines)
+	m.rebuildLayout()
+	m.vp.setLines(m.getVisualRowContents())
 	m.cursorLine = 0
 	m.cursorCol = 4
 	m.rebuildChrome()
@@ -594,7 +594,7 @@ func TestNavMode_WordMotionKeepsLogicalColumnOnLongLine(t *testing.T) {
 	}
 
 	view := m.View()
-	if !strings.Contains(view, "\033[48;5;255;38;5;16me") {
+	if !strings.Contains(view, "\033[48;5;255;38;5;16mf") {
 		t.Fatalf("view should keep cursor visible at edge for off-screen column, got %q", view)
 	}
 }
@@ -650,8 +650,8 @@ func TestNavMode_CharVisualSelectionOnLongANSILineKeepsCursorVisible(t *testing.
 	m.height = 8
 	m.vp = lightViewport{width: 6, height: 4}
 	m.rawLines = []string{"\033[31mabcdef ghi\033[0m"}
-	m.rebuildRenderedLines()
-	m.vp.setLines(m.renderedLines)
+	m.rebuildLayout()
+	m.vp.setLines(m.getVisualRowContents())
 	m.cursorLine = 0
 	m.cursorCol = 1
 
@@ -662,7 +662,7 @@ func TestNavMode_CharVisualSelectionOnLongANSILineKeepsCursorVisible(t *testing.
 
 	view := m.View()
 	firstLine := strings.Split(view, "\n")[0]
-	if !strings.Contains(view, "\033[48;5;255;38;5;16mf") {
+	if !strings.Contains(view, "\033[48;5;255;38;5;16mg") {
 		t.Fatalf("view should keep visual cursor visible on truncated ANSI line, got %q", view)
 	}
 	if lipgloss.Width(stripANSI(firstLine)) != 6 {
@@ -678,8 +678,8 @@ func TestNavMode_ViewShowsCursorOnEmptyLine(t *testing.T) {
 	m := newModelWithViewport(agent)
 	m.navigationMode = true
 	m.rawLines = []string{""}
-	m.rebuildRenderedLines()
-	m.vp.setLines(m.renderedLines)
+	m.rebuildLayout()
+	m.vp.setLines(m.getVisualRowContents())
 	m.cursorLine = 0
 	m.cursorCol = 0
 	m.rebuildChrome()
@@ -699,8 +699,8 @@ func TestNavMode_ViewportViewPadsTrailingBlankRowsToWidth(t *testing.T) {
 	m.height = 8
 	m.vp = lightViewport{width: 8, height: 4}
 	m.rawLines = []string{"line1", "line2"}
-	m.rebuildRenderedLines()
-	m.vp.setLines(m.renderedLines)
+	m.rebuildLayout()
+	m.vp.setLines(m.getVisualRowContents())
 	m.vp.gotoBottom()
 
 	lines := strings.Split(m.viewportView(), "\n")
@@ -724,8 +724,8 @@ func TestNavMode_LineVisualSelectionPadsTrailingBlankRowsToWidth(t *testing.T) {
 	m.height = 8
 	m.vp = lightViewport{width: 10, height: 4}
 	m.rawLines = []string{"\033[31m日本語\033[0m", "tail"}
-	m.rebuildRenderedLines()
-	m.vp.setLines(m.renderedLines)
+	m.rebuildLayout()
+	m.vp.setLines(m.getVisualRowContents())
 
 	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'V'}})
 	m = updated.(Model)
