@@ -4,6 +4,8 @@ import (
 	"strings"
 )
 
+// Layout engine processes raw lines to visual rows.
+
 // VisualRow represents a single displayable line on the screen.
 type VisualRow struct {
 	RawLineIdx  int
