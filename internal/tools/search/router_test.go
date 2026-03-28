@@ -72,6 +72,9 @@ func TestPlanSearchRoute_AutoGoRescueForRegexLikeSelector(t *testing.T) {
 	if trace.InitialLane != searchLaneSymbol {
 		t.Fatalf("initial lane = %q, want symbol", trace.InitialLane)
 	}
+	if trace.Decision != "go-rescue" {
+		t.Fatalf("decision = %q, want go-rescue", trace.Decision)
+	}
 	if !trace.SymbolRescue {
 		t.Fatal("expected symbol rescue to be enabled")
 	}
@@ -117,6 +120,9 @@ func TestPlanSearchRoute_PlainTextUsesLiteralLane(t *testing.T) {
 	trace := planSearchRoute("close connection", SearchOptions{Mode: string(SearchModeAuto), FileType: "go"})
 	if trace.InitialLane != searchLaneLiteral {
 		t.Fatalf("initial lane = %q, want literal", trace.InitialLane)
+	}
+	if trace.Decision != "text" {
+		t.Fatalf("decision = %q, want text", trace.Decision)
 	}
 }
 

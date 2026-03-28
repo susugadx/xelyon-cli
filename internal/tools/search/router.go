@@ -19,6 +19,7 @@ type searchRouteTrace struct {
 	FallbackLane     searchLane
 	SymbolQuery      string
 	SymbolCandidates []string
+	Decision         string
 	SymbolRescue     bool
 	SymbolAttempted  bool
 	SymbolResolved   bool
@@ -41,15 +42,18 @@ func planSearchRoute(pattern string, opts SearchOptions) searchRouteTrace {
 	switch mode {
 	case SearchModeRegex:
 		trace.InitialLane = searchLaneRegex
+		trace.Decision = "explicit-regex"
 		return trace
 	case SearchModeLiteral:
 		trace.InitialLane = searchLaneLiteral
+		trace.Decision = "explicit-literal"
 		return trace
 	case SearchModeSymbol:
 		trace.FallbackLane = searchLaneLiteral
 		trace.InitialLane = searchLaneSymbol
 		trace.SymbolQuery = analysis.TrimmedPattern
 		trace.SymbolCandidates = []string{analysis.TrimmedPattern}
+		trace.Decision = "explicit-symbol"
 		return trace
 	default:
 		trace.FallbackLane = analysis.defaultTextLane()
@@ -57,6 +61,7 @@ func planSearchRoute(pattern string, opts SearchOptions) searchRouteTrace {
 			trace.InitialLane = searchLaneSymbol
 			trace.SymbolQuery = analysis.TrimmedPattern
 			trace.SymbolCandidates = []string{analysis.TrimmedPattern}
+			trace.Decision = "auto-symbol"
 			return trace
 		}
 		if lang == "go" && opts.FilePattern == "" {
@@ -66,6 +71,7 @@ func planSearchRoute(pattern string, opts SearchOptions) searchRouteTrace {
 					trace.SymbolQuery = candidates[0]
 					trace.SymbolCandidates = candidates
 					trace.SymbolRescue = true
+					trace.Decision = "go-rescue"
 					return trace
 				}
 			}
@@ -73,10 +79,12 @@ func planSearchRoute(pattern string, opts SearchOptions) searchRouteTrace {
 				trace.InitialLane = searchLaneSymbol
 				trace.SymbolQuery = analysis.TrimmedPattern
 				trace.SymbolCandidates = []string{analysis.TrimmedPattern}
+				trace.Decision = "go-symbol"
 				return trace
 			}
 		}
 		trace.InitialLane = analysis.defaultTextLane()
+		trace.Decision = "text"
 		return trace
 	}
 }
