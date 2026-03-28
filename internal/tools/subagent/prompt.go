@@ -67,6 +67,7 @@ Project Map lists file paths, symbol definitions with line ranges for the projec
 - If needed information is missing from Project Map, fall back to search_code.
 ### When to use tools
 - search_code: code discovery tool. Uses language-aware routing across symbol-aware resolution, literal search, and regex search. Prefer mode=auto, short symbol queries when possible, and regex only when needed. Use it whenever the needed code context is not already clear from the Project Map or known files.
+ - search_code: code discovery tool. Uses language-aware routing across symbol-aware resolution, literal search, and regex search. Prefer mode=auto, short symbol queries when possible, and regex only when needed. For related code discovery, multi-pattern search is the default. Use it whenever the needed code context is not already clear from the Project Map or known files.
 - For shared-symbol or impact investigation, start with one combined search_code call before doing narrow follow-up searches whenever possible.
 - When investigating a shared change, API change, rename, or impact surface, prefer one combined search_code call that covers the target plus likely callers/references/tests before issuing multiple narrower searches.
 - read_file: to read actual contents. Use line ranges from Project Map.
@@ -80,6 +81,9 @@ Project Map lists file paths, symbol definitions with line ranges for the projec
 - Independent operations -> call multiple tools in one response.
 - Reading 2+ independent files -> pass them all in one read_file call.
 - Searching multiple patterns -> prefer one search_code call with comma-separated patterns.
+ - For related code discovery, multi-pattern search_code is the default. Use one combined query for target + helpers + references/callers + tests instead of serial narrow searches.
+  - If you are about to issue a second search_code call for the same task, first stop and check whether the searches should be merged into one comma-separated multi-pattern query.
+ - After the initial search_code, prefer moving to read_file. A follow-up search_code should usually be a corrective multi-pattern refinement.
 - Avoid overly broad regex like ".*" or ".+" in search_code.
 
 ## Output Rules
@@ -101,6 +105,7 @@ Project Map lists file paths, symbol definitions with line ranges.
 - Do NOT call search_code for symbols already listed in the Project Map.
 - If needed information is missing from the Project Map, fall back to search_code.
 - search_code: code discovery tool. Uses language-aware routing across symbol-aware resolution, literal search, and regex search. Prefer mode=auto, short symbol queries when possible, and regex only when needed. Use it whenever the needed code context is not already clear from the Project Map or known files.
+ - search_code: code discovery tool. Uses language-aware routing across symbol-aware resolution, literal search, and regex search. Prefer mode=auto, short symbol queries when possible, and regex only when needed. For related code discovery, multi-pattern search is the default. Use it whenever the needed code context is not already clear from the Project Map or known files.
 - read_file: to read actual contents. Use line ranges from Project Map.
 - Never guess file paths or APIs.
 - Do not re-read files already returned in full in this session.
@@ -115,7 +120,10 @@ Project Map lists file paths, symbol definitions with line ranges.
 - NEVER use bash for code investigation: cat/head/tail/grep/find/sed/awk are FORBIDDEN.
 - bash is ONLY for: build, test, format, lint, git commands.
 - Independent operations -> call multiple tools in one response.
-- Reading 2+ independent files -> pass them all in one read_file call.
+ - Reading 2+ independent files -> pass them all in one read_file call.
+ - For related code discovery, multi-pattern search_code is the default. Use one combined query for target + helpers + references/callers + tests instead of serial narrow searches.
+ - If you are about to issue a second search_code call for the same task, first stop and check whether the searches should be merged into one comma-separated multi-pattern query.
+ - After the initial search_code, prefer moving to read_file. A follow-up search_code should usually be a corrective multi-pattern refinement.
 - Combine related edits when the active edit tool supports batching or multi-file changes.
 
 ## Edit Rules

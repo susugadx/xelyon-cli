@@ -13,7 +13,8 @@ var providerPrefixes = map[string]string{
 	"gemini": "## Provider Notes\n" +
 		"### Gemini-specific\n" +
 		"- Tool calls must be raw JSON, not markdown code blocks\n" +
-		"- Edit the original file directly; do not create derivative temp files\n",
+		"- Edit the original file directly; do not create derivative temp files\n" +
+		"- During code discovery, do not use bash as a substitute for search_code, read_file, or list_dir. Repository exploration, symbol lookup, related-test discovery, and dependency tracing must use the dedicated tools first.\n",
 	"deepseek": "## Provider Notes\n" +
 		"### DeepSeek-specific\n" +
 		"- When function calling is enabled, use tool calls for file operations instead of plain-text descriptions\n" +

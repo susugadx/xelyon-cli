@@ -11,7 +11,7 @@ var ToolDescriptions = map[string]string{
 	"list_dir":    "Preferred for directory exploration and choosing the next file/subtree. Returns a compact summary with representative names, counts, and types. Ignores .git, node_modules, vendor by default. Use depth parameter (1-3) for recursive listing.",
 
 	// Search & Discovery
-	"search_code": "Search and discover project code. Uses language-aware routing across symbol-aware resolution, literal search, and regex search. Prefer mode=auto, short symbol queries when possible, and regex only when needed. Returns contextual matches and may provide richer definition/reference/test results for symbol-like queries in supported languages. Supports comma-separated patterns for parallel multi-search and file filtering (e.g. go, *_test.go).",
+	"search_code": "Search and discover project code. Uses language-aware routing across symbol-aware resolution, literal search, and regex search. Prefer mode=auto, short symbol queries when possible, and regex only when needed. For related code discovery, comma-separated multi-pattern search is the default. Use one combined query for target + helpers + references/callers + tests instead of serial narrow searches whenever possible. Returns contextual matches and may provide richer definition/reference/test results for symbol-like queries in supported languages. Supports comma-separated patterns for parallel multi-search and file filtering (e.g. go, *_test.go).",
 	"web_search":  "Search the web and return summarized findings plus source URLs, not full page contents. For deeper coverage, run multiple targeted searches with narrower queries.",
 
 	// Development Tools
