@@ -252,6 +252,72 @@ func TestModel_WindowResizeKeepsCharVisualSelectionState(t *testing.T) {
 	}
 }
 
+func TestNavMode_CharVisualSelectionMapsAcrossWrappedRows(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+	m.ready = true
+	m.navigationMode = true
+	m.width = 5
+	m.height = 8
+	m.vp = lightViewport{width: 5, height: 4}
+	m.rawLines = []string{"abcdefghij"}
+	m.rebuildLayout()
+	m.vp.setLines(m.getVisualRowContents())
+	m.cursorLine = 0
+	m.cursorCol = 2
+
+	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+	m = updated.(Model)
+	m.cursorCol = 6
+
+	lines := strings.Split(m.viewportView(), "\n")
+	if len(lines) < 2 {
+		t.Fatalf("viewport lines = %d, want at least 2", len(lines))
+	}
+	if !strings.Contains(lines[0], "\033[48;5;240mc\033[0m") || !strings.Contains(lines[0], "\033[48;5;240me\033[0m") {
+		t.Fatalf("first wrapped row should highlight c..e, got %q", lines[0])
+	}
+	if !strings.Contains(lines[1], "\033[48;5;240mf\033[0m") {
+		t.Fatalf("second wrapped row should highlight f, got %q", lines[1])
+	}
+	if !strings.Contains(lines[1], "\033[48;5;255;38;5;16mg\033[0m") {
+		t.Fatalf("second wrapped row should place visual cursor on g, got %q", lines[1])
+	}
+	if strings.Contains(lines[1], "\033[48;5;240mh\033[0m") || strings.Contains(lines[1], "\033[48;5;255;38;5;16mh\033[0m") {
+		t.Fatalf("second wrapped row should not highlight h.., got %q", lines[1])
+	}
+}
+
+func TestNavMode_CharVisualSelectionStopsAtWrappedBoundary(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+	m.ready = true
+	m.navigationMode = true
+	m.width = 5
+	m.height = 8
+	m.vp = lightViewport{width: 5, height: 4}
+	m.rawLines = []string{"abcdefghij"}
+	m.rebuildLayout()
+	m.vp.setLines(m.getVisualRowContents())
+	m.cursorLine = 0
+	m.cursorCol = 2
+
+	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+	m = updated.(Model)
+	m.cursorCol = 4
+
+	lines := strings.Split(m.viewportView(), "\n")
+	if len(lines) < 2 {
+		t.Fatalf("viewport lines = %d, want at least 2", len(lines))
+	}
+	if !strings.Contains(lines[0], "\033[48;5;255;38;5;16me\033[0m") {
+		t.Fatalf("boundary selection should end with cursor on e, got %q", lines[0])
+	}
+	if strings.Contains(lines[1], "\033[48;5;240m") || strings.Contains(lines[1], "\033[48;5;255;38;5;16m") {
+		t.Fatalf("next wrapped row should not be highlighted when selection ends at boundary, got %q", lines[1])
+	}
+}
+
 func TestModel_WindowResizeKeepsLineVisualSelectionState(t *testing.T) {
 	agent := &stubAgent{statusLine: "ready"}
 	m := NewModel(agent, "")

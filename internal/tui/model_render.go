@@ -277,12 +277,36 @@ func (m Model) viewportView() string {
 				localStartCol := startCol
 				localEndCol := endCol
 				if m.layout != nil && visIdx < len(m.layout.Rows) {
-					// Map global char selection into this visual row
-					// This is a naive approximation; proper handling requires a layout-aware char offset.
-					// For now, we apply style across the whole row if we are inside the selection block
 					if rawIdx > m.visualStart.line && rawIdx < m.cursorLine || rawIdx > m.cursorLine && rawIdx < m.visualStart.line {
 						localStartCol = 0
 						localEndCol = 9999
+					} else {
+						startVisRow, startVisCol := m.layout.GetVisualCursor(rawIdx, startCol)
+						endVisRow, endVisCol := m.layout.GetVisualCursor(rawIdx, endCol)
+
+						if endVisRow > startVisRow && endVisRow >= 0 && endVisRow < len(m.layout.Rows) {
+							if endVisCol == m.layout.Rows[endVisRow].PrefixWidth {
+								endVisRow--
+								endVisCol = 9999
+							}
+						}
+
+						if visIdx < startVisRow || visIdx > endVisRow {
+							localStartCol = 0
+							localEndCol = 0
+						} else {
+							if visIdx == startVisRow {
+								localStartCol = startVisCol
+							} else {
+								localStartCol = 0
+							}
+
+							if visIdx == endVisRow {
+								localEndCol = endVisCol
+							} else {
+								localEndCol = 9999
+							}
+						}
 					}
 				}
 

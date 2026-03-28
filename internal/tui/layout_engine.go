@@ -161,6 +161,19 @@ func getContinuationPrefix(line string) string {
 	return prefix.String()
 }
 
+func (l *Layout) GetRawColumnForVisualRow(visRowIdx int) int {
+	if visRowIdx < 0 || visRowIdx >= len(l.Rows) {
+		return 0
+	}
+	rawLine := l.Rows[visRowIdx].RawLineIdx
+	startRow := l.LineToRowMap[rawLine]
+	rawCol := 0
+	for i := startRow; i < visRowIdx; i++ {
+		rawCol += l.Rows[i].Width - l.Rows[i].PrefixWidth
+	}
+	return rawCol
+}
+
 func (l *Layout) GetVisualCursor(rawLine, rawCol int) (rowIdx, col int) {
 	if rawLine < 0 || rawLine >= len(l.LineToRowMap) {
 		return -1, -1

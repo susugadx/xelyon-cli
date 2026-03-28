@@ -52,7 +52,6 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if strings.TrimSpace(m.textInput.Value()) == "" {
 			m.navigationMode = true
 			m.syncCursorToViewportTop()
-			m.cursorCol = 0
 			m.textInput.Blur()
 			m.chromeDirty = true
 			return m, nil

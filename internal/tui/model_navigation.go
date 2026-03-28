@@ -62,8 +62,10 @@ func (m *Model) syncCursorToViewportTop() {
 	}
 	if m.layout != nil && m.vp.yOffset < len(m.layout.Rows) {
 		m.cursorLine = m.layout.Rows[m.vp.yOffset].RawLineIdx
+		m.cursorCol = m.layout.GetRawColumnForVisualRow(m.vp.yOffset)
 	} else {
 		m.cursorLine = 0
+		m.cursorCol = 0
 	}
 	m.clampCursorCol()
 }
