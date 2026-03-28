@@ -4,9 +4,13 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/rivo/uniseg"
 )
+
+const visualTabWidth = 4
 
 func (m *Model) rebuildLayout() {
 	m.layout = BuildLayout(m.rawLines, m.width)
@@ -58,6 +62,9 @@ func truncateWithANSI(s string, maxWidth int) string {
 
 // runeWidth は文字の表示幅を返す（CJK 全角 = 2、それ以外 = 1）。
 func runeWidth(r rune) int {
+	if r == '\t' {
+		return visualTabWidth
+	}
 	if r >= 0x1100 &&
 		(r <= 0x115F || r == 0x2329 || r == 0x232A ||
 			(r >= 0x2E80 && r <= 0x303E) ||
@@ -75,6 +82,10 @@ func runeWidth(r rune) int {
 		return 2
 	}
 	return 1
+}
+
+func plainTextDisplayWidth(s string) int {
+	return lipgloss.Width(strings.ReplaceAll(s, "\t", strings.Repeat(" ", visualTabWidth)))
 }
 
 func stripANSI(s string) string {
@@ -101,14 +112,18 @@ func displayColToRuneIndex(s string, col int) int {
 		return 0
 	}
 	width := 0
-	for idx, r := range []rune(s) {
-		next := width + runeWidth(r)
+	runeIdx := 0
+	gr := uniseg.NewGraphemes(s)
+	for gr.Next() {
+		cluster := gr.Str()
+		next := width + plainTextDisplayWidth(cluster)
 		if col < next {
-			return idx
+			return runeIdx
 		}
 		width = next
+		runeIdx += utf8.RuneCountInString(cluster)
 	}
-	return len([]rune(s))
+	return runeIdx
 }
 
 func displayColToRuneIndexAfter(s string, col int) int {
@@ -116,14 +131,19 @@ func displayColToRuneIndexAfter(s string, col int) int {
 		return 0
 	}
 	width := 0
-	for idx, r := range []rune(s) {
-		next := width + runeWidth(r)
+	runeIdx := 0
+	gr := uniseg.NewGraphemes(s)
+	for gr.Next() {
+		cluster := gr.Str()
+		clusterRunes := utf8.RuneCountInString(cluster)
+		next := width + plainTextDisplayWidth(cluster)
 		if col < next {
-			return idx + 1
+			return runeIdx + clusterRunes
 		}
 		width = next
+		runeIdx += clusterRunes
 	}
-	return len([]rune(s))
+	return runeIdx
 }
 
 func runeIndexToDisplayCol(s string, idx int) int {
@@ -131,11 +151,16 @@ func runeIndexToDisplayCol(s string, idx int) int {
 		return 0
 	}
 	width := 0
-	for i, r := range []rune(s) {
-		if i >= idx {
+	runeIdx := 0
+	gr := uniseg.NewGraphemes(s)
+	for gr.Next() {
+		cluster := gr.Str()
+		clusterRunes := utf8.RuneCountInString(cluster)
+		if runeIdx >= idx {
 			break
 		}
-		width += runeWidth(r)
+		width += plainTextDisplayWidth(cluster)
+		runeIdx += clusterRunes
 	}
 	return width
 }
@@ -206,7 +231,7 @@ func (m Model) charSelectionColumnsForLine(line int) (startCol, endCol int, ok b
 	}
 
 	plain := stripANSI(m.rawLines[line])
-	lineWidth := lipgloss.Width(plain)
+	lineWidth := plainTextDisplayWidth(plain)
 	switch {
 	case start.line == end.line:
 		return start.col, min(lineWidth, end.col+1), true
@@ -237,7 +262,57 @@ func fillANSITextWidth(line string, width int, bg string) string {
 		return line + strings.Repeat(" ", padding)
 	}
 	line = strings.ReplaceAll(line, "\033[0m", "\033[0m"+bg)
-	return bg + line + strings.Repeat(" ", padding) + "\033[0m"
+	line = strings.ReplaceAll(line, "\033[m", "\033[m"+bg)
+	line = strings.ReplaceAll(line, "\033[49m", "\033[49m"+bg)
+	// Some subcomponents may clear background; re-apply before right padding.
+	return bg + line + "\033[0m" + bg + strings.Repeat(" ", padding) + "\033[0m"
+}
+
+func sanitizeSingleLineANSI(s string) string {
+	if s == "" {
+		return ""
+	}
+
+	var b strings.Builder
+	inEscape := false
+	spacePending := false
+
+	emitSpace := func() {
+		if b.Len() == 0 || spacePending {
+			return
+		}
+		b.WriteByte(' ')
+		spacePending = true
+	}
+
+	for _, r := range s {
+		if inEscape {
+			b.WriteRune(r)
+			if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') {
+				inEscape = false
+			}
+			continue
+		}
+
+		if r == '\033' {
+			inEscape = true
+			b.WriteRune(r)
+			continue
+		}
+
+		switch r {
+		case '\r', '\n', '\t':
+			emitSpace()
+		default:
+			if (r >= 0 && r < 0x20) || r == 0x7f {
+				continue
+			}
+			b.WriteRune(r)
+			spacePending = false
+		}
+	}
+
+	return strings.TrimRight(b.String(), " ")
 }
 
 func (m Model) viewportView() string {
@@ -360,14 +435,15 @@ func (m *Model) rebuildChrome() {
 	const hintColor = "\033[38;5;244m"
 	tiView := strings.ReplaceAll(m.textInput.View(), "\033[0m", "\033[0m"+inputBg)
 	inputLine := fillANSITextWidth(inputBg+" \033[38;5;46m"+inputPrompt+"\033[38;5;252m"+tiView+"\033[0m", m.width, inputBg)
+	statusLine := sanitizeSingleLineANSI(m.statusLine)
 
 	var statusText string
 	if m.navigationMode {
-		statusText = " \033[48;5;33;38;5;255m NAV \033[0m " + m.statusLine
+		statusText = " \033[48;5;33;38;5;255m NAV \033[0m " + statusLine
 	} else if m.agent.IsProcessing() {
-		statusText = " " + m.spinner.View() + " " + m.statusLine
+		statusText = " " + m.spinner.View() + " " + statusLine
 	} else {
-		statusText = " " + m.statusLine
+		statusText = " " + statusLine
 	}
 
 	if m.newOutput && !m.vp.atBottom() {
@@ -375,7 +451,7 @@ func (m *Model) rebuildChrome() {
 	}
 
 	if m.transientStatus != "" && time.Now().Before(m.transientStatusUntil) {
-		statusText += "  \033[38;5;82m" + m.transientStatus + "\033[0m"
+		statusText += "  \033[38;5;82m" + sanitizeSingleLineANSI(m.transientStatus) + "\033[0m"
 	}
 
 	hints := statusHintsNormal

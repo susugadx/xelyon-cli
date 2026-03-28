@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -243,6 +244,9 @@ func TestNavMode_YCallsCopy(t *testing.T) {
 func TestNavMode_VisualSelectionCopiesPlainText(t *testing.T) {
 	agent := &stubAgent{statusLine: "ready"}
 	m := NewModel(agent, "")
+	m.ready = true
+	m.width = 20
+	m.height = 8
 	m.navigationMode = true
 	m.vp = lightViewport{width: 20, height: 5}
 	m.rawLines = []string{"one", "\033[31m二行目\033[0m", "three"}
@@ -327,6 +331,59 @@ func TestNavMode_CharVisualSelectionCopiesRange(t *testing.T) {
 	}
 	if agent.copyTexts[0] != "ell" {
 		t.Fatalf("copied text = %q, want %q", agent.copyTexts[0], "ell")
+	}
+	if m.visualMode != visualModeOff {
+		t.Fatalf("visualMode after copy = %d, want %d", m.visualMode, visualModeOff)
+	}
+}
+
+func TestNavMode_DollarMovesToVisualEndOnTabExpandedLine(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+	m.ready = true
+	m.width = 20
+	m.height = 8
+	m.navigationMode = true
+	m.vp = lightViewport{width: 20, height: 5}
+	m.rawLines = []string{"a\tb"}
+	m.rebuildLayout()
+	m.vp.setLines(m.getVisualRowContents())
+
+	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'$'}})
+	m = updated.(Model)
+
+	if m.cursorCol != 5 {
+		t.Fatalf("cursorCol = %d, want 5", m.cursorCol)
+	}
+	view := m.View()
+	if !strings.Contains(view, "\033[48;5;255;38;5;16mb") {
+		t.Fatalf("view should place cursor on trailing rune after tab expansion, got %q", view)
+	}
+}
+
+func TestNavMode_CharVisualSelectionCopiesAcrossTabDisplayWidth(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+	m.navigationMode = true
+	m.vp = lightViewport{width: 20, height: 5}
+	m.rawLines = []string{"a\tb"}
+	m.rebuildLayout()
+	m.vp.setLines(m.getVisualRowContents())
+
+	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+	m = updated.(Model)
+	for range 5 {
+		updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+		m = updated.(Model)
+	}
+	updated, _ = m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	m = updated.(Model)
+
+	if len(agent.copyTexts) != 1 {
+		t.Fatalf("copyTexts len = %d, want 1", len(agent.copyTexts))
+	}
+	if agent.copyTexts[0] != "a\tb" {
+		t.Fatalf("copied text = %q, want %q", agent.copyTexts[0], "a\\tb")
 	}
 	if m.visualMode != visualModeOff {
 		t.Fatalf("visualMode after copy = %d, want %d", m.visualMode, visualModeOff)
@@ -673,6 +730,45 @@ func TestModel_MouseWheelDoesNotChangeVisualSelection(t *testing.T) {
 	}
 	if m.cursorCol != cursorColBefore {
 		t.Fatalf("cursorCol changed from %d to %d during visual wheel scroll", cursorColBefore, m.cursorCol)
+	}
+}
+
+func TestNavMode_MovingToBottomClearsNewOutputBadge(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+	m.ready = true
+	m.navigationMode = true
+	m.width = 80
+	m.height = 8
+	m.vp = lightViewport{width: 80, height: 4}
+
+	for i := 0; i < 20; i++ {
+		m.appendContentLines(fmt.Sprintf("line-%d", i))
+	}
+	m.vp.gotoTop()
+	m.appendContentLines("new-line")
+	m.chromeDirty = true
+	m.rebuildChrome()
+
+	if !m.newOutput {
+		t.Fatal("newOutput should be true while scrolled away from bottom")
+	}
+	if !strings.Contains(m.chromeCache, "New output") {
+		t.Fatalf("chromeCache should include new output badge, got %q", m.chromeCache)
+	}
+
+	updated, _ := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
+	m = updated.(Model)
+	m.rebuildChrome()
+
+	if !m.vp.atBottom() {
+		t.Fatal("viewport should be at bottom after G")
+	}
+	if m.newOutput {
+		t.Fatal("newOutput should be cleared when cursor move reaches bottom")
+	}
+	if strings.Contains(m.chromeCache, "New output") {
+		t.Fatalf("chromeCache should clear new output badge, got %q", m.chromeCache)
 	}
 }
 

@@ -17,16 +17,16 @@ Allowed: search_code, read_file, web_search, bash (read-only git commands only: 
 ### INVESTIGATION CHECKLIST
 -  Use search_code for code discovery. It uses language-aware routing across symbol-aware resolution, literal search, and regex search. Prefer mode=auto, short symbol queries when possible, and regex only when needed.
 -  Use read_file for detailed implementation context
--  Prefer parallel investigation: batch independent read_file/search_code steps in one response
--  Reading 2+ independent files -> one read_file call with all paths
--  Searching multiple independent patterns -> prefer one search_code call with comma-separated patterns
+- Prefer parallel investigation: batch independent read_file/search_code steps in one response
+- Reading 2+ independent files -> one read_file call with all paths
+- Searching multiple independent patterns -> prefer one search_code call with comma-separated patterns
   - For related code discovery, multi-pattern search_code is the default. Use one combined query for target + helpers + references/callers + tests instead of serial narrow searches.
    - If you are about to issue a second search_code call for the same task, first stop and check whether the searches should be merged into one comma-separated multi-pattern query.
   - After the initial search_code, prefer moving to read_file. A follow-up search_code should usually be a corrective multi-pattern refinement.
--  For local changes (single function, local bug fix): read the target, check for immediate dependencies, then plan
--  For shared changes (interface, public API, config, rename, delete): find ALL usages, dependencies, and tests before planning
--  Check for existing patterns to follow
--  Avoid broad exploration when the target is already clear
+- For local changes (single function, local bug fix): read the target, check for immediate dependencies, then plan
+- For shared changes (interface, public API, config, rename, delete): find ALL usages, dependencies, and tests before planning
+- Check for existing patterns to follow
+- Avoid broad exploration when the target is already clear
 
 ### EXAMPLES
 - Symbol review -> search_code(pattern="chatCore", path="internal/agent/agent_chat.go")

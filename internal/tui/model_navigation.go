@@ -6,8 +6,6 @@ import (
 	"strings"
 	"time"
 	"unicode"
-
-	"github.com/charmbracelet/lipgloss"
 )
 
 // setTransientStatus は一時通知メッセージを設定する。
@@ -96,6 +94,9 @@ func (m *Model) ensureCursorVisible() {
 	if m.vp.yOffset < 0 {
 		m.vp.yOffset = 0
 	}
+	if m.vp.atBottom() {
+		m.newOutput = false
+	}
 }
 
 func (m *Model) moveCursorTo(line int) {
@@ -143,7 +144,7 @@ func (m Model) maxCursorColForLine(line int) int {
 	if line < 0 || line >= len(m.rawLines) {
 		return 0
 	}
-	width := lipgloss.Width(stripANSI(m.rawLines[line]))
+	width := plainTextDisplayWidth(stripANSI(m.rawLines[line]))
 	if width <= 0 {
 		return 0
 	}

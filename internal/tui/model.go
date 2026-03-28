@@ -25,7 +25,7 @@ var statusHintsNormal = []string{
 	"Esc:NAV • /copy",
 }
 var statusHintsNav = []string{
-	"count+j/k/h/l • w/b/e • 0/^/$ • v:visual • yy:copy • Tab:blocks • q:back",
+	"count+j/k/h/l • w/b/e • 0/^/$ • v:visual • yy:copy • Tab/Shift+Tab:blocks • q:back",
 	"count+j/k • w/b/e • 0/$ • v • yy",
 }
 var statusHintsVisual = []string{
@@ -37,8 +37,8 @@ var statusHintsVisualLine = []string{
 	"-- VISUAL LINE -- y • Esc",
 }
 var statusHintsBlockFocus = []string{
-	"Tab/Enter:toggle • j/k:blocks • y:copy • Esc:unfocus",
-	"Tab • j/k • y • Esc",
+	"Tab/Shift+Tab/j/k/↑/↓:move • Enter:toggle • y:copy • Esc:unfocus",
+	"Tab/Shift+Tab • j/k/↑/↓ • Enter • y • Esc",
 }
 
 const (
@@ -109,6 +109,9 @@ type Model struct {
 	transientStatusUntil time.Time // 一時通知の有効期限
 	lastInterrupt        time.Time
 	streamingActive      bool
+	streamCursorCol      int
+	streamActiveANSI     string
+	streamPendingANSI    string
 }
 
 // NewModel は TUI Model を作成する。
@@ -210,27 +213,42 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case AppendMessageMsg:
 		m.streamingActive = false
+		m.streamCursorCol = 0
+		m.streamActiveANSI = ""
+		m.streamPendingANSI = ""
 		cmds = append(cmds, m.appendMessage(msg.Message))
 
 	case AppendToolResultMsg:
 		m.streamingActive = false
+		m.streamCursorCol = 0
+		m.streamActiveANSI = ""
+		m.streamPendingANSI = ""
 		cmds = append(cmds, m.appendToolResult(msg.Tool))
 
 	case StreamTextMsg:
 		cmds = append(cmds, m.appendStreamText(msg.Text))
 		if msg.Done {
 			m.streamingActive = false
+			m.streamCursorCol = 0
+			m.streamActiveANSI = ""
+			m.streamPendingANSI = ""
 			m.statusLine = m.agent.GetStatusLine()
 			m.chromeDirty = true
 		}
 
 	case UpdateStatusMsg:
 		m.streamingActive = false
+		m.streamCursorCol = 0
+		m.streamActiveANSI = ""
+		m.streamPendingANSI = ""
 		m.statusLine = msg.Line
 		m.chromeDirty = true
 
 	case AgentDoneMsg:
 		m.streamingActive = false
+		m.streamCursorCol = 0
+		m.streamActiveANSI = ""
+		m.streamPendingANSI = ""
 		m.statusLine = m.agent.GetStatusLine()
 		m.chromeDirty = true
 

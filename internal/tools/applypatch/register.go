@@ -2,7 +2,6 @@ package applypatch
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/tools"
@@ -154,14 +153,8 @@ func showApplyPatchPreview(out common.Output, patchText string, hunks []Hunk) {
 		return
 	}
 
-	previews, err := BuildPatchPreview(patchText, os.ReadFile)
-	if err != nil {
-		showApplyPatchPreviewFallback(out, patchText, hunks)
-		return
-	}
-
 	showApplyPatchHeader(out, len(hunks))
-	ui.ShowPatchPreview(out.StdoutWriter(), previews)
+	showApplyPatchPreviewBody(out, patchText, hunks)
 }
 
 func showApplyPatchHeader(out common.Output, operations int) {
@@ -171,8 +164,7 @@ func showApplyPatchHeader(out common.Output, operations int) {
 	out.Println()
 }
 
-func showApplyPatchPreviewFallback(out common.Output, patchText string, hunks []Hunk) {
-	showApplyPatchHeader(out, len(hunks))
+func showApplyPatchPreviewBody(out common.Output, patchText string, hunks []Hunk) {
 	ui.ShowPatchToWriter(out.StdoutWriter(), patchText)
 
 	counts := countLinesPerPath(patchText)

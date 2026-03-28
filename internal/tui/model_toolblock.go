@@ -154,4 +154,10 @@ func (m *Model) scrollToBlock(blockIdx int) {
 		target = maxOffset
 	}
 	m.vp.yOffset = target
+	if m.vp.atBottom() {
+		if m.newOutput {
+			m.newOutput = false
+			m.chromeDirty = true
+		}
+	}
 }

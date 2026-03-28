@@ -2,6 +2,8 @@ package tui
 
 import (
 	"strings"
+
+	"github.com/rivo/uniseg"
 )
 
 // Layout engine processes raw lines to visual rows.
@@ -72,19 +74,52 @@ func wrapLineToVisualRows(line string, rawIdx int, maxWidth int) []VisualRow {
 		prefixWidth = 0
 	}
 
-	for _, r := range line {
-		if r == '\033' {
+	flushRow := func() {
+		if currentANSI.Len() > 0 {
+			currentContent.WriteString("\033[0m")
+		}
+		pw := 0
+		if subRowIdx > 0 {
+			pw = prefixWidth
+		}
+		rows = append(rows, VisualRow{
+			RawLineIdx:  rawIdx,
+			SubRowIdx:   subRowIdx,
+			Content:     currentContent.String(),
+			Width:       currentWidth,
+			PrefixWidth: pw,
+		})
+		subRowIdx++
+		currentContent.Reset()
+		currentWidth = 0
+		if currentANSI.Len() > 0 {
+			currentContent.WriteString(currentANSI.String())
+		}
+		if subRowIdx > 0 && prefix != "" {
+			currentContent.WriteString(prefix)
+			currentWidth += prefixWidth
+		}
+	}
+
+	gr := uniseg.NewGraphemes(line)
+	for gr.Next() {
+		cluster := gr.Str()
+		firstRune := gr.Runes()[0]
+
+		// ANSIエスケープシーケンスの処理
+		// エスケープ文字はASCIIなので常に独立したgraphemeクラスタになる
+		if firstRune == '\033' {
 			inEscape = true
-			currentContent.WriteRune(r)
-			activeANSI.WriteRune(r)
+			currentContent.WriteString(cluster)
+			activeANSI.WriteString(cluster)
 			continue
 		}
 		if inEscape {
-			currentContent.WriteRune(r)
-			activeANSI.WriteRune(r)
-			if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') {
+			currentContent.WriteString(cluster)
+			activeANSI.WriteString(cluster)
+			if (firstRune >= 'A' && firstRune <= 'Z') || (firstRune >= 'a' && firstRune <= 'z') {
 				inEscape = false
-				if r == 'm' {
+				if firstRune == 'm' {
 					code := activeANSI.String()
 					if code == "\033[0m" {
 						currentANSI.Reset()
@@ -97,35 +132,34 @@ func wrapLineToVisualRows(line string, rawIdx int, maxWidth int) []VisualRow {
 			continue
 		}
 
-		w := runeWidth(r)
-		if currentWidth+w > maxWidth && currentWidth > 0 {
-			if currentANSI.Len() > 0 {
-				currentContent.WriteString("\033[0m")
+		if cluster == "\t" {
+			tabRemaining := visualTabWidth
+			for tabRemaining > 0 {
+				if currentWidth >= maxWidth && currentWidth > 0 {
+					flushRow()
+				}
+				room := maxWidth - currentWidth
+				if room <= 0 {
+					room = maxWidth
+				}
+				chunk := min(tabRemaining, room)
+				currentContent.WriteString(strings.Repeat(" ", chunk))
+				currentWidth += chunk
+				tabRemaining -= chunk
+
+				if tabRemaining > 0 && currentWidth >= maxWidth {
+					flushRow()
+				}
 			}
-			pw := 0
-			if subRowIdx > 0 {
-				pw = prefixWidth
-			}
-			rows = append(rows, VisualRow{
-				RawLineIdx:  rawIdx,
-				SubRowIdx:   subRowIdx,
-				Content:     currentContent.String(),
-				Width:       currentWidth,
-				PrefixWidth: pw,
-			})
-			subRowIdx++
-			currentContent.Reset()
-			currentWidth = 0
-			if currentANSI.Len() > 0 {
-				currentContent.WriteString(currentANSI.String())
-			}
-			if subRowIdx > 0 && prefix != "" {
-				currentContent.WriteString(prefix)
-				currentWidth += prefixWidth
-			}
+			continue
 		}
 
-		currentContent.WriteRune(r)
+		w := plainTextDisplayWidth(cluster)
+		if currentWidth+w > maxWidth && currentWidth > 0 {
+			flushRow()
+		}
+
+		currentContent.WriteString(cluster)
 		currentWidth += w
 	}
 

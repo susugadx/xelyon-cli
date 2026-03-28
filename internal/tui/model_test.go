@@ -395,6 +395,493 @@ func TestModel_StreamTextMergesChunksAcrossMessages(t *testing.T) {
 	}
 }
 
+func TestModel_StreamTextInitialMultiLineChunkStartsEachLineAtColumnZero(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 20, Height: 8})
+	m = updated.(Model)
+
+	updated, _ = m.Update(StreamTextMsg{Text: "foo\nbar", Done: true})
+	m = updated.(Model)
+
+	if len(m.rawLines) != 2 {
+		t.Fatalf("rawLines len = %d, want 2", len(m.rawLines))
+	}
+	if m.rawLines[0] != "foo" || m.rawLines[1] != "bar" {
+		t.Fatalf("rawLines = %#v, want [foo bar]", m.rawLines)
+	}
+}
+
+func TestModel_AppendMessagePreservesCRLFSeparatedLines(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 20, Height: 8})
+	m = updated.(Model)
+
+	updated, _ = m.Update(AppendMessageMsg{
+		Message: ChatMessage{Role: "assistant", Content: "first\r\nsecond\r\nthird"},
+	})
+	m = updated.(Model)
+
+	if len(m.rawLines) != 3 {
+		t.Fatalf("rawLines len = %d, want 3", len(m.rawLines))
+	}
+	want := []string{"first", "second", "third"}
+	for i, line := range want {
+		if m.rawLines[i] != line {
+			t.Fatalf("rawLines[%d] = %q, want %q", i, m.rawLines[i], line)
+		}
+	}
+	if strings.Contains(m.viewportView(), "\r") {
+		t.Fatalf("viewportView should not contain carriage return, got %q", m.viewportView())
+	}
+}
+
+func TestModel_StreamTextCarriageReturnOverwritesLine(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 30, Height: 8})
+	m = updated.(Model)
+
+	updated, _ = m.Update(StreamTextMsg{Text: "progress 10%", Done: false})
+	m = updated.(Model)
+	updated, _ = m.Update(StreamTextMsg{Text: "\rprogress 20%", Done: true})
+	m = updated.(Model)
+
+	if len(m.rawLines) != 1 {
+		t.Fatalf("rawLines len = %d, want 1", len(m.rawLines))
+	}
+	if m.rawLines[0] != "progress 20%" {
+		t.Fatalf("rawLines[0] = %q, want %q", m.rawLines[0], "progress 20%")
+	}
+	view := m.viewportView()
+	if strings.Contains(view, "\r") {
+		t.Fatalf("viewportView should not contain carriage return, got %q", view)
+	}
+	if !strings.Contains(stripANSI(view), "progress 20%") {
+		t.Fatalf("viewportView should render overwritten stream text, got %q", view)
+	}
+}
+
+func TestModel_StreamTextCarriageReturnOverwritesLineAcrossChunks(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 30, Height: 8})
+	m = updated.(Model)
+
+	updated, _ = m.Update(StreamTextMsg{Text: "progress 10%\r", Done: false})
+	m = updated.(Model)
+	updated, _ = m.Update(StreamTextMsg{Text: "progress 20%", Done: true})
+	m = updated.(Model)
+
+	if len(m.rawLines) != 1 {
+		t.Fatalf("rawLines len = %d, want 1", len(m.rawLines))
+	}
+	if m.rawLines[0] != "progress 20%" {
+		t.Fatalf("rawLines[0] = %q, want %q", m.rawLines[0], "progress 20%")
+	}
+	view := m.viewportView()
+	if strings.Contains(view, "\r") {
+		t.Fatalf("viewportView should not contain carriage return, got %q", view)
+	}
+	if !strings.Contains(stripANSI(view), "progress 20%") {
+		t.Fatalf("viewportView should render overwritten stream text, got %q", view)
+	}
+}
+
+func TestModel_StreamTextCarriageReturnShortRewriteKeepsTrailingText(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 30, Height: 8})
+	m = updated.(Model)
+
+	updated, _ = m.Update(StreamTextMsg{Text: "abcdef", Done: false})
+	m = updated.(Model)
+	updated, _ = m.Update(StreamTextMsg{Text: "\rxy", Done: true})
+	m = updated.(Model)
+
+	if len(m.rawLines) != 1 {
+		t.Fatalf("rawLines len = %d, want 1", len(m.rawLines))
+	}
+	if m.rawLines[0] != "xycdef" {
+		t.Fatalf("rawLines[0] = %q, want %q", m.rawLines[0], "xycdef")
+	}
+}
+
+func TestModel_StreamTextCarriageReturnShortRewriteKeepsTrailingTextAcrossChunks(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 30, Height: 8})
+	m = updated.(Model)
+
+	updated, _ = m.Update(StreamTextMsg{Text: "abcdef\r", Done: false})
+	m = updated.(Model)
+	updated, _ = m.Update(StreamTextMsg{Text: "xy", Done: true})
+	m = updated.(Model)
+
+	if len(m.rawLines) != 1 {
+		t.Fatalf("rawLines len = %d, want 1", len(m.rawLines))
+	}
+	if m.rawLines[0] != "xycdef" {
+		t.Fatalf("rawLines[0] = %q, want %q", m.rawLines[0], "xycdef")
+	}
+}
+
+func TestModel_StreamTextCarriageReturnRewritePreservesANSISequences(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 40, Height: 8})
+	m = updated.(Model)
+
+	updated, _ = m.Update(StreamTextMsg{Text: "\033[31mabcdef\033[0m", Done: false})
+	m = updated.(Model)
+	updated, _ = m.Update(StreamTextMsg{Text: "\rxy", Done: true})
+	m = updated.(Model)
+
+	if len(m.rawLines) != 1 {
+		t.Fatalf("rawLines len = %d, want 1", len(m.rawLines))
+	}
+	if !strings.Contains(m.rawLines[0], "\033[31m") || !strings.Contains(m.rawLines[0], "\033[0m") {
+		t.Fatalf("rawLines[0] should preserve ANSI sequences, got %q", m.rawLines[0])
+	}
+	if got := stripANSI(m.rawLines[0]); got != "xycdef" {
+		t.Fatalf("stripped raw line = %q, want %q", got, "xycdef")
+	}
+}
+
+func TestModel_StreamTextCarriageReturnRewriteRestoresSuffixANSIStyle(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 40, Height: 8})
+	m = updated.(Model)
+
+	updated, _ = m.Update(StreamTextMsg{Text: "\033[31mabcdef\033[0m", Done: false})
+	m = updated.(Model)
+	updated, _ = m.Update(StreamTextMsg{Text: "\r\033[32mxy", Done: true})
+	m = updated.(Model)
+
+	if got := stripANSI(m.rawLines[0]); got != "xycdef" {
+		t.Fatalf("stripped raw line = %q, want %q", got, "xycdef")
+	}
+	if !strings.Contains(m.rawLines[0], "\033[32mx") {
+		t.Fatalf("overwritten prefix should use new ANSI style, got %q", m.rawLines[0])
+	}
+	if !strings.Contains(m.rawLines[0], "\033[31mc") {
+		t.Fatalf("untouched suffix should restore original ANSI style, got %q", m.rawLines[0])
+	}
+}
+
+func TestModel_StreamTextCarriageReturnRewriteKeepsTabAlignedSuffix(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 40, Height: 8})
+	m = updated.(Model)
+
+	updated, _ = m.Update(StreamTextMsg{Text: "a\tb", Done: false})
+	m = updated.(Model)
+	updated, _ = m.Update(StreamTextMsg{Text: "\rxy", Done: true})
+	m = updated.(Model)
+
+	if got := stripANSI(m.rawLines[0]); got != "xy   b" {
+		t.Fatalf("stripped raw line = %q, want %q", got, "xy   b")
+	}
+}
+
+func TestModel_StreamTextCarriageReturnRewriteKeepsWideCharSuffix(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 40, Height: 8})
+	m = updated.(Model)
+
+	updated, _ = m.Update(StreamTextMsg{Text: "あい", Done: false})
+	m = updated.(Model)
+	updated, _ = m.Update(StreamTextMsg{Text: "\rxy", Done: true})
+	m = updated.(Model)
+
+	if got := stripANSI(m.rawLines[0]); got != "xyい" {
+		t.Fatalf("stripped raw line = %q, want %q", got, "xyい")
+	}
+}
+
+func TestModel_StreamTextPreservesSplitANSISequencesAcrossChunks(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 40, Height: 8})
+	m = updated.(Model)
+
+	updated, _ = m.Update(StreamTextMsg{Text: "\033[31", Done: false})
+	m = updated.(Model)
+	if len(m.rawLines) != 1 {
+		t.Fatalf("rawLines len after first chunk = %d, want 1", len(m.rawLines))
+	}
+	if m.rawLines[0] != "" {
+		t.Fatalf("rawLines[0] after partial ANSI = %q, want empty", m.rawLines[0])
+	}
+
+	updated, _ = m.Update(StreamTextMsg{Text: "mred", Done: true})
+	m = updated.(Model)
+
+	if len(m.rawLines) != 1 {
+		t.Fatalf("rawLines len after second chunk = %d, want 1", len(m.rawLines))
+	}
+	if got := stripANSI(m.rawLines[0]); got != "red" {
+		t.Fatalf("stripped raw line = %q, want %q", got, "red")
+	}
+	if !strings.Contains(m.rawLines[0], "\033[31m") {
+		t.Fatalf("rawLines[0] should contain combined ANSI sequence, got %q", m.rawLines[0])
+	}
+}
+
+func TestModel_StreamTextPreservesTabsInRawLines(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 24, Height: 8})
+	m = updated.(Model)
+
+	updated, _ = m.Update(StreamTextMsg{Text: "a\tb", Done: true})
+	m = updated.(Model)
+
+	if len(m.rawLines) != 1 {
+		t.Fatalf("rawLines len = %d, want 1", len(m.rawLines))
+	}
+	if m.rawLines[0] != "a\tb" {
+		t.Fatalf("rawLines[0] = %q, want %q", m.rawLines[0], "a\\tb")
+	}
+	if err := m.copyRawRangePlain(0, 0); err != nil {
+		t.Fatalf("copyRawRangePlain() error = %v", err)
+	}
+	if len(agent.copyTexts) != 1 || agent.copyTexts[0] != "a\tb" {
+		t.Fatalf("copyTexts = %#v, want [a\\tb]", agent.copyTexts)
+	}
+}
+
+func TestModel_StreamTextPreservesActiveANSIStyleAcrossChunks(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 40, Height: 8})
+	m = updated.(Model)
+
+	updated, _ = m.Update(StreamTextMsg{Text: "\033[31mred", Done: false})
+	m = updated.(Model)
+	updated, _ = m.Update(StreamTextMsg{Text: "more", Done: true})
+	m = updated.(Model)
+
+	if got := stripANSI(m.rawLines[0]); got != "redmore" {
+		t.Fatalf("stripped raw line = %q, want %q", got, "redmore")
+	}
+	if !strings.Contains(m.rawLines[0], "\033[31mredmore") {
+		t.Fatalf("active ANSI style should continue across chunks, got %q", m.rawLines[0])
+	}
+}
+
+func TestModel_StreamTextPreservesActiveANSIStyleAcrossNewlines(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 40, Height: 8})
+	m = updated.(Model)
+
+	updated, _ = m.Update(StreamTextMsg{Text: "\033[31mfoo\nbar", Done: true})
+	m = updated.(Model)
+
+	if len(m.rawLines) != 2 {
+		t.Fatalf("rawLines len = %d, want 2", len(m.rawLines))
+	}
+	if got := stripANSI(m.rawLines[1]); got != "bar" {
+		t.Fatalf("stripped second line = %q, want %q", got, "bar")
+	}
+	if !strings.Contains(m.rawLines[1], "\033[31mbar") {
+		t.Fatalf("second line should keep active ANSI style, got %q", m.rawLines[1])
+	}
+}
+
+func TestModel_StreamTextDoesNotPersistNonSGRANSIState(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 40, Height: 8})
+	m = updated.(Model)
+
+	updated, _ = m.Update(StreamTextMsg{Text: "\033[31mfoo\033[K", Done: false})
+	m = updated.(Model)
+	updated, _ = m.Update(StreamTextMsg{Text: "bar", Done: true})
+	m = updated.(Model)
+
+	if got := stripANSI(m.rawLines[0]); got != "foobar" {
+		t.Fatalf("stripped raw line = %q, want %q", got, "foobar")
+	}
+	if strings.Contains(m.rawLines[0], "\033[K") {
+		t.Fatalf("non-SGR ANSI should not be persisted into active style replay, got %q", m.rawLines[0])
+	}
+	if !strings.Contains(m.rawLines[0], "\033[31mfoobar") {
+		t.Fatalf("SGR style should continue while non-SGR control is ignored, got %q", m.rawLines[0])
+	}
+}
+
+func TestModel_StreamTextCarriageReturnRewriteTreatsCombiningClusterAsSingleCell(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 40, Height: 8})
+	m = updated.(Model)
+
+	updated, _ = m.Update(StreamTextMsg{Text: "e\u0301x", Done: false})
+	m = updated.(Model)
+	updated, _ = m.Update(StreamTextMsg{Text: "\rz", Done: true})
+	m = updated.(Model)
+
+	if got := stripANSI(m.rawLines[0]); got != "zx" {
+		t.Fatalf("stripped raw line = %q, want %q", got, "zx")
+	}
+}
+
+func TestModel_StreamTextSplitCombiningMarkDoesNotPanicAndStaysCombined(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 40, Height: 8})
+	m = updated.(Model)
+
+	updated, _ = m.Update(StreamTextMsg{Text: "e", Done: false})
+	m = updated.(Model)
+	updated, _ = m.Update(StreamTextMsg{Text: "\u0301", Done: true})
+	m = updated.(Model)
+
+	if len(m.rawLines) != 1 {
+		t.Fatalf("rawLines len = %d, want 1", len(m.rawLines))
+	}
+	if got := m.rawLines[0]; got != "e\u0301" {
+		t.Fatalf("rawLines[0] = %q, want %q", got, "e\u0301")
+	}
+	if got := stripANSI(m.rawLines[0]); got != "e\u0301" {
+		t.Fatalf("stripped raw line = %q, want %q", got, "e\u0301")
+	}
+}
+
+func TestPlainTextDisplayWidthMatchesLipglossForCombiningAndEmoji(t *testing.T) {
+	testCases := []string{
+		"e\u0301",
+		"👨‍👩‍👧‍👦",
+		"a\te\u0301",
+	}
+
+	for _, tc := range testCases {
+		want := lipgloss.Width(strings.ReplaceAll(tc, "\t", strings.Repeat(" ", visualTabWidth)))
+		if got := plainTextDisplayWidth(tc); got != want {
+			t.Fatalf("plainTextDisplayWidth(%q) = %d, want %d", tc, got, want)
+		}
+	}
+}
+
+func TestModel_AppendMessagePreservesTabsInRawLines(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 24, Height: 8})
+	m = updated.(Model)
+
+	updated, _ = m.Update(AppendMessageMsg{
+		Message: ChatMessage{Role: "assistant", Content: "a\tb"},
+	})
+	m = updated.(Model)
+
+	if len(m.rawLines) != 1 {
+		t.Fatalf("rawLines len = %d, want 1", len(m.rawLines))
+	}
+	if m.rawLines[0] != "a\tb" {
+		t.Fatalf("rawLines[0] = %q, want %q", m.rawLines[0], "a\tb")
+	}
+	if got := stripANSI(m.viewportView()); !strings.Contains(got, "a    b") {
+		t.Fatalf("viewportView should expand tabs for display, got %q", got)
+	}
+}
+
+func TestLayout_TabWrapStaysWithinNarrowViewportWidth(t *testing.T) {
+	testCases := []struct {
+		width    int
+		wantRows int
+	}{
+		{width: 1, wantRows: 4},
+		{width: 2, wantRows: 2},
+		{width: 3, wantRows: 2},
+	}
+
+	for _, tc := range testCases {
+		layout := BuildLayout([]string{"\t"}, tc.width)
+		if len(layout.Rows) != tc.wantRows {
+			t.Fatalf("width=%d rows=%d, want %d", tc.width, len(layout.Rows), tc.wantRows)
+		}
+		total := 0
+		for i, row := range layout.Rows {
+			if row.Width > tc.width {
+				t.Fatalf("width=%d row[%d].Width=%d exceeds viewport width", tc.width, i, row.Width)
+			}
+			plainWidth := lipgloss.Width(stripANSI(row.Content))
+			if plainWidth > tc.width {
+				t.Fatalf("width=%d row[%d] content width=%d exceeds viewport width", tc.width, i, plainWidth)
+			}
+			total += row.Width
+		}
+		if total != visualTabWidth {
+			t.Fatalf("width=%d total rendered tab width=%d, want %d", tc.width, total, visualTabWidth)
+		}
+	}
+}
+
+func TestLayout_CombiningCharacterWidth(t *testing.T) {
+	// e\u0301 (e + combining acute accent) は1つのgraphemeクラスタとして幅1になるべき
+	line := "e\u0301e\u0301e\u0301" // 3 grapheme clusters, each width 1
+	layout := BuildLayout([]string{line}, 3)
+	if len(layout.Rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(layout.Rows))
+	}
+	if layout.Rows[0].Width != 3 {
+		t.Fatalf("expected width 3, got %d", layout.Rows[0].Width)
+	}
+
+	// 幅2でラップすると2行になるべき
+	layout = BuildLayout([]string{line}, 2)
+	if len(layout.Rows) != 2 {
+		t.Fatalf("expected 2 rows for width=2, got %d", len(layout.Rows))
+	}
+}
+
+func TestModel_CopyRawRangePreservesTabs(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 18, Height: 8})
+	m = updated.(Model)
+
+	updated, _ = m.Update(AppendMessageMsg{
+		Message: ChatMessage{Role: "assistant", Content: "line1\tvalue"},
+	})
+	m = updated.(Model)
+
+	if err := m.copyRawRangePlain(0, 0); err != nil {
+		t.Fatalf("copyRawRangePlain() error = %v", err)
+	}
+	if len(agent.copyTexts) != 1 {
+		t.Fatalf("copyTexts len = %d, want 1", len(agent.copyTexts))
+	}
+	if agent.copyTexts[0] != "line1\tvalue" {
+		t.Fatalf("copied text = %q, want %q", agent.copyTexts[0], "line1\tvalue")
+	}
+}
+
 func TestModel_UpdateKeyMsgRebuildsChrome(t *testing.T) {
 	agent := &stubAgent{statusLine: "ready"}
 	m := newModelWithViewport(agent)
@@ -429,6 +916,54 @@ func TestModel_StatusBarClampedToWidth(t *testing.T) {
 	}
 }
 
+func TestModel_RebuildChromeSanitizesMultilineStatusAndTransient(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+	m.ready = true
+	m.width = 40
+	m.height = 8
+	m.vp = lightViewport{width: 40, height: 4}
+	m.padLineCache = fillANSITextWidth("", m.width, "\033[48;5;236m")
+	m.statusLine = "phase1\rphase2\nphase3\tok"
+	m.transientStatus = "copy\nok\r!"
+	m.transientStatusUntil = time.Now().Add(1 * time.Second)
+	m.rebuildChrome()
+
+	lines := strings.Split(m.chromeCache, "\n")
+	if len(lines) != 4 {
+		t.Fatalf("chromeCache lines = %d, want 4; cache=%q", len(lines), m.chromeCache)
+	}
+	if got := lipgloss.Width(lines[3]); got != m.width {
+		t.Fatalf("status line width = %d, want %d; line=%q", got, m.width, lines[3])
+	}
+	plain := stripANSI(lines[3])
+	if !strings.Contains(plain, "phase1 phase2 phase3 ok") {
+		t.Fatalf("status line should be flattened to single line, got %q", plain)
+	}
+	if strings.ContainsAny(plain, "\r\n\t") {
+		t.Fatalf("status line should not contain control line-break chars, got %q", plain)
+	}
+}
+
+func TestSanitizeSingleLineANSI_CollapsesWhitespaceAcrossANSIBoundaries(t *testing.T) {
+	testCases := []struct {
+		input string
+		want  string
+	}{
+		{input: "a\n\033[31m\nb", want: "a \033[31mb"},
+		{input: "a\t\033[0m\tb", want: "a \033[0mb"},
+	}
+
+	for _, tc := range testCases {
+		if got := sanitizeSingleLineANSI(tc.input); got != tc.want {
+			t.Fatalf("sanitizeSingleLineANSI(%q) = %q, want %q", tc.input, got, tc.want)
+		}
+		if got := stripANSI(sanitizeSingleLineANSI(tc.input)); got != "a b" {
+			t.Fatalf("stripped sanitizeSingleLineANSI(%q) = %q, want %q", tc.input, got, "a b")
+		}
+	}
+}
+
 func TestTruncateWithANSI_AppendsResetWhenTruncated(t *testing.T) {
 	got := truncateWithANSI("\033[31mabcdef", 3)
 
@@ -437,6 +972,23 @@ func TestTruncateWithANSI_AppendsResetWhenTruncated(t *testing.T) {
 	}
 	if width := lipgloss.Width(got); width != 3 {
 		t.Fatalf("rendered width = %d, want 3", width)
+	}
+}
+
+func TestFillANSITextWidth_ReappliesBackgroundAfterBgResetCodes(t *testing.T) {
+	bg := "\033[48;5;236m"
+	line := "\033[32mok\033[0m\033[49m"
+	got := fillANSITextWidth(line, 8, bg)
+
+	if width := lipgloss.Width(got); width != 8 {
+		t.Fatalf("rendered width = %d, want 8; line=%q", width, got)
+	}
+	plain := stripANSI(got)
+	if plain != "ok      " {
+		t.Fatalf("plain text = %q, want %q", plain, "ok      ")
+	}
+	if !strings.Contains(got, "\033[0m"+bg+" ") {
+		t.Fatalf("padding should be preceded by background reapply, got %q", got)
 	}
 }
 

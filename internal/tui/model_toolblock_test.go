@@ -150,25 +150,203 @@ func TestToolBlock_FocusIndicatorReflected(t *testing.T) {
 	}
 }
 
-func TestToolBlock_TabKeyEntersFocusAndToggles(t *testing.T) {
+func TestToolBlock_TabKeyMovesFocusAndEnterToggles(t *testing.T) {
 	m := newModelWithViewport(&stubAgent{statusLine: "ready"})
 	m.navigationMode = true
 
 	m.appendToolResult(ToolResult{
-		Name: "search_code", Summary: "🔍 search_code: test",
-		Detail: "match1\nmatch2", Collapsed: true,
+		Name: "read_file", Summary: "first",
+		Detail: "match1", Collapsed: true,
+	})
+	m.appendToolResult(ToolResult{
+		Name: "search_code", Summary: "second",
+		Detail: "match2", Collapsed: true,
 	})
 
 	updated, _ := m.handleNavigationKey(tea.KeyMsg{Type: tea.KeyTab})
 	m = updated.(Model)
-	if m.focusedBlock != 0 {
-		t.Fatalf("after first Tab: focusedBlock = %d, want 0", m.focusedBlock)
+	if m.focusedBlock != 1 {
+		t.Fatalf("after first Tab: focusedBlock = %d, want 1", m.focusedBlock)
 	}
 
 	updated, _ = m.handleNavigationKey(tea.KeyMsg{Type: tea.KeyTab})
 	m = updated.(Model)
+	if m.focusedBlock != 1 {
+		t.Fatalf("after second Tab at edge: focusedBlock = %d, want 1", m.focusedBlock)
+	}
+	if !m.toolBlocks[1].tool.Collapsed {
+		t.Fatal("Tab should not toggle block collapse state")
+	}
+
+	updated, _ = m.handleNavigationKey(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+	if m.toolBlocks[1].tool.Collapsed {
+		t.Fatal("Enter should toggle focused block")
+	}
+}
+
+func TestToolBlock_EnterFallbackTogglesFocusedBlock(t *testing.T) {
+	m := newModelWithViewport(&stubAgent{statusLine: "ready"})
+	m.navigationMode = true
+
+	m.appendToolResult(ToolResult{
+		Name: "read_file", Summary: "first",
+		Detail: "match1", Collapsed: true,
+	})
+	m.setBlockFocus(0)
+
+	updated, _ := m.handleNavigationKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'\r'}})
+	m = updated.(Model)
+
 	if m.toolBlocks[0].tool.Collapsed {
-		t.Fatal("after second Tab: block should be expanded")
+		t.Fatal("Enter fallback should toggle focused block")
+	}
+}
+
+func TestToolBlock_ShiftTabMovesFocusBackward(t *testing.T) {
+	m := newModelWithViewport(&stubAgent{statusLine: "ready"})
+	m.navigationMode = true
+
+	m.appendToolResult(ToolResult{Name: "a", Summary: "first", Detail: "a", Collapsed: true})
+	m.appendToolResult(ToolResult{Name: "b", Summary: "second", Detail: "b", Collapsed: true})
+
+	updated, _ := m.handleNavigationKey(tea.KeyMsg{Type: tea.KeyShiftTab})
+	m = updated.(Model)
+	if m.focusedBlock != 0 {
+		t.Fatalf("after first Shift+Tab: focusedBlock = %d, want 0", m.focusedBlock)
+	}
+
+	updated, _ = m.handleNavigationKey(tea.KeyMsg{Type: tea.KeyTab})
+	m = updated.(Model)
+	if m.focusedBlock != 1 {
+		t.Fatalf("after Tab: focusedBlock = %d, want 1", m.focusedBlock)
+	}
+
+	updated, _ = m.handleNavigationKey(tea.KeyMsg{Type: tea.KeyShiftTab})
+	m = updated.(Model)
+	if m.focusedBlock != 0 {
+		t.Fatalf("after second Shift+Tab: focusedBlock = %d, want 0", m.focusedBlock)
+	}
+}
+
+func TestToolBlock_FocusedBlockMovesWithJKAndArrows(t *testing.T) {
+	m := newModelWithViewport(&stubAgent{statusLine: "ready"})
+	m.navigationMode = true
+
+	m.appendToolResult(ToolResult{Name: "a", Summary: "first", Detail: "a", Collapsed: true})
+	m.appendToolResult(ToolResult{Name: "b", Summary: "second", Detail: "b", Collapsed: true})
+	m.appendToolResult(ToolResult{Name: "c", Summary: "third", Detail: "c", Collapsed: true})
+
+	updated, _ := m.handleNavigationKey(tea.KeyMsg{Type: tea.KeyTab})
+	m = updated.(Model)
+	if m.focusedBlock != 2 {
+		t.Fatalf("after Tab: focusedBlock = %d, want 2", m.focusedBlock)
+	}
+
+	updated, _ = m.handleNavigationKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	m = updated.(Model)
+	if m.focusedBlock != 1 {
+		t.Fatalf("after k: focusedBlock = %d, want 1", m.focusedBlock)
+	}
+
+	updated, _ = m.handleNavigationKey(tea.KeyMsg{Type: tea.KeyUp})
+	m = updated.(Model)
+	if m.focusedBlock != 0 {
+		t.Fatalf("after ↑: focusedBlock = %d, want 0", m.focusedBlock)
+	}
+
+	updated, _ = m.handleNavigationKey(tea.KeyMsg{Type: tea.KeyDown})
+	m = updated.(Model)
+	if m.focusedBlock != 1 {
+		t.Fatalf("after ↓: focusedBlock = %d, want 1", m.focusedBlock)
+	}
+
+	updated, _ = m.handleNavigationKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m = updated.(Model)
+	if m.focusedBlock != 2 {
+		t.Fatalf("after j: focusedBlock = %d, want 2", m.focusedBlock)
+	}
+}
+
+func TestToolBlock_TabFocusLastBlockClearsNewOutputAtBottom(t *testing.T) {
+	m := NewModel(&stubAgent{statusLine: "ready"}, "")
+	m.ready = true
+	m.width = 20
+	m.height = 8
+	m.vp = lightViewport{width: 20, height: 4}
+	m.navigationMode = true
+
+	for i := 0; i < 20; i++ {
+		m.appendContentLines(fmt.Sprintf("line-%d", i))
+	}
+	m.appendToolResult(ToolResult{Name: "tool", Summary: "last", Detail: "d", Collapsed: true})
+
+	m.vp.gotoTop()
+	m.newOutput = true
+	m.chromeDirty = true
+	m.rebuildChrome()
+	if !strings.Contains(m.chromeCache, "↓ New") {
+		t.Fatalf("chromeCache should include new output badge before focus jump, got %q", m.chromeCache)
+	}
+
+	updated, _ := m.handleNavigationKey(tea.KeyMsg{Type: tea.KeyTab})
+	m = updated.(Model)
+	m.rebuildChrome()
+
+	if !m.vp.atBottom() {
+		t.Fatal("viewport should be at bottom after focusing the last tool block")
+	}
+	if m.newOutput {
+		t.Fatal("newOutput should be cleared when block focus jump reaches bottom")
+	}
+	if strings.Contains(m.chromeCache, "↓ New") {
+		t.Fatalf("chromeCache should clear new output badge after focus jump, got %q", m.chromeCache)
+	}
+}
+
+func TestToolBlock_JMoveFocusClearsNewOutputBadgeInChrome(t *testing.T) {
+	m := NewModel(&stubAgent{statusLine: "ready"}, "")
+	m.ready = true
+	m.width = 20
+	m.height = 8
+	m.vp = lightViewport{width: 20, height: 4}
+	m.navigationMode = true
+
+	for i := 0; i < 20; i++ {
+		m.appendContentLines(fmt.Sprintf("line-%d", i))
+	}
+	for i := 0; i < 10; i++ {
+		m.appendToolResult(ToolResult{
+			Name:      fmt.Sprintf("tool-%d", i),
+			Summary:   fmt.Sprintf("block-%d", i),
+			Detail:    "x",
+			Collapsed: true,
+		})
+	}
+
+	m.vp.gotoTop()
+	m.newOutput = true
+	m.setBlockFocus(7)
+	if m.vp.atBottom() {
+		t.Fatal("precondition failed: focus should not be at bottom before j move")
+	}
+	m.chromeDirty = true
+	m.rebuildChrome()
+	if !strings.Contains(m.chromeCache, "↓ New") {
+		t.Fatalf("chromeCache should include new output badge before j move, got %q", m.chromeCache)
+	}
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m = updated.(Model)
+
+	if !m.vp.atBottom() {
+		t.Fatal("viewport should reach bottom after moving focus to last block")
+	}
+	if m.newOutput {
+		t.Fatal("newOutput should be cleared after j move reaches bottom")
+	}
+	if strings.Contains(m.chromeCache, "↓ New") {
+		t.Fatalf("chromeCache should clear new output badge after j move, got %q", m.chromeCache)
 	}
 }
 

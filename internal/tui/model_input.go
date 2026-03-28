@@ -112,6 +112,24 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // handleNavigationKey はナビゲーションモードのキー処理。
 func (m Model) handleNavigationKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if isEnterKey(msg) {
+		// ブロックフォーカス中 → 折りたたみトグル
+		if m.focusedBlock >= 0 && m.focusedBlock < len(m.toolBlocks) {
+			m.toggleToolBlock(m.focusedBlock)
+			return m, nil
+		}
+		// NAVモード終了
+		m.clearVisualSelection()
+		if m.focusedBlock >= 0 {
+			m.clearBlockFocus()
+		}
+		m.navigationMode = false
+		m.resetNavPending()
+		m.textInput.Focus()
+		m.chromeDirty = true
+		return m, nil
+	}
+
 	switch msg.Type {
 	case tea.KeyEsc:
 		if m.visualMode != visualModeOff {
@@ -132,34 +150,44 @@ func (m Model) handleNavigationKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.textInput.Focus()
 		m.chromeDirty = true
 		return m, nil
-	case tea.KeyEnter:
-		// ブロックフォーカス中 → 折りたたみトグル
-		if m.focusedBlock >= 0 && m.focusedBlock < len(m.toolBlocks) {
-			m.toggleToolBlock(m.focusedBlock)
-			return m, nil
-		}
-		// NAVモード終了
-		m.clearVisualSelection()
-		if m.focusedBlock >= 0 {
-			m.clearBlockFocus()
-		}
-		m.navigationMode = false
-		m.resetNavPending()
-		m.textInput.Focus()
-		m.chromeDirty = true
-		return m, nil
 	case tea.KeyTab:
 		if m.visualMode != visualModeOff {
 			return m, nil
 		}
-		// Tab: フォーカス中 → トグル、未フォーカス → 最後のブロックにフォーカス
-		if m.focusedBlock >= 0 && m.focusedBlock < len(m.toolBlocks) {
-			m.toggleToolBlock(m.focusedBlock)
-		} else if len(m.toolBlocks) > 0 {
-			m.setBlockFocus(len(m.toolBlocks) - 1)
+		// Tab: 次のブロックへ移動（未フォーカス時は最後のブロックにフォーカス）
+		if len(m.toolBlocks) > 0 {
+			if m.focusedBlock >= 0 && m.focusedBlock < len(m.toolBlocks) {
+				m.moveBlockFocus(m.focusedBlock + 1)
+			} else {
+				m.setBlockFocus(len(m.toolBlocks) - 1)
+			}
 			m.chromeDirty = true
 		}
 		return m, nil
+	case tea.KeyShiftTab:
+		if m.visualMode != visualModeOff {
+			return m, nil
+		}
+		// Shift+Tab: 前のブロックへ移動（未フォーカス時は最初のブロックにフォーカス）
+		if len(m.toolBlocks) > 0 {
+			if m.focusedBlock >= 0 && m.focusedBlock < len(m.toolBlocks) {
+				m.moveBlockFocus(m.focusedBlock - 1)
+			} else {
+				m.setBlockFocus(0)
+			}
+			m.chromeDirty = true
+		}
+		return m, nil
+	case tea.KeyUp:
+		if m.focusedBlock >= 0 && len(m.toolBlocks) > 0 {
+			m.moveBlockFocus(m.focusedBlock - 1)
+			return m, nil
+		}
+	case tea.KeyDown:
+		if m.focusedBlock >= 0 && len(m.toolBlocks) > 0 {
+			m.moveBlockFocus(m.focusedBlock + 1)
+			return m, nil
+		}
 	}
 
 	s := msg.String()

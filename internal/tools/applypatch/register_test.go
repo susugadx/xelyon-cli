@@ -204,17 +204,20 @@ func TestApplyPatch_PreviewWithLineNumbers(t *testing.T) {
 		if !strings.Contains(output, "🩹 apply_patch (1 file operation(s))") {
 			t.Fatalf("stdout = %q, want patch header", output)
 		}
-		if !strings.Contains(output, "Editing target.go (+1, -1)") {
-			t.Fatalf("stdout = %q, want codex-style file header", output)
+		if !strings.Contains(output, "M target.go (+1, -1)") {
+			t.Fatalf("stdout = %q, want file summary footer", output)
 		}
-		if !strings.Contains(output, "5 - \tprintln(\"keep\")") {
-			t.Fatalf("stdout = %q, want removed line number", output)
+		if !strings.Contains(output, "-\tprintln(\"keep\")") {
+			t.Fatalf("stdout = %q, want removed line", output)
 		}
-		if !strings.Contains(output, "5 + \tprintln(\"new\")") {
-			t.Fatalf("stdout = %q, want added line number", output)
+		if !strings.Contains(output, "+\tprintln(\"new\")") {
+			t.Fatalf("stdout = %q, want added line", output)
 		}
-		if strings.Contains(output, "*** Update File:") {
-			t.Fatalf("stdout = %q, want no fallback patch display", output)
+		if !strings.Contains(output, "*** Update File: target.go") {
+			t.Fatalf("stdout = %q, want full patch display", output)
+		}
+		if !strings.Contains(output, "@@ func target() {") {
+			t.Fatalf("stdout = %q, want hunk header in full patch display", output)
 		}
 	})
 }
@@ -253,7 +256,7 @@ func TestApplyPatch_PostApplyDisplay(t *testing.T) {
 	})
 }
 
-func TestApplyPatch_PreviewFallbackOnLineNumberMiss(t *testing.T) {
+func TestApplyPatch_PreviewShowsFullPatchWhenContextLookupWouldMiss(t *testing.T) {
 	t.Setenv("XELYON_INTERACTIVE_CONFIRM", "0")
 
 	withTempWorkdir(t, func() {
