@@ -49,7 +49,8 @@ func RunHeadlessWithConfig(ctx context.Context, query string, model string, prov
 	injectProjectMap(agent, "")
 
 	// Headless Mode は Normal Mode 相当: 親と同じツール除外
-	excludedTools := normalModeExcludedTools()
+	editToolMode := ResolveEditToolMode(provider.Name(), model)
+	excludedTools := normalModeExcludedTools(editToolMode)
 	if cfg != nil && cfg.SubAgentPrompt != "" {
 		excludedTools = appendUniqueStrings(excludedTools, "spawn_agent", "wait_agent")
 	}

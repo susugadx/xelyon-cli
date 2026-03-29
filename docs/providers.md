@@ -2,6 +2,17 @@
 
 XELYON CLIは複数のLLMプロバイダーに対応しています。
 
+## 編集ツールの自動切り替え
+
+XELYON は provider/model に応じて編集ツールを自動で切り替えます。
+
+- OpenAI / Gemini 系: `apply_patch`
+- Claude / Anthropic / DeepSeek 系: `str_replace` / `write_file` / `delete_file`
+- OpenRouter: `anthropic/...` / `deepseek/...` は legacy、`openai/...` / `google/...` / `gemini/...` は `apply_patch`
+- Bedrock: Claude family は legacy、それ以外は `apply_patch`
+
+`XELYON_EDIT_TOOL` を指定した場合は、この自動判定より環境変数の指定が優先されます。
+
 ## 対応プロバイダー
 
 | プロバイダー | 画像入力 | 環境変数 | 公式サイト |

@@ -187,6 +187,24 @@ func TestCurrentSystemPrompt_LegacyEditToolMode(t *testing.T) {
 	}
 }
 
+func TestGetSystemPromptForProvider_UsesProviderResolvedMode(t *testing.T) {
+	claudePrompt := GetSystemPromptForProvider("claude", "claude-sonnet-4-6")
+	if !strings.Contains(claudePrompt, "### Legacy edit tools") {
+		t.Fatal("claude prompt should include legacy edit tool guidance")
+	}
+	if strings.Contains(claudePrompt, "### apply_patch (edit tool)") {
+		t.Fatal("claude prompt should not include apply_patch guidance")
+	}
+
+	openAIPrompt := GetSystemPromptForProvider("openai", "gpt-5.4")
+	if !strings.Contains(openAIPrompt, "### apply_patch (edit tool)") {
+		t.Fatal("openai prompt should include apply_patch guidance")
+	}
+	if strings.Contains(openAIPrompt, "### Legacy edit tools") {
+		t.Fatal("openai prompt should not include legacy edit tool guidance")
+	}
+}
+
 func TestSystemPrompt_VerificationAndOutputGuidance(t *testing.T) {
 	if !strings.Contains(SystemPrompt, "make ci-check") {
 		t.Error("SystemPrompt should mention project-defined verification commands")

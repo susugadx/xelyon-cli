@@ -1,27 +1,37 @@
 package agent
 
 import (
-	"os"
-
 	"github.com/susugadx/xelyon-cli/internal/prompt"
 )
 
-func appendDefaultEditToolExclusions(excluded []string) []string {
+const (
+	// EditToolModeApplyPatch は apply_patch を使用するモード
+	EditToolModeApplyPatch = string(prompt.EditToolModeApplyPatch)
+	// EditToolModeLegacy は str_replace / write_file / delete_file を使用するモード
+	EditToolModeLegacy = string(prompt.EditToolModeLegacy)
+)
+
+// ResolveEditToolMode はプロバイダーとモデルに応じて編集ツールのモードを解決します。
+func ResolveEditToolMode(providerName string, modelName string) string {
+	return string(prompt.ResolveEditToolMode(providerName, modelName))
+}
+
+func appendDefaultEditToolExclusions(mode string, excluded []string) []string {
 	result := filterStrings(excluded, "apply_patch", "str_replace", "write_file", "delete_file")
-	if os.Getenv("XELYON_EDIT_TOOL") == "str_replace" {
+	if mode == EditToolModeLegacy {
 		return appendUniqueStrings(result, "apply_patch")
 	}
 	return appendUniqueStrings(result, "str_replace", "write_file", "delete_file")
 }
 
-func normalModeExcludedTools() []string {
-	excluded := appendDefaultEditToolExclusions(prompt.PlanningToolNames)
+func normalModeExcludedTools(mode string) []string {
+	excluded := appendDefaultEditToolExclusions(mode, prompt.PlanningToolNames)
 	// list_dir は内部フォールバック用
 	return appendUniqueStrings(excluded, "list_dir")
 }
 
-func planModeExcludedTools() []string {
-	excluded := appendDefaultEditToolExclusions(nil)
+func planModeExcludedTools(mode string) []string {
+	excluded := appendDefaultEditToolExclusions(mode, nil)
 	return appendUniqueStrings(excluded, "list_dir")
 }
 

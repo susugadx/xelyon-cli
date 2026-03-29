@@ -276,7 +276,7 @@ func (a *Agent) rebuildSystemPromptForCurrentProvider() {
 	planningPrompt := promptplan.BuildPlanningPrompt()
 	hadPlanPrompt := strings.Contains(a.SystemPrompt, planningPrompt)
 
-	systemPrompt := prompt.CurrentSystemPrompt()
+	systemPrompt := prompt.GetSystemPromptForProvider(a.CurrentProvider.Name(), a.CurrentModel)
 	if a.mcpManager != nil && len(a.mcpManager.GetTools()) > 0 {
 		systemPrompt += buildMCPToolsPrompt(a.mcpManager)
 	}

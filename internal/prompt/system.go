@@ -1,7 +1,6 @@
 package prompt
 
 import (
-	"os"
 	"regexp"
 
 	promptplan "github.com/susugadx/xelyon-cli/internal/prompt/plan"
@@ -40,6 +39,16 @@ func StripPlanningReferences(s string) string {
 		return ""
 	})
 	return s
+}
+
+// GetSystemPromptByMode は指定された編集モードに応じたシステムプロンプトを返す。
+func GetSystemPromptByMode(editTool string) string {
+	return buildSystemPromptForEditTool(string(NormalizeEditToolMode(editTool)))
+}
+
+// GetSystemPromptForProvider は provider/model に応じた編集モードのシステムプロンプトを返す。
+func GetSystemPromptForProvider(providerName string, modelName string) string {
+	return buildSystemPromptForEditTool(string(ResolveEditToolMode(providerName, modelName)))
 }
 
 const systemPromptPrefix = `You are XELYON, an autonomous AI coding agent.
@@ -139,7 +148,7 @@ Rules:
 `
 
 const legacyEditToolGuide = `### Legacy edit tools
-When XELYON_EDIT_TOOL=str_replace is set, use str_replace / write_file / delete_file for edits.
+When the active edit tool mode is legacy, use str_replace / write_file / delete_file for edits.
 
 Rules:
 - Prefer str_replace for partial edits after targeted reads or searches
@@ -217,9 +226,10 @@ For tasks requiring sub-agents:
 // SystemPrompt はデフォルト編集モード向けのシステムプロンプトである。
 var SystemPrompt = buildSystemPromptForEditTool("")
 
-// CurrentSystemPrompt は現在の編集モードに応じたシステムプロンプトを返す。
+// CurrentSystemPrompt は環境変数 XELYON_EDIT_TOOL に応じたシステムプロンプトを返す。
+// 通常は GetSystemPromptByMode を使用する。
 func CurrentSystemPrompt() string {
-	return buildSystemPromptForEditTool(os.Getenv("XELYON_EDIT_TOOL"))
+	return GetSystemPromptForProvider("", "")
 }
 
 func buildSystemPromptForEditTool(editTool string) string {

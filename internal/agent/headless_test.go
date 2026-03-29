@@ -30,11 +30,17 @@ func (m *mockErrorProvider) ChatWithImage(ctx context.Context, systemPrompt stri
 }
 
 type headlessToolSetProbeProvider struct {
+	name         string
 	systemPrompt string
 	toolNames    []string
 }
 
-func (p *headlessToolSetProbeProvider) Name() string { return "openai" }
+func (p *headlessToolSetProbeProvider) Name() string {
+	if p.name != "" {
+		return p.name
+	}
+	return "openai"
+}
 
 func (p *headlessToolSetProbeProvider) SupportsImages() bool { return false }
 
@@ -468,6 +474,32 @@ func TestRunHeadlessWithConfig_DefaultEditToolVisibility(t *testing.T) {
 		if hasToolName(provider.toolNames, name) {
 			t.Fatalf("default headless mode should exclude %s", name)
 		}
+	}
+	if !strings.Contains(provider.systemPrompt, "### apply_patch (edit tool)") {
+		t.Fatal("default headless system prompt should use apply_patch guidance")
+	}
+}
+
+func TestRunHeadlessWithConfig_ClaudeUsesLegacyEditTools(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	cfg := newProjectMapDisabledConfig()
+	provider := &headlessToolSetProbeProvider{name: "claude"}
+
+	result := RunHeadlessWithConfig(context.Background(), "probe", "claude-sonnet-4-6", provider, cfg)
+	if result.Status != "success" {
+		t.Fatalf("result.Status = %q, want success", result.Status)
+	}
+	if hasToolName(provider.toolNames, "apply_patch") {
+		t.Fatal("claude headless mode should exclude apply_patch")
+	}
+	for _, name := range []string{"str_replace", "write_file", "delete_file"} {
+		if !hasToolName(provider.toolNames, name) {
+			t.Fatalf("claude headless mode should expose %s", name)
+		}
+	}
+	if !strings.Contains(provider.systemPrompt, "### Legacy edit tools") {
+		t.Fatal("claude headless system prompt should use legacy edit tool guidance")
 	}
 }
 

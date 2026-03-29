@@ -218,7 +218,8 @@ func NewAgentWithRuntime(model string, provider api.Provider, headless bool, run
 		}
 	}
 
-	systemPrompt := prompt.CurrentSystemPrompt()
+	editToolMode := ResolveEditToolMode(provider.Name(), model)
+	systemPrompt := prompt.GetSystemPromptForProvider(provider.Name(), model)
 
 	// MCPツールをSystemPromptに追加
 	if len(mcpManager.GetTools()) > 0 {
@@ -271,7 +272,7 @@ func NewAgentWithRuntime(model string, provider api.Provider, headless bool, run
 	// （Function Calling経由で呼び出し可能にする）
 	configureMCPTools(provider, mcpManager.GetTools(), errOut)
 
-	runtime.effectiveRegistry().SetExcludedTools(normalModeExcludedTools())
+	runtime.effectiveRegistry().SetExcludedTools(normalModeExcludedTools(editToolMode))
 
 	// プロバイダー別プレフィックスを Workflow Rules の直前に注入
 	systemPrompt = prompt.BuildProviderSystemPromptWithConfig(systemPrompt, provider.Name(), model, runtime.effectiveConfig())

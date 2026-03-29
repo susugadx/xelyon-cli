@@ -200,6 +200,7 @@ func (m *Manager) Spawn(ctx context.Context, message, taskType, model, reasoning
 		m.mu.Unlock()
 		return "", err
 	}
+	subCfg.SubAgentPrompt = PromptForTaskType(taskType, subProvider.Name(), resolvedModel)
 
 	go func() {
 		defer close(sub.done)
@@ -505,7 +506,6 @@ func cloneConfigForSub(cfg *config.Config, mainProvider, taskType, model, reason
 		return nil, "", err
 	}
 
-	cloned.SubAgentPrompt = PromptForTaskType(taskType)
 	return cloned, resolvedModel, nil
 }
 

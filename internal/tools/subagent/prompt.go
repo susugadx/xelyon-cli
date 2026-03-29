@@ -1,6 +1,6 @@
 package subagent
 
-import "os"
+import "github.com/susugadx/xelyon-cli/internal/prompt"
 
 // TaskType はサブエージェントのタスク種別です。
 const (
@@ -19,11 +19,11 @@ func ValidTaskType(t string) bool {
 	}
 }
 
-// PromptForTaskType はタスクタイプに応じたシステムプロンプトを返します。
-func PromptForTaskType(taskType string) string {
+// PromptForTaskType はタスクタイプと provider/model に応じたシステムプロンプトを返します。
+func PromptForTaskType(taskType string, providerName string, modelName string) string {
 	switch taskType {
 	case TaskTypeEdit:
-		return EditPromptForEditTool(os.Getenv("XELYON_EDIT_TOOL"))
+		return EditPromptForEditTool(string(prompt.ResolveEditToolMode(providerName, modelName)))
 	case TaskTypeVerify:
 		return VerifyPrompt
 	default:
@@ -33,7 +33,7 @@ func PromptForTaskType(taskType string) string {
 
 // EditPromptForEditTool は編集ツールに応じた EditPrompt を返す。
 func EditPromptForEditTool(editTool string) string {
-	if editTool == "str_replace" {
+	if prompt.NormalizeEditToolMode(editTool) == prompt.EditToolModeLegacy {
 		return editPromptBase + legacyEditSection
 	}
 	return editPromptBase + applyPatchSection

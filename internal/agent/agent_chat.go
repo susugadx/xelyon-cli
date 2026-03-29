@@ -106,14 +106,16 @@ func (a *Agent) chatCore(input string, image *api.ImageData, oneShot bool) error
 		defer a.registry().SetExcludedTools(prev)
 	}
 
+	editToolMode := ResolveEditToolMode(a.ProviderName, a.CurrentModel)
+
 	var err error
 	if a.PlanModeEnabled {
 		// Plan Mode: planning 系ツールを有効化しつつ、編集ツールの排他制御は維持
-		a.registry().SetExcludedTools(planModeExcludedTools())
+		a.registry().SetExcludedTools(planModeExcludedTools(editToolMode))
 		err = a.RunPlanMode(ctx, input)
 	} else {
 		// Normal Mode: planning 系ツールを除外しつつ、編集ツールの排他制御を維持
-		a.registry().SetExcludedTools(normalModeExcludedTools())
+		a.registry().SetExcludedTools(normalModeExcludedTools(editToolMode))
 		err = a.runNormalMode(ctx, input, image)
 	}
 
