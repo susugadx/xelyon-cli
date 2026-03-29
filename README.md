@@ -140,7 +140,7 @@ API実測値に基づくトークン使用量とコストをリアルタイム�
 - **ナビゲーション削減**: Project Map + `search_code` の symbol-aware routing により `read_file` の往復を減らし、編集に集中
 - **リクエスト完了時**: `✓ In: 1,234 + Out: 567 = 1,801 tok (~$0.002)` で使用量を表示
 - **Ollama対応**: ローカル実行時はコスト表示を非表示
-- **圧縮閾値**: `compression.token_threshold`（デフォルト100K）または `compression.threshold_percent`（デフォルト80%）超過時に自動圧縮/警告
+- **圧縮閾値**: `compression.trigger_percent`（デフォルト80%）超過時に自動圧縮/警告
 
 ### 📝 プロジェクト設定（xelyon.yaml）
 プロジェクト固有のルール・コンテキストを構造化 YAML で管理。`/init` でテンプレート作成。

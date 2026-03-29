@@ -42,8 +42,8 @@ func DefaultConfig() *Config {
 		DefaultProvider: "deepseek",
 		DefaultModel:    "deepseek-chat",
 		General: GeneralConfig{
-			Language:      "ja", // デフォルト: 日本語
-			ToolLoopLimit: 0,    // 0 = unlimited tool loop (default)
+			UILanguage:    "auto", // デフォルト: 自動判定（フォールバック: ja）
+			ToolLoopLimit: 0,      // 内部既定: 0 = unlimited tool loop
 		},
 		ProviderModels: map[string]ProviderModelConfig{
 			"deepseek": {
@@ -82,16 +82,16 @@ func DefaultConfig() *Config {
 			},
 		},
 		Compression: CompressionConfig{
-			AutoCompress:         true, // デフォルトON - コスト削減のため
-			ThresholdTokens:      0,    // 0 = 使用率ベース
-			ThresholdPercent:     80,   // 80%で自動圧縮
-			TokenThreshold:       0,    // 0 = カスタム絶対閾値を無効化
-			Model:                "",   // 空 = プロバイダー別デフォルト圧縮モデル
+			Enabled:              true, // デフォルトON - コスト削減のため
+			TriggerPercent:       80,   // 80%で自動圧縮
 			KeepRecent:           20,   // 履歴を多めに保持
-			PreferCompactAPI:     true, // OpenAI Compact API 優先
-			ClaudeCompaction:     true, // Claude Compaction 優先
+			ThresholdTokens:      0,    // 内部: 0 = 使用率ベース
+			TokenThreshold:       0,    // 内部: 0 = カスタム絶対閾値を無効化
+			Model:                "",   // 内部: 空 = プロバイダー別デフォルト圧縮モデル
+			PreferCompactAPI:     true, // 内部: OpenAI Compact API 優先
+			ClaudeCompaction:     true, // 内部: Claude Compaction 優先
 			CompactionTrigger:    150000,
-			ClearToolUses:        true, // Claude系の tool_use/tool_result clearing を有効化
+			ClearToolUses:        true, // 内部: Claude系の tool_use/tool_result clearing
 			ClearToolUsesTrigger: 80000,
 			ClearToolInputs:      false,
 			ProviderThresholds: map[string]int{
@@ -341,10 +341,64 @@ func LoadConfig() (*Config, error) {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
 
+	// 旧キーからの migration（後方互換）
+	migrateOldKeys(data, cfg)
+
 	// 追加のデフォルト値を適用（ネストされた構造体用）
 	applyDefaults(cfg)
 
 	return cfg, nil
+}
+
+// migrateOldKeys は旧設定キーを新キーに読み替える。
+// YAML 上の旧キー名で値が設定されている場合、新フィールドがデフォルトのままなら旧値を採用する。
+func migrateOldKeys(data []byte, cfg *Config) {
+	var raw map[string]interface{}
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		return
+	}
+
+	defaults := DefaultConfig()
+
+	// general.language → general.ui_language
+	if general, ok := raw["general"].(map[string]interface{}); ok {
+		if lang, ok := general["language"].(string); ok && lang != "" {
+			// 新キーが未設定（デフォルトのまま）なら旧値を採用
+			if cfg.General.UILanguage == defaults.General.UILanguage {
+				cfg.General.UILanguage = lang
+			}
+		}
+	}
+
+	// compression.auto_compress → compression.enabled
+	// compression.threshold_percent → compression.trigger_percent
+	if comp, ok := raw["compression"].(map[string]interface{}); ok {
+		if autoCompress, ok := comp["auto_compress"].(bool); ok {
+			if cfg.Compression.Enabled == defaults.Compression.Enabled {
+				cfg.Compression.Enabled = autoCompress
+			}
+		}
+		if thresholdPercent, ok := comp["threshold_percent"]; ok {
+			if pct := toInt(thresholdPercent); pct > 0 {
+				if cfg.Compression.TriggerPercent == defaults.Compression.TriggerPercent {
+					cfg.Compression.TriggerPercent = pct
+				}
+			}
+		}
+	}
+}
+
+// toInt は interface{} から int を取得する（YAML パーサーが返す型に対応）。
+func toInt(v interface{}) int {
+	switch n := v.(type) {
+	case int:
+		return n
+	case int64:
+		return int(n)
+	case float64:
+		return int(n)
+	}
+	return 0
 }
 
 // applyDefaults はデフォルト値を適用
@@ -379,9 +433,9 @@ func applyDefaults(cfg *Config) {
 	if cfg.APIRetry.Timeout == 0 {
 		cfg.APIRetry.Timeout = defaults.APIRetry.Timeout
 	}
-	// Compression: ThresholdTokens=0 かつ ThresholdPercent=0 の場合のみデフォルト適用
+	// Compression: ThresholdTokens=0 かつ TriggerPercent=0 の場合のみデフォルト適用
 	// （ThresholdTokens=0 は「使用率ベース」を意味するため）
-	if cfg.Compression.ThresholdTokens == 0 && cfg.Compression.ThresholdPercent == 0 {
+	if cfg.Compression.ThresholdTokens == 0 && cfg.Compression.TriggerPercent == 0 {
 		cfg.Compression = defaults.Compression
 	}
 	// Paste: 他のフィールドがすべてデフォルト値の場合、BracketedPaste もデフォルト適用
@@ -506,14 +560,9 @@ func (c *Config) ApplyEnvironmentOverrides() {
 	if val := os.Getenv("XELYON_BRACKETED_PASTE"); val == "0" || val == "false" {
 		c.Paste.BracketedPaste = false
 	}
+	// 内部設定の環境変数オーバーライド（後方互換）
 	applyEnvInt("XELYON_LOOP_THRESHOLD", func(n int) bool { return n > 0 },
 		func(n int) { c.LoopDetection.Threshold = n }, "positive integer")
-	applyEnvInt("XELYON_API_RETRY_COUNT", func(n int) bool { return n >= 0 },
-		func(n int) { c.APIRetry.Count = n }, "non-negative integer")
-	applyEnvInt("XELYON_API_RETRY_INITIAL_DELAY", func(n int) bool { return n >= 0 },
-		func(n int) { c.APIRetry.InitialDelay = n }, "non-negative integer")
-	applyEnvInt("XELYON_API_RETRY_MAX_DELAY", func(n int) bool { return n >= 0 },
-		func(n int) { c.APIRetry.MaxDelay = n }, "non-negative integer")
 	applyEnvInt("XELYON_DIFF_CONTEXT_LINES", func(n int) bool { return n >= 0 },
 		func(n int) { c.Diff.ContextLines = n }, "non-negative integer")
 }
@@ -537,18 +586,13 @@ func applyEnvInt(envKey string, valid func(int) bool, apply func(int), expect st
 	apply(n)
 }
 
-// ApplyFlagOverrides はCLIフラグで設定を上書き
+// ApplyFlagOverrides はCLIフラグで設定を上書き（内部設定、後方互換）
 func (c *Config) ApplyFlagOverrides(loopThreshold, apiRetry, apiRetryDelay, diffLines *int) {
 	if loopThreshold != nil && *loopThreshold > 0 {
 		c.LoopDetection.Threshold = *loopThreshold
 	}
-	if apiRetry != nil && *apiRetry >= 0 {
-		c.APIRetry.Count = *apiRetry
-	}
-	if apiRetryDelay != nil && *apiRetryDelay >= 0 {
-		c.APIRetry.InitialDelay = *apiRetryDelay
-	}
 	if diffLines != nil && *diffLines >= 0 {
 		c.Diff.ContextLines = *diffLines
 	}
+	// apiRetry, apiRetryDelay: 後方互換で引数は残すが内部既定値のため無視
 }

@@ -64,7 +64,7 @@ func (a *Agent) runAutoCompression(costAwareCompress bool) bool {
 						metrics.CostAwareCompressions = 1
 					}
 					a.addOptimizationMetrics(metrics)
-					_, _ = fmt.Fprintln(a.output(), "   💡 Disable with: xelyon config set compression.auto_compress false")
+					_, _ = fmt.Fprintln(a.output(), "   💡 Disable with: xelyon config set compression.enabled false")
 					_, _ = fmt.Fprintln(a.output())
 					return true
 				}
@@ -95,7 +95,7 @@ func (a *Agent) runAutoCompression(costAwareCompress bool) bool {
 	// 結果を表示
 	_, _ = fmt.Fprintf(a.output(), "   Before: %s tokens → After: %s tokens\n",
 		formatNumber(beforeTokens), formatNumber(afterTokens))
-	_, _ = fmt.Fprintln(a.output(), "   💡 Disable with: xelyon config set compression.auto_compress false")
+	_, _ = fmt.Fprintln(a.output(), "   💡 Disable with: xelyon config set compression.enabled false")
 	_, _ = fmt.Fprintln(a.output())
 
 	metrics := OptimizationMetrics{CompactionCount: 1}
@@ -110,7 +110,7 @@ func (a *Agent) runAutoCompression(costAwareCompress bool) bool {
 // 圧縮した場合は true を返す
 func (a *Agent) maybeAutoCompress() bool {
 	cfg := a.cfg()
-	if !cfg.Compression.AutoCompress {
+	if !cfg.Compression.Enabled {
 		return false
 	}
 
@@ -157,7 +157,7 @@ func (a *Agent) maybeAutoCompress() bool {
 		percentage := a.GetTokenUsagePercentage()
 
 		// 閾値を取得（パーセントベース）
-		threshold := float64(cfg.Compression.ThresholdPercent)
+		threshold := float64(cfg.Compression.TriggerPercent)
 		if threshold == 0 {
 			threshold = 80
 		}
@@ -205,7 +205,7 @@ func (a *Agent) checkTokenWarning() {
 	cfg := a.cfg()
 
 	// 自動圧縮が有効な場合は警告をスキップ（自動圧縮が処理する）
-	if cfg.Compression.AutoCompress {
+	if cfg.Compression.Enabled {
 		return
 	}
 

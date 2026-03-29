@@ -11,8 +11,6 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/stdio"
 )
 
-const minimumClaudeContextTrigger = 50000
-
 // ValidProviders は有効なプロバイダー名の一覧
 // internal/api/provider.go の NewProvider() と同期させること
 var ValidProviders = []string{
@@ -120,16 +118,9 @@ func ValidateConfig(cfg *Config) ValidationResult {
 		result.Valid = false
 	}
 
-	// 4. 数値範囲チェック
-	validateNumericRange(&result, "loop_detection.threshold", cfg.LoopDetection.Threshold, 1, 10, 3)
-	validateNumericRange(&result, "api_retry.count", cfg.APIRetry.Count, 1, 10, 3)
-	validateNumericRange(&result, "api_retry.initial_delay", cfg.APIRetry.InitialDelay, 1, 60, 1)
-	validateNumericRange(&result, "api_retry.max_delay", cfg.APIRetry.MaxDelay, 1, 300, 30)
-	validateNumericRange(&result, "api_retry.timeout", cfg.APIRetry.Timeout, 30, 7200, 3600)
+	// 4. 数値範囲チェック（user-facing 設定のみ）
+	validateNumericRange(&result, "compression.trigger_percent", cfg.Compression.TriggerPercent, 1, 100, 80)
 	validateNumericRange(&result, "compression.keep_recent", cfg.Compression.KeepRecent, 1, 100, 10)
-	validateNumericMinimum(&result, "compression.compaction_trigger", cfg.Compression.CompactionTrigger, minimumClaudeContextTrigger, 150000)
-	validateNumericMinimum(&result, "compression.clear_tool_uses_trigger", cfg.Compression.ClearToolUsesTrigger, minimumClaudeContextTrigger, 80000)
-	validateNumericRange(&result, "diff.context_lines", cfg.Diff.ContextLines, 0, 100, 10)
 
 	validateNumericRange(&result, "paste.max_lines", cfg.Paste.MaxLines, 100, 100000, 10000)
 	validateNumericRange(&result, "paste.timeout_seconds", cfg.Paste.TimeoutSeconds, 10, 600, 60)
@@ -165,23 +156,6 @@ func validateNumericRange(result *ValidationResult, field string, value, min, ma
 			Field:      field,
 			Value:      fmt.Sprintf("%d", value),
 			Message:    fmt.Sprintf("推奨範囲外です (推奨: %d-%d)", min, max),
-			Suggestion: fmt.Sprintf("%d", defaultVal),
-			Severity:   "warning",
-			CanAutoFix: true,
-			FixedValue: defaultVal,
-		})
-	}
-}
-
-func validateNumericMinimum(result *ValidationResult, field string, value, min, defaultVal int) {
-	if value == 0 {
-		return
-	}
-	if value < min {
-		result.Issues = append(result.Issues, ValidationIssue{
-			Field:      field,
-			Value:      fmt.Sprintf("%d", value),
-			Message:    fmt.Sprintf("下限未満です (最小: %d)", min),
 			Suggestion: fmt.Sprintf("%d", defaultVal),
 			Severity:   "warning",
 			CanAutoFix: true,
@@ -338,49 +312,14 @@ func ApplyAutoFixes(cfg *Config, result ValidationResult) int {
 				cfg.General.ToolLoopLimit = v
 				fixCount++
 			}
-		case "loop_detection.threshold":
+		case "compression.trigger_percent":
 			if v, ok := issue.FixedValue.(int); ok {
-				cfg.LoopDetection.Threshold = v
-				fixCount++
-			}
-		case "api_retry.count":
-			if v, ok := issue.FixedValue.(int); ok {
-				cfg.APIRetry.Count = v
-				fixCount++
-			}
-		case "api_retry.initial_delay":
-			if v, ok := issue.FixedValue.(int); ok {
-				cfg.APIRetry.InitialDelay = v
-				fixCount++
-			}
-		case "api_retry.max_delay":
-			if v, ok := issue.FixedValue.(int); ok {
-				cfg.APIRetry.MaxDelay = v
-				fixCount++
-			}
-		case "api_retry.timeout":
-			if v, ok := issue.FixedValue.(int); ok {
-				cfg.APIRetry.Timeout = v
+				cfg.Compression.TriggerPercent = v
 				fixCount++
 			}
 		case "compression.keep_recent":
 			if v, ok := issue.FixedValue.(int); ok {
 				cfg.Compression.KeepRecent = v
-				fixCount++
-			}
-		case "compression.compaction_trigger":
-			if v, ok := issue.FixedValue.(int); ok {
-				cfg.Compression.CompactionTrigger = v
-				fixCount++
-			}
-		case "compression.clear_tool_uses_trigger":
-			if v, ok := issue.FixedValue.(int); ok {
-				cfg.Compression.ClearToolUsesTrigger = v
-				fixCount++
-			}
-		case "diff.context_lines":
-			if v, ok := issue.FixedValue.(int); ok {
-				cfg.Diff.ContextLines = v
 				fixCount++
 			}
 		case "paste.max_lines":

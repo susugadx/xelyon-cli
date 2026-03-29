@@ -10,7 +10,14 @@ import (
 )
 
 func normalizeRawLine(line string) string {
-	return strings.TrimSuffix(line, "\r")
+	line = strings.TrimSuffix(line, "\r")
+	// VS16 (U+FE0F) を除去: lipgloss は ⚠️ を幅1と計算するが、ターミナルは
+	// emoji presentation で幅2としてレンダリングする。VS16 を除去して text
+	// presentation (幅1) に統一し、行ラップによる表示崩れを防ぐ。
+	if strings.ContainsRune(line, '\uFE0F') {
+		line = strings.ReplaceAll(line, "\uFE0F", "")
+	}
+	return line
 }
 
 func isANSITerminator(r rune) bool {

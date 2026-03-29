@@ -16,7 +16,7 @@ import (
 // e2eConfig はE2Eテスト用の共通設定を返す
 func e2eConfig() *config.Config {
 	cfg := config.DefaultConfig()
-	cfg.General.Language = "en"
+	cfg.General.UILanguage = "en"
 	cfg.General.ToolLoopLimit = 5
 	return cfg
 }

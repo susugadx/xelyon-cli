@@ -63,8 +63,8 @@ func TestGetFieldValue(t *testing.T) {
 	}{
 		{"default_provider", "default_provider", "string"},
 		{"default_model", "default_model", "string"},
-		{"compression.auto_compress", "compression.auto_compress", "bool"},
-		{"api_retry.count", "api_retry.count", "int"},
+		{"compression.enabled", "compression.enabled", "bool"},
+		{"compression.keep_recent", "compression.keep_recent", "int"},
 		{"thinking.enabled", "thinking.enabled", "bool"},
 	}
 
@@ -91,7 +91,7 @@ func TestSetFieldValue(t *testing.T) {
 	}{
 		{"set string", "default_model", "new-model", false},
 		{"set bool", "thinking.enabled", true, false},
-		{"set int", "api_retry.count", 5, false},
+		{"set int", "compression.keep_recent", 5, false},
 		{"invalid path", "nonexistent.field", "value", true},
 	}
 
@@ -121,11 +121,10 @@ func TestFieldTypeMap(t *testing.T) {
 	requiredFields := map[string]ConfigFieldType{
 		"default_provider":                    FieldTypeSelect,
 		"default_model":                       FieldTypeString,
-		"compression.auto_compress":           FieldTypeBool,
-		"compression.clear_tool_uses":         FieldTypeBool,
-		"compression.clear_tool_inputs":       FieldTypeBool,
-		"compression.compaction_trigger":      FieldTypeInt,
-		"api_retry.count":                     FieldTypeInt,
+		"general.ui_language":                 FieldTypeSelect,
+		"compression.enabled":                 FieldTypeBool,
+		"compression.trigger_percent":         FieldTypeInt,
+		"compression.keep_recent":             FieldTypeInt,
 		"bash.safety_level":                   FieldTypeSelect,
 		"bash.safe_commands":                  FieldTypeStringSlice,
 		"command_aliases":                     FieldTypeStringMap,
@@ -176,10 +175,10 @@ func TestFieldDescriptions(t *testing.T) {
 	// FieldDescriptions に説明が含まれていることを確認
 	requiredFields := []string{
 		"default_provider",
-		"compression.auto_compress",
-		"compression.clear_tool_uses",
-		"compression.clear_tool_inputs",
-		"api_retry.count",
+		"general.ui_language",
+		"compression.enabled",
+		"compression.trigger_percent",
+		"compression.keep_recent",
 		"bash.safety_level",
 		"output.assistant_updates",
 		"plan_mode.clear_context_on_approval",

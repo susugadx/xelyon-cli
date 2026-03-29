@@ -188,8 +188,8 @@ func NewAgentWithRuntime(model string, provider api.Provider, headless bool, run
 
 	// 言語設定を適用
 	cfg := runtime.effectiveConfig()
-	if cfg.General.Language != "" {
-		i18n.SetLang(cfg.General.Language)
+	if cfg.General.UILanguage != "" && cfg.General.UILanguage != "auto" {
+		i18n.SetLang(cfg.General.UILanguage)
 	}
 
 	// 古いartifactファイルを削除

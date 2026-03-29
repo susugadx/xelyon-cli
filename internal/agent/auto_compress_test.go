@@ -375,7 +375,7 @@ func TestCustomTokenThreshold_TriggersBeforePercentage(t *testing.T) {
 	provider := &compressionTestProvider{name: "openai", summary: "compressed summary"}
 	cfg := config.DefaultConfig()
 	cfg.Compression.TokenThreshold = 100000
-	cfg.Compression.ThresholdPercent = 99
+	cfg.Compression.TriggerPercent = 99
 	cfg.Compression.KeepRecent = 1
 	cfg.Compression.PreferCompactAPI = false
 
@@ -402,7 +402,7 @@ func TestDefaultTokenThresholdZero_DoesNotFallbackTo100K(t *testing.T) {
 	provider := &compressionTestProvider{name: "openai", summary: "compressed summary"}
 	cfg := config.DefaultConfig()
 	cfg.Compression.TokenThreshold = 0
-	cfg.Compression.ThresholdPercent = 99
+	cfg.Compression.TriggerPercent = 99
 	cfg.Compression.KeepRecent = 1
 	cfg.Compression.PreferCompactAPI = false
 
@@ -426,7 +426,7 @@ func TestCustomTokenThreshold_RespectsCacheSkip(t *testing.T) {
 	}
 	cfg := config.DefaultConfig()
 	cfg.Compression.TokenThreshold = 100000
-	cfg.Compression.ThresholdPercent = 99
+	cfg.Compression.TriggerPercent = 99
 	cfg.Compression.KeepRecent = 1
 	cfg.Compression.PreferCompactAPI = false
 

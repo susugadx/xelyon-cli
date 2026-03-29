@@ -234,32 +234,26 @@ func generateConfigDetails(structs []StructInfo, defaults map[string]interface{}
 
 	// 構造体名からYAMLキーへのマッピング
 	structToYAML := map[string]string{
-		"CompressionConfig":   "compression",
-		"BackupConfig":        "backup",
-		"LoopDetectionConfig": "loop_detection",
-		"APIRetryConfig":      "api_retry",
-		"DiffConfig":          "diff",
-		"ToolConfirmConfig":   "tool_confirm",
-		"PromptCacheConfig":   "prompt_cache",
-		"PasteConfig":         "paste",
-		"StreamingConfig":     "streaming",
-		"BashConfig":          "bash",
-		"GitStageConfig":      "git_stage",
-		"PlanModeConfig":      "plan_mode",
-		"OpenAIConfig":        "openai",
-		"ThinkingConfig":      "thinking",
-		"LSPConfig":           "lsp",
-		"WebSearchConfig":     "web_search",
-		"UtilityModelConfig":  "utility_model",
+		"GeneralConfig":      "general",
+		"CompressionConfig":  "compression",
+		"ToolConfirmConfig":  "tool_confirm",
+		"PromptCacheConfig":  "prompt_cache",
+		"PasteConfig":        "paste",
+		"StreamingConfig":    "streaming",
+		"BashConfig":         "bash",
+		"GitStageConfig":     "git_stage",
+		"PlanModeConfig":     "plan_mode",
+		"OpenAIConfig":       "openai",
+		"ThinkingConfig":     "thinking",
+		"LSPConfig":          "lsp",
+		"WebSearchConfig":    "web_search",
+		"UtilityModelConfig": "utility_model",
 	}
 
-	// 順序を定義
+	// 順序を定義（内部専用: LoopDetection, APIRetry, Diff は除外）
 	order := []string{
+		"GeneralConfig",
 		"CompressionConfig",
-		"BackupConfig",
-		"LoopDetectionConfig",
-		"APIRetryConfig",
-		"DiffConfig",
 		"StreamingConfig",
 		"ToolConfirmConfig",
 		"PromptCacheConfig",
@@ -303,11 +297,14 @@ func generateConfigDetails(structs []StructInfo, defaults map[string]interface{}
 			}
 		}
 
-		// YAML例
+		// YAML例（「内部:」コメントで始まるフィールドはスキップ）
 		sb.WriteString("```yaml\n")
 		sb.WriteString(fmt.Sprintf("%s:\n", yamlKey))
 		for _, f := range s.Fields {
 			if f.YAMLTag == "" || f.YAMLTag == "-" {
+				continue
+			}
+			if strings.HasPrefix(f.Comment, "内部:") || strings.HasPrefix(f.Comment, "内部既定値") {
 				continue
 			}
 			// map や複雑な型はスキップ
@@ -320,9 +317,12 @@ func generateConfigDetails(structs []StructInfo, defaults map[string]interface{}
 		}
 		sb.WriteString("```\n\n")
 
-		// フィールド詳細
+		// フィールド詳細（「内部:」コメントで始まるフィールドはスキップ）
 		for _, f := range s.Fields {
 			if f.YAMLTag == "" || f.YAMLTag == "-" {
+				continue
+			}
+			if strings.HasPrefix(f.Comment, "内部:") || strings.HasPrefix(f.Comment, "内部既定値") {
 				continue
 			}
 
@@ -353,22 +353,19 @@ func generateConfigDetails(structs []StructInfo, defaults map[string]interface{}
 
 func formatTitle(structName string) string {
 	titles := map[string]string{
-		"CompressionConfig":   "会話履歴圧縮設定",
-		"BackupConfig":        "バックアップ設定",
-		"LoopDetectionConfig": "ループ検知設定",
-		"APIRetryConfig":      "APIリトライ設定",
-		"DiffConfig":          "差分表示設定",
-		"ToolConfirmConfig":   "ツール確認設定",
-		"PromptCacheConfig":   "プロンプトキャッシュ設定",
-		"PasteConfig":         "ペーストモード設定",
-		"StreamingConfig":     "ストリーミング設定",
-		"BashConfig":          "bashツール設定",
-		"GitStageConfig":      "git_add設定",
-		"PlanModeConfig":      "Plan Mode設定",
-		"OpenAIConfig":        "OpenAI設定",
-		"ThinkingConfig":      "Extended Thinking設定",
-		"LSPConfig":           "LSP連携設定",
-		"WebSearchConfig":     "Web検索設定",
+		"GeneralConfig":      "一般設定",
+		"CompressionConfig":  "会話履歴圧縮設定",
+		"ToolConfirmConfig":  "ツール確認設定",
+		"PromptCacheConfig":  "プロンプトキャッシュ設定",
+		"PasteConfig":        "ペーストモード設定",
+		"StreamingConfig":    "ストリーミング設定",
+		"BashConfig":         "bashツール設定",
+		"GitStageConfig":     "git_add設定",
+		"PlanModeConfig":     "Plan Mode設定",
+		"OpenAIConfig":       "OpenAI設定",
+		"ThinkingConfig":     "Extended Thinking設定",
+		"LSPConfig":          "LSP連携設定",
+		"WebSearchConfig":    "Web検索設定",
 	}
 	if title, ok := titles[structName]; ok {
 		return title

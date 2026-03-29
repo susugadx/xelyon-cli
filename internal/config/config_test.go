@@ -38,14 +38,14 @@ func TestDefaultConfig(t *testing.T) {
 	}
 
 	// Compression
-	if cfg.Compression.AutoCompress != true {
-		t.Error("Compression.AutoCompress should default to true")
+	if cfg.Compression.Enabled != true {
+		t.Error("Compression.Enabled should default to true")
 	}
 	if cfg.Compression.ThresholdTokens != 0 {
 		t.Errorf("Compression.ThresholdTokens = %d, want 0 (percentage-based)", cfg.Compression.ThresholdTokens)
 	}
-	if cfg.Compression.ThresholdPercent != 80 {
-		t.Errorf("Compression.ThresholdPercent = %d, want 80", cfg.Compression.ThresholdPercent)
+	if cfg.Compression.TriggerPercent != 80 {
+		t.Errorf("Compression.TriggerPercent = %d, want 80", cfg.Compression.TriggerPercent)
 	}
 	if cfg.Compression.TokenThreshold != 0 {
 		t.Errorf("Compression.TokenThreshold = %d, want 0", cfg.Compression.TokenThreshold)
@@ -466,21 +466,9 @@ func TestApplyEnvironmentOverrides(t *testing.T) {
 		{
 			name: "Multiple env vars",
 			envVars: map[string]string{
-				"XELYON_API_RETRY_COUNT":         "5",
-				"XELYON_API_RETRY_INITIAL_DELAY": "2",
-				"XELYON_API_RETRY_MAX_DELAY":     "60",
-				"XELYON_DIFF_CONTEXT_LINES":      "0",
+				"XELYON_DIFF_CONTEXT_LINES": "0",
 			},
 			checkFn: func(t *testing.T, cfg *Config) {
-				if cfg.APIRetry.Count != 5 {
-					t.Errorf("APIRetry.Count = %d, want 5", cfg.APIRetry.Count)
-				}
-				if cfg.APIRetry.InitialDelay != 2 {
-					t.Errorf("APIRetry.InitialDelay = %d, want 2", cfg.APIRetry.InitialDelay)
-				}
-				if cfg.APIRetry.MaxDelay != 60 {
-					t.Errorf("APIRetry.MaxDelay = %d, want 60", cfg.APIRetry.MaxDelay)
-				}
 				if cfg.Diff.ContextLines != 0 {
 					t.Errorf("Diff.ContextLines = %d, want 0", cfg.Diff.ContextLines)
 				}
@@ -512,9 +500,6 @@ func TestApplyEnvironmentOverrides_InvalidValues_Warn(t *testing.T) {
 		{"non-numeric loop threshold", "XELYON_LOOP_THRESHOLD", "abc"},
 		{"negative loop threshold", "XELYON_LOOP_THRESHOLD", "-1"},
 		{"zero loop threshold", "XELYON_LOOP_THRESHOLD", "0"},
-		{"non-numeric retry count", "XELYON_API_RETRY_COUNT", "xyz"},
-		{"negative retry count", "XELYON_API_RETRY_COUNT", "-5"},
-		{"non-numeric retry delay", "XELYON_API_RETRY_INITIAL_DELAY", "fast"},
 		{"non-numeric diff lines", "XELYON_DIFF_CONTEXT_LINES", "many"},
 		{"negative diff lines", "XELYON_DIFF_CONTEXT_LINES", "-1"},
 	}
@@ -543,17 +528,6 @@ func TestApplyEnvironmentOverrides_InvalidValues_Warn(t *testing.T) {
 				t.Errorf("Expected warning for %s=%q on stderr, got: %q", tt.envKey, tt.envVal, output)
 			}
 		})
-	}
-}
-
-func TestApplyEnvironmentOverrides_ZeroRetryCount_Accepted(t *testing.T) {
-	t.Setenv("XELYON_API_RETRY_COUNT", "0")
-
-	cfg := DefaultConfig()
-	cfg.ApplyEnvironmentOverrides()
-
-	if cfg.APIRetry.Count != 0 {
-		t.Errorf("APIRetry.Count should accept 0 via env var, got %d", cfg.APIRetry.Count)
 	}
 }
 
@@ -589,12 +563,7 @@ func TestApplyFlagOverrides(t *testing.T) {
 				if cfg.LoopDetection.Threshold != 5 {
 					t.Errorf("LoopDetection.Threshold = %d, want 5", cfg.LoopDetection.Threshold)
 				}
-				if cfg.APIRetry.Count != 10 {
-					t.Errorf("APIRetry.Count = %d, want 10", cfg.APIRetry.Count)
-				}
-				if cfg.APIRetry.InitialDelay != 2 {
-					t.Errorf("APIRetry.InitialDelay = %d, want 2", cfg.APIRetry.InitialDelay)
-				}
+				// apiRetry/apiRetryDelay は後方互換で引数を残すが内部既定値のため無視
 				if cfg.Diff.ContextLines != 20 {
 					t.Errorf("Diff.ContextLines = %d, want 20", cfg.Diff.ContextLines)
 				}
@@ -606,19 +575,6 @@ func TestApplyFlagOverrides(t *testing.T) {
 			checkFn: func(t *testing.T, cfg *Config) {
 				if cfg.Diff.ContextLines != 0 {
 					t.Errorf("Diff.ContextLines should accept 0, got %d", cfg.Diff.ContextLines)
-				}
-			},
-		},
-		{
-			name:          "apiRetry = 0 disables retries",
-			apiRetry:      func() *int { v := 0; return &v }(),
-			apiRetryDelay: func() *int { v := 0; return &v }(),
-			checkFn: func(t *testing.T, cfg *Config) {
-				if cfg.APIRetry.Count != 0 {
-					t.Errorf("APIRetry.Count should accept 0, got %d", cfg.APIRetry.Count)
-				}
-				if cfg.APIRetry.InitialDelay != 0 {
-					t.Errorf("APIRetry.InitialDelay should accept 0, got %d", cfg.APIRetry.InitialDelay)
 				}
 			},
 		},

@@ -92,77 +92,19 @@ provider_models:
 # 一般設定
 # ============================================================
 general:
-    # 表示言語（ja, en）
-    language: ja
-    # ツールループ最大回数（0で無制限）
-    tool_loop_limit: 0
+    # 表示言語（auto, ja, en）
+    ui_language: auto
 
 # ============================================================
 # 会話履歴圧縮設定
 # ============================================================
 compression:
-    # トークン使用率が閾値を超えたら自動圧縮
-    auto_compress: true
-    # トークン数の閾値（0 = 使用しない）
-    threshold_tokens: 0
-    # トークン使用率の閾値（%）
-    threshold_percent: 80
-    # 絶対トークン閾値（デフォルト100000、キャッシュ有無に関係なく発動）
-    token_threshold: 0
-    # 圧縮用モデル（空 = プロバイダー別デフォルト、main = メインモデル）
-    model: ""
+    # 自動圧縮を有効化
+    enabled: true
+    # 自動圧縮のトークン使用率閾値（%）
+    trigger_percent: 80
     # 圧縮時に保持する直近メッセージ数
     keep_recent: 20
-    # プロバイダーのCompact APIを優先使用
-    prefer_compact_api: true
-    # Claude系の compact_20260112 を有効化
-    claude_compaction: true
-    # compact のトリガー閾値（デフォルト: 150000）
-    compaction_trigger: 150000
-    # Claude系の server-side tool clearing を有効化
-    clear_tool_uses: true
-    # clear_tool_uses のトリガー閾値（デフォルト: 80000）
-    clear_tool_uses_trigger: 80000
-    # tool_use 側の入力もクリアする
-    clear_tool_inputs: false
-    provider_thresholds:
-        bedrock: 150000
-        claude: 150000
-        deepseek: 80000
-        gemini: 180000
-        openai: 100000
-        openai:gpt-5.4: 260000
-        openai:gpt-5.4-pro: 260000
-        openrouter: 120000
-
-# ============================================================
-# ループ検知設定
-# ============================================================
-loop_detection:
-    # 同じツール呼び出しの繰り返し回数でループと判定
-    threshold: 3
-
-# ============================================================
-# APIリトライ設定
-# ============================================================
-api_retry:
-    # リトライ回数
-    count: 3
-    # 初回リトライ待機時間（秒）
-    initial_delay: 1
-    # 最大待機時間（秒）
-    max_delay: 30
-    # タイムアウト（秒）
-    timeout: 3600
-
-# ============================================================
-# 差分表示設定
-# ============================================================
-diff:
-    # 差分表示時のコンテキスト行数
-    context_lines: 10
-    # 差分表示の最大行数（0で無制限）
-    max_total_lines: 0
 
 # ============================================================
 # ツール確認設定
@@ -188,6 +130,7 @@ command_aliases:
 prompt_cache:
     # 有効化（cache_control ブレークポイントを設定）
     enabled: true
+    # キャッシュTTL（デフォルト: 5m、1h で延長キャッシュ）
     cache_ttl: 5m
 
 # ============================================================
@@ -209,6 +152,7 @@ paste:
 streaming:
     # アイドルタイムアウト（秒）
     idle_timeout_seconds: 30
+    # thinking専用タイムアウト秒（text/FC未受信時）
     thinking_timeout_seconds: 120
     # ファイル読み込み時にサイズ・行数を表示
     show_file_info: true
@@ -409,134 +353,34 @@ hooks:
 
 Context Window（コンテキストウィンドウ）を管理し、トークン上限エラーを防ぎます。
 
-#### `auto_compress`
+#### `enabled`
 - **型**: boolean
 - **デフォルト**: `true`
 - **説明**: トークン使用率が閾値を超えた際に自動圧縮を実行
 - **補足**: コスト削減・エラー防止のためデフォルトON
 
-#### `threshold_percent`
+#### `trigger_percent`
 - **型**: integer
 - **デフォルト**: `80`
 - **説明**: 自動圧縮を実行する使用率閾値（%）
 - **補足**: モデルのコンテキストウィンドウに対する使用率
-
-#### `threshold_tokens`
-- **型**: integer
-- **デフォルト**: `0`
-- **説明**: 自動圧縮を実行するトークン閾値（絶対値）
-- **補足**: `0` = 使用率ベース（`threshold_percent`を使用）
-
-#### `token_threshold`
-- **型**: integer
-- **デフォルト**: `0`
-- **説明**: Context トークン数のカスタム絶対閾値
-- **補足**: `0` = 無効。明示設定した場合のみ安全弁として使用
-
-#### `model`
-- **型**: string
-- **デフォルト**: `""`
-- **説明**: 圧縮時に使用するモデル名
-- **補足**: 空文字はプロバイダー別デフォルト、`main` は現在のメインモデルを使用
 
 #### `keep_recent`
 - **型**: integer
 - **デフォルト**: `20`
 - **説明**: 圧縮時に保持する最新メッセージ数
 
-#### `prefer_compact_api`
-- **型**: boolean
-- **デフォルト**: `true`
-- **説明**: OpenAI Compact API を優先的に使用
-- **補足**: OpenAI Responses API 対応モデル使用時のみ有効
-- **動作**: 自動圧縮時に `/responses/compact` エンドポイントを呼び出し
-- **フォールバック**: Compact API 失敗時は LLM サマリーに自動フォールバック
-
-#### `claude_compaction`
-- **型**: boolean
-- **デフォルト**: `true`
-- **説明**: Claude 系プロバイダーで `compact_20260112` を有効化
-- **補足**: Claude / Bedrock / OpenRouter(Claude models) の対応モデルでのみ有効
-- **補足**: `clear_tool_uses` とは独立設定。`false` でも `clear_tool_uses: true` なら tool clearing は有効
-
-#### `compaction_trigger`
-- **型**: integer
-- **デフォルト**: `150000`
-- **説明**: `compact_20260112` を発動する input token 閾値
-- **補足**: 最小 `50000`。それ未満は runtime で `50000` に補正
-
-#### `clear_tool_uses`
-- **型**: boolean
-- **デフォルト**: `true`
-- **説明**: Claude 系プロバイダーで `clear_tool_uses_20250919` を有効化
-- **補足**: 古い `tool_use` / `tool_result` ペア構造を server-side で削除し、compaction 前に入力トークンを節約
-- **補足**: `claude_compaction` が `false` でも単独で有効化可能
-
-#### `clear_tool_uses_trigger`
-- **型**: integer
-- **デフォルト**: `80000`
-- **説明**: `clear_tool_uses_20250919` を発動する input token 閾値
-- **補足**: 通常は `compaction_trigger` より小さくして、`clear_tool_uses` → `compact` の順で発動させる
-- **補足**: 最小 `50000`。それ未満は runtime で `50000` に補正
-
-#### `clear_tool_inputs`
-- **型**: boolean
-- **デフォルト**: `false`
-- **説明**: `clear_tool_uses` 実行時に `tool_use` 側の入力引数も削除
-- **補足**: デフォルトでは `tool_result` の clearing のみ。セッション再開時の履歴再構築への影響を避けるため、通常は `false` 推奨
-
 **自動圧縮の動作:**
 1. API呼び出し成功後に pricing cliff とプロバイダー別閾値を評価
 2. `previous_response_id` や Claude Compaction が使える場合は自動圧縮をスキップ
-3. `token_threshold` を明示設定している場合のみ、その値を追加の安全弁として評価
-4. それ以外は `threshold_percent`（デフォルト80%）や `threshold_tokens` を評価
-5. 圧縮時に通知を表示し、無効化方法も案内
+3. `trigger_percent`（デフォルト80%）で使用率を評価
+4. 圧縮時に通知を表示し、無効化方法も案内
 
 ```
-🗜️ Auto-compressing: context 151K exceeds 150K custom threshold...
+🗜️ Auto-compressing: context 151K exceeds 150K threshold...
    Before: 162,000 tokens → After: 45,000 tokens
-   💡 Disable with: xelyon config set compression.auto_compress false
+   💡 Disable with: xelyon config set compression.enabled false
 ```
-
-### ループ検知設定 (`loop_detection`)
-
-#### `threshold`
-- **型**: integer
-- **デフォルト**: `3`
-- **説明**: 同じツール呼び出しが繰り返された場合に警告する回数
-- **補足**: 無限ループ防止機能
-
-### APIリトライ設定 (`api_retry`)
-
-#### `count`
-- **型**: integer
-- **デフォルト**: `3`
-- **説明**: API呼び出し失敗時のリトライ回数
-
-#### `initial_delay`
-- **型**: integer
-- **デフォルト**: `1`
-- **説明**: 初回リトライまでの待機秒数
-
-#### `max_delay`
-- **型**: integer
-- **デフォルト**: `30`
-- **説明**: リトライ時の最大待機秒数
-- **補足**: Exponential Backoff（指数バックオフ）方式
-
-#### `timeout`
-- **型**: integer
-- **デフォルト**: `300`（5分）
-- **説明**: API呼び出しのタイムアウト秒数
-- **補足**: 長時間のレスポンスが必要な場合は増やす（例: 7200 = 2時間）
-
-### 差分表示設定 (`diff`)
-
-#### `context_lines`
-- **型**: integer
-- **デフォルト**: `10`
-- **説明**: ファイル編集時の差分表示行数
-- **補足**: `0` で省略なし（全行表示）
 
 ### ストリーミング設定 (`streaming`)
 
@@ -1136,59 +980,28 @@ xelyon  # 次回起動時にデフォルト設定が再作成される
 
 ## 使用例
 
-### 1. 自動圧縮の閾値と圧縮モデルを調整
+### 1. 自動圧縮の閾値を調整
 
 ```yaml
 compression:
-  auto_compress: true       # デフォルトON
-  token_threshold: 150000   # 明示設定した場合のみ custom threshold として使用
-  threshold_percent: 70     # 70%でも圧縮（保険として残す）
-  model: ""                # プロバイダー別デフォルト圧縮モデル
-  keep_recent: 15           # 最新15件を保持
+  enabled: true          # デフォルトON
+  trigger_percent: 70    # 70%でも圧縮（保険として残す）
+  keep_recent: 15        # 最新15件を保持
 ```
 
 ### 1b. 自動圧縮を無効化
 
 ```yaml
 compression:
-  auto_compress: false      # 手動で /compress を使用
+  enabled: false         # 手動で /compress を使用
 ```
 
 または:
 ```bash
-xelyon config set compression.auto_compress false
+xelyon config set compression.enabled false
 ```
 
-### 2. APIリトライを増やす
-
-```yaml
-api_retry:
-  count: 5
-  initial_delay: 2
-  max_delay: 60
-```
-
-または環境変数で:
-
-```bash
-export XELYON_API_RETRY_COUNT=5
-```
-
-### 3. ループ検知を緩和
-
-```yaml
-loop_detection:
-  threshold: 5
-```
-
-### 4. 差分を全行表示
-
-```yaml
-diff:
-  context_lines: 0
-```
-
-### 5. プロバイダーごとにモデルを変更
+### 2. プロバイダーごとにモデルを変更
 
 ```yaml
 provider_models:
@@ -1219,15 +1032,6 @@ env | grep XELYON
 
 # シェル設定ファイルを再読み込み
 source ~/.zshrc  # または ~/.bashrc
-```
-
-### APIリトライが動かない
-
-`config.yaml` で `api_retry.count` が `0` になっていないか確認:
-
-```yaml
-api_retry:
-  count: 3  # 0 以外を指定
 ```
 
 ### ツール出力表示設定 (`output`)

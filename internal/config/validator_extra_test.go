@@ -36,36 +36,20 @@ func TestApplyAutoFixes_EmptyProvider(t *testing.T) {
 
 func TestApplyAutoFixes_NumericRange(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.LoopDetection.Threshold = 100 // 範囲外 (1-10)
-	cfg.APIRetry.Count = 100          // 範囲外 (1-10)
-	cfg.APIRetry.InitialDelay = 100   // 範囲外 (1-60)
-	cfg.APIRetry.MaxDelay = 1000      // 範囲外 (1-300)
-	cfg.APIRetry.Timeout = 99999      // 範囲外 (30-7200)
-	cfg.Diff.ContextLines = 999       // 範囲外 (0-100)
+	cfg.Compression.TriggerPercent = 200 // 範囲外 (1-100)
+	cfg.Compression.KeepRecent = 999     // 範囲外 (1-100)
 
 	result := ValidateConfig(cfg)
 	fixCount := ApplyAutoFixes(cfg, result)
 
-	if fixCount < 6 {
-		t.Errorf("ApplyAutoFixes should fix at least 6 numeric range issues, got %d", fixCount)
+	if fixCount < 2 {
+		t.Errorf("ApplyAutoFixes should fix at least 2 numeric range issues, got %d", fixCount)
 	}
-	if cfg.LoopDetection.Threshold != 3 {
-		t.Errorf("LoopDetection.Threshold = %d, want 3", cfg.LoopDetection.Threshold)
+	if cfg.Compression.TriggerPercent != 80 {
+		t.Errorf("Compression.TriggerPercent = %d, want 80", cfg.Compression.TriggerPercent)
 	}
-	if cfg.APIRetry.Count != 3 {
-		t.Errorf("APIRetry.Count = %d, want 3", cfg.APIRetry.Count)
-	}
-	if cfg.APIRetry.InitialDelay != 1 {
-		t.Errorf("APIRetry.InitialDelay = %d, want 1", cfg.APIRetry.InitialDelay)
-	}
-	if cfg.APIRetry.MaxDelay != 30 {
-		t.Errorf("APIRetry.MaxDelay = %d, want 30", cfg.APIRetry.MaxDelay)
-	}
-	if cfg.APIRetry.Timeout != 3600 {
-		t.Errorf("APIRetry.Timeout = %d, want 3600", cfg.APIRetry.Timeout)
-	}
-	if cfg.Diff.ContextLines != 10 {
-		t.Errorf("Diff.ContextLines = %d, want 10", cfg.Diff.ContextLines)
+	if cfg.Compression.KeepRecent != 10 {
+		t.Errorf("Compression.KeepRecent = %d, want 10", cfg.Compression.KeepRecent)
 	}
 }
 
@@ -155,21 +139,6 @@ func TestApplyAutoFixes_NonAutoFixableIssue(t *testing.T) {
 	}
 }
 
-func TestApplyAutoFixes_CompressionTriggers(t *testing.T) {
-	cfg := DefaultConfig()
-	cfg.Compression.CompactionTrigger = 1        // 下限未満
-	cfg.Compression.ClearToolUsesTrigger = 10000 // 下限未満
-
-	result := ValidateConfig(cfg)
-	fixCount := ApplyAutoFixes(cfg, result)
-
-	if fixCount < 2 {
-		t.Errorf("ApplyAutoFixes should fix at least 2 compression trigger issues, got %d", fixCount)
-	}
-	if cfg.Compression.CompactionTrigger != 150000 {
-		t.Errorf("Compression.CompactionTrigger = %d, want 150000", cfg.Compression.CompactionTrigger)
-	}
-	if cfg.Compression.ClearToolUsesTrigger != 80000 {
-		t.Errorf("Compression.ClearToolUsesTrigger = %d, want 80000", cfg.Compression.ClearToolUsesTrigger)
-	}
-}
+// TestApplyAutoFixes_CompressionTriggers は内部化されたため、
+// trigger_percent/keep_recent の範囲チェックのみ検証。
+// CompactionTrigger/ClearToolUsesTrigger は内部既定値として validation 対象外。

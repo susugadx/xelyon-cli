@@ -45,25 +45,28 @@ type OutputConfig struct {
 
 // GeneralConfig は一般設定
 type GeneralConfig struct {
-	Language      string `yaml:"language"`        // 表示言語（ja, en）デフォルト: ja
-	ToolLoopLimit int    `yaml:"tool_loop_limit"` // Max tool loop iterations (0 = unlimited, default)
+	UILanguage    string `yaml:"ui_language"`     // 表示言語（auto, ja, en）デフォルト: auto
+	ToolLoopLimit int    `yaml:"tool_loop_limit"` // Max tool loop iterations (0 = unlimited, default) — 内部既定値
 }
 
 // CompressionConfig は会話履歴圧縮の設定
+//
+// user-facing 設定: Enabled, TriggerPercent, KeepRecent
+// 以下は内部既定値として保持（user-facing config には非表示）
 type CompressionConfig struct {
-	AutoCompress         bool           `yaml:"auto_compress"`                          // 自動圧縮を有効化（デフォルト: true）
-	ThresholdTokens      int            `yaml:"threshold_tokens"`                       // 自動圧縮のトークン閾値（0 = 使用率ベース）
-	ThresholdPercent     int            `yaml:"threshold_percent"`                      // 自動圧縮の使用率閾値（デフォルト: 80%）
-	TokenThreshold       int            `yaml:"token_threshold" json:"token_threshold"` // Context トークン数のカスタム絶対閾値（デフォルト: 0 = 無効）
-	Model                string         `yaml:"model" json:"model"`                     // 圧縮用モデル名（空 = プロバイダー別デフォルト、main = メインモデル）
+	Enabled              bool           `yaml:"enabled"`                                // 自動圧縮を有効化（デフォルト: true）
+	TriggerPercent       int            `yaml:"trigger_percent"`                        // 自動圧縮の使用率閾値（デフォルト: 80%）
 	KeepRecent           int            `yaml:"keep_recent"`                            // 保持する最新メッセージ数
-	PreferCompactAPI     bool           `yaml:"prefer_compact_api"`                     // OpenAI Compact API を優先（デフォルト: true）
-	ClaudeCompaction     bool           `yaml:"claude_compaction"`                      // Claude系の compact_20260112 を有効化（clear_tool_uses とは独立）
-	CompactionTrigger    int            `yaml:"compaction_trigger"`                     // compact のトリガー閾値（デフォルト: 150000）
-	ClearToolUses        bool           `yaml:"clear_tool_uses"`                        // Claude系の server-side tool clearing を有効化（compact とは独立）
-	ClearToolUsesTrigger int            `yaml:"clear_tool_uses_trigger"`                // clear_tool_uses のトリガー閾値（デフォルト: 80000、最小: 50000）
-	ClearToolInputs      bool           `yaml:"clear_tool_inputs"`                      // tool_use 側の入力もクリアする
-	ProviderThresholds   map[string]int `yaml:"provider_thresholds,omitempty"`          // provider/model ごとのコスト最適化閾値
+	ThresholdTokens      int            `yaml:"threshold_tokens"`                       // 内部: トークン閾値（0 = 使用率ベース）
+	TokenThreshold       int            `yaml:"token_threshold" json:"token_threshold"` // 内部: カスタム絶対閾値（デフォルト: 0 = 無効）
+	Model                string         `yaml:"model" json:"model"`                     // 内部: 圧縮用モデル名
+	PreferCompactAPI     bool           `yaml:"prefer_compact_api"`                     // 内部: OpenAI Compact API 優先
+	ClaudeCompaction     bool           `yaml:"claude_compaction"`                      // 内部: Claude compact_20260112
+	CompactionTrigger    int            `yaml:"compaction_trigger"`                     // 内部: compact トリガー閾値
+	ClearToolUses        bool           `yaml:"clear_tool_uses"`                        // 内部: server-side tool clearing
+	ClearToolUsesTrigger int            `yaml:"clear_tool_uses_trigger"`                // 内部: clear_tool_uses トリガー閾値
+	ClearToolInputs      bool           `yaml:"clear_tool_inputs"`                      // 内部: tool_use 入力クリア
+	ProviderThresholds   map[string]int `yaml:"provider_thresholds,omitempty"`          // 内部: provider/model 別閾値
 }
 
 // LoopDetectionConfig はループ検知の設定

@@ -738,8 +738,8 @@ func handleTokensCommand(agent *Agent) bool {
 
 	_, _ = fmt.Fprintln(out)
 	green.Fprintln(out, "⚙️  Auto-compress:")
-	if cfg.Compression.AutoCompress {
-		thresholdPercent := cfg.Compression.ThresholdPercent
+	if cfg.Compression.Enabled {
+		thresholdPercent := cfg.Compression.TriggerPercent
 		if thresholdPercent == 0 {
 			thresholdPercent = 80
 		}

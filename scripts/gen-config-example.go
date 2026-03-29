@@ -36,6 +36,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	// 内部専用フィールドを除外（user-facing example をクリーンに保つ）
+	data, err = filterInternalFields(data)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error filtering internal fields: %v\n", err)
+		os.Exit(1)
+	}
+
 	// コメント付きYAMLを生成
 	output := addComments(string(data))
 
@@ -61,6 +68,86 @@ func main() {
 	}
 
 	fmt.Printf("Generated %s\n", outputPath)
+}
+
+// filterInternalFields は YAML を raw map に変換し、
+// user-facing でないセクション・フィールドを除去して再 marshal する。
+func filterInternalFields(data []byte) ([]byte, error) {
+	var raw yaml.Node
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+
+	// user-facing フィールドパスを Sections から収集
+	// structmap/map のみのセクションはフィルタ対象外（子要素はそのまま保持）
+	userFacing := map[string]map[string]bool{}
+	for sectionKey, info := range Sections {
+		if len(info.Fields) == 0 {
+			continue
+		}
+		// FieldTypes がすべて structmap/map の場合はフィルタ対象外
+		allStructMap := true
+		for _, ft := range info.FieldTypes {
+			if ft != "structmap" && ft != "map" {
+				allStructMap = false
+				break
+			}
+		}
+		if allStructMap {
+			continue
+		}
+		fields := map[string]bool{}
+		for f := range info.Fields {
+			fields[f] = true
+		}
+		userFacing[sectionKey] = fields
+	}
+
+	// 内部専用トップレベルセクション
+	internalSections := map[string]bool{
+		"loop_detection": true,
+		"api_retry":      true,
+		"diff":           true,
+	}
+
+	// root mapping の content をフィルタ
+	if raw.Kind == yaml.DocumentNode && len(raw.Content) > 0 {
+		mapping := raw.Content[0]
+		if mapping.Kind == yaml.MappingNode {
+			filterMapping(mapping, userFacing, internalSections)
+		}
+	}
+
+	return yaml.Marshal(&raw)
+}
+
+// filterMapping はトップレベル mapping から内部フィールドを除去する。
+func filterMapping(mapping *yaml.Node, userFacing map[string]map[string]bool, internalSections map[string]bool) {
+	var filtered []*yaml.Node
+	for i := 0; i+1 < len(mapping.Content); i += 2 {
+		key := mapping.Content[i].Value
+		val := mapping.Content[i+1]
+
+		// 内部専用セクションは除外
+		if internalSections[key] {
+			continue
+		}
+
+		// ネストされたセクションの内部フィールドを除去
+		if fields, ok := userFacing[key]; ok && val.Kind == yaml.MappingNode {
+			var childFiltered []*yaml.Node
+			for j := 0; j+1 < len(val.Content); j += 2 {
+				childKey := val.Content[j].Value
+				if fields[childKey] {
+					childFiltered = append(childFiltered, val.Content[j], val.Content[j+1])
+				}
+			}
+			val.Content = childFiltered
+		}
+
+		filtered = append(filtered, mapping.Content[i], val)
+	}
+	mapping.Content = filtered
 }
 
 func addComments(yamlStr string) string {
