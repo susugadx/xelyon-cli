@@ -175,16 +175,22 @@ func stylePlainTextRange(s string, startCol, endCol int, bg string) string {
 	}
 	var result strings.Builder
 	width := 0
+	inRange := false
 	for _, r := range s {
 		rw := runeWidth(r)
-		if width < endCol && width+rw > startCol {
+		highlight := width < endCol && width+rw > startCol
+		if highlight && !inRange {
 			result.WriteString(bg)
-			result.WriteRune(r)
+			inRange = true
+		} else if !highlight && inRange {
 			result.WriteString("\033[0m")
-		} else {
-			result.WriteRune(r)
+			inRange = false
 		}
+		result.WriteRune(r)
 		width += rw
+	}
+	if inRange {
+		result.WriteString("\033[0m")
 	}
 	return result.String()
 }
@@ -316,6 +322,9 @@ func sanitizeSingleLineANSI(s string) string {
 }
 
 func (m Model) viewportView() string {
+	if m.hasActiveMouseSelection() {
+		return m.renderViewportWithMouseSelection()
+	}
 	if !m.navigationMode || m.focusedBlock >= 0 {
 		return m.vp.view()
 	}
@@ -459,7 +468,9 @@ func (m *Model) renderStatusBar() string {
 	}
 
 	hints := statusHintsNormal
-	if m.navigationMode {
+	if m.hasActiveMouseSelection() || m.mouseDragging {
+		hints = statusHintsMouseSel
+	} else if m.navigationMode {
 		if m.visualMode == visualModeChar {
 			hints = statusHintsVisual
 		} else if m.visualMode == visualModeLine {

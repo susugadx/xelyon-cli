@@ -26,7 +26,7 @@ func (m Model) footerHeight() int {
 }
 
 var statusHintsNormal = []string{
-	"Esc:NAV • /copy • Shift+drag",
+	"Esc:NAV • /copy • drag:select",
 	"Esc:NAV • /copy",
 }
 var statusHintsNav = []string{
@@ -44,6 +44,10 @@ var statusHintsVisualLine = []string{
 var statusHintsBlockFocus = []string{
 	"Tab/Shift+Tab/j/k/↑/↓:move • Enter:toggle • y:copy • Esc:unfocus",
 	"Tab/Shift+Tab • j/k/↑/↓ • Enter • y • Esc",
+}
+var statusHintsMouseSel = []string{
+	"-- SELECT -- Ctrl+C:copy • /copy • Esc:clear",
+	"-- SELECT -- Ctrl+C • Esc",
 }
 
 const (
@@ -117,6 +121,12 @@ type Model struct {
 	streamCursorCol      int
 	streamActiveANSI     string
 	streamPendingANSI    string
+	mouseSelAnchor       visualPosition // マウスドラッグ選択の開始位置（line=-1=選択なし）
+	mouseSelEnd          visualPosition // マウスドラッグ選択の終了位置
+	mouseDragging        bool           // マウスドラッグ中か
+	mouseAutoScrolling   bool           // 自動スクロールティック発行済みか
+	mouseLastScreenX     int            // 最後のマウスX座標（自動スクロール用）
+	mouseLastScreenY     int            // 最後のマウスY座標（自動スクロール用）
 }
 
 // NewModel は TUI Model を作成する。
@@ -138,14 +148,16 @@ func NewModel(agent AgentInterface, initialContent string) Model {
 		initLines = strings.Split(initialContent, "\n")
 	}
 	return Model{
-		agent:        agent,
-		textInput:    ti,
-		spinner:      sp,
-		rawLines:     append([]string(nil), initLines...),
-		messages:     []ChatMessage{},
-		focusedBlock: -1,
-		visualStart:  visualPosition{line: -1, col: -1},
-		statusLine:   agent.GetStatusLine(),
+		agent:          agent,
+		textInput:      ti,
+		spinner:        sp,
+		rawLines:       append([]string(nil), initLines...),
+		messages:       []ChatMessage{},
+		focusedBlock:   -1,
+		visualStart:    visualPosition{line: -1, col: -1},
+		mouseSelAnchor: visualPosition{line: -1, col: -1},
+		mouseSelEnd:    visualPosition{line: -1, col: -1},
+		statusLine:     agent.GetStatusLine(),
 	}
 }
 
@@ -170,12 +182,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.MouseButtonWheelDown:
 			m.vp.scrollDown(3)
 			m.afterViewportScroll()
+		default:
+			if cmd := m.handleMouseSelection(msg); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
 		}
 		if m.chromeDirty {
 			m.chromeDirty = false
 			m.rebuildChrome()
 		}
-		return m, nil
+		return m, tea.Batch(cmds...)
 
 	case tea.KeyMsg:
 		// Key handling may mark chromeDirty; keep chrome rebuild centralized in
@@ -187,6 +203,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.WindowSizeMsg:
+		m.mouseDragging = false
+		m.mouseAutoScrolling = false
 		wasAtBottom := m.ready && m.vp.atBottom()
 		widthChanged := m.width != msg.Width
 		m.width = msg.Width
@@ -255,6 +273,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.streamActiveANSI = ""
 		m.streamPendingANSI = ""
 		m.statusLine = m.agent.GetStatusLine()
+		m.chromeDirty = true
+
+	case mouseAutoScrollMsg:
+		if cmd := m.handleAutoScroll(); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 		m.chromeDirty = true
 
 	case spinner.TickMsg:

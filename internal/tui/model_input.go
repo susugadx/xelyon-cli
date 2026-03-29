@@ -29,6 +29,10 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.appendSystemInfo("⚠️  Interrupted. Press Ctrl+C again to exit.")
 			return m, nil
 		}
+		if m.hasActiveMouseSelection() {
+			m.copyMouseSelection()
+			return m, nil
+		}
 		now := time.Now()
 		if !m.lastInterrupt.IsZero() && now.Sub(m.lastInterrupt) < 3*time.Second {
 			m.quitting = true
@@ -48,6 +52,11 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// 入力モード
 	switch {
 	case msg.Type == tea.KeyEsc:
+		if m.hasActiveMouseSelection() {
+			m.clearMouseSelection()
+			m.chromeDirty = true
+			return m, nil
+		}
 		// 入力欄が空の場合のみ NAV モードに入る
 		if strings.TrimSpace(m.textInput.Value()) == "" {
 			m.navigationMode = true
@@ -72,6 +81,10 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		})
 
 		if strings.HasPrefix(input, "/") {
+			if input == "/copy" && m.hasActiveMouseSelection() {
+				m.copyMouseSelection()
+				return m, nil
+			}
 			if input == "/exit" || input == "/quit" {
 				m.quitting = true
 				m.agent.Cleanup()
@@ -132,6 +145,11 @@ func (m Model) handleNavigationKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch msg.Type {
 	case tea.KeyEsc:
+		if m.hasActiveMouseSelection() {
+			m.clearMouseSelection()
+			m.chromeDirty = true
+			return m, nil
+		}
 		if m.visualMode != visualModeOff {
 			m.clearVisualSelection()
 			m.chromeDirty = true
@@ -194,6 +212,10 @@ func (m Model) handleNavigationKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	if m.yPressed {
 		m.yPressed = false
+		if m.hasActiveMouseSelection() {
+			m.copyMouseSelection()
+			return m, nil
+		}
 		if s == "y" && m.focusedBlock < 0 && m.visualMode == visualModeOff {
 			m.copyCursorLine()
 			return m, nil
@@ -307,6 +329,7 @@ func (m Model) handleNavigationKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "v":
 		if m.focusedBlock < 0 {
+			m.clearMouseSelection()
 			m.visualMode = visualModeChar
 			m.visualStart = visualPosition{line: m.cursorLine, col: m.cursorCol}
 			m.yPressed = false
@@ -314,12 +337,17 @@ func (m Model) handleNavigationKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "V":
 		if m.focusedBlock < 0 {
+			m.clearMouseSelection()
 			m.visualMode = visualModeLine
 			m.visualStart = visualPosition{line: m.cursorLine, col: 0}
 			m.yPressed = false
 			m.chromeDirty = true
 		}
 	case "y":
+		if m.hasActiveMouseSelection() {
+			m.copyMouseSelection()
+			return m, nil
+		}
 		if m.visualMode != visualModeOff {
 			m.copyVisualSelection()
 		} else if m.focusedBlock >= 0 && m.focusedBlock < len(m.toolBlocks) {

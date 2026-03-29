@@ -274,8 +274,13 @@ func TestNavMode_CharVisualSelectionMapsAcrossWrappedRows(t *testing.T) {
 	if len(lines) < 2 {
 		t.Fatalf("viewport lines = %d, want at least 2", len(lines))
 	}
-	if !strings.Contains(lines[0], "\033[48;5;240mc\033[0m") || !strings.Contains(lines[0], "\033[48;5;240me\033[0m") {
-		t.Fatalf("first wrapped row should highlight c..e, got %q", lines[0])
+	// Range-based ANSI: single bg span for contiguous selection
+	if !strings.Contains(lines[0], "\033[48;5;240m") {
+		t.Fatalf("first wrapped row should have visual selection bg, got %q", lines[0])
+	}
+	plain0 := strings.TrimRight(stripANSI(lines[0]), " ")
+	if plain0 != "abcde" {
+		t.Fatalf("first wrapped row plain content = %q, want abcde", plain0)
 	}
 	if !strings.Contains(lines[1], "\033[48;5;240mf\033[0m") {
 		t.Fatalf("second wrapped row should highlight f, got %q", lines[1])
