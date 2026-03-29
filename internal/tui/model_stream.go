@@ -339,16 +339,7 @@ func (m *Model) appendStreamText(text string) tea.Cmd {
 		_ = m.appendContentLines(lines...)
 	}
 	m.clampCursorLine()
-	if m.ready {
-		atBottom := m.vp.atBottom()
-		m.vp.setLines(m.getVisualRowContents())
-		if atBottom {
-			m.vp.gotoBottom()
-			m.newOutput = false
-		} else {
-			m.newOutput = true
-		}
-	}
+	m.syncViewportContent()
 	return nil
 }
 
@@ -359,6 +350,22 @@ func (m *Model) appendSystemInfo(text string) tea.Cmd {
 		Content:   text,
 		Timestamp: time.Now(),
 	})
+}
+
+// syncViewportContent は viewport の内容を更新し、auto-follow を制御する。
+// 最下部にいる場合のみ追従し、上スクロール中は位置を維持する。
+func (m *Model) syncViewportContent() {
+	if !m.ready {
+		return
+	}
+	atBottom := m.vp.atBottom()
+	m.vp.setLines(m.getVisualRowContents())
+	if atBottom {
+		m.vp.gotoBottom()
+		m.newOutput = false
+	} else {
+		m.newOutput = true
+	}
 }
 
 // appendContentLines は生ログと描画済みログの両方に新しい行を追加する。
@@ -373,16 +380,7 @@ func (m *Model) appendContentLines(lines ...string) tea.Cmd {
 	m.rawLines = append(m.rawLines, normalized...)
 	m.rebuildLayout()
 	m.clampCursorLine()
-	if m.ready {
-		atBottom := m.vp.atBottom()
-		m.vp.setLines(m.getVisualRowContents())
-		if atBottom {
-			m.vp.gotoBottom()
-			m.newOutput = false
-		} else {
-			m.newOutput = true
-		}
-	}
+	m.syncViewportContent()
 	return nil
 }
 

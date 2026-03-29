@@ -428,13 +428,17 @@ func (m Model) viewportView() string {
 	return sb.String()
 }
 
-// rebuildChrome は入力欄+ステータスバーを再構築する。
-// Update() 内で chromeDirty 時のみ呼ばれる（View() は値レシーバーなので書き込み不可）。
-func (m *Model) rebuildChrome() {
+// renderInputDock は入力欄部分（パディング行+入力行+パディング行）を構築する。
+func (m *Model) renderInputDock() string {
 	const inputBg = "\033[48;5;236m"
-	const hintColor = "\033[38;5;244m"
 	tiView := strings.ReplaceAll(m.textInput.View(), "\033[0m", "\033[0m"+inputBg)
 	inputLine := fillANSITextWidth(inputBg+" \033[38;5;46m"+inputPrompt+"\033[38;5;252m"+tiView+"\033[0m", m.width, inputBg)
+	return m.padLineCache + "\n" + inputLine + "\n" + m.padLineCache
+}
+
+// renderStatusBar はステータスバー行を構築する。
+func (m *Model) renderStatusBar() string {
+	const hintColor = "\033[38;5;244m"
 	statusLine := sanitizeSingleLineANSI(m.statusLine)
 
 	var statusText string
@@ -474,9 +478,13 @@ func (m *Model) rebuildChrome() {
 			break
 		}
 	}
-	statusBar = fitANSITextWidth(statusBar, m.width)
+	return fitANSITextWidth(statusBar, m.width)
+}
 
-	m.chromeCache = m.padLineCache + "\n" + inputLine + "\n" + m.padLineCache + "\n" + statusBar
+// rebuildChrome は入力欄+ステータスバーを再構築する。
+// Update() 内で chromeDirty 時のみ呼ばれる（View() は値レシーバーなので書き込み不可）。
+func (m *Model) rebuildChrome() {
+	m.chromeCache = m.renderInputDock() + "\n" + m.renderStatusBar()
 }
 
 // View は bubbletea の View を実装する。

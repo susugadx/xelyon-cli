@@ -1189,3 +1189,179 @@ func TestModel_ScrollingToBottomClearsNewOutputBadge(t *testing.T) {
 		t.Fatalf("chromeCache should clear new output badge, got %q", m.chromeCache)
 	}
 }
+
+// --- footer 高さ計算 ---
+
+func TestModel_FooterHeight(t *testing.T) {
+	m := NewModel(&stubAgent{statusLine: "ready"}, "")
+	got := m.footerHeight()
+	want := statusBarHeight + inputHeight
+	if got != want {
+		t.Fatalf("footerHeight() = %d, want %d", got, want)
+	}
+}
+
+func TestModel_FooterHeight_UsedInWindowSizeMsg(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
+	m = updated.(Model)
+
+	wantVPHeight := 30 - m.footerHeight()
+	if m.vp.height != wantVPHeight {
+		t.Fatalf("vp.height = %d, want %d (height %d - footerHeight %d)", m.vp.height, wantVPHeight, 30, m.footerHeight())
+	}
+}
+
+// --- rebuildChrome 分割後の見た目維持 ---
+
+func TestModel_RenderInputDock_StructureAndPrompt(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := newModelWithViewport(agent)
+	m.textInput.SetValue("hello")
+	m.rebuildChrome()
+
+	dock := m.renderInputDock()
+	lines := strings.Split(dock, "\n")
+	if len(lines) != 3 {
+		t.Fatalf("renderInputDock should produce 3 lines (pad+input+pad), got %d", len(lines))
+	}
+	// 中央行に入力プロンプトが含まれる
+	if !strings.Contains(lines[1], inputPrompt) {
+		t.Fatalf("input line should contain prompt %q, got %q", inputPrompt, lines[1])
+	}
+	if !strings.Contains(lines[1], "hello") {
+		t.Fatalf("input line should contain input value, got %q", lines[1])
+	}
+}
+
+func TestModel_RenderStatusBar_ContainsHints(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := newModelWithViewport(agent)
+
+	bar := m.renderStatusBar()
+	lines := strings.Split(bar, "\n")
+	if len(lines) != 1 {
+		t.Fatalf("renderStatusBar should produce 1 line, got %d", len(lines))
+	}
+	if !strings.Contains(bar, "ready") {
+		t.Fatalf("status bar should contain status text, got %q", bar)
+	}
+}
+
+func TestModel_RenderStatusBar_NavMode(t *testing.T) {
+	agent := &stubAgent{statusLine: "nav status"}
+	m := newModelWithViewport(agent)
+	m.navigationMode = true
+
+	bar := m.renderStatusBar()
+	if !strings.Contains(bar, "NAV") {
+		t.Fatalf("nav mode status bar should contain NAV badge, got %q", bar)
+	}
+}
+
+func TestModel_RebuildChrome_ConsistentWithHelpers(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := newModelWithViewport(agent)
+	m.textInput.SetValue("test")
+	m.rebuildChrome()
+
+	want := m.renderInputDock() + "\n" + m.renderStatusBar()
+	if m.chromeCache != want {
+		t.Fatalf("chromeCache should equal renderInputDock + \\n + renderStatusBar")
+	}
+}
+
+func TestModel_RebuildChrome_TotalLineCount(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := newModelWithViewport(agent)
+	m.rebuildChrome()
+
+	lines := strings.Split(m.chromeCache, "\n")
+	if len(lines) != m.footerHeight() {
+		t.Fatalf("chromeCache line count = %d, want footerHeight() = %d", len(lines), m.footerHeight())
+	}
+}
+
+// --- auto-follow / new output バッジ ---
+
+func TestModel_AutoFollow_DoesNotJumpWhenScrolledUp(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := newModelWithViewport(agent)
+
+	// コンテンツを追加して画面を埋める
+	for i := 0; i < 40; i++ {
+		m.appendContentLines(fmt.Sprintf("line %d", i))
+	}
+
+	// 上にスクロール
+	m.vp.gotoTop()
+	savedOffset := m.vp.yOffset
+
+	// 新しいコンテンツを追加
+	m.appendContentLines("new content while scrolled up")
+
+	// yOffset が変わらないこと（勝手に最下部に飛ばない）
+	if m.vp.yOffset != savedOffset {
+		t.Fatalf("yOffset = %d, want %d (should not jump to bottom)", m.vp.yOffset, savedOffset)
+	}
+	// newOutput バッジが有効になること
+	if !m.newOutput {
+		t.Fatal("newOutput should be true when content added while scrolled up")
+	}
+}
+
+func TestModel_AutoFollow_StreamDoesNotJumpWhenScrolledUp(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := newModelWithViewport(agent)
+
+	for i := 0; i < 40; i++ {
+		m.appendContentLines(fmt.Sprintf("line %d", i))
+	}
+
+	m.vp.gotoTop()
+	savedOffset := m.vp.yOffset
+
+	// ストリーミングテキストを追加
+	m.appendStreamText("streamed text")
+
+	if m.vp.yOffset != savedOffset {
+		t.Fatalf("yOffset = %d, want %d (stream should not jump to bottom)", m.vp.yOffset, savedOffset)
+	}
+	if !m.newOutput {
+		t.Fatal("newOutput should be true when stream added while scrolled up")
+	}
+}
+
+func TestModel_AutoFollow_StaysAtBottomWhenNewContentArrives(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := newModelWithViewport(agent)
+
+	for i := 0; i < 40; i++ {
+		m.appendContentLines(fmt.Sprintf("line %d", i))
+	}
+
+	if !m.vp.atBottom() {
+		t.Fatal("viewport should be at bottom after initial content")
+	}
+
+	m.appendContentLines("another line")
+
+	if !m.vp.atBottom() {
+		t.Fatal("viewport should stay at bottom after appending while at bottom")
+	}
+	if m.newOutput {
+		t.Fatal("newOutput should be false when at bottom")
+	}
+}
+
+func TestModel_SyncViewportContent_NotReadyIsNoop(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+	// ready = false のまま
+	m.syncViewportContent() // パニックしないこと
+	if m.newOutput {
+		t.Fatal("newOutput should not be set when not ready")
+	}
+}

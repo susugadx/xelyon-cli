@@ -15,10 +15,15 @@ import (
 const (
 	statusBarHeight  = 1
 	inputHeight      = 3 // 上パディング1 + 入力行1 + 下パディング1
-	chromeHeight     = statusBarHeight + inputHeight
 	inputPrompt      = "› "
 	inputPromptWidth = 2 // lipgloss.Width(inputPrompt) の事前計算値
 )
+
+// footerHeight は下部 chrome（入力欄+ステータスバー）の合計高さを返す。
+// 将来の compact footer や compose mode では動的に切り替えられる。
+func (m Model) footerHeight() int {
+	return statusBarHeight + inputHeight
+}
 
 var statusHintsNormal = []string{
 	"Esc:NAV • /copy • Shift+drag",
@@ -186,7 +191,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		widthChanged := m.width != msg.Width
 		m.width = msg.Width
 		m.height = msg.Height
-		viewportHeight := m.height - chromeHeight
+		viewportHeight := m.height - m.footerHeight()
 		if viewportHeight < 1 {
 			viewportHeight = 1
 		}

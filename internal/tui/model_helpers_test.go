@@ -79,7 +79,7 @@ func newModelWithViewport(agent AgentInterface) Model {
 	m.ready = true
 	m.width = 80
 	m.height = 30
-	m.vp = lightViewport{width: 80, height: 26}
+	m.vp = lightViewport{width: 80, height: m.height - m.footerHeight()}
 	m.padLineCache = strings.Repeat(" ", 80)
 	return m
 }
