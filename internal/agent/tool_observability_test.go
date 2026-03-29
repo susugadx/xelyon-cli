@@ -158,6 +158,24 @@ func TestRecordToolObservability_SinglePatternSearch(t *testing.T) {
 	if a.Stats.ToolObs.SearchCodeMultiPatternCalls != 0 {
 		t.Errorf("SearchCodeMultiPatternCalls = %d, want 0", a.Stats.ToolObs.SearchCodeMultiPatternCalls)
 	}
+	if a.Stats.ToolObs.SearchCodeMissedMultiPattern != 0 {
+		t.Errorf("SearchCodeMissedMultiPattern = %d, want 0", a.Stats.ToolObs.SearchCodeMissedMultiPattern)
+	}
+}
+
+func TestRecordToolObservability_ImpactIntentCountsAsMultiPatternSearch(t *testing.T) {
+	a := &Agent{Stats: NewSessionStats("test")}
+	a.recordToolObservability("search_code", map[string]any{
+		"pattern": "NewAgent",
+		"intent":  "impact",
+	}, nil, "Found 5 matches...")
+
+	if a.Stats.ToolObs.SearchCodeMultiPatternCalls != 1 {
+		t.Errorf("SearchCodeMultiPatternCalls = %d, want 1 for intent=impact", a.Stats.ToolObs.SearchCodeMultiPatternCalls)
+	}
+	if a.Stats.ToolObs.SearchCodeMissedMultiPattern != 0 {
+		t.Errorf("SearchCodeMissedMultiPattern = %d, want 0 for intent=impact", a.Stats.ToolObs.SearchCodeMissedMultiPattern)
+	}
 }
 
 // ── recordToolObservability (XML rescue path: RawArgs なし, Args のみ) ──
@@ -208,10 +226,111 @@ func TestRecordToolObservability_XMLRescue_SinglePattern(t *testing.T) {
 	}
 }
 
+func TestRecordToolObservability_XMLRescue_ImpactIntentCountsAsMultiPatternSearch(t *testing.T) {
+	a := &Agent{Stats: NewSessionStats("test")}
+	a.recordToolObservability("search_code", nil, map[string]string{
+		"pattern": "NewAgent",
+		"intent":  "impact",
+	}, "Found 5 matches...")
+
+	if a.Stats.ToolObs.SearchCodeMultiPatternCalls != 1 {
+		t.Errorf("XML rescue: SearchCodeMultiPatternCalls = %d, want 1 for intent=impact", a.Stats.ToolObs.SearchCodeMultiPatternCalls)
+	}
+	if a.Stats.ToolObs.SearchCodeMissedMultiPattern != 0 {
+		t.Errorf("XML rescue: SearchCodeMissedMultiPattern = %d, want 0 for intent=impact", a.Stats.ToolObs.SearchCodeMissedMultiPattern)
+	}
+}
+
+func TestRecordToolObservability_SearchCodeMissedMultiPattern(t *testing.T) {
+	a := &Agent{Stats: NewSessionStats("test")}
+	a.resetSearchCodeTurnObservability()
+
+	a.recordToolObservability("search_code", map[string]any{
+		"pattern": "foo definition",
+		"path":    ".",
+		"mode":    "auto",
+	}, nil, "Found 1 match...")
+	a.recordToolObservability("search_code", map[string]any{
+		"pattern": "foo callers",
+		"path":    ".",
+		"mode":    "auto",
+	}, nil, "Found 2 matches...")
+
+	if a.Stats.ToolObs.SearchCodeMissedMultiPattern != 1 {
+		t.Errorf("SearchCodeMissedMultiPattern = %d, want 1", a.Stats.ToolObs.SearchCodeMissedMultiPattern)
+	}
+}
+
+func TestRecordToolObservability_SearchCodeMissedMultiPattern_DoesNotCountForMultiPattern(t *testing.T) {
+	a := &Agent{Stats: NewSessionStats("test")}
+	a.resetSearchCodeTurnObservability()
+
+	a.recordToolObservability("search_code", map[string]any{
+		"pattern": "foo definition,foo callers",
+		"path":    ".",
+	}, nil, "Found 3 matches...")
+
+	if a.Stats.ToolObs.SearchCodeMissedMultiPattern != 0 {
+		t.Errorf("SearchCodeMissedMultiPattern = %d, want 0", a.Stats.ToolObs.SearchCodeMissedMultiPattern)
+	}
+}
+
+func TestRecordToolObservability_SearchCodeMissedMultiPattern_CountsOncePerFamilyPerTurn(t *testing.T) {
+	a := &Agent{Stats: NewSessionStats("test")}
+	a.resetSearchCodeTurnObservability()
+
+	a.recordToolObservability("search_code", map[string]any{
+		"pattern": "foo definition",
+		"path":    ".",
+	}, nil, "Found 1 match...")
+	a.recordToolObservability("search_code", map[string]any{
+		"pattern": "foo callers",
+		"path":    ".",
+	}, nil, "Found 2 matches...")
+	a.recordToolObservability("search_code", map[string]any{
+		"pattern": "foo references",
+		"path":    ".",
+	}, nil, "Found 3 matches...")
+
+	if a.Stats.ToolObs.SearchCodeMissedMultiPattern != 1 {
+		t.Errorf("SearchCodeMissedMultiPattern = %d, want 1", a.Stats.ToolObs.SearchCodeMissedMultiPattern)
+	}
+}
+
+func TestRecordToolObservability_SearchCodeMissedMultiPattern_ResetsOnNewUserRequest(t *testing.T) {
+	a := &Agent{Stats: NewSessionStats("test")}
+	a.resetSearchCodeTurnObservability()
+
+	a.recordToolObservability("search_code", map[string]any{
+		"pattern": "foo definition",
+		"path":    ".",
+	}, nil, "Found 1 match...")
+	a.recordToolObservability("search_code", map[string]any{
+		"pattern": "foo callers",
+		"path":    ".",
+	}, nil, "Found 2 matches...")
+	a.resetSearchCodeTurnObservability()
+	a.recordToolObservability("search_code", map[string]any{
+		"pattern": "foo definition",
+		"path":    ".",
+	}, nil, "Found 1 match...")
+	a.recordToolObservability("search_code", map[string]any{
+		"pattern": "foo callers",
+		"path":    ".",
+	}, nil, "Found 2 matches...")
+
+	if a.Stats.ToolObs.SearchCodeMissedMultiPattern != 2 {
+		t.Errorf("SearchCodeMissedMultiPattern = %d, want 2", a.Stats.ToolObs.SearchCodeMissedMultiPattern)
+	}
+}
+
 func TestPrintToolObservabilitySection(t *testing.T) {
 	stats := NewSessionStats("test")
 	stats.ToolObs.ReadFileBatchCalls = 12
 	stats.ToolObs.SearchCodeMultiPatternCalls = 7
+	stats.ToolObs.SearchCodeMissedMultiPattern = 9
+	stats.ToolObs.SearchCodeBatchMerges = 5
+	stats.ToolObs.ReadFileBatchMerges = 4
 	stats.ToolObs.ReadFileEmptyPathsErrors = 3
 
 	var buf bytes.Buffer
@@ -222,14 +341,32 @@ func TestPrintToolObservabilitySection(t *testing.T) {
 	if !strings.Contains(output, "Tool Selection") {
 		t.Error("should contain Tool Selection header")
 	}
+	if !strings.Contains(output, "read_file(batch)") {
+		t.Error("should contain read_file(batch) row")
+	}
 	if !strings.Contains(output, "12") {
 		t.Error("should contain batch count 12")
+	}
+	if !strings.Contains(output, "search_code(multi)") {
+		t.Error("should contain search_code(multi) row")
 	}
 	if !strings.Contains(output, "7") {
 		t.Error("should contain multi-pattern count 7")
 	}
-	if !strings.Contains(output, "3") {
-		t.Error("should contain empty-path error count 3")
+	if !strings.Contains(output, "search_code(missed multi)") {
+		t.Error("should contain search_code(missed multi) row")
+	}
+	if !strings.Contains(output, "9") {
+		t.Error("should contain missed multi count 9")
+	}
+	if strings.Contains(output, "search_code(batch merge)") {
+		t.Error("should not contain search_code(batch merge) row")
+	}
+	if strings.Contains(output, "read_file(batch merge)") {
+		t.Error("should not contain read_file(batch merge) row")
+	}
+	if strings.Contains(output, "read_file empty-path errors") {
+		t.Error("should not contain read_file empty-path errors row")
 	}
 }
 
@@ -243,5 +380,23 @@ func TestPrintToolObservabilitySection_AllZero(t *testing.T) {
 	// 全て0でもセクションは表示される
 	if !strings.Contains(output, "Tool Selection") {
 		t.Error("should show Tool Selection even with all zeros")
+	}
+	if !strings.Contains(output, "read_file(batch)") {
+		t.Error("should contain read_file(batch) row")
+	}
+	if !strings.Contains(output, "search_code(multi)") {
+		t.Error("should contain search_code(multi) row")
+	}
+	if !strings.Contains(output, "search_code(missed multi)") {
+		t.Error("should contain search_code(missed multi) row")
+	}
+	if strings.Contains(output, "search_code(batch merge)") {
+		t.Error("should not contain search_code(batch merge) row")
+	}
+	if strings.Contains(output, "read_file(batch merge)") {
+		t.Error("should not contain read_file(batch merge) row")
+	}
+	if strings.Contains(output, "read_file empty-path errors") {
+		t.Error("should not contain read_file empty-path errors row")
 	}
 }

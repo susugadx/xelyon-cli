@@ -51,7 +51,12 @@ func (t *SearchCodeTool) Parameters() map[string]interface{} {
 	return map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
-			"pattern":     map[string]interface{}{"type": "string", "description": "Search query. Comma-separated patterns are the default for related code discovery. Prefer one combined multi-pattern query over repeated narrow searches. Examples: 'planSearchRoute,searchRouteTrace,router_test.go', 'VisualRow,syncCursorToViewportTop,charSelectionColumnsForLine'. Max 10 patterns."},
+			"pattern": map[string]interface{}{"type": "string", "description": "Search query. Comma-separated patterns are the default for related code discovery. Prefer one combined multi-pattern query over repeated narrow searches. Examples: 'planSearchRoute,searchRouteTrace,router_test.go', 'VisualRow,syncCursorToViewportTop,charSelectionColumnsForLine'. Max 10 patterns."},
+			"intent": map[string]interface{}{
+				"type":        "string",
+				"enum":        []string{"impact"},
+				"description": "Optional high-level intent. intent=impact expands a single pattern into a conservative related multi-pattern search for shared-change impact analysis. Already comma-separated patterns are used as-is.",
+			},
 			"path":        map[string]interface{}{"type": "string", "description": "Directory or file to search in (default: current directory)"},
 			"file_filter": map[string]interface{}{"type": "string", "description": "Filter by language type (e.g. go, py, ts) or glob pattern (e.g. *_test.go, Dockerfile*). Glob characters (*, ?, [) trigger glob mode, otherwise uses rg --type."},
 			"mode": map[string]interface{}{
@@ -72,6 +77,7 @@ func (t *SearchCodeTool) Parameters() map[string]interface{} {
 func (t *SearchCodeTool) Run(execCtx tools.ExecutionContext, args map[string]string) (string, *tools.FileChange, error) {
 	opts := SearchOptions{
 		Pattern: args["pattern"],
+		Intent:  args["intent"],
 		Path:    args["path"],
 		Mode:    string(SearchModeAuto),
 	}

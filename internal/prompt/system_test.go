@@ -55,6 +55,9 @@ func TestSystemPrompt_ProjectMapGuidance(t *testing.T) {
 	if !strings.Contains(SystemPrompt, "Prefer mode=auto") {
 		t.Error("SystemPrompt should prefer mode=auto for search_code")
 	}
+	if !strings.Contains(SystemPrompt, `search_code(intent="impact", pattern="SymbolName")`) {
+		t.Error("SystemPrompt should mention search_code intent=impact for shared-change investigation")
+	}
 	if strings.Contains(SystemPrompt, "imports") || strings.Contains(SystemPrompt, "← refs") {
 		t.Error("SystemPrompt should not mention imports or refs in Project Map")
 	}
@@ -106,6 +109,9 @@ func TestSystemPrompt_ParallelGuidanceIsConsolidated(t *testing.T) {
 	}
 	if !strings.Contains(SystemPrompt, "prefer one search_code call with comma-separated patterns instead of serial searches") {
 		t.Error("SystemPrompt should keep multi-pattern search_code guidance")
+	}
+	if !strings.Contains(SystemPrompt, `replaced with intent="impact"`) {
+		t.Error("SystemPrompt should guide shared-change follow-up searches toward intent=impact")
 	}
 	if !strings.Contains(SystemPrompt, "Sub-agents are fetch tools, not decision-makers") {
 		t.Error("SystemPrompt should clarify sub-agent role")

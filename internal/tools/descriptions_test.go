@@ -67,6 +67,9 @@ func TestToolDescriptions_ReadFileAndSearchCodeDescribeCurrentUsage(t *testing.T
 	if !strings.Contains(ToolDescriptions["search_code"], "Prefer mode=auto") {
 		t.Error("search_code description should recommend mode=auto")
 	}
+	if !strings.Contains(ToolDescriptions["search_code"], "intent=impact") {
+		t.Error("search_code description should mention intent=impact")
+	}
 	if strings.Contains(ToolDescriptions["search_code"], "For Go symbols") {
 		t.Error("search_code description should not be Go-specific")
 	}

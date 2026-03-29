@@ -44,6 +44,182 @@ func TestFormatToolLine_SearchCodeNoMatches(t *testing.T) {
 	}
 }
 
+func TestFormatToolLine_SearchCodeImpact(t *testing.T) {
+	line := FormatToolLine(ToolDisplayInfo{
+		ToolName: "search_code",
+		Args: map[string]string{
+			"pattern": "GetPricingInfo",
+			"path":    "internal/agent/",
+			"intent":  "impact",
+		},
+		Result: "Found 8 match(es) in 4 file(s)\ninternal/agent/stats.go:42: ...",
+	})
+
+	want := `🔍 search_code: "GetPricingInfo" in internal/agent/ (impact) → 8 matches, 4 files`
+	if line != want {
+		t.Fatalf("FormatToolLine() = %q, want %q", line, want)
+	}
+}
+
+func TestFormatToolLine_SearchCodeImpactMultiPatternSummary(t *testing.T) {
+	line := FormatToolLine(ToolDisplayInfo{
+		ToolName: "search_code",
+		Args: map[string]string{
+			"pattern": "GetPricingInfo",
+			"path":    "internal/agent/",
+			"intent":  "impact",
+		},
+		Result: strings.Join([]string{
+			`━━ Pattern 1/3: "GetPricingInfo" ━━`,
+			`Found 3 match(es) in 2 file(s)`,
+			``,
+			`📄 internal/agent/stats.go (2 match(es))`,
+			`10: line`,
+			`📄 internal/agent/cost.go (1 match(es))`,
+			`20: line`,
+			``,
+			`━━ Pattern 2/3: "GetPricingInfo_test" ━━`,
+			`Found 1 match(es) in 1 file(s)`,
+			``,
+			`📄 internal/agent/stats_test.go (1 match(es))`,
+			`30: line`,
+			``,
+			`━━ Pattern 3/3: "GetPricingInfoImpl" ━━`,
+			`No matches found`,
+		}, "\n"),
+	})
+
+	want := `🔍 search_code: "GetPricingInfo" in internal/agent/ (impact) → 3 matches, 3 files`
+	if line != want {
+		t.Fatalf("FormatToolLine() = %q, want %q", line, want)
+	}
+}
+
+func TestFormatToolLine_SearchCodeImpactMultiPatternSummary_DeduplicatesMatchesAndFiles(t *testing.T) {
+	line := FormatToolLine(ToolDisplayInfo{
+		ToolName: "search_code",
+		Args: map[string]string{
+			"pattern": "Foo",
+			"path":    "internal/agent/",
+			"intent":  "impact",
+		},
+		Result: strings.Join([]string{
+			`━━ Pattern 1/2: "Foo" ━━`,
+			`Found 2 match(es) in 1 file(s)`,
+			``,
+			`📄 internal/agent/foo.go (2 match(es))`,
+			`10: Foo`,
+			`20: FooImpl`,
+			``,
+			`━━ Pattern 2/2: "FooImpl" ━━`,
+			`Found 2 match(es) in 1 file(s)`,
+			``,
+			`📄 internal/agent/foo.go (2 match(es))`,
+			`20: FooImpl`,
+			`30: Another FooImpl`,
+		}, "\n"),
+	})
+
+	want := `🔍 search_code: "Foo" in internal/agent/ (impact) → 3 matches, 1 files`
+	if line != want {
+		t.Fatalf("FormatToolLine() = %q, want %q", line, want)
+	}
+}
+
+func TestFormatToolLine_SearchCodeImpactMultiPatternSummary_CountsGroupedSymbolBundleItems(t *testing.T) {
+	line := FormatToolLine(ToolDisplayInfo{
+		ToolName: "search_code",
+		Args: map[string]string{
+			"pattern": "Close",
+			"path":    "internal/agent/",
+			"intent":  "impact",
+		},
+		Result: strings.Join([]string{
+			`━━ Symbol Bundle: "Close" ━━`,
+			`── func Close (L10-L20) in internal/agent/agent.go ──`,
+			`Definition:`,
+			`  10: func Close() {}`,
+			``,
+			`Callers (2):`,
+			`  - internal/agent/run.go:40 | Close()`,
+			`  - internal/agent/run.go:40 | Close()`,
+			``,
+			`Tests (1):`,
+			`  - internal/agent/agent_test.go:15 | func TestClose`,
+		}, "\n"),
+	})
+
+	want := `🔍 search_code: "Close" in internal/agent/ (impact) → 3 matches, 3 files`
+	if line != want {
+		t.Fatalf("FormatToolLine() = %q, want %q", line, want)
+	}
+}
+
+func TestFormatToolLine_SearchCodeImpactMultiPatternSummary_CountsGroupedSymbolBundleItems_WindowsPath(t *testing.T) {
+	line := FormatToolLine(ToolDisplayInfo{
+		ToolName: "search_code",
+		Args: map[string]string{
+			"pattern": "Close",
+			"path":    ".",
+			"intent":  "impact",
+		},
+		Result: strings.Join([]string{
+			`━━ Symbol Bundle: "Close" ━━`,
+			`── func Close (L10-L20) in C:\repo\agent.go ──`,
+			`Definition:`,
+			`  10: func Close() {}`,
+			``,
+			`Callers (2):`,
+			`  - C:\repo\run.go:40 | Close()`,
+			`  - C:\repo\run.go:40 | Close()`,
+			``,
+			`Tests (1):`,
+			`  - C:\repo\agent_test.go:15 | func TestClose`,
+		}, "\n"),
+	})
+
+	want := `🔍 search_code: "Close" in . (impact) → 3 matches, 3 files`
+	if line != want {
+		t.Fatalf("FormatToolLine() = %q, want %q", line, want)
+	}
+}
+
+func TestFormatToolLine_SearchCodeImpactMultiPatternSummary_CountsFormattedTextSearchMatches(t *testing.T) {
+	line := FormatToolLine(ToolDisplayInfo{
+		ToolName: "search_code",
+		Args: map[string]string{
+			"pattern": "helper",
+			"path":    ".",
+			"intent":  "impact",
+		},
+		Result: strings.Join([]string{
+			`━━ Pattern 1/3: "helper" ━━`,
+			`Found 2 match(es) in 1 file(s)`,
+			``,
+			`📄 pkg/helper.go (2 match(es)) @loc1`,
+			`[def] >  42 │ func helper() {}`,
+			`[call] >  84 │ helper()`,
+			``,
+			`━━ Pattern 2/3: "helperImpl" ━━`,
+			`Found 1 match(es) in 1 file(s)`,
+			``,
+			`📄 pkg/helper.go (1 match(es)) @loc2`,
+			`[def] >  84 │ func helperImpl() {}`,
+			``,
+			`━━ Pattern 3/3: "TestHelper" ━━`,
+			`Found 1 match(es) in 1 file(s)`,
+			``,
+			`📄 pkg/helper_test.go (1 match(es)) @loc3`,
+			`[def] >  12 │ func TestHelper(t *testing.T) {}`,
+		}, "\n"),
+	})
+
+	want := `🔍 search_code: "helper" in . (impact) → 3 matches, 2 files`
+	if line != want {
+		t.Fatalf("FormatToolLine() = %q, want %q", line, want)
+	}
+}
+
 func TestFormatToolLine_ReadFile(t *testing.T) {
 	line := FormatToolLine(ToolDisplayInfo{
 		ToolName: "read_file",

@@ -65,11 +65,12 @@ func (m *OptimizationMetrics) hasAny() bool {
 
 // ToolObservability はツール実行・compaction の観測メトリクスを保持する。
 type ToolObservability struct {
-	ReadFileEmptyPathsErrors    int // read_file が paths is empty で失敗した回数
-	ReadFileBatchCalls          int // read_file(paths=...) の batch 呼び出し回数
-	SearchCodeMultiPatternCalls int // search_code の multi-pattern 呼び出し回数
-	SearchCodeBatchMerges       int // search_code multi-pattern batch merge 回数
-	ReadFileBatchMerges         int // read_file batch merge 回数
+	ReadFileEmptyPathsErrors     int // read_file が paths is empty で失敗した回数
+	ReadFileBatchCalls           int // read_file(paths=...) の batch 呼び出し回数
+	SearchCodeMultiPatternCalls  int // search_code の multi-pattern 呼び出し回数
+	SearchCodeMissedMultiPattern int // search_code の serial single-pattern から観測した missed multi-pattern 回数
+	SearchCodeBatchMerges        int // search_code multi-pattern batch merge 回数
+	ReadFileBatchMerges          int // read_file batch merge 回数
 }
 
 // SessionStats はセッション統計情報

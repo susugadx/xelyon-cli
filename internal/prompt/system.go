@@ -73,7 +73,7 @@ Project Map lists file paths, symbol definitions with line ranges for the projec
 - Do NOT call search_code to find symbols already listed in Project Map.
 - If needed information is missing from Project Map, fall back to search_code.
 #### When to use investigation tools
-- search_code: code discovery tool. Uses language-aware routing across symbol-aware resolution, literal search, and regex search. Prefer mode=auto, short symbol queries when possible, and regex only when needed. For related code discovery, multi-pattern search is the default. Use it whenever the needed code context is not already clear from the Project Map or known files.
+- search_code: code discovery tool. Uses language-aware routing across symbol-aware resolution, literal search, and regex search. Prefer mode=auto, short symbol queries when possible, and regex only when needed. For related code discovery, multi-pattern search is the default. Use it whenever the needed code context is not already clear from the Project Map or known files. For shared-change impact analysis starting from one symbol, prefer search_code(intent="impact", pattern="SymbolName").
 - read_file: to read actual file contents. Use line ranges from Project Map.
 #### Investigation rules
 - Never guess file paths or APIs. If the user gives a path, use it directly.
@@ -82,7 +82,7 @@ Project Map lists file paths, symbol definitions with line ranges for the projec
 ### 2. Impact Analysis
 **Shared changes** (function signature, struct, interface, constant, config, rename, delete, cross-file refactor):
 - MUST identify the affected surface before editing.
-- If the affected surface is not already clear from the Project Map or known files, start with one combined search_code call to gather the target plus related callers/references/tests. Then read the most relevant affected files and edit.
+- If the affected surface is not already clear from the Project Map or known files, start with search_code(intent="impact", pattern="SymbolName") or one combined multi-pattern search_code call to gather the target plus related callers/references/tests. Then read the most relevant affected files and edit.
 - Do not split definition, callers, references, and tests into separate serial searches unless the first combined search is clearly insufficient.
 - Before issuing a second search_code for the same change, check whether the first search should have been a combined multi-pattern search instead.
 - Modifying shared code without checking the affected surface is FORBIDDEN.
@@ -104,7 +104,8 @@ Notes:
 - Reading 2+ independent files -> pass them all in one read_file call.
 - Searching multiple independent patterns -> prefer one search_code call with comma-separated patterns instead of serial searches.
  - For related code discovery, multi-pattern search_code is the default. Use one combined query for target + helpers + references/callers + tests instead of serial narrow searches whenever possible.
- - If you are about to issue a second search_code call for the same task, first stop and check whether the searches should be merged into one comma-separated multi-pattern query.
+ - For shared changes when you only have one starting symbol, prefer search_code(intent="impact", pattern="SymbolName") before issuing serial follow-up searches.
+ - If you are about to issue a second search_code call for the same task, first stop and check whether the searches should be merged into one comma-separated multi-pattern query or replaced with intent="impact".
  - After the initial search_code, prefer moving to read_file. A follow-up search_code should usually be a corrective multi-pattern refinement.
 - Avoid overly broad regex like ".*" or ".+" in search_code.
 - Combine related edits in one call when the active edit tool supports batching or multi-file changes.

@@ -9,8 +9,8 @@ func TestSearchCodeToolParameters_RemoveUnusedSearchParams(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected properties map, got %T", params["properties"])
 	}
-	if len(properties) != 5 {
-		t.Fatalf("expected 5 parameters after schema update, got %d", len(properties))
+	if len(properties) != 6 {
+		t.Fatalf("expected 6 parameters after schema update, got %d", len(properties))
 	}
 	for _, key := range []string{"token_budget", "multiline", "include_hidden", "include_ignored", "context_lines", "file_type", "file_pattern", "output_mode"} {
 		if _, exists := properties[key]; exists {
@@ -22,6 +22,9 @@ func TestSearchCodeToolParameters_RemoveUnusedSearchParams(t *testing.T) {
 	}
 	if _, exists := properties["mode"]; !exists {
 		t.Fatal("mode should be exposed in the schema")
+	}
+	if _, exists := properties["intent"]; !exists {
+		t.Fatal("intent should be exposed in the schema")
 	}
 }
 

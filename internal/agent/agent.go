@@ -10,6 +10,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode"
 
 	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/api"
@@ -106,6 +107,11 @@ type Agent struct {
 	historyMu     sync.Mutex
 	changeStackMu sync.Mutex
 	statsMu       sync.Mutex
+
+	// per-turn observability for conservatively detecting serial single-pattern
+	// search_code calls that could have been grouped into one multi-pattern call.
+	searchCodeRecentSinglePatternByFamily map[string]string
+	searchCodeMissedMultiCountedFamilies  map[string]struct{}
 }
 
 func (a *Agent) setPromptReader(reader *ui.MultilineReader) {
@@ -459,18 +465,155 @@ func (a *Agent) recordToolObservability(toolName string, rawArgs map[string]any,
 			obs.ReadFileEmptyPathsErrors++
 		}
 	case "search_code":
-		// multi-pattern: カンマ区切りで2パターン以上
-		if patternVal, ok := rawArgs["pattern"]; ok {
-			if isMultiPatternArg(patternVal) {
-				obs.SearchCodeMultiPatternCalls++
-			}
-		} else if patternStr, ok := stringArgs["pattern"]; ok {
-			// XML rescue フォールバック
-			if isMultiPatternArg(patternStr) {
-				obs.SearchCodeMultiPatternCalls++
-			}
+		// multi-pattern: explicit comma-separated patterns, or intent=impact
+		// single-pattern calls that are internally expanded to the multi-pattern path.
+		if isObservedSearchCodeMulti(rawArgs, stringArgs) {
+			obs.SearchCodeMultiPatternCalls++
+			return
+		}
+		a.recordSearchCodeMissedMultiLocked(rawArgs, stringArgs)
+	}
+}
+
+func (a *Agent) resetSearchCodeTurnObservability() {
+	a.statsMu.Lock()
+	defer a.statsMu.Unlock()
+	a.searchCodeRecentSinglePatternByFamily = make(map[string]string)
+	a.searchCodeMissedMultiCountedFamilies = make(map[string]struct{})
+}
+
+func (a *Agent) recordSearchCodeMissedMultiLocked(rawArgs map[string]any, stringArgs map[string]string) {
+	args := buildSearchCodeObservabilityArgs(rawArgs, stringArgs)
+	pattern := strings.TrimSpace(args["pattern"])
+	if pattern == "" || isMultiPatternArg(pattern) {
+		return
+	}
+
+	exactPattern := normalizeSearchCodeObservedPattern(pattern, false)
+	familyPattern := normalizeSearchCodeObservedPattern(pattern, true)
+	if exactPattern == "" || familyPattern == "" {
+		return
+	}
+
+	optionsKey := searchCodeOptionsKey(&tools.ToolCall{
+		Tool: "search_code",
+		Args: args,
+	})
+	if optionsKey == "" {
+		return
+	}
+
+	if a.searchCodeRecentSinglePatternByFamily == nil {
+		a.searchCodeRecentSinglePatternByFamily = make(map[string]string)
+	}
+	if a.searchCodeMissedMultiCountedFamilies == nil {
+		a.searchCodeMissedMultiCountedFamilies = make(map[string]struct{})
+	}
+
+	familyKey := optionsKey + "|family=" + familyPattern
+	if _, counted := a.searchCodeMissedMultiCountedFamilies[familyKey]; counted {
+		return
+	}
+
+	prevPattern, seen := a.searchCodeRecentSinglePatternByFamily[familyKey]
+	if !seen {
+		a.searchCodeRecentSinglePatternByFamily[familyKey] = exactPattern
+		return
+	}
+	if prevPattern == exactPattern {
+		return
+	}
+
+	a.Stats.ToolObs.SearchCodeMissedMultiPattern++
+	a.searchCodeMissedMultiCountedFamilies[familyKey] = struct{}{}
+}
+
+func buildSearchCodeObservabilityArgs(rawArgs map[string]any, stringArgs map[string]string) map[string]string {
+	args := make(map[string]string, len(stringArgs)+len(rawArgs))
+	for k, v := range stringArgs {
+		args[k] = v
+	}
+	for k, v := range rawArgs {
+		if s, ok := stringifySearchCodeArg(v); ok {
+			args[k] = s
 		}
 	}
+	return args
+}
+
+func isObservedSearchCodeMulti(rawArgs map[string]any, stringArgs map[string]string) bool {
+	args := buildSearchCodeObservabilityArgs(rawArgs, stringArgs)
+	pattern := strings.TrimSpace(args["pattern"])
+	if pattern == "" {
+		return false
+	}
+	if isMultiPatternArg(pattern) {
+		return true
+	}
+	return strings.EqualFold(strings.TrimSpace(args["intent"]), "impact")
+}
+
+func stringifySearchCodeArg(v any) (string, bool) {
+	switch val := v.(type) {
+	case string:
+		return val, true
+	case bool:
+		if val {
+			return "true", true
+		}
+		return "false", true
+	case int:
+		return fmt.Sprintf("%d", val), true
+	case int64:
+		return fmt.Sprintf("%d", val), true
+	case float64:
+		return fmt.Sprintf("%g", val), true
+	default:
+		return "", false
+	}
+}
+
+func normalizeSearchCodeObservedPattern(pattern string, stripFamilyNoise bool) string {
+	tokens := tokenizeObservedSearchCodePattern(pattern)
+	if len(tokens) == 0 {
+		return ""
+	}
+	if !stripFamilyNoise {
+		return strings.Join(tokens, " ")
+	}
+
+	filtered := make([]string, 0, len(tokens))
+	for _, token := range tokens {
+		if _, noise := searchCodeFamilyNoiseTerms[token]; noise {
+			continue
+		}
+		filtered = append(filtered, token)
+	}
+	if len(filtered) == 0 {
+		return ""
+	}
+	return strings.Join(filtered, " ")
+}
+
+func tokenizeObservedSearchCodePattern(pattern string) []string {
+	return strings.FieldsFunc(strings.ToLower(strings.TrimSpace(pattern)), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	})
+}
+
+var searchCodeFamilyNoiseTerms = map[string]struct{}{
+	"definition":     {},
+	"definitions":    {},
+	"caller":         {},
+	"callers":        {},
+	"ref":            {},
+	"refs":           {},
+	"reference":      {},
+	"references":     {},
+	"test":           {},
+	"tests":          {},
+	"impl":           {},
+	"implementation": {},
 }
 
 // isBatchPaths は paths 引数が実質的な batch（2パス以上）か判定する。

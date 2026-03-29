@@ -472,6 +472,36 @@ func TestSearchCode_CacheKeyUsesInternalTokenBudget(t *testing.T) {
 	}
 }
 
+func TestSearchCode_ImpactIntentCacheRemainsValid(t *testing.T) {
+	setupSearchTestMocks(t)
+
+	dir := t.TempDir()
+	file1 := filepath.Join(dir, "impact_cached.go")
+	if err := os.WriteFile(file1, []byte("func NewAgent() {}\nfunc TestNewAgent() {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cache := &testSearchCache{data: make(map[string]string)}
+	opts := SearchOptions{Pattern: "NewAgent", Intent: "impact", Path: dir, FilePattern: "*.go", IsRegex: true}
+
+	result1 := ExecuteSearchCodeWithCache(cache, opts)
+	if !strings.Contains(result1, "Pattern 1/") {
+		t.Fatalf("expected multi-pattern result on first impact search, got:\n%s", result1)
+	}
+	if cache.setCalls == 0 {
+		t.Fatal("expected cache write for impact search")
+	}
+
+	getCalls := cache.getCalls
+	result2 := ExecuteSearchCodeWithCache(cache, opts)
+	if cache.getCalls <= getCalls {
+		t.Fatal("expected cache lookup on second impact search")
+	}
+	if result2 != result1 {
+		t.Fatal("expected same cached result for repeated impact search")
+	}
+}
+
 func TestSplitPatterns(t *testing.T) {
 	tests := []struct {
 		input    string
@@ -497,6 +527,60 @@ func TestSplitPatterns(t *testing.T) {
 			if got[i] != tt.expected[i] {
 				t.Errorf("splitPatterns(%q)[%d] = %q, want %q", tt.input, i, got[i], tt.expected[i])
 			}
+		}
+	}
+}
+
+func TestExpandImpactPatterns(t *testing.T) {
+	got := expandImpactPatterns("NewAgent", SearchOptions{Intent: "impact"})
+	want := []string{"NewAgent", "NewAgentImpl"}
+
+	if len(got) != len(want) {
+		t.Fatalf("expandImpactPatterns() len = %d, want %d (%v)", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("expandImpactPatterns()[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestExpandImpactPatterns_DoesNotIncludeDuplicateProneTestNameVariants(t *testing.T) {
+	got := expandImpactPatterns("Foo", SearchOptions{Intent: "impact"})
+	for _, disallowed := range []string{"TestFoo", "FooTest", "Foo_test"} {
+		for _, candidate := range got {
+			if candidate == disallowed {
+				t.Fatalf("expandImpactPatterns() should not include %q: %v", disallowed, got)
+			}
+		}
+	}
+}
+
+func TestImpactTestProbePattern_UsesCommonTestSymbolFormConservatively(t *testing.T) {
+	if got := impactTestProbePattern("helper"); got != "TestHelper" {
+		t.Fatalf("impactTestProbePattern() = %q, want %q", got, "TestHelper")
+	}
+	if got := impactTestProbePattern("NewAgent"); got != "TestNewAgent" {
+		t.Fatalf("impactTestProbePattern() = %q, want %q", got, "TestNewAgent")
+	}
+}
+
+func TestEffectiveSearchPatterns_EmptyIntentPreservesSinglePattern(t *testing.T) {
+	got := effectiveSearchPatterns(SearchOptions{Pattern: "NewAgent"})
+	if len(got) != 1 || got[0] != "NewAgent" {
+		t.Fatalf("effectiveSearchPatterns() = %v, want [NewAgent]", got)
+	}
+}
+
+func TestEffectiveSearchPatterns_AlreadyMultiPatternNotExpandedTwice(t *testing.T) {
+	got := effectiveSearchPatterns(SearchOptions{Pattern: "NewAgent,Run", Intent: "impact"})
+	want := []string{"NewAgent", "Run"}
+	if len(got) != len(want) {
+		t.Fatalf("effectiveSearchPatterns() len = %d, want %d (%v)", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("effectiveSearchPatterns()[%d] = %q, want %q", i, got[i], want[i])
 		}
 	}
 }
@@ -530,6 +614,46 @@ func TestExecuteSearchCode_MultiplePatterns(t *testing.T) {
 	}
 	if !strings.Contains(result, lineRangeHint) {
 		t.Error("Expected line-range hint in multi-pattern result")
+	}
+}
+
+func TestExecuteSearchCode_ImpactIntentExpandsSinglePattern(t *testing.T) {
+	setupSearchTestMocks(t)
+
+	dir := t.TempDir()
+	file1 := filepath.Join(dir, "impact.go")
+	content := "func NewAgent() {}\nfunc TestNewAgent() {}\nfunc NewAgentImpl() {}\n"
+	if err := os.WriteFile(file1, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	result := ExecuteSearchCode(SearchOptions{Pattern: "NewAgent", Intent: "impact", Path: dir, FilePattern: "*.go", FileType: "", CtxLines: 0, TokenBudget: 3000, IsRegex: true, Multiline: false})
+
+	if !strings.Contains(result, "Pattern 1/") {
+		t.Fatalf("expected multi-pattern output, got:\n%s", result)
+	}
+	if !strings.Contains(result, `"NewAgent"`) {
+		t.Fatalf("expected base pattern header in output, got:\n%s", result)
+	}
+	if !strings.Contains(result, "TestNewAgent") {
+		t.Fatalf("expected impact test probe in output, got:\n%s", result)
+	}
+}
+
+func TestExecuteSearchCode_ImpactIntentFallsBackToCommonTestSymbolForm(t *testing.T) {
+	setupSearchTestMocks(t)
+
+	dir := t.TempDir()
+	file1 := filepath.Join(dir, "impact_fallback.go")
+	content := "func helper() {}\nfunc helperImpl() {}\nfunc TestHelper() {}\n"
+	if err := os.WriteFile(file1, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	result := ExecuteSearchCode(SearchOptions{Pattern: "helper", Intent: "impact", Path: dir, FilePattern: "*.go", FileType: "", CtxLines: 0, TokenBudget: 3000, IsRegex: true, Multiline: false})
+
+	if !strings.Contains(result, "TestHelper") {
+		t.Fatalf("expected conservative fallback test probe to surface TestHelper, got:\n%s", result)
 	}
 }
 

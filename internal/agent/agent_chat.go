@@ -41,6 +41,7 @@ func (a *Agent) chatInternal(input string, image *api.ImageData) {
 // oneShot=true の場合: エラーを返し、対話向け後処理（usage表示・圧縮・context提案）をスキップ
 func (a *Agent) chatCore(input string, image *api.ImageData, oneShot bool) error {
 	a.SetStatus(StateRunning, "Processing request", "処理中", "Wait for response", "応答を待ってください")
+	a.resetSearchCodeTurnObservability()
 
 	// タスク開始: changeStack のオフセットを記録（タスク単位のサマリー表示用）
 	prevChanges := len(a.changeStack) - a.taskChangeOffset

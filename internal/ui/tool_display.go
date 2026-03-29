@@ -22,12 +22,16 @@ type ToolDisplayInfo struct {
 }
 
 var (
-	searchSummaryPattern   = regexp.MustCompile(`Found (\d+) match(?:\(es\)|es?) in (\d+) file(?:\(s\)|s?)`)
-	outlineSummaryPattern  = regexp.MustCompile(`\((\d+) lines total(?:\.[^)]*)?\)`)
-	strReplaceRangePattern = regexp.MustCompile(`lines (\d+)-(\d+)`)
-	strReplaceEditsPattern = regexp.MustCompile(`Successfully applied (\d+) edits`)
-	writeFileLinesPattern  = regexp.MustCompile(`Successfully wrote \d+ bytes \((\d+) lines\) to `)
-	leadingLineNumPattern  = regexp.MustCompile(`^(\d+): `)
+	searchSummaryPattern            = regexp.MustCompile(`Found (\d+) match(?:\(es\)|es?) in (\d+) file(?:\(s\)|s?)`)
+	searchFileHeaderPattern         = regexp.MustCompile(`^📄 (.+?) \(\d+ match(?:\(es\)|es?)\)(?: .+)?$`)
+	searchSymbolHeaderPattern       = regexp.MustCompile(`^── .+ \(L(\d+)(?:-L?\d+)?\) in (.+?)(?: @\S+)? ──$`)
+	searchBundleItemPattern         = regexp.MustCompile(`^- (.+?):(\d+)(?:\s|\||$)`)
+	searchFormattedMatchLinePattern = regexp.MustCompile(`^(?:\[[^]]+\]\s+)?(?:>\s*)?(\d+)\s*│`)
+	outlineSummaryPattern           = regexp.MustCompile(`\((\d+) lines total(?:\.[^)]*)?\)`)
+	strReplaceRangePattern          = regexp.MustCompile(`lines (\d+)-(\d+)`)
+	strReplaceEditsPattern          = regexp.MustCompile(`Successfully applied (\d+) edits`)
+	writeFileLinesPattern           = regexp.MustCompile(`Successfully wrote \d+ bytes \((\d+) lines\) to `)
+	leadingLineNumPattern           = regexp.MustCompile(`^(\d+): `)
 )
 
 // FormatToolLine はツール実行の1行サマリーを返す。
@@ -186,6 +190,9 @@ func toolTarget(info ToolDisplayInfo) string {
 		if path := strings.TrimSpace(info.Args["path"]); path != "" {
 			target += " in " + path
 		}
+		if strings.EqualFold(strings.TrimSpace(info.Args["intent"]), "impact") {
+			target += " (impact)"
+		}
 		return target
 	case info.ToolName == "read_file":
 		return readFileDisplayTarget(info.Args)
@@ -266,6 +273,9 @@ func formatReadFilesSummary(args map[string]string, result string) string {
 
 func formatSearchCodeSummary(args map[string]string, result string) string {
 	target := toolTarget(ToolDisplayInfo{ToolName: "search_code", Args: args})
+	if totalMatches, totalFiles, ok := summarizeMultiPatternSearchResult(result); ok {
+		return fmt.Sprintf("%s → %d matches, %d files", target, totalMatches, totalFiles)
+	}
 	for _, line := range strings.Split(result, "\n") {
 		matches := searchSummaryPattern.FindStringSubmatch(line)
 		if len(matches) != 3 {
@@ -277,6 +287,59 @@ func formatSearchCodeSummary(args map[string]string, result string) string {
 		return target + " → No matches found"
 	}
 	return target
+}
+
+func summarizeMultiPatternSearchResult(result string) (int, int, bool) {
+	matchKeys := make(map[string]struct{})
+	files := make(map[string]struct{})
+	sawMultiSection := false
+	currentFile := ""
+
+	for _, line := range strings.Split(result, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "━━ Pattern ") || strings.HasPrefix(trimmed, "━━ Symbol Bundle: ") {
+			sawMultiSection = true
+			currentFile = ""
+		}
+		if fileHeader := searchFileHeaderPattern.FindStringSubmatch(trimmed); len(fileHeader) == 2 {
+			currentFile = normalizeSearchSummaryPath(fileHeader[1])
+			files[currentFile] = struct{}{}
+			continue
+		}
+		if symbolHeader := searchSymbolHeaderPattern.FindStringSubmatch(trimmed); len(symbolHeader) == 3 {
+			currentFile = normalizeSearchSummaryPath(symbolHeader[2])
+			files[currentFile] = struct{}{}
+			matchKeys[currentFile+":"+symbolHeader[1]] = struct{}{}
+			continue
+		}
+		if bundleItem := searchBundleItemPattern.FindStringSubmatch(trimmed); len(bundleItem) == 3 {
+			currentFile = normalizeSearchSummaryPath(bundleItem[1])
+			files[currentFile] = struct{}{}
+			matchKeys[currentFile+":"+bundleItem[2]] = struct{}{}
+			continue
+		}
+		if formattedLine := searchFormattedMatchLinePattern.FindStringSubmatch(trimmed); len(formattedLine) == 2 && currentFile != "" {
+			matchKeys[currentFile+":"+formattedLine[1]] = struct{}{}
+			continue
+		}
+		if lineNum := leadingLineNumPattern.FindStringSubmatch(trimmed); len(lineNum) == 2 && currentFile != "" {
+			matchKeys[currentFile+":"+lineNum[1]] = struct{}{}
+		}
+	}
+
+	if !sawMultiSection || len(matchKeys) == 0 {
+		return 0, 0, false
+	}
+	return len(matchKeys), len(files), true
+}
+
+func normalizeSearchSummaryPath(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	path = strings.ReplaceAll(path, `\`, "/")
+	return filepath.Clean(path)
 }
 
 func formatWaitAgentSummary(rawIDs string) string {
