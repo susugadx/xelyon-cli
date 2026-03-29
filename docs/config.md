@@ -82,7 +82,7 @@ provider_models:
         default_model: qwen2.5-coder:7b
         max_output_tokens: 4096
     openai:
-        default_model: gpt-5.2
+        default_model: gpt-5.4
         max_output_tokens: 16384
     openrouter:
         default_model: anthropic/claude-sonnet-4.6
@@ -320,11 +320,11 @@ sub_agent:
     # サブエージェント機能を有効化
     enabled: true
     # 既定モデル（空でメイン provider の最安モデルを自動選択）
-    default_model: ""
+    default_model: gpt-5.4-mini
     # 既定推論強度（off / low / medium / high）
     default_effort: ""
     # 同時実行上限（デフォルト: 5）
-    max_concurrent: 5
+    max_concurrent: 1
 
 # ============================================================
 # Utility Model設定
@@ -356,6 +356,7 @@ mcp:
 hooks:
     # 完了時に実行するコマンド（例: go test ./...）
     on_completion: []
+    # ステップ完了時に実行するコマンド（Plan Mode用）
     on_step_complete: []
     # コマンドタイムアウト（秒）（デフォルト: 60）
     timeout: 60

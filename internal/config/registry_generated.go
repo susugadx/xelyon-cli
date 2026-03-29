@@ -48,7 +48,7 @@ var CategoryDefinitions = []CategoryDef{
 	{Name: "sub_agent", DisplayName: "Sub-agent", Icon: "🚀", Fields: []string{"sub_agent.default_effort", "sub_agent.default_model", "sub_agent.enabled", "sub_agent.max_concurrent"}},
 	{Name: "utility_model", DisplayName: "Utility Model", Icon: "🪶", Fields: []string{"utility_model.enabled", "utility_model.model", "utility_model.provider", "utility_model.tasks"}},
 	{Name: "mcp", DisplayName: "MCP Servers", Icon: "🔌", Fields: []string{"mcp.enabled", "mcp.headless"}},
-	{Name: "hooks", DisplayName: "Hooks", Icon: "🏁", Fields: []string{"hooks.max_retry", "hooks.on_completion", "hooks.timeout"}},
+	{Name: "hooks", DisplayName: "Hooks", Icon: "🏁", Fields: []string{"hooks.max_retry", "hooks.on_completion", "hooks.on_step_complete", "hooks.timeout"}},
 }
 
 // FieldTypeMap はフィールドパスから型へのマップ
@@ -84,6 +84,7 @@ var FieldTypeMap = map[string]ConfigFieldType{
 	"git_stage.batch_confirm":             FieldTypeBool,
 	"hooks.max_retry":                     FieldTypeInt,
 	"hooks.on_completion":                 FieldTypeStringSlice,
+	"hooks.on_step_complete":              FieldTypeStringSlice,
 	"hooks.timeout":                       FieldTypeInt,
 	"loop_detection.threshold":            FieldTypeInt,
 	"lsp.enabled":                         FieldTypeBool,
@@ -170,6 +171,7 @@ var FieldDescriptions = map[string]string{
 	"git_stage.batch_confirm":             "複数ファイルをまとめて確認",
 	"hooks.max_retry":                     "フック失敗時の最大リトライ回数（デフォルト: 3）",
 	"hooks.on_completion":                 "完了時に実行するコマンド（例: go test ./...）",
+	"hooks.on_step_complete":              "ステップ完了時に実行するコマンド（Plan Mode用）",
 	"hooks.timeout":                       "コマンドタイムアウト（秒）（デフォルト: 60）",
 	"loop_detection.threshold":            "同じツール呼び出しの繰り返し回数でループと判定",
 	"lsp.enabled":                         "LSP連携の有効/無効",

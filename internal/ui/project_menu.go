@@ -50,8 +50,9 @@ func (m *ProjectMenu) Run() (changed bool, err error) {
 
 		// 3. Hooks
 		hooksPreview := "(not set)"
-		if m.PC.Hooks != nil && len(m.PC.Hooks.OnCompletion) > 0 {
-			hooksPreview = fmt.Sprintf("(%d cmds)", len(m.PC.Hooks.OnCompletion))
+		if m.PC.Hooks != nil && (len(m.PC.Hooks.OnCompletion) > 0 || len(m.PC.Hooks.OnStepComplete) > 0) {
+			total := len(m.PC.Hooks.OnCompletion) + len(m.PC.Hooks.OnStepComplete)
+			hooksPreview = fmt.Sprintf("(%d cmds)", total)
 		}
 		_, _ = fmt.Fprintf(out, "  [3] 🔧 Hooks        %s\n", hooksPreview)
 
@@ -123,19 +124,26 @@ func (m *ProjectMenu) editHooks() {
 		}
 		_, _ = fmt.Fprintf(out, "  [1] on_completion   %s\n", cmdInfo)
 
+		// on_step_complete
+		stepInfo := "(empty)"
+		if len(m.PC.Hooks.OnStepComplete) > 0 {
+			stepInfo = fmt.Sprintf("(%d cmds)", len(m.PC.Hooks.OnStepComplete))
+		}
+		_, _ = fmt.Fprintf(out, "  [2] on_step_complete %s\n", stepInfo)
+
 		// timeout
 		timeout := m.PC.Hooks.Timeout
 		if timeout == 0 {
 			timeout = 60
 		}
-		_, _ = fmt.Fprintf(out, "  [2] timeout         %d sec\n", timeout)
+		_, _ = fmt.Fprintf(out, "  [3] timeout         %d sec\n", timeout)
 
 		// max_retry
 		maxRetry := m.PC.Hooks.MaxRetry
 		if maxRetry == 0 {
 			maxRetry = 3
 		}
-		_, _ = fmt.Fprintf(out, "  [3] max_retry       %d\n", maxRetry)
+		_, _ = fmt.Fprintf(out, "  [4] max_retry       %d\n", maxRetry)
 
 		_, _ = fmt.Fprintln(out)
 		_, _ = fmt.Fprintln(out, "  [b] Back")
@@ -152,6 +160,13 @@ func (m *ProjectMenu) editHooks() {
 				m.changed = true
 			}
 		case "2":
+			editor := NewStringSliceEditorWithRuntime("hooks.on_step_complete", m.PC.Hooks.OnStepComplete, m.Runtime)
+			result, saved, _ := editor.Run()
+			if saved {
+				m.PC.Hooks.OnStepComplete = result
+				m.changed = true
+			}
+		case "3":
 			_, _ = fmt.Fprintf(out, "Enter timeout (seconds, current: %d): ", timeout)
 			numStr := strings.TrimSpace(readLineWithIO(&promptIO))
 			if num, err := strconv.Atoi(numStr); err == nil && num > 0 {
@@ -159,7 +174,7 @@ func (m *ProjectMenu) editHooks() {
 				m.changed = true
 				_, _ = fmt.Fprintf(out, "%s✓ timeout = %d%s\n", colorGreen, num, colorReset)
 			}
-		case "3":
+		case "4":
 			_, _ = fmt.Fprintf(out, "Enter max_retry (current: %d): ", maxRetry)
 			numStr := strings.TrimSpace(readLineWithIO(&promptIO))
 			if num, err := strconv.Atoi(numStr); err == nil && num >= 0 {
@@ -169,12 +184,12 @@ func (m *ProjectMenu) editHooks() {
 			}
 		case "b", "back":
 			// hooks が全て空なら nil に戻す
-			if len(m.PC.Hooks.OnCompletion) == 0 && m.PC.Hooks.Timeout == 0 && m.PC.Hooks.MaxRetry == 0 {
+			if len(m.PC.Hooks.OnCompletion) == 0 && len(m.PC.Hooks.OnStepComplete) == 0 && m.PC.Hooks.Timeout == 0 && m.PC.Hooks.MaxRetry == 0 {
 				m.PC.Hooks = nil
 			}
 			return
 		default:
-			_, _ = fmt.Fprintf(out, "%sUnknown command. Use 1-3/b%s\n", colorDim, colorReset)
+			_, _ = fmt.Fprintf(out, "%sUnknown command. Use 1-4/b%s\n", colorDim, colorReset)
 		}
 	}
 }

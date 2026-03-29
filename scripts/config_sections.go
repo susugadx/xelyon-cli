@@ -404,14 +404,16 @@ var Sections = map[string]SectionInfo{
 			"変更ファイルは XELYON_CHANGED_FILES 環境変数で参照可能",
 		},
 		Fields: map[string]string{
-			"on_completion": "完了時に実行するコマンド（例: go test ./...）",
-			"timeout":       "コマンドタイムアウト（秒）（デフォルト: 60）",
-			"max_retry":     "フック失敗時の最大リトライ回数（デフォルト: 3）",
+			"on_completion":   "完了時に実行するコマンド（例: go test ./...）",
+			"on_step_complete": "ステップ完了時に実行するコマンド（Plan Mode用）",
+			"timeout":         "コマンドタイムアウト（秒）（デフォルト: 60）",
+			"max_retry":       "フック失敗時の最大リトライ回数（デフォルト: 3）",
 		},
 		FieldTypes: map[string]string{
-			"on_completion": "[]string",
-			"timeout":       "int",
-			"max_retry":     "int",
+			"on_completion":   "[]string",
+			"on_step_complete": "[]string",
+			"timeout":         "int",
+			"max_retry":       "int",
 		},
 	},
 }
