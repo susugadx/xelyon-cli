@@ -58,6 +58,7 @@ func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, s
 	debug := os.Getenv("XELYON_DEBUG_GEMINI") == "1"
 	out := api.OutputWriterFromContext(ctx)
 	errOut := api.ErrorWriterFromContext(ctx)
+	streamAssistantText := api.ShouldStreamAssistantText(ctx)
 	var fullResponse strings.Builder
 	var functionCalls []*api.GeminiFunctionCall
 	var thoughtParts []map[string]any // Gemini 3: thought パートを収集（次リクエストに返す）
@@ -236,7 +237,7 @@ loop:
 						resetTimer(thinkingTimer, thinkingTimeout)
 						if spinner != nil {
 							spinner.Stop()
-							if headerPrinted && !contentNewlineEmitted {
+							if streamAssistantText && headerPrinted && !contentNewlineEmitted {
 								_, _ = fmt.Fprintln(out)
 								contentNewlineEmitted = true
 							}
@@ -288,7 +289,9 @@ loop:
 								api.PrintAIHeaderWithContext(ctx)
 								headerPrinted = true
 							}
-							_, _ = fmt.Fprint(out, remaining)
+							if streamAssistantText {
+								_, _ = fmt.Fprint(out, remaining)
+							}
 						}
 						fullResponse.WriteString(remaining)
 						continue
@@ -301,7 +304,9 @@ loop:
 						api.PrintAIHeaderWithContext(ctx)
 						headerPrinted = true
 					}
-					_, _ = fmt.Fprint(out, part.Text)
+					if streamAssistantText {
+						_, _ = fmt.Fprint(out, part.Text)
+					}
 					fullResponse.WriteString(part.Text)
 				}
 
@@ -312,7 +317,7 @@ loop:
 					// テキスト表示後にFCが来た場合、ツール準備中スピナーを再開
 					if spinner != nil {
 						spinner.Stop()
-						if headerPrinted && !contentNewlineEmitted {
+						if streamAssistantText && headerPrinted && !contentNewlineEmitted {
 							_, _ = fmt.Fprintln(out)
 							contentNewlineEmitted = true
 						}
@@ -378,7 +383,7 @@ loop:
 		return "", fmt.Errorf("no content in Gemini SSE response (stream ended without generating any text or function calls)")
 	}
 
-	if !contentNewlineEmitted {
+	if streamAssistantText && !contentNewlineEmitted {
 		_, _ = fmt.Fprintln(out)
 	}
 	return fullResponse.String(), nil

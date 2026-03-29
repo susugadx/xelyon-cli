@@ -304,10 +304,15 @@ var Sections = map[string]SectionInfo{
 		Title: "ツール出力表示設定",
 		Icon:  "📤",
 		Fields: map[string]string{
-			"max_lines": "折りたたみ前の最大表示行数",
+			"assistant_updates": "assistant prose の中間表示制御（verbose / phase / off、空でモード別デフォルト）",
+			"max_lines":         "折りたたみ前の最大表示行数",
 		},
 		FieldTypes: map[string]string{
-			"max_lines": "int",
+			"assistant_updates": "select",
+			"max_lines":         "int",
+		},
+		SelectOpts: map[string][]string{
+			"assistant_updates": {"", "verbose", "phase", "off"},
 		},
 	},
 	"web_search": {

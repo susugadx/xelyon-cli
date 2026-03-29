@@ -129,6 +129,7 @@ func TestFieldTypeMap(t *testing.T) {
 		"bash.safety_level":                   FieldTypeSelect,
 		"bash.safe_commands":                  FieldTypeStringSlice,
 		"command_aliases":                     FieldTypeStringMap,
+		"output.assistant_updates":            FieldTypeSelect,
 		"plan_mode.clear_context_on_approval": FieldTypeBool,
 		"project_map.context_ratio":           FieldTypeFloat,
 		"provider_models":                     FieldTypeStructMap,
@@ -156,6 +157,7 @@ func TestSelectOptions(t *testing.T) {
 		{"default_provider", 6},  // deepseek, claude, openai, gemini, groq, ollama
 		{"bash.safety_level", 3}, // strict, moderate, permissive
 		{"thinking.level", 4},    // low, medium, high, xhigh
+		{"output.assistant_updates", 4},
 	}
 
 	for _, tt := range tests {
@@ -179,6 +181,7 @@ func TestFieldDescriptions(t *testing.T) {
 		"compression.clear_tool_inputs",
 		"api_retry.count",
 		"bash.safety_level",
+		"output.assistant_updates",
 		"plan_mode.clear_context_on_approval",
 		"project_map.context_ratio",
 		"sub_agent.default_model",

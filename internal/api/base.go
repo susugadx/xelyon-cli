@@ -134,7 +134,9 @@ func HandleNonStreamingResponse(ctx context.Context, resp *http.Response, spinne
 	}
 
 	content := result.Choices[0].Message.Content
-	_, _ = fmt.Fprintln(outputWriterFromContext(ctx), content)
+	if ShouldStreamAssistantText(ctx) {
+		_, _ = fmt.Fprintln(outputWriterFromContext(ctx), content)
+	}
 	return content, nil
 }
 

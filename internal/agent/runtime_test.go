@@ -496,6 +496,8 @@ func TestAgentRuntime_SeparatesUIRuntimeAndAuditLogger(t *testing.T) {
 
 	ctxA := agentA.requestContext(context.Background())
 	ctxB := agentB.requestContext(context.Background())
+	ctxA = api.WithAssistantUpdateMode(ctxA, api.AssistantUpdatesVerbose)
+	ctxB = api.WithAssistantUpdateMode(ctxB, api.AssistantUpdatesVerbose)
 
 	api.PrintAIHeaderWithContext(ctxA)
 	api.PrintAIHeaderWithContext(ctxB)

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -158,6 +159,35 @@ func TestParseStreamingResponse_NormalFlow(t *testing.T) {
 	expected := "HelloWorld!"
 	if result != expected {
 		t.Errorf("ParseStreamingResponse() result = %q, want %q", result, expected)
+	}
+}
+
+func TestParseStreamingResponse_SuppressesAssistantTextWhenPhaseMode(t *testing.T) {
+	cfg := config.DefaultConfig()
+	ctx := config.WithContext(context.Background(), cfg)
+	var out bytes.Buffer
+	ctx = ui.WithRuntime(ctx, ui.NewRuntime(strings.NewReader(""), &out, &out))
+	ctx = WithAssistantUpdateMode(ctx, AssistantUpdatesPhase)
+
+	body := "Hello\nWorld\n"
+	resp := &http.Response{
+		Body: &mockReadCloser{reader: strings.NewReader(body)},
+	}
+
+	spinner := ui.NewSpinner()
+	parser := func(line string) (string, bool, error) {
+		return line, false, nil
+	}
+
+	result, err := ParseStreamingResponse(ctx, resp, spinner, parser)
+	if err != nil {
+		t.Fatalf("ParseStreamingResponse() error = %v", err)
+	}
+	if result != "HelloWorld" {
+		t.Fatalf("ParseStreamingResponse() result = %q, want %q", result, "HelloWorld")
+	}
+	if out.Len() != 0 {
+		t.Fatalf("expected live assistant text to be suppressed, got %q", out.String())
 	}
 }
 

@@ -3,8 +3,17 @@ package api
 import (
 	"context"
 	"io"
+	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/ui"
+)
+
+type assistantUpdateModeKey struct{}
+
+const (
+	AssistantUpdatesVerbose = "verbose"
+	AssistantUpdatesPhase   = "phase"
+	AssistantUpdatesOff     = "off"
 )
 
 func uiRuntimeFromContext(ctx context.Context) *ui.Runtime {
@@ -42,6 +51,35 @@ func ErrorWriterFromContext(ctx context.Context) io.Writer {
 	return uiRuntimeFromContext(ctx).ErrorOutput()
 }
 
+// WithAssistantUpdateMode は assistant prose 表示モードを context に関連付ける。
+func WithAssistantUpdateMode(ctx context.Context, mode string) context.Context {
+	return context.WithValue(ctx, assistantUpdateModeKey{}, normalizeAssistantUpdateMode(mode))
+}
+
+// AssistantUpdateModeFromContext は context に設定された assistant prose 表示モードを返す。
+func AssistantUpdateModeFromContext(ctx context.Context) string {
+	if mode, ok := ctx.Value(assistantUpdateModeKey{}).(string); ok {
+		return normalizeAssistantUpdateMode(mode)
+	}
+	return AssistantUpdatesVerbose
+}
+
+// ShouldStreamAssistantText は live の assistant prose を表示するかを返す。
+func ShouldStreamAssistantText(ctx context.Context) bool {
+	return AssistantUpdateModeFromContext(ctx) == AssistantUpdatesVerbose
+}
+
+func normalizeAssistantUpdateMode(mode string) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case AssistantUpdatesOff:
+		return AssistantUpdatesOff
+	case AssistantUpdatesPhase:
+		return AssistantUpdatesPhase
+	default:
+		return AssistantUpdatesVerbose
+	}
+}
+
 // SpinnerFromContext は request context に紐づく spinner を返す。
 func SpinnerFromContext(ctx context.Context) *ui.Spinner {
 	return uiRuntimeFromContext(ctx).CurrentSpinner()
@@ -56,5 +94,8 @@ func StopSpinnerAndResetTerminal(ctx context.Context) {
 
 // PrintAIHeaderWithContext は request context に紐づく出力先へ AI 発言ヘッダーを表示する。
 func PrintAIHeaderWithContext(ctx context.Context) {
+	if !ShouldStreamAssistantText(ctx) {
+		return
+	}
 	cyanBold.Fprint(outputWriterFromContext(ctx), "\n💬 ")
 }

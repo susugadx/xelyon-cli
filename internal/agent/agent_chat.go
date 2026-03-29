@@ -49,6 +49,8 @@ func (a *Agent) chatCore(input string, image *api.ImageData, oneShot bool) error
 
 	// completion hook の git diff 空チェック判定用ベースハッシュを記録
 	a.taskBaseCommitHash = ""
+	a.taskTestResult = nil
+	a.taskTestCommand = ""
 	if out, err := exec.Command("git", "rev-parse", "HEAD").Output(); err == nil {
 		a.taskBaseCommitHash = strings.TrimSpace(string(out))
 	}
@@ -437,6 +439,8 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 			return nil
 		}
 
+		a.maybePrintAssistantPhaseUpdate(response, execToolCallsSummaryInput(toolCalls))
+
 		// ツールを実行し、失敗を検出
 		var lastFailedResult string
 
@@ -642,8 +646,117 @@ func (a *Agent) showTaskSummary() {
 		action := ui.InferAction(change.Tool)
 		ts.AddChange(change.FilePath, action, change.LinesAdded, change.LinesRemoved)
 	}
+	if a.taskTestResult != nil {
+		ts.SetTestResult(*a.taskTestResult)
+	}
+	if a.taskTestCommand != "" {
+		ts.SetTestCommand(a.taskTestCommand)
+	}
 
 	_, _ = fmt.Fprint(a.output(), ts.Render())
+}
+
+func (a *Agent) assistantUpdateMode() string {
+	if a == nil {
+		return api.AssistantUpdatesVerbose
+	}
+	mode := strings.TrimSpace(a.cfg().Output.AssistantUpdates)
+	if mode != "" {
+		return api.AssistantUpdateModeFromContext(api.WithAssistantUpdateMode(context.Background(), mode))
+	}
+	if a.PlanModeEnabled {
+		return api.AssistantUpdatesVerbose
+	}
+	return api.AssistantUpdatesPhase
+}
+
+func (a *Agent) shouldStreamAssistantText() bool {
+	return a.assistantUpdateMode() == api.AssistantUpdatesVerbose
+}
+
+func (a *Agent) shouldEmitAssistantPhaseUpdate() bool {
+	return a.assistantUpdateMode() == api.AssistantUpdatesPhase
+}
+
+func (a *Agent) printFinalAssistantResponse(response string) {
+	if a == nil || a.shouldStreamAssistantText() {
+		return
+	}
+	display := strings.TrimSpace(response)
+	if display == "" {
+		return
+	}
+	_, _ = fmt.Fprintf(a.output(), "\n💬 %s\n", display)
+}
+
+func (a *Agent) maybePrintAssistantPhaseUpdate(response string, toolCalls []*tools.ToolCall) {
+	if a == nil || !a.shouldEmitAssistantPhaseUpdate() {
+		return
+	}
+
+	explanation, _ := extractExplanationAndTool(response)
+	summary := firstAssistantSummaryLine(explanation)
+	if summary == "" {
+		summary = summarizeToolCallsForPhase(toolCalls)
+	}
+	if summary == "" {
+		return
+	}
+	_, _ = fmt.Fprintf(a.output(), "\n💬 %s\n", summary)
+}
+
+func firstAssistantSummaryLine(s string) string {
+	for _, line := range strings.Split(s, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		line = strings.TrimLeft(line, "-*0123456789. ")
+		line = strings.TrimSpace(line)
+		runes := []rune(line)
+		if len(runes) > 120 {
+			return string(runes[:120]) + "..."
+		}
+		return line
+	}
+	return ""
+}
+
+func summarizeToolCallsForPhase(toolCalls []*tools.ToolCall) string {
+	if len(toolCalls) == 0 {
+		return ""
+	}
+
+	counts := make(map[string]int, len(toolCalls))
+	order := make([]string, 0, len(toolCalls))
+	for _, tc := range toolCalls {
+		name := tc.Tool
+		if _, ok := counts[name]; !ok {
+			order = append(order, name)
+		}
+		counts[name]++
+	}
+
+	parts := make([]string, 0, len(order))
+	for _, name := range order {
+		if counts[name] == 1 {
+			parts = append(parts, name)
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("%s x%d", name, counts[name]))
+	}
+	return "Phase: " + strings.Join(parts, ", ")
+}
+
+func execToolCallsSummaryInput(toolCalls []*tools.ToolCall) []*tools.ToolCall {
+	execToolCalls := make([]*tools.ToolCall, 0, len(toolCalls))
+	for _, tc := range toolCalls {
+		if tc.Tool == "create_plan" {
+			continue
+		}
+		execToolCalls = append(execToolCalls, tc)
+	}
+	return execToolCalls
 }
 
 // chatWithImage は画像付きメッセージでAIと対話する

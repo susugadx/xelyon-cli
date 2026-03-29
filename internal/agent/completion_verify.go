@@ -166,6 +166,7 @@ func (a *Agent) runCompletionHooks(changedFiles []string) (needsContinue bool, f
 	if len(hooks) == 0 {
 		return false, ""
 	}
+	a.taskTestCommand = strings.Join(hooks, " && ")
 
 	// git diff --stat: hook 失敗時のコンテキスト用
 	yellow.Fprintln(out, "📊 Verifying changes with git diff --stat...")
@@ -239,12 +240,15 @@ func (a *Agent) runCompletionHooks(changedFiles []string) (needsContinue bool, f
 %s
 
 Please fix these errors before declaring completion. Do NOT skip these issues.`, cmd, exitCode, outputStr, diffOutput)
-
+			passed := false
+			a.taskTestResult = &passed
 			return true, feedback
 		}
 
 		green.Fprintf(out, "  Hook passed: %s\n", cmd)
 	}
+	passed := true
+	a.taskTestResult = &passed
 
 	return false, ""
 }

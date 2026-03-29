@@ -1,15 +1,19 @@
 package openrouter
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 
 	// ツール登録のための blank import
 	_ "github.com/susugadx/xelyon-cli/internal/tools/dev"
@@ -778,5 +782,105 @@ func TestHandleClaudeStreamingResponse(t *testing.T) {
 	want := "Hello World"
 	if result != want {
 		t.Errorf("handleClaudeStreamingResponse() = %q, want %q", result, want)
+	}
+}
+
+func TestStreamingResponses_DoNotEmitBlankLineWhenAssistantUpdatesSuppressed(t *testing.T) {
+	tests := []struct {
+		name     string
+		mode     string
+		wantText bool
+	}{
+		{name: "verbose", mode: api.AssistantUpdatesVerbose, wantText: true},
+		{name: "phase", mode: api.AssistantUpdatesPhase, wantText: false},
+		{name: "off", mode: api.AssistantUpdatesOff, wantText: false},
+	}
+
+	for _, tt := range tests {
+		t.Run("openai-"+tt.name, func(t *testing.T) {
+			chunks := []string{
+				`{"choices":[{"delta":{"content":"Hello"}}]}`,
+				`{"choices":[{"delta":{"content":" from"}}]}`,
+				`{"choices":[{"delta":{"content":" OpenRouter"}}]}`,
+			}
+			server := mockAPIServer(t, streamingHandler(chunks))
+			defer server.Close()
+
+			resp, err := http.Post(server.URL, "application/json", nil)
+			if err != nil {
+				t.Fatalf("Failed to post to mock server: %v", err)
+			}
+			defer resp.Body.Close()
+
+			var out bytes.Buffer
+			ctx := ui.WithRuntime(context.Background(), ui.NewRuntime(nil, &out, &out))
+			ctx = api.WithAssistantUpdateMode(ctx, tt.mode)
+
+			p := New("test-key")
+			result, err := p.handleStreamingResponse(ctx, resp, ui.NewSpinnerWithWriter(io.Discard))
+			if err != nil {
+				t.Fatalf("handleStreamingResponse() error = %v", err)
+			}
+			if result != "Hello from OpenRouter" {
+				t.Fatalf("handleStreamingResponse() = %q, want %q", result, "Hello from OpenRouter")
+			}
+
+			output := out.String()
+			if tt.wantText {
+				if !strings.Contains(output, "Hello from OpenRouter") {
+					t.Fatalf("expected streamed assistant text in verbose mode, got: %q", output)
+				}
+				if !strings.HasSuffix(output, "\n") {
+					t.Fatalf("expected trailing newline in verbose mode, got: %q", output)
+				}
+			} else if output != "" {
+				t.Fatalf("expected no streamed prose or stray newline in %s mode, got: %q", tt.mode, output)
+			}
+		})
+
+		t.Run("claude-"+tt.name, func(t *testing.T) {
+			chunks := []string{
+				`{"type": "message_start", "message": {"usage": {"input_tokens": 10}}}`,
+				`{"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}}`,
+				`{"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "Hello"}}`,
+				`{"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": " World"}}`,
+				`{"type": "content_block_stop", "index": 0}`,
+				`{"type": "message_delta", "delta": {"stop_reason": "end_turn"}, "usage": {"output_tokens": 5}}`,
+				`{"type": "message_stop"}`,
+			}
+			server := mockAPIServer(t, streamingHandler(chunks))
+			defer server.Close()
+
+			resp, err := http.Post(server.URL, "application/json", nil)
+			if err != nil {
+				t.Fatalf("Failed to post to mock server: %v", err)
+			}
+			defer resp.Body.Close()
+
+			var out bytes.Buffer
+			ctx := ui.WithRuntime(context.Background(), ui.NewRuntime(nil, &out, &out))
+			ctx = api.WithAssistantUpdateMode(ctx, tt.mode)
+
+			p := New("test-key")
+			result, err := p.handleClaudeStreamingResponse(ctx, resp, ui.NewSpinnerWithWriter(io.Discard))
+			if err != nil {
+				t.Fatalf("handleClaudeStreamingResponse() error = %v", err)
+			}
+			if result != "Hello World" {
+				t.Fatalf("handleClaudeStreamingResponse() = %q, want %q", result, "Hello World")
+			}
+
+			output := out.String()
+			if tt.wantText {
+				if !strings.Contains(output, "Hello World") {
+					t.Fatalf("expected streamed assistant text in verbose mode, got: %q", output)
+				}
+				if !strings.HasSuffix(output, "\n") {
+					t.Fatalf("expected trailing newline in verbose mode, got: %q", output)
+				}
+			} else if output != "" {
+				t.Fatalf("expected no streamed prose or stray newline in %s mode, got: %q", tt.mode, output)
+			}
+		})
 	}
 }

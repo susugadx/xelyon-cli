@@ -83,7 +83,7 @@ func (a *Agent) runInvestigationPhase(ctx context.Context) (*plan.Plan, error) {
 			}
 
 			// ツール呼び出しがない場合は終了（AIが調査を終えて説明している）
-			_, _ = fmt.Fprintln(a.output(), response)
+			a.printFinalAssistantResponse(response)
 			return nil, nil
 		}
 

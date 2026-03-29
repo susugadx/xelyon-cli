@@ -294,6 +294,8 @@ thinking:
 output:
     # 折りたたみ前の最大表示行数
     max_lines: 5
+    # assistant prose の中間表示制御（verbose / phase / off、空でモード別デフォルト）
+    assistant_updates: ""
 
 # ============================================================
 # Web検索設定
@@ -1234,7 +1236,8 @@ api_retry:
 
 ```yaml
 output:
-  max_lines: 5  # 折りたたみ前の最大表示行数
+  max_lines: 5           # 折りたたみ前の最大表示行数
+  assistant_updates: ""  # 空なら Normal=phase, Plan=verbose
 ```
 
 #### `max_lines`
@@ -1258,6 +1261,12 @@ output:
 - `bash` コマンド出力
 - `list_dir` ディレクトリ一覧
 - その他の長い出力を返すツール
+
+#### `assistant_updates`
+- **型**: string
+- **許可値**: `verbose`, `phase`, `off`
+- **デフォルト**: `""`（Normal Mode は `phase`、Plan Mode は `verbose`）
+- **説明**: assistant prose の中間表示を制御します。`phase` は着手・フェーズ切替・エラー・最終応答だけに寄せ、`off` は中間 prose をさらに抑えます。`apply_patch` やツール出力の折りたたみルールには影響しません。
 
 ## 関連ドキュメント
 

@@ -319,6 +319,16 @@ tool_confirm:
   auto_approve_medium: true  # SafetyMedium（書き込み）自動承認（デフォルト: false）
 ```
 
+### 中間出力の表示レベル
+
+```yaml
+# ~/.xelyon/config.yaml
+output:
+  assistant_updates: ""  # 空なら Normal=phase, Plan=verbose
+```
+
+`assistant_updates` は assistant prose の途中表示だけを制御します。`phase` は通常モードの逐次実況を短いフェーズ要約に寄せ、`off` はさらに抑制します。`apply_patch` の diff 表示やツール出力の折りたたみ挙動は変わりません。
+
 | 設定 | 対象ツール | デフォルト |
 |------|-----------|-----------|
 | `auto_approve_safe` | read_file, list_dir, search_code 等 | true |

@@ -279,7 +279,8 @@ func DefaultConfig() *Config {
 			Level:   "medium",
 		},
 		Output: OutputConfig{
-			MaxLines: 5, // デフォルト5行で折りたたみ
+			MaxLines:         5,  // デフォルト5行で折りたたみ
+			AssistantUpdates: "", // 空 = Normal Mode は phase / Plan Mode は verbose
 		},
 		WebSearch: WebSearchConfig{
 			CacheEnabled: true,
@@ -430,6 +431,14 @@ func applyDefaults(cfg *Config) {
 	// Hooks: Timeout が 0 の場合はデフォルト適用
 	if cfg.Hooks.Timeout == 0 {
 		cfg.Hooks.Timeout = defaults.Hooks.Timeout
+	}
+	if cfg.Output.AssistantUpdates != "" {
+		switch strings.ToLower(cfg.Output.AssistantUpdates) {
+		case "verbose", "phase", "off":
+			cfg.Output.AssistantUpdates = strings.ToLower(cfg.Output.AssistantUpdates)
+		default:
+			cfg.Output.AssistantUpdates = defaults.Output.AssistantUpdates
+		}
 	}
 }
 

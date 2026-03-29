@@ -131,4 +131,6 @@ func (a *Agent) handleNormalResponse(response string) {
 	if a.session != nil {
 		a.appendSessionMessage("assistant", displayResponse, a.CurrentModel)
 	}
+
+	a.printFinalAssistantResponse(displayResponse)
 }

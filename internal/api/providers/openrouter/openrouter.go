@@ -333,6 +333,7 @@ func (p *Provider) chatWithImageRequest(ctx context.Context, systemPrompt string
 // handleStreamingResponse は OpenAI 互換ストリーミングレスポンスを処理
 func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
 	out := api.OutputWriterFromContext(ctx)
+	streamAssistantText := api.ShouldStreamAssistantText(ctx)
 	var fullResponse strings.Builder
 	var toolCallsOutput strings.Builder
 	toolCalls := make(map[int]*toolCallAccumulator)
@@ -385,7 +386,7 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 						if tc.Function.Arguments != "" {
 							// スピナーを再表示
 							if !spinner.IsActive() {
-								if !firstChunk && !contentNewlineEmitted {
+								if streamAssistantText && !firstChunk && !contentNewlineEmitted {
 									_, _ = fmt.Fprintln(out)
 									contentNewlineEmitted = true
 								}
@@ -403,7 +404,9 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 						firstChunk = false
 						api.PrintAIHeaderWithContext(ctx)
 					}
-					_, _ = fmt.Fprint(out, choice.Delta.Content)
+					if streamAssistantText {
+						_, _ = fmt.Fprint(out, choice.Delta.Content)
+					}
 					fullResponse.WriteString(choice.Delta.Content)
 				}
 			}
@@ -437,13 +440,13 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 
 	content := fullResponse.String()
 	if toolCallsOutput.Len() > 0 {
-		if content != "" && !contentNewlineEmitted {
+		if streamAssistantText && content != "" && !contentNewlineEmitted {
 			_, _ = fmt.Fprintln(out)
 		}
 		return content + toolCallsOutput.String(), nil
 	}
 
-	if !contentNewlineEmitted {
+	if streamAssistantText && !contentNewlineEmitted {
 		_, _ = fmt.Fprintln(out)
 	}
 	return content, nil
@@ -476,7 +479,9 @@ func (p *Provider) handleNonStreamingResponse(ctx context.Context, resp *http.Re
 	if len(apiResp.Choices) > 0 {
 		api.PrintAIHeaderWithContext(ctx)
 		content := apiResp.Choices[0].Message.Content
-		_, _ = fmt.Fprintln(api.OutputWriterFromContext(ctx), content)
+		if api.ShouldStreamAssistantText(ctx) {
+			_, _ = fmt.Fprintln(api.OutputWriterFromContext(ctx), content)
+		}
 		return content, nil
 	}
 	return "", nil
@@ -604,6 +609,7 @@ func (p *Provider) chatWithClaudeAPI(ctx context.Context, systemPrompt string, h
 
 // handleClaudeStreamingResponse は Anthropic SSE ストリーミングレスポンスを処理する
 func (p *Provider) handleClaudeStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
+	streamAssistantText := api.ShouldStreamAssistantText(ctx)
 	var fullResponse strings.Builder
 	var toolCallsOutput strings.Builder
 	var compactionOutput strings.Builder
@@ -709,7 +715,9 @@ func (p *Provider) handleClaudeStreamingResponse(ctx context.Context, resp *http
 					firstChunk = false
 					api.PrintAIHeaderWithContext(ctx)
 				}
-				_, _ = fmt.Fprint(api.OutputWriterFromContext(ctx), event.Delta.Text)
+				if streamAssistantText {
+					_, _ = fmt.Fprint(api.OutputWriterFromContext(ctx), event.Delta.Text)
+				}
 				fullResponse.WriteString(event.Delta.Text)
 			}
 			if event.Delta.Type == "input_json_delta" {
@@ -752,12 +760,16 @@ done:
 
 	if toolCallsOutput.Len() > 0 {
 		if content != "" {
-			_, _ = fmt.Fprintln(api.OutputWriterFromContext(ctx))
+			if streamAssistantText {
+				_, _ = fmt.Fprintln(api.OutputWriterFromContext(ctx))
+			}
 			return content + toolCallsOutput.String(), nil
 		}
 		return toolCallsOutput.String(), nil
 	}
 
-	_, _ = fmt.Fprintln(api.OutputWriterFromContext(ctx))
+	if streamAssistantText {
+		_, _ = fmt.Fprintln(api.OutputWriterFromContext(ctx))
+	}
 	return content, nil
 }

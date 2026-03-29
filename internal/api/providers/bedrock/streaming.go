@@ -91,7 +91,9 @@ func (p *Provider) handleEventStream(ctx context.Context, output *bedrockruntime
 						firstChunk = false
 						api.PrintAIHeaderWithContext(ctx)
 					}
-					_, _ = fmt.Fprint(out, text)
+					if api.ShouldStreamAssistantText(ctx) {
+						_, _ = fmt.Fprint(out, text)
+					}
 					fullResponse.WriteString(text)
 				}
 				if done {

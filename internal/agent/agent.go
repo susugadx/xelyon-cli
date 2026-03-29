@@ -73,6 +73,8 @@ type Agent struct {
 	ToolCache            *ToolCache         // ツール結果キャッシュ（read_file, list_dir）
 	LocatorRegistry      *locator.Registry  // Locator ID レジストリ（セッション内追記のみ）
 	taskBaseCommitHash   string             // タスク開始時のHEADコミットハッシュ（completion hook の diff 空チェック判定用）
+	taskTestResult       *bool              // 現在タスクの verification/test 結果
+	taskTestCommand      string             // 現在タスクの verification/test コマンド要約
 	status               statusHolder
 
 	// LSP診断遅延バッファ: 連続編集途中の一時的エラーによる誤auto-retry防止用。

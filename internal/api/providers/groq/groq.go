@@ -145,6 +145,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
 	out := api.OutputWriterFromContext(ctx)
 	errOut := api.ErrorWriterFromContext(ctx)
+	streamAssistantText := api.ShouldStreamAssistantText(ctx)
 	var fullResponse strings.Builder
 	var toolCallsOutput strings.Builder
 	toolCalls := make(map[int]*toolCallAccumulator)
@@ -208,7 +209,7 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 					if tc.Function.Arguments != "" {
 						// スピナーを再表示
 						if !spinner.IsActive() {
-							if !firstChunk && !contentNewlineEmitted {
+							if streamAssistantText && !firstChunk && !contentNewlineEmitted {
 								_, _ = fmt.Fprintln(out)
 								contentNewlineEmitted = true
 							}
@@ -249,7 +250,9 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 					api.PrintAIHeaderWithContext(ctx)
 				}
 
-				_, _ = fmt.Fprint(out, content)
+				if streamAssistantText {
+					_, _ = fmt.Fprint(out, content)
+				}
 				fullResponse.WriteString(content)
 			}
 		}
@@ -268,13 +271,13 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 	// tool_calls がある場合はそれを返す
 	if toolCallsOutput.Len() > 0 {
 		spinner.Stop()
-		if fullResponse.Len() > 0 && !contentNewlineEmitted {
+		if streamAssistantText && fullResponse.Len() > 0 && !contentNewlineEmitted {
 			_, _ = fmt.Fprintln(out)
 		}
 		return fullResponse.String() + toolCallsOutput.String(), nil
 	}
 
-	if !contentNewlineEmitted {
+	if streamAssistantText && !contentNewlineEmitted {
 		_, _ = fmt.Fprintln(out)
 	}
 	return fullResponse.String(), nil

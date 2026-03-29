@@ -22,6 +22,12 @@ func TestBuildTUIHeader_ContainsGradientLogoAndSubtext(t *testing.T) {
 	}
 }
 
+func TestDefaultToolCollapsed_KeepsApplyPatchExpanded(t *testing.T) {
+	if collapsed := defaultToolCollapsed("apply_patch", "*** Begin Patch", false); collapsed {
+		t.Fatal("apply_patch output should stay expanded")
+	}
+}
+
 // stripANSI は ANSI エスケープシーケンスを除去する。
 func stripANSI(s string) string {
 	var sb strings.Builder

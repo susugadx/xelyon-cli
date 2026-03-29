@@ -275,6 +275,7 @@ func (a *Agent) requestContext(ctx context.Context) context.Context {
 	ctx = tools.WithRegistry(ctx, a.registry())
 	ctx = tools.WithConfig(ctx, a.cfg())
 	ctx = ui.WithRuntime(ctx, a.ui())
+	ctx = api.WithAssistantUpdateMode(ctx, a.assistantUpdateMode())
 	return ctx
 }
 

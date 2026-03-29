@@ -737,7 +737,9 @@ func (p *Provider) handleNonStreamingResponse(ctx context.Context, resp *http.Re
 
 	content := textContent.String()
 	if content != "" {
-		_, _ = fmt.Fprintln(api.OutputWriterFromContext(ctx), content)
+		if api.ShouldStreamAssistantText(ctx) {
+			_, _ = fmt.Fprintln(api.OutputWriterFromContext(ctx), content)
+		}
 	}
 
 	// Tool Use がある場合は追加

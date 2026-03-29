@@ -244,6 +244,8 @@ thinking:
 output:
     # 折りたたみ前の最大表示行数
     max_lines: 5
+    # assistant prose の中間表示制御（verbose / phase / off、空でモード別デフォルト）
+    assistant_updates: ""
 
 # ============================================================
 # Web検索設定

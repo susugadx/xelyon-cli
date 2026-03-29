@@ -174,6 +174,7 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 			if containsCompletionDeclaration(response) && beforeDiffHash != "" {
 				afterDiffHash := getGitDiffHash()
 				if afterDiffHash != "" && afterDiffHash != beforeDiffHash {
+					a.printFinalAssistantResponse(response)
 					green.Fprintf(a.output(), "✓ Step %d completed (already applied)\n", step.ID)
 					return nil
 				}
@@ -211,6 +212,7 @@ func (a *Agent) executeStepV2(ctx context.Context, p *plan.Plan, step *plan.Plan
 			}
 
 			// ツール呼び出しなし = ステップ完了
+			a.printFinalAssistantResponse(response)
 			green.Fprintf(a.output(), "✓ Step %d completed\n", step.ID)
 			return nil
 		}
