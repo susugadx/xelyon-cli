@@ -279,7 +279,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 				return p.ChatWithTools(ctx, systemPrompt, history, model)
 			}
 
-			// Idle timeout: FCモードで1回リトライ → それでもダメならエラー
+			// Transport idle timeout: FCモードで1回リトライ → それでもダメならエラー
 			var idleErr *ErrIdleTimeout
 			if errors.As(err, &idleErr) {
 				retryCount := 0
@@ -287,11 +287,11 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 					retryCount = v.(int)
 				}
 				if retryCount >= maxIdleTimeoutRetries {
-					return "", fmt.Errorf("idle timeout: exceeded max retries (%d): %w", maxIdleTimeoutRetries, err)
+					return "", fmt.Errorf("transport idle timeout: exceeded max retries (%d): %w", maxIdleTimeoutRetries, err)
 				}
 				retryCount++
 				api.StopSpinnerAndResetTerminal(ctx)
-				fmt.Fprintf(api.ErrorWriterFromContext(ctx), "⚠️ Idle timeout, retrying FC mode (attempt %d/%d)...\n", retryCount, maxIdleTimeoutRetries)
+				fmt.Fprintf(api.ErrorWriterFromContext(ctx), "⚠️ Transport idle timeout, retrying FC mode (attempt %d/%d)...\n", retryCount, maxIdleTimeoutRetries)
 				ctx = context.WithValue(ctx, idleTimeoutRetryKey, retryCount)
 				return p.ChatWithTools(ctx, systemPrompt, history, model)
 			}

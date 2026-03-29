@@ -16,7 +16,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
-// ErrThinkingTimeout はthinkingのみが続きtext/FCが来ない場合のタイムアウトエラー
+// ErrThinkingTimeout はthought は流れているが actionable output が進まない場合のタイムアウトエラー
 type ErrThinkingTimeout struct {
 	Message string
 }
@@ -32,7 +32,7 @@ func isThinkingTimeoutError(err error) bool {
 	return errors.As(err, &target)
 }
 
-// ErrIdleTimeout はSSEストリームでデータ受信がない場合のタイムアウトエラー
+// ErrIdleTimeout はSSE ストリームで有効な data を受信できない場合の transport idle timeout エラー
 type ErrIdleTimeout struct {
 	Message string
 }
@@ -70,7 +70,7 @@ func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, s
 	var toolJSONInStr bool       // ツールJSON 内の文字列リテラルフラグ
 	var streamStarted bool       // SSEストリーム開始フラグ（スピナー切り替え用）
 
-	// goroutine + channel でスキャン（ctx キャンセル・idle timeout 対応）
+	// goroutine + channel でスキャン（ctx キャンセル・transport idle timeout 対応）
 	type scanResult struct {
 		line string
 		err  error
@@ -95,18 +95,18 @@ func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, s
 	}()
 
 	cfg := config.FromContext(ctx)
-	idleTimeout := time.Duration(cfg.Streaming.IdleTimeoutSeconds) * time.Second
-	idleTimer := time.NewTimer(idleTimeout)
-	defer idleTimer.Stop()
+	transportIdleTimeout := time.Duration(cfg.Streaming.IdleTimeoutSeconds) * time.Second
+	transportIdleTimer := time.NewTimer(transportIdleTimeout)
+	defer transportIdleTimer.Stop()
 
-	// thinking タイマー: text/FC を受信せず thinking のみが続く場合のタイムアウト
+	// thinking/progress タイマー: actionable output を受信せず thought のみが続く場合のタイムアウト
 	thinkingTimeout := time.Duration(cfg.Streaming.ThinkingTimeoutSeconds) * time.Second
 	if thinkingTimeout <= 0 {
 		thinkingTimeout = 300 * time.Second // フォールバック
 	}
 	thinkingTimer := time.NewTimer(thinkingTimeout)
 	defer thinkingTimer.Stop()
-	hadOutput := false // text/FC を1つでも受信したら true
+	hadActionableOutput := false // text/FC/救済済み tool JSON を1つでも受信したら true
 	thinkingRetries := 0
 
 	var scanErr error
@@ -124,21 +124,21 @@ loop:
 			}
 			return "", ctx.Err()
 
-		case <-idleTimer.C:
+		case <-transportIdleTimer.C:
 			if spinner != nil {
 				spinner.Stop()
 			}
-			return fullResponse.String(), &ErrIdleTimeout{Message: fmt.Sprintf("idle timeout: no data received for %v", idleTimeout)}
+			return fullResponse.String(), &ErrIdleTimeout{Message: fmt.Sprintf("transport idle timeout: no valid SSE data received for %v", transportIdleTimeout)}
 
 		case <-thinkingTimer.C:
-			// thinking のみが続き text/FC が来ない場合のタイムアウト
-			if !hadOutput {
+			// thought は来ているが actionable output が進まない場合のタイムアウト
+			if !hadActionableOutput {
 				if spinner != nil {
 					spinner.Stop()
 				}
-				return fullResponse.String(), &ErrThinkingTimeout{Message: fmt.Sprintf("thinking timeout: no text or function call received for %v (thinking data was received but no actionable output)", thinkingTimeout)}
+				return fullResponse.String(), &ErrThinkingTimeout{Message: fmt.Sprintf("thinking timeout: no actionable output received for %v (thought/progress data may have arrived, but no text or function call was produced)", thinkingTimeout)}
 			}
-			// hadOutput == true: text/FC を受信済みだが thinking が続いている
+			// hadActionableOutput == true: text/FC を受信済みだが、その後 progress が止まっている
 			// → タイマーをリセットして再度待つ（最大2回まで）
 			thinkingRetries++
 			if thinkingRetries >= 2 {
@@ -154,10 +154,6 @@ loop:
 				// チャンネルクローズ（予期しない終了）
 				break loop
 			}
-
-			// hadNonThoughtData: このチャンクで text/FC データがあったかを追跡
-			// thought パートのみの場合は idleTimer をリセットしない
-			hadNonThoughtData := false
 
 			if result.done {
 				scanErr = result.err
@@ -177,6 +173,7 @@ loop:
 				}
 				continue
 			}
+			resetTimer(transportIdleTimer, transportIdleTimeout)
 
 			// SSEストリーム開始: "Waiting for Gemini..." → thinking メッセージに切り替え
 			if !streamStarted {
@@ -234,11 +231,9 @@ loop:
 					}
 					// FunctionCall が同時にある場合は FC も収集してから continue
 					if part.FunctionCall != nil {
-						hadNonThoughtData = true
-						if !hadOutput {
-							hadOutput = true
-							thinkingTimer.Stop()
-						}
+						hadActionableOutput = true
+						thinkingRetries = 0
+						resetTimer(thinkingTimer, thinkingTimeout)
 						if spinner != nil {
 							spinner.Stop()
 							if headerPrinted && !contentNewlineEmitted {
@@ -254,12 +249,9 @@ loop:
 				}
 
 				if part.Text != "" {
-					hadNonThoughtData = true
-					// text を受信 → thinking タイマー停止
-					if !hadOutput {
-						hadOutput = true
-						thinkingTimer.Stop()
-					}
+					hadActionableOutput = true
+					thinkingRetries = 0
+					resetTimer(thinkingTimer, thinkingTimeout)
 					// ツールJSON抑制中: 後続チャンクも非表示にする（チャンク分割対応）
 					if suppressingToolJSON {
 						fullResponse.WriteString(part.Text)
@@ -314,12 +306,9 @@ loop:
 				}
 
 				if part.FunctionCall != nil {
-					hadNonThoughtData = true
-					// FC を受信 → thinking タイマー停止
-					if !hadOutput {
-						hadOutput = true
-						thinkingTimer.Stop()
-					}
+					hadActionableOutput = true
+					thinkingRetries = 0
+					resetTimer(thinkingTimer, thinkingTimeout)
 					// テキスト表示後にFCが来た場合、ツール準備中スピナーを再開
 					if spinner != nil {
 						spinner.Stop()
@@ -332,17 +321,6 @@ loop:
 					part.FunctionCall.ThoughtSignature = part.ThoughtSignature
 					functionCalls = append(functionCalls, part.FunctionCall)
 				}
-			}
-
-			// idleTimer: text/FC を含むチャンクのみリセット（thought のみではリセットしない）
-			if hadNonThoughtData {
-				if !idleTimer.Stop() {
-					select {
-					case <-idleTimer.C:
-					default:
-					}
-				}
-				idleTimer.Reset(idleTimeout)
 			}
 		}
 	}
@@ -404,6 +382,16 @@ loop:
 		_, _ = fmt.Fprintln(out)
 	}
 	return fullResponse.String(), nil
+}
+
+func resetTimer(timer *time.Timer, timeout time.Duration) {
+	if !timer.Stop() {
+		select {
+		case <-timer.C:
+		default:
+		}
+	}
+	timer.Reset(timeout)
 }
 
 // updateToolJSONDepth はテキスト中の {} ネスト深度を追跡する（文字列リテラル内は無視）
