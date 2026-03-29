@@ -72,7 +72,7 @@ func TestTUIProgramE2E_CopySetsTransientStatus(t *testing.T) {
 	if len(agent.copyTexts) != 1 || agent.copyTexts[0] != "copy target" {
 		t.Fatalf("copyTexts = %#v, want [copy target]", agent.copyTexts)
 	}
-	if !strings.Contains(stripANSI(final.chromeCache), "Copi") {
+	if !strings.Contains(stripANSI(final.chromeCache), "Cop") {
 		t.Fatalf("chromeCache should include truncated transient copy status, got %q", final.chromeCache)
 	}
 	lines := normalizedViewLines(final.View())

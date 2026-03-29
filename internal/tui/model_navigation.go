@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"github.com/rivo/uniseg"
 )
 
 // setTransientStatus は一時通知メッセージを設定する。
@@ -116,9 +118,62 @@ func (m *Model) moveCursorCol(delta int) {
 		m.cursorCol = 0
 		return
 	}
-	m.cursorCol += delta
+	if delta > 0 {
+		// 右移動: 現在のカーソルが乗っている grapheme cluster の次の先頭に飛ぶ
+		for range delta {
+			m.cursorCol = m.nextClusterStart(m.cursorLine, m.cursorCol)
+		}
+	} else if delta < 0 {
+		// 左移動: 現在のカーソルの前の grapheme cluster の先頭に飛ぶ
+		for range -delta {
+			m.cursorCol = m.prevClusterStart(m.cursorLine, m.cursorCol)
+		}
+	}
 	m.clampCursorCol()
 	m.chromeDirty = true
+}
+
+// nextClusterStart は現在のカーソル列の次の grapheme cluster 先頭列を返す。
+func (m Model) nextClusterStart(line, col int) int {
+	if line < 0 || line >= len(m.rawLines) {
+		return col
+	}
+	plain := stripANSI(m.rawLines[line])
+	w := 0
+	gr := uniseg.NewGraphemes(plain)
+	for gr.Next() {
+		cw := plainTextDisplayWidth(gr.Str())
+		if w+cw > col {
+			// カーソルはこの cluster 上にある → 次の cluster の先頭を返す
+			return w + cw
+		}
+		w += cw
+	}
+	return col // 末尾を超えた場合はそのまま (clampCursorCol が処理)
+}
+
+// prevClusterStart は現在のカーソル列の前の grapheme cluster 先頭列を返す。
+func (m Model) prevClusterStart(line, col int) int {
+	if line < 0 || line >= len(m.rawLines) {
+		return col
+	}
+	plain := stripANSI(m.rawLines[line])
+	prevStart := 0
+	w := 0
+	gr := uniseg.NewGraphemes(plain)
+	for gr.Next() {
+		cw := plainTextDisplayWidth(gr.Str())
+		if w+cw >= col {
+			// カーソルはこの cluster 上またはちょうど先頭 → 前の cluster 先頭を返す
+			if w < col {
+				return w // カーソルが cluster の中間にいる → この cluster の先頭
+			}
+			return prevStart // ちょうど先頭にいる → 前の cluster の先頭
+		}
+		prevStart = w
+		w += cw
+	}
+	return prevStart
 }
 
 func (m *Model) consumePendingCountOr(fallback int) int {

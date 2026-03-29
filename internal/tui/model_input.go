@@ -73,6 +73,7 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.textInput.Reset()
+		m.chromeDirty = true // textInput 状態変更を chrome に反映
 
 		m.appendMessage(ChatMessage{
 			Role:      "user",

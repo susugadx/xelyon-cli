@@ -79,6 +79,7 @@ func (m *Model) toggleToolBlock(blockIdx int) {
 	if m.ready {
 		m.vp.setLines(m.getVisualRowContents())
 	}
+	m.chromeDirty = true
 }
 
 // setBlockFocus はブロックフォーカスを設定する。
@@ -93,6 +94,7 @@ func (m *Model) setBlockFocus(blockIdx int) {
 	m.updateBlockIndicator(old)
 	m.updateBlockIndicator(m.focusedBlock)
 	m.scrollToBlock(m.focusedBlock)
+	m.chromeDirty = true
 }
 
 // clearBlockFocus はブロックフォーカスを解除する。
@@ -100,6 +102,7 @@ func (m *Model) clearBlockFocus() {
 	old := m.focusedBlock
 	m.focusedBlock = -1
 	m.updateBlockIndicator(old)
+	m.chromeDirty = true
 }
 
 // moveBlockFocus はブロックフォーカスを移動する。

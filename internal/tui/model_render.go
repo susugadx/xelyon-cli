@@ -28,15 +28,22 @@ func (m *Model) getVisualRowContents() []string {
 }
 
 // truncateWithANSI は ANSI エスケープを保持しつつ表示幅を制限する。
-// CJK 全角文字（幅2）を正しくカウントする。
+// grapheme cluster 単位で処理し、lipgloss.Width と同一基準で幅を計算する。
 func truncateWithANSI(s string, maxWidth int) string {
 	var result strings.Builder
 	width := 0
 	inEscape := false
-	for _, r := range s {
+	// grapheme cluster 対応: ANSI を含む文字列を rune 単位でスキャンし、
+	// 非 ANSI 部分は plainTextDisplayWidth で cluster 幅を取得する。
+	// ANSI シーケンス中はそのまま通す。
+	i := 0
+	runes := []rune(s)
+	for i < len(runes) {
+		r := runes[i]
 		if r == '\033' {
 			inEscape = true
 			result.WriteRune(r)
+			i++
 			continue
 		}
 		if inEscape {
@@ -44,14 +51,24 @@ func truncateWithANSI(s string, maxWidth int) string {
 			if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') {
 				inEscape = false
 			}
+			i++
 			continue
 		}
-		w := runeWidth(r)
+		// 非 ANSI: grapheme cluster の先頭 rune を見つけた
+		// cluster 全体を抽出して幅を測る
+		clusterEnd := i + 1
+		for clusterEnd < len(runes) && runes[clusterEnd] != '\033' && isContinuationRune(runes[clusterEnd]) {
+			clusterEnd++
+		}
+		cluster := string(runes[i:clusterEnd])
+		w := plainTextDisplayWidth(cluster)
 		if width+w > maxWidth {
 			break
 		}
-		result.WriteRune(r)
+		result.WriteString(cluster)
 		width += w
+		i = clusterEnd
+		continue
 	}
 	truncated := result.String()
 	if strings.Contains(truncated, "\033[") && !strings.HasSuffix(truncated, "\033[0m") {
@@ -60,28 +77,45 @@ func truncateWithANSI(s string, maxWidth int) string {
 	return truncated
 }
 
-// runeWidth は文字の表示幅を返す（CJK 全角 = 2、それ以外 = 1）。
+// isContinuationRune は grapheme cluster の続き rune かどうかを判定する。
+// Variation Selector, Combining Mark, ZWJ 等を検出する。
+func isContinuationRune(r rune) bool {
+	// Variation Selectors (U+FE00-U+FE0F)
+	if r >= 0xFE00 && r <= 0xFE0F {
+		return true
+	}
+	// Combining Diacritical Marks (U+0300-U+036F)
+	if r >= 0x0300 && r <= 0x036F {
+		return true
+	}
+	// Zero Width Joiner (U+200D)
+	if r == 0x200D {
+		return true
+	}
+	// Combining marks general category (U+0300-U+0DFF range covers most)
+	// Regional Indicators for flag emoji (U+1F1E0-U+1F1FF)
+	if r >= 0x1F1E0 && r <= 0x1F1FF {
+		return true
+	}
+	// Skin tone modifiers (U+1F3FB-U+1F3FF)
+	if r >= 0x1F3FB && r <= 0x1F3FF {
+		return true
+	}
+	// Enclosing marks (U+20D0-U+20FF)
+	if r >= 0x20D0 && r <= 0x20FF {
+		return true
+	}
+	return false
+}
+
+// runeWidth は文字の表示幅を返す。
+// lipgloss.Width（= charmbracelet/x/ansi）と同一基準を使い、
+// truncateWithANSI と lipgloss.Width の幅不一致による行ラップを防ぐ。
 func runeWidth(r rune) int {
 	if r == '\t' {
 		return visualTabWidth
 	}
-	if r >= 0x1100 &&
-		(r <= 0x115F || r == 0x2329 || r == 0x232A ||
-			(r >= 0x2E80 && r <= 0x303E) ||
-			(r >= 0x3040 && r <= 0x33BF) ||
-			(r >= 0x3400 && r <= 0x4DBF) ||
-			(r >= 0x4E00 && r <= 0xA4CF) ||
-			(r >= 0xA960 && r <= 0xA97C) ||
-			(r >= 0xAC00 && r <= 0xD7A3) ||
-			(r >= 0xF900 && r <= 0xFAFF) ||
-			(r >= 0xFE10 && r <= 0xFE6F) ||
-			(r >= 0xFF01 && r <= 0xFF60) ||
-			(r >= 0xFFE0 && r <= 0xFFE6) ||
-			(r >= 0x1F000 && r <= 0x1FFFF) ||
-			(r >= 0x20000 && r <= 0x3FFFF)) {
-		return 2
-	}
-	return 1
+	return lipgloss.Width(string(r))
 }
 
 func plainTextDisplayWidth(s string) int {
@@ -176,9 +210,11 @@ func stylePlainTextRange(s string, startCol, endCol int, bg string) string {
 	var result strings.Builder
 	width := 0
 	inRange := false
-	for _, r := range s {
-		rw := runeWidth(r)
-		highlight := width < endCol && width+rw > startCol
+	gr := uniseg.NewGraphemes(s)
+	for gr.Next() {
+		cluster := gr.Str()
+		cw := plainTextDisplayWidth(cluster)
+		highlight := width < endCol && width+cw > startCol
 		if highlight && !inRange {
 			result.WriteString(bg)
 			inRange = true
@@ -186,8 +222,8 @@ func stylePlainTextRange(s string, startCol, endCol int, bg string) string {
 			result.WriteString("\033[0m")
 			inRange = false
 		}
-		result.WriteRune(r)
-		width += rw
+		result.WriteString(cluster)
+		width += cw
 	}
 	if inRange {
 		result.WriteString("\033[0m")
@@ -208,24 +244,55 @@ func stylePlainTextRangeWithCursor(s string, startCol, endCol int, rangeBg strin
 		}
 		return ""
 	}
+
+	hasRange := rangeBg != "" && startCol < endCol
+	hasLine := lineBg != ""
+
 	var result strings.Builder
 	width := 0
-	cursorPainted := false
-	for _, r := range s {
-		rw := runeWidth(r)
-		if lineBg != "" {
+	cursorDone := false
+	// 現在アクティブなスタイル要素を追跡（遷移時のみ ANSI を出力する）
+	var cLine, cRange, cCursor bool
+
+	transition := func(wLine, wRange, wCursor bool) {
+		if wLine == cLine && wRange == cRange && wCursor == cCursor {
+			return
+		}
+		if cLine || cRange || cCursor {
+			result.WriteString("\033[0m")
+		}
+		// 優先度順: lineBg → rangeBg → cursorBg（後勝ち）
+		if wLine {
 			result.WriteString(lineBg)
 		}
-		if rangeBg != "" && startCol < endCol && width < endCol && width+rw > startCol {
+		if wRange {
 			result.WriteString(rangeBg)
 		}
-		if !cursorPainted && cursorCol < width+rw {
+		if wCursor {
 			result.WriteString(cursorBg)
-			cursorPainted = true
 		}
-		result.WriteRune(r)
+		cLine = wLine
+		cRange = wRange
+		cCursor = wCursor
+	}
+
+	gr := uniseg.NewGraphemes(s)
+	for gr.Next() {
+		cluster := gr.Str()
+		cw := plainTextDisplayWidth(cluster)
+		inRange := hasRange && width < endCol && width+cw > startCol
+		isCursor := !cursorDone && cursorCol >= 0 && cursorCol < width+cw
+
+		transition(hasLine, inRange, isCursor)
+		result.WriteString(cluster)
+		width += cw
+		if isCursor {
+			cursorDone = true
+		}
+	}
+
+	if cLine || cRange || cCursor {
 		result.WriteString("\033[0m")
-		width += rw
 	}
 	return result.String()
 }
