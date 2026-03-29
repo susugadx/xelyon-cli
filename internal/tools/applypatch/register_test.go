@@ -201,10 +201,10 @@ func TestApplyPatch_PreviewWithLineNumbers(t *testing.T) {
 		}
 
 		output := out.String()
-		if !strings.Contains(output, "🩹 apply_patch (1 file operation(s))") {
+		if !strings.Contains(output, "apply_patch") || !strings.Contains(output, "1 files") {
 			t.Fatalf("stdout = %q, want patch header", output)
 		}
-		if !strings.Contains(output, "M target.go (+1, -1)") {
+		if !strings.Contains(output, "M") || !strings.Contains(output, "target.go") || !strings.Contains(output, "(+1, -1)") {
 			t.Fatalf("stdout = %q, want file summary footer", output)
 		}
 		if !strings.Contains(output, "-\tprintln(\"keep\")") {
@@ -243,7 +243,7 @@ func TestApplyPatch_PostApplyDisplay(t *testing.T) {
 		}
 
 		output := out.String()
-		if !strings.Contains(output, "🩹 apply_patch (1 file operation(s))") {
+		if !strings.Contains(output, "apply_patch") || !strings.Contains(output, "1 files") {
 			t.Fatalf("stdout = %q, want patch header", output)
 		}
 		if !strings.Contains(output, "Editing target.go (+1, -1)") {

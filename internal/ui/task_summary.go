@@ -10,6 +10,7 @@ import (
 type TaskSummary struct {
 	Changes     []FileChangeSummary // ファイル変更一覧
 	TestsPassed *bool               // テスト成功フラグ（nil = 未実行）
+	TestCommand string              // テスト/verification コマンド要約
 	Stats       SummaryStats        // 統計情報
 }
 
@@ -50,6 +51,12 @@ func (ts *TaskSummary) AddChange(filePath, action string, linesAdded, linesRemov
 // SetTestResult はテスト結果を設定
 func (ts *TaskSummary) SetTestResult(passed bool) *TaskSummary {
 	ts.TestsPassed = &passed
+	return ts
+}
+
+// SetTestCommand はテスト/verification コマンド要約を設定
+func (ts *TaskSummary) SetTestCommand(command string) *TaskSummary {
+	ts.TestCommand = strings.TrimSpace(command)
 	return ts
 }
 
@@ -143,10 +150,14 @@ func (ts *TaskSummary) Render() string {
 
 	// テスト結果
 	if ts.TestsPassed != nil {
+		label := "Test result"
+		if ts.TestCommand != "" {
+			label += fmt.Sprintf(" (%s)", ts.TestCommand)
+		}
 		if *ts.TestsPassed {
-			sb.WriteString("✅ All tests passed\n")
+			_, _ = fmt.Fprintf(&sb, "✅ %s: passed\n", label)
 		} else {
-			sb.WriteString("❌ Tests failed\n")
+			_, _ = fmt.Fprintf(&sb, "❌ %s: failed\n", label)
 		}
 		sb.WriteString("\n")
 	}

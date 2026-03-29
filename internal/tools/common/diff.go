@@ -77,7 +77,7 @@ func ShowPreviewWithOutputAndConfig(out Output, cfg *config.Config, content stri
 		maxLines = cfg.Diff.MaxTotalLines
 	}
 
-	out.Println(strings.Repeat("-", 50))
+	ui.FileOpDivider(out.StdoutWriter(), 50)
 	lines := strings.Split(content, "\n")
 	for i, line := range lines {
 		if maxLines > 0 && i >= maxLines {
@@ -86,5 +86,5 @@ func ShowPreviewWithOutputAndConfig(out Output, cfg *config.Config, content stri
 		}
 		out.Printf("%4d: %s\n", i+1, line)
 	}
-	out.Println(strings.Repeat("-", 50))
+	ui.FileOpDivider(out.StdoutWriter(), 50)
 }

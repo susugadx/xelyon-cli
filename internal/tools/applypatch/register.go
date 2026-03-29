@@ -158,10 +158,7 @@ func showApplyPatchPreview(out common.Output, patchText string, hunks []Hunk) {
 }
 
 func showApplyPatchHeader(out common.Output, operations int) {
-	out.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	out.Cyan.Printf("🩹 apply_patch (%d file operation(s))\n", operations)
-	out.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	out.Println()
+	ui.FileOpHeader(out.StdoutWriter(), "apply_patch", fmt.Sprintf("%d files", operations))
 }
 
 func showApplyPatchPreviewBody(out common.Output, patchText string, hunks []Hunk) {
@@ -169,23 +166,24 @@ func showApplyPatchPreviewBody(out common.Output, patchText string, hunks []Hunk
 
 	counts := countLinesPerPath(patchText)
 
+	w := out.StdoutWriter()
 	for _, hunk := range hunks {
 		c := counts[hunk.Path]
 		linesInfo := ""
 		if c[0] > 0 || c[1] > 0 {
-			linesInfo = fmt.Sprintf(" (+%d, -%d)", c[0], c[1])
+			linesInfo = fmt.Sprintf("(+%d, -%d)", c[0], c[1])
 		}
 		switch hunk.Type {
 		case "add":
-			out.Printf("  A %s%s\n", hunk.Path, linesInfo)
+			ui.FileOpPathLine(w, "A", hunk.Path, linesInfo)
 		case "delete":
-			out.Printf("  D %s\n", hunk.Path)
+			ui.FileOpPathLine(w, "D", hunk.Path, "")
 		case "update":
+			target := hunk.Path
 			if hunk.MovePath != "" {
-				out.Printf("  M %s -> %s%s\n", hunk.Path, hunk.MovePath, linesInfo)
-			} else {
-				out.Printf("  M %s%s\n", hunk.Path, linesInfo)
+				target = hunk.Path + " -> " + hunk.MovePath
 			}
+			ui.FileOpPathLine(w, "M", target, linesInfo)
 		}
 	}
 	out.Println()

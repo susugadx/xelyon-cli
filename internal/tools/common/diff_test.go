@@ -53,9 +53,8 @@ func TestShowPreview_LongContent(t *testing.T) {
 	if !strings.Contains(out.String(), "... (5 more lines)") {
 		t.Errorf("ShowPreview should show truncation notice, got: %q", out.String())
 	}
-	// カラー出力が抑制されていても、固定文字列部分は出力されるはず
-	// 失敗する場合は Printf の挙動に依存するため、最低限セパレータを確認
-	if !strings.Contains(out.String(), "--------------------------------------------------") {
-		t.Errorf("ShowPreview separator missing")
+	// セパレータ（薄い区切り線）が出力されること
+	if !strings.Contains(out.String(), "──────────") {
+		t.Errorf("ShowPreview separator missing, got: %q", out.String())
 	}
 }

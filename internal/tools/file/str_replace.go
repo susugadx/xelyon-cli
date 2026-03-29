@@ -19,6 +19,14 @@ type EditEntry struct {
 	NewStr string `json:"new_str"`
 }
 
+func batchEditLineStats(edits []EditEntry) (removed, added int) {
+	for _, edit := range edits {
+		removed += countLines(edit.OldStr)
+		added += countLines(edit.NewStr)
+	}
+	return removed, added
+}
+
 // ExecuteStrReplaceWithPromptIOAndOptions は確認設定を指定してファイル内の文字列を置換する。
 func ExecuteStrReplaceWithPromptIOAndOptions(promptIO ui.PromptIO, options common.ConfirmOptions, path, oldStr, newStr, startLineStr, endLineStr string) (string, error) {
 	promptIO = ui.NormalizePromptIO(promptIO)
@@ -125,24 +133,12 @@ func ExecuteStrReplaceWithPromptIOAndOptions(promptIO ui.PromptIO, options commo
 		// 確認UI - 変更サマリーを明確に表示
 		removed := endLine - startLine + 1
 		added := len(newStrLines)
-		lineDiff := added - removed
 
 		if !out.SuppressStdout() {
-			out.Cyan.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-			out.Cyan.Printf("🔧 str_replace (line range): %s\n", path)
-			out.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-
-			out.Yellow.Println("\n📊 Summary / 変更サマリー:")
-			out.Printf("   • Range: %d-%d (1-indexed inclusive)\n", startLine, endLine)
-			out.Printf("   • Remove %d lines / %d行削除\n", removed, removed)
-			out.Printf("   • Add %d lines / %d行追加\n", added, added)
-			if lineDiff > 0 {
-				out.Green.Printf("   • Net: +%d lines\n", lineDiff)
-			} else if lineDiff < 0 {
-				out.Red.Printf("   • Net: %d lines\n", lineDiff)
-			} else {
-				out.Printf("   • Net: 0 lines (same size)\n")
-			}
+			w := out.StdoutWriter()
+			out.Println()
+			ui.FileOpHeader(w, "str_replace", fmt.Sprintf("%s (lines %d-%d)", path, startLine, endLine))
+			ui.FileOpStatsLine(w, removed, added)
 
 			// Before/After（レンジ部分のみを表示）
 			beforeStr := strings.Join(lines[startLine-1:endLine], "\n")
@@ -255,20 +251,10 @@ func ExecuteStrReplaceWithPromptIOAndOptions(promptIO ui.PromptIO, options commo
 	lineDiff := len(newStrLines) - len(oldStrLines)
 
 	if !out.SuppressStdout() {
-		out.Cyan.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		out.Cyan.Printf("🔧 str_replace: %s\n", path)
-		out.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-
-		out.Yellow.Println("\n📊 Summary / 変更サマリー:")
-		out.Printf("   • Remove %d lines / %d行削除\n", len(oldStrLines), len(oldStrLines))
-		out.Printf("   • Add %d lines / %d行追加\n", len(newStrLines), len(newStrLines))
-		if lineDiff > 0 {
-			out.Green.Printf("   • Net: +%d lines\n", lineDiff)
-		} else if lineDiff < 0 {
-			out.Red.Printf("   • Net: %d lines\n", lineDiff)
-		} else {
-			out.Printf("   • Net: 0 lines (same size)\n")
-		}
+		w := out.StdoutWriter()
+		out.Println()
+		ui.FileOpHeader(w, "str_replace", path)
+		ui.FileOpStatsLine(w, len(oldStrLines), len(newStrLines))
 
 		// 大規模変更警告
 		absLineDiff := lineDiff
@@ -276,10 +262,7 @@ func ExecuteStrReplaceWithPromptIOAndOptions(promptIO ui.PromptIO, options commo
 			absLineDiff = -absLineDiff
 		}
 		if absLineDiff > 100 || len(oldStrLines) > 100 || len(newStrLines) > 100 {
-			out.Red.Println("\n🚨 VERY LARGE CHANGE DETECTED!")
-			out.Red.Println("   非常に大きな変更が検出されました。")
-			out.Yellow.Println("💡 Consider splitting into multiple smaller str_replace calls.")
-			out.Yellow.Println("   複数の小さな str_replace に分割することを検討してください。")
+			out.Yellow.Println("  Large change detected. Consider splitting into smaller edits.")
 		}
 
 		// diff表示用に、old_str の実ファイル開始行（1-indexed）を算出
@@ -621,29 +604,18 @@ func executeBatchEditsWithPromptIOAndOptions(promptIO ui.PromptIO, options commo
 	}
 
 	// combined diff 表示
-	oldLines := strings.Count(oldContent, "\n") + 1
-	newLines := strings.Count(content, "\n") + 1
-	lineDiff := newLines - oldLines
+	linesRemoved, linesAdded := batchEditLineStats(edits)
 
 	if !out.SuppressStdout() {
-		out.Cyan.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		out.Cyan.Printf("🔧 str_replace (batch: %d edits): %s\n", len(edits), path)
-		out.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-
-		out.Yellow.Println("\n📊 Summary / 変更サマリー:")
-		out.Printf("   • Edits: %d\n", len(edits))
-		if lineDiff > 0 {
-			out.Green.Printf("   • Net: +%d lines\n", lineDiff)
-		} else if lineDiff < 0 {
-			out.Red.Printf("   • Net: %d lines\n", lineDiff)
-		} else {
-			out.Printf("   • Net: 0 lines (same size)\n")
-		}
+		w := out.StdoutWriter()
+		out.Println()
+		ui.FileOpHeader(w, "str_replace", fmt.Sprintf("%s (batch: %d edits)", path, len(edits)))
+		ui.FileOpStatsLine(w, linesRemoved, linesAdded)
 
 		// 大規模変更の警告
-		if oldLines > 100 || newLines > 100 || lineDiff > 100 || lineDiff < -100 {
-			out.Red.Println("\n⚠️  WARNING: LARGE CHANGE DETECTED")
-			out.Red.Println("   This is a significant modification. Please review the diff carefully.")
+		lineDiff := linesAdded - linesRemoved
+		if linesRemoved > 100 || linesAdded > 100 || lineDiff > 100 || lineDiff < -100 {
+			out.Yellow.Println("  Large change detected. Review the diff carefully.")
 		}
 
 		opts := &ui.DiffOptions{

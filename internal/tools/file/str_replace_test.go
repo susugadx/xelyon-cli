@@ -1,6 +1,7 @@
 package file
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -416,6 +417,38 @@ func TestExecuteBatchEdits_Success(t *testing.T) {
 		t.Errorf("expected batch success message, got: %s", output)
 	}
 	testutil.AssertFileContent(t, testFile, "AAA\nbbb\nCCC")
+}
+
+func TestExecuteBatchEdits_StatsReflectEditedLinesNotWholeFile(t *testing.T) {
+	setupTestMocks(t)
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test.txt")
+
+	lines := make([]string, 200)
+	for i := range lines {
+		lines[i] = fmt.Sprintf("line %d", i+1)
+	}
+	lines[99] = "TARGET"
+	testutil.CreateTempFile(t, tmpDir, "test.txt", strings.Join(lines, "\n"))
+
+	editsJSON := `[{"old_str":"TARGET","new_str":"UPDATED"}]`
+
+	var stdout bytes.Buffer
+	output, err := executeBatchEditsWithPromptIOAndOptions(testPromptIO(&stdout, &stdout), testConfirmOptions(), testFile, editsJSON)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(output, "Successfully applied 1 edits") {
+		t.Fatalf("expected batch success message, got: %s", output)
+	}
+
+	rendered := stdout.String()
+	if !strings.Contains(rendered, "-1 / +1 (net 0)") {
+		t.Fatalf("expected edited-line stats, got: %q", rendered)
+	}
+	if strings.Contains(rendered, "-200 / +200") {
+		t.Fatalf("expected not to show whole-file stats, got: %q", rendered)
+	}
 }
 
 func TestExecuteBatchEdits_RollbackOnFailure(t *testing.T) {

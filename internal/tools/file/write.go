@@ -55,51 +55,49 @@ func ExecuteWriteFileWithPromptIOAndOptionsAndLSPClient(promptIO ui.PromptIO, op
 		perm = info.Mode().Perm()
 	}
 
-	// 確認UI - 変更サマリーを明確に表示
+	// 確認UI
 	newLines := strings.Split(content, "\n")
 	if !out.SuppressStdout() {
-		out.Cyan.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		w := out.StdoutWriter()
+		out.Println()
 		if exists {
-			out.Cyan.Printf("📝 write_file (overwrite): %s\n", path)
-		} else {
-			out.Cyan.Printf("📝 write_file (create): %s\n", path)
-		}
-		out.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+			ui.FileOpHeader(w, "write_file", path+" (overwrite)")
 
-		// 変更サマリー
-		out.Yellow.Println("\n📊 Summary / 変更サマリー:")
-		if exists {
 			oldContent, _ := os.ReadFile(absPath)
 			oldLines := strings.Split(string(oldContent), "\n")
-			lineDiff := len(newLines) - len(oldLines)
-			out.Printf("   • Before: %d lines / 変更前: %d行\n", len(oldLines), len(oldLines))
-			out.Printf("   • After: %d lines / 変更後: %d行\n", len(newLines), len(newLines))
-			if lineDiff > 0 {
-				out.Green.Printf("   • Net: +%d lines\n", lineDiff)
-			} else if lineDiff < 0 {
-				out.Red.Printf("   • Net: %d lines\n", lineDiff)
-			} else {
-				out.Printf("   • Net: 0 lines (same size)\n")
-			}
+			added, removed := ui.CountDiffLines(oldLines, newLines)
+			ui.FileOpStatsLine(w, removed, added)
 
 			// 既存ファイルの全体上書き警告
-			// 行数の変化が少ないのに大きなファイルを全体上書きしようとしている場合
+			lineDiff := len(newLines) - len(oldLines)
 			absLineDiff := lineDiff
 			if absLineDiff < 0 {
 				absLineDiff = -absLineDiff
 			}
 			if absLineDiff < 10 && len(oldLines) > 50 {
-				out.Red.Println("\n🚨 WARNING: Large file overwrite with minimal changes!")
-				out.Red.Println("   あなたは大きなファイルを少ない変更で全体上書きしようとしています。")
-				out.Yellow.Println("💡 Consider using str_replace for partial edits instead.")
-				out.Yellow.Println("   部分的な編集には str_replace の使用を検討してください。")
+				out.Yellow.Println("  Large file overwrite with minimal changes. Consider using str_replace.")
 			}
 
 			common.ShowDiffWithOutputAndConfig(out, cfg, string(oldContent), content, path)
 		} else {
-			out.Printf("   • New file: %d lines / 新規: %d行\n", len(newLines), len(newLines))
-			out.Printf("   • Size: %d bytes\n", len(content))
-			common.ShowPreviewWithOutputAndConfig(out, cfg, content)
+			ui.FileOpHeader(w, "write_file", path+" (create)")
+			out.Dim.Printf("  new: %d lines, %d bytes\n", len(newLines), len(content))
+			preview := buildCappedPatchPreviewLines(newLines, '+', resolvePreviewLineCap(cfg))
+			ui.ShowSinglePatchPreview(w, ui.PatchFilePreview{
+				Path:   path,
+				Action: "created",
+				Added:  preview.totalLines,
+				Hunks: []ui.PatchHunkPreview{{
+					StartLine: 1,
+					Lines:     preview.lines,
+				}},
+			})
+			if preview.truncated {
+				out.Dim.Printf("  preview truncated: showing first %d of %d lines\n", len(preview.lines), preview.totalLines)
+				if preview.truncatedByBytes {
+					out.Dim.Printf("  preview truncated at %dKB\n", maxFullBodyPreviewBytes/1024)
+				}
+			}
 		}
 	}
 

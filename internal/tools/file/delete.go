@@ -68,41 +68,31 @@ func ExecuteDeleteFileWithPromptIOAndOptionsAndLSPClient(promptIO ui.PromptIO, o
 
 	// 確認UI表示（ファイルプレビュー付き）
 	if !out.SuppressStdout() {
-		out.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		out.Cyan.Printf("🗑️  Delete File / ファイル削除\n")
-		out.Cyan.Printf("📂 Path / パス: %s\n", path)
-		out.Cyan.Printf("📏 Size / サイズ: %d bytes (%d lines)\n", fileInfo.Size(), len(lines))
-		out.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		out.Red.Println("⚠️  DESTRUCTIVE: File will be permanently deleted!")
-		out.Red.Println("⚠️  破壊的操作: ファイルは完全に削除されます!")
+		w := out.StdoutWriter()
+		ui.FileOpHeader(w, "delete_file", fmt.Sprintf("%s (%d bytes, %d lines)", path, fileInfo.Size(), len(lines)))
+		out.Red.Println("  DESTRUCTIVE: file will be permanently deleted")
 
-		cfg := options.Config
-		if cfg == nil {
-			return "", fmt.Errorf("missing confirm options config")
-		}
-		maxPreviewLines := cfg.Diff.MaxTotalLines
-		if maxPreviewLines <= 0 {
-			maxPreviewLines = len(lines)
-		}
-
-		if len(lines) > maxPreviewLines {
-			out.Yellow.Printf("\nFile preview (first %d of %d lines) / ファイルプレビュー:\n", maxPreviewLines, len(lines))
-		} else {
-			out.Yellow.Printf("\nFile contents (%d lines) / ファイル内容:\n", len(lines))
-		}
-		for i := 0; i < len(lines) && i < maxPreviewLines; i++ {
-			out.Printf("  %4d: %s\n", i+1, lines[i])
-		}
-		if len(lines) > maxPreviewLines {
-			out.Yellow.Printf("  ... (%d more lines)\n", len(lines)-maxPreviewLines)
+		preview := buildCappedPatchPreviewLines(lines, '-', resolvePreviewLineCap(options.Config))
+		ui.ShowSinglePatchPreview(w, ui.PatchFilePreview{
+			Path:    path,
+			Action:  "deleted",
+			Removed: len(lines),
+			Hunks: []ui.PatchHunkPreview{{
+				StartLine: 1,
+				Lines:     preview.lines,
+			}},
+		})
+		if preview.truncated {
+			out.Dim.Printf("  preview truncated: showing first %d of %d lines\n", len(preview.lines), preview.totalLines)
+			if preview.truncatedByBytes {
+				out.Dim.Printf("  preview truncated at %dKB\n", maxFullBodyPreviewBytes/1024)
+			}
 		}
 
 		// 外部参照の警告表示
 		if len(externalRefs) > 0 {
 			out.Println()
-			out.Yellow.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-			out.Yellow.Printf("⚠️  LSP Warning: This file contains %d external references!\n", len(externalRefs))
-			out.Yellow.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+			out.Yellow.Printf("  LSP: %d external references to symbols in this file\n", len(externalRefs))
 
 			// シンボルごとにグループ化して表示
 			symbolRefs := make(map[string][]toolslsp.ReferenceInfo)
@@ -115,7 +105,7 @@ func ExecuteDeleteFileWithPromptIOAndOptionsAndLSPClient(promptIO ui.PromptIO, o
 				shown := 0
 				for _, ref := range refs {
 					if shown >= 3 {
-						out.Yellow.Printf("      ... and %d more\n", len(refs)-3)
+						out.Dim.Printf("      ... and %d more\n", len(refs)-3)
 						break
 					}
 					out.Printf("      - %s:%d\n", ref.FilePath, ref.Line)
@@ -123,7 +113,7 @@ func ExecuteDeleteFileWithPromptIOAndOptionsAndLSPClient(promptIO ui.PromptIO, o
 				}
 			}
 			out.Println()
-			out.Red.Println("⚠️  Deleting this file may break the code that references these symbols!")
+			out.Red.Println("  Deleting this file may break code that references these symbols!")
 		}
 	}
 

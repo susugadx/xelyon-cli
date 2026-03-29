@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/fatih/color"
 )
@@ -41,9 +42,8 @@ func TestShowColoredDiff_NoChanges(t *testing.T) {
 		ShowColoredDiffToWriter(w, old, new, nil)
 	})
 
-	// サマリー行があること（net: 0）
-	if !strings.Contains(output, "net: 0") {
-		t.Errorf("Expected summary to contain 'net: 0', got: %s", output)
+	if !strings.Contains(output, "(net 0)") {
+		t.Errorf("Expected summary to contain '(net 0)', got: %s", output)
 	}
 }
 
@@ -55,9 +55,9 @@ func TestShowColoredDiff_WithChanges(t *testing.T) {
 		ShowColoredDiffToWriter(w, old, new, nil)
 	})
 
-	// 差分表示があること
-	if !strings.Contains(output, "Diff") {
-		t.Errorf("Expected diff header, got: %s", output)
+	// stats line should contain removed/added counts
+	if !strings.Contains(output, "-1") || !strings.Contains(output, "+1") {
+		t.Errorf("Expected stats line with counts, got: %s", output)
 	}
 }
 
@@ -76,9 +76,8 @@ func TestShowColoredDiff_Addition(t *testing.T) {
 		ShowColoredDiffToWriter(w, old, new, opts)
 	})
 
-	// +1の表示があること（net: +1）
-	if !strings.Contains(output, "net: +1") {
-		t.Errorf("Expected 'net: +1' in summary for net addition, got: %s", output)
+	if !strings.Contains(output, "(net +1)") {
+		t.Errorf("Expected '(net +1)' in summary for net addition, got: %s", output)
 	}
 }
 
@@ -97,9 +96,8 @@ func TestShowColoredDiff_Deletion(t *testing.T) {
 		ShowColoredDiffToWriter(w, old, new, opts)
 	})
 
-	// -1の表示があること（net: -1）
-	if !strings.Contains(output, "net: -1") {
-		t.Errorf("Expected 'net: -1' in summary for net deletion, got: %s", output)
+	if !strings.Contains(output, "(net -1)") {
+		t.Errorf("Expected '(net -1)' in summary for net deletion, got: %s", output)
 	}
 }
 
@@ -121,6 +119,33 @@ func TestShowColoredDiff_SideBySide(t *testing.T) {
 	// Before/After表示があること
 	if !strings.Contains(output, "Before") || !strings.Contains(output, "After") {
 		t.Errorf("Expected Before/After headers in side-by-side mode, got: %s", output)
+	}
+}
+
+func TestShowColoredDiff_SideBySide_SeparatesBorderAndContentStyling(t *testing.T) {
+	var buf bytes.Buffer
+	p := diffPrinter{
+		out: &buf,
+		pal: fileOpPalette{
+			AddLine: func(w io.Writer, s string) { _, _ = io.WriteString(w, s) },
+			DelLine: func(w io.Writer, s string) { _, _ = io.WriteString(w, s) },
+			Hunk:    func(w io.Writer, s string) { _, _ = io.WriteString(w, s) },
+			Accent:  func(w io.Writer, s string) { _, _ = io.WriteString(w, s) },
+			Muted:   func(w io.Writer, s string) { _, _ = io.WriteString(w, "[M]"+s+"[/M]") },
+			Border:  func(w io.Writer, s string) { _, _ = io.WriteString(w, "[B]"+s+"[/B]") },
+			Context: func(w io.Writer, s string) { _, _ = io.WriteString(w, "[C]"+s+"[/C]") },
+		},
+	}
+
+	opts := &DiffOptions{ShowLineNums: true, InlineMode: false, MaxTotalLines: 50}
+	showSideBySideDiffToWriter(p, []string{"line1"}, []string{"line2"}, opts)
+	output := buf.String()
+
+	if !strings.Contains(output, "[B]│ [/B][C]L1    line1") {
+		t.Fatalf("expected border and content styling to be separated, got: %q", output)
+	}
+	if !strings.Contains(output, "[/C][B] │\n[/B]") {
+		t.Fatalf("expected trailing border to be styled separately, got: %q", output)
 	}
 }
 
@@ -156,11 +181,8 @@ func TestShowColoredDiffWithRuntime_UsesInjectedWriter(t *testing.T) {
 	ShowColoredDiffWithRuntime(runtime, "before\nline2", "after\nline2", nil)
 
 	output := stripANSI(out.String())
-	if !strings.Contains(output, "Diff / 差分表示") {
-		t.Fatalf("expected injected output to contain diff header, got %q", output)
-	}
-	if !strings.Contains(output, "net: 0") {
-		t.Fatalf("expected injected output to contain summary, got %q", output)
+	if !strings.Contains(output, "(net 0)") {
+		t.Fatalf("expected injected output to contain stats, got %q", output)
 	}
 }
 
@@ -300,7 +322,7 @@ func TestShowColoredDiff_LargeDeletion(t *testing.T) {
 	})
 
 	// Should show net negative
-	if !strings.Contains(output, "net:") {
+	if !strings.Contains(output, "net") {
 		t.Errorf("Expected net summary, got: %s", output)
 	}
 }
@@ -315,7 +337,7 @@ func TestShowColoredDiff_LargeAddition(t *testing.T) {
 	})
 
 	// Should show net positive
-	if !strings.Contains(output, "net: +") {
+	if !strings.Contains(output, "net +") {
 		t.Errorf("Expected positive net summary, got: %s", output)
 	}
 }
@@ -377,7 +399,7 @@ func TestShowPatchToWriter(t *testing.T) {
 		ShowPatchToWriter(w, patchOutput)
 	})
 
-	// ***行が存在すること（ボールドシアン）
+	// ***行が存在すること
 	if !strings.Contains(output, "*** Begin Patch") {
 		t.Errorf("Expected '*** Begin Patch' header, got: %s", output)
 	}
@@ -391,21 +413,89 @@ func TestShowPatchToWriter(t *testing.T) {
 		t.Errorf("Expected '*** Delete File: old.txt', got: %s", output)
 	}
 
-	// @@行が存在すること（シアン）
+	// @@行が存在すること
 	if !strings.Contains(output, "@@ func main()") {
 		t.Errorf("Expected '@@ func main()' hunk header, got: %s", output)
 	}
 
-	// -行が存在すること（赤）
+	// -行が存在すること
 	if !strings.Contains(output, "-old line") {
 		t.Errorf("Expected '-old line' removed line, got: %s", output)
 	}
 
-	// +行が存在すること（緑）
+	// +行が存在すること
 	if !strings.Contains(output, "+new line") {
 		t.Errorf("Expected '+new line' added line, got: %s", output)
 	}
 	if !strings.Contains(output, "+new file content") {
 		t.Errorf("Expected '+new file content' added line, got: %s", output)
+	}
+}
+
+// isAllDashes は文字列が全て '─' (U+2500) で構成されているかを返す。
+func isAllDashes(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		if r != '─' {
+			return false
+		}
+		i += size
+	}
+	return true
+}
+
+func TestShowColoredDiff_StructuralLayout(t *testing.T) {
+	old := "aaa\nbbb\nccc\nddd\neee\nfff\nggg\nhhh\niii\njjj"
+	new := "aaa\nBBB\nccc\nddd\neee\nfff\nggg\nHHH\niii\njjj"
+	opts := &DiffOptions{ContextLines: 1, ShowLineNums: true, InlineMode: true, MaxTotalLines: 100}
+
+	output := captureOutput(func(w io.Writer) {
+		ShowColoredDiffToWriter(w, old, new, opts)
+	})
+
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+
+	hasDivider := false
+	hasStats := false
+	hasDel := false
+	hasAdd := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if isAllDashes(trimmed) && len(trimmed) > 10 {
+			hasDivider = true
+		}
+		if strings.Contains(line, "-2") && strings.Contains(line, "+2") {
+			hasStats = true
+		}
+		if strings.Contains(line, "- bbb") || strings.Contains(line, "- hhh") {
+			hasDel = true
+		}
+		if strings.Contains(line, "+ BBB") || strings.Contains(line, "+ HHH") {
+			hasAdd = true
+		}
+	}
+
+	if !hasDivider {
+		t.Error("missing divider line")
+	}
+	if !hasStats {
+		t.Error("missing stats line")
+	}
+	if !hasDel {
+		t.Error("missing deletion lines")
+	}
+	if !hasAdd {
+		t.Error("missing addition lines")
+	}
+
+	// old heavy header must NOT be present
+	if strings.Contains(output, "Diff /") {
+		t.Error("old heavy header still present")
+	}
+	if strings.Contains(output, "Summary") {
+		t.Error("old Summary heading still present")
 	}
 }

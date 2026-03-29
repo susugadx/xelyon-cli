@@ -3,8 +3,6 @@ package ui
 import (
 	"fmt"
 	"io"
-
-	"github.com/fatih/color"
 )
 
 // PatchPreviewLine はパッチプレビュー内の1行を表す。
@@ -32,57 +30,63 @@ type PatchFilePreview struct {
 
 // ShowPatchPreview は行番号付きの Codex 風パッチプレビューを出力する。
 func ShowPatchPreview(out io.Writer, previews []PatchFilePreview) {
-	bold := color.New(color.Bold)
-	green := color.New(color.FgGreen)
-	red := color.New(color.FgRed)
-	dim := color.New(color.Faint)
+	pal := newFileOpPalette(out)
 
 	for _, preview := range previews {
-		showPatchFilePreview(out, bold, green, red, dim, preview)
+		showPatchFilePreview(out, pal, preview)
 	}
 }
 
-func showPatchFilePreview(out io.Writer, bold, green, red, dim *color.Color, preview PatchFilePreview) {
-	showPatchFileHeader(out, bold, dim, preview.Action, preview.Path, preview.MovePath, preview.Added, preview.Removed)
+// ShowSinglePatchPreview は単一ファイルのパッチプレビューを出力する。
+func ShowSinglePatchPreview(out io.Writer, preview PatchFilePreview) {
+	pal := newFileOpPalette(out)
+	showPatchFilePreview(out, pal, preview)
+}
+
+func showPatchFilePreview(out io.Writer, pal fileOpPalette, preview PatchFilePreview) {
+	showPatchFileHeader(out, pal, preview.Action, preview.Path, preview.MovePath, preview.Added, preview.Removed)
 
 	switch preview.Action {
 	case "delete", "deleted":
+		if len(preview.Hunks) > 0 {
+			renderPatchLines(out, pal, preview.Hunks[0].Lines)
+		}
 		fmt.Fprintln(out)
 		return
 	case "add", "created":
 		if len(preview.Hunks) > 0 {
-			renderPatchLines(out, green, red, dim, preview.Hunks[0].Lines)
+			renderPatchLines(out, pal, preview.Hunks[0].Lines)
 		}
 		fmt.Fprintln(out)
 		return
 	default:
 		for i, hunk := range preview.Hunks {
 			if i > 0 {
-				dim.Fprintf(out, "     :\n")
+				pal.Muted(out, "     :\n")
 			}
-			renderPatchLines(out, green, red, dim, hunk.Lines)
+			renderPatchLines(out, pal, hunk.Lines)
 		}
 		fmt.Fprintln(out)
 	}
 }
 
-func showPatchFileHeader(out io.Writer, bold, dim *color.Color, action, path, movePath string, added, removed int) {
-	bold.Fprintf(out, "  • %s %s", formatPatchAction(action), formatPatchTarget(path, movePath))
+func showPatchFileHeader(out io.Writer, pal fileOpPalette, action, path, movePath string, added, removed int) {
+	pal.Accent(out, fmt.Sprintf("  • %s %s", formatPatchAction(action), formatPatchTarget(path, movePath)))
 	if counts := formatPatchCounts(added, removed); counts != "" {
-		dim.Fprintf(out, " %s", counts)
+		pal.Muted(out, fmt.Sprintf(" %s", counts))
 	}
-	dim.Fprintln(out)
+	fmt.Fprintln(out)
 }
 
-func renderPatchLines(out io.Writer, green, red, dim *color.Color, lines []PatchPreviewLine) {
+func renderPatchLines(out io.Writer, pal fileOpPalette, lines []PatchPreviewLine) {
 	for _, line := range lines {
 		switch line.Type {
 		case '-':
-			red.Fprintf(out, "  %4d - %s\n", line.LineNum, line.Text)
+			pal.DelLine(out, fmt.Sprintf("  %4d - %s\n", line.LineNum, line.Text))
 		case '+':
-			green.Fprintf(out, "  %4d + %s\n", line.LineNum, line.Text)
+			pal.AddLine(out, fmt.Sprintf("  %4d + %s\n", line.LineNum, line.Text))
 		default:
-			dim.Fprintf(out, "  %4d   %s\n", line.LineNum, line.Text)
+			pal.Context(out, fmt.Sprintf("  %4d   %s\n", line.LineNum, line.Text))
 		}
 	}
 }

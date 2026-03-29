@@ -102,7 +102,8 @@ func TestTaskSummary_Render(t *testing.T) {
 	ts := NewTaskSummary().
 		AddChange("internal/agent/agent_chat.go", "modified", 5, 3).
 		AddChange("internal/ui/task_summary.go", "created", 120, 0).
-		SetTestResult(true)
+		SetTestResult(true).
+		SetTestCommand("make ci-check")
 
 	result := ts.Render()
 
@@ -128,7 +129,7 @@ func TestTaskSummary_Render(t *testing.T) {
 	}
 
 	// テスト結果チェック
-	if !strings.Contains(result, "All tests passed") {
+	if !strings.Contains(result, "Test result (make ci-check): passed") {
 		t.Error("Missing test result")
 	}
 
@@ -160,8 +161,8 @@ func TestTaskSummary_Render_TestsFailed(t *testing.T) {
 
 	result := ts.Render()
 
-	if !strings.Contains(result, "Tests failed") {
-		t.Error("Missing 'Tests failed' message")
+	if !strings.Contains(result, "Test result: failed") {
+		t.Error("Missing failed test result message")
 	}
 }
 

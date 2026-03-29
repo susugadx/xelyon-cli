@@ -4,35 +4,22 @@ import (
 	"fmt"
 	"io"
 	"strings"
-
-	"github.com/fatih/color"
 )
 
 type diffPrinter struct {
 	out io.Writer
+	pal fileOpPalette
 }
 
 func newDiffPrinter(out io.Writer) diffPrinter {
 	if out == nil {
 		out = io.Discard
 	}
-	return diffPrinter{out: out}
-}
-
-func (p diffPrinter) printf(format string, args ...interface{}) {
-	_, _ = fmt.Fprintf(p.out, format, args...)
+	return diffPrinter{out: out, pal: newFileOpPalette(out)}
 }
 
 func (p diffPrinter) println(args ...interface{}) {
 	_, _ = fmt.Fprintln(p.out, args...)
-}
-
-func (p diffPrinter) colorPrintf(attrs []color.Attribute, format string, args ...interface{}) {
-	_, _ = color.New(attrs...).Fprintf(p.out, format, args...)
-}
-
-func (p diffPrinter) colorPrintln(attrs []color.Attribute, args ...interface{}) {
-	_, _ = color.New(attrs...).Fprintln(p.out, args...)
 }
 
 // DiffOptions は差分表示のオプション
@@ -67,28 +54,11 @@ func ShowColoredDiffToWriter(out io.Writer, oldStr, newStr string, opts *DiffOpt
 	oldLines := strings.Split(oldStr, "\n")
 	newLines := strings.Split(newStr, "\n")
 
-	p.colorPrintln([]color.Attribute{color.FgCyan}, "\n"+strings.Repeat("─", 62))
-	p.colorPrintln([]color.Attribute{color.FgCyan}, "📊 Diff / 差分表示")
-	p.colorPrintln([]color.Attribute{color.FgCyan}, strings.Repeat("─", 62))
+	p.println()
+	fileOpDividerInternal(p.out, p.pal, 50)
 
-	removed := len(oldLines)
-	added := len(newLines)
-	diff := added - removed
-	p.printf("   ")
-	p.colorPrintf([]color.Attribute{color.FgRed}, "-%d", removed)
-	p.printf(" / ")
-	p.colorPrintf([]color.Attribute{color.FgGreen}, "+%d", added)
-	if diff > 0 {
-		p.printf(" (net: ")
-		p.colorPrintf([]color.Attribute{color.FgGreen}, "+%d", diff)
-		p.printf(")\n")
-	} else if diff < 0 {
-		p.printf(" (net: ")
-		p.colorPrintf([]color.Attribute{color.FgRed}, "%d", diff)
-		p.printf(")\n")
-	} else {
-		p.printf(" (net: 0)\n")
-	}
+	added, removed := CountDiffLines(oldLines, newLines)
+	fileOpStatsInternal(p.out, p.pal, removed, added)
 	p.println()
 
 	if opts.InlineMode {
@@ -97,7 +67,8 @@ func ShowColoredDiffToWriter(out io.Writer, oldStr, newStr string, opts *DiffOpt
 		showSideBySideDiffToWriter(p, oldLines, newLines, opts)
 	}
 
-	p.colorPrintln([]color.Attribute{color.FgCyan}, strings.Repeat("─", 62)+"\n")
+	fileOpDividerInternal(p.out, p.pal, 50)
+	p.println()
 }
 
 // showInlineDiffToWriter はインライン形式で差分を表示する。
@@ -181,12 +152,12 @@ func showInlineDiffToWriter(p diffPrinter, oldLines, newLines []string, opts *Di
 		}
 
 		if lastDisplayed >= 0 && idx-lastDisplayed > 1 {
-			p.colorPrintln([]color.Attribute{color.FgYellow}, "   ...")
+			p.pal.Muted(p.out, "   ...\n")
 		}
 		lastDisplayed = idx
 
 		if opts.MaxTotalLines > 0 && displayedLines >= opts.MaxTotalLines {
-			p.colorPrintf([]color.Attribute{color.FgYellow}, "   ... (%d more lines / さらに%d行)\n", len(diffs)-idx, len(diffs)-idx)
+			p.pal.Muted(p.out, fmt.Sprintf("   ... (%d more lines)\n", len(diffs)-idx))
 			break
 		}
 
@@ -198,11 +169,11 @@ func showInlineDiffToWriter(p diffPrinter, oldLines, newLines []string, opts *Di
 
 		switch d.typ {
 		case "-":
-			p.colorPrintf([]color.Attribute{color.FgRed}, "   %s- %s\n", lineNumStr, d.text)
+			p.pal.DelLine(p.out, fmt.Sprintf("   %s- %s\n", lineNumStr, d.text))
 		case "+":
-			p.colorPrintf([]color.Attribute{color.FgGreen}, "   %s+ %s\n", lineNumStr, d.text)
+			p.pal.AddLine(p.out, fmt.Sprintf("   %s+ %s\n", lineNumStr, d.text))
 		case "=":
-			p.printf("   %s  %s\n", lineNumStr, d.text)
+			p.pal.Context(p.out, fmt.Sprintf("   %s  %s\n", lineNumStr, d.text))
 		}
 		displayedLines++
 	}
@@ -210,11 +181,15 @@ func showInlineDiffToWriter(p diffPrinter, oldLines, newLines []string, opts *Di
 
 // showSideBySideDiffToWriter は左右並列形式で差分を表示する。
 func showSideBySideDiffToWriter(p diffPrinter, oldLines, newLines []string, opts *DiffOptions) {
-	p.colorPrintln([]color.Attribute{color.FgCyan}, "Before / 変更前:")
-	p.colorPrintln([]color.Attribute{color.FgCyan}, "┌"+strings.Repeat("─", 58)+"┐")
+	p.pal.Accent(p.out, "Before / 変更前:")
+	p.println()
+	p.pal.Border(p.out, "┌"+strings.Repeat("─", 58)+"┐")
+	p.println()
 	for i, line := range oldLines {
 		if opts.MaxTotalLines > 0 && i >= opts.MaxTotalLines/2 {
-			p.colorPrintf([]color.Attribute{color.FgYellow}, "│ ... (%d lines omitted / 行省略)\n", len(oldLines)-i)
+			p.pal.Border(p.out, "│ ")
+			p.pal.Muted(p.out, fmt.Sprintf("... (%d lines omitted)", len(oldLines)-i))
+			p.pal.Border(p.out, "\n")
 			break
 		}
 		lineNumStr := ""
@@ -223,15 +198,23 @@ func showSideBySideDiffToWriter(p diffPrinter, oldLines, newLines []string, opts
 			lineNumStr = fmt.Sprintf("L%-4d ", lineNum)
 		}
 		text := truncateLine(line, 50)
-		p.colorPrintf([]color.Attribute{color.FgCyan}, "│ %s%-50s │\n", lineNumStr, text)
+		p.pal.Border(p.out, "│ ")
+		p.pal.Context(p.out, fmt.Sprintf("%s%-50s", lineNumStr, text))
+		p.pal.Border(p.out, " │\n")
 	}
-	p.colorPrintln([]color.Attribute{color.FgCyan}, "└"+strings.Repeat("─", 58)+"┘")
+	p.pal.Border(p.out, "└"+strings.Repeat("─", 58)+"┘")
+	p.println()
 
-	p.colorPrintln([]color.Attribute{color.FgCyan}, "\nAfter / 変更後:")
-	p.colorPrintln([]color.Attribute{color.FgCyan}, "┌"+strings.Repeat("─", 58)+"┐")
+	p.println()
+	p.pal.Accent(p.out, "After / 変更後:")
+	p.println()
+	p.pal.Border(p.out, "┌"+strings.Repeat("─", 58)+"┐")
+	p.println()
 	for i, line := range newLines {
 		if opts.MaxTotalLines > 0 && i >= opts.MaxTotalLines/2 {
-			p.colorPrintf([]color.Attribute{color.FgYellow}, "│ ... (%d lines omitted / 行省略)\n", len(newLines)-i)
+			p.pal.Border(p.out, "│ ")
+			p.pal.Muted(p.out, fmt.Sprintf("... (%d lines omitted)", len(newLines)-i))
+			p.pal.Border(p.out, "\n")
 			break
 		}
 		lineNumStr := ""
@@ -240,9 +223,12 @@ func showSideBySideDiffToWriter(p diffPrinter, oldLines, newLines []string, opts
 			lineNumStr = fmt.Sprintf("L%-4d ", lineNum)
 		}
 		text := truncateLine(line, 50)
-		p.colorPrintf([]color.Attribute{color.FgCyan}, "│ %s%-50s │\n", lineNumStr, text)
+		p.pal.Border(p.out, "│ ")
+		p.pal.Context(p.out, fmt.Sprintf("%s%-50s", lineNumStr, text))
+		p.pal.Border(p.out, " │\n")
 	}
-	p.colorPrintln([]color.Attribute{color.FgCyan}, "└"+strings.Repeat("─", 58)+"┘")
+	p.pal.Border(p.out, "└"+strings.Repeat("─", 58)+"┘")
+	p.println()
 }
 
 // truncateLine は行を指定幅で切り詰める。
@@ -288,15 +274,15 @@ func ShowPatchToWriter(out io.Writer, patchOutput string) {
 		case strings.HasPrefix(line, "*** Add File:"), strings.HasPrefix(line, "*** Update File:"),
 			strings.HasPrefix(line, "*** Delete File:"), strings.HasPrefix(line, "*** Move to:"),
 			strings.HasPrefix(line, "*** Begin"), strings.HasPrefix(line, "*** End"):
-			p.colorPrintln([]color.Attribute{color.Bold, color.FgCyan}, line)
+			p.pal.Accent(p.out, line+"\n")
 		case strings.HasPrefix(line, "@@"):
-			p.colorPrintln([]color.Attribute{color.FgCyan}, line)
+			p.pal.Hunk(p.out, line+"\n")
 		case strings.HasPrefix(line, "-"):
-			p.colorPrintln([]color.Attribute{color.FgRed}, line)
+			p.pal.DelLine(p.out, line+"\n")
 		case strings.HasPrefix(line, "+"):
-			p.colorPrintln([]color.Attribute{color.FgGreen}, line)
+			p.pal.AddLine(p.out, line+"\n")
 		case strings.HasPrefix(line, " "):
-			p.println(line)
+			p.pal.Context(p.out, line+"\n")
 		default:
 			p.println(line)
 		}
@@ -316,13 +302,40 @@ func ShowUnifiedDiffToWriter(out io.Writer, diffOutput string) {
 
 		switch {
 		case strings.HasPrefix(line, "---"), strings.HasPrefix(line, "+++"), strings.HasPrefix(line, "@@"):
-			p.colorPrintln([]color.Attribute{color.FgCyan}, line)
+			p.pal.Hunk(p.out, line+"\n")
 		case strings.HasPrefix(line, "-"):
-			p.colorPrintln([]color.Attribute{color.FgRed}, line)
+			p.pal.DelLine(p.out, line+"\n")
 		case strings.HasPrefix(line, "+"):
-			p.colorPrintln([]color.Attribute{color.FgGreen}, line)
+			p.pal.AddLine(p.out, line+"\n")
 		default:
 			p.println(line)
 		}
+	}
+}
+
+// fileOpDividerInternal はパッケージ内部用の区切り線描画。
+func fileOpDividerInternal(w io.Writer, pal fileOpPalette, width int) {
+	pal.Border(w, strings.Repeat("─", width))
+	_, _ = fmt.Fprintln(w)
+}
+
+// fileOpStatsInternal はパッケージ内部用の変更統計描画。
+func fileOpStatsInternal(w io.Writer, pal fileOpPalette, removed, added int) {
+	_, _ = fmt.Fprint(w, "  ")
+	pal.DelLine(w, fmt.Sprintf("-%d", removed))
+	_, _ = fmt.Fprint(w, " / ")
+	pal.AddLine(w, fmt.Sprintf("+%d", added))
+	net := added - removed
+	switch {
+	case net > 0:
+		_, _ = fmt.Fprint(w, " (net ")
+		pal.AddLine(w, fmt.Sprintf("+%d", net))
+		_, _ = fmt.Fprintln(w, ")")
+	case net < 0:
+		_, _ = fmt.Fprint(w, " (net ")
+		pal.DelLine(w, fmt.Sprintf("%d", net))
+		_, _ = fmt.Fprintln(w, ")")
+	default:
+		_, _ = fmt.Fprintln(w, " (net 0)")
 	}
 }
