@@ -251,6 +251,15 @@ func TestLoadConfig_Partial(t *testing.T) {
 	if cfg.APIRetry.Count != 3 {
 		t.Errorf("APIRetry.Count should default to 3, got %d", cfg.APIRetry.Count)
 	}
+	if cfg.Compression.Enabled != true {
+		t.Errorf("Compression.Enabled should default to true, got %v", cfg.Compression.Enabled)
+	}
+	if cfg.Compression.TriggerPercent != 80 {
+		t.Errorf("Compression.TriggerPercent should default to 80, got %d", cfg.Compression.TriggerPercent)
+	}
+	if cfg.Compression.KeepRecent != 20 {
+		t.Errorf("Compression.KeepRecent should default to 20, got %d", cfg.Compression.KeepRecent)
+	}
 	if cfg.Compression.TokenThreshold != 0 {
 		t.Errorf("Compression.TokenThreshold should default to 0, got %d", cfg.Compression.TokenThreshold)
 	}
@@ -535,19 +544,14 @@ func TestApplyFlagOverrides(t *testing.T) {
 	tests := []struct {
 		name          string
 		loopThreshold *int
-		apiRetry      *int
-		apiRetryDelay *int
 		diffLines     *int
 		checkFn       func(*testing.T, *Config)
 	}{
 		{
 			name:          "nil pointers",
 			loopThreshold: nil,
-			apiRetry:      nil,
-			apiRetryDelay: nil,
 			diffLines:     nil,
 			checkFn: func(t *testing.T, cfg *Config) {
-				// デフォルト値のまま
 				if cfg.LoopDetection.Threshold != 3 {
 					t.Errorf("LoopDetection.Threshold should remain 3, got %d", cfg.LoopDetection.Threshold)
 				}
@@ -556,14 +560,11 @@ func TestApplyFlagOverrides(t *testing.T) {
 		{
 			name:          "valid values",
 			loopThreshold: func() *int { v := 5; return &v }(),
-			apiRetry:      func() *int { v := 10; return &v }(),
-			apiRetryDelay: func() *int { v := 2; return &v }(),
 			diffLines:     func() *int { v := 20; return &v }(),
 			checkFn: func(t *testing.T, cfg *Config) {
 				if cfg.LoopDetection.Threshold != 5 {
 					t.Errorf("LoopDetection.Threshold = %d, want 5", cfg.LoopDetection.Threshold)
 				}
-				// apiRetry/apiRetryDelay は後方互換で引数を残すが内部既定値のため無視
 				if cfg.Diff.ContextLines != 20 {
 					t.Errorf("Diff.ContextLines = %d, want 20", cfg.Diff.ContextLines)
 				}
@@ -583,7 +584,7 @@ func TestApplyFlagOverrides(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := DefaultConfig()
-			cfg.ApplyFlagOverrides(tt.loopThreshold, tt.apiRetry, tt.apiRetryDelay, tt.diffLines)
+			cfg.ApplyFlagOverrides(tt.loopThreshold, tt.diffLines)
 
 			tt.checkFn(t, cfg)
 		})

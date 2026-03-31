@@ -105,26 +105,9 @@ func ValidateConfig(cfg *Config) ValidationResult {
 		}
 	}
 
-	if cfg.General.ToolLoopLimit < 0 {
-		result.Issues = append(result.Issues, ValidationIssue{
-			Field:      "general.tool_loop_limit",
-			Value:      fmt.Sprintf("%d", cfg.General.ToolLoopLimit),
-			Message:    "0以上を指定してください（0 = 無制限）",
-			Suggestion: "0",
-			Severity:   "error",
-			CanAutoFix: true,
-			FixedValue: 0,
-		})
-		result.Valid = false
-	}
-
 	// 4. 数値範囲チェック（user-facing 設定のみ）
 	validateNumericRange(&result, "compression.trigger_percent", cfg.Compression.TriggerPercent, 1, 100, 80)
 	validateNumericRange(&result, "compression.keep_recent", cfg.Compression.KeepRecent, 1, 100, 10)
-
-	validateNumericRange(&result, "paste.max_lines", cfg.Paste.MaxLines, 100, 100000, 10000)
-	validateNumericRange(&result, "paste.timeout_seconds", cfg.Paste.TimeoutSeconds, 10, 600, 60)
-	validateNumericRange(&result, "streaming.idle_timeout_seconds", cfg.Streaming.IdleTimeoutSeconds, 10, 7200, 30)
 	validateProjectMapContextRatio(&result, cfg.ProjectMap.ContextRatio)
 
 	// 5. Bash安全性レベル検証
@@ -307,11 +290,6 @@ func ApplyAutoFixes(cfg *Config, result ValidationResult) int {
 				cfg.DefaultProvider = v
 				fixCount++
 			}
-		case "general.tool_loop_limit":
-			if v, ok := issue.FixedValue.(int); ok {
-				cfg.General.ToolLoopLimit = v
-				fixCount++
-			}
 		case "compression.trigger_percent":
 			if v, ok := issue.FixedValue.(int); ok {
 				cfg.Compression.TriggerPercent = v
@@ -320,21 +298,6 @@ func ApplyAutoFixes(cfg *Config, result ValidationResult) int {
 		case "compression.keep_recent":
 			if v, ok := issue.FixedValue.(int); ok {
 				cfg.Compression.KeepRecent = v
-				fixCount++
-			}
-		case "paste.max_lines":
-			if v, ok := issue.FixedValue.(int); ok {
-				cfg.Paste.MaxLines = v
-				fixCount++
-			}
-		case "paste.timeout_seconds":
-			if v, ok := issue.FixedValue.(int); ok {
-				cfg.Paste.TimeoutSeconds = v
-				fixCount++
-			}
-		case "streaming.idle_timeout_seconds":
-			if v, ok := issue.FixedValue.(int); ok {
-				cfg.Streaming.IdleTimeoutSeconds = v
 				fixCount++
 			}
 		case "project_map.context_ratio":

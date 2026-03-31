@@ -103,11 +103,14 @@ func filterInternalFields(data []byte) ([]byte, error) {
 		userFacing[sectionKey] = fields
 	}
 
-	// 内部専用トップレベルセクション
+	// 内部専用トップレベルセクション（user-facing config から除外）
 	internalSections := map[string]bool{
-		"loop_detection": true,
-		"api_retry":      true,
-		"diff":           true,
+		"loop_detection":  true,
+		"api_retry":       true,
+		"diff":            true,
+		"command_aliases": true,
+		"prompt_cache":    true,
+		"streaming":       true,
 	}
 
 	// root mapping の content をフィルタ

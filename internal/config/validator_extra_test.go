@@ -68,18 +68,27 @@ func TestApplyAutoFixes_BashSafetyLevel(t *testing.T) {
 	}
 }
 
-func TestApplyAutoFixes_ToolLoopLimit(t *testing.T) {
+func TestApplyDefaults_NormalizesToolLoopLimit(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.General.ToolLoopLimit = -5
 
-	result := ValidateConfig(cfg)
-	fixCount := ApplyAutoFixes(cfg, result)
+	applyDefaults(cfg)
 
-	if fixCount == 0 {
-		t.Fatal("ApplyAutoFixes should fix negative tool_loop_limit")
-	}
+	// applyDefaults が負値を 0 に補正する
 	if cfg.General.ToolLoopLimit != 0 {
-		t.Errorf("General.ToolLoopLimit = %d, want 0", cfg.General.ToolLoopLimit)
+		t.Errorf("applyDefaults: General.ToolLoopLimit = %d, want 0", cfg.General.ToolLoopLimit)
+	}
+}
+
+func TestApplyDefaults_PreservesValidToolLoopLimit(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.General.ToolLoopLimit = 50
+
+	applyDefaults(cfg)
+
+	// 正の値は変更しない
+	if cfg.General.ToolLoopLimit != 50 {
+		t.Errorf("applyDefaults: General.ToolLoopLimit = %d, want 50", cfg.General.ToolLoopLimit)
 	}
 }
 

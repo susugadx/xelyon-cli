@@ -127,7 +127,6 @@ func TestFieldTypeMap(t *testing.T) {
 		"compression.keep_recent":             FieldTypeInt,
 		"bash.safety_level":                   FieldTypeSelect,
 		"bash.safe_commands":                  FieldTypeStringSlice,
-		"command_aliases":                     FieldTypeStringMap,
 		"output.assistant_updates":            FieldTypeSelect,
 		"plan_mode.clear_context_on_approval": FieldTypeBool,
 		"project_map.context_ratio":           FieldTypeFloat,

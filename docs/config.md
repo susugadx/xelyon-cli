@@ -18,7 +18,7 @@ XELYON CLIの設定方法と全オプションのリファレンスです。
 > /config
 ```
 
-20カテゴリ、50以上の設定項目をカテゴリ別に管理できます。変更は即座に `~/.xelyon/config.yaml` に保存されます。
+主要な設定項目をカテゴリ別に管理できます。変更は即座に `~/.xelyon/config.yaml` に保存されます。
 
 **サポートする設定型:**
 - bool（y/n で切り替え）
@@ -116,50 +116,11 @@ tool_confirm:
     auto_approve_medium: false
 
 # ============================================================
-# コマンドエイリアス設定
-# ============================================================
-# スラッシュコマンドの短縮名を定義
-# 例: c → /compress, u → /use, h → /history
-command_aliases:
-    c: config
-    u: use
-
-# ============================================================
-# プロンプトキャッシュ設定（Anthropic API cache_control）
-# ============================================================
-prompt_cache:
-    # 有効化（cache_control ブレークポイントを設定）
-    enabled: true
-    # キャッシュTTL（デフォルト: 5m、1h で延長キャッシュ）
-    cache_ttl: 5m
-
-# ============================================================
 # ペーストモード設定
 # ============================================================
 paste:
     # Bracketed Paste Mode を有効化（複数行ペースト対応）
     bracketed_paste: true
-    # 最大行数
-    max_lines: 10000
-    # 最大バイト数
-    max_bytes: 1048576
-    # タイムアウト（秒）
-    timeout_seconds: 60
-
-# ============================================================
-# ストリーミング設定
-# ============================================================
-streaming:
-    # アイドルタイムアウト（秒）
-    idle_timeout_seconds: 30
-    # thinking専用タイムアウト秒（text/FC未受信時）
-    thinking_timeout_seconds: 120
-    # ファイル読み込み時にサイズ・行数を表示
-    show_file_info: true
-    # 検索時に進捗を表示
-    show_search_progress: true
-    # bashコマンドの出力をリアルタイム表示
-    stream_bash_output: true
 
 # ============================================================
 # bashツール設定
@@ -384,37 +345,16 @@ Context Window（コンテキストウィンドウ）を管理し、トークン
 
 ### ストリーミング設定 (`streaming`)
 
+> **注意**: `/config` メニューには表示されません。YAML 直接編集で変更できます。
+
 ```yaml
 streaming:
-  idle_timeout_seconds: 30
-  show_file_info: true
-  show_search_progress: true
-  stream_bash_output: true
+  idle_timeout_seconds: 30       # アイドルタイムアウト秒
+  thinking_timeout_seconds: 120  # thinking 専用タイムアウト秒
+  show_file_info: true           # ファイル読み込み時にサイズ・行数表示
+  show_search_progress: true     # 検索時に進捗表示
+  stream_bash_output: true       # bash 出力をリアルタイム表示
 ```
-
-#### `idle_timeout_seconds`
-- **型**: integer
-- **デフォルト**: `30`
-- **説明**: ストリーミングレスポンスのアイドルタイムアウト秒数
-- **補足**: データ受信がこの秒数続くとタイムアウト。データが来続けている間はタイムアウトしない
-
-#### `show_file_info`
-- **型**: boolean
-- **デフォルト**: `true`
-- **説明**: ファイル読み込み時にサイズと行数を表示
-- **例**: `📖 Reading main.go (2.3KB, 150 lines)`
-
-#### `show_search_progress`
-- **型**: boolean
-- **デフォルト**: `true`
-- **説明**: 検索中にリアルタイムで進捗を表示
-- **例**: `🔍 Searching... 42 matches found`
-
-#### `stream_bash_output`
-- **型**: boolean
-- **デフォルト**: `true`
-- **説明**: bashコマンドの出力をリアルタイムでストリーミング表示
-- **補足**: `false` の場合、コマンド完了後に一括表示
 
 ### bashツール設定 (`bash`)
 
@@ -710,62 +650,37 @@ tool_confirm:
 
 ### プロンプトキャッシュ設定 (`prompt_cache`)
 
+> **注意**: `/config` メニューには表示されません。YAML 直接編集で変更できます。
+> Anthropic API の `cache_control` ブレークポイント制御です。Claude 以外のプロバイダーでは効果がありません。
+
 ```yaml
 prompt_cache:
-  enabled: true         # キャッシュを有効化
-  max_entries: 100      # 最大エントリ数
-  ttl_seconds: 300      # TTL（秒）
+  enabled: true    # cache_control BP を設定（デフォルト: true）
+  cache_ttl: 5m    # キャッシュ TTL（"5m" または "1h"）
 ```
-
-#### `enabled`
-- **型**: boolean
-- **デフォルト**: `true`
-- **説明**: System Promptのキャッシュを有効化（Claude使用時のコスト削減）
-
-#### `max_entries`
-- **型**: integer
-- **デフォルト**: `100`
-- **説明**: キャッシュの最大エントリ数（LRU方式）
-
-#### `ttl_seconds`
-- **型**: integer
-- **デフォルト**: `300`（5分）
-- **説明**: キャッシュのTTL（有効期限）
 
 ### ペーストモード設定 (`paste`)
 
 ```yaml
 paste:
-  max_lines: 10000       # 最大行数
-  max_bytes: 1048576     # 最大バイト数（1MB）
-  timeout_seconds: 60    # タイムアウト秒
+  bracketed_paste: true  # Bracketed Paste Mode を有効化（デフォルト: true）
 ```
 
-#### `max_lines`
-- **型**: integer
-- **デフォルト**: `10000`
-- **説明**: ペーストモードで受け付ける最大行数
+#### `bracketed_paste`
+- **型**: boolean
+- **デフォルト**: `true`
+- **説明**: Bracketed Paste Mode を有効化。複数行のペーストを一括入力として扱います
 
-#### `max_bytes`
-- **型**: integer
-- **デフォルト**: `1048576`（1MB）
-- **説明**: ペーストモードで受け付ける最大バイト数
-
-#### `timeout_seconds`
-- **型**: integer
-- **デフォルト**: `60`
-- **説明**: ペーストモードのタイムアウト秒数
+> `max_lines`, `max_bytes`, `timeout_seconds` は YAML 直接編集で変更可能です（`/config` メニューには表示されません）。
 
 ### コマンドエイリアス設定 (`command_aliases`)
 
-よく使うコマンドにエイリアスを設定できます。
+> **注意**: `/config` メニューには表示されません。YAML 直接編集で変更できます。
 
 ```yaml
 command_aliases:
   c: compress    # /c → /compress
   u: use         # /u → /use
-  h: history     # /h → /history
-  p: plan        # /p → /plan
 ```
 
 ## 環境変数

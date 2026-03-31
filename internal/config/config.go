@@ -351,20 +351,17 @@ func LoadConfig() (*Config, error) {
 }
 
 // migrateOldKeys は旧設定キーを新キーに読み替える。
-// YAML 上の旧キー名で値が設定されている場合、新フィールドがデフォルトのままなら旧値を採用する。
+// ルール: 新キーが YAML に明示されていれば新キーを優先。旧キーは新キーが存在しない場合の補完にのみ使う。
 func migrateOldKeys(data []byte, cfg *Config) {
 	var raw map[string]interface{}
 	if err := yaml.Unmarshal(data, &raw); err != nil {
 		return
 	}
 
-	defaults := DefaultConfig()
-
 	// general.language → general.ui_language
 	if general, ok := raw["general"].(map[string]interface{}); ok {
 		if lang, ok := general["language"].(string); ok && lang != "" {
-			// 新キーが未設定（デフォルトのまま）なら旧値を採用
-			if cfg.General.UILanguage == defaults.General.UILanguage {
+			if _, hasNewKey := general["ui_language"]; !hasNewKey {
 				cfg.General.UILanguage = lang
 			}
 		}
@@ -374,13 +371,13 @@ func migrateOldKeys(data []byte, cfg *Config) {
 	// compression.threshold_percent → compression.trigger_percent
 	if comp, ok := raw["compression"].(map[string]interface{}); ok {
 		if autoCompress, ok := comp["auto_compress"].(bool); ok {
-			if cfg.Compression.Enabled == defaults.Compression.Enabled {
+			if _, hasNewKey := comp["enabled"]; !hasNewKey {
 				cfg.Compression.Enabled = autoCompress
 			}
 		}
 		if thresholdPercent, ok := comp["threshold_percent"]; ok {
 			if pct := toInt(thresholdPercent); pct > 0 {
-				if cfg.Compression.TriggerPercent == defaults.Compression.TriggerPercent {
+				if _, hasNewKey := comp["trigger_percent"]; !hasNewKey {
 					cfg.Compression.TriggerPercent = pct
 				}
 			}
@@ -401,9 +398,15 @@ func toInt(v interface{}) int {
 	return 0
 }
 
-// applyDefaults はデフォルト値を適用
+// applyDefaults はデフォルト値と内部正規化を適用する。
+// 内部設定の補正（tool_loop_limit 負値→0 など）もこのフェーズで行う。
 func applyDefaults(cfg *Config) {
 	defaults := DefaultConfig()
+
+	// --- 内部設定の正規化 ---
+	if cfg.General.ToolLoopLimit < 0 {
+		cfg.General.ToolLoopLimit = 0 // 負値は 0（無制限）にサイレント補正
+	}
 
 	if cfg.DefaultProvider == "" {
 		cfg.DefaultProvider = "deepseek"
@@ -433,10 +436,12 @@ func applyDefaults(cfg *Config) {
 	if cfg.APIRetry.Timeout == 0 {
 		cfg.APIRetry.Timeout = defaults.APIRetry.Timeout
 	}
-	// Compression: ThresholdTokens=0 かつ TriggerPercent=0 の場合のみデフォルト適用
-	// （ThresholdTokens=0 は「使用率ベース」を意味するため）
-	if cfg.Compression.ThresholdTokens == 0 && cfg.Compression.TriggerPercent == 0 {
-		cfg.Compression = defaults.Compression
+	// Compression: ゼロ値のフィールドのみデフォルト適用（構造体全体の上書きはしない）
+	if cfg.Compression.TriggerPercent == 0 {
+		cfg.Compression.TriggerPercent = defaults.Compression.TriggerPercent
+	}
+	if cfg.Compression.KeepRecent == 0 {
+		cfg.Compression.KeepRecent = defaults.Compression.KeepRecent
 	}
 	// Paste: 他のフィールドがすべてデフォルト値の場合、BracketedPaste もデフォルト適用
 	// （既存の設定ファイルに bracketed_paste がない場合に true にするため）
@@ -586,13 +591,12 @@ func applyEnvInt(envKey string, valid func(int) bool, apply func(int), expect st
 	apply(n)
 }
 
-// ApplyFlagOverrides はCLIフラグで設定を上書き（内部設定、後方互換）
-func (c *Config) ApplyFlagOverrides(loopThreshold, apiRetry, apiRetryDelay, diffLines *int) {
+// ApplyFlagOverrides はCLIフラグで設定を上書き（内部設定）
+func (c *Config) ApplyFlagOverrides(loopThreshold, diffLines *int) {
 	if loopThreshold != nil && *loopThreshold > 0 {
 		c.LoopDetection.Threshold = *loopThreshold
 	}
 	if diffLines != nil && *diffLines >= 0 {
 		c.Diff.ContextLines = *diffLines
 	}
-	// apiRetry, apiRetryDelay: 後方互換で引数は残すが内部既定値のため無視
 }

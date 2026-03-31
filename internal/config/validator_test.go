@@ -147,31 +147,28 @@ func TestValidateConfig_RangeValidation(t *testing.T) {
 	}
 }
 
-func TestValidateConfig_NegativeToolLoopLimit(t *testing.T) {
+func TestValidateConfig_DoesNotMutateCfg(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.General.ToolLoopLimit = -1
+	cfg.Compression.TriggerPercent = 200
+	cfg.Bash.SafetyLevel = "invalid"
 
-	result := ValidateConfig(cfg)
+	// ValidateConfig 前の値を控える
+	origLimit := cfg.General.ToolLoopLimit
+	origPercent := cfg.Compression.TriggerPercent
+	origLevel := cfg.Bash.SafetyLevel
 
-	if result.Valid {
-		t.Fatal("ValidateConfig should be invalid for negative tool_loop_limit")
+	_ = ValidateConfig(cfg)
+
+	// ValidateConfig は cfg を変更してはならない
+	if cfg.General.ToolLoopLimit != origLimit {
+		t.Errorf("ValidateConfig mutated ToolLoopLimit: %d → %d", origLimit, cfg.General.ToolLoopLimit)
 	}
-
-	found := false
-	for _, issue := range result.Issues {
-		if issue.Field != "general.tool_loop_limit" {
-			continue
-		}
-		found = true
-		if issue.Severity != "error" {
-			t.Errorf("Severity = %s, want error", issue.Severity)
-		}
-		if issue.FixedValue != 0 {
-			t.Errorf("FixedValue = %v, want 0", issue.FixedValue)
-		}
+	if cfg.Compression.TriggerPercent != origPercent {
+		t.Errorf("ValidateConfig mutated TriggerPercent: %d → %d", origPercent, cfg.Compression.TriggerPercent)
 	}
-	if !found {
-		t.Fatal("Should have issue for general.tool_loop_limit")
+	if cfg.Bash.SafetyLevel != origLevel {
+		t.Errorf("ValidateConfig mutated SafetyLevel: %q → %q", origLevel, cfg.Bash.SafetyLevel)
 	}
 }
 
@@ -236,23 +233,19 @@ func TestValidateConfig_ProjectMapContextRatio(t *testing.T) {
 func TestApplyAutoFixes(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.DefaultProvider = "invalid"
-	cfg.General.ToolLoopLimit = -1
 	cfg.Compression.TriggerPercent = 200
 	cfg.ProjectMap.ContextRatio = 0.5
 
 	result := ValidateConfig(cfg)
 	fixCount := ApplyAutoFixes(cfg, result)
 
-	if fixCount < 4 {
-		t.Errorf("ApplyAutoFixes should fix at least 4 issues, got %d", fixCount)
+	if fixCount < 3 {
+		t.Errorf("ApplyAutoFixes should fix at least 3 issues, got %d", fixCount)
 	}
 
 	// Verify fixes were applied
 	if cfg.DefaultProvider != "deepseek" {
 		t.Errorf("DefaultProvider should be fixed to 'deepseek', got %q", cfg.DefaultProvider)
-	}
-	if cfg.General.ToolLoopLimit != 0 {
-		t.Errorf("General.ToolLoopLimit should be fixed to 0, got %d", cfg.General.ToolLoopLimit)
 	}
 	if cfg.Compression.TriggerPercent != 80 {
 		t.Errorf("Compression.TriggerPercent should be fixed to 80, got %d", cfg.Compression.TriggerPercent)

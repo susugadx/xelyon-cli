@@ -88,61 +88,17 @@ var Sections = map[string]SectionInfo{
 			"auto_approve_medium": "bool",
 		},
 	},
-	"command_aliases": {
-		Title: "コマンドエイリアス設定",
-		Icon:  "🔗",
-		Comments: []string{
-			"スラッシュコマンドの短縮名を定義",
-			"例: c → /compress, u → /use, h → /history",
-		},
-		FieldTypes: map[string]string{
-			"command_aliases": "map",
-		},
-	},
-	"prompt_cache": {
-		Title: "プロンプトキャッシュ設定（Anthropic API cache_control）",
-		Icon:  "💨",
-		Fields: map[string]string{
-			"enabled":   "有効化（cache_control ブレークポイントを設定）",
-			"cache_ttl": "キャッシュTTL（デフォルト: 5m、1h で延長キャッシュ）",
-		},
-		FieldTypes: map[string]string{
-			"enabled":   "bool",
-			"cache_ttl": "string",
-		},
-	},
+	// command_aliases: user-facing config から削除済み（YAML 互換は維持）
+	// prompt_cache: user-facing config から削除済み（YAML advanced 扱い）
+	// streaming: user-facing config から削除済み（YAML advanced 扱い）
 	"paste": {
 		Title: "ペーストモード設定",
 		Icon:  "📋",
 		Fields: map[string]string{
 			"bracketed_paste": "Bracketed Paste Mode を有効化（複数行ペースト対応）",
-			"max_lines":       "最大行数",
-			"max_bytes":       "最大バイト数",
-			"timeout_seconds": "タイムアウト（秒）",
 		},
 		FieldTypes: map[string]string{
 			"bracketed_paste": "bool",
-			"max_lines":       "int",
-			"max_bytes":       "int",
-			"timeout_seconds": "int",
-		},
-	},
-	"streaming": {
-		Title: "ストリーミング設定",
-		Icon:  "📺",
-		Fields: map[string]string{
-			"idle_timeout_seconds":     "アイドルタイムアウト（秒）",
-			"thinking_timeout_seconds": "thinking専用タイムアウト秒（text/FC未受信時）",
-			"show_file_info":           "ファイル読み込み時にサイズ・行数を表示",
-			"show_search_progress":     "検索時に進捗を表示",
-			"stream_bash_output":       "bashコマンドの出力をリアルタイム表示",
-		},
-		FieldTypes: map[string]string{
-			"idle_timeout_seconds":     "int",
-			"thinking_timeout_seconds": "int",
-			"show_file_info":           "bool",
-			"show_search_progress":     "bool",
-			"stream_bash_output":       "bool",
 		},
 	},
 	"bash": {
@@ -378,10 +334,7 @@ var SectionOrder = []string{
 	"general",
 	"compression",
 	"tool_confirm",
-	"command_aliases",
-	"prompt_cache",
 	"paste",
-	"streaming",
 	"bash",
 	"project_map",
 	"git_stage",
@@ -404,10 +357,7 @@ var CategoryOrder = []string{
 	"general",
 	"compression",
 	"tool_confirm",
-	"command_aliases",
-	"prompt_cache",
 	"paste",
-	"streaming",
 	"bash",
 	"project_map",
 	"git_stage",
@@ -431,10 +381,7 @@ var SectionToCategory = map[string]string{
 	"general":          "general",
 	"compression":      "compression",
 	"tool_confirm":     "tool_confirm",
-	"command_aliases":  "command_aliases",
-	"prompt_cache":     "prompt_cache",
 	"paste":            "paste",
-	"streaming":        "streaming",
 	"bash":             "bash",
 	"project_map":      "project_map",
 	"git_stage":        "git_stage",
@@ -479,25 +426,10 @@ var Categories = map[string]CategoryInfo{
 		Icon:        "✅",
 		Sections:    []string{"tool_confirm"},
 	},
-	"command_aliases": {
-		DisplayName: "Command Aliases",
-		Icon:        "🔗",
-		Sections:    []string{"command_aliases"},
-	},
-	"prompt_cache": {
-		DisplayName: "Prompt Cache",
-		Icon:        "💨",
-		Sections:    []string{"prompt_cache"},
-	},
 	"paste": {
 		DisplayName: "Paste Mode",
 		Icon:        "📋",
 		Sections:    []string{"paste"},
-	},
-	"streaming": {
-		DisplayName: "Streaming",
-		Icon:        "📺",
-		Sections:    []string{"streaming"},
 	},
 	"bash": {
 		DisplayName: "Bash Safety",

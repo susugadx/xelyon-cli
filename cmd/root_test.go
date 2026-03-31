@@ -57,8 +57,6 @@ func resetRootFlagsForTest() {
 	modelFlag = ""
 	autoApprove = false
 	loopThreshold = 0
-	apiRetry = 0
-	apiRetryDelay = 0
 	diffLines = -1
 	outputFormat = "text"
 	headless = false

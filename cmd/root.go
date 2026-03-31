@@ -33,8 +33,6 @@ var (
 	modelFlag     string
 	autoApprove   bool
 	loopThreshold int
-	apiRetry      int
-	apiRetryDelay int
 	diffLines     int
 	outputFormat  string
 	headless      bool
@@ -139,20 +137,14 @@ Examples:
 		cfg.ApplyEnvironmentOverrides()
 
 		// CLIフラグで上書き（明示的に指定されたもののみ）
-		var loopPtr, retryPtr, delayPtr, diffPtr *int
+		var loopPtr, diffPtr *int
 		if cmd.Flags().Changed("loop-threshold") {
 			loopPtr = &loopThreshold
-		}
-		if cmd.Flags().Changed("api-retry") {
-			retryPtr = &apiRetry
-		}
-		if cmd.Flags().Changed("api-retry-delay") {
-			delayPtr = &apiRetryDelay
 		}
 		if cmd.Flags().Changed("diff-lines") {
 			diffPtr = &diffLines
 		}
-		cfg.ApplyFlagOverrides(loopPtr, retryPtr, delayPtr, diffPtr)
+		cfg.ApplyFlagOverrides(loopPtr, diffPtr)
 
 		model := getModel(cfg)
 		provider := getProvider(cfg)
@@ -234,8 +226,6 @@ func init() {
 
 	// 新規: 設定カスタマイズフラグ
 	rootCmd.Flags().IntVar(&loopThreshold, "loop-threshold", 0, "Loop detection threshold (default: 3)")
-	rootCmd.Flags().IntVar(&apiRetry, "api-retry", 0, "API retry count (default: 3)")
-	rootCmd.Flags().IntVar(&apiRetryDelay, "api-retry-delay", 0, "API initial retry delay in seconds (default: 1)")
 	rootCmd.Flags().IntVar(&diffLines, "diff-lines", -1, "Diff context lines (default: 10, 0=no truncation)")
 
 	// 新規: --auto-approve/-y フラグ

@@ -181,21 +181,7 @@ type CategoryDef struct {
 	}
 	sb.WriteString("}\n\n")
 
-	// CategoryIcons を生成
-	sb.WriteString("// CategoryIcons はカテゴリのアイコン\n")
-	sb.WriteString("var CategoryIcons = map[string]string{\n")
-
-	var catNames []string
-	for catName := range Categories {
-		catNames = append(catNames, catName)
-	}
-	sort.Strings(catNames)
-
-	for _, catName := range catNames {
-		cat := Categories[catName]
-		sb.WriteString(fmt.Sprintf("\t%q: %q,\n", catName, cat.Icon))
-	}
-	sb.WriteString("}\n")
+	// NOTE: CategoryIcons は CategoryDefinitions[i].Icon で代替されるため生成しない
 
 	// ファイルに出力
 	outputPath := "internal/config/registry_generated.go"

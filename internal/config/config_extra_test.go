@@ -67,6 +67,97 @@ func TestCloneConfig_Nil(t *testing.T) {
 	}
 }
 
+func TestMigrateOldKeys_NewKeyPriority(t *testing.T) {
+	tests := []struct {
+		name    string
+		yaml    string
+		checkFn func(t *testing.T, cfg *Config)
+	}{
+		{
+			name: "旧キーのみ → 新キーへ移行",
+			yaml: `
+general:
+  language: en
+`,
+			checkFn: func(t *testing.T, cfg *Config) {
+				if cfg.General.UILanguage != "en" {
+					t.Errorf("UILanguage = %q, want %q", cfg.General.UILanguage, "en")
+				}
+			},
+		},
+		{
+			name: "新キーのみ → そのまま保持",
+			yaml: `
+general:
+  ui_language: ja
+`,
+			checkFn: func(t *testing.T, cfg *Config) {
+				if cfg.General.UILanguage != "ja" {
+					t.Errorf("UILanguage = %q, want %q", cfg.General.UILanguage, "ja")
+				}
+			},
+		},
+		{
+			name: "新旧両方 → 新キー優先",
+			yaml: `
+general:
+  ui_language: auto
+  language: en
+`,
+			checkFn: func(t *testing.T, cfg *Config) {
+				if cfg.General.UILanguage != "auto" {
+					t.Errorf("UILanguage = %q, want %q (新キー優先)", cfg.General.UILanguage, "auto")
+				}
+			},
+		},
+		{
+			name: "compression 旧キーのみ → 移行",
+			yaml: `
+compression:
+  auto_compress: false
+  threshold_percent: 60
+`,
+			checkFn: func(t *testing.T, cfg *Config) {
+				if cfg.Compression.Enabled != false {
+					t.Errorf("Enabled = %v, want false", cfg.Compression.Enabled)
+				}
+				if cfg.Compression.TriggerPercent != 60 {
+					t.Errorf("TriggerPercent = %d, want 60", cfg.Compression.TriggerPercent)
+				}
+			},
+		},
+		{
+			name: "compression 新旧両方 → 新キー優先",
+			yaml: `
+compression:
+  enabled: true
+  auto_compress: false
+  trigger_percent: 70
+  threshold_percent: 50
+`,
+			checkFn: func(t *testing.T, cfg *Config) {
+				if cfg.Compression.Enabled != true {
+					t.Errorf("Enabled = %v, want true (新キー優先)", cfg.Compression.Enabled)
+				}
+				if cfg.Compression.TriggerPercent != 70 {
+					t.Errorf("TriggerPercent = %d, want 70 (新キー優先)", cfg.Compression.TriggerPercent)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			if err := yaml.Unmarshal([]byte(tt.yaml), cfg); err != nil {
+				t.Fatalf("yaml.Unmarshal failed: %v", err)
+			}
+			migrateOldKeys([]byte(tt.yaml), cfg)
+			tt.checkFn(t, cfg)
+		})
+	}
+}
+
 func TestLoadConfigWithValidation(t *testing.T) {
 	t.Run("valid config", func(t *testing.T) {
 		tmpDir := t.TempDir()
