@@ -117,6 +117,11 @@ func DefaultConfig() *Config {
 		Diff: DiffConfig{
 			ContextLines: 10,
 		},
+		Execution: ExecutionConfig{
+			Mode:              string(ExecutionBalanced),
+			AlwaysConfirm:     []string{},
+			SafeShellCommands: []string{},
+		},
 		ToolConfirm: ToolConfirmConfig{
 			AutoApproveSafe:   true,
 			AutoApproveMedium: false,
@@ -145,7 +150,6 @@ func DefaultConfig() *Config {
 		Bash: BashConfig{
 			SafetyLevel:     "permissive", // 確認出るので安全、利便性向上
 			SafeCommands:    []string{},
-			AllowPipe:       true,
 			AllowRedirect:   true, // 利便性向上
 			AllowInlineEdit: true, // 利便性向上
 		},
@@ -367,6 +371,17 @@ func migrateOldKeys(data []byte, cfg *Config) {
 		}
 	}
 
+	// tool_confirm + bash → execution の補完（execution が未設定の場合のみ）
+	if _, hasExecution := raw["execution"]; !hasExecution {
+		// execution セクションがなければ旧設定から推定
+		if tc, ok := raw["tool_confirm"].(map[string]interface{}); ok {
+			if autoMedium, ok := tc["auto_approve_medium"].(bool); ok && autoMedium {
+				// auto_approve_medium: true → trusted 相当
+				cfg.Execution.Mode = string(ExecutionTrusted)
+			}
+		}
+	}
+
 	// compression.auto_compress → compression.enabled
 	// compression.threshold_percent → compression.trigger_percent
 	if comp, ok := raw["compression"].(map[string]interface{}); ok {
@@ -406,6 +421,10 @@ func applyDefaults(cfg *Config) {
 	// --- 内部設定の正規化 ---
 	if cfg.General.ToolLoopLimit < 0 {
 		cfg.General.ToolLoopLimit = 0 // 負値は 0（無制限）にサイレント補正
+	}
+	// Execution: mode が空なら balanced をデフォルト適用
+	if cfg.Execution.Mode == "" {
+		cfg.Execution.Mode = defaults.Execution.Mode
 	}
 
 	if cfg.DefaultProvider == "" {

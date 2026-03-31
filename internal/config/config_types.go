@@ -12,6 +12,7 @@ type Config struct {
 	LoopDetection   LoopDetectionConfig            `yaml:"loop_detection"`
 	APIRetry        APIRetryConfig                 `yaml:"api_retry"`
 	Diff            DiffConfig                     `yaml:"diff"`
+	Execution       ExecutionConfig                `yaml:"execution"`
 	ToolConfirm     ToolConfirmConfig              `yaml:"tool_confirm"`
 	CommandAliases  map[string]string              `yaml:"command_aliases,omitempty"` // コマンドエイリアス
 	PromptCache     PromptCacheConfig              `yaml:"prompt_cache"`
@@ -121,8 +122,7 @@ type StreamingConfig struct {
 type BashConfig struct {
 	SafetyLevel     string   `yaml:"safety_level"`      // strict, moderate, permissive（デフォルト: moderate）
 	SafeCommands    []string `yaml:"safe_commands"`     // 追加の安全コマンド
-	AllowPipe       bool     `yaml:"allow_pipe"`        // パイプを許可（デフォルト: true - moderateで有効）
-	AllowRedirect   bool     `yaml:"allow_redirect"`    // リダイレクトを許可（デフォルト: false）
+	AllowRedirect   bool     `yaml:"allow_redirect"`    // リダイレクトを許可（デフォルト: true）
 	AllowInlineEdit bool     `yaml:"allow_inline_edit"` // sed -i等を許可（デフォルト: false）
 }
 

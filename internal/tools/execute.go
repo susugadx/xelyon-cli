@@ -250,7 +250,8 @@ func invalidateToolCache(execCtx ExecutionContext, tc *ToolCall) {
 }
 
 // readOnlyCommands は bash 実行後にキャッシュクリアが不要なコマンドのプレフィックス。
-// defaultSafeCommands のうちファイルを変更しないもののみ（go mod tidy 等は除外）。
+// ファイルを変更しないコマンドのみ（go mod tidy 等は除外）。
+// NOTE: auto-approve 判定とは独立。discovery 系もキャッシュ判定では read-only 扱い。
 var readOnlyCommands = []string{
 	"ls", "cat", "pwd", "echo", "which",
 	"head", "tail", "wc", "grep", "rg", "find",

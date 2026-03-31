@@ -15,17 +15,36 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
-// Auto-executable safe commands
-var defaultSafeCommands = map[string]bool{
-	"ls": true, "cat": true, "pwd": true, "echo": true, "which": true,
-	"head": true, "tail": true, "wc": true, "grep": true, "find": true,
-	"sed -n": true, "diff": true, "file": true, "du": true, "stat": true,
+// verificationSafeCommands はビルド・テスト・検証・環境確認用の安全コマンド。
+// コード探索系（grep, find, cat, head, tail, sed -n 等）は含めない。
+// 探索は search_code / read_file / list_dir 等の専用ツールを使う。
+var verificationSafeCommands = map[string]bool{
+	// 環境確認
+	"pwd": true, "echo": true, "which": true, "env": true, "printenv": true,
+	// ファイル情報（内容読み取りではない）
+	// ls は探索用途で多用されるため verification safe から除外（discovery 寄り扱い）
+	"diff": true, "file": true, "du": true, "stat": true,
 	"md5sum": true, "sha256sum": true,
+	// Git 状態確認
 	"git status": true, "git log": true, "git diff": true, "git branch": true,
 	"git ls-files": true, "git show": true, "git remote": true,
-	"go version": true, "go mod tidy": true,
-	"node -v": true, "npm -v": true, "npm list": true,
-	"python --version": true, "pip list": true,
+	// ビルド・テスト・lint・format
+	// NOTE: go run / npm install / pip install / docker run は任意コード実行が可能なため除外
+	"go version": true, "go build": true, "go test": true, "go vet": true,
+	"go fmt": true, "go mod tidy": true, "go mod download": true,
+	"go generate": true,
+	"make":        true,
+	"npm test":    true, "npm run": true,
+	"cargo build": true, "cargo test": true, "cargo check": true, "cargo fmt": true,
+	"pytest": true, "python -m pytest": true, "python -m unittest": true,
+	"pip list": true,
+	"node -v":  true, "npm -v": true,
+	"python --version": true, "python3 --version": true,
+	"rustc --version": true, "cargo --version": true,
+	"java -version": true, "javac -version": true,
+	"golangci-lint": true, "eslint": true, "prettier": true,
+	// Docker（状態確認のみ、docker run は任意コマンド実行可能なため除外）
+	"docker ps": true, "docker images": true,
 }
 
 // Always blocked commands (blocked at all levels)
@@ -321,7 +340,8 @@ func executeBashWithStreaming(out common.Output, cmd *exec.Cmd) (string, error) 
 	return outputBuf.String(), err
 }
 
-// checkAndConfirmBash は共通のセキュリティチェック + 確認UIを実行
+// checkAndConfirmBash は共通のセキュリティチェック + 確認UIを実行。
+// execution policy に基づき discovery bash の抑止・verification bash の自動承認を行う。
 // 返り値: ("", true) = 実行OK, (errorMsg, false) = ブロック/キャンセル
 func checkAndConfirmBash(promptIO ui.PromptIO, cfg *config.Config, command string) (string, bool) {
 	promptIO = ui.NormalizePromptIO(promptIO)
@@ -330,7 +350,9 @@ func checkAndConfirmBash(promptIO ui.PromptIO, cfg *config.Config, command strin
 		cfg = config.DefaultConfig()
 	}
 	bashCfg := cfg.Bash
+	policy := config.ResolveExecutionPolicy(cfg.Execution)
 
+	// 1. 常時ブロック対象
 	for _, blocked := range alwaysBlockedCommands {
 		if strings.Contains(command, blocked) {
 			out.Red.Printf("🚫 Blocked dangerous command: %s\n", command)
@@ -346,20 +368,70 @@ func checkAndConfirmBash(promptIO ui.PromptIO, cfg *config.Config, command strin
 		}
 	}
 
+	// 2. safety level チェック（strict/moderate/permissive）
 	if err := CheckBashSafetyWithOutput(out, command, bashCfg); err != "" {
 		return err, false
 	}
 
+	// === 判定順序 ===
+	// 3. 分類（discovery / destructive / redirect-write / verification）
+	shellCat := config.ClassifyShellCommand(command)
+
+	// 4. discovery bash — 全 mode で原則自動許可しない（safe_shell_commands でも bypass 不可）
+	if shellCat == config.ShellDiscovery && !policy.AllowDiscoveryBash {
+		out.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		out.Cyan.Printf("🔍 Discovery Shell / 探索系シェルコマンド\n")
+		out.Cyan.Printf("📜 Command / コマンド: %s\n", command)
+		out.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		out.Yellow.Println("💡 Tip: Use search_code / read_file / list_dir instead of bash for code exploration")
+		return confirmBashPrompt(promptIO, command)
+	}
+
+	// 5. always_confirm / 強制確認（mode より優先、safe_shell_commands で bypass 不可）
+	if shellCat == config.ShellDestructive && policy.ShouldConfirm(config.ConfirmBashDestructive) {
+		out.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		out.Cyan.Printf("⚠️  Destructive Shell / 破壊的シェルコマンド\n")
+		out.Cyan.Printf("📜 Command / コマンド: %s\n", command)
+		out.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		return confirmBashPrompt(promptIO, command)
+	}
+	if shellCat == config.ShellRedirectWrite && policy.ShouldConfirm(config.ConfirmBashRedirectWrite) {
+		out.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		out.Cyan.Printf("📝 Redirect Write Shell / リダイレクト書き込み\n")
+		out.Cyan.Printf("📜 Command / コマンド: %s\n", command)
+		out.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		return confirmBashPrompt(promptIO, command)
+	}
+
+	// 6. mode による自動承認（verification 系のみ）
+	if shellCat == config.ShellVerification {
+		if IsSafeCommand(command, bashCfg) && policy.AutoApproveVerificationBash {
+			return "", true
+		}
+	}
+
+	// 7. safe_shell_commands は verification 系の escape hatch のみ。
+	// destructive / redirect-write / discovery には適用しない。
+	if shellCat == config.ShellVerification && isSafeShellCommand(command, policy.SafeShellCommands) {
+		return "", true
+	}
+
+	// 8. 組み込み safe command（verification 系のみ、上で mode チェック済みでなくても確認なしで通す）
 	if IsSafeCommand(command, bashCfg) {
 		return "", true
 	}
 
+	// 9. その他 — 確認プロンプト
 	out.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	out.Cyan.Printf("⚙️  Shell Command / シェルコマンド実行\n")
 	out.Cyan.Printf("📜 Command / コマンド: %s\n", command)
 	out.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	out.Yellow.Println("⚠️  Warning: This command may modify your system / 警告: システムに変更が加わる可能性があります")
+	return confirmBashPrompt(promptIO, command)
+}
 
+// confirmBashPrompt は bash の確認プロンプトを表示する。
+func confirmBashPrompt(promptIO ui.PromptIO, command string) (string, bool) {
 	dec := common.ConfirmWithIO(promptIO, "Run this command? / 実行しますか？")
 	switch dec.Action {
 	case common.ConfirmYes:
@@ -378,6 +450,17 @@ IMPORTANT: Do NOT execute the previous command as-is.`, strings.TrimSpace(dec.Co
 	default:
 		return "Cancelled by user", false
 	}
+}
+
+// isSafeShellCommand は safe_shell_commands に含まれるか判定する。
+func isSafeShellCommand(command string, safeCommands []string) bool {
+	trimmed := strings.TrimSpace(command)
+	for _, safe := range safeCommands {
+		if matchCommandPrefix(trimmed, safe) {
+			return true
+		}
+	}
+	return false
 }
 
 // streamOutput はパイプからの出力をリアルタイムで表示しバッファに保存
@@ -485,24 +568,23 @@ func CheckBashSafetyWithOutput(out common.Output, command string, cfg config.Bas
 				return "Error: Inline edit commands are not allowed"
 			}
 		}
-		// Block all separators (except safe commands)
-		if !IsSafeCommand(command, cfg) {
-			for _, sep := range strictSeparators {
-				if strings.Contains(command, sep) {
-					out.Red.Printf("🚫 Blocked command injection attempt: %s\n", command)
-					out.Yellow.Println("⚠️  Command contains potentially dangerous separator characters.")
-					out.Yellow.Println("💡 Tip: Set bash.safety_level: moderate in config.yaml to allow pipes")
-					return "Error: Command injection attempt detected (separator found)"
-				}
+		// strict: セパレータを含むコマンドは safe command でも一律ブロック
+		for _, sep := range strictSeparators {
+			if strings.Contains(command, sep) {
+				out.Red.Printf("🚫 Blocked command injection attempt: %s\n", command)
+				out.Yellow.Println("⚠️  Command contains potentially dangerous separator characters.")
+				out.Yellow.Println("💡 Tip: Set bash.safety_level: moderate in config.yaml to allow pipes")
+				return "Error: Command injection attempt detected (separator found)"
 			}
 		}
 		return ""
 	}
 }
 
-// IsSafeCommand checks if a command is safe
-// チェーンコマンド（&&, ||, ;）は全パーツが安全な場合のみ true を返す
-// パイプ | は分割しない（dangerousPipePatterns で別途チェック済み）
+// IsSafeCommand はコマンドが自動実行可能な安全コマンドかを判定する。
+// verification 系のみ自動許可。discovery 系は safe_commands に明示追加されていても
+// verification として扱う（探索用途の bypass にならない）。
+// チェーンコマンド（&&, ||, ;）は全パーツが安全な場合のみ true を返す。
 func IsSafeCommand(command string, cfg config.BashConfig) bool {
 	parts := splitChainCommand(command)
 	for _, part := range parts {
@@ -576,14 +658,18 @@ func splitChainCommand(command string) []string {
 	return parts
 }
 
-// isSingleCommandSafe は単一コマンド（チェーンなし）が安全かチェックする
+// isSingleCommandSafe は単一コマンド（チェーンなし）が安全かチェックする。
+// verification 系のみ true を返す。discovery 系は false。
 func isSingleCommandSafe(command string, cfg config.BashConfig) bool {
 	trimmed := strings.TrimSpace(command)
-	for safe := range defaultSafeCommands {
+
+	// verification 系の組み込み安全コマンド
+	for safe := range verificationSafeCommands {
 		if matchCommandPrefix(trimmed, safe) {
 			return true
 		}
 	}
+	// ユーザー設定の safe_shell_commands / bash.safe_commands
 	for _, safe := range cfg.SafeCommands {
 		if matchCommandPrefix(trimmed, safe) {
 			return true

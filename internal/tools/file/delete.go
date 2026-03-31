@@ -117,7 +117,7 @@ func ExecuteDeleteFileWithPromptIOAndOptionsAndLSPClient(promptIO ui.PromptIO, o
 		}
 	}
 
-	dec := common.ConfirmWithAutoApproveDecisionAndOptions(promptIO, options, "delete_file", "Delete this file? / このファイルを削除しますか？")
+	dec := common.ConfirmToolAction(promptIO, options, "delete_file", "Delete this file? / このファイルを削除しますか？", common.ToolConfirmContext{TargetPath: absPath})
 	switch dec.Action {
 	case common.ConfirmYes:
 		// continue

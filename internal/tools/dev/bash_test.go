@@ -447,8 +447,8 @@ func TestIsSafeCommand_CustomSafeCommands(t *testing.T) {
 		t.Error("IsSafeCommand() should recognize custom safe command 'cargo build'")
 	}
 
-	if IsSafeCommand("yarn build", cfg) {
-		t.Error("IsSafeCommand() should not recognize 'yarn' as safe (not in list)")
+	if IsSafeCommand("mystery_tool build", cfg) {
+		t.Error("IsSafeCommand() should not recognize 'mystery_tool' as safe (not in list)")
 	}
 }
 
@@ -610,8 +610,8 @@ func TestIsSafeCommand_DefaultSafeCommands(t *testing.T) {
 		command  string
 		expected bool
 	}{
-		{"ls", "ls -la", true},
-		{"cat", "cat file.txt", true},
+		{"ls (discovery)", "ls -la", false},
+		{"cat (discovery not safe)", "cat file.txt", false},
 		{"echo", "echo hello", true},
 		{"git status", "git status", true},
 		{"git log", "git log --oneline", true},
@@ -619,10 +619,10 @@ func TestIsSafeCommand_DefaultSafeCommands(t *testing.T) {
 		{"go version", "go version", true},
 		{"go mod tidy", "go mod tidy", true},
 		{"pwd", "pwd", true},
-		{"head", "head -10 file.txt", true},
-		{"tail", "tail -f file.txt", true},
-		{"grep", "grep pattern file.txt", true},
-		{"sed -n", "sed -n '1,5p' file.txt", true},
+		{"head (discovery)", "head -10 file.txt", false},
+		{"tail (discovery)", "tail -f file.txt", false},
+		{"grep (discovery)", "grep pattern file.txt", false},
+		{"sed -n (discovery)", "sed -n '1,5p' file.txt", false},
 		{"diff", "diff file1.txt file2.txt", true},
 		{"file", "file test.txt", true},
 		{"du", "du -sh .", true},
@@ -630,8 +630,10 @@ func TestIsSafeCommand_DefaultSafeCommands(t *testing.T) {
 		{"md5sum", "md5sum file.txt", true},
 		{"sha256sum", "sha256sum file.txt", true},
 		{"unknown", "unknown_command", false},
-		{"npm run", "npm run build", false}, // npm run は安全リストにない
-		{"cat prefix boundary positive", "cat foo.txt", true},
+		{"npm run", "npm run build", true},
+		{"go test", "go test ./...", true},
+		{"make", "make build", true},
+		{"cat (discovery)", "cat foo.txt", false},
 		{"cat prefix boundary negative", "catalog-destroyer", false},
 		{"echo prefix boundary positive", "echo hello", true},
 		{"echo prefix boundary negative", "echomalware", false},
@@ -649,15 +651,15 @@ func TestIsSafeCommand_DefaultSafeCommands(t *testing.T) {
 	}
 }
 
-func TestCheckBashSafety_SafeCommandWithSeparator(t *testing.T) {
+func TestCheckBashSafety_VerificationCommandWithSeparator(t *testing.T) {
 	cfg := config.BashConfig{
 		SafetyLevel: "moderate",
 	}
 
-	// 安全なコマンドはセパレータを含んでも許可される
-	err := CheckBashSafety("cat file.txt | head -10", cfg)
+	// verification 系の安全コマンドはセパレータを含んでも許可される
+	err := CheckBashSafety("git status && git log", cfg)
 	if strings.Contains(err, "injection") {
-		t.Errorf("CheckBashSafety() should allow pipe for safe command, got %v", err)
+		t.Errorf("CheckBashSafety() should allow && for safe verification commands, got %v", err)
 	}
 }
 
@@ -742,17 +744,17 @@ func TestIsSafeCommand_ChainedCommands(t *testing.T) {
 	}{
 		{"single safe", "git status", true},
 		{"all safe &&", "git status && git log", true},
-		{"all safe ;", "ls -la; cat file.txt", true},
+		{"ls ; discovery cat", "ls -la; cat file.txt", false},
 		{"safe && unsafe", "git status && git push", false},
 		{"safe && dangerous", "git status && rm -rf /tmp", false},
-		{"unsafe ; rm", "ls; rm file", false},
-		{"pipe not split", "grep foo | head", true},
-		{"cat && echo", "cat file && echo done", true},
+		{"discovery ls ; rm", "ls; rm file", false},
+		{"pipe discovery grep", "grep foo | head", false},
+		{"discovery cat && echo", "cat file && echo done", false},
 		{"three safe", "git status && git diff && git log --oneline", true},
-		{"middle unsafe", "ls && unknown_cmd && echo done", false},
+		{"discovery ls && unknown", "ls && unknown_cmd && echo done", false},
 		{"safe || safe", "git status || git log", true},
 		{"safe || unsafe", "git status || git push", false},
-		{"mixed operators", "git status && git log || echo fail", true},
+		{"mixed operators safe", "git status && git log || echo fail", true},
 	}
 
 	for _, tt := range tests {

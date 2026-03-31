@@ -125,8 +125,7 @@ func TestFieldTypeMap(t *testing.T) {
 		"compression.enabled":                 FieldTypeBool,
 		"compression.trigger_percent":         FieldTypeInt,
 		"compression.keep_recent":             FieldTypeInt,
-		"bash.safety_level":                   FieldTypeSelect,
-		"bash.safe_commands":                  FieldTypeStringSlice,
+		"execution.mode":                      FieldTypeSelect,
 		"output.assistant_updates":            FieldTypeSelect,
 		"plan_mode.clear_context_on_approval": FieldTypeBool,
 		"project_map.context_ratio":           FieldTypeFloat,
@@ -152,9 +151,9 @@ func TestSelectOptions(t *testing.T) {
 		path    string
 		minOpts int
 	}{
-		{"default_provider", 6},  // deepseek, claude, openai, gemini, groq, ollama
-		{"bash.safety_level", 3}, // strict, moderate, permissive
-		{"thinking.level", 4},    // low, medium, high, xhigh
+		{"default_provider", 6}, // deepseek, claude, openai, gemini, groq, ollama
+		{"execution.mode", 3},   // balanced, trusted, full_auto
+		{"thinking.level", 4},   // low, medium, high, xhigh
 		{"output.assistant_updates", 4},
 	}
 
@@ -178,7 +177,7 @@ func TestFieldDescriptions(t *testing.T) {
 		"compression.enabled",
 		"compression.trigger_percent",
 		"compression.keep_recent",
-		"bash.safety_level",
+		"execution.mode",
 		"output.assistant_updates",
 		"plan_mode.clear_context_on_approval",
 		"project_map.context_ratio",

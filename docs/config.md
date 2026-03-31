@@ -107,13 +107,19 @@ compression:
     keep_recent: 20
 
 # ============================================================
-# ツール確認設定
+# 実行モード設定
 # ============================================================
-tool_confirm:
-    # 安全なツール（read_file等）を自動承認
-    auto_approve_safe: true
-    # 中程度のツール（write_file等）を自動承認
-    auto_approve_medium: false
+# ツール実行の承認モードを制御
+# balanced: read自動/write確認/verification bash安全自動
+# trusted: workspace内通常編集も自動/高影響のみ確認
+# full_auto: 原則自動（always_confirm指定は確認）
+execution:
+    # 実行モード（balanced / trusted / full_auto）
+    mode: balanced
+    # どのモードでも確認するカテゴリ
+    always_confirm: []
+    # 追加の安全シェルコマンド（verification / env 用）
+    safe_shell_commands: []
 
 # ============================================================
 # ペーストモード設定
@@ -121,21 +127,6 @@ tool_confirm:
 paste:
     # Bracketed Paste Mode を有効化（複数行ペースト対応）
     bracketed_paste: true
-
-# ============================================================
-# bashツール設定
-# ============================================================
-bash:
-    # 安全レベル: strict / moderate / permissive
-    safety_level: permissive
-    # 追加の安全コマンド（例: - "npm run"）
-    safe_commands: []
-    # パイプを許可
-    allow_pipe: true
-    # リダイレクトを許可
-    allow_redirect: true
-    # インライン編集を許可（sed -i 等）
-    allow_inline_edit: true
 list_dir:
     additional_ignore_dirs: []
 

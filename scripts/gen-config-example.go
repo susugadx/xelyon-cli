@@ -111,6 +111,8 @@ func filterInternalFields(data []byte) ([]byte, error) {
 		"command_aliases": true,
 		"prompt_cache":    true,
 		"streaming":       true,
+		"tool_confirm":    true,
+		"bash":            true,
 	}
 
 	// root mapping の content をフィルタ

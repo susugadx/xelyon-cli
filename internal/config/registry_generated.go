@@ -28,10 +28,9 @@ type CategoryDef struct {
 var CategoryDefinitions = []CategoryDef{
 	{Name: "provider", DisplayName: "Provider & Model", Icon: "🤖", Fields: []string{"default_model", "default_provider", "provider_models"}},
 	{Name: "general", DisplayName: "General", Icon: "⚙️", Fields: []string{"general.ui_language"}},
+	{Name: "execution", DisplayName: "Execution Mode", Icon: "🛡️", Fields: []string{"execution.always_confirm", "execution.mode", "execution.safe_shell_commands"}},
 	{Name: "compression", DisplayName: "Compression", Icon: "📦", Fields: []string{"compression.enabled", "compression.keep_recent", "compression.trigger_percent"}},
-	{Name: "tool_confirm", DisplayName: "Tool Confirm", Icon: "✅", Fields: []string{"tool_confirm.auto_approve_medium", "tool_confirm.auto_approve_safe"}},
 	{Name: "paste", DisplayName: "Paste Mode", Icon: "📋", Fields: []string{"paste.bracketed_paste"}},
-	{Name: "bash", DisplayName: "Bash Safety", Icon: "💻", Fields: []string{"bash.allow_inline_edit", "bash.allow_pipe", "bash.allow_redirect", "bash.safe_commands", "bash.safety_level"}},
 	{Name: "project_map", DisplayName: "Project Map", Icon: "🗺️", Fields: []string{"project_map.additional_ignore_dirs", "project_map.context_ratio", "project_map.enabled"}},
 	{Name: "git_stage", DisplayName: "Git Settings", Icon: "📂", Fields: []string{"git_stage.batch_confirm"}},
 	{Name: "plan_mode", DisplayName: "Plan Mode", Icon: "📋", Fields: []string{"plan_mode.clear_context_on_approval", "plan_mode.max_retry", "plan_mode.step_timeout"}},
@@ -48,16 +47,14 @@ var CategoryDefinitions = []CategoryDef{
 
 // FieldTypeMap はフィールドパスから型へのマップ
 var FieldTypeMap = map[string]ConfigFieldType{
-	"bash.allow_inline_edit":              FieldTypeBool,
-	"bash.allow_pipe":                     FieldTypeBool,
-	"bash.allow_redirect":                 FieldTypeBool,
-	"bash.safe_commands":                  FieldTypeStringSlice,
-	"bash.safety_level":                   FieldTypeSelect,
 	"compression.enabled":                 FieldTypeBool,
 	"compression.keep_recent":             FieldTypeInt,
 	"compression.trigger_percent":         FieldTypeInt,
 	"default_model":                       FieldTypeString,
 	"default_provider":                    FieldTypeSelect,
+	"execution.always_confirm":            FieldTypeStringSlice,
+	"execution.mode":                      FieldTypeSelect,
+	"execution.safe_shell_commands":       FieldTypeStringSlice,
 	"general.ui_language":                 FieldTypeSelect,
 	"git_stage.batch_confirm":             FieldTypeBool,
 	"hooks.max_retry":                     FieldTypeInt,
@@ -86,8 +83,6 @@ var FieldTypeMap = map[string]ConfigFieldType{
 	"sub_agent.max_concurrent":            FieldTypeInt,
 	"thinking.enabled":                    FieldTypeBool,
 	"thinking.level":                      FieldTypeSelect,
-	"tool_confirm.auto_approve_medium":    FieldTypeBool,
-	"tool_confirm.auto_approve_safe":      FieldTypeBool,
 	"utility_model.enabled":               FieldTypeBool,
 	"utility_model.model":                 FieldTypeString,
 	"utility_model.provider":              FieldTypeSelect,
@@ -100,8 +95,8 @@ var FieldTypeMap = map[string]ConfigFieldType{
 
 // SelectOptions は選択型フィールドの選択肢
 var SelectOptions = map[string][]string{
-	"bash.safety_level":        {"strict", "moderate", "permissive"},
 	"default_provider":         {"deepseek", "claude", "openai", "gemini", "groq", "ollama", "openrouter", "bedrock"},
+	"execution.mode":           {"balanced", "trusted", "full_auto"},
 	"general.ui_language":      {"auto", "ja", "en"},
 	"output.assistant_updates": {"", "verbose", "phase", "off"},
 	"sub_agent.default_effort": {"off", "low", "medium", "high"},
@@ -112,16 +107,14 @@ var SelectOptions = map[string][]string{
 
 // FieldDescriptions はフィールドの説明
 var FieldDescriptions = map[string]string{
-	"bash.allow_inline_edit":              "インライン編集を許可（sed -i 等）",
-	"bash.allow_pipe":                     "パイプを許可",
-	"bash.allow_redirect":                 "リダイレクトを許可",
-	"bash.safe_commands":                  "追加の安全コマンド（例: - \"npm run\"）",
-	"bash.safety_level":                   "安全レベル: strict / moderate / permissive",
 	"compression.enabled":                 "自動圧縮を有効化",
 	"compression.keep_recent":             "圧縮時に保持する直近メッセージ数",
 	"compression.trigger_percent":         "自動圧縮のトークン使用率閾値（%）",
 	"default_model":                       "デフォルトで使用するモデル",
 	"default_provider":                    "デフォルトで使用するLLMプロバイダー",
+	"execution.always_confirm":            "どのモードでも確認するカテゴリ",
+	"execution.mode":                      "実行モード（balanced / trusted / full_auto）",
+	"execution.safe_shell_commands":       "追加の安全シェルコマンド（verification / env 用）",
 	"general.ui_language":                 "表示言語（auto, ja, en）",
 	"git_stage.batch_confirm":             "複数ファイルをまとめて確認",
 	"hooks.max_retry":                     "フック失敗時の最大リトライ回数（デフォルト: 3）",
@@ -149,8 +142,6 @@ var FieldDescriptions = map[string]string{
 	"sub_agent.max_concurrent":            "同時実行上限（デフォルト: 5）",
 	"thinking.enabled":                    "有効化",
 	"thinking.level":                      "レベル: low / medium / high / xhigh",
-	"tool_confirm.auto_approve_medium":    "中程度のツール（write_file等）を自動承認",
-	"tool_confirm.auto_approve_safe":      "安全なツール（read_file等）を自動承認",
 	"utility_model.enabled":               "utility model を有効化",
 	"utility_model.model":                 "補助タスク用モデル（空 = provider_models の default_model）",
 	"utility_model.provider":              "補助タスク用プロバイダー（openai / gemini / claude など）",

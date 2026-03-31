@@ -76,18 +76,31 @@ var Sections = map[string]SectionInfo{
 		},
 	},
 	// loop_detection, api_retry, diff: 内部既定値として保持（user-facing config から削除済み）
-	"tool_confirm": {
-		Title: "ツール確認設定",
-		Icon:  "✅",
+	"execution": {
+		Title: "実行モード設定",
+		Icon:  "🛡️",
+		Comments: []string{
+			"ツール実行の承認モードを制御",
+			"balanced: read自動/write確認/verification bash安全自動",
+			"trusted: workspace内通常編集も自動/高影響のみ確認",
+			"full_auto: 原則自動（always_confirm指定は確認）",
+		},
 		Fields: map[string]string{
-			"auto_approve_safe":   "安全なツール（read_file等）を自動承認",
-			"auto_approve_medium": "中程度のツール（write_file等）を自動承認",
+			"mode":                "実行モード（balanced / trusted / full_auto）",
+			"always_confirm":     "どのモードでも確認するカテゴリ",
+			"safe_shell_commands": "追加の安全シェルコマンド（verification / env 用）",
 		},
 		FieldTypes: map[string]string{
-			"auto_approve_safe":   "bool",
-			"auto_approve_medium": "bool",
+			"mode":                "select",
+			"always_confirm":     "[]string",
+			"safe_shell_commands": "[]string",
+		},
+		SelectOpts: map[string][]string{
+			"mode": {"balanced", "trusted", "full_auto"},
 		},
 	},
+	// tool_confirm: execution に統合済み（YAML 互換は維持）
+	// bash: execution.safe_shell_commands + 内部ポリシーに統合
 	// command_aliases: user-facing config から削除済み（YAML 互換は維持）
 	// prompt_cache: user-facing config から削除済み（YAML advanced 扱い）
 	// streaming: user-facing config から削除済み（YAML advanced 扱い）
@@ -101,27 +114,8 @@ var Sections = map[string]SectionInfo{
 			"bracketed_paste": "bool",
 		},
 	},
-	"bash": {
-		Title: "bashツール設定",
-		Icon:  "💻",
-		Fields: map[string]string{
-			"safety_level":      "安全レベル: strict / moderate / permissive",
-			"safe_commands":     "追加の安全コマンド（例: - \"npm run\"）",
-			"allow_pipe":        "パイプを許可",
-			"allow_redirect":    "リダイレクトを許可",
-			"allow_inline_edit": "インライン編集を許可（sed -i 等）",
-		},
-		FieldTypes: map[string]string{
-			"safety_level":      "select",
-			"safe_commands":     "[]string",
-			"allow_pipe":        "bool",
-			"allow_redirect":    "bool",
-			"allow_inline_edit": "bool",
-		},
-		SelectOpts: map[string][]string{
-			"safety_level": {"strict", "moderate", "permissive"},
-		},
-	},
+	// bash: user-facing config から削除済み（execution + 内部ポリシーに統合）
+	// YAML 互換は維持。allow_pipe は未使用のため非公開化。
 	"project_map": {
 		Title: "プロジェクト構造マップ設定",
 		Icon:  "🗺️",
@@ -332,10 +326,9 @@ var SectionOrder = []string{
 	"default_model",
 	"provider_models",
 	"general",
+	"execution",
 	"compression",
-	"tool_confirm",
 	"paste",
-	"bash",
 	"project_map",
 	"git_stage",
 	"plan_mode",
@@ -355,10 +348,9 @@ var SectionOrder = []string{
 var CategoryOrder = []string{
 	"provider", // default_provider, provider_models
 	"general",
+	"execution",
 	"compression",
-	"tool_confirm",
 	"paste",
-	"bash",
 	"project_map",
 	"git_stage",
 	"plan_mode",
@@ -379,10 +371,9 @@ var SectionToCategory = map[string]string{
 	"default_model":    "provider",
 	"provider_models":  "provider",
 	"general":          "general",
+	"execution":        "execution",
 	"compression":      "compression",
-	"tool_confirm":     "tool_confirm",
 	"paste":            "paste",
-	"bash":             "bash",
 	"project_map":      "project_map",
 	"git_stage":        "git_stage",
 	"plan_mode":        "plan_mode",
@@ -421,20 +412,15 @@ var Categories = map[string]CategoryInfo{
 		Icon:        "📦",
 		Sections:    []string{"compression"},
 	},
-	"tool_confirm": {
-		DisplayName: "Tool Confirm",
-		Icon:        "✅",
-		Sections:    []string{"tool_confirm"},
+	"execution": {
+		DisplayName: "Execution Mode",
+		Icon:        "🛡️",
+		Sections:    []string{"execution"},
 	},
 	"paste": {
 		DisplayName: "Paste Mode",
 		Icon:        "📋",
 		Sections:    []string{"paste"},
-	},
-	"bash": {
-		DisplayName: "Bash Safety",
-		Icon:        "💻",
-		Sections:    []string{"bash"},
 	},
 	"project_map": {
 		DisplayName: "Project Map",

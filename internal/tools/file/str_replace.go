@@ -153,7 +153,7 @@ func ExecuteStrReplaceWithPromptIOAndOptions(promptIO ui.PromptIO, options commo
 			ui.ShowColoredDiffToWriter(out.StdoutWriter(), beforeStr, newStr, opts)
 		}
 
-		dec := common.ConfirmWithAutoApproveDecisionAndOptions(promptIO, options, "str_replace", "Apply this replacement? / この置換を適用しますか？")
+		dec := common.ConfirmToolAction(promptIO, options, "str_replace", "Apply this replacement? / この置換を適用しますか？", common.ToolConfirmContext{TargetPath: absPath})
 		switch dec.Action {
 		case common.ConfirmYes:
 			// continue
@@ -307,7 +307,7 @@ func ExecuteStrReplaceWithPromptIOAndOptions(promptIO ui.PromptIO, options commo
 		}
 	}
 
-	dec2 := common.ConfirmWithAutoApproveDecisionAndOptions(promptIO, options, "str_replace", "Apply this replacement? / この置換を適用しますか？")
+	dec2 := common.ConfirmToolAction(promptIO, options, "str_replace", "Apply this replacement? / この置換を適用しますか？", common.ToolConfirmContext{TargetPath: absPath})
 	switch dec2.Action {
 	case common.ConfirmYes:
 		// continue
@@ -628,7 +628,7 @@ func executeBatchEditsWithPromptIOAndOptions(promptIO ui.PromptIO, options commo
 	}
 
 	// 確認
-	dec := common.ConfirmWithAutoApproveDecisionAndOptions(promptIO, options, "str_replace", "Apply batch replacement? / バッチ置換を適用しますか？")
+	dec := common.ConfirmToolAction(promptIO, options, "str_replace", "Apply batch replacement? / バッチ置換を適用しますか？", common.ToolConfirmContext{TargetPath: absPath})
 	switch dec.Action {
 	case common.ConfirmYes:
 	// continue

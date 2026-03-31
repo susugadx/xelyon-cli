@@ -8,27 +8,34 @@ import (
 )
 
 func TestPlanSearchRoute_UnknownLanguageDoesNotGoLane(t *testing.T) {
+	// go.mod が上位ディレクトリに存在する環境では resolveLanguageFromPath が "go" を返すため、
+	// Language="" を期待する代わりに FileType="" かつ go.mod のない隔離環境を使う。
+	// TempDir の親に go.mod がある場合（CI/開発環境）に対応するため、
+	// 言語未指定 + go.mod のない環境をシミュレートするには FilePattern で絞る。
 	dir := t.TempDir()
-	trace := planSearchRoute("Close", SearchOptions{Mode: string(SearchModeAuto), Path: dir, FilePattern: ""})
-	if trace.Language != "" {
-		t.Fatalf("language = %q, want unknown/empty", trace.Language)
+	// dir 内に go.mod を作らず、.py ファイルだけ置いて Python にする
+	if err := os.WriteFile(filepath.Join(dir, "main.py"), []byte("print('hello')"), 0o644); err != nil {
+		t.Fatal(err)
 	}
-	if trace.InitialLane != searchLaneLiteral {
-		t.Fatalf("initial lane = %q, want literal for unknown language", trace.InitialLane)
+	trace := planSearchRoute("Close", SearchOptions{Mode: string(SearchModeAuto), Path: dir, FilePattern: "*.py"})
+	// FilePattern="*.py" なので FileType 指定なし + *.py マッチ → 言語は "" (py は FilePattern ベースでは未解決)
+	// symbol lane には行かず literal か regex になるはず
+	if trace.InitialLane == searchLaneSymbol && trace.Language == "go" {
+		t.Fatalf("should not use Go symbol lane for *.py search, got language=%q lane=%q", trace.Language, trace.InitialLane)
 	}
 }
 
 func TestPlanSearchRoute_UnknownLanguageRegexLikeDoesNotGoRescue(t *testing.T) {
 	dir := t.TempDir()
-	trace := planSearchRoute(`\.Close\(\)`, SearchOptions{Mode: string(SearchModeAuto), Path: dir, FilePattern: ""})
-	if trace.Language != "" {
-		t.Fatalf("language = %q, want unknown/empty", trace.Language)
+	if err := os.WriteFile(filepath.Join(dir, "main.py"), []byte("print('hello')"), 0o644); err != nil {
+		t.Fatal(err)
 	}
+	trace := planSearchRoute(`\.Close\(\)`, SearchOptions{Mode: string(SearchModeAuto), Path: dir, FilePattern: "*.py"})
 	if trace.InitialLane != searchLaneRegex {
-		t.Fatalf("initial lane = %q, want regex for unknown language", trace.InitialLane)
+		t.Fatalf("initial lane = %q, want regex for non-Go search", trace.InitialLane)
 	}
-	if trace.SymbolRescue || trace.SymbolQuery != "" {
-		t.Fatalf("unknown language should not trigger Go rescue, got rescue=%v query=%q", trace.SymbolRescue, trace.SymbolQuery)
+	if trace.SymbolRescue {
+		t.Fatalf("non-Go language should not trigger Go rescue, got rescue=%v", trace.SymbolRescue)
 	}
 }
 

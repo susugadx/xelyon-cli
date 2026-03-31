@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 	"github.com/susugadx/xelyon-cli/internal/ui"
@@ -90,15 +91,90 @@ func confirmApplyPatch(execCtx tools.ExecutionContext, parsed *ParsedPatch, auto
 		return common.ConfirmDecision{Action: common.ConfirmYes}
 	}
 
-	return common.ConfirmWithIO(execCtx.PromptIO(), message)
+	// ToolConfirmContext に全パス・ファイル数・move 情報を渡す
+	tc := buildApplyPatchConfirmContext(parsed)
+	return common.ConfirmToolAction(execCtx.PromptIO(), execCtx.ConfirmOptions(), "apply_patch", message, tc)
 }
 
+// buildApplyPatchConfirmContext は patch の全 hunk から ToolConfirmContext を構築する。
+// 全対象パスを TargetPaths に入れ、move の有無も判定する。
+func buildApplyPatchConfirmContext(parsed *ParsedPatch) common.ToolConfirmContext {
+	tc := common.ToolConfirmContext{
+		AffectedFiles: countAffectedFiles(parsed),
+	}
+	if parsed == nil {
+		return tc
+	}
+	seen := make(map[string]bool)
+	for _, hunk := range parsed.Hunks {
+		if hunk.Path != "" && !seen[hunk.Path] {
+			seen[hunk.Path] = true
+			tc.TargetPaths = append(tc.TargetPaths, hunk.Path)
+		}
+		if hunk.MovePath != "" {
+			tc.HasMove = true
+			if !seen[hunk.MovePath] {
+				seen[hunk.MovePath] = true
+				tc.TargetPaths = append(tc.TargetPaths, hunk.MovePath)
+			}
+		}
+	}
+	return tc
+}
+
+// countAffectedFiles は patch 内のユニークファイル数を返す。
+func countAffectedFiles(parsed *ParsedPatch) int {
+	if parsed == nil {
+		return 0
+	}
+	seen := make(map[string]bool)
+	for _, hunk := range parsed.Hunks {
+		if hunk.Path != "" {
+			seen[hunk.Path] = true
+		}
+		if hunk.MovePath != "" {
+			seen[hunk.MovePath] = true
+		}
+	}
+	return len(seen)
+}
+
+// shouldAutoApproveApplyPatch は apply_patch のプレビュー表示をスキップするかを判定する。
+// execution policy → 旧 ToolConfirm の順で判定し、auto-approve される場合はプレビュー不要。
+// always_confirm / workspace_outside / mass_change / move に該当する場合は false を返す。
 func shouldAutoApproveApplyPatch(execCtx tools.ExecutionContext, parsed *ParsedPatch) bool {
 	options := execCtx.ConfirmOptions()
+	policy := options.EffectivePolicy()
+	tc := buildApplyPatchConfirmContext(parsed)
+
+	// always_confirm カテゴリに該当する場合はプレビュー必須
+	if cat := common.ToolNameToConfirmCategory("apply_patch"); cat != "" && policy.ShouldConfirm(cat) {
+		return false
+	}
+	for _, cat := range common.ResolveContextCategories("apply_patch", tc) {
+		if policy.ShouldConfirm(cat) {
+			return false
+		}
+	}
+
+	// --auto-approve フラグ
 	if common.IsAutoApprovable("apply_patch", options.AutoApprove) {
 		return true
 	}
 
+	// execution policy: full_auto → 自動
+	if policy.AutoApproveFullAuto {
+		return true
+	}
+
+	// execution policy: trusted + TrustedWriteTools + workspace 内 → 自動
+	if policy.AutoApproveTrustedWrite && config.TrustedWriteTools["apply_patch"] {
+		if common.AllPathsInsideWorkspace(tc) {
+			return true
+		}
+	}
+
+	// フォールバック: 旧 ToolConfirm
 	safety := getApplyPatchSafety(parsed)
 	if cfg := options.Config; cfg != nil && cfg.ToolConfirm.AutoApproveMedium && safety == common.SafetyMedium {
 		return true

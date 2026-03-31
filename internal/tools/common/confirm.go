@@ -2,6 +2,8 @@ package common
 
 import (
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
@@ -29,6 +31,30 @@ type ConfirmDecision struct {
 type ConfirmOptions struct {
 	AutoApprove bool
 	Config      *config.Config
+	Policy      *config.ExecutionPolicy // nil の場合は Config から自動解決
+}
+
+// ToolConfirmContext はツール実行時の判定材料。
+// パス・ファイル数・move 先などから always_confirm カテゴリを判定する。
+type ToolConfirmContext struct {
+	TargetPath    string   // 対象ファイルパス（単一ツール用、空なら不明）
+	TargetPaths   []string // 複数対象パス（apply_patch 等）。全パスを workspace 判定する。
+	MovePath      string   // 移動先パス（rename/move 系のみ、空なら非 move）
+	HasMove       bool     // move/rename を含むか（複数 hunk 対応）
+	AffectedFiles int      // 変更対象ファイル数（apply_patch / batch 系）
+}
+
+// EffectivePolicy は実行ポリシーを返す。Policy が設定されていれば使い、
+// なければ Config.Execution から解決する。
+func (o ConfirmOptions) EffectivePolicy() config.ExecutionPolicy {
+	if o.Policy != nil {
+		return *o.Policy
+	}
+	if o.Config != nil {
+		p := config.ResolveExecutionPolicy(o.Config.Execution)
+		return p
+	}
+	return config.ResolveExecutionPolicy(config.ExecutionConfig{Mode: string(config.ExecutionBalanced)})
 }
 
 // SimpleConfirm はユーザーに確認を求める（テスト用にグローバル変数として定義）
@@ -103,33 +129,225 @@ func ConfirmApproved(message string) bool {
 	return Confirm(message).Action == ConfirmYes
 }
 
-// ConfirmWithAutoApproveDecisionAndOptions は実行時設定を指定して確認を行う。
+// ConfirmWithAutoApproveDecisionAndOptions は ToolConfirmContext なしの互換ラッパー。
 func ConfirmWithAutoApproveDecisionAndOptions(promptIO ui.PromptIO, options ConfirmOptions, toolName, message string) ConfirmDecision {
+	return ConfirmToolAction(promptIO, options, toolName, message, ToolConfirmContext{})
+}
+
+// MassChangeThreshold は mass_change と判定するファイル数の閾値。
+const MassChangeThreshold = 5
+
+// ConfirmToolAction は実行時設定とツールコンテキストに基づいて確認を行う。
+//
+// 判定順序:
+//  1. always_confirm チェック（mode より優先、full_auto でも効く）
+//  2. --auto-approve フラグ（headless 含む）
+//  3. execution policy ベースの判定（workspace / trusted / full_auto）
+//  4. フォールバック: 旧 tool_confirm 設定
+//  5. 通常の確認プロンプト
+func ConfirmToolAction(promptIO ui.PromptIO, options ConfirmOptions, toolName, message string, tc ToolConfirmContext) ConfirmDecision {
 	promptIO = ui.NormalizePromptIO(promptIO)
 	out := NewOutput(promptIO.Out, promptIO.Err)
-	cfg := options.Config
+	policy := options.EffectivePolicy()
 
-	// --auto-approve が有効 かつ ツールが自動承認可能な場合
+	// 1. always_confirm チェック（mode より優先）
+	// ツール名ベースのカテゴリ
+	if cat := ToolNameToConfirmCategory(toolName); cat != "" && policy.ShouldConfirm(cat) {
+		return ConfirmWithIO(promptIO, message)
+	}
+	// パス/引数ベースのカテゴリ
+	for _, cat := range ResolveContextCategories(toolName, tc) {
+		if policy.ShouldConfirm(cat) {
+			return ConfirmWithIO(promptIO, message)
+		}
+	}
+
+	// 2. --auto-approve フラグ（headless 含む）
 	if IsAutoApprovable(toolName, options.AutoApprove) {
 		safety := GetToolSafety(toolName)
 		out.Green.Printf("Auto-approved (%s): %s\n", GetSafetyDescription(safety), toolName)
 		return ConfirmDecision{Action: ConfirmYes}
 	}
 
-	// SafetyHigh ツールの自動承認（設定で有効な場合）
-	if cfg != nil && cfg.ToolConfirm.AutoApproveSafe && IsSafeToolAutoApprovable(toolName) {
+	// 3. execution policy ベースの判定
+	safety := GetToolSafety(toolName)
+
+	// 3a. SafetyHigh — 全 mode で自動
+	if safety == SafetyHigh && policy.AutoApproveRead {
 		out.Green.Printf("Auto-approved (Safe read-only): %s\n", toolName)
 		return ConfirmDecision{Action: ConfirmYes}
 	}
 
-	// SafetyMedium ツールの自動承認（設定で有効な場合）
-	if cfg != nil && cfg.ToolConfirm.AutoApproveMedium && IsMediumToolAutoApprovable(toolName) {
-		out.Green.Printf("Auto-approved (Medium write): %s\n", toolName)
+	// 3b. SafetyMedium
+	if safety == SafetyMedium {
+		if policy.AutoApproveFullAuto {
+			out.Green.Printf("Auto-approved (Full auto): %s\n", toolName)
+			return ConfirmDecision{Action: ConfirmYes}
+		}
+		if policy.AutoApproveTrustedWrite && config.TrustedWriteTools[toolName] {
+			// trusted: 全対象パスが workspace 内 かつ 通常編集のみ自動
+			if AllPathsInsideWorkspace(tc) {
+				out.Green.Printf("Auto-approved (Trusted write): %s\n", toolName)
+				return ConfirmDecision{Action: ConfirmYes}
+			}
+		}
+	}
+
+	// 3c. SafetyLow — full_auto のみ自動（bash は別経路）
+	if safety == SafetyLow && policy.AutoApproveFullAuto {
+		out.Green.Printf("Auto-approved (Full auto): %s\n", toolName)
 		return ConfirmDecision{Action: ConfirmYes}
 	}
 
-	// それ以外は通常の確認プロンプト（対話モード時は y/n/c）
+	// 4. フォールバック: 旧 tool_confirm 設定
+	cfg := options.Config
+	if cfg != nil {
+		if cfg.ToolConfirm.AutoApproveSafe && safety == SafetyHigh {
+			out.Green.Printf("Auto-approved (Safe read-only): %s\n", toolName)
+			return ConfirmDecision{Action: ConfirmYes}
+		}
+		if cfg.ToolConfirm.AutoApproveMedium && safety == SafetyMedium {
+			out.Green.Printf("Auto-approved (Medium write): %s\n", toolName)
+			return ConfirmDecision{Action: ConfirmYes}
+		}
+	}
+
+	// 5. 通常の確認プロンプト
 	return ConfirmWithIO(promptIO, message)
+}
+
+// toolNameToConfirmCategory はツール名から直接マッピングできるカテゴリを返す。
+func ToolNameToConfirmCategory(toolName string) config.ConfirmCategory {
+	switch toolName {
+	case "delete_file":
+		return config.ConfirmDeleteFile
+	case "git_push", "git_force_push", "git_reset_hard":
+		return config.ConfirmBashDestructive
+	default:
+		return ""
+	}
+}
+
+// resolveContextCategories はパス・引数・ファイル数から追加のカテゴリを導出する。
+func ResolveContextCategories(toolName string, tc ToolConfirmContext) []config.ConfirmCategory {
+	var cats []config.ConfirmCategory
+
+	// move_file: MovePath または HasMove が設定されている場合
+	if tc.MovePath != "" || tc.HasMove {
+		cats = append(cats, config.ConfirmMoveFile)
+	}
+
+	// workspace_outside_write: いずれかの対象パスが workspace 外ならカテゴリ追加
+	if hasOutsideWorkspacePath(tc) {
+		cats = append(cats, config.ConfirmWorkspaceOutside)
+	}
+
+	// mass_change: 変更対象ファイル数が閾値以上
+	if tc.AffectedFiles >= MassChangeThreshold {
+		cats = append(cats, config.ConfirmMassChange)
+	}
+
+	// destructive_write: apply_patch は常に destructive_write 候補
+	if toolName == "apply_patch" {
+		cats = append(cats, config.ConfirmDestructiveWrite)
+	}
+
+	return cats
+}
+
+// hasOutsideWorkspacePath は ToolConfirmContext 内のいずれかのパスが workspace 外かを判定する。
+// 複数パス（TargetPaths）がある場合は全パスを走査する。
+func hasOutsideWorkspacePath(tc ToolConfirmContext) bool {
+	// 単一パス
+	if tc.TargetPath != "" && !isInsideWorkspace(tc.TargetPath) {
+		return true
+	}
+	// MovePath
+	if tc.MovePath != "" && !isInsideWorkspace(tc.MovePath) {
+		return true
+	}
+	// 複数パス（apply_patch 等）
+	for _, p := range tc.TargetPaths {
+		if p != "" && !isInsideWorkspace(p) {
+			return true
+		}
+	}
+	return false
+}
+
+// isInsideWorkspace は対象パスが CWD（workspace）配下かを判定する。
+// target と base の両方を実体パスに解決してから比較し、
+// symlink 経由 CWD でも symlink escape でも正しく判定する。
+// パスが空の場合は workspace 内として扱う（パス不明時は安全側に倒さない）。
+func isInsideWorkspace(path string) bool {
+	if path == "" {
+		return true // パス不明 = 判定不能 → workspace 内扱い
+	}
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return true
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return true
+	}
+	allowedDir, err := filepath.Abs(cwd)
+	if err != nil {
+		return true
+	}
+
+	// base（CWD）を実体パスに解決
+	realAllowed, err := filepath.EvalSymlinks(allowedDir)
+	if err != nil {
+		realAllowed = allowedDir
+	}
+
+	// target を実体パスに解決（存在する場合）
+	if _, statErr := os.Lstat(absPath); statErr == nil {
+		realPath, err := filepath.EvalSymlinks(absPath)
+		if err != nil {
+			return false // symlink 解決失敗 → 安全側（workspace 外扱い）
+		}
+		return isSubPathCheck(realPath, realAllowed)
+	}
+
+	// ファイル未存在 → 親ディレクトリを実体解決して判定
+	parentDir := filepath.Dir(absPath)
+	if _, statErr := os.Lstat(parentDir); statErr == nil {
+		realParent, err := filepath.EvalSymlinks(parentDir)
+		if err != nil {
+			return false
+		}
+		return isSubPathCheck(realParent, realAllowed)
+	}
+
+	// 親も存在しない → Abs パス同士で比較（フォールバック）
+	return isSubPathCheck(absPath, realAllowed)
+}
+
+// allPathsInsideWorkspace は ToolConfirmContext 内の全パスが workspace 内かを判定する。
+// 1 つでも workspace 外のパスがあれば false。パスが全て空なら true（不明 = workspace 内扱い）。
+func AllPathsInsideWorkspace(tc ToolConfirmContext) bool {
+	if tc.TargetPath != "" && !isInsideWorkspace(tc.TargetPath) {
+		return false
+	}
+	if tc.MovePath != "" && !isInsideWorkspace(tc.MovePath) {
+		return false
+	}
+	for _, p := range tc.TargetPaths {
+		if p != "" && !isInsideWorkspace(p) {
+			return false
+		}
+	}
+	return true
+}
+
+// isSubPathCheck は target が base ディレクトリ配下かどうか判定する。
+func isSubPathCheck(target, base string) bool {
+	if target == base {
+		return true
+	}
+	return strings.HasPrefix(target, base+string(filepath.Separator))
 }
 
 // ConfirmWithFeedback は対話的確認を行う（互換ラッパー）

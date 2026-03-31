@@ -101,7 +101,7 @@ func ExecuteWriteFileWithPromptIOAndOptionsAndLSPClient(promptIO ui.PromptIO, op
 		}
 	}
 
-	dec := common.ConfirmWithAutoApproveDecisionAndOptions(promptIO, options, "write_file", "Create/overwrite this file? / このファイルを作成・上書きしますか？")
+	dec := common.ConfirmToolAction(promptIO, options, "write_file", "Create/overwrite this file? / このファイルを作成・上書きしますか？", common.ToolConfirmContext{TargetPath: absPath})
 	switch dec.Action {
 	case common.ConfirmYes:
 		// continue
