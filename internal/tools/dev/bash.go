@@ -106,12 +106,13 @@ func ExecuteBashWithPromptIOAndConfig(promptIO ui.PromptIO, cfg *config.Config, 
 		return "Error: command is empty"
 	}
 
-	if msg, ok := checkAndConfirmBash(promptIO, cfg, command); !ok {
+	reason, msg, ok := checkAndConfirmBash(promptIO, cfg, command)
+	if !ok {
 		return msg
 	}
 
-	// Execute
-	out.Green.Printf("▶ Running: %s\n", command)
+	// Execute — auto-approved 理由を Running 表示に統合
+	printRunning(out, command, reason)
 	cmd := exec.Command("bash", "-c", command)
 	if cwd, err := os.Getwd(); err == nil {
 		cmd.Dir = cwd
@@ -172,12 +173,13 @@ func ExecuteBashWithContextAndPromptIOAndConfig(ctx context.Context, promptIO ui
 		return "Error: command is empty"
 	}
 
-	if msg, ok := checkAndConfirmBash(promptIO, cfg, command); !ok {
+	reason, msg, ok := checkAndConfirmBash(promptIO, cfg, command)
+	if !ok {
 		return msg
 	}
 
-	// Execute with context
-	out.Green.Printf("▶ Running: %s\n", command)
+	// Execute with context — auto-approved 理由を Running 表示に統合
+	printRunning(out, command, reason)
 	cmd := exec.CommandContext(ctx, "bash", "-c", command)
 	if cwd, err := os.Getwd(); err == nil {
 		cmd.Dir = cwd
@@ -340,10 +342,31 @@ func executeBashWithStreaming(out common.Output, cmd *exec.Cmd) (string, error) 
 	return outputBuf.String(), err
 }
 
+// printRunning は bash 実行開始メッセージを表示する。
+// auto-approved の場合は理由を統合して 1 行で表示。
+// ユーザー確認済み（reason が空）の場合は Running のみ。
+func printRunning(out common.Output, command string, reason AutoApproveReason) {
+	if reason != "" {
+		out.Green.Printf("▶ Running (auto-approved: %s): %s\n", reason, command)
+	} else {
+		out.Green.Printf("▶ Running: %s\n", command)
+	}
+}
+
+// AutoApproveReason は bash 自動承認時の理由ラベル
+type AutoApproveReason string
+
+const (
+	approveNone             AutoApproveReason = ""
+	approveVerificationBash AutoApproveReason = "Safe bash"
+	approveSafeShellCmd     AutoApproveReason = "Safe bash"
+	approveSafeBuiltin      AutoApproveReason = "Safe bash"
+)
+
 // checkAndConfirmBash は共通のセキュリティチェック + 確認UIを実行。
 // execution policy に基づき discovery bash の抑止・verification bash の自動承認を行う。
-// 返り値: ("", true) = 実行OK, (errorMsg, false) = ブロック/キャンセル
-func checkAndConfirmBash(promptIO ui.PromptIO, cfg *config.Config, command string) (string, bool) {
+// 返り値: (reason, "", true) = 自動承認（reason は理由）, ("", errorMsg, false) = ブロック/キャンセル
+func checkAndConfirmBash(promptIO ui.PromptIO, cfg *config.Config, command string) (AutoApproveReason, string, bool) {
 	promptIO = ui.NormalizePromptIO(promptIO)
 	out := common.NewOutput(promptIO.Out, promptIO.Err)
 	if cfg == nil {
@@ -356,7 +379,7 @@ func checkAndConfirmBash(promptIO ui.PromptIO, cfg *config.Config, command strin
 	for _, blocked := range alwaysBlockedCommands {
 		if strings.Contains(command, blocked) {
 			out.Red.Printf("🚫 Blocked dangerous command: %s\n", command)
-			return "Error: This command is blocked for safety", false
+			return approveNone, "Error: This command is blocked for safety", false
 		}
 	}
 
@@ -364,13 +387,13 @@ func checkAndConfirmBash(promptIO ui.PromptIO, cfg *config.Config, command strin
 	for _, part := range splitChainCommand(command) {
 		if isEvalInvocation(strings.TrimSpace(part)) {
 			out.Red.Printf("🚫 Blocked dangerous command: eval\n")
-			return "Error: eval is blocked for safety", false
+			return approveNone, "Error: eval is blocked for safety", false
 		}
 	}
 
 	// 2. safety level チェック（strict/moderate/permissive）
 	if err := CheckBashSafetyWithOutput(out, command, bashCfg); err != "" {
-		return err, false
+		return approveNone, err, false
 	}
 
 	// === 判定順序 ===
@@ -384,7 +407,8 @@ func checkAndConfirmBash(promptIO ui.PromptIO, cfg *config.Config, command strin
 		out.Cyan.Printf("📜 Command / コマンド: %s\n", command)
 		out.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 		out.Yellow.Println("💡 Tip: Use search_code / read_file / list_dir instead of bash for code exploration")
-		return confirmBashPrompt(promptIO, command)
+		reason, msg, ok := confirmBashPromptWithReason(promptIO, command)
+		return reason, msg, ok
 	}
 
 	// 5. always_confirm / 強制確認（mode より優先、safe_shell_commands で bypass 不可）
@@ -393,32 +417,34 @@ func checkAndConfirmBash(promptIO ui.PromptIO, cfg *config.Config, command strin
 		out.Cyan.Printf("⚠️  Destructive Shell / 破壊的シェルコマンド\n")
 		out.Cyan.Printf("📜 Command / コマンド: %s\n", command)
 		out.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		return confirmBashPrompt(promptIO, command)
+		reason, msg, ok := confirmBashPromptWithReason(promptIO, command)
+		return reason, msg, ok
 	}
 	if shellCat == config.ShellRedirectWrite && policy.ShouldConfirm(config.ConfirmBashRedirectWrite) {
 		out.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 		out.Cyan.Printf("📝 Redirect Write Shell / リダイレクト書き込み\n")
 		out.Cyan.Printf("📜 Command / コマンド: %s\n", command)
 		out.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		return confirmBashPrompt(promptIO, command)
+		reason, msg, ok := confirmBashPromptWithReason(promptIO, command)
+		return reason, msg, ok
 	}
 
 	// 6. mode による自動承認（verification 系のみ）
 	if shellCat == config.ShellVerification {
 		if IsSafeCommand(command, bashCfg) && policy.AutoApproveVerificationBash {
-			return "", true
+			return approveVerificationBash, "", true
 		}
 	}
 
 	// 7. safe_shell_commands は verification 系の escape hatch のみ。
 	// destructive / redirect-write / discovery には適用しない。
 	if shellCat == config.ShellVerification && isSafeShellCommand(command, policy.SafeShellCommands) {
-		return "", true
+		return approveSafeShellCmd, "", true
 	}
 
 	// 8. 組み込み safe command（verification 系のみ、上で mode チェック済みでなくても確認なしで通す）
 	if IsSafeCommand(command, bashCfg) {
-		return "", true
+		return approveSafeBuiltin, "", true
 	}
 
 	// 9. その他 — 確認プロンプト
@@ -427,17 +453,19 @@ func checkAndConfirmBash(promptIO ui.PromptIO, cfg *config.Config, command strin
 	out.Cyan.Printf("📜 Command / コマンド: %s\n", command)
 	out.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	out.Yellow.Println("⚠️  Warning: This command may modify your system / 警告: システムに変更が加わる可能性があります")
-	return confirmBashPrompt(promptIO, command)
+	reason, msg, ok := confirmBashPromptWithReason(promptIO, command)
+	return reason, msg, ok
 }
 
-// confirmBashPrompt は bash の確認プロンプトを表示する。
-func confirmBashPrompt(promptIO ui.PromptIO, command string) (string, bool) {
+// confirmBashPromptWithReason は bash の確認プロンプトを表示する。
+// ユーザーが承認した場合は approveNone（ユーザー確認済み）を返す。
+func confirmBashPromptWithReason(promptIO ui.PromptIO, command string) (AutoApproveReason, string, bool) {
 	dec := common.ConfirmWithIO(promptIO, "Run this command? / 実行しますか？")
 	switch dec.Action {
 	case common.ConfirmYes:
-		return "", true
+		return approveNone, "", true
 	case common.ConfirmComment:
-		return fmt.Sprintf(`[COMMENT] User provided feedback for bash.
+		return approveNone, fmt.Sprintf(`[COMMENT] User provided feedback for bash.
 
 Comment:
 %s
@@ -448,7 +476,7 @@ Next actions:
 
 IMPORTANT: Do NOT execute the previous command as-is.`, strings.TrimSpace(dec.Comment)), false
 	default:
-		return "Cancelled by user", false
+		return approveNone, "Cancelled by user", false
 	}
 }
 

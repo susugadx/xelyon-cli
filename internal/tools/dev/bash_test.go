@@ -57,7 +57,7 @@ func setupTestConfirm(t *testing.T, approve bool) {
 func TestCheckAndConfirmBash_NilConfigUsesDefaultConfig(t *testing.T) {
 	promptIO := ui.NewPromptIO(strings.NewReader("y\n"), &bytes.Buffer{}, &bytes.Buffer{}, nil)
 
-	msg, ok := checkAndConfirmBash(promptIO, nil, "printf hi > /tmp/xelyon-bash-test.txt")
+	_, msg, ok := checkAndConfirmBash(promptIO, nil, "printf hi > /tmp/xelyon-bash-test.txt")
 	if !ok {
 		t.Fatalf("checkAndConfirmBash() rejected default-config command: %s", msg)
 	}
