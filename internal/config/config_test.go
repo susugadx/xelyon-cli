@@ -96,16 +96,6 @@ func TestDefaultConfig(t *testing.T) {
 		t.Errorf("Diff.ContextLines = %d, want 10", cfg.Diff.ContextLines)
 	}
 
-	// PlanMode
-	if cfg.PlanMode.MaxRetry != 10 {
-		t.Errorf("PlanMode.MaxRetry = %d, want 10", cfg.PlanMode.MaxRetry)
-	}
-	if cfg.PlanMode.StepTimeout != 600 {
-		t.Errorf("PlanMode.StepTimeout = %d, want 600", cfg.PlanMode.StepTimeout)
-	}
-	if !cfg.PlanMode.ClearContextOnApproval {
-		t.Error("PlanMode.ClearContextOnApproval should default to true")
-	}
 	if cfg.General.ToolLoopLimit != 0 {
 		t.Errorf("General.ToolLoopLimit = %d, want 0", cfg.General.ToolLoopLimit)
 	}

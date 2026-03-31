@@ -119,18 +119,17 @@ func TestSetFieldValue(t *testing.T) {
 func TestFieldTypeMap(t *testing.T) {
 	// FieldTypeMap に重要なフィールドが含まれていることを確認
 	requiredFields := map[string]ConfigFieldType{
-		"default_provider":                    FieldTypeSelect,
-		"default_model":                       FieldTypeString,
-		"general.ui_language":                 FieldTypeSelect,
-		"compression.enabled":                 FieldTypeBool,
-		"compression.trigger_percent":         FieldTypeInt,
-		"compression.keep_recent":             FieldTypeInt,
-		"execution.mode":                      FieldTypeSelect,
-		"output.assistant_updates":            FieldTypeSelect,
-		"plan_mode.clear_context_on_approval": FieldTypeBool,
-		"project_map.context_ratio":           FieldTypeFloat,
-		"provider_models":                     FieldTypeStructMap,
-		"sub_agent.max_concurrent":            FieldTypeInt,
+		"default_provider":            FieldTypeSelect,
+		"default_model":               FieldTypeString,
+		"general.ui_language":         FieldTypeSelect,
+		"compression.enabled":         FieldTypeBool,
+		"compression.trigger_percent": FieldTypeInt,
+		"compression.keep_recent":     FieldTypeInt,
+		"execution.mode":              FieldTypeSelect,
+		"output.assistant_updates":    FieldTypeSelect,
+		"project_map.context_ratio":   FieldTypeFloat,
+		"provider_models":             FieldTypeStructMap,
+		"sub_agent.max_concurrent":    FieldTypeInt,
 	}
 
 	for path, expectedType := range requiredFields {
@@ -179,7 +178,6 @@ func TestFieldDescriptions(t *testing.T) {
 		"compression.keep_recent",
 		"execution.mode",
 		"output.assistant_updates",
-		"plan_mode.clear_context_on_approval",
 		"project_map.context_ratio",
 		"sub_agent.default_model",
 	}

@@ -131,30 +131,8 @@ var Sections = map[string]SectionInfo{
 		},
 	},
 
-	"git_stage": {
-		Title: "git_add設定",
-		Icon:  "📂",
-		Fields: map[string]string{
-			"batch_confirm": "複数ファイルをまとめて確認",
-		},
-		FieldTypes: map[string]string{
-			"batch_confirm": "bool",
-		},
-	},
-	"plan_mode": {
-		Title: "Plan Mode設定",
-		Icon:  "📋",
-		Fields: map[string]string{
-			"max_retry":                 "最大リトライ回数",
-			"step_timeout":              "ステップタイムアウト（秒）",
-			"clear_context_on_approval": "Plan 承認後に調査フェーズの履歴をクリアして実装を開始",
-		},
-		FieldTypes: map[string]string{
-			"max_retry":                 "int",
-			"step_timeout":              "int",
-			"clear_context_on_approval": "bool",
-		},
-	},
+	// git_stage: batch_confirm は標準挙動としてハードコード（user-facing config から削除済み）
+	// plan_mode: 内部ガードのみ保持（user-facing config から削除済み）
 	"lsp": {
 		Title: "LSP連携設定",
 		Icon:  "🔧",
@@ -330,8 +308,6 @@ var SectionOrder = []string{
 	"compression",
 	"paste",
 	"project_map",
-	"git_stage",
-	"plan_mode",
 	"lsp",
 	"openai",
 	"thinking",
@@ -352,8 +328,6 @@ var CategoryOrder = []string{
 	"compression",
 	"paste",
 	"project_map",
-	"git_stage",
-	"plan_mode",
 	"lsp",
 	"openai",
 	"thinking",
@@ -375,8 +349,6 @@ var SectionToCategory = map[string]string{
 	"compression":      "compression",
 	"paste":            "paste",
 	"project_map":      "project_map",
-	"git_stage":        "git_stage",
-	"plan_mode":        "plan_mode",
 	"lsp":              "lsp",
 	"openai":           "openai",
 	"thinking":         "thinking",
@@ -426,16 +398,6 @@ var Categories = map[string]CategoryInfo{
 		DisplayName: "Project Map",
 		Icon:        "🗺️",
 		Sections:    []string{"project_map"},
-	},
-	"git_stage": {
-		DisplayName: "Git Settings",
-		Icon:        "📂",
-		Sections:    []string{"git_stage"},
-	},
-	"plan_mode": {
-		DisplayName: "Plan Mode",
-		Icon:        "📋",
-		Sections:    []string{"plan_mode"},
 	},
 	"lsp": {
 		DisplayName: "LSP Servers",

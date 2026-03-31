@@ -11,18 +11,17 @@ import (
 )
 
 // promptFailureActionWithSelector は失敗時の Selector UI を表示
-// autoRetryMax が > 0 の場合、自動リトライが exhausted されたことを表示
+// retryCount はこれまでの自動リトライ回数（表示用）
 // 戻り値: (アクション, コメント文字列) - コメントアクション時のみ第2引数が非空
-func promptFailureActionWithSelector(promptIO ui.PromptIO, step *plan.PlanStep, result string, reason string, autoRetryMax int) (plan.FailureAction, string) {
+func promptFailureActionWithSelector(promptIO ui.PromptIO, step *plan.PlanStep, result string, reason string, retryCount int) (plan.FailureAction, string) {
 	promptIO = ui.NormalizePromptIO(promptIO)
 	out := promptIO.Out
 
 	_, _ = fmt.Fprintln(out)
 	cyan.Fprintln(out, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
-	// 自動リトライが有効だった場合のメッセージ
-	if autoRetryMax > 0 {
-		red.Fprintf(out, "❌ Step %d Failed (%d retries exhausted)\n", step.ID, autoRetryMax)
+	if retryCount > 0 {
+		red.Fprintf(out, "❌ Step %d Failed (stalled after %d retries)\n", step.ID, retryCount)
 	} else {
 		red.Fprintf(out, "❌ Step %d Failed: %s\n", step.ID, step.Description)
 	}

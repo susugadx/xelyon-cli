@@ -234,7 +234,7 @@ func TestExecuteStepV2_HardLimitRespected(t *testing.T) {
 		},
 	}
 
-	err := agent.executeStepV2(context.Background(), p, &p.Steps[0], 0, 0)
+	err := agent.executeStepV2(context.Background(), p, &p.Steps[0], 0, &retryState{})
 	if err == nil {
 		t.Fatal("executeStepV2() error = nil, want hard limit error")
 	}

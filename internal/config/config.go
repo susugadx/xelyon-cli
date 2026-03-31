@@ -165,11 +165,6 @@ func DefaultConfig() *Config {
 		GitStage: GitStageConfig{
 			BatchConfirm: true,
 		},
-		PlanMode: PlanModeConfig{
-			MaxRetry:               10,
-			StepTimeout:            600, // 10分
-			ClearContextOnApproval: true,
-		},
 		LSP: LSPConfig{
 			Enabled: true,
 			Servers: map[string]LSPServerConfig{
@@ -484,12 +479,6 @@ func applyDefaults(cfg *Config) {
 	}
 	if cfg.Streaming.IdleTimeoutSeconds == 0 {
 		cfg.Streaming.IdleTimeoutSeconds = defaults.Streaming.IdleTimeoutSeconds
-	}
-	if cfg.PlanMode.MaxRetry == 0 {
-		cfg.PlanMode.MaxRetry = defaults.PlanMode.MaxRetry
-	}
-	if cfg.PlanMode.StepTimeout == 0 {
-		cfg.PlanMode.StepTimeout = defaults.PlanMode.StepTimeout
 	}
 	// LSP設定のデフォルト適用
 	// 注: cfg.LSP.Enabled が false の場合と、設定ファイルに LSP セクションがない場合を区別するため

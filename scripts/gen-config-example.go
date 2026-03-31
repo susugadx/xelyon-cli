@@ -113,6 +113,9 @@ func filterInternalFields(data []byte) ([]byte, error) {
 		"streaming":       true,
 		"tool_confirm":    true,
 		"bash":            true,
+		"git_stage":       true,
+		"plan_mode":       true,
+		"list_dir":        true,
 	}
 
 	// root mapping の content をフィルタ

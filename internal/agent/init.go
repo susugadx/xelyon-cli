@@ -44,7 +44,6 @@ rules:
 #   on_completion:
 #     - "go fmt ./... && go build ./... && go test ./..."
 #   timeout: 60
-#   max_retry: 3
 `
 
 // handleInitCommand は/initコマンドを処理（xelyon.yaml 生成）

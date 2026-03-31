@@ -379,30 +379,6 @@ func TestExtractExplanationAndTool_UnclosedBrace(t *testing.T) {
 	}
 }
 
-// NOTE: shouldEnterPlanMode tests removed in Issue #82
-// Plan Mode Only に統一されたため、shouldEnterPlanMode 関数とそのテストは削除されました
-
-// TestMaxRetryConfig はmax_retryの設定が正しく読み込まれることを確認
-func TestMaxRetryConfig(t *testing.T) {
-	cfg := config.DefaultConfig()
-
-	// デフォルト値は10
-	if cfg.PlanMode.MaxRetry != 10 {
-		t.Errorf("PlanMode.MaxRetry = %d, want 10", cfg.PlanMode.MaxRetry)
-	}
-
-	// 一時的に変更してテスト
-	original := cfg.PlanMode.MaxRetry
-	cfg.PlanMode.MaxRetry = 5
-	defer func() {
-		cfg.PlanMode.MaxRetry = original
-	}()
-
-	if cfg.PlanMode.MaxRetry != 5 {
-		t.Errorf("PlanMode.MaxRetry after change = %d, want 5", cfg.PlanMode.MaxRetry)
-	}
-}
-
 // TestExecuteToolCallWithResult は結果を返すことを確認
 func TestExecuteToolCallWithResult(t *testing.T) {
 	provider := &mockProvider{name: "test"}
@@ -613,7 +589,7 @@ func TestExecuteStepV2_IgnoresCreatePlan(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	err := agent.executeStepV2(ctx, p, &p.Steps[0], 0, 0)
+	err := agent.executeStepV2(ctx, p, &p.Steps[0], 0, &retryState{})
 
 	if err != nil {
 		t.Errorf("executeStepV2() returned error: %v", err)

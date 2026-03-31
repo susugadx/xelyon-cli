@@ -219,9 +219,8 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 	var lastToolCall *tools.ToolCall
 	var sameCallCount int
 
-	// 自動リトライ設定
-	autoRetryMax := cfg.PlanMode.MaxRetry
-	retryCount := 0
+	// 空回り検出による自動リトライ制御
+	var rs retryState
 
 	var completionVerified bool // 完了検証ガード（タスク内1回限り）
 	var hookRetryCount int      // フック失敗リトライカウンター
@@ -576,43 +575,49 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 			a.History[len(a.History)-1].Content += diagMsg
 		}
 
-		// 失敗検出時の自動リトライ処理
+		// 失敗検出時の自動リトライ処理（空回り検出）
 		if lastFailedResult != "" {
-			if autoRetryMax > 0 && retryCount < autoRetryMax {
-				retryCount++
+			level := rs.recordFailure(lastFailedResult)
+
+			switch level {
+			case stalledNone:
+				// 通常リトライ
 				a.ui().ResetTerminalState()
-				red.Fprintf(a.output(), "❌ Failed (retry %d/%d)\n", retryCount, autoRetryMax)
+				red.Fprintf(a.output(), "❌ Failed (retry %d)\n", rs.count)
 				yellow.Fprintf(a.output(), "🔄 Retrying...\n")
 
-				// リトライ用プロンプトを追加（段階的エスカレーション）
-				var retryInstruction string
-				switch {
-				case retryCount <= 1:
-					retryInstruction = "Fix the immediate error."
-				case retryCount == 2:
-					retryInstruction = "Previous fix did not work. Write a minimal test via bash to reproduce and diagnose the root cause before attempting another fix."
-				default:
-					retryInstruction = "Multiple retries have failed. Your current approach is wrong. Change strategy fundamentally — use a completely different algorithm or technique."
-				}
+				retryInstruction := normalModeRetryInstruction(rs.count)
 				a.History = append(a.History, api.Message{
 					Role:    "user",
-					Content: fmt.Sprintf("The previous tool execution FAILED (attempt %d/%d):\n\n%s\n\n%s", retryCount, autoRetryMax, lastFailedResult, retryInstruction),
+					Content: fmt.Sprintf("The previous tool execution FAILED (attempt %d):\n\n%s\n\n%s", rs.count, lastFailedResult, retryInstruction),
+				})
+				continue
+
+			case stalledSoft:
+				// 空回りヒント → retry 指示を強化して続行（hard stop しない）
+				a.ui().ResetTerminalState()
+				yellow.Fprintf(a.output(), "⚠️  Similar failure repeated %d times (retry %d)\n", rs.sameCount, rs.count)
+				yellow.Fprintf(a.output(), "🔄 Retrying with strategy change...\n")
+
+				a.History = append(a.History, api.Message{
+					Role: "user",
+					Content: fmt.Sprintf("The previous tool execution FAILED (attempt %d):\n\n%s\n\n"+
+						"WARNING: A similar failure has now occurred %d times in a row.\n"+
+						"Your previous approach is likely wrong — do not repeat the same fix pattern.\n\n%s",
+						rs.count, lastFailedResult, rs.sameCount, normalModeRetryInstruction(rs.count)),
 				})
 				continue
 			}
 
-			// 自動リトライが exhausted
-			if autoRetryMax > 0 {
-				a.ui().ResetTerminalState()
-				red.Fprintf(a.output(), "❌ Failed (%d retries exhausted)\n", autoRetryMax)
-				yellow.Fprintln(a.output(), "Could not complete the task automatically. Letting AI respond...")
-			}
-			// AI に任せて続行（リトライカウンターをリセット）
-			retryCount = 0
-		} else if retryCount > 0 {
+			// stalledHard: 空回り確定 → AI に任せて続行
+			a.ui().ResetTerminalState()
+			red.Fprintf(a.output(), "❌ Stalled — same error %d times\n", rs.sameCount)
+			yellow.Fprintln(a.output(), "Could not complete the task automatically. Letting AI respond...")
+			rs.reset()
+		} else if rs.count > 0 {
 			// 成功した場合（リトライ後）
-			green.Fprintf(a.output(), "✅ Succeeded (on retry %d)\n", retryCount)
-			retryCount = 0
+			green.Fprintf(a.output(), "✅ Succeeded (on retry %d)\n", rs.count)
+			rs.reset()
 		}
 	}
 
@@ -815,5 +820,38 @@ func (a *Agent) printTaskUsage(startStats SessionStats) {
 			FormatNumber(outDiff),
 			FormatNumber(total))
 		dim.Fprintf(a.output(), "(~$%.4f)\n", costDiff)
+	}
+}
+
+// normalModeRetryInstruction は Normal Mode の retry プロンプトを段階的に返す。
+func normalModeRetryInstruction(attempt int) string {
+	const constraint = `
+Reuse information already obtained from the failed command/output.
+Do not re-run broad investigation unless the failure output is insufficient.`
+
+	switch {
+	case attempt <= 1:
+		return `Do not patch blindly.
+First, identify the concrete root cause in 1-2 sentences using the existing failure output.
+Point to the exact file/function/command causing the failure.
+Then make the smallest plausible fix and verify it immediately.
+
+Do not write a new test yet unless the root cause is still unclear or verification is otherwise unreliable.` + constraint
+	case attempt == 2:
+		return `The previous fix did not work.
+
+Do not repeat the same fix pattern.
+Briefly explain why the previous attempt failed.
+If the root cause is still uncertain, create the smallest possible reproduction or targeted test via bash.
+If the root cause is already clear, skip test creation and apply the next evidence-based fix directly.
+
+Then verify again.` + constraint
+	default:
+		return `Multiple retries have failed.
+
+Your current approach is not working.
+Explain which assumption was wrong.
+Change strategy fundamentally and avoid repeating the same edit pattern.
+Choose the smallest different approach that can validate the new hypothesis quickly.` + constraint
 	}
 }

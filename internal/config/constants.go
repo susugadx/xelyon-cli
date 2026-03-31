@@ -25,7 +25,6 @@ const (
 
 // Plan Execution Limits
 const (
-	PlanMaxRetries       = 3  // ステップ失敗時の最大リトライ回数
 	PlanMaxIterations    = 80 // ステップ内ツール実行の最大イテレーション数
 	PlanMaxAutoContinues = 3  // AI質問時の自動続行最大回数
 )

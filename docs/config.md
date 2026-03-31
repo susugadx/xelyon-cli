@@ -127,8 +127,6 @@ execution:
 paste:
     # Bracketed Paste Mode を有効化（複数行ペースト対応）
     bracketed_paste: true
-list_dir:
-    additional_ignore_dirs: []
 
 # ============================================================
 # プロジェクト構造マップ設定
@@ -140,24 +138,6 @@ project_map:
     context_ratio: 0.05
     # 追加除外ディレクトリ（list_dir と共通）
     additional_ignore_dirs: []
-
-# ============================================================
-# git_add設定
-# ============================================================
-git_stage:
-    # 複数ファイルをまとめて確認
-    batch_confirm: true
-
-# ============================================================
-# Plan Mode設定
-# ============================================================
-plan_mode:
-    # 最大リトライ回数
-    max_retry: 10
-    # ステップタイムアウト（秒）
-    step_timeout: 600
-    # Plan 承認後に調査フェーズの履歴をクリアして実装を開始
-    clear_context_on_approval: true
 
 # ============================================================
 # LSP連携設定
@@ -347,7 +327,9 @@ streaming:
   stream_bash_output: true       # bash 出力をリアルタイム表示
 ```
 
-### bashツール設定 (`bash`)
+### bashツール設定 (`bash`)（レガシー）
+
+> **注意**: `bash` セクションは `execution` に統合されました。既存 YAML は互換読み込みされますが、新規設定では `execution.mode` / `execution.safe_shell_commands` を使用してください。
 
 bashコマンドの安全性制限を設定します。
 
@@ -408,78 +390,6 @@ bash:
 curl ... | sh
 cat script.sh | bash
 echo password | sudo -S ...
-```
-
-### git_stage
-
-git_addツールの動作を設定します。
-
-```yaml
-git_stage:
-  # 複数ファイルのバッチ確認UIを有効化
-  batch_confirm: true
-```
-
-#### `batch_confirm`
-- **型**: boolean
-- **デフォルト**: `true`
-- **説明**: 複数ファイルをステージングする際のバッチ確認UIを有効化
-
-**バッチ確認UI**:
-```
-📦 Git Stage Batch / Gitバッチステージング
-   3 files / 3ファイル
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  - file1.go
-  - file2.go
-  - file3.go
-
-Stage all? (y/n/s=select) / 全てステージング？ (y/n/s=個別選択):
-```
-
-- `y`: 全ファイルをステージング
-- `n`: キャンセル
-- `s`: 個別選択モード（1ファイルずつ確認）
-
-### Plan Mode設定 (`plan_mode`)
-
-Plan Modeは計画駆動型の実行モードです。調査フェーズで情報を収集し、計画を生成・承認後にステップごとに順次実行します。
-
-```yaml
-plan_mode:
-  max_retry: 10            # 最大リトライ回数
-  step_timeout: 600        # ステップタイムアウト（秒）
-```
-
-#### 設定項目
-
-##### `max_retry`
-- **型**: integer
-- **デフォルト**: `10`
-- **説明**: ステップ失敗時の最大リトライ回数
-
-##### `step_timeout`
-- **型**: integer
-- **デフォルト**: `600`（10分）
-- **説明**: 各ステップのタイムアウト秒数
-
-#### 失敗時フロー
-
-ステップ実行に失敗した場合、以下の順序で処理されます：
-
-1. **リトライ**: `max_retry` 回まで自動リトライ
-2. **ユーザー確認**: リトライ上限到達後、ユーザーに選択肢を提示
-   - リトライ
-   - コメント付きリトライ
-   - スキップ
-   - 中止
-
-#### 使用例
-
-```yaml
-plan_mode:
-  max_retry: 5
-  step_timeout: 300
 ```
 
 ### OpenAI設定 (`openai`)
@@ -613,31 +523,10 @@ OpenAI Codex モデル（`gpt-5.2-codex`, `gpt-5.1-codex` 等）は reasoning �
 - `/think off` → `low` レベルにフォールバック（警告メッセージ表示）
 - Codex 以外のモデルでは通常通り無効化されます
 
-### ツール確認設定 (`tool_confirm`)
+### ツール確認設定 (`tool_confirm`)（レガシー）
 
-```yaml
-tool_confirm:
-  auto_approve_safe: true    # SafetyHigh（read_file等）を確認なしで実行
-  auto_approve_medium: false # SafetyMedium（apply_patch等）を確認なしで実行
-```
-
-#### `auto_approve_safe`
-- **型**: boolean
-- **デフォルト**: `true`
-- **説明**: SafetyHigh ツール（read_file, list_dir, git_status, git_log, git_diff, search_code 等）を確認なしで実行
-
-#### `auto_approve_medium`
-- **型**: boolean
-- **デフォルト**: `false`
-- **説明**: SafetyMedium ツール（apply_patch, str_replace, write_file, web_search 等）を確認なしで実行
-
-**安全性レベル一覧:**
-
-| レベル | ツール例 | 説明 |
-|--------|---------|------|
-| SafetyHigh | read_file, list_dir, search_* | 読み取り専用 |
-| SafetyMedium | apply_patch, str_replace, write_file | 書き込み（リカバリ可能） |
-| SafetyLow | delete_file, bash, git_push | 破壊的操作（常に確認必須） |
+> **注意**: `tool_confirm` は `execution` に統合されました。既存 YAML は互換読み込みされますが、新規設定では `execution.mode` を使用してください。
+> `auto_approve_medium: true` → `execution.mode: trusted` に自動マイグレーションされます。
 
 ### プロンプトキャッシュ設定 (`prompt_cache`)
 
@@ -661,8 +550,6 @@ paste:
 - **型**: boolean
 - **デフォルト**: `true`
 - **説明**: Bracketed Paste Mode を有効化。複数行のペーストを一括入力として扱います
-
-> `max_lines`, `max_bytes`, `timeout_seconds` は YAML 直接編集で変更可能です（`/config` メニューには表示されません）。
 
 ### コマンドエイリアス設定 (`command_aliases`)
 

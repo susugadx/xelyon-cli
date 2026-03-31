@@ -23,7 +23,6 @@ type Config struct {
 	ProjectMap      ProjectMapConfig               `yaml:"project_map"`
 
 	GitStage       GitStageConfig     `yaml:"git_stage"`
-	PlanMode       PlanModeConfig     `yaml:"plan_mode"`
 	LSP            LSPConfig          `yaml:"lsp"`
 	OpenAI         OpenAIConfig       `yaml:"openai"`
 	Thinking       ThinkingConfig     `yaml:"thinking"`
@@ -102,11 +101,14 @@ type PromptCacheConfig struct {
 }
 
 // PasteConfig はペーストモードの設定
+//
+// user-facing 設定: BracketedPaste のみ
+// MaxLines, MaxBytes, TimeoutSeconds は内部既定値（YAML 直接編集で変更可能）
 type PasteConfig struct {
 	BracketedPaste bool `yaml:"bracketed_paste"` // Bracketed Paste Mode を有効化（デフォルト: true）
-	MaxLines       int  `yaml:"max_lines"`       // 最大行数（デフォルト10000）
-	MaxBytes       int  `yaml:"max_bytes"`       // 最大バイト数（デフォルト1MB）
-	TimeoutSeconds int  `yaml:"timeout_seconds"` // タイムアウト秒（デフォルト60）
+	MaxLines       int  `yaml:"max_lines"`       // 内部: 最大行数（デフォルト10000）
+	MaxBytes       int  `yaml:"max_bytes"`       // 内部: 最大バイト数（デフォルト1MB）
+	TimeoutSeconds int  `yaml:"timeout_seconds"` // 内部: タイムアウト秒（デフォルト60）
 }
 
 // StreamingConfig はストリーミングレスポンスの設定
@@ -126,9 +128,10 @@ type BashConfig struct {
 	AllowInlineEdit bool     `yaml:"allow_inline_edit"` // sed -i等を許可（デフォルト: false）
 }
 
-// ListDirConfig は list_dir ツールの設定
+// ListDirConfig は list_dir ツールの設定（user-facing config から削除済み、YAML互換のみ保持）
+// 将来的には shared ignore の正式な置き場（project_map.additional_ignore_dirs 等）へ統合予定
 type ListDirConfig struct {
-	AdditionalIgnoreDirs []string `yaml:"additional_ignore_dirs"` // デフォルト除外に追加するディレクトリ名
+	AdditionalIgnoreDirs []string `yaml:"additional_ignore_dirs"` // 内部: デフォルト除外に追加するディレクトリ名
 }
 
 // ProjectMapConfig はプロジェクト構造マップの設定
@@ -138,16 +141,9 @@ type ProjectMapConfig struct {
 	AdditionalIgnoreDirs []string `yaml:"additional_ignore_dirs"` // デフォルト除外に追加するディレクトリ名
 }
 
-// GitStageConfig はgit_addツールの設定
+// GitStageConfig はgit_addツールの設定（user-facing config から削除済み、YAML互換のみ保持）
 type GitStageConfig struct {
-	BatchConfirm bool `yaml:"batch_confirm"` // 複数ファイルのバッチ確認UI（デフォルト: true）
-}
-
-// PlanModeConfig は Plan Mode の設定
-type PlanModeConfig struct {
-	MaxRetry               int  `yaml:"max_retry"`                 // 自動リトライ回数（デフォルト: 10）
-	StepTimeout            int  `yaml:"step_timeout"`              // ステップタイムアウト秒（デフォルト: 600）
-	ClearContextOnApproval bool `yaml:"clear_context_on_approval"` // Clear investigation context after plan approval
+	BatchConfirm bool `yaml:"batch_confirm"` // 標準挙動としてハードコード（設定不要）
 }
 
 // OpenAIConfig は OpenAI プロバイダーの設定
