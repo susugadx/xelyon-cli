@@ -530,7 +530,7 @@ func TestCtrlC_CopiesMouseSelection(t *testing.T) {
 	}
 }
 
-func TestCtrlC_InterruptTakesPriority(t *testing.T) {
+func TestCtrlC_CopyTakesPriorityOverInterrupt(t *testing.T) {
 	agent := &stubAgent{statusLine: "ready"}
 	agent.setProcessing(true)
 	m := newModelWithViewport(agent)
@@ -543,12 +543,12 @@ func TestCtrlC_InterruptTakesPriority(t *testing.T) {
 
 	m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyCtrlC})
 
-	// Cancel should be called, not copy
-	if agent.cancelCalls != 1 {
-		t.Fatalf("cancelCalls = %d, want 1", agent.cancelCalls)
+	// マウス選択中はコピーが優先（AI回答中でもキャンセルしない）
+	if agent.copyCalls != 1 {
+		t.Fatalf("copyCalls = %d, want 1 (copy should take priority over interrupt)", agent.copyCalls)
 	}
-	if agent.copyCalls != 0 {
-		t.Fatalf("copyCalls = %d, want 0 (interrupt should take priority)", agent.copyCalls)
+	if agent.cancelCalls != 0 {
+		t.Fatalf("cancelCalls = %d, want 0", agent.cancelCalls)
 	}
 }
 

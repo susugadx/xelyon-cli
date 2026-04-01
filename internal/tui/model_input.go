@@ -24,13 +24,14 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	// Ctrl+C は常に最優先
 	if msg.Type == tea.KeyCtrlC {
+		// マウス選択中はコピーを優先（AI回答中でも選択テキストのコピーを意図している）
+		if m.hasActiveMouseSelection() {
+			m.copyMouseSelection()
+			return m, nil
+		}
 		if m.agent.IsProcessing() {
 			m.agent.Cancel()
 			m.appendSystemInfo("⚠️  Interrupted. Press Ctrl+C again to exit.")
-			return m, nil
-		}
-		if m.hasActiveMouseSelection() {
-			m.copyMouseSelection()
 			return m, nil
 		}
 		now := time.Now()
