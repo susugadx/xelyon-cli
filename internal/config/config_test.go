@@ -105,18 +105,6 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.ProjectMap.ContextRatio != ProjectMapContextRatioDefault {
 		t.Errorf("ProjectMap.ContextRatio = %f, want %f", cfg.ProjectMap.ContextRatio, ProjectMapContextRatioDefault)
 	}
-	if cfg.UtilityModel.Enabled {
-		t.Error("UtilityModel.Enabled should default to false")
-	}
-	if cfg.UtilityModel.Provider != "" {
-		t.Errorf("UtilityModel.Provider = %q, want empty string", cfg.UtilityModel.Provider)
-	}
-	if cfg.UtilityModel.Model != "" {
-		t.Errorf("UtilityModel.Model = %q, want empty string", cfg.UtilityModel.Model)
-	}
-	if len(cfg.UtilityModel.Tasks) != 1 || cfg.UtilityModel.Tasks[0] != "web_search_compaction" {
-		t.Errorf("UtilityModel.Tasks = %#v, want [web_search_compaction]", cfg.UtilityModel.Tasks)
-	}
 	if !cfg.SubAgent.Enabled {
 		t.Error("SubAgent.Enabled should default to true")
 	}

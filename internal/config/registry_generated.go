@@ -36,7 +36,6 @@ var CategoryDefinitions = []CategoryDef{
 	{Name: "output", DisplayName: "Output", Icon: "📤", Fields: []string{"output.assistant_updates", "output.max_lines"}},
 	{Name: "web_search", DisplayName: "Web Search", Icon: "🔍", Fields: []string{"web_search.cache_enabled", "web_search.cache_size", "web_search.cache_ttl", "web_search.provider"}},
 	{Name: "sub_agent", DisplayName: "Sub-agent", Icon: "🚀", Fields: []string{"sub_agent.default_effort", "sub_agent.default_model", "sub_agent.enabled", "sub_agent.max_concurrent"}},
-	{Name: "utility_model", DisplayName: "Utility Model", Icon: "🪶", Fields: []string{"utility_model.enabled", "utility_model.model", "utility_model.provider", "utility_model.tasks"}},
 	{Name: "mcp", DisplayName: "MCP Servers", Icon: "🔌", Fields: []string{"mcp.enabled", "mcp.headless"}},
 	{Name: "hooks", DisplayName: "Hooks", Icon: "🏁", Fields: []string{"hooks.max_retry", "hooks.on_completion", "hooks.on_step_complete", "hooks.timeout"}},
 }
@@ -72,10 +71,6 @@ var FieldTypeMap = map[string]ConfigFieldType{
 	"sub_agent.default_model":            FieldTypeString,
 	"sub_agent.enabled":                  FieldTypeBool,
 	"sub_agent.max_concurrent":           FieldTypeInt,
-	"utility_model.enabled":              FieldTypeBool,
-	"utility_model.model":                FieldTypeString,
-	"utility_model.provider":             FieldTypeSelect,
-	"utility_model.tasks":                FieldTypeStringSlice,
 	"web_search.cache_enabled":           FieldTypeBool,
 	"web_search.cache_size":              FieldTypeInt,
 	"web_search.cache_ttl":               FieldTypeInt,
@@ -89,7 +84,6 @@ var SelectOptions = map[string][]string{
 	"general.ui_language":      {"auto", "ja", "en"},
 	"output.assistant_updates": {"", "verbose", "phase", "off"},
 	"sub_agent.default_effort": {"off", "low", "medium", "high"},
-	"utility_model.provider":   {"openai", "gemini", "claude", "deepseek", "openrouter", "groq", "ollama", "bedrock"},
 	"web_search.provider":      {"openai", "gemini", "claude"},
 }
 
@@ -123,10 +117,6 @@ var FieldDescriptions = map[string]string{
 	"sub_agent.default_model":            "既定モデル（空でメイン provider の最安モデルを自動選択）",
 	"sub_agent.enabled":                  "サブエージェント機能を有効化",
 	"sub_agent.max_concurrent":           "同時実行上限（デフォルト: 5）",
-	"utility_model.enabled":              "utility model を有効化",
-	"utility_model.model":                "補助タスク用モデル（空 = provider_models の default_model）",
-	"utility_model.provider":             "補助タスク用プロバイダー（openai / gemini / claude など）",
-	"utility_model.tasks":                "許可する軽量タスク（例: web_search_compaction）",
 	"web_search.cache_enabled":           "キャッシュを有効化（デフォルト: true）",
 	"web_search.cache_size":              "最大キャッシュ数（デフォルト: 50）",
 	"web_search.cache_ttl":               "キャッシュTTL秒数（デフォルト: 3600 = 1時間）",

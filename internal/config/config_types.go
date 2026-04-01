@@ -22,17 +22,16 @@ type Config struct {
 	ListDir         ListDirConfig                  `yaml:"list_dir"`
 	ProjectMap      ProjectMapConfig               `yaml:"project_map"`
 
-	GitStage       GitStageConfig     `yaml:"git_stage"`
-	LSP            LSPConfig          `yaml:"lsp"`
-	OpenAI         OpenAIConfig       `yaml:"openai"`
-	Thinking       ThinkingConfig     `yaml:"thinking"`
-	Output         OutputConfig       `yaml:"output"`
-	WebSearch      WebSearchConfig    `yaml:"web_search"`
-	SubAgent       SubAgentConfig     `yaml:"sub_agent"`
-	UtilityModel   UtilityModelConfig `yaml:"utility_model"`
-	MCP            MCPConfig          `yaml:"mcp"`
-	Hooks          HooksConfig        `yaml:"hooks"`
-	SubAgentPrompt string             `yaml:"-"`
+	GitStage       GitStageConfig  `yaml:"git_stage"`
+	LSP            LSPConfig       `yaml:"lsp"`
+	OpenAI         OpenAIConfig    `yaml:"openai"`
+	Thinking       ThinkingConfig  `yaml:"thinking"`
+	Output         OutputConfig    `yaml:"output"`
+	WebSearch      WebSearchConfig `yaml:"web_search"`
+	SubAgent       SubAgentConfig  `yaml:"sub_agent"`
+	MCP            MCPConfig       `yaml:"mcp"`
+	Hooks          HooksConfig     `yaml:"hooks"`
+	SubAgentPrompt string          `yaml:"-"`
 	// 将来の拡張用
 	// Cloud CloudConfig `yaml:"cloud,omitempty"`
 }
@@ -173,14 +172,6 @@ type SubAgentConfig struct {
 	DefaultModel  string `yaml:"default_model"`  // サブエージェント既定モデル（空でメイン provider の最安モデルを自動選択）
 	DefaultEffort string `yaml:"default_effort"` // サブエージェント既定推論強度（空または off で無効）
 	MaxConcurrent int    `yaml:"max_concurrent"` // 同時実行上限
-}
-
-// UtilityModelConfig は軽量な補助タスク専用モデルの設定
-type UtilityModelConfig struct {
-	Enabled  bool     `yaml:"enabled"`            // utility model を有効化
-	Provider string   `yaml:"provider,omitempty"` // 使用プロバイダー（openai/gemini/claude 等）
-	Model    string   `yaml:"model,omitempty"`    // 使用モデル（空 = provider_models の default_model）
-	Tasks    []string `yaml:"tasks,omitempty"`    // 許可する軽量タスク
 }
 
 // MCPConfig は MCP (Model Context Protocol) サーバー接続の設定

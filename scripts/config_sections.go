@@ -214,29 +214,6 @@ var Sections = map[string]SectionInfo{
 			"default_effort": {"off", "low", "medium", "high"},
 		},
 	},
-	"utility_model": {
-		Title: "Utility Model設定",
-		Icon:  "🪶",
-		Comments: []string{
-			"main 推論や compression.model とは別の軽量補助モデル設定",
-			"初期実装では web_search 結果圧縮のような限定タスクだけに使用",
-		},
-		Fields: map[string]string{
-			"enabled":  "utility model を有効化",
-			"provider": "補助タスク用プロバイダー（openai / gemini / claude など）",
-			"model":    "補助タスク用モデル（空 = provider_models の default_model）",
-			"tasks":    "許可する軽量タスク（例: web_search_compaction）",
-		},
-		FieldTypes: map[string]string{
-			"enabled":  "bool",
-			"provider": "select",
-			"model":    "string",
-			"tasks":    "[]string",
-		},
-		SelectOpts: map[string][]string{
-			"provider": {"openai", "gemini", "claude", "deepseek", "openrouter", "groq", "ollama", "bedrock"},
-		},
-	},
 	"mcp": {
 		Title: "MCP設定",
 		Icon:  "🔌",
@@ -289,7 +266,6 @@ var SectionOrder = []string{
 	"output",
 	"web_search",
 	"sub_agent",
-	"utility_model",
 	"mcp",
 	"hooks",
 }
@@ -307,7 +283,6 @@ var CategoryOrder = []string{
 	"output",
 	"web_search",
 	"sub_agent",
-	"utility_model",
 	"mcp",
 	"hooks",
 }
@@ -326,7 +301,6 @@ var SectionToCategory = map[string]string{
 	"output":           "output",
 	"web_search":       "web_search",
 	"sub_agent":        "sub_agent",
-	"utility_model":    "utility_model",
 	"mcp":              "mcp",
 	"hooks":            "hooks",
 }
@@ -389,11 +363,6 @@ var Categories = map[string]CategoryInfo{
 		DisplayName: "Sub-agent",
 		Icon:        "🚀",
 		Sections:    []string{"sub_agent"},
-	},
-	"utility_model": {
-		DisplayName: "Utility Model",
-		Icon:        "🪶",
-		Sections:    []string{"utility_model"},
 	},
 	"mcp": {
 		DisplayName: "MCP Servers",

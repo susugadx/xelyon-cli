@@ -292,12 +292,6 @@ func DefaultConfig() *Config {
 			DefaultEffort: "",
 			MaxConcurrent: 1,
 		},
-		UtilityModel: UtilityModelConfig{
-			Enabled:  false,
-			Provider: "",
-			Model:    "",
-			Tasks:    []string{"web_search_compaction"},
-		},
 		MCP: MCPConfig{
 			Enabled:  true,  // デフォルトON - MCP接続有効
 			Headless: false, // デフォルトOFF - Headlessモードでは接続しない

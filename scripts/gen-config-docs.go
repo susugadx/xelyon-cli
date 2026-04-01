@@ -244,7 +244,6 @@ func generateConfigDetails(structs []StructInfo, defaults map[string]interface{}
 		"GitStageConfig": "git_stage",
 		"LSPConfig":          "lsp",
 		"WebSearchConfig":    "web_search",
-		"UtilityModelConfig": "utility_model",
 	}
 
 	// 順序を定義（内部専用: LoopDetection, APIRetry, Diff は除外）
@@ -259,7 +258,6 @@ func generateConfigDetails(structs []StructInfo, defaults map[string]interface{}
 		"GitStageConfig",
 		"LSPConfig",
 		"WebSearchConfig",
-		"UtilityModelConfig",
 	}
 
 	structMap := make(map[string]StructInfo)

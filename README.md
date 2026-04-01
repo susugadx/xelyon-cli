@@ -257,16 +257,7 @@ xelyon --provider gemini --model gemini-2.5-flash
 web_search:
   provider: gemini
 
-# 長い web_search 結果だけを軽量モデルで再圧縮（任意）
-utility_model:
-  enabled: true
-  provider: openai
-  model: gpt-5.2-mini
-  tasks:
-    - web_search_compaction
 ```
-
-`utility_model` は検索結果圧縮などの軽量補助タスク専用です。メイン推論や `compression.model` には影響しません。
 
 Gemini API キーは無料で取得できます: https://aistudio.google.com/apikey
 
