@@ -146,15 +146,17 @@ type GitStageConfig struct {
 	BatchConfirm bool `yaml:"batch_confirm"` // 標準挙動としてハードコード（設定不要）
 }
 
-// OpenAIConfig は OpenAI プロバイダーの設定
+// OpenAIConfig は OpenAI プロバイダーの内部設定（user-facing config から削除済み、YAML 互換は維持）
+// Responses API ルーティングはプレフィックスマッチで自動判定し、このリストはフォールバック用
 type OpenAIConfig struct {
-	ResponsesAPIModels []string `yaml:"responses_api_models"` // Responses API を使用するモデル
+	ResponsesAPIModels []string `yaml:"responses_api_models"` // 内部: Responses API フォールバックリスト
 }
 
-// ThinkingConfig は Extended Thinking の設定
+// ThinkingConfig は Extended Thinking の内部設定（user-facing config から削除済み、YAML 互換は維持）
+// 正規の切り替えルートは /think コマンド。config のデフォルト値は runtime 初期値として使用
 type ThinkingConfig struct {
-	Enabled bool   `yaml:"enabled"` // デフォルト: false
-	Level   string `yaml:"level"`   // low/medium/high/xhigh（デフォルト: medium）
+	Enabled bool   `yaml:"enabled"` // 内部: デフォルト false（/think コマンドで変更）
+	Level   string `yaml:"level"`   // 内部: low/medium/high/xhigh（デフォルト: medium、/think コマンドで変更）
 }
 
 // WebSearchConfig は Web 検索プロバイダーとキャッシュの設定

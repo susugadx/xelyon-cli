@@ -116,6 +116,8 @@ func filterInternalFields(data []byte) ([]byte, error) {
 		"git_stage":       true,
 		"plan_mode":       true,
 		"list_dir":        true,
+		"openai":          true, // Responses API ルーティングは内部自動判定（YAML 互換は維持）
+		"thinking":        true, // /think コマンドが正規ルート（YAML 互換は維持）
 	}
 
 	// root mapping の content をフィルタ

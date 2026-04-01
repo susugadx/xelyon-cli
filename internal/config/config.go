@@ -271,11 +271,11 @@ func DefaultConfig() *Config {
 			},
 		},
 		OpenAI: OpenAIConfig{
-			ResponsesAPIModels: []string{}, // プレフィックスマッチで自動判定（ユーザーカスタムモデル追加用）
+			ResponsesAPIModels: []string{}, // 内部: プレフィックスマッチのフォールバック（YAML 直接編集で追加可能）
 		},
 		Thinking: ThinkingConfig{
-			Enabled: false,
-			Level:   "medium",
+			Enabled: false,    // 内部 runtime 初期値（/think コマンドが正規ルート）
+			Level:   "medium", // 内部 runtime 初期値（/think コマンドが正規ルート）
 		},
 		Output: OutputConfig{
 			MaxLines:         5,  // デフォルト5行で折りたたみ
@@ -487,7 +487,7 @@ func applyDefaults(cfg *Config) {
 		cfg.LSP = defaults.LSP
 	}
 	// Note: Diff.ContextLines は0が有効値なので、デフォルト適用は行わない
-	// Thinking: Level が空の場合はデフォルト適用
+	// Thinking: 内部 runtime 初期値（/think コマンドが正規ルート）
 	if cfg.Thinking.Level == "" {
 		cfg.Thinking.Level = defaults.Thinking.Level
 	}

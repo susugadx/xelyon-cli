@@ -149,22 +149,6 @@ lsp:
     enabled: true
 
 # ============================================================
-# OpenAI設定
-# ============================================================
-openai:
-    # Responses APIを使用するモデル
-    responses_api_models: []
-
-# ============================================================
-# Extended Thinking設定
-# ============================================================
-thinking:
-    # 有効化
-    enabled: false
-    # レベル: low / medium / high / xhigh
-    level: medium
-
-# ============================================================
 # ツール出力表示設定
 # ============================================================
 output:
@@ -392,33 +376,16 @@ cat script.sh | bash
 echo password | sudo -S ...
 ```
 
-### OpenAI設定 (`openai`)
+### OpenAI設定 (`openai`)（内部）
 
-OpenAI固有の設定を行います。
+> **注意**: `/config` メニューには表示されません。Responses API ルーティングはプレフィックスマッチで自動判定されるため、通常は設定不要です。
+> カスタムモデルを Responses API で使いたい場合のみ、YAML 直接編集で `responses_api_models` にモデル名を追加してください。
 
 ```yaml
 openai:
   responses_api_models:
-    - gpt-5.2-codex
-    - gpt-5.1-codex
-    - gpt-5.1-codex-max
-    - gpt-5-codex
+    - my-custom-responses-model
 ```
-
-#### `responses_api_models`
-- **型**: string[]
-- **デフォルト**: `["gpt-5.2-codex", "gpt-5.1-codex", "gpt-5.1-codex-max", "gpt-5-codex"]`
-- **説明**: Responses API を使用するモデルのリスト
-
-**動作:**
-- リストに含まれるモデル名が指定された場合、自動的に Responses API (`/v1/responses`) を使用
-- それ以外のモデルは従来の Chat Completions API (`/v1/chat/completions`) を使用
-- モデル名の一部一致で判定（`gpt-5.2-codex-max` も対象になる）
-
-**Responses API の特徴:**
-- 会話コンテキストをサーバー側で管理
-- Compact API による効率的な圧縮
-- ZDR（Zero Data Retention）対応
 
 ### LSP連携設定 (`lsp`)
 
@@ -464,45 +431,18 @@ lsp:
 
 **遅延起動:** LSPサーバーは初回使用時に起動します（XELYON起動時には起動しません）。
 
-### Extended Thinking設定 (`thinking`)
+### Extended Thinking設定 (`thinking`)（内部）
 
-> **重要**: この機能は対応モデルでのみ動作します。
-> - **Claude**: Sonnet 4 以降
-> - **OpenAI**: gpt-5.2 系
-> - **Gemini**: 2.5 Pro 系（Flash は非対応）
-> - **DeepSeek**: 自動で reasoner モデルに切り替わります
+> **注意**: `/config` メニューには表示されません。セッション中の切り替えは `/think` コマンドを使用してください。
+> 既存 YAML の `thinking:` セクションは互換読み込みされます（runtime 初期値として機能）。
 
-```yaml
-thinking:
-  enabled: false    # デフォルト OFF
-  level: medium     # low/medium/high/xhigh
-```
+**対応モデル:**
+- **Claude**: Sonnet 4 以降
+- **OpenAI**: gpt-5.2 系
+- **Gemini**: 2.5 Pro 系（Flash は非対応）
+- **DeepSeek**: 自動で reasoner モデルに切り替わります
 
-#### `enabled`
-- **型**: boolean
-- **デフォルト**: `false`
-- **説明**: Extended Thinking を有効化
-
-#### `level`
-- **型**: string
-- **デフォルト**: `medium`
-- **選択肢**: `low`, `medium`, `high`, `xhigh`
-- **説明**: 推論の深さレベル
-
-**レベル別パラメータ:**
-
-| Level | Claude 4.6 (effort) | Claude 4.5以前 (budget_tokens) | OpenAI (effort) | Gemini (budget) |
-|-------|---------------------|-------------------------------|-----------------|-----------------|
-| low | low | 5,000 | low | 5,000 |
-| medium | medium | 10,000 | medium | 10,000 |
-| high | high | 20,000 | high | 20,000 |
-| xhigh | max (Opus) / high | 40,000 | xhigh | 40,000 |
-
-> Claude Opus 4.6 / Sonnet 4.6 では `type: "adaptive"` + `output_config.effort` を使用。
-> それ以前のモデルでは従来の `type: "enabled"` + `budget_tokens` を使用。
-> `xhigh` の `max` は Opus 4.6 のみ対応（Sonnet 4.6 では `high` にフォールバック）。
-
-**コマンドで切り替え:**
+**コマンドで切り替え（正規ルート）:**
 
 ```
 /think          # 現在の状態を表示
@@ -514,14 +454,18 @@ thinking:
 /think xhigh    # xhigh レベルで有効化
 ```
 
-設定ファイルを変更せずに、セッション中にリアルタイムで切り替えられます。
+**レベル別パラメータ:**
+
+| Level | Claude 4.6 (effort) | Claude 4.5以前 (budget_tokens) | OpenAI (effort) | Gemini (budget) |
+|-------|---------------------|-------------------------------|-----------------|-----------------|
+| low | low | 5,000 | low | 5,000 |
+| medium | medium | 10,000 | medium | 10,000 |
+| high | high | 20,000 | high | 20,000 |
+| xhigh | max (Opus) / high | 40,000 | xhigh | 40,000 |
 
 **Codex モデルの制限:**
 
-OpenAI Codex モデル（`gpt-5.2-codex`, `gpt-5.1-codex` 等）は reasoning が必須のため、`/think off` を実行しても完全に無効化されません：
-
-- `/think off` → `low` レベルにフォールバック（警告メッセージ表示）
-- Codex 以外のモデルでは通常通り無効化されます
+OpenAI Codex モデル（`gpt-5.2-codex`, `gpt-5.1-codex` 等）は reasoning が必須のため、`/think off` → `low` レベルにフォールバックします。
 
 ### ツール確認設定 (`tool_confirm`)（レガシー）
 

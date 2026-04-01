@@ -32,10 +32,10 @@ func TestShowConfigDefault(t *testing.T) {
 func TestShowConfigWithDiff(t *testing.T) {
 	cfg := DefaultConfig()
 
-	// 設定を変更
+	// user-facing 設定を変更
 	cfg.DefaultProvider = "openai"
 	cfg.DefaultModel = "gpt-4"
-	cfg.APIRetry.Timeout = 7200
+	cfg.Compression.TriggerPercent = 50
 
 	output := ShowConfig(cfg)
 
@@ -53,8 +53,8 @@ func TestShowConfigWithDiff(t *testing.T) {
 		t.Error("Expected 'gpt-4' in output")
 	}
 
-	if !strings.Contains(output, "7200") {
-		t.Error("Expected '7200' in output")
+	if !strings.Contains(output, "50") {
+		t.Error("Expected '50' in output")
 	}
 }
 
@@ -62,17 +62,30 @@ func TestShowConfigStructure(t *testing.T) {
 	cfg := DefaultConfig()
 	output := ShowConfig(cfg)
 
-	// セクションが含まれているか
+	// user-facing セクションが含まれているか
 	expectedSections := []string{
 		"[default_provider]",
 		"[compression]",
-		"[api_retry]",
-		"[bash]",
+		"[execution]",
 	}
 
 	for _, section := range expectedSections {
 		if !strings.Contains(output, section) {
 			t.Errorf("Expected section %s in output", section)
+		}
+	}
+
+	// 内部専用セクションは非表示
+	hiddenSections := []string{
+		"[api_retry]",
+		"[bash]",
+		"[thinking]",
+		"[openai]",
+	}
+
+	for _, section := range hiddenSections {
+		if strings.Contains(output, section) {
+			t.Errorf("Internal section %s should not appear in output", section)
 		}
 	}
 }

@@ -64,6 +64,22 @@ func ShowConfig(current *Config) string {
 	return sb.String()
 }
 
+// hiddenShowSections は /config show で非表示にする内部専用セクション
+var hiddenShowSections = map[string]bool{
+	"loop_detection":  true,
+	"api_retry":       true,
+	"diff":            true,
+	"command_aliases": true,
+	"prompt_cache":    true,
+	"streaming":       true,
+	"tool_confirm":    true,
+	"bash":            true,
+	"git_stage":       true,
+	"list_dir":        true,
+	"openai":          true, // 内部ルーティング（YAML 互換は維持）
+	"thinking":        true, // /think コマンドが正規ルート（YAML 互換は維持）
+}
+
 // compareConfigs はリフレクションで2つの設定を比較
 func compareConfigs(current, defaults *Config, prefix string) []ConfigDiff {
 	var diffs []ConfigDiff
@@ -82,6 +98,11 @@ func compareConfigs(current, defaults *Config, prefix string) []ConfigDiff {
 		}
 		// "omitempty" を除去
 		yamlKey := strings.Split(yamlTag, ",")[0]
+
+		// 内部専用セクションは非表示
+		if hiddenShowSections[yamlKey] {
+			continue
+		}
 
 		// プレフィックス付きキー
 		fullKey := yamlKey

@@ -242,8 +242,6 @@ func generateConfigDetails(structs []StructInfo, defaults map[string]interface{}
 		"StreamingConfig":    "streaming",
 		"BashConfig":         "bash",
 		"GitStageConfig": "git_stage",
-		"OpenAIConfig":   "openai",
-		"ThinkingConfig":     "thinking",
 		"LSPConfig":          "lsp",
 		"WebSearchConfig":    "web_search",
 		"UtilityModelConfig": "utility_model",
@@ -259,9 +257,7 @@ func generateConfigDetails(structs []StructInfo, defaults map[string]interface{}
 		"PasteConfig",
 		"BashConfig",
 		"GitStageConfig",
-		"OpenAIConfig",
 		"LSPConfig",
-		"ThinkingConfig",
 		"WebSearchConfig",
 		"UtilityModelConfig",
 	}
@@ -359,8 +355,6 @@ func formatTitle(structName string) string {
 		"StreamingConfig":    "ストリーミング設定",
 		"BashConfig":         "bashツール設定",
 		"GitStageConfig": "git_add設定",
-		"OpenAIConfig":   "OpenAI設定",
-		"ThinkingConfig":     "Extended Thinking設定",
 		"LSPConfig":          "LSP連携設定",
 		"WebSearchConfig":    "Web検索設定",
 	}

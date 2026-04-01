@@ -150,31 +150,8 @@ var Sections = map[string]SectionInfo{
 			"servers":             "structmap",
 		},
 	},
-	"openai": {
-		Title: "OpenAI設定",
-		Icon:  "🌟",
-		Fields: map[string]string{
-			"responses_api_models": "Responses APIを使用するモデル",
-		},
-		FieldTypes: map[string]string{
-			"responses_api_models": "[]string",
-		},
-	},
-	"thinking": {
-		Title: "Extended Thinking設定",
-		Icon:  "🧠",
-		Fields: map[string]string{
-			"enabled": "有効化",
-			"level":   "レベル: low / medium / high / xhigh",
-		},
-		FieldTypes: map[string]string{
-			"enabled": "bool",
-			"level":   "select",
-		},
-		SelectOpts: map[string][]string{
-			"level": {"low", "medium", "high", "xhigh"},
-		},
-	},
+	// openai: user-facing config から削除済み（内部ルーティングで使用、YAML 互換は維持）
+	// thinking: user-facing config から削除済み（/think コマンドが正規ルート、YAML 互換は維持）
 	"output": {
 		Title: "ツール出力表示設定",
 		Icon:  "📤",
@@ -309,8 +286,6 @@ var SectionOrder = []string{
 	"paste",
 	"project_map",
 	"lsp",
-	"openai",
-	"thinking",
 	"output",
 	"web_search",
 	"sub_agent",
@@ -329,8 +304,6 @@ var CategoryOrder = []string{
 	"paste",
 	"project_map",
 	"lsp",
-	"openai",
-	"thinking",
 	"output",
 	"web_search",
 	"sub_agent",
@@ -350,8 +323,6 @@ var SectionToCategory = map[string]string{
 	"paste":            "paste",
 	"project_map":      "project_map",
 	"lsp":              "lsp",
-	"openai":           "openai",
-	"thinking":         "thinking",
 	"output":           "output",
 	"web_search":       "web_search",
 	"sub_agent":        "sub_agent",
@@ -403,16 +374,6 @@ var Categories = map[string]CategoryInfo{
 		DisplayName: "LSP Servers",
 		Icon:        "🔧",
 		Sections:    []string{"lsp"},
-	},
-	"openai": {
-		DisplayName: "OpenAI",
-		Icon:        "🌟",
-		Sections:    []string{"openai"},
-	},
-	"thinking": {
-		DisplayName: "Thinking",
-		Icon:        "🧠",
-		Sections:    []string{"thinking"},
 	},
 	"output": {
 		DisplayName: "Output",

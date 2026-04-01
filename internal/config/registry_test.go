@@ -152,7 +152,6 @@ func TestSelectOptions(t *testing.T) {
 	}{
 		{"default_provider", 6}, // deepseek, claude, openai, gemini, groq, ollama
 		{"execution.mode", 3},   // balanced, trusted, full_auto
-		{"thinking.level", 4},   // low, medium, high, xhigh
 		{"output.assistant_updates", 4},
 	}
 
@@ -190,6 +189,37 @@ func TestFieldDescriptions(t *testing.T) {
 		}
 		if desc == "" {
 			t.Errorf("FieldDescriptions[%s] is empty", path)
+		}
+	}
+}
+
+func TestInternalSectionsNotInRegistry(t *testing.T) {
+	// thinking / openai は user-facing config から削除済み
+	// make gen-all で誤って再導入されないことを保証する
+	internalFields := []string{
+		"thinking.enabled",
+		"thinking.level",
+		"openai.responses_api_models",
+	}
+
+	for _, path := range internalFields {
+		if _, ok := FieldTypeMap[path]; ok {
+			t.Errorf("FieldTypeMap should not contain internal field: %s", path)
+		}
+		if _, ok := FieldDescriptions[path]; ok {
+			t.Errorf("FieldDescriptions should not contain internal field: %s", path)
+		}
+	}
+
+	internalCategories := []string{"thinking", "openai"}
+	for _, cat := range internalCategories {
+		for _, def := range CategoryDefinitions {
+			if def.Name == cat {
+				t.Errorf("CategoryDefinitions should not contain internal category: %s", cat)
+			}
+		}
+		if _, ok := SelectOptions["thinking.level"]; ok {
+			t.Errorf("SelectOptions should not contain internal field: thinking.level")
 		}
 	}
 }
