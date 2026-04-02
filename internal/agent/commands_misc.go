@@ -432,6 +432,16 @@ func printToolObservabilitySection(out io.Writer, stats *SessionStats) {
 	selTable.AddRow("search_code(multi)", fmt.Sprintf("%d", obs.SearchCodeMultiPatternCalls))
 	selTable.AddRow("search_code(missed multi)", fmt.Sprintf("%d", obs.SearchCodeMissedMultiPattern))
 	_, _ = fmt.Fprint(out, selTable.RenderCompact())
+
+	_, _ = fmt.Fprintln(out)
+	green.Fprintln(out, "📍 Exploration")
+	explorationTable := ui.NewTable()
+	explorationTable.AddRow("search_code(impact)", fmt.Sprintf("%d", obs.SearchCodeImpactCalls))
+	explorationTable.AddRow("search_code(explicit multi)", fmt.Sprintf("%d", obs.SearchCodeExplicitMultiCalls))
+	explorationTable.AddRow("read_file(targets)", fmt.Sprintf("%d", obs.ReadFileTargetCalls))
+	explorationTable.AddRow("search_code(batch merges)", fmt.Sprintf("%d", obs.SearchCodeBatchMerges))
+	explorationTable.AddRow("read_file(batch merges)", fmt.Sprintf("%d", obs.ReadFileBatchMerges))
+	_, _ = fmt.Fprint(out, explorationTable.RenderCompact())
 }
 
 // printSavingsSection は API 入力トークン削減の推定量を表示する。

@@ -463,14 +463,21 @@ func (a *Agent) recordToolObservability(toolName string, rawArgs map[string]any,
 				obs.ReadFileBatchCalls++
 			}
 		}
+		if hasReadFileTargets(rawArgs, stringArgs) {
+			obs.ReadFileTargetCalls++
+		}
 		// empty-path error: canonical error string を検出
 		if result == "Error: paths is empty" {
 			obs.ReadFileEmptyPathsErrors++
 		}
 	case "search_code":
-		// multi-pattern: explicit comma-separated patterns, or intent=impact
-		// single-pattern calls that are internally expanded to the multi-pattern path.
-		if isObservedSearchCodeMulti(rawArgs, stringArgs) {
+		if isSearchCodeImpact(rawArgs, stringArgs) {
+			obs.SearchCodeImpactCalls++
+			return
+		}
+		// explicit multi-pattern only. impact は独立メトリクスとして扱う。
+		if isObservedSearchCodeExplicitMulti(rawArgs, stringArgs) {
+			obs.SearchCodeExplicitMultiCalls++
 			obs.SearchCodeMultiPatternCalls++
 			return
 		}
@@ -544,16 +551,18 @@ func buildSearchCodeObservabilityArgs(rawArgs map[string]any, stringArgs map[str
 	return args
 }
 
-func isObservedSearchCodeMulti(rawArgs map[string]any, stringArgs map[string]string) bool {
+func isSearchCodeImpact(rawArgs map[string]any, stringArgs map[string]string) bool {
+	args := buildSearchCodeObservabilityArgs(rawArgs, stringArgs)
+	return strings.EqualFold(strings.TrimSpace(args["intent"]), "impact")
+}
+
+func isObservedSearchCodeExplicitMulti(rawArgs map[string]any, stringArgs map[string]string) bool {
 	args := buildSearchCodeObservabilityArgs(rawArgs, stringArgs)
 	pattern := strings.TrimSpace(args["pattern"])
 	if pattern == "" {
 		return false
 	}
-	if isMultiPatternArg(pattern) {
-		return true
-	}
-	return strings.EqualFold(strings.TrimSpace(args["intent"]), "impact")
+	return isMultiPatternArg(pattern)
 }
 
 func stringifySearchCodeArg(v any) (string, bool) {
@@ -629,6 +638,18 @@ func isBatchPaths(pathsVal any) bool {
 		// JSON 文字列の場合: "[" で始まりカンマを含む → 2要素以上
 		s := strings.TrimSpace(v)
 		return len(s) > 2 && s[0] == '[' && strings.Contains(s, ",")
+	}
+	return false
+}
+
+func hasReadFileTargets(rawArgs map[string]any, stringArgs map[string]string) bool {
+	if targetsVal, ok := rawArgs["targets"]; ok {
+		if targets, ok := stringifySearchCodeArg(targetsVal); ok {
+			return strings.TrimSpace(targets) != ""
+		}
+	}
+	if targets, ok := stringArgs["targets"]; ok {
+		return strings.TrimSpace(targets) != ""
 	}
 	return false
 }

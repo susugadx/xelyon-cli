@@ -67,6 +67,9 @@ func (m *OptimizationMetrics) hasAny() bool {
 type ToolObservability struct {
 	ReadFileEmptyPathsErrors     int // read_file が paths is empty で失敗した回数
 	ReadFileBatchCalls           int // read_file(paths=...) の batch 呼び出し回数
+	ReadFileTargetCalls          int // read_file(targets=...) の呼び出し回数
+	SearchCodeImpactCalls        int // search_code(intent=impact) の呼び出し回数
+	SearchCodeExplicitMultiCalls int // search_code の明示的 multi-pattern 呼び出し回数
 	SearchCodeMultiPatternCalls  int // search_code の multi-pattern 呼び出し回数
 	SearchCodeMissedMultiPattern int // search_code の serial single-pattern から観測した missed multi-pattern 回数
 	SearchCodeBatchMerges        int // search_code multi-pattern batch merge 回数
