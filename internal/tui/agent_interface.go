@@ -1,5 +1,7 @@
 package tui
 
+import "github.com/susugadx/xelyon-cli/internal/config"
+
 // AgentInterface は tui パッケージから agent パッケージへの依存を逆転させる。
 // agent パッケージがこのインターフェースを実装する。
 type AgentInterface interface {
@@ -28,4 +30,16 @@ type AgentInterface interface {
 
 	// CopyText は指定テキストをクリップボードにコピーする。
 	CopyText(text string) error
+
+	// LoadConfigForEdit は設定ファイルを読み込み、編集用のクローンを返す。
+	LoadConfigForEdit() (*config.Config, error)
+
+	// SaveAndSyncConfig は設定をファイルに保存し、runtime に反映する。
+	SaveAndSyncConfig(cfg *config.Config) error
+
+	// GetProviderName は現在のプロバイダー名を返す。
+	GetProviderName() string
+
+	// ResolveAlias はコマンド名を alias 解決する（例: "/c" → "/config"）。
+	ResolveAlias(cmd string) string
 }

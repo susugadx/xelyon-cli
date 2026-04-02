@@ -1,6 +1,10 @@
 package tui
 
-import "time"
+import (
+	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/config"
+)
 
 // ChatMessage は会話ログの1エントリ
 type ChatMessage struct {
@@ -45,4 +49,13 @@ type UpdateStatusMsg struct {
 // AgentDoneMsg はagent.chat()の完了通知
 type AgentDoneMsg struct {
 	Error error
+}
+
+// OpenConfigScreenMsg は config screen への遷移を要求する Msg
+type OpenConfigScreenMsg struct{}
+
+// ConfigSavedMsg は config 保存完了を通知する Msg
+type ConfigSavedMsg struct {
+	Error    error
+	Snapshot *config.Config
 }

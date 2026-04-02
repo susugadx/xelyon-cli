@@ -7,13 +7,14 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tui"
 )
 
 // tuiBlockingCommands は TUI モードで stdin を読もうとしてデッドロックするコマンド一覧。
 // bubbletea が stdin を占有しているため、これらは TUI モードでは実行不可。
+// /config は TUI 専用画面で処理するため、ここには含めない。
 var tuiBlockingCommands = map[string]string{
-	"/config":  "Use --no-tui mode or edit ~/.xelyon/config.yaml directly",
 	"/project": "Use --no-tui mode or edit xelyon.yaml directly",
 	"/init":    "Use --no-tui mode: xelyon --no-tui then /init",
 	"/paste":   "Paste text directly into the input field",
@@ -84,17 +85,22 @@ func (a *TUIAdapter) HandleCommand(cmd string) bool {
 		return false
 	}
 	baseCmd := resolveCommandAliasWithConfig(parts[0], a.agent.cfg())
+	args := parts[1:]
 
 	// /compress, /lsp install は引数次第でブロッキングになるが、
 	// 安全のために常時許可し、確認プロンプト到達時にEOFでスキップされる。
 	// ただし明確にブロッキングなコマンドは事前に拒否する。
 	if hint, blocked := tuiBlockingCommands[baseCmd]; blocked {
-		// /config <key> <value> のように引数付きの場合は非ブロッキングなのでOK
-		if baseCmd == "/config" && len(parts) >= 2 {
-			return handleSpecialCommand(cmd, a.agent)
-		}
 		_, _ = fmt.Fprintf(a.agent.output(), "⚠️  %s is not available in TUI mode.\n   %s\n", baseCmd, hint)
 		return true
+	}
+
+	if baseCmd == "/config" {
+		if !isNonInteractiveConfigSubcommand(args) {
+			_, _ = fmt.Fprintf(a.agent.output(), "⚠️  %s is not available in TUI mode.\n   Use bare /config, /config show, or /config model <name>.\n", cmd)
+			return true
+		}
+		return handleSpecialCommand(cmd, a.agent)
 	}
 
 	return handleSpecialCommand(cmd, a.agent)
@@ -123,6 +129,30 @@ func (a *TUIAdapter) IsProcessing() bool {
 // CopyText は指定テキストをクリップボードにコピーする。
 func (a *TUIAdapter) CopyText(text string) error {
 	return clipboardWriteAll(text)
+}
+
+// LoadConfigForEdit は設定ファイルを読み込み、編集用のクローンを返す。
+func (a *TUIAdapter) LoadConfigForEdit() (*config.Config, error) {
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		return nil, err
+	}
+	return config.CloneConfig(cfg), nil
+}
+
+// SaveAndSyncConfig は設定をファイルに保存し、runtime に反映する。
+func (a *TUIAdapter) SaveAndSyncConfig(cfg *config.Config) error {
+	return a.agent.SaveAndSyncConfig(cfg)
+}
+
+// GetProviderName は現在のプロバイダー名を返す。
+func (a *TUIAdapter) GetProviderName() string {
+	return a.agent.ProviderName
+}
+
+// ResolveAlias はコマンド名を alias 解決する。
+func (a *TUIAdapter) ResolveAlias(cmd string) string {
+	return resolveCommandAliasWithConfig(cmd, a.agent.cfg())
 }
 
 // CopyLastOutput は直近のAI出力をクリップボードにコピーする。

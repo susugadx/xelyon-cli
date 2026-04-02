@@ -192,7 +192,7 @@ type HooksConfig struct {
 type LSPConfig struct {
 	Enabled           bool                       `yaml:"enabled"`                       // LSP機能を有効化（デフォルト: true）
 	SkipInstallPrompt bool                       `yaml:"skip_install_prompt,omitempty"` // インストール提案をスキップ
-	Servers           map[string]LSPServerConfig `yaml:"servers,omitempty"`
+	Servers           map[string]LSPServerConfig `yaml:"servers"`
 }
 
 // LSPServerConfig は個別のLSPサーバー設定

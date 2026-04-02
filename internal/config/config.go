@@ -330,6 +330,13 @@ func LoadConfig() (*Config, error) {
 	// デフォルト値で初期化してからYAMLをマージ
 	// これにより、YAMLで明示的に設定されたフィールドのみが上書きされる
 	cfg := DefaultConfig()
+	lspSectionExists := yamlHasKey(data, "lsp")
+	lspServersExists := yamlHasNestedKey(data, "lsp", "servers")
+	if lspServersExists {
+		// lsp.servers は nil と empty map を区別したいので、
+		// YAML に存在する場合だけ defaults 側の既定 map を事前に外す。
+		cfg.LSP.Servers = nil
+	}
 	if err := yaml.Unmarshal(data, cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
@@ -338,7 +345,10 @@ func LoadConfig() (*Config, error) {
 	migrateOldKeys(data, cfg)
 
 	// 追加のデフォルト値を適用（ネストされた構造体用）
-	applyDefaults(cfg)
+	applyDefaults(cfg, defaultApplyOptions{
+		lspSectionExists: lspSectionExists,
+		lspServersExists: lspServersExists,
+	})
 
 	return cfg, nil
 }
@@ -402,10 +412,73 @@ func toInt(v interface{}) int {
 	return 0
 }
 
+func yamlHasNestedKey(data []byte, parentKey, childKey string) bool {
+	var raw map[string]interface{}
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		return false
+	}
+
+	parent, ok := raw[parentKey].(map[string]interface{})
+	if !ok {
+		return false
+	}
+
+	_, exists := parent[childKey]
+	return exists
+}
+
+func yamlHasKey(data []byte, key string) bool {
+	var raw map[string]interface{}
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		return false
+	}
+	_, exists := raw[key]
+	return exists
+}
+
+func setNestedYAMLValueToNull(doc *yaml.Node, parentKey, childKey string) bool {
+	if doc == nil || doc.Kind != yaml.DocumentNode || len(doc.Content) == 0 {
+		return false
+	}
+
+	parent := findYAMLMappingValue(doc.Content[0], parentKey)
+	if parent == nil || parent.Kind != yaml.MappingNode {
+		return false
+	}
+
+	child := findYAMLMappingValue(parent, childKey)
+	if child == nil {
+		return false
+	}
+
+	*child = yaml.Node{Kind: yaml.ScalarNode, Tag: "!!null", Value: "null"}
+	return true
+}
+
+func findYAMLMappingValue(node *yaml.Node, key string) *yaml.Node {
+	if node == nil || node.Kind != yaml.MappingNode {
+		return nil
+	}
+
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		if node.Content[i].Value == key {
+			return node.Content[i+1]
+		}
+	}
+	return nil
+}
+
 // applyDefaults はデフォルト値と内部正規化を適用する。
 // 内部設定の補正（tool_loop_limit 負値→0 など）もこのフェーズで行う。
-func applyDefaults(cfg *Config) {
+func applyDefaults(cfg *Config, opts ...defaultApplyOptions) {
 	defaults := DefaultConfig()
+	options := defaultApplyOptions{
+		lspSectionExists: true,
+		lspServersExists: true,
+	}
+	if len(opts) > 0 {
+		options = opts[0]
+	}
 
 	// --- 内部設定の正規化 ---
 	if cfg.General.ToolLoopLimit < 0 {
@@ -475,10 +548,12 @@ func applyDefaults(cfg *Config) {
 		cfg.Streaming.IdleTimeoutSeconds = defaults.Streaming.IdleTimeoutSeconds
 	}
 	// LSP設定のデフォルト適用
-	// 注: cfg.LSP.Enabled が false の場合と、設定ファイルに LSP セクションがない場合を区別するため
-	// Servers が nil の場合のみデフォルトを適用する
-	if cfg.LSP.Servers == nil {
+	// lsp.servers が YAML に明示されている場合は nil/empty/non-empty をそのまま保持し、
+	// sibling field の値を巻き戻さない。
+	if !options.lspSectionExists {
 		cfg.LSP = defaults.LSP
+	} else if !options.lspServersExists && cfg.LSP.Servers == nil {
+		cfg.LSP.Servers = defaults.LSP.Servers
 	}
 	// Note: Diff.ContextLines は0が有効値なので、デフォルト適用は行わない
 	// Thinking: 内部 runtime 初期値（/think コマンドが正規ルート）
@@ -501,6 +576,11 @@ func applyDefaults(cfg *Config) {
 			cfg.Output.AssistantUpdates = defaults.Output.AssistantUpdates
 		}
 	}
+}
+
+type defaultApplyOptions struct {
+	lspSectionExists bool
+	lspServersExists bool
 }
 
 // LoadConfigWithValidation は設定ファイルを読み込み、バリデーションを実行
@@ -529,7 +609,7 @@ func SaveConfig(cfg *Config) error {
 	}
 
 	// YAML形式で保存
-	data, err := yaml.Marshal(cfg)
+	data, err := marshalConfigYAML(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
@@ -543,6 +623,30 @@ func SaveConfig(cfg *Config) error {
 	}
 
 	return nil
+}
+
+func marshalConfigYAML(cfg *Config) ([]byte, error) {
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return nil, err
+	}
+	if cfg == nil || cfg.LSP.Servers != nil {
+		return data, nil
+	}
+
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return data, nil
+	}
+	if !setNestedYAMLValueToNull(&doc, "lsp", "servers") {
+		return data, nil
+	}
+
+	patched, err := yaml.Marshal(&doc)
+	if err != nil {
+		return data, nil
+	}
+	return patched, nil
 }
 
 // getConfigPath は設定ファイルのパスを返す

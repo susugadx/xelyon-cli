@@ -143,6 +143,7 @@ var Sections = map[string]SectionInfo{
 		Fields: map[string]string{
 			"enabled":             "LSP連携の有効/無効",
 			"skip_install_prompt": "インストール提案をスキップ",
+			"servers":             "LSPサーバー個別設定（コマンド・引数・有効無効）",
 		},
 		FieldTypes: map[string]string{
 			"enabled":             "bool",

@@ -19,6 +19,14 @@ const (
 	inputPromptWidth = 2 // lipgloss.Width(inputPrompt) の事前計算値
 )
 
+// screenMode は TUI の画面モードを表す。
+type screenMode int
+
+const (
+	screenChat   screenMode = iota // 通常のチャット画面
+	screenConfig                   // /config 設定画面
+)
+
 // footerHeight は下部 chrome（入力欄+ステータスバー）の合計高さを返す。
 // 将来の compact footer や compose mode では動的に切り替えられる。
 func (m Model) footerHeight() int {
@@ -89,6 +97,8 @@ type visualPosition struct {
 // Model は bubbletea の Model インターフェースを実装する TUI のメインモデル。
 type Model struct {
 	agent                AgentInterface
+	screen               screenMode    // 現在の画面モード
+	configScreen         *configScreen // /config 画面の状態（screenConfig 時のみ非 nil）
 	vp                   lightViewport // 軽量 viewport（bubbles/viewport は lipgloss が重いため自前実装）
 	textInput            textinput.Model
 	spinner              spinner.Model
@@ -169,8 +179,81 @@ func (m Model) Init() tea.Cmd {
 	)
 }
 
+func (m Model) handleCtrlC() (tea.Model, tea.Cmd) {
+	// Mouse selection copy takes priority even while processing.
+	if m.hasActiveMouseSelection() {
+		m.copyMouseSelection()
+		return m, nil
+	}
+	if m.agent.IsProcessing() {
+		m.agent.Cancel()
+		m.appendSystemInfo("⚠️  Interrupted. Press Ctrl+C again to exit.")
+		return m, nil
+	}
+	now := time.Now()
+	if !m.lastInterrupt.IsZero() && now.Sub(m.lastInterrupt) < 3*time.Second {
+		m.quitting = true
+		m.agent.Cleanup()
+		return m, tea.Quit
+	}
+	m.lastInterrupt = now
+	m.appendSystemInfo("⚠️  Interrupted. Press Ctrl+C again within 3 seconds to exit.")
+	return m, nil
+}
+
+// applyChatWindowSize は chat 画面で使う viewport/layout/chrome を最新の端末サイズに同期する。
+func (m *Model) applyChatWindowSize(width, height int) {
+	wasAtBottom := m.ready && m.vp.atBottom()
+	widthChanged := m.width != width
+	m.width = width
+	m.height = height
+
+	viewportHeight := m.height - m.footerHeight()
+	if viewportHeight < 1 {
+		viewportHeight = 1
+	}
+
+	if !m.ready {
+		m.vp = lightViewport{width: m.width, height: viewportHeight}
+		m.rebuildLayout()
+		m.vp.setLines(m.getVisualRowContents())
+		m.vp.gotoBottom()
+		m.ready = true
+	} else {
+		m.vp.width = m.width
+		m.vp.height = viewportHeight
+		if widthChanged {
+			m.rebuildLayout()
+		}
+		m.vp.setLines(m.getVisualRowContents())
+		if wasAtBottom {
+			m.vp.gotoBottom()
+		}
+	}
+
+	m.textInput.Width = max(0, m.width-inputPromptWidth-1)
+	m.padLineCache = fillANSITextWidth("", m.width, "\033[48;5;236m")
+	m.chromeDirty = true
+}
+
+// refreshStatusLine は agent の最新 runtime state から footer 用の statusLine を再取得する。
+func (m *Model) refreshStatusLine() {
+	m.statusLine = m.agent.GetStatusLine()
+	m.chromeDirty = true
+}
+
 // Update は bubbletea の Update を実装する。
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// config screen への遷移
+	if _, ok := msg.(OpenConfigScreenMsg); ok {
+		return m.openConfigScreen()
+	}
+
+	// screenConfig 中はすべてのメッセージを config screen に委譲
+	if m.screen == screenConfig {
+		return m.updateConfigScreen(msg)
+	}
+
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
@@ -205,34 +288,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.mouseDragging = false
 		m.mouseAutoScrolling = false
-		wasAtBottom := m.ready && m.vp.atBottom()
-		widthChanged := m.width != msg.Width
-		m.width = msg.Width
-		m.height = msg.Height
-		viewportHeight := m.height - m.footerHeight()
-		if viewportHeight < 1 {
-			viewportHeight = 1
-		}
-		if !m.ready {
-			m.vp = lightViewport{width: m.width, height: viewportHeight}
-			m.rebuildLayout()
-			m.vp.setLines(m.getVisualRowContents())
-			m.vp.gotoBottom()
-			m.ready = true
-		} else {
-			m.vp.width = m.width
-			m.vp.height = viewportHeight
-			if widthChanged {
-				m.rebuildLayout()
-			}
-			m.vp.setLines(m.getVisualRowContents())
-			if wasAtBottom {
-				m.vp.gotoBottom()
-			}
-		}
-		m.textInput.Width = max(0, m.width-inputPromptWidth-1)
-		m.padLineCache = fillANSITextWidth("", m.width, "\033[48;5;236m")
-		m.chromeDirty = true
+		m.applyChatWindowSize(msg.Width, msg.Height)
 
 	case AppendMessageMsg:
 		m.streamingActive = false

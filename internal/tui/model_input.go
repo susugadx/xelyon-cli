@@ -24,25 +24,7 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	// Ctrl+C は常に最優先
 	if msg.Type == tea.KeyCtrlC {
-		// マウス選択中はコピーを優先（AI回答中でも選択テキストのコピーを意図している）
-		if m.hasActiveMouseSelection() {
-			m.copyMouseSelection()
-			return m, nil
-		}
-		if m.agent.IsProcessing() {
-			m.agent.Cancel()
-			m.appendSystemInfo("⚠️  Interrupted. Press Ctrl+C again to exit.")
-			return m, nil
-		}
-		now := time.Now()
-		if !m.lastInterrupt.IsZero() && now.Sub(m.lastInterrupt) < 3*time.Second {
-			m.quitting = true
-			m.agent.Cleanup()
-			return m, tea.Quit
-		}
-		m.lastInterrupt = now
-		m.appendSystemInfo("⚠️  Interrupted. Press Ctrl+C again within 3 seconds to exit.")
-		return m, nil
+		return m.handleCtrlC()
 	}
 
 	// ナビゲーションモード
@@ -91,6 +73,15 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.quitting = true
 				m.agent.Cleanup()
 				return m, tea.Quit
+			}
+			// /config（引数なし）は TUI config screen に遷移
+			// alias 解決後に判定（/c 等にも対応）
+			{
+				cmdParts := strings.Fields(input)
+				resolved := m.agent.ResolveAlias(cmdParts[0])
+				if resolved == "/config" && len(cmdParts) == 1 {
+					return m.openConfigScreen()
+				}
 			}
 			if m.agent.HandleCommand(input) {
 				m.statusLine = m.agent.GetStatusLine()

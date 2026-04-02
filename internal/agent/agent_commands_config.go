@@ -135,6 +135,22 @@ func handleConfigCommand(agent *Agent, args []string) bool {
 	return true
 }
 
+// isNonInteractiveConfigSubcommand は stdin を読まずに処理できる /config サブコマンドかを返す。
+func isNonInteractiveConfigSubcommand(args []string) bool {
+	if len(args) == 0 {
+		return false
+	}
+
+	switch args[0] {
+	case "show":
+		return len(args) == 1
+	case "model":
+		return len(args) >= 2
+	default:
+		return false
+	}
+}
+
 // runInteractiveConfig は対話式設定メニューを実行
 func runInteractiveConfig(agent *Agent, cfg *config.Config) {
 	out := agent.output()

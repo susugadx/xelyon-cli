@@ -1,26 +1,113 @@
 package agent
 
-import "testing"
+import (
+	"bytes"
+	"strings"
+	"testing"
 
-func TestTUICaptureWriter_FlushEmitsTrailingFragment(t *testing.T) {
-	var got []string
-	w := newTUICaptureWriter(func(text string) {
-		got = append(got, text)
-	})
+	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/ui"
+)
 
-	if _, err := w.Write([]byte("partial")); err != nil {
-		t.Fatalf("Write() error = %v", err)
+func newTUIAdapterTestAgent(t *testing.T) (*Agent, *bytes.Buffer) {
+	t.Helper()
+
+	cfg := newProjectMapDisabledConfig()
+	out := &bytes.Buffer{}
+	runtime := NewAgentRuntimeWithConfig(cfg)
+	runtime.UI = ui.NewRuntime(strings.NewReader(""), out, out)
+
+	agent := &Agent{
+		ProviderName:    "openai",
+		CurrentModel:    "gpt-old",
+		CurrentProvider: &MockProvider{name: "openai"},
+		Runtime:         runtime,
 	}
-	if len(got) != 0 {
-		t.Fatalf("expected no flushed lines before Flush(), got %v", got)
+
+	return agent, out
+}
+
+func TestTUIConfig_UnknownSubcommand_DoesNotRunInteractive(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+
+	cfg := newProjectMapDisabledConfig()
+	if err := config.SaveConfig(cfg); err != nil {
+		t.Fatalf("SaveConfig() error = %v", err)
 	}
 
-	w.Flush()
+	agent, out := newTUIAdapterTestAgent(t)
+	adapter := NewTUIAdapter(agent, nil)
 
-	if len(got) != 1 {
-		t.Fatalf("flushed line count = %d, want 1", len(got))
+	if !adapter.HandleCommand("/config foo") {
+		t.Fatal("HandleCommand(/config foo) = false, want true")
 	}
-	if got[0] != "partial" {
-		t.Fatalf("flushed text = %q, want %q", got[0], "partial")
+
+	got := out.String()
+	if !strings.Contains(got, "/config foo is not available in TUI mode") {
+		t.Fatalf("output = %q, want unsupported TUI /config message", got)
+	}
+	if strings.Contains(got, "Configuration Menu") {
+		t.Fatalf("output = %q, should not contain interactive config menu", got)
+	}
+}
+
+func TestTUIConfig_Show_StillWorks(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+
+	cfg := newProjectMapDisabledConfig()
+	cfg.DefaultProvider = "openai"
+	if err := config.SaveConfig(cfg); err != nil {
+		t.Fatalf("SaveConfig() error = %v", err)
+	}
+
+	agent, out := newTUIAdapterTestAgent(t)
+	adapter := NewTUIAdapter(agent, nil)
+
+	if !adapter.HandleCommand("/config show") {
+		t.Fatal("HandleCommand(/config show) = false, want true")
+	}
+
+	got := out.String()
+	if !strings.Contains(got, "default_provider                    = openai") {
+		t.Fatalf("output = %q, want config show output", got)
+	}
+}
+
+func TestTUIConfig_Model_StillWorks(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+
+	cfg := newProjectMapDisabledConfig()
+	cfg.DefaultProvider = "openai"
+	cfg.DefaultModel = "gpt-old"
+	cfg.ProviderModels["openai"] = config.ProviderModelConfig{DefaultModel: "gpt-old"}
+	if err := config.SaveConfig(cfg); err != nil {
+		t.Fatalf("SaveConfig() error = %v", err)
+	}
+
+	agent, out := newTUIAdapterTestAgent(t)
+	adapter := NewTUIAdapter(agent, nil)
+
+	if !adapter.HandleCommand("/config model gpt-new") {
+		t.Fatal("HandleCommand(/config model gpt-new) = false, want true")
+	}
+
+	if agent.CurrentModel != "gpt-new" {
+		t.Fatalf("agent.CurrentModel = %q, want %q", agent.CurrentModel, "gpt-new")
+	}
+	loaded, err := config.LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+	if loaded.DefaultModel != "gpt-new" {
+		t.Fatalf("loaded.DefaultModel = %q, want %q", loaded.DefaultModel, "gpt-new")
+	}
+	if loaded.ProviderModels["openai"].DefaultModel != "gpt-new" {
+		t.Fatalf("loaded.ProviderModels[openai].DefaultModel = %q, want %q", loaded.ProviderModels["openai"].DefaultModel, "gpt-new")
+	}
+	if !strings.Contains(out.String(), "Default model updated to: gpt-new") {
+		t.Fatalf("output = %q, want success message", out.String())
 	}
 }

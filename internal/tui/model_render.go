@@ -573,5 +573,8 @@ func (m Model) View() string {
 	if !m.ready {
 		return "Initializing..."
 	}
+	if m.screen == screenConfig {
+		return m.configView()
+	}
 	return m.viewportView() + "\n" + m.chromeCache
 }
