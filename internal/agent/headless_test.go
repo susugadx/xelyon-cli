@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync/atomic"
@@ -12,7 +14,9 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/tools/common"
 	toolsubagent "github.com/susugadx/xelyon-cli/internal/tools/subagent"
 )
 
@@ -521,6 +525,54 @@ func TestRunHeadlessWithConfig_LegacyEditToolVisibility(t *testing.T) {
 		if !hasToolName(provider.toolNames, name) {
 			t.Fatalf("legacy headless mode should expose %s", name)
 		}
+	}
+}
+
+func TestRunHeadlessWithConfig_ProjectMapAddsQueryFocusOverlay(t *testing.T) {
+	common.ResetRipgrepAvailabilityForTest()
+	t.Cleanup(common.ResetRipgrepAvailabilityForTest)
+	if _, err := exec.LookPath("rg"); err != nil {
+		t.Skip("ripgrep (rg) not available")
+	}
+
+	t.Setenv("HOME", t.TempDir())
+
+	root := t.TempDir()
+	oldwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldwd) })
+
+	nested := filepath.Join(root, "internal", "agent", "compress.go")
+	if err := os.MkdirAll(filepath.Dir(nested), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(nested, []byte("package agent\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := config.DefaultConfig()
+	provider := &headlessToolSetProbeProvider{}
+
+	result := RunHeadlessWithConfig(context.Background(), "internal/agent/compress.go を見て", "gpt-5.4", provider, cfg)
+	if result.Status != "success" {
+		t.Fatalf("result.Status = %q, want success", result.Status)
+	}
+	if !strings.Contains(provider.systemPrompt, "## Project Map") {
+		t.Fatalf("expected stable project map section in headless prompt:\n%s", provider.systemPrompt)
+	}
+	if !strings.Contains(provider.systemPrompt, "Focus files for current task:") {
+		t.Fatalf("expected focus overlay in headless prompt:\n%s", provider.systemPrompt)
+	}
+	if !strings.Contains(provider.systemPrompt, "internal/agent/compress.go") {
+		t.Fatalf("expected headless system prompt to include query focus file:\n%s", provider.systemPrompt)
 	}
 }
 

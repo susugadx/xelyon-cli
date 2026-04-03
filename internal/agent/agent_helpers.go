@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -24,6 +25,17 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/repomap"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
+
+var projectMapInputPathPatterns = []*regexp.Regexp{
+	regexp.MustCompile("[\"'`]([^\"'`]+(?:[\\\\/][^\"'`]+)+)[\"'`]"),
+	regexp.MustCompile(`\b([A-Za-z]:[\\/][^\s"'` + "`" + `]+)\b`),
+	regexp.MustCompile(`\b((?:[\w.-]+[\\/])+[\w./\\-]*)\b`),
+	regexp.MustCompile(`["']([^"']+\.[a-zA-Z0-9]{1,10})["']`),
+	regexp.MustCompile(`\b((?:[\w.-]+/)*[\w.-]+\.[a-zA-Z0-9]{1,10})\b`),
+	regexp.MustCompile(`(/[^\s"']+)`),
+}
+
+const projectMapFocusMaxPaths = 5
 
 // parseImageInputWithWriter は入力から画像パスを抽出する。
 // 形式: "image:/path/to/file.png こんにちは" または "こんにちは image:/path/to/file.png"
@@ -160,17 +172,40 @@ func injectProjectMap(agent *Agent, input string) {
 		return
 	}
 	pm.MaxTokens = calcProjectMapBudget(agent, cfg, pm.GetFileCount(), pm.GetSymbolCount())
+	baseKey := buildProjectMapBaseKey(agent, cfg, pm.MaxTokens, pm.GetFileCount(), pm.GetSymbolCount())
+	focusPaths := extractProjectMapFocusPaths(cwd, rootPath, input, projectMapFocusMaxPaths)
+	focusKey := buildProjectMapFocusKey(focusPaths)
 
-	if !rebuilt && agent.projectMapSection != "" && token.EstimateTokenCount(agent.projectMapSection) <= pm.MaxTokens {
+	if !rebuilt &&
+		agent.projectMapBaseSection != "" &&
+		agent.projectMapBaseKey == baseKey &&
+		agent.projectMapFocusKey == focusKey &&
+		agent.projectMapSection != "" &&
+		token.EstimateTokenCount(agent.projectMapBaseSection) <= pm.MaxTokens &&
+		token.EstimateTokenCount(agent.projectMapSection) <= pm.MaxTokens {
 		agent.SystemPrompt = appendProjectMapSection(agent.SystemPrompt, agent.projectMapSection)
 		agent.projectMapFileCount = pm.GetFileCount()
 		agent.projectMapSymbolCount = pm.GetSymbolCount()
 		agent.projectMapDirty = false
 		return
 	}
-	mapStr := pm.Generate()
+
+	baseSection := agent.projectMapBaseSection
+	if rebuilt || agent.projectMapBaseKey != baseKey || strings.TrimSpace(baseSection) == "" {
+		baseSection = pm.GenerateManifest(nil)
+	}
+	focusSection := renderProjectMapFocusOverlay(focusPaths)
+	mapStr := composeProjectMapPromptSection(baseSection, focusSection)
+	if mapStr != "" && token.EstimateTokenCount(mapStr) > pm.MaxTokens {
+		mapStr = composeProjectMapPromptSection(baseSection, "")
+		focusSection = ""
+	}
 	if mapStr == "" {
+		agent.projectMapBaseSection = ""
+		agent.projectMapFocusSection = ""
 		agent.projectMapSection = ""
+		agent.projectMapBaseKey = ""
+		agent.projectMapFocusKey = ""
 		agent.projectMapDirty = false
 		return
 	}
@@ -178,12 +213,345 @@ func injectProjectMap(agent *Agent, input string) {
 	agent.SystemPrompt = appendProjectMapSection(agent.SystemPrompt, mapStr)
 	agent.projectMapFileCount = pm.GetFileCount()
 	agent.projectMapSymbolCount = pm.GetSymbolCount()
+	agent.projectMapBaseSection = baseSection
+	agent.projectMapFocusSection = focusSection
 	agent.projectMapSection = mapStr
+	agent.projectMapBaseKey = baseKey
+	focusCount := countProjectMapFocusLines(focusSection)
+	if focusCount > len(focusPaths) {
+		focusCount = len(focusPaths)
+	}
+	agent.projectMapFocusKey = buildProjectMapFocusKey(focusPaths[:focusCount])
 	agent.projectMapDirty = false
 
 	if rebuilt {
 		green.Fprintf(agent.output(), "🗺️  Project map loaded (%d files, %d symbols)\n", agent.projectMapFileCount, agent.projectMapSymbolCount)
 	}
+}
+
+func buildProjectMapBaseKey(agent *Agent, cfg *config.Config, maxTokens, fileCount, symbolCount int) string {
+	stateKey := ""
+	if agent != nil {
+		stateKey = agent.projectMapStateKey
+	}
+	contextWindow := 0
+	if agent != nil {
+		contextWindow = token.GetModelTokenLimit(agent.CurrentModel)
+	}
+	if contextWindow <= 0 {
+		contextWindow = 128000
+	}
+
+	ratio := config.NormalizeProjectMapContextRatio(0)
+	if cfg != nil {
+		ratio = config.NormalizeProjectMapContextRatio(cfg.ProjectMap.ContextRatio)
+	}
+	effectiveRatio := effectiveProjectMapContextRatio(ratio, fileCount, symbolCount)
+
+	return fmt.Sprintf("%s\x00budget:%d\x00ctx:%d\x00ratio:%.6f", stateKey, maxTokens, contextWindow, effectiveRatio)
+}
+
+func buildProjectMapFocusKey(paths []string) string {
+	return strings.Join(dedupeProjectMapPriorityPaths(paths), "\x00")
+}
+
+func extractProjectMapFocusPaths(cwd, rootPath, input string, limit int) []string {
+	if limit <= 0 {
+		return nil
+	}
+
+	paths := dedupeProjectMapPriorityPaths(projectMapPriorityPathsFromInput(cwd, rootPath, extractProjectMapPathsFromInput(input), limit))
+	if len(paths) == 0 {
+		return nil
+	}
+	return paths
+}
+
+func extractProjectMapPathsFromInput(input string) []string {
+	if strings.TrimSpace(input) == "" {
+		return nil
+	}
+
+	pathSet := make(map[string]struct{})
+	var paths []string
+	for _, pattern := range projectMapInputPathPatterns {
+		matches := pattern.FindAllStringSubmatch(input, -1)
+		for _, match := range matches {
+			if len(match) < 2 {
+				continue
+			}
+			candidate := cleanProjectMapInputPathCandidate(match[1])
+			if candidate == "" {
+				continue
+			}
+			if _, ok := pathSet[candidate]; ok {
+				continue
+			}
+			pathSet[candidate] = struct{}{}
+			paths = append(paths, candidate)
+		}
+	}
+	return filterProjectMapInputCandidates(paths)
+}
+
+func cleanProjectMapInputPathCandidate(candidate string) string {
+	candidate = strings.TrimSpace(candidate)
+	candidate = strings.Trim(candidate, ".,:;!?()[]{}<>")
+	candidate = strings.Trim(candidate, "\"'`")
+	candidate = strings.ReplaceAll(candidate, "\\", "/")
+	if candidate == "" {
+		return ""
+	}
+	if strings.HasPrefix(candidate, "http://") || strings.HasPrefix(candidate, "https://") {
+		return ""
+	}
+	if !strings.Contains(candidate, "/") && !strings.Contains(candidate, ".") {
+		return ""
+	}
+	return candidate
+}
+
+func filterProjectMapInputCandidates(candidates []string) []string {
+	if len(candidates) == 0 {
+		return nil
+	}
+
+	type normalizedCandidate struct {
+		original   string
+		normalized string
+	}
+
+	normalized := make([]normalizedCandidate, 0, len(candidates))
+	for _, candidate := range candidates {
+		cleaned := cleanProjectMapInputPathCandidate(candidate)
+		if cleaned == "" {
+			continue
+		}
+		normalized = append(normalized, normalizedCandidate{
+			original:   cleaned,
+			normalized: strings.ToLower(cleaned),
+		})
+	}
+
+	filtered := make([]string, 0, len(normalized))
+	for i, candidate := range normalized {
+		if candidate.original == "" {
+			continue
+		}
+		if strings.Contains(candidate.original, "/") {
+			filtered = append(filtered, candidate.original)
+			continue
+		}
+
+		shadowed := false
+		for j, other := range normalized {
+			if i == j {
+				continue
+			}
+			if !strings.Contains(other.original, "/") {
+				continue
+			}
+			if strings.HasSuffix(other.normalized, "/"+candidate.normalized) {
+				shadowed = true
+				break
+			}
+		}
+		if !shadowed {
+			filtered = append(filtered, candidate.original)
+		}
+	}
+
+	return dedupeProjectMapPriorityPaths(filtered)
+}
+
+func projectMapPriorityPathsFromInput(cwd, rootPath string, candidates []string, limit int) []string {
+	if limit <= 0 {
+		return nil
+	}
+
+	capHint := len(candidates)
+	if capHint > limit {
+		capHint = limit
+	}
+	normalized := make([]string, 0, capHint)
+	for _, candidate := range candidates {
+		path, ok := resolveProjectMapInputCandidate(cwd, rootPath, candidate)
+		if !ok {
+			continue
+		}
+		normalized = append(normalized, path)
+		if len(normalized) >= limit {
+			break
+		}
+	}
+	return normalized
+}
+
+func resolveProjectMapInputCandidate(cwd, rootPath, candidate string) (string, bool) {
+	candidate = strings.TrimSpace(candidate)
+	if candidate == "" || rootPath == "" {
+		return "", false
+	}
+	if strings.HasPrefix(candidate, "http://") || strings.HasPrefix(candidate, "https://") {
+		return "", false
+	}
+	if filepath.IsAbs(candidate) {
+		absPath := filepath.Clean(candidate)
+		if !projectMapPathExists(absPath) {
+			return "", false
+		}
+		return canonicalizeProjectMapPriorityPath(rootPath, absPath)
+	}
+	if isWindowsAbsoluteProjectMapPath(candidate) {
+		absPath := filepath.Clean(windowsAbsoluteProjectMapPathToLocal(candidate))
+		if !projectMapPathExists(absPath) {
+			return "", false
+		}
+		return canonicalizeProjectMapPriorityPath(rootPath, absPath)
+	}
+
+	sessionAbs := filepath.Clean(filepath.Join(cwd, filepath.FromSlash(candidate)))
+	rootAbs := filepath.Clean(filepath.Join(rootPath, filepath.FromSlash(candidate)))
+
+	sessionExists := projectMapPathExists(sessionAbs)
+	rootExists := projectMapPathExists(rootAbs)
+
+	switch {
+	case rootExists && (looksRepoRelativeProjectMapPath(candidate) || !sessionExists):
+		return canonicalizeProjectMapPriorityPath(rootPath, rootAbs)
+	case sessionExists:
+		return canonicalizeProjectMapPriorityPath(rootPath, sessionAbs)
+	case rootExists:
+		return canonicalizeProjectMapPriorityPath(rootPath, rootAbs)
+	default:
+		return "", false
+	}
+}
+
+func canonicalizeProjectMapPriorityPath(rootPath, absPath string) (string, bool) {
+	if rootPath == "" || absPath == "" {
+		return "", false
+	}
+
+	rootAbs, err := filepath.Abs(rootPath)
+	if err != nil {
+		return "", false
+	}
+	absPath, err = filepath.Abs(absPath)
+	if err != nil {
+		return "", false
+	}
+
+	relPath, err := filepath.Rel(rootAbs, absPath)
+	if err != nil {
+		return "", false
+	}
+	if relPath == "." {
+		return "", false
+	}
+	if relPath == ".." || strings.HasPrefix(relPath, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+
+	return filepath.ToSlash(filepath.Clean(relPath)), true
+}
+
+func projectMapPathExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+func looksRepoRelativeProjectMapPath(candidate string) bool {
+	candidate = filepath.ToSlash(strings.TrimSpace(candidate))
+	if candidate == "" {
+		return false
+	}
+	if strings.HasPrefix(candidate, "./") || strings.HasPrefix(candidate, "../") {
+		return false
+	}
+	return strings.Contains(candidate, "/")
+}
+
+func isWindowsAbsoluteProjectMapPath(candidate string) bool {
+	if len(candidate) < 4 {
+		return false
+	}
+	if (candidate[0] < 'A' || candidate[0] > 'Z') && (candidate[0] < 'a' || candidate[0] > 'z') {
+		return false
+	}
+	return candidate[1] == ':' && candidate[2] == '/'
+}
+
+func windowsAbsoluteProjectMapPathToLocal(candidate string) string {
+	if !isWindowsAbsoluteProjectMapPath(candidate) {
+		return candidate
+	}
+	return candidate[2:]
+}
+
+func renderProjectMapFocusOverlay(paths []string) string {
+	paths = dedupeProjectMapPriorityPaths(paths)
+	if len(paths) == 0 {
+		return ""
+	}
+	if len(paths) > projectMapFocusMaxPaths {
+		paths = paths[:projectMapFocusMaxPaths]
+	}
+
+	var b strings.Builder
+	b.WriteString("Focus files for current task:\n")
+	for _, path := range paths {
+		b.WriteString("- ")
+		b.WriteString(path)
+		b.WriteByte('\n')
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+func composeProjectMapPromptSection(baseSection, focusSection string) string {
+	baseSection = strings.TrimRight(baseSection, "\n")
+	focusSection = strings.TrimRight(focusSection, "\n")
+
+	switch {
+	case baseSection == "":
+		if focusSection == "" {
+			return ""
+		}
+		return "## Project Map\n\n" + focusSection
+	case focusSection == "":
+		return baseSection
+	default:
+		return baseSection + "\n\n" + focusSection
+	}
+}
+
+func countProjectMapFocusLines(section string) int {
+	if strings.TrimSpace(section) == "" {
+		return 0
+	}
+	count := 0
+	for _, line := range strings.Split(section, "\n") {
+		if strings.HasPrefix(line, "- ") {
+			count++
+		}
+	}
+	return count
+}
+
+func dedupeProjectMapPriorityPaths(paths []string) []string {
+	seen := make(map[string]struct{}, len(paths))
+	deduped := make([]string, 0, len(paths))
+	for _, path := range paths {
+		if path == "" {
+			continue
+		}
+		if _, ok := seen[path]; ok {
+			continue
+		}
+		seen[path] = struct{}{}
+		deduped = append(deduped, path)
+	}
+	return deduped
 }
 
 func appendProjectMapSection(systemPrompt, section string) string {
@@ -334,10 +702,51 @@ func (a *Agent) refreshProjectPrompt(input string) {
 }
 
 func (a *Agent) refreshProjectPromptIfDirty(input string) {
-	if a == nil || !a.projectMapDirty {
+	if a == nil || !a.shouldRefreshProjectPrompt(input) {
 		return
 	}
 	a.refreshProjectPrompt(input)
+}
+
+func (a *Agent) shouldRefreshProjectPrompt(input string) bool {
+	if a == nil {
+		return false
+	}
+	if a.projectMapDirty {
+		return true
+	}
+
+	cfg := a.cfg()
+	if cfg == nil || !cfg.ProjectMap.Enabled || !common.IsRipgrepAvailable() {
+		return false
+	}
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		return false
+	}
+
+	pc := loadProjectConfig()
+	rootPath := cwd
+	if pc != nil && strings.TrimSpace(pc.FilePath) != "" {
+		rootPath = filepath.Dir(pc.FilePath)
+	}
+
+	if stateKey := currentProjectMapStateKey(a, rootPath); stateKey != "" && stateKey != a.projectMapStateKey {
+		return true
+	}
+
+	baseKey := buildProjectMapBaseKey(a, cfg, calcProjectMapBudget(a, cfg, a.projectMapFileCount, a.projectMapSymbolCount), a.projectMapFileCount, a.projectMapSymbolCount)
+	if a.projectMapBaseKey != baseKey {
+		return true
+	}
+
+	focusPaths := extractProjectMapFocusPaths(cwd, rootPath, input, projectMapFocusMaxPaths)
+	if a.projectMapFocusKey != buildProjectMapFocusKey(focusPaths) {
+		return true
+	}
+
+	return a.projectMap == nil || a.projectMapBaseSection == "" || a.projectMapSection == ""
 }
 
 func (a *Agent) invalidateProjectMap() {
@@ -350,7 +759,11 @@ func (a *Agent) invalidateProjectMap() {
 	a.projectMapIgnoreKey = ""
 	a.projectMapStateKey = ""
 	a.projectMapWatchDirs = nil
+	a.projectMapBaseSection = ""
+	a.projectMapFocusSection = ""
 	a.projectMapSection = ""
+	a.projectMapBaseKey = ""
+	a.projectMapFocusKey = ""
 	a.projectMapDirty = true
 }
 

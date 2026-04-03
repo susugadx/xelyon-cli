@@ -237,6 +237,89 @@ func (c *ToolCache) ClearSearchCache() {
 	tools.NotifySearchCacheCleared()
 }
 
+// RecentFilePaths は最近アクセスしたファイルキャッシュのパスを新しい順で返す。
+func (c *ToolCache) RecentFilePaths(limit int) []string {
+	if c == nil || limit <= 0 {
+		return nil
+	}
+
+	c.mu.RLock()
+	type entryWithPath struct {
+		path       string
+		accessedAt time.Time
+	}
+	entries := make([]entryWithPath, 0, len(c.files))
+	for path, entry := range c.files {
+		entries = append(entries, entryWithPath{
+			path:       path,
+			accessedAt: entry.AccessedAt,
+		})
+	}
+	c.mu.RUnlock()
+
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].accessedAt.After(entries[j].accessedAt)
+	})
+
+	if len(entries) > limit {
+		entries = entries[:limit]
+	}
+
+	paths := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		paths = append(paths, entry.path)
+	}
+	return paths
+}
+
+// RecentSearchAffectedFiles は最近アクセスした検索キャッシュ由来の affected files を返す。
+func (c *ToolCache) RecentSearchAffectedFiles(limit int) []string {
+	if c == nil || limit <= 0 {
+		return nil
+	}
+
+	c.mu.RLock()
+	type searchEntry struct {
+		affectedFiles []string
+		accessedAt    time.Time
+	}
+	entries := make([]searchEntry, 0, len(c.searches))
+	for _, entry := range c.searches {
+		if len(entry.AffectedFiles) == 0 {
+			continue
+		}
+		entries = append(entries, searchEntry{
+			affectedFiles: append([]string(nil), entry.AffectedFiles...),
+			accessedAt:    entry.AccessedAt,
+		})
+	}
+	c.mu.RUnlock()
+
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].accessedAt.After(entries[j].accessedAt)
+	})
+
+	seen := make(map[string]struct{})
+	paths := make([]string, 0, limit)
+	for _, entry := range entries {
+		for _, path := range entry.affectedFiles {
+			if path == "" {
+				continue
+			}
+			if _, ok := seen[path]; ok {
+				continue
+			}
+			seen[path] = struct{}{}
+			paths = append(paths, path)
+			if len(paths) >= limit {
+				return paths
+			}
+		}
+	}
+
+	return paths
+}
+
 // InvalidateSearchCacheForFile は指定ファイルパスを含む検索キャッシュエントリを無効化
 func (c *ToolCache) InvalidateSearchCacheForFile(absPath string) {
 	c.mu.Lock()

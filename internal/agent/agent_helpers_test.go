@@ -2,9 +2,14 @@ package agent
 
 import (
 	"math"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/repomap"
+	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
 func TestCalcProjectMapBudget_Auto_LargeContext(t *testing.T) {
@@ -128,5 +133,316 @@ func TestCalcProjectMapBudget_AutoBoostForLargeRepo(t *testing.T) {
 	got := calcProjectMapBudget(agent, cfg, 430, 3200)
 	if got != 16000 {
 		t.Errorf("calcProjectMapBudget() = %d, want 16000", got)
+	}
+}
+
+func TestExtractProjectMapFocusPaths_RepoRelativePathSurvivesNestedRootSession(t *testing.T) {
+	root := t.TempDir()
+	cwd := filepath.Join(root, "work")
+	if err := os.MkdirAll(filepath.Join(root, "pkg"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(cwd, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "pkg", "x.go"), []byte("package pkg\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := extractProjectMapFocusPaths(cwd, root, "pkg/x.go を見て", projectMapFocusMaxPaths)
+
+	if len(got) != 1 || got[0] != "pkg/x.go" {
+		t.Fatalf("extractProjectMapFocusPaths() = %v, want [pkg/x.go]", got)
+	}
+}
+
+func TestExtractProjectMapFocusPaths_CwdRelativePathSurvivesNestedRootSession(t *testing.T) {
+	root := t.TempDir()
+	cwd := filepath.Join(root, "sub")
+	if err := os.MkdirAll(cwd, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cwd, "edited.go"), []byte("package sub\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := extractProjectMapFocusPaths(cwd, root, "edited.go を見て", projectMapFocusMaxPaths)
+
+	if len(got) != 1 || got[0] != "sub/edited.go" {
+		t.Fatalf("extractProjectMapFocusPaths() = %v, want [sub/edited.go]", got)
+	}
+}
+
+func TestExtractProjectMapFocusPaths_WindowsRelativePathIsIncluded(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "internal", "agent", "compress.go")
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("package agent\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := extractProjectMapFocusPaths(root, root, `internal\agent\compress.go を見て`, projectMapFocusMaxPaths)
+	if len(got) != 1 || got[0] != "internal/agent/compress.go" {
+		t.Fatalf("extractProjectMapFocusPaths() = %v, want [internal/agent/compress.go]", got)
+	}
+}
+
+func TestExtractProjectMapFocusPaths_WindowsAbsolutePathIsIncluded(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "internal", "agent", "compress.go")
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("package agent\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	windowsRoot := "C:" + filepath.ToSlash(root)
+	windowsQueryPath := strings.ReplaceAll(windowsRoot+"/internal/agent/compress.go", "/", `\`)
+
+	got := extractProjectMapFocusPaths(root, root, windowsQueryPath+` を見て`, projectMapFocusMaxPaths)
+	if len(got) != 1 || got[0] != "internal/agent/compress.go" {
+		t.Fatalf("extractProjectMapFocusPaths() = %v, want [internal/agent/compress.go]", got)
+	}
+}
+
+func TestExtractProjectMapFocusPaths_WindowsAbsolutePathDoesNotMisprioritizeBasename(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "internal", "agent", "compress.go")
+	other := filepath.Join(root, "pkg", "compress.go")
+	for _, path := range []string{target, other} {
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("package main\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	windowsRoot := "C:" + filepath.ToSlash(root)
+	windowsQueryPath := strings.ReplaceAll(windowsRoot+"/internal/agent/compress.go", "/", `\`)
+
+	got := extractProjectMapFocusPaths(root, root, windowsQueryPath+` を見て`, projectMapFocusMaxPaths)
+	if len(got) != 1 || got[0] != "internal/agent/compress.go" {
+		t.Fatalf("extractProjectMapFocusPaths() = %v, want [internal/agent/compress.go]", got)
+	}
+}
+
+func TestExtractProjectMapFocusPaths_ImportPathIsExcluded(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := extractProjectMapFocusPaths(root, root, "github.com/acme/lib の import を直して", projectMapFocusMaxPaths)
+	if got != nil {
+		t.Fatalf("extractProjectMapFocusPaths() = %v, want nil for import path", got)
+	}
+}
+
+func TestExtractProjectMapFocusPaths_DirectoryPathIsIncluded(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "internal", "agent")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	got := extractProjectMapFocusPaths(root, root, "internal/agent を見て", projectMapFocusMaxPaths)
+	if len(got) != 1 || got[0] != "internal/agent" {
+		t.Fatalf("extractProjectMapFocusPaths() = %v, want [internal/agent]", got)
+	}
+}
+
+func TestExtractProjectMapFocusPaths_NonexistentPathIsExcluded(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := extractProjectMapFocusPaths(root, root, "pkg/errors を見て", projectMapFocusMaxPaths)
+	if got != nil {
+		t.Fatalf("extractProjectMapFocusPaths() = %v, want nil for nonexistent path", got)
+	}
+}
+
+func TestExtractProjectMapFocusPaths_EmptyWhenQueryHasNoPaths(t *testing.T) {
+	root := t.TempDir()
+	got := extractProjectMapFocusPaths(root, root, "実装方針を整理して", projectMapFocusMaxPaths)
+	if got != nil {
+		t.Fatalf("extractProjectMapFocusPaths() = %v, want nil", got)
+	}
+}
+
+func TestBuildProjectMapFocusKey_PreservesOrder(t *testing.T) {
+	left := buildProjectMapFocusKey([]string{"pkg/a.go", "pkg/b.go"})
+	right := buildProjectMapFocusKey([]string{"pkg/b.go", "pkg/a.go"})
+
+	if left == right {
+		t.Fatalf("buildProjectMapFocusKey() should differ when order changes: left=%q right=%q", left, right)
+	}
+}
+
+func TestBuildProjectMapFocusKey_DedupesWithoutReordering(t *testing.T) {
+	got := buildProjectMapFocusKey([]string{"pkg/a.go", "pkg/b.go", "pkg/a.go"})
+	want := "pkg/a.go\x00pkg/b.go"
+	if got != want {
+		t.Fatalf("buildProjectMapFocusKey() = %q, want %q", got, want)
+	}
+}
+
+func TestBuildProjectMapBaseKey_ChangesWhenBudgetChanges(t *testing.T) {
+	cfg := config.DefaultConfig()
+	agent := &Agent{
+		CurrentModel:       "deepseek-chat",
+		projectMapStateKey: "state",
+	}
+
+	first := buildProjectMapBaseKey(agent, cfg, 6400, 120, 1200)
+	second := buildProjectMapBaseKey(agent, cfg, 1280, 120, 1200)
+
+	if first == second {
+		t.Fatalf("buildProjectMapBaseKey() should change when budget changes: first=%q second=%q", first, second)
+	}
+}
+
+func TestShouldRefreshProjectPrompt_FocusKeyChangeTriggersRefresh(t *testing.T) {
+	common.ResetRipgrepAvailabilityForTest()
+	t.Cleanup(common.ResetRipgrepAvailabilityForTest)
+	if !common.IsRipgrepAvailable() {
+		t.Skip("ripgrep (rg) not available")
+	}
+
+	root := t.TempDir()
+	oldwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldwd) })
+	if err := os.MkdirAll(filepath.Join(root, "internal", "agent"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "internal", "agent", "compress.go"), []byte("package agent\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	stateKey := currentProjectMapStateKey(&Agent{}, root)
+
+	agent := &Agent{
+		Runtime:               NewAgentRuntimeWithConfig(config.DefaultConfig()),
+		projectMap:            &repomap.ProjectMap{},
+		projectMapStateKey:    stateKey,
+		projectMapBaseKey:     buildProjectMapBaseKey(&Agent{CurrentModel: "deepseek-chat", projectMapStateKey: stateKey}, config.DefaultConfig(), calcProjectMapBudget(&Agent{CurrentModel: "deepseek-chat"}, config.DefaultConfig(), 1, 1), 1, 1),
+		projectMapFocusKey:    "",
+		projectMapBaseSection: "cached-base",
+		projectMapSection:     "cached",
+		projectMapDirty:       false,
+		projectMapRootPath:    root,
+		projectMapIgnoreKey:   "",
+		projectMapWatchDirs:   []string{"."},
+		projectMapFileCount:   1,
+		projectMapSymbolCount: 1,
+		CurrentModel:          "deepseek-chat",
+	}
+
+	if !agent.shouldRefreshProjectPrompt("internal/agent/compress.go を見て") {
+		t.Fatal("expected focus key change to trigger prompt refresh")
+	}
+}
+
+func TestShouldRefreshProjectPrompt_SameQueryReusesPrompt(t *testing.T) {
+	common.ResetRipgrepAvailabilityForTest()
+	t.Cleanup(common.ResetRipgrepAvailabilityForTest)
+	if !common.IsRipgrepAvailable() {
+		t.Skip("ripgrep (rg) not available")
+	}
+
+	root := t.TempDir()
+	oldwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldwd) })
+	if err := os.MkdirAll(filepath.Join(root, "internal", "agent"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "internal", "agent", "compress.go"), []byte("package agent\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	stateKey := currentProjectMapStateKey(&Agent{}, root)
+
+	focusPaths := []string{"internal/agent/compress.go"}
+	agent := &Agent{
+		Runtime:               NewAgentRuntimeWithConfig(config.DefaultConfig()),
+		projectMap:            &repomap.ProjectMap{},
+		projectMapStateKey:    stateKey,
+		projectMapBaseKey:     buildProjectMapBaseKey(&Agent{CurrentModel: "deepseek-chat", projectMapStateKey: stateKey}, config.DefaultConfig(), calcProjectMapBudget(&Agent{CurrentModel: "deepseek-chat"}, config.DefaultConfig(), 1, 1), 1, 1),
+		projectMapFocusKey:    buildProjectMapFocusKey(focusPaths),
+		projectMapBaseSection: "cached-base",
+		projectMapSection:     "cached",
+		projectMapDirty:       false,
+		projectMapFileCount:   1,
+		projectMapSymbolCount: 1,
+		CurrentModel:          "deepseek-chat",
+	}
+
+	if agent.shouldRefreshProjectPrompt("internal/agent/compress.go を見て") {
+		t.Fatal("expected same focus key to reuse cached prompt")
+	}
+}
+
+func TestShouldRefreshProjectPrompt_IgnoresRecentToolCacheChurn(t *testing.T) {
+	common.ResetRipgrepAvailabilityForTest()
+	t.Cleanup(common.ResetRipgrepAvailabilityForTest)
+	if !common.IsRipgrepAvailable() {
+		t.Skip("ripgrep (rg) not available")
+	}
+
+	root := t.TempDir()
+	oldwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldwd) })
+	filePath := filepath.Join(root, "recent.go")
+	mainPath := filepath.Join(root, "main.go")
+	if err := os.WriteFile(filePath, []byte("package main\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(mainPath, []byte("package main\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	stateKey := currentProjectMapStateKey(&Agent{}, root)
+
+	cache := NewToolCache()
+	agent := &Agent{
+		Runtime:               NewAgentRuntimeWithConfig(config.DefaultConfig()),
+		ToolCache:             cache,
+		projectMap:            &repomap.ProjectMap{},
+		projectMapStateKey:    stateKey,
+		projectMapBaseKey:     buildProjectMapBaseKey(&Agent{CurrentModel: "deepseek-chat", projectMapStateKey: stateKey}, config.DefaultConfig(), calcProjectMapBudget(&Agent{CurrentModel: "deepseek-chat"}, config.DefaultConfig(), 1, 1), 1, 1),
+		projectMapFocusKey:    buildProjectMapFocusKey([]string{"main.go"}),
+		projectMapBaseSection: "cached-base",
+		projectMapSection:     "cached",
+		projectMapDirty:       false,
+		projectMapFileCount:   1,
+		projectMapSymbolCount: 1,
+		CurrentModel:          "deepseek-chat",
+	}
+
+	cache.SetFile(filePath, "package main\n")
+	cache.SetSearch("recent", root, "result", []string{filePath})
+
+	if agent.shouldRefreshProjectPrompt("main.go を見て") {
+		t.Fatal("expected recent read/search cache churn to be ignored")
 	}
 }

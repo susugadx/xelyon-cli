@@ -716,6 +716,10 @@ func (pm *ProjectMap) collectTopLevelEntries() ([]string, []string) {
 }
 
 func (pm *ProjectMap) collectPriorityFiles(prioritizedPaths []string) []string {
+	if len(prioritizedPaths) == 0 {
+		return nil
+	}
+
 	available := make(map[string]struct{}, len(pm.Files))
 	for _, file := range pm.Files {
 		if file == nil || file.Path == "" {
@@ -741,30 +745,7 @@ func (pm *ProjectMap) collectPriorityFiles(prioritizedPaths []string) []string {
 		}
 	}
 
-	for _, change := range pm.GitStatus {
-		if _, ok := available[change.Path]; ok {
-			priority = append(priority, change.Path)
-		}
-	}
-
-	for _, candidate := range []string{
-		"README.md",
-		"Makefile",
-		"go.mod",
-		"go.sum",
-		"package.json",
-		"Cargo.toml",
-		"pyproject.toml",
-		"xelyon.yaml",
-		"main.go",
-	} {
-		if _, ok := available[candidate]; ok {
-			priority = append(priority, candidate)
-		}
-	}
-
-	priority = dedupeStrings(priority)
-	return priority
+	return dedupeStrings(priority)
 }
 
 func writeManifestList(b *strings.Builder, title string, values []string, limit int, isDirectory bool) {

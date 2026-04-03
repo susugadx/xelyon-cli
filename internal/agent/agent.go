@@ -86,16 +86,20 @@ type Agent struct {
 	isCompactedMode bool            // 圧縮モードフラグ
 
 	// トークン上限エラー処理
-	tokenLimitRetryCount  int // トークン上限エラー時のリトライ回数（最大1回）
-	projectMapFileCount   int
-	projectMapSymbolCount int
-	projectMap            *repomap.ProjectMap
-	projectMapRootPath    string
-	projectMapIgnoreKey   string
-	projectMapStateKey    string
-	projectMapWatchDirs   []string
-	projectMapSection     string
-	projectMapDirty       bool
+	tokenLimitRetryCount   int // トークン上限エラー時のリトライ回数（最大1回）
+	projectMapFileCount    int
+	projectMapSymbolCount  int
+	projectMap             *repomap.ProjectMap
+	projectMapRootPath     string
+	projectMapIgnoreKey    string
+	projectMapStateKey     string
+	projectMapWatchDirs    []string
+	projectMapBaseSection  string
+	projectMapFocusSection string
+	projectMapSection      string
+	projectMapBaseKey      string
+	projectMapFocusKey     string
+	projectMapDirty        bool
 
 	// exitHook は os.Exit 前に呼ばれるフック（TUI モードのターミナル復旧等）
 	exitHook func()
