@@ -526,13 +526,13 @@ func TestSearchCode_ImpactIntentCacheRemainsValid(t *testing.T) {
 	setupSearchTestMocks(t)
 
 	dir := t.TempDir()
-	file1 := filepath.Join(dir, "impact_cached.go")
-	if err := os.WriteFile(file1, []byte("func NewAgent() {}\nfunc TestNewAgent() {}\n"), 0644); err != nil {
+	file1 := filepath.Join(dir, "impact_cached.py")
+	if err := os.WriteFile(file1, []byte("def NewAgent():\n    return 1\n\ndef NewAgentImpl():\n    return NewAgent()\n\ndef TestNewAgent():\n    return NewAgentImpl()\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 
 	cache := &testSearchCache{data: make(map[string]string)}
-	opts := SearchOptions{Pattern: "NewAgent", Intent: "impact", Path: dir, FilePattern: "*.go", IsRegex: true}
+	opts := SearchOptions{Pattern: "NewAgent", Intent: "impact", Path: dir, FileType: "py", FilePattern: "*.py", IsRegex: true}
 
 	result1 := ExecuteSearchCodeWithCache(cache, opts)
 	if !strings.Contains(result1, "Pattern 1/") {
@@ -671,13 +671,13 @@ func TestExecuteSearchCode_ImpactIntentExpandsSinglePattern(t *testing.T) {
 	setupSearchTestMocks(t)
 
 	dir := t.TempDir()
-	file1 := filepath.Join(dir, "impact.go")
-	content := "func NewAgent() {}\nfunc TestNewAgent() {}\nfunc NewAgentImpl() {}\n"
+	file1 := filepath.Join(dir, "impact.py")
+	content := "def NewAgent():\n    return 1\n\ndef NewAgentImpl():\n    return NewAgent()\n\ndef TestNewAgent():\n    return NewAgentImpl()\n"
 	if err := os.WriteFile(file1, []byte(content), 0644); err != nil {
 		t.Fatal(err)
 	}
 
-	result := ExecuteSearchCode(SearchOptions{Pattern: "NewAgent", Intent: "impact", Path: dir, FilePattern: "*.go", FileType: "", CtxLines: 0, TokenBudget: 3000, IsRegex: true, Multiline: false})
+	result := ExecuteSearchCode(SearchOptions{Pattern: "NewAgent", Intent: "impact", Path: dir, FilePattern: "*.py", FileType: "py", CtxLines: 0, TokenBudget: 3000, IsRegex: true, Multiline: false})
 
 	if !strings.Contains(result, "Pattern 1/") {
 		t.Fatalf("expected multi-pattern output, got:\n%s", result)
@@ -694,16 +694,41 @@ func TestExecuteSearchCode_ImpactIntentFallsBackToCommonTestSymbolForm(t *testin
 	setupSearchTestMocks(t)
 
 	dir := t.TempDir()
-	file1 := filepath.Join(dir, "impact_fallback.go")
-	content := "func helper() {}\nfunc helperImpl() {}\nfunc TestHelper() {}\n"
+	file1 := filepath.Join(dir, "impact_fallback.py")
+	content := "def helper():\n    return 1\n\ndef helperImpl():\n    return helper()\n\ndef TestHelper():\n    return helperImpl()\n"
 	if err := os.WriteFile(file1, []byte(content), 0644); err != nil {
 		t.Fatal(err)
 	}
 
-	result := ExecuteSearchCode(SearchOptions{Pattern: "helper", Intent: "impact", Path: dir, FilePattern: "*.go", FileType: "", CtxLines: 0, TokenBudget: 3000, IsRegex: true, Multiline: false})
+	result := ExecuteSearchCode(SearchOptions{Pattern: "helper", Intent: "impact", Path: dir, FilePattern: "*.py", FileType: "py", CtxLines: 0, TokenBudget: 3000, IsRegex: true, Multiline: false})
 
 	if !strings.Contains(result, "TestHelper") {
 		t.Fatalf("expected conservative fallback test probe to surface TestHelper, got:\n%s", result)
+	}
+}
+
+func TestBuildSearchCacheKeyWithRoute_SeparatesIntent(t *testing.T) {
+	opts := SearchOptions{Pattern: "Run", Path: ".", FileType: "go"}
+	impactOpts := SearchOptions{Pattern: "Run", Intent: "impact", Path: ".", FileType: "go"}
+
+	normalKey := buildSearchCacheKeyWithRoute(opts, "route")
+	impactKey := buildSearchCacheKeyWithRoute(impactOpts, "route")
+
+	if normalKey == impactKey {
+		t.Fatalf("expected cache key to differ by intent, got %q", normalKey)
+	}
+}
+
+func TestBuildMultiSearchCacheKey_SeparatesIntent(t *testing.T) {
+	opts := SearchOptions{Pattern: "Run,Build", Path: ".", FileType: "go"}
+	impactOpts := SearchOptions{Pattern: "Run,Build", Intent: "impact", Path: ".", FileType: "go"}
+	patterns := []string{"Run", "Build"}
+
+	normalKey := buildMultiSearchCacheKey(opts, patterns)
+	impactKey := buildMultiSearchCacheKey(impactOpts, patterns)
+
+	if normalKey == impactKey {
+		t.Fatalf("expected multi cache key to differ by intent, got %q", normalKey)
 	}
 }
 

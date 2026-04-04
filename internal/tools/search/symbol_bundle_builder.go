@@ -19,6 +19,11 @@ type symbolBundleSectionInput struct {
 	IsTest bool
 }
 
+type goSymbolBundleBuildOptions struct {
+	implementationLimit int
+	impact              *SymbolBundleImpact
+}
+
 var searchCodeGoSymbolBudget = navigation.Budget{
 	BodyLines:   18,
 	CallerLimit: 3,
@@ -29,8 +34,17 @@ var searchCodeGoSymbolBudget = navigation.Budget{
 const goImplementationLimit = 4
 
 func buildGoSymbolBundle(query string, result navigation.InspectResult) *SymbolBundle {
+	return buildGoSymbolBundleWithOptions(query, result, goSymbolBundleBuildOptions{
+		implementationLimit: goImplementationLimit,
+	})
+}
+
+func buildGoSymbolBundleWithOptions(query string, result navigation.InspectResult, opts goSymbolBundleBuildOptions) *SymbolBundle {
 	if result.Symbol == nil {
 		return nil
+	}
+	if opts.implementationLimit <= 0 {
+		opts.implementationLimit = goImplementationLimit
 	}
 
 	displayName := result.Symbol.Name
@@ -64,6 +78,7 @@ func buildGoSymbolBundle(query string, result navigation.InspectResult) *SymbolB
 			EndLine: result.Symbol.EndLine,
 			Body:    append([]string(nil), result.Body...),
 		},
+		Impact: cloneSymbolBundleImpact(opts.impact),
 		Debug: SymbolBundleDebug{
 			Source:       "go-inspect",
 			FileRootPath: result.Symbol.RootPath,
@@ -78,10 +93,11 @@ func buildGoSymbolBundle(query string, result navigation.InspectResult) *SymbolB
 	addNavigationSection(bundle, "references", "References", result.Refs, result.TotalRefs, result.MoreRefs)
 	addNavigationTestSection(bundle, result.Tests, result.TotalTests, result.MoreTests)
 	if len(result.Implementations) > 0 {
-		limit := min(goImplementationLimit, len(result.Implementations))
+		limit := min(opts.implementationLimit, len(result.Implementations))
 		items := make([]SymbolBundleItem, 0, limit)
 		for _, impl := range result.Implementations[:limit] {
 			items = append(items, SymbolBundleItem{
+				Kind:    "implementations",
 				File:    impl.File,
 				Line:    impl.Line,
 				Snippet: strings.TrimSpace(impl.Name),
@@ -111,6 +127,7 @@ func addNavigationSection(bundle *SymbolBundle, kind, title string, refs []navig
 			snippet = ref.Scope
 		}
 		items = append(items, SymbolBundleItem{
+			Kind:    kind,
 			File:    ref.File,
 			Line:    ref.Line,
 			Snippet: snippet,
@@ -134,6 +151,7 @@ func addNavigationTestSection(bundle *SymbolBundle, tests []navigation.TestRef, 
 	items := make([]SymbolBundleItem, 0, len(tests))
 	for _, test := range tests {
 		items = append(items, SymbolBundleItem{
+			Kind:   "tests",
 			File:   test.File,
 			Line:   test.Line,
 			Name:   test.Name,
@@ -200,6 +218,7 @@ func buildGenericBundleSection(def genericSymbolDef, input symbolBundleSectionIn
 	sectionItems := make([]SymbolBundleItem, 0, len(items))
 	for _, item := range items {
 		sectionItems = append(sectionItems, SymbolBundleItem{
+			Kind:    input.Kind,
 			File:    item.File,
 			Line:    item.Line,
 			Snippet: strings.TrimSpace(item.Snippet),

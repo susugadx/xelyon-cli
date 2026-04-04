@@ -1224,6 +1224,193 @@ func TestBuildGoSymbolBundleCarriesTruncatedDiagnostic(t *testing.T) {
 	}
 }
 
+func TestFormatGoImpactSymbolBundleIncludesRiskRecommendedReadsAndOmittedCounts(t *testing.T) {
+	bundle := buildGoSymbolBundleWithOptions("Builder", navigation.InspectResult{
+		Symbol: &navigation.SymbolCandidate{
+			Name:       "Builder",
+			Kind:       "interface",
+			File:       "builder.go",
+			Line:       3,
+			EndLine:    5,
+			Exported:   true,
+			PackageDir: ".",
+		},
+		Body: []string{
+			"3: type Builder interface {",
+			"4: \tBuild() string",
+			"5: }",
+		},
+		Callers: []navigation.Reference{
+			{File: "client.go", Line: 4, Scope: "UseBuilder", Snippet: "return b.Build()"},
+			{File: "service.go", Line: 8, Scope: "UseServiceBuilder", Snippet: "return svc.Build()"},
+		},
+		TotalCallers: 4,
+		Refs: []navigation.Reference{
+			{File: "api/builder_test.go", Line: 5, Scope: "TestBuilder", Snippet: "_ = b.Build()", IsTest: true},
+			{File: "cmd/demo/main.go", Line: 7, Scope: "main", Snippet: "_ = b.Build()"},
+		},
+		TotalRefs: 4,
+		Tests: []navigation.TestRef{
+			{File: "builder_test.go", Line: 4, Name: "TestBuilder"},
+			{File: "api/builder_test.go", Line: 3, Name: "TestAPIBuilder"},
+		},
+		TotalTests: 3,
+		Implementations: []navigation.ImplementationRef{
+			{File: "builder_impl.go", Line: 3, Name: "FileBuilder"},
+			{File: "builder_mock.go", Line: 3, Name: "MockBuilder"},
+			{File: "builder_remote.go", Line: 3, Name: "RemoteBuilder"},
+		},
+	}, goSymbolBundleBuildOptions{
+		implementationLimit: 2,
+		impact: &SymbolBundleImpact{
+			RiskLevel: "high",
+			RecommendedReads: []SymbolBundleItem{
+				{Kind: "definition", File: "builder.go", Line: 3, Snippet: "type Builder interface {", Name: "Builder"},
+				{Kind: "callers", File: "client.go", Line: 4, Scope: "UseBuilder", Snippet: "return b.Build()"},
+			},
+		},
+	})
+
+	output := formatSymbolBundle(bundle, nil, nil)
+	if !strings.Contains(output, "Risk: high") {
+		t.Fatalf("expected risk line in impact bundle output, got:\n%s", output)
+	}
+	if !strings.Contains(output, "Recommended reads:") {
+		t.Fatalf("expected recommended reads in impact bundle output, got:\n%s", output)
+	}
+	if !strings.Contains(output, "Omitted: callers +2, references +2, tests +1, implementations +1") {
+		t.Fatalf("expected omitted counts summary in impact bundle output, got:\n%s", output)
+	}
+}
+
+func TestExecuteSearchCode_ImpactIntentUsesStructuredGoSingleSymbolPath(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"builder.go": `package example
+
+type Builder interface {
+	Build() string
+}
+`,
+		"builder_impl.go": `package example
+
+type FileBuilder struct{}
+
+func (FileBuilder) Build() string { return "" }
+`,
+		"client.go": `package example
+
+func UseBuilder(b Builder) string {
+	return b.Build()
+}
+`,
+		"api/builder_test.go": `package api
+
+func TestBuilderUsage(t *testing.T) {
+	var b example.Builder
+	_ = b.Build()
+}
+`,
+	})
+
+	output := ExecuteSearchCode(SearchOptions{
+		Pattern: "Builder",
+		Intent:  "impact",
+		Path:    dir,
+		ProjectMap: &repomap.ProjectMap{
+			RootPath: dir,
+			Files: []*repomap.FileEntry{
+				{
+					Path: "builder.go",
+					Symbols: []repomap.Symbol{
+						{Name: "Builder", Kind: "interface", Line: 3, EndLine: 5, Signature: "type Builder interface { Build() string }", Exported: true},
+					},
+				},
+			},
+		},
+		ProjectMapRootPath: dir,
+		ProjectMapStateKey: "structured-impact-go",
+		LSPClient: &mockGoSymbolLSPClient{
+			refs: []navigation.LSPLocation{
+				{File: "client.go", Line: 4, Character: 9, EndLine: 4, EndChar: 14},
+				{File: "api/builder_test.go", Line: 5, Character: 8, EndLine: 5, EndChar: 13},
+			},
+			impls: []navigation.LSPLocation{
+				{File: "builder_impl.go", Line: 3, Character: 6, EndLine: 3, EndChar: 17},
+			},
+		},
+	})
+
+	if strings.Contains(output, "Pattern 1/") {
+		t.Fatalf("expected structured impact path instead of fake multi-pattern output, got:\n%s", output)
+	}
+	if !strings.Contains(output, "Risk: high") {
+		t.Fatalf("expected high risk in structured impact output, got:\n%s", output)
+	}
+	if !strings.Contains(output, "Recommended reads:") {
+		t.Fatalf("expected recommended reads in structured impact output, got:\n%s", output)
+	}
+	if !strings.Contains(output, "Related Implementations") {
+		t.Fatalf("expected implementations section in structured impact output, got:\n%s", output)
+	}
+}
+
+func TestExecuteSearchCode_ImpactIntentStructuredGoPreservesTestNameProbeFallback(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"builder.go": `package example
+
+type Builder interface {
+	Build() string
+}
+`,
+		"builder_impl.go": `package example
+
+type FileBuilder struct{}
+
+func (FileBuilder) Build() string { return "" }
+`,
+		"builder_test.go": `package example
+
+import "testing"
+
+func TestBuilder(t *testing.T) {
+	var impl FileBuilder
+	_ = impl.Build()
+}
+`,
+	})
+
+	output := ExecuteSearchCode(SearchOptions{
+		Pattern: "Builder",
+		Intent:  "impact",
+		Path:    dir,
+		ProjectMap: &repomap.ProjectMap{
+			RootPath: dir,
+			Files: []*repomap.FileEntry{
+				{
+					Path: "builder.go",
+					Symbols: []repomap.Symbol{
+						{Name: "Builder", Kind: "interface", Line: 3, EndLine: 5, Signature: "type Builder interface { Build() string }", Exported: true},
+					},
+				},
+			},
+		},
+		ProjectMapRootPath: dir,
+		ProjectMapStateKey: "structured-impact-go-test-probe",
+		LSPClient: &mockGoSymbolLSPClient{
+			refs: []navigation.LSPLocation{
+				{File: "builder_impl.go", Line: 5, Character: 9, EndLine: 5, EndChar: 14},
+			},
+			impls: []navigation.LSPLocation{
+				{File: "builder_impl.go", Line: 3, Character: 6, EndLine: 3, EndChar: 17},
+			},
+		},
+	})
+
+	if !strings.Contains(output, "Related Tests") || !strings.Contains(output, "TestBuilder") {
+		t.Fatalf("expected structured impact output to preserve Test<Symbol> probe fallback, got:\n%s", output)
+	}
+}
+
 func TestBuildGoSymbolBundleCanonicalIsStableAcrossLineMoves(t *testing.T) {
 	first := buildGoSymbolBundle("Run", navigation.InspectResult{
 		Symbol: &navigation.SymbolCandidate{
@@ -2071,6 +2258,34 @@ func TestSearchCode_SymbolBundleAffectedFilesUseInvocationCWDOnASTFallback(t *te
 	cache.InvalidateSearchCacheForFile(want)
 	if _, ok := cache.GetSearch("Run", cache.lastSetPath); ok {
 		t.Fatalf("expected symbol cache entry to be invalidated after editing %s", want)
+	}
+}
+
+func TestCollectSymbolBundleAffectedFiles_IncludesRecommendedReadFiles(t *testing.T) {
+	dir := t.TempDir()
+	bundle := &SymbolBundle{
+		Definition: SymbolBundleDefinition{
+			File: "pkg/run.go",
+			Line: 3,
+		},
+		Impact: &SymbolBundleImpact{
+			RiskLevel: "medium",
+			RecommendedReads: []SymbolBundleItem{
+				{Kind: "references", File: "crosspkg/reader.go", Line: 8, Snippet: "_ = Run()"},
+			},
+		},
+		Debug: SymbolBundleDebug{
+			FileRootPath: dir,
+		},
+	}
+
+	affected := collectSymbolBundleAffectedFiles(bundle, SearchOptions{ProjectMapRootPath: dir})
+	wantDefinition := filepath.Join(dir, "pkg", "run.go")
+	wantRecommended := filepath.Join(dir, "crosspkg", "reader.go")
+	for _, want := range []string{wantDefinition, wantRecommended} {
+		if !containsAffectedFile(affected, want) {
+			t.Fatalf("expected affected files to include %s, got %v", want, affected)
+		}
 	}
 }
 

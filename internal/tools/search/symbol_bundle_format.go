@@ -43,6 +43,7 @@ func formatSymbolBundle(bundle *SymbolBundle, reg *locator.Registry, matchedPatt
 	}
 
 	appendSymbolBundleDiagnostics(&sb, bundle)
+	appendSymbolBundleImpact(&sb, bundle, reg)
 
 	for _, section := range bundle.Sections {
 		if len(section.Items) == 0 {
@@ -75,6 +76,8 @@ func formatSymbolBundle(bundle *SymbolBundle, reg *locator.Registry, matchedPatt
 		sb.WriteString("\nNo references found.\n")
 	}
 
+	appendImpactOmittedCounts(&sb, bundle)
+
 	return sb.String()
 }
 
@@ -91,6 +94,34 @@ func appendSymbolBundleDiagnostics(sb *strings.Builder, bundle *SymbolBundle) {
 
 	if bundle.Diagnostics.ResolvedViaLSP {
 		sb.WriteString("\nNote: resolved via gopls.\n")
+	}
+}
+
+func appendSymbolBundleImpact(sb *strings.Builder, bundle *SymbolBundle, reg *locator.Registry) {
+	if bundle == nil || bundle.Impact == nil {
+		return
+	}
+
+	if risk := strings.TrimSpace(bundle.Impact.RiskLevel); risk != "" {
+		fmt.Fprintf(sb, "\nRisk: %s\n", risk)
+	}
+	if len(bundle.Impact.RecommendedReads) == 0 {
+		return
+	}
+
+	sb.WriteString("\nRecommended reads:\n")
+	for _, item := range bundle.Impact.RecommendedReads {
+		line := formatSymbolBundleItem(item.Kind, item)
+		if reg != nil {
+			id := reg.Register(locator.Location{
+				FilePath: item.File,
+				Line:     item.Line,
+				EndLine:  item.EndLine,
+				Name:     item.Name,
+			})
+			line += " " + id
+		}
+		fmt.Fprintf(sb, "  - %s\n", line)
 	}
 }
 
@@ -126,4 +157,48 @@ func symbolBundleReferenceCount(bundle *SymbolBundle) int {
 		total += len(section.Items)
 	}
 	return total
+}
+
+func appendImpactOmittedCounts(sb *strings.Builder, bundle *SymbolBundle) {
+	if bundle == nil || bundle.Impact == nil {
+		return
+	}
+
+	labels := []struct {
+		kind  string
+		label string
+	}{
+		{kind: "callers", label: "callers"},
+		{kind: "references", label: "references"},
+		{kind: "tests", label: "tests"},
+		{kind: "implementations", label: "implementations"},
+	}
+
+	var parts []string
+	for _, label := range labels {
+		section := symbolBundleSectionByKind(bundle, label.kind)
+		if section == nil {
+			continue
+		}
+		if omitted := section.Total - len(section.Items); omitted > 0 {
+			parts = append(parts, fmt.Sprintf("%s +%d", label.label, omitted))
+		}
+	}
+	if len(parts) == 0 {
+		return
+	}
+
+	fmt.Fprintf(sb, "\nOmitted: %s\n", strings.Join(parts, ", "))
+}
+
+func symbolBundleSectionByKind(bundle *SymbolBundle, kind string) *SymbolBundleSection {
+	if bundle == nil {
+		return nil
+	}
+	for i := range bundle.Sections {
+		if bundle.Sections[i].Kind == kind {
+			return &bundle.Sections[i]
+		}
+	}
+	return nil
 }

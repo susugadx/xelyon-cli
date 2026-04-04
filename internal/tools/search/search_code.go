@@ -248,6 +248,7 @@ func cloneSymbolBundle(bundle *SymbolBundle) *SymbolBundle {
 	if bundle.Debug.MatchedPatterns != nil {
 		cloned.Debug.MatchedPatterns = append([]string(nil), bundle.Debug.MatchedPatterns...)
 	}
+	cloned.Impact = cloneSymbolBundleImpact(bundle.Impact)
 	return &cloned
 }
 
@@ -584,6 +585,10 @@ func shouldExecuteImpactSearch(opts SearchOptions) bool {
 }
 
 func executeImpactSearch(cache tools.ToolCacheInterface, opts SearchOptions) string {
+	if structured, ok := tryStructuredGoImpactSearch(cache, opts); ok {
+		return structured
+	}
+
 	basePatterns := expandImpactPatterns(strings.TrimSpace(opts.Pattern), opts)
 	if len(basePatterns) == 0 {
 		return "Error: pattern is required"
@@ -880,8 +885,8 @@ func buildMultiCacheKey(patterns []string) string {
 }
 
 func buildSearchCacheKeyWithRoute(opts SearchOptions, routeSignature string) string {
-	return fmt.Sprintf("%s|%s|%s|%d|%d|mode=%s|regex=%t|multiline=%t|hidden=%t|ignored=%t|output=%s|ignore=%s|route=%s",
-		opts.Path, opts.FilePattern, opts.FileType, opts.CtxLines, opts.TokenBudget, opts.Mode, opts.IsRegex, opts.Multiline, opts.IncludeHidden, opts.IncludeIgnored, opts.OutputMode, opts.ignoreKey, routeSignature)
+	return fmt.Sprintf("%s|%s|%s|%d|%d|intent=%s|mode=%s|regex=%t|multiline=%t|hidden=%t|ignored=%t|output=%s|ignore=%s|route=%s",
+		opts.Path, opts.FilePattern, opts.FileType, opts.CtxLines, opts.TokenBudget, strings.TrimSpace(opts.Intent), opts.Mode, opts.IsRegex, opts.Multiline, opts.IncludeHidden, opts.IncludeIgnored, opts.OutputMode, opts.ignoreKey, routeSignature)
 }
 
 func buildMultiSearchCacheKey(opts SearchOptions, patterns []string) string {
@@ -940,6 +945,11 @@ func collectSymbolBundleAffectedFiles(bundle *SymbolBundle, opts SearchOptions) 
 	add(bundle.Definition.File)
 	for _, section := range bundle.Sections {
 		for _, item := range section.Items {
+			add(item.File)
+		}
+	}
+	if bundle.Impact != nil {
+		for _, item := range bundle.Impact.RecommendedReads {
 			add(item.File)
 		}
 	}

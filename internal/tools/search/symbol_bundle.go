@@ -5,6 +5,7 @@ type SymbolBundle struct {
 	Identity    SymbolBundleIdentity
 	Definition  SymbolBundleDefinition
 	Sections    []SymbolBundleSection
+	Impact      *SymbolBundleImpact
 	Diagnostics SymbolBundleDiagnostics
 	Debug       SymbolBundleDebug
 }
@@ -39,6 +40,12 @@ type SymbolBundleSection struct {
 	More  bool
 }
 
+// SymbolBundleImpact は impact intent 向けの付加メタデータ。
+type SymbolBundleImpact struct {
+	RiskLevel        string
+	RecommendedReads []SymbolBundleItem
+}
+
 // SymbolBundleDiagnostics は bundle の注意喚起メタデータ。
 type SymbolBundleDiagnostics struct {
 	ResolvedViaLSP     bool
@@ -48,6 +55,7 @@ type SymbolBundleDiagnostics struct {
 
 // SymbolBundleItem は bundle 内の 1 つの編集候補箇所。
 type SymbolBundleItem struct {
+	Kind    string
 	File    string
 	Line    int
 	EndLine int
