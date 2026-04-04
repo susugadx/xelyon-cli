@@ -11,6 +11,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/locator"
 	"github.com/susugadx/xelyon-cli/internal/navigation"
+	"github.com/susugadx/xelyon-cli/internal/repomap"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
@@ -1223,6 +1224,90 @@ func TestBuildGoSymbolBundleCarriesTruncatedDiagnostic(t *testing.T) {
 	}
 }
 
+func TestBuildGoSymbolBundleCanonicalIsStableAcrossLineMoves(t *testing.T) {
+	first := buildGoSymbolBundle("Run", navigation.InspectResult{
+		Symbol: &navigation.SymbolCandidate{
+			Name:               "Run",
+			Kind:               "method",
+			File:               "pkg/run.go",
+			Line:               10,
+			EndLine:            12,
+			Receiver:           "*Agent",
+			ReceiverNorm:       "Agent",
+			Signature:          "func (a *Agent) Run() error",
+			PackageDir:         "pkg",
+			StableKey:          stableGoSymbolBundleKey("pkg", "Agent", "Run", "method", "func (a *Agent) Run() error"),
+			StableKeyCollision: false,
+		},
+	})
+	second := buildGoSymbolBundle("Run", navigation.InspectResult{
+		Symbol: &navigation.SymbolCandidate{
+			Name:               "Run",
+			Kind:               "method",
+			File:               "pkg/run.go",
+			Line:               40,
+			EndLine:            42,
+			Receiver:           "*Agent",
+			ReceiverNorm:       "Agent",
+			Signature:          "func (a *Agent) Run() error",
+			PackageDir:         "pkg",
+			StableKey:          stableGoSymbolBundleKey("pkg", "Agent", "Run", "method", "func (a *Agent) Run() error"),
+			StableKeyCollision: false,
+		},
+	})
+
+	if first.Identity.Canonical == "" || second.Identity.Canonical == "" {
+		t.Fatal("expected canonical identity to be populated")
+	}
+	if first.Identity.Canonical != second.Identity.Canonical {
+		t.Fatalf("expected stable canonical identity across line moves, got %q vs %q", first.Identity.Canonical, second.Identity.Canonical)
+	}
+}
+
+func TestBuildGoSymbolBundleCanonicalAddsFileDisambiguatorOnCollision(t *testing.T) {
+	stableKey := stableGoSymbolBundleKey("pkg", "Agent", "Run", "method", "func (a *Agent) Run() error")
+	first := buildGoSymbolBundle("Run", navigation.InspectResult{
+		Symbol: &navigation.SymbolCandidate{
+			Name:               "Run",
+			Kind:               "method",
+			File:               "pkg/run_linux.go",
+			Line:               10,
+			EndLine:            12,
+			Receiver:           "*Agent",
+			ReceiverNorm:       "Agent",
+			Signature:          "func (a *Agent) Run() error",
+			PackageDir:         "pkg",
+			StableKey:          stableKey,
+			StableKeyCollision: true,
+		},
+	})
+	second := buildGoSymbolBundle("Run", navigation.InspectResult{
+		Symbol: &navigation.SymbolCandidate{
+			Name:               "Run",
+			Kind:               "method",
+			File:               "pkg/run_darwin.go",
+			Line:               10,
+			EndLine:            12,
+			Receiver:           "*Agent",
+			ReceiverNorm:       "Agent",
+			Signature:          "func (a *Agent) Run() error",
+			PackageDir:         "pkg",
+			StableKey:          stableKey,
+			StableKeyCollision: true,
+		},
+	})
+
+	if first.Identity.Canonical == second.Identity.Canonical {
+		t.Fatalf("expected file disambiguator for colliding stable keys, got %q", first.Identity.Canonical)
+	}
+	if !strings.Contains(first.Identity.Canonical, "file=pkg/run_linux.go") {
+		t.Fatalf("expected linux file disambiguator, got %q", first.Identity.Canonical)
+	}
+	if !strings.Contains(second.Identity.Canonical, "file=pkg/run_darwin.go") {
+		t.Fatalf("expected darwin file disambiguator, got %q", second.Identity.Canonical)
+	}
+}
+
 func TestGoSymbolResolver_UsesBundleDiagnostics(t *testing.T) {
 	setupSymbolTestDir(t, "example.go", `package example
 
@@ -1242,6 +1327,35 @@ func Run() {}
 	}
 	if !strings.Contains(resolved.Output, "Note: resolved via gopls.") {
 		t.Fatalf("expected LSP note in go symbol output, got:\n%s", resolved.Output)
+	}
+}
+
+func TestGoSymbolResolver_UsesProjectMapSnapshot(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"broken.go": "package example\n\nfunc (\n",
+	})
+
+	resolved := goSymbolResolver{}.Resolve("Run", SearchOptions{
+		Path: dir,
+		ProjectMap: &repomap.ProjectMap{
+			RootPath: dir,
+			Files: []*repomap.FileEntry{
+				{
+					Path: "broken.go",
+					Symbols: []repomap.Symbol{
+						{Name: "Run", Kind: "function", Line: 3, EndLine: 3, Signature: "func Run()", Exported: true},
+					},
+				},
+			},
+		},
+		ProjectMapRootPath: dir,
+		ProjectMapStateKey: "go-snapshot-fast-path",
+	})
+	if resolved.Status != symbolResolveSingle {
+		t.Fatalf("expected snapshot-backed single resolution, got %s", resolved.Status)
+	}
+	if resolved.Bundle == nil || resolved.Bundle.Definition.File != "broken.go" {
+		t.Fatalf("expected snapshot bundle for broken.go, got %+v", resolved.Bundle)
 	}
 }
 
@@ -1393,6 +1507,243 @@ func run(a *Agent) error {
 	}
 	if !strings.Contains(result, "Note: resolved via gopls.") {
 		t.Fatalf("expected LSP note in multi-pattern output, got:\n%s", result)
+	}
+}
+
+func TestSearchCode_SymbolFastPathCachesAffectedFiles(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"run.go": "package example\n\nfunc Run() {\n\thelper()\n}\n\nfunc helper() {}\n",
+	})
+
+	cache := &testSearchCache{data: make(map[string]string)}
+	opts := SearchOptions{
+		Pattern: "Run",
+		Path:    dir,
+		ProjectMap: &repomap.ProjectMap{
+			RootPath: dir,
+			Files: []*repomap.FileEntry{
+				{
+					Path: "run.go",
+					Symbols: []repomap.Symbol{
+						{Name: "Run", Kind: "function", Line: 3, EndLine: 5, Signature: "func Run()", Exported: true},
+					},
+				},
+			},
+		},
+		ProjectMapRootPath: dir,
+		ProjectMapStateKey: "affected-single",
+	}
+
+	result := ExecuteSearchCodeWithCache(cache, opts)
+	if !strings.Contains(result, "Run") {
+		t.Fatalf("expected symbol result, got:\n%s", result)
+	}
+
+	want := filepath.Join(dir, "run.go")
+	searchKey := singlePatternBundleCacheKey("Run", cache.lastSetPath)
+	affected := cache.affected[searchKey]
+	if !containsAffectedFile(affected, want) {
+		t.Fatalf("expected exact cache key %q to track %s, got %v", searchKey, want, affected)
+	}
+}
+
+func TestSearchCode_MultiPatternCacheTracksBundleAndTextAffectedFiles(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"run.go": "package example\n\nfunc Run() {\n\thelper()\n}\n\nfunc helper() {}\n",
+	})
+
+	cache := &testSearchCache{data: make(map[string]string)}
+	opts := SearchOptions{
+		Pattern: "Run,helper()",
+		Path:    dir,
+		ProjectMap: &repomap.ProjectMap{
+			RootPath: dir,
+			Files: []*repomap.FileEntry{
+				{
+					Path: "run.go",
+					Symbols: []repomap.Symbol{
+						{Name: "Run", Kind: "function", Line: 3, EndLine: 5, Signature: "func Run()", Exported: true},
+					},
+				},
+			},
+		},
+		ProjectMapRootPath: dir,
+		ProjectMapStateKey: "affected-multi",
+	}
+
+	result := ExecuteSearchCodeWithCache(cache, opts)
+	if !strings.Contains(result, "Run") || !strings.Contains(result, "helper()") {
+		t.Fatalf("expected mixed multi-pattern result, got:\n%s", result)
+	}
+
+	want := filepath.Join(dir, "run.go")
+	searchKey := singlePatternBundleCacheKey(buildMultiCacheKey(splitPatterns(opts.Pattern)), cache.lastSetPath)
+	affected := cache.affected[searchKey]
+	if !containsAffectedFile(affected, want) {
+		t.Fatalf("expected exact multi cache key %q to track %s, got %v", searchKey, want, affected)
+	}
+}
+
+func TestSearchCode_MultiPatternCacheSupplementsSymbolMultipleAffectedFiles(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"pkg/helper.go":     "package pkg\n\nfunc helper() {}\n",
+		"pkg/run_linux.go":  "package pkg\n\nfunc Run() {}\n",
+		"pkg/run_darwin.go": "package pkg\n\nfunc Run() {}\n",
+	})
+
+	cache := &testSearchCache{data: make(map[string]string)}
+	opts := SearchOptions{
+		Pattern: "helper(,Run",
+		Path:    dir,
+		ProjectMap: &repomap.ProjectMap{
+			RootPath: dir,
+			Files: []*repomap.FileEntry{
+				{
+					Path: "pkg/run_linux.go",
+					Symbols: []repomap.Symbol{
+						{Name: "Run", Kind: "function", Line: 3, EndLine: 3, Signature: "func Run()", Exported: true},
+					},
+				},
+				{
+					Path: "pkg/run_darwin.go",
+					Symbols: []repomap.Symbol{
+						{Name: "Run", Kind: "function", Line: 3, EndLine: 3, Signature: "func Run()", Exported: true},
+					},
+				},
+			},
+		},
+		ProjectMapRootPath: dir,
+		ProjectMapStateKey: "affected-multi-symbol-multiple",
+	}
+
+	result := ExecuteSearchCodeWithCache(cache, opts)
+	if !strings.Contains(result, "Multiple symbols matched") || !strings.Contains(result, "helper") {
+		t.Fatalf("expected mixed text/symbol-multiple result, got:\n%s", result)
+	}
+
+	searchKey := singlePatternBundleCacheKey(buildMultiCacheKey(splitPatterns(opts.Pattern)), cache.lastSetPath)
+	affected := cache.affected[searchKey]
+	wantHelper := filepath.Join(dir, "pkg", "helper.go")
+	wantLinux := filepath.Join(dir, "pkg", "run_linux.go")
+	wantDarwin := filepath.Join(dir, "pkg", "run_darwin.go")
+	for _, want := range []string{wantHelper, wantLinux, wantDarwin} {
+		if !containsAffectedFile(affected, want) {
+			t.Fatalf("expected exact multi cache key %q to track %s, got %v", searchKey, want, affected)
+		}
+	}
+
+	cache.InvalidateSearchCacheForFile(wantDarwin)
+	if _, ok := cache.GetSearch(buildMultiCacheKey(splitPatterns(opts.Pattern)), cache.lastSetPath); ok {
+		t.Fatalf("expected multi-pattern cache entry to be invalidated after editing %s", wantDarwin)
+	}
+}
+
+func TestSearchCode_SymbolBundleAffectedFilesStayRepoRelativeFromSubdir(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"pkg/run.go": "package pkg\n\nfunc Run() {}\n",
+	})
+	subdir := filepath.Join(dir, "pkg")
+
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(subdir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(origDir)
+	})
+
+	cache := &testSearchCache{data: make(map[string]string)}
+	opts := SearchOptions{
+		Pattern:            "Run",
+		Path:               ".",
+		ProjectMapRootPath: dir,
+		InvocationCWD:      subdir,
+		ProjectMap: &repomap.ProjectMap{
+			RootPath: dir,
+			Files: []*repomap.FileEntry{
+				{
+					Path: "pkg/run.go",
+					Symbols: []repomap.Symbol{
+						{Name: "Run", Kind: "function", Line: 3, EndLine: 3, Signature: "func Run()", Exported: true},
+					},
+				},
+			},
+		},
+		ProjectMapStateKey: "symbol-subdir-root",
+	}
+
+	result := ExecuteSearchCodeWithCache(cache, opts)
+	if !strings.Contains(result, "in pkg/run.go") {
+		t.Fatalf("expected repo-relative symbol bundle path, got:\n%s", result)
+	}
+
+	searchKey := singlePatternBundleCacheKey("Run", cache.lastSetPath)
+	affected := cache.affected[searchKey]
+	want := filepath.Join(dir, "pkg", "run.go")
+	if !containsAffectedFile(affected, want) {
+		t.Fatalf("expected symbol bundle affected files to include %s, got %v", want, affected)
+	}
+	if containsAffectedFile(affected, filepath.Join(dir, "run.go")) {
+		t.Fatalf("did not expect wrongly rebased root path in affected files: %v", affected)
+	}
+}
+
+func TestSearchCode_SymbolBundleAffectedFilesUseInvocationCWDOnASTFallback(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"pkg/run.go": "package pkg\n\nfunc Run() {}\n",
+	})
+	subdir := filepath.Join(dir, "pkg")
+
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(subdir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(origDir)
+	})
+
+	cache := &testSearchCache{data: make(map[string]string)}
+	opts := SearchOptions{
+		Pattern:            "Run",
+		Path:               ".",
+		ProjectMapRootPath: dir,
+		InvocationCWD:      subdir,
+		ProjectMap: &repomap.ProjectMap{
+			RootPath: dir,
+			Files: []*repomap.FileEntry{
+				{
+					Path:    "pkg/other.go",
+					Symbols: []repomap.Symbol{{Name: "Other", Kind: "function", Line: 3, EndLine: 3, Signature: "func Other()", Exported: true}},
+				},
+			},
+		},
+		ProjectMapStateKey: "symbol-ast-fallback-subdir",
+	}
+
+	result := ExecuteSearchCodeWithCache(cache, opts)
+	if !strings.Contains(result, "func Run()") {
+		t.Fatalf("expected AST fallback symbol result, got:\n%s", result)
+	}
+
+	searchKey := singlePatternBundleCacheKey("Run", cache.lastSetPath)
+	affected := cache.affected[searchKey]
+	want := filepath.Join(dir, "pkg", "run.go")
+	if !containsAffectedFile(affected, want) {
+		t.Fatalf("expected AST fallback affected files to include %s, got %v", want, affected)
+	}
+	if containsAffectedFile(affected, filepath.Join(dir, "run.go")) {
+		t.Fatalf("did not expect wrongly rebased repo-root path in affected files: %v", affected)
+	}
+
+	cache.InvalidateSearchCacheForFile(want)
+	if _, ok := cache.GetSearch("Run", cache.lastSetPath); ok {
+		t.Fatalf("expected symbol cache entry to be invalidated after editing %s", want)
 	}
 }
 
@@ -1671,11 +2022,17 @@ func (a *Agent) Close() error {
 	if got := countSinglePatternBundleCacheEntries(); got == 0 {
 		t.Fatal("expected bundle cache entry before clear")
 	}
+	if got := countSinglePatternAffectedFilesCacheEntries(); got == 0 {
+		t.Fatal("expected affected-files cache entry before clear")
+	}
 
 	cache.ClearSearchCache()
 
 	if got := countSinglePatternBundleCacheEntries(); got != 0 {
 		t.Fatalf("expected bundle cache to be cleared, got %d entries", got)
+	}
+	if got := countSinglePatternAffectedFilesCacheEntries(); got != 0 {
+		t.Fatalf("expected affected-files cache to be cleared, got %d entries", got)
 	}
 }
 
@@ -1707,15 +2064,20 @@ func (a *Agent) Close() error {
 	storeSinglePatternBundle("Close", cacheKey, &SymbolBundle{
 		Identity: SymbolBundleIdentity{Language: "go", Query: "Close", Canonical: "go|agent.go|5|Close", DisplayName: "Close", Kind: "function", File: "agent.go", Line: 5, EndLine: 7},
 	})
+	storeSinglePatternAffectedFiles("Close", cacheKey, []string{filepath.Join(dir, "agent.go")})
 	otherKey := buildSearchCacheKeyWithRoute(normOpts, planSearchRoute("OtherClose", normOpts).cacheSignature())
 	storeSinglePatternBundle("OtherClose", otherKey, &SymbolBundle{
 		Identity: SymbolBundleIdentity{Language: "go", Query: "OtherClose", Canonical: "go|other.go|5|OtherClose", DisplayName: "OtherClose", Kind: "function", File: "other.go", Line: 5, EndLine: 7},
 	})
+	storeSinglePatternAffectedFiles("OtherClose", otherKey, []string{filepath.Join(dir, "other.go")})
 	cache.SetSearch("Close", cacheKey, "cached", []string{filepath.Join(dir, "agent.go")})
 	cache.SetSearch("OtherClose", otherKey, "cached", []string{filepath.Join(dir, "other.go")})
 
 	if got := countSinglePatternBundleCacheEntries(); got != 2 {
 		t.Fatalf("expected 2 bundle cache entries before invalidate, got %d", got)
+	}
+	if got := countSinglePatternAffectedFilesCacheEntries(); got != 2 {
+		t.Fatalf("expected 2 affected-files cache entries before invalidate, got %d", got)
 	}
 
 	cache.InvalidateSearchCacheForFile(filepath.Join(dir, "agent.go"))
@@ -1725,6 +2087,12 @@ func (a *Agent) Close() error {
 	}
 	if loadSinglePatternBundle("OtherClose", otherKey) == nil {
 		t.Fatal("expected unrelated bundle cache entry to remain")
+	}
+	if loadSinglePatternAffectedFiles("Close", cacheKey) != nil {
+		t.Fatal("expected targeted affected-files cache entry to be removed")
+	}
+	if loadSinglePatternAffectedFiles("OtherClose", otherKey) == nil {
+		t.Fatal("expected unrelated affected-files cache entry to remain")
 	}
 }
 
@@ -1775,6 +2143,15 @@ func countSinglePatternBundleCacheEntries() int {
 	return count
 }
 
+func countSinglePatternAffectedFilesCacheEntries() int {
+	count := 0
+	singlePatternAffectedFilesCache.Range(func(key, value any) bool {
+		count++
+		return true
+	})
+	return count
+}
+
 func visibleLocatorIDs(output string) []string {
 	re := regexp.MustCompile(`\[L\d+\]`)
 	matches := re.FindAllString(output, -1)
@@ -1805,6 +2182,15 @@ func locatorIDForLine(t *testing.T, output, needle string) string {
 	}
 	t.Fatalf("expected line containing %q in output:\n%s", needle, output)
 	return ""
+}
+
+func containsAffectedFile(affected []string, want string) bool {
+	for _, file := range affected {
+		if file == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestIsSymbolResolvableLanguage(t *testing.T) {

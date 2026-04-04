@@ -50,12 +50,19 @@ var FullBudget = Budget{
 
 // SymbolCandidate はシンボル候補。
 type SymbolCandidate struct {
-	Name     string
-	Kind     string
-	File     string // プロジェクトルートからの相対パス
-	Line     int
-	EndLine  int
-	Receiver string // メソッド時のレシーバ型（例: *Config, Config）
+	Name               string
+	Kind               string
+	File               string // プロジェクトルートからの相対パス
+	Line               int
+	EndLine            int
+	Receiver           string // メソッド時のレシーバ型（例: *Config, Config）
+	ReceiverNorm       string
+	Signature          string
+	Exported           bool
+	PackageDir         string
+	StableKey          string
+	StableKeyCollision bool
+	RootPath           string
 }
 
 // InspectResult は inspect_symbol の結果。
@@ -164,49 +171,7 @@ func InspectSymbol(symbol, pathHint, mode string) string {
 
 // resolveSymbolCandidates はプロジェクト内からシンボル候補を検索する。
 func resolveSymbolCandidates(symbol, pathHint string) []SymbolCandidate {
-	query := parseSymbolQuery(symbol)
-
-	goFiles := listGoFiles(pathHint)
-	if len(goFiles) == 0 {
-		return nil
-	}
-
-	var candidates []SymbolCandidate
-	for _, f := range goFiles {
-		symbols, err := ast.ExtractSymbols(f)
-		if err != nil {
-			continue
-		}
-		for _, s := range symbols {
-			if !symbolQueryMatches(query, s) {
-				continue
-			}
-			relPath := toRelativePath(f)
-			candidates = append(candidates, SymbolCandidate{
-				Name:     s.Name,
-				Kind:     string(s.Kind),
-				File:     relPath,
-				Line:     s.Line,
-				EndLine:  s.EndLine,
-				Receiver: extractMethodReceiver(s.Signature),
-			})
-		}
-	}
-
-	sort.SliceStable(candidates, func(i, j int) bool {
-		if candidates[i].File != candidates[j].File {
-			return candidates[i].File < candidates[j].File
-		}
-		if candidates[i].Line != candidates[j].Line {
-			return candidates[i].Line < candidates[j].Line
-		}
-		if candidates[i].EndLine != candidates[j].EndLine {
-			return candidates[i].EndLine < candidates[j].EndLine
-		}
-		return candidateDisplayName(candidates[i]) < candidateDisplayName(candidates[j])
-	})
-
-	return candidates
+	return resolveSymbolCandidatesWithRuntime(symbol, pathHint, GoSymbolRuntime{})
 }
 
 // listGoFiles はプロジェクト内の Go ファイルを一覧する。
@@ -261,10 +226,29 @@ func listGoFiles(pathHint string) []string {
 	return files
 }
 
+func extractASTSymbols(path string) ([]ast.Symbol, error) {
+	return ast.ExtractSymbols(path)
+}
+
+func sortSymbolCandidates(candidates []SymbolCandidate) {
+	sort.SliceStable(candidates, func(i, j int) bool {
+		if candidates[i].File != candidates[j].File {
+			return candidates[i].File < candidates[j].File
+		}
+		if candidates[i].Line != candidates[j].Line {
+			return candidates[i].Line < candidates[j].Line
+		}
+		if candidates[i].EndLine != candidates[j].EndLine {
+			return candidates[i].EndLine < candidates[j].EndLine
+		}
+		return candidateDisplayName(candidates[i]) < candidateDisplayName(candidates[j])
+	})
+}
+
 // readDefinitionBody は定義本文を読み出す。
 func readDefinitionBody(cand SymbolCandidate, maxLines int) []string {
-	absPath, err := filepath.Abs(cand.File)
-	if err != nil {
+	absPath := candidateAbsPath(cand)
+	if absPath == "" {
 		return nil
 	}
 
@@ -300,6 +284,23 @@ func readDefinitionBody(cand SymbolCandidate, maxLines int) []string {
 	return result
 }
 
+func candidateAbsPath(cand SymbolCandidate) string {
+	if strings.TrimSpace(cand.File) == "" {
+		return ""
+	}
+	if filepath.IsAbs(cand.File) {
+		return filepath.Clean(cand.File)
+	}
+	if strings.TrimSpace(cand.RootPath) != "" {
+		return filepath.Join(cand.RootPath, filepath.FromSlash(cand.File))
+	}
+	absPath, err := filepath.Abs(cand.File)
+	if err != nil {
+		return ""
+	}
+	return absPath
+}
+
 // toRelativePath は絶対パスを作業ディレクトリからの相対パスに変換する。
 func toRelativePath(absPath string) string {
 	cwd, err := os.Getwd()
@@ -317,16 +318,7 @@ func toRelativePath(absPath string) string {
 // これらのファイル内の call/ref は別のシンボルを参照している可能性が高いため、
 // 保守的に除外対象とする。
 func findAmbiguousFiles(symbol string, cand SymbolCandidate) map[string]bool {
-	ambiguous := make(map[string]bool)
-
-	// プロジェクト全体で同名シンボルを検索（pathHint なし）
-	allCandidates := resolveSymbolCandidates(symbol, "")
-	for _, c := range allCandidates {
-		if c.File != cand.File {
-			ambiguous[c.File] = true
-		}
-	}
-	return ambiguous
+	return findAmbiguousFilesWithRuntime(symbol, cand, GoSymbolRuntime{})
 }
 
 // filterRefsByCandidate は、候補に安全に帰属できない参照を除外する。

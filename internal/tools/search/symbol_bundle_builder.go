@@ -1,6 +1,8 @@
 package search
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -44,7 +46,7 @@ func buildGoSymbolBundle(query string, result navigation.InspectResult) *SymbolB
 		Identity: SymbolBundleIdentity{
 			Language:    "go",
 			Query:       query,
-			Canonical:   canonicalSymbolBundleKey("go", result.Symbol.File, result.Symbol.Line, displayName),
+			Canonical:   canonicalGoSymbolBundleKey(*result.Symbol),
 			DisplayName: displayName,
 			Kind:        result.Symbol.Kind,
 			File:        result.Symbol.File,
@@ -62,7 +64,10 @@ func buildGoSymbolBundle(query string, result navigation.InspectResult) *SymbolB
 			EndLine: result.Symbol.EndLine,
 			Body:    append([]string(nil), result.Body...),
 		},
-		Debug: SymbolBundleDebug{Source: "go-inspect"},
+		Debug: SymbolBundleDebug{
+			Source:       "go-inspect",
+			FileRootPath: result.Symbol.RootPath,
+		},
 	}
 
 	if len(result.Body) > 0 {
@@ -304,6 +309,29 @@ func genericRefScore(def genericSymbolDef, ref genericSymbolRef, testOnly bool) 
 	}
 	score -= min(ref.Line, 200)
 	return score
+}
+
+func stableGoSymbolBundleKey(packageDir, receiverNorm, name, kind, signature string) string {
+	sigHash := sha256.Sum256([]byte(strings.TrimSpace(signature)))
+	return fmt.Sprintf("%s|%s|%s|%s|%s|%s",
+		"go",
+		filepath.ToSlash(filepath.Clean(packageDir)),
+		strings.TrimSpace(receiverNorm),
+		strings.TrimSpace(name),
+		strings.TrimSpace(kind),
+		hex.EncodeToString(sigHash[:8]),
+	)
+}
+
+func canonicalGoSymbolBundleKey(symbol navigation.SymbolCandidate) string {
+	key := strings.TrimSpace(symbol.StableKey)
+	if key == "" {
+		key = stableGoSymbolBundleKey(symbol.PackageDir, symbol.ReceiverNorm, symbol.Name, symbol.Kind, symbol.Signature)
+	}
+	if symbol.StableKeyCollision && strings.TrimSpace(symbol.File) != "" {
+		return key + "|file=" + filepath.ToSlash(filepath.Clean(symbol.File))
+	}
+	return key
 }
 
 func canonicalSymbolBundleKey(lang, file string, line int, displayName string) string {

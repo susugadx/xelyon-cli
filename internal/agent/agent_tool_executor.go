@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -36,6 +37,7 @@ func argsToJSON(args map[string]any) string {
 
 func (a *Agent) toolExecutionContext(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer) tools.ExecutionContext {
 	runtimeUI := a.ui()
+	invocationCWD, _ := os.Getwd()
 	if ctx == nil {
 		ctx = a.currentRequestContext()
 	}
@@ -49,22 +51,26 @@ func (a *Agent) toolExecutionContext(ctx context.Context, stdin io.Reader, stdou
 		stderr = runtimeUI.ErrorOutput()
 	}
 	ec := tools.ExecutionContext{
-		Context:         ctx,
-		Provider:        a.CurrentProvider,
-		ProviderName:    a.ProviderName,
-		Model:           a.CurrentModel,
-		Stdin:           stdin,
-		Stdout:          stdout,
-		Stderr:          stderr,
-		PromptReader:    runtimeUI.PromptReader(),
-		Runtime:         runtimeUI,
-		Registry:        a.registry(),
-		ToolCache:       a.ToolCache,
-		LSPClient:       a.GetLSPClient(),
-		Config:          a.cfg(),
-		AutoApprove:     a.autoApprove(),
-		AuditLogger:     a.auditLogger(),
-		LocatorRegistry: a.LocatorRegistry,
+		Context:            ctx,
+		Provider:           a.CurrentProvider,
+		ProviderName:       a.ProviderName,
+		Model:              a.CurrentModel,
+		Stdin:              stdin,
+		Stdout:             stdout,
+		Stderr:             stderr,
+		PromptReader:       runtimeUI.PromptReader(),
+		Runtime:            runtimeUI,
+		Registry:           a.registry(),
+		ToolCache:          a.ToolCache,
+		LSPClient:          a.GetLSPClient(),
+		Config:             a.cfg(),
+		ProjectMap:         a.projectMap,
+		ProjectMapRootPath: a.projectMapRootPath,
+		ProjectMapStateKey: a.projectMapStateKey,
+		InvocationCWD:      invocationCWD,
+		AutoApprove:        a.autoApprove(),
+		AuditLogger:        a.auditLogger(),
+		LocatorRegistry:    a.LocatorRegistry,
 	}
 
 	// TUIモードの場合、ToolResultCallbackを設定。

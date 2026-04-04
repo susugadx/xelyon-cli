@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/ast"
+	"github.com/susugadx/xelyon-cli/internal/repomap"
 )
 
 func TestInspectSymbol_EmptySymbol(t *testing.T) {
@@ -867,6 +868,151 @@ func TestFormatInspectResult_UpstreamComplete(t *testing.T) {
 
 	if strings.Contains(result, "truncated upstream") {
 		t.Errorf("expected no incomplete warning when search is complete, got: %s", result)
+	}
+}
+
+func TestResolveSymbolCandidatesWithRuntime_ProjectMapSnapshotDerivesMethodReceiver(t *testing.T) {
+	dir := setupTestGoFiles(t, map[string]string{
+		"pkg/service.go": "package pkg\n\nfunc placeholder() {}\n",
+	})
+
+	runtime := GoSymbolRuntime{
+		ProjectMap: &repomap.ProjectMap{
+			RootPath: dir,
+			Files: []*repomap.FileEntry{
+				{
+					Path: "pkg/service.go",
+					Symbols: []repomap.Symbol{
+						{Name: "Build", Kind: "method", Line: 3, EndLine: 3, Signature: "func (s *Service[T]) Build() error", Exported: true},
+					},
+				},
+			},
+		},
+		ProjectMapRootPath: dir,
+		ProjectMapStateKey: "state-derive",
+	}
+
+	candidates := resolveSymbolCandidatesWithRuntime("Service.Build", filepath.Join(dir, "pkg"), runtime)
+	if len(candidates) != 1 {
+		t.Fatalf("expected 1 candidate from snapshot, got %+v", candidates)
+	}
+	if candidates[0].Receiver != "*Service[T]" {
+		t.Fatalf("unexpected receiver: %+v", candidates[0])
+	}
+	if candidates[0].ReceiverNorm != "Service" {
+		t.Fatalf("unexpected receiver norm: %+v", candidates[0])
+	}
+	if candidates[0].PackageDir != "pkg" {
+		t.Fatalf("unexpected package dir: %+v", candidates[0])
+	}
+}
+
+func TestResolveSymbolCandidatesWithRuntime_ProjectMapSnapshotPathHintFilters(t *testing.T) {
+	dir := setupTestGoFiles(t, map[string]string{
+		"pkg/service.go":      "package pkg\n\nfunc placeholder() {}\n",
+		"internal/service.go": "package internal\n\nfunc placeholder() {}\n",
+	})
+
+	runtime := GoSymbolRuntime{
+		ProjectMap: &repomap.ProjectMap{
+			RootPath: dir,
+			Files: []*repomap.FileEntry{
+				{
+					Path: "pkg/service.go",
+					Symbols: []repomap.Symbol{
+						{Name: "Build", Kind: "function", Line: 3, EndLine: 3, Signature: "func Build() error", Exported: true},
+					},
+				},
+				{
+					Path: "internal/service.go",
+					Symbols: []repomap.Symbol{
+						{Name: "Build", Kind: "function", Line: 3, EndLine: 3, Signature: "func Build() error", Exported: true},
+					},
+				},
+			},
+		},
+		ProjectMapRootPath: dir,
+		ProjectMapStateKey: "state-hints",
+	}
+
+	fileCandidates := resolveSymbolCandidatesWithRuntime("Build", filepath.Join(dir, "pkg", "service.go"), runtime)
+	if len(fileCandidates) != 1 || fileCandidates[0].File != "pkg/service.go" {
+		t.Fatalf("expected file path hint to isolate pkg/service.go, got %+v", fileCandidates)
+	}
+
+	dirCandidates := resolveSymbolCandidatesWithRuntime("Build", filepath.Join(dir, "pkg"), runtime)
+	if len(dirCandidates) != 1 || dirCandidates[0].File != "pkg/service.go" {
+		t.Fatalf("expected dir path hint to isolate pkg/service.go, got %+v", dirCandidates)
+	}
+}
+
+func TestResolveSymbolCandidatesWithRuntime_ProjectMapSnapshotRelativePathUsesInvocationCWD(t *testing.T) {
+	dir := setupTestGoFiles(t, map[string]string{
+		"pkg/service.go":      "package pkg\n\nfunc placeholder() {}\n",
+		"internal/service.go": "package internal\n\nfunc placeholder() {}\n",
+	})
+	subdir := filepath.Join(dir, "pkg")
+
+	runtime := GoSymbolRuntime{
+		ProjectMap: &repomap.ProjectMap{
+			RootPath: dir,
+			Files: []*repomap.FileEntry{
+				{
+					Path: "pkg/service.go",
+					Symbols: []repomap.Symbol{
+						{Name: "Build", Kind: "function", Line: 3, EndLine: 3, Signature: "func Build() error", Exported: true},
+					},
+				},
+				{
+					Path: "internal/service.go",
+					Symbols: []repomap.Symbol{
+						{Name: "Build", Kind: "function", Line: 3, EndLine: 3, Signature: "func Build() error", Exported: true},
+					},
+				},
+			},
+		},
+		ProjectMapRootPath: dir,
+		ProjectMapStateKey: "state-relative-cwd",
+		InvocationCWD:      subdir,
+	}
+
+	candidates := resolveSymbolCandidatesWithRuntime("Build", ".", runtime)
+	if len(candidates) != 1 || candidates[0].File != "pkg/service.go" {
+		t.Fatalf("expected relative pathHint to resolve from invocation cwd, got %+v", candidates)
+	}
+}
+
+func TestFindAmbiguousFilesWithRuntime_ProjectMapSnapshot(t *testing.T) {
+	dir := setupTestGoFiles(t, map[string]string{
+		"pkg/a.go": "package pkg\n\nfunc placeholder() {}\n",
+		"pkg/b.go": "package pkg\n\nfunc placeholder() {}\n",
+	})
+
+	runtime := GoSymbolRuntime{
+		ProjectMap: &repomap.ProjectMap{
+			RootPath: dir,
+			Files: []*repomap.FileEntry{
+				{
+					Path: "pkg/a.go",
+					Symbols: []repomap.Symbol{
+						{Name: "Build", Kind: "function", Line: 3, EndLine: 3, Signature: "func Build() error", Exported: true},
+					},
+				},
+				{
+					Path: "pkg/b.go",
+					Symbols: []repomap.Symbol{
+						{Name: "Build", Kind: "function", Line: 3, EndLine: 3, Signature: "func Build() error", Exported: true},
+					},
+				},
+			},
+		},
+		ProjectMapRootPath: dir,
+		ProjectMapStateKey: "state-ambiguous",
+	}
+
+	ambiguous := findAmbiguousFilesWithRuntime("Build", SymbolCandidate{File: "pkg/a.go"}, runtime)
+	if len(ambiguous) != 1 || !ambiguous["pkg/b.go"] {
+		t.Fatalf("expected snapshot ambiguous file set, got %+v", ambiguous)
 	}
 }
 

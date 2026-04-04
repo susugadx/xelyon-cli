@@ -67,7 +67,6 @@ func RunHeadlessWithConfig(ctx context.Context, query string, model string, prov
 
 	maxIterations := normalizeToolLoopLimit(agent.cfg().General.ToolLoopLimit)
 	var finalResponse string
-	execCtx := agent.toolExecutionContext(ctx, nil, nil, nil)
 
 	for iteration := 0; maxIterations == 0 || iteration < maxIterations; iteration++ {
 		// 親 context がキャンセルされた場合は即終了
@@ -116,6 +115,7 @@ func RunHeadlessWithConfig(ctx context.Context, query string, model string, prov
 				ToolIndex: toolCount,
 			})
 
+			execCtx := agent.toolExecutionContext(ctx, nil, nil, nil)
 			output, change := tools.ExecuteQuietWithContext(execCtx, tc)
 			agent.noteProjectMapMutation(tc, change)
 

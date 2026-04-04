@@ -10,6 +10,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/locator"
 	lsplib "github.com/susugadx/xelyon-cli/internal/lsp"
+	"github.com/susugadx/xelyon-cli/internal/repomap"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -28,22 +29,26 @@ type ToolResultInfo struct {
 // web_search などが現在のプロバイダー/モデルや対話 I/O を参照するために使用する。
 // 各実行経路が明示的に組み立てて注入し、process-global 状態には依存しない。
 type ExecutionContext struct {
-	Context         context.Context
-	Provider        api.Provider
-	ProviderName    string
-	Model           string
-	Stdin           io.Reader
-	Stdout          io.Writer
-	Stderr          io.Writer
-	PromptReader    *ui.MultilineReader
-	Runtime         *ui.Runtime // スピナー停止に使用する UI Runtime
-	Registry        *Registry
-	ToolCache       ToolCacheInterface
-	LSPClient       *lsplib.Client
-	Config          *config.Config
-	AutoApprove     bool
-	AuditLogger     audit.ToolLogger
-	LocatorRegistry *locator.Registry
+	Context            context.Context
+	Provider           api.Provider
+	ProviderName       string
+	Model              string
+	Stdin              io.Reader
+	Stdout             io.Writer
+	Stderr             io.Writer
+	PromptReader       *ui.MultilineReader
+	Runtime            *ui.Runtime // スピナー停止に使用する UI Runtime
+	Registry           *Registry
+	ToolCache          ToolCacheInterface
+	LSPClient          *lsplib.Client
+	Config             *config.Config
+	ProjectMap         *repomap.ProjectMap
+	ProjectMapRootPath string
+	ProjectMapStateKey string
+	InvocationCWD      string
+	AutoApprove        bool
+	AuditLogger        audit.ToolLogger
+	LocatorRegistry    *locator.Registry
 
 	// ToolResultCallback はツール実行結果を構造化データとして通知するコールバック。
 	// TUIモードで設定される。nilの場合はstdoutに従来形式で出力する。

@@ -472,6 +472,56 @@ func TestSearchCode_CacheKeyUsesInternalTokenBudget(t *testing.T) {
 	}
 }
 
+func TestSearchCode_AffectedFilesUseInvocationCWDForSubdirSearch(t *testing.T) {
+	setupSearchTestMocks(t)
+
+	root := t.TempDir()
+	subdir := filepath.Join(root, "pkg")
+	if err := os.MkdirAll(subdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	targetFile := filepath.Join(subdir, "target.go")
+	if err := os.WriteFile(targetFile, []byte("package pkg\n\nconst target_text = 1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(subdir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(origDir)
+	})
+
+	cache := &testSearchCache{data: make(map[string]string)}
+	opts := SearchOptions{
+		Pattern:            "target_text",
+		Path:               ".",
+		Mode:               string(SearchModeLiteral),
+		ProjectMapRootPath: root,
+		InvocationCWD:      subdir,
+	}
+
+	result := ExecuteSearchCodeWithCache(cache, opts)
+	if !strings.Contains(result, "target.go") {
+		t.Fatalf("expected text search result, got:\n%s", result)
+	}
+
+	searchKey := singlePatternBundleCacheKey("target_text", cache.lastSetPath)
+	affected := cache.affected[searchKey]
+	if len(affected) != 1 || affected[0] != targetFile {
+		t.Fatalf("expected affected files [%s], got %v", targetFile, affected)
+	}
+
+	cache.InvalidateSearchCacheForFile(targetFile)
+	if _, ok := cache.GetSearch("target_text", cache.lastSetPath); ok {
+		t.Fatal("expected text search cache entry to be invalidated after file edit")
+	}
+}
+
 func TestSearchCode_ImpactIntentCacheRemainsValid(t *testing.T) {
 	setupSearchTestMocks(t)
 

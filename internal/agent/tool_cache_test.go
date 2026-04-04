@@ -8,7 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/susugadx/xelyon-cli/internal/repomap"
 	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/tools/search"
 )
 
 func TestToolCache_FileCache(t *testing.T) {
@@ -374,6 +376,44 @@ func TestToolCache_SearchEvictionTriggersBundleCacheHook(t *testing.T) {
 	}
 	if len(evictedKeys) == 0 {
 		t.Fatal("expected evicted keys to be reported")
+	}
+}
+
+func TestToolCache_RecentSearchAffectedFilesAfterSymbolSearch(t *testing.T) {
+	cache := NewToolCache()
+	dir := t.TempDir()
+	file := filepath.Join(dir, "run.go")
+	if err := os.WriteFile(file, []byte("package example\n\nfunc Run() {}\n"), 0o644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	result := search.ExecuteSearchCodeWithCache(cache, search.SearchOptions{
+		Pattern: "Run",
+		Path:    dir,
+		ProjectMap: &repomap.ProjectMap{
+			RootPath: dir,
+			Files: []*repomap.FileEntry{
+				{
+					Path: "run.go",
+					Symbols: []repomap.Symbol{
+						{Name: "Run", Kind: "function", Line: 3, EndLine: 3, Signature: "func Run() {}", Exported: true},
+					},
+				},
+			},
+		},
+		ProjectMapRootPath: dir,
+		ProjectMapStateKey: "agent-search-affected",
+	})
+	if !strings.Contains(result, "Run") {
+		t.Fatalf("expected symbol search result, got:\n%s", result)
+	}
+
+	affected := cache.RecentSearchAffectedFiles(5)
+	if len(affected) == 0 {
+		t.Fatal("expected affected files after symbol search")
+	}
+	if affected[0] != file {
+		t.Fatalf("expected first affected file %s, got %v", file, affected)
 	}
 }
 

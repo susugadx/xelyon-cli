@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
@@ -16,6 +17,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/locator"
 	"github.com/susugadx/xelyon-cli/internal/navigation"
 	"github.com/susugadx/xelyon-cli/internal/pathmatch"
+	"github.com/susugadx/xelyon-cli/internal/repomap"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
@@ -81,8 +83,12 @@ type SearchOptions struct {
 	OutputMode       string // 内部専用。外部パラメータは廃止。
 	LegacyIsRegexSet bool
 
-	LocatorRegistry *locator.Registry // Locator ID レジストリ（nilの場合はID付与しない）
-	LSPClient       navigation.LSPClient
+	LocatorRegistry    *locator.Registry // Locator ID レジストリ（nilの場合はID付与しない）
+	LSPClient          navigation.LSPClient
+	ProjectMap         *repomap.ProjectMap
+	ProjectMapRootPath string
+	ProjectMapStateKey string
+	InvocationCWD      string
 
 	ignoreMatcher *pathmatch.Matcher
 	ignoreGlobs   []string
@@ -151,13 +157,15 @@ func executeSinglePatternWithTrace(cache tools.ToolCacheInterface, pattern strin
 }
 
 type singlePatternExecution struct {
-	Pattern string
-	Output  string
-	Route   searchRouteTrace
-	Bundle  *SymbolBundle
+	Pattern       string
+	Output        string
+	Route         searchRouteTrace
+	Bundle        *SymbolBundle
+	AffectedFiles []string
 }
 
 var singlePatternBundleCache sync.Map
+var singlePatternAffectedFilesCache sync.Map
 
 func init() {
 	tools.RegisterSearchCacheLifecycleHooks(clearSinglePatternBundleCache, invalidateSinglePatternBundleCacheKeys, invalidateSinglePatternBundleCacheKeys)
@@ -172,6 +180,10 @@ func clearSinglePatternBundleCache() {
 		singlePatternBundleCache.Delete(key)
 		return true
 	})
+	singlePatternAffectedFilesCache.Range(func(key, value any) bool {
+		singlePatternAffectedFilesCache.Delete(key)
+		return true
+	})
 }
 
 func invalidateSinglePatternBundleCacheKeys(keys []string) {
@@ -180,6 +192,7 @@ func invalidateSinglePatternBundleCacheKeys(keys []string) {
 			continue
 		}
 		singlePatternBundleCache.Delete(key)
+		singlePatternAffectedFilesCache.Delete(key)
 	}
 }
 
@@ -197,6 +210,22 @@ func storeSinglePatternBundle(pattern, cacheKey string, bundle *SymbolBundle) {
 		return
 	}
 	singlePatternBundleCache.Store(singlePatternBundleCacheKey(pattern, cacheKey), cloneSymbolBundle(bundle))
+}
+
+func loadSinglePatternAffectedFiles(pattern, cacheKey string) []string {
+	value, ok := singlePatternAffectedFilesCache.Load(singlePatternBundleCacheKey(pattern, cacheKey))
+	if !ok {
+		return nil
+	}
+	paths, _ := value.([]string)
+	return append([]string(nil), paths...)
+}
+
+func storeSinglePatternAffectedFiles(pattern, cacheKey string, affectedFiles []string) {
+	if len(affectedFiles) == 0 {
+		return
+	}
+	singlePatternAffectedFilesCache.Store(singlePatternBundleCacheKey(pattern, cacheKey), append([]string(nil), affectedFiles...))
 }
 
 func cloneSymbolBundle(bundle *SymbolBundle) *SymbolBundle {
@@ -227,11 +256,17 @@ func executeSinglePatternDetailed(cache tools.ToolCacheInterface, pattern string
 	cacheKey := buildSearchCacheKeyWithRoute(opts, route.cacheSignature())
 	if cache != nil {
 		if cached, ok := cache.GetSearch(pattern, cacheKey); ok {
+			bundle := loadSinglePatternBundle(pattern, cacheKey)
+			affectedFiles := loadSinglePatternAffectedFiles(pattern, cacheKey)
+			if len(affectedFiles) == 0 {
+				affectedFiles = deriveAffectedFilesFromCachedResult(bundle, cached, opts)
+			}
 			return singlePatternExecution{
-				Pattern: pattern,
-				Output:  cached,
-				Route:   route,
-				Bundle:  loadSinglePatternBundle(pattern, cacheKey),
+				Pattern:       pattern,
+				Output:        cached,
+				Route:         route,
+				Bundle:        bundle,
+				AffectedFiles: affectedFiles,
 			}
 		}
 	}
@@ -246,20 +281,36 @@ func executeSinglePatternDetailed(cache tools.ToolCacheInterface, pattern string
 				route.FinalLane = searchLaneSymbol
 				route.SymbolResolved = true
 				resolved.Bundle = attachBundleRoute(resolved.Bundle, route)
+				affectedFiles := collectSymbolBundleAffectedFiles(resolved.Bundle, opts)
 				if cache != nil {
-					cache.SetSearch(pattern, cacheKey, resolved.Output, nil)
+					cache.SetSearch(pattern, cacheKey, resolved.Output, affectedFiles)
 					storeSinglePatternBundle(pattern, cacheKey, resolved.Bundle)
+					storeSinglePatternAffectedFiles(pattern, cacheKey, affectedFiles)
 				}
 				return singlePatternExecution{
-					Pattern: pattern,
-					Output:  resolved.Output,
-					Route:   route,
-					Bundle:  resolved.Bundle,
+					Pattern:       pattern,
+					Output:        resolved.Output,
+					Route:         route,
+					Bundle:        resolved.Bundle,
+					AffectedFiles: affectedFiles,
 				}
 			case symbolResolveMultiple:
 				route.FinalLane = searchLaneSymbol
 				route.SymbolResolved = true
-				return singlePatternExecution{Pattern: pattern, Output: resolved.Output, Route: route}
+				affectedFiles := resolved.AffectedFiles
+				if len(affectedFiles) == 0 {
+					affectedFiles = deriveAffectedFilesFromCachedResult(nil, resolved.Output, opts)
+				}
+				if cache != nil {
+					cache.SetSearch(pattern, cacheKey, resolved.Output, affectedFiles)
+					storeSinglePatternAffectedFiles(pattern, cacheKey, affectedFiles)
+				}
+				return singlePatternExecution{
+					Pattern:       pattern,
+					Output:        resolved.Output,
+					Route:         route,
+					AffectedFiles: affectedFiles,
+				}
 			case symbolResolveNone:
 				route.SymbolResolved = false
 			}
@@ -306,9 +357,12 @@ func executeSinglePatternDetailed(cache tools.ToolCacheInterface, pattern string
 		}
 
 		if cache != nil {
-			cache.SetSearch(pattern, cacheKey, finalOutput, collectFilePaths(results))
+			affectedFiles := collectFilePaths(results, opts)
+			cache.SetSearch(pattern, cacheKey, finalOutput, affectedFiles)
+			storeSinglePatternAffectedFiles(pattern, cacheKey, affectedFiles)
+			return singlePatternExecution{Pattern: pattern, Output: finalOutput, Route: route, AffectedFiles: affectedFiles}
 		}
-		return singlePatternExecution{Pattern: pattern, Output: finalOutput, Route: route}
+		return singlePatternExecution{Pattern: pattern, Output: finalOutput, Route: route, AffectedFiles: collectFilePaths(results, opts)}
 	}
 
 	results = mergeContextLines(results)
@@ -325,11 +379,13 @@ func executeSinglePatternDetailed(cache tools.ToolCacheInterface, pattern string
 	}
 	finalOutput += lineRangeHint
 
+	affectedFiles := collectFilePaths(results, opts)
 	if cache != nil {
-		cache.SetSearch(pattern, cacheKey, finalOutput, collectFilePaths(results))
+		cache.SetSearch(pattern, cacheKey, finalOutput, affectedFiles)
+		storeSinglePatternAffectedFiles(pattern, cacheKey, affectedFiles)
 	}
 
-	return singlePatternExecution{Pattern: pattern, Output: finalOutput, Route: route}
+	return singlePatternExecution{Pattern: pattern, Output: finalOutput, Route: route, AffectedFiles: affectedFiles}
 }
 
 const escapedCommaPlaceholder = "\x00COMMA\x00"
@@ -432,7 +488,8 @@ func executeMultiplePatterns(cache tools.ToolCacheInterface, patterns []string, 
 	if cache != nil {
 		multiKey := buildMultiCacheKey(patterns)
 		cacheKey := buildMultiSearchCacheKey(opts, patterns)
-		cache.SetSearch(multiKey, cacheKey, output, nil)
+		affectedFiles := collectAffectedFilesFromExecutions(collected, opts)
+		cache.SetSearch(multiKey, cacheKey, output, affectedFiles)
 	}
 
 	return output
@@ -625,9 +682,77 @@ func extractPrimaryFilePaths(output string) []string {
 				rest = rest[:atIdx]
 			}
 			add(rest)
+			continue
+		}
+		// Multiple generic definitions: "1. kind Name (L10) in path/to/file"
+		if hasNumericListPrefix(trimmed) {
+			if idx := strings.LastIndex(trimmed, " in "); idx > 0 {
+				add(strings.TrimSpace(trimmed[idx+4:]))
+				continue
+			}
+		}
+		// Multiple Go symbol candidates: "1. path/to/file kind Symbol (L10-L12)"
+		if numbered, ok := parseNumberedCandidateFilePath(trimmed); ok {
+			add(numbered)
 		}
 	}
 	return paths
+}
+
+func parseNumberedCandidateFilePath(line string) (string, bool) {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return "", false
+	}
+	dotIdx := strings.Index(line, ".")
+	if dotIdx <= 0 {
+		return "", false
+	}
+	for _, r := range line[:dotIdx] {
+		if r < '0' || r > '9' {
+			return "", false
+		}
+	}
+	rest := strings.TrimSpace(line[dotIdx+1:])
+	if rest == "" {
+		return "", false
+	}
+	if idx := strings.Index(rest, " function "); idx > 0 {
+		return strings.TrimSpace(rest[:idx]), true
+	}
+	if idx := strings.Index(rest, " method "); idx > 0 {
+		return strings.TrimSpace(rest[:idx]), true
+	}
+	if idx := strings.Index(rest, " type "); idx > 0 {
+		return strings.TrimSpace(rest[:idx]), true
+	}
+	if idx := strings.Index(rest, " interface "); idx > 0 {
+		return strings.TrimSpace(rest[:idx]), true
+	}
+	if idx := strings.Index(rest, " const "); idx > 0 {
+		return strings.TrimSpace(rest[:idx]), true
+	}
+	if idx := strings.Index(rest, " var "); idx > 0 {
+		return strings.TrimSpace(rest[:idx]), true
+	}
+	return "", false
+}
+
+func hasNumericListPrefix(line string) bool {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return false
+	}
+	dotIdx := strings.Index(line, ".")
+	if dotIdx <= 0 {
+		return false
+	}
+	for _, r := range line[:dotIdx] {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // classifyFilePath はファイルパスをカテゴリ（impl/test/config）に分類する。
@@ -768,19 +893,137 @@ func buildMultiSearchCacheKey(opts SearchOptions, patterns []string) string {
 	return buildSearchCacheKeyWithRoute(opts, strings.Join(signatures, ";"))
 }
 
-func collectFilePaths(results []SearchResult) []string {
+func collectFilePaths(results []SearchResult, opts SearchOptions) []string {
 	paths := make([]string, 0, len(results))
 	for _, r := range results {
 		if r.FilePath == "" {
 			continue
 		}
-		if absPath, err := filepath.Abs(r.FilePath); err == nil {
+		if absPath := absoluteAffectedFilePath(r.FilePath, opts, affectedFileSourceText); absPath != "" {
 			paths = append(paths, absPath)
-		} else {
-			paths = append(paths, r.FilePath)
 		}
 	}
 	return dedupePaths(paths)
+}
+
+func collectAffectedFilesFromExecutions(collected []formattedPatternExecution, opts SearchOptions) []string {
+	paths := make([]string, 0, len(collected)*2)
+	var outputs []string
+	for _, execution := range collected {
+		paths = append(paths, execution.AffectedFiles...)
+		outputs = append(outputs, execution.Output)
+	}
+	paths = append(paths, collectPrimaryFilePathsFromOutputs(outputs, opts)...)
+	return dedupePaths(paths)
+}
+
+func deriveAffectedFilesFromCachedResult(bundle *SymbolBundle, output string, opts SearchOptions) []string {
+	if affected := collectSymbolBundleAffectedFiles(bundle, opts); len(affected) > 0 {
+		return affected
+	}
+	return collectPrimaryFilePathsFromOutputs([]string{output}, opts)
+}
+
+func collectSymbolBundleAffectedFiles(bundle *SymbolBundle, opts SearchOptions) []string {
+	if bundle == nil {
+		return nil
+	}
+
+	paths := make([]string, 0, 1+len(bundle.Sections))
+	rootPath := strings.TrimSpace(bundle.Debug.FileRootPath)
+	add := func(file string) {
+		if absPath := absoluteAffectedFilePathForSymbol(file, opts, rootPath); absPath != "" {
+			paths = append(paths, absPath)
+		}
+	}
+
+	add(bundle.Definition.File)
+	for _, section := range bundle.Sections {
+		for _, item := range section.Items {
+			add(item.File)
+		}
+	}
+	return dedupePaths(paths)
+}
+
+func collectPrimaryFilePathsFromOutputs(outputs []string, opts SearchOptions) []string {
+	var paths []string
+	for _, output := range outputs {
+		for _, file := range extractPrimaryFilePaths(output) {
+			if absPath := absoluteAffectedFilePath(file, opts, affectedFileSourceText); absPath != "" {
+				paths = append(paths, absPath)
+			}
+		}
+	}
+	return dedupePaths(paths)
+}
+
+type affectedFileSource int
+
+const (
+	affectedFileSourceText affectedFileSource = iota
+	affectedFileSourceSymbol
+)
+
+func absoluteAffectedFilePath(file string, opts SearchOptions, source affectedFileSource) string {
+	return absoluteAffectedFilePathWithBase(file, affectedFileBasePath(opts, source))
+}
+
+func absoluteAffectedFilePathForSymbol(file string, opts SearchOptions, rootPath string) string {
+	rootPath = strings.TrimSpace(rootPath)
+	if rootPath != "" {
+		return absoluteAffectedFilePathWithBase(file, rootPath)
+	}
+	return absoluteAffectedFilePath(file, opts, affectedFileSourceSymbol)
+}
+
+func absoluteAffectedFilePathWithBase(file, basePath string) string {
+	file = strings.TrimSpace(file)
+	if file == "" {
+		return ""
+	}
+	if filepath.IsAbs(file) {
+		return filepath.Clean(file)
+	}
+
+	basePath = strings.TrimSpace(basePath)
+	if basePath != "" {
+		return filepath.Clean(filepath.Join(basePath, filepath.FromSlash(file)))
+	}
+
+	if absPath, err := filepath.Abs(file); err == nil {
+		return filepath.Clean(absPath)
+	}
+	return filepath.Clean(file)
+}
+
+func affectedFileBasePath(opts SearchOptions, source affectedFileSource) string {
+	switch source {
+	case affectedFileSourceSymbol:
+		if root := strings.TrimSpace(opts.ProjectMapRootPath); root != "" {
+			if abs, err := filepath.Abs(root); err == nil {
+				return abs
+			}
+			return filepath.Clean(root)
+		}
+	}
+	return invocationCWDOrGetwd(opts)
+}
+
+func invocationCWDOrGetwd(opts SearchOptions) string {
+	if cwd := strings.TrimSpace(opts.InvocationCWD); cwd != "" {
+		if abs, err := filepath.Abs(cwd); err == nil {
+			return abs
+		}
+		return filepath.Clean(cwd)
+	}
+	if cwd, err := os.Getwd(); err == nil {
+		if abs, err := filepath.Abs(cwd); err == nil {
+			return abs
+		}
+		return filepath.Clean(cwd)
+	}
+	return ""
 }
 
 func dedupePaths(paths []string) []string {

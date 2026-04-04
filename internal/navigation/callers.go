@@ -190,9 +190,8 @@ func runReferenceSearch(reader io.Reader, symbol string, cancel func(), wait fun
 	return result.Refs, result.Truncated, result.Incomplete
 }
 
-// findReferencesWithFallback runs the existing ripgrep-based search path and filters noisy matches.
-func findReferencesWithFallback(baseName string, cand SymbolCandidate) ([]Reference, bool, bool) {
-	ambiguousFiles := findAmbiguousFiles(baseName, cand)
+func findReferencesWithFallbackRuntime(baseName string, cand SymbolCandidate, runtime GoSymbolRuntime) ([]Reference, bool, bool) {
+	ambiguousFiles := findAmbiguousFilesWithRuntime(baseName, cand, runtime)
 	allRefs, truncated, incomplete := findReferences(baseName)
 	return filterRefsByCandidate(allRefs, cand, ambiguousFiles), truncated, incomplete
 }
@@ -254,9 +253,9 @@ func findImplementationsViaLSP(client LSPClient, cand SymbolCandidate) ([]Implem
 
 // findSymbolColumn returns the 1-indexed column of the symbol name on the candidate line.
 func findSymbolColumn(cand SymbolCandidate) (int, error) {
-	absPath, err := filepath.Abs(cand.File)
-	if err != nil {
-		absPath = cand.File
+	absPath := candidateAbsPath(cand)
+	if absPath == "" {
+		return 1, fmt.Errorf("empty symbol path")
 	}
 
 	content, err := os.ReadFile(absPath)

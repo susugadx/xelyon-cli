@@ -1,6 +1,9 @@
 package navigation
 
-import "github.com/susugadx/xelyon-cli/internal/locator"
+import (
+	"github.com/susugadx/xelyon-cli/internal/locator"
+	"github.com/susugadx/xelyon-cli/internal/repomap"
+)
 
 // SymbolAutoStatus はシンボル自動解決の結果種別。
 type SymbolAutoStatus string
@@ -13,9 +16,13 @@ const (
 
 // InspectSymbolAutoOptions は search_code 向けの内部構造化オプション。
 type InspectSymbolAutoOptions struct {
-	Budget    Budget
-	Registry  *locator.Registry
-	LSPClient LSPClient
+	Budget             Budget
+	Registry           *locator.Registry
+	LSPClient          LSPClient
+	ProjectMap         *repomap.ProjectMap
+	ProjectMapRootPath string
+	ProjectMapStateKey string
+	InvocationCWD      string
 }
 
 // ResolveInspectSymbolAuto はシンボル自動解決の構造化結果を返す。
@@ -26,7 +33,13 @@ func ResolveInspectSymbolAuto(symbol, pathHint string, opts InspectSymbolAutoOpt
 	}
 
 	query := parseSymbolQuery(symbol)
-	candidates := resolveSymbolCandidates(symbol, pathHint)
+	runtime := GoSymbolRuntime{
+		ProjectMap:         opts.ProjectMap,
+		ProjectMapRootPath: opts.ProjectMapRootPath,
+		ProjectMapStateKey: opts.ProjectMapStateKey,
+		InvocationCWD:      opts.InvocationCWD,
+	}
+	candidates := resolveSymbolCandidatesWithRuntime(symbol, pathHint, runtime)
 
 	if len(candidates) == 0 {
 		return InspectResult{}, "", SymbolAutoNone
@@ -52,7 +65,7 @@ func ResolveInspectSymbolAuto(symbol, pathHint string, opts InspectSymbolAutoOpt
 			allRefs = lspRefs
 			result.ResolvedViaLSP = true
 		} else {
-			allRefs, result.UpstreamTruncated, result.UpstreamIncomplete = findReferencesWithFallback(query.BaseName, cand)
+			allRefs, result.UpstreamTruncated, result.UpstreamIncomplete = findReferencesWithFallbackRuntime(query.BaseName, cand, runtime)
 		}
 		if cand.Kind == "interface" {
 			if impls, err := findImplementationsViaLSP(opts.LSPClient, cand); err == nil {
@@ -60,7 +73,7 @@ func ResolveInspectSymbolAuto(symbol, pathHint string, opts InspectSymbolAutoOpt
 			}
 		}
 	} else {
-		allRefs, result.UpstreamTruncated, result.UpstreamIncomplete = findReferencesWithFallback(query.BaseName, cand)
+		allRefs, result.UpstreamTruncated, result.UpstreamIncomplete = findReferencesWithFallbackRuntime(query.BaseName, cand, runtime)
 	}
 
 	result.Callers, result.TotalCallers, result.MoreCallers = classifyCallers(allRefs, cand, budget.CallerLimit)

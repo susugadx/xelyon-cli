@@ -101,6 +101,10 @@ func (t *SearchCodeTool) Run(execCtx tools.ExecutionContext, args map[string]str
 	}
 
 	opts.LocatorRegistry = execCtx.EffectiveLocatorRegistry()
+	opts.ProjectMap = execCtx.ProjectMap
+	opts.ProjectMapRootPath = execCtx.ProjectMapRootPath
+	opts.ProjectMapStateKey = execCtx.ProjectMapStateKey
+	opts.InvocationCWD = execCtx.InvocationCWD
 	if lspClient := execCtx.EffectiveLSPClient(); lspClient != nil {
 		if cwd, err := os.Getwd(); err == nil {
 			opts.LSPClient = navigation.NewLSPAdapter(lspClient, cwd)

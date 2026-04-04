@@ -27,9 +27,10 @@ const (
 )
 
 type symbolResolveResult struct {
-	Output string
-	Status symbolResolveStatus
-	Bundle *SymbolBundle
+	Output        string
+	Status        symbolResolveStatus
+	Bundle        *SymbolBundle
+	AffectedFiles []string
 }
 
 type symbolResolver interface {
@@ -40,9 +41,13 @@ type goSymbolResolver struct{}
 
 func (goSymbolResolver) Resolve(symbol string, opts SearchOptions) symbolResolveResult {
 	result, output, status := navigation.ResolveInspectSymbolAuto(symbol, opts.Path, navigation.InspectSymbolAutoOptions{
-		Budget:    searchCodeGoSymbolBudget,
-		Registry:  nil,
-		LSPClient: opts.LSPClient,
+		Budget:             searchCodeGoSymbolBudget,
+		Registry:           nil,
+		LSPClient:          opts.LSPClient,
+		ProjectMap:         opts.ProjectMap,
+		ProjectMapRootPath: opts.ProjectMapRootPath,
+		ProjectMapStateKey: opts.ProjectMapStateKey,
+		InvocationCWD:      opts.InvocationCWD,
 	})
 	switch status {
 	case navigation.SymbolAutoSingle:
@@ -56,14 +61,19 @@ func (goSymbolResolver) Resolve(symbol string, opts SearchOptions) symbolResolve
 			Bundle: bundle,
 		}
 	case navigation.SymbolAutoMultiple:
+		affectedFiles := collectNavigationCandidatesAffectedFiles(result.Candidates, opts)
 		if opts.LocatorRegistry != nil {
 			_, output, _ = navigation.ResolveInspectSymbolAuto(symbol, opts.Path, navigation.InspectSymbolAutoOptions{
-				Budget:    searchCodeGoSymbolBudget,
-				Registry:  opts.LocatorRegistry,
-				LSPClient: opts.LSPClient,
+				Budget:             searchCodeGoSymbolBudget,
+				Registry:           opts.LocatorRegistry,
+				LSPClient:          opts.LSPClient,
+				ProjectMap:         opts.ProjectMap,
+				ProjectMapRootPath: opts.ProjectMapRootPath,
+				ProjectMapStateKey: opts.ProjectMapStateKey,
+				InvocationCWD:      opts.InvocationCWD,
 			})
 		}
-		return symbolResolveResult{Output: output, Status: symbolResolveMultiple}
+		return symbolResolveResult{Output: output, Status: symbolResolveMultiple, AffectedFiles: affectedFiles}
 	default:
 		return symbolResolveResult{Status: symbolResolveNone}
 	}
@@ -108,7 +118,7 @@ func (r genericLanguageResolver) Resolve(symbol string, opts SearchOptions) symb
 	case genericSymbolSingle:
 		return symbolResolveResult{Output: result.Output, Status: symbolResolveSingle, Bundle: result.Bundle}
 	case genericSymbolMultiple:
-		return symbolResolveResult{Output: result.Output, Status: symbolResolveMultiple}
+		return symbolResolveResult{Output: result.Output, Status: symbolResolveMultiple, AffectedFiles: result.AffectedFiles}
 	default:
 		return symbolResolveResult{Status: symbolResolveNone}
 	}
@@ -349,9 +359,10 @@ const (
 )
 
 type genericResolveResult struct {
-	Output string
-	Status genericSymbolStatus
-	Bundle *SymbolBundle
+	Output        string
+	Status        genericSymbolStatus
+	Bundle        *SymbolBundle
+	AffectedFiles []string
 }
 
 // genericSymbolDef は多言語のシンボル定義候補。
@@ -382,8 +393,9 @@ func resolveGenericSymbol(symbol string, opts SearchOptions) genericResolveResul
 	// Step 2: 複数候補
 	if len(defs) > 1 {
 		return genericResolveResult{
-			Output: formatGenericMultipleDefs(symbol, defs, opts.LocatorRegistry),
-			Status: genericSymbolMultiple,
+			Output:        formatGenericMultipleDefs(symbol, defs, opts.LocatorRegistry),
+			Status:        genericSymbolMultiple,
+			AffectedFiles: collectGenericDefAffectedFiles(defs, opts),
 		}
 	}
 
@@ -619,4 +631,30 @@ const (
 
 func formatGenericSymbolResult(bundle *SymbolBundle, reg *locator.Registry) string {
 	return formatSymbolBundle(bundle, reg, nil)
+}
+
+func collectNavigationCandidatesAffectedFiles(candidates []navigation.SymbolCandidate, opts SearchOptions) []string {
+	paths := make([]string, 0, len(candidates))
+	defaultRoot := invocationCWDOrGetwd(opts)
+	for _, candidate := range candidates {
+		rootPath := strings.TrimSpace(candidate.RootPath)
+		if rootPath == "" {
+			rootPath = defaultRoot
+		}
+		if absPath := absoluteAffectedFilePathWithBase(candidate.File, rootPath); absPath != "" {
+			paths = append(paths, absPath)
+		}
+	}
+	return dedupePaths(paths)
+}
+
+func collectGenericDefAffectedFiles(defs []genericSymbolDef, opts SearchOptions) []string {
+	paths := make([]string, 0, len(defs))
+	basePath := invocationCWDOrGetwd(opts)
+	for _, def := range defs {
+		if absPath := absoluteAffectedFilePathWithBase(def.File, basePath); absPath != "" {
+			paths = append(paths, absPath)
+		}
+	}
+	return dedupePaths(paths)
 }

@@ -60,6 +60,7 @@ type SymbolBundleItem struct {
 // SymbolBundleDebug は router / builder の内部メタデータ。
 type SymbolBundleDebug struct {
 	Source          string
+	FileRootPath    string
 	Route           searchRouteTrace
 	MatchedPatterns []string
 }

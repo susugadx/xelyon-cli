@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	openai "github.com/susugadx/xelyon-cli/internal/api/providers/openai"
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 // testSubDir はカレントディレクトリ配下にテスト用サブディレクトリを作成し、
@@ -27,6 +28,33 @@ func testSubDir(t *testing.T) string {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { os.RemoveAll(abs) })
+	return abs
+}
+
+func testWritableHomeDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "headless_home_*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = filepath.Walk(abs, func(path string, info os.FileInfo, err error) error {
+			if err != nil || info == nil {
+				return nil
+			}
+			if info.IsDir() {
+				_ = os.Chmod(path, 0o755)
+				return nil
+			}
+			_ = os.Chmod(path, 0o644)
+			return nil
+		})
+		_ = os.RemoveAll(abs)
+	})
 	return abs
 }
 
@@ -107,6 +135,62 @@ func TestHeadless_SearchCodeTool(t *testing.T) {
 	}
 	if result.Model != "test-model" {
 		t.Errorf("expected model 'test-model', got %q", result.Model)
+	}
+}
+
+func TestHeadless_SearchCodeUsesFreshProjectMapRuntimeAfterEdit(t *testing.T) {
+	homeDir := testWritableHomeDir(t)
+	t.Setenv("HOME", homeDir)
+	t.Setenv("GOMODCACHE", filepath.Join(homeDir, "go", "pkg", "mod"))
+
+	dir := testSubDir(t)
+	testFile := filepath.Join(dir, "main.go")
+	if err := os.WriteFile(testFile, []byte("package main\n\nfunc Run() {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(origDir)
+	})
+
+	cfg := config.DefaultConfig()
+	provider := &sequenceMockProvider{
+		name: "test-provider",
+		responses: []string{
+			`{"tool": "str_replace", "args": {"path": "main.go", "old_str": "package main\n\nfunc Run() {}\n", "new_str": "package main\n\nvar moved = 1\nvar moved2 = 2\n\nfunc Run() {}\n"}}`,
+			`{"tool": "search_code", "args": {"pattern": "Run", "path": "."}}`,
+			"done",
+		},
+	}
+
+	result := RunHeadlessWithConfig(context.Background(), "Move Run then inspect it", "test-model", provider, cfg)
+	if result.Status != "success" {
+		t.Fatalf("expected status success, got %q (%+v)", result.Status, result.Error)
+	}
+	if len(result.ToolCalls) != 2 {
+		t.Fatalf("expected 2 tool calls, got %d", len(result.ToolCalls))
+	}
+	if result.ToolCalls[1].Tool != "search_code" {
+		t.Fatalf("expected second tool call to be search_code, got %q", result.ToolCalls[1].Tool)
+	}
+	if !result.ToolCalls[1].Success {
+		t.Fatalf("expected search_code success, output:\n%s", result.ToolCalls[1].Output)
+	}
+	if !strings.Contains(result.ToolCalls[1].Output, "(L6)") {
+		t.Fatalf("expected edited symbol location L6, got:\n%s", result.ToolCalls[1].Output)
+	}
+	if strings.Contains(result.ToolCalls[1].Output, "(L3)") || strings.Contains(result.ToolCalls[1].Output, "3: func Run() {}") {
+		t.Fatalf("expected fresh runtime state, but stale symbol location remained:\n%s", result.ToolCalls[1].Output)
+	}
+	if !strings.Contains(result.ToolCalls[1].Output, "6: func Run() {}") {
+		t.Fatalf("expected edited definition body at line 6, got:\n%s", result.ToolCalls[1].Output)
 	}
 }
 
