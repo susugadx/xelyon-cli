@@ -1,6 +1,10 @@
 package navigation
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
+
 	"github.com/susugadx/xelyon-cli/internal/locator"
 	"github.com/susugadx/xelyon-cli/internal/repomap"
 )
@@ -60,7 +64,7 @@ func ResolveInspectSymbolAuto(symbol, pathHint string, opts InspectSymbolAutoOpt
 
 	var allRefs []Reference
 	if opts.LSPClient != nil {
-		lspRefs, err := findReferencesViaLSP(opts.LSPClient, cand)
+		lspRefs, err := findReferencesViaLSP(opts.LSPClient, cand, runtime.InvocationCWD)
 		if err == nil && len(lspRefs) > 0 {
 			allRefs = lspRefs
 			result.ResolvedViaLSP = true
@@ -68,7 +72,7 @@ func ResolveInspectSymbolAuto(symbol, pathHint string, opts InspectSymbolAutoOpt
 			allRefs, result.UpstreamTruncated, result.UpstreamIncomplete = findReferencesWithFallbackRuntime(query.BaseName, cand, runtime)
 		}
 		if cand.Kind == "interface" {
-			if impls, err := findImplementationsViaLSP(opts.LSPClient, cand); err == nil {
+			if impls, err := findImplementationsViaLSP(opts.LSPClient, cand, runtime.InvocationCWD); err == nil {
 				result.Implementations = impls
 			}
 		}
@@ -79,6 +83,7 @@ func ResolveInspectSymbolAuto(symbol, pathHint string, opts InspectSymbolAutoOpt
 	result.Callers, result.TotalCallers, result.MoreCallers = classifyCallers(allRefs, cand, budget.CallerLimit)
 	result.Refs, result.TotalRefs, result.MoreRefs = classifyRefs(allRefs, cand, budget.RefLimit)
 	result.Tests, result.TotalTests, result.MoreTests = findRelatedTests(query.BaseName, allRefs, budget.TestLimit)
+	normalizeInspectResultPaths(&result, runtime)
 
 	return result, formatInspectResult(result, opts.Registry), SymbolAutoSingle
 }
@@ -95,4 +100,77 @@ func InspectSymbolAuto(symbol, pathHint string, reg *locator.Registry, lspClient
 		LSPClient: lspClient,
 	})
 	return output, status
+}
+
+func normalizeInspectResultPaths(result *InspectResult, runtime GoSymbolRuntime) {
+	if result == nil || result.Symbol == nil {
+		return
+	}
+
+	targetRoot := strings.TrimSpace(result.Symbol.RootPath)
+	if targetRoot == "" {
+		return
+	}
+	if abs, err := filepath.Abs(targetRoot); err == nil {
+		targetRoot = abs
+	}
+
+	sourceBase := strings.TrimSpace(runtime.InvocationCWD)
+	if sourceBase == "" {
+		if cwd, err := os.Getwd(); err == nil {
+			sourceBase = cwd
+		}
+	}
+	if sourceBase != "" {
+		if abs, err := filepath.Abs(sourceBase); err == nil {
+			sourceBase = abs
+		}
+	}
+
+	for i := range result.Callers {
+		result.Callers[i].File = normalizeResultFilePath(result.Callers[i].File, targetRoot, sourceBase)
+	}
+	for i := range result.Refs {
+		result.Refs[i].File = normalizeResultFilePath(result.Refs[i].File, targetRoot, sourceBase)
+	}
+	for i := range result.Tests {
+		result.Tests[i].File = normalizeResultFilePath(result.Tests[i].File, targetRoot, sourceBase)
+	}
+	for i := range result.Implementations {
+		result.Implementations[i].File = normalizeResultFilePath(result.Implementations[i].File, targetRoot, sourceBase)
+	}
+}
+
+func normalizeResultFilePath(path, targetRoot, sourceBase string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+
+	if filepath.IsAbs(path) {
+		if rel, ok := absoluteToSnapshotRel(targetRoot, path); ok {
+			return filepath.Clean(filepath.ToSlash(rel))
+		}
+		return filepath.Clean(path)
+	}
+
+	if targetRoot != "" {
+		rootRelativeAbs := filepath.Join(targetRoot, filepath.FromSlash(path))
+		if rel, ok := absoluteToSnapshotRel(targetRoot, rootRelativeAbs); ok && pathExists(rootRelativeAbs) {
+			return filepath.Clean(filepath.ToSlash(rel))
+		}
+	}
+
+	if sourceBase != "" {
+		if rel, ok := absoluteToSnapshotRel(targetRoot, filepath.Join(sourceBase, filepath.FromSlash(path))); ok {
+			return filepath.Clean(filepath.ToSlash(rel))
+		}
+	}
+
+	return filepath.Clean(filepath.ToSlash(path))
+}
+
+func pathExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }

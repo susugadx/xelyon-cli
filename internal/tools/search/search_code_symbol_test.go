@@ -1691,6 +1691,206 @@ func TestSearchCode_SymbolBundleAffectedFilesStayRepoRelativeFromSubdir(t *testi
 	}
 }
 
+func TestSearchCode_SnapshotBackedSectionItemAffectedFilesUseProjectRoot(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"pkg/run.go": `package pkg
+
+func Run() {}
+`,
+		"pkg/run_test.go": `package pkg
+
+func TestRun() {
+	Run()
+}
+`,
+	})
+	subdir := filepath.Join(dir, "pkg")
+
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(subdir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(origDir)
+	})
+
+	cache := &testSearchCache{data: make(map[string]string)}
+	opts := SearchOptions{
+		Pattern:            "Run",
+		Path:               ".",
+		ProjectMapRootPath: dir,
+		InvocationCWD:      subdir,
+		ProjectMap: &repomap.ProjectMap{
+			RootPath: dir,
+			Files: []*repomap.FileEntry{
+				{
+					Path: "pkg/run.go",
+					Symbols: []repomap.Symbol{
+						{Name: "Run", Kind: "function", Line: 3, EndLine: 3, Signature: "func Run()", Exported: true},
+					},
+				},
+			},
+		},
+		ProjectMapStateKey: "snapshot-section-item-subdir",
+	}
+
+	result := ExecuteSearchCodeWithCache(cache, opts)
+	if !strings.Contains(result, "Related Tests") || !strings.Contains(result, "pkg/run_test.go") {
+		t.Fatalf("expected normalized related test path in symbol bundle, got:\n%s", result)
+	}
+
+	searchKey := singlePatternBundleCacheKey("Run", cache.lastSetPath)
+	affected := cache.affected[searchKey]
+	testFile := filepath.Join(dir, "pkg", "run_test.go")
+	if !containsAffectedFile(affected, testFile) {
+		t.Fatalf("expected section item affected files to include %s, got %v", testFile, affected)
+	}
+	if containsAffectedFile(affected, filepath.Join(dir, "run_test.go")) {
+		t.Fatalf("did not expect wrongly rebased section item path in affected files: %v", affected)
+	}
+
+	cache.InvalidateSearchCacheForFile(testFile)
+	if _, ok := cache.GetSearch("Run", cache.lastSetPath); ok {
+		t.Fatalf("expected symbol cache entry to be invalidated after editing %s", testFile)
+	}
+}
+
+func TestSearchCode_SnapshotBackedLSPSectionItemKeepsRepoRelativePath(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"pkg/run.go": `package pkg
+
+func Run() {}
+`,
+		"pkg/run_test.go": `package pkg
+
+func TestRun() {
+	Run()
+}
+`,
+	})
+	subdir := filepath.Join(dir, "pkg")
+
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(subdir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(origDir)
+	})
+
+	cache := &testSearchCache{data: make(map[string]string)}
+	opts := SearchOptions{
+		Pattern:            "Run",
+		Path:               ".",
+		ProjectMapRootPath: dir,
+		InvocationCWD:      subdir,
+		ProjectMap: &repomap.ProjectMap{
+			RootPath: dir,
+			Files: []*repomap.FileEntry{
+				{
+					Path: "pkg/run.go",
+					Symbols: []repomap.Symbol{
+						{Name: "Run", Kind: "function", Line: 3, EndLine: 3, Signature: "func Run()", Exported: true},
+					},
+				},
+			},
+		},
+		ProjectMapStateKey: "snapshot-lsp-section-item-subdir",
+		LSPClient: &mockGoSymbolLSPClient{
+			refs: []navigation.LSPLocation{
+				{File: "pkg/run_test.go", Line: 4, Character: 1, EndLine: 4, EndChar: 5},
+			},
+		},
+	}
+
+	result := ExecuteSearchCodeWithCache(cache, opts)
+	if !strings.Contains(result, "Related Tests") || !strings.Contains(result, "pkg/run_test.go:3") {
+		t.Fatalf("expected repo-relative LSP section item path, got:\n%s", result)
+	}
+	if strings.Contains(result, "pkg/pkg/run_test.go") {
+		t.Fatalf("did not expect doubly rebased LSP path, got:\n%s", result)
+	}
+
+	searchKey := singlePatternBundleCacheKey("Run", cache.lastSetPath)
+	affected := cache.affected[searchKey]
+	testFile := filepath.Join(dir, "pkg", "run_test.go")
+	if !containsAffectedFile(affected, testFile) {
+		t.Fatalf("expected LSP section item affected files to include %s, got %v", testFile, affected)
+	}
+
+	cache.InvalidateSearchCacheForFile(testFile)
+	if _, ok := cache.GetSearch("Run", cache.lastSetPath); ok {
+		t.Fatalf("expected symbol cache entry to be invalidated after editing %s", testFile)
+	}
+}
+
+func TestSearchCode_SnapshotBackedLSPSectionItemPreservesInvocationRelativePath(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"pkg/run.go": `package pkg
+
+func Run() {}
+`,
+		"shared/run_test.go": `package shared
+
+func TestRunFromShared(t *testing.T) {
+	pkg.Run()
+}
+`,
+	})
+	subdir := filepath.Join(dir, "pkg")
+
+	cache := &testSearchCache{data: make(map[string]string)}
+	opts := SearchOptions{
+		Pattern:            "Run",
+		Path:               ".",
+		ProjectMapRootPath: dir,
+		InvocationCWD:      subdir,
+		ProjectMap: &repomap.ProjectMap{
+			RootPath: dir,
+			Files: []*repomap.FileEntry{
+				{
+					Path: "pkg/run.go",
+					Symbols: []repomap.Symbol{
+						{Name: "Run", Kind: "function", Line: 3, EndLine: 3, Signature: "func Run()", Exported: true},
+					},
+				},
+			},
+		},
+		ProjectMapStateKey: "snapshot-lsp-parent-relative",
+		LSPClient: &mockGoSymbolLSPClient{
+			refs: []navigation.LSPLocation{
+				{File: "../shared/run_test.go", Line: 4, Character: 2, EndLine: 4, EndChar: 6},
+			},
+		},
+	}
+
+	result := ExecuteSearchCodeWithCache(cache, opts)
+	if !strings.Contains(result, "Related Tests") || !strings.Contains(result, "shared/run_test.go:3") {
+		t.Fatalf("expected parent-relative LSP path to normalize to repo-relative, got:\n%s", result)
+	}
+	if strings.Contains(result, "../shared/run_test.go") {
+		t.Fatalf("did not expect invocation-relative path to leak into output, got:\n%s", result)
+	}
+
+	searchKey := singlePatternBundleCacheKey("Run", cache.lastSetPath)
+	affected := cache.affected[searchKey]
+	testFile := filepath.Join(dir, "shared", "run_test.go")
+	if !containsAffectedFile(affected, testFile) {
+		t.Fatalf("expected invocation-relative LSP affected files to include %s, got %v", testFile, affected)
+	}
+
+	cache.InvalidateSearchCacheForFile(testFile)
+	if _, ok := cache.GetSearch("Run", cache.lastSetPath); ok {
+		t.Fatalf("expected symbol cache entry to be invalidated after editing %s", testFile)
+	}
+}
+
 func TestSearchCode_SymbolBundleAffectedFilesUseInvocationCWDOnASTFallback(t *testing.T) {
 	dir := setupMultiLangDir(t, map[string]string{
 		"pkg/run.go": "package pkg\n\nfunc Run() {}\n",

@@ -197,7 +197,7 @@ func findReferencesWithFallbackRuntime(baseName string, cand SymbolCandidate, ru
 }
 
 // findReferencesViaLSP resolves references through the LSP client and converts them to Reference values.
-func findReferencesViaLSP(client LSPClient, cand SymbolCandidate) ([]Reference, error) {
+func findReferencesViaLSP(client LSPClient, cand SymbolCandidate, invocationCWD string) ([]Reference, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), lspReferenceTimeout)
 	defer cancel()
 
@@ -213,20 +213,21 @@ func findReferencesViaLSP(client LSPClient, cand SymbolCandidate) ([]Reference, 
 
 	refs := make([]Reference, 0, len(locations))
 	for _, loc := range locations {
+		filePath := lspLocationFilePath(loc.File, cand.RootPath, invocationCWD)
 		refs = append(refs, Reference{
-			File:    loc.File,
+			File:    filePath,
 			Line:    loc.Line,
-			Scope:   findEnclosingFunction(loc.File, loc.Line),
-			Snippet: readLineSnippet(loc.File, loc.Line),
-			IsTest:  isTestFile(loc.File),
-			Class:   classifyLineByAST(loc.File, loc.Line, cand.Name),
+			Scope:   findEnclosingFunction(filePath, loc.Line),
+			Snippet: readLineSnippet(filePath, loc.Line),
+			IsTest:  isTestFile(filePath),
+			Class:   classifyLineByAST(filePath, loc.Line, cand.Name),
 		})
 	}
 	return refs, nil
 }
 
 // findImplementationsViaLSP resolves interface implementations through the LSP client.
-func findImplementationsViaLSP(client LSPClient, cand SymbolCandidate) ([]ImplementationRef, error) {
+func findImplementationsViaLSP(client LSPClient, cand SymbolCandidate, invocationCWD string) ([]ImplementationRef, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), lspReferenceTimeout)
 	defer cancel()
 
@@ -242,13 +243,45 @@ func findImplementationsViaLSP(client LSPClient, cand SymbolCandidate) ([]Implem
 
 	impls := make([]ImplementationRef, 0, len(locations))
 	for _, loc := range locations {
+		filePath := lspLocationFilePath(loc.File, cand.RootPath, invocationCWD)
 		impls = append(impls, ImplementationRef{
-			File: loc.File,
+			File: filePath,
 			Line: loc.Line,
-			Name: findTypeNameAtLine(loc.File, loc.Line),
+			Name: findTypeNameAtLine(filePath, loc.Line),
 		})
 	}
 	return impls, nil
+}
+
+func lspLocationFilePath(file, rootPath, invocationCWD string) string {
+	file = strings.TrimSpace(file)
+	if file == "" || filepath.IsAbs(file) {
+		return file
+	}
+	file = filepath.Clean(filepath.FromSlash(file))
+	if file == "." {
+		if cwd := strings.TrimSpace(invocationCWD); cwd != "" {
+			return cwd
+		}
+		if cwd, err := os.Getwd(); err == nil {
+			return cwd
+		}
+		return file
+	}
+	if file == ".." || strings.HasPrefix(file, ".."+string(filepath.Separator)) || strings.HasPrefix(file, "."+string(filepath.Separator)) {
+		if cwd := strings.TrimSpace(invocationCWD); cwd != "" {
+			return filepath.Join(cwd, file)
+		}
+		if cwd, err := os.Getwd(); err == nil {
+			return filepath.Join(cwd, file)
+		}
+		return file
+	}
+	rootPath = strings.TrimSpace(rootPath)
+	if rootPath == "" {
+		return file
+	}
+	return filepath.Join(rootPath, file)
 }
 
 // findSymbolColumn returns the 1-indexed column of the symbol name on the candidate line.
