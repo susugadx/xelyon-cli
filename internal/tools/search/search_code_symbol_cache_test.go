@@ -5,8 +5,137 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/susugadx/xelyon-cli/internal/repomap"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
+
+func TestSearchCode_SymbolFastPathCachesAffectedFiles(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"run.go": "package example\n\nfunc Run() {\n\thelper()\n}\n\nfunc helper() {}\n",
+	})
+
+	cache := &testSearchCache{data: make(map[string]string)}
+	opts := SearchOptions{
+		Pattern: "Run",
+		Path:    dir,
+		ProjectMap: &repomap.ProjectMap{
+			RootPath: dir,
+			Files: []*repomap.FileEntry{
+				{
+					Path: "run.go",
+					Symbols: []repomap.Symbol{
+						{Name: "Run", Kind: "function", Line: 3, EndLine: 5, Signature: "func Run()", Exported: true},
+					},
+				},
+			},
+		},
+		ProjectMapRootPath: dir,
+		ProjectMapStateKey: "affected-single",
+	}
+
+	result := ExecuteSearchCodeWithCache(cache, opts)
+	if !strings.Contains(result, "Run") {
+		t.Fatalf("expected symbol result, got:\n%s", result)
+	}
+
+	want := filepath.Join(dir, "run.go")
+	searchKey := singlePatternBundleCacheKey("Run", cache.lastSetPath)
+	affected := cache.affected[searchKey]
+	if !containsAffectedFile(affected, want) {
+		t.Fatalf("expected exact cache key %q to track %s, got %v", searchKey, want, affected)
+	}
+}
+
+func TestSearchCode_MultiPatternCacheTracksBundleAndTextAffectedFiles(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"run.go": "package example\n\nfunc Run() {\n\thelper()\n}\n\nfunc helper() {}\n",
+	})
+
+	cache := &testSearchCache{data: make(map[string]string)}
+	opts := SearchOptions{
+		Pattern: "Run,helper()",
+		Path:    dir,
+		ProjectMap: &repomap.ProjectMap{
+			RootPath: dir,
+			Files: []*repomap.FileEntry{
+				{
+					Path: "run.go",
+					Symbols: []repomap.Symbol{
+						{Name: "Run", Kind: "function", Line: 3, EndLine: 5, Signature: "func Run()", Exported: true},
+					},
+				},
+			},
+		},
+		ProjectMapRootPath: dir,
+		ProjectMapStateKey: "affected-multi",
+	}
+
+	result := ExecuteSearchCodeWithCache(cache, opts)
+	if !strings.Contains(result, "Run") || !strings.Contains(result, "helper()") {
+		t.Fatalf("expected mixed multi-pattern result, got:\n%s", result)
+	}
+
+	want := filepath.Join(dir, "run.go")
+	searchKey := singlePatternBundleCacheKey(buildMultiCacheKey(splitPatterns(opts.Pattern)), cache.lastSetPath)
+	affected := cache.affected[searchKey]
+	if !containsAffectedFile(affected, want) {
+		t.Fatalf("expected exact multi cache key %q to track %s, got %v", searchKey, want, affected)
+	}
+}
+
+func TestSearchCode_MultiPatternCacheSupplementsSymbolMultipleAffectedFiles(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"pkg/helper.go":     "package pkg\n\nfunc helper() {}\n",
+		"pkg/run_linux.go":  "package pkg\n\nfunc Run() {}\n",
+		"pkg/run_darwin.go": "package pkg\n\nfunc Run() {}\n",
+	})
+
+	cache := &testSearchCache{data: make(map[string]string)}
+	opts := SearchOptions{
+		Pattern: "helper(,Run",
+		Path:    dir,
+		ProjectMap: &repomap.ProjectMap{
+			RootPath: dir,
+			Files: []*repomap.FileEntry{
+				{
+					Path: "pkg/run_linux.go",
+					Symbols: []repomap.Symbol{
+						{Name: "Run", Kind: "function", Line: 3, EndLine: 3, Signature: "func Run()", Exported: true},
+					},
+				},
+				{
+					Path: "pkg/run_darwin.go",
+					Symbols: []repomap.Symbol{
+						{Name: "Run", Kind: "function", Line: 3, EndLine: 3, Signature: "func Run()", Exported: true},
+					},
+				},
+			},
+		},
+		ProjectMapRootPath: dir,
+		ProjectMapStateKey: "affected-multi-symbol-multiple",
+	}
+
+	result := ExecuteSearchCodeWithCache(cache, opts)
+	if !strings.Contains(result, "Multiple symbols matched") || !strings.Contains(result, "helper") {
+		t.Fatalf("expected mixed text/symbol-multiple result, got:\n%s", result)
+	}
+
+	searchKey := singlePatternBundleCacheKey(buildMultiCacheKey(splitPatterns(opts.Pattern)), cache.lastSetPath)
+	affected := cache.affected[searchKey]
+	wantHelper := filepath.Join(dir, "pkg", "helper.go")
+	wantLinux := filepath.Join(dir, "pkg", "run_linux.go")
+	wantDarwin := filepath.Join(dir, "pkg", "run_darwin.go")
+	for _, want := range []string{wantHelper, wantLinux, wantDarwin} {
+		if !containsAffectedFile(affected, want) {
+			t.Fatalf("expected exact multi cache key %q to track %s, got %v", searchKey, want, affected)
+		}
+	}
+
+	cache.InvalidateSearchCacheForFile(wantDarwin)
+	if _, ok := cache.GetSearch(buildMultiCacheKey(splitPatterns(opts.Pattern)), cache.lastSetPath); ok {
+		t.Fatalf("expected multi-pattern cache entry to be invalidated after editing %s", wantDarwin)
+	}
+}
 
 func TestSearchCode_MultiPatternGoSymbolBundleDedupe(t *testing.T) {
 	dir := setupMultiLangDir(t, map[string]string{
