@@ -30,7 +30,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.26"
+          go-version-file: "go.mod"
 
       # テストで使用する ripgrep をインストール
       - name: Install ripgrep
@@ -56,7 +56,7 @@ jobs:
 
       # ビルド確認
       - name: Build
-        run: go build -v -o xelyon
+        run: go build -tags grammar_set_core -v -o xelyon
 
       # バイナリサイズチェック
       # 50MB を超えると警告（肥大化防止）
@@ -72,7 +72,7 @@ jobs:
       # -race: データ競合を検出
       # -coverprofile: カバレッジレポート出力
       - name: Run tests
-        run: go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
+        run: go test -v -race -coverprofile=coverage.txt -covermode=atomic -tags grammar_set_core ./...
 
       # カバレッジ閾値チェック
       # 60% 未満は CI 失敗
@@ -108,7 +108,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.26"
+          go-version-file: "go.mod"
 
       # golangci-lint で静的解析
       # 様々な lint ツールをまとめて実行
@@ -133,7 +133,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.26"
+          go-version-file: "go.mod"
 
       # gosec: Go コードのセキュリティ問題を検出
       # - ハードコードされた認証情報
@@ -179,14 +179,14 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.26"
+          go-version-file: "go.mod"
 
       # ベンチマーク実行
       # -bench=.: 全てのベンチマークを実行
       # -benchmem: メモリ割り当ても計測
       - name: Run benchmarks
         run: |
-          go test -bench=. -benchmem ./... 2>&1 | tee benchmark.txt
+          go test -tags grammar_set_core -bench=. -benchmem ./... 2>&1 | tee benchmark.txt
           echo "## Benchmark Results" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
           cat benchmark.txt >> $GITHUB_STEP_SUMMARY

@@ -30,11 +30,11 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.24'  # CI と同じバージョンに統一
+        go-version-file: 'go.mod'
 
     # リリース前にテスト実行
     - name: Run tests
-      run: go test -v -race ./...
+      run: go test -v -race -tags grammar_set_core ./...
 
     # セキュリティチェック（リリース前に必須）
     - name: Run govulncheck
@@ -59,7 +59,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.24'
+        go-version-file: 'go.mod'
 
     # GoReleaser でマルチプラットフォームビルド & リリース
     - name: Run GoReleaser
