@@ -309,7 +309,14 @@ func (m *Model) appendMessage(msg ChatMessage) tea.Cmd {
 
 	switch msg.Role {
 	case "user":
-		return m.appendContentLines("", "> "+msg.Content, "")
+		lines := strings.Split(msg.Content, "\n")
+		rendered := make([]string, 0, len(lines)+2)
+		rendered = append(rendered, "")
+		for _, line := range lines {
+			rendered = append(rendered, "> "+line)
+		}
+		rendered = append(rendered, "")
+		return m.appendContentLines(rendered...)
 	default:
 		return m.appendContentLines(strings.Split(msg.Content, "\n")...)
 	}

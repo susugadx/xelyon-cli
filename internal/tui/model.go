@@ -30,7 +30,7 @@ const (
 // footerHeight は下部 chrome（入力欄+ステータスバー）の合計高さを返す。
 // 将来の compact footer や compose mode では動的に切り替えられる。
 func (m Model) footerHeight() int {
-	return statusBarHeight + inputHeight
+	return statusBarHeight + inputHeight + len(m.visibleComposerRows())
 }
 
 var statusHintsNormal = []string{
@@ -103,6 +103,9 @@ type Model struct {
 	textInput            textinput.Model
 	spinner              spinner.Model
 	messages             []ChatMessage
+	composerParts        []composerPart
+	pasteBlocks          []pasteBlock
+	nextPasteUID         int
 	rawLines             []string        // 元の行データ。リサイズ時はこれを再レンダリングする
 	layout               *Layout         // 表示幅に応じたvisual rowレイアウト
 	toolBlocks           []toolBlockInfo // ツール結果ブロック

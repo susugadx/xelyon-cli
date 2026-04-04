@@ -507,9 +507,29 @@ func (m Model) viewportView() string {
 // renderInputDock は入力欄部分（パディング行+入力行+パディング行）を構築する。
 func (m *Model) renderInputDock() string {
 	const inputBg = "\033[48;5;236m"
+	const textFg = "\033[38;5;252m"
+	const pasteFg = "\033[38;5;244m"
+	const pasteID = "\033[38;5;81m"
 	tiView := strings.ReplaceAll(m.textInput.View(), "\033[0m", "\033[0m"+inputBg)
 	inputLine := fillANSITextWidth(inputBg+" \033[38;5;46m"+inputPrompt+"\033[38;5;252m"+tiView+"\033[0m", m.width, inputBg)
-	return m.padLineCache + "\n" + inputLine + "\n" + m.padLineCache
+	rows := m.visibleComposerRows()
+	lines := make([]string, 0, len(rows)+inputHeight)
+	for _, row := range rows {
+		switch row.kind {
+		case composerPartText:
+			lines = append(lines, fillANSITextWidth(inputBg+" "+textFg+m.formatComposerTextRow(row.text)+"\033[0m", m.width, inputBg))
+		case composerPartPaste:
+			summary := strings.Replace(
+				m.formatPasteBlockSummary(row.pasteBlock),
+				"#",
+				pasteID+"#",
+				1,
+			)
+			lines = append(lines, fillANSITextWidth(inputBg+" "+pasteFg+summary+"\033[0m", m.width, inputBg))
+		}
+	}
+	lines = append(lines, m.padLineCache, inputLine, m.padLineCache)
+	return strings.Join(lines, "\n")
 }
 
 // renderStatusBar はステータスバー行を構築する。
