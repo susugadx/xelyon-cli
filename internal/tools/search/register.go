@@ -106,7 +106,9 @@ func (t *SearchCodeTool) Run(execCtx tools.ExecutionContext, args map[string]str
 	opts.ProjectMapStateKey = execCtx.ProjectMapStateKey
 	opts.InvocationCWD = execCtx.InvocationCWD
 	if lspClient := execCtx.EffectiveLSPClient(); lspClient != nil {
-		if cwd, err := os.Getwd(); err == nil {
+		if cwd := strings.TrimSpace(execCtx.InvocationCWD); cwd != "" {
+			opts.LSPClient = navigation.NewLSPAdapter(lspClient, cwd)
+		} else if cwd, err := os.Getwd(); err == nil {
 			opts.LSPClient = navigation.NewLSPAdapter(lspClient, cwd)
 		}
 	}

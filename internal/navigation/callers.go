@@ -259,29 +259,31 @@ func lspLocationFilePath(file, rootPath, invocationCWD string) string {
 		return file
 	}
 	file = filepath.Clean(filepath.FromSlash(file))
-	if file == "." {
-		if cwd := strings.TrimSpace(invocationCWD); cwd != "" {
-			return cwd
-		}
-		if cwd, err := os.Getwd(); err == nil {
-			return cwd
-		}
-		return file
+	if resolved, ok := resolveExistingRelativeLSPPath(invocationCWD, file); ok {
+		return resolved
 	}
-	if file == ".." || strings.HasPrefix(file, ".."+string(filepath.Separator)) || strings.HasPrefix(file, "."+string(filepath.Separator)) {
-		if cwd := strings.TrimSpace(invocationCWD); cwd != "" {
-			return filepath.Join(cwd, file)
-		}
-		if cwd, err := os.Getwd(); err == nil {
-			return filepath.Join(cwd, file)
-		}
-		return file
+	if resolved, ok := resolveExistingRelativeLSPPath(rootPath, file); ok {
+		return resolved
 	}
-	rootPath = strings.TrimSpace(rootPath)
-	if rootPath == "" {
-		return file
+	if base := strings.TrimSpace(invocationCWD); base != "" {
+		return filepath.Join(base, file)
 	}
-	return filepath.Join(rootPath, file)
+	if base := strings.TrimSpace(rootPath); base != "" {
+		return filepath.Join(base, file)
+	}
+	return file
+}
+
+func resolveExistingRelativeLSPPath(base, file string) (string, bool) {
+	base = strings.TrimSpace(base)
+	if base == "" {
+		return "", false
+	}
+	candidate := filepath.Join(base, file)
+	if !pathExists(candidate) {
+		return "", false
+	}
+	return candidate, true
 }
 
 // findSymbolColumn returns the 1-indexed column of the symbol name on the candidate line.

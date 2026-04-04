@@ -1891,6 +1891,133 @@ func TestRunFromShared(t *testing.T) {
 	}
 }
 
+func TestSearchCode_SnapshotBackedLSPSectionItemResolvesBareRelativePathFromInvocationCWD(t *testing.T) {
+	testCases := []struct {
+		name          string
+		lspPath       string
+		files         map[string]string
+		expectedRel   string
+		expectedCache string
+		unwantedRel   string
+	}{
+		{
+			name:    "same-dir",
+			lspPath: "run_test.go",
+			files: map[string]string{
+				"pkg/run.go": `package pkg
+
+func Run() {}
+`,
+				"pkg/run_test.go": `package pkg
+
+func TestRun() {
+	Run()
+}
+`,
+			},
+			expectedRel:   "pkg/run_test.go:3",
+			expectedCache: filepath.Join("pkg", "run_test.go"),
+			unwantedRel:   "run_test.go:",
+		},
+		{
+			name:    "child-dir",
+			lspPath: "child/run_test.go",
+			files: map[string]string{
+				"pkg/run.go": `package pkg
+
+func Run() {}
+`,
+				"pkg/child/run_test.go": `package child
+
+func TestRun() {
+	pkg.Run()
+}
+`,
+			},
+			expectedRel:   "pkg/child/run_test.go:3",
+			expectedCache: filepath.Join("pkg", "child", "run_test.go"),
+			unwantedRel:   "child/run_test.go:",
+		},
+		{
+			name:    "invocation-relative-shadow-wins",
+			lspPath: "child/run_test.go",
+			files: map[string]string{
+				"child/run_test.go": `package child
+
+func TestRunFromRoot() {
+	pkg.Run()
+}
+`,
+				"pkg/run.go": `package pkg
+
+func Run() {}
+`,
+				"pkg/child/run_test.go": `package child
+
+func TestRunFromPkgChild() {
+	pkg.Run()
+}
+`,
+			},
+			expectedRel:   "pkg/child/run_test.go:3",
+			expectedCache: filepath.Join("pkg", "child", "run_test.go"),
+			unwantedRel:   "child/run_test.go:",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := setupMultiLangDir(t, tc.files)
+			subdir := filepath.Join(dir, "pkg")
+
+			cache := &testSearchCache{data: make(map[string]string)}
+			opts := SearchOptions{
+				Pattern:            "Run",
+				Path:               ".",
+				ProjectMapRootPath: dir,
+				InvocationCWD:      subdir,
+				ProjectMap: &repomap.ProjectMap{
+					RootPath: dir,
+					Files: []*repomap.FileEntry{
+						{
+							Path: "pkg/run.go",
+							Symbols: []repomap.Symbol{
+								{Name: "Run", Kind: "function", Line: 3, EndLine: 3, Signature: "func Run()", Exported: true},
+							},
+						},
+					},
+				},
+				ProjectMapStateKey: "snapshot-lsp-bare-relative-" + tc.name,
+				LSPClient: &mockGoSymbolLSPClient{
+					refs: []navigation.LSPLocation{
+						{File: tc.lspPath, Line: 4, Character: 2, EndLine: 4, EndChar: 6},
+					},
+				},
+			}
+
+			result := ExecuteSearchCodeWithCache(cache, opts)
+			if !strings.Contains(result, "Related Tests") || !strings.Contains(result, tc.expectedRel) {
+				t.Fatalf("expected bare relative LSP path to resolve to the correct repo file, got:\n%s", result)
+			}
+			if tc.unwantedRel != "" && strings.Contains(result, "\n  - "+tc.unwantedRel) {
+				t.Fatalf("did not expect unresolved or doubly rebased bare relative path in output, got:\n%s", result)
+			}
+
+			searchKey := singlePatternBundleCacheKey("Run", cache.lastSetPath)
+			affected := cache.affected[searchKey]
+			testFile := filepath.Join(dir, tc.expectedCache)
+			if !containsAffectedFile(affected, testFile) {
+				t.Fatalf("expected bare relative LSP affected files to include %s, got %v", testFile, affected)
+			}
+
+			cache.InvalidateSearchCacheForFile(testFile)
+			if _, ok := cache.GetSearch("Run", cache.lastSetPath); ok {
+				t.Fatalf("expected symbol cache entry to be invalidated after editing %s", testFile)
+			}
+		})
+	}
+}
+
 func TestSearchCode_SymbolBundleAffectedFilesUseInvocationCWDOnASTFallback(t *testing.T) {
 	dir := setupMultiLangDir(t, map[string]string{
 		"pkg/run.go": "package pkg\n\nfunc Run() {}\n",
