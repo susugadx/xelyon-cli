@@ -185,81 +185,7 @@ func (r *TurnRunner) debugLogToolCalls(response string, toolCalls []*tools.ToolC
 }
 
 func (r *TurnRunner) handleNormalModeNoToolResponse(response string, cfg *config.Config, state *normalModeState) normalModeAction {
-	a := r.agent
-	steps := extractTextPlan(response)
-	if !containsCompletionDeclaration(response) && len(steps) >= 5 && isActionPlan(steps) {
-		state.textPlanRedirectCount++
-		if state.textPlanRedirectCount > maxTextPlanHardLimit {
-			yellow.Fprintf(a.output(), "⚠️  Text plan detected %d times without tool use. Returning response to user.\n", state.textPlanRedirectCount)
-			r.appendAssistantHistoryOnly(response)
-			state.fallbackResponse = response
-			return normalModeBreak
-		}
-
-		if state.textPlanRedirectCount > maxTextPlanRedirects {
-			yellow.Fprintf(a.output(), "⚠️  Text plan detected %d times. Forcing direct execution.\n", state.textPlanRedirectCount)
-			r.appendAssistantHistoryOnly(response)
-			a.History = append(a.History, api.Message{
-				Role:    "user",
-				Content: "[SYSTEM] STOP planning. Pick the FIRST change and execute it NOW using the appropriate tool (read_file, str_replace, etc). One tool call, no explanation.",
-			})
-			return normalModeContinue
-		}
-
-		yellow.Fprintf(a.output(), "⚠️  Text plan detected (%d steps). Execute tools directly instead. (%d/%d)\n",
-			len(steps), state.textPlanRedirectCount, maxTextPlanRedirects)
-		r.appendAssistantHistoryOnly(response)
-		a.History = append(a.History, api.Message{
-			Role:    "user",
-			Content: "[SYSTEM] Do NOT output plans as numbered text. Execute the required changes directly using tools (read_file, str_replace, etc).",
-		})
-		return normalModeContinue
-	}
-
-	if !state.completionVerified {
-		needsContinue, feedback := a.verifyCompletionWithDiagnostics(response)
-		if needsContinue {
-			state.completionVerified = true
-			yellow.Fprintln(a.output(), "⚠️  Completion verification: LSP errors found in modified files")
-			r.appendAssistantHistoryOnly(response)
-			a.History = append(a.History, api.Message{
-				Role:    "user",
-				Content: feedback,
-			})
-			return normalModeContinue
-		}
-	}
-
-	if containsCompletionDeclaration(response) && len(cfg.Hooks.OnCompletion) > 0 {
-		changedFiles := a.getTaskChangedFiles()
-		if len(changedFiles) > 0 {
-			hookNeedsContinue, hookFeedback := a.checkGitDiffEmpty()
-			if !hookNeedsContinue {
-				hookNeedsContinue, hookFeedback = a.runCompletionHooks(changedFiles)
-			}
-			if hookNeedsContinue {
-				state.hookRetryCount++
-				maxRetry := cfg.Hooks.MaxRetry
-				if maxRetry <= 0 {
-					maxRetry = 3
-				}
-				if state.hookRetryCount >= maxRetry {
-					yellow.Fprintf(a.output(), "⚠️  Hook retry limit reached (%d/%d). Proceeding with completion.\n", state.hookRetryCount, maxRetry)
-				} else {
-					yellow.Fprintf(a.output(), "⚠️  Completion hook failed (%d/%d). Asking AI to fix...\n", state.hookRetryCount, maxRetry)
-					r.appendAssistantHistoryOnly(response)
-					a.History = append(a.History, api.Message{
-						Role:    "user",
-						Content: hookFeedback,
-					})
-					return normalModeContinue
-				}
-			}
-		}
-	}
-
-	a.handleNormalResponse(response)
-	return normalModeDone
+	return newNormalModeNoToolHandler(r, cfg, state).Handle(response)
 }
 
 func (r *TurnRunner) processNormalModeToolCalls(response string, toolCalls []*tools.ToolCall, rs *retryState) error {
@@ -296,50 +222,7 @@ func (r *TurnRunner) processNormalModeToolCalls(response string, toolCalls []*to
 	if toolLoopDetected {
 		return fmt.Errorf("tool loop detected")
 	}
-
-	if lastFailedResult != "" {
-		level := rs.recordFailure(lastFailedResult)
-
-		switch level {
-		case stalledNone:
-			a.ui().ResetTerminalState()
-			red.Fprintf(a.output(), "❌ Failed (retry %d)\n", rs.count)
-			yellow.Fprintf(a.output(), "🔄 Retrying...\n")
-
-			retryInstruction := normalModeRetryInstruction(rs.count)
-			a.History = append(a.History, api.Message{
-				Role:    "user",
-				Content: fmt.Sprintf("The previous tool execution FAILED (attempt %d):\n\n%s\n\n%s", rs.count, lastFailedResult, retryInstruction),
-			})
-			return nil
-
-		case stalledSoft:
-			a.ui().ResetTerminalState()
-			yellow.Fprintf(a.output(), "⚠️  Similar failure repeated %d times (retry %d)\n", rs.sameCount, rs.count)
-			yellow.Fprintf(a.output(), "🔄 Retrying with strategy change...\n")
-
-			a.History = append(a.History, api.Message{
-				Role: "user",
-				Content: fmt.Sprintf("The previous tool execution FAILED (attempt %d):\n\n%s\n\n"+
-					"WARNING: A similar failure has now occurred %d times in a row.\n"+
-					"Your previous approach is likely wrong — do not repeat the same fix pattern.\n\n%s",
-					rs.count, lastFailedResult, rs.sameCount, normalModeRetryInstruction(rs.count)),
-			})
-			return nil
-		}
-
-		a.ui().ResetTerminalState()
-		red.Fprintf(a.output(), "❌ Stalled — same error %d times\n", rs.sameCount)
-		yellow.Fprintln(a.output(), "Could not complete the task automatically. Letting AI respond...")
-		rs.reset()
-		return nil
-	}
-
-	if rs.count > 0 {
-		green.Fprintf(a.output(), "✅ Succeeded (on retry %d)\n", rs.count)
-		rs.reset()
-	}
-	return nil
+	return newNormalModeFailureHandler(r, rs, lastFailedResult).Handle()
 }
 
 func (r *TurnRunner) processDeprecatedCreatePlanCalls(response string, toolCalls []*tools.ToolCall) []*tools.ToolCall {

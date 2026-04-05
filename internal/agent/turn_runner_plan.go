@@ -6,7 +6,6 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/agent/plan"
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/config"
 	promptplan "github.com/susugadx/xelyon-cli/internal/prompt/plan"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
@@ -106,60 +105,7 @@ func (r *TurnRunner) requestPlanStepResponse(stepPrompt string) (string, error) 
 }
 
 func (r *TurnRunner) handleStepNoToolResponse(response string, step *plan.PlanStep, state *stepRunState) (stepLoopAction, error) {
-	a := r.agent
-	maxContinues := config.PlanMaxAutoContinues
-
-	if isAIQuestionWithToolParser(response, a.parseToolCalls) && state.continueCount < maxContinues {
-		state.continueCount++
-		yellow.Fprintf(a.output(), "⚠️  AI asked a question, auto-continuing (%d/%d)...\n", state.continueCount, maxContinues)
-		a.History = append(a.History, api.Message{
-			Role:    "user",
-			Content: "[AUTO-CONTINUE] Yes, proceed with the step. Execute the required tools directly without asking for confirmation.",
-		})
-		return stepLoopContinue, nil
-	}
-
-	if containsCompletionDeclaration(response) && state.beforeDiffHash != "" {
-		afterDiffHash := getGitDiffHash()
-		if afterDiffHash != "" && afterDiffHash != state.beforeDiffHash {
-			a.printFinalAssistantResponse(response)
-			green.Fprintf(a.output(), "✓ Step %d completed (already applied)\n", step.ID)
-			return stepLoopDone, nil
-		}
-	}
-
-	if state.stepHadWrites && !state.stepHadNoChangeNeeded {
-		afterDiffHash := getGitDiffHash()
-		if state.beforeDiffHash != "" && afterDiffHash != "" && state.beforeDiffHash == afterDiffHash {
-			if state.continueCount < maxContinues {
-				state.continueCount++
-				yellow.Fprintf(a.output(), "⚠️  Step %d: write tools executed but no file changes detected (%d/%d)\n",
-					step.ID, state.continueCount, maxContinues)
-				a.History = append(a.History, api.Message{
-					Role: "user",
-					Content: fmt.Sprintf("[SYSTEM] Step %d executed write tools but git diff shows no new changes. "+
-						"The tool may have failed silently. Verify and retry.", step.ID),
-				})
-				return stepLoopContinue, nil
-			}
-		}
-	}
-
-	if !state.stepCompletionVerified {
-		if needsContinue, feedback := a.verifyCompletionWithDiagnostics(response); needsContinue {
-			state.stepCompletionVerified = true
-			yellow.Fprintln(a.output(), "⚠️  Step completion verification: LSP errors found in modified files")
-			a.History = append(a.History, api.Message{
-				Role:    "user",
-				Content: feedback,
-			})
-			return stepLoopContinue, nil
-		}
-	}
-
-	a.printFinalAssistantResponse(response)
-	green.Fprintf(a.output(), "✓ Step %d completed\n", step.ID)
-	return stepLoopDone, nil
+	return newPlanStepNoToolHandler(r, step, state).Handle(response)
 }
 
 func (r *TurnRunner) processStepToolCalls(execToolCalls []*tools.ToolCall, step *plan.PlanStep, p *plan.Plan, idx int, rs *retryState, state *stepRunState) (bool, error) {
