@@ -81,21 +81,28 @@ jobs:
             escaped = body.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
             print(f"::error title={title}::{escaped}")
 
-          def first_match(prefix: str) -> str | None:
+          def first_line_containing(needle: str) -> str | None:
             for line in lines:
-              if line.startswith(prefix):
+              if needle in line:
+                return line
+            return None
+
+          def first_line_matching_prefix(prefixes: tuple[str, ...]) -> str | None:
+            for line in lines:
+              if line.startswith(prefixes):
                 return line
             return None
 
           highlights: list[tuple[str, str]] = []
-          for prefix, title in [
-            ("WARNING: DATA RACE", "Data race detected"),
-            ("panic:", "Panic detected"),
-            ("fatal error:", "Fatal runtime error"),
-            ("--- FAIL:", "Failed test"),
-            ("FAIL\tgithub.com/", "Failed package"),
+          for matcher, title in [
+            (lambda: first_line_containing("WARNING: DATA RACE"), "Data race detected"),
+            (lambda: first_line_containing("panic:"), "Panic detected"),
+            (lambda: first_line_containing("fatal error:"), "Fatal runtime error"),
+            (lambda: first_line_containing("--- FAIL:"), "Failed test"),
+            (lambda: first_line_containing("FAIL\tgithub.com/") or first_line_matching_prefix(("FAIL github.com/", "FAIL    github.com/")), "Failed package"),
+            (lambda: first_line_matching_prefix(("# github.com/",)), "Build error"),
           ]:
-            match = first_match(prefix)
+            match = matcher()
             if match:
               highlights.append((title, match))
 

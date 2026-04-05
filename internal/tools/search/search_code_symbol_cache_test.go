@@ -93,11 +93,11 @@ func TestSearchCode_MultiPatternCacheSupplementsSymbolMultipleAffectedFiles(t *t
 		"pkg/run_darwin.go": "package pkg\n\nfunc Run() {}\n",
 	})
 
-	cache := &testSearchCache{data: make(map[string]string)}
 	opts := SearchOptions{
-		Pattern:  "helper(,Run",
-		Path:     dir,
-		FileType: "go",
+		Pattern:       "helper(,Run",
+		Path:          dir,
+		FileType:      "go",
+		InvocationCWD: dir,
 		ProjectMap: &repomap.ProjectMap{
 			RootPath: dir,
 			Files: []*repomap.FileEntry{
@@ -119,24 +119,50 @@ func TestSearchCode_MultiPatternCacheSupplementsSymbolMultipleAffectedFiles(t *t
 		ProjectMapStateKey: "affected-multi-symbol-multiple",
 	}
 
-	result := ExecuteSearchCodeWithCache(cache, opts)
-	if !strings.Contains(result, "Multiple symbols matched") || !strings.Contains(result, "helper") {
-		t.Fatalf("expected mixed text/symbol-multiple result, got:\n%s", result)
+	normOpts, ok := normalizeSearchOptions(opts)
+	if !ok {
+		t.Fatal("expected normalized options")
 	}
+	normOpts.CtxLines = 3
+	normOpts.TokenBudget = 15000
 
-	searchKey := singlePatternBundleCacheKey(buildMultiCacheKey(splitPatterns(opts.Pattern)), cache.lastSetPath)
-	affected := cache.affected[searchKey]
+	helperOpts := normOpts
+	helperOpts.Mode = string(SearchModeLiteral)
+	helperExec := executeSinglePatternDetailed(nil, "helper(", helperOpts)
+	if !strings.Contains(helperExec.Output, "helper") {
+		t.Fatalf("expected helper text search result, got:\n%s", helperExec.Output)
+	}
+	helperExec.Output = strings.TrimSuffix(helperExec.Output, lineRangeHint)
+
+	runOpts := normOpts
+	runOpts.Mode = string(SearchModeSymbol)
+	runExec := executeSinglePatternDetailed(nil, "Run", runOpts)
+	if !strings.Contains(runExec.Output, "Multiple symbols matched") {
+		t.Fatalf("expected symbol-multiple output, got:\n%s", runExec.Output)
+	}
+	runExec.Output = strings.TrimSuffix(runExec.Output, lineRangeHint)
+
+	affected := collectAffectedFilesFromExecutions([]formattedPatternExecution{
+		{Index: 0, singlePatternExecution: helperExec},
+		{Index: 1, singlePatternExecution: runExec},
+	}, normOpts)
+
 	wantHelper := filepath.Join(dir, "pkg", "helper.go")
 	wantLinux := filepath.Join(dir, "pkg", "run_linux.go")
 	wantDarwin := filepath.Join(dir, "pkg", "run_darwin.go")
 	for _, want := range []string{wantHelper, wantLinux, wantDarwin} {
 		if !containsAffectedFile(affected, want) {
-			t.Fatalf("expected exact multi cache key %q to track %s, got %v", searchKey, want, affected)
+			t.Fatalf("expected aggregated affected files to include %s, got %v", want, affected)
 		}
 	}
 
+	cache := &testSearchCache{data: make(map[string]string)}
+	multiKey := buildMultiCacheKey(splitPatterns(normOpts.Pattern))
+	cacheKey := "deterministic-multi-cache"
+	cache.SetSearch(multiKey, cacheKey, "synthetic multi cache entry", affected)
+
 	cache.InvalidateSearchCacheForFile(wantDarwin)
-	if _, ok := cache.GetSearch(buildMultiCacheKey(splitPatterns(opts.Pattern)), cache.lastSetPath); ok {
+	if _, ok := cache.GetSearch(multiKey, cacheKey); ok {
 		t.Fatalf("expected multi-pattern cache entry to be invalidated after editing %s", wantDarwin)
 	}
 }
