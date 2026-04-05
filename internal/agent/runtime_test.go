@@ -97,12 +97,25 @@ func executeRuntimeTool(agent *Agent, stdin io.Reader, tc *tools.ToolCall) strin
 	return result
 }
 
-func TestAgentRuntime_SeparatesBuiltinListDirConfig(t *testing.T) {
-	root, err := os.MkdirTemp(".", "runtime-listdir-*")
+func runtimeTestWorkspace(t *testing.T) string {
+	t.Helper()
+
+	dir := t.TempDir()
+	origDir, err := os.Getwd()
 	if err != nil {
-		t.Fatalf("create temp dir: %v", err)
+		t.Fatalf("get working directory: %v", err)
 	}
-	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("change working directory: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(origDir)
+	})
+	return dir
+}
+
+func TestAgentRuntime_SeparatesBuiltinListDirConfig(t *testing.T) {
+	root := runtimeTestWorkspace(t)
 	if err := os.Mkdir(filepath.Join(root, "skipme"), 0o755); err != nil {
 		t.Fatalf("mkdir skipme: %v", err)
 	}
@@ -151,11 +164,7 @@ func TestAgentRuntime_EffectiveConfigDoesNotUseGlobalFallback(t *testing.T) {
 }
 
 func TestAgentRuntime_SeparatesRegistryCacheAndAutoApprove(t *testing.T) {
-	root, err := os.MkdirTemp(".", "runtime-cache-*")
-	if err != nil {
-		t.Fatalf("create temp dir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	root := runtimeTestWorkspace(t)
 
 	runtimeA := newIsolatedRuntime()
 	runtimeB := newIsolatedRuntime()
@@ -467,11 +476,7 @@ func TestAgentRuntime_SwitchProviderUsesRuntimeConfig(t *testing.T) {
 }
 
 func TestAgentRuntime_SeparatesUIRuntimeAndAuditLogger(t *testing.T) {
-	logDir, err := os.MkdirTemp(".", "runtime-ui-audit-*")
-	if err != nil {
-		t.Fatalf("create temp dir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(logDir) })
+	logDir := runtimeTestWorkspace(t)
 
 	outA := &bytes.Buffer{}
 	errA := &bytes.Buffer{}

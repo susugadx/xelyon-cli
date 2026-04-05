@@ -15,19 +15,23 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
-// testSubDir はカレントディレクトリ配下にテスト用サブディレクトリを作成し、
-// テスト終了時に自動削除するヘルパー。パスエスケープ検出を回避するため CWD 内に配置する。
+// testSubDir は各テスト専用の作業ディレクトリを作成し、CWD もそこへ切り替える。
+// repo 配下を汚さないことで package 並列実行時の cross-package race を防ぐ。
 func testSubDir(t *testing.T) string {
 	t.Helper()
-	dir, err := os.MkdirTemp(".", "headless_integ_*")
-	if err != nil {
-		t.Fatal(err)
-	}
+	dir := t.TempDir()
 	abs, err := filepath.Abs(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.RemoveAll(abs) })
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(abs); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
 	return abs
 }
 
@@ -148,17 +152,6 @@ func TestHeadless_SearchCodeUsesFreshProjectMapRuntimeAfterEdit(t *testing.T) {
 	if err := os.WriteFile(testFile, []byte("package main\n\nfunc Run() {}\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-
-	origDir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		_ = os.Chdir(origDir)
-	})
 
 	cfg := config.DefaultConfig()
 	provider := &sequenceMockProvider{

@@ -421,6 +421,7 @@ func TestRootCommand_PositionalQueryUsesHeadlessInJSONMode(t *testing.T) {
 
 func TestRootCommand_HeadlessJSONStdoutIsPureJSON(t *testing.T) {
 	resetRootFlagsForTest()
+	t.Setenv("HOME", t.TempDir())
 
 	origRunHeadless := runHeadless
 	t.Cleanup(func() {
@@ -428,11 +429,17 @@ func TestRootCommand_HeadlessJSONStdoutIsPureJSON(t *testing.T) {
 		resetRootFlagsForTest()
 	})
 
-	tempDir, err := os.MkdirTemp(".", "headless-json-*")
+	tempDir := t.TempDir()
+	origDir, err := os.Getwd()
 	if err != nil {
-		t.Fatalf("MkdirTemp() error = %v", err)
+		t.Fatalf("Getwd() error = %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatalf("Chdir() error = %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(origDir)
+	})
 
 	targetPath := filepath.Join(tempDir, "output.txt")
 	provider := &headlessSequenceProvider{
@@ -444,6 +451,13 @@ func TestRootCommand_HeadlessJSONStdoutIsPureJSON(t *testing.T) {
 	}
 
 	runHeadless = func(ctx context.Context, query string, model string, providerArg api.Provider, cfg *config.Config) *agent.HeadlessResult {
+		if cfg == nil {
+			cfg = config.DefaultConfig()
+		} else {
+			cloned := *cfg
+			cfg = &cloned
+		}
+		cfg.ProjectMap.Enabled = false
 		return agent.RunHeadlessWithConfig(ctx, query, model, provider, cfg)
 	}
 
