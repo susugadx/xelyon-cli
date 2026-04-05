@@ -1,37 +1,10 @@
 package file
 
 import (
-	"bufio"
-	"fmt"
-	"io"
-	"os"
-	"strings"
-
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
-
-func printReadStatus(out common.Output, format string, args ...interface{}) {
-	if out.SuppressStdout() {
-		return
-	}
-	out.Green.Printf(format, args...)
-}
-
-// formatFileSize はバイト数を人間が読みやすい形式に変換
-func formatFileSize(bytes int64) string {
-	const unit = 1024
-	if bytes < unit {
-		return fmt.Sprintf("%d B", bytes)
-	}
-	div, exp := int64(unit), 0
-	for n := bytes / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
-}
 
 // DefaultFullLines is the threshold for switching from full content to outline mode.
 // Most files should be returned in full so the model does not reread narrow ranges.
@@ -63,266 +36,24 @@ func ExecuteReadFileWithRuntime(out common.Output, cfg *config.Config, cache too
 // executeReadFileCore は outlineThreshold を指定可能な内部関数。
 // outlineThreshold 行を超えるファイルはアウトラインモードで返す。
 func executeReadFileCore(out common.Output, cfg *config.Config, cache tools.ToolCacheInterface, path string, startLine, endLine, outlineThreshold int) string {
-	if path == "" {
-		return "Error: path is empty"
+	ctx, errResult := newReadFileContext(out, cfg, cache, path, outlineThreshold)
+	if errResult != "" {
+		return errResult
 	}
 
-	// パストラバーサル防止
-	absPath, err := common.ValidatePath(path)
-	if err != nil {
-		out.Red.Printf("🚫 Security: %v\n", err)
-		return fmt.Sprintf("Error: %v", err)
-	}
-
-	// 設定読み込み（ファイル情報表示用）
-	showFileInfo := cfg != nil && cfg.Streaming.ShowFileInfo
-
-	// ファイル情報を取得（サイズ表示用）
-	var fileInfo os.FileInfo
-	var fileSize int64
-	if showFileInfo {
-		if info, err := os.Stat(absPath); err == nil {
-			fileInfo = info
-			fileSize = info.Size()
-		}
-	}
-
-	var contentStr string
-
-	// キャッシュチェック（行範囲指定なしの場合のみ）
-	if startLine == 0 && endLine == 0 && cache != nil {
-		if cached, hit := cache.GetFile(absPath); hit {
-			contentStr = cached
-		}
-	}
-
-	// キャッシュミスまたは行範囲指定ありの場合はファイルを読む
-	if contentStr == "" {
-		if fileInfo == nil {
-			info, err := os.Stat(absPath)
-			if err != nil {
-				return fmt.Sprintf("Error reading file: %v", err)
-			}
-			fileInfo = info
-			if showFileInfo {
-				fileSize = info.Size()
-			}
-		}
-
-		f, err := os.Open(absPath)
-		if err != nil {
-			return fmt.Sprintf("Error reading file: %v", err)
-		}
-		defer f.Close()
-
-		// 先頭 512 バイトでバイナリ判定
-		header := make([]byte, 512)
-		n, _ := f.Read(header)
-		if strings.Contains(string(header[:n]), "\x00") {
-			return fmt.Sprintf("Error: %s appears to be a binary file (contains null bytes). Use 'file %s' or 'xxd %s | head' for binary inspection.", path, path, path)
-		}
-
-		// 行範囲指定なし + 大容量ファイルはストリーミング読み込み
-		if startLine == 0 && endLine == 0 && fileInfo.Size() > LargeFileThreshold {
-			if _, err := f.Seek(0, 0); err != nil {
-				return fmt.Sprintf("Error reading file: %v", err)
-			}
-			lines, totalRead, hasMore, err := readFirstNLines(f, MaxReadLines)
-			if err != nil {
-				return fmt.Sprintf("Error reading file: %v", err)
-			}
-
-			// 推定総行数
-			totalLines := len(lines)
-			if hasMore && totalRead > 0 {
-				avgLineLen := fileInfo.Size() / int64(totalRead)
-				if avgLineLen > 0 {
-					totalLines = int(fileInfo.Size() / avgLineLen)
-				}
-			}
-
-			// outlineThreshold 以下かつ全行読めた場合のみ全文返却
-			if !hasMore && len(lines) <= outlineThreshold {
-				result := formatLinesWithNumbers(lines, 1)
-				if showFileInfo && fileSize > 0 {
-					printReadStatus(out, "📄 Read: %s (%s, %d lines)\n", path, formatFileSize(fileSize), len(lines))
-				} else {
-					printReadStatus(out, "📄 Read: %s (%d lines)\n", path, len(lines))
-				}
-				return result
-			}
-
-			// outline-first モード
-			result := formatOutline(absPath, lines, totalLines)
-			if showFileInfo && fileSize > 0 {
-				printReadStatus(out, "📄 Read: %s (%s, outline of ~%d lines)\n", path, formatFileSize(fileSize), totalLines)
-			} else {
-				printReadStatus(out, "📄 Read: %s (outline of ~%d lines)\n", path, totalLines)
-			}
+	if startLine == 0 && endLine == 0 {
+		if result, handled := maybeReadLargeFile(ctx); handled {
 			return result
 		}
-
-		if _, err := f.Seek(0, 0); err != nil {
-			return fmt.Sprintf("Error reading file: %v", err)
-		}
-		content, err := io.ReadAll(f)
-		if err != nil {
-			return fmt.Sprintf("Error reading file: %v", err)
-		}
-		contentStr = string(content)
-
-		// キャッシュに保存（行範囲指定なしの場合のみ）
-		if startLine == 0 && endLine == 0 && cache != nil {
-			cache.SetFile(absPath, contentStr)
-		}
 	}
 
-	// バイナリファイル検出（先頭 512 バイトに NUL が含まれる場合）
-	checkLen := len(contentStr)
-	if checkLen > 512 {
-		checkLen = 512
+	contentStr, errResult := loadReadContent(ctx, startLine, endLine)
+	if errResult != "" {
+		return errResult
 	}
-	if strings.Contains(contentStr[:checkLen], "\x00") {
-		return fmt.Sprintf("Error: %s appears to be a binary file (contains null bytes). Use 'file %s' or 'xxd %s | head' for binary inspection.", path, path, path)
-	}
-
-	lines := strings.Split(contentStr, "\n")
-	totalLines := len(lines)
-
-	// 行範囲が指定されている場合（start_line のみ、end_line のみ、両方指定 に対応）
-	if startLine > 0 || endLine > 0 {
-		// 片方のみ指定時のデフォルト補完
-		if startLine <= 0 {
-			startLine = 1
-		}
-		if endLine <= 0 {
-			endLine = startLine + MaxReadLines - 1
-		}
-
-		// 範囲調整
-		if startLine > totalLines {
-			return fmt.Sprintf("Error: start_line %d exceeds total lines %d", startLine, totalLines)
-		}
-		if endLine > totalLines {
-			endLine = totalLines
-		}
-		if startLine > endLine {
-			return fmt.Sprintf("Error: start_line %d is greater than end_line %d", startLine, endLine)
-		}
-
-		// 1-indexed to 0-indexed
-		selectedLines := lines[startLine-1 : endLine]
-		result := formatLinesWithNumbers(selectedLines, startLine)
-		if showFileInfo && fileSize > 0 {
-			printReadStatus(out, "📄 Read: %s (%s, lines %d-%d of %d)\n", path, formatFileSize(fileSize), startLine, endLine, totalLines)
-		} else {
-			printReadStatus(out, "📄 Read: %s (lines %d-%d of %d)\n", path, startLine, endLine, totalLines)
-		}
-		return result
+	if isBinaryContent(contentStr) {
+		return binaryFileError(ctx.path)
 	}
 
-	// 行範囲指定なし: outlineThreshold 以下なら全文返却
-	if totalLines <= outlineThreshold {
-		// 全行表示
-		result := formatLinesWithNumbers(lines, 1)
-		if showFileInfo && fileSize > 0 {
-			printReadStatus(out, "📄 Read: %s (%s, %d lines)\n", path, formatFileSize(fileSize), totalLines)
-		} else {
-			printReadStatus(out, "📄 Read: %s (%d lines)\n", path, totalLines)
-		}
-		return result
-	}
-
-	// outline-first モード: 先頭 + シグネチャ一覧 + 末尾
-	result := formatOutline(absPath, lines, totalLines)
-	if showFileInfo && fileSize > 0 {
-		printReadStatus(out, "📄 Read: %s (%s, outline of %d lines)\n", path, formatFileSize(fileSize), totalLines)
-	} else {
-		printReadStatus(out, "📄 Read: %s (outline of %d lines)\n", path, totalLines)
-	}
-	return result
-}
-
-// outlineHeadLines はアウトラインモードで表示する先頭行数
-const outlineHeadLines = 30
-
-// outlineTailLines はアウトラインモードで表示する末尾行数
-const outlineTailLines = 10
-
-// formatOutline はファイルのアウトラインを生成する。
-// 先頭30行 + 関数/メソッドシグネチャ一覧 + 末尾10行 を返す。
-func formatOutline(filePath string, lines []string, totalLines int) string {
-	var sb strings.Builder
-
-	// 1. 先頭 outlineHeadLines 行
-	headEnd := outlineHeadLines
-	if headEnd > totalLines {
-		headEnd = totalLines
-	}
-	sb.WriteString(formatLinesWithNumbers(lines[:headEnd], 1))
-
-	// 2. シグネチャ一覧
-	content := strings.Join(lines, "\n")
-	isBrace := common.IsBraceLanguage(filePath)
-	blocks := common.BuildBlockMap(content, isBrace)
-
-	// headEnd 行より後のブロックのみ抽出（先頭部分と重複しないように）
-	var signatures []string
-	for _, b := range blocks {
-		if b.StartLine > headEnd && b.StartLine <= totalLines-outlineTailLines {
-			signatures = append(signatures, fmt.Sprintf("  L%-4d %s", b.StartLine, b.Name))
-		}
-	}
-
-	if len(signatures) > 0 {
-		sb.WriteString("\n--- Signatures ---\n")
-		for _, sig := range signatures {
-			sb.WriteString(sig)
-			sb.WriteString("\n")
-		}
-	}
-
-	// 3. 末尾 outlineTailLines 行
-	tailStart := totalLines - outlineTailLines
-	if tailStart < headEnd {
-		tailStart = headEnd
-	}
-	if tailStart < totalLines {
-		sb.WriteString("\n--- Last lines ---\n")
-		sb.WriteString(formatLinesWithNumbers(lines[tailStart:], tailStart+1))
-	}
-
-	// 4. Footer
-	fmt.Fprintf(&sb, "\n(%d lines total. For specific sections: paths=[%q])\n", totalLines, filePath+":start-end")
-
-	return sb.String()
-}
-
-// formatLinesWithNumbers は行番号付きでフォーマット
-func formatLinesWithNumbers(lines []string, startNum int) string {
-	var sb strings.Builder
-	for i, line := range lines {
-		fmt.Fprintf(&sb, "%d: %s\n", startNum+i, line)
-	}
-	return sb.String()
-}
-
-// readFirstNLines は io.Reader から最初の n 行を読み、残りがあるかを返す
-func readFirstNLines(r io.Reader, n int) (lines []string, totalRead int, hasMore bool, err error) {
-	scanner := bufio.NewScanner(r)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-
-	for scanner.Scan() {
-		totalRead++
-		if totalRead <= n {
-			lines = append(lines, scanner.Text())
-			continue
-		}
-		hasMore = true
-		return lines, totalRead, hasMore, nil
-	}
-	if scanErr := scanner.Err(); scanErr != nil {
-		return nil, 0, false, scanErr
-	}
-	return lines, totalRead, false, nil
+	return renderReadResult(ctx, contentStr, startLine, endLine)
 }

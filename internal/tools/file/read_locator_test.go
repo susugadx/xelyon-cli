@@ -12,6 +12,7 @@ import (
 
 func TestReadFileTool_Targets(t *testing.T) {
 	setupTestMocks(t)
+	defer withPermissiveValidatePath(t)()
 
 	tmpDir := t.TempDir()
 	testutil.CreateTempFile(t, tmpDir, "test.go", "package main\n\nfunc main() {\n\tprintln(\"hello\")\n}\n")
@@ -65,6 +66,7 @@ func TestReadFileTool_TargetsInvalidID(t *testing.T) {
 
 func TestReadFileTool_LocatorIDInOutput(t *testing.T) {
 	setupTestMocks(t)
+	defer withPermissiveValidatePath(t)()
 
 	tmpDir := t.TempDir()
 	testutil.CreateTempFile(t, tmpDir, "locator_test.txt", "line1\nline2\nline3\n")
@@ -86,6 +88,7 @@ func TestReadFileTool_LocatorIDInOutput(t *testing.T) {
 
 func TestReadFileTool_LocatorIDNilRegistry(t *testing.T) {
 	setupTestMocks(t)
+	defer withPermissiveValidatePath(t)()
 
 	tmpDir := t.TempDir()
 	testutil.CreateTempFile(t, tmpDir, "no_locator.txt", "line1\nline2\n")

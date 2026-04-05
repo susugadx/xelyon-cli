@@ -8,12 +8,13 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
-// setupTestMocks はテスト用の共通モックを設定
-func setupTestMocks(t *testing.T) {
+// setupTestEnvironment は file tool テスト共通の環境変数を設定する。
+func setupTestEnvironment(t *testing.T) {
 	// 対話モードを無効化（シンプルなy/n確認を使う）
 	os.Setenv("XELYON_INTERACTIVE_CONFIRM", "0")
 	// テスト中に .gitignore 追記のプロンプトを出さない
@@ -22,21 +23,27 @@ func setupTestMocks(t *testing.T) {
 		os.Unsetenv("XELYON_INTERACTIVE_CONFIRM")
 		os.Unsetenv("XELYON_SKIP_GITIGNORE_PROMPT")
 	})
+}
 
-	// confirm関数をモック（デフォルトは自動承認）
-	setupTestConfirm(t, true)
-
-	// ValidatePathをモック（テスト時はパストラバーサルチェックをスキップ）
+// withPermissiveValidatePath は TempDir を使うテスト向けに ValidatePath を一時的に緩和する。
+func withPermissiveValidatePath(t *testing.T) func() {
+	t.Helper()
 	originalValidate := common.ValidatePath
 	common.ValidatePath = func(path string) (string, error) {
 		return filepath.Abs(path)
 	}
-	t.Cleanup(func() {
+	return func() {
 		common.ValidatePath = originalValidate
-	})
+	}
 }
 
-// setupTestConfirm はconfirm関数をモック
+// setupTestMocks は file tool テストの既定モックをまとめて設定する。
+func setupTestMocks(t *testing.T) {
+	setupTestEnvironment(t)
+	setupTestConfirm(t, true)
+}
+
+// setupTestConfirm は confirm 関数をモックする。
 func setupTestConfirm(t *testing.T, result bool) {
 	originalConfirm := common.SimpleConfirm
 	originalConfirmWithIO := common.SimpleConfirmWithIO
@@ -64,6 +71,28 @@ func testPromptIO(stdout, stderr io.Writer) ui.PromptIO {
 		stderr = io.Discard
 	}
 	return ui.NewPromptIO(strings.NewReader(""), stdout, stderr, nil)
+}
+
+func newTestToolExecContext() tools.ExecutionContext {
+	return tools.ExecutionContext{
+		Stdin:  strings.NewReader(""),
+		Stdout: io.Discard,
+		Stderr: io.Discard,
+	}
+}
+
+func assertNoFileChange(t *testing.T, change *tools.FileChange) {
+	t.Helper()
+	if change != nil {
+		t.Fatalf("expected nil change, got: %+v", change)
+	}
+}
+
+func assertHasFileChange(t *testing.T, change *tools.FileChange) {
+	t.Helper()
+	if change == nil {
+		t.Fatal("expected non-nil change")
+	}
 }
 
 func executeWriteFileForTest(path, content string) (string, error) {

@@ -3,17 +3,16 @@ package file
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/testutil"
-	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
 func TestReadFileTool_SchemaAndRun(t *testing.T) {
 	setupTestMocks(t)
+	defer withPermissiveValidatePath(t)()
 	tool := &ReadFileTool{}
 
 	params := tool.Parameters()
@@ -30,10 +29,10 @@ func TestReadFileTool_SchemaAndRun(t *testing.T) {
 	if _, ok := props["symbol"]; ok {
 		t.Fatal("symbol parameter should be removed")
 	}
-	// paths と targets は排他的なため required は未設定
 	if _, hasRequired := params["required"]; hasRequired {
 		t.Fatal("expected no required array (paths and targets are mutually exclusive)")
 	}
+
 	pathsParam, ok := props["paths"].(map[string]interface{})
 	if !ok {
 		t.Fatal("expected paths parameter schema")
@@ -46,11 +45,7 @@ func TestReadFileTool_SchemaAndRun(t *testing.T) {
 	testFile := filepath.Join(tmpDir, "test.go")
 	testutil.CreateTempFile(t, tmpDir, "test.go", "package main\nfunc main() {}")
 
-	execCtx := tools.ExecutionContext{
-		Stdin:  strings.NewReader(""),
-		Stdout: io.Discard,
-		Stderr: io.Discard,
-	}
+	execCtx := newTestToolExecContext()
 
 	t.Run("single_path_via_paths", func(t *testing.T) {
 		pathsJSON, err := json.Marshal([]string{testFile})
@@ -58,9 +53,7 @@ func TestReadFileTool_SchemaAndRun(t *testing.T) {
 			t.Fatalf("json.Marshal() error = %v", err)
 		}
 
-		result, _, err := tool.Run(execCtx, map[string]string{
-			"paths": string(pathsJSON),
-		})
+		result, _, err := tool.Run(execCtx, map[string]string{"paths": string(pathsJSON)})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -81,9 +74,7 @@ func TestReadFileTool_SchemaAndRun(t *testing.T) {
 			t.Fatalf("json.Marshal() error = %v", err)
 		}
 
-		result, _, err := tool.Run(execCtx, map[string]string{
-			"paths": string(pathsJSON),
-		})
+		result, _, err := tool.Run(execCtx, map[string]string{"paths": string(pathsJSON)})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -109,9 +100,7 @@ func TestReadFileTool_SchemaAndRun(t *testing.T) {
 			t.Fatalf("json.Marshal() error = %v", err)
 		}
 
-		result, _, err := tool.Run(execCtx, map[string]string{
-			"paths": string(pathsJSON),
-		})
+		result, _, err := tool.Run(execCtx, map[string]string{"paths": string(pathsJSON)})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -155,9 +144,7 @@ func TestReadFileTool_SchemaAndRun(t *testing.T) {
 	})
 
 	t.Run("invalid_paths_errors", func(t *testing.T) {
-		result, _, err := tool.Run(execCtx, map[string]string{
-			"paths": "not-json",
-		})
+		result, _, err := tool.Run(execCtx, map[string]string{"paths": "not-json"})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -167,9 +154,7 @@ func TestReadFileTool_SchemaAndRun(t *testing.T) {
 	})
 
 	t.Run("empty_paths_errors", func(t *testing.T) {
-		result, _, err := tool.Run(execCtx, map[string]string{
-			"paths": "[]",
-		})
+		result, _, err := tool.Run(execCtx, map[string]string{"paths": "[]"})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -189,77 +174,14 @@ func TestReadFileTool_SchemaAndRun(t *testing.T) {
 	})
 }
 
-func TestStrReplaceToolRun_FileChangeOnlyOnAppliedEdit(t *testing.T) {
-	setupTestMocks(t)
-	tool := &StrReplaceTool{}
-	execCtx := tools.ExecutionContext{
-		Stdin:  strings.NewReader(""),
-		Stdout: io.Discard,
-		Stderr: io.Discard,
+func TestReadFileTool_PathRequired(t *testing.T) {
+	tool := &ReadFileTool{}
+
+	result, _, err := tool.Run(newTestToolExecContext(), map[string]string{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-
-	t.Run("error", func(t *testing.T) {
-		tmpDir := t.TempDir()
-		testFile := filepath.Join(tmpDir, "test.txt")
-		testutil.CreateTempFile(t, tmpDir, "test.txt", "foo\nbar\nfoo")
-
-		result, change, err := tool.Run(execCtx, map[string]string{
-			"path":    testFile,
-			"old_str": "foo",
-			"new_str": "baz",
-		})
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if !strings.HasPrefix(result, "Error:") {
-			t.Fatalf("expected error result, got: %s", result)
-		}
-		if change != nil {
-			t.Fatalf("expected nil change on error, got: %+v", change)
-		}
-	})
-
-	t.Run("cancelled", func(t *testing.T) {
-		setupTestConfirm(t, false)
-		tmpDir := t.TempDir()
-		testFile := filepath.Join(tmpDir, "test.txt")
-		testutil.CreateTempFile(t, tmpDir, "test.txt", "hello")
-
-		result, change, err := tool.Run(execCtx, map[string]string{
-			"path":    testFile,
-			"old_str": "hello",
-			"new_str": "hi",
-		})
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if !strings.HasPrefix(result, "[CANCELLED]") {
-			t.Fatalf("expected cancelled result, got: %s", result)
-		}
-		if change != nil {
-			t.Fatalf("expected nil change on cancellation, got: %+v", change)
-		}
-	})
-
-	t.Run("success", func(t *testing.T) {
-		setupTestConfirm(t, true)
-		tmpDir := t.TempDir()
-		testFile := filepath.Join(tmpDir, "test.txt")
-		testutil.CreateTempFile(t, tmpDir, "test.txt", "hello")
-
-		result, change, err := tool.Run(execCtx, map[string]string{
-			"path":    testFile,
-			"old_str": "hello",
-			"new_str": "hi",
-		})
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if !strings.Contains(result, "Successfully replaced") {
-			t.Fatalf("expected success result, got: %s", result)
-		}
-		if change == nil {
-			t.Fatal("expected non-nil change on success")
-		}
-	})
+	if !strings.Contains(result, "Error: either paths or targets is required") {
+		t.Fatalf("expected error when paths is not provided, got: %s", result)
+	}
 }
