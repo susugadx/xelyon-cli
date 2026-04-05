@@ -298,7 +298,9 @@ func executeSinglePatternDetailed(cache tools.ToolCacheInterface, pattern string
 			case symbolResolveMultiple:
 				route.FinalLane = searchLaneSymbol
 				route.SymbolResolved = true
-				affectedFiles := resolved.AffectedFiles
+				affectedFiles := append([]string(nil), resolved.AffectedFiles...)
+				affectedFiles = append(affectedFiles, collectPrimaryAffectedFilePathsFromOutput(resolved.Output, opts)...)
+				affectedFiles = dedupePaths(affectedFiles)
 				if len(affectedFiles) == 0 {
 					affectedFiles = deriveAffectedFilesFromCachedResult(nil, resolved.Output, opts)
 				}
@@ -1018,14 +1020,14 @@ func absoluteAffectedFilePath(file string, opts SearchOptions, source affectedFi
 }
 
 func absoluteAffectedFilePathForSymbol(file string, opts SearchOptions, rootPath string) string {
-	rootPath = strings.TrimSpace(rootPath)
-	if rootPath != "" {
-		return absoluteAffectedFilePathWithBase(file, rootPath)
-	}
-	return absoluteAffectedFilePath(file, opts, affectedFileSourceSymbol)
+	return absoluteAffectedFilePathWithPreferredBases(file, symbolAffectedFileBaseCandidates(opts, rootPath)...)
 }
 
 func absoluteAffectedFilePathWithBase(file, basePath string) string {
+	return absoluteAffectedFilePathWithPreferredBases(file, basePath)
+}
+
+func absoluteAffectedFilePathWithPreferredBases(file string, basePaths ...string) string {
 	file = strings.TrimSpace(file)
 	if file == "" {
 		return ""
@@ -1034,15 +1036,64 @@ func absoluteAffectedFilePathWithBase(file, basePath string) string {
 		return filepath.Clean(file)
 	}
 
-	basePath = strings.TrimSpace(basePath)
-	if basePath != "" {
-		return filepath.Clean(filepath.Join(basePath, filepath.FromSlash(file)))
+	var fallback string
+	seen := make(map[string]bool, len(basePaths))
+	for _, basePath := range basePaths {
+		basePath = normalizeAffectedFileBase(basePath)
+		if basePath == "" || seen[basePath] {
+			continue
+		}
+		seen[basePath] = true
+		candidate := filepath.Clean(filepath.Join(basePath, filepath.FromSlash(file)))
+		if fallback == "" {
+			fallback = candidate
+		}
+		if affectedFileExists(candidate) {
+			return candidate
+		}
 	}
 
-	if absPath, err := filepath.Abs(file); err == nil {
+	if fallback != "" {
+		return fallback
+	}
+
+	if absPath, err := filepath.Abs(filepath.FromSlash(file)); err == nil {
 		return filepath.Clean(absPath)
 	}
 	return filepath.Clean(file)
+}
+
+func normalizeAffectedFileBase(basePath string) string {
+	basePath = strings.TrimSpace(basePath)
+	if basePath == "" {
+		return ""
+	}
+	if absPath, err := filepath.Abs(basePath); err == nil {
+		return filepath.Clean(absPath)
+	}
+	return filepath.Clean(basePath)
+}
+
+func affectedFileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+func symbolAffectedFileBaseCandidates(opts SearchOptions, rootPath string) []string {
+	bases := make([]string, 0, 4)
+	if root := strings.TrimSpace(opts.ProjectMapRootPath); root != "" {
+		bases = append(bases, root)
+	}
+	if rootPath = strings.TrimSpace(rootPath); rootPath != "" {
+		bases = append(bases, rootPath)
+	}
+	if cwd := strings.TrimSpace(opts.InvocationCWD); cwd != "" {
+		bases = append(bases, cwd)
+	}
+	if cwd := invocationCWDOrGetwd(opts); cwd != "" {
+		bases = append(bases, cwd)
+	}
+	return bases
 }
 
 func affectedFileBasePath(opts SearchOptions, source affectedFileSource) string {

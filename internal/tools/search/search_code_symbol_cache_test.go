@@ -1,6 +1,7 @@
 package search
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -191,6 +192,76 @@ func TestCollectAffectedFilesFromExecutions_SupplementsGoSymbolMultipleWithProje
 	for _, want := range []string{wantHelper, wantLinux, wantDarwin} {
 		if !containsAffectedFile(affected, want) {
 			t.Fatalf("expected supplemented affected files to include %s, got %v", want, affected)
+		}
+	}
+}
+
+func TestCollectAffectedFilesFromExecutions_RepairsWrongGoSymbolMultipleAffectedFiles(t *testing.T) {
+	outerDir := t.TempDir()
+	dir := filepath.Join(outerDir, "repo")
+	if err := os.MkdirAll(filepath.Join(dir, "pkg"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for path, content := range map[string]string{
+		"pkg/helper.go":     "package pkg\n\nfunc helper() {}\n",
+		"pkg/run_linux.go":  "package pkg\n\nfunc Run() {}\n",
+		"pkg/run_darwin.go": "package pkg\n\nfunc Run() {}\n",
+	} {
+		if err := os.WriteFile(filepath.Join(dir, filepath.FromSlash(path)), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	opts := SearchOptions{
+		Pattern: "helper(,Run",
+		Path:    dir,
+		ProjectMap: &repomap.ProjectMap{
+			RootPath: outerDir,
+			Files: []*repomap.FileEntry{
+				{
+					Path: "pkg/run_linux.go",
+					Symbols: []repomap.Symbol{
+						{Name: "Run", Kind: "function", Line: 3, EndLine: 3, Signature: "func Run()", Exported: true},
+					},
+				},
+				{
+					Path: "pkg/run_darwin.go",
+					Symbols: []repomap.Symbol{
+						{Name: "Run", Kind: "function", Line: 3, EndLine: 3, Signature: "func Run()", Exported: true},
+					},
+				},
+			},
+		},
+		ProjectMapRootPath: dir,
+		ProjectMapStateKey: "affected-multi-symbol-multiple-wrong-root",
+	}
+
+	runExec := executeSinglePatternDetailed(nil, "Run", opts)
+	if !strings.Contains(runExec.Output, "Multiple symbols matched") {
+		t.Fatalf("expected symbol-multiple output, got:\n%s", runExec.Output)
+	}
+	runExec.AffectedFiles = []string{
+		filepath.Join(outerDir, "pkg", "run_linux.go"),
+		filepath.Join(outerDir, "pkg", "run_darwin.go"),
+	}
+
+	wantHelper := filepath.Join(dir, "pkg", "helper.go")
+	helperExec := singlePatternExecution{
+		Pattern:       "helper(",
+		Output:        "📄 pkg/helper.go (1 match)",
+		AffectedFiles: []string{wantHelper},
+	}
+
+	affected := collectAffectedFilesFromExecutions([]formattedPatternExecution{
+		{Index: 0, singlePatternExecution: helperExec},
+		{Index: 1, singlePatternExecution: runExec},
+	}, opts)
+
+	wantLinux := filepath.Join(dir, "pkg", "run_linux.go")
+	wantDarwin := filepath.Join(dir, "pkg", "run_darwin.go")
+	for _, want := range []string{wantHelper, wantLinux, wantDarwin} {
+		if !containsAffectedFile(affected, want) {
+			t.Fatalf("expected repaired affected files to include %s, got %v", want, affected)
 		}
 	}
 }

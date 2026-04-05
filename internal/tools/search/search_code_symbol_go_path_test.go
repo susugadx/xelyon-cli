@@ -63,6 +63,38 @@ func TestSearchCode_SymbolBundleAffectedFilesStayRepoRelativeFromSubdir(t *testi
 	}
 }
 
+func TestCollectNavigationCandidatesAffectedFiles_PrefersExistingProjectRoot(t *testing.T) {
+	outerDir := t.TempDir()
+	dir := filepath.Join(outerDir, "repo")
+	if err := os.MkdirAll(filepath.Join(dir, "pkg"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"run_linux.go", "run_darwin.go"} {
+		if err := os.WriteFile(filepath.Join(dir, "pkg", name), []byte("package pkg\n\nfunc Run() {}\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	affected := collectNavigationCandidatesAffectedFiles([]navigation.SymbolCandidate{
+		{File: "pkg/run_linux.go", RootPath: outerDir},
+		{File: "pkg/run_darwin.go", RootPath: outerDir},
+	}, SearchOptions{
+		Path:               dir,
+		ProjectMapRootPath: dir,
+	})
+
+	wantLinux := filepath.Join(dir, "pkg", "run_linux.go")
+	wantDarwin := filepath.Join(dir, "pkg", "run_darwin.go")
+	for _, want := range []string{wantLinux, wantDarwin} {
+		if !containsAffectedFile(affected, want) {
+			t.Fatalf("expected affected files to include %s, got %v", want, affected)
+		}
+	}
+	if containsAffectedFile(affected, filepath.Join(outerDir, "pkg", "run_linux.go")) {
+		t.Fatalf("did not expect broader root path to win: %v", affected)
+	}
+}
+
 func TestSearchCode_SnapshotBackedSectionItemAffectedFilesUseProjectRoot(t *testing.T) {
 	dir := setupMultiLangDir(t, map[string]string{
 		"pkg/run.go": `package pkg

@@ -635,13 +635,8 @@ func formatGenericSymbolResult(bundle *SymbolBundle, reg *locator.Registry) stri
 
 func collectNavigationCandidatesAffectedFiles(candidates []navigation.SymbolCandidate, opts SearchOptions) []string {
 	paths := make([]string, 0, len(candidates))
-	defaultRoot := invocationCWDOrGetwd(opts)
 	for _, candidate := range candidates {
-		rootPath := strings.TrimSpace(candidate.RootPath)
-		if rootPath == "" {
-			rootPath = defaultRoot
-		}
-		if absPath := absoluteAffectedFilePathWithBase(candidate.File, rootPath); absPath != "" {
+		if absPath := absoluteAffectedFilePathForSymbol(candidate.File, opts, candidate.RootPath); absPath != "" {
 			paths = append(paths, absPath)
 		}
 	}
