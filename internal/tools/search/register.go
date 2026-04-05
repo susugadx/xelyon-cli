@@ -55,7 +55,7 @@ func (t *SearchCodeTool) Parameters() map[string]interface{} {
 			"intent": map[string]interface{}{
 				"type":        "string",
 				"enum":        []string{"impact"},
-				"description": "Optional high-level intent. intent=impact expands a single pattern into a conservative related multi-pattern search for shared-change impact analysis. Already comma-separated patterns are used as-is.",
+				"description": "Optional high-level intent. intent=impact prefers a structured Go single-symbol impact path when available; otherwise it falls back to a conservative related multi-pattern search. Already comma-separated patterns are used as-is.",
 			},
 			"path":        map[string]interface{}{"type": "string", "description": "Directory or file to search in (default: current directory)"},
 			"file_filter": map[string]interface{}{"type": "string", "description": "Filter by language type (e.g. go, py, ts) or glob pattern (e.g. *_test.go, Dockerfile*). Glob characters (*, ?, [) trigger glob mode, otherwise uses rg --type."},

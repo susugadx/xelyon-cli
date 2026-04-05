@@ -1,6 +1,9 @@
 package search
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestSearchCodeToolParameters_RemoveUnusedSearchParams(t *testing.T) {
 	params := (&SearchCodeTool{}).Parameters()
@@ -66,6 +69,22 @@ func TestContainsGlobChar(t *testing.T) {
 	for _, tt := range tests {
 		if got := containsGlobChar(tt.input); got != tt.want {
 			t.Fatalf("containsGlobChar(%q) = %v, want %v", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestSearchCodeToolParameters_ImpactDescriptionMatchesStructuredGoBehavior(t *testing.T) {
+	params := (&SearchCodeTool{}).Parameters()
+	properties := params["properties"].(map[string]interface{})
+	intentProp := properties["intent"].(map[string]interface{})
+	description, ok := intentProp["description"].(string)
+	if !ok {
+		t.Fatalf("intent.description should be string, got %T", intentProp["description"])
+	}
+
+	for _, want := range []string{"structured Go single-symbol impact path", "conservative related multi-pattern search"} {
+		if !strings.Contains(description, want) {
+			t.Fatalf("expected intent description to mention %q, got %q", want, description)
 		}
 	}
 }

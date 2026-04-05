@@ -9,40 +9,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
-const (
-	goImpactRiskLow    = "low"
-	goImpactRiskMedium = "medium"
-	goImpactRiskHigh   = "high"
-
-	structuredGoImpactRouteTag = "impact-structured-go-v1"
-)
-
-type goImpactPlan struct {
-	riskLevel           string
-	budget              navigation.Budget
-	implementationLimit int
-}
-
-var goImpactLowBudget = navigation.Budget{
-	BodyLines:   18,
-	CallerLimit: 3,
-	RefLimit:    3,
-	TestLimit:   2,
-}
-
-var goImpactMediumBudget = navigation.Budget{
-	BodyLines:   18,
-	CallerLimit: 5,
-	RefLimit:    5,
-	TestLimit:   3,
-}
-
-var goImpactHighBudget = navigation.Budget{
-	BodyLines:   18,
-	CallerLimit: 8,
-	RefLimit:    8,
-	TestLimit:   4,
-}
+const structuredGoImpactRouteTag = "impact-structured-go-v1"
 
 func tryStructuredGoImpactSearch(cache tools.ToolCacheInterface, opts SearchOptions) (string, bool) {
 	pattern := strings.TrimSpace(opts.Pattern)
@@ -63,23 +30,39 @@ func tryStructuredGoImpactSearch(cache tools.ToolCacheInterface, opts SearchOpti
 	}
 
 	resolved := resolveStructuredGoImpactSymbol(pattern, opts)
-	if resolved.Status != symbolResolveSingle || resolved.Bundle == nil {
+	route.SymbolAttempted = true
+	switch resolved.Status {
+	case symbolResolveSingle:
+		if resolved.Bundle == nil {
+			return "", false
+		}
+		route.SymbolResolved = true
+		route.FinalLane = searchLaneSymbol
+		resolved.Bundle = attachBundleRoute(resolved.Bundle, route)
+		affectedFiles := collectSymbolBundleAffectedFiles(resolved.Bundle, opts)
+
+		if cache != nil {
+			cache.SetSearch(pattern, cacheKey, resolved.Output, affectedFiles)
+			storeSinglePatternBundle(pattern, cacheKey, resolved.Bundle)
+			storeSinglePatternAffectedFiles(pattern, cacheKey, affectedFiles)
+		}
+
+		return resolved.Output, true
+	case symbolResolveMultiple:
+		route.SymbolResolved = true
+		route.FinalLane = searchLaneSymbol
+		affectedFiles := resolved.AffectedFiles
+		if len(affectedFiles) == 0 {
+			affectedFiles = deriveAffectedFilesFromCachedResult(nil, resolved.Output, opts)
+		}
+		if cache != nil {
+			cache.SetSearch(pattern, cacheKey, resolved.Output, affectedFiles)
+			storeSinglePatternAffectedFiles(pattern, cacheKey, affectedFiles)
+		}
+		return resolved.Output, true
+	default:
 		return "", false
 	}
-
-	route.SymbolAttempted = true
-	route.SymbolResolved = true
-	route.FinalLane = searchLaneSymbol
-	resolved.Bundle = attachBundleRoute(resolved.Bundle, route)
-	affectedFiles := collectSymbolBundleAffectedFiles(resolved.Bundle, opts)
-
-	if cache != nil {
-		cache.SetSearch(pattern, cacheKey, resolved.Output, affectedFiles)
-		storeSinglePatternBundle(pattern, cacheKey, resolved.Bundle)
-		storeSinglePatternAffectedFiles(pattern, cacheKey, affectedFiles)
-	}
-
-	return resolved.Output, true
 }
 
 func shouldAttemptStructuredGoImpactSearch(opts SearchOptions, pattern string) bool {
@@ -99,11 +82,12 @@ func resolveStructuredGoImpactSymbol(symbol string, opts SearchOptions) symbolRe
 	plan := goImpactPlanForRisk(goImpactRiskLow)
 	var (
 		result navigation.InspectResult
+		output string
 		status navigation.SymbolAutoStatus
 	)
 
 	for i := 0; i < 3; i++ {
-		result, _, status = navigation.ResolveInspectSymbolAuto(symbol, opts.Path, navigation.InspectSymbolAutoOptions{
+		result, output, status = navigation.ResolveInspectSymbolAuto(symbol, opts.Path, navigation.InspectSymbolAutoOptions{
 			Budget:             plan.budget,
 			Registry:           nil,
 			LSPClient:          opts.LSPClient,
@@ -112,11 +96,18 @@ func resolveStructuredGoImpactSymbol(symbol string, opts SearchOptions) symbolRe
 			ProjectMapStateKey: opts.ProjectMapStateKey,
 			InvocationCWD:      opts.InvocationCWD,
 		})
-		if status != navigation.SymbolAutoSingle {
+		switch status {
+		case navigation.SymbolAutoMultiple:
+			return resolveStructuredGoImpactMultipleSymbol(symbol, result, output, opts, plan.budget)
+		case navigation.SymbolAutoSingle:
+		default:
 			return symbolResolveResult{Status: navigationStatusToSymbolResolveStatus(status)}
 		}
 
 		nextPlan := goImpactPlanForRisk(classifyGoImpactRisk(result))
+		if goImpactPlanRank(nextPlan) < goImpactPlanRank(plan) {
+			nextPlan = plan
+		}
 		if goImpactPlanEqual(plan, nextPlan) {
 			plan = nextPlan
 			break
@@ -124,7 +115,8 @@ func resolveStructuredGoImpactSymbol(symbol string, opts SearchOptions) symbolRe
 		plan = nextPlan
 	}
 
-	result = supplementGoImpactTestsFromProbe(symbol, result, opts, plan.budget.TestLimit)
+	var probeDependencies []string
+	result, probeDependencies = supplementGoImpactTestsFromProbe(symbol, result, opts, plan.budget.TestLimit)
 	impact := buildGoImpactMetadata(result, plan.riskLevel)
 	bundle := buildGoSymbolBundleWithOptions(symbol, result, goSymbolBundleBuildOptions{
 		implementationLimit: plan.implementationLimit,
@@ -133,12 +125,29 @@ func resolveStructuredGoImpactSymbol(symbol string, opts SearchOptions) symbolRe
 	if bundle == nil {
 		return symbolResolveResult{Status: symbolResolveNone}
 	}
+	bundle.Debug.DependencyFiles = dedupePaths(append(bundle.Debug.DependencyFiles, probeDependencies...))
 
 	return symbolResolveResult{
 		Output: formatSymbolBundle(bundle, opts.LocatorRegistry, nil),
 		Status: symbolResolveSingle,
 		Bundle: bundle,
 	}
+}
+
+func resolveStructuredGoImpactMultipleSymbol(symbol string, result navigation.InspectResult, output string, opts SearchOptions, budget navigation.Budget) symbolResolveResult {
+	affectedFiles := collectNavigationCandidatesAffectedFiles(result.Candidates, opts)
+	if opts.LocatorRegistry != nil {
+		_, output, _ = navigation.ResolveInspectSymbolAuto(symbol, opts.Path, navigation.InspectSymbolAutoOptions{
+			Budget:             budget,
+			Registry:           opts.LocatorRegistry,
+			LSPClient:          opts.LSPClient,
+			ProjectMap:         opts.ProjectMap,
+			ProjectMapRootPath: opts.ProjectMapRootPath,
+			ProjectMapStateKey: opts.ProjectMapStateKey,
+			InvocationCWD:      opts.InvocationCWD,
+		})
+	}
+	return symbolResolveResult{Output: output, Status: symbolResolveMultiple, AffectedFiles: affectedFiles}
 }
 
 func navigationStatusToSymbolResolveStatus(status navigation.SymbolAutoStatus) symbolResolveStatus {
@@ -150,72 +159,6 @@ func navigationStatusToSymbolResolveStatus(status navigation.SymbolAutoStatus) s
 	default:
 		return symbolResolveNone
 	}
-}
-
-func goImpactPlanForRisk(risk string) goImpactPlan {
-	switch strings.TrimSpace(risk) {
-	case goImpactRiskHigh:
-		return goImpactPlan{riskLevel: goImpactRiskHigh, budget: goImpactHighBudget, implementationLimit: 8}
-	case goImpactRiskMedium:
-		return goImpactPlan{riskLevel: goImpactRiskMedium, budget: goImpactMediumBudget, implementationLimit: 4}
-	default:
-		return goImpactPlan{riskLevel: goImpactRiskLow, budget: goImpactLowBudget, implementationLimit: 2}
-	}
-}
-
-func goImpactPlanEqual(left, right goImpactPlan) bool {
-	return left.riskLevel == right.riskLevel &&
-		left.implementationLimit == right.implementationLimit &&
-		left.budget == right.budget
-}
-
-func classifyGoImpactRisk(result navigation.InspectResult) string {
-	if result.Symbol == nil {
-		return goImpactRiskLow
-	}
-
-	if result.Symbol.Exported || result.Symbol.Kind == "interface" || len(result.Implementations) > 0 {
-		return goImpactRiskHigh
-	}
-
-	fileCount, dirCount := goImpactReferenceSpread(result)
-	if dirCount > 1 {
-		return goImpactRiskHigh
-	}
-	if fileCount > 1 || isSharedGoPackageSymbol(*result.Symbol) {
-		return goImpactRiskMedium
-	}
-
-	return goImpactRiskLow
-}
-
-func goImpactReferenceSpread(result navigation.InspectResult) (int, int) {
-	fileSeen := make(map[string]struct{})
-	dirSeen := make(map[string]struct{})
-	add := func(file string) {
-		file = filepath.ToSlash(filepath.Clean(strings.TrimSpace(file)))
-		if file == "" {
-			return
-		}
-		fileSeen[file] = struct{}{}
-		dirSeen[filepath.ToSlash(filepath.Dir(file))] = struct{}{}
-	}
-
-	for _, ref := range result.Callers {
-		add(ref.File)
-	}
-	for _, ref := range result.Refs {
-		add(ref.File)
-	}
-	return len(fileSeen), len(dirSeen)
-}
-
-func isSharedGoPackageSymbol(symbol navigation.SymbolCandidate) bool {
-	packageDir := filepath.ToSlash(strings.TrimSpace(symbol.PackageDir))
-	if packageDir == "" || packageDir == "." {
-		return false
-	}
-	return packageDir != "cmd" && !strings.HasPrefix(packageDir, "cmd/")
 }
 
 func buildGoImpactMetadata(result navigation.InspectResult, risk string) *SymbolBundleImpact {
@@ -440,125 +383,4 @@ func cloneSymbolBundleImpact(impact *SymbolBundleImpact) *SymbolBundleImpact {
 		cloned.RecommendedReads = append([]SymbolBundleItem(nil), impact.RecommendedReads...)
 	}
 	return &cloned
-}
-
-func supplementGoImpactTestsFromProbe(symbol string, result navigation.InspectResult, opts SearchOptions, limit int) navigation.InspectResult {
-	if limit <= 0 || result.Symbol == nil || len(result.Tests) > 0 || result.TotalTests > 0 {
-		return result
-	}
-
-	probe := impactTestProbePattern(symbol)
-	if strings.TrimSpace(probe) == "" {
-		return result
-	}
-
-	tests, total := findGoImpactTestsByNameProbe(probe, result.Symbol.RootPath, opts, limit)
-	if len(tests) == 0 {
-		return result
-	}
-
-	result.Tests = tests
-	result.TotalTests = total
-	result.MoreTests = total > len(tests)
-	return result
-}
-
-func findGoImpactTestsByNameProbe(probe, rootPath string, opts SearchOptions, limit int) ([]navigation.TestRef, int) {
-	probeOpts := opts
-	probeOpts.Intent = ""
-	probeOpts.Mode = string(SearchModeLiteral)
-	probeOpts.IsRegex = false
-	if strings.TrimSpace(probeOpts.FilePattern) == "" && strings.TrimSpace(probeOpts.FileType) == "" {
-		probeOpts.FilePattern = "*_test.go"
-	}
-
-	output, useRipgrep, _, err := executeSearch(probe, probeOpts)
-	if err != nil || strings.TrimSpace(output) == "" {
-		return nil, 0
-	}
-
-	var results []SearchResult
-	if useRipgrep {
-		results = parseRipgrepJSON(output, 0)
-	} else {
-		results = parseGrepOutput(output, 0)
-	}
-	results = filterResultsByOptions(results, probeOpts)
-
-	seen := make(map[string]struct{})
-	tests := make([]navigation.TestRef, 0, min(limit, len(results)))
-	total := 0
-	for _, result := range results {
-		file := normalizeImpactProbeFile(result.FilePath, rootPath, probeOpts)
-		if file == "" {
-			continue
-		}
-		for _, match := range result.Matches {
-			if !match.IsMatch {
-				continue
-			}
-			name := extractGoImpactTestName(match.Line, probe)
-			if name == "" {
-				continue
-			}
-			key := fmt.Sprintf("%s:%d:%s", file, match.LineNum, name)
-			if _, ok := seen[key]; ok {
-				continue
-			}
-			seen[key] = struct{}{}
-			total++
-			if len(tests) < limit {
-				tests = append(tests, navigation.TestRef{
-					File: file,
-					Name: name,
-					Line: match.LineNum,
-				})
-			}
-		}
-	}
-	return tests, total
-}
-
-func normalizeImpactProbeFile(file, rootPath string, opts SearchOptions) string {
-	absPath := absoluteAffectedFilePath(file, opts, affectedFileSourceText)
-	if absPath == "" {
-		return ""
-	}
-
-	rootPath = strings.TrimSpace(rootPath)
-	if rootPath != "" {
-		if rel, err := filepath.Rel(rootPath, absPath); err == nil {
-			rel = filepath.Clean(rel)
-			if rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-				return filepath.ToSlash(rel)
-			}
-		}
-	}
-
-	return filepath.ToSlash(filepath.Clean(file))
-}
-
-func extractGoImpactTestName(line, probe string) string {
-	trimmed := strings.TrimSpace(line)
-	if trimmed == "" || !strings.Contains(trimmed, probe) || !strings.Contains(trimmed, "func ") {
-		return ""
-	}
-
-	idx := strings.Index(trimmed, "func ")
-	if idx < 0 {
-		return ""
-	}
-	rest := strings.TrimSpace(trimmed[idx+5:])
-	if rest == "" {
-		return ""
-	}
-	end := strings.Index(rest, "(")
-	if end <= 0 {
-		return ""
-	}
-	name := strings.TrimSpace(rest[:end])
-	if name == "" || !strings.HasPrefix(name, "Test") {
-		return ""
-	}
-	return name
 }
