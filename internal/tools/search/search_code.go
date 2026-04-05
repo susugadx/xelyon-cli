@@ -913,12 +913,10 @@ func collectFilePaths(results []SearchResult, opts SearchOptions) []string {
 
 func collectAffectedFilesFromExecutions(collected []formattedPatternExecution, opts SearchOptions) []string {
 	paths := make([]string, 0, len(collected)*2)
-	var outputs []string
 	for _, execution := range collected {
 		paths = append(paths, execution.AffectedFiles...)
-		outputs = append(outputs, execution.Output)
+		paths = append(paths, collectPrimaryAffectedFilePathsFromOutput(execution.Output, opts)...)
 	}
-	paths = append(paths, collectPrimaryFilePathsFromOutputs(outputs, opts)...)
 	return dedupePaths(paths)
 }
 
@@ -926,7 +924,7 @@ func deriveAffectedFilesFromCachedResult(bundle *SymbolBundle, output string, op
 	if affected := collectSymbolBundleAffectedFiles(bundle, opts); len(affected) > 0 {
 		return affected
 	}
-	return collectPrimaryFilePathsFromOutputs([]string{output}, opts)
+	return collectPrimaryAffectedFilePathsFromOutput(output, opts)
 }
 
 func collectSymbolBundleAffectedFiles(bundle *SymbolBundle, opts SearchOptions) []string {
@@ -956,16 +954,56 @@ func collectSymbolBundleAffectedFiles(bundle *SymbolBundle, opts SearchOptions) 
 	return dedupePaths(paths)
 }
 
-func collectPrimaryFilePathsFromOutputs(outputs []string, opts SearchOptions) []string {
+func collectPrimaryAffectedFilePathsFromOutput(output string, opts SearchOptions) []string {
 	var paths []string
-	for _, output := range outputs {
-		for _, file := range extractPrimaryFilePaths(output) {
-			if absPath := absoluteAffectedFilePath(file, opts, affectedFileSourceText); absPath != "" {
-				paths = append(paths, absPath)
+	seen := make(map[string]bool)
+	add := func(file string, source affectedFileSource) {
+		var absPath string
+		switch source {
+		case affectedFileSourceSymbol:
+			absPath = absoluteAffectedFilePath(file, opts, affectedFileSourceSymbol)
+		default:
+			absPath = absoluteAffectedFilePath(file, opts, affectedFileSourceText)
+		}
+		if absPath == "" || seen[absPath] {
+			return
+		}
+		seen[absPath] = true
+		paths = append(paths, absPath)
+	}
+
+	for _, line := range strings.Split(output, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "📄 ") {
+			rest := strings.TrimPrefix(trimmed, "📄 ")
+			if idx := strings.Index(rest, " ("); idx > 0 {
+				add(rest[:idx], affectedFileSourceText)
+			}
+			continue
+		}
+		if strings.HasPrefix(trimmed, "── ") && strings.Contains(trimmed, " in ") && strings.HasSuffix(trimmed, "──") {
+			inIdx := strings.LastIndex(trimmed, " in ")
+			rest := trimmed[inIdx+4:]
+			rest = strings.TrimSuffix(rest, "──")
+			rest = strings.TrimSpace(rest)
+			if atIdx := strings.LastIndex(rest, " @"); atIdx > 0 {
+				rest = rest[:atIdx]
+			}
+			add(rest, affectedFileSourceSymbol)
+			continue
+		}
+		if hasNumericListPrefix(trimmed) {
+			if numbered, ok := parseNumberedCandidateFilePath(trimmed); ok {
+				add(numbered, affectedFileSourceSymbol)
+				continue
+			}
+			if idx := strings.LastIndex(trimmed, " in "); idx > 0 {
+				add(strings.TrimSpace(trimmed[idx+4:]), affectedFileSourceText)
+				continue
 			}
 		}
 	}
-	return dedupePaths(paths)
+	return paths
 }
 
 type affectedFileSource int

@@ -137,6 +137,64 @@ func TestSearchCode_MultiPatternCacheSupplementsSymbolMultipleAffectedFiles(t *t
 	}
 }
 
+func TestCollectAffectedFilesFromExecutions_SupplementsGoSymbolMultipleWithProjectRoot(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"pkg/helper.go":     "package pkg\n\nfunc helper() {}\n",
+		"pkg/run_linux.go":  "package pkg\n\nfunc Run() {}\n",
+		"pkg/run_darwin.go": "package pkg\n\nfunc Run() {}\n",
+	})
+
+	opts := SearchOptions{
+		Pattern: "helper(,Run",
+		Path:    dir,
+		ProjectMap: &repomap.ProjectMap{
+			RootPath: dir,
+			Files: []*repomap.FileEntry{
+				{
+					Path: "pkg/run_linux.go",
+					Symbols: []repomap.Symbol{
+						{Name: "Run", Kind: "function", Line: 3, EndLine: 3, Signature: "func Run()", Exported: true},
+					},
+				},
+				{
+					Path: "pkg/run_darwin.go",
+					Symbols: []repomap.Symbol{
+						{Name: "Run", Kind: "function", Line: 3, EndLine: 3, Signature: "func Run()", Exported: true},
+					},
+				},
+			},
+		},
+		ProjectMapRootPath: dir,
+		ProjectMapStateKey: "affected-multi-symbol-multiple-fallback",
+	}
+
+	runExec := executeSinglePatternDetailed(nil, "Run", opts)
+	if !strings.Contains(runExec.Output, "Multiple symbols matched") {
+		t.Fatalf("expected symbol-multiple output, got:\n%s", runExec.Output)
+	}
+	runExec.AffectedFiles = nil
+
+	wantHelper := filepath.Join(dir, "pkg", "helper.go")
+	helperExec := singlePatternExecution{
+		Pattern:       "helper(",
+		Output:        "📄 pkg/helper.go (1 match)",
+		AffectedFiles: []string{wantHelper},
+	}
+
+	affected := collectAffectedFilesFromExecutions([]formattedPatternExecution{
+		{Index: 0, singlePatternExecution: helperExec},
+		{Index: 1, singlePatternExecution: runExec},
+	}, opts)
+
+	wantLinux := filepath.Join(dir, "pkg", "run_linux.go")
+	wantDarwin := filepath.Join(dir, "pkg", "run_darwin.go")
+	for _, want := range []string{wantHelper, wantLinux, wantDarwin} {
+		if !containsAffectedFile(affected, want) {
+			t.Fatalf("expected supplemented affected files to include %s, got %v", want, affected)
+		}
+	}
+}
+
 func TestSearchCode_MultiPatternGoSymbolBundleDedupe(t *testing.T) {
 	dir := setupMultiLangDir(t, map[string]string{
 		"agent.go": `package example
