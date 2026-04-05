@@ -494,6 +494,63 @@ func TestHandleNormalModeNoToolResponse_TextPlanFallsBackToFinalResponse(t *test
 	}
 }
 
+func TestNormalModeToolResultHandler_TracksWriteFailure(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	cfg := newProjectMapDisabledConfig()
+	agent := newTurnRunnerTestAgent(&sequenceMockProvider{name: "test"}, cfg, "", &out)
+	runner := newTurnRunner(agent, context.Background())
+	handler := newNormalModeToolResultHandler(runner)
+
+	tc := &tools.ToolCall{
+		Tool: "write_file",
+		Args: map[string]string{"path": "failure.txt", "content": "x"},
+	}
+
+	handler.Handle(tc, "exit status 1", nil)
+
+	if got := handler.LastFailedResult(); got != "exit status 1" {
+		t.Fatalf("LastFailedResult() = %q, want %q", got, "exit status 1")
+	}
+	last := agent.History[len(agent.History)-1]
+	if last.Role != "user" || !strings.Contains(last.Content, "[Tool Result for write_file]") {
+		t.Fatalf("expected tool result in history, got %#v", last)
+	}
+}
+
+func TestPlanStepToolResultHandler_TracksWriteStateAndFailure(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	cfg := newProjectMapDisabledConfig()
+	agent := newTurnRunnerTestAgent(&sequenceMockProvider{name: "test"}, cfg, "", &out)
+	runner := newTurnRunner(agent, context.Background())
+	state := &stepRunState{}
+	handler := newPlanStepToolResultHandler(runner, state)
+
+	tc := &tools.ToolCall{
+		Tool: "write_file",
+		Args: map[string]string{"path": "tracked.txt", "content": "x"},
+	}
+
+	handler.Handle(tc, "no change needed", nil)
+	if !state.stepHadWrites {
+		t.Fatal("expected stepHadWrites to be true")
+	}
+	if !state.stepHadNoChangeNeeded {
+		t.Fatal("expected stepHadNoChangeNeeded to be true")
+	}
+	if state.lastFailedResult != "" {
+		t.Fatalf("lastFailedResult = %q, want empty", state.lastFailedResult)
+	}
+
+	handler.Handle(tc, "exit status 1", nil)
+	if state.lastFailedResult != "exit status 1" {
+		t.Fatalf("lastFailedResult = %q, want %q", state.lastFailedResult, "exit status 1")
+	}
+}
+
 func TestExecuteStepV2_SelectorRetryRestartsStep(t *testing.T) {
 	disableColors(t)
 

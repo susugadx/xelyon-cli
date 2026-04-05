@@ -16,6 +16,26 @@ type TurnRunner struct {
 	sameCallCount int
 }
 
+type turnLoopDirective int
+
+const (
+	turnLoopProceed turnLoopDirective = iota
+	turnLoopContinue
+	turnLoopBreak
+	turnLoopDone
+	turnLoopReturn
+)
+
+type turnLoopPolicy struct {
+	hardLimit        int
+	requestResponse  func(iteration int) (string, error)
+	onHardLimit      func(iteration int) (turnLoopDirective, error)
+	afterPrepare     func(iteration int, response string, toolCalls []*tools.ToolCall) (turnLoopDirective, error)
+	onNoToolCalls    func(iteration int, response string) (turnLoopDirective, error)
+	beforeToolCalls  func(iteration int, response string, toolCalls []*tools.ToolCall)
+	executeToolCalls func(iteration int, response string, toolCalls []*tools.ToolCall) (turnLoopDirective, error)
+}
+
 func newTurnRunner(agent *Agent, ctx context.Context) *TurnRunner {
 	return &TurnRunner{agent: agent, ctx: ctx}
 }
@@ -111,6 +131,73 @@ func (r *TurnRunner) appendAssistantTurn(response string) {
 	}
 	if a.Stats != nil {
 		a.Stats.AssistantMessages++
+	}
+}
+
+func (r *TurnRunner) runTurnLoop(policy turnLoopPolicy) (turnLoopDirective, error) {
+	for iteration := 0; ; iteration++ {
+		if policy.hardLimit > 0 && iteration >= policy.hardLimit {
+			if policy.onHardLimit != nil {
+				return policy.onHardLimit(iteration)
+			}
+			return turnLoopBreak, nil
+		}
+		if policy.hardLimit == 0 {
+			emitLoopWarning(r.agent, iteration)
+		}
+
+		response, err := policy.requestResponse(iteration)
+		if err != nil {
+			return turnLoopReturn, err
+		}
+
+		toolCalls := r.prepareToolCalls(response)
+		if policy.afterPrepare != nil {
+			directive, err := policy.afterPrepare(iteration, response, toolCalls)
+			if err != nil {
+				return turnLoopReturn, err
+			}
+			switch directive {
+			case turnLoopContinue:
+				continue
+			case turnLoopBreak, turnLoopDone, turnLoopReturn:
+				return directive, nil
+			}
+		}
+
+		if len(toolCalls) == 0 {
+			if policy.onNoToolCalls == nil {
+				return turnLoopReturn, nil
+			}
+			directive, err := policy.onNoToolCalls(iteration, response)
+			if err != nil {
+				return turnLoopReturn, err
+			}
+			switch directive {
+			case turnLoopContinue:
+				continue
+			case turnLoopBreak, turnLoopDone, turnLoopReturn:
+				return directive, nil
+			}
+		}
+
+		if policy.beforeToolCalls != nil {
+			policy.beforeToolCalls(iteration, response, toolCalls)
+		}
+
+		if policy.executeToolCalls == nil {
+			return turnLoopReturn, nil
+		}
+		directive, err := policy.executeToolCalls(iteration, response, toolCalls)
+		if err != nil {
+			return turnLoopReturn, err
+		}
+		switch directive {
+		case turnLoopContinue:
+			continue
+		case turnLoopBreak, turnLoopDone, turnLoopReturn:
+			return directive, nil
+		}
 	}
 }
 

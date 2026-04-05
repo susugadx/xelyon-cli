@@ -2,7 +2,6 @@ package agent
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/agent/plan"
 	"github.com/susugadx/xelyon-cli/internal/api"
@@ -48,43 +47,59 @@ func (r *TurnRunner) runPlanStepLoop(p *plan.Plan, step *plan.PlanStep, idx int,
 	state := &stepRunState{
 		beforeDiffHash: getGitDiffHash(),
 	}
-
-	for j := 0; ; j++ {
-		if hardLimit > 0 && j >= hardLimit {
-			return fmt.Errorf("step %d exceeded max iterations (%d)", step.ID, hardLimit)
-		}
-		if hardLimit == 0 {
-			emitLoopWarning(a, j)
-		}
-
-		response, err := r.requestPlanStepResponse(stepPrompt)
-		if err != nil {
-			return fmt.Errorf("step %d failed: %w", step.ID, err)
-		}
-
-		execToolCalls := r.prepareToolCalls(response)
-		if len(execToolCalls) > 0 {
-			a.addToolCallsToHistory(response, execToolCalls)
-		} else {
-			r.appendAssistantTurn(response)
-		}
-
-		if len(execToolCalls) == 0 {
+	directive, err := r.runTurnLoop(turnLoopPolicy{
+		hardLimit: hardLimit,
+		onHardLimit: func(_ int) (turnLoopDirective, error) {
+			return turnLoopReturn, fmt.Errorf("step %d exceeded max iterations (%d)", step.ID, hardLimit)
+		},
+		requestResponse: func(_ int) (string, error) {
+			response, err := r.requestPlanStepResponse(stepPrompt)
+			if err != nil {
+				return "", fmt.Errorf("step %d failed: %w", step.ID, err)
+			}
+			return response, nil
+		},
+		afterPrepare: func(_ int, response string, toolCalls []*tools.ToolCall) (turnLoopDirective, error) {
+			if len(toolCalls) > 0 {
+				a.addToolCallsToHistory(response, toolCalls)
+			} else {
+				r.appendAssistantTurn(response)
+			}
+			return turnLoopProceed, nil
+		},
+		onNoToolCalls: func(_ int, response string) (turnLoopDirective, error) {
 			action, err := r.handleStepNoToolResponse(response, step, state)
 			if err != nil {
-				return err
+				return turnLoopReturn, err
 			}
-			if action == stepLoopDone {
-				return nil
+			switch action {
+			case stepLoopContinue:
+				return turnLoopContinue, nil
+			case stepLoopDone:
+				return turnLoopDone, nil
+			default:
+				return turnLoopProceed, nil
 			}
-			continue
-		}
-
-		handled, err := r.processStepToolCalls(execToolCalls, step, p, idx, rs, state)
-		if err != nil || handled {
-			return err
-		}
+		},
+		executeToolCalls: func(_ int, response string, toolCalls []*tools.ToolCall) (turnLoopDirective, error) {
+			handled, err := r.processStepToolCalls(toolCalls, step, p, idx, rs, state)
+			if err != nil {
+				return turnLoopReturn, err
+			}
+			if handled {
+				return turnLoopReturn, nil
+			}
+			return turnLoopProceed, nil
+		},
+	})
+	if err != nil {
+		return err
 	}
+
+	if directive == turnLoopDone || directive == turnLoopReturn {
+		return nil
+	}
+	return nil
 }
 
 func (r *TurnRunner) requestPlanStepResponse(stepPrompt string) (string, error) {
@@ -109,30 +124,10 @@ func (r *TurnRunner) handleStepNoToolResponse(response string, step *plan.PlanSt
 }
 
 func (r *TurnRunner) processStepToolCalls(execToolCalls []*tools.ToolCall, step *plan.PlanStep, p *plan.Plan, idx int, rs *retryState, state *stepRunState) (bool, error) {
-	a := r.agent
-	tracker := r.mutationTracker()
+	handler := newPlanStepToolResultHandler(r, state)
 
 	r.executeToolCalls("", execToolCalls, r.planStepSkipFn, func(_ int, toolCall *tools.ToolCall, result string, change *tools.FileChange) {
-		a.appendSessionToolExecution(toolCall, result)
-		tracker.RecordToolResult(toolCall, result, change)
-
-		if tools.IsWriteTool(toolCall.Tool) {
-			state.stepHadWrites = true
-			if strings.Contains(result, "no files found") ||
-				strings.Contains(result, "Total matches: 0") ||
-				strings.Contains(result, "no change needed") {
-				state.stepHadNoChangeNeeded = true
-			}
-		}
-
-		if toolCall.Tool == "bash" || tools.IsWriteTool(toolCall.Tool) {
-			if failed, reason := plan.ContainsFailure(result); failed {
-				state.lastFailedResult = result
-				state.lastFailReason = reason
-			}
-		}
-
-		a.appendToolResultToHistory(toolCall, result)
+		handler.Handle(toolCall, result, change)
 	})
 
 	if state.lastFailedResult == "" {

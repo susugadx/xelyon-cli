@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/susugadx/xelyon-cli/internal/agent/plan"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
@@ -36,6 +35,7 @@ const (
 
 func (r *TurnRunner) runNormalModeLoop(input string, image *api.ImageData) error {
 	a := r.agent
+	planningHandler := newNormalModePlanningHandler(r)
 
 	normalModeInput := input + promptnormal.NormalModePrompt
 	a.History = append(a.History, api.Message{Role: "user", Content: normalModeInput})
@@ -43,64 +43,72 @@ func (r *TurnRunner) runNormalModeLoop(input string, image *api.ImageData) error
 	cfg := a.cfg()
 	hardLimit := normalizeToolLoopLimit(cfg.General.ToolLoopLimit)
 	state := &normalModeState{}
-
-	for i := 0; ; i++ {
-		if hardLimit > 0 && i >= hardLimit {
+	directive, err := r.runTurnLoop(turnLoopPolicy{
+		hardLimit: hardLimit,
+		onHardLimit: func(_ int) (turnLoopDirective, error) {
 			state.reachedHardLimit = true
-			break
-		}
-		if hardLimit == 0 {
-			emitLoopWarning(a, i)
-		}
-
-		response, err := r.requestNormalModeResponse(input, image, i)
-		if err != nil {
-			return err
-		}
-
-		toolCalls := r.prepareToolCalls(response)
-		action, handled, err := r.handlePlanJSONFallback(response, toolCalls)
-		if err != nil {
-			return err
-		}
-		if handled {
-			if action == normalModeDone {
-				return nil
+			return turnLoopBreak, nil
+		},
+		requestResponse: func(iteration int) (string, error) {
+			return r.requestNormalModeResponse(input, image, iteration)
+		},
+		afterPrepare: func(_ int, response string, toolCalls []*tools.ToolCall) (turnLoopDirective, error) {
+			action, handled, err := planningHandler.HandlePlanJSONFallback(response, toolCalls)
+			if err != nil {
+				return turnLoopReturn, err
 			}
-			continue
-		}
-
-		r.debugLogToolCalls(response, toolCalls)
-
-		if len(toolCalls) == 0 {
-			action := r.handleNormalModeNoToolResponse(response, cfg, state)
-			if action == normalModeContinue {
-				continue
+			if handled {
+				if action == normalModeDone {
+					return turnLoopReturn, nil
+				}
+				return turnLoopContinue, nil
 			}
-			if action == normalModeBreak {
-				break
-			}
-			if action == normalModeDone {
-				a.showTaskSummary()
-				return nil
-			}
-		}
 
-		a.maybePrintAssistantPhaseUpdate(response, execToolCallsSummaryInput(toolCalls))
-
-		if err := r.processNormalModeToolCalls(response, toolCalls, &state.rs); err != nil {
-			return err
-		}
+			r.debugLogToolCalls(response, toolCalls)
+			return turnLoopProceed, nil
+		},
+		onNoToolCalls: func(_ int, response string) (turnLoopDirective, error) {
+			switch r.handleNormalModeNoToolResponse(response, cfg, state) {
+			case normalModeContinue:
+				return turnLoopContinue, nil
+			case normalModeBreak:
+				return turnLoopBreak, nil
+			case normalModeDone:
+				return turnLoopDone, nil
+			default:
+				return turnLoopProceed, nil
+			}
+		},
+		beforeToolCalls: func(_ int, response string, toolCalls []*tools.ToolCall) {
+			a.maybePrintAssistantPhaseUpdate(response, execToolCallsSummaryInput(toolCalls))
+		},
+		executeToolCalls: func(_ int, response string, toolCalls []*tools.ToolCall) (turnLoopDirective, error) {
+			if err := r.processNormalModeToolCalls(response, toolCalls, &state.rs); err != nil {
+				return turnLoopReturn, err
+			}
+			return turnLoopProceed, nil
+		},
+	})
+	if err != nil {
+		return err
 	}
 
-	if state.reachedHardLimit {
-		yellow.Fprintf(a.output(), "⚠️  Tool loop limit reached (%d iterations)\n", hardLimit)
+	switch directive {
+	case turnLoopBreak:
+		if state.reachedHardLimit {
+			yellow.Fprintf(a.output(), "⚠️  Tool loop limit reached (%d iterations)\n", hardLimit)
+		}
+		if state.fallbackResponse != "" {
+			a.printFinalAssistantResponse(state.fallbackResponse)
+		}
+		a.showTaskSummary()
+		return nil
+	case turnLoopDone:
+		a.showTaskSummary()
+		return nil
+	default:
+		return nil
 	}
-	if state.fallbackResponse != "" {
-		a.printFinalAssistantResponse(state.fallbackResponse)
-	}
-	a.showTaskSummary()
-	return nil
 }
 
 func (r *TurnRunner) requestNormalModeResponse(input string, image *api.ImageData, iteration int) (string, error) {
@@ -139,34 +147,6 @@ func (r *TurnRunner) requestNormalModeResponse(input string, image *api.ImageDat
 	return response, nil
 }
 
-func (r *TurnRunner) handlePlanJSONFallback(response string, toolCalls []*tools.ToolCall) (normalModeAction, bool, error) {
-	if len(toolCalls) != 0 || !plan.ContainsPlanJSON(response) {
-		return normalModeContinue, false, nil
-	}
-
-	a := r.agent
-	if planJSON := plan.ExtractPlanJSON(response); planJSON != "" {
-		if p, err := plan.ParsePlan(planJSON); err == nil && len(p.Steps) > 0 {
-			yellow.Fprintf(a.output(), "📋 FC fallback: extracted %d-step plan from text. Switching to step-by-step...\n", len(p.Steps))
-			r.appendAssistantHistoryOnly(response)
-			if err := a.runImplementationPhase(r.ctx, p); err != nil {
-				return normalModeContinue, true, err
-			}
-			a.runCompletionHooksWithRetry(r.ctx)
-			a.showTaskSummary()
-			return normalModeDone, true, nil
-		}
-	}
-
-	yellow.Fprintln(a.output(), "⚠️  Plan JSON detected but parse failed. Execute tools directly.")
-	r.appendAssistantHistoryOnly(response)
-	a.History = append(a.History, api.Message{
-		Role:    "user",
-		Content: "[SYSTEM] You are in NORMAL MODE. Do NOT output JSON directly. Execute the required changes directly using tools (read_file, str_replace, etc).",
-	})
-	return normalModeContinue, true, nil
-}
-
 func (r *TurnRunner) debugLogToolCalls(response string, toolCalls []*tools.ToolCall) {
 	a := r.agent
 	if os.Getenv("XELYON_DEBUG_TOOLS") != "1" {
@@ -190,63 +170,19 @@ func (r *TurnRunner) handleNormalModeNoToolResponse(response string, cfg *config
 
 func (r *TurnRunner) processNormalModeToolCalls(response string, toolCalls []*tools.ToolCall, rs *retryState) error {
 	a := r.agent
-	tracker := r.mutationTracker()
-	var lastFailedResult string
+	handler := newNormalModeToolResultHandler(r)
+	planningHandler := newNormalModePlanningHandler(r)
 
-	execToolCalls := r.processDeprecatedCreatePlanCalls(response, toolCalls)
+	execToolCalls := planningHandler.FilterExecutableToolCalls(response, toolCalls)
 	if len(execToolCalls) > 0 {
 		a.addToolCallsToHistory(response, execToolCalls)
 	}
 
 	toolLoopDetected := r.executeToolCalls(response, execToolCalls, nil, func(_ int, tc *tools.ToolCall, result string, change *tools.FileChange) {
-		a.appendSessionToolExecution(tc, result)
-
-		if a.handleStrReplaceErrors(tc, result) {
-			return
-		}
-		if a.handleCommentFlow(tc, result) {
-			return
-		}
-
-		tracker.RecordToolResult(tc, result, change)
-
-		a.appendToolResultToHistory(tc, result)
-		_, _ = fmt.Fprintln(a.output())
-
-		if tc.Tool == "bash" || tools.IsWriteTool(tc.Tool) {
-			if failed, _ := plan.ContainsFailure(result); failed {
-				lastFailedResult = result
-			}
-		}
+		handler.Handle(tc, result, change)
 	})
 	if toolLoopDetected {
 		return fmt.Errorf("tool loop detected")
 	}
-	return newNormalModeFailureHandler(r, rs, lastFailedResult).Handle()
-}
-
-func (r *TurnRunner) processDeprecatedCreatePlanCalls(response string, toolCalls []*tools.ToolCall) []*tools.ToolCall {
-	a := r.agent
-	execToolCalls := make([]*tools.ToolCall, 0, len(toolCalls))
-
-	for _, toolCall := range toolCalls {
-		if toolCall.Tool != "create_plan" {
-			execToolCalls = append(execToolCalls, toolCall)
-			continue
-		}
-
-		if a.Stats != nil {
-			a.Stats.AddToolExecution(toolCall.Tool)
-		}
-		result, _ := a.executeToolWithSpinner(r.ctx, toolCall)
-		a.appendSessionToolExecution(toolCall, result)
-		r.appendAssistantHistoryOnly(response)
-		a.appendSessionMessage("assistant", response, a.CurrentModel)
-
-		a.appendToolResultToHistory(toolCall, result)
-
-		yellow.Fprintln(a.output(), "⚠️  create_plan is deprecated, continuing in normal mode...")
-	}
-
-	return execToolCalls
+	return newNormalModeFailureHandler(r, rs, handler.LastFailedResult()).Handle()
 }
