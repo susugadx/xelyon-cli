@@ -107,13 +107,11 @@ func normalizeInspectResultPaths(result *InspectResult, runtime GoSymbolRuntime)
 		return
 	}
 
-	targetRoot := strings.TrimSpace(result.Symbol.RootPath)
+	targetRoot := preferredInspectRootPath(result.Symbol.RootPath, runtime.ProjectMapRootPath)
 	if targetRoot == "" {
 		return
 	}
-	if abs, err := filepath.Abs(targetRoot); err == nil {
-		targetRoot = abs
-	}
+	result.Symbol.RootPath = targetRoot
 
 	sourceBase := strings.TrimSpace(runtime.InvocationCWD)
 	if sourceBase == "" {
@@ -139,6 +137,44 @@ func normalizeInspectResultPaths(result *InspectResult, runtime GoSymbolRuntime)
 	for i := range result.Implementations {
 		result.Implementations[i].File = normalizeResultFilePath(result.Implementations[i].File, targetRoot, sourceBase)
 	}
+}
+
+func preferredInspectRootPath(symbolRoot, projectRoot string) string {
+	symbolRoot = normalizeInspectRootPath(symbolRoot)
+	projectRoot = normalizeInspectRootPath(projectRoot)
+
+	switch {
+	case symbolRoot == "":
+		return projectRoot
+	case projectRoot == "":
+		return symbolRoot
+	case pathWithinRoot(symbolRoot, projectRoot):
+		return projectRoot
+	case pathWithinRoot(projectRoot, symbolRoot):
+		return symbolRoot
+	default:
+		return projectRoot
+	}
+}
+
+func normalizeInspectRootPath(rootPath string) string {
+	rootPath = strings.TrimSpace(rootPath)
+	if rootPath == "" {
+		return ""
+	}
+	if abs, err := filepath.Abs(rootPath); err == nil {
+		return abs
+	}
+	return filepath.Clean(rootPath)
+}
+
+func pathWithinRoot(rootPath, candidatePath string) bool {
+	rel, err := filepath.Rel(rootPath, candidatePath)
+	if err != nil {
+		return false
+	}
+	rel = filepath.Clean(rel)
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, "../"))
 }
 
 func normalizeResultFilePath(path, targetRoot, sourceBase string) string {
