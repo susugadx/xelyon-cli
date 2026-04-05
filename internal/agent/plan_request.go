@@ -133,21 +133,7 @@ func (r *planModeRequest) renderPlan(p *plan.Plan) {
 }
 
 func (r *planModeRequest) runImplementation(p *plan.Plan) error {
-	a := r.agent
-
-	err := a.runImplementationPhase(r.ctx, p)
-	if err != nil {
-		if r.handleTokenLimit(err) {
-			return nil
-		}
-		a.SetStatus(StateAborted, "Implementation failed", "実装に失敗", "Review errors and retry", "エラーを確認して再試行")
-		return err
-	}
-
-	a.runCompletionHooksWithRetry(r.ctx)
-	a.showTaskSummary()
-	a.setReadyForInputStatus()
-	return nil
+	return newPlanImplementationRequest(r.agent, r.ctx, r.userRequest, p).Run()
 }
 
 func (r *planModeRequest) handleTokenLimit(err error) bool {

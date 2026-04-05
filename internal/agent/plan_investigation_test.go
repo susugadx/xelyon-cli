@@ -3,8 +3,10 @@ package agent
 import (
 	"bytes"
 	"context"
+	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
@@ -92,5 +94,60 @@ func TestRunInvestigationPhase_PlanModeShowsFinalProse(t *testing.T) {
 				t.Fatalf("expected %q exactly once in %s mode, got %d in output: %q", needle, tt.mode, count, output)
 			}
 		})
+	}
+}
+
+func TestPlanInvestigationRunner_HandleNoToolResponse_InvalidPlanJSONRequestsRetry(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	agent := newChatRequestTestAgent(t, &mockProvider{name: "test"}, &out)
+	runner := newPlanInvestigationRunner(agent, context.Background())
+
+	response := "```json\n{\"plan\":{\"summary\":\"Research only\",\"steps\":[]}}\n```"
+	p, action, err := runner.handleNoToolResponse(response)
+	if err != nil {
+		t.Fatalf("handleNoToolResponse() error = %v", err)
+	}
+	if p != nil {
+		t.Fatalf("handleNoToolResponse() plan = %v, want nil", p)
+	}
+	if action != investigationLoopContinue {
+		t.Fatalf("handleNoToolResponse() action = %v, want continue", action)
+	}
+	if len(agent.History) == 0 {
+		t.Fatal("expected retry instruction to be appended to history")
+	}
+	if !strings.Contains(agent.History[len(agent.History)-1].Content, "Plan JSON を**必ず**") {
+		t.Fatalf("expected retry instruction in history, got %q", agent.History[len(agent.History)-1].Content)
+	}
+}
+
+func TestPlanInvestigationRunner_Run_PropagatesContextCanceled(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	provider := &blockingCancelProvider{started: make(chan struct{})}
+	agent := newChatRequestTestAgent(t, provider, &out)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() {
+		_, err := newPlanInvestigationRunner(agent, ctx).Run()
+		errCh <- err
+	}()
+
+	select {
+	case <-provider.started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("ChatWithTools was not called")
+	}
+	cancel()
+
+	err := <-errCh
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Run() error = %v, want context.Canceled", err)
 	}
 }

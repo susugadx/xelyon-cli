@@ -101,10 +101,7 @@ func (r *planInvestigationRunner) requestResponse() (string, error) {
 }
 
 func (r *planInvestigationRunner) appendAssistantTurn(response string) {
-	r.agent.appendAssistantResponse(rawAssistantResponse(response), assistantAppendOptions{
-		incrementStats: true,
-		sessionMode:    assistantSessionRawAPI,
-	})
+	r.agent.recordAssistantAPITurn(response)
 }
 
 func (r *planInvestigationRunner) handleNoToolResponse(response string) (*plan.Plan, investigationLoopAction, error) {
@@ -119,7 +116,7 @@ func (r *planInvestigationRunner) handleNoToolResponse(response string) (*plan.P
 		return nil, investigationLoopContinue, nil
 	}
 
-	r.agent.displayAssistantResponse(prepareAssistantResponse(response))
+	r.agent.showAssistantResponse(response)
 	return nil, investigationLoopDone, nil
 }
 

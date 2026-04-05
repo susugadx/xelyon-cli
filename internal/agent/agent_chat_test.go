@@ -503,6 +503,36 @@ func TestNormalMode_CreatePlanFC(t *testing.T) {
 	}
 }
 
+func TestNormalMode_CreatePlanMixedResponse_CountsAssistantOnce(t *testing.T) {
+	var out bytes.Buffer
+	testFile := t.TempDir() + "/sample.txt"
+	if err := os.WriteFile(testFile, []byte("hello\n"), 0644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	provider := &sequenceMockProvider{
+		name: "test",
+		responses: []string{
+			fmt.Sprintf(`I'll sketch a plan and inspect the file first.
+{"tool": "create_plan", "args": {"title": "Test Plan", "summary": "Test", "steps": "[{\"id\":1,\"description\":\"Inspect file\",\"tools\":[\"read_file\"]}]"}}
+{"tool": "read_file", "args": {"paths": [%q]}}`, testFile),
+			"Done.",
+		},
+	}
+
+	agent := newChatRequestTestAgent(t, provider, &out)
+	agent.Stats = NewSessionStats("test")
+	agent.setAutoApprove(true)
+
+	if err := agent.runNormalMode(context.Background(), "inspect file", nil); err != nil {
+		t.Fatalf("runNormalMode() error = %v", err)
+	}
+
+	if agent.Stats.AssistantMessages != 2 {
+		t.Fatalf("AssistantMessages = %d, want 2 (one mixed tool turn + one final response)", agent.Stats.AssistantMessages)
+	}
+}
+
 // TestNormalMode_PlanJSONFallback は Normal Mode で Plan JSON がテキスト出力された場合、
 // ExtractPlanJSON → ParsePlan → runImplementationPhase に切り替わることをテスト
 func TestNormalMode_PlanJSONFallback(t *testing.T) {

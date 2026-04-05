@@ -110,14 +110,11 @@ func (r *TurnRunner) executeToolCalls(
 }
 
 func (r *TurnRunner) appendAssistantHistoryOnly(response string) {
-	r.agent.appendAssistantResponse(rawAssistantResponse(response), assistantAppendOptions{})
+	r.agent.recordAssistantRawResponse(response)
 }
 
 func (r *TurnRunner) appendAssistantTurn(response string) {
-	r.agent.appendAssistantResponse(rawAssistantResponse(response), assistantAppendOptions{
-		incrementStats: true,
-		sessionMode:    assistantSessionRawAPI,
-	})
+	r.agent.recordAssistantAPITurn(response)
 }
 
 func (r *TurnRunner) runTurnLoop(policy turnLoopPolicy) (turnLoopDirective, error) {

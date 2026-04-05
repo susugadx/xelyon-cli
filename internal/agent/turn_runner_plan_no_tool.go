@@ -66,7 +66,7 @@ func (h *planStepNoToolHandler) handleAlreadyApplied(response string) (bool, ste
 		return false, stepLoopContinue
 	}
 
-	a.displayAssistantResponse(prepareAssistantResponse(response))
+	a.showAssistantResponse(response)
 	green.Fprintf(a.output(), "✓ Step %d completed (already applied)\n", h.step.ID)
 	return true, stepLoopDone
 }
@@ -115,7 +115,7 @@ func (h *planStepNoToolHandler) handleCompletionVerification(response string) (b
 
 func (h *planStepNoToolHandler) completeStep(response string) {
 	a := h.runner.agent
-	a.displayAssistantResponse(prepareAssistantResponse(response))
+	a.showAssistantResponse(response)
 	green.Fprintf(a.output(), "✓ Step %d completed\n", h.step.ID)
 }
 

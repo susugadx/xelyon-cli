@@ -99,6 +99,24 @@ func (a *Agent) appendAssistantResponseHistory(prepared assistantResponse) {
 	})
 }
 
+func (a *Agent) recordAssistantRawResponse(response string) {
+	a.appendAssistantResponse(rawAssistantResponse(response), assistantAppendOptions{})
+}
+
+func (a *Agent) recordAssistantAPITurn(response string) {
+	a.appendAssistantResponse(rawAssistantResponse(response), assistantAppendOptions{
+		incrementStats: true,
+		sessionMode:    assistantSessionRawAPI,
+	})
+}
+
+func (a *Agent) recordAssistantTextTurn(response string) {
+	a.appendAssistantResponse(rawAssistantResponse(response), assistantAppendOptions{
+		incrementStats: true,
+		sessionMode:    assistantSessionRawText,
+	})
+}
+
 func (a *Agent) recordAssistantDisplayOutput(display string) {
 	a.historyMu.Lock()
 	a.lastOutputs = append(a.lastOutputs, display)
@@ -113,8 +131,16 @@ func (a *Agent) displayAssistantResponse(prepared assistantResponse) {
 	a.printFinalAssistantResponse(prepared.display)
 }
 
-func (a *Agent) handleNormalResponse(response string) {
+func (a *Agent) showAssistantResponse(response string) {
+	a.displayAssistantResponse(prepareAssistantResponse(response))
+}
+
+func (a *Agent) recordAndShowAssistantResponse(response string) {
 	prepared := prepareAssistantResponse(response)
 	a.appendAssistantResponseHistory(prepared)
 	a.displayAssistantResponse(prepared)
+}
+
+func (a *Agent) handleNormalResponse(response string) {
+	a.recordAndShowAssistantResponse(response)
 }

@@ -44,3 +44,25 @@ func TestAppendAssistantResponseHistory_SeparatesRawAndDisplayState(t *testing.T
 		t.Fatalf("expected compaction notice, got %q", out.String())
 	}
 }
+
+func TestShowAssistantResponse_DisplaysWithoutRecordingHistory(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	agent := newChatRequestTestAgent(t, &mockProvider{name: "test"}, &out)
+
+	agent.showAssistantResponse("before [COMPACTION]hidden[/COMPACTION] after")
+
+	if len(agent.History) != 0 {
+		t.Fatalf("History length = %d, want 0", len(agent.History))
+	}
+	if len(agent.lastOutputs) != 0 {
+		t.Fatalf("lastOutputs length = %d, want 0", len(agent.lastOutputs))
+	}
+	if !strings.Contains(out.String(), "Context compacted by Claude") {
+		t.Fatalf("expected compaction notice, got %q", out.String())
+	}
+	if !strings.Contains(out.String(), "💬 before  after") {
+		t.Fatalf("expected final response output, got %q", out.String())
+	}
+}

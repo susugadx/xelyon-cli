@@ -99,7 +99,7 @@ func (r *TurnRunner) runNormalModeLoop(input string, image *api.ImageData) error
 			yellow.Fprintf(a.output(), "⚠️  Tool loop limit reached (%d iterations)\n", hardLimit)
 		}
 		if state.fallbackResponse != "" {
-			a.printFinalAssistantResponse(state.fallbackResponse)
+			a.showAssistantResponse(state.fallbackResponse)
 		}
 		a.showTaskSummary()
 		return nil
