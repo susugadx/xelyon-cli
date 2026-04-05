@@ -29,7 +29,7 @@ func formatFileSize(bytes int64) string {
 }
 
 func renderReadResult(ctx readFileContext, contentStr string, startLine, endLine int) string {
-	lines := strings.Split(contentStr, "\n")
+	lines := splitNormalizedReadLines(contentStr)
 	totalLines := len(lines)
 
 	if startLine > 0 || endLine > 0 {
@@ -81,7 +81,7 @@ func formatOutline(filePath string, lines []string, totalLines int) string {
 	if headEnd > totalLines {
 		headEnd = totalLines
 	}
-	sb.WriteString(formatLinesWithNumbers(lines[:headEnd], 1))
+	sb.WriteString(formatCappedLinesWithNumbers(lines[:headEnd], 1, previewMaxLineBytes))
 
 	content := strings.Join(lines, "\n")
 	isBrace := common.IsBraceLanguage(filePath)
@@ -106,9 +106,63 @@ func formatOutline(filePath string, lines []string, totalLines int) string {
 	if tailStart < headEnd {
 		tailStart = headEnd
 	}
-	if tailStart < totalLines {
+	if tailStart < totalLines && tailStart < len(lines) {
 		sb.WriteString("\n--- Last lines ---\n")
-		sb.WriteString(formatLinesWithNumbers(lines[tailStart:], tailStart+1))
+		sb.WriteString(formatCappedLinesWithNumbers(lines[tailStart:], tailStart+1, previewMaxLineBytes))
+	}
+
+	fmt.Fprintf(&sb, "\n(%d lines total. For specific sections: paths=[%q])\n", totalLines, filePath+":start-end")
+	return sb.String()
+}
+
+func formatSampledOutline(filePath string, headLines, tailLines []string, totalLines int) string {
+	var sb strings.Builder
+
+	headEnd := outlineHeadLines
+	if headEnd > len(headLines) {
+		headEnd = len(headLines)
+	}
+	if headEnd > totalLines {
+		headEnd = totalLines
+	}
+	if headEnd > 0 {
+		sb.WriteString(formatLinesWithNumbers(headLines[:headEnd], 1))
+	}
+
+	content := strings.Join(headLines, "\n")
+	isBrace := common.IsBraceLanguage(filePath)
+	blocks := common.BuildBlockMap(content, isBrace)
+
+	var signatures []string
+	for _, b := range blocks {
+		if b.StartLine > headEnd && b.StartLine <= len(headLines) {
+			signatures = append(signatures, fmt.Sprintf("  L%-4d %s", b.StartLine, b.Name))
+		}
+	}
+
+	if len(signatures) > 0 {
+		sb.WriteString("\n--- Signatures ---\n")
+		for _, sig := range signatures {
+			sb.WriteString(sig)
+			sb.WriteString("\n")
+		}
+	}
+
+	if len(tailLines) > 0 {
+		tailStart := totalLines - len(tailLines) + 1
+		if tailStart <= headEnd {
+			skip := headEnd - tailStart + 1
+			if skip < len(tailLines) {
+				tailLines = tailLines[skip:]
+				tailStart = headEnd + 1
+			} else {
+				tailLines = nil
+			}
+		}
+		if len(tailLines) > 0 {
+			sb.WriteString("\n--- Last lines ---\n")
+			sb.WriteString(formatLinesWithNumbers(tailLines, tailStart))
+		}
 	}
 
 	fmt.Fprintf(&sb, "\n(%d lines total. For specific sections: paths=[%q])\n", totalLines, filePath+":start-end")
@@ -119,6 +173,17 @@ func formatOutline(filePath string, lines []string, totalLines int) string {
 func formatLinesWithNumbers(lines []string, startNum int) string {
 	var sb strings.Builder
 	for i, line := range lines {
+		fmt.Fprintf(&sb, "%d: %s\n", startNum+i, line)
+	}
+	return sb.String()
+}
+
+func formatCappedLinesWithNumbers(lines []string, startNum, maxLineBytes int) string {
+	var sb strings.Builder
+	for i, line := range lines {
+		if maxLineBytes > 0 && len(line) > maxLineBytes {
+			line = line[:maxLineBytes] + "..."
+		}
 		fmt.Fprintf(&sb, "%d: %s\n", startNum+i, line)
 	}
 	return sb.String()

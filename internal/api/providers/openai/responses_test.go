@@ -343,8 +343,8 @@ func TestResponsesToolFormat(t *testing.T) {
 		t.Fatal("read_file.Parameters.properties is not a map")
 	}
 
-	if len(props) != 2 {
-		t.Fatalf("read_file.Parameters.properties has %d entries, want 2", len(props))
+	if len(props) != 3 {
+		t.Fatalf("read_file.Parameters.properties has %d entries, want 3", len(props))
 	}
 	pathsProp, ok := props["paths"].(map[string]interface{})
 	if !ok {
@@ -352,6 +352,13 @@ func TestResponsesToolFormat(t *testing.T) {
 	}
 	if pathsProp["type"] != "array" {
 		t.Errorf("read_file.Parameters.properties.paths.type = %v, want array", pathsProp["type"])
+	}
+	detailProp, ok := props["detail"].(map[string]interface{})
+	if !ok {
+		t.Fatal("read_file.Parameters.properties.detail not found")
+	}
+	if detailProp["type"] != "string" {
+		t.Errorf("read_file.Parameters.properties.detail.type = %v, want string", detailProp["type"])
 	}
 
 	// paths と targets は排他的なため required は未設定

@@ -23,7 +23,7 @@ func TestToolMetadata(t *testing.T) {
 			name:          "read_file",
 			tool:          &ReadFileTool{},
 			wantName:      "read_file",
-			wantProps:     []string{"paths", "targets"},
+			wantProps:     []string{"paths", "targets", "detail"},
 			wantNoRequire: true,
 		},
 		{

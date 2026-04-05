@@ -73,6 +73,9 @@ func TestSystemPrompt_ToolGuidanceMatchesCurrentSchema(t *testing.T) {
 	if !strings.Contains(SystemPrompt, "read_file: to read actual file contents. Use line ranges from Project Map.") {
 		t.Error("SystemPrompt should describe current read_file behavior")
 	}
+	if !strings.Contains(SystemPrompt, `read_file(targets=..., detail="compact")`) {
+		t.Error("SystemPrompt should guide impact-driven locator reads toward detail=compact")
+	}
 	if !strings.Contains(SystemPrompt, "### apply_patch (edit tool)") {
 		t.Error("default SystemPrompt should include the apply_patch guide")
 	}

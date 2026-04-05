@@ -12,13 +12,17 @@ import (
 
 // ── read_file batching eligibility ──
 
-// isBatchableReadFile は read_file call が batch 対象（range なし read）かを判定する。
+// isBatchableReadFile は read_file call が batch 対象（detail=auto の range なし read）かを判定する。
 // targeted read と内部 batch call は対象外。
 func isBatchableReadFile(tc *tools.ToolCall) bool {
 	if tc.Tool != "read_file" {
 		return false
 	}
 	if strings.EqualFold(tc.Args["_full_budget"], "true") {
+		return false
+	}
+	detail := strings.TrimSpace(strings.ToLower(tc.Args["detail"]))
+	if detail != "" && detail != "auto" {
 		return false
 	}
 	if readFileHasExplicitRange(tc.Args) {

@@ -43,12 +43,17 @@ func ExecuteReadFilesWithBudget(out common.Output, paths []string, budgetOverrid
 // cfg/cache が nil の場合は単発 read_file のフォールバック動作（設定なし）を使用する。
 // reg が nil でない場合、ファイルヘッダーに Locator ID を付与する。
 func executeReadFilesCore(out common.Output, cfg *config.Config, cache tools.ToolCacheInterface, paths []string, budgetOverride int, reg *locator.Registry) string {
-	if errResult := validateReadFilesPaths(paths); errResult != "" {
+	requests := buildReadRequestsFromPaths(paths, readDetailAuto)
+	return executeReadFilesRequestsCore(out, cfg, cache, requests, budgetOverride, reg)
+}
+
+func executeReadFilesRequestsCore(out common.Output, cfg *config.Config, cache tools.ToolCacheInterface, requests []readRequest, budgetOverride int, reg *locator.Registry) string {
+	prepared := prepareReadRequests(out, cfg, cache, requests)
+	if errResult := validateReadRequests(prepared); errResult != "" {
 		return errResult
 	}
-
-	results := readFilesInParallel(out, cfg, cache, paths, resolveReadFilesBudget(budgetOverride))
+	results := readRequestsInParallel(out, cfg, cache, prepared, resolveReadFilesBudget(budgetOverride))
 	result := renderReadFilesResults(results, reg)
-	printReadStatus(out, "📄 Read: %d files\n", len(paths))
+	printReadStatus(out, "📄 Read: %d files\n", len(results))
 	return result
 }

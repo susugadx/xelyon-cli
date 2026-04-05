@@ -4,7 +4,7 @@ package tools
 // GetToolDefinitions() 経由で JSON schema の description に使用。
 var ToolDescriptions = map[string]string{
 	// File Operations
-	"read_file":   "Read files (1-10). Returns full content. Do not re-read files already returned.",
+	"read_file":   "Read files (1-10). Default detail=auto returns full content when feasible and outline for large whole-file reads. Optional detail: compact for locator targets or explicit path ranges, full, outline. Do not re-read files already returned.",
 	"write_file":  "Create or overwrite a file. Uses 0644 for new files and preserves permissions on overwrite. Prefer the primary edit tool for partial edits to existing files.",
 	"str_replace": "Edit existing file. PREFERRED: Line-range mode (old_str empty + start_line/end_line) after search_code — no read_file needed. FALLBACK: old_str mode requires read_file first. Batch mode: pass edits=[{old_str,new_str},...] for multiple replacements in one call.",
 	"delete_file": "Delete a file permanently.",

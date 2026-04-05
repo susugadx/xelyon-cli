@@ -10,19 +10,24 @@ import (
 )
 
 type readFileBatchResult struct {
-	entry     string
-	filePath  string
-	startLine int
-	endLine   int
-	result    string
+	entry       string
+	filePath    string
+	startLine   int
+	endLine     int
+	locatorName string
+	result      string
 }
 
 func validateReadFilesPaths(paths []string) string {
-	if len(paths) == 0 {
+	return validateReadRequestCount(len(paths))
+}
+
+func validateReadRequestCount(count int) string {
+	if count == 0 {
 		return "Error: paths is empty"
 	}
-	if len(paths) > MaxReadFilesPaths {
-		return fmt.Sprintf("Error: too many paths (max %d), got %d", MaxReadFilesPaths, len(paths))
+	if count > MaxReadFilesPaths {
+		return fmt.Sprintf("Error: too many paths (max %d), got %d", MaxReadFilesPaths, count)
 	}
 	return ""
 }
@@ -35,38 +40,54 @@ func resolveReadFilesBudget(budgetOverride int) int {
 }
 
 func readFilesInParallel(out common.Output, cfg *config.Config, cache tools.ToolCacheInterface, paths []string, budget int) []readFileBatchResult {
+	return readRequestsInParallel(out, cfg, cache, buildReadRequestsFromPaths(paths, readDetailAuto), budget)
+}
+
+func readRequestsInParallel(out common.Output, cfg *config.Config, cache tools.ToolCacheInterface, requests []readRequest, budget int) []readFileBatchResult {
 	sem := make(chan struct{}, tools.MaxParallelTools)
-	results := make([]readFileBatchResult, len(paths))
+	results := make([]readFileBatchResult, len(requests))
 	var wg sync.WaitGroup
 
-	for i, entry := range paths {
+	for i, req := range requests {
 		wg.Add(1)
 		sem <- struct{}{}
-		go func(idx int, rawEntry string) {
+		go func(idx int, request readRequest) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			results[idx] = executeReadBatchEntry(out, cfg, cache, rawEntry, budget)
-		}(i, entry)
+			results[idx] = executeReadBatchRequest(out, cfg, cache, request, budget)
+		}(i, req)
 	}
 	wg.Wait()
 	return results
 }
 
 func executeReadBatchEntry(out common.Output, cfg *config.Config, cache tools.ToolCacheInterface, rawEntry string, budget int) readFileBatchResult {
-	path, startLine, endLine := parsePath(rawEntry)
+	requests := buildReadRequestsFromPaths([]string{rawEntry}, readDetailAuto)
+	return executeReadBatchRequest(out, cfg, cache, requests[0], budget)
+}
 
-	result := ""
-	if startLine > 0 || endLine > 0 {
-		result = executeReadFileCore(out, cfg, cache, path, startLine, endLine, DefaultFullLines)
-	} else {
-		result = executeReadFileCore(out, cfg, cache, path, 0, 0, budget)
+func executeReadBatchRequest(out common.Output, cfg *config.Config, cache tools.ToolCacheInterface, req readRequest, budget int) readFileBatchResult {
+	req = normalizeReadRequestForExecution(req)
+
+	entry := req.RawEntry
+	if req.Source == readRequestSourceLocator {
+		entry = req.RangeEntry
+		if entry == "" {
+			entry = formatReadRangeEntry(req.FilePath, req.StartLine, req.EndLine)
+		}
+	}
+
+	locatorName := ""
+	if req.Locator != nil {
+		locatorName = req.Locator.Name
 	}
 
 	return readFileBatchResult{
-		entry:     rawEntry,
-		filePath:  path,
-		startLine: startLine,
-		endLine:   endLine,
-		result:    result,
+		entry:       entry,
+		filePath:    req.FilePath,
+		startLine:   req.StartLine,
+		endLine:     req.EndLine,
+		locatorName: locatorName,
+		result:      executeReadFileRequest(out, cfg, cache, req, budget),
 	}
 }

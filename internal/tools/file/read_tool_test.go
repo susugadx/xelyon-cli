@@ -20,11 +20,14 @@ func TestReadFileTool_SchemaAndRun(t *testing.T) {
 	if !ok {
 		t.Fatal("expected properties map")
 	}
-	if len(props) != 2 {
-		t.Fatalf("expected 2 read_file parameters, got %d", len(props))
+	if len(props) != 3 {
+		t.Fatalf("expected 3 read_file parameters, got %d", len(props))
 	}
 	if _, ok := props["paths"]; !ok {
 		t.Fatal("expected paths parameter")
+	}
+	if _, ok := props["detail"]; !ok {
+		t.Fatal("expected detail parameter")
 	}
 	if _, ok := props["symbol"]; ok {
 		t.Fatal("symbol parameter should be removed")
@@ -39,6 +42,18 @@ func TestReadFileTool_SchemaAndRun(t *testing.T) {
 	}
 	if maxItems, ok := pathsParam["maxItems"].(int); !ok || maxItems != MaxReadFilesPaths {
 		t.Fatalf("expected paths maxItems=%d, got %#v", MaxReadFilesPaths, pathsParam["maxItems"])
+	}
+	detailParam, ok := props["detail"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected detail parameter schema")
+	}
+	enumValues, ok := detailParam["enum"].([]string)
+	if !ok || len(enumValues) != 4 {
+		t.Fatalf("expected detail enum values, got %#v", detailParam["enum"])
+	}
+	description, ok := detailParam["description"].(string)
+	if !ok || !strings.Contains(description, "compact for locator targets or explicit path ranges") {
+		t.Fatalf("expected compact restriction in detail description, got %#v", detailParam["description"])
 	}
 
 	tmpDir := t.TempDir()
@@ -109,21 +124,16 @@ func TestReadFileTool_SchemaAndRun(t *testing.T) {
 		}
 	})
 
-	t.Run("paths_batch_full_budget", func(t *testing.T) {
+	t.Run("full_budget_preserves_large_file_outline", func(t *testing.T) {
 		batchDir := t.TempDir()
-		paths := make([]string, 0, 3)
-		contentLines := make([]string, 180)
+		contentLines := make([]string, 1300)
 		for i := range contentLines {
-			contentLines[i] = fmt.Sprintf("line%d", i+1)
+			contentLines[i] = fmt.Sprintf("line%d %s", i+1, strings.Repeat("x", 900))
 		}
-		content := strings.Join(contentLines, "\n")
-		for i := 0; i < 3; i++ {
-			filename := fmt.Sprintf("budget%d.txt", i)
-			testutil.CreateTempFile(t, batchDir, filename, content)
-			paths = append(paths, filepath.Join(batchDir, filename))
-		}
+		testFile := filepath.Join(batchDir, "budget.txt")
+		testutil.CreateTempFile(t, batchDir, "budget.txt", strings.Join(contentLines, "\n"))
 
-		pathsJSON, err := json.Marshal(paths)
+		pathsJSON, err := json.Marshal([]string{testFile})
 		if err != nil {
 			t.Fatalf("json.Marshal() error = %v", err)
 		}
@@ -135,11 +145,59 @@ func TestReadFileTool_SchemaAndRun(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if strings.Contains(result, "lines total") {
-			t.Fatalf("full budget batch should return full content, got: %s", result)
+		if !strings.Contains(result, "lines total") {
+			t.Fatalf("_full_budget should keep large-file outline behavior, got: %s", result)
 		}
-		if !strings.Contains(result, "180: line180") {
-			t.Fatalf("expected full content through line 180, got: %s", result)
+		if strings.Contains(result, "650: line650") {
+			t.Fatalf("outline output should not include middle lines, got: %s", result)
+		}
+	})
+
+	t.Run("detail_overrides_full_budget", func(t *testing.T) {
+		batchDir := t.TempDir()
+		contentLines := make([]string, 2200)
+		for i := range contentLines {
+			contentLines[i] = fmt.Sprintf("line%d", i+1)
+		}
+		testFile := filepath.Join(batchDir, "outline.txt")
+		testutil.CreateTempFile(t, batchDir, "outline.txt", strings.Join(contentLines, "\n"))
+
+		pathsJSON, err := json.Marshal([]string{testFile})
+		if err != nil {
+			t.Fatalf("json.Marshal() error = %v", err)
+		}
+
+		result, _, err := tool.Run(execCtx, map[string]string{
+			"paths":        string(pathsJSON),
+			"detail":       "outline",
+			"_full_budget": "true",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(result, "lines total") {
+			t.Fatalf("detail=outline should win over _full_budget, got: %s", result)
+		}
+		if strings.Contains(result, "1500: line1500") {
+			t.Fatalf("outline output should not include middle lines, got: %s", result)
+		}
+	})
+
+	t.Run("detail_compact_whole_file_errors", func(t *testing.T) {
+		pathsJSON, err := json.Marshal([]string{testFile})
+		if err != nil {
+			t.Fatalf("json.Marshal() error = %v", err)
+		}
+
+		result, _, err := tool.Run(execCtx, map[string]string{
+			"paths":  string(pathsJSON),
+			"detail": "compact",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(result, `Error: detail="compact" requires locator targets or explicit path ranges`) {
+			t.Fatalf("expected explicit compact whole-file error, got: %s", result)
 		}
 	})
 
@@ -170,6 +228,18 @@ func TestReadFileTool_SchemaAndRun(t *testing.T) {
 		}
 		if !strings.Contains(result, "Error: either paths or targets is required") {
 			t.Fatalf("expected error, got: %s", result)
+		}
+	})
+
+	t.Run("invalid_detail_errors", func(t *testing.T) {
+		result, _, err := tool.Run(execCtx, map[string]string{
+			"detail": "dense",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(result, `Error: invalid detail "dense"`) {
+			t.Fatalf("expected invalid detail error, got: %s", result)
 		}
 	})
 }

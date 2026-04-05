@@ -117,3 +117,20 @@ func TestExecuteReadFile_StartLineOnly_DefaultMaxReadLines(t *testing.T) {
 		t.Fatalf("expected output to stop at line 1099 when end_line is omitted, got: %s", output)
 	}
 }
+
+func TestExecuteReadFile_TrailingNewlineDoesNotCreateExtraLine(t *testing.T) {
+	setupTestMocks(t)
+	defer withPermissiveValidatePath(t)()
+
+	tmpDir := t.TempDir()
+	testutil.CreateTempFile(t, tmpDir, "trailing.txt", "line1\nline2\nline3\n")
+
+	output := ExecuteReadFile(filepath.Join(tmpDir, "trailing.txt"), 4, 4)
+
+	if !strings.Contains(output, "Error: start_line 4 exceeds total lines 3") {
+		t.Fatalf("expected EOF validation against 3 real lines, got: %s", output)
+	}
+	if strings.Contains(output, "4: ") || strings.Contains(output, "of 4") {
+		t.Fatalf("trailing newline must not create a phantom fourth line, got: %s", output)
+	}
+}

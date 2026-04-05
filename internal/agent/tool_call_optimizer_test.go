@@ -23,6 +23,9 @@ func TestIsBatchableReadFile(t *testing.T) {
 		{"start_line only", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"path": "/a.go", "start_line": "1"}}, false},
 		{"paths single", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"paths": `["a.go"]`}}, true},
 		{"paths specified", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"paths": `["a.go","b.go"]`}}, true},
+		{"paths detail auto", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"paths": `["a.go","b.go"]`, "detail": "auto"}}, true},
+		{"paths detail outline", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"paths": `["a.go","b.go"]`, "detail": "outline"}}, false},
+		{"paths detail compact", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"paths": `["a.go","b.go"]`, "detail": "compact"}}, false},
 		{"paths with range", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"paths": `["a.go:1-20","b.go"]`}}, false},
 		{"empty path", &tools.ToolCall{Tool: "read_file", Args: map[string]string{}}, false},
 		{"not read_file", &tools.ToolCall{Tool: "search_code", Args: map[string]string{"path": "/a.go"}}, false},
@@ -706,6 +709,9 @@ func TestIsBatchableReadFile_Comprehensive(t *testing.T) {
 		{"end_line only", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"path": "/a.go", "end_line": "50"}}, false},
 		{"paths single", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"paths": `["a.go"]`}}, true},
 		{"paths specified", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"paths": `["a.go","b.go"]`}}, true},
+		{"paths detail auto", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"paths": `["a.go","b.go"]`, "detail": "auto"}}, true},
+		{"paths detail full", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"paths": `["a.go","b.go"]`, "detail": "full"}}, false},
+		{"paths detail outline", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"paths": `["a.go","b.go"]`, "detail": "outline"}}, false},
 		{"paths specified with range", &tools.ToolCall{Tool: "read_file", Args: map[string]string{"paths": `["a.go:10-20","b.go"]`}}, false},
 		{"empty path", &tools.ToolCall{Tool: "read_file", Args: map[string]string{}}, false},
 		{"not read_file", &tools.ToolCall{Tool: "search_code", Args: map[string]string{"path": "/a.go"}}, false},
@@ -970,6 +976,19 @@ func TestSegmentReadFileBatches_NonBatchableReadIgnored(t *testing.T) {
 	}
 	if len(segs[0].paths) != 2 {
 		t.Errorf("segment should have 2 paths (a, c), got %d", len(segs[0].paths))
+	}
+}
+
+func TestSegmentReadFileBatches_ExplicitDetailIgnored(t *testing.T) {
+	tcs := []*tools.ToolCall{
+		{Tool: "read_file", Args: map[string]string{"path": "/a.go", "detail": "outline"}},
+		{Tool: "read_file", Args: map[string]string{"path": "/b.go", "detail": "outline"}},
+	}
+	flags := []bool{true, true}
+	segs := segmentReadFileBatches(tcs, flags)
+
+	if len(segs) != 0 {
+		t.Fatalf("expected 0 segments for explicit detail reads, got %d", len(segs))
 	}
 }
 

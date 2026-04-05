@@ -19,6 +19,7 @@ func renderReadFilesResults(results []readFileBatchResult, reg *locator.Registry
 				FilePath: result.filePath,
 				Line:     result.startLine,
 				EndLine:  result.endLine,
+				Name:     result.locatorName,
 			})
 			header += " " + id
 		}

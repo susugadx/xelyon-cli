@@ -84,6 +84,7 @@ Project Map lists file paths, symbol definitions with line ranges for the projec
 #### When to use investigation tools
 - search_code: code discovery tool. Uses language-aware routing across symbol-aware resolution, literal search, and regex search. Prefer mode=auto, short symbol queries when possible, and regex only when needed. For related code discovery, multi-pattern search is the default. Use it whenever the needed code context is not already clear from the Project Map or known files. For shared-change impact analysis starting from one symbol, prefer search_code(intent="impact", pattern="SymbolName").
 - read_file: to read actual file contents. Use line ranges from Project Map.
+- When search_code(intent="impact") returns Recommended reads / locator IDs, prefer read_file(targets=..., detail="compact") before editing.
 #### Investigation rules
 - Never guess file paths or APIs. If the user gives a path, use it directly.
 - After 2-3 targeted reads, or one sufficiently informative combined search plus targeted reads, form a working hypothesis and switch to implementation unless evidence conflicts.
