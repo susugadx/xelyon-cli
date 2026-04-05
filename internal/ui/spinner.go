@@ -65,6 +65,12 @@ func (s *Spinner) IsActive() bool {
 	return s.active
 }
 
+func (s *Spinner) shouldDetachFromRuntime() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return !s.active && !s.startTime.IsZero()
+}
+
 // Stop はスピナーを停止して行をクリア
 // goroutineの終了を同期的に待機してからクリアするため、
 // Stop()後は確実にターミナル書き込みが完了している

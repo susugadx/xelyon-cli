@@ -209,8 +209,11 @@ func (r *Runtime) CurrentSpinner() *Spinner {
 	if r == nil {
 		return nil
 	}
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.spinner != nil && r.spinner.shouldDetachFromRuntime() {
+		r.spinner = nil
+	}
 	return r.spinner
 }
 
