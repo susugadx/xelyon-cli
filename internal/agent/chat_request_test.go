@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -274,5 +275,107 @@ func TestChatCore_PostTurnUsageDisplay(t *testing.T) {
 	}
 	if agent.Stats.LastTurnUsage.CachedInputTokens != 20 {
 		t.Fatalf("LastTurnUsage.CachedInputTokens = %d, want 20", agent.Stats.LastTurnUsage.CachedInputTokens)
+	}
+}
+
+func TestExecuteChatRequest_OneShotNormalModeRestoresExcludedTools(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	provider := &headlessToolSetProbeProvider{}
+	agent := newChatRequestTestAgent(t, provider, &out)
+	agent.registry().SetExcludedTools([]string{"read_file"})
+
+	req := &chatRequest{
+		input:   "probe",
+		oneShot: true,
+	}
+
+	if err := agent.executeChatRequest(context.Background(), req); err != nil {
+		t.Fatalf("executeChatRequest() error = %v", err)
+	}
+
+	if hasToolName(provider.toolNames, "ask_user_question") {
+		t.Fatal("normal mode should exclude ask_user_question")
+	}
+	if hasToolName(provider.toolNames, "list_dir") {
+		t.Fatal("normal mode should exclude list_dir")
+	}
+	if !hasToolName(provider.toolNames, "apply_patch") {
+		t.Fatal("normal mode should expose apply_patch")
+	}
+
+	gotExcluded := agent.registry().GetExcludedTools()
+	sort.Strings(gotExcluded)
+	wantExcluded := []string{"read_file"}
+	if strings.Join(gotExcluded, ",") != strings.Join(wantExcluded, ",") {
+		t.Fatalf("excluded tools after oneShot = %v, want %v", gotExcluded, wantExcluded)
+	}
+}
+
+func TestExecuteChatRequest_PlanModeUsesPlanModeExcludedTools(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	provider := &headlessToolSetProbeProvider{}
+	agent := newChatRequestTestAgent(t, provider, &out)
+	agent.PlanModeEnabled = true
+
+	req := &chatRequest{input: "investigate only"}
+	if err := agent.executeChatRequest(context.Background(), req); err != nil {
+		t.Fatalf("executeChatRequest() error = %v", err)
+	}
+
+	if !hasToolName(provider.toolNames, "ask_user_question") {
+		t.Fatal("plan mode should expose ask_user_question")
+	}
+	if hasToolName(provider.toolNames, "list_dir") {
+		t.Fatal("plan mode should exclude list_dir")
+	}
+}
+
+func TestPrintContextSuggestion_CleanState(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	agent := newChatRequestTestAgent(t, &mockErrorProvider{}, &out)
+	agent.printContextSuggestion()
+
+	if !strings.Contains(out.String(), "clean state") {
+		t.Fatalf("expected clean state message, got %q", out.String())
+	}
+}
+
+func TestPrintContextSuggestion_UsesSavingsMessageWhenPricingIsKnown(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	agent := newChatRequestTestAgent(t, &mockErrorProvider{}, &out)
+	agent.ProviderName = "openai"
+	agent.History = []api.Message{
+		{Role: "user", Content: strings.Repeat("large context block ", 6000)},
+	}
+
+	agent.printContextSuggestion()
+
+	if !strings.Contains(out.String(), "/clear saves") {
+		t.Fatalf("expected pricing-aware suggestion, got %q", out.String())
+	}
+}
+
+func TestPrintContextSuggestion_FallsBackWithoutPricing(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	agent := newChatRequestTestAgent(t, &mockErrorProvider{}, &out)
+	agent.ProviderName = "ollama"
+	agent.History = []api.Message{
+		{Role: "user", Content: strings.Repeat("large context block ", 6000)},
+	}
+
+	agent.printContextSuggestion()
+
+	if !strings.Contains(out.String(), "/clear or /compress") {
+		t.Fatalf("expected generic suggestion, got %q", out.String())
 	}
 }

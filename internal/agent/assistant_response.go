@@ -13,6 +13,28 @@ type assistantResponse struct {
 	hasCompactionNotice bool
 }
 
+type assistantSessionMode int
+
+const (
+	assistantSessionNone assistantSessionMode = iota
+	assistantSessionRawAPI
+	assistantSessionRawText
+	assistantSessionDisplayText
+)
+
+type assistantAppendOptions struct {
+	incrementStats bool
+	recordOutput   bool
+	sessionMode    assistantSessionMode
+}
+
+func rawAssistantResponse(response string) assistantResponse {
+	return assistantResponse{
+		raw:     response,
+		display: response,
+	}
+}
+
 func prepareAssistantResponse(response string) assistantResponse {
 	prepared := assistantResponse{
 		raw:     response,
@@ -41,22 +63,40 @@ func (a *Agent) emitAssistantResponseNotices(prepared assistantResponse) {
 	cyan.Fprintln(a.output(), "📦 Context compacted by Claude")
 }
 
-func (a *Agent) appendAssistantResponseHistory(prepared assistantResponse) {
-	a.History = append(a.History, api.Message{
+func (a *Agent) appendAssistantResponse(prepared assistantResponse, opts assistantAppendOptions) api.Message {
+	msg := api.Message{
 		Role:             "assistant",
 		Content:          prepared.raw,
 		ReasoningContent: a.getLastReasoningContent(),
-	})
+	}
+	a.History = append(a.History, msg)
 
-	if a.Stats != nil {
+	if opts.incrementStats && a.Stats != nil {
 		a.Stats.AssistantMessages++
 	}
 
-	a.recordAssistantDisplayOutput(prepared.display)
+	if opts.recordOutput {
+		a.recordAssistantDisplayOutput(prepared.display)
+	}
 
-	if a.session != nil {
+	switch opts.sessionMode {
+	case assistantSessionRawAPI:
+		a.appendSessionMessageFromAPI(msg, a.CurrentModel)
+	case assistantSessionRawText:
+		a.appendSessionMessage("assistant", prepared.raw, a.CurrentModel)
+	case assistantSessionDisplayText:
 		a.appendSessionMessage("assistant", prepared.display, a.CurrentModel)
 	}
+
+	return msg
+}
+
+func (a *Agent) appendAssistantResponseHistory(prepared assistantResponse) {
+	a.appendAssistantResponse(prepared, assistantAppendOptions{
+		incrementStats: true,
+		recordOutput:   true,
+		sessionMode:    assistantSessionDisplayText,
+	})
 }
 
 func (a *Agent) recordAssistantDisplayOutput(display string) {
@@ -68,9 +108,13 @@ func (a *Agent) recordAssistantDisplayOutput(display string) {
 	a.historyMu.Unlock()
 }
 
+func (a *Agent) displayAssistantResponse(prepared assistantResponse) {
+	a.emitAssistantResponseNotices(prepared)
+	a.printFinalAssistantResponse(prepared.display)
+}
+
 func (a *Agent) handleNormalResponse(response string) {
 	prepared := prepareAssistantResponse(response)
-	a.emitAssistantResponseNotices(prepared)
 	a.appendAssistantResponseHistory(prepared)
-	a.printFinalAssistantResponse(prepared.display)
+	a.displayAssistantResponse(prepared)
 }

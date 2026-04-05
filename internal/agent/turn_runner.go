@@ -110,28 +110,14 @@ func (r *TurnRunner) executeToolCalls(
 }
 
 func (r *TurnRunner) appendAssistantHistoryOnly(response string) {
-	a := r.agent
-	a.History = append(a.History, api.Message{
-		Role:             "assistant",
-		Content:          response,
-		ReasoningContent: a.getLastReasoningContent(),
-	})
+	r.agent.appendAssistantResponse(rawAssistantResponse(response), assistantAppendOptions{})
 }
 
 func (r *TurnRunner) appendAssistantTurn(response string) {
-	a := r.agent
-	assistantMsg := api.Message{
-		Role:             "assistant",
-		Content:          response,
-		ReasoningContent: a.getLastReasoningContent(),
-	}
-	a.History = append(a.History, assistantMsg)
-	if a.session != nil {
-		a.appendSessionMessageFromAPI(assistantMsg, a.CurrentModel)
-	}
-	if a.Stats != nil {
-		a.Stats.AssistantMessages++
-	}
+	r.agent.appendAssistantResponse(rawAssistantResponse(response), assistantAppendOptions{
+		incrementStats: true,
+		sessionMode:    assistantSessionRawAPI,
+	})
 }
 
 func (r *TurnRunner) runTurnLoop(policy turnLoopPolicy) (turnLoopDirective, error) {

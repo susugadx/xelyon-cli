@@ -12,6 +12,21 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/tools/dev"
 )
 
+type investigationLoopAction int
+
+const (
+	investigationLoopContinue investigationLoopAction = iota
+	investigationLoopDone
+)
+
+type planInvestigationRunner struct {
+	agent         *Agent
+	ctx           context.Context
+	hardLimit     int
+	lastToolCall  *tools.ToolCall
+	sameCallCount int
+}
+
 // runInvestigationPhase は調査フェーズを実行する。
 // テキスト出力された計画（Plan JSON）を ExtractPlanJSON/ParsePlan でパースし、Plan を返す。
 //
@@ -19,111 +34,168 @@ import (
 // SafetyHigh ツール制約のある独自ループ（executeToolOnly）を持ち、
 // 並列実行の対象外である。ツールは1つずつ順次実行される。
 func (a *Agent) runInvestigationPhase(ctx context.Context) (*plan.Plan, error) {
-	cfg := a.cfg()
-	hardLimit := normalizeToolLoopLimit(cfg.General.ToolLoopLimit)
+	return newPlanInvestigationRunner(a, ctx).Run()
+}
 
-	var lastToolCall *tools.ToolCall
-	sameCallCount := 0
+func newPlanInvestigationRunner(agent *Agent, ctx context.Context) *planInvestigationRunner {
+	cfg := agent.cfg()
+	return &planInvestigationRunner{
+		agent:     agent,
+		ctx:       ctx,
+		hardLimit: normalizeToolLoopLimit(cfg.General.ToolLoopLimit),
+	}
+}
 
-	for i := 0; ; i++ {
-		if hardLimit > 0 && i >= hardLimit {
-			return nil, fmt.Errorf("investigation phase exceeded max iterations (%d)", hardLimit)
+func (r *planInvestigationRunner) Run() (*plan.Plan, error) {
+	for iteration := 0; ; iteration++ {
+		if err := r.beforeIteration(iteration); err != nil {
+			return nil, err
 		}
-		if hardLimit == 0 {
-			emitLoopWarning(a, i)
-		}
 
-		response, err := a.CurrentProvider.ChatWithTools(
-			a.requestContext(ctx),
-			a.SystemPrompt,
-			a.History,
-			a.CurrentModel,
-		)
+		response, err := r.requestResponse()
 		if err != nil {
-			return nil, fmt.Errorf("API call failed: %w", err)
+			return nil, err
 		}
 
-		toolCalls := a.parseToolCalls(response)
-
-		// assistant message を履歴に追加
-		assistantMsg := api.Message{Role: "assistant", Content: response, ReasoningContent: a.getLastReasoningContent()}
-		a.History = append(a.History, assistantMsg)
-		if a.session != nil {
-			a.appendSessionMessageFromAPI(assistantMsg, a.CurrentModel)
-		}
-		if a.Stats != nil {
-			a.Stats.AssistantMessages++
-		}
+		toolCalls := r.agent.parseToolCalls(response)
+		r.appendAssistantTurn(response)
 
 		if len(toolCalls) == 0 {
-			if os.Getenv("XELYON_DEBUG_PARSE") == "1" {
-				_, _ = fmt.Fprintf(a.errorOutput(), "[DEBUG runInvestigationPhase] ParseToolCalls returned 0 tools\n")
-				if strings.Contains(response, `{"tool"`) || strings.Contains(response, `{ "tool"`) {
-					_, _ = fmt.Fprintf(a.errorOutput(), "[DEBUG runInvestigationPhase] WARNING: tool pattern exists but not parsed!\n")
-					if len(response) > 200 {
-						_, _ = fmt.Fprintf(a.errorOutput(), "[DEBUG runInvestigationPhase] tail: ...%s\n", response[len(response)-200:])
-					}
-				}
+			p, action, err := r.handleNoToolResponse(response)
+			if err != nil {
+				return nil, err
 			}
-
-			if planJSON := plan.ExtractPlanJSON(response); planJSON != "" {
-				if os.Getenv("XELYON_DEBUG_PARSE") == "1" {
-					_, _ = fmt.Fprintf(a.errorOutput(), "[DEBUG runInvestigationPhase] found plan JSON (%d bytes)\n", len(planJSON))
-				}
-				if p, err := plan.ParsePlan(planJSON); err == nil && len(p.Steps) > 0 {
-					return p, nil
-				}
-
-				// パース失敗: JSON スキーマ例つきで再提示を促す（番号付きリストだと ExtractPlanJSON が拾えない）
-				a.History = append(a.History, api.Message{
-					Role:    "user",
-					Content: "[SYSTEM] Plan JSON を**必ず**次のスキーマ例に沿って、```json``` で囲んだ1つのJSONとして出力してください（箇条書き/番号付きリスト/文章のみは禁止）。\n\n例:\n```json\n{\n  \"title\": \"調査と実装計画\",\n  \"goal\": \"<最終的に達成したいこと>\",\n  \"assumptions\": [\"<前提>\"],\n  \"steps\": [\n    {\n      \"id\": 1,\n      \"title\": \"<手順タイトル>\",\n      \"description\": \"<この手順でやること>\",\n      \"expected_output\": \"<完了条件/成果物>\"\n    }\n  ]\n}\n```",
-				})
+			if action == investigationLoopContinue {
 				continue
 			}
-
-			// ツール呼び出しがない場合は終了（AIが調査を終えて説明している）
-			a.printFinalAssistantResponse(response)
-			return nil, nil
+			return p, nil
 		}
 
-		// ツールを分類して実行
-		for idx, tc := range toolCalls {
-			safety := tools.GetToolSafety(tc.Tool)
-
-			// SafetyHigh ツール（読み取り専用）
-			if safety == tools.SafetyHigh {
-				// ループ検知
-				if a.shouldAbortToolLoop(tc, lastToolCall, &sameCallCount) {
-					return nil, fmt.Errorf("tool loop detected during investigation")
-				}
-				lastToolCall = tc
-
-				a.executeToolOnly(tc)
-				continue
-			}
-
-			if tc.Tool == "bash" || tc.Tool == "command" {
-				cmd := tc.Args["command"]
-				if dev.IsSafeCommand(cmd, a.cfg().Bash) {
-					if a.shouldAbortToolLoop(tc, lastToolCall, &sameCallCount) {
-						return nil, fmt.Errorf("tool loop detected during investigation")
-					}
-					lastToolCall = tc
-					a.executeToolOnly(tc)
-					continue
-				}
-			}
-
-			// 書き込み系/危険系ツールは実行しない（調査フェーズ）
-			a.History = append(a.History, api.Message{
-				Role:    "user",
-				Content: fmt.Sprintf("[SYSTEM] Tool '%s' is not allowed in investigation phase. Please only use read-only tools.", tc.Tool),
-			})
-			if idx == len(toolCalls)-1 {
-				continue
-			}
+		if err := r.executeToolCalls(toolCalls); err != nil {
+			return nil, err
 		}
 	}
+}
 
+func (r *planInvestigationRunner) beforeIteration(iteration int) error {
+	if r.hardLimit > 0 && iteration >= r.hardLimit {
+		return fmt.Errorf("investigation phase exceeded max iterations (%d)", r.hardLimit)
+	}
+	if r.hardLimit == 0 {
+		emitLoopWarning(r.agent, iteration)
+	}
+	return nil
+}
+
+func (r *planInvestigationRunner) requestResponse() (string, error) {
+	response, err := r.agent.CurrentProvider.ChatWithTools(
+		r.agent.requestContext(r.ctx),
+		r.agent.SystemPrompt,
+		r.agent.History,
+		r.agent.CurrentModel,
+	)
+	if err != nil {
+		return "", fmt.Errorf("API call failed: %w", err)
+	}
+	return response, nil
+}
+
+func (r *planInvestigationRunner) appendAssistantTurn(response string) {
+	r.agent.appendAssistantResponse(rawAssistantResponse(response), assistantAppendOptions{
+		incrementStats: true,
+		sessionMode:    assistantSessionRawAPI,
+	})
+}
+
+func (r *planInvestigationRunner) handleNoToolResponse(response string) (*plan.Plan, investigationLoopAction, error) {
+	r.debugNoToolResponse(response)
+
+	p, hadPlanJSON := r.extractPlan(response)
+	if p != nil {
+		return p, investigationLoopDone, nil
+	}
+	if hadPlanJSON {
+		r.requestPlanJSONRetry()
+		return nil, investigationLoopContinue, nil
+	}
+
+	r.agent.displayAssistantResponse(prepareAssistantResponse(response))
+	return nil, investigationLoopDone, nil
+}
+
+func (r *planInvestigationRunner) debugNoToolResponse(response string) {
+	if os.Getenv("XELYON_DEBUG_PARSE") != "1" {
+		return
+	}
+
+	_, _ = fmt.Fprintf(r.agent.errorOutput(), "[DEBUG runInvestigationPhase] ParseToolCalls returned 0 tools\n")
+	if strings.Contains(response, `{"tool"`) || strings.Contains(response, `{ "tool"`) {
+		_, _ = fmt.Fprintf(r.agent.errorOutput(), "[DEBUG runInvestigationPhase] WARNING: tool pattern exists but not parsed!\n")
+		if len(response) > 200 {
+			_, _ = fmt.Fprintf(r.agent.errorOutput(), "[DEBUG runInvestigationPhase] tail: ...%s\n", response[len(response)-200:])
+		}
+	}
+}
+
+func (r *planInvestigationRunner) extractPlan(response string) (*plan.Plan, bool) {
+	planJSON := plan.ExtractPlanJSON(response)
+	if planJSON == "" {
+		return nil, false
+	}
+
+	if os.Getenv("XELYON_DEBUG_PARSE") == "1" {
+		_, _ = fmt.Fprintf(r.agent.errorOutput(), "[DEBUG runInvestigationPhase] found plan JSON (%d bytes)\n", len(planJSON))
+	}
+
+	p, err := plan.ParsePlan(planJSON)
+	if err == nil && len(p.Steps) > 0 {
+		return p, true
+	}
+	return nil, true
+}
+
+func (r *planInvestigationRunner) requestPlanJSONRetry() {
+	r.agent.History = append(r.agent.History, api.Message{
+		Role:    "user",
+		Content: "[SYSTEM] Plan JSON を**必ず**次のスキーマ例に沿って、```json``` で囲んだ1つのJSONとして出力してください（箇条書き/番号付きリスト/文章のみは禁止）。\n\n例:\n```json\n{\n  \"title\": \"調査と実装計画\",\n  \"goal\": \"<最終的に達成したいこと>\",\n  \"assumptions\": [\"<前提>\"],\n  \"steps\": [\n    {\n      \"id\": 1,\n      \"title\": \"<手順タイトル>\",\n      \"description\": \"<この手順でやること>\",\n      \"expected_output\": \"<完了条件/成果物>\"\n    }\n  ]\n}\n```",
+	})
+}
+
+func (r *planInvestigationRunner) executeToolCalls(toolCalls []*tools.ToolCall) error {
+	for _, tc := range toolCalls {
+		if r.isAllowedTool(tc) {
+			if r.shouldAbortToolLoop(tc) {
+				return fmt.Errorf("tool loop detected during investigation")
+			}
+			r.lastToolCall = tc
+			r.agent.executeToolOnly(tc)
+			continue
+		}
+
+		r.rejectTool(tc)
+	}
+	return nil
+}
+
+func (r *planInvestigationRunner) isAllowedTool(tc *tools.ToolCall) bool {
+	safety := tools.GetToolSafety(tc.Tool)
+	if safety == tools.SafetyHigh {
+		return true
+	}
+
+	if tc.Tool != "bash" && tc.Tool != "command" {
+		return false
+	}
+	return dev.IsSafeCommand(tc.Args["command"], r.agent.cfg().Bash)
+}
+
+func (r *planInvestigationRunner) shouldAbortToolLoop(tc *tools.ToolCall) bool {
+	return r.agent.shouldAbortToolLoop(tc, r.lastToolCall, &r.sameCallCount)
+}
+
+func (r *planInvestigationRunner) rejectTool(tc *tools.ToolCall) {
+	r.agent.History = append(r.agent.History, api.Message{
+		Role:    "user",
+		Content: fmt.Sprintf("[SYSTEM] Tool '%s' is not allowed in investigation phase. Please only use read-only tools.", tc.Tool),
+	})
 }

@@ -57,8 +57,9 @@ func (h *normalModePlanningHandler) FilterExecutableToolCalls(response string, t
 		}
 		result, _ := a.executeToolWithSpinner(h.runner.ctx, toolCall)
 		a.appendSessionToolExecution(toolCall, result)
-		h.runner.appendAssistantHistoryOnly(response)
-		a.appendSessionMessage("assistant", response, a.CurrentModel)
+		a.appendAssistantResponse(rawAssistantResponse(response), assistantAppendOptions{
+			sessionMode: assistantSessionRawText,
+		})
 		a.appendToolResultToHistory(toolCall, result)
 
 		yellow.Fprintln(a.output(), "⚠️  create_plan is deprecated, continuing in normal mode...")
