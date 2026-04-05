@@ -383,7 +383,9 @@ func TestAgent_IncrementAssistantMessages_NilStats(t *testing.T) {
 
 func TestAgent_AppendChange(t *testing.T) {
 	agent := &Agent{
-		changeStack: []tools.FileChange{},
+		agentWorkspaceState: agentWorkspaceState{
+			changeStack: []tools.FileChange{},
+		},
 	}
 
 	change := tools.FileChange{

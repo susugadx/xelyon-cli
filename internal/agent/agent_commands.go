@@ -5,11 +5,9 @@ import (
 	"io"
 	"os"
 
-	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 	"github.com/susugadx/xelyon-cli/internal/ui"
-	"github.com/susugadx/xelyon-cli/internal/version"
 )
 
 func printCommandHeaderToWriter(out io.Writer, title string) {
@@ -38,62 +36,11 @@ func handleSpecialCommand(input string, agent *Agent) bool {
 
 	cmd := resolveCommandAliasWithConfig(parts[0], agent.cfg())
 	args := parts[1:]
-
-	switch cmd {
-	case "/save":
-		return handleSaveCommand(agent)
-	case "/load":
-		return handleLoadCommand(agent, args)
-	case "/sessions":
-		return handleSessionsCommand(agent)
-	case "/config":
-		return handleConfigCommand(agent, args)
-	case "/stats":
-		return handleStatsCommand(agent)
-	case "/status":
-		return handleStatusCommand(agent)
-	case "/copy":
-		return handleCopyCommand(agent, args)
-	case "/compress":
-		return handleCompressCommand(agent, args)
-	case "/use":
-		return handleUseCommand(agent, args)
-	case "/providers":
-		return handleProvidersCommand(agent)
-	case "/exit", "/quit", "/q":
-		handleExitCommand(agent)
-	case "/clear":
-		agent.History = []api.Message{}
-		green.Fprintln(agent.output(), "🗑️  History cleared")
-		return true
-	case "/history":
-		handleHistoryCommand(agent)
-		return true
-	case "/help":
-		printHelpToWriter(agent.output())
-		return true
-
-	case "/model":
-		return handleModelCommand(agent, args)
-	case "/version":
-		cyan.Fprintf(agent.output(), "🚀 XELYON CLI v%s\n", version.GetVersion())
-		return true
-	case "/plan":
-		return handlePlanCommand(agent, args)
-	case "/init":
-		return handleInitCommand(agent)
-	case "/project":
-		return handleProjectCommand(agent)
-	case "/paste":
-		return handlePasteCommand(agent, args)
-	case "/lsp":
-		return handleLSPCommand(agent, args)
-	case "/tokens":
-		return handleTokensCommand(agent)
-	case "/think":
-		return handleThinkCommand(agent, args)
+	handler, ok := specialCommandRegistry()[cmd]
+	if !ok {
+		return false
 	}
-	return false
+	return handler(agent, args)
 }
 
 // splitCommand はコマンド文字列を分割

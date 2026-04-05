@@ -60,8 +60,10 @@ func TestAgent_SwitchProvider_ClearCache(t *testing.T) {
 	agent := &Agent{
 		ProviderName: "mock",
 		CurrentModel: "mock-model",
-		session:      history.NewSession("mock-model"),
 		Runtime:      NewAgentRuntimeWithConfig(newProjectMapDisabledConfig()),
+		agentConversationState: agentConversationState{
+			session: history.NewSession("mock-model"),
+		},
 	}
 
 	mockProvider := &mockCacheClearableProvider{}
@@ -96,7 +98,6 @@ func TestAgent_SwitchProvider_ClearHistoryAndNotify(t *testing.T) {
 		ProviderName:    "mock",
 		CurrentModel:    "mock-model",
 		CurrentProvider: &mockCacheClearableProvider{},
-		session:         history.NewSession("mock-model"),
 		Runtime:         runtime,
 		History: []api.Message{
 			{
@@ -120,6 +121,9 @@ func TestAgent_SwitchProvider_ClearHistoryAndNotify(t *testing.T) {
 				ToolCallID: "tc1",
 				ToolName:   "read_file",
 			},
+		},
+		agentConversationState: agentConversationState{
+			session: history.NewSession("mock-model"),
 		},
 	}
 

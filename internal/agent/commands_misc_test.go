@@ -417,8 +417,10 @@ func TestGetSessionFileInfo_UsesHistoryJSONLPath(t *testing.T) {
 	}
 
 	agent := &Agent{
-		session: session,
-		storage: storage,
+		agentConversationState: agentConversationState{
+			session: session,
+			storage: storage,
+		},
 	}
 
 	gotPath, gotSize := getSessionFileInfo(agent)

@@ -564,6 +564,57 @@ func TestNormalMode_PlanJSONParseFailed(t *testing.T) {
 	}
 }
 
+func TestNormalMode_TextPlanHardFallback_DoesNotDuplicateAssistantHistory(t *testing.T) {
+	var out bytes.Buffer
+	cfg := newProjectMapDisabledConfig()
+	cfg.Output.AssistantUpdates = "phase"
+
+	responses := []string{
+		"Plan try 1\n1. create file\n2. update config\n3. run test\n4. fix error\n5. summarize result",
+		"Plan try 2\n1. create file\n2. update config\n3. run test\n4. fix error\n5. summarize result",
+		"Plan try 3\n1. create file\n2. update config\n3. run test\n4. fix error\n5. summarize result",
+		"Plan try 4\n1. create file\n2. update config\n3. run test\n4. fix error\n5. summarize result",
+		"Plan try 5\n1. create file\n2. update config\n3. run test\n4. fix error\n5. summarize result",
+		"Plan try 6\n1. create file\n2. update config\n3. run test\n4. fix error\n5. summarize result",
+	}
+	provider := &sequenceMockProvider{
+		name:      "test",
+		responses: responses,
+	}
+
+	agent := &Agent{
+		CurrentModel:    "test-model",
+		CurrentProvider: provider,
+		Runtime: &AgentRuntime{
+			Config: cfg,
+			UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
+		},
+		History: []api.Message{},
+	}
+	agent.Stats = NewSessionStats("test")
+
+	if err := agent.runNormalMode(context.Background(), "do something", nil); err != nil {
+		t.Fatalf("runNormalMode() error = %v", err)
+	}
+
+	lastResponse := responses[len(responses)-1]
+	assistantCount := 0
+	for _, msg := range agent.History {
+		if msg.Role == "assistant" && msg.Content == lastResponse {
+			assistantCount++
+		}
+	}
+	if assistantCount != 1 {
+		t.Fatalf("assistantCount for final fallback response = %d, want 1", assistantCount)
+	}
+	if got := strings.Count(out.String(), "Plan try 6"); got != 1 {
+		t.Fatalf("expected final fallback response exactly once in output, got %d in %q", got, out.String())
+	}
+	if agent.Stats.AssistantMessages != 0 {
+		t.Fatalf("AssistantMessages = %d, want 0 for fallback-only path", agent.Stats.AssistantMessages)
+	}
+}
+
 // TestExecuteStepV2_IgnoresCreatePlan は executeStepV2 内で create_plan が
 // 無視されること（再帰防止）をテスト
 func TestExecuteStepV2_IgnoresCreatePlan(t *testing.T) {

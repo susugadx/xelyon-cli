@@ -15,7 +15,6 @@ import (
 // TestAgent_handleTokenLimitErrorWithRetry_Basic は基本的なテストケース
 func TestAgent_handleTokenLimitErrorWithRetry_Basic(t *testing.T) {
 	agent := &Agent{
-		tokenLimitRetryCount: 0,
 		History: []api.Message{
 			{Role: "user", Content: "Test message 1"},
 			{Role: "assistant", Content: "Test response 1"},
@@ -29,6 +28,9 @@ func TestAgent_handleTokenLimitErrorWithRetry_Basic(t *testing.T) {
 			{Role: "assistant", Content: "Test response 5"},
 			{Role: "user", Content: "Test message 6"},
 			{Role: "assistant", Content: "Test response 6"},
+		},
+		agentRequestState: agentRequestState{
+			tokenLimitRetryCount: 0,
 		},
 	}
 
@@ -53,10 +55,12 @@ func TestAgent_handleTokenLimitErrorWithRetry_TestCases(t *testing.T) {
 	// テストケース1: トークン上限エラー以外は何もしない（通常エラー → false）
 	t.Run("通常エラーは何もしない", func(t *testing.T) {
 		agent := &Agent{
-			tokenLimitRetryCount: 0,
 			History: []api.Message{
 				{Role: "user", Content: "Test message 1"},
 				{Role: "assistant", Content: "Test response 1"},
+			},
+			agentRequestState: agentRequestState{
+				tokenLimitRetryCount: 0,
 			},
 		}
 
@@ -78,12 +82,14 @@ func TestAgent_handleTokenLimitErrorWithRetry_TestCases(t *testing.T) {
 	// テストケース2: リトライ上限超え（tokenLimitRetryCount=1 → false）
 	t.Run("リトライ上限超えの状態確認", func(t *testing.T) {
 		agent := &Agent{
-			tokenLimitRetryCount: 1, // すでに1回リトライ済み
 			History: []api.Message{
 				{Role: "user", Content: "Test message 1"},
 				{Role: "assistant", Content: "Test response 1"},
 				{Role: "user", Content: "Test message 2"},
 				{Role: "assistant", Content: "Test response 2"},
+			},
+			agentRequestState: agentRequestState{
+				tokenLimitRetryCount: 1, // すでに1回リトライ済み
 			},
 		}
 
@@ -95,7 +101,6 @@ func TestAgent_handleTokenLimitErrorWithRetry_TestCases(t *testing.T) {
 	// テストケース3: 履歴が短すぎて圧縮できない（keepRecent以下 → false）
 	t.Run("短い履歴の状態確認", func(t *testing.T) {
 		agent := &Agent{
-			tokenLimitRetryCount: 0,
 			History: []api.Message{
 				{Role: "user", Content: "Test message 1"},
 				{Role: "assistant", Content: "Test response 1"},
@@ -108,6 +113,9 @@ func TestAgent_handleTokenLimitErrorWithRetry_TestCases(t *testing.T) {
 				{Role: "user", Content: "Test message 5"},
 				{Role: "assistant", Content: "Test response 5"},
 			}, // 10メッセージ
+			agentRequestState: agentRequestState{
+				tokenLimitRetryCount: 0,
+			},
 		}
 
 		if len(agent.History) != 10 {
@@ -118,7 +126,6 @@ func TestAgent_handleTokenLimitErrorWithRetry_TestCases(t *testing.T) {
 	// テストケース4: リトライ成功（retryFunc成功 → true, カウンターリセット確認）
 	t.Run("長い履歴の状態確認", func(t *testing.T) {
 		agent := &Agent{
-			tokenLimitRetryCount: 0,
 			History: []api.Message{
 				{Role: "user", Content: "Test message 1"},
 				{Role: "assistant", Content: "Test response 1"},
@@ -143,6 +150,9 @@ func TestAgent_handleTokenLimitErrorWithRetry_TestCases(t *testing.T) {
 				{Role: "user", Content: "Test message 11"},
 				{Role: "assistant", Content: "Test response 11"},
 			}, // 22メッセージ
+			agentRequestState: agentRequestState{
+				tokenLimitRetryCount: 0,
+			},
 		}
 
 		if len(agent.History) != 22 {
@@ -156,10 +166,12 @@ func TestAgent_handleTokenLimitErrorWithRetry_TestCases(t *testing.T) {
 	// テストケース5: リトライ失敗（retryFunc失敗 → false）
 	t.Run("エラー状態の確認", func(t *testing.T) {
 		agent := &Agent{
-			tokenLimitRetryCount: 0,
 			History: []api.Message{
 				{Role: "user", Content: "Test message 1"},
 				{Role: "assistant", Content: "Test response 1"},
+			},
+			agentRequestState: agentRequestState{
+				tokenLimitRetryCount: 0,
 			},
 		}
 

@@ -46,47 +46,33 @@ var (
 	readFileOutlineFooterPattern = regexp.MustCompile(`\(\d+ lines total(?:\.[^)]*)?\)`)
 )
 
-// Agent はCLIエージェント
-type Agent struct {
-	Model                string // 初期モデル（後方互換性のため保持）
-	CurrentModel         string // 現在のモデル（再起動なしで切り替え可能）
-	CurrentProvider      api.Provider
-	ProviderName         string
-	Runtime              *AgentRuntime
-	History              []api.Message
-	SystemPrompt         string
-	session              *history.Session
-	storage              *history.Storage
-	changeStack          []tools.FileChange
-	taskChangeOffset     int                    // タスク開始時の changeStack 長（タスク単位のサマリー表示用）
-	changeStorage        *history.ChangeStorage // 永続的変更履歴
-	mcpManager           *mcp.Manager
-	lspClient            *lsp.Client        // LSPクライアント
-	AutoApprove          bool               // --auto-approve フラグ
-	Stats                *SessionStats      // セッション統計情報
-	lastOutputs          []string           // 最後のAI出力履歴（最大10件）
-	cancelFunc           context.CancelFunc // 現在のAPI呼び出しをキャンセルするための関数
-	requestCtx           context.Context    // 現在のリクエストに紐づく context（ツール実行へ伝播）
-	lastCancelReason     string             // 現在のリクエストがキャンセルされた理由（debug/status用）
-	strReplaceErrorCount int                // str_replace連続エラーカウント（old_str not found）
-	PlanModeEnabled      bool               // Plan Mode ON/OFF（デフォルト: false）
-	ToolCache            *ToolCache         // ツール結果キャッシュ（read_file, list_dir）
-	LocatorRegistry      *locator.Registry  // Locator ID レジストリ（セッション内追記のみ）
-	taskBaseCommitHash   string             // タスク開始時のHEADコミットハッシュ（completion hook の diff 空チェック判定用）
-	taskTestResult       *bool              // 現在タスクの verification/test 結果
-	taskTestCommand      string             // 現在タスクの verification/test コマンド要約
-	status               statusHolder
+type agentConversationState struct {
+	session         *history.Session
+	storage         *history.Storage
+	lastOutputs     []string
+	compactedItems  []api.InputItem
+	isCompactedMode bool
+}
 
-	// LSP診断遅延バッファ: 連続編集途中の一時的エラーによる誤auto-retry防止用。
-	// str_replace/apply_patch 成功後に対象ファイルを追加し、全ツール実行後にフラッシュして再診断する。
-	pendingLSPFiles []string
+type agentRequestState struct {
+	cancelFunc           context.CancelFunc
+	requestCtx           context.Context
+	lastCancelReason     string
+	strReplaceErrorCount int
+	tokenLimitRetryCount int
+}
 
-	// OpenAI Compact API 関連
-	compactedItems  []api.InputItem // 圧縮済みアイテム
-	isCompactedMode bool            // 圧縮モードフラグ
+type agentWorkspaceState struct {
+	changeStack      []tools.FileChange
+	taskChangeOffset int
+	changeStorage    *history.ChangeStorage
+	taskBaseCommitHash string
+	taskTestResult   *bool
+	taskTestCommand  string
+	pendingLSPFiles  []string
+}
 
-	// トークン上限エラー処理
-	tokenLimitRetryCount   int // トークン上限エラー時のリトライ回数（最大1回）
+type agentProjectPromptState struct {
 	projectMapFileCount    int
 	projectMapSymbolCount  int
 	projectMap             *repomap.ProjectMap
@@ -100,6 +86,30 @@ type Agent struct {
 	projectMapBaseKey      string
 	projectMapFocusKey     string
 	projectMapDirty        bool
+}
+
+// Agent はCLIエージェント
+type Agent struct {
+	Model                string // 初期モデル（後方互換性のため保持）
+	CurrentModel         string // 現在のモデル（再起動なしで切り替え可能）
+	CurrentProvider      api.Provider
+	ProviderName         string
+	Runtime              *AgentRuntime
+	History              []api.Message
+	SystemPrompt         string
+	mcpManager           *mcp.Manager
+	lspClient            *lsp.Client        // LSPクライアント
+	AutoApprove          bool               // --auto-approve フラグ
+	Stats                *SessionStats      // セッション統計情報
+	PlanModeEnabled      bool               // Plan Mode ON/OFF（デフォルト: false）
+	ToolCache            *ToolCache         // ツール結果キャッシュ（read_file, list_dir）
+	LocatorRegistry      *locator.Registry  // Locator ID レジストリ（セッション内追記のみ）
+	status               statusHolder
+
+	agentConversationState
+	agentRequestState
+	agentWorkspaceState
+	agentProjectPromptState
 
 	// exitHook は os.Exit 前に呼ばれるフック（TUI モードのターミナル復旧等）
 	exitHook func()
@@ -294,18 +304,22 @@ func NewAgentWithRuntime(model string, provider api.Provider, headless bool, run
 		ProviderName:    strings.ToLower(provider.Name()),
 		Runtime:         runtime,
 		History:         []api.Message{},
-		session:         history.NewSession(model),
-		storage:         storage,
-		changeStack:     []tools.FileChange{},
-		changeStorage:   changeStorage,
 		mcpManager:      mcpManager,
 		lspClient:       lspClient,
 		SystemPrompt:    systemPrompt,
 		Stats:           NewSessionStats(strings.ToLower(provider.Name()), model),
-		lastOutputs:     []string{},
 		ToolCache:       toolCache,
 		LocatorRegistry: locator.NewRegistry(),
 		status:          statusHolder{status: defaultStatus()},
+		agentConversationState: agentConversationState{
+			session:     history.NewSession(model),
+			storage:     storage,
+			lastOutputs: []string{},
+		},
+		agentWorkspaceState: agentWorkspaceState{
+			changeStack:   []tools.FileChange{},
+			changeStorage: changeStorage,
+		},
 	}
 
 	// Usage callback を設定（プロバイダーがサポートしている場合）

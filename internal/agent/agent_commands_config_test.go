@@ -58,8 +58,10 @@ func TestHandleModelCommand_ClearCache(t *testing.T) {
 	agent := &Agent{
 		ProviderName: "mock",
 		CurrentModel: "old-model",
-		session:      history.NewSession("old-model"),
 		Runtime:      NewAgentRuntimeWithConfig(cfg),
+		agentConversationState: agentConversationState{
+			session: history.NewSession("old-model"),
+		},
 	}
 
 	mockProvider := &mockCacheClearableProviderForModel{}
@@ -166,7 +168,6 @@ func TestHandleUseCommand_WithExplicitModel_UpdatesSessionModel(t *testing.T) {
 		CurrentModel:    "gpt-old",
 		CurrentProvider: &mockCacheClearableProviderForModel{name: "openai"},
 		Stats:           NewSessionStats("openai", "gpt-old"),
-		session:         history.NewSession("gpt-old"),
 		History: []api.Message{
 			{
 				Role:    "assistant",
@@ -193,6 +194,9 @@ func TestHandleUseCommand_WithExplicitModel_UpdatesSessionModel(t *testing.T) {
 		Runtime: &AgentRuntime{
 			Config: cfg,
 			UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
+		},
+		agentConversationState: agentConversationState{
+			session: history.NewSession("gpt-old"),
 		},
 	}
 

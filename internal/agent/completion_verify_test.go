@@ -155,8 +155,10 @@ func TestGetTaskChangedFiles(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			a := &Agent{
-				changeStack:      tt.stack,
-				taskChangeOffset: tt.offset,
+				agentWorkspaceState: agentWorkspaceState{
+					changeStack:      tt.stack,
+					taskChangeOffset: tt.offset,
+				},
 			}
 
 			got := a.getTaskChangedFiles()
@@ -187,10 +189,12 @@ func TestVerifyCompletionWithDiagnostics_NoLSP(t *testing.T) {
 
 	t.Run("no_lsp_with_completion_and_changes", func(t *testing.T) {
 		a := &Agent{
-			changeStack: []tools.FileChange{
-				{FilePath: "/src/main.go"},
+			agentWorkspaceState: agentWorkspaceState{
+				changeStack: []tools.FileChange{
+					{FilePath: "/src/main.go"},
+				},
+				taskChangeOffset: 0,
 			},
-			taskChangeOffset: 0,
 		}
 
 		needsContinue, feedback := a.verifyCompletionWithDiagnostics("変更が完了しました。")
@@ -204,10 +208,12 @@ func TestVerifyCompletionWithDiagnostics_NoLSP(t *testing.T) {
 
 	t.Run("no_completion_declaration", func(t *testing.T) {
 		a := &Agent{
-			changeStack: []tools.FileChange{
-				{FilePath: "/src/main.go"},
+			agentWorkspaceState: agentWorkspaceState{
+				changeStack: []tools.FileChange{
+					{FilePath: "/src/main.go"},
+				},
+				taskChangeOffset: 0,
 			},
-			taskChangeOffset: 0,
 		}
 
 		needsContinue, feedback := a.verifyCompletionWithDiagnostics("Let me read the file next.")
@@ -221,8 +227,10 @@ func TestVerifyCompletionWithDiagnostics_NoLSP(t *testing.T) {
 
 	t.Run("no_changed_files", func(t *testing.T) {
 		a := &Agent{
-			changeStack:      nil,
-			taskChangeOffset: 0,
+			agentWorkspaceState: agentWorkspaceState{
+				changeStack:      nil,
+				taskChangeOffset: 0,
+			},
 		}
 
 		needsContinue, feedback := a.verifyCompletionWithDiagnostics("完了しました。")
@@ -445,13 +453,17 @@ func TestRunCompletionHooksWithRetry_UsesRuntimeOutput(t *testing.T) {
 		Runtime:         runtimeA,
 		CurrentProvider: provider,
 		CurrentModel:    "test-model-a",
-		changeStack:     []tools.FileChange{{FilePath: "/src/a.go"}},
+		agentWorkspaceState: agentWorkspaceState{
+			changeStack: []tools.FileChange{{FilePath: "/src/a.go"}},
+		},
 	}
 	agentB := &Agent{
 		Runtime:         runtimeB,
 		CurrentProvider: provider,
 		CurrentModel:    "test-model-b",
-		changeStack:     []tools.FileChange{{FilePath: "/src/b.go"}},
+		agentWorkspaceState: agentWorkspaceState{
+			changeStack: []tools.FileChange{{FilePath: "/src/b.go"}},
+		},
 	}
 
 	if got := agentA.runCompletionHooksWithRetry(context.Background()); got {

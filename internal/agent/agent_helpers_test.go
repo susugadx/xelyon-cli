@@ -295,8 +295,10 @@ func TestBuildProjectMapFocusKey_DedupesWithoutReordering(t *testing.T) {
 func TestBuildProjectMapBaseKey_ChangesWhenBudgetChanges(t *testing.T) {
 	cfg := config.DefaultConfig()
 	agent := &Agent{
-		CurrentModel:       "deepseek-chat",
-		projectMapStateKey: "state",
+		CurrentModel: "deepseek-chat",
+		agentProjectPromptState: agentProjectPromptState{
+			projectMapStateKey: "state",
+		},
 	}
 
 	first := buildProjectMapBaseKey(agent, cfg, 6400, 120, 1200)
@@ -332,20 +334,22 @@ func TestShouldRefreshProjectPrompt_FocusKeyChangeTriggersRefresh(t *testing.T) 
 	stateKey := currentProjectMapStateKey(&Agent{}, root)
 
 	agent := &Agent{
-		Runtime:               NewAgentRuntimeWithConfig(config.DefaultConfig()),
-		projectMap:            &repomap.ProjectMap{},
-		projectMapStateKey:    stateKey,
-		projectMapBaseKey:     buildProjectMapBaseKey(&Agent{CurrentModel: "deepseek-chat", projectMapStateKey: stateKey}, config.DefaultConfig(), calcProjectMapBudget(&Agent{CurrentModel: "deepseek-chat"}, config.DefaultConfig(), 1, 1), 1, 1),
-		projectMapFocusKey:    "",
-		projectMapBaseSection: "cached-base",
-		projectMapSection:     "cached",
-		projectMapDirty:       false,
-		projectMapRootPath:    root,
-		projectMapIgnoreKey:   "",
-		projectMapWatchDirs:   []string{"."},
-		projectMapFileCount:   1,
-		projectMapSymbolCount: 1,
-		CurrentModel:          "deepseek-chat",
+		Runtime:      NewAgentRuntimeWithConfig(config.DefaultConfig()),
+		CurrentModel: "deepseek-chat",
+		agentProjectPromptState: agentProjectPromptState{
+			projectMap:            &repomap.ProjectMap{},
+			projectMapStateKey:    stateKey,
+			projectMapBaseKey:     buildProjectMapBaseKey(&Agent{CurrentModel: "deepseek-chat", agentProjectPromptState: agentProjectPromptState{projectMapStateKey: stateKey}}, config.DefaultConfig(), calcProjectMapBudget(&Agent{CurrentModel: "deepseek-chat"}, config.DefaultConfig(), 1, 1), 1, 1),
+			projectMapFocusKey:    "",
+			projectMapBaseSection: "cached-base",
+			projectMapSection:     "cached",
+			projectMapDirty:       false,
+			projectMapRootPath:    root,
+			projectMapIgnoreKey:   "",
+			projectMapWatchDirs:   []string{"."},
+			projectMapFileCount:   1,
+			projectMapSymbolCount: 1,
+		},
 	}
 
 	if !agent.shouldRefreshProjectPrompt("internal/agent/compress.go を見て") {
@@ -379,17 +383,19 @@ func TestShouldRefreshProjectPrompt_SameQueryReusesPrompt(t *testing.T) {
 
 	focusPaths := []string{"internal/agent/compress.go"}
 	agent := &Agent{
-		Runtime:               NewAgentRuntimeWithConfig(config.DefaultConfig()),
-		projectMap:            &repomap.ProjectMap{},
-		projectMapStateKey:    stateKey,
-		projectMapBaseKey:     buildProjectMapBaseKey(&Agent{CurrentModel: "deepseek-chat", projectMapStateKey: stateKey}, config.DefaultConfig(), calcProjectMapBudget(&Agent{CurrentModel: "deepseek-chat"}, config.DefaultConfig(), 1, 1), 1, 1),
-		projectMapFocusKey:    buildProjectMapFocusKey(focusPaths),
-		projectMapBaseSection: "cached-base",
-		projectMapSection:     "cached",
-		projectMapDirty:       false,
-		projectMapFileCount:   1,
-		projectMapSymbolCount: 1,
-		CurrentModel:          "deepseek-chat",
+		Runtime:      NewAgentRuntimeWithConfig(config.DefaultConfig()),
+		CurrentModel: "deepseek-chat",
+		agentProjectPromptState: agentProjectPromptState{
+			projectMap:            &repomap.ProjectMap{},
+			projectMapStateKey:    stateKey,
+			projectMapBaseKey:     buildProjectMapBaseKey(&Agent{CurrentModel: "deepseek-chat", agentProjectPromptState: agentProjectPromptState{projectMapStateKey: stateKey}}, config.DefaultConfig(), calcProjectMapBudget(&Agent{CurrentModel: "deepseek-chat"}, config.DefaultConfig(), 1, 1), 1, 1),
+			projectMapFocusKey:    buildProjectMapFocusKey(focusPaths),
+			projectMapBaseSection: "cached-base",
+			projectMapSection:     "cached",
+			projectMapDirty:       false,
+			projectMapFileCount:   1,
+			projectMapSymbolCount: 1,
+		},
 	}
 
 	if agent.shouldRefreshProjectPrompt("internal/agent/compress.go を見て") {
@@ -425,18 +431,20 @@ func TestShouldRefreshProjectPrompt_IgnoresRecentToolCacheChurn(t *testing.T) {
 
 	cache := NewToolCache()
 	agent := &Agent{
-		Runtime:               NewAgentRuntimeWithConfig(config.DefaultConfig()),
-		ToolCache:             cache,
-		projectMap:            &repomap.ProjectMap{},
-		projectMapStateKey:    stateKey,
-		projectMapBaseKey:     buildProjectMapBaseKey(&Agent{CurrentModel: "deepseek-chat", projectMapStateKey: stateKey}, config.DefaultConfig(), calcProjectMapBudget(&Agent{CurrentModel: "deepseek-chat"}, config.DefaultConfig(), 1, 1), 1, 1),
-		projectMapFocusKey:    buildProjectMapFocusKey([]string{"main.go"}),
-		projectMapBaseSection: "cached-base",
-		projectMapSection:     "cached",
-		projectMapDirty:       false,
-		projectMapFileCount:   1,
-		projectMapSymbolCount: 1,
-		CurrentModel:          "deepseek-chat",
+		Runtime:      NewAgentRuntimeWithConfig(config.DefaultConfig()),
+		ToolCache:    cache,
+		CurrentModel: "deepseek-chat",
+		agentProjectPromptState: agentProjectPromptState{
+			projectMap:            &repomap.ProjectMap{},
+			projectMapStateKey:    stateKey,
+			projectMapBaseKey:     buildProjectMapBaseKey(&Agent{CurrentModel: "deepseek-chat", agentProjectPromptState: agentProjectPromptState{projectMapStateKey: stateKey}}, config.DefaultConfig(), calcProjectMapBudget(&Agent{CurrentModel: "deepseek-chat"}, config.DefaultConfig(), 1, 1), 1, 1),
+			projectMapFocusKey:    buildProjectMapFocusKey([]string{"main.go"}),
+			projectMapBaseSection: "cached-base",
+			projectMapSection:     "cached",
+			projectMapDirty:       false,
+			projectMapFileCount:   1,
+			projectMapSymbolCount: 1,
+		},
 	}
 
 	cache.SetFile(filePath, "package main\n")
