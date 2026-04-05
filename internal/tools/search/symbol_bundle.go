@@ -71,4 +71,5 @@ type SymbolBundleDebug struct {
 	FileRootPath    string
 	Route           searchRouteTrace
 	MatchedPatterns []string
+	DependencyFiles []string
 }
