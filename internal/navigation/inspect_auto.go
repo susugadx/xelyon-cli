@@ -203,6 +203,14 @@ func normalizeResultFilePath(path, targetRoot, sourceBase string) string {
 		}
 	}
 
+	// Some navigation helpers still emit paths relative to the process cwd.
+	// Recover those into snapshot-relative paths when the referenced file exists.
+	if absPath, err := filepath.Abs(filepath.FromSlash(path)); err == nil && pathExists(absPath) {
+		if rel, ok := absoluteToSnapshotRel(targetRoot, absPath); ok {
+			return filepath.Clean(filepath.ToSlash(rel))
+		}
+	}
+
 	return filepath.Clean(filepath.ToSlash(path))
 }
 
