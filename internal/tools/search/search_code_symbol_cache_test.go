@@ -17,8 +17,9 @@ func TestSearchCode_SymbolFastPathCachesAffectedFiles(t *testing.T) {
 
 	cache := &testSearchCache{data: make(map[string]string)}
 	opts := SearchOptions{
-		Pattern: "Run",
-		Path:    dir,
+		Pattern:  "Run",
+		Path:     dir,
+		FileType: "go",
 		ProjectMap: &repomap.ProjectMap{
 			RootPath: dir,
 			Files: []*repomap.FileEntry{
@@ -54,8 +55,9 @@ func TestSearchCode_MultiPatternCacheTracksBundleAndTextAffectedFiles(t *testing
 
 	cache := &testSearchCache{data: make(map[string]string)}
 	opts := SearchOptions{
-		Pattern: "Run,helper()",
-		Path:    dir,
+		Pattern:  "Run,helper()",
+		Path:     dir,
+		FileType: "go",
 		ProjectMap: &repomap.ProjectMap{
 			RootPath: dir,
 			Files: []*repomap.FileEntry{
@@ -93,8 +95,9 @@ func TestSearchCode_MultiPatternCacheSupplementsSymbolMultipleAffectedFiles(t *t
 
 	cache := &testSearchCache{data: make(map[string]string)}
 	opts := SearchOptions{
-		Pattern: "helper(,Run",
-		Path:    dir,
+		Pattern:  "helper(,Run",
+		Path:     dir,
+		FileType: "go",
 		ProjectMap: &repomap.ProjectMap{
 			RootPath: dir,
 			Files: []*repomap.FileEntry{
@@ -146,8 +149,9 @@ func TestCollectAffectedFilesFromExecutions_SupplementsGoSymbolMultipleWithProje
 	})
 
 	opts := SearchOptions{
-		Pattern: "helper(,Run",
-		Path:    dir,
+		Pattern:  "helper(,Run",
+		Path:     dir,
+		FileType: "go",
 		ProjectMap: &repomap.ProjectMap{
 			RootPath: dir,
 			Files: []*repomap.FileEntry{
@@ -213,8 +217,9 @@ func TestCollectAffectedFilesFromExecutions_RepairsWrongGoSymbolMultipleAffected
 	}
 
 	opts := SearchOptions{
-		Pattern: "helper(,Run",
-		Path:    dir,
+		Pattern:  "helper(,Run",
+		Path:     dir,
+		FileType: "go",
 		ProjectMap: &repomap.ProjectMap{
 			RootPath: outerDir,
 			Files: []*repomap.FileEntry{
