@@ -20,6 +20,14 @@ func newTurnRunner(agent *Agent, ctx context.Context) *TurnRunner {
 	return &TurnRunner{agent: agent, ctx: ctx}
 }
 
+func (r *TurnRunner) promptManager() *PromptManager {
+	return newPromptManager(r.agent)
+}
+
+func (r *TurnRunner) mutationTracker() *MutationTracker {
+	return newMutationTracker(r.agent)
+}
+
 func (r *TurnRunner) resetLoopDetectionState() {
 	r.lastToolCall = nil
 	r.sameCallCount = 0
@@ -56,7 +64,7 @@ func (r *TurnRunner) buildLoopDetectFn() func(*tools.ToolCall) bool {
 
 func (r *TurnRunner) appendDeferredLSPDiagnostics() {
 	a := r.agent
-	if diagMsg := a.flushLSPDiagnostics(); diagMsg != "" && len(a.History) > 0 {
+	if diagMsg := r.mutationTracker().FlushDeferredDiagnostics(); diagMsg != "" && len(a.History) > 0 {
 		a.History[len(a.History)-1].Content += diagMsg
 	}
 }

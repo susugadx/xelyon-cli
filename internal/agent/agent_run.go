@@ -227,20 +227,7 @@ func appendHeadlessToolResultToHistory(agent *Agent, toolCall *tools.ToolCall, r
 	if agent == nil || toolCall == nil {
 		return
 	}
-	if toolCall.ID != "" {
-		agent.History = append(agent.History, api.Message{
-			Role:       "tool",
-			Content:    result,
-			ToolCallID: toolCall.ID,
-			ToolName:   toolCall.Tool,
-		})
-		return
-	}
-
-	agent.History = append(agent.History, api.Message{
-		Role:    "user",
-		Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, result),
-	})
+	agent.History = append(agent.History, buildToolResultMessage(toolCall, result, formatTextToolResultContent(toolCall.Tool, result)))
 }
 
 // extractToolFilePath はツール呼び出しから表示用ターゲットを抽出する。

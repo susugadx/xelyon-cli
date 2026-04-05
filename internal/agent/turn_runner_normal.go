@@ -3,7 +3,6 @@ package agent
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/agent/plan"
 	"github.com/susugadx/xelyon-cli/internal/api"
@@ -107,7 +106,7 @@ func (r *TurnRunner) runNormalModeLoop(input string, image *api.ImageData) error
 func (r *TurnRunner) requestNormalModeResponse(input string, image *api.ImageData, iteration int) (string, error) {
 	a := r.agent
 	if iteration == 0 {
-		a.refreshProjectPromptIfDirty(input)
+		r.promptManager().RefreshProjectPromptIfDirty(input)
 	}
 	effectivePrompt := prompt.StripPlanningReferences(a.SystemPrompt)
 
@@ -265,6 +264,7 @@ func (r *TurnRunner) handleNormalModeNoToolResponse(response string, cfg *config
 
 func (r *TurnRunner) processNormalModeToolCalls(response string, toolCalls []*tools.ToolCall, rs *retryState) error {
 	a := r.agent
+	tracker := r.mutationTracker()
 	var lastFailedResult string
 
 	execToolCalls := r.processDeprecatedCreatePlanCalls(response, toolCalls)
@@ -273,7 +273,6 @@ func (r *TurnRunner) processNormalModeToolCalls(response string, toolCalls []*to
 	}
 
 	toolLoopDetected := r.executeToolCalls(response, execToolCalls, nil, func(_ int, tc *tools.ToolCall, result string, change *tools.FileChange) {
-		a.noteProjectMapMutation(tc, change)
 		a.appendSessionToolExecution(tc, result)
 
 		if a.handleStrReplaceErrors(tc, result) {
@@ -283,38 +282,10 @@ func (r *TurnRunner) processNormalModeToolCalls(response string, toolCalls []*to
 			return
 		}
 
-		a.handleFileChange(change)
+		tracker.RecordToolResult(tc, result, change)
 
-		if tc.ID != "" {
-			toolMsg := api.Message{
-				Role:       "tool",
-				Content:    result,
-				ToolCallID: tc.ID,
-				ToolName:   tc.Tool,
-			}
-			a.History = append(a.History, toolMsg)
-			a.appendSessionMessageFromAPI(toolMsg, a.CurrentModel)
-		} else {
-			toolResultMsg := api.Message{
-				Role:    "user",
-				Content: fmt.Sprintf("[Tool Result for %s]\n%s", tc.Tool, result),
-			}
-			a.History = append(a.History, toolResultMsg)
-			a.appendSessionMessage(toolResultMsg.Role, toolResultMsg.Content, a.CurrentModel)
-		}
+		a.appendToolResultToHistory(tc, result)
 		_, _ = fmt.Fprintln(a.output())
-
-		if !strings.HasPrefix(result, "Error:") &&
-			!strings.HasPrefix(result, "[CANCELLED]") && !strings.HasPrefix(result, "[COMMENT]") {
-			switch tc.Tool {
-			case "str_replace":
-				if path := tc.Args["path"]; path != "" {
-					a.addPendingLSPFile(path)
-				}
-			case "apply_patch":
-				a.addPendingLSPFilesFromChange(change)
-			}
-		}
 
 		if tc.Tool == "bash" || tools.IsWriteTool(tc.Tool) {
 			if failed, _ := plan.ContainsFailure(result); failed {
@@ -389,12 +360,7 @@ func (r *TurnRunner) processDeprecatedCreatePlanCalls(response string, toolCalls
 		r.appendAssistantHistoryOnly(response)
 		a.appendSessionMessage("assistant", response, a.CurrentModel)
 
-		toolResultMsg := api.Message{
-			Role:    "user",
-			Content: fmt.Sprintf("[Tool Result for create_plan]\n%s", result),
-		}
-		a.History = append(a.History, toolResultMsg)
-		a.appendSessionMessage(toolResultMsg.Role, toolResultMsg.Content, a.CurrentModel)
+		a.appendToolResultToHistory(toolCall, result)
 
 		yellow.Fprintln(a.output(), "⚠️  create_plan is deprecated, continuing in normal mode...")
 	}

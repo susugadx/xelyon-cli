@@ -425,27 +425,7 @@ func (a *Agent) executeToolOnly(toolCall *tools.ToolCall) string {
 	a.handleFileChange(change)
 
 	// 結果を履歴に追加
-	if toolCall.ID != "" {
-		// Function Calling: role="tool" で tool_call_id 付きで送信
-		toolMsg := api.Message{
-			Role:       "tool",
-			Content:    result,
-			ToolCallID: toolCall.ID,
-			ToolName:   toolCall.Tool,
-		}
-		a.History = append(a.History, toolMsg)
-
-		// セッションに tool result を保存
-		a.appendSessionMessageFromAPI(toolMsg, a.CurrentModel)
-	} else {
-		// テキストベース: role="user" で送信（従来方式）
-		toolResultMsg := api.Message{
-			Role:    "user",
-			Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, result),
-		}
-		a.History = append(a.History, toolResultMsg)
-		a.appendSessionMessage(toolResultMsg.Role, toolResultMsg.Content, a.CurrentModel)
-	}
+	a.appendToolResultToHistory(toolCall, result)
 
 	_, _ = fmt.Fprintln(a.output())
 	return result
@@ -586,27 +566,7 @@ func (a *Agent) executeToolCallInternal(response string, toolCall *tools.ToolCal
 	a.handleFileChange(change)
 
 	// 結果を履歴に追加
-	if toolCall.ID != "" {
-		// Function Calling: role="tool" で tool_call_id 付きで送信
-		toolMsg := api.Message{
-			Role:       "tool",
-			Content:    result,
-			ToolCallID: toolCall.ID,
-			ToolName:   toolCall.Tool,
-		}
-		a.History = append(a.History, toolMsg)
-
-		// セッションに tool result を保存
-		a.appendSessionMessageFromAPI(toolMsg, a.CurrentModel)
-	} else {
-		// テキストベース: role="user" で送信（従来方式）
-		toolResultMsg := api.Message{
-			Role:    "user",
-			Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, result),
-		}
-		a.History = append(a.History, toolResultMsg)
-		a.appendSessionMessage(toolResultMsg.Role, toolResultMsg.Content, a.CurrentModel)
-	}
+	a.appendToolResultToHistory(toolCall, result)
 
 	_, _ = fmt.Fprintln(a.output())
 	return result
@@ -640,21 +600,8 @@ func (a *Agent) handleStrReplaceErrors(toolCall *tools.ToolCall, result string) 
 			_, _ = fmt.Fprintln(out)
 
 			// AIに警告を送信
-			if toolCall.ID != "" {
-				// Function Calling 形式: role="tool" で tool_call_id 付き
-				a.History = append(a.History, api.Message{
-					Role:       "tool",
-					Content:    fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, result),
-					ToolCallID: toolCall.ID,
-					ToolName:   toolCall.Tool,
-				})
-			} else {
-				// テキストベース: role="user" で送信
-				a.History = append(a.History, api.Message{
-					Role:    "user",
-					Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, result),
-				})
-			}
+			content := formatTextToolResultContent(toolCall.Tool, result)
+			a.History = append(a.History, buildToolResultMessage(toolCall, content, content))
 			a.History = append(a.History, api.Message{
 				Role: "user",
 				Content: `[SYSTEM WARNING] str_replace has failed multiple times. The old_str pattern was not found in the file.
@@ -706,20 +653,7 @@ func (a *Agent) handleCommentFlow(toolCall *tools.ToolCall, result string) bool 
 	}
 
 	// 結果を履歴に追加（Function Calling形式を考慮）
-	isFunctionCalling := toolCall.ID != ""
-	if isFunctionCalling {
-		a.History = append(a.History, api.Message{
-			Role:       "tool",
-			Content:    result,
-			ToolCallID: toolCall.ID,
-			ToolName:   toolCall.Tool,
-		})
-	} else {
-		a.History = append(a.History, api.Message{
-			Role:    "user",
-			Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, result),
-		})
-	}
+	a.History = append(a.History, buildToolResultMessage(toolCall, result, formatTextToolResultContent(toolCall.Tool, result)))
 
 	// AIに「コメントを反映して別案を提示」するよう促す
 	a.History = append(a.History, api.Message{
@@ -742,43 +676,11 @@ IMPORTANT:
 
 // handleFileChange は変更履歴を保存
 func (a *Agent) handleFileChange(change *tools.FileChange) {
-	if change == nil {
-		return
-	}
-
-	a.invalidateProjectMap()
-
-	a.changeStack = append(a.changeStack, *change)
-	if len(a.changeStack) > config.MaxChangeStack {
-		a.changeStack = a.changeStack[1:]
-	}
-
-	// 永続的変更履歴に保存
-	if a.changeStorage != nil && a.session != nil {
-		if err := a.changeStorage.AppendChange(a.session.ID, *change); err != nil {
-			// エラーログは出すが実行は継続
-			yellow.Fprintf(a.output(), "Warning: Failed to persist change: %v\n", err)
-		}
-	}
+	a.mutationTracker().RecordFileChange(change)
 }
 
 func (a *Agent) noteProjectMapMutation(tc *tools.ToolCall, change *tools.FileChange) {
-	if change != nil {
-		a.invalidateProjectMap()
-		return
-	}
-	if tc == nil {
-		return
-	}
-	if tc.Tool == "bash" {
-		if !tools.IsReadOnlyBashCommand(tc.Args["command"]) {
-			a.invalidateProjectMap()
-		}
-		return
-	}
-	if tools.IsWriteTool(tc.Tool) {
-		a.invalidateProjectMap()
-	}
+	a.mutationTracker().NoteProjectMapMutation(tc, change)
 }
 
 // ToolExecCallback は executeToolCallsWithParallel の呼び出し元が各結果を処理するコールバック。
@@ -1168,25 +1070,7 @@ func (a *Agent) executeToolCallsWithParallel(
 		switch e.status {
 		case statusSkip:
 			// スキップされたツール: skipMsg を tool result として履歴に追加
-			if tc.ID != "" {
-				// FC: role="tool" + tool_call_id
-				toolMsg := api.Message{
-					Role:       "tool",
-					Content:    e.skipMsg,
-					ToolCallID: tc.ID,
-					ToolName:   tc.Tool,
-				}
-				a.History = append(a.History, toolMsg)
-				a.appendSessionMessageFromAPI(toolMsg, a.CurrentModel)
-			} else {
-				// text-based: role="user"
-				toolResultMsg := api.Message{
-					Role:    "user",
-					Content: fmt.Sprintf("[Tool Result for %s]\n%s", tc.Tool, e.skipMsg),
-				}
-				a.History = append(a.History, toolResultMsg)
-				a.appendSessionMessage(toolResultMsg.Role, toolResultMsg.Content, a.CurrentModel)
-			}
+			a.appendToolResultToHistory(tc, e.skipMsg)
 
 		case statusLoopAbort:
 			if i == loopTriggerIdx {

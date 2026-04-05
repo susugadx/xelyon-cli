@@ -21,7 +21,6 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/pathmatch"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
-	promptplan "github.com/susugadx/xelyon-cli/internal/prompt/plan"
 	"github.com/susugadx/xelyon-cli/internal/repomap"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
@@ -637,29 +636,7 @@ func effectiveProjectMapContextRatio(baseRatio float64, fileCount, symbolCount i
 // rebuildSystemPromptForCurrentProvider は現在の provider/model に合わせて
 // SystemPrompt をベースから再構築する。
 func (a *Agent) rebuildSystemPromptForCurrentProvider() {
-	if a == nil || a.CurrentProvider == nil {
-		return
-	}
-
-	planningPrompt := promptplan.BuildPlanningPrompt()
-	hadPlanPrompt := strings.Contains(a.SystemPrompt, planningPrompt)
-
-	systemPrompt := prompt.GetSystemPromptForProvider(a.CurrentProvider.Name(), a.CurrentModel)
-	if a.mcpManager != nil && len(a.mcpManager.GetTools()) > 0 {
-		systemPrompt += buildMCPToolsPrompt(a.mcpManager)
-	}
-	systemPrompt = prompt.BuildProviderSystemPromptWithConfig(systemPrompt, a.CurrentProvider.Name(), a.CurrentModel, a.cfg())
-
-	if pc := loadProjectConfig(); pc != nil {
-		systemPrompt = injectProjectConfig(systemPrompt, pc, "")
-	}
-
-	if hadPlanPrompt {
-		systemPrompt += api.SystemPromptCacheBoundary + planningPrompt
-	}
-
-	a.SystemPrompt = systemPrompt
-	injectProjectMap(a, "")
+	a.promptManager().RebuildSystemPromptForCurrentProvider()
 }
 
 func estimateProjectConfigTokens(pc *config.ProjectConfig) int {
@@ -672,99 +649,19 @@ func estimateProjectConfigTokens(pc *config.ProjectConfig) int {
 }
 
 func (a *Agent) refreshProjectPrompt(input string) {
-	if a == nil {
-		return
-	}
-
-	// project config の選択結果を構築（入力依存の conditional ブロック含む）
-	pc := loadProjectConfig()
-	var newConfigBlock string
-	if pc != nil {
-		selection := config.SelectProjectPromptSelection(pc, input)
-		newConfigBlock = prompt.BuildProjectConfigBlock(selection.Rules, selection.Contexts)
-	}
-
-	// project config が前回と同じなら strip → inject の再構築をスキップ。
-	// 繰り返しで改行数が変わりキャッシュ prefix が無効化されるのを回避。
-	oldConfigBlock := prompt.ExtractProjectConfigBlock(a.SystemPrompt)
-	if strings.TrimSpace(newConfigBlock) != strings.TrimSpace(oldConfigBlock) {
-		// project config が変わった → system prompt を再構築
-		systemPrompt := stripProjectMapSection(prompt.StripProjectConfigSections(a.SystemPrompt))
-		if newConfigBlock != "" {
-			systemPrompt = prompt.InjectProjectConfigBlock(systemPrompt, newConfigBlock)
-		}
-		a.SystemPrompt = systemPrompt
-	} else {
-		// project config は同じ → project map 部分のみ更新
-		a.SystemPrompt = stripProjectMapSection(a.SystemPrompt)
-	}
-	injectProjectMap(a, input)
+	a.promptManager().RefreshProjectPrompt(input)
 }
 
 func (a *Agent) refreshProjectPromptIfDirty(input string) {
-	if a == nil || !a.shouldRefreshProjectPrompt(input) {
-		return
-	}
-	a.refreshProjectPrompt(input)
+	a.promptManager().RefreshProjectPromptIfDirty(input)
 }
 
 func (a *Agent) shouldRefreshProjectPrompt(input string) bool {
-	if a == nil {
-		return false
-	}
-	if a.projectMapDirty {
-		return true
-	}
-
-	cfg := a.cfg()
-	if cfg == nil || !cfg.ProjectMap.Enabled || !common.IsRipgrepAvailable() {
-		return false
-	}
-
-	cwd, err := os.Getwd()
-	if err != nil {
-		return false
-	}
-
-	pc := loadProjectConfig()
-	rootPath := cwd
-	if pc != nil && strings.TrimSpace(pc.FilePath) != "" {
-		rootPath = filepath.Dir(pc.FilePath)
-	}
-
-	if stateKey := currentProjectMapStateKey(a, rootPath); stateKey != "" && stateKey != a.projectMapStateKey {
-		return true
-	}
-
-	baseKey := buildProjectMapBaseKey(a, cfg, calcProjectMapBudget(a, cfg, a.projectMapFileCount, a.projectMapSymbolCount), a.projectMapFileCount, a.projectMapSymbolCount)
-	if a.projectMapBaseKey != baseKey {
-		return true
-	}
-
-	focusPaths := extractProjectMapFocusPaths(cwd, rootPath, input, projectMapFocusMaxPaths)
-	if a.projectMapFocusKey != buildProjectMapFocusKey(focusPaths) {
-		return true
-	}
-
-	return a.projectMap == nil || a.projectMapBaseSection == "" || a.projectMapSection == ""
+	return a.promptManager().ShouldRefreshProjectPrompt(input)
 }
 
 func (a *Agent) invalidateProjectMap() {
-	if a == nil {
-		return
-	}
-
-	a.projectMap = nil
-	a.projectMapRootPath = ""
-	a.projectMapIgnoreKey = ""
-	a.projectMapStateKey = ""
-	a.projectMapWatchDirs = nil
-	a.projectMapBaseSection = ""
-	a.projectMapFocusSection = ""
-	a.projectMapSection = ""
-	a.projectMapBaseKey = ""
-	a.projectMapFocusKey = ""
-	a.projectMapDirty = true
+	a.promptManager().InvalidateProjectMap()
 }
 
 func currentProjectMapStateKey(agent *Agent, rootPath string) string {

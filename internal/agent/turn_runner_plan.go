@@ -90,7 +90,7 @@ func (r *TurnRunner) runPlanStepLoop(p *plan.Plan, step *plan.PlanStep, idx int,
 
 func (r *TurnRunner) requestPlanStepResponse(stepPrompt string) (string, error) {
 	a := r.agent
-	a.refreshProjectPromptIfDirty(stepPrompt)
+	r.promptManager().RefreshProjectPromptIfDirty(stepPrompt)
 
 	response, err := a.CurrentProvider.ChatWithTools(
 		a.requestContext(r.ctx),
@@ -164,22 +164,11 @@ func (r *TurnRunner) handleStepNoToolResponse(response string, step *plan.PlanSt
 
 func (r *TurnRunner) processStepToolCalls(execToolCalls []*tools.ToolCall, step *plan.PlanStep, p *plan.Plan, idx int, rs *retryState, state *stepRunState) (bool, error) {
 	a := r.agent
+	tracker := r.mutationTracker()
 
 	r.executeToolCalls("", execToolCalls, r.planStepSkipFn, func(_ int, toolCall *tools.ToolCall, result string, change *tools.FileChange) {
-		a.noteProjectMapMutation(toolCall, change)
 		a.appendSessionToolExecution(toolCall, result)
-
-		if !strings.HasPrefix(result, "Error:") &&
-			!strings.HasPrefix(result, "[CANCELLED]") && !strings.HasPrefix(result, "[COMMENT]") {
-			switch toolCall.Tool {
-			case "str_replace":
-				if path := toolCall.Args["path"]; path != "" {
-					a.addPendingLSPFile(path)
-				}
-			case "apply_patch":
-				a.addPendingLSPFilesFromChange(change)
-			}
-		}
+		tracker.RecordToolResult(toolCall, result, change)
 
 		if tools.IsWriteTool(toolCall.Tool) {
 			state.stepHadWrites = true
@@ -197,104 +186,14 @@ func (r *TurnRunner) processStepToolCalls(execToolCalls []*tools.ToolCall, step 
 			}
 		}
 
-		a.handleFileChange(change)
-
-		if toolCall.ID != "" {
-			toolMsg := api.Message{
-				Role:       "tool",
-				Content:    result,
-				ToolCallID: toolCall.ID,
-				ToolName:   toolCall.Tool,
-			}
-			a.History = append(a.History, toolMsg)
-			a.appendSessionMessageFromAPI(toolMsg, a.CurrentModel)
-		} else {
-			toolResultMsg := api.Message{
-				Role:    "user",
-				Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, result),
-			}
-			a.History = append(a.History, toolResultMsg)
-			a.appendSessionMessage(toolResultMsg.Role, toolResultMsg.Content, a.CurrentModel)
-		}
+		a.appendToolResultToHistory(toolCall, result)
 	})
 
 	if state.lastFailedResult == "" {
 		return false, nil
 	}
 
-	level := rs.recordFailure(state.lastFailedResult)
-	switch level {
-	case stalledNone:
-		a.ui().StopSpinner()
-		red.Fprintf(a.output(), "❌ Step %d Failed (auto-retry %d)\n", step.ID, rs.count)
-		yellow.Fprintf(a.output(), "🔄 Retrying...\n")
-
-		retryInstruction := planModeRetryInstruction(rs.count)
-		a.History = append(a.History, api.Message{
-			Role: "user",
-			Content: fmt.Sprintf("The previous step FAILED with the following error:\n\n%s\n\n%s",
-				state.lastFailedResult, retryInstruction),
-		})
-		return true, r.ExecuteStep(p, step, idx, rs)
-
-	case stalledSoft:
-		a.ui().StopSpinner()
-		yellow.Fprintf(a.output(), "⚠️  Step %d: similar failure repeated %d times (auto-retry %d)\n", step.ID, rs.sameCount, rs.count)
-		yellow.Fprintf(a.output(), "🔄 Retrying with strategy change...\n")
-
-		a.History = append(a.History, api.Message{
-			Role: "user",
-			Content: fmt.Sprintf("The previous step FAILED with the following error:\n\n%s\n\n"+
-				"WARNING: A similar failure has now occurred %d times in a row.\n"+
-				"Your previous approach is likely wrong — do not repeat the same fix pattern.\n\n%s",
-				state.lastFailedResult, rs.sameCount, planModeRetryInstruction(rs.count)),
-		})
-		return true, r.ExecuteStep(p, step, idx, rs)
-	}
-
-	a.SetStatus(StateWaitingApproval, "Step failed - waiting for action", "ステップ失敗 - アクション待ち", "Choose action", "アクションを選択")
-	a.ui().StopSpinner()
-
-	for {
-		action, comment := promptFailureActionWithSelector(a.ui().PromptIO(), step, state.lastFailedResult, state.lastFailReason, rs.count)
-		switch action {
-		case plan.FailureActionRetry:
-			a.History = append(a.History, api.Message{
-				Role: "user",
-				Content: fmt.Sprintf(`The previous step FAILED with the following error:
-
-%s
-
-Please:
-1. Analyze the error carefully
-2. Identify the root cause
-3. Fix the code or configuration
-4. Re-run the step to verify the fix
-
-Do NOT skip this step. The issue must be resolved before proceeding.`, state.lastFailedResult),
-			})
-			return true, r.ExecuteStep(p, step, idx, &retryState{})
-		case plan.FailureActionComment:
-			a.History = append(a.History, api.Message{
-				Role: "user",
-				Content: fmt.Sprintf(`The previous step FAILED. Here are the user's instructions for fixing it:
-
-%s
-
-Error that occurred:
-%s
-
-Please follow these instructions to fix the issue and retry the step.`, comment, state.lastFailedResult),
-			})
-			return true, r.ExecuteStep(p, step, idx, &retryState{})
-		case plan.FailureActionSkip:
-			yellow.Fprintf(a.output(), "⏭️  Step %d skipped by user\n", step.ID)
-			return true, nil
-		case plan.FailureActionAbort:
-			red.Fprintf(a.output(), "🛑 Step %d aborted by user\n", step.ID)
-			return true, fmt.Errorf("step %d aborted by user: %s", step.ID, state.lastFailReason)
-		}
-	}
+	return newPlanStepFailureHandler(r, p, step, idx, rs, state).Handle()
 }
 
 func (r *TurnRunner) planStepSkipFn(tc *tools.ToolCall) (bool, string) {
