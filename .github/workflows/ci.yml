@@ -38,52 +38,37 @@ jobs:
 
       # 依存関係の整合性を確認
       - name: Verify dependencies
-        run: go mod verify
+        run: make ci-verify-deps
 
       # go mod tidy で不要な依存がないか確認
       # 差分があれば CI 失敗（コミット忘れ防止）
       - name: Run go mod tidy
-        run: |
-          go mod tidy
-          git diff --exit-code go.mod go.sum
+        run: make ci-check-tidy
 
       # go fmt でフォーマットされているか確認
       # 差分があれば CI 失敗
       - name: Run go fmt
-        run: |
-          go fmt ./...
-          git diff --exit-code
+        run: make ci-check-fmt
 
       # ビルド確認
       - name: Build
-        run: go build -tags grammar_set_core -v -o xelyon
+        run: make ci-build
 
       # バイナリサイズチェック
       # 50MB を超えると警告（肥大化防止）
       - name: Check binary size
-        run: |
-          size=$(stat -c%s xelyon)
-          echo "Binary size: $((size / 1024 / 1024))MB ($size bytes)"
-          if [ $size -gt 52428800 ]; then
-            echo "::warning::Binary size exceeds 50MB!"
-          fi
+        run: make ci-check-binary-size
 
       # テスト実行
       # -race: データ競合を検出
       # -coverprofile: カバレッジレポート出力
       - name: Run tests
-        run: go test -p=2 -v -race -coverprofile=coverage.txt -covermode=atomic -tags grammar_set_core ./...
+        run: make ci-test
 
       # カバレッジ閾値チェック
       # 60% 未満は CI 失敗
       - name: Check coverage threshold
-        run: |
-          coverage=$(go tool cover -func=coverage.txt | grep total | awk '{print $3}' | sed 's/%//')
-          echo "Total coverage: $coverage%"
-          if [ $(echo "$coverage < 60" | bc -l) -eq 1 ]; then
-            echo "::error::Coverage $coverage% is below 60% threshold"
-            exit 1
-          fi
+        run: make ci-check-coverage
 
       # Codecov にカバレッジをアップロード
       # PR でカバレッジの増減が見れる

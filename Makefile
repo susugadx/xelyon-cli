@@ -1,6 +1,12 @@
 # XELYON CLI Makefile
 
-.PHONY: build test fmt lint gen-config gen-docs gen-registry gen-help gen-all clean check ci-check ci-check-full e2e release-check
+.PHONY: build test fmt lint gen-config gen-docs gen-registry gen-help gen-all clean check ci-check ci-check-full e2e release-check ci-verify-deps ci-check-fmt ci-check-tidy ci-build ci-check-binary-size ci-lint ci-test ci-check-coverage release-test
+
+CI_BINARY := xelyon
+CI_COVERAGE_FILE := coverage.txt
+CI_COVERAGE_THRESHOLD := 60
+CI_TEST_CMD := go test -p=2 -v -race -coverprofile=$(CI_COVERAGE_FILE) -covermode=atomic -tags grammar_set_core ./...
+RELEASE_TEST_CMD := go test -p=2 -v -race -tags grammar_set_core ./...
 
 # ビルド
 build:
@@ -50,8 +56,15 @@ clean:
 # 全てのチェック
 check: fmt test lint
 
-# CIと同じチェック（未フォーマットがあればエラー）
-ci-check:
+# CI の依存関係整合性チェック
+ci-verify-deps:
+	@echo "=== Verifying dependencies ==="
+	@go mod verify
+	@echo "✓ Dependency verification passed"
+	@echo ""
+
+# CI の go fmt チェック
+ci-check-fmt:
 	@echo "=== Checking go fmt ==="
 	@if [ -n "$$(go fmt ./...)" ]; then \
 		echo "Error: Files need formatting. Run 'make fmt' to fix."; \
@@ -59,6 +72,9 @@ ci-check:
 	fi
 	@echo "✓ go fmt check passed"
 	@echo ""
+
+# CI の go mod tidy チェック
+ci-check-tidy:
 	@echo "=== Checking go mod tidy ==="
 	@go mod tidy
 	@if ! git diff --exit-code go.mod go.sum >/dev/null; then \
@@ -67,18 +83,66 @@ ci-check:
 	fi
 	@echo "✓ go mod tidy check passed"
 	@echo ""
-	@echo "=== Building all packages ==="
-	@go build -tags grammar_set_core ./...
+
+# CI のビルドチェック
+ci-build:
+	@echo "=== Building binary ==="
+	@go build -tags grammar_set_core -v -o $(CI_BINARY)
 	@echo "✓ Build check passed"
 	@echo ""
+
+# CI のバイナリサイズ確認
+ci-check-binary-size:
+	@echo "=== Checking binary size ==="
+	@size=$$(stat -c%s $(CI_BINARY)); \
+	echo "Binary size: $$((size / 1024 / 1024))MB ($$size bytes)"; \
+	if [ $$size -gt 52428800 ]; then \
+		echo "Warning: Binary size exceeds 50MB!"; \
+	fi
+	@echo "✓ Binary size check passed"
+	@echo ""
+
+# CI の lint チェック
+ci-lint:
 	@echo "=== Running golangci-lint ==="
 	@golangci-lint run
 	@echo "✓ Lint check passed"
 	@echo ""
+
+# CI と同じテストコマンド
+ci-test:
 	@echo "=== Running tests ==="
-	@go test -p=2 -tags grammar_set_core -race -timeout 180s ./...
+	@$(CI_TEST_CMD)
 	@echo "✓ Tests passed"
 	@echo ""
+
+# CI のカバレッジ閾値チェック
+ci-check-coverage:
+	@echo "=== Checking coverage threshold ==="
+	@coverage=$$(go tool cover -func=$(CI_COVERAGE_FILE) | awk '/^total:/ {gsub(/%/, "", $$3); print $$3}'); \
+	if [ -z "$$coverage" ]; then \
+		echo "Error: Failed to read total coverage from $(CI_COVERAGE_FILE)."; \
+		exit 1; \
+	fi; \
+	echo "Total coverage: $$coverage%"; \
+	awk "BEGIN { exit !($$coverage >= $(CI_COVERAGE_THRESHOLD)) }" >/dev/null 2>&1 || { \
+		echo "Error: Coverage $$coverage% is below $(CI_COVERAGE_THRESHOLD)% threshold"; \
+		exit 1; \
+	}
+	@echo "✓ Coverage check passed"
+	@echo ""
+
+# CI と同じ主要チェック（ローカル実行向け）
+ci-check:
+	@$(MAKE) --no-print-directory ci-check-fmt
+	@$(MAKE) --no-print-directory ci-verify-deps
+	@$(MAKE) --no-print-directory ci-check-tidy
+	@$(MAKE) --no-print-directory ci-build
+	@$(MAKE) --no-print-directory ci-check-binary-size
+	@$(MAKE) --no-print-directory ci-lint
+	@$(MAKE) --no-print-directory ci-test
+	@$(MAKE) --no-print-directory ci-check-coverage
+	@rm -f $(CI_BINARY) $(CI_COVERAGE_FILE)
 	@echo "✅ All CI checks passed!"
 
 # インテグレーションテスト含む全テスト
@@ -86,6 +150,10 @@ ci-check-full:
 	@echo "=== Running all tests (including integration) ==="
 	@go test -tags "grammar_set_core integration" -race -timeout 600s ./...
 	@echo "✓ All tests passed (including integration)"
+
+# リリース検証と同じテスト
+release-test:
+	@$(RELEASE_TEST_CMD)
 
 # E2Eテスト（実際のLLM APIを使用、OPENAI_API_KEY必須）
 e2e:

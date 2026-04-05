@@ -34,7 +34,7 @@ jobs:
 
     # リリース前にテスト実行
     - name: Run tests
-      run: go test -p=2 -v -race -tags grammar_set_core ./...
+      run: make release-test
 
     # セキュリティチェック（リリース前に必須）
     - name: Run govulncheck
