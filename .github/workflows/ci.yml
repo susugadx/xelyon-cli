@@ -93,6 +93,35 @@ jobs:
                 return line
             return None
 
+          def first_block_matching_prefix(prefixes: tuple[str, ...], max_lines: int = 8) -> str | None:
+            stop_prefixes = (
+              "=== RUN",
+              "--- PASS:",
+              "--- FAIL:",
+              "PASS",
+              "coverage:",
+              "ok\t",
+              "ok ",
+              "FAIL\t",
+              "FAIL ",
+              "make: ***",
+              "Error:",
+            )
+            for index, line in enumerate(lines):
+              if not line.startswith(prefixes):
+                continue
+              block = [line]
+              for next_line in lines[index + 1:]:
+                if not next_line.strip():
+                  break
+                if next_line.startswith(stop_prefixes):
+                  break
+                block.append(next_line)
+                if len(block) >= max_lines:
+                  break
+              return "\n".join(block)
+            return None
+
           highlights: list[tuple[str, str]] = []
           for matcher, title in [
             (lambda: first_line_containing("WARNING: DATA RACE"), "Data race detected"),
@@ -100,7 +129,7 @@ jobs:
             (lambda: first_line_containing("fatal error:"), "Fatal runtime error"),
             (lambda: first_line_containing("--- FAIL:"), "Failed test"),
             (lambda: first_line_containing("FAIL\tgithub.com/") or first_line_matching_prefix(("FAIL github.com/", "FAIL    github.com/")), "Failed package"),
-            (lambda: first_line_matching_prefix(("# github.com/",)), "Build error"),
+            (lambda: first_block_matching_prefix(("# github.com/",)), "Build error"),
           ]:
             match = matcher()
             if match:
@@ -127,7 +156,10 @@ jobs:
             with open(summary_path, "a", encoding="utf-8") as f:
               f.write("## Test Failure Summary\n")
               for title, body in highlights[:5]:
-                f.write(f"- {title}: `{body}`\n")
+                if "\n" in body:
+                  f.write(f"- {title}:\n\n```text\n{body}\n```\n")
+                else:
+                  f.write(f"- {title}: `{body}`\n")
               f.write("\n### Log Tail\n\n```text\n")
               f.write("\n".join(tail))
               f.write("\n```\n")
