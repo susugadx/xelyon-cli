@@ -27,10 +27,16 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Resolve Go version
+      id: go-version
+      run: |
+        version=$(awk '$1 == "toolchain" { sub(/^go/, "", $2); toolchain = $2 } $1 == "go" && !gover { gover = $2 } END { print toolchain ? toolchain : gover }' go.mod)
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version-file: 'go.mod'
+        go-version: ${{ steps.go-version.outputs.version }}
 
     # リリース前にテスト実行
     - name: Run tests
@@ -56,10 +62,16 @@ jobs:
       with:
         fetch-depth: 0  # 全履歴取得（変更ログ生成に必要）
 
+    - name: Resolve Go version
+      id: go-version
+      run: |
+        version=$(awk '$1 == "toolchain" { sub(/^go/, "", $2); toolchain = $2 } $1 == "go" && !gover { gover = $2 } END { print toolchain ? toolchain : gover }' go.mod)
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version-file: 'go.mod'
+        go-version: ${{ steps.go-version.outputs.version }}
 
     # GoReleaser でマルチプラットフォームビルド & リリース
     - name: Run GoReleaser

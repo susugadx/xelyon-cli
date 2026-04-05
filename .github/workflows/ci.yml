@@ -27,10 +27,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Resolve Go version
+        id: go-version
+        run: |
+          version=$(awk '$1 == "toolchain" { sub(/^go/, "", $2); toolchain = $2 } $1 == "go" && !gover { gover = $2 } END { print toolchain ? toolchain : gover }' go.mod)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: "go.mod"
+          go-version: ${{ steps.go-version.outputs.version }}
 
       # テストで使用する ripgrep をインストール
       - name: Install ripgrep
@@ -200,10 +206,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Resolve Go version
+        id: go-version
+        run: |
+          version=$(awk '$1 == "toolchain" { sub(/^go/, "", $2); toolchain = $2 } $1 == "go" && !gover { gover = $2 } END { print toolchain ? toolchain : gover }' go.mod)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: "go.mod"
+          go-version: ${{ steps.go-version.outputs.version }}
 
       # golangci-lint で静的解析
       # 様々な lint ツールをまとめて実行
@@ -225,10 +237,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Resolve Go version
+        id: go-version
+        run: |
+          version=$(awk '$1 == "toolchain" { sub(/^go/, "", $2); toolchain = $2 } $1 == "go" && !gover { gover = $2 } END { print toolchain ? toolchain : gover }' go.mod)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: "go.mod"
+          go-version: ${{ steps.go-version.outputs.version }}
 
       # gosec: Go コードのセキュリティ問題を検出
       # - ハードコードされた認証情報
@@ -271,10 +289,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Resolve Go version
+        id: go-version
+        run: |
+          version=$(awk '$1 == "toolchain" { sub(/^go/, "", $2); toolchain = $2 } $1 == "go" && !gover { gover = $2 } END { print toolchain ? toolchain : gover }' go.mod)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: "go.mod"
+          go-version: ${{ steps.go-version.outputs.version }}
 
       # ベンチマーク実行
       # -bench=.: 全てのベンチマークを実行
