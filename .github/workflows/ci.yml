@@ -63,7 +63,17 @@ jobs:
       # -race: データ競合を検出
       # -coverprofile: カバレッジレポート出力
       - name: Run tests
-        run: make ci-test
+        run: |
+          set -o pipefail
+          make ci-test 2>&1 | tee test.log
+
+      - name: Upload test log
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-log
+          path: test.log
+          retention-days: 7
 
       # カバレッジ閾値チェック
       # 60% 未満は CI 失敗

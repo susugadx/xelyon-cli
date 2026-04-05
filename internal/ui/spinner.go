@@ -11,12 +11,14 @@ import (
 type Spinner struct {
 	mu        sync.Mutex
 	active    bool
+	animated  bool
 	stopChan  chan struct{}
 	doneChan  chan struct{} // goroutine終了通知（Stop()の同期待機用）
 	writer    io.Writer
 	frames    []string
 	startTime time.Time // 開始時刻（経過時間表示用）
-	status    string    // 追加のステータスメッセージ
+	message   string
+	status    string // 追加のステータスメッセージ
 }
 
 // NewSpinner は新しいSpinnerを作成
@@ -44,16 +46,30 @@ func NewSpinnerWithWriter(w io.Writer) *Spinner {
 // Start はスピナーアニメーションを開始
 func (s *Spinner) Start(message string) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	if s.active {
+		s.mu.Unlock()
 		return
 	}
 
 	s.active = true
+	s.startTime = time.Now()
+	s.message = message
+	s.status = ""
+	s.animated = shouldAnimateSpinner(s.writer)
+
+	if !s.animated {
+		writer := s.writer
+		s.mu.Unlock()
+		if message != "" {
+			fmt.Fprintln(writer, message)
+		}
+		return
+	}
+
 	s.stopChan = make(chan struct{})
 	s.doneChan = make(chan struct{})
-	s.startTime = time.Now()
+	s.mu.Unlock()
 
 	go s.spin(message)
 }
@@ -84,18 +100,25 @@ func (s *Spinner) Stop() {
 
 	s.active = false
 	s.status = "" // ステータスもクリア
+	s.message = ""
 
 	doneChan := s.doneChan
+	animated := s.animated
 
 	// stopChanがnilでないことを確認してからclose（競合対策）
-	if s.stopChan != nil {
+	if animated && s.stopChan != nil {
 		close(s.stopChan)
 		s.stopChan = nil
 	}
+	s.doneChan = nil
 
 	// ロックを解放してからgoroutine終了を待機
 	// （spin goroutineがGetStatus()でロックを取るためデッドロック防止）
 	s.mu.Unlock()
+
+	if !animated {
+		return
+	}
 
 	// goroutineの終了を待機（最大200msのタイムアウト付き）
 	if doneChan != nil {
@@ -113,8 +136,23 @@ func (s *Spinner) Stop() {
 // 例: "⠋ Thinking (5s) - Analyzing main.go"
 func (s *Spinner) SetStatus(status string) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	prevStatus := s.status
 	s.status = status
+	active := s.active
+	animated := s.animated
+	message := s.message
+	writer := s.writer
+	s.mu.Unlock()
+
+	if !active || animated || status == "" || status == prevStatus {
+		return
+	}
+
+	if message == "" {
+		fmt.Fprintln(writer, status)
+		return
+	}
+	fmt.Fprintf(writer, "%s - %s\n", message, status)
 }
 
 // ClearStatus はステータスメッセージをクリア
@@ -194,6 +232,10 @@ func formatElapsed(d time.Duration) string {
 		return ""
 	}
 	return fmt.Sprintf("(%ds)", seconds)
+}
+
+func shouldAnimateSpinner(w io.Writer) bool {
+	return isFileTerminal(w)
 }
 
 // ResetTerminalState はターミナル状態をリセットする

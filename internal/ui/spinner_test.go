@@ -44,15 +44,8 @@ func TestNewSpinnerWithRuntime_UsesInjectedWriter(t *testing.T) {
 }
 
 func TestSpinner_StartStop(t *testing.T) {
-	// Note: This test has a race condition when using bytes.Buffer
-	// because the spinner goroutine writes while we read.
-	// For CI with -race flag, this test may fail.
-	// TODO: Use a thread-safe writer or sync the buffer access
-	t.Skip("Skipping due to race condition with bytes.Buffer - needs thread-safe writer")
-
-	s := NewSpinner()
 	var buf bytes.Buffer
-	s.writer = &buf
+	s := NewSpinnerWithWriter(&buf)
 
 	// Start
 	s.Start("Testing")
@@ -65,14 +58,8 @@ func TestSpinner_StartStop(t *testing.T) {
 		t.Error("Start() should set active to true")
 	}
 
-	// 少し待機してアニメーションを確認
-	time.Sleep(100 * time.Millisecond)
-
 	// Stop
 	s.Stop()
-
-	// Stop完了まで少し待機（race condition回避）
-	time.Sleep(10 * time.Millisecond)
 
 	s.mu.Lock()
 	active = s.active
@@ -93,9 +80,12 @@ func TestSpinner_StartStop(t *testing.T) {
 		t.Error("Spinner should produce output")
 	}
 
-	// クリア文字が含まれていることを確認
-	if !strings.Contains(output, "\r") {
-		t.Error("Spinner output should contain carriage return")
+	if !strings.Contains(output, "Testing") {
+		t.Fatalf("Spinner output should contain start message, got %q", output)
+	}
+
+	if strings.Contains(output, "\r") {
+		t.Errorf("non-terminal spinner should not animate with carriage returns, got %q", output)
 	}
 }
 
@@ -155,6 +145,25 @@ func TestSpinner_StopWithoutStart(t *testing.T) {
 
 	if active {
 		t.Error("Spinner should not be active")
+	}
+}
+
+func TestSpinner_SetStatus_StaticWriterLogsDistinctUpdates(t *testing.T) {
+	var buf bytes.Buffer
+	s := NewSpinnerWithWriter(&buf)
+
+	s.Start("Waiting for Gemini...")
+	s.SetStatus("retrying in 1s")
+	s.SetStatus("retrying in 1s")
+	s.SetStatus("retrying in 2s")
+	s.Stop()
+
+	output := buf.String()
+	if strings.Count(output, "Waiting for Gemini...") != 3 {
+		t.Fatalf("expected one start line and two distinct status lines, got %q", output)
+	}
+	if strings.Contains(output, "\033[38;5;") {
+		t.Fatalf("non-terminal spinner should not emit ANSI color escapes, got %q", output)
 	}
 }
 
@@ -288,23 +297,16 @@ func TestSpinner_RapidStartStop(t *testing.T) {
 }
 
 func TestSpinner_WriterOutput(t *testing.T) {
-	// Note: This test has a race condition when using bytes.Buffer
-	// TODO: Use a thread-safe writer or sync the buffer access
-	t.Skip("Skipping due to race condition with bytes.Buffer - needs thread-safe writer")
-
-	s := NewSpinner()
 	var buf bytes.Buffer
-	s.writer = &buf
+	s := NewSpinnerWithWriter(&buf)
 
 	s.Start("Test message")
-	time.Sleep(100 * time.Millisecond)
 	s.Stop()
 
 	output := buf.String()
 
-	// ANSI エスケープシーケンスを確認
-	if !strings.Contains(output, "\033[K") {
-		t.Error("Stop() should output ANSI clear sequence")
+	if strings.Contains(output, "\033[K") {
+		t.Errorf("non-terminal spinner should not emit ANSI clear sequence, got %q", output)
 	}
 }
 
