@@ -22,7 +22,7 @@ func resolveJSSymbol(symbol string, opts SearchOptions) genericResolveResult {
 		return genericResolveResult{Status: genericSymbolNone}
 	}
 	if len(defs) > 1 {
-		return genericResolveResult{Output: formatGenericMultipleDefs(symbol, defs, opts.LocatorRegistry), Status: genericSymbolMultiple}
+		return genericResolveResult{Output: formatGenericMultipleDefsWithOptions(symbol, defs, opts.LocatorRegistry, opts), Status: genericSymbolMultiple}
 	}
 
 	def := defs[0]
@@ -48,6 +48,7 @@ func resolveJSSymbol(symbol string, opts SearchOptions) genericResolveResult {
 		{Kind: "references", Title: "References", Items: otherRefs, Limit: genericRefLimit},
 		{Kind: "tests", Title: "Related Tests", Items: testRefs, Limit: genericTestLimit, IsTest: true},
 	})
+	bundle.Debug.FileRootPath = invocationCWDOrGetwd(opts)
 	return genericResolveResult{Output: formatJSSymbolResult(bundle, opts.LocatorRegistry), Status: genericSymbolSingle, Bundle: bundle}
 }
 

@@ -2,6 +2,7 @@ package locator
 
 import (
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -9,10 +10,11 @@ import (
 
 // Location はコードベース上の位置を表す。
 type Location struct {
-	FilePath string // プロジェクトルートからの相対パス
-	Line     int    // 開始行（1-based）
-	EndLine  int    // 終了行（1-based、0の場合はLine単体）
-	Name     string // シンボル名（例: "func computeReplacements"）。テキスト検索マッチの場合は空。
+	FilePath     string // Display path shown to the model. Usually project-root-relative, but some producers keep their original relative form.
+	ResolvedPath string // Optional absolute path used for follow-up reads/edits when display path is ambiguous.
+	Line         int    // 開始行（1-based）
+	EndLine      int    // 終了行（1-based、0の場合はLine単体）
+	Name         string // シンボル名（例: "func computeReplacements"）。テキスト検索マッチの場合は空。
 }
 
 // Registry はLocator IDと位置情報のマッピングを管理する。
@@ -100,7 +102,24 @@ func (r *Registry) ResolveMulti(raw string) []Location {
 
 func dedupKey(loc Location) string {
 	// NULセパレータでフィールド値内のコロン等との衝突を防止
-	return loc.FilePath + "\x00" + strconv.Itoa(loc.Line) + "\x00" + strconv.Itoa(loc.EndLine) + "\x00" + loc.Name
+	return loc.FilePath + "\x00" + normalizedResolvedPathKey(loc) + "\x00" + strconv.Itoa(loc.Line) + "\x00" + strconv.Itoa(loc.EndLine) + "\x00" + loc.Name
+}
+
+func normalizedResolvedPathKey(loc Location) string {
+	resolvedPath := strings.TrimSpace(loc.ResolvedPath)
+	if resolvedPath == "" {
+		return ""
+	}
+	resolvedPath = filepath.Clean(resolvedPath)
+
+	filePath := strings.TrimSpace(loc.FilePath)
+	if filepath.IsAbs(filePath) {
+		filePath = filepath.Clean(filePath)
+		if filePath == resolvedPath {
+			return ""
+		}
+	}
+	return resolvedPath
 }
 
 func formatID(idx int) string {

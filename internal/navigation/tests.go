@@ -49,9 +49,10 @@ func findRelatedTests(symbol string, refs []Reference, limit int) ([]TestRef, in
 				}
 				seen[key] = true
 				results = append(results, TestRef{
-					File: toRelativePath(f),
-					Line: s.Line,
-					Name: s.Name,
+					File:         toRelativePath(f),
+					ResolvedPath: cleanNavigationResolvedPath(f),
+					Line:         s.Line,
+					Name:         s.Name,
 				})
 			}
 		}

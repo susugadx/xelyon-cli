@@ -95,7 +95,7 @@ func locatorHasExplicitRange(loc *locator.Location) bool {
 
 func (r *compactReadResolver) resolveCompactLocatorRange(req readRequest) (int, int) {
 	line := req.Locator.Line
-	blocks, ok := r.blockMap(req.FilePath)
+	blocks, ok := r.blockMap(req)
 	if !ok {
 		return defaultLocatorReadWindow(line)
 	}
@@ -106,29 +106,30 @@ func (r *compactReadResolver) resolveCompactLocatorRange(req readRequest) (int, 
 	return defaultLocatorReadWindow(line)
 }
 
-func (r *compactReadResolver) blockMap(filePath string) ([]common.BlockRange, bool) {
-	if cached, ok := r.blockCache[filePath]; ok {
+func (r *compactReadResolver) blockMap(req readRequest) ([]common.BlockRange, bool) {
+	cacheKey := req.readPath()
+	if cached, ok := r.blockCache[cacheKey]; ok {
 		return cached.blocks, cached.ok
 	}
 
-	ctx, errResult := newReadFileContext(r.out, r.cfg, r.cache, filePath, DefaultFullLines)
+	ctx, errResult := newReadFileContextForRequest(r.out, r.cfg, r.cache, req, DefaultFullLines)
 	if errResult != "" {
-		r.blockCache[filePath] = compactBlockCacheEntry{ok: false}
+		r.blockCache[cacheKey] = compactBlockCacheEntry{ok: false}
 		return nil, false
 	}
 	if !shouldResolveCompactLocatorByBlock(ctx) {
-		r.blockCache[filePath] = compactBlockCacheEntry{ok: false}
+		r.blockCache[cacheKey] = compactBlockCacheEntry{ok: false}
 		return nil, false
 	}
 
 	contentStr, errResult := loadReadContent(ctx, 0, 0)
 	if errResult != "" || isBinaryContent(contentStr) {
-		r.blockCache[filePath] = compactBlockCacheEntry{ok: false}
+		r.blockCache[cacheKey] = compactBlockCacheEntry{ok: false}
 		return nil, false
 	}
 
-	blocks := common.BuildBlockMap(contentStr, common.IsBraceLanguage(filePath))
-	r.blockCache[filePath] = compactBlockCacheEntry{
+	blocks := common.BuildBlockMap(contentStr, common.IsBraceLanguage(req.FilePath))
+	r.blockCache[cacheKey] = compactBlockCacheEntry{
 		blocks: blocks,
 		ok:     true,
 	}

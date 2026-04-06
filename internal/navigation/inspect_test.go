@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/ast"
+	"github.com/susugadx/xelyon-cli/internal/locator"
 	"github.com/susugadx/xelyon-cli/internal/repomap"
 )
 
@@ -418,6 +419,70 @@ func TestFormatInspectResult(t *testing.T) {
 	}
 	if !strings.Contains(result, "Related tests (1)") {
 		t.Error("expected tests section")
+	}
+}
+
+func TestFormatInspectResult_LocatorsPreferResolvedPathsForRelatedItems(t *testing.T) {
+	root := t.TempDir()
+	subdir := filepath.Join(root, "pkg")
+	if err := os.MkdirAll(subdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	rootShadow := filepath.Join(root, "target.go")
+	subdirTarget := filepath.Join(subdir, "target.go")
+	subdirTest := filepath.Join(subdir, "target_test.go")
+	for _, path := range []string{rootShadow, subdirTarget, subdirTest} {
+		if err := os.WriteFile(path, []byte("package pkg\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	reg := locator.NewRegistry()
+	result := formatInspectResult(InspectResult{
+		Symbol: &SymbolCandidate{
+			Name:     "Build",
+			Kind:     "function",
+			File:     "pkg/source.go",
+			Line:     10,
+			EndLine:  20,
+			RootPath: root,
+		},
+		Body: []string{"10: func Build() {}"},
+		Callers: []Reference{
+			{File: "target.go", ResolvedPath: subdirTarget, Line: 3, Scope: "func main"},
+		},
+		Refs: []Reference{
+			{File: "target.go", ResolvedPath: subdirTarget, Line: 4, Snippet: "Build()"},
+		},
+		Tests: []TestRef{
+			{File: "target_test.go", ResolvedPath: subdirTest, Name: "TestBuild", Line: 5},
+		},
+		Implementations: []ImplementationRef{
+			{File: "target.go", ResolvedPath: subdirTarget, Line: 6, Name: "Builder"},
+		},
+	}, reg)
+
+	for _, needle := range []string{"target.go:3", "target.go:4 | Build()", "target_test.go:5 | func TestBuild", "target.go:6 Builder"} {
+		if !strings.Contains(result, needle) {
+			t.Fatalf("expected %q in output, got:\n%s", needle, result)
+		}
+	}
+
+	for _, id := range []string{"[L2]", "[L3]", "[L4]", "[L5]"} {
+		loc, ok := reg.Resolve(id)
+		if !ok {
+			t.Fatalf("expected locator %s to resolve", id)
+		}
+		if loc.ResolvedPath == rootShadow {
+			t.Fatalf("expected locator %s to avoid root shadow path, got %+v", id, loc)
+		}
+	}
+	if loc, _ := reg.Resolve("[L2]"); loc.ResolvedPath != subdirTarget {
+		t.Fatalf("expected caller locator to use %s, got %+v", subdirTarget, loc)
+	}
+	if loc, _ := reg.Resolve("[L4]"); loc.ResolvedPath != subdirTest {
+		t.Fatalf("expected test locator to use %s, got %+v", subdirTest, loc)
 	}
 }
 

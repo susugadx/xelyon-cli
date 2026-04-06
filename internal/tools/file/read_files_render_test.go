@@ -29,11 +29,12 @@ func TestRenderReadFilesResults_WithLocator(t *testing.T) {
 	reg := locator.NewRegistry()
 	results := []readFileBatchResult{
 		{
-			entry:     "a.go:10-20",
-			filePath:  "a.go",
-			startLine: 10,
-			endLine:   20,
-			result:    "10: line10\n",
+			entry:        "a.go:10-20",
+			filePath:     "a.go",
+			resolvedPath: "/tmp/real/a.go",
+			startLine:    10,
+			endLine:      20,
+			result:       "10: line10\n",
 		},
 	}
 
@@ -46,7 +47,7 @@ func TestRenderReadFilesResults_WithLocator(t *testing.T) {
 	if !ok {
 		t.Fatal("expected locator to be registered")
 	}
-	if loc.FilePath != "a.go" || loc.Line != 10 || loc.EndLine != 20 {
+	if loc.FilePath != "a.go" || loc.ResolvedPath != "/tmp/real/a.go" || loc.Line != 10 || loc.EndLine != 20 {
 		t.Fatalf("unexpected locator: %+v", loc)
 	}
 }

@@ -20,7 +20,15 @@ type readFileContext struct {
 }
 
 func newReadFileContext(out common.Output, cfg *config.Config, cache tools.ToolCacheInterface, path string, outlineThreshold int) (readFileContext, string) {
-	absPath, errResult := resolveValidatedPath(out, path, "path is empty")
+	return newReadFileContextResolved(out, cfg, cache, path, path, nil, outlineThreshold)
+}
+
+func newReadFileContextForRequest(out common.Output, cfg *config.Config, cache tools.ToolCacheInterface, req readRequest, outlineThreshold int) (readFileContext, string) {
+	return newReadFileContextResolved(out, cfg, cache, req.FilePath, req.readPath(), req.AllowedRoots, outlineThreshold)
+}
+
+func newReadFileContextResolved(out common.Output, cfg *config.Config, cache tools.ToolCacheInterface, displayPath, readPath string, allowedRoots []string, outlineThreshold int) (readFileContext, string) {
+	absPath, errResult := resolveValidatedPathWithRoots(out, readPath, allowedRoots, "path is empty")
 	if errResult != "" {
 		return readFileContext{}, errResult
 	}
@@ -34,7 +42,7 @@ func newReadFileContext(out common.Output, cfg *config.Config, cache tools.ToolC
 	return readFileContext{
 		out:              out,
 		cache:            cache,
-		path:             path,
+		path:             displayPath,
 		absPath:          absPath,
 		showFileInfo:     showFileInfo,
 		outlineThreshold: outlineThreshold,

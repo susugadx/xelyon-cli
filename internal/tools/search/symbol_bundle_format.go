@@ -19,12 +19,7 @@ func formatSymbolBundle(bundle *SymbolBundle, reg *locator.Registry, matchedPatt
 	}
 	header += fmt.Sprintf(") in %s", bundle.Identity.File)
 	if reg != nil {
-		id := reg.Register(locator.Location{
-			FilePath: bundle.Identity.File,
-			Line:     bundle.Identity.Line,
-			EndLine:  bundle.Identity.EndLine,
-			Name:     fmt.Sprintf("%s %s", bundle.Identity.Kind, bundle.Identity.DisplayName),
-		})
+		id := reg.Register(newBundleLocator(bundle.Identity.File, bundle.Identity.Line, bundle.Identity.EndLine, fmt.Sprintf("%s %s", bundle.Identity.Kind, bundle.Identity.DisplayName), bundle))
 		header += " " + id
 	}
 	sb.WriteString(header + " ──\n")
@@ -57,12 +52,7 @@ func formatSymbolBundle(bundle *SymbolBundle, reg *locator.Registry, matchedPatt
 		for _, item := range section.Items {
 			line := formatSymbolBundleItem(section.Kind, item)
 			if reg != nil {
-				id := reg.Register(locator.Location{
-					FilePath: item.File,
-					Line:     item.Line,
-					EndLine:  item.EndLine,
-					Name:     item.Name,
-				})
+				id := reg.Register(newBundleItemLocator(item, bundle))
 				line += " " + id
 			}
 			fmt.Fprintf(&sb, "  - %s\n", line)
@@ -113,12 +103,7 @@ func appendSymbolBundleImpact(sb *strings.Builder, bundle *SymbolBundle, reg *lo
 	for _, item := range bundle.Impact.RecommendedReads {
 		line := formatSymbolBundleItem(item.Kind, item)
 		if reg != nil {
-			id := reg.Register(locator.Location{
-				FilePath: item.File,
-				Line:     item.Line,
-				EndLine:  item.EndLine,
-				Name:     item.Name,
-			})
+			id := reg.Register(newBundleItemLocator(item, bundle))
 			line += " " + id
 		}
 		fmt.Fprintf(sb, "  - %s\n", line)

@@ -15,12 +15,7 @@ func renderReadFilesResults(results []readFileBatchResult, reg *locator.Registry
 		}
 		header := fmt.Sprintf("📄 File: %s", result.entry)
 		if reg != nil {
-			id := reg.Register(locator.Location{
-				FilePath: result.filePath,
-				Line:     result.startLine,
-				EndLine:  result.endLine,
-				Name:     result.locatorName,
-			})
+			id := reg.Register(newReadResultLocatorForBatch(result))
 			header += " " + id
 		}
 		fmt.Fprintf(&sb, "%s\n", header)

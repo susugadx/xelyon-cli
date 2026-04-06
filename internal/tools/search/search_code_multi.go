@@ -72,13 +72,7 @@ func executeMultiplePatterns(cache tools.ToolCacheInterface, patterns []string, 
 		}
 	}
 
-	pats := make([]string, len(collected))
-	outs := make([]string, len(collected))
-	for i, c := range collected {
-		pats[i] = c.Pattern
-		outs[i] = c.Output
-	}
-	if idx := buildCrossPatternIndex(pats, outs, opts.LocatorRegistry); idx != "" {
+	if idx := buildCrossPatternIndexFromExecutions(collected, opts.LocatorRegistry, opts); idx != "" {
 		sb.WriteString(idx)
 	}
 
@@ -118,49 +112,6 @@ func groupPatternSymbolBundles(collected []formattedPatternExecution) map[string
 		groups[key] = group
 	}
 	return groups
-}
-
-func extractPrimaryFilePaths(output string) []string {
-	var paths []string
-	seen := make(map[string]bool)
-	add := func(p string) {
-		p = strings.TrimSpace(p)
-		if p != "" && !seen[p] {
-			seen[p] = true
-			paths = append(paths, p)
-		}
-	}
-	for _, line := range strings.Split(output, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "📄 ") {
-			rest := strings.TrimPrefix(trimmed, "📄 ")
-			if idx := strings.Index(rest, " ("); idx > 0 {
-				add(rest[:idx])
-			}
-			continue
-		}
-		if strings.HasPrefix(trimmed, "── ") && strings.Contains(trimmed, " in ") && strings.HasSuffix(trimmed, "──") {
-			inIdx := strings.LastIndex(trimmed, " in ")
-			rest := trimmed[inIdx+4:]
-			rest = strings.TrimSuffix(rest, "──")
-			rest = strings.TrimSpace(rest)
-			if atIdx := strings.LastIndex(rest, " @"); atIdx > 0 {
-				rest = rest[:atIdx]
-			}
-			add(rest)
-			continue
-		}
-		if hasNumericListPrefix(trimmed) {
-			if idx := strings.LastIndex(trimmed, " in "); idx > 0 {
-				add(strings.TrimSpace(trimmed[idx+4:]))
-				continue
-			}
-		}
-		if numbered, ok := parseNumberedCandidateFilePath(trimmed); ok {
-			add(numbered)
-		}
-	}
-	return paths
 }
 
 func parseNumberedCandidateFilePath(line string) (string, bool) {
@@ -233,7 +184,29 @@ func classifyFilePath(path string) string {
 }
 
 func buildCrossPatternIndex(patterns, outputs []string, reg *locator.Registry) string {
+	return buildCrossPatternIndexWithOptions(patterns, outputs, reg, SearchOptions{})
+}
+
+func buildCrossPatternIndexWithOptions(patterns, outputs []string, reg *locator.Registry, opts SearchOptions) string {
+	collected := make([]formattedPatternExecution, 0, min(len(patterns), len(outputs)))
+	for i, output := range outputs {
+		if i >= len(patterns) {
+			break
+		}
+		collected = append(collected, formattedPatternExecution{
+			Index: i,
+			singlePatternExecution: singlePatternExecution{
+				Pattern: patterns[i],
+				Output:  output,
+			},
+		})
+	}
+	return buildCrossPatternIndexFromExecutions(collected, reg, opts)
+}
+
+func buildCrossPatternIndexFromExecutions(collected []formattedPatternExecution, reg *locator.Registry, opts SearchOptions) string {
 	type fileEntry struct {
+		ref          primaryFileRef
 		patternCount int
 		category     string
 	}
@@ -241,19 +214,18 @@ func buildCrossPatternIndex(patterns, outputs []string, reg *locator.Registry) s
 	fileMap := make(map[string]*fileEntry)
 	var order []string
 
-	for i, output := range outputs {
-		if i >= len(patterns) {
-			break
-		}
-		for _, p := range extractPrimaryFilePaths(output) {
-			if entry, ok := fileMap[p]; ok {
+	for _, execution := range collected {
+		for _, ref := range primaryFileRefsFromExecution(execution, opts) {
+			key := ref.DisplayPath + "\x00" + ref.ResolvedPath
+			if entry, ok := fileMap[key]; ok {
 				entry.patternCount++
 			} else {
-				fileMap[p] = &fileEntry{
+				fileMap[key] = &fileEntry{
+					ref:          ref,
 					patternCount: 1,
-					category:     classifyFilePath(p),
+					category:     classifyFilePath(ref.DisplayPath),
 				}
-				order = append(order, p)
+				order = append(order, key)
 			}
 		}
 	}
@@ -263,14 +235,14 @@ func buildCrossPatternIndex(patterns, outputs []string, reg *locator.Registry) s
 	}
 
 	var impl, test, cfg []string
-	for _, p := range order {
-		switch fileMap[p].category {
+	for _, key := range order {
+		switch fileMap[key].category {
 		case "test":
-			test = append(test, p)
+			test = append(test, key)
 		case "config":
-			cfg = append(cfg, p)
+			cfg = append(cfg, key)
 		default:
-			impl = append(impl, p)
+			impl = append(impl, key)
 		}
 	}
 
@@ -298,13 +270,14 @@ func buildCrossPatternIndex(patterns, outputs []string, reg *locator.Registry) s
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "\n━━ File Index (%d unique files) ━━\n", len(order))
 
-	writeGroup := func(label string, paths []string) {
-		if len(paths) == 0 {
+	writeGroup := func(label string, keys []string) {
+		if len(keys) == 0 {
 			return
 		}
 		fmt.Fprintf(&sb, "%s:\n", label)
-		for _, p := range paths {
-			e := fileMap[p]
+		for _, key := range keys {
+			e := fileMap[key]
+			p := e.ref.DisplayPath
 			var line string
 			if e.patternCount > 1 {
 				line = fmt.Sprintf("  %s (★%d patterns)", p, e.patternCount)
@@ -312,7 +285,7 @@ func buildCrossPatternIndex(patterns, outputs []string, reg *locator.Registry) s
 				line = fmt.Sprintf("  %s", p)
 			}
 			if reg != nil {
-				id := reg.Register(locator.Location{FilePath: p})
+				id := reg.Register(newSearchLocator(p, e.ref.ResolvedPath, 0, 0, ""))
 				line += " " + id
 			}
 			fmt.Fprintf(&sb, "%s\n", line)
@@ -324,6 +297,31 @@ func buildCrossPatternIndex(patterns, outputs []string, reg *locator.Registry) s
 	writeGroup("Config", cfg)
 
 	return sb.String()
+}
+
+func primaryFileRefsFromExecution(execution formattedPatternExecution, opts SearchOptions) []primaryFileRef {
+	return primaryFileRefsFromBundleOrOutput(execution.Bundle, execution.Output, opts)
+}
+
+func primaryFileRefsFromBundleOrOutput(bundle *SymbolBundle, output string, opts SearchOptions) []primaryFileRef {
+	if ref, ok := primaryFileRefFromBundle(bundle); ok {
+		return []primaryFileRef{ref}
+	}
+	return extractPrimaryFileRefs(output, opts)
+}
+
+func primaryFileRefFromBundle(bundle *SymbolBundle) (primaryFileRef, bool) {
+	if bundle == nil {
+		return primaryFileRef{}, false
+	}
+	displayPath := strings.TrimSpace(bundle.Identity.File)
+	if displayPath == "" {
+		return primaryFileRef{}, false
+	}
+	return primaryFileRef{
+		DisplayPath:  displayPath,
+		ResolvedPath: cleanResolvedLocatorPath(absoluteAffectedFilePathWithBase(displayPath, bundle.Debug.FileRootPath)),
+	}, true
 }
 
 func buildMultiCacheKey(patterns []string) string {

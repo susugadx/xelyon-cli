@@ -2,6 +2,7 @@ package file
 
 import (
 	"fmt"
+	"io"
 	"sync"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
@@ -10,12 +11,13 @@ import (
 )
 
 type readFileBatchResult struct {
-	entry       string
-	filePath    string
-	startLine   int
-	endLine     int
-	locatorName string
-	result      string
+	entry        string
+	filePath     string
+	resolvedPath string
+	startLine    int
+	endLine      int
+	locatorName  string
+	result       string
 }
 
 func validateReadFilesPaths(paths []string) string {
@@ -82,12 +84,33 @@ func executeReadBatchRequest(out common.Output, cfg *config.Config, cache tools.
 		locatorName = req.Locator.Name
 	}
 
+	return newReadFileBatchResult(req, entry, locatorName, executeReadFileRequest(out, cfg, cache, req, budget))
+}
+
+func newReadFileBatchResult(req readRequest, entry, locatorName, result string) readFileBatchResult {
 	return readFileBatchResult{
-		entry:       entry,
-		filePath:    req.FilePath,
-		startLine:   req.StartLine,
-		endLine:     req.EndLine,
-		locatorName: locatorName,
-		result:      executeReadFileRequest(out, cfg, cache, req, budget),
+		entry:        entry,
+		filePath:     req.FilePath,
+		resolvedPath: resolvedReadResultPath(req),
+		startLine:    req.StartLine,
+		endLine:      req.EndLine,
+		locatorName:  locatorName,
+		result:       result,
 	}
+}
+
+func resolvedReadResultPath(req readRequest) string {
+	if req.ResolvedPath != "" {
+		return req.ResolvedPath
+	}
+	return resolveReadResultPath(req)
+}
+
+func resolveReadResultPath(req readRequest) string {
+	out := common.NewOutput(io.Discard, io.Discard)
+	absPath, errResult := resolveValidatedPathWithRoots(out, req.readPath(), req.AllowedRoots, "path is empty")
+	if errResult != "" {
+		return ""
+	}
+	return absPath
 }

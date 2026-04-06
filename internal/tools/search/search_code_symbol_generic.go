@@ -57,7 +57,7 @@ func resolveGenericSymbol(symbol string, opts SearchOptions) genericResolveResul
 
 	if len(defs) > 1 {
 		return genericResolveResult{
-			Output:        formatGenericMultipleDefs(symbol, defs, opts.LocatorRegistry),
+			Output:        formatGenericMultipleDefsWithOptions(symbol, defs, opts.LocatorRegistry, opts),
 			Status:        genericSymbolMultiple,
 			AffectedFiles: collectGenericDefAffectedFiles(defs, opts),
 		}
@@ -82,6 +82,7 @@ func resolveGenericSymbol(symbol string, opts SearchOptions) genericResolveResul
 		{Kind: "references", Title: "References", Items: normalRefs, Limit: genericRefLimit},
 		{Kind: "tests", Title: "Related Tests", Items: testRefs, Limit: genericTestLimit, IsTest: true},
 	})
+	bundle.Debug.FileRootPath = invocationCWDOrGetwd(opts)
 	return genericResolveResult{
 		Output: formatSymbolBundle(bundle, opts.LocatorRegistry, nil),
 		Status: genericSymbolSingle,
@@ -268,13 +269,13 @@ func normalizeRgType(fileType string) string {
 	}
 }
 
-func formatGenericMultipleDefs(symbol string, defs []genericSymbolDef, reg *locator.Registry) string {
+func formatGenericMultipleDefsWithOptions(symbol string, defs []genericSymbolDef, reg *locator.Registry, opts SearchOptions) string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "Multiple definitions found for %q:\n", symbol)
 	for i, d := range defs {
 		line := fmt.Sprintf("  %d. %s %s (L%d) in %s", i+1, d.Kind, d.Name, d.Line, d.File)
 		if reg != nil {
-			id := reg.Register(locator.Location{FilePath: d.File, Line: d.Line, Name: fmt.Sprintf("%s %s", d.Kind, d.Name)})
+			id := reg.Register(newTextSearchLocator(d.File, d.Line, 0, fmt.Sprintf("%s %s", d.Kind, d.Name), opts))
 			line += " " + id
 		}
 		fmt.Fprintf(&sb, "%s\n", line)

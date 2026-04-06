@@ -22,13 +22,22 @@ func collectFilePaths(results []SearchResult, opts SearchOptions) []string {
 func collectAffectedFilesFromExecutions(collected []formattedPatternExecution, opts SearchOptions) []string {
 	paths := make([]string, 0, len(collected)*2)
 	for _, execution := range collected {
-		paths = append(paths, execution.AffectedFiles...)
-		paths = append(paths, collectPrimaryAffectedFilePathsFromOutput(execution.Output, opts)...)
+		paths = append(paths, affectedFilePathsFromExecution(execution, opts)...)
 	}
 	return dedupePaths(paths)
 }
 
 func deriveAffectedFilesFromCachedResult(bundle *SymbolBundle, output string, opts SearchOptions) []string {
+	return affectedFilePathsFromBundleOrOutput(bundle, output, opts)
+}
+
+func affectedFilePathsFromExecution(execution formattedPatternExecution, opts SearchOptions) []string {
+	paths := append([]string(nil), execution.AffectedFiles...)
+	paths = append(paths, affectedFilePathsFromBundleOrOutput(execution.Bundle, execution.Output, opts)...)
+	return dedupePaths(paths)
+}
+
+func affectedFilePathsFromBundleOrOutput(bundle *SymbolBundle, output string, opts SearchOptions) []string {
 	if affected := collectSymbolBundleAffectedFiles(bundle, opts); len(affected) > 0 {
 		return affected
 	}
@@ -43,20 +52,27 @@ func collectSymbolBundleAffectedFiles(bundle *SymbolBundle, opts SearchOptions) 
 	paths := make([]string, 0, 1+len(bundle.Sections))
 	rootPath := strings.TrimSpace(bundle.Debug.FileRootPath)
 	add := func(file string) {
-		if absPath := absoluteAffectedFilePathForSymbol(file, opts, rootPath); absPath != "" {
+		if absPath := absoluteAffectedFilePathForBundle(file, opts, rootPath); absPath != "" {
 			paths = append(paths, absPath)
 		}
+	}
+	addItem := func(item SymbolBundleItem) {
+		if resolved := cleanResolvedLocatorPath(item.ResolvedPath); resolved != "" {
+			paths = append(paths, resolved)
+			return
+		}
+		add(item.File)
 	}
 
 	add(bundle.Definition.File)
 	for _, section := range bundle.Sections {
 		for _, item := range section.Items {
-			add(item.File)
+			addItem(item)
 		}
 	}
 	if bundle.Impact != nil {
 		for _, item := range bundle.Impact.RecommendedReads {
-			add(item.File)
+			addItem(item)
 		}
 	}
 	for _, file := range bundle.Debug.DependencyFiles {
@@ -70,51 +86,13 @@ func collectSymbolBundleAffectedFiles(bundle *SymbolBundle, opts SearchOptions) 
 func collectPrimaryAffectedFilePathsFromOutput(output string, opts SearchOptions) []string {
 	var paths []string
 	seen := make(map[string]bool)
-	add := func(file string, source affectedFileSource) {
-		var absPath string
-		switch source {
-		case affectedFileSourceSymbol:
-			absPath = absoluteAffectedFilePathForSymbol(file, opts, "")
-		default:
-			absPath = absoluteAffectedFilePath(file, opts, affectedFileSourceText)
-		}
+	for _, ref := range extractPrimaryFileRefs(output, opts) {
+		absPath := ref.ResolvedPath
 		if absPath == "" || seen[absPath] {
-			return
+			continue
 		}
 		seen[absPath] = true
 		paths = append(paths, absPath)
-	}
-
-	for _, line := range strings.Split(output, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "📄 ") {
-			rest := strings.TrimPrefix(trimmed, "📄 ")
-			if idx := strings.Index(rest, " ("); idx > 0 {
-				add(rest[:idx], affectedFileSourceText)
-			}
-			continue
-		}
-		if strings.HasPrefix(trimmed, "── ") && strings.Contains(trimmed, " in ") && strings.HasSuffix(trimmed, "──") {
-			inIdx := strings.LastIndex(trimmed, " in ")
-			rest := trimmed[inIdx+4:]
-			rest = strings.TrimSuffix(rest, "──")
-			rest = strings.TrimSpace(rest)
-			if atIdx := strings.LastIndex(rest, " @"); atIdx > 0 {
-				rest = rest[:atIdx]
-			}
-			add(rest, affectedFileSourceSymbol)
-			continue
-		}
-		if hasNumericListPrefix(trimmed) {
-			if numbered, ok := parseNumberedCandidateFilePath(trimmed); ok {
-				add(numbered, affectedFileSourceSymbol)
-				continue
-			}
-			if idx := strings.LastIndex(trimmed, " in "); idx > 0 {
-				add(strings.TrimSpace(trimmed[idx+4:]), affectedFileSourceText)
-				continue
-			}
-		}
 	}
 	return paths
 }
@@ -132,6 +110,23 @@ func absoluteAffectedFilePath(file string, opts SearchOptions, source affectedFi
 
 func absoluteAffectedFilePathForSymbol(file string, opts SearchOptions, rootPath string) string {
 	return absoluteAffectedFilePathWithPreferredBases(file, symbolAffectedFileBaseCandidates(opts, rootPath)...)
+}
+
+func absoluteAffectedFilePathForBundle(file string, opts SearchOptions, rootPath string) string {
+	bases := make([]string, 0, 4)
+	if rootPath = strings.TrimSpace(rootPath); rootPath != "" {
+		bases = append(bases, rootPath)
+	}
+	if root := strings.TrimSpace(opts.ProjectMapRootPath); root != "" {
+		bases = append(bases, root)
+	}
+	if cwd := strings.TrimSpace(opts.InvocationCWD); cwd != "" {
+		bases = append(bases, cwd)
+	}
+	if cwd := invocationCWDOrGetwd(opts); cwd != "" {
+		bases = append(bases, cwd)
+	}
+	return absoluteAffectedFilePathWithPreferredBases(file, bases...)
 }
 
 func absoluteAffectedFilePathWithBase(file, basePath string) string {

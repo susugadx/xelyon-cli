@@ -1,6 +1,7 @@
 package search
 
 import (
+	"os"
 	"path/filepath"
 	"strconv"
 	"testing"
@@ -132,6 +133,51 @@ func TestFormatSymbolBundle_LocatorRegistryMatchesRelatedTest(t *testing.T) {
 	}
 }
 
+func TestFormatSymbolBundle_SectionItemLocatorsPreferResolvedPath(t *testing.T) {
+	root := t.TempDir()
+	subdir := filepath.Join(root, "pkg")
+	if err := os.MkdirAll(subdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	rootShadow := filepath.Join(root, "target.go")
+	subdirTarget := filepath.Join(subdir, "target.go")
+	for _, path := range []string{rootShadow, subdirTarget} {
+		if err := os.WriteFile(path, []byte("package pkg\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	reg := locator.NewRegistry()
+	bundle := buildGoSymbolBundle("Run", navigation.InspectResult{
+		Symbol: &navigation.SymbolCandidate{
+			Name:     "Run",
+			Kind:     "function",
+			File:     "pkg/run.go",
+			Line:     3,
+			EndLine:  3,
+			RootPath: root,
+		},
+		Body: []string{"3: func Run() {}"},
+		Refs: []navigation.Reference{
+			{File: "target.go", ResolvedPath: subdirTarget, Line: 8, Snippet: "Run()"},
+		},
+	})
+
+	output := formatSymbolBundle(bundle, reg, nil)
+	refID := locatorIDForLine(t, output, "target.go:8 | Run()")
+	refLoc, ok := reg.Resolve(refID)
+	if !ok {
+		t.Fatalf("expected reference locator %s to resolve", refID)
+	}
+	if refLoc.ResolvedPath != subdirTarget {
+		t.Fatalf("expected reference locator to use %s, got %+v", subdirTarget, refLoc)
+	}
+	if refLoc.ResolvedPath == rootShadow {
+		t.Fatalf("expected reference locator to avoid root shadow path, got %+v", refLoc)
+	}
+}
+
 func TestCollectSymbolBundleAffectedFiles_IncludesRecommendedReadFiles(t *testing.T) {
 	dir := t.TempDir()
 	bundle := &SymbolBundle{
@@ -157,6 +203,49 @@ func TestCollectSymbolBundleAffectedFiles_IncludesRecommendedReadFiles(t *testin
 		if !containsAffectedFile(affected, want) {
 			t.Fatalf("expected affected files to include %s, got %v", want, affected)
 		}
+	}
+}
+
+func TestCollectSymbolBundleAffectedFiles_PrefersItemResolvedPath(t *testing.T) {
+	root := t.TempDir()
+	subdir := filepath.Join(root, "pkg")
+	if err := os.MkdirAll(subdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	rootShadow := filepath.Join(root, "target.go")
+	subdirTarget := filepath.Join(subdir, "target.go")
+	for _, path := range []string{rootShadow, subdirTarget} {
+		if err := os.WriteFile(path, []byte("package pkg\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	bundle := &SymbolBundle{
+		Definition: SymbolBundleDefinition{
+			File: "pkg/run.go",
+			Line: 3,
+		},
+		Sections: []SymbolBundleSection{
+			{
+				Kind:  "references",
+				Title: "References",
+				Items: []SymbolBundleItem{
+					{Kind: "references", File: "target.go", ResolvedPath: subdirTarget, Line: 8, Snippet: "Run()"},
+				},
+			},
+		},
+		Debug: SymbolBundleDebug{
+			FileRootPath: root,
+		},
+	}
+
+	affected := collectSymbolBundleAffectedFiles(bundle, SearchOptions{ProjectMapRootPath: root, InvocationCWD: subdir})
+	if !containsAffectedFile(affected, subdirTarget) {
+		t.Fatalf("expected affected files to include %s, got %v", subdirTarget, affected)
+	}
+	if containsAffectedFile(affected, rootShadow) {
+		t.Fatalf("did not expect affected files to include root shadow %s, got %v", rootShadow, affected)
 	}
 }
 

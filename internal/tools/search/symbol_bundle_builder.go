@@ -97,11 +97,12 @@ func buildGoSymbolBundleWithOptions(query string, result navigation.InspectResul
 		items := make([]SymbolBundleItem, 0, limit)
 		for _, impl := range result.Implementations[:limit] {
 			items = append(items, SymbolBundleItem{
-				Kind:    "implementations",
-				File:    impl.File,
-				Line:    impl.Line,
-				Snippet: strings.TrimSpace(impl.Name),
-				Name:    impl.Name,
+				Kind:         "implementations",
+				File:         impl.File,
+				ResolvedPath: impl.ResolvedPath,
+				Line:         impl.Line,
+				Snippet:      strings.TrimSpace(impl.Name),
+				Name:         impl.Name,
 			})
 		}
 		bundle.Sections = append(bundle.Sections, SymbolBundleSection{
@@ -127,12 +128,13 @@ func addNavigationSection(bundle *SymbolBundle, kind, title string, refs []navig
 			snippet = ref.Scope
 		}
 		items = append(items, SymbolBundleItem{
-			Kind:    kind,
-			File:    ref.File,
-			Line:    ref.Line,
-			Snippet: snippet,
-			Scope:   ref.Scope,
-			IsTest:  ref.IsTest,
+			Kind:         kind,
+			File:         ref.File,
+			ResolvedPath: ref.ResolvedPath,
+			Line:         ref.Line,
+			Snippet:      snippet,
+			Scope:        ref.Scope,
+			IsTest:       ref.IsTest,
 		})
 	}
 	bundle.Sections = append(bundle.Sections, SymbolBundleSection{
@@ -151,11 +153,12 @@ func addNavigationTestSection(bundle *SymbolBundle, tests []navigation.TestRef, 
 	items := make([]SymbolBundleItem, 0, len(tests))
 	for _, test := range tests {
 		items = append(items, SymbolBundleItem{
-			Kind:   "tests",
-			File:   test.File,
-			Line:   test.Line,
-			Name:   test.Name,
-			IsTest: true,
+			Kind:         "tests",
+			File:         test.File,
+			ResolvedPath: test.ResolvedPath,
+			Line:         test.Line,
+			Name:         test.Name,
+			IsTest:       true,
 		})
 	}
 	bundle.Sections = append(bundle.Sections, SymbolBundleSection{

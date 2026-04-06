@@ -55,14 +55,15 @@ type SymbolBundleDiagnostics struct {
 
 // SymbolBundleItem は bundle 内の 1 つの編集候補箇所。
 type SymbolBundleItem struct {
-	Kind    string
-	File    string
-	Line    int
-	EndLine int
-	Snippet string
-	Scope   string
-	Name    string
-	IsTest  bool
+	Kind         string
+	File         string
+	ResolvedPath string
+	Line         int
+	EndLine      int
+	Snippet      string
+	Scope        string
+	Name         string
+	IsTest       bool
 }
 
 // SymbolBundleDebug は router / builder の内部メタデータ。

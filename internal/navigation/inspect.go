@@ -92,14 +92,16 @@ type InspectResult struct {
 
 // ImplementationRef describes an interface implementation discovered via LSP.
 type ImplementationRef struct {
-	File string
-	Line int
-	Name string
+	File         string
+	ResolvedPath string
+	Line         int
+	Name         string
 }
 
 // Reference はシンボル参照。
 type Reference struct {
 	File         string
+	ResolvedPath string
 	Line         int
 	Scope        string // 包含関数名
 	Snippet      string // マッチ行テキスト
@@ -112,9 +114,10 @@ type Reference struct {
 
 // TestRef は関連テストの参照情報。
 type TestRef struct {
-	File string
-	Name string
-	Line int
+	File         string
+	ResolvedPath string
+	Name         string
+	Line         int
 }
 
 // InspectSymbol は指定シンボルの定義・caller・ref・テストをまとめて返す。
@@ -362,12 +365,7 @@ func formatMultipleCandidates(symbol string, candidates []SymbolCandidate, reg *
 		line := fmt.Sprintf("  %d. %-40s %s %s (L%d-L%d)",
 			i+1, c.File, c.Kind, candidateDisplayName(c), c.Line, c.EndLine)
 		if reg != nil {
-			id := reg.Register(locator.Location{
-				FilePath: c.File,
-				Line:     c.Line,
-				EndLine:  c.EndLine,
-				Name:     fmt.Sprintf("%s %s", c.Kind, candidateDisplayName(c)),
-			})
+			id := reg.Register(newInspectSymbolLocator(c.File, c.RootPath, c.Line, c.EndLine, fmt.Sprintf("%s %s", c.Kind, candidateDisplayName(c))))
 			line += " " + id
 		}
 		fmt.Fprintf(&sb, "%s\n", line)
@@ -390,12 +388,7 @@ func formatInspectResult(r InspectResult, reg *locator.Registry) string {
 	header := fmt.Sprintf("── %s %s (L%d-L%d) in %s",
 		s.Kind, candidateDisplayName(*s), s.Line, s.EndLine, s.File)
 	if reg != nil {
-		id := reg.Register(locator.Location{
-			FilePath: s.File,
-			Line:     s.Line,
-			EndLine:  s.EndLine,
-			Name:     fmt.Sprintf("%s %s", s.Kind, candidateDisplayName(*s)),
-		})
+		id := reg.Register(newInspectSymbolLocator(s.File, s.RootPath, s.Line, s.EndLine, fmt.Sprintf("%s %s", s.Kind, candidateDisplayName(*s))))
 		header += " " + id
 	}
 	fmt.Fprintf(&sb, "%s ──\n", header)
@@ -420,7 +413,7 @@ func formatInspectResult(r InspectResult, reg *locator.Registry) string {
 			}
 			line := fmt.Sprintf("  - %s:%d%s", c.File, c.Line, scope)
 			if reg != nil {
-				id := reg.Register(locator.Location{FilePath: c.File, Line: c.Line})
+				id := reg.Register(newInspectRelatedLocator(c.File, c.ResolvedPath, s.RootPath, c.Line, 0, ""))
 				line += " " + id
 			}
 			fmt.Fprintf(&sb, "%s\n", line)
@@ -444,7 +437,7 @@ func formatInspectResult(r InspectResult, reg *locator.Registry) string {
 			}
 			line := fmt.Sprintf("  - %s:%d | %s%s", ref.File, ref.Line, strings.TrimSpace(ref.Snippet), label)
 			if reg != nil {
-				id := reg.Register(locator.Location{FilePath: ref.File, Line: ref.Line})
+				id := reg.Register(newInspectRelatedLocator(ref.File, ref.ResolvedPath, s.RootPath, ref.Line, 0, ""))
 				line += " " + id
 			}
 			fmt.Fprintf(&sb, "%s\n", line)
@@ -464,7 +457,7 @@ func formatInspectResult(r InspectResult, reg *locator.Registry) string {
 		for _, t := range r.Tests {
 			line := fmt.Sprintf("  - %s:%d | func %s", t.File, t.Line, t.Name)
 			if reg != nil {
-				id := reg.Register(locator.Location{FilePath: t.File, Line: t.Line, Name: "func " + t.Name})
+				id := reg.Register(newInspectRelatedLocator(t.File, t.ResolvedPath, s.RootPath, t.Line, 0, "func "+t.Name))
 				line += " " + id
 			}
 			fmt.Fprintf(&sb, "%s\n", line)
@@ -480,7 +473,7 @@ func formatInspectResult(r InspectResult, reg *locator.Registry) string {
 		for _, impl := range r.Implementations {
 			line := fmt.Sprintf("  - %s:%d %s", impl.File, impl.Line, impl.Name)
 			if reg != nil {
-				id := reg.Register(locator.Location{FilePath: impl.File, Line: impl.Line})
+				id := reg.Register(newInspectRelatedLocator(impl.File, impl.ResolvedPath, s.RootPath, impl.Line, 0, ""))
 				line += " " + id
 			}
 			fmt.Fprintf(&sb, "%s\n", line)
@@ -503,4 +496,58 @@ func formatInspectResult(r InspectResult, reg *locator.Registry) string {
 	}
 
 	return sb.String()
+}
+
+func newInspectSymbolLocator(filePath, rootPath string, line, endLine int, name string) locator.Location {
+	return locator.Location{
+		FilePath:     filePath,
+		ResolvedPath: resolveInspectLocatorPath(filePath, rootPath),
+		Line:         line,
+		EndLine:      endLine,
+		Name:         name,
+	}
+}
+
+func newInspectRelatedLocator(filePath, resolvedPath, rootPath string, line, endLine int, name string) locator.Location {
+	if strings.TrimSpace(resolvedPath) == "" {
+		resolvedPath = resolveInspectLocatorPath(filePath, rootPath)
+	} else {
+		resolvedPath = cleanInspectResolvedPath(resolvedPath)
+	}
+	return locator.Location{
+		FilePath:     filePath,
+		ResolvedPath: resolvedPath,
+		Line:         line,
+		EndLine:      endLine,
+		Name:         name,
+	}
+}
+
+func resolveInspectLocatorPath(filePath, rootPath string) string {
+	filePath = strings.TrimSpace(filePath)
+	if filePath == "" {
+		return ""
+	}
+	if filepath.IsAbs(filePath) {
+		return filepath.Clean(filePath)
+	}
+	rootPath = strings.TrimSpace(rootPath)
+	if rootPath == "" {
+		return ""
+	}
+	if abs, err := filepath.Abs(rootPath); err == nil {
+		rootPath = abs
+	}
+	return filepath.Clean(filepath.Join(rootPath, filepath.FromSlash(filePath)))
+}
+
+func cleanInspectResolvedPath(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	if abs, err := filepath.Abs(path); err == nil {
+		path = abs
+	}
+	return filepath.Clean(path)
 }

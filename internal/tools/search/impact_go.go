@@ -288,11 +288,12 @@ func primaryCallerReadItems(refs []navigation.Reference, limit int) []SymbolBund
 			snippet = ref.Scope
 		}
 		items = append(items, SymbolBundleItem{
-			Kind:    "callers",
-			File:    ref.File,
-			Line:    ref.Line,
-			Snippet: snippet,
-			Scope:   ref.Scope,
+			Kind:         "callers",
+			File:         ref.File,
+			ResolvedPath: ref.ResolvedPath,
+			Line:         ref.Line,
+			Snippet:      snippet,
+			Scope:        ref.Scope,
 		})
 	}
 	return items
@@ -308,11 +309,12 @@ func primaryTestReadItems(tests []navigation.TestRef, limit int) []SymbolBundleI
 			break
 		}
 		items = append(items, SymbolBundleItem{
-			Kind:   "tests",
-			File:   test.File,
-			Line:   test.Line,
-			Name:   test.Name,
-			IsTest: true,
+			Kind:         "tests",
+			File:         test.File,
+			ResolvedPath: test.ResolvedPath,
+			Line:         test.Line,
+			Name:         test.Name,
+			IsTest:       true,
 		})
 	}
 	return items
@@ -328,11 +330,12 @@ func primaryImplementationReadItems(impls []navigation.ImplementationRef, limit 
 			break
 		}
 		items = append(items, SymbolBundleItem{
-			Kind:    "implementations",
-			File:    impl.File,
-			Line:    impl.Line,
-			Snippet: strings.TrimSpace(impl.Name),
-			Name:    impl.Name,
+			Kind:         "implementations",
+			File:         impl.File,
+			ResolvedPath: impl.ResolvedPath,
+			Line:         impl.Line,
+			Snippet:      strings.TrimSpace(impl.Name),
+			Name:         impl.Name,
 		})
 	}
 	return items
@@ -360,12 +363,13 @@ func crossPackageRefReadItems(result navigation.InspectResult, limit int) []Symb
 			snippet = ref.Scope
 		}
 		items = append(items, SymbolBundleItem{
-			Kind:    "references",
-			File:    ref.File,
-			Line:    ref.Line,
-			Snippet: snippet,
-			Scope:   ref.Scope,
-			IsTest:  ref.IsTest,
+			Kind:         "references",
+			File:         ref.File,
+			ResolvedPath: ref.ResolvedPath,
+			Line:         ref.Line,
+			Snippet:      snippet,
+			Scope:        ref.Scope,
+			IsTest:       ref.IsTest,
 		})
 		if len(items) >= limit {
 			break

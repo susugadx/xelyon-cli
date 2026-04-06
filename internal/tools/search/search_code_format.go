@@ -63,6 +63,10 @@ func truncateToTokenBudget(results []SearchResult, budget int, _ bool) ([]Search
 }
 
 func formatSearchResults(results []SearchResult, truncated bool, tokenBudget int, reg *locator.Registry) string {
+	return formatSearchResultsWithOptions(results, truncated, tokenBudget, reg, SearchOptions{})
+}
+
+func formatSearchResultsWithOptions(results []SearchResult, truncated bool, tokenBudget int, reg *locator.Registry, opts SearchOptions) string {
 	totalMatches := 0
 	for _, r := range results {
 		totalMatches += r.MatchCount
@@ -70,19 +74,19 @@ func formatSearchResults(results []SearchResult, truncated bool, tokenBudget int
 
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "Found %d match(es) in %d file(s)\n", totalMatches, len(results))
-	sb.WriteString(formatSearchResultsBody(results, truncated, tokenBudget, reg))
+	sb.WriteString(formatSearchResultsBody(results, truncated, tokenBudget, reg, opts))
 	return sb.String()
 }
 
 // formatSearchResultsBody はファイルごとの結果部分のみをフォーマットする
 // formatSearchResults と formatMultiResults の両方から呼ばれる
-func formatSearchResultsBody(results []SearchResult, truncated bool, tokenBudget int, reg *locator.Registry) string {
+func formatSearchResultsBody(results []SearchResult, truncated bool, tokenBudget int, reg *locator.Registry, opts SearchOptions) string {
 	var sb strings.Builder
 
 	for _, r := range results {
 		fileHeader := fmt.Sprintf("\n📄 %s (%d match(es))", r.FilePath, r.MatchCount)
 		if reg != nil {
-			id := reg.Register(locator.Location{FilePath: r.FilePath})
+			id := reg.Register(newTextSearchLocator(r.FilePath, 0, 0, "", opts))
 			fileHeader += " " + id
 		}
 		fmt.Fprintf(&sb, "%s\n", fileHeader)
@@ -121,11 +125,7 @@ func formatSearchResultsBody(results []SearchResult, truncated bool, tokenBudget
 						blockLine = fmt.Sprintf("  %10s  %4s   ── in %s", "", "", m.Block.Name)
 					}
 					if reg != nil && m.Block.StartLine > 0 {
-						id := reg.Register(locator.Location{
-							FilePath: r.FilePath,
-							Line:     m.Block.StartLine,
-							Name:     m.Block.Name,
-						})
+						id := reg.Register(newTextSearchLocator(r.FilePath, m.Block.StartLine, 0, m.Block.Name, opts))
 						blockLine += " " + id
 					}
 					fmt.Fprintf(&sb, "%s\n", blockLine)
@@ -145,6 +145,10 @@ func formatSearchResultsBody(results []SearchResult, truncated bool, tokenBudget
 
 // formatMultiResults は複数パターンの検索結果をフォーマットする
 func formatMultiResults(collected []patternResult, tokenBudget int) string {
+	return formatMultiResultsWithOptions(collected, tokenBudget, SearchOptions{})
+}
+
+func formatMultiResultsWithOptions(collected []patternResult, tokenBudget int, opts SearchOptions) string {
 	var b strings.Builder
 
 	totalMatches := 0
@@ -183,16 +187,14 @@ func formatMultiResults(collected []patternResult, tokenBudget int) string {
 			continue
 		}
 
-		b.WriteString(formatSearchResultsBody(pr.Results, pr.Truncated, budgetPerPattern, nil))
+		b.WriteString(formatSearchResultsBody(pr.Results, pr.Truncated, budgetPerPattern, nil, opts))
 		b.WriteString("\n")
 	}
 
 	return b.String()
 }
 
-// formatManifestLine はファイル1つ分のマニフェスト行を生成する。
-// ブロック名を最大3つまで付記する。
-func formatManifestLine(r SearchResult, reg *locator.Registry) string {
+func formatManifestLineWithOptions(r SearchResult, reg *locator.Registry, opts SearchOptions) string {
 	blockNames := collectUniqueBlockNames(r.Matches, 3)
 	var line string
 	if len(blockNames) > 0 {
@@ -201,7 +203,7 @@ func formatManifestLine(r SearchResult, reg *locator.Registry) string {
 		line = fmt.Sprintf("  %-40s — %d matches", r.FilePath, r.MatchCount)
 	}
 	if reg != nil {
-		id := reg.Register(locator.Location{FilePath: r.FilePath})
+		id := reg.Register(newTextSearchLocator(r.FilePath, 0, 0, "", opts))
 		line += " " + id
 	}
 	return line
@@ -228,6 +230,10 @@ func collectUniqueBlockNames(matches []Match, limit int) []string {
 
 // formatManifestResults は単一パターンのマニフェスト出力を生成する
 func formatManifestResults(results []SearchResult, reg *locator.Registry) string {
+	return formatManifestResultsWithOptions(results, reg, SearchOptions{})
+}
+
+func formatManifestResultsWithOptions(results []SearchResult, reg *locator.Registry, opts SearchOptions) string {
 	totalMatches := 0
 	for _, r := range results {
 		totalMatches += r.MatchCount
@@ -235,7 +241,7 @@ func formatManifestResults(results []SearchResult, reg *locator.Registry) string
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "Found %d matches in %d files:\n", totalMatches, len(results))
 	for _, r := range results {
-		sb.WriteString(formatManifestLine(r, reg))
+		sb.WriteString(formatManifestLineWithOptions(r, reg, opts))
 		sb.WriteString("\n")
 	}
 	return sb.String()
@@ -243,6 +249,10 @@ func formatManifestResults(results []SearchResult, reg *locator.Registry) string
 
 // formatManifestMultiResults は複数パターンのマニフェスト出力を生成する
 func formatManifestMultiResults(collected []patternResult, reg *locator.Registry) string {
+	return formatManifestMultiResultsWithOptions(collected, reg, SearchOptions{})
+}
+
+func formatManifestMultiResultsWithOptions(collected []patternResult, reg *locator.Registry, opts SearchOptions) string {
 	var sb strings.Builder
 	totalMatches := 0
 	for _, pr := range collected {
@@ -266,7 +276,7 @@ func formatManifestMultiResults(collected []patternResult, reg *locator.Registry
 			continue
 		}
 		for _, r := range pr.Results {
-			sb.WriteString(formatManifestLine(r, reg))
+			sb.WriteString(formatManifestLineWithOptions(r, reg, opts))
 			sb.WriteString("\n")
 		}
 		sb.WriteString("\n")

@@ -37,6 +37,17 @@ func TestRegisterIdempotent(t *testing.T) {
 	}
 }
 
+func TestRegisterDistinctResolvedPathsDoNotDedup(t *testing.T) {
+	reg := NewRegistry()
+
+	id1 := reg.Register(Location{FilePath: "target.go", ResolvedPath: "/repo/target.go", Line: 3})
+	id2 := reg.Register(Location{FilePath: "target.go", ResolvedPath: "/repo/sub/target.go", Line: 3})
+
+	if id1 == id2 {
+		t.Fatalf("expected distinct IDs for same display path with different resolved paths, got %s", id1)
+	}
+}
+
 func TestRegisterMultipleLocations(t *testing.T) {
 	reg := NewRegistry()
 

@@ -42,7 +42,7 @@ func executeReadFileRequest(out common.Output, cfg *config.Config, cache tools.T
 		if result, handled := maybeExecuteCompactRangeRead(out, cfg, cache, req); handled {
 			return result
 		}
-		return executeReadFileCore(out, cfg, cache, req.FilePath, req.StartLine, req.EndLine, DefaultFullLines)
+		return executeReadFileRequestCore(out, cfg, cache, req, DefaultFullLines)
 	}
 
 	if req.Detail == readDetailCompact {
@@ -53,10 +53,10 @@ func executeReadFileRequest(out common.Output, cfg *config.Config, cache tools.T
 	}
 
 	if req.Detail.wholeFileOverride() {
-		return executeReadWholeFileWithDetail(out, cfg, cache, req.FilePath, req.Detail)
+		return executeReadRequestWholeFileWithDetail(out, cfg, cache, req, req.Detail)
 	}
 
-	return executeReadFileCore(out, cfg, cache, req.FilePath, 0, 0, wholeFileThreshold)
+	return executeReadFileRequestCore(out, cfg, cache, req, wholeFileThreshold)
 }
 
 func normalizeReadRequestForExecution(req readRequest) readRequest {
@@ -71,14 +71,14 @@ func canFallbackCompactWholeFile(req readRequest) bool {
 }
 
 func executeCompactWholeFileFallback(out common.Output, cfg *config.Config, cache tools.ToolCacheInterface, req readRequest, wholeFileThreshold int) string {
-	ctx, errResult := newReadFileContext(out, cfg, cache, req.FilePath, wholeFileThreshold)
+	ctx, errResult := newReadFileContextForRequest(out, cfg, cache, req, wholeFileThreshold)
 	if errResult != "" {
 		return errResult
 	}
 	if ctx.fileInfo != nil && ctx.fileInfo.Size() > LargeFileThreshold {
 		return executeLargeFileOutline(ctx)
 	}
-	return executeReadFileCore(out, cfg, cache, req.FilePath, 0, 0, wholeFileThreshold)
+	return executeReadFileRequestCore(out, cfg, cache, req, wholeFileThreshold)
 }
 
 func maybeExecuteCompactRangeRead(out common.Output, cfg *config.Config, cache tools.ToolCacheInterface, req readRequest) (string, bool) {
@@ -86,7 +86,7 @@ func maybeExecuteCompactRangeRead(out common.Output, cfg *config.Config, cache t
 		return "", false
 	}
 
-	ctx, errResult := newReadFileContext(out, cfg, cache, req.FilePath, DefaultFullLines)
+	ctx, errResult := newReadFileContextForRequest(out, cfg, cache, req, DefaultFullLines)
 	if errResult != "" {
 		return errResult, true
 	}
@@ -103,7 +103,18 @@ func executeReadFileCore(out common.Output, cfg *config.Config, cache tools.Tool
 	if errResult != "" {
 		return errResult
 	}
+	return executeReadFileWithContext(ctx, startLine, endLine)
+}
 
+func executeReadFileRequestCore(out common.Output, cfg *config.Config, cache tools.ToolCacheInterface, req readRequest, outlineThreshold int) string {
+	ctx, errResult := newReadFileContextForRequest(out, cfg, cache, req, outlineThreshold)
+	if errResult != "" {
+		return errResult
+	}
+	return executeReadFileWithContext(ctx, req.StartLine, req.EndLine)
+}
+
+func executeReadFileWithContext(ctx readFileContext, startLine, endLine int) string {
 	if startLine == 0 && endLine == 0 {
 		if result, handled := maybeReadLargeFile(ctx); handled {
 			return result
@@ -121,12 +132,15 @@ func executeReadFileCore(out common.Output, cfg *config.Config, cache tools.Tool
 	return renderReadResult(ctx, contentStr, startLine, endLine)
 }
 
-func executeReadWholeFileWithDetail(out common.Output, cfg *config.Config, cache tools.ToolCacheInterface, path string, detail readDetailMode) string {
-	ctx, errResult := newReadFileContext(out, cfg, cache, path, DefaultFullLines)
+func executeReadRequestWholeFileWithDetail(out common.Output, cfg *config.Config, cache tools.ToolCacheInterface, req readRequest, detail readDetailMode) string {
+	ctx, errResult := newReadFileContextForRequest(out, cfg, cache, req, DefaultFullLines)
 	if errResult != "" {
 		return errResult
 	}
+	return executeReadWholeFileWithDetailContext(ctx, detail)
+}
 
+func executeReadWholeFileWithDetailContext(ctx readFileContext, detail readDetailMode) string {
 	if detail == readDetailOutline {
 		if ctx.fileInfo != nil && ctx.fileInfo.Size() > LargeFileThreshold {
 			ctx.outlineThreshold = 0

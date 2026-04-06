@@ -117,7 +117,7 @@ func executeSinglePatternDetailed(cache tools.ToolCacheInterface, pattern string
 	if opts.OutputMode == "manifest" {
 		sortResultsByPriority(results)
 		detectBlocksWithCache(cache, results)
-		formatted := formatManifestResults(results, opts.LocatorRegistry)
+		formatted := formatManifestResultsWithOptions(results, opts.LocatorRegistry, opts)
 		finalOutput := formatted
 		if len(warnings) > 0 {
 			finalOutput = strings.Join(warnings, "\n") + "\n" + formatted
@@ -139,7 +139,7 @@ func executeSinglePatternDetailed(cache tools.ToolCacheInterface, pattern string
 
 	detectBlocksWithCache(cache, results)
 
-	formatted := formatSearchResults(results, truncated, opts.TokenBudget, opts.LocatorRegistry)
+	formatted := formatSearchResultsWithOptions(results, truncated, opts.TokenBudget, opts.LocatorRegistry, opts)
 	finalOutput := formatted
 	if len(warnings) > 0 {
 		finalOutput = strings.Join(warnings, "\n") + "\n" + formatted

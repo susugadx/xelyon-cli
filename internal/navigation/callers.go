@@ -215,12 +215,13 @@ func findReferencesViaLSP(client LSPClient, cand SymbolCandidate, invocationCWD 
 	for _, loc := range locations {
 		filePath := lspLocationFilePath(loc.File, cand.RootPath, invocationCWD)
 		refs = append(refs, Reference{
-			File:    filePath,
-			Line:    loc.Line,
-			Scope:   findEnclosingFunction(filePath, loc.Line),
-			Snippet: readLineSnippet(filePath, loc.Line),
-			IsTest:  isTestFile(filePath),
-			Class:   classifyLineByAST(filePath, loc.Line, cand.Name),
+			File:         filePath,
+			ResolvedPath: cleanNavigationResolvedPath(filePath),
+			Line:         loc.Line,
+			Scope:        findEnclosingFunction(filePath, loc.Line),
+			Snippet:      readLineSnippet(filePath, loc.Line),
+			IsTest:       isTestFile(filePath),
+			Class:        classifyLineByAST(filePath, loc.Line, cand.Name),
 		})
 	}
 	return refs, nil
@@ -245,9 +246,10 @@ func findImplementationsViaLSP(client LSPClient, cand SymbolCandidate, invocatio
 	for _, loc := range locations {
 		filePath := lspLocationFilePath(loc.File, cand.RootPath, invocationCWD)
 		impls = append(impls, ImplementationRef{
-			File: filePath,
-			Line: loc.Line,
-			Name: findTypeNameAtLine(filePath, loc.Line),
+			File:         filePath,
+			ResolvedPath: cleanNavigationResolvedPath(filePath),
+			Line:         loc.Line,
+			Name:         findTypeNameAtLine(filePath, loc.Line),
 		})
 	}
 	return impls, nil
@@ -471,6 +473,7 @@ func parseRipgrepLine(line, symbol string, cache *referenceParseCache) *Referenc
 
 	return &Reference{
 		File:         relPath,
+		ResolvedPath: cleanNavigationResolvedPath(absPath),
 		Line:         lineNum,
 		Scope:        scope,
 		Snippet:      strings.TrimSpace(content),
@@ -480,6 +483,17 @@ func parseRipgrepLine(line, symbol string, cache *referenceParseCache) *Referenc
 		SelectorKind: selectorKind,
 		ReceiverType: receiverType,
 	}
+}
+
+func cleanNavigationResolvedPath(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	if abs, err := filepath.Abs(path); err == nil {
+		path = abs
+	}
+	return filepath.Clean(path)
 }
 
 func applyGoParserReferenceHints(file *goast.File, fset *token.FileSet, imports map[string]bool, line int, symbol, scope string, class ast.MatchClass, nodeType, selectorKind, receiverType string) (string, ast.MatchClass, string, string, string) {
