@@ -22,6 +22,7 @@ func executeSinglePatternDetailed(cache tools.ToolCacheInterface, pattern string
 	if cache != nil {
 		if cached, ok := cache.GetSearch(pattern, cacheKey); ok {
 			bundle := loadSinglePatternBundle(pattern, cacheKey)
+			bundle, cached = formatImpactBundleForRuntimeWithContext(bundle, cached, opts, cache, currentSearchImpactRuntimeRankContext(pattern, cacheKey))
 			affectedFiles := loadSinglePatternAffectedFiles(pattern, cacheKey)
 			if len(affectedFiles) == 0 {
 				affectedFiles = deriveAffectedFilesFromCachedResult(bundle, cached, opts)
@@ -46,6 +47,7 @@ func executeSinglePatternDetailed(cache tools.ToolCacheInterface, pattern string
 				route.FinalLane = searchLaneSymbol
 				route.SymbolResolved = true
 				resolved.Bundle = attachBundleRoute(resolved.Bundle, route)
+				outputBundle, output := formatImpactBundleForRuntime(resolved.Bundle, resolved.Output, opts, cache)
 				affectedFiles := collectSymbolBundleAffectedFiles(resolved.Bundle, opts)
 				if cache != nil {
 					cache.SetSearch(pattern, cacheKey, resolved.Output, affectedFiles)
@@ -54,9 +56,9 @@ func executeSinglePatternDetailed(cache tools.ToolCacheInterface, pattern string
 				}
 				return singlePatternExecution{
 					Pattern:       pattern,
-					Output:        resolved.Output,
+					Output:        output,
 					Route:         route,
-					Bundle:        resolved.Bundle,
+					Bundle:        outputBundle,
 					AffectedFiles: affectedFiles,
 				}
 			case symbolResolveMultiple:

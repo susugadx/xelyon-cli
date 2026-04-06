@@ -417,6 +417,33 @@ func TestToolCache_RecentSearchAffectedFilesAfterSymbolSearch(t *testing.T) {
 	}
 }
 
+func TestToolCache_RecentSearchAffectedFilesExcludingSkipsCurrentSearchEntry(t *testing.T) {
+	cache := NewToolCache()
+
+	currentFiles := make([]string, 0, 40)
+	for i := 0; i < 40; i++ {
+		currentFiles = append(currentFiles, filepath.Join("/project", fmt.Sprintf("current_%02d.go", i)))
+	}
+	olderFile := filepath.Join("/project", "older.go")
+
+	cache.SetSearch("older", "/project", "older-result", []string{olderFile})
+	cache.SetSearch("current", "/project", "current-result", currentFiles)
+
+	if got := cache.RecentSearchAffectedFiles(32); containsStringInSlice(got, olderFile) {
+		t.Fatalf("expected current search to consume the recent-search limit before exclusion, got %v", got)
+	}
+
+	got := cache.RecentSearchAffectedFilesExcluding("current", "/project", 32)
+	if !containsStringInSlice(got, olderFile) {
+		t.Fatalf("expected excluding current search to surface older affected file %s, got %v", olderFile, got)
+	}
+	for _, file := range currentFiles {
+		if containsStringInSlice(got, file) {
+			t.Fatalf("did not expect excluded current search file %s in %v", file, got)
+		}
+	}
+}
+
 func TestToolCache_FileCacheLRU(t *testing.T) {
 	cache := NewToolCache()
 	tmpDir := t.TempDir()
@@ -804,4 +831,13 @@ func TestToolCache_Save_SizeLimit(t *testing.T) {
 			t.Errorf("cache file should not exceed %d bytes, got %d", maxCacheFileSize, info.Size())
 		}
 	}
+}
+
+func containsStringInSlice(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }

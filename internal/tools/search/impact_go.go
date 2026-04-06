@@ -25,6 +25,8 @@ func tryStructuredGoImpactSearch(cache tools.ToolCacheInterface, opts SearchOpti
 	cacheKey := buildSearchCacheKeyWithRoute(opts, route.cacheSignature()+"|"+structuredGoImpactRouteTag)
 	if cache != nil {
 		if cached, ok := cache.GetSearch(pattern, cacheKey); ok {
+			bundle := loadSinglePatternBundle(pattern, cacheKey)
+			_, cached = formatImpactBundleForRuntimeWithContext(bundle, cached, opts, cache, currentSearchImpactRuntimeRankContext(pattern, cacheKey))
 			return cached, true
 		}
 	}
@@ -40,6 +42,7 @@ func tryStructuredGoImpactSearch(cache tools.ToolCacheInterface, opts SearchOpti
 		route.FinalLane = searchLaneSymbol
 		resolved.Bundle = attachBundleRoute(resolved.Bundle, route)
 		affectedFiles := collectSymbolBundleAffectedFiles(resolved.Bundle, opts)
+		_, output := formatImpactBundleForRuntime(resolved.Bundle, resolved.Output, opts, cache)
 
 		if cache != nil {
 			cache.SetSearch(pattern, cacheKey, resolved.Output, affectedFiles)
@@ -47,7 +50,7 @@ func tryStructuredGoImpactSearch(cache tools.ToolCacheInterface, opts SearchOpti
 			storeSinglePatternAffectedFiles(pattern, cacheKey, affectedFiles)
 		}
 
-		return resolved.Output, true
+		return output, true
 	case symbolResolveMultiple:
 		route.SymbolResolved = true
 		route.FinalLane = searchLaneSymbol
