@@ -2,6 +2,7 @@ package agent
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
@@ -69,10 +70,7 @@ func handleModelCommand(agent *Agent, args []string) bool {
 	cfg.DefaultModel = newModel
 
 	// プロバイダー別の設定がある場合はそちらも更新（優先されるため）
-	if pm, ok := cfg.ProviderModels[agent.ProviderName]; ok {
-		pm.DefaultModel = newModel
-		cfg.ProviderModels[agent.ProviderName] = pm
-	}
+	agent.SyncDefaultModelToProvider(cfg)
 
 	if err := config.SaveConfig(cfg); err != nil {
 		yellow.Fprintf(out, "Warning: Failed to save config: %v\n", err)
@@ -110,10 +108,7 @@ func handleConfigCommand(agent *Agent, args []string) bool {
 
 		// プロバイダー別の設定がある場合はそちらも更新
 		if agent != nil {
-			if pm, ok := cfg.ProviderModels[agent.ProviderName]; ok {
-				pm.DefaultModel = newModel
-				cfg.ProviderModels[agent.ProviderName] = pm
-			}
+			agent.SyncDefaultModelToProvider(cfg)
 		}
 
 		if err := config.SaveConfig(cfg); err != nil {
@@ -215,10 +210,8 @@ func runInteractiveConfig(agent *Agent, cfg *config.Config) {
 			// default_model 変更時はプロバイダー別設定も同期
 			if selectedField.Path == "default_model" && agent != nil {
 				if strValue, ok := newValue.(string); ok {
-					if pm, ok := cfg.ProviderModels[agent.ProviderName]; ok {
-						pm.DefaultModel = strValue
-						cfg.ProviderModels[agent.ProviderName] = pm
-					}
+					cfg.DefaultModel = strValue
+					agent.SyncDefaultModelToProvider(cfg)
 				}
 			}
 
@@ -271,7 +264,8 @@ func handleUseCommand(agent *Agent, args []string) bool {
 	}
 
 	// 既に同じプロバイダーの場合でも、モデルが指定されていれば切り替え
-	if agent.ProviderName == providerName && len(args) < 2 {
+	requestedProviderConfigKey := config.NormalizeProviderName(providerName)
+	if len(args) < 2 && requestedProviderConfigKey != "" && requestedProviderConfigKey == agent.currentProviderConfigKey() {
 		yellow.Fprintf(out, "Already using %s (model: %s)\n", providerName, agent.CurrentModel)
 		yellow.Fprintln(out, "Hint: Use '/use <provider> <model>' to change model")
 		return true
@@ -282,7 +276,7 @@ func handleUseCommand(agent *Agent, args []string) bool {
 		red.Fprintf(out, "❌ %v\n", err)
 
 		// API キー設定方法を表示
-		switch providerName {
+		switch config.CanonicalProviderName(providerName) {
 		case "deepseek":
 			yellow.Fprintln(out, "\n設定方法:")
 			yellow.Fprintln(out, "  export DEEPSEEK_API_KEY=your-api-key")
@@ -332,6 +326,20 @@ func handleUseCommand(agent *Agent, args []string) bool {
 func handleProvidersCommand(agent *Agent) bool {
 	providers := api.ListProviders()
 	out := agent.output()
+	currentProviderConfigKey := agent.currentProviderConfigKey()
+	if currentProviderConfigKey != "" && api.IsRegisteredProvider(currentProviderConfigKey) {
+		found := false
+		for _, provider := range providers {
+			if config.NormalizeProviderName(provider) == currentProviderConfigKey {
+				found = true
+				break
+			}
+		}
+		if !found {
+			providers = append(providers, currentProviderConfigKey)
+			slices.Sort(providers)
+		}
+	}
 
 	cyan.Fprintln(out, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	cyan.Fprintln(out, "📡 利用可能なプロバイダー / Available Providers")
@@ -339,8 +347,8 @@ func handleProvidersCommand(agent *Agent) bool {
 	_, _ = fmt.Fprintln(out)
 
 	for _, provider := range providers {
-		// 現在使用中かチェック
-		isCurrent := agent.ProviderName == provider
+		// 表示上の current は session が所有する exact provider config key に合わせる。
+		isCurrent := currentProviderConfigKey != "" && config.NormalizeProviderName(provider) == currentProviderConfigKey
 		hasAPIKey := IsAPIKeyAvailable(provider)
 
 		// アイコン

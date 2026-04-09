@@ -37,6 +37,36 @@ func (t *blockingParallelTool) Run(_ tools.ExecutionContext, _ map[string]string
 	return "ok", nil, nil
 }
 
+func TestToolExecutionContext_PrefersActiveModelOwnerForProviderConfigKey(t *testing.T) {
+	cfg := newProjectMapDisabledConfig()
+	cfg.SetProviderModelsForEdit(map[string]config.ProviderModelConfig{
+		"claude": {
+			DefaultModel: "claude-custom",
+		},
+		"anthropic": {
+			DefaultModel: "anthropic-custom",
+		},
+	})
+	runtime := NewAgentRuntimeWithConfig(cfg)
+
+	agent := &Agent{
+		ProviderName:      "claude",
+		ProviderConfigKey: "claude",
+		CurrentModel:      "anthropic-custom",
+		CurrentProvider:   &MockProvider{name: "claude"},
+		Runtime:           runtime,
+	}
+
+	execCtx := agent.toolExecutionContext(context.Background(), nil, io.Discard, io.Discard)
+
+	if execCtx.ProviderName != "claude" {
+		t.Fatalf("ProviderName = %q, want %q", execCtx.ProviderName, "claude")
+	}
+	if execCtx.ProviderConfigKey != "anthropic" {
+		t.Fatalf("ProviderConfigKey = %q, want %q", execCtx.ProviderConfigKey, "anthropic")
+	}
+}
+
 // --- Test 1: Loop detection prevents execution of subsequent tools ---
 
 func TestExecuteToolCallsWithParallel_LoopDetection_PreventsExecution(t *testing.T) {

@@ -227,20 +227,7 @@ func appendHeadlessToolResultToHistory(agent *Agent, toolCall *tools.ToolCall, r
 	if agent == nil || toolCall == nil {
 		return
 	}
-	if toolCall.ID != "" {
-		agent.History = append(agent.History, api.Message{
-			Role:       "tool",
-			Content:    result,
-			ToolCallID: toolCall.ID,
-			ToolName:   toolCall.Tool,
-		})
-		return
-	}
-
-	agent.History = append(agent.History, api.Message{
-		Role:    "user",
-		Content: fmt.Sprintf("[Tool Result for %s]\n%s", toolCall.Tool, result),
-	})
+	agent.History = append(agent.History, buildToolResultMessage(toolCall, result, formatTextToolResultContent(toolCall.Tool, result)))
 }
 
 // extractToolFilePath はツール呼び出しから表示用ターゲットを抽出する。
@@ -339,7 +326,7 @@ func RunOnceWithConfig(query string, model string, provider api.Provider, cfg *c
 }
 
 // RunOnceWithImageWithConfig は指定設定で画像付きの単一クエリを実行する。
-func RunOnceWithImageWithConfig(query string, model string, provider api.Provider, imagePath string, cfg *config.Config, autoApprove bool) {
+func RunOnceWithImageWithConfig(query string, model string, provider api.Provider, imagePath string, cfg *config.Config, autoApprove bool, quiet bool) error {
 	runtime := NewAgentRuntimeWithConfig(cfg)
 	runtime.AutoApprove = autoApprove
 	out := runtime.effectiveUI().Output()
@@ -350,6 +337,9 @@ func RunOnceWithImageWithConfig(query string, model string, provider api.Provide
 	if err != nil {
 		yellow.Fprintf(out, "Warning: Failed to initialize audit log: %v\n", err)
 	}
+	if auditEnabled && !quiet {
+		green.Fprintln(out, "📝 Audit logging enabled")
+	}
 	if logger != nil {
 		runtime.AuditLogger = logger
 	}
@@ -357,24 +347,25 @@ func RunOnceWithImageWithConfig(query string, model string, provider api.Provide
 	agent.setAutoApprove(autoApprove)
 	defer agent.Cleanup()
 
-	// ヘッダー表示
-	printHeaderToWriter(runtime.effectiveUI().Output(), model, provider)
-	printModeInfoToWriter(runtime.effectiveUI().Output(), autoApprove, false)
+	// ヘッダー表示（quiet 時はスキップ）
+	if !quiet {
+		printHeaderToWriter(runtime.effectiveUI().Output(), model, provider)
+		printModeInfoToWriter(runtime.effectiveUI().Output(), autoApprove, false)
+	}
 
 	// プロバイダーが画像対応かチェック
-	if !api.SupportsImages(provider.Name()) {
-		red.Fprintf(out, "❌ Provider '%s' does not support image input\n", provider.Name())
-		_, _ = fmt.Fprintln(agent.output(), "Supported providers for image input: gemini, claude, openai")
-		return
+	if !provider.SupportsImages() {
+		return fmt.Errorf("provider %q does not support image input", provider.Name())
 	}
 
 	// 画像読み込み
 	image, err := api.LoadImage(imagePath)
 	if err != nil {
-		red.Fprintf(out, "❌ Failed to load image: %v\n", err)
-		return
+		return fmt.Errorf("failed to load image: %w", err)
 	}
-	green.Fprintf(out, "🖼️  Image loaded: %s (%s)\n", image.Path, api.FormatImageSize(image.Size))
+	if !quiet {
+		green.Fprintf(out, "🖼️  Image loaded: %s (%s)\n", image.Path, api.FormatImageSize(image.Size))
+	}
 
 	// プロジェクト設定読み込み（xelyon.yaml）
 	if pc := loadProjectConfig(); pc != nil {
@@ -382,44 +373,17 @@ func RunOnceWithImageWithConfig(query string, model string, provider api.Provide
 	}
 	injectProjectMap(agent, "")
 
-	_, _ = fmt.Fprintln(agent.output())
+	if !quiet {
+		_, _ = fmt.Fprintln(agent.output())
+	}
 
 	// デフォルトメッセージ
 	if query == "" {
 		query = "Please analyze this image."
 	}
 
-	// 画像付きで会話
-	agent.chatWithImage(query, image)
-
-	// 対話ループに入る
-	runtimeUI := runtime.effectiveUI()
-	mlReader := ui.NewMultilineReaderWithRuntime(runtimeUI)
-	runtimeUI.SetPromptReader(mlReader)
-	mlReader.EnableBracketedPaste()
-	defer mlReader.DisableBracketedPaste()
-	agent.setPromptReader(mlReader)
-
-	for {
-		mlReader.FlushInput()
-		agent.PrintStatusFooter()
-
-		input, err := mlReader.ReadInput("\n> ")
-		if err != nil {
-			break
-		}
-
-		input = strings.TrimSpace(input)
-		if input == "" {
-			continue
-		}
-
-		// 特殊コマンド
-		if handleSpecialCommand(input, agent) {
-			continue
-		}
-
-		// 通常の会話
-		agent.chat(input)
+	if !quiet {
+		green.Fprintf(out, "🖼️  Sending image: %s (%s)\n", image.Path, api.FormatImageSize(image.Size))
 	}
+	return agent.ChatOnceWithImage(query, image)
 }

@@ -26,6 +26,68 @@ type ConfigCategory struct {
 	Fields      []ConfigField // フィールドリスト
 }
 
+type fieldAdapter struct {
+	get        func(*Config) (interface{}, error)
+	set        func(*Config, interface{}) error
+	getDefault func() interface{}
+}
+
+func getProviderModelsFieldValue(cfg *Config) (interface{}, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("config is nil")
+	}
+	return cfg.ProviderModelsForEdit(), nil
+}
+
+func setProviderModelsFieldValue(cfg *Config, value interface{}) error {
+	if cfg == nil {
+		return fmt.Errorf("config is nil")
+	}
+	providerModels, ok := value.(map[string]ProviderModelConfig)
+	if !ok {
+		return fmt.Errorf("type mismatch: expected map[string]ProviderModelConfig, got %T", value)
+	}
+	if providerModels == nil {
+		cfg.ResetProviderModelsForEdit()
+		return nil
+	}
+	cfg.SetProviderModelsForEdit(providerModels)
+	return nil
+}
+
+func getLSPServersFieldValue(cfg *Config) (interface{}, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("config is nil")
+	}
+	return cfg.LSP.Servers, nil
+}
+
+func setLSPServersFieldValue(cfg *Config, value interface{}) error {
+	if cfg == nil {
+		return fmt.Errorf("config is nil")
+	}
+	servers, ok := value.(map[string]LSPServerConfig)
+	if !ok {
+		return fmt.Errorf("type mismatch: expected map[string]LSPServerConfig, got %T", value)
+	}
+	cfg.LSP.Servers = servers
+	return nil
+}
+
+var fieldAdapters = map[string]fieldAdapter{
+	"provider_models": {
+		get: getProviderModelsFieldValue,
+		set: setProviderModelsFieldValue,
+		getDefault: func() interface{} {
+			return map[string]ProviderModelConfig(nil)
+		},
+	},
+	"lsp.servers": {
+		get: getLSPServersFieldValue,
+		set: setLSPServersFieldValue,
+	},
+}
+
 // BuildConfigRegistry はConfig構造体からカテゴリリストを構築する
 func BuildConfigRegistry(cfg *Config) []ConfigCategory {
 	defaultCfg := DefaultConfig()
@@ -49,6 +111,9 @@ func BuildConfigRegistry(cfg *Config) []ConfigCategory {
 
 			currentVal, _ := GetFieldValue(cfg, fieldPath)
 			defaultVal, _ := GetFieldValue(defaultCfg, fieldPath)
+			if adapter, ok := fieldAdapters[fieldPath]; ok && adapter.getDefault != nil {
+				defaultVal = adapter.getDefault()
+			}
 
 			// 表示名をパスから生成
 			displayName := fieldPath
@@ -75,14 +140,12 @@ func BuildConfigRegistry(cfg *Config) []ConfigCategory {
 	return categories
 }
 
-// GetFieldValue はパスを指定して設定値を取得する
-func GetFieldValue(cfg *Config, path string) (interface{}, error) {
+func getReflectFieldValue(cfg *Config, path string) (interface{}, error) {
 	parts := strings.Split(path, ".")
 	v := reflect.ValueOf(cfg).Elem()
 
 	for _, part := range parts {
 		if v.Kind() == reflect.Map {
-			// map型の場合
 			key := reflect.ValueOf(part)
 			mapVal := v.MapIndex(key)
 			if !mapVal.IsValid() {
@@ -96,7 +159,6 @@ func GetFieldValue(cfg *Config, path string) (interface{}, error) {
 			return nil, fmt.Errorf("not a struct: %s", part)
 		}
 
-		// yamlタグでフィールドを検索
 		t := v.Type()
 		found := false
 		for i := 0; i < t.NumField(); i++ {
@@ -117,12 +179,10 @@ func GetFieldValue(cfg *Config, path string) (interface{}, error) {
 	return v.Interface(), nil
 }
 
-// SetFieldValue はパスを指定して設定値を設定する
-func SetFieldValue(cfg *Config, path string, value interface{}) error {
+func setReflectFieldValue(cfg *Config, path string, value interface{}) error {
 	parts := strings.Split(path, ".")
 	v := reflect.ValueOf(cfg).Elem()
 
-	// 最後の要素以外をたどる
 	for i := 0; i < len(parts)-1; i++ {
 		part := parts[i]
 
@@ -140,13 +200,14 @@ func SetFieldValue(cfg *Config, path string, value interface{}) error {
 			return fmt.Errorf("not a struct: %s", part)
 		}
 
+		// yamlタグでフィールドを検索
 		t := v.Type()
 		found := false
-		for j := 0; j < t.NumField(); j++ {
-			field := t.Field(j)
+		for i := 0; i < t.NumField(); i++ {
+			field := t.Field(i)
 			yamlTag := strings.Split(field.Tag.Get("yaml"), ",")[0]
 			if yamlTag == part {
-				v = v.Field(j)
+				v = v.Field(i)
 				found = true
 				break
 			}
@@ -157,11 +218,9 @@ func SetFieldValue(cfg *Config, path string, value interface{}) error {
 		}
 	}
 
-	// 最後の要素を設定
 	lastPart := parts[len(parts)-1]
 
 	if v.Kind() == reflect.Map {
-		// map型の場合
 		key := reflect.ValueOf(lastPart)
 		v.SetMapIndex(key, reflect.ValueOf(value))
 		return nil
@@ -194,6 +253,22 @@ func SetFieldValue(cfg *Config, path string, value interface{}) error {
 	}
 
 	return fmt.Errorf("field not found: %s", lastPart)
+}
+
+// GetFieldValue はパスを指定して設定値を取得する
+func GetFieldValue(cfg *Config, path string) (interface{}, error) {
+	if adapter, ok := fieldAdapters[path]; ok {
+		return adapter.get(cfg)
+	}
+	return getReflectFieldValue(cfg, path)
+}
+
+// SetFieldValue はパスを指定して設定値を設定する
+func SetFieldValue(cfg *Config, path string, value interface{}) error {
+	if adapter, ok := fieldAdapters[path]; ok {
+		return adapter.set(cfg, value)
+	}
+	return setReflectFieldValue(cfg, path, value)
 }
 
 // GetStringMapValue はmap[string]string型のフィールド値を取得する

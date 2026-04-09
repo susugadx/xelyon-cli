@@ -82,7 +82,7 @@ func TestTUIConfig_Model_StillWorks(t *testing.T) {
 	cfg := newProjectMapDisabledConfig()
 	cfg.DefaultProvider = "openai"
 	cfg.DefaultModel = "gpt-old"
-	cfg.ProviderModels["openai"] = config.ProviderModelConfig{DefaultModel: "gpt-old"}
+	cfg.SetProviderModelConfig("openai", config.ProviderModelConfig{DefaultModel: "gpt-old"})
 	if err := config.SaveConfig(cfg); err != nil {
 		t.Fatalf("SaveConfig() error = %v", err)
 	}

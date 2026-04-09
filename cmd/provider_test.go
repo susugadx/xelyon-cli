@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 func TestCreateProvider_ValidProviders(t *testing.T) {
@@ -251,6 +253,59 @@ func TestResolveProviderName_Priority(t *testing.T) {
 				t.Errorf("resolveProviderName() = %q, want %q", result, tt.expectedName)
 			}
 		})
+	}
+}
+
+func TestResolveProviderName_NormalizesAndCanonicalizes(t *testing.T) {
+	tests := []struct {
+		name         string
+		flagValue    string
+		envValue     string
+		configValue  string
+		expectedName string
+	}{
+		{
+			name:         "flag is normalized and alias is preserved",
+			flagValue:    " Anthropic ",
+			envValue:     "openai",
+			configValue:  "gemini",
+			expectedName: "anthropic",
+		},
+		{
+			name:         "env is normalized",
+			flagValue:    "",
+			envValue:     " OpenAI ",
+			configValue:  "gemini",
+			expectedName: "openai",
+		},
+		{
+			name:         "config is normalized",
+			flagValue:    "",
+			envValue:     "",
+			configValue:  " Gemini ",
+			expectedName: "gemini",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("XELYON_PROVIDER", tt.envValue)
+
+			result := resolveProviderName(tt.flagValue, tt.configValue)
+			if result != tt.expectedName {
+				t.Fatalf("resolveProviderName() = %q, want %q", result, tt.expectedName)
+			}
+		})
+	}
+}
+
+func TestProviderModelLookupKeys_PreservesAliasBeforeCanonicalFallback(t *testing.T) {
+	keys := config.ProviderModelLookupKeys(" Anthropic ")
+	if len(keys) != 2 {
+		t.Fatalf("len(ProviderModelLookupKeys()) = %d, want 2", len(keys))
+	}
+	if keys[0] != "anthropic" || keys[1] != "claude" {
+		t.Fatalf("ProviderModelLookupKeys() = %v, want [anthropic claude]", keys)
 	}
 }
 

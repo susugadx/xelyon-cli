@@ -16,16 +16,12 @@ func TestDefaultConfig(t *testing.T) {
 		t.Fatal("DefaultConfig() returned nil")
 	}
 
-	// デフォルト値を確認
 	if cfg.DefaultProvider != "deepseek" {
 		t.Errorf("DefaultProvider = %v, want deepseek", cfg.DefaultProvider)
 	}
-
 	if cfg.DefaultModel != "deepseek-chat" {
 		t.Errorf("DefaultModel = %v, want deepseek-chat", cfg.DefaultModel)
 	}
-
-	// Provider models
 	if cfg.ProviderModels == nil {
 		t.Fatal("ProviderModels is nil")
 	}
@@ -37,7 +33,6 @@ func TestDefaultConfig(t *testing.T) {
 		}
 	}
 
-	// Compression
 	if cfg.Compression.Enabled != true {
 		t.Error("Compression.Enabled should default to true")
 	}
@@ -74,13 +69,9 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Compression.ClearToolInputs {
 		t.Error("Compression.ClearToolInputs should default to false")
 	}
-
-	// LoopDetection
 	if cfg.LoopDetection.Threshold != 3 {
 		t.Errorf("LoopDetection.Threshold = %d, want 3", cfg.LoopDetection.Threshold)
 	}
-
-	// APIRetry
 	if cfg.APIRetry.Count != 3 {
 		t.Errorf("APIRetry.Count = %d, want 3", cfg.APIRetry.Count)
 	}
@@ -90,12 +81,9 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.APIRetry.MaxDelay != 30 {
 		t.Errorf("APIRetry.MaxDelay = %d, want 30", cfg.APIRetry.MaxDelay)
 	}
-
-	// Diff
 	if cfg.Diff.ContextLines != 10 {
 		t.Errorf("Diff.ContextLines = %d, want 10", cfg.Diff.ContextLines)
 	}
-
 	if cfg.General.ToolLoopLimit != 0 {
 		t.Errorf("General.ToolLoopLimit = %d, want 0", cfg.General.ToolLoopLimit)
 	}
@@ -120,7 +108,6 @@ func TestDefaultConfig(t *testing.T) {
 }
 
 func TestLoadConfig_NotExists(t *testing.T) {
-	// テスト用のHOMEディレクトリを設定
 	tmpDir := t.TempDir()
 	t.Setenv("HOME", tmpDir)
 
@@ -128,17 +115,13 @@ func TestLoadConfig_NotExists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadConfig() error = %v", err)
 	}
-
 	if cfg == nil {
 		t.Fatal("LoadConfig() returned nil")
 	}
-
-	// デフォルト設定が返されることを確認
 	if cfg.DefaultProvider != "deepseek" {
 		t.Errorf("DefaultProvider = %v, want deepseek", cfg.DefaultProvider)
 	}
 
-	// 設定ファイルが作成されたことを確認
 	configPath := filepath.Join(tmpDir, ".xelyon", "config.yaml")
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		t.Error("LoadConfig() did not create config file")
@@ -149,7 +132,6 @@ func TestLoadConfig_Exists(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("HOME", tmpDir)
 
-	// カスタム設定ファイルを作成
 	configDir := filepath.Join(tmpDir, ".xelyon")
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		t.Fatalf("Failed to create config dir: %v", err)
@@ -174,13 +156,11 @@ func TestLoadConfig_Exists(t *testing.T) {
 		t.Fatalf("Failed to write config file: %v", err)
 	}
 
-	// 読み込み
 	cfg, err := LoadConfig()
 	if err != nil {
 		t.Fatalf("LoadConfig() error = %v", err)
 	}
 
-	// カスタム値を確認
 	if cfg.DefaultProvider != "openai" {
 		t.Errorf("DefaultProvider = %v, want openai", cfg.DefaultProvider)
 	}
@@ -201,7 +181,6 @@ func TestLoadConfig_Partial(t *testing.T) {
 		t.Fatalf("Failed to create config dir: %v", err)
 	}
 
-	// 部分的な設定ファイル（プロバイダーのみ）
 	partialYAML := "default_provider: claude\n"
 
 	configPath := filepath.Join(configDir, "config.yaml")
@@ -214,12 +193,9 @@ func TestLoadConfig_Partial(t *testing.T) {
 		t.Fatalf("LoadConfig() error = %v", err)
 	}
 
-	// 指定された値
 	if cfg.DefaultProvider != "claude" {
 		t.Errorf("DefaultProvider = %v, want claude", cfg.DefaultProvider)
 	}
-
-	// デフォルト値が適用されることを確認
 	if cfg.ProviderModels == nil {
 		t.Error("ProviderModels should be populated with defaults")
 	}
@@ -255,7 +231,6 @@ func TestLoadConfig_InvalidYAML(t *testing.T) {
 		t.Fatalf("Failed to create config dir: %v", err)
 	}
 
-	// 不正なYAML
 	invalidYAML := "default_provider: openai\n  invalid: - [\n"
 
 	configPath := filepath.Join(configDir, "config.yaml")
@@ -267,7 +242,6 @@ func TestLoadConfig_InvalidYAML(t *testing.T) {
 	if err == nil {
 		t.Error("LoadConfig() expected error for invalid YAML, got nil")
 	}
-
 	if !strings.Contains(err.Error(), "failed to parse") {
 		t.Errorf("Expected parse error, got: %v", err)
 	}
@@ -280,18 +254,15 @@ func TestSaveConfig_NewFile(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.DefaultProvider = "gemini"
 
-	err := SaveConfig(cfg)
-	if err != nil {
+	if err := SaveConfig(cfg); err != nil {
 		t.Fatalf("SaveConfig() error = %v", err)
 	}
 
-	// ファイルが作成されたことを確認
 	configPath := filepath.Join(tmpDir, ".xelyon", "config.yaml")
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		t.Error("SaveConfig() did not create config file")
 	}
 
-	// 内容を確認
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		t.Fatalf("Failed to read config file: %v", err)
@@ -301,8 +272,6 @@ func TestSaveConfig_NewFile(t *testing.T) {
 	if !strings.Contains(content, "gemini") {
 		t.Error("SaveConfig() did not save custom provider")
 	}
-
-	// ヘッダーコメントを確認
 	if !strings.Contains(content, "# XELYON CLI 設定") {
 		t.Error("SaveConfig() should include header comment")
 	}
@@ -323,7 +292,6 @@ func TestSaveConfig_Permissions(t *testing.T) {
 		t.Fatalf("Failed to stat config file: %v", err)
 	}
 
-	// パーミッション 0600
 	mode := info.Mode().Perm()
 	expectedMode := os.FileMode(0600)
 	if mode != expectedMode {
@@ -335,7 +303,6 @@ func TestSaveConfig_DirectoryCreation(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("HOME", tmpDir)
 
-	// .xelyonディレクトリが存在しないことを確認
 	configDir := filepath.Join(tmpDir, ".xelyon")
 	if _, err := os.Stat(configDir); !os.IsNotExist(err) {
 		t.Fatal(".xelyon directory should not exist yet")
@@ -346,12 +313,10 @@ func TestSaveConfig_DirectoryCreation(t *testing.T) {
 		t.Fatalf("SaveConfig() error = %v", err)
 	}
 
-	// ディレクトリが作成されたことを確認
 	if _, err := os.Stat(configDir); os.IsNotExist(err) {
 		t.Error("SaveConfig() did not create .xelyon directory")
 	}
 
-	// ディレクトリパーミッション 0755
 	info, err := os.Stat(configDir)
 	if err != nil {
 		t.Fatalf("Failed to stat directory: %v", err)
@@ -469,55 +434,6 @@ func TestLSPNonEmptyServers_RoundTrip_Unchanged(t *testing.T) {
 	}
 }
 
-func TestGetModelForProvider(t *testing.T) {
-	cfg := DefaultConfig()
-
-	tests := []struct {
-		name     string
-		provider string
-		want     string
-	}{
-		{name: "deepseek", provider: "deepseek", want: "deepseek-chat"},
-		{name: "openai", provider: "openai", want: "gpt-5.4"},
-		{name: "claude", provider: "claude", want: "claude-sonnet-4-6"},
-		{name: "ollama", provider: "ollama", want: "qwen2.5-coder:7b"},
-		{name: "groq", provider: "groq", want: "meta-llama/llama-4-scout-17b-16e-instruct"},
-		{name: "unknown", provider: "unknown", want: ""},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := cfg.GetModelForProvider(tt.provider)
-			if got != tt.want {
-				t.Errorf("GetModelForProvider(%q) = %q, want %q", tt.provider, got, tt.want)
-			}
-		})
-	}
-}
-
-func TestValidateModelForProvider(t *testing.T) {
-	cfg := DefaultConfig()
-
-	tests := []struct {
-		name     string
-		provider string
-		model    string
-		want     bool
-	}{
-		{name: "valid provider", provider: "deepseek", model: "any-model", want: true},
-		{name: "invalid provider", provider: "unknown", model: "any-model", want: false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := cfg.ValidateModelForProvider(tt.provider, tt.model)
-			if got != tt.want {
-				t.Errorf("ValidateModelForProvider(%q, %q) = %v, want %v", tt.provider, tt.model, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestValidateModel(t *testing.T) {
 	tests := []string{"any-model", "gpt-4", "deepseek-coder", ""}
 	for _, model := range tests {
@@ -570,7 +486,6 @@ func TestApplyEnvironmentOverrides(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// 環境変数を設定
 			for key, value := range tt.envVars {
 				t.Setenv(key, value)
 			}
@@ -600,7 +515,6 @@ func TestApplyEnvironmentOverrides_InvalidValues_Warn(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Setenv(tt.envKey, tt.envVal)
 
-			// Capture stderr
 			oldStderr := os.Stderr
 			r, w, _ := os.Pipe()
 			os.Stderr = w
@@ -681,7 +595,6 @@ func TestIsResponsesAPIModel(t *testing.T) {
 		model    string
 		expected bool
 	}{
-		// GPT-5 シリーズ（prefix マッチ）
 		{"gpt-5.2-codex", true},
 		{"gpt-5.1-codex", true},
 		{"gpt-5.1-codex-max", true},
@@ -694,11 +607,9 @@ func TestIsResponsesAPIModel(t *testing.T) {
 		{"gpt-5-nano", true},
 		{"gpt-5.3-codex-spark", true},
 		{"gpt-5.1-codex-mini", true},
-		// GPT-4o シリーズ（prefix マッチ）
 		{"gpt-4o", true},
 		{"gpt-4o-mini", true},
 		{"gpt-4o-audio-preview", true},
-		// o-series reasoning モデル（prefix マッチ）
 		{"o1", true},
 		{"o1-mini", true},
 		{"o1-pro", true},
@@ -706,13 +617,10 @@ func TestIsResponsesAPIModel(t *testing.T) {
 		{"o3-mini", true},
 		{"o3-pro", true},
 		{"o4-mini", true},
-		// Chat Completions API を使用するモデル（Responses API 非対応）
 		{"gpt-4-turbo", false},
 		{"gpt-4", false},
 		{"gpt-3.5-turbo", false},
-		// prefix 誤マッチ防止
 		{"openai-custom", false},
-		// 存在しないモデル
 		{"unknown-model", false},
 	}
 
@@ -728,11 +636,8 @@ func TestIsResponsesAPIModel(t *testing.T) {
 
 func TestIsResponsesAPIModel_CustomModels(t *testing.T) {
 	cfg := DefaultConfig()
-
-	// カスタムモデルを追加
 	cfg.OpenAI.ResponsesAPIModels = append(cfg.OpenAI.ResponsesAPIModels, "custom-codex-model")
 
-	// カスタムモデルが認識されることを確認
 	if !cfg.IsResponsesAPIModel("custom-codex-model") {
 		t.Error("IsResponsesAPIModel() should return true for custom model")
 	}

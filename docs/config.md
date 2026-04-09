@@ -162,9 +162,9 @@ output:
 # ============================================================
 # ネイティブ Web 検索の実行プロバイダーとキャッシュ設定
 # 未設定の場合はメインプロバイダーの検索を使用
-# メインが非対応の場合は openai / gemini / claude のいずれかを設定
+# メインが非対応の場合は openai / gemini / claude / anthropic のいずれかを設定
 web_search:
-    # 検索プロバイダー（openai / gemini / claude、未設定時はメインプロバイダーを使用）
+    # 検索プロバイダー（openai / gemini / claude / anthropic、未設定時はメインプロバイダーを使用）
     provider: gemini
     # キャッシュを有効化（デフォルト: true）
     cache_enabled: true

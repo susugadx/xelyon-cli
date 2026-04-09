@@ -22,10 +22,12 @@ func TestHandleSaveAndSessionsCommand_UseRuntimeOutput(t *testing.T) {
 
 	var out bytes.Buffer
 	agent := &Agent{
-		session: session,
-		storage: storage,
 		Runtime: &AgentRuntime{
 			UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+		},
+		agentConversationState: agentConversationState{
+			session: session,
+			storage: storage,
 		},
 	}
 
@@ -64,10 +66,12 @@ func TestHandleLoadCommand_UsesRuntimeOutput(t *testing.T) {
 
 	var out bytes.Buffer
 	agent := &Agent{
-		storage:         storage,
 		CurrentProvider: &mockProvider{name: "test"},
 		Runtime: &AgentRuntime{
 			UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+		},
+		agentConversationState: agentConversationState{
+			storage: storage,
 		},
 	}
 

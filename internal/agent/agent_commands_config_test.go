@@ -58,8 +58,10 @@ func TestHandleModelCommand_ClearCache(t *testing.T) {
 	agent := &Agent{
 		ProviderName: "mock",
 		CurrentModel: "old-model",
-		session:      history.NewSession("old-model"),
 		Runtime:      NewAgentRuntimeWithConfig(cfg),
+		agentConversationState: agentConversationState{
+			session: history.NewSession("old-model"),
+		},
 	}
 
 	mockProvider := &mockCacheClearableProviderForModel{}
@@ -153,6 +155,58 @@ func TestHandleProvidersCommand_UsesRuntimeOutput(t *testing.T) {
 	}
 }
 
+func TestHandleProvidersCommand_MarksOnlyClaudeOwnerAsCurrent(t *testing.T) {
+	var out bytes.Buffer
+	agent := &Agent{
+		ProviderName:      "claude",
+		ProviderConfigKey: "claude",
+		Runtime: &AgentRuntime{
+			UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+		},
+	}
+
+	if result := handleProvidersCommand(agent); !result {
+		t.Fatal("handleProvidersCommand() = false, want true")
+	}
+
+	output := out.String()
+	if strings.Count(output, "✓ ") != 1 {
+		t.Fatalf("expected exactly one current marker, got output %q", output)
+	}
+	if !strings.Contains(output, "✓ claude") {
+		t.Fatalf("expected claude to be marked current, got %q", output)
+	}
+	if strings.Contains(output, "✓ anthropic") {
+		t.Fatalf("anthropic should not be marked current when claude owns the session, got %q", output)
+	}
+}
+
+func TestHandleProvidersCommand_MarksOnlyAnthropicOwnerAsCurrent(t *testing.T) {
+	var out bytes.Buffer
+	agent := &Agent{
+		ProviderName:      "claude",
+		ProviderConfigKey: "anthropic",
+		Runtime: &AgentRuntime{
+			UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+		},
+	}
+
+	if result := handleProvidersCommand(agent); !result {
+		t.Fatal("handleProvidersCommand() = false, want true")
+	}
+
+	output := out.String()
+	if strings.Count(output, "✓ ") != 1 {
+		t.Fatalf("expected exactly one current marker, got output %q", output)
+	}
+	if !strings.Contains(output, "✓ anthropic") {
+		t.Fatalf("expected anthropic to be marked current, got %q", output)
+	}
+	if strings.Contains(output, "✓ claude") {
+		t.Fatalf("claude should not be marked current when anthropic owns the session, got %q", output)
+	}
+}
+
 func TestHandleUseCommand_WithExplicitModel_UpdatesSessionModel(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	cfg := newProjectMapDisabledConfig()
@@ -166,7 +220,6 @@ func TestHandleUseCommand_WithExplicitModel_UpdatesSessionModel(t *testing.T) {
 		CurrentModel:    "gpt-old",
 		CurrentProvider: &mockCacheClearableProviderForModel{name: "openai"},
 		Stats:           NewSessionStats("openai", "gpt-old"),
-		session:         history.NewSession("gpt-old"),
 		History: []api.Message{
 			{
 				Role:    "assistant",
@@ -194,6 +247,9 @@ func TestHandleUseCommand_WithExplicitModel_UpdatesSessionModel(t *testing.T) {
 			Config: cfg,
 			UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
 		},
+		agentConversationState: agentConversationState{
+			session: history.NewSession("gpt-old"),
+		},
 	}
 
 	result := handleUseCommand(agent, []string{"ollama", "qwen2.5-coder:14b"})
@@ -211,5 +267,66 @@ func TestHandleUseCommand_WithExplicitModel_UpdatesSessionModel(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "History cleared after provider switch") {
 		t.Fatalf("expected output to contain history cleared notification, got %q", out.String())
+	}
+}
+
+func TestHandleUseCommand_SwitchesAliasOwnerWithinSameRuntimeIdentity(t *testing.T) {
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+
+	var out bytes.Buffer
+	cfg := newProjectMapDisabledConfig()
+	cfg.DefaultProvider = "claude"
+	cfg.SetProviderModelsForEdit(map[string]config.ProviderModelConfig{
+		"anthropic": {DefaultModel: "anthropic-custom"},
+		"claude":    {DefaultModel: "claude-custom"},
+	})
+
+	agent := &Agent{
+		ProviderName:      "claude",
+		ProviderConfigKey: "claude",
+		CurrentModel:      "claude-custom",
+		CurrentProvider:   &mockCacheClearableProviderForModel{name: "claude"},
+		Runtime: &AgentRuntime{
+			Config: cfg,
+			UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
+		},
+		agentConversationState: agentConversationState{
+			session: history.NewSession("claude-custom"),
+		},
+	}
+
+	if result := handleUseCommand(agent, []string{"anthropic"}); !result {
+		t.Fatal("handleUseCommand() = false, want true")
+	}
+	if agent.ProviderName != "claude" {
+		t.Fatalf("ProviderName = %q, want %q", agent.ProviderName, "claude")
+	}
+	if agent.ProviderConfigKey != "anthropic" {
+		t.Fatalf("ProviderConfigKey = %q, want %q", agent.ProviderConfigKey, "anthropic")
+	}
+	if providerConfigKeyFromProvider(agent.CurrentProvider) != "anthropic" {
+		t.Fatalf("provider config key = %q, want %q", providerConfigKeyFromProvider(agent.CurrentProvider), "anthropic")
+	}
+	if agent.CurrentModel != "anthropic-custom" {
+		t.Fatalf("CurrentModel = %q, want %q", agent.CurrentModel, "anthropic-custom")
+	}
+	if agent.session == nil || agent.session.Model != "anthropic-custom" {
+		t.Fatalf("session.Model = %q, want %q", agent.session.Model, "anthropic-custom")
+	}
+
+	if result := handleUseCommand(agent, []string{"claude"}); !result {
+		t.Fatal("handleUseCommand() = false, want true")
+	}
+	if agent.ProviderConfigKey != "claude" {
+		t.Fatalf("ProviderConfigKey = %q, want %q", agent.ProviderConfigKey, "claude")
+	}
+	if providerConfigKeyFromProvider(agent.CurrentProvider) != "claude" {
+		t.Fatalf("provider config key = %q, want %q", providerConfigKeyFromProvider(agent.CurrentProvider), "claude")
+	}
+	if agent.CurrentModel != "claude-custom" {
+		t.Fatalf("CurrentModel = %q, want %q", agent.CurrentModel, "claude-custom")
+	}
+	if agent.session == nil || agent.session.Model != "claude-custom" {
+		t.Fatalf("session.Model = %q, want %q", agent.session.Model, "claude-custom")
 	}
 }

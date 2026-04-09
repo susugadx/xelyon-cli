@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
 	"github.com/susugadx/xelyon-cli/internal/ui"
@@ -60,8 +62,10 @@ func TestAgent_SwitchProvider_ClearCache(t *testing.T) {
 	agent := &Agent{
 		ProviderName: "mock",
 		CurrentModel: "mock-model",
-		session:      history.NewSession("mock-model"),
 		Runtime:      NewAgentRuntimeWithConfig(newProjectMapDisabledConfig()),
+		agentConversationState: agentConversationState{
+			session: history.NewSession("mock-model"),
+		},
 	}
 
 	mockProvider := &mockCacheClearableProvider{}
@@ -96,7 +100,6 @@ func TestAgent_SwitchProvider_ClearHistoryAndNotify(t *testing.T) {
 		ProviderName:    "mock",
 		CurrentModel:    "mock-model",
 		CurrentProvider: &mockCacheClearableProvider{},
-		session:         history.NewSession("mock-model"),
 		Runtime:         runtime,
 		History: []api.Message{
 			{
@@ -120,6 +123,9 @@ func TestAgent_SwitchProvider_ClearHistoryAndNotify(t *testing.T) {
 				ToolCallID: "tc1",
 				ToolName:   "read_file",
 			},
+		},
+		agentConversationState: agentConversationState{
+			session: history.NewSession("mock-model"),
 		},
 	}
 
@@ -149,4 +155,173 @@ func TestAgent_SwitchProvider_RebuildsSystemPrompt(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Contains(t, agent.SystemPrompt, "### DeepSeek-specific")
 	assert.NotContains(t, agent.SystemPrompt, "### Gemini-specific")
+}
+
+func TestAgent_SwitchProvider_UsesProviderDefaultWhenOtherProviderHasOverride(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+	t.Setenv("OPENAI_API_KEY", "test-key")
+
+	configDir := filepath.Join(tmpDir, ".xelyon")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatalf("Failed to create config dir: %v", err)
+	}
+
+	yamlData := `
+default_provider: deepseek
+default_model: global-custom-model
+provider_models:
+  deepseek:
+    default_model: deepseek-custom
+`
+	configPath := filepath.Join(configDir, "config.yaml")
+	if err := os.WriteFile(configPath, []byte(yamlData), 0600); err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	agent := &Agent{
+		ProviderName:    "deepseek",
+		CurrentModel:    "deepseek-custom",
+		CurrentProvider: &mockCacheClearableProvider{name: "deepseek"},
+		Runtime:         NewAgentRuntimeWithConfig(cfg),
+		agentConversationState: agentConversationState{
+			session: history.NewSession("deepseek-custom"),
+		},
+	}
+
+	err = agent.SwitchProvider("openai")
+	assert.NoError(t, err)
+	assert.Equal(t, "openai", agent.ProviderName)
+	want := config.DefaultConfig().ProviderModels["openai"].DefaultModel
+	assert.Equal(t, want, agent.CurrentModel)
+	assert.Equal(t, want, agent.session.Model)
+}
+
+func TestAgent_SwitchProvider_DefaultModelWinsWhenExplicitEntryHasOnlyNonModelSettings(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "test-key")
+
+	cfg := newProjectMapDisabledConfig()
+	cfg.DefaultProvider = "openai"
+	cfg.DefaultModel = "gpt-custom"
+	cfg.SetProviderModelConfig("openai", config.ProviderModelConfig{
+		MaxOutputTokens: 99999,
+	})
+
+	agent := &Agent{
+		ProviderName:    "deepseek",
+		CurrentModel:    "deepseek-chat",
+		CurrentProvider: &mockCacheClearableProvider{name: "deepseek"},
+		Runtime:         NewAgentRuntimeWithConfig(cfg),
+		agentConversationState: agentConversationState{
+			session: history.NewSession("deepseek-chat"),
+		},
+	}
+
+	err := agent.SwitchProvider("openai")
+	assert.NoError(t, err)
+	assert.Equal(t, "openai", agent.ProviderName)
+	assert.Equal(t, "gpt-custom", agent.CurrentModel)
+	assert.Equal(t, "gpt-custom", agent.session.Model)
+}
+
+func TestAgent_SwitchProvider_KeepsConfiguredOllamaModelThatLooksLikeAnotherProvider(t *testing.T) {
+	t.Setenv("OLLAMA_BASE_URL", "http://localhost:11434")
+
+	cfg := newProjectMapDisabledConfig()
+	cfg.DefaultProvider = "ollama"
+	cfg.DefaultModel = "deepseek-r1:8b"
+
+	agent := &Agent{
+		ProviderName:    "deepseek",
+		CurrentModel:    "deepseek-chat",
+		CurrentProvider: &mockCacheClearableProvider{name: "deepseek"},
+		Runtime:         NewAgentRuntimeWithConfig(cfg),
+		agentConversationState: agentConversationState{
+			session: history.NewSession("deepseek-chat"),
+		},
+	}
+
+	err := agent.SwitchProvider("ollama")
+	assert.NoError(t, err)
+	assert.Equal(t, "ollama", agent.ProviderName)
+	assert.Equal(t, "deepseek-r1:8b", agent.CurrentModel)
+	assert.Equal(t, "deepseek-r1:8b", agent.session.Model)
+}
+
+func TestAgent_SwitchProvider_CanonicalizesAnthropicAlias(t *testing.T) {
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+
+	cfg := newProjectMapDisabledConfig()
+	cfg.DefaultProvider = "anthropic"
+	cfg.DefaultModel = "claude-custom"
+
+	agent := &Agent{
+		ProviderName:    "deepseek",
+		CurrentModel:    "deepseek-chat",
+		CurrentProvider: &mockCacheClearableProvider{name: "deepseek"},
+		Runtime:         NewAgentRuntimeWithConfig(cfg),
+		agentConversationState: agentConversationState{
+			session: history.NewSession("deepseek-chat"),
+		},
+	}
+
+	err := agent.SwitchProvider("anthropic")
+	assert.NoError(t, err)
+	assert.Equal(t, "claude", agent.ProviderName)
+	assert.Equal(t, "claude-custom", agent.CurrentModel)
+	assert.Equal(t, "claude-custom", agent.session.Model)
+	if agent.CurrentProvider == nil {
+		t.Fatal("CurrentProvider should not be nil")
+	}
+	assert.Equal(t, "claude", config.CanonicalProviderName(agent.CurrentProvider.Name()))
+}
+
+func TestAgent_SwitchProvider_AnthropicAliasUsesAliasSpecificModelWhenBothKeysExist(t *testing.T) {
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+	configDir := filepath.Join(tmpDir, ".xelyon")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatalf("Failed to create config dir: %v", err)
+	}
+
+	yamlData := `
+default_provider: deepseek
+provider_models:
+  anthropic:
+    default_model: anthropic-custom
+  claude:
+    default_model: claude-custom
+`
+	configPath := filepath.Join(configDir, "config.yaml")
+	if err := os.WriteFile(configPath, []byte(yamlData), 0600); err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	agent := &Agent{
+		ProviderName:    "deepseek",
+		CurrentModel:    "deepseek-chat",
+		CurrentProvider: &mockCacheClearableProvider{name: "deepseek"},
+		Runtime:         NewAgentRuntimeWithConfig(cfg),
+		agentConversationState: agentConversationState{
+			session: history.NewSession("deepseek-chat"),
+		},
+	}
+
+	err = agent.SwitchProvider("anthropic")
+	assert.NoError(t, err)
+	assert.Equal(t, "claude", agent.ProviderName)
+	assert.Equal(t, "anthropic-custom", agent.CurrentModel)
+	assert.Equal(t, "anthropic-custom", agent.session.Model)
 }

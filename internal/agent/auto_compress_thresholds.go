@@ -12,18 +12,21 @@ func GetProviderCompressThresholdWithConfig(cfg *config.Config, provider string,
 		cfg = config.DefaultConfig()
 	}
 
-	normalizedProvider := strings.ToLower(strings.TrimSpace(provider))
+	normalizedProvider := config.NormalizeProviderName(provider)
+	canonicalProvider := config.CanonicalProviderName(provider)
 	normalizedModel := strings.ToLower(strings.TrimSpace(model))
 	if cfg.Compression.ProviderThresholds != nil {
-		if threshold, ok := lookupConfiguredModelThreshold(cfg.Compression.ProviderThresholds, normalizedProvider, normalizedModel); ok {
-			return threshold
-		}
-		if threshold, ok := cfg.Compression.ProviderThresholds[normalizedProvider]; ok {
-			return threshold
+		for _, candidate := range providerThresholdLookupKeys(normalizedProvider, canonicalProvider) {
+			if threshold, ok := lookupConfiguredModelThreshold(cfg.Compression.ProviderThresholds, candidate, normalizedModel); ok {
+				return threshold
+			}
+			if threshold, ok := cfg.Compression.ProviderThresholds[candidate]; ok {
+				return threshold
+			}
 		}
 	}
 
-	return defaultProviderCompressThreshold(normalizedProvider, normalizedModel)
+	return defaultProviderCompressThreshold(canonicalProvider, normalizedModel)
 }
 
 // GetProviderCompressThreshold はプロバイダとモデルに基づく
@@ -48,6 +51,17 @@ func defaultProviderCompressThreshold(provider string, model string) int {
 	default:
 		return 0 // 不明なプロバイダは既存ロジックに任せる
 	}
+}
+
+func providerThresholdLookupKeys(normalizedProvider, canonicalProvider string) []string {
+	keys := config.ProviderModelLookupKeys(normalizedProvider)
+	if len(keys) > 0 {
+		return keys
+	}
+	if canonicalProvider == "" {
+		return nil
+	}
+	return []string{canonicalProvider}
 }
 
 func lookupConfiguredModelThreshold(thresholds map[string]int, provider string, model string) (int, bool) {

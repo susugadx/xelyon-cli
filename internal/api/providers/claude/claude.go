@@ -20,14 +20,14 @@ func init() {
 		if apiKey == "" {
 			return nil, fmt.Errorf("ANTHROPIC_API_KEY not set")
 		}
-		return New(apiKey), nil
+		return newProvider(apiKey, "claude"), nil
 	})
 	// anthropic エイリアス
 	api.RegisterProvider("anthropic", func(apiKey string) (api.Provider, error) {
 		if apiKey == "" {
 			return nil, fmt.Errorf("ANTHROPIC_API_KEY not set")
 		}
-		return New(apiKey), nil
+		return newProvider(apiKey, "anthropic"), nil
 	})
 }
 
@@ -49,6 +49,7 @@ type Provider struct {
 	mcpTools      []api.ToolDefinition // MCP ツール定義（Tool Use用）
 	usageCallback api.UsageCallback    // トークン使用量コールバック
 	runtimeConfig *config.Config
+	configKey     string
 }
 
 // ContextManagement は Claude Context Management API の設定
@@ -150,9 +151,29 @@ func appendUniqueStrings(headers []string, extras ...string) []string {
 
 // New は新しいProviderを作成
 func New(apiKey string) *Provider {
+	return newProvider(apiKey, "claude")
+}
+
+func newProvider(apiKey, configKey string) *Provider {
 	return &Provider{
 		BaseProvider: api.NewBaseProvider("Claude", apiKey, defaultClaudeURL, "ANTHROPIC_API_URL"),
+		configKey:    config.NormalizeProviderName(configKey),
 	}
+}
+
+func (p *Provider) configLookupKey() string {
+	if p != nil && p.configKey != "" {
+		return p.configKey
+	}
+	return "claude"
+}
+
+func (p *Provider) ProviderConfigKey() string {
+	return p.configLookupKey()
+}
+
+func (p *Provider) maxOutputTokens(ctx context.Context, model string) int {
+	return api.GetMaxOutputTokens(ctx, p.configLookupKey(), model)
 }
 
 // SupportsImages は画像入力対応を返す
@@ -347,7 +368,7 @@ type requestResult struct {
 
 // executeRequest はClaude API呼び出しの共通処理
 // withImage: 画像付きリクエストの場合はtrue（スピナー表示に影響）
-func (p *Provider) executeRequest(ctx context.Context, reqBody interface{}, contextManagement *ContextManagement, withImage bool) (*requestResult, error) {
+func (p *Provider) executeRequest(ctx context.Context, reqBody interface{}, model string, contextManagement *ContextManagement, withImage bool) (*requestResult, error) {
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, err
@@ -362,7 +383,8 @@ func (p *Provider) executeRequest(ctx context.Context, reqBody interface{}, cont
 	req.Header.Set("x-api-key", p.APIKey)
 
 	cfg := config.FromContext(ctx)
-	pCfg := cfg.ProviderModels["claude"]
+	lookupProvider := cfg.RuntimeProviderConfigKey(p.configLookupKey(), model)
+	pCfg, _ := cfg.GetProviderModelConfig(lookupProvider)
 
 	// Anthropic Version
 	version := pCfg.AnthropicVersion
@@ -436,7 +458,7 @@ func (p *Provider) supportsClaudeCompactionWithConfig(cfg *config.Config, model 
 		return false
 	}
 	if model == "" {
-		model = cfg.GetModelForProvider("claude")
+		model = cfg.GetEffectiveModelForProvider("claude")
 	}
 	if model == "" {
 		model = "claude-sonnet-4-6"
@@ -497,7 +519,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		Model:     model,
 		Messages:  messages,
 		System:    api.BuildSystemFieldWithConfig(systemPrompt, cfg),
-		MaxTokens: api.GetMaxOutputTokens(ctx, "claude", model),
+		MaxTokens: p.maxOutputTokens(ctx, model),
 		Stream:    true,
 	}
 	if cfg != nil && cfg.PromptCache.Enabled {
@@ -531,7 +553,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		reqBody.Tools = GetCombinedClaudeToolsWithContext(ctx, p.mcpTools)
 	}
 
-	result, err := p.executeRequest(ctx, reqBody, reqBody.ContextManagement, false)
+	result, err := p.executeRequest(ctx, reqBody, model, reqBody.ContextManagement, false)
 	if err != nil {
 		return "", err
 	}
@@ -797,7 +819,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 		Model:     model,
 		Messages:  messages,
 		System:    api.BuildSystemFieldWithConfig(systemPrompt, cfg),
-		MaxTokens: api.GetMaxOutputTokens(ctx, "claude", model),
+		MaxTokens: p.maxOutputTokens(ctx, model),
 		Stream:    true,
 	}
 	if cfg != nil && cfg.PromptCache.Enabled {
@@ -828,7 +850,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 		reqBody.Tools = GetCombinedClaudeToolsWithContext(ctx, p.mcpTools)
 	}
 
-	result, err := p.executeRequest(ctx, reqBody, reqBody.ContextManagement, true)
+	result, err := p.executeRequest(ctx, reqBody, model, reqBody.ContextManagement, true)
 	if err != nil {
 		return "", err
 	}

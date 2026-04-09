@@ -122,7 +122,7 @@ func (p *Provider) supportsClaudeCompactionWithConfig(cfg *config.Config, model 
 		return false
 	}
 	if model == "" {
-		model = cfg.GetModelForProvider("openrouter")
+		model = cfg.GetEffectiveModelForProvider("openrouter")
 	}
 	if model == "" {
 		model = "anthropic/claude-sonnet-4.6"

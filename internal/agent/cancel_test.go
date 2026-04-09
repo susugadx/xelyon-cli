@@ -143,7 +143,7 @@ func TestToolExecutionContext_UsesRequestContextFallback(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	agent := &Agent{requestCtx: ctx}
+	agent := &Agent{agentRequestState: agentRequestState{requestCtx: ctx}}
 	execCtx := agent.toolExecutionContext(agent.currentRequestContext(), nil, nil, nil)
 
 	if execCtx.EffectiveContext() != ctx {

@@ -111,6 +111,50 @@ func TestSyncWithRuntimeConfig_DefaultModelUpdate_WhenNoProviderOverride(t *test
 	}
 }
 
+func TestSyncWithRuntimeConfig_DefaultModelWinsWhenExplicitEntryHasOnlyNonModelSettings(t *testing.T) {
+	cfg := newProjectMapDisabledConfig()
+	cfg.DefaultProvider = "openai"
+	cfg.DefaultModel = "gpt-default-new"
+	cfg.SetProviderModelConfig("openai", config.ProviderModelConfig{
+		MaxOutputTokens: 99999,
+	})
+	runtime := NewAgentRuntimeWithConfig(cfg)
+
+	a := &Agent{
+		ProviderName:    "openai",
+		CurrentModel:    "gpt-old",
+		CurrentProvider: &MockProvider{name: "openai"},
+		Runtime:         runtime,
+	}
+
+	a.SyncWithRuntimeConfig()
+
+	if a.CurrentModel != "gpt-default-new" {
+		t.Errorf("Expected CurrentModel to be 'gpt-default-new', got '%s'", a.CurrentModel)
+	}
+}
+
+func TestSyncWithRuntimeConfig_FallsBackToProviderDefaultWhenGlobalModelBelongsToDifferentProvider(t *testing.T) {
+	cfg := newProjectMapDisabledConfig()
+	cfg.DefaultProvider = "openai"
+	cfg.DefaultModel = "deepseek-chat"
+	runtime := NewAgentRuntimeWithConfig(cfg)
+
+	a := &Agent{
+		ProviderName:    "openai",
+		CurrentModel:    "gpt-old",
+		CurrentProvider: &MockProvider{name: "openai"},
+		Runtime:         runtime,
+	}
+
+	a.SyncWithRuntimeConfig()
+
+	want := config.DefaultConfig().ProviderModels["openai"].DefaultModel
+	if a.CurrentModel != want {
+		t.Errorf("Expected CurrentModel to be %q, got %q", want, a.CurrentModel)
+	}
+}
+
 func TestSyncWithRuntimeConfig_RebuildsPromptForClaudeOpus(t *testing.T) {
 	cfg := newProjectMapDisabledConfig()
 	cfg.PromptCache.Enabled = true
@@ -153,5 +197,148 @@ func TestSyncWithRuntimeConfig_UsesRuntimeOutputForSwitchWarning(t *testing.T) {
 
 	if !strings.Contains(out.String(), "Warning: Failed to switch provider") {
 		t.Fatalf("expected runtime output to contain switch warning, got %q", out.String())
+	}
+}
+
+func TestSyncWithRuntimeConfig_DoesNotReswitchWhenAnthropicAliasOwnerIsUnchanged(t *testing.T) {
+	var out bytes.Buffer
+	cfg := newProjectMapDisabledConfig()
+	cfg.DefaultProvider = "anthropic"
+	cfg.SetProviderModelsForEdit(map[string]config.ProviderModelConfig{
+		"anthropic": {DefaultModel: "anthropic-custom"},
+	})
+	runtime := NewAgentRuntimeWithConfig(cfg)
+	runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, &out)
+
+	currentProvider := &MockProvider{name: "claude"}
+	a := &Agent{
+		ProviderName:      "claude",
+		ProviderConfigKey: "anthropic",
+		CurrentModel:      "claude-old",
+		CurrentProvider:   currentProvider,
+		Runtime:           runtime,
+	}
+
+	a.SyncWithRuntimeConfig()
+
+	if a.ProviderName != "claude" {
+		t.Fatalf("ProviderName = %q, want %q", a.ProviderName, "claude")
+	}
+	if a.CurrentProvider != currentProvider {
+		t.Fatal("CurrentProvider should not be recreated for anthropic/claude alias sync")
+	}
+	if a.ProviderConfigKey != "anthropic" {
+		t.Fatalf("ProviderConfigKey = %q, want %q", a.ProviderConfigKey, "anthropic")
+	}
+	if a.CurrentModel != "anthropic-custom" {
+		t.Fatalf("CurrentModel = %q, want %q", a.CurrentModel, "anthropic-custom")
+	}
+	if strings.Contains(out.String(), "Warning: Failed to switch provider") {
+		t.Fatalf("unexpected switch warning: %q", out.String())
+	}
+}
+
+func TestSyncWithRuntimeConfig_SwitchesAliasOwnerWithinSameRuntimeIdentity(t *testing.T) {
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+
+	var out bytes.Buffer
+	cfg := newProjectMapDisabledConfig()
+	cfg.DefaultProvider = "anthropic"
+	cfg.SetProviderModelsForEdit(map[string]config.ProviderModelConfig{
+		"anthropic": {DefaultModel: "anthropic-custom"},
+		"claude":    {DefaultModel: "claude-custom"},
+	})
+	cfg.Compression.ProviderThresholds["anthropic"] = 123456
+	cfg.Compression.ProviderThresholds["claude"] = 654321
+
+	runtime := NewAgentRuntimeWithConfig(cfg)
+	runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, &out)
+
+	currentProvider := &MockProvider{name: "claude"}
+	a := &Agent{
+		ProviderName:      "claude",
+		ProviderConfigKey: "claude",
+		CurrentModel:      "claude-old",
+		CurrentProvider:   currentProvider,
+		Runtime:           runtime,
+	}
+
+	a.SyncWithRuntimeConfig()
+
+	if a.ProviderName != "claude" {
+		t.Fatalf("ProviderName = %q, want %q", a.ProviderName, "claude")
+	}
+	if a.ProviderConfigKey != "anthropic" {
+		t.Fatalf("ProviderConfigKey = %q, want %q", a.ProviderConfigKey, "anthropic")
+	}
+	if providerConfigKeyFromProvider(a.CurrentProvider) != "anthropic" {
+		t.Fatalf("provider config key = %q, want %q", providerConfigKeyFromProvider(a.CurrentProvider), "anthropic")
+	}
+	if a.CurrentProvider == currentProvider {
+		t.Fatal("CurrentProvider should be recreated when alias owner changes")
+	}
+	if a.CurrentModel != "anthropic-custom" {
+		t.Fatalf("CurrentModel = %q, want %q", a.CurrentModel, "anthropic-custom")
+	}
+	if got := GetProviderCompressThresholdWithConfig(cfg, a.sessionProviderConfigKey(cfg), a.CurrentModel); got != 123456 {
+		t.Fatalf("compression threshold = %d, want %d", got, 123456)
+	}
+	if strings.Contains(out.String(), "Warning: Failed to switch provider") {
+		t.Fatalf("unexpected switch warning: %q", out.String())
+	}
+}
+
+func TestSyncWithRuntimeConfig_PrefersDefaultProviderAliasModelForSameRuntimeIdentity(t *testing.T) {
+	cfg := newProjectMapDisabledConfig()
+	cfg.DefaultProvider = "anthropic"
+	cfg.SetProviderModelsForEdit(map[string]config.ProviderModelConfig{
+		"anthropic": {DefaultModel: "anthropic-custom"},
+		"claude":    {DefaultModel: "claude-custom"},
+	})
+	runtime := NewAgentRuntimeWithConfig(cfg)
+
+	a := &Agent{
+		ProviderName:    "claude",
+		CurrentModel:    "claude-old",
+		CurrentProvider: &MockProvider{name: "claude"},
+		Runtime:         runtime,
+	}
+
+	a.SyncWithRuntimeConfig()
+
+	if a.CurrentModel != "anthropic-custom" {
+		t.Fatalf("CurrentModel = %q, want %q", a.CurrentModel, "anthropic-custom")
+	}
+}
+
+func TestSyncWithRuntimeConfig_PrefersSessionProviderConfigKeyWhenDefaultProviderDiffers(t *testing.T) {
+	t.Setenv("DEEPSEEK_API_KEY", "test-key")
+
+	cfg := newProjectMapDisabledConfig()
+	cfg.DefaultProvider = "deepseek"
+	cfg.SetProviderModelsForEdit(map[string]config.ProviderModelConfig{
+		"anthropic": {DefaultModel: "anthropic-custom"},
+		"claude":    {DefaultModel: "claude-custom"},
+	})
+	runtime := NewAgentRuntimeWithConfig(cfg)
+
+	a := &Agent{
+		ProviderName:      "claude",
+		ProviderConfigKey: "anthropic",
+		CurrentModel:      "claude-old",
+		CurrentProvider:   &MockProvider{name: "claude"},
+		Runtime:           runtime,
+	}
+
+	a.SyncWithRuntimeConfig()
+
+	if a.ProviderName != "deepseek" {
+		t.Fatalf("ProviderName = %q, want %q", a.ProviderName, "deepseek")
+	}
+	if a.ProviderConfigKey != "deepseek" {
+		t.Fatalf("ProviderConfigKey = %q, want %q", a.ProviderConfigKey, "deepseek")
+	}
+	if a.CurrentModel != "deepseek-chat" {
+		t.Fatalf("CurrentModel = %q, want %q", a.CurrentModel, "deepseek-chat")
 	}
 }

@@ -503,6 +503,36 @@ func TestNormalMode_CreatePlanFC(t *testing.T) {
 	}
 }
 
+func TestNormalMode_CreatePlanMixedResponse_CountsAssistantOnce(t *testing.T) {
+	var out bytes.Buffer
+	testFile := t.TempDir() + "/sample.txt"
+	if err := os.WriteFile(testFile, []byte("hello\n"), 0644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	provider := &sequenceMockProvider{
+		name: "test",
+		responses: []string{
+			fmt.Sprintf(`I'll sketch a plan and inspect the file first.
+{"tool": "create_plan", "args": {"title": "Test Plan", "summary": "Test", "steps": "[{\"id\":1,\"description\":\"Inspect file\",\"tools\":[\"read_file\"]}]"}}
+{"tool": "read_file", "args": {"paths": [%q]}}`, testFile),
+			"Done.",
+		},
+	}
+
+	agent := newChatRequestTestAgent(t, provider, &out)
+	agent.Stats = NewSessionStats("test")
+	agent.setAutoApprove(true)
+
+	if err := agent.runNormalMode(context.Background(), "inspect file", nil); err != nil {
+		t.Fatalf("runNormalMode() error = %v", err)
+	}
+
+	if agent.Stats.AssistantMessages != 2 {
+		t.Fatalf("AssistantMessages = %d, want 2 (one mixed tool turn + one final response)", agent.Stats.AssistantMessages)
+	}
+}
+
 // TestNormalMode_PlanJSONFallback は Normal Mode で Plan JSON がテキスト出力された場合、
 // ExtractPlanJSON → ParsePlan → runImplementationPhase に切り替わることをテスト
 func TestNormalMode_PlanJSONFallback(t *testing.T) {
@@ -561,6 +591,57 @@ func TestNormalMode_PlanJSONParseFailed(t *testing.T) {
 	// 2回呼ばれていることを確認（リダイレクト後に通常応答）
 	if provider.callCount != 2 {
 		t.Errorf("Expected provider to be called 2 times, got %d", provider.callCount)
+	}
+}
+
+func TestNormalMode_TextPlanHardFallback_DoesNotDuplicateAssistantHistory(t *testing.T) {
+	var out bytes.Buffer
+	cfg := newProjectMapDisabledConfig()
+	cfg.Output.AssistantUpdates = "phase"
+
+	responses := []string{
+		"Plan try 1\n1. create file\n2. update config\n3. run test\n4. fix error\n5. summarize result",
+		"Plan try 2\n1. create file\n2. update config\n3. run test\n4. fix error\n5. summarize result",
+		"Plan try 3\n1. create file\n2. update config\n3. run test\n4. fix error\n5. summarize result",
+		"Plan try 4\n1. create file\n2. update config\n3. run test\n4. fix error\n5. summarize result",
+		"Plan try 5\n1. create file\n2. update config\n3. run test\n4. fix error\n5. summarize result",
+		"Plan try 6\n1. create file\n2. update config\n3. run test\n4. fix error\n5. summarize result",
+	}
+	provider := &sequenceMockProvider{
+		name:      "test",
+		responses: responses,
+	}
+
+	agent := &Agent{
+		CurrentModel:    "test-model",
+		CurrentProvider: provider,
+		Runtime: &AgentRuntime{
+			Config: cfg,
+			UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
+		},
+		History: []api.Message{},
+	}
+	agent.Stats = NewSessionStats("test")
+
+	if err := agent.runNormalMode(context.Background(), "do something", nil); err != nil {
+		t.Fatalf("runNormalMode() error = %v", err)
+	}
+
+	lastResponse := responses[len(responses)-1]
+	assistantCount := 0
+	for _, msg := range agent.History {
+		if msg.Role == "assistant" && msg.Content == lastResponse {
+			assistantCount++
+		}
+	}
+	if assistantCount != 1 {
+		t.Fatalf("assistantCount for final fallback response = %d, want 1", assistantCount)
+	}
+	if got := strings.Count(out.String(), "Plan try 6"); got != 1 {
+		t.Fatalf("expected final fallback response exactly once in output, got %d in %q", got, out.String())
+	}
+	if agent.Stats.AssistantMessages != 0 {
+		t.Fatalf("AssistantMessages = %d, want 0 for fallback-only path", agent.Stats.AssistantMessages)
 	}
 }
 

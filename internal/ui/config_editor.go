@@ -274,8 +274,9 @@ func (e *StructMapEditor) runProviderModels(cfg *config.Config) (bool, error) {
 
 	for {
 		// プロバイダーリスト
-		providers := make([]string, 0, len(cfg.ProviderModels))
-		for p := range cfg.ProviderModels {
+		providerModels := cfg.ProviderModelsForEdit()
+		providers := make([]string, 0, len(providerModels))
+		for p := range providerModels {
 			providers = append(providers, p)
 		}
 		sort.Strings(providers)
@@ -287,7 +288,7 @@ func (e *StructMapEditor) runProviderModels(cfg *config.Config) (bool, error) {
 			_, _ = fmt.Fprintf(out, "    %s(empty)%s\n", colorDim, colorReset)
 		} else {
 			for i, p := range providers {
-				model := cfg.ProviderModels[p].DefaultModel
+				model := providerModels[p].DefaultModel
 				_, _ = fmt.Fprintf(out, "    %d. %s: %s\n", i+1, p, truncateString(model, 25))
 			}
 		}
@@ -306,16 +307,22 @@ func (e *StructMapEditor) runProviderModels(cfg *config.Config) (bool, error) {
 		switch input {
 		case "a", "add":
 			_, _ = fmt.Fprint(out, "Enter provider name: ")
-			name := strings.TrimSpace(readLineWithIO(&promptIO))
+			name := config.NormalizeProviderName(readLineWithIO(&promptIO))
 			if name == "" {
+				continue
+			}
+			nextProviderModels := cfg.ProviderModelsForEdit()
+			if nextProviderModels == nil {
+				nextProviderModels = make(map[string]config.ProviderModelConfig)
+			}
+			if _, ok := nextProviderModels[name]; ok {
+				_, _ = fmt.Fprintf(out, "%sProvider already configured: %s%s\n", colorDim, name, colorReset)
 				continue
 			}
 			_, _ = fmt.Fprint(out, "Enter default model: ")
 			model := strings.TrimSpace(readLineWithIO(&promptIO))
-			if cfg.ProviderModels == nil {
-				cfg.ProviderModels = make(map[string]config.ProviderModelConfig)
-			}
-			cfg.ProviderModels[name] = config.ProviderModelConfig{DefaultModel: model}
+			nextProviderModels[name] = config.ProviderModelConfig{DefaultModel: model}
+			cfg.SetProviderModelsForEdit(nextProviderModels)
 			_, _ = fmt.Fprintf(out, "%s✓ Added: %s%s\n", colorGreen, name, colorReset)
 
 		case "d", "delete":
@@ -329,7 +336,7 @@ func (e *StructMapEditor) runProviderModels(cfg *config.Config) (bool, error) {
 				continue
 			}
 			name := providers[num-1]
-			delete(cfg.ProviderModels, name)
+			cfg.DeleteProviderModelConfig(name)
 			_, _ = fmt.Fprintf(out, "%s✓ Deleted: %s%s\n", colorGreen, name, colorReset)
 
 		case "s", "save":
@@ -342,13 +349,14 @@ func (e *StructMapEditor) runProviderModels(cfg *config.Config) (bool, error) {
 			// 数字入力の場合
 			if num, err := strconv.Atoi(input); err == nil && num >= 1 && num <= len(providers) {
 				name := providers[num-1]
-				pConfig := cfg.ProviderModels[name]
+				pConfig := providerModels[name]
 				_, _ = fmt.Fprintf(out, "\nEditing %s (current: %s)\n", name, pConfig.DefaultModel)
 				_, _ = fmt.Fprint(out, "Enter new default model: ")
 				model := strings.TrimSpace(readLineWithIO(&promptIO))
 				if model != "" {
-					pConfig.DefaultModel = model
-					cfg.ProviderModels[name] = pConfig
+					cfg.PatchProviderModelConfig(name, func(pm *config.ProviderModelConfig) {
+						pm.DefaultModel = model
+					})
 					_, _ = fmt.Fprintf(out, "%s✓ Updated: %s%s\n", colorGreen, name, colorReset)
 				}
 			}

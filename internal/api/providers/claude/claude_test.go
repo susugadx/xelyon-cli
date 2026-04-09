@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -191,7 +192,32 @@ func rateLimitHandler(retryAfter string) http.HandlerFunc {
 	}
 }
 
-func captureClaudeRequest(t *testing.T, cfg *config.Config, model string) (Request, http.Header) {
+const (
+	testSharedClaudeAliasModel   = "shared-custom"
+	testAnthropicAliasMaxTokens  = 1024
+	testCanonicalClaudeMaxTokens = 1536
+)
+
+func newClaudeAliasSizingConfig() *config.Config {
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelsForEdit(map[string]config.ProviderModelConfig{
+		"anthropic": {
+			DefaultModel:     testSharedClaudeAliasModel,
+			MaxOutputTokens:  testAnthropicAliasMaxTokens,
+			AnthropicVersion: "2099-01-01",
+			AnthropicBeta:    []string{"alias-beta"},
+		},
+		"claude": {
+			DefaultModel:     testSharedClaudeAliasModel,
+			MaxOutputTokens:  testCanonicalClaudeMaxTokens,
+			AnthropicVersion: "2024-01-01",
+			AnthropicBeta:    []string{"canonical-beta"},
+		},
+	})
+	return cfg
+}
+
+func captureClaudeRequestForProvider(t *testing.T, cfg *config.Config, providerKey, model string) (Request, http.Header) {
 	t.Helper()
 
 	var reqBody Request
@@ -210,11 +236,45 @@ func captureClaudeRequest(t *testing.T, cfg *config.Config, model string) (Reque
 
 	t.Setenv("ANTHROPIC_API_URL", server.URL)
 
-	p := New("test-key")
+	p := newProvider("test-key", providerKey)
 	ctx := config.WithContext(context.Background(), cfg)
 	_, err := p.ChatWithTools(ctx, "System", []api.Message{{Role: "user", Content: "Hello"}}, model)
 	if err != nil {
 		t.Fatalf("ChatWithTools() error = %v", err)
+	}
+
+	return reqBody, headers
+}
+
+func captureClaudeRequest(t *testing.T, cfg *config.Config, model string) (Request, http.Header) {
+	t.Helper()
+	return captureClaudeRequestForProvider(t, cfg, "claude", model)
+}
+
+func captureClaudeImageRequestForProvider(t *testing.T, cfg *config.Config, providerKey, model string) (MultimodalRequest, http.Header) {
+	t.Helper()
+
+	var reqBody MultimodalRequest
+	var headers http.Header
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		headers = r.Header.Clone()
+		if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+			t.Fatalf("Failed to decode request: %v", err)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(Response{
+			Content: []Content{{Type: "text", Text: "ok"}},
+		})
+	})
+
+	t.Setenv("ANTHROPIC_API_URL", server.URL)
+
+	p := newProvider("test-key", providerKey)
+	ctx := config.WithContext(context.Background(), cfg)
+	image := &api.ImageData{Base64: "dGVzdA==", MediaType: "image/png"}
+	if _, err := p.ChatWithImage(ctx, "System", nil, "Describe this", image, model); err != nil {
+		t.Fatalf("ChatWithImage() error = %v", err)
 	}
 
 	return reqBody, headers
@@ -335,6 +395,176 @@ func TestClearToolUses_BetaHeader(t *testing.T) {
 	}
 	if !headerHasBetaValue(headers, compactBetaHeader) {
 		t.Errorf("anthropic-beta should include %q, got %q", compactBetaHeader, headers.Get("anthropic-beta"))
+	}
+}
+
+func TestClaudeProvider_UsesAnthropicAliasProviderConfig(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("anthropic", config.ProviderModelConfig{
+		DefaultModel:     "anthropic-custom",
+		AnthropicVersion: "2099-01-01",
+		AnthropicBeta:    []string{"alias-beta"},
+	})
+
+	reqBody, headers := captureClaudeRequest(t, cfg, "claude-sonnet-4-6")
+	if reqBody.Model != "claude-sonnet-4-6" {
+		t.Fatalf("Model = %q, want %q", reqBody.Model, "claude-sonnet-4-6")
+	}
+	if got := headers.Get("anthropic-version"); got != "2099-01-01" {
+		t.Fatalf("anthropic-version = %q, want %q", got, "2099-01-01")
+	}
+	if !headerHasBetaValue(headers, "alias-beta") {
+		t.Fatalf("anthropic-beta should include %q, got %q", "alias-beta", headers.Get("anthropic-beta"))
+	}
+}
+
+func TestClaudeProvider_PrefersAnthropicOwnerHeadersForAnthropicSelectedModel(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+
+	configDir := filepath.Join(tmpDir, ".xelyon")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatalf("Failed to create config dir: %v", err)
+	}
+
+	yamlData := `
+default_provider: deepseek
+provider_models:
+  anthropic:
+    default_model: anthropic-custom
+    anthropic_version: 2099-01-01
+    anthropic_beta:
+      - alias-beta
+  claude:
+    default_model: claude-custom
+    anthropic_version: 2024-01-01
+    anthropic_beta:
+      - canonical-beta
+`
+	configPath := filepath.Join(configDir, "config.yaml")
+	if err := os.WriteFile(configPath, []byte(yamlData), 0600); err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	reqBody, headers := captureClaudeRequest(t, cfg, "anthropic-custom")
+	if reqBody.Model != "anthropic-custom" {
+		t.Fatalf("Model = %q, want %q", reqBody.Model, "anthropic-custom")
+	}
+	if got := headers.Get("anthropic-version"); got != "2099-01-01" {
+		t.Fatalf("anthropic-version = %q, want %q", got, "2099-01-01")
+	}
+	if !headerHasBetaValue(headers, "alias-beta") {
+		t.Fatalf("anthropic-beta should include %q, got %q", "alias-beta", headers.Get("anthropic-beta"))
+	}
+	if headerHasBetaValue(headers, "canonical-beta") {
+		t.Fatalf("anthropic-beta should not include %q, got %q", "canonical-beta", headers.Get("anthropic-beta"))
+	}
+}
+
+func TestClaudeProvider_PrefersRequestedAnthropicAliasWhenBothAliasEntriesShareSameModel(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+
+	configDir := filepath.Join(tmpDir, ".xelyon")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatalf("Failed to create config dir: %v", err)
+	}
+
+	yamlData := `
+default_provider: deepseek
+provider_models:
+  anthropic:
+    default_model: shared-custom
+    anthropic_version: 2099-01-01
+    anthropic_beta:
+      - alias-beta
+  claude:
+    default_model: shared-custom
+    anthropic_version: 2024-01-01
+    anthropic_beta:
+      - canonical-beta
+`
+	configPath := filepath.Join(configDir, "config.yaml")
+	if err := os.WriteFile(configPath, []byte(yamlData), 0600); err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	reqBody, headers := captureClaudeRequestForProvider(t, cfg, "anthropic", "shared-custom")
+	if reqBody.Model != "shared-custom" {
+		t.Fatalf("Model = %q, want %q", reqBody.Model, "shared-custom")
+	}
+	if got := headers.Get("anthropic-version"); got != "2099-01-01" {
+		t.Fatalf("anthropic-version = %q, want %q", got, "2099-01-01")
+	}
+	if !headerHasBetaValue(headers, "alias-beta") {
+		t.Fatalf("anthropic-beta should include %q, got %q", "alias-beta", headers.Get("anthropic-beta"))
+	}
+	if headerHasBetaValue(headers, "canonical-beta") {
+		t.Fatalf("anthropic-beta should not include %q, got %q", "canonical-beta", headers.Get("anthropic-beta"))
+	}
+}
+
+func TestClaudeProvider_AnthropicAliasRequestSizingUsesAnthropicMaxTokens(t *testing.T) {
+	cfg := newClaudeAliasSizingConfig()
+
+	reqBody, headers := captureClaudeRequestForProvider(t, cfg, "anthropic", testSharedClaudeAliasModel)
+	if reqBody.MaxTokens != testAnthropicAliasMaxTokens {
+		t.Fatalf("MaxTokens = %d, want %d", reqBody.MaxTokens, testAnthropicAliasMaxTokens)
+	}
+	if got := headers.Get("anthropic-version"); got != "2099-01-01" {
+		t.Fatalf("anthropic-version = %q, want %q", got, "2099-01-01")
+	}
+	if !headerHasBetaValue(headers, "alias-beta") {
+		t.Fatalf("anthropic-beta should include %q, got %q", "alias-beta", headers.Get("anthropic-beta"))
+	}
+	if headerHasBetaValue(headers, "canonical-beta") {
+		t.Fatalf("anthropic-beta should not include %q, got %q", "canonical-beta", headers.Get("anthropic-beta"))
+	}
+}
+
+func TestClaudeProvider_ClaudeAliasRequestSizingUsesClaudeMaxTokens(t *testing.T) {
+	cfg := newClaudeAliasSizingConfig()
+
+	reqBody, headers := captureClaudeRequestForProvider(t, cfg, "claude", testSharedClaudeAliasModel)
+	if reqBody.MaxTokens != testCanonicalClaudeMaxTokens {
+		t.Fatalf("MaxTokens = %d, want %d", reqBody.MaxTokens, testCanonicalClaudeMaxTokens)
+	}
+	if got := headers.Get("anthropic-version"); got != "2024-01-01" {
+		t.Fatalf("anthropic-version = %q, want %q", got, "2024-01-01")
+	}
+	if !headerHasBetaValue(headers, "canonical-beta") {
+		t.Fatalf("anthropic-beta should include %q, got %q", "canonical-beta", headers.Get("anthropic-beta"))
+	}
+	if headerHasBetaValue(headers, "alias-beta") {
+		t.Fatalf("anthropic-beta should not include %q, got %q", "alias-beta", headers.Get("anthropic-beta"))
+	}
+}
+
+func TestClaudeProvider_AnthropicAliasImageRequestSizingUsesAnthropicMaxTokens(t *testing.T) {
+	cfg := newClaudeAliasSizingConfig()
+
+	reqBody, headers := captureClaudeImageRequestForProvider(t, cfg, "anthropic", testSharedClaudeAliasModel)
+	if reqBody.MaxTokens != testAnthropicAliasMaxTokens {
+		t.Fatalf("MaxTokens = %d, want %d", reqBody.MaxTokens, testAnthropicAliasMaxTokens)
+	}
+	if got := headers.Get("anthropic-version"); got != "2099-01-01" {
+		t.Fatalf("anthropic-version = %q, want %q", got, "2099-01-01")
+	}
+	if !headerHasBetaValue(headers, "alias-beta") {
+		t.Fatalf("anthropic-beta should include %q, got %q", "alias-beta", headers.Get("anthropic-beta"))
+	}
+	if headerHasBetaValue(headers, "canonical-beta") {
+		t.Fatalf("anthropic-beta should not include %q, got %q", "canonical-beta", headers.Get("anthropic-beta"))
 	}
 }
 

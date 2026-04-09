@@ -261,8 +261,10 @@ func TestInjectProjectMap_DoesNotUseRecentToolPathsForFocusOverlay(t *testing.T)
 		Runtime:      runtime,
 		SystemPrompt: "base prompt",
 		ToolCache:    cache,
-		changeStack: []tools.FileChange{
-			{FilePath: recentEdit},
+		agentWorkspaceState: agentWorkspaceState{
+			changeStack: []tools.FileChange{
+				{FilePath: recentEdit},
+			},
 		},
 	}
 
@@ -699,7 +701,7 @@ func TestCurrentProjectMapStateKey_NonGitWatchesEmptyDirectories(t *testing.T) {
 		t.Fatalf("collectProjectMapWatchDirs() = %v, want empty directories included", watchDirs)
 	}
 
-	agent := &Agent{projectMapWatchDirs: watchDirs}
+	agent := &Agent{agentProjectPromptState: agentProjectPromptState{projectMapWatchDirs: watchDirs}}
 	before := currentProjectMapStateKey(agent, root)
 	if before == "" {
 		t.Fatal("expected non-empty state key before change")
@@ -728,8 +730,10 @@ func TestCurrentProjectMapStateKey_NonGitIgnoresIgnoredEntries(t *testing.T) {
 
 	watchDirs := collectProjectMapWatchDirs(root, ignorePatterns)
 	agent := &Agent{
-		projectMapWatchDirs: watchDirs,
-		projectMapIgnoreKey: strings.Join(ignorePatterns, "\x00"),
+		agentProjectPromptState: agentProjectPromptState{
+			projectMapWatchDirs: watchDirs,
+			projectMapIgnoreKey: strings.Join(ignorePatterns, "\x00"),
+		},
 	}
 
 	before := currentProjectMapStateKey(agent, root)
@@ -811,7 +815,7 @@ func TestRefreshProjectPromptIfDirty_RebuildsProjectMapAfterToolMutation(t *test
 }
 
 func TestNoteProjectMapMutation_DoesNotInvalidateReadOnlyBash(t *testing.T) {
-	agent := &Agent{projectMapDirty: false}
+	agent := &Agent{agentProjectPromptState: agentProjectPromptState{projectMapDirty: false}}
 
 	agent.noteProjectMapMutation(&tools.ToolCall{
 		Tool: "bash",

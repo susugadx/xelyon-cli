@@ -245,3 +245,81 @@ func TestExecuteStepV2_HardLimitRespected(t *testing.T) {
 		t.Fatalf("provider.callCount = %d, want 5", provider.callCount)
 	}
 }
+
+func TestExecuteStepV2_ToolLoopDetectionDoesNotAbortPlanStep(t *testing.T) {
+	disableColors(t)
+
+	cfg := config.DefaultConfig()
+	cfg.General.ToolLoopLimit = 5
+	cfg.LoopDetection.Threshold = 2
+
+	var out bytes.Buffer
+	provider := &sequenceMockProvider{
+		name: "test",
+		responses: []string{
+			`{"tool":"loop_tool","args":{"iteration":"same"}}
+{"tool":"loop_tool","args":{"iteration":"same"}}`,
+			"Step completed.",
+		},
+	}
+	agent := newLoopTestAgent(provider, cfg, &out)
+
+	p := &plan.Plan{
+		Summary: "Test plan",
+		Steps: []plan.PlanStep{
+			{ID: 1, Description: "Looping step", Status: "pending", Tools: []string{"loop_tool"}},
+		},
+	}
+
+	if err := agent.executeStepV2(context.Background(), p, &p.Steps[0], 0, &retryState{}); err != nil {
+		t.Fatalf("executeStepV2() error = %v, want nil", err)
+	}
+	if provider.callCount != 2 {
+		t.Fatalf("provider.callCount = %d, want 2", provider.callCount)
+	}
+	if !strings.Contains(out.String(), "✓ Step 1 completed") {
+		t.Fatalf("expected step completion output, got %q", out.String())
+	}
+}
+
+func TestTurnRunnerExecuteStep_ResetsLoopDetectionStatePerCall(t *testing.T) {
+	disableColors(t)
+
+	cfg := config.DefaultConfig()
+	cfg.General.ToolLoopLimit = 5
+	cfg.LoopDetection.Threshold = 2
+
+	var out bytes.Buffer
+	provider := &sequenceMockProvider{
+		name: "test",
+		responses: []string{
+			`{"tool":"loop_tool","args":{"iteration":"same"}}`,
+			"Step 1 completed.",
+			`{"tool":"loop_tool","args":{"iteration":"same"}}`,
+			"Step 2 completed.",
+		},
+	}
+	agent := newLoopTestAgent(provider, cfg, &out)
+	runner := newTurnRunner(agent, context.Background())
+
+	p := &plan.Plan{
+		Summary: "Test plan",
+		Steps: []plan.PlanStep{
+			{ID: 1, Description: "Step 1", Status: "pending", Tools: []string{"loop_tool"}},
+			{ID: 2, Description: "Step 2", Status: "pending", Tools: []string{"loop_tool"}},
+		},
+	}
+
+	if err := runner.ExecuteStep(p, &p.Steps[0], 0, &retryState{}); err != nil {
+		t.Fatalf("first ExecuteStep() error = %v", err)
+	}
+	if err := runner.ExecuteStep(p, &p.Steps[1], 1, &retryState{}); err != nil {
+		t.Fatalf("second ExecuteStep() error = %v", err)
+	}
+	if strings.Contains(out.String(), "Warning: Same tool call repeated 2 times") {
+		t.Fatalf("unexpected cross-step loop detection warning: %q", out.String())
+	}
+	if provider.callCount != 4 {
+		t.Fatalf("provider.callCount = %d, want 4", provider.callCount)
+	}
+}

@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
@@ -88,49 +87,4 @@ func extractExplanationAndTool(response string) (explanation, toolJSON string) {
 // DeepSeek Reasoner などの思考モデルで使用
 func (a *Agent) getLastReasoningContent() string {
 	return api.GetReasoningContent(a.CurrentProvider)
-}
-
-// handleNormalResponse は通常の回答（ツール呼び出しなし）を処理
-func (a *Agent) handleNormalResponse(response string) {
-	out := a.output()
-
-	// Compaction が含まれている場合の処理
-	displayResponse := response
-	if strings.Contains(response, "[COMPACTION]") {
-		startIdx := strings.Index(response, "[COMPACTION]")
-		endIdx := strings.Index(response, "[/COMPACTION]")
-		if startIdx != -1 && endIdx != -1 && endIdx > startIdx {
-			// 通知を表示
-			cyan.Fprintln(out, "📦 Context compacted by Claude")
-			// 表示用からは削除
-			displayResponse = strings.TrimSpace(response[:startIdx] + response[endIdx+len("[/COMPACTION]"):])
-		}
-	}
-
-	a.History = append(a.History, api.Message{
-		Role:             "assistant",
-		Content:          response,
-		ReasoningContent: a.getLastReasoningContent(),
-	})
-
-	// 統計情報更新: Assistantメッセージ数をカウント
-	if a.Stats != nil {
-		a.Stats.AssistantMessages++
-	}
-
-	// 最後の出力を記録（最大保存数: config.MaxLastOutputs）
-	// CopyLastOutput (TUI goroutine) と data race しないように historyMu で保護
-	a.historyMu.Lock()
-	a.lastOutputs = append(a.lastOutputs, displayResponse)
-	if len(a.lastOutputs) > config.MaxLastOutputs {
-		a.lastOutputs = a.lastOutputs[1:]
-	}
-	a.historyMu.Unlock()
-
-	// セッションに保存
-	if a.session != nil {
-		a.appendSessionMessage("assistant", displayResponse, a.CurrentModel)
-	}
-
-	a.printFinalAssistantResponse(displayResponse)
 }

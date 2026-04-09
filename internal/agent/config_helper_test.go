@@ -10,9 +10,7 @@ func TestSaveAndSyncConfig_ProviderOverride_NotOverwritten(t *testing.T) {
 	// provider_models の個別 override を編集して保存しても潰されないことを検証
 	cfg := config.DefaultConfig()
 	cfg.DefaultModel = "global-model"
-	cfg.ProviderModels = map[string]config.ProviderModelConfig{
-		"openai": {DefaultModel: "provider-override"},
-	}
+	cfg.SetProviderModelConfig("openai", config.ProviderModelConfig{DefaultModel: "provider-override"})
 
 	a := &Agent{ProviderName: "openai"}
 
@@ -42,9 +40,7 @@ func TestSaveAndSyncConfig_ProviderOverride_NotOverwritten(t *testing.T) {
 func TestSyncDefaultModelToProvider_SyncsCurrentProvider(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.DefaultModel = "new-global-model"
-	cfg.ProviderModels = map[string]config.ProviderModelConfig{
-		"openai": {DefaultModel: "old-model"},
-	}
+	cfg.SetProviderModelConfig("openai", config.ProviderModelConfig{DefaultModel: "old-model"})
 
 	a := &Agent{ProviderName: "openai"}
 	a.SyncDefaultModelToProvider(cfg)
@@ -55,7 +51,51 @@ func TestSyncDefaultModelToProvider_SyncsCurrentProvider(t *testing.T) {
 	}
 }
 
-func TestSyncDefaultModelToProvider_SkipsIfNoProviderEntry(t *testing.T) {
+func TestSyncDefaultModelToProvider_RemovesOverrideWhenModelMatchesProviderDefault(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.DefaultModel = config.DefaultConfig().ProviderModels["openai"].DefaultModel
+	cfg.SetProviderModelConfig("openai", config.ProviderModelConfig{DefaultModel: "old-model"})
+
+	a := &Agent{ProviderName: "openai"}
+	a.SyncDefaultModelToProvider(cfg)
+
+	if got := cfg.ProviderModelsForSave(); got["openai"].DefaultModel != "" {
+		t.Fatalf("ProviderModelsForSave()[openai].DefaultModel = %q, want override removed", got["openai"].DefaultModel)
+	}
+}
+
+func TestSyncDefaultModelToProvider_PreservesOtherProviderSettingsWhenModelMatchesDefault(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.DefaultModel = config.DefaultConfig().ProviderModels["claude"].DefaultModel
+	cfg.SetProviderModelConfig("claude", config.ProviderModelConfig{
+		DefaultModel:     "claude-custom",
+		AnthropicVersion: "2099-01-01",
+		MaxOutputTokens:  1234,
+	})
+
+	a := &Agent{
+		ProviderName:      "claude",
+		ProviderConfigKey: "claude",
+	}
+	a.SyncDefaultModelToProvider(cfg)
+
+	saved := cfg.ProviderModelsForSave()
+	pm, ok := saved["claude"]
+	if !ok {
+		t.Fatal("ProviderModelsForSave() should retain claude entry for non-model settings")
+	}
+	if pm.DefaultModel != "" {
+		t.Fatalf("ProviderModelsForSave()[claude].DefaultModel = %q, want cleared", pm.DefaultModel)
+	}
+	if pm.AnthropicVersion != "2099-01-01" {
+		t.Fatalf("ProviderModelsForSave()[claude].AnthropicVersion = %q, want %q", pm.AnthropicVersion, "2099-01-01")
+	}
+	if pm.MaxOutputTokens != 1234 {
+		t.Fatalf("ProviderModelsForSave()[claude].MaxOutputTokens = %d, want %d", pm.MaxOutputTokens, 1234)
+	}
+}
+
+func TestSyncDefaultModelToProvider_CreatesProviderEntryWhenMissing(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.DefaultModel = "new-model"
 	cfg.ProviderModels = map[string]config.ProviderModelConfig{}
@@ -63,8 +103,52 @@ func TestSyncDefaultModelToProvider_SkipsIfNoProviderEntry(t *testing.T) {
 	a := &Agent{ProviderName: "openai"}
 	a.SyncDefaultModelToProvider(cfg)
 
-	// provider entry がなければ何もしない
-	if _, ok := cfg.ProviderModels["openai"]; ok {
-		t.Fatal("should not create new provider entry")
+	if got := cfg.ProviderModels["openai"].DefaultModel; got != "new-model" {
+		t.Fatalf("ProviderModels[openai].DefaultModel = %q, want %q", got, "new-model")
+	}
+}
+
+func TestSyncDefaultModelToProvider_PrefersAnthropicAliasEntry(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.DefaultProvider = "anthropic"
+	cfg.DefaultModel = "new-model"
+	cfg.SetProviderModelConfig("anthropic", config.ProviderModelConfig{DefaultModel: "old-model"})
+
+	a := &Agent{
+		ProviderName:      "claude",
+		ProviderConfigKey: "anthropic",
+	}
+	a.SyncDefaultModelToProvider(cfg)
+
+	if got := cfg.ProviderModels["anthropic"].DefaultModel; got != "new-model" {
+		t.Fatalf("ProviderModels[anthropic].DefaultModel = %q, want %q", got, "new-model")
+	}
+	if got := cfg.ProviderModels["claude"].DefaultModel; got != "claude-sonnet-4-6" {
+		t.Fatalf("ProviderModels[claude].DefaultModel = %q, want default claude entry to remain unchanged", got)
+	}
+}
+
+func TestSyncDefaultModelToProvider_PreservesSessionAnthropicAliasWhenDefaultProviderDiffers(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.DefaultProvider = "deepseek"
+	cfg.DefaultModel = "anthropic-new"
+	cfg.SetProviderModelsForEdit(map[string]config.ProviderModelConfig{
+		"anthropic": {DefaultModel: "anthropic-old"},
+		"claude":    {DefaultModel: "claude-old"},
+	})
+
+	a := &Agent{
+		ProviderName:      "claude",
+		ProviderConfigKey: "anthropic",
+		CurrentModel:      "anthropic-old",
+	}
+	a.SyncDefaultModelToProvider(cfg)
+
+	saved := cfg.ProviderModelsForSave()
+	if got := saved["anthropic"].DefaultModel; got != "anthropic-new" {
+		t.Fatalf("ProviderModelsForSave()[anthropic].DefaultModel = %q, want %q", got, "anthropic-new")
+	}
+	if got := saved["claude"].DefaultModel; got != "claude-old" {
+		t.Fatalf("ProviderModelsForSave()[claude].DefaultModel = %q, want %q", got, "claude-old")
 	}
 }

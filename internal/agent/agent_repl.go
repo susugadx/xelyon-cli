@@ -90,6 +90,52 @@ func RunInteractiveWithConfig(model string, provider api.Provider, cfg *config.C
 	runREPLLoop(agent, mlReader)
 }
 
+// RunInteractiveWithImageWithConfig は指定設定で画像付きのインタラクティブモードを実行する。
+func RunInteractiveWithImageWithConfig(query string, model string, provider api.Provider, imagePath string, cfg *config.Config, autoApprove bool) error {
+	runtime := NewAgentRuntimeWithConfig(cfg)
+	runtime.AutoApprove = autoApprove
+
+	runtimeUI := runtime.effectiveUI()
+	mlReader := ui.NewMultilineReaderWithRuntime(runtimeUI)
+	runtimeUI.SetPromptReader(mlReader)
+	runtimeCfg := runtime.effectiveConfig()
+
+	if os.Getenv("XELYON_DEBUG_PASTE") == "1" {
+		_, _ = fmt.Fprintf(runtimeUI.ErrorOutput(), "[DEBUG] cfg.Paste.BracketedPaste = %v\n", runtimeCfg.Paste.BracketedPaste)
+	}
+
+	if runtimeCfg.Paste.BracketedPaste {
+		mlReader.EnableBracketedPaste()
+		defer mlReader.DisableBracketedPaste()
+	}
+
+	if !provider.SupportsImages() {
+		return fmt.Errorf("provider %q does not support image input", provider.Name())
+	}
+
+	image, err := api.LoadImage(imagePath)
+	if err != nil {
+		return fmt.Errorf("failed to load image: %w", err)
+	}
+
+	agent := initInteractiveAgentWithRuntime(runtime, model, provider, autoApprove)
+	defer agent.Cleanup()
+
+	printHeaderToWriter(runtimeUI.Output(), agent.Model, provider)
+	printModeInfoToWriter(runtimeUI.Output(), autoApprove, false)
+	printContextSize(agent)
+	green.Fprintf(runtimeUI.Output(), "🖼️  Image loaded: %s (%s)\n", image.Path, api.FormatImageSize(image.Size))
+
+	if query == "" {
+		query = "Please analyze this image."
+	}
+
+	agent.setPromptReader(mlReader)
+	agent.chatWithImage(query, image)
+	runREPLLoop(agent, mlReader)
+	return nil
+}
+
 // RunInteractiveWithResumeWithConfig は指定設定で前回セッションを再開してインタラクティブモードを実行する。
 func RunInteractiveWithResumeWithConfig(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
 	runtime := NewAgentRuntimeWithConfig(cfg)

@@ -42,33 +42,12 @@ var (
 
 	runInteractive           = agent.RunInteractiveWithConfig
 	runInteractiveWithResume = agent.RunInteractiveWithResumeWithConfig
+	runInteractiveWithImage  = agent.RunInteractiveWithImageWithConfig
 	runTUI                   = agent.RunTUIWithConfig
 	runHeadless              = agent.RunHeadlessWithConfig
 	runOnce                  = agent.RunOnceWithConfig
 	runOnceWithImage         = agent.RunOnceWithImageWithConfig
 )
-
-// getModel はフラグからモデルを決定する
-// 優先順位: --model フラグ > provider_models.<provider>.default_model > default_model
-func getModel(cfg *config.Config) string {
-	// --model フラグが指定されていればそれを優先
-	if modelFlag != "" {
-		return modelFlag
-	}
-
-	if cfg == nil {
-		return "deepseek-chat"
-	}
-
-	// プロバイダー固有のモデル設定を確認
-	providerName := resolveProviderName(providerFlag, cfg.DefaultProvider)
-	if providerModel := cfg.GetModelForProvider(providerName); providerModel != "" {
-		return providerModel
-	}
-
-	return cfg.DefaultModel
-}
-
 var rootCmd = &cobra.Command{
 	Use:     "xelyon [query]",
 	Short:   "XELYON CLI - AI-powered coding agent",
@@ -83,46 +62,23 @@ Examples:
   xelyon --provider openai --model gpt-5.2         # Use OpenAI GPT-5.2
   xelyon -p deepseek -m deepseek-chat             # Short flags`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// バージョンチェック（--no-update-check または --headless でない場合）
-		if !noUpdateCheck && !headless && outputFormat != "json" {
+		resolvedOutputFormat, err := resolveOutputFormat(outputFormat, headless)
+		if err != nil {
+			return err
+		}
+
+		mode, err := resolveExecutionMode(args, resolvedOutputFormat)
+		if err != nil {
+			return err
+		}
+
+		// バージョンチェック（--no-update-check または JSON 出力でない場合）
+		if !noUpdateCheck && resolvedOutputFormat != outputFormatJSON {
 			if home, err := os.UserHomeDir(); err == nil {
 				configDir := filepath.Join(home, ".xelyon")
 				if result, _ := version.CheckForUpdates(configDir); result != nil {
 					fmt.Print(version.FormatUpdateNotification(result))
 				}
-			}
-		}
-
-		// --headless は --output-format json のエイリアス
-		if headless {
-			outputFormat = "json"
-		}
-
-		implicitOnce := outputFormat == "text" && len(args) > 0 && imageFlag == "" && !interactive && !resume
-		effectiveOnce := once || implicitOnce
-
-		if interactive && once {
-			return fmt.Errorf("--interactive cannot be used with --once")
-		}
-
-		if resume && len(args) > 0 && outputFormat == "text" && imageFlag == "" {
-			return fmt.Errorf("--resume cannot be used with query arguments")
-		}
-
-		// --quiet はワンショット実行専用
-		if quiet && !effectiveOnce {
-			return fmt.Errorf("--quiet can only be used with one-shot execution")
-		}
-
-		if once {
-			if resume {
-				return fmt.Errorf("--once cannot be used with --resume")
-			}
-			if headless || outputFormat == "json" {
-				return fmt.Errorf("--once cannot be used with --headless or --output-format json")
-			}
-			if len(args) == 0 {
-				return fmt.Errorf("query argument is required when using --once")
 			}
 		}
 
@@ -148,64 +104,40 @@ Examples:
 
 		model := getModel(cfg)
 		provider := getProvider(cfg)
+		query := strings.Join(args, " ")
 
-		// Headlessモードチェック（クエリ必須）
-		if outputFormat == "json" {
-			if len(args) == 0 {
+		switch mode {
+		case executionModeHeadless:
+			if query == "" {
 				return fmt.Errorf("query argument is required in headless mode")
 			}
-			result := runHeadless(cmd.Context(), strings.Join(args, " "), model, provider, cfg)
+			result := runHeadless(cmd.Context(), query, model, provider, cfg)
 			jsonBytes, _ := json.MarshalIndent(result, "", "  ")
 			fmt.Println(string(jsonBytes))
 			if result.Status == "error" {
 				return fmt.Errorf("headless execution failed")
 			}
 			return nil
-		}
-
-		if once {
-			return runOnce(strings.Join(args, " "), model, provider, cfg, autoApprove, quiet)
-		}
-
-		// --resume フラグチェック
-		if resume && len(args) == 0 {
+		case executionModeOnce:
+			return runOnce(query, model, provider, cfg, autoApprove, quiet)
+		case executionModeResume:
 			// TODO: TUI resume 対応（Phase 2）、現状は従来REPLモードで起動する。
 			runInteractiveWithResume(model, provider, cfg, autoApprove)
 			return nil
-		}
-
-		// 引数なし & 画像指定なし → 対話モード
-		if len(args) == 0 && imageFlag == "" {
+		case executionModeInteractive:
 			if noTUI {
 				runInteractive(model, provider, cfg, autoApprove)
 			} else {
 				runTUI(model, provider, cfg, autoApprove)
 			}
 			return nil
+		case executionModeOnceImage:
+			return runOnceWithImage(query, model, provider, imageFlag, cfg, autoApprove, quiet)
+		case executionModeInteractiveImage:
+			return runInteractiveWithImage(query, model, provider, imageFlag, cfg, autoApprove)
+		default:
+			return fmt.Errorf("unsupported execution mode: %s", mode)
 		}
-
-		// 画像フラグが指定された場合 → ワンショットモード（画像付き）
-		if imageFlag != "" {
-			query := ""
-			if len(args) > 0 {
-				query = args[0]
-			}
-			runOnceWithImage(query, model, provider, imageFlag, cfg, autoApprove)
-			return nil
-		}
-
-		// テキストクエリ引数付き → デフォルトでワンショット実行
-		if implicitOnce {
-			return runOnce(strings.Join(args, " "), model, provider, cfg, autoApprove, quiet)
-		}
-
-		// クエリ引数付き + --interactive → 対話モード
-		if noTUI {
-			runInteractive(model, provider, cfg, autoApprove)
-		} else {
-			runTUI(model, provider, cfg, autoApprove)
-		}
-		return nil
 	},
 }
 

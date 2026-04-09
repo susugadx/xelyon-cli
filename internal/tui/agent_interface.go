@@ -40,6 +40,9 @@ type AgentInterface interface {
 	// GetProviderName は現在のプロバイダー名を返す。
 	GetProviderName() string
 
+	// GetProviderConfigKey は現在セッションが代表する provider_models key を返す。
+	GetProviderConfigKey() string
+
 	// ResolveAlias はコマンド名を alias 解決する（例: "/c" → "/config"）。
 	ResolveAlias(cmd string) string
 }

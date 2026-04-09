@@ -9,20 +9,21 @@ import (
 )
 
 type stubAgent struct {
-	mu              sync.RWMutex
-	processing      bool
-	cancelCalls     int
-	cleanupCalls    int
-	copyCalls       int
-	copyTexts       []string
-	chatInputs      []string
-	handledInputs   []string
-	handledCommands map[string]bool
-	statusLine      string
-	saveStatusLine  string
-	providerName    string
-	saveErr         error          // non-nil にすると SaveAndSyncConfig が失敗する
-	lastSavedConfig *config.Config // SaveAndSyncConfig で受け取った最後の Config
+	mu                sync.RWMutex
+	processing        bool
+	cancelCalls       int
+	cleanupCalls      int
+	copyCalls         int
+	copyTexts         []string
+	chatInputs        []string
+	handledInputs     []string
+	handledCommands   map[string]bool
+	statusLine        string
+	saveStatusLine    string
+	providerName      string
+	providerConfigKey string
+	saveErr           error          // non-nil にすると SaveAndSyncConfig が失敗する
+	lastSavedConfig   *config.Config // SaveAndSyncConfig で受け取った最後の Config
 }
 
 func (s *stubAgent) Chat(input string) {
@@ -86,6 +87,12 @@ func (s *stubAgent) GetProviderName() string {
 		return s.providerName
 	}
 	return "deepseek"
+}
+func (s *stubAgent) GetProviderConfigKey() string {
+	if s.providerConfigKey != "" {
+		return s.providerConfigKey
+	}
+	return s.GetProviderName()
 }
 func (s *stubAgent) ResolveAlias(cmd string) string {
 	// テスト用 alias

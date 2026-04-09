@@ -128,6 +128,17 @@ func TestIsAPIKeyAvailable(t *testing.T) {
 			want:     false,
 		},
 		{
+			name:     "Anthropic alias with API key",
+			provider: "anthropic",
+			setup: func() {
+				os.Setenv("ANTHROPIC_API_KEY", "test-key")
+			},
+			cleanup: func() {
+				os.Unsetenv("ANTHROPIC_API_KEY")
+			},
+			want: true,
+		},
+		{
 			name:     "OpenAI with API key",
 			provider: "openai",
 			setup: func() {
@@ -383,7 +394,9 @@ func TestAgent_IncrementAssistantMessages_NilStats(t *testing.T) {
 
 func TestAgent_AppendChange(t *testing.T) {
 	agent := &Agent{
-		changeStack: []tools.FileChange{},
+		agentWorkspaceState: agentWorkspaceState{
+			changeStack: []tools.FileChange{},
+		},
 	}
 
 	change := tools.FileChange{

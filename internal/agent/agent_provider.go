@@ -5,20 +5,30 @@ import (
 	"os"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 // SwitchProvider はプロバイダーを切り替える
 func (a *Agent) SwitchProvider(providerName string) error {
 	out := a.output()
 	errOut := a.errorOutput()
+	requestedProviderName := providerName
+	modelLookupProviderName := config.NormalizeProviderName(providerName)
+	runtimeProviderName := config.CanonicalProviderName(providerName)
+	if runtimeProviderName == "" {
+		return fmt.Errorf("unknown provider: %s", requestedProviderName)
+	}
+	if modelLookupProviderName == "" {
+		modelLookupProviderName = runtimeProviderName
+	}
 
 	// API キー存在チェック
-	if !IsAPIKeyAvailable(providerName) {
-		return fmt.Errorf("%s のAPIキーが設定されていません", providerName)
+	if !IsAPIKeyAvailable(runtimeProviderName) {
+		return fmt.Errorf("%s のAPIキーが設定されていません", requestedProviderName)
 	}
 
 	// プロバイダーインスタンス作成
-	provider, err := api.NewProvider(providerName)
+	provider, err := api.NewProvider(modelLookupProviderName)
 	if err != nil {
 		return fmt.Errorf("プロバイダーの初期化に失敗しました: %w", err)
 	}
@@ -27,30 +37,7 @@ func (a *Agent) SwitchProvider(providerName string) error {
 
 	// runtime 設定から新しいプロバイダーのデフォルトモデルを取得
 	cfg := a.cfg()
-	newModel := cfg.GetModelForProvider(providerName)
-	if newModel == "" {
-		// フォールバック: プロバイダー別のハードコードされたデフォルト
-		switch providerName {
-		case "deepseek":
-			newModel = "deepseek-chat"
-		case "openai":
-			newModel = "gpt-5.2"
-		case "gemini":
-			newModel = "gemini-3.1-pro-preview-customtools"
-		case "claude":
-			newModel = "claude-sonnet-4-6"
-		case "ollama":
-			newModel = "qwen2.5-coder:7b"
-		case "groq":
-			newModel = "meta-llama/llama-4-scout-17b-16e-instruct"
-		case "openrouter":
-			newModel = "anthropic/claude-sonnet-4.6"
-		case "bedrock":
-			newModel = "global.anthropic.claude-sonnet-4-6-v1"
-		default:
-			newModel = "default-model"
-		}
-	}
+	newModel := cfg.GetSelectedModelForProvider(modelLookupProviderName)
 
 	// 既存プロバイダーのキャッシュをクリア（サポートしている場合）
 	if a.CurrentProvider != nil {
@@ -62,7 +49,7 @@ func (a *Agent) SwitchProvider(providerName string) error {
 	// プロバイダー切り替え
 	oldProvider := a.ProviderName
 	oldModel := a.CurrentModel
-	if oldProvider != "" && oldProvider != providerName {
+	if oldProvider != "" && !config.SameProviderRuntimeIdentity(oldProvider, runtimeProviderName) {
 		// プロバイダー切り替え時は tool_calls のフォーマットが互換でない場合があるため、履歴を破棄する
 		a.historyMu.Lock()
 		hadHistory := len(a.History) > 0
@@ -73,14 +60,15 @@ func (a *Agent) SwitchProvider(providerName string) error {
 		}
 	}
 	a.CurrentProvider = provider
-	a.ProviderName = providerName
+	a.ProviderName = runtimeProviderName
+	a.ProviderConfigKey = modelLookupProviderName
 	a.CurrentModel = newModel
 	a.syncSessionModel()
 
 	// 統計情報をリセット（プロバイダー切り替え時）
 	if a.Stats != nil {
 		a.statsMu.Lock()
-		a.Stats.Provider = providerName
+		a.Stats.Provider = runtimeProviderName
 		a.Stats.Model = newModel
 		a.Stats.InputTokens = 0
 		a.Stats.CachedInputTokens = 0
@@ -110,14 +98,14 @@ func (a *Agent) SwitchProvider(providerName string) error {
 
 	a.rebuildSystemPromptForCurrentProvider()
 
-	green.Fprintf(out, "✅ Provider: %s → %s\n", oldProvider, providerName)
+	green.Fprintf(out, "✅ Provider: %s → %s\n", oldProvider, runtimeProviderName)
 	green.Fprintf(out, "✅ Model: %s → %s\n", oldModel, newModel)
 	return nil
 }
 
 // IsAPIKeyAvailable は指定されたプロバイダーのAPIキーが利用可能かチェック
 func IsAPIKeyAvailable(provider string) bool {
-	switch provider {
+	switch config.CanonicalProviderName(provider) {
 	case "deepseek":
 		return os.Getenv("DEEPSEEK_API_KEY") != ""
 	case "openai":

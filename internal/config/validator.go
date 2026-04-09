@@ -92,7 +92,7 @@ func ValidateConfig(cfg *Config) ValidationResult {
 	}
 
 	// 3. ProviderModels のプロバイダー名検証
-	for providerName := range cfg.ProviderModels {
+	for providerName := range cfg.ProviderModelsForEdit() {
 		if !isValidProvider(providerName) {
 			result.Issues = append(result.Issues, ValidationIssue{
 				Field:      fmt.Sprintf("provider_models.%s", providerName),
@@ -178,7 +178,7 @@ func formatFloatValidationValue(value float64) string {
 
 // isValidProvider はプロバイダー名が有効かチェック
 func isValidProvider(name string) bool {
-	lower := strings.ToLower(name)
+	lower := NormalizeProviderName(name)
 	for _, valid := range ValidProviders {
 		if lower == valid {
 			return true
@@ -189,7 +189,7 @@ func isValidProvider(name string) bool {
 
 // suggestProvider は類似のプロバイダー名を提案
 func suggestProvider(invalid string) string {
-	lower := strings.ToLower(invalid)
+	lower := NormalizeProviderName(invalid)
 
 	// 完全一致チェック（大文字小文字違いの場合）
 	for _, valid := range ValidProviders {

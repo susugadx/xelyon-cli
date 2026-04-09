@@ -150,6 +150,11 @@ func (a *TUIAdapter) GetProviderName() string {
 	return a.agent.ProviderName
 }
 
+// GetProviderConfigKey は現在セッションが代表する provider_models key を返す。
+func (a *TUIAdapter) GetProviderConfigKey() string {
+	return a.agent.GetProviderConfigKey()
+}
+
 // ResolveAlias はコマンド名を alias 解決する。
 func (a *TUIAdapter) ResolveAlias(cmd string) string {
 	return resolveCommandAliasWithConfig(cmd, a.agent.cfg())
