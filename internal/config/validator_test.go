@@ -21,6 +21,7 @@ func TestIsValidProvider(t *testing.T) {
 		{"valid gemini", "gemini", true},
 		{"valid claude", "claude", true},
 		{"valid anthropic", "anthropic", true},
+		{"valid anthropic with spaces", "  anthropic  ", true},
 		{"valid ollama", "ollama", true},
 		{"valid groq", "groq", true},
 		{"valid uppercase", "DeepSeek", true},
@@ -52,6 +53,7 @@ func TestSuggestProvider(t *testing.T) {
 		{"chatgpt", "chatgpt", "openai"},
 		{"google", "google", "gemini"},
 		{"sonnet", "sonnet", "claude"},
+		{"trimmed case-insensitive", " OpenAI ", "openai"},
 		{"llama", "llama", "ollama"},
 		{"unknown", "unknown", "deepseek"},
 	}

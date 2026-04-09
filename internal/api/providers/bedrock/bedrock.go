@@ -150,7 +150,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	if cfg == nil {
 		cfg = config.DefaultConfig()
 	}
-	pCfg := cfg.ProviderModels["bedrock"]
+	pCfg, _ := cfg.GetProviderModelConfig("bedrock")
 
 	// Anthropic Version（config → フォールバック定数）
 	version := pCfg.AnthropicVersion
@@ -230,7 +230,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	}
 	messages = append(messages, multimodalMessage)
 
-	pCfg := cfg.ProviderModels["bedrock"]
+	pCfg, _ := cfg.GetProviderModelConfig("bedrock")
 
 	// Anthropic Version（config → フォールバック定数）
 	version := pCfg.AnthropicVersion
@@ -279,7 +279,7 @@ func (p *Provider) supportsClaudeCompactionWithConfig(cfg *config.Config, model 
 		return false
 	}
 	if model == "" {
-		model = cfg.GetModelForProvider("bedrock")
+		model = cfg.GetEffectiveModelForProvider("bedrock")
 	}
 	if model == "" {
 		model = defaultModel

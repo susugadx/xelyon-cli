@@ -128,6 +128,17 @@ func TestIsAPIKeyAvailable(t *testing.T) {
 			want:     false,
 		},
 		{
+			name:     "Anthropic alias with API key",
+			provider: "anthropic",
+			setup: func() {
+				os.Setenv("ANTHROPIC_API_KEY", "test-key")
+			},
+			cleanup: func() {
+				os.Unsetenv("ANTHROPIC_API_KEY")
+			},
+			want: true,
+		},
+		{
 			name:     "OpenAI with API key",
 			provider: "openai",
 			setup: func() {

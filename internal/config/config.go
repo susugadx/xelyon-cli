@@ -25,14 +25,17 @@ func CloneConfig(cfg *Config) *Config {
 	data, err := json.Marshal(cfg)
 	if err != nil {
 		clone := *cfg
+		clone.providerModelsStore = cfg.providerModelsStore.clone()
 		return &clone
 	}
 
 	var cloned Config
 	if err := json.Unmarshal(data, &cloned); err != nil {
 		clone := *cfg
+		clone.providerModelsStore = cfg.providerModelsStore.clone()
 		return &clone
 	}
+	cloned.providerModelsStore = cfg.providerModelsStore.clone()
 	return &cloned
 }
 
@@ -301,6 +304,9 @@ func DefaultConfig() *Config {
 			Timeout:      60,  // 60秒タイムアウト
 			MaxRetry:     3,   // フック失敗時の最大リトライ回数
 		},
+		providerModelsStore: providerModelStore{
+			state: providerModelSectionStateInMemoryEffectiveOnly,
+		},
 	}
 }
 
@@ -314,6 +320,8 @@ func LoadConfig() (*Config, error) {
 	// 設定ファイルが存在しない場合はデフォルトを作成
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		cfg := DefaultConfig()
+		cfg.providerModelsStore = normalizeProviderModelStore(providerModelSectionStateAbsent, nil)
+		cfg.refreshEffectiveProviderModels()
 		if err := SaveConfig(cfg); err != nil {
 			// 保存失敗してもデフォルト設定を返す
 			return cfg, nil
@@ -343,6 +351,7 @@ func LoadConfig() (*Config, error) {
 
 	// 旧キーからの migration（後方互換）
 	migrateOldKeys(data, cfg)
+	cfg.providerModelsStore = providerModelStoreFromYAML(data)
 
 	// 追加のデフォルト値を適用（ネストされた構造体用）
 	applyDefaults(cfg, defaultApplyOptions{
@@ -455,6 +464,26 @@ func setNestedYAMLValueToNull(doc *yaml.Node, parentKey, childKey string) bool {
 	return true
 }
 
+func removeTopLevelYAMLKey(doc *yaml.Node, key string) bool {
+	if doc == nil || doc.Kind != yaml.DocumentNode || len(doc.Content) == 0 {
+		return false
+	}
+
+	root := doc.Content[0]
+	if root.Kind != yaml.MappingNode {
+		return false
+	}
+
+	for i := 0; i+1 < len(root.Content); i += 2 {
+		if root.Content[i].Value == key {
+			root.Content = append(root.Content[:i], root.Content[i+2:]...)
+			return true
+		}
+	}
+
+	return false
+}
+
 func findYAMLMappingValue(node *yaml.Node, key string) *yaml.Node {
 	if node == nil || node.Kind != yaml.MappingNode {
 		return nil
@@ -492,20 +521,7 @@ func applyDefaults(cfg *Config, opts ...defaultApplyOptions) {
 	if cfg.DefaultProvider == "" {
 		cfg.DefaultProvider = "deepseek"
 	}
-	if cfg.ProviderModels == nil {
-		cfg.ProviderModels = defaults.ProviderModels
-	} else {
-		// ProviderModels の MaxOutputTokens が 0（未設定）の場合、デフォルト値を適用
-		// YAML で provider_models を設定すると map が上書きされ MaxOutputTokens が消えるため
-		for name, pm := range cfg.ProviderModels {
-			if pm.MaxOutputTokens == 0 {
-				if defaultPM, ok := defaults.ProviderModels[name]; ok {
-					pm.MaxOutputTokens = defaultPM.MaxOutputTokens
-					cfg.ProviderModels[name] = pm
-				}
-			}
-		}
-	}
+	cfg.refreshEffectiveProviderModels()
 
 	// ネストされた構造体のデフォルト値を適用（YAMLで省略された場合）
 	if cfg.LoopDetection.Threshold == 0 {
@@ -626,20 +642,26 @@ func SaveConfig(cfg *Config) error {
 }
 
 func marshalConfigYAML(cfg *Config) ([]byte, error) {
-	data, err := yaml.Marshal(cfg)
+	saveCfg := CloneConfig(cfg)
+	if saveCfg != nil {
+		saveCfg.ProviderModels = saveCfg.ProviderModelsForSave()
+	}
+
+	data, err := yaml.Marshal(saveCfg)
 	if err != nil {
 		return nil, err
-	}
-	if cfg == nil || cfg.LSP.Servers != nil {
-		return data, nil
 	}
 
 	var doc yaml.Node
 	if err := yaml.Unmarshal(data, &doc); err != nil {
 		return data, nil
 	}
-	if !setNestedYAMLValueToNull(&doc, "lsp", "servers") {
-		return data, nil
+
+	if saveCfg != nil && saveCfg.LSP.Servers == nil {
+		_ = setNestedYAMLValueToNull(&doc, "lsp", "servers")
+	}
+	if saveCfg == nil || saveCfg.ProviderModels == nil {
+		removeTopLevelYAMLKey(&doc, "provider_models")
 	}
 
 	patched, err := yaml.Marshal(&doc)

@@ -63,13 +63,13 @@ type agentRequestState struct {
 }
 
 type agentWorkspaceState struct {
-	changeStack      []tools.FileChange
-	taskChangeOffset int
-	changeStorage    *history.ChangeStorage
+	changeStack        []tools.FileChange
+	taskChangeOffset   int
+	changeStorage      *history.ChangeStorage
 	taskBaseCommitHash string
-	taskTestResult   *bool
-	taskTestCommand  string
-	pendingLSPFiles  []string
+	taskTestResult     *bool
+	taskTestCommand    string
+	pendingLSPFiles    []string
 }
 
 type agentProjectPromptState struct {
@@ -90,21 +90,22 @@ type agentProjectPromptState struct {
 
 // Agent はCLIエージェント
 type Agent struct {
-	Model                string // 初期モデル（後方互換性のため保持）
-	CurrentModel         string // 現在のモデル（再起動なしで切り替え可能）
-	CurrentProvider      api.Provider
-	ProviderName         string
-	Runtime              *AgentRuntime
-	History              []api.Message
-	SystemPrompt         string
-	mcpManager           *mcp.Manager
-	lspClient            *lsp.Client        // LSPクライアント
-	AutoApprove          bool               // --auto-approve フラグ
-	Stats                *SessionStats      // セッション統計情報
-	PlanModeEnabled      bool               // Plan Mode ON/OFF（デフォルト: false）
-	ToolCache            *ToolCache         // ツール結果キャッシュ（read_file, list_dir）
-	LocatorRegistry      *locator.Registry  // Locator ID レジストリ（セッション内追記のみ）
-	status               statusHolder
+	Model             string // 初期モデル（後方互換性のため保持）
+	CurrentModel      string // 現在のモデル（再起動なしで切り替え可能）
+	CurrentProvider   api.Provider
+	ProviderName      string
+	ProviderConfigKey string
+	Runtime           *AgentRuntime
+	History           []api.Message
+	SystemPrompt      string
+	mcpManager        *mcp.Manager
+	lspClient         *lsp.Client       // LSPクライアント
+	AutoApprove       bool              // --auto-approve フラグ
+	Stats             *SessionStats     // セッション統計情報
+	PlanModeEnabled   bool              // Plan Mode ON/OFF（デフォルト: false）
+	ToolCache         *ToolCache        // ツール結果キャッシュ（read_file, list_dir）
+	LocatorRegistry   *locator.Registry // Locator ID レジストリ（セッション内追記のみ）
+	status            statusHolder
 
 	agentConversationState
 	agentRequestState
@@ -298,19 +299,20 @@ func NewAgentWithRuntime(model string, provider api.Provider, headless bool, run
 
 	// Agent を作成
 	agent := &Agent{
-		Model:           model,
-		CurrentModel:    model,
-		CurrentProvider: provider,
-		ProviderName:    strings.ToLower(provider.Name()),
-		Runtime:         runtime,
-		History:         []api.Message{},
-		mcpManager:      mcpManager,
-		lspClient:       lspClient,
-		SystemPrompt:    systemPrompt,
-		Stats:           NewSessionStats(strings.ToLower(provider.Name()), model),
-		ToolCache:       toolCache,
-		LocatorRegistry: locator.NewRegistry(),
-		status:          statusHolder{status: defaultStatus()},
+		Model:             model,
+		CurrentModel:      model,
+		CurrentProvider:   provider,
+		ProviderName:      strings.ToLower(provider.Name()),
+		ProviderConfigKey: providerConfigKeyFromProvider(provider),
+		Runtime:           runtime,
+		History:           []api.Message{},
+		mcpManager:        mcpManager,
+		lspClient:         lspClient,
+		SystemPrompt:      systemPrompt,
+		Stats:             NewSessionStats(strings.ToLower(provider.Name()), model),
+		ToolCache:         toolCache,
+		LocatorRegistry:   locator.NewRegistry(),
+		status:            statusHolder{status: defaultStatus()},
 		agentConversationState: agentConversationState{
 			session:     history.NewSession(model),
 			storage:     storage,

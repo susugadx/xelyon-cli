@@ -420,7 +420,7 @@ func TestConfigScreen_VeryNarrowWidth_ConfigDoesNotEnterInvisiblePane(t *testing
 	m.height = 20
 
 	cs := m.configScreen
-	setConfigFieldSelection(t, cs, "provider", "provider_models")
+	setConfigFieldSelection(t, cs, "lsp", "lsp.servers")
 
 	leftW, midW, rightW := configPaneWidths(m.width)
 	if leftW != 30 || midW != 0 || rightW != 0 {
@@ -440,7 +440,7 @@ func TestConfigScreen_VeryNarrowWidth_ConfigDoesNotEnterInvisiblePane(t *testing
 	if !strings.Contains(view, "Keys:") {
 		t.Fatal("very narrow view should render a visible struct map editor")
 	}
-	if !strings.Contains(view, "openai") {
+	if !strings.Contains(view, "go") {
 		t.Fatal("very narrow view should render struct map entries")
 	}
 }
@@ -526,9 +526,9 @@ func TestConfigScreen_StructMapEdit(t *testing.T) {
 	m := newConfigTestModel()
 	cs := m.configScreen
 
-	// provider カテゴリの provider_models
+	// lsp カテゴリの lsp.servers
 	for i, cat := range cs.categories {
-		if cat.Name == "provider" {
+		if cat.Name == "lsp" {
 			cs.catIndex = i
 			break
 		}
@@ -536,7 +536,7 @@ func TestConfigScreen_StructMapEdit(t *testing.T) {
 	cs.activePane = paneField
 	fields := cs.filteredFields()
 	for i, f := range fields {
-		if f.Path == "provider_models" {
+		if f.Path == "lsp.servers" {
 			cs.fieldIndex = i
 			break
 		}
@@ -549,7 +549,7 @@ func TestConfigScreen_StructMapEdit(t *testing.T) {
 		t.Fatalf("editMode = %d, want editStructMap(%d)", cs.editMode, editStructMap)
 	}
 	if len(cs.editStructKeys) == 0 {
-		t.Fatal("editStructKeys should not be empty for provider_models")
+		t.Fatal("editStructKeys should not be empty for lsp.servers")
 	}
 
 	// Esc で戻る
@@ -1382,68 +1382,6 @@ func TestConfigScreen_FieldScroll_ResetOnCategoryChange(t *testing.T) {
 	}
 }
 
-func TestConfigScreen_StructMapOrder_ProviderModels(t *testing.T) {
-	m := newConfigTestModel()
-	cs := m.configScreen
-
-	// provider カテゴリの provider_models
-	for i, cat := range cs.categories {
-		if cat.Name == "provider" {
-			cs.catIndex = i
-			break
-		}
-	}
-	cs.activePane = paneField
-	fields := cs.filteredFields()
-	for i, f := range fields {
-		if f.Path == "provider_models" {
-			cs.fieldIndex = i
-			break
-		}
-	}
-
-	// Enter で structmap 編集
-	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
-	if cs.editMode != editStructMap {
-		t.Fatalf("editMode = %d, want editStructMap", cs.editMode)
-	}
-
-	// キーがソート済みか確認
-	keys := cs.editStructKeys
-	for i := 1; i < len(keys); i++ {
-		if keys[i] < keys[i-1] {
-			t.Fatalf("editStructKeys not sorted: %q comes after %q", keys[i], keys[i-1])
-		}
-	}
-
-	// 最初のキーを記録
-	if len(keys) == 0 {
-		t.Fatal("editStructKeys is empty")
-	}
-	firstKey := keys[0]
-
-	// index=0 で d を押すと最初のキーが削除される
-	cs.editStructIndex = 0
-	m = sendConfigKey(m, "d")
-	cs = m.configScreen
-
-	// 削除されたキーが firstKey であること
-	for _, k := range cs.editStructKeys {
-		if k == firstKey {
-			t.Fatalf("key %q should have been deleted", firstKey)
-		}
-	}
-
-	// 削除後もソート済み
-	for i := 1; i < len(cs.editStructKeys); i++ {
-		if cs.editStructKeys[i] < cs.editStructKeys[i-1] {
-			t.Fatalf("editStructKeys not sorted after delete: %q after %q",
-				cs.editStructKeys[i], cs.editStructKeys[i-1])
-		}
-	}
-}
-
 // --- structmap entry value editing tests ---
 
 // enterStructMapEdit は指定の path の structmap 編集モードに入った Model を返す。
@@ -1478,59 +1416,6 @@ func enterStructMapEdit(t *testing.T, path string) Model {
 		t.Fatalf("editMode = %d, want editStructMap", cs.editMode)
 	}
 	return m
-}
-
-func TestConfigScreen_ProviderModels_EntryEdit(t *testing.T) {
-	m := enterStructMapEdit(t, "provider_models")
-	cs := m.configScreen
-
-	if len(cs.editStructKeys) == 0 {
-		t.Fatal("no provider_models keys")
-	}
-
-	// Enter で entry 編集に入る
-	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
-	if !cs.editEntryActive {
-		t.Fatal("editEntryActive should be true")
-	}
-	if len(cs.editEntryFields) == 0 {
-		t.Fatal("editEntryFields should not be empty")
-	}
-
-	// default_model フィールドを探す
-	found := false
-	for i, ef := range cs.editEntryFields {
-		if ef.Name == "default_model" {
-			cs.editEntryIndex = i
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Fatal("default_model field not found in entry")
-	}
-
-	// Enter で input 編集開始
-	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
-	if cs.editEntryFieldEdit != "input" {
-		t.Fatalf("editEntryFieldEdit = %q, want \"input\"", cs.editEntryFieldEdit)
-	}
-
-	// Esc で input 編集キャンセル
-	m = sendConfigKey(m, "esc")
-	cs = m.configScreen
-	if cs.editEntryFieldEdit != "" {
-		t.Fatalf("editEntryFieldEdit = %q after esc, want empty", cs.editEntryFieldEdit)
-	}
-
-	// Esc で entry 編集を抜ける
-	m = sendConfigKey(m, "esc")
-	cs = m.configScreen
-	if cs.editEntryActive {
-		t.Fatal("editEntryActive should be false after esc")
-	}
 }
 
 func TestConfigScreen_LSPServers_EntryEdit(t *testing.T) {
@@ -1603,12 +1488,12 @@ func TestConfigScreen_LSPServers_EntryEdit(t *testing.T) {
 }
 
 func TestConfigScreen_StructMapAdd_ThenEdit(t *testing.T) {
-	m := enterStructMapEdit(t, "provider_models")
+	m := enterStructMapEdit(t, "lsp.servers")
 	cs := m.configScreen
 
 	initialLen := len(cs.editStructKeys)
 
-	// a で新規キー追加、"test_provider" を入力
+	// a で新規キー追加、"testlang" を入力
 	m = sendConfigKey(m, "a")
 	cs = m.configScreen
 	if !cs.editStructAdding {
@@ -1616,7 +1501,7 @@ func TestConfigScreen_StructMapAdd_ThenEdit(t *testing.T) {
 	}
 
 	// テキスト入力（bubbletea のモデルに直接値をセット）
-	cs.editStructInput.SetValue("test_provider")
+	cs.editStructInput.SetValue("testlang")
 	m = sendConfigKey(m, "enter")
 	cs = m.configScreen
 
@@ -1625,8 +1510,8 @@ func TestConfigScreen_StructMapAdd_ThenEdit(t *testing.T) {
 	}
 
 	// カーソルが新規キーに合っている
-	if cs.editStructKeys[cs.editStructIndex] != "test_provider" {
-		t.Fatalf("cursor on %q, want \"test_provider\"", cs.editStructKeys[cs.editStructIndex])
+	if cs.editStructKeys[cs.editStructIndex] != "testlang" {
+		t.Fatalf("cursor on %q, want \"testlang\"", cs.editStructKeys[cs.editStructIndex])
 	}
 
 	// Enter で entry 編集に入れる
@@ -1635,13 +1520,13 @@ func TestConfigScreen_StructMapAdd_ThenEdit(t *testing.T) {
 	if !cs.editEntryActive {
 		t.Fatal("editEntryActive should be true for new key")
 	}
-	if cs.editEntryKey != "test_provider" {
-		t.Fatalf("editEntryKey = %q, want \"test_provider\"", cs.editEntryKey)
+	if cs.editEntryKey != "testlang" {
+		t.Fatalf("editEntryKey = %q, want \"testlang\"", cs.editEntryKey)
 	}
 }
 
 func TestConfigScreen_StructMapDelete_AfterEdit(t *testing.T) {
-	m := enterStructMapEdit(t, "provider_models")
+	m := enterStructMapEdit(t, "lsp.servers")
 	cs := m.configScreen
 
 	if len(cs.editStructKeys) < 2 {
@@ -1675,43 +1560,6 @@ func TestConfigScreen_StructMapDelete_AfterEdit(t *testing.T) {
 		if k == firstKey {
 			t.Fatalf("key %q should have been deleted", firstKey)
 		}
-	}
-}
-
-func TestConfigScreen_ProviderModels_NilMap_AddEntry_DoesNotPanic(t *testing.T) {
-	m := newConfigTestModel()
-	cs := m.configScreen
-	cs.cfg.ProviderModels = nil
-	cs.refreshCategories()
-
-	setConfigFieldSelection(t, cs, "provider", "provider_models")
-	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
-	if cs.editMode != editStructMap {
-		t.Fatalf("editMode = %d, want editStructMap", cs.editMode)
-	}
-
-	m = sendConfigKey(m, "a")
-	cs = m.configScreen
-	if !cs.editStructAdding {
-		t.Fatal("editStructAdding should be true")
-	}
-
-	cs.editStructInput.SetValue("nil_provider")
-	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
-
-	if cs.cfg.ProviderModels == nil {
-		t.Fatal("ProviderModels should be initialized after add")
-	}
-	if _, ok := cs.cfg.ProviderModels["nil_provider"]; !ok {
-		t.Fatal("ProviderModels should contain the added key")
-	}
-	if !cs.dirty {
-		t.Fatal("dirty should be true after add")
-	}
-	if cs.saveStatus != statusModified {
-		t.Fatalf("saveStatus = %d, want statusModified", cs.saveStatus)
 	}
 }
 
@@ -1753,7 +1601,7 @@ func TestConfigScreen_LSPServers_NilMap_AddEntry_DoesNotPanic(t *testing.T) {
 }
 
 func TestConfigScreen_StructMap_NonNil_AddEntry_BehaviorUnchanged(t *testing.T) {
-	m := enterStructMapEdit(t, "provider_models")
+	m := enterStructMapEdit(t, "lsp.servers")
 	cs := m.configScreen
 
 	initialLen := len(cs.editStructKeys)
@@ -1761,15 +1609,15 @@ func TestConfigScreen_StructMap_NonNil_AddEntry_BehaviorUnchanged(t *testing.T) 
 
 	m = sendConfigKey(m, "a")
 	cs = m.configScreen
-	cs.editStructInput.SetValue("behavior_test_provider")
+	cs.editStructInput.SetValue("behavior_test_lsp")
 	m = sendConfigKey(m, "enter")
 	cs = m.configScreen
 
 	if len(cs.editStructKeys) != initialLen+1 {
 		t.Fatalf("keys count = %d, want %d", len(cs.editStructKeys), initialLen+1)
 	}
-	if _, ok := cs.cfg.ProviderModels["behavior_test_provider"]; !ok {
-		t.Fatal("ProviderModels should contain the added key")
+	if _, ok := cs.cfg.LSP.Servers["behavior_test_lsp"]; !ok {
+		t.Fatal("LSP.Servers should contain the added key")
 	}
 	if cs.dirty == initialDirty {
 		t.Fatalf("dirty = %v, want changed from initial state", cs.dirty)
@@ -1781,7 +1629,7 @@ func TestConfigScreen_StructMap_NonNil_AddEntry_BehaviorUnchanged(t *testing.T) 
 	addedLen := len(cs.editStructKeys)
 	m = sendConfigKey(m, "a")
 	cs = m.configScreen
-	cs.editStructInput.SetValue("behavior_test_provider")
+	cs.editStructInput.SetValue("behavior_test_lsp")
 	m = sendConfigKey(m, "enter")
 	cs = m.configScreen
 
@@ -1859,8 +1707,16 @@ func TestConfigScreen_SpaceBoolOnly(t *testing.T) {
 	}
 
 	// --- structmap フィールド: Space は no-op ---
+	for i, cat := range cs.categories {
+		if cat.Name == "lsp" {
+			cs.catIndex = i
+			break
+		}
+	}
+	cs.fieldIndex = 0
+	cs.fieldScroll = 0
 	for i, f := range cs.filteredFields() {
-		if f.Path == "provider_models" {
+		if f.Path == "lsp.servers" {
 			cs.fieldIndex = i
 			break
 		}
@@ -1894,7 +1750,7 @@ func TestConfigScreen_SpaceBoolOnly(t *testing.T) {
 }
 
 func TestConfigScreen_StructMapEntryEdit_HintTransition(t *testing.T) {
-	m := enterStructMapEdit(t, "provider_models")
+	m := enterStructMapEdit(t, "lsp.servers")
 	_ = m.configScreen // state 確認不要、View 経由でヒントを検証
 
 	// key list 中のヒントを確認（View 経由で間接的に）
@@ -2031,45 +1887,6 @@ func makeConfigScreenDirty(t *testing.T, m Model) Model {
 		t.Fatal("dirty should be true after toggle")
 	}
 	return m
-}
-
-func TestConfigScreen_ProviderModels_ValueChange_Persists(t *testing.T) {
-	m := enterStructMapEntryForKey(t, "provider_models", "openai")
-	cs := m.configScreen
-
-	// default_model フィールドにカーソル
-	setEntryFieldIndex(t, cs, "default_model")
-
-	// Enter で input 編集開始
-	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
-	if cs.editEntryFieldEdit != "input" {
-		t.Fatalf("editEntryFieldEdit = %q, want \"input\"", cs.editEntryFieldEdit)
-	}
-
-	// 新しい値をセット
-	cs.editInput.SetValue("gpt-99-turbo")
-
-	// Enter で確定
-	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
-
-	// Config 実値を検証
-	pm, ok := cs.cfg.ProviderModels["openai"]
-	if !ok {
-		t.Fatal("openai not found in ProviderModels")
-	}
-	if pm.DefaultModel != "gpt-99-turbo" {
-		t.Fatalf("ProviderModels[openai].DefaultModel = %q, want \"gpt-99-turbo\"", pm.DefaultModel)
-	}
-
-	// dirty / saveStatus を検証
-	if !cs.dirty {
-		t.Fatal("dirty should be true after value change")
-	}
-	if cs.saveStatus != statusModified {
-		t.Fatalf("saveStatus = %d, want statusModified(%d)", cs.saveStatus, statusModified)
-	}
 }
 
 func TestConfigScreen_StructEntryInt_InvalidInput_DoesNotCloseOrDirty(t *testing.T) {
@@ -2238,100 +2055,6 @@ func TestConfigScreen_LSPServers_DisabledToggle_Persists(t *testing.T) {
 	}
 }
 
-func TestConfigScreen_Save_AfterEntryEdit_UsesUpdatedConfig(t *testing.T) {
-	agent := &stubAgent{}
-	m := newModelWithViewport(agent)
-	cfg := config.DefaultConfig()
-	m.screen = screenConfig
-	m.configScreen = newConfigScreen(cfg)
-
-	// provider_models で openai の default_model を変更
-	cs := m.configScreen
-	for i, cat := range cs.categories {
-		if cat.Name == "provider" {
-			cs.catIndex = i
-			break
-		}
-	}
-	cs.activePane = paneField
-	for i, f := range cs.filteredFields() {
-		if f.Path == "provider_models" {
-			cs.fieldIndex = i
-			break
-		}
-	}
-
-	// Enter → structmap 編集
-	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
-
-	// openai key にカーソル
-	for i, k := range cs.editStructKeys {
-		if k == "openai" {
-			cs.editStructIndex = i
-			break
-		}
-	}
-
-	// Enter → entry 編集
-	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
-
-	// default_model を変更
-	setEntryFieldIndex(t, cs, "default_model")
-	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
-	cs.editInput.SetValue("save-test-model")
-	m = sendConfigKey(m, "enter") // 確定
-
-	// Esc で entry → key list → editNone に戻る
-	m = sendConfigKey(m, "esc") // entry → key list
-	m = sendConfigKey(m, "esc") // key list → editNone
-
-	// s で保存 — sendConfigKey は Cmd を捨てるので、直接 Update して Cmd を実行する
-	sMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")}
-	updated2, saveCmd := m.Update(sMsg)
-	m = updated2.(Model)
-	cs = m.configScreen
-	if cs.saveStatus != statusSaving {
-		t.Fatalf("saveStatus = %d, want statusSaving", cs.saveStatus)
-	}
-
-	// saveCmd を実行して ConfigSavedMsg を取得
-	if saveCmd == nil {
-		t.Fatal("saveCmd should not be nil")
-	}
-	resultMsg := saveCmd()
-
-	// ConfigSavedMsg を Model に送る
-	updated3, _ := m.Update(resultMsg)
-	m = updated3.(Model)
-	cs = m.configScreen
-
-	if cs.dirty {
-		t.Fatal("dirty should be false after save")
-	}
-	if cs.saveStatus != statusSaved {
-		t.Fatalf("saveStatus = %d, want statusSaved", cs.saveStatus)
-	}
-
-	// stubAgent が受け取った config を検証
-	agent.mu.RLock()
-	saved := agent.lastSavedConfig
-	agent.mu.RUnlock()
-
-	if saved == nil {
-		t.Fatal("lastSavedConfig is nil — SaveAndSyncConfig was not called")
-	}
-	pm, ok := saved.ProviderModels["openai"]
-	if !ok {
-		t.Fatal("openai not found in saved ProviderModels")
-	}
-	if pm.DefaultModel != "save-test-model" {
-		t.Fatalf("saved ProviderModels[openai].DefaultModel = %q, want \"save-test-model\"", pm.DefaultModel)
-	}
-}
-
 func TestConfigScreen_SaveSnapshot_Isolation(t *testing.T) {
 	agent := &stubAgent{}
 	m := newModelWithViewport(agent)
@@ -2417,7 +2140,7 @@ func TestConfigScreen_ConfigAlias_OpensTUIScreen(t *testing.T) {
 }
 
 func TestConfigScreen_StructMap_DuplicateKey_NoUIAppend(t *testing.T) {
-	m := enterStructMapEdit(t, "provider_models")
+	m := enterStructMapEdit(t, "lsp.servers")
 	cs := m.configScreen
 
 	if len(cs.editStructKeys) == 0 {
@@ -2451,57 +2174,6 @@ func TestConfigScreen_StructMap_DuplicateKey_NoUIAppend(t *testing.T) {
 			t.Fatalf("duplicate key %q in editStructKeys", k)
 		}
 		seen[k] = true
-	}
-}
-
-func TestConfigScreen_ProviderOverride_Save_NotOverwritten(t *testing.T) {
-	// TUI で provider_models[openai].default_model を編集して保存しても
-	// global default_model で上書きされないことを検証
-	agent := &stubAgent{}
-	m := newModelWithViewport(agent)
-	cfg := config.DefaultConfig()
-	m.screen = screenConfig
-	m.configScreen = newConfigScreen(cfg)
-	cs := m.configScreen
-
-	// global default_model を設定
-	cs.cfg.DefaultModel = "global-model"
-
-	// provider_models["openai"] の override を変更
-	if pm, ok := cs.cfg.ProviderModels["openai"]; ok {
-		pm.DefaultModel = "provider-override"
-		cs.cfg.ProviderModels["openai"] = pm
-	}
-	cs.dirty = true
-
-	// s → saveCmd 実行 → ConfigSavedMsg
-	sMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")}
-	updated, saveCmd := m.Update(sMsg)
-	m = updated.(Model)
-	if saveCmd == nil {
-		t.Fatal("saveCmd is nil")
-	}
-	resultMsg := saveCmd()
-	updated, _ = m.Update(resultMsg)
-	m = updated.(Model)
-
-	// stubAgent が受け取った config を検証
-	agent.mu.RLock()
-	saved := agent.lastSavedConfig
-	agent.mu.RUnlock()
-	if saved == nil {
-		t.Fatal("lastSavedConfig is nil")
-	}
-
-	// provider override が global default_model で潰されていないこと
-	pm := saved.ProviderModels["openai"]
-	if pm.DefaultModel != "provider-override" {
-		t.Fatalf("saved ProviderModels[openai].DefaultModel = %q, want \"provider-override\"", pm.DefaultModel)
-	}
-
-	// global default_model は変わらないこと
-	if saved.DefaultModel != "global-model" {
-		t.Fatalf("saved DefaultModel = %q, want \"global-model\"", saved.DefaultModel)
 	}
 }
 
@@ -2540,387 +2212,6 @@ func TestConfigScreen_SaveCmd_SnapshotIsolation(t *testing.T) {
 	}
 	if saved.DefaultModel != "at-save-time" {
 		t.Fatalf("saved.DefaultModel = %q, want \"at-save-time\" (snapshot should be isolated from post-save mutation)", saved.DefaultModel)
-	}
-}
-
-func TestConfigScreen_DefaultProviderThenDefaultModelSyncsEditedProvider(t *testing.T) {
-	agent := &stubAgent{}
-	m := newModelWithViewport(agent)
-	m.screen = screenConfig
-	m.configScreen = newConfigScreen(config.DefaultConfig())
-
-	cs := m.configScreen
-	cs.cfg.DefaultProvider = "deepseek"
-	cs.cfg.DefaultModel = "deepseek-chat"
-	cs.refreshCategories()
-
-	m = selectConfigOption(t, m, "provider", "default_provider", "openai")
-	cs = m.configScreen
-	if cs.cfg.DefaultProvider != "openai" {
-		t.Fatalf("DefaultProvider = %q, want \"openai\"", cs.cfg.DefaultProvider)
-	}
-
-	setConfigFieldSelection(t, cs, "provider", "default_model")
-	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
-	if cs.editMode != editInput {
-		t.Fatalf("editMode = %d, want editInput", cs.editMode)
-	}
-
-	cs.editInput.SetValue("gpt-5.4")
-	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
-
-	if cs.cfg.DefaultModel != "gpt-5.4" {
-		t.Fatalf("DefaultModel = %q, want \"gpt-5.4\"", cs.cfg.DefaultModel)
-	}
-
-	openaiPM := cs.cfg.ProviderModels["openai"]
-	if openaiPM.DefaultModel != "gpt-5.4" {
-		t.Fatalf("ProviderModels[openai].DefaultModel = %q, want \"gpt-5.4\"", openaiPM.DefaultModel)
-	}
-
-	deepseekPM := cs.cfg.ProviderModels["deepseek"]
-	if deepseekPM.DefaultModel == "gpt-5.4" {
-		t.Fatalf("ProviderModels[deepseek].DefaultModel = %q, should not be updated from edited provider path", deepseekPM.DefaultModel)
-	}
-
-	m = saveConfigAndWait(t, m)
-
-	agent.mu.RLock()
-	saved := agent.lastSavedConfig
-	agent.mu.RUnlock()
-	if saved == nil {
-		t.Fatal("lastSavedConfig is nil")
-	}
-	if saved.ProviderModels["openai"].DefaultModel != "gpt-5.4" {
-		t.Fatalf("saved ProviderModels[openai].DefaultModel = %q, want \"gpt-5.4\"", saved.ProviderModels["openai"].DefaultModel)
-	}
-	if saved.ProviderModels["deepseek"].DefaultModel == "gpt-5.4" {
-		t.Fatalf("saved ProviderModels[deepseek].DefaultModel = %q, should not match edited openai model", saved.ProviderModels["deepseek"].DefaultModel)
-	}
-}
-
-func TestDefaultModelSync_UsesIntendedProvider(t *testing.T) {
-	t.Run("edited default_provider wins for edit and reset", func(t *testing.T) {
-		run := func(t *testing.T, reset bool) {
-			t.Helper()
-
-			agent := &stubAgent{}
-			m := newModelWithViewport(agent)
-			m.screen = screenConfig
-			m.configScreen = newConfigScreen(config.DefaultConfig())
-
-			cs := m.configScreen
-			cs.cfg.DefaultProvider = "deepseek"
-			cs.cfg.DefaultModel = "custom-global-model"
-
-			openaiPM := cs.cfg.ProviderModels["openai"]
-			openaiPM.DefaultModel = "stale-openai-model"
-			cs.cfg.ProviderModels["openai"] = openaiPM
-
-			deepseekPM := cs.cfg.ProviderModels["deepseek"]
-			deepseekPM.DefaultModel = "stale-deepseek-model"
-			cs.cfg.ProviderModels["deepseek"] = deepseekPM
-			cs.refreshCategories()
-
-			m = selectConfigOption(t, m, "provider", "default_provider", "openai")
-			cs = m.configScreen
-			setConfigFieldSelection(t, cs, "provider", "default_model")
-
-			wantModel := "gpt-5.4"
-			if reset {
-				m = sendConfigKey(m, "r")
-				wantModel = config.DefaultConfig().DefaultModel
-			} else {
-				m = sendConfigKey(m, "enter")
-				cs = m.configScreen
-				if cs.editMode != editInput {
-					t.Fatalf("editMode = %d, want editInput", cs.editMode)
-				}
-				cs.editInput.SetValue(wantModel)
-				m = sendConfigKey(m, "enter")
-			}
-
-			cs = m.configScreen
-			if cs.cfg.DefaultModel != wantModel {
-				t.Fatalf("DefaultModel = %q, want %q", cs.cfg.DefaultModel, wantModel)
-			}
-			if cs.cfg.ProviderModels["openai"].DefaultModel != wantModel {
-				t.Fatalf("ProviderModels[openai].DefaultModel = %q, want %q", cs.cfg.ProviderModels["openai"].DefaultModel, wantModel)
-			}
-			if cs.cfg.ProviderModels["deepseek"].DefaultModel == wantModel {
-				t.Fatalf("ProviderModels[deepseek].DefaultModel = %q, should not be updated", cs.cfg.ProviderModels["deepseek"].DefaultModel)
-			}
-
-			m = saveConfigAndWait(t, m)
-
-			agent.mu.RLock()
-			saved := agent.lastSavedConfig
-			agent.mu.RUnlock()
-			if saved == nil {
-				t.Fatal("lastSavedConfig is nil")
-			}
-			if saved.ProviderModels["openai"].DefaultModel != wantModel {
-				t.Fatalf("saved ProviderModels[openai].DefaultModel = %q, want %q", saved.ProviderModels["openai"].DefaultModel, wantModel)
-			}
-			if saved.ProviderModels["deepseek"].DefaultModel == wantModel {
-				t.Fatalf("saved ProviderModels[deepseek].DefaultModel = %q, should not be updated", saved.ProviderModels["deepseek"].DefaultModel)
-			}
-		}
-
-		t.Run("edit", func(t *testing.T) { run(t, false) })
-		t.Run("reset", func(t *testing.T) { run(t, true) })
-	})
-
-	t.Run("runtime provider wins when default_provider unchanged", func(t *testing.T) {
-		run := func(t *testing.T, reset bool) {
-			t.Helper()
-
-			agent := &stubAgent{providerName: "openai"}
-			m := newModelWithViewport(agent)
-			m.screen = screenConfig
-			m.configScreen = newConfigScreen(config.DefaultConfig())
-
-			cs := m.configScreen
-			cs.cfg.DefaultProvider = "deepseek"
-			cs.cfg.DefaultModel = "custom-global-model"
-
-			openaiPM := cs.cfg.ProviderModels["openai"]
-			openaiPM.DefaultModel = "stale-openai-model"
-			cs.cfg.ProviderModels["openai"] = openaiPM
-
-			deepseekPM := cs.cfg.ProviderModels["deepseek"]
-			deepseekPM.DefaultModel = "stale-deepseek-model"
-			cs.cfg.ProviderModels["deepseek"] = deepseekPM
-			cs.refreshCategories()
-
-			setConfigFieldSelection(t, cs, "provider", "default_model")
-
-			wantModel := "gpt-5.4"
-			if reset {
-				m = sendConfigKey(m, "r")
-				wantModel = config.DefaultConfig().DefaultModel
-			} else {
-				m = sendConfigKey(m, "enter")
-				cs = m.configScreen
-				if cs.editMode != editInput {
-					t.Fatalf("editMode = %d, want editInput", cs.editMode)
-				}
-				cs.editInput.SetValue(wantModel)
-				m = sendConfigKey(m, "enter")
-			}
-
-			cs = m.configScreen
-			if cs.cfg.DefaultModel != wantModel {
-				t.Fatalf("DefaultModel = %q, want %q", cs.cfg.DefaultModel, wantModel)
-			}
-			if cs.cfg.ProviderModels["openai"].DefaultModel != wantModel {
-				t.Fatalf("ProviderModels[openai].DefaultModel = %q, want %q", cs.cfg.ProviderModels["openai"].DefaultModel, wantModel)
-			}
-			if cs.cfg.ProviderModels["deepseek"].DefaultModel == wantModel {
-				t.Fatalf("ProviderModels[deepseek].DefaultModel = %q, should not be updated", cs.cfg.ProviderModels["deepseek"].DefaultModel)
-			}
-
-			m = saveConfigAndWait(t, m)
-
-			agent.mu.RLock()
-			saved := agent.lastSavedConfig
-			agent.mu.RUnlock()
-			if saved == nil {
-				t.Fatal("lastSavedConfig is nil")
-			}
-			if saved.ProviderModels["openai"].DefaultModel != wantModel {
-				t.Fatalf("saved ProviderModels[openai].DefaultModel = %q, want %q", saved.ProviderModels["openai"].DefaultModel, wantModel)
-			}
-			if saved.ProviderModels["deepseek"].DefaultModel == wantModel {
-				t.Fatalf("saved ProviderModels[deepseek].DefaultModel = %q, should not be updated", saved.ProviderModels["deepseek"].DefaultModel)
-			}
-		}
-
-		t.Run("edit", func(t *testing.T) { run(t, false) })
-		t.Run("reset", func(t *testing.T) { run(t, true) })
-	})
-}
-
-func TestConfigScreen_DefaultProviderThenResetDefaultModelSyncsEditedProvider(t *testing.T) {
-	agent := &stubAgent{}
-	m := newModelWithViewport(agent)
-	m.screen = screenConfig
-	m.configScreen = newConfigScreen(config.DefaultConfig())
-
-	cs := m.configScreen
-	cs.cfg.DefaultProvider = "deepseek"
-	cs.cfg.DefaultModel = "custom-global-model"
-	deepseekPM := cs.cfg.ProviderModels["deepseek"]
-	deepseekPM.DefaultModel = "stale-deepseek-model"
-	cs.cfg.ProviderModels["deepseek"] = deepseekPM
-	openaiPM := cs.cfg.ProviderModels["openai"]
-	openaiPM.DefaultModel = "stale-openai-model"
-	cs.cfg.ProviderModels["openai"] = openaiPM
-	cs.refreshCategories()
-
-	m = selectConfigOption(t, m, "provider", "default_provider", "openai")
-	cs = m.configScreen
-	setConfigFieldSelection(t, cs, "provider", "default_model")
-
-	m = sendConfigKey(m, "r")
-	cs = m.configScreen
-
-	defaultCfg := config.DefaultConfig()
-	if cs.cfg.DefaultModel != defaultCfg.DefaultModel {
-		t.Fatalf("DefaultModel after reset = %q, want %q", cs.cfg.DefaultModel, defaultCfg.DefaultModel)
-	}
-	openaiPM = cs.cfg.ProviderModels["openai"]
-	if openaiPM.DefaultModel != defaultCfg.DefaultModel {
-		t.Fatalf("ProviderModels[openai].DefaultModel after reset = %q, want %q", openaiPM.DefaultModel, defaultCfg.DefaultModel)
-	}
-	deepseekPM = cs.cfg.ProviderModels["deepseek"]
-	if deepseekPM.DefaultModel == defaultCfg.DefaultModel {
-		t.Fatalf("ProviderModels[deepseek].DefaultModel after reset = %q, should not be updated from edited provider path", deepseekPM.DefaultModel)
-	}
-
-	m = saveConfigAndWait(t, m)
-
-	agent.mu.RLock()
-	saved := agent.lastSavedConfig
-	agent.mu.RUnlock()
-	if saved == nil {
-		t.Fatal("lastSavedConfig is nil")
-	}
-	if saved.DefaultModel != defaultCfg.DefaultModel {
-		t.Fatalf("saved.DefaultModel = %q, want %q", saved.DefaultModel, defaultCfg.DefaultModel)
-	}
-	if saved.ProviderModels["openai"].DefaultModel != defaultCfg.DefaultModel {
-		t.Fatalf("saved ProviderModels[openai].DefaultModel = %q, want %q", saved.ProviderModels["openai"].DefaultModel, defaultCfg.DefaultModel)
-	}
-	if saved.ProviderModels["deepseek"].DefaultModel == defaultCfg.DefaultModel {
-		t.Fatalf("saved ProviderModels[deepseek].DefaultModel = %q, should not match edited openai reset target", saved.ProviderModels["deepseek"].DefaultModel)
-	}
-}
-
-func TestConfigScreen_ActiveSessionProviderThenDefaultModelSyncsRuntimeProvider(t *testing.T) {
-	agent := &stubAgent{providerName: "openai"}
-	m := newModelWithViewport(agent)
-	m.screen = screenConfig
-	m.configScreen = newConfigScreen(config.DefaultConfig())
-
-	cs := m.configScreen
-	cs.cfg.DefaultProvider = "deepseek"
-	cs.cfg.DefaultModel = "deepseek-chat"
-	openaiPM := cs.cfg.ProviderModels["openai"]
-	openaiPM.DefaultModel = "stale-openai-model"
-	cs.cfg.ProviderModels["openai"] = openaiPM
-	deepseekPM := cs.cfg.ProviderModels["deepseek"]
-	deepseekPM.DefaultModel = "stale-deepseek-model"
-	cs.cfg.ProviderModels["deepseek"] = deepseekPM
-	cs.refreshCategories()
-
-	setConfigFieldSelection(t, cs, "provider", "default_model")
-	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
-	if cs.editMode != editInput {
-		t.Fatalf("editMode = %d, want editInput", cs.editMode)
-	}
-
-	cs.editInput.SetValue("gpt-5.4")
-	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
-
-	if cs.cfg.DefaultModel != "gpt-5.4" {
-		t.Fatalf("DefaultModel = %q, want \"gpt-5.4\"", cs.cfg.DefaultModel)
-	}
-	if cs.cfg.ProviderModels["openai"].DefaultModel != "gpt-5.4" {
-		t.Fatalf("ProviderModels[openai].DefaultModel = %q, want \"gpt-5.4\"", cs.cfg.ProviderModels["openai"].DefaultModel)
-	}
-	if cs.cfg.ProviderModels["deepseek"].DefaultModel == "gpt-5.4" {
-		t.Fatalf("ProviderModels[deepseek].DefaultModel = %q, should not be updated from runtime provider path", cs.cfg.ProviderModels["deepseek"].DefaultModel)
-	}
-
-	m = saveConfigAndWait(t, m)
-
-	agent.mu.RLock()
-	saved := agent.lastSavedConfig
-	agent.mu.RUnlock()
-	if saved == nil {
-		t.Fatal("lastSavedConfig is nil")
-	}
-	if saved.ProviderModels["openai"].DefaultModel != "gpt-5.4" {
-		t.Fatalf("saved ProviderModels[openai].DefaultModel = %q, want \"gpt-5.4\"", saved.ProviderModels["openai"].DefaultModel)
-	}
-	if saved.ProviderModels["deepseek"].DefaultModel == "gpt-5.4" {
-		t.Fatalf("saved ProviderModels[deepseek].DefaultModel = %q, should not match runtime provider sync target", saved.ProviderModels["deepseek"].DefaultModel)
-	}
-}
-
-func TestConfigScreen_ActiveSessionProviderThenResetDefaultModelSyncsRuntimeProvider(t *testing.T) {
-	agent := &stubAgent{providerName: "openai"}
-	m := newModelWithViewport(agent)
-	m.screen = screenConfig
-	m.configScreen = newConfigScreen(config.DefaultConfig())
-
-	cs := m.configScreen
-	cs.cfg.DefaultProvider = "deepseek"
-	cs.cfg.DefaultModel = "custom-global-model"
-	openaiPM := cs.cfg.ProviderModels["openai"]
-	openaiPM.DefaultModel = "stale-openai-model"
-	cs.cfg.ProviderModels["openai"] = openaiPM
-	deepseekPM := cs.cfg.ProviderModels["deepseek"]
-	deepseekPM.DefaultModel = "stale-deepseek-model"
-	cs.cfg.ProviderModels["deepseek"] = deepseekPM
-	cs.refreshCategories()
-
-	setConfigFieldSelection(t, cs, "provider", "default_model")
-	m = sendConfigKey(m, "r")
-	cs = m.configScreen
-
-	defaultCfg := config.DefaultConfig()
-	if cs.cfg.DefaultModel != defaultCfg.DefaultModel {
-		t.Fatalf("DefaultModel after reset = %q, want %q", cs.cfg.DefaultModel, defaultCfg.DefaultModel)
-	}
-	if cs.cfg.ProviderModels["openai"].DefaultModel != defaultCfg.DefaultModel {
-		t.Fatalf("ProviderModels[openai].DefaultModel after reset = %q, want %q", cs.cfg.ProviderModels["openai"].DefaultModel, defaultCfg.DefaultModel)
-	}
-	if cs.cfg.ProviderModels["deepseek"].DefaultModel == defaultCfg.DefaultModel {
-		t.Fatalf("ProviderModels[deepseek].DefaultModel after reset = %q, should not be updated from runtime provider path", cs.cfg.ProviderModels["deepseek"].DefaultModel)
-	}
-
-	m = saveConfigAndWait(t, m)
-
-	agent.mu.RLock()
-	saved := agent.lastSavedConfig
-	agent.mu.RUnlock()
-	if saved == nil {
-		t.Fatal("lastSavedConfig is nil")
-	}
-	if saved.ProviderModels["openai"].DefaultModel != defaultCfg.DefaultModel {
-		t.Fatalf("saved ProviderModels[openai].DefaultModel = %q, want %q", saved.ProviderModels["openai"].DefaultModel, defaultCfg.DefaultModel)
-	}
-	if saved.ProviderModels["deepseek"].DefaultModel == defaultCfg.DefaultModel {
-		t.Fatalf("saved ProviderModels[deepseek].DefaultModel = %q, should not match runtime provider reset target", saved.ProviderModels["deepseek"].DefaultModel)
-	}
-}
-
-func TestConfigScreen_ProviderModelDirectEditStillDoesNotGetOverwritten(t *testing.T) {
-	// provider_models[openai].default_model を直接編集して保存しても、
-	// global default_model で上書きされないこと。
-	m := newConfigTestModel()
-	cs := m.configScreen
-
-	cs.cfg.DefaultProvider = "openai"
-	cs.cfg.DefaultModel = "global-model"
-	if pm, ok := cs.cfg.ProviderModels["openai"]; ok {
-		pm.DefaultModel = "openai-specific"
-		cs.cfg.ProviderModels["openai"] = pm
-	}
-	cs.dirty = true
-
-	m = saveConfigAndWait(t, m)
-	cs = m.configScreen
-
-	pm := cs.cfg.ProviderModels["openai"]
-	if pm.DefaultModel != "openai-specific" {
-		t.Fatalf("ProviderModels[openai].DefaultModel = %q, want \"openai-specific\"", pm.DefaultModel)
 	}
 }
 

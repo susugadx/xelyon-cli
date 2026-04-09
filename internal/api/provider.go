@@ -65,14 +65,14 @@ func ListProviders() []string {
 
 // getAPIKeyForProvider はプロバイダー名から環境変数のAPIキーを取得
 func getAPIKeyForProvider(providerName string) string {
-	switch strings.ToLower(providerName) {
+	switch config.CanonicalProviderName(providerName) {
 	case "deepseek":
 		return os.Getenv("DEEPSEEK_API_KEY")
 	case "openai":
 		return os.Getenv("OPENAI_API_KEY")
 	case "gemini":
 		return os.Getenv("GEMINI_API_KEY")
-	case "claude", "anthropic":
+	case "claude":
 		return os.Getenv("ANTHROPIC_API_KEY")
 	case "ollama":
 		baseURL := os.Getenv("OLLAMA_BASE_URL")
@@ -205,11 +205,9 @@ func GetMaxOutputTokens(ctx context.Context, providerName, model string) int {
 	cfg := config.FromContext(ctx)
 
 	maxTokens := 0
-	pName := strings.ToLower(providerName)
-	pCfg, ok := cfg.ProviderModels[pName]
-	if !ok {
-		pCfg = config.ProviderModelConfig{}
-	}
+	pName := config.NormalizeProviderName(providerName)
+	lookupProvider := cfg.RuntimeProviderConfigKey(providerName, model)
+	pCfg, _ := cfg.GetProviderModelConfig(lookupProvider)
 
 	// 1. ユーザーの model_overrides
 	if pCfg.ModelOverrides != nil {
@@ -245,8 +243,8 @@ func GetMaxOutputTokens(ctx context.Context, providerName, model string) int {
 
 // SupportsImages はプロバイダー名から画像対応を判定
 func SupportsImages(providerName string) bool {
-	switch strings.ToLower(providerName) {
-	case "claude", "anthropic", "openai", "gemini", "bedrock":
+	switch config.CanonicalProviderName(providerName) {
+	case "claude", "openai", "gemini", "bedrock":
 		return true
 	case "deepseek", "ollama", "groq":
 		return false

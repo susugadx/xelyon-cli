@@ -14,6 +14,7 @@ func TestGetProviderCompressThreshold(t *testing.T) {
 		want     int
 	}{
 		{name: "gemini", provider: "gemini", want: 180000},
+		{name: "anthropic alias", provider: "anthropic", want: 150000},
 		{name: "deepseek", provider: "deepseek", want: 80000},
 		{name: "openai legacy", provider: "openai", model: "gpt-5", want: 100000},
 		{name: "openai gpt-5.4", provider: "openai", model: "gpt-5.4", want: 260000},

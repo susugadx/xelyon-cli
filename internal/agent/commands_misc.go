@@ -85,10 +85,6 @@ func sessionCacheHitRate(stats *SessionStats) float64 {
 	return float64(stats.CachedInputTokens) / float64(stats.InputTokens) * 100.0
 }
 
-func buildSessionOverviewTable(agent *Agent, stats *SessionStats) *ui.Table {
-	return renderSessionOverviewTable(agent, stats)
-}
-
 func buildSessionTokenTable(agent *Agent, stats *SessionStats, subSummary *subagent.SubAgentSummary) *ui.Table {
 	return renderSessionTokenTable(agent, stats, subSummary)
 }
@@ -173,13 +169,6 @@ func printSubAgentStats(out io.Writer, summary subagent.SubAgentSummary) {
 // printToolObservabilitySection はツール選択のobservabilityセクションを表示する。
 func printToolObservabilitySection(out io.Writer, stats *SessionStats) {
 	renderToolObservabilitySection(out, stats)
-}
-
-// printSavingsSection は API 入力トークン削減の推定量を表示する。
-// batch merge は tool_call / tool result が個別に履歴に残るため含めない。
-// 含むのは: same-turn duplicate の result サイズ差、compaction による圧縮分。
-func printSavingsSection(out io.Writer, stats *SessionStats) {
-	renderSavingsSection(out, stats)
 }
 
 // handleStatsCommand は /status の互換エイリアス

@@ -84,7 +84,7 @@ var SelectOptions = map[string][]string{
 	"general.ui_language":      {"auto", "ja", "en"},
 	"output.assistant_updates": {"", "verbose", "phase", "off"},
 	"sub_agent.default_effort": {"off", "low", "medium", "high"},
-	"web_search.provider":      {"openai", "gemini", "claude"},
+	"web_search.provider":      {"openai", "gemini", "claude", "anthropic"},
 }
 
 // FieldDescriptions はフィールドの説明
@@ -121,5 +121,5 @@ var FieldDescriptions = map[string]string{
 	"web_search.cache_enabled":           "キャッシュを有効化（デフォルト: true）",
 	"web_search.cache_size":              "最大キャッシュ数（デフォルト: 50）",
 	"web_search.cache_ttl":               "キャッシュTTL秒数（デフォルト: 3600 = 1時間）",
-	"web_search.provider":                "検索プロバイダー（openai / gemini / claude、未設定時はメインプロバイダーを使用）",
+	"web_search.provider":                "検索プロバイダー（openai / gemini / claude / anthropic、未設定時はメインプロバイダーを使用）",
 }

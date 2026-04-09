@@ -8,6 +8,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 // ResponseIDCapable は Responses API のキャッシュ機能を持つプロバイダー
@@ -20,12 +21,12 @@ type ResponseIDCapable interface {
 // defaultCompressionModel はプロバイダー別のデフォルト圧縮モデルを返す。
 // compression.model が空の場合に使用する。
 func defaultCompressionModel(providerName string) string {
-	switch strings.ToLower(providerName) {
+	switch config.CanonicalProviderName(providerName) {
 	case "openai":
 		return "gpt-5.4-mini"
 	case "gemini":
 		return "gemini-3.1-flash-lite-preview"
-	case "claude", "anthropic", "bedrock":
+	case "claude", "bedrock":
 		return "claude-haiku-4-5"
 	case "deepseek":
 		return ""
@@ -116,7 +117,7 @@ func (a *Agent) maybeAutoCompress() bool {
 
 	// プロバイダ別コスト最適化閾値
 	currentTokens := a.EstimateTokens()
-	providerThreshold := GetProviderCompressThresholdWithConfig(cfg, a.ProviderName, a.CurrentModel)
+	providerThreshold := GetProviderCompressThresholdWithConfig(cfg, a.sessionProviderConfigKey(cfg), a.CurrentModel)
 	projectedTokens, costAwareCompress := shouldForceCompressForPricingCliff(a.ProviderName, a.CurrentModel, currentTokens, a.Stats)
 	forceCompress := costAwareCompress
 	if !forceCompress && providerThreshold > 0 && currentTokens >= providerThreshold {

@@ -94,8 +94,9 @@ func TestRootCommand_PositionalQueryDefaultsToOnce(t *testing.T) {
 		interactiveCalled = true
 		return agent.NewSuccessResult(provider.Name(), model, "", nil, 0)
 	}
-	runOnceWithImage = func(query string, model string, provider api.Provider, imagePath string, cfg *config.Config, autoApprove bool) {
+	runOnceWithImage = func(query string, model string, provider api.Provider, imagePath string, cfg *config.Config, autoApprove bool, quiet bool) error {
 		interactiveCalled = true
+		return nil
 	}
 	runOnce = func(query string, model string, provider api.Provider, cfg *config.Config, autoApprove bool, quiet bool) error {
 		onceCalled = true
@@ -147,8 +148,9 @@ func TestRootCommand_OnceExecutesSingleTurn(t *testing.T) {
 		interactiveCalled = true
 		return nil
 	}
-	runOnceWithImage = func(query string, model string, provider api.Provider, imagePath string, cfg *config.Config, autoApprove bool) {
+	runOnceWithImage = func(query string, model string, provider api.Provider, imagePath string, cfg *config.Config, autoApprove bool, quiet bool) error {
 		interactiveCalled = true
+		return nil
 	}
 	runOnce = func(query string, model string, provider api.Provider, cfg *config.Config, autoApprove bool, quiet bool) error {
 		onceCalled = true
@@ -419,6 +421,47 @@ func TestRootCommand_PositionalQueryUsesHeadlessInJSONMode(t *testing.T) {
 	}
 }
 
+func TestRootCommand_OutputFormatIsCaseInsensitive(t *testing.T) {
+	resetRootFlagsForTest()
+
+	origRunHeadless := runHeadless
+	t.Cleanup(func() {
+		runHeadless = origRunHeadless
+		resetRootFlagsForTest()
+	})
+
+	headlessCalled := false
+	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config) *agent.HeadlessResult {
+		headlessCalled = true
+		if query != "hello" {
+			t.Fatalf("query = %q, want hello", query)
+		}
+		return agent.NewSuccessResult(provider.Name(), model, "ok", nil, 0)
+	}
+
+	rootCmd.SetArgs([]string{"--output-format", "JSON", "--provider", "ollama", "--no-update-check", "hello"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if !headlessCalled {
+		t.Fatal("expected normalized JSON mode to use headless path")
+	}
+}
+
+func TestRootCommand_InvalidOutputFormatReturnsError(t *testing.T) {
+	resetRootFlagsForTest()
+	rootCmd.SetArgs([]string{"--output-format", "yaml", "--no-update-check", "hello"})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for invalid output format")
+	}
+	if !strings.Contains(err.Error(), "invalid --output-format") {
+		t.Fatalf("unexpected error message: %v", err)
+	}
+}
+
 func TestRootCommand_HeadlessJSONStdoutIsPureJSON(t *testing.T) {
 	resetRootFlagsForTest()
 	t.Setenv("HOME", t.TempDir())
@@ -517,7 +560,7 @@ func TestRootCommand_ImageFlagPreservesImagePath(t *testing.T) {
 	runInteractive = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
 		interactiveCalled = true
 	}
-	runOnceWithImage = func(query string, model string, provider api.Provider, imagePath string, cfg *config.Config, autoApprove bool) {
+	runOnceWithImage = func(query string, model string, provider api.Provider, imagePath string, cfg *config.Config, autoApprove bool, quiet bool) error {
 		imageCalled = true
 		if query != "describe" {
 			t.Fatalf("query = %q, want describe", query)
@@ -525,6 +568,7 @@ func TestRootCommand_ImageFlagPreservesImagePath(t *testing.T) {
 		if imagePath != "/tmp/image.png" {
 			t.Fatalf("imagePath = %q, want /tmp/image.png", imagePath)
 		}
+		return nil
 	}
 
 	rootCmd.SetArgs([]string{"--image", "/tmp/image.png", "--provider", "ollama", "--no-update-check", "describe"})
@@ -540,5 +584,207 @@ func TestRootCommand_ImageFlagPreservesImagePath(t *testing.T) {
 	}
 	if interactiveCalled {
 		t.Fatal("interactive path must not be executed when --image is set")
+	}
+}
+
+func TestRootCommand_OnceWithImageUsesImageOneShotPath(t *testing.T) {
+	resetRootFlagsForTest()
+
+	origRunOnce := runOnce
+	origRunOnceWithImage := runOnceWithImage
+	t.Cleanup(func() {
+		runOnce = origRunOnce
+		runOnceWithImage = origRunOnceWithImage
+		resetRootFlagsForTest()
+	})
+
+	imageCalled := false
+	onceCalled := false
+	runOnce = func(query string, model string, provider api.Provider, cfg *config.Config, autoApprove bool, quiet bool) error {
+		onceCalled = true
+		return nil
+	}
+	runOnceWithImage = func(query string, model string, provider api.Provider, imagePath string, cfg *config.Config, autoApprove bool, quiet bool) error {
+		imageCalled = true
+		if query != "describe" {
+			t.Fatalf("query = %q, want describe", query)
+		}
+		if imagePath != "/tmp/image.png" {
+			t.Fatalf("imagePath = %q, want /tmp/image.png", imagePath)
+		}
+		return nil
+	}
+
+	rootCmd.SetArgs([]string{"--once", "--image", "/tmp/image.png", "--provider", "ollama", "--no-update-check", "describe"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if !imageCalled {
+		t.Fatal("expected --once --image to use image one-shot path")
+	}
+	if onceCalled {
+		t.Fatal("text one-shot path must not be executed for --once --image")
+	}
+}
+
+func TestRootCommand_OnceWithImageWithoutQueryUsesImageOneShotPath(t *testing.T) {
+	resetRootFlagsForTest()
+
+	origRunOnce := runOnce
+	origRunOnceWithImage := runOnceWithImage
+	t.Cleanup(func() {
+		runOnce = origRunOnce
+		runOnceWithImage = origRunOnceWithImage
+		resetRootFlagsForTest()
+	})
+
+	imageCalled := false
+	runOnce = func(query string, model string, provider api.Provider, cfg *config.Config, autoApprove bool, quiet bool) error {
+		t.Fatal("text one-shot path must not be executed for --once --image without query")
+		return nil
+	}
+	runOnceWithImage = func(query string, model string, provider api.Provider, imagePath string, cfg *config.Config, autoApprove bool, quiet bool) error {
+		imageCalled = true
+		if query != "" {
+			t.Fatalf("query = %q, want empty string so image path can apply its default prompt", query)
+		}
+		if imagePath != "/tmp/image.png" {
+			t.Fatalf("imagePath = %q, want /tmp/image.png", imagePath)
+		}
+		return nil
+	}
+
+	rootCmd.SetArgs([]string{"--once", "--image", "/tmp/image.png", "--provider", "ollama", "--no-update-check"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if !imageCalled {
+		t.Fatal("expected --once --image without query to use image one-shot path")
+	}
+}
+
+func TestRootCommand_InteractiveWithImageUsesInteractiveImagePath(t *testing.T) {
+	resetRootFlagsForTest()
+
+	origRunOnceWithImage := runOnceWithImage
+	origRunInteractiveWithImage := runInteractiveWithImage
+	t.Cleanup(func() {
+		runOnceWithImage = origRunOnceWithImage
+		runInteractiveWithImage = origRunInteractiveWithImage
+		resetRootFlagsForTest()
+	})
+
+	imageInteractiveCalled := false
+	imageOnceCalled := false
+	runInteractiveWithImage = func(query string, model string, provider api.Provider, imagePath string, cfg *config.Config, autoApprove bool) error {
+		imageInteractiveCalled = true
+		if query != "describe this screenshot" {
+			t.Fatalf("query = %q, want %q", query, "describe this screenshot")
+		}
+		if imagePath != "/tmp/image.png" {
+			t.Fatalf("imagePath = %q, want /tmp/image.png", imagePath)
+		}
+		return nil
+	}
+	runOnceWithImage = func(query string, model string, provider api.Provider, imagePath string, cfg *config.Config, autoApprove bool, quiet bool) error {
+		imageOnceCalled = true
+		return nil
+	}
+
+	rootCmd.SetArgs([]string{"--interactive", "--image", "/tmp/image.png", "--provider", "ollama", "--no-update-check", "describe", "this", "screenshot"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if !imageInteractiveCalled {
+		t.Fatal("expected --interactive --image to use interactive image path")
+	}
+	if imageOnceCalled {
+		t.Fatal("image one-shot path must not be executed for --interactive --image")
+	}
+}
+
+func TestRootCommand_ImageErrorPropagation(t *testing.T) {
+	resetRootFlagsForTest()
+
+	origRunOnceWithImage := runOnceWithImage
+	t.Cleanup(func() {
+		runOnceWithImage = origRunOnceWithImage
+		resetRootFlagsForTest()
+	})
+
+	runOnceWithImage = func(query string, model string, provider api.Provider, imagePath string, cfg *config.Config, autoApprove bool, quiet bool) error {
+		return fmt.Errorf("image failed")
+	}
+
+	rootCmd.SetArgs([]string{"--image", "/tmp/image.png", "--provider", "ollama", "--no-update-check", "describe"})
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected error to propagate from image one-shot execution")
+	}
+	if !strings.Contains(err.Error(), "image failed") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRootCommand_ImageWithJSONReturnsError(t *testing.T) {
+	resetRootFlagsForTest()
+	rootCmd.SetArgs([]string{"--image", "/tmp/image.png", "--output-format", "json", "--provider", "ollama", "--no-update-check", "describe"})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for --image with JSON output")
+	}
+	if !strings.Contains(err.Error(), "--image cannot be used with --headless or --output-format json") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRootCommand_QuietWithImageUsesOneShotImagePath(t *testing.T) {
+	resetRootFlagsForTest()
+
+	origRunOnceWithImage := runOnceWithImage
+	t.Cleanup(func() {
+		runOnceWithImage = origRunOnceWithImage
+		resetRootFlagsForTest()
+	})
+
+	called := false
+	runOnceWithImage = func(query string, model string, provider api.Provider, imagePath string, cfg *config.Config, autoApprove bool, quiet bool) error {
+		called = true
+		if !quiet {
+			t.Fatal("expected quiet to be passed to image one-shot execution")
+		}
+		if query != "describe" {
+			t.Fatalf("query = %q, want describe", query)
+		}
+		if imagePath != "/tmp/image.png" {
+			t.Fatalf("imagePath = %q, want /tmp/image.png", imagePath)
+		}
+		return nil
+	}
+
+	rootCmd.SetArgs([]string{"--quiet", "--image", "/tmp/image.png", "--provider", "ollama", "--no-update-check", "describe"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if !called {
+		t.Fatal("expected quiet image one-shot execution")
+	}
+}
+
+func TestRootCommand_ResumeWithImageReturnsError(t *testing.T) {
+	resetRootFlagsForTest()
+	rootCmd.SetArgs([]string{"--resume", "--image", "/tmp/image.png", "--provider", "ollama", "--no-update-check"})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for --resume with image")
+	}
+	if !strings.Contains(err.Error(), "--resume cannot be used with --image") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }

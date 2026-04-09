@@ -196,7 +196,7 @@ func TestRunNormalMode_CompletionHookFailureRetries(t *testing.T) {
 		},
 	}
 	agent := newTurnRunnerTestAgent(provider, cfg, "", &out)
-	agent.agentWorkspaceState.changeStack = []tools.FileChange{{FilePath: "/src/main.go"}}
+	agent.changeStack = []tools.FileChange{{FilePath: "/src/main.go"}}
 	agent.Stats = NewSessionStats("test")
 
 	if err := agent.runNormalMode(context.Background(), "finish it", nil); err != nil {
@@ -373,7 +373,7 @@ func TestHandleStepNoToolResponse_CompletionVerificationRequestsContinue(t *test
 	chdirForTest(t, rootDir)
 
 	agent.lspClient = newFakeLSPClientWithError(t, rootDir, filePath, "unused variable")
-	agent.agentWorkspaceState.changeStack = []tools.FileChange{{FilePath: filePath}}
+	agent.changeStack = []tools.FileChange{{FilePath: filePath}}
 
 	state := &stepRunState{}
 	action, err := runner.handleStepNoToolResponse("変更が完了しました。", step, state)

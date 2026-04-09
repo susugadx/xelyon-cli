@@ -286,6 +286,11 @@ func TestSupportsImages(t *testing.T) {
 			providerName: "CLAUDE",
 			want:         true,
 		},
+		{
+			name:         "Anthropic with spaces supports images",
+			providerName: "  anthropic  ",
+			want:         true,
+		},
 	}
 
 	for _, tt := range tests {

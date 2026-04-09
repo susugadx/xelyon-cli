@@ -2,6 +2,22 @@ package config
 
 import "strings"
 
+type providerModelSectionState int
+
+const (
+	providerModelSectionStateAbsent providerModelSectionState = iota
+	providerModelSectionStateExplicitEmpty
+	providerModelSectionStateExplicitEntries
+	providerModelSectionStateExplicitEntriesPreserveEmpty
+	providerModelSectionStateImplicitEntries
+	providerModelSectionStateInMemoryEffectiveOnly
+)
+
+type providerModelStore struct {
+	state providerModelSectionState
+	raw   map[string]ProviderModelConfig
+}
+
 // Config はXELYON CLIの設定
 type Config struct {
 	DefaultProvider string                         `yaml:"default_provider"`
@@ -22,18 +38,26 @@ type Config struct {
 	ListDir         ListDirConfig                  `yaml:"list_dir"`
 	ProjectMap      ProjectMapConfig               `yaml:"project_map"`
 
-	GitStage       GitStageConfig  `yaml:"git_stage"`
-	LSP            LSPConfig       `yaml:"lsp"`
-	OpenAI         OpenAIConfig    `yaml:"openai"`
-	Thinking       ThinkingConfig  `yaml:"thinking"`
-	Output         OutputConfig    `yaml:"output"`
-	WebSearch      WebSearchConfig `yaml:"web_search"`
-	SubAgent       SubAgentConfig  `yaml:"sub_agent"`
-	MCP            MCPConfig       `yaml:"mcp"`
-	Hooks          HooksConfig     `yaml:"hooks"`
-	SubAgentPrompt string          `yaml:"-"`
+	GitStage            GitStageConfig     `yaml:"git_stage"`
+	LSP                 LSPConfig          `yaml:"lsp"`
+	OpenAI              OpenAIConfig       `yaml:"openai"`
+	Thinking            ThinkingConfig     `yaml:"thinking"`
+	Output              OutputConfig       `yaml:"output"`
+	WebSearch           WebSearchConfig    `yaml:"web_search"`
+	SubAgent            SubAgentConfig     `yaml:"sub_agent"`
+	MCP                 MCPConfig          `yaml:"mcp"`
+	Hooks               HooksConfig        `yaml:"hooks"`
+	SubAgentPrompt      string             `yaml:"-"`
+	providerModelsStore providerModelStore `yaml:"-"`
 	// 将来の拡張用
 	// Cloud CloudConfig `yaml:"cloud,omitempty"`
+}
+
+func (c *Config) providerModelSectionState() providerModelSectionState {
+	if c == nil {
+		return providerModelSectionStateAbsent
+	}
+	return c.providerModelsStore.state
 }
 
 // OutputConfig はツール出力表示の設定
@@ -222,22 +246,6 @@ type ProviderModelConfig struct {
 // 	UserID  string `yaml:"user_id"`
 // 	Token   string `yaml:"token"`
 // }
-
-// GetModelForProvider はプロバイダーに対応するデフォルトモデルを取得
-func (c *Config) GetModelForProvider(provider string) string {
-	if providerConfig, ok := c.ProviderModels[provider]; ok {
-		return providerConfig.DefaultModel
-	}
-	return "" // フォールバック
-}
-
-// ValidateModelForProvider は任意のモデル名を受け付ける（後方互換のため残す）
-// 注: v0.16.0以降、モデル名の検証は行わない
-func (c *Config) ValidateModelForProvider(provider, model string) bool {
-	// プロバイダーが存在するかのみチェック
-	_, ok := c.ProviderModels[provider]
-	return ok
-}
 
 // IsResponsesAPIModel はモデルが OpenAI Responses API を使用するか判定
 // 対応モデルは prefix マッチで自動判定し、設定リストをフォールバックとして使用

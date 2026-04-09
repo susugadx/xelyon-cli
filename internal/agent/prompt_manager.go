@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
@@ -153,11 +152,4 @@ func (m *PromptManager) DebugString() string {
 		return "<nil>"
 	}
 	return fmt.Sprintf("PromptManager(model=%s, dirty=%t, files=%d, symbols=%d)", a.CurrentModel, a.projectMapDirty, a.projectMapFileCount, a.projectMapSymbolCount)
-}
-
-func (m *PromptManager) estimateProjectMapTokens() int {
-	if m == nil || m.agent == nil {
-		return 0
-	}
-	return token.EstimateTokenCount(m.agent.projectMapSection)
 }

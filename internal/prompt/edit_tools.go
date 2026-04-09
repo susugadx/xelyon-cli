@@ -3,6 +3,8 @@ package prompt
 import (
 	"os"
 	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 // EditToolMode は編集ツール露出と編集ガイドの切り替えモードです。
@@ -33,7 +35,7 @@ func ResolveEditToolMode(providerName string, modelName string) EditToolMode {
 		return NormalizeEditToolMode(env)
 	}
 
-	provider := strings.ToLower(strings.TrimSpace(providerName))
+	provider := config.CanonicalProviderName(providerName)
 	model := strings.ToLower(strings.TrimSpace(modelName))
 
 	if provider == "openrouter" {
@@ -60,7 +62,7 @@ func ResolveEditToolMode(providerName string, modelName string) EditToolMode {
 	switch provider {
 	case "openai", "gemini", "google":
 		return EditToolModeApplyPatch
-	case "claude", "anthropic", "deepseek":
+	case "claude", "deepseek":
 		return EditToolModeLegacy
 	default:
 		return EditToolModeApplyPatch

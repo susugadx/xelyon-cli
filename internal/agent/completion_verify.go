@@ -265,13 +265,6 @@ func (a *Agent) addPendingLSPFilesFromChange(change *tools.FileChange) {
 	a.mutationTracker().AddPendingLSPFilesFromChange(change)
 }
 
-// flushLSPDiagnostics はバッファ内の全ファイルに対して LSP 診断を実行し、
-// 結果文字列を返してバッファをクリアする。
-// エラーがなければ空文字を返す。LSP 未起動時も空文字を返す（graceful degradation）。
-func (a *Agent) flushLSPDiagnostics() string {
-	return a.mutationTracker().FlushDeferredDiagnostics()
-}
-
 // runCompletionHooksWithRetry は completion hooks を最大 MaxRetry 回実行する。
 // フック失敗時は AI にフィードバックして修正を試み、再実行する。
 // Plan mode での使用を想定（ループ型の runNormalMode では直接カウンターを使用）。

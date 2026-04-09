@@ -45,7 +45,7 @@ func ExecuteWebSearch(execCtx tools.ExecutionContext, query string) string {
 	}
 
 	cfg := execCtx.EffectiveConfig()
-	searchProvider := resolveSearchProvider(cfg, execCtx.ProviderName)
+	searchProvider := resolveSearchProvider(cfg, execCtx.ProviderName, execCtx.ProviderConfigKey)
 	if searchProvider == "" {
 		return webSearchProviderError()
 	}
@@ -132,15 +132,15 @@ func normalizeQuery(query string) string {
 	return strings.ToLower(strings.TrimSpace(query))
 }
 
-func normalizeCacheKey(provider, query string) string {
-	provider = strings.ToLower(strings.TrimSpace(provider))
-	if provider == "" {
-		provider = "default"
+func normalizeCacheKey(searchOwnerKey, query string) string {
+	searchOwnerKey = normalizeProviderName(searchOwnerKey)
+	if searchOwnerKey == "" {
+		searchOwnerKey = "default"
 	}
-	return provider + ":" + normalizeQuery(query)
+	return searchOwnerKey + ":" + normalizeQuery(query)
 }
 
-func resolveSearchProvider(cfg *config.Config, mainProvider string) string {
+func resolveSearchProvider(cfg *config.Config, mainProvider, mainProviderConfigKey string) string {
 	if cfg != nil {
 		provider := normalizeProviderName(cfg.WebSearch.Provider)
 		if isNativeSearchProvider(provider) {
@@ -148,7 +148,12 @@ func resolveSearchProvider(cfg *config.Config, mainProvider string) string {
 		}
 	}
 
-	provider := normalizeProviderName(mainProvider)
+	provider := normalizeProviderName(mainProviderConfigKey)
+	if isNativeSearchProvider(provider) {
+		return provider
+	}
+
+	provider = normalizeProviderName(mainProvider)
 	if isNativeSearchProvider(provider) {
 		return provider
 	}
@@ -157,20 +162,17 @@ func resolveSearchProvider(cfg *config.Config, mainProvider string) string {
 }
 
 func resolveSearchModel(cfg *config.Config, searchProvider, mainProvider, mainModel string) string {
-	if searchProvider == normalizeProviderName(mainProvider) {
+	if config.SameProviderRuntimeIdentity(searchProvider, mainProvider) {
 		return mainModel
 	}
 	if cfg == nil {
 		return ""
 	}
-	if providerConfig, ok := cfg.ProviderModels[searchProvider]; ok {
-		return providerConfig.DefaultModel
-	}
-	return ""
+	return cfg.GetEffectiveModelForProvider(searchProvider)
 }
 
 func isNativeSearchProvider(provider string) bool {
-	switch provider {
+	switch config.CanonicalProviderName(provider) {
 	case "openai", "gemini", "claude":
 		return true
 	default:
@@ -180,7 +182,7 @@ func isNativeSearchProvider(provider string) bool {
 
 func webSearchProviderError() string {
 	return `Web search requires a provider with native search support.
-Set web_search.provider in config.yaml to one of: openai, gemini, claude
+Set web_search.provider in config.yaml to one of: openai, gemini, claude, anthropic
 
 Example:
   web_search:
@@ -190,10 +192,5 @@ Gemini API key is free at https://aistudio.google.com/apikey`
 }
 
 func normalizeProviderName(providerName string) string {
-	switch strings.ToLower(strings.TrimSpace(providerName)) {
-	case "anthropic":
-		return "claude"
-	default:
-		return strings.ToLower(strings.TrimSpace(providerName))
-	}
+	return config.NormalizeProviderName(providerName)
 }

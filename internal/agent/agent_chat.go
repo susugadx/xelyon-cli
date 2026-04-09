@@ -21,6 +21,11 @@ func (a *Agent) ChatOnce(input string) error {
 	return a.chatCore(input, nil, true)
 }
 
+// ChatOnceWithImage は画像付きの単一クエリを1ターンだけ実行してエラーを返す。
+func (a *Agent) ChatOnceWithImage(input string, image *api.ImageData) error {
+	return a.chatCore(input, image, true)
+}
+
 // chatInternal はAIと対話する内部実装（対話モード用ラッパー）
 // image が nil でない場合は画像付きメッセージとして処理
 func (a *Agent) chatInternal(input string, image *api.ImageData) {

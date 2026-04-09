@@ -660,10 +660,6 @@ func (a *Agent) shouldRefreshProjectPrompt(input string) bool {
 	return a.promptManager().ShouldRefreshProjectPrompt(input)
 }
 
-func (a *Agent) invalidateProjectMap() {
-	a.promptManager().InvalidateProjectMap()
-}
-
 func currentProjectMapStateKey(agent *Agent, rootPath string) string {
 	head := gitProjectMapHEAD(rootPath)
 	status := gitProjectMapStatusDigest(rootPath)

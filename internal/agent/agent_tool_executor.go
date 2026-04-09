@@ -54,6 +54,7 @@ func (a *Agent) toolExecutionContext(ctx context.Context, stdin io.Reader, stdou
 		Context:            ctx,
 		Provider:           a.CurrentProvider,
 		ProviderName:       a.ProviderName,
+		ProviderConfigKey:  a.activeModelProviderConfigKey(a.cfg()),
 		Model:              a.CurrentModel,
 		Stdin:              stdin,
 		Stdout:             stdout,

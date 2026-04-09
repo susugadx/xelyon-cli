@@ -74,6 +74,14 @@ func TestGetProviderPrefix_Anthropic(t *testing.T) {
 	}
 }
 
+func TestGetProviderPrefix_AnthropicWithSpaces(t *testing.T) {
+	anthropic := GetProviderPrefix("  anthropic  ")
+	claude := GetProviderPrefix("claude")
+	if anthropic != claude {
+		t.Error("spaced anthropic and claude should return identical prefixes")
+	}
+}
+
 func TestGetProviderPrefix_Bedrock(t *testing.T) {
 	bedrock := GetProviderPrefix("bedrock")
 	claude := GetProviderPrefix("claude")

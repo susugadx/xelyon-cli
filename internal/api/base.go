@@ -164,14 +164,14 @@ func StopSpinner(spinner *ui.Spinner) {
 }
 
 // GetDefaultModelWithContext は context に埋め込まれた設定を優先して使用モデルを返す。
-// providerName は設定上のキー（例: "openai", "claude", "deepseek"）と一致している必要がある。
+// providerName は alias を含む provider 名を受け付ける。
 func GetDefaultModelWithContext(ctx context.Context, model, providerName, fallback string) string {
 	if model != "" {
 		return model
 	}
 	cfg := config.FromContext(ctx)
-	if pm, ok := cfg.ProviderModels[providerName]; ok && pm.DefaultModel != "" {
-		return pm.DefaultModel
+	if providerModel := cfg.GetEffectiveModelForProvider(providerName); providerModel != "" {
+		return providerModel
 	}
 	return fallback
 }

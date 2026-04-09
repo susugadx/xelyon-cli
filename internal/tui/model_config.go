@@ -135,22 +135,23 @@ func (cs *configScreen) loadEntryFields(path, key string) []structEntryField {
 	return nil
 }
 
-// applyEntryField は entry の1フィールドを Config に書き戻す。
+// applyEntryField は entry の1フィールドだけを Config にパッチ適用する。
 func (cs *configScreen) applyEntryField(path, key string, ef structEntryField) {
 	val, _ := config.GetFieldValue(cs.cfg, path)
 	switch v := val.(type) {
 	case map[string]config.ProviderModelConfig:
-		pm := v[key]
-		switch ef.Name {
-		case "default_model":
-			pm.DefaultModel, _ = ef.Value.(string)
-		case "max_output_tokens":
-			switch n := ef.Value.(type) {
-			case int:
-				pm.MaxOutputTokens = n
+		_ = v
+		cs.cfg.PatchProviderModelConfig(key, func(pm *config.ProviderModelConfig) {
+			switch ef.Name {
+			case "default_model":
+				pm.DefaultModel, _ = ef.Value.(string)
+			case "max_output_tokens":
+				switch n := ef.Value.(type) {
+				case int:
+					pm.MaxOutputTokens = n
+				}
 			}
-		}
-		v[key] = pm
+		})
 	case map[string]config.LSPServerConfig:
 		ls := v[key]
 		switch ef.Name {
@@ -1254,7 +1255,7 @@ func (m *Model) deleteStructMapKey(path, key string) {
 	val, _ := config.GetFieldValue(cs.cfg, path)
 	switch v := val.(type) {
 	case map[string]config.ProviderModelConfig:
-		delete(v, key)
+		cs.cfg.DeleteProviderModelConfig(key)
 	case map[string]config.LSPServerConfig:
 		delete(v, key)
 	}
@@ -1265,14 +1266,20 @@ func (m *Model) deleteStructMapKey(path, key string) {
 func (m *Model) addStructMapKey(path, key string) bool {
 	cs := m.configScreen
 	m.ensureStructMapInitialized(path)
-	val, _ := config.GetFieldValue(cs.cfg, path)
-	switch v := val.(type) {
-	case map[string]config.ProviderModelConfig:
-		if _, ok := v[key]; ok {
+	if path == "provider_models" {
+		providerModels := cs.cfg.ProviderModelsForEdit()
+		if providerModels == nil {
+			providerModels = map[string]config.ProviderModelConfig{}
+		}
+		if _, ok := providerModels[key]; ok {
 			return false
 		}
-		v[key] = config.ProviderModelConfig{}
+		providerModels[key] = config.ProviderModelConfig{}
+		cs.cfg.SetProviderModelsForEdit(providerModels)
 		return true
+	}
+	val, _ := config.GetFieldValue(cs.cfg, path)
+	switch v := val.(type) {
 	case map[string]config.LSPServerConfig:
 		if _, ok := v[key]; ok {
 			return false
@@ -1291,10 +1298,6 @@ func (m *Model) ensureStructMapInitialized(path string) {
 	}
 
 	switch path {
-	case "provider_models":
-		if cs.cfg.ProviderModels == nil {
-			cs.cfg.ProviderModels = make(map[string]config.ProviderModelConfig)
-		}
 	case "lsp.servers":
 		if cs.cfg.LSP.Servers == nil {
 			cs.cfg.LSP.Servers = make(map[string]config.LSPServerConfig)
@@ -1439,27 +1442,20 @@ func (m Model) syncEditedProviderDefaultModel() {
 	if provName == "" {
 		return
 	}
-	pm, exists := cs.cfg.ProviderModels[provName]
-	if !exists {
-		return
-	}
-	pm.DefaultModel = cs.cfg.DefaultModel
-	cs.cfg.ProviderModels[provName] = pm
+	cs.cfg.SyncProviderDefaultModel(provName, cs.cfg.DefaultModel)
 }
 
-// defaultModelSyncProvider は global default_model の同期先 provider を返す。
+// defaultModelSyncProvider は global default_model を同期する provider_models key を返す。
+// default_provider が別 runtime へ切り替わっていない限り、現在セッションの exact alias owner を優先する。
 func (m Model) defaultModelSyncProvider() string {
 	cs := m.configScreen
 	if cs == nil {
 		return ""
 	}
-	if cs.cfg != nil && cs.cfg.DefaultProvider != cs.initialDefaultProvider {
-		return cs.cfg.DefaultProvider
+	if cs.cfg == nil {
+		return ""
 	}
-	if provider := m.agent.GetProviderName(); provider != "" {
-		return provider
-	}
-	return cs.cfg.DefaultProvider
+	return cs.cfg.DefaultModelSyncProviderKey(m.agent.GetProviderConfigKey(), cs.initialDefaultProvider)
 }
 
 // sliceEqual は []string の等値比較。

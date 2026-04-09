@@ -166,7 +166,7 @@ func (m *Manager) Spawn(ctx context.Context, message, taskType, model, reasoning
 		taskType = TaskTypeExplore
 	}
 
-	mainProvider := normalizeProviderName(provider.Name())
+	mainProvider := config.CanonicalProviderName(provider.Name())
 	subCfg, resolvedModel, err := cloneConfigForSub(cfg, mainProvider, taskType, model, reasoningEffort)
 	if err != nil {
 		return "", err
@@ -520,7 +520,7 @@ func normalizeSubAgentModel(model string) string {
 }
 
 func inferSubAgentModel(provider string) string {
-	switch normalizeProviderName(provider) {
+	switch config.CanonicalProviderName(provider) {
 	case "openai":
 		return "gpt-5.4-mini"
 	case "claude":
@@ -556,22 +556,46 @@ func normalizeReasoningEffort(effort string) string {
 	return strings.ToLower(strings.TrimSpace(effort))
 }
 
+type providerConfigKeyProvider interface {
+	ProviderConfigKey() string
+}
+
+func currentProviderConfigKey(current api.Provider) string {
+	if current == nil {
+		return ""
+	}
+	if keyed, ok := current.(providerConfigKeyProvider); ok {
+		if key := config.ActiveProviderConfigKey(keyed.ProviderConfigKey()); key != "" {
+			return key
+		}
+	}
+	return config.ActiveProviderConfigKey(current.Name())
+}
+
 func resolveSubProvider(current api.Provider, cfg *config.Config, model string, factory ProviderFactory) (api.Provider, error) {
 	if current == nil {
 		return nil, fmt.Errorf("provider is required")
 	}
 
-	currentName := normalizeProviderName(current.Name())
-	target := inferProviderFromModel(cfg, currentName, model)
+	currentName := config.CanonicalProviderName(current.Name())
+	currentConfigKey := currentProviderConfigKey(current)
+	target := currentName
+	if cfg != nil {
+		target = cfg.ResolveProviderForModel(currentName, model)
+	}
 	if target == "" {
 		target = currentName
+	}
+	factoryProviderName := target
+	if currentConfigKey != "" && config.SameProviderRuntimeIdentity(currentConfigKey, target) {
+		factoryProviderName = currentConfigKey
 	}
 	if factory == nil {
 		factory = api.NewProvider
 	}
-	provider, err := factory(target)
+	provider, err := factory(factoryProviderName)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create provider %s: %w", target, err)
+		return nil, fmt.Errorf("failed to create provider %s: %w", factoryProviderName, err)
 	}
 	resetSubProviderState(provider)
 	return provider, nil
@@ -587,62 +611,6 @@ func resetSubProviderState(provider api.Provider) {
 	}
 	if responseIDSetter, ok := provider.(interface{ SetResponseID(string) }); ok {
 		responseIDSetter.SetResponseID("")
-	}
-}
-
-func inferProviderFromModel(cfg *config.Config, currentProvider, model string) string {
-	model = strings.TrimSpace(model)
-	if model == "" {
-		return currentProvider
-	}
-
-	if cfg != nil {
-		for providerName, providerCfg := range cfg.ProviderModels {
-			if providerCfg.DefaultModel == model {
-				return normalizeProviderName(providerName)
-			}
-		}
-	}
-
-	normalized := strings.ToLower(model)
-	switch {
-	case strings.HasPrefix(normalized, "gpt-"),
-		normalized == "codex-mini",
-		normalized == "codex",
-		isOpenAIReasoningModel(normalized):
-		return "openai"
-	case strings.HasPrefix(normalized, "gemini"):
-		return "gemini"
-	case strings.HasPrefix(normalized, "claude"):
-		return "claude"
-	case strings.HasPrefix(normalized, "deepseek"):
-		return "deepseek"
-	case strings.HasPrefix(normalized, "global.anthropic."):
-		return "bedrock"
-	case strings.Contains(normalized, "/"):
-		return "openrouter"
-	default:
-		return currentProvider
-	}
-}
-
-func isOpenAIReasoningModel(model string) bool {
-	switch {
-	case strings.HasPrefix(model, "o1"),
-		strings.HasPrefix(model, "o3"),
-		strings.HasPrefix(model, "o4"):
-		return true
-	default:
-		return false
-	}
-}
-
-func normalizeProviderName(providerName string) string {
-	switch strings.ToLower(strings.TrimSpace(providerName)) {
-	case "anthropic":
-		return "claude"
-	default:
-		return strings.ToLower(strings.TrimSpace(providerName))
 	}
 }
 

@@ -110,13 +110,6 @@ func (a *Agent) recordAssistantAPITurn(response string) {
 	})
 }
 
-func (a *Agent) recordAssistantTextTurn(response string) {
-	a.appendAssistantResponse(rawAssistantResponse(response), assistantAppendOptions{
-		incrementStats: true,
-		sessionMode:    assistantSessionRawText,
-	})
-}
-
 func (a *Agent) recordAssistantDisplayOutput(display string) {
 	a.historyMu.Lock()
 	a.lastOutputs = append(a.lastOutputs, display)

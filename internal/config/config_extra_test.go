@@ -13,6 +13,7 @@ func TestCloneConfig(t *testing.T) {
 	original.DefaultProvider = "claude"
 	original.DefaultModel = "claude-sonnet-4-6"
 	original.CommandAliases["x"] = "exit"
+	original.SetProviderModelConfig("claude", ProviderModelConfig{DefaultModel: "claude-custom"})
 
 	cloned := CloneConfig(original)
 
@@ -48,6 +49,9 @@ func TestCloneConfig(t *testing.T) {
 	cloned.ProviderModels["deepseek"] = ProviderModelConfig{DefaultModel: "changed-model"}
 	if original.ProviderModels["deepseek"].DefaultModel == "changed-model" {
 		t.Error("original.ProviderModels was modified after changing clone")
+	}
+	if got := cloned.ProviderModelsForSave()["claude"].DefaultModel; got != "claude-custom" {
+		t.Fatalf("cloned raw provider model = %q, want %q", got, "claude-custom")
 	}
 }
 

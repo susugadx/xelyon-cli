@@ -429,6 +429,26 @@ func TestDefaultTokenThresholdZero_DoesNotFallbackTo100K(t *testing.T) {
 	}
 }
 
+func TestMaybeAutoCompress_UsesSessionAnthropicThresholdOverride(t *testing.T) {
+	provider := &compressionTestProvider{name: "claude", summary: "compressed summary"}
+	cfg := config.DefaultConfig()
+	cfg.Compression.KeepRecent = 1
+	cfg.Compression.PreferCompactAPI = false
+	cfg.Compression.ProviderThresholds["anthropic"] = 1
+	cfg.Compression.ProviderThresholds["claude"] = 100000000
+
+	agent, _ := newCompressionTestAgent(t, provider, "claude-haiku-4-5", cfg)
+	agent.ProviderConfigKey = "anthropic"
+	agent.History = oversizedCompressionHistory()
+
+	if !agent.maybeAutoCompress() {
+		t.Fatal("maybeAutoCompress() = false, want true when anthropic alias threshold is exceeded")
+	}
+	if provider.chatCalls != 1 {
+		t.Fatalf("ChatWithTools call count = %d, want 1", provider.chatCalls)
+	}
+}
+
 func TestCustomTokenThreshold_RespectsCacheSkip(t *testing.T) {
 	provider := &compressionTestProvider{
 		name:             "openai",
@@ -468,6 +488,12 @@ func TestDefaultCompressionModel_Gemini(t *testing.T) {
 func TestDefaultCompressionModel_Claude(t *testing.T) {
 	if got := defaultCompressionModel("claude"); got != "claude-haiku-4-5" {
 		t.Fatalf("defaultCompressionModel(claude) = %q, want %q", got, "claude-haiku-4-5")
+	}
+}
+
+func TestDefaultCompressionModel_AnthropicAlias(t *testing.T) {
+	if got := defaultCompressionModel("anthropic"); got != "claude-haiku-4-5" {
+		t.Fatalf("defaultCompressionModel(anthropic) = %q, want %q", got, "claude-haiku-4-5")
 	}
 }
 

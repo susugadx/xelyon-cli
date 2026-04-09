@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"gopkg.in/yaml.v3"
 )
 
@@ -222,7 +223,7 @@ func GetPricingInfo(provider string, model string, promptTokenCount ...int) Pric
 	if len(promptTokenCount) > 0 {
 		ptc = promptTokenCount[0]
 	}
-	switch provider {
+	switch config.CanonicalProviderName(provider) {
 	case "deepseek":
 		// DeepSeekの料金体系
 		return getDeepSeekPricing(model)

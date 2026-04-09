@@ -152,6 +152,7 @@ func TestGetPricingInfo_ProviderRouting(t *testing.T) {
 	}{
 		{name: "deepseek routes correctly", provider: "deepseek", model: "deepseek-chat"},
 		{name: "claude routes correctly", provider: "claude", model: "claude-sonnet-4-5"},
+		{name: "anthropic alias routes like claude", provider: "anthropic", model: "claude-sonnet-4-5"},
 		{name: "openai routes correctly", provider: "openai", model: "gpt-5.4"},
 		{name: "gemini routes correctly", provider: "gemini", model: "gemini-2.5-pro"},
 		{name: "groq routes correctly", provider: "groq", model: "llama-3-70b"},

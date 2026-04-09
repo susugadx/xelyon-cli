@@ -32,6 +32,7 @@ type ExecutionContext struct {
 	Context            context.Context
 	Provider           api.Provider
 	ProviderName       string
+	ProviderConfigKey  string
 	Model              string
 	Stdin              io.Reader
 	Stdout             io.Writer

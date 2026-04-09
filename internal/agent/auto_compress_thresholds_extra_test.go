@@ -175,6 +175,50 @@ func TestGetProviderCompressThresholdWithConfig_ModelOverrideBeforeProvider(t *t
 	}
 }
 
+func TestGetProviderCompressThresholdWithConfig_PrefersExactAnthropicAliasOverride(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Compression.ProviderThresholds["anthropic"] = 123456
+	cfg.Compression.ProviderThresholds["claude"] = 654321
+
+	got := GetProviderCompressThresholdWithConfig(cfg, "anthropic", "claude-sonnet-4-6")
+	if got != 123456 {
+		t.Fatalf("GetProviderCompressThresholdWithConfig() = %d, want %d", got, 123456)
+	}
+}
+
+func TestGetProviderCompressThresholdWithConfig_PrefersAnthropicAliasModelOverrideBeforeCanonicalFallback(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Compression.ProviderThresholds["anthropic:claude-sonnet-4*"] = 111111
+	cfg.Compression.ProviderThresholds["claude:claude-sonnet-4*"] = 222222
+
+	got := GetProviderCompressThresholdWithConfig(cfg, "anthropic", "claude-sonnet-4-6")
+	if got != 111111 {
+		t.Fatalf("GetProviderCompressThresholdWithConfig() = %d, want %d", got, 111111)
+	}
+}
+
+func TestGetProviderCompressThresholdWithConfig_FallsBackToCanonicalWhenExactAnthropicAliasMissing(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Compression.ProviderThresholds["claude"] = 222222
+
+	got := GetProviderCompressThresholdWithConfig(cfg, "anthropic", "claude-sonnet-4-6")
+	if got != 222222 {
+		t.Fatalf("GetProviderCompressThresholdWithConfig() = %d, want %d", got, 222222)
+	}
+}
+
+func TestGetProviderCompressThresholdWithConfig_CanonicalClaudeFallsBackToAnthropicAliasOverride(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Compression.ProviderThresholds = map[string]int{
+		"anthropic": 123456,
+	}
+
+	got := GetProviderCompressThresholdWithConfig(cfg, "claude", "claude-sonnet-4-6")
+	if got != 123456 {
+		t.Fatalf("GetProviderCompressThresholdWithConfig() = %d, want %d", got, 123456)
+	}
+}
+
 // --- averageOutputTokens tests ---
 
 func TestAverageOutputTokens_Normal(t *testing.T) {

@@ -45,7 +45,12 @@ var providerAliases = map[string]string{
 // GetProviderPrefix はプロバイダー名に応じたプレフィックスを返す
 // 未登録プロバイダーは空文字を返す
 func GetProviderPrefix(provider string) string {
-	name := strings.ToLower(provider)
+	name := config.NormalizeProviderName(provider)
+	if name == "bedrock" {
+		name = "claude"
+	} else {
+		name = config.CanonicalProviderName(name)
+	}
 	if canonical, ok := providerAliases[name]; ok {
 		name = canonical
 	}

@@ -53,24 +53,33 @@ type webSearchSource struct {
 }
 
 func init() {
-	websearch.RegisterWithContext("claude", WebSearchWithContext)
+	websearch.RegisterWithContext("claude", func(ctx context.Context, query, model string) (string, error) {
+		return webSearchWithContextForProvider(ctx, "claude", query, model)
+	})
+	websearch.RegisterWithContext("anthropic", func(ctx context.Context, query, model string) (string, error) {
+		return webSearchWithContextForProvider(ctx, "anthropic", query, model)
+	})
 }
 
 // WebSearchWithContext は request context を使って Claude ネイティブ web_search を実行する。
 func WebSearchWithContext(ctx context.Context, query, model string) (string, error) {
+	return webSearchWithContextForProvider(ctx, "claude", query, model)
+}
+
+func webSearchWithContextForProvider(ctx context.Context, providerKey, query, model string) (string, error) {
 	apiKey := os.Getenv("ANTHROPIC_API_KEY")
 	if apiKey == "" {
 		return "", fmt.Errorf("ANTHROPIC_API_KEY not set")
 	}
 
-	model = api.GetDefaultModelWithContext(ctx, model, "claude", "claude-sonnet-4-6")
-	provider := New(apiKey)
+	model = api.GetDefaultModelWithContext(ctx, model, providerKey, "claude-sonnet-4-6")
+	provider := newProvider(apiKey, providerKey)
 	return provider.webSearch(ctx, query, model)
 }
 
 func (p *Provider) webSearch(ctx context.Context, query, model string) (string, error) {
 	maxTokens := 2048
-	if providerMax := api.GetMaxOutputTokens(ctx, "claude", model); providerMax > 0 && providerMax < maxTokens {
+	if providerMax := p.maxOutputTokens(ctx, model); providerMax > 0 && providerMax < maxTokens {
 		maxTokens = providerMax
 	}
 
@@ -103,8 +112,8 @@ func (p *Provider) webSearch(ctx context.Context, query, model string) (string, 
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-api-key", p.APIKey)
-	req.Header.Set("anthropic-version", getAnthropicVersion(ctx))
-	req.Header.Set("anthropic-beta", strings.Join(getAnthropicBetaHeaders(ctx), ","))
+	req.Header.Set("anthropic-version", getAnthropicVersion(ctx, p.configLookupKey(), reqBody.Model))
+	req.Header.Set("anthropic-beta", strings.Join(getAnthropicBetaHeaders(ctx, p.configLookupKey(), reqBody.Model), ","))
 
 	resp, err := p.ExecuteRequest(req)
 	if err != nil {
@@ -129,19 +138,21 @@ func buildWebSearchPrompt(query string) string {
 	return fmt.Sprintf("Use web search to answer the query below. Return a concise summary of the most relevant findings.\n\nQuery: %s", query)
 }
 
-func getAnthropicVersion(ctx context.Context) string {
+func getAnthropicVersion(ctx context.Context, providerKey, model string) string {
 	cfg := config.FromContext(ctx)
-	if pm, ok := cfg.ProviderModels["claude"]; ok && pm.AnthropicVersion != "" {
+	lookupProvider := cfg.RuntimeProviderConfigKey(providerKey, model)
+	if pm, ok := cfg.GetProviderModelConfig(lookupProvider); ok && pm.AnthropicVersion != "" {
 		return pm.AnthropicVersion
 	}
 	return "2023-06-01"
 }
 
-func getAnthropicBetaHeaders(ctx context.Context) []string {
+func getAnthropicBetaHeaders(ctx context.Context, providerKey, model string) []string {
 	cfg := config.FromContext(ctx)
 	seen := map[string]bool{webSearchBetaHeader: true}
 	headers := []string{webSearchBetaHeader}
-	if pm, ok := cfg.ProviderModels["claude"]; ok {
+	lookupProvider := cfg.RuntimeProviderConfigKey(providerKey, model)
+	if pm, ok := cfg.GetProviderModelConfig(lookupProvider); ok {
 		for _, header := range pm.AnthropicBeta {
 			header = strings.TrimSpace(header)
 			if header == "" || seen[header] {
