@@ -9,6 +9,11 @@ func TestGetToolSafety(t *testing.T) {
 		want     ToolSafety
 	}{
 		{
+			name:     "gather_context is SafetyHigh",
+			toolName: "gather_context",
+			want:     SafetyHigh,
+		},
+		{
 			name:     "read_file is SafetyHigh",
 			toolName: "read_file",
 			want:     SafetyHigh,

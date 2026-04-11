@@ -34,6 +34,7 @@ type DependencyResult struct {
 
 // ツール分類（読み取り専用）
 var readTools = map[string]bool{
+	"gather_context":  true,
 	"read_file":       true,
 	"list_dir":        true,
 	"git_status":      true,

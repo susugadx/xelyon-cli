@@ -95,6 +95,8 @@ func toolIcon(toolName string) string {
 	}
 
 	switch toolName {
+	case "gather_context":
+		return "🧭"
 	case "read_file", "read_files":
 		return "📄"
 	case "write_file":
@@ -128,6 +130,8 @@ func toolIcon(toolName string) string {
 
 func formatToolSummary(info ToolDisplayInfo, trimmed string) string {
 	switch {
+	case info.ToolName == "gather_context":
+		return formatGatherContextSummary(info.Args)
 	case info.ToolName == "read_file":
 		return formatReadFileSummary(info.Args, trimmed)
 	case info.ToolName == "read_files":
@@ -181,6 +185,16 @@ func formatToolSummary(info ToolDisplayInfo, trimmed string) string {
 
 func toolTarget(info ToolDisplayInfo) string {
 	switch {
+	case info.ToolName == "gather_context":
+		query := strings.TrimSpace(info.Args["query"])
+		if query == "" {
+			return ""
+		}
+		target := fmt.Sprintf("%q", query)
+		if path := strings.TrimSpace(info.Args["path"]); path != "" {
+			target += " in " + path
+		}
+		return target
 	case info.ToolName == "search_code":
 		pattern := strings.TrimSpace(info.Args["pattern"])
 		if pattern == "" {
@@ -222,6 +236,21 @@ func toolTarget(info ToolDisplayInfo) string {
 	}
 
 	return firstNonEmpty(info.Args, sortedKeys(info.Args)...)
+}
+
+func formatGatherContextSummary(args map[string]string) string {
+	query := strings.TrimSpace(args["query"])
+	if query == "" {
+		return ""
+	}
+	target := fmt.Sprintf("%q", query)
+	if path := strings.TrimSpace(args["path"]); path != "" {
+		target += " in " + path
+	}
+	if filter := strings.TrimSpace(args["file_filter"]); filter != "" {
+		target += " [" + filter + "]"
+	}
+	return target
 }
 
 func formatReadFileSummary(args map[string]string, result string) string {

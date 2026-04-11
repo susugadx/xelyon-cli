@@ -35,7 +35,8 @@ func (a *Agent) RunPlanMode(ctx context.Context, userRequest string) error {
 	a.SetStatus(StateRunning, "Investigating", "調査中", "Wait for investigation", "調査完了を待ってください")
 
 	// ユーザーリクエストを履歴に追加
-	investigationPrompt := promptplan.BuildInvestigationPrompt(userRequest)
+	toolVisibility := a.toolVisibilityPolicy(toolSurfacePhasePlan, toolVisibilityOptions{allowSubAgents: true})
+	investigationPrompt := promptplan.BuildInvestigationPrompt(userRequest, toolVisibility.allowLowLevelInvestigation)
 
 	a.History = append(a.History, api.Message{Role: "user", Content: investigationPrompt})
 

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/tools"
+	filetool "github.com/susugadx/xelyon-cli/internal/tools/file"
 )
 
 // ToolCache はツール結果のキャッシュ
@@ -125,7 +126,8 @@ func (c *ToolCache) GetDir(path string) (string, bool) {
 	}
 
 	// ディレクトリの mtime をチェック
-	info, err := os.Stat(path)
+	dirPath := filetool.ListDirCachePhysicalPath(path)
+	info, err := os.Stat(dirPath)
 	if err != nil {
 		c.InvalidateDir(path)
 		return "", false
@@ -146,7 +148,12 @@ func (c *ToolCache) GetDir(path string) (string, bool) {
 
 // SetDir はディレクトリ一覧をキャッシュに保存
 func (c *ToolCache) SetDir(path, result string) {
-	info, err := os.Stat(path)
+	key := filetool.NormalizeListDirCacheKey(path)
+	if key == "" {
+		return
+	}
+	dirPath := filetool.ListDirCachePhysicalPath(key)
+	info, err := os.Stat(dirPath)
 	if err != nil {
 		return
 	}
@@ -154,7 +161,7 @@ func (c *ToolCache) SetDir(path, result string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.dirs[path] = cacheEntry{
+	c.dirs[key] = cacheEntry{
 		Content:    result,
 		ModTime:    info.ModTime(),
 		AccessedAt: time.Now(),
@@ -173,7 +180,12 @@ func (c *ToolCache) InvalidateFile(path string) {
 func (c *ToolCache) InvalidateDir(path string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	delete(c.dirs, path)
+	targetPath := filetool.ListDirCachePhysicalPath(path)
+	for key := range c.dirs {
+		if filetool.ListDirCachePhysicalPath(key) == targetPath {
+			delete(c.dirs, key)
+		}
+	}
 }
 
 // Clear は全キャッシュをクリア
@@ -542,18 +554,19 @@ func (c *ToolCache) Load() error {
 	}
 
 	for path, entry := range pc.Dirs {
-		info, err := os.Stat(path)
+		key := filetool.NormalizeListDirCacheKey(path)
+		if key == "" {
+			continue
+		}
+		dirPath := filetool.ListDirCachePhysicalPath(key)
+		info, err := os.Stat(dirPath)
 		if err != nil {
 			continue
 		}
 		if info.ModTime().After(entry.ModTime) {
 			continue
 		}
-		absPath, err := filepath.Abs(path)
-		if err != nil {
-			continue
-		}
-		c.dirs[absPath] = cacheEntry{
+		c.dirs[key] = cacheEntry{
 			Content:    entry.Content,
 			ModTime:    entry.ModTime,
 			AccessedAt: now,

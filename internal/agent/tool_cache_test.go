@@ -107,6 +107,33 @@ func TestToolCache_DirCache(t *testing.T) {
 	}
 }
 
+func TestToolCache_DirCache_MetadataKeysSharePhysicalDirValidation(t *testing.T) {
+	cache := NewToolCache()
+
+	tmpDir := t.TempDir()
+	keyA := tmpDir + "::depth=1::filter=pkg/*.js::filter_root=" + tmpDir
+	keyB := tmpDir + "::depth=1::filter=pkg/*.js::filter_root=" + filepath.Join(tmpDir, "workspace")
+
+	cache.SetDir(keyA, "result-a")
+	cache.SetDir(keyB, "result-b")
+
+	if got, hit := cache.GetDir(keyA); !hit || got != "result-a" {
+		t.Fatalf("expected metadata dir cache hit for keyA, got (%q, %v)", got, hit)
+	}
+	if got, hit := cache.GetDir(keyB); !hit || got != "result-b" {
+		t.Fatalf("expected metadata dir cache hit for keyB, got (%q, %v)", got, hit)
+	}
+
+	cache.InvalidateDir(tmpDir)
+
+	if _, hit := cache.GetDir(keyA); hit {
+		t.Fatal("expected keyA cache miss after physical dir invalidation")
+	}
+	if _, hit := cache.GetDir(keyB); hit {
+		t.Fatal("expected keyB cache miss after physical dir invalidation")
+	}
+}
+
 func TestToolCache_InvalidateFile(t *testing.T) {
 	cache := NewToolCache()
 
@@ -656,6 +683,38 @@ func TestToolCache_SaveLoad_RoundTrip(t *testing.T) {
 	// 検索キャッシュは永続化されないこと
 	if _, hit := cache2.GetSearch("func", "."); hit {
 		t.Error("search cache should NOT be persisted")
+	}
+}
+
+func TestToolCache_SaveLoad_RoundTrip_MetadataDirKey(t *testing.T) {
+	tmpDir := t.TempDir()
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(origDir) }()
+
+	testDir := filepath.Join(tmpDir, "subdir")
+	if err := os.Mkdir(testDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	cacheKey := testDir + "::depth=1::filter=pkg/*.js::filter_root=" + tmpDir
+
+	cache1 := NewToolCache()
+	cache1.SetDir(cacheKey, "main.js")
+	if err := cache1.Save(); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	cache2 := NewToolCache()
+	if err := cache2.Load(); err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	if content, hit := cache2.GetDir(cacheKey); !hit {
+		t.Fatal("expected metadata dir cache hit after Load")
+	} else if content != "main.js" {
+		t.Fatalf("expected metadata dir listing, got %q", content)
 	}
 }
 

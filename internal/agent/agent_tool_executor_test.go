@@ -393,6 +393,8 @@ func TestExecuteToolCallsWithParallel_AllParallelConcurrency(t *testing.T) {
 }
 
 func TestExecuteToolCallsWithParallel_PrintsParallelGroup(t *testing.T) {
+	t.Setenv("XELYON_EDIT_TOOL", "str_replace")
+
 	provider := &mockProvider{name: "test"}
 	var out bytes.Buffer
 	agent := NewAgentWithRuntime("test-model", provider, false, &AgentRuntime{
@@ -441,6 +443,8 @@ func TestExecuteToolCallsWithParallel_PrintsParallelGroup(t *testing.T) {
 }
 
 func TestExecuteToolCallsWithParallel_ShowsSpinnerDuringParallelRun(t *testing.T) {
+	t.Setenv("XELYON_EDIT_TOOL", "str_replace")
+
 	provider := &mockProvider{name: "test"}
 	runtime := NewAgentRuntime()
 	runtime.UI = ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)

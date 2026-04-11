@@ -35,7 +35,7 @@ type ToolDefinition struct {
 type Registry struct {
 	mu            sync.RWMutex // 並行アクセス保護（MCP動的登録対応）
 	tools         map[string]Tool
-	excludedTools map[string]bool // GetToolDefinitions から除外するツール名セット
+	excludedTools map[string]bool // 現在の surface から除外し、実行も拒否するツール名セット
 }
 
 // NewRegistry は新しいRegistryを作成
@@ -56,10 +56,14 @@ func (r *Registry) Register(tool Tool) {
 func (r *Registry) ExecuteWithContext(execCtx ExecutionContext, tc *ToolCall) (string, *FileChange) {
 	r.mu.RLock()
 	tool, ok := r.tools[tc.Tool]
+	excluded := r.excludedTools[tc.Tool]
 	r.mu.RUnlock()
 
 	if !ok {
 		return fmt.Sprintf("Unknown tool: %s", tc.Tool), nil
+	}
+	if excluded {
+		return fmt.Sprintf("Error: tool not available in current mode: %s", tc.Tool), nil
 	}
 
 	output, change, err := tool.Run(normalizeExecutionContext(execCtx), tc.Args)
@@ -113,8 +117,8 @@ func (r *Registry) HasTool(name string) bool {
 	return ok
 }
 
-// SetExcludedTools は GetToolDefinitions から除外するツール名を設定
-// Normal Mode で planning 系ツールを非表示にするために使用
+// SetExcludedTools は現在の surface から除外するツール名を設定する。
+// 除外されたツールは定義から消え、直接実行も拒否される。
 func (r *Registry) SetExcludedTools(names []string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

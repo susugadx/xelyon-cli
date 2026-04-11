@@ -8,11 +8,14 @@ import (
 )
 
 func renderReadFilesResults(results []readFileBatchResult, reg *locator.Registry) string {
+	return renderReadExecutionSections(renderReadFilesSections(results, reg))
+}
+
+func renderReadFilesSections(results []readFileBatchResult, reg *locator.Registry) []ReadExecutionSection {
+	sections := make([]ReadExecutionSection, 0, len(results))
 	var sb strings.Builder
-	for i, result := range results {
-		if i > 0 {
-			sb.WriteString("\n")
-		}
+	for _, result := range results {
+		sb.Reset()
 		header := fmt.Sprintf("📄 File: %s", result.entry)
 		if reg != nil {
 			id := reg.Register(newReadResultLocatorForBatch(result))
@@ -20,6 +23,15 @@ func renderReadFilesResults(results []readFileBatchResult, reg *locator.Registry
 		}
 		fmt.Fprintf(&sb, "%s\n", header)
 		sb.WriteString(result.result)
+		sections = append(sections, ReadExecutionSection{
+			Output: sb.String(),
+			Failed: isRenderedReadFailure(result.result),
+		})
 	}
-	return sb.String()
+	return sections
+}
+
+func isRenderedReadFailure(result string) bool {
+	trimmed := strings.TrimSpace(result)
+	return strings.HasPrefix(trimmed, "Error:") || strings.HasPrefix(trimmed, "Error reading file:")
 }

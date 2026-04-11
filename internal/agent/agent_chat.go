@@ -108,16 +108,14 @@ func (a *Agent) chatCore(input string, image *api.ImageData, oneShot bool) error
 		defer a.registry().SetExcludedTools(prev)
 	}
 
-	editToolMode := ResolveEditToolMode(a.ProviderName, a.CurrentModel)
-
 	var err error
 	if a.PlanModeEnabled {
 		// Plan Mode: planning 系ツールを有効化しつつ、編集ツールの排他制御は維持
-		a.registry().SetExcludedTools(planModeExcludedTools(editToolMode))
+		a.registry().SetExcludedTools(a.toolVisibilityPolicy(toolSurfacePhasePlan, toolVisibilityOptions{allowSubAgents: true}).excluded())
 		err = a.RunPlanMode(ctx, input)
 	} else {
 		// Normal Mode: planning 系ツールを除外しつつ、編集ツールの排他制御を維持
-		a.registry().SetExcludedTools(normalModeExcludedTools(editToolMode))
+		a.registry().SetExcludedTools(a.toolVisibilityPolicy(toolSurfacePhaseNormal, toolVisibilityOptions{allowSubAgents: true}).excluded())
 		err = a.runNormalMode(ctx, input, image)
 	}
 
@@ -312,7 +310,7 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 			})
 			a.History = append(a.History, api.Message{
 				Role:    "user",
-				Content: "[SYSTEM] You are in NORMAL MODE. Do NOT output JSON directly. Execute the required changes directly using tools (read_file, str_replace, etc).",
+				Content: a.toolVisibilityPolicy(toolSurfacePhaseNormal, toolVisibilityOptions{allowSubAgents: true}).normalModeRecoveryPrompt(normalModeRecoveryPromptDirectExecution),
 			})
 			continue
 		}
@@ -360,7 +358,7 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 					})
 					a.History = append(a.History, api.Message{
 						Role:    "user",
-						Content: "[SYSTEM] STOP planning. Pick the FIRST change and execute it NOW using the appropriate tool (read_file, str_replace, etc). One tool call, no explanation.",
+						Content: a.toolVisibilityPolicy(toolSurfacePhaseNormal, toolVisibilityOptions{allowSubAgents: true}).normalModeRecoveryPrompt(normalModeRecoveryPromptStopPlanning),
 					})
 					continue
 				}
@@ -374,7 +372,7 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 				})
 				a.History = append(a.History, api.Message{
 					Role:    "user",
-					Content: "[SYSTEM] Do NOT output plans as numbered text. Execute the required changes directly using tools (read_file, str_replace, etc).",
+					Content: a.toolVisibilityPolicy(toolSurfacePhaseNormal, toolVisibilityOptions{allowSubAgents: true}).normalModeRecoveryPrompt(normalModeRecoveryPromptNoTextPlan),
 				})
 				continue
 			}

@@ -16,25 +16,6 @@ func ResolveEditToolMode(providerName string, modelName string) string {
 	return string(prompt.ResolveEditToolMode(providerName, modelName))
 }
 
-func appendDefaultEditToolExclusions(mode string, excluded []string) []string {
-	result := filterStrings(excluded, "apply_patch", "str_replace", "write_file", "delete_file")
-	if mode == EditToolModeLegacy {
-		return appendUniqueStrings(result, "apply_patch")
-	}
-	return appendUniqueStrings(result, "str_replace", "write_file", "delete_file")
-}
-
-func normalModeExcludedTools(mode string) []string {
-	excluded := appendDefaultEditToolExclusions(mode, prompt.PlanningToolNames)
-	// list_dir は内部フォールバック用
-	return appendUniqueStrings(excluded, "list_dir")
-}
-
-func planModeExcludedTools(mode string) []string {
-	excluded := appendDefaultEditToolExclusions(mode, nil)
-	return appendUniqueStrings(excluded, "list_dir")
-}
-
 func appendUniqueStrings(values []string, extras ...string) []string {
 	seen := make(map[string]struct{}, len(values)+len(extras))
 	for _, value := range values {

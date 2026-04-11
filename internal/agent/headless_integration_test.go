@@ -100,6 +100,7 @@ func TestHeadless_SimpleResponse(t *testing.T) {
 // TestHeadless_SearchCodeTool はsearch_codeツール呼び出しを経由するフローを検証する。
 func TestHeadless_SearchCodeTool(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XELYON_EDIT_TOOL", "str_replace")
 
 	// CWD配下にテスト用ファイルを作成（パスエスケープ検出回避）
 	dir := testSubDir(t)
@@ -145,6 +146,7 @@ func TestHeadless_SearchCodeTool(t *testing.T) {
 func TestHeadless_SearchCodeUsesFreshProjectMapRuntimeAfterEdit(t *testing.T) {
 	homeDir := testWritableHomeDir(t)
 	t.Setenv("HOME", homeDir)
+	t.Setenv("XELYON_EDIT_TOOL", "str_replace")
 	t.Setenv("GOMODCACHE", filepath.Join(homeDir, "go", "pkg", "mod"))
 
 	dir := testSubDir(t)
@@ -190,6 +192,7 @@ func TestHeadless_SearchCodeUsesFreshProjectMapRuntimeAfterEdit(t *testing.T) {
 // TestHeadless_ReadFileTool はread_fileツール呼び出しを経由するフローを検証する。
 func TestHeadless_ReadFileTool(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XELYON_EDIT_TOOL", "str_replace")
 
 	// CWD配下にテスト用ファイルを作成
 	dir := testSubDir(t)
@@ -229,7 +232,7 @@ func TestHeadless_ReadFileTool(t *testing.T) {
 	}
 }
 
-// TestHeadless_ListDirTool はlist_dirツール呼び出しを経由するフローを検証する。
+// TestHeadless_ListDirTool はgather_contextのディレクトリ調査フローを検証する。
 func TestHeadless_ListDirTool(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
@@ -246,7 +249,7 @@ func TestHeadless_ListDirTool(t *testing.T) {
 	provider := &sequenceMockProvider{
 		name: "test-provider",
 		responses: []string{
-			fmt.Sprintf(`{"tool": "list_dir", "args": {"path": %q}}`, dir),
+			fmt.Sprintf(`{"tool": "gather_context", "args": {"query": %q}}`, dir+string(os.PathSeparator)),
 			"The directory contains file1.go and file2.txt",
 		},
 	}
@@ -262,18 +265,18 @@ func TestHeadless_ListDirTool(t *testing.T) {
 	if len(result.ToolCalls) != 1 {
 		t.Fatalf("expected 1 tool call, got %d", len(result.ToolCalls))
 	}
-	if result.ToolCalls[0].Tool != "list_dir" {
-		t.Errorf("expected tool 'list_dir', got %q", result.ToolCalls[0].Tool)
+	if result.ToolCalls[0].Tool != "gather_context" {
+		t.Errorf("expected tool 'gather_context', got %q", result.ToolCalls[0].Tool)
 	}
 	if !result.ToolCalls[0].Success {
-		t.Errorf("expected list_dir to succeed, output: %q", result.ToolCalls[0].Output)
+		t.Errorf("expected gather_context to succeed, output: %q", result.ToolCalls[0].Output)
 	}
-	if !strings.Contains(result.ToolCalls[0].Output, "file1.go") {
-		t.Errorf("expected output to contain 'file1.go', got %q", result.ToolCalls[0].Output)
+	if !strings.Contains(result.ToolCalls[0].Output, "Route: Directory listing") || !strings.Contains(result.ToolCalls[0].Output, "file1.go") {
+		t.Errorf("expected gather_context directory listing output, got %q", result.ToolCalls[0].Output)
 	}
 }
 
-// TestHeadless_MultipleToolCalls は複数のツール呼び出しを順番に実行するフローを検証する。
+// TestHeadless_MultipleToolCalls は複数のgather_context呼び出しを順番に実行するフローを検証する。
 func TestHeadless_MultipleToolCalls(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
@@ -288,8 +291,8 @@ func TestHeadless_MultipleToolCalls(t *testing.T) {
 	provider := &sequenceMockProvider{
 		name: "test-provider",
 		responses: []string{
-			fmt.Sprintf(`{"tool": "list_dir", "args": {"path": %q}}`, dir),
-			fmt.Sprintf(`{"tool": "read_file", "args": {"paths": [%q]}}`, testFile),
+			fmt.Sprintf(`{"tool": "gather_context", "args": {"query": %q}}`, dir+string(os.PathSeparator)),
+			fmt.Sprintf(`{"tool": "gather_context", "args": {"query": %q}}`, testFile),
 			"Directory listing and file reading completed successfully",
 		},
 	}
@@ -305,17 +308,23 @@ func TestHeadless_MultipleToolCalls(t *testing.T) {
 	if len(result.ToolCalls) != 2 {
 		t.Fatalf("expected 2 tool calls, got %d", len(result.ToolCalls))
 	}
-	if result.ToolCalls[0].Tool != "list_dir" {
-		t.Errorf("expected first tool 'list_dir', got %q", result.ToolCalls[0].Tool)
+	if result.ToolCalls[0].Tool != "gather_context" {
+		t.Errorf("expected first tool 'gather_context', got %q", result.ToolCalls[0].Tool)
 	}
-	if result.ToolCalls[1].Tool != "read_file" {
-		t.Errorf("expected second tool 'read_file', got %q", result.ToolCalls[1].Tool)
+	if result.ToolCalls[1].Tool != "gather_context" {
+		t.Errorf("expected second tool 'gather_context', got %q", result.ToolCalls[1].Tool)
 	}
 	if !result.ToolCalls[0].Success {
 		t.Errorf("expected first tool call to succeed, output: %q", result.ToolCalls[0].Output)
 	}
 	if !result.ToolCalls[1].Success {
 		t.Errorf("expected second tool call to succeed, output: %q", result.ToolCalls[1].Output)
+	}
+	if !strings.Contains(result.ToolCalls[0].Output, "data.txt") {
+		t.Errorf("expected first gather_context output to contain directory contents, got %q", result.ToolCalls[0].Output)
+	}
+	if !strings.Contains(result.ToolCalls[1].Output, "important data") {
+		t.Errorf("expected second gather_context output to contain file content, got %q", result.ToolCalls[1].Output)
 	}
 }
 
@@ -356,10 +365,13 @@ func TestHeadless_MaxIterationsReached(t *testing.T) {
 	cfg := newProjectMapDisabledConfig()
 	cfg.General.ToolLoopLimit = 10
 	// 全てのレスポンスがツール呼び出し → 設定した最大10回でループ終了
-	// list_dir に "." を指定してパスエスケープを回避
+	dir := testSubDir(t)
+	if err := os.WriteFile(filepath.Join(dir, "file1.go"), []byte("package a\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 	responses := make([]string, 15)
 	for i := range responses {
-		responses[i] = `{"tool": "list_dir", "args": {"path": "."}}`
+		responses[i] = fmt.Sprintf(`{"tool": "gather_context", "args": {"query": %q}}`, dir+string(os.PathSeparator))
 	}
 	provider := &sequenceMockProvider{
 		name:      "test-provider",
@@ -378,10 +390,10 @@ func TestHeadless_MaxIterationsReached(t *testing.T) {
 	if provider.callCount != 10 {
 		t.Errorf("expected provider to be called 10 times, got %d", provider.callCount)
 	}
-	// 全てのツール呼び出しが list_dir であることを確認
+	// 全てのツール呼び出しが gather_context であることを確認
 	for i, tc := range result.ToolCalls {
-		if tc.Tool != "list_dir" {
-			t.Errorf("expected tool call %d to be 'list_dir', got %q", i, tc.Tool)
+		if tc.Tool != "gather_context" {
+			t.Errorf("expected tool call %d to be 'gather_context', got %q", i, tc.Tool)
 		}
 	}
 }
@@ -389,6 +401,7 @@ func TestHeadless_MaxIterationsReached(t *testing.T) {
 // TestHeadless_ToolError は存在しないファイルへのread_fileでSuccess=falseになることを検証する。
 func TestHeadless_ToolError(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XELYON_EDIT_TOOL", "str_replace")
 
 	// CWD配下に存在しないファイルパスを指定
 	dir := testSubDir(t)
@@ -443,9 +456,9 @@ func TestHeadless_HistoryAccumulation(t *testing.T) {
 	provider := &sequenceMockProvider{
 		name: "test-provider",
 		responses: []string{
-			fmt.Sprintf(`{"tool": "list_dir", "args": {"path": %q}}`, dir),
-			fmt.Sprintf(`{"tool": "read_file", "args": {"paths": [%q]}}`, file1),
-			fmt.Sprintf(`{"tool": "read_file", "args": {"paths": [%q]}}`, file2),
+			fmt.Sprintf(`{"tool": "gather_context", "args": {"query": %q}}`, dir+string(os.PathSeparator)),
+			fmt.Sprintf(`{"tool": "gather_context", "args": {"query": %q}}`, file1),
+			fmt.Sprintf(`{"tool": "gather_context", "args": {"query": %q}}`, file2),
 			"All files have been read in order",
 		},
 	}
@@ -460,7 +473,7 @@ func TestHeadless_HistoryAccumulation(t *testing.T) {
 	}
 
 	// 順序が正しいことを検証
-	expectedTools := []string{"list_dir", "read_file", "read_file"}
+	expectedTools := []string{"gather_context", "gather_context", "gather_context"}
 	for i, expected := range expectedTools {
 		if result.ToolCalls[i].Tool != expected {
 			t.Errorf("tool call %d: expected %q, got %q", i, expected, result.ToolCalls[i].Tool)
@@ -474,17 +487,17 @@ func TestHeadless_HistoryAccumulation(t *testing.T) {
 		}
 	}
 
-	// list_dirの出力にファイル名が含まれていることを検証
+	// gather_context の directory listing 出力にファイル名が含まれていることを検証
 	if !strings.Contains(result.ToolCalls[0].Output, "first.txt") {
-		t.Errorf("expected list_dir output to contain 'first.txt', got %q", result.ToolCalls[0].Output)
+		t.Errorf("expected gather_context directory output to contain 'first.txt', got %q", result.ToolCalls[0].Output)
 	}
 
-	// read_fileの出力にファイル内容が含まれていることを検証
+	// gather_context read 出力にファイル内容が含まれていることを検証
 	if !strings.Contains(result.ToolCalls[1].Output, "first file content") {
-		t.Errorf("expected first read_file output to contain 'first file content', got %q", result.ToolCalls[1].Output)
+		t.Errorf("expected first gather_context output to contain 'first file content', got %q", result.ToolCalls[1].Output)
 	}
 	if !strings.Contains(result.ToolCalls[2].Output, "second file content") {
-		t.Errorf("expected second read_file output to contain 'second file content', got %q", result.ToolCalls[2].Output)
+		t.Errorf("expected second gather_context output to contain 'second file content', got %q", result.ToolCalls[2].Output)
 	}
 
 	// 最終レスポンスが正しいことを検証
@@ -523,8 +536,8 @@ func TestHeadless_OpenAIResponsesUsesPreviousResponseIDAfterToolCall(t *testing.
 
 		if len(requests) == 1 {
 			fmt.Fprintf(w, "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_first\"}}\n\n")
-			fmt.Fprintf(w, "data: {\"type\":\"response.output_item.added\",\"item\":{\"type\":\"function_call\",\"call_id\":\"call_1\",\"name\":\"read_file\"}}\n\n")
-			fmt.Fprintf(w, "data: {\"type\":\"response.function_call_arguments.done\",\"item\":{\"call_id\":\"call_1\",\"arguments\":%q}}\n\n", fmt.Sprintf("{\"paths\":[%q]}", testFile))
+			fmt.Fprintf(w, "data: {\"type\":\"response.output_item.added\",\"item\":{\"type\":\"function_call\",\"call_id\":\"call_1\",\"name\":\"gather_context\"}}\n\n")
+			fmt.Fprintf(w, "data: {\"type\":\"response.function_call_arguments.done\",\"item\":{\"call_id\":\"call_1\",\"arguments\":%q}}\n\n", fmt.Sprintf("{\"query\":%q}", testFile))
 			fmt.Fprintf(w, "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_first\"}}\n\n")
 		} else {
 			fmt.Fprintf(w, "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_second\"}}\n\n")

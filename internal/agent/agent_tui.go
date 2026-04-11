@@ -129,7 +129,7 @@ func defaultToolCollapsed(toolName, result string, isError bool) bool {
 		return false // diff は見たい → 展開
 	case "bash":
 		return true // 成功は折りたたみ
-	case "search_code", "read_file", "read_files":
+	case "gather_context", "search_code", "read_file", "read_files":
 		return true // 結果が長い → 折りたたみ
 	case "web_search":
 		return true // 結果が長い → 折りたたみ

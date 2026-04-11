@@ -77,11 +77,35 @@ func TestRegistry_ExcludedTools(t *testing.T) {
 		t.Error("HasTool(ask_user_question) should be true even when excluded")
 	}
 
+	output, change := r.ExecuteWithContext(ExecutionContext{}, &ToolCall{Tool: "ask_user_question"})
+	if change != nil {
+		t.Fatalf("ExecuteWithContext() change = %+v, want nil", change)
+	}
+	if output != "Error: tool not available in current mode: ask_user_question" {
+		t.Fatalf("ExecuteWithContext() output = %q, want excluded-tool error", output)
+	}
+
+	output, change = r.ExecuteWithContext(ExecutionContext{}, &ToolCall{Tool: "read_file"})
+	if change != nil {
+		t.Fatalf("ExecuteWithContext() change = %+v, want nil", change)
+	}
+	if output != "Success" {
+		t.Fatalf("ExecuteWithContext() output = %q, want Success", output)
+	}
+
 	// ClearExcludedTools で復帰
 	r.ClearExcludedTools()
 	defs = r.GetToolDefinitions()
 	if len(defs) != 2 {
 		t.Errorf("GetToolDefinitions() after clear = %d, want 2", len(defs))
+	}
+
+	output, change = r.ExecuteWithContext(ExecutionContext{}, &ToolCall{Tool: "ask_user_question"})
+	if change != nil {
+		t.Fatalf("ExecuteWithContext() after clear change = %+v, want nil", change)
+	}
+	if output != "Success" {
+		t.Fatalf("ExecuteWithContext() after clear output = %q, want Success", output)
 	}
 }
 

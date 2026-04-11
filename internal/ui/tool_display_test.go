@@ -235,6 +235,23 @@ func TestFormatToolLine_ReadFile(t *testing.T) {
 	}
 }
 
+func TestFormatToolLine_GatherContext(t *testing.T) {
+	line := FormatToolLine(ToolDisplayInfo{
+		ToolName: "gather_context",
+		Args: map[string]string{
+			"query":       "Run",
+			"path":        "internal/agent",
+			"file_filter": "go",
+		},
+		Result: "Route: Structured impact\n\nSearch / Discovery\n...",
+	})
+
+	want := `🧭 gather_context: "Run" in internal/agent [go]`
+	if line != want {
+		t.Fatalf("FormatToolLine() = %q, want %q", line, want)
+	}
+}
+
 func TestFormatToolLine_ReadFile_GoOutline(t *testing.T) {
 	line := FormatToolLine(ToolDisplayInfo{
 		ToolName: "read_file",

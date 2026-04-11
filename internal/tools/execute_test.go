@@ -21,6 +21,11 @@ func TestPreviewToolCall(t *testing.T) {
 		want []string
 	}{
 		{
+			name: "gather_context",
+			tc:   &ToolCall{Tool: "gather_context", Args: map[string]string{"query": "Agent", "path": "internal/agent", "file_filter": "go"}},
+			want: []string{"Query: Agent", "Path: internal/agent", "File filter: go"},
+		},
+		{
 			name: "read_file",
 			tc:   &ToolCall{Tool: "read_file", Args: map[string]string{"paths": `["test.txt"]`}},
 			want: []string{"File: test.txt"},
@@ -130,7 +135,7 @@ func TestIsWriteToolConsistency(t *testing.T) {
 		}
 	}
 
-	readTools := []string{"read_file", "list_dir", "web_search"}
+	readTools := []string{"gather_context", "read_file", "list_dir", "web_search"}
 	for _, tool := range readTools {
 		if IsWriteTool(tool) {
 			t.Errorf("IsWriteTool(%q) = true, want false", tool)

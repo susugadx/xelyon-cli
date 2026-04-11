@@ -2,6 +2,7 @@ package file
 
 import (
 	"github.com/susugadx/xelyon-cli/internal/pathmatch"
+	"github.com/susugadx/xelyon-cli/internal/repomap"
 )
 
 const (
@@ -36,24 +37,24 @@ type listDirBudget struct {
 	remainingEntries int
 }
 
-func summarizeListDir(dirPath, rootPath, relPath string, remain int, matcher *pathmatch.Matcher, budget *listDirBudget, isRoot bool) *listDirSection {
-	section := &listDirSection{relPath: relPath}
-	if budget.remainingEntries <= 0 {
+func summarizeListDir(dirPath, rootPath, filterRoot, relPath string, remain int, matcher *pathmatch.Matcher, fileFilter string, projectMap *repomap.ProjectMap, budget *listDirBudget, isRoot bool) *listDirSection {
+	filterIdx := buildListDirFilterIndex(dirPath, rootPath, filterRoot, matcher, fileFilter, projectMap)
+	tree := buildVisibleListDirTree(dirPath, rootPath, filterRoot, relPath, remain, matcher, fileFilter, filterIdx, isRoot)
+	return summarizeVisibleListDirTree(tree, remain, budget, isRoot)
+}
+
+func summarizeVisibleListDirTree(tree *listDirVisibleNode, remain int, budget *listDirBudget, isRoot bool) *listDirSection {
+	section := &listDirSection{relPath: tree.relPath, readErr: tree.readErr}
+	if budget.remainingEntries <= 0 || tree.readErr != nil {
 		return section
 	}
 
-	dirs, files, err := readVisibleListDirEntries(dirPath, rootPath, matcher)
-	if err != nil {
-		section.readErr = err
+	populateListDirSectionEntries(section, tree, budget, isRoot)
+
+	if remain <= 1 || budget.remainingEntries <= 0 || len(tree.expandedDirs) == 0 {
 		return section
 	}
 
-	populateListDirSectionEntries(section, dirs, files, budget, isRoot)
-
-	if remain <= 1 || budget.remainingEntries <= 0 || len(dirs) == 0 {
-		return section
-	}
-
-	section.subtrees, section.moreSubtree = summarizeListDirSubtrees(dirPath, rootPath, relPath, remain, matcher, budget, dirs)
+	section.subtrees, section.moreSubtree = summarizeListDirSubtrees(tree, remain, budget, isRoot)
 	return section
 }

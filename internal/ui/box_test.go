@@ -12,6 +12,7 @@ func TestGetToolIcon(t *testing.T) {
 		want     string
 	}{
 		// File operations
+		{"gather_context", "🧭"},
 		{"read_file", "📖"},
 		{"write_file", "📝"},
 		{"str_replace", "✏️"},

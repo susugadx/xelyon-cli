@@ -32,6 +32,14 @@ func splitPatterns(pattern string) []string {
 	return result
 }
 
+// HasEffectivePatternList reports whether a comma-separated search query
+// contains at least one non-empty effective pattern after trim and escaped
+// comma handling. High-level tools use this to reject malformed separator-only
+// input before dispatching into search execution.
+func HasEffectivePatternList(pattern string) bool {
+	return len(splitPatterns(pattern)) > 0
+}
+
 func appendPatternIfMissing(patterns []string, pattern string) []string {
 	pattern = strings.TrimSpace(pattern)
 	if pattern == "" {

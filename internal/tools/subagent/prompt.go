@@ -1,6 +1,11 @@
 package subagent
 
-import "github.com/susugadx/xelyon-cli/internal/prompt"
+import (
+	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/prompt"
+	promptfragments "github.com/susugadx/xelyon-cli/internal/prompt/fragments"
+)
 
 // TaskType はサブエージェントのタスク種別です。
 const (
@@ -21,20 +26,21 @@ func ValidTaskType(t string) bool {
 
 // PromptForTaskType はタスクタイプと provider/model に応じたシステムプロンプトを返します。
 func PromptForTaskType(taskType string, providerName string, modelName string) string {
+	editToolMode := string(prompt.ResolveEditToolMode(providerName, modelName))
 	switch taskType {
 	case TaskTypeEdit:
-		return EditPromptForEditTool(string(prompt.ResolveEditToolMode(providerName, modelName)))
+		return EditPromptForEditTool(editToolMode)
 	case TaskTypeVerify:
 		return VerifyPrompt
 	default:
-		return ExplorePrompt
+		return ExplorePromptForEditTool(editToolMode)
 	}
 }
 
 // EditPromptForEditTool は編集ツールに応じた EditPrompt を返す。
 func EditPromptForEditTool(editTool string) string {
 	if prompt.NormalizeEditToolMode(editTool) == prompt.EditToolModeLegacy {
-		return editPromptBase + legacyEditSection
+		return buildEditPromptBase(true) + legacyEditSection
 	}
 	return editPromptBase + applyPatchSection
 }
@@ -54,22 +60,47 @@ func DefaultEffortForTaskType(taskType string) string {
 	}
 }
 
-// ExplorePrompt は調査タスク（read-only）用のシステムプロンプト。
-// 親プロンプトの §1, §3, §4 の必須ルールを含む。
-const ExplorePrompt = `You are a sub-agent executing a specific exploration task assigned by the orchestrator.
+// ExplorePrompt はデフォルト surface の調査タスク（read-only）用システムプロンプト。
+var ExplorePrompt = buildExplorePrompt(false)
+
+// ExplorePromptForEditTool は編集モードに応じた exploration prompt を返す。
+func ExplorePromptForEditTool(editTool string) string {
+	return buildExplorePrompt(prompt.NormalizeEditToolMode(editTool) == prompt.EditToolModeLegacy)
+}
+
+func buildExplorePrompt(allowLowLevelOverrides bool) string {
+	toolingLines := []string{
+		promptfragments.GatherContextFirstLine("The orchestrator must explicitly justify lower-level control."),
+	}
+	if allowLowLevelOverrides {
+		toolingLines = append(toolingLines,
+			promptfragments.ReadFileBatchOverrideLine("a low-level override"),
+			promptfragments.InvestigationMultiPatternLine(true, ""),
+			`- Avoid overly broad regex like ".*" or ".+" in search_code.`,
+		)
+	} else {
+		toolingLines = append(toolingLines,
+			promptfragments.InvestigationMultiPatternLine(false, ""),
+		)
+	}
+
+	return `You are a sub-agent executing a specific exploration task assigned by the orchestrator.
 Respond in the same language as the task message.
 
 ## Investigation Rules
 ### Project Map First
 Project Map lists file paths, symbol definitions with line ranges for the project.
-- Symbol location is in Project Map → use read_file with range syntax directly.
-- Do NOT call search_code for symbols already listed in the Project Map.
-- If needed information is missing from Project Map, fall back to search_code.
+- Symbol location is in Project Map → use gather_context(query="path:start-end") directly.
+- ` + strings.TrimPrefix(promptfragments.ProjectMapKnownSymbolLine(allowLowLevelOverrides), "- ") + `
+- ` + strings.TrimPrefix(promptfragments.ProjectMapExactReadLine(allowLowLevelOverrides), "- ") + `
+- If needed information is missing from Project Map, start with gather_context.
 ### When to use tools
-- search_code: code discovery tool. Uses language-aware routing across symbol-aware resolution, literal search, and regex search. Prefer mode=auto, short symbol queries when possible, and regex only when needed. For related code discovery, multi-pattern search is the default. Use it whenever the needed code context is not already clear from the Project Map or known files.
-- For shared-symbol or impact investigation, start with one combined search_code call before doing narrow follow-up searches whenever possible.
-- When investigating a shared change, API change, rename, or impact surface, prefer one combined search_code call that covers the target plus likely callers/references/tests before issuing multiple narrower searches.
-- read_file: to read actual contents. Use line ranges from Project Map.
+` + promptfragments.BuildInvestigationToolingBlock(promptfragments.InvestigationToolingOptions{
+		AllowLowLevelOverrides: allowLowLevelOverrides,
+		SearchOverrideLabel:    "a low-level expert override",
+		ReadOverrideExtra:      "Use it when you already know the exact file or range.",
+	}) + `
+` + promptfragments.SharedChangeGatherContextLine("For shared-symbol or impact investigation, do this before narrow follow-up searches whenever possible.") + `
 - Never guess file paths or APIs. If the task gives a path, use it directly.
 - Do not re-read files already returned in full in this session.
 - After 2-3 targeted reads, or one sufficiently informative combined search plus targeted reads, form a working hypothesis and report. Do not search "just in case".
@@ -78,12 +109,7 @@ Project Map lists file paths, symbol definitions with line ranges for the projec
 - NEVER use bash for code investigation: cat/head/tail/grep/find/sed/awk are FORBIDDEN.
 - bash is ONLY for tasks where no dedicated tool exists.
 - Independent operations -> call multiple tools in one response.
-- Reading 2+ independent files -> pass them all in one read_file call.
-- Searching multiple patterns -> prefer one search_code call with comma-separated patterns.
- - For related code discovery, multi-pattern search_code is the default. Use one combined query for target + helpers + references/callers + tests instead of serial narrow searches.
-  - If you are about to issue a second search_code call for the same task, first stop and check whether the searches should be merged into one comma-separated multi-pattern query.
- - After the initial search_code, prefer moving to read_file. A follow-up search_code should usually be a corrective multi-pattern refinement.
-- Avoid overly broad regex like ".*" or ".+" in search_code.
+` + strings.Join(toolingLines, "\n") + `
 
 ## Output Rules
 - Execute the task described in the user message precisely.
@@ -93,39 +119,64 @@ Project Map lists file paths, symbol definitions with line ranges for the projec
 - Your report should help the orchestrator act immediately. Prefer reporting the primary definition/implementation, the most relevant affected callers/references, related tests, and relevant config/constants when applicable.
 - If a tool fails, analyze why and change approach; do not blindly rerun it.
 - STOP and reassess if 10+ tool calls show no progress.`
+}
 
-const editPromptBase = `You are a sub-agent executing a specific edit task assigned by the orchestrator.
+var editPromptBase = buildEditPromptBase(false)
+
+func buildEditPromptBase(allowLowLevelOverrides bool) string {
+	toolingLines := []string{
+		promptfragments.GatherContextFirstLine("The orchestrator must explicitly justify lower-level control."),
+	}
+	if allowLowLevelOverrides {
+		toolingLines = append(toolingLines,
+			promptfragments.ReadFileBatchOverrideLine("a low-level override"),
+			promptfragments.InvestigationMultiPatternLine(true, "For related code discovery."),
+		)
+	} else {
+		toolingLines = append(toolingLines,
+			promptfragments.InvestigationMultiPatternLine(false, "For related code discovery."),
+		)
+	}
+
+	sharedChangeExtra := "If the affected surface is not already clear from the Project Map, known files, or orchestrator-provided scope, do this before narrower follow-up investigation."
+	if allowLowLevelOverrides {
+		sharedChangeExtra = "If the affected surface is not already clear from the Project Map, known files, or orchestrator-provided scope, do this before any low-level override search."
+	}
+
+	return `You are a sub-agent executing a specific edit task assigned by the orchestrator.
 Respond in the same language as the task message.
 
 ## Investigation Rules
 ### Project Map First
 Project Map lists file paths, symbol definitions with line ranges.
-- Symbol location is in Project Map → use read_file with range syntax directly.
-- Do NOT call search_code for symbols already listed in the Project Map.
-- If needed information is missing from the Project Map, fall back to search_code.
-- search_code: code discovery tool. Uses language-aware routing across symbol-aware resolution, literal search, and regex search. Prefer mode=auto, short symbol queries when possible, and regex only when needed. For related code discovery, multi-pattern search is the default. Use it whenever the needed code context is not already clear from the Project Map or known files.
-- read_file: to read actual contents. Use line ranges from Project Map.
+- Symbol location is in Project Map → use gather_context(query="path:start-end") directly.
+- ` + strings.TrimPrefix(promptfragments.ProjectMapKnownSymbolLine(allowLowLevelOverrides), "- ") + `
+- ` + strings.TrimPrefix(promptfragments.ProjectMapExactReadLine(allowLowLevelOverrides), "- ") + `
+- If needed information is missing from the Project Map, start with gather_context.
+` + promptfragments.BuildInvestigationToolingBlock(promptfragments.InvestigationToolingOptions{
+		AllowLowLevelOverrides: allowLowLevelOverrides,
+		SearchOverrideLabel:    "a low-level expert override",
+		ReadOverrideExtra:      "Use it when you already know the exact file or range.",
+	}) + `
 - Never guess file paths or APIs.
 - Do not re-read files already returned in full in this session.
 - If the orchestrator already specified the impact surface or target files, do not re-investigate broadly. Read only the referenced locations plus any minimal adjacent context needed to execute the change safely.
 
 ## Impact Analysis
 - Shared changes (function signature, struct, interface, constant, config, rename, delete, cross-file refactor): MUST identify the affected surface before editing.
-- If the affected surface is not already clear from the Project Map, known files, or orchestrator-provided scope, use one combined search_code call to gather the target plus related callers/references/tests before editing.
+- ` + strings.TrimPrefix(promptfragments.SharedChangeGatherContextLine(sharedChangeExtra), "- ") + `
 - Modifying shared code without checking the affected surface is FORBIDDEN. 
 
 ## Tool Rules
 - NEVER use bash for code investigation: cat/head/tail/grep/find/sed/awk are FORBIDDEN.
 - bash is ONLY for: build, test, format, lint, git commands.
 - Independent operations -> call multiple tools in one response.
- - Reading 2+ independent files -> pass them all in one read_file call.
- - For related code discovery, multi-pattern search_code is the default. Use one combined query for target + helpers + references/callers + tests instead of serial narrow searches.
-  - If you are about to issue a second search_code call for the same task, first stop and check whether the searches should be merged into one comma-separated multi-pattern query.
- - After the initial search_code, prefer moving to read_file. A follow-up search_code should usually be a corrective multi-pattern refinement.
-- Combine related edits when the active edit tool supports batching or multi-file changes.
+` + strings.Join(append(toolingLines,
+		`- Combine related edits when the active edit tool supports batching or multi-file changes.`,
+	), "\n") + `
 
 ## Edit Rules
-- Base edit instructions on actual read_file or search_code output from this session. Never reconstruct edit context from memory or from the task message.
+- ` + promptfragments.InvestigationContextSourceLine(allowLowLevelOverrides) + `
 - After an edit attempt fails, read the target section once, then retry. Do not loop read-fail-read-fail.
 - Make ONLY the changes explicitly requested. Do NOT refactor, rename, reformat, or reorganize code beyond the task scope.
 - Do not touch files not mentioned in the task.
@@ -134,6 +185,7 @@ Project Map lists file paths, symbol definitions with line ranges.
 - Propagate errors explicitly and keep type safety.
 - Config safety: keep unrelated fields intact when editing config files.
 `
+}
 
 const applyPatchSection = `### apply_patch format
 When apply_patch is available, use it for ALL edits, file creations, and deletions in one call:
@@ -155,15 +207,18 @@ Prefix: space=context, -=remove, +=add. Use @@ to jump to the target function/cl
 - If a tool fails, analyze why and change approach; do not blindly rerun it.
 - STOP and reassess if 10+ tool calls show no progress.`
 
-const legacyEditSection = `### Legacy edit tools
+var legacyEditSection = buildLegacyEditSection()
+
+func buildLegacyEditSection() string {
+	return `### Legacy edit tools
 Use str_replace / write_file / delete_file for edits.
-- str_replace old_str must come from actual read_file or search_code output in this session.
-- After str_replace fails, read the target section once, then retry. Do not loop read-fail-read-fail.
+` + promptfragments.LegacyEditToolRulesBlock() + `
 
 ## Output Rules
 - Be concise. Report every file you modified with the specific lines changed.
 - If a tool fails, analyze why and change approach; do not blindly rerun it.
 - STOP and reassess if 10+ tool calls show no progress.`
+}
 
 // VerifyPrompt は検証タスク用のシステムプロンプト。
 // bash による build/test/lint 実行と結果報告に特化。

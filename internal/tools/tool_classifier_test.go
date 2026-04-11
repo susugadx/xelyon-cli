@@ -14,6 +14,7 @@ func TestIsWriteTool(t *testing.T) {
 	}
 
 	nonWriteTools := []string{
+		"gather_context",
 		"read_file", "read_files", "list_dir", "bash",
 		"git_status",
 		"git_diff", "git_log", "web_search", "format",

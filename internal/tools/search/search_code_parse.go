@@ -56,7 +56,7 @@ outer:
 		case "begin":
 			var data rgBeginData
 			if err := json.Unmarshal(entry.Data, &data); err == nil {
-				currentFile = data.Path.Text
+				currentFile = normalizeSearchResultFilePath(data.Path.Text)
 				if _, exists := fileMap[currentFile]; !exists {
 					fileMap[currentFile] = &SearchResult{FilePath: currentFile}
 					fileOrder = append(fileOrder, currentFile)
@@ -68,7 +68,7 @@ outer:
 			if err := json.Unmarshal(entry.Data, &data); err == nil {
 				filePath := currentFile
 				if data.Path.Text != "" {
-					filePath = data.Path.Text
+					filePath = normalizeSearchResultFilePath(data.Path.Text)
 				}
 				if _, exists := fileMap[filePath]; !exists {
 					fileMap[filePath] = &SearchResult{FilePath: filePath}
@@ -94,7 +94,7 @@ outer:
 			if err := json.Unmarshal(entry.Data, &data); err == nil {
 				filePath := currentFile
 				if data.Path.Text != "" {
-					filePath = data.Path.Text
+					filePath = normalizeSearchResultFilePath(data.Path.Text)
 				}
 				if _, exists := fileMap[filePath]; !exists {
 					fileMap[filePath] = &SearchResult{FilePath: filePath}
@@ -217,9 +217,13 @@ func tryParseGrepMatch(line, sep string) (filePath string, lineNum int, content 
 			continue
 		}
 
-		filePath = line[:pos]
+		filePath = normalizeSearchResultFilePath(line[:pos])
 		lineNum = n
 		content = line[numEnd+len(sep):]
 		return filePath, lineNum, content, true
 	}
+}
+
+func normalizeSearchResultFilePath(filePath string) string {
+	return cleanFileFilterPath(filePath)
 }

@@ -104,21 +104,22 @@ func printBoxLineToWriter(out io.Writer, text string, width int) {
 // getToolIcon はツール名に対応するアイコンを返す
 func getToolIcon(toolName string) string {
 	icons := map[string]string{
-		"read_file":   "📖",
-		"write_file":  "📝",
-		"str_replace": "✏️",
-		"delete_file": "🗑️",
-		"copy_file":   "📋",
-		"list_dir":    "📁",
-		"bash":        "💻",
-		"git_add":     "➕",
-		"git_push":    "🚀",
-		"git_status":  "📊",
-		"git_diff":    "📄",
-		"git_log":     "📜",
-		"git_branch":  "🌿",
-		"git_stash":   "📥",
-		"web_search":  "🌐",
+		"gather_context": "🧭",
+		"read_file":      "📖",
+		"write_file":     "📝",
+		"str_replace":    "✏️",
+		"delete_file":    "🗑️",
+		"copy_file":      "📋",
+		"list_dir":       "📁",
+		"bash":           "💻",
+		"git_add":        "➕",
+		"git_push":       "🚀",
+		"git_status":     "📊",
+		"git_diff":       "📄",
+		"git_log":        "📜",
+		"git_branch":     "🌿",
+		"git_stash":      "📥",
+		"web_search":     "🌐",
 	}
 
 	if icon, ok := icons[toolName]; ok {

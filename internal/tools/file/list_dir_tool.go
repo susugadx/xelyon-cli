@@ -29,5 +29,5 @@ func (t *ListDirTool) Run(execCtx tools.ExecutionContext, args map[string]string
 			depth = n
 		}
 	}
-	return ExecuteListDirWithRuntime(execCtx.EffectiveConfig(), execCtx.EffectiveToolCache(), args["path"], depth), nil, nil
+	return ExecuteListDirWithContext(execCtx, args["path"], depth), nil, nil
 }

@@ -17,7 +17,7 @@ import (
 
 // verificationSafeCommands はビルド・テスト・検証・環境確認用の安全コマンド。
 // コード探索系（grep, find, cat, head, tail, sed -n 等）は含めない。
-// 探索は search_code / read_file / list_dir 等の専用ツールを使う。
+// 探索は gather_context を第一選択にし、必要時のみ低レベル investigation tool を使う。
 var verificationSafeCommands = map[string]bool{
 	// 環境確認
 	"pwd": true, "echo": true, "which": true, "env": true, "printenv": true,
@@ -406,7 +406,7 @@ func checkAndConfirmBash(promptIO ui.PromptIO, cfg *config.Config, command strin
 		out.Cyan.Printf("🔍 Discovery Shell / 探索系シェルコマンド\n")
 		out.Cyan.Printf("📜 Command / コマンド: %s\n", command)
 		out.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		out.Yellow.Println("💡 Tip: Use search_code / read_file / list_dir instead of bash for code exploration")
+		out.Yellow.Println("💡 Tip: Use gather_context first for code exploration; fall back to read_file/search_code/list_dir only when you need exact low-level control")
 		reason, msg, ok := confirmBashPromptWithReason(promptIO, command)
 		return reason, msg, ok
 	}

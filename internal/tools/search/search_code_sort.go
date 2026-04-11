@@ -1,7 +1,6 @@
 package search
 
 import (
-	"path/filepath"
 	"sort"
 
 	"github.com/susugadx/xelyon-cli/internal/repomap"
@@ -25,43 +24,11 @@ func filterResultsByOptions(results []SearchResult, opts SearchOptions) []Search
 }
 
 func matchesSearchFileFilter(filePath string, opts SearchOptions) bool {
-	glob := opts.FilePattern
-	if opts.FileType != "" {
-		if typeGlob, ok := fileTypeToGlob(opts.FileType); ok {
-			glob = typeGlob
-		}
-	}
-	if glob == "" {
-		return true
-	}
-
-	cleanPath := filepath.ToSlash(filePath)
-	base := filepath.Base(cleanPath)
-	if matched, err := filepath.Match(glob, base); err == nil && matched {
-		return true
-	}
-	if matched, err := filepath.Match(glob, cleanPath); err == nil && matched {
-		return true
-	}
-	return false
-}
-
-func fileTypeToGlob(fileType string) (string, bool) {
-	typeToGlob := map[string]string{
-		"go":    "*.go",
-		"py":    "*.py",
-		"js":    "*.js",
-		"ts":    "*.ts",
-		"rust":  "*.rs",
-		"java":  "*.java",
-		"c":     "*.c",
-		"cpp":   "*.cpp",
-		"rb":    "*.rb",
-		"php":   "*.php",
-		"swift": "*.swift",
-	}
-	glob, ok := typeToGlob[fileType]
-	return glob, ok
+	return matchesFileFilterParts(
+		searchFileFilterMatchPathWithWorkspace(filePath, opts.Path, resolveSearchWorkspaceRoot(opts)),
+		opts.FileType,
+		opts.FilePattern,
+	)
 }
 
 func mergeContextLines(results []SearchResult) []SearchResult {

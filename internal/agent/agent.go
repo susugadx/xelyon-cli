@@ -30,6 +30,7 @@ import (
 	_ "github.com/susugadx/xelyon-cli/internal/tools/applypatch"
 	toolsdev "github.com/susugadx/xelyon-cli/internal/tools/dev"
 	_ "github.com/susugadx/xelyon-cli/internal/tools/file"
+	_ "github.com/susugadx/xelyon-cli/internal/tools/gathercontext"
 	_ "github.com/susugadx/xelyon-cli/internal/tools/navigation"
 	_ "github.com/susugadx/xelyon-cli/internal/tools/planning"
 	_ "github.com/susugadx/xelyon-cli/internal/tools/search"
@@ -224,7 +225,7 @@ func NewAgentWithRuntime(model string, provider api.Provider, headless bool, run
 		}
 	}
 
-	editToolMode := ResolveEditToolMode(provider.Name(), model)
+	toolVisibility := resolveToolVisibilityPolicy(provider.Name(), model, toolSurfacePhaseNormal, toolVisibilityOptions{allowSubAgents: true})
 	systemPrompt := prompt.GetSystemPromptForProvider(provider.Name(), model)
 
 	// MCPツールをSystemPromptに追加
@@ -278,7 +279,7 @@ func NewAgentWithRuntime(model string, provider api.Provider, headless bool, run
 	// （Function Calling経由で呼び出し可能にする）
 	configureMCPTools(provider, mcpManager.GetTools(), errOut)
 
-	runtime.effectiveRegistry().SetExcludedTools(normalModeExcludedTools(editToolMode))
+	runtime.effectiveRegistry().SetExcludedTools(toolVisibility.excluded())
 
 	// プロバイダー別プレフィックスを Workflow Rules の直前に注入
 	systemPrompt = prompt.BuildProviderSystemPromptWithConfig(systemPrompt, provider.Name(), model, runtime.effectiveConfig())

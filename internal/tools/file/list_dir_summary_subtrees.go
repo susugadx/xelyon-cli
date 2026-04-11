@@ -1,27 +1,16 @@
 package file
 
-import (
-	"os"
-	"path/filepath"
+import "path/filepath"
 
-	"github.com/susugadx/xelyon-cli/internal/pathmatch"
-)
-
-func summarizeListDirSubtrees(dirPath, rootPath, relPath string, remain int, matcher *pathmatch.Matcher, budget *listDirBudget, dirs []os.DirEntry) ([]*listDirSection, int) {
-	_, _, subtreeLimit := listDirDisplayLimits(relPath == "")
-	expandCount := minInt(len(dirs), subtreeLimit)
-
-	subtrees := make([]*listDirSection, 0, expandCount)
-	for i := 0; i < expandCount && budget.remainingEntries > 0; i++ {
-		dirName := dirs[i].Name()
-		childRelPath := joinListDirRelPath(relPath, dirName)
-		childPath := filepath.Join(dirPath, dirName)
-		subtrees = append(subtrees, summarizeListDir(childPath, rootPath, childRelPath, remain-1, matcher, budget, false))
+func summarizeListDirSubtrees(tree *listDirVisibleNode, remain int, budget *listDirBudget, isRoot bool) ([]*listDirSection, int) {
+	subtrees := make([]*listDirSection, 0, len(tree.expandedDirs))
+	for i := 0; i < len(tree.expandedDirs) && budget.remainingEntries > 0; i++ {
+		subtrees = append(subtrees, summarizeVisibleListDirTree(tree.expandedDirs[i], remain-1, budget, false))
 	}
 
 	moreSubtree := 0
-	if len(dirs) > len(subtrees) {
-		moreSubtree = len(dirs) - len(subtrees)
+	if len(tree.dirs) > len(subtrees) {
+		moreSubtree = len(tree.dirs) - len(subtrees)
 	}
 	return subtrees, moreSubtree
 }
