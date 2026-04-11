@@ -21,12 +21,8 @@ func TestSummarizeListDirSubtrees_RootLimitAndMoreCount(t *testing.T) {
 		}
 	}
 
-	dirs, _, err := readVisibleListDirEntries(tmpDir, tmpDir, pathmatch.NewMatcher(nil))
-	if err != nil {
-		t.Fatalf("readVisibleListDirEntries failed: %v", err)
-	}
-
-	subtrees, more := summarizeListDirSubtrees(tmpDir, tmpDir, "", 2, pathmatch.NewMatcher(nil), &listDirBudget{remainingEntries: maxEntries}, dirs)
+	tree := buildVisibleListDirTree(tmpDir, tmpDir, tmpDir, "", 2, pathmatch.NewMatcher(nil), "", nil, true)
+	subtrees, more := summarizeListDirSubtrees(tree, 2, &listDirBudget{remainingEntries: maxEntries}, true)
 	if len(subtrees) != maxRootSubtreesShown {
 		t.Fatalf("expected %d subtrees, got %d", maxRootSubtreesShown, len(subtrees))
 	}
@@ -47,17 +43,13 @@ func TestSummarizeListDirSubtrees_StopsWhenBudgetExhausted(t *testing.T) {
 		}
 	}
 
-	dirs, _, err := readVisibleListDirEntries(tmpDir, tmpDir, pathmatch.NewMatcher(nil))
-	if err != nil {
-		t.Fatalf("readVisibleListDirEntries failed: %v", err)
-	}
-
-	subtrees, more := summarizeListDirSubtrees(tmpDir, tmpDir, "", 2, pathmatch.NewMatcher(nil), &listDirBudget{remainingEntries: 0}, dirs)
+	tree := buildVisibleListDirTree(tmpDir, tmpDir, tmpDir, "", 2, pathmatch.NewMatcher(nil), "", nil, true)
+	subtrees, more := summarizeListDirSubtrees(tree, 2, &listDirBudget{remainingEntries: 0}, true)
 	if len(subtrees) != 0 {
 		t.Fatalf("expected no expanded subtrees, got %d", len(subtrees))
 	}
-	if more != len(dirs) {
-		t.Fatalf("expected %d remaining subtrees, got %d", len(dirs), more)
+	if more != len(tree.dirs) {
+		t.Fatalf("expected %d remaining subtrees, got %d", len(tree.dirs), more)
 	}
 }
 
@@ -69,12 +61,8 @@ func TestSummarizeListDirSubtrees_PreservesNestedRelPath(t *testing.T) {
 		t.Fatalf("failed to create nested dir: %v", err)
 	}
 
-	dirs, _, err := readVisibleListDirEntries(parentDir, tmpDir, pathmatch.NewMatcher(nil))
-	if err != nil {
-		t.Fatalf("readVisibleListDirEntries failed: %v", err)
-	}
-
-	subtrees, more := summarizeListDirSubtrees(parentDir, tmpDir, "parent/", 2, pathmatch.NewMatcher(nil), &listDirBudget{remainingEntries: maxEntries}, dirs)
+	tree := buildVisibleListDirTree(parentDir, tmpDir, tmpDir, "parent/", 2, pathmatch.NewMatcher(nil), "", nil, false)
+	subtrees, more := summarizeListDirSubtrees(tree, 2, &listDirBudget{remainingEntries: maxEntries}, false)
 	if more != 0 {
 		t.Fatalf("expected no remaining subtrees, got %d", more)
 	}

@@ -75,7 +75,7 @@ func classifyMatch(line string) MatchType {
 
 // reclassifyWithAST は Go ファイルの検索結果を AST ベースで再分類する。
 // 非 Go ファイル、または targetName を抽出できない regex パターンはスキップする。
-func reclassifyWithAST(results []SearchResult, pattern string, isRegex bool) {
+func reclassifyWithAST(results []SearchResult, pattern string, isRegex bool, opts SearchOptions) {
 	targetName := extractTargetName(pattern, isRegex)
 	if targetName == "" {
 		return
@@ -83,11 +83,15 @@ func reclassifyWithAST(results []SearchResult, pattern string, isRegex bool) {
 
 	for i := range results {
 		r := &results[i]
-		if !internalast.IsSupportedFile(r.FilePath) {
+		absPath := absoluteAffectedFilePath(r.FilePath, opts, affectedFileSourceText)
+		if absPath == "" {
+			absPath = r.FilePath
+		}
+		if !internalast.IsSupportedFile(absPath) {
 			continue
 		}
 
-		src, err := os.ReadFile(r.FilePath)
+		src, err := os.ReadFile(absPath)
 		if err != nil {
 			continue
 		}
@@ -98,7 +102,7 @@ func reclassifyWithAST(results []SearchResult, pattern string, isRegex bool) {
 				continue
 			}
 
-			info, err := internalast.ClassifyLine(r.FilePath, src, m.LineNum, targetName)
+			info, err := internalast.ClassifyLine(absPath, src, m.LineNum, targetName)
 			if err != nil {
 				continue
 			}

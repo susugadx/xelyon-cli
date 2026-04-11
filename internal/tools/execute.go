@@ -19,6 +19,14 @@ import (
 // printToolArgs はツールの引数を簡潔に表示する（Execute/PreviewToolCallで共通使用）
 func printToolArgs(w io.Writer, tc *ToolCall) {
 	switch tc.Tool {
+	case "gather_context":
+		_, _ = fmt.Fprintf(w, "   Query: %s\n", truncate(tc.Args["query"], 60))
+		if tc.Args["path"] != "" {
+			_, _ = fmt.Fprintf(w, "   Path: %s\n", tc.Args["path"])
+		}
+		if tc.Args["file_filter"] != "" {
+			_, _ = fmt.Fprintf(w, "   File filter: %s\n", tc.Args["file_filter"])
+		}
 	case "read_file":
 		_, _ = fmt.Fprintf(w, "   %s\n", formatReadFilePreviewArg(tc.Args))
 	case "write_file":

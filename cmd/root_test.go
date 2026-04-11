@@ -484,11 +484,14 @@ func TestRootCommand_HeadlessJSONStdoutIsPureJSON(t *testing.T) {
 		_ = os.Chdir(origDir)
 	})
 
-	targetPath := filepath.Join(tempDir, "output.txt")
+	targetPath := filepath.Join(tempDir, "input.txt")
+	if err := os.WriteFile(targetPath, []byte("hello from headless\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
 	provider := &headlessSequenceProvider{
 		name: "headless-seq",
 		responses: []string{
-			fmt.Sprintf(`{"tool":"write_file","args":{"path":%q,"content":%q}}`, targetPath, "hello from headless"),
+			fmt.Sprintf(`{"tool":"gather_context","args":{"query":%q}}`, targetPath),
 			"done",
 		},
 	}
@@ -532,8 +535,8 @@ func TestRootCommand_HeadlessJSONStdoutIsPureJSON(t *testing.T) {
 	if parsed["status"] != "success" {
 		t.Fatalf("status = %v, want success", parsed["status"])
 	}
-	if _, err := os.Stat(targetPath); err != nil {
-		t.Fatalf("expected write_file to create %s: %v", targetPath, err)
+	if parsed["response"] != "done" {
+		t.Fatalf("response = %v, want done", parsed["response"])
 	}
 }
 

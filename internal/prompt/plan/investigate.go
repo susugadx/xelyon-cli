@@ -1,10 +1,37 @@
 package plan
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+
+	promptfragments "github.com/susugadx/xelyon-cli/internal/prompt/fragments"
+)
 
 // BuildInvestigationPrompt generates the prompt for the investigation phase.
 // userRequest is the original user request to investigate.
-func BuildInvestigationPrompt(userRequest string) string {
+func BuildInvestigationPrompt(userRequest string, allowLowLevelOverrides bool) string {
+	allowedTools := promptfragments.InvestigationAllowedToolsLine(allowLowLevelOverrides)
+	checklistLines := []string{
+		promptfragments.BuildInvestigationToolingBlock(promptfragments.InvestigationToolingOptions{
+			AllowLowLevelOverrides: allowLowLevelOverrides,
+			SearchOverrideLabel:    "a low-level expert override",
+			ReadOverrideExtra:      "Use it only when you already know the exact file or range.",
+			IncludeBatchRead:       true,
+			BatchReadOverrideLabel: "a low-level override",
+		}),
+		`- If the Project Map already gives an exact file or range, pass that exact target to gather_context(query="...").`,
+		`- Prefer parallel investigation: batch independent gather_context/web_search steps in one response`,
+		promptfragments.SharedChangeGatherContextLine(""),
+		`- For local changes (single function, local bug fix): read the target, check for immediate dependencies, then plan`,
+		`- For shared changes (interface, public API, config, rename, delete): find ALL usages, dependencies, and tests before planning`,
+		`- Check for existing patterns to follow`,
+		`- Avoid broad exploration when the target is already clear`,
+	}
+	if allowLowLevelOverrides {
+		checklistLines = append(checklistLines[:2], append([]string{promptfragments.LowLevelOverridesWhenExposedLine()}, checklistLines[2:]...)...)
+	}
+	checklist := strings.Join(checklistLines, "\n")
+
 	return fmt.Sprintf(`USER REQUEST: %s
 
 You are in PLAN MODE (Investigation Phase).
@@ -12,26 +39,16 @@ You are in PLAN MODE (Investigation Phase).
 ### READ-ONLY ONLY
 Modification tools are FORBIDDEN: apply_patch, write_file, str_replace, delete_file
 
-Allowed: search_code, read_file, web_search, bash (read-only git commands only: git status, git diff, git log)
+%s
 
 ### INVESTIGATION CHECKLIST
--  Use search_code for code discovery. It uses language-aware routing across symbol-aware resolution, literal search, and regex search. Prefer mode=auto, short symbol queries when possible, and regex only when needed.
--  Use read_file for detailed implementation context
-- Prefer parallel investigation: batch independent read_file/search_code steps in one response
-- Reading 2+ independent files -> one read_file call with all paths
-- Searching multiple independent patterns -> prefer one search_code call with comma-separated patterns
-  - For related code discovery, multi-pattern search_code is the default. Use one combined query for target + helpers + references/callers + tests instead of serial narrow searches.
-   - If you are about to issue a second search_code call for the same task, first stop and check whether the searches should be merged into one comma-separated multi-pattern query.
-  - After the initial search_code, prefer moving to read_file. A follow-up search_code should usually be a corrective multi-pattern refinement.
-- For local changes (single function, local bug fix): read the target, check for immediate dependencies, then plan
-- For shared changes (interface, public API, config, rename, delete): find ALL usages, dependencies, and tests before planning
-- Check for existing patterns to follow
-- Avoid broad exploration when the target is already clear
+%s
 
 ### EXAMPLES
-- Symbol review -> search_code(pattern="chatCore", path="internal/agent/agent_chat.go")
-- Need implementation + tests -> read_file(paths=["impl.go", "impl_test.go"])
-- Broad pattern search -> search_code(pattern="handleError,validateInput")
+- Symbol review -> gather_context(query="chatCore", path="internal/agent/agent_chat.go")
+- Need implementation + tests -> gather_context(query="impl.go,impl_test.go", path="pkg", file_filter="go")
+- Direct file read -> gather_context(query="internal/agent/agent.go:161-328")
+- Directory summary -> gather_context(query="internal/tools/search")
 
 ### AFTER INVESTIGATION
 When ready, output your implementation plan as text that includes a single JSON object matching the Plan schema.
@@ -40,7 +57,7 @@ When ready, output your implementation plan as text that includes a single JSON 
 - Do NOT create steps like "investigate X" or "read file Y"
 - Each step should be an ACTION that modifies the codebase
 
-Start investigation now.`, userRequest)
+Start investigation now.`, userRequest, allowedTools, checklist)
 }
 
 // BuildPlanRequestMessage generates the system message asking for a plan

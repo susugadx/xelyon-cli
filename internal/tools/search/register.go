@@ -58,7 +58,7 @@ func (t *SearchCodeTool) Parameters() map[string]interface{} {
 				"description": "Optional high-level intent. intent=impact prefers a structured Go single-symbol impact path when available; otherwise it falls back to a conservative related multi-pattern search. Already comma-separated patterns are used as-is.",
 			},
 			"path":        map[string]interface{}{"type": "string", "description": "Directory or file to search in (default: current directory)"},
-			"file_filter": map[string]interface{}{"type": "string", "description": "Filter by language type (e.g. go, py, ts) or glob pattern (e.g. *_test.go, Dockerfile*). Glob characters (*, ?, [) trigger glob mode, otherwise uses rg --type."},
+			"file_filter": map[string]interface{}{"type": "string", "description": "Filter by language type (e.g. go, py, ts) or glob pattern (e.g. *_test.go, Dockerfile*). Glob characters (*, ?, [) trigger glob mode; otherwise uses the built-in ripgrep-like file type mapping defined by the tool."},
 			"mode": map[string]interface{}{
 				"type":        "string",
 				"enum":        []string{"auto", "symbol", "literal", "regex"},
@@ -82,11 +82,7 @@ func (t *SearchCodeTool) Run(execCtx tools.ExecutionContext, args map[string]str
 		Mode:    string(SearchModeAuto),
 	}
 	if filter := args["file_filter"]; filter != "" {
-		if containsGlobChar(filter) {
-			opts.FilePattern = filter
-		} else {
-			opts.FileType = filter
-		}
+		opts.FileType, opts.FilePattern = ParseRawFileFilter(filter)
 	}
 
 	if mode := args["mode"]; mode != "" {

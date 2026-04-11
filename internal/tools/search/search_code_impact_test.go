@@ -66,6 +66,24 @@ func TestSplitPatterns(t *testing.T) {
 	}
 }
 
+func TestHasEffectivePatternList(t *testing.T) {
+	tests := []struct {
+		pattern string
+		want    bool
+	}{
+		{pattern: "", want: false},
+		{pattern: " , ", want: false},
+		{pattern: `\,`, want: true},
+		{pattern: "A, B", want: true},
+	}
+
+	for _, tt := range tests {
+		if got := HasEffectivePatternList(tt.pattern); got != tt.want {
+			t.Fatalf("HasEffectivePatternList(%q) = %v, want %v", tt.pattern, got, tt.want)
+		}
+	}
+}
+
 func TestExpandImpactPatterns(t *testing.T) {
 	got := expandImpactPatterns("NewAgent", SearchOptions{Intent: "impact"})
 	want := []string{"NewAgent", "NewAgentImpl"}

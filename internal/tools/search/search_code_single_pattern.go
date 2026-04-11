@@ -107,7 +107,7 @@ func executeSinglePatternDetailed(cache tools.ToolCacheInterface, pattern string
 		results = parseGrepOutput(output, 0)
 	}
 	results = filterResultsByOptions(results, textOpts)
-	reclassifyWithAST(results, pattern, textOpts.IsRegex)
+	reclassifyWithAST(results, pattern, textOpts.IsRegex, textOpts)
 
 	if len(results) == 0 {
 		if len(warnings) > 0 {
@@ -118,7 +118,7 @@ func executeSinglePatternDetailed(cache tools.ToolCacheInterface, pattern string
 
 	if opts.OutputMode == "manifest" {
 		sortResultsByPriority(results)
-		detectBlocksWithCache(cache, results)
+		detectBlocksWithCache(cache, results, textOpts)
 		formatted := formatManifestResultsWithOptions(results, opts.LocatorRegistry, opts)
 		finalOutput := formatted
 		if len(warnings) > 0 {
@@ -139,7 +139,7 @@ func executeSinglePatternDetailed(cache tools.ToolCacheInterface, pattern string
 
 	results, truncated := truncateToTokenBudget(results, opts.TokenBudget, false)
 
-	detectBlocksWithCache(cache, results)
+	detectBlocksWithCache(cache, results, textOpts)
 
 	formatted := formatSearchResultsWithOptions(results, truncated, opts.TokenBudget, opts.LocatorRegistry, opts)
 	finalOutput := formatted

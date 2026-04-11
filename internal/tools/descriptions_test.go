@@ -14,7 +14,7 @@ func TestToolDescriptions_AllKeysNonEmpty(t *testing.T) {
 }
 
 func TestToolDescriptions_ExpectedToolCount(t *testing.T) {
-	expected := 11
+	expected := 12
 	if len(ToolDescriptions) != expected {
 		t.Errorf("ToolDescriptions has %d entries, want %d", len(ToolDescriptions), expected)
 	}
@@ -22,6 +22,7 @@ func TestToolDescriptions_ExpectedToolCount(t *testing.T) {
 
 func TestToolDescriptions_KnownToolsExist(t *testing.T) {
 	knownTools := []string{
+		"gather_context",
 		"read_file", "write_file", "str_replace", "delete_file", "list_dir",
 		"search_code", "web_search",
 		"bash",
@@ -41,20 +42,33 @@ func TestToolDescriptions_InspectSymbolNotPublic(t *testing.T) {
 	}
 }
 
-func TestToolDescriptions_ListDirMentionsCompactSummaryAndNextChoice(t *testing.T) {
+func TestToolDescriptions_GatherContextIsPrimaryInvestigationTool(t *testing.T) {
+	desc := ToolDescriptions["gather_context"]
+	if !strings.Contains(desc, "Primary investigation tool") {
+		t.Error("gather_context description should mark it as the primary investigation tool")
+	}
+	if !strings.Contains(desc, "structured impact") {
+		t.Error("gather_context description should mention structured impact routing")
+	}
+	if !strings.Contains(desc, "bounded compact evidence prefetch") {
+		t.Error("gather_context description should mention compact evidence prefetch")
+	}
+}
+
+func TestToolDescriptions_ListDirMentionsCompactSummaryAndOverrideUsage(t *testing.T) {
 	desc := ToolDescriptions["list_dir"]
-	if !strings.Contains(desc, "Preferred for directory exploration") {
-		t.Error("list_dir description should mark it as preferred for directory exploration")
+	if !strings.Contains(desc, "Usually prefer gather_context first") {
+		t.Error("list_dir description should mention gather_context-first usage")
 	}
 	if !strings.Contains(desc, "compact summary") {
 		t.Error("list_dir description should mention compact summary output")
 	}
-	if !strings.Contains(desc, "next file/subtree") {
-		t.Error("list_dir description should mention next file/subtree selection")
-	}
 }
 
-func TestToolDescriptions_ReadFileAndSearchCodeDescribeCurrentUsage(t *testing.T) {
+func TestToolDescriptions_ReadFileAndSearchCodeDescribeLowLevelUsage(t *testing.T) {
+	if !strings.Contains(ToolDescriptions["read_file"], "Low-level file reader") {
+		t.Error("read_file description should position it as low-level")
+	}
 	if !strings.Contains(ToolDescriptions["read_file"], "Default detail=auto returns full content when feasible") {
 		t.Error("read_file description should describe the default auto behavior")
 	}
@@ -64,6 +78,9 @@ func TestToolDescriptions_ReadFileAndSearchCodeDescribeCurrentUsage(t *testing.T
 	if !strings.Contains(ToolDescriptions["read_file"], "Do not re-read files already returned") {
 		t.Error("read_file description should discourage rereading returned files")
 	}
+	if !strings.Contains(ToolDescriptions["search_code"], "Low-level code discovery tool") {
+		t.Error("search_code description should position it as low-level")
+	}
 	if !strings.Contains(ToolDescriptions["search_code"], "comma-separated patterns for parallel multi-search") {
 		t.Error("search_code description should mention comma-separated parallel multi-search")
 	}
@@ -72,6 +89,9 @@ func TestToolDescriptions_ReadFileAndSearchCodeDescribeCurrentUsage(t *testing.T
 	}
 	if !strings.Contains(ToolDescriptions["search_code"], "intent=impact") {
 		t.Error("search_code description should mention intent=impact")
+	}
+	if !strings.Contains(ToolDescriptions["search_code"], "ripgrep-like built-in language aliases") {
+		t.Error("search_code description should mention the shared built-in file filter contract")
 	}
 	if strings.Contains(ToolDescriptions["search_code"], "For Go symbols") {
 		t.Error("search_code description should not be Go-specific")

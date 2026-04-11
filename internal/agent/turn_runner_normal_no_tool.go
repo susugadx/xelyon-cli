@@ -54,7 +54,7 @@ func (h *normalModeNoToolHandler) handleTextPlanRedirect(response string) (bool,
 		h.runner.appendAssistantHistoryOnly(response)
 		a.History = append(a.History, api.Message{
 			Role:    "user",
-			Content: "[SYSTEM] STOP planning. Pick the FIRST change and execute it NOW using the appropriate tool (read_file, str_replace, etc). One tool call, no explanation.",
+			Content: a.toolVisibilityPolicy(toolSurfacePhaseNormal, toolVisibilityOptions{allowSubAgents: true}).normalModeRecoveryPrompt(normalModeRecoveryPromptStopPlanning),
 		})
 		return true, normalModeContinue
 	}
@@ -64,7 +64,7 @@ func (h *normalModeNoToolHandler) handleTextPlanRedirect(response string) (bool,
 	h.runner.appendAssistantHistoryOnly(response)
 	a.History = append(a.History, api.Message{
 		Role:    "user",
-		Content: "[SYSTEM] Do NOT output plans as numbered text. Execute the required changes directly using tools (read_file, str_replace, etc).",
+		Content: a.toolVisibilityPolicy(toolSurfacePhaseNormal, toolVisibilityOptions{allowSubAgents: true}).normalModeRecoveryPrompt(normalModeRecoveryPromptNoTextPlan),
 	})
 	return true, normalModeContinue
 }

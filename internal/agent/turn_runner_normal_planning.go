@@ -37,7 +37,7 @@ func (h *normalModePlanningHandler) HandlePlanJSONFallback(response string, tool
 	h.runner.appendAssistantHistoryOnly(response)
 	a.History = append(a.History, api.Message{
 		Role:    "user",
-		Content: "[SYSTEM] You are in NORMAL MODE. Do NOT output JSON directly. Execute the required changes directly using tools (read_file, str_replace, etc).",
+		Content: a.toolVisibilityPolicy(toolSurfacePhaseNormal, toolVisibilityOptions{allowSubAgents: true}).normalModeRecoveryPrompt(normalModeRecoveryPromptDirectExecution),
 	})
 	return normalModeContinue, true, nil
 }

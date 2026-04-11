@@ -109,13 +109,14 @@ func (a *Agent) executeChatRequest(ctx context.Context, req *chatRequest) error 
 		defer a.registry().SetExcludedTools(prevExcluded)
 	}
 
-	editToolMode := ResolveEditToolMode(a.ProviderName, a.CurrentModel)
+	toolVisibility := a.toolVisibilityPolicy(toolSurfacePhaseNormal, toolVisibilityOptions{allowSubAgents: true})
 	if a.PlanModeEnabled {
-		a.registry().SetExcludedTools(planModeExcludedTools(editToolMode))
+		toolVisibility = a.toolVisibilityPolicy(toolSurfacePhasePlan, toolVisibilityOptions{allowSubAgents: true})
+		a.registry().SetExcludedTools(toolVisibility.excluded())
 		return a.RunPlanMode(ctx, req.input)
 	}
 
-	a.registry().SetExcludedTools(normalModeExcludedTools(editToolMode))
+	a.registry().SetExcludedTools(toolVisibility.excluded())
 	return a.runNormalMode(ctx, req.input, req.image)
 }
 

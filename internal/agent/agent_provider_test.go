@@ -183,6 +183,7 @@ provider_models:
 	if err != nil {
 		t.Fatalf("LoadConfig() error = %v", err)
 	}
+	cfg.ProjectMap.Enabled = false
 
 	agent := &Agent{
 		ProviderName:    "deepseek",
@@ -308,6 +309,7 @@ provider_models:
 	if err != nil {
 		t.Fatalf("LoadConfig() error = %v", err)
 	}
+	cfg.ProjectMap.Enabled = false
 
 	agent := &Agent{
 		ProviderName:    "deepseek",

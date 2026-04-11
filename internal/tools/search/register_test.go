@@ -73,6 +73,91 @@ func TestContainsGlobChar(t *testing.T) {
 	}
 }
 
+func TestMatchesRawFileFilter(t *testing.T) {
+	tests := []struct {
+		name   string
+		path   string
+		filter string
+		want   bool
+	}{
+		{name: "empty filter matches", path: "pkg/target.go", filter: "", want: true},
+		{name: "language filter matches path", path: "pkg/target.go", filter: "go", want: true},
+		{name: "language filter rejects other ext", path: "pkg/target.py", filter: "go", want: false},
+		{name: "python filter matches py extension", path: "pkg/models.py", filter: "py", want: true},
+		{name: "python filter matches pyi extension", path: "pkg/types.pyi", filter: "py", want: true},
+		{name: "python alias matches pyi extension", path: "pkg/types.pyi", filter: "python", want: true},
+		{name: "plain rs token matches rs extension", path: "pkg/main.rs", filter: "rs", want: true},
+		{name: "plain rs token rejects go extension", path: "pkg/main.go", filter: "rs", want: false},
+		{name: "plain json token matches json extension", path: "pkg/config.json", filter: "json", want: true},
+		{name: "plain ex token matches ex extension", path: "pkg/main.ex", filter: "ex", want: true},
+		{name: "plain exs token matches exs extension", path: "pkg/main.exs", filter: "exs", want: true},
+		{name: "c filter matches header extension", path: "pkg/target.h", filter: "c", want: true},
+		{name: "c filter matches generated header template", path: "pkg/target.h.in", filter: "c", want: true},
+		{name: "java filter matches properties extension", path: "pkg/application.properties", filter: "java", want: true},
+		{name: "java filter matches jspx extension", path: "pkg/view.jspx", filter: "java", want: true},
+		{name: "sh filter matches zsh extension", path: "pkg/env.zsh", filter: "sh", want: true},
+		{name: "sh filter matches shell dotfile", path: "pkg/.bashrc", filter: "sh", want: true},
+		{name: "typescript alias matches ts extension", path: "pkg/App.ts", filter: "typescript", want: true},
+		{name: "typescript alias matches tsx extension", path: "pkg/App.tsx", filter: "typescript", want: true},
+		{name: "typescript alias rejects cts extension", path: "pkg/App.cts", filter: "typescript", want: false},
+		{name: "typescript alias rejects mts extension", path: "pkg/App.mts", filter: "typescript", want: false},
+		{name: "typescript alias rejects go extension", path: "pkg/App.go", filter: "typescript", want: false},
+		{name: "javascript alias matches js extension", path: "pkg/App.js", filter: "javascript", want: true},
+		{name: "javascript alias matches jsx extension", path: "pkg/App.jsx", filter: "javascript", want: true},
+		{name: "javascript alias matches mjs extension", path: "pkg/App.mjs", filter: "javascript", want: true},
+		{name: "javascript alias matches cjs extension", path: "pkg/App.cjs", filter: "javascript", want: true},
+		{name: "javascript alias rejects vue extension", path: "pkg/App.vue", filter: "javascript", want: false},
+		{name: "glob matches basename", path: "pkg/target_test.go", filter: "*_test.go", want: true},
+		{name: "glob matches clean path", path: "pkg/generated/mock.go", filter: "pkg/generated/*.go", want: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := MatchesRawFileFilter(tt.path, tt.filter); got != tt.want {
+				t.Fatalf("MatchesRawFileFilter(%q, %q) = %v, want %v", tt.path, tt.filter, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSearchCodeToolParameters_FileFilterDescriptionMatchesContract(t *testing.T) {
+	params := (&SearchCodeTool{}).Parameters()
+	properties := params["properties"].(map[string]interface{})
+	fileFilterProp := properties["file_filter"].(map[string]interface{})
+	description, ok := fileFilterProp["description"].(string)
+	if !ok {
+		t.Fatalf("file_filter.description should be string, got %T", fileFilterProp["description"])
+	}
+	if !strings.Contains(description, "ripgrep-like file type mapping") {
+		t.Fatalf("file_filter description should mention ripgrep-like mapping, got %q", description)
+	}
+	if strings.Contains(description, "uses rg --type") {
+		t.Fatalf("file_filter description should avoid false rg --type precision, got %q", description)
+	}
+}
+
+func TestParseRawFileFilter(t *testing.T) {
+	tests := []struct {
+		name        string
+		filter      string
+		wantType    string
+		wantPattern string
+	}{
+		{name: "trims and lowercases extension token", filter: "  RS  ", wantType: "rs"},
+		{name: "strips leading dot token", filter: " .json ", wantType: "json"},
+		{name: "keeps glob pattern", filter: "  *_test.go  ", wantPattern: "*_test.go"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotType, gotPattern := ParseRawFileFilter(tt.filter)
+			if gotType != tt.wantType || gotPattern != tt.wantPattern {
+				t.Fatalf("ParseRawFileFilter(%q) = (%q, %q), want (%q, %q)", tt.filter, gotType, gotPattern, tt.wantType, tt.wantPattern)
+			}
+		})
+	}
+}
+
 func TestSearchCodeToolParameters_ImpactDescriptionMatchesStructuredGoBehavior(t *testing.T) {
 	params := (&SearchCodeTool{}).Parameters()
 	properties := params["properties"].(map[string]interface{})

@@ -82,7 +82,8 @@ func BuildGitHubMCPGuide() string {
 ` + "```" + `
 
 **RULES:**
-- NEVER use MCP tools to read local files - use read_file or bash instead
+- NEVER use MCP tools to inspect or edit local repo files - use the visible local tools in this session instead
+- For repo-local investigation, prefer gather_context first. Lower-level local investigation tools are expert overrides only when they are actually exposed.
 - ALWAYS use MCP tools for GitHub operations - never say "use GitHub web UI"
 - Information-only requests (get, show, list): display result and STOP. Do NOT start implementing
 - If a tool fails, report the error and suggest alternatives

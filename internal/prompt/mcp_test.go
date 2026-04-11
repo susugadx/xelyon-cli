@@ -125,4 +125,10 @@ func TestBuildGitHubMCPGuide(t *testing.T) {
 			t.Errorf("guide should contain keyword %q", kw)
 		}
 	}
+	if strings.Contains(guide, "read_file or bash") {
+		t.Error("guide should not recommend hidden local tools like read_file or bash for repo-local inspection")
+	}
+	if !strings.Contains(guide, "gather_context") {
+		t.Error("guide should recommend gather_context-first local investigation guidance")
+	}
 }

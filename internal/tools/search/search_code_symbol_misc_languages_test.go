@@ -1,8 +1,11 @@
 package search
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
 func TestSearchCode_SwiftSymbolSingleHit(t *testing.T) {
@@ -120,5 +123,125 @@ func TestSearchCode_GenericSymbolNoRefs(t *testing.T) {
 	}
 	if !strings.Contains(result, "No references found") {
 		t.Error("expected 'No references found' message")
+	}
+}
+
+func TestSearchCode_JavaScriptAliasSymbolContract(t *testing.T) {
+	if !common.IsRipgrepAvailable() {
+		t.Skip("ripgrep not available")
+	}
+
+	dir := setupMultiLangDir(t, map[string]string{
+		"service.js":    "class UserService {}\n",
+		"consumer.jsx":  "const svc = new UserService()\n",
+		"component.vue": "<script>\nclass UserService {}\n</script>\n",
+	})
+
+	result := ExecuteSearchCode(SearchOptions{
+		Pattern:  "UserService",
+		Mode:     string(SearchModeSymbol),
+		Path:     dir,
+		FileType: "javascript",
+	})
+	if strings.Contains(result, "No matches found") {
+		t.Fatal("expected javascript alias symbol hit")
+	}
+	if !strings.Contains(result, "service.js") {
+		t.Fatalf("expected javascript alias symbol result to include service.js, got:\n%s", result)
+	}
+	if strings.Contains(result, ".vue") {
+		t.Fatalf("expected javascript alias symbol result to exclude .vue files, got:\n%s", result)
+	}
+	if strings.Contains(result, "Multiple definitions found") {
+		t.Fatalf("expected javascript alias symbol result to avoid widened ambiguous defs, got:\n%s", result)
+	}
+}
+
+func TestSearchCode_TypeScriptAliasSymbolContract(t *testing.T) {
+	if !common.IsRipgrepAvailable() {
+		t.Skip("ripgrep not available")
+	}
+
+	dir := setupMultiLangDir(t, map[string]string{
+		"App.tsx":    "export function RenderCard() { return <div /> }\n",
+		"use.ts":     "RenderCard()\n",
+		"legacy.cts": "export function RenderCard() { return null }\n",
+		"legacy.mts": "export function RenderCard() { return null }\n",
+	})
+
+	result := ExecuteSearchCode(SearchOptions{
+		Pattern:  "RenderCard",
+		Mode:     string(SearchModeSymbol),
+		Path:     dir,
+		FileType: "typescript",
+	})
+	if strings.Contains(result, "No matches found") {
+		t.Fatal("expected typescript alias symbol hit")
+	}
+	if !strings.Contains(result, "App.tsx") {
+		t.Fatalf("expected typescript alias symbol result to include App.tsx, got:\n%s", result)
+	}
+	if strings.Contains(result, "legacy.cts") || strings.Contains(result, "legacy.mts") {
+		t.Fatalf("expected typescript alias symbol result to exclude .cts/.mts files, got:\n%s", result)
+	}
+	if strings.Contains(result, "Multiple definitions found") {
+		t.Fatalf("expected typescript alias symbol result to avoid widened ambiguous defs, got:\n%s", result)
+	}
+}
+
+func TestSearchCode_GenericSymbolHonorsGlobFilePatternWithAbsolutePath(t *testing.T) {
+	if !common.IsRipgrepAvailable() {
+		t.Skip("ripgrep not available")
+	}
+
+	dir := setupMultiLangDir(t, map[string]string{
+		"pkg/service.js": "class UserService {}\n",
+		"pkg/use.js":     "const svc = new UserService()\n",
+		"pkg/other.jsx":  "const UserService = () => null\n",
+	})
+
+	result := ExecuteSearchCode(SearchOptions{
+		Pattern:     "UserService",
+		Mode:        string(SearchModeSymbol),
+		Path:        dir,
+		FilePattern: "pkg/*.js",
+	})
+	if strings.Contains(result, "No matches found") {
+		t.Fatalf("expected absolute-path glob symbol search hit, got:\n%s", result)
+	}
+	if !strings.Contains(result, "pkg/service.js") {
+		t.Fatalf("expected absolute-path glob symbol search to include pkg/service.js, got:\n%s", result)
+	}
+	if strings.Contains(result, "pkg/other.jsx") {
+		t.Fatalf("expected absolute-path glob symbol search to exclude pkg/other.jsx, got:\n%s", result)
+	}
+}
+
+func TestSearchCode_GenericSymbolHonorsWorkspaceRelativeGlobWithAbsoluteScopedPath(t *testing.T) {
+	if !common.IsRipgrepAvailable() {
+		t.Skip("ripgrep not available")
+	}
+
+	dir := setupMultiLangDir(t, map[string]string{
+		"pkg/service.js": "class UserService {}\n",
+		"pkg/use.js":     "const svc = new UserService()\n",
+		"pkg/other.jsx":  "const UserService = () => null\n",
+	})
+
+	result := ExecuteSearchCode(SearchOptions{
+		Pattern:       "UserService",
+		Mode:          string(SearchModeSymbol),
+		Path:          filepath.Join(dir, "pkg"),
+		FilePattern:   "pkg/*.js",
+		InvocationCWD: dir,
+	})
+	if strings.Contains(result, "No matches found") {
+		t.Fatalf("expected absolute-scoped glob symbol search hit, got:\n%s", result)
+	}
+	if !strings.Contains(result, "pkg/service.js") {
+		t.Fatalf("expected absolute-scoped glob symbol search to include pkg/service.js, got:\n%s", result)
+	}
+	if strings.Contains(result, "pkg/other.jsx") {
+		t.Fatalf("expected absolute-scoped glob symbol search to exclude pkg/other.jsx, got:\n%s", result)
 	}
 }

@@ -17,7 +17,6 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
-	toolsubagent "github.com/susugadx/xelyon-cli/internal/tools/subagent"
 )
 
 // mockErrorProvider は常にエラーを返すプロバイダー
@@ -129,15 +128,6 @@ func cloneHeadlessHistory(history []api.Message) []api.Message {
 		}
 	}
 	return cloned
-}
-
-func hasToolName(names []string, target string) bool {
-	for _, name := range names {
-		if name == target {
-			return true
-		}
-	}
-	return false
 }
 
 func TestHeadlessResult_ToJSON(t *testing.T) {
@@ -412,122 +402,6 @@ func TestRunHeadlessWithConfig_CollectsTokenUsageAndCost(t *testing.T) {
 	}
 }
 
-func TestRunHeadlessWithConfig_SubAgentModeUsesSubPromptAndExcludesSubAgentTools(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-
-	cfg := newProjectMapDisabledConfig()
-	cfg.SubAgentPrompt = toolsubagent.ExplorePrompt
-	provider := &headlessToolSetProbeProvider{}
-
-	result := RunHeadlessWithConfig(context.Background(), "probe", "gpt-5.4-nano", provider, cfg)
-	if result.Status != "success" {
-		t.Fatalf("result.Status = %q, want success", result.Status)
-	}
-	if !strings.Contains(provider.systemPrompt, "You are a sub-agent executing a specific exploration task assigned by the orchestrator.") {
-		t.Fatalf("systemPrompt should contain sub-agent prompt, got %q", provider.systemPrompt)
-	}
-	if strings.Contains(provider.systemPrompt, "## Core Identity") {
-		t.Fatalf("systemPrompt should not keep the parent prompt, got %q", provider.systemPrompt)
-	}
-	if hasToolName(provider.toolNames, "spawn_agent") {
-		t.Fatal("sub-agent headless mode should exclude spawn_agent")
-	}
-	if hasToolName(provider.toolNames, "wait_agent") {
-		t.Fatal("sub-agent headless mode should exclude wait_agent")
-	}
-	if hasToolName(provider.toolNames, "ask_user_question") {
-		t.Fatal("sub-agent headless mode should exclude planning tools")
-	}
-}
-
-func TestRunHeadlessWithConfig_NormalHeadlessKeepsSubAgentTools(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-
-	cfg := newProjectMapDisabledConfig()
-	provider := &headlessToolSetProbeProvider{}
-
-	result := RunHeadlessWithConfig(context.Background(), "probe", "gpt-5.4", provider, cfg)
-	if result.Status != "success" {
-		t.Fatalf("result.Status = %q, want success", result.Status)
-	}
-	if !hasToolName(provider.toolNames, "spawn_agent") {
-		t.Fatal("normal headless mode should expose spawn_agent")
-	}
-	if !hasToolName(provider.toolNames, "wait_agent") {
-		t.Fatal("normal headless mode should expose wait_agent")
-	}
-	if hasToolName(provider.toolNames, "ask_user_question") {
-		t.Fatal("normal headless mode should still exclude planning tools")
-	}
-}
-
-func TestRunHeadlessWithConfig_DefaultEditToolVisibility(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-
-	cfg := newProjectMapDisabledConfig()
-	provider := &headlessToolSetProbeProvider{}
-
-	result := RunHeadlessWithConfig(context.Background(), "probe", "gpt-5.4", provider, cfg)
-	if result.Status != "success" {
-		t.Fatalf("result.Status = %q, want success", result.Status)
-	}
-	if !hasToolName(provider.toolNames, "apply_patch") {
-		t.Fatal("default headless mode should expose apply_patch")
-	}
-	for _, name := range []string{"str_replace", "write_file", "delete_file"} {
-		if hasToolName(provider.toolNames, name) {
-			t.Fatalf("default headless mode should exclude %s", name)
-		}
-	}
-	if !strings.Contains(provider.systemPrompt, "### apply_patch (edit tool)") {
-		t.Fatal("default headless system prompt should use apply_patch guidance")
-	}
-}
-
-func TestRunHeadlessWithConfig_ClaudeUsesLegacyEditTools(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-
-	cfg := newProjectMapDisabledConfig()
-	provider := &headlessToolSetProbeProvider{name: "claude"}
-
-	result := RunHeadlessWithConfig(context.Background(), "probe", "claude-sonnet-4-6", provider, cfg)
-	if result.Status != "success" {
-		t.Fatalf("result.Status = %q, want success", result.Status)
-	}
-	if hasToolName(provider.toolNames, "apply_patch") {
-		t.Fatal("claude headless mode should exclude apply_patch")
-	}
-	for _, name := range []string{"str_replace", "write_file", "delete_file"} {
-		if !hasToolName(provider.toolNames, name) {
-			t.Fatalf("claude headless mode should expose %s", name)
-		}
-	}
-	if !strings.Contains(provider.systemPrompt, "### Legacy edit tools") {
-		t.Fatal("claude headless system prompt should use legacy edit tool guidance")
-	}
-}
-
-func TestRunHeadlessWithConfig_LegacyEditToolVisibility(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("XELYON_EDIT_TOOL", "str_replace")
-
-	cfg := newProjectMapDisabledConfig()
-	provider := &headlessToolSetProbeProvider{}
-
-	result := RunHeadlessWithConfig(context.Background(), "probe", "gpt-5.4", provider, cfg)
-	if result.Status != "success" {
-		t.Fatalf("result.Status = %q, want success", result.Status)
-	}
-	if hasToolName(provider.toolNames, "apply_patch") {
-		t.Fatal("legacy headless mode should exclude apply_patch")
-	}
-	for _, name := range []string{"str_replace", "write_file", "delete_file"} {
-		if !hasToolName(provider.toolNames, name) {
-			t.Fatalf("legacy headless mode should expose %s", name)
-		}
-	}
-}
-
 func TestRunHeadlessWithConfig_ProjectMapAddsQueryFocusOverlay(t *testing.T) {
 	common.ResetRipgrepAvailabilityForTest()
 	t.Cleanup(common.ResetRipgrepAvailabilityForTest)
@@ -666,7 +540,7 @@ func TestRunHeadlessWithConfig_UsesFunctionCallingHistoryForToolLoop(t *testing.
 
 	provider := &headlessHistoryProbeProvider{
 		responses: []string{
-			fmt.Sprintf(`{"tool": "read_file", "args": {"paths": [%q]}}`, testFile),
+			fmt.Sprintf(`{"tool": "gather_context", "args": {"query": %q}}`, testFile),
 			"done",
 		},
 	}
@@ -697,8 +571,8 @@ func TestRunHeadlessWithConfig_UsesFunctionCallingHistoryForToolLoop(t *testing.
 	if toolCall.ID == "" {
 		t.Fatal("history[1].ToolCalls[0].ID is empty, want rescue tool_call_id")
 	}
-	if toolCall.Function.Name != "read_file" {
-		t.Errorf("history[1].ToolCalls[0].Function.Name = %q, want read_file", toolCall.Function.Name)
+	if toolCall.Function.Name != "gather_context" {
+		t.Errorf("history[1].ToolCalls[0].Function.Name = %q, want gather_context", toolCall.Function.Name)
 	}
 
 	if secondHistory[2].Role != "tool" {
@@ -707,11 +581,11 @@ func TestRunHeadlessWithConfig_UsesFunctionCallingHistoryForToolLoop(t *testing.
 	if secondHistory[2].ToolCallID != toolCall.ID {
 		t.Errorf("history[2].ToolCallID = %q, want %q", secondHistory[2].ToolCallID, toolCall.ID)
 	}
-	if secondHistory[2].ToolName != "read_file" {
-		t.Errorf("history[2].ToolName = %q, want read_file", secondHistory[2].ToolName)
+	if secondHistory[2].ToolName != "gather_context" {
+		t.Errorf("history[2].ToolName = %q, want gather_context", secondHistory[2].ToolName)
 	}
 	if !strings.Contains(secondHistory[2].Content, "hello from headless") {
-		t.Errorf("history[2].Content = %q, want read_file output", secondHistory[2].Content)
+		t.Errorf("history[2].Content = %q, want gather_context output", secondHistory[2].Content)
 	}
 }
 

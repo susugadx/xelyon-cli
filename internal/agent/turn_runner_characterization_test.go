@@ -75,6 +75,11 @@ func newTurnRunnerTestAgent(provider api.Provider, cfg *config.Config, promptInp
 
 	agent := NewAgentWithRuntime("test-model", provider, false, runtime)
 	agent.setAutoApprove(true)
+	if len(extraTools) > 0 {
+		// Characterization tests inject explicit doubles such as failing write tools.
+		// They should exercise those doubles directly instead of the runtime surface policy.
+		agent.registry().ClearExcludedTools()
+	}
 	return agent
 }
 

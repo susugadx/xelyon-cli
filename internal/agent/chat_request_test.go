@@ -295,13 +295,13 @@ func TestExecuteChatRequest_OneShotNormalModeRestoresExcludedTools(t *testing.T)
 		t.Fatalf("executeChatRequest() error = %v", err)
 	}
 
-	if hasToolName(provider.toolNames, "ask_user_question") {
+	if toolNameInList(provider.toolNames, "ask_user_question") {
 		t.Fatal("normal mode should exclude ask_user_question")
 	}
-	if hasToolName(provider.toolNames, "list_dir") {
+	if toolNameInList(provider.toolNames, "list_dir") {
 		t.Fatal("normal mode should exclude list_dir")
 	}
-	if !hasToolName(provider.toolNames, "apply_patch") {
+	if !toolNameInList(provider.toolNames, "apply_patch") {
 		t.Fatal("normal mode should expose apply_patch")
 	}
 
@@ -326,10 +326,10 @@ func TestExecuteChatRequest_PlanModeUsesPlanModeExcludedTools(t *testing.T) {
 		t.Fatalf("executeChatRequest() error = %v", err)
 	}
 
-	if !hasToolName(provider.toolNames, "ask_user_question") {
+	if !toolNameInList(provider.toolNames, "ask_user_question") {
 		t.Fatal("plan mode should expose ask_user_question")
 	}
-	if hasToolName(provider.toolNames, "list_dir") {
+	if toolNameInList(provider.toolNames, "list_dir") {
 		t.Fatal("plan mode should exclude list_dir")
 	}
 }

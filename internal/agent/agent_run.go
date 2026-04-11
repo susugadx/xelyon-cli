@@ -49,12 +49,11 @@ func RunHeadlessWithConfig(ctx context.Context, query string, model string, prov
 	injectProjectMap(agent, "")
 
 	// Headless Mode は Normal Mode 相当: 親と同じツール除外
-	editToolMode := ResolveEditToolMode(provider.Name(), model)
-	excludedTools := normalModeExcludedTools(editToolMode)
-	if cfg != nil && cfg.SubAgentPrompt != "" {
-		excludedTools = appendUniqueStrings(excludedTools, "spawn_agent", "wait_agent")
-	}
-	agent.registry().SetExcludedTools(excludedTools)
+	allowSubAgents := cfg == nil || cfg.SubAgentPrompt == ""
+	toolVisibility := resolveToolVisibilityPolicy(provider.Name(), model, toolSurfacePhaseNormal, toolVisibilityOptions{
+		allowSubAgents: allowSubAgents,
+	})
+	agent.registry().SetExcludedTools(toolVisibility.excluded())
 
 	// ツール呼び出し結果を記録
 	var allToolCalls []ToolCallResult
@@ -237,6 +236,13 @@ func extractToolFilePath(tc *tools.ToolCall) string {
 	}
 
 	switch tc.Tool {
+	case "gather_context":
+		if query := tc.Args["query"]; query != "" {
+			return query
+		}
+		if path := tc.Args["path"]; path != "" {
+			return path
+		}
 	case "read_file", "write_file", "str_replace", "delete_file", "list_dir", "lint", "format":
 		if path := tc.Args["path"]; path != "" {
 			return path

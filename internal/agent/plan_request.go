@@ -46,7 +46,8 @@ func (r *planModeRequest) Run() error {
 func (r *planModeRequest) prepare() {
 	r.ensurePlanningPrompt()
 	r.userRequest = r.prepareUserRequest(r.userRequest)
-	r.investigationPrompt = promptplan.BuildInvestigationPrompt(r.userRequest)
+	toolVisibility := r.agent.toolVisibilityPolicy(toolSurfacePhasePlan, toolVisibilityOptions{allowSubAgents: true})
+	r.investigationPrompt = promptplan.BuildInvestigationPrompt(r.userRequest, toolVisibility.allowLowLevelInvestigation)
 }
 
 func (r *planModeRequest) ensurePlanningPrompt() {

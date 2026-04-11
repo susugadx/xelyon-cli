@@ -30,6 +30,8 @@ func isGNUGrep() bool {
 }
 
 func executeSearch(pattern string, opts SearchOptions) (string, bool, []string, error) {
+	basis := resolveSearchPathBasisForOptions(opts)
+
 	if common.IsRipgrepAvailable() {
 		args := []string{
 			"--json",
@@ -38,11 +40,7 @@ func executeSearch(pattern string, opts SearchOptions) (string, bool, []string, 
 		if opts.CtxLines > 0 {
 			args = append(args, "--context", fmt.Sprintf("%d", opts.CtxLines))
 		}
-		if opts.FileType != "" {
-			args = append(args, "--type", normalizeRgType(opts.FileType))
-		} else if opts.FilePattern != "" {
-			args = append(args, "--glob", opts.FilePattern)
-		}
+		args = append(args, rawFileFilterToRipgrepArgs(opts.FileType, opts.FilePattern)...)
 		if !opts.IsRegex {
 			args = append(args, "--fixed-strings")
 		}
@@ -58,12 +56,15 @@ func executeSearch(pattern string, opts SearchOptions) (string, bool, []string, 
 		for _, glob := range opts.ignoreGlobs {
 			args = append(args, "--glob", glob)
 		}
-		args = append(args, pattern, opts.Path)
+		args = append(args, pattern, basis.target)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
 		cmd := exec.CommandContext(ctx, common.RipgrepPath(), args...)
+		if basis.workdir != "" {
+			cmd.Dir = basis.workdir
+		}
 		var stdout, stderr bytes.Buffer
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
@@ -103,17 +104,8 @@ func executeSearch(pattern string, opts SearchOptions) (string, bool, []string, 
 		warnings = append(warnings, "Warning: include_hidden is partially supported in grep fallback mode")
 	}
 
-	if opts.FileType != "" {
-		if glob, ok := fileTypeToGlob(opts.FileType); ok {
-			args = append(args, "--include="+glob)
-		} else {
-			warnings = append(warnings, fmt.Sprintf("Warning: file_filter=%q is not supported in grep fallback mode as a language type (rg not found)", opts.FileType))
-			if opts.FilePattern != "" {
-				args = append(args, "--include="+opts.FilePattern)
-			}
-		}
-	} else if opts.FilePattern != "" {
-		args = append(args, "--include="+opts.FilePattern)
+	for _, glob := range rawFileFilterGlobs(opts.FileType, opts.FilePattern) {
+		args = append(args, "--include="+glob)
 	}
 
 	if opts.Multiline {
@@ -122,12 +114,15 @@ func executeSearch(pattern string, opts SearchOptions) (string, bool, []string, 
 	if opts.CtxLines > 0 {
 		args = append(args, "-C", fmt.Sprintf("%d", opts.CtxLines))
 	}
-	args = append(args, pattern, opts.Path)
+	args = append(args, pattern, basis.target)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "grep", args...)
+	if basis.workdir != "" {
+		cmd.Dir = basis.workdir
+	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

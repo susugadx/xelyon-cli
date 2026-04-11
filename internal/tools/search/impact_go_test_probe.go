@@ -93,7 +93,12 @@ func (ctx goMethodTestProbeContext) collectCrossPackageTests(limit int, appendTe
 
 	broader, _ := findGoImpactTestsByNameProbe(ctx.probe, ctx.symbol.RootPath, ctx.opts, 0)
 	for _, candidate := range broader {
-		absPath := absoluteAffectedFilePathWithBase(candidate.File, ctx.symbol.RootPath)
+		absPath := absoluteAffectedFilePathWithPreferredBases(
+			candidate.File,
+			ctx.symbol.RootPath,
+			affectedFileBasePath(ctx.opts, affectedFileSourceText),
+			structuredGoImpactProbeRootPath(ctx.opts, ctx.packageDir),
+		)
 		ctx.dependencies.add(absPath)
 		if absPath == "" || filepath.Clean(filepath.Dir(absPath)) == filepath.Clean(ctx.packageDir) {
 			continue

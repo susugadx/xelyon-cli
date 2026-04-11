@@ -210,3 +210,27 @@ func TestBuildProviderSystemPrompt_OpenRouterReturnsBase(t *testing.T) {
 		t.Error("openrouter with empty prefix should return unchanged base prompt")
 	}
 }
+
+func TestGetSystemPromptForProvider_UsesProviderResolvedMode(t *testing.T) {
+	claudePrompt := GetSystemPromptForProvider("claude", "claude-sonnet-4-6")
+	if !strings.Contains(claudePrompt, "### Legacy edit tools") {
+		t.Fatal("claude prompt should include legacy edit tool guidance")
+	}
+	if strings.Contains(claudePrompt, "### apply_patch (edit tool)") {
+		t.Fatal("claude prompt should not include apply_patch guidance")
+	}
+	if !strings.Contains(claudePrompt, "search_code: code discovery tool") || !strings.Contains(claudePrompt, "read_file: low-level exact-content reader") {
+		t.Fatal("claude prompt should keep low-level investigation override guidance when those tools are visible")
+	}
+
+	openAIPrompt := GetSystemPromptForProvider("openai", "gpt-5.4")
+	if !strings.Contains(openAIPrompt, "### apply_patch (edit tool)") {
+		t.Fatal("openai prompt should include apply_patch guidance")
+	}
+	if strings.Contains(openAIPrompt, "### Legacy edit tools") {
+		t.Fatal("openai prompt should not include legacy edit tool guidance")
+	}
+	if strings.Contains(openAIPrompt, "search_code: code discovery tool") || strings.Contains(openAIPrompt, "read_file: low-level exact-content reader") {
+		t.Fatal("openai prompt should not advertise hidden low-level investigation tools")
+	}
+}

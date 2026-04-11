@@ -211,6 +211,10 @@ func affectedFileBasePath(opts SearchOptions, source affectedFileSource) string 
 			}
 			return filepath.Clean(root)
 		}
+	case affectedFileSourceText:
+		if root := searchFileFilterMatchRootWithWorkspace(opts.Path, resolveSearchWorkspaceRoot(opts)); root != "" {
+			return root
+		}
 	}
 	return invocationCWDOrGetwd(opts)
 }

@@ -96,13 +96,26 @@ func ExecuteSearchCodeWithCache(cache tools.ToolCacheInterface, opts SearchOptio
 
 // ExecuteSearchCodeWithConfig は設定とキャッシュを指定してコード検索を実行する。
 func ExecuteSearchCodeWithConfig(cfg *config.Config, cache tools.ToolCacheInterface, opts SearchOptions) string {
+	opts, errResult := prepareSearchOptionsForRuntime(cfg, opts)
+	if errResult != "" {
+		return errResult
+	}
+
+	if shouldExecuteImpactSearch(opts) {
+		return executeImpactSearch(cache, opts)
+	}
+	patterns := effectiveSearchPatterns(opts)
+	return executeSearchPatterns(cache, patterns, opts)
+}
+
+func prepareSearchOptionsForRuntime(cfg *config.Config, opts SearchOptions) (SearchOptions, string) {
 	if opts.Pattern == "" {
-		return "Error: pattern is required"
+		return opts, "Error: pattern is required"
 	}
 	var ok bool
 	opts, ok = normalizeSearchOptions(opts)
 	if !ok {
-		return "Error: invalid mode (expected auto, symbol, literal, or regex)"
+		return opts, "Error: invalid mode (expected auto, symbol, literal, or regex)"
 	}
 	if opts.Path == "" {
 		opts.Path = "."
@@ -123,10 +136,5 @@ func ExecuteSearchCodeWithConfig(cfg *config.Config, cache tools.ToolCacheInterf
 		opts.ignoreGlobs = pathmatch.BuildRGIgnoreGlobs(ignorePatterns)
 		opts.ignoreKey = strings.Join(ignorePatterns, ",")
 	}
-
-	if shouldExecuteImpactSearch(opts) {
-		return executeImpactSearch(cache, opts)
-	}
-	patterns := effectiveSearchPatterns(opts)
-	return executeSearchPatterns(cache, patterns, opts)
+	return opts, ""
 }

@@ -3,97 +3,72 @@ package plan
 import (
 	"strings"
 	"testing"
+
+	promptfragments "github.com/susugadx/xelyon-cli/internal/prompt/fragments"
 )
 
-func TestBuildInvestigationPrompt_ContainsSearchCode(t *testing.T) {
-	prompt := BuildInvestigationPrompt("test request")
-	if !strings.Contains(prompt, "search_code") {
-		t.Error("investigation prompt should mention search_code as an allowed tool")
+func TestBuildInvestigationPrompt_ContainsGatherContext(t *testing.T) {
+	prompt := BuildInvestigationPrompt("test request", false)
+	if !strings.Contains(prompt, "gather_context") {
+		t.Error("investigation prompt should mention gather_context as the default tool")
 	}
 	// inspect_symbol は search_code に統合済みなので参照しない
 	if strings.Contains(prompt, "inspect_symbol") {
 		t.Error("investigation prompt should not mention inspect_symbol (integrated into search_code)")
 	}
-	// list_dir は除外済みなので参照しない
-	if strings.Contains(prompt, "list_dir") {
-		t.Error("investigation prompt should not mention list_dir (excluded from registry)")
+}
+
+func TestBuildInvestigationPrompt_UsesSharedInvestigationBlock(t *testing.T) {
+	prompt := BuildInvestigationPrompt("test request", false)
+	block := promptfragments.BuildInvestigationToolingBlock(promptfragments.InvestigationToolingOptions{
+		AllowLowLevelOverrides: false,
+		SearchOverrideLabel:    "a low-level expert override",
+		ReadOverrideExtra:      "Use it only when you already know the exact file or range.",
+		IncludeBatchRead:       true,
+		BatchReadOverrideLabel: "a low-level override",
+	})
+	for _, want := range []string{
+		block,
+		promptfragments.SharedChangeGatherContextLine(""),
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("investigation prompt should include shared fragment %q", want)
+		}
+	}
+	if strings.Contains(prompt, promptfragments.LowLevelOverridesWhenExposedLine()) {
+		t.Fatal("default investigation prompt should not advertise hidden low-level overrides")
 	}
 }
 
 func TestBuildInvestigationPrompt_BashLimitedToReadOnlyGit(t *testing.T) {
-	prompt := BuildInvestigationPrompt("test request")
-	// bash should be listed but restricted to read-only git commands
-	if !strings.Contains(prompt, "bash") {
-		t.Error("investigation prompt should still mention bash (for read-only git)")
+	prompt := BuildInvestigationPrompt("test request", false)
+	for _, want := range []string{"bash", "git status", "git diff", "git log"} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("investigation prompt should mention %q", want)
+		}
 	}
-	// bash should NOT be suggested for find/read-only code investigation
-	if strings.Contains(prompt, "bash (find/read-only)") {
-		t.Error("investigation prompt should not suggest bash for find/read-only code investigation")
-	}
-	// bash should NOT allow build/test (not strictly read-only)
-	if strings.Contains(prompt, "build/test/git only") {
-		t.Error("investigation prompt bash should not allow build/test under READ-ONLY ONLY")
-	}
-	// should mention specific read-only git commands
-	if !strings.Contains(prompt, "git status") || !strings.Contains(prompt, "git diff") || !strings.Contains(prompt, "git log") {
-		t.Error("investigation prompt should list specific read-only git commands")
-	}
-}
-
-func TestBuildInvestigationPrompt_DedicatedToolsInChecklist(t *testing.T) {
-	prompt := BuildInvestigationPrompt("test request")
-	checks := []string{"search_code", "read_file"}
-	for _, tool := range checks {
-		if !strings.Contains(prompt, tool) {
-			t.Errorf("investigation checklist should mention %s", tool)
+	for _, forbidden := range []string{"bash (find/read-only)", "build/test/git only"} {
+		if strings.Contains(prompt, forbidden) {
+			t.Errorf("investigation prompt should not contain %q", forbidden)
 		}
 	}
 }
 
-func TestBuildInvestigationPrompt_SearchCodeRoutingGuidance(t *testing.T) {
-	prompt := BuildInvestigationPrompt("test request")
-	if !strings.Contains(prompt, "language-aware routing across symbol-aware resolution, literal search, and regex search") {
-		t.Error("investigation prompt should describe language-aware search_code routing")
-	}
-	if !strings.Contains(prompt, "Prefer mode=auto") {
-		t.Error("investigation prompt should prefer mode=auto")
-	}
-	if strings.Contains(prompt, "search_code+read_file") {
-		t.Error("investigation prompt should not compare search_code against search_code+read_file")
-	}
-	if strings.Contains(prompt, "For Go symbols") {
-		t.Error("investigation prompt should not hardcode Go-specific search_code guidance")
-	}
-}
-
-func TestBuildInvestigationPrompt_PrefersParallelInvestigation(t *testing.T) {
-	prompt := BuildInvestigationPrompt("test request")
-	if !strings.Contains(prompt, "Prefer parallel investigation") {
-		t.Error("investigation prompt should encourage parallel investigation")
-	}
-	if !strings.Contains(prompt, "one read_file call with all paths") {
-		t.Error("investigation prompt should prefer read_file paths for multi-file reads")
-	}
-	if !strings.Contains(prompt, "prefer one search_code call with comma-separated patterns") {
-		t.Error("investigation prompt should prefer multi-pattern search_code")
-	}
-}
-
 func TestBuildInvestigationPrompt_ContainsToolSelectionExamples(t *testing.T) {
-	prompt := BuildInvestigationPrompt("test request")
+	prompt := BuildInvestigationPrompt("test request", false)
 	if !strings.Contains(prompt, "### EXAMPLES") {
 		t.Error("investigation prompt should include tool selection examples")
 	}
-	if !strings.Contains(prompt, `search_code(pattern="chatCore"`) {
-		t.Error("investigation prompt should include a search_code example")
+	if !strings.Contains(prompt, `gather_context(query="chatCore"`) {
+		t.Error("investigation prompt should include a gather_context example")
 	}
-	if !strings.Contains(prompt, `read_file(paths=["impl.go", "impl_test.go"])`) {
-		t.Error("investigation prompt should include a read_file paths example")
+	if !strings.Contains(prompt, `gather_context(query="impl.go,impl_test.go", path="pkg", file_filter="go")`) {
+		t.Error("investigation prompt should include a scoped combined gather_context example")
 	}
 }
 
 func TestBuildInvestigationPrompt_LocalVsSharedGuidance(t *testing.T) {
-	prompt := BuildInvestigationPrompt("test request")
+	prompt := BuildInvestigationPrompt("test request", false)
 	if !strings.Contains(prompt, "local changes") {
 		t.Error("investigation checklist should mention local changes")
 	}
@@ -102,5 +77,25 @@ func TestBuildInvestigationPrompt_LocalVsSharedGuidance(t *testing.T) {
 	}
 	if !strings.Contains(prompt, "Avoid broad exploration") {
 		t.Error("investigation checklist should discourage broad exploration when target is clear")
+	}
+}
+
+func TestBuildInvestigationPrompt_LegacyAllowedTools(t *testing.T) {
+	prompt := BuildInvestigationPrompt("test request", true)
+	if !strings.Contains(prompt, promptfragments.InvestigationAllowedToolsLine(true)) {
+		t.Error("legacy investigation prompt should list low-level overrides in the allowed surface")
+	}
+	if !strings.Contains(prompt, promptfragments.LowLevelOverridesWhenExposedLine()) {
+		t.Error("legacy investigation prompt should mention low-level overrides when they are visible")
+	}
+}
+
+func TestBuildInvestigationPrompt_DefaultAllowedToolsStayGatherContextFirst(t *testing.T) {
+	prompt := BuildInvestigationPrompt("test request", false)
+	if strings.Contains(prompt, promptfragments.InvestigationAllowedToolsLine(true)) {
+		t.Error("default investigation prompt should not list low-level overrides as normally allowed")
+	}
+	if !strings.Contains(prompt, promptfragments.InvestigationAllowedToolsLine(false)) {
+		t.Error("default investigation prompt should list gather_context-first allowed tools")
 	}
 }

@@ -23,6 +23,15 @@ type mockProvider struct {
 	name string
 }
 
+func newAgentChatTestAgent(t *testing.T, provider api.Provider) *Agent {
+	t.Helper()
+
+	runtime := NewAgentRuntimeWithConfig(newProjectMapDisabledConfig())
+	agent := NewAgentWithRuntime("test-model", provider, false, runtime)
+	t.Cleanup(agent.Cleanup)
+	return agent
+}
+
 func (m *mockProvider) Name() string {
 	return m.name
 }
@@ -45,7 +54,7 @@ func (m *mockProvider) ChatWithImage(ctx context.Context, systemPrompt string, h
 
 func TestShouldAbortToolLoop_SameToolRepeated(t *testing.T) {
 	provider := &mockProvider{name: "test"}
-	agent := NewAgent("test-model", provider, false)
+	agent := newAgentChatTestAgent(t, provider)
 
 	// 閾値を3に設定
 	cfg := agent.cfg()
@@ -97,7 +106,7 @@ func TestShouldAbortToolLoop_SameToolRepeated(t *testing.T) {
 
 func TestShouldAbortToolLoop_DifferentTools(t *testing.T) {
 	provider := &mockProvider{name: "test"}
-	agent := NewAgent("test-model", provider, false)
+	agent := newAgentChatTestAgent(t, provider)
 
 	cfg := agent.cfg()
 	originalThreshold := cfg.LoopDetection.Threshold
@@ -138,7 +147,7 @@ func TestShouldAbortToolLoop_DifferentTools(t *testing.T) {
 
 func TestExecuteToolCall_UpdatesHistory(t *testing.T) {
 	provider := &mockProvider{name: "test"}
-	agent := NewAgent("test-model", provider, false)
+	agent := newAgentChatTestAgent(t, provider)
 
 	initialHistoryLen := len(agent.History)
 
@@ -162,7 +171,7 @@ func TestExecuteToolCall_UpdatesHistory(t *testing.T) {
 
 func TestExecuteToolCall_UpdatesStats(t *testing.T) {
 	provider := &mockProvider{name: "test"}
-	agent := NewAgent("test-model", provider, false)
+	agent := newAgentChatTestAgent(t, provider)
 
 	// Statsを初期化
 	agent.Stats = &SessionStats{
@@ -189,7 +198,7 @@ func TestExecuteToolCall_UpdatesStats(t *testing.T) {
 
 func TestAgent_Cleanup_NoStorage(t *testing.T) {
 	provider := &mockProvider{name: "test"}
-	agent := NewAgent("test-model", provider, false)
+	agent := newAgentChatTestAgent(t, provider)
 
 	// storageとsessionをnil化
 	agent.storage = nil
@@ -235,7 +244,7 @@ func TestAgent_SwitchProvider_NoAPIKey_ChatTest(t *testing.T) {
 	os.Unsetenv("DEEPSEEK_API_KEY")
 
 	provider := &mockProvider{name: "test"}
-	agent := NewAgent("test-model", provider, false)
+	agent := newAgentChatTestAgent(t, provider)
 
 	err := agent.SwitchProvider("deepseek")
 	if err == nil {
@@ -382,7 +391,7 @@ func TestExtractExplanationAndTool_UnclosedBrace(t *testing.T) {
 // TestExecuteToolCallWithResult は結果を返すことを確認
 func TestExecuteToolCallWithResult(t *testing.T) {
 	provider := &mockProvider{name: "test"}
-	agent := NewAgent("test-model", provider, false)
+	agent := newAgentChatTestAgent(t, provider)
 
 	// Statsを初期化
 	agent.Stats = &SessionStats{
@@ -492,7 +501,7 @@ func TestNormalMode_CreatePlanFC(t *testing.T) {
 		},
 	}
 
-	agent := NewAgent("test-model", provider, false)
+	agent := newAgentChatTestAgent(t, provider)
 	agent.Stats = NewSessionStats("test")
 
 	ctx := context.Background()
@@ -548,7 +557,7 @@ func TestNormalMode_PlanJSONFallback(t *testing.T) {
 		},
 	}
 
-	agent := NewAgent("test-model", provider, false)
+	agent := newAgentChatTestAgent(t, provider)
 	agent.Stats = NewSessionStats("test")
 
 	ctx := context.Background()
@@ -578,7 +587,7 @@ func TestNormalMode_PlanJSONParseFailed(t *testing.T) {
 		},
 	}
 
-	agent := NewAgent("test-model", provider, false)
+	agent := newAgentChatTestAgent(t, provider)
 	agent.Stats = NewSessionStats("test")
 
 	ctx := context.Background()
@@ -659,7 +668,7 @@ func TestExecuteStepV2_IgnoresCreatePlan(t *testing.T) {
 		},
 	}
 
-	agent := NewAgent("test-model", provider, false)
+	agent := newAgentChatTestAgent(t, provider)
 	agent.Stats = NewSessionStats("test")
 
 	p := &plan.Plan{
@@ -706,7 +715,7 @@ func TestChatCore_SetsAbortedStatusWithCancelReason(t *testing.T) {
 
 	var out bytes.Buffer
 	provider := &blockingCancelProvider{started: make(chan struct{})}
-	agent := NewAgent("test-model", provider, false)
+	agent := newAgentChatTestAgent(t, provider)
 	cfg := config.DefaultConfig()
 	cfg.ProjectMap.Enabled = false
 	agent.Runtime = &AgentRuntime{
@@ -747,7 +756,7 @@ func TestChatCore_SetsAbortedStatusWithCancelReason(t *testing.T) {
 
 func TestPrintTaskUsage(t *testing.T) {
 	provider := &mockProvider{name: "test"}
-	agent := NewAgent("test-model", provider, false)
+	agent := newAgentChatTestAgent(t, provider)
 	agent.Stats = NewSessionStats("openai", "gpt-5.4")
 	agent.ProviderName = "openai"
 

@@ -65,7 +65,7 @@ func TestBuildSystemPrompt_SystemPromptConstant(t *testing.T) {
 	if !strings.Contains(result, "Plan Mode") {
 		t.Error("result should append Plan Mode content")
 	}
-	if !strings.Contains(result, `paths=["agent.go:161-328"]`) {
-		t.Error("result should preserve read_file range syntax guidance")
+	if !strings.Contains(result, `gather_context(query="agent.go:161-328")`) {
+		t.Error("result should preserve gather_context exact-range guidance")
 	}
 }

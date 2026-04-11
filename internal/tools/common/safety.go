@@ -17,6 +17,7 @@ const (
 // ToolSafetyLevels は各ツールの安全性レベルを定義
 var ToolSafetyLevels = map[string]ToolSafety{
 	// SafetyHigh: 読み取り専用操作
+	"gather_context":    SafetyHigh,
 	"read_file":         SafetyHigh,
 	"read_files":        SafetyHigh,
 	"search_code":       SafetyHigh,

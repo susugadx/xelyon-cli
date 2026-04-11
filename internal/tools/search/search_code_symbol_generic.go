@@ -96,17 +96,20 @@ func findGenericDefinitions(symbol string, opts SearchOptions) []genericSymbolDe
 		return nil
 	}
 
-	args := buildGenericRgArgs(symbol, opts)
+	args, workdir := buildGenericRgArgs(symbol, opts)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, common.RipgrepPath(), args...)
+	if workdir != "" {
+		cmd.Dir = workdir
+	}
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
 	_ = cmd.Run()
 
-	lang := resolvePatternLang(opts.FileType)
+	lang := resolvePatternLang(representativeRawFileFilterToken(opts.FileType, opts.FilePattern))
 
 	var defs []genericSymbolDef
 	scanner := bufio.NewScanner(&stdout)
@@ -117,6 +120,9 @@ func findGenericDefinitions(symbol string, opts SearchOptions) []genericSymbolDe
 			continue
 		}
 		file := parts[0]
+		if !matchesSearchFileFilter(file, opts) {
+			continue
+		}
 		lineNum, err := strconv.Atoi(parts[1])
 		if err != nil {
 			continue
@@ -148,12 +154,15 @@ func findGenericReferences(symbol string, opts SearchOptions) []genericSymbolRef
 		return nil
 	}
 
-	args := buildGenericRgArgs(symbol, opts)
+	args, workdir := buildGenericRgArgs(symbol, opts)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, common.RipgrepPath(), args...)
+	if workdir != "" {
+		cmd.Dir = workdir
+	}
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
 	_ = cmd.Run()
@@ -167,6 +176,9 @@ func findGenericReferences(symbol string, opts SearchOptions) []genericSymbolRef
 			continue
 		}
 		file := parts[0]
+		if !matchesSearchFileFilter(file, opts) {
+			continue
+		}
 		lineNum, err := strconv.Atoi(parts[1])
 		if err != nil {
 			continue
@@ -183,20 +195,16 @@ func findGenericReferences(symbol string, opts SearchOptions) []genericSymbolRef
 }
 
 // buildGenericRgArgs は多言語シンボル検索用の ripgrep 引数を構築する。
-func buildGenericRgArgs(symbol string, opts SearchOptions) []string {
+func buildGenericRgArgs(symbol string, opts SearchOptions) ([]string, string) {
+	basis := resolveSearchPathBasisForOptions(opts)
+
 	args := []string{
 		"-n", "--no-heading", "--color", "never",
 		"-w",
 	}
-	if opts.FileType != "" {
-		args = append(args, "--type", normalizeRgType(opts.FileType))
-	}
-	searchPath := "."
-	if opts.Path != "" {
-		searchPath = opts.Path
-	}
-	args = append(args, symbol, searchPath)
-	return args
+	args = append(args, rawFileFilterToRipgrepArgs(opts.FileType, opts.FilePattern)...)
+	args = append(args, symbol, basis.target)
+	return args, basis.workdir
 }
 
 // resolvePatternLang は FileType を signaturePattern の lang に変換する。
@@ -244,29 +252,6 @@ func filterGenericRefs(refs []genericSymbolRef, def genericSymbolDef) []genericS
 		filtered = append(filtered, ref)
 	}
 	return filtered
-}
-
-func normalizeRgType(fileType string) string {
-	switch fileType {
-	case "python":
-		return "py"
-	case "typescript", "tsx", "jsx", "mjs":
-		return "ts"
-	case "rs", "rust":
-		return "rust"
-	case "kt", "kotlin", "kts":
-		return "kotlin"
-	case "cs", "csharp":
-		return "csharp"
-	case "cc", "hpp":
-		return "cpp"
-	case "ex", "exs", "elixir":
-		return "elixir"
-	case "rb", "ruby":
-		return "ruby"
-	default:
-		return fileType
-	}
 }
 
 func formatGenericMultipleDefsWithOptions(symbol string, defs []genericSymbolDef, reg *locator.Registry, opts SearchOptions) string {

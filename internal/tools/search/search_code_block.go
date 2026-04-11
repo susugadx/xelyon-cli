@@ -78,13 +78,17 @@ func getFileContentWithCache(cache tools.ToolCacheInterface, filePath string) st
 	return content
 }
 
-func detectBlocksWithCache(cache tools.ToolCacheInterface, results []SearchResult) {
+func detectBlocksWithCache(cache tools.ToolCacheInterface, results []SearchResult, opts SearchOptions) {
 	for i := range results {
 		r := &results[i]
 		if internalast.IsSupportedFile(r.FilePath) {
 			continue
 		}
-		content := getFileContentWithCache(cache, r.FilePath)
+		absPath := absoluteAffectedFilePath(r.FilePath, opts, affectedFileSourceText)
+		if absPath == "" {
+			absPath = r.FilePath
+		}
+		content := getFileContentWithCache(cache, absPath)
 		if content == "" {
 			continue
 		}
