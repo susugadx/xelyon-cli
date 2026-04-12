@@ -7,6 +7,19 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/agent/token"
 )
 
+var (
+	runImplementationPhaseForPlanRequest = defaultRunImplementationPhaseForPlanRequest
+	handlePlanImplementationTokenLimit   = defaultHandlePlanImplementationTokenLimit
+)
+
+func defaultRunImplementationPhaseForPlanRequest(a *Agent, ctx context.Context, p *plan.Plan) error {
+	return a.runImplementationPhase(ctx, p)
+}
+
+func defaultHandlePlanImplementationTokenLimit(a *Agent, err error, userRequest string, retryFunc func() error) bool {
+	return a.handleTokenLimitErrorWithRetry(err, retryFunc, true)
+}
+
 type planImplementationRequest struct {
 	agent       *Agent
 	ctx         context.Context
@@ -24,7 +37,7 @@ func newPlanImplementationRequest(agent *Agent, ctx context.Context, userRequest
 }
 
 func (r *planImplementationRequest) Run() error {
-	if err := r.agent.runImplementationPhase(r.ctx, r.plan); err != nil {
+	if err := runImplementationPhaseForPlanRequest(r.agent, r.ctx, r.plan); err != nil {
 		return r.handleFailure(err)
 	}
 
@@ -51,5 +64,5 @@ func (r *planImplementationRequest) handleTokenLimit(err error) bool {
 	retryFunc := func() error {
 		return r.agent.RunPlanMode(r.ctx, r.userRequest)
 	}
-	return r.agent.handleTokenLimitErrorWithRetry(err, retryFunc, true)
+	return handlePlanImplementationTokenLimit(r.agent, err, r.userRequest, retryFunc)
 }

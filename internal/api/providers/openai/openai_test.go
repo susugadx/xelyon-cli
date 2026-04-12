@@ -615,3 +615,105 @@ func TestIsCodexModel(t *testing.T) {
 		})
 	}
 }
+
+func TestOpenAIProvider_Setters(t *testing.T) {
+	p := New("test-key")
+
+	tools := []api.ToolDefinition{
+		{Name: "custom_tool", Description: "custom"},
+	}
+	p.SetMCPTools(tools)
+	if len(p.mcpTools) != 1 || p.mcpTools[0].Name != "custom_tool" {
+		t.Fatalf("mcpTools = %+v, want custom_tool", p.mcpTools)
+	}
+
+	var usage api.Usage
+	p.SetUsageCallback(func(u api.Usage) {
+		usage = u
+	})
+	if p.usageCallback == nil {
+		t.Fatal("usageCallback should be set")
+	}
+	p.usageCallback(api.Usage{InputTokens: 10, OutputTokens: 5})
+	if usage.InputTokens != 10 || usage.OutputTokens != 5 {
+		t.Fatalf("usage callback = %+v, want input=10 output=5", usage)
+	}
+
+	p.SetToolChoice("read_file")
+	if p.toolChoice == nil || *p.toolChoice != "read_file" {
+		t.Fatalf("toolChoice = %v, want read_file", p.toolChoice)
+	}
+	p.ClearToolChoice()
+	if p.toolChoice != nil {
+		t.Fatal("toolChoice should be cleared")
+	}
+}
+
+func TestOpenAIProvider_ChatWithImage_ResponsesAPIModel(t *testing.T) {
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		var raw map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+			t.Fatalf("Failed to decode request: %v", err)
+		}
+
+		if raw["model"] != "gpt-5" {
+			t.Fatalf("model = %v, want gpt-5", raw["model"])
+		}
+
+		input, ok := raw["input"].([]interface{})
+		if !ok || len(input) == 0 {
+			t.Fatalf("input = %#v, want non-empty array", raw["input"])
+		}
+
+		foundImage := false
+		for _, item := range input {
+			msg, ok := item.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			content, ok := msg["content"].([]interface{})
+			if !ok {
+				continue
+			}
+			for _, part := range content {
+				partMap, ok := part.(map[string]interface{})
+				if !ok {
+					continue
+				}
+				if partMap["type"] == "input_image" {
+					if url, ok := partMap["image_url"].(string); ok && strings.Contains(url, "data:image/png;base64,abcd") {
+						foundImage = true
+					}
+				}
+			}
+		}
+		if !foundImage {
+			t.Fatalf("request input should contain image data url, got %#v", raw["input"])
+		}
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = fmt.Fprint(w, "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_img\"}}\n\n")
+		_, _ = fmt.Fprint(w, "data: {\"type\":\"response.output_text.delta\",\"delta\":\"Image response\"}\n\n")
+		_, _ = fmt.Fprint(w, "data: {\"type\":\"response.completed\",\"response\":{\"usage\":{\"input_tokens\":8,\"output_tokens\":3}}}\n\n")
+		_, _ = fmt.Fprint(w, "data: [DONE]\n\n")
+	})
+
+	originalURL := os.Getenv("OPENAI_RESPONSES_URL")
+	defer os.Setenv("OPENAI_RESPONSES_URL", originalURL)
+	os.Setenv("OPENAI_RESPONSES_URL", server.URL)
+
+	p := New("test-key")
+	result, err := p.ChatWithImage(context.Background(), "System", nil, "describe", &api.ImageData{
+		Base64:    "abcd",
+		MediaType: "image/png",
+	}, "gpt-5")
+	if err != nil {
+		t.Fatalf("ChatWithImage() error = %v", err)
+	}
+	if result != "Image response" {
+		t.Fatalf("ChatWithImage() = %q, want %q", result, "Image response")
+	}
+	if p.GetResponseID() != "resp_img" {
+		t.Fatalf("GetResponseID() = %q, want %q", p.GetResponseID(), "resp_img")
+	}
+}

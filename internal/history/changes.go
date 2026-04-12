@@ -16,6 +16,8 @@ const (
 	changesDir = ".xelyon/changes"
 )
 
+var userHomeDirForChanges = os.UserHomeDir
+
 // PersistentChange は永続化される変更履歴
 type PersistentChange struct {
 	SessionID   string    `json:"session_id"`
@@ -32,7 +34,7 @@ type ChangeStorage struct {
 
 // NewChangeStorage は新しいChangeStorageを作成
 func NewChangeStorage() (*ChangeStorage, error) {
-	home, err := os.UserHomeDir()
+	home, err := userHomeDirForChanges()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get home directory: %w", err)
 	}

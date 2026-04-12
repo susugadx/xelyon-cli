@@ -7,7 +7,7 @@ func (a *Agent) setCurrentModel(model string) {
 		return
 	}
 	a.CurrentModel = model
-	a.syncSessionModel()
+	a.syncSessionRuntimeIdentity()
 	if a.Stats != nil {
 		a.statsMu.Lock()
 		a.Stats.Model = model
@@ -16,11 +16,13 @@ func (a *Agent) setCurrentModel(model string) {
 }
 
 // setCurrentModelAndSync updates the current model and immediately refreshes
-// derived runtime state that depends on provider/model selection.
+// derived runtime state plus session response-context reconciliation owned by
+// the current provider/model selection.
 func (a *Agent) setCurrentModelAndSync(model string) {
 	if a == nil {
 		return
 	}
 	a.setCurrentModel(model)
 	a.syncCurrentDerivedRuntimeState()
+	a.reconcileSessionForCurrentRuntime()
 }

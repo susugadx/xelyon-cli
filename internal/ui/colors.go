@@ -63,14 +63,14 @@ type fileOpPalette struct {
 
 // isTrueColorCapable は writer が truecolor 対応端末かどうかを返す。
 func isTrueColorCapable(w io.Writer) bool {
-	if color.NoColor {
+	return shouldUseTrueColor(color.NoColor, isFileTerminal(w), os.Getenv("COLORTERM"))
+}
+
+func shouldUseTrueColor(noColor bool, isTerminal bool, colorTerm string) bool {
+	if noColor || !isTerminal {
 		return false
 	}
-	if !isFileTerminal(w) {
-		return false
-	}
-	ct := os.Getenv("COLORTERM")
-	return ct == "truecolor" || ct == "24bit"
+	return colorTerm == "truecolor" || colorTerm == "24bit"
 }
 
 // writeTCFgBg は 24-bit truecolor の前景+背景でテキストを書き出す。
@@ -85,10 +85,14 @@ func writeTCFg(w io.Writer, r, g, b byte, text string) {
 
 // newFileOpPalette は writer の端末能力に応じたパレットを返す。
 func newFileOpPalette(w io.Writer) fileOpPalette {
-	if color.NoColor {
+	return newFileOpPaletteForCapabilities(color.NoColor, isFileTerminal(w), os.Getenv("COLORTERM"))
+}
+
+func newFileOpPaletteForCapabilities(noColor bool, isTerminal bool, colorTerm string) fileOpPalette {
+	if noColor {
 		return newPlainFileOpPalette()
 	}
-	if isTrueColorCapable(w) {
+	if shouldUseTrueColor(false, isTerminal, colorTerm) {
 		return newTrueColorFileOpPalette()
 	}
 	return new16ColorFileOpPalette()

@@ -12,15 +12,20 @@ const toolExecutionEntryType = "tool_execution"
 
 // Session は会話セッションを表す
 type Session struct {
-	ID              string
-	Model           string
-	StartTime       time.Time
-	LastModified    time.Time
-	Messages        []MessageEntry
-	CompactedItems  []CompactedItem `json:"compacted_items,omitempty"`   // Compact API 圧縮済みアイテム
-	IsCompactedMode bool            `json:"is_compacted_mode,omitempty"` // 圧縮モードフラグ
-	ResponseID      string          `json:"response_id,omitempty"`       // OpenAI Responses API の最新レスポンスID
-	persistedCount  int
+	ID                        string
+	Model                     string
+	ProviderName              string
+	ProviderConfigKey         string
+	StartTime                 time.Time
+	LastModified              time.Time
+	Messages                  []MessageEntry
+	CompactedItems            []CompactedItem `json:"compacted_items,omitempty"`   // Compact API 圧縮済みアイテム
+	IsCompactedMode           bool            `json:"is_compacted_mode,omitempty"` // 圧縮モードフラグ
+	ResponseID                string          `json:"response_id,omitempty"`       // OpenAI Responses API の継続コンテキスト用レスポンスID
+	ResponseModel             string          `json:"response_model,omitempty"`
+	ResponseProviderName      string          `json:"response_provider_name,omitempty"`
+	ResponseProviderConfigKey string          `json:"response_provider_config_key,omitempty"`
+	persistedCount            int
 }
 
 // CompactedItem は Compact API の圧縮済みアイテム（セッション保存用）
@@ -58,12 +63,19 @@ type ToolExecutionEntry struct {
 
 // SessionMetadata はセッション一覧用のメタデータ
 type SessionMetadata struct {
-	ID           string    `json:"session_id"`
-	Model        string    `json:"model"`
-	StartTime    time.Time `json:"start_time"`
-	LastModified time.Time `json:"last_modified"`
-	MessageCount int       `json:"message_count"`
-	Preview      string    `json:"preview"`
+	ID                        string    `json:"session_id"`
+	Model                     string    `json:"model"`
+	ProviderName              string    `json:"provider_name,omitempty"`
+	ProviderConfigKey         string    `json:"provider_config_key,omitempty"`
+	StartTime                 time.Time `json:"start_time"`
+	LastModified              time.Time `json:"last_modified"`
+	MessageCount              int       `json:"message_count"`
+	Preview                   string    `json:"preview"`
+	ResponseID                string    `json:"response_id,omitempty"`
+	ResponseContextVersion    int       `json:"response_context_version,omitempty"`
+	ResponseModel             string    `json:"response_model,omitempty"`
+	ResponseProviderName      string    `json:"response_provider_name,omitempty"`
+	ResponseProviderConfigKey string    `json:"response_provider_config_key,omitempty"`
 }
 
 // NewSession は新しいセッションを作成

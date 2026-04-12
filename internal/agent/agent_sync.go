@@ -42,6 +42,7 @@ func (a *Agent) SyncWithRuntimeConfig() {
 	if resolvedModel != "" {
 		a.setCurrentModelAndSync(resolvedModel)
 	}
+	a.reconcileSessionForCurrentRuntime()
 }
 
 func (a *Agent) syncRuntimeProviderConfig(cfg *config.Config, out io.Writer) {

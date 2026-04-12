@@ -31,11 +31,15 @@ const (
 
 // Provider は AWS Bedrock (Anthropic Claude) のプロバイダー実装
 type Provider struct {
-	client        *bedrockruntime.Client
+	client        invokeModelWithResponseStreamClient
 	region        string
 	mcpTools      []api.ToolDefinition // MCP ツール定義
 	usageCallback api.UsageCallback
 	runtimeConfig *config.Config
+}
+
+type invokeModelWithResponseStreamClient interface {
+	InvokeModelWithResponseStream(ctx context.Context, params *bedrockruntime.InvokeModelWithResponseStreamInput, optFns ...func(*bedrockruntime.Options)) (*bedrockruntime.InvokeModelWithResponseStreamOutput, error)
 }
 
 // New は新しい Bedrock Provider を作成

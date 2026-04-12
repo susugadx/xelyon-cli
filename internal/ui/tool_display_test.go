@@ -490,3 +490,63 @@ func TestFormatApplyPatchSummary(t *testing.T) {
 		})
 	}
 }
+
+func TestFormatToolLine_ErrorIncludesTarget(t *testing.T) {
+	line := FormatToolLine(ToolDisplayInfo{
+		ToolName: "read_file",
+		Args: map[string]string{
+			"path": "internal/lsp/server.go",
+		},
+		Result: "Error: permission denied\nsecond line",
+	})
+
+	want := "❌ read_file: internal/lsp/server.go → Error: permission denied"
+	if line != want {
+		t.Fatalf("FormatToolLine() = %q, want %q", line, want)
+	}
+}
+
+func TestFormatWriteFileSummary(t *testing.T) {
+	got := formatWriteFileSummary(map[string]string{"path": "tmp/out.txt"}, "Successfully wrote 42 bytes (3 lines) to tmp/out.txt")
+	if got != "tmp/out.txt (3 lines)" {
+		t.Fatalf("formatWriteFileSummary() = %q, want %q", got, "tmp/out.txt (3 lines)")
+	}
+}
+
+func TestFormatCopyFileSummary_FallsBackToSinglePath(t *testing.T) {
+	got := formatCopyFileSummary(map[string]string{"dest": "tmp/out.txt"})
+	if got != "tmp/out.txt" {
+		t.Fatalf("formatCopyFileSummary() = %q, want %q", got, "tmp/out.txt")
+	}
+}
+
+func TestFormatGitSummary_PrefersPathOrder(t *testing.T) {
+	got := formatGitSummary(map[string]string{
+		"message": "commit message",
+		"branch":  "feature/test",
+		"path":    "internal/api",
+	})
+	if got != "internal/api" {
+		t.Fatalf("formatGitSummary() = %q, want %q", got, "internal/api")
+	}
+}
+
+func TestReadFileDisplayTarget_FallsBackToPath(t *testing.T) {
+	got := readFileDisplayTarget(map[string]string{"path": "internal/api/base.go"})
+	if got != "internal/api/base.go" {
+		t.Fatalf("readFileDisplayTarget() = %q, want %q", got, "internal/api/base.go")
+	}
+}
+
+func TestFormatToolSummary_UnknownToolUsesSortedArgs(t *testing.T) {
+	got := formatToolSummary(ToolDisplayInfo{
+		ToolName: "custom_tool",
+		Args: map[string]string{
+			"z": "last",
+			"a": "first",
+		},
+	}, "")
+	if got != "first" {
+		t.Fatalf("formatToolSummary() = %q, want %q", got, "first")
+	}
+}

@@ -87,7 +87,7 @@ func (r *implementationPhaseRunner) persistSession() error {
 		return nil
 	}
 
-	a.syncResponseIDToSession()
+	a.syncSessionPersistenceState()
 	if err := a.storage.Save(a.session); err != nil {
 		yellow.Fprintf(a.output(), "Warning: Failed to save session: %v\n", err)
 	}

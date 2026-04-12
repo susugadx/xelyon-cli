@@ -30,6 +30,11 @@ var DefaultBoxStyle = BoxStyle{
 	RightT:      "┤",
 }
 
+const (
+	confirmBoxWidth   = 45
+	confirmBoxOptions = " [y] Approve  [n] Reject  [c] Comment"
+)
+
 // ToolConfirmBoxWithRuntime は runtime の出力先にツール確認用ボックスを表示する。
 func ToolConfirmBoxWithRuntime(runtime *Runtime, toolName string, details []string) {
 	ToolConfirmBoxToWriter(runtimeOrDefault(runtime).Output(), toolName, details)
@@ -41,18 +46,15 @@ func ToolConfirmBoxToWriter(out io.Writer, toolName string, details []string) {
 		return
 	}
 
-	width := 45
+	width := confirmBoxWidth
 
 	// 上辺
 	Cyan.Fprintf(out, "%s%s%s\n", DefaultBoxStyle.TopLeft, strings.Repeat(DefaultBoxStyle.Horizontal, width-2), DefaultBoxStyle.TopRight)
 
 	// ツール名（アイコン付き）
 	icon := getToolIcon(toolName)
-	title := fmt.Sprintf(" %s %s", icon, toolName)
-	padding := width - 2 - len([]rune(title))
-	if padding < 0 {
-		padding = 0
-	}
+	title := truncateBoxText(fmt.Sprintf(" %s %s", icon, toolName), width-4)
+	padding := boxLinePadding(width, len([]rune(title)))
 	Cyan.Fprintf(out, "%s", DefaultBoxStyle.Vertical)
 	Yellow.Fprintf(out, "%s%s", title, strings.Repeat(" ", padding))
 	Cyan.Fprintf(out, "%s\n", DefaultBoxStyle.Vertical)
@@ -66,11 +68,8 @@ func ToolConfirmBoxToWriter(out io.Writer, toolName string, details []string) {
 	Cyan.Fprintf(out, "%s%s%s\n", DefaultBoxStyle.LeftT, strings.Repeat(DefaultBoxStyle.Horizontal, width-2), DefaultBoxStyle.RightT)
 
 	// 選択肢
-	options := " [y] Approve  [n] Reject  [c] Comment"
-	optPadding := width - 2 - len(options)
-	if optPadding < 0 {
-		optPadding = 0
-	}
+	options := truncateBoxText(confirmBoxOptions, width-2)
+	optPadding := boxLinePadding(width, len([]rune(options)))
 	Cyan.Fprintf(out, "%s", DefaultBoxStyle.Vertical)
 	_, _ = fmt.Fprintf(out, "%s%s", options, strings.Repeat(" ", optPadding))
 	Cyan.Fprintf(out, "%s\n", DefaultBoxStyle.Vertical)
@@ -84,21 +83,35 @@ func printBoxLineToWriter(out io.Writer, text string, width int) {
 		return
 	}
 
-	// 長すぎる場合は切り詰め
-	maxLen := width - 4
-	displayText := text
-	if len([]rune(text)) > maxLen {
-		displayText = string([]rune(text)[:maxLen-3]) + "..."
-	}
-
-	padding := width - 2 - len([]rune(displayText)) - 1
-	if padding < 0 {
-		padding = 0
-	}
+	displayText := truncateBoxText(text, width-4)
+	padding := boxLinePadding(width, len([]rune(displayText))+1)
 
 	Cyan.Fprintf(out, "%s", DefaultBoxStyle.Vertical)
 	_, _ = fmt.Fprintf(out, " %s%s", displayText, strings.Repeat(" ", padding))
 	Cyan.Fprintf(out, "%s\n", DefaultBoxStyle.Vertical)
+}
+
+func truncateBoxText(text string, maxLen int) string {
+	if maxLen <= 0 {
+		return ""
+	}
+
+	runes := []rune(text)
+	if len(runes) <= maxLen {
+		return text
+	}
+	if maxLen <= 3 {
+		return string(runes[:maxLen])
+	}
+	return string(runes[:maxLen-3]) + "..."
+}
+
+func boxLinePadding(width, contentWidth int) int {
+	padding := width - 2 - contentWidth
+	if padding < 0 {
+		return 0
+	}
+	return padding
 }
 
 // getToolIcon はツール名に対応するアイコンを返す
@@ -152,21 +165,14 @@ func ConfirmPromptBoxToWriter(out io.Writer, message string) {
 		return
 	}
 
-	width := 45
+	width := confirmBoxWidth
 
 	// 上辺
 	Cyan.Fprintf(out, "%s%s%s\n", DefaultBoxStyle.TopLeft, strings.Repeat(DefaultBoxStyle.Horizontal, width-2), DefaultBoxStyle.TopRight)
 
 	// メッセージ
-	displayMsg := message
-	maxLen := width - 4
-	if len([]rune(message)) > maxLen {
-		displayMsg = string([]rune(message)[:maxLen-3]) + "..."
-	}
-	padding := width - 2 - len([]rune(displayMsg)) - 1
-	if padding < 0 {
-		padding = 0
-	}
+	displayMsg := truncateBoxText(message, width-4)
+	padding := boxLinePadding(width, len([]rune(displayMsg))+1)
 	Cyan.Fprintf(out, "%s", DefaultBoxStyle.Vertical)
 	Yellow.Fprintf(out, " %s%s", displayMsg, strings.Repeat(" ", padding))
 	Cyan.Fprintf(out, "%s\n", DefaultBoxStyle.Vertical)
@@ -175,11 +181,8 @@ func ConfirmPromptBoxToWriter(out io.Writer, message string) {
 	Cyan.Fprintf(out, "%s%s%s\n", DefaultBoxStyle.LeftT, strings.Repeat(DefaultBoxStyle.Horizontal, width-2), DefaultBoxStyle.RightT)
 
 	// 選択肢
-	options := " [y] Approve  [n] Reject  [c] Comment"
-	optPadding := width - 2 - len(options)
-	if optPadding < 0 {
-		optPadding = 0
-	}
+	options := truncateBoxText(confirmBoxOptions, width-2)
+	optPadding := boxLinePadding(width, len([]rune(options)))
 	Cyan.Fprintf(out, "%s", DefaultBoxStyle.Vertical)
 	_, _ = fmt.Fprintf(out, "%s%s", options, strings.Repeat(" ", optPadding))
 	Cyan.Fprintf(out, "%s\n", DefaultBoxStyle.Vertical)

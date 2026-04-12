@@ -3,7 +3,9 @@ package history
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -17,6 +19,39 @@ const (
 	defaultHistoryDir = ".xelyon/history"
 )
 
+var (
+	encryptSessionForStorage = crypto.EncryptSession
+	decryptSessionForStorage = crypto.DecryptSession
+	userHomeDirForStorage    = os.UserHomeDir
+	getPassphraseForStorage  = crypto.GetOrCreatePassphrase
+)
+
+var (
+	errSessionRecordDecrypt   = errors.New("failed to decrypt session record")
+	errSessionRecordUnmarshal = errors.New("failed to unmarshal session record")
+)
+
+func trimSessionRecordDelimiter(line []byte) []byte {
+	if n := len(line); n > 0 && line[n-1] == '\n' {
+		return line[:n-1]
+	}
+	return line
+}
+
+func readSessionRecord(reader *bufio.Reader) ([]byte, error) {
+	line, err := reader.ReadBytes('\n')
+	if err == io.EOF {
+		if len(line) == 0 {
+			return nil, io.EOF
+		}
+		return trimSessionRecordDelimiter(line), nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to read session file: %w", err)
+	}
+	return trimSessionRecordDelimiter(line), nil
+}
+
 // Storage は履歴の永続化を管理
 type Storage struct {
 	baseDir    string
@@ -26,7 +61,7 @@ type Storage struct {
 
 // NewStorage はストレージインスタンスを作成
 func NewStorage() (*Storage, error) {
-	home, err := os.UserHomeDir()
+	home, err := userHomeDirForStorage()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get home dir: %w", err)
 	}
@@ -40,7 +75,7 @@ func NewStorage() (*Storage, error) {
 	encryptionEnabled := os.Getenv("XELYON_ENCRYPT_HISTORY") == "1"
 	var passphrase string
 	if encryptionEnabled {
-		passphrase, err = crypto.GetOrCreatePassphrase()
+		passphrase, err = getPassphraseForStorage()
 		if err != nil {
 			return nil, fmt.Errorf("failed to get encryption key: %w", err)
 		}
@@ -80,7 +115,7 @@ func (st *Storage) Save(session *Session) error {
 
 		// 暗号化が有効な場合は暗号化
 		if st.encryption {
-			encrypted, err := crypto.EncryptSession(data, st.passphrase)
+			encrypted, err := encryptSessionForStorage(data, st.passphrase)
 			if err != nil {
 				return fmt.Errorf("failed to encrypt message: %w", err)
 			}
@@ -121,7 +156,7 @@ func (st *Storage) Rewrite(session *Session) error {
 		}
 
 		if st.encryption {
-			encrypted, err := crypto.EncryptSession(data, st.passphrase)
+			encrypted, err := encryptSessionForStorage(data, st.passphrase)
 			if err != nil {
 				return fmt.Errorf("failed to encrypt message: %w", err)
 			}
@@ -146,12 +181,19 @@ func (st *Storage) Load(sessionID string) (*Session, error) {
 	}
 
 	session := &Session{
-		ID:           meta.ID,
-		Model:        meta.Model,
-		StartTime:    meta.StartTime,
-		LastModified: meta.LastModified,
-		Messages:     []MessageEntry{},
+		ID:                        meta.ID,
+		Model:                     meta.Model,
+		ProviderName:              meta.ProviderName,
+		ProviderConfigKey:         meta.ProviderConfigKey,
+		StartTime:                 meta.StartTime,
+		LastModified:              meta.LastModified,
+		ResponseID:                meta.ResponseID,
+		ResponseModel:             meta.ResponseModel,
+		ResponseProviderName:      meta.ResponseProviderName,
+		ResponseProviderConfigKey: meta.ResponseProviderConfigKey,
+		Messages:                  []MessageEntry{},
 	}
+	restoreLoadedResponseContext(meta, session)
 
 	// JSONLメッセージを読み込み
 	filePath := st.sessionPath(sessionID)
@@ -161,30 +203,51 @@ func (st *Storage) Load(sessionID string) (*Session, error) {
 	}
 	defer f.Close()
 
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		data := scanner.Bytes()
+	reader := bufio.NewReader(f)
+	for {
+		record, err := readSessionRecord(reader)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
 
-		// 暗号化が有効な場合は復号化
-		if st.encryption && len(data) > 0 {
-			decrypted, err := crypto.DecryptSession(data, st.passphrase)
-			if err != nil {
-				// 復号化失敗はスキップ（古い非暗号化データかもしれない）
+		msg, err := st.decodeSessionRecord(record)
+		if err != nil {
+			if shouldSkipSessionRecordDecodeError(err) {
 				continue
 			}
-			data = decrypted
+			return nil, err
 		}
-
-		var msg MessageEntry
-		if err := json.Unmarshal(data, &msg); err != nil {
-			// 不正な行はスキップ
-			continue
-		}
-		session.Messages = append(session.Messages, msg)
+		session.Messages = append(session.Messages, *msg)
 	}
 	session.markPersisted()
 
 	return session, nil
+}
+
+func shouldSkipSessionRecordDecodeError(err error) bool {
+	return errors.Is(err, errSessionRecordDecrypt) || errors.Is(err, errSessionRecordUnmarshal)
+}
+
+func (st *Storage) decodeSessionRecord(record []byte) (*MessageEntry, error) {
+	data := record
+
+	// 暗号化が有効な場合は復号化
+	if st.encryption && len(data) > 0 {
+		decrypted, err := decryptSessionForStorage(data, st.passphrase)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", errSessionRecordDecrypt, err)
+		}
+		data = decrypted
+	}
+
+	var msg MessageEntry
+	if err := json.Unmarshal(data, &msg); err != nil {
+		return nil, fmt.Errorf("%w: %v", errSessionRecordUnmarshal, err)
+	}
+	return &msg, nil
 }
 
 // ListSessions は全セッションを新しい順で返す
@@ -264,12 +327,19 @@ func (st *Storage) saveMetadata(session *Session) error {
 	}
 
 	meta := SessionMetadata{
-		ID:           session.ID,
-		Model:        session.Model,
-		StartTime:    session.StartTime,
-		LastModified: session.LastModified,
-		MessageCount: session.conversationMessageCount(),
-		Preview:      preview,
+		ID:                        session.ID,
+		Model:                     session.Model,
+		ProviderName:              session.ProviderName,
+		ProviderConfigKey:         session.ProviderConfigKey,
+		StartTime:                 session.StartTime,
+		LastModified:              session.LastModified,
+		MessageCount:              session.conversationMessageCount(),
+		Preview:                   preview,
+		ResponseID:                session.ResponseID,
+		ResponseContextVersion:    responseContextMetadataVersionForSession(session),
+		ResponseModel:             session.ResponseModel,
+		ResponseProviderName:      session.ResponseProviderName,
+		ResponseProviderConfigKey: session.ResponseProviderConfigKey,
 	}
 
 	data, err := json.MarshalIndent(meta, "", "  ")

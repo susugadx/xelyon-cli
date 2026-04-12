@@ -179,16 +179,7 @@ func RunInteractiveWithResumeWithConfig(model string, provider api.Provider, cfg
 
 	// ロード済みセッションでAgent作成
 	agent := initInteractiveAgentWithRuntime(runtime, model, provider, autoApprove)
-	agent.session = session
-	agent.History = session.ToAPIMessages()
-	// Compacted 状態を復元（Compact API で圧縮済みの場合）
-	agent.RestoreCompactedState(session)
-	// ResponseID 復元（OpenAI Responses API キャッシュ）
-	if session.ResponseID != "" {
-		if ridProvider, ok := provider.(ResponseIDCapable); ok {
-			ridProvider.SetResponseID(session.ResponseID)
-		}
-	}
+	agent.applyLoadedSession(session)
 	defer agent.Cleanup() // グレースフルシャットダウン
 
 	printHeaderToWriter(runtimeUI.Output(), model, provider)
@@ -218,17 +209,7 @@ func runREPLLoop(agent *Agent, mlReader *ui.MultilineReader) {
 		greenPrompt := green.Sprint(">")
 		input, err := mlReader.ReadInput("\n" + greenPrompt + " ")
 		if err != nil {
-			// Handle Ctrl+C (ErrInterrupted)
-			if err == ui.ErrInterrupted {
-				now := time.Now()
-				if now.Sub(lastInterrupt) < 3*time.Second {
-					// 2回目（3秒以内）: アプリ終了
-					_, _ = fmt.Fprintln(agent.output(), "\n👋 Gracefully shutting down...")
-					agent.Cleanup()
-					os.Exit(0)
-				}
-				lastInterrupt = now
-				_, _ = fmt.Fprintln(agent.output(), "⚠️  Interrupted. Press Ctrl+C again within 3 seconds to exit.")
+			if handleREPLReadError(agent, err, &lastInterrupt) {
 				continue
 			}
 			// Other errors (like EOF): exit loop
@@ -268,27 +249,8 @@ func setupSignalHandler(agent *Agent) {
 	go func() {
 		for sig := range sigChan {
 			interruptMu.Lock()
-			now := time.Now()
-
-			if now.Sub(lastInterrupt) < 3*time.Second {
-				// 2回目（3秒以内）: アプリ終了
-				interruptMu.Unlock()
-				if agent.exitHook != nil {
-					agent.exitHook()
-				}
-				_, _ = fmt.Fprintln(agent.output(), "\n\n👋 Gracefully shutting down...")
-				agent.Cleanup()
-				os.Exit(0)
-			}
-
-			lastInterrupt = now
+			handleSignalInterrupt(agent, &lastInterrupt, sig)
 			interruptMu.Unlock()
-
-			// 1回目: 中断メッセージ
-			_, _ = fmt.Fprintln(agent.output(), "\n\n⚠️  Interrupted. Press Ctrl+C again within 3 seconds to exit.")
-
-			// 現在のAPI呼び出しをキャンセル
-			agent.cancelActiveRequest(fmt.Sprintf("signal: %s", sig))
 		}
 	}()
 }

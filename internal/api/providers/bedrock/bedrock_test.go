@@ -1,6 +1,7 @@
 package bedrock
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"strings"
@@ -630,4 +631,78 @@ func TestProvider_InterfaceCompliance(t *testing.T) {
 
 	// UsageReporter interface
 	var _ api.UsageReporter = p
+}
+
+func TestProvider_RuntimeConfigAndCompactionSupport(t *testing.T) {
+	p := &Provider{}
+
+	defaultCfg := p.effectiveConfig()
+	if defaultCfg == nil {
+		t.Fatal("effectiveConfig() should fall back to default config")
+	}
+
+	customCfg := config.DefaultConfig()
+	customCfg.DefaultModel = "custom-model"
+	customCfg.Compression.ClaudeCompaction = true
+	p.SetRuntimeConfig(customCfg)
+
+	if got := p.effectiveConfig(); got != customCfg {
+		t.Fatal("effectiveConfig() should return runtime config")
+	}
+	if !p.supportsClaudeCompactionWithConfig(customCfg, "global.anthropic.claude-sonnet-4-6-v1") {
+		t.Fatal("supportsClaudeCompactionWithConfig() = false, want true for supported model")
+	}
+	if p.supportsClaudeCompactionWithConfig(customCfg, "anthropic.claude-3-haiku") {
+		t.Fatal("supportsClaudeCompactionWithConfig() = true, want false for unsupported model")
+	}
+}
+
+func TestProvider_SetMCPEnabled_NoOp(t *testing.T) {
+	p := &Provider{}
+	p.SetMCPEnabled(true)
+	p.SetMCPEnabled(false)
+}
+
+func TestProvider_SupportsClaudeCompaction_WithRuntimeAndContext(t *testing.T) {
+	p := &Provider{}
+
+	runtimeCfg := config.DefaultConfig()
+	runtimeCfg.Compression.ClaudeCompaction = true
+	runtimeCfg.DefaultProvider = "bedrock"
+	runtimeCfg.DefaultModel = "global.anthropic.claude-sonnet-4-6-v1"
+	p.SetRuntimeConfig(runtimeCfg)
+
+	if !p.SupportsClaudeCompaction() {
+		t.Fatal("SupportsClaudeCompaction() = false, want true")
+	}
+
+	ctxCfg := config.DefaultConfig()
+	ctxCfg.Compression.ClaudeCompaction = false
+	ctxCfg.DefaultProvider = "bedrock"
+	ctxCfg.DefaultModel = "anthropic.claude-3-haiku"
+	ctx := config.WithContext(context.Background(), ctxCfg)
+
+	if p.SupportsClaudeCompactionWithContext(ctx, "") {
+		t.Fatal("SupportsClaudeCompactionWithContext() = true, want false when context disables compaction")
+	}
+	if !p.SupportsClaudeCompactionWithContext(context.Background(), "global.anthropic.claude-sonnet-4-6-v1") {
+		t.Fatal("SupportsClaudeCompactionWithContext() = false, want true for explicit supported model")
+	}
+}
+
+func TestBuildBedrockContextManagement_NoCompactionSupport(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Compression.ClaudeCompaction = true
+	headers := []string{"existing-beta"}
+
+	contextManagement, betaHeaders := buildBedrockContextManagement("anthropic.claude-3-haiku", cfg.Compression, headers)
+	if contextManagement == nil {
+		t.Fatal("ContextManagement should still exist for clear_tool_uses path")
+	}
+	if containsString(betaHeaders, "compact-2026-01-12") {
+		t.Fatalf("betaHeaders = %v, should not include compact beta", betaHeaders)
+	}
+	if !containsString(betaHeaders, "existing-beta") {
+		t.Fatalf("betaHeaders = %v, should preserve existing headers", betaHeaders)
+	}
 }

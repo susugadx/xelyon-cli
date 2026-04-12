@@ -280,31 +280,49 @@ func hasOutsideWorkspacePath(tc ToolConfirmContext) bool {
 // symlink 経由 CWD でも symlink escape でも正しく判定する。
 // パスが空の場合は workspace 内として扱う（パス不明時は安全側に倒さない）。
 func isInsideWorkspace(path string) bool {
+	return isInsideWorkspaceWithOps(path, defaultWorkspacePathOps)
+}
+
+type workspacePathOps struct {
+	abs          func(string) (string, error)
+	getwd        func() (string, error)
+	evalSymlinks func(string) (string, error)
+	lstat        func(string) (os.FileInfo, error)
+}
+
+var defaultWorkspacePathOps = workspacePathOps{
+	abs:          filepath.Abs,
+	getwd:        os.Getwd,
+	evalSymlinks: filepath.EvalSymlinks,
+	lstat:        os.Lstat,
+}
+
+func isInsideWorkspaceWithOps(path string, ops workspacePathOps) bool {
 	if path == "" {
 		return true // パス不明 = 判定不能 → workspace 内扱い
 	}
-	absPath, err := filepath.Abs(path)
+	absPath, err := ops.abs(path)
 	if err != nil {
 		return true
 	}
-	cwd, err := os.Getwd()
+	cwd, err := ops.getwd()
 	if err != nil {
 		return true
 	}
-	allowedDir, err := filepath.Abs(cwd)
+	allowedDir, err := ops.abs(cwd)
 	if err != nil {
 		return true
 	}
 
 	// base（CWD）を実体パスに解決
-	realAllowed, err := filepath.EvalSymlinks(allowedDir)
+	realAllowed, err := ops.evalSymlinks(allowedDir)
 	if err != nil {
 		realAllowed = allowedDir
 	}
 
 	// target を実体パスに解決（存在する場合）
-	if _, statErr := os.Lstat(absPath); statErr == nil {
-		realPath, err := filepath.EvalSymlinks(absPath)
+	if _, statErr := ops.lstat(absPath); statErr == nil {
+		realPath, err := ops.evalSymlinks(absPath)
 		if err != nil {
 			return false // symlink 解決失敗 → 安全側（workspace 外扱い）
 		}
@@ -313,8 +331,8 @@ func isInsideWorkspace(path string) bool {
 
 	// ファイル未存在 → 親ディレクトリを実体解決して判定
 	parentDir := filepath.Dir(absPath)
-	if _, statErr := os.Lstat(parentDir); statErr == nil {
-		realParent, err := filepath.EvalSymlinks(parentDir)
+	if _, statErr := ops.lstat(parentDir); statErr == nil {
+		realParent, err := ops.evalSymlinks(parentDir)
 		if err != nil {
 			return false
 		}

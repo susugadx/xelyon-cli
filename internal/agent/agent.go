@@ -157,6 +157,7 @@ func (a *Agent) appendSessionMessage(role, content, model string) {
 	if a == nil || a.session == nil {
 		return
 	}
+	a.invalidateSavedResponseContextForCurrentRuntime()
 	a.session.AddMessage(role, content, model)
 	a.persistSession()
 }
@@ -165,6 +166,7 @@ func (a *Agent) appendSessionMessageFromAPI(msg api.Message, model string) {
 	if a == nil || a.session == nil {
 		return
 	}
+	a.invalidateSavedResponseContextForCurrentRuntime()
 	a.session.AddMessageFromAPI(msg, model)
 	a.persistSession()
 }
@@ -173,6 +175,7 @@ func (a *Agent) appendSessionToolExecution(toolCall *tools.ToolCall, result stri
 	if a == nil || a.session == nil || toolCall == nil {
 		return
 	}
+	a.invalidateSavedResponseContextForCurrentRuntime()
 	success := !strings.HasPrefix(strings.TrimSpace(result), "Error:")
 	a.session.AddToolExecution(toolCall.Tool, toolCall.Args, result, success, a.CurrentModel)
 	a.persistSession()
@@ -182,7 +185,7 @@ func (a *Agent) persistSession() {
 	if a == nil || a.session == nil || a.storage == nil {
 		return
 	}
-	a.syncResponseIDToSession()
+	a.syncSessionPersistenceState()
 	if err := a.storage.Save(a.session); err != nil {
 		yellow.Fprintf(a.output(), "⚠️  Warning: Failed to save session: %v\n", err)
 	}
@@ -324,6 +327,7 @@ func NewAgentWithRuntime(model string, provider api.Provider, headless bool, run
 			changeStorage: changeStorage,
 		},
 	}
+	agent.syncSessionRuntimeIdentity()
 
 	// Usage callback を設定（プロバイダーがサポートしている場合）
 	if reporter, ok := provider.(api.UsageReporter); ok {
@@ -345,17 +349,8 @@ func shouldSkipLSPWarmup() bool {
 // cleanupHook はテスト用フック（非nil時にCleanupから呼ばれる）
 var cleanupHook func()
 
-// syncResponseIDToSession はプロバイダーの ResponseID をセッションに同期する（保存前に呼ぶ）
-func (a *Agent) syncResponseIDToSession() {
-	if a.session == nil {
-		return
-	}
-	if ridProvider, ok := a.CurrentProvider.(ResponseIDCapable); ok {
-		if ridProvider.HasCachedResponseID() {
-			a.session.ResponseID = ridProvider.GetResponseID()
-		}
-	}
-}
+// exitProcess はテスト用に差し替え可能なプロセス終了フック。
+var exitProcess = os.Exit
 
 // Cleanup はエージェントのリソースをクリーンアップ
 func (a *Agent) Cleanup() {
@@ -377,7 +372,7 @@ func (a *Agent) Cleanup() {
 	}
 	// セッション保存
 	if a.storage != nil && a.session != nil {
-		a.syncResponseIDToSession()
+		a.syncSessionPersistenceState()
 		if err := a.storage.Save(a.session); err != nil {
 			yellow.Fprintf(a.output(), "Warning: Failed to save session: %v\n", err)
 		}

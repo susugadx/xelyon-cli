@@ -2,7 +2,9 @@ package lsp
 
 import (
 	"bytes"
+	"context"
 	"io"
+	"os"
 	"testing"
 )
 
@@ -124,4 +126,86 @@ func TestServerDebugOutputUsesInjectedWriter(t *testing.T) {
 	if buf.String() != "[LSP test] hello\n" {
 		t.Fatalf("debug output should not change when debug is disabled")
 	}
+}
+
+func TestClient_GetDiagnostics_WithHelperServer(t *testing.T) {
+	t.Setenv("GO_WANT_XELYON_LSP_HELPER", "1")
+
+	tmpDir := t.TempDir()
+	filePath := tmpDir + "/main.go"
+	if err := os.WriteFile(filePath, []byte("package main\n\nfunc main() {}\n"), 0644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	cmd, args := lspHelperCommand(t)
+	client := NewClient(tmpDir)
+	client.SetConfigs(map[string]ServerConfig{
+		"go": {Command: cmd, Args: args},
+	})
+
+	var out bytes.Buffer
+	client.SetOutput(&out)
+
+	diags, err := client.GetDiagnostics(context.Background(), filePath)
+	if err != nil {
+		t.Fatalf("GetDiagnostics() error = %v", err)
+	}
+	if len(diags) != 2 {
+		t.Fatalf("len(diags) = %d, want 2", len(diags))
+	}
+	if diags[0].Message != "undefined: helper" {
+		t.Fatalf("diags[0].Message = %q, want %q", diags[0].Message, "undefined: helper")
+	}
+	if diags[1].Severity != DiagnosticSeverityWarning {
+		t.Fatalf("diags[1].Severity = %d, want %d", diags[1].Severity, DiagnosticSeverityWarning)
+	}
+	if got := out.String(); got == "" || !bytes.Contains([]byte(got), []byte("LSP server")) {
+		t.Fatalf("client output = %q, want server started message", got)
+	}
+	client.Close()
+}
+
+func TestClient_PositionMethods_WithHelperServer(t *testing.T) {
+	t.Setenv("GO_WANT_XELYON_LSP_HELPER", "1")
+
+	tmpDir := t.TempDir()
+	filePath := tmpDir + "/main.go"
+	if err := os.WriteFile(filePath, []byte("package main\n\nfunc helper() {}\n"), 0644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	cmd, args := lspHelperCommand(t)
+	client := NewClient(tmpDir)
+	client.SetConfigs(map[string]ServerConfig{
+		"go": {Command: cmd, Args: args},
+	})
+
+	ctx := context.Background()
+	refs, err := client.FindReferences(ctx, filePath, 3, 6, true)
+	if err != nil {
+		t.Fatalf("FindReferences() error = %v", err)
+	}
+	if len(refs) != 2 {
+		t.Fatalf("len(refs) = %d, want 2", len(refs))
+	}
+	if refs[0].Range.Start.Line != 9 {
+		t.Fatalf("refs[0].Range.Start.Line = %d, want 9", refs[0].Range.Start.Line)
+	}
+
+	defs, err := client.GotoDefinition(ctx, filePath, 3, 6)
+	if err != nil {
+		t.Fatalf("GotoDefinition() error = %v", err)
+	}
+	if len(defs) != 1 || defs[0].Range.Start.Line != 0 {
+		t.Fatalf("GotoDefinition() = %+v, want line 0", defs)
+	}
+
+	impls, err := client.GotoImplementation(ctx, filePath, 3, 6)
+	if err != nil {
+		t.Fatalf("GotoImplementation() error = %v", err)
+	}
+	if len(impls) != 1 || impls[0].Range.Start.Line != 20 {
+		t.Fatalf("GotoImplementation() = %+v, want line 20", impls)
+	}
+	client.Close()
 }

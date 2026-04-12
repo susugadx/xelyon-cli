@@ -1,11 +1,16 @@
 package openai
 
 import (
+	"context"
 	"encoding/json"
+	"io"
+	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	toolsreg "github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 
 	// ツール登録のための blank import
 	_ "github.com/susugadx/xelyon-cli/internal/tools/dev"
@@ -687,3 +692,68 @@ func TestResponsesUsageReasoningTokensToAPIUsage(t *testing.T) {
 // - callID がある場合: 通常通り累積
 // - done イベントで Arguments が空文字列なら累積値を保持
 // - done イベントで Arguments があれば上書き
+
+func TestHandleResponsesStreaming_TextToolCallsAndUsage(t *testing.T) {
+	var out strings.Builder
+	ctx := ui.WithRuntime(context.Background(), ui.NewRuntime(strings.NewReader(""), &out, &out))
+	ctx = api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesOff)
+
+	var gotUsage api.Usage
+	p := New("test-key")
+	p.SetUsageCallback(func(u api.Usage) {
+		gotUsage = u
+	})
+
+	resp := &http.Response{
+		Body: io.NopCloser(strings.NewReader(strings.Join([]string{
+			`data: {"type":"response.created","response":{"id":"resp_123","status":"in_progress"}}`,
+			``,
+			`data: {"type":"response.output_text.delta","delta":"Hello "}`,
+			``,
+			`data: {"type":"response.output_item.added","item":{"type":"function_call","name":"read_file","call_id":"call_1"}}`,
+			``,
+			`data: {"type":"response.function_call_arguments.delta","item":{"call_id":"call_1"},"delta":"{\"path\":\"main.go\"}"}`,
+			``,
+			`data: {"type":"response.completed","response":{"usage":{"input_tokens":10,"output_tokens":4,"input_tokens_details":{"cached_tokens":3},"output_tokens_details":{"reasoning_tokens":2}}}}`,
+			``,
+			`data: [DONE]`,
+		}, "\n"))),
+	}
+
+	content, responseID, err := p.handleResponsesStreaming(ctx, resp, ui.NewSpinnerWithRuntime(ui.RuntimeFromContext(ctx)))
+	if err != nil {
+		t.Fatalf("handleResponsesStreaming() error = %v", err)
+	}
+	if responseID != "resp_123" {
+		t.Fatalf("responseID = %q, want %q", responseID, "resp_123")
+	}
+	if !strings.Contains(content, "Hello ") {
+		t.Fatalf("content = %q, want text delta", content)
+	}
+	if !strings.Contains(content, `"tool":"read_file"`) || !strings.Contains(content, `"path":"main.go"`) {
+		t.Fatalf("content = %q, want tool call JSON", content)
+	}
+	if gotUsage.InputTokens != 10 || gotUsage.OutputTokens != 4 || gotUsage.CachedInputTokens != 3 || gotUsage.ThinkingTokens != 2 {
+		t.Fatalf("usage = %+v, want input=10 output=4 cached=3 thinking=2", gotUsage)
+	}
+}
+
+func TestHandleResponsesStreaming_ErrorEvent(t *testing.T) {
+	var out strings.Builder
+	ctx := ui.WithRuntime(context.Background(), ui.NewRuntime(strings.NewReader(""), &out, &out))
+	ctx = api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesOff)
+
+	p := New("test-key")
+	resp := &http.Response{
+		Body: io.NopCloser(strings.NewReader(strings.Join([]string{
+			`data: {"type":"error","error":{"message":"quota exceeded"}}`,
+			``,
+			`data: [DONE]`,
+		}, "\n"))),
+	}
+
+	_, _, err := p.handleResponsesStreaming(ctx, resp, ui.NewSpinnerWithRuntime(ui.RuntimeFromContext(ctx)))
+	if err == nil || !strings.Contains(err.Error(), "quota exceeded") {
+		t.Fatalf("handleResponsesStreaming() error = %v, want quota exceeded", err)
+	}
+}

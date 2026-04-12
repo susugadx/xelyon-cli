@@ -81,7 +81,6 @@ func (m Model) updateConfigScreen(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 }
-
 func (m Model) configLayout() configLayout {
 	return newConfigLayout(m.width, m.height)
 }

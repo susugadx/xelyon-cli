@@ -368,3 +368,42 @@ func TestSyncWithRuntimeConfig_PrefersSessionProviderConfigKeyWhenDefaultProvide
 		t.Fatalf("CurrentModel = %q, want %q", a.CurrentModel, "deepseek-chat")
 	}
 }
+
+func TestSyncWithRuntimeConfig_RestoresSavedResponseIDWhenRuntimeReturnsToMatchingContext(t *testing.T) {
+	cfg := newProjectMapDisabledConfig()
+	cfg.DefaultProvider = "openai"
+	cfg.SetProviderModelConfig("openai", config.ProviderModelConfig{DefaultModel: "saved-model"})
+	runtime := NewAgentRuntimeWithConfig(cfg)
+
+	provider := &mockResponseIDProvider{mockProvider: mockProvider{name: "openai"}}
+	session := history.NewSession("old-runtime-model")
+	session.ProviderName = "openai"
+	session.ProviderConfigKey = "openai"
+	session.ResponseID = "resp_saved"
+	session.ResponseModel = "saved-model"
+	session.ResponseProviderName = "openai"
+	session.ResponseProviderConfigKey = "openai"
+
+	a := &Agent{
+		ProviderName:      "openai",
+		ProviderConfigKey: "openai",
+		CurrentModel:      "different-model",
+		CurrentProvider:   provider,
+		Runtime:           runtime,
+		agentConversationState: agentConversationState{
+			session: session,
+		},
+	}
+
+	a.SyncWithRuntimeConfig()
+
+	if a.CurrentModel != "saved-model" {
+		t.Fatalf("CurrentModel = %q, want %q", a.CurrentModel, "saved-model")
+	}
+	if provider.responseID != "resp_saved" {
+		t.Fatalf("provider.responseID = %q, want restored saved response id", provider.responseID)
+	}
+	if a.session.Model != "saved-model" {
+		t.Fatalf("session.Model = %q, want reconciled runtime model", a.session.Model)
+	}
+}
