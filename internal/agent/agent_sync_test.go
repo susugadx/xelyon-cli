@@ -8,6 +8,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -49,6 +50,10 @@ func TestSyncWithRuntimeConfig_ModelUpdate(t *testing.T) {
 		CurrentModel:    "gpt-old",
 		CurrentProvider: &MockProvider{name: "openai"},
 		Runtime:         runtime,
+		Stats:           NewSessionStats("openai", "gpt-old"),
+		agentConversationState: agentConversationState{
+			session: history.NewSession("gpt-old"),
+		},
 	}
 
 	// Scenario 1: Update provider specific model in config
@@ -60,6 +65,12 @@ func TestSyncWithRuntimeConfig_ModelUpdate(t *testing.T) {
 
 	if a.CurrentModel != "gpt-new" {
 		t.Errorf("Expected CurrentModel to be 'gpt-new', got '%s'", a.CurrentModel)
+	}
+	if a.session == nil || a.session.Model != "gpt-new" {
+		t.Fatalf("session.Model = %q, want %q", a.session.Model, "gpt-new")
+	}
+	if a.Stats == nil || a.Stats.Model != "gpt-new" {
+		t.Fatalf("Stats.Model = %q, want %q", a.Stats.Model, "gpt-new")
 	}
 }
 

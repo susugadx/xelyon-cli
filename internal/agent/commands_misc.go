@@ -506,7 +506,7 @@ func handleThinkCommand(agent *Agent, args []string) bool {
 		cfg.Thinking.Enabled = true
 		// DeepSeek: モデル名で思考が決まるため reasoner に切り替え
 		if isDeepSeek && agent != nil {
-			agent.CurrentModel = "deepseek-reasoner"
+			agent.setCurrentModelAndSync("deepseek-reasoner")
 		}
 		green.Fprintf(out, "🧠 Thinking Mode: ON (level: %s)\n", cfg.Thinking.Level)
 		if isDeepSeek {
@@ -523,7 +523,7 @@ func handleThinkCommand(agent *Agent, args []string) bool {
 			cfg.Thinking.Enabled = false
 			// DeepSeek: reasoner → chat にフォールバック
 			if isDeepSeek && agent != nil && agent.CurrentModel == "deepseek-reasoner" {
-				agent.CurrentModel = "deepseek-chat"
+				agent.setCurrentModelAndSync("deepseek-chat")
 			}
 			green.Fprintln(out, "🧠 Thinking Mode: OFF")
 			if isDeepSeek {
@@ -535,7 +535,7 @@ func handleThinkCommand(agent *Agent, args []string) bool {
 		cfg.Thinking.Level = args[0]
 		// DeepSeek: モデル名で思考が決まるため reasoner に切り替え
 		if isDeepSeek && agent != nil {
-			agent.CurrentModel = "deepseek-reasoner"
+			agent.setCurrentModelAndSync("deepseek-reasoner")
 		}
 		green.Fprintf(out, "🧠 Thinking Mode: ON (level: %s)\n", args[0])
 		if isDeepSeek {
@@ -543,10 +543,6 @@ func handleThinkCommand(agent *Agent, args []string) bool {
 		}
 	default:
 		yellow.Fprintln(out, "Usage: /think [on|off|low|medium|high|xhigh]")
-	}
-
-	if isDeepSeek && agent != nil {
-		agent.syncSessionModel()
 	}
 	return true
 }
@@ -558,11 +554,11 @@ func handlePlanCommand(agent *Agent, args []string) bool {
 	if len(args) > 0 {
 		switch args[0] {
 		case "on":
-			agent.PlanModeEnabled = true
+			agent.setPlanModeEnabled(true)
 			green.Fprintln(out, "✅ Plan Mode ON - 調査→計画→承認→実行")
 			return true
 		case "off":
-			agent.PlanModeEnabled = false
+			agent.setPlanModeEnabled(false)
 			green.Fprintln(out, "✅ Plan Mode OFF - 通常モード")
 			return true
 		case "status":

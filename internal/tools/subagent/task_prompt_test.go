@@ -25,6 +25,9 @@ func TestPromptForTaskType_EditUsesProviderResolvedMode(t *testing.T) {
 		t.Fatal("openai edit prompt should not mention str_replace")
 	}
 	if strings.Contains(openAIPrompt, "search_code: code discovery tool") || strings.Contains(openAIPrompt, "read_file: low-level exact-content reader") {
-		t.Fatal("openai edit prompt should not advertise hidden low-level investigation tools")
+		t.Fatal("openai edit prompt should not advertise legacy low-level investigation tools")
+	}
+	if !strings.Contains(openAIPrompt, "read_file: exact-content reader for edit/apply_patch exact-control override") {
+		t.Fatal("openai edit prompt should keep read_file exact-control guidance when it stays visible")
 	}
 }

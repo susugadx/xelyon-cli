@@ -231,6 +231,9 @@ func TestGetSystemPromptForProvider_UsesProviderResolvedMode(t *testing.T) {
 		t.Fatal("openai prompt should not include legacy edit tool guidance")
 	}
 	if strings.Contains(openAIPrompt, "search_code: code discovery tool") || strings.Contains(openAIPrompt, "read_file: low-level exact-content reader") {
-		t.Fatal("openai prompt should not advertise hidden low-level investigation tools")
+		t.Fatal("openai prompt should not advertise legacy low-level investigation overrides")
+	}
+	if !strings.Contains(openAIPrompt, "read_file: exact-content reader for edit/apply_patch exact-control override") {
+		t.Fatal("openai prompt should keep read_file exact-control guidance when it stays visible")
 	}
 }

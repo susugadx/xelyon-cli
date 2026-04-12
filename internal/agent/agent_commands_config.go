@@ -48,12 +48,7 @@ func handleModelCommand(agent *Agent, args []string) bool {
 
 	// モデルを切り替え
 	oldModel := agent.CurrentModel
-	agent.CurrentModel = newModel
-	agent.syncSessionModel()
-	if agent.Stats != nil {
-		agent.Stats.Model = newModel
-	}
-	agent.rebuildSystemPromptForCurrentProvider()
+	agent.setCurrentModelAndSync(newModel)
 
 	green.Fprintf(out, "✅ Model switched: %s → %s\n", oldModel, newModel)
 	if agent.CurrentProvider != nil {
@@ -306,12 +301,7 @@ func handleUseCommand(agent *Agent, args []string) bool {
 	if len(args) >= 2 {
 		newModel := args[1]
 		oldModel := agent.CurrentModel
-		agent.CurrentModel = newModel
-		agent.syncSessionModel()
-		if agent.Stats != nil {
-			agent.Stats.Model = newModel
-		}
-		agent.rebuildSystemPromptForCurrentProvider()
+		agent.setCurrentModelAndSync(newModel)
 		green.Fprintf(out, "✅ Model: %s → %s\n", oldModel, newModel)
 	}
 

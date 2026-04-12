@@ -1,8 +1,9 @@
 package agent
 
 import (
-	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/investigation"
 )
 
 func TestToolVisibilityPolicy_Plan_DefaultEditTool(t *testing.T) {
@@ -23,7 +24,10 @@ func TestToolVisibilityPolicy_Plan_DefaultEditTool(t *testing.T) {
 	if toolNameInList(excluded, "read_file") {
 		t.Fatal("plan mode should keep read_file visible in default edit mode")
 	}
-	if policy.allowLowLevelInvestigation {
+	if policy.investigationSurface != investigation.SurfaceEditExactControl {
+		t.Fatalf("default edit mode should use edit exact-control surface, got %q", policy.investigationSurface)
+	}
+	if policy.investigationSurface.AllowsLowLevelOverrides() {
 		t.Fatal("default edit mode should not expose low-level investigation overrides")
 	}
 }
@@ -50,7 +54,10 @@ func TestToolVisibilityPolicy_Plan_LegacyEditTool(t *testing.T) {
 	if !toolNameInList(excluded, "list_dir") {
 		t.Fatal("plan mode should keep list_dir hidden in legacy edit mode")
 	}
-	if !policy.allowLowLevelInvestigation {
+	if policy.investigationSurface != investigation.SurfaceLegacyOverrides {
+		t.Fatalf("legacy edit mode should use legacy override surface, got %q", policy.investigationSurface)
+	}
+	if !policy.investigationSurface.AllowsLowLevelOverrides() {
 		t.Fatal("legacy edit mode should expose low-level investigation overrides")
 	}
 }
@@ -81,6 +88,10 @@ func TestToolVisibilityPolicy_NormalAndPlan_GatherContextFirst(t *testing.T) {
 			if toolNameInList(excluded, "gather_context") {
 				t.Fatalf("%s mode should keep gather_context visible", tt.phase)
 			}
+			policy := newToolVisibilityPolicy(EditToolModeApplyPatch, tt.phase, toolVisibilityOptions{allowSubAgents: true})
+			if policy.investigationSurface.ReadFileRole() != investigation.ToolRoleEditExactControl {
+				t.Fatalf("%s mode should keep read_file as exact-control override, got %q", tt.phase, policy.investigationSurface.ReadFileRole())
+			}
 		})
 	}
 }
@@ -95,6 +106,10 @@ func TestToolVisibilityPolicy_NormalLegacyKeepsLowLevelOverrides(t *testing.T) {
 	if !toolNameInList(excluded, "list_dir") {
 		t.Fatal("normal mode should keep list_dir hidden in legacy edit mode")
 	}
+	policy := newToolVisibilityPolicy(EditToolModeLegacy, toolSurfacePhaseNormal, toolVisibilityOptions{allowSubAgents: true})
+	if policy.investigationSurface.SearchCodeRole() != investigation.ToolRoleLowLevelOverride || policy.investigationSurface.ReadFileRole() != investigation.ToolRoleLowLevelOverride {
+		t.Fatalf("legacy mode should keep search_code/read_file as low-level overrides, got search=%q read=%q", policy.investigationSurface.SearchCodeRole(), policy.investigationSurface.ReadFileRole())
+	}
 }
 
 func TestToolVisibilityPolicy_DisablesSubAgentToolsWhenRequested(t *testing.T) {
@@ -105,53 +120,3 @@ func TestToolVisibilityPolicy_DisablesSubAgentToolsWhenRequested(t *testing.T) {
 		}
 	}
 }
-
-func TestToolVisibilityPolicy_NormalModeRecoveryPrompt_DefaultSurface(t *testing.T) {
-	policy := newToolVisibilityPolicy(EditToolModeApplyPatch, toolSurfacePhaseNormal, toolVisibilityOptions{allowSubAgents: true})
-
-	for _, kind := range []normalModeRecoveryPromptKind{
-		normalModeRecoveryPromptDirectExecution,
-		normalModeRecoveryPromptStopPlanning,
-		normalModeRecoveryPromptNoTextPlan,
-	} {
-		got := policy.normalModeRecoveryPrompt(kind)
-		if !containsAll(got, "gather_context", "read_file", "apply_patch") {
-			t.Fatalf("default recovery prompt should mention gather_context/read_file/apply_patch, got %q", got)
-		}
-		if containsAny(got, "str_replace") {
-			t.Fatalf("default recovery prompt should avoid hidden legacy edit tools, got %q", got)
-		}
-	}
-}
-
-func TestToolVisibilityPolicy_NormalModeRecoveryPrompt_LegacySurface(t *testing.T) {
-	policy := newToolVisibilityPolicy(EditToolModeLegacy, toolSurfacePhaseNormal, toolVisibilityOptions{allowSubAgents: true})
-
-	got := policy.normalModeRecoveryPrompt(normalModeRecoveryPromptDirectExecution)
-	if !containsAll(got, "gather_context", "read_file", "str_replace") {
-		t.Fatalf("legacy recovery prompt should mention visible low-level tools, got %q", got)
-	}
-	if containsAny(got, "apply_patch") {
-		t.Fatalf("legacy recovery prompt should avoid apply_patch, got %q", got)
-	}
-}
-
-func containsAll(s string, subs ...string) bool {
-	for _, sub := range subs {
-		if !containsString(s, sub) {
-			return false
-		}
-	}
-	return true
-}
-
-func containsAny(s string, subs ...string) bool {
-	for _, sub := range subs {
-		if containsString(s, sub) {
-			return true
-		}
-	}
-	return false
-}
-
-func containsString(s, sub string) bool { return strings.Contains(s, sub) }

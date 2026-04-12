@@ -58,6 +58,7 @@ func TestHandleModelCommand_ClearCache(t *testing.T) {
 	agent := &Agent{
 		ProviderName: "mock",
 		CurrentModel: "old-model",
+		Stats:        NewSessionStats("mock", "old-model"),
 		Runtime:      NewAgentRuntimeWithConfig(cfg),
 		agentConversationState: agentConversationState{
 			session: history.NewSession("old-model"),
@@ -76,6 +77,7 @@ func TestHandleModelCommand_ClearCache(t *testing.T) {
 	// モデルが切り替わったことを確認
 	assert.Equal(t, "new-model", agent.CurrentModel)
 	assert.Equal(t, "new-model", agent.session.Model)
+	assert.Equal(t, "new-model", agent.Stats.Model)
 	// ClearCacheが呼ばれたことを確認
 	assert.True(t, mockProvider.cleared, "ClearCache should be called when switching model")
 }
@@ -261,6 +263,9 @@ func TestHandleUseCommand_WithExplicitModel_UpdatesSessionModel(t *testing.T) {
 	}
 	if agent.session == nil || agent.session.Model != "qwen2.5-coder:14b" {
 		t.Fatalf("session.Model = %q, want %q", agent.session.Model, "qwen2.5-coder:14b")
+	}
+	if agent.Stats == nil || agent.Stats.Model != "qwen2.5-coder:14b" {
+		t.Fatalf("Stats.Model = %q, want %q", agent.Stats.Model, "qwen2.5-coder:14b")
 	}
 	if len(agent.History) != 0 {
 		t.Fatalf("len(agent.History) = %d, want 0", len(agent.History))

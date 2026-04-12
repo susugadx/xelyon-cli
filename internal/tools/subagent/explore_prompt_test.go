@@ -4,27 +4,31 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/susugadx/xelyon-cli/internal/investigation"
 	promptfragments "github.com/susugadx/xelyon-cli/internal/prompt/fragments"
 )
 
 func TestExplorePrompt_UsesSharedInvestigationBlock(t *testing.T) {
 	block := promptfragments.BuildInvestigationToolingBlock(promptfragments.InvestigationToolingOptions{
-		AllowLowLevelOverrides: false,
-		SearchOverrideLabel:    "a low-level expert override",
-		ReadOverrideExtra:      "Use it when you already know the exact file or range.",
+		Surface:             investigation.SurfaceEditExactControl,
+		SearchOverrideLabel: "a low-level expert override",
+		ReadOverrideExtra:   "Use it only when you already know the exact file or range and need exact manual control.",
 	})
 	for _, want := range []string{
 		block,
 		promptfragments.SharedChangeGatherContextLine("For shared-symbol or impact investigation, do this before narrow follow-up searches whenever possible."),
 		promptfragments.GatherContextFirstLine("The orchestrator must explicitly justify lower-level control."),
-		promptfragments.InvestigationMultiPatternLine(false, ""),
+		promptfragments.InvestigationMultiPatternLine(investigation.SurfaceEditExactControl, ""),
 	} {
 		if !strings.Contains(ExplorePrompt, want) {
 			t.Fatalf("ExplorePrompt should embed shared investigation fragment %q", want)
 		}
 	}
 	if strings.Contains(ExplorePrompt, "search_code: code discovery tool") || strings.Contains(ExplorePrompt, "read_file: low-level exact-content reader") {
-		t.Fatal("default ExplorePrompt should not advertise hidden low-level investigation tools")
+		t.Fatal("default ExplorePrompt should not advertise legacy low-level investigation tools")
+	}
+	if !strings.Contains(ExplorePrompt, "read_file: exact-content reader for edit/apply_patch exact-control override") {
+		t.Fatal("default ExplorePrompt should keep read_file exact-control guidance aligned with visible tools")
 	}
 }
 

@@ -47,7 +47,7 @@ func (r *planModeRequest) prepare() {
 	r.ensurePlanningPrompt()
 	r.userRequest = r.prepareUserRequest(r.userRequest)
 	toolVisibility := r.agent.toolVisibilityPolicy(toolSurfacePhasePlan, toolVisibilityOptions{allowSubAgents: true})
-	r.investigationPrompt = promptplan.BuildInvestigationPrompt(r.userRequest, toolVisibility.allowLowLevelInvestigation)
+	r.investigationPrompt = promptplan.BuildInvestigationPrompt(r.userRequest, toolVisibility.investigationSurface)
 }
 
 func (r *planModeRequest) ensurePlanningPrompt() {

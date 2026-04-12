@@ -95,7 +95,3 @@ func handleHistoryCommand(agent *Agent) {
 		_, _ = fmt.Fprintf(out, "  %d. %s %s\n", i+1, role, preview)
 	}
 }
-
-func printHelpToWriter(out io.Writer) {
-	_, _ = fmt.Fprint(out, GeneratedHelpText)
-}

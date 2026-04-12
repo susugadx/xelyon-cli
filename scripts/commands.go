@@ -18,12 +18,6 @@ type SubCommand struct {
 	Description string // "Show all settings with diff from defaults"
 }
 
-// ToolInfo はツール情報
-type ToolInfo struct {
-	Name        string // "bash"
-	Description string // "Execute shell commands"
-}
-
 // Commands はコマンド一覧
 var Commands = []CommandInfo{
 	{
@@ -151,16 +145,6 @@ var Commands = []CommandInfo{
 		Description:   "Show this help",
 		DescriptionJP: "ヘルプを表示",
 	},
-}
-
-// Tools はツール一覧
-var Tools = []ToolInfo{
-	{Name: "bash", Description: "Execute shell commands"},
-	{Name: "read_file", Description: "Read file contents"},
-	{Name: "write_file", Description: "Write/create files"},
-	{Name: "str_replace", Description: "Replace text in file"},
-	{Name: "list_dir", Description: "List directory contents"},
-	{Name: "git_*", Description: "Git operations (status, diff, add, commit, push, log)"},
 }
 
 // Tips はTips一覧

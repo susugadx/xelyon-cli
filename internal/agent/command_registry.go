@@ -24,7 +24,7 @@ func specialCommandRegistry() map[string]specialCommandHandler {
 		"/q":         func(agent *Agent, _ []string) bool { handleExitCommand(agent); return true },
 		"/clear":     handleClearCommand,
 		"/history":   func(agent *Agent, _ []string) bool { handleHistoryCommand(agent); return true },
-		"/help":      func(agent *Agent, _ []string) bool { printHelpToWriter(agent.output()); return true },
+		"/help":      func(agent *Agent, _ []string) bool { printHelpToWriter(agent.output(), agent); return true },
 		"/model":     handleModelCommand,
 		"/version":   handleVersionCommand,
 		"/plan":      handlePlanCommand,

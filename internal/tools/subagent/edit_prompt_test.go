@@ -4,14 +4,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/susugadx/xelyon-cli/internal/investigation"
 	promptfragments "github.com/susugadx/xelyon-cli/internal/prompt/fragments"
 )
 
 func TestEditPromptBase_UsesSharedInvestigationBlock(t *testing.T) {
 	block := promptfragments.BuildInvestigationToolingBlock(promptfragments.InvestigationToolingOptions{
-		AllowLowLevelOverrides: false,
-		SearchOverrideLabel:    "a low-level expert override",
-		ReadOverrideExtra:      "Use it when you already know the exact file or range.",
+		Surface:             investigation.SurfaceEditExactControl,
+		SearchOverrideLabel: "a low-level expert override",
+		ReadOverrideExtra:   "Use it only when you already know the exact file or range and need exact manual control.",
 	})
 	if !strings.Contains(editPromptBase, block) {
 		t.Fatal("editPromptBase should embed the shared investigation block")
@@ -20,7 +21,10 @@ func TestEditPromptBase_UsesSharedInvestigationBlock(t *testing.T) {
 		t.Fatal("editPromptBase should embed shared-change guidance")
 	}
 	if strings.Contains(editPromptBase, "search_code: code discovery tool") || strings.Contains(editPromptBase, "read_file: low-level exact-content reader") {
-		t.Fatal("default editPromptBase should not advertise hidden low-level investigation tools")
+		t.Fatal("default editPromptBase should not advertise legacy low-level investigation tools")
+	}
+	if !strings.Contains(editPromptBase, "read_file: exact-content reader for edit/apply_patch exact-control override") {
+		t.Fatal("default editPromptBase should keep read_file exact-control guidance aligned with visible tools")
 	}
 }
 

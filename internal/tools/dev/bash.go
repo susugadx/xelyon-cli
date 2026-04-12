@@ -406,7 +406,7 @@ func checkAndConfirmBash(promptIO ui.PromptIO, cfg *config.Config, command strin
 		out.Cyan.Printf("🔍 Discovery Shell / 探索系シェルコマンド\n")
 		out.Cyan.Printf("📜 Command / コマンド: %s\n", command)
 		out.Cyan.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		out.Yellow.Println("💡 Tip: Use gather_context first for code exploration; fall back to read_file/search_code/list_dir only when you need exact low-level control")
+		out.Yellow.Println("💡 Tip: Use gather_context first for code exploration; fall back only to the low-level investigation tools that are actually visible in the current surface when exact control is required")
 		reason, msg, ok := confirmBashPromptWithReason(promptIO, command)
 		return reason, msg, ok
 	}

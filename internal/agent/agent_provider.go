@@ -62,14 +62,12 @@ func (a *Agent) SwitchProvider(providerName string) error {
 	a.CurrentProvider = provider
 	a.ProviderName = runtimeProviderName
 	a.ProviderConfigKey = modelLookupProviderName
-	a.CurrentModel = newModel
-	a.syncSessionModel()
+	a.setCurrentModel(newModel)
 
 	// 統計情報をリセット（プロバイダー切り替え時）
 	if a.Stats != nil {
 		a.statsMu.Lock()
 		a.Stats.Provider = runtimeProviderName
-		a.Stats.Model = newModel
 		a.Stats.InputTokens = 0
 		a.Stats.CachedInputTokens = 0
 		a.Stats.CacheCreationTokens = 0
@@ -96,7 +94,7 @@ func (a *Agent) SwitchProvider(providerName string) error {
 		configureMCPTools(provider, a.mcpManager.GetTools(), errOut)
 	}
 
-	a.rebuildSystemPromptForCurrentProvider()
+	a.syncCurrentDerivedRuntimeState()
 
 	green.Fprintf(out, "✅ Provider: %s → %s\n", oldProvider, runtimeProviderName)
 	green.Fprintf(out, "✅ Model: %s → %s\n", oldModel, newModel)

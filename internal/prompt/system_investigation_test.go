@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/susugadx/xelyon-cli/internal/investigation"
 	promptfragments "github.com/susugadx/xelyon-cli/internal/prompt/fragments"
 )
 
@@ -24,16 +25,16 @@ func TestSystemPrompt_ProjectMapGuidance(t *testing.T) {
 
 func TestSystemPrompt_UsesSharedInvestigationFragments(t *testing.T) {
 	toolingBlock := promptfragments.BuildInvestigationToolingBlock(promptfragments.InvestigationToolingOptions{
-		AllowLowLevelOverrides: false,
-		SearchOverrideLabel:    "an expert override",
-		SearchOverrideExtra:    `Short symbol queries when possible, and regex only when needed. For related code discovery, multi-pattern search is the default. For shared-change impact analysis starting from one symbol, prefer search_code(intent="impact", pattern="SymbolName") only when gather_context is clearly insufficient.`,
-		ReadOverrideExtra:      "Use line ranges from Project Map when exact manual control matters.",
+		Surface:             investigation.SurfaceEditExactControl,
+		SearchOverrideLabel: "an expert override",
+		SearchOverrideExtra: `Short symbol queries when possible, and regex only when needed. For related code discovery, multi-pattern search is the default. For shared-change impact analysis starting from one symbol, prefer search_code(intent="impact", pattern="SymbolName") only when gather_context is clearly insufficient.`,
+		ReadOverrideExtra:   "Use line ranges from Project Map when exact manual control matters.",
 	})
 	for _, want := range []string{
 		toolingBlock,
 		promptfragments.GatherContextFirstLine(""),
-		promptfragments.InvestigationMultiPatternLine(false, "For independent patterns and related code discovery, one combined query is preferred over serial narrow searches whenever possible."),
-		promptfragments.InvestigationFollowUpLine(false, ""),
+		promptfragments.InvestigationMultiPatternLine(investigation.SurfaceEditExactControl, "For independent patterns and related code discovery, one combined query is preferred over serial narrow searches whenever possible."),
+		promptfragments.InvestigationFollowUpLine(investigation.SurfaceEditExactControl, ""),
 		strings.TrimPrefix(promptfragments.SharedChangeGatherContextLine("Then edit once the affected files are clear."), "- "),
 	} {
 		if !strings.Contains(SystemPrompt, want) {
@@ -51,7 +52,7 @@ func TestSystemPrompt_WorkflowRules(t *testing.T) {
 		"Do not upgrade from targeted read to full-file read unless",
 		"NEVER re-read a file already returned in full",
 		"Do not search \"just in case\"",
-		"Use exact context from actual visible investigation tool output in this session",
+		"Use exact context from actual gather_context/read_file output when constructing edit instructions",
 		"make ci-check",
 		"Prefer targeted verification first",
 		"Do not rerun the same failing command without a code change",
@@ -71,7 +72,7 @@ func TestSystemPrompt_ParallelGuidanceIsConsolidated(t *testing.T) {
 		"For shared changes, gather the target code and its callers/tests in parallel when independent",
 		"Sub-agents are fetch tools, not decision-makers",
 		"Use wait_agent to collect results before synthesizing your response",
-		"do NOT repeat the same investigation yourself with gather_context or other visible read-only tools",
+		"do NOT repeat the same investigation yourself with gather_context/read_file",
 		"Fall back to direct tool use ONLY when ALL sub-agents fail",
 		"SINGLE response as parallel tool calls",
 		"Skip sub-agents for simple tasks",
@@ -86,13 +87,14 @@ func TestSystemPrompt_ParallelGuidanceIsConsolidated(t *testing.T) {
 func TestSystemPrompt_DefaultSurfaceAvoidsHiddenLowLevelOverrides(t *testing.T) {
 	for _, forbidden := range []string{
 		"search_code: code discovery tool",
-		"read_file: low-level exact-content reader",
 		"search_code(intent=\"impact\"",
-		"Reading 2+ independent exact files -> read_file can batch",
 	} {
 		if strings.Contains(SystemPrompt, forbidden) {
 			t.Fatalf("default SystemPrompt should not advertise hidden low-level investigation tool %q", forbidden)
 		}
+	}
+	if !strings.Contains(SystemPrompt, "read_file: exact-content reader for edit/apply_patch exact-control override") {
+		t.Fatal("default SystemPrompt should keep read_file exact-control guidance aligned with visible tools")
 	}
 }
 

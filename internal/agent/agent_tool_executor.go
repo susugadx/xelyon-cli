@@ -595,7 +595,7 @@ func (a *Agent) handleStrReplaceErrors(toolCall *tools.ToolCall, result string) 
 			yellow.Fprintf(out, "⚠️  str_replace failed %d times consecutively. Stopping to prevent loop.\n", a.strReplaceErrorCount)
 			yellow.Fprintln(out, "💡 Suggested alternatives / 代替案:")
 			_, _ = fmt.Fprintln(out, "   1. Use gather_context to inspect the target file or symbol before retrying")
-			_, _ = fmt.Fprintln(out, "   2. Use read_file/search_code only if you need exact low-level control")
+			_, _ = fmt.Fprintln(out, "   2. Use read_file only for exact manual control, and use search_code only if it is actually visible in the current surface")
 			_, _ = fmt.Fprintln(out, "   3. Ask the user for clarification on what to change")
 			_, _ = fmt.Fprintln(out, "   4. Try delete_lines + insert_before/insert_after for line-based edits")
 			_, _ = fmt.Fprintln(out)
@@ -609,7 +609,7 @@ func (a *Agent) handleStrReplaceErrors(toolCall *tools.ToolCall, result string) 
 
 Suggested next steps:
 1. Use gather_context to inspect the target file or symbol
-2. Use read_file/search_code only if you need exact low-level control
+2. Use read_file only for exact manual control, and use search_code only if it is actually visible in the current surface
 3. Ask the user for clarification
 4. Try a different approach (delete_lines + insert_before/insert_after)
 
