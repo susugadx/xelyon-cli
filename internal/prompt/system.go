@@ -30,7 +30,7 @@ var planningRefRe = regexp.MustCompile(`(?s)<!-- PLANNING_REF(?:\s+alt="([^"]*)"
 
 // StripPlanningReferences は SystemPrompt から planning ツール関連の参照を除去する。
 // Normal Mode で使用: FC プロバイダーは GetToolDefinitions() の除外で対応済みだが、
-// Workflow Rules 内のテキスト参照（create_plan, ask_user_question）も除去する必要がある。
+// Workflow Rules 内の planning 専用テキスト参照も除去する必要がある。
 func StripPlanningReferences(s string) string {
 	s = planningBlockRe.ReplaceAllString(s, "")
 	s = planningRefRe.ReplaceAllStringFunc(s, func(match string) string {

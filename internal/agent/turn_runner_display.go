@@ -101,17 +101,6 @@ func summarizeToolCallsForPhase(toolCalls []*tools.ToolCall) string {
 	return "Phase: " + strings.Join(parts, ", ")
 }
 
-func execToolCallsSummaryInput(toolCalls []*tools.ToolCall) []*tools.ToolCall {
-	execToolCalls := make([]*tools.ToolCall, 0, len(toolCalls))
-	for _, tc := range toolCalls {
-		if tc.Tool == "create_plan" {
-			continue
-		}
-		execToolCalls = append(execToolCalls, tc)
-	}
-	return execToolCalls
-}
-
 // normalModeRetryInstruction は Normal Mode の retry プロンプトを段階的に返す。
 func normalModeRetryInstruction(attempt int) string {
 	const constraint = `

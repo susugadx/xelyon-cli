@@ -80,7 +80,7 @@ func (r *TurnRunner) runNormalModeLoop(input string, image *api.ImageData) error
 			}
 		},
 		beforeToolCalls: func(_ int, response string, toolCalls []*tools.ToolCall) {
-			a.maybePrintAssistantPhaseUpdate(response, execToolCallsSummaryInput(toolCalls))
+			a.maybePrintAssistantPhaseUpdate(response, toolCalls)
 		},
 		executeToolCalls: func(_ int, response string, toolCalls []*tools.ToolCall) (turnLoopDirective, error) {
 			if err := r.processNormalModeToolCalls(response, toolCalls, &state.rs); err != nil {
@@ -171,14 +171,12 @@ func (r *TurnRunner) handleNormalModeNoToolResponse(response string, cfg *config
 func (r *TurnRunner) processNormalModeToolCalls(response string, toolCalls []*tools.ToolCall, rs *retryState) error {
 	a := r.agent
 	handler := newNormalModeToolResultHandler(r)
-	planningHandler := newNormalModePlanningHandler(r)
 
-	execToolCalls := planningHandler.FilterExecutableToolCalls(response, toolCalls)
-	if len(execToolCalls) > 0 {
-		a.addToolCallsToHistory(response, execToolCalls)
+	if len(toolCalls) > 0 {
+		a.addToolCallsToHistory(response, toolCalls)
 	}
 
-	toolLoopDetected := r.executeToolCalls(response, execToolCalls, nil, func(_ int, tc *tools.ToolCall, result string, change *tools.FileChange) {
+	toolLoopDetected := r.executeToolCalls(response, toolCalls, nil, func(_ int, tc *tools.ToolCall, result string, change *tools.FileChange) {
 		handler.Handle(tc, result, change)
 	})
 	if toolLoopDetected {

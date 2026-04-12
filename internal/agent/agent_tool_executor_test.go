@@ -150,24 +150,24 @@ func TestExecuteToolCallsWithParallel_LoopDetection_PreventsExecution(t *testing
 	}
 }
 
-// --- Test 2: skipFn prevents execution (Plan Mode create_plan/update_plan) ---
+// --- Test 2: skipFn prevents execution for selected tools ---
 
-func TestExecuteToolCallsWithParallel_SkipFn_PlanningTools(t *testing.T) {
+func TestExecuteToolCallsWithParallel_SkipFn_GenericTools(t *testing.T) {
 	provider := &mockProvider{name: "test"}
 	agent := NewAgent("test-model", provider, false)
 	agent.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
 
 	toolCalls := []*tools.ToolCall{
-		{ID: "c1", Tool: "create_plan", Args: map[string]string{"title": "Plan"}, RawArgs: map[string]any{"title": "Plan"}},
+		{ID: "c1", Tool: "write_file", Args: map[string]string{"path": "/tmp/a.go"}, RawArgs: map[string]any{"path": "/tmp/a.go"}},
 		{ID: "c2", Tool: "read_file", Args: testReadFileArgs("/a.go"), RawArgs: testReadFileRawArgs("/a.go")},
-		{ID: "c3", Tool: "update_plan", Args: map[string]string{"step_id": "1"}, RawArgs: map[string]any{"step_id": "1"}},
+		{ID: "c3", Tool: "search_code", Args: map[string]string{"pattern": "needle"}, RawArgs: map[string]any{"pattern": "needle"}},
 	}
 
 	agent.addToolCallsToHistory("test", toolCalls)
 
 	skipFn := func(tc *tools.ToolCall) (bool, string) {
-		if tc.Tool == "create_plan" || tc.Tool == "update_plan" {
-			return true, fmt.Sprintf("[%s] Ignored: planning tools are deprecated.", tc.Tool)
+		if tc.Tool == "write_file" || tc.Tool == "search_code" {
+			return true, fmt.Sprintf("[%s] Ignored by skipFn.", tc.Tool)
 		}
 		return false, ""
 	}
@@ -192,7 +192,7 @@ func TestExecuteToolCallsWithParallel_SkipFn_PlanningTools(t *testing.T) {
 		t.Errorf("executedTools[0] = %q, want 'read_file'", executedTools[0])
 	}
 
-	// create_plan/update_plan の skip メッセージが履歴にあること
+	// skip メッセージが履歴にあること
 	for _, id := range []string{"c1", "c3"} {
 		found := false
 		for _, msg := range agent.History {
@@ -298,7 +298,7 @@ func TestExecuteToolCallsWithParallel_HistoryMessages(t *testing.T) {
 
 	// 順序: skip(c0) → execute(c1) → loop(c2=c1と同じ) → abort(c3)
 	toolCalls := []*tools.ToolCall{
-		{ID: "c0", Tool: "create_plan", Args: map[string]string{"title": "X"}, RawArgs: map[string]any{"title": "X"}},
+		{ID: "c0", Tool: "write_file", Args: map[string]string{"path": "/tmp/x.go"}, RawArgs: map[string]any{"path": "/tmp/x.go"}},
 		{ID: "c1", Tool: "read_file", Args: testReadFileArgs("/a.go"), RawArgs: testReadFileRawArgs("/a.go")},
 		{ID: "c2", Tool: "read_file", Args: testReadFileArgs("/a.go"), RawArgs: testReadFileRawArgs("/a.go")},             // ループ
 		{ID: "c3", Tool: "search_code", Args: map[string]string{"pattern": "x"}, RawArgs: map[string]any{"pattern": "x"}}, // ループ後スキップ
@@ -308,8 +308,8 @@ func TestExecuteToolCallsWithParallel_HistoryMessages(t *testing.T) {
 	historyBefore := len(agent.History)
 
 	skipFn := func(tc *tools.ToolCall) (bool, string) {
-		if tc.Tool == "create_plan" {
-			return true, "[create_plan] Ignored"
+		if tc.Tool == "write_file" {
+			return true, "[write_file] Ignored"
 		}
 		return false, ""
 	}
@@ -541,13 +541,13 @@ func TestExecuteToolCallsWithParallel_TextBased_Skip(t *testing.T) {
 
 	// ID が空 = テキストベース
 	toolCalls := []*tools.ToolCall{
-		{Tool: "create_plan", Args: map[string]string{"title": "X"}, RawArgs: map[string]any{"title": "X"}},
+		{Tool: "write_file", Args: map[string]string{"path": "/tmp/x.go"}, RawArgs: map[string]any{"path": "/tmp/x.go"}},
 		{Tool: "read_file", Args: testReadFileArgs("/a.go"), RawArgs: testReadFileRawArgs("/a.go")},
 	}
 
 	skipFn := func(tc *tools.ToolCall) (bool, string) {
-		if tc.Tool == "create_plan" {
-			return true, "[create_plan] Ignored"
+		if tc.Tool == "write_file" {
+			return true, "[write_file] Ignored"
 		}
 		return false, ""
 	}
@@ -567,7 +567,7 @@ func TestExecuteToolCallsWithParallel_TextBased_Skip(t *testing.T) {
 	// テキストベースの skip は role="user" で追加されること
 	found := false
 	for _, msg := range agent.History {
-		if msg.Role == "user" && strings.Contains(msg.Content, "[create_plan] Ignored") {
+		if msg.Role == "user" && strings.Contains(msg.Content, "[write_file] Ignored") {
 			found = true
 			break
 		}

@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/susugadx/xelyon-cli/internal/agent/plan"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	_ "github.com/susugadx/xelyon-cli/internal/api/providers/deepseek"
 	"github.com/susugadx/xelyon-cli/internal/config"
@@ -486,33 +485,7 @@ func (m *blockingCancelProvider) ChatWithImage(ctx context.Context, systemPrompt
 	return m.ChatWithTools(ctx, systemPrompt, history, model)
 }
 
-// TestNormalMode_CreatePlanFC は Normal Mode で create_plan ツールコールが FC で来た場合、
-// deprecated 扱いで通常モード継続できることをテスト
-func TestNormalMode_CreatePlanFC(t *testing.T) {
-	// create_plan ツールコールを含むレスポンス → deprecated として無視 → 通常応答で終了
-	provider := &sequenceMockProvider{
-		name: "test",
-		responses: []string{
-			// 1回目: create_plan FC ツールコール
-			`I'll create a plan for this task.
-{"tool": "create_plan", "args": {"title": "Test Plan", "summary": "Test", "steps": "[{\"id\":1,\"description\":\"Step 1\",\"tools\":[\"bash\"]}]"}}`,
-			// 2回目: 通常応答（ツールなし）
-			"OK. Continuing without create_plan.",
-		},
-	}
-
-	agent := newAgentChatTestAgent(t, provider)
-	agent.Stats = NewSessionStats("test")
-
-	ctx := context.Background()
-	err := agent.runNormalMode(ctx, "do something complex", nil)
-
-	if err != nil {
-		t.Errorf("runNormalMode() returned error: %v", err)
-	}
-}
-
-func TestNormalMode_CreatePlanMixedResponse_CountsAssistantOnce(t *testing.T) {
+func TestNormalMode_MixedToolResponse_CountsAssistantOnce(t *testing.T) {
 	var out bytes.Buffer
 	testFile := t.TempDir() + "/sample.txt"
 	if err := os.WriteFile(testFile, []byte("hello\n"), 0644); err != nil {
@@ -522,8 +495,7 @@ func TestNormalMode_CreatePlanMixedResponse_CountsAssistantOnce(t *testing.T) {
 	provider := &sequenceMockProvider{
 		name: "test",
 		responses: []string{
-			fmt.Sprintf(`I'll sketch a plan and inspect the file first.
-{"tool": "create_plan", "args": {"title": "Test Plan", "summary": "Test", "steps": "[{\"id\":1,\"description\":\"Inspect file\",\"tools\":[\"read_file\"]}]"}}
+			fmt.Sprintf(`I'll inspect the file first.
 {"tool": "read_file", "args": {"paths": [%q]}}`, testFile),
 			"Done.",
 		},
@@ -651,38 +623,6 @@ func TestNormalMode_TextPlanHardFallback_DoesNotDuplicateAssistantHistory(t *tes
 	}
 	if agent.Stats.AssistantMessages != 0 {
 		t.Fatalf("AssistantMessages = %d, want 0 for fallback-only path", agent.Stats.AssistantMessages)
-	}
-}
-
-// TestExecuteStepV2_IgnoresCreatePlan は executeStepV2 内で create_plan が
-// 無視されること（再帰防止）をテスト
-func TestExecuteStepV2_IgnoresCreatePlan(t *testing.T) {
-	// ステップ実行中に create_plan を呼ぼうとする → 無視 → ステップ完了
-	provider := &sequenceMockProvider{
-		name: "test",
-		responses: []string{
-			// 1回目: ステップ実行中に create_plan を呼ぼうとする
-			`{"tool": "create_plan", "args": {"title": "Nested Plan", "summary": "Bad", "steps": "[{\"id\":1,\"description\":\"Nested\",\"tools\":[\"bash\"]}]"}}`,
-			// 2回目: ステップ完了
-			"Step completed.",
-		},
-	}
-
-	agent := newAgentChatTestAgent(t, provider)
-	agent.Stats = NewSessionStats("test")
-
-	p := &plan.Plan{
-		Summary: "Test plan",
-		Steps: []plan.PlanStep{
-			{ID: 1, Description: "Test step", Status: "pending", Tools: []string{"bash"}},
-		},
-	}
-
-	ctx := context.Background()
-	err := agent.executeStepV2(ctx, p, &p.Steps[0], 0, &retryState{})
-
-	if err != nil {
-		t.Errorf("executeStepV2() returned error: %v", err)
 	}
 }
 
