@@ -146,6 +146,32 @@ func TestRestoreSessionResponseIDForCurrentContext(t *testing.T) {
 		}
 	})
 
+	t.Run("legacy openai response context without provider owner remains alias agnostic", func(t *testing.T) {
+		provider := &mockResponseIDProvider{mockProvider: mockProvider{name: "openai"}, responseID: "old"}
+		session := history.NewSession("saved-model")
+		session.ResponseID = "resp_legacy"
+		session.ResponseModel = "saved-model"
+		session.ResponseProviderName = "openai"
+		agent := &Agent{
+			CurrentModel:      "saved-model",
+			ProviderName:      "openai",
+			ProviderConfigKey: "openai-alt",
+			CurrentProvider:   provider,
+			agentConversationState: agentConversationState{
+				session: session,
+			},
+		}
+
+		agent.restoreSessionResponseIDForCurrentContext()
+
+		if provider.responseID != "resp_legacy" {
+			t.Fatalf("provider.responseID = %q, want restored legacy response id", provider.responseID)
+		}
+		if agent.session.ResponseID != "resp_legacy" {
+			t.Fatalf("session.ResponseID = %q, want saved response id preserved", agent.session.ResponseID)
+		}
+	})
+
 	t.Run("missing saved provider identity does not guess openai anymore", func(t *testing.T) {
 		provider := &mockResponseIDProvider{mockProvider: mockProvider{name: "openai"}, responseID: "old"}
 		session := history.NewSession("saved-model")

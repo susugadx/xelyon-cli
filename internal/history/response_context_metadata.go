@@ -32,11 +32,7 @@ func migrateLegacyOpenAIResponseContext(session *Session) {
 	if session.ResponseProviderName == "" {
 		session.ResponseProviderName = "openai"
 	}
-	if session.ResponseProviderConfigKey == "" {
-		if session.ProviderConfigKey != "" {
-			session.ResponseProviderConfigKey = session.ProviderConfigKey
-		} else {
-			session.ResponseProviderConfigKey = "openai"
-		}
+	if session.ResponseProviderConfigKey == "" && session.ProviderConfigKey != "" {
+		session.ResponseProviderConfigKey = session.ProviderConfigKey
 	}
 }

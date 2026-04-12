@@ -20,7 +20,7 @@ func TestResponseContextMetadataVersionForSession(t *testing.T) {
 }
 
 func TestRestoreLoadedResponseContext(t *testing.T) {
-	t.Run("legacy metadata migrates openai response context", func(t *testing.T) {
+	t.Run("legacy metadata migrates openai response context with known provider owner", func(t *testing.T) {
 		meta := &SessionMetadata{ResponseID: "resp_legacy"}
 		session := &Session{
 			Model:             "saved-model",
@@ -41,6 +41,29 @@ func TestRestoreLoadedResponseContext(t *testing.T) {
 				session.ResponseProviderConfigKey,
 				"openai",
 				"openai",
+			)
+		}
+	})
+
+	t.Run("legacy metadata keeps provider owner empty when unknown", func(t *testing.T) {
+		meta := &SessionMetadata{ResponseID: "resp_legacy"}
+		session := &Session{
+			Model:      "saved-model",
+			ResponseID: "resp_legacy",
+		}
+
+		restoreLoadedResponseContext(meta, session)
+
+		if session.ResponseModel != "saved-model" {
+			t.Fatalf("session.ResponseModel = %q, want %q", session.ResponseModel, "saved-model")
+		}
+		if session.ResponseProviderName != "openai" || session.ResponseProviderConfigKey != "" {
+			t.Fatalf(
+				"session response provider identity = (%q, %q), want (%q, %q)",
+				session.ResponseProviderName,
+				session.ResponseProviderConfigKey,
+				"openai",
+				"",
 			)
 		}
 	})

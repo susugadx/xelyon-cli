@@ -273,3 +273,54 @@ func TestStorageLoad_VersionedResponseContextDoesNotGuessMissingProviderIdentity
 		)
 	}
 }
+
+func TestStorageLoad_LegacyResponseContextKeepsProviderOwnerEmptyWhenUnknown(t *testing.T) {
+	storage := newTestStorage(t)
+
+	session := NewSession("saved-model")
+	session.ResponseID = "resp_legacy"
+	session.AddMessage("user", "hello", "saved-model")
+	if err := storage.Save(session); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	metaPath := storage.metadataPath(session.ID)
+	raw, err := os.ReadFile(metaPath)
+	if err != nil {
+		t.Fatalf("ReadFile(metadata) error = %v", err)
+	}
+
+	var meta SessionMetadata
+	if err := json.Unmarshal(raw, &meta); err != nil {
+		t.Fatalf("Unmarshal(metadata) error = %v", err)
+	}
+	meta.ResponseModel = ""
+	meta.ResponseProviderName = ""
+	meta.ResponseProviderConfigKey = ""
+	meta.ResponseContextVersion = 0
+
+	legacyRaw, err := json.MarshalIndent(meta, "", "  ")
+	if err != nil {
+		t.Fatalf("MarshalIndent(metadata) error = %v", err)
+	}
+	if err := os.WriteFile(metaPath, legacyRaw, 0o600); err != nil {
+		t.Fatalf("WriteFile(metadata) error = %v", err)
+	}
+
+	loaded, err := storage.Load(session.ID)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if loaded.ResponseModel != "saved-model" {
+		t.Fatalf("loaded.ResponseModel = %q, want %q", loaded.ResponseModel, "saved-model")
+	}
+	if loaded.ResponseProviderName != "openai" || loaded.ResponseProviderConfigKey != "" {
+		t.Fatalf(
+			"loaded response provider identity = (%q, %q), want (%q, %q)",
+			loaded.ResponseProviderName,
+			loaded.ResponseProviderConfigKey,
+			"openai",
+			"",
+		)
+	}
+}
