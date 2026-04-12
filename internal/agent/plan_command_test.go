@@ -50,6 +50,61 @@ func TestHandlePlanCommand_Off(t *testing.T) {
 	}
 }
 
+func TestHandlePlanCommand_TogglesSurfaceVisibility(t *testing.T) {
+	runtime := newIsolatedRuntime()
+	agent := NewAgentWithRuntime("gpt-5.4", &mockProvider{name: "openai"}, false, runtime)
+	t.Cleanup(agent.Cleanup)
+
+	if toolNameInList(agent.registry().GetExcludedTools(), "ask_user_question") == false {
+		t.Fatalf("normal mode should start with ask_user_question excluded, got %v", agent.registry().GetExcludedTools())
+	}
+
+	if !handlePlanCommand(agent, []string{"on"}) {
+		t.Fatal("handlePlanCommand(on) = false, want true")
+	}
+	if toolNameInList(agent.registry().GetExcludedTools(), "ask_user_question") {
+		t.Fatalf("plan mode should expose ask_user_question, got %v", agent.registry().GetExcludedTools())
+	}
+
+	agent.syncCurrentDerivedRuntimeState()
+	if toolNameInList(agent.registry().GetExcludedTools(), "ask_user_question") {
+		t.Fatalf("plan-mode derived sync should keep ask_user_question visible, got %v", agent.registry().GetExcludedTools())
+	}
+
+	if !handlePlanCommand(agent, []string{"off"}) {
+		t.Fatal("handlePlanCommand(off) = false, want true")
+	}
+	excluded := agent.registry().GetExcludedTools()
+	if !toolNameInList(excluded, "ask_user_question") {
+		t.Fatalf("plan off should restore normal surface exclusion for ask_user_question, got %v", excluded)
+	}
+	if toolNameInList(excluded, "read_file") {
+		t.Fatalf("plan off should keep read_file visible on apply_patch surfaces, got %v", excluded)
+	}
+}
+
+func TestHandlePlanCommand_PreservesRuntimeSpecificExclusions(t *testing.T) {
+	runtime := newIsolatedRuntime()
+	agent := NewAgentWithRuntime("gpt-5.4", &mockProvider{name: "openai"}, false, runtime)
+	t.Cleanup(agent.Cleanup)
+
+	agent.registry().SetExcludedTools(append(agent.registry().GetExcludedTools(), "read_file", "mcp_github_get_issue"))
+
+	if !handlePlanCommand(agent, []string{"on"}) {
+		t.Fatal("handlePlanCommand(on) = false, want true")
+	}
+	if !handlePlanCommand(agent, []string{"off"}) {
+		t.Fatal("handlePlanCommand(off) = false, want true")
+	}
+
+	excluded := agent.registry().GetExcludedTools()
+	for _, name := range []string{"read_file", "mcp_github_get_issue", "ask_user_question"} {
+		if !toolNameInList(excluded, name) {
+			t.Fatalf("plan toggle should preserve runtime-specific exclusion for %s, got %v", name, excluded)
+		}
+	}
+}
+
 func TestHandlePlanCommand_Status(t *testing.T) {
 	agent := NewAgent("test-model", &mockPlanProvider{}, false)
 

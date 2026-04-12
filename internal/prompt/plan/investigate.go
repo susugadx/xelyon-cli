@@ -4,18 +4,20 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/susugadx/xelyon-cli/internal/investigation"
 	promptfragments "github.com/susugadx/xelyon-cli/internal/prompt/fragments"
 )
 
 // BuildInvestigationPrompt generates the prompt for the investigation phase.
 // userRequest is the original user request to investigate.
-func BuildInvestigationPrompt(userRequest string, allowLowLevelOverrides bool) string {
-	allowedTools := promptfragments.InvestigationAllowedToolsLine(allowLowLevelOverrides)
+func BuildInvestigationPrompt(userRequest string, surface investigation.Surface) string {
+	surface = investigation.NormalizeSurface(surface)
+	allowedTools := promptfragments.InvestigationAllowedToolsLine(surface)
 	checklistLines := []string{
 		promptfragments.BuildInvestigationToolingBlock(promptfragments.InvestigationToolingOptions{
-			AllowLowLevelOverrides: allowLowLevelOverrides,
+			Surface:                surface,
 			SearchOverrideLabel:    "a low-level expert override",
-			ReadOverrideExtra:      "Use it only when you already know the exact file or range.",
+			ReadOverrideExtra:      "Use it only when you already know the exact file or range and need exact manual control.",
 			IncludeBatchRead:       true,
 			BatchReadOverrideLabel: "a low-level override",
 		}),
@@ -27,7 +29,7 @@ func BuildInvestigationPrompt(userRequest string, allowLowLevelOverrides bool) s
 		`- Check for existing patterns to follow`,
 		`- Avoid broad exploration when the target is already clear`,
 	}
-	if allowLowLevelOverrides {
+	if surface.AllowsLowLevelOverrides() {
 		checklistLines = append(checklistLines[:2], append([]string{promptfragments.LowLevelOverridesWhenExposedLine()}, checklistLines[2:]...)...)
 	}
 	checklist := strings.Join(checklistLines, "\n")

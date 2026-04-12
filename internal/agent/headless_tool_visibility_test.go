@@ -73,6 +73,12 @@ func TestRunHeadlessWithConfig_DefaultEditToolVisibility(t *testing.T) {
 	if !strings.Contains(provider.systemPrompt, "### apply_patch (edit tool)") {
 		t.Fatal("default headless system prompt should use apply_patch guidance")
 	}
+	if strings.Contains(provider.systemPrompt, "search_code: code discovery tool") {
+		t.Fatal("default headless system prompt should not advertise hidden search_code")
+	}
+	if !strings.Contains(provider.systemPrompt, "read_file: exact-content reader for edit/apply_patch exact-control override") {
+		t.Fatal("default headless system prompt should keep read_file exact-control guidance")
+	}
 }
 
 func TestRunHeadlessWithConfig_ProviderResolvedLegacyEditToolVisibility(t *testing.T) {

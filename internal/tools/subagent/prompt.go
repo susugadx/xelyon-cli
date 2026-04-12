@@ -3,6 +3,7 @@ package subagent
 import (
 	"strings"
 
+	"github.com/susugadx/xelyon-cli/internal/investigation"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
 	promptfragments "github.com/susugadx/xelyon-cli/internal/prompt/fragments"
 )
@@ -69,18 +70,19 @@ func ExplorePromptForEditTool(editTool string) string {
 }
 
 func buildExplorePrompt(allowLowLevelOverrides bool) string {
+	surface := investigation.ResolveSurface(allowLowLevelOverrides, true)
 	toolingLines := []string{
 		promptfragments.GatherContextFirstLine("The orchestrator must explicitly justify lower-level control."),
 	}
-	if allowLowLevelOverrides {
+	if surface.AllowsLowLevelOverrides() {
 		toolingLines = append(toolingLines,
-			promptfragments.ReadFileBatchOverrideLine("a low-level override"),
-			promptfragments.InvestigationMultiPatternLine(true, ""),
+			promptfragments.ReadFileBatchOverrideLine(surface, "a low-level override"),
+			promptfragments.InvestigationMultiPatternLine(surface, ""),
 			`- Avoid overly broad regex like ".*" or ".+" in search_code.`,
 		)
 	} else {
 		toolingLines = append(toolingLines,
-			promptfragments.InvestigationMultiPatternLine(false, ""),
+			promptfragments.InvestigationMultiPatternLine(surface, ""),
 		)
 	}
 
@@ -91,14 +93,14 @@ Respond in the same language as the task message.
 ### Project Map First
 Project Map lists file paths, symbol definitions with line ranges for the project.
 - Symbol location is in Project Map → use gather_context(query="path:start-end") directly.
-- ` + strings.TrimPrefix(promptfragments.ProjectMapKnownSymbolLine(allowLowLevelOverrides), "- ") + `
-- ` + strings.TrimPrefix(promptfragments.ProjectMapExactReadLine(allowLowLevelOverrides), "- ") + `
+- ` + strings.TrimPrefix(promptfragments.ProjectMapKnownSymbolLine(surface), "- ") + `
+- ` + strings.TrimPrefix(promptfragments.ProjectMapExactReadLine(surface), "- ") + `
 - If needed information is missing from Project Map, start with gather_context.
 ### When to use tools
 ` + promptfragments.BuildInvestigationToolingBlock(promptfragments.InvestigationToolingOptions{
-		AllowLowLevelOverrides: allowLowLevelOverrides,
-		SearchOverrideLabel:    "a low-level expert override",
-		ReadOverrideExtra:      "Use it when you already know the exact file or range.",
+		Surface:             surface,
+		SearchOverrideLabel: "a low-level expert override",
+		ReadOverrideExtra:   "Use it only when you already know the exact file or range and need exact manual control.",
 	}) + `
 ` + promptfragments.SharedChangeGatherContextLine("For shared-symbol or impact investigation, do this before narrow follow-up searches whenever possible.") + `
 - Never guess file paths or APIs. If the task gives a path, use it directly.
@@ -124,22 +126,23 @@ Project Map lists file paths, symbol definitions with line ranges for the projec
 var editPromptBase = buildEditPromptBase(false)
 
 func buildEditPromptBase(allowLowLevelOverrides bool) string {
+	surface := investigation.ResolveSurface(allowLowLevelOverrides, true)
 	toolingLines := []string{
 		promptfragments.GatherContextFirstLine("The orchestrator must explicitly justify lower-level control."),
 	}
-	if allowLowLevelOverrides {
+	if surface.AllowsLowLevelOverrides() {
 		toolingLines = append(toolingLines,
-			promptfragments.ReadFileBatchOverrideLine("a low-level override"),
-			promptfragments.InvestigationMultiPatternLine(true, "For related code discovery."),
+			promptfragments.ReadFileBatchOverrideLine(surface, "a low-level override"),
+			promptfragments.InvestigationMultiPatternLine(surface, "For related code discovery."),
 		)
 	} else {
 		toolingLines = append(toolingLines,
-			promptfragments.InvestigationMultiPatternLine(false, "For related code discovery."),
+			promptfragments.InvestigationMultiPatternLine(surface, "For related code discovery."),
 		)
 	}
 
 	sharedChangeExtra := "If the affected surface is not already clear from the Project Map, known files, or orchestrator-provided scope, do this before narrower follow-up investigation."
-	if allowLowLevelOverrides {
+	if surface.AllowsLowLevelOverrides() {
 		sharedChangeExtra = "If the affected surface is not already clear from the Project Map, known files, or orchestrator-provided scope, do this before any low-level override search."
 	}
 
@@ -150,13 +153,13 @@ Respond in the same language as the task message.
 ### Project Map First
 Project Map lists file paths, symbol definitions with line ranges.
 - Symbol location is in Project Map → use gather_context(query="path:start-end") directly.
-- ` + strings.TrimPrefix(promptfragments.ProjectMapKnownSymbolLine(allowLowLevelOverrides), "- ") + `
-- ` + strings.TrimPrefix(promptfragments.ProjectMapExactReadLine(allowLowLevelOverrides), "- ") + `
+- ` + strings.TrimPrefix(promptfragments.ProjectMapKnownSymbolLine(surface), "- ") + `
+- ` + strings.TrimPrefix(promptfragments.ProjectMapExactReadLine(surface), "- ") + `
 - If needed information is missing from the Project Map, start with gather_context.
 ` + promptfragments.BuildInvestigationToolingBlock(promptfragments.InvestigationToolingOptions{
-		AllowLowLevelOverrides: allowLowLevelOverrides,
-		SearchOverrideLabel:    "a low-level expert override",
-		ReadOverrideExtra:      "Use it when you already know the exact file or range.",
+		Surface:             surface,
+		SearchOverrideLabel: "a low-level expert override",
+		ReadOverrideExtra:   "Use it only when you already know the exact file or range and need exact manual control.",
 	}) + `
 - Never guess file paths or APIs.
 - Do not re-read files already returned in full in this session.
@@ -176,7 +179,7 @@ Project Map lists file paths, symbol definitions with line ranges.
 	), "\n") + `
 
 ## Edit Rules
-- ` + promptfragments.InvestigationContextSourceLine(allowLowLevelOverrides) + `
+- ` + promptfragments.InvestigationContextSourceLine(surface) + `
 - After an edit attempt fails, read the target section once, then retry. Do not loop read-fail-read-fail.
 - Make ONLY the changes explicitly requested. Do NOT refactor, rename, reformat, or reorganize code beyond the task scope.
 - Do not touch files not mentioned in the task.

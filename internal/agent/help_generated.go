@@ -2,8 +2,8 @@
 
 package agent
 
-// GeneratedHelpText は自動生成されたヘルプテキスト
-const GeneratedHelpText = `Commands:
+// GeneratedHelpCommandsText は自動生成されたヘルプのコマンド一覧。
+const GeneratedHelpCommandsText = `Commands:
   /exit, /quit, /q          - Exit the CLI
   /clear                    - Clear conversation history
   /history                  - Show conversation history
@@ -28,16 +28,10 @@ const GeneratedHelpText = `Commands:
   /lsp [status]             - Show LSP server status (running/not started/disabled)
   /version                  - Show version information
   /help                     - Show this help
+`
 
-Available tools (AI will use automatically):
-  bash        - Execute shell commands
-  read_file   - Read file contents
-  write_file  - Write/create files
-  str_replace - Replace text in file
-  list_dir    - List directory contents
-  git_*       - Git operations (status, diff, add, commit, push, log)
-
-Tips:
+// GeneratedHelpTipsText は自動生成されたヘルプの Tips 一覧。
+const GeneratedHelpTipsText = `Tips:
   - Just describe what you want in natural language
   - AI will ask confirmation for dangerous operations
   - Use Ctrl+C to cancel current operation

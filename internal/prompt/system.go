@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/susugadx/xelyon-cli/internal/investigation"
 	promptfragments "github.com/susugadx/xelyon-cli/internal/prompt/fragments"
 	promptplan "github.com/susugadx/xelyon-cli/internal/prompt/plan"
 )
@@ -53,14 +54,14 @@ func GetSystemPromptForProvider(providerName string, modelName string) string {
 	return buildSystemPromptForEditTool(string(ResolveEditToolMode(providerName, modelName)))
 }
 
-func buildSystemPromptPrefix(allowLowLevelOverrides bool) string {
-	projectMapKnownSymbolLine := promptfragments.ProjectMapKnownSymbolLine(allowLowLevelOverrides)
-	projectMapExactReadLine := promptfragments.ProjectMapExactReadLine(allowLowLevelOverrides)
+func buildSystemPromptPrefix(surface investigation.Surface) string {
+	projectMapKnownSymbolLine := promptfragments.ProjectMapKnownSymbolLine(surface)
+	projectMapExactReadLine := promptfragments.ProjectMapExactReadLine(surface)
 	impactLines := []string{
 		"- MUST identify the affected surface before editing.",
 		"- " + strings.TrimPrefix(promptfragments.SharedChangeGatherContextLine("Then edit once the affected files are clear."), "- "),
 	}
-	if allowLowLevelOverrides {
+	if surface.AllowsLowLevelOverrides() {
 		impactLines = append(impactLines,
 			`- search_code(intent="impact", pattern="SymbolName") remains the expert override when you need exact low-level control over the search path.`,
 			`- Do not split definition, callers, references, and tests into separate serial searches unless the first combined search is clearly insufficient.`,
@@ -80,17 +81,17 @@ func buildSystemPromptPrefix(allowLowLevelOverrides bool) string {
 	toolStrategyExtras := []string{
 		promptfragments.GatherContextFirstLine(""),
 	}
-	if allowLowLevelOverrides {
+	if surface.AllowsLowLevelOverrides() {
 		toolStrategyExtras = append(toolStrategyExtras,
-			promptfragments.ReadFileBatchOverrideLine("an expert override"),
-			promptfragments.InvestigationMultiPatternLine(true, "For independent patterns and related code discovery, one combined query is preferred over serial narrow searches whenever possible."),
-			promptfragments.InvestigationFollowUpLine(true, ""),
+			promptfragments.ReadFileBatchOverrideLine(surface, "an expert override"),
+			promptfragments.InvestigationMultiPatternLine(surface, "For independent patterns and related code discovery, one combined query is preferred over serial narrow searches whenever possible."),
+			promptfragments.InvestigationFollowUpLine(surface, ""),
 			`- Avoid overly broad regex like ".*" or ".+" in search_code.`,
 		)
 	} else {
 		toolStrategyExtras = append(toolStrategyExtras,
-			promptfragments.InvestigationMultiPatternLine(false, "For independent patterns and related code discovery, one combined query is preferred over serial narrow searches whenever possible."),
-			promptfragments.InvestigationFollowUpLine(false, ""),
+			promptfragments.InvestigationMultiPatternLine(surface, "For independent patterns and related code discovery, one combined query is preferred over serial narrow searches whenever possible."),
+			promptfragments.InvestigationFollowUpLine(surface, ""),
 		)
 	}
 	toolStrategyBlock := strings.Join(toolStrategyExtras, "\n")
@@ -110,7 +111,7 @@ func buildSystemPromptPrefix(allowLowLevelOverrides bool) string {
 - STOP immediately for greetings, thanks, or casual chat: respond conversationally with no tool calls.
 - If the user asks a question without requesting changes, answer and stop.
 - Review or investigation request: do not modify files unless asked.
-  - ` + promptfragments.ReviewInvestigationSentence(allowLowLevelOverrides) + `
+  - ` + promptfragments.ReviewInvestigationSentence(surface) + `
   - Prefer read-only reproduction: use existing tests, focused verification commands, and actual visible tool output. If a new targeted test or file edit would be required to verify something, say so and wait for explicit permission to modify files.
   - Report only issues you can reproduce with actual execution output. Do NOT report issues you cannot reproduce.
   - Report findings as [P0-P3] file:line - title - why it matters, with reproduction command and output as evidence.
@@ -128,10 +129,10 @@ Project Map lists file paths, symbol definitions with line ranges for the projec
 - If needed information is missing from Project Map, start with gather_context.
 #### When to use investigation tools
 ` + promptfragments.BuildInvestigationToolingBlock(promptfragments.InvestigationToolingOptions{
-		AllowLowLevelOverrides: allowLowLevelOverrides,
-		SearchOverrideLabel:    "an expert override",
-		SearchOverrideExtra:    `Short symbol queries when possible, and regex only when needed. For related code discovery, multi-pattern search is the default. For shared-change impact analysis starting from one symbol, prefer search_code(intent="impact", pattern="SymbolName") only when gather_context is clearly insufficient.`,
-		ReadOverrideExtra:      "Use line ranges from Project Map when exact manual control matters.",
+		Surface:             surface,
+		SearchOverrideLabel: "an expert override",
+		SearchOverrideExtra: `Short symbol queries when possible, and regex only when needed. For related code discovery, multi-pattern search is the default. For shared-change impact analysis starting from one symbol, prefer search_code(intent="impact", pattern="SymbolName") only when gather_context is clearly insufficient.`,
+		ReadOverrideExtra:   "Use line ranges from Project Map when exact manual control matters.",
 	}) + `
 - If the Project Map already gives an exact file, directory, or range, pass that direct target to gather_context instead of searching again.
 #### Investigation rules
@@ -196,7 +197,7 @@ Rules:
 `
 }
 
-func buildSystemPromptSuffix(allowLowLevelOverrides bool) string {
+func buildSystemPromptSuffix(surface investigation.Surface) string {
 	return `### 3A. Sub-agent Delegation
 #### When to use sub-agents
 - Prefer single-agent execution by default. Use sub-agents only when they clearly reduce turns by parallelizing fetch-heavy investigation.
@@ -207,7 +208,7 @@ func buildSystemPromptSuffix(allowLowLevelOverrides bool) string {
 - Sub-agents run in isolated context. Only their final report is returned to you.
 - Call ALL spawn_agent invocations in a SINGLE response as parallel tool calls. Do NOT spawn one agent per turn.
 - Use wait_agent to collect results before synthesizing your response.
-- ` + strings.TrimPrefix(promptfragments.DelegatedInvestigationWaitLine(allowLowLevelOverrides), "- ") + `
+- ` + strings.TrimPrefix(promptfragments.DelegatedInvestigationWaitLine(surface), "- ") + `
 - Fall back to direct tool use ONLY when ALL sub-agents fail or their reports are clearly insufficient.
 #### Staged Delegation Protocol
 For tasks requiring sub-agents:
@@ -226,10 +227,10 @@ For tasks requiring sub-agents:
 - Do not upgrade from targeted read to full-file read unless it is necessary for the next edit or verification step.
 - Avoid repeated micro-edits caused by insufficient context.
 - Do not read the same file twice unless it changed or you need a different section.
-- ` + strings.TrimPrefix(promptfragments.InvestigationCoverageLine(allowLowLevelOverrides), "- ") + `
-- ` + strings.TrimPrefix(promptfragments.CombinedInvestigationQueryLine(allowLowLevelOverrides), "- ") + `
+- ` + strings.TrimPrefix(promptfragments.InvestigationCoverageLine(surface), "- ") + `
+- ` + strings.TrimPrefix(promptfragments.CombinedInvestigationQueryLine(surface), "- ") + `
 - Prefer one parallel investigation turn over multiple serial tool turns when later steps do not depend on earlier output.
-- ` + promptfragments.InvestigationContextSourceLine(allowLowLevelOverrides) + `
+- ` + promptfragments.InvestigationContextSourceLine(surface) + `
 - After an edit attempt fails, read the target section once, then retry. Do not loop read-fail-read-fail.
 - Run verification after all related edits are complete.
 - When deleting or renaming code, search references once, fix everything, then verify once.
@@ -274,10 +275,10 @@ func CurrentSystemPrompt() string {
 
 func buildSystemPromptForEditTool(editTool string) string {
 	normalizedEditTool := NormalizeEditToolMode(editTool)
-	allowLowLevelOverrides := normalizedEditTool == EditToolModeLegacy
+	surface := investigation.ResolveSurface(normalizedEditTool == EditToolModeLegacy, true)
 	editGuide := applyPatchGuide
 	if normalizedEditTool == EditToolModeLegacy {
 		editGuide = legacyEditToolGuide
 	}
-	return buildSystemPromptPrefix(allowLowLevelOverrides) + editGuide + buildSystemPromptSuffix(allowLowLevelOverrides)
+	return buildSystemPromptPrefix(surface) + editGuide + buildSystemPromptSuffix(surface)
 }

@@ -3,11 +3,13 @@ package fragments
 import (
 	"fmt"
 	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/investigation"
 )
 
 // InvestigationToolingOptions は共有 investigation tool guidance block の構成を表す。
 type InvestigationToolingOptions struct {
-	AllowLowLevelOverrides bool
+	Surface                investigation.Surface
 	SearchOverrideLabel    string
 	SearchOverrideExtra    string
 	ReadOverrideExtra      string
@@ -29,8 +31,8 @@ func GatherContextFirstLine(extra string) string {
 }
 
 // ReviewInvestigationSentence returns the shared review/investigation tracing sentence.
-func ReviewInvestigationSentence(allowLowLevelOverrides bool) string {
-	if allowLowLevelOverrides {
+func ReviewInvestigationSentence(surface investigation.Surface) string {
+	if investigation.NormalizeSurface(surface).AllowsLowLevelOverrides() {
 		return "Trace callers, shared contracts, deletion paths, and error paths with gather_context first. Use search_code/read_file only when exact low-level control is clearly necessary."
 	}
 	return "Trace callers, shared contracts, deletion paths, and error paths with gather_context first. Refine gather_context queries before escalating to any lower-level path."
@@ -53,26 +55,33 @@ func SharedChangeGatherContextLine(extra string) string {
 }
 
 // ProjectMapExactReadLine returns the shared Project Map exact-read guidance.
-func ProjectMapExactReadLine(allowLowLevelOverrides bool) string {
-	if allowLowLevelOverrides {
+func ProjectMapExactReadLine(surface investigation.Surface) string {
+	surface = investigation.NormalizeSurface(surface)
+	switch surface.ReadFileRole() {
+	case investigation.ToolRoleLowLevelOverride:
 		return promptBullet(`read_file with range syntax (e.g. paths=["agent.go:161-328"]) is the expert override when you need exact manual control.`)
+	case investigation.ToolRoleEditExactControl:
+		return promptBullet(`For exact Project Map ranges, keep using gather_context(query="agent.go:161-328") directly. Use read_file with range syntax only when you already know the exact target and need edit/apply_patch exact control.`)
 	}
 	return promptBullet(`For exact Project Map ranges, keep using gather_context(query="agent.go:161-328") directly.`)
 }
 
 // ProjectMapKnownSymbolLine returns the shared Project Map known-symbol guidance.
-func ProjectMapKnownSymbolLine(allowLowLevelOverrides bool) string {
-	if allowLowLevelOverrides {
+func ProjectMapKnownSymbolLine(surface investigation.Surface) string {
+	if investigation.NormalizeSurface(surface).AllowsLowLevelOverrides() {
 		return promptBullet("Do NOT call search_code to find symbols already listed in Project Map.")
 	}
 	return promptBullet("Do NOT re-search symbols already listed in Project Map.")
 }
 
 // InvestigationFollowUpLine returns the shared follow-up read guidance.
-func InvestigationFollowUpLine(allowLowLevelOverrides bool, extra string) string {
+func InvestigationFollowUpLine(surface investigation.Surface, extra string) string {
+	surface = investigation.NormalizeSurface(surface)
 	core := "After the initial gather_context, prefer another targeted gather_context query when exact manual follow-up is needed."
-	if allowLowLevelOverrides {
+	if surface.AllowsLowLevelOverrides() {
 		core = "After the initial gather_context/search_code, prefer moving to read_file only when exact manual follow-up is needed."
+	} else if surface.HasReadFileExactControl() {
+		core = "After the initial gather_context, prefer another targeted gather_context query first. Move to read_file only when you already know the exact file or range and need edit/apply_patch exact control."
 	}
 	return promptBulletWithExtra(core, extra)
 }
@@ -92,13 +101,21 @@ func SearchCodeOverrideLine(overrideLabel string, extra string) string {
 }
 
 // ReadFileOverrideLine returns the shared read_file override guidance with caller-specific detail.
-func ReadFileOverrideLine(extra string) string {
-	core := "read_file: low-level exact-content reader for expert override."
+func ReadFileOverrideLine(surface investigation.Surface, extra string) string {
+	surface = investigation.NormalizeSurface(surface)
+	core := "read_file: exact-content reader for edit/apply_patch exact-control override."
+	if surface.ReadFileRole() == investigation.ToolRoleLowLevelOverride {
+		core = "read_file: low-level exact-content reader for expert override."
+	}
 	return promptBulletWithExtra(core, extra)
 }
 
 // ReadFileBatchOverrideLine returns the shared batch read guidance.
-func ReadFileBatchOverrideLine(overrideLabel string) string {
+func ReadFileBatchOverrideLine(surface investigation.Surface, overrideLabel string) string {
+	surface = investigation.NormalizeSurface(surface)
+	if surface.ReadFileRole() == investigation.ToolRoleEditExactControl {
+		return promptBullet("Reading 2+ independent exact files -> read_file can batch them when you need edit/apply_patch exact-control reads.")
+	}
 	if strings.TrimSpace(overrideLabel) == "" {
 		overrideLabel = "an expert override"
 	}
@@ -106,43 +123,48 @@ func ReadFileBatchOverrideLine(overrideLabel string) string {
 }
 
 // InvestigationMultiPatternLine returns the shared multi-pattern investigation guidance.
-func InvestigationMultiPatternLine(allowLowLevelOverrides bool, extra string) string {
+func InvestigationMultiPatternLine(surface investigation.Surface, extra string) string {
+	surface = investigation.NormalizeSurface(surface)
 	core := "Searching multiple patterns -> prefer one gather_context query with comma-separated patterns instead of serial narrow searches."
-	if allowLowLevelOverrides {
+	if surface.AllowsLowLevelOverrides() {
 		core = "Searching multiple patterns -> prefer one gather_context query or one search_code call with comma-separated patterns instead of serial searches."
 	}
 	return promptBulletWithExtra(core, extra)
 }
 
 // InvestigationAllowedToolsLine は investigation prompt 用の Allowed 行を返す。
-func InvestigationAllowedToolsLine(allowLowLevelOverrides bool) string {
-	if allowLowLevelOverrides {
+func InvestigationAllowedToolsLine(surface investigation.Surface) string {
+	surface = investigation.NormalizeSurface(surface)
+	switch {
+	case surface.AllowsLowLevelOverrides():
 		return "Allowed: gather_context, search_code, read_file, web_search, bash (read-only git commands only: git status, git diff, git log)"
+	case surface.HasVisibleReadFile():
+		return "Allowed: gather_context, read_file, web_search, bash (read-only git commands only: git status, git diff, git log)"
 	}
 	return "Allowed: gather_context, web_search, bash (read-only git commands only: git status, git diff, git log)"
 }
 
 // BuildInvestigationToolingBlock は共有 investigation tooling guidance block を返す。
 func BuildInvestigationToolingBlock(opts InvestigationToolingOptions) string {
+	surface := investigation.NormalizeSurface(opts.Surface)
 	lines := []string{
 		GatherContextDefaultInvestigationLine(),
 		GatherContextDirectMultiReadLine(),
 		GatherContextPathDisambiguationLine(),
 	}
 	if opts.IncludeMultiPattern {
-		lines = append(lines, InvestigationMultiPatternLine(opts.AllowLowLevelOverrides, opts.MultiPatternExtra))
+		lines = append(lines, InvestigationMultiPatternLine(surface, opts.MultiPatternExtra))
 	}
-	if !opts.AllowLowLevelOverrides {
-		return strings.Join(lines, "\n")
+	if surface.SearchCodeRole() == investigation.ToolRoleLowLevelOverride {
+		if strings.TrimSpace(opts.SearchOverrideLabel) != "" || strings.TrimSpace(opts.SearchOverrideExtra) != "" {
+			lines = append(lines, SearchCodeOverrideLine(opts.SearchOverrideLabel, opts.SearchOverrideExtra))
+		}
 	}
-	if strings.TrimSpace(opts.SearchOverrideLabel) != "" || strings.TrimSpace(opts.SearchOverrideExtra) != "" {
-		lines = append(lines, SearchCodeOverrideLine(opts.SearchOverrideLabel, opts.SearchOverrideExtra))
+	if surface.HasVisibleReadFile() {
+		lines = append(lines, ReadFileOverrideLine(surface, opts.ReadOverrideExtra))
 	}
-	if strings.TrimSpace(opts.ReadOverrideExtra) != "" {
-		lines = append(lines, ReadFileOverrideLine(opts.ReadOverrideExtra))
-	}
-	if opts.IncludeBatchRead {
-		lines = append(lines, ReadFileBatchOverrideLine(opts.BatchReadOverrideLabel))
+	if opts.IncludeBatchRead && surface.HasVisibleReadFile() {
+		lines = append(lines, ReadFileBatchOverrideLine(surface, opts.BatchReadOverrideLabel))
 	}
 	return strings.Join(lines, "\n")
 }
@@ -158,32 +180,44 @@ func NoBashSubstituteSentence() string {
 }
 
 // InvestigationContextSourceLine returns the shared exact-context rule.
-func InvestigationContextSourceLine(allowLowLevelOverrides bool) string {
-	if allowLowLevelOverrides {
+func InvestigationContextSourceLine(surface investigation.Surface) string {
+	surface = investigation.NormalizeSurface(surface)
+	switch {
+	case surface.AllowsLowLevelOverrides():
 		return "Use exact context from actual gather_context/read_file/search_code output when constructing edit instructions; never reconstruct it from memory."
+	case surface.HasVisibleReadFile():
+		return "Use exact context from actual gather_context/read_file output when constructing edit instructions; never reconstruct it from memory."
 	}
 	return "Use exact context from actual visible investigation tool output in this session, especially gather_context output; never reconstruct it from memory."
 }
 
 // DelegatedInvestigationWaitLine returns the shared no-duplicate-after-delegation rule.
-func DelegatedInvestigationWaitLine(allowLowLevelOverrides bool) string {
-	if allowLowLevelOverrides {
+func DelegatedInvestigationWaitLine(surface investigation.Surface) string {
+	surface = investigation.NormalizeSurface(surface)
+	switch {
+	case surface.AllowsLowLevelOverrides():
 		return "- After spawning, do NOT use gather_context/search_code/read_file yourself for the same delegated task. Wait for results first."
+	case surface.HasVisibleReadFile():
+		return "- After spawning, do NOT repeat the same investigation yourself with gather_context/read_file for the same delegated task. Wait for results first."
 	}
 	return "- After spawning, do NOT repeat the same investigation yourself with gather_context or other visible read-only tools for the same delegated task. Wait for results first."
 }
 
 // InvestigationCoverageLine returns the shared re-read coverage rule.
-func InvestigationCoverageLine(allowLowLevelOverrides bool) string {
-	if allowLowLevelOverrides {
+func InvestigationCoverageLine(surface investigation.Surface) string {
+	surface = investigation.NormalizeSurface(surface)
+	switch {
+	case surface.AllowsLowLevelOverrides():
 		return "- NEVER re-read a file already returned in full. Avoid re-reading files already covered by gather_context/search_code or earlier read_file calls in this session."
+	case surface.HasVisibleReadFile():
+		return "- NEVER re-read a file already returned in full. Avoid re-reading files already covered by gather_context or earlier read_file calls in this session."
 	}
 	return "- NEVER re-read a file already returned in full. Avoid re-reading files already covered by gather_context in this session."
 }
 
 // CombinedInvestigationQueryLine returns the shared combined-query efficiency rule.
-func CombinedInvestigationQueryLine(allowLowLevelOverrides bool) string {
-	if allowLowLevelOverrides {
+func CombinedInvestigationQueryLine(surface investigation.Surface) string {
+	if investigation.NormalizeSurface(surface).AllowsLowLevelOverrides() {
 		return "- One gather_context query or one search_code call with comma-separated patterns is better than multiple narrow searches."
 	}
 	return "- One combined gather_context query is better than multiple narrow investigation queries."

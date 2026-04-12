@@ -40,12 +40,7 @@ func (a *Agent) SyncWithRuntimeConfig() {
 	modelLookupProvider := a.sessionProviderConfigKey(cfg)
 	resolvedModel := cfg.GetSelectedModelForProvider(modelLookupProvider)
 	if resolvedModel != "" {
-		a.CurrentModel = resolvedModel
-		a.syncSessionModel()
-		if a.Stats != nil {
-			a.Stats.Model = resolvedModel
-		}
-		a.rebuildSystemPromptForCurrentProvider()
+		a.setCurrentModelAndSync(resolvedModel)
 	}
 }
 

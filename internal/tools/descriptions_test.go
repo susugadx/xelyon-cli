@@ -57,8 +57,11 @@ func TestToolDescriptions_GatherContextIsPrimaryInvestigationTool(t *testing.T) 
 
 func TestToolDescriptions_ListDirMentionsCompactSummaryAndOverrideUsage(t *testing.T) {
 	desc := ToolDescriptions["list_dir"]
-	if !strings.Contains(desc, "Usually prefer gather_context first") {
-		t.Error("list_dir description should mention gather_context-first usage")
+	if !strings.Contains(desc, "gather_context is the default front door") {
+		t.Error("list_dir description should mention gather_context as the directory front door")
+	}
+	if !strings.Contains(desc, "stays hidden on current gather_context-first agent surfaces") {
+		t.Error("list_dir description should describe its hidden-by-default agent surface")
 	}
 	if !strings.Contains(desc, "compact summary") {
 		t.Error("list_dir description should mention compact summary output")
@@ -66,8 +69,14 @@ func TestToolDescriptions_ListDirMentionsCompactSummaryAndOverrideUsage(t *testi
 }
 
 func TestToolDescriptions_ReadFileAndSearchCodeDescribeLowLevelUsage(t *testing.T) {
-	if !strings.Contains(ToolDescriptions["read_file"], "Low-level file reader") {
-		t.Error("read_file description should position it as low-level")
+	if !strings.Contains(ToolDescriptions["read_file"], "gather_context remains the default investigation front door") {
+		t.Error("read_file description should keep gather_context as the default front door")
+	}
+	if !strings.Contains(ToolDescriptions["read_file"], "edit exact-control override") {
+		t.Error("read_file description should describe the apply_patch exact-control contract")
+	}
+	if !strings.Contains(ToolDescriptions["read_file"], "legacy surfaces it remains a low-level expert override") {
+		t.Error("read_file description should describe the legacy override contract")
 	}
 	if !strings.Contains(ToolDescriptions["read_file"], "Default detail=auto returns full content when feasible") {
 		t.Error("read_file description should describe the default auto behavior")
@@ -80,6 +89,12 @@ func TestToolDescriptions_ReadFileAndSearchCodeDescribeLowLevelUsage(t *testing.
 	}
 	if !strings.Contains(ToolDescriptions["search_code"], "Low-level code discovery tool") {
 		t.Error("search_code description should position it as low-level")
+	}
+	if !strings.Contains(ToolDescriptions["search_code"], "gather_context remains the default investigation front door") {
+		t.Error("search_code description should keep gather_context as the default front door")
+	}
+	if !strings.Contains(ToolDescriptions["search_code"], "When a legacy surface exposes search_code") {
+		t.Error("search_code description should describe the legacy exposure contract")
 	}
 	if !strings.Contains(ToolDescriptions["search_code"], "comma-separated patterns for parallel multi-search") {
 		t.Error("search_code description should mention comma-separated parallel multi-search")
