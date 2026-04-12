@@ -1,11 +1,14 @@
 package lsp
 
 import (
+	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"strings"
 	"testing"
+	"time"
 )
 
 type nopWriteCloser struct {
@@ -231,5 +234,40 @@ func TestServer_Close_NotStarted(t *testing.T) {
 	err = s.Close()
 	if err != nil {
 		t.Errorf("second Close() returned error: %v", err)
+	}
+}
+
+func TestServer_ReadHeader_IgnoresOtherHeaders(t *testing.T) {
+	s := NewServer("test")
+	s.stdout = bufio.NewReader(strings.NewReader("Content-Length: 42\r\nContent-Type: application/vscode-jsonrpc; charset=utf-8\r\n\r\n"))
+
+	got, err := s.readHeader()
+	if err != nil {
+		t.Fatalf("readHeader() error = %v", err)
+	}
+	if got != 42 {
+		t.Fatalf("readHeader() = %d, want 42", got)
+	}
+}
+
+func TestServer_WaitForDocumentReady_DelayedDiagnostics(t *testing.T) {
+	s := NewServer("test")
+	uri := FileToURI("/tmp/test.go")
+
+	go func() {
+		time.Sleep(30 * time.Millisecond)
+		s.diagMu.Lock()
+		s.diagnostics[uri] = []Diagnostic{{Message: "ready"}}
+		s.diagMu.Unlock()
+	}()
+
+	start := time.Now()
+	s.WaitForDocumentReady(context.Background(), uri, 200*time.Millisecond)
+
+	if elapsed := time.Since(start); elapsed >= 200*time.Millisecond {
+		t.Fatalf("WaitForDocumentReady() waited too long: %v", elapsed)
+	}
+	if got := s.GetLastDiagnostics("/tmp/test.go"); len(got) != 1 {
+		t.Fatalf("len(GetLastDiagnostics()) = %d, want 1", len(got))
 	}
 }

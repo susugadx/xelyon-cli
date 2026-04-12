@@ -702,6 +702,40 @@ func TestFunctionCalling_Disabled(t *testing.T) {
 	}
 }
 
+func TestProvider_ToolChoiceAndReasoningAccessors(t *testing.T) {
+	p := New("test-key")
+
+	if got := p.LastReasoningContent(); got != "" {
+		t.Fatalf("LastReasoningContent() = %q, want empty", got)
+	}
+
+	p.lastReasoningContent = "thinking..."
+	if got := p.LastReasoningContent(); got != "thinking..." {
+		t.Fatalf("LastReasoningContent() = %q, want %q", got, "thinking...")
+	}
+
+	p.SetToolChoice("read_file")
+	if p.toolChoice == nil || *p.toolChoice != "read_file" {
+		t.Fatalf("toolChoice = %v, want read_file", p.toolChoice)
+	}
+	p.ClearToolChoice()
+	if p.toolChoice != nil {
+		t.Fatal("toolChoice should be nil after ClearToolChoice")
+	}
+
+	var usage api.Usage
+	p.SetUsageCallback(func(u api.Usage) {
+		usage = u
+	})
+	if p.usageCallback == nil {
+		t.Fatal("usageCallback should be set")
+	}
+	p.usageCallback(api.Usage{InputTokens: 12})
+	if usage.InputTokens != 12 {
+		t.Fatalf("usage = %+v, want input=12", usage)
+	}
+}
+
 // containsString は文字列に部分文字列が含まれるかチェック
 func containsString(s, substr string) bool {
 	for i := 0; i <= len(s)-len(substr); i++ {

@@ -508,6 +508,14 @@ func TestManager_GetTools_AfterConnect(t *testing.T) {
 	}
 }
 
+func TestManager_SetOutput_NilFallsBackToDiscard(t *testing.T) {
+	manager := NewManager()
+	manager.SetOutput(nil)
+	if manager.out() != io.Discard {
+		t.Fatalf("out() should fall back to io.Discard when output is nil")
+	}
+}
+
 func TestShouldIncludeTool(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -603,5 +611,40 @@ func TestServerConfig_ToolsFilter_JSON(t *testing.T) {
 	legacy := config.MCPServers["legacy"]
 	if legacy.Tools != nil {
 		t.Errorf("legacy should have nil tools filter, got %+v", legacy.Tools)
+	}
+}
+
+func TestManager_Reconnect_NoConfig(t *testing.T) {
+	manager := NewManager()
+	err := manager.Reconnect(context.Background(), "github")
+	if err == nil || !strings.Contains(err.Error(), "no configuration loaded") {
+		t.Fatalf("Reconnect() error = %v, want no configuration loaded", err)
+	}
+}
+
+func TestManager_Reconnect_ServerNotFound(t *testing.T) {
+	manager := NewManager()
+	manager.config = &Config{MCPServers: map[string]ServerConfig{}}
+
+	err := manager.Reconnect(context.Background(), "github")
+	if err == nil || !strings.Contains(err.Error(), "not found in config") {
+		t.Fatalf("Reconnect() error = %v, want server not found", err)
+	}
+}
+
+func TestManager_Reconnect_DisabledServer(t *testing.T) {
+	manager := NewManager()
+	manager.config = &Config{
+		MCPServers: map[string]ServerConfig{
+			"github": {
+				Command:  "npx",
+				Disabled: true,
+			},
+		},
+	}
+
+	err := manager.Reconnect(context.Background(), "github")
+	if err == nil || !strings.Contains(err.Error(), "is disabled") {
+		t.Fatalf("Reconnect() error = %v, want disabled server error", err)
 	}
 }

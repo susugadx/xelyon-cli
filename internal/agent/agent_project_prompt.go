@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -25,79 +24,30 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
-var projectMapInputPathPatterns = []*regexp.Regexp{
-	regexp.MustCompile("[\"'`]([^\"'`]+(?:[\\\\/][^\"'`]+)+)[\"'`]"),
-	regexp.MustCompile(`\b([A-Za-z]:[\\/][^\s"'` + "`" + `]+)\b`),
-	regexp.MustCompile(`\b((?:[\w.-]+[\\/])+[\w./\\-]*)\b`),
-	regexp.MustCompile(`["']([^"']+\.[a-zA-Z0-9]{1,10})["']`),
-	regexp.MustCompile(`\b((?:[\w.-]+/)*[\w.-]+\.[a-zA-Z0-9]{1,10})\b`),
-	regexp.MustCompile(`(/[^\s"']+)`),
-}
+var (
+	// 引用付き path は slash を含むものを優先的に取る。
+	projectMapQuotedPathPattern = regexp.MustCompile("[\"'`]([^\"'`]+(?:[\\\\/][^\"'`]+)+)[\"'`]")
+	// slash を含まない quoted filename は dedicated pattern で扱う。
+	// 'design spec.md' のような空白付き filename は他パターンではまたげない。
+	projectMapQuotedFilenamePattern = regexp.MustCompile(`["']([^"']+\.[a-zA-Z0-9]{1,10})["']`)
+	projectMapInputPathPatterns     = []*regexp.Regexp{
+		projectMapQuotedPathPattern,
+		regexp.MustCompile(`\b([A-Za-z]:[\\/][^\s"'` + "`" + `]+)\b`),
+		regexp.MustCompile(`\b((?:[\w.-]+[\\/])+[\w./\\-]*)\b`),
+		projectMapQuotedFilenamePattern,
+		regexp.MustCompile(`\b((?:[\w.-]+/)*[\w.-]+\.[a-zA-Z0-9]{1,10})\b`),
+		regexp.MustCompile(`(/[^\s"']+)`),
+	}
+)
 
 const projectMapFocusMaxPaths = 5
 
-// parseImageInputWithWriter は入力から画像パスを抽出する。
-// 形式: "image:/path/to/file.png こんにちは" または "こんにちは image:/path/to/file.png"
-func parseImageInputWithWriter(out io.Writer, input string) (text string, image *api.ImageData) {
-	// image:プレフィックスを探す
-	imagePrefix := "image:"
-
-	// 正規表現的な簡易パース
-	parts := strings.Fields(input)
-	var textParts []string
-	var imagePath string
-
-	for _, part := range parts {
-		if strings.HasPrefix(part, imagePrefix) {
-			imagePath = strings.TrimPrefix(part, imagePrefix)
-		} else {
-			textParts = append(textParts, part)
-		}
-	}
-
-	// 画像パスがない場合
-	if imagePath == "" {
-		return input, nil
-	}
-
-	// テキスト部分を結合
-	text = strings.Join(textParts, " ")
-	if text == "" {
-		text = "Please analyze this image." // デフォルトメッセージ
-	}
-
-	// 画像読み込み
-	img, err := api.LoadImage(imagePath)
-	if err != nil {
-		red.Fprintf(out, "Failed to load image: %v\n", err)
-		return input, nil
-	}
-
-	green.Fprintf(out, "🖼️  Image loaded: %s (%s)\n", img.Path, api.FormatImageSize(img.Size))
-	return text, img
+type projectMapInputMatch struct {
+	candidate string
+	start     int
+	end       int
 }
 
-// printHeaderToWriter はセッション開始時のグラデーションロゴ + Provider/Model 情報を表示する。
-func printHeaderToWriter(out io.Writer, model string, provider api.Provider) {
-	_, _ = fmt.Fprint(out, buildGradientHeader())
-	dim.Fprintf(out, "  Provider: %s | Model: %s\n", provider.Name(), model)
-}
-
-func printModeInfoToWriter(out io.Writer, autoApprove, dryRun bool) {
-	var modes []string
-	if autoApprove {
-		modes = append(modes, "Auto-approve")
-	}
-	if dryRun {
-		modes = append(modes, "Dry-run")
-	}
-
-	if len(modes) > 0 {
-		yellow.Fprintf(out, "  Mode: %s\n", strings.Join(modes, ", "))
-	}
-}
-
-// loadProjectConfig はプロジェクト設定をロード（xelyon.yaml）
 func loadProjectConfig() *config.ProjectConfig {
 	return config.LoadProjectConfig()
 }
@@ -272,14 +222,19 @@ func extractProjectMapPathsFromInput(input string) []string {
 	}
 
 	pathSet := make(map[string]struct{})
+	var accepted []projectMapInputMatch
 	var paths []string
 	for _, pattern := range projectMapInputPathPatterns {
-		matches := pattern.FindAllStringSubmatch(input, -1)
+		matches := pattern.FindAllStringSubmatchIndex(input, -1)
 		for _, match := range matches {
-			if len(match) < 2 {
+			if len(match) < 4 {
 				continue
 			}
-			candidate := cleanProjectMapInputPathCandidate(match[1])
+			start, end := match[2], match[3]
+			if shouldSkipProjectMapInputMatch(accepted, start, end) {
+				continue
+			}
+			candidate := cleanProjectMapInputPathCandidate(input[start:end])
 			if candidate == "" {
 				continue
 			}
@@ -287,10 +242,24 @@ func extractProjectMapPathsFromInput(input string) []string {
 				continue
 			}
 			pathSet[candidate] = struct{}{}
+			accepted = append(accepted, projectMapInputMatch{
+				candidate: candidate,
+				start:     start,
+				end:       end,
+			})
 			paths = append(paths, candidate)
 		}
 	}
 	return filterProjectMapInputCandidates(paths)
+}
+
+func shouldSkipProjectMapInputMatch(accepted []projectMapInputMatch, start, end int) bool {
+	for _, existing := range accepted {
+		if start >= existing.start && end <= existing.end {
+			return true
+		}
+	}
+	return false
 }
 
 func cleanProjectMapInputPathCandidate(candidate string) string {
@@ -807,75 +776,4 @@ func collectProjectMapWatchDirs(rootPath string, ignorePatterns []string) []stri
 
 	slices.Sort(dirs)
 	return slices.Compact(dirs)
-}
-
-func (a *Agent) syncSessionModel() {
-	if a == nil || a.session == nil {
-		return
-	}
-	a.session.Model = a.CurrentModel
-}
-
-func summarizeStatusError(err error) string {
-	if err == nil {
-		return "Request failed"
-	}
-
-	msg := strings.TrimSpace(err.Error())
-	if msg == "" {
-		return "Request failed"
-	}
-
-	if idx := strings.IndexByte(msg, '\n'); idx >= 0 {
-		msg = strings.TrimSpace(msg[:idx])
-	}
-
-	const maxReasonLen = 120
-	if len(msg) > maxReasonLen {
-		msg = msg[:maxReasonLen-3] + "..."
-	}
-
-	return msg
-}
-
-func cancelDebugEnabled() bool {
-	return os.Getenv("XELYON_DEBUG_CANCEL") == "1"
-}
-
-func (a *Agent) debugCancelf(format string, args ...any) {
-	if a == nil || !cancelDebugEnabled() {
-		return
-	}
-	_, _ = fmt.Fprintf(a.errorOutput(), "[DEBUG Cancel] "+format+"\n", args...)
-}
-
-func (a *Agent) cancelActiveRequest(reason string) {
-	if a == nil {
-		return
-	}
-
-	if reason != "" {
-		a.lastCancelReason = reason
-	}
-
-	if a.cancelFunc == nil {
-		a.debugCancelf("cancel requested without active request (reason=%q)", reason)
-		return
-	}
-
-	a.debugCancelf("canceling active request (reason=%q)", reason)
-	a.cancelFunc()
-}
-
-func (a *Agent) statusReasonForError(err error) string {
-	reason := summarizeStatusError(err)
-	if a == nil {
-		return reason
-	}
-
-	if reason != "Request failed" && strings.TrimSpace(a.lastCancelReason) != "" && strings.Contains(reason, "context canceled") {
-		return reason + " [" + a.lastCancelReason + "]"
-	}
-
-	return reason
 }

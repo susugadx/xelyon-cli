@@ -32,12 +32,33 @@ type MultilineReader struct {
 	input                 io.Reader
 	out                   io.Writer
 	err                   io.Writer
+	rawMode               rawModeController
 	bracketedPasteEnabled bool
 	fd                    int // file descriptor for stdin (for raw mode)
 	// Raw mode channels (initialized lazily, reused across calls)
 	byteChan    chan byte
 	errChan     chan error
 	rawModeInit bool
+}
+
+type rawModeController interface {
+	isTerminal(fd int) bool
+	makeRaw(fd int) (*term.State, error)
+	restore(fd int, state *term.State) error
+}
+
+type systemRawModeController struct{}
+
+func (systemRawModeController) isTerminal(fd int) bool {
+	return term.IsTerminal(fd)
+}
+
+func (systemRawModeController) makeRaw(fd int) (*term.State, error) {
+	return term.MakeRaw(fd)
+}
+
+func (systemRawModeController) restore(fd int, state *term.State) error {
+	return term.Restore(fd, state)
 }
 
 // NewMultilineReader creates a new multiline reader
@@ -75,12 +96,24 @@ func newMultilineReader(r io.Reader, out, errOut io.Writer) *MultilineReader {
 		input:                 r,
 		out:                   out,
 		err:                   errOut,
+		rawMode:               systemRawModeController{},
 		bracketedPasteEnabled: false,
 		fd:                    fd,
 		byteChan:              nil,
 		errChan:               nil,
 		rawModeInit:           false,
 	}
+}
+
+func (m *MultilineReader) rawModeOps() rawModeController {
+	if m != nil && m.rawMode != nil {
+		return m.rawMode
+	}
+	return systemRawModeController{}
+}
+
+func (m *MultilineReader) isTerminalInput() bool {
+	return m != nil && m.fd >= 0 && m.rawModeOps().isTerminal(m.fd)
 }
 
 // initRawModeChannels initializes the raw mode channels and goroutine (once)
@@ -113,9 +146,9 @@ func (m *MultilineReader) initRawModeChannels() {
 // This sends the escape sequence to the terminal to enable the mode
 // Windows Terminal skips multiline paste warning when this mode is active
 func (m *MultilineReader) EnableBracketedPaste() {
-	pasteDebugf(m.errorWriter(), "[DEBUG] EnableBracketedPaste: fd=%d, IsTerminal=%v\n", m.fd, m.fd >= 0 && term.IsTerminal(m.fd))
+	pasteDebugf(m.errorWriter(), "[DEBUG] EnableBracketedPaste: fd=%d, IsTerminal=%v\n", m.fd, m.isTerminalInput())
 
-	if m.fd >= 0 && term.IsTerminal(m.fd) {
+	if m.isTerminalInput() {
 		// Use WriteString for immediate, unbuffered output
 		m.writeString(bracketedPasteEnable)
 		m.bracketedPasteEnabled = true
@@ -161,7 +194,7 @@ func (m *MultilineReader) ReadInput(prompt string) (string, error) {
 	m.print(prompt)
 
 	// If bracketed paste mode is enabled and we're in a terminal, use raw mode
-	if m.bracketedPasteEnabled && m.fd >= 0 && term.IsTerminal(m.fd) {
+	if m.bracketedPasteEnabled && m.isTerminalInput() {
 		return m.readWithBracketedPaste()
 	}
 
@@ -194,12 +227,12 @@ func (m *MultilineReader) readLine() (string, error) {
 func (m *MultilineReader) readWithBracketedPaste() (string, error) {
 	pasteDebugf(m.errorWriter(), "[DEBUG] Entering raw mode...\n")
 
-	oldState, err := term.MakeRaw(m.fd)
+	oldState, err := m.rawModeOps().makeRaw(m.fd)
 	if err != nil {
 		pasteDebugf(m.errorWriter(), "[DEBUG] MakeRaw FAILED: %v\n", err)
 		return m.readLine()
 	}
-	defer func() { _ = term.Restore(m.fd, oldState) }()
+	defer func() { _ = m.rawModeOps().restore(m.fd, oldState) }()
 
 	pasteDebugWriteString(m.errorWriter(), "[DEBUG] Raw mode OK\r\n")
 
@@ -225,7 +258,7 @@ func (m *MultilineReader) readWithBracketedPaste() (string, error) {
 		case b := <-m.byteChan:
 			// Ctrl+C - always handle first (even in paste mode)
 			if b == 0x03 {
-				_ = term.Restore(m.fd, oldState)
+				_ = m.rawModeOps().restore(m.fd, oldState)
 				m.print("^C\r\n")
 				return "", ErrInterrupted
 			}
@@ -247,7 +280,7 @@ func (m *MultilineReader) readWithBracketedPaste() (string, error) {
 					}
 					// Check for Ctrl+C even inside escape sequence detection
 					if nb == 0x03 {
-						_ = term.Restore(m.fd, oldState)
+						_ = m.rawModeOps().restore(m.fd, oldState)
 						m.print("^C\r\n")
 						return "", ErrInterrupted
 					}
@@ -320,7 +353,7 @@ func (m *MultilineReader) readWithBracketedPaste() (string, error) {
 				content := buf.String()
 				content = stripAllBracketedPasteMarkers(content)
 				if content == "```" {
-					_ = term.Restore(m.fd, oldState)
+					_ = m.rawModeOps().restore(m.fd, oldState)
 					return m.readMultilineWithMarker()
 				}
 				return content, nil
@@ -393,11 +426,11 @@ func (m *MultilineReader) readMultilineWithMarker() (string, error) {
 	// terminal echo (prevents paste markers from being displayed)
 	useChannel := m.rawModeInit && m.byteChan != nil
 	var oldState *term.State
-	if useChannel && m.fd >= 0 && term.IsTerminal(m.fd) {
-		st, err := term.MakeRaw(m.fd)
+	if useChannel && m.isTerminalInput() {
+		st, err := m.rawModeOps().makeRaw(m.fd)
 		if err == nil {
 			oldState = st
-			defer func() { _ = term.Restore(m.fd, oldState) }()
+			defer func() { _ = m.rawModeOps().restore(m.fd, oldState) }()
 		}
 	}
 
@@ -462,10 +495,10 @@ func (m *MultilineReader) ReadSimpleLine() (string, error) {
 	if m.rawModeInit && m.byteChan != nil {
 		// Enter raw mode to suppress terminal echo (paste markers would be
 		// visible in cooked mode because the terminal echoes before we can strip)
-		if m.fd >= 0 && term.IsTerminal(m.fd) {
-			oldState, err := term.MakeRaw(m.fd)
+		if m.isTerminalInput() {
+			oldState, err := m.rawModeOps().makeRaw(m.fd)
 			if err == nil {
-				defer func() { _ = term.Restore(m.fd, oldState) }()
+				defer func() { _ = m.rawModeOps().restore(m.fd, oldState) }()
 				return m.readLineFromChannel()
 			}
 		}

@@ -41,12 +41,12 @@ func (a *Agent) SyncWithRuntimeConfig() {
 	resolvedModel := cfg.GetSelectedModelForProvider(modelLookupProvider)
 	if resolvedModel != "" {
 		a.CurrentModel = resolvedModel
-		a.syncSessionModel()
 		if a.Stats != nil {
 			a.Stats.Model = resolvedModel
 		}
 		a.rebuildSystemPromptForCurrentProvider()
 	}
+	a.reconcileSessionForCurrentRuntime()
 }
 
 func (a *Agent) syncRuntimeProviderConfig(cfg *config.Config, out io.Writer) {

@@ -63,7 +63,7 @@ func (a *Agent) SwitchProvider(providerName string) error {
 	a.ProviderName = runtimeProviderName
 	a.ProviderConfigKey = modelLookupProviderName
 	a.CurrentModel = newModel
-	a.syncSessionModel()
+	a.reconcileSessionForCurrentRuntime()
 
 	// 統計情報をリセット（プロバイダー切り替え時）
 	if a.Stats != nil {

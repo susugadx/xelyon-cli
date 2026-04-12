@@ -2,643 +2,270 @@ package mcp
 
 import (
 	"bytes"
-	"encoding/json"
+	"context"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/susugadx/xelyon-cli/internal/stdio"
-	"github.com/susugadx/xelyon-cli/internal/tools"
+	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-func TestMCPToolWrapper_Name(t *testing.T) {
-	tests := []struct {
-		name       string
-		serverName string
-		toolName   string
-		expected   string
-	}{
-		{
-			name:       "simple names",
-			serverName: "filesystem",
-			toolName:   "read_file",
-			expected:   "mcp_filesystem_read_file",
-		},
-		{
-			name:       "names with hyphens",
-			serverName: "my-server",
-			toolName:   "my-tool",
-			expected:   "mcp_my_server_my_tool",
-		},
-		{
-			name:       "names with special characters",
-			serverName: "server@1.0",
-			toolName:   "tool!",
-			expected:   "mcp_server_1_0_tool_",
-		},
-		{
-			name:       "names with spaces",
-			serverName: "my server",
-			toolName:   "my tool",
-			expected:   "mcp_my_server_my_tool",
-		},
-		{
-			name:       "names with slashes",
-			serverName: "server/path",
-			toolName:   "tool/action",
-			expected:   "mcp_server_path_tool_action",
+func TestManager_Connect_RegistersFilteredTools(t *testing.T) {
+	command, args := mcpHelperCommand(t)
+
+	manager := NewManager()
+	var output bytes.Buffer
+	manager.SetOutput(&output)
+	manager.config = &Config{
+		MCPServers: map[string]ServerConfig{
+			"helper": {
+				Command: command,
+				Args:    args,
+				Env: map[string]string{
+					"GO_WANT_XELYON_MCP_HELPER": "1",
+				},
+				Tools: &ToolsFilter{
+					Exclude: []string{"hidden"},
+				},
+			},
 		},
 	}
+	t.Cleanup(manager.Close)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			wrapper := &MCPToolWrapper{
-				serverName: tt.serverName,
-				toolName:   tt.toolName,
-			}
-
-			result := wrapper.Name()
-			if result != tt.expected {
-				t.Errorf("Name() = %q, want %q", result, tt.expected)
-			}
-		})
-	}
-}
-
-func TestMCPToolWrapper_FormatResult(t *testing.T) {
-	wrapper := &MCPToolWrapper{
-		toolName: "test_tool",
+	if err := manager.Connect(context.Background()); err != nil {
+		t.Fatalf("Connect() error = %v", err)
 	}
 
-	tests := []struct {
-		name     string
-		input    string
-		contains string
-	}{
-		{
-			name:     "empty result",
-			input:    "",
-			contains: "Tool executed successfully (no output)",
-		},
-		{
-			name:     "short result",
-			input:    "success",
-			contains: "success",
-		},
-		{
-			name:     "multiline result (under limit)",
-			input:    "line1\nline2\nline3",
-			contains: "line1\nline2\nline3",
-		},
+	if len(manager.sessions) != 1 {
+		t.Fatalf("len(sessions) = %d, want 1", len(manager.sessions))
+	}
+	if manager.sessions["helper"] == nil {
+		t.Fatal("sessions[helper] should be initialized")
+	}
+	if len(manager.tools) != 1 {
+		t.Fatalf("len(tools) = %d, want 1", len(manager.tools))
+	}
+	if manager.tools[0].Name != "echo" {
+		t.Fatalf("tools[0].Name = %q, want echo", manager.tools[0].Name)
+	}
+	if !bytes.Contains(manager.tools[0].InputSchema, []byte(`"name"`)) {
+		t.Fatalf("InputSchema = %s, want to contain field name", manager.tools[0].InputSchema)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := wrapper.formatResult(tt.input)
-			if tt.contains != "" && result != tt.contains {
-				t.Errorf("formatResult() = %q, want %q", result, tt.contains)
-			}
-		})
+	result, err := manager.CallTool(context.Background(), "helper", "echo", map[string]any{"name": "tester"})
+	if err != nil {
+		t.Fatalf("CallTool() error = %v", err)
+	}
+	if result != "Hello tester\nFrom helper\n" {
+		t.Fatalf("CallTool() = %q, want %q", result, "Hello tester\nFrom helper\n")
+	}
+	if !strings.Contains(output.String(), "filtered out") {
+		t.Fatalf("Connect output = %q, want filtered out message", output.String())
 	}
 }
 
-func TestMCPToolWrapper_FormatResult_NoTruncation(t *testing.T) {
-	wrapper := &MCPToolWrapper{
-		toolName: "test_tool",
+func TestManager_Reconnect_ReplacesServerToolsAndUpdatesHealth(t *testing.T) {
+	command, args := mcpHelperCommand(t)
+
+	manager := NewManager()
+	var output bytes.Buffer
+	manager.SetOutput(&output)
+	manager.config = &Config{
+		MCPServers: map[string]ServerConfig{
+			"helper": {
+				Command: command,
+				Args:    args,
+				Env: map[string]string{
+					"GO_WANT_XELYON_MCP_HELPER": "1",
+				},
+			},
+		},
+	}
+	t.Cleanup(manager.Close)
+
+	if err := manager.Connect(context.Background()); err != nil {
+		t.Fatalf("Connect() error = %v", err)
+	}
+	if len(manager.tools) != 2 {
+		t.Fatalf("len(tools) after Connect = %d, want 2", len(manager.tools))
 	}
 
-	// 25行の出力を生成
-	// NOTE: MCP出力の切り詰めはtoken_guard.goで一元管理するため、ここでは行わない
-	var lines []string
-	for i := 1; i <= 25; i++ {
-		lines = append(lines, "line")
+	manager.tools = append(manager.tools, MCPTool{ServerName: "other", Name: "persist"})
+	output.Reset()
+
+	manager.config.MCPServers["helper"] = ServerConfig{
+		Command: command,
+		Args:    args,
+		Env: map[string]string{
+			"GO_WANT_XELYON_MCP_HELPER": "1",
+		},
+		Tools: &ToolsFilter{
+			Include: []string{"echo"},
+		},
 	}
-	input := ""
-	for i, line := range lines {
-		if i > 0 {
-			input += "\n"
+
+	if err := manager.Reconnect(context.Background(), "helper"); err != nil {
+		t.Fatalf("Reconnect() error = %v", err)
+	}
+
+	var helperToolNames []string
+	for _, tool := range manager.tools {
+		if tool.ServerName == "helper" {
+			helperToolNames = append(helperToolNames, tool.Name)
 		}
-		input += line
+	}
+	if len(helperToolNames) != 1 || helperToolNames[0] != "echo" {
+		t.Fatalf("helper tools after Reconnect = %v, want [echo]", helperToolNames)
+	}
+	if len(manager.tools) != 2 {
+		t.Fatalf("len(tools) after Reconnect = %d, want 2", len(manager.tools))
 	}
 
-	result := wrapper.formatResult(input)
-
-	// truncationされていないこと（全行が含まれる）
-	if result != input {
-		t.Errorf("Expected result to equal input (no truncation), got different output")
+	status := manager.HealthStatus()
+	health := status["helper"]
+	if !strings.Contains(health, "✅") {
+		t.Fatalf("HealthStatus()[helper] = %q, want connected status", health)
 	}
-
-	// "output truncated"が含まれていないこと
-	if strings.Contains(result, "output truncated") {
-		t.Errorf("Expected result to NOT contain 'output truncated'")
+	if !strings.Contains(output.String(), "reconnected") {
+		t.Fatalf("Reconnect output = %q, want reconnected message", output.String())
 	}
 }
 
-func TestMCPToolWrapper_ValidateArgs_EmptySchema(t *testing.T) {
-	wrapper := &MCPToolWrapper{
-		toolName:    "test_tool",
-		inputSchema: nil,
-	}
+func TestManager_CallTool_RetriesToolErrorAndSucceeds(t *testing.T) {
+	var attempts int
+	manager, output := newInMemoryManagerWithTool(t, "unstable", func(_ context.Context, _ *sdkmcp.CallToolRequest, _ map[string]any) (*sdkmcp.CallToolResult, any, error) {
+		attempts++
+		if attempts == 1 {
+			return &sdkmcp.CallToolResult{
+				IsError: true,
+				Content: []sdkmcp.Content{
+					&sdkmcp.TextContent{Text: "temporary failure"},
+				},
+			}, nil, nil
+		}
+		return &sdkmcp.CallToolResult{
+			Content: []sdkmcp.Content{
+				&sdkmcp.TextContent{Text: "recovered"},
+			},
+		}, nil, nil
+	})
 
-	args := map[string]string{
-		"param1": "value1",
-	}
-
-	err := wrapper.validateArgs(io.Discard, args)
+	got, err := manager.CallTool(context.Background(), "test-server", "unstable", nil)
 	if err != nil {
-		t.Errorf("validateArgs with empty schema should not error, got: %v", err)
+		t.Fatalf("CallTool() error = %v", err)
+	}
+	if got != "recovered\n" {
+		t.Fatalf("CallTool() = %q, want %q", got, "recovered\n")
+	}
+	if attempts != 2 {
+		t.Fatalf("attempts = %d, want 2", attempts)
+	}
+	if !strings.Contains(output.String(), "attempt 1 failed") {
+		t.Fatalf("CallTool output = %q, want retry warning", output.String())
 	}
 }
 
-func TestMCPToolWrapper_ValidateArgs_NullSchema(t *testing.T) {
-	wrapper := &MCPToolWrapper{
-		toolName:    "test_tool",
-		inputSchema: json.RawMessage("null"),
-	}
+func newInMemoryManagerWithTool(
+	t *testing.T,
+	toolName string,
+	handler func(context.Context, *sdkmcp.CallToolRequest, map[string]any) (*sdkmcp.CallToolResult, any, error),
+) (*Manager, *bytes.Buffer) {
+	t.Helper()
 
-	args := map[string]string{
-		"param1": "value1",
-	}
+	server := sdkmcp.NewServer(&sdkmcp.Implementation{
+		Name:    "test-server",
+		Version: "test",
+	}, nil)
+	sdkmcp.AddTool(server, &sdkmcp.Tool{
+		Name:        toolName,
+		Description: "test tool",
+	}, handler)
 
-	err := wrapper.validateArgs(io.Discard, args)
+	ctx := context.Background()
+	serverTransport, clientTransport := sdkmcp.NewInMemoryTransports()
+	serverSession, err := server.Connect(ctx, serverTransport, nil)
 	if err != nil {
-		t.Errorf("validateArgs with null schema should not error, got: %v", err)
-	}
-}
-
-func TestMCPToolWrapper_ValidateArgs_InvalidJSON(t *testing.T) {
-	wrapper := &MCPToolWrapper{
-		toolName:    "test_tool",
-		inputSchema: json.RawMessage("{invalid json"),
+		t.Fatalf("server.Connect() error = %v", err)
 	}
 
-	args := map[string]string{
-		"param1": "value1",
-	}
-
-	// 不正なJSONの場合は警告のみで成功するべき
-	err := wrapper.validateArgs(io.Discard, args)
+	client := sdkmcp.NewClient(&sdkmcp.Implementation{
+		Name:    "test-client",
+		Version: "test",
+	}, nil)
+	clientSession, err := client.Connect(ctx, clientTransport, nil)
 	if err != nil {
-		t.Errorf("validateArgs with invalid JSON should warn but not error, got: %v", err)
+		t.Fatalf("client.Connect() error = %v", err)
 	}
-}
-
-func TestMCPToolWrapper_ValidateArgs_ValidSchema(t *testing.T) {
-	schema := map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"path": map[string]any{
-				"type":     "string",
-				"required": true,
-			},
-			"optional": map[string]any{
-				"type": "string",
-			},
-		},
-	}
-
-	schemaBytes, _ := json.Marshal(schema)
-	wrapper := &MCPToolWrapper{
-		toolName:    "test_tool",
-		inputSchema: schemaBytes,
-	}
-
-	tests := []struct {
-		name    string
-		args    map[string]string
-		wantErr bool
-	}{
-		{
-			name: "valid args with required param",
-			args: map[string]string{
-				"path": "/test/path",
-			},
-			wantErr: false,
-		},
-		{
-			name: "valid args with all params",
-			args: map[string]string{
-				"path":     "/test/path",
-				"optional": "value",
-			},
-			wantErr: false,
-		},
-		{
-			name:    "missing required param",
-			args:    map[string]string{},
-			wantErr: true, // Should error because 'path' is required
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := wrapper.validateArgs(io.Discard, tt.args)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("validateArgs() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
-
-func TestManager_RegisterToToolRegistry(t *testing.T) {
-	manager := NewManager()
-
-	// モックツールを追加
-	manager.tools = []MCPTool{
-		{
-			ServerName:  "test-server",
-			Name:        "test-tool",
-			Description: "A test tool",
-			InputSchema: json.RawMessage(`{"type": "object"}`),
-		},
-	}
-
-	// RegisterToToolRegistry を直接テストするのは難しいので、
-	// ツールが正しくフォーマットされることを確認
-	wrapper := &MCPToolWrapper{
-		manager:     manager,
-		serverName:  "test-server",
-		toolName:    "test-tool",
-		desc:        "A test tool",
-		inputSchema: json.RawMessage(`{"type": "object"}`),
-	}
-
-	expectedName := "mcp_test_server_test_tool"
-	if wrapper.Name() != expectedName {
-		t.Errorf("Wrapper name = %q, want %q", wrapper.Name(), expectedName)
-	}
-}
-
-func TestMCPToolWrapper_Run_ValidationError(t *testing.T) {
-	manager := NewManager()
-
-	schema := map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"required_param": map[string]any{
-				"type":     "string",
-				"required": true,
-			},
-		},
-	}
-	schemaBytes, _ := json.Marshal(schema)
-
-	wrapper := &MCPToolWrapper{
-		manager:     manager,
-		serverName:  "test-server",
-		toolName:    "test-tool",
-		desc:        "A test tool",
-		inputSchema: schemaBytes,
-	}
-
-	// 必須パラメータなしで実行
-	result, change, err := wrapper.Run(tools.ExecutionContext{}, map[string]string{})
-
-	if err == nil {
-		t.Error("Run() should return error for missing required parameter")
-	}
-
-	if change != nil {
-		t.Error("Run() should not return FileChange on validation error")
-	}
-
-	if !strings.Contains(result, "Validation Error") {
-		t.Errorf("Result should contain 'Validation Error', got: %s", result)
-	}
-}
-
-func TestMCPToolWrapper_Run_CallToolError(t *testing.T) {
-	manager := NewManager()
-
-	wrapper := &MCPToolWrapper{
-		manager:     manager,
-		serverName:  "nonexistent-server",
-		toolName:    "test-tool",
-		desc:        "A test tool",
-		inputSchema: nil,
-	}
-
-	// 接続していないサーバーに対して実行
-	result, change, err := wrapper.Run(tools.ExecutionContext{}, map[string]string{})
-
-	if err == nil {
-		t.Error("Run() should return error for non-connected server")
-	}
-
-	if change != nil {
-		t.Error("Run() should not return FileChange on error")
-	}
-
-	if !strings.Contains(result, "Error:") {
-		t.Errorf("Result should contain 'Error:', got: %s", result)
-	}
-}
-
-func TestMCPToolWrapper_Run_ZeroValueExecutionContext_InvalidPropertySchema(t *testing.T) {
-	var out bytes.Buffer
-	var errOut bytes.Buffer
-	stdio.SetDefaults(strings.NewReader("\n"), &out, &errOut)
 	t.Cleanup(func() {
-		stdio.SetDefaults(nil, nil, nil)
+		_ = clientSession.Close()
+		_ = serverSession.Wait()
 	})
 
 	manager := NewManager()
-	wrapper := &MCPToolWrapper{
-		manager:     manager,
-		serverName:  "nonexistent-server",
-		toolName:    "test-tool",
-		desc:        "A test tool",
-		inputSchema: json.RawMessage(`{"type":"object","properties":{"broken":"oops"}}`),
-	}
-
-	result, change, err := wrapper.Run(tools.ExecutionContext{}, map[string]string{})
-	if err == nil {
-		t.Error("Run() should return error for non-connected server")
-	}
-	if change != nil {
-		t.Error("Run() should not return FileChange on error")
-	}
-	if !strings.Contains(result, "Error:") {
-		t.Errorf("Result should contain 'Error:', got: %s", result)
-	}
-	if !strings.Contains(out.String(), "Invalid property schema") {
-		t.Fatalf("expected warning output for invalid property schema, got %q", out.String())
-	}
+	var output bytes.Buffer
+	manager.SetOutput(&output)
+	manager.sessions["test-server"] = clientSession
+	return manager, &output
 }
 
-func TestMCPToolWrapper_ConvertArgsWithSchema_EmptySchema(t *testing.T) {
-	wrapper := &MCPToolWrapper{
-		toolName:    "test_tool",
-		inputSchema: nil,
+func mcpHelperCommand(t *testing.T) (string, []string) {
+	t.Helper()
+
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatalf("os.Executable() error = %v", err)
 	}
 
-	args := map[string]string{
-		"param1": "value1",
-		"param2": "123",
+	commandName := "xelyon-mcp-helper"
+	binDir := t.TempDir()
+	binPath := filepath.Join(binDir, commandName)
+	if err := os.Symlink(exe, binPath); err != nil {
+		copyExecutable(t, exe, binPath)
 	}
 
-	result := wrapper.convertArgsWithSchema(args)
+	previousPath := os.Getenv("PATH")
+	separator := string(os.PathListSeparator)
+	if previousPath == "" {
+		os.Setenv("PATH", binDir)
+	} else {
+		os.Setenv("PATH", binDir+separator+previousPath)
+	}
+	t.Cleanup(func() {
+		os.Setenv("PATH", previousPath)
+	})
 
-	if result["param1"] != "value1" {
-		t.Errorf("Expected param1='value1', got %v", result["param1"])
-	}
-	if result["param2"] != "123" {
-		t.Errorf("Expected param2='123' (string), got %v", result["param2"])
-	}
+	_, existed := allowedMCPCommands[commandName]
+	previousAllowed := allowedMCPCommands[commandName]
+	allowedMCPCommands[commandName] = true
+	t.Cleanup(func() {
+		if existed {
+			allowedMCPCommands[commandName] = previousAllowed
+			return
+		}
+		delete(allowedMCPCommands, commandName)
+	})
+
+	return commandName, []string{"-test.run=TestMCPHelperProcess", "--"}
 }
 
-func TestMCPToolWrapper_ConvertArgsWithSchema_NullSchema(t *testing.T) {
-	wrapper := &MCPToolWrapper{
-		toolName:    "test_tool",
-		inputSchema: json.RawMessage("null"),
+func copyExecutable(t *testing.T, srcPath, dstPath string) {
+	t.Helper()
+
+	src, err := os.Open(srcPath)
+	if err != nil {
+		t.Fatalf("os.Open(%q) error = %v", srcPath, err)
 	}
+	defer src.Close()
 
-	args := map[string]string{
-		"param1": "value1",
+	dst, err := os.OpenFile(dstPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
+	if err != nil {
+		t.Fatalf("os.OpenFile(%q) error = %v", dstPath, err)
 	}
+	defer dst.Close()
 
-	result := wrapper.convertArgsWithSchema(args)
-
-	if result["param1"] != "value1" {
-		t.Errorf("Expected param1='value1', got %v", result["param1"])
-	}
-}
-
-func TestMCPToolWrapper_ConvertArgsWithSchema_InvalidJSON(t *testing.T) {
-	wrapper := &MCPToolWrapper{
-		toolName:    "test_tool",
-		inputSchema: json.RawMessage("{invalid json"),
-	}
-
-	args := map[string]string{
-		"param1": "value1",
-	}
-
-	result := wrapper.convertArgsWithSchema(args)
-
-	// Invalid JSON should fall back to string values
-	if result["param1"] != "value1" {
-		t.Errorf("Expected param1='value1', got %v", result["param1"])
-	}
-}
-
-func TestMCPToolWrapper_ConvertArgsWithSchema_IntegerType(t *testing.T) {
-	schema := map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"count": map[string]any{
-				"type": "integer",
-			},
-		},
-	}
-	schemaBytes, _ := json.Marshal(schema)
-
-	wrapper := &MCPToolWrapper{
-		toolName:    "test_tool",
-		inputSchema: schemaBytes,
-	}
-
-	args := map[string]string{
-		"count": "42",
-	}
-
-	result := wrapper.convertArgsWithSchema(args)
-
-	if val, ok := result["count"].(int64); !ok || val != 42 {
-		t.Errorf("Expected count=42 (int64), got %T %v", result["count"], result["count"])
-	}
-}
-
-func TestMCPToolWrapper_ConvertArgsWithSchema_NumberType(t *testing.T) {
-	schema := map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"price": map[string]any{
-				"type": "number",
-			},
-		},
-	}
-	schemaBytes, _ := json.Marshal(schema)
-
-	wrapper := &MCPToolWrapper{
-		toolName:    "test_tool",
-		inputSchema: schemaBytes,
-	}
-
-	args := map[string]string{
-		"price": "19.99",
-	}
-
-	result := wrapper.convertArgsWithSchema(args)
-
-	if val, ok := result["price"].(float64); !ok || val != 19.99 {
-		t.Errorf("Expected price=19.99 (float64), got %T %v", result["price"], result["price"])
-	}
-}
-
-func TestMCPToolWrapper_ConvertArgsWithSchema_BooleanType(t *testing.T) {
-	schema := map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"enabled": map[string]any{
-				"type": "boolean",
-			},
-		},
-	}
-	schemaBytes, _ := json.Marshal(schema)
-
-	wrapper := &MCPToolWrapper{
-		toolName:    "test_tool",
-		inputSchema: schemaBytes,
-	}
-
-	tests := []struct {
-		name  string
-		input string
-		want  bool
-	}{
-		{"true", "true", true},
-		{"false", "false", false},
-		{"1", "1", true},
-		{"0", "0", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			args := map[string]string{
-				"enabled": tt.input,
-			}
-			result := wrapper.convertArgsWithSchema(args)
-
-			if val, ok := result["enabled"].(bool); !ok || val != tt.want {
-				t.Errorf("Expected enabled=%v (bool), got %T %v", tt.want, result["enabled"], result["enabled"])
-			}
-		})
-	}
-}
-
-func TestMCPToolWrapper_ConvertArgsWithSchema_StringType(t *testing.T) {
-	schema := map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"name": map[string]any{
-				"type": "string",
-			},
-		},
-	}
-	schemaBytes, _ := json.Marshal(schema)
-
-	wrapper := &MCPToolWrapper{
-		toolName:    "test_tool",
-		inputSchema: schemaBytes,
-	}
-
-	args := map[string]string{
-		"name": "test-value",
-	}
-
-	result := wrapper.convertArgsWithSchema(args)
-
-	// String type should remain as string
-	if result["name"] != "test-value" {
-		t.Errorf("Expected name='test-value', got %v", result["name"])
-	}
-}
-
-func TestMCPToolWrapper_ConvertArgsWithSchema_MixedTypes(t *testing.T) {
-	schema := map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"name": map[string]any{
-				"type": "string",
-			},
-			"count": map[string]any{
-				"type": "integer",
-			},
-			"enabled": map[string]any{
-				"type": "boolean",
-			},
-		},
-	}
-	schemaBytes, _ := json.Marshal(schema)
-
-	wrapper := &MCPToolWrapper{
-		toolName:    "test_tool",
-		inputSchema: schemaBytes,
-	}
-
-	args := map[string]string{
-		"name":    "test",
-		"count":   "10",
-		"enabled": "true",
-	}
-
-	result := wrapper.convertArgsWithSchema(args)
-
-	if result["name"] != "test" {
-		t.Errorf("Expected name='test', got %v", result["name"])
-	}
-	if val, ok := result["count"].(int64); !ok || val != 10 {
-		t.Errorf("Expected count=10 (int64), got %T %v", result["count"], result["count"])
-	}
-	if val, ok := result["enabled"].(bool); !ok || val != true {
-		t.Errorf("Expected enabled=true (bool), got %T %v", result["enabled"], result["enabled"])
-	}
-}
-
-func TestMCPToolWrapper_ConvertArgsWithSchema_InvalidValue(t *testing.T) {
-	schema := map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"count": map[string]any{
-				"type": "integer",
-			},
-		},
-	}
-	schemaBytes, _ := json.Marshal(schema)
-
-	wrapper := &MCPToolWrapper{
-		toolName:    "test_tool",
-		inputSchema: schemaBytes,
-	}
-
-	args := map[string]string{
-		"count": "not-a-number",
-	}
-
-	result := wrapper.convertArgsWithSchema(args)
-
-	// Invalid value should remain as string
-	if result["count"] != "not-a-number" {
-		t.Errorf("Expected count='not-a-number' (string fallback), got %T %v", result["count"], result["count"])
-	}
-}
-
-func TestMCPToolWrapper_ConvertArgsWithSchema_UnknownProperty(t *testing.T) {
-	schema := map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"known": map[string]any{
-				"type": "string",
-			},
-		},
-	}
-	schemaBytes, _ := json.Marshal(schema)
-
-	wrapper := &MCPToolWrapper{
-		toolName:    "test_tool",
-		inputSchema: schemaBytes,
-	}
-
-	args := map[string]string{
-		"known":   "value",
-		"unknown": "123",
-	}
-
-	result := wrapper.convertArgsWithSchema(args)
-
-	// Unknown property should remain as string
-	if result["unknown"] != "123" {
-		t.Errorf("Expected unknown='123' (string), got %v", result["unknown"])
+	if _, err := io.Copy(dst, src); err != nil {
+		t.Fatalf("io.Copy() error = %v", err)
 	}
 }

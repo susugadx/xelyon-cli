@@ -546,7 +546,7 @@ func handleThinkCommand(agent *Agent, args []string) bool {
 	}
 
 	if isDeepSeek && agent != nil {
-		agent.syncSessionModel()
+		agent.reconcileSessionForCurrentRuntime()
 	}
 	return true
 }

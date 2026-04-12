@@ -10,6 +10,23 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
+type configCommandMenu interface {
+	Run() (*config.ConfigCategory, error)
+	ShowFieldList(*config.ConfigCategory) (*config.ConfigField, error)
+	EditField(*config.ConfigField) (interface{}, bool, error)
+}
+
+var (
+	loadConfigForCommand          = config.LoadConfig
+	saveConfigForCommand          = config.SaveConfig
+	showConfigForCommand          = config.ShowConfig
+	setFieldValueForCommand       = config.SetFieldValue
+	buildConfigRegistryForCommand = config.BuildConfigRegistry
+	newConfigMenuForCommand       = func(cfg *config.Config, categories []config.ConfigCategory, runtime *ui.Runtime) configCommandMenu {
+		return ui.NewConfigMenuWithRuntime(cfg, categories, runtime)
+	}
+)
+
 // handleModelCommand はモデルの表示・切り替えを処理
 func handleModelCommand(agent *Agent, args []string) bool {
 	out := agent.output()
@@ -49,7 +66,7 @@ func handleModelCommand(agent *Agent, args []string) bool {
 	// モデルを切り替え
 	oldModel := agent.CurrentModel
 	agent.CurrentModel = newModel
-	agent.syncSessionModel()
+	agent.reconcileSessionForCurrentRuntime()
 	if agent.Stats != nil {
 		agent.Stats.Model = newModel
 	}
@@ -61,7 +78,7 @@ func handleModelCommand(agent *Agent, args []string) bool {
 	}
 
 	// 設定ファイルにも保存
-	cfg, err := config.LoadConfig()
+	cfg, err := loadConfigForCommand()
 	if err != nil {
 		yellow.Fprintf(out, "Warning: Failed to load config: %v\n", err)
 		return true
@@ -72,7 +89,7 @@ func handleModelCommand(agent *Agent, args []string) bool {
 	// プロバイダー別の設定がある場合はそちらも更新（優先されるため）
 	agent.SyncDefaultModelToProvider(cfg)
 
-	if err := config.SaveConfig(cfg); err != nil {
+	if err := saveConfigForCommand(cfg); err != nil {
 		yellow.Fprintf(out, "Warning: Failed to save config: %v\n", err)
 		yellow.Fprintln(out, "Model switched for this session only")
 		return true
@@ -87,7 +104,7 @@ func handleModelCommand(agent *Agent, args []string) bool {
 func handleConfigCommand(agent *Agent, args []string) bool {
 	out := agent.output()
 
-	cfg, err := config.LoadConfig()
+	cfg, err := loadConfigForCommand()
 	if err != nil {
 		red.Fprintf(out, "Failed to load config: %v\n", err)
 		return true
@@ -95,7 +112,7 @@ func handleConfigCommand(agent *Agent, args []string) bool {
 
 	// /config show → 全設定をデフォルトとの差分付きで表示
 	if len(args) > 0 && args[0] == "show" {
-		_, _ = fmt.Fprint(out, config.ShowConfig(cfg))
+		_, _ = fmt.Fprint(out, showConfigForCommand(cfg))
 		return true
 	}
 
@@ -111,7 +128,7 @@ func handleConfigCommand(agent *Agent, args []string) bool {
 			agent.SyncDefaultModelToProvider(cfg)
 		}
 
-		if err := config.SaveConfig(cfg); err != nil {
+		if err := saveConfigForCommand(cfg); err != nil {
 			red.Fprintf(out, "Failed to save config: %v\n", err)
 			return true
 		}
@@ -149,8 +166,8 @@ func isNonInteractiveConfigSubcommand(args []string) bool {
 // runInteractiveConfig は対話式設定メニューを実行
 func runInteractiveConfig(agent *Agent, cfg *config.Config) {
 	out := agent.output()
-	categories := config.BuildConfigRegistry(cfg)
-	menu := ui.NewConfigMenuWithRuntime(cfg, categories, agent.ui())
+	categories := buildConfigRegistryForCommand(cfg)
+	menu := newConfigMenuForCommand(cfg, categories, agent.ui())
 
 	for {
 		// カテゴリ選択
@@ -179,7 +196,7 @@ func runInteractiveConfig(agent *Agent, cfg *config.Config) {
 
 			// StructMap型は直接Configを編集するので、保存のみ
 			if selectedField.FieldType == config.FieldTypeStructMap {
-				if err := config.SaveConfig(cfg); err != nil {
+				if err := saveConfigForCommand(cfg); err != nil {
 					red.Fprintf(out, "Error saving: %v\n", err)
 				} else {
 					green.Fprintf(out, "✓ Saved: %s\n", selectedField.Path)
@@ -189,8 +206,8 @@ func runInteractiveConfig(agent *Agent, cfg *config.Config) {
 					}
 				}
 				// カテゴリを再構築
-				categories = config.BuildConfigRegistry(cfg)
-				menu = ui.NewConfigMenuWithRuntime(cfg, categories, agent.ui())
+				categories = buildConfigRegistryForCommand(cfg)
+				menu = newConfigMenuForCommand(cfg, categories, agent.ui())
 				// 現在のカテゴリを更新
 				for i := range categories {
 					if categories[i].Name == selectedCategory.Name {
@@ -202,7 +219,7 @@ func runInteractiveConfig(agent *Agent, cfg *config.Config) {
 			}
 
 			// 値を設定
-			if err := config.SetFieldValue(cfg, selectedField.Path, newValue); err != nil {
+			if err := setFieldValueForCommand(cfg, selectedField.Path, newValue); err != nil {
 				red.Fprintf(out, "Error setting value: %v\n", err)
 				continue
 			}
@@ -216,7 +233,7 @@ func runInteractiveConfig(agent *Agent, cfg *config.Config) {
 			}
 
 			// 保存
-			if err := config.SaveConfig(cfg); err != nil {
+			if err := saveConfigForCommand(cfg); err != nil {
 				red.Fprintf(out, "Error saving: %v\n", err)
 				continue
 			}
@@ -229,8 +246,8 @@ func runInteractiveConfig(agent *Agent, cfg *config.Config) {
 			}
 
 			// カテゴリを再構築して現在値を更新
-			categories = config.BuildConfigRegistry(cfg)
-			menu = ui.NewConfigMenuWithRuntime(cfg, categories, agent.ui())
+			categories = buildConfigRegistryForCommand(cfg)
+			menu = newConfigMenuForCommand(cfg, categories, agent.ui())
 			// 現在のカテゴリを更新
 			for i := range categories {
 				if categories[i].Name == selectedCategory.Name {
@@ -307,7 +324,7 @@ func handleUseCommand(agent *Agent, args []string) bool {
 		newModel := args[1]
 		oldModel := agent.CurrentModel
 		agent.CurrentModel = newModel
-		agent.syncSessionModel()
+		agent.reconcileSessionForCurrentRuntime()
 		if agent.Stats != nil {
 			agent.Stats.Model = newModel
 		}

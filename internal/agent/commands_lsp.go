@@ -8,6 +8,13 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/lsp"
 )
 
+var (
+	lspCommandGetwd                  = os.Getwd
+	lspCommandDetectProjectLanguages = lsp.DetectProjectLanguages
+	lspCommandGetInstallInfo         = lsp.GetInstallInfo
+	lspCommandRunInstallWithIO       = lsp.RunInstallWithIO
+)
+
 // handleLSPCommand は LSP サーバーの状態を表示・管理
 func handleLSPCommand(agent *Agent, args []string) bool {
 	out := agent.output()
@@ -72,8 +79,8 @@ func handleLSPStatus(agent *Agent, lspClient *lsp.Client) bool {
 	}
 
 	// プロジェクト内の言語を検出
-	cwd, _ := os.Getwd()
-	detectedLangs, _ := lsp.DetectProjectLanguages(cwd)
+	cwd, _ := lspCommandGetwd()
+	detectedLangs, _ := lspCommandDetectProjectLanguages(cwd)
 	if len(detectedLangs) > 0 {
 		_, _ = fmt.Fprintln(out)
 		var langNames []string
@@ -88,7 +95,7 @@ func handleLSPStatus(agent *Agent, lspClient *lsp.Client) bool {
 		_, _ = fmt.Fprintln(out)
 		yellow.Fprintln(out, "💡 Missing LSP servers:")
 		for _, lang := range notInstalled {
-			if info, ok := lsp.GetInstallInfo(lang); ok {
+			if info, ok := lspCommandGetInstallInfo(lang); ok {
 				_, _ = fmt.Fprintf(out, "   %s: %s\n", lang, info.Commands[0])
 			}
 		}
@@ -109,13 +116,13 @@ func handleLSPDetect(agent *Agent, lspClient *lsp.Client) bool {
 	cyan.Fprintln(out, "🔍 Detecting languages in project...")
 	_, _ = fmt.Fprintln(out)
 
-	cwd, err := os.Getwd()
+	cwd, err := lspCommandGetwd()
 	if err != nil {
 		red.Fprintf(out, "Error getting current directory: %v\n", err)
 		return true
 	}
 
-	languages, err := lsp.DetectProjectLanguages(cwd)
+	languages, err := lspCommandDetectProjectLanguages(cwd)
 	if err != nil {
 		red.Fprintf(out, "Error detecting languages: %v\n", err)
 		return true
@@ -153,7 +160,7 @@ func handleLSPDetect(agent *Agent, lspClient *lsp.Client) bool {
 		} else if state == "disabled" {
 			_, _ = fmt.Fprintf(out, "  🔴 %s: disabled\n", serverKey)
 		} else {
-			installInfo, _ := lsp.GetInstallInfo(serverKey)
+			installInfo, _ := lspCommandGetInstallInfo(serverKey)
 			_, _ = fmt.Fprintf(out, "  ✅ %s: installed (%s)\n", serverKey, installInfo.PackageName)
 		}
 	}
@@ -185,7 +192,7 @@ func handleLSPInstall(agent *Agent, lspClient *lsp.Client, args []string) bool {
 	}
 
 	// 単一言語のインストール
-	info, ok := lsp.GetInstallInfo(target)
+	info, ok := lspCommandGetInstallInfo(target)
 	if !ok {
 		red.Fprintf(out, "Unknown language: %s\n", target)
 		yellow.Fprintln(out, "Available languages: go, typescript, python, rust")
@@ -205,7 +212,7 @@ func handleLSPInstall(agent *Agent, lspClient *lsp.Client, args []string) bool {
 	cyan.Fprintf(out, "Running: %s\n", info.Commands[0])
 	_, _ = fmt.Fprintln(out)
 
-	if err := lsp.RunInstallWithIO(target, agent.ui().Input(), agent.ui().Output(), agent.ui().ErrorOutput()); err != nil {
+	if err := lspCommandRunInstallWithIO(target, agent.ui().Input(), agent.ui().Output(), agent.ui().ErrorOutput()); err != nil {
 		red.Fprintf(out, "❌ Installation failed: %v\n", err)
 		_, _ = fmt.Fprintln(out)
 		yellow.Fprintln(out, "Try installing manually:")
@@ -245,7 +252,7 @@ func handleLSPInstallAll(agent *Agent, lspClient *lsp.Client) bool {
 
 	successCount := 0
 	for i, lang := range toInstall {
-		info, ok := lsp.GetInstallInfo(lang)
+		info, ok := lspCommandGetInstallInfo(lang)
 		if !ok {
 			continue
 		}
@@ -253,7 +260,7 @@ func handleLSPInstallAll(agent *Agent, lspClient *lsp.Client) bool {
 		_, _ = fmt.Fprintf(out, "[%d/%d] Installing %s (%s)...\n", i+1, len(toInstall), lang, info.PackageName)
 		_, _ = fmt.Fprintf(out, "      %s\n", info.Commands[0])
 
-		if err := lsp.RunInstallWithIO(lang, agent.ui().Input(), agent.ui().Output(), agent.ui().ErrorOutput()); err != nil {
+		if err := lspCommandRunInstallWithIO(lang, agent.ui().Input(), agent.ui().Output(), agent.ui().ErrorOutput()); err != nil {
 			red.Fprintf(out, "      ❌ Failed: %v\n", err)
 		} else {
 			green.Fprintln(out, "      ✅ Success")
