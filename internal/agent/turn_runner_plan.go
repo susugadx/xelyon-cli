@@ -126,7 +126,7 @@ func (r *TurnRunner) handleStepNoToolResponse(response string, step *plan.PlanSt
 func (r *TurnRunner) processStepToolCalls(execToolCalls []*tools.ToolCall, step *plan.PlanStep, p *plan.Plan, idx int, rs *retryState, state *stepRunState) (bool, error) {
 	handler := newPlanStepToolResultHandler(r, state)
 
-	r.executeToolCalls("", execToolCalls, r.planStepSkipFn, func(_ int, toolCall *tools.ToolCall, result string, change *tools.FileChange) {
+	r.executeToolCalls("", execToolCalls, nil, func(_ int, toolCall *tools.ToolCall, result string, change *tools.FileChange) {
 		handler.Handle(toolCall, result, change)
 	})
 
@@ -135,12 +135,4 @@ func (r *TurnRunner) processStepToolCalls(execToolCalls []*tools.ToolCall, step 
 	}
 
 	return newPlanStepFailureHandler(r, p, step, idx, rs, state).Handle()
-}
-
-func (r *TurnRunner) planStepSkipFn(tc *tools.ToolCall) (bool, string) {
-	if tc.Tool == "create_plan" || tc.Tool == "update_plan" {
-		yellow.Fprintf(r.agent.output(), "⚠️  Ignored deprecated planning tool call: %s\n", tc.Tool)
-		return true, fmt.Sprintf("[%s] Ignored: planning tools are deprecated. Continue with current step.", tc.Tool)
-	}
-	return false, ""
 }

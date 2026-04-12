@@ -30,7 +30,6 @@ func TestIsParallelSafe_StaticTools(t *testing.T) {
 		{"str_replace", false},
 		{"delete_file", false},
 		{"ask_user_question", false},
-		{"create_plan", false},
 		{"unknown_tool", false},
 	}
 

@@ -72,6 +72,12 @@ func TestBuildStepPrompt_ContainsRules(t *testing.T) {
 	if !strings.Contains(prompt, "Execute ONLY this step") {
 		t.Error("expected step isolation rule")
 	}
+	if !strings.Contains(prompt, "Do NOT use update_plan to set status to completed") {
+		t.Error("expected step prompt to preserve the runtime completion marker guidance")
+	}
+	if !strings.Contains(prompt, "system handles completion automatically") {
+		t.Error("expected step prompt to explain completion is runtime-managed")
+	}
 	if !strings.Contains(prompt, "WHAT:") {
 		t.Error("expected report format")
 	}
@@ -100,5 +106,8 @@ func TestBuildPlanRequestMessage_RequestsPlan(t *testing.T) {
 	}
 	if !strings.Contains(msg, "ExtractPlanJSON") {
 		t.Error("expected message to reference ExtractPlanJSON")
+	}
+	if !strings.Contains(msg, "Do not call tools in this response.") {
+		t.Error("expected message to forbid tool calls in the retry response")
 	}
 }

@@ -542,14 +542,14 @@ func TestExecuteToolCallsWithParallel_SkipDoesNotBreakRepeatedReads(t *testing.T
 
 	toolCalls := []*tools.ToolCall{
 		{ID: "c1", Tool: "read_file", Args: map[string]string{"path": "/a.go"}, RawArgs: map[string]any{"path": "/a.go"}},
-		{ID: "c2", Tool: "create_plan", Args: map[string]string{"title": "X"}, RawArgs: map[string]any{"title": "X"}},
+		{ID: "c2", Tool: "write_file", Args: map[string]string{"path": "/tmp/x.go"}, RawArgs: map[string]any{"path": "/tmp/x.go"}},
 		{ID: "c3", Tool: "read_file", Args: map[string]string{"path": "/a.go"}, RawArgs: map[string]any{"path": "/a.go"}},
 	}
 	agent.addToolCallsToHistory("test", toolCalls)
 
 	skipFn := func(tc *tools.ToolCall) (bool, string) {
-		if tc.Tool == "create_plan" {
-			return true, "[create_plan] Ignored"
+		if tc.Tool == "write_file" {
+			return true, "[write_file] Ignored"
 		}
 		return false, ""
 	}

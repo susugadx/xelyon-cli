@@ -41,29 +41,3 @@ func (h *normalModePlanningHandler) HandlePlanJSONFallback(response string, tool
 	})
 	return normalModeContinue, true, nil
 }
-
-func (h *normalModePlanningHandler) FilterExecutableToolCalls(response string, toolCalls []*tools.ToolCall) []*tools.ToolCall {
-	a := h.runner.agent
-	execToolCalls := make([]*tools.ToolCall, 0, len(toolCalls))
-
-	for _, toolCall := range toolCalls {
-		if toolCall.Tool != "create_plan" {
-			execToolCalls = append(execToolCalls, toolCall)
-			continue
-		}
-
-		if a.Stats != nil {
-			a.Stats.AddToolExecution(toolCall.Tool)
-		}
-		result, _ := a.executeToolWithSpinner(h.runner.ctx, toolCall)
-		a.appendSessionToolExecution(toolCall, result)
-		a.appendAssistantResponse(rawAssistantResponse(response), assistantAppendOptions{
-			sessionMode: assistantSessionRawText,
-		})
-		a.appendToolResultToHistory(toolCall, result)
-
-		yellow.Fprintln(a.output(), "⚠️  create_plan is deprecated, continuing in normal mode...")
-	}
-
-	return execToolCalls
-}

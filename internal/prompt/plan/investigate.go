@@ -70,5 +70,5 @@ Before using modification tools, you must provide an implementation plan.
 Output your plan as text that includes a single JSON object matching the Plan schema.
 The runtime extracts it via ExtractPlanJSON/ParsePlan.
 
-Do NOT call create_plan/update_plan tools.`, toolName)
+Do not call tools in this response. Return only the implementation plan.`, toolName)
 }

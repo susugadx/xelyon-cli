@@ -8,11 +8,8 @@ import (
 func TestStripPlanningReferences(t *testing.T) {
 	result := StripPlanningReferences(SystemPrompt)
 
-	if strings.Contains(result, "create_plan") {
-		t.Error("StripPlanningReferences should remove all create_plan references")
-	}
-	if strings.Contains(result, "update_plan") {
-		t.Error("StripPlanningReferences should remove all update_plan references")
+	if strings.Contains(result, "ask_user_question") {
+		t.Error("StripPlanningReferences should remove plan-mode tool references")
 	}
 	if !strings.Contains(result, "## Workflow Rules") {
 		t.Error("StripPlanningReferences should preserve workflow rules")
