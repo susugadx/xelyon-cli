@@ -2,6 +2,9 @@ package agent
 
 import (
 	"bytes"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -115,6 +118,61 @@ func TestHandleLoadCommand_RestoresResponseIDAndListsEmptySessions(t *testing.T)
 	}
 	if !strings.Contains(out.String(), "No sessions found") {
 		t.Fatalf("output = %q, want no sessions message", out.String())
+	}
+}
+
+func TestHandleLoadCommand_RepairsVersion1GuessedOpenAIOwnerForAliasRuntime(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	storage, err := history.NewStorage()
+	if err != nil {
+		t.Fatalf("NewStorage() error = %v", err)
+	}
+
+	session := history.NewSession("test-model")
+	session.ResponseID = "resp_v1"
+	session.ProviderName = "openai"
+	session.ProviderConfigKey = "openai-alt"
+	session.ResponseModel = "test-model"
+	session.ResponseProviderName = "openai"
+	session.ResponseProviderConfigKey = "openai"
+	session.AddMessage("user", "hello", "test-model")
+	if err := storage.Save(session); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	metaPath := filepath.Join(os.Getenv("HOME"), ".xelyon", "history", "metadata", session.ID+".json")
+	raw, err := os.ReadFile(metaPath)
+	if err != nil {
+		t.Fatalf("ReadFile(metadata) error = %v", err)
+	}
+
+	var meta history.SessionMetadata
+	if err := json.Unmarshal(raw, &meta); err != nil {
+		t.Fatalf("Unmarshal(metadata) error = %v", err)
+	}
+	meta.ResponseContextVersion = 1
+	version1Raw, err := json.MarshalIndent(meta, "", "  ")
+	if err != nil {
+		t.Fatalf("MarshalIndent(metadata) error = %v", err)
+	}
+	if err := os.WriteFile(metaPath, version1Raw, 0o600); err != nil {
+		t.Fatalf("WriteFile(metadata) error = %v", err)
+	}
+
+	var out bytes.Buffer
+	agent := newSessionCommandTestAgent(&out)
+	agent.storage = storage
+	agent.CurrentModel = "test-model"
+	agent.ProviderName = "openai"
+	agent.ProviderConfigKey = "openai-alt"
+	agent.CurrentProvider = &mockResponseIDProvider{mockProvider: mockProvider{name: "openai"}}
+
+	if !handleLoadCommand(agent, []string{session.ID}) {
+		t.Fatal("handleLoadCommand() = false, want true")
+	}
+	if ridProvider, ok := agent.CurrentProvider.(*mockResponseIDProvider); !ok || ridProvider.responseID != "resp_v1" {
+		t.Fatalf("responseID = %#v, want resp_v1", agent.CurrentProvider)
 	}
 }
 
