@@ -14,10 +14,18 @@ import (
 
 // MockProvider implements api.Provider for testing
 type MockProvider struct {
-	name string
+	name      string
+	configKey string
 }
 
 func (m *MockProvider) Name() string { return m.name }
+func (m *MockProvider) ProviderConfigKey() string {
+	if m.configKey != "" {
+		return m.configKey
+	}
+	return m.name
+}
+func (m *MockProvider) SetProviderConfigKey(key string) { m.configKey = key }
 func (m *MockProvider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
 	return "", nil
 }
@@ -238,9 +246,7 @@ func TestSyncWithRuntimeConfig_DoesNotReswitchWhenAnthropicAliasOwnerIsUnchanged
 	}
 }
 
-func TestSyncWithRuntimeConfig_SwitchesAliasOwnerWithinSameRuntimeIdentity(t *testing.T) {
-	t.Setenv("ANTHROPIC_API_KEY", "test-key")
-
+func TestSyncWithRuntimeConfig_RebindsAliasOwnerWithinSameRuntimeIdentity(t *testing.T) {
 	var out bytes.Buffer
 	cfg := newProjectMapDisabledConfig()
 	cfg.DefaultProvider = "anthropic"
@@ -274,8 +280,8 @@ func TestSyncWithRuntimeConfig_SwitchesAliasOwnerWithinSameRuntimeIdentity(t *te
 	if providerConfigKeyFromProvider(a.CurrentProvider) != "anthropic" {
 		t.Fatalf("provider config key = %q, want %q", providerConfigKeyFromProvider(a.CurrentProvider), "anthropic")
 	}
-	if a.CurrentProvider == currentProvider {
-		t.Fatal("CurrentProvider should be recreated when alias owner changes")
+	if a.CurrentProvider != currentProvider {
+		t.Fatal("CurrentProvider should be reused when only the config owner alias changes")
 	}
 	if a.CurrentModel != "anthropic-custom" {
 		t.Fatalf("CurrentModel = %q, want %q", a.CurrentModel, "anthropic-custom")
@@ -289,25 +295,34 @@ func TestSyncWithRuntimeConfig_SwitchesAliasOwnerWithinSameRuntimeIdentity(t *te
 }
 
 func TestSyncWithRuntimeConfig_PrefersDefaultProviderAliasModelForSameRuntimeIdentity(t *testing.T) {
+	var out bytes.Buffer
 	cfg := newProjectMapDisabledConfig()
 	cfg.DefaultProvider = "anthropic"
 	cfg.SetProviderModelsForEdit(map[string]config.ProviderModelConfig{
 		"anthropic": {DefaultModel: "anthropic-custom"},
 		"claude":    {DefaultModel: "claude-custom"},
 	})
-	runtime := NewAgentRuntimeWithConfig(cfg)
 
 	a := &Agent{
 		ProviderName:    "claude",
 		CurrentModel:    "claude-old",
 		CurrentProvider: &MockProvider{name: "claude"},
-		Runtime:         runtime,
+		Runtime: &AgentRuntime{
+			Config: cfg,
+			UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
+		},
 	}
 
 	a.SyncWithRuntimeConfig()
 
+	if a.ProviderConfigKey != "anthropic" {
+		t.Fatalf("ProviderConfigKey = %q, want %q", a.ProviderConfigKey, "anthropic")
+	}
 	if a.CurrentModel != "anthropic-custom" {
 		t.Fatalf("CurrentModel = %q, want %q", a.CurrentModel, "anthropic-custom")
+	}
+	if strings.Contains(out.String(), "Warning: Failed to switch provider") {
+		t.Fatalf("unexpected switch warning: %q", out.String())
 	}
 }
 

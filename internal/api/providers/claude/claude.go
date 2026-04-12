@@ -172,6 +172,13 @@ func (p *Provider) ProviderConfigKey() string {
 	return p.configLookupKey()
 }
 
+func (p *Provider) SetProviderConfigKey(key string) {
+	if p == nil {
+		return
+	}
+	p.configKey = config.NormalizeProviderName(key)
+}
+
 func (p *Provider) maxOutputTokens(ctx context.Context, model string) int {
 	return api.GetMaxOutputTokens(ctx, p.configLookupKey(), model)
 }

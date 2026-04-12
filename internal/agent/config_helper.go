@@ -9,6 +9,10 @@ type providerConfigKeyAware interface {
 	ProviderConfigKey() string
 }
 
+type providerConfigKeyMutable interface {
+	SetProviderConfigKey(key string)
+}
+
 func providerConfigKeyFromProvider(provider api.Provider) string {
 	if provider == nil {
 		return ""
@@ -19,6 +23,15 @@ func providerConfigKeyFromProvider(provider api.Provider) string {
 		}
 	}
 	return config.NormalizeProviderName(provider.Name())
+}
+
+func syncProviderConfigKeyToProvider(provider api.Provider, key string) {
+	if provider == nil {
+		return
+	}
+	if mutable, ok := provider.(providerConfigKeyMutable); ok {
+		mutable.SetProviderConfigKey(key)
+	}
 }
 
 func (a *Agent) sessionProviderConfigKey(cfg *config.Config) string {
