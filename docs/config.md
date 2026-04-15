@@ -200,19 +200,15 @@ mcp:
     headless: false
 
 # ============================================================
-# フック設定
+# Final Checks 設定
 # ============================================================
-# タスク完了時に自動実行するシェルコマンド（LSPチェック後）
+# completed_with_changes 時に自動実行する final checks コマンド
 # 変更ファイルは XELYON_CHANGED_FILES 環境変数で参照可能
-hooks:
-    # 完了時に実行するコマンド（例: go test ./...）
-    on_completion: []
-    # ステップ完了時に実行するコマンド（Plan Mode用）
-    on_step_complete: []
-    # コマンドタイムアウト（秒）（デフォルト: 60）
-    timeout: 60
-    # フック失敗時の最大リトライ回数（デフォルト: 3）
-    max_retry: 3
+final_checks:
+    # completed_with_changes 時に実行するコマンド（例: go test ./...）
+    commands: []
+    # コマンドタイムアウト（秒）（デフォルト: 600）
+    timeout: 600
 ```
 <!-- CONFIG-EXAMPLE-END -->
 

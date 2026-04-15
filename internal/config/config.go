@@ -299,10 +299,9 @@ func DefaultConfig() *Config {
 			Enabled:  true,  // デフォルトON - MCP接続有効
 			Headless: false, // デフォルトOFF - Headlessモードでは接続しない
 		},
-		Hooks: HooksConfig{
-			OnCompletion: nil, // デフォルト: フックなし
-			Timeout:      60,  // 60秒タイムアウト
-			MaxRetry:     3,   // フック失敗時の最大リトライ回数
+		FinalChecks: FinalChecksConfig{
+			Commands: nil, // デフォルト: final checks なし
+			Timeout:  600, // 10分タイムアウト
 		},
 		providerModelsStore: providerModelStore{
 			state: providerModelSectionStateInMemoryEffectiveOnly,
@@ -405,6 +404,10 @@ func migrateOldKeys(data []byte, cfg *Config) {
 				}
 			}
 		}
+	}
+
+	if finalChecks, err := loadCompatibleFinalChecks(data); err == nil && finalChecks != nil {
+		cfg.FinalChecks = *finalChecks
 	}
 }
 
@@ -580,9 +583,9 @@ func applyDefaults(cfg *Config, opts ...defaultApplyOptions) {
 	if !cfg.WebSearch.CacheEnabled && cfg.WebSearch.CacheTTL == 0 && cfg.WebSearch.CacheSize == 0 {
 		cfg.WebSearch = defaults.WebSearch
 	}
-	// Hooks: Timeout が 0 の場合はデフォルト適用
-	if cfg.Hooks.Timeout == 0 {
-		cfg.Hooks.Timeout = defaults.Hooks.Timeout
+	// FinalChecks: Timeout が 0 の場合はデフォルト適用
+	if cfg.FinalChecks.Timeout == 0 {
+		cfg.FinalChecks.Timeout = defaults.FinalChecks.Timeout
 	}
 	if cfg.Output.AssistantUpdates != "" {
 		switch strings.ToLower(cfg.Output.AssistantUpdates) {

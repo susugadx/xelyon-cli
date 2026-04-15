@@ -94,6 +94,8 @@ func (a *Agent) IsCompactedMode() bool {
 
 // RestoreCompactedState はセッションから圧縮状態を復元
 func (a *Agent) RestoreCompactedState(session *history.Session) {
+	a.compactedItems = nil
+	a.isCompactedMode = false
 	if session == nil {
 		return
 	}

@@ -116,7 +116,7 @@ func injectProjectConfig(systemPrompt string, pc *config.ProjectConfig, input st
 }
 
 // applyProjectConfig はプロジェクト設定をエージェントに適用する統一ヘルパー。
-// SystemPrompt 注入 + hooks 解決 + UI 表示を行う。
+// SystemPrompt 注入 + final checks 解決 + UI 表示を行う。
 func applyProjectConfig(agent *Agent, pc *config.ProjectConfig) {
 	if pc == nil {
 		return
@@ -125,10 +125,10 @@ func applyProjectConfig(agent *Agent, pc *config.ProjectConfig) {
 	// 1. System prompt 注入
 	agent.SystemPrompt = injectProjectConfig(agent.SystemPrompt, pc, "")
 
-	// 2. hooks 解決（xelyon.yaml 優先、config.yaml フォールバック）
-	if resolved := config.ResolveHooks(agent.cfg(), pc); resolved != nil {
+	// 2. final checks 解決（xelyon.yaml 優先、config.yaml フォールバック）
+	if resolved := config.ResolveFinalChecks(agent.cfg(), pc); resolved != nil {
 		cfg := agent.cfg()
-		cfg.Hooks = *resolved
+		cfg.FinalChecks = *resolved
 	}
 
 	// 3. UI 表示

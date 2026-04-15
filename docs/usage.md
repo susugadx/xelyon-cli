@@ -155,7 +155,7 @@ xelyon.yaml は AI 用の構造化設定ファイルです。
 - `rules`: 開発ルール・コーディング規約
 - `conditional`: 特定パスにだけ適用したい rules/context
 - `ignore`: Project Map / `list_dir` / `search_code` で共有したい ignore パターン
-- `hooks`: 完了時フック・ステップ完了時フック（変更後に実行する検証コマンド）
+- `final_checks`: 明示完了時の final checks（変更後に実行する検証コマンド）
 
 **書かないこと:**
 - ディレクトリ構造やコードマップの詳細
@@ -193,16 +193,13 @@ ignore:
     - "coverage"
     - "*.generated.go"
 
-hooks:
-  on_completion:
+final_checks:
+  commands:
     - "npm run lint && npm run build && npm test"
-  on_step_complete:
-    - "git add -A && git commit -m 'Step {{step_id}}: {{step_description}}'"
-  timeout: 60
-  max_retry: 3
+  timeout: 600
 ```
 
-> **Note:** `hooks.on_completion` を定義すると、AI がコード変更後に自動でそのコマンドを実行します。`hooks.on_step_complete` を定義すると、Plan Mode の各ステップ完了時にコマンドを実行します（テンプレート変数: `{{step_id}}`, `{{step_description}}`, `{{step_status}}`）。省略時は `config.yaml` の hooks 設定が使われます。
+> **Note:** `final_checks.commands` を定義すると、AI が `completed_with_changes` の完了候補で自動実行します。省略時は `config.yaml` の final_checks 設定が使われます。旧 `verification` も互換入力として読み取られます。
 
 ---
 

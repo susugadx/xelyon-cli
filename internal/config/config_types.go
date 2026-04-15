@@ -46,7 +46,7 @@ type Config struct {
 	WebSearch           WebSearchConfig    `yaml:"web_search"`
 	SubAgent            SubAgentConfig     `yaml:"sub_agent"`
 	MCP                 MCPConfig          `yaml:"mcp"`
-	Hooks               HooksConfig        `yaml:"hooks"`
+	FinalChecks         FinalChecksConfig  `yaml:"final_checks"`
 	SubAgentPrompt      string             `yaml:"-"`
 	providerModelsStore providerModelStore `yaml:"-"`
 	// 将来の拡張用
@@ -204,13 +204,14 @@ type MCPConfig struct {
 	Headless bool `yaml:"headless"` // Headlessモードでも接続（デフォルト: false）
 }
 
-// HooksConfig はフック設定
-type HooksConfig struct {
-	OnCompletion   []string `yaml:"on_completion"`    // 完了時に実行するコマンド
-	OnStepComplete []string `yaml:"on_step_complete"` // ステップ完了時に実行するコマンド
-	Timeout        int      `yaml:"timeout"`          // コマンドタイムアウト秒（デフォルト: 60）
-	MaxRetry       int      `yaml:"max_retry"`        // フック失敗時の最大リトライ回数（デフォルト: 3）
+// FinalChecksConfig は明示完了時に実行する user-configured final checks 設定。
+type FinalChecksConfig struct {
+	Commands []string `yaml:"commands"` // completed_with_changes 時に実行するコマンド
+	Timeout  int      `yaml:"timeout"`  // コマンドタイムアウト秒（デフォルト: 600）
 }
+
+// VerificationConfig は旧名互換の型エイリアス。
+type VerificationConfig = FinalChecksConfig
 
 // LSPConfig は LSP (Language Server Protocol) 連携の設定
 type LSPConfig struct {

@@ -3,7 +3,6 @@ package agent
 import (
 	"strings"
 
-	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	toolslsp "github.com/susugadx/xelyon-cli/internal/tools/lsp"
 )
@@ -60,10 +59,8 @@ func (m *MutationTracker) RecordFileChange(change *tools.FileChange) {
 
 	a.promptManager().InvalidateProjectMap()
 
-	a.changeStack = append(a.changeStack, *change)
-	if len(a.changeStack) > config.MaxChangeStack {
-		a.changeStack = a.changeStack[1:]
-	}
+	a.appendChange(*change)
+	a.noteApprovedPlanRecordedChange(change)
 
 	if a.changeStorage != nil && a.session != nil {
 		if err := a.changeStorage.AppendChange(a.session.ID, *change); err != nil {
@@ -92,6 +89,18 @@ func (m *MutationTracker) AddPendingLSPFilesFromChange(change *tools.FileChange)
 	for _, d := range change.Details {
 		m.AddPendingLSPFile(d.FilePath)
 	}
+}
+
+// addPendingLSPFile は編集ツール成功後に対象ファイルを遅延診断バッファへ追加する。
+// 重複ファイルは追加しない（連続編集で同一ファイルを複数回編集した場合も1エントリ）。
+func (a *Agent) addPendingLSPFile(path string) {
+	a.mutationTracker().AddPendingLSPFile(path)
+}
+
+// addPendingLSPFilesFromChange は FileChange 内の全ファイルを遅延診断バッファへ追加する。
+// apply_patch のように複数ファイルを一度に変更するツール向け。
+func (a *Agent) addPendingLSPFilesFromChange(change *tools.FileChange) {
+	a.mutationTracker().AddPendingLSPFilesFromChange(change)
 }
 
 func (m *MutationTracker) FlushDeferredDiagnostics() string {

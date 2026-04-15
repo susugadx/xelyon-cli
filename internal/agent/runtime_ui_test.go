@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/susugadx/xelyon-cli/internal/agent/plan"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -55,30 +54,5 @@ func TestHandleInitCommand_UsesRuntimeUI(t *testing.T) {
 	}
 	if !strings.Contains(output, "Cancelled") {
 		t.Fatalf("expected injected output to contain cancellation message, got %q", output)
-	}
-}
-
-func TestPromptFailureActionWithSelector_UsesInjectedPromptIO(t *testing.T) {
-	var out bytes.Buffer
-	promptIO := ui.NewPromptIO(strings.NewReader("3\n"), &out, &out, nil)
-
-	action, comment := promptFailureActionWithSelector(promptIO, &plan.PlanStep{
-		ID:          7,
-		Description: "apply fix",
-	}, "boom", "command failed", 0)
-
-	if action != plan.FailureActionSkip {
-		t.Fatalf("action = %q, want %q", action, plan.FailureActionSkip)
-	}
-	if comment != "" {
-		t.Fatalf("comment = %q, want empty", comment)
-	}
-
-	output := out.String()
-	if !strings.Contains(output, "Step 7 Failed") {
-		t.Fatalf("expected injected output to contain failure header, got %q", output)
-	}
-	if !strings.Contains(output, "Choice [1]: ") {
-		t.Fatalf("expected injected output to contain selector prompt, got %q", output)
 	}
 }

@@ -61,16 +61,16 @@ type agentRequestState struct {
 	lastCancelReason     string
 	strReplaceErrorCount int
 	tokenLimitRetryCount int
+	activeApprovedPlan   string
 }
 
 type agentWorkspaceState struct {
-	changeStack        []tools.FileChange
-	taskChangeOffset   int
-	changeStorage      *history.ChangeStorage
-	taskBaseCommitHash string
-	taskTestResult     *bool
-	taskTestCommand    string
-	pendingLSPFiles    []string
+	changeStack      []tools.FileChange
+	taskChangeOffset int
+	changeStorage    *history.ChangeStorage
+	taskTestResult   *bool
+	taskTestCommand  string
+	pendingLSPFiles  []string
 }
 
 type agentProjectPromptState struct {
@@ -91,22 +91,25 @@ type agentProjectPromptState struct {
 
 // Agent はCLIエージェント
 type Agent struct {
-	Model             string // 初期モデル（後方互換性のため保持）
-	CurrentModel      string // 現在のモデル（再起動なしで切り替え可能）
-	CurrentProvider   api.Provider
-	ProviderName      string
-	ProviderConfigKey string
-	Runtime           *AgentRuntime
-	History           []api.Message
-	SystemPrompt      string
-	mcpManager        *mcp.Manager
-	lspClient         *lsp.Client       // LSPクライアント
-	AutoApprove       bool              // --auto-approve フラグ
-	Stats             *SessionStats     // セッション統計情報
-	PlanModeEnabled   bool              // Plan Mode ON/OFF（デフォルト: false）
-	ToolCache         *ToolCache        // ツール結果キャッシュ（read_file, list_dir）
-	LocatorRegistry   *locator.Registry // Locator ID レジストリ（セッション内追記のみ）
-	status            statusHolder
+	Model                           string // 初期モデル（後方互換性のため保持）
+	CurrentModel                    string // 現在のモデル（再起動なしで切り替え可能）
+	CurrentProvider                 api.Provider
+	ProviderName                    string
+	ProviderConfigKey               string
+	Runtime                         *AgentRuntime
+	History                         []api.Message
+	SystemPrompt                    string
+	mcpManager                      *mcp.Manager
+	lspClient                       *lsp.Client       // LSPクライアント
+	AutoApprove                     bool              // --auto-approve フラグ
+	Stats                           *SessionStats     // セッション統計情報
+	PlanModeEnabled                 bool              // Plan Mode ON/OFF（デフォルト: false）
+	PendingApprovedPlan             string            // 次の通常ターンへ1回だけ handoff する承認済み plan
+	PendingApprovedPlanHasChanges   bool              // 現在の承認済み plan で一度でも FileChange が記録されたか
+	PendingApprovedPlanChangedFiles []string          // 現在の承認済み plan で記録された変更ファイル集合
+	ToolCache                       *ToolCache        // ツール結果キャッシュ（read_file, list_dir）
+	LocatorRegistry                 *locator.Registry // Locator ID レジストリ（セッション内追記のみ）
+	status                          statusHolder
 
 	agentConversationState
 	agentRequestState
@@ -182,6 +185,7 @@ func (a *Agent) persistSession() {
 	if a == nil || a.session == nil || a.storage == nil {
 		return
 	}
+	a.syncApprovedPlanStateToSession()
 	a.syncResponseIDToSession()
 	if err := a.storage.Save(a.session); err != nil {
 		yellow.Fprintf(a.output(), "⚠️  Warning: Failed to save session: %v\n", err)
@@ -377,6 +381,7 @@ func (a *Agent) Cleanup() {
 	}
 	// セッション保存
 	if a.storage != nil && a.session != nil {
+		a.syncApprovedPlanStateToSession()
 		a.syncResponseIDToSession()
 		if err := a.storage.Save(a.session); err != nil {
 			yellow.Fprintf(a.output(), "Warning: Failed to save session: %v\n", err)

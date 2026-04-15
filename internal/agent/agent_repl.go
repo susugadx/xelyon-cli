@@ -179,16 +179,7 @@ func RunInteractiveWithResumeWithConfig(model string, provider api.Provider, cfg
 
 	// ロード済みセッションでAgent作成
 	agent := initInteractiveAgentWithRuntime(runtime, model, provider, autoApprove)
-	agent.session = session
-	agent.History = session.ToAPIMessages()
-	// Compacted 状態を復元（Compact API で圧縮済みの場合）
-	agent.RestoreCompactedState(session)
-	// ResponseID 復元（OpenAI Responses API キャッシュ）
-	if session.ResponseID != "" {
-		if ridProvider, ok := provider.(ResponseIDCapable); ok {
-			ridProvider.SetResponseID(session.ResponseID)
-		}
-	}
+	agent.restoreSessionConversation(session)
 	defer agent.Cleanup() // グレースフルシャットダウン
 
 	printHeaderToWriter(runtimeUI.Output(), model, provider)

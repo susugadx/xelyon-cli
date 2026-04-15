@@ -1,7 +1,6 @@
 package history
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -137,56 +136,6 @@ func (st *Storage) Rewrite(session *Session) error {
 	return st.saveMetadata(session)
 }
 
-// Load はセッションファイルから読み込み
-func (st *Storage) Load(sessionID string) (*Session, error) {
-	// メタデータを読み込み
-	meta, err := st.loadMetadata(sessionID)
-	if err != nil {
-		return nil, err
-	}
-
-	session := &Session{
-		ID:           meta.ID,
-		Model:        meta.Model,
-		StartTime:    meta.StartTime,
-		LastModified: meta.LastModified,
-		Messages:     []MessageEntry{},
-	}
-
-	// JSONLメッセージを読み込み
-	filePath := st.sessionPath(sessionID)
-	f, err := os.Open(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open session file: %w", err)
-	}
-	defer f.Close()
-
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		data := scanner.Bytes()
-
-		// 暗号化が有効な場合は復号化
-		if st.encryption && len(data) > 0 {
-			decrypted, err := crypto.DecryptSession(data, st.passphrase)
-			if err != nil {
-				// 復号化失敗はスキップ（古い非暗号化データかもしれない）
-				continue
-			}
-			data = decrypted
-		}
-
-		var msg MessageEntry
-		if err := json.Unmarshal(data, &msg); err != nil {
-			// 不正な行はスキップ
-			continue
-		}
-		session.Messages = append(session.Messages, msg)
-	}
-	session.markPersisted()
-
-	return session, nil
-}
-
 // ListSessions は全セッションを新しい順で返す
 func (st *Storage) ListSessions() ([]SessionMetadata, error) {
 	metaDir := filepath.Join(st.baseDir, "metadata")
@@ -264,12 +213,15 @@ func (st *Storage) saveMetadata(session *Session) error {
 	}
 
 	meta := SessionMetadata{
-		ID:           session.ID,
-		Model:        session.Model,
-		StartTime:    session.StartTime,
-		LastModified: session.LastModified,
-		MessageCount: session.conversationMessageCount(),
-		Preview:      preview,
+		ID:                              session.ID,
+		Model:                           session.Model,
+		StartTime:                       session.StartTime,
+		LastModified:                    session.LastModified,
+		MessageCount:                    session.conversationMessageCount(),
+		Preview:                         preview,
+		PendingApprovedPlan:             session.PendingApprovedPlan,
+		PendingApprovedPlanHasChanges:   session.PendingApprovedPlanHasChanges,
+		PendingApprovedPlanChangedFiles: append([]string(nil), session.PendingApprovedPlanChangedFiles...),
 	}
 
 	data, err := json.MarshalIndent(meta, "", "  ")

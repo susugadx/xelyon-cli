@@ -1,9 +1,6 @@
 package agent
 
-import (
-	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/version"
-)
+import "github.com/susugadx/xelyon-cli/internal/version"
 
 type specialCommandHandler func(*Agent, []string) bool
 
@@ -38,7 +35,10 @@ func specialCommandRegistry() map[string]specialCommandHandler {
 }
 
 func handleClearCommand(agent *Agent, _ []string) bool {
-	agent.History = []api.Message{}
+	if err := agent.resetConversationState(); err != nil {
+		red.Fprintf(agent.output(), "Failed to clear history: %v\n", err)
+		return true
+	}
 	green.Fprintln(agent.output(), "🗑️  History cleared")
 	return true
 }

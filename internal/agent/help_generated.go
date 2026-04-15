@@ -21,9 +21,9 @@ const GeneratedHelpText = `Commands:
                             /config model <name> - Change default model
   /model [name]             - Show current model or switch model without restart
   /init                     - Create xelyon.yaml template (project config)
-  /project                  - Edit xelyon.yaml interactively (rules, hooks)
+  /project                  - Edit xelyon.yaml interactively (rules, final checks)
   /paste, /p                - Paste mode for long text (end with empty line x2, END, or Ctrl+D)
-  /plan [on|off]            - Toggle Plan Mode (investigation -> plan -> approval -> execution)
+  /plan [on|off]            - Toggle Plan Mode (investigation -> plan -> approval; implementation happens on next normal turn)
   /think [on|off|level]     - Toggle Extended Thinking mode (level: low/medium/high/xhigh)
   /lsp [status]             - Show LSP server status (running/not started/disabled)
   /version                  - Show version information

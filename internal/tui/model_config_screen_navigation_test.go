@@ -84,7 +84,7 @@ func TestConfigScreen_FieldScroll_FollowsCursor(t *testing.T) {
 	cs := m.configScreen
 
 	for i, cat := range cs.categories {
-		if cat.Name == "hooks" {
+		if cat.Name == "final_checks" {
 			cs.catIndex = i
 			break
 		}
@@ -94,23 +94,20 @@ func TestConfigScreen_FieldScroll_FollowsCursor(t *testing.T) {
 	cs.fieldScroll = 0
 
 	fields := cs.filteredFields()
-	if len(fields) < 4 {
-		t.Skipf("hooks category has %d fields, need >=4 for scroll test", len(fields))
+	if len(fields) < 2 {
+		t.Skipf("final_checks category has %d fields, need >=2 for scroll test", len(fields))
 	}
 
-	m = sendConfigKeys(m, "j", "j", "j")
+	m = sendConfigKey(m, "j")
 	cs = m.configScreen
-	if cs.fieldIndex != 3 {
-		t.Fatalf("fieldIndex = %d, want 3", cs.fieldIndex)
-	}
-	if cs.fieldScroll < 1 {
-		t.Fatalf("fieldScroll = %d, want >= 1 (fieldIndex=3 with 3 visible rows)", cs.fieldScroll)
+	if cs.fieldIndex != 1 {
+		t.Fatalf("fieldIndex = %d, want 1", cs.fieldIndex)
 	}
 	if cs.fieldIndex < cs.fieldScroll || cs.fieldIndex >= cs.fieldScroll+3 {
 		t.Fatalf("fieldIndex=%d out of visible range [%d, %d)", cs.fieldIndex, cs.fieldScroll, cs.fieldScroll+3)
 	}
 
-	m = sendConfigKeys(m, "k", "k", "k")
+	m = sendConfigKey(m, "k")
 	cs = m.configScreen
 	if cs.fieldIndex != 0 {
 		t.Fatalf("fieldIndex = %d, want 0", cs.fieldIndex)
@@ -126,7 +123,7 @@ func TestConfigScreen_FieldScroll_ResetOnCategoryChange(t *testing.T) {
 	cs := m.configScreen
 
 	for i, cat := range cs.categories {
-		if cat.Name == "hooks" {
+		if cat.Name == "final_checks" {
 			cs.catIndex = i
 			break
 		}

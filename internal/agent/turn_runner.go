@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/susugadx/xelyon-cli/internal/agent/plan"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
@@ -46,11 +45,6 @@ func (r *TurnRunner) promptManager() *PromptManager {
 
 func (r *TurnRunner) mutationTracker() *MutationTracker {
 	return newMutationTracker(r.agent)
-}
-
-func (r *TurnRunner) resetLoopDetectionState() {
-	r.lastToolCall = nil
-	r.sameCallCount = 0
 }
 
 func (r *TurnRunner) prepareToolCalls(response string) []*tools.ToolCall {
@@ -111,10 +105,6 @@ func (r *TurnRunner) executeToolCalls(
 
 func (r *TurnRunner) appendAssistantHistoryOnly(response string) {
 	r.agent.recordAssistantRawResponse(response)
-}
-
-func (r *TurnRunner) appendAssistantTurn(response string) {
-	r.agent.recordAssistantAPITurn(response)
 }
 
 func (r *TurnRunner) runTurnLoop(policy turnLoopPolicy) (turnLoopDirective, error) {
@@ -186,8 +176,4 @@ func (r *TurnRunner) runTurnLoop(policy turnLoopPolicy) (turnLoopDirective, erro
 
 func (r *TurnRunner) RunNormalMode(input string, image *api.ImageData) error {
 	return r.runNormalModeLoop(input, image)
-}
-
-func (r *TurnRunner) ExecuteStep(p *plan.Plan, step *plan.PlanStep, idx int, rs *retryState) error {
-	return r.runPlanStepLoop(p, step, idx, rs)
 }

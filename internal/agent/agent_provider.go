@@ -51,11 +51,11 @@ func (a *Agent) SwitchProvider(providerName string) error {
 	oldModel := a.CurrentModel
 	if oldProvider != "" && !config.SameProviderRuntimeIdentity(oldProvider, runtimeProviderName) {
 		// プロバイダー切り替え時は tool_calls のフォーマットが互換でない場合があるため、履歴を破棄する
-		a.historyMu.Lock()
-		hadHistory := len(a.History) > 0
-		a.History = []api.Message{}
-		a.historyMu.Unlock()
-		if hadHistory {
+		hadConversation := a.hasConversationState()
+		if err := a.resetConversationState(); err != nil {
+			return fmt.Errorf("failed to reset conversation state during provider switch: %w", err)
+		}
+		if hadConversation {
 			yellow.Fprintln(out, "🗑️  History cleared after provider switch to avoid incompatible tool-call history")
 		}
 	}

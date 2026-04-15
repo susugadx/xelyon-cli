@@ -51,18 +51,16 @@ DeepSeek, OpenAI, Gemini, Claude, Ollama, Groq, OpenRouter, Bedrock をシーム
 2. **単純なQ&A**: 調査のみで回答可能な場合はそのまま終了
 3. **計画生成**: 実装が必要な場合、ステップを JSON で出力
 4. **承認**: ユーザーが計画を確認・承認
-5. **コンテキスト軽量化**: 承認後は調査フェーズの履歴をクリアし、承認済みプラン要約だけを残して実装に移行
-6. **実行**: ステップごとに失敗検知・リトライ付きで順次実行
+5. **handoff**: 承認済み plan を次の通常ターンへ渡して終了
 
 デフォルトは通常モード（ツール個別確認）。軽いタスクにはオーバーヘッドなく即座に応答。
 
 ### 🔄 自動リトライ機能
 ツール実行が失敗した場合、自動的にリトライして成功するまで試行します。
-- **デフォルト10回**のリトライ（`plan_mode.auto_retry: 10`で設定可能）
-- Plan Mode と通常モード両方で有効
+- 通常モードのツール実行と completion hook の再試行で有効
 - リトライ中: `❌ Failed (retry 1/10)` → `🔄 Retrying...`
 - 成功時: `✅ Succeeded (on retry 3)`
-- 上限到達時: Selector UI で継続/中止を選択（Plan Mode のみ）
+- 上限到達時は AI に修正を促すか、通常応答へ戻ります
 
 ### ⚡ Parallel Tool Execution
 LLMが1回の応答で複数のread-onlyツールを返した場合、並列実行してレイテンシを削減します。
@@ -108,7 +106,7 @@ LLMが1回の応答で複数のread-onlyツールを返した場合、並列実�
 Language Server Protocol (LSP) を活用してIDE並みのコード理解を実現。
 - **削除時参照チェック**: ファイル削除前に外部参照を自動検出し警告
 - **完了検証**: AI が「完了」「done」と宣言した際、変更ファイルの LSP 診断を自動実行しエラー残存時は修正を続行
-- **Completion Hooks**: LSP チェック後にユーザー定義のシェルコマンド（`go test ./...` 等）を自動実行。失敗時は AI が修正を続行（`hooks.on_completion` で設定）
+- **Final Checks**: `completed_with_changes` の完了候補でユーザー定義のシェルコマンド（`go test ./...` 等）を自動実行。失敗時は AI が修正を続行（`final_checks.commands` で設定）
 - **自動検出**: プロジェクト内の言語を自動検出し、未インストールのLSPサーバーを提案
 - **ワンクリックインストール**: `/lsp install <言語>` でLSPサーバーをインストール
 - **23言語対応**:
@@ -162,20 +160,17 @@ ignore:
   patterns:
     - "dist"
     - "*.min.js"
-hooks:                    # config.yaml の hooks を上書き
-  on_completion:
+final_checks:             # config.yaml の final_checks を上書き
+  commands:
     - "go vet ./... && go test ./..."
-  on_step_complete:
-    - "echo 'Step {{step_id}}: {{step_status}}'"
   timeout: 120
-  max_retry: 3
 ```
 
 - **context**: AI に注入するプロジェクト説明
 - **rules**: 番号付きで system prompt に注入される必須ルール
 - **conditional**: `paths` に一致した時だけ注入する rules/context
 - **ignore**: Project Map / `list_dir` / `search_code` で共有する ignore パターン
-- **hooks**: 完了時・ステップ完了時フック（`config.yaml` の hooks より優先）
+- **final_checks**: 明示完了時の final checks（`config.yaml` の final_checks より優先）
 - **Project Map**: 起動時は軽量 manifest が自動生成されるため、`xelyon.yaml` にファイル一覧や関数目次は書かない
 
 ## インストール
@@ -352,16 +347,16 @@ mcp:
 `~/.xelyon/mcp.json` の設定はそのまま残るため、再度 `enabled: true` にすれば復活します。
 - **ツール単位フィルタリング**: MCPサーバーのツールを `include`/`exclude` で制御。不要なツールを除外してトークン消費を最適化
 
-### Completion Hooks
+### Final Checks
 
-AI が完了を宣言すると、LSP 診断の後にここで定義したコマンドを順番に実行します。
-コマンド失敗時は AI にエラー内容をフィードバックし修正を続行します（最大 `max_retry` 回）。
+AI が `completed_with_changes` の完了候補に達すると、ここで定義したコマンドを順番に実行します。
+コマンド失敗時は AI にエラー内容をフィードバックし修正を続行します。final checks が通るまで完了扱いにはなりません。
 Makefile は不要です。普段使っているコマンドをそのまま書けます。
 
 ```yaml
 # ~/.xelyon/config.yaml
-hooks:
-  on_completion:
+final_checks:
+  commands:
     # Go
     - "go vet ./... && go test ./..."
     # Node.js / TypeScript
@@ -372,30 +367,12 @@ hooks:
     # - "cargo test"
     # Makefile がある場合
     # - "make ci-check"
-  timeout: 120         # コマンドタイムアウト秒（デフォルト: 60）
-  max_retry: 3         # フック失敗時の最大リトライ回数（デフォルト: 3）
+  timeout: 600         # コマンドタイムアウト秒（デフォルト: 600）
 ```
 
-`xelyon.yaml` にも `hooks` を定義でき、`config.yaml` より優先されます（プロジェクト固有のフック設定に便利）。
+`xelyon.yaml` にも `final_checks` を定義でき、`config.yaml` より優先されます（プロジェクト固有の final checks 設定に便利）。
 変更ファイルは `XELYON_CHANGED_FILES` 環境変数（スペース区切り）で参照できます。
-Normal mode / Plan mode の両方で動作します。
-
-### Step Complete Hooks
-
-Plan Mode で各ステップ完了時に実行するコマンドです。
-テンプレート変数 `{{step_id}}`, `{{step_description}}`, `{{step_status}}` が使えます。
-
-```yaml
-# ~/.xelyon/config.yaml
-hooks:
-  on_step_complete:
-    # ステップごとにテスト実行
-    - "go test ./..."
-    # 通知（ステップ番号・状態を展開）
-    # - "echo 'Step {{step_id}} ({{step_status}}): {{step_description}}'"
-```
-
-失敗時は AI にフィードバックして修正を試み、次のステップに進む前に再実行します。
+`/plan` 自体では実行されず、承認後の通常モード実装ターンで動作します。
 
 ### 設定管理
 
