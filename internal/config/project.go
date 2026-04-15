@@ -10,11 +10,11 @@ import (
 
 // ProjectConfig はプロジェクト固有の設定（xelyon.yaml）
 type ProjectConfig struct {
-	Context     string                    `yaml:"context"`               // AI に注入するプロジェクトコンテキスト
-	Rules       []string                  `yaml:"rules"`                 // 必須ルール（番号付きで system prompt に注入）
-	Conditional []ProjectConditionalBlock `yaml:"conditional,omitempty"` // 条件付きで注入する rules/context
-	Ignore      ProjectIgnoreConfig       `yaml:"ignore,omitempty"`      // repomap/list_dir/search_code で共有する ignore 設定
-	Hooks       *HooksConfig              `yaml:"hooks,omitempty"`       // 完了時フック（config.yaml の hooks を上書き）
+	Context     string                    `yaml:"context"`                // AI に注入するプロジェクトコンテキスト
+	Rules       []string                  `yaml:"rules"`                  // 必須ルール（番号付きで system prompt に注入）
+	Conditional []ProjectConditionalBlock `yaml:"conditional,omitempty"`  // 条件付きで注入する rules/context
+	Ignore      ProjectIgnoreConfig       `yaml:"ignore,omitempty"`       // repomap/list_dir/search_code で共有する ignore 設定
+	FinalChecks *FinalChecksConfig        `yaml:"final_checks,omitempty"` // 明示完了時 final checks（config.yaml の final_checks を上書き）
 
 	FilePath string `yaml:"-"` // ロード元ファイルパス
 }
@@ -79,6 +79,11 @@ func loadProjectConfigFromYAML(path string) (*ProjectConfig, error) {
 	if err := yaml.Unmarshal(data, pc); err != nil {
 		return nil, err
 	}
+	finalChecks, err := loadCompatibleFinalChecks(data)
+	if err != nil {
+		return nil, err
+	}
+	pc.FinalChecks = finalChecks
 
 	pc.FilePath = path
 	return pc, nil
@@ -114,20 +119,20 @@ func SaveProjectConfig(pc *ProjectConfig) error {
 	return nil
 }
 
-// ResolveHooks はプロジェクト設定とグローバル設定から hooks を解決する。
+// ResolveFinalChecks はプロジェクト設定とグローバル設定から final checks を解決する。
 // 優先順位:
-//  1. xelyon.yaml に hooks あり → それを使う
-//  2. xelyon.yaml に hooks なし → config.yaml の hooks を使う
+//  1. xelyon.yaml に final_checks あり → それを使う
+//  2. xelyon.yaml に final_checks なし → config.yaml の final_checks を使う
 //  3. どちらもなし → nil
-func ResolveHooks(globalCfg *Config, projectCfg *ProjectConfig) *HooksConfig {
-	// xelyon.yaml の hooks が設定されている場合はそれを優先
-	if projectCfg != nil && projectCfg.Hooks != nil {
-		return projectCfg.Hooks
+func ResolveFinalChecks(globalCfg *Config, projectCfg *ProjectConfig) *FinalChecksConfig {
+	// xelyon.yaml の final_checks が設定されている場合はそれを優先
+	if projectCfg != nil && projectCfg.FinalChecks != nil {
+		return projectCfg.FinalChecks
 	}
 
-	// config.yaml の hooks にフォールバック
-	if globalCfg != nil && (len(globalCfg.Hooks.OnCompletion) > 0 || len(globalCfg.Hooks.OnStepComplete) > 0) {
-		return &globalCfg.Hooks
+	// config.yaml の final_checks にフォールバック
+	if globalCfg != nil && len(globalCfg.FinalChecks.Commands) > 0 {
+		return &globalCfg.FinalChecks
 	}
 
 	return nil

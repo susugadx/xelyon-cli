@@ -48,13 +48,13 @@ func (m *ProjectMenu) Run() (changed bool, err error) {
 		// 2. Rules
 		_, _ = fmt.Fprintf(out, "  [2] 📋 Rules        (%d items)\n", len(m.PC.Rules))
 
-		// 3. Hooks
-		hooksPreview := "(not set)"
-		if m.PC.Hooks != nil && (len(m.PC.Hooks.OnCompletion) > 0 || len(m.PC.Hooks.OnStepComplete) > 0) {
-			total := len(m.PC.Hooks.OnCompletion) + len(m.PC.Hooks.OnStepComplete)
-			hooksPreview = fmt.Sprintf("(%d cmds)", total)
+		// 3. Final Checks
+		finalChecksPreview := "(not set)"
+		if m.PC.FinalChecks != nil && len(m.PC.FinalChecks.Commands) > 0 {
+			total := len(m.PC.FinalChecks.Commands)
+			finalChecksPreview = fmt.Sprintf("(%d cmds)", total)
 		}
-		_, _ = fmt.Fprintf(out, "  [3] 🔧 Hooks        %s\n", hooksPreview)
+		_, _ = fmt.Fprintf(out, "  [3] 🧪 Final Checks %s\n", finalChecksPreview)
 
 		_, _ = fmt.Fprintln(out)
 		_, _ = fmt.Fprintln(out, "  [s] Save and exit")
@@ -69,7 +69,7 @@ func (m *ProjectMenu) Run() (changed bool, err error) {
 		case "2":
 			m.editRules()
 		case "3":
-			m.editHooks()
+			m.editFinalChecks()
 		case "s", "save":
 			return m.changed, nil
 		case "c", "cancel":
@@ -105,45 +105,31 @@ func (m *ProjectMenu) editRules() {
 	}
 }
 
-// editHooks は Hooks のサブメニューを表示する
-func (m *ProjectMenu) editHooks() {
-	if m.PC.Hooks == nil {
-		m.PC.Hooks = &config.HooksConfig{}
+// editFinalChecks は Final Checks のサブメニューを表示する
+func (m *ProjectMenu) editFinalChecks() {
+	if m.PC.FinalChecks == nil {
+		m.PC.FinalChecks = &config.FinalChecksConfig{}
 	}
 
 	promptIO := runtimeOrDefault(m.Runtime).PromptIO()
 	out := promptIO.Out
 
 	for {
-		_, _ = fmt.Fprintf(out, "\n%s── Hooks ────────────────────────────────────%s\n\n", colorCyan, colorReset)
+		_, _ = fmt.Fprintf(out, "\n%s── Final Checks ────────────────────────────%s\n\n", colorCyan, colorReset)
 
-		// on_completion
+		// commands
 		cmdInfo := "(empty)"
-		if len(m.PC.Hooks.OnCompletion) > 0 {
-			cmdInfo = fmt.Sprintf("(%d cmds)", len(m.PC.Hooks.OnCompletion))
+		if len(m.PC.FinalChecks.Commands) > 0 {
+			cmdInfo = fmt.Sprintf("(%d cmds)", len(m.PC.FinalChecks.Commands))
 		}
-		_, _ = fmt.Fprintf(out, "  [1] on_completion   %s\n", cmdInfo)
-
-		// on_step_complete
-		stepInfo := "(empty)"
-		if len(m.PC.Hooks.OnStepComplete) > 0 {
-			stepInfo = fmt.Sprintf("(%d cmds)", len(m.PC.Hooks.OnStepComplete))
-		}
-		_, _ = fmt.Fprintf(out, "  [2] on_step_complete %s\n", stepInfo)
+		_, _ = fmt.Fprintf(out, "  [1] commands        %s\n", cmdInfo)
 
 		// timeout
-		timeout := m.PC.Hooks.Timeout
+		timeout := m.PC.FinalChecks.Timeout
 		if timeout == 0 {
-			timeout = 60
+			timeout = 600
 		}
-		_, _ = fmt.Fprintf(out, "  [3] timeout         %d sec\n", timeout)
-
-		// max_retry
-		maxRetry := m.PC.Hooks.MaxRetry
-		if maxRetry == 0 {
-			maxRetry = 3
-		}
-		_, _ = fmt.Fprintf(out, "  [4] max_retry       %d\n", maxRetry)
+		_, _ = fmt.Fprintf(out, "  [2] timeout         %d sec\n", timeout)
 
 		_, _ = fmt.Fprintln(out)
 		_, _ = fmt.Fprintln(out, "  [b] Back")
@@ -153,43 +139,28 @@ func (m *ProjectMenu) editHooks() {
 
 		switch input {
 		case "1":
-			editor := NewStringSliceEditorWithRuntime("hooks.on_completion", m.PC.Hooks.OnCompletion, m.Runtime)
+			editor := NewStringSliceEditorWithRuntime("final_checks.commands", m.PC.FinalChecks.Commands, m.Runtime)
 			result, saved, _ := editor.Run()
 			if saved {
-				m.PC.Hooks.OnCompletion = result
+				m.PC.FinalChecks.Commands = result
 				m.changed = true
 			}
 		case "2":
-			editor := NewStringSliceEditorWithRuntime("hooks.on_step_complete", m.PC.Hooks.OnStepComplete, m.Runtime)
-			result, saved, _ := editor.Run()
-			if saved {
-				m.PC.Hooks.OnStepComplete = result
-				m.changed = true
-			}
-		case "3":
 			_, _ = fmt.Fprintf(out, "Enter timeout (seconds, current: %d): ", timeout)
 			numStr := strings.TrimSpace(readLineWithIO(&promptIO))
 			if num, err := strconv.Atoi(numStr); err == nil && num > 0 {
-				m.PC.Hooks.Timeout = num
+				m.PC.FinalChecks.Timeout = num
 				m.changed = true
 				_, _ = fmt.Fprintf(out, "%s✓ timeout = %d%s\n", colorGreen, num, colorReset)
 			}
-		case "4":
-			_, _ = fmt.Fprintf(out, "Enter max_retry (current: %d): ", maxRetry)
-			numStr := strings.TrimSpace(readLineWithIO(&promptIO))
-			if num, err := strconv.Atoi(numStr); err == nil && num >= 0 {
-				m.PC.Hooks.MaxRetry = num
-				m.changed = true
-				_, _ = fmt.Fprintf(out, "%s✓ max_retry = %d%s\n", colorGreen, num, colorReset)
-			}
 		case "b", "back":
-			// hooks が全て空なら nil に戻す
-			if len(m.PC.Hooks.OnCompletion) == 0 && len(m.PC.Hooks.OnStepComplete) == 0 && m.PC.Hooks.Timeout == 0 && m.PC.Hooks.MaxRetry == 0 {
-				m.PC.Hooks = nil
+			// final checks が全て空なら nil に戻す
+			if len(m.PC.FinalChecks.Commands) == 0 && m.PC.FinalChecks.Timeout == 0 {
+				m.PC.FinalChecks = nil
 			}
 			return
 		default:
-			_, _ = fmt.Fprintf(out, "%sUnknown command. Use 1-4/b%s\n", colorDim, colorReset)
+			_, _ = fmt.Fprintf(out, "%sUnknown command. Use 1-2/b%s\n", colorDim, colorReset)
 		}
 	}
 }

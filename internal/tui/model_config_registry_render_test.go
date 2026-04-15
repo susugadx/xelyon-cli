@@ -31,7 +31,7 @@ func TestConfigScreen_AllCategoriesPresent(t *testing.T) {
 	expectedCats := []string{
 		"provider", "general", "execution", "compression",
 		"paste", "project_map", "lsp", "output",
-		"web_search", "sub_agent", "mcp", "hooks",
+		"web_search", "sub_agent", "mcp", "final_checks",
 	}
 
 	catNames := make(map[string]bool)

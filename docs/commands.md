@@ -244,17 +244,16 @@ XELYON CLIで使用できる全コマンドのリファレンスです。
 - `rules` — 必須ルール（AI が必ず従うルール）
 - `conditional` — `paths` に一致した時だけ注入する rules/context
 - `ignore` — Project Map / `list_dir` / `search_code` で共有する ignore パターン
-- `hooks` — 完了時フック・ステップ完了時フック（省略時は config.yaml の hooks を使用）
+- `final_checks` — 明示完了時の final checks（省略時は config.yaml の final_checks を使用）
 
 **注意:**
 - コード構造の詳細な記載は不要
 - Project Map は起動時に軽量 manifest を自動注入するため、ファイル一覧や関数目次は書かない
-- `hooks.on_completion` を定義すると、AIが変更後に必ず実行します
-- `hooks.on_step_complete` を定義すると、Plan Mode の各ステップ完了時に実行します（テンプレート変数: `{{step_id}}`, `{{step_description}}`, `{{step_status}}`）
+- `final_checks.commands` を定義すると、AIが `completed_with_changes` の完了候補で必ず実行します
 
 ### `/plan`
 
-Plan Modeを切り替えます。有効にすると、リクエストが「調査→計画→承認→実行」のフローで処理されます。
+Plan Modeを切り替えます。有効にすると、リクエストが「調査→計画→承認→通常モードへ handoff」のフローで処理されます。
 
 ```
 > /plan           # 現在のモード表示
@@ -273,8 +272,10 @@ Plan Modeを切り替えます。有効にすると、リクエストが「調�
 **Plan Mode（ON）:**
 1. **調査フェーズ**: SafetyHighツール（read_file, list_dir, search_code等）を自由に実行
 2. **計画生成**: 実装が必要な場合、ステップをJSONで出力
-3. **承認**: ユーザーが計画を確認・承認
-4. **実行**: ステップごとに失敗検知・リトライ付きで実行
+3. **承認**: ユーザーが計画を確認・承認して終了
+4. **handoff**: 承認済み plan は次の通常ターンで実装の guidance として使われる
+
+`/plan` 自体は実装を開始しません。実装は次の通常モードのターンで行います。
 
 **ステータス表示:**
 ```
@@ -636,7 +637,7 @@ xelyon
 
 ### `/project`
 
-Edit xelyon.yaml interactively (rules, hooks)
+Edit xelyon.yaml interactively (rules, final checks)
 
 ```
 > /project

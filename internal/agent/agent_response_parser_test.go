@@ -1,116 +1,111 @@
 package agent
 
-import (
-	"bytes"
-	"context"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
-	"strings"
-	"testing"
+import "testing"
 
-	claudeprovider "github.com/susugadx/xelyon-cli/internal/api/providers/claude"
-	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
-)
+func TestExtractExplanationAndTool_NoToolCall(t *testing.T) {
+	response := "This is just a plain text response with no tool calls."
 
-func TestHandleNormalResponse_UsesRuntimeOutputForCompactionNotice(t *testing.T) {
-	var outA bytes.Buffer
-	var outB bytes.Buffer
-
-	agentA := &Agent{
-		CurrentModel:    "test-model",
-		CurrentProvider: &mockProvider{name: "test"},
-		Runtime: &AgentRuntime{
-			UI: ui.NewRuntime(strings.NewReader(""), &outA, &outA),
-		},
+	explanation, toolJSON := extractExplanationAndTool(response)
+	if explanation != response {
+		t.Errorf("extractExplanationAndTool() explanation = %q, want original response", explanation)
 	}
-
-	agentA.handleNormalResponse("before [COMPACTION]hidden[/COMPACTION] after")
-
-	if !strings.Contains(outA.String(), "Context compacted by Claude") {
-		t.Fatalf("expected runtime output to contain compaction notice, got %q", outA.String())
-	}
-	if outB.Len() != 0 {
-		t.Fatalf("expected other runtime output to stay empty, got %q", outB.String())
-	}
-	if got := agentA.lastOutputs[len(agentA.lastOutputs)-1]; got != "before  after" {
-		t.Fatalf("last output = %q, want %q", got, "before  after")
+	if toolJSON != "" {
+		t.Errorf("extractExplanationAndTool() toolJSON = %q, want empty string", toolJSON)
 	}
 }
 
-func TestHandleNormalResponse_PrintsFinalResponseWhenAssistantUpdatesSuppressed(t *testing.T) {
-	var out bytes.Buffer
-	cfg := config.DefaultConfig()
-	cfg.Output.AssistantUpdates = "phase"
+func TestExtractExplanationAndTool_OnlyToolCall(t *testing.T) {
+	response := `{"tool": "read_file", "args": {"paths": ["/test.txt"]}}`
 
-	agent := &Agent{
-		CurrentModel:    "test-model",
-		CurrentProvider: &mockProvider{name: "test"},
-		Runtime: &AgentRuntime{
-			Config: cfg,
-			UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
-		},
+	explanation, toolJSON := extractExplanationAndTool(response)
+	if explanation != "" {
+		t.Errorf("extractExplanationAndTool() explanation = %q, want empty string", explanation)
 	}
-
-	agent.handleNormalResponse("final response")
-
-	if !strings.Contains(out.String(), "💬 final response") {
-		t.Fatalf("expected suppressed mode to print final response once, got %q", out.String())
+	if toolJSON != response {
+		t.Errorf("extractExplanationAndTool() toolJSON = %q, want %q", toolJSON, response)
 	}
 }
 
-func TestClaudeNonStreamingAssistantUpdates_PrintsFinalResponseExactlyOnce(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(claudeprovider.Response{
-			Content: []claudeprovider.Content{{Type: "text", Text: "Claude final response"}},
-		})
-	}))
-	defer server.Close()
+func TestExtractExplanationAndTool_BothParts(t *testing.T) {
+	response := `I'll read the file for you.
 
-	t.Setenv("ANTHROPIC_API_URL", server.URL)
+{"tool": "read_file", "args": {"paths": ["/test.txt"]}}`
 
-	tests := []struct {
-		name string
-		mode string
-	}{
-		{name: "phase", mode: "phase"},
-		{name: "off", mode: "off"},
-		{name: "verbose", mode: "verbose"},
+	explanation, toolJSON := extractExplanationAndTool(response)
+	expectedExplanation := "I'll read the file for you."
+	if explanation != expectedExplanation {
+		t.Errorf("extractExplanationAndTool() explanation = %q, want %q", explanation, expectedExplanation)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var out bytes.Buffer
-			cfg := config.DefaultConfig()
-			cfg.Output.AssistantUpdates = tt.mode
+	expectedToolJSON := `{"tool": "read_file", "args": {"paths": ["/test.txt"]}}`
+	if toolJSON != expectedToolJSON {
+		t.Errorf("extractExplanationAndTool() toolJSON = %q, want %q", toolJSON, expectedToolJSON)
+	}
+}
 
-			provider := claudeprovider.New("test-key")
-			agent := &Agent{
-				CurrentModel:    "claude-sonnet-4-6",
-				CurrentProvider: provider,
-				Runtime: &AgentRuntime{
-					Config: cfg,
-					UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
-				},
-			}
+func TestExtractExplanationAndTool_NestedJSON(t *testing.T) {
+	response := `Here's the file operation:
 
-			response, err := provider.ChatWithTools(
-				agent.requestContext(context.Background()),
-				"System prompt",
-				nil,
-				agent.CurrentModel,
-			)
-			if err != nil {
-				t.Fatalf("ChatWithTools() error = %v", err)
-			}
+{"tool": "write_file", "args": {"path": "/config.json", "content": "{\"key\": \"value\"}"}}`
 
-			agent.handleNormalResponse(response)
+	explanation, toolJSON := extractExplanationAndTool(response)
+	if explanation != "Here's the file operation:" {
+		t.Errorf("extractExplanationAndTool() explanation = %q, want 'Here's the file operation:'", explanation)
+	}
 
-			if got := strings.Count(out.String(), "Claude final response"); got != 1 {
-				t.Fatalf("expected final response to be printed exactly once in %s mode, got %d in output %q", tt.mode, got, out.String())
-			}
-		})
+	expectedToolJSON := `{"tool": "write_file", "args": {"path": "/config.json", "content": "{\"key\": \"value\"}"}}`
+	if toolJSON != expectedToolJSON {
+		t.Errorf("extractExplanationAndTool() toolJSON = %q, want %q", toolJSON, expectedToolJSON)
+	}
+}
+
+func TestExtractExplanationAndTool_SpacedToolPattern(t *testing.T) {
+	response := `Explanation text
+
+{ "tool": "bash", "args": {"command": "ls -la"}}`
+
+	explanation, toolJSON := extractExplanationAndTool(response)
+	if explanation != "Explanation text" {
+		t.Errorf("extractExplanationAndTool() explanation = %q, want 'Explanation text'", explanation)
+	}
+	if toolJSON == "" {
+		t.Error("extractExplanationAndTool() should detect spaced tool pattern")
+	}
+}
+
+func TestExtractExplanationAndTool_EscapedQuotes(t *testing.T) {
+	response := `{"tool": "str_replace", "args": {"path": "/test.txt", "old_str": "say \"hello\"", "new_str": "say \"goodbye\""}}`
+
+	explanation, toolJSON := extractExplanationAndTool(response)
+	if explanation != "" {
+		t.Errorf("extractExplanationAndTool() explanation = %q, want empty string", explanation)
+	}
+	if toolJSON != response {
+		t.Errorf("extractExplanationAndTool() toolJSON = %q, want %q", toolJSON, response)
+	}
+}
+
+func TestExtractExplanationAndTool_MultipleJSONObjects(t *testing.T) {
+	response := `{"tool": "read_file", "args": {"paths": ["/a.txt"]}}
+{"tool": "read_file", "args": {"paths": ["/b.txt"]}}`
+
+	_, toolJSON := extractExplanationAndTool(response)
+	expectedFirst := `{"tool": "read_file", "args": {"paths": ["/a.txt"]}}`
+	if toolJSON != expectedFirst {
+		t.Errorf("extractExplanationAndTool() should extract first tool call only, got %q", toolJSON)
+	}
+}
+
+func TestExtractExplanationAndTool_UnclosedBrace(t *testing.T) {
+	response := `Explanation
+
+{"tool": "bash", "args": {"command": "echo 'test'"`
+
+	explanation, toolJSON := extractExplanationAndTool(response)
+	if explanation != "Explanation" {
+		t.Errorf("extractExplanationAndTool() explanation = %q, want 'Explanation'", explanation)
+	}
+	if toolJSON == "" {
+		t.Error("extractExplanationAndTool() should return partial JSON when unclosed")
 	}
 }

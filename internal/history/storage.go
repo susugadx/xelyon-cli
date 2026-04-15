@@ -1,11 +1,8 @@
 package history
 
 import (
-	"bufio"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -25,32 +22,6 @@ var (
 	userHomeDirForStorage    = os.UserHomeDir
 	getPassphraseForStorage  = crypto.GetOrCreatePassphrase
 )
-
-var (
-	errSessionRecordDecrypt   = errors.New("failed to decrypt session record")
-	errSessionRecordUnmarshal = errors.New("failed to unmarshal session record")
-)
-
-func trimSessionRecordDelimiter(line []byte) []byte {
-	if n := len(line); n > 0 && line[n-1] == '\n' {
-		return line[:n-1]
-	}
-	return line
-}
-
-func readSessionRecord(reader *bufio.Reader) ([]byte, error) {
-	line, err := reader.ReadBytes('\n')
-	if err == io.EOF {
-		if len(line) == 0 {
-			return nil, io.EOF
-		}
-		return trimSessionRecordDelimiter(line), nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to read session file: %w", err)
-	}
-	return trimSessionRecordDelimiter(line), nil
-}
 
 // Storage は履歴の永続化を管理
 type Storage struct {
@@ -172,84 +143,6 @@ func (st *Storage) Rewrite(session *Session) error {
 	return st.saveMetadata(session)
 }
 
-// Load はセッションファイルから読み込み
-func (st *Storage) Load(sessionID string) (*Session, error) {
-	// メタデータを読み込み
-	meta, err := st.loadMetadata(sessionID)
-	if err != nil {
-		return nil, err
-	}
-
-	session := &Session{
-		ID:                        meta.ID,
-		Model:                     meta.Model,
-		ProviderName:              meta.ProviderName,
-		ProviderConfigKey:         meta.ProviderConfigKey,
-		StartTime:                 meta.StartTime,
-		LastModified:              meta.LastModified,
-		ResponseID:                meta.ResponseID,
-		ResponseModel:             meta.ResponseModel,
-		ResponseProviderName:      meta.ResponseProviderName,
-		ResponseProviderConfigKey: meta.ResponseProviderConfigKey,
-		Messages:                  []MessageEntry{},
-	}
-	restoreLoadedResponseContext(meta, session)
-
-	// JSONLメッセージを読み込み
-	filePath := st.sessionPath(sessionID)
-	f, err := os.Open(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open session file: %w", err)
-	}
-	defer f.Close()
-
-	reader := bufio.NewReader(f)
-	for {
-		record, err := readSessionRecord(reader)
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-
-		msg, err := st.decodeSessionRecord(record)
-		if err != nil {
-			if shouldSkipSessionRecordDecodeError(err) {
-				continue
-			}
-			return nil, err
-		}
-		session.Messages = append(session.Messages, *msg)
-	}
-	session.markPersisted()
-
-	return session, nil
-}
-
-func shouldSkipSessionRecordDecodeError(err error) bool {
-	return errors.Is(err, errSessionRecordDecrypt) || errors.Is(err, errSessionRecordUnmarshal)
-}
-
-func (st *Storage) decodeSessionRecord(record []byte) (*MessageEntry, error) {
-	data := record
-
-	// 暗号化が有効な場合は復号化
-	if st.encryption && len(data) > 0 {
-		decrypted, err := decryptSessionForStorage(data, st.passphrase)
-		if err != nil {
-			return nil, fmt.Errorf("%w: %v", errSessionRecordDecrypt, err)
-		}
-		data = decrypted
-	}
-
-	var msg MessageEntry
-	if err := json.Unmarshal(data, &msg); err != nil {
-		return nil, fmt.Errorf("%w: %v", errSessionRecordUnmarshal, err)
-	}
-	return &msg, nil
-}
-
 // ListSessions は全セッションを新しい順で返す
 func (st *Storage) ListSessions() ([]SessionMetadata, error) {
 	metaDir := filepath.Join(st.baseDir, "metadata")
@@ -327,19 +220,22 @@ func (st *Storage) saveMetadata(session *Session) error {
 	}
 
 	meta := SessionMetadata{
-		ID:                        session.ID,
-		Model:                     session.Model,
-		ProviderName:              session.ProviderName,
-		ProviderConfigKey:         session.ProviderConfigKey,
-		StartTime:                 session.StartTime,
-		LastModified:              session.LastModified,
-		MessageCount:              session.conversationMessageCount(),
-		Preview:                   preview,
-		ResponseID:                session.ResponseID,
-		ResponseContextVersion:    responseContextMetadataVersionForSession(session),
-		ResponseModel:             session.ResponseModel,
-		ResponseProviderName:      session.ResponseProviderName,
-		ResponseProviderConfigKey: session.ResponseProviderConfigKey,
+		ID:                              session.ID,
+		Model:                           session.Model,
+		ProviderName:                    session.ProviderName,
+		ProviderConfigKey:               session.ProviderConfigKey,
+		StartTime:                       session.StartTime,
+		LastModified:                    session.LastModified,
+		MessageCount:                    session.conversationMessageCount(),
+		Preview:                         preview,
+		PendingApprovedPlan:             session.PendingApprovedPlan,
+		PendingApprovedPlanHasChanges:   session.PendingApprovedPlanHasChanges,
+		PendingApprovedPlanChangedFiles: append([]string(nil), session.PendingApprovedPlanChangedFiles...),
+		ResponseID:                      session.ResponseID,
+		ResponseContextVersion:          responseContextMetadataVersionForSession(session),
+		ResponseModel:                   session.ResponseModel,
+		ResponseProviderName:            session.ResponseProviderName,
+		ResponseProviderConfigKey:       session.ResponseProviderConfigKey,
 	}
 
 	data, err := json.MarshalIndent(meta, "", "  ")

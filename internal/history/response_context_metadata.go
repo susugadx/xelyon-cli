@@ -2,6 +2,17 @@ package history
 
 const responseContextMetadataVersion = 1
 
+func clearSavedResponseContext(session *Session) {
+	if session == nil {
+		return
+	}
+
+	session.ResponseID = ""
+	session.ResponseModel = ""
+	session.ResponseProviderName = ""
+	session.ResponseProviderConfigKey = ""
+}
+
 func responseContextMetadataVersionForSession(session *Session) int {
 	if session == nil || session.ResponseID == "" {
 		return 0

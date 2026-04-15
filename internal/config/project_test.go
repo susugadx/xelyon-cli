@@ -96,16 +96,15 @@ func TestLoadProjectConfigInvalidYAML(t *testing.T) {
 	}
 }
 
-func TestLoadProjectConfigWithHooks(t *testing.T) {
+func TestLoadProjectConfigWithFinalChecks(t *testing.T) {
 	dir := t.TempDir()
 	yamlContent := `context: "test"
 rules:
   - "rule 1"
-hooks:
-  on_completion:
+final_checks:
+  commands:
     - "go test ./..."
   timeout: 30
-  max_retry: 5
 `
 	if err := os.WriteFile(filepath.Join(dir, "xelyon.yaml"), []byte(yamlContent), 0644); err != nil {
 		t.Fatal(err)
@@ -121,17 +120,88 @@ hooks:
 	if pc == nil {
 		t.Fatal("LoadProjectConfig() returned nil")
 	}
-	if pc.Hooks == nil {
-		t.Fatal("Hooks is nil, want non-nil")
+	if pc.FinalChecks == nil {
+		t.Fatal("FinalChecks is nil, want non-nil")
 	}
-	if len(pc.Hooks.OnCompletion) != 1 || pc.Hooks.OnCompletion[0] != "go test ./..." {
-		t.Errorf("Hooks.OnCompletion = %v, want [\"go test ./...\"]", pc.Hooks.OnCompletion)
+	if len(pc.FinalChecks.Commands) != 1 || pc.FinalChecks.Commands[0] != "go test ./..." {
+		t.Errorf("FinalChecks.Commands = %v, want [\"go test ./...\"]", pc.FinalChecks.Commands)
 	}
-	if pc.Hooks.Timeout != 30 {
-		t.Errorf("Hooks.Timeout = %d, want 30", pc.Hooks.Timeout)
+	if pc.FinalChecks.Timeout != 30 {
+		t.Errorf("FinalChecks.Timeout = %d, want 30", pc.FinalChecks.Timeout)
 	}
-	if pc.Hooks.MaxRetry != 5 {
-		t.Errorf("Hooks.MaxRetry = %d, want 5", pc.Hooks.MaxRetry)
+}
+
+func TestLoadProjectConfigWithLegacyHooks(t *testing.T) {
+	dir := t.TempDir()
+	yamlContent := `context: "test"
+hooks:
+  on_completion:
+    - "go test ./..."
+  timeout: 45
+`
+	if err := os.WriteFile(filepath.Join(dir, "xelyon.yaml"), []byte(yamlContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	origDir, _ := os.Getwd()
+	defer func() { _ = os.Chdir(origDir) }()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	pc := LoadProjectConfig()
+	if pc == nil {
+		t.Fatal("LoadProjectConfig() returned nil")
+	}
+	if pc.FinalChecks == nil {
+		t.Fatal("FinalChecks is nil, want non-nil")
+	}
+	if len(pc.FinalChecks.Commands) != 1 || pc.FinalChecks.Commands[0] != "go test ./..." {
+		t.Errorf("FinalChecks.Commands = %v, want [\"go test ./...\"]", pc.FinalChecks.Commands)
+	}
+	if pc.FinalChecks.Timeout != 45 {
+		t.Errorf("FinalChecks.Timeout = %d, want 45", pc.FinalChecks.Timeout)
+	}
+}
+
+func TestLoadProjectConfig_FinalChecksWinsOverLegacyVerificationAndHooks(t *testing.T) {
+	dir := t.TempDir()
+	yamlContent := `context: "test"
+final_checks:
+  commands:
+    - "make test"
+  timeout: 90
+verification:
+  commands:
+    - "legacy verify"
+  timeout: 60
+hooks:
+  on_completion:
+    - "go test ./..."
+  timeout: 45
+`
+	if err := os.WriteFile(filepath.Join(dir, "xelyon.yaml"), []byte(yamlContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	origDir, _ := os.Getwd()
+	defer func() { _ = os.Chdir(origDir) }()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	pc := LoadProjectConfig()
+	if pc == nil {
+		t.Fatal("LoadProjectConfig() returned nil")
+	}
+	if pc.FinalChecks == nil {
+		t.Fatal("FinalChecks is nil, want non-nil")
+	}
+	if len(pc.FinalChecks.Commands) != 1 || pc.FinalChecks.Commands[0] != "make test" {
+		t.Errorf("FinalChecks.Commands = %v, want [\"make test\"]", pc.FinalChecks.Commands)
+	}
+	if pc.FinalChecks.Timeout != 90 {
+		t.Errorf("FinalChecks.Timeout = %d, want 90", pc.FinalChecks.Timeout)
 	}
 }
 
@@ -292,77 +362,77 @@ func TestSelectProjectPromptSelection_UsesProjectRootForAbsolutePath(t *testing.
 	}
 }
 
-func TestResolveHooks_ProjectHooksPriority(t *testing.T) {
+func TestResolveFinalChecks_ProjectFinalChecksPriority(t *testing.T) {
 	globalCfg := &Config{
-		Hooks: HooksConfig{
-			OnCompletion: []string{"global hook"},
-			Timeout:      60,
+		FinalChecks: FinalChecksConfig{
+			Commands: []string{"global verify"},
+			Timeout:  600,
 		},
 	}
 	projectCfg := &ProjectConfig{
-		Hooks: &HooksConfig{
-			OnCompletion: []string{"project hook"},
-			Timeout:      30,
+		FinalChecks: &FinalChecksConfig{
+			Commands: []string{"project verify"},
+			Timeout:  30,
 		},
 	}
 
-	resolved := ResolveHooks(globalCfg, projectCfg)
+	resolved := ResolveFinalChecks(globalCfg, projectCfg)
 	if resolved == nil {
-		t.Fatal("ResolveHooks returned nil")
+		t.Fatal("ResolveFinalChecks returned nil")
 	}
-	if len(resolved.OnCompletion) != 1 || resolved.OnCompletion[0] != "project hook" {
-		t.Errorf("expected project hook, got %v", resolved.OnCompletion)
+	if len(resolved.Commands) != 1 || resolved.Commands[0] != "project verify" {
+		t.Errorf("expected project final checks, got %v", resolved.Commands)
 	}
 	if resolved.Timeout != 30 {
 		t.Errorf("Timeout = %d, want 30", resolved.Timeout)
 	}
 }
 
-func TestResolveHooks_GlobalFallback(t *testing.T) {
+func TestResolveFinalChecks_GlobalFallback(t *testing.T) {
 	globalCfg := &Config{
-		Hooks: HooksConfig{
-			OnCompletion: []string{"global hook"},
-			Timeout:      60,
+		FinalChecks: FinalChecksConfig{
+			Commands: []string{"global verify"},
+			Timeout:  600,
 		},
 	}
 	projectCfg := &ProjectConfig{
-		// Hooks is nil → should fall back to global
+		// FinalChecks is nil → should fall back to global
 	}
 
-	resolved := ResolveHooks(globalCfg, projectCfg)
+	resolved := ResolveFinalChecks(globalCfg, projectCfg)
 	if resolved == nil {
-		t.Fatal("ResolveHooks returned nil")
+		t.Fatal("ResolveFinalChecks returned nil")
 	}
-	if len(resolved.OnCompletion) != 1 || resolved.OnCompletion[0] != "global hook" {
-		t.Errorf("expected global hook fallback, got %v", resolved.OnCompletion)
+	if len(resolved.Commands) != 1 || resolved.Commands[0] != "global verify" {
+		t.Errorf("expected global final checks fallback, got %v", resolved.Commands)
 	}
 }
 
-func TestResolveHooks_BothEmpty(t *testing.T) {
+func TestResolveFinalChecks_BothEmpty(t *testing.T) {
 	globalCfg := &Config{
-		Hooks: HooksConfig{}, // no on_completion
+		FinalChecks: FinalChecksConfig{}, // no commands
 	}
-	projectCfg := &ProjectConfig{} // no hooks
+	projectCfg := &ProjectConfig{} // no final checks
 
-	resolved := ResolveHooks(globalCfg, projectCfg)
+	resolved := ResolveFinalChecks(globalCfg, projectCfg)
 	if resolved != nil {
 		t.Errorf("expected nil when both are empty, got %v", resolved)
 	}
 }
 
-func TestResolveHooks_NilProject(t *testing.T) {
+func TestResolveFinalChecks_NilProject(t *testing.T) {
 	globalCfg := &Config{
-		Hooks: HooksConfig{
-			OnCompletion: []string{"global hook"},
+		FinalChecks: FinalChecksConfig{
+			Commands: []string{"global verify"},
 		},
 	}
 
-	resolved := ResolveHooks(globalCfg, nil)
+	resolved := ResolveFinalChecks(globalCfg, nil)
 	if resolved == nil {
-		t.Fatal("ResolveHooks returned nil with nil project but global hooks")
+		t.Fatal("ResolveFinalChecks returned nil with nil project but global final checks")
 	}
-	if resolved.OnCompletion[0] != "global hook" {
-		t.Errorf("expected global hook, got %v", resolved.OnCompletion)
+	if resolved.Commands[0] != "global verify" {
+		t.Errorf("expected global final checks, got %v", resolved.Commands)
 	}
 }
 
@@ -391,15 +461,14 @@ func TestSaveProjectConfig(t *testing.T) {
 	}
 }
 
-func TestSaveProjectConfig_WithHooks(t *testing.T) {
+func TestSaveProjectConfig_WithFinalChecks(t *testing.T) {
 	dir := t.TempDir()
 	pc := &ProjectConfig{
 		Context: "test",
 		Rules:   []string{"rule 1"},
-		Hooks: &HooksConfig{
-			OnCompletion: []string{"go test ./..."},
-			Timeout:      120,
-			MaxRetry:     5,
+		FinalChecks: &FinalChecksConfig{
+			Commands: []string{"go test ./..."},
+			Timeout:  120,
 		},
 		FilePath: filepath.Join(dir, "xelyon.yaml"),
 	}
@@ -412,17 +481,14 @@ func TestSaveProjectConfig_WithHooks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadProjectConfigFromYAML() error: %v", err)
 	}
-	if loaded.Hooks == nil {
-		t.Fatal("Hooks is nil after save/load")
+	if loaded.FinalChecks == nil {
+		t.Fatal("FinalChecks is nil after save/load")
 	}
-	if len(loaded.Hooks.OnCompletion) != 1 || loaded.Hooks.OnCompletion[0] != "go test ./..." {
-		t.Errorf("Hooks.OnCompletion = %v", loaded.Hooks.OnCompletion)
+	if len(loaded.FinalChecks.Commands) != 1 || loaded.FinalChecks.Commands[0] != "go test ./..." {
+		t.Errorf("FinalChecks.Commands = %v", loaded.FinalChecks.Commands)
 	}
-	if loaded.Hooks.Timeout != 120 {
-		t.Errorf("Hooks.Timeout = %d, want 120", loaded.Hooks.Timeout)
-	}
-	if loaded.Hooks.MaxRetry != 5 {
-		t.Errorf("Hooks.MaxRetry = %d, want 5", loaded.Hooks.MaxRetry)
+	if loaded.FinalChecks.Timeout != 120 {
+		t.Errorf("FinalChecks.Timeout = %d, want 120", loaded.FinalChecks.Timeout)
 	}
 }
 

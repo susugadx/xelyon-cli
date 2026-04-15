@@ -13,6 +13,34 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
+type scriptedStreamingProvider struct {
+	name     string
+	response string
+}
+
+func (p *scriptedStreamingProvider) Name() string {
+	if p.name != "" {
+		return p.name
+	}
+	return "test"
+}
+
+func (p *scriptedStreamingProvider) SupportsImages() bool { return false }
+
+func (p *scriptedStreamingProvider) IsFunctionCallingEnabled() bool { return true }
+
+func (p *scriptedStreamingProvider) ChatWithTools(ctx context.Context, _ string, _ []api.Message, _ string) (string, error) {
+	if api.ShouldStreamAssistantText(ctx) {
+		api.PrintAIHeaderWithContext(ctx)
+		_, _ = api.OutputWriterFromContext(ctx).Write([]byte(p.response + "\n"))
+	}
+	return p.response, nil
+}
+
+func (p *scriptedStreamingProvider) ChatWithImage(_ context.Context, _ string, _ []api.Message, _ string, _ *api.ImageData, _ string) (string, error) {
+	return "", nil
+}
+
 func TestRunInvestigationPhase_DebugOutputUsesRuntimeErrorOutput(t *testing.T) {
 	t.Setenv("XELYON_DEBUG_PARSE", "1")
 
@@ -61,7 +89,7 @@ func TestRunInvestigationPhase_PlanModeShowsFinalProse(t *testing.T) {
 
 			var provider api.Provider
 			if tt.streaming {
-				provider = &scriptedStepProvider{name: "test", response: "investigation result"}
+				provider = &scriptedStreamingProvider{name: "test", response: "investigation result"}
 			} else {
 				provider = &mockProvider{name: "test"}
 			}

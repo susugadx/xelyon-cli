@@ -10,7 +10,7 @@ import (
 type TaskSummary struct {
 	Changes     []FileChangeSummary // ファイル変更一覧
 	TestsPassed *bool               // テスト成功フラグ（nil = 未実行）
-	TestCommand string              // テスト/verification コマンド要約
+	TestCommand string              // テスト/final checks コマンド要約
 	Stats       SummaryStats        // 統計情報
 }
 
@@ -54,7 +54,7 @@ func (ts *TaskSummary) SetTestResult(passed bool) *TaskSummary {
 	return ts
 }
 
-// SetTestCommand はテスト/verification コマンド要約を設定
+// SetTestCommand はテスト/final checks コマンド要約を設定
 func (ts *TaskSummary) SetTestCommand(command string) *TaskSummary {
 	ts.TestCommand = strings.TrimSpace(command)
 	return ts

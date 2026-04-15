@@ -18,8 +18,10 @@ import (
 
 // mockCacheClearableProvider はキャッシュクリアと Provider を実装したモック
 type mockCacheClearableProvider struct {
-	cleared bool
-	name    string
+	cleared          bool
+	name             string
+	responseID       string
+	cachedResponseID bool
 }
 
 func (m *mockCacheClearableProvider) Name() string {
@@ -47,6 +49,19 @@ func (m *mockCacheClearableProvider) IsFunctionCallingEnabled() bool {
 
 func (m *mockCacheClearableProvider) ClearCache() {
 	m.cleared = true
+}
+
+func (m *mockCacheClearableProvider) HasCachedResponseID() bool {
+	return m.cachedResponseID
+}
+
+func (m *mockCacheClearableProvider) SetResponseID(id string) {
+	m.responseID = id
+	m.cachedResponseID = id != ""
+}
+
+func (m *mockCacheClearableProvider) GetResponseID() string {
+	return m.responseID
 }
 
 func TestAgent_SwitchProvider_ClearCache(t *testing.T) {
@@ -97,10 +112,11 @@ func TestAgent_SwitchProvider_ClearHistoryAndNotify(t *testing.T) {
 	runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, &out)
 
 	agent := &Agent{
-		ProviderName:    "mock",
-		CurrentModel:    "mock-model",
-		CurrentProvider: &mockCacheClearableProvider{},
-		Runtime:         runtime,
+		ProviderName:        "mock",
+		CurrentModel:        "mock-model",
+		CurrentProvider:     &mockCacheClearableProvider{},
+		Runtime:             runtime,
+		PendingApprovedPlan: "Implementation Plan\n1. Update the target file",
 		History: []api.Message{
 			{
 				Role:    "assistant",
@@ -128,11 +144,23 @@ func TestAgent_SwitchProvider_ClearHistoryAndNotify(t *testing.T) {
 			session: history.NewSession("mock-model"),
 		},
 	}
+	agent.session.AddMessage("user", "old task", agent.CurrentModel)
+	agent.session.PendingApprovedPlan = agent.PendingApprovedPlan
+	agent.session.CompactedItems = []history.CompactedItem{{Type: "compacted", Data: "compressed"}}
+	agent.session.IsCompactedMode = true
+	agent.session.ResponseID = "resp_old"
+	agent.persistSession()
 
 	err := agent.SwitchProvider("ollama")
 	assert.NoError(t, err)
 
 	assert.Equal(t, 0, len(agent.History))
+	assert.Empty(t, agent.PendingApprovedPlan)
+	assert.Empty(t, agent.session.Messages)
+	assert.Empty(t, agent.session.PendingApprovedPlan)
+	assert.False(t, agent.session.IsCompactedMode)
+	assert.Empty(t, agent.session.CompactedItems)
+	assert.Empty(t, agent.session.ResponseID)
 	assert.Contains(t, out.String(), "History cleared after provider switch")
 }
 

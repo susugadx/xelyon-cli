@@ -20,13 +20,11 @@ func newNormalModeNoToolHandler(r *TurnRunner, cfg *config.Config, state *normal
 }
 
 func (h *normalModeNoToolHandler) Handle(response string) normalModeAction {
-	if handled, action := h.handleTextPlanRedirect(response); handled {
+	if handled, action := h.handleTextPlanRecovery(response); handled {
 		return action
 	}
-	if handled, action := h.handleCompletionVerification(response); handled {
-		return action
-	}
-	if handled, action := h.handleCompletionHooks(response); handled {
+	recordedChanges := h.captureRecordedTaskChanges(response)
+	if handled, action := h.handleCompletionFinalChecks(response, recordedChanges); handled {
 		return action
 	}
 
@@ -34,96 +32,75 @@ func (h *normalModeNoToolHandler) Handle(response string) normalModeAction {
 	return normalModeDone
 }
 
-func (h *normalModeNoToolHandler) handleTextPlanRedirect(response string) (bool, normalModeAction) {
+func (h *normalModeNoToolHandler) captureRecordedTaskChanges(response string) recordedTaskChangeSnapshot {
+	if !isCompletionTriggerResponse(response) {
+		h.state.recordedTaskChanges = recordedTaskChangeSnapshot{}
+		return recordedTaskChangeSnapshot{}
+	}
+
+	snapshot := h.runner.agent.recordedTaskChangeSnapshot()
+	h.state.recordedTaskChanges = snapshot
+	return snapshot
+}
+
+func (h *normalModeNoToolHandler) handleCompletionFinalChecks(response string, changes recordedTaskChangeSnapshot) (bool, normalModeAction) {
 	a := h.runner.agent
-	steps := extractTextPlan(response)
-	if containsCompletionDeclaration(response) || len(steps) < 5 || !isActionPlan(steps) {
+	if !isCompletionTriggerResponse(response) || len(h.cfg.FinalChecks.Commands) == 0 {
+		return false, normalModeContinue
+	}
+	finalCheckTargets := h.finalCheckTargetSnapshot(changes)
+	if len(finalCheckTargets.files) == 0 {
 		return false, normalModeContinue
 	}
 
-	h.state.textPlanRedirectCount++
-	if h.state.textPlanRedirectCount > maxTextPlanHardLimit {
-		yellow.Fprintf(a.output(), "⚠️  Text plan detected %d times without tool use. Returning response to user.\n", h.state.textPlanRedirectCount)
-		h.runner.appendAssistantHistoryOnly(response)
-		h.state.fallbackResponse = response
+	result := a.runFinalCheckCommands(finalCheckTargets.files)
+	if !result.needsContinue {
+		h.state.finalCheckRetry.reset()
+		return false, normalModeContinue
+	}
+
+	h.runner.appendAssistantHistoryOnly(response)
+	if h.state.finalCheckRetry.recordFailure(result, finalCheckTargets.progressFingerprint) {
+		yellow.Fprintln(a.output(), "⚠️  Final checks failed again without any task progress. Returning control to user.")
+		a.History = append(a.History, api.Message{
+			Role:    "user",
+			Content: result.feedback,
+		})
 		return true, normalModeBreak
 	}
 
-	if h.state.textPlanRedirectCount > maxTextPlanRedirects {
-		yellow.Fprintf(a.output(), "⚠️  Text plan detected %d times. Forcing direct execution.\n", h.state.textPlanRedirectCount)
-		h.runner.appendAssistantHistoryOnly(response)
-		a.History = append(a.History, api.Message{
-			Role:    "user",
-			Content: a.toolVisibilityPolicy(toolSurfacePhaseNormal, toolVisibilityOptions{allowSubAgents: true}).normalModeRecoveryPrompt(normalModeRecoveryPromptStopPlanning),
-		})
-		return true, normalModeContinue
-	}
-
-	yellow.Fprintf(a.output(), "⚠️  Text plan detected (%d steps). Execute tools directly instead. (%d/%d)\n",
-		len(steps), h.state.textPlanRedirectCount, maxTextPlanRedirects)
-	h.runner.appendAssistantHistoryOnly(response)
+	yellow.Fprintln(a.output(), "⚠️  Final check command failed. Asking AI to fix...")
 	a.History = append(a.History, api.Message{
 		Role:    "user",
-		Content: a.toolVisibilityPolicy(toolSurfacePhaseNormal, toolVisibilityOptions{allowSubAgents: true}).normalModeRecoveryPrompt(normalModeRecoveryPromptNoTextPlan),
+		Content: result.feedback,
 	})
 	return true, normalModeContinue
 }
 
-func (h *normalModeNoToolHandler) handleCompletionVerification(response string) (bool, normalModeAction) {
+func (h *normalModeNoToolHandler) finalCheckTargetSnapshot(changes recordedTaskChangeSnapshot) recordedTaskChangeSnapshot {
 	a := h.runner.agent
-	if h.state.completionVerified {
-		return false, normalModeContinue
+	mergedFiles := append([]string(nil), changes.files...)
+
+	if a != nil && a.activeApprovedPlan != "" && a.pendingApprovedPlanHasChanges() {
+		planFiles := a.pendingApprovedPlanChangedFiles()
+		if len(planFiles) > 0 {
+			seen := make(map[string]bool, len(mergedFiles)+len(planFiles))
+			for _, file := range mergedFiles {
+				seen[file] = true
+			}
+			for _, file := range planFiles {
+				mergedFiles = appendRecordedChangedFile(mergedFiles, seen, file)
+			}
+		}
 	}
 
-	needsContinue, feedback := a.verifyCompletionWithDiagnostics(response)
-	if !needsContinue {
-		return false, normalModeContinue
+	progressFingerprint := fingerprintFinalCheckTargetFiles(mergedFiles)
+	if progressFingerprint == "" {
+		progressFingerprint = changes.progressFingerprint
 	}
 
-	h.state.completionVerified = true
-	yellow.Fprintln(a.output(), "⚠️  Completion verification: LSP errors found in modified files")
-	h.runner.appendAssistantHistoryOnly(response)
-	a.History = append(a.History, api.Message{
-		Role:    "user",
-		Content: feedback,
-	})
-	return true, normalModeContinue
-}
-
-func (h *normalModeNoToolHandler) handleCompletionHooks(response string) (bool, normalModeAction) {
-	a := h.runner.agent
-	if !containsCompletionDeclaration(response) || len(h.cfg.Hooks.OnCompletion) == 0 {
-		return false, normalModeContinue
+	return recordedTaskChangeSnapshot{
+		files:               mergedFiles,
+		progressFingerprint: progressFingerprint,
 	}
-
-	changedFiles := a.getTaskChangedFiles()
-	if len(changedFiles) == 0 {
-		return false, normalModeContinue
-	}
-
-	hookNeedsContinue, hookFeedback := a.checkGitDiffEmpty()
-	if !hookNeedsContinue {
-		hookNeedsContinue, hookFeedback = a.runCompletionHooks(changedFiles)
-	}
-	if !hookNeedsContinue {
-		return false, normalModeContinue
-	}
-
-	h.state.hookRetryCount++
-	maxRetry := h.cfg.Hooks.MaxRetry
-	if maxRetry <= 0 {
-		maxRetry = 3
-	}
-	if h.state.hookRetryCount >= maxRetry {
-		yellow.Fprintf(a.output(), "⚠️  Hook retry limit reached (%d/%d). Proceeding with completion.\n", h.state.hookRetryCount, maxRetry)
-		return false, normalModeContinue
-	}
-
-	yellow.Fprintf(a.output(), "⚠️  Completion hook failed (%d/%d). Asking AI to fix...\n", h.state.hookRetryCount, maxRetry)
-	h.runner.appendAssistantHistoryOnly(response)
-	a.History = append(a.History, api.Message{
-		Role:    "user",
-		Content: hookFeedback,
-	})
-	return true, normalModeContinue
 }

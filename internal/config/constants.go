@@ -23,12 +23,6 @@ const (
 	MaxDiffIterations   = 20     // diff比較最大イテレーション
 )
 
-// Plan Execution Limits
-const (
-	PlanMaxIterations    = 80 // ステップ内ツール実行の最大イテレーション数
-	PlanMaxAutoContinues = 3  // AI質問時の自動続行最大回数
-)
-
 // Message Processing Limits
 const (
 	MessageTruncateLen = 500 // サマリー生成時のメッセージ切り詰め長
@@ -40,7 +34,6 @@ const (
 	HistoryPreviewLen     = 50  // /history コマンドのプレビュー切り詰め長
 	SessionPreviewLen     = 60  // /sessions コマンドのプレビュー切り詰め長
 	SessionListMaxDisplay = 10  // /sessions の最大表示数
-	ErrorOutputMaxLines   = 20  // Plan失敗時のエラー出力最大行数
 	DebugPreviewLen       = 500 // デバッグログのプレビュー長
 )
 

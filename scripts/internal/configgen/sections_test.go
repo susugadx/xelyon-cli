@@ -35,7 +35,7 @@ func TestUserFacingSectionsHaveStructNames(t *testing.T) {
 		"web_search",
 		"sub_agent",
 		"mcp",
-		"hooks",
+		"final_checks",
 	} {
 		if Sections[sectionName].StructName == "" {
 			t.Fatalf("expected StructName for %q", sectionName)

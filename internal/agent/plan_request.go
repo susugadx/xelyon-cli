@@ -15,39 +15,69 @@ import (
 type planModeRequest struct {
 	agent               *Agent
 	ctx                 context.Context
-	userRequest         string
+	originalUserRequest string
+	preparedUserRequest string
 	investigationPrompt string
+	checkpoint          planModeCheckpoint
 }
 
 func newPlanModeRequest(agent *Agent, ctx context.Context, userRequest string) *planModeRequest {
 	return &planModeRequest{
-		agent:       agent,
-		ctx:         ctx,
-		userRequest: userRequest,
+		agent:               agent,
+		ctx:                 ctx,
+		originalUserRequest: userRequest,
 	}
 }
 
 func (r *planModeRequest) Run() error {
 	r.prepare()
+	restoreConversationOnExit := true
+	restoreApprovedPlanOnExit := false
+	restorePromptOnExit := true
+	defer func() {
+		if restoreConversationOnExit {
+			var err error
+			if restoreApprovedPlanOnExit {
+				err = r.restoreTechnicalFailureState()
+			} else {
+				err = r.restoreConversationState()
+			}
+			if err != nil {
+				red.Fprintf(r.agent.output(), "Failed to restore plan mode state: %v\n", err)
+			}
+			return
+		}
+		if restorePromptOnExit {
+			r.restorePlanningPrompt()
+		}
+	}()
 
 	p, handled, err := r.runInvestigation()
-	if err != nil || handled {
+	if err != nil {
+		restoreApprovedPlanOnExit = true
 		return err
 	}
+	if handled {
+		return err
+	}
+	restoreConversationOnExit = r.shouldRestoreConversationOnExit(p)
+	restorePromptOnExit = !restoreConversationOnExit
 
 	handled, err = r.handleInvestigationResult(p)
 	if err != nil || handled {
 		return err
 	}
 
-	return r.runImplementation(p)
+	return nil
 }
 
 func (r *planModeRequest) prepare() {
+	r.checkpoint = capturePlanModeCheckpoint(r.agent, r.originalUserRequest)
+	r.agent.clearApprovedPlanState()
 	r.ensurePlanningPrompt()
-	r.userRequest = r.prepareUserRequest(r.userRequest)
+	r.preparedUserRequest = r.prepareUserRequest(r.originalUserRequest)
 	toolVisibility := r.agent.toolVisibilityPolicy(toolSurfacePhasePlan, toolVisibilityOptions{allowSubAgents: true})
-	r.investigationPrompt = promptplan.BuildInvestigationPrompt(r.userRequest, toolVisibility.investigationSurface)
+	r.investigationPrompt = promptplan.BuildInvestigationPrompt(r.preparedUserRequest, toolVisibility.investigationSurface)
 }
 
 func (r *planModeRequest) ensurePlanningPrompt() {
@@ -102,26 +132,31 @@ func (r *planModeRequest) handleInvestigationResult(p *plan.Plan) (bool, error) 
 		return true, nil
 	}
 
-	r.renderPlan(p)
+	planText := r.renderPlan(p)
 
 	a.SetStatus(StateWaitingApproval, "Waiting for plan approval", "計画の承認待ち", "Answer y/n/c", "y/n/c で回答")
 	approved, feedback := a.confirmPlan()
 	if approved {
-		green.Fprintln(out, "✓ Plan approved. Starting implementation...")
-		a.SetStatus(StateRunning, "Implementing", "実装中", "Wait for completion", "完了を待ってください")
-		return false, nil
+		a.setPendingApprovedPlan(planText)
+		a.setPlanModeEnabled(false)
+		green.Fprintln(out, "✓ Plan approved. Plan Mode complete. Implementation not started.")
+		a.setReadyForInputStatus()
+		return true, nil
 	}
 
 	if feedback != "" {
 		yellow.Fprintf(out, "Plan rejected with feedback: %s\n", feedback)
-		return true, a.RunPlanMode(r.ctx, r.userRequest+" (Previous plan feedback: "+feedback+")")
+		if err := r.restoreConversationState(); err != nil {
+			return true, err
+		}
+		return true, r.rerunPlanMode(r.feedbackRerunRequest(feedback))
 	}
 
-	red.Fprintln(out, "Plan execution cancelled.")
+	red.Fprintln(out, "Plan mode cancelled.")
 	return true, nil
 }
 
-func (r *planModeRequest) renderPlan(p *plan.Plan) {
+func (r *planModeRequest) renderPlan(p *plan.Plan) string {
 	planDisplay := ui.NewPlanDisplay("Implementation Plan").
 		SetSummary(p.Summary)
 
@@ -129,12 +164,10 @@ func (r *planModeRequest) renderPlan(p *plan.Plan) {
 		planDisplay.AddStep(step.ID, step.Description, step.Tools, step.TargetFiles)
 	}
 
+	rendered := planDisplay.Render()
 	_, _ = fmt.Fprintln(r.agent.output())
-	_, _ = fmt.Fprint(r.agent.output(), planDisplay.Render())
-}
-
-func (r *planModeRequest) runImplementation(p *plan.Plan) error {
-	return newPlanImplementationRequest(r.agent, r.ctx, r.userRequest, p).Run()
+	_, _ = fmt.Fprint(r.agent.output(), rendered)
+	return rendered
 }
 
 func (r *planModeRequest) handleTokenLimit(err error) bool {
@@ -143,7 +176,62 @@ func (r *planModeRequest) handleTokenLimit(err error) bool {
 	}
 
 	retryFunc := func() error {
-		return r.agent.RunPlanMode(r.ctx, r.userRequest)
+		if restoreErr := r.restoreTechnicalFailureState(); restoreErr != nil {
+			return restoreErr
+		}
+		return r.rerunPlanMode(r.originalUserRequest)
 	}
 	return r.agent.handleTokenLimitErrorWithRetry(err, retryFunc, true)
+}
+
+func (r *planModeRequest) feedbackRerunRequest(feedback string) string {
+	base := strings.TrimSpace(r.originalUserRequest)
+	if base == "" {
+		return "Previous plan feedback: " + feedback
+	}
+	return base + " (Previous plan feedback: " + feedback + ")"
+}
+
+func (r *planModeRequest) rerunPlanMode(userRequest string) error {
+	r.recordRerunRequest(userRequest)
+	return r.agent.RunPlanMode(r.ctx, userRequest)
+}
+
+func (r *planModeRequest) recordRerunRequest(userRequest string) {
+	if r.agent == nil || r.agent.session == nil {
+		return
+	}
+
+	userRequest = strings.TrimSpace(userRequest)
+	if userRequest == "" {
+		return
+	}
+
+	if len(r.agent.session.Messages) > 0 {
+		last := r.agent.session.Messages[len(r.agent.session.Messages)-1]
+		if last.Role == "user" && strings.TrimSpace(last.Content) == userRequest {
+			return
+		}
+	}
+
+	r.agent.appendSessionMessage("user", userRequest, r.agent.CurrentModel)
+}
+
+func (r *planModeRequest) restoreConversationState() error {
+	return r.checkpoint.restore(r.agent, false)
+}
+
+func (r *planModeRequest) restoreTechnicalFailureState() error {
+	return r.checkpoint.restore(r.agent, true)
+}
+
+func (r *planModeRequest) restorePlanningPrompt() {
+	r.checkpoint.restoreSystemPrompt(r.agent)
+}
+
+func (r *planModeRequest) shouldRestoreConversationOnExit(p *plan.Plan) bool {
+	if p == nil {
+		return false
+	}
+	return len(p.Steps) > 0
 }

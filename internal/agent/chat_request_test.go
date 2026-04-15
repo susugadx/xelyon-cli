@@ -100,35 +100,6 @@ func TestChatCore_OneShotReturnsProviderErrorWithoutInteractiveHandling(t *testi
 	}
 }
 
-func TestChatCore_PlanModeEnabledUsesPlanModeFlow(t *testing.T) {
-	disableColors(t)
-
-	var out bytes.Buffer
-	provider := &sequenceMockProvider{
-		name:      "test",
-		responses: []string{"Investigation complete."},
-	}
-	agent := newChatRequestTestAgent(t, provider, &out)
-	agent.PlanModeEnabled = true
-
-	if err := agent.chatCore("investigate only", nil, false); err != nil {
-		t.Fatalf("chatCore() error = %v", err)
-	}
-	if provider.callCount != 1 {
-		t.Fatalf("provider.callCount = %d, want 1", provider.callCount)
-	}
-	if len(agent.History) == 0 || !strings.Contains(agent.History[0].Content, "You are in PLAN MODE") {
-		t.Fatalf("expected plan investigation prompt in history, got %#v", agent.History)
-	}
-	if !strings.Contains(out.String(), "Investigation phase - researching the codebase") {
-		t.Fatalf("expected plan mode output, got %q", out.String())
-	}
-	status := agent.statusRef().getStatus()
-	if status.State != StateWaitingInput {
-		t.Fatalf("status.State = %q, want %q", status.State, StateWaitingInput)
-	}
-}
-
 func TestChatCore_CanceledRequestPrintsInterruptedMessage(t *testing.T) {
 	disableColors(t)
 

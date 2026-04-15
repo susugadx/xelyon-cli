@@ -591,52 +591,6 @@ func TestStorage_WithEncryption_Save_Load(t *testing.T) {
 	}
 }
 
-func TestStorage_Load_CorruptedData(t *testing.T) {
-	tmpDir := t.TempDir()
-	os.Setenv("HOME", tmpDir)
-	defer os.Unsetenv("HOME")
-
-	storage, err := NewStorage()
-	if err != nil {
-		t.Fatalf("NewStorage failed: %v", err)
-	}
-
-	// セッション作成
-	session := NewSession("test-model")
-	session.AddMessage("user", "Valid message", "test-model")
-
-	// 保存
-	if err := storage.Save(session); err != nil {
-		t.Fatalf("Save failed: %v", err)
-	}
-
-	// JSONLファイルに不正な行を追加
-	filePath := storage.sessionPath(session.ID)
-	f, err := os.OpenFile(filePath, os.O_APPEND|os.O_WRONLY, 0600)
-	if err != nil {
-		t.Fatalf("Failed to open file: %v", err)
-	}
-	if _, err := f.WriteString("CORRUPTED LINE\n"); err != nil {
-		t.Fatalf("Failed to write corrupted line: %v", err)
-	}
-	f.Close()
-
-	// 読み込み（不正な行はスキップされるべき）
-	loaded, err := storage.Load(session.ID)
-	if err != nil {
-		t.Fatalf("Load should not fail on corrupted data: %v", err)
-	}
-
-	// 有効なメッセージのみ読み込まれるべき
-	if len(loaded.Messages) != 1 {
-		t.Errorf("Expected 1 valid message (corrupted line skipped), got %d", len(loaded.Messages))
-	}
-
-	if loaded.Messages[0].Content != "Valid message" {
-		t.Errorf("Expected 'Valid message', got '%s'", loaded.Messages[0].Content)
-	}
-}
-
 func TestStorage_SessionPath(t *testing.T) {
 	tmpDir := t.TempDir()
 	storage := &Storage{

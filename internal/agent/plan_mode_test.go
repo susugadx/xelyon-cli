@@ -3,47 +3,12 @@ package agent
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/agent/plan"
-	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
-
-type scriptedStepProvider struct {
-	name     string
-	response string
-}
-
-func (p *scriptedStepProvider) Name() string {
-	if p.name != "" {
-		return p.name
-	}
-	return "test"
-}
-
-func (p *scriptedStepProvider) SupportsImages() bool {
-	return false
-}
-
-func (p *scriptedStepProvider) IsFunctionCallingEnabled() bool {
-	return true
-}
-
-func (p *scriptedStepProvider) ChatWithTools(ctx context.Context, _ string, _ []api.Message, _ string) (string, error) {
-	if api.ShouldStreamAssistantText(ctx) {
-		api.PrintAIHeaderWithContext(ctx)
-		_, _ = fmt.Fprintln(api.OutputWriterFromContext(ctx), p.response)
-	}
-	return p.response, nil
-}
-
-func (p *scriptedStepProvider) ChatWithImage(_ context.Context, _ string, _ []api.Message, _ string, _ *api.ImageData, _ string) (string, error) {
-	return "", nil
-}
 
 func TestExtractPlanJSON_Mode(t *testing.T) {
 	tests := []struct {
@@ -188,53 +153,5 @@ func TestRunPlanMode_UsesRuntimeOutput(t *testing.T) {
 	}
 	if !strings.Contains(output, "Investigation complete. No implementation needed.") {
 		t.Fatalf("expected runtime output to contain completion message, got %q", output)
-	}
-}
-
-func TestExecuteStepV2_PrintsFinalPlainTextResponseOnceWhenAssistantUpdatesSuppressed(t *testing.T) {
-	tests := []struct {
-		name string
-		mode string
-	}{
-		{name: "verbose", mode: api.AssistantUpdatesVerbose},
-		{name: "phase", mode: api.AssistantUpdatesPhase},
-		{name: "off", mode: api.AssistantUpdatesOff},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var out bytes.Buffer
-			cfg := config.DefaultConfig()
-			cfg.Output.AssistantUpdates = tt.mode
-
-			agent := &Agent{
-				CurrentModel:    "test-model",
-				CurrentProvider: &scriptedStepProvider{response: "Plan step final response"},
-				Runtime: &AgentRuntime{
-					Config: cfg,
-					UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
-				},
-				History: []api.Message{},
-			}
-
-			p := &plan.Plan{
-				Steps: []plan.PlanStep{{
-					ID:          1,
-					Description: "Finish the step",
-				}},
-			}
-
-			if err := agent.executeStepV2(context.Background(), p, &p.Steps[0], 0, &retryState{}); err != nil {
-				t.Fatalf("executeStepV2() error = %v", err)
-			}
-
-			output := out.String()
-			if got := strings.Count(output, "Plan step final response"); got != 1 {
-				t.Fatalf("expected final response exactly once in %s mode, got %d in output %q", tt.mode, got, output)
-			}
-			if !strings.Contains(output, "✓ Step 1 completed") {
-				t.Fatalf("expected step completion message, got %q", output)
-			}
-		})
 	}
 }

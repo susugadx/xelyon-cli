@@ -6,15 +6,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
-	"unsafe"
 
-	"github.com/susugadx/xelyon-cli/internal/agent/plan"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	lsplib "github.com/susugadx/xelyon-cli/internal/lsp"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -22,6 +18,7 @@ import (
 type commentSignalTool struct{}
 
 type failingWriteTool struct{}
+type finalCheckWriteTool struct{}
 
 func (t *commentSignalTool) Name() string { return "comment_signal" }
 
@@ -62,6 +59,38 @@ func (t *failingWriteTool) Parameters() map[string]interface{} {
 
 func (t *failingWriteTool) Run(_ tools.ExecutionContext, _ map[string]string) (string, *tools.FileChange, error) {
 	return "exit status 1", nil, nil
+}
+
+func (t *finalCheckWriteTool) Name() string { return "final_check_write" }
+
+func (t *finalCheckWriteTool) Description() string {
+	return "Writes file content for final check retry tests."
+}
+
+func (t *finalCheckWriteTool) Parameters() map[string]interface{} {
+	return map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"path":    map[string]interface{}{"type": "string"},
+			"content": map[string]interface{}{"type": "string"},
+		},
+	}
+}
+
+func (t *finalCheckWriteTool) Run(_ tools.ExecutionContext, args map[string]string) (string, *tools.FileChange, error) {
+	path := args["path"]
+	content := args["content"]
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		return "", nil, err
+	}
+	return "final check retry wrote file", &tools.FileChange{
+		FilePath: path,
+		Tool:     "final_check_write",
+		Details: []tools.FileChangeDetail{{
+			FilePath: path,
+			Action:   "modified",
+		}},
+	}, nil
 }
 
 func newTurnRunnerTestAgent(provider api.Provider, cfg *config.Config, promptInput string, out *bytes.Buffer, extraTools ...tools.Tool) *Agent {
@@ -141,67 +170,27 @@ func newCommittedGitRepo(t *testing.T) (string, string) {
 	return dir, file
 }
 
-func setUnexportedField(t *testing.T, target any, fieldName string, value any) {
-	t.Helper()
-
-	v := reflect.ValueOf(target)
-	if v.Kind() != reflect.Pointer || v.IsNil() {
-		t.Fatalf("target must be a non-nil pointer")
-	}
-	field := v.Elem().FieldByName(fieldName)
-	if !field.IsValid() {
-		t.Fatalf("field %q not found", fieldName)
-	}
-	reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem().Set(reflect.ValueOf(value))
-}
-
-func newFakeLSPClientWithError(t *testing.T, rootDir, filePath, message string) *lsplib.Client {
-	t.Helper()
-
-	client := lsplib.NewClient(rootDir)
-	server := lsplib.NewServer("go")
-	fileURI := lsplib.FileToURI(filePath)
-
-	setUnexportedField(t, server, "initialized", true)
-	setUnexportedField(t, server, "openDocs", map[string]struct{}{fileURI: {}})
-	setUnexportedField(t, server, "diagnostics", map[string][]lsplib.Diagnostic{
-		fileURI: {
-			{
-				Range: lsplib.Range{
-					Start: lsplib.Position{Line: 0, Character: 0},
-					End:   lsplib.Position{Line: 0, Character: 4},
-				},
-				Severity: lsplib.DiagnosticSeverityError,
-				Message:  message,
-			},
-		},
-	})
-	setUnexportedField(t, client, "servers", map[string]*lsplib.Server{
-		"go": server,
-	})
-
-	return client
-}
-
-func TestRunNormalMode_CompletionHookFailureRetries(t *testing.T) {
+func TestRunNormalMode_FinalCheckFailureRequestsFix(t *testing.T) {
 	disableColors(t)
 
 	var out bytes.Buffer
 	cfg := newProjectMapDisabledConfig()
 	cfg.Output.AssistantUpdates = api.AssistantUpdatesPhase
-	cfg.Hooks.OnCompletion = []string{"exit 1"}
-	cfg.Hooks.Timeout = 1
-	cfg.Hooks.MaxRetry = 2
 
 	provider := &sequenceMockProvider{
 		name: "test",
-		responses: []string{
-			"変更が完了しました。",
-			"修正が完了しました。",
-		},
 	}
-	agent := newTurnRunnerTestAgent(provider, cfg, "", &out)
 	repoDir, filePath := newCommittedGitRepo(t)
+	cfg.FinalChecks.Commands = []string{"grep -q fixed " + filePath}
+	cfg.FinalChecks.Timeout = 1
+
+	provider.responses = []string{
+		"変更が完了しました。",
+		`{"tool":"final_check_write","args":{"path":"` + filePath + `","content":"package main\n\nfunc main() { println(\"fixed\") }\n"}}`,
+		"修正が完了しました。",
+	}
+
+	agent := newTurnRunnerTestAgent(provider, cfg, "", &out, &finalCheckWriteTool{})
 	chdirForTest(t, repoDir)
 	if err := os.WriteFile(filePath, []byte("package main\n\nfunc main() { println(\"done\") }\n"), 0o644); err != nil {
 		t.Fatalf("failed to modify repo file: %v", err)
@@ -212,25 +201,22 @@ func TestRunNormalMode_CompletionHookFailureRetries(t *testing.T) {
 	if err := agent.runNormalMode(context.Background(), "finish it", nil); err != nil {
 		t.Fatalf("runNormalMode() error = %v", err)
 	}
-	if provider.callCount != 2 {
-		t.Fatalf("provider.callCount = %d, want 2", provider.callCount)
+	if provider.callCount != 3 {
+		t.Fatalf("provider.callCount = %d, want 3", provider.callCount)
 	}
-	if !strings.Contains(out.String(), "Completion hook failed (1/2). Asking AI to fix...") {
-		t.Fatalf("expected retry output, got %q", out.String())
-	}
-	if !strings.Contains(out.String(), "Hook retry limit reached (2/2). Proceeding with completion.") {
-		t.Fatalf("expected hook retry limit output, got %q", out.String())
+	if !strings.Contains(out.String(), "Final check command failed. Asking AI to fix...") {
+		t.Fatalf("expected final check retry output, got %q", out.String())
 	}
 
 	foundFeedback := false
 	for _, msg := range agent.History {
-		if msg.Role == "user" && strings.Contains(msg.Content, "Hook command \"exit 1\" failed") {
+		if msg.Role == "user" && strings.Contains(msg.Content, "Final check failed. Command") {
 			foundFeedback = true
 			break
 		}
 	}
 	if !foundFeedback {
-		t.Fatalf("expected hook feedback to be appended to history, got %#v", agent.History)
+		t.Fatalf("expected final check feedback to be appended to history, got %#v", agent.History)
 	}
 }
 
@@ -267,138 +253,6 @@ func TestRunNormalMode_CommentFlowRequestsReplan(t *testing.T) {
 	}
 	if !foundFeedback {
 		t.Fatalf("expected comment feedback in history, got %#v", agent.History)
-	}
-}
-
-func TestHandleStepNoToolResponse_AutoContinue(t *testing.T) {
-	disableColors(t)
-
-	var out bytes.Buffer
-	cfg := newProjectMapDisabledConfig()
-	agent := newTurnRunnerTestAgent(&sequenceMockProvider{name: "test"}, cfg, "", &out)
-	runner := newTurnRunner(agent, context.Background())
-	state := &stepRunState{}
-	step := &plan.PlanStep{ID: 1, Description: "Ask a question", Status: "pending"}
-
-	action, err := runner.handleStepNoToolResponse("Should I proceed with the next step?", step, state)
-	if err != nil {
-		t.Fatalf("handleStepNoToolResponse() error = %v", err)
-	}
-	if action != stepLoopContinue {
-		t.Fatalf("action = %v, want stepLoopContinue", action)
-	}
-	if state.continueCount != 1 {
-		t.Fatalf("continueCount = %d, want 1", state.continueCount)
-	}
-	last := agent.History[len(agent.History)-1]
-	if last.Role != "user" || !strings.Contains(last.Content, "[AUTO-CONTINUE] Yes, proceed with the step") {
-		t.Fatalf("expected auto-continue message, got %#v", last)
-	}
-}
-
-func TestHandleStepNoToolResponse_AlreadyApplied(t *testing.T) {
-	disableColors(t)
-
-	var out bytes.Buffer
-	cfg := newProjectMapDisabledConfig()
-	agent := newTurnRunnerTestAgent(&sequenceMockProvider{name: "test"}, cfg, "", &out)
-	runner := newTurnRunner(agent, context.Background())
-	step := &plan.PlanStep{ID: 1, Description: "Already applied", Status: "pending"}
-
-	repoDir, filePath := newCommittedGitRepo(t)
-	chdirForTest(t, repoDir)
-
-	before := getGitDiffHash()
-	if before == "" {
-		t.Skip("git diff hash unavailable")
-	}
-	if err := os.WriteFile(filePath, []byte("package main\n\nfunc main() { println(\"done\") }\n"), 0o644); err != nil {
-		t.Fatalf("failed to modify repo file: %v", err)
-	}
-
-	state := &stepRunState{beforeDiffHash: before}
-	action, err := runner.handleStepNoToolResponse("変更が完了しました。", step, state)
-	if err != nil {
-		t.Fatalf("handleStepNoToolResponse() error = %v", err)
-	}
-	if action != stepLoopDone {
-		t.Fatalf("action = %v, want stepLoopDone", action)
-	}
-	if !strings.Contains(out.String(), "Step 1 completed (already applied)") {
-		t.Fatalf("expected already-applied output, got %q", out.String())
-	}
-}
-
-func TestHandleStepNoToolResponse_WriteToolsWithoutDiffRequestsRetry(t *testing.T) {
-	disableColors(t)
-
-	var out bytes.Buffer
-	cfg := newProjectMapDisabledConfig()
-	agent := newTurnRunnerTestAgent(&sequenceMockProvider{name: "test"}, cfg, "", &out)
-	runner := newTurnRunner(agent, context.Background())
-	step := &plan.PlanStep{ID: 1, Description: "No diff after writes", Status: "pending"}
-
-	repoDir, _ := newCommittedGitRepo(t)
-	chdirForTest(t, repoDir)
-
-	before := getGitDiffHash()
-	if before == "" {
-		t.Skip("git diff hash unavailable")
-	}
-
-	state := &stepRunState{
-		beforeDiffHash: before,
-		stepHadWrites:  true,
-	}
-	action, err := runner.handleStepNoToolResponse("I changed the files.", step, state)
-	if err != nil {
-		t.Fatalf("handleStepNoToolResponse() error = %v", err)
-	}
-	if action != stepLoopContinue {
-		t.Fatalf("action = %v, want stepLoopContinue", action)
-	}
-	if state.continueCount != 1 {
-		t.Fatalf("continueCount = %d, want 1", state.continueCount)
-	}
-	last := agent.History[len(agent.History)-1]
-	if last.Role != "user" || !strings.Contains(last.Content, "write tools but git diff shows no new changes") {
-		t.Fatalf("expected no-diff retry feedback, got %#v", last)
-	}
-}
-
-func TestHandleStepNoToolResponse_CompletionVerificationRequestsContinue(t *testing.T) {
-	disableColors(t)
-
-	var out bytes.Buffer
-	cfg := newProjectMapDisabledConfig()
-	agent := newTurnRunnerTestAgent(&sequenceMockProvider{name: "test"}, cfg, "", &out)
-	runner := newTurnRunner(agent, context.Background())
-	step := &plan.PlanStep{ID: 1, Description: "Verify completion", Status: "pending"}
-
-	rootDir := t.TempDir()
-	filePath := filepath.Join(rootDir, "main.go")
-	if err := os.WriteFile(filePath, []byte("package main\n\nfunc main() {}\n"), 0o644); err != nil {
-		t.Fatalf("failed to write source file: %v", err)
-	}
-	chdirForTest(t, rootDir)
-
-	agent.lspClient = newFakeLSPClientWithError(t, rootDir, filePath, "unused variable")
-	agent.changeStack = []tools.FileChange{{FilePath: filePath}}
-
-	state := &stepRunState{}
-	action, err := runner.handleStepNoToolResponse("変更が完了しました。", step, state)
-	if err != nil {
-		t.Fatalf("handleStepNoToolResponse() error = %v", err)
-	}
-	if action != stepLoopContinue {
-		t.Fatalf("action = %v, want stepLoopContinue", action)
-	}
-	if !state.stepCompletionVerified {
-		t.Fatal("expected stepCompletionVerified to be set")
-	}
-	last := agent.History[len(agent.History)-1]
-	if last.Role != "user" || !strings.Contains(last.Content, "Completion verification failed") {
-		t.Fatalf("expected completion verification feedback, got %#v", last)
 	}
 }
 
@@ -526,196 +380,5 @@ func TestNormalModeToolResultHandler_TracksWriteFailure(t *testing.T) {
 	last := agent.History[len(agent.History)-1]
 	if last.Role != "user" || !strings.Contains(last.Content, "[Tool Result for write_file]") {
 		t.Fatalf("expected tool result in history, got %#v", last)
-	}
-}
-
-func TestPlanStepToolResultHandler_TracksWriteStateAndFailure(t *testing.T) {
-	disableColors(t)
-
-	var out bytes.Buffer
-	cfg := newProjectMapDisabledConfig()
-	agent := newTurnRunnerTestAgent(&sequenceMockProvider{name: "test"}, cfg, "", &out)
-	runner := newTurnRunner(agent, context.Background())
-	state := &stepRunState{}
-	handler := newPlanStepToolResultHandler(runner, state)
-
-	tc := &tools.ToolCall{
-		Tool: "write_file",
-		Args: map[string]string{"path": "tracked.txt", "content": "x"},
-	}
-
-	handler.Handle(tc, "no change needed", nil)
-	if !state.stepHadWrites {
-		t.Fatal("expected stepHadWrites to be true")
-	}
-	if !state.stepHadNoChangeNeeded {
-		t.Fatal("expected stepHadNoChangeNeeded to be true")
-	}
-	if state.lastFailedResult != "" {
-		t.Fatalf("lastFailedResult = %q, want empty", state.lastFailedResult)
-	}
-
-	handler.Handle(tc, "exit status 1", nil)
-	if state.lastFailedResult != "exit status 1" {
-		t.Fatalf("lastFailedResult = %q, want %q", state.lastFailedResult, "exit status 1")
-	}
-}
-
-func TestExecuteStepV2_SelectorRetryRestartsStep(t *testing.T) {
-	disableColors(t)
-
-	var out bytes.Buffer
-	cfg := newProjectMapDisabledConfig()
-	cfg.Output.AssistantUpdates = api.AssistantUpdatesPhase
-
-	provider := &sequenceMockProvider{
-		name: "test",
-		responses: []string{
-			`{"tool":"write_file","args":{"path":"retry.txt","content":"x"}}`,
-			"Retry path completed.",
-		},
-	}
-	agent := newTurnRunnerTestAgent(provider, cfg, "1\n", &out, &failingWriteTool{})
-
-	p := &plan.Plan{
-		Summary: "Test plan",
-		Steps: []plan.PlanStep{
-			{ID: 1, Description: "Retry this step", Status: "pending", Tools: []string{"bash"}},
-		},
-	}
-
-	if err := agent.executeStepV2(context.Background(), p, &p.Steps[0], 0, newForcedHardRetryState("exit status 1")); err != nil {
-		t.Fatalf("executeStepV2() error = %v", err)
-	}
-	if provider.callCount != 2 {
-		t.Fatalf("provider.callCount = %d, want 2", provider.callCount)
-	}
-	if !strings.Contains(out.String(), "✓ Retry") || !strings.Contains(out.String(), "✓ Step 1 completed") {
-		t.Fatalf("expected retry selector flow output, got %q", out.String())
-	}
-}
-
-func TestExecuteStepV2_SelectorCommentRestartsStepWithInstructions(t *testing.T) {
-	disableColors(t)
-
-	var out bytes.Buffer
-	cfg := newProjectMapDisabledConfig()
-	cfg.Output.AssistantUpdates = api.AssistantUpdatesPhase
-
-	provider := &sequenceMockProvider{
-		name: "test",
-		responses: []string{
-			`{"tool":"write_file","args":{"path":"comment.txt","content":"x"}}`,
-			"Comment path completed.",
-		},
-	}
-	agent := newTurnRunnerTestAgent(provider, cfg, "2\nUse search first\n\n\n", &out, &failingWriteTool{})
-
-	p := &plan.Plan{
-		Summary: "Test plan",
-		Steps: []plan.PlanStep{
-			{ID: 1, Description: "Comment this step", Status: "pending", Tools: []string{"bash"}},
-		},
-	}
-
-	if err := agent.executeStepV2(context.Background(), p, &p.Steps[0], 0, newForcedHardRetryState("exit status 1")); err != nil {
-		t.Fatalf("executeStepV2() error = %v", err)
-	}
-	if provider.callCount != 2 {
-		t.Fatalf("provider.callCount = %d, want 2", provider.callCount)
-	}
-
-	foundComment := false
-	for _, msg := range agent.History {
-		if msg.Role == "user" && strings.Contains(msg.Content, "Use search first") {
-			foundComment = true
-			break
-		}
-	}
-	if !foundComment {
-		t.Fatalf("expected manual comment instructions in history, got %#v", agent.History)
-	}
-}
-
-func TestExecuteStepV2_SelectorSkipSkipsStep(t *testing.T) {
-	disableColors(t)
-
-	var out bytes.Buffer
-	cfg := newProjectMapDisabledConfig()
-
-	provider := &sequenceMockProvider{
-		name: "test",
-		responses: []string{
-			`{"tool":"write_file","args":{"path":"skip.txt","content":"x"}}`,
-		},
-	}
-	agent := newTurnRunnerTestAgent(provider, cfg, "3\n", &out, &failingWriteTool{})
-
-	p := &plan.Plan{
-		Summary: "Test plan",
-		Steps: []plan.PlanStep{
-			{ID: 1, Description: "Skip this step", Status: "pending", Tools: []string{"bash"}},
-		},
-	}
-
-	if err := agent.executeStepV2(context.Background(), p, &p.Steps[0], 0, newForcedHardRetryState("exit status 1")); err != nil {
-		t.Fatalf("executeStepV2() error = %v", err)
-	}
-	if provider.callCount != 1 {
-		t.Fatalf("provider.callCount = %d, want 1", provider.callCount)
-	}
-	if !strings.Contains(out.String(), "⏭️  Step 1 skipped by user") {
-		t.Fatalf("expected skip output, got %q", out.String())
-	}
-}
-
-func TestExecuteStepV2_SoftStallRetriesWithStrategyChange(t *testing.T) {
-	disableColors(t)
-
-	var out bytes.Buffer
-	cfg := newProjectMapDisabledConfig()
-	cfg.Output.AssistantUpdates = api.AssistantUpdatesPhase
-
-	provider := &sequenceMockProvider{
-		name: "test",
-		responses: []string{
-			`{"tool":"write_file","args":{"path":"soft.txt","content":"x"}}`,
-			"Strategy change completed.",
-		},
-	}
-	agent := newTurnRunnerTestAgent(provider, cfg, "", &out, &failingWriteTool{})
-
-	p := &plan.Plan{
-		Summary: "Test plan",
-		Steps: []plan.PlanStep{
-			{ID: 1, Description: "Recover with strategy change", Status: "pending", Tools: []string{"bash"}},
-		},
-	}
-
-	rs := &retryState{
-		count:       2,
-		lastErrorFP: errorFingerprint("exit status 1"),
-		sameCount:   stalledRetryThreshold - 1,
-	}
-
-	if err := agent.executeStepV2(context.Background(), p, &p.Steps[0], 0, rs); err != nil {
-		t.Fatalf("executeStepV2() error = %v", err)
-	}
-	if provider.callCount != 2 {
-		t.Fatalf("provider.callCount = %d, want 2", provider.callCount)
-	}
-	if !strings.Contains(out.String(), "Retrying with strategy change") {
-		t.Fatalf("expected strategy-change retry output, got %q", out.String())
-	}
-
-	foundMessage := false
-	for _, msg := range agent.History {
-		if msg.Role == "user" && strings.Contains(msg.Content, "A similar failure has now occurred 3 times in a row") {
-			foundMessage = true
-			break
-		}
-	}
-	if !foundMessage {
-		t.Fatalf("expected strategy-change retry message in history, got %#v", agent.History)
 	}
 }

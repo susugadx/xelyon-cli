@@ -108,7 +108,7 @@ var Commands = []CommandInfo{
 	},
 	{
 		Name:          "/project",
-		Description:   "Edit xelyon.yaml interactively (rules, hooks)",
+		Description:   "Edit xelyon.yaml interactively (rules, final checks)",
 		DescriptionJP: "xelyon.yamlを対話式で編集",
 	},
 	{
@@ -120,7 +120,7 @@ var Commands = []CommandInfo{
 	{
 		Name:          "/plan",
 		Args:          "[on|off]",
-		Description:   "Toggle Plan Mode (investigation -> plan -> approval -> execution)",
+		Description:   "Toggle Plan Mode (investigation -> plan -> approval; implementation happens on next normal turn)",
 		DescriptionJP: "Plan Modeを切り替え",
 	},
 	{

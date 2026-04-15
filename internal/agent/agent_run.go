@@ -40,10 +40,10 @@ func RunHeadlessWithConfig(ctx context.Context, query string, model string, prov
 	// プロジェクト設定読み込み（xelyon.yaml）
 	if pc := loadProjectConfig(); pc != nil {
 		agent.SystemPrompt = injectProjectConfig(agent.SystemPrompt, pc, "")
-		// headless では hooks 解決のみ（UI 表示不要）
-		if resolved := config.ResolveHooks(agent.cfg(), pc); resolved != nil {
+		// headless では final checks 解決のみ（UI 表示不要）
+		if resolved := config.ResolveFinalChecks(agent.cfg(), pc); resolved != nil {
 			cfg := agent.cfg()
-			cfg.Hooks = *resolved
+			cfg.FinalChecks = *resolved
 		}
 	}
 	injectProjectMap(agent, "")
@@ -147,7 +147,8 @@ func RunHeadlessWithConfig(ctx context.Context, query string, model string, prov
 
 			// ファイル変更履歴を記録
 			if change != nil {
-				agent.changeStack = append(agent.changeStack, *change)
+				agent.appendChange(*change)
+				agent.noteApprovedPlanRecordedChange(change)
 			}
 		}
 

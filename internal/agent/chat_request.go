@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os/exec"
-	"strings"
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/agent/token"
@@ -13,10 +11,11 @@ import (
 )
 
 type chatRequest struct {
-	input      string
-	image      *api.ImageData
-	oneShot    bool
-	startStats SessionStats
+	input               string
+	image               *api.ImageData
+	oneShot             bool
+	startStats          SessionStats
+	approvedPlanHandoff string
 }
 
 // chatCore は chat / ChatOnce の共有実装
@@ -68,12 +67,8 @@ func (a *Agent) beginTaskTracking() {
 	prevChanges := len(a.changeStack) - a.taskChangeOffset
 	a.taskChangeOffset = len(a.changeStack)
 
-	a.taskBaseCommitHash = ""
 	a.taskTestResult = nil
 	a.taskTestCommand = ""
-	if out, err := exec.Command("git", "rev-parse", "HEAD").Output(); err == nil {
-		a.taskBaseCommitHash = strings.TrimSpace(string(out))
-	}
 
 	if prevChanges > 0 {
 		yellow.Fprintf(a.output(), "⚠️  %d uncommitted changes from previous task\n", prevChanges)
@@ -90,11 +85,13 @@ func (a *Agent) beginChatRequestContext() (context.Context, func()) {
 	a.lastCancelReason = ""
 	a.cancelFunc = cancel
 	a.requestCtx = ctx
+	a.activeApprovedPlan = ""
 	a.debugCancelf("request started (timeout=%s, model=%s, provider=%s)", timeout, a.CurrentModel, a.ProviderName)
 
 	cleanup := func() {
 		a.debugCancelf("request finished (ctx_err=%v, cancel_reason=%q)", ctx.Err(), a.lastCancelReason)
 		cancel()
+		a.activeApprovedPlan = ""
 		a.requestCtx = nil
 		a.cancelFunc = nil
 		a.lastCancelReason = ""
@@ -117,7 +114,7 @@ func (a *Agent) executeChatRequest(ctx context.Context, req *chatRequest) error 
 	}
 
 	a.registry().SetExcludedTools(toolVisibility.excluded())
-	return a.runNormalMode(ctx, req.input, req.image)
+	return a.runNormalChatRequest(ctx, req)
 }
 
 func (a *Agent) retryChatRequest(req *chatRequest) error {
@@ -125,7 +122,18 @@ func (a *Agent) retryChatRequest(req *chatRequest) error {
 	if a.PlanModeEnabled {
 		return a.RunPlanMode(ctx, req.input)
 	}
-	return a.runNormalMode(ctx, req.input, req.image)
+	return a.runNormalChatRequest(ctx, req)
+}
+
+func (a *Agent) runNormalChatRequest(ctx context.Context, req *chatRequest) error {
+	a.beginApprovedPlanHandoff(req)
+
+	if err := a.runNormalMode(ctx, req.input, req.image); err != nil {
+		return err
+	}
+
+	a.finishApprovedPlanHandoff(req)
+	return nil
 }
 
 func (a *Agent) handleChatRequestError(req *chatRequest, err error) error {

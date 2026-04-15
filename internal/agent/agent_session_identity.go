@@ -20,6 +20,7 @@ func (a *Agent) syncSessionPersistenceState() {
 		return
 	}
 
+	a.syncApprovedPlanStateToSession()
 	a.syncSessionRuntimeIdentity()
 	a.syncSavedResponseContextFromProvider()
 }
@@ -156,12 +157,10 @@ func (a *Agent) restoreSessionResponseIDForCurrentContext() {
 }
 
 func (a *Agent) applyLoadedSession(session *history.Session) {
-	if a == nil || session == nil {
+	if a == nil {
 		return
 	}
 
-	a.session = session
-	a.History = session.ToAPIMessages()
-	a.RestoreCompactedState(session)
+	a.restoreSessionConversation(session)
 	a.reconcileSessionForCurrentRuntime()
 }

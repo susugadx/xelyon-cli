@@ -18,7 +18,7 @@ type retryState struct {
 const stalledRetryThreshold = 3
 
 // stalledHardThreshold は stalled 検出後にさらに何回失敗したら hard escalation するか。
-// plan mode では selector UI、normal mode では AI に委譲。
+// hard escalation 時は caller が外部介入方針（AI への委譲など）を選ぶ。
 const stalledHardThreshold = 2
 
 // stalledLevel は空回り検出の深刻度。
@@ -27,13 +27,13 @@ type stalledLevel int
 const (
 	stalledNone stalledLevel = iota // 空回りなし → 通常リトライ
 	stalledSoft                     // 空回りヒント → retry 指示を強化して続行
-	stalledHard                     // 空回り確定 → 外部介入（selector / AI 委譲）
+	stalledHard                     // 空回り確定 → 外部介入
 )
 
 // recordFailure はエラーを記録し、空回りの深刻度を返す。
 //   - stalledNone: 新しいエラーまたは閾値未到達 → 通常リトライ
 //   - stalledSoft: 同一 fingerprint が閾値に達した → retry 指示を強化して続行
-//   - stalledHard: soft 後もさらに同一エラーが続いた → 外部介入（selector / AI 委譲）
+//   - stalledHard: soft 後もさらに同一エラーが続いた → 外部介入
 func (s *retryState) recordFailure(errorOutput string) stalledLevel {
 	fp := errorFingerprint(errorOutput)
 	if fp == s.lastErrorFP {
@@ -117,43 +117,4 @@ func normalizeErrorText(s string) string {
 		}
 	}
 	return b.String()
-}
-
-// planModeRetryInstruction は Plan Mode の retry プロンプトを段階的に返す。
-func planModeRetryInstruction(attempt int) string {
-	const constraint = `
-Reuse information already obtained from the failed command/output.
-Do not restart broad investigation unless the current evidence is insufficient.
-Prefer the smallest clarifying step before expanding the plan.`
-
-	switch {
-	case attempt <= 1:
-		return `Do not react blindly.
-First, identify the concrete cause of failure in 1-2 sentences using the existing output.
-Point to the exact file/function/command/step involved.
-Then choose the smallest next action that can resolve or verify the issue immediately.
-
-Do not broaden investigation yet unless the current failure output is insufficient.
-
-Do NOT skip this step. The issue must be resolved before proceeding.` + constraint
-	case attempt == 2:
-		return `The previous attempt did not work.
-
-Do not repeat the same step pattern.
-Briefly explain why the previous attempt failed.
-If the cause is still unclear, create the smallest possible reproduction or targeted verification via bash.
-If the cause is already clear, skip extra test creation and apply the next evidence-based step directly.
-
-Then verify again.
-
-Do NOT skip this step. The issue must be resolved before proceeding.` + constraint
-	default:
-		return `Multiple retries have failed.
-
-Your current plan is not working.
-Explain which assumption was wrong.
-Change strategy fundamentally and choose the smallest different step that can validate the new hypothesis quickly.
-
-Do NOT skip this step. The issue must be resolved before proceeding.` + constraint
-	}
 }

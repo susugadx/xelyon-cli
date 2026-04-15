@@ -230,25 +230,21 @@ var Sections = map[string]SectionInfo{
 			"headless": "bool",
 		},
 	},
-	"hooks": {
-		StructName: "HooksConfig",
-		Title:      "フック設定",
-		Icon:       "🏁",
+	"final_checks": {
+		StructName: "FinalChecksConfig",
+		Title:      "Final Checks 設定",
+		Icon:       "🧪",
 		Comments: []string{
-			"タスク完了時に自動実行するシェルコマンド（LSPチェック後）",
+			"completed_with_changes 時に自動実行する final checks コマンド",
 			"変更ファイルは XELYON_CHANGED_FILES 環境変数で参照可能",
 		},
 		Fields: map[string]string{
-			"on_completion":    "完了時に実行するコマンド（例: go test ./...）",
-			"on_step_complete": "ステップ完了時に実行するコマンド（Plan Mode用）",
-			"timeout":          "コマンドタイムアウト（秒）（デフォルト: 60）",
-			"max_retry":        "フック失敗時の最大リトライ回数（デフォルト: 3）",
+			"commands": "completed_with_changes 時に実行する final checks コマンド（例: go test ./...）",
+			"timeout":  "final checks コマンドタイムアウト（秒）（デフォルト: 600）",
 		},
 		FieldTypes: map[string]string{
-			"on_completion":    "[]string",
-			"on_step_complete": "[]string",
-			"timeout":          "int",
-			"max_retry":        "int",
+			"commands": "[]string",
+			"timeout":  "int",
 		},
 	},
 }
@@ -268,7 +264,7 @@ var SectionOrder = []string{
 	"web_search",
 	"sub_agent",
 	"mcp",
-	"hooks",
+	"final_checks",
 }
 
 // CategoryOrder is the UI grouping order.
@@ -284,7 +280,7 @@ var CategoryOrder = []string{
 	"web_search",
 	"sub_agent",
 	"mcp",
-	"hooks",
+	"final_checks",
 }
 
 // SectionToCategory maps sections to UI categories.
@@ -302,7 +298,7 @@ var SectionToCategory = map[string]string{
 	"web_search":       "web_search",
 	"sub_agent":        "sub_agent",
 	"mcp":              "mcp",
-	"hooks":            "hooks",
+	"final_checks":     "final_checks",
 }
 
 // Categories contains category display metadata.
@@ -351,9 +347,9 @@ var Categories = map[string]CategoryInfo{
 		DisplayName: "MCP Servers",
 		Icon:        "🔌",
 	},
-	"hooks": {
-		DisplayName: "Hooks",
-		Icon:        "🏁",
+	"final_checks": {
+		DisplayName: "Final Checks",
+		Icon:        "🧪",
 	},
 }
 
