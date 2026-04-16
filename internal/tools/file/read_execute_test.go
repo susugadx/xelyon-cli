@@ -69,8 +69,8 @@ func TestExecuteReadFile_QuietModeSuppressesStdout(t *testing.T) {
 		os.Stdout = oldStdout
 	}()
 
-	common.SetQuietMode(true)
-	defer common.SetQuietMode(false)
+	restoreQuiet := common.PushQuietMode()
+	defer restoreQuiet()
 
 	result := ExecuteReadFile(filepath.Join(tmpDir, "quiet.txt"), 0, 0)
 	_ = w.Close()
@@ -105,8 +105,8 @@ func TestExecuteReadFiles_QuietModeSuppressesStdout(t *testing.T) {
 		os.Stdout = oldStdout
 	}()
 
-	common.SetQuietMode(true)
-	defer common.SetQuietMode(false)
+	restoreQuiet := common.PushQuietMode()
+	defer restoreQuiet()
 
 	result := ExecuteReadFiles([]string{
 		filepath.Join(tmpDir, "file1.txt"),

@@ -31,7 +31,6 @@ import (
 	toolsdev "github.com/susugadx/xelyon-cli/internal/tools/dev"
 	_ "github.com/susugadx/xelyon-cli/internal/tools/file"
 	_ "github.com/susugadx/xelyon-cli/internal/tools/gathercontext"
-	_ "github.com/susugadx/xelyon-cli/internal/tools/navigation"
 	_ "github.com/susugadx/xelyon-cli/internal/tools/planning"
 	_ "github.com/susugadx/xelyon-cli/internal/tools/search"
 )

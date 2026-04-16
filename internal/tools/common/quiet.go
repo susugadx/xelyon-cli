@@ -35,17 +35,6 @@ func PushQuietMode() func() {
 	}
 }
 
-// SetQuietMode は旧 API 互換ラッパー。
-// absolute setter ではなく、enabled=true で Enter、false で Exit を行う。
-// 新規コードでは PushQuietMode / EnterQuietMode / ExitQuietMode を使う。
-func SetQuietMode(enabled bool) {
-	if enabled {
-		EnterQuietMode()
-		return
-	}
-	ExitQuietMode()
-}
-
 // IsQuietMode は現在 1 つ以上 quiet 実行中か返す。
 func IsQuietMode() bool {
 	return atomic.LoadInt32(&quietModeCount) > 0

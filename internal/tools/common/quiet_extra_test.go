@@ -5,59 +5,40 @@ import (
 	"testing"
 )
 
-func TestSetQuietMode_Enable(t *testing.T) {
-	// テスト前の状態を保存・復元
+func TestEnterExitQuietMode_ReferenceCount(t *testing.T) {
 	saved := atomic.LoadInt32(&quietModeCount)
 	defer atomic.StoreInt32(&quietModeCount, saved)
 
 	atomic.StoreInt32(&quietModeCount, 0)
 
-	SetQuietMode(true)
+	EnterQuietMode()
+	EnterQuietMode()
 	if !IsQuietMode() {
-		t.Error("expected IsQuietMode() == true after SetQuietMode(true)")
+		t.Fatal("expected quiet mode enabled after EnterQuietMode")
 	}
-}
 
-func TestSetQuietMode_Disable(t *testing.T) {
-	saved := atomic.LoadInt32(&quietModeCount)
-	defer atomic.StoreInt32(&quietModeCount, saved)
+	ExitQuietMode()
+	if !IsQuietMode() {
+		t.Fatal("expected quiet mode to remain enabled until all references exit")
+	}
 
-	// まず有効にしてから無効にする
-	atomic.StoreInt32(&quietModeCount, 1)
-
-	SetQuietMode(false)
+	ExitQuietMode()
 	if IsQuietMode() {
-		t.Error("expected IsQuietMode() == false after SetQuietMode(false)")
+		t.Fatal("expected quiet mode disabled after final ExitQuietMode")
 	}
 }
 
-func TestSetQuietMode_EnableDisable(t *testing.T) {
+func TestExitQuietMode_AtZero_NoOp(t *testing.T) {
 	saved := atomic.LoadInt32(&quietModeCount)
 	defer atomic.StoreInt32(&quietModeCount, saved)
 
 	atomic.StoreInt32(&quietModeCount, 0)
 
-	// 有効化
-	SetQuietMode(true)
-	if !IsQuietMode() {
-		t.Error("expected quiet mode enabled after SetQuietMode(true)")
-	}
-
-	// 無効化
-	SetQuietMode(false)
+	ExitQuietMode()
 	if IsQuietMode() {
-		t.Error("expected quiet mode disabled after SetQuietMode(false)")
+		t.Fatal("expected quiet mode to stay disabled when exiting at zero")
 	}
-
-	// 再度有効化
-	SetQuietMode(true)
-	if !IsQuietMode() {
-		t.Error("expected quiet mode re-enabled after second SetQuietMode(true)")
-	}
-
-	// 再度無効化
-	SetQuietMode(false)
-	if IsQuietMode() {
-		t.Error("expected quiet mode disabled after second SetQuietMode(false)")
+	if got := atomic.LoadInt32(&quietModeCount); got != 0 {
+		t.Fatalf("expected quietModeCount to remain 0, got %d", got)
 	}
 }
