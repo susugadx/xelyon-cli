@@ -227,63 +227,6 @@ sub_agent:
 
 ---
 
-## コードレビュー
-
-`/review` コマンドでセッション中の変更をAIがレビューします。
-
-```bash
-# セッション中の変更をレビュー
-> /review
-
-# 特定のファイル/ディレクトリ
-> /review internal/api/
-
-# globパターン
-> /review **/*.go --security
-```
-
-### フラグ一覧
-
-| フラグ | 短縮形 | 説明 |
-|--------|--------|------|
-| `--all` | `-a` | すべてのgit変更をレビュー |
-| `--security` | `-s` | セキュリティフォーカス |
-| `--test` | `-t` | テストカバレッジフォーカス |
-| `--max-issues N` | | 表示する最大Issue数 |
-
-### 検出ルール
-
-- **セキュリティ**: コマンドインジェクション、パストラバーサル、弱い暗号化
-- **一般**: 大きな差分、TODO/FIXME追加、ドキュメント不足
-- **テスト**: テストカバレッジ不足、アサーション不足
-
-レポートは `~/.xelyon/reviews/` に保存されます。
-
----
-
-## リファクタリング
-
-`/refactor` コマンドでコードのリファクタリング分析を行います（静的解析のみ）。
-
-```bash
-# 基本分析
-> /refactor
-
-# 特定タイプのみ
-> /refactor --type split-file
-
-# 閾値カスタマイズ
-> /refactor --max-file-lines 300 --max-func-lines 50
-```
-
-### フラグ一覧
-
-| フラグ | 説明 |
-|--------|------|
-| `--type` | フィルタ（split-file, extract-method, dry, rename） |
-| `--max-file-lines N` | ファイル行数上限 |
-| `--max-func-lines N` | 関数行数上限 |
-
 ---
 
 ## 確認UI（y/n/c）
@@ -357,19 +300,11 @@ xelyon --dry-run
 > /exit
 ```
 
-### コードレビュー（静的解析）
-
-```bash
-> /review --security
-> /review **/*.go --test
-```
-
 ### 日常的な開発
 
 ```bash
 $ xelyon
 > バグ #123 を修正して
-> /review
 > /exit
 ```
 
