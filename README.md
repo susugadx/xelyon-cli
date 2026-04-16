@@ -390,7 +390,7 @@ final_checks:
 | [設定リファレンス](docs/config.md) | config.yaml と環境変数 |
 | [MCP連携](docs/mcp.md) | 外部ツール追加 |
 | [LSP連携](docs/lsp.md) | 言語サーバー連携（23言語対応） |
-| [使い方詳細](docs/usage.md) | 複数行入力、画像入力、レビュー機能など |
+| [使い方詳細](docs/usage.md) | 複数行入力、画像入力、サブエージェント委譲など |
 
 ## 開発に参加する
 
