@@ -21,10 +21,10 @@ make e2e
 
 | テスト | 内容 |
 |--------|------|
-| TestE2E_SearchCode | search_code ツールで `func main` を検索 |
+| TestE2E_SearchCode | gather_context ツールで `func main` を検索 |
 | TestE2E_ReadFile | read_file ツールで go.mod を読み込み |
 | TestE2E_ReadFileBatch | read_file ツールで go.mod + Makefile を一括読み込み |
-| TestE2E_SearchCodeSymbolResolve | search_code ツールでシンボル自動解決 |
+| TestE2E_SearchCodeSymbolResolve | gather_context ツールでシンボル解決 |
 | TestE2E_SimpleQuery | 自然言語での調査タスク |
 
 ## コスト

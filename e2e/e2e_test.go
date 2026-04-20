@@ -28,21 +28,21 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// TestE2E_SearchCode はsearch_codeツールが正常に実行されることを確認する
+// TestE2E_SearchCode は gather_context 経由のコード検索が正常に実行されることを確認する
 func TestE2E_SearchCode(t *testing.T) {
 	t.Parallel()
 	result := runHeadless(t,
-		`Use the search_code tool to search for the pattern "func main" and report what files contain it. Do not use any other tools.`)
+		`Use the gather_context tool to search for the pattern "func main" and report what files contain it. Do not use any other tools.`)
 
 	assertSuccess(t, result)
-	assertToolUsed(t, result, "search_code")
+	assertToolUsed(t, result, "gather_context")
 
-	output, ok := findToolOutput(result, "search_code")
+	output, ok := findToolOutput(result, "gather_context")
 	if !ok {
-		t.Fatal("search_code output not found")
+		t.Fatal("gather_context output not found")
 	}
 	if !strings.Contains(output, "main.go") {
-		t.Errorf("expected search_code output to contain main.go, got: %s", truncate(output, 200))
+		t.Errorf("expected gather_context output to contain main.go, got: %s", truncate(output, 200))
 	}
 }
 
@@ -87,14 +87,14 @@ func TestE2E_ReadFileBatch(t *testing.T) {
 	}
 }
 
-// TestE2E_SearchCodeSymbolResolve はsearch_codeのシンボル自動解決が正常に実行されることを確認する
+// TestE2E_SearchCodeSymbolResolve は gather_context のシンボル解決が正常に実行されることを確認する
 func TestE2E_SearchCodeSymbolResolve(t *testing.T) {
 	t.Parallel()
 	result := runHeadless(t,
-		`Use the search_code tool to search for the symbol "main" and report what you found. Do not use any other tools.`)
+		`Use the gather_context tool to search for the symbol "main" and report what you found. Do not use any other tools.`)
 
 	assertSuccess(t, result)
-	assertToolUsed(t, result, "search_code")
+	assertToolUsed(t, result, "gather_context")
 }
 
 // TestE2E_SimpleQuery は簡単な調査タスクが完了することを確認する
