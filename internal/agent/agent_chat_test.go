@@ -23,6 +23,28 @@ func TestAgent_Cleanup_NoStorage(t *testing.T) {
 	agent.Cleanup()
 }
 
+func TestAgent_Cleanup_PersistsSession(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	provider := &mockProvider{name: "test"}
+	agent := newAgentChatTestAgent(t, provider)
+	if agent.storage == nil || agent.session == nil {
+		t.Fatal("agent should initialize storage/session")
+	}
+
+	agent.session.AddMessage("user", "persist me", agent.CurrentModel)
+	agent.Cleanup()
+
+	loaded, err := agent.storage.Load(agent.session.ID)
+	if err != nil {
+		t.Fatalf("storage.Load() error = %v", err)
+	}
+	msgs := loaded.ToAPIMessages()
+	if len(msgs) != 1 || msgs[0].Content != "persist me" {
+		t.Fatalf("loaded messages = %#v, want one persisted message", msgs)
+	}
+}
+
 func TestAgent_SwitchProvider_Success(t *testing.T) {
 	os.Setenv("DEEPSEEK_API_KEY", "test-key")
 	defer os.Unsetenv("DEEPSEEK_API_KEY")

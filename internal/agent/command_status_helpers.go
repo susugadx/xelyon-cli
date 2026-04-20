@@ -1,0 +1,173 @@
+package agent
+
+import (
+	"fmt"
+	"io"
+	"os"
+	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/agent/viewfmt"
+	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/tools/subagent"
+	"github.com/susugadx/xelyon-cli/internal/ui"
+)
+
+func requestCacheMode(usage api.Usage) string {
+	switch {
+	case usage.CachedInputTokens > 0 && usage.CacheCreationTokens > 0:
+		return "read + create"
+	case usage.CachedInputTokens > 0:
+		return "read"
+	case usage.CacheCreationTokens > 0:
+		return "create"
+	default:
+		return "none"
+	}
+}
+
+func requestCacheHitRate(usage api.Usage) float64 {
+	if usage.InputTokens <= 0 {
+		return 0
+	}
+	return float64(usage.CachedInputTokens) / float64(usage.InputTokens) * 100.0
+}
+
+func requestUsageCost(provider, model string, usage api.Usage) float64 {
+	return CalculateRequestCostWithCache(provider, model, usage) + usage.StorageCost
+}
+
+func buildLastRequestTable(provider, model string, usage *api.Usage, costOverride *float64) *ui.Table {
+	return renderLastRequestTable(provider, model, usage, costOverride)
+}
+
+func lastRequestUsageForStatus(stats *SessionStats) (*api.Usage, *float64) {
+	if stats == nil {
+		return nil, nil
+	}
+	if stats.LastTurnUsage != nil {
+		cost := stats.LastTurnCost
+		return stats.LastTurnUsage, &cost
+	}
+	return stats.LastUsage, nil
+}
+
+func getSessionFileInfo(agent *Agent) (string, int64) {
+	sessionPath := ""
+	sessionSize := int64(0)
+	if agent.session != nil {
+		sessionPath = fmt.Sprintf("~/.xelyon/history/%s.jsonl", agent.session.ID)
+		if agent.storage != nil {
+			homeDir, err := os.UserHomeDir()
+			if err == nil {
+				fullPath := fmt.Sprintf("%s/.xelyon/history/%s.jsonl", homeDir, agent.session.ID)
+				if size, err := GetSessionFileSize(fullPath); err == nil {
+					sessionSize = size
+				}
+			}
+		}
+	}
+	return sessionPath, sessionSize
+}
+
+func sessionCacheHitRate(stats *SessionStats) float64 {
+	if stats.InputTokens <= 0 {
+		return 0
+	}
+	return float64(stats.CachedInputTokens) / float64(stats.InputTokens) * 100.0
+}
+
+func buildSessionTokenTable(agent *Agent, stats *SessionStats, subSummary *subagent.SubAgentSummary) *ui.Table {
+	return renderSessionTokenTable(agent, stats, subSummary)
+}
+
+func tokenRowLabel(hasSubAgents bool, scope, label string) string {
+	if !hasSubAgents {
+		return label
+	}
+	return scope + " " + label
+}
+
+func subAgentCacheHitRate(summary subagent.SubAgentSummary) float64 {
+	if summary.TotalInput <= 0 {
+		return 0
+	}
+	return float64(summary.TotalCached) / float64(summary.TotalInput) * 100.0
+}
+
+func subAgentTotalTokens(summary subagent.SubAgentSummary) int {
+	return summary.TotalInput + summary.TotalOutput + summary.TotalThinking
+}
+
+func printSessionSections(agent *Agent) {
+	renderSessionSections(agent)
+}
+
+func formatUSD(value float64) string {
+	return viewfmt.USD(value)
+}
+
+func formatUSDWithSuffix(value float64) string {
+	return viewfmt.USDWithSuffix(value)
+}
+
+func formatParentCost(providerName string, cost float64) string {
+	if strings.EqualFold(providerName, "ollama") && cost == 0 {
+		return "Free (local)"
+	}
+	return formatUSDWithSuffix(cost)
+}
+
+func formatSubAgentNumber(value int, pending bool) string {
+	if pending {
+		return "-"
+	}
+	return formatNumber(value)
+}
+
+func formatSubAgentCost(cost float64, pending bool) string {
+	if pending {
+		return "-"
+	}
+	return formatUSD(cost)
+}
+
+func formatSubAgentError(status, message string) string {
+	if status == "running" {
+		return ""
+	}
+	if status != "error" {
+		return ""
+	}
+	message = firstStatusLine(strings.TrimSpace(message))
+	if message == "" {
+		return "unknown error"
+	}
+	return truncateStatusText(message, 120)
+}
+
+func firstStatusLine(s string) string {
+	return viewfmt.FirstLine(s)
+}
+
+func truncateStatusText(s string, maxLen int) string {
+	return viewfmt.Truncate(s, maxLen)
+}
+
+func printSubAgentStats(out io.Writer, summary subagent.SubAgentSummary) {
+	renderSubAgentStats(out, summary)
+}
+
+// printToolObservabilitySection はツール選択のobservabilityセクションを表示する。
+func printToolObservabilitySection(out io.Writer, stats *SessionStats) {
+	renderToolObservabilitySection(out, stats)
+}
+
+// handleStatsCommand は /status の互換エイリアス
+func handleStatsCommand(agent *Agent) bool {
+	return handleStatusCommand(agent)
+}
+
+// formatNumber はカンマ区切りの数値を返す
+func formatNumber(n int) string {
+	return viewfmt.Number(n)
+}
