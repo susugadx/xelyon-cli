@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
@@ -200,6 +201,50 @@ func TestHandleStreamingResponse_UsageWithoutMessageStart(t *testing.T) {
 	}
 	if gotUsage.InputTokens != 7 || gotUsage.OutputTokens != 9 {
 		t.Fatalf("usage callback = %+v, want input=7 output=9", gotUsage)
+	}
+}
+
+func TestHandleStreamingResponse_ContextCanceledReturnsPartialWithoutError(t *testing.T) {
+	p := New("test-key")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	ctx = api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesOff)
+	var errOut bytes.Buffer
+	ctx = ui.WithRuntime(ctx, ui.NewRuntime(strings.NewReader(""), io.Discard, &errOut))
+
+	reader, writer := io.Pipe()
+	resp := &http.Response{
+		Header: http.Header{"Content-Type": []string{"text/event-stream"}},
+		Body:   io.NopCloser(reader),
+	}
+
+	written := make(chan struct{})
+	go func() {
+		_, _ = io.WriteString(writer, marshalStreamEvent(t, StreamEvent{
+			Type:  "content_block_delta",
+			Index: 0,
+			Delta: &Delta{Type: "text_delta", Text: "Hello"},
+		})+"\n\n")
+		close(written)
+		<-ctx.Done()
+		_ = writer.Close()
+	}()
+
+	go func() {
+		<-written
+		time.Sleep(20 * time.Millisecond)
+		cancel()
+	}()
+
+	result, err := p.handleStreamingResponse(ctx, resp, ui.NewSpinnerWithWriter(io.Discard))
+	if err != nil {
+		t.Fatalf("handleStreamingResponse() error = %v, want nil", err)
+	}
+	if result != "Hello" {
+		t.Fatalf("handleStreamingResponse() = %q, want %q", result, "Hello")
+	}
+	if !strings.Contains(errOut.String(), "Partial result returned.") {
+		t.Fatalf("stderr = %q, want partial warning", errOut.String())
 	}
 }
 

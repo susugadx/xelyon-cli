@@ -1,7 +1,6 @@
 package groq
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -13,6 +12,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/api/providers/openai"
+	openaicompatstream "github.com/susugadx/xelyon-cli/internal/api/providers/openai_compat_stream"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -28,13 +28,6 @@ func init() {
 var yellow = color.New(color.FgYellow)
 
 const defaultGroqURL = "https://api.groq.com/openai/v1/chat/completions"
-
-// toolCallAccumulator はストリーミング中のtool_callを蓄積する
-type toolCallAccumulator struct {
-	ID        string
-	Name      string
-	Arguments strings.Builder
-}
 
 // Provider はGroq APIのプロバイダー実装（OpenAI互換）
 type Provider struct {
@@ -143,124 +136,53 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 
 // handleStreamingResponse はストリーミングレスポンスを処理
 func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
-	out := api.OutputWriterFromContext(ctx)
 	errOut := api.ErrorWriterFromContext(ctx)
-	streamAssistantText := api.ShouldStreamAssistantText(ctx)
-	var fullResponse strings.Builder
-	var toolCallsOutput strings.Builder
-	toolCalls := make(map[int]*toolCallAccumulator)
-	scanner := bufio.NewScanner(resp.Body)
-	firstChunk := true
+	toolCalls := openaicompatstream.NewToolCallCollector()
 	var lastUsage *api.Usage
-	var contentNewlineEmitted bool // スピナー上書き防止用
 
-	for scanner.Scan() {
-		// contextキャンセルチェック
-		select {
-		case <-ctx.Done():
-			spinner.Stop()
-			return "", ctx.Err()
-		default:
+	parser := func(line string) (string, bool, error) {
+		data, done, handled := openaicompatstream.ParseSSEDataLine(line)
+		if !handled {
+			return "", false, nil
+		}
+		if done {
+			return "", true, nil
 		}
 
-		line := scanner.Text()
-		if strings.HasPrefix(line, "data: ") {
-			data := strings.TrimPrefix(line, "data: ")
-			if data == "[DONE]" {
-				break
-			}
-
-			var streamResp api.StreamResponse
-			if err := json.Unmarshal([]byte(data), &streamResp); err != nil {
-				// JSONパースエラーを警告（データ損失を防ぐため記録）
-				fmt.Fprintf(errOut, "⚠️  Warning: failed to parse streaming response: %v\n", err)
-				continue
-			}
-
-			// Usage情報を追跡（最終チャンクに含まれる）
-			if streamResp.Usage != nil {
-				cachedTokens := 0
-				if streamResp.Usage.PromptTokensDetails != nil {
-					cachedTokens = streamResp.Usage.PromptTokensDetails.CachedTokens
-				}
-				lastUsage = &api.Usage{
-					InputTokens:       streamResp.Usage.PromptTokens,
-					OutputTokens:      streamResp.Usage.CompletionTokens,
-					CachedInputTokens: cachedTokens,
-				}
-			}
-
-			if len(streamResp.Choices) > 0 {
-				choice := streamResp.Choices[0]
-
-				// Function Calling: tool_calls を蓄積
-				for _, tc := range choice.Delta.ToolCalls {
-					acc, exists := toolCalls[tc.Index]
-					if !exists {
-						acc = &toolCallAccumulator{}
-						toolCalls[tc.Index] = acc
-					}
-					if tc.ID != "" {
-						acc.ID = tc.ID
-					}
-					if tc.Function.Name != "" {
-						acc.Name = tc.Function.Name
-					}
-					if tc.Function.Arguments != "" {
-						// スピナーを再表示
-						if !spinner.IsActive() {
-							if streamAssistantText && !firstChunk && !contentNewlineEmitted {
-								_, _ = fmt.Fprintln(out)
-								contentNewlineEmitted = true
-							}
-							spinner.Start(ui.SpinnerMessageForTool(acc.Name))
-						}
-						acc.Arguments.WriteString(tc.Function.Arguments)
-					}
-				}
-
-				// Function Calling: finish_reason == "tool_calls" で完了
-				if choice.FinishReason == "tool_calls" {
-					// tool_calls を内部JSON形式に変換
-					for i := 0; i < len(toolCalls); i++ {
-						acc := toolCalls[i]
-						if acc == nil {
-							continue
-						}
-						tc := &api.OpenAIToolCall{
-							ID:   acc.ID,
-							Type: "function",
-							Function: api.OpenAIToolCallFunction{
-								Name:      acc.Name,
-								Arguments: acc.Arguments.String(),
-							},
-						}
-						if toolJSON, err := openai.ConvertToolCallToToolJSON(tc); err == nil {
-							toolCallsOutput.WriteString(toolJSON)
-						}
-					}
-				}
-
-				content := choice.Delta.Content
-
-				// 最初のコンテンツでスピナー停止 + AI発言ヘッダー表示
-				if firstChunk && content != "" {
-					spinner.Stop()
-					firstChunk = false
-					api.PrintAIHeaderWithContext(ctx)
-				}
-
-				if streamAssistantText {
-					_, _ = fmt.Fprint(out, content)
-				}
-				fullResponse.WriteString(content)
-			}
+		chunk, err := openaicompatstream.DecodeChunk(data)
+		if err != nil {
+			// JSONパースエラーは警告して継続（既存方針を維持）
+			fmt.Fprintf(errOut, "⚠️  Warning: failed to parse streaming response: %v\n", err)
+			return "", false, nil
 		}
+
+		usage, err := openaicompatstream.DecodeStandardUsage(chunk.Usage)
+		if err != nil {
+			fmt.Fprintf(errOut, "⚠️  Warning: failed to parse streaming response: %v\n", err)
+			return "", false, nil
+		}
+		if usage != nil {
+			lastUsage = usage
+		}
+
+		if len(chunk.Choices) == 0 {
+			return "", false, nil
+		}
+
+		choice := chunk.Choices[0]
+		toolCalls.Append(choice.Delta.ToolCalls, func(toolName string) {
+			if !spinner.IsActive() {
+				spinner.Start(ui.SpinnerMessageForTool(toolName))
+			}
+		})
+
+		// finish_reason=="tool_calls" でも usage 追跡のため [DONE] まで継続する。
+		return choice.Delta.Content, false, nil
 	}
 
-	// スキャナーのI/Oエラーチェック
-	if err := scanner.Err(); err != nil {
-		return "", fmt.Errorf("stream reading error: %w", err)
+	content, err := api.ParseStreamingResponse(ctx, resp, spinner, parser)
+	if err != nil {
+		return "", err
 	}
 
 	// Usage callback
@@ -268,19 +190,14 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 		p.usageCallback(*lastUsage)
 	}
 
-	// tool_calls がある場合はそれを返す
-	if toolCallsOutput.Len() > 0 {
-		spinner.Stop()
-		if streamAssistantText && fullResponse.Len() > 0 && !contentNewlineEmitted {
-			_, _ = fmt.Fprintln(out)
-		}
-		return fullResponse.String() + toolCallsOutput.String(), nil
+	toolCallsOutput := openaicompatstream.BuildToolCallJSON(
+		toolCalls.ToOpenAIToolCalls(),
+		openai.ConvertToolCallToToolJSON,
+	)
+	if toolCallsOutput != "" {
+		return content + toolCallsOutput, nil
 	}
-
-	if streamAssistantText && !contentNewlineEmitted {
-		_, _ = fmt.Fprintln(out)
-	}
-	return fullResponse.String(), nil
+	return content, nil
 }
 
 // handleNonStreamingResponse は非ストリーミングレスポンスを処理（フォールバック）

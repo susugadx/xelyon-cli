@@ -11,6 +11,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/api/providers/openai"
+	openaicompatstream "github.com/susugadx/xelyon-cli/internal/api/providers/openai_compat_stream"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -164,20 +165,11 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	return p.handleStreamingResponse(ctx, resp, spinner)
 }
 
-// toolCallAccumulator は分割された tool_calls を累積するための構造体
-type toolCallAccumulator struct {
-	ID        string
-	Name      string
-	Arguments strings.Builder
-}
-
 // handleStreamingResponse はストリーミングレスポンスを処理（tool_calls対応）
 func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
 	out := api.OutputWriterFromContext(ctx)
 	errOut := api.ErrorWriterFromContext(ctx)
-	// ストリーミングで分割されて送られてくる tool_calls を累積
-	toolCalls := make(map[int]*toolCallAccumulator)
-	var toolCallsOutput strings.Builder
+	toolCalls := openaicompatstream.NewToolCallCollector()
 
 	// reasoning_content を累積
 	var reasoningContent strings.Builder
@@ -190,12 +182,11 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 
 	// DeepSeek固有のパース処理（OpenAI互換形式）
 	parser := func(line string) (string, bool, error) {
-		if !strings.HasPrefix(line, "data: ") {
+		data, done, handled := openaicompatstream.ParseSSEDataLine(line)
+		if !handled {
 			return "", false, nil
 		}
-
-		data := strings.TrimPrefix(line, "data: ")
-		if data == "[DONE]" {
+		if done {
 			return "", true, nil
 		}
 
@@ -204,45 +195,38 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 			return "", false, fmt.Errorf("invalid response structure: %w", err)
 		}
 
-		// 拡張した StreamResponse（tool_calls, finish_reason, reasoning_content, usage を含む）
-		var streamResp struct {
-			Choices []struct {
-				Delta struct {
-					Content          string               `json:"content,omitempty"`
-					ReasoningContent string               `json:"reasoning_content,omitempty"` // DeepSeek Reasoner の思考内容
-					ToolCalls        []api.OpenAIToolCall `json:"tool_calls,omitempty"`
-				} `json:"delta"`
-				FinishReason string `json:"finish_reason,omitempty"`
-			} `json:"choices"`
-			Usage *struct {
+		chunk, err := openaicompatstream.DecodeChunk(data)
+		if err != nil {
+			return "", false, err
+		}
+
+		if openaicompatstream.HasUsagePayload(chunk.Usage) {
+			var usagePayload struct {
 				PromptTokens          int `json:"prompt_tokens"`
 				CompletionTokens      int `json:"completion_tokens"`
 				PromptCacheHitTokens  int `json:"prompt_cache_hit_tokens,omitempty"`
 				PromptCacheMissTokens int `json:"prompt_cache_miss_tokens,omitempty"`
-			} `json:"usage,omitempty"`
-		}
-		if err := json.Unmarshal([]byte(data), &streamResp); err != nil {
-			return "", false, err
-		}
+			}
+			if err := json.Unmarshal(chunk.Usage, &usagePayload); err != nil {
+				return "", false, err
+			}
 
-		// usage 情報を記録
-		if streamResp.Usage != nil {
 			lastUsage = &api.Usage{
-				InputTokens:       streamResp.Usage.PromptTokens,
-				OutputTokens:      streamResp.Usage.CompletionTokens,
-				CachedInputTokens: streamResp.Usage.PromptCacheHitTokens,
+				InputTokens:       usagePayload.PromptTokens,
+				OutputTokens:      usagePayload.CompletionTokens,
+				CachedInputTokens: usagePayload.PromptCacheHitTokens,
 			}
 			if os.Getenv("XELYON_DEBUG_DEEPSEEK") == "1" {
 				fmt.Fprintf(errOut, "[DEBUG DeepSeek] usage received: input=%d, output=%d, cached=%d\n",
-					streamResp.Usage.PromptTokens, streamResp.Usage.CompletionTokens, streamResp.Usage.PromptCacheHitTokens)
+					usagePayload.PromptTokens, usagePayload.CompletionTokens, usagePayload.PromptCacheHitTokens)
 			}
 		}
 
-		if len(streamResp.Choices) == 0 {
+		if len(chunk.Choices) == 0 {
 			return "", false, nil
 		}
 
-		choice := streamResp.Choices[0]
+		choice := chunk.Choices[0]
 
 		// reasoning_content の累積・表示
 		if choice.Delta.ReasoningContent != "" {
@@ -263,27 +247,12 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 			reasoningStarted = false
 		}
 
-		// tool_calls の累積処理
-		for _, tc := range choice.Delta.ToolCalls {
-			acc, exists := toolCalls[tc.Index]
-			if !exists {
-				acc = &toolCallAccumulator{}
-				toolCalls[tc.Index] = acc
+		toolCalls.Append(choice.Delta.ToolCalls, func(toolName string) {
+			// reasoning/content 表示後に tool_call へ切り替わる場合は spinner を再表示する。
+			if !spinner.IsActive() {
+				spinner.Start(ui.SpinnerMessageForTool(toolName))
 			}
-			if tc.ID != "" {
-				acc.ID = tc.ID
-			}
-			if tc.Function.Name != "" {
-				acc.Name = tc.Function.Name
-			}
-			if tc.Function.Arguments != "" {
-				// スピナーを再表示
-				if !spinner.IsActive() {
-					spinner.Start(ui.SpinnerMessageForTool(acc.Name))
-				}
-				acc.Arguments.WriteString(tc.Function.Arguments)
-			}
-		}
+		})
 
 		// finish_reason == "tool_calls" で完了
 		if choice.FinishReason == "tool_calls" {
@@ -291,24 +260,6 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 			if reasoningStarted && reasoningContent.Len() > 0 {
 				_, _ = fmt.Fprintln(out)
 				_, _ = fmt.Fprintln(out)
-			}
-			// 累積した tool_calls を内部JSON形式に変換
-			for i := 0; i < len(toolCalls); i++ {
-				acc := toolCalls[i]
-				if acc == nil {
-					continue
-				}
-				tc := &api.OpenAIToolCall{
-					ID:   acc.ID,
-					Type: "function",
-					Function: api.OpenAIToolCallFunction{
-						Name:      acc.Name,
-						Arguments: acc.Arguments.String(),
-					},
-				}
-				if toolJSON, err := openai.ConvertToolCallToToolJSON(tc); err == nil {
-					toolCallsOutput.WriteString(toolJSON)
-				}
 			}
 			return "", true, nil
 		}
@@ -335,12 +286,17 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 		p.usageCallback(*lastUsage)
 	}
 
+	toolCallsOutput := openaicompatstream.BuildToolCallJSON(
+		toolCalls.ToOpenAIToolCalls(),
+		openai.ConvertToolCallToToolJSON,
+	)
+
 	// tool_calls がある場合はそれを返す
-	if toolCallsOutput.Len() > 0 {
+	if toolCallsOutput != "" {
 		if content != "" {
-			return content + toolCallsOutput.String(), nil
+			return content + toolCallsOutput, nil
 		}
-		return toolCallsOutput.String(), nil
+		return toolCallsOutput, nil
 	}
 	return content, nil
 }

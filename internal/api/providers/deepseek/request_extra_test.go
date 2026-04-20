@@ -184,3 +184,30 @@ func TestHandleStreamingResponse_PersistsReasoningAndUsage(t *testing.T) {
 		t.Fatalf("output should include reasoning content, got %q", out.String())
 	}
 }
+
+func TestHandleStreamingResponse_NullUsageDoesNotEmitZeroUsageOnToolCallsFinish(t *testing.T) {
+	p := New("test-key")
+	callbackCount := 0
+	p.SetUsageCallback(func(api.Usage) {
+		callbackCount++
+	})
+
+	ctx, _, _ := newDeepSeekTestContext(t, false)
+	resp := newDeepSeekSSEResponse(
+		`{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"read_file","arguments":"{\"path\":\"/tmp/demo.txt\"}"}}]}}]}`,
+		`{"choices":[],"usage":null}`,
+		`{"choices":[{"delta":{},"finish_reason":"tool_calls"}]}`,
+	)
+	defer resp.Body.Close()
+
+	got, err := p.handleStreamingResponse(ctx, resp, ui.NewSpinnerWithWriter(io.Discard))
+	if err != nil {
+		t.Fatalf("handleStreamingResponse() error = %v", err)
+	}
+	if !strings.Contains(got, `"tool":"read_file"`) {
+		t.Fatalf("handleStreamingResponse() = %q, want tool JSON", got)
+	}
+	if callbackCount != 0 {
+		t.Fatalf("usage callback count = %d, want 0 when usage is null only", callbackCount)
+	}
+}

@@ -15,6 +15,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/api/providers/openai"
+	openaicompatstream "github.com/susugadx/xelyon-cli/internal/api/providers/openai_compat_stream"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -26,13 +27,6 @@ func init() {
 }
 
 var yellow = color.New(color.FgYellow)
-
-// toolCallAccumulator はストリーミング中のtool_callを蓄積する
-type toolCallAccumulator struct {
-	ID        string
-	Name      string
-	Arguments strings.Builder
-}
 
 // Provider はOllama APIのプロバイダー実装
 type Provider struct {
@@ -199,8 +193,7 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 	errOut := api.ErrorWriterFromContext(ctx)
 	streamAssistantText := api.ShouldStreamAssistantText(ctx)
 	var fullResponse strings.Builder
-	var toolCallsOutput strings.Builder
-	toolCalls := make(map[int]*toolCallAccumulator)
+	toolCalls := openaicompatstream.NewToolCallCollector()
 	scanner := bufio.NewScanner(resp.Body)
 	firstChunk := true
 	var contentNewlineEmitted bool // スピナー上書き防止用
@@ -228,29 +221,16 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 
 		// Function Calling: tool_calls を蓄積
 		for idx, tc := range streamResp.Message.ToolCalls {
-			acc, exists := toolCalls[idx]
-			if !exists {
-				acc = &toolCallAccumulator{}
-				toolCalls[idx] = acc
-			}
-			if tc.ID != "" {
-				acc.ID = tc.ID
-			}
-			if tc.Function.Name != "" {
-				acc.Name = tc.Function.Name
-			}
-			if tc.Function.Arguments != "" {
+			toolCalls.ReplaceAt(idx, tc, func(toolName string) {
 				// スピナーを再表示
 				if !spinner.IsActive() {
 					if streamAssistantText && !firstChunk && !contentNewlineEmitted {
 						_, _ = fmt.Fprintln(out)
 						contentNewlineEmitted = true
 					}
-					spinner.Start(ui.SpinnerMessageForTool(acc.Name))
+					spinner.Start(ui.SpinnerMessageForTool(toolName))
 				}
-				acc.Arguments.Reset() // Ollama は累積ではなく完全な引数を送る
-				acc.Arguments.WriteString(tc.Function.Arguments)
-			}
+			})
 		}
 
 		// done=trueで終了
@@ -264,25 +244,6 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 			}
 
 			// tool_calls がある場合は変換
-			if len(toolCalls) > 0 {
-				for i := 0; i < len(toolCalls); i++ {
-					acc := toolCalls[i]
-					if acc == nil {
-						continue
-					}
-					tc := &api.OpenAIToolCall{
-						ID:   acc.ID,
-						Type: "function",
-						Function: api.OpenAIToolCallFunction{
-							Name:      acc.Name,
-							Arguments: acc.Arguments.String(),
-						},
-					}
-					if toolJSON, err := openai.ConvertToolCallToToolJSON(tc); err == nil {
-						toolCallsOutput.WriteString(toolJSON)
-					}
-				}
-			}
 			break
 		}
 
@@ -307,13 +268,18 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 		return "", fmt.Errorf("stream reading error: %w", err)
 	}
 
+	toolCallsOutput := openaicompatstream.BuildToolCallJSON(
+		toolCalls.ToOpenAIToolCalls(),
+		openai.ConvertToolCallToToolJSON,
+	)
+
 	// tool_calls がある場合はそれを返す
-	if toolCallsOutput.Len() > 0 {
+	if toolCallsOutput != "" {
 		spinner.Stop()
 		if streamAssistantText && fullResponse.Len() > 0 && !contentNewlineEmitted {
 			_, _ = fmt.Fprintln(out)
 		}
-		return fullResponse.String() + toolCallsOutput.String(), nil
+		return fullResponse.String() + toolCallsOutput, nil
 	}
 
 	if streamAssistantText && !contentNewlineEmitted {

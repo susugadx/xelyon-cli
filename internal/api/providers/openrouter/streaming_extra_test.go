@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/ui"
@@ -96,5 +97,79 @@ func TestHandleClaudeStreamingResponse_ToolUseOnly(t *testing.T) {
 	}
 	if usage.InputTokens != 7 || usage.OutputTokens != 3 || usage.CachedInputTokens != 1 {
 		t.Fatalf("usage = %+v, want input=7 output=3 cached=1", usage)
+	}
+}
+
+func TestHandleClaudeStreamingResponse_ContextCanceledReturnsPartialAndError(t *testing.T) {
+	p := New("test-key")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	ctx = api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesOff)
+
+	reader, writer := io.Pipe()
+	resp := &http.Response{
+		Body: io.NopCloser(reader),
+	}
+
+	written := make(chan struct{})
+	go func() {
+		_, _ = io.WriteString(writer, `data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}`+"\n\n")
+		close(written)
+		<-ctx.Done()
+		_ = writer.Close()
+	}()
+	go func() {
+		<-written
+		time.Sleep(20 * time.Millisecond)
+		cancel()
+	}()
+
+	got, err := p.handleClaudeStreamingResponse(ctx, resp, ui.NewSpinnerWithWriter(io.Discard))
+	if err != context.Canceled {
+		t.Fatalf("handleClaudeStreamingResponse() error = %v, want %v", err, context.Canceled)
+	}
+	if got != "Hello" {
+		t.Fatalf("handleClaudeStreamingResponse() = %q, want %q", got, "Hello")
+	}
+}
+
+func TestHandleClaudeStreamingResponse_ContextCanceledDoesNotEmitUsageCallback(t *testing.T) {
+	p := New("test-key")
+	callbackCount := 0
+	p.SetUsageCallback(func(api.Usage) {
+		callbackCount++
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	ctx = api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesOff)
+
+	reader, writer := io.Pipe()
+	resp := &http.Response{
+		Body: io.NopCloser(reader),
+	}
+
+	written := make(chan struct{})
+	go func() {
+		_, _ = io.WriteString(writer, `data: {"type":"message_start","message":{"usage":{"input_tokens":6}}}`+"\n\n")
+		_, _ = io.WriteString(writer, `data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}`+"\n\n")
+		close(written)
+		<-ctx.Done()
+		_ = writer.Close()
+	}()
+	go func() {
+		<-written
+		time.Sleep(20 * time.Millisecond)
+		cancel()
+	}()
+
+	got, err := p.handleClaudeStreamingResponse(ctx, resp, ui.NewSpinnerWithWriter(io.Discard))
+	if err != context.Canceled {
+		t.Fatalf("handleClaudeStreamingResponse() error = %v, want %v", err, context.Canceled)
+	}
+	if got != "Hello" {
+		t.Fatalf("handleClaudeStreamingResponse() = %q, want %q", got, "Hello")
+	}
+	if callbackCount != 0 {
+		t.Fatalf("usage callback count = %d, want 0 on canceled stream", callbackCount)
 	}
 }

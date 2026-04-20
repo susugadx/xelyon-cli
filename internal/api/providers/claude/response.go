@@ -8,48 +8,15 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	claudestream "github.com/susugadx/xelyon-cli/internal/api/providers/claude_stream"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
-type Delta struct {
-	Type        string `json:"type"`
-	Text        string `json:"text,omitempty"`
-	PartialJSON string `json:"partial_json,omitempty"` // tool_use の input (input_json_delta)
-	StopReason  string `json:"stop_reason,omitempty"`  // message_delta 用
-}
-
-// ContentBlock はストリーミングのコンテンツブロック (content_block_start 用)
-type ContentBlock struct {
-	Type  string                 `json:"type"`            // "text" or "tool_use"
-	ID    string                 `json:"id,omitempty"`    // tool_use 用
-	Name  string                 `json:"name,omitempty"`  // tool_use 用
-	Text  string                 `json:"text,omitempty"`  // text 用
-	Input map[string]interface{} `json:"input,omitempty"` // tool_use 用（非ストリーミング）
-}
-
-// StreamUsage は Claude のトークン使用量
-type StreamUsage struct {
-	InputTokens              int `json:"input_tokens"`
-	OutputTokens             int `json:"output_tokens"`
-	CacheReadInputTokens     int `json:"cache_read_input_tokens,omitempty"`
-	CacheCreationInputTokens int `json:"cache_creation_input_tokens,omitempty"`
-}
-
-// StreamEvent はストリームイベント
-type StreamEvent struct {
-	Type         string        `json:"type"`
-	Index        int           `json:"index,omitempty"`
-	ContentBlock *ContentBlock `json:"content_block,omitempty"` // content_block_start 用
-	Delta        *Delta        `json:"delta,omitempty"`
-	Usage        *StreamUsage  `json:"usage,omitempty"` // message_delta 用
-}
-
-// toolUseAccumulator はストリーミング中の tool_use を蓄積する
-type toolUseAccumulator struct {
-	ID    string
-	Name  string
-	Input strings.Builder // JSON文字列を蓄積
-}
+// Claude 互換ストリーム型は claude_stream owner に集約し、この package からは alias を公開する。
+type Delta = claudestream.Delta
+type ContentBlock = claudestream.ContentBlock
+type StreamUsage = claudestream.StreamUsage
+type StreamEvent = claudestream.StreamEvent
 
 // Content はレスポンスのコンテンツ
 type Content struct {
@@ -105,48 +72,21 @@ type Response struct {
 // requestResult はexecuteRequestの結果を格納
 
 func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
-	// Tool Use の蓄積用
-	toolUses := make(map[int]*toolUseAccumulator)
+	toolUses := claudestream.NewToolUseCollector()
 	var toolCallsOutput strings.Builder
 
-	// Compaction の蓄積用
-	compactionBlocks := make(map[int]*strings.Builder)
-	var compactionOutput strings.Builder
+	compaction := claudestream.NewCompactionCollector()
 
 	// usage 情報を追跡
 	var lastUsage *api.Usage
 
-	// Claude固有のパース処理
-	parser := func(line string) (string, bool, error) {
-		if !strings.HasPrefix(line, "data: ") {
-			return "", false, nil
-		}
-
-		data := strings.TrimPrefix(line, "data: ")
-		var event StreamEvent
-		if err := json.Unmarshal([]byte(data), &event); err != nil {
-			return "", false, err
-		}
-
+	// Claude固有のイベント処理
+	handler := func(event claudestream.StreamEvent, data string) (string, bool, error) {
 		switch event.Type {
 		case "message_start":
-			// message_start は常に最初のイベント。input_tokens の権威的ソース。
-			// message_delta には基本リクエストで output_tokens のみ含まれるため、
-			// input_tokens は message_start から取得する。
-			var msgStart struct {
-				Message struct {
-					Usage StreamUsage `json:"usage"`
-				} `json:"message"`
-			}
-			if err := json.Unmarshal([]byte(data), &msgStart); err == nil {
-				u := msgStart.Message.Usage
-				lastUsage = &api.Usage{
-					// InputTokens を正規化: API の input_tokens は非キャッシュ分のみ
-					InputTokens:         u.InputTokens + u.CacheReadInputTokens + u.CacheCreationInputTokens,
-					OutputTokens:        u.OutputTokens,
-					CachedInputTokens:   u.CacheReadInputTokens,
-					CacheCreationTokens: u.CacheCreationInputTokens,
-				}
+			// message_start は input_tokens の権威的ソース。
+			if usage, err := claudestream.DecodeMessageStartUsage(data); err == nil {
+				lastUsage = usage
 			}
 			return "", false, nil
 
@@ -154,87 +94,38 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 			return "", true, nil
 
 		case "content_block_start":
-			if event.ContentBlock != nil {
-				switch event.ContentBlock.Type {
-				case "tool_use":
-					toolUses[event.Index] = &toolUseAccumulator{
-						ID:   event.ContentBlock.ID,
-						Name: event.ContentBlock.Name,
-					}
-				case "compaction":
-					// compaction ブロックの開始を記録
-					compactionBlocks[event.Index] = &strings.Builder{}
-				}
-			}
+			claudestream.HandleContentBlockStart(event, toolUses, compaction)
 			return "", false, nil
 
 		case "content_block_delta":
-			if event.Delta == nil {
-				return "", false, nil
-			}
-			// テキストデルタ
-			if event.Delta.Type == "text_delta" {
-				// compaction ブロックの場合は蓄積（表示しない）
-				if acc, ok := compactionBlocks[event.Index]; ok {
-					acc.WriteString(event.Delta.Text)
-					return "", false, nil
+			return claudestream.HandleContentBlockDelta(event, toolUses, compaction, func(toolName string) {
+				// スピナーを再表示（引数生成中）
+				if !spinner.IsActive() {
+					spinner.Start(ui.SpinnerMessageForTool(toolName))
 				}
-				return event.Delta.Text, false, nil
-			}
-			// Tool Use の input を蓄積
-			if event.Delta.Type == "input_json_delta" {
-				if acc := toolUses[event.Index]; acc != nil {
-					// スピナーを再表示（引数生成中）
-					if !spinner.IsActive() {
-						spinner.Start(ui.SpinnerMessageForTool(acc.Name))
-					}
-					acc.Input.WriteString(event.Delta.PartialJSON)
-				}
-			}
-			return "", false, nil
+			}), false, nil
 
 		case "content_block_stop":
-			// compaction ブロックの完了
-			if acc, ok := compactionBlocks[event.Index]; ok {
-				compactionOutput.WriteString(acc.String())
-				delete(compactionBlocks, event.Index)
-			}
-			// tool_use ブロックの完了 - この時点で変換
-			if acc := toolUses[event.Index]; acc != nil {
-				var input map[string]interface{}
-				if err := json.Unmarshal([]byte(acc.Input.String()), &input); err == nil {
-					if toolJSON, err := ConvertToolUseToToolJSON(acc.ID, acc.Name, input); err == nil {
-						toolCallsOutput.WriteString(toolJSON)
-					}
-				}
+			if toolJSON := claudestream.HandleContentBlockStop(event, toolUses, compaction, ConvertToolUseToToolJSON); toolJSON != "" {
+				toolCallsOutput.WriteString(toolJSON)
 			}
 			return "", false, nil
 
 		case "message_delta":
-			// usage 情報を記録（message_delta の usage は累積値）
-			if event.Usage != nil {
-				if lastUsage == nil {
-					lastUsage = &api.Usage{}
-				}
-				lastUsage.OutputTokens = event.Usage.OutputTokens
-				// フォールバック: message_start が欠損した場合 or Web Search で input_tokens が更新された場合
-				if event.Usage.InputTokens > 0 {
-					lastUsage.InputTokens = event.Usage.InputTokens + event.Usage.CacheReadInputTokens + event.Usage.CacheCreationInputTokens
-				}
-				if event.Usage.CacheReadInputTokens > 0 {
-					lastUsage.CachedInputTokens = event.Usage.CacheReadInputTokens
-				}
-				if event.Usage.CacheCreationInputTokens > 0 {
-					lastUsage.CacheCreationTokens = event.Usage.CacheCreationInputTokens
-				}
-			}
+			// message_start 欠損や Web Search 由来の更新をフォールバックで反映する。
+			lastUsage = claudestream.UpdateUsageFromMessageDelta(lastUsage, event.Usage, true)
 			return "", false, nil
 		}
 
 		return "", false, nil
 	}
 
-	content, err := api.ParseStreamingResponse(ctx, resp, spinner, parser)
+	content, err := claudestream.RunStreamingResponse(ctx, resp, spinner, handler, claudestream.RunnerOptions{
+		CancelMode:        claudestream.CancelModePartialAsSuccess,
+		WarnOnPartial:     true,
+		IgnoreDecodeError: false,
+		EnableIdleTimeout: true,
+	})
 	if err != nil {
 		return "", err
 	}
@@ -245,8 +136,9 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 	}
 
 	// compaction が発生した場合、レスポンスの先頭にマーカーを付加
-	if compactionOutput.Len() > 0 {
-		content = "[COMPACTION]\n" + compactionOutput.String() + "\n[/COMPACTION]\n" + content
+	compactionOutput := compaction.Output()
+	if compactionOutput != "" {
+		content = "[COMPACTION]\n" + compactionOutput + "\n[/COMPACTION]\n" + content
 	}
 
 	// Tool Use がある場合はそれを追加して返す

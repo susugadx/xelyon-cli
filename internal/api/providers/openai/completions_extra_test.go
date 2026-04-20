@@ -74,6 +74,32 @@ func TestHandleStreamingResponse_CombinesToolCallsAndUsage(t *testing.T) {
 	}
 }
 
+func TestHandleStreamingResponse_NullUsageDoesNotEmitZeroUsageOnToolCallsFinish(t *testing.T) {
+	p := New("test-key")
+	callbackCount := 0
+	p.SetUsageCallback(func(api.Usage) {
+		callbackCount++
+	})
+
+	resp := newOpenAISSEResponse(
+		`{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"read_file","arguments":"{\"path\":\"main.go\"}"}}]}}]}`,
+		`{"choices":[],"usage":null}`,
+		`{"choices":[{"delta":{},"finish_reason":"tool_calls"}]}`,
+	)
+	defer resp.Body.Close()
+
+	got, err := p.handleStreamingResponse(newOpenAITestContext(t, false), resp, ui.NewSpinnerWithWriter(io.Discard))
+	if err != nil {
+		t.Fatalf("handleStreamingResponse() error = %v", err)
+	}
+	if !strings.Contains(got, `"tool":"read_file"`) {
+		t.Fatalf("handleStreamingResponse() = %q, want tool JSON", got)
+	}
+	if callbackCount != 0 {
+		t.Fatalf("usage callback count = %d, want 0 when usage is null only", callbackCount)
+	}
+}
+
 func TestChatWithCompletions_RequestIncludesThinkingAndForcedToolChoice(t *testing.T) {
 	var captured api.ChatRequest
 	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
