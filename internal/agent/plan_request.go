@@ -19,6 +19,7 @@ type planModeRequest struct {
 	preparedUserRequest string
 	investigationPrompt string
 	checkpoint          planModeCheckpoint
+	approved            bool
 }
 
 func newPlanModeRequest(agent *Agent, ctx context.Context, userRequest string) *planModeRequest {
@@ -32,29 +33,24 @@ func newPlanModeRequest(agent *Agent, ctx context.Context, userRequest string) *
 func (r *planModeRequest) Run() error {
 	r.prepare()
 	restoreConversationOnExit := true
-	restoreApprovedPlanOnExit := false
 	restorePromptOnExit := true
+	clearResponseContextOnExit := false
 	defer func() {
 		if restoreConversationOnExit {
-			var err error
-			if restoreApprovedPlanOnExit {
-				err = r.restoreTechnicalFailureState()
-			} else {
-				err = r.restoreConversationState()
-			}
+			err := r.restoreConversationState()
 			if err != nil {
 				red.Fprintf(r.agent.output(), "Failed to restore plan mode state: %v\n", err)
 			}
-			return
-		}
-		if restorePromptOnExit {
+		} else if restorePromptOnExit {
 			r.restorePlanningPrompt()
+		}
+		if clearResponseContextOnExit {
+			r.clearResponseContext()
 		}
 	}()
 
 	p, handled, err := r.runInvestigation()
 	if err != nil {
-		restoreApprovedPlanOnExit = true
 		return err
 	}
 	if handled {
@@ -64,6 +60,12 @@ func (r *planModeRequest) Run() error {
 	restorePromptOnExit = !restoreConversationOnExit
 
 	handled, err = r.handleInvestigationResult(p)
+	if r.approved {
+		// Plan 承認後は planning-only。調査フェーズ履歴は通常ターンへ持ち越さない。
+		restoreConversationOnExit = true
+		restorePromptOnExit = true
+		clearResponseContextOnExit = true
+	}
 	if err != nil || handled {
 		return err
 	}
@@ -73,7 +75,6 @@ func (r *planModeRequest) Run() error {
 
 func (r *planModeRequest) prepare() {
 	r.checkpoint = capturePlanModeCheckpoint(r.agent, r.originalUserRequest)
-	r.agent.clearApprovedPlanState()
 	r.ensurePlanningPrompt()
 	r.preparedUserRequest = r.prepareUserRequest(r.originalUserRequest)
 	toolVisibility := r.agent.toolVisibilityPolicy(toolSurfacePhasePlan, toolVisibilityOptions{allowSubAgents: true})
@@ -132,12 +133,12 @@ func (r *planModeRequest) handleInvestigationResult(p *plan.Plan) (bool, error) 
 		return true, nil
 	}
 
-	planText := r.renderPlan(p)
+	r.renderPlan(p)
 
 	a.SetStatus(StateWaitingApproval, "Waiting for plan approval", "計画の承認待ち", "Answer y/n/c", "y/n/c で回答")
 	approved, feedback := a.confirmPlan()
 	if approved {
-		a.setPendingApprovedPlan(planText)
+		r.approved = true
 		a.setPlanModeEnabled(false)
 		green.Fprintln(out, "✓ Plan approved. Plan Mode complete. Implementation not started.")
 		a.setReadyForInputStatus()
@@ -176,7 +177,7 @@ func (r *planModeRequest) handleTokenLimit(err error) bool {
 	}
 
 	retryFunc := func() error {
-		if restoreErr := r.restoreTechnicalFailureState(); restoreErr != nil {
+		if restoreErr := r.restoreConversationState(); restoreErr != nil {
 			return restoreErr
 		}
 		return r.rerunPlanMode(r.originalUserRequest)
@@ -218,15 +219,27 @@ func (r *planModeRequest) recordRerunRequest(userRequest string) {
 }
 
 func (r *planModeRequest) restoreConversationState() error {
-	return r.checkpoint.restore(r.agent, false)
-}
-
-func (r *planModeRequest) restoreTechnicalFailureState() error {
-	return r.checkpoint.restore(r.agent, true)
+	return r.checkpoint.restore(r.agent)
 }
 
 func (r *planModeRequest) restorePlanningPrompt() {
 	r.checkpoint.restoreSystemPrompt(r.agent)
+}
+
+func (r *planModeRequest) clearResponseContext() {
+	if r == nil || r.agent == nil {
+		return
+	}
+
+	// Plan Mode は planning-only なので、承認後の通常ターンは
+	// planning チェーン(previous_response_id)を継続せず履歴ベースで開始する。
+	r.agent.restoreProviderResponseID("")
+	if r.agent.session == nil {
+		return
+	}
+
+	clearSavedResponseContext(r.agent.session)
+	r.agent.persistSession()
 }
 
 func (r *planModeRequest) shouldRestoreConversationOnExit(p *plan.Plan) bool {

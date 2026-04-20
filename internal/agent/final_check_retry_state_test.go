@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -120,11 +121,9 @@ func TestHandleNormalModeNoToolResponse_FinalChecksNoProgressBreaks(t *testing.T
 	cfg.FinalChecks.Timeout = 10
 
 	agent := newTurnRunnerTestAgent(&sequenceMockProvider{name: "test"}, cfg, "", &out)
-	agent.changeStack = []tools.FileChange{{FilePath: "/src/main.go"}}
-	agent.taskChangeOffset = 0
 
 	runner := newTurnRunner(agent, context.Background())
-	state := &normalModeState{}
+	state := newMutatedNormalModeState("/src/main.go")
 	response := "The requested changes are done."
 
 	if action := runner.handleNormalModeNoToolResponse(response, cfg, state); action != normalModeContinue {
@@ -138,7 +137,7 @@ func TestHandleNormalModeNoToolResponse_FinalChecksNoProgressBreaks(t *testing.T
 	}
 }
 
-func TestHandleNormalModeNoToolResponse_NoRecordedChangesSkipsFinalChecks(t *testing.T) {
+func TestHandleNormalModeNoToolResponse_NoMutationSkipsFinalChecks(t *testing.T) {
 	disableColors(t)
 
 	var out bytes.Buffer
@@ -149,7 +148,7 @@ func TestHandleNormalModeNoToolResponse_NoRecordedChangesSkipsFinalChecks(t *tes
 	agent := newTurnRunnerTestAgent(&sequenceMockProvider{name: "test"}, cfg, "", &out)
 	runner := newTurnRunner(agent, context.Background())
 	state := &normalModeState{}
-	response := "The requested changes are done."
+	response := "Done."
 
 	if action := runner.handleNormalModeNoToolResponse(response, cfg, state); action != normalModeDone {
 		t.Fatalf("action = %v, want normalModeDone", action)
@@ -157,6 +156,296 @@ func TestHandleNormalModeNoToolResponse_NoRecordedChangesSkipsFinalChecks(t *tes
 	if strings.Contains(out.String(), "Final check command failed") {
 		t.Fatalf("expected final checks to be skipped without recorded changes, got %q", out.String())
 	}
+}
+
+func TestHandleNormalModeNoToolResponse_ReadOnlyTurnSkipsFinalChecks(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	cfg := config.DefaultConfig()
+	cfg.FinalChecks.Commands = []string{"exit 1"}
+	cfg.FinalChecks.Timeout = 10
+
+	agent := newTurnRunnerTestAgent(&sequenceMockProvider{name: "test"}, cfg, "", &out)
+	runner := newTurnRunner(agent, context.Background())
+	state := &normalModeState{}
+	response := "I inspected the file and found no additional changes."
+
+	if action := runner.handleNormalModeNoToolResponse(response, cfg, state); action != normalModeDone {
+		t.Fatalf("action = %v, want normalModeDone", action)
+	}
+	if strings.Contains(out.String(), "Running final checks") {
+		t.Fatalf("expected read-only turn to skip final checks, got %q", out.String())
+	}
+}
+
+func TestHandleNormalModeNoToolResponse_FinalChecksAreTriggeredByMutationNotWording(t *testing.T) {
+	disableColors(t)
+
+	// completion 文面の違いではなく、mutation の有無だけで final checks 起動を決める。
+	responses := []string{
+		"Done.",
+		"Would you like me to continue?",
+		"完了しました。",
+		"Updated foo.go and added tests.",
+	}
+
+	for _, response := range responses {
+		t.Run("mutation_"+normalizeSubtestName(response), func(t *testing.T) {
+			var out bytes.Buffer
+			cfg := config.DefaultConfig()
+			cfg.FinalChecks.Commands = []string{"exit 1"}
+			cfg.FinalChecks.Timeout = 10
+
+			agent := newTurnRunnerTestAgent(&sequenceMockProvider{name: "test"}, cfg, "", &out)
+
+			runner := newTurnRunner(agent, context.Background())
+			state := newMutatedNormalModeState("/src/main.go")
+
+			if action := runner.handleNormalModeNoToolResponse(response, cfg, state); action != normalModeContinue {
+				t.Fatalf("action = %v, want normalModeContinue", action)
+			}
+			if !strings.Contains(out.String(), "Final check command failed. Asking AI to fix...") {
+				t.Fatalf("expected final checks to run when mutation exists, got %q", out.String())
+			}
+		})
+
+		t.Run("no_mutation_"+normalizeSubtestName(response), func(t *testing.T) {
+			var out bytes.Buffer
+			cfg := config.DefaultConfig()
+			cfg.FinalChecks.Commands = []string{"exit 1"}
+			cfg.FinalChecks.Timeout = 10
+
+			agent := newTurnRunnerTestAgent(&sequenceMockProvider{name: "test"}, cfg, "", &out)
+			runner := newTurnRunner(agent, context.Background())
+			state := &normalModeState{}
+
+			if action := runner.handleNormalModeNoToolResponse(response, cfg, state); action != normalModeDone {
+				t.Fatalf("action = %v, want normalModeDone", action)
+			}
+			if strings.Contains(out.String(), "Running final checks") {
+				t.Fatalf("expected final checks to be skipped when no mutation exists, got %q", out.String())
+			}
+		})
+	}
+}
+
+func TestHandleNormalModeNoToolResponse_DoesNotStallWhenSilentFileContentAdvances(t *testing.T) {
+	disableColors(t)
+
+	workDir := t.TempDir()
+	chdirForTest(t, workDir)
+	initialContent := []byte("package main\n\nfunc main() { println(\"v1\") }\n")
+	targetFile := filepath.Join(workDir, "main.go")
+	if err := os.WriteFile(targetFile, initialContent, 0o644); err != nil {
+		t.Fatalf("failed to write initial target file: %v", err)
+	}
+
+	var out bytes.Buffer
+	cfg := config.DefaultConfig()
+	cfg.FinalChecks.Commands = []string{"exit 1"}
+	cfg.FinalChecks.Timeout = 10
+
+	agent := newTurnRunnerTestAgent(&sequenceMockProvider{name: "test"}, cfg, "", &out)
+	runner := newTurnRunner(agent, context.Background())
+	state := newMutatedNormalModeState(targetFile)
+	response := "The requested changes are done."
+
+	if action := runner.handleNormalModeNoToolResponse(response, cfg, state); action != normalModeContinue {
+		t.Fatalf("first action = %v, want normalModeContinue", action)
+	}
+	if err := os.WriteFile(targetFile, []byte("package main\n\nfunc main() { println(\"v2\") }\n"), 0o644); err != nil {
+		t.Fatalf("failed to advance target file silently: %v", err)
+	}
+	if action := runner.handleNormalModeNoToolResponse(response, cfg, state); action != normalModeContinue {
+		t.Fatalf("second action = %v, want normalModeContinue because resulting file state advanced", action)
+	}
+	if strings.Contains(out.String(), "without any task progress") {
+		t.Fatalf("did not expect no-progress warning when resulting file state advanced, got %q", out.String())
+	}
+}
+
+func TestHandleNormalModeNoToolResponse_StallsWhenSilentEditReturnsToSameFileState(t *testing.T) {
+	disableColors(t)
+
+	workDir := t.TempDir()
+	chdirForTest(t, workDir)
+	initialContent := []byte("package main\n\nfunc main() { println(\"v1\") }\n")
+	targetFile := filepath.Join(workDir, "main.go")
+	if err := os.WriteFile(targetFile, initialContent, 0o644); err != nil {
+		t.Fatalf("failed to write initial target file: %v", err)
+	}
+
+	var out bytes.Buffer
+	cfg := config.DefaultConfig()
+	cfg.FinalChecks.Commands = []string{"exit 1"}
+	cfg.FinalChecks.Timeout = 10
+
+	agent := newTurnRunnerTestAgent(&sequenceMockProvider{name: "test"}, cfg, "", &out)
+	runner := newTurnRunner(agent, context.Background())
+	state := newMutatedNormalModeState(targetFile)
+	response := "The requested changes are done."
+
+	if action := runner.handleNormalModeNoToolResponse(response, cfg, state); action != normalModeContinue {
+		t.Fatalf("first action = %v, want normalModeContinue", action)
+	}
+	if err := os.WriteFile(targetFile, []byte("package main\n\nfunc main() { println(\"v2\") }\n"), 0o644); err != nil {
+		t.Fatalf("failed to update target file silently: %v", err)
+	}
+	if err := os.WriteFile(targetFile, initialContent, 0o644); err != nil {
+		t.Fatalf("failed to revert target file silently: %v", err)
+	}
+	if action := runner.handleNormalModeNoToolResponse(response, cfg, state); action != normalModeBreak {
+		t.Fatalf("second action = %v, want normalModeBreak because resulting file state returned to same fingerprint", action)
+	}
+	if !strings.Contains(out.String(), "without any task progress") {
+		t.Fatalf("expected no-progress warning when resulting file state returned to original fingerprint, got %q", out.String())
+	}
+}
+
+func TestHandleNormalModeNoToolResponse_MaxChangeStackOverflowStillRunsFinalChecks(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	cfg := config.DefaultConfig()
+	cfg.FinalChecks.Commands = []string{"exit 1"}
+	cfg.FinalChecks.Timeout = 10
+
+	agent := newTurnRunnerTestAgent(&sequenceMockProvider{name: "test"}, cfg, "", &out)
+	runner := newTurnRunner(agent, context.Background())
+	state := &normalModeState{turnMutations: newTurnMutationState()}
+	handler := newNormalModeToolResultHandler(runner, state)
+
+	totalMutations := config.MaxChangeStack + 5
+	for i := 0; i < totalMutations; i++ {
+		path := fmt.Sprintf("/tmp/generated_%d.go", i)
+		change := &tools.FileChange{
+			FilePath: path,
+			Tool:     "write_file",
+			Details: []tools.FileChangeDetail{{
+				FilePath: path,
+				Action:   "modified",
+			}},
+		}
+		handler.Handle(&tools.ToolCall{
+			Tool: "write_file",
+			Args: map[string]string{"path": path, "content": "x"},
+		}, "ok", change)
+	}
+
+	if len(agent.changeStack) != config.MaxChangeStack {
+		t.Fatalf("changeStack len = %d, want %d", len(agent.changeStack), config.MaxChangeStack)
+	}
+	if state.turnMutations.snapshot().mutationCount != totalMutations {
+		t.Fatalf("mutationCount = %d, want %d", state.turnMutations.snapshot().mutationCount, totalMutations)
+	}
+
+	if action := runner.handleNormalModeNoToolResponse("Done.", cfg, state); action != normalModeContinue {
+		t.Fatalf("action = %v, want normalModeContinue", action)
+	}
+	if !strings.Contains(out.String(), "Final check command failed. Asking AI to fix...") {
+		t.Fatalf("expected final checks to run even after changeStack overflow, got %q", out.String())
+	}
+}
+
+func TestHandleNormalModeNoToolResponse_NumberedCompletionSummaryAfterMutationRunsFinalChecks(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	cfg := config.DefaultConfig()
+	cfg.FinalChecks.Commands = []string{"exit 1"}
+	cfg.FinalChecks.Timeout = 10
+
+	agent := newTurnRunnerTestAgent(&sequenceMockProvider{name: "test"}, cfg, "", &out)
+	runner := newTurnRunner(agent, context.Background())
+	state := newMutatedNormalModeState("/src/main.go")
+	response := `Done.
+1. Updated foo.go
+2. Added tests
+3. Ran go test`
+
+	if action := runner.handleNormalModeNoToolResponse(response, cfg, state); action != normalModeContinue {
+		t.Fatalf("action = %v, want normalModeContinue", action)
+	}
+	if strings.Contains(out.String(), "Text plan detected") {
+		t.Fatalf("did not expect text plan recovery for numbered completion summary, got %q", out.String())
+	}
+	if !strings.Contains(out.String(), "Final check command failed. Asking AI to fix...") {
+		t.Fatalf("expected mutation-based final checks to run, got %q", out.String())
+	}
+}
+
+func TestHandleNormalModeNoToolResponse_StrongPlanSignalWithMutationUsesFinalChecks(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	cfg := config.DefaultConfig()
+	cfg.FinalChecks.Commands = []string{"exit 1"}
+	cfg.FinalChecks.Timeout = 10
+
+	agent := newTurnRunnerTestAgent(&sequenceMockProvider{name: "test"}, cfg, "", &out)
+	runner := newTurnRunner(agent, context.Background())
+	state := newMutatedNormalModeState("/src/main.go")
+	response := `Here is the plan:
+1. Update foo.go
+2. Add tests
+3. Run go test`
+
+	if action := runner.handleNormalModeNoToolResponse(response, cfg, state); action != normalModeContinue {
+		t.Fatalf("action = %v, want normalModeContinue", action)
+	}
+	if strings.Contains(out.String(), "Text plan detected") {
+		t.Fatalf("did not expect text plan recovery when mutation exists, got %q", out.String())
+	}
+	if !strings.Contains(out.String(), "Final check command failed. Asking AI to fix...") {
+		t.Fatalf("expected mutation-based final checks to run, got %q", out.String())
+	}
+}
+
+func newMutatedNormalModeState(paths ...string) *normalModeState {
+	state := &normalModeState{
+		turnMutations: newTurnMutationState(),
+	}
+	if len(paths) == 0 {
+		paths = []string{"/src/main.go"}
+	}
+	for _, path := range paths {
+		state.turnMutations.recordFileChange(tools.FileChange{
+			FilePath: path,
+			Tool:     "write_file",
+			Details: []tools.FileChangeDetail{{
+				FilePath: path,
+				Action:   "modified",
+			}},
+		})
+	}
+	return state
+}
+
+func normalizeSubtestName(response string) string {
+	name := strings.ToLower(strings.TrimSpace(response))
+	replacer := strings.NewReplacer(
+		" ", "_",
+		".", "_",
+		"?", "_",
+		"。", "_",
+		",", "_",
+		"!", "_",
+		":", "_",
+		";", "_",
+		"/", "_",
+		"'", "_",
+		"\"", "_",
+	)
+	name = replacer.Replace(name)
+	for strings.Contains(name, "__") {
+		name = strings.ReplaceAll(name, "__", "_")
+	}
+	name = strings.Trim(name, "_")
+	if name == "" {
+		return "response"
+	}
+	return name
 }
 
 func TestRunNormalMode_FinalChecksNoProgressReturnsControl(t *testing.T) {
@@ -170,103 +459,20 @@ func TestRunNormalMode_FinalChecksNoProgressReturnsControl(t *testing.T) {
 	provider := &sequenceMockProvider{
 		name: "test",
 		responses: []string{
+			`{"tool":"final_check_write","args":{"path":"` + filepath.Join(t.TempDir(), "main.go") + `","content":"package main\n\nfunc main() {}\n"}}`,
 			"The requested changes are done.",
 			"The requested changes are done.",
 		},
 	}
 
-	agent := newTurnRunnerTestAgent(provider, cfg, "", &out)
-	agent.changeStack = []tools.FileChange{{FilePath: "/src/main.go"}}
-	agent.taskChangeOffset = 0
-
+	agent := newTurnRunnerTestAgent(provider, cfg, "", &out, &finalCheckWriteTool{})
 	if err := agent.runNormalMode(context.Background(), "finish it", nil); err != nil {
 		t.Fatalf("runNormalMode() error = %v", err)
 	}
-	if provider.callCount != 2 {
-		t.Fatalf("provider.callCount = %d, want 2", provider.callCount)
+	if provider.callCount != 3 {
+		t.Fatalf("provider.callCount = %d, want 3", provider.callCount)
 	}
 	if !strings.Contains(out.String(), "without any task progress") {
 		t.Fatalf("expected no-progress final checks warning, got %q", out.String())
-	}
-}
-
-func TestHandleNormalModeNoToolResponse_DoesNotStallWhenApprovedPlanFilesAdvanceSilently(t *testing.T) {
-	disableColors(t)
-
-	workDir := t.TempDir()
-	chdirForTest(t, workDir)
-	targetFile := filepath.Join(workDir, "main.go")
-	if err := os.WriteFile(targetFile, []byte("package main\n\nfunc main() { println(\"v1\") }\n"), 0o644); err != nil {
-		t.Fatalf("failed to write initial target file: %v", err)
-	}
-
-	var out bytes.Buffer
-	cfg := config.DefaultConfig()
-	cfg.FinalChecks.Commands = []string{"exit 1"}
-	cfg.FinalChecks.Timeout = 10
-
-	agent := newTurnRunnerTestAgent(&sequenceMockProvider{name: "test"}, cfg, "", &out)
-	agent.setPendingApprovedPlanState("Implementation Plan\n1. Update main.go", true, []string{targetFile})
-	agent.activeApprovedPlan = agent.PendingApprovedPlan
-
-	runner := newTurnRunner(agent, context.Background())
-	state := &normalModeState{}
-	response := "The requested changes are done."
-
-	if action := runner.handleNormalModeNoToolResponse(response, cfg, state); action != normalModeContinue {
-		t.Fatalf("first action = %v, want normalModeContinue", action)
-	}
-	if err := os.WriteFile(targetFile, []byte("package main\n\nfunc main() { println(\"v2\") }\n"), 0o644); err != nil {
-		t.Fatalf("failed to advance target file silently: %v", err)
-	}
-	if action := runner.handleNormalModeNoToolResponse(response, cfg, state); action != normalModeContinue {
-		t.Fatalf("second action = %v, want normalModeContinue after silent content advance", action)
-	}
-	if strings.Contains(out.String(), "without any task progress") {
-		t.Fatalf("silent file-content advance should not be treated as no progress, got %q", out.String())
-	}
-}
-
-func TestHandleNormalModeNoToolResponse_DoesNotStallWhenRecordedFilesAdvanceSilently(t *testing.T) {
-	disableColors(t)
-
-	workDir := t.TempDir()
-	chdirForTest(t, workDir)
-	targetFile := filepath.Join(workDir, "main.go")
-	if err := os.WriteFile(targetFile, []byte("package main\n\nfunc main() { println(\"v1\") }\n"), 0o644); err != nil {
-		t.Fatalf("failed to write initial target file: %v", err)
-	}
-
-	var out bytes.Buffer
-	cfg := config.DefaultConfig()
-	cfg.FinalChecks.Commands = []string{"exit 1"}
-	cfg.FinalChecks.Timeout = 10
-
-	agent := newTurnRunnerTestAgent(&sequenceMockProvider{name: "test"}, cfg, "", &out)
-	agent.changeStack = []tools.FileChange{{
-		FilePath: targetFile,
-		Tool:     "write_file",
-		Details: []tools.FileChangeDetail{{
-			FilePath: targetFile,
-			Action:   "modified",
-		}},
-	}}
-	agent.taskChangeOffset = 0
-
-	runner := newTurnRunner(agent, context.Background())
-	state := &normalModeState{}
-	response := "The requested changes are done."
-
-	if action := runner.handleNormalModeNoToolResponse(response, cfg, state); action != normalModeContinue {
-		t.Fatalf("first action = %v, want normalModeContinue", action)
-	}
-	if err := os.WriteFile(targetFile, []byte("package main\n\nfunc main() { println(\"v2\") }\n"), 0o644); err != nil {
-		t.Fatalf("failed to advance target file silently: %v", err)
-	}
-	if action := runner.handleNormalModeNoToolResponse(response, cfg, state); action != normalModeContinue {
-		t.Fatalf("second action = %v, want normalModeContinue after silent content advance", action)
-	}
-	if strings.Contains(out.String(), "without any task progress") {
-		t.Fatalf("silent file-content advance should not be treated as no progress, got %q", out.String())
 	}
 }

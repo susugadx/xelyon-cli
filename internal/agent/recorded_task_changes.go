@@ -3,6 +3,7 @@ package agent
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"hash"
 	"strconv"
 
 	"github.com/susugadx/xelyon-cli/internal/tools"
@@ -73,28 +74,32 @@ func fingerprintRecordedTaskChanges(changes []tools.FileChange) string {
 
 	hasher := sha256.New()
 	for idx, change := range changes {
-		_, _ = hasher.Write([]byte(strconv.Itoa(idx)))
-		_, _ = hasher.Write([]byte{'\n'})
-		_, _ = hasher.Write([]byte(change.Tool))
-		_, _ = hasher.Write([]byte{'\n'})
-		_, _ = hasher.Write([]byte(change.FilePath))
-		_, _ = hasher.Write([]byte{'\n'})
-		_, _ = hasher.Write([]byte(change.Description))
-		_, _ = hasher.Write([]byte{'\n'})
-		_, _ = hasher.Write([]byte(strconv.Itoa(change.LinesAdded)))
-		_, _ = hasher.Write([]byte{'\n'})
-		_, _ = hasher.Write([]byte(strconv.Itoa(change.LinesRemoved)))
-		_, _ = hasher.Write([]byte{'\n'})
-		for _, detail := range change.Details {
-			_, _ = hasher.Write([]byte(detail.FilePath))
-			_, _ = hasher.Write([]byte{'\n'})
-			_, _ = hasher.Write([]byte(detail.Action))
-			_, _ = hasher.Write([]byte{'\n'})
-			_, _ = hasher.Write([]byte(strconv.Itoa(detail.LinesAdded)))
-			_, _ = hasher.Write([]byte{'\n'})
-			_, _ = hasher.Write([]byte(strconv.Itoa(detail.LinesRemoved)))
-			_, _ = hasher.Write([]byte{'\n'})
-		}
+		writeChangeFingerprint(hasher, idx, change)
 	}
 	return hex.EncodeToString(hasher.Sum(nil))
+}
+
+func writeChangeFingerprint(hasher hash.Hash, idx int, change tools.FileChange) {
+	_, _ = hasher.Write([]byte(strconv.Itoa(idx)))
+	_, _ = hasher.Write([]byte{'\n'})
+	_, _ = hasher.Write([]byte(change.Tool))
+	_, _ = hasher.Write([]byte{'\n'})
+	_, _ = hasher.Write([]byte(change.FilePath))
+	_, _ = hasher.Write([]byte{'\n'})
+	_, _ = hasher.Write([]byte(change.Description))
+	_, _ = hasher.Write([]byte{'\n'})
+	_, _ = hasher.Write([]byte(strconv.Itoa(change.LinesAdded)))
+	_, _ = hasher.Write([]byte{'\n'})
+	_, _ = hasher.Write([]byte(strconv.Itoa(change.LinesRemoved)))
+	_, _ = hasher.Write([]byte{'\n'})
+	for _, detail := range change.Details {
+		_, _ = hasher.Write([]byte(detail.FilePath))
+		_, _ = hasher.Write([]byte{'\n'})
+		_, _ = hasher.Write([]byte(detail.Action))
+		_, _ = hasher.Write([]byte{'\n'})
+		_, _ = hasher.Write([]byte(strconv.Itoa(detail.LinesAdded)))
+		_, _ = hasher.Write([]byte{'\n'})
+		_, _ = hasher.Write([]byte(strconv.Itoa(detail.LinesRemoved)))
+		_, _ = hasher.Write([]byte{'\n'})
+	}
 }

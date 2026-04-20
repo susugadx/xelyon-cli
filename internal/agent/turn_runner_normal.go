@@ -3,7 +3,6 @@ package agent
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
@@ -17,22 +16,13 @@ const (
 	maxTextPlanHardLimit = 5
 )
 
-const approvedPlanHandoffInstruction = `
-[APPROVED PLAN HANDOFF]
-The user approved this plan in the previous /plan turn. Use it as execution guidance for this task unless the user's new request changes the scope. If the new request clearly changes scope, follow the new request instead.
-
-Approved plan:
-%s
-[/APPROVED PLAN HANDOFF]
-`
-
 type normalModeState struct {
 	rs                    retryState
 	finalCheckRetry       finalCheckRetryState
 	textPlanRedirectCount int
 	fallbackResponse      string
 	reachedHardLimit      bool
-	recordedTaskChanges   recordedTaskChangeSnapshot
+	turnMutations         turnMutationState
 }
 
 type normalModeAction int
@@ -47,13 +37,14 @@ func (r *TurnRunner) runNormalModeLoop(input string, image *api.ImageData) error
 	a := r.agent
 	planningHandler := newNormalModePlanningHandler(r)
 
-	normalModeInput, providerInput := buildNormalModeInputs(input, a.activeApprovedPlan)
-	turnUserMessageIndex := len(a.History)
+	normalModeInput := input + promptnormal.NormalModePrompt
 	a.History = append(a.History, api.Message{Role: "user", Content: normalModeInput})
 
 	cfg := a.cfg()
 	hardLimit := normalizeToolLoopLimit(cfg.General.ToolLoopLimit)
-	state := &normalModeState{}
+	state := &normalModeState{
+		turnMutations: newTurnMutationState(),
+	}
 	directive, err := r.runTurnLoop(turnLoopPolicy{
 		hardLimit: hardLimit,
 		onHardLimit: func(_ int) (turnLoopDirective, error) {
@@ -61,7 +52,7 @@ func (r *TurnRunner) runNormalModeLoop(input string, image *api.ImageData) error
 			return turnLoopBreak, nil
 		},
 		requestResponse: func(iteration int) (string, error) {
-			return r.requestNormalModeResponse(input, image, iteration, turnUserMessageIndex, providerInput)
+			return r.requestNormalModeResponse(input, image, iteration)
 		},
 		afterPrepare: func(_ int, response string, toolCalls []*tools.ToolCall) (turnLoopDirective, error) {
 			action, handled, err := planningHandler.HandlePlanJSONFallback(response, toolCalls)
@@ -94,7 +85,7 @@ func (r *TurnRunner) runNormalModeLoop(input string, image *api.ImageData) error
 			a.maybePrintAssistantPhaseUpdate(response, toolCalls)
 		},
 		executeToolCalls: func(_ int, response string, toolCalls []*tools.ToolCall) (turnLoopDirective, error) {
-			if err := r.processNormalModeToolCalls(response, toolCalls, &state.rs); err != nil {
+			if err := r.processNormalModeToolCalls(response, toolCalls, state, &state.rs); err != nil {
 				return turnLoopReturn, err
 			}
 			return turnLoopProceed, nil
@@ -122,7 +113,7 @@ func (r *TurnRunner) runNormalModeLoop(input string, image *api.ImageData) error
 	}
 }
 
-func (r *TurnRunner) requestNormalModeResponse(input string, image *api.ImageData, iteration int, turnUserMessageIndex int, providerInput string) (string, error) {
+func (r *TurnRunner) requestNormalModeResponse(input string, image *api.ImageData, iteration int) (string, error) {
 	a := r.agent
 	if iteration == 0 {
 		r.promptManager().RefreshProjectPromptIfDirty(input)
@@ -132,7 +123,7 @@ func (r *TurnRunner) requestNormalModeResponse(input string, image *api.ImageDat
 	requestCtx := a.requestContext(r.ctx)
 	if iteration == 0 && image != nil {
 		response, err := a.CurrentProvider.ChatWithImage(
-			requestCtx, effectivePrompt, a.History[:len(a.History)-1], providerInput, image, a.CurrentModel,
+			requestCtx, effectivePrompt, a.History[:len(a.History)-1], input+promptnormal.NormalModePrompt, image, a.CurrentModel,
 		)
 		if err != nil {
 			a.ui().StopSpinner()
@@ -141,11 +132,10 @@ func (r *TurnRunner) requestNormalModeResponse(input string, image *api.ImageDat
 		return response, nil
 	}
 
-	requestHistory := buildNormalModeRequestHistory(a.History, turnUserMessageIndex, providerInput)
 	response, err := a.CurrentProvider.ChatWithTools(
 		requestCtx,
 		effectivePrompt,
-		requestHistory,
+		a.History,
 		a.CurrentModel,
 	)
 	if tc, ok := a.CurrentProvider.(interface{ ClearToolChoice() }); ok {
@@ -156,32 +146,6 @@ func (r *TurnRunner) requestNormalModeResponse(input string, image *api.ImageDat
 		return "", fmt.Errorf("API call failed: %w", err)
 	}
 	return response, nil
-}
-
-func buildNormalModeInputs(input, approvedPlan string) (string, string) {
-	normalModeInput := input + promptnormal.NormalModePrompt
-	approvedPlan = strings.TrimSpace(approvedPlan)
-	if approvedPlan == "" {
-		return normalModeInput, normalModeInput
-	}
-
-	var builder strings.Builder
-	builder.WriteString(normalModeInput)
-	_, _ = fmt.Fprintf(&builder, approvedPlanHandoffInstruction, approvedPlan)
-	return normalModeInput, builder.String()
-}
-
-func buildNormalModeRequestHistory(history []api.Message, turnUserMessageIndex int, providerInput string) []api.Message {
-	if turnUserMessageIndex < 0 || turnUserMessageIndex >= len(history) {
-		return history
-	}
-	if history[turnUserMessageIndex].Content == providerInput {
-		return history
-	}
-
-	cloned := append([]api.Message(nil), history...)
-	cloned[turnUserMessageIndex].Content = providerInput
-	return cloned
 }
 
 func (r *TurnRunner) debugLogToolCalls(response string, toolCalls []*tools.ToolCall) {
@@ -205,9 +169,9 @@ func (r *TurnRunner) handleNormalModeNoToolResponse(response string, cfg *config
 	return newNormalModeNoToolHandler(r, cfg, state).Handle(response)
 }
 
-func (r *TurnRunner) processNormalModeToolCalls(response string, toolCalls []*tools.ToolCall, rs *retryState) error {
+func (r *TurnRunner) processNormalModeToolCalls(response string, toolCalls []*tools.ToolCall, state *normalModeState, rs *retryState) error {
 	a := r.agent
-	handler := newNormalModeToolResultHandler(r)
+	handler := newNormalModeToolResultHandler(r, state)
 
 	if len(toolCalls) > 0 {
 		a.addToolCallsToHistory(response, toolCalls)

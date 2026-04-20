@@ -1,13 +1,23 @@
 package agent
 
-import "github.com/susugadx/xelyon-cli/internal/api"
+import (
+	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/agent/plan"
+	"github.com/susugadx/xelyon-cli/internal/api"
+)
 
 // handleTextPlanRecovery は normal mode で no-tool 応答が
 // 実行ではなく計画文へ逸れた時の補正だけを担当する。
+// wording 判定は使わず、no-mutation + strong plan signal の場合だけ補正する。
 func (h *normalModeNoToolHandler) handleTextPlanRecovery(response string) (bool, normalModeAction) {
 	a := h.runner.agent
+	if !hasStrongTextPlanSignal(response) {
+		return false, normalModeContinue
+	}
+
 	steps := extractTextPlan(response)
-	if isCompletionTriggerResponse(response) || len(steps) < 5 || !isActionPlan(steps) {
+	if len(steps) < 3 || !isActionPlan(steps) {
 		return false, normalModeContinue
 	}
 
@@ -37,4 +47,61 @@ func (h *normalModeNoToolHandler) handleTextPlanRecovery(response string) (bool,
 		Content: a.toolVisibilityPolicy(toolSurfacePhaseNormal, toolVisibilityOptions{allowSubAgents: true}).normalModeRecoveryPrompt(normalModeRecoveryPromptNoTextPlan),
 	})
 	return true, normalModeContinue
+}
+
+func hasStrongTextPlanSignal(response string) bool {
+	trimmed := strings.TrimSpace(response)
+	if trimmed == "" {
+		return false
+	}
+	if plan.ContainsPlanJSON(trimmed) {
+		return true
+	}
+
+	lowered := strings.ToLower(trimmed)
+	strongPrefixes := []string{
+		"here is the plan",
+		"plan:",
+		"plan：",
+		"execution plan:",
+		"execution plan：",
+		"計画:",
+		"計画：",
+		"実行計画:",
+		"実行計画：",
+		"作業計画:",
+		"作業計画：",
+		"# plan",
+		"## plan",
+		"### plan",
+	}
+	for _, prefix := range strongPrefixes {
+		if strings.HasPrefix(lowered, prefix) {
+			return true
+		}
+	}
+
+	markers := []string{
+		"\nhere is the plan",
+		"\nplan:",
+		"\nplan：",
+		"\nexecution plan:",
+		"\nexecution plan：",
+		"\n計画:",
+		"\n計画：",
+		"\n実行計画:",
+		"\n実行計画：",
+		"\n作業計画:",
+		"\n作業計画：",
+		"\n# plan",
+		"\n## plan",
+		"\n### plan",
+	}
+	for _, marker := range markers {
+		if strings.Contains(lowered, marker) {
+			return true
+		}
+	}
+
+	return strings.Contains(lowered, "```json") && strings.Contains(lowered, "\"plan\"")
 }

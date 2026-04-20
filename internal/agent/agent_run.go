@@ -148,7 +148,6 @@ func RunHeadlessWithConfig(ctx context.Context, query string, model string, prov
 			// ファイル変更履歴を記録
 			if change != nil {
 				agent.appendChange(*change)
-				agent.noteApprovedPlanRecordedChange(change)
 			}
 		}
 

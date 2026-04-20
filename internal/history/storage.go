@@ -220,22 +220,19 @@ func (st *Storage) saveMetadata(session *Session) error {
 	}
 
 	meta := SessionMetadata{
-		ID:                              session.ID,
-		Model:                           session.Model,
-		ProviderName:                    session.ProviderName,
-		ProviderConfigKey:               session.ProviderConfigKey,
-		StartTime:                       session.StartTime,
-		LastModified:                    session.LastModified,
-		MessageCount:                    session.conversationMessageCount(),
-		Preview:                         preview,
-		PendingApprovedPlan:             session.PendingApprovedPlan,
-		PendingApprovedPlanHasChanges:   session.PendingApprovedPlanHasChanges,
-		PendingApprovedPlanChangedFiles: append([]string(nil), session.PendingApprovedPlanChangedFiles...),
-		ResponseID:                      session.ResponseID,
-		ResponseContextVersion:          responseContextMetadataVersionForSession(session),
-		ResponseModel:                   session.ResponseModel,
-		ResponseProviderName:            session.ResponseProviderName,
-		ResponseProviderConfigKey:       session.ResponseProviderConfigKey,
+		ID:                        session.ID,
+		Model:                     session.Model,
+		ProviderName:              session.ProviderName,
+		ProviderConfigKey:         session.ProviderConfigKey,
+		StartTime:                 session.StartTime,
+		LastModified:              session.LastModified,
+		MessageCount:              session.conversationMessageCount(),
+		Preview:                   preview,
+		ResponseID:                session.ResponseID,
+		ResponseContextVersion:    responseContextMetadataVersionForSession(session),
+		ResponseModel:             session.ResponseModel,
+		ResponseProviderName:      session.ResponseProviderName,
+		ResponseProviderConfigKey: session.ResponseProviderConfigKey,
 	}
 
 	data, err := json.MarshalIndent(meta, "", "  ")

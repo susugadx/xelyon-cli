@@ -10,13 +10,19 @@ import (
 type normalModeToolResultHandler struct {
 	runner           *TurnRunner
 	tracker          *MutationTracker
+	turnMutations    *turnMutationState
 	lastFailedResult string
 }
 
-func newNormalModeToolResultHandler(r *TurnRunner) *normalModeToolResultHandler {
+func newNormalModeToolResultHandler(r *TurnRunner, state *normalModeState) *normalModeToolResultHandler {
+	var turnMutations *turnMutationState
+	if state != nil {
+		turnMutations = &state.turnMutations
+	}
 	return &normalModeToolResultHandler{
-		runner:  r,
-		tracker: r.mutationTracker(),
+		runner:        r,
+		tracker:       r.mutationTracker(),
+		turnMutations: turnMutations,
 	}
 }
 
@@ -31,7 +37,7 @@ func (h *normalModeToolResultHandler) Handle(tc *tools.ToolCall, result string, 
 		return
 	}
 
-	h.tracker.RecordToolResult(tc, result, change)
+	h.tracker.RecordToolResult(tc, result, change, h.turnMutations)
 	a.appendToolResultToHistory(tc, result)
 	_, _ = fmt.Fprintln(a.output())
 

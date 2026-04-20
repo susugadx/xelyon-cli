@@ -555,7 +555,7 @@ func handlePlanCommand(agent *Agent, args []string) bool {
 		switch args[0] {
 		case "on":
 			agent.setPlanModeEnabled(true)
-			green.Fprintln(out, "✅ Plan Mode ON - 調査→計画→承認→通常モードへ handoff")
+			green.Fprintln(out, "✅ Plan Mode ON - 調査→計画→承認（planning only）")
 			return true
 		case "off":
 			agent.setPlanModeEnabled(false)

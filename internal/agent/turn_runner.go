@@ -174,6 +174,7 @@ func (r *TurnRunner) runTurnLoop(policy turnLoopPolicy) (turnLoopDirective, erro
 	}
 }
 
+// RunNormalMode は通常ターンを実行する。
 func (r *TurnRunner) RunNormalMode(input string, image *api.ImageData) error {
 	return r.runNormalModeLoop(input, image)
 }

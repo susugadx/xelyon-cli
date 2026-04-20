@@ -12,19 +12,16 @@ func (a *Agent) restoreSessionConversation(session *history.Session) {
 	}
 
 	a.session = session
-	a.activeApprovedPlan = ""
 	a.lastOutputs = nil
 
 	if session == nil {
 		a.History = nil
-		a.restoreApprovedPlanStateFromSession()
 		a.RestoreCompactedState(nil)
 		a.restoreProviderResponseID("")
 		return
 	}
 
 	a.History = session.ToAPIMessages()
-	a.restoreApprovedPlanStateFromSession()
 	a.RestoreCompactedState(session)
 	a.restoreProviderResponseID(session.ResponseID)
 }
@@ -36,10 +33,6 @@ func (a *Agent) resetConversationState() error {
 
 	a.History = nil
 	a.lastOutputs = nil
-	a.activeApprovedPlan = ""
-	a.PendingApprovedPlan = ""
-	a.PendingApprovedPlanHasChanges = false
-	a.PendingApprovedPlanChangedFiles = nil
 	a.RestoreCompactedState(nil)
 	a.restoreProviderResponseID("")
 
@@ -68,7 +61,7 @@ func (a *Agent) hasConversationState() bool {
 		return false
 	}
 
-	if len(a.History) > 0 || len(a.lastOutputs) > 0 || strings.TrimSpace(a.PendingApprovedPlan) != "" || a.isCompactedMode || len(a.compactedItems) > 0 {
+	if len(a.History) > 0 || len(a.lastOutputs) > 0 || a.isCompactedMode || len(a.compactedItems) > 0 {
 		return true
 	}
 	if ridProvider, ok := a.CurrentProvider.(ResponseIDCapable); ok && ridProvider.HasCachedResponseID() {
@@ -80,6 +73,5 @@ func (a *Agent) hasConversationState() bool {
 	return len(a.session.Messages) > 0 ||
 		len(a.session.CompactedItems) > 0 ||
 		a.session.IsCompactedMode ||
-		strings.TrimSpace(a.session.PendingApprovedPlan) != "" ||
 		strings.TrimSpace(a.session.ResponseID) != ""
 }

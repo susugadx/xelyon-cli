@@ -17,20 +17,17 @@ func (st *Storage) Load(sessionID string) (*Session, error) {
 	}
 
 	session := &Session{
-		ID:                              meta.ID,
-		Model:                           meta.Model,
-		ProviderName:                    meta.ProviderName,
-		ProviderConfigKey:               meta.ProviderConfigKey,
-		StartTime:                       meta.StartTime,
-		LastModified:                    meta.LastModified,
-		Messages:                        []MessageEntry{},
-		PendingApprovedPlan:             meta.PendingApprovedPlan,
-		PendingApprovedPlanHasChanges:   meta.PendingApprovedPlanHasChanges,
-		PendingApprovedPlanChangedFiles: append([]string(nil), meta.PendingApprovedPlanChangedFiles...),
-		ResponseID:                      meta.ResponseID,
-		ResponseModel:                   meta.ResponseModel,
-		ResponseProviderName:            meta.ResponseProviderName,
-		ResponseProviderConfigKey:       meta.ResponseProviderConfigKey,
+		ID:                        meta.ID,
+		Model:                     meta.Model,
+		ProviderName:              meta.ProviderName,
+		ProviderConfigKey:         meta.ProviderConfigKey,
+		StartTime:                 meta.StartTime,
+		LastModified:              meta.LastModified,
+		Messages:                  []MessageEntry{},
+		ResponseID:                meta.ResponseID,
+		ResponseModel:             meta.ResponseModel,
+		ResponseProviderName:      meta.ResponseProviderName,
+		ResponseProviderConfigKey: meta.ResponseProviderConfigKey,
 	}
 	restoreLoadedResponseContext(meta, session)
 

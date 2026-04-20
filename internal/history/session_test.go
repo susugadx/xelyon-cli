@@ -38,8 +38,6 @@ func TestSession_TruncateMessages(t *testing.T) {
 func TestSession_ResetConversation(t *testing.T) {
 	session := NewSession("test-model")
 	session.AddMessage("user", "hello", "test-model")
-	session.PendingApprovedPlan = "Implementation Plan\n1. Step"
-	session.PendingApprovedPlanChangedFiles = []string{"foo.go"}
 	session.CompactedItems = []CompactedItem{{Type: "compacted", Data: "compressed"}}
 	session.IsCompactedMode = true
 	session.ResponseID = "resp_123"
@@ -49,15 +47,6 @@ func TestSession_ResetConversation(t *testing.T) {
 
 	if len(session.Messages) != 0 {
 		t.Fatalf("len(session.Messages) = %d, want 0", len(session.Messages))
-	}
-	if session.PendingApprovedPlan != "" {
-		t.Fatalf("PendingApprovedPlan = %q, want empty", session.PendingApprovedPlan)
-	}
-	if session.PendingApprovedPlanHasChanges {
-		t.Fatal("PendingApprovedPlanHasChanges = true, want false")
-	}
-	if len(session.PendingApprovedPlanChangedFiles) != 0 {
-		t.Fatalf("PendingApprovedPlanChangedFiles = %v, want empty", session.PendingApprovedPlanChangedFiles)
 	}
 	if len(session.CompactedItems) != 0 {
 		t.Fatalf("len(session.CompactedItems) = %d, want 0", len(session.CompactedItems))

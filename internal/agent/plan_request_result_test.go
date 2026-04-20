@@ -45,7 +45,7 @@ func TestPlanModeRequest_HandleInvestigationResult_NoImplementationCases(t *test
 	}
 }
 
-func TestPlanModeRequest_HandleInvestigationResult_ApprovedPlanStopsAfterApproval(t *testing.T) {
+func TestPlanModeRequest_HandleInvestigationResult_PlanApprovalStopsAfterApproval(t *testing.T) {
 	disableColors(t)
 
 	var out bytes.Buffer
@@ -74,12 +74,6 @@ func TestPlanModeRequest_HandleInvestigationResult_ApprovedPlanStopsAfterApprova
 	if !strings.Contains(out.String(), "Plan approved. Plan Mode complete. Implementation not started.") {
 		t.Fatalf("expected approval output, got %q", out.String())
 	}
-	if agent.PendingApprovedPlan == "" {
-		t.Fatal("PendingApprovedPlan should be saved on approval")
-	}
-	if !strings.Contains(agent.PendingApprovedPlan, "Update the target file") {
-		t.Fatalf("PendingApprovedPlan = %q, want rendered plan text", agent.PendingApprovedPlan)
-	}
 	if agent.PlanModeEnabled {
 		t.Fatal("PlanModeEnabled should be false after approval")
 	}
@@ -88,7 +82,7 @@ func TestPlanModeRequest_HandleInvestigationResult_ApprovedPlanStopsAfterApprova
 	}
 }
 
-func TestPlanModeRequest_Run_ApprovedPlanStopsBeforeImplementation(t *testing.T) {
+func TestPlanModeRequest_Run_PlanApprovalStopsBeforeImplementation(t *testing.T) {
 	disableColors(t)
 
 	var out bytes.Buffer
@@ -123,9 +117,6 @@ func TestPlanModeRequest_Run_ApprovedPlanStopsBeforeImplementation(t *testing.T)
 	}
 	if strings.Contains(output, "Starting implementation") {
 		t.Fatalf("expected no implementation start message, got %q", output)
-	}
-	if agent.PendingApprovedPlan == "" {
-		t.Fatal("PendingApprovedPlan should be saved on approval")
 	}
 	if agent.PlanModeEnabled {
 		t.Fatal("PlanModeEnabled should be false after approval")

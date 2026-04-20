@@ -17,42 +17,13 @@ func newStorageLoadTestStorage(t *testing.T) *Storage {
 	return storage
 }
 
-func TestStorage_Save_LoadPendingApprovedPlan(t *testing.T) {
-	storage := newStorageLoadTestStorage(t)
-
-	session := NewSession("test-model")
-	session.AddMessage("user", "Hello", "test-model")
-	session.PendingApprovedPlan = "Implementation Plan\n1. Restore me later"
-	session.PendingApprovedPlanHasChanges = true
-	session.PendingApprovedPlanChangedFiles = []string{"foo.go", "bar.go"}
-
-	if err := storage.Save(session); err != nil {
-		t.Fatalf("Save failed: %v", err)
-	}
-
-	loaded, err := storage.Load(session.ID)
-	if err != nil {
-		t.Fatalf("Load failed: %v", err)
-	}
-
-	if loaded.PendingApprovedPlan != session.PendingApprovedPlan {
-		t.Fatalf("PendingApprovedPlan = %q, want %q", loaded.PendingApprovedPlan, session.PendingApprovedPlan)
-	}
-	if loaded.PendingApprovedPlanHasChanges != session.PendingApprovedPlanHasChanges {
-		t.Fatalf("PendingApprovedPlanHasChanges = %v, want %v", loaded.PendingApprovedPlanHasChanges, session.PendingApprovedPlanHasChanges)
-	}
-	if strings.Join(loaded.PendingApprovedPlanChangedFiles, ",") != strings.Join(session.PendingApprovedPlanChangedFiles, ",") {
-		t.Fatalf("PendingApprovedPlanChangedFiles = %v, want %v", loaded.PendingApprovedPlanChangedFiles, session.PendingApprovedPlanChangedFiles)
-	}
-}
-
 func TestStorage_Load_MetadataOnlySession(t *testing.T) {
 	storage := newStorageLoadTestStorage(t)
 
 	session := NewSession("test-model")
-	session.PendingApprovedPlan = "Implementation Plan\n1. Restore me later"
-	session.PendingApprovedPlanHasChanges = true
-	session.PendingApprovedPlanChangedFiles = []string{"foo.go"}
+	session.CompactedItems = []CompactedItem{{Type: "compacted", Data: "summary"}}
+	session.IsCompactedMode = true
+	session.ResponseID = "resp_123"
 	if err := storage.Save(session); err != nil {
 		t.Fatalf("Save failed: %v", err)
 	}
@@ -64,14 +35,14 @@ func TestStorage_Load_MetadataOnlySession(t *testing.T) {
 	if len(loaded.Messages) != 0 {
 		t.Fatalf("len(loaded.Messages) = %d, want 0 for metadata-only session", len(loaded.Messages))
 	}
-	if loaded.PendingApprovedPlan != session.PendingApprovedPlan {
-		t.Fatalf("PendingApprovedPlan = %q, want %q", loaded.PendingApprovedPlan, session.PendingApprovedPlan)
+	if loaded.IsCompactedMode {
+		t.Fatal("loaded.IsCompactedMode = true, want false for metadata-only restore")
 	}
-	if loaded.PendingApprovedPlanHasChanges != session.PendingApprovedPlanHasChanges {
-		t.Fatalf("PendingApprovedPlanHasChanges = %v, want %v", loaded.PendingApprovedPlanHasChanges, session.PendingApprovedPlanHasChanges)
+	if loaded.ResponseID != "resp_123" {
+		t.Fatalf("loaded.ResponseID = %q, want resp_123", loaded.ResponseID)
 	}
-	if strings.Join(loaded.PendingApprovedPlanChangedFiles, ",") != strings.Join(session.PendingApprovedPlanChangedFiles, ",") {
-		t.Fatalf("PendingApprovedPlanChangedFiles = %v, want %v", loaded.PendingApprovedPlanChangedFiles, session.PendingApprovedPlanChangedFiles)
+	if len(loaded.CompactedItems) != 0 {
+		t.Fatalf("loaded.CompactedItems = %#v, want empty for metadata-only restore", loaded.CompactedItems)
 	}
 }
 

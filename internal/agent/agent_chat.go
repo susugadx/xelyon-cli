@@ -32,8 +32,7 @@ func (a *Agent) chatInternal(input string, image *api.ImageData) {
 	_ = a.chatCore(input, image, false)
 }
 
-// runNormalMode は通常モードでの処理（Plan Mode OFF 時）
-// ツールを個別に確認しながら実行するループ（自動リトライ対応）
+// runNormalMode は通常モードでの処理（Plan Mode OFF 時）を実行する。
 func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.ImageData) error {
 	return newTurnRunner(a, ctx).RunNormalMode(input, image)
 }

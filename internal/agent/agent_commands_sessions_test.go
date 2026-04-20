@@ -89,7 +89,7 @@ func TestHandleLoadCommand_UsesRuntimeOutput(t *testing.T) {
 	}
 }
 
-func TestHandleLoadCommand_RestoresPendingApprovedPlanForNextTurn(t *testing.T) {
+func TestHandleLoadCommand_DoesNotInjectLegacyPlanMarker(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
 	storage, err := history.NewStorage()
@@ -99,7 +99,6 @@ func TestHandleLoadCommand_RestoresPendingApprovedPlanForNextTurn(t *testing.T) 
 
 	session := history.NewSession("test-model")
 	session.AddMessage("user", "loaded session", "test-model")
-	session.PendingApprovedPlan = "Implementation Plan\n1. Restore the approved plan"
 	if err := storage.Save(session); err != nil {
 		t.Fatalf("Save() error = %v", err)
 	}
@@ -116,34 +115,21 @@ func TestHandleLoadCommand_RestoresPendingApprovedPlanForNextTurn(t *testing.T) 
 		},
 	}
 	agent := newChatRequestTestAgent(t, provider, &out)
-	agent.PendingApprovedPlan = "Implementation Plan\n1. Stale local plan"
 	agent.storage = storage
 
 	if !handleLoadCommand(agent, []string{session.ID}) {
 		t.Fatal("handleLoadCommand() = false, want true")
 	}
-	if agent.PendingApprovedPlan != session.PendingApprovedPlan {
-		t.Fatalf("PendingApprovedPlan = %q, want loaded session plan %q", agent.PendingApprovedPlan, session.PendingApprovedPlan)
-	}
 
-	req := &chatRequest{input: "new task"}
+	req := &chatRequest{input: "continue"}
 	if err := agent.executeChatRequest(context.Background(), req); err != nil {
 		t.Fatalf("executeChatRequest() error = %v", err)
-	}
-	if req.approvedPlanHandoff != session.PendingApprovedPlan {
-		t.Fatalf("approvedPlanHandoff = %q, want restored plan after /load", req.approvedPlanHandoff)
 	}
 	if len(capturedHistories) != 1 {
 		t.Fatalf("capturedHistories = %d, want 1", len(capturedHistories))
 	}
 	lastUserMessage := capturedHistories[0][len(capturedHistories[0])-1].Content
-	if !strings.Contains(lastUserMessage, "[APPROVED PLAN HANDOFF]") {
-		t.Fatalf("approved plan handoff should be injected after /load, got %#v", capturedHistories[0])
-	}
-	if !strings.Contains(lastUserMessage, "Restore the approved plan") {
-		t.Fatalf("expected loaded plan in handoff guidance, got %q", lastUserMessage)
-	}
-	if strings.Contains(lastUserMessage, "Stale local plan") {
-		t.Fatalf("stale local pending plan should be replaced by loaded session state, got %q", lastUserMessage)
+	if strings.Contains(lastUserMessage, "[APPROVED PLAN HANDOFF]") {
+		t.Fatalf("normal mode request should not inject legacy plan marker after /load, got %#v", capturedHistories[0])
 	}
 }

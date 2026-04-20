@@ -11,11 +11,10 @@ import (
 )
 
 type chatRequest struct {
-	input               string
-	image               *api.ImageData
-	oneShot             bool
-	startStats          SessionStats
-	approvedPlanHandoff string
+	input      string
+	image      *api.ImageData
+	oneShot    bool
+	startStats SessionStats
 }
 
 // chatCore は chat / ChatOnce の共有実装
@@ -85,13 +84,11 @@ func (a *Agent) beginChatRequestContext() (context.Context, func()) {
 	a.lastCancelReason = ""
 	a.cancelFunc = cancel
 	a.requestCtx = ctx
-	a.activeApprovedPlan = ""
 	a.debugCancelf("request started (timeout=%s, model=%s, provider=%s)", timeout, a.CurrentModel, a.ProviderName)
 
 	cleanup := func() {
 		a.debugCancelf("request finished (ctx_err=%v, cancel_reason=%q)", ctx.Err(), a.lastCancelReason)
 		cancel()
-		a.activeApprovedPlan = ""
 		a.requestCtx = nil
 		a.cancelFunc = nil
 		a.lastCancelReason = ""
@@ -126,14 +123,7 @@ func (a *Agent) retryChatRequest(req *chatRequest) error {
 }
 
 func (a *Agent) runNormalChatRequest(ctx context.Context, req *chatRequest) error {
-	a.beginApprovedPlanHandoff(req)
-
-	if err := a.runNormalMode(ctx, req.input, req.image); err != nil {
-		return err
-	}
-
-	a.finishApprovedPlanHandoff(req)
-	return nil
+	return a.runNormalMode(ctx, req.input, req.image)
 }
 
 func (a *Agent) handleChatRequestError(req *chatRequest, err error) error {

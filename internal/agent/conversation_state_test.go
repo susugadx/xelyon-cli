@@ -49,8 +49,6 @@ func TestAgent_ResetConversationState_ClearsRuntimeAndSessionState(t *testing.T)
 
 	agent.History = []api.Message{{Role: "assistant", Content: "old response"}}
 	agent.lastOutputs = []string{"old response"}
-	agent.PendingApprovedPlan = "Implementation Plan\n1. Update target file"
-	agent.activeApprovedPlan = "Implementation Plan\n1. Update target file"
 	agent.compactedItems = []api.InputItem{{Type: "compacted", Data: "compressed"}}
 	agent.isCompactedMode = true
 	provider.SetResponseID("resp_old")
@@ -59,7 +57,6 @@ func TestAgent_ResetConversationState_ClearsRuntimeAndSessionState(t *testing.T)
 		t.Fatal("agent.session = nil")
 	}
 	agent.session.AddMessage("user", "old request", agent.CurrentModel)
-	agent.session.PendingApprovedPlan = agent.PendingApprovedPlan
 	agent.session.CompactedItems = []history.CompactedItem{{Type: "compacted", Data: "compressed"}}
 	agent.session.IsCompactedMode = true
 	agent.session.ResponseID = "resp_old"
@@ -74,12 +71,6 @@ func TestAgent_ResetConversationState_ClearsRuntimeAndSessionState(t *testing.T)
 	}
 	if len(agent.lastOutputs) != 0 {
 		t.Fatalf("len(agent.lastOutputs) = %d, want 0", len(agent.lastOutputs))
-	}
-	if agent.PendingApprovedPlan != "" {
-		t.Fatalf("PendingApprovedPlan = %q, want empty", agent.PendingApprovedPlan)
-	}
-	if agent.activeApprovedPlan != "" {
-		t.Fatalf("activeApprovedPlan = %q, want empty", agent.activeApprovedPlan)
 	}
 	if agent.IsCompactedMode() {
 		t.Fatal("IsCompactedMode() = true, want false")
@@ -97,9 +88,6 @@ func TestAgent_ResetConversationState_ClearsRuntimeAndSessionState(t *testing.T)
 	}
 	if len(loaded.ToAPIMessages()) != 0 {
 		t.Fatalf("len(loaded.ToAPIMessages()) = %d, want 0", len(loaded.ToAPIMessages()))
-	}
-	if loaded.PendingApprovedPlan != "" {
-		t.Fatalf("loaded.PendingApprovedPlan = %q, want empty", loaded.PendingApprovedPlan)
 	}
 	if loaded.IsCompactedMode {
 		t.Fatal("loaded.IsCompactedMode = true, want false")
@@ -121,15 +109,12 @@ func TestAgent_RestoreSessionConversation_ReplacesRuntimeMirrors(t *testing.T) {
 
 	agent.History = []api.Message{{Role: "assistant", Content: "stale response"}}
 	agent.lastOutputs = []string{"stale output"}
-	agent.PendingApprovedPlan = "Implementation Plan\n1. Stale plan"
-	agent.activeApprovedPlan = "Implementation Plan\n1. Stale plan"
 	agent.compactedItems = []api.InputItem{{Type: "compacted", Data: "stale"}}
 	agent.isCompactedMode = true
 	provider.SetResponseID("resp_stale")
 
 	session := history.NewSession("test-model")
 	session.AddMessage("user", "loaded request", "test-model")
-	session.PendingApprovedPlan = "Implementation Plan\n1. Loaded plan"
 
 	agent.restoreSessionConversation(session)
 
@@ -138,12 +123,6 @@ func TestAgent_RestoreSessionConversation_ReplacesRuntimeMirrors(t *testing.T) {
 	}
 	if len(agent.History) != 1 || agent.History[0].Content != "loaded request" {
 		t.Fatalf("agent.History = %#v, want loaded session messages", agent.History)
-	}
-	if agent.PendingApprovedPlan != session.PendingApprovedPlan {
-		t.Fatalf("PendingApprovedPlan = %q, want %q", agent.PendingApprovedPlan, session.PendingApprovedPlan)
-	}
-	if agent.activeApprovedPlan != "" {
-		t.Fatalf("activeApprovedPlan = %q, want empty", agent.activeApprovedPlan)
 	}
 	if agent.IsCompactedMode() {
 		t.Fatal("IsCompactedMode() = true, want false after loading non-compacted session")

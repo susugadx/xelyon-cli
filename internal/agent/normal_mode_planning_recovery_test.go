@@ -108,12 +108,12 @@ func TestNormalMode_TextPlanHardFallback_DoesNotDuplicateAssistantHistory(t *tes
 	cfg.Output.AssistantUpdates = "phase"
 
 	responses := []string{
-		"Plan try 1\n1. create file\n2. update config\n3. run test\n4. fix error\n5. summarize result",
-		"Plan try 2\n1. create file\n2. update config\n3. run test\n4. fix error\n5. summarize result",
-		"Plan try 3\n1. create file\n2. update config\n3. run test\n4. fix error\n5. summarize result",
-		"Plan try 4\n1. create file\n2. update config\n3. run test\n4. fix error\n5. summarize result",
-		"Plan try 5\n1. create file\n2. update config\n3. run test\n4. fix error\n5. summarize result",
-		"Plan try 6\n1. create file\n2. update config\n3. run test\n4. fix error\n5. summarize result",
+		"Here is the plan (try 1):\n1. create file\n2. update config\n3. run test\n4. fix error\n5. summarize result",
+		"Here is the plan (try 2):\n1. create file\n2. update config\n3. run test\n4. fix error\n5. summarize result",
+		"Here is the plan (try 3):\n1. create file\n2. update config\n3. run test\n4. fix error\n5. summarize result",
+		"Here is the plan (try 4):\n1. create file\n2. update config\n3. run test\n4. fix error\n5. summarize result",
+		"Here is the plan (try 5):\n1. create file\n2. update config\n3. run test\n4. fix error\n5. summarize result",
+		"Here is the plan (try 6):\n1. create file\n2. update config\n3. run test\n4. fix error\n5. summarize result",
 	}
 	provider := &sequenceMockProvider{
 		name:      "test",

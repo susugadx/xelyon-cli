@@ -185,24 +185,21 @@ func TestRunNormalMode_FinalCheckFailureRequestsFix(t *testing.T) {
 	cfg.FinalChecks.Timeout = 1
 
 	provider.responses = []string{
-		"変更が完了しました。",
+		`{"tool":"final_check_write","args":{"path":"` + filePath + `","content":"package main\n\nfunc main() { println(\"done\") }\n"}}`,
+		"Would you like me to continue?",
 		`{"tool":"final_check_write","args":{"path":"` + filePath + `","content":"package main\n\nfunc main() { println(\"fixed\") }\n"}}`,
-		"修正が完了しました。",
+		"Would you like me to continue?",
 	}
 
 	agent := newTurnRunnerTestAgent(provider, cfg, "", &out, &finalCheckWriteTool{})
 	chdirForTest(t, repoDir)
-	if err := os.WriteFile(filePath, []byte("package main\n\nfunc main() { println(\"done\") }\n"), 0o644); err != nil {
-		t.Fatalf("failed to modify repo file: %v", err)
-	}
-	agent.changeStack = []tools.FileChange{{FilePath: filePath}}
 	agent.Stats = NewSessionStats("test")
 
 	if err := agent.runNormalMode(context.Background(), "finish it", nil); err != nil {
 		t.Fatalf("runNormalMode() error = %v", err)
 	}
-	if provider.callCount != 3 {
-		t.Fatalf("provider.callCount = %d, want 3", provider.callCount)
+	if provider.callCount != 4 {
+		t.Fatalf("provider.callCount = %d, want 4", provider.callCount)
 	}
 	if !strings.Contains(out.String(), "Final check command failed. Asking AI to fix...") {
 		t.Fatalf("expected final check retry output, got %q", out.String())
@@ -267,7 +264,7 @@ func TestHandleNormalModeNoToolResponse_StalledHardDelegatesBackToAI(t *testing.
 
 	response := `{"tool":"write_file","args":{"path":"retry.txt","content":"x"}}`
 	toolCalls := runner.prepareToolCalls(response)
-	if err := runner.processNormalModeToolCalls(response, toolCalls, rs); err != nil {
+	if err := runner.processNormalModeToolCalls(response, toolCalls, &normalModeState{}, rs); err != nil {
 		t.Fatalf("processNormalModeToolCalls() error = %v", err)
 	}
 	if rs.count != 0 || rs.sameCount != 0 || rs.stalledRuns != 0 {
@@ -287,7 +284,8 @@ func TestHandleNormalModeNoToolResponse_TextPlanFirstRedirect(t *testing.T) {
 	runner := newTurnRunner(agent, context.Background())
 	state := &normalModeState{}
 
-	response := `1. Create test file
+	response := `Here is the plan:
+1. Create test file
 2. Fix lint errors
 3. Update README
 4. Implement handler
@@ -314,7 +312,8 @@ func TestHandleNormalModeNoToolResponse_TextPlanForcesDirectExecution(t *testing
 	runner := newTurnRunner(agent, context.Background())
 	state := &normalModeState{textPlanRedirectCount: maxTextPlanRedirects}
 
-	response := `1. Create test file
+	response := `Plan:
+1. Create test file
 2. Fix lint errors
 3. Update README
 4. Implement handler
@@ -341,7 +340,8 @@ func TestHandleNormalModeNoToolResponse_TextPlanFallsBackToFinalResponse(t *test
 	runner := newTurnRunner(agent, context.Background())
 	state := &normalModeState{textPlanRedirectCount: maxTextPlanHardLimit}
 
-	response := `1. Create test file
+	response := `Here is the plan:
+1. Create test file
 2. Fix lint errors
 3. Update README
 4. Implement handler
@@ -358,6 +358,31 @@ func TestHandleNormalModeNoToolResponse_TextPlanFallsBackToFinalResponse(t *test
 	}
 }
 
+func TestHandleNormalModeNoToolResponse_NumberedSummaryWithoutStrongPlanSignalDoesNotRecover(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	cfg := newProjectMapDisabledConfig()
+	agent := newTurnRunnerTestAgent(&sequenceMockProvider{name: "test"}, cfg, "", &out)
+	runner := newTurnRunner(agent, context.Background())
+	state := &normalModeState{}
+
+	response := `Done.
+1. Updated foo.go
+2. Added tests
+3. Ran go test`
+	action := runner.handleNormalModeNoToolResponse(response, cfg, state)
+	if action != normalModeDone {
+		t.Fatalf("action = %v, want normalModeDone", action)
+	}
+	if state.textPlanRedirectCount != 0 {
+		t.Fatalf("textPlanRedirectCount = %d, want 0", state.textPlanRedirectCount)
+	}
+	if strings.Contains(out.String(), "Text plan detected") {
+		t.Fatalf("expected no text plan recovery output, got %q", out.String())
+	}
+}
+
 func TestNormalModeToolResultHandler_TracksWriteFailure(t *testing.T) {
 	disableColors(t)
 
@@ -365,7 +390,7 @@ func TestNormalModeToolResultHandler_TracksWriteFailure(t *testing.T) {
 	cfg := newProjectMapDisabledConfig()
 	agent := newTurnRunnerTestAgent(&sequenceMockProvider{name: "test"}, cfg, "", &out)
 	runner := newTurnRunner(agent, context.Background())
-	handler := newNormalModeToolResultHandler(runner)
+	handler := newNormalModeToolResultHandler(runner, &normalModeState{})
 
 	tc := &tools.ToolCall{
 		Tool: "write_file",

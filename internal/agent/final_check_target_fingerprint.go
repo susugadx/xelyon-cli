@@ -9,8 +9,7 @@ import (
 )
 
 // fingerprintFinalCheckTargetFiles は final_checks.commands の対象ファイル内容から
-// 進捗 fingerprint を作る。silent edit も検出したいので、ファイル名集合ではなく
-// 実ファイル内容を source of truth とする。
+// 進捗 fingerprint を作る。changeStack 履歴ではなく結果ファイル状態を source of truth とする。
 func fingerprintFinalCheckTargetFiles(paths []string) string {
 	if len(paths) == 0 {
 		return ""
@@ -31,7 +30,9 @@ func fingerprintFinalCheckTargetFiles(paths []string) string {
 				_, _ = hasher.Write([]byte{'\n'})
 				continue
 			}
-			return ""
+			_, _ = hasher.Write([]byte("<unreadable>"))
+			_, _ = hasher.Write([]byte{'\n'})
+			continue
 		}
 
 		_, _ = hasher.Write(data)

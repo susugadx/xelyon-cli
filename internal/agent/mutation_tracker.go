@@ -19,13 +19,13 @@ func (a *Agent) mutationTracker() *MutationTracker {
 	return newMutationTracker(a)
 }
 
-func (m *MutationTracker) RecordToolResult(tc *tools.ToolCall, result string, change *tools.FileChange) {
+func (m *MutationTracker) RecordToolResult(tc *tools.ToolCall, result string, change *tools.FileChange, turnMutations *turnMutationState) {
 	if m == nil || m.agent == nil {
 		return
 	}
 	m.NoteProjectMapMutation(tc, change)
 	m.trackDeferredDiagnostics(tc, result, change)
-	m.RecordFileChange(change)
+	m.RecordFileChangeForTurn(change, turnMutations)
 }
 
 func (m *MutationTracker) NoteProjectMapMutation(tc *tools.ToolCall, change *tools.FileChange) {
@@ -52,6 +52,10 @@ func (m *MutationTracker) NoteProjectMapMutation(tc *tools.ToolCall, change *too
 }
 
 func (m *MutationTracker) RecordFileChange(change *tools.FileChange) {
+	m.RecordFileChangeForTurn(change, nil)
+}
+
+func (m *MutationTracker) RecordFileChangeForTurn(change *tools.FileChange, turnMutations *turnMutationState) {
 	a := m.agent
 	if a == nil || change == nil {
 		return
@@ -60,7 +64,9 @@ func (m *MutationTracker) RecordFileChange(change *tools.FileChange) {
 	a.promptManager().InvalidateProjectMap()
 
 	a.appendChange(*change)
-	a.noteApprovedPlanRecordedChange(change)
+	if turnMutations != nil {
+		turnMutations.recordFileChange(*change)
+	}
 
 	if a.changeStorage != nil && a.session != nil {
 		if err := a.changeStorage.AppendChange(a.session.ID, *change); err != nil {

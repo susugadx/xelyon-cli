@@ -20,7 +20,6 @@ func (a *Agent) syncSessionPersistenceState() {
 		return
 	}
 
-	a.syncApprovedPlanStateToSession()
 	a.syncSessionRuntimeIdentity()
 	a.syncSavedResponseContextFromProvider()
 }

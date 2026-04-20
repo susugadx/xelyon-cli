@@ -20,11 +20,18 @@ func newNormalModeNoToolHandler(r *TurnRunner, cfg *config.Config, state *normal
 }
 
 func (h *normalModeNoToolHandler) Handle(response string) normalModeAction {
-	if handled, action := h.handleTextPlanRecovery(response); handled {
-		return action
+	// completion wording は使わず、変更が発生したターンの最初の no-tool 応答で
+	// final checks を機械的に実行する。
+	// 早めに走るケースはあるが、open-world な wording 判定を避けて単純化を優先する。
+	if h.hasTaskMutationsThisTurn() {
+		if handled, action := h.handlePostMutationFinalChecks(response); handled {
+			return action
+		}
+		h.runner.agent.handleNormalResponse(response)
+		return normalModeDone
 	}
-	recordedChanges := h.captureRecordedTaskChanges(response)
-	if handled, action := h.handleCompletionFinalChecks(response, recordedChanges); handled {
+
+	if handled, action := h.handleTextPlanRecovery(response); handled {
 		return action
 	}
 
@@ -32,26 +39,18 @@ func (h *normalModeNoToolHandler) Handle(response string) normalModeAction {
 	return normalModeDone
 }
 
-func (h *normalModeNoToolHandler) captureRecordedTaskChanges(response string) recordedTaskChangeSnapshot {
-	if !isCompletionTriggerResponse(response) {
-		h.state.recordedTaskChanges = recordedTaskChangeSnapshot{}
-		return recordedTaskChangeSnapshot{}
-	}
-
-	snapshot := h.runner.agent.recordedTaskChangeSnapshot()
-	h.state.recordedTaskChanges = snapshot
-	return snapshot
+func (h *normalModeNoToolHandler) hasTaskMutationsThisTurn() bool {
+	return h.state != nil && h.state.turnMutations.hasMutations()
 }
 
-func (h *normalModeNoToolHandler) handleCompletionFinalChecks(response string, changes recordedTaskChangeSnapshot) (bool, normalModeAction) {
+func (h *normalModeNoToolHandler) handlePostMutationFinalChecks(response string) (bool, normalModeAction) {
 	a := h.runner.agent
-	if !isCompletionTriggerResponse(response) || len(h.cfg.FinalChecks.Commands) == 0 {
+	if len(h.cfg.FinalChecks.Commands) == 0 {
 		return false, normalModeContinue
 	}
-	finalCheckTargets := h.finalCheckTargetSnapshot(changes)
-	if len(finalCheckTargets.files) == 0 {
-		return false, normalModeContinue
-	}
+
+	turnMutations := h.state.turnMutations.snapshot()
+	finalCheckTargets := h.finalCheckTargetSnapshot(turnMutations)
 
 	result := a.runFinalCheckCommands(finalCheckTargets.files)
 	if !result.needsContinue {
@@ -77,30 +76,18 @@ func (h *normalModeNoToolHandler) handleCompletionFinalChecks(response string, c
 	return true, normalModeContinue
 }
 
-func (h *normalModeNoToolHandler) finalCheckTargetSnapshot(changes recordedTaskChangeSnapshot) recordedTaskChangeSnapshot {
-	a := h.runner.agent
-	mergedFiles := append([]string(nil), changes.files...)
-
-	if a != nil && a.activeApprovedPlan != "" && a.pendingApprovedPlanHasChanges() {
-		planFiles := a.pendingApprovedPlanChangedFiles()
-		if len(planFiles) > 0 {
-			seen := make(map[string]bool, len(mergedFiles)+len(planFiles))
-			for _, file := range mergedFiles {
-				seen[file] = true
-			}
-			for _, file := range planFiles {
-				mergedFiles = appendRecordedChangedFile(mergedFiles, seen, file)
-			}
-		}
-	}
-
-	progressFingerprint := fingerprintFinalCheckTargetFiles(mergedFiles)
+func (h *normalModeNoToolHandler) finalCheckTargetSnapshot(changes turnMutationSnapshot) turnMutationSnapshot {
+	files := append([]string(nil), changes.files...)
+	progressFingerprint := fingerprintFinalCheckTargetFiles(files)
 	if progressFingerprint == "" {
+		// 対象ファイルを特定できない mutation でも retry 進捗は追跡したいので、
+		// turn-local FileChange イベント由来の fingerprint にフォールバックする。
 		progressFingerprint = changes.progressFingerprint
 	}
 
-	return recordedTaskChangeSnapshot{
-		files:               mergedFiles,
+	return turnMutationSnapshot{
+		mutationCount:       changes.mutationCount,
+		files:               files,
 		progressFingerprint: progressFingerprint,
 	}
 }

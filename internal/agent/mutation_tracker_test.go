@@ -90,3 +90,41 @@ func TestAddPendingLSPFilesFromChange(t *testing.T) {
 		}
 	})
 }
+
+func TestMutationTracker_RecordToolResult_UpdatesTurnMutationState(t *testing.T) {
+	a := &Agent{
+		agentWorkspaceState: agentWorkspaceState{
+			changeStack: []tools.FileChange{},
+		},
+	}
+	tracker := a.mutationTracker()
+	state := newTurnMutationState()
+
+	change := &tools.FileChange{
+		FilePath: "/src/main.go",
+		Tool:     "write_file",
+		Details: []tools.FileChangeDetail{
+			{FilePath: "/src/main.go", Action: "modified"},
+			{FilePath: "/src/util.go", Action: "modified"},
+		},
+	}
+
+	tracker.RecordToolResult(&tools.ToolCall{Tool: "write_file"}, "ok", change, &state)
+
+	if !state.hasMutations() {
+		t.Fatal("expected turn-local mutation state to be updated by file change event")
+	}
+	snapshot := state.snapshot()
+	if snapshot.mutationCount != 1 {
+		t.Fatalf("mutationCount = %d, want 1", snapshot.mutationCount)
+	}
+	if len(snapshot.files) != 2 {
+		t.Fatalf("len(files) = %d, want 2", len(snapshot.files))
+	}
+	if snapshot.progressFingerprint == "" {
+		t.Fatal("expected non-empty progress fingerprint")
+	}
+	if len(a.changeStack) != 1 {
+		t.Fatalf("changeStack len = %d, want 1", len(a.changeStack))
+	}
+}
