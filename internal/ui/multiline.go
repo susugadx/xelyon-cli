@@ -410,6 +410,12 @@ func (m *MultilineReader) readWithBracketedPaste() (string, error) {
 			}
 
 		case err := <-m.errChan:
+			// If bytes are still buffered, process them first.
+			// This avoids dropping pending control bytes (e.g. Ctrl+C)
+			// when EOF races with byte delivery.
+			if len(m.byteChan) > 0 {
+				continue
+			}
 			if err == io.EOF {
 				return buf.String(), nil
 			}
@@ -614,6 +620,11 @@ func (m *MultilineReader) readLineFromChannel() (string, error) {
 				}
 			}
 		case err := <-m.errChan:
+			// If bytes are still buffered, process them first.
+			// This avoids dropping pending bytes when EOF races with byte delivery.
+			if len(m.byteChan) > 0 {
+				continue
+			}
 			if len(buf) > 0 {
 				return StripBracketedPaste(string(buf)), nil
 			}
