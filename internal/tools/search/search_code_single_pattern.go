@@ -1,11 +1,15 @@
 package search
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
+
+type singlePatternExecutionContext struct {
+	Pattern  string
+	Opts     SearchOptions
+	Route    searchRouteTrace
+	CacheKey string
+}
 
 func executeSinglePattern(cache tools.ToolCacheInterface, pattern string, opts SearchOptions) string {
 	return executeSinglePatternDetailed(cache, pattern, opts).Output
@@ -17,142 +21,56 @@ func executeSinglePatternWithTrace(cache tools.ToolCacheInterface, pattern strin
 }
 
 func executeSinglePatternDetailed(cache tools.ToolCacheInterface, pattern string, opts SearchOptions) singlePatternExecution {
+	ctx := newSinglePatternExecutionContext(pattern, opts)
+	if cached, ok := loadCachedSinglePatternExecution(cache, ctx); ok {
+		return cached
+	}
+	if resolved, ok := executeSinglePatternSymbolStage(cache, &ctx); ok {
+		return resolved
+	}
+	return executeSinglePatternTextStage(cache, ctx)
+}
+
+func newSinglePatternExecutionContext(pattern string, opts SearchOptions) singlePatternExecutionContext {
 	route := planSearchRoute(pattern, opts)
-	cacheKey := buildSearchCacheKeyWithRoute(opts, route.cacheSignature())
-	if cache != nil {
-		if cached, ok := cache.GetSearch(pattern, cacheKey); ok {
-			bundle := loadSinglePatternBundle(pattern, cacheKey)
-			bundle, cached = formatImpactBundleForRuntimeWithContext(bundle, cached, opts, cache, currentSearchImpactRuntimeRankContext(pattern, cacheKey))
-			affectedFiles := loadSinglePatternAffectedFiles(pattern, cacheKey)
-			if len(affectedFiles) == 0 {
-				affectedFiles = deriveAffectedFilesFromCachedResult(bundle, cached, opts)
-			}
-			return singlePatternExecution{
-				Pattern:       pattern,
-				Output:        cached,
-				Route:         route,
-				Bundle:        bundle,
-				AffectedFiles: affectedFiles,
-			}
-		}
+	return singlePatternExecutionContext{
+		Pattern:  pattern,
+		Opts:     opts,
+		Route:    route,
+		CacheKey: buildSearchCacheKey(opts, route),
+	}
+}
+
+func loadCachedSinglePatternExecution(cache tools.ToolCacheInterface, ctx singlePatternExecutionContext) (singlePatternExecution, bool) {
+	if cache == nil {
+		return singlePatternExecution{}, false
 	}
 
-	if route.InitialLane == searchLaneSymbol {
-		route.SymbolAttempted = true
-		resolver := resolverForLanguage(route.Language)
-		if resolver != nil {
-			resolved := resolver.Resolve(route.SymbolQuery, opts)
-			switch resolved.Status {
-			case symbolResolveSingle:
-				route.FinalLane = searchLaneSymbol
-				route.SymbolResolved = true
-				resolved.Bundle = attachBundleRoute(resolved.Bundle, route)
-				outputBundle, output := formatImpactBundleForRuntime(resolved.Bundle, resolved.Output, opts, cache)
-				affectedFiles := collectSymbolBundleAffectedFiles(resolved.Bundle, opts)
-				if cache != nil {
-					cache.SetSearch(pattern, cacheKey, resolved.Output, affectedFiles)
-					storeSinglePatternBundle(pattern, cacheKey, resolved.Bundle)
-					storeSinglePatternAffectedFiles(pattern, cacheKey, affectedFiles)
-				}
-				return singlePatternExecution{
-					Pattern:       pattern,
-					Output:        output,
-					Route:         route,
-					Bundle:        outputBundle,
-					AffectedFiles: affectedFiles,
-				}
-			case symbolResolveMultiple:
-				route.FinalLane = searchLaneSymbol
-				route.SymbolResolved = true
-				affectedFiles := append([]string(nil), resolved.AffectedFiles...)
-				affectedFiles = append(affectedFiles, collectPrimaryAffectedFilePathsFromOutput(resolved.Output, opts)...)
-				affectedFiles = dedupePaths(affectedFiles)
-				if len(affectedFiles) == 0 {
-					affectedFiles = deriveAffectedFilesFromCachedResult(nil, resolved.Output, opts)
-				}
-				if cache != nil {
-					cache.SetSearch(pattern, cacheKey, resolved.Output, affectedFiles)
-					storeSinglePatternAffectedFiles(pattern, cacheKey, affectedFiles)
-				}
-				return singlePatternExecution{
-					Pattern:       pattern,
-					Output:        resolved.Output,
-					Route:         route,
-					AffectedFiles: affectedFiles,
-				}
-			case symbolResolveNone:
-				route.SymbolResolved = false
-			}
-		}
-		if route.FallbackLane != "" {
-			route.FallbackUsed = true
-			route.FinalLane = route.FallbackLane
-		}
-	}
-	if route.FinalLane == "" {
-		route.FinalLane = route.InitialLane
+	cached, ok := cache.GetSearch(ctx.Pattern, ctx.CacheKey)
+	if !ok {
+		return singlePatternExecution{}, false
 	}
 
-	textOpts := opts
-	textOpts.IsRegex = route.textIsRegex()
-	output, useRipgrep, warnings, err := executeSearch(pattern, textOpts)
-	if err != nil {
-		return singlePatternExecution{Pattern: pattern, Output: fmt.Sprintf("Error: %v", err), Route: route}
+	bundle := loadSinglePatternBundle(ctx.Pattern, ctx.CacheKey)
+	bundle, cached = formatImpactBundleForRuntimeWithContext(bundle, cached, ctx.Opts, cache, currentSearchImpactRuntimeRankContext(ctx.Pattern, ctx.CacheKey))
+	affectedFiles := loadSinglePatternAffectedFiles(ctx.Pattern, ctx.CacheKey)
+	if len(affectedFiles) == 0 {
+		affectedFiles = deriveAffectedFilesFromCachedResult(bundle, cached, ctx.Opts)
 	}
 
-	var results []SearchResult
-	if useRipgrep {
-		results = parseRipgrepJSON(output, 0)
-	} else {
-		results = parseGrepOutput(output, 0)
+	return singlePatternExecution{
+		Pattern:       ctx.Pattern,
+		Output:        cached,
+		Route:         ctx.Route,
+		Bundle:        bundle,
+		AffectedFiles: affectedFiles,
+	}, true
+}
+
+func writeSinglePatternSearchCache(cache tools.ToolCacheInterface, ctx singlePatternExecutionContext, output string, affectedFiles []string) {
+	if cache == nil {
+		return
 	}
-	results = filterResultsByOptions(results, textOpts)
-	reclassifyWithAST(results, pattern, textOpts.IsRegex, textOpts)
-
-	if len(results) == 0 {
-		if len(warnings) > 0 {
-			return singlePatternExecution{Pattern: pattern, Output: strings.Join(warnings, "\n") + "\nNo matches found", Route: route}
-		}
-		return singlePatternExecution{Pattern: pattern, Output: "No matches found", Route: route}
-	}
-
-	if opts.OutputMode == "manifest" {
-		sortResultsByPriority(results)
-		detectBlocksWithCache(cache, results, textOpts)
-		formatted := formatManifestResultsWithOptions(results, opts.LocatorRegistry, opts)
-		finalOutput := formatted
-		if len(warnings) > 0 {
-			finalOutput = strings.Join(warnings, "\n") + "\n" + formatted
-		}
-
-		if cache != nil {
-			affectedFiles := collectFilePaths(results, opts)
-			cache.SetSearch(pattern, cacheKey, finalOutput, affectedFiles)
-			storeSinglePatternAffectedFiles(pattern, cacheKey, affectedFiles)
-			return singlePatternExecution{Pattern: pattern, Output: finalOutput, Route: route, AffectedFiles: affectedFiles}
-		}
-		return singlePatternExecution{Pattern: pattern, Output: finalOutput, Route: route, AffectedFiles: collectFilePaths(results, opts)}
-	}
-
-	results = mergeContextLines(results)
-	sortResultsByPriority(results)
-
-	results, truncated := truncateToTokenBudget(results, opts.TokenBudget, false)
-
-	detectBlocksWithCache(cache, results, textOpts)
-
-	formatted := formatSearchResultsWithOptions(results, truncated, opts.TokenBudget, opts.LocatorRegistry, opts)
-	finalOutput := formatted
-	if len(warnings) > 0 {
-		finalOutput = strings.Join(warnings, "\n") + "\n" + formatted
-	}
-	finalOutput += lineRangeHint
-
-	affectedFiles := collectFilePaths(results, opts)
-	if cache != nil {
-		cache.SetSearch(pattern, cacheKey, finalOutput, affectedFiles)
-		storeSinglePatternAffectedFiles(pattern, cacheKey, affectedFiles)
-	}
-
-	return singlePatternExecution{Pattern: pattern, Output: finalOutput, Route: route, AffectedFiles: affectedFiles}
+	cache.SetSearch(ctx.Pattern, ctx.CacheKey, output, affectedFiles)
+	storeSinglePatternAffectedFiles(ctx.Pattern, ctx.CacheKey, affectedFiles)
 }

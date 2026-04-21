@@ -203,6 +203,33 @@ func TestExecuteSinglePatternWithTrace_SymbolMissFallsBackToLiteral(t *testing.T
 	}
 }
 
+func TestExecuteSinglePatternWithTrace_ExplicitLiteralSkipsSymbolStage(t *testing.T) {
+	setupSearchTestMocks(t)
+
+	dir := t.TempDir()
+	file := filepath.Join(dir, "agent.go")
+	if err := os.WriteFile(file, []byte("package main\n\nvar closePath = \"Close\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	result, trace := executeSinglePatternWithTrace(nil, "Close", SearchOptions{
+		Pattern:  "Close",
+		Mode:     string(SearchModeLiteral),
+		Path:     dir,
+		FileType: "go",
+	})
+
+	if trace.SymbolAttempted {
+		t.Fatal("explicit literal search should skip symbol stage")
+	}
+	if trace.FinalLane != searchLaneLiteral {
+		t.Fatalf("final lane = %q, want literal", trace.FinalLane)
+	}
+	if !strings.Contains(result, lineRangeHint) {
+		t.Fatalf("expected text-search style output, got:\n%s", result)
+	}
+}
+
 func TestBuildSearchCacheKeyWithRoute_DiffersByModeAndRoute(t *testing.T) {
 	optsAuto, ok := normalizeSearchOptions(SearchOptions{Mode: string(SearchModeAuto), Path: ".", FileType: "go"})
 	if !ok {
@@ -235,5 +262,15 @@ func TestBuildSearchCacheKeyWithRoute_LegacyRegexMatchesModeRegex(t *testing.T) 
 	modeKey := buildSearchCacheKeyWithRoute(modeRegex, planSearchRoute(`\.Close\(\)`, modeRegex).cacheSignature())
 	if legacyKey != modeKey {
 		t.Fatalf("expected legacy regex and mode=regex to share cache key, got %q vs %q", legacyKey, modeKey)
+	}
+}
+
+func TestBuildMultiSearchCacheKey_OrderIndependent(t *testing.T) {
+	opts := SearchOptions{Path: ".", FileType: "go", Mode: string(SearchModeAuto)}
+	first := buildMultiSearchCacheKey(opts, []string{"Close", `\.Close\(\)`})
+	second := buildMultiSearchCacheKey(opts, []string{`\.Close\(\)`, "Close"})
+
+	if first != second {
+		t.Fatalf("expected multi cache key to be order-independent, got %q vs %q", first, second)
 	}
 }
