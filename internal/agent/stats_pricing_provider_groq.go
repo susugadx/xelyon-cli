@@ -8,11 +8,7 @@ import (
 func getGroqPricing(model string) PricingInfo {
 	lm := strings.ToLower(model)
 	if cfg := loadPricingConfig(); cfg != nil {
-		provider := cfg.Groq
-		if pricing, ok := matchPricingRules(lm, provider, 0); ok {
-			return pricing
-		}
-		return provider.Default
+		return resolveProviderPricingFromConfig(cfg.Groq, lm, 0, false)
 	}
 
 	switch {

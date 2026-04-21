@@ -226,6 +226,36 @@ func TestGetPricingInfo_OpenRouter_GLM5(t *testing.T) {
 	}
 }
 
+func TestResolveProviderPricingFromConfig_UsesLongInputTierWhenEnabled(t *testing.T) {
+	provider := providerPricingConfig{
+		Default: PricingInfo{InputCostPerM: 1.0},
+		LongInput: &longInputTier{
+			Threshold: 200,
+			Pricing:   PricingInfo{InputCostPerM: 2.0},
+		},
+	}
+
+	got := resolveProviderPricingFromConfig(provider, "model", 201, true)
+	if got.InputCostPerM != 2.0 {
+		t.Fatalf("resolveProviderPricingFromConfig(long enabled) = %#v, want long-input tier", got)
+	}
+}
+
+func TestResolveProviderPricingFromConfig_DoesNotUseLongInputTierWhenDisabled(t *testing.T) {
+	provider := providerPricingConfig{
+		Default: PricingInfo{InputCostPerM: 1.0},
+		LongInput: &longInputTier{
+			Threshold: 200,
+			Pricing:   PricingInfo{InputCostPerM: 2.0},
+		},
+	}
+
+	got := resolveProviderPricingFromConfig(provider, "model", 201, false)
+	if got.InputCostPerM != 1.0 {
+		t.Fatalf("resolveProviderPricingFromConfig(long disabled) = %#v, want default tier", got)
+	}
+}
+
 // --- CalculateRequestCost tests ---
 
 func TestCalculateRequestCost_BasicCost(t *testing.T) {

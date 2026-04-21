@@ -8,14 +8,7 @@ import (
 func getOpenAIPricing(model string, promptTokenCount int) PricingInfo {
 	lm := strings.ToLower(model)
 	if cfg := loadPricingConfig(); cfg != nil {
-		provider := cfg.OpenAI
-		if pricing, ok := matchPricingRules(lm, provider, promptTokenCount); ok {
-			return pricing
-		}
-		if provider.LongInput != nil && promptTokenCount > provider.LongInput.Threshold {
-			return provider.LongInput.Pricing
-		}
-		return provider.Default
+		return resolveProviderPricingFromConfig(cfg.OpenAI, lm, promptTokenCount, true)
 	}
 
 	switch {

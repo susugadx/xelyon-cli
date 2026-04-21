@@ -8,11 +8,7 @@ import (
 func getDeepSeekPricing(model string) PricingInfo {
 	lm := strings.ToLower(model)
 	if cfg := loadPricingConfig(); cfg != nil {
-		provider := cfg.DeepSeek
-		if pricing, ok := matchPricingRules(lm, provider, 0); ok {
-			return pricing
-		}
-		return provider.Default
+		return resolveProviderPricingFromConfig(cfg.DeepSeek, lm, 0, false)
 	}
 
 	// DeepSeek V3.2: deepseek-chat/deepseek-reasoner 統一料金

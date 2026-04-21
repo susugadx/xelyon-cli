@@ -9,15 +9,7 @@ import (
 func getGeminiPricing(model string, promptTokenCount int) PricingInfo {
 	lm := strings.ToLower(model)
 	if cfg := loadPricingConfig(); cfg != nil {
-		provider := cfg.Gemini
-		if pricing, ok := matchPricingRules(lm, provider, promptTokenCount); ok {
-			return pricing
-		}
-		// デフォルトの long_input チェック
-		if provider.LongInput != nil && promptTokenCount > provider.LongInput.Threshold {
-			return provider.LongInput.Pricing
-		}
-		return provider.Default
+		return resolveProviderPricingFromConfig(cfg.Gemini, lm, promptTokenCount, true)
 	}
 
 	switch {

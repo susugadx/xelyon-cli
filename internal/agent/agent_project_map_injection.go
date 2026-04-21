@@ -1,14 +1,7 @@
 package agent
 
 import (
-	"os"
-	"path/filepath"
-	"strings"
-
-	"github.com/susugadx/xelyon-cli/internal/agent/token"
-	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/repomap"
-	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
 type projectMapInjectionContext struct {
@@ -71,108 +64,4 @@ func resetProjectMapCachedSections(agent *Agent) {
 	agent.projectMapSection = ""
 	agent.projectMapBaseKey = ""
 	agent.projectMapFocusKey = ""
-}
-
-func prepareProjectMapInjection(agent *Agent, input string) (projectMapInjectionContext, bool) {
-	cfg := agent.cfg()
-	if !cfg.ProjectMap.Enabled {
-		return projectMapInjectionContext{}, false
-	}
-	if !common.IsRipgrepAvailable() {
-		return projectMapInjectionContext{}, false
-	}
-
-	cwd, err := os.Getwd()
-	if err != nil {
-		return projectMapInjectionContext{}, false
-	}
-
-	pc := loadProjectConfig()
-	rootPath := cwd
-	if pc != nil && strings.TrimSpace(pc.FilePath) != "" {
-		rootPath = filepath.Dir(pc.FilePath)
-	}
-	ignorePatterns := config.ResolveSharedIgnorePatterns(cfg, pc)
-	ignoreKey := strings.Join(ignorePatterns, "\x00")
-
-	pm, rebuilt := ensureProjectMap(agent, rootPath, ignorePatterns, ignoreKey)
-	if pm == nil {
-		return projectMapInjectionContext{}, false
-	}
-
-	fileCount := pm.GetFileCount()
-	symbolCount := pm.GetSymbolCount()
-	maxTokens := calcProjectMapBudget(agent, cfg, fileCount, symbolCount)
-	pm.MaxTokens = maxTokens
-
-	focusPaths := extractProjectMapFocusPaths(cwd, rootPath, input, projectMapFocusMaxPaths)
-	return projectMapInjectionContext{
-		pm:          pm,
-		rebuilt:     rebuilt,
-		maxTokens:   maxTokens,
-		baseKey:     buildProjectMapBaseKey(agent, cfg, maxTokens, fileCount, symbolCount),
-		focusPaths:  focusPaths,
-		focusKey:    buildProjectMapFocusKey(focusPaths),
-		fileCount:   fileCount,
-		symbolCount: symbolCount,
-	}, true
-}
-
-func applyProjectMapCachedSection(agent *Agent, injectionCtx projectMapInjectionContext) bool {
-	if injectionCtx.rebuilt ||
-		agent.projectMapBaseSection == "" ||
-		agent.projectMapBaseKey != injectionCtx.baseKey ||
-		agent.projectMapFocusKey != injectionCtx.focusKey ||
-		agent.projectMapSection == "" ||
-		token.EstimateTokenCount(agent.projectMapBaseSection) > injectionCtx.maxTokens ||
-		token.EstimateTokenCount(agent.projectMapSection) > injectionCtx.maxTokens {
-		return false
-	}
-
-	agent.SystemPrompt = appendProjectMapSection(agent.SystemPrompt, agent.projectMapSection)
-	agent.projectMapFileCount = injectionCtx.fileCount
-	agent.projectMapSymbolCount = injectionCtx.symbolCount
-	agent.projectMapDirty = false
-	return true
-}
-
-func buildProjectMapSection(agent *Agent, injectionCtx projectMapInjectionContext) (projectMapSectionBuild, bool) {
-	baseSection := agent.projectMapBaseSection
-	if injectionCtx.rebuilt || agent.projectMapBaseKey != injectionCtx.baseKey || strings.TrimSpace(baseSection) == "" {
-		baseSection = injectionCtx.pm.GenerateManifest(nil)
-	}
-
-	focusSection := renderProjectMapFocusOverlay(injectionCtx.focusPaths)
-	projectMapPrompt := composeProjectMapPromptSection(baseSection, focusSection)
-	if projectMapPrompt != "" && token.EstimateTokenCount(projectMapPrompt) > injectionCtx.maxTokens {
-		projectMapPrompt = composeProjectMapPromptSection(baseSection, "")
-		focusSection = ""
-	}
-	if projectMapPrompt == "" {
-		return projectMapSectionBuild{}, false
-	}
-
-	focusCount := countProjectMapFocusLines(focusSection)
-	if focusCount > len(injectionCtx.focusPaths) {
-		focusCount = len(injectionCtx.focusPaths)
-	}
-
-	return projectMapSectionBuild{
-		baseSection:       baseSection,
-		focusSection:      focusSection,
-		projectMapPrompt:  projectMapPrompt,
-		effectiveFocusKey: buildProjectMapFocusKey(injectionCtx.focusPaths[:focusCount]),
-	}, true
-}
-
-func applyProjectMapBuiltSection(agent *Agent, injectionCtx projectMapInjectionContext, build projectMapSectionBuild) {
-	agent.SystemPrompt = appendProjectMapSection(agent.SystemPrompt, build.projectMapPrompt)
-	agent.projectMapFileCount = injectionCtx.fileCount
-	agent.projectMapSymbolCount = injectionCtx.symbolCount
-	agent.projectMapBaseSection = build.baseSection
-	agent.projectMapFocusSection = build.focusSection
-	agent.projectMapSection = build.projectMapPrompt
-	agent.projectMapBaseKey = injectionCtx.baseKey
-	agent.projectMapFocusKey = build.effectiveFocusKey
-	agent.projectMapDirty = false
 }
