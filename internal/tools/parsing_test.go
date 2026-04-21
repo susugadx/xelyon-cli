@@ -270,6 +270,61 @@ func TestParseToolCalls_MultipleCodeBlocks(t *testing.T) {
 	}
 }
 
+func TestParseToolCalls_IncompleteJSON_UsesXMLRescueWhenNoJSONParsed(t *testing.T) {
+	registerXMLTestTools(t)
+
+	// JSON が不完全で抽出できない場合でも、JSON 0件なら XML rescue を試す
+	input := `{"tool": "read_file", "args": {"path": "main.go"}
+
+<list_dir>
+  <path>.</path>
+</list_dir>`
+
+	result := ParseToolCalls(input)
+	if len(result) != 1 {
+		t.Fatalf("ParseToolCalls() returned %d calls, want 1 (XML rescue)", len(result))
+	}
+	if result[0].Tool != "list_dir" {
+		t.Errorf("Tool = %q, want 'list_dir'", result[0].Tool)
+	}
+	if result[0].Args["path"] != "." {
+		t.Errorf("Args[path] = %q, want '.'", result[0].Args["path"])
+	}
+}
+
+func TestParseToolCalls_IncompleteJSON_AfterValidJSONDoesNotRunXMLRescue(t *testing.T) {
+	registerXMLTestTools(t)
+
+	// 先頭 JSON を1件取れた時点で XML rescue は発動しない（既存契約）
+	input := `{"tool": "read_file", "args": {"path": "main.go"}}
+{"tool": "str_replace", "args": {"path": "main.go", "old_str": "old", "new_str": "new"
+
+<list_dir>
+  <path>.</path>
+</list_dir>`
+
+	result := ParseToolCalls(input)
+	if len(result) != 1 {
+		t.Fatalf("ParseToolCalls() returned %d calls, want 1 (JSON only)", len(result))
+	}
+	if result[0].Tool != "read_file" {
+		t.Errorf("Tool = %q, want 'read_file'", result[0].Tool)
+	}
+}
+
+func TestParseToolCalls_IncompleteJSONInCodeBlock_DoesNotBlockOutsideJSON(t *testing.T) {
+	// コードブロック内の不完全 JSON は除外され、外側の有効 JSON は抽出される
+	input := "```json\n{\"tool\": \"write_file\", \"args\": {\"path\": \"a.go\"\n```\n\n{\"tool\": \"bash\", \"args\": {\"command\": \"echo ok\"}}"
+
+	result := ParseToolCalls(input)
+	if len(result) != 1 {
+		t.Fatalf("ParseToolCalls() returned %d calls, want 1", len(result))
+	}
+	if result[0].Tool != "bash" {
+		t.Errorf("Tool = %q, want 'bash'", result[0].Tool)
+	}
+}
+
 func TestParseToolCall_SingleCall(t *testing.T) {
 	input := `{"tool": "bash", "args": {"command": "ls -la"}}`
 	result := ParseToolCall(input)

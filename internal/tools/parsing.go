@@ -26,173 +26,205 @@ func ParseToolCalls(response string) []*ToolCall {
 	return ParseToolCallsWithRegistry(response, DefaultRegistry, ui.DefaultRuntime().ErrorOutput())
 }
 
+var toolCallJSONStartPatterns = []string{
+	"{\"id\"",     // {"id" (Function Calling)
+	"{ \"id\"",    // { "id" (Function Calling)
+	"{\"tool\"",   // {"tool"
+	"{ \"tool\"",  // { "tool"
+	"{\"tool\":",  // {"tool":
+	"{ \"tool\":", // { "tool":
+}
+
 // ParseToolCallsWithRegistry は registry を指定して全てのツール呼び出しを抽出する。
 // debugOut にはデバッグログの出力先を渡す。
 func ParseToolCallsWithRegistry(response string, registry *Registry, debugOut io.Writer) []*ToolCall {
 	registry = resolveRegistry(registry)
 
-	// デバッグモード
 	debug := os.Getenv("XELYON_DEBUG_PARSE") == "1"
 	if debug {
-		fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] response length: %d\n", len(response))
-		// ツールパターンの存在をチェック
-		for _, p := range []string{`{"tool"`, `{ "tool"`} {
-			if idx := strings.Index(response, p); idx != -1 {
-				fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] found pattern %q at index %d\n", p, idx)
-				// 周辺100文字を表示
-				start := idx
-				if start > 50 {
-					start = idx - 50
-				}
-				end := idx + 100
-				if end > len(response) {
-					end = len(response)
-				}
-				fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] context: ...%s...\n", response[start:end])
+		logParseResponseDebug(response, debugOut)
+	}
+	codeBlockRanges := findCodeBlockRanges(response)
+	results := parseJSONToolCalls(response, codeBlockRanges, debug, debugOut)
+
+	// XML rescue: JSONで何も見つからなかった場合にXML形式を試す
+	if len(results) == 0 {
+		return parseXMLToolCalls(response, codeBlockRanges, debug, registry, debugOut)
+	}
+
+	return results
+}
+
+func logParseResponseDebug(response string, debugOut io.Writer) {
+	fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] response length: %d\n", len(response))
+	for _, p := range []string{`{"tool"`, `{ "tool"`} {
+		if idx := strings.Index(response, p); idx != -1 {
+			fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] found pattern %q at index %d\n", p, idx)
+			start := idx
+			if start > 50 {
+				start = idx - 50
 			}
+			end := idx + 100
+			if end > len(response) {
+				end = len(response)
+			}
+			fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] context: ...%s...\n", response[start:end])
 		}
 	}
-	// Markdownコードブロック（```...```）の位置を記録
-	codeBlockRanges := findCodeBlockRanges(response)
+}
 
-	// JSONブロックを探す（複数パターン対応）
-	// Function Calling では {"id": "...", "tool": "..."} 形式
-	patterns := []string{
-		"{\"id\"",     // {"id" (Function Calling)
-		"{ \"id\"",    // { "id" (Function Calling)
-		"{\"tool\"",   // {"tool"
-		"{ \"tool\"",  // { "tool"
-		"{\"tool\":",  // {"tool":
-		"{ \"tool\":", // { "tool":
-	}
-
+func parseJSONToolCalls(response string, codeBlockRanges [][2]int, debug bool, debugOut io.Writer) []*ToolCall {
 	var results []*ToolCall
 	searchFrom := 0
 
 	for searchFrom < len(response) {
-		// 次のツール呼び出し候補を探す
-		start := -1
-		for _, pattern := range patterns {
-			idx := strings.Index(response[searchFrom:], pattern)
-			if idx != -1 {
-				absIdx := searchFrom + idx
-				if start == -1 || absIdx < start {
-					start = absIdx
-				}
-			}
-		}
+		start := findNextToolCallJSONStart(response, searchFrom)
 		if start == -1 {
 			break
 		}
 
-		// コードブロック内の場合はスキップ
-		if isInCodeBlock(start, codeBlockRanges) {
-			if debug {
-				fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] skipping: in code block at %d\n", start)
-			}
+		if shouldSkipCodeBlockJSON(start, codeBlockRanges, debug, debugOut) {
 			searchFrom = start + 1
 			continue
 		}
 
-		// 対応する閉じ括弧を探す（JSON文字列内の括弧は無視）
-		depth := 0
-		end := -1
-		inString := false
-		escaped := false
-		for i := start; i < len(response); i++ {
-			ch := response[i]
-
-			if escaped {
-				escaped = false
-				continue
-			}
-
-			if ch == '\\' && inString {
-				escaped = true
-				continue
-			}
-
-			if ch == '"' {
-				inString = !inString
-				continue
-			}
-
-			if inString {
-				continue // 文字列リテラル内の括弧は無視
-			}
-
-			if ch == '{' {
-				depth++
-			} else if ch == '}' {
-				depth--
-				if depth == 0 {
-					end = i + 1
-					break
-				}
-			}
-		}
-
-		if end == -1 {
-			if debug {
-				fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] incomplete JSON: no closing brace found from index %d\n", start)
-				// 末尾100文字を表示
-				showStart := start
-				if len(response)-showStart > 200 {
-					showStart = len(response) - 200
-				}
-				fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] tail: ...%s\n", response[showStart:])
-			}
+		jsonStr, end, ok := extractJSONObject(response, start, debug, debugOut)
+		if !ok {
 			break
 		}
 
-		jsonStr := response[start:end]
-		if debug {
-			fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] extracted JSON (%d bytes): %s\n", len(jsonStr), truncateDebug(jsonStr, 200))
+		if toolCall, ok := decodeToolCallJSON(jsonStr, debug, debugOut); ok {
+			results = append(results, toolCall)
 		}
-		var toolCall ToolCall
-		if err := json.Unmarshal([]byte(jsonStr), &toolCall); err != nil {
-			// FC rescue フォールバック: JSON文字列値内の生制御文字を修復して再試行
-			repaired := repairJSONStringValues(jsonStr)
-			if repaired != jsonStr {
-				if err2 := json.Unmarshal([]byte(repaired), &toolCall); err2 == nil {
-					if debug {
-						fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] JSON repaired: fixed raw control characters in string values\n")
-					}
-					goto jsonParsed
-				}
-			}
-			// 修復しても失敗 → スキップして次を探す
-			if debug {
-				fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] JSON parse error: %v\n", err)
-			}
-			searchFrom = end
-			continue
-		}
-	jsonParsed:
-
-		// tool フィールドが空の場合はスキップ
-		if toolCall.Tool == "" {
-			if debug {
-				fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] skipping: empty tool field\n")
-			}
-			searchFrom = end
-			continue
-		}
-
-		// RawArgs（any型）をArgs（string型）に変換
-		toolCall.NormalizeArgs()
-
-		results = append(results, &toolCall)
 		searchFrom = end
 	}
 
-	// XML rescue: JSONで何も見つからなかった場合にXML形式を試す
-	if len(results) == 0 {
-		xmlResults := parseXMLToolCalls(response, codeBlockRanges, debug, registry, debugOut)
-		results = append(results, xmlResults...)
+	return results
+}
+
+func findNextToolCallJSONStart(response string, searchFrom int) int {
+	start := -1
+	for _, pattern := range toolCallJSONStartPatterns {
+		idx := strings.Index(response[searchFrom:], pattern)
+		if idx == -1 {
+			continue
+		}
+		absIdx := searchFrom + idx
+		if start == -1 || absIdx < start {
+			start = absIdx
+		}
+	}
+	return start
+}
+
+func shouldSkipCodeBlockJSON(start int, codeBlockRanges [][2]int, debug bool, debugOut io.Writer) bool {
+	if !isInCodeBlock(start, codeBlockRanges) {
+		return false
+	}
+	if debug {
+		fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] skipping: in code block at %d\n", start)
+	}
+	return true
+}
+
+func extractJSONObject(response string, start int, debug bool, debugOut io.Writer) (string, int, bool) {
+	end := findJSONObjectEnd(response, start)
+	if end == -1 {
+		if debug {
+			fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] incomplete JSON: no closing brace found from index %d\n", start)
+			showStart := start
+			if len(response)-showStart > 200 {
+				showStart = len(response) - 200
+			}
+			fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] tail: ...%s\n", response[showStart:])
+		}
+		return "", 0, false
 	}
 
-	return results
+	jsonStr := response[start:end]
+	if debug {
+		fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] extracted JSON (%d bytes): %s\n", len(jsonStr), truncateDebug(jsonStr, 200))
+	}
+	return jsonStr, end, true
+}
+
+func findJSONObjectEnd(response string, start int) int {
+	depth := 0
+	inString := false
+	escaped := false
+
+	for i := start; i < len(response); i++ {
+		ch := response[i]
+
+		if escaped {
+			escaped = false
+			continue
+		}
+
+		if ch == '\\' && inString {
+			escaped = true
+			continue
+		}
+
+		if ch == '"' {
+			inString = !inString
+			continue
+		}
+
+		if inString {
+			continue
+		}
+
+		switch ch {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return i + 1
+			}
+		}
+	}
+
+	return -1
+}
+
+func decodeToolCallJSON(jsonStr string, debug bool, debugOut io.Writer) (*ToolCall, bool) {
+	var toolCall ToolCall
+	if !unmarshalToolCallJSONWithRepair(jsonStr, &toolCall, debug, debugOut) {
+		return nil, false
+	}
+
+	if toolCall.Tool == "" {
+		if debug {
+			fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] skipping: empty tool field\n")
+		}
+		return nil, false
+	}
+
+	toolCall.NormalizeArgs()
+	return &toolCall, true
+}
+
+func unmarshalToolCallJSONWithRepair(jsonStr string, toolCall *ToolCall, debug bool, debugOut io.Writer) bool {
+	if err := json.Unmarshal([]byte(jsonStr), toolCall); err == nil {
+		return true
+	} else {
+		repaired := repairJSONStringValues(jsonStr)
+		if repaired != jsonStr {
+			if err2 := json.Unmarshal([]byte(repaired), toolCall); err2 == nil {
+				if debug {
+					fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] JSON repaired: fixed raw control characters in string values\n")
+				}
+				return true
+			}
+		}
+
+		if debug {
+			fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] JSON parse error: %v\n", err)
+		}
+		return false
+	}
 }
 
 // xmlOpenTagPattern は <tag_name> 形式の開始タグを検出する正規表現
