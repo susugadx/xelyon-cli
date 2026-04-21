@@ -12,36 +12,32 @@ import (
 )
 
 type sseInterpretState struct {
-	spinner             *ui.Spinner
-	out                 io.Writer
-	errOut              io.Writer
-	streamAssistantText bool
-	thinkingMsg         string
-	debug               bool
+	display     *sseDisplayState
+	errOut      io.Writer
+	thinkingMsg string
+	debug       bool
 
-	fullResponse          strings.Builder
-	functionCalls         []*api.GeminiFunctionCall
-	thoughtParts          []map[string]any
-	rescuedToolJSONs      []string
-	usage                 *GeminiUsageMetadata
-	headerPrinted         bool
-	contentNewlineEmitted bool
-	suppressingToolJSON   bool
-	toolJSONDepth         int
-	toolJSONInStr         bool
-	streamStarted         bool
-	hadActionableOutput   bool
-	thinkingRetries       int
+	fullResponse        strings.Builder
+	functionCalls       []*api.GeminiFunctionCall
+	thoughtParts        []map[string]any
+	rescuedToolJSONs    []string
+	usage               *GeminiUsageMetadata
+	suppressingToolJSON bool
+	toolJSONDepth       int
+	toolJSONInStr       bool
+	streamStarted       bool
+	hadActionableOutput bool
+	thinkingRetries     int
 }
 
 func newSSEInterpretState(ctx context.Context, spinner *ui.Spinner, thinkingMsg string, debug bool) *sseInterpretState {
+	out := api.OutputWriterFromContext(ctx)
+	streamAssistantText := api.ShouldStreamAssistantText(ctx)
 	return &sseInterpretState{
-		spinner:             spinner,
-		out:                 api.OutputWriterFromContext(ctx),
-		errOut:              api.ErrorWriterFromContext(ctx),
-		streamAssistantText: api.ShouldStreamAssistantText(ctx),
-		thinkingMsg:         thinkingMsg,
-		debug:               debug,
+		display:     newSSEDisplayState(spinner, out, streamAssistantText),
+		errOut:      api.ErrorWriterFromContext(ctx),
+		thinkingMsg: thinkingMsg,
+		debug:       debug,
 	}
 }
 
@@ -50,10 +46,10 @@ func (s *sseInterpretState) response() string {
 }
 
 func (s *sseInterpretState) stopSpinner() {
-	if s.spinner == nil {
+	if s.display == nil {
 		return
 	}
-	s.spinner.Stop()
+	s.display.stopSpinner()
 }
 
 func (s *sseInterpretState) debugf(format string, args ...interface{}) {
@@ -86,9 +82,8 @@ func (s *sseInterpretState) resetThinkingProgress(timer *time.Timer, timeout tim
 func (s *sseInterpretState) processChunk(ctx context.Context, chunk GeminiFunctionResponse, thinkingTimer *time.Timer, thinkingTimeout time.Duration) {
 	if !s.streamStarted {
 		s.streamStarted = true
-		if s.spinner != nil && s.thinkingMsg != "" {
-			s.spinner.Stop()
-			s.spinner.Start(s.thinkingMsg)
+		if s.display != nil {
+			s.display.restartSpinner(s.thinkingMsg)
 		}
 	}
 
@@ -186,39 +181,28 @@ func (s *sseInterpretState) handleTextPart(ctx context.Context, text string, thi
 		s.rescuedToolJSONs = append(s.rescuedToolJSONs, extracted...)
 		if strings.TrimSpace(remaining) != "" {
 			s.ensureHeaderPrinted(ctx)
-			if s.streamAssistantText {
-				_, _ = fmt.Fprint(s.out, remaining)
-			}
+			s.display.printText(remaining)
 		}
 		s.fullResponse.WriteString(remaining)
 		return
 	}
 
 	s.ensureHeaderPrinted(ctx)
-	if s.streamAssistantText {
-		_, _ = fmt.Fprint(s.out, text)
-	}
+	s.display.printText(text)
 	s.fullResponse.WriteString(text)
 }
 
 func (s *sseInterpretState) ensureHeaderPrinted(ctx context.Context) {
-	if s.headerPrinted {
+	if s.display == nil {
 		return
 	}
-	s.stopSpinner()
-	api.PrintAIHeaderWithContext(ctx)
-	s.headerPrinted = true
+	s.display.ensureHeader(ctx)
 }
 
 func (s *sseInterpretState) handleFunctionCall(functionCall *api.GeminiFunctionCall, thoughtSignature string, thinkingTimer *time.Timer, thinkingTimeout time.Duration) {
 	s.resetThinkingProgress(thinkingTimer, thinkingTimeout)
-	if s.spinner != nil {
-		s.spinner.Stop()
-		if s.streamAssistantText && s.headerPrinted && !s.contentNewlineEmitted {
-			_, _ = fmt.Fprintln(s.out)
-			s.contentNewlineEmitted = true
-		}
-		s.spinner.Start(ui.SpinnerMessageForTool(functionCall.Name))
+	if s.display != nil {
+		s.display.showToolSpinner(functionCall.Name)
 	}
 	functionCall.ThoughtSignature = thoughtSignature
 	s.functionCalls = append(s.functionCalls, functionCall)
@@ -264,8 +248,8 @@ func (s *sseInterpretState) finalize(p *Provider) (string, error) {
 		return "", fmt.Errorf("no content in Gemini SSE response (stream ended without generating any text or function calls)")
 	}
 
-	if s.streamAssistantText && !s.contentNewlineEmitted {
-		_, _ = fmt.Fprintln(s.out)
+	if s.display != nil {
+		s.display.printTrailingNewlineIfNeeded()
 	}
 	return s.response(), nil
 }

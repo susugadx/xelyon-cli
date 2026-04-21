@@ -91,15 +91,41 @@ func (s *responsesStreamState) debugf(format string, args ...interface{}) {
 }
 
 func (s *responsesStreamState) handleChunk(chunk ResponsesStreamChunk, rawData string) (string, bool, error) {
+	s.logChunkEvent(chunk, rawData)
+	s.captureResponseID(chunk)
+
+	if done, err := s.handleErrorEvent(chunk); done {
+		return "", true, err
+	}
+
+	s.handleFunctionCallEvent(chunk)
+
+	if chunk.Type == "response.output_text.delta" {
+		return chunk.Delta, false, nil
+	}
+
+	if isResponsesCompletionEvent(chunk.Type) {
+		s.handleCompletionEvent(chunk)
+		return "", true, nil
+	}
+
+	return "", false, nil
+}
+
+func (s *responsesStreamState) logChunkEvent(chunk ResponsesStreamChunk, rawData string) {
 	s.debugf("[DEBUG OpenAI Responses] event: %s\n", chunk.Type)
 	if chunk.Type == "response.completed" {
 		s.debugf("[DEBUG OpenAI Responses] raw data: %s\n", rawData)
 	}
+}
 
+func (s *responsesStreamState) captureResponseID(chunk ResponsesStreamChunk) {
 	if chunk.Type == "response.created" && chunk.Response != nil {
 		s.responseID = chunk.Response.ID
 	}
+}
 
+func (s *responsesStreamState) handleErrorEvent(chunk ResponsesStreamChunk) (bool, error) {
 	if chunk.Type == "error" {
 		errMsg := "OpenAI API error"
 		if chunk.Error != nil {
@@ -109,69 +135,92 @@ func (s *responsesStreamState) handleChunk(chunk ResponsesStreamChunk, rawData s
 				errMsg = fmt.Sprintf("OpenAI API error: %s", chunk.Error.Code)
 			}
 		}
-		return "", true, fmt.Errorf("%s", errMsg)
+		return true, fmt.Errorf("%s", errMsg)
 	}
 
 	if chunk.Type == "response.failed" {
-		return "", true, fmt.Errorf("OpenAI Responses API request failed")
+		return true, fmt.Errorf("OpenAI Responses API request failed")
 	}
 
-	if chunk.Type == "response.output_item.added" && chunk.Item != nil && chunk.Item.Type == "function_call" {
-		if s.spinner != nil {
-			s.spinner.Stop()
-			s.spinner.Start(ui.SpinnerMessageForTool(chunk.Item.Name))
+	return false, nil
+}
+
+func (s *responsesStreamState) handleFunctionCallEvent(chunk ResponsesStreamChunk) {
+	switch chunk.Type {
+	case "response.output_item.added":
+		s.handleFunctionCallAdded(chunk.Item)
+	case "response.function_call_arguments.delta":
+		s.handleFunctionCallArgumentsDelta(chunk)
+	case "response.function_call_arguments.done":
+		s.handleFunctionCallArgumentsDone(chunk)
+	}
+}
+
+func (s *responsesStreamState) handleFunctionCallAdded(item *ResponsesItem) {
+	if item == nil || item.Type != "function_call" {
+		return
+	}
+
+	if s.spinner != nil {
+		s.spinner.Stop()
+		s.spinner.Start(ui.SpinnerMessageForTool(item.Name))
+	}
+	acc, exists := s.functionCalls[item.CallID]
+	if !exists {
+		acc = &responsesFunctionCallAccumulator{
+			CallID: item.CallID,
+			Name:   item.Name,
 		}
-		acc, exists := s.functionCalls[chunk.Item.CallID]
-		if !exists {
-			acc = &responsesFunctionCallAccumulator{
-				CallID: chunk.Item.CallID,
-				Name:   chunk.Item.Name,
-			}
-			s.functionCalls[chunk.Item.CallID] = acc
-			s.callOrder = append(s.callOrder, chunk.Item.CallID)
-		} else if chunk.Item.Name != "" {
-			acc.Name = chunk.Item.Name
+		s.functionCalls[item.CallID] = acc
+		s.callOrder = append(s.callOrder, item.CallID)
+		return
+	}
+	if item.Name != "" {
+		acc.Name = item.Name
+	}
+}
+
+func (s *responsesStreamState) handleFunctionCallArgumentsDelta(chunk ResponsesStreamChunk) {
+	callID := ""
+	if chunk.Item != nil {
+		callID = chunk.Item.CallID
+	}
+
+	if callID != "" {
+		if acc, ok := s.functionCalls[callID]; ok {
+			acc.Arguments.WriteString(chunk.Delta)
 		}
+		return
 	}
 
-	if chunk.Type == "response.function_call_arguments.delta" {
-		callID := ""
-		if chunk.Item != nil {
-			callID = chunk.Item.CallID
-		}
-
-		if callID != "" {
-			if acc, ok := s.functionCalls[callID]; ok {
-				acc.Arguments.WriteString(chunk.Delta)
-			}
-		} else if len(s.functionCalls) == 1 {
-			for _, acc := range s.functionCalls {
-				acc.Arguments.WriteString(chunk.Delta)
-				break
-			}
-		}
+	if len(s.functionCalls) != 1 {
+		return
 	}
-
-	if chunk.Type == "response.function_call_arguments.done" && chunk.Item != nil {
-		if acc, ok := s.functionCalls[chunk.Item.CallID]; ok {
-			if chunk.Item.Arguments != "" {
-				acc.Arguments.Reset()
-				acc.Arguments.WriteString(chunk.Item.Arguments)
-			}
-		}
+	for _, acc := range s.functionCalls {
+		acc.Arguments.WriteString(chunk.Delta)
+		return
 	}
+}
 
-	if chunk.Type == "response.output_text.delta" {
-		return chunk.Delta, false, nil
+func (s *responsesStreamState) handleFunctionCallArgumentsDone(chunk ResponsesStreamChunk) {
+	if chunk.Item == nil {
+		return
 	}
-
-	if chunk.Type == "response.completed" || chunk.Type == "response.done" {
-		s.captureUsage(chunk)
-		s.appendFunctionCallsToOutput()
-		return "", true, nil
+	acc, ok := s.functionCalls[chunk.Item.CallID]
+	if !ok || chunk.Item.Arguments == "" {
+		return
 	}
+	acc.Arguments.Reset()
+	acc.Arguments.WriteString(chunk.Item.Arguments)
+}
 
-	return "", false, nil
+func (s *responsesStreamState) handleCompletionEvent(chunk ResponsesStreamChunk) {
+	s.captureUsage(chunk)
+	s.appendFunctionCallsToOutput()
+}
+
+func isResponsesCompletionEvent(eventType string) bool {
+	return eventType == "response.completed" || eventType == "response.done"
 }
 
 func (s *responsesStreamState) captureUsage(chunk ResponsesStreamChunk) {

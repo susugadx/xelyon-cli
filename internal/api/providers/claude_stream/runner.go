@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/fatih/color"
@@ -50,20 +49,8 @@ func RunStreamingResponse(
 		return "", fmt.Errorf("event handler is required")
 	}
 
-	stopSpinner := func() {
-		if spinner != nil {
-			spinner.Stop()
-		}
-	}
-	defer stopSpinner()
-
-	out := api.OutputWriterFromContext(ctx)
-	errOut := api.ErrorWriterFromContext(ctx)
-	streamAssistantText := api.ShouldStreamAssistantText(ctx)
-
-	var fullResponse strings.Builder
-	firstChunk := true
-	contentNewlineEmitted := false
+	state := newRunnerOutputState(ctx, spinner)
+	defer state.stopSpinner()
 
 	var idleTimeout time.Duration
 	if opts.EnableIdleTimeout {
@@ -81,38 +68,13 @@ func RunStreamingResponse(
 		eventResult := controller.Next(ctx, nil)
 		switch eventResult.Type {
 		case api.StreamLoopEventContextDone:
-			stopSpinner()
-			partial := fullResponse.String()
-			if partial != "" {
-				if streamAssistantText && !firstChunk && !contentNewlineEmitted {
-					_, _ = fmt.Fprintln(out)
-				}
-				if opts.WarnOnPartial {
-					cancelWarnColor.Fprintln(errOut, "\n⚠️  Response interrupted. Partial result returned.")
-				}
-				if opts.CancelMode == CancelModePartialAsError {
-					return partial, ctx.Err()
-				}
-				return partial, nil
-			}
-			if eventResult.Err != nil {
-				return "", eventResult.Err
-			}
-			return "", ctx.Err()
+			return state.finalizeContextDone(opts, eventResult.Err)
 
 		case api.StreamLoopEventIdleTimeout:
-			stopSpinner()
-			return fullResponse.String(), fmt.Errorf("idle timeout: no data received for %v", idleTimeout)
+			return state.finalizeIdleTimeout(idleTimeout)
 
 		case api.StreamLoopEventScannerDone:
-			stopSpinner()
-			if eventResult.Err != nil {
-				return fullResponse.String(), fmt.Errorf("stream reading error: %w", eventResult.Err)
-			}
-			if streamAssistantText && !firstChunk && !contentNewlineEmitted {
-				_, _ = fmt.Fprintln(out)
-			}
-			return fullResponse.String(), nil
+			return state.finalizeScannerDone(eventResult.Err)
 
 		case api.StreamLoopEventLine:
 			line := eventResult.Line
@@ -130,49 +92,21 @@ func RunStreamingResponse(
 				if opts.IgnoreDecodeError {
 					continue
 				}
-				stopSpinner()
-				if streamAssistantText && !firstChunk && !contentNewlineEmitted {
-					_, _ = fmt.Fprintln(out)
-				}
-				return fullResponse.String(), err
+				return state.finalizeDecodeError(err)
 			}
 
 			textDelta, done, err := handler(event, data)
-			if streamAssistantText && !firstChunk && spinner != nil && spinner.IsActive() && !contentNewlineEmitted {
-				_, _ = fmt.Fprintln(out)
-				contentNewlineEmitted = true
-			}
+			state.syncNewlineForActiveSpinner()
 
 			if err != nil {
-				stopSpinner()
-				if streamAssistantText && !firstChunk && !contentNewlineEmitted {
-					_, _ = fmt.Fprintln(out)
-				}
-				return fullResponse.String(), err
+				return state.finalizeHandlerError(err)
 			}
 
 			if done {
-				stopSpinner()
-				if streamAssistantText && !firstChunk && !contentNewlineEmitted {
-					_, _ = fmt.Fprintln(out)
-				}
-				return fullResponse.String(), nil
+				return state.finalizeDone()
 			}
 
-			if textDelta == "" {
-				continue
-			}
-
-			if firstChunk {
-				stopSpinner()
-				firstChunk = false
-				api.PrintAIHeaderWithContext(ctx)
-			}
-			if streamAssistantText {
-				_, _ = fmt.Fprint(out, textDelta)
-				contentNewlineEmitted = false
-			}
-			fullResponse.WriteString(textDelta)
+			state.appendTextDelta(textDelta)
 		}
 	}
 }
