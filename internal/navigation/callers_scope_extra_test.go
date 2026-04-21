@@ -5,6 +5,8 @@ import (
 	"go/parser"
 	"go/token"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/ast"
 )
 
 func parseNavigationStmt(t *testing.T, body string) (goast.Stmt, *token.FileSet) {
@@ -21,6 +23,17 @@ func parseNavigationStmt(t *testing.T, body string) (goast.Stmt, *token.FileSet)
 		t.Fatal("parsed function body is empty")
 	}
 	return fn.Body.List[0], fset
+}
+
+func parseNavigationFile(t *testing.T, src string) (*goast.File, *token.FileSet) {
+	t.Helper()
+
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "sample.go", src, parser.SkipObjectResolution)
+	if err != nil {
+		t.Fatalf("ParseFile() error = %v", err)
+	}
+	return file, fset
 }
 
 func TestCheckNestedDeclInStmt_CoversCompoundStatements(t *testing.T) {
@@ -120,5 +133,95 @@ func TestMatchesDeclName_AssignAndVarDeclarations(t *testing.T) {
 	}
 	if !matchesDeclName(declStmt, "declared") {
 		t.Fatal("matchesDeclName() should detect var declaration")
+	}
+}
+
+func TestClassifyLineWithGoAST_DefRefCallContract(t *testing.T) {
+	file, fset := parseNavigationFile(t, `package sample
+
+import "example/pkg"
+
+type Client struct{}
+
+func (Client) Build() {}
+
+func Use(client Client) {
+	_ = client.Build
+	client.Build()
+	pkg.Build()
+	Build()
+}
+
+func Build() {}
+`)
+	imports := importedPackageNames(file)
+
+	tests := []struct {
+		name             string
+		line             int
+		wantClass        ast.MatchClass
+		wantNodeType     string
+		wantSelectorKind string
+	}{
+		{
+			name:             "method definition",
+			line:             7,
+			wantClass:        ast.ClassDef,
+			wantNodeType:     "identifier",
+			wantSelectorKind: "",
+		},
+		{
+			name:             "selector reference",
+			line:             10,
+			wantClass:        ast.ClassRef,
+			wantNodeType:     "field_identifier",
+			wantSelectorKind: "method",
+		},
+		{
+			name:             "method call",
+			line:             11,
+			wantClass:        ast.ClassCall,
+			wantNodeType:     "field_identifier",
+			wantSelectorKind: "method",
+		},
+		{
+			name:             "package call",
+			line:             12,
+			wantClass:        ast.ClassCall,
+			wantNodeType:     "field_identifier",
+			wantSelectorKind: "package",
+		},
+		{
+			name:             "bare call",
+			line:             13,
+			wantClass:        ast.ClassCall,
+			wantNodeType:     "identifier",
+			wantSelectorKind: "",
+		},
+		{
+			name:             "function definition",
+			line:             16,
+			wantClass:        ast.ClassDef,
+			wantNodeType:     "identifier",
+			wantSelectorKind: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := classifyLineWithGoAST(file, fset, imports, tt.line, "Build")
+			if !ok {
+				t.Fatalf("classifyLineWithGoAST() matched = false at line %d", tt.line)
+			}
+			if got.Class != tt.wantClass {
+				t.Fatalf("class = %s, want %s", got.Class, tt.wantClass)
+			}
+			if got.NodeType != tt.wantNodeType {
+				t.Fatalf("nodeType = %q, want %q", got.NodeType, tt.wantNodeType)
+			}
+			if got.SelectorKind != tt.wantSelectorKind {
+				t.Fatalf("selectorKind = %q, want %q", got.SelectorKind, tt.wantSelectorKind)
+			}
+		})
 	}
 }

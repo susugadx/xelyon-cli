@@ -138,3 +138,20 @@ func TestSnippetOperandHelpers(t *testing.T) {
 		t.Fatalf("inferReceiverTypeFromSnippetOperand(pkg.Client) = %q, want empty", got)
 	}
 }
+
+func TestParseRipgrepLine_UnsupportedFileStillCompletesBySnippet(t *testing.T) {
+	cache := newReferenceParseCache()
+	ref := parseRipgrepLine("notes.txt:3:return pkg.Build()", "Build", cache)
+	if ref == nil {
+		t.Fatal("parseRipgrepLine() returned nil")
+	}
+	if ref.Class != ast.ClassCall {
+		t.Fatalf("class = %v, want %v", ref.Class, ast.ClassCall)
+	}
+	if ref.NodeType != "field_identifier" {
+		t.Fatalf("nodeType = %q, want %q", ref.NodeType, "field_identifier")
+	}
+	if ref.SelectorKind != "package" {
+		t.Fatalf("selectorKind = %q, want %q", ref.SelectorKind, "package")
+	}
+}

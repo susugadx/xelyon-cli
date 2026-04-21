@@ -133,78 +133,129 @@ func classifyLineByAST(filePath string, line int, symbol string) ast.MatchClass 
 	return info.Class
 }
 
-// parseRipgrepLine は "file:line:content" 形式の行をパースする。
+type parsedRipgrepReferenceLine struct {
+	AbsPath string
+	RelPath string
+	Line    int
+	Snippet string
+	IsTest  bool
+}
+
+type referenceClassification struct {
+	Scope        string
+	Class        ast.MatchClass
+	NodeType     string
+	SelectorKind string
+	ReceiverType string
+}
+
+// parseRipgrepLine は "file:line:content" 形式の行をパースし、分類情報を付与する。
 func parseRipgrepLine(line, symbol string, cache *referenceParseCache) *Reference {
-	// file:line:content
+	parsed, ok := parseRipgrepReferenceLine(line)
+	if !ok {
+		return nil
+	}
+
+	classification := classifyParsedReferenceLine(parsed, symbol, cache)
+	classification = applySnippetCompletionHints(parsed.Snippet, symbol, classification)
+	return buildReferenceFromParsedLine(parsed, classification)
+}
+
+// parseRipgrepReferenceLine は ripgrep 1行を参照情報の基本形に変換する。
+func parseRipgrepReferenceLine(line string) (parsedRipgrepReferenceLine, bool) {
 	firstColon := strings.Index(line, ":")
 	if firstColon < 0 {
-		return nil
+		return parsedRipgrepReferenceLine{}, false
 	}
 	rest := line[firstColon+1:]
 	secondColon := strings.Index(rest, ":")
 	if secondColon < 0 {
-		return nil
+		return parsedRipgrepReferenceLine{}, false
 	}
 
 	filePath := line[:firstColon]
-	lineNumStr := rest[:secondColon]
-	content := rest[secondColon+1:]
-
-	lineNum, err := strconv.Atoi(lineNumStr)
+	lineNum, err := strconv.Atoi(rest[:secondColon])
 	if err != nil || lineNum <= 0 {
-		return nil
+		return parsedRipgrepReferenceLine{}, false
 	}
 
-	relPath := toRelativePath(mustAbs(filePath))
-	isTest := strings.HasSuffix(filePath, "_test.go")
-
-	// AST 分類を試みる（キャッシュで同一ファイルの重複パースを回避）
-	scope := ""
-	class := ast.ClassUnknown
-	nodeType := ""
-	selectorKind := ""
-	receiverType := ""
 	absPath := mustAbs(filePath)
-	if ast.IsSupportedFile(absPath) {
-		if cf := cache.get(absPath); cf != nil {
-			if pf := cf.ensureTreeSitter(absPath); pf != nil {
-				if info, err := ast.ClassifyLineWithParsed(pf, lineNum, symbol); err == nil && info != nil {
-					scope = info.Scope
-					class = info.Class
-					nodeType = info.NodeType
-					selectorKind = info.SelectorKind
-					receiverType = info.ReceiverType
-				}
-			}
-			if goFile, goFSet, goImports := cf.ensureGoParser(absPath); goFile != nil {
-				scope, class, nodeType, selectorKind, receiverType = applyGoParserReferenceHints(
-					goFile,
-					goFSet,
-					goImports,
-					lineNum,
-					symbol,
-					scope,
-					class,
-					nodeType,
-					selectorKind,
-					receiverType,
-				)
-			}
+	return parsedRipgrepReferenceLine{
+		AbsPath: absPath,
+		RelPath: toRelativePath(absPath),
+		Line:    lineNum,
+		Snippet: strings.TrimSpace(rest[secondColon+1:]),
+		IsTest:  strings.HasSuffix(filePath, "_test.go"),
+	}, true
+}
+
+// classifyParsedReferenceLine は parse 済み参照に AST ベース分類を適用する。
+func classifyParsedReferenceLine(parsed parsedRipgrepReferenceLine, symbol string, cache *referenceParseCache) referenceClassification {
+	classification := referenceClassification{
+		Class: ast.ClassUnknown,
+	}
+	if symbol == "" || cache == nil || !ast.IsSupportedFile(parsed.AbsPath) {
+		return classification
+	}
+
+	cf := cache.get(parsed.AbsPath)
+	if cf == nil {
+		return classification
+	}
+
+	classification = classifyParsedLineWithTreeSitter(cf, parsed, symbol, classification)
+	classification = classifyParsedLineWithGoASTHints(cf, parsed, symbol, classification)
+	return classification
+}
+
+// classifyParsedLineWithTreeSitter は tree-sitter 分類結果を反映する。
+func classifyParsedLineWithTreeSitter(cf *cachedFile, parsed parsedRipgrepReferenceLine, symbol string, current referenceClassification) referenceClassification {
+	if pf := cf.ensureTreeSitter(parsed.AbsPath); pf != nil {
+		if info, err := ast.ClassifyLineWithParsed(pf, parsed.Line, symbol); err == nil && info != nil {
+			current.Scope = info.Scope
+			current.Class = info.Class
+			current.NodeType = info.NodeType
+			current.SelectorKind = info.SelectorKind
+			current.ReceiverType = info.ReceiverType
 		}
 	}
-	class, nodeType, selectorKind, receiverType = applySnippetReferenceHints(strings.TrimSpace(content), symbol, class, nodeType, selectorKind, receiverType)
+	return current
+}
 
+// classifyParsedLineWithGoASTHints は go/parser 分類をヒントとして補完適用する。
+func classifyParsedLineWithGoASTHints(cf *cachedFile, parsed parsedRipgrepReferenceLine, symbol string, current referenceClassification) referenceClassification {
+	if goFile, goFSet, goImports := cf.ensureGoParser(parsed.AbsPath); goFile != nil {
+		return applyGoParserReferenceHints(goFile, goFSet, goImports, parsed.Line, symbol, current)
+	}
+	return current
+}
+
+// applySnippetCompletionHints は snippet から不足した分類情報を補完する。
+func applySnippetCompletionHints(snippet, symbol string, current referenceClassification) referenceClassification {
+	current.Class, current.NodeType, current.SelectorKind, current.ReceiverType = applySnippetReferenceHints(
+		snippet,
+		symbol,
+		current.Class,
+		current.NodeType,
+		current.SelectorKind,
+		current.ReceiverType,
+	)
+	return current
+}
+
+// buildReferenceFromParsedLine は parse + classify 結果から最終参照構造体を組み立てる。
+func buildReferenceFromParsedLine(parsed parsedRipgrepReferenceLine, classification referenceClassification) *Reference {
 	return &Reference{
-		File:         relPath,
-		ResolvedPath: cleanNavigationResolvedPath(absPath),
-		Line:         lineNum,
-		Scope:        scope,
-		Snippet:      strings.TrimSpace(content),
-		IsTest:       isTest,
-		Class:        class,
-		NodeType:     nodeType,
-		SelectorKind: selectorKind,
-		ReceiverType: receiverType,
+		File:         parsed.RelPath,
+		ResolvedPath: cleanNavigationResolvedPath(parsed.AbsPath),
+		Line:         parsed.Line,
+		Scope:        classification.Scope,
+		Snippet:      parsed.Snippet,
+		IsTest:       parsed.IsTest,
+		Class:        classification.Class,
+		NodeType:     classification.NodeType,
+		SelectorKind: classification.SelectorKind,
+		ReceiverType: classification.ReceiverType,
 	}
 }
 
@@ -219,114 +270,206 @@ func cleanNavigationResolvedPath(path string) string {
 	return filepath.Clean(path)
 }
 
-func applyGoParserReferenceHints(file *goast.File, fset *token.FileSet, imports map[string]bool, line int, symbol, scope string, class ast.MatchClass, nodeType, selectorKind, receiverType string) (string, ast.MatchClass, string, string, string) {
+func applyGoParserReferenceHints(file *goast.File, fset *token.FileSet, imports map[string]bool, line int, symbol string, current referenceClassification) referenceClassification {
 	fallback, ok := classifyLineWithGoAST(file, fset, imports, line, symbol)
 	if !ok {
-		return scope, class, nodeType, selectorKind, receiverType
+		return current
 	}
 
-	if (scope == "" || scope == "package-level") && fallback.Scope != "" {
-		scope = fallback.Scope
+	if (current.Scope == "" || current.Scope == "package-level") && fallback.Scope != "" {
+		current.Scope = fallback.Scope
 	}
 	if fallback.Class == ast.ClassDef {
-		class = ast.ClassDef
-	} else if class == ast.ClassUnknown && fallback.Class != ast.ClassUnknown {
-		class = fallback.Class
+		current.Class = ast.ClassDef
+	} else if current.Class == ast.ClassUnknown && fallback.Class != ast.ClassUnknown {
+		current.Class = fallback.Class
 	}
-	if nodeType == "" && fallback.NodeType != "" {
-		nodeType = fallback.NodeType
+	if current.NodeType == "" && fallback.NodeType != "" {
+		current.NodeType = fallback.NodeType
 	}
-	if (selectorKind == "" || selectorKind == "unknown") && fallback.SelectorKind != "" {
-		selectorKind = fallback.SelectorKind
+	if (current.SelectorKind == "" || current.SelectorKind == "unknown") && fallback.SelectorKind != "" {
+		current.SelectorKind = fallback.SelectorKind
 	}
-	if receiverType == "" && fallback.ReceiverType != "" {
-		receiverType = fallback.ReceiverType
+	if current.ReceiverType == "" && fallback.ReceiverType != "" {
+		current.ReceiverType = fallback.ReceiverType
 	}
 
-	return scope, class, nodeType, selectorKind, receiverType
+	return current
 }
 
 func classifyLineWithGoAST(file *goast.File, fset *token.FileSet, imports map[string]bool, line int, symbol string) (Reference, bool) {
-	if file == nil || line <= 0 || symbol == "" {
+	if !isGoASTClassificationInputValid(file, fset, line, symbol) {
 		return Reference{}, false
 	}
 
-	result := Reference{}
-	if scope := enclosingScopeFromGoAST(file, fset, line); scope != "" {
-		result.Scope = scope
+	ctx := goASTLineClassificationContext{
+		file:    file,
+		fset:    fset,
+		imports: imports,
+		line:    line,
+		symbol:  symbol,
 	}
-
-	matched := false
-	goast.Inspect(file, func(n goast.Node) bool {
-		if n == nil {
-			return true
-		}
-		startLine := fset.Position(n.Pos()).Line
-		endLine := fset.Position(n.End()).Line
-		if line < startLine || line > endLine {
-			return true
-		}
-
-		switch node := n.(type) {
-		case *goast.FuncDecl:
-			if node.Name != nil && node.Name.Name == symbol && fset.Position(node.Name.Pos()).Line == line {
-				result.Class = ast.ClassDef
-				result.NodeType = "identifier"
-				matched = true
-			}
-		case *goast.CallExpr:
-			switch fun := node.Fun.(type) {
-			case *goast.Ident:
-				if fun.Name == symbol && fset.Position(fun.Pos()).Line == line {
-					result.Class = ast.ClassCall
-					result.NodeType = "identifier"
-					matched = true
-				}
-			case *goast.SelectorExpr:
-				if fun.Sel != nil && fun.Sel.Name == symbol && fset.Position(fun.Sel.Pos()).Line == line {
-					result.Class = ast.ClassCall
-					result.NodeType = "field_identifier"
-					result.SelectorKind = selectorKindFromGoExpr(fun.X, imports, file, fset, line)
-					if result.SelectorKind == "method" {
-						result.ReceiverType = receiverTypeFromGoExpr(fun.X)
-					}
-					matched = true
-				}
-			}
-		case *goast.SelectorExpr:
-			if node.Sel != nil && node.Sel.Name == symbol && fset.Position(node.Sel.Pos()).Line == line {
-				if result.Class == ast.ClassUnknown {
-					result.Class = ast.ClassRef
-				}
-				if result.NodeType == "" {
-					result.NodeType = "field_identifier"
-				}
-				if result.SelectorKind == "" || result.SelectorKind == "unknown" {
-					result.SelectorKind = selectorKindFromGoExpr(node.X, imports, file, fset, line)
-				}
-				if result.ReceiverType == "" && result.SelectorKind == "method" {
-					result.ReceiverType = receiverTypeFromGoExpr(node.X)
-				}
-				matched = true
-			}
-		case *goast.Ident:
-			if node.Name == symbol && fset.Position(node.Pos()).Line == line {
-				if result.Class == ast.ClassUnknown {
-					result.Class = ast.ClassRef
-				}
-				if result.NodeType == "" {
-					result.NodeType = "identifier"
-				}
-				matched = true
-			}
-		}
-		return true
-	})
-
-	if !matched {
+	result := Reference{
+		Scope: enclosingScopeFromGoAST(file, fset, line),
+		Class: ast.ClassUnknown,
+	}
+	if !classifyLineByGoASTNodes(ctx, &result) {
 		return Reference{}, false
 	}
 	return result, true
+}
+
+type goASTLineClassificationContext struct {
+	file    *goast.File
+	fset    *token.FileSet
+	imports map[string]bool
+	line    int
+	symbol  string
+}
+
+func isGoASTClassificationInputValid(file *goast.File, fset *token.FileSet, line int, symbol string) bool {
+	return file != nil && fset != nil && line > 0 && symbol != ""
+}
+
+func classifyLineByGoASTNodes(ctx goASTLineClassificationContext, result *Reference) bool {
+	matched := false
+	goast.Inspect(ctx.file, func(n goast.Node) bool {
+		if !nodeIncludesLine(ctx.fset, n, ctx.line) {
+			return true
+		}
+		if classifyGoASTNode(ctx, result, n) {
+			matched = true
+		}
+		return true
+	})
+	return matched
+}
+
+func nodeIncludesLine(fset *token.FileSet, n goast.Node, line int) bool {
+	if fset == nil || n == nil {
+		return false
+	}
+	startLine := fset.Position(n.Pos()).Line
+	endLine := fset.Position(n.End()).Line
+	return line >= startLine && line <= endLine
+}
+
+func classifyGoASTNode(ctx goASTLineClassificationContext, result *Reference, n goast.Node) bool {
+	switch node := n.(type) {
+	case *goast.FuncDecl:
+		return classifyGoASTFuncDecl(ctx, result, node)
+	case *goast.CallExpr:
+		return classifyGoASTCallExpr(ctx, result, node)
+	case *goast.SelectorExpr:
+		return classifyGoASTSelectorExpr(ctx, result, node)
+	case *goast.Ident:
+		return classifyGoASTIdent(ctx, result, node)
+	default:
+		return false
+	}
+}
+
+func classifyGoASTFuncDecl(ctx goASTLineClassificationContext, result *Reference, fn *goast.FuncDecl) bool {
+	if !identMatchesLine(ctx.fset, fn.Name, ctx.symbol, ctx.line) {
+		return false
+	}
+	applyGoASTDefinitionHint(result)
+	return true
+}
+
+func classifyGoASTCallExpr(ctx goASTLineClassificationContext, result *Reference, call *goast.CallExpr) bool {
+	switch fun := call.Fun.(type) {
+	case *goast.Ident:
+		if !identMatchesLine(ctx.fset, fun, ctx.symbol, ctx.line) {
+			return false
+		}
+		applyGoASTIdentCallHint(result)
+		return true
+	case *goast.SelectorExpr:
+		if !identMatchesLine(ctx.fset, fun.Sel, ctx.symbol, ctx.line) {
+			return false
+		}
+		selectorKind := selectorKindFromGoExpr(fun.X, ctx.imports, ctx.file, ctx.fset, ctx.line)
+		receiverType := ""
+		if selectorKind == "method" {
+			receiverType = receiverTypeFromGoExpr(fun.X)
+		}
+		applyGoASTSelectorCallHint(result, selectorKind, receiverType)
+		return true
+	default:
+		return false
+	}
+}
+
+func classifyGoASTSelectorExpr(ctx goASTLineClassificationContext, result *Reference, selector *goast.SelectorExpr) bool {
+	if !identMatchesLine(ctx.fset, selector.Sel, ctx.symbol, ctx.line) {
+		return false
+	}
+	selectorKind := result.SelectorKind
+	if selectorKind == "" || selectorKind == "unknown" {
+		selectorKind = selectorKindFromGoExpr(selector.X, ctx.imports, ctx.file, ctx.fset, ctx.line)
+	}
+	receiverType := result.ReceiverType
+	if receiverType == "" && selectorKind == "method" {
+		receiverType = receiverTypeFromGoExpr(selector.X)
+	}
+	applyGoASTSelectorRefHint(result, selectorKind, receiverType)
+	return true
+}
+
+func classifyGoASTIdent(ctx goASTLineClassificationContext, result *Reference, ident *goast.Ident) bool {
+	if !identMatchesLine(ctx.fset, ident, ctx.symbol, ctx.line) {
+		return false
+	}
+	applyGoASTIdentRefHint(result)
+	return true
+}
+
+func identMatchesLine(fset *token.FileSet, ident *goast.Ident, symbol string, line int) bool {
+	return ident != nil && ident.Name == symbol && fset.Position(ident.Pos()).Line == line
+}
+
+func applyGoASTDefinitionHint(result *Reference) {
+	result.Class = ast.ClassDef
+	result.NodeType = "identifier"
+}
+
+func applyGoASTIdentCallHint(result *Reference) {
+	result.Class = ast.ClassCall
+	result.NodeType = "identifier"
+}
+
+func applyGoASTSelectorCallHint(result *Reference, selectorKind, receiverType string) {
+	result.Class = ast.ClassCall
+	result.NodeType = "field_identifier"
+	result.SelectorKind = selectorKind
+	if result.SelectorKind == "method" {
+		result.ReceiverType = receiverType
+	}
+}
+
+func applyGoASTSelectorRefHint(result *Reference, selectorKind, receiverType string) {
+	if result.Class == ast.ClassUnknown {
+		result.Class = ast.ClassRef
+	}
+	if result.NodeType == "" {
+		result.NodeType = "field_identifier"
+	}
+	if result.SelectorKind == "" || result.SelectorKind == "unknown" {
+		result.SelectorKind = selectorKind
+	}
+	if result.ReceiverType == "" && result.SelectorKind == "method" {
+		result.ReceiverType = receiverType
+	}
+}
+
+func applyGoASTIdentRefHint(result *Reference) {
+	if result.Class == ast.ClassUnknown {
+		result.Class = ast.ClassRef
+	}
+	if result.NodeType == "" {
+		result.NodeType = "identifier"
+	}
 }
 
 func enclosingScopeFromGoAST(file *goast.File, fset *token.FileSet, line int) string {
