@@ -50,6 +50,13 @@ func RunStreamingResponse(
 		return "", fmt.Errorf("event handler is required")
 	}
 
+	stopSpinner := func() {
+		if spinner != nil {
+			spinner.Stop()
+		}
+	}
+	defer stopSpinner()
+
 	out := api.OutputWriterFromContext(ctx)
 	errOut := api.ErrorWriterFromContext(ctx)
 	streamAssistantText := api.ShouldStreamAssistantText(ctx)
@@ -74,7 +81,7 @@ func RunStreamingResponse(
 		eventResult := controller.Next(ctx, nil)
 		switch eventResult.Type {
 		case api.StreamLoopEventContextDone:
-			spinner.Stop()
+			stopSpinner()
 			partial := fullResponse.String()
 			if partial != "" {
 				if streamAssistantText && !firstChunk && !contentNewlineEmitted {
@@ -94,11 +101,11 @@ func RunStreamingResponse(
 			return "", ctx.Err()
 
 		case api.StreamLoopEventIdleTimeout:
-			spinner.Stop()
+			stopSpinner()
 			return fullResponse.String(), fmt.Errorf("idle timeout: no data received for %v", idleTimeout)
 
 		case api.StreamLoopEventScannerDone:
-			spinner.Stop()
+			stopSpinner()
 			if eventResult.Err != nil {
 				return fullResponse.String(), fmt.Errorf("stream reading error: %w", eventResult.Err)
 			}
@@ -123,7 +130,7 @@ func RunStreamingResponse(
 				if opts.IgnoreDecodeError {
 					continue
 				}
-				spinner.Stop()
+				stopSpinner()
 				if streamAssistantText && !firstChunk && !contentNewlineEmitted {
 					_, _ = fmt.Fprintln(out)
 				}
@@ -131,13 +138,13 @@ func RunStreamingResponse(
 			}
 
 			textDelta, done, err := handler(event, data)
-			if streamAssistantText && !firstChunk && spinner.IsActive() && !contentNewlineEmitted {
+			if streamAssistantText && !firstChunk && spinner != nil && spinner.IsActive() && !contentNewlineEmitted {
 				_, _ = fmt.Fprintln(out)
 				contentNewlineEmitted = true
 			}
 
 			if err != nil {
-				spinner.Stop()
+				stopSpinner()
 				if streamAssistantText && !firstChunk && !contentNewlineEmitted {
 					_, _ = fmt.Fprintln(out)
 				}
@@ -145,7 +152,7 @@ func RunStreamingResponse(
 			}
 
 			if done {
-				spinner.Stop()
+				stopSpinner()
 				if streamAssistantText && !firstChunk && !contentNewlineEmitted {
 					_, _ = fmt.Fprintln(out)
 				}
@@ -157,7 +164,7 @@ func RunStreamingResponse(
 			}
 
 			if firstChunk {
-				spinner.Stop()
+				stopSpinner()
 				firstChunk = false
 				api.PrintAIHeaderWithContext(ctx)
 			}

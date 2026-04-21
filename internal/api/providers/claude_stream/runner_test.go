@@ -2,9 +2,12 @@ package claudestream
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
+	"testing/iotest"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/ui"
@@ -64,5 +67,38 @@ func TestRunStreamingResponse_CancelModePartialAsError(t *testing.T) {
 	}
 	if got != "Hello" {
 		t.Fatalf("RunStreamingResponse() = %q, want %q", got, "Hello")
+	}
+}
+
+func TestRunStreamingResponse_StopsSpinnerOnScannerError(t *testing.T) {
+	ctx := api.WithAssistantUpdateMode(context.Background(), api.AssistantUpdatesOff)
+	spinner := ui.NewSpinnerWithWriter(io.Discard)
+	spinner.Start("Waiting for stream...")
+
+	readErr := errors.New("boom")
+	body := io.NopCloser(io.MultiReader(
+		strings.NewReader(`data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Hello"}}`+"\n\n"),
+		iotest.ErrReader(readErr),
+	))
+	resp := &http.Response{Body: body}
+
+	got, err := RunStreamingResponse(ctx, resp, spinner, func(event StreamEvent, _ string) (string, bool, error) {
+		if event.Type == "content_block_delta" && event.Delta != nil && event.Delta.Type == "text_delta" {
+			return event.Delta.Text, false, nil
+		}
+		return "", false, nil
+	}, RunnerOptions{})
+
+	if err == nil {
+		t.Fatal("RunStreamingResponse() should return scanner error")
+	}
+	if !strings.Contains(err.Error(), "stream reading error") || !strings.Contains(err.Error(), "boom") {
+		t.Fatalf("RunStreamingResponse() error = %q, want scanner error with cause", err.Error())
+	}
+	if got != "Hello" {
+		t.Fatalf("RunStreamingResponse() = %q, want %q", got, "Hello")
+	}
+	if spinner.IsActive() {
+		t.Fatal("RunStreamingResponse() should stop spinner on scanner error")
 	}
 }
