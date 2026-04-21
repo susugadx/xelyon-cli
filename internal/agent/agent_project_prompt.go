@@ -85,27 +85,80 @@ func applyProjectConfig(agent *Agent, pc *config.ProjectConfig) {
 	green.Fprintln(agent.output(), "📋 xelyon.yaml loaded")
 }
 
+type projectMapInjectionContext struct {
+	pm          *repomap.ProjectMap
+	rebuilt     bool
+	maxTokens   int
+	baseKey     string
+	focusPaths  []string
+	focusKey    string
+	fileCount   int
+	symbolCount int
+}
+
+type projectMapSectionBuild struct {
+	baseSection       string
+	focusSection      string
+	projectMapPrompt  string
+	effectiveFocusKey string
+}
+
 // injectProjectMap はプロジェクト構造マップをシステムプロンプトに注入する。
 func injectProjectMap(agent *Agent, input string) {
 	if agent == nil {
 		return
 	}
 
+	resetProjectMapPromptSection(agent)
+
+	injectionCtx, ok := prepareProjectMapInjection(agent, input)
+	if !ok {
+		return
+	}
+
+	if applyProjectMapCachedSection(agent, injectionCtx) {
+		return
+	}
+
+	build, ok := buildProjectMapSection(agent, injectionCtx)
+	if !ok {
+		resetProjectMapCachedSections(agent)
+		agent.projectMapDirty = false
+		return
+	}
+
+	applyProjectMapBuiltSection(agent, injectionCtx, build)
+	if injectionCtx.rebuilt {
+		green.Fprintf(agent.output(), "🗺️  Project map loaded (%d files, %d symbols)\n", agent.projectMapFileCount, agent.projectMapSymbolCount)
+	}
+}
+
+func resetProjectMapPromptSection(agent *Agent) {
 	agent.SystemPrompt = stripProjectMapSection(agent.SystemPrompt)
 	agent.projectMapFileCount = 0
 	agent.projectMapSymbolCount = 0
+}
 
+func resetProjectMapCachedSections(agent *Agent) {
+	agent.projectMapBaseSection = ""
+	agent.projectMapFocusSection = ""
+	agent.projectMapSection = ""
+	agent.projectMapBaseKey = ""
+	agent.projectMapFocusKey = ""
+}
+
+func prepareProjectMapInjection(agent *Agent, input string) (projectMapInjectionContext, bool) {
 	cfg := agent.cfg()
 	if !cfg.ProjectMap.Enabled {
-		return
+		return projectMapInjectionContext{}, false
 	}
 	if !common.IsRipgrepAvailable() {
-		return
+		return projectMapInjectionContext{}, false
 	}
 
 	cwd, err := os.Getwd()
 	if err != nil {
-		return
+		return projectMapInjectionContext{}, false
 	}
 
 	pc := loadProjectConfig()
@@ -118,64 +171,84 @@ func injectProjectMap(agent *Agent, input string) {
 
 	pm, rebuilt := ensureProjectMap(agent, rootPath, ignorePatterns, ignoreKey)
 	if pm == nil {
-		return
+		return projectMapInjectionContext{}, false
 	}
-	pm.MaxTokens = calcProjectMapBudget(agent, cfg, pm.GetFileCount(), pm.GetSymbolCount())
-	baseKey := buildProjectMapBaseKey(agent, cfg, pm.MaxTokens, pm.GetFileCount(), pm.GetSymbolCount())
+
+	fileCount := pm.GetFileCount()
+	symbolCount := pm.GetSymbolCount()
+	maxTokens := calcProjectMapBudget(agent, cfg, fileCount, symbolCount)
+	pm.MaxTokens = maxTokens
+
 	focusPaths := extractProjectMapFocusPaths(cwd, rootPath, input, projectMapFocusMaxPaths)
-	focusKey := buildProjectMapFocusKey(focusPaths)
+	return projectMapInjectionContext{
+		pm:          pm,
+		rebuilt:     rebuilt,
+		maxTokens:   maxTokens,
+		baseKey:     buildProjectMapBaseKey(agent, cfg, maxTokens, fileCount, symbolCount),
+		focusPaths:  focusPaths,
+		focusKey:    buildProjectMapFocusKey(focusPaths),
+		fileCount:   fileCount,
+		symbolCount: symbolCount,
+	}, true
+}
 
-	if !rebuilt &&
-		agent.projectMapBaseSection != "" &&
-		agent.projectMapBaseKey == baseKey &&
-		agent.projectMapFocusKey == focusKey &&
-		agent.projectMapSection != "" &&
-		token.EstimateTokenCount(agent.projectMapBaseSection) <= pm.MaxTokens &&
-		token.EstimateTokenCount(agent.projectMapSection) <= pm.MaxTokens {
-		agent.SystemPrompt = appendProjectMapSection(agent.SystemPrompt, agent.projectMapSection)
-		agent.projectMapFileCount = pm.GetFileCount()
-		agent.projectMapSymbolCount = pm.GetSymbolCount()
-		agent.projectMapDirty = false
-		return
+func applyProjectMapCachedSection(agent *Agent, injectionCtx projectMapInjectionContext) bool {
+	if injectionCtx.rebuilt ||
+		agent.projectMapBaseSection == "" ||
+		agent.projectMapBaseKey != injectionCtx.baseKey ||
+		agent.projectMapFocusKey != injectionCtx.focusKey ||
+		agent.projectMapSection == "" ||
+		token.EstimateTokenCount(agent.projectMapBaseSection) > injectionCtx.maxTokens ||
+		token.EstimateTokenCount(agent.projectMapSection) > injectionCtx.maxTokens {
+		return false
 	}
 
+	agent.SystemPrompt = appendProjectMapSection(agent.SystemPrompt, agent.projectMapSection)
+	agent.projectMapFileCount = injectionCtx.fileCount
+	agent.projectMapSymbolCount = injectionCtx.symbolCount
+	agent.projectMapDirty = false
+	return true
+}
+
+func buildProjectMapSection(agent *Agent, injectionCtx projectMapInjectionContext) (projectMapSectionBuild, bool) {
 	baseSection := agent.projectMapBaseSection
-	if rebuilt || agent.projectMapBaseKey != baseKey || strings.TrimSpace(baseSection) == "" {
-		baseSection = pm.GenerateManifest(nil)
+	if injectionCtx.rebuilt || agent.projectMapBaseKey != injectionCtx.baseKey || strings.TrimSpace(baseSection) == "" {
+		baseSection = injectionCtx.pm.GenerateManifest(nil)
 	}
-	focusSection := renderProjectMapFocusOverlay(focusPaths)
-	mapStr := composeProjectMapPromptSection(baseSection, focusSection)
-	if mapStr != "" && token.EstimateTokenCount(mapStr) > pm.MaxTokens {
-		mapStr = composeProjectMapPromptSection(baseSection, "")
+
+	focusSection := renderProjectMapFocusOverlay(injectionCtx.focusPaths)
+	projectMapPrompt := composeProjectMapPromptSection(baseSection, focusSection)
+	if projectMapPrompt != "" && token.EstimateTokenCount(projectMapPrompt) > injectionCtx.maxTokens {
+		projectMapPrompt = composeProjectMapPromptSection(baseSection, "")
 		focusSection = ""
 	}
-	if mapStr == "" {
-		agent.projectMapBaseSection = ""
-		agent.projectMapFocusSection = ""
-		agent.projectMapSection = ""
-		agent.projectMapBaseKey = ""
-		agent.projectMapFocusKey = ""
-		agent.projectMapDirty = false
-		return
+	if projectMapPrompt == "" {
+		return projectMapSectionBuild{}, false
 	}
 
-	agent.SystemPrompt = appendProjectMapSection(agent.SystemPrompt, mapStr)
-	agent.projectMapFileCount = pm.GetFileCount()
-	agent.projectMapSymbolCount = pm.GetSymbolCount()
-	agent.projectMapBaseSection = baseSection
-	agent.projectMapFocusSection = focusSection
-	agent.projectMapSection = mapStr
-	agent.projectMapBaseKey = baseKey
 	focusCount := countProjectMapFocusLines(focusSection)
-	if focusCount > len(focusPaths) {
-		focusCount = len(focusPaths)
+	if focusCount > len(injectionCtx.focusPaths) {
+		focusCount = len(injectionCtx.focusPaths)
 	}
-	agent.projectMapFocusKey = buildProjectMapFocusKey(focusPaths[:focusCount])
-	agent.projectMapDirty = false
 
-	if rebuilt {
-		green.Fprintf(agent.output(), "🗺️  Project map loaded (%d files, %d symbols)\n", agent.projectMapFileCount, agent.projectMapSymbolCount)
-	}
+	return projectMapSectionBuild{
+		baseSection:       baseSection,
+		focusSection:      focusSection,
+		projectMapPrompt:  projectMapPrompt,
+		effectiveFocusKey: buildProjectMapFocusKey(injectionCtx.focusPaths[:focusCount]),
+	}, true
+}
+
+func applyProjectMapBuiltSection(agent *Agent, injectionCtx projectMapInjectionContext, build projectMapSectionBuild) {
+	agent.SystemPrompt = appendProjectMapSection(agent.SystemPrompt, build.projectMapPrompt)
+	agent.projectMapFileCount = injectionCtx.fileCount
+	agent.projectMapSymbolCount = injectionCtx.symbolCount
+	agent.projectMapBaseSection = build.baseSection
+	agent.projectMapFocusSection = build.focusSection
+	agent.projectMapSection = build.projectMapPrompt
+	agent.projectMapBaseKey = injectionCtx.baseKey
+	agent.projectMapFocusKey = build.effectiveFocusKey
+	agent.projectMapDirty = false
 }
 
 func buildProjectMapBaseKey(agent *Agent, cfg *config.Config, maxTokens, fileCount, symbolCount int) string {
