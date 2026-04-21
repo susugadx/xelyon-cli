@@ -49,63 +49,63 @@ func executeBatchEditsWithPromptIOAndOptionsResult(promptIO ui.PromptIO, options
 		}
 	}
 
-	outcome := buildBatchStringReplacementOutcome(oldContent, edits)
-	for _, editIndex := range outcome.plan.normalizedAttemptedEdits {
-		if !ctx.out.SuppressStdout() {
-			ctx.out.Yellow.Printf("⚠️  edits[%d]: Exact match failed, trying normalized whitespace matching...\n", editIndex)
-		}
-	}
-	if outcome.failure != nil {
-		return newErrorMutationResult(buildBatchStringReplacementFailure(path, *outcome.failure)), nil
-	}
-	content := outcome.plan.newContent
+	var outcome batchStringReplacementOutcome
+	return executeFileMutationWorkflow(ctx, options, fileMutationWorkflow{
+		toolName:       "str_replace",
+		confirmMessage: "Apply batch replacement? / バッチ置換を適用しますか？",
+		preview: func() fileMutationResult {
+			outcome = buildBatchStringReplacementOutcome(oldContent, edits)
+			for _, editIndex := range outcome.plan.normalizedAttemptedEdits {
+				if !ctx.out.SuppressStdout() {
+					ctx.out.Yellow.Printf("⚠️  edits[%d]: Exact match failed, trying normalized whitespace matching...\n", editIndex)
+				}
+			}
+			if outcome.failure != nil {
+				return newErrorMutationResult(buildBatchStringReplacementFailure(path, *outcome.failure))
+			}
+			if outcome.plan.newContent == oldContent {
+				return newNoopMutationResult("No changes after applying all edits")
+			}
+			showBatchReplacementPreview(ctx, oldContent, outcome.plan.newContent, path, edits)
+			return fileMutationResult{}
+		},
+		confirm: mutationConfirmHandlers{
+			onComment: func(comment string) fileMutationResult {
+				return newCommentMutationResult(buildDeferredStrReplaceResult("[COMMENT]", "batch", path, comment))
+			},
+			onCancel: func() fileMutationResult {
+				ctx.out.Yellow.Println("⚠️  User cancelled the batch replacement")
+				return newCancelledMutationResult(buildDeferredStrReplaceResult("[CANCELLED]", "batch", path, ""))
+			},
+		},
+		apply: func() (fileMutationResult, error) {
+			message := fmt.Sprintf("Successfully applied %d edits to %s", len(edits), path)
+			return applyStringReplaceMutation(ctx, outcome.plan.newContent, fmt.Sprintf("✅ Applied %d edits to: %s", len(edits), path), message)
+		},
+	})
+}
 
-	if content == oldContent {
-		return newNoopMutationResult("No changes after applying all edits"), nil
+func showBatchReplacementPreview(ctx fileMutationContext, oldContent, newContent, path string, edits []EditEntry) {
+	if ctx.out.SuppressStdout() {
+		return
 	}
 
 	linesRemoved, linesAdded := batchEditLineStats(edits)
-	if !ctx.out.SuppressStdout() {
-		w := ctx.out.StdoutWriter()
-		ctx.out.Println()
-		ui.FileOpHeader(w, "str_replace", fmt.Sprintf("%s (batch: %d edits)", path, len(edits)))
-		ui.FileOpStatsLine(w, linesRemoved, linesAdded)
+	w := ctx.out.StdoutWriter()
+	ctx.out.Println()
+	ui.FileOpHeader(w, "str_replace", fmt.Sprintf("%s (batch: %d edits)", path, len(edits)))
+	ui.FileOpStatsLine(w, linesRemoved, linesAdded)
 
-		lineDiff := linesAdded - linesRemoved
-		if linesRemoved > 100 || linesAdded > 100 || lineDiff > 100 || lineDiff < -100 {
-			ctx.out.Yellow.Println("  Large change detected. Review the diff carefully.")
-		}
-
-		opts := &ui.DiffOptions{
-			ContextLines:  ctx.cfg.Diff.ContextLines,
-			ShowLineNums:  true,
-			InlineMode:    true,
-			MaxTotalLines: ctx.cfg.Diff.MaxTotalLines,
-		}
-		ui.ShowColoredDiffToWriter(ctx.out.StdoutWriter(), oldContent, content, opts)
+	lineDiff := linesAdded - linesRemoved
+	if linesRemoved > 100 || linesAdded > 100 || lineDiff > 100 || lineDiff < -100 {
+		ctx.out.Yellow.Println("  Large change detected. Review the diff carefully.")
 	}
 
-	if result, ok := confirmFileMutation(ctx, options, "str_replace", "Apply batch replacement? / バッチ置換を適用しますか？", mutationConfirmHandlers{
-		onComment: func(comment string) fileMutationResult {
-			return newCommentMutationResult(buildDeferredStrReplaceResult("[COMMENT]", "batch", path, comment))
-		},
-		onCancel: func() fileMutationResult {
-			ctx.out.Yellow.Println("⚠️  User cancelled the batch replacement")
-			return newCancelledMutationResult(buildDeferredStrReplaceResult("[CANCELLED]", "batch", path, ""))
-		},
-	}); !ok {
-		return result, nil
+	opts := &ui.DiffOptions{
+		ContextLines:  ctx.cfg.Diff.ContextLines,
+		ShowLineNums:  true,
+		InlineMode:    true,
+		MaxTotalLines: ctx.cfg.Diff.MaxTotalLines,
 	}
-
-	syntaxWarning := validateGoSyntaxForReplace(ctx.absPath, []byte(content))
-	if syntaxWarning != "" && !ctx.out.SuppressStdout() {
-		ctx.out.Yellow.Printf("%s\n", syntaxWarning)
-	}
-	if err := os.WriteFile(ctx.absPath, []byte(content), 0644); err != nil {
-		return newErrorMutationResult(fmt.Sprintf("Error writing file: %v", err)), nil
-	}
-
-	ctx.out.Green.Printf("✅ Applied %d edits to: %s\n", len(edits), path)
-	message := fmt.Sprintf("Successfully applied %d edits to %s", len(edits), path)
-	return newAppliedMutationResult(appendSyntaxWarning(message, syntaxWarning)), nil
+	ui.ShowColoredDiffToWriter(ctx.out.StdoutWriter(), oldContent, newContent, opts)
 }

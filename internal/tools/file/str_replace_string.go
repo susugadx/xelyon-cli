@@ -2,7 +2,6 @@ package file
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 	"github.com/susugadx/xelyon-cli/internal/ui"
@@ -41,17 +40,8 @@ func executeStringReplacement(ctx fileMutationContext, options common.ConfirmOpt
 			},
 		},
 		apply: func() (fileMutationResult, error) {
-			syntaxWarning := validateGoSyntaxForReplace(ctx.absPath, []byte(execution.plan.newContent))
-			if syntaxWarning != "" && !out.SuppressStdout() {
-				out.Yellow.Printf("%s\n", syntaxWarning)
-			}
-			if err := os.WriteFile(ctx.absPath, []byte(execution.plan.newContent), 0644); err != nil {
-				return newErrorMutationResult(fmt.Sprintf("Error writing file: %v", err)), nil
-			}
-
-			out.Green.Printf("✅ Replaced in: %s\n", path)
 			result := buildAppliedStrReplaceResult(path, execution.plan)
-			return newAppliedMutationResult(appendSyntaxWarning(result, syntaxWarning)), nil
+			return applyStringReplaceMutation(ctx, execution.plan.newContent, fmt.Sprintf("✅ Replaced in: %s", path), result)
 		},
 	})
 }

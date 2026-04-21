@@ -237,6 +237,24 @@ func TestExecuteBatchEdits_SequentialApplication(t *testing.T) {
 	testutil.AssertFileContent(t, testFile, "hi there")
 }
 
+func TestExecuteBatchEdits_NoopWhenFinalContentUnchanged(t *testing.T) {
+	setupTestMocks(t)
+	defer withPermissiveValidatePath(t)()
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test.txt")
+	testutil.CreateTempFile(t, tmpDir, "test.txt", "hello world")
+
+	editsJSON := `[{"old_str":"hello","new_str":"hi"},{"old_str":"hi","new_str":"hello"}]`
+	output, err := executeBatchEditsForTest(testFile, editsJSON)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(output, "No changes after applying all edits") {
+		t.Fatalf("expected noop result, got: %s", output)
+	}
+	testutil.AssertFileContent(t, testFile, "hello world")
+}
+
 func TestExecuteBatchEdits_AmbiguousMatch_SummaryFirst(t *testing.T) {
 	setupTestMocks(t)
 	defer withPermissiveValidatePath(t)()
