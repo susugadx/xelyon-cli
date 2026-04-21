@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -21,6 +22,27 @@ import (
 type blockingParallelTool struct {
 	started chan struct{}
 	release chan struct{}
+}
+
+type spinnerOrderCheckWriter struct {
+	mu                  sync.Mutex
+	agent               *Agent
+	sawParallelGroup    bool
+	groupWhileSpinnerOn bool
+}
+
+func (w *spinnerOrderCheckWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	text := string(p)
+	if strings.Contains(text, "┌ Parallel") {
+		w.sawParallelGroup = true
+		if w.agent != nil && w.agent.ui().CurrentSpinner() != nil {
+			w.groupWhileSpinnerOn = true
+		}
+	}
+	return len(p), nil
 }
 
 func (t *blockingParallelTool) Name() string { return "read_file" }
@@ -204,6 +226,70 @@ func TestExecuteToolCallsWithParallel_SkipFn_GenericTools(t *testing.T) {
 		if !found {
 			t.Errorf("expected skip message for %s in history", id)
 		}
+	}
+}
+
+func TestExecuteToolCallsWithParallel_LoopDetectBeforeSkip(t *testing.T) {
+	provider := &mockProvider{name: "test"}
+	agent := NewAgent("test-model", provider, false)
+	agent.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
+
+	cfg := agent.cfg()
+	origThreshold := cfg.LoopDetection.Threshold
+	cfg.LoopDetection.Threshold = 2
+	defer func() { cfg.LoopDetection.Threshold = origThreshold }()
+
+	toolCalls := []*tools.ToolCall{
+		{ID: "c1", Tool: "write_file", Args: map[string]string{"path": "/tmp/a.go"}, RawArgs: map[string]any{"path": "/tmp/a.go"}},
+		{ID: "c2", Tool: "write_file", Args: map[string]string{"path": "/tmp/a.go"}, RawArgs: map[string]any{"path": "/tmp/a.go"}},
+		{ID: "c3", Tool: "read_file", Args: testReadFileArgs("/a.go"), RawArgs: testReadFileRawArgs("/a.go")},
+	}
+	agent.addToolCallsToHistory("test", toolCalls)
+	historyBefore := len(agent.History)
+
+	skipFn := func(tc *tools.ToolCall) (bool, string) {
+		if tc.Tool == "write_file" {
+			return true, "[write_file] Ignored by skipFn."
+		}
+		return false, ""
+	}
+
+	var lastToolCall *tools.ToolCall
+	sameCallCount := 0
+	loopDetectFn := func(tc *tools.ToolCall) bool {
+		if isSameToolCall(tc, lastToolCall) {
+			sameCallCount++
+			return sameCallCount >= cfg.LoopDetection.Threshold
+		}
+		sameCallCount = 1
+		lastToolCall = tc
+		return false
+	}
+
+	var executed []string
+	loopDetected := agent.executeToolCallsWithParallel(context.Background(), toolCalls, loopDetectFn, skipFn, func(_ int, tc *tools.ToolCall, _ string, _ *tools.FileChange) {
+		executed = append(executed, tc.ID)
+	})
+
+	if !loopDetected {
+		t.Fatal("expected loopDetected=true")
+	}
+	if len(executed) != 0 {
+		t.Fatalf("executed = %v, want none", executed)
+	}
+
+	addedMsgs := agent.History[historyBefore:]
+	if len(addedMsgs) != 3 {
+		t.Fatalf("added %d history messages, want 3", len(addedMsgs))
+	}
+	if addedMsgs[0].ToolCallID != "c1" || !strings.Contains(addedMsgs[0].Content, "Ignored by skipFn") {
+		t.Errorf("addedMsgs[0] = {ID:%q, Content:%q}, want skip message for c1", addedMsgs[0].ToolCallID, addedMsgs[0].Content)
+	}
+	if addedMsgs[1].ToolCallID != "c2" || !strings.Contains(addedMsgs[1].Content, "loop detected") {
+		t.Errorf("addedMsgs[1] = {ID:%q, Content:%q}, want loop detection for c2", addedMsgs[1].ToolCallID, addedMsgs[1].Content)
+	}
+	if addedMsgs[2].ToolCallID != "c3" || !strings.Contains(addedMsgs[2].Content, "Skipped due to tool loop detection.") {
+		t.Errorf("addedMsgs[2] = {ID:%q, Content:%q}, want loop skip for c3", addedMsgs[2].ToolCallID, addedMsgs[2].Content)
 	}
 }
 
@@ -529,6 +615,119 @@ func TestExecuteToolCallsWithParallel_ShowsSpinnerDuringParallelRun(t *testing.T
 
 	if spinner := agent.ui().CurrentSpinner(); spinner != nil {
 		t.Fatal("expected spinner to be cleared after parallel execution")
+	}
+}
+
+func TestExecuteToolCallsWithParallel_StopsSpinnerBeforeNonTUIReport(t *testing.T) {
+	t.Setenv("XELYON_EDIT_TOOL", "str_replace")
+
+	provider := &mockProvider{name: "test"}
+	runtime := NewAgentRuntime()
+	checkWriter := &spinnerOrderCheckWriter{}
+	runtime.UI = ui.NewRuntime(strings.NewReader(""), checkWriter, checkWriter)
+
+	agent := NewAgentWithRuntime("test-model", provider, false, runtime)
+	checkWriter.agent = agent
+	t.Cleanup(agent.Cleanup)
+
+	toolCalls := []*tools.ToolCall{
+		{
+			ID:      "c1",
+			Tool:    "read_file",
+			Args:    testReadFileArgs("auto_compress.go"),
+			RawArgs: testReadFileRawArgs("auto_compress.go"),
+		},
+		{
+			ID:   "c2",
+			Tool: "search_code",
+			Args: map[string]string{
+				"pattern": "maybeAutoCompress",
+				"path":    ".",
+			},
+			RawArgs: map[string]any{
+				"pattern": "maybeAutoCompress",
+				"path":    ".",
+			},
+		},
+	}
+
+	agent.executeToolCallsWithParallel(context.Background(), toolCalls, nil, nil, func(_ int, _ *tools.ToolCall, _ string, _ *tools.FileChange) {})
+
+	if !checkWriter.sawParallelGroup {
+		t.Fatal("expected non-TUI parallel group output")
+	}
+	if checkWriter.groupWhileSpinnerOn {
+		t.Fatal("parallel report should not run while spinner is still active")
+	}
+}
+
+func TestExecuteToolCallsWithParallel_StopsSpinnerBeforeTUIReport(t *testing.T) {
+	t.Setenv("XELYON_EDIT_TOOL", "str_replace")
+
+	provider := &mockProvider{name: "test"}
+	runtime := NewAgentRuntime()
+	runtime.UI = ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
+
+	started := make(chan struct{}, 1)
+	release := make(chan struct{})
+	origTool := runtime.Registry.GetTool("read_file")
+	runtime.Registry.Register(&blockingParallelTool{
+		started: started,
+		release: release,
+	})
+
+	agent := NewAgentWithRuntime("test-model", provider, false, runtime)
+	t.Cleanup(func() {
+		agent.Cleanup()
+		if origTool != nil {
+			runtime.Registry.Register(origTool)
+		}
+	})
+
+	toolResultCh := make(chan tools.ToolResultInfo)
+	agent.tuiToolResultCh = toolResultCh
+
+	toolCalls := []*tools.ToolCall{{
+		ID:      "c1",
+		Tool:    "read_file",
+		Args:    testReadFileArgs("a.go"),
+		RawArgs: testReadFileRawArgs("a.go"),
+	}}
+
+	done := make(chan struct{})
+	go func() {
+		agent.executeToolCallsWithParallel(context.Background(), toolCalls, nil, nil, func(_ int, _ *tools.ToolCall, _ string, _ *tools.FileChange) {})
+		close(done)
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for parallel tool to start")
+	}
+
+	if spinner := agent.ui().CurrentSpinner(); spinner == nil || !spinner.IsActive() {
+		t.Fatal("expected spinner to be active before TUI parallel report")
+	}
+
+	go func() {
+		time.Sleep(10 * time.Millisecond)
+		close(release)
+	}()
+
+	select {
+	case <-toolResultCh:
+		if spinner := agent.ui().CurrentSpinner(); spinner != nil {
+			t.Fatal("TUI parallel report should not run while spinner is still active")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for TUI parallel tool result")
+	}
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for parallel execution to finish")
 	}
 }
 
