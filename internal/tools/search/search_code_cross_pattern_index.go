@@ -1,7 +1,6 @@
 package search
 
 import (
-	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -98,99 +97,89 @@ func buildCrossPatternIndexWithOptions(patterns, outputs []string, reg *locator.
 	return buildCrossPatternIndexFromExecutions(collected, reg, opts)
 }
 
+type crossPatternIndexEntry struct {
+	ref          primaryFileRef
+	patternCount int
+	category     string
+}
+
+type crossPatternIndexSections struct {
+	implKeys   []string
+	testKeys   []string
+	configKeys []string
+}
+
 func buildCrossPatternIndexFromExecutions(collected []formattedPatternExecution, reg *locator.Registry, opts SearchOptions) string {
-	type fileEntry struct {
-		ref          primaryFileRef
-		patternCount int
-		category     string
+	fileMap, order := collectCrossPatternIndexEntries(collected, opts)
+	if len(order) == 0 {
+		return ""
 	}
 
-	fileMap := make(map[string]*fileEntry)
-	var order []string
+	sections := splitCrossPatternIndexSections(fileMap, order)
+	hasHotspot := hasCrossPatternHotspot(fileMap)
+	if !shouldRenderCrossPatternIndex(order, sections, hasHotspot) {
+		return ""
+	}
+	return renderCrossPatternIndex(fileMap, order, sections, reg)
+}
 
+func collectCrossPatternIndexEntries(collected []formattedPatternExecution, opts SearchOptions) (map[string]*crossPatternIndexEntry, []string) {
+	fileMap := make(map[string]*crossPatternIndexEntry)
+	var order []string
 	for _, execution := range collected {
 		for _, ref := range primaryFileRefsFromExecution(execution, opts) {
 			key := ref.DisplayPath + "\x00" + ref.ResolvedPath
 			if entry, ok := fileMap[key]; ok {
 				entry.patternCount++
-			} else {
-				fileMap[key] = &fileEntry{
-					ref:          ref,
-					patternCount: 1,
-					category:     classifyFilePath(ref.DisplayPath),
-				}
-				order = append(order, key)
+				continue
 			}
+			fileMap[key] = &crossPatternIndexEntry{
+				ref:          ref,
+				patternCount: 1,
+				category:     classifyFilePath(ref.DisplayPath),
+			}
+			order = append(order, key)
 		}
 	}
+	return fileMap, order
+}
 
-	if len(order) == 0 {
-		return ""
-	}
-
-	var impl, test, cfg []string
+func splitCrossPatternIndexSections(fileMap map[string]*crossPatternIndexEntry, order []string) crossPatternIndexSections {
+	sections := crossPatternIndexSections{}
 	for _, key := range order {
 		switch fileMap[key].category {
 		case "test":
-			test = append(test, key)
+			sections.testKeys = append(sections.testKeys, key)
 		case "config":
-			cfg = append(cfg, key)
+			sections.configKeys = append(sections.configKeys, key)
 		default:
-			impl = append(impl, key)
+			sections.implKeys = append(sections.implKeys, key)
 		}
 	}
+	return sections
+}
 
-	hasHotspot := false
-	for _, e := range fileMap {
-		if e.patternCount > 1 {
-			hasHotspot = true
-			break
+func hasCrossPatternHotspot(fileMap map[string]*crossPatternIndexEntry) bool {
+	for _, entry := range fileMap {
+		if entry.patternCount > 1 {
+			return true
 		}
 	}
+	return false
+}
+
+func shouldRenderCrossPatternIndex(order []string, sections crossPatternIndexSections, hasHotspot bool) bool {
 	categoryCount := 0
-	if len(impl) > 0 {
+	if len(sections.implKeys) > 0 {
 		categoryCount++
 	}
-	if len(test) > 0 {
+	if len(sections.testKeys) > 0 {
 		categoryCount++
 	}
-	if len(cfg) > 0 {
+	if len(sections.configKeys) > 0 {
 		categoryCount++
 	}
-	if !hasHotspot && categoryCount < 2 && len(order) < 3 {
-		return ""
-	}
-
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "\n━━ File Index (%d unique files) ━━\n", len(order))
-
-	writeGroup := func(label string, keys []string) {
-		if len(keys) == 0 {
-			return
-		}
-		fmt.Fprintf(&sb, "%s:\n", label)
-		for _, key := range keys {
-			e := fileMap[key]
-			p := e.ref.DisplayPath
-			var line string
-			if e.patternCount > 1 {
-				line = fmt.Sprintf("  %s (★%d patterns)", p, e.patternCount)
-			} else {
-				line = fmt.Sprintf("  %s", p)
-			}
-			if reg != nil {
-				id := reg.Register(newSearchLocator(p, e.ref.ResolvedPath, 0, 0, ""))
-				line += " " + id
-			}
-			fmt.Fprintf(&sb, "%s\n", line)
-		}
-	}
-
-	writeGroup("Impl", impl)
-	writeGroup("Test", test)
-	writeGroup("Config", cfg)
-
-	return sb.String()
+	return hasHotspot || categoryCount >= 2 || len(order) >= 3
 }
 
 func primaryFileRefsFromExecution(execution formattedPatternExecution, opts SearchOptions) []primaryFileRef {

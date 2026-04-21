@@ -59,20 +59,22 @@ func runTextSearchStage(pattern string, textOpts SearchOptions) (textSearchStage
 
 func formatSinglePatternTextStage(cache tools.ToolCacheInterface, ctx singlePatternExecutionContext, route searchRouteTrace, textOpts SearchOptions, stage textSearchStageResult) singlePatternExecution {
 	results := stage.Results
-	if ctx.Opts.OutputMode == "manifest" {
-		sortResultsByPriority(results)
-		detectBlocksWithCache(cache, results, textOpts)
-		finalOutput := withSearchWarnings(formatManifestResultsWithOptions(results, ctx.Opts.LocatorRegistry, ctx.Opts), stage.Warnings)
-		affectedFiles := collectFilePaths(results, ctx.Opts)
-		writeSinglePatternSearchCache(cache, ctx, finalOutput, affectedFiles)
-		return singlePatternExecution{
-			Pattern:       ctx.Pattern,
-			Output:        finalOutput,
-			Route:         route,
-			AffectedFiles: affectedFiles,
-		}
+	if isManifestSearchOutput(ctx.Opts) {
+		return formatSinglePatternManifestTextStage(cache, ctx, route, textOpts, stage, results)
 	}
+	return formatSinglePatternStandardTextStage(cache, ctx, route, textOpts, stage, results)
+}
 
+func formatSinglePatternManifestTextStage(cache tools.ToolCacheInterface, ctx singlePatternExecutionContext, route searchRouteTrace, textOpts SearchOptions, stage textSearchStageResult, results []SearchResult) singlePatternExecution {
+	sortResultsByPriority(results)
+	detectBlocksWithCache(cache, results, textOpts)
+	finalOutput := withSearchWarnings(formatManifestResultsWithOptions(results, ctx.Opts.LocatorRegistry, ctx.Opts), stage.Warnings)
+	affectedFiles := collectFilePaths(results, ctx.Opts)
+	writeSinglePatternSearchCache(cache, ctx, finalOutput, affectedFiles)
+	return newSinglePatternTextExecution(ctx.Pattern, route, finalOutput, affectedFiles)
+}
+
+func formatSinglePatternStandardTextStage(cache tools.ToolCacheInterface, ctx singlePatternExecutionContext, route searchRouteTrace, textOpts SearchOptions, stage textSearchStageResult, results []SearchResult) singlePatternExecution {
 	results = mergeContextLines(results)
 	sortResultsByPriority(results)
 	results, truncated := truncateToTokenBudget(results, ctx.Opts.TokenBudget, false)
@@ -82,13 +84,20 @@ func formatSinglePatternTextStage(cache tools.ToolCacheInterface, ctx singlePatt
 	finalOutput := withSearchWarnings(formatted, stage.Warnings) + lineRangeHint
 	affectedFiles := collectFilePaths(results, ctx.Opts)
 	writeSinglePatternSearchCache(cache, ctx, finalOutput, affectedFiles)
+	return newSinglePatternTextExecution(ctx.Pattern, route, finalOutput, affectedFiles)
+}
 
+func newSinglePatternTextExecution(pattern string, route searchRouteTrace, output string, affectedFiles []string) singlePatternExecution {
 	return singlePatternExecution{
-		Pattern:       ctx.Pattern,
-		Output:        finalOutput,
+		Pattern:       pattern,
+		Output:        output,
 		Route:         route,
 		AffectedFiles: affectedFiles,
 	}
+}
+
+func isManifestSearchOutput(opts SearchOptions) bool {
+	return opts.OutputMode == "manifest"
 }
 
 func formatNoMatchOutput(warnings []string) string {
