@@ -38,12 +38,65 @@ func buildStringReplacementFailure(path, oldContent, oldStr string, failure stri
 	}
 }
 
+func buildBatchStringReplacementFailure(path string, failure batchStringReplacementFailure) string {
+	lines := strings.Split(failure.oldContent, "\n")
+	switch failure.failure.reason {
+	case stringReplacementFailureMultipleMatches:
+		cands := findAllOccurrencesLineRanges(failure.oldContent, failure.oldStr, maxFailureCandidatesToShow)
+		return joinFailureResult(
+			fmt.Sprintf("Error: edits[%d].old_str appears %d times in %s (must be unique; batch aborted, no changes written).", failure.editIndex, failure.failure.exactCount, path),
+			buildCandidateSummary(lines, cands, failure.failure.exactCount),
+			fmt.Sprintf("Next: use read_file on one candidate and retry with a more specific edits[%d].old_str; use line-range mode for a fixed block.", failure.editIndex),
+		)
+	case stringReplacementFailureNotFound:
+		return joinFailureResult(
+			fmt.Sprintf("Error: edits[%d].old_str not found in %s (tried exact and normalized matching; batch aborted, no changes written).", failure.editIndex, path),
+			buildHeadPreview(lines, maxFailurePreviewLines),
+			fmt.Sprintf("Next: use read_file/search_code to copy the exact text for edits[%d].old_str, then retry; split the batch if later edits depend on earlier changes.", failure.editIndex),
+		)
+	default:
+		return ""
+	}
+}
+
+func buildLineRangeReplacementFailure(path string, failure lineRangeReplacementFailure) string {
+	switch failure.reason {
+	case lineRangeReplacementFailureMissingRange:
+		return "Error: old_str is required (or provide both start_line and end_line for line-range replacement)"
+	case lineRangeReplacementFailureIncompleteRange:
+		return "Error: both start_line and end_line are required for line-range replacement (1-indexed inclusive)"
+	case lineRangeReplacementFailureInvalidRange:
+		return joinFailureResult(
+			fmt.Sprintf("Error: invalid line range in %s: %v", path, failure.parseErr),
+			"Next: use read_file to confirm start_line/end_line (1-indexed inclusive).",
+		)
+	case lineRangeReplacementFailureEmptyFile:
+		return fmt.Sprintf("Error: file is empty: %s", path)
+	case lineRangeReplacementFailureStartOutOfRange:
+		return joinFailureResult(
+			fmt.Sprintf("Error: start_line is out of range in %s (start_line=%d, file_lines=%d).", path, failure.startLine, failure.fileLines),
+			"Next: use read_file to confirm the target range.",
+		)
+	case lineRangeReplacementFailureEndOutOfRange:
+		return joinFailureResult(
+			fmt.Sprintf("Error: end_line is out of range in %s (end_line=%d, file_lines=%d).", path, failure.endLine, failure.fileLines),
+			"Next: use read_file to confirm the target range.",
+		)
+	default:
+		return ""
+	}
+}
+
 func buildAppliedStrReplaceResult(path string, plan stringReplacementPlan) string {
 	result := fmt.Sprintf("Successfully replaced text in %s (lines %d-%d → %d-%d)", path, plan.matchStartLine, plan.matchEndLine, plan.matchStartLine, plan.replacedEndLine)
 	if plan.usedNormalizedMatch {
 		result = fmt.Sprintf("Successfully replaced text in %s (lines %d-%d → %d-%d, used normalized whitespace matching)", path, plan.matchStartLine, plan.matchEndLine, plan.matchStartLine, plan.replacedEndLine)
 	}
 	return result
+}
+
+func buildAppliedLineRangeStrReplaceResult(path string, plan lineRangeReplacementPlan) string {
+	return fmt.Sprintf("Successfully replaced lines %d-%d in %s (new range: %d-%d)", plan.startLine, plan.endLine, path, plan.startLine, plan.replacedEndLine())
 }
 
 func buildDeferredStrReplaceResult(status, mode, path, comment string) string {

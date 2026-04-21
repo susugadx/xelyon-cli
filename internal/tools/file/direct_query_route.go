@@ -6,6 +6,14 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
+type gatherContextFallbackRouteMode string
+
+const (
+	gatherContextFallbackRouteModeNone gatherContextFallbackRouteMode = "none"
+	gatherContextFallbackRouteModeAny  gatherContextFallbackRouteMode = "any"
+	gatherContextFallbackRouteModeRead gatherContextFallbackRouteMode = "read"
+)
+
 // PlanGatherContextDirectRoute centralizes gather_context-specific direct query policy
 // so high-level routing does not need to know explicit/implicit path heuristics.
 // Route ownership lives here: classify scoped direct, generic explicit direct,
@@ -76,31 +84,39 @@ func resolveScopedGatherContextDirectRoute(execCtx tools.ExecutionContext, input
 }
 
 func resolveFallbackGatherContextDirectRoute(execCtx tools.ExecutionContext, input directQueryInput, policy GatherContextDirectRoutePolicy) GatherContextDirectRouteOutcome {
-	if inputHasOnlyPathCandidateSyntax(input) {
+	switch resolveGatherContextFallbackRouteMode(input, policy.AllowImplicitBareFile) {
+	case gatherContextFallbackRouteModeAny:
 		if inputHasOnlyStrongDirectIntent(input) {
 			return resolveRequiredCandidateGatherContextAnyRoute(execCtx, input, policy)
 		}
 		return resolveCandidateGatherContextAnyRoute(execCtx, input, policy)
+	case gatherContextFallbackRouteModeRead:
+		if inputHasOnlyStrongDirectIntent(input) {
+			return resolveRequiredCandidateGatherContextReadRoute(execCtx, input)
+		}
+		return resolveCandidateGatherContextReadRoute(execCtx, input)
+	default:
+		return GatherContextDirectRouteOutcome{Kind: GatherContextDirectRouteOutcomeNone}
+	}
+}
+
+func resolveGatherContextFallbackRouteMode(input directQueryInput, allowImplicitBareFile bool) gatherContextFallbackRouteMode {
+	if inputHasOnlyPathCandidateSyntax(input) {
+		return gatherContextFallbackRouteModeAny
 	}
 	if inputContainsPathCandidateSyntax(input) {
-		if !inputHasOnlyCandidateDirectSyntax(input, policy.AllowImplicitBareFile) {
-			return GatherContextDirectRouteOutcome{Kind: GatherContextDirectRouteOutcomeNone}
+		if !inputHasOnlyCandidateDirectSyntax(input, allowImplicitBareFile) {
+			return gatherContextFallbackRouteModeNone
 		}
-		if inputHasOnlyStrongDirectIntent(input) {
-			return resolveRequiredCandidateGatherContextAnyRoute(execCtx, input, policy)
-		}
-		return resolveCandidateGatherContextAnyRoute(execCtx, input, policy)
+		return gatherContextFallbackRouteModeAny
 	}
-	if !policy.AllowImplicitBareFile {
-		return GatherContextDirectRouteOutcome{Kind: GatherContextDirectRouteOutcomeNone}
+	if !allowImplicitBareFile {
+		return gatherContextFallbackRouteModeNone
 	}
 	if !inputHasOnlyDirectReadCandidates(input, true) {
-		return GatherContextDirectRouteOutcome{Kind: GatherContextDirectRouteOutcomeNone}
+		return gatherContextFallbackRouteModeNone
 	}
-	if inputHasOnlyStrongDirectIntent(input) {
-		return resolveRequiredCandidateGatherContextReadRoute(execCtx, input)
-	}
-	return resolveCandidateGatherContextReadRoute(execCtx, input)
+	return gatherContextFallbackRouteModeRead
 }
 
 func resolveCandidateGatherContextReadRoute(execCtx tools.ExecutionContext, input directQueryInput) GatherContextDirectRouteOutcome {

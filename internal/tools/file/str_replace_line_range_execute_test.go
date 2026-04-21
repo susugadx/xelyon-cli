@@ -83,3 +83,33 @@ func TestStrReplace_LineRangeOutOfBounds(t *testing.T) {
 
 	testutil.AssertFileContent(t, testFile, "line1\nline2\nline3")
 }
+
+func TestBuildLineRangeReplacementExecution_Success(t *testing.T) {
+	execution := buildLineRangeReplacementExecution("line1\nline2\nline3", "A\nB", "2", "3")
+	if execution.failure.hasFailure() {
+		t.Fatalf("expected success execution, got failure: %+v", execution.failure)
+	}
+	if execution.plan.startLine != 2 || execution.plan.endLine != 3 {
+		t.Fatalf("unexpected range: %d-%d", execution.plan.startLine, execution.plan.endLine)
+	}
+	if execution.plan.newContent != "line1\nA\nB" {
+		t.Fatalf("unexpected new content: %q", execution.plan.newContent)
+	}
+	if execution.plan.replacedEndLine() != 3 {
+		t.Fatalf("unexpected replaced end line: %d", execution.plan.replacedEndLine())
+	}
+}
+
+func TestBuildLineRangeReplacementFailure_EndOutOfRange(t *testing.T) {
+	execution := buildLineRangeReplacementExecution("line1\nline2\nline3", "REPLACED", "2", "10")
+	if !execution.failure.hasFailure() {
+		t.Fatal("expected failure")
+	}
+	msg := buildLineRangeReplacementFailure("test.txt", execution.failure)
+	if !strings.Contains(msg, "Error: end_line is out of range in test.txt (end_line=10, file_lines=3).") {
+		t.Fatalf("unexpected failure summary: %s", msg)
+	}
+	if !strings.Contains(msg, "Next: use read_file to confirm the target range.") {
+		t.Fatalf("unexpected failure guidance: %s", msg)
+	}
+}

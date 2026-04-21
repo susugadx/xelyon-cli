@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 	"github.com/susugadx/xelyon-cli/internal/ui"
@@ -41,7 +40,6 @@ func executeBatchEditsWithPromptIOAndOptionsResult(promptIO ui.PromptIO, options
 		return newErrorMutationResult("Error: edits array is empty"), nil
 	}
 
-	content := oldContent
 	for i, edit := range edits {
 		if edit.OldStr == "" {
 			return newErrorMutationResult(fmt.Sprintf("Error: edits[%d].old_str is empty in %s", i, path)), nil
@@ -49,35 +47,18 @@ func executeBatchEditsWithPromptIOAndOptionsResult(promptIO ui.PromptIO, options
 		if edit.OldStr == edit.NewStr {
 			return newErrorMutationResult(fmt.Sprintf("Error: edits[%d] old_str and new_str are identical (no change needed) in %s", i, path)), nil
 		}
+	}
 
-		count := strings.Count(content, edit.OldStr)
-		switch {
-		case count == 1:
-			content = strings.Replace(content, edit.OldStr, edit.NewStr, 1)
-		case count > 1:
-			lines := strings.Split(content, "\n")
-			cands := findAllOccurrencesLineRanges(content, edit.OldStr, maxFailureCandidatesToShow)
-			return newErrorMutationResult(joinFailureResult(
-				fmt.Sprintf("Error: edits[%d].old_str appears %d times in %s (must be unique; batch aborted, no changes written).", i, count, path),
-				buildCandidateSummary(lines, cands, count),
-				fmt.Sprintf("Next: use read_file on one candidate and retry with a more specific edits[%d].old_str; use line-range mode for a fixed block.", i),
-			)), nil
-		default:
-			if !ctx.out.SuppressStdout() {
-				ctx.out.Yellow.Printf("⚠️  edits[%d]: Exact match failed, trying normalized whitespace matching...\n", i)
-			}
-			found, startIdx, endIdx := common.FindWithNormalizedWhitespace(content, edit.OldStr)
-			if !found {
-				lines := strings.Split(content, "\n")
-				return newErrorMutationResult(joinFailureResult(
-					fmt.Sprintf("Error: edits[%d].old_str not found in %s (tried exact and normalized matching; batch aborted, no changes written).", i, path),
-					buildHeadPreview(lines, maxFailurePreviewLines),
-					fmt.Sprintf("Next: use read_file/search_code to copy the exact text for edits[%d].old_str, then retry; split the batch if later edits depend on earlier changes.", i),
-				)), nil
-			}
-			content = content[:startIdx] + edit.NewStr + content[endIdx+1:]
+	outcome := buildBatchStringReplacementOutcome(oldContent, edits)
+	for _, editIndex := range outcome.plan.normalizedAttemptedEdits {
+		if !ctx.out.SuppressStdout() {
+			ctx.out.Yellow.Printf("⚠️  edits[%d]: Exact match failed, trying normalized whitespace matching...\n", editIndex)
 		}
 	}
+	if outcome.failure != nil {
+		return newErrorMutationResult(buildBatchStringReplacementFailure(path, *outcome.failure)), nil
+	}
+	content := outcome.plan.newContent
 
 	if content == oldContent {
 		return newNoopMutationResult("No changes after applying all edits"), nil
