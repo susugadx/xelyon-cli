@@ -1,12 +1,11 @@
 package tools
 
 import (
+	"io"
 	"testing"
 )
 
 func TestParseToolCalls_IncompleteJSON_UsesXMLRescueWhenNoJSONParsed(t *testing.T) {
-	registerXMLTestTools(t)
-
 	// JSON が不完全で抽出できない場合でも、JSON 0件なら XML rescue を試す
 	input := `{"tool": "read_file", "args": {"path": "main.go"}
 
@@ -14,7 +13,7 @@ func TestParseToolCalls_IncompleteJSON_UsesXMLRescueWhenNoJSONParsed(t *testing.
   <path>.</path>
 </list_dir>`
 
-	result := ParseToolCalls(input)
+	result := parseToolCallsForXMLTest(t, input)
 	if len(result) != 1 {
 		t.Fatalf("ParseToolCalls() returned %d calls, want 1 (XML rescue)", len(result))
 	}
@@ -27,8 +26,6 @@ func TestParseToolCalls_IncompleteJSON_UsesXMLRescueWhenNoJSONParsed(t *testing.
 }
 
 func TestParseToolCalls_IncompleteJSON_AfterValidJSONDoesNotRunXMLRescue(t *testing.T) {
-	registerXMLTestTools(t)
-
 	// 先頭 JSON を1件取れた時点で XML rescue は発動しない（既存契約）
 	input := `{"tool": "read_file", "args": {"path": "main.go"}}
 {"tool": "str_replace", "args": {"path": "main.go", "old_str": "old", "new_str": "new"
@@ -37,7 +34,7 @@ func TestParseToolCalls_IncompleteJSON_AfterValidJSONDoesNotRunXMLRescue(t *test
   <path>.</path>
 </list_dir>`
 
-	result := ParseToolCalls(input)
+	result := parseToolCallsForXMLTest(t, input)
 	if len(result) != 1 {
 		t.Fatalf("ParseToolCalls() returned %d calls, want 1 (JSON only)", len(result))
 	}
@@ -47,6 +44,7 @@ func TestParseToolCalls_IncompleteJSON_AfterValidJSONDoesNotRunXMLRescue(t *test
 }
 
 // xmlTestTool はXML rescueテスト用のダミーツール
+// Run を実行するテストではないため、実行結果は空で返す。
 type xmlTestTool struct {
 	name string
 }
@@ -58,19 +56,25 @@ func (t *xmlTestTool) Run(_ ExecutionContext, args map[string]string) (string, *
 	return "", nil, nil
 }
 
-// registerXMLTestTools はXML rescueテスト用にDefaultRegistryにダミーツールを登録する
-func registerXMLTestTools(t *testing.T) {
+func parseToolCallsForXMLTest(t *testing.T, input string) []*ToolCall {
 	t.Helper()
+	return ParseToolCallsWithRegistry(input, newXMLTestRegistry(t), io.Discard)
+}
+
+// newXMLTestRegistry はXML rescueテスト専用レジストリを返す。
+// DefaultRegistry への副作用を避けるため clone を使う。
+func newXMLTestRegistry(t *testing.T) *Registry {
+	t.Helper()
+	registry := DefaultRegistry.Clone()
 	for _, name := range []string{"read_file", "list_dir", "bash", "write_file", "str_replace"} {
-		if !DefaultRegistry.HasTool(name) {
-			DefaultRegistry.Register(&xmlTestTool{name: name})
+		if !registry.HasTool(name) {
+			registry.Register(&xmlTestTool{name: name})
 		}
 	}
+	return registry
 }
 
 func TestParseToolCalls_XMLRescue_WithArgsWrapper(t *testing.T) {
-	registerXMLTestTools(t)
-
 	input := `Let me read the file for you.
 
 <read_file>
@@ -81,7 +85,7 @@ func TestParseToolCalls_XMLRescue_WithArgsWrapper(t *testing.T) {
 
 Done.`
 
-	result := ParseToolCalls(input)
+	result := parseToolCallsForXMLTest(t, input)
 	if len(result) != 1 {
 		t.Fatalf("ParseToolCalls() returned %d calls, want 1", len(result))
 	}
@@ -94,15 +98,13 @@ Done.`
 }
 
 func TestParseToolCalls_XMLRescue_WithoutArgsWrapper(t *testing.T) {
-	registerXMLTestTools(t)
-
 	input := `I'll list the directory.
 
 <list_dir>
   <path>.</path>
 </list_dir>`
 
-	result := ParseToolCalls(input)
+	result := parseToolCallsForXMLTest(t, input)
 	if len(result) != 1 {
 		t.Fatalf("ParseToolCalls() returned %d calls, want 1", len(result))
 	}
@@ -115,8 +117,6 @@ func TestParseToolCalls_XMLRescue_WithoutArgsWrapper(t *testing.T) {
 }
 
 func TestParseToolCalls_XMLRescue_MultipleToolCalls(t *testing.T) {
-	registerXMLTestTools(t)
-
 	input := `First read, then list.
 
 <read_file>
@@ -127,7 +127,7 @@ func TestParseToolCalls_XMLRescue_MultipleToolCalls(t *testing.T) {
 <path>.</path>
 </list_dir>`
 
-	result := ParseToolCalls(input)
+	result := parseToolCallsForXMLTest(t, input)
 	if len(result) != 2 {
 		t.Fatalf("ParseToolCalls() returned %d calls, want 2", len(result))
 	}
@@ -140,33 +140,27 @@ func TestParseToolCalls_XMLRescue_MultipleToolCalls(t *testing.T) {
 }
 
 func TestParseToolCalls_XMLRescue_UnknownToolIgnored(t *testing.T) {
-	registerXMLTestTools(t)
-
-	// "unknown_tool" はDefaultRegistryに未登録なのでスキップされる
+	// "unknown_tool" は registry に未登録なのでスキップされる
 	input := `<unknown_tool>
 <param1>value1</param1>
 </unknown_tool>`
 
-	result := ParseToolCalls(input)
+	result := parseToolCallsForXMLTest(t, input)
 	if len(result) != 0 {
 		t.Errorf("ParseToolCalls() returned %d calls, want 0 (unknown tool)", len(result))
 	}
 }
 
 func TestParseToolCalls_XMLRescue_InCodeBlockIgnored(t *testing.T) {
-	registerXMLTestTools(t)
-
 	input := "Example:\n```\n<read_file>\n<path>test.go</path>\n</read_file>\n```"
 
-	result := ParseToolCalls(input)
+	result := parseToolCallsForXMLTest(t, input)
 	if len(result) != 0 {
 		t.Errorf("ParseToolCalls() returned %d calls, want 0 (in code block)", len(result))
 	}
 }
 
 func TestParseToolCalls_XMLRescue_JSONTakesPriority(t *testing.T) {
-	registerXMLTestTools(t)
-
 	// JSONが見つかればXML rescueは発動しない
 	input := `{"tool": "read_file", "args": {"path": "main.go"}}
 
@@ -174,7 +168,7 @@ func TestParseToolCalls_XMLRescue_JSONTakesPriority(t *testing.T) {
 <command>ls</command>
 </bash>`
 
-	result := ParseToolCalls(input)
+	result := parseToolCallsForXMLTest(t, input)
 	if len(result) != 1 {
 		t.Fatalf("ParseToolCalls() returned %d calls, want 1 (JSON only)", len(result))
 	}
@@ -184,15 +178,13 @@ func TestParseToolCalls_XMLRescue_JSONTakesPriority(t *testing.T) {
 }
 
 func TestParseToolCalls_XMLRescue_BashCommand(t *testing.T) {
-	registerXMLTestTools(t)
-
 	input := `<bash>
 <args>
   <command>go test ./...</command>
 </args>
 </bash>`
 
-	result := ParseToolCalls(input)
+	result := parseToolCallsForXMLTest(t, input)
 	if len(result) != 1 {
 		t.Fatalf("ParseToolCalls() returned %d calls, want 1", len(result))
 	}
@@ -205,13 +197,11 @@ func TestParseToolCalls_XMLRescue_BashCommand(t *testing.T) {
 }
 
 func TestParseToolCalls_XMLRescue_JSONInsideXMLTags(t *testing.T) {
-	registerXMLTestTools(t)
-
 	input := `<read_file>
 {"path": "main.go"}
 </read_file>`
 
-	result := ParseToolCalls(input)
+	result := parseToolCallsForXMLTest(t, input)
 	if len(result) != 1 {
 		t.Fatalf("ParseToolCalls() returned %d calls, want 1", len(result))
 	}
@@ -224,13 +214,11 @@ func TestParseToolCalls_XMLRescue_JSONInsideXMLTags(t *testing.T) {
 }
 
 func TestParseToolCalls_XMLRescue_BashJSONInsideXMLTags(t *testing.T) {
-	registerXMLTestTools(t)
-
 	input := `<bash>
 {"command": "cat main.go"}
 </bash>`
 
-	result := ParseToolCalls(input)
+	result := parseToolCallsForXMLTest(t, input)
 	if len(result) != 1 {
 		t.Fatalf("ParseToolCalls() returned %d calls, want 1", len(result))
 	}

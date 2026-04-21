@@ -268,6 +268,43 @@ func TestParseToolCalls_MultipleCodeBlocks(t *testing.T) {
 	}
 }
 
+func TestParseToolCalls_UnclosedCodeBlock(t *testing.T) {
+	tests := []struct {
+		name      string
+		response  string
+		wantCount int
+		wantTools []string
+	}{
+		{
+			name: "unclosed code block before tool (CURRENT BEHAVIOR - may cause issues)",
+			// 現在の実装では、閉じていないコードブロック以降がすべてスキップされる
+			response:  "```json\nsome example\n{\"tool\": \"read_file\", \"args\": {}}",
+			wantCount: 0, // 現在の挙動: コードブロック内なのでスキップ
+			wantTools: []string{},
+		},
+		{
+			name:      "tool after properly closed code block",
+			response:  "```json\nexample\n```\n{\"tool\": \"read_file\", \"args\": {}}",
+			wantCount: 1,
+			wantTools: []string{"read_file"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ParseToolCalls(tt.response)
+			if len(got) != tt.wantCount {
+				t.Fatalf("ParseToolCalls() returned %d tools, want %d", len(got), tt.wantCount)
+			}
+			for i, tc := range got {
+				if tc.Tool != tt.wantTools[i] {
+					t.Errorf("ParseToolCalls()[%d].Tool = %v, want %v", i, tc.Tool, tt.wantTools[i])
+				}
+			}
+		})
+	}
+}
+
 func TestParseToolCalls_IncompleteJSONInCodeBlock_DoesNotBlockOutsideJSON(t *testing.T) {
 	// コードブロック内の不完全 JSON は除外され、外側の有効 JSON は抽出される
 	input := "```json\n{\"tool\": \"write_file\", \"args\": {\"path\": \"a.go\"\n```\n\n{\"tool\": \"bash\", \"args\": {\"command\": \"echo ok\"}}"
