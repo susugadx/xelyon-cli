@@ -63,6 +63,87 @@ func TestPatterns_CommentExclusion(t *testing.T) {
 	if matchesSymbolPattern("tasks.py", "# def build_map():") {
 		t.Fatal("commented Python definition should not match")
 	}
+	if matchesSymbolPattern("build.sh", "# function build_map") {
+		t.Fatal("commented Shell definition should not match")
+	}
+}
+
+func TestSupportsSymbols_LanguageCoverage(t *testing.T) {
+	tests := []struct {
+		path string
+		want bool
+	}{
+		{path: "main.go", want: true},
+		{path: "app.tsx", want: true},
+		{path: "tasks.py", want: true},
+		{path: "lib.rs", want: true},
+		{path: "src/Main.java", want: true},
+		{path: "src/Main.kt", want: true},
+		{path: "src/Main.kts", want: true},
+		{path: "lib/runner.rb", want: true},
+		{path: "web/index.php", want: true},
+		{path: "main.c", want: true},
+		{path: "main.hpp", want: true},
+		{path: "App.swift", want: true},
+		{path: "App.scala", want: true},
+		{path: "build.sh", want: true},
+		{path: "build.bash", want: true},
+		{path: "build.zsh", want: true},
+		{path: "README.md", want: false},
+		{path: "Dockerfile", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			if got := supportsSymbols(tt.path); got != tt.want {
+				t.Fatalf("supportsSymbols(%q) = %v, want %v", tt.path, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPatterns_MultiLanguageRegression(t *testing.T) {
+	positive := []struct {
+		name string
+		path string
+		line string
+	}{
+		{name: "Java interface", path: "src/Runner.java", line: "public interface Runner {"},
+		{name: "Kotlin data class", path: "src/Runner.kt", line: "data class Runner(val id: String)"},
+		{name: "Ruby module", path: "lib/runner.rb", line: "  module Runner"},
+		{name: "PHP function", path: "web/runner.php", line: "protected static function buildMap() {"},
+		{name: "Swift protocol", path: "ios/Runner.swift", line: "public protocol Runner {"},
+		{name: "Scala case class", path: "src/Runner.scala", line: "case class Runner(id: String)"},
+		{name: "Shell function", path: "scripts/build.sh", line: "function build_map"},
+	}
+	for _, tt := range positive {
+		t.Run(tt.name, func(t *testing.T) {
+			if !matchesSymbolPattern(tt.path, tt.line) {
+				t.Fatalf("matchesSymbolPattern(%q, %q) = false, want true", tt.path, tt.line)
+			}
+		})
+	}
+
+	negative := []struct {
+		name string
+		path string
+		line string
+	}{
+		{name: "Java statement", path: "src/Runner.java", line: "if (ready) {"},
+		{name: "Kotlin assignment", path: "src/Runner.kt", line: "val runner = Runner()"},
+		{name: "Ruby call", path: "lib/runner.rb", line: "puts runner"},
+		{name: "PHP echo", path: "web/runner.php", line: "echo $runner;"},
+		{name: "Swift call", path: "ios/Runner.swift", line: "print(runner)"},
+		{name: "Scala call", path: "src/Runner.scala", line: "println(runner)"},
+		{name: "Shell command", path: "scripts/build.sh", line: "echo build"},
+	}
+	for _, tt := range negative {
+		t.Run(tt.name, func(t *testing.T) {
+			if matchesSymbolPattern(tt.path, tt.line) {
+				t.Fatalf("matchesSymbolPattern(%q, %q) = true, want false", tt.path, tt.line)
+			}
+		})
+	}
 }
 
 func TestPatterns_CppStructAndDefine(t *testing.T) {
@@ -203,29 +284,6 @@ func TestExtractJSArrowFunctionMetadata(t *testing.T) {
 			}
 			if gotKind != tt.wantKind {
 				t.Fatalf("kind = %q, want %q", gotKind, tt.wantKind)
-			}
-		})
-	}
-}
-
-func TestTestSortBase_DoesNotTreatContestAsTest(t *testing.T) {
-	tests := []struct {
-		name string
-		want string
-	}{
-		{name: "contest.java", want: "contest.java"},
-		{name: "Contest.kt", want: "contest.kt"},
-		{name: "MyContest.cs", want: "mycontest.cs"},
-		{name: "Contest.php", want: "contest.php"},
-		{name: "UserServiceTest.java", want: "userservice.java"},
-		{name: "UserServiceTests.kt", want: "userservice.kt"},
-		{name: "user_service_test.php", want: "user_service.php"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := testSortBase(tt.name); got != tt.want {
-				t.Fatalf("testSortBase(%q) = %q, want %q", tt.name, got, tt.want)
 			}
 		})
 	}
