@@ -108,3 +108,61 @@ func TestDefaultModelSyncProviderKey_PrefersSessionOwnerUnlessDefaultProviderCha
 		})
 	}
 }
+
+func TestProviderModelLookupKey_PrefersExactThenAlias(t *testing.T) {
+	t.Run("exact key wins when both aliases exist", func(t *testing.T) {
+		key, ok := providerModelLookupKey(map[string]ProviderModelConfig{
+			"anthropic": {},
+			"claude":    {},
+		}, "anthropic")
+		if !ok || key != "anthropic" {
+			t.Fatalf("providerModelLookupKey(anthropic with both aliases) = (%q, %v), want (%q, true)", key, ok, "anthropic")
+		}
+	})
+
+	t.Run("falls back to sibling alias when exact key is absent", func(t *testing.T) {
+		key, ok := providerModelLookupKey(map[string]ProviderModelConfig{
+			"claude": {},
+		}, "anthropic")
+		if !ok || key != "claude" {
+			t.Fatalf("providerModelLookupKey(anthropic via claude fallback) = (%q, %v), want (%q, true)", key, ok, "claude")
+		}
+	})
+}
+
+func TestProviderModelWriteAndDeleteTargetKeys_RespectAliasOwnership(t *testing.T) {
+	t.Run("write reuses existing sibling alias entry", func(t *testing.T) {
+		key, ok := providerModelWriteTargetKey(map[string]ProviderModelConfig{
+			"claude": {},
+		}, "anthropic")
+		if !ok || key != "claude" {
+			t.Fatalf("providerModelWriteTargetKey(anthropic with existing claude) = (%q, %v), want (%q, true)", key, ok, "claude")
+		}
+	})
+
+	t.Run("write creates exact requested alias when no entry exists", func(t *testing.T) {
+		key, ok := providerModelWriteTargetKey(nil, "anthropic")
+		if !ok || key != "anthropic" {
+			t.Fatalf("providerModelWriteTargetKey(anthropic, nil) = (%q, %v), want (%q, true)", key, ok, "anthropic")
+		}
+	})
+
+	t.Run("delete keeps exact requested key precedence", func(t *testing.T) {
+		keys := providerModelDeleteTargetKeys(map[string]ProviderModelConfig{
+			"claude":    {},
+			"anthropic": {},
+		}, "claude")
+		if len(keys) != 1 || keys[0] != "claude" {
+			t.Fatalf("providerModelDeleteTargetKeys(claude with both aliases) = %v, want [claude]", keys)
+		}
+	})
+
+	t.Run("delete falls back to sibling alias when exact key is absent", func(t *testing.T) {
+		keys := providerModelDeleteTargetKeys(map[string]ProviderModelConfig{
+			"claude": {},
+		}, "anthropic")
+		if len(keys) != 1 || keys[0] != "claude" {
+			t.Fatalf("providerModelDeleteTargetKeys(anthropic via claude fallback) = %v, want [claude]", keys)
+		}
+	})
+}

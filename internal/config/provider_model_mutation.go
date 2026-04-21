@@ -1,13 +1,5 @@
 package config
 
-func providerModelCreationKey(provider string) (string, bool) {
-	key := ActiveProviderConfigKey(provider)
-	if key == "" {
-		return "", false
-	}
-	return key, true
-}
-
 func deleteProviderModelKeys(raw map[string]ProviderModelConfig, keys []string) {
 	if raw == nil {
 		return
@@ -17,34 +9,8 @@ func deleteProviderModelKeys(raw map[string]ProviderModelConfig, keys []string) 
 	}
 }
 
-func existingProviderModelWriteKey(raw map[string]ProviderModelConfig, provider string) (string, bool) {
-	requestedKey := NormalizeProviderName(provider)
-	if requestedKey != "" {
-		if _, ok := raw[requestedKey]; ok {
-			return requestedKey, true
-		}
-	}
-	return selectProviderModelKey(raw, provider)
-}
-
 func providerModelMutationKey(raw map[string]ProviderModelConfig, provider string) (string, bool) {
-	if key, ok := existingProviderModelWriteKey(raw, provider); ok {
-		return key, true
-	}
-	return providerModelCreationKey(provider)
-}
-
-func providerModelDeleteKeys(raw map[string]ProviderModelConfig, provider string) []string {
-	requestedKey := NormalizeProviderName(provider)
-	if requestedKey != "" {
-		if _, ok := raw[requestedKey]; ok {
-			return []string{requestedKey}
-		}
-	}
-	if key, ok := selectProviderModelKey(raw, provider); ok {
-		return []string{key}
-	}
-	return nil
+	return providerModelWriteTargetKey(raw, provider)
 }
 
 func currentProviderModelConfigForMutation(raw map[string]ProviderModelConfig, selectedKey string) ProviderModelConfig {
@@ -98,18 +64,16 @@ func (c *Config) DeleteProviderModelConfig(provider string) {
 		return
 	}
 
-	key := NormalizeProviderName(provider)
-	if key == "" {
+	key, ok := providerModelRequestedKey(provider)
+	if !ok {
 		return
 	}
-
 	raw := c.clonedRawProviderModelsForMutation()
-	if deleteKeys := providerModelDeleteKeys(raw, provider); len(deleteKeys) > 0 {
+	if deleteKeys := providerModelDeleteTargetKeys(raw, provider); len(deleteKeys) > 0 {
 		deleteProviderModelKeys(raw, deleteKeys)
 		c.applyRawProviderModelMutation(raw)
 		return
 	}
-
 	if base, ok := defaultProviderModelConfig(key); ok {
 		c.setEffectiveProviderModelConfig(key, base)
 		return
@@ -117,46 +81,11 @@ func (c *Config) DeleteProviderModelConfig(provider string) {
 	c.deleteEffectiveProviderModelConfig(key)
 }
 
-// ResetProviderModelsForEdit restores provider_models to the default "section absent" state.
-func (c *Config) ResetProviderModelsForEdit() {
-	if c == nil {
-		return
-	}
-	c.setProviderModelStoreState(providerModelSectionStateAbsent, nil)
-}
-
-// SetProviderModelsForEdit updates the editable provider_models backing map.
-func (c *Config) SetProviderModelsForEdit(providerModels map[string]ProviderModelConfig) {
-	if c == nil {
-		return
-	}
-	if providerModels == nil {
-		c.ResetProviderModelsForEdit()
-		return
-	}
-
-	cloned := c.normalizeEditableProviderModels(providerModels)
-	nextState := c.providerModelsStore.stateAfterEditingEntries(len(cloned))
-	if nextState == providerModelSectionStateInMemoryEffectiveOnly {
-		c.resetInMemoryEffectiveProviderModels()
-		return
-	}
-	if len(cloned) == 0 {
-		c.setProviderModelStoreState(nextState, nil)
-		return
-	}
-	c.setProviderModelStoreState(nextState, cloned)
-}
-
 func (c *Config) selectedProviderModelWriteKey(provider string) (string, bool) {
 	if c == nil {
 		return "", false
 	}
-	raw := c.explicitProviderModelSource()
-	if key, ok := existingProviderModelWriteKey(raw, provider); ok {
-		return key, true
-	}
-	return providerModelCreationKey(provider)
+	return providerModelWriteTargetKey(c.explicitProviderModelSource(), provider)
 }
 
 // ProviderModelWriteKey は provider_models の更新先キーを返す。
@@ -183,8 +112,10 @@ func (c *Config) SyncProviderDefaultModel(provider, model string) bool {
 	if model == "" {
 		return false
 	}
-	if providerDefault, ok := defaultProviderModelConfig(key); ok && model == providerDefault.DefaultModel {
-		return c.clearProviderDefaultModelOverrideExact(key)
+	if base, ok := defaultProviderModelConfig(key); ok {
+		if model == base.DefaultModel {
+			return c.clearProviderDefaultModelOverrideExact(key)
+		}
 	}
 
 	raw := c.mutableRawProviderModelsForMutation()
@@ -193,6 +124,33 @@ func (c *Config) SyncProviderDefaultModel(provider, model string) bool {
 	raw[key] = cloneProviderModelConfig(pm)
 	c.applyRawProviderModelMutation(raw)
 	return true
+}
+
+// ResetProviderModelsForEdit restores provider_models to the default "section absent" state.
+func (c *Config) ResetProviderModelsForEdit() {
+	if c == nil {
+		return
+	}
+	c.setProviderModelStoreState(providerModelSectionStateAbsent, nil)
+}
+
+// SetProviderModelsForEdit updates the editable provider_models backing map.
+func (c *Config) SetProviderModelsForEdit(providerModels map[string]ProviderModelConfig) {
+	if c == nil {
+		return
+	}
+	if providerModels == nil {
+		c.ResetProviderModelsForEdit()
+		return
+	}
+
+	cloned := c.normalizeEditableProviderModels(providerModels)
+	transition := c.providerModelsStore.transitionAfterEditingEntries(cloned)
+	if transition.resetInMemoryEffective {
+		c.resetInMemoryEffectiveProviderModels()
+		return
+	}
+	c.setProviderModelStoreState(transition.state, transition.raw)
 }
 
 func (c *Config) clearProviderDefaultModelOverrideExact(provider string) bool {

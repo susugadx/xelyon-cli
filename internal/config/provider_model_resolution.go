@@ -21,21 +21,6 @@ func defaultProviderModelConfig(provider string) (ProviderModelConfig, bool) {
 	return merged, found
 }
 
-func selectProviderModelKey(src map[string]ProviderModelConfig, provider string) (string, bool) {
-	keys := ProviderModelLookupKeys(provider)
-	if len(keys) == 0 || src == nil {
-		return "", false
-	}
-
-	for _, key := range keys {
-		if _, ok := src[key]; ok {
-			return key, true
-		}
-	}
-
-	return "", false
-}
-
 func (c *Config) explicitProviderModelSource() map[string]ProviderModelConfig {
 	if c == nil {
 		return nil
@@ -49,7 +34,7 @@ func (c *Config) explicitProviderModelSelection(provider string) (map[string]Pro
 	}
 
 	source := c.explicitProviderModelSource()
-	key, ok := selectProviderModelKey(source, provider)
+	key, ok := providerModelLookupKey(source, provider)
 	if !ok {
 		return source, "", false
 	}
@@ -75,7 +60,7 @@ func (c *Config) selectedProviderModelLookupKey(provider string) (string, bool) 
 	if _, key, ok := c.explicitProviderModelSelection(provider); ok {
 		return key, true
 	}
-	return selectProviderModelKey(c.effectiveProviderModels(), provider)
+	return providerModelLookupKey(c.effectiveProviderModels(), provider)
 }
 
 // GetProviderDefaultModel は provider の実効デフォルトモデルを返す。

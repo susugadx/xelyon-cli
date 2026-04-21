@@ -308,6 +308,46 @@ func (s providerModelStore) nextStateForMutation(raw map[string]ProviderModelCon
 	return s.stateForEntryMutation()
 }
 
+type providerModelStoreEditTransition struct {
+	state                  providerModelSectionState
+	raw                    map[string]ProviderModelConfig
+	resetInMemoryEffective bool
+}
+
+func (s providerModelStore) transitionAfterEditingEntries(raw map[string]ProviderModelConfig) providerModelStoreEditTransition {
+	nextState := s.stateAfterEditingEntries(len(raw))
+	transition := providerModelStoreEditTransition{
+		state: nextState,
+	}
+
+	switch nextState {
+	case providerModelSectionStateInMemoryEffectiveOnly:
+		transition.resetInMemoryEffective = true
+	case providerModelSectionStateAbsent, providerModelSectionStateExplicitEmpty:
+		transition.raw = nil
+	default:
+		if len(raw) > 0 {
+			transition.raw = raw
+		}
+	}
+
+	return transition
+}
+
+func (s providerModelStore) transitionAfterRawMutation(raw map[string]ProviderModelConfig) providerModelStoreEditTransition {
+	nextState := s.nextStateForMutation(raw)
+	if len(raw) == 0 {
+		return providerModelStoreEditTransition{
+			state: nextState,
+			raw:   nil,
+		}
+	}
+	return providerModelStoreEditTransition{
+		state: nextState,
+		raw:   raw,
+	}
+}
+
 func (s providerModelStore) rawForEdit(effective map[string]ProviderModelConfig) map[string]ProviderModelConfig {
 	switch s.state {
 	case providerModelSectionStateAbsent:
@@ -417,12 +457,8 @@ func (c *Config) applyRawProviderModelMutation(raw map[string]ProviderModelConfi
 	if c == nil {
 		return
 	}
-	nextState := c.providerModelsStore.nextStateForMutation(raw)
-	if len(raw) == 0 {
-		c.setProviderModelStoreState(nextState, nil)
-		return
-	}
-	c.setProviderModelStoreState(nextState, raw)
+	transition := c.providerModelsStore.transitionAfterRawMutation(raw)
+	c.setProviderModelStoreState(transition.state, transition.raw)
 }
 
 // ProviderModelsForSave returns the raw provider_models map that should be serialized on save.
