@@ -17,6 +17,35 @@ func joinFailureResult(parts ...string) string {
 	return strings.Join(filtered, "\n")
 }
 
+func buildStringReplacementFailure(path, oldContent, oldStr string, failure stringReplacementFailure) string {
+	lines := strings.Split(oldContent, "\n")
+	switch failure.reason {
+	case stringReplacementFailureMultipleMatches:
+		cands := findAllOccurrencesLineRanges(oldContent, oldStr, maxFailureCandidatesToShow)
+		return joinFailureResult(
+			fmt.Sprintf("Error: old_str appears %d times in %s (must be unique).", failure.exactCount, path),
+			buildCandidateSummary(lines, cands, failure.exactCount),
+			"Next: use read_file on one candidate and retry with a more specific old_str; use start_line/end_line for a fixed range; use batch edits to replace all matches.",
+		)
+	case stringReplacementFailureNotFound:
+		return joinFailureResult(
+			fmt.Sprintf("Error: old_str not found in %s (tried exact and normalized matching).", path),
+			buildHeadPreview(lines, maxFailurePreviewLines),
+			"Next: use read_file/search_code to copy the exact text, then retry; use start_line/end_line if you already know the target range.",
+		)
+	default:
+		return ""
+	}
+}
+
+func buildAppliedStrReplaceResult(path string, plan stringReplacementPlan) string {
+	result := fmt.Sprintf("Successfully replaced text in %s (lines %d-%d → %d-%d)", path, plan.matchStartLine, plan.matchEndLine, plan.matchStartLine, plan.replacedEndLine)
+	if plan.usedNormalizedMatch {
+		result = fmt.Sprintf("Successfully replaced text in %s (lines %d-%d → %d-%d, used normalized whitespace matching)", path, plan.matchStartLine, plan.matchEndLine, plan.matchStartLine, plan.replacedEndLine)
+	}
+	return result
+}
+
 func buildDeferredStrReplaceResult(status, mode, path, comment string) string {
 	header := status + " str_replace"
 	if mode != "" {
