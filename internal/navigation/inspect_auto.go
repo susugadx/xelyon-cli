@@ -59,31 +59,7 @@ func ResolveInspectSymbolAuto(symbol, pathHint string, opts InspectSymbolAutoOpt
 	}
 
 	cand := candidates[0]
-	result := InspectResult{Symbol: &cand}
-	result.Body = readDefinitionBody(cand, budget.BodyLines)
-
-	var allRefs []Reference
-	if opts.LSPClient != nil {
-		lspRefs, err := findReferencesViaLSP(opts.LSPClient, cand, runtime.InvocationCWD)
-		if err == nil && len(lspRefs) > 0 {
-			allRefs = lspRefs
-			result.ResolvedViaLSP = true
-		} else {
-			allRefs, result.UpstreamTruncated, result.UpstreamIncomplete = findReferencesWithFallbackRuntime(query.BaseName, cand, runtime)
-		}
-		if cand.Kind == "interface" {
-			if impls, err := findImplementationsViaLSP(opts.LSPClient, cand, runtime.InvocationCWD); err == nil {
-				result.Implementations = impls
-			}
-		}
-	} else {
-		allRefs, result.UpstreamTruncated, result.UpstreamIncomplete = findReferencesWithFallbackRuntime(query.BaseName, cand, runtime)
-	}
-
-	result.Callers, result.TotalCallers, result.MoreCallers = classifyCallers(allRefs, cand, budget.CallerLimit)
-	result.Refs, result.TotalRefs, result.MoreRefs = classifyRefs(allRefs, cand, budget.RefLimit)
-	result.Tests, result.TotalTests, result.MoreTests = findRelatedTests(query.BaseName, allRefs, budget.TestLimit)
-	normalizeInspectResultPaths(&result, runtime)
+	result := buildInspectResultForSingleCandidate(query, cand, budget, runtime, opts.LSPClient, true)
 
 	return result, formatInspectResult(result, opts.Registry), SymbolAutoSingle
 }
@@ -212,9 +188,4 @@ func normalizeResultFilePath(path, targetRoot, sourceBase string) string {
 	}
 
 	return filepath.Clean(filepath.ToSlash(path))
-}
-
-func pathExists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
 }

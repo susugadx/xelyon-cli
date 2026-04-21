@@ -151,25 +151,46 @@ func InspectSymbol(symbol, pathHint, mode string) string {
 
 	// 3. 単一候補 → 詳細取得
 	cand := candidates[0]
-	result := InspectResult{Symbol: &cand}
+	result := buildInspectResultForSingleCandidate(query, cand, budget, GoSymbolRuntime{}, nil, false)
 
-	// 定義本文
+	return formatInspectResult(result, nil)
+}
+
+func buildInspectResultForSingleCandidate(query symbolQuery, cand SymbolCandidate, budget Budget, runtime GoSymbolRuntime, lspClient LSPClient, normalizePaths bool) InspectResult {
+	result := InspectResult{Symbol: &cand}
 	result.Body = readDefinitionBody(cand, budget.BodyLines)
 
-	// 同名シンボルを持つ他ファイルを特定（曖昧ファイル）
-	// pathHint で絞った場合でも、プロジェクト全体で同名定義がどこにあるか調べる
-	ambiguousFiles := findAmbiguousFiles(query.BaseName, cand)
-
-	// Caller / Reference / Test
-	allRefs, upstreamTruncated, upstreamIncomplete := findReferences(query.BaseName)
+	allRefs, implementations, resolvedViaLSP, upstreamTruncated, upstreamIncomplete := collectInspectReferences(query.BaseName, cand, runtime, lspClient)
+	result.Implementations = implementations
+	result.ResolvedViaLSP = resolvedViaLSP
 	result.UpstreamTruncated = upstreamTruncated
 	result.UpstreamIncomplete = upstreamIncomplete
-	allRefs = filterRefsByCandidate(allRefs, cand, ambiguousFiles)
 	result.Callers, result.TotalCallers, result.MoreCallers = classifyCallers(allRefs, cand, budget.CallerLimit)
 	result.Refs, result.TotalRefs, result.MoreRefs = classifyRefs(allRefs, cand, budget.RefLimit)
 	result.Tests, result.TotalTests, result.MoreTests = findRelatedTests(query.BaseName, allRefs, budget.TestLimit)
 
-	return formatInspectResult(result, nil)
+	if normalizePaths {
+		normalizeInspectResultPaths(&result, runtime)
+	}
+	return result
+}
+
+func collectInspectReferences(baseName string, cand SymbolCandidate, runtime GoSymbolRuntime, lspClient LSPClient) ([]Reference, []ImplementationRef, bool, bool, bool) {
+	var implementations []ImplementationRef
+	if lspClient != nil {
+		if cand.Kind == "interface" {
+			if impls, implErr := findImplementationsViaLSP(lspClient, cand, runtime.InvocationCWD); implErr == nil {
+				implementations = impls
+			}
+		}
+		lspRefs, err := findReferencesViaLSP(lspClient, cand, runtime.InvocationCWD)
+		if err == nil && len(lspRefs) > 0 {
+			return lspRefs, implementations, true, false, false
+		}
+	}
+
+	refs, truncated, incomplete := findReferencesWithFallbackRuntime(baseName, cand, runtime)
+	return refs, implementations, false, truncated, incomplete
 }
 
 // resolveSymbolCandidates はプロジェクト内からシンボル候補を検索する。
@@ -302,26 +323,6 @@ func candidateAbsPath(cand SymbolCandidate) string {
 		return ""
 	}
 	return absPath
-}
-
-// toRelativePath は絶対パスを作業ディレクトリからの相対パスに変換する。
-func toRelativePath(absPath string) string {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return absPath
-	}
-	rel, err := filepath.Rel(cwd, absPath)
-	if err != nil {
-		return absPath
-	}
-	return rel
-}
-
-// findAmbiguousFiles は、候補と同名のシンボル定義を持つ他ファイルを特定する。
-// これらのファイル内の call/ref は別のシンボルを参照している可能性が高いため、
-// 保守的に除外対象とする。
-func findAmbiguousFiles(symbol string, cand SymbolCandidate) map[string]bool {
-	return findAmbiguousFilesWithRuntime(symbol, cand, GoSymbolRuntime{})
 }
 
 // filterRefsByCandidate は、候補に安全に帰属できない参照を除外する。
@@ -539,15 +540,4 @@ func resolveInspectLocatorPath(filePath, rootPath string) string {
 		rootPath = abs
 	}
 	return filepath.Clean(filepath.Join(rootPath, filepath.FromSlash(filePath)))
-}
-
-func cleanInspectResolvedPath(path string) string {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return ""
-	}
-	if abs, err := filepath.Abs(path); err == nil {
-		path = abs
-	}
-	return filepath.Clean(path)
 }

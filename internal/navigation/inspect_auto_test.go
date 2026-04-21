@@ -353,3 +353,38 @@ func (FileBuilder) Build() string { return "" }
 		t.Fatalf("expected gopls suffix, got: %s", output)
 	}
 }
+
+func TestInspectSymbolAuto_LSPFallbackStillKeepsImplementations(t *testing.T) {
+	setupTestGoFile(t, "example.go", `package example
+
+type Builder interface {
+	Build() string
+}
+
+type FileBuilder struct{}
+
+func (FileBuilder) Build() string { return "" }
+
+func Use(b Builder) string {
+	return b.Build()
+}
+`)
+
+	client := &mockNavigationLSPClient{
+		refsErr: errors.New("boom"),
+		impls: []LSPLocation{
+			{File: "example.go", Line: 7, Character: 1, EndLine: 7, EndChar: 11},
+		},
+	}
+
+	output, status := InspectSymbolAuto("Builder", "", nil, client)
+	if status != SymbolAutoSingle {
+		t.Fatalf("expected SymbolAutoSingle, got %s", status)
+	}
+	if strings.Contains(output, "resolved via gopls") {
+		t.Fatalf("expected fallback output without gopls suffix, got: %s", output)
+	}
+	if !strings.Contains(output, "Implementations (1)") {
+		t.Fatalf("expected implementations section on fallback, got: %s", output)
+	}
+}
