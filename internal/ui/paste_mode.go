@@ -10,41 +10,65 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
-// PasteMode captures multiline input for environments where bracketed paste mode is unreliable.
-// It is also reusable from other input contexts (e.g., comment input during confirmations).
+// PasteMode は bracketed paste が不安定な環境向けに複数行入力を対話的に収集する。
 //
-// End conditions:
-// - empty line x2
-// - "END" or "/end"
+// 終了条件:
+// - 空行2回
+// - "END" または "/end"
 // - Ctrl+D (EOF)
 //
-// Cancel:
-// - "/cancel" or "/c" (content is discarded)
+// キャンセル:
+// - "/cancel" または "/c"（入力内容は破棄）
 //
-// Limits:
-// - max lines / max bytes
-// - idle timeout
+// 制約:
+// - 最大行数 / 最大バイト数
+// - アイドルタイムアウト
 //
-// Note: This does NOT read from the OS clipboard. It is an interactive capture mode.
+// 注記: OSクリップボードは参照しない。
 type PasteMode struct {
 	cfg config.PasteConfig
 }
 
+type pasteLineReader func() (string, error)
+
+type pasteReadResult struct {
+	line string
+	err  error
+}
+
+// NewPasteMode は設定付きの PasteMode を生成する。
 func NewPasteMode(cfg config.PasteConfig) *PasteMode {
 	return &PasteMode{cfg: cfg}
 }
 
-// Capture reads multiline input from in and writes prompts/help to out.
-// Returns captured content, cancelled=true when user cancelled, and error when I/O fails.
-// Deprecated: Use CaptureWithReader for better buffer sharing.
+// Capture は in から複数行入力を読み取り、案内文を out へ出力する。
+// キャンセル時は cancelled=true を返す。
+// Deprecated: バッファ共有のため CaptureWithReader を使うこと。
 func (p *PasteMode) Capture(in io.Reader, out io.Writer) (content string, cancelled bool, err error) {
 	return p.CaptureWithReader(bufio.NewReader(in), out)
 }
 
-// CaptureWithReader reads multiline input using an existing bufio.Reader.
-// This avoids buffer conflicts when sharing stdin with other readers.
-// Returns captured content, cancelled=true when user cancelled, and error when I/O fails.
+// CaptureWithReader は既存の bufio.Reader で複数行入力を収集する。
+// stdin を他 reader と共有する際のバッファ競合を避ける。
 func (p *PasteMode) CaptureWithReader(reader *bufio.Reader, out io.Writer) (content string, cancelled bool, err error) {
+	return p.captureLoop(out, func() (string, error) {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			return "", err
+		}
+		line = strings.TrimRight(line, "\r\n")
+		return StripBracketedPaste(line), nil
+	})
+}
+
+// CaptureWithMultilineReader は MultilineReader を使って複数行入力を収集する。
+// raw mode goroutine が有効な場合は ReadSimpleLine() 側で raw mode に入り、
+// paste marker の端末エコーを抑制する。
+func (p *PasteMode) CaptureWithMultilineReader(mlReader *MultilineReader, out io.Writer) (content string, cancelled bool, err error) {
+	return p.captureLoop(out, mlReader.ReadSimpleLine)
+}
+
+func (p *PasteMode) captureLoop(out io.Writer, readLine pasteLineReader) (content string, cancelled bool, err error) {
 	maxLines := p.cfg.MaxLines
 	maxBytes := p.cfg.MaxBytes
 	timeout := time.Duration(p.cfg.TimeoutSeconds) * time.Second
@@ -55,40 +79,24 @@ func (p *PasteMode) CaptureWithReader(reader *bufio.Reader, out io.Writer) (cont
 	emptyCount := 0
 	totalBytes := 0
 
-	type readResult struct {
-		line string
-		err  error
-	}
-	inputChan := make(chan readResult, 1)
-
 	for {
-		go func() {
-			line, e := reader.ReadString('\n')
-			inputChan <- readResult{line: line, err: e}
-		}()
-
-		select {
-		case result := <-inputChan:
-			if result.err == io.EOF {
-				goto done
-			}
-			if result.err != nil {
-				return "", false, result.err
-			}
-
-			line := strings.TrimRight(result.line, "\r\n")
-			line = StripBracketedPaste(line)
-
-			action := p.processLine(line, &lines, &emptyCount, &totalBytes, maxLines, maxBytes)
-			switch action {
-			case pasteActionDone:
-				goto done
-			case pasteActionCancel:
-				return "", true, nil
-			}
-
-		case <-time.After(timeout):
+		line, timedOut, err := p.readLineWithTimeout(readLine, timeout)
+		if timedOut {
 			goto done
+		}
+		if err == io.EOF {
+			goto done
+		}
+		if err != nil {
+			return "", false, err
+		}
+
+		action := p.processLine(line, &lines, &emptyCount, &totalBytes, maxLines, maxBytes)
+		switch action {
+		case pasteActionDone:
+			goto done
+		case pasteActionCancel:
+			return "", true, nil
 		}
 	}
 
@@ -96,58 +104,19 @@ done:
 	return p.finalize(lines), false, nil
 }
 
-// CaptureWithMultilineReader reads multiline input using a MultilineReader.
-// When the raw mode goroutine is active, this uses ReadSimpleLine() which enters
-// raw mode to suppress terminal echo of paste markers.
-func (p *PasteMode) CaptureWithMultilineReader(mlReader *MultilineReader, out io.Writer) (content string, cancelled bool, err error) {
-	maxLines := p.cfg.MaxLines
-	maxBytes := p.cfg.MaxBytes
-	timeout := time.Duration(p.cfg.TimeoutSeconds) * time.Second
+func (p *PasteMode) readLineWithTimeout(readLine pasteLineReader, timeout time.Duration) (line string, timedOut bool, err error) {
+	inputChan := make(chan pasteReadResult, 1)
+	go func() {
+		line, err := readLine()
+		inputChan <- pasteReadResult{line: line, err: err}
+	}()
 
-	p.printBanner(out)
-
-	var lines []string
-	emptyCount := 0
-	totalBytes := 0
-
-	type readResult struct {
-		line string
-		err  error
+	select {
+	case result := <-inputChan:
+		return result.line, false, result.err
+	case <-time.After(timeout):
+		return "", true, nil
 	}
-	inputChan := make(chan readResult, 1)
-
-	for {
-		go func() {
-			line, e := mlReader.ReadSimpleLine()
-			inputChan <- readResult{line: line, err: e}
-		}()
-
-		select {
-		case result := <-inputChan:
-			if result.err == io.EOF {
-				goto done
-			}
-			if result.err != nil {
-				return "", false, result.err
-			}
-
-			line := result.line // ReadSimpleLine already strips paste markers
-
-			action := p.processLine(line, &lines, &emptyCount, &totalBytes, maxLines, maxBytes)
-			switch action {
-			case pasteActionDone:
-				goto done
-			case pasteActionCancel:
-				return "", true, nil
-			}
-
-		case <-time.After(timeout):
-			goto done
-		}
-	}
-
-done:
-	return p.finalize(lines), false, nil
 }
 
 type pasteAction int

@@ -40,6 +40,75 @@ func TestMultilineReaderHelperMethods(t *testing.T) {
 		}
 	})
 
+	t.Run("detectPasteMarker", func(t *testing.T) {
+		r := NewMultilineReader(strings.NewReader(""))
+		tests := []struct {
+			seq  string
+			want pasteMarkerKind
+		}{
+			{seq: pasteStart, want: pasteMarkerStart},
+			{seq: "[200~", want: pasteMarkerStart},
+			{seq: pasteEnd, want: pasteMarkerEnd},
+			{seq: "[201~", want: pasteMarkerEnd},
+			{seq: "[20x~", want: pasteMarkerNone},
+		}
+		for _, tt := range tests {
+			if got := r.detectPasteMarker(tt.seq); got != tt.want {
+				t.Fatalf("detectPasteMarker(%q) = %v, want %v", tt.seq, got, tt.want)
+			}
+		}
+	})
+
+	t.Run("readEscapeSequence", func(t *testing.T) {
+		r := NewMultilineReader(strings.NewReader(""))
+
+		t.Run("marker検出時はunhandledを返さない", func(t *testing.T) {
+			tail := []byte{'2', '0', '0', '~'}
+			idx := 0
+			readNext := func(time.Duration) (byte, bool) {
+				if idx >= len(tail) {
+					return 0, false
+				}
+				b := tail[idx]
+				idx++
+				return b, true
+			}
+			unhandled, marker, err := r.readEscapeSequence('[', readNext, nil)
+			if err != nil {
+				t.Fatalf("readEscapeSequence() error = %v", err)
+			}
+			if marker != pasteMarkerStart {
+				t.Fatalf("marker = %v, want %v", marker, pasteMarkerStart)
+			}
+			if len(unhandled) != 0 {
+				t.Fatalf("unhandled = %q, want empty", string(unhandled))
+			}
+		})
+
+		t.Run("marker非検出時は入力を保持", func(t *testing.T) {
+			tail := []byte{'2', '0', 'x', '~'}
+			idx := 0
+			readNext := func(time.Duration) (byte, bool) {
+				if idx >= len(tail) {
+					return 0, false
+				}
+				b := tail[idx]
+				idx++
+				return b, true
+			}
+			unhandled, marker, err := r.readEscapeSequence('[', readNext, nil)
+			if err != nil {
+				t.Fatalf("readEscapeSequence() error = %v", err)
+			}
+			if marker != pasteMarkerNone {
+				t.Fatalf("marker = %v, want %v", marker, pasteMarkerNone)
+			}
+			if got := string(unhandled); got != "[20x~" {
+				t.Fatalf("unhandled = %q, want %q", got, "[20x~")
+			}
+		})
+	})
+
 	t.Run("FlushInput discards buffered bytes", func(t *testing.T) {
 		r := NewMultilineReader(strings.NewReader("first\nsecond\n"))
 		if _, err := r.GetBufioReader().Peek(5); err != nil {

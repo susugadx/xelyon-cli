@@ -223,6 +223,201 @@ func (m *MultilineReader) readLine() (string, error) {
 	return line, nil
 }
 
+type pasteMarkerKind int
+
+const (
+	pasteMarkerNone pasteMarkerKind = iota
+	pasteMarkerStart
+	pasteMarkerEnd
+)
+
+const escapeSequenceReadTimeout = 10 * time.Millisecond
+
+type lineAssembler struct {
+	data []byte
+}
+
+func (l *lineAssembler) appendByte(b byte) {
+	l.data = append(l.data, b)
+}
+
+func (l *lineAssembler) appendBytes(bytes []byte) {
+	l.data = append(l.data, bytes...)
+}
+
+func (l *lineAssembler) appendString(s string) {
+	l.data = append(l.data, s...)
+}
+
+func (l *lineAssembler) len() int {
+	return len(l.data)
+}
+
+func (l *lineAssembler) bytes() []byte {
+	return l.data
+}
+
+func (l *lineAssembler) string() string {
+	return string(l.data)
+}
+
+func (l *lineAssembler) deleteLastRune() (rune, bool) {
+	if len(l.data) == 0 {
+		return 0, false
+	}
+	r, size := utf8.DecodeLastRune(l.data)
+	if size <= 0 {
+		return 0, false
+	}
+	l.data = l.data[:len(l.data)-size]
+	return r, true
+}
+
+type pasteAssembler struct {
+	active bool
+	buf    bytes.Buffer
+}
+
+func (p *pasteAssembler) start() {
+	if p.active {
+		return
+	}
+	p.active = true
+	p.buf.Reset()
+}
+
+func (p *pasteAssembler) appendByte(b byte) {
+	p.buf.WriteByte(b)
+}
+
+func (p *pasteAssembler) appendBytes(bytes []byte) {
+	p.buf.Write(bytes)
+}
+
+func (p *pasteAssembler) finish() string {
+	p.active = false
+	content := p.buf.String()
+	content = strings.ReplaceAll(content, "\r\n", "\n")
+	content = strings.ReplaceAll(content, "\r", "\n")
+	content = strings.TrimRight(content, "\n")
+	p.buf.Reset()
+	return content
+}
+
+type escapeByteReader func(timeout time.Duration) (byte, bool)
+type escapeByteValidator func(b byte) error
+
+func (m *MultilineReader) isEscapeLeadByte(b byte) bool {
+	return b == 0x1b || b == '['
+}
+
+func (m *MultilineReader) maxEscapeSequenceRead(first byte) int {
+	if first == 0x1b {
+		return 6 // ESC + [200~ = 6 bytes total
+	}
+	return 5
+}
+
+func (m *MultilineReader) detectPasteMarker(sequence string) pasteMarkerKind {
+	switch sequence {
+	case pasteStart, "[200~":
+		return pasteMarkerStart
+	case pasteEnd, "[201~":
+		return pasteMarkerEnd
+	default:
+		return pasteMarkerNone
+	}
+}
+
+func (m *MultilineReader) readEscapeSequence(first byte, readNext escapeByteReader, validate escapeByteValidator) (unhandled []byte, marker pasteMarkerKind, err error) {
+	escBuf := []byte{first}
+	for i := 0; i < m.maxEscapeSequenceRead(first); i++ {
+		nb, ok := readNext(escapeSequenceReadTimeout)
+		if !ok {
+			break
+		}
+		if validate != nil {
+			if err := validate(nb); err != nil {
+				return nil, pasteMarkerNone, err
+			}
+		}
+		escBuf = append(escBuf, nb)
+		if marker := m.detectPasteMarker(string(escBuf)); marker != pasteMarkerNone {
+			return nil, marker, nil
+		}
+	}
+	return escBuf, pasteMarkerNone, nil
+}
+
+func (m *MultilineReader) interruptRawInput(oldState *term.State) error {
+	_ = m.rawModeOps().restore(m.fd, oldState)
+	m.print("^C\r\n")
+	return ErrInterrupted
+}
+
+func (m *MultilineReader) eraseRune(r rune) {
+	w := runewidth.RuneWidth(r)
+	for i := 0; i < w; i++ {
+		m.print("\b \b")
+	}
+}
+
+func (m *MultilineReader) handleBackspace(line *lineAssembler) {
+	if r, ok := line.deleteLastRune(); ok {
+		m.eraseRune(r)
+	}
+}
+
+func (m *MultilineReader) echoByte(lineBytes []byte, b byte) {
+	if b < 0x80 {
+		// ASCII: 印字可能文字のみエコー
+		if b >= 0x20 && b != 0x7f {
+			m.print(string(b))
+		}
+		return
+	}
+	if b >= 0xC0 {
+		// UTF-8マルチバイトの先頭: 何もしない（継続バイトを待つ）
+		return
+	}
+	// 継続バイト (0x80-0xBF): 文字が完成したかチェック
+	n := len(lineBytes)
+	if n >= 2 && utf8.Valid(lineBytes[n-2:]) {
+		r, _ := utf8.DecodeLastRune(lineBytes)
+		if r != utf8.RuneError {
+			m.print(string(r))
+		}
+		return
+	}
+	if n >= 3 && utf8.Valid(lineBytes[n-3:]) {
+		r, _ := utf8.DecodeLastRune(lineBytes)
+		if r != utf8.RuneError {
+			m.print(string(r))
+		}
+		return
+	}
+	if n >= 4 && utf8.Valid(lineBytes[n-4:]) {
+		r, _ := utf8.DecodeLastRune(lineBytes)
+		if r != utf8.RuneError {
+			m.print(string(r))
+		}
+	}
+}
+
+func (m *MultilineReader) echoPrintableASCII(bytes []byte) {
+	for _, b := range bytes {
+		if b >= 0x20 && b < 0x80 && b != 0x7f {
+			m.print(string(b))
+		}
+	}
+}
+
+func (m *MultilineReader) echoPastedContent(content string) {
+	// In raw mode, need \r\n for proper line breaks
+	displayContent := strings.ReplaceAll(content, "\n", "\r\n")
+	m.print(displayContent)
+}
+
 // readWithBracketedPaste reads input using raw mode with paste marker detection
 func (m *MultilineReader) readWithBracketedPaste() (string, error) {
 	pasteDebugf(m.errorWriter(), "[DEBUG] Entering raw mode...\n")
@@ -236,9 +431,8 @@ func (m *MultilineReader) readWithBracketedPaste() (string, error) {
 
 	pasteDebugWriteString(m.errorWriter(), "[DEBUG] Raw mode OK\r\n")
 
-	var buf bytes.Buffer
-	var pasteContent bytes.Buffer
-	inPaste := false
+	var line lineAssembler
+	var paste pasteAssembler
 
 	// Initialize raw mode channels (once, reused across calls)
 	m.initRawModeChannels()
@@ -258,99 +452,66 @@ func (m *MultilineReader) readWithBracketedPaste() (string, error) {
 		case b := <-m.byteChan:
 			// Ctrl+C - always handle first (even in paste mode)
 			if b == 0x03 {
-				_ = m.rawModeOps().restore(m.fd, oldState)
-				m.print("^C\r\n")
-				return "", ErrInterrupted
+				return "", m.interruptRawInput(oldState)
 			}
 
 			// ESC or '[' - check for paste marker
 			// Some terminals send \x1b[200~, others send [200~ without ESC
-			if b == 0x1b || b == '[' {
-				// Try to read paste marker: [200~ or [201~ (or with ESC prefix)
-				escBuf := []byte{b}
-				maxRead := 5
-				if b == 0x1b {
-					maxRead = 6 // ESC + [200~ = 6 bytes total
+			if m.isEscapeLeadByte(b) {
+				escBuf, marker, err := m.readEscapeSequence(b, readByteTimeout, func(next byte) error {
+					if next == 0x03 {
+						return m.interruptRawInput(oldState)
+					}
+					return nil
+				})
+				if err != nil {
+					return "", err
 				}
-				markerDetected := false
-				for i := 0; i < maxRead; i++ {
-					nb, ok := readByteTimeout(10 * time.Millisecond)
-					if !ok {
-						break
+				switch marker {
+				case pasteMarkerStart:
+					// Only start paste mode if not already in paste mode.
+					if !paste.active {
+						paste.start()
+						pasteDebugWriteString(m.errorWriter(), "[DEBUG] Paste START\r\n")
 					}
-					// Check for Ctrl+C even inside escape sequence detection
-					if nb == 0x03 {
-						_ = m.rawModeOps().restore(m.fd, oldState)
-						m.print("^C\r\n")
-						return "", ErrInterrupted
-					}
-					escBuf = append(escBuf, nb)
-
-					escStr := string(escBuf)
-					// Check both with and without ESC prefix
-					if escStr == pasteStart || escStr == "[200~" { // \x1b[200~ or [200~
-						// Only start paste mode if not already in paste mode
-						if !inPaste {
-							inPaste = true
-							pasteContent.Reset()
-							pasteDebugWriteString(m.errorWriter(), "[DEBUG] Paste START\r\n")
+				case pasteMarkerEnd:
+					content := paste.finish()
+					pasteDebugf(m.errorWriter(), "[DEBUG] Paste END, %d bytes\r\n", len(content))
+					// Add pasted content to buffer (don't return yet - wait for Enter)
+					line.appendString(content)
+					// Echo pasted content to terminal so user can see it
+					m.echoPastedContent(content)
+				default:
+					if len(escBuf) > 0 {
+						if paste.active {
+							paste.appendBytes(escBuf)
+						} else {
+							line.appendBytes(escBuf)
 						}
-						// If already in paste mode, ignore duplicate start marker
-						escBuf = nil
-						markerDetected = true
-						break
-					}
-					if escStr == pasteEnd || escStr == "[201~" { // \x1b[201~ or [201~
-						inPaste = false
-						content := pasteContent.String()
-						pasteDebugf(m.errorWriter(), "[DEBUG] Paste END, %d bytes\r\n", len(content))
-						// Normalize line endings: \r\n -> \n, standalone \r -> \n
-						content = strings.ReplaceAll(content, "\r\n", "\n")
-						content = strings.ReplaceAll(content, "\r", "\n")
-						// Remove trailing newlines
-						content = strings.TrimRight(content, "\n")
-						// Add pasted content to buffer (don't return yet - wait for Enter)
-						buf.WriteString(content)
-						// Echo pasted content to terminal so user can see it
-						// In raw mode, need \r\n for proper line breaks
-						displayContent := strings.ReplaceAll(content, "\n", "\r\n")
-						m.print(displayContent)
-						pasteContent.Reset()
-						escBuf = nil
-						markerDetected = true
-						break
-					}
-				}
-				// Not a paste marker - add to buffer
-				if !markerDetected && len(escBuf) > 0 {
-					if inPaste {
-						pasteContent.Write(escBuf)
-					} else {
-						buf.Write(escBuf)
 					}
 				}
 				continue
 			}
 
 			// In paste mode - collect everything
-			if inPaste {
-				pasteContent.WriteByte(b)
+			if paste.active {
+				paste.appendByte(b)
 				continue
 			}
 
 			// Ctrl+D
 			if b == 0x04 {
-				if buf.Len() == 0 {
+				if line.len() == 0 {
 					return "", io.EOF
 				}
 				m.print("\r\n")
-				return buf.String(), nil
+				return line.string(), nil
 			}
 
 			// Enter
 			if b == '\r' || b == '\n' {
 				m.print("\r\n")
-				content := buf.String()
+				content := line.string()
 				content = stripAllBracketedPasteMarkers(content)
 				if content == "```" {
 					_ = m.rawModeOps().restore(m.fd, oldState)
@@ -361,53 +522,13 @@ func (m *MultilineReader) readWithBracketedPaste() (string, error) {
 
 			// Backspace
 			if b == 0x7f || b == 0x08 {
-				if buf.Len() > 0 {
-					data := buf.Bytes()
-					r, size := utf8.DecodeLastRune(data)
-					if size > 0 {
-						buf.Reset()
-						buf.Write(data[:len(data)-size])
-						w := runewidth.RuneWidth(r)
-						for i := 0; i < w; i++ {
-							m.print("\b \b")
-						}
-					}
-				}
+				m.handleBackspace(&line)
 				continue
 			}
 
 			// Regular character
-			buf.WriteByte(b)
-
-			// UTF-8対応エコー
-			if b < 0x80 {
-				// ASCII: 印字可能文字のみエコー
-				if b >= 0x20 && b != 0x7f {
-					m.print(string(b))
-				}
-			} else if b >= 0xC0 {
-				// UTF-8マルチバイトの先頭: 何もしない（継続バイトを待つ）
-			} else {
-				// 継続バイト (0x80-0xBF): 文字が完成したかチェック
-				data := buf.Bytes()
-				n := len(data)
-				if n >= 2 && utf8.Valid(data[n-2:]) {
-					r, _ := utf8.DecodeLastRune(data)
-					if r != utf8.RuneError {
-						m.print(string(r))
-					}
-				} else if n >= 3 && utf8.Valid(data[n-3:]) {
-					r, _ := utf8.DecodeLastRune(data)
-					if r != utf8.RuneError {
-						m.print(string(r))
-					}
-				} else if n >= 4 && utf8.Valid(data[n-4:]) {
-					r, _ := utf8.DecodeLastRune(data)
-					if r != utf8.RuneError {
-						m.print(string(r))
-					}
-				}
-			}
+			line.appendByte(b)
+			m.echoByte(line.bytes(), b)
 
 		case err := <-m.errChan:
 			// If bytes are still buffered, process them first.
@@ -417,7 +538,7 @@ func (m *MultilineReader) readWithBracketedPaste() (string, error) {
 				continue
 			}
 			if err == io.EOF {
-				return buf.String(), nil
+				return line.string(), nil
 			}
 			return "", err
 		}
@@ -532,101 +653,46 @@ func (m *MultilineReader) readByteTimeoutFromChannel(timeout time.Duration) (byt
 
 // readLineFromChannel reads a line from the byte channel (when goroutine is active)
 func (m *MultilineReader) readLineFromChannel() (string, error) {
-	var buf []byte
+	var line lineAssembler
 	for {
 		select {
 		case b := <-m.byteChan:
 			// Enter (raw mode では '\r' が来る)
 			if b == '\n' || b == '\r' {
 				m.print("\r\n") // 改行をエコー
-				return StripBracketedPaste(string(buf)), nil
+				return StripBracketedPaste(line.string()), nil
 			}
 
 			// ESC or '[' - check for paste marker (suppress echo of marker bytes)
-			if b == 0x1b || b == '[' {
-				escBuf := []byte{b}
-				maxRead := 5
-				if b == 0x1b {
-					maxRead = 6 // ESC + [200~ = 6 bytes total
+			if m.isEscapeLeadByte(b) {
+				escBuf, marker, err := m.readEscapeSequence(b, m.readByteTimeoutFromChannel, nil)
+				if err != nil {
+					return "", err
 				}
-				markerDetected := false
-				for i := 0; i < maxRead; i++ {
-					nb, ok := m.readByteTimeoutFromChannel(10 * time.Millisecond)
-					if !ok {
-						break
-					}
-					escBuf = append(escBuf, nb)
-					escStr := string(escBuf)
-					if escStr == pasteStart || escStr == "[200~" ||
-						escStr == pasteEnd || escStr == "[201~" {
-						markerDetected = true
-						break
-					}
-				}
-				if !markerDetected && len(escBuf) > 0 {
-					buf = append(buf, escBuf...)
+				if marker == pasteMarkerNone && len(escBuf) > 0 {
+					line.appendBytes(escBuf)
 					// Echo non-marker bytes
-					for _, eb := range escBuf {
-						if eb >= 0x20 && eb < 0x80 && eb != 0x7f {
-							m.print(string(eb))
-						}
-					}
+					m.echoPrintableASCII(escBuf)
 				}
 				continue
 			}
 
 			// Backspace / DEL
 			if b == 0x7f || b == 0x08 {
-				if len(buf) > 0 {
-					r, size := utf8.DecodeLastRune(buf)
-					if size > 0 {
-						buf = buf[:len(buf)-size]
-						w := runewidth.RuneWidth(r)
-						for i := 0; i < w; i++ {
-							m.print("\b \b")
-						}
-					}
-				}
+				m.handleBackspace(&line)
 				continue
 			}
 
-			buf = append(buf, b)
-
-			// UTF-8対応エコー
-			if b < 0x80 {
-				if b >= 0x20 && b != 0x7f {
-					m.print(string(b))
-				}
-			} else if b >= 0xC0 {
-				// UTF-8マルチバイトの先頭: 何もしない
-			} else {
-				// 継続バイト: 文字が完成したかチェック
-				n := len(buf)
-				if n >= 2 && utf8.Valid(buf[n-2:]) {
-					r, _ := utf8.DecodeLastRune(buf)
-					if r != utf8.RuneError {
-						m.print(string(r))
-					}
-				} else if n >= 3 && utf8.Valid(buf[n-3:]) {
-					r, _ := utf8.DecodeLastRune(buf)
-					if r != utf8.RuneError {
-						m.print(string(r))
-					}
-				} else if n >= 4 && utf8.Valid(buf[n-4:]) {
-					r, _ := utf8.DecodeLastRune(buf)
-					if r != utf8.RuneError {
-						m.print(string(r))
-					}
-				}
-			}
+			line.appendByte(b)
+			m.echoByte(line.bytes(), b)
 		case err := <-m.errChan:
 			// If bytes are still buffered, process them first.
 			// This avoids dropping pending bytes when EOF races with byte delivery.
 			if len(m.byteChan) > 0 {
 				continue
 			}
-			if len(buf) > 0 {
-				return StripBracketedPaste(string(buf)), nil
+			if line.len() > 0 {
+				return StripBracketedPaste(line.string()), nil
 			}
 			return "", err
 		}
