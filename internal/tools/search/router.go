@@ -37,56 +37,76 @@ func planSearchRoute(pattern string, opts SearchOptions) searchRouteTrace {
 		Analysis:      analysis,
 	}
 
-	symbolAllowed := opts.FilePattern == "" && lang != "" && isSymbolResolvableLanguage(lang)
+	if explicit, ok := planExplicitSearchRoute(trace, analysis); ok {
+		return explicit
+	}
+	return planAutoSearchRoute(trace, pattern, opts, analysis)
+}
 
-	switch mode {
+func planExplicitSearchRoute(trace searchRouteTrace, analysis SearchQueryAnalysis) (searchRouteTrace, bool) {
+	switch trace.RequestedMode {
 	case SearchModeRegex:
 		trace.InitialLane = searchLaneRegex
 		trace.Decision = "explicit-regex"
-		return trace
+		return trace, true
 	case SearchModeLiteral:
 		trace.InitialLane = searchLaneLiteral
 		trace.Decision = "explicit-literal"
-		return trace
+		return trace, true
 	case SearchModeSymbol:
 		trace.FallbackLane = searchLaneLiteral
-		trace.InitialLane = searchLaneSymbol
-		trace.SymbolQuery = analysis.TrimmedPattern
-		trace.SymbolCandidates = []string{analysis.TrimmedPattern}
+		trace = assignRouteSymbolQuery(trace, analysis.TrimmedPattern, []string{analysis.TrimmedPattern})
 		trace.Decision = "explicit-symbol"
-		return trace
+		return trace, true
 	default:
-		trace.FallbackLane = analysis.defaultTextLane()
-		if symbolAllowed && (analysis.LooksLikeBareIdentifier || analysis.LooksLikeDottedSymbol) {
-			trace.InitialLane = searchLaneSymbol
-			trace.SymbolQuery = analysis.TrimmedPattern
-			trace.SymbolCandidates = []string{analysis.TrimmedPattern}
-			trace.Decision = "auto-symbol"
-			return trace
-		}
-		if lang == "go" && opts.FilePattern == "" {
-			if shouldTryGoSymbolRescue(pattern, analysis) {
-				if candidates := extractGoSymbolRescueCandidates(pattern); len(candidates) > 0 {
-					trace.InitialLane = searchLaneSymbol
-					trace.SymbolQuery = candidates[0]
-					trace.SymbolCandidates = candidates
-					trace.SymbolRescue = true
-					trace.Decision = "go-rescue"
-					return trace
-				}
-			}
-			if analysis.LooksLikeBareIdentifier || analysis.LooksLikeDottedSymbol {
-				trace.InitialLane = searchLaneSymbol
-				trace.SymbolQuery = analysis.TrimmedPattern
-				trace.SymbolCandidates = []string{analysis.TrimmedPattern}
-				trace.Decision = "go-symbol"
-				return trace
-			}
-		}
-		trace.InitialLane = analysis.defaultTextLane()
-		trace.Decision = "text"
+		return searchRouteTrace{}, false
+	}
+}
+
+func planAutoSearchRoute(trace searchRouteTrace, pattern string, opts SearchOptions, analysis SearchQueryAnalysis) searchRouteTrace {
+	trace.FallbackLane = analysis.defaultTextLane()
+	if symbolSearchAllowed(opts, trace.Language) && (analysis.LooksLikeBareIdentifier || analysis.LooksLikeDottedSymbol) {
+		trace = assignRouteSymbolQuery(trace, analysis.TrimmedPattern, []string{analysis.TrimmedPattern})
+		trace.Decision = "auto-symbol"
 		return trace
 	}
+	if goSpecific, ok := planGoSpecificAutoSearchRoute(trace, pattern, opts, analysis); ok {
+		return goSpecific
+	}
+	trace.InitialLane = analysis.defaultTextLane()
+	trace.Decision = "text"
+	return trace
+}
+
+func planGoSpecificAutoSearchRoute(trace searchRouteTrace, pattern string, opts SearchOptions, analysis SearchQueryAnalysis) (searchRouteTrace, bool) {
+	if trace.Language != "go" || opts.FilePattern != "" {
+		return searchRouteTrace{}, false
+	}
+	if shouldTryGoSymbolRescue(pattern, analysis) {
+		if candidates := extractGoSymbolRescueCandidates(pattern); len(candidates) > 0 {
+			trace = assignRouteSymbolQuery(trace, candidates[0], candidates)
+			trace.SymbolRescue = true
+			trace.Decision = "go-rescue"
+			return trace, true
+		}
+	}
+	if analysis.LooksLikeBareIdentifier || analysis.LooksLikeDottedSymbol {
+		trace = assignRouteSymbolQuery(trace, analysis.TrimmedPattern, []string{analysis.TrimmedPattern})
+		trace.Decision = "go-symbol"
+		return trace, true
+	}
+	return searchRouteTrace{}, false
+}
+
+func assignRouteSymbolQuery(trace searchRouteTrace, query string, candidates []string) searchRouteTrace {
+	trace.InitialLane = searchLaneSymbol
+	trace.SymbolQuery = query
+	trace.SymbolCandidates = candidates
+	return trace
+}
+
+func symbolSearchAllowed(opts SearchOptions, language string) bool {
+	return opts.FilePattern == "" && language != "" && isSymbolResolvableLanguage(language)
 }
 
 func (t searchRouteTrace) cacheSignature() string {

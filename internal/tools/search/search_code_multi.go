@@ -1,7 +1,6 @@
 package search
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/tools"
@@ -50,50 +49,6 @@ func collectMultiPatternExecutions(cache tools.ToolCacheInterface, patterns []st
 	return collected
 }
 
-func renderMultiPatternOutput(collected []formattedPatternExecution, patterns []string, opts SearchOptions) string {
-	var sb strings.Builder
-	grouped := groupPatternSymbolBundles(collected)
-	for i, pr := range collected {
-		if sb.Len() > 0 {
-			sb.WriteString("\n")
-		}
-		if wroteBundle := writeGroupedSymbolBundleOutput(&sb, grouped, pr, opts); wroteBundle {
-			continue
-		}
-		fmt.Fprintf(&sb, "━━ Pattern %d/%d: %q ━━\n", i+1, len(patterns), pr.Pattern)
-		sb.WriteString(pr.Output)
-		if !strings.HasSuffix(pr.Output, "\n") {
-			sb.WriteString("\n")
-		}
-	}
-
-	if idx := buildCrossPatternIndexFromExecutions(collected, opts.LocatorRegistry, opts); idx != "" {
-		sb.WriteString(idx)
-	}
-	return sb.String() + lineRangeHint
-}
-
-func writeGroupedSymbolBundleOutput(sb *strings.Builder, grouped map[string]patternSymbolBundleGroup, execution formattedPatternExecution, opts SearchOptions) bool {
-	if execution.Bundle == nil {
-		return false
-	}
-	group, ok := grouped[execution.Bundle.Identity.Canonical]
-	if !ok || len(group.Patterns) <= 1 {
-		return false
-	}
-	if group.Emitted {
-		return true
-	}
-	group.Emitted = true
-	grouped[execution.Bundle.Identity.Canonical] = group
-	fmt.Fprintf(sb, "━━ Symbol Bundle: %q ━━\n", group.Bundle.Identity.DisplayName)
-	sb.WriteString(formatSymbolBundle(group.Bundle, opts.LocatorRegistry, group.Patterns))
-	if !strings.HasSuffix(sb.String(), "\n") {
-		sb.WriteString("\n")
-	}
-	return true
-}
-
 func writeMultiPatternCache(cache tools.ToolCacheInterface, patterns []string, opts SearchOptions, output string, collected []formattedPatternExecution) {
 	if cache == nil {
 		return
@@ -102,30 +57,4 @@ func writeMultiPatternCache(cache tools.ToolCacheInterface, patterns []string, o
 	cacheKey := buildMultiSearchCacheKey(opts, patterns)
 	affectedFiles := collectAffectedFilesFromExecutions(collected, opts)
 	cache.SetSearch(multiKey, cacheKey, output, affectedFiles)
-}
-
-type patternSymbolBundleGroup struct {
-	Bundle   *SymbolBundle
-	Patterns []string
-	Emitted  bool
-}
-
-func groupPatternSymbolBundles(collected []formattedPatternExecution) map[string]patternSymbolBundleGroup {
-	groups := make(map[string]patternSymbolBundleGroup)
-	for _, item := range collected {
-		if item.Bundle == nil {
-			continue
-		}
-		key := item.Bundle.Identity.Canonical
-		group := groups[key]
-		if group.Bundle == nil {
-			group.Bundle = item.Bundle
-		}
-		group.Patterns = appendPatternIfMissing(group.Patterns, item.Pattern)
-		for _, candidate := range item.Route.SymbolCandidates {
-			group.Patterns = appendPatternIfMissing(group.Patterns, candidate)
-		}
-		groups[key] = group
-	}
-	return groups
 }
