@@ -11,70 +11,99 @@ import (
 // xmlOpenTagPattern は <tag_name> 形式の開始タグを検出する正規表現
 var xmlOpenTagPattern = regexp.MustCompile(`<([a-zA-Z_][\w-]*)>`)
 
+type xmlToolCallCandidate struct {
+	tagName      string
+	innerContent string
+	start        int
+}
+
+type xmlToolCallScanner struct {
+	response   string
+	searchFrom int
+}
+
 // parseXMLToolCalls はXML形式のツール呼び出しをパースする
 // Kimi K2 等がFC失敗時に出力する XML 形式を rescue する
 func parseXMLToolCalls(response string, codeBlockRanges [][2]int, debug bool, registry *Registry, debugOut io.Writer) []*ToolCall {
-	var results []*ToolCall
-	searchFrom := 0
+	scanner := newXMLToolCallScanner(response)
 
-	for searchFrom < len(response) {
-		// 開始タグを探す
-		loc := xmlOpenTagPattern.FindStringIndex(response[searchFrom:])
-		if loc == nil {
+	var results []*ToolCall
+	for {
+		candidate, ok := scanner.Next()
+		if !ok {
 			break
 		}
-		absStart := searchFrom + loc[0]
-		tagEnd := searchFrom + loc[1]
-
-		// タグ名を抽出
-		tagName := xmlOpenTagPattern.FindStringSubmatch(response[searchFrom:])[1]
-
-		// 対応する閉じタグを探す
-		closeTag := "</" + tagName + ">"
-		closeIdx := strings.Index(response[tagEnd:], closeTag)
-		if closeIdx == -1 {
-			searchFrom = tagEnd
-			continue
-		}
-		absCloseStart := tagEnd + closeIdx
-		fullEnd := absCloseStart + len(closeTag)
-
-		innerContent := response[tagEnd:absCloseStart]
-
-		// 次の検索位置を更新
-		searchFrom = fullEnd
-
-		// コードブロック内はスキップ
-		if isInCodeBlock(absStart, codeBlockRanges) {
-			if debug {
-				fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] XML rescue: skipping %q in code block\n", tagName)
-			}
+		if !shouldAcceptXMLToolCallCandidate(candidate, codeBlockRanges, debug, registry, debugOut) {
 			continue
 		}
 
-		// 指定 Registry に登録されているツール名のみ許可
-		if !registry.HasTool(tagName) {
-			if debug {
-				fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] XML rescue: skipping unknown tool %q\n", tagName)
-			}
-			continue
-		}
-
-		// 内部コンテンツからパラメータを抽出
-		args := parseXMLParams(innerContent)
-
+		args := parseXMLParams(candidate.innerContent)
 		if debug {
-			fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] XML rescue: tool=%s, args=%v\n", tagName, args)
+			fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] XML rescue: tool=%s, args=%v\n", candidate.tagName, args)
 		}
 
-		tc := &ToolCall{
-			Tool: tagName,
+		results = append(results, &ToolCall{
+			Tool: candidate.tagName,
 			Args: args,
-		}
-		results = append(results, tc)
+		})
 	}
 
 	return results
+}
+
+func newXMLToolCallScanner(response string) *xmlToolCallScanner {
+	return &xmlToolCallScanner{response: response}
+}
+
+func (s *xmlToolCallScanner) Next() (xmlToolCallCandidate, bool) {
+	for s.searchFrom < len(s.response) {
+		loc := xmlOpenTagPattern.FindStringSubmatchIndex(s.response[s.searchFrom:])
+		if loc == nil {
+			return xmlToolCallCandidate{}, false
+		}
+
+		absStart := s.searchFrom + loc[0]
+		tagEnd := s.searchFrom + loc[1]
+		tagName := s.response[s.searchFrom+loc[2] : s.searchFrom+loc[3]]
+
+		closeTag := "</" + tagName + ">"
+		closeIdx := strings.Index(s.response[tagEnd:], closeTag)
+		if closeIdx == -1 {
+			s.searchFrom = tagEnd
+			continue
+		}
+
+		absCloseStart := tagEnd + closeIdx
+		fullEnd := absCloseStart + len(closeTag)
+		innerContent := s.response[tagEnd:absCloseStart]
+		s.searchFrom = fullEnd
+
+		return xmlToolCallCandidate{
+			tagName:      tagName,
+			innerContent: innerContent,
+			start:        absStart,
+		}, true
+	}
+
+	return xmlToolCallCandidate{}, false
+}
+
+func shouldAcceptXMLToolCallCandidate(candidate xmlToolCallCandidate, codeBlockRanges [][2]int, debug bool, registry *Registry, debugOut io.Writer) bool {
+	if isInCodeBlock(candidate.start, codeBlockRanges) {
+		if debug {
+			fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] XML rescue: skipping %q in code block\n", candidate.tagName)
+		}
+		return false
+	}
+
+	if !registry.HasTool(candidate.tagName) {
+		if debug {
+			fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] XML rescue: skipping unknown tool %q\n", candidate.tagName)
+		}
+		return false
+	}
+
+	return true
 }
 
 // parseXMLParams は XML 内部コンテンツからパラメータを抽出する

@@ -16,6 +16,24 @@ var toolCallJSONStartPatterns = []string{
 	"{ \"tool\":", // { "tool":
 }
 
+type jsonToolCallCandidate struct {
+	json string
+}
+
+type jsonToolCallScanner struct {
+	response        string
+	codeBlockRanges [][2]int
+	debug           bool
+	debugOut        io.Writer
+	searchFrom      int
+	done            bool
+}
+
+type jsonToolCallDecoder struct {
+	debug    bool
+	debugOut io.Writer
+}
+
 func logParseResponseDebug(response string, debugOut io.Writer) {
 	fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] response length: %d\n", len(response))
 	for _, p := range []string{`{"tool"`, `{ "tool"`} {
@@ -35,32 +53,69 @@ func logParseResponseDebug(response string, debugOut io.Writer) {
 }
 
 func parseJSONToolCalls(response string, codeBlockRanges [][2]int, debug bool, debugOut io.Writer) []*ToolCall {
+	scanner := newJSONToolCallScanner(response, codeBlockRanges, debug, debugOut)
+	decoder := newJSONToolCallDecoder(debug, debugOut)
+
 	var results []*ToolCall
-	searchFrom := 0
-
-	for searchFrom < len(response) {
-		start := findNextToolCallJSONStart(response, searchFrom)
-		if start == -1 {
-			break
-		}
-
-		if shouldSkipCodeBlockJSON(start, codeBlockRanges, debug, debugOut) {
-			searchFrom = start + 1
-			continue
-		}
-
-		jsonStr, end, ok := extractJSONObject(response, start, debug, debugOut)
+	for {
+		candidate, ok := scanner.Next()
 		if !ok {
 			break
 		}
-
-		if toolCall, ok := decodeToolCallJSON(jsonStr, debug, debugOut); ok {
+		if toolCall, ok := decoder.Decode(candidate); ok {
 			results = append(results, toolCall)
 		}
-		searchFrom = end
 	}
 
 	return results
+}
+
+func newJSONToolCallScanner(response string, codeBlockRanges [][2]int, debug bool, debugOut io.Writer) *jsonToolCallScanner {
+	return &jsonToolCallScanner{
+		response:        response,
+		codeBlockRanges: codeBlockRanges,
+		debug:           debug,
+		debugOut:        debugOut,
+	}
+}
+
+func (s *jsonToolCallScanner) Next() (jsonToolCallCandidate, bool) {
+	if s.done {
+		return jsonToolCallCandidate{}, false
+	}
+
+	for s.searchFrom < len(s.response) {
+		start := findNextToolCallJSONStart(s.response, s.searchFrom)
+		if start == -1 {
+			s.done = true
+			return jsonToolCallCandidate{}, false
+		}
+
+		if shouldSkipCodeBlockJSON(start, s.codeBlockRanges, s.debug, s.debugOut) {
+			s.searchFrom = start + 1
+			continue
+		}
+
+		jsonStr, end, ok := extractJSONObject(s.response, start, s.debug, s.debugOut)
+		if !ok {
+			s.done = true
+			return jsonToolCallCandidate{}, false
+		}
+
+		s.searchFrom = end
+		return jsonToolCallCandidate{json: jsonStr}, true
+	}
+
+	s.done = true
+	return jsonToolCallCandidate{}, false
+}
+
+func newJSONToolCallDecoder(debug bool, debugOut io.Writer) *jsonToolCallDecoder {
+	return &jsonToolCallDecoder{debug: debug, debugOut: debugOut}
+}
+
+func (d *jsonToolCallDecoder) Decode(candidate jsonToolCallCandidate) (*ToolCall, bool) {
+	return decodeToolCallJSON(candidate.json, d.debug, d.debugOut)
 }
 
 func findNextToolCallJSONStart(response string, searchFrom int) int {
@@ -186,64 +241,4 @@ func unmarshalToolCallJSONWithRepair(jsonStr string, toolCall *ToolCall, debug b
 		}
 		return false
 	}
-}
-
-// repairJSONStringValues は JSON 文字列値内の生制御文字をエスケープする。
-// LLM が FC rescue テキストで出力する malformed JSON を修復する。
-// 正常な JSON はそのまま返す。既にエスケープ済みの \\n, \\t, \\" 等は二重エスケープしない。
-//
-// 修復対象:
-//   - 生改行 (0x0A) → \n
-//   - 生キャリッジリターン (0x0D) → \r
-//   - 生タブ (0x09) → \t
-//   - その他の制御文字 (0x00-0x1F) → \uXXXX
-func repairJSONStringValues(jsonStr string) string {
-	var buf strings.Builder
-	buf.Grow(len(jsonStr) + 64)
-
-	inString := false
-	escaped := false
-
-	for i := 0; i < len(jsonStr); i++ {
-		ch := jsonStr[i]
-
-		if escaped {
-			buf.WriteByte(ch)
-			escaped = false
-			continue
-		}
-
-		if ch == '\\' && inString {
-			buf.WriteByte(ch)
-			escaped = true
-			continue
-		}
-
-		if ch == '"' {
-			inString = !inString
-			buf.WriteByte(ch)
-			continue
-		}
-
-		if inString {
-			switch ch {
-			case '\n':
-				buf.WriteString(`\n`)
-			case '\r':
-				buf.WriteString(`\r`)
-			case '\t':
-				buf.WriteString(`\t`)
-			default:
-				if ch < 0x20 {
-					fmt.Fprintf(&buf, `\u%04x`, ch)
-				} else {
-					buf.WriteByte(ch)
-				}
-			}
-		} else {
-			buf.WriteByte(ch)
-		}
-	}
-
-	return buf.String()
 }
