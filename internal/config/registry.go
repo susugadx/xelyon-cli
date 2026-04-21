@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"reflect"
 	"strings"
 )
 
@@ -141,118 +140,19 @@ func BuildConfigRegistry(cfg *Config) []ConfigCategory {
 }
 
 func getReflectFieldValue(cfg *Config, path string) (interface{}, error) {
-	parts := strings.Split(path, ".")
-	v := reflect.ValueOf(cfg).Elem()
-
-	for _, part := range parts {
-		if v.Kind() == reflect.Map {
-			key := reflect.ValueOf(part)
-			mapVal := v.MapIndex(key)
-			if !mapVal.IsValid() {
-				return nil, fmt.Errorf("key not found: %s", part)
-			}
-			v = mapVal
-			continue
-		}
-
-		if v.Kind() != reflect.Struct {
-			return nil, fmt.Errorf("not a struct: %s", part)
-		}
-
-		t := v.Type()
-		found := false
-		for i := 0; i < t.NumField(); i++ {
-			field := t.Field(i)
-			yamlTag := strings.Split(field.Tag.Get("yaml"), ",")[0]
-			if yamlTag == part {
-				v = v.Field(i)
-				found = true
-				break
-			}
-		}
-
-		if !found {
-			return nil, fmt.Errorf("field not found: %s", part)
-		}
+	v, err := resolveConfigValueByPath(cfg, strings.Split(path, "."))
+	if err != nil {
+		return nil, err
 	}
-
 	return v.Interface(), nil
 }
 
 func setReflectFieldValue(cfg *Config, path string, value interface{}) error {
-	parts := strings.Split(path, ".")
-	v := reflect.ValueOf(cfg).Elem()
-
-	for i := 0; i < len(parts)-1; i++ {
-		part := parts[i]
-
-		if v.Kind() == reflect.Map {
-			key := reflect.ValueOf(part)
-			mapVal := v.MapIndex(key)
-			if !mapVal.IsValid() {
-				return fmt.Errorf("key not found: %s", part)
-			}
-			v = mapVal
-			continue
-		}
-
-		if v.Kind() != reflect.Struct {
-			return fmt.Errorf("not a struct: %s", part)
-		}
-
-		// yamlタグでフィールドを検索
-		t := v.Type()
-		found := false
-		for i := 0; i < t.NumField(); i++ {
-			field := t.Field(i)
-			yamlTag := strings.Split(field.Tag.Get("yaml"), ",")[0]
-			if yamlTag == part {
-				v = v.Field(i)
-				found = true
-				break
-			}
-		}
-
-		if !found {
-			return fmt.Errorf("field not found: %s", part)
-		}
+	parent, lastPart, err := resolveConfigParentForSet(cfg, strings.Split(path, "."))
+	if err != nil {
+		return err
 	}
-
-	lastPart := parts[len(parts)-1]
-
-	if v.Kind() == reflect.Map {
-		key := reflect.ValueOf(lastPart)
-		v.SetMapIndex(key, reflect.ValueOf(value))
-		return nil
-	}
-
-	if v.Kind() != reflect.Struct {
-		return fmt.Errorf("not a struct: %s", lastPart)
-	}
-
-	t := v.Type()
-	for i := 0; i < t.NumField(); i++ {
-		field := t.Field(i)
-		yamlTag := strings.Split(field.Tag.Get("yaml"), ",")[0]
-		if yamlTag == lastPart {
-			fieldVal := v.Field(i)
-			if !fieldVal.CanSet() {
-				return fmt.Errorf("cannot set field: %s", lastPart)
-			}
-
-			// 型変換
-			newVal := reflect.ValueOf(value)
-			if newVal.Type().ConvertibleTo(fieldVal.Type()) {
-				fieldVal.Set(newVal.Convert(fieldVal.Type()))
-				return nil
-			}
-
-			return fmt.Errorf("type mismatch: expected %s, got %s",
-				fieldVal.Type(), newVal.Type())
-		}
-	}
-
-	return fmt.Errorf("field not found: %s", lastPart)
+	return assignValueByPathPart(parent, lastPart, value)
 }
 
 // GetFieldValue はパスを指定して設定値を取得する

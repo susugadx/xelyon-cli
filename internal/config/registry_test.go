@@ -118,6 +118,69 @@ func TestSetFieldValue(t *testing.T) {
 	}
 }
 
+func TestGetFieldValue_CommandAliasesMapKeyPath(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.CommandAliases["custom"] = "config"
+
+	val, err := GetFieldValue(cfg, "command_aliases.custom")
+	if err != nil {
+		t.Fatalf("GetFieldValue(command_aliases.custom) error = %v", err)
+	}
+
+	got, ok := val.(string)
+	if !ok {
+		t.Fatalf("GetFieldValue(command_aliases.custom) returned %T, want string", val)
+	}
+	if got != "config" {
+		t.Fatalf("GetFieldValue(command_aliases.custom) = %q, want %q", got, "config")
+	}
+}
+
+func TestSetFieldValue_CommandAliasesMapKeyPath(t *testing.T) {
+	cfg := DefaultConfig()
+
+	if err := SetFieldValue(cfg, "command_aliases.alias-c", "config"); err != nil {
+		t.Fatalf("SetFieldValue(command_aliases.alias-c) error = %v", err)
+	}
+
+	if got := cfg.CommandAliases["alias-c"]; got != "config" {
+		t.Fatalf("cfg.CommandAliases[alias-c] = %q, want %q", got, "config")
+	}
+}
+
+func TestSetFieldValue_IntFieldAcceptsConvertibleAliasType(t *testing.T) {
+	cfg := DefaultConfig()
+
+	if err := SetFieldValue(cfg, "compression.keep_recent", int8(7)); err != nil {
+		t.Fatalf("SetFieldValue(compression.keep_recent, int8) error = %v", err)
+	}
+
+	gotVal, err := GetFieldValue(cfg, "compression.keep_recent")
+	if err != nil {
+		t.Fatalf("GetFieldValue(compression.keep_recent) error = %v", err)
+	}
+	got, ok := gotVal.(int)
+	if !ok {
+		t.Fatalf("GetFieldValue(compression.keep_recent) returned %T, want int", gotVal)
+	}
+	if got != 7 {
+		t.Fatalf("GetFieldValue(compression.keep_recent) = %d, want %d", got, 7)
+	}
+}
+
+func TestSetFieldValue_IntFieldRejectsTypeMismatchWithoutMutation(t *testing.T) {
+	cfg := DefaultConfig()
+	before := cfg.Compression.KeepRecent
+
+	if err := SetFieldValue(cfg, "compression.keep_recent", "7"); err == nil {
+		t.Fatal("SetFieldValue(compression.keep_recent, string) expected error, got nil")
+	}
+
+	if got := cfg.Compression.KeepRecent; got != before {
+		t.Fatalf("cfg.Compression.KeepRecent = %d, want unchanged %d", got, before)
+	}
+}
+
 func TestGetFieldValue_ProviderModelsUsesRawEntriesForLoadedConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("HOME", tmpDir)
