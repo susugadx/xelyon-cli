@@ -77,36 +77,24 @@ func RunStreamingResponse(
 			return state.finalizeScannerDone(eventResult.Err)
 
 		case api.StreamLoopEventLine:
-			line := eventResult.Line
-			if line == "" {
+			lineResult := state.processLineEvent(eventResult.Line, handler, opts.IgnoreDecodeError)
+			if lineResult.skip {
 				continue
 			}
-
-			data, handled := ParseSSEDataLine(line)
-			if !handled {
-				continue
-			}
-
-			event, err := DecodeEvent(data)
-			if err != nil {
-				if opts.IgnoreDecodeError {
-					continue
-				}
-				return state.finalizeDecodeError(err)
-			}
-
-			textDelta, done, err := handler(event, data)
 			state.syncNewlineForActiveSpinner()
 
-			if err != nil {
-				return state.finalizeHandlerError(err)
+			if lineResult.err != nil {
+				if lineResult.decodeErr {
+					return state.finalizeDecodeError(lineResult.err)
+				}
+				return state.finalizeHandlerError(lineResult.err)
 			}
 
-			if done {
+			if lineResult.done {
 				return state.finalizeDone()
 			}
 
-			state.appendTextDelta(textDelta)
+			state.appendTextDelta(lineResult.textDelta)
 		}
 	}
 }

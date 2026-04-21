@@ -100,24 +100,24 @@ func (s *sseInterpretState) processChunk(ctx context.Context, chunk GeminiFuncti
 }
 
 func (s *sseInterpretState) processPart(ctx context.Context, part GeminiFunctionPart, thinkingTimer *time.Timer, thinkingTimeout time.Duration) {
-	if part.Thought {
+	action := buildPartAction(part)
+	if action.collectThought {
 		s.collectThoughtPart(part)
 		return
 	}
-
-	if part.ThoughtSignature != "" {
+	if action.collectSignature {
 		s.collectSignaturePart(part)
-		if part.FunctionCall != nil {
-			s.handleFunctionCall(part.FunctionCall, part.ThoughtSignature, thinkingTimer, thinkingTimeout)
+		if action.functionCall != nil {
+			s.handleFunctionCall(action.functionCall, action.thoughtSignature, thinkingTimer, thinkingTimeout)
 		}
 		return
 	}
 
-	if part.Text != "" {
-		s.handleTextPart(ctx, part.Text, thinkingTimer, thinkingTimeout)
+	if action.text != "" {
+		s.handleTextPart(ctx, action.text, thinkingTimer, thinkingTimeout)
 	}
-	if part.FunctionCall != nil {
-		s.handleFunctionCall(part.FunctionCall, part.ThoughtSignature, thinkingTimer, thinkingTimeout)
+	if action.functionCall != nil {
+		s.handleFunctionCall(action.functionCall, action.thoughtSignature, thinkingTimer, thinkingTimeout)
 	}
 }
 
@@ -154,42 +154,15 @@ func (s *sseInterpretState) collectSignaturePart(part GeminiFunctionPart) {
 
 func (s *sseInterpretState) handleTextPart(ctx context.Context, text string, thinkingTimer *time.Timer, thinkingTimeout time.Duration) {
 	s.resetThinkingProgress(thinkingTimer, thinkingTimeout)
-	if s.suppressingToolJSON {
-		s.fullResponse.WriteString(text)
-		updateToolJSONDepth(text, &s.toolJSONDepth, &s.toolJSONInStr)
-		if s.toolJSONDepth <= 0 {
-			s.suppressingToolJSON = false
-		}
-		return
+	textAction := s.interpretTextPart(text)
+	s.rescuedToolJSONs = append(s.rescuedToolJSONs, textAction.rescuedToolJSONs...)
+
+	if textAction.shouldDisplay {
+		s.ensureHeaderPrinted(ctx)
+		s.display.printText(textAction.displayText)
 	}
 
-	trimmed := strings.TrimSpace(text)
-	if isToolJSONPrefix(trimmed) {
-		s.suppressingToolJSON = true
-		s.toolJSONDepth = 0
-		s.toolJSONInStr = false
-		updateToolJSONDepth(text, &s.toolJSONDepth, &s.toolJSONInStr)
-		if s.toolJSONDepth <= 0 {
-			s.suppressingToolJSON = false
-		}
-		s.fullResponse.WriteString(text)
-		return
-	}
-
-	extracted, remaining := extractCodeBlockToolJSON(text)
-	if len(extracted) > 0 {
-		s.rescuedToolJSONs = append(s.rescuedToolJSONs, extracted...)
-		if strings.TrimSpace(remaining) != "" {
-			s.ensureHeaderPrinted(ctx)
-			s.display.printText(remaining)
-		}
-		s.fullResponse.WriteString(remaining)
-		return
-	}
-
-	s.ensureHeaderPrinted(ctx)
-	s.display.printText(text)
-	s.fullResponse.WriteString(text)
+	s.fullResponse.WriteString(textAction.responseText)
 }
 
 func (s *sseInterpretState) ensureHeaderPrinted(ctx context.Context) {
