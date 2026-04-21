@@ -56,6 +56,8 @@ func (e *ErrResponseStartTimeout) Error() string {
 func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner, thinkingMsg string) (string, error) {
 	debug := os.Getenv("XELYON_DEBUG_GEMINI") == "1"
 	state := newSSEInterpretState(ctx, spinner, thinkingMsg, debug)
+	// どの return 経路でもスピナー停止を保証し、描画崩れを防ぐ。
+	defer state.stopSpinner()
 
 	cfg := config.FromContext(ctx)
 	transportIdleTimeout := time.Duration(cfg.Streaming.IdleTimeoutSeconds) * time.Second
@@ -80,7 +82,6 @@ loop:
 		eventResult := controller.Next(ctx, thinkingTimer.C)
 		switch eventResult.Type {
 		case api.StreamLoopEventContextDone:
-			state.stopSpinner()
 			partial := state.response()
 			if partial != "" {
 				return partial, nil
@@ -91,7 +92,6 @@ loop:
 			return "", ctx.Err()
 
 		case api.StreamLoopEventIdleTimeout:
-			state.stopSpinner()
 			return state.response(), &ErrIdleTimeout{Message: fmt.Sprintf("transport idle timeout: no valid SSE data received for %v", transportIdleTimeout)}
 
 		case api.StreamLoopEventExternal:

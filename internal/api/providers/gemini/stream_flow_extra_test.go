@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 func TestHandleSSEResponse_ContextCancelReturnsPartialText(t *testing.T) {
@@ -117,6 +118,8 @@ func TestHandleSSEResponse_DedupesSignatureFunctionCallsAndCarriesThoughtParts(t
 func TestHandleSSEResponse_ScanErrorAfterPartialChunk(t *testing.T) {
 	p := New("test-key")
 	ctx, _, _ := newGeminiResponseContext()
+	spinner := ui.NewSpinnerWithWriter(io.Discard)
+	spinner.Start("Waiting for Gemini...")
 
 	readErr := errors.New("boom")
 	body := io.NopCloser(io.MultiReader(
@@ -128,11 +131,14 @@ func TestHandleSSEResponse_ScanErrorAfterPartialChunk(t *testing.T) {
 		iotest.ErrReader(readErr),
 	))
 
-	_, err := p.handleSSEResponse(ctx, &http.Response{Body: body}, nil, "")
+	_, err := p.handleSSEResponse(ctx, &http.Response{Body: body}, spinner, "")
 	if err == nil {
 		t.Fatal("handleSSEResponse() should return scan error")
 	}
 	if !strings.Contains(err.Error(), "SSE scan error") || !strings.Contains(err.Error(), "boom") {
 		t.Fatalf("handleSSEResponse() error = %q, want scan error with cause", err.Error())
+	}
+	if spinner.IsActive() {
+		t.Fatal("handleSSEResponse() should stop spinner on scan error")
 	}
 }
