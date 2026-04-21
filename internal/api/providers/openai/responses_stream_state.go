@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
@@ -26,6 +27,7 @@ type responsesStreamState struct {
 	debug         bool
 	responseID    string
 	functionCalls map[string]*responsesFunctionCallAccumulator
+	callOrder     []string
 	toolCallsOut  strings.Builder
 	lastUsage     *api.Usage
 }
@@ -119,11 +121,17 @@ func (s *responsesStreamState) handleChunk(chunk ResponsesStreamChunk, rawData s
 			s.spinner.Stop()
 			s.spinner.Start(ui.SpinnerMessageForTool(chunk.Item.Name))
 		}
-		acc := &responsesFunctionCallAccumulator{
-			CallID: chunk.Item.CallID,
-			Name:   chunk.Item.Name,
+		acc, exists := s.functionCalls[chunk.Item.CallID]
+		if !exists {
+			acc = &responsesFunctionCallAccumulator{
+				CallID: chunk.Item.CallID,
+				Name:   chunk.Item.Name,
+			}
+			s.functionCalls[chunk.Item.CallID] = acc
+			s.callOrder = append(s.callOrder, chunk.Item.CallID)
+		} else if chunk.Item.Name != "" {
+			acc.Name = chunk.Item.Name
 		}
-		s.functionCalls[chunk.Item.CallID] = acc
 	}
 
 	if chunk.Type == "response.function_call_arguments.delta" {
@@ -198,18 +206,48 @@ func (s *responsesStreamState) captureUsage(chunk ResponsesStreamChunk) {
 }
 
 func (s *responsesStreamState) appendFunctionCallsToOutput() {
-	for _, acc := range s.functionCalls {
-		tc := &api.OpenAIToolCall{
-			ID:   acc.CallID,
-			Type: "function",
-			Function: api.OpenAIToolCallFunction{
-				Name:      acc.Name,
-				Arguments: acc.Arguments.String(),
-			},
+	emitted := make(map[string]struct{}, len(s.functionCalls))
+	for _, callID := range s.callOrder {
+		acc, ok := s.functionCalls[callID]
+		if !ok {
+			continue
 		}
-		if toolJSON, err := ConvertToolCallToToolJSON(tc); err == nil {
-			s.toolCallsOut.WriteString(toolJSON)
+		s.appendFunctionCallToolJSON(acc)
+		emitted[callID] = struct{}{}
+	}
+
+	// フォールバック: 順序情報のない call は call_id 昇順で安定出力する。
+	if len(emitted) == len(s.functionCalls) {
+		return
+	}
+	remaining := make([]string, 0, len(s.functionCalls)-len(emitted))
+	for callID := range s.functionCalls {
+		if _, ok := emitted[callID]; ok {
+			continue
 		}
+		remaining = append(remaining, callID)
+	}
+	sort.Strings(remaining)
+	for _, callID := range remaining {
+		acc := s.functionCalls[callID]
+		s.appendFunctionCallToolJSON(acc)
+	}
+}
+
+func (s *responsesStreamState) appendFunctionCallToolJSON(acc *responsesFunctionCallAccumulator) {
+	if acc == nil {
+		return
+	}
+	tc := &api.OpenAIToolCall{
+		ID:   acc.CallID,
+		Type: "function",
+		Function: api.OpenAIToolCallFunction{
+			Name:      acc.Name,
+			Arguments: acc.Arguments.String(),
+		},
+	}
+	if toolJSON, err := ConvertToolCallToToolJSON(tc); err == nil {
+		s.toolCallsOut.WriteString(toolJSON)
 	}
 }
 

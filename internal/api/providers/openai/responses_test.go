@@ -737,6 +737,43 @@ func TestHandleResponsesStreaming_TextToolCallsAndUsage(t *testing.T) {
 	}
 }
 
+func TestHandleResponsesStreaming_PreservesFunctionCallOutputOrder(t *testing.T) {
+	var out strings.Builder
+	ctx := ui.WithRuntime(context.Background(), ui.NewRuntime(strings.NewReader(""), &out, &out))
+	ctx = api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesOff)
+
+	p := New("test-key")
+	resp := &http.Response{
+		Body: io.NopCloser(strings.NewReader(strings.Join([]string{
+			`data: {"type":"response.output_item.added","item":{"type":"function_call","name":"second","call_id":"call_2"}}`,
+			``,
+			`data: {"type":"response.output_item.added","item":{"type":"function_call","name":"first","call_id":"call_1"}}`,
+			``,
+			`data: {"type":"response.function_call_arguments.done","item":{"call_id":"call_2","arguments":"{\"path\":\"/tmp/2\"}"}}`,
+			``,
+			`data: {"type":"response.function_call_arguments.done","item":{"call_id":"call_1","arguments":"{\"path\":\"/tmp/1\"}"}}`,
+			``,
+			`data: {"type":"response.completed"}`,
+			``,
+			`data: [DONE]`,
+		}, "\n"))),
+	}
+
+	content, _, err := p.handleResponsesStreaming(ctx, resp, ui.NewSpinnerWithRuntime(ui.RuntimeFromContext(ctx)))
+	if err != nil {
+		t.Fatalf("handleResponsesStreaming() error = %v", err)
+	}
+
+	idxCall2 := strings.Index(content, `"id":"call_2"`)
+	idxCall1 := strings.Index(content, `"id":"call_1"`)
+	if idxCall2 == -1 || idxCall1 == -1 {
+		t.Fatalf("content = %q, want both call_2 and call_1", content)
+	}
+	if idxCall2 > idxCall1 {
+		t.Fatalf("content = %q, want call_2 before call_1", content)
+	}
+}
+
 func TestHandleResponsesStreaming_ErrorEvent(t *testing.T) {
 	var out strings.Builder
 	ctx := ui.WithRuntime(context.Background(), ui.NewRuntime(strings.NewReader(""), &out, &out))
