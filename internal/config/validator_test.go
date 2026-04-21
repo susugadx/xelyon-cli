@@ -129,6 +129,26 @@ func TestValidateConfig_EmptyProvider(t *testing.T) {
 	}
 }
 
+func TestValidateConfig_EmptyProviderDoesNotReportDuplicateProviderErrors(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.DefaultProvider = ""
+
+	result := ValidateConfig(cfg)
+
+	var providerIssues []ValidationIssue
+	for _, issue := range result.Issues {
+		if issue.Field == "default_provider" {
+			providerIssues = append(providerIssues, issue)
+		}
+	}
+	if len(providerIssues) != 1 {
+		t.Fatalf("default_provider issues = %d, want 1", len(providerIssues))
+	}
+	if providerIssues[0].Message != "必須項目が未設定です" {
+		t.Fatalf("default_provider issue message = %q, want %q", providerIssues[0].Message, "必須項目が未設定です")
+	}
+}
+
 func TestValidateConfig_RangeValidation(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Compression.TriggerPercent = 200 // Out of range (1-100)
@@ -229,6 +249,39 @@ func TestValidateConfig_ProjectMapContextRatio(t *testing.T) {
 				t.Fatal("Should have issue for project_map.context_ratio")
 			}
 		})
+	}
+}
+
+func TestValidateConfig_AggregatesProviderNumericAndBashIssues(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.DefaultProvider = "invalid_provider"
+	cfg.Compression.TriggerPercent = 200
+	cfg.Bash.SafetyLevel = "invalid"
+
+	result := ValidateConfig(cfg)
+	if result.Valid {
+		t.Fatal("ValidateConfig should be invalid when provider rule returns error")
+	}
+
+	var hasProviderError, hasNumericWarning, hasBashWarning bool
+	for _, issue := range result.Issues {
+		switch issue.Field {
+		case "default_provider":
+			hasProviderError = issue.Severity == "error"
+		case "compression.trigger_percent":
+			hasNumericWarning = issue.Severity == "warning"
+		case "bash.safety_level":
+			hasBashWarning = issue.Severity == "warning"
+		}
+	}
+	if !hasProviderError {
+		t.Fatal("missing default_provider error")
+	}
+	if !hasNumericWarning {
+		t.Fatal("missing compression.trigger_percent warning")
+	}
+	if !hasBashWarning {
+		t.Fatal("missing bash.safety_level warning")
 	}
 }
 
