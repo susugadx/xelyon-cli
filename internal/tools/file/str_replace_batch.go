@@ -18,6 +18,14 @@ func executeBatchEditsWithPromptIOAndOptions(promptIO ui.PromptIO, options commo
 }
 
 func executeBatchEditsWithPromptIOAndOptionsResult(promptIO ui.PromptIO, options common.ConfirmOptions, path, editsJSON string) (fileMutationResult, error) {
+	edits, err := parseBatchEditEntries(editsJSON)
+	if err != nil {
+		return newErrorMutationResult(fmt.Sprintf("Error: invalid edits JSON: %v", err)), nil
+	}
+	return executeBatchEditsWithEntriesAndOptionsResult(promptIO, options, path, edits)
+}
+
+func executeBatchEditsWithEntriesAndOptionsResult(promptIO ui.PromptIO, options common.ConfirmOptions, path string, edits []EditEntry) (fileMutationResult, error) {
 	ctx, result, err := prepareFileMutation(promptIO, options, path, "path is required")
 	if result.message != "" || err != nil {
 		return result, err
@@ -32,21 +40,8 @@ func executeBatchEditsWithPromptIOAndOptionsResult(promptIO ui.PromptIO, options
 	}
 	oldContent := string(contentBytes)
 
-	var edits []EditEntry
-	if err := json.Unmarshal([]byte(editsJSON), &edits); err != nil {
-		return newErrorMutationResult(fmt.Sprintf("Error: invalid edits JSON: %v", err)), nil
-	}
-	if len(edits) == 0 {
-		return newErrorMutationResult("Error: edits array is empty"), nil
-	}
-
-	for i, edit := range edits {
-		if edit.OldStr == "" {
-			return newErrorMutationResult(fmt.Sprintf("Error: edits[%d].old_str is empty in %s", i, path)), nil
-		}
-		if edit.OldStr == edit.NewStr {
-			return newErrorMutationResult(fmt.Sprintf("Error: edits[%d] old_str and new_str are identical (no change needed) in %s", i, path)), nil
-		}
+	if validationErr := validateBatchEditEntries(path, edits); validationErr.IsTerminal() {
+		return validationErr, nil
 	}
 
 	var outcome batchStringReplacementOutcome
@@ -83,6 +78,31 @@ func executeBatchEditsWithPromptIOAndOptionsResult(promptIO ui.PromptIO, options
 			return applyStringReplaceMutation(ctx, outcome.plan.newContent, fmt.Sprintf("✅ Applied %d edits to: %s", len(edits), path), message)
 		},
 	})
+}
+
+func parseBatchEditEntries(editsJSON string) ([]EditEntry, error) {
+	var edits []EditEntry
+	if err := json.Unmarshal([]byte(editsJSON), &edits); err != nil {
+		return nil, err
+	}
+	return edits, nil
+}
+
+func validateBatchEditEntries(path string, edits []EditEntry) fileMutationResult {
+	if len(edits) == 0 {
+		return newErrorMutationResult("Error: edits array is empty")
+	}
+
+	for i, edit := range edits {
+		if edit.OldStr == "" {
+			return newErrorMutationResult(fmt.Sprintf("Error: edits[%d].old_str is empty in %s", i, path))
+		}
+		if edit.OldStr == edit.NewStr {
+			return newErrorMutationResult(fmt.Sprintf("Error: edits[%d] old_str and new_str are identical (no change needed) in %s", i, path))
+		}
+	}
+
+	return fileMutationResult{}
 }
 
 func showBatchReplacementPreview(ctx fileMutationContext, oldContent, newContent, path string, edits []EditEntry) {

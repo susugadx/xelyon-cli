@@ -72,6 +72,46 @@ func TestStrReplaceToolRun_FileChangeOnlyOnAppliedEdit(t *testing.T) {
 		}
 		assertHasFileChange(t, change)
 	})
+
+	t.Run("batch success", func(t *testing.T) {
+		setupTestConfirm(t, true)
+		tmpDir := t.TempDir()
+		testFile := filepath.Join(tmpDir, "batch.txt")
+		testutil.CreateTempFile(t, tmpDir, "batch.txt", "hello")
+
+		result, change, err := tool.Run(execCtx, map[string]string{
+			"path":  testFile,
+			"edits": `[{"old_str":"hello","new_str":"hi"}]`,
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(result, "Successfully applied 1 edits") {
+			t.Fatalf("expected batch success result, got: %s", result)
+		}
+		assertHasFileChange(t, change)
+		if change.LinesAdded != 1 || change.LinesRemoved != 1 {
+			t.Fatalf("expected line stats +1/-1, got +%d/-%d", change.LinesAdded, change.LinesRemoved)
+		}
+	})
+
+	t.Run("batch invalid json", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		testFile := filepath.Join(tmpDir, "batch-invalid.txt")
+		testutil.CreateTempFile(t, tmpDir, "batch-invalid.txt", "hello")
+
+		result, change, err := tool.Run(execCtx, map[string]string{
+			"path":  testFile,
+			"edits": `not-json`,
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(result, "Error: invalid edits JSON:") {
+			t.Fatalf("expected invalid json error result, got: %s", result)
+		}
+		assertNoFileChange(t, change)
+	})
 }
 
 func TestWriteDeleteToolRun_FileChangeOnlyOnAppliedEdit(t *testing.T) {

@@ -1,7 +1,7 @@
 package file
 
 import (
-	"encoding/json"
+	"fmt"
 
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
@@ -27,46 +27,73 @@ func (t *StrReplaceTool) Parameters() map[string]interface{} {
 }
 
 func (t *StrReplaceTool) Run(execCtx tools.ExecutionContext, args map[string]string) (string, *tools.FileChange, error) {
-	if args["old_str"] == "" && args["edits"] != "" {
-		result, err := executeBatchEditsWithPromptIOAndOptionsResult(execCtx.PromptIO(), execCtx.ConfirmOptions(), args["path"], args["edits"])
-		if err != nil {
-			return result.message, nil, err
-		}
-		if !result.ShouldRecordChange() {
-			return result.message, nil, nil
-		}
-
-		linesAdded, linesRemoved := 0, 0
-		var edits []EditEntry
-		if json.Unmarshal([]byte(args["edits"]), &edits) == nil {
-			for _, edit := range edits {
-				linesAdded += countLines(edit.NewStr)
-				linesRemoved += countLines(edit.OldStr)
-			}
-		}
-
-		return result.message, newFileChange(
-			args["path"],
-			"str_replace",
-			"Batch replaced in "+args["path"],
-			linesAdded,
-			linesRemoved,
-		), nil
-	}
-
-	result, err := executeStrReplaceWithPromptIOAndOptionsResult(execCtx.PromptIO(), execCtx.ConfirmOptions(), args["path"], args["old_str"], args["new_str"], args["start_line"], args["end_line"])
+	outcome, err := executeStrReplaceToolRun(execCtx, args)
 	if err != nil {
-		return result.message, nil, err
+		return outcome.result.message, nil, err
 	}
-	if !result.ShouldRecordChange() {
-		return result.message, nil, nil
+	if !outcome.result.ShouldRecordChange() {
+		return outcome.result.message, nil, nil
 	}
 
-	return result.message, newFileChange(
-		args["path"],
+	return outcome.result.message, newFileChange(
+		outcome.path,
 		"str_replace",
-		"Replaced in "+args["path"],
-		countLines(args["new_str"]),
-		countLines(args["old_str"]),
+		outcome.fileChangeDescription,
+		outcome.linesAdded,
+		outcome.linesRemoved,
 	), nil
+}
+
+type strReplaceToolRunOutcome struct {
+	result                fileMutationResult
+	path                  string
+	fileChangeDescription string
+	linesAdded            int
+	linesRemoved          int
+}
+
+func executeStrReplaceToolRun(execCtx tools.ExecutionContext, args map[string]string) (strReplaceToolRunOutcome, error) {
+	if args["old_str"] == "" && args["edits"] != "" {
+		return executeBatchStrReplaceToolRun(execCtx, args)
+	}
+	return executeSingleStrReplaceToolRun(execCtx, args)
+}
+
+func executeBatchStrReplaceToolRun(execCtx tools.ExecutionContext, args map[string]string) (strReplaceToolRunOutcome, error) {
+	edits, err := parseBatchEditEntries(args["edits"])
+	if err != nil {
+		return strReplaceToolRunOutcome{
+			result: newErrorMutationResult(fmt.Sprintf("Error: invalid edits JSON: %v", err)),
+			path:   args["path"],
+		}, nil
+	}
+
+	result, execErr := executeBatchEditsWithEntriesAndOptionsResult(execCtx.PromptIO(), execCtx.ConfirmOptions(), args["path"], edits)
+	linesRemoved, linesAdded := batchEditLineStats(edits)
+	return strReplaceToolRunOutcome{
+		result:                result,
+		path:                  args["path"],
+		fileChangeDescription: "Batch replaced in " + args["path"],
+		linesAdded:            linesAdded,
+		linesRemoved:          linesRemoved,
+	}, execErr
+}
+
+func executeSingleStrReplaceToolRun(execCtx tools.ExecutionContext, args map[string]string) (strReplaceToolRunOutcome, error) {
+	result, err := executeStrReplaceWithPromptIOAndOptionsResult(
+		execCtx.PromptIO(),
+		execCtx.ConfirmOptions(),
+		args["path"],
+		args["old_str"],
+		args["new_str"],
+		args["start_line"],
+		args["end_line"],
+	)
+	return strReplaceToolRunOutcome{
+		result:                result,
+		path:                  args["path"],
+		fileChangeDescription: "Replaced in " + args["path"],
+		linesAdded:            countLines(args["new_str"]),
+		linesRemoved:          countLines(args["old_str"]),
+	}, err
 }
