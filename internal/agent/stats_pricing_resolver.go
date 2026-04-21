@@ -96,16 +96,7 @@ func GetPricingInfo(provider string, model string, promptTokenCount ...int) Pric
 	case "claude":
 		return getClaudePricing(model, ptc)
 	case "bedrock":
-		if strings.Contains(strings.ToLower(model), "claude") {
-			return getClaudePricing(model, ptc)
-		}
-		// Claude以外のBedrockモデルは一旦汎用料金
-		return PricingInfo{
-			InputCostPerM:         0.28,
-			OutputCostPerM:        0.42,
-			CachedInputCostPerM:   0.028,
-			CacheCreationCostPerM: 0.28,
-		}
+		return getBedrockPricing(model, ptc)
 	case "gemini":
 		return getGeminiPricing(model, ptc)
 	case "groq":
@@ -115,12 +106,6 @@ func GetPricingInfo(provider string, model string, promptTokenCount ...int) Pric
 	case "ollama":
 		return PricingInfo{} // ローカル実行は無料
 	default:
-		// 不明なプロバイダーはDeepSeek V3.2料金で概算
-		return PricingInfo{
-			InputCostPerM:         0.28,
-			OutputCostPerM:        0.42,
-			CachedInputCostPerM:   0.028,
-			CacheCreationCostPerM: 0.28,
-		}
+		return getUnknownProviderFallbackPricing()
 	}
 }

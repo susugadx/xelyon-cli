@@ -192,6 +192,27 @@ func TestGetPricingInfo_UnknownProviderFallback(t *testing.T) {
 	}
 }
 
+func TestGetBedrockPricing_ClaudeDelegation(t *testing.T) {
+	model := "global.anthropic.claude-sonnet-4-6-v1:0"
+	promptTokens := 250000
+
+	got := getBedrockPricing(model, promptTokens)
+	want := getClaudePricing(model, promptTokens)
+
+	if got != want {
+		t.Fatalf("getBedrockPricing() = %#v, want %#v", got, want)
+	}
+}
+
+func TestGetBedrockPricing_NonClaudeFallsBack(t *testing.T) {
+	got := getBedrockPricing("amazon.nova-pro-v1:0", 0)
+	want := getUnknownProviderFallbackPricing()
+
+	if got != want {
+		t.Fatalf("getBedrockPricing(non-claude) = %#v, want %#v", got, want)
+	}
+}
+
 func TestGetPricingInfo_OpenRouter_GLM5(t *testing.T) {
 	pricing := GetPricingInfo("openrouter", "zhipu/glm-5")
 	if pricing.InputCostPerM != 0.72 {
