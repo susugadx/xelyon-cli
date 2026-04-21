@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -270,196 +271,221 @@ type responsesFunctionCallAccumulator struct {
 	Arguments strings.Builder
 }
 
+type responsesStreamState struct {
+	spinner       *ui.Spinner
+	errOut        io.Writer
+	debug         bool
+	responseID    string
+	functionCalls map[string]*responsesFunctionCallAccumulator
+	toolCallsOut  strings.Builder
+	lastUsage     *api.Usage
+}
+
+func newResponsesStreamState(spinner *ui.Spinner, errOut io.Writer) *responsesStreamState {
+	return &responsesStreamState{
+		spinner:       spinner,
+		errOut:        errOut,
+		debug:         os.Getenv("XELYON_DEBUG_OPENAI") == "1",
+		functionCalls: make(map[string]*responsesFunctionCallAccumulator),
+	}
+}
+
+func (s *responsesStreamState) parseLine(line string) (string, bool, error) {
+	if s.debug && line != "" {
+		s.debugf("[DEBUG OpenAI Responses] SSE line: %s\n", line)
+	}
+
+	data, done, handled := parseResponsesSSEDataLine(line)
+	if !handled {
+		return "", false, nil
+	}
+	if done {
+		return "", true, nil
+	}
+
+	chunk, err := decodeResponsesStreamChunk(data)
+	if err != nil {
+		return "", false, nil // パースエラーはスキップ
+	}
+
+	return s.handleChunk(chunk, data)
+}
+
+func parseResponsesSSEDataLine(line string) (data string, done bool, handled bool) {
+	if !strings.HasPrefix(line, "data: ") {
+		return "", false, false
+	}
+
+	data = strings.TrimPrefix(line, "data: ")
+	if data == "[DONE]" {
+		return "", true, true
+	}
+
+	return data, false, true
+}
+
+func decodeResponsesStreamChunk(data string) (ResponsesStreamChunk, error) {
+	var chunk ResponsesStreamChunk
+	if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+		return ResponsesStreamChunk{}, err
+	}
+	return chunk, nil
+}
+
+func (s *responsesStreamState) debugf(format string, args ...interface{}) {
+	if !s.debug {
+		return
+	}
+	fmt.Fprintf(s.errOut, format, args...)
+}
+
+func (s *responsesStreamState) handleChunk(chunk ResponsesStreamChunk, rawData string) (string, bool, error) {
+	s.debugf("[DEBUG OpenAI Responses] event: %s\n", chunk.Type)
+	if chunk.Type == "response.completed" {
+		s.debugf("[DEBUG OpenAI Responses] raw data: %s\n", rawData)
+	}
+
+	if chunk.Type == "response.created" && chunk.Response != nil {
+		s.responseID = chunk.Response.ID
+	}
+
+	if chunk.Type == "error" {
+		errMsg := "OpenAI API error"
+		if chunk.Error != nil {
+			if chunk.Error.Message != "" {
+				errMsg = chunk.Error.Message
+			} else if chunk.Error.Code != "" {
+				errMsg = fmt.Sprintf("OpenAI API error: %s", chunk.Error.Code)
+			}
+		}
+		return "", true, fmt.Errorf("%s", errMsg)
+	}
+
+	if chunk.Type == "response.failed" {
+		return "", true, fmt.Errorf("OpenAI Responses API request failed")
+	}
+
+	if chunk.Type == "response.output_item.added" && chunk.Item != nil && chunk.Item.Type == "function_call" {
+		if s.spinner != nil {
+			s.spinner.Stop()
+			s.spinner.Start(ui.SpinnerMessageForTool(chunk.Item.Name))
+		}
+		acc := &responsesFunctionCallAccumulator{
+			CallID: chunk.Item.CallID,
+			Name:   chunk.Item.Name,
+		}
+		s.functionCalls[chunk.Item.CallID] = acc
+	}
+
+	if chunk.Type == "response.function_call_arguments.delta" {
+		callID := ""
+		if chunk.Item != nil {
+			callID = chunk.Item.CallID
+		}
+
+		if callID != "" {
+			if acc, ok := s.functionCalls[callID]; ok {
+				acc.Arguments.WriteString(chunk.Delta)
+			}
+		} else if len(s.functionCalls) == 1 {
+			for _, acc := range s.functionCalls {
+				acc.Arguments.WriteString(chunk.Delta)
+				break
+			}
+		}
+	}
+
+	if chunk.Type == "response.function_call_arguments.done" && chunk.Item != nil {
+		if acc, ok := s.functionCalls[chunk.Item.CallID]; ok {
+			if chunk.Item.Arguments != "" {
+				acc.Arguments.Reset()
+				acc.Arguments.WriteString(chunk.Item.Arguments)
+			}
+		}
+	}
+
+	if chunk.Type == "response.output_text.delta" {
+		return chunk.Delta, false, nil
+	}
+
+	if chunk.Type == "response.completed" || chunk.Type == "response.done" {
+		s.captureUsage(chunk)
+		s.appendFunctionCallsToOutput()
+		return "", true, nil
+	}
+
+	return "", false, nil
+}
+
+func (s *responsesStreamState) captureUsage(chunk ResponsesStreamChunk) {
+	var usage *ResponsesUsage
+	if chunk.Response != nil && chunk.Response.Usage != nil {
+		usage = chunk.Response.Usage
+	} else if chunk.Usage != nil {
+		usage = chunk.Usage
+	}
+
+	if usage == nil {
+		s.debugf("[DEBUG OpenAI Responses] %s event but usage is nil\n", chunk.Type)
+		return
+	}
+
+	cachedTokens := 0
+	if usage.InputTokensDetails != nil {
+		cachedTokens = usage.InputTokensDetails.CachedTokens
+	}
+	reasoningTokens := 0
+	if usage.OutputTokensDetails != nil {
+		reasoningTokens = usage.OutputTokensDetails.ReasoningTokens
+	}
+	s.lastUsage = &api.Usage{
+		InputTokens:       usage.InputTokens,
+		OutputTokens:      usage.OutputTokens,
+		ThinkingTokens:    reasoningTokens,
+		CachedInputTokens: cachedTokens,
+	}
+	s.debugf("[DEBUG OpenAI Responses] usage received: input=%d, output=%d, cached=%d\n",
+		usage.InputTokens, usage.OutputTokens, cachedTokens)
+}
+
+func (s *responsesStreamState) appendFunctionCallsToOutput() {
+	for _, acc := range s.functionCalls {
+		tc := &api.OpenAIToolCall{
+			ID:   acc.CallID,
+			Type: "function",
+			Function: api.OpenAIToolCallFunction{
+				Name:      acc.Name,
+				Arguments: acc.Arguments.String(),
+			},
+		}
+		if toolJSON, err := ConvertToolCallToToolJSON(tc); err == nil {
+			s.toolCallsOut.WriteString(toolJSON)
+		}
+	}
+}
+
 // handleResponsesStreaming は Responses API のストリーミングを処理
 // Response ID も抽出して返却（content, responseID, error）
 func (p *Provider) handleResponsesStreaming(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, string, error) {
-	var responseID string // response.created イベントから抽出
-
-	// Function Calling: 累積用
-	functionCalls := make(map[string]*responsesFunctionCallAccumulator) // call_id -> accumulator
-	var toolCallsOutput strings.Builder
-
-	// usage 情報を追跡
-	var lastUsage *api.Usage
-
-	errOut := api.ErrorWriterFromContext(ctx)
-
-	parser := func(line string) (string, bool, error) {
-		// デバッグ: 全SSE行を出力
-		if os.Getenv("XELYON_DEBUG_OPENAI") == "1" && line != "" {
-			fmt.Fprintf(errOut, "[DEBUG OpenAI Responses] SSE line: %s\n", line)
-		}
-
-		// SSE形式: "event: xxx" と "data: {...}" の組み合わせ
-		if !strings.HasPrefix(line, "data: ") {
-			return "", false, nil
-		}
-		data := strings.TrimPrefix(line, "data: ")
-		if data == "[DONE]" {
-			return "", true, nil
-		}
-
-		var chunk ResponsesStreamChunk
-		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
-			return "", false, nil // パースエラーはスキップ
-		}
-
-		// デバッグログ: イベントタイプを表示
-		if os.Getenv("XELYON_DEBUG_OPENAI") == "1" {
-			fmt.Fprintf(errOut, "[DEBUG OpenAI Responses] event: %s\n", chunk.Type)
-			// response.completed の生データを表示
-			if chunk.Type == "response.completed" {
-				fmt.Fprintf(errOut, "[DEBUG OpenAI Responses] raw data: %s\n", data)
-			}
-		}
-
-		// response.created イベントから Response ID を抽出
-		if chunk.Type == "response.created" && chunk.Response != nil {
-			responseID = chunk.Response.ID
-		}
-
-		// error イベント: API エラー（quota超過、レート制限など）
-		if chunk.Type == "error" {
-			errMsg := "OpenAI API error"
-			if chunk.Error != nil {
-				if chunk.Error.Message != "" {
-					errMsg = chunk.Error.Message
-				} else if chunk.Error.Code != "" {
-					errMsg = fmt.Sprintf("OpenAI API error: %s", chunk.Error.Code)
-				}
-			}
-			return "", true, fmt.Errorf("%s", errMsg)
-		}
-
-		// response.failed イベント: リクエスト失敗（error イベントのフォールバック）
-		if chunk.Type == "response.failed" {
-			return "", true, fmt.Errorf("OpenAI Responses API request failed")
-		}
-
-		// response.output_item.added: function_call 開始
-		if chunk.Type == "response.output_item.added" && chunk.Item != nil && chunk.Item.Type == "function_call" {
-			if spinner != nil {
-				spinner.Stop()
-				spinner.Start(ui.SpinnerMessageForTool(chunk.Item.Name))
-			}
-			acc := &responsesFunctionCallAccumulator{
-				CallID: chunk.Item.CallID,
-				Name:   chunk.Item.Name,
-			}
-			functionCalls[chunk.Item.CallID] = acc
-		}
-
-		// response.function_call_arguments.delta: 引数の差分
-		if chunk.Type == "response.function_call_arguments.delta" {
-			callID := ""
-			if chunk.Item != nil {
-				callID = chunk.Item.CallID
-			}
-
-			if callID != "" {
-				// call_id がある場合は対応するアキュムレータに追加
-				if acc, ok := functionCalls[callID]; ok {
-					acc.Arguments.WriteString(chunk.Delta)
-				}
-			} else if len(functionCalls) == 1 {
-				// call_id が空で単一 function_call の場合のみ追加
-				for _, acc := range functionCalls {
-					acc.Arguments.WriteString(chunk.Delta)
-					break
-				}
-			}
-			// call_id が空で複数 function_call の場合は無視（どれに追加すべきか不明）
-		}
-
-		// response.function_call_arguments.done: 引数完了
-		if chunk.Type == "response.function_call_arguments.done" && chunk.Item != nil {
-			if acc, ok := functionCalls[chunk.Item.CallID]; ok {
-				// 完了した引数で上書き（doneイベントには完全な引数が含まれる）
-				if chunk.Item.Arguments != "" {
-					acc.Arguments.Reset()
-					acc.Arguments.WriteString(chunk.Item.Arguments)
-				}
-				// Arguments が空の場合は delta で累積した値をそのまま使用
-			}
-		}
-
-		// response.output_text.delta でテキスト差分を取得
-		if chunk.Type == "response.output_text.delta" {
-			return chunk.Delta, false, nil
-		}
-
-		// response.completed または response.done で終了
-		if chunk.Type == "response.completed" || chunk.Type == "response.done" {
-			// usage 情報を抽出（response.completed では response.usage にネストされている）
-			var usage *ResponsesUsage
-			if chunk.Response != nil && chunk.Response.Usage != nil {
-				usage = chunk.Response.Usage
-			} else if chunk.Usage != nil {
-				// フォールバック: トップレベルの usage もチェック
-				usage = chunk.Usage
-			}
-
-			if usage != nil {
-				cachedTokens := 0
-				if usage.InputTokensDetails != nil {
-					cachedTokens = usage.InputTokensDetails.CachedTokens
-				}
-				reasoningTokens := 0
-				if usage.OutputTokensDetails != nil {
-					reasoningTokens = usage.OutputTokensDetails.ReasoningTokens
-				}
-				lastUsage = &api.Usage{
-					InputTokens:       usage.InputTokens,
-					OutputTokens:      usage.OutputTokens,
-					ThinkingTokens:    reasoningTokens,
-					CachedInputTokens: cachedTokens,
-				}
-				if os.Getenv("XELYON_DEBUG_OPENAI") == "1" {
-					fmt.Fprintf(errOut, "[DEBUG OpenAI Responses] usage received: input=%d, output=%d, cached=%d\n",
-						usage.InputTokens, usage.OutputTokens, cachedTokens)
-				}
-			} else if os.Getenv("XELYON_DEBUG_OPENAI") == "1" {
-				fmt.Fprintf(errOut, "[DEBUG OpenAI Responses] %s event but usage is nil\n", chunk.Type)
-			}
-
-			// Function Calling: 累積した呼び出しを内部形式に変換
-			for _, acc := range functionCalls {
-				tc := &api.OpenAIToolCall{
-					ID:   acc.CallID,
-					Type: "function",
-					Function: api.OpenAIToolCallFunction{
-						Name:      acc.Name,
-						Arguments: acc.Arguments.String(),
-					},
-				}
-				if toolJSON, err := ConvertToolCallToToolJSON(tc); err == nil {
-					toolCallsOutput.WriteString(toolJSON)
-				}
-			}
-			return "", true, nil
-		}
-
-		return "", false, nil
-	}
-
-	content, err := api.ParseStreamingResponse(ctx, resp, spinner, parser)
+	state := newResponsesStreamState(spinner, api.ErrorWriterFromContext(ctx))
+	content, err := api.ParseStreamingResponse(ctx, resp, spinner, state.parseLine)
 	if err != nil {
-		return "", responseID, err
+		return "", state.responseID, err
 	}
 
 	// usage コールバックを呼び出し
-	if lastUsage != nil && p.usageCallback != nil {
-		p.usageCallback(*lastUsage)
+	if state.lastUsage != nil && p.usageCallback != nil {
+		p.usageCallback(*state.lastUsage)
 	}
 
 	// tool_calls がある場合はそれを返す
-	if toolCallsOutput.Len() > 0 {
+	if state.toolCallsOut.Len() > 0 {
 		if content != "" {
-			return content + toolCallsOutput.String(), responseID, nil
+			return content + state.toolCallsOut.String(), state.responseID, nil
 		}
-		return toolCallsOutput.String(), responseID, nil
+		return state.toolCallsOut.String(), state.responseID, nil
 	}
-	return content, responseID, nil
+	return content, state.responseID, nil
 }
 
 // chatWithImageResponses は Responses API で画像付きメッセージを処理

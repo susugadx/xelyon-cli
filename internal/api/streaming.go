@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"net/http"
@@ -49,182 +48,37 @@ type StreamParser func(line string) (content string, done bool, err error)
 func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner, parser StreamParser) (string, error) {
 	cfg := config.FromContext(ctx)
 	idleTimeout := time.Duration(cfg.Streaming.IdleTimeoutSeconds) * time.Second
-	out := outputWriterFromContext(ctx)
 	errOut := errorWriterFromContext(ctx)
-	streamAssistantText := ShouldStreamAssistantText(ctx)
 
-	var fullResponse strings.Builder
-	firstChunk := true
-	inToolJSON := false            // ツールJSON内にいるか
-	jsonDepth := 0                 // JSONのネスト深度
-	inString := false              // JSON文字列リテラル内にいるか
-	escaped := false               // JSON文字列内のエスケープ状態
-	var pendingChunk string        // チャンク分割対応: パターンプレフィックスが末尾にある場合に保留
-	var contentNewlineEmitted bool // 表示済みテキストの後に改行を出力済みか（スピナー上書き防止用）
+	controller := NewStreamLoopController(resp.Body, StreamLoopOptions{
+		IdleTimeout:         idleTimeout,
+		AutoResetIdleOnLine: true,
+	})
+	defer controller.Stop()
 
-	// チャンネル経由でスキャン結果を受け取る
-	type scanResult struct {
-		line string
-		err  error
-		done bool // scanner終了
-	}
-	lineCh := make(chan scanResult)
-
-	// バックグラウンドでスキャン
-	go func() {
-		defer close(lineCh)
-		scanner := bufio.NewScanner(resp.Body)
-		// バッファサイズを10MBに拡張（Function Callingの長いレスポンス対応）
-		buf := make([]byte, 0, 10*1024*1024)
-		scanner.Buffer(buf, 10*1024*1024)
-		for scanner.Scan() {
-			lineCh <- scanResult{line: scanner.Text()}
-		}
-		if err := scanner.Err(); err != nil {
-			lineCh <- scanResult{err: err, done: true}
-		} else {
-			lineCh <- scanResult{done: true}
-		}
-	}()
-
-	// アイドルタイマー
-	idleTimer := time.NewTimer(idleTimeout)
-	defer idleTimer.Stop()
+	state := newStreamOutputState(ctx, spinner)
 
 	for {
-		select {
-		case <-ctx.Done():
-			spinner.Stop()
-			partialResponse := fullResponse.String()
-			if partialResponse != "" {
-				// 部分結果がある場合は警告と共に返す
-				if streamAssistantText && !firstChunk && !contentNewlineEmitted {
-					_, _ = fmt.Fprintln(out) // 改行
-				}
-				yellow.Fprintln(errOut, "\n⚠️  Response interrupted. Partial result returned.")
-				return partialResponse, nil // エラーではなく部分結果を返す
-			}
-			return "", ctx.Err()
+		event := controller.Next(ctx, nil)
+		switch event.Type {
+		case StreamLoopEventContextDone:
+			return state.finalizeContextDone(errOut, event.Err)
 
-		case <-idleTimer.C:
+		case StreamLoopEventIdleTimeout:
 			// アイドルタイムアウト
-			spinner.Stop()
-			return fullResponse.String(), fmt.Errorf("idle timeout: no data received for %v", idleTimeout)
+			state.stopSpinner()
+			return state.response(), fmt.Errorf("idle timeout: no data received for %v", idleTimeout)
 
-		case result, ok := <-lineCh:
-			if !ok {
-				// チャンネルクローズ（予期しない終了）
-				spinner.Stop()
-				if streamAssistantText && !firstChunk && !contentNewlineEmitted {
-					_, _ = fmt.Fprintln(out)
-				}
-				return fullResponse.String(), nil
-			}
+		case StreamLoopEventScannerDone:
+			return state.finalizeScannerDone(event.Err)
 
-			// アイドルタイマーをリセット（データ受信ごとに）
-			if !idleTimer.Stop() {
-				select {
-				case <-idleTimer.C:
-				default:
-				}
-			}
-			idleTimer.Reset(idleTimeout)
-
-			if result.done {
-				// スキャン完了
-				spinner.Stop()
-				if result.err != nil {
-					return fullResponse.String(), fmt.Errorf("scanner error: %w", result.err)
-				}
-				if streamAssistantText && !firstChunk && !contentNewlineEmitted {
-					_, _ = fmt.Fprintln(out)
-				}
-				return fullResponse.String(), nil
-			}
-
-			line := result.line
-			if line == "" {
-				continue
-			}
-
-			// プロバイダー固有のパース処理
-			content, done, err := parser(line)
-
-			// parser 内でスピナーが開始された場合（FC tool_calls 等）、
-			// 表示済みテキストの後に改行を入れてスピナーの \r による上書きを防ぐ
-			if streamAssistantText && !firstChunk && spinner.IsActive() && !contentNewlineEmitted {
-				_, _ = fmt.Fprintln(out)
-				contentNewlineEmitted = true
-			}
-
+		case StreamLoopEventLine:
+			done, err := state.processLine(event.Line, parser)
 			if err != nil {
-				spinner.Stop()
-				if streamAssistantText && !firstChunk && !contentNewlineEmitted {
-					_, _ = fmt.Fprintln(out)
-				}
-				return fullResponse.String(), err
+				return state.finalizeParserError(err)
 			}
-
 			if done {
-				spinner.Stop()
-				// チャンク分割対応: 保留分を flush（パターンが完成しなかった = テキスト）
-				if streamAssistantText && pendingChunk != "" {
-					_, _ = fmt.Fprint(out, pendingChunk)
-					contentNewlineEmitted = false // pending flush 後は改行が必要
-				}
-				if streamAssistantText && !firstChunk && !contentNewlineEmitted {
-					_, _ = fmt.Fprintln(out)
-				}
-				return fullResponse.String(), nil
-			}
-
-			if content != "" {
-				// fullResponseには常に追加（内部処理用）
-				fullResponse.WriteString(content)
-
-				// チャンク分割対応: 前回保留分と結合
-				if pendingChunk != "" {
-					content = pendingChunk + content
-					pendingChunk = ""
-				}
-
-				// チャンク末尾がパターンプレフィックスに一致する場合、表示を保留
-				if !inToolJSON {
-					if prefixLen := matchesPatternPrefix(content); prefixLen > 0 {
-						pendingChunk = content[len(content)-prefixLen:]
-						content = content[:len(content)-prefixLen]
-					}
-				}
-
-				// ツールJSON検出・非表示処理
-				displayContent := filterToolJSON(content, &inToolJSON, &jsonDepth, &inString, &escaped)
-
-				// ツールJSON開始時にスピナーを表示
-				if inToolJSON && spinner != nil && !spinner.IsActive() {
-					// 表示済みテキストの後に改行を入れてスピナーの \r による上書きを防ぐ
-					if streamAssistantText && !firstChunk && !contentNewlineEmitted {
-						_, _ = fmt.Fprintln(out)
-						contentNewlineEmitted = true
-					}
-					msg := "Preparing..."
-					responseStr := fullResponse.String()
-					if strings.Contains(responseStr, "write_file") {
-						msg = ui.SpinnerMessageForTool("write_file")
-					} else if strings.Contains(responseStr, "str_replace") {
-						msg = ui.SpinnerMessageForTool("str_replace")
-					}
-					spinner.Start(msg)
-				}
-
-				// 最初のコンテンツでスピナー停止 + AI発言ヘッダー表示
-				if firstChunk {
-					spinner.Stop()
-					firstChunk = false
-					PrintAIHeaderWithContext(ctx)
-				}
-				if streamAssistantText && displayContent != "" {
-					_, _ = fmt.Fprint(out, displayContent)
-				}
+				return state.finalizeDone()
 			}
 		}
 	}

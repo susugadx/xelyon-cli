@@ -1,7 +1,6 @@
 package claudestream
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"net/http"
@@ -59,58 +58,22 @@ func RunStreamingResponse(
 	firstChunk := true
 	contentNewlineEmitted := false
 
-	type scanResult struct {
-		line string
-		err  error
-		done bool
-	}
-	lineCh := make(chan scanResult)
-
-	go func() {
-		defer close(lineCh)
-		scanner := bufio.NewScanner(resp.Body)
-		buf := make([]byte, 0, 10*1024*1024)
-		scanner.Buffer(buf, 10*1024*1024)
-		for scanner.Scan() {
-			lineCh <- scanResult{line: scanner.Text()}
-		}
-		if err := scanner.Err(); err != nil {
-			lineCh <- scanResult{err: err, done: true}
-		} else {
-			lineCh <- scanResult{done: true}
-		}
-	}()
-
-	var idleTimer *time.Timer
 	var idleTimeout time.Duration
 	if opts.EnableIdleTimeout {
 		cfg := config.FromContext(ctx)
 		idleTimeout = time.Duration(cfg.Streaming.IdleTimeoutSeconds) * time.Second
-		idleTimer = time.NewTimer(idleTimeout)
-		defer idleTimer.Stop()
 	}
 
-	resetIdleTimer := func() {
-		if idleTimer == nil {
-			return
-		}
-		if !idleTimer.Stop() {
-			select {
-			case <-idleTimer.C:
-			default:
-			}
-		}
-		idleTimer.Reset(idleTimeout)
-	}
+	controller := api.NewStreamLoopController(resp.Body, api.StreamLoopOptions{
+		IdleTimeout:         idleTimeout,
+		AutoResetIdleOnLine: true,
+	})
+	defer controller.Stop()
 
 	for {
-		var idleTimerCh <-chan time.Time
-		if idleTimer != nil {
-			idleTimerCh = idleTimer.C
-		}
-
-		select {
-		case <-ctx.Done():
+		eventResult := controller.Next(ctx, nil)
+		switch eventResult.Type {
+		case api.StreamLoopEventContextDone:
 			spinner.Stop()
 			partial := fullResponse.String()
 			if partial != "" {
@@ -125,39 +88,32 @@ func RunStreamingResponse(
 				}
 				return partial, nil
 			}
+			if eventResult.Err != nil {
+				return "", eventResult.Err
+			}
 			return "", ctx.Err()
 
-		case <-idleTimerCh:
+		case api.StreamLoopEventIdleTimeout:
 			spinner.Stop()
 			return fullResponse.String(), fmt.Errorf("idle timeout: no data received for %v", idleTimeout)
 
-		case result, ok := <-lineCh:
-			if !ok {
-				spinner.Stop()
-				if streamAssistantText && !firstChunk && !contentNewlineEmitted {
-					_, _ = fmt.Fprintln(out)
-				}
-				return fullResponse.String(), nil
+		case api.StreamLoopEventScannerDone:
+			spinner.Stop()
+			if eventResult.Err != nil {
+				return fullResponse.String(), fmt.Errorf("stream reading error: %w", eventResult.Err)
 			}
-
-			resetIdleTimer()
-
-			if result.done {
-				spinner.Stop()
-				if result.err != nil {
-					return fullResponse.String(), fmt.Errorf("stream reading error: %w", result.err)
-				}
-				if streamAssistantText && !firstChunk && !contentNewlineEmitted {
-					_, _ = fmt.Fprintln(out)
-				}
-				return fullResponse.String(), nil
+			if streamAssistantText && !firstChunk && !contentNewlineEmitted {
+				_, _ = fmt.Fprintln(out)
 			}
+			return fullResponse.String(), nil
 
-			if result.line == "" {
+		case api.StreamLoopEventLine:
+			line := eventResult.Line
+			if line == "" {
 				continue
 			}
 
-			data, handled := ParseSSEDataLine(result.line)
+			data, handled := ParseSSEDataLine(line)
 			if !handled {
 				continue
 			}

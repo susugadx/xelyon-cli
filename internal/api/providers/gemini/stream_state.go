@@ -1,0 +1,271 @@
+package gemini
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"strings"
+	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/ui"
+)
+
+type sseInterpretState struct {
+	spinner             *ui.Spinner
+	out                 io.Writer
+	errOut              io.Writer
+	streamAssistantText bool
+	thinkingMsg         string
+	debug               bool
+
+	fullResponse          strings.Builder
+	functionCalls         []*api.GeminiFunctionCall
+	thoughtParts          []map[string]any
+	rescuedToolJSONs      []string
+	usage                 *GeminiUsageMetadata
+	headerPrinted         bool
+	contentNewlineEmitted bool
+	suppressingToolJSON   bool
+	toolJSONDepth         int
+	toolJSONInStr         bool
+	streamStarted         bool
+	hadActionableOutput   bool
+	thinkingRetries       int
+}
+
+func newSSEInterpretState(ctx context.Context, spinner *ui.Spinner, thinkingMsg string, debug bool) *sseInterpretState {
+	return &sseInterpretState{
+		spinner:             spinner,
+		out:                 api.OutputWriterFromContext(ctx),
+		errOut:              api.ErrorWriterFromContext(ctx),
+		streamAssistantText: api.ShouldStreamAssistantText(ctx),
+		thinkingMsg:         thinkingMsg,
+		debug:               debug,
+	}
+}
+
+func (s *sseInterpretState) response() string {
+	return s.fullResponse.String()
+}
+
+func (s *sseInterpretState) stopSpinner() {
+	if s.spinner == nil {
+		return
+	}
+	s.spinner.Stop()
+}
+
+func (s *sseInterpretState) debugf(format string, args ...interface{}) {
+	if !s.debug {
+		return
+	}
+	fmt.Fprintf(s.errOut, format, args...)
+}
+
+func (s *sseInterpretState) handleThinkingTimeout(thinkingTimeout time.Duration) error {
+	if !s.hadActionableOutput {
+		s.stopSpinner()
+		return &ErrThinkingTimeout{Message: fmt.Sprintf("thinking timeout: no actionable output received for %v (thought/progress data may have arrived, but no text or function call was produced)", thinkingTimeout)}
+	}
+
+	s.thinkingRetries++
+	if s.thinkingRetries >= 2 {
+		s.stopSpinner()
+		return &ErrThinkingTimeout{Message: fmt.Sprintf("thinking timeout: extended thinking exceeded %v with no new output", thinkingTimeout*time.Duration(s.thinkingRetries+1))}
+	}
+	return nil
+}
+
+func (s *sseInterpretState) resetThinkingProgress(timer *time.Timer, timeout time.Duration) {
+	s.hadActionableOutput = true
+	s.thinkingRetries = 0
+	resetTimer(timer, timeout)
+}
+
+func (s *sseInterpretState) processChunk(ctx context.Context, chunk GeminiFunctionResponse, thinkingTimer *time.Timer, thinkingTimeout time.Duration) {
+	if !s.streamStarted {
+		s.streamStarted = true
+		if s.spinner != nil && s.thinkingMsg != "" {
+			s.spinner.Stop()
+			s.spinner.Start(s.thinkingMsg)
+		}
+	}
+
+	if chunk.UsageMetadata != nil {
+		s.usage = chunk.UsageMetadata
+	}
+	if len(chunk.Candidates) == 0 {
+		return
+	}
+
+	for _, part := range chunk.Candidates[0].Content.Parts {
+		s.processPart(ctx, part, thinkingTimer, thinkingTimeout)
+	}
+}
+
+func (s *sseInterpretState) processPart(ctx context.Context, part GeminiFunctionPart, thinkingTimer *time.Timer, thinkingTimeout time.Duration) {
+	if part.Thought {
+		s.collectThoughtPart(part)
+		return
+	}
+
+	if part.ThoughtSignature != "" {
+		s.collectSignaturePart(part)
+		if part.FunctionCall != nil {
+			s.handleFunctionCall(part.FunctionCall, part.ThoughtSignature, thinkingTimer, thinkingTimeout)
+		}
+		return
+	}
+
+	if part.Text != "" {
+		s.handleTextPart(ctx, part.Text, thinkingTimer, thinkingTimeout)
+	}
+	if part.FunctionCall != nil {
+		s.handleFunctionCall(part.FunctionCall, part.ThoughtSignature, thinkingTimer, thinkingTimeout)
+	}
+}
+
+func (s *sseInterpretState) collectThoughtPart(part GeminiFunctionPart) {
+	tp := map[string]any{"thought": true}
+	if part.Text != "" {
+		tp["text"] = part.Text
+	}
+	if part.ThoughtSignature != "" {
+		tp["thought_signature"] = part.ThoughtSignature
+	}
+	s.thoughtParts = append(s.thoughtParts, tp)
+
+	sig := part.ThoughtSignature
+	if len(sig) > 20 {
+		sig = sig[:20] + "..."
+	}
+	s.debugf("[DEBUG Gemini SSE] Collected thought part (text=%d chars, sig=%q)\n", len(part.Text), sig)
+}
+
+func (s *sseInterpretState) collectSignaturePart(part GeminiFunctionPart) {
+	tp := map[string]any{"thought_signature": part.ThoughtSignature}
+	if part.Text != "" {
+		tp["text"] = part.Text
+	}
+	s.thoughtParts = append(s.thoughtParts, tp)
+
+	sig := part.ThoughtSignature
+	if len(sig) > 20 {
+		sig = sig[:20] + "..."
+	}
+	s.debugf("[DEBUG Gemini SSE] Collected signature part (text=%d chars, sig=%q, hasFC=%v)\n", len(part.Text), sig, part.FunctionCall != nil)
+}
+
+func (s *sseInterpretState) handleTextPart(ctx context.Context, text string, thinkingTimer *time.Timer, thinkingTimeout time.Duration) {
+	s.resetThinkingProgress(thinkingTimer, thinkingTimeout)
+	if s.suppressingToolJSON {
+		s.fullResponse.WriteString(text)
+		updateToolJSONDepth(text, &s.toolJSONDepth, &s.toolJSONInStr)
+		if s.toolJSONDepth <= 0 {
+			s.suppressingToolJSON = false
+		}
+		return
+	}
+
+	trimmed := strings.TrimSpace(text)
+	if isToolJSONPrefix(trimmed) {
+		s.suppressingToolJSON = true
+		s.toolJSONDepth = 0
+		s.toolJSONInStr = false
+		updateToolJSONDepth(text, &s.toolJSONDepth, &s.toolJSONInStr)
+		if s.toolJSONDepth <= 0 {
+			s.suppressingToolJSON = false
+		}
+		s.fullResponse.WriteString(text)
+		return
+	}
+
+	extracted, remaining := extractCodeBlockToolJSON(text)
+	if len(extracted) > 0 {
+		s.rescuedToolJSONs = append(s.rescuedToolJSONs, extracted...)
+		if strings.TrimSpace(remaining) != "" {
+			s.ensureHeaderPrinted(ctx)
+			if s.streamAssistantText {
+				_, _ = fmt.Fprint(s.out, remaining)
+			}
+		}
+		s.fullResponse.WriteString(remaining)
+		return
+	}
+
+	s.ensureHeaderPrinted(ctx)
+	if s.streamAssistantText {
+		_, _ = fmt.Fprint(s.out, text)
+	}
+	s.fullResponse.WriteString(text)
+}
+
+func (s *sseInterpretState) ensureHeaderPrinted(ctx context.Context) {
+	if s.headerPrinted {
+		return
+	}
+	s.stopSpinner()
+	api.PrintAIHeaderWithContext(ctx)
+	s.headerPrinted = true
+}
+
+func (s *sseInterpretState) handleFunctionCall(functionCall *api.GeminiFunctionCall, thoughtSignature string, thinkingTimer *time.Timer, thinkingTimeout time.Duration) {
+	s.resetThinkingProgress(thinkingTimer, thinkingTimeout)
+	if s.spinner != nil {
+		s.spinner.Stop()
+		if s.streamAssistantText && s.headerPrinted && !s.contentNewlineEmitted {
+			_, _ = fmt.Fprintln(s.out)
+			s.contentNewlineEmitted = true
+		}
+		s.spinner.Start(ui.SpinnerMessageForTool(functionCall.Name))
+	}
+	functionCall.ThoughtSignature = thoughtSignature
+	s.functionCalls = append(s.functionCalls, functionCall)
+}
+
+func (s *sseInterpretState) finalize(p *Provider) (string, error) {
+	s.stopSpinner()
+
+	if len(s.thoughtParts) > 0 {
+		for _, fc := range s.functionCalls {
+			fc.ThoughtParts = s.thoughtParts
+		}
+	}
+
+	if len(s.functionCalls) == 0 && len(s.rescuedToolJSONs) > 0 {
+		s.debugf("[DEBUG Gemini SSE] Rescuing %d tool call(s) from text\n", len(s.rescuedToolJSONs))
+		fmt.Fprintf(s.errOut, "⚠️  FC rescue: %d tool call(s) extracted from text response\n", len(s.rescuedToolJSONs))
+		for _, tj := range s.rescuedToolJSONs {
+			s.fullResponse.WriteString(tj)
+		}
+	}
+
+	seenTools := make(map[string]bool)
+	for _, fc := range s.functionCalls {
+		displayKey := convertFunctionCallToDisplayJSON(fc)
+		if seenTools[displayKey] {
+			continue
+		}
+		seenTools[displayKey] = true
+		s.fullResponse.WriteString(convertFunctionCallToToolJSON(fc))
+	}
+
+	if s.usage != nil && p.usageCallback != nil {
+		p.usageCallback(api.Usage{
+			InputTokens:       s.usage.PromptTokenCount,
+			OutputTokens:      s.usage.CandidatesTokenCount,
+			ThinkingTokens:    s.usage.ThoughtsTokenCount,
+			CachedInputTokens: s.usage.CachedContentTokenCount,
+		})
+	}
+
+	if s.fullResponse.Len() == 0 {
+		return "", fmt.Errorf("no content in Gemini SSE response (stream ended without generating any text or function calls)")
+	}
+
+	if s.streamAssistantText && !s.contentNewlineEmitted {
+		_, _ = fmt.Fprintln(s.out)
+	}
+	return s.response(), nil
+}
