@@ -84,56 +84,7 @@ func formatSearchResultsBody(results []SearchResult, truncated bool, tokenBudget
 	var sb strings.Builder
 
 	for _, r := range results {
-		fileHeader := fmt.Sprintf("\n📄 %s (%d match(es))", r.FilePath, r.MatchCount)
-		if reg != nil {
-			id := reg.Register(newTextSearchLocator(r.FilePath, 0, 0, "", opts))
-			fileHeader += " " + id
-		}
-		fmt.Fprintf(&sb, "%s\n", fileHeader)
-
-		blocks := buildMatchBlocks(r.Matches)
-		sort.SliceStable(blocks, func(i, j int) bool {
-			return blocks[i].typ < blocks[j].typ
-		})
-		var sorted []Match
-		for _, b := range blocks {
-			sorted = append(sorted, b.matches...)
-		}
-
-		prevLineNum := -1
-		for _, m := range sorted {
-			if m.LineNum < 0 {
-				sb.WriteString("      ...\n")
-				fmt.Fprintf(&sb, "  %10s       │ %s\n", "", m.Line)
-				sb.WriteString("      ...\n")
-				prevLineNum = -1
-				continue
-			}
-
-			if prevLineNum > 0 && m.LineNum != prevLineNum+1 {
-				sb.WriteString("      ...\n")
-			}
-			prevLineNum = m.LineNum
-
-			if m.IsMatch {
-				fmt.Fprintf(&sb, "  %-10s> %4d │ %s\n", matchTypeTag[m.Type], m.LineNum, m.Line)
-				if m.Block != nil {
-					blockLine := ""
-					if m.Block.StartLine > 0 {
-						blockLine = fmt.Sprintf("  %10s  %4s   ── in %s (L%d)", "", "", m.Block.Name, m.Block.StartLine)
-					} else {
-						blockLine = fmt.Sprintf("  %10s  %4s   ── in %s", "", "", m.Block.Name)
-					}
-					if reg != nil && m.Block.StartLine > 0 {
-						id := reg.Register(newTextSearchLocator(r.FilePath, m.Block.StartLine, 0, m.Block.Name, opts))
-						blockLine += " " + id
-					}
-					fmt.Fprintf(&sb, "%s\n", blockLine)
-				}
-			} else {
-				fmt.Fprintf(&sb, "  %10s  %4d │ %s\n", "", m.LineNum, m.Line)
-			}
-		}
+		renderSearchResultBodyFile(&sb, r, reg, opts)
 	}
 
 	if truncated {
@@ -141,6 +92,84 @@ func formatSearchResultsBody(results []SearchResult, truncated bool, tokenBudget
 	}
 
 	return sb.String()
+}
+
+func renderSearchResultBodyFile(sb *strings.Builder, result SearchResult, reg *locator.Registry, opts SearchOptions) {
+	fmt.Fprintf(sb, "%s\n", formatSearchResultFileHeader(result, reg, opts))
+
+	prevLineNum := -1
+	for _, match := range sortMatchesForSearchResultBody(result.Matches) {
+		if match.LineNum < 0 {
+			appendSearchResultBodyDetachedLine(sb, match.Line)
+			prevLineNum = -1
+			continue
+		}
+
+		appendSearchResultBodyGapMarkerIfNeeded(sb, prevLineNum, match.LineNum)
+		prevLineNum = match.LineNum
+		appendSearchResultBodyMatchLine(sb, result.FilePath, match, reg, opts)
+	}
+}
+
+func formatSearchResultFileHeader(result SearchResult, reg *locator.Registry, opts SearchOptions) string {
+	fileHeader := fmt.Sprintf("\n📄 %s (%d match(es))", result.FilePath, result.MatchCount)
+	if reg != nil {
+		id := reg.Register(newTextSearchLocator(result.FilePath, 0, 0, "", opts))
+		fileHeader += " " + id
+	}
+	return fileHeader
+}
+
+func sortMatchesForSearchResultBody(matches []Match) []Match {
+	blocks := buildMatchBlocks(matches)
+	sort.SliceStable(blocks, func(i, j int) bool {
+		return blocks[i].typ < blocks[j].typ
+	})
+
+	sorted := make([]Match, 0, len(matches))
+	for _, block := range blocks {
+		sorted = append(sorted, block.matches...)
+	}
+	return sorted
+}
+
+func appendSearchResultBodyDetachedLine(sb *strings.Builder, line string) {
+	sb.WriteString("      ...\n")
+	fmt.Fprintf(sb, "  %10s       │ %s\n", "", line)
+	sb.WriteString("      ...\n")
+}
+
+func appendSearchResultBodyGapMarkerIfNeeded(sb *strings.Builder, prevLineNum, currentLineNum int) {
+	if prevLineNum > 0 && currentLineNum != prevLineNum+1 {
+		sb.WriteString("      ...\n")
+	}
+}
+
+func appendSearchResultBodyMatchLine(sb *strings.Builder, filePath string, match Match, reg *locator.Registry, opts SearchOptions) {
+	if match.IsMatch {
+		fmt.Fprintf(sb, "  %-10s> %4d │ %s\n", matchTypeTag[match.Type], match.LineNum, match.Line)
+		appendSearchResultBodyBlockLine(sb, filePath, match, reg, opts)
+		return
+	}
+	fmt.Fprintf(sb, "  %10s  %4d │ %s\n", "", match.LineNum, match.Line)
+}
+
+func appendSearchResultBodyBlockLine(sb *strings.Builder, filePath string, match Match, reg *locator.Registry, opts SearchOptions) {
+	if match.Block == nil {
+		return
+	}
+
+	blockLine := ""
+	if match.Block.StartLine > 0 {
+		blockLine = fmt.Sprintf("  %10s  %4s   ── in %s (L%d)", "", "", match.Block.Name, match.Block.StartLine)
+	} else {
+		blockLine = fmt.Sprintf("  %10s  %4s   ── in %s", "", "", match.Block.Name)
+	}
+	if reg != nil && match.Block.StartLine > 0 {
+		id := reg.Register(newTextSearchLocator(filePath, match.Block.StartLine, 0, match.Block.Name, opts))
+		blockLine += " " + id
+	}
+	fmt.Fprintf(sb, "%s\n", blockLine)
 }
 
 // formatMultiResults は複数パターンの検索結果をフォーマットする

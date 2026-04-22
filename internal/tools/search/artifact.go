@@ -126,84 +126,34 @@ func executeImpactSearchArtifact(cache tools.ToolCacheInterface, opts SearchOpti
 }
 
 func tryStructuredGoImpactSearchArtifact(cache tools.ToolCacheInterface, opts SearchOptions) (SearchExecutionArtifact, bool) {
-	pattern := strings.TrimSpace(opts.Pattern)
-	if !shouldAttemptStructuredGoImpactSearch(opts, pattern) {
+	ctx, ok := newStructuredGoImpactSearchContext(opts)
+	if !ok {
 		return SearchExecutionArtifact{}, false
 	}
 
-	route := planSearchRoute(pattern, opts)
-	if route.InitialLane != searchLaneSymbol || route.Language != "go" {
-		return SearchExecutionArtifact{}, false
-	}
-
-	cacheKey := buildSearchCacheKeyWithRoute(opts, route.cacheSignature()+"|"+structuredGoImpactRouteTag)
-	if cache != nil {
-		if cached, ok := cache.GetSearch(pattern, cacheKey); ok {
-			bundle := loadSinglePatternBundle(pattern, cacheKey)
-			bundle, cached = formatImpactBundleForRuntimeWithContext(bundle, cached, opts, cache, currentSearchImpactRuntimeRankContext(pattern, cacheKey))
-			affectedFiles := loadSinglePatternAffectedFiles(pattern, cacheKey)
-			if len(affectedFiles) == 0 {
-				affectedFiles = deriveAffectedFilesFromCachedResult(bundle, cached, opts)
-			}
-			return SearchExecutionArtifact{
-				Rendered: cached,
-				Metadata: SearchExecutionMetadata{
-					Bundle:           bundle,
-					AffectedFiles:    affectedFiles,
-					StructuredImpact: true,
-					Ambiguous:        bundle == nil,
-				},
-			}, true
-		}
-	}
-
-	resolved := resolveStructuredGoImpactSymbol(pattern, opts)
-	route.SymbolAttempted = true
-	switch resolved.Status {
-	case symbolResolveSingle:
-		if resolved.Bundle == nil {
-			return SearchExecutionArtifact{}, false
-		}
-		route.SymbolResolved = true
-		route.FinalLane = searchLaneSymbol
-		resolved.Bundle = attachBundleRoute(resolved.Bundle, route)
-		affectedFiles := collectSymbolBundleAffectedFiles(resolved.Bundle, opts)
-		outputBundle, output := formatImpactBundleForRuntime(resolved.Bundle, resolved.Output, opts, cache)
-
-		if cache != nil {
-			cache.SetSearch(pattern, cacheKey, resolved.Output, affectedFiles)
-			storeSinglePatternBundle(pattern, cacheKey, resolved.Bundle)
-			storeSinglePatternAffectedFiles(pattern, cacheKey, affectedFiles)
-		}
-
+	if cached, ok := loadStructuredGoImpactCachedResult(cache, ctx, opts); ok {
 		return SearchExecutionArtifact{
-			Rendered: output,
+			Rendered: cached.Output,
 			Metadata: SearchExecutionMetadata{
-				Bundle:           outputBundle,
-				AffectedFiles:    affectedFiles,
+				Bundle:           cached.Bundle,
+				AffectedFiles:    cached.AffectedFiles,
 				StructuredImpact: true,
+				Ambiguous:        cached.Bundle == nil,
 			},
 		}, true
-	case symbolResolveMultiple:
-		route.SymbolResolved = true
-		route.FinalLane = searchLaneSymbol
-		affectedFiles := append([]string(nil), resolved.AffectedFiles...)
-		if len(affectedFiles) == 0 {
-			affectedFiles = deriveAffectedFilesFromCachedResult(nil, resolved.Output, opts)
-		}
-		if cache != nil {
-			cache.SetSearch(pattern, cacheKey, resolved.Output, affectedFiles)
-			storeSinglePatternAffectedFiles(pattern, cacheKey, affectedFiles)
-		}
-		return SearchExecutionArtifact{
-			Rendered: resolved.Output,
-			Metadata: SearchExecutionMetadata{
-				AffectedFiles:    affectedFiles,
-				StructuredImpact: true,
-				Ambiguous:        true,
-			},
-		}, true
-	default:
+	}
+
+	resolved, ok := resolveStructuredGoImpactWithContext(cache, ctx, opts)
+	if !ok {
 		return SearchExecutionArtifact{}, false
 	}
+	return SearchExecutionArtifact{
+		Rendered: resolved.Rendered,
+		Metadata: SearchExecutionMetadata{
+			Bundle:           resolved.Bundle,
+			AffectedFiles:    resolved.AffectedFiles,
+			StructuredImpact: true,
+			Ambiguous:        resolved.Ambiguous,
+		},
+	}, true
 }

@@ -248,6 +248,57 @@ func TestEffectiveSearchPatterns_AlreadyMultiPatternNotExpandedTwice(t *testing.
 	}
 }
 
+func TestShouldExpandImpactSearchPatterns(t *testing.T) {
+	tests := []struct {
+		name     string
+		opts     SearchOptions
+		patterns []string
+		want     bool
+	}{
+		{
+			name:     "impact single pattern",
+			opts:     SearchOptions{Intent: "impact"},
+			patterns: []string{"Run"},
+			want:     true,
+		},
+		{
+			name:     "impact multi pattern",
+			opts:     SearchOptions{Intent: "impact"},
+			patterns: []string{"Run", "Build"},
+			want:     false,
+		},
+		{
+			name:     "non impact intent",
+			opts:     SearchOptions{Intent: "search"},
+			patterns: []string{"Run"},
+			want:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := shouldExpandImpactSearchPatterns(tt.opts, tt.patterns); got != tt.want {
+				t.Fatalf("shouldExpandImpactSearchPatterns() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNewSearchPatternDispatch_PreparesContextsForMultiPattern(t *testing.T) {
+	opts := SearchOptions{Pattern: "Run,Build", Path: t.TempDir()}
+	dispatch := newSearchPatternDispatch([]string{"Run", "Build"}, opts)
+
+	if len(dispatch.patterns) != 2 {
+		t.Fatalf("patterns len = %d, want %d", len(dispatch.patterns), 2)
+	}
+	if len(dispatch.contexts) != 2 {
+		t.Fatalf("contexts len = %d, want %d", len(dispatch.contexts), 2)
+	}
+	if dispatch.contexts[0].Pattern != "Run" || dispatch.contexts[1].Pattern != "Build" {
+		t.Fatalf("unexpected contexts: %+v", dispatch.contexts)
+	}
+}
+
 func TestExecuteSearchCode_MultiplePatterns(t *testing.T) {
 	setupSearchTestMocks(t)
 

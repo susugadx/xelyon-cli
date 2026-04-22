@@ -55,13 +55,14 @@ func appendPatternIfMissing(patterns []string, pattern string) []string {
 
 func effectiveSearchPatterns(opts SearchOptions) []string {
 	patterns := splitPatterns(opts.Pattern)
-	if len(patterns) != 1 {
-		return patterns
-	}
-	if !strings.EqualFold(strings.TrimSpace(opts.Intent), "impact") {
+	if !shouldExpandImpactSearchPatterns(opts, patterns) {
 		return patterns
 	}
 	return expandImpactPatterns(patterns[0], opts)
+}
+
+func shouldExpandImpactSearchPatterns(opts SearchOptions, patterns []string) bool {
+	return len(patterns) == 1 && strings.EqualFold(strings.TrimSpace(opts.Intent), "impact")
 }
 
 func expandImpactPatterns(pattern string, opts SearchOptions) []string {
@@ -144,11 +145,29 @@ func appendImpactTestProbePattern(basePatterns []string, pattern string) []strin
 }
 
 func executeSearchPatterns(cache tools.ToolCacheInterface, patterns []string, opts SearchOptions) string {
-	if len(patterns) <= 1 {
-		return executeSinglePattern(cache, patterns[0], opts)
-	}
+	return newSearchPatternDispatch(patterns, opts).execute(cache, opts)
+}
 
-	return executeMultipleSearchPatterns(cache, newSinglePatternExecutionContexts(patterns, opts), opts)
+type searchPatternDispatch struct {
+	patterns []string
+	contexts []singlePatternExecutionContext
+}
+
+func newSearchPatternDispatch(patterns []string, opts SearchOptions) searchPatternDispatch {
+	dispatch := searchPatternDispatch{
+		patterns: patterns,
+	}
+	if len(patterns) > 1 {
+		dispatch.contexts = newSinglePatternExecutionContexts(patterns, opts)
+	}
+	return dispatch
+}
+
+func (dispatch searchPatternDispatch) execute(cache tools.ToolCacheInterface, opts SearchOptions) string {
+	if len(dispatch.patterns) <= 1 {
+		return executeSinglePattern(cache, dispatch.patterns[0], opts)
+	}
+	return executeMultipleSearchPatterns(cache, dispatch.contexts, opts)
 }
 
 func executeMultipleSearchPatterns(cache tools.ToolCacheInterface, contexts []singlePatternExecutionContext, opts SearchOptions) string {

@@ -12,60 +12,20 @@ import (
 const structuredGoImpactRouteTag = "impact-structured-go-v1"
 
 func tryStructuredGoImpactSearch(cache tools.ToolCacheInterface, opts SearchOptions) (string, bool) {
-	pattern := strings.TrimSpace(opts.Pattern)
-	if !shouldAttemptStructuredGoImpactSearch(opts, pattern) {
+	ctx, ok := newStructuredGoImpactSearchContext(opts)
+	if !ok {
 		return "", false
 	}
 
-	route := planSearchRoute(pattern, opts)
-	if route.InitialLane != searchLaneSymbol || route.Language != "go" {
+	if cached, ok := loadStructuredGoImpactCachedResult(cache, ctx, opts); ok {
+		return cached.Output, true
+	}
+
+	resolved, ok := resolveStructuredGoImpactWithContext(cache, ctx, opts)
+	if !ok {
 		return "", false
 	}
-
-	cacheKey := buildSearchCacheKeyWithRoute(opts, route.cacheSignature()+"|"+structuredGoImpactRouteTag)
-	if cache != nil {
-		if cached, ok := cache.GetSearch(pattern, cacheKey); ok {
-			bundle := loadSinglePatternBundle(pattern, cacheKey)
-			_, cached = formatImpactBundleForRuntimeWithContext(bundle, cached, opts, cache, currentSearchImpactRuntimeRankContext(pattern, cacheKey))
-			return cached, true
-		}
-	}
-
-	resolved := resolveStructuredGoImpactSymbol(pattern, opts)
-	route.SymbolAttempted = true
-	switch resolved.Status {
-	case symbolResolveSingle:
-		if resolved.Bundle == nil {
-			return "", false
-		}
-		route.SymbolResolved = true
-		route.FinalLane = searchLaneSymbol
-		resolved.Bundle = attachBundleRoute(resolved.Bundle, route)
-		affectedFiles := collectSymbolBundleAffectedFiles(resolved.Bundle, opts)
-		_, output := formatImpactBundleForRuntime(resolved.Bundle, resolved.Output, opts, cache)
-
-		if cache != nil {
-			cache.SetSearch(pattern, cacheKey, resolved.Output, affectedFiles)
-			storeSinglePatternBundle(pattern, cacheKey, resolved.Bundle)
-			storeSinglePatternAffectedFiles(pattern, cacheKey, affectedFiles)
-		}
-
-		return output, true
-	case symbolResolveMultiple:
-		route.SymbolResolved = true
-		route.FinalLane = searchLaneSymbol
-		affectedFiles := resolved.AffectedFiles
-		if len(affectedFiles) == 0 {
-			affectedFiles = deriveAffectedFilesFromCachedResult(nil, resolved.Output, opts)
-		}
-		if cache != nil {
-			cache.SetSearch(pattern, cacheKey, resolved.Output, affectedFiles)
-			storeSinglePatternAffectedFiles(pattern, cacheKey, affectedFiles)
-		}
-		return resolved.Output, true
-	default:
-		return "", false
-	}
+	return resolved.Rendered, true
 }
 
 func shouldAttemptStructuredGoImpactSearch(opts SearchOptions, pattern string) bool {
@@ -82,15 +42,30 @@ func shouldAttemptStructuredGoImpactSearch(opts SearchOptions, pattern string) b
 }
 
 func resolveStructuredGoImpactSymbol(symbol string, opts SearchOptions) symbolResolveResult {
+	inspected := inspectStructuredGoImpactSymbol(symbol, opts)
+	switch inspected.status {
+	case navigation.SymbolAutoMultiple:
+		return resolveStructuredGoImpactMultipleSymbol(symbol, inspected.result, inspected.output, opts, inspected.plan.budget)
+	case navigation.SymbolAutoSingle:
+		return buildStructuredGoImpactSingleSymbolResult(symbol, inspected.result, opts, inspected.plan)
+	default:
+		return symbolResolveResult{Status: navigationStatusToSymbolResolveStatus(inspected.status)}
+	}
+}
+
+type structuredGoImpactInspection struct {
+	result navigation.InspectResult
+	output string
+	status navigation.SymbolAutoStatus
+	plan   goImpactPlan
+}
+
+func inspectStructuredGoImpactSymbol(symbol string, opts SearchOptions) structuredGoImpactInspection {
 	plan := goImpactPlanForRisk(goImpactRiskLow)
-	var (
-		result navigation.InspectResult
-		output string
-		status navigation.SymbolAutoStatus
-	)
+	inspected := structuredGoImpactInspection{plan: plan}
 
 	for i := 0; i < 3; i++ {
-		result, output, status = navigation.ResolveInspectSymbolAuto(symbol, opts.Path, navigation.InspectSymbolAutoOptions{
+		result, output, status := navigation.ResolveInspectSymbolAuto(symbol, opts.Path, navigation.InspectSymbolAutoOptions{
 			Budget:             plan.budget,
 			Registry:           nil,
 			LSPClient:          opts.LSPClient,
@@ -99,25 +74,36 @@ func resolveStructuredGoImpactSymbol(symbol string, opts SearchOptions) symbolRe
 			ProjectMapStateKey: opts.ProjectMapStateKey,
 			InvocationCWD:      opts.InvocationCWD,
 		})
-		switch status {
-		case navigation.SymbolAutoMultiple:
-			return resolveStructuredGoImpactMultipleSymbol(symbol, result, output, opts, plan.budget)
-		case navigation.SymbolAutoSingle:
-		default:
-			return symbolResolveResult{Status: navigationStatusToSymbolResolveStatus(status)}
+		inspected.result = result
+		inspected.output = output
+		inspected.status = status
+		inspected.plan = plan
+
+		if status != navigation.SymbolAutoSingle {
+			return inspected
 		}
 
-		nextPlan := goImpactPlanForRisk(classifyGoImpactRisk(result))
-		if goImpactPlanRank(nextPlan) < goImpactPlanRank(plan) {
-			nextPlan = plan
-		}
+		nextPlan := nextStructuredGoImpactPlan(plan, result)
 		if goImpactPlanEqual(plan, nextPlan) {
-			plan = nextPlan
-			break
+			inspected.plan = nextPlan
+			return inspected
 		}
 		plan = nextPlan
 	}
 
+	inspected.plan = plan
+	return inspected
+}
+
+func nextStructuredGoImpactPlan(current goImpactPlan, result navigation.InspectResult) goImpactPlan {
+	nextPlan := goImpactPlanForRisk(classifyGoImpactRisk(result))
+	if goImpactPlanRank(nextPlan) < goImpactPlanRank(current) {
+		return current
+	}
+	return nextPlan
+}
+
+func buildStructuredGoImpactSingleSymbolResult(symbol string, result navigation.InspectResult, opts SearchOptions, plan goImpactPlan) symbolResolveResult {
 	var probeDependencies []string
 	result, probeDependencies = supplementGoImpactTestsFromProbe(symbol, result, opts, plan.budget.TestLimit)
 	impact := buildGoImpactMetadata(result, plan.riskLevel)

@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/navigation"
@@ -47,16 +46,23 @@ func buildGoSymbolBundleWithOptions(query string, result navigation.InspectResul
 		opts.implementationLimit = goImplementationLimit
 	}
 
-	displayName := result.Symbol.Name
-	if result.Symbol.Kind == "method" && result.Symbol.Receiver != "" {
-		if strings.HasPrefix(result.Symbol.Receiver, "*") {
-			displayName = fmt.Sprintf("(%s).%s", result.Symbol.Receiver, result.Symbol.Name)
-		} else {
-			displayName = result.Symbol.Receiver + "." + result.Symbol.Name
-		}
+	bundle := newGoSymbolBundle(query, result, opts)
+
+	if len(result.Body) > 0 {
+		bundle.Definition.Signature = result.Body[0]
 	}
 
-	bundle := &SymbolBundle{
+	addNavigationSection(bundle, "callers", "Callers", result.Callers, result.TotalCallers, result.MoreCallers)
+	addNavigationSection(bundle, "references", "References", result.Refs, result.TotalRefs, result.MoreRefs)
+	addNavigationTestSection(bundle, result.Tests, result.TotalTests, result.MoreTests)
+	appendGoImplementationSection(bundle, result.Implementations, opts.implementationLimit)
+
+	return bundle
+}
+
+func newGoSymbolBundle(query string, result navigation.InspectResult, opts goSymbolBundleBuildOptions) *SymbolBundle {
+	displayName := goSymbolBundleDisplayName(*result.Symbol)
+	return &SymbolBundle{
 		Identity: SymbolBundleIdentity{
 			Language:    "go",
 			Query:       query,
@@ -84,37 +90,43 @@ func buildGoSymbolBundleWithOptions(query string, result navigation.InspectResul
 			FileRootPath: result.Symbol.RootPath,
 		},
 	}
+}
 
-	if len(result.Body) > 0 {
-		bundle.Definition.Signature = result.Body[0]
+func goSymbolBundleDisplayName(symbol navigation.SymbolCandidate) string {
+	if symbol.Kind != "method" || symbol.Receiver == "" {
+		return symbol.Name
+	}
+	if strings.HasPrefix(symbol.Receiver, "*") {
+		return fmt.Sprintf("(%s).%s", symbol.Receiver, symbol.Name)
+	}
+	return symbol.Receiver + "." + symbol.Name
+}
+
+func appendGoImplementationSection(bundle *SymbolBundle, impls []navigation.ImplementationRef, implementationLimit int) {
+	if len(impls) == 0 || implementationLimit <= 0 {
+		return
 	}
 
-	addNavigationSection(bundle, "callers", "Callers", result.Callers, result.TotalCallers, result.MoreCallers)
-	addNavigationSection(bundle, "references", "References", result.Refs, result.TotalRefs, result.MoreRefs)
-	addNavigationTestSection(bundle, result.Tests, result.TotalTests, result.MoreTests)
-	if len(result.Implementations) > 0 {
-		limit := min(opts.implementationLimit, len(result.Implementations))
-		items := make([]SymbolBundleItem, 0, limit)
-		for _, impl := range result.Implementations[:limit] {
-			items = append(items, SymbolBundleItem{
-				Kind:         "implementations",
-				File:         impl.File,
-				ResolvedPath: impl.ResolvedPath,
-				Line:         impl.Line,
-				Snippet:      strings.TrimSpace(impl.Name),
-				Name:         impl.Name,
-			})
-		}
-		bundle.Sections = append(bundle.Sections, SymbolBundleSection{
-			Kind:  "implementations",
-			Title: "Related Implementations",
-			Items: items,
-			Total: len(result.Implementations),
-			More:  len(result.Implementations) > len(items),
+	limit := min(implementationLimit, len(impls))
+	items := make([]SymbolBundleItem, 0, limit)
+	for _, impl := range impls[:limit] {
+		items = append(items, SymbolBundleItem{
+			Kind:         "implementations",
+			File:         impl.File,
+			ResolvedPath: impl.ResolvedPath,
+			Line:         impl.Line,
+			Snippet:      strings.TrimSpace(impl.Name),
+			Name:         impl.Name,
 		})
 	}
 
-	return bundle
+	bundle.Sections = append(bundle.Sections, SymbolBundleSection{
+		Kind:  "implementations",
+		Title: "Related Implementations",
+		Items: items,
+		Total: len(impls),
+		More:  len(impls) > len(items),
+	})
 }
 
 func addNavigationSection(bundle *SymbolBundle, kind, title string, refs []navigation.Reference, total int, more bool) {
@@ -205,132 +217,6 @@ func buildGenericSymbolBundle(lang, query string, def genericSymbolDef, body []s
 	}
 
 	return bundle
-}
-
-func buildGenericBundleSection(def genericSymbolDef, input symbolBundleSectionInput) *SymbolBundleSection {
-	if len(input.Items) == 0 {
-		return nil
-	}
-
-	total := len(dedupeGenericRefs(input.Items))
-	items := prioritizeGenericRefs(def, input.Items, input.Limit, input.IsTest)
-	if len(items) == 0 {
-		return nil
-	}
-
-	sectionItems := make([]SymbolBundleItem, 0, len(items))
-	for _, item := range items {
-		sectionItems = append(sectionItems, SymbolBundleItem{
-			Kind:    input.Kind,
-			File:    item.File,
-			Line:    item.Line,
-			Snippet: strings.TrimSpace(item.Snippet),
-			IsTest:  input.IsTest || item.IsTest,
-		})
-	}
-
-	return &SymbolBundleSection{
-		Kind:  input.Kind,
-		Title: input.Title,
-		Items: sectionItems,
-		Total: total,
-		More:  total > len(sectionItems),
-	}
-}
-
-func dedupeGenericRefs(refs []genericSymbolRef) []genericSymbolRef {
-	seen := make(map[string]bool)
-	result := make([]genericSymbolRef, 0, len(refs))
-	for _, ref := range refs {
-		key := fmt.Sprintf("%s:%d", ref.File, ref.Line)
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-		result = append(result, ref)
-	}
-	return result
-}
-
-func prioritizeGenericRefs(def genericSymbolDef, refs []genericSymbolRef, limit int, testOnly bool) []genericSymbolRef {
-	if limit <= 0 {
-		return nil
-	}
-
-	uniq := dedupeGenericRefs(refs)
-	sort.SliceStable(uniq, func(i, j int) bool {
-		left := genericRefScore(def, uniq[i], testOnly)
-		right := genericRefScore(def, uniq[j], testOnly)
-		if left != right {
-			return left > right
-		}
-		if uniq[i].File != uniq[j].File {
-			return uniq[i].File < uniq[j].File
-		}
-		return uniq[i].Line < uniq[j].Line
-	})
-
-	selected := make([]genericSymbolRef, 0, min(limit, len(uniq)))
-	seenFile := make(map[string]bool)
-	for _, ref := range uniq {
-		if len(selected) >= limit {
-			break
-		}
-		if seenFile[ref.File] {
-			continue
-		}
-		seenFile[ref.File] = true
-		selected = append(selected, ref)
-	}
-	for _, ref := range uniq {
-		if len(selected) >= limit {
-			break
-		}
-		if containsGenericRef(selected, ref) {
-			continue
-		}
-		selected = append(selected, ref)
-	}
-	return selected
-}
-
-func containsGenericRef(refs []genericSymbolRef, target genericSymbolRef) bool {
-	for _, ref := range refs {
-		if ref.File == target.File && ref.Line == target.Line {
-			return true
-		}
-	}
-	return false
-}
-
-func genericRefScore(def genericSymbolDef, ref genericSymbolRef, testOnly bool) int {
-	score := 0
-	defDir := filepath.Dir(def.File)
-	refDir := filepath.Dir(ref.File)
-	if defDir == refDir {
-		score += 40
-	}
-	if ref.File == def.File {
-		score += 30
-	}
-	if strings.Contains(strings.ToLower(filepath.Base(ref.File)), strings.ToLower(def.Name)) {
-		score += 20
-	}
-	if strings.Contains(strings.ToLower(filepath.Base(ref.File)), strings.ToLower(strings.TrimSuffix(filepath.Base(def.File), filepath.Ext(def.File)))) {
-		score += 15
-	}
-	if testOnly {
-		if ref.IsTest {
-			score += 50
-		}
-	} else if ref.IsTest {
-		score -= 100
-	}
-	if classifyFilePath(ref.File) == "impl" {
-		score += 5
-	}
-	score -= min(ref.Line, 200)
-	return score
 }
 
 func stableGoSymbolBundleKey(packageDir, receiverNorm, name, kind, signature string) string {
