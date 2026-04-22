@@ -6,24 +6,14 @@ func (c *Config) SyncProviderDefaultModel(provider, model string) bool {
 	if c == nil {
 		return false
 	}
-	key := ActiveProviderConfigKey(provider)
-	if key == "" {
+	plan := providerDefaultModelSyncPlanFor(provider, model)
+	if !plan.valid {
 		return false
 	}
-	if model == "" {
-		return false
+	if plan.clearExact {
+		return c.clearProviderDefaultModelOverrideExactByKey(plan.key)
 	}
-	if base, ok := defaultProviderModelConfig(key); ok {
-		if model == base.DefaultModel {
-			return c.clearProviderDefaultModelOverrideExact(key)
-		}
-	}
-
-	raw := c.mutableRawProviderModelsForMutation()
-	pm := currentProviderModelConfigForMutation(raw, key)
-	pm.DefaultModel = model
-	raw[key] = cloneProviderModelConfig(pm)
-	c.applyRawProviderModelMutation(raw)
+	c.setProviderDefaultModelOverrideByKey(plan.key, plan.model)
 	return true
 }
 
@@ -32,26 +22,35 @@ func (c *Config) clearProviderDefaultModelOverrideExact(provider string) bool {
 		return false
 	}
 
-	key := ActiveProviderConfigKey(provider)
-	if key == "" {
+	key, ok := providerDefaultModelConfigKey(provider)
+	if !ok {
 		return false
 	}
+	return c.clearProviderDefaultModelOverrideExactByKey(key)
+}
 
+func (c *Config) clearProviderDefaultModelOverrideExactByKey(key string) bool {
+	if c == nil || key == "" {
+		return false
+	}
 	raw := c.clonedRawProviderModelsForMutation()
-	pm, ok := raw[key]
+	_, ok := raw[key]
 	if !ok {
 		return true
 	}
 
-	pm = cloneProviderModelConfig(pm)
-	pm.DefaultModel = ""
-	if isZeroProviderModelConfig(pm) {
-		delete(raw, key)
-	} else {
-		raw[key] = pm
-	}
+	clearProviderDefaultModelInRaw(raw, key)
 	c.applyRawProviderModelMutation(raw)
 	return true
+}
+
+func (c *Config) setProviderDefaultModelOverrideByKey(key, model string) {
+	if c == nil || key == "" || model == "" {
+		return
+	}
+	raw := c.mutableRawProviderModelsForMutation()
+	setProviderDefaultModelInRaw(raw, key, model)
+	c.applyRawProviderModelMutation(raw)
 }
 
 // ClearProviderDefaultModelOverride は provider の default_model override のみ削除する。
@@ -67,14 +66,7 @@ func (c *Config) ClearProviderDefaultModelOverride(provider string) bool {
 		return true
 	}
 
-	pm := currentProviderModelConfigForMutation(raw, key)
-	pm.DefaultModel = ""
-	if isZeroProviderModelConfig(pm) {
-		delete(raw, key)
-	} else {
-		raw[key] = pm
-	}
-
+	clearProviderDefaultModelInRaw(raw, key)
 	c.applyRawProviderModelMutation(raw)
 	return true
 }
