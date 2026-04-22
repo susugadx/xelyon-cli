@@ -13,22 +13,12 @@ func buildSnapshotPathMatcher(rootPath, invocationCWD, pathHint string) func(str
 		return nil
 	}
 
-	root := strings.TrimSpace(rootPath)
-	if root != "" {
-		if abs, err := filepath.Abs(root); err == nil {
-			root = abs
-		}
-	}
+	root := normalizeNavigationRootPath(rootPath)
 
 	normalizedHint := filepath.Clean(pathHint)
 	absHint := normalizedHint
 	if !filepath.IsAbs(absHint) {
-		baseCWD := strings.TrimSpace(invocationCWD)
-		if baseCWD == "" {
-			if cwd, err := os.Getwd(); err == nil {
-				baseCWD = cwd
-			}
-		}
+		baseCWD := resolveNavigationSourceBase(invocationCWD)
 		if baseCWD != "" {
 			absHint = filepath.Join(baseCWD, normalizedHint)
 		} else if abs, err := filepath.Abs(normalizedHint); err == nil {

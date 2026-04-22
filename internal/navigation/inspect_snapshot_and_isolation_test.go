@@ -1,7 +1,6 @@
 package navigation
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -152,36 +151,6 @@ func TestFindAmbiguousFilesWithRuntime_ProjectMapSnapshot(t *testing.T) {
 	if len(ambiguous) != 1 || !ambiguous["pkg/b.go"] {
 		t.Fatalf("expected snapshot ambiguous file set, got %+v", ambiguous)
 	}
-}
-
-// setupTestGoFiles は複数の Go ファイルを一時ディレクトリに作成し、
-// そのディレクトリに cd した後、元に戻すための cleanup を登録する。
-func setupTestGoFiles(t *testing.T, files map[string]string) string {
-	t.Helper()
-	dir := t.TempDir()
-	for name, content := range files {
-		path := filepath.Join(dir, name)
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	origDir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		if err := os.Chdir(origDir); err != nil {
-			t.Logf("warning: could not restore directory: %v", err)
-		}
-	})
-	return dir
 }
 
 // E2E: agent.go の Build を inspect したとき config.go 由来の caller/ref が混ざらない

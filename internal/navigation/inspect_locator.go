@@ -41,7 +41,7 @@ func resolveInspectLocatorPath(filePath, rootPath string) string {
 		return filepath.Clean(filePath)
 	}
 	filePath = cleanRelativeNavigationPath(filePath)
-	rootPath = normalizeInspectRootPath(rootPath)
+	rootPath = normalizeNavigationRootPath(rootPath)
 	if rootPath == "" {
 		return ""
 	}

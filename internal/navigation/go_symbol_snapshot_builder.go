@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/repomap"
@@ -15,15 +14,7 @@ func buildGoSymbolSnapshot(pm *repomap.ProjectMap, rootPath, stateKey string) *g
 		return nil
 	}
 
-	root := strings.TrimSpace(rootPath)
-	if root == "" {
-		root = strings.TrimSpace(pm.RootPath)
-	}
-	if root != "" {
-		if abs, err := filepath.Abs(root); err == nil {
-			root = abs
-		}
-	}
+	root := normalizeGoSymbolSnapshotRootPath(rootPath, pm)
 
 	snapshot := &goSymbolSnapshot{
 		RootPath: root,
@@ -32,52 +23,9 @@ func buildGoSymbolSnapshot(pm *repomap.ProjectMap, rootPath, stateKey string) *g
 	}
 	stableKeyCounts := make(map[string]int)
 	for _, file := range pm.Files {
-		if file == nil || !strings.HasSuffix(strings.ToLower(file.Path), ".go") {
-			continue
-		}
-		relPath := filepath.Clean(filepath.ToSlash(file.Path))
-		packageDir := filepath.Dir(relPath)
-		for _, symbol := range file.Symbols {
-			receiver := extractMethodReceiver(symbol.Signature)
-			entry := goSymbolSnapshotEntry{
-				Name:         symbol.Name,
-				Kind:         symbol.Kind,
-				File:         relPath,
-				Line:         symbol.Line,
-				EndLine:      symbol.EndLine,
-				Signature:    symbol.Signature,
-				Exported:     symbol.Exported,
-				Receiver:     receiver,
-				ReceiverNorm: canonicalReceiver(receiver),
-				PackageDir:   packageDir,
-				StableKey:    stableGoSymbolKey(packageDir, canonicalReceiver(receiver), symbol.Name, symbol.Kind, symbol.Signature),
-			}
-			snapshot.ByName[entry.Name] = append(snapshot.ByName[entry.Name], entry)
-			stableKeyCounts[entry.StableKey]++
-		}
+		appendGoSymbolSnapshotEntriesFromFile(snapshot, stableKeyCounts, file)
 	}
-	for name := range snapshot.ByName {
-		for i := range snapshot.ByName[name] {
-			snapshot.ByName[name][i].Collision = stableKeyCounts[snapshot.ByName[name][i].StableKey] > 1
-		}
-		sort.SliceStable(snapshot.ByName[name], func(i, j int) bool {
-			left := snapshot.ByName[name][i]
-			right := snapshot.ByName[name][j]
-			if left.File != right.File {
-				return left.File < right.File
-			}
-			if left.Line != right.Line {
-				return left.Line < right.Line
-			}
-			if left.EndLine != right.EndLine {
-				return left.EndLine < right.EndLine
-			}
-			if left.Kind != right.Kind {
-				return left.Kind < right.Kind
-			}
-			return left.Signature < right.Signature
-		})
-	}
+	finalizeGoSymbolSnapshotEntries(snapshot, stableKeyCounts)
 	return snapshot
 }
 

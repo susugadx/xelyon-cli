@@ -142,24 +142,5 @@ func applyGoParserReferenceHints(file *goast.File, fset *token.FileSet, imports 
 	if !ok {
 		return current
 	}
-
-	if (current.Scope == "" || current.Scope == "package-level") && fallback.Scope != "" {
-		current.Scope = fallback.Scope
-	}
-	if fallback.Class == ast.ClassDef {
-		current.Class = ast.ClassDef
-	} else if current.Class == ast.ClassUnknown && fallback.Class != ast.ClassUnknown {
-		current.Class = fallback.Class
-	}
-	if current.NodeType == "" && fallback.NodeType != "" {
-		current.NodeType = fallback.NodeType
-	}
-	if (current.SelectorKind == "" || current.SelectorKind == "unknown") && fallback.SelectorKind != "" {
-		current.SelectorKind = fallback.SelectorKind
-	}
-	if current.ReceiverType == "" && fallback.ReceiverType != "" {
-		current.ReceiverType = fallback.ReceiverType
-	}
-
-	return current
+	return mergeFallbackReferenceClassification(current, referenceClassificationFromReference(fallback))
 }

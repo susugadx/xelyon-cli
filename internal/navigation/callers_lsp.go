@@ -2,9 +2,10 @@ package navigation
 
 import (
 	"context"
-	"path/filepath"
-	"strings"
+	"time"
 )
+
+const lspReferenceTimeout = 5 * time.Second
 
 // findReferencesViaLSP は LSP の参照結果を navigation.Reference に変換する。
 func findReferencesViaLSP(client LSPClient, cand SymbolCandidate, invocationCWD string) ([]Reference, error) {
@@ -76,16 +77,5 @@ func newImplementationFromLSPLocation(loc LSPLocation, cand SymbolCandidate, inv
 }
 
 func lspLocationFilePath(file, rootPath, invocationCWD string) string {
-	file = strings.TrimSpace(file)
-	if file == "" || filepath.IsAbs(file) {
-		return file
-	}
-	file = cleanRelativeNavigationPath(file)
-	if resolved, ok := resolveExistingRelativePath(invocationCWD, file); ok {
-		return resolved
-	}
-	if resolved, ok := resolveExistingRelativePath(rootPath, file); ok {
-		return resolved
-	}
-	return resolveRelativePathFromPreferredBases(file, invocationCWD, rootPath)
+	return resolveNavigationRelativeFilePath(file, invocationCWD, rootPath)
 }

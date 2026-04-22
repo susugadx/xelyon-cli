@@ -1,7 +1,6 @@
 package navigation
 
 import (
-	"path/filepath"
 	"strings"
 	"sync"
 )
@@ -28,15 +27,6 @@ func loadGoSymbolSnapshot(runtime GoSymbolRuntime) *goSymbolSnapshot {
 	return nil
 }
 
-func goSymbolSnapshotCacheKey(rootPath, stateKey string) string {
-	rootPath = strings.TrimSpace(rootPath)
-	stateKey = strings.TrimSpace(stateKey)
-	if rootPath == "" || stateKey == "" {
-		return ""
-	}
-	return filepath.Clean(rootPath) + "::" + stateKey
-}
-
 func lookupGoSymbolSnapshot(cacheKey string) *goSymbolSnapshot {
 	if strings.TrimSpace(cacheKey) == "" {
 		return nil
@@ -54,17 +44,7 @@ func storeGoSymbolSnapshot(cacheKey string, snapshot *goSymbolSnapshot) {
 		return
 	}
 	goSymbolSnapshotCache.Store(cacheKey, snapshot)
-
-	rootKey := filepath.Clean(snapshot.RootPath)
-	if rootKey == "" || rootKey == "." {
-		return
-	}
-	if previous, ok := goSymbolSnapshotRootKeys.Load(rootKey); ok {
-		if oldKey, _ := previous.(string); oldKey != "" && oldKey != cacheKey {
-			goSymbolSnapshotCache.Delete(oldKey)
-		}
-	}
-	goSymbolSnapshotRootKeys.Store(rootKey, cacheKey)
+	trackGoSymbolSnapshotRootCacheKey(cacheKey, snapshot)
 }
 
 func clearGoSymbolSnapshotCache() {

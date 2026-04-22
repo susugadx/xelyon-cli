@@ -32,32 +32,18 @@ func ResolveInspectSymbolAuto(symbol, pathHint string, opts InspectSymbolAutoOpt
 		return InspectResult{}, "", SymbolAutoNone
 	}
 
-	query := parseSymbolQuery(symbol)
 	runtime := GoSymbolRuntime{
 		ProjectMap:         opts.ProjectMap,
 		ProjectMapRootPath: opts.ProjectMapRootPath,
 		ProjectMapStateKey: opts.ProjectMapStateKey,
 		InvocationCWD:      opts.InvocationCWD,
 	}
-	candidates := resolveSymbolCandidatesWithRuntime(symbol, pathHint, runtime)
-
-	if len(candidates) == 0 {
-		return InspectResult{}, "", SymbolAutoNone
-	}
-
-	if len(candidates) > 1 {
-		return InspectResult{Candidates: candidates}, formatMultipleCandidates(symbol, candidates, opts.Registry), SymbolAutoMultiple
-	}
 
 	budget := opts.Budget
-	if budget.BodyLines == 0 && budget.CallerLimit == 0 && budget.RefLimit == 0 && budget.TestLimit == 0 {
+	if isZeroInspectBudget(budget) {
 		budget = SummaryBudget
 	}
-
-	cand := candidates[0]
-	result := buildInspectResultForSingleCandidate(query, cand, budget, runtime, opts.LSPClient, true)
-
-	return result, formatInspectResult(result, opts.Registry), SymbolAutoSingle
+	return resolveInspectSymbol(symbol, pathHint, budget, runtime, opts.Registry, opts.LSPClient, true)
 }
 
 // InspectSymbolAuto はシンボル名の自動解決を試みる。

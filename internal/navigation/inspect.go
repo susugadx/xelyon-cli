@@ -8,8 +8,6 @@ func InspectSymbol(symbol, pathHint, mode string) string {
 		return "Error: symbol is required"
 	}
 
-	query := parseSymbolQuery(symbol)
-
 	inspectMode := ModeSummary
 	if mode == "full" {
 		inspectMode = ModeFull
@@ -20,22 +18,11 @@ func InspectSymbol(symbol, pathHint, mode string) string {
 		budget = FullBudget
 	}
 
-	// 1. シンボル候補を解決
-	candidates := resolveSymbolCandidates(symbol, pathHint)
-	if len(candidates) == 0 {
+	_, output, status := resolveInspectSymbol(symbol, pathHint, budget, GoSymbolRuntime{}, nil, nil, false)
+	if status == SymbolAutoNone {
 		return fmt.Sprintf("No symbol found: %q", symbol)
 	}
-
-	// 2. 複数候補 → 一覧のみ
-	if len(candidates) > 1 {
-		return formatMultipleCandidates(symbol, candidates, nil)
-	}
-
-	// 3. 単一候補 → 詳細取得
-	cand := candidates[0]
-	result := buildInspectResultForSingleCandidate(query, cand, budget, GoSymbolRuntime{}, nil, false)
-
-	return formatInspectResult(result, nil)
+	return output
 }
 
 func buildInspectResultForSingleCandidate(query symbolQuery, cand SymbolCandidate, budget Budget, runtime GoSymbolRuntime, lspClient LSPClient, normalizePaths bool) InspectResult {

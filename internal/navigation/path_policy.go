@@ -36,6 +36,33 @@ func cleanInspectResolvedPath(path string) string {
 	return cleanNavigationResolvedPath(path)
 }
 
+func normalizeNavigationBasePath(base string) string {
+	base = strings.TrimSpace(base)
+	if base == "" {
+		return ""
+	}
+	if abs, err := filepath.Abs(base); err == nil {
+		return filepath.Clean(abs)
+	}
+	return filepath.Clean(base)
+}
+
+func normalizeNavigationRootPath(rootPath string) string {
+	return normalizeNavigationBasePath(rootPath)
+}
+
+func resolveNavigationSourceBase(sourceBase string) string {
+	base := normalizeNavigationBasePath(sourceBase)
+	if base != "" {
+		return base
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	return normalizeNavigationBasePath(cwd)
+}
+
 func pathExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
@@ -72,4 +99,21 @@ func resolveRelativePathFromPreferredBases(relativePath string, bases ...string)
 		}
 	}
 	return relativePath
+}
+
+func resolveNavigationRelativeFilePath(file, invocationCWD, rootPath string) string {
+	file = strings.TrimSpace(file)
+	if file == "" || filepath.IsAbs(file) {
+		return file
+	}
+	file = cleanRelativeNavigationPath(file)
+	invocationBase := normalizeNavigationBasePath(invocationCWD)
+	rootBase := normalizeNavigationRootPath(rootPath)
+	if resolved, ok := resolveExistingRelativePath(invocationBase, file); ok {
+		return resolved
+	}
+	if resolved, ok := resolveExistingRelativePath(rootBase, file); ok {
+		return resolved
+	}
+	return resolveRelativePathFromPreferredBases(file, invocationBase, rootBase)
 }

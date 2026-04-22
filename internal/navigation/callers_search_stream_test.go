@@ -101,7 +101,7 @@ func TestRunReferenceSearch_WaitErrorMarksIncomplete(t *testing.T) {
 	}
 }
 
-func TestFindReferences_Exactly200NotTruncated(t *testing.T) {
+func TestFindReferences_ExactlyLimitNotTruncated(t *testing.T) {
 	refs, truncated, incomplete := runReferenceSearch(
 		strings.NewReader(makeRipgrepOutput("Target", maxRipgrepResults)),
 		"Target",
@@ -120,7 +120,7 @@ func TestFindReferences_Exactly200NotTruncated(t *testing.T) {
 	}
 }
 
-func TestFindReferences_Over200Truncated(t *testing.T) {
+func TestFindReferences_OverLimitTruncated(t *testing.T) {
 	canceled := false
 	refs, truncated, incomplete := runReferenceSearch(
 		strings.NewReader(makeRipgrepOutput("Target", maxRipgrepResults+1)),
@@ -139,6 +139,6 @@ func TestFindReferences_Over200Truncated(t *testing.T) {
 		t.Fatalf("expected %d refs after truncation, got %d", maxRipgrepResults, len(refs))
 	}
 	if !canceled {
-		t.Fatal("expected cancel to be invoked after detecting the 201st result")
+		t.Fatalf("expected cancel after detecting the %dth result", maxRipgrepResults+1)
 	}
 }

@@ -39,10 +39,7 @@ func findSymbolColumn(cand SymbolCandidate) (int, error) {
 
 // findEnclosingFunction は file/line を包含する関数スコープ名を返す。
 func findEnclosingFunction(filePath string, line int) string {
-	absPath, err := filepath.Abs(filePath)
-	if err != nil {
-		absPath = filePath
-	}
+	absPath := contextAbsPath(filePath)
 
 	symbols, err := ast.ExtractSymbols(absPath)
 	if err != nil {
@@ -64,10 +61,7 @@ func findEnclosingFunction(filePath string, line int) string {
 
 // findTypeNameAtLine は指定行で宣言される型名を推定して返す。
 func findTypeNameAtLine(filePath string, line int) string {
-	absPath, err := filepath.Abs(filePath)
-	if err != nil {
-		absPath = filePath
-	}
+	absPath := contextAbsPath(filePath)
 
 	symbols, err := ast.ExtractSymbols(absPath)
 	if err == nil {
@@ -95,17 +89,10 @@ func isTestFile(filePath string) bool {
 
 // readLineSnippet は指定行のテキストを trim して返す。
 func readLineSnippet(filePath string, line int) string {
-	absPath, err := filepath.Abs(filePath)
-	if err != nil {
-		absPath = filePath
-	}
-
-	data, err := os.ReadFile(absPath)
+	lines, err := readContextLines(filePath)
 	if err != nil {
 		return ""
 	}
-
-	lines := strings.Split(string(data), "\n")
 	if line < 1 || line > len(lines) {
 		return ""
 	}
@@ -114,10 +101,7 @@ func readLineSnippet(filePath string, line int) string {
 
 // classifyLineByAST は単一行を AST ヒューリスティックで分類する。
 func classifyLineByAST(filePath string, line int, symbol string) ast.MatchClass {
-	absPath, err := filepath.Abs(filePath)
-	if err != nil {
-		absPath = filePath
-	}
+	absPath := contextAbsPath(filePath)
 
 	src, err := os.ReadFile(absPath)
 	if err != nil {

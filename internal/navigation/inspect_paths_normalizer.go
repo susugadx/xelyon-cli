@@ -1,7 +1,6 @@
 package navigation
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 )
@@ -17,17 +16,7 @@ func normalizeInspectResultPaths(result *InspectResult, runtime GoSymbolRuntime)
 	}
 	result.Symbol.RootPath = targetRoot
 
-	sourceBase := strings.TrimSpace(runtime.InvocationCWD)
-	if sourceBase == "" {
-		if cwd, err := os.Getwd(); err == nil {
-			sourceBase = cwd
-		}
-	}
-	if sourceBase != "" {
-		if abs, err := filepath.Abs(sourceBase); err == nil {
-			sourceBase = abs
-		}
-	}
+	sourceBase := resolveNavigationSourceBase(runtime.InvocationCWD)
 
 	for i := range result.Callers {
 		result.Callers[i].File = normalizeResultFilePath(result.Callers[i].File, targetRoot, sourceBase)
@@ -44,8 +33,8 @@ func normalizeInspectResultPaths(result *InspectResult, runtime GoSymbolRuntime)
 }
 
 func preferredInspectRootPath(symbolRoot, projectRoot string) string {
-	symbolRoot = normalizeInspectRootPath(symbolRoot)
-	projectRoot = normalizeInspectRootPath(projectRoot)
+	symbolRoot = normalizeNavigationRootPath(symbolRoot)
+	projectRoot = normalizeNavigationRootPath(projectRoot)
 
 	switch {
 	case symbolRoot == "":
@@ -59,17 +48,6 @@ func preferredInspectRootPath(symbolRoot, projectRoot string) string {
 	default:
 		return projectRoot
 	}
-}
-
-func normalizeInspectRootPath(rootPath string) string {
-	rootPath = strings.TrimSpace(rootPath)
-	if rootPath == "" {
-		return ""
-	}
-	if abs, err := filepath.Abs(rootPath); err == nil {
-		return abs
-	}
-	return filepath.Clean(rootPath)
 }
 
 func pathWithinRoot(rootPath, candidatePath string) bool {
