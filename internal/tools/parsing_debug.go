@@ -28,13 +28,16 @@ func (l *parseDebugLogger) Logf(format string, args ...interface{}) {
 	fmt.Fprintf(l.out, format, args...)
 }
 
-func (l *parseDebugLogger) LogParseResponse(response string) {
+func (l *parseDebugLogger) LogParseResponse(response string, finder jsonToolCallStartFinder) {
 	if l == nil || !l.enabled {
 		return
 	}
 
 	l.Logf("[DEBUG ParseToolCalls] response length: %d\n", len(response))
-	for _, p := range []string{`{"tool"`, `{ "tool"`} {
+	if finder == nil {
+		return
+	}
+	for _, p := range finder.DebugPatterns() {
 		if idx := strings.Index(response, p); idx != -1 {
 			l.Logf("[DEBUG ParseToolCalls] found pattern %q at index %d\n", p, idx)
 			start := idx

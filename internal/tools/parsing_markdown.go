@@ -2,8 +2,30 @@ package tools
 
 import "strings"
 
+type markdownUnclosedFencePolicy int
+
+const (
+	markdownUnclosedFencePolicyToEOF markdownUnclosedFencePolicy = iota + 1
+	markdownUnclosedFencePolicyIgnore
+)
+
+type markdownCodeBlockPolicy struct {
+	unclosedFence markdownUnclosedFencePolicy
+}
+
+func defaultMarkdownCodeBlockPolicy() markdownCodeBlockPolicy {
+	// 既存契約: 未クローズ fence は末尾まで code block として扱う。
+	return markdownCodeBlockPolicy{
+		unclosedFence: markdownUnclosedFencePolicyToEOF,
+	}
+}
+
 // findCodeBlockRanges はMarkdownコードブロックの範囲を返す。
 func findCodeBlockRanges(text string) [][2]int {
+	return findCodeBlockRangesWithPolicy(text, defaultMarkdownCodeBlockPolicy())
+}
+
+func findCodeBlockRangesWithPolicy(text string, policy markdownCodeBlockPolicy) [][2]int {
 	var ranges [][2]int
 	idx := 0
 
@@ -25,8 +47,10 @@ func findCodeBlockRanges(text string) [][2]int {
 
 		end := strings.Index(text[endSearch:], "```")
 		if end == -1 {
-			// 閉じていない場合は残り全部をコードブロックとみなす
-			ranges = append(ranges, [2]int{start, len(text)})
+			if policy.unclosedFence == markdownUnclosedFencePolicyToEOF {
+				// 閉じていない場合は残り全部をコードブロックとみなす
+				ranges = append(ranges, [2]int{start, len(text)})
+			}
 			break
 		}
 		end += endSearch + 3

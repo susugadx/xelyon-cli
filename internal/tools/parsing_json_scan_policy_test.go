@@ -19,7 +19,7 @@ func TestJSONToolCallScanner_ContinuePolicySkipsIncompleteCandidate(t *testing.T
 {"tool": "bash", "args": {"command": "echo ok"}}`
 
 	logger := newParseDebugLogger(false, io.Discard)
-	scanner := newJSONToolCallScanner(input, nil, logger)
+	scanner := newJSONToolCallScanner(input, nil, nil, logger)
 	scanner.errorPolicy = jsonToolCallScanErrorPolicy{onIncompleteJSONObject: jsonToolCallScanDecisionContinue}
 	decoder := newJSONToolCallDecoder(logger)
 

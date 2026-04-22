@@ -13,6 +13,7 @@ var defaultJSONToolCallStartPatterns = []string{
 
 type jsonToolCallStartFinder interface {
 	Find(response string, searchFrom int) int
+	DebugPatterns() []string
 }
 
 type patternJSONToolCallStartFinder struct {
@@ -42,4 +43,10 @@ func (f patternJSONToolCallStartFinder) Find(response string, searchFrom int) in
 		}
 	}
 	return start
+}
+
+func (f patternJSONToolCallStartFinder) DebugPatterns() []string {
+	patterns := make([]string, len(f.patterns))
+	copy(patterns, f.patterns)
+	return patterns
 }

@@ -69,3 +69,20 @@ func TestIsInCodeBlock(t *testing.T) {
 		})
 	}
 }
+
+func TestFindCodeBlockRangesWithPolicy_UnclosedFenceIgnored(t *testing.T) {
+	text := "```json\n{\"tool\":\"bash\"}"
+	got := findCodeBlockRangesWithPolicy(text, markdownCodeBlockPolicy{
+		unclosedFence: markdownUnclosedFencePolicyIgnore,
+	})
+	if len(got) != 0 {
+		t.Fatalf("findCodeBlockRangesWithPolicy() returned %d ranges, want 0", len(got))
+	}
+}
+
+func TestDefaultMarkdownCodeBlockPolicy_UnclosedFenceToEOF(t *testing.T) {
+	policy := defaultMarkdownCodeBlockPolicy()
+	if policy.unclosedFence != markdownUnclosedFencePolicyToEOF {
+		t.Fatalf("defaultMarkdownCodeBlockPolicy().unclosedFence = %v, want %v", policy.unclosedFence, markdownUnclosedFencePolicyToEOF)
+	}
+}

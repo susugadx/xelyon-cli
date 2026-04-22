@@ -1,7 +1,6 @@
 package tools
 
 import (
-	"encoding/json"
 	"regexp"
 	"strings"
 )
@@ -20,10 +19,22 @@ type xmlToolCallScanner struct {
 	searchFrom int
 }
 
+type xmlToolCallFilter struct {
+	codeBlockRanges [][2]int
+	registry        *Registry
+	logger          *parseDebugLogger
+}
+
+type xmlToolCallDecoder struct {
+	logger *parseDebugLogger
+}
+
 // parseXMLToolCalls はXML形式のツール呼び出しをパースする
 // Kimi K2 等がFC失敗時に出力する XML 形式を rescue する
 func parseXMLToolCalls(response string, codeBlockRanges [][2]int, registry *Registry, logger *parseDebugLogger) []*ToolCall {
 	scanner := newXMLToolCallScanner(response)
+	filter := newXMLToolCallFilter(codeBlockRanges, registry, logger)
+	decoder := newXMLToolCallDecoder(logger)
 
 	var results []*ToolCall
 	for {
@@ -31,17 +42,10 @@ func parseXMLToolCalls(response string, codeBlockRanges [][2]int, registry *Regi
 		if !ok {
 			break
 		}
-		if !shouldAcceptXMLToolCallCandidate(candidate, codeBlockRanges, registry, logger) {
+		if !filter.Accept(candidate) {
 			continue
 		}
-
-		args := parseXMLParams(candidate.innerContent)
-		logger.Logf("[DEBUG ParseToolCalls] XML rescue: tool=%s, args=%v\n", candidate.tagName, args)
-
-		results = append(results, &ToolCall{
-			Tool: candidate.tagName,
-			Args: args,
-		})
+		results = append(results, decoder.Decode(candidate))
 	}
 
 	return results
@@ -49,6 +53,18 @@ func parseXMLToolCalls(response string, codeBlockRanges [][2]int, registry *Regi
 
 func newXMLToolCallScanner(response string) *xmlToolCallScanner {
 	return &xmlToolCallScanner{response: response}
+}
+
+func newXMLToolCallFilter(codeBlockRanges [][2]int, registry *Registry, logger *parseDebugLogger) *xmlToolCallFilter {
+	return &xmlToolCallFilter{
+		codeBlockRanges: codeBlockRanges,
+		registry:        registry,
+		logger:          logger,
+	}
+}
+
+func newXMLToolCallDecoder(logger *parseDebugLogger) *xmlToolCallDecoder {
+	return &xmlToolCallDecoder{logger: logger}
 }
 
 func (s *xmlToolCallScanner) Next() (xmlToolCallCandidate, bool) {
@@ -84,100 +100,25 @@ func (s *xmlToolCallScanner) Next() (xmlToolCallCandidate, bool) {
 	return xmlToolCallCandidate{}, false
 }
 
-func shouldAcceptXMLToolCallCandidate(candidate xmlToolCallCandidate, codeBlockRanges [][2]int, registry *Registry, logger *parseDebugLogger) bool {
-	if isInCodeBlock(candidate.start, codeBlockRanges) {
-		logger.Logf("[DEBUG ParseToolCalls] XML rescue: skipping %q in code block\n", candidate.tagName)
+func (f *xmlToolCallFilter) Accept(candidate xmlToolCallCandidate) bool {
+	if isInCodeBlock(candidate.start, f.codeBlockRanges) {
+		f.logger.Logf("[DEBUG ParseToolCalls] XML rescue: skipping %q in code block\n", candidate.tagName)
 		return false
 	}
 
-	if !registry.HasTool(candidate.tagName) {
-		logger.Logf("[DEBUG ParseToolCalls] XML rescue: skipping unknown tool %q\n", candidate.tagName)
+	if !f.registry.HasTool(candidate.tagName) {
+		f.logger.Logf("[DEBUG ParseToolCalls] XML rescue: skipping unknown tool %q\n", candidate.tagName)
 		return false
 	}
 
 	return true
 }
 
-// parseXMLParams は XML 内部コンテンツからパラメータを抽出する
-// パターン1: <args><param>value</param>...</args> （args ラッパーあり）
-// パターン2: <param>value</param>... （args ラッパーなし）
-// パターン3: {"key": "value"} （JSON 形式）
-func parseXMLParams(content string) map[string]string {
-	content = unwrapXMLArgsContent(content)
-	args := parseXMLTagParams(content)
-	if len(args) > 0 {
-		return args
+func (d *xmlToolCallDecoder) Decode(candidate xmlToolCallCandidate) *ToolCall {
+	args := parseXMLParams(candidate.innerContent)
+	d.logger.Logf("[DEBUG ParseToolCalls] XML rescue: tool=%s, args=%v\n", candidate.tagName, args)
+	return &ToolCall{
+		Tool: candidate.tagName,
+		Args: args,
 	}
-	return parseXMLJSONParams(content)
-}
-
-func unwrapXMLArgsContent(content string) string {
-	// <args>...</args> ラッパーがある場合は中身を取り出す
-	if argsStart := strings.Index(content, "<args>"); argsStart != -1 {
-		if argsEnd := strings.Index(content, "</args>"); argsEnd != -1 && argsEnd > argsStart {
-			return content[argsStart+len("<args>") : argsEnd]
-		}
-	}
-	return content
-}
-
-func parseXMLTagParams(content string) map[string]string {
-	args := make(map[string]string)
-
-	// <param>value</param> を手動パースで抽出（バックリファレンス不要）
-	searchFrom := 0
-	for searchFrom < len(content) {
-		// 開始タグを探す
-		loc := xmlOpenTagPattern.FindStringSubmatchIndex(content[searchFrom:])
-		if loc == nil {
-			break
-		}
-		tagStart := searchFrom + loc[1]
-		tagName := content[searchFrom+loc[2] : searchFrom+loc[3]]
-
-		// "args" タグ自体はスキップ
-		if tagName == "args" {
-			searchFrom = tagStart
-			continue
-		}
-
-		// 対応する閉じタグを探す
-		closeTag := "</" + tagName + ">"
-		closeIdx := strings.Index(content[tagStart:], closeTag)
-		if closeIdx == -1 {
-			searchFrom = tagStart
-			continue
-		}
-
-		value := content[tagStart : tagStart+closeIdx]
-		args[tagName] = value
-		searchFrom = tagStart + closeIdx + len(closeTag)
-	}
-
-	return args
-}
-
-func parseXMLJSONParams(content string) map[string]string {
-	args := make(map[string]string)
-	trimmed := strings.TrimSpace(content)
-	if !strings.HasPrefix(trimmed, "{") {
-		return args
-	}
-
-	var jsonArgs map[string]interface{}
-	if err := json.Unmarshal([]byte(trimmed), &jsonArgs); err != nil {
-		return args
-	}
-
-	for k, v := range jsonArgs {
-		switch val := v.(type) {
-		case string:
-			args[k] = val
-		default:
-			if b, err := json.Marshal(v); err == nil {
-				args[k] = string(b)
-			}
-		}
-	}
-	return args
 }

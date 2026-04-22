@@ -12,54 +12,15 @@ type jsonToolCallScanner struct {
 	startFinder     jsonToolCallStartFinder
 	errorPolicy     jsonToolCallScanErrorPolicy
 	logger          *parseDebugLogger
-	searchFrom      int
-	done            bool
+	state           *jsonToolCallScanState
 }
 
 type jsonToolCallDecoder struct {
 	logger *parseDebugLogger
 }
 
-type jsonToolCallScanDecision int
-
-const (
-	jsonToolCallScanDecisionContinue jsonToolCallScanDecision = iota
-	jsonToolCallScanDecisionStop
-)
-
-type jsonToolCallScanErrorKind int
-
-const (
-	jsonToolCallScanErrorIncompleteJSONObject jsonToolCallScanErrorKind = iota + 1
-)
-
-type jsonToolCallScanError struct {
-	kind  jsonToolCallScanErrorKind
-	start int
-}
-
-type jsonToolCallScanErrorPolicy struct {
-	onIncompleteJSONObject jsonToolCallScanDecision
-}
-
-func defaultJSONToolCallScanErrorPolicy() jsonToolCallScanErrorPolicy {
-	// 既存挙動互換: 途中で不完全 JSON を見つけたら JSON 走査を終了する。
-	return jsonToolCallScanErrorPolicy{
-		onIncompleteJSONObject: jsonToolCallScanDecisionStop,
-	}
-}
-
-func (p jsonToolCallScanErrorPolicy) Decide(err jsonToolCallScanError) jsonToolCallScanDecision {
-	switch err.kind {
-	case jsonToolCallScanErrorIncompleteJSONObject:
-		return p.onIncompleteJSONObject
-	default:
-		return jsonToolCallScanDecisionStop
-	}
-}
-
-func parseJSONToolCalls(response string, codeBlockRanges [][2]int, logger *parseDebugLogger) []*ToolCall {
-	scanner := newJSONToolCallScanner(response, codeBlockRanges, logger)
+func parseJSONToolCalls(response string, codeBlockRanges [][2]int, startFinder jsonToolCallStartFinder, logger *parseDebugLogger) []*ToolCall {
+	scanner := newJSONToolCallScanner(response, codeBlockRanges, startFinder, logger)
 	decoder := newJSONToolCallDecoder(logger)
 
 	var results []*ToolCall
@@ -76,48 +37,53 @@ func parseJSONToolCalls(response string, codeBlockRanges [][2]int, logger *parse
 	return results
 }
 
-func newJSONToolCallScanner(response string, codeBlockRanges [][2]int, logger *parseDebugLogger) *jsonToolCallScanner {
+func newJSONToolCallScanner(response string, codeBlockRanges [][2]int, startFinder jsonToolCallStartFinder, logger *parseDebugLogger) *jsonToolCallScanner {
+	if startFinder == nil {
+		startFinder = newDefaultJSONToolCallStartFinder()
+	}
+
 	return &jsonToolCallScanner{
 		response:        response,
 		codeBlockRanges: codeBlockRanges,
-		startFinder:     newDefaultJSONToolCallStartFinder(),
+		startFinder:     startFinder,
 		errorPolicy:     defaultJSONToolCallScanErrorPolicy(),
 		logger:          logger,
+		state:           newJSONToolCallScanState(),
 	}
 }
 
 func (s *jsonToolCallScanner) Next() (jsonToolCallCandidate, bool) {
-	if s.done {
+	if s.state.IsDone() {
 		return jsonToolCallCandidate{}, false
 	}
 
-	for s.searchFrom < len(s.response) {
-		start := s.startFinder.Find(s.response, s.searchFrom)
+	for s.state.SearchFrom() < len(s.response) {
+		start := s.startFinder.Find(s.response, s.state.SearchFrom())
 		if start == -1 {
-			s.done = true
+			s.state.MarkDone()
 			return jsonToolCallCandidate{}, false
 		}
 
 		if shouldSkipCodeBlockJSON(start, s.codeBlockRanges, s.logger) {
-			s.searchFrom = start + 1
+			s.state.AdvancePast(start)
 			continue
 		}
 
 		candidate, end, scanErr := extractJSONObjectCandidate(s.response, start, s.logger)
 		if scanErr != nil {
 			if s.errorPolicy.Decide(*scanErr) == jsonToolCallScanDecisionStop {
-				s.done = true
+				s.state.MarkDone()
 				return jsonToolCallCandidate{}, false
 			}
-			s.searchFrom = start + 1
+			s.state.AdvancePast(start)
 			continue
 		}
 
-		s.searchFrom = end
+		s.state.AdvanceTo(end)
 		return candidate, true
 	}
 
-	s.done = true
+	s.state.MarkDone()
 	return jsonToolCallCandidate{}, false
 }
 
@@ -138,7 +104,7 @@ func shouldSkipCodeBlockJSON(start int, codeBlockRanges [][2]int, logger *parseD
 }
 
 func extractJSONObjectCandidate(response string, start int, logger *parseDebugLogger) (jsonToolCallCandidate, int, *jsonToolCallScanError) {
-	end := findJSONObjectEnd(response, start)
+	end := findBalancedJSONObjectEnd(response, start)
 	if end == -1 {
 		logger.Logf("[DEBUG ParseToolCalls] incomplete JSON: no closing brace found from index %d\n", start)
 		showStart := start
@@ -155,47 +121,6 @@ func extractJSONObjectCandidate(response string, start int, logger *parseDebugLo
 	jsonStr := response[start:end]
 	logger.Logf("[DEBUG ParseToolCalls] extracted JSON (%d bytes): %s\n", len(jsonStr), truncateDebug(jsonStr, 200))
 	return jsonToolCallCandidate{json: jsonStr}, end, nil
-}
-
-func findJSONObjectEnd(response string, start int) int {
-	depth := 0
-	inString := false
-	escaped := false
-
-	for i := start; i < len(response); i++ {
-		ch := response[i]
-
-		if escaped {
-			escaped = false
-			continue
-		}
-
-		if ch == '\\' && inString {
-			escaped = true
-			continue
-		}
-
-		if ch == '"' {
-			inString = !inString
-			continue
-		}
-
-		if inString {
-			continue
-		}
-
-		switch ch {
-		case '{':
-			depth++
-		case '}':
-			depth--
-			if depth == 0 {
-				return i + 1
-			}
-		}
-	}
-
-	return -1
 }
 
 func decodeToolCallJSON(jsonStr string, logger *parseDebugLogger) (*ToolCall, bool) {

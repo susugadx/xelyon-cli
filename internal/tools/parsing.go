@@ -3,8 +3,6 @@ package tools
 import (
 	"io"
 	"os"
-
-	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // ParseToolCall はレスポンスからツール呼び出しを抽出（最初の1つのみ - 後方互換）
@@ -19,7 +17,7 @@ func ParseToolCall(response string) *ToolCall {
 // ParseToolCalls はレスポンスから全てのツール呼び出しを抽出
 // Markdownコードブロック内のJSONは除外する
 func ParseToolCalls(response string) []*ToolCall {
-	return ParseToolCallsWithRegistry(response, DefaultRegistry, ui.DefaultRuntime().ErrorOutput())
+	return ParseToolCallsWithRegistry(response, DefaultRegistry, nil)
 }
 
 // ParseToolCallsWithRegistry は registry を指定して全てのツール呼び出しを抽出する。
@@ -30,29 +28,26 @@ func ParseToolCallsWithRegistry(response string, registry *Registry, debugOut io
 }
 
 type parseRunOptions struct {
-	registry *Registry
-	logger   *parseDebugLogger
+	registry        *Registry
+	startFinder     jsonToolCallStartFinder
+	codeBlockPolicy markdownCodeBlockPolicy
+	logger          *parseDebugLogger
 }
 
 func resolveParseRunOptions(registry *Registry, debugOut io.Writer) parseRunOptions {
 	debugEnabled := os.Getenv("XELYON_DEBUG_PARSE") == "1"
 	return parseRunOptions{
-		registry: resolveRegistry(registry),
-		logger:   newParseDebugLogger(debugEnabled, debugOut),
+		registry:        resolveRegistry(registry),
+		startFinder:     newDefaultJSONToolCallStartFinder(),
+		codeBlockPolicy: defaultMarkdownCodeBlockPolicy(),
+		logger:          newParseDebugLogger(debugEnabled, debugOut),
 	}
 }
 
 func parseToolCalls(response string, options parseRunOptions) []*ToolCall {
-	options.logger.LogParseResponse(response)
-	codeBlockRanges := findCodeBlockRanges(response)
-	results := parseJSONToolCalls(response, codeBlockRanges, options.logger)
-
-	// XML rescue: JSONで何も見つからなかった場合にXML形式を試す
-	if len(results) == 0 {
-		return parseXMLToolCalls(response, codeBlockRanges, options.registry, options.logger)
-	}
-
-	return results
+	options.logger.LogParseResponse(response, options.startFinder)
+	ctx := newParseToolCallContext(response, options)
+	return runParseToolCallPhases(ctx, defaultParseToolCallPhases())
 }
 
 func resolveRegistry(registry *Registry) *Registry {
