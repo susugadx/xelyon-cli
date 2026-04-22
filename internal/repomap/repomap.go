@@ -1,12 +1,8 @@
 package repomap
 
 import (
-	"fmt"
 	"path/filepath"
-	"sort"
 	"time"
-
-	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
 // ProjectMap はプロジェクトの構造マップ。
@@ -74,88 +70,26 @@ func NewProjectMap(rootPath string, maxTokens int, additionalIgnoreDirs ...strin
 
 // Build はプロジェクトのファイル一覧とシンボル一覧を構築する。
 func (pm *ProjectMap) Build() error {
-	if pm == nil {
-		return fmt.Errorf("project map is nil")
+	if err := pm.validateBuildPreconditions(); err != nil {
+		return err
 	}
-	if !common.IsRipgrepAvailable() {
-		return fmt.Errorf("ripgrep (rg) is required")
-	}
-	paths, err := pm.listFiles()
+
+	artifacts, err := pm.collectBuildArtifacts()
 	if err != nil {
 		return err
 	}
 
-	cache, err := loadMapCache(pm.RootPath)
-	if err != nil {
-		cache = &MapCache{RootPath: pm.RootPath, Files: map[string]*CacheFile{}}
-	}
-	if cache.Files == nil {
-		cache.Files = map[string]*CacheFile{}
-	}
-
-	states, err := pm.buildFileStates(paths, cache)
-	if err != nil {
-		return err
-	}
-
-	symbolsByFile, err := pm.scanSymbols(states)
-	if err != nil {
-		return err
-	}
-
-	newCache := &MapCache{
-		RootPath: pm.RootPath,
-		Files:    make(map[string]*CacheFile, len(states)),
-	}
-
-	entries := make([]*FileEntry, 0, len(states))
-	for _, state := range states {
-		if state.cached != nil && state.modTime.Equal(state.cached.ModTime) {
-			entry := &FileEntry{
-				Path:      state.path,
-				LineCount: state.cached.LineCount,
-			}
-			if len(state.cached.Symbols) > 0 {
-				entry.Symbols = append([]Symbol(nil), state.cached.Symbols...)
-			}
-			entries = append(entries, entry)
-			newCache.Files[state.path] = cloneCacheFile(state.cached)
-			continue
-		}
-
-		lineCount, err := countLines(state.absPath)
-		if err != nil {
-			return fmt.Errorf("count lines %s: %w", state.path, err)
-		}
-
-		entry := &FileEntry{
-			Path:      state.path,
-			LineCount: lineCount,
-			Symbols:   symbolsByFile[state.path],
-		}
-		entries = append(entries, entry)
-		newCache.Files[state.path] = &CacheFile{
-			ModTime:   state.modTime,
-			LineCount: lineCount,
-			Symbols:   append([]Symbol(nil), entry.Symbols...),
-		}
-	}
-
-	sortFileEntries(entries)
-	pm.Files = entries
+	pm.Files = artifacts.entries
 	pm.GitStatus = pm.loadGitStatus()
 
-	_ = saveMapCache(pm.RootPath, newCache)
+	_ = saveMapCache(pm.RootPath, artifacts.cache)
 	return nil
 }
 
 // BuildManifest は軽量な manifest 用にファイル一覧と git status のみを構築する。
 func (pm *ProjectMap) BuildManifest() error {
-	if pm == nil {
-		return fmt.Errorf("project map is nil")
-	}
-	if !common.IsRipgrepAvailable() {
-		return fmt.Errorf("ripgrep (rg) is required")
+	if err := pm.validateBuildPreconditions(); err != nil {
+		return err
 	}
 
 	paths, err := pm.listFiles()
@@ -181,59 +115,7 @@ func (pm *ProjectMap) Generate() string {
 	if len(pm.Files) == 0 && len(pm.GitStatus) == 0 {
 		return ""
 	}
-
-	options := make([]renderOption, len(pm.Files))
-	for i := range pm.Files {
-		options[i] = renderOption{include: true, showSymbols: true}
-	}
-
-	result := pm.render(options, 0)
-	if pm.fitsBudget(result) {
-		return result
-	}
-
-	for i, file := range pm.Files {
-		if isTestFile(file.Path) && len(file.Symbols) > 0 {
-			options[i].showSymbols = false
-		}
-	}
-	result = pm.render(options, 0)
-	if pm.fitsBudget(result) {
-		return result
-	}
-
-	var order []int
-	for i, file := range pm.Files {
-		if !options[i].include {
-			continue
-		}
-		order = append(order, i)
-		if file == nil {
-			continue
-		}
-	}
-	sort.Slice(order, func(i, j int) bool {
-		left := pm.Files[order[i]]
-		right := pm.Files[order[j]]
-		leftDepth := directoryDepth(left.Path)
-		rightDepth := directoryDepth(right.Path)
-		if leftDepth != rightDepth {
-			return leftDepth > rightDepth
-		}
-		return left.Path > right.Path
-	})
-
-	omitted := 0
-	for _, idx := range order {
-		options[idx].include = false
-		omitted++
-		result = pm.render(options, omitted)
-		if pm.fitsBudget(result) {
-			return result
-		}
-	}
-
-	return pm.render(options, omitted)
+	return newProjectMapBudgetReducer(pm).reduce()
 }
 
 // GenerateManifest は root manifest 寄りの軽量な Project Map を生成する。
@@ -242,38 +124,9 @@ func (pm *ProjectMap) GenerateManifest(prioritizedPaths []string) string {
 		return ""
 	}
 
-	const (
-		maxTopLevelDirs  = 8
-		maxTopLevelFiles = 8
-		maxPriorityFiles = 10
-	)
-
 	topDirs, topFiles := pm.collectTopLevelEntries()
 	priorityFiles := pm.collectPriorityFiles(prioritizedPaths)
-	dirLimit := minInt(len(topDirs), maxTopLevelDirs)
-	fileLimit := minInt(len(topFiles), maxTopLevelFiles)
-	priorityLimit := minInt(len(priorityFiles), maxPriorityFiles)
-	changeLimit := len(pm.GitStatus)
-
-	for {
-		result := renderManifest(topDirs, dirLimit, topFiles, fileLimit, priorityFiles, priorityLimit, pm.GitStatus, changeLimit)
-		if result == "" || pm.fitsBudget(result) {
-			return result
-		}
-
-		switch {
-		case priorityLimit > 0:
-			priorityLimit--
-		case changeLimit > 0:
-			changeLimit--
-		case fileLimit > 0:
-			fileLimit--
-		case dirLimit > 0:
-			dirLimit--
-		default:
-			return pm.generateManifestFallback(len(pm.Files), len(pm.GitStatus))
-		}
-	}
+	return newProjectMapManifestBudgetReducer(pm, topDirs, topFiles, priorityFiles).reduce()
 }
 
 // GetSymbolCount は保持しているシンボル数を返す。

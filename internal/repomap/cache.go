@@ -24,6 +24,24 @@ type CacheFile struct {
 	Symbols   []Symbol  `json:"symbols,omitempty"`
 }
 
+func newEmptyMapCache(rootPath string) *MapCache {
+	return &MapCache{
+		RootPath: rootPath,
+		Files:    map[string]*CacheFile{},
+	}
+}
+
+func loadMapCacheWithFallback(rootPath string) *MapCache {
+	cache, err := loadMapCache(rootPath)
+	if err != nil || cache == nil {
+		return newEmptyMapCache(rootPath)
+	}
+	if cache.Files == nil {
+		cache.Files = map[string]*CacheFile{}
+	}
+	return cache
+}
+
 func loadMapCache(rootPath string) (*MapCache, error) {
 	cachePath, err := cacheFilePath(rootPath)
 	if err != nil {
@@ -33,10 +51,7 @@ func loadMapCache(rootPath string) (*MapCache, error) {
 	data, err := os.ReadFile(cachePath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return &MapCache{
-				RootPath: rootPath,
-				Files:    map[string]*CacheFile{},
-			}, nil
+			return newEmptyMapCache(rootPath), nil
 		}
 		return nil, err
 	}

@@ -52,6 +52,33 @@ func TestCache_SaveLoad(t *testing.T) {
 	}
 }
 
+func TestLoadMapCacheWithFallback_InvalidJSON(t *testing.T) {
+	setProjectMapTestHome(t)
+
+	root := filepath.Join(t.TempDir(), "repo")
+	cachePath, err := cacheFilePath(root)
+	if err != nil {
+		t.Fatalf("cacheFilePath() error = %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(cachePath), 0755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	if err := os.WriteFile(cachePath, []byte("{invalid"), 0600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	cache := loadMapCacheWithFallback(root)
+	if cache == nil {
+		t.Fatal("loadMapCacheWithFallback() returned nil")
+	}
+	if cache.RootPath != root {
+		t.Fatalf("RootPath = %q, want %q", cache.RootPath, root)
+	}
+	if len(cache.Files) != 0 {
+		t.Fatalf("Files length = %d, want 0", len(cache.Files))
+	}
+}
+
 func TestCache_ModTimeChanged(t *testing.T) {
 	setProjectMapTestHome(t)
 
@@ -77,10 +104,11 @@ func TestCache_ModTimeChanged(t *testing.T) {
 	}
 
 	pm := NewProjectMap(root, 1000)
-	states, err := pm.buildFileStates([]string{"main.go"}, cache)
+	states, err := pm.buildFileStates([]string{"main.go"})
 	if err != nil {
 		t.Fatalf("buildFileStates() error = %v", err)
 	}
+	states = applyCachePolicyToStates(states, cache)
 	if len(states) != 1 {
 		t.Fatalf("states length = %d, want 1", len(states))
 	}
@@ -118,10 +146,11 @@ func TestCache_NewFile(t *testing.T) {
 	}
 
 	pm := NewProjectMap(root, 1000)
-	states, err := pm.buildFileStates([]string{"main.go", "extra.go"}, cache)
+	states, err := pm.buildFileStates([]string{"main.go", "extra.go"})
 	if err != nil {
 		t.Fatalf("buildFileStates() error = %v", err)
 	}
+	states = applyCachePolicyToStates(states, cache)
 	if len(states) != 2 {
 		t.Fatalf("states length = %d, want 2", len(states))
 	}
