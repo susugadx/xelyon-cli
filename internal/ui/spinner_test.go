@@ -8,6 +8,36 @@ import (
 	"time"
 )
 
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+func startAnimatedSpinnerForTest(s *Spinner, message string) {
+	s.mu.Lock()
+	s.active = true
+	s.animated = true
+	s.startTime = time.Now()
+	s.message = message
+	s.status = ""
+	s.stopChan = make(chan struct{})
+	s.doneChan = make(chan struct{})
+	s.mu.Unlock()
+	go s.spin(message)
+}
+
 func TestNewSpinner(t *testing.T) {
 	s := NewSpinner()
 
@@ -168,15 +198,10 @@ func TestSpinner_SetStatus_StaticWriterLogsDistinctUpdates(t *testing.T) {
 }
 
 func TestSpinner_Animation(t *testing.T) {
-	// Note: This test has a race condition when using bytes.Buffer
-	// TODO: Use a thread-safe writer or sync the buffer access
-	t.Skip("Skipping due to race condition with bytes.Buffer - needs thread-safe writer")
-
 	s := NewSpinner()
-	var buf bytes.Buffer
-	s.writer = &buf
-
-	s.Start("Loading")
+	buf := &lockedBuffer{}
+	s.writer = buf
+	startAnimatedSpinnerForTest(s, "Loading")
 
 	// アニメーションフレームが変化するのを待つ
 	time.Sleep(200 * time.Millisecond)
@@ -229,23 +254,16 @@ func TestSpinner_ConcurrentStartStop(t *testing.T) {
 }
 
 func TestSpinner_MultipleMessages(t *testing.T) {
-	// Note: This test has a race condition when using bytes.Buffer
-	// TODO: Use a thread-safe writer or sync the buffer access
-	t.Skip("Skipping due to race condition with bytes.Buffer - needs thread-safe writer")
-
 	messages := []string{"Loading", "Processing", "Finishing"}
 
 	for _, msg := range messages {
 		s := NewSpinner()
-		var buf bytes.Buffer
-		s.writer = &buf
+		buf := &lockedBuffer{}
+		s.writer = buf
 
-		s.Start(msg)
+		startAnimatedSpinnerForTest(s, msg)
 		time.Sleep(100 * time.Millisecond)
 		s.Stop()
-
-		// Stop完了まで少し待機（race condition回避）
-		time.Sleep(10 * time.Millisecond)
 
 		output := buf.String()
 

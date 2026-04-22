@@ -184,6 +184,35 @@ func TestFormatToolLine_SearchCodeImpactMultiPatternSummary_CountsGroupedSymbolB
 	}
 }
 
+func TestFormatToolLine_SearchCodeImpactMultiPatternSummary_CountsGroupedSymbolBundleItems_MixedWindowsPathSeparators(t *testing.T) {
+	line := FormatToolLine(ToolDisplayInfo{
+		ToolName: "search_code",
+		Args: map[string]string{
+			"pattern": "Close",
+			"path":    ".",
+			"intent":  "impact",
+		},
+		Result: strings.Join([]string{
+			`━━ Symbol Bundle: "Close" ━━`,
+			`── func Close (L10-L20) in C:\repo\agent.go ──`,
+			`Definition:`,
+			`  10: func Close() {}`,
+			``,
+			`Callers (2):`,
+			`  - C:\repo\run.go:40 | Close()`,
+			`  - C:/repo/run.go:40 | Close()`,
+			``,
+			`Tests (1):`,
+			`  - C:\repo\agent_test.go:15 | func TestClose`,
+		}, "\n"),
+	})
+
+	want := `🔍 search_code: "Close" in . (impact) → 3 matches, 3 files`
+	if line != want {
+		t.Fatalf("FormatToolLine() = %q, want %q", line, want)
+	}
+}
+
 func TestFormatToolLine_SearchCodeImpactMultiPatternSummary_CountsFormattedTextSearchMatches(t *testing.T) {
 	line := FormatToolLine(ToolDisplayInfo{
 		ToolName: "search_code",
