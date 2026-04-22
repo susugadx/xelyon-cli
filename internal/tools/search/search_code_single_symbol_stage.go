@@ -29,44 +29,54 @@ func executeSinglePatternSymbolStage(cache tools.ToolCacheInterface, ctx *single
 }
 
 func completeSingleSymbolPattern(cache tools.ToolCacheInterface, ctx singlePatternExecutionContext, resolved symbolResolveResult) singlePatternExecution {
-	route := ctx.Route
-	route.FinalLane = searchLaneSymbol
-	route.SymbolResolved = true
+	route := resolvedSinglePatternSymbolRoute(ctx.Route)
 	resolved.Bundle = attachBundleRoute(resolved.Bundle, route)
 	outputBundle, output := formatImpactBundleForRuntime(resolved.Bundle, resolved.Output, ctx.Opts, cache)
 	affectedFiles := collectSymbolBundleAffectedFiles(resolved.Bundle, ctx.Opts)
 
-	writeSinglePatternSearchCache(cache, ctx, resolved.Output, affectedFiles)
-	if cache != nil {
-		storeSinglePatternBundle(ctx.Pattern, ctx.CacheKey, resolved.Bundle)
-	}
+	writeSingleSymbolPatternCache(cache, ctx, resolved, affectedFiles)
 
+	return newSinglePatternSymbolExecution(ctx.Pattern, output, route, outputBundle, affectedFiles)
+}
+
+func completeMultiSymbolPattern(cache tools.ToolCacheInterface, ctx singlePatternExecutionContext, resolved symbolResolveResult) singlePatternExecution {
+	route := resolvedSinglePatternSymbolRoute(ctx.Route)
+	affectedFiles := resolveMultiSymbolAffectedFiles(resolved, ctx.Opts)
+	writeSinglePatternSearchCache(cache, ctx, resolved.Output, affectedFiles)
+
+	return newSinglePatternSymbolExecution(ctx.Pattern, resolved.Output, route, nil, affectedFiles)
+}
+
+func resolvedSinglePatternSymbolRoute(route searchRouteTrace) searchRouteTrace {
+	route.FinalLane = searchLaneSymbol
+	route.SymbolResolved = true
+	return route
+}
+
+func resolveMultiSymbolAffectedFiles(resolved symbolResolveResult, opts SearchOptions) []string {
+	affectedFiles := append([]string(nil), resolved.AffectedFiles...)
+	affectedFiles = append(affectedFiles, collectPrimaryAffectedFilePathsFromOutput(resolved.Output, opts)...)
+	affectedFiles = dedupePaths(affectedFiles)
+	if len(affectedFiles) > 0 {
+		return affectedFiles
+	}
+	return deriveAffectedFilesFromCachedResult(nil, resolved.Output, opts)
+}
+
+func newSinglePatternSymbolExecution(pattern string, output string, route searchRouteTrace, bundle *SymbolBundle, affectedFiles []string) singlePatternExecution {
 	return singlePatternExecution{
-		Pattern:       ctx.Pattern,
+		Pattern:       pattern,
 		Output:        output,
 		Route:         route,
-		Bundle:        outputBundle,
+		Bundle:        bundle,
 		AffectedFiles: affectedFiles,
 	}
 }
 
-func completeMultiSymbolPattern(cache tools.ToolCacheInterface, ctx singlePatternExecutionContext, resolved symbolResolveResult) singlePatternExecution {
-	route := ctx.Route
-	route.FinalLane = searchLaneSymbol
-	route.SymbolResolved = true
-
-	affectedFiles := append([]string(nil), resolved.AffectedFiles...)
-	affectedFiles = append(affectedFiles, collectPrimaryAffectedFilePathsFromOutput(resolved.Output, ctx.Opts)...)
-	affectedFiles = dedupePaths(affectedFiles)
-	if len(affectedFiles) == 0 {
-		affectedFiles = deriveAffectedFilesFromCachedResult(nil, resolved.Output, ctx.Opts)
-	}
+func writeSingleSymbolPatternCache(cache tools.ToolCacheInterface, ctx singlePatternExecutionContext, resolved symbolResolveResult, affectedFiles []string) {
 	writeSinglePatternSearchCache(cache, ctx, resolved.Output, affectedFiles)
-
-	return singlePatternExecution{
-		Pattern:       ctx.Pattern,
-		Output:        resolved.Output,
-		Route:         route,
-		AffectedFiles: affectedFiles,
+	if cache == nil || resolved.Bundle == nil {
+		return
 	}
+	storeSinglePatternBundle(ctx.Pattern, ctx.CacheKey, resolved.Bundle)
 }

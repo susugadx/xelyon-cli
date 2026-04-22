@@ -11,10 +11,11 @@ func buildSearchCacheKey(opts SearchOptions, route searchRouteTrace) string {
 }
 
 func buildMultiCacheKey(patterns []string) string {
-	sorted := make([]string, len(patterns))
-	copy(sorted, patterns)
-	sort.Strings(sorted)
-	return strings.Join(sorted, "|")
+	return strings.Join(sortedStrings(patterns), "|")
+}
+
+func buildMultiCacheKeyFromContexts(contexts []singlePatternExecutionContext) string {
+	return buildMultiCacheKey(contextPatterns(contexts))
 }
 
 func buildSearchCacheKeyWithRoute(opts SearchOptions, routeSignature string) string {
@@ -23,10 +24,32 @@ func buildSearchCacheKeyWithRoute(opts SearchOptions, routeSignature string) str
 }
 
 func buildMultiSearchCacheKey(opts SearchOptions, patterns []string) string {
-	signatures := make([]string, 0, len(patterns))
-	for _, pattern := range patterns {
-		signatures = append(signatures, planSearchRoute(pattern, opts).cacheSignature())
+	return buildMultiSearchCacheKeyFromContexts(opts, newSinglePatternExecutionContexts(patterns, opts))
+}
+
+func buildMultiSearchCacheKeyFromContexts(opts SearchOptions, contexts []singlePatternExecutionContext) string {
+	return buildSearchCacheKeyWithRoute(opts, strings.Join(sortedStrings(contextRouteSignatures(contexts)), ";"))
+}
+
+func contextPatterns(contexts []singlePatternExecutionContext) []string {
+	patterns := make([]string, 0, len(contexts))
+	for _, ctx := range contexts {
+		patterns = append(patterns, ctx.Pattern)
 	}
-	sort.Strings(signatures)
-	return buildSearchCacheKeyWithRoute(opts, strings.Join(signatures, ";"))
+	return patterns
+}
+
+func contextRouteSignatures(contexts []singlePatternExecutionContext) []string {
+	signatures := make([]string, 0, len(contexts))
+	for _, ctx := range contexts {
+		signatures = append(signatures, ctx.Route.cacheSignature())
+	}
+	return signatures
+}
+
+func sortedStrings(values []string) []string {
+	sorted := make([]string, len(values))
+	copy(sorted, values)
+	sort.Strings(sorted)
+	return sorted
 }

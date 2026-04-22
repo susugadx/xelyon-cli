@@ -21,7 +21,10 @@ func executeSinglePatternWithTrace(cache tools.ToolCacheInterface, pattern strin
 }
 
 func executeSinglePatternDetailed(cache tools.ToolCacheInterface, pattern string, opts SearchOptions) singlePatternExecution {
-	ctx := newSinglePatternExecutionContext(pattern, opts)
+	return executeSinglePatternWithContext(cache, newSinglePatternExecutionContext(pattern, opts))
+}
+
+func executeSinglePatternWithContext(cache tools.ToolCacheInterface, ctx singlePatternExecutionContext) singlePatternExecution {
 	if cached, ok := loadCachedSinglePatternExecution(cache, ctx); ok {
 		return cached
 	}
@@ -41,30 +44,51 @@ func newSinglePatternExecutionContext(pattern string, opts SearchOptions) single
 	}
 }
 
-func loadCachedSinglePatternExecution(cache tools.ToolCacheInterface, ctx singlePatternExecutionContext) (singlePatternExecution, bool) {
-	if cache == nil {
-		return singlePatternExecution{}, false
+func newSinglePatternExecutionContexts(patterns []string, opts SearchOptions) []singlePatternExecutionContext {
+	contexts := make([]singlePatternExecutionContext, 0, len(patterns))
+	for _, pattern := range patterns {
+		contexts = append(contexts, newSinglePatternExecutionContext(pattern, opts))
 	}
+	return contexts
+}
 
-	cached, ok := cache.GetSearch(ctx.Pattern, ctx.CacheKey)
+func loadCachedSinglePatternExecution(cache tools.ToolCacheInterface, ctx singlePatternExecutionContext) (singlePatternExecution, bool) {
+	cached, ok := loadCachedSinglePatternOutput(cache, ctx)
 	if !ok {
 		return singlePatternExecution{}, false
 	}
+	bundle, formatted := loadCachedSinglePatternBundleOutput(ctx, cache, cached)
+	affectedFiles := loadCachedSinglePatternAffectedFiles(ctx, bundle, formatted)
+	return newCachedSinglePatternExecution(ctx, formatted, bundle, affectedFiles), true
+}
 
-	bundle := loadSinglePatternBundle(ctx.Pattern, ctx.CacheKey)
-	bundle, cached = formatImpactBundleForRuntimeWithContext(bundle, cached, ctx.Opts, cache, currentSearchImpactRuntimeRankContext(ctx.Pattern, ctx.CacheKey))
-	affectedFiles := loadSinglePatternAffectedFiles(ctx.Pattern, ctx.CacheKey)
-	if len(affectedFiles) == 0 {
-		affectedFiles = deriveAffectedFilesFromCachedResult(bundle, cached, ctx.Opts)
+func loadCachedSinglePatternOutput(cache tools.ToolCacheInterface, ctx singlePatternExecutionContext) (string, bool) {
+	if cache == nil {
+		return "", false
 	}
+	return cache.GetSearch(ctx.Pattern, ctx.CacheKey)
+}
 
+func loadCachedSinglePatternBundleOutput(ctx singlePatternExecutionContext, cache tools.ToolCacheInterface, output string) (*SymbolBundle, string) {
+	bundle := loadSinglePatternBundle(ctx.Pattern, ctx.CacheKey)
+	return formatImpactBundleForRuntimeWithContext(bundle, output, ctx.Opts, cache, currentSearchImpactRuntimeRankContext(ctx.Pattern, ctx.CacheKey))
+}
+
+func loadCachedSinglePatternAffectedFiles(ctx singlePatternExecutionContext, bundle *SymbolBundle, output string) []string {
+	if affectedFiles := loadSinglePatternAffectedFiles(ctx.Pattern, ctx.CacheKey); len(affectedFiles) > 0 {
+		return affectedFiles
+	}
+	return deriveAffectedFilesFromCachedResult(bundle, output, ctx.Opts)
+}
+
+func newCachedSinglePatternExecution(ctx singlePatternExecutionContext, output string, bundle *SymbolBundle, affectedFiles []string) singlePatternExecution {
 	return singlePatternExecution{
 		Pattern:       ctx.Pattern,
-		Output:        cached,
+		Output:        output,
 		Route:         ctx.Route,
 		Bundle:        bundle,
 		AffectedFiles: affectedFiles,
-	}, true
+	}
 }
 
 func writeSinglePatternSearchCache(cache tools.ToolCacheInterface, ctx singlePatternExecutionContext, output string, affectedFiles []string) {

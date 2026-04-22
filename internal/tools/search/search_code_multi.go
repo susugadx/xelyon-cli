@@ -22,39 +22,60 @@ type formattedPatternExecution struct {
 	singlePatternExecution
 }
 
+type multiPatternCacheWrite struct {
+	PatternKey    string
+	CacheKey      string
+	AffectedFiles []string
+}
+
 // executeMultiplePatterns は複数パターンを goroutine 並列で検索する。
 // 各パターンは executeSinglePattern に委譲し、symbol fast path + キャッシュが自動で効く。
-func executeMultiplePatterns(cache tools.ToolCacheInterface, patterns []string, opts SearchOptions) string {
-	collected := collectMultiPatternExecutions(cache, patterns, opts)
-	output := renderMultiPatternOutput(collected, patterns, opts)
-	writeMultiPatternCache(cache, patterns, opts, output, collected)
+func executeMultiplePatterns(cache tools.ToolCacheInterface, contexts []singlePatternExecutionContext, opts SearchOptions) string {
+	collected := collectMultiPatternExecutions(cache, contexts)
+	output := renderMultiPatternOutput(collected, len(contexts), opts)
+	writeMultiPatternCache(cache, contexts, opts, output, collected)
 	return output
 }
 
-func collectMultiPatternExecutions(cache tools.ToolCacheInterface, patterns []string, opts SearchOptions) []formattedPatternExecution {
-	ch := make(chan formattedPatternExecution, len(patterns))
-	for i, p := range patterns {
-		go func(idx int, pat string) {
-			result := executeSinglePatternDetailed(cache, pat, opts)
-			result.Output = strings.TrimSuffix(result.Output, lineRangeHint)
-			ch <- formattedPatternExecution{Index: idx, singlePatternExecution: result}
-		}(i, p)
+func collectMultiPatternExecutions(cache tools.ToolCacheInterface, contexts []singlePatternExecutionContext) []formattedPatternExecution {
+	ch := make(chan formattedPatternExecution, len(contexts))
+	for i, ctx := range contexts {
+		go runMultiPatternExecutionWorker(cache, i, ctx, ch)
 	}
+	return collectOrderedPatternExecutions(len(contexts), ch)
+}
 
-	collected := make([]formattedPatternExecution, len(patterns))
-	for range patterns {
+func runMultiPatternExecutionWorker(cache tools.ToolCacheInterface, idx int, context singlePatternExecutionContext, ch chan<- formattedPatternExecution) {
+	result := executeSinglePatternWithContext(cache, context)
+	ch <- buildFormattedPatternExecution(idx, result)
+}
+
+func buildFormattedPatternExecution(idx int, result singlePatternExecution) formattedPatternExecution {
+	result.Output = strings.TrimSuffix(result.Output, lineRangeHint)
+	return formattedPatternExecution{Index: idx, singlePatternExecution: result}
+}
+
+func collectOrderedPatternExecutions(count int, ch <-chan formattedPatternExecution) []formattedPatternExecution {
+	collected := make([]formattedPatternExecution, count)
+	for i := 0; i < count; i++ {
 		r := <-ch
 		collected[r.Index] = r
 	}
 	return collected
 }
 
-func writeMultiPatternCache(cache tools.ToolCacheInterface, patterns []string, opts SearchOptions, output string, collected []formattedPatternExecution) {
+func writeMultiPatternCache(cache tools.ToolCacheInterface, contexts []singlePatternExecutionContext, opts SearchOptions, output string, collected []formattedPatternExecution) {
 	if cache == nil {
 		return
 	}
-	multiKey := buildMultiCacheKey(patterns)
-	cacheKey := buildMultiSearchCacheKey(opts, patterns)
-	affectedFiles := collectAffectedFilesFromExecutions(collected, opts)
-	cache.SetSearch(multiKey, cacheKey, output, affectedFiles)
+	write := prepareMultiPatternCacheWrite(contexts, opts, collected)
+	cache.SetSearch(write.PatternKey, write.CacheKey, output, write.AffectedFiles)
+}
+
+func prepareMultiPatternCacheWrite(contexts []singlePatternExecutionContext, opts SearchOptions, collected []formattedPatternExecution) multiPatternCacheWrite {
+	return multiPatternCacheWrite{
+		PatternKey:    buildMultiCacheKeyFromContexts(contexts),
+		CacheKey:      buildMultiSearchCacheKeyFromContexts(opts, contexts),
+		AffectedFiles: collectAffectedFilesFromExecutions(collected, opts),
+	}
 }

@@ -274,3 +274,31 @@ func TestBuildMultiSearchCacheKey_OrderIndependent(t *testing.T) {
 		t.Fatalf("expected multi cache key to be order-independent, got %q vs %q", first, second)
 	}
 }
+
+func TestBuildMultiSearchCacheKeyFromContexts_CompatibleWithPatternInput(t *testing.T) {
+	opts := SearchOptions{Path: ".", FileType: "go", Mode: string(SearchModeAuto)}
+
+	patternKey := buildMultiSearchCacheKey(opts, []string{"Close", `\.Close\(\)`})
+	contextKey := buildMultiSearchCacheKeyFromContexts(opts, []singlePatternExecutionContext{
+		newSinglePatternExecutionContext(`\.Close\(\)`, opts),
+		newSinglePatternExecutionContext("Close", opts),
+	})
+
+	if patternKey != contextKey {
+		t.Fatalf("expected contexts-based key to match pattern input key, got %q vs %q", patternKey, contextKey)
+	}
+}
+
+func TestBuildMultiCacheKeyFromContexts_CompatibleWithPatternInput(t *testing.T) {
+	opts := SearchOptions{Path: ".", FileType: "go", Mode: string(SearchModeAuto)}
+
+	patternKey := buildMultiCacheKey([]string{"Close", `\.Close\(\)`})
+	contextKey := buildMultiCacheKeyFromContexts([]singlePatternExecutionContext{
+		newSinglePatternExecutionContext(`\.Close\(\)`, opts),
+		newSinglePatternExecutionContext("Close", opts),
+	})
+
+	if patternKey != contextKey {
+		t.Fatalf("expected contexts-based multi key to match pattern input key, got %q vs %q", patternKey, contextKey)
+	}
+}

@@ -1,6 +1,7 @@
 package search
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -52,7 +53,7 @@ func TestRenderMultiPatternOutput_DedupesGroupedSymbolBundleSection(t *testing.T
 		},
 	}
 
-	result := renderMultiPatternOutput(collected, []string{"Close", "(*Agent).Close", "run"}, SearchOptions{})
+	result := renderMultiPatternOutput(collected, 3, SearchOptions{})
 	if count := strings.Count(result, "━━ Symbol Bundle:"); count != 1 {
 		t.Fatalf("expected one grouped bundle section, got %d:\n%s", count, result)
 	}
@@ -67,5 +68,93 @@ func TestRenderMultiPatternOutput_DedupesGroupedSymbolBundleSection(t *testing.T
 	}
 	if !strings.HasSuffix(result, lineRangeHint) {
 		t.Fatalf("expected lineRangeHint suffix, got:\n%s", result)
+	}
+}
+
+func TestAppendRenderedSection_AppendsMissingTrailingNewline(t *testing.T) {
+	var sb strings.Builder
+	appendRenderedSection(&sb, "first line")
+	if got := sb.String(); got != "first line\n" {
+		t.Fatalf("expected newline to be appended, got %q", got)
+	}
+}
+
+func TestAppendRenderedSection_PreservesExistingTrailingNewline(t *testing.T) {
+	var sb strings.Builder
+	appendRenderedSection(&sb, "first line\n")
+	appendRenderedSection(&sb, "second line")
+	if got := sb.String(); got != "first line\nsecond line\n" {
+		t.Fatalf("unexpected combined output: %s", fmt.Sprintf("%q", got))
+	}
+}
+
+func TestPatternSymbolBundleCandidates_IncludesPatternAndRouteCandidates(t *testing.T) {
+	execution := formattedPatternExecution{
+		singlePatternExecution: singlePatternExecution{
+			Pattern: "Close",
+			Route: searchRouteTrace{
+				SymbolCandidates: []string{"Close", "(*Agent).Close"},
+			},
+		},
+	}
+
+	got := patternSymbolBundleCandidates(execution)
+	want := []string{"Close", "Close", "(*Agent).Close"}
+	if len(got) != len(want) {
+		t.Fatalf("unexpected candidate count: got=%d want=%d (%v)", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("unexpected candidate[%d]: got=%q want=%q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestGroupPatternSymbolBundles_MergesPatternCandidatesByCanonical(t *testing.T) {
+	bundle := &SymbolBundle{
+		Identity: SymbolBundleIdentity{
+			Canonical: "example.Agent.Close",
+		},
+	}
+	collected := []formattedPatternExecution{
+		{
+			singlePatternExecution: singlePatternExecution{
+				Pattern: "Close",
+				Bundle:  bundle,
+				Route: searchRouteTrace{
+					SymbolCandidates: []string{"Close", "(*Agent).Close"},
+				},
+			},
+		},
+		{
+			singlePatternExecution: singlePatternExecution{
+				Pattern: "(*Agent).Close",
+				Bundle:  bundle,
+				Route: searchRouteTrace{
+					SymbolCandidates: []string{"(*Agent).Close", "Close"},
+				},
+			},
+		},
+		{
+			singlePatternExecution: singlePatternExecution{
+				Pattern: "run",
+			},
+		},
+	}
+
+	groups := groupPatternSymbolBundles(collected)
+	group, ok := groups["example.Agent.Close"]
+	if !ok {
+		t.Fatalf("expected canonical group to exist: %#v", groups)
+	}
+
+	want := []string{"Close", "(*Agent).Close"}
+	if len(group.Patterns) != len(want) {
+		t.Fatalf("unexpected grouped patterns: got=%v want=%v", group.Patterns, want)
+	}
+	for i := range want {
+		if group.Patterns[i] != want[i] {
+			t.Fatalf("unexpected grouped pattern[%d]: got=%q want=%q", i, group.Patterns[i], want[i])
+		}
 	}
 }

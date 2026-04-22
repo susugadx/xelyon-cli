@@ -6,6 +6,16 @@ import (
 	"strings"
 )
 
+type primaryAffectedPathCollector struct {
+	seen  map[string]bool
+	paths []string
+}
+
+type affectedFileCandidateResolution struct {
+	Matched  string
+	Fallback string
+}
+
 func collectFilePaths(results []SearchResult, opts SearchOptions) []string {
 	paths := make([]string, 0, len(results))
 	for _, r := range results {
@@ -51,50 +61,80 @@ func collectSymbolBundleAffectedFiles(bundle *SymbolBundle, opts SearchOptions) 
 
 	paths := make([]string, 0, 1+len(bundle.Sections))
 	rootPath := strings.TrimSpace(bundle.Debug.FileRootPath)
-	add := func(file string) {
-		if absPath := absoluteAffectedFilePathForBundle(file, opts, rootPath); absPath != "" {
-			paths = append(paths, absPath)
-		}
-	}
-	addItem := func(item SymbolBundleItem) {
-		if resolved := cleanResolvedLocatorPath(item.ResolvedPath); resolved != "" {
-			paths = append(paths, resolved)
-			return
-		}
-		add(item.File)
-	}
+	paths = appendBundleFileAffectedPath(paths, bundle.Definition.File, opts, rootPath)
+	paths = appendBundleSectionAffectedPaths(paths, bundle.Sections, opts, rootPath)
+	paths = appendBundleImpactAffectedPaths(paths, bundle.Impact, opts, rootPath)
+	paths = appendBundleDependencyAffectedPaths(paths, bundle.Debug.DependencyFiles, rootPath)
+	return dedupePaths(paths)
+}
 
-	add(bundle.Definition.File)
-	for _, section := range bundle.Sections {
+func appendBundleSectionAffectedPaths(paths []string, sections []SymbolBundleSection, opts SearchOptions, rootPath string) []string {
+	for _, section := range sections {
 		for _, item := range section.Items {
-			addItem(item)
+			paths = appendBundleItemAffectedPath(paths, item, opts, rootPath)
 		}
 	}
-	if bundle.Impact != nil {
-		for _, item := range bundle.Impact.RecommendedReads {
-			addItem(item)
-		}
+	return paths
+}
+
+func appendBundleImpactAffectedPaths(paths []string, impact *SymbolBundleImpact, opts SearchOptions, rootPath string) []string {
+	if impact == nil {
+		return paths
 	}
-	for _, file := range bundle.Debug.DependencyFiles {
+	for _, item := range impact.RecommendedReads {
+		paths = appendBundleItemAffectedPath(paths, item, opts, rootPath)
+	}
+	return paths
+}
+
+func appendBundleDependencyAffectedPaths(paths []string, dependencyFiles []string, rootPath string) []string {
+	for _, file := range dependencyFiles {
 		if absPath := absoluteAffectedFilePathWithBase(file, rootPath); absPath != "" {
 			paths = append(paths, absPath)
 		}
 	}
-	return dedupePaths(paths)
+	return paths
+}
+
+func appendBundleItemAffectedPath(paths []string, item SymbolBundleItem, opts SearchOptions, rootPath string) []string {
+	if resolved := cleanResolvedLocatorPath(item.ResolvedPath); resolved != "" {
+		return append(paths, resolved)
+	}
+	return appendBundleFileAffectedPath(paths, item.File, opts, rootPath)
+}
+
+func appendBundleFileAffectedPath(paths []string, file string, opts SearchOptions, rootPath string) []string {
+	if absPath := absoluteAffectedFilePathForBundle(file, opts, rootPath); absPath != "" {
+		return append(paths, absPath)
+	}
+	return paths
 }
 
 func collectPrimaryAffectedFilePathsFromOutput(output string, opts SearchOptions) []string {
-	var paths []string
-	seen := make(map[string]bool)
+	collector := newPrimaryAffectedPathCollector()
 	for _, ref := range extractPrimaryFileRefs(output, opts) {
-		absPath := ref.ResolvedPath
-		if absPath == "" || seen[absPath] {
-			continue
-		}
-		seen[absPath] = true
-		paths = append(paths, absPath)
+		collector.addRef(ref)
 	}
-	return paths
+	return collector.results()
+}
+
+func newPrimaryAffectedPathCollector() *primaryAffectedPathCollector {
+	return &primaryAffectedPathCollector{
+		seen: make(map[string]bool),
+	}
+}
+
+func (collector *primaryAffectedPathCollector) addRef(ref primaryFileRef) {
+	absPath := strings.TrimSpace(ref.ResolvedPath)
+	if absPath == "" || collector.seen[absPath] {
+		return
+	}
+	collector.seen[absPath] = true
+	collector.paths = append(collector.paths, absPath)
+}
+
+func (collector *primaryAffectedPathCollector) results() []string {
+	return collector.paths
 }
 
 type affectedFileSource int
@@ -103,6 +143,13 @@ const (
 	affectedFileSourceText affectedFileSource = iota
 	affectedFileSourceSymbol
 )
+
+type affectedFileBaseResolver func(opts SearchOptions) string
+
+var affectedFileBaseResolvers = map[affectedFileSource]affectedFileBaseResolver{
+	affectedFileSourceText:   resolveTextAffectedFileBase,
+	affectedFileSourceSymbol: resolveSymbolAffectedFileBase,
+}
 
 func absoluteAffectedFilePath(file string, opts SearchOptions, source affectedFileSource) string {
 	return absoluteAffectedFilePathWithBase(file, affectedFileBasePath(opts, source))
@@ -113,20 +160,7 @@ func absoluteAffectedFilePathForSymbol(file string, opts SearchOptions, rootPath
 }
 
 func absoluteAffectedFilePathForBundle(file string, opts SearchOptions, rootPath string) string {
-	bases := make([]string, 0, 4)
-	if rootPath = strings.TrimSpace(rootPath); rootPath != "" {
-		bases = append(bases, rootPath)
-	}
-	if root := strings.TrimSpace(opts.ProjectMapRootPath); root != "" {
-		bases = append(bases, root)
-	}
-	if cwd := strings.TrimSpace(opts.InvocationCWD); cwd != "" {
-		bases = append(bases, cwd)
-	}
-	if cwd := invocationCWDOrGetwd(opts); cwd != "" {
-		bases = append(bases, cwd)
-	}
-	return absoluteAffectedFilePathWithPreferredBases(file, bases...)
+	return absoluteAffectedFilePathWithPreferredBases(file, bundleAffectedFileBaseCandidates(opts, rootPath)...)
 }
 
 func absoluteAffectedFilePathWithBase(file, basePath string) string {
@@ -141,28 +175,50 @@ func absoluteAffectedFilePathWithPreferredBases(file string, basePaths ...string
 	if filepath.IsAbs(file) {
 		return filepath.Clean(file)
 	}
+	resolution := resolveAffectedFileCandidateFromBases(file, basePaths)
+	if resolution.Matched != "" {
+		return resolution.Matched
+	}
+	if resolution.Fallback != "" {
+		return resolution.Fallback
+	}
+	return fallbackAbsoluteAffectedFilePath(file)
+}
 
-	var fallback string
+func resolveAffectedFileCandidateFromBases(file string, basePaths []string) affectedFileCandidateResolution {
+	resolution := affectedFileCandidateResolution{}
+	for _, basePath := range normalizedUniqueBasePaths(basePaths) {
+		candidate := affectedFileCandidatePath(file, basePath)
+		if resolution.Fallback == "" {
+			resolution.Fallback = candidate
+		}
+		if affectedFileExists(candidate) {
+			resolution.Matched = candidate
+			return resolution
+		}
+	}
+	return resolution
+}
+
+func normalizedUniqueBasePaths(basePaths []string) []string {
 	seen := make(map[string]bool, len(basePaths))
+	normalized := make([]string, 0, len(basePaths))
 	for _, basePath := range basePaths {
 		basePath = normalizeAffectedFileBase(basePath)
 		if basePath == "" || seen[basePath] {
 			continue
 		}
 		seen[basePath] = true
-		candidate := filepath.Clean(filepath.Join(basePath, filepath.FromSlash(file)))
-		if fallback == "" {
-			fallback = candidate
-		}
-		if affectedFileExists(candidate) {
-			return candidate
-		}
+		normalized = append(normalized, basePath)
 	}
+	return normalized
+}
 
-	if fallback != "" {
-		return fallback
-	}
+func affectedFileCandidatePath(file, basePath string) string {
+	return filepath.Clean(filepath.Join(basePath, filepath.FromSlash(file)))
+}
 
+func fallbackAbsoluteAffectedFilePath(file string) string {
 	if absPath, err := filepath.Abs(filepath.FromSlash(file)); err == nil {
 		return filepath.Clean(absPath)
 	}
@@ -186,12 +242,19 @@ func affectedFileExists(path string) bool {
 }
 
 func symbolAffectedFileBaseCandidates(opts SearchOptions, rootPath string) []string {
-	bases := make([]string, 0, 4)
-	if root := strings.TrimSpace(opts.ProjectMapRootPath); root != "" {
-		bases = append(bases, root)
-	}
-	if rootPath = strings.TrimSpace(rootPath); rootPath != "" {
-		bases = append(bases, rootPath)
+	return affectedFileBaseCandidates(opts, opts.ProjectMapRootPath, rootPath)
+}
+
+func bundleAffectedFileBaseCandidates(opts SearchOptions, rootPath string) []string {
+	return affectedFileBaseCandidates(opts, rootPath, opts.ProjectMapRootPath)
+}
+
+func affectedFileBaseCandidates(opts SearchOptions, prioritized ...string) []string {
+	bases := make([]string, 0, len(prioritized)+2)
+	for _, base := range prioritized {
+		if base = strings.TrimSpace(base); base != "" {
+			bases = append(bases, base)
+		}
 	}
 	if cwd := strings.TrimSpace(opts.InvocationCWD); cwd != "" {
 		bases = append(bases, cwd)
@@ -203,34 +266,28 @@ func symbolAffectedFileBaseCandidates(opts SearchOptions, rootPath string) []str
 }
 
 func affectedFileBasePath(opts SearchOptions, source affectedFileSource) string {
-	switch source {
-	case affectedFileSourceSymbol:
-		if root := strings.TrimSpace(opts.ProjectMapRootPath); root != "" {
-			if abs, err := filepath.Abs(root); err == nil {
-				return abs
-			}
-			return filepath.Clean(root)
-		}
-	case affectedFileSourceText:
-		if root := searchFileFilterMatchRootWithWorkspace(opts.Path, resolveSearchWorkspaceRoot(opts)); root != "" {
+	if resolver, ok := affectedFileBaseResolvers[source]; ok {
+		if root := normalizeAffectedFileBase(resolver(opts)); root != "" {
 			return root
 		}
 	}
 	return invocationCWDOrGetwd(opts)
 }
 
+func resolveSymbolAffectedFileBase(opts SearchOptions) string {
+	return opts.ProjectMapRootPath
+}
+
+func resolveTextAffectedFileBase(opts SearchOptions) string {
+	return searchFileFilterMatchRootWithWorkspace(opts.Path, resolveSearchWorkspaceRoot(opts))
+}
+
 func invocationCWDOrGetwd(opts SearchOptions) string {
-	if cwd := strings.TrimSpace(opts.InvocationCWD); cwd != "" {
-		if abs, err := filepath.Abs(cwd); err == nil {
-			return abs
-		}
-		return filepath.Clean(cwd)
+	if cwd := normalizeAffectedFileBase(opts.InvocationCWD); cwd != "" {
+		return cwd
 	}
 	if cwd, err := os.Getwd(); err == nil {
-		if abs, err := filepath.Abs(cwd); err == nil {
-			return abs
-		}
-		return filepath.Clean(cwd)
+		return normalizeAffectedFileBase(cwd)
 	}
 	return ""
 }

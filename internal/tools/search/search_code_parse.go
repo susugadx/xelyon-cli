@@ -30,94 +30,152 @@ type rgBeginData struct {
 	Path rgPath `json:"path"`
 }
 
+type parsedSearchLine struct {
+	FilePath string
+	LineNum  int
+	Line     string
+	IsMatch  bool
+	Type     MatchType
+}
+
+type searchResultCollector struct {
+	fileMap         map[string]*SearchResult
+	fileOrder       []string
+	totalMatches    int
+	maxTotalMatches int
+}
+
+func newSearchResultCollector(maxTotalMatches int) *searchResultCollector {
+	return &searchResultCollector{
+		fileMap:         make(map[string]*SearchResult),
+		maxTotalMatches: maxTotalMatches,
+	}
+}
+
+func (c *searchResultCollector) ensureFile(filePath string) {
+	if _, exists := c.fileMap[filePath]; exists {
+		return
+	}
+	c.fileMap[filePath] = &SearchResult{FilePath: filePath}
+	c.fileOrder = append(c.fileOrder, filePath)
+}
+
+func (c *searchResultCollector) addLine(line parsedSearchLine) bool {
+	c.ensureFile(line.FilePath)
+	sr := c.fileMap[line.FilePath]
+	sr.Matches = append(sr.Matches, Match{
+		LineNum: line.LineNum,
+		Line:    line.Line,
+		IsMatch: line.IsMatch,
+		Type:    line.Type,
+	})
+	if !line.IsMatch {
+		return false
+	}
+
+	sr.MatchCount++
+	c.totalMatches++
+	return c.maxTotalMatches > 0 && c.totalMatches >= c.maxTotalMatches
+}
+
+func (c *searchResultCollector) results() []SearchResult {
+	results := make([]SearchResult, 0, len(c.fileOrder))
+	for _, fp := range c.fileOrder {
+		results = append(results, *c.fileMap[fp])
+	}
+	return results
+}
+
 func parseRipgrepJSON(output string, maxTotalMatches int) []SearchResult {
 	if output == "" {
 		return nil
 	}
 
-	fileMap := make(map[string]*SearchResult)
-	var fileOrder []string
+	collector := newSearchResultCollector(maxTotalMatches)
 	var currentFile string
-	totalMatches := 0
 
-	lines := strings.Split(strings.TrimSpace(output), "\n")
-outer:
-	for _, line := range lines {
-		if line == "" {
-			continue
+	scanSearchOutputLines(output, func(line string) bool {
+		entry, ok := decodeRipgrepJSONEntry(line)
+		if !ok {
+			return false
 		}
+		var shouldStop bool
+		currentFile, shouldStop = appendRipgrepEntry(entry, currentFile, collector)
+		return shouldStop
+	})
 
-		var entry rgJSONLine
-		if err := json.Unmarshal([]byte(line), &entry); err != nil {
-			continue
+	return collector.results()
+}
+
+func appendRipgrepEntry(entry rgJSONLine, currentFile string, collector *searchResultCollector) (string, bool) {
+	switch entry.Type {
+	case "begin":
+		if data, ok := decodeRipgrepBeginData(entry); ok {
+			currentFile = normalizeSearchResultFilePath(data.Path.Text)
+			collector.ensureFile(currentFile)
 		}
-
-		switch entry.Type {
-		case "begin":
-			var data rgBeginData
-			if err := json.Unmarshal(entry.Data, &data); err == nil {
-				currentFile = normalizeSearchResultFilePath(data.Path.Text)
-				if _, exists := fileMap[currentFile]; !exists {
-					fileMap[currentFile] = &SearchResult{FilePath: currentFile}
-					fileOrder = append(fileOrder, currentFile)
-				}
-			}
-
-		case "match":
-			var data rgMatchData
-			if err := json.Unmarshal(entry.Data, &data); err == nil {
-				filePath := currentFile
-				if data.Path.Text != "" {
-					filePath = normalizeSearchResultFilePath(data.Path.Text)
-				}
-				if _, exists := fileMap[filePath]; !exists {
-					fileMap[filePath] = &SearchResult{FilePath: filePath}
-					fileOrder = append(fileOrder, filePath)
-				}
-				sr := fileMap[filePath]
-				lineText := strings.TrimRight(data.Lines.Text, "\n")
-				sr.Matches = append(sr.Matches, Match{
-					LineNum: data.LineNumber,
-					Line:    lineText,
-					IsMatch: true,
-					Type:    classifyMatch(lineText),
-				})
-				sr.MatchCount++
-				totalMatches++
-				if maxTotalMatches > 0 && totalMatches >= maxTotalMatches {
-					break outer
-				}
-			}
-
-		case "context":
-			var data rgMatchData
-			if err := json.Unmarshal(entry.Data, &data); err == nil {
-				filePath := currentFile
-				if data.Path.Text != "" {
-					filePath = normalizeSearchResultFilePath(data.Path.Text)
-				}
-				if _, exists := fileMap[filePath]; !exists {
-					fileMap[filePath] = &SearchResult{FilePath: filePath}
-					fileOrder = append(fileOrder, filePath)
-				}
-				sr := fileMap[filePath]
-				sr.Matches = append(sr.Matches, Match{
-					LineNum: data.LineNumber,
-					Line:    strings.TrimRight(data.Lines.Text, "\n"),
-					IsMatch: false,
-					Type:    MatchTypeRef,
-				})
-			}
-
-			// "end", "summary" -> 無視
+		return currentFile, false
+	case "match":
+		if data, ok := decodeRipgrepMatchData(entry); ok {
+			record := buildRipgrepParsedLine(currentFile, data, true)
+			return currentFile, collector.addLine(record)
 		}
+		return currentFile, false
+	case "context":
+		if data, ok := decodeRipgrepMatchData(entry); ok {
+			collector.addLine(buildRipgrepParsedLine(currentFile, data, false))
+		}
+		return currentFile, false
+	default:
+		return currentFile, false
 	}
+}
 
-	var results []SearchResult
-	for _, fp := range fileOrder {
-		results = append(results, *fileMap[fp])
+func decodeRipgrepJSONEntry(line string) (rgJSONLine, bool) {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return rgJSONLine{}, false
 	}
-	return results
+	var entry rgJSONLine
+	if err := json.Unmarshal([]byte(line), &entry); err != nil {
+		return rgJSONLine{}, false
+	}
+	return entry, true
+}
+
+func decodeRipgrepBeginData(entry rgJSONLine) (rgBeginData, bool) {
+	var data rgBeginData
+	if err := json.Unmarshal(entry.Data, &data); err != nil {
+		return rgBeginData{}, false
+	}
+	return data, true
+}
+
+func decodeRipgrepMatchData(entry rgJSONLine) (rgMatchData, bool) {
+	var data rgMatchData
+	if err := json.Unmarshal(entry.Data, &data); err != nil {
+		return rgMatchData{}, false
+	}
+	return data, true
+}
+
+func buildRipgrepParsedLine(currentFile string, data rgMatchData, isMatch bool) parsedSearchLine {
+	filePath := currentFile
+	if data.Path.Text != "" {
+		filePath = normalizeSearchResultFilePath(data.Path.Text)
+	}
+	lineText := strings.TrimRight(data.Lines.Text, "\n")
+	matchType := MatchTypeRef
+	if isMatch {
+		matchType = classifyMatch(lineText)
+	}
+	return parsedSearchLine{
+		FilePath: filePath,
+		LineNum:  data.LineNumber,
+		Line:     lineText,
+		IsMatch:  isMatch,
+		Type:     matchType,
+	}
 }
 
 func parseGrepOutput(output string, maxTotalMatches int) []SearchResult {
@@ -125,52 +183,49 @@ func parseGrepOutput(output string, maxTotalMatches int) []SearchResult {
 		return nil
 	}
 
-	fileMap := make(map[string]*SearchResult)
-	var fileOrder []string
-	totalMatches := 0
+	collector := newSearchResultCollector(maxTotalMatches)
+	scanSearchOutputLines(output, func(line string) bool {
+		return appendGrepParsedLine(line, collector)
+	})
 
-	lines := strings.Split(strings.TrimSpace(output), "\n")
-outer:
-	for _, line := range lines {
-		if line == "--" {
-			continue
-		}
+	return collector.results()
+}
 
-		filePath, lineNum, content, isMatch := parseGrepLine(line)
-		if filePath == "" {
-			continue
-		}
-
-		if _, exists := fileMap[filePath]; !exists {
-			fileMap[filePath] = &SearchResult{FilePath: filePath}
-			fileOrder = append(fileOrder, filePath)
-		}
-
-		sr := fileMap[filePath]
-		matchType := MatchTypeRef
-		if isMatch {
-			matchType = classifyMatch(content)
-		}
-		sr.Matches = append(sr.Matches, Match{
-			LineNum: lineNum,
-			Line:    content,
-			IsMatch: isMatch,
-			Type:    matchType,
-		})
-		if isMatch {
-			sr.MatchCount++
-			totalMatches++
-			if maxTotalMatches > 0 && totalMatches >= maxTotalMatches {
-				break outer
-			}
+func scanSearchOutputLines(output string, consume func(line string) bool) {
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		if consume(line) {
+			return
 		}
 	}
+}
 
-	var results []SearchResult
-	for _, fp := range fileOrder {
-		results = append(results, *fileMap[fp])
+func appendGrepParsedLine(line string, collector *searchResultCollector) bool {
+	if line == "--" {
+		return false
 	}
-	return results
+	record, ok := decodeGrepParsedLine(line)
+	if !ok {
+		return false
+	}
+	return collector.addLine(record)
+}
+
+func decodeGrepParsedLine(line string) (parsedSearchLine, bool) {
+	filePath, lineNum, content, isMatch := parseGrepLine(line)
+	if filePath == "" {
+		return parsedSearchLine{}, false
+	}
+	matchType := MatchTypeRef
+	if isMatch {
+		matchType = classifyMatch(content)
+	}
+	return parsedSearchLine{
+		FilePath: filePath,
+		LineNum:  lineNum,
+		Line:     content,
+		IsMatch:  isMatch,
+		Type:     matchType,
+	}, true
 }
 
 // parseGrepLine は grep の1行をパースする

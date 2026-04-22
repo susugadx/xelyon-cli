@@ -105,42 +105,64 @@ func executeImpactSearch(cache tools.ToolCacheInterface, opts SearchOptions) str
 		return structured
 	}
 
-	basePatterns := expandImpactPatterns(strings.TrimSpace(opts.Pattern), opts)
+	basePatterns := impactBasePatterns(opts)
 	if len(basePatterns) == 0 {
 		return "Error: pattern is required"
 	}
 
 	baseOutput := executeSearchPatterns(cache, basePatterns, opts)
-	if impactOutputHasTestCoverage(baseOutput) || len(basePatterns) >= impactPatternExpansionCap {
+	if !shouldAppendImpactTestProbe(baseOutput, basePatterns) {
 		return baseOutput
 	}
 
-	testProbe := impactTestProbePattern(opts.Pattern)
-	if testProbe == "" {
+	finalPatterns := appendImpactTestProbePattern(basePatterns, opts.Pattern)
+	if len(finalPatterns) == len(basePatterns) {
 		return baseOutput
 	}
-	for _, existing := range basePatterns {
-		if existing == testProbe {
-			return baseOutput
-		}
-	}
-
-	finalPatterns := append(append([]string(nil), basePatterns...), testProbe)
 	return executeSearchPatterns(cache, finalPatterns, opts)
 }
 
-func executeSearchPatterns(cache tools.ToolCacheInterface, patterns []string, opts SearchOptions) string {
-	if len(patterns) > 1 {
-		multiKey := buildMultiCacheKey(patterns)
-		cacheKey := buildMultiSearchCacheKey(opts, patterns)
-		if cache != nil {
-			if cached, ok := cache.GetSearch(multiKey, cacheKey); ok {
-				return cached
-			}
-		}
-		return executeMultiplePatterns(cache, patterns, opts)
+func impactBasePatterns(opts SearchOptions) []string {
+	return expandImpactPatterns(strings.TrimSpace(opts.Pattern), opts)
+}
+
+func shouldAppendImpactTestProbe(baseOutput string, basePatterns []string) bool {
+	return !impactOutputHasTestCoverage(baseOutput) && len(basePatterns) < impactPatternExpansionCap
+}
+
+func appendImpactTestProbePattern(basePatterns []string, pattern string) []string {
+	testProbe := impactTestProbePattern(pattern)
+	if testProbe == "" {
+		return basePatterns
 	}
-	return executeSinglePattern(cache, patterns[0], opts)
+	for _, existing := range basePatterns {
+		if existing == testProbe {
+			return basePatterns
+		}
+	}
+	return append(append([]string(nil), basePatterns...), testProbe)
+}
+
+func executeSearchPatterns(cache tools.ToolCacheInterface, patterns []string, opts SearchOptions) string {
+	if len(patterns) <= 1 {
+		return executeSinglePattern(cache, patterns[0], opts)
+	}
+
+	return executeMultipleSearchPatterns(cache, newSinglePatternExecutionContexts(patterns, opts), opts)
+}
+
+func executeMultipleSearchPatterns(cache tools.ToolCacheInterface, contexts []singlePatternExecutionContext, opts SearchOptions) string {
+	if cached, ok := loadCachedMultiPatternSearch(cache, contexts, opts); ok {
+		return cached
+	}
+	return executeMultiplePatterns(cache, contexts, opts)
+}
+
+func loadCachedMultiPatternSearch(cache tools.ToolCacheInterface, contexts []singlePatternExecutionContext, opts SearchOptions) (string, bool) {
+	if cache == nil {
+		return "", false
+	}
+	return cache.GetSearch(buildMultiCacheKeyFromContexts(contexts), buildMultiSearchCacheKeyFromContexts(opts, contexts))
 }
 
 func impactOutputHasTestCoverage(output string) bool {

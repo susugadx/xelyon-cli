@@ -7,62 +7,6 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/locator"
 )
 
-func parseNumberedCandidateFilePath(line string) (string, bool) {
-	line = strings.TrimSpace(line)
-	if line == "" {
-		return "", false
-	}
-	dotIdx := strings.Index(line, ".")
-	if dotIdx <= 0 {
-		return "", false
-	}
-	for _, r := range line[:dotIdx] {
-		if r < '0' || r > '9' {
-			return "", false
-		}
-	}
-	rest := strings.TrimSpace(line[dotIdx+1:])
-	if rest == "" {
-		return "", false
-	}
-	if idx := strings.Index(rest, " function "); idx > 0 {
-		return strings.TrimSpace(rest[:idx]), true
-	}
-	if idx := strings.Index(rest, " method "); idx > 0 {
-		return strings.TrimSpace(rest[:idx]), true
-	}
-	if idx := strings.Index(rest, " type "); idx > 0 {
-		return strings.TrimSpace(rest[:idx]), true
-	}
-	if idx := strings.Index(rest, " interface "); idx > 0 {
-		return strings.TrimSpace(rest[:idx]), true
-	}
-	if idx := strings.Index(rest, " const "); idx > 0 {
-		return strings.TrimSpace(rest[:idx]), true
-	}
-	if idx := strings.Index(rest, " var "); idx > 0 {
-		return strings.TrimSpace(rest[:idx]), true
-	}
-	return "", false
-}
-
-func hasNumericListPrefix(line string) bool {
-	line = strings.TrimSpace(line)
-	if line == "" {
-		return false
-	}
-	dotIdx := strings.Index(line, ".")
-	if dotIdx <= 0 {
-		return false
-	}
-	for _, r := range line[:dotIdx] {
-		if r < '0' || r > '9' {
-			return false
-		}
-	}
-	return true
-}
-
 func classifyFilePath(path string) string {
 	base := filepath.Base(path)
 	if strings.HasSuffix(base, "_test.go") || strings.Contains(base, ".test.") ||
@@ -81,6 +25,10 @@ func buildCrossPatternIndex(patterns, outputs []string, reg *locator.Registry) s
 }
 
 func buildCrossPatternIndexWithOptions(patterns, outputs []string, reg *locator.Registry, opts SearchOptions) string {
+	return buildCrossPatternIndexFromExecutions(buildCrossPatternExecutions(patterns, outputs), reg, opts)
+}
+
+func buildCrossPatternExecutions(patterns, outputs []string) []formattedPatternExecution {
 	collected := make([]formattedPatternExecution, 0, min(len(patterns), len(outputs)))
 	for i, output := range outputs {
 		if i >= len(patterns) {
@@ -94,7 +42,7 @@ func buildCrossPatternIndexWithOptions(patterns, outputs []string, reg *locator.
 			},
 		})
 	}
-	return buildCrossPatternIndexFromExecutions(collected, reg, opts)
+	return collected
 }
 
 type crossPatternIndexEntry struct {
@@ -109,45 +57,105 @@ type crossPatternIndexSections struct {
 	configKeys []string
 }
 
-func buildCrossPatternIndexFromExecutions(collected []formattedPatternExecution, reg *locator.Registry, opts SearchOptions) string {
-	fileMap, order := collectCrossPatternIndexEntries(collected, opts)
-	if len(order) == 0 {
-		return ""
-	}
+type crossPatternIndexCollector struct {
+	fileMap map[string]*crossPatternIndexEntry
+	order   []string
+}
 
-	sections := splitCrossPatternIndexSections(fileMap, order)
-	hasHotspot := hasCrossPatternHotspot(fileMap)
-	if !shouldRenderCrossPatternIndex(order, sections, hasHotspot) {
+type crossPatternIndexData struct {
+	fileMap    map[string]*crossPatternIndexEntry
+	order      []string
+	sections   crossPatternIndexSections
+	hasHotspot bool
+}
+
+type crossPatternIndexRenderPolicy struct {
+	MinCategoryCount int
+	MinUniqueFiles   int
+}
+
+var defaultCrossPatternIndexRenderPolicy = crossPatternIndexRenderPolicy{
+	MinCategoryCount: 2,
+	MinUniqueFiles:   3,
+}
+
+func buildCrossPatternIndexFromExecutions(collected []formattedPatternExecution, reg *locator.Registry, opts SearchOptions) string {
+	data := buildCrossPatternIndexData(collected, opts)
+	if data.isEmpty() {
 		return ""
 	}
-	return renderCrossPatternIndex(fileMap, order, sections, reg)
+	if !data.shouldRender() {
+		return ""
+	}
+	return renderCrossPatternIndex(data.fileMap, data.order, data.sections, reg)
+}
+
+func buildCrossPatternIndexData(collected []formattedPatternExecution, opts SearchOptions) crossPatternIndexData {
+	fileMap, order := collectCrossPatternIndexEntries(collected, opts)
+	sections, hasHotspot := summarizeCrossPatternIndex(fileMap, order)
+	return crossPatternIndexData{
+		fileMap:    fileMap,
+		order:      order,
+		sections:   sections,
+		hasHotspot: hasHotspot,
+	}
+}
+
+func (d crossPatternIndexData) isEmpty() bool {
+	return len(d.order) == 0
+}
+
+func (d crossPatternIndexData) shouldRender() bool {
+	return shouldRenderCrossPatternIndex(d.order, d.sections, d.hasHotspot)
 }
 
 func collectCrossPatternIndexEntries(collected []formattedPatternExecution, opts SearchOptions) (map[string]*crossPatternIndexEntry, []string) {
-	fileMap := make(map[string]*crossPatternIndexEntry)
-	var order []string
+	collector := newCrossPatternIndexCollector()
 	for _, execution := range collected {
 		for _, ref := range primaryFileRefsFromExecution(execution, opts) {
-			key := ref.DisplayPath + "\x00" + ref.ResolvedPath
-			if entry, ok := fileMap[key]; ok {
-				entry.patternCount++
-				continue
-			}
-			fileMap[key] = &crossPatternIndexEntry{
-				ref:          ref,
-				patternCount: 1,
-				category:     classifyFilePath(ref.DisplayPath),
-			}
-			order = append(order, key)
+			collector.addRef(ref)
 		}
 	}
-	return fileMap, order
+	return collector.results()
 }
 
-func splitCrossPatternIndexSections(fileMap map[string]*crossPatternIndexEntry, order []string) crossPatternIndexSections {
+func crossPatternIndexEntryKey(ref primaryFileRef) string {
+	return ref.DisplayPath + "\x00" + ref.ResolvedPath
+}
+
+func newCrossPatternIndexCollector() *crossPatternIndexCollector {
+	return &crossPatternIndexCollector{
+		fileMap: make(map[string]*crossPatternIndexEntry),
+	}
+}
+
+func (collector *crossPatternIndexCollector) addRef(ref primaryFileRef) {
+	key := crossPatternIndexEntryKey(ref)
+	if entry, ok := collector.fileMap[key]; ok {
+		entry.patternCount++
+		return
+	}
+	collector.fileMap[key] = &crossPatternIndexEntry{
+		ref:          ref,
+		patternCount: 1,
+		category:     classifyFilePath(ref.DisplayPath),
+	}
+	collector.order = append(collector.order, key)
+}
+
+func (collector *crossPatternIndexCollector) results() (map[string]*crossPatternIndexEntry, []string) {
+	return collector.fileMap, collector.order
+}
+
+func summarizeCrossPatternIndex(fileMap map[string]*crossPatternIndexEntry, order []string) (crossPatternIndexSections, bool) {
 	sections := crossPatternIndexSections{}
+	hasHotspot := false
 	for _, key := range order {
-		switch fileMap[key].category {
+		entry := fileMap[key]
+		if entry.patternCount > 1 {
+			hasHotspot = true
+		}
+		switch entry.category {
 		case "test":
 			sections.testKeys = append(sections.testKeys, key)
 		case "config":
@@ -156,19 +164,14 @@ func splitCrossPatternIndexSections(fileMap map[string]*crossPatternIndexEntry, 
 			sections.implKeys = append(sections.implKeys, key)
 		}
 	}
-	return sections
-}
-
-func hasCrossPatternHotspot(fileMap map[string]*crossPatternIndexEntry) bool {
-	for _, entry := range fileMap {
-		if entry.patternCount > 1 {
-			return true
-		}
-	}
-	return false
+	return sections, hasHotspot
 }
 
 func shouldRenderCrossPatternIndex(order []string, sections crossPatternIndexSections, hasHotspot bool) bool {
+	return defaultCrossPatternIndexRenderPolicy.shouldRender(order, sections, hasHotspot)
+}
+
+func (sections crossPatternIndexSections) categoryCount() int {
 	categoryCount := 0
 	if len(sections.implKeys) > 0 {
 		categoryCount++
@@ -179,7 +182,17 @@ func shouldRenderCrossPatternIndex(order []string, sections crossPatternIndexSec
 	if len(sections.configKeys) > 0 {
 		categoryCount++
 	}
-	return hasHotspot || categoryCount >= 2 || len(order) >= 3
+	return categoryCount
+}
+
+func (policy crossPatternIndexRenderPolicy) shouldRender(order []string, sections crossPatternIndexSections, hasHotspot bool) bool {
+	if hasHotspot {
+		return true
+	}
+	if sections.categoryCount() >= policy.MinCategoryCount {
+		return true
+	}
+	return len(order) >= policy.MinUniqueFiles
 }
 
 func primaryFileRefsFromExecution(execution formattedPatternExecution, opts SearchOptions) []primaryFileRef {

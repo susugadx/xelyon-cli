@@ -20,6 +20,38 @@ const (
 	primaryFileRefSourceInvocationRelative
 )
 
+type primaryFileRefCandidate struct {
+	DisplayPath string
+	Source      primaryFileRefSource
+}
+
+type primaryFileRefResolver struct {
+	opts SearchOptions
+	seen map[string]bool
+	refs []primaryFileRef
+}
+
+type primaryFileRefCandidateCollector struct {
+	candidates []primaryFileRefCandidate
+}
+
+type primaryFileRefLineParser func(line string) (primaryFileRefCandidate, bool)
+
+var numberedCandidateKindTokens = []string{
+	" function ",
+	" method ",
+	" type ",
+	" interface ",
+	" const ",
+	" var ",
+}
+
+var primaryFileRefLineParsers = []primaryFileRefLineParser{
+	parseTextPrimaryFileRefCandidate,
+	parseStructuredHeaderPrimaryFileRefCandidate,
+	parseNumberedPrimaryFileRefCandidate,
+}
+
 func newSearchLocator(displayPath, resolvedPath string, line, endLine int, name string) locator.Location {
 	return locator.Location{
 		FilePath:     displayPath,
@@ -63,56 +95,190 @@ func extractPrimaryFilePaths(output string) []string {
 }
 
 func extractPrimaryFileRefs(output string, opts SearchOptions) []primaryFileRef {
-	var refs []primaryFileRef
-	seen := make(map[string]bool)
-	add := func(file string, source primaryFileRefSource) {
-		displayPath := strings.TrimSpace(file)
-		if displayPath == "" {
-			return
-		}
+	candidates := collectPrimaryFileRefCandidates(output)
+	return resolvePrimaryFileRefs(candidates, opts)
+}
 
-		resolvedPath := resolvePrimaryFileRefPath(displayPath, opts, source)
-
-		key := displayPath + "\x00" + cleanResolvedLocatorPath(resolvedPath)
-		if seen[key] {
-			return
-		}
-		seen[key] = true
-		refs = append(refs, primaryFileRef{
-			DisplayPath:  displayPath,
-			ResolvedPath: cleanResolvedLocatorPath(resolvedPath),
-		})
-	}
-
+func collectPrimaryFileRefCandidates(output string) []primaryFileRefCandidate {
+	collector := newPrimaryFileRefCandidateCollector()
 	for _, line := range strings.Split(output, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "📄 ") {
-			rest := strings.TrimPrefix(trimmed, "📄 ")
-			if idx := strings.Index(rest, " ("); idx > 0 {
-				add(rest[:idx], primaryFileRefSourceText)
-			}
-			continue
-		}
-		if strings.HasPrefix(trimmed, "── ") && strings.Contains(trimmed, " in ") && strings.HasSuffix(trimmed, "──") {
-			inIdx := strings.LastIndex(trimmed, " in ")
-			rest := trimmed[inIdx+4:]
-			rest = strings.TrimSuffix(rest, "──")
-			rest = trimRenderedPrimaryFilePath(rest)
-			add(rest, primaryFileRefSourceStructuredSymbol)
-			continue
-		}
-		if hasNumericListPrefix(trimmed) {
-			if numbered, ok := parseNumberedCandidateFilePath(trimmed); ok {
-				add(trimRenderedPrimaryFilePath(numbered), primaryFileRefSourceStructuredSymbol)
-				continue
-			}
-			if idx := strings.LastIndex(trimmed, " in "); idx > 0 {
-				add(trimRenderedPrimaryFilePath(trimmed[idx+4:]), primaryFileRefSourceInvocationRelative)
-				continue
-			}
+		collector.addLine(line)
+	}
+	return collector.results()
+}
+
+func parsePrimaryFileRefCandidateLine(line string) (primaryFileRefCandidate, bool) {
+	trimmed := strings.TrimSpace(line)
+	for _, parser := range primaryFileRefLineParsers {
+		if candidate, ok := parser(trimmed); ok {
+			return candidate, true
 		}
 	}
-	return refs
+	return primaryFileRefCandidate{}, false
+}
+
+func parseTextPrimaryFileRefCandidate(line string) (primaryFileRefCandidate, bool) {
+	if !strings.HasPrefix(line, "📄 ") {
+		return primaryFileRefCandidate{}, false
+	}
+	rest := strings.TrimPrefix(line, "📄 ")
+	idx := strings.Index(rest, " (")
+	if idx <= 0 {
+		return primaryFileRefCandidate{}, false
+	}
+	return primaryFileRefCandidate{
+		DisplayPath: strings.TrimSpace(rest[:idx]),
+		Source:      primaryFileRefSourceText,
+	}, true
+}
+
+func parseStructuredHeaderPrimaryFileRefCandidate(line string) (primaryFileRefCandidate, bool) {
+	if !strings.HasPrefix(line, "── ") || !strings.Contains(line, " in ") || !strings.HasSuffix(line, "──") {
+		return primaryFileRefCandidate{}, false
+	}
+	inIdx := strings.LastIndex(line, " in ")
+	rest := line[inIdx+4:]
+	rest = strings.TrimSuffix(rest, "──")
+	return primaryFileRefCandidate{
+		DisplayPath: trimRenderedPrimaryFilePath(rest),
+		Source:      primaryFileRefSourceStructuredSymbol,
+	}, true
+}
+
+func parseNumberedPrimaryFileRefCandidate(line string) (primaryFileRefCandidate, bool) {
+	rest, ok := splitNumberedListLinePrefix(line)
+	if !ok {
+		return primaryFileRefCandidate{}, false
+	}
+	if numbered, ok := parseNumberedCandidateFilePathWithPolicy(rest, numberedCandidateKindTokens); ok {
+		return primaryFileRefCandidate{
+			DisplayPath: trimRenderedPrimaryFilePath(numbered),
+			Source:      primaryFileRefSourceStructuredSymbol,
+		}, true
+	}
+	if idx := strings.LastIndex(rest, " in "); idx > 0 {
+		return primaryFileRefCandidate{
+			DisplayPath: trimRenderedPrimaryFilePath(rest[idx+4:]),
+			Source:      primaryFileRefSourceInvocationRelative,
+		}, true
+	}
+	return primaryFileRefCandidate{}, false
+}
+
+func newPrimaryFileRefCandidateCollector() *primaryFileRefCandidateCollector {
+	return &primaryFileRefCandidateCollector{
+		candidates: make([]primaryFileRefCandidate, 0),
+	}
+}
+
+func (collector *primaryFileRefCandidateCollector) addLine(line string) {
+	candidate, ok := parsePrimaryFileRefCandidateLine(line)
+	if !ok {
+		return
+	}
+	collector.addCandidate(candidate)
+}
+
+func (collector *primaryFileRefCandidateCollector) addCandidate(candidate primaryFileRefCandidate) {
+	candidate.DisplayPath = strings.TrimSpace(candidate.DisplayPath)
+	if candidate.DisplayPath == "" {
+		return
+	}
+	collector.candidates = append(collector.candidates, candidate)
+}
+
+func (collector *primaryFileRefCandidateCollector) results() []primaryFileRefCandidate {
+	return collector.candidates
+}
+
+func resolvePrimaryFileRefs(candidates []primaryFileRefCandidate, opts SearchOptions) []primaryFileRef {
+	resolver := newPrimaryFileRefResolver(opts)
+	for _, candidate := range candidates {
+		resolver.addCandidate(candidate)
+	}
+	return resolver.results()
+}
+
+func newPrimaryFileRefResolver(opts SearchOptions) *primaryFileRefResolver {
+	return &primaryFileRefResolver{
+		opts: opts,
+		seen: make(map[string]bool),
+	}
+}
+
+func (resolver *primaryFileRefResolver) addCandidate(candidate primaryFileRefCandidate) {
+	ref, ok := resolver.resolveCandidate(candidate)
+	if !ok {
+		return
+	}
+	key := primaryFileRefKey(ref)
+	if resolver.seen[key] {
+		return
+	}
+	resolver.seen[key] = true
+	resolver.refs = append(resolver.refs, ref)
+}
+
+func (resolver *primaryFileRefResolver) resolveCandidate(candidate primaryFileRefCandidate) (primaryFileRef, bool) {
+	displayPath := strings.TrimSpace(candidate.DisplayPath)
+	if displayPath == "" {
+		return primaryFileRef{}, false
+	}
+	return primaryFileRef{
+		DisplayPath:  displayPath,
+		ResolvedPath: cleanResolvedLocatorPath(resolvePrimaryFileRefPath(displayPath, resolver.opts, candidate.Source)),
+	}, true
+}
+
+func (resolver *primaryFileRefResolver) results() []primaryFileRef {
+	return resolver.refs
+}
+
+func primaryFileRefKey(ref primaryFileRef) string {
+	return ref.DisplayPath + "\x00" + ref.ResolvedPath
+}
+
+func hasNumericListPrefix(line string) bool {
+	_, ok := splitNumberedListLinePrefix(line)
+	return ok
+}
+
+func splitNumberedListLinePrefix(line string) (string, bool) {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return "", false
+	}
+	dotIdx := strings.Index(line, ".")
+	if dotIdx <= 0 {
+		return "", false
+	}
+	for _, r := range line[:dotIdx] {
+		if r < '0' || r > '9' {
+			return "", false
+		}
+	}
+	rest := strings.TrimSpace(line[dotIdx+1:])
+	if rest == "" {
+		return "", false
+	}
+	return rest, true
+}
+
+func parseNumberedCandidateFilePath(line string) (string, bool) {
+	rest, ok := splitNumberedListLinePrefix(line)
+	if !ok {
+		return "", false
+	}
+	return parseNumberedCandidateFilePathWithPolicy(rest, numberedCandidateKindTokens)
+}
+
+func parseNumberedCandidateFilePathWithPolicy(rest string, kindTokens []string) (string, bool) {
+	for _, token := range kindTokens {
+		if idx := strings.Index(rest, token); idx > 0 {
+			return strings.TrimSpace(rest[:idx]), true
+		}
+	}
+	return "", false
 }
 
 func resolvePrimaryFileRefPath(displayPath string, opts SearchOptions, source primaryFileRefSource) string {

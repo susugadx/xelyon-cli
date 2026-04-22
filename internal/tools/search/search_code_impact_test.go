@@ -118,6 +118,116 @@ func TestImpactTestProbePattern_UsesCommonTestSymbolFormConservatively(t *testin
 	}
 }
 
+func TestShouldAppendImpactTestProbe(t *testing.T) {
+	tests := []struct {
+		name        string
+		baseOutput  string
+		basePattern []string
+		want        bool
+	}{
+		{
+			name:        "already has test coverage",
+			baseOutput:  "foo_test.go:1:def TestFoo():",
+			basePattern: []string{"Foo"},
+			want:        false,
+		},
+		{
+			name:        "expansion cap reached",
+			baseOutput:  "foo.go:1:func Foo()",
+			basePattern: []string{"a", "b", "c", "d", "e"},
+			want:        false,
+		},
+		{
+			name:        "eligible for probe append",
+			baseOutput:  "foo.go:1:func Foo()",
+			basePattern: []string{"Foo", "FooImpl"},
+			want:        true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := shouldAppendImpactTestProbe(tt.baseOutput, tt.basePattern); got != tt.want {
+				t.Fatalf("shouldAppendImpactTestProbe() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestAppendImpactTestProbePattern(t *testing.T) {
+	tests := []struct {
+		name         string
+		basePatterns []string
+		pattern      string
+		want         []string
+	}{
+		{
+			name:         "appends missing conservative test probe",
+			basePatterns: []string{"helper", "helperImpl"},
+			pattern:      "helper",
+			want:         []string{"helper", "helperImpl", "TestHelper"},
+		},
+		{
+			name:         "skips existing test probe",
+			basePatterns: []string{"helper", "TestHelper"},
+			pattern:      "helper",
+			want:         []string{"helper", "TestHelper"},
+		},
+		{
+			name:         "empty pattern keeps base list",
+			basePatterns: []string{"helper"},
+			pattern:      "",
+			want:         []string{"helper"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := appendImpactTestProbePattern(tt.basePatterns, tt.pattern)
+			if len(got) != len(tt.want) {
+				t.Fatalf("appendImpactTestProbePattern() len = %d, want %d (%v)", len(got), len(tt.want), got)
+			}
+			for i := range tt.want {
+				if got[i] != tt.want[i] {
+					t.Fatalf("appendImpactTestProbePattern()[%d] = %q, want %q", i, got[i], tt.want[i])
+				}
+			}
+		})
+	}
+}
+
+func TestLoadCachedMultiPatternSearch(t *testing.T) {
+	opts := SearchOptions{Pattern: "Run,Build", Path: t.TempDir()}
+	contexts := newSinglePatternExecutionContexts([]string{"Run", "Build"}, opts)
+
+	if got, ok := loadCachedMultiPatternSearch(nil, contexts, opts); ok || got != "" {
+		t.Fatalf("expected nil cache miss, got hit=%v output=%q", ok, got)
+	}
+
+	cache := &testSearchCache{data: make(map[string]string)}
+	cache.SetSearch(buildMultiCacheKeyFromContexts(contexts), buildMultiSearchCacheKeyFromContexts(opts, contexts), "cached-multi", nil)
+
+	got, ok := loadCachedMultiPatternSearch(cache, contexts, opts)
+	if !ok {
+		t.Fatal("expected cached multi-pattern hit")
+	}
+	if got != "cached-multi" {
+		t.Fatalf("unexpected cached multi output: %q", got)
+	}
+}
+
+func TestExecuteMultipleSearchPatterns_UsesCacheHit(t *testing.T) {
+	opts := SearchOptions{Pattern: "Run,Build", Path: t.TempDir()}
+	contexts := newSinglePatternExecutionContexts([]string{"Run", "Build"}, opts)
+
+	cache := &testSearchCache{data: make(map[string]string)}
+	cache.SetSearch(buildMultiCacheKeyFromContexts(contexts), buildMultiSearchCacheKeyFromContexts(opts, contexts), "cached-dispatch", nil)
+
+	if got := executeMultipleSearchPatterns(cache, contexts, opts); got != "cached-dispatch" {
+		t.Fatalf("expected cached dispatch output, got %q", got)
+	}
+}
+
 func TestEffectiveSearchPatterns_EmptyIntentPreservesSinglePattern(t *testing.T) {
 	got := effectiveSearchPatterns(SearchOptions{Pattern: "NewAgent"})
 	if len(got) != 1 || got[0] != "NewAgent" {
