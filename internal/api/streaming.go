@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -46,29 +45,24 @@ func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *u
 	defer controller.Stop()
 
 	state := newStreamOutputState(ctx, spinner)
+	loopPolicy := newParseStreamingLoopPolicy(state, errOut, idleTimeout)
 
 	for {
 		event := controller.Next(ctx, nil)
-		switch event.Type {
-		case StreamLoopEventContextDone:
-			return state.finalizeContextDone(errOut, event.Err)
+		transition := loopPolicy.resolve(event)
+		if transition.handled {
+			return transition.response, transition.err
+		}
+		if event.Type != StreamLoopEventLine {
+			continue
+		}
 
-		case StreamLoopEventIdleTimeout:
-			// アイドルタイムアウト
-			state.stopSpinner()
-			return state.response(), fmt.Errorf("idle timeout: no data received for %v", idleTimeout)
-
-		case StreamLoopEventScannerDone:
-			return state.finalizeScannerDone(event.Err)
-
-		case StreamLoopEventLine:
-			done, err := state.processLine(event.Line, parser)
-			if err != nil {
-				return state.finalizeParserError(err)
-			}
-			if done {
-				return state.finalizeDone()
-			}
+		done, err := state.processLine(event.Line, parser)
+		if err != nil {
+			return state.finalizeParserError(err)
+		}
+		if done {
+			return state.finalizeDone()
 		}
 	}
 }

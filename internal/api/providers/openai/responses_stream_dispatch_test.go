@@ -126,3 +126,21 @@ func TestHandleChunk_DispatchesFunctionCallAndCompletion(t *testing.T) {
 		t.Fatalf("lastUsage = %+v, want input=10 output=4", state.lastUsage)
 	}
 }
+
+func TestHandleChunk_DispatchesOutputTextDelta(t *testing.T) {
+	state := newResponsesStreamState(nil, io.Discard)
+
+	textDelta, done, err := state.handleChunk(ResponsesStreamChunk{
+		Type:  "response.output_text.delta",
+		Delta: "hello",
+	}, "")
+	if err != nil {
+		t.Fatalf("handleChunk() error = %v, want nil", err)
+	}
+	if done {
+		t.Fatal("handleChunk() done = true, want false")
+	}
+	if textDelta != "hello" {
+		t.Fatalf("handleChunk() textDelta = %q, want %q", textDelta, "hello")
+	}
+}

@@ -41,11 +41,7 @@ func (s *sseFinalizeState) appendRescuedToolJSONIfNeeded() {
 	}
 
 	s.interpret.debugf("[DEBUG Gemini SSE] Rescuing %d tool call(s) from text\n", len(s.interpret.rescuedToolJSONs))
-	if s.interpret.display != nil {
-		s.interpret.display.warnFunctionCallRescue(len(s.interpret.rescuedToolJSONs))
-	} else {
-		fmt.Fprintf(s.interpret.errOut, "⚠️  FC rescue: %d tool call(s) extracted from text response\n", len(s.interpret.rescuedToolJSONs))
-	}
+	s.interpret.display.warnFunctionCallRescue(len(s.interpret.rescuedToolJSONs))
 	for _, toolJSON := range s.interpret.rescuedToolJSONs {
 		s.output.Append(toolJSON)
 	}
@@ -81,8 +77,6 @@ func (s *sseFinalizeState) finalizeOutput() (string, error) {
 		return "", fmt.Errorf("no content in Gemini SSE response (stream ended without generating any text or function calls)")
 	}
 
-	if s.interpret.display != nil {
-		s.interpret.display.printTrailingNewlineIfNeeded()
-	}
+	s.interpret.display.printTrailingNewlineIfNeeded()
 	return s.output.Response(), nil
 }

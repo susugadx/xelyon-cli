@@ -109,21 +109,5 @@ func (s *responsesStreamState) handleErrorEvent(chunk ResponsesStreamChunk) (boo
 func (p *Provider) handleResponsesStreaming(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, string, error) {
 	state := newResponsesStreamState(spinner, api.ErrorWriterFromContext(ctx))
 	content, err := api.ParseStreamingResponse(ctx, resp, spinner, state.parseLine)
-	if err != nil {
-		return "", state.responseID, err
-	}
-
-	// usage コールバックを呼び出し
-	if state.lastUsage != nil && p.usageCallback != nil {
-		p.usageCallback(*state.lastUsage)
-	}
-
-	// tool_calls がある場合はそれを返す
-	if state.toolCallsOut.Len() > 0 {
-		if content != "" {
-			return content + state.toolCallsOut.String(), state.responseID, nil
-		}
-		return state.toolCallsOut.String(), state.responseID, nil
-	}
-	return content, state.responseID, nil
+	return newResponsesStreamFinalizePolicy(state, p.usageCallback).finalize(content, err)
 }

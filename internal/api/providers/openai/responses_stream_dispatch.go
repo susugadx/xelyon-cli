@@ -33,19 +33,23 @@ func responsesFunctionCallArgumentsDoneAction(s *responsesStreamState, chunk Res
 	return responsesChunkActionResult{}
 }
 
+func responsesCreatedAction(s *responsesStreamState, chunk ResponsesStreamChunk) responsesChunkActionResult {
+	s.captureResponseID(chunk)
+	return responsesChunkActionResult{}
+}
+
+func responsesTextDeltaAction(_ *responsesStreamState, chunk ResponsesStreamChunk) responsesChunkActionResult {
+	return responsesChunkActionResult{textDelta: chunk.Delta}
+}
+
 var responsesChunkActionTable = map[string]responsesChunkAction{
-	"response.created": func(s *responsesStreamState, chunk ResponsesStreamChunk) responsesChunkActionResult {
-		s.captureResponseID(chunk)
-		return responsesChunkActionResult{}
-	},
+	"response.created":                       responsesCreatedAction,
 	"error":                                  responsesErrorAction,
 	"response.failed":                        responsesErrorAction,
 	"response.output_item.added":             responsesFunctionCallAddedAction,
 	"response.function_call_arguments.delta": responsesFunctionCallArgumentsDeltaAction,
 	"response.function_call_arguments.done":  responsesFunctionCallArgumentsDoneAction,
-	"response.output_text.delta": func(_ *responsesStreamState, chunk ResponsesStreamChunk) responsesChunkActionResult {
-		return responsesChunkActionResult{textDelta: chunk.Delta}
-	},
-	"response.completed": responsesCompletionAction,
-	"response.done":      responsesCompletionAction,
+	"response.output_text.delta":             responsesTextDeltaAction,
+	"response.completed":                     responsesCompletionAction,
+	"response.done":                          responsesCompletionAction,
 }

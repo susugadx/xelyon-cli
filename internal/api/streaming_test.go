@@ -668,3 +668,85 @@ func TestFilterToolJSON_NonToolJSON(t *testing.T) {
 		})
 	}
 }
+
+func TestParseStreamingLoopPolicy_ResolveIdleTimeoutWithPartial(t *testing.T) {
+	ctx := config.WithContext(context.Background(), config.DefaultConfig())
+	state := newStreamOutputState(ctx, nil)
+	state.fullResponse.WriteString("partial")
+
+	policy := newParseStreamingLoopPolicy(state, io.Discard, 12*time.Second)
+	transition := policy.resolve(StreamLoopEvent{Type: StreamLoopEventIdleTimeout})
+	if !transition.handled {
+		t.Fatal("resolve() handled = false, want true")
+	}
+	if transition.response != "partial" {
+		t.Fatalf("resolve() response = %q, want %q", transition.response, "partial")
+	}
+	if transition.err == nil || !strings.Contains(transition.err.Error(), "idle timeout: no data received for 12s") {
+		t.Fatalf("resolve() err = %v, want idle timeout message", transition.err)
+	}
+}
+
+func TestParseStreamingLoopPolicy_ResolveContextDoneWithoutPartial(t *testing.T) {
+	ctx := config.WithContext(context.Background(), config.DefaultConfig())
+	state := newStreamOutputState(ctx, nil)
+	policy := newParseStreamingLoopPolicy(state, io.Discard, time.Second)
+	eventErr := errors.New("context done")
+
+	transition := policy.resolve(StreamLoopEvent{Type: StreamLoopEventContextDone, Err: eventErr})
+	if !transition.handled {
+		t.Fatal("resolve() handled = false, want true")
+	}
+	if !errors.Is(transition.err, eventErr) {
+		t.Fatalf("resolve() err = %v, want %v", transition.err, eventErr)
+	}
+	if transition.response != "" {
+		t.Fatalf("resolve() response = %q, want empty", transition.response)
+	}
+}
+
+func TestParseStreamingLoopPolicy_ResolveContextDoneWithPartial(t *testing.T) {
+	ctx := config.WithContext(context.Background(), config.DefaultConfig())
+	state := newStreamOutputState(ctx, nil)
+	state.fullResponse.WriteString("partial")
+	policy := newParseStreamingLoopPolicy(state, io.Discard, time.Second)
+
+	transition := policy.resolve(StreamLoopEvent{Type: StreamLoopEventContextDone, Err: errors.New("ignored")})
+	if !transition.handled {
+		t.Fatal("resolve() handled = false, want true")
+	}
+	if transition.err != nil {
+		t.Fatalf("resolve() err = %v, want nil", transition.err)
+	}
+	if transition.response != "partial" {
+		t.Fatalf("resolve() response = %q, want %q", transition.response, "partial")
+	}
+}
+
+func TestParseStreamingLoopPolicy_ResolveScannerDoneWithError(t *testing.T) {
+	ctx := config.WithContext(context.Background(), config.DefaultConfig())
+	state := newStreamOutputState(ctx, nil)
+	policy := newParseStreamingLoopPolicy(state, io.Discard, time.Second)
+
+	transition := policy.resolve(StreamLoopEvent{Type: StreamLoopEventScannerDone, Err: errors.New("boom")})
+	if !transition.handled {
+		t.Fatal("resolve() handled = false, want true")
+	}
+	if transition.err == nil || !strings.Contains(transition.err.Error(), "scanner error: boom") {
+		t.Fatalf("resolve() err = %v, want scanner error", transition.err)
+	}
+}
+
+func TestParseStreamingLoopPolicy_ResolveScannerDoneWithoutError(t *testing.T) {
+	ctx := config.WithContext(context.Background(), config.DefaultConfig())
+	state := newStreamOutputState(ctx, nil)
+	policy := newParseStreamingLoopPolicy(state, io.Discard, time.Second)
+
+	transition := policy.resolve(StreamLoopEvent{Type: StreamLoopEventScannerDone})
+	if !transition.handled {
+		t.Fatal("resolve() handled = false, want true")
+	}
+	if transition.err != nil {
+		t.Fatalf("resolve() err = %v, want nil", transition.err)
+	}
+}

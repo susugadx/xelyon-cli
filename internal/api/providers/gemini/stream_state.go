@@ -156,14 +156,7 @@ func (s *sseInterpretState) collectSignaturePart(part GeminiFunctionPart) {
 func (s *sseInterpretState) handleTextPart(ctx context.Context, text string, thinkingTimer *time.Timer, thinkingTimeout time.Duration) {
 	s.resetThinkingProgress(thinkingTimer, thinkingTimeout)
 	textAction := s.interpretTextPart(text)
-	s.rescuedToolJSONs = append(s.rescuedToolJSONs, textAction.rescuedToolJSONs...)
-
-	if textAction.shouldDisplay {
-		s.ensureHeaderPrinted(ctx)
-		s.display.printText(textAction.displayText)
-	}
-
-	s.fullResponse.WriteString(textAction.responseText)
+	s.applyTextAction(ctx, textAction)
 }
 
 func (s *sseInterpretState) ensureHeaderPrinted(ctx context.Context) {

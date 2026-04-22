@@ -104,24 +104,31 @@ func (s *runnerOutputState) finalizeContextDone(opts RunnerOptions, eventErr err
 }
 
 func (s *runnerOutputState) finalizeIdleTimeout(idleTimeout time.Duration) (string, error) {
-	return s.finalizeWith(fmt.Errorf("idle timeout: no data received for %v", idleTimeout), false)
+	policy := newRunnerFinalizeErrorPolicy()
+	resolution := policy.resolveIdleTimeout(idleTimeout)
+	return s.finalizeWith(resolution.err, resolution.printTrailingNewline)
 }
 
 func (s *runnerOutputState) finalizeScannerDone(scanErr error) (string, error) {
-	if scanErr != nil {
-		return s.finalizeWith(fmt.Errorf("stream reading error: %w", scanErr), false)
-	}
-	return s.finalizeWith(nil, true)
+	policy := newRunnerFinalizeErrorPolicy()
+	resolution := policy.resolveScannerDone(scanErr)
+	return s.finalizeWith(resolution.err, resolution.printTrailingNewline)
 }
 
 func (s *runnerOutputState) finalizeDecodeError(err error) (string, error) {
-	return s.finalizeWith(err, true)
+	policy := newRunnerFinalizeErrorPolicy()
+	resolution := policy.resolveDecodeError(err)
+	return s.finalizeWith(resolution.err, resolution.printTrailingNewline)
 }
 
 func (s *runnerOutputState) finalizeHandlerError(err error) (string, error) {
-	return s.finalizeWith(err, true)
+	policy := newRunnerFinalizeErrorPolicy()
+	resolution := policy.resolveHandlerError(err)
+	return s.finalizeWith(resolution.err, resolution.printTrailingNewline)
 }
 
 func (s *runnerOutputState) finalizeDone() (string, error) {
-	return s.finalizeWith(nil, true)
+	policy := newRunnerFinalizeErrorPolicy()
+	resolution := policy.resolveDone()
+	return s.finalizeWith(resolution.err, resolution.printTrailingNewline)
 }

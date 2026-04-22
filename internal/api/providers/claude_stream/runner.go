@@ -63,38 +63,13 @@ func RunStreamingResponse(
 		AutoResetIdleOnLine: true,
 	})
 	defer controller.Stop()
+	loopPolicy := newRunnerLoopPolicy(state, handler, opts, idleTimeout)
 
 	for {
 		eventResult := controller.Next(ctx, nil)
-		switch eventResult.Type {
-		case api.StreamLoopEventContextDone:
-			return state.finalizeContextDone(opts, eventResult.Err)
-
-		case api.StreamLoopEventIdleTimeout:
-			return state.finalizeIdleTimeout(idleTimeout)
-
-		case api.StreamLoopEventScannerDone:
-			return state.finalizeScannerDone(eventResult.Err)
-
-		case api.StreamLoopEventLine:
-			lineResult := state.processLineEvent(eventResult.Line, handler, opts.IgnoreDecodeError)
-			if lineResult.skip {
-				continue
-			}
-			state.syncNewlineForActiveSpinner()
-
-			if lineResult.err != nil {
-				if lineResult.decodeErr {
-					return state.finalizeDecodeError(lineResult.err)
-				}
-				return state.finalizeHandlerError(lineResult.err)
-			}
-
-			if lineResult.done {
-				return state.finalizeDone()
-			}
-
-			state.appendTextDelta(lineResult.textDelta)
+		transition := loopPolicy.resolve(eventResult)
+		if transition.handled {
+			return transition.response, transition.err
 		}
 	}
 }

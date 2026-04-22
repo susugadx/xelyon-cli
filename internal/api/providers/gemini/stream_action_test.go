@@ -135,3 +135,41 @@ func TestInterpretTextPart_CodeBlockOnlySkipsDisplay(t *testing.T) {
 		t.Fatalf("responseText = %q, want empty after code block removal", action.responseText)
 	}
 }
+
+func TestApplyTextAction_UpdatesResponseAndRescueState(t *testing.T) {
+	ctx, _, _ := newGeminiResponseContext()
+	state := newSSEInterpretState(ctx, nil, "", false)
+
+	state.applyTextAction(ctx, sseTextAction{
+		responseText:     "Hello",
+		rescuedToolJSONs: []string{`{"tool":"read_file"}`},
+		shouldDisplay:    false,
+	})
+	if state.response() != "Hello" {
+		t.Fatalf("response = %q, want %q", state.response(), "Hello")
+	}
+	if len(state.rescuedToolJSONs) != 1 {
+		t.Fatalf("rescuedToolJSONs len = %d, want 1", len(state.rescuedToolJSONs))
+	}
+}
+
+func TestApplyTextAction_DisplayMissingDoesNotPanic(t *testing.T) {
+	ctx, _, _ := newGeminiResponseContext()
+	state := newSSEInterpretState(ctx, nil, "", false)
+	state.display = nil
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("applyTextAction() panicked with nil display: %v", r)
+		}
+	}()
+
+	state.applyTextAction(ctx, sseTextAction{
+		responseText:  "Visible text",
+		displayText:   "Visible text",
+		shouldDisplay: true,
+	})
+	if state.response() != "Visible text" {
+		t.Fatalf("response = %q, want %q", state.response(), "Visible text")
+	}
+}

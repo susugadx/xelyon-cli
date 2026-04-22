@@ -3,7 +3,6 @@ package gemini
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"os"
 	"time"
@@ -59,6 +58,7 @@ func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, s
 
 	cfg := config.FromContext(ctx)
 	transportIdleTimeout := time.Duration(cfg.Streaming.IdleTimeoutSeconds) * time.Second
+	loopPolicy := newSSELoopPolicy(ctx, transportIdleTimeout)
 	controller := api.NewStreamLoopController(resp.Body, api.StreamLoopOptions{
 		IdleTimeout:         transportIdleTimeout,
 		AutoResetIdleOnLine: false, // Gemini は「有効な data chunk」を受信したときだけ idle をリセットする
@@ -73,24 +73,19 @@ func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, s
 	thinkingTimer := time.NewTimer(thinkingTimeout)
 	defer thinkingTimer.Stop()
 
-	var scanErr error
-
 loop:
 	for {
 		eventResult := controller.Next(ctx, thinkingTimer.C)
 		switch eventResult.Type {
 		case api.StreamLoopEventContextDone:
-			partial := state.response()
-			if partial != "" {
-				return partial, nil
+			transition := loopPolicy.resolveContextDone(state.response(), eventResult.Err)
+			if transition.terminate {
+				return transition.response, transition.err
 			}
-			if eventResult.Err != nil {
-				return "", eventResult.Err
-			}
-			return "", ctx.Err()
 
 		case api.StreamLoopEventIdleTimeout:
-			return state.response(), &ErrIdleTimeout{Message: fmt.Sprintf("transport idle timeout: no valid SSE data received for %v", transportIdleTimeout)}
+			transition := loopPolicy.resolveIdleTimeout(state.response())
+			return transition.response, transition.err
 
 		case api.StreamLoopEventExternal:
 			if err := state.handleThinkingTimeout(thinkingTimeout); err != nil {
@@ -99,8 +94,13 @@ loop:
 			thinkingTimer.Reset(thinkingTimeout)
 
 		case api.StreamLoopEventScannerDone:
-			scanErr = eventResult.Err
-			break loop
+			transition := loopPolicy.resolveScannerDone(eventResult.Err)
+			if transition.terminate {
+				return transition.response, transition.err
+			}
+			if transition.continueToDone {
+				break loop
+			}
 
 		case api.StreamLoopEventLine:
 			data, handled := parseGeminiSSEDataLine(eventResult.Line)
@@ -116,10 +116,6 @@ loop:
 			controller.ResetIdleTimer()
 			state.processChunk(ctx, chunk, thinkingTimer, thinkingTimeout)
 		}
-	}
-
-	if scanErr != nil {
-		return "", fmt.Errorf("SSE scan error: %w", scanErr)
 	}
 
 	return state.finalize(p)

@@ -28,14 +28,14 @@ func newSSEDisplayState(spinner *ui.Spinner, out io.Writer, errOut io.Writer, st
 }
 
 func (s *sseDisplayState) stopSpinner() {
-	if s.spinner == nil {
+	if s == nil || s.spinner == nil {
 		return
 	}
 	s.spinner.Stop()
 }
 
 func (s *sseDisplayState) restartSpinner(message string) {
-	if s.spinner == nil || message == "" {
+	if s == nil || s.spinner == nil || message == "" {
 		return
 	}
 	s.spinner.Stop()
@@ -43,6 +43,9 @@ func (s *sseDisplayState) restartSpinner(message string) {
 }
 
 func (s *sseDisplayState) ensureHeader(ctx context.Context) {
+	if s == nil {
+		return
+	}
 	if s.headerPrinted {
 		return
 	}
@@ -52,6 +55,9 @@ func (s *sseDisplayState) ensureHeader(ctx context.Context) {
 }
 
 func (s *sseDisplayState) printText(text string) {
+	if s == nil {
+		return
+	}
 	if !s.streamAssistantText || text == "" {
 		return
 	}
@@ -60,7 +66,7 @@ func (s *sseDisplayState) printText(text string) {
 }
 
 func (s *sseDisplayState) showToolSpinner(toolName string) {
-	if s.spinner == nil {
+	if s == nil || s.spinner == nil {
 		return
 	}
 	s.spinner.Stop()
@@ -72,6 +78,9 @@ func (s *sseDisplayState) showToolSpinner(toolName string) {
 }
 
 func (s *sseDisplayState) printTrailingNewlineIfNeeded() {
+	if s == nil {
+		return
+	}
 	if !s.streamAssistantText || s.contentNewlineEmitted {
 		return
 	}
@@ -79,7 +88,7 @@ func (s *sseDisplayState) printTrailingNewlineIfNeeded() {
 }
 
 func (s *sseDisplayState) warnFunctionCallRescue(count int) {
-	if s.errOut == nil {
+	if s == nil || s.errOut == nil {
 		return
 	}
 	_, _ = fmt.Fprintf(s.errOut, "⚠️  FC rescue: %d tool call(s) extracted from text response\n", count)
