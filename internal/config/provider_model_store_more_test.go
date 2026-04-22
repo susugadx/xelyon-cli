@@ -23,6 +23,77 @@ provider_models:
 	}
 }
 
+func TestProviderModelStoreFromYAMLWithRoot_StateResolution(t *testing.T) {
+	t.Run("provider_models key missing keeps absent state", func(t *testing.T) {
+		data := []byte("default_provider: openai")
+		store := providerModelStoreFromYAMLWithRoot(data, map[string]interface{}{
+			"default_provider": "openai",
+		})
+		if store.state != providerModelSectionStateAbsent {
+			t.Fatalf("providerModelStoreFromYAMLWithRoot(missing).state = %v, want %v", store.state, providerModelSectionStateAbsent)
+		}
+		if store.raw != nil {
+			t.Fatalf("providerModelStoreFromYAMLWithRoot(missing).raw = %#v, want nil", store.raw)
+		}
+	})
+
+	t.Run("explicit empty map keeps explicit-empty state", func(t *testing.T) {
+		data := []byte("provider_models: {}")
+		raw := parseYAMLRootMap(data)
+		store := providerModelStoreFromYAMLWithRoot(data, raw)
+		if store.state != providerModelSectionStateExplicitEmpty {
+			t.Fatalf("providerModelStoreFromYAMLWithRoot(empty).state = %v, want %v", store.state, providerModelSectionStateExplicitEmpty)
+		}
+		if store.raw == nil || len(store.raw) != 0 {
+			t.Fatalf("providerModelStoreFromYAMLWithRoot(empty).raw = %#v, want empty map", store.raw)
+		}
+	})
+
+	t.Run("entry map becomes explicit entries with normalized key", func(t *testing.T) {
+		data := []byte(`
+provider_models:
+  " OpenAI ":
+    default_model: gpt-custom
+`)
+		raw := parseYAMLRootMap(data)
+		store := providerModelStoreFromYAMLWithRoot(data, raw)
+		if store.state != providerModelSectionStateExplicitEntries {
+			t.Fatalf("providerModelStoreFromYAMLWithRoot(entries).state = %v, want %v", store.state, providerModelSectionStateExplicitEntries)
+		}
+		if got := store.raw["openai"].DefaultModel; got != "gpt-custom" {
+			t.Fatalf("providerModelStoreFromYAMLWithRoot(entries).raw[openai].DefaultModel = %q, want %q", got, "gpt-custom")
+		}
+	})
+
+	t.Run("invalid provider_models shape keeps explicit-empty contract", func(t *testing.T) {
+		store := providerModelStoreFromYAMLWithRoot([]byte("provider_models: [unexpected]"), map[string]interface{}{
+			"provider_models": []interface{}{"unexpected"},
+		})
+		if store.state != providerModelSectionStateExplicitEmpty {
+			t.Fatalf("providerModelStoreFromYAMLWithRoot(invalid).state = %v, want %v", store.state, providerModelSectionStateExplicitEmpty)
+		}
+		if store.raw == nil || len(store.raw) != 0 {
+			t.Fatalf("providerModelStoreFromYAMLWithRoot(invalid).raw = %#v, want empty map", store.raw)
+		}
+	})
+
+	t.Run("anthropic_version date scalar keeps plain date string", func(t *testing.T) {
+		data := []byte(`
+provider_models:
+  anthropic:
+    anthropic_version: 2099-01-01
+`)
+		raw := parseYAMLRootMap(data)
+		store := providerModelStoreFromYAMLWithRoot(data, raw)
+		if store.state != providerModelSectionStateExplicitEntries {
+			t.Fatalf("providerModelStoreFromYAMLWithRoot(date).state = %v, want %v", store.state, providerModelSectionStateExplicitEntries)
+		}
+		if got := store.raw["anthropic"].AnthropicVersion; got != "2099-01-01" {
+			t.Fatalf("providerModelStoreFromYAMLWithRoot(date).raw[anthropic].AnthropicVersion = %q, want %q", got, "2099-01-01")
+		}
+	})
+}
+
 func TestDiffProviderModelConfig_TracksOnlyEffectiveChanges(t *testing.T) {
 	base := ProviderModelConfig{
 		DefaultModel:     "gpt-5.4",

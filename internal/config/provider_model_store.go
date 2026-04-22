@@ -1,43 +1,6 @@
 package config
 
-import (
-	"reflect"
-
-	"gopkg.in/yaml.v3"
-)
-
-func cloneModelOverrides(src map[string]ModelOverride) map[string]ModelOverride {
-	if len(src) == 0 {
-		return nil
-	}
-	cloned := make(map[string]ModelOverride, len(src))
-	for key, value := range src {
-		cloned[key] = value
-	}
-	return cloned
-}
-
-func cloneProviderModelConfig(src ProviderModelConfig) ProviderModelConfig {
-	cloned := src
-	cloned.AnthropicBeta = append([]string(nil), src.AnthropicBeta...)
-	cloned.ModelOverrides = cloneModelOverrides(src.ModelOverrides)
-	return cloned
-}
-
-func cloneProviderModelConfigMap(src map[string]ProviderModelConfig) map[string]ProviderModelConfig {
-	if src == nil {
-		return nil
-	}
-	cloned := make(map[string]ProviderModelConfig, len(src))
-	for key, value := range src {
-		normalized := NormalizeProviderName(key)
-		if normalized == "" {
-			continue
-		}
-		cloned[normalized] = cloneProviderModelConfig(value)
-	}
-	return cloned
-}
+import "gopkg.in/yaml.v3"
 
 func extractRawProviderModelsFromYAML(data []byte) map[string]ProviderModelConfig {
 	var raw struct {
@@ -49,125 +12,17 @@ func extractRawProviderModelsFromYAML(data []byte) map[string]ProviderModelConfi
 	return cloneProviderModelConfigMap(raw.ProviderModels)
 }
 
-func providerModelStoreFromYAML(data []byte) providerModelStore {
-	if !yamlHasKey(data, "provider_models") {
+func providerModelStoreFromYAMLWithRoot(data []byte, raw map[string]interface{}) providerModelStore {
+	if !yamlRootHasKey(raw, "provider_models") {
 		return normalizeProviderModelStore(providerModelSectionStateAbsent, nil)
 	}
 
-	raw := extractRawProviderModelsFromYAML(data)
-	if len(raw) == 0 {
+	providerModelsRaw := extractRawProviderModelsFromYAML(data)
+	if len(providerModelsRaw) == 0 {
 		return normalizeProviderModelStore(providerModelSectionStateExplicitEmpty, nil)
 	}
 
-	return normalizeProviderModelStore(providerModelSectionStateExplicitEntries, raw)
-}
-
-func mergeProviderModelConfig(base, override ProviderModelConfig) ProviderModelConfig {
-	merged := base
-
-	if override.DefaultModel != "" {
-		merged.DefaultModel = override.DefaultModel
-	}
-	if override.MaxOutputTokens > 0 {
-		merged.MaxOutputTokens = override.MaxOutputTokens
-	}
-	if override.AnthropicVersion != "" {
-		merged.AnthropicVersion = override.AnthropicVersion
-	}
-	if len(override.AnthropicBeta) > 0 {
-		merged.AnthropicBeta = append([]string(nil), override.AnthropicBeta...)
-	}
-
-	if len(base.ModelOverrides) == 0 && len(override.ModelOverrides) == 0 {
-		merged.ModelOverrides = nil
-		return merged
-	}
-
-	merged.ModelOverrides = cloneModelOverrides(base.ModelOverrides)
-	if merged.ModelOverrides == nil {
-		merged.ModelOverrides = map[string]ModelOverride{}
-	}
-	for key, value := range override.ModelOverrides {
-		merged.ModelOverrides[key] = value
-	}
-
-	return merged
-}
-
-func isZeroProviderModelConfig(pm ProviderModelConfig) bool {
-	return pm.DefaultModel == "" &&
-		pm.MaxOutputTokens == 0 &&
-		pm.AnthropicVersion == "" &&
-		len(pm.AnthropicBeta) == 0 &&
-		len(pm.ModelOverrides) == 0
-}
-
-func diffProviderModelConfig(base, current ProviderModelConfig) ProviderModelConfig {
-	diff := ProviderModelConfig{}
-
-	if current.DefaultModel != "" && current.DefaultModel != base.DefaultModel {
-		diff.DefaultModel = current.DefaultModel
-	}
-	if current.MaxOutputTokens > 0 && current.MaxOutputTokens != base.MaxOutputTokens {
-		diff.MaxOutputTokens = current.MaxOutputTokens
-	}
-	if current.AnthropicVersion != "" && current.AnthropicVersion != base.AnthropicVersion {
-		diff.AnthropicVersion = current.AnthropicVersion
-	}
-	if len(current.AnthropicBeta) > 0 && !reflect.DeepEqual(current.AnthropicBeta, base.AnthropicBeta) {
-		diff.AnthropicBeta = append([]string(nil), current.AnthropicBeta...)
-	}
-	if len(current.ModelOverrides) > 0 && !reflect.DeepEqual(current.ModelOverrides, base.ModelOverrides) {
-		diff.ModelOverrides = cloneModelOverrides(current.ModelOverrides)
-	}
-
-	return diff
-}
-
-func rawProviderModelsFromEffectiveDiff(effective map[string]ProviderModelConfig) map[string]ProviderModelConfig {
-	if len(effective) == 0 {
-		return nil
-	}
-
-	raw := map[string]ProviderModelConfig{}
-	for key, pm := range effective {
-		normalized := NormalizeProviderName(key)
-		if normalized == "" {
-			continue
-		}
-
-		base, ok := defaultProviderModelConfig(normalized)
-		if ok {
-			pm = diffProviderModelConfig(base, pm)
-		}
-		if isZeroProviderModelConfig(pm) {
-			continue
-		}
-		raw[normalized] = cloneProviderModelConfig(pm)
-	}
-
-	if len(raw) == 0 {
-		return nil
-	}
-	return raw
-}
-
-func buildEffectiveProviderModels(src map[string]ProviderModelConfig) map[string]ProviderModelConfig {
-	effective := cloneProviderModelConfigMap(DefaultConfig().ProviderModels)
-	if effective == nil {
-		effective = map[string]ProviderModelConfig{}
-	}
-
-	for key, pm := range src {
-		base, ok := defaultProviderModelConfig(key)
-		if ok {
-			effective[key] = mergeProviderModelConfig(base, pm)
-			continue
-		}
-		effective[key] = cloneProviderModelConfig(pm)
-	}
-
-	return effective
+	return normalizeProviderModelStore(providerModelSectionStateExplicitEntries, providerModelsRaw)
 }
 
 func (s providerModelStore) rawForSave() map[string]ProviderModelConfig {
@@ -279,6 +134,13 @@ func (c *Config) effectiveProviderModelRefreshSource() map[string]ProviderModelC
 	return c.providerModelsStore.refreshSource(c.effectiveProviderModels())
 }
 
+func (c *Config) explicitProviderModelSource() map[string]ProviderModelConfig {
+	if c == nil {
+		return nil
+	}
+	return c.providerModelsStore.explicitSource(c.effectiveProviderModels())
+}
+
 func (c *Config) refreshEffectiveProviderModels() {
 	if c == nil {
 		return
@@ -300,6 +162,17 @@ func (c *Config) resetInMemoryEffectiveProviderModels() {
 	}
 	c.providerModelsStore = normalizeProviderModelStore(providerModelSectionStateInMemoryEffectiveOnly, nil)
 	c.ProviderModels = buildEffectiveProviderModels(nil)
+}
+
+func (c *Config) applyProviderModelEditTransition(transition providerModelStoreEditTransition) {
+	if c == nil {
+		return
+	}
+	if transition.resetInMemoryEffective {
+		c.resetInMemoryEffectiveProviderModels()
+		return
+	}
+	c.setProviderModelStoreState(transition.state, transition.raw)
 }
 
 func (c *Config) clonedRawProviderModelsForMutation() map[string]ProviderModelConfig {
@@ -324,7 +197,30 @@ func (c *Config) applyRawProviderModelMutation(raw map[string]ProviderModelConfi
 	c.setProviderModelStoreState(transition.state, transition.raw)
 }
 
-// ProviderModelsForSave returns the raw provider_models map that should be serialized on save.
+// ResetProviderModelsForEdit は provider_models を既定の「section absent」状態へ戻す。
+func (c *Config) ResetProviderModelsForEdit() {
+	if c == nil {
+		return
+	}
+	c.setProviderModelStoreState(providerModelSectionStateAbsent, nil)
+}
+
+// SetProviderModelsForEdit は編集UI向け provider_models バッキングマップを更新する。
+func (c *Config) SetProviderModelsForEdit(providerModels map[string]ProviderModelConfig) {
+	if c == nil {
+		return
+	}
+	if providerModels == nil {
+		c.ResetProviderModelsForEdit()
+		return
+	}
+
+	cloned := normalizeProviderModelsForEdit(providerModels)
+	transition := c.providerModelsStore.transitionAfterEditingEntries(cloned)
+	c.applyProviderModelEditTransition(transition)
+}
+
+// ProviderModelsForSave は保存時にシリアライズすべき raw provider_models マップを返す。
 func (c *Config) ProviderModelsForSave() map[string]ProviderModelConfig {
 	if c == nil {
 		return nil
@@ -332,7 +228,7 @@ func (c *Config) ProviderModelsForSave() map[string]ProviderModelConfig {
 	return c.providerModelsStore.rawForSave()
 }
 
-// ProviderModelsForEdit returns the raw provider_models map that should be shown in editing UIs.
+// ProviderModelsForEdit は編集UIに表示すべき raw provider_models マップを返す。
 func (c *Config) ProviderModelsForEdit() map[string]ProviderModelConfig {
 	if c == nil {
 		return nil

@@ -24,14 +24,14 @@ func SameProviderRuntimeIdentity(a, b string) bool {
 	return canonicalA != "" && canonicalA == canonicalB
 }
 
-// ActiveProviderConfigKey returns the exact config-side owner key for an active provider/session.
-// When an explicit provider alias is known, it must not be rewritten to default_provider spelling.
+// ActiveProviderConfigKey は active provider/session の正確な config 側 owner key を返す。
+// 明示 provider alias がある場合は default_provider 側の表記に書き換えない。
 func ActiveProviderConfigKey(provider string) string {
 	return NormalizeProviderName(provider)
 }
 
-// FallbackProviderConfigKey returns a generic config-side lookup key.
-// The explicit provider wins when present; defaultProvider is used only when provider is empty.
+// FallbackProviderConfigKey は汎用的な config 側 lookup key を返す。
+// provider があればそれを優先し、provider が空のときだけ defaultProvider を使う。
 func FallbackProviderConfigKey(provider, defaultProvider string) string {
 	if normalizedProvider := ActiveProviderConfigKey(provider); normalizedProvider != "" {
 		return normalizedProvider
@@ -39,8 +39,8 @@ func FallbackProviderConfigKey(provider, defaultProvider string) string {
 	return NormalizeProviderName(defaultProvider)
 }
 
-// PreferredProviderConfigKey is kept as a compatibility alias for fallback lookup.
-// Active/session alias ownership must use ActiveProviderConfigKey instead.
+// PreferredProviderConfigKey は fallback lookup 用の後方互換エイリアス。
+// active/session の alias ownership には ActiveProviderConfigKey を使う。
 func PreferredProviderConfigKey(provider, defaultProvider string) string {
 	return FallbackProviderConfigKey(provider, defaultProvider)
 }
@@ -52,9 +52,9 @@ func (c *Config) PreferredProviderConfigKey(provider string) string {
 	return PreferredProviderConfigKey(provider, c.DefaultProvider)
 }
 
-// DefaultModelSyncProviderKey returns the provider config key that should receive a default_model sync.
-// If default_provider was edited to a different runtime identity, the edited provider wins.
-// Otherwise the current session's exact provider config key wins, falling back to current default_provider.
+// DefaultModelSyncProviderKey は default_model 同期先となる provider config key を返す。
+// default_provider が別 runtime identity に編集されていれば、その編集後 provider を優先する。
+// それ以外は current session の正確な provider config key を優先し、最後に current default_provider へ fallback する。
 func DefaultModelSyncProviderKey(currentSessionProviderConfigKey, currentDefaultProvider, initialDefaultProvider string) string {
 	normalizedCurrentDefault := NormalizeProviderName(currentDefaultProvider)
 	normalizedInitialDefault := NormalizeProviderName(initialDefaultProvider)
@@ -72,76 +72,4 @@ func (c *Config) DefaultModelSyncProviderKey(currentSessionProviderConfigKey, in
 		return DefaultModelSyncProviderKey(currentSessionProviderConfigKey, "", initialDefaultProvider)
 	}
 	return DefaultModelSyncProviderKey(currentSessionProviderConfigKey, c.DefaultProvider, initialDefaultProvider)
-}
-
-// ProviderModelLookupKeys は provider_models lookup の優先キーを返す。
-// 先頭は常に入力値に最も近いキー、後続は互換 alias/canonical fallback。
-func ProviderModelLookupKeys(provider string) []string {
-	normalized := NormalizeProviderName(provider)
-	if normalized == "" {
-		return nil
-	}
-
-	keys := []string{normalized}
-	switch normalized {
-	case "anthropic":
-		keys = append(keys, "claude")
-	case "claude":
-		keys = append(keys, "anthropic")
-	}
-	return keys
-}
-
-func providerModelRequestedKey(provider string) (string, bool) {
-	key := ActiveProviderConfigKey(provider)
-	if key == "" {
-		return "", false
-	}
-	return key, true
-}
-
-func providerModelLookupKey(src map[string]ProviderModelConfig, provider string) (string, bool) {
-	keys := ProviderModelLookupKeys(provider)
-	if len(keys) == 0 || src == nil {
-		return "", false
-	}
-
-	for _, key := range keys {
-		if _, ok := src[key]; ok {
-			return key, true
-		}
-	}
-
-	return "", false
-}
-
-func providerModelWriteTargetKey(raw map[string]ProviderModelConfig, provider string) (string, bool) {
-	requestedKey, ok := providerModelRequestedKey(provider)
-	if !ok {
-		return "", false
-	}
-	if raw == nil {
-		return requestedKey, true
-	}
-	if _, ok := raw[requestedKey]; ok {
-		return requestedKey, true
-	}
-	if key, ok := providerModelLookupKey(raw, provider); ok {
-		return key, true
-	}
-	return requestedKey, true
-}
-
-func providerModelDeleteTargetKeys(raw map[string]ProviderModelConfig, provider string) []string {
-	requestedKey, ok := providerModelRequestedKey(provider)
-	if !ok || raw == nil {
-		return nil
-	}
-	if _, ok := raw[requestedKey]; ok {
-		return []string{requestedKey}
-	}
-	if key, ok := providerModelLookupKey(raw, provider); ok {
-		return []string{key}
-	}
-	return nil
 }

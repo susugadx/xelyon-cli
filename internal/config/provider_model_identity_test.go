@@ -130,6 +130,52 @@ func TestProviderModelLookupKey_PrefersExactThenAlias(t *testing.T) {
 	})
 }
 
+func TestProviderModelLookupFallbackKeys_AnthropicAliasContract(t *testing.T) {
+	tests := []struct {
+		provider string
+		want     []string
+	}{
+		{provider: "anthropic", want: []string{"claude"}},
+		{provider: "claude", want: []string{"anthropic"}},
+		{provider: "openai", want: nil},
+		{provider: "", want: nil},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.provider, func(t *testing.T) {
+			got := providerModelLookupFallbackKeys(tt.provider)
+			if len(got) != len(tt.want) {
+				t.Fatalf("providerModelLookupFallbackKeys(%q) = %v, want %v", tt.provider, got, tt.want)
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Fatalf("providerModelLookupFallbackKeys(%q) = %v, want %v", tt.provider, got, tt.want)
+				}
+			}
+		})
+	}
+}
+
+func TestProviderModelFirstExistingKey_RespectsCandidateOrder(t *testing.T) {
+	raw := map[string]ProviderModelConfig{
+		"claude":    {},
+		"anthropic": {},
+	}
+
+	if key, ok := providerModelFirstExistingKey(raw, []string{"anthropic", "claude"}); !ok || key != "anthropic" {
+		t.Fatalf("providerModelFirstExistingKey(order anth->claude) = (%q, %v), want (%q, true)", key, ok, "anthropic")
+	}
+	if key, ok := providerModelFirstExistingKey(raw, []string{"missing", "claude"}); !ok || key != "claude" {
+		t.Fatalf("providerModelFirstExistingKey(order missing->claude) = (%q, %v), want (%q, true)", key, ok, "claude")
+	}
+	if key, ok := providerModelFirstExistingKey(nil, []string{"claude"}); ok || key != "" {
+		t.Fatalf("providerModelFirstExistingKey(nil) = (%q, %v), want (\"\", false)", key, ok)
+	}
+	if key, ok := providerModelFirstExistingKey(raw, nil); ok || key != "" {
+		t.Fatalf("providerModelFirstExistingKey(nil keys) = (%q, %v), want (\"\", false)", key, ok)
+	}
+}
+
 func TestProviderModelWriteAndDeleteTargetKeys_RespectAliasOwnership(t *testing.T) {
 	t.Run("write reuses existing sibling alias entry", func(t *testing.T) {
 		key, ok := providerModelWriteTargetKey(map[string]ProviderModelConfig{

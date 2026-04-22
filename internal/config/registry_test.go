@@ -6,55 +6,6 @@ import (
 	"testing"
 )
 
-func TestBuildConfigRegistry(t *testing.T) {
-	cfg := DefaultConfig()
-	categories := BuildConfigRegistry(cfg)
-
-	// カテゴリ数の確認
-	if len(categories) == 0 {
-		t.Error("BuildConfigRegistry returned empty categories")
-	}
-
-	// 各カテゴリにフィールドがあることを確認
-	for _, cat := range categories {
-		if cat.Name == "" {
-			t.Error("Category has empty name")
-		}
-		if cat.DisplayName == "" {
-			t.Errorf("Category %s has empty display name", cat.Name)
-		}
-		if cat.Icon == "" {
-			t.Errorf("Category %s has empty icon", cat.Name)
-		}
-	}
-
-	// provider カテゴリの確認
-	var providerCat *ConfigCategory
-	for i := range categories {
-		if categories[i].Name == "provider" {
-			providerCat = &categories[i]
-			break
-		}
-	}
-
-	if providerCat == nil {
-		t.Error("Provider category not found")
-	} else {
-		// provider カテゴリには default_provider, default_model, provider_models が含まれる
-		fieldPaths := make(map[string]bool)
-		for _, field := range providerCat.Fields {
-			fieldPaths[field.Path] = true
-		}
-
-		expectedFields := []string{"default_provider", "default_model", "provider_models"}
-		for _, expected := range expectedFields {
-			if !fieldPaths[expected] {
-				t.Errorf("Provider category missing field: %s", expected)
-			}
-		}
-	}
-}
-
 func TestGetFieldValue(t *testing.T) {
 	cfg := DefaultConfig()
 

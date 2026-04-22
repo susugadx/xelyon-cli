@@ -116,3 +116,186 @@ func TestProviderModelStoreTransitions_DirectBranches(t *testing.T) {
 		}
 	})
 }
+
+func TestProviderModelStatePersistsRawEntries(t *testing.T) {
+	tests := []struct {
+		state providerModelSectionState
+		want  bool
+	}{
+		{state: providerModelSectionStateAbsent, want: false},
+		{state: providerModelSectionStateExplicitEmpty, want: false},
+		{state: providerModelSectionStateExplicitEntries, want: true},
+		{state: providerModelSectionStateExplicitEntriesPreserveEmpty, want: true},
+		{state: providerModelSectionStateImplicitEntries, want: true},
+		{state: providerModelSectionStateInMemoryEffectiveOnly, want: false},
+	}
+
+	for _, tt := range tests {
+		if got := providerModelStatePersistsRawEntries(tt.state); got != tt.want {
+			t.Fatalf("providerModelStatePersistsRawEntries(%v) = %v, want %v", tt.state, got, tt.want)
+		}
+	}
+}
+
+func TestProviderModelStoreTransition_DirectBranches(t *testing.T) {
+	raw := map[string]ProviderModelConfig{
+		"openai": {DefaultModel: "gpt-custom"},
+	}
+
+	t.Run("in-memory state can request effective reset", func(t *testing.T) {
+		transition := providerModelStoreTransition(providerModelSectionStateInMemoryEffectiveOnly, raw, true)
+		if transition.state != providerModelSectionStateInMemoryEffectiveOnly {
+			t.Fatalf("state = %v, want %v", transition.state, providerModelSectionStateInMemoryEffectiveOnly)
+		}
+		if !transition.resetInMemoryEffective {
+			t.Fatal("resetInMemoryEffective = false, want true")
+		}
+		if transition.raw != nil {
+			t.Fatalf("raw = %#v, want nil", transition.raw)
+		}
+	})
+
+	t.Run("in-memory state does not reset when reset is disallowed", func(t *testing.T) {
+		transition := providerModelStoreTransition(providerModelSectionStateInMemoryEffectiveOnly, raw, false)
+		if transition.resetInMemoryEffective {
+			t.Fatal("resetInMemoryEffective = true, want false")
+		}
+		if transition.raw != nil {
+			t.Fatalf("raw = %#v, want nil", transition.raw)
+		}
+	})
+
+	t.Run("raw persists only for states that own raw entries", func(t *testing.T) {
+		transition := providerModelStoreTransition(providerModelSectionStateExplicitEntries, raw, true)
+		if transition.raw == nil || transition.raw["openai"].DefaultModel != "gpt-custom" {
+			t.Fatalf("raw = %#v, want openai entry", transition.raw)
+		}
+
+		transition = providerModelStoreTransition(providerModelSectionStateExplicitEmpty, raw, true)
+		if transition.raw != nil {
+			t.Fatalf("explicit empty transition raw = %#v, want nil", transition.raw)
+		}
+
+		transition = providerModelStoreTransition(providerModelSectionStateExplicitEntries, map[string]ProviderModelConfig{}, true)
+		if transition.raw != nil {
+			t.Fatalf("empty raw transition = %#v, want nil", transition.raw)
+		}
+	})
+}
+
+func TestProviderModelStateAfterEditingHelpers(t *testing.T) {
+	if got := providerModelStateAfterEditingNoEntries(providerModelSectionStateExplicitEntriesPreserveEmpty); got != providerModelSectionStateExplicitEmpty {
+		t.Fatalf("providerModelStateAfterEditingNoEntries(preserve-empty) = %v, want %v", got, providerModelSectionStateExplicitEmpty)
+	}
+	if got := providerModelStateAfterEditingNoEntries(providerModelSectionStateInMemoryEffectiveOnly); got != providerModelSectionStateInMemoryEffectiveOnly {
+		t.Fatalf("providerModelStateAfterEditingNoEntries(in-memory) = %v, want %v", got, providerModelSectionStateInMemoryEffectiveOnly)
+	}
+	if got := providerModelStateAfterEditingNoEntries(providerModelSectionStateExplicitEntries); got != providerModelSectionStateAbsent {
+		t.Fatalf("providerModelStateAfterEditingNoEntries(explicit-entries) = %v, want %v", got, providerModelSectionStateAbsent)
+	}
+
+	if got := providerModelStateAfterEditingEntries(providerModelSectionStateExplicitEmpty); got != providerModelSectionStateExplicitEntriesPreserveEmpty {
+		t.Fatalf("providerModelStateAfterEditingEntries(explicit-empty) = %v, want %v", got, providerModelSectionStateExplicitEntriesPreserveEmpty)
+	}
+	if got := providerModelStateAfterEditingEntries(providerModelSectionStateExplicitEntries); got != providerModelSectionStateExplicitEntries {
+		t.Fatalf("providerModelStateAfterEditingEntries(explicit-entries) = %v, want %v", got, providerModelSectionStateExplicitEntries)
+	}
+	if got := providerModelStateAfterEditingEntries(providerModelSectionStateAbsent); got != providerModelSectionStateImplicitEntries {
+		t.Fatalf("providerModelStateAfterEditingEntries(absent) = %v, want %v", got, providerModelSectionStateImplicitEntries)
+	}
+}
+
+func TestNormalizeProviderModelsForEdit_DirectBranches(t *testing.T) {
+	if got := normalizeProviderModelsForEdit(nil); got != nil {
+		t.Fatalf("normalizeProviderModelsForEdit(nil) = %#v, want nil", got)
+	}
+
+	src := map[string]ProviderModelConfig{
+		" OpenAI ": {DefaultModel: "gpt-custom"},
+	}
+	got := normalizeProviderModelsForEdit(src)
+	if got["openai"].DefaultModel != "gpt-custom" {
+		t.Fatalf("normalizeProviderModelsForEdit()[openai].DefaultModel = %q, want %q", got["openai"].DefaultModel, "gpt-custom")
+	}
+	got["openai"] = ProviderModelConfig{DefaultModel: "mutated"}
+	if src[" OpenAI "].DefaultModel != "gpt-custom" {
+		t.Fatalf("normalizeProviderModelsForEdit() should clone input map, src = %#v", src)
+	}
+}
+
+func TestSetProviderModelsForEdit_DirectBranches(t *testing.T) {
+	t.Run("nil input resets to absent state", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.SetProviderModelsForEdit(map[string]ProviderModelConfig{
+			"openai": {DefaultModel: "gpt-custom"},
+		})
+		cfg.SetProviderModelsForEdit(nil)
+
+		if got := cfg.providerModelSectionState(); got != providerModelSectionStateAbsent {
+			t.Fatalf("providerModelSectionState() = %v, want %v", got, providerModelSectionStateAbsent)
+		}
+		if got := cfg.ProviderModelsForSave(); got != nil {
+			t.Fatalf("ProviderModelsForSave() = %#v, want nil", got)
+		}
+	})
+
+	t.Run("empty map from in-memory state triggers effective reset path", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.providerModelsStore = normalizeProviderModelStore(providerModelSectionStateInMemoryEffectiveOnly, nil)
+		cfg.ProviderModels = buildEffectiveProviderModels(nil)
+		cfg.ProviderModels["openai"] = mergeProviderModelConfig(
+			DefaultConfig().ProviderModels["openai"],
+			ProviderModelConfig{DefaultModel: "gpt-custom"},
+		)
+
+		cfg.SetProviderModelsForEdit(map[string]ProviderModelConfig{})
+
+		if got := cfg.providerModelSectionState(); got != providerModelSectionStateInMemoryEffectiveOnly {
+			t.Fatalf("providerModelSectionState() = %v, want %v", got, providerModelSectionStateInMemoryEffectiveOnly)
+		}
+		want := DefaultConfig().ProviderModels["openai"].DefaultModel
+		if got := cfg.GetEffectiveModelForProvider("openai"); got != want {
+			t.Fatalf("GetEffectiveModelForProvider(openai) = %q, want %q", got, want)
+		}
+	})
+}
+
+func TestApplyProviderModelEditTransition_DirectBranches(t *testing.T) {
+	t.Run("reset transition restores in-memory effective defaults", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.providerModelsStore = normalizeProviderModelStore(providerModelSectionStateExplicitEntries, map[string]ProviderModelConfig{
+			"openai": {DefaultModel: "gpt-custom"},
+		})
+		cfg.refreshEffectiveProviderModels()
+
+		cfg.applyProviderModelEditTransition(providerModelStoreEditTransition{
+			state:                  providerModelSectionStateInMemoryEffectiveOnly,
+			resetInMemoryEffective: true,
+		})
+
+		if got := cfg.providerModelSectionState(); got != providerModelSectionStateInMemoryEffectiveOnly {
+			t.Fatalf("providerModelSectionState() = %v, want %v", got, providerModelSectionStateInMemoryEffectiveOnly)
+		}
+		want := DefaultConfig().ProviderModels["openai"].DefaultModel
+		if got := cfg.GetEffectiveModelForProvider("openai"); got != want {
+			t.Fatalf("GetEffectiveModelForProvider(openai) = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("non-reset transition applies explicit state/raw", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.applyProviderModelEditTransition(providerModelStoreEditTransition{
+			state: providerModelSectionStateExplicitEntriesPreserveEmpty,
+			raw: map[string]ProviderModelConfig{
+				"openai": {DefaultModel: "gpt-custom"},
+			},
+		})
+
+		if got := cfg.providerModelSectionState(); got != providerModelSectionStateExplicitEntriesPreserveEmpty {
+			t.Fatalf("providerModelSectionState() = %v, want %v", got, providerModelSectionStateExplicitEntriesPreserveEmpty)
+		}
+		if got := cfg.ProviderModelsForSave()["openai"].DefaultModel; got != "gpt-custom" {
+			t.Fatalf("ProviderModelsForSave()[openai].DefaultModel = %q, want %q", got, "gpt-custom")
+		}
+	})
+}

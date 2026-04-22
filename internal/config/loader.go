@@ -37,14 +37,15 @@ func bootstrapMissingConfig() (*Config, error) {
 }
 
 func loadConfigFromData(data []byte) (*Config, error) {
-	sections := detectLoaderSections(data)
+	raw := parseYAMLRootMap(data)
+	sections := detectLoaderSectionsFromRoot(raw)
 	cfg := defaultConfigForLoad(sections)
 
 	if err := yaml.Unmarshal(data, cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
 
-	applyLegacyLoadCompatibility(data, cfg)
+	applyLegacyLoadCompatibility(data, raw, cfg)
 	applyDefaults(cfg, sections.defaultApplyOptions())
 
 	return cfg, nil

@@ -246,6 +246,37 @@ func TestDeleteProviderModelConfig_RemovesOnlyRequestedClaudeEntryWhenAnthropicS
 	}
 }
 
+func TestDeleteProviderModelConfig_NoRawOverrideRestoresEffectiveDefault(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.providerModelsStore = normalizeProviderModelStore(providerModelSectionStateAbsent, nil)
+	cfg.ProviderModels = buildEffectiveProviderModels(nil)
+
+	cfg.ProviderModels["openai"] = mergeProviderModelConfig(cfg.ProviderModels["openai"], ProviderModelConfig{
+		DefaultModel: "gpt-custom",
+	})
+	cfg.DeleteProviderModelConfig("openai")
+
+	want := DefaultConfig().ProviderModels["openai"].DefaultModel
+	if got := cfg.ProviderModels["openai"].DefaultModel; got != want {
+		t.Fatalf("DeleteProviderModelConfig(openai) fallback default = %q, want %q", got, want)
+	}
+	if got := cfg.providerModelSectionState(); got != providerModelSectionStateAbsent {
+		t.Fatalf("providerModelSectionState() = %v, want %v", got, providerModelSectionStateAbsent)
+	}
+}
+
+func TestDeleteProviderModelConfig_NoRawOverrideDeletesUnknownEffectiveEntry(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.providerModelsStore = normalizeProviderModelStore(providerModelSectionStateAbsent, nil)
+	cfg.ProviderModels["custom-provider"] = ProviderModelConfig{DefaultModel: "custom-model"}
+
+	cfg.DeleteProviderModelConfig("custom-provider")
+
+	if _, ok := cfg.ProviderModels["custom-provider"]; ok {
+		t.Fatalf("DeleteProviderModelConfig(custom-provider) should delete unknown effective entry, got %#v", cfg.ProviderModels["custom-provider"])
+	}
+}
+
 func TestClearProviderDefaultModelOverride_ClearsOnlyRequestedClaudeEntry(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.SetProviderModelsForEdit(map[string]ProviderModelConfig{

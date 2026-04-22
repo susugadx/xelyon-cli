@@ -8,13 +8,13 @@ type loaderSections struct {
 }
 
 func detectLoaderSections(data []byte) loaderSections {
-	raw := parseYAMLRoot(data)
-	if raw == nil {
-		return loaderSections{}
-	}
+	return detectLoaderSectionsFromRoot(parseYAMLRootMap(data))
+}
+
+func detectLoaderSectionsFromRoot(raw map[string]interface{}) loaderSections {
 	return loaderSections{
-		lspSectionExists: rootHasKey(raw, "lsp"),
-		lspServersExists: rootHasNestedKey(raw, "lsp", "servers"),
+		lspSectionExists: yamlRootHasKey(raw, "lsp"),
+		lspServersExists: yamlRootHasNestedKey(raw, "lsp", "servers"),
 	}
 }
 
@@ -28,9 +28,9 @@ func defaultConfigForLoad(sections loaderSections) *Config {
 	return cfg
 }
 
-func applyLegacyLoadCompatibility(data []byte, cfg *Config) {
-	migrateOldKeys(data, cfg)
-	cfg.providerModelsStore = providerModelStoreFromYAML(data)
+func applyLegacyLoadCompatibility(data []byte, raw map[string]interface{}, cfg *Config) {
+	migrateOldKeysFromRaw(data, raw, cfg)
+	cfg.providerModelsStore = providerModelStoreFromYAMLWithRoot(data, raw)
 }
 
 func (s loaderSections) defaultApplyOptions() defaultApplyOptions {
@@ -38,22 +38,14 @@ func (s loaderSections) defaultApplyOptions() defaultApplyOptions {
 }
 
 func yamlHasNestedKey(data []byte, parentKey, childKey string) bool {
-	raw := parseYAMLRoot(data)
-	if raw == nil {
-		return false
-	}
-	return rootHasNestedKey(raw, parentKey, childKey)
+	return yamlRootHasNestedKey(parseYAMLRootMap(data), parentKey, childKey)
 }
 
 func yamlHasKey(data []byte, key string) bool {
-	raw := parseYAMLRoot(data)
-	if raw == nil {
-		return false
-	}
-	return rootHasKey(raw, key)
+	return yamlRootHasKey(parseYAMLRootMap(data), key)
 }
 
-func parseYAMLRoot(data []byte) map[string]interface{} {
+func parseYAMLRootMap(data []byte) map[string]interface{} {
 	var raw map[string]interface{}
 	if err := yaml.Unmarshal(data, &raw); err != nil {
 		return nil
@@ -61,7 +53,7 @@ func parseYAMLRoot(data []byte) map[string]interface{} {
 	return raw
 }
 
-func rootHasKey(raw map[string]interface{}, key string) bool {
+func yamlRootHasKey(raw map[string]interface{}, key string) bool {
 	if raw == nil {
 		return false
 	}
@@ -69,7 +61,7 @@ func rootHasKey(raw map[string]interface{}, key string) bool {
 	return exists
 }
 
-func rootHasNestedKey(raw map[string]interface{}, parentKey, childKey string) bool {
+func yamlRootHasNestedKey(raw map[string]interface{}, parentKey, childKey string) bool {
 	if raw == nil {
 		return false
 	}

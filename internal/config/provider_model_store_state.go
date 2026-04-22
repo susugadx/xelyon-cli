@@ -58,36 +58,33 @@ func (s providerModelStore) stateAfterDeletingAllEntries() providerModelSectionS
 	}
 }
 
-func (s providerModelStore) stateAfterEditingEntries(entryCount int) providerModelSectionState {
-	switch s.state {
-	case providerModelSectionStateExplicitEmpty:
-		if entryCount == 0 {
-			return providerModelSectionStateExplicitEmpty
-		}
-		return providerModelSectionStateExplicitEntriesPreserveEmpty
-	case providerModelSectionStateExplicitEntries:
-		if entryCount == 0 {
-			return providerModelSectionStateAbsent
-		}
-		return providerModelSectionStateExplicitEntries
-	case providerModelSectionStateExplicitEntriesPreserveEmpty:
-		if entryCount == 0 {
-			return providerModelSectionStateExplicitEmpty
-		}
-		return providerModelSectionStateExplicitEntriesPreserveEmpty
-	case providerModelSectionStateAbsent, providerModelSectionStateImplicitEntries:
-		if entryCount == 0 {
-			return providerModelSectionStateAbsent
-		}
-		return providerModelSectionStateImplicitEntries
+func providerModelStateAfterEditingNoEntries(state providerModelSectionState) providerModelSectionState {
+	switch state {
+	case providerModelSectionStateExplicitEmpty, providerModelSectionStateExplicitEntriesPreserveEmpty:
+		return providerModelSectionStateExplicitEmpty
 	case providerModelSectionStateInMemoryEffectiveOnly:
-		if entryCount == 0 {
-			return providerModelSectionStateInMemoryEffectiveOnly
-		}
-		return providerModelSectionStateImplicitEntries
+		return providerModelSectionStateInMemoryEffectiveOnly
 	default:
 		return providerModelSectionStateAbsent
 	}
+}
+
+func providerModelStateAfterEditingEntries(state providerModelSectionState) providerModelSectionState {
+	switch state {
+	case providerModelSectionStateExplicitEmpty, providerModelSectionStateExplicitEntriesPreserveEmpty:
+		return providerModelSectionStateExplicitEntriesPreserveEmpty
+	case providerModelSectionStateExplicitEntries:
+		return providerModelSectionStateExplicitEntries
+	default:
+		return providerModelSectionStateImplicitEntries
+	}
+}
+
+func (s providerModelStore) stateAfterEditingEntries(entryCount int) providerModelSectionState {
+	if entryCount == 0 {
+		return providerModelStateAfterEditingNoEntries(s.state)
+	}
+	return providerModelStateAfterEditingEntries(s.state)
 }
 
 func (s providerModelStore) nextStateForMutation(raw map[string]ProviderModelConfig) providerModelSectionState {
@@ -97,42 +94,42 @@ func (s providerModelStore) nextStateForMutation(raw map[string]ProviderModelCon
 	return s.stateForEntryMutation()
 }
 
+func providerModelStatePersistsRawEntries(state providerModelSectionState) bool {
+	switch state {
+	case providerModelSectionStateExplicitEntries, providerModelSectionStateExplicitEntriesPreserveEmpty, providerModelSectionStateImplicitEntries:
+		return true
+	default:
+		return false
+	}
+}
+
 type providerModelStoreEditTransition struct {
 	state                  providerModelSectionState
 	raw                    map[string]ProviderModelConfig
 	resetInMemoryEffective bool
 }
 
-func (s providerModelStore) transitionAfterEditingEntries(raw map[string]ProviderModelConfig) providerModelStoreEditTransition {
-	nextState := s.stateAfterEditingEntries(len(raw))
+func providerModelStoreTransition(nextState providerModelSectionState, raw map[string]ProviderModelConfig, allowResetInMemoryEffective bool) providerModelStoreEditTransition {
 	transition := providerModelStoreEditTransition{
 		state: nextState,
 	}
-
-	switch nextState {
-	case providerModelSectionStateInMemoryEffectiveOnly:
+	if allowResetInMemoryEffective && nextState == providerModelSectionStateInMemoryEffectiveOnly {
 		transition.resetInMemoryEffective = true
-	case providerModelSectionStateAbsent, providerModelSectionStateExplicitEmpty:
-		transition.raw = nil
-	default:
-		if len(raw) > 0 {
-			transition.raw = raw
-		}
+		return transition
 	}
-
+	if !providerModelStatePersistsRawEntries(nextState) || len(raw) == 0 {
+		return transition
+	}
+	transition.raw = raw
 	return transition
+}
+
+func (s providerModelStore) transitionAfterEditingEntries(raw map[string]ProviderModelConfig) providerModelStoreEditTransition {
+	nextState := s.stateAfterEditingEntries(len(raw))
+	return providerModelStoreTransition(nextState, raw, true)
 }
 
 func (s providerModelStore) transitionAfterRawMutation(raw map[string]ProviderModelConfig) providerModelStoreEditTransition {
 	nextState := s.nextStateForMutation(raw)
-	if len(raw) == 0 {
-		return providerModelStoreEditTransition{
-			state: nextState,
-			raw:   nil,
-		}
-	}
-	return providerModelStoreEditTransition{
-		state: nextState,
-		raw:   raw,
-	}
+	return providerModelStoreTransition(nextState, raw, false)
 }

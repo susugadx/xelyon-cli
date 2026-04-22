@@ -87,58 +87,6 @@ var fieldAdapters = map[string]fieldAdapter{
 	},
 }
 
-// BuildConfigRegistry はConfig構造体からカテゴリリストを構築する
-func BuildConfigRegistry(cfg *Config) []ConfigCategory {
-	defaultCfg := DefaultConfig()
-	var categories []ConfigCategory
-
-	for _, catDef := range CategoryDefinitions {
-		cat := ConfigCategory{
-			Name:        catDef.Name,
-			DisplayName: catDef.DisplayName,
-			Icon:        catDef.Icon,
-		}
-
-		for _, fieldPath := range catDef.Fields {
-			fieldType, ok := FieldTypeMap[fieldPath]
-			if !ok {
-				fieldType = FieldTypeString
-			}
-
-			desc := FieldDescriptions[fieldPath]
-			opts := SelectOptions[fieldPath]
-
-			currentVal, _ := GetFieldValue(cfg, fieldPath)
-			defaultVal, _ := GetFieldValue(defaultCfg, fieldPath)
-			if adapter, ok := fieldAdapters[fieldPath]; ok && adapter.getDefault != nil {
-				defaultVal = adapter.getDefault()
-			}
-
-			// 表示名をパスから生成
-			displayName := fieldPath
-			if parts := strings.Split(fieldPath, "."); len(parts) > 1 {
-				displayName = parts[len(parts)-1]
-			}
-
-			field := ConfigField{
-				Path:        fieldPath,
-				DisplayName: displayName,
-				Description: desc,
-				FieldType:   fieldType,
-				Options:     opts,
-				Category:    catDef.Name,
-				Current:     currentVal,
-				Default:     defaultVal,
-			}
-			cat.Fields = append(cat.Fields, field)
-		}
-
-		categories = append(categories, cat)
-	}
-
-	return categories
-}
-
 func getReflectFieldValue(cfg *Config, path string) (interface{}, error) {
 	v, err := resolveConfigValueByPath(cfg, strings.Split(path, "."))
 	if err != nil {
