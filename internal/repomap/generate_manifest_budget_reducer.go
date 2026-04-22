@@ -72,3 +72,10 @@ func (r *projectMapManifestBudgetReducer) shrink() bool {
 	}
 	return true
 }
+
+func minInt(left, right int) int {
+	if left < right {
+		return left
+	}
+	return right
+}

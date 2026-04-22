@@ -1,62 +1,6 @@
 package repomap
 
-import (
-	"fmt"
-
-	"github.com/susugadx/xelyon-cli/internal/tools/common"
-)
-
-type buildArtifacts struct {
-	entries []*FileEntry
-	cache   *MapCache
-}
-
-func (pm *ProjectMap) validateBuildPreconditions() error {
-	if pm == nil {
-		return fmt.Errorf("project map is nil")
-	}
-	if !common.IsRipgrepAvailable() {
-		return fmt.Errorf("ripgrep (rg) is required")
-	}
-	return nil
-}
-
-func (pm *ProjectMap) collectBuildArtifacts() (*buildArtifacts, error) {
-	states, symbolsByFile, err := pm.collectBuildInputs()
-	if err != nil {
-		return nil, err
-	}
-
-	entries, cache, err := pm.buildEntriesAndCache(states, symbolsByFile)
-	if err != nil {
-		return nil, err
-	}
-
-	return &buildArtifacts{
-		entries: entries,
-		cache:   cache,
-	}, nil
-}
-
-func (pm *ProjectMap) collectBuildInputs() ([]fileState, map[string][]Symbol, error) {
-	paths, err := pm.listFiles()
-	if err != nil {
-		return nil, nil, err
-	}
-
-	cache := loadBuildInputCache(pm.RootPath)
-	states, err := pm.buildFileStates(paths)
-	if err != nil {
-		return nil, nil, err
-	}
-	states = applyCachePolicyToStates(states, cache)
-
-	symbolsByFile, err := pm.scanSymbols(states)
-	if err != nil {
-		return nil, nil, err
-	}
-	return states, symbolsByFile, nil
-}
+import "fmt"
 
 func (pm *ProjectMap) buildEntriesAndCache(states []fileState, symbolsByFile map[string][]Symbol) ([]*FileEntry, *MapCache, error) {
 	entries := make([]*FileEntry, 0, len(states))

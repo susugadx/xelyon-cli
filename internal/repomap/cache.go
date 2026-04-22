@@ -1,12 +1,8 @@
 package repomap
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"os"
-	"path/filepath"
 	"time"
 )
 
@@ -43,12 +39,7 @@ func loadMapCacheWithFallback(rootPath string) *MapCache {
 }
 
 func loadMapCache(rootPath string) (*MapCache, error) {
-	cachePath, err := cacheFilePath(rootPath)
-	if err != nil {
-		return nil, err
-	}
-
-	data, err := os.ReadFile(cachePath)
+	data, err := readMapCacheData(rootPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return newEmptyMapCache(rootPath), nil
@@ -56,42 +47,19 @@ func loadMapCache(rootPath string) (*MapCache, error) {
 		return nil, err
 	}
 
-	var cache MapCache
-	if err := json.Unmarshal(data, &cache); err != nil {
+	cache, err := decodeMapCache(data)
+	if err != nil {
 		return nil, err
 	}
-	if cache.Files == nil {
-		cache.Files = map[string]*CacheFile{}
-	}
-	return &cache, nil
+	return normalizeLoadedMapCache(rootPath, cache), nil
 }
 
 func saveMapCache(rootPath string, cache *MapCache) error {
-	cachePath, err := cacheFilePath(rootPath)
+	data, err := encodeMapCache(rootPath, cache, time.Now().UTC())
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(cachePath), 0755); err != nil {
-		return err
-	}
-
-	cache.RootPath = rootPath
-	cache.UpdatedAt = time.Now().UTC()
-	data, err := json.MarshalIndent(cache, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(cachePath, data, 0600)
-}
-
-func cacheFilePath(rootPath string) (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	sum := sha256.Sum256([]byte(filepath.Clean(rootPath)))
-	name := hex.EncodeToString(sum[:])[:12] + ".json"
-	return filepath.Join(home, ".xelyon", "cache", "projectmap", name), nil
+	return writeMapCacheData(rootPath, data)
 }
 
 func cloneCacheFile(file *CacheFile) *CacheFile {
@@ -106,4 +74,17 @@ func cloneCacheFile(file *CacheFile) *CacheFile {
 		cloned.Symbols = append([]Symbol(nil), file.Symbols...)
 	}
 	return cloned
+}
+
+func normalizeLoadedMapCache(rootPath string, cache *MapCache) *MapCache {
+	if cache == nil {
+		return newEmptyMapCache(rootPath)
+	}
+	if cache.RootPath == "" {
+		cache.RootPath = rootPath
+	}
+	if cache.Files == nil {
+		cache.Files = map[string]*CacheFile{}
+	}
+	return cache
 }
