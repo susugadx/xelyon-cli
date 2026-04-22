@@ -1,8 +1,6 @@
 package agent
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
@@ -34,16 +32,13 @@ func resolveProjectMapInjectionSources(agent *Agent) (projectMapInjectionSources
 		return projectMapInjectionSources{}, false
 	}
 
-	cwd, err := os.Getwd()
-	if err != nil {
+	cwd, ok := resolveProjectMapSourceCWD()
+	if !ok {
 		return projectMapInjectionSources{}, false
 	}
 
 	pc := loadProjectConfig()
-	rootPath := cwd
-	if pc != nil && strings.TrimSpace(pc.FilePath) != "" {
-		rootPath = filepath.Dir(pc.FilePath)
-	}
+	rootPath := resolveProjectMapSourceRootPath(cwd, pc)
 	ignorePatterns := config.ResolveSharedIgnorePatterns(cfg, pc)
 
 	return projectMapInjectionSources{
