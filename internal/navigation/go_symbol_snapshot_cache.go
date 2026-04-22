@@ -4,18 +4,12 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-
-	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
 var (
 	goSymbolSnapshotCache    sync.Map
 	goSymbolSnapshotRootKeys sync.Map
 )
-
-func init() {
-	tools.AddSearchCacheLifecycleHooks(clearGoSymbolSnapshotCache, clearGoSymbolSnapshotCacheWithKeys, clearGoSymbolSnapshotCacheWithKeys)
-}
 
 func loadGoSymbolSnapshot(runtime GoSymbolRuntime) *goSymbolSnapshot {
 	cacheKey := goSymbolSnapshotCacheKey(runtime.ProjectMapRootPath, runtime.ProjectMapStateKey)
