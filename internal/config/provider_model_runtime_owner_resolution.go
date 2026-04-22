@@ -69,31 +69,3 @@ func (c *Config) RuntimeProviderConfigKey(provider, model string) string {
 	}
 	return FallbackProviderConfigKey(provider, c.DefaultProvider)
 }
-
-func normalizeModelResolutionInput(currentProvider, model string) (string, string) {
-	return CanonicalProviderName(currentProvider), strings.TrimSpace(model)
-}
-
-func resolveProviderForModelFallback(currentProvider, model string) string {
-	if inferred := InferProviderFromModel(model); inferred != "" {
-		return CanonicalProviderName(inferred)
-	}
-	return currentProvider
-}
-
-// ResolveProviderForModel は model を所有すべき実行時 provider を解決する。
-// 解決順序は「config の選択モデル」→「provider default」→「モデル名からの推定」。
-func (c *Config) ResolveProviderForModel(currentProvider, model string) string {
-	currentProvider, model = normalizeModelResolutionInput(currentProvider, model)
-	if model == "" {
-		return currentProvider
-	}
-
-	if providerName := c.FindProviderBySelectedModel(model); providerName != "" {
-		return CanonicalProviderName(providerName)
-	}
-	if providerName := c.FindProviderByDefaultModel(model); providerName != "" {
-		return CanonicalProviderName(providerName)
-	}
-	return resolveProviderForModelFallback(currentProvider, model)
-}
