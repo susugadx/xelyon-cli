@@ -615,7 +615,16 @@ export XELYON_API_RETRY_MAX_DELAY=60
 
 # 差分表示行数
 export XELYON_DIFF_CONTEXT_LINES=20
+
+# str_replace batch: stdout抑止時でも厳密な行数統計を強制
+export XELYON_STR_REPLACE_BATCH_EXACT_LINE_STATS=1
 ```
+
+`XELYON_STR_REPLACE_BATCH_EXACT_LINE_STATS` は `str_replace` の batch 置換で使う行数統計モードを切り替えます。
+
+- デフォルト（未設定）: `SuppressStdout()==true` の実行では軽量統計を使用（高速）
+- `1` / `true` / `yes` / `on`: stdout 抑止時でも厳密統計を使用
+- 注意: 厳密統計は大きい入力で CPU / メモリコストが増えるため、検証用途でのみ有効化することを推奨
 
 ### Function Calling（ツール呼び出し）
 

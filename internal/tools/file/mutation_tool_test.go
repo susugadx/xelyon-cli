@@ -1,6 +1,7 @@
 package file
 
 import (
+	"bytes"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -95,6 +96,110 @@ func TestStrReplaceToolRun_FileChangeOnlyOnAppliedEdit(t *testing.T) {
 		}
 	})
 
+	t.Run("batch success uses final diff line stats when preview is enabled", func(t *testing.T) {
+		setupTestConfirm(t, true)
+		tmpDir := t.TempDir()
+		testFile := filepath.Join(tmpDir, "batch-diff.txt")
+		testutil.CreateTempFile(t, tmpDir, "batch-diff.txt", "x")
+		var stdout bytes.Buffer
+		execCtxWithPreview := newTestToolExecContext()
+		execCtxWithPreview.Stdout = &stdout
+
+		result, change, err := tool.Run(execCtxWithPreview, map[string]string{
+			"path":  testFile,
+			"edits": `[{"old_str":"x","new_str":"x\ny"},{"old_str":"x\ny","new_str":"z"}]`,
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(result, "Successfully applied 2 edits") {
+			t.Fatalf("expected batch success result, got: %s", result)
+		}
+		assertHasFileChange(t, change)
+		if change.LinesAdded != 1 || change.LinesRemoved != 1 {
+			t.Fatalf("expected final diff line stats +1/-1, got +%d/-%d", change.LinesAdded, change.LinesRemoved)
+		}
+	})
+
+	t.Run("batch success uses lightweight line stats when stdout is suppressed", func(t *testing.T) {
+		setupTestConfirm(t, true)
+		tmpDir := t.TempDir()
+		testFile := filepath.Join(tmpDir, "batch-diff-suppressed.txt")
+		testutil.CreateTempFile(t, tmpDir, "batch-diff-suppressed.txt", "x")
+
+		result, change, err := tool.Run(execCtx, map[string]string{
+			"path":  testFile,
+			"edits": `[{"old_str":"x","new_str":"x\ny"},{"old_str":"x\ny","new_str":"z"}]`,
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(result, "Successfully applied 2 edits") {
+			t.Fatalf("expected batch success result, got: %s", result)
+		}
+		assertHasFileChange(t, change)
+		if change.LinesAdded != 3 || change.LinesRemoved != 3 {
+			t.Fatalf("expected lightweight line stats +3/-3, got +%d/-%d", change.LinesAdded, change.LinesRemoved)
+		}
+	})
+
+	t.Run("batch success can force exact diff line stats when stdout is suppressed", func(t *testing.T) {
+		setupTestConfirm(t, true)
+		t.Setenv(envBatchExactLineStats, "1")
+		tmpDir := t.TempDir()
+		testFile := filepath.Join(tmpDir, "batch-diff-suppressed-force-exact.txt")
+		testutil.CreateTempFile(t, tmpDir, "batch-diff-suppressed-force-exact.txt", "x")
+
+		result, change, err := tool.Run(execCtx, map[string]string{
+			"path":  testFile,
+			"edits": `[{"old_str":"x","new_str":"x\ny"},{"old_str":"x\ny","new_str":"z"}]`,
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(result, "Successfully applied 2 edits") {
+			t.Fatalf("expected batch success result, got: %s", result)
+		}
+		assertHasFileChange(t, change)
+		if change.LinesAdded != 1 || change.LinesRemoved != 1 {
+			t.Fatalf("expected forced exact line stats +1/-1, got +%d/-%d", change.LinesAdded, change.LinesRemoved)
+		}
+	})
+
+	t.Run("batch success falls back to lightweight line stats when exact diff is capped", func(t *testing.T) {
+		setupTestConfirm(t, true)
+		originalLimit := myersDiagonalStepLimit
+		originalMin := myersMinDiagonalStepLimit
+		myersDiagonalStepLimit = 1
+		myersMinDiagonalStepLimit = 1
+		t.Cleanup(func() {
+			myersDiagonalStepLimit = originalLimit
+			myersMinDiagonalStepLimit = originalMin
+		})
+
+		tmpDir := t.TempDir()
+		testFile := filepath.Join(tmpDir, "batch-diff-fallback.txt")
+		testutil.CreateTempFile(t, tmpDir, "batch-diff-fallback.txt", "x")
+		var stdout bytes.Buffer
+		execCtxWithPreview := newTestToolExecContext()
+		execCtxWithPreview.Stdout = &stdout
+
+		result, change, err := tool.Run(execCtxWithPreview, map[string]string{
+			"path":  testFile,
+			"edits": `[{"old_str":"x","new_str":"x\ny"},{"old_str":"x\ny","new_str":"z"}]`,
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(result, "Successfully applied 2 edits") {
+			t.Fatalf("expected batch success result, got: %s", result)
+		}
+		assertHasFileChange(t, change)
+		if change.LinesAdded != 3 || change.LinesRemoved != 3 {
+			t.Fatalf("expected fallback line stats +3/-3, got +%d/-%d", change.LinesAdded, change.LinesRemoved)
+		}
+	})
+
 	t.Run("batch invalid json", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		testFile := filepath.Join(tmpDir, "batch-invalid.txt")
@@ -111,6 +216,30 @@ func TestStrReplaceToolRun_FileChangeOnlyOnAppliedEdit(t *testing.T) {
 			t.Fatalf("expected invalid json error result, got: %s", result)
 		}
 		assertNoFileChange(t, change)
+	})
+
+	t.Run("line range success tracks removed lines", func(t *testing.T) {
+		setupTestConfirm(t, true)
+		tmpDir := t.TempDir()
+		testFile := filepath.Join(tmpDir, "line-range.txt")
+		testutil.CreateTempFile(t, tmpDir, "line-range.txt", "a\nb\nc")
+
+		result, change, err := tool.Run(execCtx, map[string]string{
+			"path":       testFile,
+			"new_str":    "x\ny",
+			"start_line": "2",
+			"end_line":   "3",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(result, "Successfully replaced lines 2-3") {
+			t.Fatalf("expected line-range success result, got: %s", result)
+		}
+		assertHasFileChange(t, change)
+		if change.LinesAdded != 2 || change.LinesRemoved != 2 {
+			t.Fatalf("expected line stats +2/-2, got +%d/-%d", change.LinesAdded, change.LinesRemoved)
+		}
 	})
 }
 

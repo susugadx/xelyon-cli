@@ -4,10 +4,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
+
+const envBatchExactLineStats = "XELYON_STR_REPLACE_BATCH_EXACT_LINE_STATS"
+
+type batchEditsExecutionDetails struct {
+	result       fileMutationResult
+	linesAdded   int
+	linesRemoved int
+}
 
 // executeBatchEdits は batch edits モードを実行する。
 // edits を順番に in-memory 適用し、全成功時のみファイルに書き込む。
@@ -26,26 +35,33 @@ func executeBatchEditsWithPromptIOAndOptionsResult(promptIO ui.PromptIO, options
 }
 
 func executeBatchEditsWithEntriesAndOptionsResult(promptIO ui.PromptIO, options common.ConfirmOptions, path string, edits []EditEntry) (fileMutationResult, error) {
+	details, err := executeBatchEditsWithEntriesAndOptionsDetails(promptIO, options, path, edits)
+	return details.result, err
+}
+
+func executeBatchEditsWithEntriesAndOptionsDetails(promptIO ui.PromptIO, options common.ConfirmOptions, path string, edits []EditEntry) (batchEditsExecutionDetails, error) {
 	ctx, result, err := prepareFileMutation(promptIO, options, path, "path is required")
 	if result.message != "" || err != nil {
-		return result, err
+		return batchEditsExecutionDetails{result: result}, err
 	}
 	if ctx.cfg == nil {
-		return fileMutationResult{}, fmt.Errorf("missing confirm options config")
+		return batchEditsExecutionDetails{}, fmt.Errorf("missing confirm options config")
 	}
 
 	contentBytes, err := os.ReadFile(ctx.absPath)
 	if err != nil {
-		return newErrorMutationResult(fmt.Sprintf("Error reading file: %v", err)), nil
+		return batchEditsExecutionDetails{result: newErrorMutationResult(fmt.Sprintf("Error reading file: %v", err))}, nil
 	}
 	oldContent := string(contentBytes)
 
 	if validationErr := validateBatchEditEntries(path, edits); validationErr.IsTerminal() {
-		return validationErr, nil
+		return batchEditsExecutionDetails{result: validationErr}, nil
 	}
 
+	details := batchEditsExecutionDetails{}
+
 	var outcome batchStringReplacementOutcome
-	return executeFileMutationWorkflow(ctx, options, fileMutationWorkflow{
+	workflowResult, workflowErr := executeFileMutationWorkflow(ctx, options, fileMutationWorkflow{
 		toolName:       "str_replace",
 		confirmMessage: "Apply batch replacement? / バッチ置換を適用しますか？",
 		preview: func() fileMutationResult {
@@ -61,7 +77,8 @@ func executeBatchEditsWithEntriesAndOptionsResult(promptIO ui.PromptIO, options 
 			if outcome.plan.newContent == oldContent {
 				return newNoopMutationResult("No changes after applying all edits")
 			}
-			showBatchReplacementPreview(ctx, oldContent, outcome.plan.newContent, path, edits)
+			details.linesAdded, details.linesRemoved = resolveBatchExecutionLineStats(ctx, oldContent, outcome.plan.newContent, edits)
+			showBatchReplacementPreview(ctx, oldContent, outcome.plan.newContent, path, len(edits), details.linesRemoved, details.linesAdded)
 			return fileMutationResult{}
 		},
 		confirm: mutationConfirmHandlers{
@@ -78,6 +95,37 @@ func executeBatchEditsWithEntriesAndOptionsResult(promptIO ui.PromptIO, options 
 			return applyStringReplaceMutation(ctx, outcome.plan.newContent, fmt.Sprintf("✅ Applied %d edits to: %s", len(edits), path), message)
 		},
 	})
+	details.result = workflowResult
+	return details, workflowErr
+}
+
+func resolveBatchExecutionLineStats(ctx fileMutationContext, oldContent, newContent string, edits []EditEntry) (linesAdded, linesRemoved int) {
+	linesRemoved, linesAdded = batchEditLineStats(edits)
+	if !shouldResolveExactBatchLineStats(ctx) {
+		return linesAdded, linesRemoved
+	}
+
+	if exactLinesAdded, exactLinesRemoved, exact := resolveBatchDiffLineStats(oldContent, newContent); exact {
+		return exactLinesAdded, exactLinesRemoved
+	}
+
+	return linesAdded, linesRemoved
+}
+
+func shouldResolveExactBatchLineStats(ctx fileMutationContext) bool {
+	if isBatchExactLineStatsForced() {
+		return true
+	}
+	return !ctx.out.SuppressStdout()
+}
+
+func isBatchExactLineStatsForced() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(envBatchExactLineStats))) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
 }
 
 func parseBatchEditEntries(editsJSON string) ([]EditEntry, error) {
@@ -105,15 +153,14 @@ func validateBatchEditEntries(path string, edits []EditEntry) fileMutationResult
 	return fileMutationResult{}
 }
 
-func showBatchReplacementPreview(ctx fileMutationContext, oldContent, newContent, path string, edits []EditEntry) {
+func showBatchReplacementPreview(ctx fileMutationContext, oldContent, newContent, path string, editCount, linesRemoved, linesAdded int) {
 	if ctx.out.SuppressStdout() {
 		return
 	}
 
-	linesRemoved, linesAdded := batchEditLineStats(edits)
 	w := ctx.out.StdoutWriter()
 	ctx.out.Println()
-	ui.FileOpHeader(w, "str_replace", fmt.Sprintf("%s (batch: %d edits)", path, len(edits)))
+	ui.FileOpHeader(w, "str_replace", fmt.Sprintf("%s (batch: %d edits)", path, editCount))
 	ui.FileOpStatsLine(w, linesRemoved, linesAdded)
 
 	lineDiff := linesAdded - linesRemoved
