@@ -57,23 +57,6 @@ paste:
 ✅ Captured 5 lines
 ```
 
-### 方法3: /paste コマンド
-
-Bracketed Paste非対応環境向け。
-
-```bash
-> /paste
-📝 Paste Mode
-[長文をペースト]
-[空行]
-[空行]
-✅ Captured N lines
-```
-
-- 終了: 空行2回、`END`、Ctrl+D
-- キャンセル: `/cancel`
-- エイリアス: `/p`
-
 ---
 
 ## NAVモード

@@ -27,7 +27,6 @@ func specialCommandRegistry() map[string]specialCommandHandler {
 		"/plan":      handlePlanCommand,
 		"/init":      func(agent *Agent, _ []string) bool { return handleInitCommand(agent) },
 		"/project":   func(agent *Agent, _ []string) bool { return handleProjectCommand(agent) },
-		"/paste":     handlePasteCommand,
 		"/lsp":       handleLSPCommand,
 		"/tokens":    func(agent *Agent, _ []string) bool { return handleTokensCommand(agent) },
 		"/think":     handleThinkCommand,

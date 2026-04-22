@@ -61,7 +61,6 @@ func ConfirmInteractiveWithIO(promptIO ui.PromptIO, message string) ConfirmResul
 // ReadMultiLineComment は複数行コメントを読み取る
 // 空行2回で入力終了
 // image:プレフィックスで画像を指定可能
-// /paste（または /p）で Paste Mode を起動して長文を挿入可能
 func ReadMultiLineComment(reader *bufio.Reader) (string, *ImageData) {
 	return readMultiLineComment(ui.DefaultPromptIO(), reader)
 }
@@ -77,7 +76,6 @@ func readMultiLineComment(promptIO ui.PromptIO, reader *bufio.Reader) (string, *
 	out.Cyan.Println("--------------------------------------------")
 	out.Cyan.Println("Enter your comment (press Enter twice to finish):")
 	out.Cyan.Println("   Tip: Use 'image:/path/to/file.png' to attach an image")
-	out.Cyan.Println("   Tip: Use '/paste' (or /p) to enter Paste Mode and insert long text")
 	out.Cyan.Println("--------------------------------------------")
 
 	cfg := config.DefaultConfig()
@@ -111,54 +109,6 @@ func readMultiLineComment(promptIO ui.PromptIO, reader *bufio.Reader) (string, *
 		}
 
 		trimmed := strings.TrimSpace(line)
-
-		// /paste: enter paste mode and insert captured content
-		if trimmed == "/p" || trimmed == "/paste" {
-			pm := ui.NewPasteMode(cfg.Paste)
-			var content string
-			var cancelled bool
-			var err error
-			if promptIO.Reader != nil {
-				content, cancelled, err = pm.CaptureWithMultilineReader(promptIO.Reader, promptIO.Out)
-			} else {
-				content, cancelled, err = pm.CaptureWithReader(reader, promptIO.Out)
-			}
-			if err != nil {
-				out.Red.Printf("Paste Mode error: %v\n", err)
-				continue
-			}
-			if cancelled {
-				out.Yellow.Println("Cancelled - input discarded")
-				continue
-			}
-
-			content = strings.ReplaceAll(content, "\r\n", "\n")
-			content = strings.TrimRight(content, "\n")
-			if content == "" {
-				out.Yellow.Println("No content captured")
-				continue
-			}
-
-			pastedLines := strings.Split(content, "\n")
-			for _, pl := range pastedLines {
-				lines = append(lines, pl)
-				totalBytes += len(pl) + 1
-			}
-			emptyLineCount = 0
-
-			if len(lines) >= maxLines {
-				out.Yellow.Printf("Max lines (%d) reached\n", maxLines)
-				goto done
-			}
-			if totalBytes >= maxBytes {
-				out.Yellow.Printf("Max size (%d bytes) reached\n", maxBytes)
-				goto done
-			}
-
-			out.Green.Printf("Inserted %d lines from Paste Mode into comment\n", len(pastedLines))
-			out.Cyan.Println("Back to comment input (finish with empty line x2)")
-			continue
-		}
 
 		// 空行チェック（Enter 2回で終了）
 		if trimmed == "" {

@@ -17,7 +17,6 @@ import (
 var tuiBlockingCommands = map[string]string{
 	"/project": "Use --no-tui mode or edit xelyon.yaml directly",
 	"/init":    "Use --no-tui mode: xelyon --no-tui then /init",
-	"/paste":   "Paste text directly into the input field",
 }
 
 // TUIAdapter は Agent を tui.AgentInterface に適合させるアダプタ

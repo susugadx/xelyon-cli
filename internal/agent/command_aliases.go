@@ -10,7 +10,6 @@ import (
 // config.yaml の command_aliases で上書き・追加できる。
 var defaultCommandAliases = map[string]string{
 	"/h": "/help",
-	"/p": "/paste",
 }
 
 func resolveCommandAliasWithConfig(cmd string, cfg *config.Config) string {

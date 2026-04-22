@@ -112,12 +112,6 @@ var Commands = []CommandInfo{
 		DescriptionJP: "xelyon.yamlを対話式で編集",
 	},
 	{
-		Name:          "/paste",
-		Aliases:       []string{"/p"},
-		Description:   "Paste mode for long text (end with empty line x2, END, or Ctrl+D)",
-		DescriptionJP: "ペーストモード",
-	},
-	{
 		Name:          "/plan",
 		Args:          "[on|off]",
 		Description:   "Toggle Plan Mode (investigation -> plan -> approval; implementation happens on next normal turn)",

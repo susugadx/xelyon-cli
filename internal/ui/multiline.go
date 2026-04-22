@@ -2,21 +2,19 @@ package ui
 
 import (
 	"bufio"
-	"bytes"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 	"time"
-	"unicode/utf8"
 
-	"github.com/mattn/go-runewidth"
 	"golang.org/x/term"
 )
 
 // ErrInterrupted is returned when user presses Ctrl+C
 var ErrInterrupted = errors.New("interrupted")
+var errReadLineTimeout = errors.New("read line timeout")
 
 // Bracketed Paste Mode escape sequences
 const (
@@ -221,201 +219,6 @@ func (m *MultilineReader) readLine() (string, error) {
 
 	// Case 2: Single line input
 	return line, nil
-}
-
-type pasteMarkerKind int
-
-const (
-	pasteMarkerNone pasteMarkerKind = iota
-	pasteMarkerStart
-	pasteMarkerEnd
-)
-
-const escapeSequenceReadTimeout = 10 * time.Millisecond
-
-type lineAssembler struct {
-	data []byte
-}
-
-func (l *lineAssembler) appendByte(b byte) {
-	l.data = append(l.data, b)
-}
-
-func (l *lineAssembler) appendBytes(bytes []byte) {
-	l.data = append(l.data, bytes...)
-}
-
-func (l *lineAssembler) appendString(s string) {
-	l.data = append(l.data, s...)
-}
-
-func (l *lineAssembler) len() int {
-	return len(l.data)
-}
-
-func (l *lineAssembler) bytes() []byte {
-	return l.data
-}
-
-func (l *lineAssembler) string() string {
-	return string(l.data)
-}
-
-func (l *lineAssembler) deleteLastRune() (rune, bool) {
-	if len(l.data) == 0 {
-		return 0, false
-	}
-	r, size := utf8.DecodeLastRune(l.data)
-	if size <= 0 {
-		return 0, false
-	}
-	l.data = l.data[:len(l.data)-size]
-	return r, true
-}
-
-type pasteAssembler struct {
-	active bool
-	buf    bytes.Buffer
-}
-
-func (p *pasteAssembler) start() {
-	if p.active {
-		return
-	}
-	p.active = true
-	p.buf.Reset()
-}
-
-func (p *pasteAssembler) appendByte(b byte) {
-	p.buf.WriteByte(b)
-}
-
-func (p *pasteAssembler) appendBytes(bytes []byte) {
-	p.buf.Write(bytes)
-}
-
-func (p *pasteAssembler) finish() string {
-	p.active = false
-	content := p.buf.String()
-	content = strings.ReplaceAll(content, "\r\n", "\n")
-	content = strings.ReplaceAll(content, "\r", "\n")
-	content = strings.TrimRight(content, "\n")
-	p.buf.Reset()
-	return content
-}
-
-type escapeByteReader func(timeout time.Duration) (byte, bool)
-type escapeByteValidator func(b byte) error
-
-func (m *MultilineReader) isEscapeLeadByte(b byte) bool {
-	return b == 0x1b || b == '['
-}
-
-func (m *MultilineReader) maxEscapeSequenceRead(first byte) int {
-	if first == 0x1b {
-		return 6 // ESC + [200~ = 6 bytes total
-	}
-	return 5
-}
-
-func (m *MultilineReader) detectPasteMarker(sequence string) pasteMarkerKind {
-	switch sequence {
-	case pasteStart, "[200~":
-		return pasteMarkerStart
-	case pasteEnd, "[201~":
-		return pasteMarkerEnd
-	default:
-		return pasteMarkerNone
-	}
-}
-
-func (m *MultilineReader) readEscapeSequence(first byte, readNext escapeByteReader, validate escapeByteValidator) (unhandled []byte, marker pasteMarkerKind, err error) {
-	escBuf := []byte{first}
-	for i := 0; i < m.maxEscapeSequenceRead(first); i++ {
-		nb, ok := readNext(escapeSequenceReadTimeout)
-		if !ok {
-			break
-		}
-		if validate != nil {
-			if err := validate(nb); err != nil {
-				return nil, pasteMarkerNone, err
-			}
-		}
-		escBuf = append(escBuf, nb)
-		if marker := m.detectPasteMarker(string(escBuf)); marker != pasteMarkerNone {
-			return nil, marker, nil
-		}
-	}
-	return escBuf, pasteMarkerNone, nil
-}
-
-func (m *MultilineReader) interruptRawInput(oldState *term.State) error {
-	_ = m.rawModeOps().restore(m.fd, oldState)
-	m.print("^C\r\n")
-	return ErrInterrupted
-}
-
-func (m *MultilineReader) eraseRune(r rune) {
-	w := runewidth.RuneWidth(r)
-	for i := 0; i < w; i++ {
-		m.print("\b \b")
-	}
-}
-
-func (m *MultilineReader) handleBackspace(line *lineAssembler) {
-	if r, ok := line.deleteLastRune(); ok {
-		m.eraseRune(r)
-	}
-}
-
-func (m *MultilineReader) echoByte(lineBytes []byte, b byte) {
-	if b < 0x80 {
-		// ASCII: 印字可能文字のみエコー
-		if b >= 0x20 && b != 0x7f {
-			m.print(string(b))
-		}
-		return
-	}
-	if b >= 0xC0 {
-		// UTF-8マルチバイトの先頭: 何もしない（継続バイトを待つ）
-		return
-	}
-	// 継続バイト (0x80-0xBF): 文字が完成したかチェック
-	n := len(lineBytes)
-	if n >= 2 && utf8.Valid(lineBytes[n-2:]) {
-		r, _ := utf8.DecodeLastRune(lineBytes)
-		if r != utf8.RuneError {
-			m.print(string(r))
-		}
-		return
-	}
-	if n >= 3 && utf8.Valid(lineBytes[n-3:]) {
-		r, _ := utf8.DecodeLastRune(lineBytes)
-		if r != utf8.RuneError {
-			m.print(string(r))
-		}
-		return
-	}
-	if n >= 4 && utf8.Valid(lineBytes[n-4:]) {
-		r, _ := utf8.DecodeLastRune(lineBytes)
-		if r != utf8.RuneError {
-			m.print(string(r))
-		}
-	}
-}
-
-func (m *MultilineReader) echoPrintableASCII(bytes []byte) {
-	for _, b := range bytes {
-		if b >= 0x20 && b < 0x80 && b != 0x7f {
-			m.print(string(b))
-		}
-	}
-}
-
-func (m *MultilineReader) echoPastedContent(content string) {
-	// In raw mode, need \r\n for proper line breaks
-	displayContent := strings.ReplaceAll(content, "\n", "\r\n")
-	m.print(displayContent)
 }
 
 // readWithBracketedPaste reads input using raw mode with paste marker detection
@@ -641,6 +444,113 @@ func (m *MultilineReader) ReadSimpleLine() (string, error) {
 	return StripBracketedPaste(line), nil
 }
 
+// ReadSimpleLineWithTimeout は1行入力を読み取り、タイムアウト時に errReadLineTimeout を返す。
+// 行ごとに goroutine を生成せず、対話入力のアイドルタイムアウトを扱う用途を想定する。
+func (m *MultilineReader) ReadSimpleLineWithTimeout(timeout time.Duration) (string, error) {
+	// 先行の ReadSimpleLine() などで m.reader に既に取り込まれたデータを優先消費する。
+	line, prefix, hasBufferedLine, err := m.consumeBufferedLineForTimedRead()
+	if err != nil {
+		return "", err
+	}
+	if hasBufferedLine {
+		return line, nil
+	}
+
+	// raw mode goroutine未起動時は bufio.Reader 経路で処理する。
+	// 共有 reader に対してこの関数が独自 goroutine を常駐させないようにする。
+	if !m.rawModeInit {
+		return m.readSimpleLineFromReaderWithTimeout(timeout, prefix)
+	}
+	if m.byteChan == nil || m.errChan == nil {
+		m.initRawModeChannels()
+	}
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	timeoutCh := timer.C
+
+	// Enter raw mode to suppress terminal echo (paste markers would be
+	// visible in cooked mode because the terminal echoes before we can strip).
+	if m.isTerminalInput() {
+		oldState, err := m.rawModeOps().makeRaw(m.fd)
+		if err == nil {
+			defer func() { _ = m.rawModeOps().restore(m.fd, oldState) }()
+		}
+	}
+	return m.readLineFromChannelWithTimeoutAndPrefix(timeoutCh, prefix)
+}
+
+func (m *MultilineReader) consumeBufferedLineForTimedRead() (line string, prefix []byte, hasBufferedLine bool, err error) {
+	buffered := m.reader.Buffered()
+	if buffered == 0 {
+		return "", nil, false, nil
+	}
+
+	peeked, err := m.reader.Peek(buffered)
+	if err != nil {
+		return "", nil, false, err
+	}
+
+	if consumeLen, found := findBufferedLineConsumeLen(peeked); found {
+		lineBytes := append([]byte(nil), peeked[:consumeLen]...)
+		if _, err := m.reader.Discard(consumeLen); err != nil {
+			return "", nil, false, err
+		}
+		trimmed := strings.TrimRight(string(lineBytes), "\n\r")
+		return StripBracketedPaste(trimmed), nil, true, nil
+	}
+
+	prefix = append([]byte(nil), peeked...)
+	if _, err := m.reader.Discard(buffered); err != nil {
+		return "", nil, false, err
+	}
+	return "", prefix, false, nil
+}
+
+func findBufferedLineConsumeLen(buf []byte) (consumeLen int, found bool) {
+	for i, b := range buf {
+		switch b {
+		case '\n':
+			return i + 1, true
+		case '\r':
+			if i+1 < len(buf) && buf[i+1] == '\n' {
+				return i + 2, true
+			}
+			return i + 1, true
+		}
+	}
+	return 0, false
+}
+
+func (m *MultilineReader) readSimpleLineFromReaderWithTimeout(timeout time.Duration, prefix []byte) (string, error) {
+	if f, ok := m.input.(*os.File); ok && timeout > 0 {
+		if err := f.SetReadDeadline(time.Now().Add(timeout)); err == nil {
+			defer func() { _ = f.SetReadDeadline(time.Time{}) }()
+			line, err := m.readSimpleLineFromReader(prefix)
+			if err != nil {
+				if errors.Is(err, os.ErrDeadlineExceeded) {
+					return "", errReadLineTimeout
+				}
+				return "", err
+			}
+			return line, nil
+		}
+	}
+	return m.readSimpleLineFromReader(prefix)
+}
+
+func (m *MultilineReader) readSimpleLineFromReader(prefix []byte) (string, error) {
+	line, err := m.reader.ReadString('\n')
+	if err != nil {
+		return "", err
+	}
+	if len(prefix) > 0 {
+		line = string(prefix) + line
+	}
+	line = strings.TrimRight(line, "\n\r")
+	return StripBracketedPaste(line), nil
+}
+
 // readByteTimeoutFromChannel reads a byte from the channel with timeout
 func (m *MultilineReader) readByteTimeoutFromChannel(timeout time.Duration) (byte, bool) {
 	select {
@@ -653,9 +563,22 @@ func (m *MultilineReader) readByteTimeoutFromChannel(timeout time.Duration) (byt
 
 // readLineFromChannel reads a line from the byte channel (when goroutine is active)
 func (m *MultilineReader) readLineFromChannel() (string, error) {
+	return m.readLineFromChannelWithTimeout(nil)
+}
+
+func (m *MultilineReader) readLineFromChannelWithTimeout(timeout <-chan time.Time) (string, error) {
+	return m.readLineFromChannelWithTimeoutAndPrefix(timeout, nil)
+}
+
+func (m *MultilineReader) readLineFromChannelWithTimeoutAndPrefix(timeout <-chan time.Time, prefix []byte) (string, error) {
 	var line lineAssembler
+	if len(prefix) > 0 {
+		line.appendBytes(prefix)
+	}
 	for {
 		select {
+		case <-timeout:
+			return "", errReadLineTimeout
 		case b := <-m.byteChan:
 			// Enter (raw mode では '\r' が来る)
 			if b == '\n' || b == '\r' {

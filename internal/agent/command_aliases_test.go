@@ -13,8 +13,8 @@ func TestResolveCommandAlias_Default(t *testing.T) {
 	}
 
 	got = resolveCommandAliasWithConfig("/p", config.DefaultConfig())
-	if got != "/paste" {
-		t.Fatalf("resolveCommandAlias(/p) = %q, want /paste", got)
+	if got != "/p" {
+		t.Fatalf("resolveCommandAlias(/p) = %q, want /p", got)
 	}
 }
 

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -26,6 +27,63 @@ func TestMultilineReaderHelperMethods(t *testing.T) {
 		}
 		if got != "hello" {
 			t.Fatalf("ReadSimpleLine() = %q, want %q", got, "hello")
+		}
+	})
+
+	t.Run("ReadSimpleLineWithTimeout keeps buffered line after ReadSimpleLine", func(t *testing.T) {
+		r := NewMultilineReader(strings.NewReader("a\nb\n"))
+		first, err := r.ReadSimpleLine()
+		if err != nil {
+			t.Fatalf("ReadSimpleLine() error = %v", err)
+		}
+		if first != "a" {
+			t.Fatalf("ReadSimpleLine() = %q, want %q", first, "a")
+		}
+
+		second, err := r.ReadSimpleLineWithTimeout(100 * time.Millisecond)
+		if err != nil {
+			t.Fatalf("ReadSimpleLineWithTimeout() error = %v", err)
+		}
+		if second != "b" {
+			t.Fatalf("ReadSimpleLineWithTimeout() = %q, want %q", second, "b")
+		}
+	})
+
+	t.Run("ReadSimpleLineWithTimeout does not start raw reader when rawModeInit is false", func(t *testing.T) {
+		r := NewMultilineReader(strings.NewReader("line\n"))
+		if r.rawModeInit {
+			t.Fatal("rawModeInit should be false before ReadSimpleLineWithTimeout()")
+		}
+
+		got, err := r.ReadSimpleLineWithTimeout(100 * time.Millisecond)
+		if err != nil {
+			t.Fatalf("ReadSimpleLineWithTimeout() error = %v", err)
+		}
+		if got != "line" {
+			t.Fatalf("ReadSimpleLineWithTimeout() = %q, want %q", got, "line")
+		}
+		if r.rawModeInit {
+			t.Fatal("ReadSimpleLineWithTimeout() should not initialize raw mode channels")
+		}
+	})
+
+	t.Run("ReadSimpleLineWithTimeout reads from channel", func(t *testing.T) {
+		r, ch, _ := newTestReaderWithChannel()
+		go feedBytes(ch, []byte("hello"))
+		got, err := r.ReadSimpleLineWithTimeout(100 * time.Millisecond)
+		if err != nil {
+			t.Fatalf("ReadSimpleLineWithTimeout() error = %v", err)
+		}
+		if got != "hello" {
+			t.Fatalf("ReadSimpleLineWithTimeout() = %q, want %q", got, "hello")
+		}
+	})
+
+	t.Run("ReadSimpleLineWithTimeout timeout", func(t *testing.T) {
+		r, _, _ := newTestReaderWithChannel()
+		_, err := r.ReadSimpleLineWithTimeout(5 * time.Millisecond)
+		if !errors.Is(err, errReadLineTimeout) {
+			t.Fatalf("ReadSimpleLineWithTimeout() error = %v, want errReadLineTimeout", err)
 		}
 	})
 
