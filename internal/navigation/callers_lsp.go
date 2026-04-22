@@ -80,30 +80,12 @@ func lspLocationFilePath(file, rootPath, invocationCWD string) string {
 	if file == "" || filepath.IsAbs(file) {
 		return file
 	}
-	file = filepath.Clean(filepath.FromSlash(file))
-	if resolved, ok := resolveExistingRelativeLSPPath(invocationCWD, file); ok {
+	file = cleanRelativeNavigationPath(file)
+	if resolved, ok := resolveExistingRelativePath(invocationCWD, file); ok {
 		return resolved
 	}
-	if resolved, ok := resolveExistingRelativeLSPPath(rootPath, file); ok {
+	if resolved, ok := resolveExistingRelativePath(rootPath, file); ok {
 		return resolved
 	}
-	if base := strings.TrimSpace(invocationCWD); base != "" {
-		return filepath.Join(base, file)
-	}
-	if base := strings.TrimSpace(rootPath); base != "" {
-		return filepath.Join(base, file)
-	}
-	return file
-}
-
-func resolveExistingRelativeLSPPath(base, file string) (string, bool) {
-	base = strings.TrimSpace(base)
-	if base == "" {
-		return "", false
-	}
-	candidate := filepath.Join(base, file)
-	if !pathExists(candidate) {
-		return "", false
-	}
-	return candidate, true
+	return resolveRelativePathFromPreferredBases(file, invocationCWD, rootPath)
 }

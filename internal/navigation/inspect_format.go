@@ -2,7 +2,6 @@ package navigation
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/locator"
@@ -192,47 +191,4 @@ func (w *inspectResultWriter) appendRelatedLocator(line, filePath, resolvedPath 
 	}
 	id := w.reg.Register(newInspectRelatedLocator(filePath, resolvedPath, w.symbol.RootPath, lineNo, 0, name))
 	return line + " " + id
-}
-
-func newInspectSymbolLocator(filePath, rootPath string, line, endLine int, name string) locator.Location {
-	return locator.Location{
-		FilePath:     filePath,
-		ResolvedPath: resolveInspectLocatorPath(filePath, rootPath),
-		Line:         line,
-		EndLine:      endLine,
-		Name:         name,
-	}
-}
-
-func newInspectRelatedLocator(filePath, resolvedPath, rootPath string, line, endLine int, name string) locator.Location {
-	if strings.TrimSpace(resolvedPath) == "" {
-		resolvedPath = resolveInspectLocatorPath(filePath, rootPath)
-	} else {
-		resolvedPath = cleanInspectResolvedPath(resolvedPath)
-	}
-	return locator.Location{
-		FilePath:     filePath,
-		ResolvedPath: resolvedPath,
-		Line:         line,
-		EndLine:      endLine,
-		Name:         name,
-	}
-}
-
-func resolveInspectLocatorPath(filePath, rootPath string) string {
-	filePath = strings.TrimSpace(filePath)
-	if filePath == "" {
-		return ""
-	}
-	if filepath.IsAbs(filePath) {
-		return filepath.Clean(filePath)
-	}
-	rootPath = strings.TrimSpace(rootPath)
-	if rootPath == "" {
-		return ""
-	}
-	if abs, err := filepath.Abs(rootPath); err == nil {
-		rootPath = abs
-	}
-	return filepath.Clean(filepath.Join(rootPath, filepath.FromSlash(filePath)))
 }

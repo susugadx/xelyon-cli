@@ -3,6 +3,7 @@ package navigation
 import (
 	goast "go/ast"
 	"go/token"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -55,7 +56,10 @@ func parseRipgrepReferenceLine(line string) (parsedRipgrepReferenceLine, bool) {
 		return parsedRipgrepReferenceLine{}, false
 	}
 
-	absPath := mustAbs(filePath)
+	absPath, err := filepath.Abs(filePath)
+	if err != nil {
+		absPath = filePath
+	}
 	return parsedRipgrepReferenceLine{
 		AbsPath: absPath,
 		RelPath: toRelativePath(absPath),

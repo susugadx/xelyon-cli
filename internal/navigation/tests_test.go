@@ -87,3 +87,23 @@ func TestHealth(t *testing.T) {
 		t.Fatalf("expected only build_test.go/TestBuildMain survivor, got %+v", got[0])
 	}
 }
+
+func TestIsTestFunction(t *testing.T) {
+	tests := []struct {
+		name string
+		want bool
+	}{
+		{"TestBuild_Normal", true},
+		{"BenchmarkBuild", true},
+		{"ExampleBuild", true},
+		{"helperFunc", false},
+		{"testHelper", false},
+	}
+
+	for _, tt := range tests {
+		got := isTestFunction(tt.name)
+		if got != tt.want {
+			t.Errorf("isTestFunction(%q) = %v, want %v", tt.name, got, tt.want)
+		}
+	}
+}
