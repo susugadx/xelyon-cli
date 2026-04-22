@@ -77,54 +77,51 @@ func (s *runnerOutputState) appendTextDelta(textDelta string) {
 	s.fullResponse.WriteString(textDelta)
 }
 
-func (s *runnerOutputState) finalizeContextDone(opts RunnerOptions, eventErr error) (string, error) {
-	s.stopSpinner()
-	partial := s.response()
-	if partial != "" {
-		s.printTrailingNewlineIfNeeded()
-		if opts.WarnOnPartial {
-			cancelWarnColor.Fprintln(s.errOut, "\n⚠️  Response interrupted. Partial result returned.")
-		}
-		if opts.CancelMode == CancelModePartialAsError {
-			return partial, s.ctx.Err()
-		}
-		return partial, nil
-	}
+func (s *runnerOutputState) finalizeWith(err error, printTrailingNewline bool) (string, error) {
+	return s.finalizeWithResponse(s.currentResponse(), err, printTrailingNewline)
+}
 
-	if eventErr != nil {
-		return "", eventErr
+func (s *runnerOutputState) currentResponse() string {
+	return s.response()
+}
+
+func (s *runnerOutputState) finalizeWithResponse(response string, err error, printTrailingNewline bool) (string, error) {
+	s.stopSpinner()
+	if printTrailingNewline {
+		s.printTrailingNewlineIfNeeded()
 	}
-	return "", s.ctx.Err()
+	return response, err
+}
+
+func (s *runnerOutputState) finalizeContextDone(opts RunnerOptions, eventErr error) (string, error) {
+	policy := newRunnerContextDonePolicy(opts)
+	response := s.currentResponse()
+	resolution := policy.resolve(response, eventErr, s.ctx.Err())
+	if resolution.warnPartial {
+		cancelWarnColor.Fprintln(s.errOut, "\n⚠️  Response interrupted. Partial result returned.")
+	}
+	return s.finalizeWithResponse(response, resolution.err, resolution.printTrailingNewline)
 }
 
 func (s *runnerOutputState) finalizeIdleTimeout(idleTimeout time.Duration) (string, error) {
-	s.stopSpinner()
-	return s.response(), fmt.Errorf("idle timeout: no data received for %v", idleTimeout)
+	return s.finalizeWith(fmt.Errorf("idle timeout: no data received for %v", idleTimeout), false)
 }
 
 func (s *runnerOutputState) finalizeScannerDone(scanErr error) (string, error) {
-	s.stopSpinner()
 	if scanErr != nil {
-		return s.response(), fmt.Errorf("stream reading error: %w", scanErr)
+		return s.finalizeWith(fmt.Errorf("stream reading error: %w", scanErr), false)
 	}
-	s.printTrailingNewlineIfNeeded()
-	return s.response(), nil
+	return s.finalizeWith(nil, true)
 }
 
 func (s *runnerOutputState) finalizeDecodeError(err error) (string, error) {
-	s.stopSpinner()
-	s.printTrailingNewlineIfNeeded()
-	return s.response(), err
+	return s.finalizeWith(err, true)
 }
 
 func (s *runnerOutputState) finalizeHandlerError(err error) (string, error) {
-	s.stopSpinner()
-	s.printTrailingNewlineIfNeeded()
-	return s.response(), err
+	return s.finalizeWith(err, true)
 }
 
 func (s *runnerOutputState) finalizeDone() (string, error) {
-	s.stopSpinner()
-	s.printTrailingNewlineIfNeeded()
-	return s.response(), nil
+	return s.finalizeWith(nil, true)
 }

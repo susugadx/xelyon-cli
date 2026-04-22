@@ -15,17 +15,6 @@ type responsesFunctionCallAccumulator struct {
 	Arguments strings.Builder
 }
 
-func (s *responsesStreamState) handleFunctionCallEvent(chunk ResponsesStreamChunk) {
-	switch chunk.Type {
-	case "response.output_item.added":
-		s.handleFunctionCallAdded(chunk.Item)
-	case "response.function_call_arguments.delta":
-		s.handleFunctionCallArgumentsDelta(chunk)
-	case "response.function_call_arguments.done":
-		s.handleFunctionCallArgumentsDone(chunk)
-	}
-}
-
 func (s *responsesStreamState) handleFunctionCallAdded(item *ResponsesItem) {
 	if item == nil || item.Type != "function_call" {
 		return

@@ -7,10 +7,6 @@ func (s *responsesStreamState) handleCompletionEvent(chunk ResponsesStreamChunk)
 	s.appendFunctionCallsToOutput()
 }
 
-func isResponsesCompletionEvent(eventType string) bool {
-	return eventType == "response.completed" || eventType == "response.done"
-}
-
 func (s *responsesStreamState) captureUsage(chunk ResponsesStreamChunk) {
 	var usage *ResponsesUsage
 	if chunk.Response != nil && chunk.Response.Usage != nil {

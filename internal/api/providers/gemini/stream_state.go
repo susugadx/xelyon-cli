@@ -32,10 +32,11 @@ type sseInterpretState struct {
 
 func newSSEInterpretState(ctx context.Context, spinner *ui.Spinner, thinkingMsg string, debug bool) *sseInterpretState {
 	out := api.OutputWriterFromContext(ctx)
+	errOut := api.ErrorWriterFromContext(ctx)
 	streamAssistantText := api.ShouldStreamAssistantText(ctx)
 	return &sseInterpretState{
-		display:     newSSEDisplayState(spinner, out, streamAssistantText),
-		errOut:      api.ErrorWriterFromContext(ctx),
+		display:     newSSEDisplayState(spinner, out, errOut, streamAssistantText),
+		errOut:      errOut,
 		thinkingMsg: thinkingMsg,
 		debug:       debug,
 	}
@@ -183,46 +184,5 @@ func (s *sseInterpretState) handleFunctionCall(functionCall *api.GeminiFunctionC
 
 func (s *sseInterpretState) finalize(p *Provider) (string, error) {
 	s.stopSpinner()
-
-	if len(s.thoughtParts) > 0 {
-		for _, fc := range s.functionCalls {
-			fc.ThoughtParts = s.thoughtParts
-		}
-	}
-
-	if len(s.functionCalls) == 0 && len(s.rescuedToolJSONs) > 0 {
-		s.debugf("[DEBUG Gemini SSE] Rescuing %d tool call(s) from text\n", len(s.rescuedToolJSONs))
-		fmt.Fprintf(s.errOut, "⚠️  FC rescue: %d tool call(s) extracted from text response\n", len(s.rescuedToolJSONs))
-		for _, tj := range s.rescuedToolJSONs {
-			s.fullResponse.WriteString(tj)
-		}
-	}
-
-	seenTools := make(map[string]bool)
-	for _, fc := range s.functionCalls {
-		displayKey := convertFunctionCallToDisplayJSON(fc)
-		if seenTools[displayKey] {
-			continue
-		}
-		seenTools[displayKey] = true
-		s.fullResponse.WriteString(convertFunctionCallToToolJSON(fc))
-	}
-
-	if s.usage != nil && p.usageCallback != nil {
-		p.usageCallback(api.Usage{
-			InputTokens:       s.usage.PromptTokenCount,
-			OutputTokens:      s.usage.CandidatesTokenCount,
-			ThinkingTokens:    s.usage.ThoughtsTokenCount,
-			CachedInputTokens: s.usage.CachedContentTokenCount,
-		})
-	}
-
-	if s.fullResponse.Len() == 0 {
-		return "", fmt.Errorf("no content in Gemini SSE response (stream ended without generating any text or function calls)")
-	}
-
-	if s.display != nil {
-		s.display.printTrailingNewlineIfNeeded()
-	}
-	return s.response(), nil
+	return newSSEFinalizeState(s).finalize(p)
 }

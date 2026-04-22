@@ -62,24 +62,13 @@ func (s *responsesStreamState) debugf(format string, args ...interface{}) {
 
 func (s *responsesStreamState) handleChunk(chunk ResponsesStreamChunk, rawData string) (string, bool, error) {
 	s.logChunkEvent(chunk, rawData)
-	s.captureResponseID(chunk)
-
-	if done, err := s.handleErrorEvent(chunk); done {
-		return "", true, err
+	action, ok := responsesChunkActionTable[chunk.Type]
+	if !ok {
+		return "", false, nil
 	}
 
-	s.handleFunctionCallEvent(chunk)
-
-	if chunk.Type == "response.output_text.delta" {
-		return chunk.Delta, false, nil
-	}
-
-	if isResponsesCompletionEvent(chunk.Type) {
-		s.handleCompletionEvent(chunk)
-		return "", true, nil
-	}
-
-	return "", false, nil
+	result := action(s, chunk)
+	return result.textDelta, result.done, result.err
 }
 
 func (s *responsesStreamState) logChunkEvent(chunk ResponsesStreamChunk, rawData string) {

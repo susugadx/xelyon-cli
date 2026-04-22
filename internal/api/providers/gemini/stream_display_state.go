@@ -12,15 +12,17 @@ import (
 type sseDisplayState struct {
 	spinner               *ui.Spinner
 	out                   io.Writer
+	errOut                io.Writer
 	streamAssistantText   bool
 	headerPrinted         bool
 	contentNewlineEmitted bool
 }
 
-func newSSEDisplayState(spinner *ui.Spinner, out io.Writer, streamAssistantText bool) *sseDisplayState {
+func newSSEDisplayState(spinner *ui.Spinner, out io.Writer, errOut io.Writer, streamAssistantText bool) *sseDisplayState {
 	return &sseDisplayState{
 		spinner:             spinner,
 		out:                 out,
+		errOut:              errOut,
 		streamAssistantText: streamAssistantText,
 	}
 }
@@ -74,4 +76,11 @@ func (s *sseDisplayState) printTrailingNewlineIfNeeded() {
 		return
 	}
 	_, _ = fmt.Fprintln(s.out)
+}
+
+func (s *sseDisplayState) warnFunctionCallRescue(count int) {
+	if s.errOut == nil {
+		return
+	}
+	_, _ = fmt.Fprintf(s.errOut, "⚠️  FC rescue: %d tool call(s) extracted from text response\n", count)
 }
