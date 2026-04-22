@@ -2,8 +2,6 @@ package tools
 
 import (
 	"encoding/json"
-	"fmt"
-	"io"
 	"regexp"
 	"strings"
 )
@@ -24,7 +22,7 @@ type xmlToolCallScanner struct {
 
 // parseXMLToolCalls はXML形式のツール呼び出しをパースする
 // Kimi K2 等がFC失敗時に出力する XML 形式を rescue する
-func parseXMLToolCalls(response string, codeBlockRanges [][2]int, debug bool, registry *Registry, debugOut io.Writer) []*ToolCall {
+func parseXMLToolCalls(response string, codeBlockRanges [][2]int, registry *Registry, logger *parseDebugLogger) []*ToolCall {
 	scanner := newXMLToolCallScanner(response)
 
 	var results []*ToolCall
@@ -33,14 +31,12 @@ func parseXMLToolCalls(response string, codeBlockRanges [][2]int, debug bool, re
 		if !ok {
 			break
 		}
-		if !shouldAcceptXMLToolCallCandidate(candidate, codeBlockRanges, debug, registry, debugOut) {
+		if !shouldAcceptXMLToolCallCandidate(candidate, codeBlockRanges, registry, logger) {
 			continue
 		}
 
 		args := parseXMLParams(candidate.innerContent)
-		if debug {
-			fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] XML rescue: tool=%s, args=%v\n", candidate.tagName, args)
-		}
+		logger.Logf("[DEBUG ParseToolCalls] XML rescue: tool=%s, args=%v\n", candidate.tagName, args)
 
 		results = append(results, &ToolCall{
 			Tool: candidate.tagName,
@@ -88,18 +84,14 @@ func (s *xmlToolCallScanner) Next() (xmlToolCallCandidate, bool) {
 	return xmlToolCallCandidate{}, false
 }
 
-func shouldAcceptXMLToolCallCandidate(candidate xmlToolCallCandidate, codeBlockRanges [][2]int, debug bool, registry *Registry, debugOut io.Writer) bool {
+func shouldAcceptXMLToolCallCandidate(candidate xmlToolCallCandidate, codeBlockRanges [][2]int, registry *Registry, logger *parseDebugLogger) bool {
 	if isInCodeBlock(candidate.start, codeBlockRanges) {
-		if debug {
-			fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] XML rescue: skipping %q in code block\n", candidate.tagName)
-		}
+		logger.Logf("[DEBUG ParseToolCalls] XML rescue: skipping %q in code block\n", candidate.tagName)
 		return false
 	}
 
 	if !registry.HasTool(candidate.tagName) {
-		if debug {
-			fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] XML rescue: skipping unknown tool %q\n", candidate.tagName)
-		}
+		logger.Logf("[DEBUG ParseToolCalls] XML rescue: skipping unknown tool %q\n", candidate.tagName)
 		return false
 	}
 

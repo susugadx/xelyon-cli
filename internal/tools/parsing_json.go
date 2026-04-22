@@ -1,20 +1,6 @@
 package tools
 
-import (
-	"encoding/json"
-	"fmt"
-	"io"
-	"strings"
-)
-
-var toolCallJSONStartPatterns = []string{
-	"{\"id\"",     // {"id" (Function Calling)
-	"{ \"id\"",    // { "id" (Function Calling)
-	"{\"tool\"",   // {"tool"
-	"{ \"tool\"",  // { "tool"
-	"{\"tool\":",  // {"tool":
-	"{ \"tool\":", // { "tool":
-}
+import "encoding/json"
 
 type jsonToolCallCandidate struct {
 	json string
@@ -23,38 +9,58 @@ type jsonToolCallCandidate struct {
 type jsonToolCallScanner struct {
 	response        string
 	codeBlockRanges [][2]int
-	debug           bool
-	debugOut        io.Writer
+	startFinder     jsonToolCallStartFinder
+	errorPolicy     jsonToolCallScanErrorPolicy
+	logger          *parseDebugLogger
 	searchFrom      int
 	done            bool
 }
 
 type jsonToolCallDecoder struct {
-	debug    bool
-	debugOut io.Writer
+	logger *parseDebugLogger
 }
 
-func logParseResponseDebug(response string, debugOut io.Writer) {
-	fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] response length: %d\n", len(response))
-	for _, p := range []string{`{"tool"`, `{ "tool"`} {
-		if idx := strings.Index(response, p); idx != -1 {
-			fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] found pattern %q at index %d\n", p, idx)
-			start := idx
-			if start > 50 {
-				start = idx - 50
-			}
-			end := idx + 100
-			if end > len(response) {
-				end = len(response)
-			}
-			fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] context: ...%s...\n", response[start:end])
-		}
+type jsonToolCallScanDecision int
+
+const (
+	jsonToolCallScanDecisionContinue jsonToolCallScanDecision = iota
+	jsonToolCallScanDecisionStop
+)
+
+type jsonToolCallScanErrorKind int
+
+const (
+	jsonToolCallScanErrorIncompleteJSONObject jsonToolCallScanErrorKind = iota + 1
+)
+
+type jsonToolCallScanError struct {
+	kind  jsonToolCallScanErrorKind
+	start int
+}
+
+type jsonToolCallScanErrorPolicy struct {
+	onIncompleteJSONObject jsonToolCallScanDecision
+}
+
+func defaultJSONToolCallScanErrorPolicy() jsonToolCallScanErrorPolicy {
+	// 既存挙動互換: 途中で不完全 JSON を見つけたら JSON 走査を終了する。
+	return jsonToolCallScanErrorPolicy{
+		onIncompleteJSONObject: jsonToolCallScanDecisionStop,
 	}
 }
 
-func parseJSONToolCalls(response string, codeBlockRanges [][2]int, debug bool, debugOut io.Writer) []*ToolCall {
-	scanner := newJSONToolCallScanner(response, codeBlockRanges, debug, debugOut)
-	decoder := newJSONToolCallDecoder(debug, debugOut)
+func (p jsonToolCallScanErrorPolicy) Decide(err jsonToolCallScanError) jsonToolCallScanDecision {
+	switch err.kind {
+	case jsonToolCallScanErrorIncompleteJSONObject:
+		return p.onIncompleteJSONObject
+	default:
+		return jsonToolCallScanDecisionStop
+	}
+}
+
+func parseJSONToolCalls(response string, codeBlockRanges [][2]int, logger *parseDebugLogger) []*ToolCall {
+	scanner := newJSONToolCallScanner(response, codeBlockRanges, logger)
+	decoder := newJSONToolCallDecoder(logger)
 
 	var results []*ToolCall
 	for {
@@ -70,12 +76,13 @@ func parseJSONToolCalls(response string, codeBlockRanges [][2]int, debug bool, d
 	return results
 }
 
-func newJSONToolCallScanner(response string, codeBlockRanges [][2]int, debug bool, debugOut io.Writer) *jsonToolCallScanner {
+func newJSONToolCallScanner(response string, codeBlockRanges [][2]int, logger *parseDebugLogger) *jsonToolCallScanner {
 	return &jsonToolCallScanner{
 		response:        response,
 		codeBlockRanges: codeBlockRanges,
-		debug:           debug,
-		debugOut:        debugOut,
+		startFinder:     newDefaultJSONToolCallStartFinder(),
+		errorPolicy:     defaultJSONToolCallScanErrorPolicy(),
+		logger:          logger,
 	}
 }
 
@@ -85,83 +92,69 @@ func (s *jsonToolCallScanner) Next() (jsonToolCallCandidate, bool) {
 	}
 
 	for s.searchFrom < len(s.response) {
-		start := findNextToolCallJSONStart(s.response, s.searchFrom)
+		start := s.startFinder.Find(s.response, s.searchFrom)
 		if start == -1 {
 			s.done = true
 			return jsonToolCallCandidate{}, false
 		}
 
-		if shouldSkipCodeBlockJSON(start, s.codeBlockRanges, s.debug, s.debugOut) {
+		if shouldSkipCodeBlockJSON(start, s.codeBlockRanges, s.logger) {
 			s.searchFrom = start + 1
 			continue
 		}
 
-		jsonStr, end, ok := extractJSONObject(s.response, start, s.debug, s.debugOut)
-		if !ok {
-			s.done = true
-			return jsonToolCallCandidate{}, false
+		candidate, end, scanErr := extractJSONObjectCandidate(s.response, start, s.logger)
+		if scanErr != nil {
+			if s.errorPolicy.Decide(*scanErr) == jsonToolCallScanDecisionStop {
+				s.done = true
+				return jsonToolCallCandidate{}, false
+			}
+			s.searchFrom = start + 1
+			continue
 		}
 
 		s.searchFrom = end
-		return jsonToolCallCandidate{json: jsonStr}, true
+		return candidate, true
 	}
 
 	s.done = true
 	return jsonToolCallCandidate{}, false
 }
 
-func newJSONToolCallDecoder(debug bool, debugOut io.Writer) *jsonToolCallDecoder {
-	return &jsonToolCallDecoder{debug: debug, debugOut: debugOut}
+func newJSONToolCallDecoder(logger *parseDebugLogger) *jsonToolCallDecoder {
+	return &jsonToolCallDecoder{logger: logger}
 }
 
 func (d *jsonToolCallDecoder) Decode(candidate jsonToolCallCandidate) (*ToolCall, bool) {
-	return decodeToolCallJSON(candidate.json, d.debug, d.debugOut)
+	return decodeToolCallJSON(candidate.json, d.logger)
 }
 
-func findNextToolCallJSONStart(response string, searchFrom int) int {
-	start := -1
-	for _, pattern := range toolCallJSONStartPatterns {
-		idx := strings.Index(response[searchFrom:], pattern)
-		if idx == -1 {
-			continue
-		}
-		absIdx := searchFrom + idx
-		if start == -1 || absIdx < start {
-			start = absIdx
-		}
-	}
-	return start
-}
-
-func shouldSkipCodeBlockJSON(start int, codeBlockRanges [][2]int, debug bool, debugOut io.Writer) bool {
+func shouldSkipCodeBlockJSON(start int, codeBlockRanges [][2]int, logger *parseDebugLogger) bool {
 	if !isInCodeBlock(start, codeBlockRanges) {
 		return false
 	}
-	if debug {
-		fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] skipping: in code block at %d\n", start)
-	}
+	logger.Logf("[DEBUG ParseToolCalls] skipping: in code block at %d\n", start)
 	return true
 }
 
-func extractJSONObject(response string, start int, debug bool, debugOut io.Writer) (string, int, bool) {
+func extractJSONObjectCandidate(response string, start int, logger *parseDebugLogger) (jsonToolCallCandidate, int, *jsonToolCallScanError) {
 	end := findJSONObjectEnd(response, start)
 	if end == -1 {
-		if debug {
-			fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] incomplete JSON: no closing brace found from index %d\n", start)
-			showStart := start
-			if len(response)-showStart > 200 {
-				showStart = len(response) - 200
-			}
-			fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] tail: ...%s\n", response[showStart:])
+		logger.Logf("[DEBUG ParseToolCalls] incomplete JSON: no closing brace found from index %d\n", start)
+		showStart := start
+		if len(response)-showStart > 200 {
+			showStart = len(response) - 200
 		}
-		return "", 0, false
+		logger.Logf("[DEBUG ParseToolCalls] tail: ...%s\n", response[showStart:])
+		return jsonToolCallCandidate{}, 0, &jsonToolCallScanError{
+			kind:  jsonToolCallScanErrorIncompleteJSONObject,
+			start: start,
+		}
 	}
 
 	jsonStr := response[start:end]
-	if debug {
-		fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] extracted JSON (%d bytes): %s\n", len(jsonStr), truncateDebug(jsonStr, 200))
-	}
-	return jsonStr, end, true
+	logger.Logf("[DEBUG ParseToolCalls] extracted JSON (%d bytes): %s\n", len(jsonStr), truncateDebug(jsonStr, 200))
+	return jsonToolCallCandidate{json: jsonStr}, end, nil
 }
 
 func findJSONObjectEnd(response string, start int) int {
@@ -205,16 +198,14 @@ func findJSONObjectEnd(response string, start int) int {
 	return -1
 }
 
-func decodeToolCallJSON(jsonStr string, debug bool, debugOut io.Writer) (*ToolCall, bool) {
+func decodeToolCallJSON(jsonStr string, logger *parseDebugLogger) (*ToolCall, bool) {
 	var toolCall ToolCall
-	if !unmarshalToolCallJSONWithRepair(jsonStr, &toolCall, debug, debugOut) {
+	if !unmarshalToolCallJSONWithRepair(jsonStr, &toolCall, logger) {
 		return nil, false
 	}
 
 	if toolCall.Tool == "" {
-		if debug {
-			fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] skipping: empty tool field\n")
-		}
+		logger.Logf("[DEBUG ParseToolCalls] skipping: empty tool field\n")
 		return nil, false
 	}
 
@@ -222,23 +213,20 @@ func decodeToolCallJSON(jsonStr string, debug bool, debugOut io.Writer) (*ToolCa
 	return &toolCall, true
 }
 
-func unmarshalToolCallJSONWithRepair(jsonStr string, toolCall *ToolCall, debug bool, debugOut io.Writer) bool {
-	if err := json.Unmarshal([]byte(jsonStr), toolCall); err == nil {
+func unmarshalToolCallJSONWithRepair(jsonStr string, toolCall *ToolCall, logger *parseDebugLogger) bool {
+	err := json.Unmarshal([]byte(jsonStr), toolCall)
+	if err == nil {
 		return true
-	} else {
-		repaired := repairJSONStringValues(jsonStr)
-		if repaired != jsonStr {
-			if err2 := json.Unmarshal([]byte(repaired), toolCall); err2 == nil {
-				if debug {
-					fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] JSON repaired: fixed raw control characters in string values\n")
-				}
-				return true
-			}
-		}
-
-		if debug {
-			fmt.Fprintf(debugOut, "[DEBUG ParseToolCalls] JSON parse error: %v\n", err)
-		}
-		return false
 	}
+
+	repaired := repairJSONStringValues(jsonStr)
+	if repaired != jsonStr {
+		if err2 := json.Unmarshal([]byte(repaired), toolCall); err2 == nil {
+			logger.Logf("[DEBUG ParseToolCalls] JSON repaired: fixed raw control characters in string values\n")
+			return true
+		}
+	}
+
+	logger.Logf("[DEBUG ParseToolCalls] JSON parse error: %v\n", err)
+	return false
 }

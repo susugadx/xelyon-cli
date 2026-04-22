@@ -31,28 +31,25 @@ func ParseToolCallsWithRegistry(response string, registry *Registry, debugOut io
 
 type parseRunOptions struct {
 	registry *Registry
-	debug    bool
-	debugOut io.Writer
+	logger   *parseDebugLogger
 }
 
 func resolveParseRunOptions(registry *Registry, debugOut io.Writer) parseRunOptions {
+	debugEnabled := os.Getenv("XELYON_DEBUG_PARSE") == "1"
 	return parseRunOptions{
 		registry: resolveRegistry(registry),
-		debug:    os.Getenv("XELYON_DEBUG_PARSE") == "1",
-		debugOut: debugOut,
+		logger:   newParseDebugLogger(debugEnabled, debugOut),
 	}
 }
 
 func parseToolCalls(response string, options parseRunOptions) []*ToolCall {
-	if options.debug {
-		logParseResponseDebug(response, options.debugOut)
-	}
+	options.logger.LogParseResponse(response)
 	codeBlockRanges := findCodeBlockRanges(response)
-	results := parseJSONToolCalls(response, codeBlockRanges, options.debug, options.debugOut)
+	results := parseJSONToolCalls(response, codeBlockRanges, options.logger)
 
 	// XML rescue: JSONで何も見つからなかった場合にXML形式を試す
 	if len(results) == 0 {
-		return parseXMLToolCalls(response, codeBlockRanges, options.debug, options.registry, options.debugOut)
+		return parseXMLToolCalls(response, codeBlockRanges, options.registry, options.logger)
 	}
 
 	return results
