@@ -3,36 +3,53 @@ package file
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
-// ExecuteStrReplaceWithPromptIOAndOptions は確認設定を指定してファイル内の文字列を置換する。
-func ExecuteStrReplaceWithPromptIOAndOptions(promptIO ui.PromptIO, options common.ConfirmOptions, path, oldStr, newStr, startLineStr, endLineStr string) (string, error) {
-	result, err := executeStrReplaceWithPromptIOAndOptionsResult(promptIO, options, path, oldStr, newStr, startLineStr, endLineStr)
-	return result.message, err
+type strReplaceExecutionDetails struct {
+	result       fileMutationResult
+	linesAdded   int
+	linesRemoved int
 }
 
-func executeStrReplaceWithPromptIOAndOptionsResult(promptIO ui.PromptIO, options common.ConfirmOptions, path, oldStr, newStr, startLineStr, endLineStr string) (fileMutationResult, error) {
+// ExecuteStrReplaceWithPromptIOAndOptions は確認設定を指定してファイル内の文字列を置換する。
+func ExecuteStrReplaceWithPromptIOAndOptions(promptIO ui.PromptIO, options common.ConfirmOptions, path, oldStr, newStr, startLineStr, endLineStr string) (string, error) {
+	details, err := executeStrReplaceWithPromptIOAndOptionsDetails(promptIO, options, path, oldStr, newStr, startLineStr, endLineStr)
+	return details.result.message, err
+}
+
+func executeStrReplaceWithPromptIOAndOptionsDetails(promptIO ui.PromptIO, options common.ConfirmOptions, path, oldStr, newStr, startLineStr, endLineStr string) (strReplaceExecutionDetails, error) {
+	linesAdded, linesRemoved := resolveSingleStrReplaceLineStats(oldStr, newStr, startLineStr, endLineStr)
+	details := strReplaceExecutionDetails{
+		linesAdded:   linesAdded,
+		linesRemoved: linesRemoved,
+	}
+
 	ctx, result, err := prepareFileMutation(promptIO, options, path, "path is required")
 	if result.message != "" || err != nil {
-		return result, err
+		details.result = result
+		return details, err
 	}
 	if ctx.cfg == nil {
-		return fileMutationResult{}, fmt.Errorf("missing confirm options config")
+		return strReplaceExecutionDetails{}, fmt.Errorf("missing confirm options config")
 	}
 
 	contentBytes, err := os.ReadFile(ctx.absPath)
 	if err != nil {
-		return newErrorMutationResult(fmt.Sprintf("Error reading file: %v", err)), nil
+		details.result = newErrorMutationResult(fmt.Sprintf("Error reading file: %v", err))
+		return details, nil
 	}
 	oldContent := string(contentBytes)
 
 	if oldStr == "" {
-		return executeLineRangeReplacement(ctx, options, oldContent, newStr, startLineStr, endLineStr)
+		details.result, err = executeLineRangeReplacement(ctx, options, oldContent, newStr, startLineStr, endLineStr)
+		return details, err
 	}
-	return executeStringReplacement(ctx, options, oldContent, oldStr, newStr)
+	details.result, err = executeStringReplacement(ctx, options, oldContent, oldStr, newStr)
+	return details, err
 }
 
 func executeLineRangeReplacement(ctx fileMutationContext, options common.ConfirmOptions, oldContent, newStr, startLineStr, endLineStr string) (fileMutationResult, error) {
@@ -50,15 +67,7 @@ func executeLineRangeReplacement(ctx fileMutationContext, options common.Confirm
 			showLineRangeReplacementPreview(ctx, newStr, execution.plan)
 			return fileMutationResult{}
 		},
-		confirm: mutationConfirmHandlers{
-			onComment: func(comment string) fileMutationResult {
-				return newCommentMutationResult(buildDeferredStrReplaceResult("[COMMENT]", "line range", path, comment))
-			},
-			onCancel: func() fileMutationResult {
-				out.Yellow.Println("⚠️  User cancelled the replacement")
-				return newCancelledMutationResult(buildDeferredStrReplaceResult("[CANCELLED]", "line range", path, ""))
-			},
-		},
+		confirm: buildStrReplaceConfirmHandlers(out, path, strReplaceModeLineRange),
 		apply: func() (fileMutationResult, error) {
 			result := buildAppliedLineRangeStrReplaceResult(path, execution.plan)
 			return applyStringReplaceMutation(
@@ -80,17 +89,28 @@ func showLineRangeReplacementPreview(ctx fileMutationContext, newStr string, pla
 		return
 	}
 
-	w := out.StdoutWriter()
-	out.Println()
-	ui.FileOpHeader(w, "str_replace", fmt.Sprintf("%s (lines %d-%d)", ctx.path, plan.startLine, plan.endLine))
-	ui.FileOpStatsLine(w, plan.oldLineCount, plan.newLineCount)
+	showStrReplaceDiffPreview(ctx, strReplaceDiffPreview{
+		targetPath:    fmt.Sprintf("%s (lines %d-%d)", ctx.path, plan.startLine, plan.endLine),
+		removedLines:  plan.oldLineCount,
+		addedLines:    plan.newLineCount,
+		before:        plan.beforeRange,
+		after:         newStr,
+		lineNumOffset: plan.startLine - 1,
+	})
+}
 
-	opts := &ui.DiffOptions{
-		ContextLines:  ctx.cfg.Diff.ContextLines,
-		ShowLineNums:  true,
-		InlineMode:    true,
-		MaxTotalLines: ctx.cfg.Diff.MaxTotalLines,
-		LineNumOffset: plan.startLine - 1,
+func resolveSingleStrReplaceLineStats(oldStr, newStr, startLineStr, endLineStr string) (added, removed int) {
+	added = countLines(newStr)
+	if oldStr != "" {
+		return added, countLines(oldStr)
 	}
-	ui.ShowColoredDiffToWriter(out.StdoutWriter(), plan.beforeRange, newStr, opts)
+	if strings.TrimSpace(startLineStr) == "" || strings.TrimSpace(endLineStr) == "" {
+		return added, 0
+	}
+
+	startLine, endLine, err := parseLineRange(startLineStr, endLineStr)
+	if err != nil {
+		return added, 0
+	}
+	return added, endLine - startLine + 1
 }

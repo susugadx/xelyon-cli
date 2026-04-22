@@ -84,32 +84,89 @@ func TestStrReplace_LineRangeOutOfBounds(t *testing.T) {
 	testutil.AssertFileContent(t, testFile, "line1\nline2\nline3")
 }
 
-func TestBuildLineRangeReplacementExecution_Success(t *testing.T) {
-	execution := buildLineRangeReplacementExecution("line1\nline2\nline3", "A\nB", "2", "3")
-	if execution.failure.hasFailure() {
-		t.Fatalf("expected success execution, got failure: %+v", execution.failure)
+func TestExecuteStrReplace_LineRange_WarnsOnDuplicateNearby(t *testing.T) {
+	setupTestMocks(t)
+	defer withPermissiveValidatePath(t)()
+	setupTestConfirm(t, true)
+
+	var output strings.Builder
+
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test.txt")
+	testutil.CreateTempFile(t, tmpDir, "test.txt", "keep\nold\nold\nkeep")
+
+	replaceOutput, err := executeStrReplaceWithWritersForTest(&output, nil, testFile, "", "keep", "2", "3")
+	if err != nil {
+		t.Fatalf("ExecuteStrReplace failed: %v", err)
 	}
-	if execution.plan.startLine != 2 || execution.plan.endLine != 3 {
-		t.Fatalf("unexpected range: %d-%d", execution.plan.startLine, execution.plan.endLine)
+	if !strings.Contains(output.String(), "Warning: new_str already exists near the target range") {
+		t.Errorf("Expected warning output, got: %s", output.String())
 	}
-	if execution.plan.newContent != "line1\nA\nB" {
-		t.Fatalf("unexpected new content: %q", execution.plan.newContent)
+	if !strings.Contains(replaceOutput, "Successfully replaced lines 2-3") {
+		t.Errorf("Expected success message, got: %s", replaceOutput)
 	}
-	if execution.plan.replacedEndLine() != 3 {
-		t.Fatalf("unexpected replaced end line: %d", execution.plan.replacedEndLine())
-	}
+	testutil.AssertFileContent(t, testFile, "keep\nkeep\nkeep")
 }
 
-func TestBuildLineRangeReplacementFailure_EndOutOfRange(t *testing.T) {
-	execution := buildLineRangeReplacementExecution("line1\nline2\nline3", "REPLACED", "2", "10")
-	if !execution.failure.hasFailure() {
-		t.Fatal("expected failure")
+func TestExecuteStrReplace_LineRange_NoWarningWhenUniqueOutsideRange(t *testing.T) {
+	setupTestMocks(t)
+	defer withPermissiveValidatePath(t)()
+	setupTestConfirm(t, true)
+
+	var output strings.Builder
+
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test.txt")
+	testutil.CreateTempFile(t, tmpDir, "test.txt", "keep\nold\nold\nkeep")
+
+	replaceOutput, err := executeStrReplaceWithWritersForTest(&output, nil, testFile, "", "NEWLINE", "2", "3")
+	if err != nil {
+		t.Fatalf("ExecuteStrReplace failed: %v", err)
 	}
-	msg := buildLineRangeReplacementFailure("test.txt", execution.failure)
-	if !strings.Contains(msg, "Error: end_line is out of range in test.txt (end_line=10, file_lines=3).") {
-		t.Fatalf("unexpected failure summary: %s", msg)
+	if strings.Contains(output.String(), "Warning: new_str already exists near the target range") {
+		t.Errorf("Did not expect warning output, got: %s", output.String())
 	}
-	if !strings.Contains(msg, "Next: use read_file to confirm the target range.") {
-		t.Fatalf("unexpected failure guidance: %s", msg)
+	if !strings.Contains(replaceOutput, "Successfully replaced lines 2-3") {
+		t.Errorf("Expected success message, got: %s", replaceOutput)
+	}
+	testutil.AssertFileContent(t, testFile, "keep\nNEWLINE\nkeep")
+}
+
+func TestExecuteStrReplace_LineRangeGoSyntaxWarning(t *testing.T) {
+	setupTestMocks(t)
+	defer withPermissiveValidatePath(t)()
+	setupTestConfirm(t, true)
+
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "main.go")
+	testutil.CreateTempFile(t, tmpDir, "main.go", "package main\n\nfunc Build() error {\n\treturn nil\n}\n")
+
+	result, err := executeStrReplaceForTest(testFile, "", "func Build() error \n\treturn nil\n}", "3", "5")
+	if err != nil {
+		t.Fatalf("ExecuteStrReplace failed: %v", err)
+	}
+	if !strings.Contains(result, "AST syntax check found issues after replacement") {
+		t.Fatalf("expected syntax warning in result, got: %s", result)
+	}
+	testutil.AssertFileContent(t, testFile, "package main\n\nfunc Build() error \n\treturn nil\n}\n")
+}
+
+func TestExecuteStrReplace_LineRangeOutOfRange_SummaryFirst(t *testing.T) {
+	setupTestMocks(t)
+	defer withPermissiveValidatePath(t)()
+
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test.txt")
+	testutil.CreateTempFile(t, tmpDir, "test.txt", "a\nb\nc")
+
+	output, err := executeStrReplaceForTest(testFile, "", "X", "5", "5")
+	if err != nil {
+		t.Fatalf("ExecuteStrReplace should not return error: %v", err)
+	}
+	if !strings.Contains(output, "Error: start_line is out of range in ") {
+		t.Fatalf("expected range error with path, got: %s", output)
+	}
+	if !strings.Contains(output, "Next: use read_file to confirm the target range.") {
+		t.Fatalf("expected concise range hint, got: %s", output)
 	}
 }

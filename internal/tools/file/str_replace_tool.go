@@ -1,9 +1,6 @@
 package file
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
@@ -61,15 +58,7 @@ func executeStrReplaceToolRun(execCtx tools.ExecutionContext, args map[string]st
 }
 
 func executeBatchStrReplaceToolRun(execCtx tools.ExecutionContext, args map[string]string) (strReplaceToolRunOutcome, error) {
-	edits, err := parseBatchEditEntries(args["edits"])
-	if err != nil {
-		return strReplaceToolRunOutcome{
-			result: newErrorMutationResult(fmt.Sprintf("Error: invalid edits JSON: %v", err)),
-			path:   args["path"],
-		}, nil
-	}
-
-	details, execErr := executeBatchEditsWithEntriesAndOptionsDetails(execCtx.PromptIO(), execCtx.ConfirmOptions(), args["path"], edits)
+	details, execErr := executeBatchEditsWithPromptIOAndOptionsDetails(execCtx.PromptIO(), execCtx.ConfirmOptions(), args["path"], args["edits"])
 
 	return strReplaceToolRunOutcome{
 		result:                details.result,
@@ -81,7 +70,7 @@ func executeBatchStrReplaceToolRun(execCtx tools.ExecutionContext, args map[stri
 }
 
 func executeSingleStrReplaceToolRun(execCtx tools.ExecutionContext, args map[string]string) (strReplaceToolRunOutcome, error) {
-	result, err := executeStrReplaceWithPromptIOAndOptionsResult(
+	details, err := executeStrReplaceWithPromptIOAndOptionsDetails(
 		execCtx.PromptIO(),
 		execCtx.ConfirmOptions(),
 		args["path"],
@@ -90,28 +79,11 @@ func executeSingleStrReplaceToolRun(execCtx tools.ExecutionContext, args map[str
 		args["start_line"],
 		args["end_line"],
 	)
-	linesAdded, linesRemoved := resolveSingleStrReplaceLineStats(args["old_str"], args["new_str"], args["start_line"], args["end_line"])
 	return strReplaceToolRunOutcome{
-		result:                result,
+		result:                details.result,
 		path:                  args["path"],
 		fileChangeDescription: "Replaced in " + args["path"],
-		linesAdded:            linesAdded,
-		linesRemoved:          linesRemoved,
+		linesAdded:            details.linesAdded,
+		linesRemoved:          details.linesRemoved,
 	}, err
-}
-
-func resolveSingleStrReplaceLineStats(oldStr, newStr, startLineStr, endLineStr string) (added, removed int) {
-	added = countLines(newStr)
-	if oldStr != "" {
-		return added, countLines(oldStr)
-	}
-	if strings.TrimSpace(startLineStr) == "" || strings.TrimSpace(endLineStr) == "" {
-		return added, 0
-	}
-
-	startLine, endLine, err := parseLineRange(startLineStr, endLineStr)
-	if err != nil {
-		return added, 0
-	}
-	return added, endLine - startLine + 1
 }

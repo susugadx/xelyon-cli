@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
-	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 func executeStringReplacement(ctx fileMutationContext, options common.ConfirmOptions, oldContent, oldStr, newStr string) (fileMutationResult, error) {
@@ -30,15 +29,7 @@ func executeStringReplacement(ctx fileMutationContext, options common.ConfirmOpt
 			showStringReplacementPreview(ctx, oldContent, oldStr, newStr, execution.plan)
 			return fileMutationResult{}
 		},
-		confirm: mutationConfirmHandlers{
-			onComment: func(comment string) fileMutationResult {
-				return newCommentMutationResult(buildDeferredStrReplaceResult("[COMMENT]", "", path, comment))
-			},
-			onCancel: func() fileMutationResult {
-				out.Yellow.Println("⚠️  User cancelled the replacement")
-				return newCancelledMutationResult(buildDeferredStrReplaceResult("[CANCELLED]", "", path, ""))
-			},
-		},
+		confirm: buildStrReplaceConfirmHandlers(out, path, strReplaceModeDefault),
 		apply: func() (fileMutationResult, error) {
 			result := buildAppliedStrReplaceResult(path, execution.plan)
 			return applyStringReplaceMutation(ctx, execution.plan.newContent, fmt.Sprintf("✅ Replaced in: %s", path), result)
@@ -64,28 +55,25 @@ func showStringReplacementPreview(ctx fileMutationContext, oldContent, oldStr, n
 		return
 	}
 
-	w := out.StdoutWriter()
-	out.Println()
-	ui.FileOpHeader(w, "str_replace", ctx.path)
-	ui.FileOpStatsLine(w, plan.oldLineCount, plan.newLineCount)
-
 	lineDiff := plan.newLineCount - plan.oldLineCount
 	absLineDiff := lineDiff
 	if absLineDiff < 0 {
 		absLineDiff = -absLineDiff
 	}
+	largeChangeWarning := ""
 	if absLineDiff > 100 || plan.oldLineCount > 100 || plan.newLineCount > 100 {
-		out.Yellow.Println("  Large change detected. Consider splitting into smaller edits.")
+		largeChangeWarning = "  Large change detected. Consider splitting into smaller edits."
 	}
 
-	opts := &ui.DiffOptions{
-		ContextLines:  ctx.cfg.Diff.ContextLines,
-		ShowLineNums:  true,
-		InlineMode:    true,
-		MaxTotalLines: ctx.cfg.Diff.MaxTotalLines,
-		LineNumOffset: plan.startLineForDisplay - 1,
-	}
-	ui.ShowColoredDiffToWriter(out.StdoutWriter(), oldStr, newStr, opts)
+	showStrReplaceDiffPreview(ctx, strReplaceDiffPreview{
+		targetPath:         ctx.path,
+		removedLines:       plan.oldLineCount,
+		addedLines:         plan.newLineCount,
+		before:             oldStr,
+		after:              newStr,
+		lineNumOffset:      plan.startLineForDisplay - 1,
+		largeChangeWarning: largeChangeWarning,
+	})
 
 	if newStr != "" && hasNearbyStringReplacementDuplicate(oldContent, newStr, plan.matchStartLine, plan.matchEndLine) {
 		out.Yellow.Println("⚠️  Warning: new_str already exists near the replacement (±10 lines, possible duplication)")
