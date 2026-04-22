@@ -104,7 +104,6 @@ func DefaultConfig() *Config {
 			BracketedPaste: true, // デフォルトON - 複数行ペースト対応
 			MaxLines:       10000,
 			MaxBytes:       1048576,
-			TimeoutSeconds: 60,
 		},
 		Streaming: StreamingConfig{
 			IdleTimeoutSeconds:     30,  // チャンク間隔タイムアウト（30秒）
@@ -317,7 +316,7 @@ func applyDefaults(cfg *Config, opts ...defaultApplyOptions) {
 	}
 	// Paste: 他のフィールドがすべてデフォルト値の場合、BracketedPaste もデフォルト適用
 	// （既存の設定ファイルに bracketed_paste がない場合に true にするため）
-	if cfg.Paste.MaxLines == 0 && cfg.Paste.MaxBytes == 0 && cfg.Paste.TimeoutSeconds == 0 {
+	if cfg.Paste.MaxLines == 0 && cfg.Paste.MaxBytes == 0 {
 		// Paste セクションが未設定 → 全てデフォルト適用
 		cfg.Paste = defaults.Paste
 	} else {
@@ -328,12 +327,6 @@ func applyDefaults(cfg *Config, opts ...defaultApplyOptions) {
 		if cfg.Paste.MaxBytes == 0 {
 			cfg.Paste.MaxBytes = defaults.Paste.MaxBytes
 		}
-		if cfg.Paste.TimeoutSeconds == 0 {
-			cfg.Paste.TimeoutSeconds = defaults.Paste.TimeoutSeconds
-		}
-		// BracketedPaste: 明示的に false に設定されていない限り、デフォルト (true) を適用
-		// 注: YAML で bracketed_paste: false を明示的に設定した場合のみ false になる
-		// 既存の設定ファイル（フィールドがない）では true にする
 	}
 	if cfg.Streaming.IdleTimeoutSeconds == 0 {
 		cfg.Streaming.IdleTimeoutSeconds = defaults.Streaming.IdleTimeoutSeconds

@@ -126,12 +126,11 @@ type PromptCacheConfig struct {
 // PasteConfig はペーストモードの設定
 //
 // user-facing 設定: BracketedPaste のみ
-// MaxLines, MaxBytes, TimeoutSeconds は内部既定値（YAML 直接編集で変更可能）
+// MaxLines, MaxBytes は内部既定値（YAML 直接編集で変更可能）
 type PasteConfig struct {
 	BracketedPaste bool `yaml:"bracketed_paste"` // Bracketed Paste Mode を有効化（デフォルト: true）
 	MaxLines       int  `yaml:"max_lines"`       // 内部: 最大行数（デフォルト10000）
 	MaxBytes       int  `yaml:"max_bytes"`       // 内部: 最大バイト数（デフォルト1MB）
-	TimeoutSeconds int  `yaml:"timeout_seconds"` // 内部: タイムアウト秒（デフォルト60）
 }
 
 // StreamingConfig はストリーミングレスポンスの設定
