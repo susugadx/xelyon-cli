@@ -1,30 +1,5 @@
 package config
 
-import "gopkg.in/yaml.v3"
-
-func extractRawProviderModelsFromYAML(data []byte) map[string]ProviderModelConfig {
-	var raw struct {
-		ProviderModels map[string]ProviderModelConfig `yaml:"provider_models"`
-	}
-	if err := yaml.Unmarshal(data, &raw); err != nil {
-		return nil
-	}
-	return cloneProviderModelConfigMap(raw.ProviderModels)
-}
-
-func providerModelStoreFromYAMLWithRoot(data []byte, raw map[string]interface{}) providerModelStore {
-	if !yamlRootHasKey(raw, "provider_models") {
-		return normalizeProviderModelStore(providerModelSectionStateAbsent, nil)
-	}
-
-	providerModelsRaw := extractRawProviderModelsFromYAML(data)
-	if len(providerModelsRaw) == 0 {
-		return normalizeProviderModelStore(providerModelSectionStateExplicitEmpty, nil)
-	}
-
-	return normalizeProviderModelStore(providerModelSectionStateExplicitEntries, providerModelsRaw)
-}
-
 func (s providerModelStore) rawForSave() map[string]ProviderModelConfig {
 	switch s.state {
 	case providerModelSectionStateExplicitEmpty:

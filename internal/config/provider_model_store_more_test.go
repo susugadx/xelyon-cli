@@ -94,6 +94,49 @@ provider_models:
 	})
 }
 
+func TestProviderModelStoreStateFromParsedYAML_DirectBranches(t *testing.T) {
+	t.Run("empty raw keeps explicit-empty contract", func(t *testing.T) {
+		store := providerModelStoreStateFromParsedYAML(nil)
+		if store.state != providerModelSectionStateExplicitEmpty {
+			t.Fatalf("providerModelStoreStateFromParsedYAML(nil).state = %v, want %v", store.state, providerModelSectionStateExplicitEmpty)
+		}
+		if store.raw == nil || len(store.raw) != 0 {
+			t.Fatalf("providerModelStoreStateFromParsedYAML(nil).raw = %#v, want empty map", store.raw)
+		}
+	})
+
+	t.Run("non-empty raw keeps explicit-entries contract", func(t *testing.T) {
+		store := providerModelStoreStateFromParsedYAML(map[string]ProviderModelConfig{
+			"openai": {DefaultModel: "gpt-custom"},
+		})
+		if store.state != providerModelSectionStateExplicitEntries {
+			t.Fatalf("providerModelStoreStateFromParsedYAML(entries).state = %v, want %v", store.state, providerModelSectionStateExplicitEntries)
+		}
+		if got := store.raw["openai"].DefaultModel; got != "gpt-custom" {
+			t.Fatalf("providerModelStoreStateFromParsedYAML(entries).raw[openai].DefaultModel = %q, want %q", got, "gpt-custom")
+		}
+	})
+}
+
+func TestProviderModelStoreStateFromYAMLSection_DirectBranches(t *testing.T) {
+	if got := providerModelsSectionExists(nil); got {
+		t.Fatal("providerModelsSectionExists(nil) = true, want false")
+	}
+	if got := providerModelsSectionExists(map[string]interface{}{"provider_models": map[string]interface{}{}}); !got {
+		t.Fatal("providerModelsSectionExists(provider_models) = false, want true")
+	}
+
+	store := providerModelStoreStateFromYAMLSection(false, map[string]ProviderModelConfig{
+		"openai": {DefaultModel: "gpt-custom"},
+	})
+	if store.state != providerModelSectionStateAbsent {
+		t.Fatalf("providerModelStoreStateFromYAMLSection(false, entries).state = %v, want %v", store.state, providerModelSectionStateAbsent)
+	}
+	if store.raw != nil {
+		t.Fatalf("providerModelStoreStateFromYAMLSection(false, entries).raw = %#v, want nil", store.raw)
+	}
+}
+
 func TestDiffProviderModelConfig_TracksOnlyEffectiveChanges(t *testing.T) {
 	base := ProviderModelConfig{
 		DefaultModel:     "gpt-5.4",

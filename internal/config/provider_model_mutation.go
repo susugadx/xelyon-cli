@@ -1,42 +1,5 @@
 package config
 
-func deleteProviderModelKeys(raw map[string]ProviderModelConfig, keys []string) {
-	if raw == nil {
-		return
-	}
-	for _, key := range keys {
-		delete(raw, key)
-	}
-}
-
-func (c *Config) deleteProviderModelOverrides(provider string) bool {
-	if c == nil {
-		return false
-	}
-
-	raw := c.clonedRawProviderModelsForMutation()
-	deleteKeys := providerModelDeleteTargetKeys(raw, provider)
-	if len(deleteKeys) == 0 {
-		return false
-	}
-
-	deleteProviderModelKeys(raw, deleteKeys)
-	c.applyRawProviderModelMutation(raw)
-	return true
-}
-
-func (c *Config) applyProviderModelDeleteFallback(key string) {
-	if c == nil || key == "" {
-		return
-	}
-
-	if base, ok := defaultProviderModelConfig(key); ok {
-		c.setEffectiveProviderModelConfig(key, base)
-		return
-	}
-	c.deleteEffectiveProviderModelConfig(key)
-}
-
 func providerModelMutationKey(raw map[string]ProviderModelConfig, provider string) (string, bool) {
 	return providerModelWriteTargetKey(raw, provider)
 }
@@ -79,23 +42,6 @@ func (c *Config) SetProviderModelConfig(provider string, pm ProviderModelConfig)
 // provider_models の 1 エントリを更新する。
 func (c *Config) PatchProviderModelConfig(provider string, patch func(*ProviderModelConfig)) bool {
 	return c.mutateProviderModelConfig(provider, patch)
-}
-
-func (c *Config) DeleteProviderModelConfig(provider string) {
-	if c == nil {
-		return
-	}
-
-	key, ok := providerModelRequestedKey(provider)
-	if !ok {
-		return
-	}
-
-	if c.deleteProviderModelOverrides(provider) {
-		return
-	}
-
-	c.applyProviderModelDeleteFallback(key)
 }
 
 // ProviderModelWriteKey は provider_models の更新先キーを返す。
