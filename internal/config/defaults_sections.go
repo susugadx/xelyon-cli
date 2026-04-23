@@ -93,7 +93,6 @@ func defaultPasteConfig() PasteConfig {
 		BracketedPaste: true, // デフォルトON - 複数行ペースト対応
 		MaxLines:       10000,
 		MaxBytes:       1048576,
-		TimeoutSeconds: 60,
 	}
 }
 
