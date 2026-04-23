@@ -37,24 +37,27 @@ func newProjectMapManifestBudgetReducer(pm *ProjectMap, topDirs, topFiles, prior
 }
 
 func (r *projectMapManifestBudgetReducer) reduce() string {
-	for {
-		result := renderManifest(
-			r.topDirs,
-			r.limits.dirLimit,
-			r.topFiles,
-			r.limits.fileLimit,
-			r.priorityFiles,
-			r.limits.priorityLimit,
-			r.pm.GitStatus,
-			r.limits.changeLimit,
-		)
-		if result == "" || r.pm.fitsBudget(result) {
-			return result
-		}
-		if !r.shrink() {
+	return runBudgetReduction(budgetReductionEngine{
+		render: func() string {
+			return renderManifest(
+				r.topDirs,
+				r.limits.dirLimit,
+				r.topFiles,
+				r.limits.fileLimit,
+				r.priorityFiles,
+				r.limits.priorityLimit,
+				r.pm.GitStatus,
+				r.limits.changeLimit,
+			)
+		},
+		fits: r.pm.fitsBudget,
+		shrink: func() bool {
+			return r.shrink()
+		},
+		onExhausted: func(string) string {
 			return r.pm.generateManifestFallback(len(r.pm.Files), len(r.pm.GitStatus))
-		}
-	}
+		},
+	})
 }
 
 func (r *projectMapManifestBudgetReducer) shrink() bool {

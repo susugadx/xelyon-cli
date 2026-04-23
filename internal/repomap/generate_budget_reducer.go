@@ -3,9 +3,12 @@ package repomap
 import "sort"
 
 type projectMapBudgetReducer struct {
-	pm      *ProjectMap
-	options []renderOption
-	omitted int
+	pm                    *ProjectMap
+	options               []renderOption
+	omitted               int
+	testSymbolsSuppressed bool
+	omitOrder             []int
+	omitIndex             int
 }
 
 func newProjectMapBudgetReducer(pm *ProjectMap) *projectMapBudgetReducer {
@@ -20,30 +23,36 @@ func newProjectMapBudgetReducer(pm *ProjectMap) *projectMapBudgetReducer {
 }
 
 func (r *projectMapBudgetReducer) reduce() string {
-	if result, ok := r.renderIfWithinBudget(); ok {
-		return result
-	}
-
-	r.suppressTestFileSymbols()
-	if result, ok := r.renderIfWithinBudget(); ok {
-		return result
-	}
-
-	for _, idx := range r.orderedIncludedFileIndexes() {
-		r.options[idx].include = false
-		r.omitted++
-
-		if result, ok := r.renderIfWithinBudget(); ok {
-			return result
-		}
-	}
-
-	return r.pm.render(r.options, r.omitted)
+	return runBudgetReduction(budgetReductionEngine{
+		render: func() string {
+			return r.pm.render(r.options, r.omitted)
+		},
+		fits: r.pm.fitsBudget,
+		shrink: func() bool {
+			return r.shrink()
+		},
+	})
 }
 
-func (r *projectMapBudgetReducer) renderIfWithinBudget() (string, bool) {
-	result := r.pm.render(r.options, r.omitted)
-	return result, r.pm.fitsBudget(result)
+func (r *projectMapBudgetReducer) shrink() bool {
+	if !r.testSymbolsSuppressed {
+		r.suppressTestFileSymbols()
+		r.testSymbolsSuppressed = true
+		return true
+	}
+
+	if len(r.omitOrder) == 0 {
+		r.omitOrder = r.orderedIncludedFileIndexes()
+	}
+	if r.omitIndex >= len(r.omitOrder) {
+		return false
+	}
+
+	idx := r.omitOrder[r.omitIndex]
+	r.omitIndex++
+	r.options[idx].include = false
+	r.omitted++
+	return true
 }
 
 func (r *projectMapBudgetReducer) suppressTestFileSymbols() {
