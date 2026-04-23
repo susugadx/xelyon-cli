@@ -8,6 +8,19 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
+type patchPreviewBuilder struct {
+	readFile func(path string) ([]byte, error)
+}
+
+type updatePreviewState struct {
+	hunk          Hunk
+	originalLines []string
+	preview       ui.PatchFilePreview
+	lineIndex     int
+	lineDelta     int
+	prevChunkEnd  int
+}
+
 // BuildPatchPreview は apply_patch テキストから行番号付きプレビュー情報を構築する。
 func BuildPatchPreview(patchText string, readFile func(path string) ([]byte, error)) ([]ui.PatchFilePreview, error) {
 	parsed, err := ParsePatch(patchText)
@@ -15,29 +28,47 @@ func BuildPatchPreview(patchText string, readFile func(path string) ([]byte, err
 		return nil, err
 	}
 
+	builder := patchPreviewBuilder{readFile: readFile}
 	previews := make([]ui.PatchFilePreview, 0, len(parsed.Hunks))
 	for _, hunk := range parsed.Hunks {
-		switch hunk.Type {
-		case "add":
-			previews = append(previews, buildAddFilePreview(hunk))
-		case "delete":
-			previews = append(previews, buildDeleteFilePreview(hunk, readFile))
-		case "update":
-			preview, err := buildUpdateFilePreview(hunk, readFile)
-			if err != nil {
-				return nil, err
-			}
-			previews = append(previews, preview)
-		default:
-			return nil, fmt.Errorf("unsupported hunk type: %s", hunk.Type)
+		preview, err := builder.buildHunkPreview(hunk)
+		if err != nil {
+			return nil, err
 		}
+		previews = append(previews, preview)
 	}
 
 	return previews, nil
 }
 
+func (b patchPreviewBuilder) buildHunkPreview(hunk Hunk) (ui.PatchFilePreview, error) {
+	switch hunk.Type {
+	case "add":
+		return buildAddFilePreview(hunk), nil
+	case "delete":
+		return buildDeleteFilePreview(hunk, b.readFile), nil
+	case "update":
+		return buildUpdateFilePreview(hunk, b.readFile)
+	default:
+		return ui.PatchFilePreview{}, fmt.Errorf("unsupported hunk type: %s", hunk.Type)
+	}
+}
+
 func buildAddFilePreview(hunk Hunk) ui.PatchFilePreview {
 	lines := splitPreviewContentLines(hunk.Contents)
+
+	return ui.PatchFilePreview{
+		Path:   hunk.Path,
+		Action: hunk.Type,
+		Added:  len(lines),
+		Hunks: []ui.PatchHunkPreview{{
+			StartLine: 1,
+			Lines:     buildAddPreviewLines(lines),
+		}},
+	}
+}
+
+func buildAddPreviewLines(lines []string) []ui.PatchPreviewLine {
 	previewLines := make([]ui.PatchPreviewLine, 0, len(lines))
 	for i, line := range lines {
 		previewLines = append(previewLines, ui.PatchPreviewLine{
@@ -46,129 +77,147 @@ func buildAddFilePreview(hunk Hunk) ui.PatchFilePreview {
 			Text:    line,
 		})
 	}
-
-	return ui.PatchFilePreview{
-		Path:   hunk.Path,
-		Action: hunk.Type,
-		Added:  len(lines),
-		Hunks: []ui.PatchHunkPreview{{
-			StartLine: 1,
-			Lines:     previewLines,
-		}},
-	}
+	return previewLines
 }
 
 func buildDeleteFilePreview(hunk Hunk, readFile func(path string) ([]byte, error)) ui.PatchFilePreview {
-	preview := ui.PatchFilePreview{
-		Path:   hunk.Path,
-		Action: hunk.Type,
-	}
-
-	if readFile == nil {
-		return preview
-	}
-
-	absPath, err := common.ValidatePath(hunk.Path)
-	if err != nil {
-		return preview
-	}
-
-	contents, err := readFile(absPath)
-	if err != nil {
+	preview := ui.PatchFilePreview{Path: hunk.Path, Action: hunk.Type}
+	contents, ok := readPreviewFile(hunk.Path, readFile)
+	if !ok {
 		return preview
 	}
 	preview.Removed = countPreviewContentLines(string(contents))
 	return preview
 }
 
-func buildUpdateFilePreview(hunk Hunk, readFile func(path string) ([]byte, error)) (ui.PatchFilePreview, error) {
+func readPreviewFile(path string, readFile func(path string) ([]byte, error)) ([]byte, bool) {
 	if readFile == nil {
-		return ui.PatchFilePreview{}, fmt.Errorf("readFile is required for update preview")
+		return nil, false
 	}
 
-	absPath, err := common.ValidatePath(hunk.Path)
+	absPath, err := common.ValidatePath(path)
 	if err != nil {
-		return ui.PatchFilePreview{}, err
+		return nil, false
 	}
 
 	contents, err := readFile(absPath)
 	if err != nil {
+		return nil, false
+	}
+	return contents, true
+}
+
+func buildUpdateFilePreview(hunk Hunk, readFile func(path string) ([]byte, error)) (ui.PatchFilePreview, error) {
+	originalLines, err := readUpdatePreviewSourceLines(hunk.Path, readFile)
+	if err != nil {
 		return ui.PatchFilePreview{}, err
 	}
+	state := newUpdatePreviewState(hunk, originalLines)
+	return state.build()
+}
 
-	originalLines := splitPreviewContentLines(string(contents))
-	preview := ui.PatchFilePreview{
-		Path:     hunk.Path,
-		Action:   hunk.Type,
-		MovePath: hunk.MovePath,
-		Hunks:    make([]ui.PatchHunkPreview, 0, len(hunk.Chunks)),
+func readUpdatePreviewSourceLines(path string, readFile func(path string) ([]byte, error)) ([]string, error) {
+	if readFile == nil {
+		return nil, fmt.Errorf("readFile is required for update preview")
 	}
+	absPath, err := common.ValidatePath(path)
+	if err != nil {
+		return nil, err
+	}
+	contents, err := readFile(absPath)
+	if err != nil {
+		return nil, err
+	}
+	return splitPreviewContentLines(string(contents)), nil
+}
 
-	lineIndex := 0
-	lineDelta := 0
-	prevChunkEnd := 0
-	for _, chunk := range hunk.Chunks {
-		result, err := LocateChunk(originalLines, hunk.Path, chunk, lineIndex, prevChunkEnd)
-		if err != nil {
+func newUpdatePreviewState(hunk Hunk, originalLines []string) *updatePreviewState {
+	return &updatePreviewState{
+		hunk:          hunk,
+		originalLines: originalLines,
+		preview: ui.PatchFilePreview{
+			Path:     hunk.Path,
+			Action:   hunk.Type,
+			MovePath: hunk.MovePath,
+			Hunks:    make([]ui.PatchHunkPreview, 0, len(hunk.Chunks)),
+		},
+	}
+}
+
+func (s *updatePreviewState) build() (ui.PatchFilePreview, error) {
+	for _, chunk := range s.hunk.Chunks {
+		if err := s.appendChunk(chunk); err != nil {
 			return ui.PatchFilePreview{}, err
 		}
+	}
+	return s.preview, nil
+}
 
-		added, removed := countPreviewLines(chunk.previewLines)
-		preview.Added += added
-		preview.Removed += removed
-		preview.Hunks = append(preview.Hunks, buildChunkPreview(result.StartIdx, lineDelta, chunk.previewLines))
-
-		lineIndex = result.NextIndex
-		if len(result.Pattern) > 0 {
-			prevChunkEnd = result.StartIdx + len(result.Pattern)
-		}
-		lineDelta += len(result.NewLines) - len(result.Pattern)
+func (s *updatePreviewState) appendChunk(chunk UpdateFileChunk) error {
+	result, err := LocateChunk(s.originalLines, s.hunk.Path, chunk, s.lineIndex, s.prevChunkEnd)
+	if err != nil {
+		return err
 	}
 
-	return preview, nil
+	added, removed := countPreviewLines(chunk.previewLines)
+	s.preview.Added += added
+	s.preview.Removed += removed
+	s.preview.Hunks = append(s.preview.Hunks, buildChunkPreview(result.StartIdx, s.lineDelta, chunk.previewLines))
+
+	s.lineIndex = result.NextIndex
+	if len(result.Pattern) > 0 {
+		s.prevChunkEnd = result.StartIdx + len(result.Pattern)
+	}
+	s.lineDelta += len(result.NewLines) - len(result.Pattern)
+	return nil
 }
 
 func buildChunkPreview(startIdx, lineDelta int, lines []patchLine) ui.PatchHunkPreview {
+	previewLines := make([]ui.PatchPreviewLine, 0, len(lines))
 	oldLine := startIdx + 1
 	newLine := startIdx + 1 + lineDelta
-	previewLines := make([]ui.PatchPreviewLine, 0, len(lines))
 
 	for _, line := range lines {
-		switch line.Type {
-		case '-':
-			previewLines = append(previewLines, ui.PatchPreviewLine{
-				Type:    '-',
-				LineNum: oldLine,
-				Text:    line.Text,
-			})
-			oldLine++
-		case '+':
-			previewLines = append(previewLines, ui.PatchPreviewLine{
-				Type:    '+',
-				LineNum: newLine,
-				Text:    line.Text,
-			})
-			newLine++
-		default:
-			previewLines = append(previewLines, ui.PatchPreviewLine{
-				Type:    ' ',
-				LineNum: newLine,
-				Text:    line.Text,
-			})
-			oldLine++
-			newLine++
-		}
-	}
-
-	startLine := startIdx + 1 + lineDelta
-	if len(previewLines) > 0 {
-		startLine = previewLines[0].LineNum
+		previewLine, nextOld, nextNew := toPreviewLine(line, oldLine, newLine)
+		previewLines = append(previewLines, previewLine)
+		oldLine = nextOld
+		newLine = nextNew
 	}
 
 	return ui.PatchHunkPreview{
-		StartLine: startLine,
+		StartLine: resolveChunkStartLine(startIdx, lineDelta, previewLines),
 		Lines:     previewLines,
 	}
+}
+
+func toPreviewLine(line patchLine, oldLine int, newLine int) (ui.PatchPreviewLine, int, int) {
+	switch line.Type {
+	case '-':
+		return ui.PatchPreviewLine{
+			Type:    '-',
+			LineNum: oldLine,
+			Text:    line.Text,
+		}, oldLine + 1, newLine
+	case '+':
+		return ui.PatchPreviewLine{
+			Type:    '+',
+			LineNum: newLine,
+			Text:    line.Text,
+		}, oldLine, newLine + 1
+	default:
+		return ui.PatchPreviewLine{
+			Type:    ' ',
+			LineNum: newLine,
+			Text:    line.Text,
+		}, oldLine + 1, newLine + 1
+	}
+}
+
+func resolveChunkStartLine(startIdx int, lineDelta int, previewLines []ui.PatchPreviewLine) int {
+	if len(previewLines) > 0 {
+		return previewLines[0].LineNum
+	}
+	return startIdx + 1 + lineDelta
 }
 
 func countPreviewLines(lines []patchLine) (added, removed int) {

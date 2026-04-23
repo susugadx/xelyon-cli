@@ -289,3 +289,24 @@ func TestApplyPatch_PreviewShowsFullPatchWhenContextLookupWouldMiss(t *testing.T
 		}
 	})
 }
+
+func TestBuildApplyPatchConfirmContext_DeduplicatesPathsAndTracksMove(t *testing.T) {
+	parsed := &ParsedPatch{
+		Hunks: []Hunk{
+			{Type: "add", Path: "a.txt"},
+			{Type: "update", Path: "a.txt", MovePath: "b.txt"},
+			{Type: "update", Path: "b.txt", MovePath: "b.txt"},
+		},
+	}
+
+	tc := buildApplyPatchConfirmContext(parsed)
+	if !tc.HasMove {
+		t.Fatal("buildApplyPatchConfirmContext() HasMove = false, want true")
+	}
+	if tc.AffectedFiles != 2 {
+		t.Fatalf("buildApplyPatchConfirmContext() AffectedFiles = %d, want 2", tc.AffectedFiles)
+	}
+	if len(tc.TargetPaths) != 2 || tc.TargetPaths[0] != "a.txt" || tc.TargetPaths[1] != "b.txt" {
+		t.Fatalf("buildApplyPatchConfirmContext() TargetPaths = %v, want [a.txt b.txt]", tc.TargetPaths)
+	}
+}

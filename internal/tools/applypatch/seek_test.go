@@ -1,6 +1,9 @@
 package applypatch
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func TestSeekSequence_ExactMatch(t *testing.T) {
 	lines := []string{"foo", "bar", "baz"}
@@ -76,5 +79,27 @@ func TestFindLineNumber(t *testing.T) {
 	}
 	if got := FindLineNumber(content, "missing"); got != -1 {
 		t.Fatalf("FindLineNumber() = %d, want -1", got)
+	}
+}
+
+func TestLocateChunk_TrimTrailingEmptyLinePattern(t *testing.T) {
+	chunk := UpdateFileChunk{
+		OldLines: []string{"foo", ""},
+		NewLines: []string{"bar", ""},
+	}
+
+	result, err := LocateChunk([]string{"foo", "tail"}, "sample.txt", chunk, 0, 0)
+	if err != nil {
+		t.Fatalf("LocateChunk() error = %v", err)
+	}
+
+	if result.StartIdx != 0 {
+		t.Fatalf("LocateChunk() StartIdx = %d, want 0", result.StartIdx)
+	}
+	if !reflect.DeepEqual(result.Pattern, []string{"foo"}) {
+		t.Fatalf("LocateChunk() Pattern = %v, want [foo]", result.Pattern)
+	}
+	if !reflect.DeepEqual(result.NewLines, []string{"bar"}) {
+		t.Fatalf("LocateChunk() NewLines = %v, want [bar]", result.NewLines)
 	}
 }

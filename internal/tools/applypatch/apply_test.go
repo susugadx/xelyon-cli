@@ -367,6 +367,66 @@ func TestApplyPatch_HeredocWrapper(t *testing.T) {
 	})
 }
 
+// TestApplyParsedPatch_FromParserOutput は parser/apply 境界の回帰テスト。
+// ParsePatch が生成した MovePath と Chunk 情報を apply がそのまま適用できることを固定する。
+func TestApplyParsedPatch_FromParserOutput(t *testing.T) {
+	withTempWorkdir(t, func() {
+		writeTestFile(t, "src.txt", "line\n")
+
+		patch := "*** Begin Patch\n" +
+			"*** Update File: src.txt\n" +
+			"*** Move to: dst.txt\n" +
+			"@@\n" +
+			"-line\n" +
+			"+line2\n" +
+			"*** End Patch\n"
+
+		parsed, err := ParsePatch(patch)
+		if err != nil {
+			t.Fatalf("ParsePatch() error = %v", err)
+		}
+
+		result, err := applyParsedPatch(parsed)
+		if err != nil {
+			t.Fatalf("applyParsedPatch() error = %v", err)
+		}
+
+		assertApplyResult(t, result, nil, []string{"dst.txt"}, nil)
+		assertFileContent(t, "dst.txt", "line2\n")
+		if _, err := os.Stat("src.txt"); !os.IsNotExist(err) {
+			t.Fatalf("src.txt should be removed, stat err = %v", err)
+		}
+	})
+}
+
+// TestApplyParsedPatch_EndOfFileChunkFromParser は parser が解釈した EOF チャンクが
+// apply 側で末尾追記として扱われることを検証する。
+func TestApplyParsedPatch_EndOfFileChunkFromParser(t *testing.T) {
+	withTempWorkdir(t, func() {
+		writeTestFile(t, "eof-from-parser.txt", "foo\nbar\n")
+
+		patch := "*** Begin Patch\n" +
+			"*** Update File: eof-from-parser.txt\n" +
+			"@@\n" +
+			"+baz\n" +
+			"*** End of File\n" +
+			"*** End Patch\n"
+
+		parsed, err := ParsePatch(patch)
+		if err != nil {
+			t.Fatalf("ParsePatch() error = %v", err)
+		}
+
+		result, err := applyParsedPatch(parsed)
+		if err != nil {
+			t.Fatalf("applyParsedPatch() error = %v", err)
+		}
+
+		assertApplyResult(t, result, nil, []string{"eof-from-parser.txt"}, nil)
+		assertFileContent(t, "eof-from-parser.txt", "foo\nbar\nbaz\n")
+	})
+}
+
 func withTempWorkdir(t *testing.T, fn func()) {
 	t.Helper()
 
