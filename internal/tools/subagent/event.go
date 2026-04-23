@@ -2,6 +2,8 @@ package subagent
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 )
 
@@ -70,4 +72,59 @@ func EmitEvent(ctx context.Context, event SubAgentEvent) {
 	default:
 		// チャネルフル時はドロップ（親UIが追いつかない場合）
 	}
+}
+
+// EmitCompletionEvent はサブエージェント完了イベントを送信します。
+func EmitCompletionEvent(ctx context.Context, status string, result *RunResult) {
+	EmitEvent(ctx, SubAgentEvent{
+		Tool:    "_completed",
+		Phase:   "end",
+		Output:  formatCompletionEventOutput(status, result),
+		Success: status == "completed",
+	})
+}
+
+func formatCompletionEventOutput(status string, result *RunResult) string {
+	if result == nil {
+		if status == "" {
+			return "unknown"
+		}
+		return status
+	}
+	if status != "completed" {
+		if result.ErrorMessage != "" {
+			return result.ErrorMessage
+		}
+		if status != "" {
+			return status
+		}
+		return "error"
+	}
+
+	parts := make([]string, 0, 2)
+	if result.ToolExecutions > 0 {
+		label := "tools"
+		if result.ToolExecutions == 1 {
+			label = "tool"
+		}
+		parts = append(parts, fmt.Sprintf("%d %s", result.ToolExecutions, label))
+	}
+	if result.DurationMs > 0 {
+		parts = append(parts, formatEventDuration(result.DurationMs))
+	}
+	if len(parts) == 0 {
+		return "completed"
+	}
+	return fmt.Sprintf("completed (%s)", strings.Join(parts, ", "))
+}
+
+func formatEventDuration(durationMs int64) string {
+	if durationMs < 1000 {
+		return fmt.Sprintf("%dms", durationMs)
+	}
+	seconds := float64(durationMs) / 1000
+	if durationMs%1000 == 0 {
+		return fmt.Sprintf("%.0fs", seconds)
+	}
+	return fmt.Sprintf("%.1fs", seconds)
 }

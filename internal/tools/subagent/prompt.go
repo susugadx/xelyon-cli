@@ -173,6 +173,7 @@ Project Map lists file paths, symbol definitions with line ranges.
 ## Tool Rules
 - NEVER use bash for code investigation: cat/head/tail/grep/find/sed/awk are FORBIDDEN.
 - bash is ONLY for: build, test, format, lint, git commands.
+- bash is ONLY for: build, test, format, lint, git commands.
 - Independent operations -> call multiple tools in one response.
 ` + strings.Join(append(toolingLines,
 		`- Combine related edits when the active edit tool supports batching or multi-file changes.`,

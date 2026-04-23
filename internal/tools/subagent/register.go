@@ -1,20 +1,31 @@
 package subagent
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strconv"
 
+	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
+type subAgentSpawner interface {
+	Spawn(ctx context.Context, message, taskType, model, reasoningEffort string, provider api.Provider, cfg *config.Config) (string, error)
+}
+
+type subAgentWaiter interface {
+	Wait(ids []string, timeoutMs int) WaitResponse
+}
+
 // SpawnAgentTool は spawn_agent ツールです。
 type SpawnAgentTool struct {
-	manager *Manager
+	manager subAgentSpawner
 }
 
 // NewSpawnAgentTool は spawn_agent ツールを作成します。
-func NewSpawnAgentTool(manager *Manager) *SpawnAgentTool {
+func NewSpawnAgentTool(manager subAgentSpawner) *SpawnAgentTool {
 	return &SpawnAgentTool{manager: manager}
 }
 
@@ -75,20 +86,16 @@ func (t *SpawnAgentTool) Run(execCtx tools.ExecutionContext, args map[string]str
 		return fmt.Sprintf("Error: %v", err), nil, nil
 	}
 
-	bytes, _ := json.Marshal(map[string]string{
-		"agent_id": id,
-		"status":   "running",
-	})
-	return string(bytes), nil, nil
+	return runningAgentResponse(id), nil, nil
 }
 
 // WaitAgentTool は wait_agent ツールです。
 type WaitAgentTool struct {
-	manager *Manager
+	manager subAgentWaiter
 }
 
 // NewWaitAgentTool は wait_agent ツールを作成します。
-func NewWaitAgentTool(manager *Manager) *WaitAgentTool {
+func NewWaitAgentTool(manager subAgentWaiter) *WaitAgentTool {
 	return &WaitAgentTool{manager: manager}
 }
 
@@ -118,27 +125,54 @@ func (t *WaitAgentTool) Run(_ tools.ExecutionContext, args map[string]string) (s
 		return "Error: sub-agent manager is not configured", nil, nil
 	}
 
-	var ids []string
-	if err := json.Unmarshal([]byte(args["ids"]), &ids); err != nil {
+	ids, err := parseWaitAgentIDs(args["ids"])
+	if err != nil {
 		return fmt.Sprintf("Error: invalid ids: %v", err), nil, nil
 	}
 	if len(ids) == 0 {
 		return "Error: ids is empty", nil, nil
 	}
 
-	timeoutMs := 0
-	if raw := args["timeout_ms"]; raw != "" {
-		value, err := strconv.Atoi(raw)
-		if err != nil {
-			return fmt.Sprintf("Error: invalid timeout_ms: %v", err), nil, nil
-		}
-		if value > 0 && value < 60000 {
-			value = 0
-		}
-		timeoutMs = value
+	timeoutMs, err := parseWaitTimeoutMs(args["timeout_ms"])
+	if err != nil {
+		return fmt.Sprintf("Error: invalid timeout_ms: %v", err), nil, nil
 	}
 
 	response := t.manager.Wait(ids, timeoutMs)
+	return waitResponseJSON(response), nil, nil
+}
+
+func parseWaitAgentIDs(raw string) ([]string, error) {
+	var ids []string
+	if err := json.Unmarshal([]byte(raw), &ids); err != nil {
+		return nil, err
+	}
+	return ids, nil
+}
+
+func parseWaitTimeoutMs(raw string) (int, error) {
+	if raw == "" {
+		return 0, nil
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, err
+	}
+	if value > 0 && value < 60000 {
+		return 0, nil
+	}
+	return value, nil
+}
+
+func runningAgentResponse(agentID string) string {
+	bytes, _ := json.Marshal(map[string]string{
+		"agent_id": agentID,
+		"status":   "running",
+	})
+	return string(bytes)
+}
+
+func waitResponseJSON(response WaitResponse) string {
 	bytes, _ := json.Marshal(response)
-	return string(bytes), nil, nil
+	return string(bytes)
 }

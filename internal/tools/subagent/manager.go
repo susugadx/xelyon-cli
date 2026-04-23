@@ -14,7 +14,6 @@ import (
 )
 
 const (
-	defaultSubAgentModel         = "gpt-5.4-mini"
 	defaultSubAgentMaxConcurrent = 1
 )
 
@@ -162,147 +161,127 @@ func (m *Manager) Spawn(ctx context.Context, message, taskType, model, reasoning
 	if provider == nil {
 		return "", fmt.Errorf("provider is required")
 	}
-	if !ValidTaskType(taskType) {
-		taskType = TaskTypeExplore
-	}
+	taskType = normalizeTaskType(taskType)
 
-	mainProvider := config.CanonicalProviderName(provider.Name())
-	subCfg, resolvedModel, err := cloneConfigForSub(cfg, mainProvider, taskType, model, reasoningEffort)
+	spawnCfg, err := prepareSpawnConfig(cfg, provider, taskType, model, reasoningEffort)
 	if err != nil {
 		return "", err
 	}
-	if !subCfg.SubAgent.Enabled {
-		return "", fmt.Errorf("sub-agent is disabled")
+
+	sub, err := m.allocateRunningAgent(spawnCfg.model, spawnCfg.taskType, spawnCfg.cfg)
+	if err != nil {
+		return "", err
 	}
 
+	subProvider, err := resolveSubProvider(provider, spawnCfg.cfg, spawnCfg.model, m.providerFactory)
+	if err != nil {
+		m.removeAgent(sub.id)
+		return "", err
+	}
+	applySubAgentPrompt(spawnCfg.cfg, spawnCfg.taskType, subProvider, spawnCfg.model)
+
+	go func() {
+		m.runAgent(ctx, sub, message, spawnCfg.model, subProvider, spawnCfg.cfg)
+	}()
+
+	return sub.id, nil
+}
+
+func (m *Manager) runAgent(ctx context.Context, sub *managedSubAgent, message, model string, provider api.Provider, cfg *config.Config) {
+	runCtx := WithEventChannel(ctx, m.eventCh)
+	runCtx = WithAgentID(runCtx, sub.id)
+
+	defer close(sub.done)
+	defer func() {
+		status, result := m.agentOutcome(sub)
+		EmitCompletionEvent(runCtx, status, result)
+	}()
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			m.markAgentPanic(sub, recovered)
+		}
+	}()
+
+	result := normalizeAgentResult(m.runHeadless(runCtx, message, model, provider, cfg))
+	m.setAgentResult(sub, result)
+}
+
+func normalizeAgentResult(result *RunResult) *RunResult {
+	if result == nil {
+		return &RunResult{
+			Status:       "error",
+			ErrorMessage: "sub-agent runner returned nil result",
+		}
+	}
+	if result.Status == "running" {
+		return &RunResult{
+			Status:       "error",
+			ErrorMessage: "sub-agent runner returned invalid running status",
+		}
+	}
+	return result
+}
+
+func (m *Manager) allocateRunningAgent(model, taskType string, cfg *config.Config) (*managedSubAgent, error) {
 	m.mu.Lock()
-	if m.runningCountLocked() >= maxConcurrent(subCfg) {
-		m.mu.Unlock()
-		return "", fmt.Errorf("max concurrent sub-agents reached (%d)", maxConcurrent(subCfg))
+	defer m.mu.Unlock()
+
+	limit := maxConcurrent(cfg)
+	if m.runningCountLocked() >= limit {
+		return nil, fmt.Errorf("max concurrent sub-agents reached (%d)", limit)
 	}
 
 	id := fmt.Sprintf("sub-%03d", m.counter.Add(1))
 	sub := &managedSubAgent{
 		id:        id,
-		model:     resolvedModel,
+		model:     model,
 		taskType:  taskType,
 		status:    "running",
 		done:      make(chan struct{}),
 		startTime: time.Now(),
 	}
 	m.agents[id] = sub
-	m.mu.Unlock()
-
-	subProvider, err := resolveSubProvider(provider, subCfg, resolvedModel, m.providerFactory)
-	if err != nil {
-		m.mu.Lock()
-		delete(m.agents, id)
-		m.mu.Unlock()
-		return "", err
-	}
-	subCfg.SubAgentPrompt = PromptForTaskType(taskType, subProvider.Name(), resolvedModel)
-
-	go func() {
-		defer close(sub.done)
-		defer func() {
-			m.mu.Lock()
-			status := sub.status
-			result := sub.result
-			m.mu.Unlock()
-
-			EmitEvent(ctx, SubAgentEvent{
-				Tool:    "_completed",
-				Phase:   "end",
-				Output:  formatCompletionEventOutput(status, result),
-				Success: status == "completed",
-			})
-		}()
-		defer func() {
-			if recovered := recover(); recovered != nil {
-				m.mu.Lock()
-				sub.status = "error"
-				sub.result = &RunResult{
-					Status:       "error",
-					ErrorMessage: fmt.Sprintf("panic: %v", recovered),
-				}
-				m.mu.Unlock()
-			}
-		}()
-
-		ctx = WithEventChannel(ctx, m.eventCh)
-		ctx = WithAgentID(ctx, id)
-
-		result := m.runHeadless(ctx, message, resolvedModel, subProvider, subCfg)
-		if result == nil {
-			result = &RunResult{
-				Status:       "error",
-				ErrorMessage: "sub-agent runner returned nil result",
-			}
-		}
-
-		m.mu.Lock()
-		sub.result = result
-		switch result.Status {
-		case "completed":
-			sub.status = "completed"
-		case "running":
-			sub.status = "error"
-			sub.result = &RunResult{
-				Status:       "error",
-				ErrorMessage: "sub-agent runner returned invalid running status",
-			}
-		default:
-			sub.status = "error"
-		}
-		m.mu.Unlock()
-	}()
-
-	return id, nil
+	return sub, nil
 }
 
-func formatCompletionEventOutput(status string, result *RunResult) string {
-	if result == nil {
-		if status == "" {
-			return "unknown"
-		}
-		return status
-	}
-	if status != "completed" {
-		if result.ErrorMessage != "" {
-			return result.ErrorMessage
-		}
-		if status != "" {
-			return status
-		}
-		return "error"
-	}
-
-	parts := make([]string, 0, 2)
-	if result.ToolExecutions > 0 {
-		label := "tools"
-		if result.ToolExecutions == 1 {
-			label = "tool"
-		}
-		parts = append(parts, fmt.Sprintf("%d %s", result.ToolExecutions, label))
-	}
-	if result.DurationMs > 0 {
-		parts = append(parts, formatEventDuration(result.DurationMs))
-	}
-	if len(parts) == 0 {
-		return "completed"
-	}
-	return fmt.Sprintf("completed (%s)", strings.Join(parts, ", "))
+func (m *Manager) removeAgent(id string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.agents, id)
 }
 
-func formatEventDuration(durationMs int64) string {
-	if durationMs < 1000 {
-		return fmt.Sprintf("%dms", durationMs)
+func (m *Manager) markAgentPanic(sub *managedSubAgent, recovered interface{}) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	sub.status = "error"
+	sub.result = &RunResult{
+		Status:       "error",
+		ErrorMessage: fmt.Sprintf("panic: %v", recovered),
 	}
-	seconds := float64(durationMs) / 1000
-	if durationMs%1000 == 0 {
-		return fmt.Sprintf("%.0fs", seconds)
+}
+
+func (m *Manager) setAgentResult(sub *managedSubAgent, result *RunResult) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	sub.result = result
+	if result.Status == "completed" {
+		sub.status = "completed"
+		return
 	}
-	return fmt.Sprintf("%.1fs", seconds)
+	sub.status = "error"
+}
+
+func (m *Manager) agentOutcome(sub *managedSubAgent) (string, *RunResult) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return sub.status, sub.result
+}
+
+func (m *Manager) getAgent(id string) (*managedSubAgent, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	sub, ok := m.agents[id]
+	return sub, ok
 }
 
 // Wait は指定されたサブエージェントの完了を待ちます。
@@ -317,9 +296,7 @@ func (m *Manager) Wait(ids []string, timeoutMs int) WaitResponse {
 
 	timedOut := false
 	for i, id := range ids {
-		m.mu.Lock()
-		sub, ok := m.agents[id]
-		m.mu.Unlock()
+		sub, ok := m.getAgent(id)
 		if !ok {
 			results[i] = WaitResult{AgentID: id, Status: "error", Output: "agent not found"}
 			status = "error"
@@ -471,146 +448,6 @@ func (m *Manager) snapshotOrTimeout(sub *managedSubAgent, timeout bool) WaitResu
 		AgentID: sub.id,
 		Status:  sub.status,
 		Output:  output,
-	}
-}
-
-func cloneConfigForSub(cfg *config.Config, mainProvider, taskType, model, reasoningEffort string) (*config.Config, string, error) {
-	cloned := config.CloneConfig(cfg)
-	if cloned == nil {
-		cloned = config.DefaultConfig()
-	}
-	if !ValidTaskType(taskType) {
-		taskType = TaskTypeExplore
-	}
-
-	resolvedModel := normalizeSubAgentModel(model)
-	if resolvedModel == "" {
-		resolvedModel = normalizeSubAgentModel(cloned.SubAgent.DefaultModel)
-	}
-	if resolvedModel == "" {
-		resolvedModel = inferSubAgentModel(mainProvider)
-	}
-	if resolvedModel == "" {
-		resolvedModel = defaultSubAgentModel
-	}
-
-	effort := strings.TrimSpace(reasoningEffort)
-	if effort == "" {
-		effort = DefaultEffortForTaskType(taskType)
-	}
-	if effort == "" {
-		effort = strings.TrimSpace(cloned.SubAgent.DefaultEffort)
-	}
-
-	if err := applyReasoningEffort(cloned, effort); err != nil {
-		return nil, "", err
-	}
-
-	return cloned, resolvedModel, nil
-}
-
-func normalizeSubAgentModel(model string) string {
-	model = strings.TrimSpace(model)
-	switch strings.ToLower(model) {
-	case "", "sub_agent.default_model":
-		return ""
-	default:
-		return model
-	}
-}
-
-func inferSubAgentModel(provider string) string {
-	switch config.CanonicalProviderName(provider) {
-	case "openai":
-		return "gpt-5.4-mini"
-	case "claude":
-		return "claude-haiku-4-5-20251001"
-	case "gemini":
-		return "gemini-3.1-flash-lite-preview"
-	case "deepseek":
-		return "deepseek-chat"
-	case "groq":
-		return "llama-3.3-70b-versatile"
-	case "openrouter":
-		return "openai/gpt-5.4-mini"
-	default:
-		return ""
-	}
-}
-
-func applyReasoningEffort(cfg *config.Config, effort string) error {
-	switch normalizeReasoningEffort(effort) {
-	case "", "off":
-		cfg.Thinking.Enabled = false
-		return nil
-	case "low", "medium", "high", "xhigh":
-		cfg.Thinking.Enabled = true
-		cfg.Thinking.Level = normalizeReasoningEffort(effort)
-		return nil
-	default:
-		return fmt.Errorf("invalid reasoning_effort: %s", effort)
-	}
-}
-
-func normalizeReasoningEffort(effort string) string {
-	return strings.ToLower(strings.TrimSpace(effort))
-}
-
-type providerConfigKeyProvider interface {
-	ProviderConfigKey() string
-}
-
-func currentProviderConfigKey(current api.Provider) string {
-	if current == nil {
-		return ""
-	}
-	if keyed, ok := current.(providerConfigKeyProvider); ok {
-		if key := config.ActiveProviderConfigKey(keyed.ProviderConfigKey()); key != "" {
-			return key
-		}
-	}
-	return config.ActiveProviderConfigKey(current.Name())
-}
-
-func resolveSubProvider(current api.Provider, cfg *config.Config, model string, factory ProviderFactory) (api.Provider, error) {
-	if current == nil {
-		return nil, fmt.Errorf("provider is required")
-	}
-
-	currentName := config.CanonicalProviderName(current.Name())
-	currentConfigKey := currentProviderConfigKey(current)
-	target := currentName
-	if cfg != nil {
-		target = cfg.ResolveProviderForModel(currentName, model)
-	}
-	if target == "" {
-		target = currentName
-	}
-	factoryProviderName := target
-	if currentConfigKey != "" && config.SameProviderRuntimeIdentity(currentConfigKey, target) {
-		factoryProviderName = currentConfigKey
-	}
-	if factory == nil {
-		factory = api.NewProvider
-	}
-	provider, err := factory(factoryProviderName)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create provider %s: %w", factoryProviderName, err)
-	}
-	resetSubProviderState(provider)
-	return provider, nil
-}
-
-func resetSubProviderState(provider api.Provider) {
-	if provider == nil {
-		return
-	}
-	if cacheClearable, ok := provider.(api.CacheClearable); ok {
-		cacheClearable.ClearCache()
-		return
-	}
-	if responseIDSetter, ok := provider.(interface{ SetResponseID(string) }); ok {
-		responseIDSetter.SetResponseID("")
 	}
 }
 
