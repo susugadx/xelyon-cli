@@ -7,7 +7,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
-// BashTool executes bash commands
+// BashTool は bash コマンドを実行するツール。
 type BashTool struct{}
 
 func (t *BashTool) Name() string { return "bash" }
@@ -36,7 +36,7 @@ func (t *BashTool) Run(execCtx tools.ExecutionContext, args map[string]string) (
 	return output, nil, nil
 }
 
-// RegisterTools registers all dev tools to the registry
+// RegisterTools は dev ツール群をレジストリへ登録する。
 func RegisterTools(registry *tools.Registry) {
 	registry.Register(&BashTool{})
 }
