@@ -1,13 +1,5 @@
 package tools
 
-import (
-	"regexp"
-	"strings"
-)
-
-// xmlOpenTagPattern は <tag_name> 形式の開始タグを検出する正規表現
-var xmlOpenTagPattern = regexp.MustCompile(`<([a-zA-Z_][\w-]*)>`)
-
 type xmlToolCallCandidate struct {
 	tagName      string
 	innerContent string
@@ -69,31 +61,27 @@ func newXMLToolCallDecoder(logger *parseDebugLogger) *xmlToolCallDecoder {
 
 func (s *xmlToolCallScanner) Next() (xmlToolCallCandidate, bool) {
 	for s.searchFrom < len(s.response) {
-		loc := xmlOpenTagPattern.FindStringSubmatchIndex(s.response[s.searchFrom:])
-		if loc == nil {
+		openTag, ok := findNextXMLOpenTag(s.response, s.searchFrom)
+		if !ok {
 			return xmlToolCallCandidate{}, false
 		}
 
-		absStart := s.searchFrom + loc[0]
-		tagEnd := s.searchFrom + loc[1]
-		tagName := s.response[s.searchFrom+loc[2] : s.searchFrom+loc[3]]
-
-		closeTag := "</" + tagName + ">"
-		closeIdx := strings.Index(s.response[tagEnd:], closeTag)
+		closeIdx := findXMLCloseTagIndex(s.response, openTag.contentStart, openTag.tagName)
 		if closeIdx == -1 {
-			s.searchFrom = tagEnd
+			s.searchFrom = openTag.contentStart
 			continue
 		}
 
-		absCloseStart := tagEnd + closeIdx
+		closeTag := xmlCloseTag(openTag.tagName)
+		absCloseStart := openTag.contentStart + closeIdx
 		fullEnd := absCloseStart + len(closeTag)
-		innerContent := s.response[tagEnd:absCloseStart]
+		innerContent := s.response[openTag.contentStart:absCloseStart]
 		s.searchFrom = fullEnd
 
 		return xmlToolCallCandidate{
-			tagName:      tagName,
+			tagName:      openTag.tagName,
 			innerContent: innerContent,
-			start:        absStart,
+			start:        openTag.openStart,
 		}, true
 	}
 
@@ -102,12 +90,12 @@ func (s *xmlToolCallScanner) Next() (xmlToolCallCandidate, bool) {
 
 func (f *xmlToolCallFilter) Accept(candidate xmlToolCallCandidate) bool {
 	if isInCodeBlock(candidate.start, f.codeBlockRanges) {
-		f.logger.Logf("[DEBUG ParseToolCalls] XML rescue: skipping %q in code block\n", candidate.tagName)
+		f.logger.LogEvent(newParseDebugXMLRescueSkipInCodeBlockEvent(candidate.tagName))
 		return false
 	}
 
 	if !f.registry.HasTool(candidate.tagName) {
-		f.logger.Logf("[DEBUG ParseToolCalls] XML rescue: skipping unknown tool %q\n", candidate.tagName)
+		f.logger.LogEvent(newParseDebugXMLRescueSkipUnknownToolEvent(candidate.tagName))
 		return false
 	}
 
@@ -116,7 +104,7 @@ func (f *xmlToolCallFilter) Accept(candidate xmlToolCallCandidate) bool {
 
 func (d *xmlToolCallDecoder) Decode(candidate xmlToolCallCandidate) *ToolCall {
 	args := parseXMLParams(candidate.innerContent)
-	d.logger.Logf("[DEBUG ParseToolCalls] XML rescue: tool=%s, args=%v\n", candidate.tagName, args)
+	d.logger.LogEvent(newParseDebugXMLRescueToolCallEvent(candidate.tagName, args))
 	return &ToolCall{
 		Tool: candidate.tagName,
 		Args: args,

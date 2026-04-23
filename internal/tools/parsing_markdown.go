@@ -1,7 +1,5 @@
 package tools
 
-import "strings"
-
 type markdownUnclosedFencePolicy int
 
 const (
@@ -27,36 +25,21 @@ func findCodeBlockRanges(text string) [][2]int {
 
 func findCodeBlockRangesWithPolicy(text string, policy markdownCodeBlockPolicy) [][2]int {
 	var ranges [][2]int
-	idx := 0
+	scanner := newMarkdownFenceScanner(text)
 
-	for idx < len(text) {
-		// ``` の開始を探す
-		start := strings.Index(text[idx:], "```")
-		if start == -1 {
+	for {
+		fence, ok := scanner.Next()
+		if !ok {
 			break
 		}
-		start += idx
-
-		// 対応する ``` の終了を探す（開始の次の行から）
-		endSearch := start + 3
-		// 言語指定がある場合は改行まで読み飛ばす
-		newline := strings.Index(text[endSearch:], "\n")
-		if newline != -1 {
-			endSearch += newline + 1
-		}
-
-		end := strings.Index(text[endSearch:], "```")
-		if end == -1 {
+		if !fence.closed {
 			if policy.unclosedFence == markdownUnclosedFencePolicyToEOF {
 				// 閉じていない場合は残り全部をコードブロックとみなす
-				ranges = append(ranges, [2]int{start, len(text)})
+				ranges = append(ranges, [2]int{fence.start, fence.end})
 			}
 			break
 		}
-		end += endSearch + 3
-
-		ranges = append(ranges, [2]int{start, end})
-		idx = end
+		ranges = append(ranges, [2]int{fence.start, fence.end})
 	}
 
 	return ranges

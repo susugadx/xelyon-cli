@@ -86,3 +86,32 @@ func TestDefaultMarkdownCodeBlockPolicy_UnclosedFenceToEOF(t *testing.T) {
 		t.Fatalf("defaultMarkdownCodeBlockPolicy().unclosedFence = %v, want %v", policy.unclosedFence, markdownUnclosedFencePolicyToEOF)
 	}
 }
+
+func TestMarkdownFenceScanner_ClosedFence(t *testing.T) {
+	scanner := newMarkdownFenceScanner("before ```go\nfmt.Println(1)\n``` after")
+	fence, ok := scanner.Next()
+	if !ok {
+		t.Fatal("Next() ok = false, want true")
+	}
+	if !fence.closed {
+		t.Fatal("fence.closed = false, want true")
+	}
+	if fence.start != 7 {
+		t.Fatalf("fence.start = %d, want 7", fence.start)
+	}
+}
+
+func TestMarkdownFenceScanner_UnclosedFence(t *testing.T) {
+	text := "before ```go\nfmt.Println(1)"
+	scanner := newMarkdownFenceScanner(text)
+	fence, ok := scanner.Next()
+	if !ok {
+		t.Fatal("Next() ok = false, want true")
+	}
+	if fence.closed {
+		t.Fatal("fence.closed = true, want false")
+	}
+	if fence.end != len(text) {
+		t.Fatalf("fence.end = %d, want %d", fence.end, len(text))
+	}
+}

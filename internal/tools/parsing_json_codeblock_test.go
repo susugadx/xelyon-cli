@@ -53,7 +53,7 @@ func TestParseToolCalls_UnclosedCodeBlock(t *testing.T) {
 		wantTools []string
 	}{
 		{
-			name:      "unclosed code block before tool (CURRENT BEHAVIOR - may cause issues)",
+			name:      "unclosed code block before tool is treated as code until EOF (default contract)",
 			response:  "```json\nsome example\n{\"tool\": \"read_file\", \"args\": {}}",
 			wantCount: 0,
 			wantTools: []string{},

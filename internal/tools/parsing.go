@@ -2,7 +2,6 @@ package tools
 
 import (
 	"io"
-	"os"
 )
 
 // ParseToolCall はレスポンスからツール呼び出しを抽出（最初の1つのみ - 後方互換）
@@ -27,27 +26,10 @@ func ParseToolCallsWithRegistry(response string, registry *Registry, debugOut io
 	return parseToolCalls(response, options)
 }
 
-type parseRunOptions struct {
-	registry        *Registry
-	startFinder     jsonToolCallStartFinder
-	codeBlockPolicy markdownCodeBlockPolicy
-	logger          *parseDebugLogger
-}
-
-func resolveParseRunOptions(registry *Registry, debugOut io.Writer) parseRunOptions {
-	debugEnabled := os.Getenv("XELYON_DEBUG_PARSE") == "1"
-	return parseRunOptions{
-		registry:        resolveRegistry(registry),
-		startFinder:     newDefaultJSONToolCallStartFinder(),
-		codeBlockPolicy: defaultMarkdownCodeBlockPolicy(),
-		logger:          newParseDebugLogger(debugEnabled, debugOut),
-	}
-}
-
 func parseToolCalls(response string, options parseRunOptions) []*ToolCall {
 	options.logger.LogParseResponse(response, options.startFinder)
 	ctx := newParseToolCallContext(response, options)
-	return runParseToolCallPhases(ctx, defaultParseToolCallPhases())
+	return runParseToolCallPhases(ctx, options.plan.ResolvePhases())
 }
 
 func resolveRegistry(registry *Registry) *Registry {

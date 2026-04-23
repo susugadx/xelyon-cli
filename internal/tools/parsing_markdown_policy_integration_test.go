@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestParseToolCalls_CodeBlockPolicyInjection(t *testing.T) {
+func TestParseToolCalls_UnclosedCodeBlock_DefaultPolicyTreatsToEOF(t *testing.T) {
 	input := "```json\nexample\n{\"tool\": \"read_file\", \"args\": {\"path\": \"main.go\"}}"
 
 	defaultOptions := resolveParseRunOptions(newXMLTestRegistry(t), io.Discard)
@@ -13,12 +13,17 @@ func TestParseToolCalls_CodeBlockPolicyInjection(t *testing.T) {
 	if len(gotDefault) != 0 {
 		t.Fatalf("default policy returned %d calls, want 0", len(gotDefault))
 	}
+}
 
-	customOptions := defaultOptions
-	customOptions.codeBlockPolicy = markdownCodeBlockPolicy{
+func TestParseToolCalls_CodeBlockPolicyInjection(t *testing.T) {
+	input := "```json\nexample\n{\"tool\": \"read_file\", \"args\": {\"path\": \"main.go\"}}"
+
+	options := resolveParseRunOptions(newXMLTestRegistry(t), io.Discard)
+	options.plan.codeBlockPolicy = markdownCodeBlockPolicy{
 		unclosedFence: markdownUnclosedFencePolicyIgnore,
 	}
-	gotCustom := parseToolCalls(input, customOptions)
+
+	gotCustom := parseToolCalls(input, options)
 	if len(gotCustom) != 1 {
 		t.Fatalf("custom policy returned %d calls, want 1", len(gotCustom))
 	}

@@ -52,3 +52,10 @@ func (l *parseDebugLogger) LogParseResponse(response string, finder jsonToolCall
 		}
 	}
 }
+
+func (l *parseDebugLogger) LogEvent(event parseDebugEvent) {
+	if l == nil || !l.enabled || event == nil {
+		return
+	}
+	event.log(l)
+}

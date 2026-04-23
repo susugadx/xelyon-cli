@@ -1,9 +1,32 @@
 package tools
 
-import (
-	"encoding/json"
-	"strings"
-)
+type xmlParamsParseStrategy interface {
+	Parse(content string) xmlParamsParseOutcome
+}
+
+type xmlTagParamsParseStrategy struct{}
+
+type xmlJSONParamsParseStrategy struct{}
+
+type xmlParamsParser struct {
+	strategies []xmlParamsParseStrategy
+}
+
+type xmlParamsParseOutcome struct {
+	args map[string]string
+	// handled は「この戦略が入力形式の責務 owner だったか」を表す。
+	// true の場合、args が空でも他戦略へフォールバックしない。
+	handled bool
+}
+
+func newDefaultXMLParamsParser() xmlParamsParser {
+	return xmlParamsParser{
+		strategies: []xmlParamsParseStrategy{
+			xmlTagParamsParseStrategy{},
+			xmlJSONParamsParseStrategy{},
+		},
+	}
+}
 
 // parseXMLParams は XML 内部コンテンツからパラメータを抽出する。
 // パターン1: <args><param>value</param>...</args> （args ラッパーあり）
@@ -11,80 +34,30 @@ import (
 // パターン3: {"key": "value"} （JSON 形式）
 func parseXMLParams(content string) map[string]string {
 	content = unwrapXMLArgsContent(content)
-	args := parseXMLTagParams(content)
-	if len(args) > 0 {
-		return args
-	}
-	return parseXMLJSONParams(content)
-}
-
-func unwrapXMLArgsContent(content string) string {
-	// <args>...</args> ラッパーがある場合は中身を取り出す
-	if argsStart := strings.Index(content, "<args>"); argsStart != -1 {
-		if argsEnd := strings.Index(content, "</args>"); argsEnd != -1 && argsEnd > argsStart {
-			return content[argsStart+len("<args>") : argsEnd]
-		}
-	}
-	return content
-}
-
-func parseXMLTagParams(content string) map[string]string {
-	args := make(map[string]string)
-
-	// <param>value</param> を手動パースで抽出（バックリファレンス不要）
-	searchFrom := 0
-	for searchFrom < len(content) {
-		// 開始タグを探す
-		loc := xmlOpenTagPattern.FindStringSubmatchIndex(content[searchFrom:])
-		if loc == nil {
-			break
-		}
-		tagStart := searchFrom + loc[1]
-		tagName := content[searchFrom+loc[2] : searchFrom+loc[3]]
-
-		// "args" タグ自体はスキップ
-		if tagName == "args" {
-			searchFrom = tagStart
+	parser := newDefaultXMLParamsParser()
+	for _, strategy := range parser.strategies {
+		outcome := strategy.Parse(content)
+		if !outcome.handled {
 			continue
 		}
-
-		// 対応する閉じタグを探す
-		closeTag := "</" + tagName + ">"
-		closeIdx := strings.Index(content[tagStart:], closeTag)
-		if closeIdx == -1 {
-			searchFrom = tagStart
-			continue
+		if outcome.args == nil {
+			return map[string]string{}
 		}
-
-		value := content[tagStart : tagStart+closeIdx]
-		args[tagName] = value
-		searchFrom = tagStart + closeIdx + len(closeTag)
+		return outcome.args
 	}
-
-	return args
+	return map[string]string{}
 }
 
-func parseXMLJSONParams(content string) map[string]string {
-	args := make(map[string]string)
-	trimmed := strings.TrimSpace(content)
-	if !strings.HasPrefix(trimmed, "{") {
-		return args
+func handledXMLParamsOutcome(args map[string]string) xmlParamsParseOutcome {
+	return xmlParamsParseOutcome{
+		args:    args,
+		handled: true,
 	}
+}
 
-	var jsonArgs map[string]interface{}
-	if err := json.Unmarshal([]byte(trimmed), &jsonArgs); err != nil {
-		return args
+func unhandledXMLParamsOutcome() xmlParamsParseOutcome {
+	return xmlParamsParseOutcome{
+		args:    nil,
+		handled: false,
 	}
-
-	for k, v := range jsonArgs {
-		switch val := v.(type) {
-		case string:
-			args[k] = val
-		default:
-			if b, err := json.Marshal(v); err == nil {
-				args[k] = string(b)
-			}
-		}
-	}
-	return args
 }
