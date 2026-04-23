@@ -4,6 +4,8 @@ import (
 	"io"
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 func TestHandleChunk_DispatchesResponseCreated(t *testing.T) {
@@ -143,4 +145,28 @@ func TestHandleChunk_DispatchesOutputTextDelta(t *testing.T) {
 	if textDelta != "hello" {
 		t.Fatalf("handleChunk() textDelta = %q, want %q", textDelta, "hello")
 	}
+}
+
+func TestHandleChunk_FunctionCallAddedStartsSpinnerViaDisplayState(t *testing.T) {
+	spinner := ui.NewSpinnerWithWriter(io.Discard)
+	state := newResponsesStreamState(spinner, io.Discard)
+
+	_, done, err := state.handleChunk(ResponsesStreamChunk{
+		Type: "response.output_item.added",
+		Item: &ResponsesItem{
+			Type:   "function_call",
+			CallID: "call_1",
+			Name:   "read_file",
+		},
+	}, "")
+	if err != nil {
+		t.Fatalf("handleChunk() error = %v, want nil", err)
+	}
+	if done {
+		t.Fatal("handleChunk() done = true, want false")
+	}
+	if !spinner.IsActive() {
+		t.Fatal("handleChunk() should start spinner for function_call event")
+	}
+	spinner.Stop()
 }

@@ -100,6 +100,22 @@ func (s *sseInterpretState) processChunk(ctx context.Context, chunk GeminiFuncti
 	}
 }
 
+func (s *sseInterpretState) processLine(ctx context.Context, line string, thinkingTimer *time.Timer, thinkingTimeout time.Duration) bool {
+	data, handled := parseGeminiSSEDataLine(line)
+	if !handled {
+		return false
+	}
+
+	chunk, err := decodeGeminiSSEChunk(data)
+	if err != nil {
+		s.debugf("[DEBUG Gemini SSE] Failed to unmarshal chunk: %v\n", err)
+		return false
+	}
+
+	s.processChunk(ctx, chunk, thinkingTimer, thinkingTimeout)
+	return true
+}
+
 func (s *sseInterpretState) processPart(ctx context.Context, part GeminiFunctionPart, thinkingTimer *time.Timer, thinkingTimeout time.Duration) {
 	action := buildPartAction(part)
 	if action.collectThought {

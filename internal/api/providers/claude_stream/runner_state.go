@@ -93,42 +93,55 @@ func (s *runnerOutputState) finalizeWithResponse(response string, err error, pri
 	return response, err
 }
 
-func (s *runnerOutputState) finalizeContextDone(opts RunnerOptions, eventErr error) (string, error) {
-	policy := newRunnerContextDonePolicy(opts)
-	response := s.currentResponse()
-	resolution := policy.resolve(response, eventErr, s.ctx.Err())
+func (s *runnerOutputState) finalizeWithErrorResolution(resolution runnerFinalizeErrorResolution) (string, error) {
+	return s.finalizeWith(resolution.err, resolution.printTrailingNewline)
+}
+
+func (s *runnerOutputState) finalizeWithErrorPolicy(resolve func(runnerFinalizeErrorPolicy) runnerFinalizeErrorResolution) (string, error) {
+	policy := newRunnerFinalizeErrorPolicy()
+	return s.finalizeWithErrorResolution(resolve(policy))
+}
+
+func (s *runnerOutputState) finalizeContextDoneWithResolution(response string, resolution contextDoneResolution) (string, error) {
 	if resolution.warnPartial {
 		cancelWarnColor.Fprintln(s.errOut, "\n⚠️  Response interrupted. Partial result returned.")
 	}
 	return s.finalizeWithResponse(response, resolution.err, resolution.printTrailingNewline)
 }
 
+func (s *runnerOutputState) finalizeContextDone(opts RunnerOptions, eventErr error) (string, error) {
+	policy := newRunnerContextDonePolicy(opts)
+	response := s.currentResponse()
+	resolution := policy.resolve(response, eventErr, s.ctx.Err())
+	return s.finalizeContextDoneWithResolution(response, resolution)
+}
+
 func (s *runnerOutputState) finalizeIdleTimeout(idleTimeout time.Duration) (string, error) {
-	policy := newRunnerFinalizeErrorPolicy()
-	resolution := policy.resolveIdleTimeout(idleTimeout)
-	return s.finalizeWith(resolution.err, resolution.printTrailingNewline)
+	return s.finalizeWithErrorPolicy(func(policy runnerFinalizeErrorPolicy) runnerFinalizeErrorResolution {
+		return policy.resolveIdleTimeout(idleTimeout)
+	})
 }
 
 func (s *runnerOutputState) finalizeScannerDone(scanErr error) (string, error) {
-	policy := newRunnerFinalizeErrorPolicy()
-	resolution := policy.resolveScannerDone(scanErr)
-	return s.finalizeWith(resolution.err, resolution.printTrailingNewline)
+	return s.finalizeWithErrorPolicy(func(policy runnerFinalizeErrorPolicy) runnerFinalizeErrorResolution {
+		return policy.resolveScannerDone(scanErr)
+	})
 }
 
 func (s *runnerOutputState) finalizeDecodeError(err error) (string, error) {
-	policy := newRunnerFinalizeErrorPolicy()
-	resolution := policy.resolveDecodeError(err)
-	return s.finalizeWith(resolution.err, resolution.printTrailingNewline)
+	return s.finalizeWithErrorPolicy(func(policy runnerFinalizeErrorPolicy) runnerFinalizeErrorResolution {
+		return policy.resolveDecodeError(err)
+	})
 }
 
 func (s *runnerOutputState) finalizeHandlerError(err error) (string, error) {
-	policy := newRunnerFinalizeErrorPolicy()
-	resolution := policy.resolveHandlerError(err)
-	return s.finalizeWith(resolution.err, resolution.printTrailingNewline)
+	return s.finalizeWithErrorPolicy(func(policy runnerFinalizeErrorPolicy) runnerFinalizeErrorResolution {
+		return policy.resolveHandlerError(err)
+	})
 }
 
 func (s *runnerOutputState) finalizeDone() (string, error) {
-	policy := newRunnerFinalizeErrorPolicy()
-	resolution := policy.resolveDone()
-	return s.finalizeWith(resolution.err, resolution.printTrailingNewline)
+	return s.finalizeWithErrorPolicy(func(policy runnerFinalizeErrorPolicy) runnerFinalizeErrorResolution {
+		return policy.resolveDone()
+	})
 }

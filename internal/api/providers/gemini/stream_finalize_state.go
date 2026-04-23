@@ -11,6 +11,11 @@ type sseFinalizeState struct {
 	output    sseFinalizeOutput
 }
 
+type sseFinalizeBuildResult struct {
+	response             string
+	rescuedToolCallCount int
+}
+
 func newSSEFinalizeState(interpret *sseInterpretState) *sseFinalizeState {
 	return &sseFinalizeState{
 		interpret: interpret,
@@ -19,11 +24,28 @@ func newSSEFinalizeState(interpret *sseInterpretState) *sseFinalizeState {
 }
 
 func (s *sseFinalizeState) finalize(p *Provider) (string, error) {
+	buildResult, err := s.buildOutput()
+	if err != nil {
+		return "", err
+	}
+
+	s.emitFinalizeEffects(p, buildResult.rescuedToolCallCount)
+	return buildResult.response, nil
+}
+
+func (s *sseFinalizeState) buildOutput() (sseFinalizeBuildResult, error) {
 	s.attachThoughtPartsToFunctionCalls()
-	s.appendRescuedToolJSONIfNeeded()
+	rescuedToolCallCount := s.appendRescuedToolJSONIfNeeded()
 	s.appendUniqueFunctionCalls()
-	s.emitUsage(p)
-	return s.finalizeOutput()
+
+	if s.output.Len() == 0 {
+		return sseFinalizeBuildResult{}, fmt.Errorf("no content in Gemini SSE response (stream ended without generating any text or function calls)")
+	}
+
+	return sseFinalizeBuildResult{
+		response:             s.output.Response(),
+		rescuedToolCallCount: rescuedToolCallCount,
+	}, nil
 }
 
 func (s *sseFinalizeState) attachThoughtPartsToFunctionCalls() {
@@ -35,16 +57,16 @@ func (s *sseFinalizeState) attachThoughtPartsToFunctionCalls() {
 	}
 }
 
-func (s *sseFinalizeState) appendRescuedToolJSONIfNeeded() {
+func (s *sseFinalizeState) appendRescuedToolJSONIfNeeded() int {
 	if len(s.interpret.functionCalls) != 0 || len(s.interpret.rescuedToolJSONs) == 0 {
-		return
+		return 0
 	}
 
 	s.interpret.debugf("[DEBUG Gemini SSE] Rescuing %d tool call(s) from text\n", len(s.interpret.rescuedToolJSONs))
-	s.interpret.display.warnFunctionCallRescue(len(s.interpret.rescuedToolJSONs))
 	for _, toolJSON := range s.interpret.rescuedToolJSONs {
 		s.output.Append(toolJSON)
 	}
+	return len(s.interpret.rescuedToolJSONs)
 }
 
 func (s *sseFinalizeState) appendUniqueFunctionCalls() {
@@ -72,11 +94,17 @@ func (s *sseFinalizeState) emitUsage(p *Provider) {
 	})
 }
 
-func (s *sseFinalizeState) finalizeOutput() (string, error) {
-	if s.output.Len() == 0 {
-		return "", fmt.Errorf("no content in Gemini SSE response (stream ended without generating any text or function calls)")
+func (s *sseFinalizeState) emitFinalizeEffects(p *Provider, rescuedToolCallCount int) {
+	s.emitFunctionCallRescueWarning(rescuedToolCallCount)
+	s.emitUsage(p)
+	if s.interpret.display != nil {
+		s.interpret.display.printTrailingNewlineIfNeeded()
 	}
+}
 
-	s.interpret.display.printTrailingNewlineIfNeeded()
-	return s.output.Response(), nil
+func (s *sseFinalizeState) emitFunctionCallRescueWarning(rescuedToolCallCount int) {
+	if rescuedToolCallCount == 0 || s.interpret.display == nil {
+		return
+	}
+	s.interpret.display.warnFunctionCallRescue(rescuedToolCallCount)
 }

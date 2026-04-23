@@ -103,18 +103,9 @@ loop:
 			}
 
 		case api.StreamLoopEventLine:
-			data, handled := parseGeminiSSEDataLine(eventResult.Line)
-			if !handled {
-				continue
+			if state.processLine(ctx, eventResult.Line, thinkingTimer, thinkingTimeout) {
+				controller.ResetIdleTimer()
 			}
-
-			chunk, err := decodeGeminiSSEChunk(data)
-			if err != nil {
-				state.debugf("[DEBUG Gemini SSE] Failed to unmarshal chunk: %v\n", err)
-				continue
-			}
-			controller.ResetIdleTimer()
-			state.processChunk(ctx, chunk, thinkingTimer, thinkingTimeout)
 		}
 	}
 

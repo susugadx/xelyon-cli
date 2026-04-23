@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // responsesFunctionCallAccumulator は Responses API の function_call を累積
@@ -20,10 +19,6 @@ func (s *responsesStreamState) handleFunctionCallAdded(item *ResponsesItem) {
 		return
 	}
 
-	if s.spinner != nil {
-		s.spinner.Stop()
-		s.spinner.Start(ui.SpinnerMessageForTool(item.Name))
-	}
 	acc, exists := s.functionCalls[item.CallID]
 	if !exists {
 		acc = &responsesFunctionCallAccumulator{

@@ -19,6 +19,7 @@ func responsesCompletionAction(s *responsesStreamState, chunk ResponsesStreamChu
 }
 
 func responsesFunctionCallAddedAction(s *responsesStreamState, chunk ResponsesStreamChunk) responsesChunkActionResult {
+	s.showFunctionCallSpinner(chunk.Item)
 	s.handleFunctionCallAdded(chunk.Item)
 	return responsesChunkActionResult{}
 }
