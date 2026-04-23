@@ -7,6 +7,7 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -230,6 +231,31 @@ func TestMCPToolWrapper_Run(t *testing.T) {
 		}
 		if result != "Hello tester\n" {
 			t.Fatalf("result = %q, want tool output", result)
+		}
+	})
+
+	t.Run("deadline exceeded returns timeout error", func(t *testing.T) {
+		manager, _ := newInMemoryManagerWithTool(t, "slow", func(ctx context.Context, _ *sdkmcp.CallToolRequest, _ map[string]any) (*sdkmcp.CallToolResult, any, error) {
+			<-ctx.Done()
+			return nil, nil, ctx.Err()
+		})
+		wrapper := &MCPToolWrapper{
+			manager:     manager,
+			serverName:  "test-server",
+			toolName:    "slow",
+			callTimeout: 20 * time.Millisecond,
+		}
+
+		var stdout bytes.Buffer
+		result, fileChange, err := wrapper.Run(newMCPExecutionContext("y\n", &stdout), map[string]string{})
+		if err == nil || !strings.Contains(err.Error(), "timed out") {
+			t.Fatalf("Run() error = %v, want timeout error", err)
+		}
+		if fileChange != nil {
+			t.Fatalf("fileChange = %#v, want nil", fileChange)
+		}
+		if !strings.Contains(result, "timed out") {
+			t.Fatalf("result = %q, want timeout message", result)
 		}
 	})
 }

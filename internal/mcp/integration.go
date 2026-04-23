@@ -13,6 +13,16 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
+const defaultMCPToolCallTimeout = 30 * time.Second
+
+// integrationToolCaller は integration 層が必要とする最小契約。
+// serverName/toolName/args を指定して実行し、テキスト結果またはエラーを返す。
+type integrationToolCaller interface {
+	CallTool(ctx context.Context, serverName, toolName string, args map[string]any) (string, error)
+}
+
+var _ integrationToolCaller = (*Manager)(nil)
+
 // RegisterToToolRegistry はMCPツールをTool Registryに登録
 func (m *Manager) RegisterToToolRegistry(registry *tools.Registry) {
 	for _, mcpTool := range m.tools {
@@ -34,11 +44,12 @@ func (m *Manager) RegisterToToolRegistry(registry *tools.Registry) {
 
 // MCPToolWrapper はMCPツールをTool interfaceにラップ
 type MCPToolWrapper struct {
-	manager     *Manager
+	manager     integrationToolCaller
 	serverName  string
 	toolName    string
 	desc        string
 	inputSchema json.RawMessage // JSONスキーマ情報
+	callTimeout time.Duration
 }
 
 // Name はツール名を返す（mcp_<server>_<tool> 形式、特殊文字を置換）
@@ -132,15 +143,17 @@ func (w *MCPToolWrapper) Run(execCtx tools.ExecutionContext, args map[string]str
 	// スキーマに基づいて型変換（string → number/integer/boolean）
 	anyArgs := w.convertArgsWithSchema(args)
 
-	// タイムアウト付きコンテキスト（30秒）
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	callTimeout := w.callTimeoutDuration()
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
 	result, err := w.manager.CallTool(ctx, w.serverName, w.toolName, anyArgs)
 	if err != nil {
 		// タイムアウトエラーの場合
 		if ctx.Err() == context.DeadlineExceeded {
-			return "Error: Tool execution timed out after 30 seconds", nil, fmt.Errorf("tool execution timed out")
+			return fmt.Sprintf("Error: Tool execution timed out after %s", formatTimeoutDuration(callTimeout)),
+				nil,
+				fmt.Errorf("tool execution timed out")
 		}
 		return fmt.Sprintf("Error: %v", err), nil, err
 	}
@@ -208,6 +221,20 @@ func (w *MCPToolWrapper) convertArgsWithSchema(args map[string]string) map[strin
 	}
 
 	return anyArgs
+}
+
+func (w *MCPToolWrapper) callTimeoutDuration() time.Duration {
+	if w.callTimeout > 0 {
+		return w.callTimeout
+	}
+	return defaultMCPToolCallTimeout
+}
+
+func formatTimeoutDuration(d time.Duration) string {
+	if d > 0 && d%time.Second == 0 {
+		return fmt.Sprintf("%d seconds", int(d/time.Second))
+	}
+	return d.String()
 }
 
 // validateArgs は引数を検証する（簡易版）

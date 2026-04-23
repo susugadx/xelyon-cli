@@ -3,11 +3,14 @@ package mcp
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -63,6 +66,12 @@ func TestManager_Connect_RegistersFilteredTools(t *testing.T) {
 	}
 	if !strings.Contains(output.String(), "filtered out") {
 		t.Fatalf("Connect output = %q, want filtered out message", output.String())
+	}
+
+	status := manager.HealthStatus()
+	health := status["helper"]
+	if !strings.Contains(health, "✅") {
+		t.Fatalf("HealthStatus()[helper] = %q, want connected status", health)
 	}
 }
 
@@ -164,6 +173,37 @@ func TestManager_CallTool_RetriesToolErrorAndSucceeds(t *testing.T) {
 	}
 	if !strings.Contains(output.String(), "attempt 1 failed") {
 		t.Fatalf("CallTool output = %q, want retry warning", output.String())
+	}
+}
+
+func TestManager_CallTool_DeadlineExceeded_DoesNotRetry(t *testing.T) {
+	var attempts atomic.Int32
+	manager, output := newInMemoryManagerWithTool(t, "slow", func(ctx context.Context, _ *sdkmcp.CallToolRequest, _ map[string]any) (*sdkmcp.CallToolResult, any, error) {
+		attempts.Add(1)
+		<-ctx.Done()
+		return nil, nil, ctx.Err()
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+
+	started := time.Now()
+	_, err := manager.CallTool(ctx, "test-server", "slow", nil)
+	elapsed := time.Since(started)
+	if err == nil {
+		t.Fatal("CallTool() error = nil, want deadline exceeded")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("CallTool() error = %v, want deadline exceeded", err)
+	}
+	if attempts.Load() != 1 {
+		t.Fatalf("attempts = %d, want 1", attempts.Load())
+	}
+	if elapsed >= 500*time.Millisecond {
+		t.Fatalf("CallTool() elapsed = %v, want no retry backoff", elapsed)
+	}
+	if strings.Contains(output.String(), "retrying") {
+		t.Fatalf("CallTool output = %q, want no retry warning", output.String())
 	}
 }
 

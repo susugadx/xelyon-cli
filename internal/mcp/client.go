@@ -3,11 +3,11 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -61,6 +61,15 @@ var allowedMCPCommands = map[string]bool{
 	"python3": true,
 	"uvx":     true,
 	"docker":  true,
+}
+
+const (
+	toolCallMaxAttempts = 2
+)
+
+type toolRegistrationSummary struct {
+	registered int
+	skipped    int
 }
 
 // NewManager は新しいManagerを作成
@@ -175,55 +184,17 @@ func (m *Manager) LoadConfig() error {
 		return err
 	}
 
-	configPath := filepath.Join(homeDir, ".xelyon", "mcp.json")
-
-	// .xelyonディレクトリが存在しない場合は作成
-	xelyonDir := filepath.Join(homeDir, ".xelyon")
-	if _, err := os.Stat(xelyonDir); os.IsNotExist(err) {
-		if err := os.MkdirAll(xelyonDir, 0755); err != nil {
-			return fmt.Errorf("failed to create .xelyon directory: %w", err)
-		}
-	}
-
-	// ファイルが存在しない場合はデフォルト設定を作成
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		defaultConfig := Config{
-			MCPServers: map[string]ServerConfig{
-				// 例: filesystemサーバー
-				"filesystem": {
-					Command: "npx",
-					Args:    []string{"@modelcontextprotocol/server-filesystem", "/path/to/directory"},
-					Env:     map[string]string{"NODE_OPTIONS": "--no-warnings"},
-				},
-			},
-		}
-
-		data, err := json.MarshalIndent(defaultConfig, "", "  ")
-		if err != nil {
-			return fmt.Errorf("failed to marshal default config: %w", err)
-		}
-
-		if err := os.WriteFile(configPath, data, 0644); err != nil {
-			return fmt.Errorf("failed to write default config: %w", err)
-		}
-
-		fmt.Fprintf(m.out(), "📄 Created default MCP config at %s\n", configPath)
-		fmt.Fprintln(m.out(), "ℹ️  Please edit the config file to add your MCP servers")
-		m.config = &defaultConfig
-		return nil
-	}
-
-	data, err := os.ReadFile(configPath)
+	loadResult, err := loadMCPConfig(homeDir)
 	if err != nil {
 		return err
 	}
 
-	var config Config
-	if err := json.Unmarshal(data, &config); err != nil {
-		return err
+	if loadResult.createdDefault {
+		fmt.Fprintf(m.out(), "📄 Created default MCP config at %s\n", loadResult.configPath)
+		fmt.Fprintln(m.out(), "ℹ️  Please edit the config file to add your MCP servers")
 	}
 
-	m.config = &config
+	m.config = loadResult.config
 	return nil
 }
 
@@ -233,10 +204,7 @@ func (m *Manager) Connect(ctx context.Context) error {
 		return nil
 	}
 
-	client := mcp.NewClient(&mcp.Implementation{
-		Name:    "xelyon-cli",
-		Version: version.Version,
-	}, nil)
+	client := m.newClient()
 
 	for name, serverConfig := range m.config.MCPServers {
 		if serverConfig.Disabled {
@@ -250,54 +218,138 @@ func (m *Manager) Connect(ctx context.Context) error {
 			continue
 		}
 
-		cmd := exec.Command(serverConfig.Command, serverConfig.Args...)
-
-		// 環境変数を安全なもののみに制限
-		cmd.Env = sanitizeEnv(serverConfig.Env)
-
-		transport := &mcp.CommandTransport{Command: cmd}
-		session, err := client.Connect(ctx, transport, nil)
+		session, err := m.openServerSession(ctx, client, serverConfig)
 		if err != nil {
 			// 接続失敗は警告のみ、続行
 			fmt.Fprintf(m.out(), "⚠️  MCP server '%s' connection failed: %v\n", name, err)
 			continue
 		}
 
-		m.sessions[name] = session
+		previous := m.swapServerSession(name, session)
+		if previous != nil && previous != session {
+			_ = previous.Close()
+		}
 
-		// ツール一覧を取得
-		toolsResult, err := session.ListTools(ctx, nil)
+		summary, err := m.refreshServerTools(ctx, name, session, serverConfig.Tools, true)
 		if err != nil {
 			fmt.Fprintf(m.out(), "⚠️  Failed to list tools from '%s': %v\n", name, err)
 			continue
 		}
 
-		registered := 0
-		skipped := 0
-		for _, tool := range toolsResult.Tools {
-			if !shouldIncludeTool(tool.Name, serverConfig.Tools) {
-				skipped++
-				continue
-			}
-			schemaBytes, _ := json.Marshal(tool.InputSchema)
-			m.tools = append(m.tools, MCPTool{
-				ServerName:  name,
-				Name:        tool.Name,
-				Description: tool.Description,
-				InputSchema: schemaBytes,
-				Session:     session,
-			})
-			registered++
-		}
-
-		if skipped > 0 {
-			fmt.Fprintf(m.out(), "🔌 MCP server '%s' connected (%d tools, %d filtered out)\n", name, registered, skipped)
-		} else {
-			fmt.Fprintf(m.out(), "🔌 MCP server '%s' connected (%d tools)\n", name, registered)
-		}
+		m.markServerHealthy(name)
+		m.printServerConnectionStatus(name, summary, false)
 	}
 
 	return nil
+}
+
+func (m *Manager) newClient() *mcp.Client {
+	return mcp.NewClient(&mcp.Implementation{
+		Name:    "xelyon-cli",
+		Version: version.Version,
+	}, nil)
+}
+
+func (m *Manager) openServerSession(ctx context.Context, client *mcp.Client, serverConfig ServerConfig) (*mcp.ClientSession, error) {
+	cmd := exec.Command(serverConfig.Command, serverConfig.Args...)
+	cmd.Env = sanitizeEnv(serverConfig.Env)
+
+	transport := &mcp.CommandTransport{Command: cmd}
+	return client.Connect(ctx, transport, nil)
+}
+
+func (m *Manager) swapServerSession(serverName string, session *mcp.ClientSession) *mcp.ClientSession {
+	previous := m.sessions[serverName]
+	m.sessions[serverName] = session
+	return previous
+}
+
+func (m *Manager) removeServerSession(serverName string) {
+	session, ok := m.sessions[serverName]
+	if !ok {
+		return
+	}
+
+	_ = session.Close()
+	delete(m.sessions, serverName)
+}
+
+func (m *Manager) markServerHealthy(serverName string) {
+	m.healthCheck[serverName] = time.Now()
+}
+
+func (m *Manager) refreshServerTools(
+	ctx context.Context,
+	serverName string,
+	session *mcp.ClientSession,
+	filter *ToolsFilter,
+	replace bool,
+) (toolRegistrationSummary, error) {
+	toolsResult, err := session.ListTools(ctx, nil)
+	if err != nil {
+		return toolRegistrationSummary{}, err
+	}
+
+	summary := m.storeServerTools(serverName, session, toolsResult.Tools, filter, replace)
+	return summary, nil
+}
+
+func (m *Manager) storeServerTools(
+	serverName string,
+	session *mcp.ClientSession,
+	toolDefs []*mcp.Tool,
+	filter *ToolsFilter,
+	replace bool,
+) toolRegistrationSummary {
+	if replace {
+		m.removeServerTools(serverName)
+	}
+
+	summary := toolRegistrationSummary{}
+	for _, tool := range toolDefs {
+		if tool == nil {
+			continue
+		}
+		if !shouldIncludeTool(tool.Name, filter) {
+			summary.skipped++
+			continue
+		}
+
+		schemaBytes, _ := json.Marshal(tool.InputSchema)
+		m.tools = append(m.tools, MCPTool{
+			ServerName:  serverName,
+			Name:        tool.Name,
+			Description: tool.Description,
+			InputSchema: schemaBytes,
+			Session:     session,
+		})
+		summary.registered++
+	}
+
+	return summary
+}
+
+func (m *Manager) removeServerTools(serverName string) {
+	filteredTools := m.tools[:0]
+	for _, tool := range m.tools {
+		if tool.ServerName != serverName {
+			filteredTools = append(filteredTools, tool)
+		}
+	}
+	m.tools = filteredTools
+}
+
+func (m *Manager) printServerConnectionStatus(serverName string, summary toolRegistrationSummary, reconnect bool) {
+	status := "connected"
+	if reconnect {
+		status = "reconnected"
+	}
+
+	if summary.skipped > 0 {
+		fmt.Fprintf(m.out(), "🔌 MCP server '%s' %s (%d tools, %d filtered out)\n", serverName, status, summary.registered, summary.skipped)
+		return
+	}
+	fmt.Fprintf(m.out(), "🔌 MCP server '%s' %s (%d tools)\n", serverName, status, summary.registered)
 }
 
 // GetTools は利用可能なMCPツール一覧を返す
@@ -317,60 +369,120 @@ func (m *Manager) CallTool(ctx context.Context, serverName, toolName string, arg
 		Arguments: args,
 	}
 
-	// 最大2回リトライ
+	result, err := m.callToolWithRetry(ctx, session, toolName, params)
+	if err != nil {
+		return "", err
+	}
+	if result.IsError {
+		return "", fmt.Errorf("%s", toolResultErrorMessage(result))
+	}
+
+	return toolResultText(result), nil
+}
+
+func (m *Manager) callToolWithRetry(
+	ctx context.Context,
+	session *mcp.ClientSession,
+	toolName string,
+	params *mcp.CallToolParams,
+) (*mcp.CallToolResult, error) {
 	var result *mcp.CallToolResult
 	var callErr error
+	attempted := 0
 
-	for attempt := 1; attempt <= 2; attempt++ {
+	for attempt := 1; attempt <= toolCallMaxAttempts; attempt++ {
+		attempted = attempt
 		result, callErr = session.CallTool(ctx, params)
-		if callErr == nil && !result.IsError {
-			break // 成功
+		if callErr == nil && result != nil && !result.IsError {
+			return result, nil
+		}
+		if !shouldRetryToolCall(ctx, attempt, callErr, result) {
+			break
 		}
 
-		if attempt < 2 {
-			errMsg := ""
-			if callErr != nil {
-				errMsg = callErr.Error()
-			} else if result.IsError {
-				errMsg = "tool returned error"
-			}
-			fmt.Fprintf(m.out(), "⚠️  MCP tool '%s' call attempt %d failed: %s (retrying...)\n", toolName, attempt, errMsg)
-			shift := min(attempt-1, 30)
-			time.Sleep(time.Duration(1<<uint(shift)) * time.Second)
-		}
+		fmt.Fprintf(
+			m.out(),
+			"⚠️  MCP tool '%s' call attempt %d failed: %s (retrying...)\n",
+			toolName,
+			attempt,
+			toolCallFailureReason(callErr, result),
+		)
+		time.Sleep(toolRetryDelay(attempt))
 	}
 
 	if callErr != nil {
-		return "", fmt.Errorf("failed to call tool after 2 attempts: %w", callErr)
+		return nil, fmt.Errorf("failed to call tool after %d attempts: %w", attempted, callErr)
 	}
+	if result == nil {
+		return nil, fmt.Errorf("failed to call tool after %d attempts: empty response", attempted)
+	}
+	return result, nil
+}
 
-	if result.IsError {
-		// エラーメッセージを抽出
-		errMsg := "tool returned error"
-		for _, content := range result.Content {
-			if textContent, ok := content.(*mcp.TextContent); ok {
-				errMsg = textContent.Text
-				break
-			}
+func shouldRetryToolCall(ctx context.Context, attempt int, callErr error, result *mcp.CallToolResult) bool {
+	if attempt >= toolCallMaxAttempts {
+		return false
+	}
+	if ctx.Err() != nil {
+		return false
+	}
+	if callErr != nil {
+		if errors.Is(callErr, context.Canceled) || errors.Is(callErr, context.DeadlineExceeded) {
+			return false
 		}
-		return "", fmt.Errorf("%s", errMsg)
+		return true
 	}
+	return result != nil && result.IsError
+}
 
-	// 結果をテキストに変換
-	var output string
+func toolRetryDelay(attempt int) time.Duration {
+	shift := min(attempt-1, 30)
+	return time.Duration(1<<uint(shift)) * time.Second
+}
+
+func toolCallFailureReason(callErr error, result *mcp.CallToolResult) string {
+	if callErr != nil {
+		return callErr.Error()
+	}
+	if result != nil && result.IsError {
+		return toolResultErrorMessage(result)
+	}
+	return "tool returned error"
+}
+
+func toolResultErrorMessage(result *mcp.CallToolResult) string {
+	errMsg := "tool returned error"
+	if result == nil {
+		return errMsg
+	}
 	for _, content := range result.Content {
 		if textContent, ok := content.(*mcp.TextContent); ok {
-			output += textContent.Text + "\n"
+			errMsg = textContent.Text
+			break
 		}
 	}
+	return errMsg
+}
 
-	return output, nil
+func toolResultText(result *mcp.CallToolResult) string {
+	if result == nil {
+		return ""
+	}
+
+	var output strings.Builder
+	for _, content := range result.Content {
+		if textContent, ok := content.(*mcp.TextContent); ok {
+			output.WriteString(textContent.Text)
+			output.WriteByte('\n')
+		}
+	}
+	return output.String()
 }
 
 // Close は全ての接続を閉じる
 func (m *Manager) Close() {
-	for _, session := range m.sessions {
-		session.Close()
+	for serverName := range m.sessions {
+		m.removeServerSession(serverName)
 	}
 }
 
@@ -406,72 +518,30 @@ func (m *Manager) Reconnect(ctx context.Context, serverName string) error {
 		return fmt.Errorf("server '%s' is disabled", serverName)
 	}
 
-	// 既存のセッションを閉じる
-	if session, ok := m.sessions[serverName]; ok {
-		defer session.Close()
-		delete(m.sessions, serverName)
+	if err := validateMCPCommand(serverConfig.Command); err != nil {
+		return fmt.Errorf("server '%s' blocked: %w", serverName, err)
 	}
 
-	// ツールリストから削除
-	var filteredTools []MCPTool
-	for _, tool := range m.tools {
-		if tool.ServerName != serverName {
-			filteredTools = append(filteredTools, tool)
-		}
-	}
-	m.tools = filteredTools
+	m.removeServerSession(serverName)
+	m.removeServerTools(serverName)
 
-	// 再接続
-	client := mcp.NewClient(&mcp.Implementation{
-		Name:    "xelyon-cli",
-		Version: version.Version,
-	}, nil)
-
-	cmd := exec.Command(serverConfig.Command, serverConfig.Args...)
-	if len(serverConfig.Env) > 0 {
-		cmd.Env = os.Environ()
-		for k, v := range serverConfig.Env {
-			cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
-		}
-	}
-
-	transport := &mcp.CommandTransport{Command: cmd}
-	session, err := client.Connect(ctx, transport, nil)
+	client := m.newClient()
+	session, err := m.openServerSession(ctx, client, serverConfig)
 	if err != nil {
 		return fmt.Errorf("reconnection failed: %w", err)
 	}
 
-	m.sessions[serverName] = session
+	previous := m.swapServerSession(serverName, session)
+	if previous != nil && previous != session {
+		_ = previous.Close()
+	}
 
-	// ツール一覧を取得
-	toolsResult, err := session.ListTools(ctx, nil)
+	summary, err := m.refreshServerTools(ctx, serverName, session, serverConfig.Tools, true)
 	if err != nil {
 		return fmt.Errorf("failed to list tools: %w", err)
 	}
 
-	registered := 0
-	skipped := 0
-	for _, tool := range toolsResult.Tools {
-		if !shouldIncludeTool(tool.Name, serverConfig.Tools) {
-			skipped++
-			continue
-		}
-		schemaBytes, _ := json.Marshal(tool.InputSchema)
-		m.tools = append(m.tools, MCPTool{
-			ServerName:  serverName,
-			Name:        tool.Name,
-			Description: tool.Description,
-			InputSchema: schemaBytes,
-			Session:     session,
-		})
-		registered++
-	}
-
-	m.healthCheck[serverName] = time.Now()
-	if skipped > 0 {
-		fmt.Fprintf(m.out(), "🔌 MCP server '%s' reconnected (%d tools, %d filtered out)\n", serverName, registered, skipped)
-	} else {
-		fmt.Fprintf(m.out(), "🔌 MCP server '%s' reconnected (%d tools)\n", serverName, registered)
-	}
+	m.markServerHealthy(serverName)
+	m.printServerConnectionStatus(serverName, summary, true)
 	return nil
 }
