@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/repomap"
-	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/searchcache"
 )
 
 func TestResolveInspectSymbolAuto_UsesSnapshotCacheWhenProjectMapBecomesNil(t *testing.T) {
@@ -95,7 +95,7 @@ func TestGoSymbolSnapshotCacheClearedBySearchCacheHook(t *testing.T) {
 		t.Fatal("expected snapshot cache entry before clear")
 	}
 
-	tools.NotifySearchCacheCleared()
+	searchcache.NotifySearchCacheCleared()
 
 	if got := lookupGoSymbolSnapshot(goSymbolSnapshotCacheKey(dir, "clear-state")); got != nil {
 		t.Fatalf("expected snapshot cache entry to be cleared, got %+v", got)

@@ -1,9 +1,9 @@
 package navigation
 
-import "github.com/susugadx/xelyon-cli/internal/tools"
+import "github.com/susugadx/xelyon-cli/internal/searchcache"
 
 func init() {
-	tools.AddSearchCacheLifecycleHooks(
+	searchcache.AddSearchCacheLifecycleHooks(
 		clearGoSymbolSnapshotCache,
 		clearGoSymbolSnapshotCacheWithKeys,
 		clearGoSymbolSnapshotCacheWithKeys,

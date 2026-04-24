@@ -4,7 +4,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/searchcache"
 )
 
 // searchCacheKey は検索キャッシュのキーを生成
@@ -45,7 +45,7 @@ func (c *ToolCache) SetSearch(pattern, cacheKey, result string, affectedFiles []
 	evicted := pruneOldestEntries(c.searches, MaxSearchCacheEntries)
 	c.mu.Unlock()
 	if len(evicted) > 0 {
-		tools.NotifySearchCacheEvicted(evicted)
+		searchcache.NotifySearchCacheEvicted(evicted)
 	}
 }
 
@@ -54,7 +54,7 @@ func (c *ToolCache) ClearSearchCache() {
 	c.mu.Lock()
 	c.searches = make(map[string]cacheEntry)
 	c.mu.Unlock()
-	tools.NotifySearchCacheCleared()
+	searchcache.NotifySearchCacheCleared()
 }
 
 // RecentSearchAffectedFiles は最近アクセスした検索キャッシュ由来の affected files を返す。

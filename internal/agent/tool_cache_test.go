@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/repomap"
-	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/searchcache"
 	"github.com/susugadx/xelyon-cli/internal/tools/search"
 )
 
@@ -349,14 +349,14 @@ func TestToolCache_InvalidateSearchCacheForFile(t *testing.T) {
 }
 
 func TestToolCache_InvalidateSearchCacheForFile_NotifiesOnlyWhenDeleted(t *testing.T) {
-	tools.RegisterSearchCacheLifecycleHooks(nil, nil, nil)
+	searchcache.RegisterSearchCacheLifecycleHooks(nil, nil, nil)
 	t.Cleanup(func() {
-		tools.RegisterSearchCacheLifecycleHooks(nil, nil, nil)
+		searchcache.RegisterSearchCacheLifecycleHooks(nil, nil, nil)
 	})
 
 	invalidateCount := 0
 	var invalidatedKeys []string
-	tools.RegisterSearchCacheLifecycleHooks(nil, func(keys []string) {
+	searchcache.RegisterSearchCacheLifecycleHooks(nil, func(keys []string) {
 		invalidateCount++
 		invalidatedKeys = append([]string(nil), keys...)
 	}, nil)
@@ -381,14 +381,14 @@ func TestToolCache_InvalidateSearchCacheForFile_NotifiesOnlyWhenDeleted(t *testi
 }
 
 func TestToolCache_SearchEvictionTriggersBundleCacheHook(t *testing.T) {
-	tools.RegisterSearchCacheLifecycleHooks(nil, nil, nil)
+	searchcache.RegisterSearchCacheLifecycleHooks(nil, nil, nil)
 	t.Cleanup(func() {
-		tools.RegisterSearchCacheLifecycleHooks(nil, nil, nil)
+		searchcache.RegisterSearchCacheLifecycleHooks(nil, nil, nil)
 	})
 
 	evicted := 0
 	var evictedKeys []string
-	tools.RegisterSearchCacheLifecycleHooks(nil, nil, func(keys []string) {
+	searchcache.RegisterSearchCacheLifecycleHooks(nil, nil, func(keys []string) {
 		evicted++
 		evictedKeys = append(evictedKeys, keys...)
 	})

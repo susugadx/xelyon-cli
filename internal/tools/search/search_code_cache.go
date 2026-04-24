@@ -4,7 +4,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/searchcache"
 )
 
 type singlePatternExecution struct {
@@ -19,7 +19,7 @@ var singlePatternBundleCache sync.Map
 var singlePatternAffectedFilesCache sync.Map
 
 func init() {
-	tools.RegisterSearchCacheLifecycleHooks(clearSinglePatternBundleCache, invalidateSinglePatternBundleCacheKeys, invalidateSinglePatternBundleCacheKeys)
+	searchcache.RegisterSearchCacheLifecycleHooks(clearSinglePatternBundleCache, invalidateSinglePatternBundleCacheKeys, invalidateSinglePatternBundleCacheKeys)
 }
 
 func singlePatternBundleCacheKey(pattern, cacheKey string) string {

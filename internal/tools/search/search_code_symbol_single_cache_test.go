@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/searchcache"
 )
 
 func TestSinglePatternBundleCacheClearedWithSearchCache(t *testing.T) {
@@ -114,7 +114,7 @@ func TestSinglePatternBundleCacheClearedOnSearchCacheEviction(t *testing.T) {
 		t.Fatalf("expected 2 bundle cache entries before eviction, got %d", got)
 	}
 
-	tools.NotifySearchCacheEvicted([]string{singlePatternBundleCacheKey("drop", "key")})
+	searchcache.NotifySearchCacheEvicted([]string{singlePatternBundleCacheKey("drop", "key")})
 
 	if got := countSinglePatternBundleCacheEntries(); got != 1 {
 		t.Fatalf("expected targeted bundle cache eviction, got %d entries", got)
@@ -131,7 +131,7 @@ func TestSinglePatternBundleCachePreservesUnrelatedKeysOnTargetedInvalidation(t 
 	storeSinglePatternBundle("keep", "key", &SymbolBundle{Identity: SymbolBundleIdentity{Canonical: "keep"}})
 	storeSinglePatternBundle("drop", "key", &SymbolBundle{Identity: SymbolBundleIdentity{Canonical: "drop"}})
 
-	tools.NotifySearchCacheInvalidatedKeys([]string{singlePatternBundleCacheKey("drop", "key")})
+	searchcache.NotifySearchCacheInvalidatedKeys([]string{singlePatternBundleCacheKey("drop", "key")})
 
 	if loadSinglePatternBundle("keep", "key") == nil {
 		t.Fatal("expected unrelated bundle cache entry to remain after targeted invalidation")

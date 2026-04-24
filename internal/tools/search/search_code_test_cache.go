@@ -3,7 +3,7 @@ package search
 import (
 	"sync"
 
-	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/searchcache"
 )
 
 type testSearchCache struct {
@@ -24,7 +24,7 @@ func (c *testSearchCache) SetDir(path, result string)         {}
 func (c *testSearchCache) InvalidateFile(path string)         {}
 func (c *testSearchCache) InvalidateDir(path string)          {}
 func (c *testSearchCache) Clear()                             {}
-func (c *testSearchCache) ClearSearchCache()                  { tools.NotifySearchCacheCleared() }
+func (c *testSearchCache) ClearSearchCache()                  { searchcache.NotifySearchCacheCleared() }
 
 func (c *testSearchCache) InvalidateSearchCacheForFile(absPath string) {
 	c.mu.Lock()
@@ -46,7 +46,7 @@ func (c *testSearchCache) InvalidateSearchCacheForFile(absPath string) {
 	}
 	c.mu.Unlock()
 	if deleted {
-		tools.NotifySearchCacheInvalidatedKeys(deletedKeys)
+		searchcache.NotifySearchCacheInvalidatedKeys(deletedKeys)
 	}
 }
 

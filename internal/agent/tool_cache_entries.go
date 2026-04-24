@@ -5,7 +5,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/searchcache"
 	filetool "github.com/susugadx/xelyon-cli/internal/tools/file"
 )
 
@@ -144,7 +144,7 @@ func (c *ToolCache) Clear() {
 	c.searches = make(map[string]cacheEntry)
 	c.negatives = make(map[string]negativeCacheEntry)
 	c.mu.Unlock()
-	tools.NotifySearchCacheCleared()
+	searchcache.NotifySearchCacheCleared()
 }
 
 // Stats はキャッシュの統計情報を返す
@@ -169,7 +169,7 @@ func (c *ToolCache) InvalidateSearchCacheForFile(absPath string) {
 	}
 	c.mu.Unlock()
 	if len(deletedKeys) > 0 {
-		tools.NotifySearchCacheInvalidatedKeys(deletedKeys)
+		searchcache.NotifySearchCacheInvalidatedKeys(deletedKeys)
 	}
 }
 

@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/navigation"
-	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/searchcache"
 )
 
 func TestStructuredGoImpactMethodProbeReceiverCachesClearOnSearchCacheInvalidation(t *testing.T) {
@@ -65,7 +65,7 @@ type Builder interface {
 		t.Fatal(err)
 	}
 
-	tools.NotifySearchCacheInvalidatedKeys([]string{"structured-go-impact-method-probe"})
+	searchcache.NotifySearchCacheInvalidatedKeys([]string{"structured-go-impact-method-probe"})
 
 	if role := methodProbeQualifiedReceiverRole("otherpkg.Builder", testPath, testSrc, opts); role != methodProbeReceiverRoleInterface {
 		t.Fatalf("expected invalidation to clear receiver role cache, got %q", role)

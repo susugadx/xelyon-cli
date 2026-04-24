@@ -5,7 +5,7 @@ import (
 	"sync"
 
 	"github.com/susugadx/xelyon-cli/internal/navigation"
-	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/searchcache"
 )
 
 type methodProbeReceiverRole string
@@ -34,7 +34,7 @@ var methodProbeReceiverRoleCache sync.Map
 var methodProbeQualifiedReceiverDirectMethodCache sync.Map
 
 func init() {
-	tools.AddSearchCacheLifecycleHooks(clearStructuredGoImpactMethodProbeCaches, clearStructuredGoImpactMethodProbeCachesWithKeys, clearStructuredGoImpactMethodProbeCachesWithKeys)
+	searchcache.AddSearchCacheLifecycleHooks(clearStructuredGoImpactMethodProbeCaches, clearStructuredGoImpactMethodProbeCachesWithKeys, clearStructuredGoImpactMethodProbeCachesWithKeys)
 }
 
 func clearStructuredGoImpactMethodProbeCaches() {
