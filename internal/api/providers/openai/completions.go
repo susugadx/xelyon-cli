@@ -126,107 +126,80 @@ func (p *Provider) chatWithCompletions(ctx context.Context, systemPrompt string,
 
 // handleStreamingResponse はストリーミングレスポンスを処理（tool_calls対応）
 func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
-	// OpenAI 互換 tool_calls の分割チャンクを index ごとに再構築する。
-	toolCalls := openaicompatstream.NewToolCallCollector()
-
-	// usage 情報を追跡
-	var lastUsage *api.Usage
-
-	// OpenAI固有のパース処理
-	parser := func(line string) (string, bool, error) {
-		data, done, handled := openaicompatstream.ParseSSEDataLine(line)
-		if !handled {
-			return "", false, nil
-		}
-		if done {
-			return "", true, nil
-		}
-
-		chunk, err := openaicompatstream.DecodeChunk(data)
-		if err != nil {
-			return "", false, err
-		}
-
-		if openaicompatstream.HasUsagePayload(chunk.Usage) {
-			var usagePayload struct {
-				PromptTokens        int `json:"prompt_tokens"`
-				CompletionTokens    int `json:"completion_tokens"`
-				PromptTokensDetails *struct {
-					CachedTokens int `json:"cached_tokens,omitempty"`
-				} `json:"prompt_tokens_details,omitempty"`
-				CompletionTokensDetails *struct {
-					ReasoningTokens int `json:"reasoning_tokens,omitempty"`
-				} `json:"completion_tokens_details,omitempty"`
-			}
-			if err := json.Unmarshal(chunk.Usage, &usagePayload); err != nil {
-				return "", false, err
-			}
-
-			cachedTokens := 0
-			if usagePayload.PromptTokensDetails != nil {
-				cachedTokens = usagePayload.PromptTokensDetails.CachedTokens
-			}
-			reasoningTokens := 0
-			if usagePayload.CompletionTokensDetails != nil {
-				reasoningTokens = usagePayload.CompletionTokensDetails.ReasoningTokens
-			}
-			lastUsage = &api.Usage{
-				InputTokens:       usagePayload.PromptTokens,
-				OutputTokens:      usagePayload.CompletionTokens,
-				ThinkingTokens:    reasoningTokens,
-				CachedInputTokens: cachedTokens,
-			}
-			if os.Getenv("XELYON_DEBUG_OPENAI") == "1" {
-				fmt.Fprintf(api.ErrorWriterFromContext(ctx), "[DEBUG OpenAI] usage received: input=%d, output=%d, cached=%d\n",
-					usagePayload.PromptTokens, usagePayload.CompletionTokens, cachedTokens)
-			}
-		}
-
-		if len(chunk.Choices) == 0 {
-			return "", false, nil
-		}
-
-		choice := chunk.Choices[0]
-
-		toolCalls.Append(choice.Delta.ToolCalls, func(toolName string) {
+	streamResult, err := openaicompatstream.ParseSSEStream(ctx, resp, spinner, openaicompatstream.ParseSSEOptions{
+		UsageDecoder:          decodeOpenAICompatUsage,
+		StopOnToolCallsFinish: true,
+		OnToolCallArguments: func(toolName string) {
 			// tool_call arguments が届いた時のみ spinner を tool 名で再表示する。
 			if !spinner.IsActive() {
 				spinner.Start(ui.SpinnerMessageForTool(toolName))
 			}
-		})
-
-		// finish_reason == "tool_calls" で完了
-		if choice.FinishReason == "tool_calls" {
-			return "", true, nil
-		}
-
-		// テキストコンテンツ
-		return choice.Delta.Content, false, nil
-	}
-
-	content, err := api.ParseStreamingResponse(ctx, resp, spinner, parser)
+		},
+	})
 	if err != nil {
 		return "", err
 	}
 
 	// usage コールバックを呼び出し
-	if lastUsage != nil && p.usageCallback != nil {
-		p.usageCallback(*lastUsage)
+	if streamResult.Usage != nil {
+		if os.Getenv("XELYON_DEBUG_OPENAI") == "1" {
+			fmt.Fprintf(api.ErrorWriterFromContext(ctx), "[DEBUG OpenAI] usage received: input=%d, output=%d, cached=%d\n",
+				streamResult.Usage.InputTokens, streamResult.Usage.OutputTokens, streamResult.Usage.CachedInputTokens)
+		}
+		if p.usageCallback != nil {
+			p.usageCallback(*streamResult.Usage)
+		}
 	}
 
 	toolCallsOutput := openaicompatstream.BuildToolCallJSON(
-		toolCalls.ToOpenAIToolCalls(),
+		streamResult.ToolCalls,
 		ConvertToolCallToToolJSON,
 	)
 
 	// tool_calls がある場合はそれを返す
 	if toolCallsOutput != "" {
-		if content != "" {
-			return content + toolCallsOutput, nil
+		if streamResult.Content != "" {
+			return streamResult.Content + toolCallsOutput, nil
 		}
 		return toolCallsOutput, nil
 	}
-	return content, nil
+	return streamResult.Content, nil
+}
+
+func decodeOpenAICompatUsage(raw json.RawMessage) (*api.Usage, error) {
+	if !openaicompatstream.HasUsagePayload(raw) {
+		return nil, nil
+	}
+
+	var usagePayload struct {
+		PromptTokens        int `json:"prompt_tokens"`
+		CompletionTokens    int `json:"completion_tokens"`
+		PromptTokensDetails *struct {
+			CachedTokens int `json:"cached_tokens,omitempty"`
+		} `json:"prompt_tokens_details,omitempty"`
+		CompletionTokensDetails *struct {
+			ReasoningTokens int `json:"reasoning_tokens,omitempty"`
+		} `json:"completion_tokens_details,omitempty"`
+	}
+	if err := json.Unmarshal(raw, &usagePayload); err != nil {
+		return nil, err
+	}
+
+	cachedTokens := 0
+	if usagePayload.PromptTokensDetails != nil {
+		cachedTokens = usagePayload.PromptTokensDetails.CachedTokens
+	}
+	reasoningTokens := 0
+	if usagePayload.CompletionTokensDetails != nil {
+		reasoningTokens = usagePayload.CompletionTokensDetails.ReasoningTokens
+	}
+
+	return &api.Usage{
+		InputTokens:       usagePayload.PromptTokens,
+		OutputTokens:      usagePayload.CompletionTokens,
+		ThinkingTokens:    reasoningTokens,
+		CachedInputTokens: cachedTokens,
+	}, nil
 }
 
 // handleNonStreamingResponse は非ストリーミングレスポンスを処理（フォールバック）

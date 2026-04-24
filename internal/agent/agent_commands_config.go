@@ -288,28 +288,11 @@ func handleUseCommand(agent *Agent, args []string) bool {
 		red.Fprintf(out, "❌ %v\n", err)
 
 		// API キー設定方法を表示
-		switch config.CanonicalProviderName(providerName) {
-		case "deepseek":
+		if instructions := config.ProviderSetupInstructions(providerName); len(instructions) > 0 {
 			yellow.Fprintln(out, "\n設定方法:")
-			yellow.Fprintln(out, "  export DEEPSEEK_API_KEY=your-api-key")
-		case "openai":
-			yellow.Fprintln(out, "\n設定方法:")
-			yellow.Fprintln(out, "  export OPENAI_API_KEY=your-api-key")
-		case "claude":
-			yellow.Fprintln(out, "\n設定方法:")
-			yellow.Fprintln(out, "  export ANTHROPIC_API_KEY=your-api-key")
-		case "gemini":
-			yellow.Fprintln(out, "\n設定方法:")
-			yellow.Fprintln(out, "  export GEMINI_API_KEY=your-api-key")
-		case "groq":
-			yellow.Fprintln(out, "\n設定方法:")
-			yellow.Fprintln(out, "  export GROQ_API_KEY=your-api-key")
-		case "openrouter":
-			yellow.Fprintln(out, "\n設定方法:")
-			yellow.Fprintln(out, "  export OPENROUTER_API_KEY=your-api-key")
-		case "bedrock":
-			yellow.Fprintln(out, "\n設定方法:")
-			yellow.Fprintln(out, "  AWS認証チェーン（IAMロール、環境変数、~/.aws/credentials等）を設定")
+			for _, line := range instructions {
+				yellow.Fprintf(out, "  %s\n", line)
+			}
 		}
 		return true
 	}

@@ -97,22 +97,7 @@ func normalizeSubAgentModel(model string) string {
 }
 
 func inferSubAgentModel(provider string) string {
-	switch config.CanonicalProviderName(provider) {
-	case "openai":
-		return "gpt-5.4-mini"
-	case "claude":
-		return "claude-haiku-4-5-20251001"
-	case "gemini":
-		return "gemini-3.1-flash-lite-preview"
-	case "deepseek":
-		return "deepseek-chat"
-	case "groq":
-		return "llama-3.3-70b-versatile"
-	case "openrouter":
-		return "openai/gpt-5.4-mini"
-	default:
-		return ""
-	}
+	return config.ProviderDefaultSubAgentModel(provider)
 }
 
 func applyReasoningEffort(cfg *config.Config, effort string) error {

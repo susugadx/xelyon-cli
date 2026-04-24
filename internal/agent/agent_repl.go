@@ -54,8 +54,14 @@ func initInteractiveAgentWithRuntime(runtime *AgentRuntime, model string, provid
 	return agent
 }
 
-// RunInteractiveWithConfig は指定設定でインタラクティブモードを実行する。
-func RunInteractiveWithConfig(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
+type interactiveREPLEnvironment struct {
+	runtime   *AgentRuntime
+	runtimeUI *ui.Runtime
+	mlReader  *ui.MultilineReader
+}
+
+// prepareInteractiveREPLEnvironment は REPL 起動に必要な runtime/UI/reader を初期化する。
+func prepareInteractiveREPLEnvironment(cfg *config.Config, autoApprove bool) (*interactiveREPLEnvironment, func()) {
 	runtime := NewAgentRuntimeWithConfig(cfg)
 	runtime.AutoApprove = autoApprove
 
@@ -70,44 +76,50 @@ func RunInteractiveWithConfig(model string, provider api.Provider, cfg *config.C
 		_, _ = fmt.Fprintf(runtimeUI.ErrorOutput(), "[DEBUG] cfg.Paste.BracketedPaste = %v\n", runtimeCfg.Paste.BracketedPaste)
 	}
 
-	if runtimeCfg.Paste.BracketedPaste {
-		mlReader.EnableBracketedPaste()
-		defer mlReader.DisableBracketedPaste()
+	var cleanupOnce sync.Once
+	cleanup := func() {
+		cleanupOnce.Do(func() {
+			if runtimeCfg.Paste.BracketedPaste {
+				mlReader.DisableBracketedPaste()
+			}
+		})
 	}
 
-	agent := initInteractiveAgentWithRuntime(runtime, model, provider, autoApprove)
+	if runtimeCfg.Paste.BracketedPaste {
+		mlReader.EnableBracketedPaste()
+	}
+
+	return &interactiveREPLEnvironment{
+		runtime:   runtime,
+		runtimeUI: runtimeUI,
+		mlReader:  mlReader,
+	}, cleanup
+}
+
+// RunInteractiveWithConfig は指定設定でインタラクティブモードを実行する。
+func RunInteractiveWithConfig(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
+	env, cleanup := prepareInteractiveREPLEnvironment(cfg, autoApprove)
+	defer cleanup()
+
+	agent := initInteractiveAgentWithRuntime(env.runtime, model, provider, autoApprove)
 	defer agent.Cleanup() // グレースフルシャットダウン
 
 	// ヘッダー表示
-	printHeaderToWriter(runtimeUI.Output(), agent.Model, provider)
-	printModeInfoToWriter(runtimeUI.Output(), autoApprove, false)
+	printHeaderToWriter(env.runtimeUI.Output(), agent.Model, provider)
+	printModeInfoToWriter(env.runtimeUI.Output(), autoApprove, false)
 
 	// コンテキストサイズ表示（ツリー形式）
 	printContextSize(agent)
 
 	// REPLループ開始
-	agent.setPromptReader(mlReader)
-	runREPLLoop(agent, mlReader)
+	agent.setPromptReader(env.mlReader)
+	runREPLLoop(agent, env.mlReader)
 }
 
 // RunInteractiveWithImageWithConfig は指定設定で画像付きのインタラクティブモードを実行する。
 func RunInteractiveWithImageWithConfig(query string, model string, provider api.Provider, imagePath string, cfg *config.Config, autoApprove bool) error {
-	runtime := NewAgentRuntimeWithConfig(cfg)
-	runtime.AutoApprove = autoApprove
-
-	runtimeUI := runtime.effectiveUI()
-	mlReader := ui.NewMultilineReaderWithRuntime(runtimeUI)
-	runtimeUI.SetPromptReader(mlReader)
-	runtimeCfg := runtime.effectiveConfig()
-
-	if os.Getenv("XELYON_DEBUG_PASTE") == "1" {
-		_, _ = fmt.Fprintf(runtimeUI.ErrorOutput(), "[DEBUG] cfg.Paste.BracketedPaste = %v\n", runtimeCfg.Paste.BracketedPaste)
-	}
-
-	if runtimeCfg.Paste.BracketedPaste {
-		mlReader.EnableBracketedPaste()
-		defer mlReader.DisableBracketedPaste()
-	}
+	env, cleanup := prepareInteractiveREPLEnvironment(cfg, autoApprove)
+	defer cleanup()
 
 	if !provider.SupportsImages() {
 		return fmt.Errorf("provider %q does not support image input", provider.Name())
@@ -118,80 +130,68 @@ func RunInteractiveWithImageWithConfig(query string, model string, provider api.
 		return fmt.Errorf("failed to load image: %w", err)
 	}
 
-	agent := initInteractiveAgentWithRuntime(runtime, model, provider, autoApprove)
+	agent := initInteractiveAgentWithRuntime(env.runtime, model, provider, autoApprove)
 	defer agent.Cleanup()
 
-	printHeaderToWriter(runtimeUI.Output(), agent.Model, provider)
-	printModeInfoToWriter(runtimeUI.Output(), autoApprove, false)
+	printHeaderToWriter(env.runtimeUI.Output(), agent.Model, provider)
+	printModeInfoToWriter(env.runtimeUI.Output(), autoApprove, false)
 	printContextSize(agent)
-	green.Fprintf(runtimeUI.Output(), "🖼️  Image loaded: %s (%s)\n", image.Path, api.FormatImageSize(image.Size))
+	green.Fprintf(env.runtimeUI.Output(), "🖼️  Image loaded: %s (%s)\n", image.Path, api.FormatImageSize(image.Size))
 
 	if query == "" {
 		query = "Please analyze this image."
 	}
 
-	agent.setPromptReader(mlReader)
+	agent.setPromptReader(env.mlReader)
 	agent.chatWithImage(query, image)
-	runREPLLoop(agent, mlReader)
+	runREPLLoop(agent, env.mlReader)
 	return nil
 }
 
 // RunInteractiveWithResumeWithConfig は指定設定で前回セッションを再開してインタラクティブモードを実行する。
 func RunInteractiveWithResumeWithConfig(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
-	runtime := NewAgentRuntimeWithConfig(cfg)
-	runtime.AutoApprove = autoApprove
-	runtimeUI := runtime.effectiveUI()
-
-	// Bracketed Paste Mode を最初に有効化（Windows Terminal の警告回避のため）
-	mlReader := ui.NewMultilineReaderWithRuntime(runtimeUI)
-	runtimeUI.SetPromptReader(mlReader)
-	runtimeCfg := runtime.effectiveConfig()
-
-	if os.Getenv("XELYON_DEBUG_PASTE") == "1" {
-		_, _ = fmt.Fprintf(runtimeUI.ErrorOutput(), "[DEBUG] cfg.Paste.BracketedPaste = %v\n", runtimeCfg.Paste.BracketedPaste)
-	}
-
-	if runtimeCfg.Paste.BracketedPaste {
-		mlReader.EnableBracketedPaste()
-		defer mlReader.DisableBracketedPaste()
-	}
+	env, cleanup := prepareInteractiveREPLEnvironment(cfg, autoApprove)
+	defer cleanup()
 
 	storage, err := history.NewStorage()
 	if err != nil {
-		red.Fprintf(runtimeUI.Output(), "Failed to initialize storage: %v\n", err)
+		red.Fprintf(env.runtimeUI.Output(), "Failed to initialize storage: %v\n", err)
+		cleanup()
 		RunInteractiveWithConfig(model, provider, cfg, autoApprove)
 		return
 	}
 
 	sessionID, err := storage.GetLastSession()
 	if err != nil {
-		yellow.Fprintln(runtimeUI.Output(), "No previous session found, starting new session")
+		yellow.Fprintln(env.runtimeUI.Output(), "No previous session found, starting new session")
+		cleanup()
 		RunInteractiveWithConfig(model, provider, cfg, autoApprove)
 		return
 	}
 
 	session, err := storage.Load(sessionID)
 	if err != nil {
-		red.Fprintf(runtimeUI.Output(), "Failed to load session: %v\n", err)
+		red.Fprintf(env.runtimeUI.Output(), "Failed to load session: %v\n", err)
+		cleanup()
 		RunInteractiveWithConfig(model, provider, cfg, autoApprove)
 		return
 	}
 
 	// ロード済みセッションでAgent作成
-	agent := initInteractiveAgentWithRuntime(runtime, model, provider, autoApprove)
+	agent := initInteractiveAgentWithRuntime(env.runtime, model, provider, autoApprove)
 	agent.applyLoadedSession(session)
 	defer agent.Cleanup() // グレースフルシャットダウン
 
-	printHeaderToWriter(runtimeUI.Output(), model, provider)
-	printModeInfoToWriter(runtimeUI.Output(), autoApprove, false)
-	green.Fprintf(runtimeUI.Output(), "📂 Resumed session %s (%d messages)\n", sessionID, len(session.ToAPIMessages()))
+	printHeaderToWriter(env.runtimeUI.Output(), model, provider)
+	printModeInfoToWriter(env.runtimeUI.Output(), autoApprove, false)
+	green.Fprintf(env.runtimeUI.Output(), "📂 Resumed session %s (%d messages)\n", sessionID, len(session.ToAPIMessages()))
 
 	// コンテキストサイズ表示（ツリー形式）
 	printContextSize(agent)
 
 	// REPLループ開始
-	agent.setPromptReader(mlReader)
-	runREPLLoop(agent, mlReader)
+	agent.setPromptReader(env.mlReader)
+	runREPLLoop(agent, env.mlReader)
 }
 
 // runREPLLoop は共通のREPLループを実行（RunInteractive/RunInteractiveWithResumeで共用）

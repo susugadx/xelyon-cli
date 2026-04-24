@@ -2,11 +2,14 @@ package openaicompatstream
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"net/http"
 	"sort"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // Chunk は OpenAI 互換 SSE の最小共通レスポンス構造。
@@ -192,5 +195,96 @@ func DecodeStandardUsage(raw json.RawMessage) (*api.Usage, error) {
 		InputTokens:       usage.PromptTokens,
 		OutputTokens:      usage.CompletionTokens,
 		CachedInputTokens: cachedTokens,
+	}, nil
+}
+
+// ParseSSEOptions は OpenAI 互換 SSE の共通処理オプション。
+type ParseSSEOptions struct {
+	// OnChunkDecodeError は chunk decode 失敗時の処理を上書きする。
+	// nil を返すとエラーを握り潰して継続する。
+	OnChunkDecodeError func(error) error
+	// OnUsageDecodeError は usage decode 失敗時の処理を上書きする。
+	// nil を返すとエラーを握り潰して継続する。
+	OnUsageDecodeError func(error) error
+	// UsageDecoder は usage payload の decode 方法を上書きする。
+	UsageDecoder func(json.RawMessage) (*api.Usage, error)
+	// OnToolCallArguments は tool_call arguments 受信時に呼ばれる。
+	OnToolCallArguments func(string)
+	// ChoiceHandler は choice 処理を上書きする。
+	ChoiceHandler func(choice Choice) (content string, done bool, err error)
+	// StopOnToolCallsFinish は finish_reason=tool_calls で終了するかどうか。
+	StopOnToolCallsFinish bool
+}
+
+// ParseSSEResult は OpenAI 互換 SSE の共通処理結果。
+type ParseSSEResult struct {
+	Content   string
+	ToolCalls []api.OpenAIToolCall
+	Usage     *api.Usage
+}
+
+// ParseSSEStream は OpenAI 互換 SSE を共通処理する。
+func ParseSSEStream(ctx context.Context, resp *http.Response, spinner *ui.Spinner, options ParseSSEOptions) (*ParseSSEResult, error) {
+	collector := NewToolCallCollector()
+	var lastUsage *api.Usage
+
+	usageDecoder := options.UsageDecoder
+	if usageDecoder == nil {
+		usageDecoder = DecodeStandardUsage
+	}
+
+	parser := func(line string) (string, bool, error) {
+		data, done, handled := ParseSSEDataLine(line)
+		if !handled {
+			return "", false, nil
+		}
+		if done {
+			return "", true, nil
+		}
+
+		chunk, err := DecodeChunk(data)
+		if err != nil {
+			if options.OnChunkDecodeError != nil {
+				return "", false, options.OnChunkDecodeError(err)
+			}
+			return "", false, err
+		}
+
+		usage, err := usageDecoder(chunk.Usage)
+		if err != nil {
+			if options.OnUsageDecodeError != nil {
+				return "", false, options.OnUsageDecodeError(err)
+			}
+			return "", false, err
+		}
+		if usage != nil {
+			lastUsage = usage
+		}
+
+		if len(chunk.Choices) == 0 {
+			return "", false, nil
+		}
+
+		choice := chunk.Choices[0]
+		collector.Append(choice.Delta.ToolCalls, options.OnToolCallArguments)
+
+		if options.ChoiceHandler != nil {
+			return options.ChoiceHandler(choice)
+		}
+		if options.StopOnToolCallsFinish && choice.FinishReason == "tool_calls" {
+			return "", true, nil
+		}
+		return choice.Delta.Content, false, nil
+	}
+
+	content, err := api.ParseStreamingResponse(ctx, resp, spinner, parser)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ParseSSEResult{
+		Content:   content,
+		ToolCalls: collector.ToOpenAIToolCalls(),
+		Usage:     lastUsage,
 	}, nil
 }

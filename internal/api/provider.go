@@ -65,30 +65,23 @@ func ListProviders() []string {
 
 // getAPIKeyForProvider はプロバイダー名から環境変数のAPIキーを取得
 func getAPIKeyForProvider(providerName string) string {
-	switch config.CanonicalProviderName(providerName) {
-	case "deepseek":
-		return os.Getenv("DEEPSEEK_API_KEY")
-	case "openai":
-		return os.Getenv("OPENAI_API_KEY")
-	case "gemini":
-		return os.Getenv("GEMINI_API_KEY")
-	case "claude":
-		return os.Getenv("ANTHROPIC_API_KEY")
+	canonical := config.CanonicalProviderName(providerName)
+	switch canonical {
 	case "ollama":
 		baseURL := os.Getenv("OLLAMA_BASE_URL")
 		if baseURL == "" {
 			return "http://localhost:11434"
 		}
 		return baseURL
-	case "groq":
-		return os.Getenv("GROQ_API_KEY")
-	case "openrouter":
-		return os.Getenv("OPENROUTER_API_KEY")
 	case "bedrock":
 		// Bedrock は AWS 認証チェーンを使用するため、常にダミー値を返す
 		return "aws-credentials"
 	default:
-		return ""
+		envKey := config.ProviderAPIKeyEnv(canonical)
+		if envKey == "" {
+			return ""
+		}
+		return os.Getenv(envKey)
 	}
 }
 
@@ -243,14 +236,7 @@ func GetMaxOutputTokens(ctx context.Context, providerName, model string) int {
 
 // SupportsImages はプロバイダー名から画像対応を判定
 func SupportsImages(providerName string) bool {
-	switch config.CanonicalProviderName(providerName) {
-	case "claude", "openai", "gemini", "bedrock":
-		return true
-	case "deepseek", "ollama", "groq":
-		return false
-	default:
-		return false
-	}
+	return config.ProviderSupportsImages(providerName)
 }
 
 // ApplyRuntimeConfig は provider が RuntimeConfigurable の場合に runtime 設定を注入する。

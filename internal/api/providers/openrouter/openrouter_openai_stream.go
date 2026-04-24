@@ -15,62 +15,36 @@ import (
 // handleStreamingResponse は OpenRouter の OpenAI 互換 SSE 処理を担う。
 // request 構築やモデル分岐は openrouter.go 側が owner。
 func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
-	toolCalls := openaicompatstream.NewToolCallCollector()
-	var lastUsage *api.Usage
-
-	parser := func(line string) (string, bool, error) {
-		data, done, handled := openaicompatstream.ParseSSEDataLine(line)
-		if !handled {
-			return "", false, nil
-		}
-		if done {
-			return "", true, nil
-		}
-
-		chunk, err := openaicompatstream.DecodeChunk(data)
-		if err != nil {
+	streamResult, err := openaicompatstream.ParseSSEStream(ctx, resp, spinner, openaicompatstream.ParseSSEOptions{
+		OnChunkDecodeError: func(error) error {
 			// 既存挙動を維持: 破損チャンクは無視して継続
-			return "", false, nil
-		}
-
-		usage, err := openaicompatstream.DecodeStandardUsage(chunk.Usage)
-		if err != nil {
-			return "", false, nil
-		}
-		if usage != nil {
-			lastUsage = usage
-		}
-
-		if len(chunk.Choices) == 0 {
-			return "", false, nil
-		}
-
-		choice := chunk.Choices[0]
-		toolCalls.Append(choice.Delta.ToolCalls, func(toolName string) {
+			return nil
+		},
+		OnUsageDecodeError: func(error) error {
+			return nil
+		},
+		OnToolCallArguments: func(toolName string) {
 			if !spinner.IsActive() {
 				spinner.Start(ui.SpinnerMessageForTool(toolName))
 			}
-		})
-		return choice.Delta.Content, false, nil
-	}
-
-	content, err := api.ParseStreamingResponse(ctx, resp, spinner, parser)
+		},
+	})
 	if err != nil {
 		return "", err
 	}
 
-	if p.usageCallback != nil && lastUsage != nil {
-		p.usageCallback(*lastUsage)
+	if p.usageCallback != nil && streamResult.Usage != nil {
+		p.usageCallback(*streamResult.Usage)
 	}
 
 	toolCallsOutput := openaicompatstream.BuildToolCallJSON(
-		toolCalls.ToOpenAIToolCalls(),
+		streamResult.ToolCalls,
 		openai.ConvertToolCallToToolJSON,
 	)
 	if toolCallsOutput != "" {
-		return content + toolCallsOutput, nil
+		return streamResult.Content + toolCallsOutput, nil
 	}
-	return content, nil
+	return streamResult.Content, nil
 }
 
 // handleNonStreamingResponse は OpenRouter の OpenAI 互換非ストリーミング処理を担う。

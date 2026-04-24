@@ -1,11 +1,15 @@
 package openaicompatstream
 
 import (
+	"context"
 	"encoding/json"
+	"io"
+	"net/http"
 	"strings"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 func TestParseSSEDataLine(t *testing.T) {
@@ -197,5 +201,54 @@ func TestDecodeStandardUsage_NullReturnsNil(t *testing.T) {
 	}
 	if usage != nil {
 		t.Fatalf("DecodeStandardUsage(null) = %+v, want nil", usage)
+	}
+}
+
+func TestParseSSEStream_DefaultFlow(t *testing.T) {
+	resp := &http.Response{
+		Body: io.NopCloser(strings.NewReader(strings.Join([]string{
+			`data: {"choices":[{"delta":{"content":"Hello"}}]}`,
+			`data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"read_file","arguments":"{\"path\":\"a.txt\"}"}}]}}]}`,
+			`data: {"usage":{"prompt_tokens":9,"completion_tokens":4,"prompt_tokens_details":{"cached_tokens":2}}}`,
+			"data: [DONE]",
+		}, "\n"))),
+	}
+
+	got, err := ParseSSEStream(context.Background(), resp, ui.NewSpinnerWithWriter(io.Discard), ParseSSEOptions{})
+	if err != nil {
+		t.Fatalf("ParseSSEStream() error = %v", err)
+	}
+	if got.Content != "Hello" {
+		t.Fatalf("ParseSSEStream().Content = %q, want %q", got.Content, "Hello")
+	}
+	if got.Usage == nil || got.Usage.InputTokens != 9 || got.Usage.OutputTokens != 4 || got.Usage.CachedInputTokens != 2 {
+		t.Fatalf("ParseSSEStream().Usage = %+v, want input=9 output=4 cached=2", got.Usage)
+	}
+	if len(got.ToolCalls) != 1 || got.ToolCalls[0].Function.Name != "read_file" {
+		t.Fatalf("ParseSSEStream().ToolCalls = %+v, want one read_file call", got.ToolCalls)
+	}
+}
+
+func TestParseSSEStream_ErrorCallbacksCanContinue(t *testing.T) {
+	resp := &http.Response{
+		Body: io.NopCloser(strings.NewReader(strings.Join([]string{
+			`data: {"choices":[{"delta":{"content":"A"}}]}`,
+			"data: {broken json",
+			`data: {"choices":[{"delta":{"content":"B"}}]}`,
+			"data: [DONE]",
+		}, "\n"))),
+	}
+
+	got, err := ParseSSEStream(context.Background(), resp, ui.NewSpinnerWithWriter(io.Discard), ParseSSEOptions{
+		OnChunkDecodeError: func(error) error { return nil },
+		UsageDecoder: func(json.RawMessage) (*api.Usage, error) {
+			return nil, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("ParseSSEStream() error = %v", err)
+	}
+	if got.Content != "AB" {
+		t.Fatalf("ParseSSEStream().Content = %q, want %q", got.Content, "AB")
 	}
 }

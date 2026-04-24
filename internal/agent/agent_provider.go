@@ -2,7 +2,6 @@ package agent
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
@@ -103,24 +102,5 @@ func (a *Agent) SwitchProvider(providerName string) error {
 
 // IsAPIKeyAvailable は指定されたプロバイダーのAPIキーが利用可能かチェック
 func IsAPIKeyAvailable(provider string) bool {
-	switch config.CanonicalProviderName(provider) {
-	case "deepseek":
-		return os.Getenv("DEEPSEEK_API_KEY") != ""
-	case "openai":
-		return os.Getenv("OPENAI_API_KEY") != ""
-	case "claude":
-		return os.Getenv("ANTHROPIC_API_KEY") != ""
-	case "gemini":
-		return os.Getenv("GEMINI_API_KEY") != ""
-	case "groq":
-		return os.Getenv("GROQ_API_KEY") != ""
-	case "openrouter":
-		return os.Getenv("OPENROUTER_API_KEY") != ""
-	case "ollama":
-		return true // Ollama はローカルなのでキー不要
-	case "bedrock":
-		return true // AWS 認証チェーン（IAM ロール等）を許可
-	default:
-		return false
-	}
+	return config.ProviderHasAvailableCredential(provider)
 }
