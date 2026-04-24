@@ -15,6 +15,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/cost"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
@@ -391,7 +392,7 @@ func TestRunHeadlessWithConfig_CollectsTokenUsageAndCost(t *testing.T) {
 		t.Fatalf("result.Tokens.Total = %d, want 1350", result.Tokens.Total)
 	}
 
-	expectedCost := CalculateRequestCostWithCache("openai", "gpt-5.4-nano", api.Usage{
+	expectedCost := cost.CalculateRequestCostWithCache("openai", "gpt-5.4-nano", api.Usage{
 		InputTokens:       1000,
 		CachedInputTokens: 200,
 		OutputTokens:      300,

@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/cost"
 )
 
 // GetProviderCompressThresholdWithConfig は設定を考慮して provider/model ごとの圧縮閾値を返す。
@@ -120,8 +121,8 @@ func shouldForceCompressForPricingCliff(provider, model string, currentTokens in
 	}
 
 	projectedTokens := currentTokens + averageOutputTokens(stats)
-	currentPricing := GetPricingInfo(provider, model, currentTokens)
-	projectedPricing := GetPricingInfo(provider, model, projectedTokens)
+	currentPricing := cost.GetPricingInfo(provider, model, currentTokens)
+	projectedPricing := cost.GetPricingInfo(provider, model, projectedTokens)
 	if projectedPricing.InputCostPerM > currentPricing.InputCostPerM {
 		return projectedTokens, true
 	}

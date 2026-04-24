@@ -1,4 +1,4 @@
-package agent
+package cost
 
 func resolveProviderPricingFromConfig(provider providerPricingConfig, lm string, promptTokenCount int, allowLongInputTier bool) PricingInfo {
 	if pricing, ok := matchPricingRules(lm, provider, promptTokenCount); ok {

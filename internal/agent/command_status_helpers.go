@@ -8,6 +8,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/agent/viewfmt"
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/cost"
 	"github.com/susugadx/xelyon-cli/internal/tools/subagent"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -33,7 +34,7 @@ func requestCacheHitRate(usage api.Usage) float64 {
 }
 
 func requestUsageCost(provider, model string, usage api.Usage) float64 {
-	return CalculateRequestCostWithCache(provider, model, usage) + usage.StorageCost
+	return cost.CalculateRequestCostWithCache(provider, model, usage) + usage.StorageCost
 }
 
 func buildLastRequestTable(provider, model string, usage *api.Usage, costOverride *float64) *ui.Table {

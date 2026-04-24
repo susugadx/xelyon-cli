@@ -8,6 +8,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/cost"
 )
 
 type chatRequest struct {
@@ -181,7 +182,7 @@ func (a *Agent) printContextSuggestion() {
 	}
 
 	saved := currentTokens - baseTokens
-	pricing := GetPricingInfo(a.ProviderName, a.CurrentModel)
+	pricing := cost.GetPricingInfo(a.ProviderName, a.CurrentModel)
 	if pricing.InputCostPerM > 0 {
 		savingPerTurn := float64(saved) / 1_000_000.0 * pricing.InputCostPerM * 0.5
 		if savingPerTurn < 0.01 {

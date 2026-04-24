@@ -3,11 +3,11 @@ package agent
 import (
 	"os"
 	"path/filepath"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/cost"
 )
 
 func TestNewSessionStats(t *testing.T) {
@@ -531,10 +531,10 @@ func TestCalculateRequestCost(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		result := CalculateRequestCost(tt.provider, tt.model, tt.input, tt.output)
+		result := cost.CalculateRequestCost(tt.provider, tt.model, tt.input, tt.output)
 		// 浮動小数点の比較は許容誤差を設ける
 		if result < tt.expected-0.001 || result > tt.expected+0.001 {
-			t.Errorf("CalculateRequestCost(%s, %s, %d, %d) = %f, want %f",
+			t.Errorf("cost.CalculateRequestCost(%s, %s, %d, %d) = %f, want %f",
 				tt.provider, tt.model, tt.input, tt.output, result, tt.expected)
 		}
 	}
@@ -542,7 +542,7 @@ func TestCalculateRequestCost(t *testing.T) {
 
 func TestGetGeminiPricing_200KTier(t *testing.T) {
 	// Pro: 200K以下 → 標準料金
-	p1 := getGeminiPricing("gemini-3.1-pro", 100000)
+	p1 := cost.GetPricingInfo("gemini", "gemini-3.1-pro", 100000)
 	if p1.InputCostPerM != 2.00 {
 		t.Errorf("Gemini Pro <200K input = %f, want 2.00", p1.InputCostPerM)
 	}
@@ -551,7 +551,7 @@ func TestGetGeminiPricing_200KTier(t *testing.T) {
 	}
 
 	// Pro: 200K超 → 高ティア料金
-	p2 := getGeminiPricing("gemini-3.1-pro", 250000)
+	p2 := cost.GetPricingInfo("gemini", "gemini-3.1-pro", 250000)
 	if p2.InputCostPerM != 4.00 {
 		t.Errorf("Gemini Pro >200K input = %f, want 4.00", p2.InputCostPerM)
 	}
@@ -563,7 +563,7 @@ func TestGetGeminiPricing_200KTier(t *testing.T) {
 	}
 
 	// Flash: 200K超でも料金変わらない（long context ティアなし）
-	f1 := getGeminiPricing("gemini-3-flash", 250000)
+	f1 := cost.GetPricingInfo("gemini", "gemini-3-flash", 250000)
 	if f1.InputCostPerM != 0.50 {
 		t.Errorf("Gemini Flash >200K input = %f, want 0.50 (no long context tier)", f1.InputCostPerM)
 	}
@@ -600,7 +600,7 @@ func TestEstimatedCost_GeminiTierTransition(t *testing.T) {
 
 func TestCalculateRequestCostWithCache_GeminiTier(t *testing.T) {
 	// 200K以下
-	cost1 := CalculateRequestCostWithCache("gemini", "gemini-3.1-pro", api.Usage{
+	cost1 := cost.CalculateRequestCostWithCache("gemini", "gemini-3.1-pro", api.Usage{
 		InputTokens:       100000,
 		OutputTokens:      10000,
 		CachedInputTokens: 50000,
@@ -615,7 +615,7 @@ func TestCalculateRequestCostWithCache_GeminiTier(t *testing.T) {
 	}
 
 	// 200K超
-	cost2 := CalculateRequestCostWithCache("gemini", "gemini-3.1-pro", api.Usage{
+	cost2 := cost.CalculateRequestCostWithCache("gemini", "gemini-3.1-pro", api.Usage{
 		InputTokens:       300000,
 		OutputTokens:      10000,
 		CachedInputTokens: 100000,
@@ -662,7 +662,7 @@ func TestSessionStats_AddUsage_ThinkingTokens(t *testing.T) {
 }
 
 func TestCalculateRequestCostWithCache_ThinkingTokens(t *testing.T) {
-	cost := CalculateRequestCostWithCache("gemini", "gemini-3.1-pro", api.Usage{
+	gotCost := cost.CalculateRequestCostWithCache("gemini", "gemini-3.1-pro", api.Usage{
 		InputTokens:    100000,
 		OutputTokens:   10000,
 		ThinkingTokens: 50000,
@@ -672,8 +672,8 @@ func TestCalculateRequestCostWithCache_ThinkingTokens(t *testing.T) {
 	// Thinking: 50K/1M * $12.00 = $0.60
 	// 合計: $0.92
 	expected := 0.92
-	if cost < expected-0.001 || cost > expected+0.001 {
-		t.Errorf("CostWithCache thinking = %f, want %f", cost, expected)
+	if gotCost < expected-0.001 || gotCost > expected+0.001 {
+		t.Errorf("CostWithCache thinking = %f, want %f", gotCost, expected)
 	}
 }
 
@@ -704,37 +704,18 @@ func TestGetClaudePricing(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		pricing := getClaudePricing(tt.model, tt.ptc)
+		pricing := cost.GetPricingInfo("claude", tt.model, tt.ptc)
 		if pricing.InputCostPerM != tt.wantInput {
-			t.Errorf("getClaudePricing(%q, %d).InputCostPerM = %f, want %f", tt.model, tt.ptc, pricing.InputCostPerM, tt.wantInput)
+			t.Errorf("cost.GetPricingInfo(%q, %q, %d).InputCostPerM = %f, want %f", "claude", tt.model, tt.ptc, pricing.InputCostPerM, tt.wantInput)
 		}
 		if pricing.OutputCostPerM != tt.wantOutput {
-			t.Errorf("getClaudePricing(%q, %d).OutputCostPerM = %f, want %f", tt.model, tt.ptc, pricing.OutputCostPerM, tt.wantOutput)
+			t.Errorf("cost.GetPricingInfo(%q, %q, %d).OutputCostPerM = %f, want %f", "claude", tt.model, tt.ptc, pricing.OutputCostPerM, tt.wantOutput)
 		}
-	}
-}
-
-func TestGetPricingInfo_FallbackToHardcodedWhenYAMLUnavailable(t *testing.T) {
-	origEmbedded := embeddedPricingYAML
-	origCfg := loadedPricingConfig
-
-	embeddedPricingYAML = nil
-	pricingConfigOnce = sync.Once{}
-	loadedPricingConfig = nil
-	t.Cleanup(func() {
-		embeddedPricingYAML = origEmbedded
-		pricingConfigOnce = sync.Once{}
-		loadedPricingConfig = origCfg
-	})
-
-	pricing := GetPricingInfo("openai", "gpt-5")
-	if pricing.InputCostPerM != 1.25 || pricing.OutputCostPerM != 10.00 {
-		t.Fatalf("fallback pricing mismatch: got input=%f output=%f", pricing.InputCostPerM, pricing.OutputCostPerM)
 	}
 }
 
 func TestGetOpenAIPricing_GPT54(t *testing.T) {
-	pricing := GetPricingInfo("openai", "gpt-5.4")
+	pricing := cost.GetPricingInfo("openai", "gpt-5.4")
 	if pricing.InputCostPerM != 2.50 {
 		t.Errorf("expected 2.50, got %f", pricing.InputCostPerM)
 	}
@@ -744,7 +725,7 @@ func TestGetOpenAIPricing_GPT54(t *testing.T) {
 }
 
 func TestGetOpenAIPricing_GPT54Pro(t *testing.T) {
-	pricing := GetPricingInfo("openai", "gpt-5.4-pro")
+	pricing := cost.GetPricingInfo("openai", "gpt-5.4-pro")
 	if pricing.InputCostPerM != 30.00 {
 		t.Errorf("expected 30.00, got %f", pricing.InputCostPerM)
 	}
@@ -754,7 +735,7 @@ func TestGetOpenAIPricing_GPT54Pro(t *testing.T) {
 }
 
 func TestGetOpenAIPricing_GPT54_LongInput(t *testing.T) {
-	pricing := GetPricingInfo("openai", "gpt-5.4", 300000)
+	pricing := cost.GetPricingInfo("openai", "gpt-5.4", 300000)
 	if pricing.InputCostPerM != 5.00 {
 		t.Errorf("expected 5.00 for long input, got %f", pricing.InputCostPerM)
 	}
@@ -764,7 +745,7 @@ func TestGetOpenAIPricing_GPT54_LongInput(t *testing.T) {
 }
 
 func TestGetOpenAIPricing_GPT54Pro_LongInput(t *testing.T) {
-	pricing := GetPricingInfo("openai", "gpt-5.4-pro", 300000)
+	pricing := cost.GetPricingInfo("openai", "gpt-5.4-pro", 300000)
 	if pricing.InputCostPerM != 60.00 {
 		t.Errorf("expected 60.00 for long input, got %f", pricing.InputCostPerM)
 	}
@@ -787,12 +768,12 @@ func TestGetDeepSeekPricing_V32Unified(t *testing.T) {
 		{"", 0.28, 0.42},                  // デフォルト
 	}
 	for _, tt := range tests {
-		pricing := getDeepSeekPricing(tt.model)
+		pricing := cost.GetPricingInfo("deepseek", tt.model)
 		if pricing.InputCostPerM != tt.wantInput {
-			t.Errorf("getDeepSeekPricing(%q).InputCostPerM = %f, want %f", tt.model, pricing.InputCostPerM, tt.wantInput)
+			t.Errorf("cost.GetPricingInfo(%q, %q).InputCostPerM = %f, want %f", "deepseek", tt.model, pricing.InputCostPerM, tt.wantInput)
 		}
 		if pricing.OutputCostPerM != tt.wantOutput {
-			t.Errorf("getDeepSeekPricing(%q).OutputCostPerM = %f, want %f", tt.model, pricing.OutputCostPerM, tt.wantOutput)
+			t.Errorf("cost.GetPricingInfo(%q, %q).OutputCostPerM = %f, want %f", "deepseek", tt.model, pricing.OutputCostPerM, tt.wantOutput)
 		}
 	}
 }
@@ -801,7 +782,7 @@ func TestGetDeepSeekPricing_V32Unified(t *testing.T) {
 
 func TestGetClaudePricing_LongContext(t *testing.T) {
 	// Sonnet: >200K → $6/$22.50
-	p := getClaudePricing("claude-sonnet-4-5-20250929", 250000)
+	p := cost.GetPricingInfo("claude", "claude-sonnet-4-5-20250929", 250000)
 	if p.InputCostPerM != 6.00 || p.OutputCostPerM != 22.50 {
 		t.Errorf("Sonnet long context: got input=%f output=%f, want 6.00/22.50", p.InputCostPerM, p.OutputCostPerM)
 	}
@@ -810,13 +791,13 @@ func TestGetClaudePricing_LongContext(t *testing.T) {
 	}
 
 	// Opus: >200K → $10/$37.50
-	p2 := getClaudePricing("claude-opus-4-6", 250000)
+	p2 := cost.GetPricingInfo("claude", "claude-opus-4-6", 250000)
 	if p2.InputCostPerM != 10.00 || p2.OutputCostPerM != 37.50 {
 		t.Errorf("Opus long context: got input=%f output=%f, want 10.00/37.50", p2.InputCostPerM, p2.OutputCostPerM)
 	}
 
 	// Haiku: long context なし
-	p3 := getClaudePricing("claude-haiku-4-5", 250000)
+	p3 := cost.GetPricingInfo("claude", "claude-haiku-4-5", 250000)
 	if p3.InputCostPerM != 1.00 || p3.OutputCostPerM != 5.00 {
 		t.Errorf("Haiku should not have long context pricing: got input=%f output=%f", p3.InputCostPerM, p3.OutputCostPerM)
 	}
@@ -826,7 +807,7 @@ func TestGetClaudePricing_LongContext(t *testing.T) {
 
 func TestCalculateRequestCostWithCache_TierIncludesCachedTokens(t *testing.T) {
 	// Claude Sonnet: 通常input 150K + cached 60K = 210K → long context 料金
-	cost := CalculateRequestCostWithCache("claude", "claude-sonnet-4-5", api.Usage{
+	gotCost := cost.CalculateRequestCostWithCache("claude", "claude-sonnet-4-5", api.Usage{
 		InputTokens:       150000,
 		OutputTokens:      10000,
 		CachedInputTokens: 60000,
@@ -837,12 +818,12 @@ func TestCalculateRequestCostWithCache_TierIncludesCachedTokens(t *testing.T) {
 	// output:   10K/1M * $22.50 = $0.225
 	// total: $0.801
 	expected := 0.801
-	if cost < expected-0.01 || cost > expected+0.01 {
-		t.Errorf("CostWithCache (cached triggers 200K tier) = %f, want ~%f", cost, expected)
+	if gotCost < expected-0.01 || gotCost > expected+0.01 {
+		t.Errorf("CostWithCache (cached triggers 200K tier) = %f, want ~%f", gotCost, expected)
 	}
 
 	// 同じトークン数でもキャッシュなし 150K → 通常料金
-	cost2 := CalculateRequestCostWithCache("claude", "claude-sonnet-4-5", api.Usage{
+	cost2 := cost.CalculateRequestCostWithCache("claude", "claude-sonnet-4-5", api.Usage{
 		InputTokens:  150000,
 		OutputTokens: 10000,
 	})
@@ -860,13 +841,13 @@ func TestCalculateRequestCostWithCache_TierIncludesCachedTokens(t *testing.T) {
 
 func TestGetGeminiPricing_25Pro(t *testing.T) {
 	// 2.5 Pro: $1.25/$10.00 (<=200K)
-	p := getGeminiPricing("gemini-2.5-pro", 100000)
+	p := cost.GetPricingInfo("gemini", "gemini-2.5-pro", 100000)
 	if p.InputCostPerM != 1.25 || p.OutputCostPerM != 10.00 {
 		t.Errorf("Gemini 2.5 Pro <200K: got input=%f output=%f, want 1.25/10.00", p.InputCostPerM, p.OutputCostPerM)
 	}
 
 	// 2.5 Pro: $2.50/$15.00 (>200K)
-	p2 := getGeminiPricing("gemini-2.5-pro", 250000)
+	p2 := cost.GetPricingInfo("gemini", "gemini-2.5-pro", 250000)
 	if p2.InputCostPerM != 2.50 || p2.OutputCostPerM != 15.00 {
 		t.Errorf("Gemini 2.5 Pro >200K: got input=%f output=%f, want 2.50/15.00", p2.InputCostPerM, p2.OutputCostPerM)
 	}
@@ -876,13 +857,13 @@ func TestGetGeminiPricing_25Pro(t *testing.T) {
 
 func TestGetGeminiPricing_FlashLite(t *testing.T) {
 	// 2.5 Flash-Lite: $0.10/$0.40
-	p := getGeminiPricing("gemini-2.5-flash-lite", 0)
+	p := cost.GetPricingInfo("gemini", "gemini-2.5-flash-lite", 0)
 	if p.InputCostPerM != 0.10 || p.OutputCostPerM != 0.40 {
 		t.Errorf("Gemini 2.5 Flash-Lite: got input=%f output=%f, want 0.10/0.40", p.InputCostPerM, p.OutputCostPerM)
 	}
 
 	// 2.5 Flash: $0.30/$2.50 (Flash-Lite とは違う)
-	p2 := getGeminiPricing("gemini-2.5-flash", 0)
+	p2 := cost.GetPricingInfo("gemini", "gemini-2.5-flash", 0)
 	if p2.InputCostPerM != 0.30 || p2.OutputCostPerM != 2.50 {
 		t.Errorf("Gemini 2.5 Flash: got input=%f output=%f, want 0.30/2.50", p2.InputCostPerM, p2.OutputCostPerM)
 	}
@@ -891,13 +872,13 @@ func TestGetGeminiPricing_FlashLite(t *testing.T) {
 // === 新規テスト: Gemini 2.0 Flash ===
 
 func TestGetGeminiPricing_20Flash(t *testing.T) {
-	p := getGeminiPricing("gemini-2.0-flash", 0)
+	p := cost.GetPricingInfo("gemini", "gemini-2.0-flash", 0)
 	if p.InputCostPerM != 0.10 || p.OutputCostPerM != 0.40 {
 		t.Errorf("Gemini 2.0 Flash: got input=%f output=%f, want 0.10/0.40", p.InputCostPerM, p.OutputCostPerM)
 	}
 
 	// 2.0 Flash-Lite
-	p2 := getGeminiPricing("gemini-2.0-flash-lite", 0)
+	p2 := cost.GetPricingInfo("gemini", "gemini-2.0-flash-lite", 0)
 	if p2.InputCostPerM != 0.075 || p2.OutputCostPerM != 0.30 {
 		t.Errorf("Gemini 2.0 Flash-Lite: got input=%f output=%f, want 0.075/0.30", p2.InputCostPerM, p2.OutputCostPerM)
 	}
@@ -906,7 +887,7 @@ func TestGetGeminiPricing_20Flash(t *testing.T) {
 // === 新規テスト: GPT-5.4-mini / GPT-5.4-nano 専用価格 ===
 
 func TestGetOpenAIPricing_GPT54Mini(t *testing.T) {
-	pricing := GetPricingInfo("openai", "gpt-5.4-mini")
+	pricing := cost.GetPricingInfo("openai", "gpt-5.4-mini")
 	if pricing.InputCostPerM != 0.75 {
 		t.Errorf("gpt-5.4-mini input: got %f, want 0.75", pricing.InputCostPerM)
 	}
@@ -919,7 +900,7 @@ func TestGetOpenAIPricing_GPT54Mini(t *testing.T) {
 }
 
 func TestGetOpenAIPricing_GPT54Nano(t *testing.T) {
-	pricing := GetPricingInfo("openai", "gpt-5.4-nano")
+	pricing := cost.GetPricingInfo("openai", "gpt-5.4-nano")
 	if pricing.InputCostPerM != 0.20 {
 		t.Errorf("gpt-5.4-nano input: got %f, want 0.20", pricing.InputCostPerM)
 	}
@@ -934,7 +915,7 @@ func TestGetOpenAIPricing_GPT54Nano(t *testing.T) {
 // === 新規テスト: Gemini 3.1 Flash-Lite Preview 専用価格 ===
 
 func TestGetGeminiPricing_31FlashLite(t *testing.T) {
-	pricing := getGeminiPricing("gemini-3.1-flash-lite-preview", 0)
+	pricing := cost.GetPricingInfo("gemini", "gemini-3.1-flash-lite-preview", 0)
 	if pricing.InputCostPerM != 0.25 {
 		t.Errorf("gemini-3.1-flash-lite-preview input: got %f, want 0.25", pricing.InputCostPerM)
 	}
@@ -949,14 +930,14 @@ func TestGetGeminiPricing_31FlashLite(t *testing.T) {
 // === 新規テスト: 汎用 mini/nano が 5.4 以外では従来通り ===
 
 func TestGetOpenAIPricing_GenericMiniStillWorks(t *testing.T) {
-	pricing := GetPricingInfo("openai", "gpt-4.1-mini")
+	pricing := cost.GetPricingInfo("openai", "gpt-4.1-mini")
 	if pricing.InputCostPerM != 0.25 {
 		t.Errorf("gpt-4.1-mini input: got %f, want 0.25 (generic mini)", pricing.InputCostPerM)
 	}
 }
 
 func TestGetOpenAIPricing_GenericNanoStillWorks(t *testing.T) {
-	pricing := GetPricingInfo("openai", "gpt-4.1-nano")
+	pricing := cost.GetPricingInfo("openai", "gpt-4.1-nano")
 	if pricing.InputCostPerM != 0.05 {
 		t.Errorf("gpt-4.1-nano input: got %f, want 0.05 (generic nano)", pricing.InputCostPerM)
 	}

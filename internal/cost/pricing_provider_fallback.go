@@ -1,4 +1,4 @@
-package agent
+package cost
 
 func getUnknownProviderFallbackPricing() PricingInfo {
 	// 不明なプロバイダーはDeepSeek V3.2料金で概算

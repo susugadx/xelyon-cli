@@ -1,4 +1,4 @@
-package agent
+package cost
 
 // PricingInfo はプロバイダー別の料金情報（$/1M tokens）
 type PricingInfo struct {

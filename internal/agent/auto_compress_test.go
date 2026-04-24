@@ -9,6 +9,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/cost"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -269,9 +270,9 @@ func TestGetPricingInfo_PricingCliffBoundaries(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			below := GetPricingInfo(tt.provider, tt.model, tt.threshold-1)
-			atThreshold := GetPricingInfo(tt.provider, tt.model, tt.threshold)
-			above := GetPricingInfo(tt.provider, tt.model, tt.threshold+1)
+			below := cost.GetPricingInfo(tt.provider, tt.model, tt.threshold-1)
+			atThreshold := cost.GetPricingInfo(tt.provider, tt.model, tt.threshold)
+			above := cost.GetPricingInfo(tt.provider, tt.model, tt.threshold+1)
 
 			if below.InputCostPerM != tt.wantBase {
 				t.Fatalf("below cliff InputCostPerM = %f, want %f", below.InputCostPerM, tt.wantBase)

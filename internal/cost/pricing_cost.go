@@ -1,4 +1,4 @@
-package agent
+package cost
 
 import (
 	"github.com/susugadx/xelyon-cli/internal/api"

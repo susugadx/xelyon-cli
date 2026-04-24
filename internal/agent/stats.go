@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/cost"
 )
 
 // SavingsMetrics はコスト最適化による削減量の推定値を保持する。
@@ -131,7 +132,7 @@ func (s *SessionStats) AddUsage(usage api.Usage) {
 	s.LastUsage = &usage
 
 	// リクエスト単位のコストを累積（Gemini 200Kティア等に対応）
-	s.AccumulatedCost += CalculateRequestCostWithCache(s.Provider, s.Model, usage)
+	s.AccumulatedCost += cost.CalculateRequestCostWithCache(s.Provider, s.Model, usage)
 	s.AccumulatedCost += usage.StorageCost // ストレージ料金を加算
 }
 
@@ -156,7 +157,7 @@ func (s *SessionStats) EstimatedCost() float64 {
 	// フォールバック: AddTokens() のみ使われた場合（レガシー互換）
 	// キャッシュ情報がないので InputTokens でティア判定
 	totalInputForTier := s.InputTokens + s.CachedInputTokens + s.CacheCreationTokens
-	pricing := GetPricingInfo(s.Provider, s.Model, totalInputForTier)
+	pricing := cost.GetPricingInfo(s.Provider, s.Model, totalInputForTier)
 
 	cachedInputCost := float64(s.CachedInputTokens) / 1_000_000.0 * pricing.CachedInputCostPerM
 	cacheCreationCost := float64(s.CacheCreationTokens) / 1_000_000.0 * pricing.CacheCreationCostPerM
