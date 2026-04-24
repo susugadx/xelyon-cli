@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
 // GetGeminiToolDefinitions returns all tool definitions for Function Calling API
@@ -16,7 +15,7 @@ func GetGeminiToolDefinitions() []api.GeminiToolConfig {
 
 // GetGeminiToolDefinitionsWithContext は request context の Registry を使って Function Calling API 用のツール定義を返す。
 func GetGeminiToolDefinitionsWithContext(ctx context.Context) []api.GeminiToolConfig {
-	defs := tools.RegistryFromContext(ctx).GetToolDefinitions()
+	defs := api.ToolDefinitionsFromContext(ctx)
 	declarations := make([]api.GeminiFunctionDeclaration, 0, len(defs))
 
 	for _, def := range defs {
@@ -142,7 +141,7 @@ func convertPropertyItems(itemsMap map[string]interface{}) api.GeminiPropertyDef
 
 // GetToolDefinitionNames returns all defined tool names for testing
 func GetToolDefinitionNames() []string {
-	defs := tools.RegistryFromContext(context.Background()).GetToolDefinitions()
+	defs := api.ToolDefinitionsFromContext(context.Background())
 	names := make([]string, 0, len(defs))
 	for _, def := range defs {
 		names = append(names, def.Name)
@@ -195,7 +194,7 @@ func GetCombinedToolDefinitions(mcpTools []api.ToolDefinition) []api.GeminiToolC
 
 // GetCombinedToolDefinitionsWithContext は request context の Registry を使って組み込みツール + MCPツール定義を返す。
 func GetCombinedToolDefinitionsWithContext(ctx context.Context, mcpTools []api.ToolDefinition) []api.GeminiToolConfig {
-	defs := tools.RegistryFromContext(ctx).GetToolDefinitions()
+	defs := api.ToolDefinitionsFromContext(ctx)
 	declarations := make([]api.GeminiFunctionDeclaration, 0, len(defs)+len(mcpTools))
 	seen := make(map[string]bool)
 

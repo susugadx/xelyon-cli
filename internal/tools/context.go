@@ -163,7 +163,8 @@ func WithRegistry(ctx context.Context, registry *Registry) context.Context {
 	if registry == nil {
 		return ctx
 	}
-	return context.WithValue(ctx, registryContextKey{}, registry)
+	ctx = context.WithValue(ctx, registryContextKey{}, registry)
+	return api.WithToolDefinitions(ctx, registry.GetAPIToolDefinitions())
 }
 
 // RegistryFromContext は request context から Tool Registry を取得する。

@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 // getGeminiFunctionCallingURL は非ストリーミング（generateContent）用の URL を生成
@@ -127,7 +127,7 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 		}
 	}
 
-	cfg := tools.ConfigFromContext(ctx)
+	cfg := config.FromContext(ctx)
 
 	// Function Calling 用リクエストを構築
 	reqBody := GeminiRequestWithTools{

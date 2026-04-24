@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 // ClaudeTool は Anthropic Claude API 用のツール定義
@@ -25,7 +25,7 @@ func GetClaudeToolDefinitions() []ClaudeTool {
 
 // GetClaudeToolDefinitionsWithContext は request context の Registry を使って Claude 形式のツール定義を返す。
 func GetClaudeToolDefinitionsWithContext(ctx context.Context) []ClaudeTool {
-	defs := tools.RegistryFromContext(ctx).GetToolDefinitions()
+	defs := api.ToolDefinitionsFromContext(ctx)
 	result := make([]ClaudeTool, 0, len(defs))
 	for _, def := range defs {
 		result = append(result, ClaudeTool{
@@ -67,7 +67,7 @@ func GetCombinedClaudeToolsWithContext(ctx context.Context, mcpTools []api.ToolD
 
 	// BP#2: ツール定義末尾に cache_control を設定
 	if len(result) > 0 {
-		cfg := tools.ConfigFromContext(ctx)
+		cfg := config.FromContext(ctx)
 		if cfg != nil && cfg.PromptCache.Enabled {
 			result[len(result)-1].CacheControl = api.NewCacheControlWithConfig(cfg)
 		}
@@ -106,7 +106,7 @@ func ConvertToolUseToToolJSON(id, name string, input map[string]interface{}) (st
 
 // GetToolDefinitionNames は定義済みツール名一覧を返す（テスト用）
 func GetToolDefinitionNames() []string {
-	defs := tools.RegistryFromContext(context.Background()).GetToolDefinitions()
+	defs := api.ToolDefinitionsFromContext(context.Background())
 	names := make([]string, 0, len(defs))
 	for _, def := range defs {
 		names = append(names, def.Name)

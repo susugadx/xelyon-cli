@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 func init() {
@@ -68,7 +68,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	model = api.GetDefaultModelWithContext(ctx, model, "openai", "gpt-4o")
 
 	// モデルに応じて API を自動選択
-	cfg := tools.ConfigFromContext(ctx)
+	cfg := config.FromContext(ctx)
 	isResponses := cfg.IsResponsesAPIModel(model)
 	if os.Getenv("XELYON_DEBUG_OPENAI") == "1" {
 		fmt.Fprintf(api.ErrorWriterFromContext(ctx), "[DEBUG OpenAI] ChatWithTools model=%s, isResponsesAPI=%v\n", model, isResponses)
@@ -136,7 +136,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	model = api.GetDefaultModelWithContext(ctx, model, "openai", "gpt-4o")
 
 	// Responses API モデルの場合は専用の画像処理
-	cfg := tools.ConfigFromContext(ctx)
+	cfg := config.FromContext(ctx)
 	if cfg.IsResponsesAPIModel(model) {
 		return p.chatWithImageResponses(ctx, systemPrompt, history, userMessage, image, model)
 	}

@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 func resolveResponsesAPIURL() string {
@@ -132,7 +132,7 @@ func applyResponsesToolChoice(reqBody *ResponsesRequest, toolChoice *string) {
 }
 
 func applyResponsesReasoning(ctx context.Context, model string, reqBody *ResponsesRequest) {
-	cfg := tools.ConfigFromContext(ctx)
+	cfg := config.FromContext(ctx)
 	if api.IsThinkingEnabled(ctx) {
 		reqBody.Reasoning = &ReasoningConfig{
 			Effort: LevelToReasoningEffort(cfg.Thinking.Level),

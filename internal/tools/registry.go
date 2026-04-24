@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+
+	"github.com/susugadx/xelyon-cli/internal/api"
 )
 
 // Tool はツールの共通インターフェース
@@ -50,6 +52,7 @@ func (r *Registry) Register(tool Tool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.tools[tool.Name()] = tool
+	r.syncDefaultToolDefinitionsLocked()
 }
 
 // ExecuteWithContext は実行コンテキスト付きでツール呼び出しを実行する。
@@ -126,6 +129,7 @@ func (r *Registry) SetExcludedTools(names []string) {
 	for _, n := range names {
 		r.excludedTools[n] = true
 	}
+	r.syncDefaultToolDefinitionsLocked()
 }
 
 // GetExcludedTools は現在の除外ツール名リストを返す
@@ -144,13 +148,17 @@ func (r *Registry) ClearExcludedTools() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.excludedTools = nil
+	r.syncDefaultToolDefinitionsLocked()
 }
 
 // GetToolDefinitions は登録済みツールの定義を返す（除外設定を適用）
 func (r *Registry) GetToolDefinitions() []ToolDefinition {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	return r.toolDefinitionsLocked()
+}
 
+func (r *Registry) toolDefinitionsLocked() []ToolDefinition {
 	defs := make([]ToolDefinition, 0, len(r.tools))
 	for _, tool := range r.tools {
 		if r.excludedTools[tool.Name()] {
@@ -166,6 +174,32 @@ func (r *Registry) GetToolDefinitions() []ToolDefinition {
 		return defs[i].Name < defs[j].Name
 	})
 	return defs
+}
+
+// GetAPIToolDefinitions は provider へ渡す API 形式のツール定義を返す。
+func (r *Registry) GetAPIToolDefinitions() []api.ToolDefinition {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return apiToolDefinitionsFromToolDefinitions(r.toolDefinitionsLocked())
+}
+
+func (r *Registry) syncDefaultToolDefinitionsLocked() {
+	if DefaultRegistry == nil || r != DefaultRegistry {
+		return
+	}
+	api.SetDefaultToolDefinitions(apiToolDefinitionsFromToolDefinitions(r.toolDefinitionsLocked()))
+}
+
+func apiToolDefinitionsFromToolDefinitions(defs []ToolDefinition) []api.ToolDefinition {
+	apiDefs := make([]api.ToolDefinition, 0, len(defs))
+	for _, def := range defs {
+		apiDefs = append(apiDefs, api.ToolDefinition{
+			Name:        def.Name,
+			Description: def.Description,
+			Parameters:  def.Parameters,
+		})
+	}
+	return apiDefs
 }
 
 // DefaultRegistry はデフォルトのツールレジストリ

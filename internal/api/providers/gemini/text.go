@@ -10,7 +10,7 @@ import (
 	"os"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 // chatWithTextMode はテキストベースのツール呼び出しモード（従来の実装）
@@ -47,7 +47,7 @@ func (p *Provider) chatWithTextMode(ctx context.Context, systemPrompt string, hi
 		})
 	}
 
-	cfg := tools.ConfigFromContext(ctx)
+	cfg := config.FromContext(ctx)
 
 	reqBody := GeminiRequest{
 		CachedContent:     cacheName,
@@ -160,7 +160,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	}
 	contents = append(contents, multimodalContent)
 
-	cfgImg := tools.ConfigFromContext(ctx)
+	cfgImg := config.FromContext(ctx)
 
 	reqBody := GeminiMultimodalRequest{
 		SystemInstruction: sysInstruction,

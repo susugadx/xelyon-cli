@@ -11,7 +11,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	openaicompatstream "github.com/susugadx/xelyon-cli/internal/api/providers/openai_compat_stream"
-	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -46,7 +46,7 @@ type MultimodalRequest struct {
 
 // chatWithCompletions は Chat Completions API でチャット
 func (p *Provider) chatWithCompletions(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
-	cfg := tools.ConfigFromContext(ctx)
+	cfg := config.FromContext(ctx)
 
 	// メッセージ構築
 	messages := []api.Message{
@@ -209,7 +209,7 @@ func (p *Provider) handleNonStreamingResponse(ctx context.Context, resp *http.Re
 
 // chatWithImageCompletions は Completions API で画像付きメッセージを処理
 func (p *Provider) chatWithImageCompletions(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {
-	cfg := tools.ConfigFromContext(ctx)
+	cfg := config.FromContext(ctx)
 
 	// システムプロンプトを最初のメッセージとして追加
 	var messages []interface{}
