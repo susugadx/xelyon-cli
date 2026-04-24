@@ -1,17 +1,12 @@
 package file
 
 import (
-	"io"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/pathmatch"
 	"github.com/susugadx/xelyon-cli/internal/tools"
-	"github.com/susugadx/xelyon-cli/internal/tools/common"
-	searchtool "github.com/susugadx/xelyon-cli/internal/tools/search"
 )
 
 type scopedExactLookupScope struct {
@@ -106,100 +101,6 @@ func resolveScopedGatherContextTarget(scopes []scopedExactLookupScope, ignoreMat
 	return resolveScopedBasenameDirectTarget(scopes, ignoreMatcher, entry, fileFilter)
 }
 
-func resolveScopedExactLookupScopes(execCtx tools.ExecutionContext, policy GatherContextDirectRoutePolicy) []scopedExactLookupScope {
-	roots := directQueryRoots(execCtx)
-	if len(roots) == 0 {
-		return nil
-	}
-
-	scopePath := strings.TrimSpace(policy.ScopedPath)
-	scopes := make([]scopedExactLookupScope, 0, len(roots))
-	seen := make(map[string]struct{})
-	addScope := func(resolvedPath, displayRoot string) {
-		resolvedPath = normalizeWorkspaceRoot(resolvedPath)
-		displayRoot = normalizeWorkspaceRoot(displayRoot)
-		if resolvedPath == "" || displayRoot == "" {
-			return
-		}
-		if _, ok := seen[resolvedPath]; ok {
-			return
-		}
-		seen[resolvedPath] = struct{}{}
-		scopes = append(scopes, scopedExactLookupScope{
-			displayRoot:  displayRoot,
-			resolvedPath: resolvedPath,
-		})
-	}
-
-	if scopePath == "" {
-		for _, root := range roots {
-			addScope(root, root)
-		}
-		return scopes
-	}
-
-	if filepath.IsAbs(scopePath) || hasWindowsPathPrefix(scopePath) {
-		resolvedPath, ok := resolveExistingScopedLookupPath(scopePath, roots)
-		if !ok {
-			return nil
-		}
-		addScope(resolvedPath, preferredScopedLookupDisplayRoot(resolvedPath, roots))
-		return scopes
-	}
-
-	baseRoot := preferredScopedLookupBaseRoot(execCtx)
-	if baseRoot == "" {
-		return nil
-	}
-	resolvedPath, ok := resolveExistingScopedLookupPath(filepath.Join(baseRoot, scopePath), []string{baseRoot})
-	if !ok {
-		return nil
-	}
-	addScope(resolvedPath, baseRoot)
-	return scopes
-}
-
-func preferredScopedLookupBaseRoot(execCtx tools.ExecutionContext) string {
-	if root := normalizeWorkspaceRoot(execCtx.InvocationCWD); root != "" {
-		return root
-	}
-	return normalizeWorkspaceRoot(execCtx.ProjectMapRootPath)
-}
-
-func newScopedLookupIgnoreMatcher(execCtx tools.ExecutionContext) *pathmatch.Matcher {
-	patterns := config.ResolveSharedIgnorePatterns(execCtx.EffectiveConfig(), config.LoadProjectConfig())
-	if len(patterns) == 0 {
-		return nil
-	}
-	return pathmatch.NewMatcher(patterns)
-}
-
-func resolveExistingScopedLookupPath(path string, allowedRoots []string) (string, bool) {
-	out := common.NewOutput(io.Discard, io.Discard)
-	resolvedPath, errResult := resolveValidatedPathWithRoots(out, path, allowedRoots, "path is empty")
-	if errResult != "" {
-		return "", false
-	}
-	if _, err := os.Stat(resolvedPath); err != nil {
-		return "", false
-	}
-	return resolvedPath, true
-}
-
-func preferredScopedLookupDisplayRoot(path string, roots []string) string {
-	path = normalizeWorkspaceRoot(path)
-	for _, root := range roots {
-		root = normalizeWorkspaceRoot(root)
-		if root == "" {
-			continue
-		}
-		if isPathWithinRoot(path, root) {
-			return root
-		}
-	}
-	return ""
-}
-
 func resolveScopedRelativeDirectTarget(scopes []scopedExactLookupScope, entry directQueryEntryInput, fileFilter string) scopedDirectTargetOutcome {
 	if entry.explicitRelative {
 		if len(scopes) == 0 {
@@ -256,144 +157,6 @@ func resolveScopedRelativeDirectTargetInScope(scope scopedExactLookupScope, entr
 		return DirectQueryTarget{}, false
 	}
 	return buildScopedTargetFromResolvedPath(scope, resolvedPath, entry, fileFilter)
-}
-
-func resolveScopedBasenameDirectTarget(scopes []scopedExactLookupScope, ignoreMatcher *pathmatch.Matcher, entry directQueryEntryInput, fileFilter string) scopedDirectTargetOutcome {
-	trimmedFilter := strings.TrimSpace(fileFilter)
-	matches := make([]DirectQueryTarget, 0, 1)
-	seen := make(map[string]struct{})
-	for _, scope := range scopes {
-		limit := 0
-		if trimmedFilter == "" {
-			limit = 2 - len(matches)
-		}
-		for _, target := range collectScopedBasenameTargets(scope, ignoreMatcher, entry, fileFilter, seen, limit) {
-			matches = append(matches, target)
-			if trimmedFilter == "" && len(matches) > 1 {
-				return scopedDirectTargetOutcome{Kind: scopedDirectResolutionAmbiguous}
-			}
-		}
-	}
-	return selectScopedBasenameDirectTarget(matches, trimmedFilter, entry.rawEntry)
-}
-
-func selectScopedBasenameDirectTarget(matches []DirectQueryTarget, fileFilter string, rawEntry string) scopedDirectTargetOutcome {
-	if len(matches) == 0 {
-		return scopedDirectTargetOutcome{
-			Kind:  scopedDirectResolutionMissing,
-			Error: "Error: direct path not found: " + rawEntry,
-		}
-	}
-
-	if fileFilter != "" {
-		// Bare/scoped basename resolution is a soft direct route. file_filter
-		// must be honored for the final exact target, but a mismatch should not
-		// masquerade as a direct read.
-		filtered := filterScopedBasenameTargets(matches, fileFilter)
-		if len(filtered) == 1 {
-			return scopedDirectTargetOutcome{
-				Kind:   scopedDirectResolutionResolved,
-				Target: filtered[0],
-			}
-		}
-		if len(filtered) == 0 {
-			return scopedDirectTargetOutcome{Kind: scopedDirectResolutionFiltered}
-		}
-		return scopedDirectTargetOutcome{Kind: scopedDirectResolutionAmbiguous}
-	}
-
-	if len(matches) == 1 {
-		return scopedDirectTargetOutcome{
-			Kind:   scopedDirectResolutionResolved,
-			Target: matches[0],
-		}
-	}
-	return scopedDirectTargetOutcome{Kind: scopedDirectResolutionAmbiguous}
-}
-
-func filterScopedBasenameTargets(matches []DirectQueryTarget, fileFilter string) []DirectQueryTarget {
-	filtered := make([]DirectQueryTarget, 0, len(matches))
-	for _, target := range matches {
-		if target.Kind != DirectQueryTargetFile {
-			filtered = append(filtered, target)
-			continue
-		}
-		if searchtool.MatchesRawFileFilter(target.FilePath, fileFilter) {
-			filtered = append(filtered, target)
-		}
-	}
-	return filtered
-}
-
-func collectScopedBasenameTargets(scope scopedExactLookupScope, ignoreMatcher *pathmatch.Matcher, entry directQueryEntryInput, fileFilter string, seen map[string]struct{}, limit int) []DirectQueryTarget {
-	if limit <= 0 {
-		limit = 0
-	}
-
-	info, err := os.Stat(scope.resolvedPath)
-	if err != nil {
-		return nil
-	}
-
-	if !info.IsDir() {
-		target, ok := buildScopedBasenameTarget(scope, scope.resolvedPath, entry, fileFilter, seen)
-		if !ok {
-			return nil
-		}
-		return []DirectQueryTarget{target}
-	}
-
-	matches := make([]DirectQueryTarget, 0, 1)
-	_ = filepath.WalkDir(scope.resolvedPath, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
-		if path != scope.resolvedPath {
-			relPath, ok := relativeScopedLookupDisplayPath(scope.displayRoot, path)
-			if ok && ignoreMatcher != nil && ignoreMatcher.Match(relPath, d.IsDir()) {
-				if d.IsDir() {
-					return fs.SkipDir
-				}
-				return nil
-			}
-		}
-		if d.IsDir() {
-			return nil
-		}
-
-		target, ok := buildScopedBasenameTarget(scope, path, entry, fileFilter, seen)
-		if !ok {
-			return nil
-		}
-
-		matches = append(matches, target)
-		if limit > 0 && len(matches) >= limit {
-			return fs.SkipAll
-		}
-		return nil
-	})
-	return matches
-}
-
-func buildScopedBasenameTarget(scope scopedExactLookupScope, candidatePath string, entry directQueryEntryInput, fileFilter string, seen map[string]struct{}) (DirectQueryTarget, bool) {
-	if filepath.Base(candidatePath) != entry.cleanedPath {
-		return DirectQueryTarget{}, false
-	}
-
-	resolvedPath, ok := resolveExistingScopedLookupPath(candidatePath, []string{scope.resolvedPath})
-	if !ok {
-		return DirectQueryTarget{}, false
-	}
-	if _, exists := seen[resolvedPath]; exists {
-		return DirectQueryTarget{}, false
-	}
-
-	target, ok := buildScopedTargetFromResolvedPath(scope, resolvedPath, entry, fileFilter)
-	if !ok {
-		return DirectQueryTarget{}, false
-	}
-	seen[resolvedPath] = struct{}{}
-	return target, true
 }
 
 func relativeScopedLookupDisplayPath(root, path string) (string, bool) {
