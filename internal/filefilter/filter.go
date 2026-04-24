@@ -1,4 +1,4 @@
-package search
+package filefilter
 
 import (
 	"path"
@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-func ParseRawFileFilter(filter string) (string, string) {
+func Parse(filter string) (string, string) {
 	filter = strings.TrimSpace(filter)
 	if filter == "" {
 		return "", ""
@@ -17,14 +17,19 @@ func ParseRawFileFilter(filter string) (string, string) {
 	return normalizeRawFileFilterToken(filter), ""
 }
 
-func MatchesRawFileFilter(filePath, filter string) bool {
-	fileType, filePattern := ParseRawFileFilter(filter)
-	return matchesFileFilterParts(filePath, fileType, filePattern)
+func containsGlobChar(s string) bool {
+	return strings.ContainsAny(s, "*?[")
 }
 
-func matchesFileFilterParts(filePath, fileType, filePattern string) bool {
+func Matches(filePath, filter string) bool {
+	fileType, filePattern := Parse(filter)
+	return MatchesParts(filePath, fileType, filePattern)
+}
+
+// MatchesParts は parse 済みの file type / glob pattern で path を判定する。
+func MatchesParts(filePath, fileType, filePattern string) bool {
 	cleanPath := cleanFileFilterPath(filePath)
-	globs := rawFileFilterGlobs(fileType, filePattern)
+	globs := Globs(fileType, filePattern)
 	if len(globs) == 0 {
 		return true
 	}
@@ -37,12 +42,17 @@ func normalizeRawFileFilterToken(token string) string {
 	return strings.ToLower(token)
 }
 
-func cleanFileFilterPath(filePath string) string {
+// CleanPath は file_filter matching 用に path 表現を slash 区切りへ正規化する。
+func CleanPath(filePath string) string {
 	filePath = strings.TrimSpace(filePath)
 	if filePath == "" {
 		return ""
 	}
 	return filepath.ToSlash(filepath.Clean(filePath))
+}
+
+func cleanFileFilterPath(filePath string) string {
+	return CleanPath(filePath)
 }
 
 func matchesAnyFileFilterGlob(cleanPath string, globs []string) bool {

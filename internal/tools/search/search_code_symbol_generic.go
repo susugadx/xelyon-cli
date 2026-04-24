@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/susugadx/xelyon-cli/internal/filefilter"
 	"github.com/susugadx/xelyon-cli/internal/locator"
 	"github.com/susugadx/xelyon-cli/internal/navigation"
 	"github.com/susugadx/xelyon-cli/internal/repomap"
@@ -99,7 +100,7 @@ func resolveGenericSymbol(symbol string, opts SearchOptions) genericResolveResul
 // findGenericDefinitions は ripgrep + signaturePatterns でシンボルの定義行を見つける。
 func findGenericDefinitions(symbol string, opts SearchOptions) []genericSymbolDef {
 	matches := findGenericSymbolMatches(symbol, opts, 0)
-	lang := resolvePatternLang(representativeRawFileFilterToken(opts.FileType, opts.FilePattern))
+	lang := resolvePatternLang(filefilter.RepresentativeToken(opts.FileType, opts.FilePattern))
 
 	defs := make([]genericSymbolDef, 0, len(matches))
 	for _, match := range matches {
@@ -216,9 +217,9 @@ func buildGenericRgArgs(symbol string, opts SearchOptions) ([]string, string) {
 		"-n", "--no-heading", "--color", "never",
 		"-w",
 	}
-	args = append(args, rawFileFilterToRipgrepArgs(opts.FileType, opts.FilePattern)...)
-	args = append(args, symbol, basis.target)
-	return args, basis.workdir
+	args = append(args, filefilter.RipgrepArgs(opts.FileType, opts.FilePattern)...)
+	args = append(args, symbol, basis.Target)
+	return args, basis.Workdir
 }
 
 // resolvePatternLang は FileType を signaturePattern の lang に変換する。

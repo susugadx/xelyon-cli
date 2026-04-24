@@ -1,4 +1,4 @@
-package search
+package filefilter
 
 import (
 	"path"
@@ -93,8 +93,8 @@ var supportedBareFileExtensions = map[string]struct{}{
 	"tsx": {}, "txt": {}, "work": {}, "xml": {}, "yaml": {}, "yml": {}, "zsh": {},
 }
 
-func rawFileFilterToRipgrepArgs(fileType, filePattern string) []string {
-	globs := rawFileFilterGlobs(fileType, filePattern)
+func RipgrepArgs(fileType, filePattern string) []string {
+	globs := Globs(fileType, filePattern)
 	if len(globs) == 0 {
 		return nil
 	}
@@ -106,7 +106,7 @@ func rawFileFilterToRipgrepArgs(fileType, filePattern string) []string {
 	return args
 }
 
-func representativeRawFileFilterToken(fileType, filePattern string) string {
+func RepresentativeToken(fileType, filePattern string) string {
 	if token := normalizeRawFileFilterToken(fileType); token != "" {
 		return token
 	}
@@ -120,7 +120,7 @@ func representativeRawFileFilterToken(fileType, filePattern string) string {
 	return normalizeRawFileFilterToken(ext)
 }
 
-func SupportsBareFileExtension(ext string) bool {
+func SupportsBareExtension(ext string) bool {
 	ext = normalizeRawFileFilterToken(ext)
 	if ext == "" {
 		return false
@@ -129,15 +129,15 @@ func SupportsBareFileExtension(ext string) bool {
 	return ok
 }
 
-func fileTypeToGlob(fileType string) (string, bool) {
-	globs, ok := fileTypeToGlobs(fileType)
+func FileTypeGlob(fileType string) (string, bool) {
+	globs, ok := FileTypeGlobs(fileType)
 	if !ok || len(globs) == 0 {
 		return "", false
 	}
 	return globs[0], true
 }
 
-func fileTypeToGlobs(fileType string) ([]string, bool) {
+func FileTypeGlobs(fileType string) ([]string, bool) {
 	spec, ok := rawFileFilterSpecs[normalizeRawFileFilterToken(fileType)]
 	if !ok {
 		return nil, false
@@ -146,7 +146,7 @@ func fileTypeToGlobs(fileType string) ([]string, bool) {
 	return globs, true
 }
 
-func matchGlobsForRawFileType(fileType string) []string {
+func MatchGlobsForRawFileType(fileType string) []string {
 	if spec, ok := rawFileFilterSpecs[normalizeRawFileFilterToken(fileType)]; ok {
 		return spec.matchGlobs
 	}
@@ -158,10 +158,10 @@ func matchGlobsForRawFileType(fileType string) []string {
 	return []string{"*." + token}
 }
 
-func rawFileFilterGlobs(fileType, filePattern string) []string {
+func Globs(fileType, filePattern string) []string {
 	fileType = strings.TrimSpace(fileType)
 	if fileType != "" {
-		return matchGlobsForRawFileType(fileType)
+		return MatchGlobsForRawFileType(fileType)
 	}
 
 	filePattern = strings.TrimSpace(filePattern)

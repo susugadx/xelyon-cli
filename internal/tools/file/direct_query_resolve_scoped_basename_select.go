@@ -1,6 +1,6 @@
 package file
 
-import searchtool "github.com/susugadx/xelyon-cli/internal/tools/search"
+import "github.com/susugadx/xelyon-cli/internal/filefilter"
 
 func selectScopedBasenameDirectTarget(matches []DirectQueryTarget, fileFilter string, rawEntry string) scopedDirectTargetOutcome {
 	if len(matches) == 0 {
@@ -43,7 +43,7 @@ func filterScopedBasenameTargets(matches []DirectQueryTarget, fileFilter string)
 			filtered = append(filtered, target)
 			continue
 		}
-		if searchtool.MatchesRawFileFilter(target.FilePath, fileFilter) {
+		if filefilter.Matches(target.FilePath, fileFilter) {
 			filtered = append(filtered, target)
 		}
 	}

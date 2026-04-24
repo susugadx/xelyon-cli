@@ -5,9 +5,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/susugadx/xelyon-cli/internal/filefilter"
 	"github.com/susugadx/xelyon-cli/internal/pathmatch"
 	"github.com/susugadx/xelyon-cli/internal/repomap"
-	searchtool "github.com/susugadx/xelyon-cli/internal/tools/search"
 )
 
 // listDirFilterIndex owns request-local descendant visibility for filtered
@@ -105,7 +105,7 @@ func listDirFilterCandidateMatches(path, rootPath, filterRoot string, matcher *p
 	if listDirFilterPathIgnored(rootPath, matcher, path, false) {
 		return false
 	}
-	if !searchtool.MatchesRawFileFilter(searchtool.WorkspaceRelativeFileFilterPath(path, filterRoot), fileFilter) {
+	if !filefilter.Matches(filefilter.WorkspaceRelativePath(path, filterRoot), fileFilter) {
 		return false
 	}
 	return true

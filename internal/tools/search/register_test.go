@@ -3,6 +3,8 @@ package search
 import (
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/filefilter"
 )
 
 func TestSearchCodeToolParameters_RemoveUnusedSearchParams(t *testing.T) {
@@ -73,7 +75,7 @@ func TestContainsGlobChar(t *testing.T) {
 	}
 }
 
-func TestMatchesRawFileFilter(t *testing.T) {
+func TestFileFilterMatches(t *testing.T) {
 	tests := []struct {
 		name   string
 		path   string
@@ -113,8 +115,8 @@ func TestMatchesRawFileFilter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := MatchesRawFileFilter(tt.path, tt.filter); got != tt.want {
-				t.Fatalf("MatchesRawFileFilter(%q, %q) = %v, want %v", tt.path, tt.filter, got, tt.want)
+			if got := filefilter.Matches(tt.path, tt.filter); got != tt.want {
+				t.Fatalf("filefilter.Matches(%q, %q) = %v, want %v", tt.path, tt.filter, got, tt.want)
 			}
 		})
 	}
@@ -136,7 +138,7 @@ func TestSearchCodeToolParameters_FileFilterDescriptionMatchesContract(t *testin
 	}
 }
 
-func TestParseRawFileFilter(t *testing.T) {
+func TestFileFilterParse(t *testing.T) {
 	tests := []struct {
 		name        string
 		filter      string
@@ -150,9 +152,9 @@ func TestParseRawFileFilter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotType, gotPattern := ParseRawFileFilter(tt.filter)
+			gotType, gotPattern := filefilter.Parse(tt.filter)
 			if gotType != tt.wantType || gotPattern != tt.wantPattern {
-				t.Fatalf("ParseRawFileFilter(%q) = (%q, %q), want (%q, %q)", tt.filter, gotType, gotPattern, tt.wantType, tt.wantPattern)
+				t.Fatalf("filefilter.Parse(%q) = (%q, %q), want (%q, %q)", tt.filter, gotType, gotPattern, tt.wantType, tt.wantPattern)
 			}
 		})
 	}

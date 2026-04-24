@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strconv"
 	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/filefilter"
 )
 
 // rgJSONLine は rg --json 出力の1行
@@ -280,5 +282,5 @@ func tryParseGrepMatch(line, sep string) (filePath string, lineNum int, content 
 }
 
 func normalizeSearchResultFilePath(filePath string) string {
-	return cleanFileFilterPath(filePath)
+	return filefilter.CleanPath(filePath)
 }

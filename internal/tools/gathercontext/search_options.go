@@ -4,6 +4,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/susugadx/xelyon-cli/internal/filefilter"
 	"github.com/susugadx/xelyon-cli/internal/navigation"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/search"
@@ -24,7 +25,7 @@ func buildSearchOptions(execCtx tools.ExecutionContext, plan searchPlan) search.
 		opts.Intent = "impact"
 	}
 
-	opts.FileType, opts.FilePattern = search.ParseRawFileFilter(plan.fileFilter)
+	opts.FileType, opts.FilePattern = filefilter.Parse(plan.fileFilter)
 	attachSearchLSPAdapter(&opts, execCtx)
 	return opts
 }

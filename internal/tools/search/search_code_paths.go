@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/filefilter"
 )
 
 type primaryAffectedPathCollector struct {
@@ -279,7 +281,7 @@ func resolveSymbolAffectedFileBase(opts SearchOptions) string {
 }
 
 func resolveTextAffectedFileBase(opts SearchOptions) string {
-	return searchFileFilterMatchRootWithWorkspace(opts.Path, resolveSearchWorkspaceRoot(opts))
+	return filefilter.MatchRootWithWorkspace(opts.Path, resolveSearchWorkspaceRoot(opts))
 }
 
 func invocationCWDOrGetwd(opts SearchOptions) string {

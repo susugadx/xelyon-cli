@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	searchtool "github.com/susugadx/xelyon-cli/internal/tools/search"
+	"github.com/susugadx/xelyon-cli/internal/filefilter"
 )
 
 type directQuerySyntaxKind string
@@ -174,7 +174,7 @@ func looksLikeBareExtFileCandidate(rawPath string) bool {
 	if ext == "" {
 		return false
 	}
-	return searchtool.SupportsBareFileExtension(ext)
+	return filefilter.SupportsBareExtension(ext)
 }
 
 func looksLikeBareNamedFileCandidate(rawPath string) bool {

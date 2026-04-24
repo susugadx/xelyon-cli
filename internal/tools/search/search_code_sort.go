@@ -3,6 +3,7 @@ package search
 import (
 	"sort"
 
+	"github.com/susugadx/xelyon-cli/internal/filefilter"
 	"github.com/susugadx/xelyon-cli/internal/repomap"
 )
 
@@ -24,8 +25,8 @@ func filterResultsByOptions(results []SearchResult, opts SearchOptions) []Search
 }
 
 func matchesSearchFileFilter(filePath string, opts SearchOptions) bool {
-	return matchesFileFilterParts(
-		searchFileFilterMatchPathWithWorkspace(filePath, opts.Path, resolveSearchWorkspaceRoot(opts)),
+	return filefilter.MatchesParts(
+		filefilter.MatchPathWithWorkspace(filePath, opts.Path, resolveSearchWorkspaceRoot(opts)),
 		opts.FileType,
 		opts.FilePattern,
 	)

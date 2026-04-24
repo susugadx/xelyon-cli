@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/susugadx/xelyon-cli/internal/filefilter"
 	"github.com/susugadx/xelyon-cli/internal/navigation"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
@@ -82,7 +83,7 @@ func (t *SearchCodeTool) Run(execCtx tools.ExecutionContext, args map[string]str
 		Mode:    string(SearchModeAuto),
 	}
 	if filter := args["file_filter"]; filter != "" {
-		opts.FileType, opts.FilePattern = ParseRawFileFilter(filter)
+		opts.FileType, opts.FilePattern = filefilter.Parse(filter)
 	}
 
 	if mode := args["mode"]; mode != "" {

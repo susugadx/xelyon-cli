@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/filefilter"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
@@ -156,9 +157,9 @@ func TestSearchCode_TypeToGlobMapping(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got, ok := fileTypeToGlob(tt.fileType)
+		got, ok := filefilter.FileTypeGlob(tt.fileType)
 		if ok != tt.wantOK || got != tt.wantGlob {
-			t.Fatalf("fileTypeToGlob(%q) = (%q, %v), want (%q, %v)", tt.fileType, got, ok, tt.wantGlob, tt.wantOK)
+			t.Fatalf("filefilter.FileTypeGlob(%q) = (%q, %v), want (%q, %v)", tt.fileType, got, ok, tt.wantGlob, tt.wantOK)
 		}
 	}
 }
@@ -180,16 +181,16 @@ func TestSearchCode_FileTypeToGlobsMapping(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got, ok := fileTypeToGlobs(tt.fileType)
+		got, ok := filefilter.FileTypeGlobs(tt.fileType)
 		if ok != tt.wantOK {
-			t.Fatalf("fileTypeToGlobs(%q) ok = %v, want %v", tt.fileType, ok, tt.wantOK)
+			t.Fatalf("filefilter.FileTypeGlobs(%q) ok = %v, want %v", tt.fileType, ok, tt.wantOK)
 		}
 		if len(got) != len(tt.want) {
-			t.Fatalf("fileTypeToGlobs(%q) len = %d, want %d", tt.fileType, len(got), len(tt.want))
+			t.Fatalf("filefilter.FileTypeGlobs(%q) len = %d, want %d", tt.fileType, len(got), len(tt.want))
 		}
 		for i := range got {
 			if got[i] != tt.want[i] {
-				t.Fatalf("fileTypeToGlobs(%q)[%d] = %q, want %q", tt.fileType, i, got[i], tt.want[i])
+				t.Fatalf("filefilter.FileTypeGlobs(%q)[%d] = %q, want %q", tt.fileType, i, got[i], tt.want[i])
 			}
 		}
 	}
@@ -247,13 +248,13 @@ func TestSearchCode_RawFileFilterToRipgrepArgs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := rawFileFilterToRipgrepArgs(tt.fileType, tt.filePattern)
+			got := filefilter.RipgrepArgs(tt.fileType, tt.filePattern)
 			if len(got) != len(tt.want) {
-				t.Fatalf("rawFileFilterToRipgrepArgs(%q, %q) len = %d, want %d", tt.fileType, tt.filePattern, len(got), len(tt.want))
+				t.Fatalf("filefilter.RipgrepArgs(%q, %q) len = %d, want %d", tt.fileType, tt.filePattern, len(got), len(tt.want))
 			}
 			for i := range got {
 				if got[i] != tt.want[i] {
-					t.Fatalf("rawFileFilterToRipgrepArgs(%q, %q)[%d] = %q, want %q", tt.fileType, tt.filePattern, i, got[i], tt.want[i])
+					t.Fatalf("filefilter.RipgrepArgs(%q, %q)[%d] = %q, want %q", tt.fileType, tt.filePattern, i, got[i], tt.want[i])
 				}
 			}
 		})
@@ -286,8 +287,8 @@ func TestSearchFileFilterMatchPath_UsesSharedBasis(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := searchFileFilterMatchPath(tt.file, tt.path); got != tt.want {
-				t.Fatalf("searchFileFilterMatchPath(%q, %q) = %q, want %q", tt.file, tt.path, got, tt.want)
+			if got := filefilter.MatchPath(tt.file, tt.path); got != tt.want {
+				t.Fatalf("filefilter.MatchPath(%q, %q) = %q, want %q", tt.file, tt.path, got, tt.want)
 			}
 		})
 	}
@@ -297,10 +298,10 @@ func TestSearchFileFilterMatchPathWithWorkspace_PreservesWorkspaceRelativeGlobBa
 	root := t.TempDir()
 	absFile := filepath.Join(root, "pkg", "service.js")
 
-	got := searchFileFilterMatchPathWithWorkspace(absFile, filepath.Join(root, "pkg"), root)
+	got := filefilter.MatchPathWithWorkspace(absFile, filepath.Join(root, "pkg"), root)
 	want := filepath.ToSlash(filepath.Join("pkg", "service.js"))
 	if got != want {
-		t.Fatalf("searchFileFilterMatchPathWithWorkspace(%q, %q, %q) = %q, want %q", absFile, filepath.Join(root, "pkg"), root, got, want)
+		t.Fatalf("filefilter.MatchPathWithWorkspace(%q, %q, %q) = %q, want %q", absFile, filepath.Join(root, "pkg"), root, got, want)
 	}
 }
 
@@ -346,9 +347,9 @@ func TestResolveSearchPathBasis_AlignsExecutionAndMatchRoot(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := resolveSearchPathBasis(tt.path)
-			if got.workdir != tt.wantWorkdir || got.target != tt.wantTarget || got.matchRoot != tt.wantMatchRoot {
-				t.Fatalf("resolveSearchPathBasis(%q) = %+v, want workdir=%q target=%q matchRoot=%q", tt.path, got, tt.wantWorkdir, tt.wantTarget, tt.wantMatchRoot)
+			got := filefilter.ResolveSearchPathBasis(tt.path)
+			if got.Workdir != tt.wantWorkdir || got.Target != tt.wantTarget || got.MatchRoot != tt.wantMatchRoot {
+				t.Fatalf("filefilter.ResolveSearchPathBasis(%q) = %+v, want workdir=%q target=%q matchRoot=%q", tt.path, got, tt.wantWorkdir, tt.wantTarget, tt.wantMatchRoot)
 			}
 		})
 	}
@@ -363,7 +364,7 @@ func TestResolveSearchPathBasisForOptions_UsesWorkspaceRootForAbsoluteScopedPath
 		ProjectMapRootPath: root,
 		InvocationCWD:      root,
 	})
-	if got.workdir != root || got.target != "pkg" || got.matchRoot != root {
+	if got.Workdir != root || got.Target != "pkg" || got.MatchRoot != root {
 		t.Fatalf("resolveSearchPathBasisForOptions(%q) = %+v, want workdir=%q target=%q matchRoot=%q", scopeDir, got, root, "pkg", root)
 	}
 }

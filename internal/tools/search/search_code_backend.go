@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/susugadx/xelyon-cli/internal/filefilter"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
@@ -47,21 +48,21 @@ func executeSearch(pattern string, opts SearchOptions) (string, bool, []string, 
 	return output, plan.useRipgrep, plan.warnings, nil
 }
 
-func planSearchBackendExecution(pattern string, opts SearchOptions, basis searchPathBasis) searchBackendPlan {
+func planSearchBackendExecution(pattern string, opts SearchOptions, basis filefilter.SearchPathBasis) searchBackendPlan {
 	if common.IsRipgrepAvailable() {
 		return searchBackendPlan{
 			command:    common.RipgrepPath(),
-			args:       buildRipgrepSearchArgs(pattern, opts, basis.target),
-			workdir:    basis.workdir,
+			args:       buildRipgrepSearchArgs(pattern, opts, basis.Target),
+			workdir:    basis.Workdir,
 			useRipgrep: true,
 		}
 	}
 
-	args, warnings := buildGrepSearchArgs(pattern, opts, basis.target, isGNUGrep())
+	args, warnings := buildGrepSearchArgs(pattern, opts, basis.Target, isGNUGrep())
 	return searchBackendPlan{
 		command:  "grep",
 		args:     args,
-		workdir:  basis.workdir,
+		workdir:  basis.Workdir,
 		warnings: warnings,
 	}
 }
@@ -74,7 +75,7 @@ func buildRipgrepSearchArgs(pattern string, opts SearchOptions, target string) [
 	if opts.CtxLines > 0 {
 		args = append(args, "--context", fmt.Sprintf("%d", opts.CtxLines))
 	}
-	args = append(args, rawFileFilterToRipgrepArgs(opts.FileType, opts.FilePattern)...)
+	args = append(args, filefilter.RipgrepArgs(opts.FileType, opts.FilePattern)...)
 	if !opts.IsRegex {
 		args = append(args, "--fixed-strings")
 	}
@@ -122,7 +123,7 @@ func buildGrepSearchArgs(pattern string, opts SearchOptions, target string, gnuG
 	} else {
 		warnings = append(warnings, "Warning: include_hidden is partially supported in grep fallback mode")
 	}
-	for _, glob := range rawFileFilterGlobs(opts.FileType, opts.FilePattern) {
+	for _, glob := range filefilter.Globs(opts.FileType, opts.FilePattern) {
 		args = append(args, "--include="+glob)
 	}
 	if opts.Multiline {
