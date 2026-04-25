@@ -1,12 +1,10 @@
 package tui
 
-import "strings"
+import (
+	"strings"
 
-const (
-	cursorLineBg   = "\033[48;5;236m"
-	cursorCharBg   = "\033[48;5;255;38;5;16m"
-	visualBg       = "\033[48;5;240m"
-	visualCursorBg = "\033[48;5;255;38;5;16m"
+	"github.com/susugadx/xelyon-cli/internal/tui/termtext"
+	"github.com/susugadx/xelyon-cli/internal/tui/theme"
 )
 
 func (m Model) renderNavigationViewport() string {
@@ -51,8 +49,8 @@ func (m Model) renderNavigationViewportLine(line string, visIdx int, rawIdx int)
 		}
 	}
 
-	if rawIdx == m.cursorLine && isCursorInVisualRow(m.layout, visIdx, rawIdx, m.cursorCol) {
-		return m.renderCursorViewportLine(line, visIdx, rawIdx, cursorCharBg, cursorLineBg)
+	if rawIdx == m.cursorLine && termtext.CursorInVisualRow(m.layout, visIdx, rawIdx, m.cursorCol) {
+		return m.renderCursorViewportLine(line, visIdx, rawIdx, theme.Viewport.CursorCharBg, theme.Viewport.CursorLineBg)
 	}
 	return fitANSITextWidth(line, m.vp.width)
 }

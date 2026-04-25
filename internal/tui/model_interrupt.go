@@ -11,8 +11,8 @@ func (m Model) handleCtrlC() (tea.Model, tea.Cmd) {
 		m.copyMouseSelection()
 		return m, nil
 	}
-	if m.agent.IsProcessing() {
-		m.agent.Cancel()
+	if m.conversation.IsProcessing() {
+		m.conversation.Cancel()
 		m.appendSystemInfo("⚠️  Interrupted. Press Ctrl+C again to exit.")
 		return m, nil
 	}
@@ -20,7 +20,7 @@ func (m Model) handleCtrlC() (tea.Model, tea.Cmd) {
 	now := time.Now()
 	if !m.lastInterrupt.IsZero() && now.Sub(m.lastInterrupt) < 3*time.Second {
 		m.quitting = true
-		m.agent.Cleanup()
+		m.conversation.Cleanup()
 		return m, tea.Quit
 	}
 

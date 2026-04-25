@@ -1,5 +1,7 @@
 package tui
 
+import "github.com/susugadx/xelyon-cli/internal/tui/selection"
+
 func (m *Model) clearVisualSelection() {
 	m.visualMode = visualModeOff
 	m.visualStart = visualPosition{line: -1, col: -1}
@@ -26,8 +28,7 @@ func (m Model) lineSelectionRange() (start, end int, ok bool) {
 	if m.visualMode == visualModeOff || m.visualStart.line < 0 {
 		return 0, 0, false
 	}
-	start = min(m.visualStart.line, m.cursorLine)
-	end = max(m.visualStart.line, m.cursorLine)
+	start, end = selection.LineRange(m.visualStart.line, m.cursorLine)
 	return start, end, true
 }
 
@@ -35,10 +36,9 @@ func (m Model) normalizedCharSelection() (start, end visualPosition, ok bool) {
 	if m.visualMode != visualModeChar || m.visualStart.line < 0 {
 		return visualPosition{}, visualPosition{}, false
 	}
-	start = m.visualStart
-	end = visualPosition{line: m.cursorLine, col: m.cursorCol}
-	if start.line > end.line || (start.line == end.line && start.col > end.col) {
-		start, end = end, start
+	r, ok := selection.Normalize(m.visualStart.line, m.visualStart.col, m.cursorLine, m.cursorCol)
+	if !ok {
+		return visualPosition{}, visualPosition{}, false
 	}
-	return start, end, true
+	return visualPosition{line: r.StartLine, col: r.StartCol}, visualPosition{line: r.EndLine, col: r.EndCol}, true
 }

@@ -1,5 +1,7 @@
 package tui
 
+import termtext "github.com/susugadx/xelyon-cli/internal/tui/termtext"
+
 func (m *Model) moveCursorToNextWordStart(count int) {
 	if len(m.rawLines) == 0 {
 		return
@@ -45,20 +47,20 @@ func (m *Model) moveCursorToWordEnd(count int) {
 func (m Model) findNextWordStart(line, col int) (int, int) {
 	inWord := false
 	for lineIdx := line; lineIdx < len(m.rawLines); lineIdx++ {
-		text := stripANSI(m.rawLines[lineIdx])
+		text := termtext.StripANSI(m.rawLines[lineIdx])
 		runes := []rune(text)
 		start := 0
 		if lineIdx == line {
-			start = displayColToRuneIndex(text, col)
+			start = termtext.DisplayColToRuneIndex(text, col)
 			if start < len(runes) {
-				inWord = isWordRune(runes[start])
+				inWord = termtext.IsWordRune(runes[start])
 				start++
 			}
 		}
 		for idx := start; idx < len(runes); idx++ {
-			if isWordRune(runes[idx]) {
-				if !inWord || idx == 0 || !isWordRune(runes[idx-1]) {
-					return lineIdx, runeIndexToDisplayCol(text, idx)
+			if termtext.IsWordRune(runes[idx]) {
+				if !inWord || idx == 0 || !termtext.IsWordRune(runes[idx-1]) {
+					return lineIdx, termtext.RuneIndexToDisplayCol(text, idx)
 				}
 			} else {
 				inWord = false
@@ -72,24 +74,24 @@ func (m Model) findNextWordStart(line, col int) (int, int) {
 
 func (m Model) findPrevWordStart(line, col int) (int, int) {
 	for lineIdx := line; lineIdx >= 0; lineIdx-- {
-		text := stripANSI(m.rawLines[lineIdx])
+		text := termtext.StripANSI(m.rawLines[lineIdx])
 		runes := []rune(text)
 		if len(runes) == 0 {
 			continue
 		}
 		idx := len(runes) - 1
 		if lineIdx == line {
-			idx = displayColToRuneIndex(text, col)
+			idx = termtext.DisplayColToRuneIndex(text, col)
 			if idx >= len(runes) {
 				idx = len(runes) - 1
 			}
 		}
-		for idx >= 0 && !isWordRune(runes[idx]) {
+		for idx >= 0 && !termtext.IsWordRune(runes[idx]) {
 			idx--
 		}
-		for idx >= 0 && isWordRune(runes[idx]) {
-			if idx == 0 || !isWordRune(runes[idx-1]) {
-				return lineIdx, runeIndexToDisplayCol(text, idx)
+		for idx >= 0 && termtext.IsWordRune(runes[idx]) {
+			if idx == 0 || !termtext.IsWordRune(runes[idx-1]) {
+				return lineIdx, termtext.RuneIndexToDisplayCol(text, idx)
 			}
 			idx--
 		}
@@ -100,20 +102,20 @@ func (m Model) findPrevWordStart(line, col int) (int, int) {
 func (m Model) findWordEnd(line, col int) (int, int) {
 	inWord := false
 	for lineIdx := line; lineIdx < len(m.rawLines); lineIdx++ {
-		text := stripANSI(m.rawLines[lineIdx])
+		text := termtext.StripANSI(m.rawLines[lineIdx])
 		runes := []rune(text)
 		start := 0
 		if lineIdx == line {
-			start = displayColToRuneIndex(text, col)
-			if start < len(runes) && isWordRune(runes[start]) {
+			start = termtext.DisplayColToRuneIndex(text, col)
+			if start < len(runes) && termtext.IsWordRune(runes[start]) {
 				inWord = true
 			}
 		}
 		for idx := start; idx < len(runes); idx++ {
-			if isWordRune(runes[idx]) {
+			if termtext.IsWordRune(runes[idx]) {
 				inWord = true
-				if idx == len(runes)-1 || !isWordRune(runes[idx+1]) {
-					return lineIdx, runeIndexToDisplayCol(text, idx)
+				if idx == len(runes)-1 || !termtext.IsWordRune(runes[idx+1]) {
+					return lineIdx, termtext.RuneIndexToDisplayCol(text, idx)
 				}
 				continue
 			}

@@ -30,7 +30,7 @@ func (cs *configScreen) handleBrowseEnter(layout configLayout, providerConfigKey
 		if field == nil {
 			return configCommandNone, nil
 		}
-		return cs.startFieldEdit(field, layout.editTargetPane(), providerConfigKey)
+		return cs.startFieldEdit(field, layout.EditTargetPane(), providerConfigKey)
 	default:
 		return configCommandNone, nil
 	}

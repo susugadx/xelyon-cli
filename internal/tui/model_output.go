@@ -1,38 +1,16 @@
 package tui
 
 import (
-	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/susugadx/xelyon-cli/internal/tui/transcript"
 )
-
-func normalizeRawLine(line string) string {
-	line = strings.TrimSuffix(line, "\r")
-	// VS16 (U+FE0F) を除去して emoji presentation による幅ズレを防ぐ。
-	if strings.ContainsRune(line, '\uFE0F') {
-		line = strings.ReplaceAll(line, "\uFE0F", "")
-	}
-	return line
-}
 
 // appendMessage は会話ログにメッセージを追加する。
 func (m *Model) appendMessage(msg ChatMessage) tea.Cmd {
 	m.messages = append(m.messages, msg)
-
-	switch msg.Role {
-	case "user":
-		lines := strings.Split(msg.Content, "\n")
-		rendered := make([]string, 0, len(lines)+2)
-		rendered = append(rendered, "")
-		for _, line := range lines {
-			rendered = append(rendered, "> "+line)
-		}
-		rendered = append(rendered, "")
-		return m.appendContentLines(rendered...)
-	default:
-		return m.appendContentLines(strings.Split(msg.Content, "\n")...)
-	}
+	return m.appendContentLines(transcript.MessageLines(msg.Role, msg.Content)...)
 }
 
 // appendSystemInfo はシステム情報メッセージを追加する。
@@ -65,11 +43,7 @@ func (m *Model) appendContentLines(lines ...string) tea.Cmd {
 	if len(lines) == 0 {
 		return nil
 	}
-	normalized := make([]string, len(lines))
-	for i, line := range lines {
-		normalized[i] = normalizeRawLine(line)
-	}
-	m.rawLines = append(m.rawLines, normalized...)
+	m.rawLines = append(m.rawLines, transcript.NormalizeLines(lines)...)
 	m.rebuildLayout()
 	m.clampCursorLine()
 	m.syncViewportContent()

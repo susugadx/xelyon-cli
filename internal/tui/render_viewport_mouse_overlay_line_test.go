@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/susugadx/xelyon-cli/internal/tui/theme"
 )
 
 func TestRender_SelectionOnlyOnSelectedLines(t *testing.T) {
@@ -20,15 +21,15 @@ func TestRender_SelectionOnlyOnSelectedLines(t *testing.T) {
 	view := m.renderViewportWithMouseSelection()
 	lines := helperSplitViewLines(view, m.vp.height)
 
-	if strings.Contains(lines[0], mouseSelBg) {
+	if strings.Contains(lines[0], theme.Viewport.MouseSelectionBg) {
 		t.Error("line 0 should not have selection background")
 	}
 	for i := 1; i <= 3; i++ {
-		if !strings.Contains(lines[i], mouseSelBg) {
+		if !strings.Contains(lines[i], theme.Viewport.MouseSelectionBg) {
 			t.Errorf("line %d should have selection background", i)
 		}
 	}
-	if strings.Contains(lines[4], mouseSelBg) {
+	if strings.Contains(lines[4], theme.Viewport.MouseSelectionBg) {
 		t.Error("line 4 should not have selection background")
 	}
 }
@@ -47,7 +48,7 @@ func TestRender_CJKBoundary_SelectionHighlightsWholeChar(t *testing.T) {
 	lines := helperSplitViewLines(view, m.vp.height)
 	line0 := lines[0]
 
-	if !strings.Contains(line0, mouseSelBg) {
+	if !strings.Contains(line0, theme.Viewport.MouseSelectionBg) {
 		t.Fatal("expected selection background for CJK char")
 	}
 	plainBefore := stripANSI(line0)
@@ -70,7 +71,7 @@ func TestRender_ANSIResetBalanced(t *testing.T) {
 	lines := helperSplitViewLines(view, m.vp.height)
 	line0 := lines[0]
 
-	bgCount := strings.Count(line0, mouseSelBg)
+	bgCount := strings.Count(line0, theme.Viewport.MouseSelectionBg)
 	resetCount := strings.Count(line0, "\033[0m")
 	if bgCount > 0 && resetCount < bgCount {
 		t.Errorf("ANSI unbalanced: %d bg opens, %d resets", bgCount, resetCount)
@@ -159,7 +160,7 @@ func TestRender_IntermediateLineFull(t *testing.T) {
 	if trimmed1 != "INTERMEDIATE" {
 		t.Errorf("intermediate plain = %q, want %q", trimmed1, "INTERMEDIATE")
 	}
-	if !strings.Contains(lines[1], mouseSelBg) {
+	if !strings.Contains(lines[1], theme.Viewport.MouseSelectionBg) {
 		t.Error("intermediate line should have selection background")
 	}
 	w := lipgloss.Width(lines[1])

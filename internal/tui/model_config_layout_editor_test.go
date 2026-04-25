@@ -3,6 +3,8 @@ package tui
 import (
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/tui/configscreen"
 )
 
 func TestConfigScreen_NarrowWidth_StringEdit_RemainsVisible(t *testing.T) {
@@ -13,7 +15,7 @@ func TestConfigScreen_NarrowWidth_StringEdit_RemainsVisible(t *testing.T) {
 	cs := m.configScreen
 	setConfigFieldSelection(t, cs, "provider", "default_model")
 
-	_, _, rightW := configPaneWidths(m.width)
+	_, _, rightW := configscreen.PaneWidths(m.width)
 	if rightW != 0 {
 		t.Fatalf("rightW = %d, want 0 for narrow width", rightW)
 	}
@@ -44,7 +46,7 @@ func TestConfigScreen_NarrowWidth_SelectEdit_RemainsVisible(t *testing.T) {
 	cs := m.configScreen
 	setConfigFieldSelection(t, cs, "execution", "execution.mode")
 
-	_, _, rightW := configPaneWidths(m.width)
+	_, _, rightW := configscreen.PaneWidths(m.width)
 	if rightW != 0 {
 		t.Fatalf("rightW = %d, want 0 for narrow width", rightW)
 	}
@@ -75,9 +77,9 @@ func TestConfigScreen_VeryNarrowWidth_ConfigDoesNotEnterInvisiblePane(t *testing
 	cs := m.configScreen
 	setConfigFieldSelection(t, cs, "lsp", "lsp.servers")
 
-	leftW, midW, rightW := configPaneWidths(m.width)
+	leftW, midW, rightW := configscreen.PaneWidths(m.width)
 	if leftW != 30 || midW != 0 || rightW != 0 {
-		t.Fatalf("configPaneWidths(%d) = (%d, %d, %d), want (30, 0, 0)", m.width, leftW, midW, rightW)
+		t.Fatalf("configscreen.PaneWidths(%d) = (%d, %d, %d), want (30, 0, 0)", m.width, leftW, midW, rightW)
 	}
 
 	m = sendConfigKey(m, "enter")
@@ -106,7 +108,7 @@ func TestConfigScreen_NormalWidth_BehaviorUnchanged(t *testing.T) {
 	cs := m.configScreen
 	setConfigFieldSelection(t, cs, "provider", "default_model")
 
-	_, _, rightW := configPaneWidths(m.width)
+	_, _, rightW := configscreen.PaneWidths(m.width)
 	if rightW <= 0 {
 		t.Fatalf("rightW = %d, want visible detail pane on normal width", rightW)
 	}

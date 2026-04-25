@@ -20,7 +20,7 @@ func (cs *configScreen) normalizePaneState(layout configLayout) {
 	if cs == nil {
 		return
 	}
-	if cs.activePane == paneDetail && !layout.detailVisible() {
+	if cs.activePane == paneDetail && !layout.DetailVisible() {
 		cs.activePane = paneField
 	}
 }

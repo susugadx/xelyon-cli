@@ -96,8 +96,8 @@ func (m *Model) handleChatAutoScrollMsg() tea.Cmd {
 func (m Model) handleSpinnerTickMsg(msg spinner.TickMsg) (Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.spinner, cmd = m.spinner.Update(msg)
-	if m.agent.IsProcessing() {
-		m.statusLine = m.agent.GetStatusLine()
+	if m.conversation.IsProcessing() {
+		m.statusLine = m.conversation.GetStatusLine()
 	}
 	m.chromeDirty = true
 	return m, cmd

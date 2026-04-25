@@ -1,6 +1,9 @@
 package tui
 
-import "unicode"
+import (
+	termtext "github.com/susugadx/xelyon-cli/internal/tui/termtext"
+	"unicode"
+)
 
 func (m *Model) moveCursorTo(line int) {
 	if len(m.rawLines) == 0 {
@@ -43,14 +46,14 @@ func (m *Model) moveCursorToLineStart(firstNonBlank bool, count int) {
 	}
 	targetLine := min(m.cursorLine+count-1, len(m.rawLines)-1)
 	m.cursorLine = targetLine
-	line := stripANSI(m.rawLines[targetLine])
+	line := termtext.StripANSI(m.rawLines[targetLine])
 	m.cursorCol = 0
 	if firstNonBlank {
 		for _, r := range line {
 			if !unicode.IsSpace(r) {
 				break
 			}
-			m.cursorCol += runeWidth(r)
+			m.cursorCol += termtext.RuneWidth(r)
 		}
 	}
 	m.clampCursorCol()

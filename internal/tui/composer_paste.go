@@ -1,11 +1,13 @@
 package tui
 
+import tuicomposer "github.com/susugadx/xelyon-cli/internal/tui/composer"
+
 func (m *Model) handleComposerPaste(content string) {
-	content = normalizePastedText(content)
+	content = tuicomposer.NormalizePastedText(content)
 	if content == "" {
 		return
 	}
-	if shouldFoldPasteBlock(content) {
+	if tuicomposer.ShouldFoldPasteBlock(content) {
 		m.appendPasteBlock(content)
 	} else {
 		m.insertTextIntoInput(content)
@@ -14,19 +16,11 @@ func (m *Model) handleComposerPaste(content string) {
 }
 
 func (m *Model) removeLastPasteBlock() bool {
-	if len(m.pasteBlocks) == 0 {
+	text, ok := m.composer.RemoveLastPasteBlock()
+	if !ok {
 		return false
 	}
-	lastUID := m.pasteBlocks[len(m.pasteBlocks)-1].uid
-	m.pasteBlocks = m.pasteBlocks[:len(m.pasteBlocks)-1]
-	for i := len(m.composerParts) - 1; i >= 0; i-- {
-		if m.composerParts[i].kind != composerPartPaste || m.composerParts[i].pasteUID != lastUID {
-			continue
-		}
-		m.composerParts = append(m.composerParts[:i], m.composerParts[i+1:]...)
-		break
-	}
-	m.promoteTrailingComposerTextToInput()
+	m.prependTextToInput(text)
 	m.syncComposerLayout()
 	return true
 }

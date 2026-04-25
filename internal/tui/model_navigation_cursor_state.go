@@ -1,5 +1,7 @@
 package tui
 
+import termtext "github.com/susugadx/xelyon-cli/internal/tui/termtext"
+
 func (m *Model) clampCursorLine() {
 	if len(m.rawLines) == 0 {
 		m.cursorLine = 0
@@ -29,7 +31,7 @@ func (m Model) maxCursorColForLine(line int) int {
 	if line < 0 || line >= len(m.rawLines) {
 		return 0
 	}
-	width := plainTextDisplayWidth(stripANSI(m.rawLines[line]))
+	width := termtext.PlainTextDisplayWidth(termtext.StripANSI(m.rawLines[line]))
 	if width <= 0 {
 		return 0
 	}

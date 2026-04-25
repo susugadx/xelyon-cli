@@ -34,11 +34,11 @@ func TestComposer_SendBuildsPayloadInOrder(t *testing.T) {
 	if got := m.textInput.Value(); got != "" {
 		t.Fatalf("textInput.Value() = %q after send, want empty", got)
 	}
-	if len(m.pasteBlocks) != 0 {
-		t.Fatalf("pasteBlocks length = %d after send, want 0", len(m.pasteBlocks))
+	if len(m.composer.PasteBlocks) != 0 {
+		t.Fatalf("pasteBlocks length = %d after send, want 0", len(m.composer.PasteBlocks))
 	}
-	if len(m.composerParts) != 0 {
-		t.Fatalf("composerParts length = %d after send, want 0", len(m.composerParts))
+	if len(m.composer.Parts) != 0 {
+		t.Fatalf("composerParts length = %d after send, want 0", len(m.composer.Parts))
 	}
 	if len(m.messages) == 0 {
 		t.Fatal("messages should contain the user message after send")
@@ -82,8 +82,8 @@ func TestComposer_EnterHandlesSlashCommandWithFoldedPaste(t *testing.T) {
 	if got := m.textInput.Value(); got != "" {
 		t.Fatalf("textInput.Value() after handled command = %q, want empty", got)
 	}
-	if len(m.pasteBlocks) != 1 || len(m.composerParts) != 1 {
-		t.Fatalf("composer state should be preserved after handled command, got pasteBlocks=%d composerParts=%d", len(m.pasteBlocks), len(m.composerParts))
+	if len(m.composer.PasteBlocks) != 1 || len(m.composer.Parts) != 1 {
+		t.Fatalf("composer state should be preserved after handled command, got pasteBlocks=%d composerParts=%d", len(m.composer.PasteBlocks), len(m.composer.Parts))
 	}
 	if got := m.buildComposerPayload(); got != "line1\nline2" {
 		t.Fatalf("buildComposerPayload() after handled command = %q, want %q", got, "line1\nline2")
@@ -208,8 +208,8 @@ func TestComposer_UnhandledSlashSendsFullComposerPayload(t *testing.T) {
 	if got := agent.handledInputs[0]; got != "/tmp/log" {
 		t.Fatalf("handledInputs[0] = %q, want %q", got, "/tmp/log")
 	}
-	if len(m.pasteBlocks) != 0 || len(m.composerParts) != 0 {
-		t.Fatalf("composer state should be cleared after sending payload, got pasteBlocks=%d composerParts=%d", len(m.pasteBlocks), len(m.composerParts))
+	if len(m.composer.PasteBlocks) != 0 || len(m.composer.Parts) != 0 {
+		t.Fatalf("composer state should be cleared after sending payload, got pasteBlocks=%d composerParts=%d", len(m.composer.PasteBlocks), len(m.composer.Parts))
 	}
 	if len(m.messages) == 0 || m.messages[len(m.messages)-1].Content != want {
 		t.Fatalf("last message content = %#v, want %q", m.messages, want)

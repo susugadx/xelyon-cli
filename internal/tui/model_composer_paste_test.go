@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	tuicomposer "github.com/susugadx/xelyon-cli/internal/tui/composer"
 )
 
 func TestComposer_ShortSingleLinePasteStaysInInput(t *testing.T) {
@@ -17,8 +18,8 @@ func TestComposer_ShortSingleLinePasteStaysInInput(t *testing.T) {
 	if got := m.textInput.Value(); got != "short paste" {
 		t.Fatalf("textInput.Value() = %q, want %q", got, "short paste")
 	}
-	if len(m.pasteBlocks) != 0 {
-		t.Fatalf("pasteBlocks length = %d, want 0", len(m.pasteBlocks))
+	if len(m.composer.PasteBlocks) != 0 {
+		t.Fatalf("pasteBlocks length = %d, want 0", len(m.composer.PasteBlocks))
 	}
 	if got := m.footerHeight(); got != statusBarHeight+inputHeight {
 		t.Fatalf("footerHeight() = %d, want %d", got, statusBarHeight+inputHeight)
@@ -32,7 +33,7 @@ func TestComposer_MultilinePasteCreatesFoldedBlock(t *testing.T) {
 	updated, _ := m.Update(pasteKey("line1\nline2"))
 	m = updated.(Model)
 
-	if got := len(m.pasteBlocks); got != 1 {
+	if got := len(m.composer.PasteBlocks); got != 1 {
 		t.Fatalf("pasteBlocks length = %d, want 1", got)
 	}
 	if got := m.textInput.Value(); got != "" {
@@ -57,12 +58,12 @@ func TestComposer_MultilinePasteCreatesFoldedBlock(t *testing.T) {
 func TestComposer_LongSingleLinePasteCreatesFoldedBlock(t *testing.T) {
 	agent := &stubAgent{statusLine: "ready"}
 	m := newModelWithViewport(agent)
-	longLine := strings.Repeat("x", pasteBlockFoldThreshold)
+	longLine := strings.Repeat("x", tuicomposer.PasteBlockFoldThreshold)
 
 	updated, _ := m.Update(pasteKey(longLine))
 	m = updated.(Model)
 
-	if got := len(m.pasteBlocks); got != 1 {
+	if got := len(m.composer.PasteBlocks); got != 1 {
 		t.Fatalf("pasteBlocks length = %d, want 1", got)
 	}
 	if got := m.textInput.Value(); got != "" {
@@ -106,7 +107,7 @@ func TestComposer_CtrlVPasteCreatesFoldedBlockAndPreservesContent(t *testing.T) 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlV})
 	m = updated.(Model)
 
-	if got := len(m.pasteBlocks); got != 1 {
+	if got := len(m.composer.PasteBlocks); got != 1 {
 		t.Fatalf("pasteBlocks length = %d, want 1", got)
 	}
 	if got := m.textInput.Value(); got != "" {
@@ -135,7 +136,7 @@ func TestComposer_BackspaceRemovesLastPasteBlockWhenInputIsEmpty(t *testing.T) {
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
 	m = updated.(Model)
 
-	if got := len(m.pasteBlocks); got != 1 {
+	if got := len(m.composer.PasteBlocks); got != 1 {
 		t.Fatalf("pasteBlocks length = %d after removing last block, want 1", got)
 	}
 	if got := m.textInput.Value(); got != "beta" {
@@ -148,7 +149,7 @@ func TestComposer_BackspaceRemovesLastPasteBlockWhenInputIsEmpty(t *testing.T) {
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
 	m = updated.(Model)
 
-	if got := len(m.pasteBlocks); got != 1 {
+	if got := len(m.composer.PasteBlocks); got != 1 {
 		t.Fatalf("pasteBlocks length = %d after backspacing text, want 1", got)
 	}
 	if got := m.textInput.Value(); got != "bet" {
@@ -175,7 +176,7 @@ func TestComposer_BackspaceRemovesLastPasteBlockAtInputStartWithTrailingText(t *
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
 	m = updated.(Model)
 
-	if got := len(m.pasteBlocks); got != 0 {
+	if got := len(m.composer.PasteBlocks); got != 0 {
 		t.Fatalf("pasteBlocks length = %d after removing block, want 0", got)
 	}
 	if got := m.textInput.Value(); got != "beforeafter" {

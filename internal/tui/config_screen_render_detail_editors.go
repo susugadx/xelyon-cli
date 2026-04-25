@@ -4,39 +4,40 @@ import (
 	"fmt"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/tui/theme"
 )
 
 func (m Model) renderConfigSelectDetail(addLine func(string), field *config.ConfigField) {
-	addLine(cfgFgCyan + "  Select:")
+	addLine(theme.Config.FgCyan + "  Select:")
 	for i, opt := range field.Options {
 		marker := "  ( ) "
 		if i == m.configScreen.editSelect {
 			marker = "  (*) "
-			addLine(cfgBgSelected + cfgFgBright + marker + opt)
+			addLine(theme.Config.BgSelected + theme.Config.FgBright + marker + opt)
 			continue
 		}
-		addLine(cfgFgNormal + marker + opt)
+		addLine(theme.Config.FgNormal + marker + opt)
 	}
 }
 
 func (m Model) renderConfigSliceDetail(addLine func(string)) {
 	cs := m.configScreen
-	addLine(cfgFgCyan + "  Items: (" + fmt.Sprintf("%d", len(cs.editSliceItems)) + ")")
+	addLine(theme.Config.FgCyan + "  Items: (" + fmt.Sprintf("%d", len(cs.editSliceItems)) + ")")
 	for i, item := range cs.editSliceItems {
 		prefix := "    "
-		bg := cfgBgNormal
+		bg := theme.Config.BgNormal
 		if i == cs.editSliceIndex {
 			prefix = "  > "
-			bg = cfgBgInactive
+			bg = theme.Config.BgInactive
 		}
 		if cs.editSliceEditing && i == cs.editSliceIndex {
-			addLine(bg + cfgFgBright + "  > " + cs.editSliceInput.View())
+			addLine(bg + theme.Config.FgBright + "  > " + cs.editSliceInput.View())
 			continue
 		}
-		addLine(bg + cfgFgNormal + prefix + item)
+		addLine(bg + theme.Config.FgNormal + prefix + item)
 	}
 	if cs.editSliceAdding {
-		addLine(cfgFgCyan + "  + " + cs.editSliceInput.View())
+		addLine(theme.Config.FgCyan + "  + " + cs.editSliceInput.View())
 	}
 }
 
@@ -50,18 +51,18 @@ func (m Model) renderConfigStructMapDetail(addLine func(string), field *config.C
 
 func (m Model) renderConfigStructKeyList(addLine func(string), field *config.ConfigField) {
 	cs := m.configScreen
-	addLine(cfgFgCyan + "  Keys: (" + fmt.Sprintf("%d", len(cs.editStructKeys)) + ")")
+	addLine(theme.Config.FgCyan + "  Keys: (" + fmt.Sprintf("%d", len(cs.editStructKeys)) + ")")
 	for i, key := range cs.editStructKeys {
 		prefix := "    "
-		bg := cfgBgNormal
+		bg := theme.Config.BgNormal
 		if i == cs.editStructIndex {
 			prefix = "  > "
-			bg = cfgBgInactive
+			bg = theme.Config.BgInactive
 		}
-		addLine(bg + cfgFgNormal + prefix + key)
+		addLine(bg + theme.Config.FgNormal + prefix + key)
 	}
 	if cs.editStructAdding {
-		addLine(cfgFgCyan + "  + " + cs.editStructInput.View())
+		addLine(theme.Config.FgCyan + "  + " + cs.editStructInput.View())
 	}
 	if cs.editStructIndex < 0 || cs.editStructIndex >= len(cs.editStructKeys) {
 		return
@@ -73,36 +74,36 @@ func (m Model) renderConfigStructKeyList(addLine func(string), field *config.Con
 		return
 	}
 	addLine("")
-	addLine(cfgFgCyan + "  " + key + ":")
+	addLine(theme.Config.FgCyan + "  " + key + ":")
 	for _, ef := range summary {
-		addLine(cfgFgDim + "    " + ef.Name + ": " + cfgFgNormal + entryFieldValueStr(ef))
+		addLine(theme.Config.FgDim + "    " + ef.Name + ": " + theme.Config.FgNormal + entryFieldValueStr(ef))
 	}
 }
 
 func (m Model) renderConfigStructEntryDetail(addLine func(string)) {
 	cs := m.configScreen
-	addLine(cfgFgCyan + "  " + cs.editEntryKey + ":")
+	addLine(theme.Config.FgCyan + "  " + cs.editEntryKey + ":")
 	addLine("")
 
 	for i, ef := range cs.editEntryFields {
 		prefix := "    "
-		bg := cfgBgNormal
+		bg := theme.Config.BgNormal
 		if i == cs.editEntryIndex {
 			prefix = "  > "
-			bg = cfgBgInactive
+			bg = theme.Config.BgInactive
 		}
 
 		if i == cs.editEntryIndex && cs.editEntryFieldEdit == "input" {
-			addLine(bg + cfgFgBright + "  > " + ef.Name + ": " + cs.editInput.View())
+			addLine(bg + theme.Config.FgBright + "  > " + ef.Name + ": " + cs.editInput.View())
 			continue
 		}
 		if i == cs.editEntryIndex && cs.editEntryFieldEdit == "slice" {
-			addLine(bg + cfgFgBright + "  > " + ef.Name + ":")
+			addLine(bg + theme.Config.FgBright + "  > " + ef.Name + ":")
 			m.renderConfigStructEntrySliceDetail(addLine)
 			continue
 		}
 
-		addLine(bg + cfgFgNormal + prefix + ef.Name + ": " + cfgFgDim + entryFieldValueStr(ef))
+		addLine(bg + theme.Config.FgNormal + prefix + ef.Name + ": " + theme.Config.FgDim + entryFieldValueStr(ef))
 	}
 }
 
@@ -110,18 +111,18 @@ func (m Model) renderConfigStructEntrySliceDetail(addLine func(string)) {
 	cs := m.configScreen
 	for i, item := range cs.editSliceItems {
 		prefix := "      "
-		bg := cfgBgNormal
+		bg := theme.Config.BgNormal
 		if i == cs.editSliceIndex {
 			prefix = "    > "
-			bg = cfgBgInactive
+			bg = theme.Config.BgInactive
 		}
 		if cs.editSliceEditing && i == cs.editSliceIndex {
-			addLine(bg + cfgFgBright + "    > " + cs.editSliceInput.View())
+			addLine(bg + theme.Config.FgBright + "    > " + cs.editSliceInput.View())
 			continue
 		}
-		addLine(bg + cfgFgNormal + prefix + item)
+		addLine(bg + theme.Config.FgNormal + prefix + item)
 	}
 	if cs.editSliceAdding {
-		addLine(cfgFgCyan + "    + " + cs.editSliceInput.View())
+		addLine(theme.Config.FgCyan + "    + " + cs.editSliceInput.View())
 	}
 }

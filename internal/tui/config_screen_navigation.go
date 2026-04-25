@@ -46,7 +46,7 @@ func (cs *configScreen) navRight(layout configLayout) {
 	case paneCategory:
 		cs.activePane = paneField
 	case paneField:
-		if layout.detailVisible() {
+		if layout.DetailVisible() {
 			cs.activePane = paneDetail
 		}
 	}
@@ -77,7 +77,7 @@ func (cs *configScreen) selectPreviousField(layout configLayout) {
 	} else if len(fields) > 0 {
 		cs.fieldIndex = len(fields) - 1
 	}
-	cs.ensureFieldVisible(layout.fieldPaneVisibleRows(cs))
+	cs.ensureFieldVisible(layout.FieldPaneVisibleRows(cs.filterMode || cs.filterText != ""))
 }
 
 func (cs *configScreen) selectNextField(layout configLayout) {
@@ -87,7 +87,7 @@ func (cs *configScreen) selectNextField(layout configLayout) {
 	} else if len(fields) > 0 {
 		cs.fieldIndex = 0
 	}
-	cs.ensureFieldVisible(layout.fieldPaneVisibleRows(cs))
+	cs.ensureFieldVisible(layout.FieldPaneVisibleRows(cs.filterMode || cs.filterText != ""))
 }
 
 func (cs *configScreen) resetFieldSelection() {

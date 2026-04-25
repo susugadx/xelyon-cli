@@ -5,6 +5,8 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
+	tuicomposer "github.com/susugadx/xelyon-cli/internal/tui/composer"
+	"github.com/susugadx/xelyon-cli/internal/tui/termtext"
 )
 
 const (
@@ -72,48 +74,34 @@ type visualPosition struct {
 
 // Model は bubbletea の Model インターフェースを実装する TUI のメインモデル。
 type Model struct {
-	agent                AgentInterface
-	screen               screenMode    // 現在の画面モード
-	configScreen         *configScreen // /config 画面の状態（screenConfig 時のみ非 nil）
-	vp                   lightViewport // 軽量 viewport（bubbles/viewport は lipgloss が重いため自前実装）
-	textInput            textinput.Model
-	spinner              spinner.Model
-	messages             []ChatMessage
-	composerParts        []composerPart
-	pasteBlocks          []pasteBlock
-	nextPasteUID         int
-	rawLines             []string        // 元の行データ。リサイズ時はこれを再レンダリングする
-	layout               *Layout         // 表示幅に応じたvisual rowレイアウト
-	toolBlocks           []toolBlockInfo // ツール結果ブロック
-	focusedBlock         int             // NAVモードでフォーカス中のツールブロックインデックス（-1=なし）
-	statusLine           string
-	padLineCache         string // View() 用の背景パディング行キャッシュ
-	chromeCache          string // View() 用の chrome 部分キャッシュ（入力欄+ステータス）
-	chromeDirty          bool   // chrome 再構築が必要か
-	width                int
-	height               int
-	newOutput            bool // 上スクロール中に新出力があったか
-	ready                bool // viewport 初期化済みか
-	quitting             bool
-	navigationMode       bool // Vim ナビゲーションモード
-	gPressed             bool // g キーが1回押された状態
-	pendingCount         int  // 数字プレフィックスで入力中の移動回数
-	yPressed             bool // y キーが1回押された状態（yy用）
-	cursorLine           int  // NAVモードの現在行（rawLines基準）
-	cursorCol            int  // NAVモードの現在列（表示幅基準）
-	visualMode           int  // 0=OFF, 1=文字単位, 2=行単位
-	visualStart          visualPosition
+	conversation ConversationAgent
+	commands     CommandAgent
+	clipboard    ClipboardAgent
+	configAgent  ConfigAgent
+	screen       screenMode    // 現在の画面モード
+	configScreen *configScreen // /config 画面の状態（screenConfig 時のみ非 nil）
+	vp           lightViewport // 軽量 viewport（bubbles/viewport は lipgloss が重いため自前実装）
+	textInput    textinput.Model
+	spinner      spinner.Model
+	messages     []ChatMessage
+	composer     tuicomposer.State
+	rawLines     []string         // 元の行データ。リサイズ時はこれを再レンダリングする
+	layout       *termtext.Layout // 表示幅に応じたvisual rowレイアウト
+	toolBlocks   []toolBlockInfo  // ツール結果ブロック
+	focusedBlock int              // NAVモードでフォーカス中のツールブロックインデックス（-1=なし）
+	statusLine   string
+	padLineCache string // View() 用の背景パディング行キャッシュ
+	chromeCache  string // View() 用の chrome 部分キャッシュ（入力欄+ステータス）
+	chromeDirty  bool   // chrome 再構築が必要か
+	width        int
+	height       int
+	newOutput    bool // 上スクロール中に新出力があったか
+	ready        bool // viewport 初期化済みか
+	quitting     bool
+	navigationState
 	transientStatus      string    // 一時通知メッセージ
 	transientStatusUntil time.Time // 一時通知の有効期限
 	lastInterrupt        time.Time
-	streamingActive      bool
-	streamCursorCol      int
-	streamActiveANSI     string
-	streamPendingANSI    string
-	mouseSelAnchor       visualPosition // マウスドラッグ選択の開始位置（line=-1=選択なし）
-	mouseSelEnd          visualPosition // マウスドラッグ選択の終了位置
-	mouseDragging        bool           // マウスドラッグ中か
-	mouseAutoScrolling   bool           // 自動スクロールティック発行済みか
-	mouseLastScreenX     int            // 最後のマウスX座標（自動スクロール用）
-	mouseLastScreenY     int            // 最後のマウスY座標（自動スクロール用）
+	streamState
+	mouseSelectionState
 }

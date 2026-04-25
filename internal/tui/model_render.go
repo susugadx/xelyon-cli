@@ -1,7 +1,9 @@
 package tui
 
+import termtext "github.com/susugadx/xelyon-cli/internal/tui/termtext"
+
 func (m *Model) rebuildLayout() {
-	m.layout = BuildLayout(m.rawLines, m.width)
+	m.layout = termtext.BuildLayout(m.rawLines, m.width)
 }
 
 func (m *Model) getVisualRowContents() []string {

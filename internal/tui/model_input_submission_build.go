@@ -1,6 +1,10 @@
 package tui
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/tui/slash"
+)
 
 type composerSubmissionKind int
 
@@ -15,24 +19,12 @@ type composerSubmission struct {
 	payload      string
 }
 
-type composerCommand struct {
-	input        string
-	payload      string
-	resolvedName string
-	argCount     int
-}
-
-func trimmedCommandInput(value string) (string, bool) {
-	input := strings.TrimSpace(value)
-	return input, strings.HasPrefix(input, "/")
-}
-
 func (m Model) buildComposerSubmission() (composerSubmission, bool) {
 	if !m.hasSubmittableComposerContent() {
 		return composerSubmission{}, false
 	}
 
-	if input, isCommand := trimmedCommandInput(m.textInput.Value()); isCommand {
+	if input, isCommand := slash.TrimmedInput(m.textInput.Value()); isCommand {
 		payload := input
 		if !m.isPlainComposerInput() {
 			payload = m.buildComposerPayload()
@@ -61,24 +53,6 @@ func (m Model) buildComposerSubmission() (composerSubmission, bool) {
 	}, true
 }
 
-func (m Model) resolveComposerCommand(sub composerSubmission) composerCommand {
-	cmdParts := strings.Fields(sub.commandInput)
-	resolvedCommand := sub.commandInput
-	if len(cmdParts) > 0 {
-		resolvedCommand = m.agent.ResolveAlias(cmdParts[0])
-	}
-	return composerCommand{
-		input:        sub.commandInput,
-		payload:      sub.payload,
-		resolvedName: resolvedCommand,
-		argCount:     len(cmdParts),
-	}
-}
-
-func (c composerCommand) isBare(name string) bool {
-	return c.resolvedName == name && c.argCount == 1
-}
-
-func (c composerCommand) matches(name string) bool {
-	return c.resolvedName == name
+func (m Model) resolveComposerCommand(sub composerSubmission) slash.Command {
+	return slash.NewCommand(sub.commandInput, sub.payload, m.commands.ResolveAlias)
 }

@@ -3,11 +3,12 @@ package tui
 import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/tui/configscreen"
 )
 
 // openConfigScreen は config screen を開く。
 func (m Model) openConfigScreen() (tea.Model, tea.Cmd) {
-	cfg, err := m.agent.LoadConfigForEdit()
+	cfg, err := m.configAgent.LoadConfigForEdit()
 	if err != nil {
 		m.appendSystemInfo("Failed to load config: " + err.Error())
 		return m, nil
@@ -56,7 +57,7 @@ func (m Model) updateConfigScreen(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
-		action, cmd := cs.handleKey(msg, m.configLayout(), m.agent.IsProcessing(), m.agent.GetProviderConfigKey())
+		action, cmd := cs.handleKey(msg, m.configLayout(), m.conversation.IsProcessing(), m.configAgent.GetProviderConfigKey())
 		switch action {
 		case configCommandDelegateCtrlC:
 			return m.handleCtrlC()
@@ -82,7 +83,7 @@ func (m Model) updateConfigScreen(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 }
 func (m Model) configLayout() configLayout {
-	return newConfigLayout(m.width, m.height)
+	return configscreen.NewLayout(m.width, m.height)
 }
 
 func (m Model) beginConfigSave(closeOnSuccess bool) (tea.Model, tea.Cmd) {
@@ -100,9 +101,9 @@ func (m Model) beginConfigSave(closeOnSuccess bool) (tea.Model, tea.Cmd) {
 // Cmd クロージャには cfg の snapshot を渡し、非同期実行中に元 cfg が変更されても保存対象が変わらないようにする。
 func (m Model) saveConfigCmd() tea.Cmd {
 	snapshot := config.CloneConfig(m.configScreen.cfg)
-	agent := m.agent
+	configAgent := m.configAgent
 	return func() tea.Msg {
-		err := agent.SaveAndSyncConfig(snapshot)
+		err := configAgent.SaveAndSyncConfig(snapshot)
 		return ConfigSavedMsg{Error: err, Snapshot: snapshot}
 	}
 }
@@ -112,7 +113,7 @@ func (m Model) syncEditedProviderDefaultModel() {
 	if m.configScreen == nil {
 		return
 	}
-	m.configScreen.syncEditedProviderDefaultModel(m.agent.GetProviderConfigKey())
+	m.configScreen.syncEditedProviderDefaultModel(m.configAgent.GetProviderConfigKey())
 }
 
 // defaultModelSyncProvider は global default_model を同期する provider_models key を返す。
@@ -121,7 +122,7 @@ func (m Model) defaultModelSyncProvider() string {
 	if m.configScreen == nil {
 		return ""
 	}
-	return m.configScreen.defaultModelSyncProvider(m.agent.GetProviderConfigKey())
+	return m.configScreen.defaultModelSyncProvider(m.configAgent.GetProviderConfigKey())
 }
 
 // addStructMapKey は structmap に空のキーを追加する。

@@ -6,7 +6,7 @@ func (m *Model) copyFocusedBlock() {
 	}
 
 	content := m.toolBlocks[m.focusedBlock].tool.Detail
-	if err := m.agent.CopyText(content); err == nil {
+	if err := m.clipboard.CopyText(content); err == nil {
 		m.setCopySuccess("Copied block to clipboard")
 	} else {
 		m.setCopyError(err)

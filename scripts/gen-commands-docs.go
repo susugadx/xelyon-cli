@@ -9,6 +9,8 @@ import (
 	"os"
 	"regexp"
 	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 )
 
 func main() {
@@ -24,8 +26,8 @@ func main() {
 	existingCommands := findExistingCommands(string(content))
 
 	// 不足しているコマンドを検出
-	var missingCommands []CommandInfo
-	for _, cmd := range Commands {
+	var missingCommands []commandcatalog.CommandInfo
+	for _, cmd := range commandcatalog.Commands {
 		cmdName := cmd.Name
 		if len(cmd.Aliases) > 0 {
 			// エイリアス付きで検索

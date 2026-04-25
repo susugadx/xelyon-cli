@@ -7,6 +7,8 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/susugadx/xelyon-cli/internal/tui/termtext"
+	"github.com/susugadx/xelyon-cli/internal/tui/theme"
 )
 
 // footerHeight は下部 chrome（入力欄+ステータスバー）の合計高さを返す。
@@ -34,16 +36,23 @@ func NewModel(agent AgentInterface, initialContent string) Model {
 	}
 
 	return Model{
-		agent:          agent,
-		textInput:      ti,
-		spinner:        sp,
-		rawLines:       append([]string(nil), initLines...),
-		messages:       []ChatMessage{},
-		focusedBlock:   -1,
-		visualStart:    visualPosition{line: -1, col: -1},
-		mouseSelAnchor: visualPosition{line: -1, col: -1},
-		mouseSelEnd:    visualPosition{line: -1, col: -1},
-		statusLine:     agent.GetStatusLine(),
+		conversation: agent,
+		commands:     agent,
+		clipboard:    agent,
+		configAgent:  agent,
+		textInput:    ti,
+		spinner:      sp,
+		rawLines:     append([]string(nil), initLines...),
+		messages:     []ChatMessage{},
+		focusedBlock: -1,
+		navigationState: navigationState{
+			visualStart: visualPosition{line: -1, col: -1},
+		},
+		mouseSelectionState: mouseSelectionState{
+			mouseSelAnchor: visualPosition{line: -1, col: -1},
+			mouseSelEnd:    visualPosition{line: -1, col: -1},
+		},
+		statusLine: agent.GetStatusLine(),
 	}
 }
 
@@ -86,12 +95,12 @@ func (m *Model) applyChatWindowSize(width, height int) {
 	}
 
 	m.textInput.Width = max(0, m.width-inputPromptWidth-1)
-	m.padLineCache = fillANSITextWidth("", m.width, "\033[48;5;236m")
+	m.padLineCache = termtext.FillANSITextWidth("", m.width, theme.Chrome.InputBg)
 	m.chromeDirty = true
 }
 
 // refreshStatusLine は agent の最新 runtime state から footer 用の statusLine を再取得する。
 func (m *Model) refreshStatusLine() {
-	m.statusLine = m.agent.GetStatusLine()
+	m.statusLine = m.conversation.GetStatusLine()
 	m.chromeDirty = true
 }

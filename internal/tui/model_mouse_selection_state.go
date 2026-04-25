@@ -1,12 +1,10 @@
 package tui
 
+import "github.com/susugadx/xelyon-cli/internal/tui/selection"
+
 // hasActiveMouseSelection はマウス選択がアクティブかどうかを返す。
 func (m Model) hasActiveMouseSelection() bool {
-	if m.mouseSelAnchor.line < 0 {
-		return false
-	}
-	return m.mouseSelAnchor.line != m.mouseSelEnd.line ||
-		m.mouseSelAnchor.col != m.mouseSelEnd.col
+	return selection.Active(m.mouseSelAnchor.line, m.mouseSelAnchor.col, m.mouseSelEnd.line, m.mouseSelEnd.col)
 }
 
 // clearMouseSelection はマウス選択をクリアする。
@@ -22,31 +20,24 @@ func (m Model) normalizedMouseSelection() (start, end visualPosition, ok bool) {
 	if !m.hasActiveMouseSelection() {
 		return visualPosition{}, visualPosition{}, false
 	}
-	start = m.mouseSelAnchor
-	end = m.mouseSelEnd
-	if start.line > end.line || (start.line == end.line && start.col > end.col) {
-		start, end = end, start
+	r, ok := selection.Normalize(m.mouseSelAnchor.line, m.mouseSelAnchor.col, m.mouseSelEnd.line, m.mouseSelEnd.col)
+	if !ok {
+		return visualPosition{}, visualPosition{}, false
 	}
-	return start, end, true
+	return visualPosition{line: r.StartLine, col: r.StartCol}, visualPosition{line: r.EndLine, col: r.EndCol}, true
 }
 
 // mouseSelectionColumnsForLine は指定行のマウス選択列範囲を返す。
 // startCol は包含、endCol は排他。選択に含まれない行は ok=false を返す。
 func (m Model) mouseSelectionColumnsForLine(line int) (startCol, endCol int, ok bool) {
-	start, end, ok := m.normalizedMouseSelection()
-	if !ok || line < start.line || line > end.line || line >= len(m.rawLines) {
+	if !m.hasActiveMouseSelection() {
 		return 0, 0, false
 	}
-	switch {
-	case start.line == end.line:
-		return start.col, end.col + 1, true
-	case line == start.line:
-		return start.col, 9999, true
-	case line == end.line:
-		return 0, end.col + 1, true
-	default:
-		return 0, 9999, true
+	r, ok := selection.Normalize(m.mouseSelAnchor.line, m.mouseSelAnchor.col, m.mouseSelEnd.line, m.mouseSelEnd.col)
+	if !ok {
+		return 0, 0, false
 	}
+	return selection.ColumnsForLine(r, line, len(m.rawLines))
 }
 
 // mouseSelectionColumnsForVisualRow は rawLine レベルの選択列をビジュアル行ローカル列に変換する。

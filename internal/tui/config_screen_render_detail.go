@@ -1,6 +1,10 @@
 package tui
 
-import "github.com/susugadx/xelyon-cli/internal/config"
+import (
+	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/tui/termtext"
+	"github.com/susugadx/xelyon-cli/internal/tui/theme"
+)
 
 // renderConfigDetailPane は右ペイン（詳細/エディタ）を構築する。
 func (m Model) renderConfigDetailPane(width, height int) []string {
@@ -11,10 +15,10 @@ func (m Model) renderConfigDetailPane(width, height int) []string {
 	field := m.configScreen.selectedField()
 	if field == nil {
 		return appendConfigPanePadding(
-			[]string{fillANSITextWidth(cfgBgNormal+cfgFgDim+"  No field selected"+cfgReset, width, cfgBgNormal)},
+			[]string{termtext.FillANSITextWidth(theme.Config.BgNormal+theme.Config.FgDim+"  No field selected"+theme.Config.Reset, width, theme.Config.BgNormal)},
 			width,
 			height,
-			cfgBgNormal,
+			theme.Config.BgNormal,
 		)
 	}
 
@@ -23,7 +27,7 @@ func (m Model) renderConfigDetailPane(width, height int) []string {
 	m.renderConfigFieldSummary(addLine, field)
 	m.renderConfigDetailEditor(addLine, field)
 
-	return appendConfigPanePadding(lines, width, height, cfgBgNormal)
+	return appendConfigPanePadding(lines, width, height, theme.Config.BgNormal)
 }
 
 func newConfigDetailLineAppender(width, height int, lines *[]string) func(string) {
@@ -31,20 +35,20 @@ func newConfigDetailLineAppender(width, height int, lines *[]string) func(string
 		if len(*lines) >= height {
 			return
 		}
-		*lines = append(*lines, fillANSITextWidth(cfgBgNormal+text+cfgReset, width, cfgBgNormal))
+		*lines = append(*lines, termtext.FillANSITextWidth(theme.Config.BgNormal+text+theme.Config.Reset, width, theme.Config.BgNormal))
 	}
 }
 
 func (m Model) renderConfigFieldSummary(addLine func(string), field *config.ConfigField) {
-	addLine(cfgBold + cfgFgBright + "  " + field.DisplayName)
+	addLine(theme.Config.Bold + theme.Config.FgBright + "  " + field.DisplayName)
 	addLine("")
-	addLine(cfgFgDim + "  " + field.Description)
-	addLine(cfgFgDim + "  path: " + field.Path)
-	addLine(cfgFgDim + "  type: " + field.FieldType.String())
+	addLine(theme.Config.FgDim + "  " + field.Description)
+	addLine(theme.Config.FgDim + "  path: " + field.Path)
+	addLine(theme.Config.FgDim + "  type: " + field.FieldType.String())
 	addLine("")
-	addLine(cfgFgNormal + "  current: " + cfgFgBright + formatConfigValue(field.Current, field.FieldType))
+	addLine(theme.Config.FgNormal + "  current: " + theme.Config.FgBright + formatConfigValue(field.Current, field.FieldType))
 	if field.Default != nil {
-		addLine(cfgFgDim + "  default: " + formatConfigValue(field.Default, field.FieldType))
+		addLine(theme.Config.FgDim + "  default: " + formatConfigValue(field.Default, field.FieldType))
 	}
 	addLine("")
 }
@@ -54,8 +58,8 @@ func (m Model) renderConfigDetailEditor(addLine func(string), field *config.Conf
 	case editSelect:
 		m.renderConfigSelectDetail(addLine, field)
 	case editInput:
-		addLine(cfgFgCyan + "  Edit:")
-		addLine("  " + cfgFgBright + m.configScreen.editInput.View())
+		addLine(theme.Config.FgCyan + "  Edit:")
+		addLine("  " + theme.Config.FgBright + m.configScreen.editInput.View())
 	case editSlice:
 		m.renderConfigSliceDetail(addLine)
 	case editStructMap:
@@ -68,14 +72,14 @@ func (m Model) renderConfigDetailEditor(addLine func(string), field *config.Conf
 func configDetailHint(fieldType config.ConfigFieldType) string {
 	switch fieldType {
 	case config.FieldTypeBool:
-		return cfgFgDim + "  Press Space or Enter to toggle"
+		return theme.Config.FgDim + "  Press Space or Enter to toggle"
 	case config.FieldTypeSelect:
-		return cfgFgDim + "  Press Enter to select from options"
+		return theme.Config.FgDim + "  Press Enter to select from options"
 	case config.FieldTypeStringSlice:
-		return cfgFgDim + "  Press Enter to edit items"
+		return theme.Config.FgDim + "  Press Enter to edit items"
 	case config.FieldTypeStructMap:
-		return cfgFgDim + "  Press Enter to manage entries"
+		return theme.Config.FgDim + "  Press Enter to manage entries"
 	default:
-		return cfgFgDim + "  Press Enter to edit"
+		return theme.Config.FgDim + "  Press Enter to edit"
 	}
 }

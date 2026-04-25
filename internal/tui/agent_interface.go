@@ -2,15 +2,10 @@ package tui
 
 import "github.com/susugadx/xelyon-cli/internal/config"
 
-// AgentInterface は tui パッケージから agent パッケージへの依存を逆転させる。
-// agent パッケージがこのインターフェースを実装する。
-type AgentInterface interface {
+// ConversationAgent は chat 実行と処理状態を TUI に提供する。
+type ConversationAgent interface {
 	// Chat はユーザー入力をAIに送信する（非同期、goroutineで呼ぶ）
 	Chat(input string)
-
-	// HandleCommand は /status, /use, /clear 等のコマンドを処理する。
-	// 処理した場合 true を返す。
-	HandleCommand(cmd string) bool
 
 	// GetStatusLine はステータスバーに表示する文字列を返す。
 	GetStatusLine() string
@@ -23,14 +18,30 @@ type AgentInterface interface {
 
 	// IsProcessing はAI処理中（chat実行中）かどうかを返す。
 	IsProcessing() bool
+}
 
+// CommandAgent は slash command の実行と alias 解決を TUI に提供する。
+type CommandAgent interface {
+	// HandleCommand は /status, /use, /clear 等のコマンドを処理する。
+	// 処理した場合 true を返す。
+	HandleCommand(cmd string) bool
+
+	// ResolveAlias はコマンド名を alias 解決する（例: "/c" -> "/config"）。
+	ResolveAlias(cmd string) string
+}
+
+// ClipboardAgent は TUI から利用する clipboard 操作を提供する。
+type ClipboardAgent interface {
 	// CopyLastOutput は直近のAI出力をクリップボードにコピーする。
 	// 成功時は要約（例: "Copied 12 lines"）、失敗時はエラーを返す。
 	CopyLastOutput() (string, error)
 
 	// CopyText は指定テキストをクリップボードにコピーする。
 	CopyText(text string) error
+}
 
+// ConfigAgent は /config 画面が必要とする設定の load/save と provider 情報を提供する。
+type ConfigAgent interface {
 	// LoadConfigForEdit は設定ファイルを読み込み、編集用のクローンを返す。
 	LoadConfigForEdit() (*config.Config, error)
 
@@ -42,7 +53,13 @@ type AgentInterface interface {
 
 	// GetProviderConfigKey は現在セッションが代表する provider_models key を返す。
 	GetProviderConfigKey() string
+}
 
-	// ResolveAlias はコマンド名を alias 解決する（例: "/c" → "/config"）。
-	ResolveAlias(cmd string) string
+// AgentInterface は tui パッケージから agent パッケージへの依存を逆転させる。
+// agent パッケージが各 capability interface を実装する。
+type AgentInterface interface {
+	ConversationAgent
+	CommandAgent
+	ClipboardAgent
+	ConfigAgent
 }

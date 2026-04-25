@@ -6,6 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tui"
+	"github.com/susugadx/xelyon-cli/internal/tui/lifecycle"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -120,7 +121,7 @@ func registerTUIBridgeOnExit(register func(func()), shutdown func()) {
 func bindTUIProgram(adapter *TUIAdapter, ag *Agent, toolResultCh <-chan tools.ToolResultInfo, program *tea.Program) *tuiProgramBridge {
 	bridge := newTUIProgramBridge(adapter, ag, toolResultCh, func(msg tea.Msg) {
 		sendTUIProgramMessage(program, msg)
-	}, tui.DebugLog)
+	}, lifecycle.DebugLog)
 	bridge.start()
 	registerTUIBridgeOnExit(registerTUIOnExit, bridge.shutdown)
 	return bridge

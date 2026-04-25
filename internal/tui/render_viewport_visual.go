@@ -1,24 +1,28 @@
 package tui
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"github.com/charmbracelet/lipgloss"
+	"github.com/susugadx/xelyon-cli/internal/tui/termtext"
+	"github.com/susugadx/xelyon-cli/internal/tui/theme"
+)
 
 func (m Model) renderVisualCharViewportLine(line string, visIdx int, rawIdx int) (string, bool) {
 	startCol, endCol, ok := m.charSelectionColumnsForLine(rawIdx)
 	if ok {
-		plain := stripANSI(line)
+		plain := termtext.StripANSI(line)
 		localStartCol, localEndCol := m.visualCharSelectionLocalRange(visIdx, rawIdx, startCol, endCol)
 		if localStartCol < localEndCol {
-			styled := stylePlainTextRange(plain, localStartCol, localEndCol, visualBg)
-			if rawIdx == m.cursorLine && isCursorInVisualRow(m.layout, visIdx, rawIdx, m.cursorCol) {
-				localCursorCol := getLocalCursorCol(m.layout, visIdx, rawIdx, m.cursorCol)
-				styled = stylePlainTextRangeWithCursor(plain, localStartCol, localEndCol, visualBg, localCursorCol, visualCursorBg, "")
+			styled := termtext.StylePlainTextRange(plain, localStartCol, localEndCol, theme.Viewport.VisualBg)
+			if rawIdx == m.cursorLine && termtext.CursorInVisualRow(m.layout, visIdx, rawIdx, m.cursorCol) {
+				localCursorCol := termtext.LocalCursorCol(m.layout, visIdx, rawIdx, m.cursorCol)
+				styled = termtext.StylePlainTextRangeWithCursor(plain, localStartCol, localEndCol, theme.Viewport.VisualBg, localCursorCol, theme.Viewport.VisualCursorBg, "")
 			}
 			return decorateViewportLine(styled, m.vp.width, ""), true
 		}
 	}
 
-	if rawIdx == m.cursorLine && isCursorInVisualRow(m.layout, visIdx, rawIdx, m.cursorCol) {
-		return m.renderCursorViewportLine(line, visIdx, rawIdx, visualCursorBg, ""), true
+	if rawIdx == m.cursorLine && termtext.CursorInVisualRow(m.layout, visIdx, rawIdx, m.cursorCol) {
+		return m.renderCursorViewportLine(line, visIdx, rawIdx, theme.Viewport.VisualCursorBg, ""), true
 	}
 	return "", false
 }
@@ -72,18 +76,18 @@ func (m Model) renderVisualLineViewportLine(line string, visIdx int, rawIdx int)
 		return "", false
 	}
 
-	if rawIdx == m.cursorLine && isCursorInVisualRow(m.layout, visIdx, rawIdx, m.cursorCol) {
-		plain := stripANSI(line)
-		localCursorCol := getLocalCursorCol(m.layout, visIdx, rawIdx, m.cursorCol)
-		styled := stylePlainTextRangeWithCursor(plain, 0, lipgloss.Width(plain), visualBg, localCursorCol, visualCursorBg, "")
-		return decorateViewportLine(styled, m.vp.width, visualBg), true
+	if rawIdx == m.cursorLine && termtext.CursorInVisualRow(m.layout, visIdx, rawIdx, m.cursorCol) {
+		plain := termtext.StripANSI(line)
+		localCursorCol := termtext.LocalCursorCol(m.layout, visIdx, rawIdx, m.cursorCol)
+		styled := termtext.StylePlainTextRangeWithCursor(plain, 0, lipgloss.Width(plain), theme.Viewport.VisualBg, localCursorCol, theme.Viewport.VisualCursorBg, "")
+		return decorateViewportLine(styled, m.vp.width, theme.Viewport.VisualBg), true
 	}
-	return decorateViewportLine(line, m.vp.width, visualBg), true
+	return decorateViewportLine(line, m.vp.width, theme.Viewport.VisualBg), true
 }
 
 func (m Model) renderCursorViewportLine(line string, visIdx int, rawIdx int, cursorBg string, lineBg string) string {
-	plain := stripANSI(line)
-	localCursorCol := getLocalCursorCol(m.layout, visIdx, rawIdx, m.cursorCol)
-	styled := stylePlainTextRangeWithCursor(plain, 0, 0, "", localCursorCol, cursorBg, lineBg)
+	plain := termtext.StripANSI(line)
+	localCursorCol := termtext.LocalCursorCol(m.layout, visIdx, rawIdx, m.cursorCol)
+	styled := termtext.StylePlainTextRangeWithCursor(plain, 0, 0, "", localCursorCol, cursorBg, lineBg)
 	return decorateViewportLine(styled, m.vp.width, lineBg)
 }

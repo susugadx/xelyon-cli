@@ -1,8 +1,11 @@
 package tui
 
-import "strings"
+import (
+	"strings"
 
-const mouseSelBg = "\033[48;5;240m"
+	"github.com/susugadx/xelyon-cli/internal/tui/termtext"
+	"github.com/susugadx/xelyon-cli/internal/tui/theme"
+)
 
 // renderViewportWithMouseSelection はマウス選択オーバーレイ付きの viewport を描画する。
 // 可視行のみに選択背景を適用し、スクロール性能を維持する。
@@ -28,10 +31,10 @@ func (m Model) renderViewportWithMouseSelection() string {
 		line := visible[i]
 
 		if startCol, endCol, ok := m.mouseSelectionColumnsForLine(rawIdx); ok {
-			plain := stripANSI(line)
+			plain := termtext.StripANSI(line)
 			localStart, localEnd := m.mouseSelectionColumnsForVisualRow(visIdx, rawIdx, startCol, endCol)
 			if localStart < localEnd {
-				styled := stylePlainTextRange(plain, localStart, localEnd, mouseSelBg)
+				styled := termtext.StylePlainTextRange(plain, localStart, localEnd, theme.Viewport.MouseSelectionBg)
 				sb.WriteString(decorateViewportLine(styled, m.vp.width, ""))
 				continue
 			}

@@ -1,6 +1,6 @@
 package tui
 
-import "strings"
+import tuiviewport "github.com/susugadx/xelyon-cli/internal/tui/viewport"
 
 // lightViewport は bubbles/viewport の軽量代替。
 // lipgloss を使わず、行スライスの直接操作のみで描画する。
@@ -13,7 +13,7 @@ type lightViewport struct {
 
 // setContent はコンテンツを文字列で設定する。
 func (v *lightViewport) setContent(s string) {
-	v.lines = strings.Split(s, "\n")
+	v.lines = tuiviewport.LinesFromContent(s)
 	if v.yOffset > v.maxYOffset() {
 		v.gotoBottom()
 	}
@@ -29,45 +29,16 @@ func (v *lightViewport) setLines(lines []string) {
 
 // visibleLines は現在表示中の行を返す。
 func (v *lightViewport) visibleLines() []string {
-	if len(v.lines) == 0 || v.height <= 0 {
-		return nil
-	}
-
-	top := v.yOffset
-	if top < 0 {
-		top = 0
-	}
-	end := top + v.height
-	if end > len(v.lines) {
-		end = len(v.lines)
-	}
-	return v.lines[top:end]
+	return tuiviewport.VisibleLines(v.lines, v.yOffset, v.height)
 }
 
 // view は表示領域の行を結合して返す。高さに足りない場合は空行で埋める。
 func (v *lightViewport) view() string {
-	visible := v.visibleLines()
-	var sb strings.Builder
-	sb.Grow(v.height * (v.width + 1))
-	for i := 0; i < v.height; i++ {
-		if i > 0 {
-			sb.WriteByte('\n')
-		}
-		if i < len(visible) {
-			sb.WriteString(fitANSITextWidth(visible[i], v.width))
-			continue
-		}
-		sb.WriteString(strings.Repeat(" ", max(0, v.width)))
-	}
-	return sb.String()
+	return tuiviewport.Render(v.lines, v.yOffset, v.height, v.width)
 }
 
 func (v *lightViewport) maxYOffset() int {
-	m := len(v.lines) - v.height
-	if m < 0 {
-		return 0
-	}
-	return m
+	return tuiviewport.MaxYOffset(len(v.lines), v.height)
 }
 
 func (v *lightViewport) atBottom() bool {
@@ -79,17 +50,11 @@ func (v *lightViewport) gotoBottom() {
 }
 
 func (v *lightViewport) scrollUp(n int) {
-	v.yOffset -= n
-	if v.yOffset < 0 {
-		v.yOffset = 0
-	}
+	v.yOffset = tuiviewport.ScrollUp(v.yOffset, n, len(v.lines), v.height)
 }
 
 func (v *lightViewport) scrollDown(n int) {
-	v.yOffset += n
-	if v.yOffset > v.maxYOffset() {
-		v.yOffset = v.maxYOffset()
-	}
+	v.yOffset = tuiviewport.ScrollDown(v.yOffset, n, len(v.lines), v.height)
 }
 
 // gotoTop は先頭にスクロールする。

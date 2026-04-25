@@ -5,30 +5,30 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	tuicomposer "github.com/susugadx/xelyon-cli/internal/tui/composer"
+	"github.com/susugadx/xelyon-cli/internal/tui/termtext"
+	"github.com/susugadx/xelyon-cli/internal/tui/theme"
 )
 
 // renderInputDock は入力欄部分（パディング行+入力行+パディング行）を構築する。
 func (m *Model) renderInputDock() string {
-	const inputBg = "\033[48;5;236m"
-	const textFg = "\033[38;5;252m"
-	const pasteFg = "\033[38;5;244m"
-	const pasteID = "\033[38;5;81m"
-	tiView := strings.ReplaceAll(m.textInput.View(), "\033[0m", "\033[0m"+inputBg)
-	inputLine := fillANSITextWidth(inputBg+" \033[38;5;46m"+inputPrompt+"\033[38;5;252m"+tiView+"\033[0m", m.width, inputBg)
+	chrome := theme.Chrome
+	tiView := strings.ReplaceAll(m.textInput.View(), chrome.Reset, chrome.Reset+chrome.InputBg)
+	inputLine := termtext.FillANSITextWidth(chrome.InputBg+" "+chrome.InputPrompt+inputPrompt+chrome.InputTextFg+tiView+chrome.Reset, m.width, chrome.InputBg)
 	rows := m.visibleComposerRows()
 	lines := make([]string, 0, len(rows)+inputHeight)
 	for _, row := range rows {
-		switch row.kind {
-		case composerPartText:
-			lines = append(lines, fillANSITextWidth(inputBg+" "+textFg+m.formatComposerTextRow(row.text)+"\033[0m", m.width, inputBg))
-		case composerPartPaste:
+		switch row.Kind {
+		case tuicomposer.PartText:
+			lines = append(lines, termtext.FillANSITextWidth(chrome.InputBg+" "+chrome.InputTextFg+m.formatComposerTextRow(row.Text)+chrome.Reset, m.width, chrome.InputBg))
+		case tuicomposer.PartPaste:
 			summary := strings.Replace(
-				m.formatPasteBlockSummary(row.pasteBlock),
+				m.formatPasteBlockSummary(row.PasteBlock),
 				"#",
-				pasteID+"#",
+				chrome.InputPasteID+"#",
 				1,
 			)
-			lines = append(lines, fillANSITextWidth(inputBg+" "+pasteFg+summary+"\033[0m", m.width, inputBg))
+			lines = append(lines, termtext.FillANSITextWidth(chrome.InputBg+" "+chrome.InputPasteFg+summary+chrome.Reset, m.width, chrome.InputBg))
 		}
 	}
 	lines = append(lines, m.padLineCache, inputLine, m.padLineCache)
@@ -37,24 +37,24 @@ func (m *Model) renderInputDock() string {
 
 // renderStatusBar はステータスバー行を構築する。
 func (m *Model) renderStatusBar() string {
-	const hintColor = "\033[38;5;244m"
-	statusLine := sanitizeSingleLineANSI(m.statusLine)
+	chrome := theme.Chrome
+	statusLine := termtext.SanitizeSingleLineANSI(m.statusLine)
 
 	var statusText string
 	if m.navigationMode {
-		statusText = " \033[48;5;33;38;5;255m NAV \033[0m " + statusLine
-	} else if m.agent.IsProcessing() {
+		statusText = " " + chrome.NavBadge + " NAV " + chrome.Reset + " " + statusLine
+	} else if m.conversation.IsProcessing() {
 		statusText = " " + m.spinner.View() + " " + statusLine
 	} else {
 		statusText = " " + statusLine
 	}
 
 	if m.newOutput && !m.vp.atBottom() {
-		statusText += "  \033[48;5;63;38;5;230m ↓ New output \033[0m"
+		statusText += "  " + chrome.NewOutput + " ↓ New output " + chrome.Reset
 	}
 
 	if m.transientStatus != "" && time.Now().Before(m.transientStatusUntil) {
-		statusText += "  \033[38;5;82m" + sanitizeSingleLineANSI(m.transientStatus) + "\033[0m"
+		statusText += "  " + chrome.SuccessFg + termtext.SanitizeSingleLineANSI(m.transientStatus) + chrome.Reset
 	}
 
 	hints := statusHintsNormal
@@ -75,7 +75,7 @@ func (m *Model) renderStatusBar() string {
 	for _, hint := range hints {
 		padding := m.width - lipgloss.Width(statusText) - lipgloss.Width(hint)
 		if padding >= 2 {
-			statusBar = statusText + strings.Repeat(" ", padding) + hintColor + hint + "\033[0m"
+			statusBar = statusText + strings.Repeat(" ", padding) + chrome.HintFg + hint + chrome.Reset
 			break
 		}
 	}

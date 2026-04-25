@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	termtext "github.com/susugadx/xelyon-cli/internal/tui/termtext"
 	"strings"
 )
 
@@ -14,7 +15,7 @@ func (m *Model) copyCursorLine() {
 }
 
 func (m *Model) copyDefaultSelectionTarget() {
-	if msg, err := m.agent.CopyLastOutput(); err == nil {
+	if msg, err := m.clipboard.CopyLastOutput(); err == nil {
 		m.setCopySuccess(msg)
 	} else {
 		m.setCopyError(err)
@@ -33,7 +34,7 @@ func (m Model) copyRawRangePlain(start, end int) error {
 
 	lines := make([]string, 0, end-start+1)
 	for _, line := range m.rawLines[start : end+1] {
-		lines = append(lines, stripANSI(line))
+		lines = append(lines, termtext.StripANSI(line))
 	}
-	return m.agent.CopyText(strings.Join(lines, "\n"))
+	return m.clipboard.CopyText(strings.Join(lines, "\n"))
 }

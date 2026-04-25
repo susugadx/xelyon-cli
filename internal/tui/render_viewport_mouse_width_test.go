@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/susugadx/xelyon-cli/internal/tui/theme"
 )
 
 func TestRender_EachLineExactWidth_ASCII(t *testing.T) {
@@ -140,14 +141,14 @@ func TestStylePlainTextRange_PreservesWidth(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			inputWidth := lipgloss.Width(tt.input)
-			styled := stylePlainTextRange(tt.input, 0, 9999, mouseSelBg)
+			styled := stylePlainTextRange(tt.input, 0, 9999, theme.Viewport.MouseSelectionBg)
 			styledWidth := lipgloss.Width(styled)
 			if styledWidth != inputWidth {
 				t.Errorf("full highlight: width %d -> %d (styled=%q)", inputWidth, styledWidth, styled)
 			}
 			mid := inputWidth / 2
 			if mid > 0 {
-				styled2 := stylePlainTextRange(tt.input, mid, mid+1, mouseSelBg)
+				styled2 := stylePlainTextRange(tt.input, mid, mid+1, theme.Viewport.MouseSelectionBg)
 				styled2Width := lipgloss.Width(styled2)
 				if styled2Width != inputWidth {
 					t.Errorf("partial highlight: width %d -> %d", inputWidth, styled2Width)
@@ -166,9 +167,9 @@ func TestFillANSITextWidth_StyledOutputExactWidth(t *testing.T) {
 		{"ASCII short", "Hello", 80},
 		{"CJK short", "日本語", 80},
 		{"CJK exact", "日本語テスト日本語テ", 20},
-		{"ANSI styled", stylePlainTextRange("abcdef", 2, 5, mouseSelBg), 80},
-		{"CJK styled", stylePlainTextRange("日本語テスト", 2, 8, mouseSelBg), 80},
-		{"Empty styled", stylePlainTextRange("", 0, 5, mouseSelBg), 80},
+		{"ANSI styled", stylePlainTextRange("abcdef", 2, 5, theme.Viewport.MouseSelectionBg), 80},
+		{"CJK styled", stylePlainTextRange("日本語テスト", 2, 8, theme.Viewport.MouseSelectionBg), 80},
+		{"Empty styled", stylePlainTextRange("", 0, 5, theme.Viewport.MouseSelectionBg), 80},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

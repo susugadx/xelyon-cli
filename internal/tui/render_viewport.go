@@ -1,13 +1,15 @@
 package tui
 
+import termtext "github.com/susugadx/xelyon-cli/internal/tui/termtext"
+
 func (m Model) charSelectionColumnsForLine(line int) (startCol, endCol int, ok bool) {
 	start, end, ok := m.normalizedCharSelection()
 	if !ok || line < start.line || line > end.line {
 		return 0, 0, false
 	}
 
-	plain := stripANSI(m.rawLines[line])
-	lineWidth := plainTextDisplayWidth(plain)
+	plain := termtext.StripANSI(m.rawLines[line])
+	lineWidth := termtext.PlainTextDisplayWidth(plain)
 	switch {
 	case start.line == end.line:
 		return start.col, min(lineWidth, end.col+1), true

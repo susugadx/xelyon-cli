@@ -1,6 +1,9 @@
 package tui
 
-import tea "github.com/charmbracelet/bubbletea"
+import (
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/susugadx/xelyon-cli/internal/tui/lifecycle"
+)
 
 func (m *Model) switchToComposerInput() {
 	if !m.navigationMode {
@@ -63,7 +66,7 @@ func (m Model) handleComposerInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case isEnterKey(msg):
-		tuiDebugf("Enter detected, textInput value=%q", m.textInput.Value())
+		lifecycle.DebugLog("Enter detected, textInput value=%q", m.textInput.Value())
 		return m.handleComposerSubmit()
 
 	case msg.Type == tea.KeyUp:

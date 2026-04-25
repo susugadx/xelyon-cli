@@ -8,6 +8,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tui"
+	"github.com/susugadx/xelyon-cli/internal/tui/lifecycle"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -23,7 +24,7 @@ func (tuiAutoApproveReader) Read(p []byte) (int, error) {
 }
 
 var runTUIProgram = tui.Run
-var registerTUIOnExit = tui.OnExit
+var registerTUIOnExit = lifecycle.OnExit
 
 // RunTUIWithConfig は TUI モードでインタラクティブセッションを起動する。
 func RunTUIWithConfig(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
@@ -43,7 +44,7 @@ func RunTUIWithConfig(model string, provider api.Provider, cfg *config.Config, a
 	defer ag.Cleanup()
 
 	// SIGTERM 時に Alt Screen を復旧するフックを登録
-	ag.exitHook = tui.RestoreTerminal
+	ag.exitHook = lifecycle.RestoreTerminal
 
 	// ヘッダー + キャプチャした初期化出力を結合して初期コンテンツにする
 	initialContent := buildTUIHeader() + captureBuf.String()

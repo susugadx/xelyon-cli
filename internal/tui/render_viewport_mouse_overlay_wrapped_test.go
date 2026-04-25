@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/susugadx/xelyon-cli/internal/tui/theme"
 )
 
 func TestRender_WrappedLine_SelectionAcrossBoundary(t *testing.T) {
@@ -36,10 +37,10 @@ func TestRender_WrappedLine_SelectionAcrossBoundary(t *testing.T) {
 			t.Errorf("visual row %d: width = %d, want 20 (line=%q)", i, w, lines[i])
 		}
 	}
-	if !strings.Contains(lines[0], mouseSelBg) {
+	if !strings.Contains(lines[0], theme.Viewport.MouseSelectionBg) {
 		t.Error("visual row 0 should have selection background")
 	}
-	if !strings.Contains(lines[1], mouseSelBg) {
+	if !strings.Contains(lines[1], theme.Viewport.MouseSelectionBg) {
 		t.Error("visual row 1 should have selection background")
 	}
 }
@@ -63,10 +64,10 @@ func TestRender_WrappedLine_SelectionOnlyOnFirstRow(t *testing.T) {
 	view := m.renderViewportWithMouseSelection()
 	lines := helperSplitViewLines(view, m.vp.height)
 
-	if !strings.Contains(lines[0], mouseSelBg) {
+	if !strings.Contains(lines[0], theme.Viewport.MouseSelectionBg) {
 		t.Error("visual row 0 should have selection background")
 	}
-	if strings.Contains(lines[1], mouseSelBg) {
+	if strings.Contains(lines[1], theme.Viewport.MouseSelectionBg) {
 		t.Error("visual row 1 should NOT have selection background")
 	}
 	for i := 0; i < 2; i++ {

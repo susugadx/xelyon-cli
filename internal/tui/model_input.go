@@ -4,6 +4,7 @@ import (
 	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/susugadx/xelyon-cli/internal/tui/lifecycle"
 )
 
 var readClipboardText = clipboard.ReadAll
@@ -29,7 +30,7 @@ func isBackspaceKey(msg tea.KeyMsg) bool {
 
 // handleKeyMsg はキー入力を処理する。
 func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	tuiDebugf("KeyMsg: Type=%d(%s) Runes=%v String=%q", msg.Type, msg.Type, msg.Runes, msg.String())
+	lifecycle.DebugLog("KeyMsg: Type=%d(%s) Runes=%v String=%q", msg.Type, msg.Type, msg.Runes, msg.String())
 
 	// Ctrl+C は常に最優先
 	if msg.Type == tea.KeyCtrlC {

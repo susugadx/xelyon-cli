@@ -1,6 +1,12 @@
 package tui
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/tui/configscreen"
+	"github.com/susugadx/xelyon-cli/internal/tui/termtext"
+	"github.com/susugadx/xelyon-cli/internal/tui/theme"
+)
 
 type configBodyColumn struct {
 	width int
@@ -41,7 +47,7 @@ func (m Model) renderConfigBody(height int) string {
 
 func (m Model) configBodyColumns(height int) []configBodyColumn {
 	cs := m.configScreen
-	leftW, midW, rightW := configPaneWidths(m.width)
+	leftW, midW, rightW := configscreen.PaneWidths(m.width)
 
 	switch {
 	case rightW > 0:
@@ -75,5 +81,5 @@ func configBodyLine(column configBodyColumn, row int) string {
 	if row < len(column.lines) {
 		return column.lines[row]
 	}
-	return fillANSITextWidth("", column.width, cfgBgNormal)
+	return termtext.FillANSITextWidth("", column.width, theme.Config.BgNormal)
 }
