@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	openaicompat "github.com/susugadx/xelyon-cli/internal/api/providers/openai_compat"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -101,7 +102,7 @@ func TestHandleStreamingResponse_NullUsageDoesNotEmitZeroUsageOnToolCallsFinish(
 }
 
 func TestChatWithCompletions_RequestIncludesThinkingAndForcedToolChoice(t *testing.T) {
-	var captured api.ChatRequest
+	var captured openaicompat.ChatCompletionsRequest
 	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
 		if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
 			t.Fatalf("decode request: %v", err)

@@ -7,14 +7,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	_ "github.com/susugadx/xelyon-cli/internal/api/providers/bedrock"
-	_ "github.com/susugadx/xelyon-cli/internal/api/providers/claude"
-	_ "github.com/susugadx/xelyon-cli/internal/api/providers/deepseek"
-	_ "github.com/susugadx/xelyon-cli/internal/api/providers/gemini"
-	_ "github.com/susugadx/xelyon-cli/internal/api/providers/groq"
-	_ "github.com/susugadx/xelyon-cli/internal/api/providers/ollama"
-	_ "github.com/susugadx/xelyon-cli/internal/api/providers/openai"
-	_ "github.com/susugadx/xelyon-cli/internal/api/providers/openrouter"
+	_ "github.com/susugadx/xelyon-cli/internal/api/providers/all"
 )
 
 func TestNewProvider_MissingAPIKey(t *testing.T) {

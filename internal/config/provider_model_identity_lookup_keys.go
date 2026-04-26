@@ -1,21 +1,11 @@
 package config
 
+import "github.com/susugadx/xelyon-cli/internal/llmcatalog"
+
 // ProviderModelLookupKeys は provider_models lookup の優先キーを返す。
 // 先頭は常に入力値に最も近いキー、後続は互換 alias/canonical fallback。
 func ProviderModelLookupKeys(provider string) []string {
-	normalized := NormalizeProviderName(provider)
-	if normalized == "" {
-		return nil
-	}
-
-	keys := []string{normalized}
-	switch normalized {
-	case "anthropic":
-		keys = append(keys, "claude")
-	case "claude":
-		keys = append(keys, "anthropic")
-	}
-	return keys
+	return llmcatalog.ProviderModelLookupKeys(provider)
 }
 
 func providerModelLookupFallbackKeys(provider string) []string {

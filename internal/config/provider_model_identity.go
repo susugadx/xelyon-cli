@@ -1,20 +1,15 @@
 package config
 
-import "strings"
+import "github.com/susugadx/xelyon-cli/internal/llmcatalog"
 
 // NormalizeProviderName は provider 名を設定 lookup 用に正規化する。
 func NormalizeProviderName(name string) string {
-	return strings.ToLower(strings.TrimSpace(name))
+	return llmcatalog.NormalizeProviderKey(name)
 }
 
 // CanonicalProviderName は provider 名を実行時 canonical 名に変換する。
 func CanonicalProviderName(name string) string {
-	switch NormalizeProviderName(name) {
-	case "anthropic":
-		return "claude"
-	default:
-		return NormalizeProviderName(name)
-	}
+	return llmcatalog.CanonicalProviderKey(name)
 }
 
 // SameProviderRuntimeIdentity は alias/canonical を吸収して同一 runtime provider か判定する。

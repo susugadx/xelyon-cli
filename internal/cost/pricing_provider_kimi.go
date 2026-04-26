@@ -7,8 +7,8 @@ import (
 // getKimiPricing はモデル名からKimi料金を返す
 func getKimiPricing(model string) PricingInfo {
 	lm := strings.ToLower(model)
-	if cfg := loadPricingConfig(); cfg != nil {
-		return resolveProviderPricingFromConfig(cfg.Kimi, lm, 0, false)
+	if pricing, ok := resolveProviderPricingFromLoadedConfig("kimi", lm, 0, false); ok {
+		return pricing
 	}
 
 	if strings.Contains(lm, "k2.5") {

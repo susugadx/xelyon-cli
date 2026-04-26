@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"strings"
 
 	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/api/providers/openai"
+	openaicompat "github.com/susugadx/xelyon-cli/internal/api/providers/openai_compat"
 	openaicompatstream "github.com/susugadx/xelyon-cli/internal/api/providers/openai_compat_stream"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -67,11 +67,7 @@ func (p *Provider) IsFunctionCallingEnabled() bool {
 
 // ChatWithTools は Provider interface の実装（context対応）
 func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
-	// メッセージ構築
-	messages := []api.Message{
-		{Role: "system", Content: systemPrompt},
-	}
-	messages = append(messages, history...)
+	messages := openaicompat.BuildChatMessages(systemPrompt, history)
 
 	// デバッグ: メッセージ構造をダンプ
 	if os.Getenv("XELYON_DEBUG_DEEPSEEK") == "1" {
@@ -111,107 +107,74 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	// モデル名マッピング
 	actualModel := getActualModel(model)
 
-	reqBody := api.ChatRequest{
-		Model:         actualModel,
-		Messages:      messages,
-		MaxTokens:     api.GetMaxOutputTokens(ctx, "deepseek", model),
-		Stream:        true,
-		StreamOptions: &api.StreamOptions{IncludeUsage: true},
-		ToolChoice:    "", // テスト期待値との整合性のため空文字列で初期化
+	options := openaicompat.ChatCompletionsRequestOptions{
+		Model:             actualModel,
+		Messages:          messages,
+		MaxTokens:         api.GetMaxOutputTokens(ctx, "deepseek", model),
+		Stream:            true,
+		IncludeUsage:      true,
+		InitialToolChoice: "", // テスト期待値との整合性のため空文字列で初期化
 	}
 
 	// Function Calling: ツール定義を追加（環境変数で無効化可能）
 	if os.Getenv("DEEPSEEK_FUNCTION_CALLING") != "0" {
-		reqBody.Tools = openai.GetCombinedOpenAIToolsWithContext(ctx, p.mcpTools)
-		reqBody.ToolChoice = "auto"
-
-		// tool_choice 強制設定がある場合
-		if p.toolChoice != nil {
-			reqBody.ToolChoice = map[string]interface{}{
-				"type": "function",
-				"function": map[string]string{
-					"name": *p.toolChoice,
-				},
-			}
+		options.FunctionCalling = &openaicompat.FunctionCallingOptions{
+			Tools:    openai.GetCombinedOpenAIToolsWithContext(ctx, p.mcpTools),
+			ToolName: p.toolChoice,
 		}
 	}
 
+	reqBody := openaicompat.BuildChatCompletionsRequest(options)
 	req, err := p.CreateAPIRequest(ctx, reqBody)
 	if err != nil {
 		return "", err
 	}
 	p.SetBearerAuth(req)
 
-	// スピナー開始
 	spinnerSuffix := ""
 	if api.IsThinkingEnabled(ctx) {
 		spinnerSuffix = "Reasoner"
 	}
-	spinner := api.StartThinkingSpinner(ctx, false, spinnerSuffix)
-
-	// 再利用可能なHTTPクライアントを使用
-	resp, err := p.ExecuteRequest(req)
-	if err != nil {
-		spinner.Stop()
-		return "", fmt.Errorf("DeepSeek API request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return "", api.HandleHTTPError(resp, spinner, p.Name())
-	}
-
-	// ストリーミング処理（tool_calls対応）
-	return p.handleStreamingResponse(ctx, resp, spinner)
+	return openaicompat.RunChatCompletions(ctx, p, req, openaicompat.ChatCompletionsRunOptions{
+		SpinnerSuffix:      spinnerSuffix,
+		ForceStreaming:     true,
+		RequestErrorPrefix: "DeepSeek API request failed",
+		StreamHandler:      p.handleStreamingResponse,
+	})
 }
 
 // handleStreamingResponse はストリーミングレスポンスを処理（tool_calls対応）
 func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
 	out := api.OutputWriterFromContext(ctx)
 	errOut := api.ErrorWriterFromContext(ctx)
-	toolCalls := openaicompatstream.NewToolCallCollector()
-
-	// reasoning_content を累積
-	var reasoningContent strings.Builder
-	reasoningStarted := false
-
-	// usage 情報を追跡
-	var lastUsage *api.Usage
-
 	dim := color.New(color.Faint)
+	reasoningActive := false
 
-	// DeepSeek固有のパース処理（OpenAI互換形式）
-	parser := func(line string) (string, bool, error) {
-		data, done, handled := openaicompatstream.ParseSSEDataLine(line)
-		if !handled {
-			return "", false, nil
-		}
-		if done {
-			return "", true, nil
-		}
+	// lastReasoningContent をリセット
+	p.lastReasoningContent = ""
 
-		// レスポンス構造を検証
-		if err := api.ValidateStreamResponse([]byte(data)); err != nil {
-			return "", false, fmt.Errorf("invalid response structure: %w", err)
-		}
-
-		chunk, err := openaicompatstream.DecodeChunk(data)
-		if err != nil {
-			return "", false, err
-		}
-
-		if openaicompatstream.HasUsagePayload(chunk.Usage) {
+	streamResult, err := openaicompatstream.ParseSSEStream(ctx, resp, spinner, openaicompatstream.ParseSSEOptions{
+		ValidateData: func(data string) error {
+			if err := api.ValidateStreamResponse([]byte(data)); err != nil {
+				return fmt.Errorf("invalid response structure: %w", err)
+			}
+			return nil
+		},
+		UsageDecoder: func(raw json.RawMessage) (*api.Usage, error) {
+			if !openaicompatstream.HasUsagePayload(raw) {
+				return nil, nil
+			}
 			var usagePayload struct {
 				PromptTokens          int `json:"prompt_tokens"`
 				CompletionTokens      int `json:"completion_tokens"`
 				PromptCacheHitTokens  int `json:"prompt_cache_hit_tokens,omitempty"`
 				PromptCacheMissTokens int `json:"prompt_cache_miss_tokens,omitempty"`
 			}
-			if err := json.Unmarshal(chunk.Usage, &usagePayload); err != nil {
-				return "", false, err
+			if err := json.Unmarshal(raw, &usagePayload); err != nil {
+				return nil, err
 			}
 
-			lastUsage = &api.Usage{
+			usage := &api.Usage{
 				InputTokens:       usagePayload.PromptTokens,
 				OutputTokens:      usagePayload.CompletionTokens,
 				CachedInputTokens: usagePayload.PromptCacheHitTokens,
@@ -220,85 +183,57 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 				fmt.Fprintf(errOut, "[DEBUG DeepSeek] usage received: input=%d, output=%d, cached=%d\n",
 					usagePayload.PromptTokens, usagePayload.CompletionTokens, usagePayload.PromptCacheHitTokens)
 			}
-		}
-
-		if len(chunk.Choices) == 0 {
-			return "", false, nil
-		}
-
-		choice := chunk.Choices[0]
-
-		// reasoning_content の累積・表示
-		if choice.Delta.ReasoningContent != "" {
-			if !reasoningStarted {
-				reasoningStarted = true
-				// スピナーを停止して思考表示開始
+			return usage, nil
+		},
+		OnReasoningContent: func(content string, first bool) {
+			if first {
+				reasoningActive = true
 				spinner.Stop()
 				dim.Fprint(out, "💭 ")
 			}
-			reasoningContent.WriteString(choice.Delta.ReasoningContent)
-			dim.Fprint(out, choice.Delta.ReasoningContent)
-		}
-
-		// reasoning_content から content に切り替わった時に改行
-		if choice.Delta.Content != "" && reasoningStarted && reasoningContent.Len() > 0 {
-			_, _ = fmt.Fprintln(out) // 思考内容の後に改行
-			_, _ = fmt.Fprintln(out) // 空行で区切り
-			reasoningStarted = false
-		}
-
-		toolCalls.Append(choice.Delta.ToolCalls, func(toolName string) {
+			dim.Fprint(out, content)
+		},
+		OnReasoningBoundary: func() {
+			if !reasoningActive {
+				return
+			}
+			_, _ = fmt.Fprintln(out)
+			_, _ = fmt.Fprintln(out)
+			reasoningActive = false
+		},
+		OnToolCallArguments: func(toolName string) {
 			// reasoning/content 表示後に tool_call へ切り替わる場合は spinner を再表示する。
 			if !spinner.IsActive() {
 				spinner.Start(ui.SpinnerMessageForTool(toolName))
 			}
-		})
-
-		// finish_reason == "tool_calls" で完了
-		if choice.FinishReason == "tool_calls" {
-			// 思考のみで終了した場合の改行
-			if reasoningStarted && reasoningContent.Len() > 0 {
-				_, _ = fmt.Fprintln(out)
-				_, _ = fmt.Fprintln(out)
-			}
-			return "", true, nil
-		}
-
-		// テキストコンテンツ
-		return choice.Delta.Content, false, nil
-	}
-
-	// lastReasoningContent をリセット
-	p.lastReasoningContent = ""
-
-	content, err := api.ParseStreamingResponse(ctx, resp, spinner, parser)
+		},
+		StopOnToolCallsFinish: true,
+	})
 	if err != nil {
 		return "", err
 	}
 
 	// reasoning_content を保存（次のリクエストに含めるため）
-	if reasoningContent.Len() > 0 {
-		p.lastReasoningContent = reasoningContent.String()
-	}
+	p.lastReasoningContent = streamResult.ReasoningContent
 
 	// usage コールバックを呼び出し
-	if lastUsage != nil && p.usageCallback != nil {
-		p.usageCallback(*lastUsage)
+	if streamResult.Usage != nil && p.usageCallback != nil {
+		p.usageCallback(*streamResult.Usage)
 	}
 
 	toolCallsOutput := openaicompatstream.BuildToolCallJSON(
-		toolCalls.ToOpenAIToolCalls(),
+		streamResult.ToolCalls,
 		openai.ConvertToolCallToToolJSON,
 	)
 
 	// tool_calls がある場合はそれを返す
 	if toolCallsOutput != "" {
-		if content != "" {
-			return content + toolCallsOutput, nil
+		if streamResult.Content != "" {
+			return streamResult.Content + toolCallsOutput, nil
 		}
 		return toolCallsOutput, nil
 	}
-	return content, nil
+	return streamResult.Content, nil
 }
 
 // getActualModel はモデル名を実際のAPI用に変換

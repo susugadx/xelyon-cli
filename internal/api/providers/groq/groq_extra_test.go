@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	openaicompat "github.com/susugadx/xelyon-cli/internal/api/providers/openai_compat"
 )
 
 func TestProvider_IsFunctionCallingEnabled(t *testing.T) {
@@ -30,7 +31,7 @@ func TestProvider_SettersAffectRequestAndUsageCallback(t *testing.T) {
 	defer os.Setenv("GROQ_FUNCTION_CALLING", originalEnv)
 	os.Unsetenv("GROQ_FUNCTION_CALLING")
 
-	var requestBody api.ChatRequest
+	var requestBody openaicompat.ChatCompletionsRequest
 	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
 		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
 			t.Fatalf("Failed to decode request: %v", err)

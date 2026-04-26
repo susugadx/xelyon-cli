@@ -10,6 +10,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/api/providers/openai"
+	openaicompat "github.com/susugadx/xelyon-cli/internal/api/providers/openai_compat"
 
 	// ツール登録のための blank import
 	_ "github.com/susugadx/xelyon-cli/internal/tools/dev"
@@ -166,7 +167,7 @@ func TestProvider_ChatWithTools_RequestValidation(t *testing.T) {
 		}
 
 		// リクエストボディを検証
-		var req api.ChatRequest
+		var req openaicompat.ChatCompletionsRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Fatalf("Failed to decode request: %v", err)
 		}
@@ -612,7 +613,7 @@ func TestGetCombinedTools_BuiltinToolsPresent(t *testing.T) {
 
 // TestFunctionCalling_RequestFormat は Function Calling 有効時のリクエスト形式をテスト
 func TestFunctionCalling_RequestFormat(t *testing.T) {
-	var capturedRequest api.ChatRequest
+	var capturedRequest openaicompat.ChatCompletionsRequest
 
 	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
 		if err := json.NewDecoder(r.Body).Decode(&capturedRequest); err != nil {
@@ -656,7 +657,7 @@ func TestFunctionCalling_RequestFormat(t *testing.T) {
 
 // TestFunctionCalling_Disabled は DEEPSEEK_FUNCTION_CALLING=0 でツールが含まれないことを確認
 func TestFunctionCalling_Disabled(t *testing.T) {
-	var capturedRequest api.ChatRequest
+	var capturedRequest openaicompat.ChatCompletionsRequest
 
 	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
 		if err := json.NewDecoder(r.Body).Decode(&capturedRequest); err != nil {

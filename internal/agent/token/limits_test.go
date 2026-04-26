@@ -252,18 +252,18 @@ func TestEstimateTokenCount_Proportional(t *testing.T) {
 	}
 }
 
-func TestModelTokenLimits_AllPositive(t *testing.T) {
-	// All model limits should be positive
-	for model, limit := range modelTokenLimits {
-		if limit <= 0 {
-			t.Errorf("Model %q has non-positive limit: %d", model, limit)
+func TestModelTokenLimitPolicy_ReturnsPositiveLimitsForRepresentatives(t *testing.T) {
+	for _, model := range []string{
+		"claude-sonnet-4-6",
+		"gpt-5.4",
+		"gemini-3.1-pro-preview",
+		"deepseek-chat",
+		"llama-3.3-70b-versatile",
+		"qwen2.5-coder:7b",
+		"unknown-model",
+	} {
+		if limit := GetModelTokenLimit(model); limit <= 0 {
+			t.Errorf("GetModelTokenLimit(%q) = %d, want positive", model, limit)
 		}
-	}
-}
-
-func TestModelTokenLimits_DefaultExists(t *testing.T) {
-	// "default" key should exist
-	if _, ok := modelTokenLimits["default"]; !ok {
-		t.Error("Default token limit not defined")
 	}
 }

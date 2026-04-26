@@ -1,5 +1,7 @@
 package configgen
 
+import "github.com/susugadx/xelyon-cli/internal/llmcatalog"
+
 // SectionInfo describes a user-facing config section and its fields.
 type SectionInfo struct {
 	StructName string
@@ -29,7 +31,7 @@ var Sections = map[string]SectionInfo{
 			"default_provider": "select",
 		},
 		SelectOpts: map[string][]string{
-			"default_provider": {"deepseek", "claude", "openai", "gemini", "groq", "ollama", "openrouter", "bedrock"},
+			"default_provider": llmcatalog.DisplayProviderKeys(),
 		},
 	},
 	"default_model": {
@@ -186,7 +188,7 @@ var Sections = map[string]SectionInfo{
 			"cache_size":    "int",
 		},
 		SelectOpts: map[string][]string{
-			"provider": {"openai", "gemini", "claude", "anthropic"},
+			"provider": llmcatalog.NativeWebSearchProviderKeys(true),
 		},
 	},
 	"sub_agent": {

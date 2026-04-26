@@ -8,6 +8,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/api/providers/claude"
 	"github.com/susugadx/xelyon-cli/internal/api/providers/openai"
+	openaicompat "github.com/susugadx/xelyon-cli/internal/api/providers/openai_compat"
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
@@ -15,37 +16,24 @@ import (
 // OpenRouter 向け request payload 構築だけを担当する。
 
 func (p *Provider) buildOpenAITextChatPayload(ctx context.Context, systemPrompt string, history []api.Message, model string) ([]byte, error) {
-	messages := []api.Message{
-		{Role: "system", Content: systemPrompt},
-	}
-	messages = append(messages, history...)
-
-	reqBody := api.ChatRequest{
-		Model:         model,
-		Messages:      messages,
-		MaxTokens:     api.GetMaxOutputTokens(ctx, "openrouter", model),
-		Stream:        true,
-		StreamOptions: &api.StreamOptions{IncludeUsage: true},
+	options := openaicompat.ChatCompletionsRequestOptions{
+		Model:        model,
+		SystemPrompt: systemPrompt,
+		History:      history,
+		MaxTokens:    api.GetMaxOutputTokens(ctx, "openrouter", model),
+		Stream:       true,
+		IncludeUsage: true,
 	}
 
 	if p.IsFunctionCallingEnabled() {
-		reqBody.Tools = openai.GetCombinedOpenAIToolsWithContext(ctx, p.mcpTools)
-		reqBody.ToolChoice = p.buildOpenAIToolChoice()
+		options.FunctionCalling = &openaicompat.FunctionCallingOptions{
+			Tools:    openai.GetCombinedOpenAIToolsWithContext(ctx, p.mcpTools),
+			ToolName: p.toolChoice,
+		}
 	}
 
+	reqBody := openaicompat.BuildChatCompletionsRequest(options)
 	return json.Marshal(reqBody)
-}
-
-func (p *Provider) buildOpenAIToolChoice() interface{} {
-	if p.toolChoice == nil {
-		return "auto"
-	}
-	return map[string]interface{}{
-		"type": "function",
-		"function": map[string]string{
-			"name": *p.toolChoice,
-		},
-	}
 }
 
 func (p *Provider) buildOpenAIImageChatPayload(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) ([]byte, error) {

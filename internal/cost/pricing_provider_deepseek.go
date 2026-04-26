@@ -7,8 +7,8 @@ import (
 // getDeepSeekPricing はモデル名からDeepSeek料金を返す
 func getDeepSeekPricing(model string) PricingInfo {
 	lm := strings.ToLower(model)
-	if cfg := loadPricingConfig(); cfg != nil {
-		return resolveProviderPricingFromConfig(cfg.DeepSeek, lm, 0, false)
+	if pricing, ok := resolveProviderPricingFromLoadedConfig("deepseek", lm, 0, false); ok {
+		return pricing
 	}
 
 	// DeepSeek V3.2: deepseek-chat/deepseek-reasoner 統一料金

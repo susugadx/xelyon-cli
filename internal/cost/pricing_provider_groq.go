@@ -7,8 +7,8 @@ import (
 // getGroqPricing はモデル名からGroq料金を返す
 func getGroqPricing(model string) PricingInfo {
 	lm := strings.ToLower(model)
-	if cfg := loadPricingConfig(); cfg != nil {
-		return resolveProviderPricingFromConfig(cfg.Groq, lm, 0, false)
+	if pricing, ok := resolveProviderPricingFromLoadedConfig("groq", lm, 0, false); ok {
+		return pricing
 	}
 
 	switch {

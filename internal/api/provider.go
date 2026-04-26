@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -65,23 +66,27 @@ func ListProviders() []string {
 
 // getAPIKeyForProvider はプロバイダー名から環境変数のAPIキーを取得
 func getAPIKeyForProvider(providerName string) string {
-	canonical := config.CanonicalProviderName(providerName)
-	switch canonical {
-	case "ollama":
-		baseURL := os.Getenv("OLLAMA_BASE_URL")
-		if baseURL == "" {
-			return "http://localhost:11434"
+	entry, ok := llmcatalog.ProviderDescriptorFor(providerName)
+	if !ok {
+		return ""
+	}
+	switch entry.CredentialKind {
+	case "base_url":
+		if entry.BaseURLEnv != "" {
+			if value := os.Getenv(entry.BaseURLEnv); value != "" {
+				return value
+			}
 		}
-		return baseURL
-	case "bedrock":
-		// Bedrock は AWS 認証チェーンを使用するため、常にダミー値を返す
-		return "aws-credentials"
-	default:
-		envKey := config.ProviderAPIKeyEnv(canonical)
-		if envKey == "" {
+		return entry.DefaultBaseURL
+	case "static":
+		return entry.StaticCredential
+	case "api_key", "":
+		if entry.APIKeyEnv == "" {
 			return ""
 		}
-		return os.Getenv(envKey)
+		return os.Getenv(entry.APIKeyEnv)
+	default:
+		return ""
 	}
 }
 
@@ -175,25 +180,8 @@ type CacheClearable interface {
 	ClearCache()
 }
 
-// knownModelMaxOutputTokens は既知モデルの最大出力トークン数マップ
-var knownModelMaxOutputTokens = map[string]int{
-	"deepseek-chat":                      8192,
-	"deepseek-reasoner":                  64000,
-	"claude-sonnet-4-6":                  64000,
-	"claude-sonnet-4-5":                  64000,
-	"claude-opus-4-6":                    128000,
-	"claude-opus-4-5":                    64000,
-	"gpt-5.2":                            16384,
-	"gemini-2.5-flash":                   65536,
-	"gemini-3.1-pro-preview":             65536,
-	"gemini-3.1-pro-preview-customtools": 65536,
-}
-
-// GetMaxOutputTokens は指定されたプロバイダーとモデルの最大出力トークン数を取得する（4段階フォールバック）
-// 1. Extended Thinking 有効時は BudgetTokens を考慮
-// 2. ユーザーの model_overrides (config)
-// 3. 既知モデルマップ (knownModelMaxOutputTokens)
-// 4. プロバイダーのデフォルト値 (ProviderModelConfig.MaxOutputTokens)
+// GetMaxOutputTokens は指定されたプロバイダーとモデルの最大出力トークン数を取得する。
+// 優先順位: model_overrides > catalog の既知モデル値 > provider default > Thinking 加算。
 func GetMaxOutputTokens(ctx context.Context, providerName, model string) int {
 	cfg := config.FromContext(ctx)
 
@@ -209,9 +197,9 @@ func GetMaxOutputTokens(ctx context.Context, providerName, model string) int {
 		}
 	}
 
-	// 2. 既知モデルマップ
+	// 2. catalog の既知モデル値
 	if maxTokens == 0 {
-		if tokens, ok := knownModelMaxOutputTokens[model]; ok {
+		if tokens, ok := llmcatalog.KnownMaxOutputTokens(model); ok {
 			maxTokens = tokens
 		}
 	}
@@ -324,11 +312,7 @@ func HandleRateLimit(resp *http.Response) error {
 // isAdaptiveThinkingModel は adaptive thinking を使用するモデルか判定する。
 // claude パッケージと循環依存を避けるため api パッケージにも定義。
 func isAdaptiveThinkingModel(model string) bool {
-	m := strings.ToLower(model)
-	return strings.Contains(m, "claude-opus-4-6") ||
-		strings.Contains(m, "claude-sonnet-4-6") ||
-		strings.Contains(m, "claude-opus-4.6") ||
-		strings.Contains(m, "claude-sonnet-4.6")
+	return llmcatalog.IsAdaptiveClaudeThinkingModel(model)
 }
 
 // LevelToBudgetTokens は Thinking Level を budget_tokens に変換（Claude/Gemini共通）

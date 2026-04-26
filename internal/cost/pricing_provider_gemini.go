@@ -8,8 +8,8 @@ import (
 // promptTokenCount はリクエストの入力トークン数（200Kティア判定に使用）
 func getGeminiPricing(model string, promptTokenCount int) PricingInfo {
 	lm := strings.ToLower(model)
-	if cfg := loadPricingConfig(); cfg != nil {
-		return resolveProviderPricingFromConfig(cfg.Gemini, lm, promptTokenCount, true)
+	if pricing, ok := resolveProviderPricingFromLoadedConfig("gemini", lm, promptTokenCount, true); ok {
+		return pricing
 	}
 
 	switch {

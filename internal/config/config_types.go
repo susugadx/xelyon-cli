@@ -1,6 +1,6 @@
 package config
 
-import "strings"
+import "github.com/susugadx/xelyon-cli/internal/llmcatalog"
 
 type providerModelSectionState int
 
@@ -250,24 +250,5 @@ type ProviderModelConfig struct {
 // IsResponsesAPIModel はモデルが OpenAI Responses API を使用するか判定
 // 対応モデルは prefix マッチで自動判定し、設定リストをフォールバックとして使用
 func (c *Config) IsResponsesAPIModel(model string) bool {
-	// GPT-5 シリーズ
-	if strings.HasPrefix(model, "gpt-5") {
-		return true
-	}
-	// GPT-4o シリーズ（gpt-4o, gpt-4o-mini 等）
-	// 注意: gpt-4-turbo, gpt-4 は非対応なので gpt-4o のみ
-	if strings.HasPrefix(model, "gpt-4o") {
-		return true
-	}
-	// o-series reasoning モデル（o1, o3, o4 等）
-	if strings.HasPrefix(model, "o1") || strings.HasPrefix(model, "o3") || strings.HasPrefix(model, "o4") {
-		return true
-	}
-	// 設定リストによるフォールバック（ユーザーカスタムモデル用）
-	for _, m := range c.OpenAI.ResponsesAPIModels {
-		if m == model {
-			return true
-		}
-	}
-	return false
+	return llmcatalog.IsOpenAIResponsesModel(model, c.OpenAI.ResponsesAPIModels)
 }

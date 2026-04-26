@@ -3,21 +3,12 @@ package config
 import (
 	"fmt"
 	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
 )
 
 // ValidProviders は有効なプロバイダー名の一覧
-// internal/api/provider.go の NewProvider() と同期させること
-var ValidProviders = []string{
-	"deepseek",
-	"openai",
-	"gemini",
-	"claude",
-	"anthropic", // claudeのエイリアス
-	"ollama",
-	"groq",
-	"openrouter",
-	"bedrock",
-}
+var ValidProviders = llmcatalog.ProviderKeys(true)
 
 var providerTypos = map[string]string{
 	"deepseak":  "deepseek",
@@ -40,14 +31,7 @@ var providerTypos = map[string]string{
 
 // GetDisplayProviders は表示用のプロバイダーリスト（エイリアスを除く）を返す
 func GetDisplayProviders() []string {
-	var display []string
-	for _, p := range ValidProviders {
-		if p == "anthropic" {
-			continue
-		}
-		display = append(display, p)
-	}
-	return display
+	return llmcatalog.DisplayProviderKeys()
 }
 
 func validateProviderIssues(cfg *Config) []ValidationIssue {
@@ -114,13 +98,7 @@ func validateProviderModelsIssues(cfg *Config) []ValidationIssue {
 
 // isValidProvider はプロバイダー名が有効かチェック
 func isValidProvider(name string) bool {
-	lower := NormalizeProviderName(name)
-	for _, valid := range ValidProviders {
-		if lower == valid {
-			return true
-		}
-	}
-	return false
+	return llmcatalog.IsKnownProvider(name)
 }
 
 // suggestProvider は類似のプロバイダー名を提案

@@ -208,6 +208,12 @@ type ParseSSEOptions struct {
 	OnUsageDecodeError func(error) error
 	// UsageDecoder は usage payload の decode 方法を上書きする。
 	UsageDecoder func(json.RawMessage) (*api.Usage, error)
+	// ValidateData は data JSON の構造検証を行う。
+	ValidateData func(string) error
+	// OnReasoningContent は reasoning_content 受信時に呼ばれる。
+	OnReasoningContent func(content string, first bool)
+	// OnReasoningBoundary は reasoning_content から通常 content や tool_calls 終了へ移る時に呼ばれる。
+	OnReasoningBoundary func()
 	// OnToolCallArguments は tool_call arguments 受信時に呼ばれる。
 	OnToolCallArguments func(string)
 	// ChoiceHandler は choice 処理を上書きする。
@@ -218,15 +224,18 @@ type ParseSSEOptions struct {
 
 // ParseSSEResult は OpenAI 互換 SSE の共通処理結果。
 type ParseSSEResult struct {
-	Content   string
-	ToolCalls []api.OpenAIToolCall
-	Usage     *api.Usage
+	Content          string
+	ReasoningContent string
+	ToolCalls        []api.OpenAIToolCall
+	Usage            *api.Usage
 }
 
 // ParseSSEStream は OpenAI 互換 SSE を共通処理する。
 func ParseSSEStream(ctx context.Context, resp *http.Response, spinner *ui.Spinner, options ParseSSEOptions) (*ParseSSEResult, error) {
 	collector := NewToolCallCollector()
 	var lastUsage *api.Usage
+	var reasoningContent strings.Builder
+	reasoningActive := false
 
 	usageDecoder := options.UsageDecoder
 	if usageDecoder == nil {
@@ -240,6 +249,12 @@ func ParseSSEStream(ctx context.Context, resp *http.Response, spinner *ui.Spinne
 		}
 		if done {
 			return "", true, nil
+		}
+
+		if options.ValidateData != nil {
+			if err := options.ValidateData(data); err != nil {
+				return "", false, err
+			}
 		}
 
 		chunk, err := DecodeChunk(data)
@@ -266,6 +281,22 @@ func ParseSSEStream(ctx context.Context, resp *http.Response, spinner *ui.Spinne
 		}
 
 		choice := chunk.Choices[0]
+
+		if choice.Delta.ReasoningContent != "" {
+			first := !reasoningActive
+			reasoningActive = true
+			reasoningContent.WriteString(choice.Delta.ReasoningContent)
+			if options.OnReasoningContent != nil {
+				options.OnReasoningContent(choice.Delta.ReasoningContent, first)
+			}
+		}
+		if reasoningActive && (choice.Delta.Content != "" || choice.FinishReason == "tool_calls") {
+			if options.OnReasoningBoundary != nil {
+				options.OnReasoningBoundary()
+			}
+			reasoningActive = false
+		}
+
 		collector.Append(choice.Delta.ToolCalls, options.OnToolCallArguments)
 
 		if options.ChoiceHandler != nil {
@@ -283,8 +314,9 @@ func ParseSSEStream(ctx context.Context, resp *http.Response, spinner *ui.Spinne
 	}
 
 	return &ParseSSEResult{
-		Content:   content,
-		ToolCalls: collector.ToOpenAIToolCalls(),
-		Usage:     lastUsage,
+		Content:          content,
+		ReasoningContent: reasoningContent.String(),
+		ToolCalls:        collector.ToOpenAIToolCalls(),
+		Usage:            lastUsage,
 	}, nil
 }

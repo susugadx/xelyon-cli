@@ -36,7 +36,6 @@ export DEEPSEEK_API_KEY=sk-...
 
 # 使用例
 xelyon --provider deepseek --model deepseek-chat
-xelyon --provider deepseek --model deepseek-chat
 xelyon --provider deepseek --model deepseek-reasoner
 ```
 
@@ -53,15 +52,15 @@ xelyon --provider deepseek --model deepseek-reasoner
 export OPENAI_API_KEY=sk-...
 
 # 使用例
-xelyon --provider openai --model gpt-4
-xelyon --provider openai --model gpt-4-turbo
+xelyon --provider openai --model gpt-5.4
+xelyon --provider openai --model gpt-5.4-mini
 xelyon --provider openai --model gpt-5.2
 xelyon --provider openai --model gpt-5.2-codex
 ```
 
 **特徴:**
 - 高品質な回答
-- GPT-4Vで画像入力対応
+- 画像入力対応
 - 豊富なモデルラインナップ
 - **注意: 高コスト**（GPT-5.2: 入力 $1.75/1M, 出力 $14/1M）
 
@@ -146,8 +145,8 @@ Gemini 3 Pro / Flash は **thinking（推論）が常時 ON** です。XELYON �
 export ANTHROPIC_API_KEY=sk-ant-...
 
 # 使用例
-xelyon --provider claude --model claude-sonnet-4-5-20250514
-xelyon --provider claude --model claude-opus-4
+xelyon --provider claude --model claude-sonnet-4-6
+xelyon --provider claude --model claude-opus-4-6
 ```
 
 **特徴:**
@@ -204,7 +203,7 @@ xelyon --provider ollama --model llama3.1:8b
 export OPENROUTER_API_KEY=sk-or-...
 
 # 使用例
-xelyon --provider openrouter --model anthropic/claude-opus-4.5
+xelyon --provider openrouter --model anthropic/claude-sonnet-4.6
 ```
 
 **特徴:**
@@ -227,8 +226,8 @@ aws configure
 # 方法3: IAM ロール（EC2/ECS上で自動）
 
 # 使用例
+xelyon --provider bedrock --model global.anthropic.claude-sonnet-4-6-v1
 xelyon --provider bedrock --model global.anthropic.claude-opus-4-5-20251101-v1:0
-xelyon --provider bedrock --model us.anthropic.claude-sonnet-4-20250514-v1:0
 xelyon --provider bedrock --model us.anthropic.claude-haiku-4-5-20251001-v1:0
 ```
 
@@ -243,7 +242,7 @@ xelyon --provider bedrock --model us.anthropic.claude-haiku-4-5-20251001-v1:0
 | モデル | Bedrock モデル ID |
 |--------|------------------|
 | Claude Opus 4.5 | `global.anthropic.claude-opus-4-5-20251101-v1:0` |
-| Claude Sonnet 4 | `us.anthropic.claude-sonnet-4-20250514-v1:0` |
+| Claude Sonnet 4.6 | `global.anthropic.claude-sonnet-4-6-v1` |
 | Claude Haiku 4.5 | `us.anthropic.claude-haiku-4-5-20251001-v1:0` |
 
 ## モデル指定方法
@@ -251,7 +250,7 @@ xelyon --provider bedrock --model us.anthropic.claude-haiku-4-5-20251001-v1:0
 ### 1. コマンドラインフラグ（最優先）
 
 ```bash
-xelyon --provider openai --model gpt-4
+xelyon --provider openai --model gpt-5.4
 ```
 
 ### 2. 環境変数
@@ -272,26 +271,26 @@ provider_models:
   deepseek:
     default_model: deepseek-chat
   openai:
-    default_model: gpt-4
+    default_model: gpt-5.4
   gemini:
-    default_model: gemini-2.5-flash
+    default_model: gemini-3.1-pro-preview-customtools
   claude:
-    default_model: claude-sonnet-4-5-20250514
+    default_model: claude-sonnet-4-6
   ollama:
     default_model: qwen2.5-coder:7b
   groq:
     default_model: meta-llama/llama-4-scout-17b-16e-instruct
   openrouter:
-    default_model: anthropic/claude-opus-4.5
+    default_model: anthropic/claude-sonnet-4.6
   bedrock:
-    default_model: global.anthropic.claude-opus-4-5-20251101-v1:0
+    default_model: global.anthropic.claude-sonnet-4-6-v1
 ```
 
 ### 4. セッション中の切り替え（`/use`コマンド）
 
 ```bash
 xelyon
-> /use openai gpt-4
+> /use openai gpt-5.4
 > 質問1
 > /use deepseek
 > 質問2
@@ -327,14 +326,14 @@ xelyon
 
 ### 複雑な問題解決
 - **Claude Opus 4**: 長文理解・推論
-- **GPT-4**: バランスの良い性能
+- **GPT-5.4**: バランスの良い性能
 
 ### 高速レスポンス
 - **Groq**: 超高速推論
 - **Gemini Flash**: バランス良く高速
 
 ### 画像解析
-- **GPT-4V**: 高品質な画像理解
+- **OpenAI**: 高品質な画像理解
 - **Gemini**: マルチモーダル対応
 - **Claude**: 画像+長文の組み合わせ
 
@@ -375,7 +374,7 @@ xelyon
 > /providers
 
 # 正しいモデル名を指定
-xelyon --provider openai --model gpt-4
+xelyon --provider openai --model gpt-5.4
 ```
 
 ### レート制限エラー

@@ -81,3 +81,29 @@ func TestGetModel_DefaultProviderKeepsGlobalDefaultModelWhenExplicitEntryHasOnly
 		t.Fatalf("getModel() = %q, want %q", got, "gpt-custom")
 	}
 }
+
+func TestGetModel_EnvironmentModelOverridesProviderResolution(t *testing.T) {
+	resetRootFlagsForTest()
+	t.Cleanup(resetRootFlagsForTest)
+
+	cfg := config.DefaultConfig()
+	cfg.DefaultProvider = "openai"
+	cfg.ProviderModels["openai"] = config.ProviderModelConfig{DefaultModel: "gpt-custom"}
+	t.Setenv("XELYON_MODEL", " env-model ")
+
+	if got := getModel(cfg); got != "env-model" {
+		t.Fatalf("getModel() = %q, want %q", got, "env-model")
+	}
+}
+
+func TestGetModel_FlagOverridesEnvironmentModel(t *testing.T) {
+	resetRootFlagsForTest()
+	t.Cleanup(resetRootFlagsForTest)
+
+	modelFlag = "flag-model"
+	t.Setenv("XELYON_MODEL", "env-model")
+
+	if got := getModel(config.DefaultConfig()); got != "flag-model" {
+		t.Fatalf("getModel() = %q, want %q", got, "flag-model")
+	}
+}

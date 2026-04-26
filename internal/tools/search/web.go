@@ -10,6 +10,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api/websearch"
 	"github.com/susugadx/xelyon-cli/internal/cache"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
@@ -172,23 +173,19 @@ func resolveSearchModel(cfg *config.Config, searchProvider, mainProvider, mainMo
 }
 
 func isNativeSearchProvider(provider string) bool {
-	switch config.CanonicalProviderName(provider) {
-	case "openai", "gemini", "claude":
-		return true
-	default:
-		return false
-	}
+	entry, ok := llmcatalog.ProviderDescriptorFor(provider)
+	return ok && entry.NativeWebSearch
 }
 
 func webSearchProviderError() string {
-	return `Web search requires a provider with native search support.
-Set web_search.provider in config.yaml to one of: openai, gemini, claude, anthropic
+	return fmt.Sprintf(`Web search requires a provider with native search support.
+Set web_search.provider in config.yaml to one of: %s
 
 Example:
   web_search:
     provider: gemini
 
-Gemini API key is free at https://aistudio.google.com/apikey`
+Gemini API key is free at https://aistudio.google.com/apikey`, strings.Join(llmcatalog.NativeWebSearchProviderKeys(true), ", "))
 }
 
 func normalizeProviderName(providerName string) string {

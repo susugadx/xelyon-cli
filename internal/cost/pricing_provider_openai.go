@@ -7,8 +7,8 @@ import (
 // getOpenAIPricing はモデル名からOpenAI料金を返す
 func getOpenAIPricing(model string, promptTokenCount int) PricingInfo {
 	lm := strings.ToLower(model)
-	if cfg := loadPricingConfig(); cfg != nil {
-		return resolveProviderPricingFromConfig(cfg.OpenAI, lm, promptTokenCount, true)
+	if pricing, ok := resolveProviderPricingFromLoadedConfig("openai", lm, promptTokenCount, true); ok {
+		return pricing
 	}
 
 	switch {

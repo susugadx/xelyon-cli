@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	openaicompat "github.com/susugadx/xelyon-cli/internal/api/providers/openai_compat"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 
@@ -234,7 +235,7 @@ func TestProvider_ChatWithTools_NonStreaming(t *testing.T) {
 			t.Errorf("X-Title = %q, want 'XELYON CLI'", r.Header.Get("X-Title"))
 		}
 
-		var req api.ChatRequest
+		var req openaicompat.ChatCompletionsRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Fatalf("Failed to decode request: %v", err)
 		}
@@ -611,7 +612,7 @@ func TestProvider_ChatWithTools_FunctionCallingDisabled(t *testing.T) {
 	defer os.Setenv("OPENROUTER_FUNCTION_CALLING", originalEnv)
 	os.Setenv("OPENROUTER_FUNCTION_CALLING", "0")
 
-	var requestBody api.ChatRequest
+	var requestBody openaicompat.ChatCompletionsRequest
 	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
 		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
 			t.Fatalf("Failed to decode request: %v", err)
@@ -648,7 +649,7 @@ func TestProvider_ChatWithTools_FunctionCallingEnabled(t *testing.T) {
 	defer os.Setenv("OPENROUTER_FUNCTION_CALLING", originalEnv)
 	os.Unsetenv("OPENROUTER_FUNCTION_CALLING")
 
-	var requestBody api.ChatRequest
+	var requestBody openaicompat.ChatCompletionsRequest
 	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
 		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
 			t.Fatalf("Failed to decode request: %v", err)

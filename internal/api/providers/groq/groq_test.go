@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	openaicompat "github.com/susugadx/xelyon-cli/internal/api/providers/openai_compat"
 
 	// ツール登録のための blank import
 	_ "github.com/susugadx/xelyon-cli/internal/tools/dev"
@@ -119,7 +120,7 @@ func TestProvider_ChatWithTools_NonStreaming(t *testing.T) {
 			t.Errorf("Authorization = %q, want 'Bearer test-key'", r.Header.Get("Authorization"))
 		}
 
-		var req api.ChatRequest
+		var req openaicompat.ChatCompletionsRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Fatalf("Failed to decode request: %v", err)
 		}
@@ -367,7 +368,7 @@ func TestProvider_ChatWithTools_FunctionCallingDisabled(t *testing.T) {
 	defer os.Setenv("GROQ_FUNCTION_CALLING", originalEnv)
 	os.Setenv("GROQ_FUNCTION_CALLING", "0")
 
-	var requestBody api.ChatRequest
+	var requestBody openaicompat.ChatCompletionsRequest
 	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
 		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
 			t.Fatalf("Failed to decode request: %v", err)
@@ -405,7 +406,7 @@ func TestProvider_ChatWithTools_FunctionCallingEnabled(t *testing.T) {
 	defer os.Setenv("GROQ_FUNCTION_CALLING", originalEnv)
 	os.Unsetenv("GROQ_FUNCTION_CALLING")
 
-	var requestBody api.ChatRequest
+	var requestBody openaicompat.ChatCompletionsRequest
 	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
 		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
 			t.Fatalf("Failed to decode request: %v", err)

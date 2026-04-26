@@ -1,11 +1,45 @@
 package cost
 
-import "github.com/susugadx/xelyon-cli/internal/config"
+import "github.com/susugadx/xelyon-cli/internal/llmcatalog"
+
+type pricingRequest struct {
+	Model            string
+	PromptTokenCount int
+}
+
+type pricingResolver func(pricingRequest) PricingInfo
+
+var pricingResolvers = map[string]pricingResolver{
+	"deepseek": func(req pricingRequest) PricingInfo {
+		return getDeepSeekPricing(req.Model)
+	},
+	"openai": func(req pricingRequest) PricingInfo {
+		return getOpenAIPricing(req.Model, req.PromptTokenCount)
+	},
+	"claude": func(req pricingRequest) PricingInfo {
+		return getClaudePricing(req.Model, req.PromptTokenCount)
+	},
+	"bedrock": func(req pricingRequest) PricingInfo {
+		return getBedrockPricing(req.Model, req.PromptTokenCount)
+	},
+	"gemini": func(req pricingRequest) PricingInfo {
+		return getGeminiPricing(req.Model, req.PromptTokenCount)
+	},
+	"groq": func(req pricingRequest) PricingInfo {
+		return getGroqPricing(req.Model)
+	},
+	"openrouter": func(req pricingRequest) PricingInfo {
+		return getOpenRouterPricing(req.Model, req.PromptTokenCount)
+	},
+	"ollama": func(pricingRequest) PricingInfo {
+		return PricingInfo{}
+	},
+}
 
 // GetPricingInfo はプロバイダー・モデル別の料金情報を返す
 // promptTokenCount はオプション（Gemini 200Kティア判定用）
 func GetPricingInfo(provider string, model string, promptTokenCount ...int) PricingInfo {
-	return resolvePricingByCanonicalProvider(config.CanonicalProviderName(provider), model, normalizePromptTokenCount(promptTokenCount))
+	return resolvePricingByProvider(provider, model, normalizePromptTokenCount(promptTokenCount))
 }
 
 func normalizePromptTokenCount(promptTokenCount []int) int {
@@ -15,26 +49,22 @@ func normalizePromptTokenCount(promptTokenCount []int) int {
 	return promptTokenCount[0]
 }
 
-func resolvePricingByCanonicalProvider(provider string, model string, promptTokenCount int) PricingInfo {
-	switch provider {
-	case "deepseek":
-		// DeepSeekの料金体系
-		return getDeepSeekPricing(model)
-	case "openai":
-		return getOpenAIPricing(model, promptTokenCount)
-	case "claude":
-		return getClaudePricing(model, promptTokenCount)
-	case "bedrock":
-		return getBedrockPricing(model, promptTokenCount)
-	case "gemini":
-		return getGeminiPricing(model, promptTokenCount)
-	case "groq":
-		return getGroqPricing(model)
-	case "openrouter":
-		return getOpenRouterPricing(model, promptTokenCount)
-	case "ollama":
-		return PricingInfo{} // ローカル実行は無料
-	default:
+func resolvePricingByProvider(provider string, model string, promptTokenCount int) PricingInfo {
+	entry, ok := llmcatalog.ProviderDescriptorFor(provider)
+	if !ok {
 		return getUnknownProviderFallbackPricing()
 	}
+
+	return resolvePricingByFamily(entry.PricingFamily, pricingRequest{
+		Model:            model,
+		PromptTokenCount: promptTokenCount,
+	})
+}
+
+func resolvePricingByFamily(family string, req pricingRequest) PricingInfo {
+	resolver, ok := pricingResolvers[family]
+	if !ok {
+		return getUnknownProviderFallbackPricing()
+	}
+	return resolver(req)
 }

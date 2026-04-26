@@ -1,25 +1,11 @@
 package api
 
-// このファイルは OpenAI互換 Chat API で使用される共通型を定義します。
-// DeepSeek, Groq, Ollama などの OpenAI互換プロバイダーで共有されます。
+// このファイルは OpenAI互換 Chat API で使用される共通レスポンス型を定義します。
+// request payload は各 provider の owner パッケージで定義します。
 
 // StreamOptions はストリーミング時のオプション
 type StreamOptions struct {
 	IncludeUsage bool `json:"include_usage"` // trueでusage情報を最終チャンクに含める
-}
-
-// ChatRequest はAPIリクエスト（OpenAI互換形式）
-type ChatRequest struct {
-	Model                string         `json:"model"`
-	Messages             []Message      `json:"messages"`
-	MaxTokens            int            `json:"max_tokens,omitempty"` // 最大出力トークン数
-	Stream               bool           `json:"stream"`
-	StreamOptions        *StreamOptions `json:"stream_options,omitempty"`         // ストリーミング時のオプション
-	ReasoningEffort      string         `json:"reasoning_effort,omitempty"`       // OpenAI Extended Thinking用
-	Tools                []OpenAITool   `json:"tools,omitempty"`                  // Function Calling用
-	ToolChoice           interface{}    `json:"tool_choice,omitempty"`            // "auto", "none", "required", またはオブジェクト
-	PromptCacheKey       string         `json:"prompt_cache_key,omitempty"`       // プロンプトキャッシュのルーティングキー
-	PromptCacheRetention string         `json:"prompt_cache_retention,omitempty"` // キャッシュ保持期間（"24h"でextended cache）
 }
 
 // Delta はストリームレスポンスの差分

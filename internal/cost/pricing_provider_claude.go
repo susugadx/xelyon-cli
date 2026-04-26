@@ -8,8 +8,8 @@ import (
 // promptTokenCount は200Kティア判定に使用（Geminiと同様）
 func getClaudePricing(model string, promptTokenCount int) PricingInfo {
 	lm := strings.ToLower(model)
-	if cfg := loadPricingConfig(); cfg != nil {
-		return resolveProviderPricingFromConfig(cfg.Claude, lm, promptTokenCount, true)
+	if pricing, ok := resolveProviderPricingFromLoadedConfig("claude", lm, promptTokenCount, true); ok {
+		return pricing
 	}
 
 	switch {

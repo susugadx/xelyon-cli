@@ -229,6 +229,44 @@ func TestParseSSEStream_DefaultFlow(t *testing.T) {
 	}
 }
 
+func TestParseSSEStream_AccumulatesReasoningContentAndCallbacks(t *testing.T) {
+	resp := &http.Response{
+		Body: io.NopCloser(strings.NewReader(strings.Join([]string{
+			`data: {"choices":[{"delta":{"reasoning_content":"Think"}}]}`,
+			`data: {"choices":[{"delta":{"reasoning_content":" deeply"}}]}`,
+			`data: {"choices":[{"delta":{"content":"Answer"}}]}`,
+			"data: [DONE]",
+		}, "\n"))),
+	}
+
+	var events []string
+	got, err := ParseSSEStream(context.Background(), resp, ui.NewSpinnerWithWriter(io.Discard), ParseSSEOptions{
+		OnReasoningContent: func(content string, first bool) {
+			if first {
+				events = append(events, "first:"+content)
+				return
+			}
+			events = append(events, "next:"+content)
+		},
+		OnReasoningBoundary: func() {
+			events = append(events, "boundary")
+		},
+	})
+	if err != nil {
+		t.Fatalf("ParseSSEStream() error = %v", err)
+	}
+	if got.Content != "Answer" {
+		t.Fatalf("ParseSSEStream().Content = %q, want Answer", got.Content)
+	}
+	if got.ReasoningContent != "Think deeply" {
+		t.Fatalf("ParseSSEStream().ReasoningContent = %q, want Think deeply", got.ReasoningContent)
+	}
+	wantEvents := []string{"first:Think", "next: deeply", "boundary"}
+	if strings.Join(events, "|") != strings.Join(wantEvents, "|") {
+		t.Fatalf("events = %v, want %v", events, wantEvents)
+	}
+}
+
 func TestParseSSEStream_ErrorCallbacksCanContinue(t *testing.T) {
 	resp := &http.Response{
 		Body: io.NopCloser(strings.NewReader(strings.Join([]string{

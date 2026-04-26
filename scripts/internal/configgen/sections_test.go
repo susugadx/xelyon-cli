@@ -1,6 +1,11 @@
 package configgen
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
+)
 
 func TestOrderedSectionsForCategory(t *testing.T) {
 	got := OrderedSectionsForCategory("provider")
@@ -40,5 +45,14 @@ func TestUserFacingSectionsHaveStructNames(t *testing.T) {
 		if Sections[sectionName].StructName == "" {
 			t.Fatalf("expected StructName for %q", sectionName)
 		}
+	}
+}
+
+func TestProviderSelectOptionsUseLLMCatalog(t *testing.T) {
+	if got, want := Sections["default_provider"].SelectOpts["default_provider"], llmcatalog.DisplayProviderKeys(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("default_provider options = %v, want %v", got, want)
+	}
+	if got, want := Sections["web_search"].SelectOpts["provider"], llmcatalog.NativeWebSearchProviderKeys(true); !reflect.DeepEqual(got, want) {
+		t.Fatalf("web_search.provider options = %v, want %v", got, want)
 	}
 }

@@ -205,9 +205,9 @@ mcp:
 # completed_with_changes 時に自動実行する final checks コマンド
 # 変更ファイルは XELYON_CHANGED_FILES 環境変数で参照可能
 final_checks:
-    # completed_with_changes 時に実行するコマンド（例: go test ./...）
+    # completed_with_changes 時に実行する final checks コマンド（例: go test ./...）
     commands: []
-    # コマンドタイムアウト（秒）（デフォルト: 600）
+    # final checks コマンドタイムアウト（秒）（デフォルト: 600）
     timeout: 600
 ```
 <!-- CONFIG-EXAMPLE-END -->
@@ -220,7 +220,7 @@ final_checks:
 - **型**: string
 - **デフォルト**: `deepseek`
 - **説明**: デフォルトで使用するプロバイダー
-- **選択肢**: `deepseek`, `openai`, `gemini`, `claude`, `ollama`, `groq`
+- **選択肢**: `deepseek`, `claude`, `openai`, `gemini`, `groq`, `ollama`, `openrouter`, `bedrock`
 
 #### `default_model`
 - **型**: string

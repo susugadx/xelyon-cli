@@ -9,3 +9,15 @@ func resolveProviderPricingFromConfig(provider providerPricingConfig, lm string,
 	}
 	return provider.Default
 }
+
+func resolveProviderPricingFromLoadedConfig(family string, lm string, promptTokenCount int, allowLongInputTier bool) (PricingInfo, bool) {
+	cfg := loadPricingConfig()
+	if cfg == nil {
+		return PricingInfo{}, false
+	}
+	provider, ok := cfg.provider(family)
+	if !ok {
+		return PricingInfo{}, false
+	}
+	return resolveProviderPricingFromConfig(provider, lm, promptTokenCount, allowLongInputTier), true
+}

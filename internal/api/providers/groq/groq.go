@@ -1,17 +1,15 @@
 package groq
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
-	"strings"
 
 	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/api/providers/openai"
+	openaicompat "github.com/susugadx/xelyon-cli/internal/api/providers/openai_compat"
 	openaicompatstream "github.com/susugadx/xelyon-cli/internal/api/providers/openai_compat_stream"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -62,76 +60,36 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		yellow.Fprintln(api.OutputWriterFromContext(ctx), "⚠️  Warning: Groq does not support Extended Thinking. Proceeding without it.")
 	}
 
-	// メッセージ構築
-	messages := []api.Message{
-		{Role: "system", Content: systemPrompt},
-	}
-	messages = append(messages, history...)
-
 	// モデル名を設定（config優先、フォールバックはkimi-k2-instruct）
 	model = api.GetDefaultModelWithContext(ctx, model, "groq", "moonshotai/kimi-k2-instruct")
 
-	reqBody := api.ChatRequest{
-		Model:         model,
-		Messages:      messages,
-		MaxTokens:     api.GetMaxOutputTokens(ctx, "groq", model),
-		Stream:        true,
-		StreamOptions: &api.StreamOptions{IncludeUsage: true},
+	options := openaicompat.ChatCompletionsRequestOptions{
+		Model:        model,
+		SystemPrompt: systemPrompt,
+		History:      history,
+		MaxTokens:    api.GetMaxOutputTokens(ctx, "groq", model),
+		Stream:       true,
+		IncludeUsage: true,
 	}
 
 	// Function Calling: ツール定義を追加（環境変数で無効化可能）
 	if os.Getenv("GROQ_FUNCTION_CALLING") != "0" {
-		reqBody.Tools = openai.GetCombinedOpenAIToolsWithContext(ctx, p.mcpTools)
-		reqBody.ToolChoice = "auto"
-
-		// tool_choice 強制設定がある場合
-		if p.toolChoice != nil {
-			reqBody.ToolChoice = map[string]interface{}{
-				"type": "function",
-				"function": map[string]string{
-					"name": *p.toolChoice,
-				},
-			}
+		options.FunctionCalling = &openaicompat.FunctionCallingOptions{
+			Tools:    openai.GetCombinedOpenAIToolsWithContext(ctx, p.mcpTools),
+			ToolName: p.toolChoice,
 		}
 	}
 
-	jsonBody, err := json.Marshal(reqBody)
+	reqBody := openaicompat.BuildChatCompletionsRequest(options)
+	req, err := openaicompat.NewBearerJSONRequest(ctx, p.BaseProvider.APIURL, p.APIKey, reqBody)
 	if err != nil {
 		return "", err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", p.BaseProvider.APIURL, bytes.NewBuffer(jsonBody))
-	if err != nil {
-		return "", err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+p.APIKey)
-
-	// スピナー開始
-	spinner := api.StartThinkingSpinner(ctx, false, "")
-
-	// 再利用可能なHTTPクライアントを使用
-	resp, err := p.ExecuteRequest(req)
-	if err != nil {
-		spinner.Stop()
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return "", api.HandleHTTPError(resp, spinner, p.Name())
-	}
-
-	// Content-Typeでストリーミング対応を判定
-	contentType := resp.Header.Get("Content-Type")
-	isStreaming := strings.Contains(contentType, "text/event-stream")
-
-	if isStreaming {
-		return p.handleStreamingResponse(ctx, resp, spinner)
-	} else {
-		return p.handleNonStreamingResponse(ctx, resp, spinner)
-	}
+	return openaicompat.RunChatCompletions(ctx, p, req, openaicompat.ChatCompletionsRunOptions{
+		StreamHandler:    p.handleStreamingResponse,
+		NonStreamHandler: p.handleNonStreamingResponse,
+	})
 }
 
 // handleStreamingResponse はストリーミングレスポンスを処理

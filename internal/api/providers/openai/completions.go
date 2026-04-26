@@ -1,15 +1,14 @@
 package openai
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
-	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	openaicompat "github.com/susugadx/xelyon-cli/internal/api/providers/openai_compat"
 	openaicompatstream "github.com/susugadx/xelyon-cli/internal/api/providers/openai_compat_stream"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/ui"
@@ -48,80 +47,40 @@ type MultimodalRequest struct {
 func (p *Provider) chatWithCompletions(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
 	cfg := config.FromContext(ctx)
 
-	// メッセージ構築
-	messages := []api.Message{
-		{Role: "system", Content: systemPrompt},
-	}
-	messages = append(messages, history...)
-
-	reqBody := api.ChatRequest{
+	options := openaicompat.ChatCompletionsRequestOptions{
 		Model:                model,
-		Messages:             messages,
+		SystemPrompt:         systemPrompt,
+		History:              history,
 		MaxTokens:            api.GetMaxOutputTokens(ctx, "openai", model),
 		Stream:               true,
-		StreamOptions:        &api.StreamOptions{IncludeUsage: true},
+		IncludeUsage:         true,
 		PromptCacheKey:       BuildPromptCacheKey(model, systemPrompt),
 		PromptCacheRetention: "24h",
 	}
 
 	// Function Calling: ツール定義を追加（環境変数で無効化可能）
 	if os.Getenv("OPENAI_FUNCTION_CALLING") != "0" {
-		reqBody.Tools = GetCombinedOpenAIToolsWithContext(ctx, p.mcpTools)
-		reqBody.ToolChoice = "auto"
-
-		// tool_choice 強制設定がある場合
-		if p.toolChoice != nil {
-			reqBody.ToolChoice = map[string]interface{}{
-				"type": "function",
-				"function": map[string]string{
-					"name": *p.toolChoice,
-				},
-			}
+		options.FunctionCalling = &openaicompat.FunctionCallingOptions{
+			Tools:    GetCombinedOpenAIToolsWithContext(ctx, p.mcpTools),
+			ToolName: p.toolChoice,
 		}
 	}
 
 	// Extended Thinking 適用
 	if api.IsThinkingEnabled(ctx) {
-		reqBody.ReasoningEffort = LevelToReasoningEffort(cfg.Thinking.Level)
+		options.ReasoningEffort = LevelToReasoningEffort(cfg.Thinking.Level)
 	}
 
-	jsonBody, err := json.Marshal(reqBody)
+	reqBody := openaicompat.BuildChatCompletionsRequest(options)
+	req, err := openaicompat.NewBearerJSONRequest(ctx, p.APIURL, p.APIKey, reqBody)
 	if err != nil {
 		return "", err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", p.APIURL, bytes.NewBuffer(jsonBody))
-	if err != nil {
-		return "", err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+p.APIKey)
-
-	// スピナー開始
-	spinner := api.StartThinkingSpinner(ctx, false, "")
-
-	// 再利用可能なHTTPクライアントを使用
-	resp, err := p.ExecuteRequest(req)
-	if err != nil {
-		spinner.Stop()
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return "", api.HandleHTTPError(resp, spinner, p.Name())
-	}
-
-	// Content-Typeでストリーミング対応を判定
-	contentType := resp.Header.Get("Content-Type")
-	isStreaming := strings.Contains(contentType, "text/event-stream")
-
-	if isStreaming {
-		return p.handleStreamingResponse(ctx, resp, spinner)
-	} else {
-		return p.handleNonStreamingResponse(ctx, resp, spinner)
-	}
+	return openaicompat.RunChatCompletions(ctx, p, req, openaicompat.ChatCompletionsRunOptions{
+		StreamHandler:    p.handleStreamingResponse,
+		NonStreamHandler: p.handleNonStreamingResponse,
+	})
 }
 
 // handleStreamingResponse はストリーミングレスポンスを処理（tool_calls対応）
@@ -255,40 +214,14 @@ func (p *Provider) chatWithImageCompletions(ctx context.Context, systemPrompt st
 		reqBody.ReasoningEffort = LevelToReasoningEffort(cfg.Thinking.Level)
 	}
 
-	jsonBody, err := json.Marshal(reqBody)
+	req, err := openaicompat.NewBearerJSONRequest(ctx, p.APIURL, p.APIKey, reqBody)
 	if err != nil {
 		return "", err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", p.APIURL, bytes.NewBuffer(jsonBody))
-	if err != nil {
-		return "", err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+p.APIKey)
-
-	// スピナー開始
-	spinner := api.StartThinkingSpinner(ctx, true, "")
-
-	resp, err := p.ExecuteRequest(req)
-	if err != nil {
-		spinner.Stop()
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return "", api.HandleHTTPError(resp, spinner, p.Name())
-	}
-
-	// ストリーミング処理
-	contentType := resp.Header.Get("Content-Type")
-	isStreaming := strings.Contains(contentType, "text/event-stream")
-
-	if isStreaming {
-		return p.handleStreamingResponse(ctx, resp, spinner)
-	} else {
-		return p.handleNonStreamingResponse(ctx, resp, spinner)
-	}
+	return openaicompat.RunChatCompletions(ctx, p, req, openaicompat.ChatCompletionsRunOptions{
+		ImageMode:        true,
+		StreamHandler:    p.handleStreamingResponse,
+		NonStreamHandler: p.handleNonStreamingResponse,
+	})
 }

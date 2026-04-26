@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	openaicompat "github.com/susugadx/xelyon-cli/internal/api/providers/openai_compat"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -78,7 +79,7 @@ func TestProvider_ChatWithTools_SelectsReasonerModelByThinkingState(t *testing.T
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var captured api.ChatRequest
+			var captured openaicompat.ChatCompletionsRequest
 			server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
 				if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
 					t.Fatalf("decode request: %v", err)
@@ -101,7 +102,7 @@ func TestProvider_ChatWithTools_SelectsReasonerModelByThinkingState(t *testing.T
 }
 
 func TestProvider_ChatWithTools_ForcedToolChoiceIncludesCustomMCPTool(t *testing.T) {
-	var captured api.ChatRequest
+	var captured openaicompat.ChatCompletionsRequest
 	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
 		if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
 			t.Fatalf("decode request: %v", err)

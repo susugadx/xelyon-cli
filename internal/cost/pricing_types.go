@@ -25,11 +25,12 @@ type longInputTier struct {
 	Pricing   PricingInfo `yaml:"pricing"`
 }
 
-type pricingConfig struct {
-	OpenAI   providerPricingConfig `yaml:"openai"`
-	Claude   providerPricingConfig `yaml:"claude"`
-	Gemini   providerPricingConfig `yaml:"gemini"`
-	DeepSeek providerPricingConfig `yaml:"deepseek"`
-	Groq     providerPricingConfig `yaml:"groq"`
-	Kimi     providerPricingConfig `yaml:"kimi"`
+type pricingConfig map[string]providerPricingConfig
+
+func (c pricingConfig) provider(family string) (providerPricingConfig, bool) {
+	if c == nil {
+		return providerPricingConfig{}, false
+	}
+	provider, ok := c[family]
+	return provider, ok
 }

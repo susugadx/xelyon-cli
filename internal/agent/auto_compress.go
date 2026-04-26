@@ -8,7 +8,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
 )
 
 // ResponseIDCapable は Responses API のキャッシュ機能を持つプロバイダー
@@ -21,18 +21,11 @@ type ResponseIDCapable interface {
 // defaultCompressionModel はプロバイダー別のデフォルト圧縮モデルを返す。
 // compression.model が空の場合に使用する。
 func defaultCompressionModel(providerName string) string {
-	switch config.CanonicalProviderName(providerName) {
-	case "openai":
-		return "gpt-5.4-mini"
-	case "gemini":
-		return "gemini-3.1-flash-lite-preview"
-	case "claude", "bedrock":
-		return "claude-haiku-4-5"
-	case "deepseek":
-		return ""
-	default:
+	entry, ok := llmcatalog.ProviderDescriptorFor(providerName)
+	if !ok {
 		return ""
 	}
+	return strings.TrimSpace(entry.CompressionModel)
 }
 
 // getCompressionModel は圧縮に使用するモデルを返す。

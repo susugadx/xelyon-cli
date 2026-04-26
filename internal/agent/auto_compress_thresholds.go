@@ -5,6 +5,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/cost"
+	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
 )
 
 // GetProviderCompressThresholdWithConfig は設定を考慮して provider/model ごとの圧縮閾値を返す。
@@ -38,20 +39,11 @@ func GetProviderCompressThreshold(provider string, model string) int {
 }
 
 func defaultProviderCompressThreshold(provider string, model string) int {
-	switch provider {
-	case "gemini":
-		return 180000 // 200K pricing cliff回避
-	case "claude", "bedrock":
-		return 150000 // 200K pricing cliff回避
-	case "deepseek":
-		return 80000 // 128K window に対して出力/推論 headroom を残す
-	case "openai":
+	entry, ok := llmcatalog.ProviderDescriptorFor(provider)
+	if !ok {
 		return 0
-	case "openrouter":
-		return 120000 // モデル依存だが安全な値
-	default:
-		return 0 // 不明なプロバイダは既存ロジックに任せる
 	}
+	return entry.CompressionThreshold
 }
 
 func providerThresholdLookupKeys(normalizedProvider, canonicalProvider string) []string {

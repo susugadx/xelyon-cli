@@ -510,7 +510,7 @@ bash: git checkout -b feature-branch
 |---------|------|---------|
 | `search_code` | コード検索。`mode=auto` を既定に symbol-aware / literal / regex を language-aware に routing し、複数パターン・結果分類にも対応。対応言語では symbol-like query から定義・caller・参照・テストを自動解決 | `pattern`, `mode`, `path`, `file_filter` 等 |
 | `web_search` | ネイティブWeb検索（`web_search.provider` で OpenAI / Gemini / Claude を選択可能） | `query` |
-**注意**: メインプロバイダーがネイティブ検索非対応（DeepSeek / Groq / Ollama / OpenRouter など）の場合は、`config.yaml` で `web_search.provider` を設定してください。詳細は[config.md - Web検索](config.md#web検索)を参照してください。
+**注意**: メインプロバイダーがネイティブ検索非対応（DeepSeek / Groq / Ollama / OpenRouter / Bedrock など）の場合は、`config.yaml` で `web_search.provider` を設定してください。詳細は[config.md - Web検索](config.md#web検索)を参照してください。
 
 ### 開発支援
 

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	openaicompat "github.com/susugadx/xelyon-cli/internal/api/providers/openai_compat"
 
 	// ツール登録のための blank import
 	_ "github.com/susugadx/xelyon-cli/internal/tools/dev"
@@ -124,7 +125,7 @@ func TestOpenAIProvider_ChatWithTools_NonStreaming(t *testing.T) {
 			t.Errorf("Authorization = %q, want 'Bearer test-key'", r.Header.Get("Authorization"))
 		}
 
-		var req api.ChatRequest
+		var req openaicompat.ChatCompletionsRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Fatalf("Failed to decode request: %v", err)
 		}

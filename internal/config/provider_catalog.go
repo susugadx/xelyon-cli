@@ -3,6 +3,8 @@ package config
 import (
 	"os"
 	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
 )
 
 // ProviderCatalogEntry は provider ごとの運用メタ情報を表す。
@@ -13,58 +15,18 @@ type ProviderCatalogEntry struct {
 	SupportsImages       bool
 }
 
-var providerCatalog = map[string]ProviderCatalogEntry{
-	"deepseek": {
-		APIKeyEnv:            "DEEPSEEK_API_KEY",
-		SetupInstructions:    []string{"export DEEPSEEK_API_KEY=your-api-key"},
-		DefaultSubAgentModel: "deepseek-chat",
-		SupportsImages:       false,
-	},
-	"openai": {
-		APIKeyEnv:            "OPENAI_API_KEY",
-		SetupInstructions:    []string{"export OPENAI_API_KEY=your-api-key"},
-		DefaultSubAgentModel: "gpt-5.4-mini",
-		SupportsImages:       true,
-	},
-	"claude": {
-		APIKeyEnv:            "ANTHROPIC_API_KEY",
-		SetupInstructions:    []string{"export ANTHROPIC_API_KEY=your-api-key"},
-		DefaultSubAgentModel: "claude-haiku-4-5-20251001",
-		SupportsImages:       true,
-	},
-	"gemini": {
-		APIKeyEnv:            "GEMINI_API_KEY",
-		SetupInstructions:    []string{"export GEMINI_API_KEY=your-api-key"},
-		DefaultSubAgentModel: "gemini-3.1-flash-lite-preview",
-		SupportsImages:       true,
-	},
-	"groq": {
-		APIKeyEnv:            "GROQ_API_KEY",
-		SetupInstructions:    []string{"export GROQ_API_KEY=your-api-key"},
-		DefaultSubAgentModel: "llama-3.3-70b-versatile",
-		SupportsImages:       false,
-	},
-	"openrouter": {
-		APIKeyEnv:            "OPENROUTER_API_KEY",
-		SetupInstructions:    []string{"export OPENROUTER_API_KEY=your-api-key"},
-		DefaultSubAgentModel: "openai/gpt-5.4-mini",
-		SupportsImages:       true,
-	},
-	"ollama": {
-		SetupInstructions: []string{"ローカルの Ollama サーバーを起動してください"},
-		SupportsImages:    false,
-	},
-	"bedrock": {
-		SetupInstructions: []string{"AWS認証チェーン（IAMロール、環境変数、~/.aws/credentials等）を設定"},
-		SupportsImages:    true,
-	},
-}
-
 // ProviderCatalogEntryFor は provider 名に対応するメタ情報を返す。
 func ProviderCatalogEntryFor(name string) (ProviderCatalogEntry, bool) {
-	key := CanonicalProviderName(name)
-	entry, ok := providerCatalog[key]
-	return entry, ok
+	entry, ok := llmcatalog.ProviderDescriptorFor(name)
+	if !ok {
+		return ProviderCatalogEntry{}, false
+	}
+	return ProviderCatalogEntry{
+		APIKeyEnv:            entry.APIKeyEnv,
+		SetupInstructions:    entry.SetupInstructions,
+		DefaultSubAgentModel: entry.DefaultSubAgentModel,
+		SupportsImages:       entry.SupportsImages,
+	}, true
 }
 
 // ProviderAPIKeyEnv は provider に対応する API キー環境変数名を返す。
