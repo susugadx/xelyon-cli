@@ -364,8 +364,8 @@ func TestSyncWithRuntimeConfig_PrefersSessionProviderConfigKeyWhenDefaultProvide
 	if a.ProviderConfigKey != "deepseek" {
 		t.Fatalf("ProviderConfigKey = %q, want %q", a.ProviderConfigKey, "deepseek")
 	}
-	if a.CurrentModel != "deepseek-chat" {
-		t.Fatalf("CurrentModel = %q, want %q", a.CurrentModel, "deepseek-chat")
+	if a.CurrentModel != "deepseek-v4-flash" {
+		t.Fatalf("CurrentModel = %q, want %q", a.CurrentModel, "deepseek-v4-flash")
 	}
 }
 

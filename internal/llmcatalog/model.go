@@ -9,8 +9,11 @@ type ModelLimit struct {
 }
 
 var knownModelMaxOutputTokens = map[string]int{
-	"deepseek-chat":                         8192,
-	"deepseek-reasoner":                     64000,
+	"deepseek-chat":                         384000,
+	"deepseek-coder":                        16384,
+	"deepseek-reasoner":                     384000,
+	"deepseek-v4-flash":                     384000,
+	"deepseek-v4-pro":                       384000,
 	"claude-sonnet-4-6":                     64000,
 	"claude-sonnet-4-5":                     64000,
 	"claude-opus-4-7":                       128000,
@@ -85,9 +88,11 @@ var modelContextLimits = map[string]int{
 	"gemini-exp-1121":                    2000000,
 	"gemini-pro":                         32768,
 
-	"deepseek-chat":     128000,
+	"deepseek-chat":     1000000,
 	"deepseek-coder":    64000,
-	"deepseek-reasoner": 128000,
+	"deepseek-reasoner": 1000000,
+	"deepseek-v4-flash": 1000000,
+	"deepseek-v4-pro":   1000000,
 
 	"llama-3.3-70b-versatile": 128000,
 	"llama-3.1-70b-versatile": 128000,
@@ -109,6 +114,10 @@ var modelContextLimits = map[string]int{
 	"default": 100000,
 }
 
+var modelMaxOutputTokenPrefixes = []ModelLimit{
+	{Pattern: "deepseek-v4", Limit: 384000},
+}
+
 var modelContextLimitPrefixes = []ModelLimit{
 	{Pattern: "us.anthropic.claude", Limit: 200000},
 	{Pattern: "anthropic.claude", Limit: 200000},
@@ -128,8 +137,9 @@ var modelContextLimitPrefixes = []ModelLimit{
 	{Pattern: "gemini-2", Limit: 1000000},
 	{Pattern: "gemini-1.5", Limit: 1000000},
 	{Pattern: "gemini-pro", Limit: 32768},
-	{Pattern: "deepseek-chat", Limit: 128000},
-	{Pattern: "deepseek-reasoner", Limit: 128000},
+	{Pattern: "deepseek-chat", Limit: 1000000},
+	{Pattern: "deepseek-reasoner", Limit: 1000000},
+	{Pattern: "deepseek-v4", Limit: 1000000},
 	{Pattern: "deepseek-v3", Limit: 128000},
 	{Pattern: "deepseek-r1", Limit: 128000},
 	{Pattern: "deepseek-coder", Limit: 64000},
@@ -177,6 +187,11 @@ func KnownMaxOutputTokens(model string) (int, bool) {
 	}
 	if isClaudeOpus47ModelName(model) {
 		return 128000, true
+	}
+	for _, rule := range modelMaxOutputTokenPrefixes {
+		if strings.HasPrefix(model, rule.Pattern) {
+			return rule.Limit, true
+		}
 	}
 	return 0, false
 }

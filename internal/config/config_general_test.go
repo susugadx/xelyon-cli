@@ -19,8 +19,8 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.DefaultProvider != "deepseek" {
 		t.Errorf("DefaultProvider = %v, want deepseek", cfg.DefaultProvider)
 	}
-	if cfg.DefaultModel != "deepseek-chat" {
-		t.Errorf("DefaultModel = %v, want deepseek-chat", cfg.DefaultModel)
+	if cfg.DefaultModel != "deepseek-v4-flash" {
+		t.Errorf("DefaultModel = %v, want deepseek-v4-flash", cfg.DefaultModel)
 	}
 	if cfg.ProviderModels == nil {
 		t.Fatal("ProviderModels is nil")

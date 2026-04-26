@@ -16,7 +16,7 @@ func TestGetModelTokenLimit(t *testing.T) {
 		{"claude-sonnet-4-20250514", 200000},
 		{"gpt-4o", 128000},
 		{"gpt-5.1", 400000},
-		{"deepseek-chat", 128000},
+		{"deepseek-chat", 1000000},
 		{"gemini-2.0-flash", 1000000},
 
 		// Prefix matches
@@ -24,6 +24,7 @@ func TestGetModelTokenLimit(t *testing.T) {
 		{"gpt-4o-2024-01-01", 128000},
 		{"gpt-5-preview", 400000},
 		{"deepseek-coder-v3", 64000},
+		{"deepseek-v4-custom", 1000000},
 		{"deepseek-v3", 128000},
 		{"gemini-2.5-pro-exp", 1000000},
 

@@ -18,7 +18,7 @@ func TestDefaultProviderCompressThreshold_AllProviders(t *testing.T) {
 		{name: "gemini", provider: "gemini", model: "", want: 180000},
 		{name: "claude", provider: "claude", model: "", want: 150000},
 		{name: "bedrock", provider: "bedrock", model: "", want: 150000},
-		{name: "deepseek", provider: "deepseek", model: "", want: 80000},
+		{name: "deepseek", provider: "deepseek", model: "", want: 600000},
 		{name: "openai", provider: "openai", model: "", want: 0},
 		{name: "openrouter", provider: "openrouter", model: "", want: 120000},
 		{name: "unknown", provider: "unknown", model: "", want: 0},

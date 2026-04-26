@@ -11,7 +11,26 @@ func getDeepSeekPricing(model string) PricingInfo {
 		return pricing
 	}
 
-	// DeepSeek V3.2: deepseek-chat/deepseek-reasoner 統一料金
+	if strings.Contains(lm, "deepseek-v4-pro") {
+		return PricingInfo{
+			InputCostPerM:         1.74,
+			OutputCostPerM:        3.48,
+			CachedInputCostPerM:   0.0145,
+			CacheCreationCostPerM: 1.74,
+		}
+	}
+	if strings.Contains(lm, "deepseek-v4-flash") ||
+		strings.Contains(lm, "deepseek-chat") ||
+		strings.Contains(lm, "deepseek-reasoner") {
+		return PricingInfo{
+			InputCostPerM:         0.14,
+			OutputCostPerM:        0.28,
+			CachedInputCostPerM:   0.0028,
+			CacheCreationCostPerM: 0.14,
+		}
+	}
+
+	// DeepSeek V3.2/R1/coder など、V4 alias ではないモデルの既存フォールバック。
 	// $0.28/$0.42 per million tokens, Cache hit: $0.028
 	return PricingInfo{
 		InputCostPerM:         0.28,

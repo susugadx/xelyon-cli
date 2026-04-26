@@ -8,7 +8,7 @@
 # ============================================================
 default_provider: deepseek
 # デフォルトで使用するモデル
-default_model: deepseek-chat
+default_model: deepseek-v4-flash
 # プロバイダーごとのモデル設定
 provider_models:
     bedrock:
@@ -20,7 +20,9 @@ provider_models:
         max_output_tokens: 64000
         anthropic_version: "2023-06-01"
     deepseek:
-        default_model: deepseek-chat
+        default_model: deepseek-v4-flash
+        # V4 既知モデルは catalog から 384000 を自動解決します。
+        # この値は pass-through/custom モデル向けの保守的な fallback です。
         max_output_tokens: 16384
     gemini:
         default_model: gemini-3.1-pro-preview-customtools

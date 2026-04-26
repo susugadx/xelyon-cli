@@ -10,7 +10,7 @@ func TestGetModelForProvider(t *testing.T) {
 		provider string
 		want     string
 	}{
-		{name: "deepseek", provider: "deepseek", want: "deepseek-chat"},
+		{name: "deepseek", provider: "deepseek", want: "deepseek-v4-flash"},
 		{name: "openai", provider: "openai", want: "gpt-5.4"},
 		{name: "claude", provider: "claude", want: "claude-sonnet-4-6"},
 		{name: "anthropic alias", provider: "anthropic", want: "claude-sonnet-4-6"},

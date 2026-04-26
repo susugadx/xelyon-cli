@@ -30,7 +30,7 @@ func defaultCompressionProviderThresholds() map[string]int {
 		"gemini":             180000,
 		"claude":             150000,
 		"bedrock":            150000,
-		"deepseek":           80000, // 128K window に対して出力/推論 headroom を残す安全側の値
+		"deepseek":           600000, // V4 1M window から最大出力 384K の headroom を残す安全側の値
 		"openai":             100000,
 		"openai:gpt-5.4":     260000, // 272K pricing cliff 手前
 		"openai:gpt-5.4-pro": 260000,

@@ -88,14 +88,14 @@ func TestCalcProjectMapBudget_RatioOverride(t *testing.T) {
 }
 
 func TestCalcProjectMapBudget_SmallModelHasNoFixedFloor(t *testing.T) {
-	// deepseek-chat: 128K context × 1% = 1280
+	// deepseek-chat: V4 Flash alias 1M context × 1% = 10000
 	agent := &Agent{CurrentModel: "deepseek-chat"}
 	cfg := config.DefaultConfig()
 	cfg.ProjectMap.ContextRatio = 0.01
 
 	got := calcProjectMapBudget(agent, cfg, 50, 500)
-	if got != 1280 {
-		t.Errorf("calcProjectMapBudget() = %d, want 1280", got)
+	if got != 10000 {
+		t.Errorf("calcProjectMapBudget() = %d, want 10000", got)
 	}
 }
 

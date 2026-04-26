@@ -4,7 +4,7 @@ package config
 func DefaultConfig() *Config {
 	return &Config{
 		DefaultProvider:     "deepseek",
-		DefaultModel:        "deepseek-chat",
+		DefaultModel:        "deepseek-v4-flash",
 		General:             defaultGeneralConfig(),
 		ProviderModels:      defaultProviderModels(),
 		Compression:         defaultCompressionConfig(),

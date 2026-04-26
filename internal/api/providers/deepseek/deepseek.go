@@ -92,28 +92,20 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		}
 	}
 
-	// モデル名を設定（config優先、フォールバックはdeepseek-chat）
-	model = api.GetDefaultModelWithContext(ctx, model, "deepseek", "deepseek-chat")
-
-	// Extended Thinking の ON/OFF でモデルを切り替え
-	// DeepSeek は reasoner モデル自体が思考モードなので、モデル名で制御する
-	if api.IsThinkingEnabled(ctx) {
-		model = "deepseek-reasoner"
-	} else if model == "deepseek-reasoner" {
-		// /think off 時は deepseek-chat にフォールバック
-		model = "deepseek-chat"
-	}
-
-	// モデル名マッピング
-	actualModel := getActualModel(model)
+	// モデル名を設定（config優先、フォールバックは DeepSeek V4 Flash）
+	requestedModel := api.GetDefaultModelWithContext(ctx, model, "deepseek", defaultDeepSeekModel)
+	modelSelection := resolveDeepSeekModelSelection(ctx, requestedModel)
+	extraFields, reasoningEffort, spinnerSuffix := deepSeekThinkingConfig(ctx, modelSelection)
 
 	options := openaicompat.ChatCompletionsRequestOptions{
-		Model:             actualModel,
+		Model:             modelSelection.actualModel,
 		Messages:          messages,
-		MaxTokens:         api.GetMaxOutputTokens(ctx, "deepseek", model),
+		MaxTokens:         api.GetMaxOutputTokens(ctx, "deepseek", requestedModel),
 		Stream:            true,
 		IncludeUsage:      true,
+		ReasoningEffort:   reasoningEffort,
 		InitialToolChoice: "", // テスト期待値との整合性のため空文字列で初期化
+		ExtraFields:       extraFields,
 	}
 
 	// Function Calling: ツール定義を追加（環境変数で無効化可能）
@@ -131,10 +123,6 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	}
 	p.SetBearerAuth(req)
 
-	spinnerSuffix := ""
-	if api.IsThinkingEnabled(ctx) {
-		spinnerSuffix = "Reasoner"
-	}
 	return openaicompat.RunChatCompletions(ctx, p, req, openaicompat.ChatCompletionsRunOptions{
 		SpinnerSuffix:      spinnerSuffix,
 		ForceStreaming:     true,
@@ -234,20 +222,6 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 		return toolCallsOutput, nil
 	}
 	return streamResult.Content, nil
-}
-
-// getActualModel はモデル名を実際のAPI用に変換
-func getActualModel(model string) string {
-	switch model {
-	case "deepseek-chat", "":
-		return "deepseek-chat"
-	case "deepseek-coder":
-		return "deepseek-coder"
-	case "deepseek-reasoner":
-		return "deepseek-reasoner"
-	default:
-		return "deepseek-chat"
-	}
 }
 
 // ChatWithImage は画像付きメッセージで会話を行う（非対応：テキストのみ送信）

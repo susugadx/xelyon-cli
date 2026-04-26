@@ -37,7 +37,7 @@ func TestGetMaxOutputTokens(t *testing.T) {
 			name:     "Known model map has second priority",
 			provider: "deepseek",
 			model:    "deepseek-chat",
-			expected: 8192,
+			expected: 384000,
 		},
 		{
 			name:     "Provider default is fallback",
@@ -85,14 +85,29 @@ func TestGetMaxOutputTokens_UsesCatalogModelForDeploymentName(t *testing.T) {
 	})
 	ctx := config.WithContext(context.Background(), cfg)
 
-	if got := GetMaxOutputTokens(ctx, "deepseek", "corp-chat-deployment"); got != 8192 {
-		t.Fatalf("GetMaxOutputTokens(default deployment) = %d, want 8192 from deepseek-chat", got)
+	if got := GetMaxOutputTokens(ctx, "deepseek", "corp-chat-deployment"); got != 384000 {
+		t.Fatalf("GetMaxOutputTokens(default deployment) = %d, want 384000 from deepseek-chat", got)
 	}
-	if got := GetMaxOutputTokens(ctx, "deepseek", "reasoner-deployment"); got != 64000 {
-		t.Fatalf("GetMaxOutputTokens(reasoner deployment) = %d, want 64000 from deepseek-reasoner", got)
+	if got := GetMaxOutputTokens(ctx, "deepseek", "reasoner-deployment"); got != 384000 {
+		t.Fatalf("GetMaxOutputTokens(reasoner deployment) = %d, want 384000 from deepseek-reasoner", got)
 	}
 	if got := GetMaxOutputTokens(ctx, "deepseek", "manual-limit"); got != 7777 {
 		t.Fatalf("GetMaxOutputTokens(manual limit) = %d, want explicit override", got)
+	}
+}
+
+func TestGetMaxOutputTokens_DeepSeekV4LimitDoesNotLeakToPassThroughModels(t *testing.T) {
+	cfg := config.DefaultConfig()
+	ctx := config.WithContext(context.Background(), cfg)
+
+	if got := GetMaxOutputTokens(ctx, "deepseek", "deepseek-v4-custom"); got != 384000 {
+		t.Fatalf("GetMaxOutputTokens(deepseek-v4-custom) = %d, want 384000 from V4 family", got)
+	}
+	if got := GetMaxOutputTokens(ctx, "deepseek", "deepseek-coder"); got != 16384 {
+		t.Fatalf("GetMaxOutputTokens(deepseek-coder) = %d, want conservative pass-through limit", got)
+	}
+	if got := GetMaxOutputTokens(ctx, "deepseek", "unknown-model"); got != 16384 {
+		t.Fatalf("GetMaxOutputTokens(unknown-model) = %d, want provider fallback", got)
 	}
 }
 

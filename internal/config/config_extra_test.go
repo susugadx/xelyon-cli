@@ -66,8 +66,8 @@ func TestCloneConfig_Nil(t *testing.T) {
 	if cloned.DefaultProvider != "deepseek" {
 		t.Errorf("CloneConfig(nil).DefaultProvider = %q, want %q", cloned.DefaultProvider, "deepseek")
 	}
-	if cloned.DefaultModel != "deepseek-chat" {
-		t.Errorf("CloneConfig(nil).DefaultModel = %q, want %q", cloned.DefaultModel, "deepseek-chat")
+	if cloned.DefaultModel != "deepseek-v4-flash" {
+		t.Errorf("CloneConfig(nil).DefaultModel = %q, want %q", cloned.DefaultModel, "deepseek-v4-flash")
 	}
 }
 

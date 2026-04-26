@@ -193,6 +193,37 @@ func TestGetPricingInfo_UnknownProviderFallback(t *testing.T) {
 	}
 }
 
+func TestGetDeepSeekPricing_V4ModelsAndLegacyAliases(t *testing.T) {
+	tests := []struct {
+		name       string
+		model      string
+		wantInput  float64
+		wantOutput float64
+		wantCached float64
+	}{
+		{name: "v4 flash", model: "deepseek-v4-flash", wantInput: 0.14, wantOutput: 0.28, wantCached: 0.0028},
+		{name: "v4 pro", model: "deepseek-v4-pro", wantInput: 1.74, wantOutput: 3.48, wantCached: 0.0145},
+		{name: "legacy chat", model: "deepseek-chat", wantInput: 0.14, wantOutput: 0.28, wantCached: 0.0028},
+		{name: "legacy reasoner", model: "deepseek-reasoner", wantInput: 0.14, wantOutput: 0.28, wantCached: 0.0028},
+		{name: "v3 fallback", model: "deepseek-v3", wantInput: 0.28, wantOutput: 0.42, wantCached: 0.028},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pricing := getDeepSeekPricing(tt.model)
+			if pricing.InputCostPerM != tt.wantInput {
+				t.Errorf("InputCostPerM = %f, want %f", pricing.InputCostPerM, tt.wantInput)
+			}
+			if pricing.OutputCostPerM != tt.wantOutput {
+				t.Errorf("OutputCostPerM = %f, want %f", pricing.OutputCostPerM, tt.wantOutput)
+			}
+			if pricing.CachedInputCostPerM != tt.wantCached {
+				t.Errorf("CachedInputCostPerM = %f, want %f", pricing.CachedInputCostPerM, tt.wantCached)
+			}
+		})
+	}
+}
+
 func TestGetBedrockPricing_ClaudeDelegation(t *testing.T) {
 	model := "global.anthropic.claude-sonnet-4-6-v1:0"
 	promptTokens := 250000
@@ -292,7 +323,7 @@ func TestCalculateRequestCost_BasicCost(t *testing.T) {
 	}{
 		{
 			name: "deepseek 1M tokens", provider: "deepseek", model: "deepseek-chat",
-			input: 1000000, output: 1000000, wantMin: 0.69, wantMax: 0.71,
+			input: 1000000, output: 1000000, wantMin: 0.41, wantMax: 0.43,
 		},
 		{
 			name: "ollama always zero", provider: "ollama", model: "llama3",

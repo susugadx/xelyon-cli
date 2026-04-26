@@ -58,7 +58,7 @@ vi ~/.xelyon/config.yaml
 ```yaml
 default_provider: deepseek
 # デフォルトで使用するモデル
-default_model: deepseek-chat
+default_model: deepseek-v4-flash
 # プロバイダーごとのモデル設定
 provider_models:
     bedrock:
@@ -70,7 +70,9 @@ provider_models:
         max_output_tokens: 64000
         anthropic_version: "2023-06-01"
     deepseek:
-        default_model: deepseek-chat
+        default_model: deepseek-v4-flash
+        # V4 既知モデルは catalog から 384000 を自動解決します。
+        # この値は pass-through/custom モデル向けの保守的な fallback です。
         max_output_tokens: 16384
     gemini:
         default_model: gemini-3.1-pro-preview-customtools
@@ -224,7 +226,7 @@ final_checks:
 
 #### `default_model`
 - **型**: string
-- **デフォルト**: `deepseek-chat`
+- **デフォルト**: `deepseek-v4-flash`
 - **説明**: デフォルトで使用するモデル
 
 #### `provider_models`
@@ -238,14 +240,14 @@ final_checks:
     - **用途**: 既知モデルマップにないモデル、deployment 名、デフォルト値を上書きしたい場合に指定
     - **サブキー**: `max_output_tokens`, `catalog_model`
     - **優先度**: `model_overrides[model].max_output_tokens` > `catalog_model` を含む既知モデルマップ > `max_output_tokens`
-    - **補足**: 既知モデル（`deepseek-chat`, `gpt-5.2`, `gemini-2.5-flash` 等）は自動解決されるため、通常は設定不要
+    - **補足**: 既知モデル（`deepseek-v4-flash`, `deepseek-v4-pro`, `gpt-5.2`, `gemini-2.5-flash` 等）は自動解決されるため、通常は設定不要
 - **例**:
   ```yaml
   provider_models:
     deepseek:
-      default_model: deepseek-chat
+      default_model: deepseek-v4-flash
+      # V4 既知モデルは自動解決されるため model_overrides 不要
       max_output_tokens: 16384
-      # 既知モデルは自動解決されるため model_overrides 不要
       # カスタムモデルのみ指定:
       model_overrides:
         my-custom-model:
@@ -254,6 +256,14 @@ final_checks:
           catalog_model: gpt-5.4
           max_output_tokens: 16384
   ```
+
+DeepSeek の推奨モデル:
+- `deepseek-v4-flash`: 低コスト・高速・普段使い向き
+- `deepseek-v4-pro`: 高精度・重い設計/レビュー向き
+
+`deepseek-chat` / `deepseek-reasoner` は `deepseek-v4-flash` 相当の legacy alias です。2026-07-24 廃止予定のため、新規設定では `deepseek-v4-flash` / `deepseek-v4-pro` を使用してください。DeepSeek V4 は 1M context / 最大 384K output です。
+
+DeepSeek V4 Pro には 2026-05-05 15:59 UTC までの期間限定 75% off がありますが、静的な `pricing.yaml` には通常価格を記録しています。
 
 ### 会話履歴圧縮設定 (`compression`)
 
@@ -275,6 +285,11 @@ Context Window（コンテキストウィンドウ）を管理し、トークン
 - **型**: integer
 - **デフォルト**: `20`
 - **説明**: 圧縮時に保持する最新メッセージ数
+
+#### `provider_thresholds`
+- **型**: map
+- **説明**: provider/model ごとの絶対圧縮閾値
+- **補足**: DeepSeek は V4 の 1M context に合わせ、最大出力 384K の headroom を残す `600000` がデフォルトです。
 
 **自動圧縮の動作:**
 1. API呼び出し成功後に pricing cliff とプロバイダー別閾値を評価
@@ -430,7 +445,7 @@ lsp:
 - **Claude**: Sonnet 4 以降
 - **OpenAI**: gpt-5.2 系
 - **Gemini**: 2.5 Pro 系（Flash は非対応）
-- **DeepSeek**: 自動で reasoner モデルに切り替わります
+- **DeepSeek**: V4 の `thinking` field で制御します。`/think off` は `thinking.disabled`、`/think on` は `thinking.enabled` + `reasoning_effort` を送ります。`/think xhigh` は DeepSeek では `max` に変換されます。
 
 **コマンドで切り替え（正規ルート）:**
 
@@ -572,7 +587,7 @@ xelyon
 export XELYON_PROVIDER=deepseek
 
 # モデル指定
-export XELYON_MODEL=deepseek-chat
+export XELYON_MODEL=deepseek-v4-flash
 ```
 
 ### セキュリティ・監査設定
@@ -723,6 +738,8 @@ compression:
   enabled: true          # デフォルトON
   trigger_percent: 70    # 70%でも圧縮（保険として残す）
   keep_recent: 15        # 最新15件を保持
+  provider_thresholds:
+    deepseek: 600000     # DeepSeek V4 1M context 向け
 ```
 
 ### 1b. 自動圧縮を無効化

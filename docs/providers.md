@@ -35,15 +35,20 @@ XELYON は provider/model に応じて編集ツールを自動で切り替えま
 export DEEPSEEK_API_KEY=sk-...
 
 # 使用例
-xelyon --provider deepseek --model deepseek-chat
-xelyon --provider deepseek --model deepseek-reasoner
+xelyon --provider deepseek --model deepseek-v4-flash
+xelyon --provider deepseek --model deepseek-v4-pro
 ```
 
 **特徴:**
-- 高速・低コスト
-- コード生成に特化したモデルあり
+- **deepseek-v4-flash**: 低コスト・高速・普段使い向き
+- **deepseek-v4-pro**: 高精度・重い設計/レビュー向き
+- 1M context / 最大 384K output
+- streaming / tool calls / JSON output / thinking modes 対応
 - 画像入力非対応
-- **deepseek-reasoner**: `reasoning_content`（思考内容）をストリーミング表示（💭）、ツール実行時も思考を保持
+- `/think off`: `thinking: {"type":"disabled"}` を明示送信
+- `/think on`: `thinking: {"type":"enabled"}` と `reasoning_effort` を送信（`/think xhigh` は DeepSeek では `max`）
+- `deepseek-chat` / `deepseek-reasoner` は legacy alias（`deepseek-v4-flash` 相当）です。2026-07-24 廃止予定のため、新規設定では `deepseek-v4-flash` / `deepseek-v4-pro` を使用してください。
+- `reasoning_content`（思考内容）はストリーミング表示（💭）され、ツール実行時も保持されます。
 
 ### 2. OpenAI
 
@@ -259,7 +264,7 @@ xelyon --provider openai --model gpt-5.4
 
 ```bash
 export XELYON_PROVIDER=deepseek
-export XELYON_MODEL=deepseek-chat
+export XELYON_MODEL=deepseek-v4-flash
 xelyon
 ```
 
@@ -267,11 +272,11 @@ xelyon
 
 ```yaml
 default_provider: deepseek
-default_model: deepseek-chat
+default_model: deepseek-v4-flash
 
 provider_models:
   deepseek:
-    default_model: deepseek-chat
+    default_model: deepseek-v4-flash
   openai:
     default_model: gpt-5.4
   gemini:
@@ -315,15 +320,18 @@ xelyon
 
 長い会話でのコスト効率を重視する場合:
 
-1. **DeepSeek** - 元々低コスト + キャッシュ安定
+1. **DeepSeek V4 Flash** - 低コスト + キャッシュ安定
 2. **Bedrock（Claude）** - プロンプトキャッシュが確実に効く + AWS 直接契約で中間マージンなし
 3. **Claude（直接）** - プロンプトキャッシュが確実に効く
 4. **OpenAI** - 高コスト + キャッシュ不安定のため、コスト重視なら非推奨
 
+DeepSeek V4 Pro には 2026-05-05 15:59 UTC までの期間限定 75% off がありますが、`pricing.yaml` は date-aware pricing ではないため通常価格を記録しています。
+
 ## プロバイダー選択のヒント
 
 ### コード生成・編集
-- **DeepSeek Coder**: 高速・低コスト・高品質
+- **DeepSeek V4 Flash**: 高速・低コスト・普段使い
+- **DeepSeek V4 Pro**: 高精度・重い設計/レビュー向き
 - **Qwen2.5-Coder (Ollama)**: ローカル実行
 
 ### 複雑な問題解決

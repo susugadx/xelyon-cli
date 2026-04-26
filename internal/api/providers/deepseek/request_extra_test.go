@@ -17,9 +17,19 @@ import (
 
 func newDeepSeekTestContext(t *testing.T, thinking bool) (context.Context, *bytes.Buffer, *bytes.Buffer) {
 	t.Helper()
+	return newDeepSeekTestContextWithLevel(t, thinking, "high")
+}
+
+func newDeepSeekTestContextWithLevel(t *testing.T, thinking bool, level string) (context.Context, *bytes.Buffer, *bytes.Buffer) {
+	t.Helper()
 	cfg := config.DefaultConfig()
 	cfg.Thinking.Enabled = thinking
-	cfg.Thinking.Level = "high"
+	cfg.Thinking.Level = level
+	return newDeepSeekTestContextWithConfig(t, cfg)
+}
+
+func newDeepSeekTestContextWithConfig(t *testing.T, cfg *config.Config) (context.Context, *bytes.Buffer, *bytes.Buffer) {
+	t.Helper()
 	var out bytes.Buffer
 	var errOut bytes.Buffer
 	runtime := ui.NewRuntime(strings.NewReader(""), &out, &errOut)
@@ -56,30 +66,98 @@ func TestProvider_IsFunctionCallingEnabled_RespectsEnv(t *testing.T) {
 	}
 }
 
-func TestProvider_ChatWithTools_SelectsReasonerModelByThinkingState(t *testing.T) {
+func TestProvider_ChatWithTools_DeepSeekThinkingRequest(t *testing.T) {
 	tests := []struct {
-		name      string
-		thinking  bool
-		model     string
-		wantModel string
+		name                string
+		thinking            bool
+		level               string
+		model               string
+		wantModel           string
+		wantThinking        string
+		wantReasoningEffort string
 	}{
 		{
-			name:      "thinking on upgrades default model",
-			thinking:  true,
-			model:     "",
-			wantModel: "deepseek-reasoner",
+			name:         "think off flash disables thinking",
+			thinking:     false,
+			level:        "high",
+			model:        "deepseek-v4-flash",
+			wantModel:    "deepseek-v4-flash",
+			wantThinking: "disabled",
 		},
 		{
-			name:      "thinking off downgrades explicit reasoner",
-			thinking:  false,
-			model:     "deepseek-reasoner",
-			wantModel: "deepseek-chat",
+			name:                "think on high flash enables thinking",
+			thinking:            true,
+			level:               "high",
+			model:               "deepseek-v4-flash",
+			wantModel:           "deepseek-v4-flash",
+			wantThinking:        "enabled",
+			wantReasoningEffort: "high",
+		},
+		{
+			name:                "think on xhigh flash maps effort to max",
+			thinking:            true,
+			level:               "xhigh",
+			model:               "deepseek-v4-flash",
+			wantModel:           "deepseek-v4-flash",
+			wantThinking:        "enabled",
+			wantReasoningEffort: "max",
+		},
+		{
+			name:                "think on high pro keeps pro",
+			thinking:            true,
+			level:               "high",
+			model:               "deepseek-v4-pro",
+			wantModel:           "deepseek-v4-pro",
+			wantThinking:        "enabled",
+			wantReasoningEffort: "high",
+		},
+		{
+			name:         "think off pro keeps pro",
+			thinking:     false,
+			level:        "high",
+			model:        "deepseek-v4-pro",
+			wantModel:    "deepseek-v4-pro",
+			wantThinking: "disabled",
+		},
+		{
+			name:         "legacy chat think off maps to flash disabled",
+			thinking:     false,
+			level:        "high",
+			model:        "deepseek-chat",
+			wantModel:    "deepseek-v4-flash",
+			wantThinking: "disabled",
+		},
+		{
+			name:                "legacy chat think on maps to flash enabled",
+			thinking:            true,
+			level:               "high",
+			model:               "deepseek-chat",
+			wantModel:           "deepseek-v4-flash",
+			wantThinking:        "enabled",
+			wantReasoningEffort: "high",
+		},
+		{
+			name:                "legacy reasoner think on maps to flash enabled",
+			thinking:            true,
+			level:               "high",
+			model:               "deepseek-reasoner",
+			wantModel:           "deepseek-v4-flash",
+			wantThinking:        "enabled",
+			wantReasoningEffort: "high",
+		},
+		{
+			name:         "legacy reasoner think off maps to flash disabled",
+			thinking:     false,
+			level:        "high",
+			model:        "deepseek-reasoner",
+			wantModel:    "deepseek-v4-flash",
+			wantThinking: "disabled",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var captured openaicompat.ChatCompletionsRequest
+			var captured map[string]any
 			server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
 				if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
 					t.Fatalf("decode request: %v", err)
@@ -89,13 +167,128 @@ func TestProvider_ChatWithTools_SelectsReasonerModelByThinkingState(t *testing.T
 			t.Setenv("DEEPSEEK_API_URL", server.URL)
 
 			p := New("test-key")
-			ctx, _, _ := newDeepSeekTestContext(t, tt.thinking)
+			ctx, _, _ := newDeepSeekTestContextWithLevel(t, tt.thinking, tt.level)
 			_, err := p.ChatWithTools(ctx, "System", []api.Message{{Role: "user", Content: "Hi"}}, tt.model)
 			if err != nil {
 				t.Fatalf("ChatWithTools() error = %v", err)
 			}
-			if captured.Model != tt.wantModel {
-				t.Fatalf("request model = %q, want %q", captured.Model, tt.wantModel)
+			if captured["model"] != tt.wantModel {
+				t.Fatalf("request model = %q, want %q", captured["model"], tt.wantModel)
+			}
+			thinking, ok := captured["thinking"].(map[string]any)
+			if !ok {
+				t.Fatalf("request thinking = %#v, want object", captured["thinking"])
+			}
+			if thinking["type"] != tt.wantThinking {
+				t.Fatalf("thinking.type = %q, want %q", thinking["type"], tt.wantThinking)
+			}
+			gotReasoning, hasReasoning := captured["reasoning_effort"]
+			if tt.wantReasoningEffort == "" {
+				if hasReasoning {
+					t.Fatalf("reasoning_effort = %q, want absent", gotReasoning)
+				}
+				return
+			}
+			if !hasReasoning || gotReasoning != tt.wantReasoningEffort {
+				t.Fatalf("reasoning_effort = %q, want %q", gotReasoning, tt.wantReasoningEffort)
+			}
+		})
+	}
+}
+
+func TestProvider_ChatWithTools_DeepSeekCatalogAliasDrivesThinkingRequest(t *testing.T) {
+	tests := []struct {
+		name                string
+		thinking            bool
+		level               string
+		model               string
+		wantModel           string
+		wantThinking        string
+		wantReasoningEffort string
+	}{
+		{
+			name:         "default deployment uses catalog model for V4 thinking off",
+			thinking:     false,
+			level:        "high",
+			model:        "",
+			wantModel:    "corp-v4-pro",
+			wantThinking: "disabled",
+		},
+		{
+			name:                "model override deployment uses catalog model for xhigh",
+			thinking:            true,
+			level:               "xhigh",
+			model:               "corp-v4-flash",
+			wantModel:           "corp-v4-flash",
+			wantThinking:        "enabled",
+			wantReasoningEffort: "max",
+		},
+		{
+			name:                "legacy catalog alias still enables V4 thinking",
+			thinking:            true,
+			level:               "high",
+			model:               "corp-legacy-chat",
+			wantModel:           "corp-legacy-chat",
+			wantThinking:        "enabled",
+			wantReasoningEffort: "high",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var captured map[string]any
+			server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+				if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+					t.Fatalf("decode request: %v", err)
+				}
+				streamingHandler([]string{`{"choices":[{"delta":{"content":"ok"}}]}`})(w, r)
+			})
+			t.Setenv("DEEPSEEK_API_URL", server.URL)
+
+			cfg := config.DefaultConfig()
+			cfg.SetProviderModelConfig("deepseek", config.ProviderModelConfig{
+				DefaultModel: "corp-v4-pro",
+				CatalogModel: "deepseek-v4-pro",
+				ModelOverrides: map[string]config.ModelOverride{
+					"corp-v4-flash": {
+						CatalogModel: "deepseek-v4-flash",
+					},
+					"corp-legacy-chat": {
+						CatalogModel: "deepseek-chat",
+					},
+				},
+			})
+			cfg.Thinking.Enabled = tt.thinking
+			cfg.Thinking.Level = tt.level
+
+			p := New("test-key")
+			ctx, _, _ := newDeepSeekTestContextWithConfig(t, cfg)
+			_, err := p.ChatWithTools(ctx, "System", []api.Message{{Role: "user", Content: "Hi"}}, tt.model)
+			if err != nil {
+				t.Fatalf("ChatWithTools() error = %v", err)
+			}
+			if captured["model"] != tt.wantModel {
+				t.Fatalf("request model = %q, want %q", captured["model"], tt.wantModel)
+			}
+			if captured["max_tokens"] != float64(384000) {
+				t.Fatalf("max_tokens = %v, want 384000 from catalog_model", captured["max_tokens"])
+			}
+			thinking, ok := captured["thinking"].(map[string]any)
+			if !ok {
+				t.Fatalf("request thinking = %#v, want object", captured["thinking"])
+			}
+			if thinking["type"] != tt.wantThinking {
+				t.Fatalf("thinking.type = %q, want %q", thinking["type"], tt.wantThinking)
+			}
+			gotReasoning, hasReasoning := captured["reasoning_effort"]
+			if tt.wantReasoningEffort == "" {
+				if hasReasoning {
+					t.Fatalf("reasoning_effort = %q, want absent", gotReasoning)
+				}
+				return
+			}
+			if !hasReasoning || gotReasoning != tt.wantReasoningEffort {
+				t.Fatalf("reasoning_effort = %q, want %q", gotReasoning, tt.wantReasoningEffort)
 			}
 		})
 	}

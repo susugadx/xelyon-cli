@@ -292,7 +292,7 @@ Extended Thinking（推論モード）を切り替えます。複雑なタスク
 | Claude | ✅ | Opus 4.7 / Opus 4.6 / Sonnet 4.6: adaptive thinking + effort / 4.5以前: budget_tokens |
 | OpenAI | ✅ | reasoning_effort パラメータ |
 | Gemini | ✅ | thinkingConfig.thinkingBudget |
-| DeepSeek | ✅ | deepseek-reasoner モデルに切り替え |
+| DeepSeek | ✅ | V4 `thinking` field + `reasoning_effort` |
 | Groq | ❌ | 警告表示（非対応） |
 | Ollama | ⚠️ | モデル依存（R1/QwQ推奨） |
 
@@ -300,7 +300,7 @@ Extended Thinking（推論モード）を切り替えます。複雑なタスク
 - **Claude**: Sonnet 4 以降（Opus 4.7 / Opus 4.6 / Sonnet 4.6 は adaptive thinking。Opus 4.7 の `/think xhigh` は `xhigh` effort）
 - **OpenAI**: gpt-5.2 系
 - **Gemini**: 2.5 Pro 系（Flash は非対応）
-- **DeepSeek**: 自動で reasoner モデルに切り替わります（`reasoning_content` を💭で表示、ツール実行フローでも保持）
+- **DeepSeek**: モデル名は維持し、`/think off` は `thinking.disabled`、`/think on` は `thinking.enabled` + `reasoning_effort` を送ります。`/think xhigh` は DeepSeek では `max` に変換されます。`reasoning_content` は💭で表示し、ツール実行フローでも保持します。
 
 **注意**: Extended Thinking はトークン消費量が増加します。
 

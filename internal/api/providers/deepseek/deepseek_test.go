@@ -68,44 +68,81 @@ func TestProvider_SupportsImages(t *testing.T) {
 	}
 }
 
-func TestGetActualModel(t *testing.T) {
+func TestNormalizeDeepSeekModel(t *testing.T) {
 	tests := []struct {
 		name  string
 		model string
 		want  string
 	}{
 		{
-			name:  "deepseek-chat (default)",
-			model: "deepseek-chat",
-			want:  "deepseek-chat",
+			name:  "empty string",
+			model: "",
+			want:  "deepseek-v4-flash",
 		},
 		{
-			name:  "deepseek-coder",
+			name:  "deepseek-chat legacy alias",
+			model: "deepseek-chat",
+			want:  "deepseek-v4-flash",
+		},
+		{
+			name:  "deepseek-reasoner legacy alias",
+			model: "deepseek-reasoner",
+			want:  "deepseek-v4-flash",
+		},
+		{
+			name:  "deepseek-v4-flash",
+			model: "deepseek-v4-flash",
+			want:  "deepseek-v4-flash",
+		},
+		{
+			name:  "deepseek-v4-pro",
+			model: "deepseek-v4-pro",
+			want:  "deepseek-v4-pro",
+		},
+		{
+			name:  "deepseek-v4-custom",
+			model: "deepseek-v4-custom",
+			want:  "deepseek-v4-custom",
+		},
+		{
+			name:  "deepseek-coder is passed through",
 			model: "deepseek-coder",
 			want:  "deepseek-coder",
 		},
 		{
-			name:  "deepseek-reasoner",
-			model: "deepseek-reasoner",
-			want:  "deepseek-reasoner",
-		},
-		{
-			name:  "empty string",
-			model: "",
-			want:  "deepseek-chat", // デフォルト
-		},
-		{
-			name:  "unknown model",
+			name:  "unknown model is passed through",
 			model: "unknown-model",
-			want:  "deepseek-chat", // デフォルト
+			want:  "unknown-model",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := getActualModel(tt.model)
+			got := normalizeDeepSeekModel(tt.model)
 			if got != tt.want {
-				t.Errorf("getActualModel(%q) = %v, want %v", tt.model, got, tt.want)
+				t.Errorf("normalizeDeepSeekModel(%q) = %v, want %v", tt.model, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDeepSeekReasoningEffort(t *testing.T) {
+	tests := []struct {
+		level string
+		want  string
+	}{
+		{level: "low", want: "high"},
+		{level: "medium", want: "high"},
+		{level: "high", want: "high"},
+		{level: "xhigh", want: "max"},
+		{level: "max", want: "max"},
+		{level: "", want: "high"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.level, func(t *testing.T) {
+			if got := deepSeekReasoningEffort(tt.level); got != tt.want {
+				t.Errorf("deepSeekReasoningEffort(%q) = %q, want %q", tt.level, got, tt.want)
 			}
 		})
 	}
@@ -171,8 +208,8 @@ func TestProvider_ChatWithTools_RequestValidation(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Fatalf("Failed to decode request: %v", err)
 		}
-		if req.Model != "deepseek-chat" {
-			t.Errorf("Model = %q, want 'deepseek-chat'", req.Model)
+		if req.Model != "deepseek-v4-flash" {
+			t.Errorf("Model = %q, want 'deepseek-v4-flash'", req.Model)
 		}
 		if len(req.Messages) != 2 { // system + user
 			t.Errorf("Messages count = %d, want 2", len(req.Messages))

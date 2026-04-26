@@ -754,18 +754,20 @@ func TestGetOpenAIPricing_GPT54Pro_LongInput(t *testing.T) {
 	}
 }
 
-// === 新規テスト: DeepSeek V3.2 統一料金 ===
+// === 新規テスト: DeepSeek V4 と legacy alias 料金 ===
 
-func TestGetDeepSeekPricing_V32Unified(t *testing.T) {
-	// deepseek-chat と deepseek-reasoner は V3.2 で統一料金
+func TestGetDeepSeekPricing_V4AndLegacyAliases(t *testing.T) {
+	// deepseek-chat と deepseek-reasoner は V4 Flash 相当の legacy alias
 	tests := []struct {
 		model      string
 		wantInput  float64
 		wantOutput float64
 	}{
-		{"deepseek-chat", 0.28, 0.42},
-		{"deepseek-reasoner", 0.28, 0.42}, // V3.2 で統一
-		{"", 0.28, 0.42},                  // デフォルト
+		{"deepseek-v4-flash", 0.14, 0.28},
+		{"deepseek-v4-pro", 1.74, 3.48},
+		{"deepseek-chat", 0.14, 0.28},
+		{"deepseek-reasoner", 0.14, 0.28},
+		{"", 0.28, 0.42}, // V4 alias ではない既存フォールバック
 	}
 	for _, tt := range tests {
 		pricing := cost.GetPricingInfo("deepseek", tt.model)

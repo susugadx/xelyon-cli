@@ -42,9 +42,11 @@ func TestGetModelTokenLimit_ExactMatch(t *testing.T) {
 		{"gemini-pro", 32768},
 
 		// DeepSeek models
-		{"deepseek-chat", 128000},
+		{"deepseek-chat", 1000000},
 		{"deepseek-coder", 64000},
-		{"deepseek-reasoner", 128000},
+		{"deepseek-reasoner", 1000000},
+		{"deepseek-v4-flash", 1000000},
+		{"deepseek-v4-pro", 1000000},
 
 		// Groq models
 		{"llama-3.3-70b-versatile", 128000},
@@ -121,6 +123,7 @@ func TestGetModelTokenLimit_PrefixMatch(t *testing.T) {
 		{"gemini-1.5-flash-latest", 1000000},
 
 		// DeepSeek prefix
+		{"deepseek-v4-custom", 1000000},
 		{"deepseek-v3", 128000},
 		{"deepseek-r1-2025", 128000},
 		{"deepseek-coder-v3", 64000},

@@ -197,6 +197,21 @@ deepseek:
     outputcostperm: 0.42
     cachedinputcostperm: 0.028
     cachecreationcostperm: 0.28
+  rules:
+    # V4 Pro has a limited-time 75% off until 2026-05-05 15:59 UTC.
+    # Static pricing uses normal prices because date-aware pricing is not implemented.
+    - contains: ["deepseek-v4-pro"]
+      pricing:
+        inputcostperm: 1.74
+        outputcostperm: 3.48
+        cachedinputcostperm: 0.0145
+        cachecreationcostperm: 1.74
+    - contains: ["deepseek-v4-flash", "deepseek-chat", "deepseek-reasoner"]
+      pricing:
+        inputcostperm: 0.14
+        outputcostperm: 0.28
+        cachedinputcostperm: 0.0028
+        cachecreationcostperm: 0.14
 
 groq:
   default:

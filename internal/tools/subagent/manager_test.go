@@ -70,7 +70,7 @@ func TestInferSubAgentModel(t *testing.T) {
 		{provider: "claude", want: "claude-haiku-4-5-20251001"},
 		{provider: "anthropic", want: "claude-haiku-4-5-20251001"},
 		{provider: "gemini", want: "gemini-3.1-flash-lite-preview"},
-		{provider: "deepseek", want: "deepseek-chat"},
+		{provider: "deepseek", want: "deepseek-v4-flash"},
 		{provider: "groq", want: "llama-3.3-70b-versatile"},
 		{provider: "openrouter", want: "openai/gpt-5.4-mini"},
 		{provider: "unknown", want: ""},

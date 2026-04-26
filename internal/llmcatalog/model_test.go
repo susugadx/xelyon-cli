@@ -40,6 +40,52 @@ func TestModelContextLimit_ClaudeOpus47(t *testing.T) {
 	}
 }
 
+func TestKnownMaxOutputTokens_DeepSeekV4(t *testing.T) {
+	for _, model := range []string{
+		"deepseek-v4-flash",
+		"deepseek-v4-pro",
+		"deepseek-v4-custom",
+		"deepseek-chat",
+		"deepseek-reasoner",
+	} {
+		t.Run(model, func(t *testing.T) {
+			got, ok := KnownMaxOutputTokens(model)
+			if !ok {
+				t.Fatalf("KnownMaxOutputTokens(%q) ok = false, want true", model)
+			}
+			if got != 384000 {
+				t.Fatalf("KnownMaxOutputTokens(%q) = %d, want 384000", model, got)
+			}
+		})
+	}
+}
+
+func TestKnownMaxOutputTokens_DeepSeekPassThrough(t *testing.T) {
+	got, ok := KnownMaxOutputTokens("deepseek-coder")
+	if !ok {
+		t.Fatalf("KnownMaxOutputTokens(%q) ok = false, want true", "deepseek-coder")
+	}
+	if got != 16384 {
+		t.Fatalf("KnownMaxOutputTokens(%q) = %d, want 16384", "deepseek-coder", got)
+	}
+}
+
+func TestModelContextLimit_DeepSeekV4(t *testing.T) {
+	for _, model := range []string{
+		"deepseek-v4-flash",
+		"deepseek-v4-pro",
+		"deepseek-v4-custom",
+		"deepseek-chat",
+		"deepseek-reasoner",
+	} {
+		t.Run(model, func(t *testing.T) {
+			if got := ModelContextLimit(model); got != 1000000 {
+				t.Fatalf("ModelContextLimit(%q) = %d, want 1000000", model, got)
+			}
+		})
+	}
+}
+
 func TestIsAdaptiveClaudeThinkingModel_Opus47(t *testing.T) {
 	tests := []struct {
 		model string

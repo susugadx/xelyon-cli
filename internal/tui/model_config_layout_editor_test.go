@@ -33,7 +33,7 @@ func TestConfigScreen_NarrowWidth_StringEdit_RemainsVisible(t *testing.T) {
 	if !strings.Contains(view, "Edit:") {
 		t.Fatal("narrow width view should render the input editor")
 	}
-	if !strings.Contains(view, "deepseek-chat") {
+	if !strings.Contains(view, "deepseek-v4-flash") {
 		t.Fatal("narrow width view should include the current input value")
 	}
 }
