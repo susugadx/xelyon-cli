@@ -48,21 +48,10 @@ func ConvertOpenAIToolToClaude(tool api.ToolDefinition) ClaudeTool {
 
 // GetCombinedClaudeToolsWithContext は request context の Registry/Config を使って組み込みツール + MCPツールを返す。
 func GetCombinedClaudeToolsWithContext(ctx context.Context, mcpTools []api.ToolDefinition) []ClaudeTool {
-	result := GetClaudeToolDefinitionsWithContext(ctx)
-	seen := make(map[string]bool)
-
-	// 組み込みツールの名前を記録
-	for _, tool := range result {
-		seen[tool.Name] = true
-	}
-
-	// MCPツール（重複チェック）
-	for _, mcp := range mcpTools {
-		if seen[mcp.Name] {
-			continue
-		}
-		seen[mcp.Name] = true
-		result = append(result, ConvertOpenAIToolToClaude(mcp))
+	defs := api.ToolDefinitionsWithAdditional(ctx, mcpTools)
+	result := make([]ClaudeTool, 0, len(defs))
+	for _, def := range defs {
+		result = append(result, ConvertOpenAIToolToClaude(def))
 	}
 
 	// BP#2: ツール定義末尾に cache_control を設定

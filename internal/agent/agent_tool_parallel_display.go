@@ -7,12 +7,13 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/toolruntime"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // printParallelToolGroup は非TUIモード向けに並列実行グループの結果を表示する。
-func printParallelToolGroup(out io.Writer, cfg *config.Config, allToolCalls []*tools.ToolCall, indices []int, results []toolExecResult, elapsed time.Duration) {
+func printParallelToolGroup(out io.Writer, cfg *config.Config, allToolCalls []*tools.ToolCall, indices []int, results []toolruntime.Result, elapsed time.Duration) {
 	if len(indices) == 0 {
 		return
 	}
@@ -22,10 +23,10 @@ func printParallelToolGroup(out io.Writer, cfg *config.Config, allToolCalls []*t
 		_, _ = fmt.Fprintln(out, ui.FormatToolLine(ui.ToolDisplayInfo{
 			ToolName: allToolCalls[idx].Tool,
 			Args:     allToolCalls[idx].Args,
-			Result:   results[idx].result,
-			Error:    strings.HasPrefix(strings.TrimSpace(results[idx].result), "Error:"),
+			Result:   results[idx].Result,
+			Error:    strings.HasPrefix(strings.TrimSpace(results[idx].Result), "Error:"),
 		}))
-		printParallelCollapsedOutput(out, cfg, allToolCalls[idx].Tool, results[idx].result)
+		printParallelCollapsedOutput(out, cfg, allToolCalls[idx].Tool, results[idx].Result)
 		return
 	}
 
@@ -34,10 +35,10 @@ func printParallelToolGroup(out io.Writer, cfg *config.Config, allToolCalls []*t
 		ui.PrintParallelGroupLineToWriter(out, ui.FormatToolLine(ui.ToolDisplayInfo{
 			ToolName: allToolCalls[idx].Tool,
 			Args:     allToolCalls[idx].Args,
-			Result:   results[idx].result,
-			Error:    strings.HasPrefix(strings.TrimSpace(results[idx].result), "Error:"),
+			Result:   results[idx].Result,
+			Error:    strings.HasPrefix(strings.TrimSpace(results[idx].Result), "Error:"),
 		}))
-		printParallelCollapsedOutputWithPrefix(out, cfg, allToolCalls[idx].Tool, results[idx].result, "│    ")
+		printParallelCollapsedOutputWithPrefix(out, cfg, allToolCalls[idx].Tool, results[idx].Result, "│    ")
 	}
 	ui.PrintParallelGroupEndToWriter(out, formatParallelGroupSummary(allToolCalls, indices, elapsed))
 }
@@ -116,7 +117,7 @@ func formatParallelGroupSummary(allToolCalls []*tools.ToolCall, indices []int, e
 
 // sendParallelToolResults は TUI モードで並列実行結果を個別にチャネルへ送信する。
 // ToolResultCallback と同じ二重保護（closed チェック + select default）を適用する。
-func (a *Agent) sendParallelToolResults(allToolCalls []*tools.ToolCall, indices []int, results []toolExecResult, elapsed time.Duration) {
+func (a *Agent) sendParallelToolResults(allToolCalls []*tools.ToolCall, indices []int, results []toolruntime.Result, elapsed time.Duration) {
 	ch := a.tuiToolResultCh
 	for _, idx := range indices {
 		if a.tuiToolResultClosed.Load() {
@@ -127,8 +128,8 @@ func (a *Agent) sendParallelToolResults(allToolCalls []*tools.ToolCall, indices 
 		case ch <- tools.ToolResultInfo{
 			ToolName: tc.Tool,
 			Args:     tc.Args,
-			Result:   results[idx].result,
-			Error:    strings.HasPrefix(strings.TrimSpace(results[idx].result), "Error:"),
+			Result:   results[idx].Result,
+			Error:    strings.HasPrefix(strings.TrimSpace(results[idx].Result), "Error:"),
 			Duration: elapsed,
 		}:
 		default:

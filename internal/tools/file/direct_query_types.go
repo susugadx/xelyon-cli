@@ -70,16 +70,6 @@ type GatherContextDirectRouteOutcome struct {
 	Error string
 }
 
-type directQueryEntryInput struct {
-	rawEntry         string
-	rawPath          string
-	cleanedPath      string
-	startLine        int
-	endLine          int
-	explicitRelative bool
-	syntax           directQuerySyntaxKind
-}
-
 // RawEntries returns the normalized direct query entries for debugging and tests.
 func (r GatherContextDirectRoute) RawEntries() []string {
 	entries := make([]string, 0, len(r.targets))

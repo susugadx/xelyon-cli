@@ -130,7 +130,7 @@ func resolveCandidateGatherContextReadRoute(execCtx tools.ExecutionContext, inpu
 			},
 		}
 	}
-	if len(input.entries) > 1 {
+	if len(input.Entries) > 1 {
 		return resolveRequiredCandidateGatherContextReadRoute(execCtx, input)
 	}
 	return GatherContextDirectRouteOutcome{Kind: GatherContextDirectRouteOutcomeNone}
@@ -233,9 +233,9 @@ func strictScopedDirectErrorOutcome(input directQueryInput, scopedResolution sco
 }
 
 func joinDirectQueryRawEntries(input directQueryInput) string {
-	entries := make([]string, 0, len(input.entries))
-	for _, entry := range input.entries {
-		entries = append(entries, entry.rawEntry)
+	entries := make([]string, 0, len(input.Entries))
+	for _, entry := range input.Entries {
+		entries = append(entries, entry.RawEntry)
 	}
 	return strings.Join(entries, ",")
 }
@@ -277,10 +277,10 @@ func hasScopedExactFilenameLookupScope(policy GatherContextDirectRoutePolicy) bo
 }
 
 func inputHasOnlyScopedDirectCandidates(input directQueryInput) bool {
-	if len(input.entries) == 0 {
+	if len(input.Entries) == 0 {
 		return false
 	}
-	for _, entry := range input.entries {
+	for _, entry := range input.Entries {
 		if !entryCanUseScopedDirectResolution(entry) {
 			return false
 		}

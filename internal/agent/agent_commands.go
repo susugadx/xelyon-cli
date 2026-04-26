@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/susugadx/xelyon-cli/internal/commandruntime"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 	"github.com/susugadx/xelyon-cli/internal/ui"
@@ -29,48 +30,12 @@ func promptConfirmWithRuntime(runtime *ui.Runtime, prompt string) bool {
 
 // handleSpecialCommand は特殊コマンドを処理
 func handleSpecialCommand(input string, agent *Agent) bool {
-	parts := splitCommand(input)
-	if len(parts) == 0 {
-		return false
-	}
-
-	cmd := resolveCommandAliasWithConfig(parts[0], agent.cfg())
-	args := parts[1:]
-	handler, ok := specialCommandRegistry()[cmd]
-	if !ok {
-		return false
-	}
-	return handler(agent, args)
+	return commandruntime.Dispatch(input, commandAliasesFromConfig(agent.cfg()), specialCommandRegistry(agent))
 }
 
 // splitCommand はコマンド文字列を分割
 func splitCommand(input string) []string {
-	var parts []string
-	var current string
-	inQuote := false
-	quoteChar := rune(0)
-
-	for _, r := range input {
-		switch {
-		case (r == '"' || r == '\'') && !inQuote:
-			inQuote = true
-			quoteChar = r
-		case r == quoteChar && inQuote:
-			inQuote = false
-			quoteChar = 0
-		case r == ' ' && !inQuote:
-			if current != "" {
-				parts = append(parts, current)
-				current = ""
-			}
-		default:
-			current += string(r)
-		}
-	}
-	if current != "" {
-		parts = append(parts, current)
-	}
-	return parts
+	return commandruntime.Split(input)
 }
 
 // handleExitCommand は終了処理を行う

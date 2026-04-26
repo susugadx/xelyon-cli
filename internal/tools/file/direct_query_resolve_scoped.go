@@ -51,8 +51,8 @@ func resolveScopedGatherContextDirectResolution(execCtx tools.ExecutionContext, 
 		return scopedDirectResolutionOutcome{Kind: scopedDirectResolutionNone}
 	}
 
-	targets := make([]DirectQueryTarget, 0, len(input.entries))
-	for _, entry := range input.entries {
+	targets := make([]DirectQueryTarget, 0, len(input.Entries))
+	for _, entry := range input.Entries {
 		targetOutcome := resolveScopedGatherContextTarget(scopes, ignoreMatcher, entry, policy.FileFilter)
 		switch targetOutcome.Kind {
 		case scopedDirectResolutionResolved:
@@ -102,18 +102,18 @@ func resolveScopedGatherContextTarget(scopes []scopedExactLookupScope, ignoreMat
 }
 
 func resolveScopedRelativeDirectTarget(scopes []scopedExactLookupScope, entry directQueryEntryInput, fileFilter string) scopedDirectTargetOutcome {
-	if entry.explicitRelative {
+	if entry.ExplicitRelative {
 		if len(scopes) == 0 {
 			return scopedDirectTargetOutcome{
 				Kind:  scopedDirectResolutionMissing,
-				Error: "Error: direct path not found: " + entry.rawEntry,
+				Error: "Error: direct path not found: " + entry.RawEntry,
 			}
 		}
 		target, ok := resolveScopedRelativeDirectTargetInScope(scopes[0], entry, fileFilter)
 		if !ok {
 			return scopedDirectTargetOutcome{
 				Kind:  scopedDirectResolutionMissing,
-				Error: "Error: direct path not found: " + entry.rawEntry,
+				Error: "Error: direct path not found: " + entry.RawEntry,
 			}
 		}
 		return scopedDirectTargetOutcome{
@@ -141,7 +141,7 @@ func resolveScopedRelativeDirectTarget(scopes []scopedExactLookupScope, entry di
 	if len(matches) != 1 {
 		return scopedDirectTargetOutcome{
 			Kind:  scopedDirectResolutionMissing,
-			Error: "Error: direct path not found: " + entry.rawEntry,
+			Error: "Error: direct path not found: " + entry.RawEntry,
 		}
 	}
 	return scopedDirectTargetOutcome{
@@ -151,7 +151,7 @@ func resolveScopedRelativeDirectTarget(scopes []scopedExactLookupScope, entry di
 }
 
 func resolveScopedRelativeDirectTargetInScope(scope scopedExactLookupScope, entry directQueryEntryInput, fileFilter string) (DirectQueryTarget, bool) {
-	candidatePath := filepath.Join(scope.resolvedPath, entry.cleanedPath)
+	candidatePath := filepath.Join(scope.resolvedPath, entry.CleanedPath)
 	resolvedPath, ok := resolveExistingScopedLookupPath(candidatePath, []string{scope.resolvedPath})
 	if !ok {
 		return DirectQueryTarget{}, false
@@ -188,7 +188,7 @@ func buildScopedTargetFromResolvedPath(scope scopedExactLookupScope, resolvedPat
 		return DirectQueryTarget{}, false
 	}
 	if info.IsDir() {
-		if entry.startLine > 0 || entry.endLine > 0 {
+		if entry.StartLine > 0 || entry.EndLine > 0 {
 			return DirectQueryTarget{}, false
 		}
 		return DirectQueryTarget{
@@ -203,32 +203,32 @@ func buildScopedTargetFromResolvedPath(scope scopedExactLookupScope, resolvedPat
 		}, true
 	}
 	return DirectQueryTarget{
-		RawEntry:      normalizeDirectQueryRawEntry(displayPath, entry.startLine, entry.endLine),
+		RawEntry:      normalizeDirectQueryRawEntry(displayPath, entry.StartLine, entry.EndLine),
 		FilePath:      displayPath,
 		ResolvedPath:  resolvedPath,
 		AllowedRoots:  []string{scope.resolvedPath},
 		WorkspaceRoot: scope.displayRoot,
 		FileFilter:    fileFilter,
 		BypassIgnores: false,
-		StartLine:     entry.startLine,
-		EndLine:       entry.endLine,
+		StartLine:     entry.StartLine,
+		EndLine:       entry.EndLine,
 		Kind:          DirectQueryTargetFile,
 	}, true
 }
 
 func entryCanUseScopedDirectResolution(entry directQueryEntryInput) bool {
-	if entry.syntax == directQuerySyntaxNone {
+	if entry.Syntax == directQuerySyntaxNone {
 		return false
 	}
-	if strings.TrimSpace(entry.cleanedPath) == "" {
+	if strings.TrimSpace(entry.CleanedPath) == "" {
 		return false
 	}
-	if filepath.IsAbs(entry.cleanedPath) || hasWindowsPathPrefix(entry.rawPath) {
+	if filepath.IsAbs(entry.CleanedPath) || hasWindowsPathPrefix(entry.RawPath) {
 		return false
 	}
 	return true
 }
 
 func usesScopedRelativeDirectPath(entry directQueryEntryInput) bool {
-	return strings.ContainsAny(entry.rawPath, `/\`)
+	return strings.ContainsAny(entry.RawPath, `/\`)
 }

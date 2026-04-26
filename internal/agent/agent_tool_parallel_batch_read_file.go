@@ -1,23 +1,27 @@
 package agent
 
-import "context"
+import (
+	"context"
 
-func (a *Agent) executeReadFileBatchMerge(ctx context.Context, state *parallelToolCallState) {
-	execFlags := make([]bool, len(state.allToolCalls))
-	for i, entry := range state.entries {
-		execFlags[i] = entry.status == parallelToolCallStatusExecute
+	"github.com/susugadx/xelyon-cli/internal/toolruntime"
+)
+
+func (a *Agent) executeReadFileBatchMerge(ctx context.Context, state *toolruntime.ParallelCallState) {
+	execFlags := make([]bool, len(state.AllToolCalls))
+	for i, entry := range state.Entries {
+		execFlags[i] = entry.Status == toolruntime.ParallelCallStatusExecute
 	}
-	readBatchSegments := segmentReadFileBatches(state.allToolCalls, execFlags)
+	readBatchSegments := toolruntime.SegmentReadFileBatches(state.AllToolCalls, execFlags)
 
 	for _, seg := range readBatchSegments {
-		for callStart, pathStart := 0, 0; callStart < len(seg.indices); {
+		for callStart, pathStart := 0, 0; callStart < len(seg.Indices); {
 			chunkCallStart := callStart
 			chunkPathStart := pathStart
 			chunkPathCount := 0
 
-			for callStart < len(seg.indices) {
-				callPathCount := seg.pathCounts[callStart]
-				if chunkPathCount > 0 && chunkPathCount+callPathCount > maxReadFileBatchPaths {
+			for callStart < len(seg.Indices) {
+				callPathCount := seg.PathCounts[callStart]
+				if chunkPathCount > 0 && chunkPathCount+callPathCount > toolruntime.MaxReadFileBatchPaths {
 					break
 				}
 				chunkPathCount += callPathCount
@@ -25,16 +29,16 @@ func (a *Agent) executeReadFileBatchMerge(ctx context.Context, state *parallelTo
 				callStart++
 			}
 
-			chunkIndices := seg.indices[chunkCallStart:callStart]
-			chunkPathCounts := seg.pathCounts[chunkCallStart:callStart]
-			chunkPaths := seg.paths[chunkPathStart : chunkPathStart+chunkPathCount]
+			chunkIndices := seg.Indices[chunkCallStart:callStart]
+			chunkPathCounts := seg.PathCounts[chunkCallStart:callStart]
+			chunkPaths := seg.Paths[chunkPathStart : chunkPathStart+chunkPathCount]
 
 			if len(chunkIndices) < 2 {
 				continue
 			}
 
 			mergedResult := a.executeReadFileBatch(ctx, chunkPaths)
-			perFile := splitReadFileBatchResult(mergedResult, chunkPaths)
+			perFile := toolruntime.SplitReadFileBatchResult(mergedResult, chunkPaths)
 			if perFile == nil {
 				continue
 			}
@@ -43,12 +47,12 @@ func (a *Agent) executeReadFileBatchMerge(ctx context.Context, state *parallelTo
 			for j, idx := range chunkIndices {
 				callPaths := chunkPaths[offset : offset+chunkPathCounts[j]]
 				offset += chunkPathCounts[j]
-				if section, ok := joinReadFileBatchSections(perFile, callPaths); ok {
-					state.results[idx] = toolExecResult{result: section}
+				if section, ok := toolruntime.JoinReadFileBatchSections(perFile, callPaths); ok {
+					state.Results[idx] = toolruntime.Result{Result: section}
 				} else {
-					state.results[idx] = toolExecResult{result: mergedResult}
+					state.Results[idx] = toolruntime.Result{Result: mergedResult}
 				}
-				state.entries[idx] = parallelToolCallEntry{status: parallelToolCallStatusBatched}
+				state.Entries[idx] = toolruntime.ParallelCallEntry{Status: toolruntime.ParallelCallStatusBatched}
 			}
 			a.recordReadFileBatchMerge(len(chunkIndices))
 		}

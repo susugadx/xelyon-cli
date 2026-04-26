@@ -1,11 +1,12 @@
-package agent
+package toolruntime
 
 import (
 	"encoding/json"
 	"strings"
 )
 
-func readFilePathsFromArgs(args map[string]string) []string {
+// ReadFilePathsFromArgs は read_file の path/paths 引数から有効な path 一覧を取り出す。
+func ReadFilePathsFromArgs(args map[string]string) []string {
 	if args == nil {
 		return nil
 	}
@@ -29,31 +30,34 @@ func readFilePathsFromArgs(args map[string]string) []string {
 	return nil
 }
 
-func readFileEntryHasRange(entry string) bool {
+// ReadFileEntryHasRange は path entry が末尾に line range 指定を持つか返す。
+func ReadFileEntryHasRange(entry string) bool {
 	lastColon := strings.LastIndex(entry, ":")
 	if lastColon < 0 {
 		return false
 	}
 	suffix := entry[lastColon+1:]
-	return suffix != "" && isDigitOrRange(suffix)
+	return suffix != "" && IsDigitOrRange(suffix)
 }
 
-func readFileHasExplicitRange(args map[string]string) bool {
+// ReadFileHasExplicitRange は read_file 引数が明示的な range 指定を持つか返す。
+func ReadFileHasExplicitRange(args map[string]string) bool {
 	if args == nil {
 		return false
 	}
 	if args["start_line"] != "" || args["end_line"] != "" {
 		return true
 	}
-	for _, path := range readFilePathsFromArgs(args) {
-		if readFileEntryHasRange(path) {
+	for _, path := range ReadFilePathsFromArgs(args) {
+		if ReadFileEntryHasRange(path) {
 			return true
 		}
 	}
 	return false
 }
 
-func isDigitOrRange(s string) bool {
+// IsDigitOrRange は文字列が行番号または行番号 range として解釈できるか返す。
+func IsDigitOrRange(s string) bool {
 	dashSeen := false
 	for i, c := range s {
 		if c >= '0' && c <= '9' {

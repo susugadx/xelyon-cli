@@ -34,8 +34,8 @@ func TestParseDirectQueryEntryInput_SyntaxClassification(t *testing.T) {
 			if !ok {
 				t.Fatalf("parseDirectQueryEntryInput(%q) returned ok=false", tt.query)
 			}
-			if input.syntax != tt.want {
-				t.Fatalf("parseDirectQueryEntryInput(%q).syntax = %q, want %q", tt.query, input.syntax, tt.want)
+			if input.Syntax != tt.want {
+				t.Fatalf("parseDirectQueryEntryInput(%q).Syntax = %q, want %q", tt.query, input.Syntax, tt.want)
 			}
 		})
 	}

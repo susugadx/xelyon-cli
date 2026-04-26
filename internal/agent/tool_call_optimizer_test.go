@@ -7,10 +7,11 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/toolruntime"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
-// ── isBatchableReadFile tests ──
+// ── toolruntime.IsBatchableReadFile tests ──
 
 func TestIsBatchableReadFile(t *testing.T) {
 	tests := []struct {
@@ -32,19 +33,19 @@ func TestIsBatchableReadFile(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := isBatchableReadFile(tt.tc); got != tt.want {
-				t.Errorf("isBatchableReadFile() = %v, want %v", got, tt.want)
+			if got := toolruntime.IsBatchableReadFile(tt.tc); got != tt.want {
+				t.Errorf("toolruntime.IsBatchableReadFile() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-// ── searchCodeOptionsKey tests ──
+// ── toolruntime.SearchCodeOptionsKey tests ──
 
 func TestSearchCodeOptionsKey_SameOptions(t *testing.T) {
 	tc1 := &tools.ToolCall{Tool: "search_code", Args: map[string]string{"pattern": "foo", "path": ".", "file_filter": "go"}}
 	tc2 := &tools.ToolCall{Tool: "search_code", Args: map[string]string{"pattern": "bar", "path": ".", "file_filter": "go"}}
-	if searchCodeOptionsKey(tc1) != searchCodeOptionsKey(tc2) {
+	if toolruntime.SearchCodeOptionsKey(tc1) != toolruntime.SearchCodeOptionsKey(tc2) {
 		t.Error("same options (different pattern) should produce same key")
 	}
 }
@@ -52,7 +53,7 @@ func TestSearchCodeOptionsKey_SameOptions(t *testing.T) {
 func TestSearchCodeOptionsKey_DifferentOptions(t *testing.T) {
 	tc1 := &tools.ToolCall{Tool: "search_code", Args: map[string]string{"pattern": "foo", "path": ".", "file_filter": "go"}}
 	tc2 := &tools.ToolCall{Tool: "search_code", Args: map[string]string{"pattern": "foo", "path": ".", "file_filter": "py"}}
-	if searchCodeOptionsKey(tc1) == searchCodeOptionsKey(tc2) {
+	if toolruntime.SearchCodeOptionsKey(tc1) == toolruntime.SearchCodeOptionsKey(tc2) {
 		t.Error("different file_filter should produce different key")
 	}
 }
@@ -60,7 +61,7 @@ func TestSearchCodeOptionsKey_DifferentOptions(t *testing.T) {
 func TestSearchCodeOptionsKey_EmptyOptionsIgnored(t *testing.T) {
 	tc1 := &tools.ToolCall{Tool: "search_code", Args: map[string]string{"pattern": "foo"}}
 	tc2 := &tools.ToolCall{Tool: "search_code", Args: map[string]string{"pattern": "bar", "file_filter": ""}}
-	if searchCodeOptionsKey(tc1) != searchCodeOptionsKey(tc2) {
+	if toolruntime.SearchCodeOptionsKey(tc1) != toolruntime.SearchCodeOptionsKey(tc2) {
 		t.Error("empty options should be ignored in key")
 	}
 }
@@ -68,25 +69,25 @@ func TestSearchCodeOptionsKey_EmptyOptionsIgnored(t *testing.T) {
 func TestSearchCodeOptionsKey_NormalizesModeAndLegacyRegex(t *testing.T) {
 	autoImplicit := &tools.ToolCall{Tool: "search_code", Args: map[string]string{"pattern": "foo"}}
 	autoExplicit := &tools.ToolCall{Tool: "search_code", Args: map[string]string{"pattern": "bar", "mode": "auto"}}
-	if searchCodeOptionsKey(autoImplicit) != searchCodeOptionsKey(autoExplicit) {
+	if toolruntime.SearchCodeOptionsKey(autoImplicit) != toolruntime.SearchCodeOptionsKey(autoExplicit) {
 		t.Error("implicit auto and explicit auto should produce same key")
 	}
 
 	regexLegacy := &tools.ToolCall{Tool: "search_code", Args: map[string]string{"pattern": "foo", "is_regex": "true"}}
 	regexMode := &tools.ToolCall{Tool: "search_code", Args: map[string]string{"pattern": "bar", "mode": "regex"}}
-	if searchCodeOptionsKey(regexLegacy) != searchCodeOptionsKey(regexMode) {
+	if toolruntime.SearchCodeOptionsKey(regexLegacy) != toolruntime.SearchCodeOptionsKey(regexMode) {
 		t.Error("legacy is_regex=true and mode=regex should produce same key")
 	}
 }
 
 func TestSearchCodeOptionsKey_NotSearchCode(t *testing.T) {
 	tc := &tools.ToolCall{Tool: "read_file", Args: map[string]string{"path": "/a.go"}}
-	if searchCodeOptionsKey(tc) != "" {
+	if toolruntime.SearchCodeOptionsKey(tc) != "" {
 		t.Error("non-search_code should return empty key")
 	}
 }
 
-// ── isSimpleSearchPattern tests ──
+// ── toolruntime.IsSimpleSearchPattern tests ──
 
 func TestIsSimpleSearchPattern(t *testing.T) {
 	tests := []struct {
@@ -105,18 +106,18 @@ func TestIsSimpleSearchPattern(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.pattern, func(t *testing.T) {
-			if got := isSimpleSearchPattern(tt.pattern); got != tt.want {
-				t.Errorf("isSimpleSearchPattern(%q) = %v, want %v", tt.pattern, got, tt.want)
+			if got := toolruntime.IsSimpleSearchPattern(tt.pattern); got != tt.want {
+				t.Errorf("toolruntime.IsSimpleSearchPattern(%q) = %v, want %v", tt.pattern, got, tt.want)
 			}
 		})
 	}
 }
 
-// ── splitMultiPatternResult tests ──
+// ── toolruntime.SplitMultiPatternResult tests ──
 
 func TestSplitMultiPatternResult_TipAppendedToAllSections(t *testing.T) {
 	// lineRangeHint は multi-pattern 結果の末尾に 1 回だけ付く。
-	// splitMultiPatternResult は各 section に Tip を付与すべき。
+	// toolruntime.SplitMultiPatternResult は各 section に Tip を付与すべき。
 	tip := "\n\nTip: Use the active edit tool with the matched lines plus surrounding context to make exact edits."
 	result := `Found 5 matches across 2 patterns:
 
@@ -129,7 +130,7 @@ func TestSplitMultiPatternResult_TipAppendedToAllSections(t *testing.T) {
   2: bar` + tip
 
 	patterns := []string{"foo", "bar"}
-	sections := splitMultiPatternResult(result, patterns)
+	sections := toolruntime.SplitMultiPatternResult(result, patterns)
 
 	if sections == nil {
 		t.Fatal("expected non-nil sections")
@@ -156,7 +157,7 @@ func TestSplitMultiPatternResult_ErrorSectionNoTip(t *testing.T) {
 ⚠️ Error: regex syntax error` + tip
 
 	patterns := []string{"ok", "bad"}
-	sections := splitMultiPatternResult(result, patterns)
+	sections := toolruntime.SplitMultiPatternResult(result, patterns)
 
 	if sections == nil {
 		t.Fatal("expected non-nil sections")
@@ -182,7 +183,7 @@ Warning: include_hidden is partially supported in grep fallback mode
 No matches found` + tip
 
 	patterns := []string{"hit", "miss"}
-	sections := splitMultiPatternResult(result, patterns)
+	sections := toolruntime.SplitMultiPatternResult(result, patterns)
 
 	if sections == nil {
 		t.Fatal("expected non-nil sections")
@@ -211,7 +212,7 @@ func TestSplitMultiPatternResult_TwoPatterns(t *testing.T) {
 `
 
 	patterns := []string{"handleSSE", "parseResponse"}
-	sections := splitMultiPatternResult(result, patterns)
+	sections := toolruntime.SplitMultiPatternResult(result, patterns)
 
 	if sections == nil {
 		t.Fatal("expected non-nil sections")
@@ -233,7 +234,7 @@ func TestSplitMultiPatternResult_HeaderCountMismatch(t *testing.T) {
 	result := `━━ Pattern 1/1: "foo" ━━
 some result
 `
-	sections := splitMultiPatternResult(result, []string{"foo", "bar"})
+	sections := toolruntime.SplitMultiPatternResult(result, []string{"foo", "bar"})
 	if sections != nil {
 		t.Error("should return nil when header count doesn't match")
 	}
@@ -241,7 +242,7 @@ some result
 
 func TestSplitMultiPatternResult_NoHeaders(t *testing.T) {
 	result := "Just some text without any pattern headers"
-	sections := splitMultiPatternResult(result, []string{"foo"})
+	sections := toolruntime.SplitMultiPatternResult(result, []string{"foo"})
 	if sections != nil {
 		t.Error("should return nil when no headers found")
 	}
@@ -258,7 +259,7 @@ func TestSplitMultiPatternResult_PatternWithError(t *testing.T) {
 ⚠️ Error: regex syntax error
 `
 	patterns := []string{"validPattern", "bad[pattern"}
-	sections := splitMultiPatternResult(result, patterns)
+	sections := toolruntime.SplitMultiPatternResult(result, patterns)
 	if sections == nil {
 		t.Fatal("should split even with error sections")
 	}
@@ -270,7 +271,7 @@ func TestSplitMultiPatternResult_PatternWithError(t *testing.T) {
 	}
 }
 
-// ── cloneToolCallWithNewPattern tests ──
+// ── toolruntime.CloneToolCallWithNewPattern tests ──
 
 func TestCloneToolCallWithNewPattern(t *testing.T) {
 	original := &tools.ToolCall{
@@ -287,7 +288,7 @@ func TestCloneToolCallWithNewPattern(t *testing.T) {
 		},
 	}
 
-	cloned := cloneToolCallWithNewPattern(original, "foo,bar")
+	cloned := toolruntime.CloneToolCallWithNewPattern(original, "foo,bar")
 
 	if cloned.Args["pattern"] != "foo,bar" {
 		t.Errorf("cloned pattern = %q, want %q", cloned.Args["pattern"], "foo,bar")
@@ -414,8 +415,8 @@ func TestSearchCodeBatch_SameOptionsGrouped(t *testing.T) {
 	tc1 := &tools.ToolCall{Tool: "search_code", Args: map[string]string{"pattern": "handleSSE", "path": ".", "file_filter": "go"}}
 	tc2 := &tools.ToolCall{Tool: "search_code", Args: map[string]string{"pattern": "parseResponse", "path": ".", "file_filter": "go"}}
 
-	key1 := searchCodeOptionsKey(tc1)
-	key2 := searchCodeOptionsKey(tc2)
+	key1 := toolruntime.SearchCodeOptionsKey(tc1)
+	key2 := toolruntime.SearchCodeOptionsKey(tc2)
 
 	if key1 != key2 {
 		t.Errorf("same options should produce same key: %q vs %q", key1, key2)
@@ -426,8 +427,8 @@ func TestSearchCodeBatch_DifferentOptionsNotGrouped(t *testing.T) {
 	tc1 := &tools.ToolCall{Tool: "search_code", Args: map[string]string{"pattern": "foo", "file_filter": "go"}}
 	tc2 := &tools.ToolCall{Tool: "search_code", Args: map[string]string{"pattern": "bar", "file_filter": "py"}}
 
-	key1 := searchCodeOptionsKey(tc1)
-	key2 := searchCodeOptionsKey(tc2)
+	key1 := toolruntime.SearchCodeOptionsKey(tc1)
+	key2 := toolruntime.SearchCodeOptionsKey(tc2)
 
 	if key1 == key2 {
 		t.Error("different file_filter should produce different keys")
@@ -436,7 +437,7 @@ func TestSearchCodeBatch_DifferentOptionsNotGrouped(t *testing.T) {
 
 func TestSearchCodeBatch_MultiPatternPatternNotBatched(t *testing.T) {
 	// Already multi-pattern → should not be batched further
-	if isSimpleSearchPattern("foo,bar") {
+	if toolruntime.IsSimpleSearchPattern("foo,bar") {
 		t.Error("multi-pattern should not be considered simple")
 	}
 }
@@ -458,7 +459,7 @@ func TestSplitMultiPatternResult_ThreePatterns(t *testing.T) {
 `
 
 	patterns := []string{"foo", "bar", "baz"}
-	sections := splitMultiPatternResult(result, patterns)
+	sections := toolruntime.SplitMultiPatternResult(result, patterns)
 
 	if sections == nil {
 		t.Fatal("expected non-nil sections")
@@ -567,13 +568,13 @@ func TestExecuteToolCallsWithParallel_SkipDoesNotBreakRepeatedReads(t *testing.T
 	}
 }
 
-// ── splitReadFileBatchResult tests ──
+// ── toolruntime.SplitReadFileBatchResult tests ──
 
 func TestSplitReadFileBatchResult_TwoFiles(t *testing.T) {
 	result := "📄 File: /a.go\npackage main\n\nfunc main() {}\n\n📄 File: /b.go\npackage util\n\nfunc Helper() {}\n"
 
 	paths := []string{"/a.go", "/b.go"}
-	sections := splitReadFileBatchResult(result, paths)
+	sections := toolruntime.SplitReadFileBatchResult(result, paths)
 
 	if sections == nil {
 		t.Fatal("expected non-nil sections")
@@ -600,7 +601,7 @@ func TestSplitReadFileBatchResult_ThreeFiles(t *testing.T) {
 	result := "📄 File: /a.go\ncontent_a\n\n📄 File: /b.go\ncontent_b\n\n📄 File: /c.go\ncontent_c\n"
 
 	paths := []string{"/a.go", "/b.go", "/c.go"}
-	sections := splitReadFileBatchResult(result, paths)
+	sections := toolruntime.SplitReadFileBatchResult(result, paths)
 
 	if sections == nil {
 		t.Fatal("expected non-nil sections")
@@ -626,7 +627,7 @@ func TestSplitReadFileBatchResult_HeaderMissing(t *testing.T) {
 	result := "📄 File: /a.go\ncontent_a\n"
 
 	paths := []string{"/a.go", "/b.go"}
-	sections := splitReadFileBatchResult(result, paths)
+	sections := toolruntime.SplitReadFileBatchResult(result, paths)
 
 	if sections != nil {
 		t.Error("should return nil when header for /b.go is missing")
@@ -638,7 +639,7 @@ func TestSplitReadFileBatchResult_ErrorFile(t *testing.T) {
 	result := "📄 File: /a.go\npackage main\n\n📄 File: /missing.go\nError: file not found: /missing.go\n"
 
 	paths := []string{"/a.go", "/missing.go"}
-	sections := splitReadFileBatchResult(result, paths)
+	sections := toolruntime.SplitReadFileBatchResult(result, paths)
 
 	if sections == nil {
 		t.Fatal("expected non-nil sections even with error")
@@ -652,17 +653,17 @@ func TestSplitReadFileBatchResult_ErrorFile(t *testing.T) {
 }
 
 func TestSplitReadFileBatchResult_EmptyResult(t *testing.T) {
-	sections := splitReadFileBatchResult("", []string{"/a.go"})
+	sections := toolruntime.SplitReadFileBatchResult("", []string{"/a.go"})
 	if sections != nil {
 		t.Error("should return nil for empty result")
 	}
 }
 
-// ── buildReadFileBatchToolCall tests ──
+// ── toolruntime.BuildReadFileBatchToolCall tests ──
 
 func TestBuildReadFileBatchToolCall_FullBudget(t *testing.T) {
 	paths := []string{"/a.go", "/b.go", "/c.go"}
-	tc := buildReadFileBatchToolCall(paths, true)
+	tc := toolruntime.BuildReadFileBatchToolCall(paths, true)
 
 	if tc.Tool != "read_file" {
 		t.Errorf("Tool = %q, want read_file", tc.Tool)
@@ -674,7 +675,7 @@ func TestBuildReadFileBatchToolCall_FullBudget(t *testing.T) {
 	if !strings.HasPrefix(tc.Args["paths"], "[") {
 		t.Errorf("paths should be JSON array, got %q", tc.Args["paths"])
 	}
-	// RawArgs.paths should be []string
+	// RawArgs.Paths should be []string
 	rawPaths, ok := tc.RawArgs["paths"].([]string)
 	if !ok {
 		t.Fatal("RawArgs[paths] should be []string")
@@ -689,7 +690,7 @@ func TestBuildReadFileBatchToolCall_FullBudget(t *testing.T) {
 }
 
 func TestBuildReadFileBatchToolCall_NoFullBudget(t *testing.T) {
-	tc := buildReadFileBatchToolCall([]string{"/a.go", "/b.go"}, false)
+	tc := toolruntime.BuildReadFileBatchToolCall([]string{"/a.go", "/b.go"}, false)
 	if tc.Args["_full_budget"] != "" {
 		t.Error("fullBudget=false should not set _full_budget arg")
 	}
@@ -718,8 +719,8 @@ func TestIsBatchableReadFile_Comprehensive(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := isBatchableReadFile(tt.tc); got != tt.want {
-				t.Errorf("isBatchableReadFile() = %v, want %v", got, tt.want)
+			if got := toolruntime.IsBatchableReadFile(tt.tc); got != tt.want {
+				t.Errorf("toolruntime.IsBatchableReadFile() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -816,7 +817,7 @@ func TestReadFileBatchMerge_SingleReadNotMerged(t *testing.T) {
 	}
 }
 
-// ── segmentReadFileBatches tests ──
+// ── toolruntime.SegmentReadFileBatches tests ──
 
 func TestSegmentReadFileBatches_AllReads(t *testing.T) {
 	// 全て read_file → 1 セグメント
@@ -826,13 +827,13 @@ func TestSegmentReadFileBatches_AllReads(t *testing.T) {
 		{Tool: "read_file", Args: map[string]string{"path": "/c.go"}},
 	}
 	flags := []bool{true, true, true}
-	segs := segmentReadFileBatches(tcs, flags)
+	segs := toolruntime.SegmentReadFileBatches(tcs, flags)
 
 	if len(segs) != 1 {
 		t.Fatalf("expected 1 segment, got %d", len(segs))
 	}
-	if len(segs[0].paths) != 3 {
-		t.Errorf("segment should have 3 paths, got %d", len(segs[0].paths))
+	if len(segs[0].Paths) != 3 {
+		t.Errorf("segment should have 3 paths, got %d", len(segs[0].Paths))
 	}
 }
 
@@ -846,13 +847,13 @@ func TestSegmentReadFileBatches_SplitAtMutation(t *testing.T) {
 		{Tool: "read_file", Args: map[string]string{"path": "/d.go"}},
 	}
 	flags := []bool{true, true, true, true}
-	segs := segmentReadFileBatches(tcs, flags)
+	segs := toolruntime.SegmentReadFileBatches(tcs, flags)
 
 	if len(segs) != 1 {
 		t.Fatalf("expected 1 segment (only post-mutation pair), got %d", len(segs))
 	}
-	if segs[0].paths[0] != "/c.go" || segs[0].paths[1] != "/d.go" {
-		t.Errorf("segment paths = %v, want [/c.go, /d.go]", segs[0].paths)
+	if segs[0].Paths[0] != "/c.go" || segs[0].Paths[1] != "/d.go" {
+		t.Errorf("segment paths = %v, want [/c.go, /d.go]", segs[0].Paths)
 	}
 }
 
@@ -867,16 +868,16 @@ func TestSegmentReadFileBatches_TwoSegments(t *testing.T) {
 		{Tool: "read_file", Args: map[string]string{"path": "/e.go"}},
 	}
 	flags := []bool{true, true, true, true, true}
-	segs := segmentReadFileBatches(tcs, flags)
+	segs := toolruntime.SegmentReadFileBatches(tcs, flags)
 
 	if len(segs) != 2 {
 		t.Fatalf("expected 2 segments, got %d", len(segs))
 	}
-	if segs[0].paths[0] != "/a.go" || segs[0].paths[1] != "/b.go" {
-		t.Errorf("segment 0 = %v, want [/a.go, /b.go]", segs[0].paths)
+	if segs[0].Paths[0] != "/a.go" || segs[0].Paths[1] != "/b.go" {
+		t.Errorf("segment 0 = %v, want [/a.go, /b.go]", segs[0].Paths)
 	}
-	if segs[1].paths[0] != "/d.go" || segs[1].paths[1] != "/e.go" {
-		t.Errorf("segment 1 = %v, want [/d.go, /e.go]", segs[1].paths)
+	if segs[1].Paths[0] != "/d.go" || segs[1].Paths[1] != "/e.go" {
+		t.Errorf("segment 1 = %v, want [/d.go, /e.go]", segs[1].Paths)
 	}
 }
 
@@ -889,13 +890,13 @@ func TestSegmentReadFileBatches_ParallelSafeDoesNotSplit(t *testing.T) {
 		{Tool: "read_file", Args: map[string]string{"path": "/b.go"}},
 	}
 	flags := []bool{true, true, true}
-	segs := segmentReadFileBatches(tcs, flags)
+	segs := toolruntime.SegmentReadFileBatches(tcs, flags)
 
 	if len(segs) != 1 {
 		t.Fatalf("expected 1 segment (parallel-safe does not split), got %d", len(segs))
 	}
-	if len(segs[0].paths) != 2 {
-		t.Errorf("segment should have 2 paths, got %d", len(segs[0].paths))
+	if len(segs[0].Paths) != 2 {
+		t.Errorf("segment should have 2 paths, got %d", len(segs[0].Paths))
 	}
 }
 
@@ -908,16 +909,16 @@ func TestSegmentReadFileBatches_SkippedEntriesIgnored(t *testing.T) {
 		{Tool: "read_file", Args: map[string]string{"path": "/c.go"}},
 	}
 	flags := []bool{true, false, true}
-	segs := segmentReadFileBatches(tcs, flags)
+	segs := toolruntime.SegmentReadFileBatches(tcs, flags)
 
 	if len(segs) != 1 {
 		t.Fatalf("expected 1 segment, got %d", len(segs))
 	}
-	if len(segs[0].paths) != 2 {
-		t.Errorf("segment should have 2 paths, got %d", len(segs[0].paths))
+	if len(segs[0].Paths) != 2 {
+		t.Errorf("segment should have 2 paths, got %d", len(segs[0].Paths))
 	}
-	if segs[0].paths[0] != "/a.go" || segs[0].paths[1] != "/c.go" {
-		t.Errorf("segment = %v, want [/a.go, /c.go]", segs[0].paths)
+	if segs[0].Paths[0] != "/a.go" || segs[0].Paths[1] != "/c.go" {
+		t.Errorf("segment = %v, want [/a.go, /c.go]", segs[0].Paths)
 	}
 }
 
@@ -930,7 +931,7 @@ func TestSegmentReadFileBatches_SingleReadNotBatched(t *testing.T) {
 		{Tool: "read_file", Args: map[string]string{"path": "/c.go"}},
 	}
 	flags := []bool{true, true, true}
-	segs := segmentReadFileBatches(tcs, flags)
+	segs := toolruntime.SegmentReadFileBatches(tcs, flags)
 
 	if len(segs) != 0 {
 		t.Errorf("expected 0 segments (each has only 1 read), got %d", len(segs))
@@ -938,8 +939,8 @@ func TestSegmentReadFileBatches_SingleReadNotBatched(t *testing.T) {
 }
 
 func TestSegmentReadFileBatches_OverMaxPaths(t *testing.T) {
-	// 15 個の read_file: maxReadFileBatchPaths(10) を超えるが、
-	// segmentReadFileBatches は上限チェックを行わず1セグメントとして返す。
+	// 15 個の read_file: toolruntime.MaxReadFileBatchPaths(10) を超えるが、
+	// toolruntime.SegmentReadFileBatches は上限チェックを行わず1セグメントとして返す。
 	// chunk 分割は実行側（executeToolCallsWithParallel）で行う。
 	n := 15
 	tcs := make([]*tools.ToolCall, n)
@@ -951,12 +952,12 @@ func TestSegmentReadFileBatches_OverMaxPaths(t *testing.T) {
 		}
 		flags[i] = true
 	}
-	segs := segmentReadFileBatches(tcs, flags)
+	segs := toolruntime.SegmentReadFileBatches(tcs, flags)
 	if len(segs) != 1 {
 		t.Fatalf("expected 1 segment, got %d", len(segs))
 	}
-	if len(segs[0].indices) != n {
-		t.Errorf("expected %d indices, got %d", n, len(segs[0].indices))
+	if len(segs[0].Indices) != n {
+		t.Errorf("expected %d indices, got %d", n, len(segs[0].Indices))
 	}
 }
 
@@ -969,13 +970,13 @@ func TestSegmentReadFileBatches_NonBatchableReadIgnored(t *testing.T) {
 		{Tool: "read_file", Args: map[string]string{"path": "/c.go"}},
 	}
 	flags := []bool{true, true, true}
-	segs := segmentReadFileBatches(tcs, flags)
+	segs := toolruntime.SegmentReadFileBatches(tcs, flags)
 
 	if len(segs) != 1 {
 		t.Fatalf("expected 1 segment, got %d", len(segs))
 	}
-	if len(segs[0].paths) != 2 {
-		t.Errorf("segment should have 2 paths (a, c), got %d", len(segs[0].paths))
+	if len(segs[0].Paths) != 2 {
+		t.Errorf("segment should have 2 paths (a, c), got %d", len(segs[0].Paths))
 	}
 }
 
@@ -985,7 +986,7 @@ func TestSegmentReadFileBatches_ExplicitDetailIgnored(t *testing.T) {
 		{Tool: "read_file", Args: map[string]string{"path": "/b.go", "detail": "outline"}},
 	}
 	flags := []bool{true, true}
-	segs := segmentReadFileBatches(tcs, flags)
+	segs := toolruntime.SegmentReadFileBatches(tcs, flags)
 
 	if len(segs) != 0 {
 		t.Fatalf("expected 0 segments for explicit detail reads, got %d", len(segs))
@@ -1037,10 +1038,10 @@ func TestSearchCodeChunkBatch_GroupsOverLimit(t *testing.T) {
 	// グループ化ロジックの検証
 	groups := make(map[string][]int)
 	for i, tc := range tcs {
-		if !isSimpleSearchPattern(tc.Args["pattern"]) {
+		if !toolruntime.IsSimpleSearchPattern(tc.Args["pattern"]) {
 			continue
 		}
-		key := searchCodeOptionsKey(tc)
+		key := toolruntime.SearchCodeOptionsKey(tc)
 		groups[key] = append(groups[key], i)
 	}
 
@@ -1052,10 +1053,10 @@ func TestSearchCodeChunkBatch_GroupsOverLimit(t *testing.T) {
 		if len(indices) != n {
 			t.Errorf("group should have %d indices, got %d", n, len(indices))
 		}
-		// chunk 分割: maxSearchBatchPatterns(5) 単位
+		// chunk 分割: toolruntime.MaxSearchBatchPatterns(5) 単位
 		chunkCount := 0
-		for start := 0; start < len(indices); start += maxSearchBatchPatterns {
-			end := start + maxSearchBatchPatterns
+		for start := 0; start < len(indices); start += toolruntime.MaxSearchBatchPatterns {
+			end := start + toolruntime.MaxSearchBatchPatterns
 			if end > len(indices) {
 				end = len(indices)
 			}
@@ -1075,7 +1076,7 @@ func TestSearchCodeChunkBatch_GroupsOverLimit(t *testing.T) {
 
 func TestReadFileChunkBatch_SegmentOverLimit(t *testing.T) {
 	// 12 plain read_file calls: segmentation returns 1 segment (no max check).
-	// Chunk 分割は executeToolCallsWithParallel 内で maxReadFileBatchPaths 単位で行う。
+	// Chunk 分割は executeToolCallsWithParallel 内で toolruntime.MaxReadFileBatchPaths 単位で行う。
 	n := 12
 	tcs := make([]*tools.ToolCall, n)
 	flags := make([]bool, n)
@@ -1087,23 +1088,23 @@ func TestReadFileChunkBatch_SegmentOverLimit(t *testing.T) {
 		flags[i] = true
 	}
 
-	segs := segmentReadFileBatches(tcs, flags)
+	segs := toolruntime.SegmentReadFileBatches(tcs, flags)
 	if len(segs) != 1 {
 		t.Fatalf("expected 1 segment, got %d", len(segs))
 	}
-	if len(segs[0].indices) != n {
-		t.Errorf("segment should have %d indices, got %d", n, len(segs[0].indices))
+	if len(segs[0].Indices) != n {
+		t.Errorf("segment should have %d indices, got %d", n, len(segs[0].Indices))
 	}
 
 	// chunk 分割シミュレーション
 	seg := segs[0]
 	chunkCount := 0
-	for start := 0; start < len(seg.indices); start += maxReadFileBatchPaths {
-		end := start + maxReadFileBatchPaths
-		if end > len(seg.indices) {
-			end = len(seg.indices)
+	for start := 0; start < len(seg.Indices); start += toolruntime.MaxReadFileBatchPaths {
+		end := start + toolruntime.MaxReadFileBatchPaths
+		if end > len(seg.Indices) {
+			end = len(seg.Indices)
 		}
-		chunk := seg.indices[start:end]
+		chunk := seg.Indices[start:end]
 		if len(chunk) >= 2 {
 			chunkCount++
 		}

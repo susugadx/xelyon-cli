@@ -1,6 +1,10 @@
 package agent
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/toolruntime"
+)
 
 func TestIsDigitOrRange(t *testing.T) {
 	tests := []struct {
@@ -17,8 +21,8 @@ func TestIsDigitOrRange(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			if got := isDigitOrRange(tt.input); got != tt.want {
-				t.Fatalf("isDigitOrRange(%q) = %v, want %v", tt.input, got, tt.want)
+			if got := toolruntime.IsDigitOrRange(tt.input); got != tt.want {
+				t.Fatalf("toolruntime.IsDigitOrRange(%q) = %v, want %v", tt.input, got, tt.want)
 			}
 		})
 	}
@@ -59,8 +63,8 @@ func TestReadFileHasExplicitRange(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := readFileHasExplicitRange(tt.args); got != tt.want {
-				t.Fatalf("readFileHasExplicitRange(%v) = %v, want %v", tt.args, got, tt.want)
+			if got := toolruntime.ReadFileHasExplicitRange(tt.args); got != tt.want {
+				t.Fatalf("toolruntime.ReadFileHasExplicitRange(%v) = %v, want %v", tt.args, got, tt.want)
 			}
 		})
 	}

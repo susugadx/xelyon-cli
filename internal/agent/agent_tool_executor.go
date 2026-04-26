@@ -2,25 +2,12 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"os"
 
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
-
-// argsToJSON は RawArgs を JSON 文字列に変換
-func argsToJSON(args map[string]any) string {
-	if len(args) == 0 {
-		return "{}"
-	}
-	b, err := json.Marshal(args)
-	if err != nil {
-		return "{}"
-	}
-	return string(b)
-}
 
 func (a *Agent) toolExecutionContext(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer) tools.ExecutionContext {
 	runtimeUI := a.ui()

@@ -13,6 +13,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/audit"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
+	"github.com/susugadx/xelyon-cli/internal/toolruntime"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/subagent"
 	"github.com/susugadx/xelyon-cli/internal/ui"
@@ -247,7 +248,7 @@ func appendHeadlessToolCallsToHistory(agent *Agent, response string, toolCalls [
 			Type: "function",
 			Function: api.OpenAIToolCallFunction{
 				Name:      tc.Tool,
-				Arguments: argsToJSON(tc.RawArgs),
+				Arguments: toolruntime.ArgsToJSON(tc.RawArgs),
 			},
 		}
 		if i == 0 {
@@ -271,7 +272,7 @@ func appendHeadlessToolResultToHistory(agent *Agent, toolCall *tools.ToolCall, r
 	if agent == nil || toolCall == nil {
 		return
 	}
-	agent.History = append(agent.History, buildToolResultMessage(toolCall, result, formatTextToolResultContent(toolCall.Tool, result)))
+	agent.History = append(agent.History, toolruntime.BuildToolResultMessage(toolCall, result, toolruntime.FormatTextToolResultContent(toolCall.Tool, result)))
 }
 
 // extractToolFilePath はツール呼び出しから表示用ターゲットを抽出する。

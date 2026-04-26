@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/toolruntime"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
@@ -23,7 +24,7 @@ func (a *Agent) addToolCallsToHistory(response string, toolCalls []*tools.ToolCa
 			Type: "function",
 			Function: api.OpenAIToolCallFunction{
 				Name:      tc.Tool,
-				Arguments: argsToJSON(tc.RawArgs),
+				Arguments: toolruntime.ArgsToJSON(tc.RawArgs),
 			},
 		}
 		// ThoughtSignature/ThoughtParts は最初の ToolCall のみ（Gemini 3 仕様）
@@ -113,7 +114,7 @@ func (a *Agent) addToolCallToHistory(response string, toolCall *tools.ToolCall) 
 				ThoughtParts:     toolCall.ThoughtParts,
 				Function: api.OpenAIToolCallFunction{
 					Name:      toolCall.Tool,
-					Arguments: argsToJSON(toolCall.RawArgs),
+					Arguments: toolruntime.ArgsToJSON(toolCall.RawArgs),
 				},
 			}},
 		})
@@ -257,8 +258,8 @@ func (a *Agent) handleStrReplaceErrors(toolCall *tools.ToolCall, result string) 
 			_, _ = fmt.Fprintln(out)
 
 			// AIに警告を送信
-			content := formatTextToolResultContent(toolCall.Tool, result)
-			a.History = append(a.History, buildToolResultMessage(toolCall, content, content))
+			content := toolruntime.FormatTextToolResultContent(toolCall.Tool, result)
+			a.History = append(a.History, toolruntime.BuildToolResultMessage(toolCall, content, content))
 			a.History = append(a.History, api.Message{
 				Role: "user",
 				Content: `[SYSTEM WARNING] str_replace has failed multiple times. The old_str pattern was not found in the file.
@@ -310,7 +311,7 @@ func (a *Agent) handleCommentFlow(toolCall *tools.ToolCall, result string) bool 
 	}
 
 	// 結果を履歴に追加（Function Calling形式を考慮）
-	a.History = append(a.History, buildToolResultMessage(toolCall, result, formatTextToolResultContent(toolCall.Tool, result)))
+	a.History = append(a.History, toolruntime.BuildToolResultMessage(toolCall, result, toolruntime.FormatTextToolResultContent(toolCall.Tool, result)))
 
 	// AIに「コメントを反映して別案を提示」するよう促す
 	a.History = append(a.History, api.Message{

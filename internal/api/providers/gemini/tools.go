@@ -194,33 +194,13 @@ func GetCombinedToolDefinitions(mcpTools []api.ToolDefinition) []api.GeminiToolC
 
 // GetCombinedToolDefinitionsWithContext は request context の Registry を使って組み込みツール + MCPツール定義を返す。
 func GetCombinedToolDefinitionsWithContext(ctx context.Context, mcpTools []api.ToolDefinition) []api.GeminiToolConfig {
-	defs := api.ToolDefinitionsFromContext(ctx)
-	declarations := make([]api.GeminiFunctionDeclaration, 0, len(defs)+len(mcpTools))
-	seen := make(map[string]bool)
-
-	// 組み込みツール（Registry から生成）
+	defs := api.ToolDefinitionsWithAdditional(ctx, mcpTools)
+	declarations := make([]api.GeminiFunctionDeclaration, 0, len(defs))
 	for _, def := range defs {
-		if seen[def.Name] {
-			continue
-		}
-		seen[def.Name] = true
 		declarations = append(declarations, api.GeminiFunctionDeclaration{
 			Name:        def.Name,
 			Description: def.Description,
 			Parameters:  convertToGeminiSchema(def.Parameters),
-		})
-	}
-
-	// MCPツール（ToolDefinitionからGeminiFunctionDeclarationに変換）
-	for _, mcp := range mcpTools {
-		if seen[mcp.Name] {
-			continue
-		}
-		seen[mcp.Name] = true
-		declarations = append(declarations, api.GeminiFunctionDeclaration{
-			Name:        mcp.Name,
-			Description: mcp.Description,
-			Parameters:  convertToGeminiSchema(mcp.Parameters),
 		})
 	}
 

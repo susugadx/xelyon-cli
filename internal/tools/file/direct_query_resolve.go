@@ -19,12 +19,12 @@ func resolveDirectQuery(execCtx tools.ExecutionContext, query string) (DirectQue
 }
 
 func resolveDirectQueryInput(execCtx tools.ExecutionContext, input directQueryInput) (DirectQueryResolution, string) {
-	if len(input.entries) == 0 {
+	if len(input.Entries) == 0 {
 		return DirectQueryResolution{}, "Error: direct query is empty"
 	}
 
-	targets := make([]DirectQueryTarget, 0, len(input.entries))
-	for _, entry := range input.entries {
+	targets := make([]DirectQueryTarget, 0, len(input.Entries))
+	for _, entry := range input.Entries {
 		target, errResult := resolveDirectQueryTarget(execCtx, entry)
 		if errResult != "" {
 			return DirectQueryResolution{}, errResult
@@ -62,7 +62,7 @@ func resolveImplicitDirectFileQuery(execCtx tools.ExecutionContext, query string
 }
 
 func resolveDirectQueryTarget(execCtx tools.ExecutionContext, input directQueryEntryInput) (DirectQueryTarget, string) {
-	if strings.TrimSpace(input.cleanedPath) == "" {
+	if strings.TrimSpace(input.CleanedPath) == "" {
 		return DirectQueryTarget{}, "Error: direct query target is empty"
 	}
 
@@ -72,12 +72,12 @@ func resolveDirectQueryTarget(execCtx tools.ExecutionContext, input directQueryE
 	}
 	bypassIgnores := directQueryTargetBypassesIgnores(input)
 	if info.IsDir() {
-		if input.startLine > 0 || input.endLine > 0 {
+		if input.StartLine > 0 || input.EndLine > 0 {
 			return DirectQueryTarget{}, "Error: direct directory query does not support line ranges"
 		}
 		return DirectQueryTarget{
-			RawEntry:      input.cleanedPath,
-			FilePath:      input.cleanedPath,
+			RawEntry:      input.CleanedPath,
+			FilePath:      input.CleanedPath,
 			ResolvedPath:  resolvedPath,
 			AllowedRoots:  allowedRoots,
 			WorkspaceRoot: directQueryWorkspaceRoot(resolvedPath, allowedRoots),
@@ -87,33 +87,33 @@ func resolveDirectQueryTarget(execCtx tools.ExecutionContext, input directQueryE
 	}
 
 	return DirectQueryTarget{
-		RawEntry:      normalizeDirectQueryRawEntry(input.cleanedPath, input.startLine, input.endLine),
-		FilePath:      input.cleanedPath,
+		RawEntry:      normalizeDirectQueryRawEntry(input.CleanedPath, input.StartLine, input.EndLine),
+		FilePath:      input.CleanedPath,
 		ResolvedPath:  resolvedPath,
 		AllowedRoots:  allowedRoots,
 		WorkspaceRoot: directQueryWorkspaceRoot(resolvedPath, allowedRoots),
 		BypassIgnores: bypassIgnores,
-		StartLine:     input.startLine,
-		EndLine:       input.endLine,
+		StartLine:     input.StartLine,
+		EndLine:       input.EndLine,
 		Kind:          DirectQueryTargetFile,
 	}, ""
 }
 
 func resolveExistingDirectQueryPath(execCtx tools.ExecutionContext, input directQueryEntryInput) (string, []string, os.FileInfo, string) {
-	if strings.TrimSpace(input.cleanedPath) == "" {
+	if strings.TrimSpace(input.CleanedPath) == "" {
 		return "", nil, nil, "Error: direct query target is empty"
 	}
 
-	if input.explicitRelative {
+	if input.ExplicitRelative {
 		return resolveExistingExplicitRelativeDirectQueryPath(execCtx, input)
 	}
 
 	allowedRoots := directQueryAllowedRoots(execCtx)
 	out := common.NewOutput(io.Discard, io.Discard)
 
-	candidates := directQueryCandidates(input.cleanedPath, allowedRoots)
+	candidates := directQueryCandidates(input.CleanedPath, allowedRoots)
 	if len(candidates) == 0 {
-		candidates = []string{input.cleanedPath}
+		candidates = []string{input.CleanedPath}
 	}
 
 	for _, candidate := range candidates {
@@ -128,18 +128,18 @@ func resolveExistingDirectQueryPath(execCtx tools.ExecutionContext, input direct
 		return resolvedPath, allowedRoots, info, ""
 	}
 
-	return "", nil, nil, "Error: direct path not found: " + input.rawEntry
+	return "", nil, nil, "Error: direct path not found: " + input.RawEntry
 }
 
 func resolveExistingExplicitRelativeDirectQueryPath(execCtx tools.ExecutionContext, input directQueryEntryInput) (string, []string, os.FileInfo, string) {
 	baseRoot := directQueryExplicitRelativeBase(execCtx)
 	if baseRoot == "" {
-		return "", nil, nil, "Error: direct path not found: " + input.rawEntry
+		return "", nil, nil, "Error: direct path not found: " + input.RawEntry
 	}
 
 	allowedRoots := directQueryExplicitRelativeAllowedRoots(execCtx)
 	out := common.NewOutput(io.Discard, io.Discard)
-	candidate := filepath.Clean(filepath.Join(baseRoot, input.cleanedPath))
+	candidate := filepath.Clean(filepath.Join(baseRoot, input.CleanedPath))
 	resolvedPath, errResult := resolveValidatedPathWithRoots(out, candidate, allowedRoots, "path is empty")
 	if errResult != "" {
 		return "", nil, nil, errResult
@@ -147,7 +147,7 @@ func resolveExistingExplicitRelativeDirectQueryPath(execCtx tools.ExecutionConte
 
 	info, err := os.Stat(resolvedPath)
 	if err != nil {
-		return "", nil, nil, "Error: direct path not found: " + input.rawEntry
+		return "", nil, nil, "Error: direct path not found: " + input.RawEntry
 	}
 	return resolvedPath, allowedRoots, info, ""
 }
@@ -161,12 +161,12 @@ func resolveExistingDirectReadTargets(execCtx tools.ExecutionContext, input dire
 }
 
 func resolveDirectReadTargets(execCtx tools.ExecutionContext, input directQueryInput) ([]DirectQueryTarget, string) {
-	if len(input.entries) == 0 {
+	if len(input.Entries) == 0 {
 		return nil, "Error: direct query is empty"
 	}
 
-	targets := make([]DirectQueryTarget, 0, len(input.entries))
-	for _, entry := range input.entries {
+	targets := make([]DirectQueryTarget, 0, len(input.Entries))
+	for _, entry := range input.Entries {
 		target, errResult := resolveDirectQueryTarget(execCtx, entry)
 		if errResult != "" {
 			return nil, errResult
@@ -255,7 +255,7 @@ func directQueryWorkspaceRoot(resolvedPath string, allowedRoots []string) string
 }
 
 func directQueryTargetBypassesIgnores(input directQueryEntryInput) bool {
-	switch input.syntax {
+	switch input.Syntax {
 	case directQuerySyntaxExplicitPath, directQuerySyntaxPathCandidate:
 		return true
 	default:

@@ -1,39 +1,15 @@
 package agent
 
 import (
-	"fmt"
-
-	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/toolruntime"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
-
-func formatTextToolResultContent(toolName, result string) string {
-	return fmt.Sprintf("[Tool Result for %s]\n%s", toolName, result)
-}
-
-func buildToolResultMessage(toolCall *tools.ToolCall, functionContent, textContent string) api.Message {
-	if toolCall == nil {
-		return api.Message{}
-	}
-	if toolCall.ID != "" {
-		return api.Message{
-			Role:       "tool",
-			Content:    functionContent,
-			ToolCallID: toolCall.ID,
-			ToolName:   toolCall.Tool,
-		}
-	}
-	return api.Message{
-		Role:    "user",
-		Content: textContent,
-	}
-}
 
 func (a *Agent) appendToolResultToHistory(toolCall *tools.ToolCall, result string) {
 	if toolCall == nil {
 		return
 	}
-	a.appendToolResultToHistoryWithContent(toolCall, result, formatTextToolResultContent(toolCall.Tool, result))
+	a.appendToolResultToHistoryWithContent(toolCall, result, toolruntime.FormatTextToolResultContent(toolCall.Tool, result))
 }
 
 func (a *Agent) appendToolResultToHistoryWithContent(toolCall *tools.ToolCall, functionContent, textContent string) {
@@ -41,7 +17,7 @@ func (a *Agent) appendToolResultToHistoryWithContent(toolCall *tools.ToolCall, f
 		return
 	}
 
-	msg := buildToolResultMessage(toolCall, functionContent, textContent)
+	msg := toolruntime.BuildToolResultMessage(toolCall, functionContent, textContent)
 	a.History = append(a.History, msg)
 
 	if toolCall.ID != "" {

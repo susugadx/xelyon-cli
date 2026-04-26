@@ -1,4 +1,4 @@
-package mcp
+package mcptool
 
 import (
 	"context"
@@ -15,36 +15,39 @@ import (
 
 const defaultMCPToolCallTimeout = 30 * time.Second
 
-// integrationToolCaller は integration 層が必要とする最小契約。
+// Definition は MCP server から取得した tool metadata を tools.Registry 用に表す。
+type Definition struct {
+	ServerName  string
+	Name        string
+	Description string
+	InputSchema json.RawMessage
+}
+
+// ToolCaller は integration 層が必要とする最小契約。
 // serverName/toolName/args を指定して実行し、テキスト結果またはエラーを返す。
-type integrationToolCaller interface {
+type ToolCaller interface {
 	CallTool(ctx context.Context, serverName, toolName string, args map[string]any) (string, error)
 }
 
-var _ integrationToolCaller = (*Manager)(nil)
-
-// RegisterToToolRegistry はMCPツールをTool Registryに登録
-func (m *Manager) RegisterToToolRegistry(registry *tools.Registry) {
-	for _, mcpTool := range m.tools {
-		// クロージャで値をキャプチャ
-		tool := mcpTool
-
-		// MCPツール用のラッパーを作成
-		wrapper := &MCPToolWrapper{
-			manager:     m,
-			serverName:  tool.ServerName,
-			toolName:    tool.Name,
-			desc:        tool.Description,
-			inputSchema: tool.InputSchema,
-		}
+// RegisterToRegistry は MCP tool metadata を tools.Registry に登録する。
+func RegisterToRegistry(registry *tools.Registry, caller ToolCaller, definitions []Definition) {
+	for _, definition := range definitions {
+		tool := definition
+		wrapper := NewWrapper(WrapperOptions{
+			Caller:      caller,
+			ServerName:  tool.ServerName,
+			ToolName:    tool.Name,
+			Description: tool.Description,
+			InputSchema: tool.InputSchema,
+		})
 
 		registry.Register(wrapper)
 	}
 }
 
-// MCPToolWrapper はMCPツールをTool interfaceにラップ
-type MCPToolWrapper struct {
-	manager     integrationToolCaller
+// Wrapper はMCPツールをTool interfaceにラップ
+type Wrapper struct {
+	manager     ToolCaller
 	serverName  string
 	toolName    string
 	desc        string
@@ -52,8 +55,30 @@ type MCPToolWrapper struct {
 	callTimeout time.Duration
 }
 
+// WrapperOptions は Wrapper 作成時の依存と metadata をまとめる。
+type WrapperOptions struct {
+	Caller      ToolCaller
+	ServerName  string
+	ToolName    string
+	Description string
+	InputSchema json.RawMessage
+	CallTimeout time.Duration
+}
+
+// NewWrapper は MCP tool metadata から tools.Tool 実装を作る。
+func NewWrapper(opts WrapperOptions) *Wrapper {
+	return &Wrapper{
+		manager:     opts.Caller,
+		serverName:  opts.ServerName,
+		toolName:    opts.ToolName,
+		desc:        opts.Description,
+		inputSchema: opts.InputSchema,
+		callTimeout: opts.CallTimeout,
+	}
+}
+
 // Name はツール名を返す（mcp_<server>_<tool> 形式、特殊文字を置換）
-func (w *MCPToolWrapper) Name() string {
+func (w *Wrapper) Name() string {
 	// 特殊文字をアンダースコアに置換
 	safeServer := strings.Map(func(r rune) rune {
 		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
@@ -73,7 +98,7 @@ func (w *MCPToolWrapper) Name() string {
 }
 
 // Description はツールの説明を返す
-func (w *MCPToolWrapper) Description() string {
+func (w *Wrapper) Description() string {
 	if w.desc != "" {
 		return w.desc
 	}
@@ -81,7 +106,7 @@ func (w *MCPToolWrapper) Description() string {
 }
 
 // Parameters はツールのパラメータ定義を返す
-func (w *MCPToolWrapper) Parameters() map[string]interface{} {
+func (w *Wrapper) Parameters() map[string]interface{} {
 	// inputSchemaをそのままmap[string]interface{}に変換
 	if len(w.inputSchema) == 0 || string(w.inputSchema) == "null" {
 		return map[string]interface{}{
@@ -103,7 +128,7 @@ func (w *MCPToolWrapper) Parameters() map[string]interface{} {
 }
 
 // Run はツールを実行
-func (w *MCPToolWrapper) Run(execCtx tools.ExecutionContext, args map[string]string) (string, *tools.FileChange, error) {
+func (w *Wrapper) Run(execCtx tools.ExecutionContext, args map[string]string) (string, *tools.FileChange, error) {
 	out := execCtx.Output()
 
 	// 引数バリデーション（簡易版）
@@ -164,7 +189,7 @@ func (w *MCPToolWrapper) Run(execCtx tools.ExecutionContext, args map[string]str
 }
 
 // convertArgsWithSchema はスキーマに基づいて引数の型を変換する
-func (w *MCPToolWrapper) convertArgsWithSchema(args map[string]string) map[string]any {
+func (w *Wrapper) convertArgsWithSchema(args map[string]string) map[string]any {
 	anyArgs := make(map[string]any)
 
 	// スキーマが空の場合は文字列のまま返す
@@ -223,7 +248,12 @@ func (w *MCPToolWrapper) convertArgsWithSchema(args map[string]string) map[strin
 	return anyArgs
 }
 
-func (w *MCPToolWrapper) callTimeoutDuration() time.Duration {
+// ConvertArgsWithSchema は schema に基づく引数変換を実行する。
+func (w *Wrapper) ConvertArgsWithSchema(args map[string]string) map[string]any {
+	return w.convertArgsWithSchema(args)
+}
+
+func (w *Wrapper) callTimeoutDuration() time.Duration {
 	if w.callTimeout > 0 {
 		return w.callTimeout
 	}
@@ -238,7 +268,7 @@ func formatTimeoutDuration(d time.Duration) string {
 }
 
 // validateArgs は引数を検証する（簡易版）
-func (w *MCPToolWrapper) validateArgs(out io.Writer, args map[string]string) error {
+func (w *Wrapper) validateArgs(out io.Writer, args map[string]string) error {
 	if out == nil {
 		out = io.Discard
 	}
@@ -276,13 +306,23 @@ func (w *MCPToolWrapper) validateArgs(out io.Writer, args map[string]string) err
 	return nil
 }
 
+// ValidateArgs は MCP tool 実行前の簡易 argument validation を行う。
+func (w *Wrapper) ValidateArgs(out io.Writer, args map[string]string) error {
+	return w.validateArgs(out, args)
+}
+
 // formatResult は結果をフォーマットする
 // NOTE: 出力の切り詰めはtoken_guard.goで一元管理するため、ここでは行わない
-func (w *MCPToolWrapper) formatResult(result string) string {
+func (w *Wrapper) formatResult(result string) string {
 	// 結果が空の場合
 	if result == "" {
 		return "Tool executed successfully (no output)"
 	}
 
 	return result
+}
+
+// FormatResult は MCP tool のテキスト結果を表示用に整える。
+func (w *Wrapper) FormatResult(result string) string {
+	return w.formatResult(result)
 }

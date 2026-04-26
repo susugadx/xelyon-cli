@@ -25,7 +25,7 @@ func resolveScopedBasenameDirectTarget(scopes []scopedExactLookupScope, ignoreMa
 			}
 		}
 	}
-	return selectScopedBasenameDirectTarget(matches, trimmedFilter, entry.rawEntry)
+	return selectScopedBasenameDirectTarget(matches, trimmedFilter, entry.RawEntry)
 }
 
 func collectScopedBasenameTargets(scope scopedExactLookupScope, ignoreMatcher *pathmatch.Matcher, entry directQueryEntryInput, fileFilter string, seen map[string]struct{}, limit int) []DirectQueryTarget {
@@ -79,7 +79,7 @@ func collectScopedBasenameTargets(scope scopedExactLookupScope, ignoreMatcher *p
 }
 
 func buildScopedBasenameTarget(scope scopedExactLookupScope, candidatePath string, entry directQueryEntryInput, fileFilter string, seen map[string]struct{}) (DirectQueryTarget, bool) {
-	if filepath.Base(candidatePath) != entry.cleanedPath {
+	if filepath.Base(candidatePath) != entry.CleanedPath {
 		return DirectQueryTarget{}, false
 	}
 

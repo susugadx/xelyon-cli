@@ -1,16 +1,14 @@
 package search
 
 import (
-	"path/filepath"
-	"strings"
-
+	"github.com/susugadx/xelyon-cli/internal/goimpact"
 	"github.com/susugadx/xelyon-cli/internal/navigation"
 )
 
 const (
-	goImpactRiskLow    = "low"
-	goImpactRiskMedium = "medium"
-	goImpactRiskHigh   = "high"
+	goImpactRiskLow    = goimpact.RiskLow
+	goImpactRiskMedium = goimpact.RiskMedium
+	goImpactRiskHigh   = goimpact.RiskHigh
 )
 
 type goImpactPlan struct {
@@ -19,110 +17,31 @@ type goImpactPlan struct {
 	implementationLimit int
 }
 
-var goImpactLowBudget = navigation.Budget{
-	BodyLines:   18,
-	CallerLimit: 3,
-	RefLimit:    3,
-	TestLimit:   2,
-}
-
-var goImpactMediumBudget = navigation.Budget{
-	BodyLines:   18,
-	CallerLimit: 5,
-	RefLimit:    5,
-	TestLimit:   3,
-}
-
-var goImpactHighBudget = navigation.Budget{
-	BodyLines:   18,
-	CallerLimit: 8,
-	RefLimit:    8,
-	TestLimit:   4,
-}
-
 func goImpactPlanForRisk(risk string) goImpactPlan {
-	switch strings.TrimSpace(risk) {
-	case goImpactRiskHigh:
-		return goImpactPlan{riskLevel: goImpactRiskHigh, budget: goImpactHighBudget, implementationLimit: 8}
-	case goImpactRiskMedium:
-		return goImpactPlan{riskLevel: goImpactRiskMedium, budget: goImpactMediumBudget, implementationLimit: 4}
-	default:
-		return goImpactPlan{riskLevel: goImpactRiskLow, budget: goImpactLowBudget, implementationLimit: 2}
+	plan := goimpact.PlanForRisk(risk)
+	return goImpactPlan{
+		riskLevel:           plan.RiskLevel,
+		budget:              plan.Budget,
+		implementationLimit: plan.ImplementationLimit,
 	}
 }
 
 func goImpactPlanEqual(left, right goImpactPlan) bool {
-	return left.riskLevel == right.riskLevel &&
-		left.implementationLimit == right.implementationLimit &&
-		left.budget == right.budget
+	return goimpact.PlanEqual(toGoImpactPlan(left), toGoImpactPlan(right))
 }
 
 func goImpactPlanRank(plan goImpactPlan) int {
-	switch plan.riskLevel {
-	case goImpactRiskHigh:
-		return 3
-	case goImpactRiskMedium:
-		return 2
-	default:
-		return 1
-	}
+	return goimpact.PlanRank(toGoImpactPlan(plan))
 }
 
 func classifyGoImpactRisk(result navigation.InspectResult) string {
-	if result.Symbol == nil {
-		return goImpactRiskLow
-	}
-
-	if result.Symbol.Exported || result.Symbol.Kind == "interface" || len(result.Implementations) > 0 {
-		return goImpactRiskHigh
-	}
-
-	fileCount, dirCount := goImpactReferenceSpread(result)
-	if dirCount > 1 {
-		return goImpactRiskHigh
-	}
-	if fileCount > 1 || isSharedGoPackageSymbol(*result.Symbol) {
-		return goImpactRiskMedium
-	}
-	if goImpactNeedsWidening(result) {
-		return goImpactRiskMedium
-	}
-
-	return goImpactRiskLow
+	return goimpact.ClassifyRisk(result)
 }
 
-func goImpactNeedsWidening(result navigation.InspectResult) bool {
-	if result.MoreCallers || result.MoreRefs || result.UpstreamTruncated || result.UpstreamIncomplete {
-		return true
+func toGoImpactPlan(plan goImpactPlan) goimpact.Plan {
+	return goimpact.Plan{
+		RiskLevel:           plan.riskLevel,
+		Budget:              plan.budget,
+		ImplementationLimit: plan.implementationLimit,
 	}
-	return result.TotalCallers > len(result.Callers) || result.TotalRefs > len(result.Refs)
-}
-
-func goImpactReferenceSpread(result navigation.InspectResult) (int, int) {
-	fileSeen := make(map[string]struct{})
-	dirSeen := make(map[string]struct{})
-	add := func(file string) {
-		file = filepath.ToSlash(filepath.Clean(strings.TrimSpace(file)))
-		if file == "" {
-			return
-		}
-		fileSeen[file] = struct{}{}
-		dirSeen[filepath.ToSlash(filepath.Dir(file))] = struct{}{}
-	}
-
-	for _, ref := range result.Callers {
-		add(ref.File)
-	}
-	for _, ref := range result.Refs {
-		add(ref.File)
-	}
-	return len(fileSeen), len(dirSeen)
-}
-
-func isSharedGoPackageSymbol(symbol navigation.SymbolCandidate) bool {
-	packageDir := filepath.ToSlash(strings.TrimSpace(symbol.PackageDir))
-	if packageDir == "" || packageDir == "." {
-		return false
-	}
-	return packageDir != "cmd" && !strings.HasPrefix(packageDir, "cmd/")
 }

@@ -1,6 +1,10 @@
 package agent
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/toolruntime"
+)
 
 func TestJoinReadFileBatchSections(t *testing.T) {
 	perFile := map[string]string{
@@ -8,14 +12,14 @@ func TestJoinReadFileBatchSections(t *testing.T) {
 		"b.go": "package b",
 	}
 
-	got, ok := joinReadFileBatchSections(perFile, []string{"a.go", "b.go"})
+	got, ok := toolruntime.JoinReadFileBatchSections(perFile, []string{"a.go", "b.go"})
 	if !ok {
-		t.Fatal("joinReadFileBatchSections() = false, want true")
+		t.Fatal("toolruntime.JoinReadFileBatchSections() = false, want true")
 	}
 
 	want := "📄 File: a.go\npackage a\nfunc A() {}\n📄 File: b.go\npackage b"
 	if got != want {
-		t.Fatalf("joinReadFileBatchSections() = %q, want %q", got, want)
+		t.Fatalf("toolruntime.JoinReadFileBatchSections() = %q, want %q", got, want)
 	}
 }
 
@@ -24,8 +28,8 @@ func TestJoinReadFileBatchSections_MissingSection(t *testing.T) {
 		"a.go": "package a",
 	}
 
-	got, ok := joinReadFileBatchSections(perFile, []string{"a.go", "b.go"})
+	got, ok := toolruntime.JoinReadFileBatchSections(perFile, []string{"a.go", "b.go"})
 	if ok {
-		t.Fatalf("joinReadFileBatchSections() = (%q, true), want false", got)
+		t.Fatalf("toolruntime.JoinReadFileBatchSections() = (%q, true), want false", got)
 	}
 }

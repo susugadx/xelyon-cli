@@ -38,26 +38,13 @@ func GetCombinedOpenAITools(mcpTools []api.ToolDefinition) []api.OpenAITool {
 
 // GetCombinedOpenAIToolsWithContext は request context の Registry を使って組み込みツール + MCPツールを返す。
 func GetCombinedOpenAIToolsWithContext(ctx context.Context, mcpTools []api.ToolDefinition) []api.OpenAITool {
-	result := GetOpenAIToolDefinitionsWithContext(ctx)
-	seen := make(map[string]bool)
-
-	// 組み込みツールの名前を記録
-	for _, tool := range result {
-		if tool.Function != nil {
-			seen[tool.Function.Name] = true
-		}
-	}
-
-	// MCPツール（重複チェック）
-	for _, mcp := range mcpTools {
-		if seen[mcp.Name] {
-			continue
-		}
-		seen[mcp.Name] = true
-		mcpCopy := mcp // ループ変数のコピー
+	defs := api.ToolDefinitionsWithAdditional(ctx, mcpTools)
+	result := make([]api.OpenAITool, 0, len(defs))
+	for _, def := range defs {
+		defCopy := def
 		result = append(result, api.OpenAITool{
 			Type:     "function",
-			Function: &mcpCopy,
+			Function: &defCopy,
 		})
 	}
 	return result
@@ -72,35 +59,14 @@ func GetResponsesToolDefinitions(mcpTools []api.ToolDefinition) []ResponsesTool 
 
 // GetResponsesToolDefinitionsWithContext は request context の Registry を使って Responses API 用のツール定義を返す。
 func GetResponsesToolDefinitionsWithContext(ctx context.Context, mcpTools []api.ToolDefinition) []ResponsesTool {
-	defs := api.ToolDefinitionsFromContext(ctx)
-	result := make([]ResponsesTool, 0, len(defs)+len(mcpTools))
-	seen := make(map[string]bool)
-
-	// 組み込みツール（Registry から生成）
+	defs := api.ToolDefinitionsWithAdditional(ctx, mcpTools)
+	result := make([]ResponsesTool, 0, len(defs))
 	for _, def := range defs {
-		if seen[def.Name] {
-			continue
-		}
-		seen[def.Name] = true
 		result = append(result, ResponsesTool{
 			Type:        "function",
 			Name:        def.Name,
 			Description: def.Description,
 			Parameters:  def.Parameters,
-		})
-	}
-
-	// MCPツール（重複チェック）
-	for _, mcp := range mcpTools {
-		if seen[mcp.Name] {
-			continue
-		}
-		seen[mcp.Name] = true
-		result = append(result, ResponsesTool{
-			Type:        "function",
-			Name:        mcp.Name,
-			Description: mcp.Description,
-			Parameters:  mcp.Parameters,
 		})
 	}
 

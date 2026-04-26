@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/commandruntime"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -144,18 +145,7 @@ func handleConfigCommand(agent *Agent, args []string) bool {
 
 // isNonInteractiveConfigSubcommand は stdin を読まずに処理できる /config サブコマンドかを返す。
 func isNonInteractiveConfigSubcommand(args []string) bool {
-	if len(args) == 0 {
-		return false
-	}
-
-	switch args[0] {
-	case "show":
-		return len(args) == 1
-	case "model":
-		return len(args) >= 2
-	default:
-		return false
-	}
+	return commandruntime.IsNonInteractiveConfigSubcommand(args)
 }
 
 // runInteractiveConfig は対話式設定メニューを実行

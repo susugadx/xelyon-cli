@@ -5,43 +5,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/susugadx/xelyon-cli/internal/toolruntime"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
-
-type parallelToolCallStatus int
-
-const (
-	parallelToolCallStatusExecute parallelToolCallStatus = iota
-	parallelToolCallStatusSkip
-	parallelToolCallStatusLoopAbort
-	parallelToolCallStatusBatched
-)
-
-type parallelToolCallEntry struct {
-	status  parallelToolCallStatus
-	skipMsg string
-}
-
-type parallelToolCallState struct {
-	allToolCalls []*tools.ToolCall
-	entries      []parallelToolCallEntry
-	results      []toolExecResult
-
-	parallelEntries   []int
-	sequentialEntries []int
-
-	loopTriggerIdx int
-	loopDetected   bool
-}
-
-func newParallelToolCallState(allToolCalls []*tools.ToolCall) *parallelToolCallState {
-	return &parallelToolCallState{
-		allToolCalls:   allToolCalls,
-		entries:        make([]parallelToolCallEntry, len(allToolCalls)),
-		results:        make([]toolExecResult, len(allToolCalls)),
-		loopTriggerIdx: -1,
-	}
-}
 
 // executeToolCallsWithParallel は parallel-safe なツールを並列実行し、sequential なツールを順次実行する。
 // 通常モードと Plan Mode の両方で使用する共通 executor。
@@ -66,75 +32,29 @@ func (a *Agent) executeToolCallsWithParallel(
 	skipFn func(tc *tools.ToolCall) (skip bool, msg string),
 	callback ToolExecCallback,
 ) (loopDetected bool) {
-	state := newParallelToolCallState(allToolCalls)
-	if len(state.allToolCalls) == 0 {
+	state := toolruntime.NewParallelCallState(allToolCalls)
+	if len(state.AllToolCalls) == 0 {
 		return false
 	}
 
-	a.planParallelToolCalls(state, loopDetectFn, skipFn)
+	toolruntime.PlanParallelCalls(state, loopDetectFn, skipFn)
 	a.executeSearchCodeBatch(ctx, state)
 	a.executeReadFileBatchMerge(ctx, state)
-	a.partitionParallelAndSequential(state)
+	toolruntime.PartitionParallelAndSequential(state)
 	a.runParallelSafeToolsPhase(ctx, state)
 	a.executeSequentialTools(ctx, state)
 	a.deliverToolExecutionResults(state, callback)
 
-	return state.loopDetected
+	return state.LoopDetected
 }
 
-// planParallelToolCalls は Phase0 の判定を担当し、各 tool call の実行状態を確定する。
-// loopDetectFn を skipFn より先に評価し、旧 sequential 実装と同じ連続性判定契約を維持する。
-func (a *Agent) planParallelToolCalls(
-	state *parallelToolCallState,
-	loopDetectFn func(tc *tools.ToolCall) (abort bool),
-	skipFn func(tc *tools.ToolCall) (skip bool, msg string),
-) {
-	aborted := false
-	for i, tc := range state.allToolCalls {
-		if aborted {
-			state.entries[i] = parallelToolCallEntry{status: parallelToolCallStatusLoopAbort}
-			continue
-		}
-		if loopDetectFn != nil && loopDetectFn(tc) {
-			state.entries[i] = parallelToolCallEntry{status: parallelToolCallStatusLoopAbort}
-			state.loopDetected = true
-			state.loopTriggerIdx = i
-			aborted = true
-			continue
-		}
-		if skipFn != nil {
-			if skip, msg := skipFn(tc); skip {
-				state.entries[i] = parallelToolCallEntry{status: parallelToolCallStatusSkip, skipMsg: msg}
-				continue
-			}
-		}
-		state.entries[i] = parallelToolCallEntry{status: parallelToolCallStatusExecute}
-	}
-}
-
-func (a *Agent) partitionParallelAndSequential(state *parallelToolCallState) {
-	state.parallelEntries = state.parallelEntries[:0]
-	state.sequentialEntries = state.sequentialEntries[:0]
-
-	for i, entry := range state.entries {
-		if entry.status != parallelToolCallStatusExecute {
-			continue
-		}
-		if tools.IsParallelSafe(state.allToolCalls[i]) {
-			state.parallelEntries = append(state.parallelEntries, i)
-		} else {
-			state.sequentialEntries = append(state.sequentialEntries, i)
-		}
-	}
-}
-
-func (a *Agent) runParallelSafeToolsPhase(ctx context.Context, state *parallelToolCallState) {
-	if len(state.parallelEntries) == 0 {
+func (a *Agent) runParallelSafeToolsPhase(ctx context.Context, state *toolruntime.ParallelCallState) {
+	if len(state.ParallelEntries) == 0 {
 		return
 	}
 
 	parallelSpinner := a.ui().NewSpinner()
-	parallelSpinner.Start(parallelGroupSpinnerMessage(state.allToolCalls, state.parallelEntries))
+	parallelSpinner.Start(parallelGroupSpinnerMessage(state.AllToolCalls, state.ParallelEntries))
 	a.ui().SetSpinner(parallelSpinner)
 	// panic 経路でも spinner が残留しないよう、最終的な停止を保証する。
 	defer a.ui().StopSpinner()
@@ -147,16 +67,16 @@ func (a *Agent) runParallelSafeToolsPhase(ctx context.Context, state *parallelTo
 
 // executeParallelSafeTools は並列安全ツール群のワーカー実行のみを担当する。
 // spinner 制御や表示は runParallelSafeToolsPhase 側で行う。
-func (a *Agent) executeParallelSafeTools(ctx context.Context, state *parallelToolCallState) time.Duration {
+func (a *Agent) executeParallelSafeTools(ctx context.Context, state *toolruntime.ParallelCallState) time.Duration {
 	startedAt := time.Now()
 	sem := make(chan struct{}, tools.MaxParallelTools)
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 
-	for _, idx := range state.parallelEntries {
+	for _, idx := range state.ParallelEntries {
 		if ctx.Err() != nil {
 			mu.Lock()
-			state.results[idx] = toolExecResult{result: "Error: context cancelled"}
+			state.Results[idx] = toolruntime.Result{Result: "Error: context cancelled"}
 			mu.Unlock()
 			continue
 		}
@@ -166,9 +86,9 @@ func (a *Agent) executeParallelSafeTools(ctx context.Context, state *parallelToo
 			defer wg.Done()
 			defer func() { <-sem }()
 
-			r, c := a.executeToolForParallel(ctx, state.allToolCalls[i])
+			r, c := a.executeToolForParallel(ctx, state.AllToolCalls[i])
 			mu.Lock()
-			state.results[i] = toolExecResult{result: r, change: c}
+			state.Results[i] = toolruntime.Result{Result: r, Change: c}
 			mu.Unlock()
 		}(idx)
 	}
@@ -176,21 +96,21 @@ func (a *Agent) executeParallelSafeTools(ctx context.Context, state *parallelToo
 	return time.Since(startedAt)
 }
 
-func (a *Agent) reportParallelSafeExecution(state *parallelToolCallState, elapsed time.Duration) {
+func (a *Agent) reportParallelSafeExecution(state *toolruntime.ParallelCallState, elapsed time.Duration) {
 	if a.tuiToolResultCh != nil {
-		a.sendParallelToolResults(state.allToolCalls, state.parallelEntries, state.results, elapsed)
+		a.sendParallelToolResults(state.AllToolCalls, state.ParallelEntries, state.Results, elapsed)
 		return
 	}
-	printParallelToolGroup(a.output(), a.cfg(), state.allToolCalls, state.parallelEntries, state.results, elapsed)
+	printParallelToolGroup(a.output(), a.cfg(), state.AllToolCalls, state.ParallelEntries, state.Results, elapsed)
 }
 
-func (a *Agent) executeSequentialTools(ctx context.Context, state *parallelToolCallState) {
-	for _, idx := range state.sequentialEntries {
+func (a *Agent) executeSequentialTools(ctx context.Context, state *toolruntime.ParallelCallState) {
+	for _, idx := range state.SequentialEntries {
 		if ctx.Err() != nil {
-			state.results[idx] = toolExecResult{result: "Error: context cancelled"}
+			state.Results[idx] = toolruntime.Result{Result: "Error: context cancelled"}
 			continue
 		}
-		r, c := a.executeToolWithSpinner(ctx, state.allToolCalls[idx])
-		state.results[idx] = toolExecResult{result: r, change: c}
+		r, c := a.executeToolWithSpinner(ctx, state.AllToolCalls[idx])
+		state.Results[idx] = toolruntime.Result{Result: r, Change: c}
 	}
 }

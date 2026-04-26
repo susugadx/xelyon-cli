@@ -5,16 +5,12 @@ import (
 	"io"
 	"strings"
 
+	"github.com/susugadx/xelyon-cli/internal/toolruntime"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	filetool "github.com/susugadx/xelyon-cli/internal/tools/file"
 )
 
 type ToolExecCallback func(idx int, tc *tools.ToolCall, result string, change *tools.FileChange)
-
-type toolExecResult struct {
-	result string
-	change *tools.FileChange
-}
 
 // executeToolForParallel は並列実行用のツール実行関数。
 // goroutine から安全に呼び出せるよう、以下を省略している:
@@ -60,7 +56,7 @@ func (a *Agent) executeToolForParallel(ctx context.Context, tc *tools.ToolCall) 
 }
 
 func (a *Agent) executeReadFileBatch(ctx context.Context, paths []string) string {
-	tc := buildReadFileBatchToolCall(paths, true)
+	tc := toolruntime.BuildReadFileBatchToolCall(paths, true)
 	if ctx.Err() != nil {
 		return "Error: context cancelled"
 	}

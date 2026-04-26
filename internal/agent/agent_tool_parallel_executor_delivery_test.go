@@ -3,12 +3,13 @@ package agent
 import (
 	"testing"
 
+	"github.com/susugadx/xelyon-cli/internal/toolruntime"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
 func TestBuildLoopAbortHistoryMessage_FCTrigger(t *testing.T) {
 	tc := &tools.ToolCall{ID: "call1", Tool: "read_file"}
-	msg, ok := buildLoopAbortHistoryMessage(tc, 2, 2, 3)
+	msg, ok := toolruntime.BuildLoopAbortHistoryMessage(tc, 2, 2, 3)
 	if !ok {
 		t.Fatal("expected ok=true for FC trigger")
 	}
@@ -26,7 +27,7 @@ func TestBuildLoopAbortHistoryMessage_FCTrigger(t *testing.T) {
 
 func TestBuildLoopAbortHistoryMessage_TextTrigger(t *testing.T) {
 	tc := &tools.ToolCall{Tool: "read_file"}
-	msg, ok := buildLoopAbortHistoryMessage(tc, 2, 2, 4)
+	msg, ok := toolruntime.BuildLoopAbortHistoryMessage(tc, 2, 2, 4)
 	if !ok {
 		t.Fatal("expected ok=true for text trigger")
 	}
@@ -41,7 +42,7 @@ func TestBuildLoopAbortHistoryMessage_TextTrigger(t *testing.T) {
 
 func TestBuildLoopAbortHistoryMessage_FCSubsequent(t *testing.T) {
 	tc := &tools.ToolCall{ID: "call2", Tool: "search_code"}
-	msg, ok := buildLoopAbortHistoryMessage(tc, 3, 1, 3)
+	msg, ok := toolruntime.BuildLoopAbortHistoryMessage(tc, 3, 1, 3)
 	if !ok {
 		t.Fatal("expected ok=true for FC subsequent")
 	}
@@ -58,7 +59,7 @@ func TestBuildLoopAbortHistoryMessage_FCSubsequent(t *testing.T) {
 
 func TestBuildLoopAbortHistoryMessage_TextSubsequent_NoMessage(t *testing.T) {
 	tc := &tools.ToolCall{Tool: "search_code"}
-	_, ok := buildLoopAbortHistoryMessage(tc, 3, 1, 3)
+	_, ok := toolruntime.BuildLoopAbortHistoryMessage(tc, 3, 1, 3)
 	if ok {
 		t.Fatal("expected ok=false for text-based subsequent tool")
 	}

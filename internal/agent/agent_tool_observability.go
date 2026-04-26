@@ -6,6 +6,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/susugadx/xelyon-cli/internal/toolruntime"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
@@ -88,7 +89,7 @@ func (a *Agent) recordSearchCodeMissedMultiLocked(rawArgs map[string]any, string
 		return
 	}
 
-	optionsKey := searchCodeOptionsKey(&tools.ToolCall{
+	optionsKey := toolruntime.SearchCodeOptionsKey(&tools.ToolCall{
 		Tool: "search_code",
 		Args: args,
 	})

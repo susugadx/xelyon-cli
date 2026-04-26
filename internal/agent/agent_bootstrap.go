@@ -15,6 +15,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/locator"
 	"github.com/susugadx/xelyon-cli/internal/lsp"
 	"github.com/susugadx/xelyon-cli/internal/mcp"
+	"github.com/susugadx/xelyon-cli/internal/mcptool"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 
@@ -132,7 +133,7 @@ func setupMCPManager(cfg *config.Config, headless bool, out, errOut io.Writer, r
 	}
 
 	if len(manager.GetTools()) > 0 {
-		manager.RegisterToToolRegistry(registry)
+		mcptool.RegisterToRegistry(registry, manager, mcpToolDefinitions(manager.GetTools()))
 	}
 
 	return manager

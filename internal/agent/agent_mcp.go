@@ -8,6 +8,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/mcp"
+	"github.com/susugadx/xelyon-cli/internal/mcptool"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
 )
 
@@ -29,6 +30,19 @@ func buildMCPToolsPrompt(mcpManager *mcp.Manager) string {
 	}
 
 	return prompt.BuildMCPToolsPrompt(promptTools)
+}
+
+func mcpToolDefinitions(mcpTools []mcp.MCPTool) []mcptool.Definition {
+	defs := make([]mcptool.Definition, 0, len(mcpTools))
+	for _, tool := range mcpTools {
+		defs = append(defs, mcptool.Definition{
+			ServerName:  tool.ServerName,
+			Name:        tool.Name,
+			Description: tool.Description,
+			InputSchema: tool.InputSchema,
+		})
+	}
+	return defs
 }
 
 // sanitizeToolName はツール名から特殊文字を除去する（prompt.SanitizeToolName のエイリアス）

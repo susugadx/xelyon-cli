@@ -1,35 +1,36 @@
 package agent
 
-import "github.com/susugadx/xelyon-cli/internal/version"
+import (
+	"github.com/susugadx/xelyon-cli/internal/commandruntime"
+	"github.com/susugadx/xelyon-cli/internal/version"
+)
 
-type specialCommandHandler func(*Agent, []string) bool
-
-func specialCommandRegistry() map[string]specialCommandHandler {
-	return map[string]specialCommandHandler{
-		"/save":      func(agent *Agent, _ []string) bool { return handleSaveCommand(agent) },
-		"/load":      handleLoadCommand,
-		"/sessions":  func(agent *Agent, _ []string) bool { return handleSessionsCommand(agent) },
-		"/config":    handleConfigCommand,
-		"/stats":     func(agent *Agent, _ []string) bool { return handleStatsCommand(agent) },
-		"/status":    func(agent *Agent, _ []string) bool { return handleStatusCommand(agent) },
-		"/copy":      handleCopyCommand,
-		"/compress":  handleCompressCommand,
-		"/use":       handleUseCommand,
-		"/providers": func(agent *Agent, _ []string) bool { return handleProvidersCommand(agent) },
-		"/exit":      func(agent *Agent, _ []string) bool { handleExitCommand(agent); return true },
-		"/quit":      func(agent *Agent, _ []string) bool { handleExitCommand(agent); return true },
-		"/q":         func(agent *Agent, _ []string) bool { handleExitCommand(agent); return true },
-		"/clear":     handleClearCommand,
-		"/history":   func(agent *Agent, _ []string) bool { handleHistoryCommand(agent); return true },
-		"/help":      func(agent *Agent, _ []string) bool { printHelpToWriter(agent.output(), agent); return true },
-		"/model":     handleModelCommand,
-		"/version":   handleVersionCommand,
-		"/plan":      handlePlanCommand,
-		"/init":      func(agent *Agent, _ []string) bool { return handleInitCommand(agent) },
-		"/project":   func(agent *Agent, _ []string) bool { return handleProjectCommand(agent) },
-		"/lsp":       handleLSPCommand,
-		"/tokens":    func(agent *Agent, _ []string) bool { return handleTokensCommand(agent) },
-		"/think":     handleThinkCommand,
+func specialCommandRegistry(agent *Agent) commandruntime.Registry {
+	return commandruntime.Registry{
+		"/save":      func(_ []string) bool { return handleSaveCommand(agent) },
+		"/load":      func(args []string) bool { return handleLoadCommand(agent, args) },
+		"/sessions":  func(_ []string) bool { return handleSessionsCommand(agent) },
+		"/config":    func(args []string) bool { return handleConfigCommand(agent, args) },
+		"/stats":     func(_ []string) bool { return handleStatsCommand(agent) },
+		"/status":    func(_ []string) bool { return handleStatusCommand(agent) },
+		"/copy":      func(args []string) bool { return handleCopyCommand(agent, args) },
+		"/compress":  func(args []string) bool { return handleCompressCommand(agent, args) },
+		"/use":       func(args []string) bool { return handleUseCommand(agent, args) },
+		"/providers": func(_ []string) bool { return handleProvidersCommand(agent) },
+		"/exit":      func(_ []string) bool { handleExitCommand(agent); return true },
+		"/quit":      func(_ []string) bool { handleExitCommand(agent); return true },
+		"/q":         func(_ []string) bool { handleExitCommand(agent); return true },
+		"/clear":     func(args []string) bool { return handleClearCommand(agent, args) },
+		"/history":   func(_ []string) bool { handleHistoryCommand(agent); return true },
+		"/help":      func(_ []string) bool { printHelpToWriter(agent.output(), agent); return true },
+		"/model":     func(args []string) bool { return handleModelCommand(agent, args) },
+		"/version":   func(args []string) bool { return handleVersionCommand(agent, args) },
+		"/plan":      func(args []string) bool { return handlePlanCommand(agent, args) },
+		"/init":      func(_ []string) bool { return handleInitCommand(agent) },
+		"/project":   func(_ []string) bool { return handleProjectCommand(agent) },
+		"/lsp":       func(args []string) bool { return handleLSPCommand(agent, args) },
+		"/tokens":    func(_ []string) bool { return handleTokensCommand(agent) },
+		"/think":     func(args []string) bool { return handleThinkCommand(agent, args) },
 	}
 }
 

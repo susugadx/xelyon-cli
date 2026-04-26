@@ -3,9 +3,11 @@ package agent
 import (
 	"context"
 	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/toolruntime"
 )
 
-func (a *Agent) executeSearchCodeBatch(ctx context.Context, state *parallelToolCallState) {
+func (a *Agent) executeSearchCodeBatch(ctx context.Context, state *toolruntime.ParallelCallState) {
 	type searchBatchGroup struct {
 		indices  []int
 		patterns []string
@@ -14,15 +16,15 @@ func (a *Agent) executeSearchCodeBatch(ctx context.Context, state *parallelToolC
 	searchGroups := make(map[string]*searchBatchGroup)
 	var searchGroupOrder []string
 
-	for i, entry := range state.entries {
-		if entry.status != parallelToolCallStatusExecute {
+	for i, entry := range state.Entries {
+		if entry.Status != toolruntime.ParallelCallStatusExecute {
 			continue
 		}
-		tc := state.allToolCalls[i]
-		if tc.Tool != "search_code" || !isSimpleSearchPattern(tc.Args["pattern"]) {
+		tc := state.AllToolCalls[i]
+		if tc.Tool != "search_code" || !toolruntime.IsSimpleSearchPattern(tc.Args["pattern"]) {
 			continue
 		}
-		optKey := searchCodeOptionsKey(tc)
+		optKey := toolruntime.SearchCodeOptionsKey(tc)
 		if group, ok := searchGroups[optKey]; ok {
 			group.indices = append(group.indices, i)
 			group.patterns = append(group.patterns, tc.Args["pattern"])
@@ -40,8 +42,8 @@ func (a *Agent) executeSearchCodeBatch(ctx context.Context, state *parallelToolC
 		if len(group.indices) < 2 {
 			continue
 		}
-		for chunkStart := 0; chunkStart < len(group.indices); chunkStart += maxSearchBatchPatterns {
-			chunkEnd := chunkStart + maxSearchBatchPatterns
+		for chunkStart := 0; chunkStart < len(group.indices); chunkStart += toolruntime.MaxSearchBatchPatterns {
+			chunkEnd := chunkStart + toolruntime.MaxSearchBatchPatterns
 			if chunkEnd > len(group.indices) {
 				chunkEnd = len(group.indices)
 			}
@@ -52,11 +54,11 @@ func (a *Agent) executeSearchCodeBatch(ctx context.Context, state *parallelToolC
 				continue
 			}
 
-			leaderTC := state.allToolCalls[chunkIndices[0]]
-			mergedTC := cloneToolCallWithNewPattern(leaderTC, strings.Join(chunkPatterns, ","))
+			leaderTC := state.AllToolCalls[chunkIndices[0]]
+			mergedTC := toolruntime.CloneToolCallWithNewPattern(leaderTC, strings.Join(chunkPatterns, ","))
 			mergedResult, _ := a.executeToolForParallel(ctx, mergedTC)
 
-			perPattern := splitMultiPatternResult(mergedResult, chunkPatterns)
+			perPattern := toolruntime.SplitMultiPatternResult(mergedResult, chunkPatterns)
 			if perPattern == nil {
 				continue
 			}
@@ -64,11 +66,11 @@ func (a *Agent) executeSearchCodeBatch(ctx context.Context, state *parallelToolC
 			for j, idx := range chunkIndices {
 				pattern := chunkPatterns[j]
 				if section, ok := perPattern[pattern]; ok {
-					state.results[idx] = toolExecResult{result: section}
+					state.Results[idx] = toolruntime.Result{Result: section}
 				} else {
-					state.results[idx] = toolExecResult{result: mergedResult}
+					state.Results[idx] = toolruntime.Result{Result: mergedResult}
 				}
-				state.entries[idx] = parallelToolCallEntry{status: parallelToolCallStatusBatched}
+				state.Entries[idx] = toolruntime.ParallelCallEntry{Status: toolruntime.ParallelCallStatusBatched}
 			}
 			a.recordSearchCodeBatchMerge(len(chunkIndices))
 		}
