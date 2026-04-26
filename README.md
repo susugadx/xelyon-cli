@@ -277,6 +277,9 @@ provider_models:
   deepseek:
     default_model: deepseek-chat
     max_output_tokens: 8192    # デフォルト: 8192
+  openai:
+    default_model: corp-gpt-deployment
+    catalog_model: gpt-5.4     # deployment/alias の料金・context 判定に使う既知モデル
 ```
 
 | プロバイダー | デフォルト max_output_tokens |

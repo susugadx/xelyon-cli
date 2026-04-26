@@ -17,10 +17,13 @@ func GetProviderCompressThresholdWithConfig(cfg *config.Config, provider string,
 	normalizedProvider := config.NormalizeProviderName(provider)
 	canonicalProvider := config.CanonicalProviderName(provider)
 	normalizedModel := strings.ToLower(strings.TrimSpace(model))
+	catalogModel := strings.ToLower(strings.TrimSpace(cfg.ModelCatalogName(provider, model)))
 	if cfg.Compression.ProviderThresholds != nil {
 		for _, candidate := range providerThresholdLookupKeys(normalizedProvider, canonicalProvider) {
-			if threshold, ok := lookupConfiguredModelThreshold(cfg.Compression.ProviderThresholds, candidate, normalizedModel); ok {
-				return threshold
+			for _, lookupModel := range modelThresholdLookupNames(normalizedModel, catalogModel) {
+				if threshold, ok := lookupConfiguredModelThreshold(cfg.Compression.ProviderThresholds, candidate, lookupModel); ok {
+					return threshold
+				}
 			}
 			if threshold, ok := cfg.Compression.ProviderThresholds[candidate]; ok {
 				return threshold
@@ -55,6 +58,13 @@ func providerThresholdLookupKeys(normalizedProvider, canonicalProvider string) [
 		return nil
 	}
 	return []string{canonicalProvider}
+}
+
+func modelThresholdLookupNames(model, catalogModel string) []string {
+	if catalogModel == "" || catalogModel == model {
+		return []string{model}
+	}
+	return []string{model, catalogModel}
 }
 
 func lookupConfiguredModelThreshold(thresholds map[string]int, provider string, model string) (int, bool) {
@@ -108,13 +118,17 @@ func averageOutputTokens(stats *SessionStats) int {
 }
 
 func shouldForceCompressForPricingCliff(provider, model string, currentTokens int, stats *SessionStats) (int, bool) {
+	return shouldForceCompressForPricingCliffForConfig(nil, provider, model, currentTokens, stats)
+}
+
+func shouldForceCompressForPricingCliffForConfig(cfg *config.Config, provider, model string, currentTokens int, stats *SessionStats) (int, bool) {
 	if currentTokens <= 0 {
 		return currentTokens, false
 	}
 
 	projectedTokens := currentTokens + averageOutputTokens(stats)
-	currentPricing := cost.GetPricingInfo(provider, model, currentTokens)
-	projectedPricing := cost.GetPricingInfo(provider, model, projectedTokens)
+	currentPricing := cost.GetPricingInfoForConfig(cfg, provider, model, currentTokens)
+	projectedPricing := cost.GetPricingInfoForConfig(cfg, provider, model, projectedTokens)
 	if projectedPricing.InputCostPerM > currentPricing.InputCostPerM {
 		return projectedTokens, true
 	}

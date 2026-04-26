@@ -182,7 +182,8 @@ func (a *Agent) printContextSuggestion() {
 	}
 
 	saved := currentTokens - baseTokens
-	pricing := cost.GetPricingInfo(a.ProviderName, a.CurrentModel)
+	cfg := a.cfg()
+	pricing := cost.GetPricingInfoForConfig(cfg, a.activeModelProviderConfigKey(cfg), a.CurrentModel)
 	if pricing.InputCostPerM > 0 {
 		savingPerTurn := float64(saved) / 1_000_000.0 * pricing.InputCostPerM * 0.5
 		if savingPerTurn < 0.01 {

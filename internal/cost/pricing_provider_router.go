@@ -1,6 +1,9 @@
 package cost
 
-import "github.com/susugadx/xelyon-cli/internal/llmcatalog"
+import (
+	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
+)
 
 type pricingRequest struct {
 	Model            string
@@ -40,6 +43,15 @@ var pricingResolvers = map[string]pricingResolver{
 // promptTokenCount はオプション（Gemini 200Kティア判定用）
 func GetPricingInfo(provider string, model string, promptTokenCount ...int) PricingInfo {
 	return resolvePricingByProvider(provider, model, normalizePromptTokenCount(promptTokenCount))
+}
+
+// GetPricingInfoForConfig は catalog_model 設定を考慮して料金情報を返す。
+func GetPricingInfoForConfig(cfg *config.Config, provider string, model string, promptTokenCount ...int) PricingInfo {
+	pricingModel := model
+	if cfg != nil {
+		pricingModel = cfg.ModelCatalogName(provider, model)
+	}
+	return GetPricingInfo(provider, pricingModel, promptTokenCount...)
 }
 
 func normalizePromptTokenCount(promptTokenCount []int) int {

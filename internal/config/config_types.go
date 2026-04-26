@@ -228,13 +228,15 @@ type LSPServerConfig struct {
 
 // ModelOverride はモデルごとの個別設定
 type ModelOverride struct {
-	MaxOutputTokens int `yaml:"max_output_tokens,omitempty"` // このモデル固有の最大出力トークン数
+	MaxOutputTokens int    `yaml:"max_output_tokens,omitempty"` // このモデル固有の最大出力トークン数
+	CatalogModel    string `yaml:"catalog_model,omitempty"`     // token/pricing/catalog lookup に使う既知モデル名
 }
 
 // ProviderModelConfig はプロバイダーごとのモデル設定
 type ProviderModelConfig struct {
 	DefaultModel     string                   `yaml:"default_model"`
 	MaxOutputTokens  int                      `yaml:"max_output_tokens,omitempty"` // プロバイダー全体のデフォルト最大出力トークン数
+	CatalogModel     string                   `yaml:"catalog_model,omitempty"`     // default_model が deployment/alias の場合の既知モデル名
 	AnthropicVersion string                   `yaml:"anthropic_version,omitempty"` // Anthropic API バージョン
 	AnthropicBeta    []string                 `yaml:"anthropic_beta,omitempty"`    // Anthropic Beta ヘッダー
 	ModelOverrides   map[string]ModelOverride `yaml:"model_overrides,omitempty"`   // モデルごとの個別オーバーライド
@@ -251,4 +253,13 @@ type ProviderModelConfig struct {
 // 対応モデルは prefix マッチで自動判定し、設定リストをフォールバックとして使用
 func (c *Config) IsResponsesAPIModel(model string) bool {
 	return llmcatalog.IsOpenAIResponsesModel(model, c.OpenAI.ResponsesAPIModels)
+}
+
+// IsProviderResponsesAPIModel は provider/model の実行経路が Responses API か判定する。
+// deployment/alias 名は catalog_model に解決してから判定する。
+func (c *Config) IsProviderResponsesAPIModel(provider, model string) bool {
+	if !ProviderSupportsResponsesAPI(provider) {
+		return false
+	}
+	return c.IsResponsesAPIModel(c.ModelCatalogName(provider, model))
 }

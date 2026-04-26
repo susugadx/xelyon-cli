@@ -42,6 +42,9 @@ func mergeProviderModelConfig(base, override ProviderModelConfig) ProviderModelC
 	if override.MaxOutputTokens > 0 {
 		merged.MaxOutputTokens = override.MaxOutputTokens
 	}
+	if override.CatalogModel != "" {
+		merged.CatalogModel = override.CatalogModel
+	}
 	if override.AnthropicVersion != "" {
 		merged.AnthropicVersion = override.AnthropicVersion
 	}
@@ -68,6 +71,7 @@ func mergeProviderModelConfig(base, override ProviderModelConfig) ProviderModelC
 func isZeroProviderModelConfig(pm ProviderModelConfig) bool {
 	return pm.DefaultModel == "" &&
 		pm.MaxOutputTokens == 0 &&
+		pm.CatalogModel == "" &&
 		pm.AnthropicVersion == "" &&
 		len(pm.AnthropicBeta) == 0 &&
 		len(pm.ModelOverrides) == 0

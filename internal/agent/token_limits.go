@@ -1,11 +1,24 @@
 package agent
 
-import "github.com/susugadx/xelyon-cli/internal/agent/token"
+import (
+	"github.com/susugadx/xelyon-cli/internal/agent/token"
+	"github.com/susugadx/xelyon-cli/internal/config"
+)
+
+func (a *Agent) currentModelTokenLimit(cfg *config.Config) int {
+	if a == nil {
+		return 0
+	}
+	if cfg == nil {
+		cfg = a.cfg()
+	}
+	return token.GetModelTokenLimitForConfig(cfg, a.activeModelProviderConfigKey(cfg), a.CurrentModel)
+}
 
 // GetTokenUsagePercentage はトークン使用率を計算
 func (a *Agent) GetTokenUsagePercentage() float64 {
 	currentTokens := a.EstimateTokens()
-	limit := token.GetModelTokenLimit(a.CurrentModel)
+	limit := a.currentModelTokenLimit(a.cfg())
 	if limit == 0 {
 		return 0
 	}

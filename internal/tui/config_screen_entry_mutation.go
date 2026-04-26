@@ -16,6 +16,8 @@ func (cs *configScreen) applyEntryField(path, key string, ef structEntryField) {
 				if n, ok := ef.Value.(int); ok {
 					pm.MaxOutputTokens = n
 				}
+			case "catalog_model":
+				pm.CatalogModel, _ = ef.Value.(string)
 			}
 		})
 	case map[string]config.LSPServerConfig:

@@ -69,7 +69,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 
 	// モデルに応じて API を自動選択
 	cfg := config.FromContext(ctx)
-	isResponses := cfg.IsResponsesAPIModel(model)
+	isResponses := cfg.IsProviderResponsesAPIModel("openai", model)
 	if os.Getenv("XELYON_DEBUG_OPENAI") == "1" {
 		fmt.Fprintf(api.ErrorWriterFromContext(ctx), "[DEBUG OpenAI] ChatWithTools model=%s, isResponsesAPI=%v\n", model, isResponses)
 	}
@@ -137,7 +137,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 
 	// Responses API モデルの場合は専用の画像処理
 	cfg := config.FromContext(ctx)
-	if cfg.IsResponsesAPIModel(model) {
+	if cfg.IsProviderResponsesAPIModel("openai", model) {
 		return p.chatWithImageResponses(ctx, systemPrompt, history, userMessage, image, model)
 	}
 

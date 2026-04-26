@@ -70,6 +70,32 @@ func TestGetMaxOutputTokens(t *testing.T) {
 	}
 }
 
+func TestGetMaxOutputTokens_UsesCatalogModelForDeploymentName(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("deepseek", config.ProviderModelConfig{
+		DefaultModel: "corp-chat-deployment",
+		CatalogModel: "deepseek-chat",
+		ModelOverrides: map[string]config.ModelOverride{
+			"reasoner-deployment": {CatalogModel: "deepseek-reasoner"},
+			"manual-limit": {
+				CatalogModel:    "deepseek-chat",
+				MaxOutputTokens: 7777,
+			},
+		},
+	})
+	ctx := config.WithContext(context.Background(), cfg)
+
+	if got := GetMaxOutputTokens(ctx, "deepseek", "corp-chat-deployment"); got != 8192 {
+		t.Fatalf("GetMaxOutputTokens(default deployment) = %d, want 8192 from deepseek-chat", got)
+	}
+	if got := GetMaxOutputTokens(ctx, "deepseek", "reasoner-deployment"); got != 64000 {
+		t.Fatalf("GetMaxOutputTokens(reasoner deployment) = %d, want 64000 from deepseek-reasoner", got)
+	}
+	if got := GetMaxOutputTokens(ctx, "deepseek", "manual-limit"); got != 7777 {
+		t.Fatalf("GetMaxOutputTokens(manual limit) = %d, want explicit override", got)
+	}
+}
+
 func TestGetMaxOutputTokens_AnthropicAliasConfigAppliesToClaudeRuntime(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.SetProviderModelConfig("anthropic", config.ProviderModelConfig{MaxOutputTokens: 12345})

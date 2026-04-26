@@ -219,7 +219,7 @@ func attachHeadlessStats(agent *Agent, result *HeadlessResult) *HeadlessResult {
 		Thinking: agent.Stats.ThinkingTokens,
 		Total:    agent.Stats.TotalTokens(),
 	}
-	result.Cost = agent.Stats.EstimatedCost()
+	result.Cost = agent.Stats.EstimatedCostForConfig(agent.cfg())
 	return result
 }
 

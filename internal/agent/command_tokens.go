@@ -3,8 +3,6 @@ package agent
 import (
 	"fmt"
 	"strings"
-
-	"github.com/susugadx/xelyon-cli/internal/agent/token"
 )
 
 // handleTokensCommand はトークン使用量を表示
@@ -16,7 +14,7 @@ func handleTokensCommand(agent *Agent) bool {
 	totalTokens := agent.EstimateTokens()
 	systemTokens := agent.EstimateSystemPromptTokens()
 	historyTokens := agent.EstimateHistoryTokens()
-	limit := token.GetModelTokenLimit(agent.CurrentModel)
+	limit := agent.currentModelTokenLimit(cfg)
 	percentage := float64(totalTokens) / float64(limit) * 100
 
 	// 表示

@@ -10,9 +10,11 @@ import (
 // ProviderCatalogEntry は provider ごとの運用メタ情報を表す。
 type ProviderCatalogEntry struct {
 	APIKeyEnv            string
+	CredentialEnvVars    []string
 	SetupInstructions    []string
 	DefaultSubAgentModel string
 	SupportsImages       bool
+	SupportsResponsesAPI bool
 }
 
 // ProviderCatalogEntryFor は provider 名に対応するメタ情報を返す。
@@ -23,9 +25,11 @@ func ProviderCatalogEntryFor(name string) (ProviderCatalogEntry, bool) {
 	}
 	return ProviderCatalogEntry{
 		APIKeyEnv:            entry.APIKeyEnv,
+		CredentialEnvVars:    entry.RequiredCredentialEnvVars(),
 		SetupInstructions:    entry.SetupInstructions,
 		DefaultSubAgentModel: entry.DefaultSubAgentModel,
 		SupportsImages:       entry.SupportsImages,
+		SupportsResponsesAPI: entry.SupportsResponsesAPI,
 	}, true
 }
 
@@ -38,11 +42,28 @@ func ProviderAPIKeyEnv(name string) string {
 	return entry.APIKeyEnv
 }
 
+// ProviderCredentialEnvVars は provider に必要な認証環境変数名を返す。
+func ProviderCredentialEnvVars(name string) []string {
+	entry, ok := ProviderCatalogEntryFor(name)
+	if !ok {
+		return nil
+	}
+	return append([]string(nil), entry.CredentialEnvVars...)
+}
+
 // ProviderHasAvailableCredential は provider の認証情報が利用可能かを返す。
 func ProviderHasAvailableCredential(name string) bool {
 	entry, ok := ProviderCatalogEntryFor(name)
 	if !ok {
 		return false
+	}
+	if len(entry.CredentialEnvVars) > 0 {
+		for _, envName := range entry.CredentialEnvVars {
+			if strings.TrimSpace(os.Getenv(envName)) == "" {
+				return false
+			}
+		}
+		return true
 	}
 	if entry.APIKeyEnv == "" {
 		return true
@@ -74,4 +95,10 @@ func ProviderDefaultSubAgentModel(name string) string {
 func ProviderSupportsImages(name string) bool {
 	entry, ok := ProviderCatalogEntryFor(name)
 	return ok && entry.SupportsImages
+}
+
+// ProviderSupportsResponsesAPI は provider が Responses API 形の実行経路を持つか返す。
+func ProviderSupportsResponsesAPI(name string) bool {
+	entry, ok := ProviderCatalogEntryFor(name)
+	return ok && entry.SupportsResponsesAPI
 }

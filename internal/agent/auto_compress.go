@@ -110,8 +110,9 @@ func (a *Agent) maybeAutoCompress() bool {
 
 	// プロバイダ別コスト最適化閾値
 	currentTokens := a.EstimateTokens()
-	providerThreshold := GetProviderCompressThresholdWithConfig(cfg, a.sessionProviderConfigKey(cfg), a.CurrentModel)
-	projectedTokens, costAwareCompress := shouldForceCompressForPricingCliff(a.ProviderName, a.CurrentModel, currentTokens, a.Stats)
+	providerKey := a.sessionProviderConfigKey(cfg)
+	providerThreshold := GetProviderCompressThresholdWithConfig(cfg, providerKey, a.CurrentModel)
+	projectedTokens, costAwareCompress := shouldForceCompressForPricingCliffForConfig(cfg, providerKey, a.CurrentModel, currentTokens, a.Stats)
 	forceCompress := costAwareCompress
 	if !forceCompress && providerThreshold > 0 && currentTokens >= providerThreshold {
 		forceCompress = true

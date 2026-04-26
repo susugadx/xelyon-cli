@@ -12,6 +12,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	openaicompat "github.com/susugadx/xelyon-cli/internal/api/providers/openai_compat"
+	"github.com/susugadx/xelyon-cli/internal/config"
 
 	// ツール登録のための blank import
 	_ "github.com/susugadx/xelyon-cli/internal/tools/dev"
@@ -155,6 +156,98 @@ func TestOpenAIProvider_ChatWithTools_NonStreaming(t *testing.T) {
 	}
 	if result != "Test response from OpenAI" {
 		t.Errorf("ChatWithTools() = %q, want 'Test response from OpenAI'", result)
+	}
+}
+
+func TestOpenAIProvider_ChatWithTools_UsesCatalogModelForResponsesRouting(t *testing.T) {
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		var raw map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+			t.Fatalf("Failed to decode request: %v", err)
+		}
+		if _, ok := raw["messages"]; ok {
+			t.Fatalf("request used Chat Completions payload: %#v", raw)
+		}
+		if raw["model"] != "corp-gpt-deployment" {
+			t.Fatalf("model = %v, want deployment name", raw["model"])
+		}
+		if _, ok := raw["input"]; !ok {
+			t.Fatalf("request missing Responses input: %#v", raw)
+		}
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = fmt.Fprint(w, "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_catalog\"}}\n\n")
+		_, _ = fmt.Fprint(w, "data: {\"type\":\"response.output_text.delta\",\"delta\":\"Responses route\"}\n\n")
+		_, _ = fmt.Fprint(w, "data: {\"type\":\"response.completed\",\"response\":{\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}}\n\n")
+		_, _ = fmt.Fprint(w, "data: [DONE]\n\n")
+	})
+
+	originalResponsesURL := os.Getenv("OPENAI_RESPONSES_URL")
+	originalChatURL := os.Getenv("OPENAI_API_URL")
+	defer os.Setenv("OPENAI_RESPONSES_URL", originalResponsesURL)
+	defer os.Setenv("OPENAI_API_URL", originalChatURL)
+	os.Setenv("OPENAI_RESPONSES_URL", server.URL)
+	os.Setenv("OPENAI_API_URL", server.URL)
+
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("openai", config.ProviderModelConfig{
+		DefaultModel: "corp-gpt-deployment",
+		CatalogModel: "gpt-5.4",
+	})
+	ctx := config.WithContext(context.Background(), cfg)
+
+	p := New("test-key")
+	result, err := p.ChatWithTools(ctx, "System", []api.Message{{Role: "user", Content: "Hi"}}, "corp-gpt-deployment")
+	if err != nil {
+		t.Fatalf("ChatWithTools() error = %v", err)
+	}
+	if result != "Responses route" {
+		t.Fatalf("ChatWithTools() = %q, want Responses route", result)
+	}
+}
+
+func TestOpenAIProvider_ChatWithTools_UsesCatalogModelForCodexReasoningFallback(t *testing.T) {
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		var raw map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+			t.Fatalf("Failed to decode request: %v", err)
+		}
+		if raw["model"] != "corp-codex-deployment" {
+			t.Fatalf("model = %v, want deployment name", raw["model"])
+		}
+		reasoning, ok := raw["reasoning"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("reasoning = %#v, want low fallback for codex catalog model", raw["reasoning"])
+		}
+		if reasoning["effort"] != "low" {
+			t.Fatalf("reasoning.effort = %v, want low", reasoning["effort"])
+		}
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = fmt.Fprint(w, "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_codex\"}}\n\n")
+		_, _ = fmt.Fprint(w, "data: {\"type\":\"response.output_text.delta\",\"delta\":\"Codex route\"}\n\n")
+		_, _ = fmt.Fprint(w, "data: {\"type\":\"response.completed\",\"response\":{\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}}\n\n")
+		_, _ = fmt.Fprint(w, "data: [DONE]\n\n")
+	})
+
+	originalResponsesURL := os.Getenv("OPENAI_RESPONSES_URL")
+	defer os.Setenv("OPENAI_RESPONSES_URL", originalResponsesURL)
+	os.Setenv("OPENAI_RESPONSES_URL", server.URL)
+
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("openai", config.ProviderModelConfig{
+		DefaultModel: "corp-codex-deployment",
+		CatalogModel: "gpt-5.2-codex",
+	})
+	ctx := config.WithContext(context.Background(), cfg)
+
+	p := New("test-key")
+	result, err := p.ChatWithTools(ctx, "System", []api.Message{{Role: "user", Content: "Hi"}}, "corp-codex-deployment")
+	if err != nil {
+		t.Fatalf("ChatWithTools() error = %v", err)
+	}
+	if result != "Codex route" {
+		t.Fatalf("ChatWithTools() = %q, want Codex route", result)
 	}
 }
 

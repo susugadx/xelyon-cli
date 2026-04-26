@@ -100,7 +100,8 @@ func (a *Agent) printTaskUsage(startStats SessionStats) {
 		CachedInputTokens:   a.Stats.CachedInputTokens - startStats.CachedInputTokens,
 		CacheCreationTokens: a.Stats.CacheCreationTokens - startStats.CacheCreationTokens,
 	}
-	costDiff := a.Stats.EstimatedCost() - startStats.EstimatedCost()
+	cfg := a.cfg()
+	costDiff := a.Stats.EstimatedCostForConfig(cfg) - startStats.EstimatedCostForConfig(cfg)
 	a.Stats.LastTurnUsage = &turnUsage
 	a.Stats.LastTurnCost = costDiff
 	inDiff := turnUsage.InputTokens

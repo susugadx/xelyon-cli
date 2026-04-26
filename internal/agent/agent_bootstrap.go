@@ -196,7 +196,7 @@ func setUsageReporter(agent *Agent, provider api.Provider) {
 	reporter.SetUsageCallback(func(u api.Usage) {
 		agent.statsMu.Lock()
 		defer agent.statsMu.Unlock()
-		agent.Stats.AddUsage(u)
+		agent.Stats.AddUsageForConfig(agent.cfg(), u)
 	})
 }
 

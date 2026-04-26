@@ -105,3 +105,57 @@ func TestWebSearch_UnsupportedModel(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestWebSearch_UsesCatalogModelForCodexReasoningFallback(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("failed to decode request: %v", err)
+		}
+		if req["model"] != "corp-search-deployment" {
+			t.Fatalf("model = %v, want deployment name", req["model"])
+		}
+		reasoning, ok := req["reasoning"].(map[string]any)
+		if !ok {
+			t.Fatalf("reasoning = %#v, want low fallback for codex catalog model", req["reasoning"])
+		}
+		if reasoning["effort"] != "low" {
+			t.Fatalf("reasoning.effort = %v, want low", reasoning["effort"])
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"output": [
+				{
+					"type": "message",
+					"content": [
+						{"type": "output_text", "text": "Search response."}
+					]
+				}
+			]
+		}`))
+	}))
+	defer server.Close()
+
+	oldURL := os.Getenv("OPENAI_RESPONSES_URL")
+	oldKey := os.Getenv("OPENAI_API_KEY")
+	os.Setenv("OPENAI_RESPONSES_URL", server.URL)
+	os.Setenv("OPENAI_API_KEY", "test-key")
+	defer os.Setenv("OPENAI_RESPONSES_URL", oldURL)
+	defer os.Setenv("OPENAI_API_KEY", oldKey)
+
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("openai", config.ProviderModelConfig{
+		DefaultModel: "corp-search-deployment",
+		CatalogModel: "gpt-5.2-codex",
+	})
+	ctx := config.WithContext(context.Background(), cfg)
+
+	result, err := WebSearchWithContext(ctx, "latest openai news", "corp-search-deployment")
+	if err != nil {
+		t.Fatalf("WebSearchWithContext() error = %v", err)
+	}
+	if !strings.Contains(result, "Search response.") {
+		t.Fatalf("result = %q, want search response text", result)
+	}
+}

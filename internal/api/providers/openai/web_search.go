@@ -1,7 +1,6 @@
 package openai
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -10,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	openaicompat "github.com/susugadx/xelyon-cli/internal/api/providers/openai_compat"
 	"github.com/susugadx/xelyon-cli/internal/api/websearch"
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
@@ -68,7 +68,7 @@ func WebSearchWithContext(ctx context.Context, query, model string) (string, err
 
 	model = api.GetDefaultModelWithContext(ctx, model, "openai", "gpt-4o")
 	cfg := config.FromContext(ctx)
-	if !cfg.IsResponsesAPIModel(model) {
+	if !cfg.IsProviderResponsesAPIModel("openai", model) {
 		return "", fmt.Errorf("model %q does not support Responses API web search", model)
 	}
 
@@ -77,37 +77,20 @@ func WebSearchWithContext(ctx context.Context, query, model string) (string, err
 }
 
 func (p *Provider) webSearch(ctx context.Context, query, model string) (string, error) {
-	apiURL := os.Getenv("OPENAI_RESPONSES_URL")
-	if apiURL == "" {
-		apiURL = defaultOpenAIResponsesURL
-	}
-
+	modelIdentity := newOpenAIResponsesModelIdentity(ctx, model)
 	reqBody := webSearchRequest{
-		Model:   model,
-		Input:   buildWebSearchPrompt(query),
-		Tools:   []map[string]any{{"type": "web_search"}},
-		Include: []string{"web_search_call.action.sources"},
-		Store:   false,
+		Model:     modelIdentity.RequestName(),
+		Input:     buildWebSearchPrompt(query),
+		Tools:     []map[string]any{{"type": "web_search"}},
+		Include:   []string{"web_search_call.action.sources"},
+		Store:     false,
+		Reasoning: responsesReasoningConfig(ctx, modelIdentity),
 	}
 
-	cfg := config.FromContext(ctx)
-	if api.IsThinkingEnabled(ctx) {
-		reqBody.Reasoning = &ReasoningConfig{Effort: LevelToReasoningEffort(cfg.Thinking.Level)}
-	} else if isCodexModel(model) {
-		reqBody.Reasoning = &ReasoningConfig{Effort: "low"}
-	}
-
-	jsonBody, err := json.Marshal(reqBody)
+	req, err := openaicompat.NewBearerJSONRequest(ctx, resolveResponsesAPIURL(), p.APIKey, reqBody)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal request: %w", err)
+		return "", err
 	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, apiURL, bytes.NewBuffer(jsonBody))
-	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
-	}
-	p.SetBearerAuth(req)
-	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := p.ExecuteRequest(req)
 	if err != nil {

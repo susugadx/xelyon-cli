@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/cost"
 )
 
@@ -124,6 +125,11 @@ func (s *SessionStats) AddTokens(input, output int) {
 // AddUsage は api.Usage からトークン使用量を追加
 // リクエスト単位のコストを計算して AccumulatedCost に累積する
 func (s *SessionStats) AddUsage(usage api.Usage) {
+	s.AddUsageForConfig(nil, usage)
+}
+
+// AddUsageForConfig は catalog_model 設定を考慮して api.Usage を累積する。
+func (s *SessionStats) AddUsageForConfig(cfg *config.Config, usage api.Usage) {
 	s.InputTokens += usage.InputTokens
 	s.OutputTokens += usage.OutputTokens
 	s.ThinkingTokens += usage.ThinkingTokens
@@ -132,7 +138,7 @@ func (s *SessionStats) AddUsage(usage api.Usage) {
 	s.LastUsage = &usage
 
 	// リクエスト単位のコストを累積（Gemini 200Kティア等に対応）
-	s.AccumulatedCost += cost.CalculateRequestCostWithCache(s.Provider, s.Model, usage)
+	s.AccumulatedCost += cost.CalculateRequestCostWithCacheForConfig(cfg, s.Provider, s.Model, usage)
 	s.AccumulatedCost += usage.StorageCost // ストレージ料金を加算
 }
 
@@ -145,6 +151,11 @@ func (s *SessionStats) TotalTokens() int {
 // AddUsage 経由で累積されたコストがあればそれを使い、
 // AddTokens() のみ使われた場合はフォールバック計算を行う
 func (s *SessionStats) EstimatedCost() float64 {
+	return s.EstimatedCostForConfig(nil)
+}
+
+// EstimatedCostForConfig は catalog_model 設定を考慮して推定コストを計算する。
+func (s *SessionStats) EstimatedCostForConfig(cfg *config.Config) float64 {
 	if s.Provider == "ollama" {
 		return 0.0 // ローカル実行
 	}
@@ -157,7 +168,7 @@ func (s *SessionStats) EstimatedCost() float64 {
 	// フォールバック: AddTokens() のみ使われた場合（レガシー互換）
 	// キャッシュ情報がないので InputTokens でティア判定
 	totalInputForTier := s.InputTokens + s.CachedInputTokens + s.CacheCreationTokens
-	pricing := cost.GetPricingInfo(s.Provider, s.Model, totalInputForTier)
+	pricing := cost.GetPricingInfoForConfig(cfg, s.Provider, s.Model, totalInputForTier)
 
 	cachedInputCost := float64(s.CachedInputTokens) / 1_000_000.0 * pricing.CachedInputCostPerM
 	cacheCreationCost := float64(s.CacheCreationTokens) / 1_000_000.0 * pricing.CacheCreationCostPerM

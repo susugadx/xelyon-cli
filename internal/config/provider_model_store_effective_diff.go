@@ -11,6 +11,9 @@ func diffProviderModelConfig(base, current ProviderModelConfig) ProviderModelCon
 	if current.MaxOutputTokens > 0 && current.MaxOutputTokens != base.MaxOutputTokens {
 		diff.MaxOutputTokens = current.MaxOutputTokens
 	}
+	if current.CatalogModel != "" && current.CatalogModel != base.CatalogModel {
+		diff.CatalogModel = current.CatalogModel
+	}
 	if current.AnthropicVersion != "" && current.AnthropicVersion != base.AnthropicVersion {
 		diff.AnthropicVersion = current.AnthropicVersion
 	}

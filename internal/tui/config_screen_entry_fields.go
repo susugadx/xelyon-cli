@@ -7,6 +7,7 @@ func providerModelEntryFields(pm config.ProviderModelConfig) []structEntryField 
 	return []structEntryField{
 		{Name: "default_model", Type: "string", Value: pm.DefaultModel},
 		{Name: "max_output_tokens", Type: "int", Value: pm.MaxOutputTokens},
+		{Name: "catalog_model", Type: "string", Value: pm.CatalogModel},
 	}
 }
 

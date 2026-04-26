@@ -5,12 +5,21 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
 )
 
 // GetModelTokenLimit はモデルのトークン上限を取得
 func GetModelTokenLimit(model string) int {
 	return llmcatalog.ModelContextLimit(model)
+}
+
+// GetModelTokenLimitForConfig は catalog_model 設定を考慮してモデルのトークン上限を取得する。
+func GetModelTokenLimitForConfig(cfg *config.Config, provider, model string) int {
+	if cfg != nil {
+		model = cfg.ModelCatalogName(provider, model)
+	}
+	return GetModelTokenLimit(model)
 }
 
 // EstimateTokenCount はテキストのトークン数を推定する。

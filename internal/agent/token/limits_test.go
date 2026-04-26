@@ -2,6 +2,8 @@ package token
 
 import (
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 func TestGetModelTokenLimit_ExactMatch(t *testing.T) {
@@ -57,6 +59,24 @@ func TestGetModelTokenLimit_ExactMatch(t *testing.T) {
 				t.Errorf("GetModelTokenLimit(%q) = %d, want %d", tt.model, result, tt.expected)
 			}
 		})
+	}
+}
+
+func TestGetModelTokenLimitForConfig_UsesCatalogModel(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("openai", config.ProviderModelConfig{
+		DefaultModel: "corp-gpt-deployment",
+		CatalogModel: "gpt-5.4",
+		ModelOverrides: map[string]config.ModelOverride{
+			"mini-deployment": {CatalogModel: "gpt-5.4-mini"},
+		},
+	})
+
+	if got := GetModelTokenLimitForConfig(cfg, "openai", "corp-gpt-deployment"); got != 1000000 {
+		t.Fatalf("GetModelTokenLimitForConfig(default deployment) = %d, want 1000000", got)
+	}
+	if got := GetModelTokenLimitForConfig(cfg, "openai", "mini-deployment"); got != 400000 {
+		t.Fatalf("GetModelTokenLimitForConfig(model override) = %d, want 400000", got)
 	}
 }
 

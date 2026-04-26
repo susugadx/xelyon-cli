@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
@@ -15,7 +14,7 @@ func buildProjectMapBaseKey(agent *Agent, cfg *config.Config, maxTokens, fileCou
 	}
 	contextWindow := 0
 	if agent != nil {
-		contextWindow = token.GetModelTokenLimit(agent.CurrentModel)
+		contextWindow = agent.currentModelTokenLimit(cfg)
 	}
 	if contextWindow <= 0 {
 		contextWindow = 128000
@@ -36,7 +35,7 @@ func buildProjectMapFocusKey(paths []string) string {
 
 func calcProjectMapBudget(agent *Agent, cfg *config.Config, fileCount, symbolCount int) int {
 	// コンテキストウィンドウサイズを取得
-	contextWindow := token.GetModelTokenLimit(agent.CurrentModel)
+	contextWindow := agent.currentModelTokenLimit(cfg)
 	if contextWindow <= 0 {
 		contextWindow = 128000 // フォールバック
 	}

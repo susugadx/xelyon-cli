@@ -82,3 +82,26 @@ func TestConfigScreen_ProviderModels_ValueChange_Persists(t *testing.T) {
 		t.Fatalf("saveStatus = %d, want statusModified(%d)", cs.saveStatus, statusModified)
 	}
 }
+
+func TestConfigScreen_ProviderModels_CatalogModelChange_Persists(t *testing.T) {
+	m := enterStructMapEntryForKey(t, "provider_models", "openai")
+	cs := m.configScreen
+
+	setEntryFieldIndex(t, cs, "catalog_model")
+	m = sendConfigKey(m, "enter")
+	cs = m.configScreen
+	if cs.editEntryFieldEdit != "input" {
+		t.Fatalf("editEntryFieldEdit = %q, want \"input\"", cs.editEntryFieldEdit)
+	}
+
+	cs.editInput.SetValue("gpt-5.4")
+	m = sendConfigKey(m, "enter")
+	cs = m.configScreen
+
+	if got := cs.cfg.ProviderModels["openai"].CatalogModel; got != "gpt-5.4" {
+		t.Fatalf("ProviderModels[openai].CatalogModel = %q, want gpt-5.4", got)
+	}
+	if !cs.dirty {
+		t.Fatal("dirty should be true after catalog_model change")
+	}
+}

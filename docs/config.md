@@ -233,9 +233,11 @@ final_checks:
 - **サブキー**:
   - `default_model`: プロバイダーのデフォルトモデル名
   - `max_output_tokens`: プロバイダーの出力トークン上限（デフォルト値）
+  - `catalog_model`: `default_model` が deployment 名や社内 alias の場合に、token limit / pricing / context 判定へ使う既知モデル名（オプション）
   - `model_overrides`: 特定モデル別の出力トークン上限設定（オプション）
-    - **用途**: 既知モデルマップにないモデルや、デフォルト値を上書きしたい場合に指定
-    - **優先度**: `model_overrides[model]` > 既知モデルマップ > `max_output_tokens`
+    - **用途**: 既知モデルマップにないモデル、deployment 名、デフォルト値を上書きしたい場合に指定
+    - **サブキー**: `max_output_tokens`, `catalog_model`
+    - **優先度**: `model_overrides[model].max_output_tokens` > `catalog_model` を含む既知モデルマップ > `max_output_tokens`
     - **補足**: 既知モデル（`deepseek-chat`, `gpt-5.2`, `gemini-2.5-flash` 等）は自動解決されるため、通常は設定不要
 - **例**:
   ```yaml
@@ -248,6 +250,9 @@ final_checks:
       model_overrides:
         my-custom-model:
           max_output_tokens: 32768
+        corp-gpt-deployment:
+          catalog_model: gpt-5.4
+          max_output_tokens: 16384
   ```
 
 ### 会話履歴圧縮設定 (`compression`)

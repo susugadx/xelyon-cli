@@ -181,7 +181,7 @@ type CacheClearable interface {
 }
 
 // GetMaxOutputTokens は指定されたプロバイダーとモデルの最大出力トークン数を取得する。
-// 優先順位: model_overrides > catalog の既知モデル値 > provider default > Thinking 加算。
+// 優先順位: model_overrides > catalog_model を含む既知モデル値 > provider default > Thinking 加算。
 func GetMaxOutputTokens(ctx context.Context, providerName, model string) int {
 	cfg := config.FromContext(ctx)
 
@@ -189,17 +189,16 @@ func GetMaxOutputTokens(ctx context.Context, providerName, model string) int {
 	pName := config.NormalizeProviderName(providerName)
 	lookupProvider := cfg.RuntimeProviderConfigKey(providerName, model)
 	pCfg, _ := cfg.GetProviderModelConfig(lookupProvider)
+	catalogModel := cfg.ModelCatalogName(providerName, model)
 
 	// 1. ユーザーの model_overrides
-	if pCfg.ModelOverrides != nil {
-		if override, ok := pCfg.ModelOverrides[model]; ok && override.MaxOutputTokens > 0 {
-			maxTokens = override.MaxOutputTokens
-		}
+	if override, ok := cfg.ModelOverrideForProvider(providerName, model); ok && override.MaxOutputTokens > 0 {
+		maxTokens = override.MaxOutputTokens
 	}
 
-	// 2. catalog の既知モデル値
+	// 2. catalog_model を含む catalog の既知モデル値
 	if maxTokens == 0 {
-		if tokens, ok := llmcatalog.KnownMaxOutputTokens(model); ok {
+		if tokens, ok := llmcatalog.KnownMaxOutputTokens(catalogModel); ok {
 			maxTokens = tokens
 		}
 	}
@@ -213,7 +212,7 @@ func GetMaxOutputTokens(ctx context.Context, providerName, model string) int {
 	// adaptive thinking モデル（Claude 4.6）は API が自動管理するため加算不要
 	// それ以外は max_tokens = budget_tokens + output_tokens
 	if IsThinkingEnabled(ctx) && (pName == "claude" || pName == "anthropic" || pName == "bedrock") {
-		if !isAdaptiveThinkingModel(model) {
+		if !isAdaptiveThinkingModel(catalogModel) {
 			budget := LevelToBudgetTokens(cfg.Thinking.Level)
 			return budget + maxTokens
 		}

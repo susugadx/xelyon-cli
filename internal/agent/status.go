@@ -6,7 +6,6 @@ import (
 	"sync"
 
 	"github.com/fatih/color"
-	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -100,7 +99,7 @@ func (a *Agent) FormatStatusLine() string {
 	a.statsMu.Lock()
 	tokens := a.Stats.TotalTokens()
 	tokenStr := FormatTokens(tokens)
-	cost := a.Stats.EstimatedCost()
+	cost := a.Stats.EstimatedCostForConfig(a.cfg())
 	a.statsMu.Unlock()
 
 	if manager := a.subAgentManager(); manager != nil {
@@ -165,7 +164,7 @@ func handleStatusCommand(agent *Agent) bool {
 
 	status := agent.statusRef().getStatus()
 	currentTokens := agent.EstimateTokens()
-	limit := token.GetModelTokenLimit(agent.CurrentModel)
+	limit := agent.currentModelTokenLimit(agent.cfg())
 	contextText := formatNumber(currentTokens)
 	if limit > 0 {
 		contextText = fmt.Sprintf("%s / %s (%.1f%%)", formatNumber(currentTokens), formatNumber(limit), float64(currentTokens)/float64(limit)*100)

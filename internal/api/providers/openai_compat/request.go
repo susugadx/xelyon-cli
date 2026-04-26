@@ -1,4 +1,4 @@
-// Package openaicompat は OpenAI Chat Completions 互換 API の request 構築補助を提供する。
+// Package openaicompat は OpenAI 互換 API の request 構築補助を提供する。
 package openaicompat
 
 import (
@@ -185,12 +185,45 @@ func NewBearerJSONRequest(ctx context.Context, url, apiKey string, body any) (*h
 
 // NewBearerJSONBytesRequest は marshal 済み JSON payload から Bearer 認証つき POST request を作成する。
 func NewBearerJSONBytesRequest(ctx context.Context, url, apiKey string, payload []byte) (*http.Request, error) {
+	req, err := NewJSONBytesRequest(ctx, url, payload)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	return req, nil
+}
+
+// NewAPIKeyJSONRequest は api-key ヘッダー認証つき JSON POST request を作成する。
+func NewAPIKeyJSONRequest(ctx context.Context, url, apiKey string, body any) (*http.Request, error) {
+	return NewHeaderJSONRequest(ctx, url, "api-key", apiKey, body)
+}
+
+// NewHeaderJSONRequest は任意ヘッダー認証つき JSON POST request を作成する。
+func NewHeaderJSONRequest(ctx context.Context, url, headerName, headerValue string, body any) (*http.Request, error) {
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+	return NewHeaderJSONBytesRequest(ctx, url, headerName, headerValue, jsonBody)
+}
+
+// NewHeaderJSONBytesRequest は marshal 済み JSON payload から任意ヘッダー認証つき POST request を作成する。
+func NewHeaderJSONBytesRequest(ctx context.Context, url, headerName, headerValue string, payload []byte) (*http.Request, error) {
+	req, err := NewJSONBytesRequest(ctx, url, payload)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set(headerName, headerValue)
+	return req, nil
+}
+
+// NewJSONBytesRequest は marshal 済み JSON payload から認証なし POST request を作成する。
+func NewJSONBytesRequest(ctx context.Context, url string, payload []byte) (*http.Request, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(payload))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+apiKey)
 	return req, nil
 }

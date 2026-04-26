@@ -36,3 +36,33 @@ func TestDefaultProviderModelsUseLLMCatalogDefaults(t *testing.T) {
 		}
 	}
 }
+
+func TestProviderCredentialEnvVarsAndAvailability(t *testing.T) {
+	if got := ProviderCredentialEnvVars("openai"); !reflect.DeepEqual(got, []string{"OPENAI_API_KEY"}) {
+		t.Fatalf("ProviderCredentialEnvVars(openai) = %v, want [OPENAI_API_KEY]", got)
+	}
+	if got := ProviderCredentialEnvVars("ollama"); len(got) != 0 {
+		t.Fatalf("ProviderCredentialEnvVars(ollama) = %v, want empty", got)
+	}
+
+	t.Setenv("OPENAI_API_KEY", "")
+	if ProviderHasAvailableCredential("openai") {
+		t.Fatal("ProviderHasAvailableCredential(openai) = true, want false without key")
+	}
+	t.Setenv("OPENAI_API_KEY", "sk-test")
+	if !ProviderHasAvailableCredential("openai") {
+		t.Fatal("ProviderHasAvailableCredential(openai) = false, want true with key")
+	}
+	if !ProviderHasAvailableCredential("ollama") {
+		t.Fatal("ProviderHasAvailableCredential(ollama) = false, want true with default base URL")
+	}
+}
+
+func TestProviderSupportsResponsesAPI(t *testing.T) {
+	if !ProviderSupportsResponsesAPI("openai") {
+		t.Fatal("ProviderSupportsResponsesAPI(openai) = false, want true")
+	}
+	if ProviderSupportsResponsesAPI("groq") {
+		t.Fatal("ProviderSupportsResponsesAPI(groq) = true, want false")
+	}
+}

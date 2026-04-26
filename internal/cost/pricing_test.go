@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 // --- GetOpenAIPricing table-driven tests ---
@@ -223,6 +224,27 @@ func TestGetPricingInfo_OpenRouter_GLM5(t *testing.T) {
 	}
 	if pricing.CachedInputCostPerM != 0.072 {
 		t.Errorf("openrouter glm-5 CachedInputCostPerM = %f, want 0.072", pricing.CachedInputCostPerM)
+	}
+}
+
+func TestGetPricingInfoForConfig_UsesCatalogModel(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("openai", config.ProviderModelConfig{
+		DefaultModel: "corp-gpt-deployment",
+		CatalogModel: "gpt-5.4-mini",
+		ModelOverrides: map[string]config.ModelOverride{
+			"pro-deployment": {CatalogModel: "gpt-5.4-pro"},
+		},
+	})
+
+	defaultDeployment := GetPricingInfoForConfig(cfg, "openai", "corp-gpt-deployment")
+	if defaultDeployment.InputCostPerM != 0.75 || defaultDeployment.OutputCostPerM != 4.50 {
+		t.Fatalf("default deployment pricing = %#v, want gpt-5.4-mini pricing", defaultDeployment)
+	}
+
+	overrideDeployment := GetPricingInfoForConfig(cfg, "openai", "pro-deployment")
+	if overrideDeployment.InputCostPerM != 30.00 || overrideDeployment.OutputCostPerM != 180.00 {
+		t.Fatalf("override deployment pricing = %#v, want gpt-5.4-pro pricing", overrideDeployment)
 	}
 }
 

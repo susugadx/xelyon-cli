@@ -5,7 +5,6 @@ import (
 	"io"
 	"strconv"
 
-	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/agent/viewfmt"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/tools/subagent"
@@ -71,13 +70,13 @@ func renderSessionTokenTable(agent *Agent, stats *SessionStats, subSummary *suba
 
 	tokenTable := ui.NewTable()
 	currentTokens := agent.EstimateTokens()
-	limit := token.GetModelTokenLimit(agent.CurrentModel)
+	limit := agent.currentModelTokenLimit(agent.cfg())
 	if limit > 0 {
 		contextPct := float64(currentTokens) / float64(limit) * 100
 		tokenTable.AddRow(tokenRowLabel(hasSubAgents, "Parent", "Context"), fmt.Sprintf("%s / %s (%.1f%%)", formatNumber(currentTokens), formatNumber(limit), contextPct))
 	}
 
-	cost := stats.EstimatedCost()
+	cost := stats.EstimatedCostForConfig(agent.cfg())
 	if stats.TotalTokens() > 0 {
 		tokenTable.AddRow(tokenRowLabel(hasSubAgents, "Parent", "Input"), formatNumber(stats.InputTokens)+" tokens")
 

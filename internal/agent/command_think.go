@@ -11,10 +11,22 @@ func isCodexModel(model string) bool {
 	return strings.Contains(strings.ToLower(model), "codex")
 }
 
+func isAgentCodexModel(agent *Agent) bool {
+	if agent == nil {
+		return false
+	}
+	cfg := agent.cfg()
+	model := agent.CurrentModel
+	if cfg != nil {
+		model = cfg.ModelCatalogName(agent.activeModelProviderConfigKey(cfg), model)
+	}
+	return isCodexModel(model)
+}
+
 // handleThinkCommand は Extended Thinking モードの切り替え
 func handleThinkCommand(agent *Agent, args []string) bool {
 	cfg := agent.cfg()
-	isCodex := agent != nil && isCodexModel(agent.CurrentModel)
+	isCodex := isAgentCodexModel(agent)
 	out := agent.output()
 
 	if len(args) == 0 {

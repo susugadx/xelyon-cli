@@ -18,11 +18,13 @@ type ProviderDescriptor struct {
 	APIKeyEnv            string
 	BaseURLEnv           string
 	DefaultBaseURL       string
+	CredentialEnvVars    []string
 	StaticCredential     string
 	SetupInstructions    []string
 	DefaultSubAgentModel string
 	SupportsImages       bool
 	NativeWebSearch      bool
+	SupportsResponsesAPI bool
 	PricingFamily        string
 	CompressionModel     string
 	CompressionThreshold int
@@ -79,6 +81,7 @@ var providerDescriptors = map[string]ProviderDescriptor{
 		DefaultSubAgentModel: "gpt-5.4-mini",
 		SupportsImages:       true,
 		NativeWebSearch:      true,
+		SupportsResponsesAPI: true,
 		PricingFamily:        "openai",
 		CompressionModel:     "gpt-5.4-mini",
 		ModelDefaults: ProviderModelDefaults{
@@ -225,6 +228,34 @@ func ProviderDescriptorFor(name string) (ProviderDescriptor, bool) {
 	return cloneProviderDescriptor(entry), true
 }
 
+// RequiredCredentialEnvVars は provider 利用可否判定に必要な環境変数名を返す。
+func (d ProviderDescriptor) RequiredCredentialEnvVars() []string {
+	if len(d.CredentialEnvVars) > 0 {
+		return cloneStrings(d.CredentialEnvVars)
+	}
+	if d.CredentialKind == "api_key" || d.CredentialKind == "" {
+		if d.APIKeyEnv != "" {
+			return []string{d.APIKeyEnv}
+		}
+	}
+	return nil
+}
+
+// ProviderCredentialEnvVars は provider 利用可否判定に必要な環境変数名を返す。
+func ProviderCredentialEnvVars(name string) []string {
+	entry, ok := ProviderDescriptorFor(name)
+	if !ok {
+		return nil
+	}
+	return entry.RequiredCredentialEnvVars()
+}
+
+// ProviderSupportsResponsesAPI は provider が OpenAI Responses API 形の実行経路を持つか返す。
+func ProviderSupportsResponsesAPI(name string) bool {
+	entry, ok := ProviderDescriptorFor(name)
+	return ok && entry.SupportsResponsesAPI
+}
+
 // IsKnownProvider は provider key または alias が組み込み provider か返す。
 func IsKnownProvider(name string) bool {
 	_, ok := ProviderDescriptorFor(name)
@@ -286,6 +317,7 @@ func DefaultProviderModelDescriptors() map[string]ProviderModelDefaults {
 
 func cloneProviderDescriptor(entry ProviderDescriptor) ProviderDescriptor {
 	entry.Aliases = cloneStrings(entry.Aliases)
+	entry.CredentialEnvVars = cloneStrings(entry.CredentialEnvVars)
 	entry.SetupInstructions = cloneStrings(entry.SetupInstructions)
 	entry.ModelDefaults = cloneProviderModelDefaults(entry.ModelDefaults)
 	return entry

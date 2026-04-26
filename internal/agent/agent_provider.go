@@ -84,7 +84,7 @@ func (a *Agent) SwitchProvider(providerName string) error {
 		reporter.SetUsageCallback(func(u api.Usage) {
 			a.statsMu.Lock()
 			defer a.statsMu.Unlock()
-			a.Stats.AddUsage(u)
+			a.Stats.AddUsageForConfig(a.cfg(), u)
 		})
 	}
 

@@ -175,6 +175,20 @@ func TestGetProviderCompressThresholdWithConfig_ModelOverrideBeforeProvider(t *t
 	}
 }
 
+func TestGetProviderCompressThresholdWithConfig_UsesCatalogModelForModelThreshold(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("openai", config.ProviderModelConfig{
+		DefaultModel: "corp-gpt-deployment",
+		CatalogModel: "gpt-5.4",
+	})
+	cfg.Compression.ProviderThresholds["openai:gpt-5.4*"] = 260000
+
+	got := GetProviderCompressThresholdWithConfig(cfg, "openai", "corp-gpt-deployment")
+	if got != 260000 {
+		t.Fatalf("GetProviderCompressThresholdWithConfig(deployment) = %d, want catalog model threshold", got)
+	}
+}
+
 func TestGetProviderCompressThresholdWithConfig_PrefersExactAnthropicAliasOverride(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Compression.ProviderThresholds["anthropic"] = 123456
@@ -307,5 +321,22 @@ func TestShouldForceCompressForPricingCliff_AtCliffBoundary(t *testing.T) {
 	}
 	if projected != 204000 {
 		t.Errorf("projected = %d, want 204000", projected)
+	}
+}
+
+func TestShouldForceCompressForPricingCliffForConfig_UsesCatalogModel(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("openai", config.ProviderModelConfig{
+		DefaultModel: "corp-gpt-deployment",
+		CatalogModel: "gpt-5.4",
+	})
+	stats := &SessionStats{OutputTokens: 2000, AssistantMessages: 1}
+
+	projected, force := shouldForceCompressForPricingCliffForConfig(cfg, "openai", "corp-gpt-deployment", 271000, stats)
+	if projected != 273000 {
+		t.Fatalf("projected = %d, want 273000", projected)
+	}
+	if !force {
+		t.Fatal("force = false, want true from gpt-5.4 pricing cliff")
 	}
 }
