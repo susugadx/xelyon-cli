@@ -91,6 +91,3 @@ func (p *Provider) processResponse(ctx context.Context, result *requestResult) (
 	}
 	return p.handleNonStreamingResponse(ctx, result.Response, result.Spinner)
 }
-
-// isCompactionSupported は Compaction API 対応モデルか判定
-// 現時点では Opus 4.6 のみ

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
@@ -33,6 +34,16 @@ func TestIsAdaptiveThinkingModel(t *testing.T) {
 		model string
 		want  bool
 	}{
+		{
+			name:  "claude-opus-4-7 is adaptive",
+			model: "claude-opus-4-7",
+			want:  true,
+		},
+		{
+			name:  "claude-opus-4.7 dot notation is adaptive",
+			model: "claude-opus-4.7",
+			want:  true,
+		},
 		{
 			name:  "claude-opus-4-6 is adaptive",
 			model: "claude-opus-4-6",
@@ -90,6 +101,34 @@ func TestIsAdaptiveThinkingModel(t *testing.T) {
 			got := isAdaptiveThinkingModel(tt.model)
 			if got != tt.want {
 				t.Errorf("isAdaptiveThinkingModel(%q) = %v, want %v", tt.model, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetMaxOutputTokens_ClaudeOpus47FamilyUsesCatalogLimit(t *testing.T) {
+	tests := []struct {
+		provider string
+		model    string
+	}{
+		{provider: "bedrock", model: "global.anthropic.claude-opus-4-7-v1:0"},
+		{provider: "bedrock", model: "us.anthropic.claude-opus-4-7-v1:0"},
+		{provider: "openrouter", model: "anthropic/claude-opus-4-7"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.provider+"/"+tt.model, func(t *testing.T) {
+			cfg := config.DefaultConfig()
+			cfg.ProviderModels[tt.provider] = config.ProviderModelConfig{
+				DefaultModel:    tt.model,
+				MaxOutputTokens: 64000,
+			}
+			cfg.Thinking.Enabled = true
+			cfg.Thinking.Level = "xhigh"
+
+			ctx := config.WithContext(context.Background(), cfg)
+			if got := GetMaxOutputTokens(ctx, tt.provider, tt.model); got != 128000 {
+				t.Fatalf("GetMaxOutputTokens(%s, %q) = %d, want 128000", tt.provider, tt.model, got)
 			}
 		})
 	}

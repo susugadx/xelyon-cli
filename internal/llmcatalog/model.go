@@ -9,19 +9,25 @@ type ModelLimit struct {
 }
 
 var knownModelMaxOutputTokens = map[string]int{
-	"deepseek-chat":                      8192,
-	"deepseek-reasoner":                  64000,
-	"claude-sonnet-4-6":                  64000,
-	"claude-sonnet-4-5":                  64000,
-	"claude-opus-4-6":                    128000,
-	"claude-opus-4-5":                    64000,
-	"gpt-5.2":                            16384,
-	"gemini-2.5-flash":                   65536,
-	"gemini-3.1-pro-preview":             65536,
-	"gemini-3.1-pro-preview-customtools": 65536,
+	"deepseek-chat":                         8192,
+	"deepseek-reasoner":                     64000,
+	"claude-sonnet-4-6":                     64000,
+	"claude-sonnet-4-5":                     64000,
+	"claude-opus-4-7":                       128000,
+	"claude-opus-4.7":                       128000,
+	"global.anthropic.claude-opus-4-7-v1":   128000,
+	"global.anthropic.claude-opus-4-7-v1:0": 128000,
+	"claude-opus-4-6":                       128000,
+	"claude-opus-4-5":                       64000,
+	"gpt-5.2":                               16384,
+	"gemini-2.5-flash":                      65536,
+	"gemini-3.1-pro-preview":                65536,
+	"gemini-3.1-pro-preview-customtools":    65536,
 }
 
 var modelContextLimits = map[string]int{
+	"claude-opus-4-7":            1000000,
+	"claude-opus-4.7":            1000000,
 	"claude-sonnet-4-6":          200000,
 	"claude-opus-4-6":            200000,
 	"claude-sonnet-4-20250514":   200000,
@@ -34,6 +40,8 @@ var modelContextLimits = map[string]int{
 	"claude-3-haiku-20240307":    200000,
 
 	"global.anthropic.claude-sonnet-4-6-v1":            200000,
+	"global.anthropic.claude-opus-4-7-v1":              1000000,
+	"global.anthropic.claude-opus-4-7-v1:0":            1000000,
 	"anthropic.claude-sonnet-4-6":                      200000,
 	"global.anthropic.claude-opus-4-5-20251101-v1:0":   200000,
 	"us.anthropic.claude-sonnet-4-20250514-v1:0":       200000,
@@ -162,14 +170,25 @@ func InferProviderFromModel(model string) string {
 
 // KnownMaxOutputTokens は既知モデルの最大出力トークン数を返す。
 func KnownMaxOutputTokens(model string) (int, bool) {
+	model = normalizeModelName(model)
 	tokens, ok := knownModelMaxOutputTokens[model]
-	return tokens, ok
+	if ok {
+		return tokens, true
+	}
+	if isClaudeOpus47ModelName(model) {
+		return 128000, true
+	}
+	return 0, false
 }
 
 // ModelContextLimit はモデルのコンテキスト上限を返す。
 func ModelContextLimit(model string) int {
+	model = normalizeModelName(model)
 	if limit, ok := modelContextLimits[model]; ok {
 		return limit
+	}
+	if isClaudeOpus47ModelName(model) {
+		return 1000000
 	}
 
 	for _, rule := range modelContextLimitPrefixes {
@@ -202,11 +221,21 @@ func IsOpenAIResponsesModel(model string, extraModels []string) bool {
 
 // IsAdaptiveClaudeThinkingModel は adaptive thinking を使う Claude モデルか返す。
 func IsAdaptiveClaudeThinkingModel(model string) bool {
-	m := strings.ToLower(model)
-	return strings.Contains(m, "claude-opus-4-6") ||
+	m := normalizeModelName(model)
+	return isClaudeOpus47ModelName(m) ||
+		strings.Contains(m, "claude-opus-4-6") ||
 		strings.Contains(m, "claude-sonnet-4-6") ||
 		strings.Contains(m, "claude-opus-4.6") ||
 		strings.Contains(m, "claude-sonnet-4.6")
+}
+
+func normalizeModelName(model string) string {
+	return strings.ToLower(strings.TrimSpace(model))
+}
+
+func isClaudeOpus47ModelName(model string) bool {
+	return strings.Contains(model, "claude-opus-4-7") ||
+		strings.Contains(model, "claude-opus-4.7")
 }
 
 func isOpenAIReasoningModelName(model string) bool {

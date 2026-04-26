@@ -173,6 +173,27 @@ func TestClearToolUses_OpenRouter(t *testing.T) {
 		}
 	})
 
+	t.Run("Opus47Compaction", func(t *testing.T) {
+		contextManagement, betaHeaders := buildOpenRouterClaudeContextManagement(
+			"anthropic/claude-opus-4-7",
+			cfg.Compression,
+			nil,
+		)
+
+		if contextManagement == nil {
+			t.Fatal("ContextManagement should be set for OpenRouter Opus 4.7")
+		}
+		if len(contextManagement.Edits) != 2 {
+			t.Fatalf("len(ContextManagement.Edits) = %d, want 2", len(contextManagement.Edits))
+		}
+		if contextManagement.Edits[1].Type != "compact_20260112" {
+			t.Fatalf("Edits[1].Type = %q, want compact_20260112", contextManagement.Edits[1].Type)
+		}
+		if !containsString(betaHeaders, "compact-2026-01-12") {
+			t.Fatalf("beta headers should include compact-2026-01-12, got %v", betaHeaders)
+		}
+	})
+
 	t.Run("ClearOnlyWithoutCompaction", func(t *testing.T) {
 		cfg := config.DefaultConfig()
 		cfg.Compression.ClaudeCompaction = false
@@ -704,6 +725,7 @@ func TestIsClaudeModel(t *testing.T) {
 		want  bool
 	}{
 		{"anthropic/claude-opus-4.5", true},
+		{"Anthropic/Claude-Opus-4.7", true},
 		{"anthropic/claude-3-5-sonnet", true},
 		{"google/gemini-pro", false},
 		{"openai/gpt-4o", false},
@@ -722,6 +744,8 @@ func TestIsCompactionSupported(t *testing.T) {
 		want  bool
 	}{
 		{"anthropic/claude-opus-4.5", true},
+		{"anthropic/claude-opus-4-7", true},
+		{"anthropic/claude-opus-4.7", true},
 		{"anthropic/claude-opus-4-6", true},
 		{"anthropic/claude-sonnet-4.6", true},
 		{"anthropic/claude-sonnet-4-6", true},

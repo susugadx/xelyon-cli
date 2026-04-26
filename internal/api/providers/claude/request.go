@@ -8,6 +8,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
 )
 
 type ThinkingConfig struct {
@@ -15,9 +16,9 @@ type ThinkingConfig struct {
 	BudgetTokens int    `json:"budget_tokens,omitempty"` // type="enabled" 時のみ（min 1024）
 }
 
-// OutputConfig は出力制御の設定（Claude 4.6 モデル用）
+// OutputConfig は出力制御の設定（Claude adaptive thinking モデル用）
 type OutputConfig struct {
-	Effort string `json:"effort"` // low / medium / high / max
+	Effort string `json:"effort"` // low / medium / high / xhigh / max
 }
 
 type Request struct {
@@ -40,18 +41,13 @@ func LevelToBudgetTokens(level string) int {
 }
 
 // IsAdaptiveThinkingModel は adaptive thinking を使用すべきモデルか判定する。
-// Claude Opus 4.6 と Sonnet 4.6 が対象。
 func IsAdaptiveThinkingModel(model string) bool {
-	m := strings.ToLower(model)
-	return strings.Contains(m, "claude-opus-4-6") ||
-		strings.Contains(m, "claude-sonnet-4-6") ||
-		strings.Contains(m, "claude-opus-4.6") ||
-		strings.Contains(m, "claude-sonnet-4.6")
+	return llmcatalog.IsAdaptiveClaudeThinkingModel(model)
 }
 
-// levelToEffort は thinking level を Claude effort パラメータに変換する。
-// xhigh は Opus 4.6 限定の max にマッピングする。
-func levelToEffort(level, model string) string {
+// LevelToEffort は thinking level を Claude effort パラメータに変換する。
+// xhigh は Opus 4.7 では xhigh、Opus 4.6 では max、Sonnet 4.6 では high にする。
+func LevelToEffort(level, model string) string {
 	switch level {
 	case "low":
 		return "low"
@@ -60,14 +56,30 @@ func levelToEffort(level, model string) string {
 	case "high":
 		return "high"
 	case "xhigh":
-		// max は Opus 4.6 のみ対応
-		if strings.Contains(strings.ToLower(model), "opus") {
+		if isClaudeOpus47Model(model) {
+			return "xhigh"
+		}
+		if isClaudeOpus46Model(model) {
 			return "max"
 		}
 		return "high"
 	default:
 		return "medium"
 	}
+}
+
+func levelToEffort(level, model string) string {
+	return LevelToEffort(level, model)
+}
+
+func isClaudeOpus47Model(model string) bool {
+	m := strings.ToLower(model)
+	return strings.Contains(m, "claude-opus-4-7") || strings.Contains(m, "claude-opus-4.7")
+}
+
+func isClaudeOpus46Model(model string) bool {
+	m := strings.ToLower(model)
+	return strings.Contains(m, "claude-opus-4-6") || strings.Contains(m, "claude-opus-4.6")
 }
 
 // Delta はストリームの差分
@@ -115,6 +127,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	}
 
 	cfg := config.ResolveContext(ctx, p.effectiveConfig())
+	catalogModel := cfg.ModelCatalogName(p.configLookupKey(), model)
 
 	reqBody := Request{
 		Model:     model,
@@ -130,16 +143,16 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		reqBody.CacheControl = api.NewCacheControlWithConfig(cfg)
 	}
 
-	reqBody.ContextManagement = buildContextManagementForModel(model, cfg.Compression)
+	reqBody.ContextManagement = buildContextManagementForModel(catalogModel, cfg.Compression)
 
 	// Extended Thinking 適用
 	if api.IsThinkingEnabled(ctx) {
-		if IsAdaptiveThinkingModel(model) {
+		if IsAdaptiveThinkingModel(catalogModel) {
 			reqBody.Thinking = &ThinkingConfig{
 				Type: "adaptive",
 			}
 			reqBody.OutputConfig = &OutputConfig{
-				Effort: levelToEffort(cfg.Thinking.Level, model),
+				Effort: LevelToEffort(cfg.Thinking.Level, catalogModel),
 			}
 		} else {
 			reqBody.Thinking = &ThinkingConfig{
@@ -178,6 +191,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	converted := ConvertToAnthropicMessages(history)
 
 	cfg := config.ResolveContext(ctx, p.effectiveConfig())
+	catalogModel := cfg.ModelCatalogName(p.configLookupKey(), model)
 
 	var messages []interface{}
 	for _, msg := range converted {
@@ -215,16 +229,16 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 		reqBody.CacheControl = api.NewCacheControlWithConfig(cfg)
 	}
 
-	reqBody.ContextManagement = buildContextManagementForModel(model, cfg.Compression)
+	reqBody.ContextManagement = buildContextManagementForModel(catalogModel, cfg.Compression)
 
 	// Extended Thinking 適用
 	if api.IsThinkingEnabled(ctx) {
-		if IsAdaptiveThinkingModel(model) {
+		if IsAdaptiveThinkingModel(catalogModel) {
 			reqBody.Thinking = &ThinkingConfig{
 				Type: "adaptive",
 			}
 			reqBody.OutputConfig = &OutputConfig{
-				Effort: levelToEffort(cfg.Thinking.Level, model),
+				Effort: LevelToEffort(cfg.Thinking.Level, catalogModel),
 			}
 		} else {
 			reqBody.Thinking = &ThinkingConfig{

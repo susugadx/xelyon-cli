@@ -14,14 +14,12 @@ import (
 
 // isClaudeModel はモデル名が Claude モデルかを判定する。
 func isClaudeModel(model string) bool {
-	return strings.HasPrefix(model, "anthropic/claude-")
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(model)), "anthropic/claude-")
 }
 
 // isCompactionSupported はモデルが Compaction 対応か判定する。
 func isCompactionSupported(model string) bool {
-	return strings.Contains(model, "opus-4-6") || strings.Contains(model, "opus-4-5") ||
-		strings.Contains(model, "opus-4.6") || strings.Contains(model, "opus-4.5") ||
-		strings.Contains(model, "sonnet-4-6") || strings.Contains(model, "sonnet-4.6")
+	return claude.IsCompactionSupportedModel(model)
 }
 
 func buildOpenRouterClaudeContextManagement(model string, compression config.CompressionConfig, betaHeaders []string) (*claude.ContextManagement, []string) {

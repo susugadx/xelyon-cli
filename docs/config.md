@@ -446,12 +446,12 @@ lsp:
 
 **レベル別パラメータ:**
 
-| Level | Claude 4.6 (effort) | Claude 4.5以前 (budget_tokens) | OpenAI (effort) | Gemini (budget) |
-|-------|---------------------|-------------------------------|-----------------|-----------------|
+| Level | Claude adaptive (Opus 4.7 / 4.6) | Claude 4.5以前 (budget_tokens) | OpenAI (effort) | Gemini (budget) |
+|-------|------------------------------------|-------------------------------|-----------------|-----------------|
 | low | low | 5,000 | low | 5,000 |
 | medium | medium | 10,000 | medium | 10,000 |
 | high | high | 20,000 | high | 20,000 |
-| xhigh | max (Opus) / high | 40,000 | xhigh | 40,000 |
+| xhigh | Opus 4.7: xhigh / Opus 4.6: max / Sonnet 4.6: high | 40,000 | xhigh | 40,000 |
 
 **Codex モデルの制限:**
 

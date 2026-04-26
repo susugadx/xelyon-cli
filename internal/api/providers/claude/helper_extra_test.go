@@ -45,6 +45,14 @@ func TestSupportsClaudeCompaction_UsesRuntimeAndContextConfig(t *testing.T) {
 		t.Fatal("SupportsClaudeCompactionWithContext() = true, want false for unsupported model")
 	}
 
+	ctxCfg.SetProviderModelConfig("claude", config.ProviderModelConfig{
+		DefaultModel: "corp-claude-opus47",
+		CatalogModel: "claude-opus-4-7",
+	})
+	if !p.SupportsClaudeCompactionWithContext(ctx, "corp-claude-opus47") {
+		t.Fatal("SupportsClaudeCompactionWithContext() = false, want true via catalog_model")
+	}
+
 	defaultCfg := config.DefaultConfig()
 	defaultCfg.Compression.ClaudeCompaction = true
 	pm := defaultCfg.ProviderModels["claude"]

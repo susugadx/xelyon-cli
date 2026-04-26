@@ -654,6 +654,22 @@ func TestProvider_RuntimeConfigAndCompactionSupport(t *testing.T) {
 	if p.supportsClaudeCompactionWithConfig(customCfg, "anthropic.claude-3-haiku") {
 		t.Fatal("supportsClaudeCompactionWithConfig() = true, want false for unsupported model")
 	}
+
+	customCfg.ProviderModels["bedrock"] = config.ProviderModelConfig{
+		DefaultModel: "corp-bedrock-sonnet46",
+		CatalogModel: "global.anthropic.claude-sonnet-4-6-v1",
+	}
+	if !p.supportsClaudeCompactionWithConfig(customCfg, "corp-bedrock-sonnet46") {
+		t.Fatal("supportsClaudeCompactionWithConfig() = false, want true via catalog_model")
+	}
+
+	customCfg.ProviderModels["bedrock"] = config.ProviderModelConfig{
+		DefaultModel: "corp-bedrock-opus47",
+		CatalogModel: "global.anthropic.claude-opus-4-7-v1:0",
+	}
+	if p.supportsClaudeCompactionWithConfig(customCfg, "corp-bedrock-opus47") {
+		t.Fatal("supportsClaudeCompactionWithConfig() = true, want false for Bedrock Opus 4.7 until compaction support is confirmed")
+	}
 }
 
 func TestProvider_SetMCPEnabled_NoOp(t *testing.T) {
@@ -694,14 +710,84 @@ func TestBuildBedrockContextManagement_NoCompactionSupport(t *testing.T) {
 	cfg.Compression.ClaudeCompaction = true
 	headers := []string{"existing-beta"}
 
-	contextManagement, betaHeaders := buildBedrockContextManagement("anthropic.claude-3-haiku", cfg.Compression, headers)
-	if contextManagement == nil {
-		t.Fatal("ContextManagement should still exist for clear_tool_uses path")
+	tests := []string{
+		"anthropic.claude-3-haiku",
+		"global.anthropic.claude-opus-4-7-v1:0",
 	}
-	if containsString(betaHeaders, "compact-2026-01-12") {
-		t.Fatalf("betaHeaders = %v, should not include compact beta", betaHeaders)
+
+	for _, model := range tests {
+		t.Run(model, func(t *testing.T) {
+			contextManagement, betaHeaders := buildBedrockContextManagement(model, cfg.Compression, headers)
+			if contextManagement == nil {
+				t.Fatal("ContextManagement should still exist for clear_tool_uses path")
+			}
+			if containsString(betaHeaders, "compact-2026-01-12") {
+				t.Fatalf("betaHeaders = %v, should not include compact beta", betaHeaders)
+			}
+			if !containsString(betaHeaders, "existing-beta") {
+				t.Fatalf("betaHeaders = %v, should preserve existing headers", betaHeaders)
+			}
+		})
 	}
-	if !containsString(betaHeaders, "existing-beta") {
-		t.Fatalf("betaHeaders = %v, should preserve existing headers", betaHeaders)
+}
+
+func TestBuildBedrockThinkingConfig(t *testing.T) {
+	tests := []struct {
+		name       string
+		model      string
+		level      string
+		wantType   string
+		wantBudget int
+		wantEffort string
+	}{
+		{
+			name:       "opus 4.7 xhigh uses adaptive xhigh",
+			model:      "global.anthropic.claude-opus-4-7-v1:0",
+			level:      "xhigh",
+			wantType:   "adaptive",
+			wantEffort: "xhigh",
+		},
+		{
+			name:       "opus 4.6 xhigh keeps max effort",
+			model:      "global.anthropic.claude-opus-4-6-v1:0",
+			level:      "xhigh",
+			wantType:   "adaptive",
+			wantEffort: "max",
+		},
+		{
+			name:       "sonnet 4.6 xhigh keeps high effort",
+			model:      "global.anthropic.claude-sonnet-4-6-v1",
+			level:      "xhigh",
+			wantType:   "adaptive",
+			wantEffort: "high",
+		},
+		{
+			name:       "legacy opus keeps budget tokens",
+			model:      "global.anthropic.claude-opus-4-5-20251101-v1:0",
+			level:      "high",
+			wantType:   "enabled",
+			wantBudget: api.LevelToBudgetTokens("high"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			thinking, outputConfig := buildBedrockThinkingConfig(tt.model, tt.level)
+			if thinking == nil || thinking.Type != tt.wantType {
+				t.Fatalf("Thinking = %#v, want type %q", thinking, tt.wantType)
+			}
+			if thinking.BudgetTokens != tt.wantBudget {
+				t.Fatalf("Thinking.BudgetTokens = %d, want %d", thinking.BudgetTokens, tt.wantBudget)
+			}
+			if tt.wantEffort == "" {
+				if outputConfig != nil {
+					t.Fatalf("OutputConfig = %#v, want nil", outputConfig)
+				}
+				return
+			}
+			if outputConfig == nil || outputConfig.Effort != tt.wantEffort {
+				t.Fatalf("OutputConfig = %#v, want effort %q", outputConfig, tt.wantEffort)
+			}
+		})
 	}
 }

@@ -141,8 +141,9 @@ func TestChatWithImage_BuildsToolAndThinkingForMultimodalRequest(t *testing.T) {
 	})
 
 	cfg := config.DefaultConfig()
+	legacyThinkingModel := "global.anthropic.claude-opus-4-5-20251101-v1:0"
 	cfg.ProviderModels["bedrock"] = config.ProviderModelConfig{
-		DefaultModel:    defaultModel,
+		DefaultModel:    legacyThinkingModel,
 		MaxOutputTokens: 88,
 	}
 	cfg.Thinking.Enabled = true
@@ -164,7 +165,97 @@ func TestChatWithImage_BuildsToolAndThinkingForMultimodalRequest(t *testing.T) {
 	if req.Thinking == nil || req.Thinking.BudgetTokens != api.LevelToBudgetTokens("high") {
 		t.Fatalf("Thinking = %#v, want high-level budget", req.Thinking)
 	}
+	if req.OutputConfig != nil {
+		t.Fatalf("OutputConfig = %#v, want nil for legacy thinking", req.OutputConfig)
+	}
 	if len(req.Tools) == 0 || !hasClaudeTool(req.Tools, "lookup") {
 		t.Fatalf("Tools = %#v, want lookup tool", req.Tools)
 	}
+}
+
+func TestChatWithImage_BuildsAdaptiveThinkingForOpus47(t *testing.T) {
+	t.Setenv("BEDROCK_FUNCTION_CALLING", "0")
+
+	mockClient := &mockInvokeModelWithResponseStreamClient{err: errors.New("boom")}
+	p := &Provider{client: mockClient}
+
+	cfg := config.DefaultConfig()
+	cfg.ProviderModels["bedrock"] = config.ProviderModelConfig{
+		DefaultModel:    defaultModel,
+		MaxOutputTokens: 88,
+	}
+	cfg.Thinking.Enabled = true
+	cfg.Thinking.Level = "xhigh"
+
+	ctx := newBedrockTestContext(cfg)
+	model := "global.anthropic.claude-opus-4-7-v1:0"
+	_, err := p.ChatWithImage(ctx, "system prompt", []api.Message{{Role: "assistant", Content: "previous"}}, "describe", &api.ImageData{
+		MediaType: "image/png",
+		Base64:    "dGVzdA==",
+	}, model)
+	if err == nil || !strings.Contains(err.Error(), "bedrock API error") {
+		t.Fatalf("ChatWithImage() error = %v, want wrapped bedrock API error", err)
+	}
+
+	var req BedrockMultimodalRequest
+	if err := json.Unmarshal(mockClient.lastInput.Body, &req); err != nil {
+		t.Fatalf("json.Unmarshal(request) error = %v", err)
+	}
+	if req.MaxTokens != 128000 {
+		t.Fatalf("MaxTokens = %d, want 128000 catalog limit without thinking budget addition", req.MaxTokens)
+	}
+	if req.Thinking == nil || req.Thinking.Type != "adaptive" {
+		t.Fatalf("Thinking = %#v, want adaptive", req.Thinking)
+	}
+	if req.OutputConfig == nil || req.OutputConfig.Effort != "xhigh" {
+		t.Fatalf("OutputConfig = %#v, want effort=xhigh", req.OutputConfig)
+	}
+	assertBedrockThinkingBudgetOmitted(t, mockClient.lastInput.Body)
+}
+
+func TestChatWithImage_UsesCatalogModelForOpus47Alias(t *testing.T) {
+	t.Setenv("BEDROCK_FUNCTION_CALLING", "0")
+
+	mockClient := &mockInvokeModelWithResponseStreamClient{err: errors.New("boom")}
+	p := &Provider{client: mockClient}
+
+	model := "corp-bedrock-opus47"
+	cfg := config.DefaultConfig()
+	cfg.ProviderModels["bedrock"] = config.ProviderModelConfig{
+		DefaultModel:    model,
+		CatalogModel:    "global.anthropic.claude-opus-4-7-v1:0",
+		MaxOutputTokens: 64000,
+	}
+	cfg.Thinking.Enabled = true
+	cfg.Thinking.Level = "xhigh"
+
+	ctx := newBedrockTestContext(cfg)
+	_, err := p.ChatWithImage(ctx, "system prompt", nil, "describe", &api.ImageData{
+		MediaType: "image/png",
+		Base64:    "dGVzdA==",
+	}, model)
+	if err == nil || !strings.Contains(err.Error(), "bedrock API error") {
+		t.Fatalf("ChatWithImage() error = %v, want wrapped bedrock API error", err)
+	}
+	if got := aws.ToString(mockClient.lastInput.ModelId); got != model {
+		t.Fatalf("ModelId = %q, want raw alias model %q", got, model)
+	}
+
+	var req BedrockMultimodalRequest
+	if err := json.Unmarshal(mockClient.lastInput.Body, &req); err != nil {
+		t.Fatalf("json.Unmarshal(request) error = %v", err)
+	}
+	if req.MaxTokens != 128000 {
+		t.Fatalf("MaxTokens = %d, want 128000 catalog limit", req.MaxTokens)
+	}
+	if req.Thinking == nil || req.Thinking.Type != "adaptive" {
+		t.Fatalf("Thinking = %#v, want adaptive via catalog_model", req.Thinking)
+	}
+	if req.OutputConfig == nil || req.OutputConfig.Effort != "xhigh" {
+		t.Fatalf("OutputConfig = %#v, want effort=xhigh via catalog_model", req.OutputConfig)
+	}
+	if containsString(req.AnthropicBeta, "compact-2026-01-12") {
+		t.Fatalf("AnthropicBeta = %v, should not include Bedrock Opus 4.7 compaction beta", req.AnthropicBeta)
+	}
+	assertBedrockThinkingBudgetOmitted(t, mockClient.lastInput.Body)
 }

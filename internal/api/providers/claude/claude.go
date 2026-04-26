@@ -207,12 +207,20 @@ func (p *Provider) SetRuntimeConfig(cfg *config.Config) {
 }
 
 // ThinkingConfig は Extended Thinking の設定
-// Opus 4.6 / Sonnet 4.6: type="adaptive"（budget_tokens 不要）
+// Opus 4.7 / Opus 4.6 / Sonnet 4.6: type="adaptive"（budget_tokens 不要）
 // それ以前: type="enabled" + budget_tokens
 
+// IsCompactionSupportedModel は Claude Compaction API 対応モデルか判定する。
+func IsCompactionSupportedModel(model string) bool {
+	m := strings.ToLower(strings.TrimSpace(model))
+	return strings.Contains(m, "opus-4-7") || strings.Contains(m, "opus-4.7") ||
+		strings.Contains(m, "opus-4-6") || strings.Contains(m, "opus-4.6") ||
+		strings.Contains(m, "opus-4-5") || strings.Contains(m, "opus-4.5") ||
+		strings.Contains(m, "sonnet-4-6") || strings.Contains(m, "sonnet-4.6")
+}
+
 func isCompactionSupported(model string) bool {
-	return strings.Contains(model, "opus-4-6") || strings.Contains(model, "opus-4-5") ||
-		strings.Contains(model, "sonnet-4-6")
+	return IsCompactionSupportedModel(model)
 }
 
 func (p *Provider) effectiveConfig() *config.Config {
@@ -226,13 +234,14 @@ func (p *Provider) supportsClaudeCompactionWithConfig(cfg *config.Config, model 
 	if cfg == nil || !cfg.Compression.ClaudeCompaction {
 		return false
 	}
+	providerKey := p.configLookupKey()
 	if model == "" {
-		model = cfg.GetEffectiveModelForProvider("claude")
+		model = cfg.GetEffectiveModelForProvider(providerKey)
 	}
 	if model == "" {
 		model = "claude-sonnet-4-6"
 	}
-	return isCompactionSupported(model)
+	return isCompactionSupported(cfg.ModelCatalogName(providerKey, model))
 }
 
 func buildContextManagementForModel(model string, compression config.CompressionConfig) *ContextManagement {

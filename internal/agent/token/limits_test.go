@@ -12,6 +12,9 @@ func TestGetModelTokenLimit_ExactMatch(t *testing.T) {
 		expected int
 	}{
 		// Claude models
+		{"claude-opus-4-7", 1000000},
+		{"anthropic/claude-opus-4-7", 1000000},
+		{"us.anthropic.claude-opus-4-7-v1:0", 1000000},
 		{"claude-sonnet-4-20250514", 200000},
 		{"claude-3-5-sonnet-20241022", 200000},
 		{"claude-3-opus-20240229", 200000},

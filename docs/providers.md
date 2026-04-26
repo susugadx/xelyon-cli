@@ -146,6 +146,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 # 使用例
 xelyon --provider claude --model claude-sonnet-4-6
+xelyon --provider claude --model claude-opus-4-7
 xelyon --provider claude --model claude-opus-4-6
 ```
 
@@ -155,9 +156,10 @@ xelyon --provider claude --model claude-opus-4-6
 - 画像入力対応
 
 **Extended Thinking:**
-- Opus 4.6 / Sonnet 4.6: `type: "adaptive"` + `output_config.effort`（low / medium / high / max）
+- Opus 4.7 / Opus 4.6 / Sonnet 4.6: `type: "adaptive"` + `output_config.effort`
 - それ以前のモデル: `type: "enabled"` + `budget_tokens`
-- `xhigh` レベルは Opus 4.6 で `max`、Sonnet 4.6 では `high` にフォールバック
+- `xhigh` レベルは Opus 4.7 で `xhigh`、Opus 4.6 で `max`、Sonnet 4.6 では `high` にフォールバック
+- Claude Compaction は Opus 4.7 / Opus 4.6 / Opus 4.5 / Sonnet 4.6 で有効化対象
 
 ### 5. Groq
 

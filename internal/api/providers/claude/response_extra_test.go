@@ -50,6 +50,19 @@ func TestChatWithTools_SetsThinkingConfigByModel(t *testing.T) {
 	cfg.Thinking.Enabled = true
 	cfg.Thinking.Level = "xhigh"
 
+	opus47Req, _ := captureClaudeRawRequest(t, cfg, "claude-opus-4-7")
+	opus47Thinking, ok := opus47Req["thinking"].(map[string]any)
+	if !ok || opus47Thinking["type"] != "adaptive" {
+		t.Fatalf("opus 4.7 thinking = %+v, want adaptive type", opus47Req["thinking"])
+	}
+	if _, ok := opus47Thinking["budget_tokens"]; ok {
+		t.Fatalf("opus 4.7 thinking should omit budget_tokens, got %+v", opus47Thinking)
+	}
+	opus47OutputConfig, ok := opus47Req["output_config"].(map[string]any)
+	if !ok || opus47OutputConfig["effort"] != "xhigh" {
+		t.Fatalf("opus 4.7 output_config = %+v, want effort=xhigh", opus47Req["output_config"])
+	}
+
 	adaptiveReq, _ := captureClaudeRequest(t, cfg, "claude-opus-4-6")
 	if adaptiveReq.Thinking == nil || adaptiveReq.Thinking.Type != "adaptive" {
 		t.Fatalf("adaptive Thinking = %+v, want adaptive type", adaptiveReq.Thinking)

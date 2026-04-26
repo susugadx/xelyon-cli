@@ -209,7 +209,7 @@ func GetMaxOutputTokens(ctx context.Context, providerName, model string) int {
 	}
 
 	// 4. Extended Thinking 有効時は BudgetTokens を考慮
-	// adaptive thinking モデル（Claude 4.6）は API が自動管理するため加算不要
+	// adaptive thinking モデル（Claude Opus 4.7 / 4.6 など）は API が自動管理するため加算不要
 	// それ以外は max_tokens = budget_tokens + output_tokens
 	if IsThinkingEnabled(ctx) && (pName == "claude" || pName == "anthropic" || pName == "bedrock") {
 		if !isAdaptiveThinkingModel(catalogModel) {

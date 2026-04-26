@@ -68,8 +68,9 @@ func TestProvider_ChatWithTools_BuildsRequestFromContext(t *testing.T) {
 	})
 
 	cfg := config.DefaultConfig()
+	legacyThinkingModel := "global.anthropic.claude-opus-4-5-20251101-v1:0"
 	cfg.ProviderModels["bedrock"] = config.ProviderModelConfig{
-		DefaultModel:     "global.anthropic.claude-sonnet-4-6-v1",
+		DefaultModel:     legacyThinkingModel,
 		MaxOutputTokens:  321,
 		AnthropicVersion: "bedrock-test-version",
 		AnthropicBeta:    []string{"beta-from-config"},
@@ -87,8 +88,8 @@ func TestProvider_ChatWithTools_BuildsRequestFromContext(t *testing.T) {
 	if mockClient.lastInput == nil {
 		t.Fatal("InvokeModelWithResponseStream() should be called")
 	}
-	if got := aws.ToString(mockClient.lastInput.ModelId); got != "global.anthropic.claude-sonnet-4-6-v1" {
-		t.Fatalf("ModelId = %q, want %q", got, "global.anthropic.claude-sonnet-4-6-v1")
+	if got := aws.ToString(mockClient.lastInput.ModelId); got != legacyThinkingModel {
+		t.Fatalf("ModelId = %q, want %q", got, legacyThinkingModel)
 	}
 	if got := aws.ToString(mockClient.lastInput.ContentType); got != "application/json" {
 		t.Fatalf("ContentType = %q, want application/json", got)
@@ -101,14 +102,18 @@ func TestProvider_ChatWithTools_BuildsRequestFromContext(t *testing.T) {
 	if req.AnthropicVersion != "bedrock-test-version" {
 		t.Fatalf("AnthropicVersion = %q, want %q", req.AnthropicVersion, "bedrock-test-version")
 	}
-	if req.MaxTokens != 321 {
-		t.Fatalf("MaxTokens = %d, want 321", req.MaxTokens)
+	wantMaxTokens := 321 + api.LevelToBudgetTokens("high")
+	if req.MaxTokens != wantMaxTokens {
+		t.Fatalf("MaxTokens = %d, want %d", req.MaxTokens, wantMaxTokens)
 	}
 	if req.CacheControl == nil || req.CacheControl.Type != "ephemeral" {
 		t.Fatalf("CacheControl = %#v, want ephemeral cache control", req.CacheControl)
 	}
-	if req.Thinking == nil || req.Thinking.BudgetTokens != api.LevelToBudgetTokens("high") {
+	if req.Thinking == nil || req.Thinking.Type != "enabled" || req.Thinking.BudgetTokens != api.LevelToBudgetTokens("high") {
 		t.Fatalf("Thinking = %#v, want high-level budget", req.Thinking)
+	}
+	if req.OutputConfig != nil {
+		t.Fatalf("OutputConfig = %#v, want nil for legacy thinking", req.OutputConfig)
 	}
 	if req.ContextManagement == nil {
 		t.Fatal("ContextManagement should be set for supported Claude model")
@@ -131,6 +136,87 @@ func TestProvider_ChatWithTools_BuildsRequestFromContext(t *testing.T) {
 	if req.System == nil {
 		t.Fatal("System should be populated")
 	}
+}
+
+func TestProvider_ChatWithTools_BuildsAdaptiveThinkingForOpus47(t *testing.T) {
+	mockClient := &mockInvokeModelWithResponseStreamClient{err: errors.New("boom")}
+	p := &Provider{client: mockClient}
+
+	cfg := config.DefaultConfig()
+	cfg.ProviderModels["bedrock"] = config.ProviderModelConfig{
+		DefaultModel:    defaultModel,
+		MaxOutputTokens: 321,
+	}
+	cfg.Thinking.Enabled = true
+	cfg.Thinking.Level = "xhigh"
+	cfg.Compression.ClaudeCompaction = false
+
+	ctx := newBedrockTestContext(cfg)
+	model := "global.anthropic.claude-opus-4-7-v1:0"
+	_, err := p.ChatWithTools(ctx, "system prompt", []api.Message{{Role: "user", Content: "hello"}}, model)
+	if err == nil || !strings.Contains(err.Error(), "bedrock API error") {
+		t.Fatalf("ChatWithTools() error = %v, want wrapped bedrock API error", err)
+	}
+	if mockClient.lastInput == nil {
+		t.Fatal("InvokeModelWithResponseStream() should be called")
+	}
+
+	var req BedrockRequest
+	if err := json.Unmarshal(mockClient.lastInput.Body, &req); err != nil {
+		t.Fatalf("json.Unmarshal(request) error = %v", err)
+	}
+	if req.MaxTokens != 128000 {
+		t.Fatalf("MaxTokens = %d, want 128000 catalog limit without thinking budget addition", req.MaxTokens)
+	}
+	if req.Thinking == nil || req.Thinking.Type != "adaptive" {
+		t.Fatalf("Thinking = %#v, want adaptive", req.Thinking)
+	}
+	if req.OutputConfig == nil || req.OutputConfig.Effort != "xhigh" {
+		t.Fatalf("OutputConfig = %#v, want effort=xhigh", req.OutputConfig)
+	}
+	assertBedrockThinkingBudgetOmitted(t, mockClient.lastInput.Body)
+}
+
+func TestProvider_ChatWithTools_UsesCatalogModelForOpus47Alias(t *testing.T) {
+	mockClient := &mockInvokeModelWithResponseStreamClient{err: errors.New("boom")}
+	p := &Provider{client: mockClient}
+
+	model := "corp-bedrock-opus47"
+	cfg := config.DefaultConfig()
+	cfg.ProviderModels["bedrock"] = config.ProviderModelConfig{
+		DefaultModel:    model,
+		CatalogModel:    "global.anthropic.claude-opus-4-7-v1:0",
+		MaxOutputTokens: 64000,
+	}
+	cfg.Thinking.Enabled = true
+	cfg.Thinking.Level = "xhigh"
+
+	ctx := newBedrockTestContext(cfg)
+	_, err := p.ChatWithTools(ctx, "system prompt", []api.Message{{Role: "user", Content: "hello"}}, model)
+	if err == nil || !strings.Contains(err.Error(), "bedrock API error") {
+		t.Fatalf("ChatWithTools() error = %v, want wrapped bedrock API error", err)
+	}
+	if got := aws.ToString(mockClient.lastInput.ModelId); got != model {
+		t.Fatalf("ModelId = %q, want raw alias model %q", got, model)
+	}
+
+	var req BedrockRequest
+	if err := json.Unmarshal(mockClient.lastInput.Body, &req); err != nil {
+		t.Fatalf("json.Unmarshal(request) error = %v", err)
+	}
+	if req.MaxTokens != 128000 {
+		t.Fatalf("MaxTokens = %d, want 128000 catalog limit", req.MaxTokens)
+	}
+	if req.Thinking == nil || req.Thinking.Type != "adaptive" {
+		t.Fatalf("Thinking = %#v, want adaptive via catalog_model", req.Thinking)
+	}
+	if req.OutputConfig == nil || req.OutputConfig.Effort != "xhigh" {
+		t.Fatalf("OutputConfig = %#v, want effort=xhigh via catalog_model", req.OutputConfig)
+	}
+	if containsString(req.AnthropicBeta, "compact-2026-01-12") {
+		t.Fatalf("AnthropicBeta = %v, should not include Bedrock Opus 4.7 compaction beta", req.AnthropicBeta)
+	}
+	assertBedrockThinkingBudgetOmitted(t, mockClient.lastInput.Body)
 }
 
 func TestProvider_ChatWithImage_BuildsMultimodalRequestAndVersionFallback(t *testing.T) {
@@ -233,4 +319,23 @@ func hasClaudeTool(tools []claude.ClaudeTool, name string) bool {
 		}
 	}
 	return false
+}
+
+func assertBedrockThinkingBudgetOmitted(t *testing.T, body []byte) {
+	t.Helper()
+
+	var raw map[string]any
+	if err := json.Unmarshal(body, &raw); err != nil {
+		t.Fatalf("json.Unmarshal(raw request) error = %v", err)
+	}
+	thinking, ok := raw["thinking"].(map[string]any)
+	if !ok {
+		t.Fatalf("thinking = %T, want object", raw["thinking"])
+	}
+	if thinking["type"] != "adaptive" {
+		t.Fatalf("thinking.type = %v, want adaptive", thinking["type"])
+	}
+	if _, ok := thinking["budget_tokens"]; ok {
+		t.Fatalf("thinking.budget_tokens should be omitted for adaptive thinking, got %#v", thinking)
+	}
 }

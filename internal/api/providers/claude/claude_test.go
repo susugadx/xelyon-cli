@@ -250,6 +250,35 @@ func captureClaudeRequest(t *testing.T, cfg *config.Config, model string) (Reque
 	return captureClaudeRequestForProvider(t, cfg, "claude", model)
 }
 
+func captureClaudeRawRequest(t *testing.T, cfg *config.Config, model string) (map[string]any, http.Header) {
+	t.Helper()
+
+	var reqBody map[string]any
+	var headers http.Header
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		headers = r.Header.Clone()
+		if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+			t.Fatalf("Failed to decode request: %v", err)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(Response{
+			Content: []Content{{Type: "text", Text: "ok"}},
+		})
+	})
+
+	t.Setenv("ANTHROPIC_API_URL", server.URL)
+
+	p := newProvider("test-key", "claude")
+	ctx := config.WithContext(context.Background(), cfg)
+	_, err := p.ChatWithTools(ctx, "System", []api.Message{{Role: "user", Content: "Hello"}}, model)
+	if err != nil {
+		t.Fatalf("ChatWithTools() error = %v", err)
+	}
+
+	return reqBody, headers
+}
+
 func captureClaudeImageRequestForProvider(t *testing.T, cfg *config.Config, providerKey, model string) (MultimodalRequest, http.Header) {
 	t.Helper()
 
@@ -394,6 +423,110 @@ func TestClearToolUses_BetaHeader(t *testing.T) {
 	}
 	if !headerHasBetaValue(headers, compactBetaHeader) {
 		t.Errorf("anthropic-beta should include %q, got %q", compactBetaHeader, headers.Get("anthropic-beta"))
+	}
+}
+
+func TestClaudeCompaction_Opus47Request(t *testing.T) {
+	cfg := config.DefaultConfig()
+
+	reqBody, headers := captureClaudeRequest(t, cfg, "claude-opus-4-7")
+	if reqBody.ContextManagement == nil {
+		t.Fatal("ContextManagement should be set for Opus 4.7")
+	}
+	if len(reqBody.ContextManagement.Edits) != 2 {
+		t.Fatalf("len(ContextManagement.Edits) = %d, want 2", len(reqBody.ContextManagement.Edits))
+	}
+	if reqBody.ContextManagement.Edits[0].Type != clearToolUsesEditType {
+		t.Fatalf("Edits[0].Type = %q, want %q", reqBody.ContextManagement.Edits[0].Type, clearToolUsesEditType)
+	}
+	if reqBody.ContextManagement.Edits[1].Type != compactEditType {
+		t.Fatalf("Edits[1].Type = %q, want %q", reqBody.ContextManagement.Edits[1].Type, compactEditType)
+	}
+	if !headerHasBetaValue(headers, compactBetaHeader) {
+		t.Fatalf("anthropic-beta should include %q, got %q", compactBetaHeader, headers.Get("anthropic-beta"))
+	}
+}
+
+func TestClaudeCompaction_DisabledKeepsClearToolUsesForOpus47(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Compression.ClaudeCompaction = false
+
+	reqBody, headers := captureClaudeRequest(t, cfg, "claude-opus-4-7")
+	if reqBody.ContextManagement == nil {
+		t.Fatal("ContextManagement should be set for clear_tool_uses")
+	}
+	if len(reqBody.ContextManagement.Edits) != 1 {
+		t.Fatalf("len(ContextManagement.Edits) = %d, want 1", len(reqBody.ContextManagement.Edits))
+	}
+	if reqBody.ContextManagement.Edits[0].Type != clearToolUsesEditType {
+		t.Fatalf("Edits[0].Type = %q, want %q", reqBody.ContextManagement.Edits[0].Type, clearToolUsesEditType)
+	}
+	if headerHasBetaValue(headers, compactBetaHeader) {
+		t.Fatalf("anthropic-beta should not include %q when compaction is disabled, got %q", compactBetaHeader, headers.Get("anthropic-beta"))
+	}
+}
+
+func TestClaudeOpus47CatalogModelDrivesRequestFeatures(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("claude", config.ProviderModelConfig{
+		DefaultModel:    "corp-claude-opus47",
+		CatalogModel:    "claude-opus-4-7",
+		MaxOutputTokens: 64000,
+	})
+	cfg.Thinking.Enabled = true
+	cfg.Thinking.Level = "xhigh"
+
+	reqBody, headers := captureClaudeRawRequest(t, cfg, "corp-claude-opus47")
+	if reqBody["model"] != "corp-claude-opus47" {
+		t.Fatalf("model = %v, want raw request model", reqBody["model"])
+	}
+	if reqBody["max_tokens"] != float64(128000) {
+		t.Fatalf("max_tokens = %v, want 128000 from catalog_model", reqBody["max_tokens"])
+	}
+	thinking, ok := reqBody["thinking"].(map[string]any)
+	if !ok || thinking["type"] != "adaptive" {
+		t.Fatalf("thinking = %+v, want adaptive via catalog_model", reqBody["thinking"])
+	}
+	if _, ok := thinking["budget_tokens"]; ok {
+		t.Fatalf("thinking.budget_tokens should be omitted for catalog_model adaptive thinking, got %+v", thinking)
+	}
+	outputConfig, ok := reqBody["output_config"].(map[string]any)
+	if !ok || outputConfig["effort"] != "xhigh" {
+		t.Fatalf("output_config = %+v, want effort=xhigh via catalog_model", reqBody["output_config"])
+	}
+	if !headerHasBetaValue(headers, compactBetaHeader) {
+		t.Fatalf("anthropic-beta should include %q via catalog_model, got %q", compactBetaHeader, headers.Get("anthropic-beta"))
+	}
+}
+
+func TestClaudeOpus47CatalogModelDrivesImageRequestFeatures(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("claude", config.ProviderModelConfig{
+		DefaultModel:    "corp-claude-opus47",
+		CatalogModel:    "claude-opus-4-7",
+		MaxOutputTokens: 64000,
+	})
+	cfg.Thinking.Enabled = true
+	cfg.Thinking.Level = "xhigh"
+
+	reqBody, headers := captureClaudeImageRequestForProvider(t, cfg, "claude", "corp-claude-opus47")
+	if reqBody.Model != "corp-claude-opus47" {
+		t.Fatalf("Model = %q, want raw request model", reqBody.Model)
+	}
+	if reqBody.MaxTokens != 128000 {
+		t.Fatalf("MaxTokens = %d, want 128000 from catalog_model", reqBody.MaxTokens)
+	}
+	if reqBody.Thinking == nil || reqBody.Thinking.Type != "adaptive" {
+		t.Fatalf("Thinking = %+v, want adaptive via catalog_model", reqBody.Thinking)
+	}
+	if reqBody.Thinking.BudgetTokens != 0 {
+		t.Fatalf("Thinking.BudgetTokens = %d, want omitted for catalog_model adaptive thinking", reqBody.Thinking.BudgetTokens)
+	}
+	if reqBody.OutputConfig == nil || reqBody.OutputConfig.Effort != "xhigh" {
+		t.Fatalf("OutputConfig = %+v, want effort=xhigh via catalog_model", reqBody.OutputConfig)
+	}
+	if !headerHasBetaValue(headers, compactBetaHeader) {
+		t.Fatalf("anthropic-beta should include %q via catalog_model, got %q", compactBetaHeader, headers.Get("anthropic-beta"))
 	}
 }
 
@@ -849,6 +982,8 @@ func TestIsAdaptiveThinkingModel(t *testing.T) {
 		model string
 		want  bool
 	}{
+		{"claude-opus-4-7", true},
+		{"claude-opus-4.7", true},
 		{"claude-opus-4-6", true},
 		{"claude-sonnet-4-6", true},
 		{"claude-opus-4.6", true},
@@ -877,6 +1012,8 @@ func TestLevelToEffort(t *testing.T) {
 		{"low", "claude-opus-4-6", "low"},
 		{"medium", "claude-opus-4-6", "medium"},
 		{"high", "claude-opus-4-6", "high"},
+		{"xhigh", "claude-opus-4-7", "xhigh"},
+		{"xhigh", "claude-opus-4.7", "xhigh"},
 		{"xhigh", "claude-opus-4-6", "max"},
 		{"xhigh", "claude-sonnet-4-6", "high"},
 		{"", "claude-opus-4-6", "medium"},
@@ -886,6 +1023,29 @@ func TestLevelToEffort(t *testing.T) {
 		t.Run(tt.level+"_"+tt.model, func(t *testing.T) {
 			if got := levelToEffort(tt.level, tt.model); got != tt.want {
 				t.Errorf("levelToEffort(%q, %q) = %q, want %q", tt.level, tt.model, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsCompactionSupportedModel(t *testing.T) {
+	tests := []struct {
+		model string
+		want  bool
+	}{
+		{"claude-opus-4-7", true},
+		{"claude-opus-4.7", true},
+		{"Claude-Opus-4-7", true},
+		{"claude-opus-4-6", true},
+		{"claude-opus-4-5", true},
+		{"claude-sonnet-4-6", true},
+		{"claude-3-5-sonnet", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			if got := IsCompactionSupportedModel(tt.model); got != tt.want {
+				t.Errorf("IsCompactionSupportedModel(%q) = %v, want %v", tt.model, got, tt.want)
 			}
 		})
 	}

@@ -126,6 +126,7 @@ type BedrockRequest struct {
 	System            interface{}               `json:"system,omitempty"` // can be string or []api.SystemBlock
 	Messages          []claude.AnthropicMessage `json:"messages"`
 	Thinking          *claude.ThinkingConfig    `json:"thinking,omitempty"`
+	OutputConfig      *claude.OutputConfig      `json:"output_config,omitempty"`
 	Tools             []claude.ClaudeTool       `json:"tools,omitempty"`
 	ContextManagement *claude.ContextManagement `json:"context_management,omitempty"`
 }
@@ -139,8 +140,21 @@ type BedrockMultimodalRequest struct {
 	System            interface{}               `json:"system,omitempty"`
 	Messages          []interface{}             `json:"messages"`
 	Thinking          *claude.ThinkingConfig    `json:"thinking,omitempty"`
+	OutputConfig      *claude.OutputConfig      `json:"output_config,omitempty"`
 	Tools             []claude.ClaudeTool       `json:"tools,omitempty"`
 	ContextManagement *claude.ContextManagement `json:"context_management,omitempty"`
+}
+
+func buildBedrockThinkingConfig(model, level string) (*claude.ThinkingConfig, *claude.OutputConfig) {
+	if claude.IsAdaptiveThinkingModel(model) {
+		thinking := &claude.ThinkingConfig{Type: "adaptive"}
+		outputConfig := &claude.OutputConfig{Effort: claude.LevelToEffort(level, model)}
+		return thinking, outputConfig
+	}
+	return &claude.ThinkingConfig{
+		Type:         "enabled",
+		BudgetTokens: api.LevelToBudgetTokens(level),
+	}, nil
 }
 
 // ChatWithTools は Provider interface の実装
@@ -154,6 +168,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	if cfg == nil {
 		cfg = config.DefaultConfig()
 	}
+	catalogModel := cfg.ModelCatalogName("bedrock", model)
 	pCfg, _ := cfg.GetProviderModelConfig("bedrock")
 
 	// Anthropic Version（config → フォールバック定数）
@@ -175,10 +190,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 
 	// Extended Thinking 適用
 	if api.IsThinkingEnabled(ctx) {
-		reqBody.Thinking = &claude.ThinkingConfig{
-			Type:         "enabled",
-			BudgetTokens: api.LevelToBudgetTokens(cfg.Thinking.Level),
-		}
+		reqBody.Thinking, reqBody.OutputConfig = buildBedrockThinkingConfig(catalogModel, cfg.Thinking.Level)
 	}
 
 	// Tool Use: ツール定義を追加
@@ -186,7 +198,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		reqBody.Tools = claude.GetCombinedClaudeToolsWithContext(ctx, p.mcpTools)
 	}
 
-	reqBody.ContextManagement, reqBody.AnthropicBeta = buildBedrockContextManagement(model, cfg.Compression, reqBody.AnthropicBeta)
+	reqBody.ContextManagement, reqBody.AnthropicBeta = buildBedrockContextManagement(catalogModel, cfg.Compression, reqBody.AnthropicBeta)
 
 	return p.invokeStream(ctx, model, reqBody)
 }
@@ -208,6 +220,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	if cfg == nil {
 		cfg = config.DefaultConfig()
 	}
+	catalogModel := cfg.ModelCatalogName("bedrock", model)
 
 	var messages []interface{}
 	for _, msg := range converted {
@@ -255,10 +268,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 
 	// Extended Thinking 適用
 	if api.IsThinkingEnabled(ctx) {
-		reqBody.Thinking = &claude.ThinkingConfig{
-			Type:         "enabled",
-			BudgetTokens: api.LevelToBudgetTokens(cfg.Thinking.Level),
-		}
+		reqBody.Thinking, reqBody.OutputConfig = buildBedrockThinkingConfig(catalogModel, cfg.Thinking.Level)
 	}
 
 	// Tool Use: ツール定義を追加
@@ -266,7 +276,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 		reqBody.Tools = claude.GetCombinedClaudeToolsWithContext(ctx, p.mcpTools)
 	}
 
-	reqBody.ContextManagement, reqBody.AnthropicBeta = buildBedrockContextManagement(model, cfg.Compression, reqBody.AnthropicBeta)
+	reqBody.ContextManagement, reqBody.AnthropicBeta = buildBedrockContextManagement(catalogModel, cfg.Compression, reqBody.AnthropicBeta)
 
 	return p.invokeStream(ctx, model, reqBody)
 }
@@ -288,7 +298,7 @@ func (p *Provider) supportsClaudeCompactionWithConfig(cfg *config.Config, model 
 	if model == "" {
 		model = defaultModel
 	}
-	return isBedrockCompactionSupported(model)
+	return isBedrockCompactionSupported(cfg.ModelCatalogName("bedrock", model))
 }
 
 // invokeStream は Bedrock InvokeModelWithResponseStream を呼び出す共通処理
