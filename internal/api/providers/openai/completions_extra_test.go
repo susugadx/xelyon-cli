@@ -70,8 +70,8 @@ func TestHandleStreamingResponse_CombinesToolCallsAndUsage(t *testing.T) {
 	if !strings.Contains(got, "Let me check.") || !strings.Contains(got, "read_file") || !strings.Contains(got, "main.go") {
 		t.Fatalf("handleStreamingResponse() = %q, want text and tool JSON", got)
 	}
-	if gotUsage.InputTokens != 10 || gotUsage.OutputTokens != 4 || gotUsage.CachedInputTokens != 3 || gotUsage.ThinkingTokens != 2 {
-		t.Fatalf("usage = %+v, want input=10 output=4 cached=3 thinking=2", gotUsage)
+	if gotUsage.InputTokens != 10 || gotUsage.OutputTokens != 2 || gotUsage.CachedInputTokens != 3 || gotUsage.ThinkingTokens != 2 {
+		t.Fatalf("usage = %+v, want input=10 output=2 cached=3 thinking=2", gotUsage)
 	}
 }
 

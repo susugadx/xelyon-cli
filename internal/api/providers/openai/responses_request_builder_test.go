@@ -1,0 +1,140 @@
+package openai
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"testing"
+	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
+)
+
+func TestBuildChatResponsesRequest_StreamCapabilityByModel(t *testing.T) {
+	tests := []struct {
+		model      string
+		wantStream bool
+	}{
+		{model: "gpt-5.5", wantStream: true},
+		{model: "gpt-5.5-2026-04-23", wantStream: true},
+		{model: "gpt-5.5-pro", wantStream: false},
+		{model: "gpt-5.5-pro-2026-04-23", wantStream: false},
+		{model: "gpt-5.4", wantStream: true},
+		{model: "gpt-5.4-pro", wantStream: true},
+		{model: "gpt-5.2-codex", wantStream: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			req := New("test-key").buildChatResponsesRequest(
+				config.WithContext(context.Background(), config.DefaultConfig()),
+				"system",
+				[]api.Message{{Role: "user", Content: "hi"}},
+				tt.model,
+			)
+			if req.Stream != tt.wantStream {
+				t.Fatalf("Stream = %v, want %v", req.Stream, tt.wantStream)
+			}
+
+			raw := marshalResponsesRequestMap(t, req)
+			if tt.wantStream {
+				if raw["stream"] != true {
+					t.Fatalf("JSON stream = %#v, want true", raw["stream"])
+				}
+				return
+			}
+			if raw["stream"] == true {
+				t.Fatalf("JSON stream = true, want false or omitted")
+			}
+		})
+	}
+}
+
+func TestBuildChatResponsesRequest_GPT55ReasoningXHighAndMaxOutput(t *testing.T) {
+	tests := []string{"gpt-5.5", "gpt-5.5-pro"}
+	for _, model := range tests {
+		t.Run(model, func(t *testing.T) {
+			cfg := config.DefaultConfig()
+			cfg.Thinking.Enabled = true
+			cfg.Thinking.Level = "xhigh"
+			ctx := config.WithContext(context.Background(), cfg)
+
+			req := New("test-key").buildChatResponsesRequest(ctx, "system", []api.Message{{Role: "user", Content: "hi"}}, model)
+			if req.Reasoning == nil || req.Reasoning.Effort != "xhigh" {
+				t.Fatalf("Reasoning = %#v, want effort xhigh", req.Reasoning)
+			}
+			if req.MaxOutputTokens != 128000 {
+				t.Fatalf("MaxOutputTokens = %d, want 128000", req.MaxOutputTokens)
+			}
+		})
+	}
+}
+
+func TestBuildChatResponsesRequest_GPT55ThinkingOffOmitsReasoning(t *testing.T) {
+	tests := []string{"gpt-5.5", "gpt-5.5-pro"}
+	for _, model := range tests {
+		t.Run(model, func(t *testing.T) {
+			req := New("test-key").buildChatResponsesRequest(
+				config.WithContext(context.Background(), config.DefaultConfig()),
+				"system",
+				[]api.Message{{Role: "user", Content: "hi"}},
+				model,
+			)
+			if req.Reasoning != nil {
+				t.Fatalf("Reasoning = %#v, want nil", req.Reasoning)
+			}
+		})
+	}
+}
+
+func TestBuildChatResponsesRequest_CodexReasoningFallbackStillLow(t *testing.T) {
+	req := New("test-key").buildChatResponsesRequest(
+		config.WithContext(context.Background(), config.DefaultConfig()),
+		"system",
+		[]api.Message{{Role: "user", Content: "hi"}},
+		"gpt-5.2-codex",
+	)
+	if !req.Stream {
+		t.Fatal("Stream = false, want true for gpt-5.2-codex")
+	}
+	if req.Reasoning == nil || req.Reasoning.Effort != "low" {
+		t.Fatalf("Reasoning = %#v, want low fallback", req.Reasoning)
+	}
+}
+
+func TestLongRunningResponsesHTTPClientDisablesHeaderTimeout(t *testing.T) {
+	baseTransport := &http.Transport{ResponseHeaderTimeout: 60 * time.Second}
+	baseClient := &http.Client{
+		Timeout:   3 * time.Minute,
+		Transport: baseTransport,
+	}
+
+	got := newLongRunningResponsesHTTPClient(baseClient)
+	if got.Timeout != baseClient.Timeout {
+		t.Fatalf("Timeout = %v, want %v", got.Timeout, baseClient.Timeout)
+	}
+	transport, ok := got.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("Transport type = %T, want *http.Transport", got.Transport)
+	}
+	if transport.ResponseHeaderTimeout != 0 {
+		t.Fatalf("ResponseHeaderTimeout = %v, want 0", transport.ResponseHeaderTimeout)
+	}
+	if baseTransport.ResponseHeaderTimeout != 60*time.Second {
+		t.Fatalf("base ResponseHeaderTimeout mutated to %v", baseTransport.ResponseHeaderTimeout)
+	}
+}
+
+func marshalResponsesRequestMap(t *testing.T, req ResponsesRequest) map[string]any {
+	t.Helper()
+	payload, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(payload, &raw); err != nil {
+		t.Fatalf("unmarshal request: %v", err)
+	}
+	return raw
+}

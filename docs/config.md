@@ -82,6 +82,7 @@ provider_models:
         default_model: qwen2.5-coder:7b
         max_output_tokens: 4096
     openai:
+        # default_model は gpt-5.4 のままです。GPT-5.5 / GPT-5.5 Pro は明示指定で利用できます。
         default_model: gpt-5.4
         max_output_tokens: 16384
     openrouter:
@@ -371,6 +372,8 @@ echo password | sudo -S ...
 > **注意**: `/config` メニューには表示されません。Responses API ルーティングはプレフィックスマッチで自動判定されるため、通常は設定不要です。
 > カスタムモデルを Responses API で使いたい場合のみ、YAML 直接編集で `responses_api_models` にモデル名を追加してください。
 
+`gpt-5.5` は Responses API の streaming 経路で動作します。`gpt-5.5-pro` は Responses API 対応ですが streaming unsupported のため、XELYON は non-streaming 経路を使用します。GPT-5.5 Pro は cached input discount がなく、応答に数分かかる場合があります。background mode は未対応です。
+
 ```yaml
 openai:
   responses_api_models:
@@ -428,7 +431,7 @@ lsp:
 
 **対応モデル:**
 - **Claude**: Sonnet 4 以降
-- **OpenAI**: gpt-5.2 系
+- **OpenAI**: GPT-5 系（GPT-5.5 / GPT-5.5 Pro を含む）
 - **Gemini**: 2.5 Pro 系（Flash は非対応）
 - **DeepSeek**: 自動で reasoner モデルに切り替わります
 
@@ -456,6 +459,7 @@ lsp:
 **Codex モデルの制限:**
 
 OpenAI Codex モデル（`gpt-5.2-codex`, `gpt-5.1-codex` 等）は reasoning が必須のため、`/think off` → `low` レベルにフォールバックします。
+GPT-5.5 / GPT-5.5 Pro は `/think xhigh` で `reasoning.effort: xhigh` を送信し、`/think off` では reasoning を送信しません。
 
 ### ツール確認設定 (`tool_confirm`)（レガシー）
 

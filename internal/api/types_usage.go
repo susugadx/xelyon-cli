@@ -16,3 +16,21 @@ type Usage struct {
 
 // UsageCallback は usage 受信時に呼ばれるコールバック
 type UsageCallback func(usage Usage)
+
+// UsageFromOutputTokensIncludingThinking は、provider の出力合計が thinking/reasoning
+// tokens を内包している usage を api.Usage の契約に正規化する。
+func UsageFromOutputTokensIncludingThinking(inputTokens, outputTokensIncludingThinking, cachedInputTokens, thinkingTokens int) Usage {
+	if thinkingTokens < 0 {
+		thinkingTokens = 0
+	}
+	outputTokens := outputTokensIncludingThinking - thinkingTokens
+	if outputTokens < 0 {
+		outputTokens = 0
+	}
+	return Usage{
+		InputTokens:       inputTokens,
+		OutputTokens:      outputTokens,
+		ThinkingTokens:    thinkingTokens,
+		CachedInputTokens: cachedInputTokens,
+	}
+}

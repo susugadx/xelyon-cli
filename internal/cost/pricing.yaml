@@ -5,6 +5,25 @@ openai:
     cachedinputcostperm: 0.125
     cachecreationcostperm: 1.25
   rules:
+    - contains: ["5.5-pro"]
+      pricing:
+        inputcostperm: 30.00
+        outputcostperm: 180.00
+        cachedinputcostperm: 30.00
+        cachecreationcostperm: 30.00
+    - contains: ["5.5"]
+      pricing:
+        inputcostperm: 5.00
+        outputcostperm: 30.00
+        cachedinputcostperm: 0.50
+        cachecreationcostperm: 5.00
+      long_input:
+        threshold: 272000
+        pricing:
+          inputcostperm: 10.00
+          outputcostperm: 45.00
+          cachedinputcostperm: 1.00
+          cachecreationcostperm: 10.00
     - contains: ["5.4-mini"]
       pricing:
         inputcostperm: 0.75

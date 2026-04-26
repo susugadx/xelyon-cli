@@ -12,6 +12,30 @@ func getOpenAIPricing(model string, promptTokenCount int) PricingInfo {
 	}
 
 	switch {
+	case strings.Contains(lm, "5.5-pro"):
+		// GPT-5.5 Pro: $30/$180 per million tokens。キャッシュ入力割引なし。
+		return PricingInfo{
+			InputCostPerM:         30.00,
+			OutputCostPerM:        180.00,
+			CachedInputCostPerM:   30.00,
+			CacheCreationCostPerM: 30.00,
+		}
+	case strings.Contains(lm, "5.5"):
+		// GPT-5.5: $5/$30 per million tokens。272K超は入力系2倍・出力1.5倍。
+		if promptTokenCount > 272000 {
+			return PricingInfo{
+				InputCostPerM:         10.00,
+				OutputCostPerM:        45.00,
+				CachedInputCostPerM:   1.00,
+				CacheCreationCostPerM: 10.00,
+			}
+		}
+		return PricingInfo{
+			InputCostPerM:         5.00,
+			OutputCostPerM:        30.00,
+			CachedInputCostPerM:   0.50,
+			CacheCreationCostPerM: 5.00,
+		}
 	case strings.Contains(lm, "5.4-mini"):
 		// GPT-5.4 Mini: $0.75/$4.50 per million tokens
 		return PricingInfo{

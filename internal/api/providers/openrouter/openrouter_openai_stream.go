@@ -60,15 +60,7 @@ func (p *Provider) handleNonStreamingResponse(ctx context.Context, resp *http.Re
 	spinner.Stop()
 
 	if p.usageCallback != nil {
-		cachedTokens := 0
-		if apiResp.Usage.PromptTokensDetails != nil {
-			cachedTokens = apiResp.Usage.PromptTokensDetails.CachedTokens
-		}
-		p.usageCallback(api.Usage{
-			InputTokens:       apiResp.Usage.PromptTokens,
-			OutputTokens:      apiResp.Usage.CompletionTokens,
-			CachedInputTokens: cachedTokens,
-		})
+		p.usageCallback(apiResp.Usage.ToUsage())
 	}
 
 	if len(apiResp.Choices) > 0 {

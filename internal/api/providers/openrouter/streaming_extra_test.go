@@ -30,7 +30,7 @@ func TestHandleStreamingResponse_EmitsToolCallsAndUsage(t *testing.T) {
 		`data: {"choices":[{"delta":{"content":"Hello"}}]}`,
 		`data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"read_file","arguments":""}}]}}]}`,
 		`data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"path\":\"/tmp/demo.txt\"}"}}]}}]}`,
-		`data: {"choices":[],"usage":{"prompt_tokens":9,"completion_tokens":4,"prompt_tokens_details":{"cached_tokens":2}}}`,
+		`data: {"choices":[],"usage":{"prompt_tokens":9,"completion_tokens":4,"prompt_tokens_details":{"cached_tokens":2},"completion_tokens_details":{"reasoning_tokens":1}}}`,
 		`data: [DONE]`,
 	}, "\n\n") + "\n\n"
 
@@ -47,8 +47,8 @@ func TestHandleStreamingResponse_EmitsToolCallsAndUsage(t *testing.T) {
 	if !strings.Contains(got, `"/tmp/demo.txt"`) {
 		t.Fatalf("result = %q, want tool arguments", got)
 	}
-	if usage.InputTokens != 9 || usage.OutputTokens != 4 || usage.CachedInputTokens != 2 {
-		t.Fatalf("usage = %+v, want input=9 output=4 cached=2", usage)
+	if usage.InputTokens != 9 || usage.OutputTokens != 3 || usage.CachedInputTokens != 2 || usage.ThinkingTokens != 1 {
+		t.Fatalf("usage = %+v, want input=9 output=3 cached=2 thinking=1", usage)
 	}
 }
 

@@ -36,10 +36,8 @@ func CalculateRequestCostWithCacheForConfig(cfg *config.Config, provider, model 
 		return 0.0
 	}
 
-	// キャッシュトークンも含めた総入力トークンで200Kティア判定
-	// Anthropic/Gemini公式: input + cache_read + cache_creation の合計でティア判定
-	totalInputForTier := usage.InputTokens + usage.CachedInputTokens + usage.CacheCreationTokens
-	pricing := GetPricingInfoForConfig(cfg, provider, model, totalInputForTier)
+	tierInputTokens := pricingTierInputTokensForUsage(cfg, provider, model, usage)
+	pricing := GetPricingInfoForConfig(cfg, provider, model, tierInputTokens)
 
 	cachedInputCost := float64(usage.CachedInputTokens) / 1_000_000.0 * pricing.CachedInputCostPerM
 	cacheCreationCost := float64(usage.CacheCreationTokens) / 1_000_000.0 * pricing.CacheCreationCostPerM

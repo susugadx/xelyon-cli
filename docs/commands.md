@@ -77,9 +77,13 @@ XELYON CLIで使用できる全コマンドのリファレンスです。
 例:
 ```
 > /model gpt-4o
+> /model gpt-5.5
+> /model gpt-5.5-pro
 > /model claude-sonnet-4-5-20250514
 > /model gemini-2.0-flash-exp
 ```
+
+`gpt-5.5` は OpenAI Responses API の streaming 経路、`gpt-5.5-pro` は streaming unsupported のため non-streaming 経路を使用します。GPT-5.5 Pro は応答に数分かかる場合があります。
 
 ### `/copy`
 

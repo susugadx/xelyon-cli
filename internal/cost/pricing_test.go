@@ -18,6 +18,10 @@ func TestGetOpenAIPricing_AllModels(t *testing.T) {
 		wantOutput float64
 		wantCached float64
 	}{
+		{name: "gpt-5.5", model: "gpt-5.5", ptc: 100000, wantInput: 5.00, wantOutput: 30.00, wantCached: 0.50},
+		{name: "gpt-5.5 long input", model: "gpt-5.5", ptc: 300000, wantInput: 10.00, wantOutput: 45.00, wantCached: 1.00},
+		{name: "gpt-5.5-pro", model: "gpt-5.5-pro", ptc: 100000, wantInput: 30.00, wantOutput: 180.00, wantCached: 30.00},
+		{name: "gpt-5.5-pro long input keeps standard pricing", model: "gpt-5.5-pro", ptc: 300000, wantInput: 30.00, wantOutput: 180.00, wantCached: 30.00},
 		{name: "gpt-5.4-nano", model: "gpt-5.4-nano", wantInput: 0.20, wantOutput: 1.25, wantCached: 0.02},
 		{name: "gpt-5.4", model: "gpt-5.4", wantInput: 2.50, wantOutput: 15.00, wantCached: 0.25},
 		{name: "gpt-5.4-pro", model: "gpt-5.4-pro", wantInput: 30.00, wantOutput: 180.00, wantCached: 3.00},
@@ -335,6 +339,49 @@ func TestCalculateRequestCostWithCache_Basic(t *testing.T) {
 	}
 }
 
+func TestCalculateRequestCostWithCache_OpenAIGPT55CachedTokensDoNotTriggerLongInputTier(t *testing.T) {
+	cost := CalculateRequestCostWithCache("openai", "gpt-5.5", api.Usage{
+		InputTokens:       200000,
+		CachedInputTokens: 100000,
+	})
+
+	// OpenAI cached_tokens は input_tokens の内訳なので、tier 判定は 200K のまま。
+	// uncached: 100K * $5.00 = $0.50, cached: 100K * $0.50 = $0.05
+	assertCostApprox(t, cost, 0.55)
+}
+
+func TestCalculateRequestCostWithCache_OpenAIGPT55LongInputUsesInputTokensOnly(t *testing.T) {
+	cost := CalculateRequestCostWithCache("openai", "gpt-5.5", api.Usage{
+		InputTokens:       300000,
+		CachedInputTokens: 100000,
+	})
+
+	// input_tokens 自体が 272K を超えた場合だけ GPT-5.5 long_input tier になる。
+	// uncached: 200K * $10.00 = $2.00, cached: 100K * $1.00 = $0.10
+	assertCostApprox(t, cost, 2.10)
+}
+
+func TestCalculateRequestCostWithCache_OpenRouterDelegatedOpenAICachedTokensDoNotTriggerLongInputTier(t *testing.T) {
+	cost := CalculateRequestCostWithCache("openrouter", "openai/gpt-5.5", api.Usage{
+		InputTokens:       200000,
+		CachedInputTokens: 100000,
+	})
+
+	assertCostApprox(t, cost, 0.55)
+}
+
+func TestCalculateRequestCostWithCache_ClaudeStillUsesCacheTokensForLongInputTier(t *testing.T) {
+	cost := CalculateRequestCostWithCache("claude", "claude-sonnet-4-5", api.Usage{
+		InputTokens:         150000,
+		CachedInputTokens:   50000,
+		CacheCreationTokens: 10000,
+	})
+
+	// Anthropic は input + cache_read + cache_creation の合計で 200K tier 判定する。
+	// uncached: 90K * $6.00 = $0.54, cached: 50K * $0.60 = $0.03, creation: 10K * $7.50 = $0.075
+	assertCostApprox(t, cost, 0.645)
+}
+
 func TestCalculateRequestCostWithCache_OllamaZero(t *testing.T) {
 	cost := CalculateRequestCostWithCache("ollama", "llama3", api.Usage{
 		InputTokens:  100000,
@@ -342,5 +389,13 @@ func TestCalculateRequestCostWithCache_OllamaZero(t *testing.T) {
 	})
 	if cost != 0.0 {
 		t.Errorf("ollama cost = %f, want 0.0", cost)
+	}
+}
+
+func assertCostApprox(t *testing.T, got, want float64) {
+	t.Helper()
+	const tolerance = 0.000001
+	if got < want-tolerance || got > want+tolerance {
+		t.Fatalf("cost = %f, want %f", got, want)
 	}
 }

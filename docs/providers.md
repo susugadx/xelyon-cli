@@ -53,6 +53,8 @@ export OPENAI_API_KEY=sk-...
 
 # 使用例
 xelyon --provider openai --model gpt-5.4
+xelyon --provider openai --model gpt-5.5
+xelyon --provider openai --model gpt-5.5-pro
 xelyon --provider openai --model gpt-5.4-mini
 xelyon --provider openai --model gpt-5.2
 xelyon --provider openai --model gpt-5.2-codex
@@ -62,19 +64,20 @@ xelyon --provider openai --model gpt-5.2-codex
 - 高品質な回答
 - 画像入力対応
 - 豊富なモデルラインナップ
-- **注意: 高コスト**（GPT-5.2: 入力 $1.75/1M, 出力 $14/1M）
+- **注意: 高コスト**（GPT-5.5: 入力 $5/1M, 出力 $30/1M、GPT-5.5 Pro: 入力 $30/1M, 出力 $180/1M）
 
 #### プロンプトキャッシュに関する注意
 
 XELYON は Responses API の `prompt_cache_key`（ルーティングヒント）と `prompt_cache_retention: "24h"` を送信していますが、GPT-5 系モデルではキャッシュが**不安定**です。
 
 - **GPT-5-nano / GPT-5-mini**: ほぼ機能せず（`cached_tokens=0` が頻発）
-- **GPT-5 / GPT-5.1 / GPT-5.2**: 不安定（ヒット率が低い場合あり）
+- **GPT-5 / GPT-5.1 / GPT-5.2 / GPT-5.4 / GPT-5.5**: 不安定（ヒット率が低い場合あり）
+- **GPT-5.5 Pro**: cached input discount なし（`cached_tokens` が返っても割引単価では計算しません）
 - **GPT-4o / o3-mini**: 正常動作
 
 `prompt_cache_key` はキャッシュ制御ではなく、同じ GPU にルーティングするための**ヒント**です。キャッシュ自体は OpenAI 側で自動的にプレフィックスマッチング（1024 トークン以上）で行われます。
 
-キャッシュヒット時は入力トークン 90% 割引ですが、現時点では GPT-5 系での効果は限定的です。コスト重視の場合は DeepSeek や Bedrock（Claude）の利用を推奨します。
+キャッシュヒット時は多くの OpenAI モデルで入力トークン割引がありますが、現時点では GPT-5 系での効果は限定的です。GPT-5.5 Pro は公式に cached input discount がないため、XELYON でも通常入力単価で計算します。コスト重視の場合は DeepSeek や Bedrock（Claude）の利用を推奨します。
 
 > 参考: [OpenAI Community - Caching is borked for GPT-5 models](https://community.openai.com/t/caching-is-borked-for-gpt-5-models/1359574)
 
@@ -82,7 +85,11 @@ XELYON は Responses API の `prompt_cache_key`（ルーティングヒント）
 
 `gpt-5.2-codex` などの Codex モデルは自動的に Responses API を使用します。
 
+GPT-5.5 系も OpenAI provider では Responses API を使用します。
+
 **対応モデル:**
+- `gpt-5.5`（Responses API + streaming）
+- `gpt-5.5-pro`（Responses API、streaming unsupported のため non-streaming 経路）
 - `gpt-5.2-codex`
 - `gpt-5.1-codex`
 - `gpt-5.1-codex-max`
@@ -95,9 +102,16 @@ XELYON は Responses API の `prompt_cache_key`（ルーティングヒント）
 - Compact API による効率的な履歴圧縮
 - ZDR（Zero Data Retention）対応
 
+**GPT-5.5 Pro の注意:**
+- streaming は公式に unsupported のため、XELYON は non-streaming Responses 経路を使用します。
+- 応答に数分かかる場合があります。background mode は今回未対応です。
+- function calling / structured outputs は Responses API 経路で利用します。
+
 **使用例:**
 ```bash
 xelyon --provider openai --model gpt-5.2-codex
+xelyon --provider openai --model gpt-5.5
+xelyon --provider openai --model gpt-5.5-pro
 ```
 
 ### 3. Gemini
@@ -302,7 +316,7 @@ xelyon
 |------------|------|------|-------|------|
 | **Claude** | 明示的（`cache_control`） | 安定 | 読み取り 90% OFF | `prompt_cache.enabled: true` で有効 |
 | **Bedrock** | 明示的（`cache_control`） | 安定 | 読み取り 90% OFF | Claude と同じ仕組み |
-| **OpenAI** | 自動（プレフィックス） | **不安定**（GPT-5系） | 読み取り 90% OFF | `prompt_cache_key` はルーティングヒントのみ |
+| **OpenAI** | 自動（プレフィックス） | **不安定**（GPT-5系） | モデル依存 | `prompt_cache_key` はルーティングヒントのみ。GPT-5.5 Pro は cached input discount なし |
 | **DeepSeek** | 自動 | 安定 | 読み取り割引あり | 設定不要 |
 | **Gemini** | 自動（暗黙的） | 安定 | - | Gemini 2.5 系で対応 |
 | **OpenRouter** | プロバイダー依存 | - | - | Anthropic モデル: 手動 `cache_control` 必要 |

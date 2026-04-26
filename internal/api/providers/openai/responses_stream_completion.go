@@ -1,7 +1,5 @@
 package openai
 
-import "github.com/susugadx/xelyon-cli/internal/api"
-
 func (s *responsesStreamState) handleCompletionEvent(chunk ResponsesStreamChunk) {
 	s.captureUsage(chunk)
 	s.appendFunctionCallsToOutput()
@@ -20,20 +18,7 @@ func (s *responsesStreamState) captureUsage(chunk ResponsesStreamChunk) {
 		return
 	}
 
-	cachedTokens := 0
-	if usage.InputTokensDetails != nil {
-		cachedTokens = usage.InputTokensDetails.CachedTokens
-	}
-	reasoningTokens := 0
-	if usage.OutputTokensDetails != nil {
-		reasoningTokens = usage.OutputTokensDetails.ReasoningTokens
-	}
-	s.lastUsage = &api.Usage{
-		InputTokens:       usage.InputTokens,
-		OutputTokens:      usage.OutputTokens,
-		ThinkingTokens:    reasoningTokens,
-		CachedInputTokens: cachedTokens,
-	}
+	s.lastUsage = responsesUsageToAPIUsage(usage)
 	s.debugf("[DEBUG OpenAI Responses] usage received: input=%d, output=%d, cached=%d\n",
-		usage.InputTokens, usage.OutputTokens, cachedTokens)
+		usage.InputTokens, usage.OutputTokens, s.lastUsage.CachedInputTokens)
 }
