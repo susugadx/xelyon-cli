@@ -234,7 +234,7 @@ func GetMaxOutputTokens(ctx context.Context, providerName, model string) int {
 	// 4. Extended Thinking 有効時は BudgetTokens を考慮
 	// adaptive thinking モデル（Claude Opus 4.7 / 4.6 など）は API が自動管理するため加算不要
 	// それ以外は max_tokens = budget_tokens + output_tokens
-	if IsThinkingEnabled(ctx) && (pName == "claude" || pName == "anthropic" || pName == "bedrock") {
+	if IsThinkingEnabled(ctx) && supportsAnthropicThinkingBudget(pName, model, catalogModel) {
 		if !isAdaptiveThinkingModel(catalogModel) {
 			budget := LevelToBudgetTokens(cfg.Thinking.Level)
 			return budget + maxTokens
@@ -242,6 +242,17 @@ func GetMaxOutputTokens(ctx context.Context, providerName, model string) int {
 	}
 
 	return maxTokens
+}
+
+func supportsAnthropicThinkingBudget(providerName, model, catalogModel string) bool {
+	switch providerName {
+	case "claude", "anthropic":
+		return true
+	case "bedrock":
+		return llmcatalog.BedrockModelFamilyFor(model, catalogModel) == llmcatalog.BedrockModelFamilyClaude
+	default:
+		return false
+	}
 }
 
 // SupportsImages はプロバイダー名から画像対応を判定

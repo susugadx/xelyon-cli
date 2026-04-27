@@ -9,7 +9,7 @@ XELYON は provider/model に応じて編集ツールを自動で切り替えま
 - OpenAI / Azure OpenAI / Gemini 系: `apply_patch`
 - Claude / Anthropic / DeepSeek 系: `str_replace` / `write_file` / `delete_file`
 - OpenRouter: `anthropic/...` / `deepseek/...` は legacy、`openai/...` / `google/...` / `gemini/...` は `apply_patch`
-- Bedrock: Claude family のみ対応し、編集ツールは legacy
+- Bedrock: Claude family は legacy 編集ツール。非 Claude family は Converse API 経路で対応予定
 
 `XELYON_EDIT_TOOL` を指定した場合は、この自動判定より環境変数の指定が優先されます。
 
@@ -350,7 +350,7 @@ xelyon --provider openrouter --model anthropic/claude-sonnet-4.6
 
 ### 9. Bedrock (AWS)
 
-現在の Bedrock provider は Claude on Bedrock 専用です。Amazon Nova など Claude 以外の Bedrock モデルは未対応で、今後 Converse API 経路で対応予定です。
+現在の Bedrock provider は Claude on Bedrock を `InvokeModelWithResponseStream` + Claude Messages 形式で実行します。Amazon Nova など Claude 以外の Bedrock モデルは Converse API 経路へ分離済みですが、実行処理は未実装です。
 
 ```bash
 # AWS 認証情報を設定（以下のいずれか）
@@ -443,7 +443,7 @@ xelyon
 | プロバイダー | 方式 | 状態 | 割引率 | 備考 |
 |------------|------|------|-------|------|
 | **Claude** | 明示的（`cache_control`） | 安定 | 読み取り 90% OFF | `prompt_cache.enabled: true` で有効 |
-| **Bedrock** | 明示的（`cache_control`） | 安定 | 読み取り 90% OFF | Claude と同じ仕組み |
+| **Bedrock(Claude)** | 明示的（`cache_control`） | 安定 | 読み取り 90% OFF | Claude と同じ仕組み |
 | **OpenAI** | 自動（プレフィックス） | **不安定**（GPT-5系） | モデル依存 | `prompt_cache_key` はルーティングヒントのみ。GPT-5.5 Pro は cached input discount なし |
 | **DeepSeek** | 自動 | 安定 | 読み取り割引あり | 設定不要 |
 | **Gemini** | 自動（暗黙的） | 安定 | - | Gemini 2.5 系で対応 |

@@ -95,7 +95,7 @@ func TestProvider_ChatWithTools_BuildsRequestFromContext(t *testing.T) {
 		t.Fatalf("ContentType = %q, want application/json", got)
 	}
 
-	var req BedrockRequest
+	var req BedrockClaudeMessagesRequest
 	if err := json.Unmarshal(mockClient.lastInput.Body, &req); err != nil {
 		t.Fatalf("json.Unmarshal(request) error = %v", err)
 	}
@@ -161,7 +161,7 @@ func TestProvider_ChatWithTools_BuildsAdaptiveThinkingForOpus47(t *testing.T) {
 		t.Fatal("InvokeModelWithResponseStream() should be called")
 	}
 
-	var req BedrockRequest
+	var req BedrockClaudeMessagesRequest
 	if err := json.Unmarshal(mockClient.lastInput.Body, &req); err != nil {
 		t.Fatalf("json.Unmarshal(request) error = %v", err)
 	}
@@ -180,7 +180,7 @@ func TestProvider_ChatWithTools_BuildsAdaptiveThinkingForOpus47(t *testing.T) {
 	assertBedrockThinkingBudgetOmitted(t, mockClient.lastInput.Body)
 }
 
-func TestProvider_ChatWithTools_RejectsNonClaudeBedrockModel(t *testing.T) {
+func TestProvider_ChatWithTools_SelectsConverseRouteForNonClaudeBedrockModel(t *testing.T) {
 	mockClient := &mockInvokeModelWithResponseStreamClient{err: errors.New("should not call bedrock")}
 	p := &Provider{client: mockClient}
 
@@ -192,11 +192,11 @@ func TestProvider_ChatWithTools_RejectsNonClaudeBedrockModel(t *testing.T) {
 
 	ctx := newBedrockTestContext(cfg)
 	_, err := p.ChatWithTools(ctx, "system prompt", []api.Message{{Role: "user", Content: "hello"}}, "")
-	if err == nil || !strings.Contains(err.Error(), "supports Anthropic Claude models only") {
-		t.Fatalf("ChatWithTools() error = %v, want non-Claude guard", err)
+	if err == nil || !strings.Contains(err.Error(), "ConverseStream route is selected but not implemented yet") {
+		t.Fatalf("ChatWithTools() error = %v, want ConverseStream route stub", err)
 	}
 	if mockClient.lastInput != nil {
-		t.Fatal("InvokeModelWithResponseStream() should not be called for non-Claude model")
+		t.Fatal("InvokeModelWithResponseStream() should not be called for Converse route")
 	}
 }
 
@@ -223,7 +223,7 @@ func TestProvider_ChatWithTools_UsesCatalogModelForOpus47Alias(t *testing.T) {
 		t.Fatalf("ModelId = %q, want raw alias model %q", got, model)
 	}
 
-	var req BedrockRequest
+	var req BedrockClaudeMessagesRequest
 	if err := json.Unmarshal(mockClient.lastInput.Body, &req); err != nil {
 		t.Fatalf("json.Unmarshal(request) error = %v", err)
 	}

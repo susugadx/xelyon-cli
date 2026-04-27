@@ -67,7 +67,7 @@ func newHeadlessRunner(query, model string, provider api.Provider, cfg *config.C
 
 	// Headless Mode は Normal Mode 相当: 親と同じツール除外
 	allowSubAgents := cfg == nil || cfg.SubAgentPrompt == ""
-	toolVisibility := resolveToolVisibilityPolicy(agent.ProviderName, model, toolSurfacePhaseNormal, toolVisibilityOptions{
+	toolVisibility := resolveToolVisibilityPolicyWithConfig(agent.ProviderName, model, agent.cfg(), toolSurfacePhaseNormal, toolVisibilityOptions{
 		allowSubAgents: allowSubAgents,
 	})
 	agent.registry().SetExcludedTools(toolVisibility.excluded())

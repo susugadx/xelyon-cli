@@ -3,6 +3,7 @@ package subagent
 import (
 	"strings"
 
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/investigation"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
 	promptfragments "github.com/susugadx/xelyon-cli/internal/prompt/fragments"
@@ -27,7 +28,12 @@ func ValidTaskType(t string) bool {
 
 // PromptForTaskType はタスクタイプと provider/model に応じたシステムプロンプトを返します。
 func PromptForTaskType(taskType string, providerName string, modelName string) string {
-	editToolMode := string(prompt.ResolveEditToolMode(providerName, modelName))
+	return PromptForTaskTypeWithConfig(taskType, providerName, modelName, nil)
+}
+
+// PromptForTaskTypeWithConfig はタスクタイプと provider/model/config に応じたシステムプロンプトを返します。
+func PromptForTaskTypeWithConfig(taskType string, providerName string, modelName string, cfg *config.Config) string {
+	editToolMode := string(prompt.ResolveEditToolModeWithConfig(providerName, modelName, cfg))
 	switch taskType {
 	case TaskTypeEdit:
 		return EditPromptForEditTool(editToolMode)

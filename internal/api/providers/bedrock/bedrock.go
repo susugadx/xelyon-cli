@@ -30,9 +30,10 @@ const (
 	bedrockEffortBetaHeader = "effort-2025-11-24"
 )
 
-// Provider は AWS Bedrock (Anthropic Claude) のプロバイダー実装
+// Provider は AWS Bedrock のプロバイダー実装。
 type Provider struct {
 	client            invokeModelWithResponseStreamClient
+	converseClient    converseStreamClient
 	region            string
 	mcpTools          []api.ToolDefinition // MCP ツール定義
 	usageCallback     api.UsageCallback
@@ -42,6 +43,10 @@ type Provider struct {
 
 type invokeModelWithResponseStreamClient interface {
 	InvokeModelWithResponseStream(ctx context.Context, params *bedrockruntime.InvokeModelWithResponseStreamInput, optFns ...func(*bedrockruntime.Options)) (*bedrockruntime.InvokeModelWithResponseStreamOutput, error)
+}
+
+type converseStreamClient interface {
+	ConverseStream(ctx context.Context, params *bedrockruntime.ConverseStreamInput, optFns ...func(*bedrockruntime.Options)) (*bedrockruntime.ConverseStreamOutput, error)
 }
 
 // New は新しい Bedrock Provider を作成
@@ -62,8 +67,9 @@ func New() (*Provider, error) {
 	client := bedrockruntime.NewFromConfig(cfg)
 
 	return &Provider{
-		client: client,
-		region: cfg.Region,
+		client:         client,
+		converseClient: client,
+		region:         cfg.Region,
 	}, nil
 }
 
@@ -108,21 +114,6 @@ func appendUniqueString(values []string, value string) []string {
 	return append(values, value)
 }
 
-func ensureBedrockClaudeModel(model, catalogModel string) error {
-	if isBedrockClaudeModel(model) || isBedrockClaudeModel(catalogModel) {
-		return nil
-	}
-	return fmt.Errorf("bedrock provider currently supports Anthropic Claude models only: model=%q catalog_model=%q", model, catalogModel)
-}
-
-func isBedrockClaudeModel(model string) bool {
-	m := strings.ToLower(strings.TrimSpace(model))
-	if m == "" {
-		return false
-	}
-	return strings.Contains(m, "claude") || strings.Contains(m, "anthropic")
-}
-
 // SupportsClaudeCompaction は Claude Compaction 対応状況を返す
 func (p *Provider) SupportsClaudeCompaction() bool {
 	return p.supportsClaudeCompactionWithConfig(p.effectiveConfig(), "")
@@ -157,9 +148,9 @@ func (p *Provider) IsFunctionCallingEnabled() bool {
 	return os.Getenv("BEDROCK_FUNCTION_CALLING") != "0"
 }
 
-// BedrockRequest は Bedrock InvokeModel 用リクエスト
+// BedrockClaudeMessagesRequest は Bedrock InvokeModel 用の Claude Messages リクエスト。
 // Claude API とは異なり anthropic_version をボディに含み、model/stream フィールドは不要
-type BedrockRequest struct {
+type BedrockClaudeMessagesRequest struct {
 	AnthropicVersion  string                    `json:"anthropic_version"`
 	AnthropicBeta     []string                  `json:"anthropic_beta,omitempty"`
 	CacheControl      *api.CacheControl         `json:"cache_control,omitempty"`
@@ -172,8 +163,8 @@ type BedrockRequest struct {
 	ContextManagement *claude.ContextManagement `json:"context_management,omitempty"`
 }
 
-// BedrockMultimodalRequest はマルチモーダル（画像付き）リクエスト
-type BedrockMultimodalRequest struct {
+// BedrockClaudeMultimodalRequest は Bedrock InvokeModel 用の Claude 画像付きリクエスト。
+type BedrockClaudeMultimodalRequest struct {
 	AnthropicVersion  string                    `json:"anthropic_version"`
 	AnthropicBeta     []string                  `json:"anthropic_beta,omitempty"`
 	CacheControl      *api.CacheControl         `json:"cache_control,omitempty"`
@@ -201,41 +192,45 @@ func buildBedrockThinkingConfig(model, level string) (*claude.ThinkingConfig, *c
 // ChatWithTools は Provider interface の実装
 func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
 	p.lastContentBlocks = nil
-	model = api.GetDefaultModelWithContext(ctx, model, "bedrock", defaultModel)
+	req := p.resolveBedrockRequestContext(ctx, model)
 
-	// Anthropic Messages API 形式に変換（role:"tool" → role:"user"+tool_result 等）
-	messages := claude.ConvertToAnthropicMessagesWithThinking(history, api.IsThinkingEnabled(ctx))
-
-	cfg := config.ResolveContext(ctx, p.effectiveConfig())
-	if cfg == nil {
-		cfg = config.DefaultConfig()
+	switch req.route {
+	case bedrockRouteClaudeMessages:
+		return p.chatWithClaudeMessages(ctx, systemPrompt, history, req)
+	case bedrockRouteConverseStream:
+		return p.chatWithConverseStream(ctx, systemPrompt, history, "", nil, req)
+	default:
+		return "", fmt.Errorf("unsupported bedrock route %q for model=%q catalog_model=%q", req.route, req.model, req.catalogModel)
 	}
-	catalogModel := cfg.ModelCatalogName("bedrock", model)
-	if err := ensureBedrockClaudeModel(model, catalogModel); err != nil {
+}
+
+func (p *Provider) chatWithClaudeMessages(ctx context.Context, systemPrompt string, history []api.Message, req bedrockRequestContext) (string, error) {
+	if err := ensureBedrockClaudeMessagesRoute(req); err != nil {
 		return "", err
 	}
-	pCfg, _ := cfg.GetProviderModelConfig("bedrock")
+
+	messages := claude.ConvertToAnthropicMessagesWithThinking(history, api.IsThinkingEnabled(ctx))
 
 	// Anthropic Version（config → フォールバック定数）
-	version := pCfg.AnthropicVersion
+	version := req.providerConfig.AnthropicVersion
 	if version == "" {
 		version = bedrockAnthropicVersion
 	}
 
-	reqBody := BedrockRequest{
+	reqBody := BedrockClaudeMessagesRequest{
 		AnthropicVersion: version,
-		AnthropicBeta:    pCfg.AnthropicBeta,
-		MaxTokens:        api.GetMaxOutputTokens(ctx, "bedrock", model),
-		System:           api.BuildSystemFieldWithConfig(systemPrompt, cfg),
+		AnthropicBeta:    req.providerConfig.AnthropicBeta,
+		MaxTokens:        api.GetMaxOutputTokens(ctx, "bedrock", req.model),
+		System:           api.BuildSystemFieldWithConfig(systemPrompt, req.cfg),
 		Messages:         messages,
 	}
-	if cfg.PromptCache.Enabled {
-		reqBody.CacheControl = api.NewCacheControlWithConfig(cfg)
+	if req.cfg.PromptCache.Enabled {
+		reqBody.CacheControl = api.NewCacheControlWithConfig(req.cfg)
 	}
 
 	// Extended Thinking 適用
 	if api.IsThinkingEnabled(ctx) {
-		reqBody.Thinking, reqBody.OutputConfig = buildBedrockThinkingConfig(catalogModel, cfg.Thinking.Level)
+		reqBody.Thinking, reqBody.OutputConfig = buildBedrockThinkingConfig(req.catalogModel, req.cfg.Thinking.Level)
 	}
 
 	// Tool Use: ツール定義を追加
@@ -243,10 +238,10 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		reqBody.Tools = claude.GetCombinedClaudeToolsWithContext(ctx, p.mcpTools)
 	}
 
-	reqBody.ContextManagement, reqBody.AnthropicBeta = buildBedrockContextManagement(catalogModel, cfg.Compression, reqBody.AnthropicBeta)
+	reqBody.ContextManagement, reqBody.AnthropicBeta = buildBedrockContextManagement(req.catalogModel, req.cfg.Compression, reqBody.AnthropicBeta)
 	reqBody.AnthropicBeta = mergeBedrockOutputBetaHeaders(reqBody.AnthropicBeta, reqBody.OutputConfig)
 
-	return p.invokeStream(ctx, model, reqBody)
+	return p.invokeClaudeMessagesStream(ctx, req.model, reqBody)
 }
 
 // ChatWithImage は画像付きメッセージで会話を行う
@@ -259,19 +254,24 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 		return p.ChatWithTools(ctx, systemPrompt, history, model)
 	}
 
-	model = api.GetDefaultModelWithContext(ctx, model, "bedrock", defaultModel)
+	req := p.resolveBedrockRequestContext(ctx, model)
+	switch req.route {
+	case bedrockRouteClaudeMessages:
+		return p.chatWithClaudeImage(ctx, systemPrompt, history, userMessage, image, req)
+	case bedrockRouteConverseStream:
+		return p.chatWithConverseStream(ctx, systemPrompt, history, userMessage, image, req)
+	default:
+		return "", fmt.Errorf("unsupported bedrock route %q for model=%q catalog_model=%q", req.route, req.model, req.catalogModel)
+	}
+}
+
+func (p *Provider) chatWithClaudeImage(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, req bedrockRequestContext) (string, error) {
+	if err := ensureBedrockClaudeMessagesRoute(req); err != nil {
+		return "", err
+	}
 
 	// Anthropic Messages API 形式に変換（role:"tool" → role:"user"+tool_result 等）
 	converted := claude.ConvertToAnthropicMessagesWithThinking(history, api.IsThinkingEnabled(ctx))
-
-	cfg := config.ResolveContext(ctx, p.effectiveConfig())
-	if cfg == nil {
-		cfg = config.DefaultConfig()
-	}
-	catalogModel := cfg.ModelCatalogName("bedrock", model)
-	if err := ensureBedrockClaudeModel(model, catalogModel); err != nil {
-		return "", err
-	}
 
 	var messages []interface{}
 	for _, msg := range converted {
@@ -298,28 +298,26 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	}
 	messages = append(messages, multimodalMessage)
 
-	pCfg, _ := cfg.GetProviderModelConfig("bedrock")
-
 	// Anthropic Version（config → フォールバック定数）
-	version := pCfg.AnthropicVersion
+	version := req.providerConfig.AnthropicVersion
 	if version == "" {
 		version = bedrockAnthropicVersion
 	}
 
-	reqBody := BedrockMultimodalRequest{
+	reqBody := BedrockClaudeMultimodalRequest{
 		AnthropicVersion: version,
-		AnthropicBeta:    pCfg.AnthropicBeta,
-		MaxTokens:        api.GetMaxOutputTokens(ctx, "bedrock", model),
-		System:           api.BuildSystemFieldWithConfig(systemPrompt, cfg),
+		AnthropicBeta:    req.providerConfig.AnthropicBeta,
+		MaxTokens:        api.GetMaxOutputTokens(ctx, "bedrock", req.model),
+		System:           api.BuildSystemFieldWithConfig(systemPrompt, req.cfg),
 		Messages:         messages,
 	}
-	if cfg.PromptCache.Enabled {
-		reqBody.CacheControl = api.NewCacheControlWithConfig(cfg)
+	if req.cfg.PromptCache.Enabled {
+		reqBody.CacheControl = api.NewCacheControlWithConfig(req.cfg)
 	}
 
 	// Extended Thinking 適用
 	if api.IsThinkingEnabled(ctx) {
-		reqBody.Thinking, reqBody.OutputConfig = buildBedrockThinkingConfig(catalogModel, cfg.Thinking.Level)
+		reqBody.Thinking, reqBody.OutputConfig = buildBedrockThinkingConfig(req.catalogModel, req.cfg.Thinking.Level)
 	}
 
 	// Tool Use: ツール定義を追加
@@ -327,10 +325,10 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 		reqBody.Tools = claude.GetCombinedClaudeToolsWithContext(ctx, p.mcpTools)
 	}
 
-	reqBody.ContextManagement, reqBody.AnthropicBeta = buildBedrockContextManagement(catalogModel, cfg.Compression, reqBody.AnthropicBeta)
+	reqBody.ContextManagement, reqBody.AnthropicBeta = buildBedrockContextManagement(req.catalogModel, req.cfg.Compression, reqBody.AnthropicBeta)
 	reqBody.AnthropicBeta = mergeBedrockOutputBetaHeaders(reqBody.AnthropicBeta, reqBody.OutputConfig)
 
-	return p.invokeStream(ctx, model, reqBody)
+	return p.invokeClaudeMessagesStream(ctx, req.model, reqBody)
 }
 
 func (p *Provider) effectiveConfig() *config.Config {
@@ -353,8 +351,8 @@ func (p *Provider) supportsClaudeCompactionWithConfig(cfg *config.Config, model 
 	return isBedrockCompactionSupported(cfg.ModelCatalogName("bedrock", model))
 }
 
-// invokeStream は Bedrock InvokeModelWithResponseStream を呼び出す共通処理
-func (p *Provider) invokeStream(ctx context.Context, model string, reqBody interface{}) (string, error) {
+// invokeClaudeMessagesStream は Claude Messages payload を Bedrock InvokeModelWithResponseStream へ送る。
+func (p *Provider) invokeClaudeMessagesStream(ctx context.Context, model string, reqBody interface{}) (string, error) {
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {
 		return "", fmt.Errorf("request marshal failed: %w", err)

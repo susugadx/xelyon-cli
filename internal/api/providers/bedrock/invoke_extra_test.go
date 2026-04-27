@@ -26,7 +26,7 @@ func newBedrockStreamOutput(reader *fakeResponseStreamReader) *bedrockruntime.In
 	return output
 }
 
-func TestInvokeStream_SuccessAndMarshalFailure(t *testing.T) {
+func TestInvokeClaudeMessagesStream_SuccessAndMarshalFailure(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		reader := &fakeResponseStreamReader{
 			events: make(chan bedrocktypes.ResponseStream, 2),
@@ -46,15 +46,15 @@ func TestInvokeStream_SuccessAndMarshalFailure(t *testing.T) {
 		ctx := ui.WithRuntime(context.Background(), ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard))
 		ctx = api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesOff)
 
-		got, err := p.invokeStream(ctx, "model-id", BedrockRequest{
+		got, err := p.invokeClaudeMessagesStream(ctx, "model-id", BedrockClaudeMessagesRequest{
 			AnthropicVersion: "test-version",
 			MaxTokens:        5,
 		})
 		if err != nil {
-			t.Fatalf("invokeStream() error = %v", err)
+			t.Fatalf("invokeClaudeMessagesStream() error = %v", err)
 		}
 		if got != "Hello" {
-			t.Fatalf("invokeStream() = %q, want %q", got, "Hello")
+			t.Fatalf("invokeClaudeMessagesStream() = %q, want %q", got, "Hello")
 		}
 		if mockClient.lastInput == nil {
 			t.Fatal("InvokeModelWithResponseStream() should be called")
@@ -69,11 +69,11 @@ func TestInvokeStream_SuccessAndMarshalFailure(t *testing.T) {
 
 	t.Run("marshalError", func(t *testing.T) {
 		p := &Provider{client: &mockInvokeModelWithResponseStreamClient{}}
-		_, err := p.invokeStream(context.Background(), "model-id", map[string]any{
+		_, err := p.invokeClaudeMessagesStream(context.Background(), "model-id", map[string]any{
 			"bad": func() {},
 		})
 		if err == nil || !strings.Contains(err.Error(), "request marshal failed") {
-			t.Fatalf("invokeStream() error = %v, want marshal failure", err)
+			t.Fatalf("invokeClaudeMessagesStream() error = %v, want marshal failure", err)
 		}
 	})
 }
@@ -100,7 +100,7 @@ func TestChatWithImage_WithoutImageFallsBackToTextRequest(t *testing.T) {
 		t.Fatalf("ModelId = %q, want %q", got, defaultModel)
 	}
 
-	var req BedrockRequest
+	var req BedrockClaudeMessagesRequest
 	if err := json.Unmarshal(mockClient.lastInput.Body, &req); err != nil {
 		t.Fatalf("json.Unmarshal(request) error = %v", err)
 	}
@@ -161,7 +161,7 @@ func TestChatWithImage_BuildsToolAndThinkingForMultimodalRequest(t *testing.T) {
 		t.Fatalf("ChatWithImage() error = %v, want wrapped bedrock API error", err)
 	}
 
-	var req BedrockMultimodalRequest
+	var req BedrockClaudeMultimodalRequest
 	if err := json.Unmarshal(mockClient.lastInput.Body, &req); err != nil {
 		t.Fatalf("json.Unmarshal(request) error = %v", err)
 	}
@@ -200,7 +200,7 @@ func TestChatWithImage_BuildsAdaptiveThinkingForOpus47(t *testing.T) {
 		t.Fatalf("ChatWithImage() error = %v, want wrapped bedrock API error", err)
 	}
 
-	var req BedrockMultimodalRequest
+	var req BedrockClaudeMultimodalRequest
 	if err := json.Unmarshal(mockClient.lastInput.Body, &req); err != nil {
 		t.Fatalf("json.Unmarshal(request) error = %v", err)
 	}
@@ -247,7 +247,7 @@ func TestChatWithImage_UsesCatalogModelForOpus47Alias(t *testing.T) {
 		t.Fatalf("ModelId = %q, want raw alias model %q", got, model)
 	}
 
-	var req BedrockMultimodalRequest
+	var req BedrockClaudeMultimodalRequest
 	if err := json.Unmarshal(mockClient.lastInput.Body, &req); err != nil {
 		t.Fatalf("json.Unmarshal(request) error = %v", err)
 	}

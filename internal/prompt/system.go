@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/investigation"
 	promptfragments "github.com/susugadx/xelyon-cli/internal/prompt/fragments"
 	promptplan "github.com/susugadx/xelyon-cli/internal/prompt/plan"
@@ -51,7 +52,12 @@ func GetSystemPromptByMode(editTool string) string {
 
 // GetSystemPromptForProvider は provider/model に応じた編集モードのシステムプロンプトを返す。
 func GetSystemPromptForProvider(providerName string, modelName string) string {
-	return buildSystemPromptForEditTool(string(ResolveEditToolMode(providerName, modelName)))
+	return GetSystemPromptForProviderWithConfig(providerName, modelName, nil)
+}
+
+// GetSystemPromptForProviderWithConfig は provider/model/config に応じた編集モードのシステムプロンプトを返す。
+func GetSystemPromptForProviderWithConfig(providerName string, modelName string, cfg *config.Config) string {
+	return buildSystemPromptForEditTool(string(ResolveEditToolModeWithConfig(providerName, modelName, cfg)))
 }
 
 func buildSystemPromptPrefix(surface investigation.Surface) string {

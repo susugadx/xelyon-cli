@@ -134,6 +134,22 @@ func TestGetMaxOutputTokens_ClaudeOpus47FamilyUsesCatalogLimit(t *testing.T) {
 	}
 }
 
+func TestGetMaxOutputTokens_BedrockConverseModelDoesNotAddClaudeThinkingBudget(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.ProviderModels["bedrock"] = config.ProviderModelConfig{
+		DefaultModel:     "amazon.nova-pro-v1:0",
+		MaxOutputTokens:  4096,
+		AnthropicVersion: "bedrock-2023-05-31",
+	}
+	cfg.Thinking.Enabled = true
+	cfg.Thinking.Level = "high"
+
+	ctx := config.WithContext(context.Background(), cfg)
+	if got := GetMaxOutputTokens(ctx, "bedrock", "amazon.nova-pro-v1:0"); got != 4096 {
+		t.Fatalf("GetMaxOutputTokens(bedrock, nova) = %d, want 4096 without Claude thinking budget", got)
+	}
+}
+
 func TestLevelToBudgetTokens(t *testing.T) {
 	tests := []struct {
 		name  string

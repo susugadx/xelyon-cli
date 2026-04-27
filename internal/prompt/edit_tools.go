@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
 )
 
 // EditToolMode は編集ツール露出と編集ガイドの切り替えモードです。
@@ -31,6 +32,11 @@ func NormalizeEditToolMode(editTool string) EditToolMode {
 
 // ResolveEditToolMode は provider/model と環境変数上書きに基づいて編集ツールモードを解決します。
 func ResolveEditToolMode(providerName string, modelName string) EditToolMode {
+	return ResolveEditToolModeWithConfig(providerName, modelName, nil)
+}
+
+// ResolveEditToolModeWithConfig は provider/model/config に基づいて編集ツールモードを解決します。
+func ResolveEditToolModeWithConfig(providerName string, modelName string, cfg *config.Config) EditToolMode {
 	if env := strings.TrimSpace(os.Getenv("XELYON_EDIT_TOOL")); env != "" {
 		return NormalizeEditToolMode(env)
 	}
@@ -53,7 +59,11 @@ func ResolveEditToolMode(providerName string, modelName string) EditToolMode {
 	}
 
 	if provider == "bedrock" {
-		return EditToolModeLegacy
+		catalogModel := bedrockCatalogModel(modelName, cfg)
+		if llmcatalog.BedrockModelFamilyFor(modelName, catalogModel) == llmcatalog.BedrockModelFamilyClaude {
+			return EditToolModeLegacy
+		}
+		return EditToolModeApplyPatch
 	}
 
 	switch provider {
@@ -64,4 +74,14 @@ func ResolveEditToolMode(providerName string, modelName string) EditToolMode {
 	default:
 		return EditToolModeApplyPatch
 	}
+}
+
+func bedrockCatalogModel(modelName string, cfg *config.Config) string {
+	if cfg == nil {
+		return modelName
+	}
+	if strings.TrimSpace(modelName) == "" {
+		modelName = cfg.GetEffectiveModelForProvider("bedrock")
+	}
+	return cfg.ModelCatalogName("bedrock", modelName)
 }

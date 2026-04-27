@@ -84,9 +84,38 @@ func TestGetProviderPrefix_AnthropicWithSpaces(t *testing.T) {
 
 func TestGetProviderPrefix_Bedrock(t *testing.T) {
 	bedrock := GetProviderPrefix("bedrock")
-	claude := GetProviderPrefix("claude")
-	if bedrock != claude {
-		t.Error("bedrock and claude should return identical prefixes")
+	if bedrock != "" {
+		t.Error("provider-only bedrock prefix should be empty because Bedrock route depends on model family")
+	}
+}
+
+func TestBuildProviderSystemPrompt_BedrockClaudeModel(t *testing.T) {
+	base := "Header\n## Workflow Rules\nRules"
+	result := BuildProviderSystemPromptWithConfig(base, "bedrock", "global.anthropic.claude-sonnet-4-6-v1", config.DefaultConfig())
+	if !strings.Contains(result, "### Claude-specific") {
+		t.Fatal("Bedrock Claude model should receive Claude-specific provider notes")
+	}
+}
+
+func TestBuildProviderSystemPrompt_BedrockConverseModelReturnsBase(t *testing.T) {
+	base := "Header\n## Workflow Rules\nRules"
+	result := BuildProviderSystemPromptWithConfig(base, "bedrock", "amazon.nova-pro-v1:0", config.DefaultConfig())
+	if result != base {
+		t.Fatalf("Bedrock non-Claude model should not receive Claude provider notes, got %q", result)
+	}
+}
+
+func TestBuildProviderSystemPrompt_BedrockCatalogClaudeAlias(t *testing.T) {
+	base := "Header\n## Workflow Rules\nRules"
+	cfg := config.DefaultConfig()
+	cfg.ProviderModels["bedrock"] = config.ProviderModelConfig{
+		DefaultModel: "corp-bedrock-sonnet46",
+		CatalogModel: "global.anthropic.claude-sonnet-4-6-v1",
+	}
+
+	result := BuildProviderSystemPromptWithConfig(base, "bedrock", "corp-bedrock-sonnet46", cfg)
+	if !strings.Contains(result, "### Claude-specific") {
+		t.Fatal("Bedrock catalog_model Claude alias should receive Claude-specific provider notes")
 	}
 }
 

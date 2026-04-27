@@ -48,7 +48,7 @@ func directErrorHint() string {
 }
 
 func preferredDirectReadDetail(execCtx tools.ExecutionContext, route filetool.GatherContextDirectRoute) string {
-	if prompt.ResolveEditToolMode(execCtx.ProviderName, execCtx.Model) == prompt.EditToolModeApplyPatch && route.PrefersFullRead() {
+	if prompt.ResolveEditToolModeWithConfig(execCtx.ProviderName, execCtx.Model, execCtx.Config) == prompt.EditToolModeApplyPatch && route.PrefersFullRead() {
 		return "full"
 	}
 	return "auto"

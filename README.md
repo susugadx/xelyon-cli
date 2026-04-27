@@ -114,15 +114,15 @@ Language Server Protocol (LSP) を活用してIDE並みのコード理解を実�
 - **`/tokens`**: 現在のトークン使用量と上限を確認
 - **Project Map 自動注入**: 起動時は root manifest 寄りの軽量マップだけを注入し、詳細シンボルは必要時に取得。大規模 repo でも固定コストを抑制
 - **自動圧縮**: Context 100K または 80% 到達で自動的に履歴を圧縮（デフォルトON）
-- **圧縮専用モデル**: OpenAI は GPT-5 Mini、Gemini は Flash-Lite、Claude/Bedrock は Haiku で低コスト圧縮
+- **圧縮専用モデル**: OpenAI は GPT-5 Mini、Gemini は Flash-Lite、Claude/Bedrock(Claude) は Haiku で低コスト圧縮
 - **手動圧縮**: `/compress [N]` で履歴を圧縮（最新N件を保持）
 - **OpenAI Compact API**: `/compress --compact` でOpenAI独自の圧縮（ユーザーメッセージ保持）
 - **80%/90%警告**: 上限接近時に自動で警告表示
 - **トークン上限エラー時の提案**: エラー発生時に `/compress` または `/clear` を案内
 - **Assistant narration clearing**: ツール呼び出し時に表示した短い実況テキストは History 保存時に自動削除し、入力トークンの再送を抑制
 - **ツール結果の自動truncate**: 3ターン以上前のツール結果（50行超）を送信時に自動圧縮（先頭20行+末尾5行を保持）。元の履歴は保持され、API送信時にのみ適用
-- **Claude系の server-side tool clearing**: Claude / Bedrock / OpenRouter(Claude models) では `clear_tool_uses` により古い `tool_use` / `tool_result` ペア構造をサーバー側で削減し、compaction 発動前に入力トークンを節約
-- **プロンプトキャッシュ最適化**: Claude/Bedrock利用時、安定区間の末尾userメッセージにBPを配置し、古い履歴のキャッシュHIT率を向上（`prompt_cache.enabled: true`で有効）。Opus 4.6の最低キャッシュトークン数（4096）に対応するため、system promptの最終ブロックにcache_controlを配置
+- **Claude系の server-side tool clearing**: Claude / Bedrock(Claude) / OpenRouter(Claude models) では `clear_tool_uses` により古い `tool_use` / `tool_result` ペア構造をサーバー側で削減し、compaction 発動前に入力トークンを節約
+- **プロンプトキャッシュ最適化**: Claude/Bedrock(Claude) 利用時、安定区間の末尾userメッセージにBPを配置し、古い履歴のキャッシュHIT率を向上（`prompt_cache.enabled: true`で有効）。Opus 4.6の最低キャッシュトークン数（4096）に対応するため、system promptの最終ブロックにcache_controlを配置
 - **Long Context 料金自動判定**: Claude/Gemini Pro で200Kトークン超のリクエスト時、long context 料金ティアを自動適用。キャッシュトークン（cache_read + cache_creation）も含めた総入力トークンでティア判定
 
 ### 📈 リアルタイムトークン表示

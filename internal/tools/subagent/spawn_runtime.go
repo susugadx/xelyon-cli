@@ -63,7 +63,7 @@ func applySubAgentPrompt(cfg *config.Config, taskType string, provider api.Provi
 	if cfg == nil || provider == nil {
 		return
 	}
-	cfg.SubAgentPrompt = PromptForTaskType(taskType, provider.Name(), model)
+	cfg.SubAgentPrompt = PromptForTaskTypeWithConfig(taskType, provider.Name(), model, cfg)
 }
 
 func cloneConfigForSub(cfg *config.Config, mainProvider, taskType, model, reasoningEffort string) (*config.Config, string, error) {

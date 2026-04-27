@@ -94,8 +94,8 @@ func TestDefaultRegion(t *testing.T) {
 	})
 }
 
-func TestBedrockRequest_JSON(t *testing.T) {
-	req := BedrockRequest{
+func TestBedrockClaudeMessagesRequest_JSON(t *testing.T) {
+	req := BedrockClaudeMessagesRequest{
 		AnthropicVersion: bedrockAnthropicVersion,
 		MaxTokens:        4096,
 		System:           "You are a helpful assistant.",
@@ -145,8 +145,8 @@ func TestBedrockRequest_JSON(t *testing.T) {
 	}
 }
 
-func TestBedrockRequest_WithAnthropicBeta(t *testing.T) {
-	req := BedrockRequest{
+func TestBedrockClaudeMessagesRequest_WithAnthropicBeta(t *testing.T) {
+	req := BedrockClaudeMessagesRequest{
 		AnthropicVersion: bedrockAnthropicVersion,
 		AnthropicBeta:    []string{"context-1m-2025-08-07"},
 		MaxTokens:        4096,
@@ -175,8 +175,8 @@ func TestBedrockRequest_WithAnthropicBeta(t *testing.T) {
 	}
 }
 
-func TestBedrockRequest_WithTopLevelCacheControl(t *testing.T) {
-	req := BedrockRequest{
+func TestBedrockClaudeMessagesRequest_WithTopLevelCacheControl(t *testing.T) {
+	req := BedrockClaudeMessagesRequest{
 		AnthropicVersion: bedrockAnthropicVersion,
 		CacheControl:     &api.CacheControl{Type: "ephemeral"},
 		MaxTokens:        4096,
@@ -272,10 +272,10 @@ func containsString(values []string, want string) bool {
 	return false
 }
 
-func TestBedrockRequest_ConfigVersion(t *testing.T) {
+func TestBedrockClaudeMessagesRequest_ConfigVersion(t *testing.T) {
 	// config から version を取得する場合のテスト
 	customVersion := "bedrock-2024-01-01"
-	req := BedrockRequest{
+	req := BedrockClaudeMessagesRequest{
 		AnthropicVersion: customVersion,
 		MaxTokens:        4096,
 		System:           "System prompt",
@@ -299,8 +299,8 @@ func TestBedrockRequest_ConfigVersion(t *testing.T) {
 	}
 }
 
-func TestBedrockRequest_WithThinking(t *testing.T) {
-	req := BedrockRequest{
+func TestBedrockClaudeMessagesRequest_WithThinking(t *testing.T) {
+	req := BedrockClaudeMessagesRequest{
 		AnthropicVersion: bedrockAnthropicVersion,
 		MaxTokens:        4096,
 		System:           "System prompt",
@@ -336,8 +336,8 @@ func TestBedrockRequest_WithThinking(t *testing.T) {
 	}
 }
 
-func TestBedrockRequest_WithTools(t *testing.T) {
-	req := BedrockRequest{
+func TestBedrockClaudeMessagesRequest_WithTools(t *testing.T) {
+	req := BedrockClaudeMessagesRequest{
 		AnthropicVersion: bedrockAnthropicVersion,
 		MaxTokens:        4096,
 		System:           "System prompt",

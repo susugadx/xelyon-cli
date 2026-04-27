@@ -18,7 +18,7 @@ func TestResolveEditToolMode(t *testing.T) {
 		{name: "openrouter openai uses apply_patch", provider: "openrouter", model: "openai/gpt-5.4"},
 		{name: "openrouter google uses apply_patch", provider: "openrouter", model: "google/gemini-2.5-pro"},
 		{name: "bedrock claude family uses legacy", provider: "bedrock", model: "global.anthropic.claude-sonnet-4-6-v1", wantLegacy: true},
-		{name: "bedrock is claude-only legacy in phase 1", provider: "bedrock", model: "amazon.nova-pro-v1:0", wantLegacy: true},
+		{name: "bedrock non-claude uses apply_patch", provider: "bedrock", model: "amazon.nova-pro-v1:0"},
 	}
 
 	for _, tt := range tests {

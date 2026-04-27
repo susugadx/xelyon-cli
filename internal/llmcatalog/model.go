@@ -179,7 +179,7 @@ func InferProviderFromModel(model string) string {
 		return "claude"
 	case strings.HasPrefix(normalized, "deepseek"):
 		return "deepseek"
-	case strings.HasPrefix(normalized, "global.anthropic."):
+	case IsBedrockModelID(normalized):
 		return "bedrock"
 	case strings.Contains(normalized, "/"):
 		return "openrouter"

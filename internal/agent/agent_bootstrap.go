@@ -52,7 +52,7 @@ func NewAgentWithRuntime(model string, provider api.Provider, headless bool, run
 	lspClient := newAgentLSPClient(cfg, errOut)
 	providerRuntimeName := providerRuntimeNameFromProvider(provider)
 	providerConfigKey := providerConfigKeyFromProvider(provider)
-	toolVisibility := resolveToolVisibilityPolicy(providerRuntimeName, model, toolSurfacePhaseNormal, toolVisibilityOptions{allowSubAgents: true})
+	toolVisibility := resolveToolVisibilityPolicyWithConfig(providerRuntimeName, model, cfg, toolSurfacePhaseNormal, toolVisibilityOptions{allowSubAgents: true})
 
 	configureMCPTools(provider, mcpManager.GetTools(), errOut)
 	runtime.effectiveRegistry().SetExcludedTools(toolVisibility.excluded())
@@ -142,7 +142,7 @@ func setupMCPManager(cfg *config.Config, headless bool, out, errOut io.Writer, r
 
 func buildAgentSystemPrompt(provider api.Provider, model string, cfg *config.Config, manager *mcp.Manager) string {
 	providerName := providerRuntimeNameFromProvider(provider)
-	systemPrompt := prompt.GetSystemPromptForProvider(providerName, model)
+	systemPrompt := prompt.GetSystemPromptForProviderWithConfig(providerName, model, cfg)
 	if manager != nil && len(manager.GetTools()) > 0 {
 		systemPrompt += buildMCPToolsPrompt(manager)
 	}

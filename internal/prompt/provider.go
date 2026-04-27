@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
 	promptfragments "github.com/susugadx/xelyon-cli/internal/prompt/fragments"
 )
 
@@ -40,23 +41,40 @@ var providerPrefixes = map[string]string{
 // providerAliases はプロバイダー名のエイリアスを正規名に変換するマップ
 var providerAliases = map[string]string{
 	"anthropic": "claude",
-	"bedrock":   "claude", // AWS Bedrock の裏は Claude
 	"azure":     "openai", // Azure OpenAI は OpenAI Responses 系
 }
 
 // GetProviderPrefix はプロバイダー名に応じたプレフィックスを返す
 // 未登録プロバイダーは空文字を返す
 func GetProviderPrefix(provider string) string {
+	return getProviderPrefixForModel(provider, "", nil)
+}
+
+func getProviderPrefixForModel(provider string, model string, cfg *config.Config) string {
 	name := config.NormalizeProviderName(provider)
-	if name == "bedrock" {
-		name = "claude"
-	} else {
+	if name != "bedrock" {
 		name = config.CanonicalProviderName(name)
 	}
 	if canonical, ok := providerAliases[name]; ok {
 		name = canonical
 	}
+	if name == "bedrock" {
+		if bedrockPromptFamily(model, cfg) == llmcatalog.BedrockModelFamilyClaude {
+			name = "claude"
+		}
+	}
 	return providerPrefixes[name]
+}
+
+func bedrockPromptFamily(model string, cfg *config.Config) llmcatalog.BedrockModelFamily {
+	catalogModel := model
+	if cfg != nil {
+		if strings.TrimSpace(model) == "" {
+			model = cfg.GetEffectiveModelForProvider("bedrock")
+		}
+		catalogModel = cfg.ModelCatalogName("bedrock", model)
+	}
+	return llmcatalog.BedrockModelFamilyFor(model, catalogModel)
 }
 
 const workflowRulesHeader = "\n## Workflow Rules\n"
@@ -64,7 +82,7 @@ const workflowRulesHeader = "\n## Workflow Rules\n"
 // BuildProviderSystemPromptWithConfig は明示指定した設定を使ってプロバイダー別ノートを挿入する。
 // シグネチャは呼び出し元との互換性のため model, cfg を維持する。
 func BuildProviderSystemPromptWithConfig(base, providerName, model string, cfg *config.Config) string {
-	prefix := strings.TrimSpace(GetProviderPrefix(providerName))
+	prefix := strings.TrimSpace(getProviderPrefixForModel(providerName, model, cfg))
 	if prefix == "" {
 		return base
 	}

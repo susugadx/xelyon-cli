@@ -38,7 +38,7 @@ func (m *PromptManager) RebuildSystemPromptForCurrentProvider() {
 	if providerName == "" {
 		providerName = providerRuntimeNameFromProvider(a.CurrentProvider)
 	}
-	systemPrompt := prompt.GetSystemPromptForProvider(providerName, a.CurrentModel)
+	systemPrompt := prompt.GetSystemPromptForProviderWithConfig(providerName, a.CurrentModel, a.cfg())
 	if a.mcpManager != nil && len(a.mcpManager.GetTools()) > 0 {
 		systemPrompt += buildMCPToolsPrompt(a.mcpManager)
 	}

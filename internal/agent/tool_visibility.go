@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/investigation"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
 )
@@ -33,7 +34,12 @@ const (
 )
 
 func resolveToolVisibilityPolicy(providerName string, modelName string, phase toolSurfacePhase, opts toolVisibilityOptions) toolVisibilityPolicy {
-	return newToolVisibilityPolicy(ResolveEditToolMode(providerName, modelName), phase, opts)
+	return resolveToolVisibilityPolicyWithConfig(providerName, modelName, nil, phase, opts)
+}
+
+func resolveToolVisibilityPolicyWithConfig(providerName string, modelName string, cfg *config.Config, phase toolSurfacePhase, opts toolVisibilityOptions) toolVisibilityPolicy {
+	editToolMode := string(prompt.ResolveEditToolModeWithConfig(providerName, modelName, cfg))
+	return newToolVisibilityPolicy(editToolMode, phase, opts)
 }
 
 func newToolVisibilityPolicy(editToolMode string, phase toolSurfacePhase, opts toolVisibilityOptions) toolVisibilityPolicy {
@@ -154,5 +160,5 @@ func (a *Agent) toolVisibilityPolicy(phase toolSurfacePhase, opts toolVisibility
 	if a == nil {
 		return newToolVisibilityPolicy(EditToolModeApplyPatch, phase, opts)
 	}
-	return resolveToolVisibilityPolicy(a.ProviderName, a.CurrentModel, phase, opts)
+	return resolveToolVisibilityPolicyWithConfig(a.ProviderName, a.CurrentModel, a.cfg(), phase, opts)
 }

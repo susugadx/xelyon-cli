@@ -51,6 +51,7 @@ func TestFindProviderByDefaultModelAndInferenceHelpers(t *testing.T) {
 		{model: "claude-sonnet-4-6", want: "claude"},
 		{model: "deepseek-chat", want: "deepseek"},
 		{model: "global.anthropic.claude-sonnet-4-6-v1", want: "bedrock"},
+		{model: "amazon.nova-pro-v1:0", want: "bedrock"},
 		{model: "anthropic/claude-sonnet-4.6", want: "openrouter"},
 		{model: "unknown-model", want: ""},
 	}
