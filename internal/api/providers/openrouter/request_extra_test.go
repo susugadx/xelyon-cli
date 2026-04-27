@@ -362,6 +362,74 @@ func TestBuildClaudeChatPayload_FixesCompactionCacheAndImageContent(t *testing.T
 	}
 }
 
+func TestBuildClaudeChatPayload_OmitsThinkingBlocksWithoutThinkingOption(t *testing.T) {
+	t.Setenv("OPENROUTER_FUNCTION_CALLING", "0")
+
+	cfg := config.DefaultConfig()
+	cfg.Compression.ClaudeCompaction = false
+
+	assistantMessage := api.Message{
+		Role: "assistant",
+		ToolCalls: []api.OpenAIToolCall{{
+			ID:   "toolu_01XYZ",
+			Type: "function",
+			Function: api.OpenAIToolCallFunction{
+				Name:      "read_file",
+				Arguments: `{"path":"/readme.md"}`,
+			},
+		}},
+	}
+	assistantMessage.SetAnthropicContentBlocks([]api.AnthropicContentBlock{
+		{Type: "thinking", Thinking: "need the file", Signature: "sig_1"},
+		{Type: "tool_use", ID: "toolu_01XYZ", Name: "read_file", Input: map[string]any{"path": "/readme.md"}},
+	})
+
+	p := New("test-key")
+	ctx, _ := newOpenRouterTestContext(t, cfg)
+
+	payload, err := p.buildClaudeChatPayload(
+		ctx,
+		"System prompt",
+		[]api.Message{
+			{Role: "user", Content: "Read a file"},
+			assistantMessage,
+		},
+		"",
+		"anthropic/claude-3.5-sonnet",
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("buildClaudeChatPayload() error = %v", err)
+	}
+
+	var body struct {
+		Messages []struct {
+			Role    string           `json:"role"`
+			Content []map[string]any `json:"content"`
+		} `json:"messages"`
+	}
+	if err := json.Unmarshal(payload, &body); err != nil {
+		t.Fatalf("json unmarshal failed: %v", err)
+	}
+
+	if len(body.Messages) != 2 {
+		t.Fatalf("len(messages) = %d, want 2", len(body.Messages))
+	}
+	assistantContent := body.Messages[1].Content
+	if len(assistantContent) != 1 {
+		t.Fatalf("assistant content = %#v, want only tool_use block", assistantContent)
+	}
+	if assistantContent[0]["type"] != "tool_use" {
+		t.Fatalf("assistant content[0].type = %v, want tool_use", assistantContent[0]["type"])
+	}
+	if _, ok := assistantContent[0]["thinking"]; ok {
+		t.Fatalf("assistant content leaked thinking block: %#v", assistantContent)
+	}
+	if _, ok := assistantContent[0]["signature"]; ok {
+		t.Fatalf("assistant content leaked thinking signature: %#v", assistantContent)
+	}
+}
+
 func TestBuildClaudeChatPayload_FunctionCallingDisabledOmitsTools(t *testing.T) {
 	t.Setenv("OPENROUTER_FUNCTION_CALLING", "0")
 

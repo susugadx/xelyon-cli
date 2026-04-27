@@ -17,6 +17,9 @@ import (
 type AnthropicContentBlock struct {
 	Type         string            `json:"type"`                    // "text", "tool_use", "tool_result"
 	Text         string            `json:"text,omitempty"`          // type="text" 用
+	Thinking     string            `json:"thinking,omitempty"`      // type="thinking" 用
+	Signature    string            `json:"signature,omitempty"`     // type="thinking" 用
+	Data         string            `json:"data,omitempty"`          // type="redacted_thinking" 用
 	ID           string            `json:"id,omitempty"`            // type="tool_use" 用
 	Name         string            `json:"name,omitempty"`          // type="tool_use" 用
 	Input        map[string]any    `json:"input,omitempty"`         // type="tool_use" 用
@@ -40,7 +43,13 @@ type AnthropicMessage struct {
 //   - role:"assistant" + ToolCalls → role:"assistant" + [{type:"tool_use",...}] (テキストがあれば先頭に text ブロック追加)
 //   - role:"tool" → role:"user" + [{type:"tool_result", tool_use_id:..., content:...}]
 //   - 連続する同一 role のメッセージはマージ（Anthropic API は user/assistant 交互を要求）
+//   - provider 専用の thinking block は含めない
 func ConvertToAnthropicMessages(history []api.Message) []AnthropicMessage {
+	return ConvertToAnthropicMessagesWithThinking(history, false)
+}
+
+// ConvertToAnthropicMessagesWithThinking は Claude/Bedrock の thinking 有効リクエストでのみ thinking block を再送する。
+func ConvertToAnthropicMessagesWithThinking(history []api.Message, includeThinking bool) []AnthropicMessage {
 	if len(history) == 0 {
 		return nil
 	}
@@ -49,6 +58,21 @@ func ConvertToAnthropicMessages(history []api.Message) []AnthropicMessage {
 
 	for _, msg := range history {
 		var converted AnthropicMessage
+
+		if msg.Role == "assistant" {
+			if blocks, ok := anthropicReplayBlocksFromMessage(msg, includeThinking); ok {
+				converted = AnthropicMessage{
+					Role:    "assistant",
+					Content: blocks,
+				}
+				if len(result) > 0 && result[len(result)-1].Role == converted.Role {
+					result[len(result)-1].Content = append(result[len(result)-1].Content, converted.Content...)
+				} else {
+					result = append(result, converted)
+				}
+				continue
+			}
+		}
 
 		switch {
 		case msg.Role == "tool":
@@ -67,6 +91,8 @@ func ConvertToAnthropicMessages(history []api.Message) []AnthropicMessage {
 		case msg.Role == "assistant" && len(msg.ToolCalls) > 0:
 			// assistant + ToolCalls → assistant + tool_use ブロック
 			var blocks []AnthropicContentBlock
+
+			blocks = appendLegacyThinkingBlocksForToolCalls(blocks, msg, includeThinking)
 
 			// テキスト部分があれば先頭に追加
 			if msg.Content != "" {
@@ -107,6 +133,7 @@ func ConvertToAnthropicMessages(history []api.Message) []AnthropicMessage {
 			if msg.Role == "assistant" && strings.Contains(msg.Content, "[COMPACTION]") {
 				compactionSummary, textContent := extractCompaction(msg.Content)
 				var blocks []AnthropicContentBlock
+				blocks = appendAnthropicThinkingBlocks(blocks, msg.AnthropicThinkingBlocks(), includeThinking)
 
 				if compactionSummary != "" {
 					blocks = append(blocks, AnthropicContentBlock{
@@ -131,14 +158,17 @@ func ConvertToAnthropicMessages(history []api.Message) []AnthropicMessage {
 				if textContent == "" {
 					textContent = "(empty)"
 				}
+				var blocks []AnthropicContentBlock
+				if msg.Role == "assistant" {
+					blocks = appendAnthropicThinkingBlocks(blocks, msg.AnthropicThinkingBlocks(), includeThinking)
+				}
+				blocks = append(blocks, AnthropicContentBlock{
+					Type: "text",
+					Text: textContent,
+				})
 				converted = AnthropicMessage{
-					Role: msg.Role,
-					Content: []AnthropicContentBlock{
-						{
-							Type: "text",
-							Text: textContent,
-						},
-					},
+					Role:    msg.Role,
+					Content: blocks,
 				}
 			}
 		}
@@ -152,6 +182,158 @@ func ConvertToAnthropicMessages(history []api.Message) []AnthropicMessage {
 	}
 
 	return result
+}
+
+func anthropicReplayBlocksFromMessage(msg api.Message, includeThinking bool) ([]AnthropicContentBlock, bool) {
+	if !includeThinking {
+		return nil, false
+	}
+	providerBlocks := msg.AnthropicContentBlocks()
+	if len(providerBlocks) == 0 {
+		return nil, false
+	}
+	if !orderedBlocksCoverToolCalls(providerBlocks, msg.ToolCalls) {
+		return nil, false
+	}
+
+	blocks := make([]AnthropicContentBlock, 0, len(providerBlocks))
+	for _, block := range providerBlocks {
+		converted, ok := convertAnthropicReplayBlock(block)
+		if ok {
+			blocks = append(blocks, converted)
+		}
+	}
+	if len(blocks) == 0 {
+		return nil, false
+	}
+	return blocks, true
+}
+
+func orderedBlocksCoverToolCalls(blocks []api.AnthropicContentBlock, toolCalls []api.OpenAIToolCall) bool {
+	toolUseCount := 0
+	toolUseIDs := make(map[string]struct{}, len(toolCalls))
+	for _, block := range blocks {
+		if block.Type != "tool_use" {
+			continue
+		}
+		if block.ID == "" || block.Name == "" {
+			return false
+		}
+		toolUseCount++
+		toolUseIDs[block.ID] = struct{}{}
+	}
+
+	if len(toolCalls) == 0 {
+		return toolUseCount == 0
+	}
+	if toolUseCount != len(toolCalls) {
+		return false
+	}
+
+	for _, tc := range toolCalls {
+		if tc.ID == "" {
+			return false
+		}
+		if _, ok := toolUseIDs[tc.ID]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func convertAnthropicReplayBlock(block api.AnthropicContentBlock) (AnthropicContentBlock, bool) {
+	switch block.Type {
+	case "text":
+		if block.Text == "" {
+			return AnthropicContentBlock{}, false
+		}
+		return AnthropicContentBlock{Type: "text", Text: block.Text}, true
+	case "thinking":
+		if block.Thinking == "" && block.Signature == "" {
+			return AnthropicContentBlock{}, false
+		}
+		return AnthropicContentBlock{
+			Type:      "thinking",
+			Thinking:  block.Thinking,
+			Signature: block.Signature,
+		}, true
+	case "redacted_thinking":
+		if block.Data == "" {
+			return AnthropicContentBlock{}, false
+		}
+		return AnthropicContentBlock{Type: "redacted_thinking", Data: block.Data}, true
+	case "tool_use":
+		input := cloneAnthropicInput(block.Input)
+		if input == nil {
+			input = map[string]any{}
+		}
+		return AnthropicContentBlock{
+			Type:  "tool_use",
+			ID:    block.ID,
+			Name:  block.Name,
+			Input: input,
+		}, true
+	case "compaction":
+		if block.Content == "" {
+			return AnthropicContentBlock{}, false
+		}
+		return AnthropicContentBlock{Type: "compaction", Content: block.Content}, true
+	default:
+		return AnthropicContentBlock{}, false
+	}
+}
+
+func cloneAnthropicInput(src map[string]any) map[string]any {
+	if len(src) == 0 {
+		return nil
+	}
+	dst := make(map[string]any, len(src))
+	for k, v := range src {
+		dst[k] = v
+	}
+	return dst
+}
+
+func appendLegacyThinkingBlocksForToolCalls(blocks []AnthropicContentBlock, msg api.Message, includeThinking bool) []AnthropicContentBlock {
+	if !includeThinking {
+		return blocks
+	}
+	if len(msg.AnthropicContentBlocks()) > 0 {
+		return blocks
+	}
+	thinkingBlocks := msg.AnthropicThinkingBlocks()
+	if len(thinkingBlocks) > 1 && len(msg.ToolCalls) > 1 {
+		return blocks
+	}
+	return appendAnthropicThinkingBlocks(blocks, thinkingBlocks, true)
+}
+
+func appendAnthropicThinkingBlocks(blocks []AnthropicContentBlock, thinkingBlocks []api.AnthropicThinkingBlock, includeThinking bool) []AnthropicContentBlock {
+	if !includeThinking || len(thinkingBlocks) == 0 {
+		return blocks
+	}
+	for _, block := range thinkingBlocks {
+		switch block.Type {
+		case "thinking":
+			if block.Thinking == "" && block.Signature == "" {
+				continue
+			}
+			blocks = append(blocks, AnthropicContentBlock{
+				Type:      "thinking",
+				Thinking:  block.Thinking,
+				Signature: block.Signature,
+			})
+		case "redacted_thinking":
+			if block.Data == "" {
+				continue
+			}
+			blocks = append(blocks, AnthropicContentBlock{
+				Type: "redacted_thinking",
+				Data: block.Data,
+			})
+		}
+	}
+	return blocks
 }
 
 // SetMessageCacheBreakpointsWithEnabled は prompt cache 有効時のみメッセージに breakpoints を設定する。

@@ -157,6 +157,254 @@ func TestConvertToAnthropicMessages_AssistantWithToolCalls(t *testing.T) {
 	}
 }
 
+func TestConvertToAnthropicMessages_WithThinkingBlocks(t *testing.T) {
+	assistantMessage := api.Message{
+		Role: "assistant",
+		ToolCalls: []api.OpenAIToolCall{
+			{
+				ID:   "toolu_01XYZ",
+				Type: "function",
+				Function: api.OpenAIToolCallFunction{
+					Name:      "read_file",
+					Arguments: `{"path":"/readme.md"}`,
+				},
+			},
+		},
+	}
+	assistantMessage.SetAnthropicThinkingBlocks([]api.AnthropicThinkingBlock{
+		{Type: "thinking", Thinking: "need the file", Signature: "sig_1"},
+	})
+
+	history := []api.Message{
+		{Role: "user", Content: "Read a file"},
+		assistantMessage,
+	}
+
+	result := ConvertToAnthropicMessagesWithThinking(history, true)
+	if len(result) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(result))
+	}
+	assistantMsg := result[1]
+	if len(assistantMsg.Content) != 2 {
+		t.Fatalf("assistant content length = %d, want thinking + tool_use", len(assistantMsg.Content))
+	}
+	if assistantMsg.Content[0].Type != "thinking" || assistantMsg.Content[0].Thinking != "need the file" || assistantMsg.Content[0].Signature != "sig_1" {
+		t.Fatalf("thinking block = %#v, want preserved thinking block", assistantMsg.Content[0])
+	}
+	if assistantMsg.Content[1].Type != "tool_use" {
+		t.Fatalf("Content[1].Type = %q, want tool_use", assistantMsg.Content[1].Type)
+	}
+
+	withoutThinking := ConvertToAnthropicMessagesWithThinking(history, false)
+	if len(withoutThinking[1].Content) != 1 || withoutThinking[1].Content[0].Type != "tool_use" {
+		t.Fatalf("thinking disabled content = %#v, want only tool_use", withoutThinking[1].Content)
+	}
+
+	defaultResult := ConvertToAnthropicMessages(history)
+	if len(defaultResult[1].Content) != 1 || defaultResult[1].Content[0].Type != "tool_use" {
+		t.Fatalf("default conversion content = %#v, want thinking omitted unless explicitly enabled", defaultResult[1].Content)
+	}
+}
+
+func TestConvertToAnthropicMessages_WithOrderedContentBlocks(t *testing.T) {
+	assistantMessage := api.Message{
+		Role: "assistant",
+		ToolCalls: []api.OpenAIToolCall{
+			{
+				ID:   "toolu_01A",
+				Type: "function",
+				Function: api.OpenAIToolCallFunction{
+					Name:      "read_file",
+					Arguments: `{"path":"a.txt"}`,
+				},
+			},
+			{
+				ID:   "toolu_01B",
+				Type: "function",
+				Function: api.OpenAIToolCallFunction{
+					Name:      "read_file",
+					Arguments: `{"path":"b.txt"}`,
+				},
+			},
+		},
+	}
+	assistantMessage.SetAnthropicContentBlocks([]api.AnthropicContentBlock{
+		{Type: "thinking", Thinking: "need a", Signature: "sig_a"},
+		{Type: "tool_use", ID: "toolu_01A", Name: "read_file", Input: map[string]any{"path": "a.txt"}},
+		{Type: "thinking", Thinking: "need b", Signature: "sig_b"},
+		{Type: "tool_use", ID: "toolu_01B", Name: "read_file", Input: map[string]any{"path": "b.txt"}},
+	})
+
+	history := []api.Message{
+		{Role: "user", Content: "Read both files"},
+		assistantMessage,
+	}
+
+	result := ConvertToAnthropicMessagesWithThinking(history, true)
+	if len(result) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(result))
+	}
+
+	content := result[1].Content
+	if len(content) != 4 {
+		t.Fatalf("assistant content length = %d, want original thinking/tool sequence", len(content))
+	}
+	wantTypes := []string{"thinking", "tool_use", "thinking", "tool_use"}
+	for i, want := range wantTypes {
+		if content[i].Type != want {
+			t.Fatalf("content[%d].Type = %q, want %q; content=%#v", i, content[i].Type, want, content)
+		}
+	}
+	if content[1].ID != "toolu_01A" || content[1].Input["path"] != "a.txt" {
+		t.Fatalf("content[1] = %#v, want first tool_use preserved", content[1])
+	}
+	if content[2].Thinking != "need b" || content[2].Signature != "sig_b" {
+		t.Fatalf("content[2] = %#v, want second thinking preserved between tool calls", content[2])
+	}
+	if content[3].ID != "toolu_01B" || content[3].Input["path"] != "b.txt" {
+		t.Fatalf("content[3] = %#v, want second tool_use preserved", content[3])
+	}
+
+	defaultResult := ConvertToAnthropicMessages(history)
+	if len(defaultResult[1].Content) != 2 {
+		t.Fatalf("default conversion content = %#v, want only generic tool_use blocks", defaultResult[1].Content)
+	}
+	for _, block := range defaultResult[1].Content {
+		if block.Type == "thinking" {
+			t.Fatalf("default conversion leaked thinking block: %#v", defaultResult[1].Content)
+		}
+	}
+}
+
+func TestConvertToAnthropicMessages_IncompleteOrderedContentBlocksFallsBackToToolCalls(t *testing.T) {
+	assistantMessage := api.Message{
+		Role: "assistant",
+		ToolCalls: []api.OpenAIToolCall{
+			{
+				ID:   "toolu_01A",
+				Type: "function",
+				Function: api.OpenAIToolCallFunction{
+					Name:      "read_file",
+					Arguments: `{"path":"a.txt"}`,
+				},
+			},
+			{
+				ID:   "toolu_01B",
+				Type: "function",
+				Function: api.OpenAIToolCallFunction{
+					Name:      "read_file",
+					Arguments: `{"path":"b.txt"}`,
+				},
+			},
+		},
+	}
+	assistantMessage.SetAnthropicContentBlocks([]api.AnthropicContentBlock{
+		{Type: "thinking", Thinking: "need a", Signature: "sig_a"},
+		{Type: "tool_use", ID: "toolu_01A", Name: "read_file", Input: map[string]any{"path": "a.txt"}},
+	})
+
+	result := ConvertToAnthropicMessagesWithThinking([]api.Message{
+		{Role: "user", Content: "Read both files"},
+		assistantMessage,
+	}, true)
+
+	if len(result) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(result))
+	}
+	content := result[1].Content
+	if len(content) != 2 {
+		t.Fatalf("assistant content = %#v, want fallback tool_use blocks only", content)
+	}
+	for i, block := range content {
+		if block.Type != "tool_use" {
+			t.Fatalf("content[%d].Type = %q, want tool_use; content=%#v", i, block.Type, content)
+		}
+	}
+	if content[0].ID != "toolu_01A" || content[1].ID != "toolu_01B" {
+		t.Fatalf("fallback tool_use IDs = %#v, want both tool calls preserved", content)
+	}
+}
+
+func TestConvertToAnthropicMessages_ExtraOrderedToolUseFallsBackToToolCalls(t *testing.T) {
+	assistantMessage := api.Message{
+		Role: "assistant",
+		ToolCalls: []api.OpenAIToolCall{
+			{
+				ID:   "toolu_01A",
+				Type: "function",
+				Function: api.OpenAIToolCallFunction{
+					Name:      "read_file",
+					Arguments: `{"path":"a.txt"}`,
+				},
+			},
+		},
+	}
+	assistantMessage.SetAnthropicContentBlocks([]api.AnthropicContentBlock{
+		{Type: "thinking", Thinking: "need a", Signature: "sig_a"},
+		{Type: "tool_use", ID: "toolu_01A", Name: "read_file", Input: map[string]any{"path": "a.txt"}},
+		{Type: "tool_use", ID: "toolu_extra", Name: "read_file", Input: map[string]any{"path": "extra.txt"}},
+	})
+
+	result := ConvertToAnthropicMessagesWithThinking([]api.Message{
+		{Role: "user", Content: "Read a file"},
+		assistantMessage,
+	}, true)
+
+	if len(result) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(result))
+	}
+	content := result[1].Content
+	if len(content) != 1 || content[0].Type != "tool_use" || content[0].ID != "toolu_01A" {
+		t.Fatalf("assistant content = %#v, want only recorded tool call", content)
+	}
+}
+
+func TestConvertToAnthropicMessages_LegacyThinkingBlocksSkipAmbiguousMultiToolReplay(t *testing.T) {
+	assistantMessage := api.Message{
+		Role: "assistant",
+		ToolCalls: []api.OpenAIToolCall{
+			{
+				ID:   "toolu_01A",
+				Type: "function",
+				Function: api.OpenAIToolCallFunction{
+					Name:      "read_file",
+					Arguments: `{"path":"a.txt"}`,
+				},
+			},
+			{
+				ID:   "toolu_01B",
+				Type: "function",
+				Function: api.OpenAIToolCallFunction{
+					Name:      "read_file",
+					Arguments: `{"path":"b.txt"}`,
+				},
+			},
+		},
+	}
+	assistantMessage.SetAnthropicThinkingBlocks([]api.AnthropicThinkingBlock{
+		{Type: "thinking", Thinking: "need a", Signature: "sig_a"},
+		{Type: "thinking", Thinking: "need b", Signature: "sig_b"},
+	})
+
+	result := ConvertToAnthropicMessagesWithThinking([]api.Message{
+		{Role: "user", Content: "Read both files"},
+		assistantMessage,
+	}, true)
+
+	if len(result) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(result))
+	}
+	content := result[1].Content
+	if len(content) != 2 {
+		t.Fatalf("assistant content = %#v, want ambiguous legacy thinking omitted", content)
+	}
+	for i, block := range content {
+		if block.Type != "tool_use" {
+			t.Fatalf("content[%d].Type = %q, want tool_use; content=%#v", i, block.Type, content)
+		}
+	}
+}
+
 func TestConvertToAnthropicMessages_AssistantEmptyContentWithToolCalls(t *testing.T) {
 	history := []api.Message{
 		{Role: "user", Content: "Read a file"},

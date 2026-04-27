@@ -1,6 +1,8 @@
 package api
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -65,5 +67,41 @@ func TestMultimodalMessage_HasImage_EmptyBase64(t *testing.T) {
 
 	if mm.HasImage() {
 		t.Error("HasImage() should return false when Base64 is empty")
+	}
+}
+
+func TestMessageMarshalOmitAnthropicThinkingBlocks(t *testing.T) {
+	msg := Message{Role: "assistant", Content: "calling a tool"}
+	msg.SetAnthropicContentBlocks([]AnthropicContentBlock{
+		{Type: "thinking", Thinking: "provider private thought", Signature: "sig_1"},
+		{Type: "tool_use", ID: "toolu_1", Name: "read_file", Input: map[string]any{"path": "README.md"}},
+	})
+
+	data, err := json.Marshal(msg)
+	if err != nil {
+		t.Fatalf("json.Marshal(Message) error = %v", err)
+	}
+
+	payload := string(data)
+	if strings.Contains(payload, "anthropic_content_blocks") || strings.Contains(payload, "anthropic_thinking_blocks") || strings.Contains(payload, "provider private thought") || strings.Contains(payload, "sig_1") {
+		t.Fatalf("marshaled Message leaked provider state: %s", payload)
+	}
+
+	contentBlocks := msg.AnthropicContentBlocks()
+	if len(contentBlocks) != 2 {
+		t.Fatalf("len(AnthropicContentBlocks()) = %d, want 2", len(contentBlocks))
+	}
+	contentBlocks[1].Input["path"] = "mutated"
+	if got := msg.AnthropicContentBlocks()[1].Input["path"]; got != "README.md" {
+		t.Fatalf("AnthropicContentBlocks() returned mutable input, got %q", got)
+	}
+
+	blocks := msg.AnthropicThinkingBlocks()
+	if len(blocks) != 1 {
+		t.Fatalf("len(AnthropicThinkingBlocks()) = %d, want 1", len(blocks))
+	}
+	blocks[0].Thinking = "mutated"
+	if got := msg.AnthropicThinkingBlocks()[0].Thinking; got != "provider private thought" {
+		t.Fatalf("AnthropicThinkingBlocks() returned mutable state, got %q", got)
 	}
 }

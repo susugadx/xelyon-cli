@@ -53,10 +53,7 @@ func ResolveEditToolMode(providerName string, modelName string) EditToolMode {
 	}
 
 	if provider == "bedrock" {
-		if strings.Contains(model, "anthropic") || strings.Contains(model, "claude") {
-			return EditToolModeLegacy
-		}
-		return EditToolModeApplyPatch
+		return EditToolModeLegacy
 	}
 
 	switch provider {

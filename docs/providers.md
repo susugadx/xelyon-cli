@@ -9,7 +9,7 @@ XELYON は provider/model に応じて編集ツールを自動で切り替えま
 - OpenAI / Azure OpenAI / Gemini 系: `apply_patch`
 - Claude / Anthropic / DeepSeek 系: `str_replace` / `write_file` / `delete_file`
 - OpenRouter: `anthropic/...` / `deepseek/...` は legacy、`openai/...` / `google/...` / `gemini/...` は `apply_patch`
-- Bedrock: Claude family は legacy、それ以外は `apply_patch`
+- Bedrock: Claude family のみ対応し、編集ツールは legacy
 
 `XELYON_EDIT_TOOL` を指定した場合は、この自動判定より環境変数の指定が優先されます。
 
@@ -349,6 +349,8 @@ xelyon --provider openrouter --model anthropic/claude-sonnet-4.6
 - 画像入力対応（モデルによる）
 
 ### 9. Bedrock (AWS)
+
+現在の Bedrock provider は Claude on Bedrock 専用です。Amazon Nova など Claude 以外の Bedrock モデルは未対応で、今後 Converse API 経路で対応予定です。
 
 ```bash
 # AWS 認証情報を設定（以下のいずれか）

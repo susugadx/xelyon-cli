@@ -31,7 +31,7 @@ DeepSeek, OpenAI, Azure OpenAI, Gemini, Claude, Ollama, Groq, OpenRouter, Bedroc
 **FC rescue JSON修復**: テキストモードで抽出されたツールJSONに生制御文字（改行・タブ等）が含まれる場合、自動修復してパース成功させる。
 
 ### 🛠️ 組み込みツール
-- **ファイル操作**: 編集ツールは provider/model に応じて自動切替。OpenAI / Azure OpenAI / Gemini 系は Codex 互換の `apply_patch`、Claude / DeepSeek 系は旧 `str_replace` / `write_file` / `delete_file` を使います。OpenRouter は model family を見て判定し、`XELYON_EDIT_TOOL=str_replace` などの明示 override がある場合はそれを最優先します
+- **ファイル操作**: 編集ツールは provider/model に応じて自動切替。OpenAI / Azure OpenAI / Gemini 系は Codex 互換の `apply_patch`、Claude / Bedrock(Claude) / DeepSeek 系は旧 `str_replace` / `write_file` / `delete_file` を使います。OpenRouter は model family を見て判定し、`XELYON_EDIT_TOOL=str_replace` などの明示 override がある場合はそれを最優先します
 - **コード検索**: `search_code` は language-aware router として動作し、`mode=auto` を既定に symbol-aware / literal / regex の各レーンを内部選択（複数パターン、結果分類、不正regex検出にも対応）
 - **シンボル調査**: `search_code` は短い symbol query を優先し、対応言語では定義・caller・参照・関連テストをまとめて返却。Go は first-class に `Config.Build` / `(*Config).Build` や regex っぽい query の rescue も吸収
 - **サブエージェント委譲**: `spawn_agent` / `wait_agent` で探索タスクを別コンテキストの軽量モデルへ委譲し、親には最終レポートだけを返す

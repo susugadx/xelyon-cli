@@ -11,17 +11,23 @@ import (
 type Delta struct {
 	Type        string `json:"type"`
 	Text        string `json:"text,omitempty"`
+	Thinking    string `json:"thinking,omitempty"`
+	Signature   string `json:"signature,omitempty"`
+	Data        string `json:"data,omitempty"`
 	PartialJSON string `json:"partial_json,omitempty"` // tool_use の input (input_json_delta)
 	StopReason  string `json:"stop_reason,omitempty"`  // message_delta 用
 }
 
 // ContentBlock は Claude 互換 content_block_start のブロック情報。
 type ContentBlock struct {
-	Type  string                 `json:"type"`            // "text" or "tool_use"
-	ID    string                 `json:"id,omitempty"`    // tool_use 用
-	Name  string                 `json:"name,omitempty"`  // tool_use 用
-	Text  string                 `json:"text,omitempty"`  // text 用
-	Input map[string]interface{} `json:"input,omitempty"` // tool_use 用（非ストリーミング）
+	Type      string                 `json:"type"`                // "text" or "tool_use"
+	ID        string                 `json:"id,omitempty"`        // tool_use 用
+	Name      string                 `json:"name,omitempty"`      // tool_use 用
+	Text      string                 `json:"text,omitempty"`      // text 用
+	Thinking  string                 `json:"thinking,omitempty"`  // thinking 用
+	Signature string                 `json:"signature,omitempty"` // thinking 用
+	Data      string                 `json:"data,omitempty"`      // redacted_thinking 用
+	Input     map[string]interface{} `json:"input,omitempty"`     // tool_use 用（非ストリーミング）
 }
 
 // StreamUsage は Claude 互換ストリーム usage。

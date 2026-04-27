@@ -4,6 +4,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/api"
 )
 
 func newStorageLoadTestStorage(t *testing.T) *Storage {
@@ -43,6 +45,69 @@ func TestStorage_Load_MetadataOnlySession(t *testing.T) {
 	}
 	if len(loaded.CompactedItems) != 0 {
 		t.Fatalf("loaded.CompactedItems = %#v, want empty for metadata-only restore", loaded.CompactedItems)
+	}
+}
+
+func TestStorage_SaveLoad_RestoresProviderMetadata(t *testing.T) {
+	storage := newStorageLoadTestStorage(t)
+
+	session := NewSession("claude-test")
+	msg := api.Message{
+		Role:    "assistant",
+		Content: "I'll inspect it.",
+		ToolCalls: []api.OpenAIToolCall{{
+			ID:   "toolu_01XYZ",
+			Type: "function",
+			Function: api.OpenAIToolCallFunction{
+				Name:      "read_file",
+				Arguments: `{"path":"README.md"}`,
+			},
+		}},
+	}
+	msg.SetAnthropicContentBlocks([]api.AnthropicContentBlock{
+		{Type: "thinking", Thinking: "need the README", Signature: "sig_1"},
+		{Type: "tool_use", ID: "toolu_01XYZ", Name: "read_file", Input: map[string]any{"path": "README.md"}},
+		{Type: "redacted_thinking", Data: "opaque"},
+	})
+	session.AddMessageFromAPI(msg, "claude-test")
+
+	if err := storage.Save(session); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	raw, err := os.ReadFile(storage.sessionPath(session.ID))
+	if err != nil {
+		t.Fatalf("ReadFile failed: %v", err)
+	}
+	rawJSON := string(raw)
+	if !strings.Contains(rawJSON, "provider_metadata") || !strings.Contains(rawJSON, "anthropic_content_blocks") {
+		t.Fatalf("stored JSONL = %s, want provider metadata persisted", rawJSON)
+	}
+
+	loaded, err := storage.Load(session.ID)
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	restored := loaded.ToAPIMessages()
+	if len(restored) != 1 {
+		t.Fatalf("len(ToAPIMessages()) = %d, want 1", len(restored))
+	}
+	blocks := restored[0].AnthropicThinkingBlocks()
+	if len(blocks) != 2 {
+		t.Fatalf("len(restored AnthropicThinkingBlocks) = %d, want 2", len(blocks))
+	}
+	if blocks[0].Type != "thinking" || blocks[0].Thinking != "need the README" || blocks[0].Signature != "sig_1" {
+		t.Fatalf("restored thinking block = %#v, want preserved thinking/signature", blocks[0])
+	}
+	if blocks[1].Type != "redacted_thinking" || blocks[1].Data != "opaque" {
+		t.Fatalf("restored redacted thinking block = %#v, want preserved data", blocks[1])
+	}
+	contentBlocks := restored[0].AnthropicContentBlocks()
+	if len(contentBlocks) != 3 {
+		t.Fatalf("len(restored AnthropicContentBlocks) = %d, want 3", len(contentBlocks))
+	}
+	if contentBlocks[1].Type != "tool_use" || contentBlocks[1].ID != "toolu_01XYZ" {
+		t.Fatalf("restored content blocks = %#v, want ordered thinking/tool_use/redacted blocks", contentBlocks)
 	}
 }
 

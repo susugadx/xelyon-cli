@@ -174,7 +174,30 @@ func TestProvider_ChatWithTools_BuildsAdaptiveThinkingForOpus47(t *testing.T) {
 	if req.OutputConfig == nil || req.OutputConfig.Effort != "xhigh" {
 		t.Fatalf("OutputConfig = %#v, want effort=xhigh", req.OutputConfig)
 	}
+	if !containsString(req.AnthropicBeta, bedrockEffortBetaHeader) {
+		t.Fatalf("AnthropicBeta = %v, want effort beta header", req.AnthropicBeta)
+	}
 	assertBedrockThinkingBudgetOmitted(t, mockClient.lastInput.Body)
+}
+
+func TestProvider_ChatWithTools_RejectsNonClaudeBedrockModel(t *testing.T) {
+	mockClient := &mockInvokeModelWithResponseStreamClient{err: errors.New("should not call bedrock")}
+	p := &Provider{client: mockClient}
+
+	cfg := config.DefaultConfig()
+	cfg.ProviderModels["bedrock"] = config.ProviderModelConfig{
+		DefaultModel:    "amazon.nova-pro-v1:0",
+		MaxOutputTokens: 4096,
+	}
+
+	ctx := newBedrockTestContext(cfg)
+	_, err := p.ChatWithTools(ctx, "system prompt", []api.Message{{Role: "user", Content: "hello"}}, "")
+	if err == nil || !strings.Contains(err.Error(), "supports Anthropic Claude models only") {
+		t.Fatalf("ChatWithTools() error = %v, want non-Claude guard", err)
+	}
+	if mockClient.lastInput != nil {
+		t.Fatal("InvokeModelWithResponseStream() should not be called for non-Claude model")
+	}
 }
 
 func TestProvider_ChatWithTools_UsesCatalogModelForOpus47Alias(t *testing.T) {
@@ -212,6 +235,9 @@ func TestProvider_ChatWithTools_UsesCatalogModelForOpus47Alias(t *testing.T) {
 	}
 	if req.OutputConfig == nil || req.OutputConfig.Effort != "xhigh" {
 		t.Fatalf("OutputConfig = %#v, want effort=xhigh via catalog_model", req.OutputConfig)
+	}
+	if !containsString(req.AnthropicBeta, bedrockEffortBetaHeader) {
+		t.Fatalf("AnthropicBeta = %v, want effort beta header", req.AnthropicBeta)
 	}
 	if containsString(req.AnthropicBeta, "compact-2026-01-12") {
 		t.Fatalf("AnthropicBeta = %v, should not include Bedrock Opus 4.7 compaction beta", req.AnthropicBeta)

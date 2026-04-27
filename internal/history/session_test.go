@@ -1,6 +1,12 @@
 package history
 
-import "testing"
+import (
+	"encoding/json"
+	"strings"
+	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/api"
+)
 
 func TestSession_ToAPIMessages_SkipsToolExecutionEntries(t *testing.T) {
 	session := NewSession("test-model")
@@ -14,6 +20,70 @@ func TestSession_ToAPIMessages_SkipsToolExecutionEntries(t *testing.T) {
 	}
 	if msgs[0].Role != "user" || msgs[1].Role != "assistant" {
 		t.Fatalf("unexpected roles: %#v", msgs)
+	}
+}
+
+func TestSession_AddMessageFromAPI_RoundTripsProviderMetadata(t *testing.T) {
+	session := NewSession("test-model")
+	msg := api.Message{
+		Role:    "assistant",
+		Content: "I'll inspect it.",
+		ToolCalls: []api.OpenAIToolCall{{
+			ID:   "toolu_01XYZ",
+			Type: "function",
+			Function: api.OpenAIToolCallFunction{
+				Name:      "read_file",
+				Arguments: `{"path":"README.md"}`,
+			},
+		}},
+	}
+	msg.SetAnthropicContentBlocks([]api.AnthropicContentBlock{
+		{Type: "thinking", Thinking: "need the README", Signature: "sig_1"},
+		{Type: "tool_use", ID: "toolu_01XYZ", Name: "read_file", Input: map[string]any{"path": "README.md"}},
+	})
+
+	session.AddMessageFromAPI(msg, "claude-test")
+	if len(session.Messages) != 1 {
+		t.Fatalf("len(session.Messages) = %d, want 1", len(session.Messages))
+	}
+	entry := session.Messages[0]
+	if entry.ProviderMetadata == nil {
+		t.Fatal("ProviderMetadata = nil, want persisted provider metadata")
+	}
+	if len(entry.ProviderMetadata.AnthropicContentBlocks) != 2 {
+		t.Fatalf("len(ProviderMetadata.AnthropicContentBlocks) = %d, want 2", len(entry.ProviderMetadata.AnthropicContentBlocks))
+	}
+
+	entryJSON, err := json.Marshal(entry)
+	if err != nil {
+		t.Fatalf("json.Marshal(MessageEntry) error = %v", err)
+	}
+	if !strings.Contains(string(entryJSON), "provider_metadata") || !strings.Contains(string(entryJSON), "anthropic_content_blocks") {
+		t.Fatalf("MessageEntry JSON = %s, want provider metadata persisted", string(entryJSON))
+	}
+
+	restored := session.ToAPIMessages()
+	if len(restored) != 1 {
+		t.Fatalf("len(ToAPIMessages()) = %d, want 1", len(restored))
+	}
+	blocks := restored[0].AnthropicThinkingBlocks()
+	if len(blocks) != 1 {
+		t.Fatalf("len(restored AnthropicThinkingBlocks) = %d, want 1", len(blocks))
+	}
+	if blocks[0].Thinking != "need the README" || blocks[0].Signature != "sig_1" {
+		t.Fatalf("restored thinking block = %#v, want preserved thinking/signature", blocks[0])
+	}
+	contentBlocks := restored[0].AnthropicContentBlocks()
+	if len(contentBlocks) != 2 || contentBlocks[1].Type != "tool_use" || contentBlocks[1].ID != "toolu_01XYZ" {
+		t.Fatalf("restored content blocks = %#v, want ordered thinking/tool_use blocks", contentBlocks)
+	}
+
+	requestJSON, err := json.Marshal(restored[0])
+	if err != nil {
+		t.Fatalf("json.Marshal(api.Message) error = %v", err)
+	}
+	if strings.Contains(string(requestJSON), "anthropic_content_blocks") || strings.Contains(string(requestJSON), "anthropic_thinking_blocks") || strings.Contains(string(requestJSON), "need the README") {
+		t.Fatalf("api.Message JSON leaked provider metadata: %s", string(requestJSON))
 	}
 }
 

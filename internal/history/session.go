@@ -41,16 +41,23 @@ type CompactedItem struct {
 
 // MessageEntry はタイムスタンプ付きメッセージ
 type MessageEntry struct {
-	Timestamp     time.Time            `json:"timestamp"`
-	Role          string               `json:"role"`
-	Content       string               `json:"content"`
-	Model         string               `json:"model,omitempty"`
-	ResponseID    string               `json:"response_id,omitempty"`    // OpenAI Responses API の ID
-	ToolCalls     []api.OpenAIToolCall `json:"tool_calls,omitempty"`     // FC: assistant のツール呼び出し
-	ToolCallID    string               `json:"tool_call_id,omitempty"`   // FC: tool レスポンスの呼び出しID
-	ToolName      string               `json:"tool_name,omitempty"`      // FC: ツール名（Gemini 用）
-	EntryType     string               `json:"entry_type,omitempty"`     // "tool_execution" は監査用
-	ToolExecution *ToolExecutionEntry  `json:"tool_execution,omitempty"` // ツール実行の監査情報
+	Timestamp        time.Time                `json:"timestamp"`
+	Role             string                   `json:"role"`
+	Content          string                   `json:"content"`
+	Model            string                   `json:"model,omitempty"`
+	ResponseID       string                   `json:"response_id,omitempty"`       // OpenAI Responses API の ID
+	ToolCalls        []api.OpenAIToolCall     `json:"tool_calls,omitempty"`        // FC: assistant のツール呼び出し
+	ToolCallID       string                   `json:"tool_call_id,omitempty"`      // FC: tool レスポンスの呼び出しID
+	ToolName         string                   `json:"tool_name,omitempty"`         // FC: ツール名（Gemini 用）
+	ProviderMetadata *MessageProviderMetadata `json:"provider_metadata,omitempty"` // request payload には出さない provider 専用 state
+	EntryType        string                   `json:"entry_type,omitempty"`        // "tool_execution" は監査用
+	ToolExecution    *ToolExecutionEntry      `json:"tool_execution,omitempty"`    // ツール実行の監査情報
+}
+
+// MessageProviderMetadata は会話再開時に必要な provider 専用 state を保存する。
+type MessageProviderMetadata struct {
+	AnthropicContentBlocks  []api.AnthropicContentBlock  `json:"anthropic_content_blocks,omitempty"`
+	AnthropicThinkingBlocks []api.AnthropicThinkingBlock `json:"anthropic_thinking_blocks,omitempty"` // legacy metadata
 }
 
 // ToolExecutionEntry はツール実行の監査情報です。
@@ -104,13 +111,14 @@ func (s *Session) AddMessage(role, content, model string) {
 // AddMessageFromAPI は api.Message から FC メタデータ付きでセッションに保存
 func (s *Session) AddMessageFromAPI(msg api.Message, model string) {
 	s.Messages = append(s.Messages, MessageEntry{
-		Timestamp:  time.Now(),
-		Role:       msg.Role,
-		Content:    msg.Content,
-		Model:      model,
-		ToolCalls:  msg.ToolCalls,
-		ToolCallID: msg.ToolCallID,
-		ToolName:   msg.ToolName,
+		Timestamp:        time.Now(),
+		Role:             msg.Role,
+		Content:          msg.Content,
+		Model:            model,
+		ToolCalls:        msg.ToolCalls,
+		ToolCallID:       msg.ToolCallID,
+		ToolName:         msg.ToolName,
+		ProviderMetadata: providerMetadataFromAPIMessage(msg),
 	})
 	s.LastModified = time.Now()
 }
@@ -139,15 +147,40 @@ func (s *Session) ToAPIMessages() []api.Message {
 		if m.EntryType == toolExecutionEntryType {
 			continue
 		}
-		msgs = append(msgs, api.Message{
+		msg := api.Message{
 			Role:       m.Role,
 			Content:    m.Content,
 			ToolCalls:  m.ToolCalls,
 			ToolCallID: m.ToolCallID,
 			ToolName:   m.ToolName,
-		})
+		}
+		if m.ProviderMetadata != nil {
+			if len(m.ProviderMetadata.AnthropicContentBlocks) > 0 {
+				msg.SetAnthropicContentBlocks(m.ProviderMetadata.AnthropicContentBlocks)
+			} else {
+				msg.SetAnthropicThinkingBlocks(m.ProviderMetadata.AnthropicThinkingBlocks)
+			}
+		}
+		msgs = append(msgs, msg)
 	}
 	return msgs
+}
+
+func providerMetadataFromAPIMessage(msg api.Message) *MessageProviderMetadata {
+	contentBlocks := msg.AnthropicContentBlocks()
+	if len(contentBlocks) > 0 {
+		return &MessageProviderMetadata{
+			AnthropicContentBlocks: contentBlocks,
+		}
+	}
+
+	thinkingBlocks := msg.AnthropicThinkingBlocks()
+	if len(thinkingBlocks) == 0 {
+		return nil
+	}
+	return &MessageProviderMetadata{
+		AnthropicThinkingBlocks: thinkingBlocks,
+	}
 }
 
 func (s *Session) unsavedMessages() []MessageEntry {

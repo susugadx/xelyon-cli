@@ -20,11 +20,14 @@ type StreamEvent = claudestream.StreamEvent
 
 // Content はレスポンスのコンテンツ
 type Content struct {
-	Type  string                 `json:"type"`            // "text" or "tool_use"
-	Text  string                 `json:"text,omitempty"`  // text 用
-	ID    string                 `json:"id,omitempty"`    // tool_use 用
-	Name  string                 `json:"name,omitempty"`  // tool_use 用
-	Input map[string]interface{} `json:"input,omitempty"` // tool_use 用
+	Type      string                 `json:"type"`                // "text" or "tool_use"
+	Text      string                 `json:"text,omitempty"`      // text 用
+	Thinking  string                 `json:"thinking,omitempty"`  // thinking 用
+	Signature string                 `json:"signature,omitempty"` // thinking 用
+	Data      string                 `json:"data,omitempty"`      // redacted_thinking 用
+	ID        string                 `json:"id,omitempty"`        // tool_use 用
+	Name      string                 `json:"name,omitempty"`      // tool_use 用
+	Input     map[string]interface{} `json:"input,omitempty"`     // tool_use 用
 }
 
 // ContentPart はマルチモーダルコンテンツのパート
@@ -76,6 +79,7 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 	var toolCallsOutput strings.Builder
 
 	compaction := claudestream.NewCompactionCollector()
+	contentBlocks := claudestream.NewContentBlockCollector()
 
 	// usage 情報を追跡
 	var lastUsage *api.Usage
@@ -94,10 +98,12 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 			return "", true, nil
 
 		case "content_block_start":
+			contentBlocks.Start(event.Index, event.ContentBlock)
 			claudestream.HandleContentBlockStart(event, toolUses, compaction)
 			return "", false, nil
 
 		case "content_block_delta":
+			contentBlocks.AppendDelta(event.Index, event.Delta)
 			return claudestream.HandleContentBlockDelta(event, toolUses, compaction, func(toolName string) {
 				// スピナーを再表示（引数生成中）
 				if !spinner.IsActive() {
@@ -106,6 +112,7 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 			}), false, nil
 
 		case "content_block_stop":
+			contentBlocks.Stop(event.Index)
 			if toolJSON := claudestream.HandleContentBlockStop(event, toolUses, compaction, ConvertToolUseToToolJSON); toolJSON != "" {
 				toolCallsOutput.WriteString(toolJSON)
 			}
@@ -129,6 +136,7 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 	if err != nil {
 		return "", err
 	}
+	p.lastContentBlocks = contentBlocks.Blocks()
 
 	// usage コールバックを呼び出し
 	if lastUsage != nil && p.usageCallback != nil {
@@ -179,17 +187,42 @@ func (p *Provider) handleNonStreamingResponse(ctx context.Context, resp *http.Re
 	// テキストと Tool Use を収集
 	var textContent strings.Builder
 	var toolCallsOutput strings.Builder
+	var contentBlocks []api.AnthropicContentBlock
 
 	for _, c := range result.Content {
 		switch c.Type {
 		case "text":
 			textContent.WriteString(c.Text)
+			if c.Text != "" {
+				contentBlocks = append(contentBlocks, api.AnthropicContentBlock{
+					Type: "text",
+					Text: c.Text,
+				})
+			}
+		case "thinking":
+			contentBlocks = append(contentBlocks, api.AnthropicContentBlock{
+				Type:      "thinking",
+				Thinking:  c.Thinking,
+				Signature: c.Signature,
+			})
+		case "redacted_thinking":
+			contentBlocks = append(contentBlocks, api.AnthropicContentBlock{
+				Type: "redacted_thinking",
+				Data: c.Data,
+			})
 		case "tool_use":
+			contentBlocks = append(contentBlocks, api.AnthropicContentBlock{
+				Type:  "tool_use",
+				ID:    c.ID,
+				Name:  c.Name,
+				Input: cloneContentInput(c.Input),
+			})
 			if toolJSON, err := ConvertToolUseToToolJSON(c.ID, c.Name, c.Input); err == nil {
 				toolCallsOutput.WriteString(toolJSON)
 			}
 		}
 	}
+	p.lastContentBlocks = contentBlocks
 
 	content := textContent.String()
 	if content != "" {
@@ -206,6 +239,17 @@ func (p *Provider) handleNonStreamingResponse(ctx context.Context, resp *http.Re
 		return toolCallsOutput.String(), nil
 	}
 	return content, nil
+}
+
+func cloneContentInput(src map[string]interface{}) map[string]any {
+	if len(src) == 0 {
+		return nil
+	}
+	dst := make(map[string]any, len(src))
+	for k, v := range src {
+		dst[k] = v
+	}
+	return dst
 }
 
 // ChatWithImage は画像付きメッセージで会話を行う

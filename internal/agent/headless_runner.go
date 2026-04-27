@@ -240,6 +240,7 @@ func appendHeadlessToolCallsToHistory(agent *Agent, response string, toolCalls [
 
 	explanation, _ := extractExplanationAndTool(response)
 	reasoningContent := agent.getLastReasoningContent()
+	contentBlocks := agent.getLastAnthropicContentBlocks()
 	historyContent, historyReasoning := agent.assistantToolHistoryContent(explanation, reasoningContent)
 
 	openAIToolCalls := make([]api.OpenAIToolCall, len(toolCalls))
@@ -258,12 +259,14 @@ func appendHeadlessToolCallsToHistory(agent *Agent, response string, toolCalls [
 		}
 	}
 
-	agent.History = append(agent.History, api.Message{
+	msg := api.Message{
 		Role:             "assistant",
 		Content:          historyContent,
 		ReasoningContent: historyReasoning,
 		ToolCalls:        openAIToolCalls,
-	})
+	}
+	msg.SetAnthropicContentBlocks(contentBlocks)
+	agent.History = append(agent.History, msg)
 	if agent.Stats != nil {
 		agent.Stats.AssistantMessages++
 	}

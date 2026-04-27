@@ -27,15 +27,17 @@ const (
 	defaultRegion           = "us-east-1"
 	defaultModel            = "global.anthropic.claude-sonnet-4-6-v1"
 	bedrockAnthropicVersion = "bedrock-2023-05-31"
+	bedrockEffortBetaHeader = "effort-2025-11-24"
 )
 
 // Provider は AWS Bedrock (Anthropic Claude) のプロバイダー実装
 type Provider struct {
-	client        invokeModelWithResponseStreamClient
-	region        string
-	mcpTools      []api.ToolDefinition // MCP ツール定義
-	usageCallback api.UsageCallback
-	runtimeConfig *config.Config
+	client            invokeModelWithResponseStreamClient
+	region            string
+	mcpTools          []api.ToolDefinition // MCP ツール定義
+	usageCallback     api.UsageCallback
+	runtimeConfig     *config.Config
+	lastContentBlocks []api.AnthropicContentBlock
 }
 
 type invokeModelWithResponseStreamClient interface {
@@ -44,27 +46,32 @@ type invokeModelWithResponseStreamClient interface {
 
 // New は新しい Bedrock Provider を作成
 func New() (*Provider, error) {
-	region := os.Getenv("AWS_REGION")
-	if region == "" {
-		region = os.Getenv("AWS_DEFAULT_REGION")
-	}
-	if region == "" {
-		region = defaultRegion
+	loadOptions := []func(*awsconfig.LoadOptions) error{}
+	if region := explicitAWSRegionFromEnv(); region != "" {
+		loadOptions = append(loadOptions, awsconfig.WithRegion(region))
 	}
 
-	cfg, err := awsconfig.LoadDefaultConfig(context.Background(),
-		awsconfig.WithRegion(region),
-	)
+	cfg, err := awsconfig.LoadDefaultConfig(context.Background(), loadOptions...)
 	if err != nil {
 		return nil, fmt.Errorf("AWS config load failed: %w", err)
+	}
+	if strings.TrimSpace(cfg.Region) == "" {
+		cfg.Region = defaultRegion
 	}
 
 	client := bedrockruntime.NewFromConfig(cfg)
 
 	return &Provider{
 		client: client,
-		region: region,
+		region: cfg.Region,
 	}, nil
+}
+
+func explicitAWSRegionFromEnv() string {
+	if region := strings.TrimSpace(os.Getenv("AWS_REGION")); region != "" {
+		return region
+	}
+	return strings.TrimSpace(os.Getenv("AWS_DEFAULT_REGION"))
 }
 
 // isBedrockCompactionSupported はモデルが Compaction に対応しているか判定
@@ -80,6 +87,40 @@ func buildBedrockContextManagement(model string, compression config.CompressionC
 	}
 
 	return contextManagement, claude.MergeAnthropicBetaHeaders(betaHeaders, contextManagement)
+}
+
+func mergeBedrockOutputBetaHeaders(headers []string, outputConfig *claude.OutputConfig) []string {
+	if outputConfig == nil || strings.TrimSpace(outputConfig.Effort) == "" {
+		return headers
+	}
+	return appendUniqueString(headers, bedrockEffortBetaHeader)
+}
+
+func appendUniqueString(values []string, value string) []string {
+	if value == "" {
+		return values
+	}
+	for _, existing := range values {
+		if existing == value {
+			return values
+		}
+	}
+	return append(values, value)
+}
+
+func ensureBedrockClaudeModel(model, catalogModel string) error {
+	if isBedrockClaudeModel(model) || isBedrockClaudeModel(catalogModel) {
+		return nil
+	}
+	return fmt.Errorf("bedrock provider currently supports Anthropic Claude models only: model=%q catalog_model=%q", model, catalogModel)
+}
+
+func isBedrockClaudeModel(model string) bool {
+	m := strings.ToLower(strings.TrimSpace(model))
+	if m == "" {
+		return false
+	}
+	return strings.Contains(m, "claude") || strings.Contains(m, "anthropic")
 }
 
 // SupportsClaudeCompaction は Claude Compaction 対応状況を返す
@@ -159,16 +200,20 @@ func buildBedrockThinkingConfig(model, level string) (*claude.ThinkingConfig, *c
 
 // ChatWithTools は Provider interface の実装
 func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
+	p.lastContentBlocks = nil
 	model = api.GetDefaultModelWithContext(ctx, model, "bedrock", defaultModel)
 
 	// Anthropic Messages API 形式に変換（role:"tool" → role:"user"+tool_result 等）
-	messages := claude.ConvertToAnthropicMessages(history)
+	messages := claude.ConvertToAnthropicMessagesWithThinking(history, api.IsThinkingEnabled(ctx))
 
 	cfg := config.ResolveContext(ctx, p.effectiveConfig())
 	if cfg == nil {
 		cfg = config.DefaultConfig()
 	}
 	catalogModel := cfg.ModelCatalogName("bedrock", model)
+	if err := ensureBedrockClaudeModel(model, catalogModel); err != nil {
+		return "", err
+	}
 	pCfg, _ := cfg.GetProviderModelConfig("bedrock")
 
 	// Anthropic Version（config → フォールバック定数）
@@ -199,12 +244,15 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	}
 
 	reqBody.ContextManagement, reqBody.AnthropicBeta = buildBedrockContextManagement(catalogModel, cfg.Compression, reqBody.AnthropicBeta)
+	reqBody.AnthropicBeta = mergeBedrockOutputBetaHeaders(reqBody.AnthropicBeta, reqBody.OutputConfig)
 
 	return p.invokeStream(ctx, model, reqBody)
 }
 
 // ChatWithImage は画像付きメッセージで会話を行う
 func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {
+	p.lastContentBlocks = nil
+
 	// 画像がない場合は通常の ChatWithTools を使用
 	if image == nil || image.Base64 == "" {
 		history = append(history, api.Message{Role: "user", Content: userMessage})
@@ -214,13 +262,16 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	model = api.GetDefaultModelWithContext(ctx, model, "bedrock", defaultModel)
 
 	// Anthropic Messages API 形式に変換（role:"tool" → role:"user"+tool_result 等）
-	converted := claude.ConvertToAnthropicMessages(history)
+	converted := claude.ConvertToAnthropicMessagesWithThinking(history, api.IsThinkingEnabled(ctx))
 
 	cfg := config.ResolveContext(ctx, p.effectiveConfig())
 	if cfg == nil {
 		cfg = config.DefaultConfig()
 	}
 	catalogModel := cfg.ModelCatalogName("bedrock", model)
+	if err := ensureBedrockClaudeModel(model, catalogModel); err != nil {
+		return "", err
+	}
 
 	var messages []interface{}
 	for _, msg := range converted {
@@ -277,6 +328,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	}
 
 	reqBody.ContextManagement, reqBody.AnthropicBeta = buildBedrockContextManagement(catalogModel, cfg.Compression, reqBody.AnthropicBeta)
+	reqBody.AnthropicBeta = mergeBedrockOutputBetaHeaders(reqBody.AnthropicBeta, reqBody.OutputConfig)
 
 	return p.invokeStream(ctx, model, reqBody)
 }
@@ -313,6 +365,7 @@ func (p *Provider) invokeStream(ctx context.Context, model string, reqBody inter
 	output, err := p.client.InvokeModelWithResponseStream(ctx, &bedrockruntime.InvokeModelWithResponseStreamInput{
 		ModelId:     aws.String(model),
 		ContentType: aws.String("application/json"),
+		Accept:      aws.String("application/json"),
 		Body:        jsonBody,
 	})
 	if err != nil {
@@ -321,6 +374,22 @@ func (p *Provider) invokeStream(ctx context.Context, model string, reqBody inter
 	}
 
 	return p.handleEventStream(ctx, output, spinner)
+}
+
+// LastAnthropicThinkingBlocks は最後の API 呼び出しで返された thinking blocks を返す。
+func (p *Provider) LastAnthropicThinkingBlocks() []api.AnthropicThinkingBlock {
+	if p == nil {
+		return nil
+	}
+	return api.AnthropicThinkingBlocksFromContentBlocks(p.lastContentBlocks)
+}
+
+// LastAnthropicContentBlocks は最後の API 呼び出しで返された assistant content blocks を順序付きで返す。
+func (p *Provider) LastAnthropicContentBlocks() []api.AnthropicContentBlock {
+	if p == nil || len(p.lastContentBlocks) == 0 {
+		return nil
+	}
+	return api.CloneAnthropicContentBlocks(p.lastContentBlocks)
 }
 
 // SetMCPTools は MCP ツール定義を設定する

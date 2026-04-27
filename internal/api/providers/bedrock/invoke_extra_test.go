@@ -62,6 +62,9 @@ func TestInvokeStream_SuccessAndMarshalFailure(t *testing.T) {
 		if aws.ToString(mockClient.lastInput.ModelId) != "model-id" {
 			t.Fatalf("ModelId = %q, want %q", aws.ToString(mockClient.lastInput.ModelId), "model-id")
 		}
+		if got := aws.ToString(mockClient.lastInput.Accept); got != "application/json" {
+			t.Fatalf("Accept = %q, want application/json", got)
+		}
 	})
 
 	t.Run("marshalError", func(t *testing.T) {
@@ -210,6 +213,9 @@ func TestChatWithImage_BuildsAdaptiveThinkingForOpus47(t *testing.T) {
 	if req.OutputConfig == nil || req.OutputConfig.Effort != "xhigh" {
 		t.Fatalf("OutputConfig = %#v, want effort=xhigh", req.OutputConfig)
 	}
+	if !containsString(req.AnthropicBeta, bedrockEffortBetaHeader) {
+		t.Fatalf("AnthropicBeta = %v, want effort beta header", req.AnthropicBeta)
+	}
 	assertBedrockThinkingBudgetOmitted(t, mockClient.lastInput.Body)
 }
 
@@ -253,6 +259,9 @@ func TestChatWithImage_UsesCatalogModelForOpus47Alias(t *testing.T) {
 	}
 	if req.OutputConfig == nil || req.OutputConfig.Effort != "xhigh" {
 		t.Fatalf("OutputConfig = %#v, want effort=xhigh via catalog_model", req.OutputConfig)
+	}
+	if !containsString(req.AnthropicBeta, bedrockEffortBetaHeader) {
+		t.Fatalf("AnthropicBeta = %v, want effort beta header", req.AnthropicBeta)
 	}
 	if containsString(req.AnthropicBeta, "compact-2026-01-12") {
 		t.Fatalf("AnthropicBeta = %v, should not include Bedrock Opus 4.7 compaction beta", req.AnthropicBeta)

@@ -85,11 +85,13 @@ func isClaudeOpus46Model(model string) bool {
 // Delta はストリームの差分
 
 func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
+	p.lastContentBlocks = nil
+
 	// モデル名を設定（config優先、フォールバックはclaude-sonnet-4-6）
 	model = api.GetDefaultModelWithContext(ctx, model, "claude", "claude-sonnet-4-6")
 
 	// Anthropic Messages API 形式に変換（role:"tool" → role:"user"+tool_result 等）
-	messages := ConvertToAnthropicMessages(history)
+	messages := ConvertToAnthropicMessagesWithThinking(history, api.IsThinkingEnabled(ctx))
 
 	// デバッグ: tool_use/tool_result の整合性チェック
 	if os.Getenv("XELYON_DEBUG_CLAUDE") == "1" {
@@ -178,6 +180,8 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 // handleStreamingResponse はストリーミングレスポンスを処理
 
 func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {
+	p.lastContentBlocks = nil
+
 	// 画像がない場合は通常のChatWithToolsを使用
 	if image == nil || image.Base64 == "" {
 		history = append(history, api.Message{Role: "user", Content: userMessage})
@@ -188,7 +192,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	model = api.GetDefaultModelWithContext(ctx, model, "claude", "claude-sonnet-4-6")
 
 	// Anthropic Messages API 形式に変換（role:"tool" → role:"user"+tool_result 等）
-	converted := ConvertToAnthropicMessages(history)
+	converted := ConvertToAnthropicMessagesWithThinking(history, api.IsThinkingEnabled(ctx))
 
 	cfg := config.ResolveContext(ctx, p.effectiveConfig())
 	catalogModel := cfg.ModelCatalogName(p.configLookupKey(), model)

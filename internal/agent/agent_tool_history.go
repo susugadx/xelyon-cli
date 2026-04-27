@@ -16,6 +16,7 @@ func (a *Agent) addToolCallsToHistory(response string, toolCalls []*tools.ToolCa
 
 	explanation, _ := extractExplanationAndTool(response)
 	reasoningContent := a.getLastReasoningContent()
+	contentBlocks := a.getLastAnthropicContentBlocks()
 
 	openAIToolCalls := make([]api.OpenAIToolCall, len(toolCalls))
 	for i, tc := range toolCalls {
@@ -36,12 +37,14 @@ func (a *Agent) addToolCallsToHistory(response string, toolCalls []*tools.ToolCa
 
 	historyContent, historyReasoning := a.assistantToolHistoryContent(explanation, reasoningContent)
 
-	a.History = append(a.History, api.Message{
+	msg := api.Message{
 		Role:             "assistant",
 		Content:          historyContent,
 		ReasoningContent: historyReasoning,
 		ToolCalls:        openAIToolCalls,
-	})
+	}
+	msg.SetAnthropicContentBlocks(contentBlocks)
+	a.History = append(a.History, msg)
 
 	// セッションに保存（1回のみ）
 	if a.session != nil {
@@ -96,6 +99,7 @@ func (a *Agent) addToolCallToHistory(response string, toolCall *tools.ToolCall) 
 
 	// reasoning_content を取得（DeepSeek Reasoner 対応）
 	reasoningContent := a.getLastReasoningContent()
+	contentBlocks := a.getLastAnthropicContentBlocks()
 
 	// Function Calling: tool_call_id がある場合は OpenAI 形式で履歴に追加
 	isFunctionCalling := toolCall.ID != ""
@@ -103,7 +107,7 @@ func (a *Agent) addToolCallToHistory(response string, toolCall *tools.ToolCall) 
 		historyContent, historyReasoning := a.assistantToolHistoryContent(explanation, reasoningContent)
 
 		// assistant メッセージに tool_calls を含める
-		a.History = append(a.History, api.Message{
+		msg := api.Message{
 			Role:             "assistant",
 			Content:          historyContent, // 説明部分のみ（ツール呼び出しは ToolCalls に）
 			ReasoningContent: historyReasoning,
@@ -117,7 +121,9 @@ func (a *Agent) addToolCallToHistory(response string, toolCall *tools.ToolCall) 
 					Arguments: toolruntime.ArgsToJSON(toolCall.RawArgs),
 				},
 			}},
-		})
+		}
+		msg.SetAnthropicContentBlocks(contentBlocks)
+		a.History = append(a.History, msg)
 	} else {
 		// テキストベースのツール呼び出し（従来方式）
 		a.History = append(a.History, api.Message{

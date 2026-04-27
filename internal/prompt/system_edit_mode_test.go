@@ -38,3 +38,11 @@ func TestCurrentSystemPrompt_LegacyEditToolMode(t *testing.T) {
 		}
 	}
 }
+
+func TestResolveEditToolMode_BedrockClaudeOnly(t *testing.T) {
+	t.Setenv("XELYON_EDIT_TOOL", "")
+
+	if got := ResolveEditToolMode("bedrock", "amazon.nova-pro-v1:0"); got != EditToolModeLegacy {
+		t.Fatalf("ResolveEditToolMode(bedrock, non-Claude) = %q, want legacy because Bedrock provider is Claude-only in this phase", got)
+	}
+}

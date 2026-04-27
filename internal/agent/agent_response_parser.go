@@ -88,3 +88,7 @@ func extractExplanationAndTool(response string) (explanation, toolJSON string) {
 func (a *Agent) getLastReasoningContent() string {
 	return api.GetReasoningContent(a.CurrentProvider)
 }
+
+func (a *Agent) getLastAnthropicContentBlocks() []api.AnthropicContentBlock {
+	return api.GetAnthropicContentBlocks(a.CurrentProvider)
+}

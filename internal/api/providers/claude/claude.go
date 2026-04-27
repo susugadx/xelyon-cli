@@ -40,10 +40,11 @@ const (
 // Provider はClaude (Anthropic) APIのプロバイダー実装
 type Provider struct {
 	api.BaseProvider
-	mcpTools      []api.ToolDefinition // MCP ツール定義（Tool Use用）
-	usageCallback api.UsageCallback    // トークン使用量コールバック
-	runtimeConfig *config.Config
-	configKey     string
+	mcpTools          []api.ToolDefinition // MCP ツール定義（Tool Use用）
+	usageCallback     api.UsageCallback    // トークン使用量コールバック
+	runtimeConfig     *config.Config
+	configKey         string
+	lastContentBlocks []api.AnthropicContentBlock
 }
 
 // ContextManagement は Claude Context Management API の設定
@@ -175,6 +176,22 @@ func (p *Provider) SetProviderConfigKey(key string) {
 
 func (p *Provider) maxOutputTokens(ctx context.Context, model string) int {
 	return api.GetMaxOutputTokens(ctx, p.configLookupKey(), model)
+}
+
+// LastAnthropicThinkingBlocks は最後の API 呼び出しで返された thinking blocks を返す。
+func (p *Provider) LastAnthropicThinkingBlocks() []api.AnthropicThinkingBlock {
+	if p == nil {
+		return nil
+	}
+	return api.AnthropicThinkingBlocksFromContentBlocks(p.lastContentBlocks)
+}
+
+// LastAnthropicContentBlocks は最後の API 呼び出しで返された assistant content blocks を順序付きで返す。
+func (p *Provider) LastAnthropicContentBlocks() []api.AnthropicContentBlock {
+	if p == nil || len(p.lastContentBlocks) == 0 {
+		return nil
+	}
+	return api.CloneAnthropicContentBlocks(p.lastContentBlocks)
 }
 
 // SupportsImages は画像入力対応を返す

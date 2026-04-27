@@ -185,6 +185,18 @@ type ReasoningContentProvider interface {
 	LastReasoningContent() string
 }
 
+// AnthropicThinkingBlockProvider は Claude thinking block の継続再送に対応するプロバイダーのオプショナルインターフェース
+type AnthropicThinkingBlockProvider interface {
+	// LastAnthropicThinkingBlocks は最後の API 呼び出しで返された thinking blocks を返す
+	LastAnthropicThinkingBlocks() []AnthropicThinkingBlock
+}
+
+// AnthropicContentBlockProvider は Claude content block の順序付き継続再送に対応するプロバイダーのオプショナルインターフェース
+type AnthropicContentBlockProvider interface {
+	// LastAnthropicContentBlocks は最後の API 呼び出しで返された assistant content blocks を順序付きで返す
+	LastAnthropicContentBlocks() []AnthropicContentBlock
+}
+
 // CacheClearable はモデル/プロバイダー切り替え時にキャッシュをクリア可能なプロバイダーのオプショナルインターフェース
 type CacheClearable interface {
 	// ClearCache はプロバイダーが保持するキャッシュ（リモート/ローカル）をクリアする

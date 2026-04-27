@@ -14,14 +14,13 @@ func newTestSpinner() *ui.Spinner {
 	return ui.NewSpinnerWithWriter(io.Discard)
 }
 
+func newTestStreamState() *bedrockStreamState {
+	return newBedrockStreamState(newTestSpinner())
+}
+
 func TestProcessChunk_CompactionBlock(t *testing.T) {
 	p := &Provider{}
-	toolUses := make(map[int]*toolUseAccumulator)
-	compactionBlocks := make(map[int]*strings.Builder)
-	var toolCallsOutput strings.Builder
-	var compactionOutput strings.Builder
-	var lastUsage *api.Usage
-	spinner := newTestSpinner()
+	state := newTestStreamState()
 
 	// content_block_start for compaction
 	startData, _ := json.Marshal(map[string]interface{}{
@@ -31,12 +30,9 @@ func TestProcessChunk_CompactionBlock(t *testing.T) {
 			"type": "compaction",
 		},
 	})
-	text, done := p.processChunk(startData, toolUses, &toolCallsOutput, &lastUsage, compactionBlocks, &compactionOutput, spinner)
+	text, done := p.processChunk(startData, state)
 	if text != "" || done {
 		t.Errorf("expected empty text and done=false for compaction start, got text=%q done=%v", text, done)
-	}
-	if _, ok := compactionBlocks[0]; !ok {
-		t.Fatal("expected compaction block accumulator to be created")
 	}
 
 	// content_block_delta for compaction (should not produce text output)
@@ -48,7 +44,7 @@ func TestProcessChunk_CompactionBlock(t *testing.T) {
 			"text": "compacted content",
 		},
 	})
-	text, _ = p.processChunk(deltaData, toolUses, &toolCallsOutput, &lastUsage, compactionBlocks, &compactionOutput, spinner)
+	text, _ = p.processChunk(deltaData, state)
 	if text != "" {
 		t.Errorf("compaction delta should not produce text output, got: %q", text)
 	}
@@ -58,23 +54,18 @@ func TestProcessChunk_CompactionBlock(t *testing.T) {
 		"type":  "content_block_stop",
 		"index": 0,
 	})
-	text, done = p.processChunk(stopData, toolUses, &toolCallsOutput, &lastUsage, compactionBlocks, &compactionOutput, spinner)
+	text, done = p.processChunk(stopData, state)
 	if text != "" || done {
 		t.Errorf("unexpected output on compaction stop: text=%q done=%v", text, done)
 	}
-	if !strings.Contains(compactionOutput.String(), "compacted content") {
-		t.Errorf("compaction output missing content, got: %q", compactionOutput.String())
+	if !strings.Contains(state.compaction.Output(), "compacted content") {
+		t.Errorf("compaction output missing content, got: %q", state.compaction.Output())
 	}
 }
 
 func TestProcessChunk_MessageDelta_OutputTokens(t *testing.T) {
 	p := &Provider{}
-	toolUses := make(map[int]*toolUseAccumulator)
-	compactionBlocks := make(map[int]*strings.Builder)
-	var toolCallsOutput strings.Builder
-	var compactionOutput strings.Builder
-	var lastUsage *api.Usage
-	spinner := newTestSpinner()
+	state := newTestStreamState()
 
 	data, _ := json.Marshal(map[string]interface{}{
 		"type": "message_delta",
@@ -82,24 +73,19 @@ func TestProcessChunk_MessageDelta_OutputTokens(t *testing.T) {
 			"output_tokens": 42,
 		},
 	})
-	p.processChunk(data, toolUses, &toolCallsOutput, &lastUsage, compactionBlocks, &compactionOutput, spinner)
+	p.processChunk(data, state)
 
-	if lastUsage == nil {
+	if state.lastUsage == nil {
 		t.Fatal("expected lastUsage to be set")
 	}
-	if lastUsage.OutputTokens != 42 {
-		t.Errorf("OutputTokens = %d, want 42", lastUsage.OutputTokens)
+	if state.lastUsage.OutputTokens != 42 {
+		t.Errorf("OutputTokens = %d, want 42", state.lastUsage.OutputTokens)
 	}
 }
 
 func TestProcessChunk_MessageDelta_CacheMetrics(t *testing.T) {
 	p := &Provider{}
-	toolUses := make(map[int]*toolUseAccumulator)
-	compactionBlocks := make(map[int]*strings.Builder)
-	var toolCallsOutput strings.Builder
-	var compactionOutput strings.Builder
-	var lastUsage *api.Usage
-	spinner := newTestSpinner()
+	state := newTestStreamState()
 
 	data, _ := json.Marshal(map[string]interface{}{
 		"type": "message_delta",
@@ -110,41 +96,94 @@ func TestProcessChunk_MessageDelta_CacheMetrics(t *testing.T) {
 			"cache_creation_input_tokens": 20,
 		},
 	})
-	p.processChunk(data, toolUses, &toolCallsOutput, &lastUsage, compactionBlocks, &compactionOutput, spinner)
+	p.processChunk(data, state)
 
-	if lastUsage == nil {
+	if state.lastUsage == nil {
 		t.Fatal("expected lastUsage to be set")
 	}
-	if lastUsage.OutputTokens != 50 {
-		t.Errorf("OutputTokens = %d, want 50", lastUsage.OutputTokens)
+	if state.lastUsage.OutputTokens != 50 {
+		t.Errorf("OutputTokens = %d, want 50", state.lastUsage.OutputTokens)
 	}
 	// InputTokens は正規化: input + cache_read + cache_creation
-	if lastUsage.InputTokens != 200 {
-		t.Errorf("InputTokens = %d, want 200", lastUsage.InputTokens)
+	if state.lastUsage.InputTokens != 200 {
+		t.Errorf("InputTokens = %d, want 200", state.lastUsage.InputTokens)
 	}
-	if lastUsage.CachedInputTokens != 80 {
-		t.Errorf("CachedInputTokens = %d, want 80", lastUsage.CachedInputTokens)
+	if state.lastUsage.CachedInputTokens != 80 {
+		t.Errorf("CachedInputTokens = %d, want 80", state.lastUsage.CachedInputTokens)
 	}
-	if lastUsage.CacheCreationTokens != 20 {
-		t.Errorf("CacheCreationTokens = %d, want 20", lastUsage.CacheCreationTokens)
+	if state.lastUsage.CacheCreationTokens != 20 {
+		t.Errorf("CacheCreationTokens = %d, want 20", state.lastUsage.CacheCreationTokens)
+	}
+}
+
+func TestProcessChunk_ThinkingBlock(t *testing.T) {
+	p := &Provider{}
+	state := newTestStreamState()
+
+	startData, _ := json.Marshal(map[string]interface{}{
+		"type":  "content_block_start",
+		"index": 0,
+		"content_block": map[string]string{
+			"type": "thinking",
+		},
+	})
+	text, done := p.processChunk(startData, state)
+	if text != "" || done {
+		t.Fatalf("thinking start text=%q done=%v, want empty false", text, done)
+	}
+
+	deltaData, _ := json.Marshal(map[string]interface{}{
+		"type":  "content_block_delta",
+		"index": 0,
+		"delta": map[string]string{
+			"type":     "thinking_delta",
+			"thinking": "need a file",
+		},
+	})
+	text, done = p.processChunk(deltaData, state)
+	if text != "" || done {
+		t.Fatalf("thinking delta text=%q done=%v, want empty false", text, done)
+	}
+
+	sigData, _ := json.Marshal(map[string]interface{}{
+		"type":  "content_block_delta",
+		"index": 0,
+		"delta": map[string]string{
+			"type":      "signature_delta",
+			"signature": "sig_1",
+		},
+	})
+	p.processChunk(sigData, state)
+
+	stopData, _ := json.Marshal(map[string]interface{}{
+		"type":  "content_block_stop",
+		"index": 0,
+	})
+	p.processChunk(stopData, state)
+
+	contentBlocks := state.contentBlocks.Blocks()
+	if len(contentBlocks) != 1 {
+		t.Fatalf("len(content blocks) = %d, want 1", len(contentBlocks))
+	}
+	blocks := api.AnthropicThinkingBlocksFromContentBlocks(contentBlocks)
+	if len(blocks) != 1 {
+		t.Fatalf("len(thinking blocks) = %d, want 1", len(blocks))
+	}
+	if blocks[0].Type != "thinking" || blocks[0].Thinking != "need a file" || blocks[0].Signature != "sig_1" {
+		t.Fatalf("thinking block = %#v, want preserved thinking/signature", blocks[0])
 	}
 }
 
 func TestProcessChunk_ContentBlockDelta_NilDelta(t *testing.T) {
 	p := &Provider{}
-	toolUses := make(map[int]*toolUseAccumulator)
-	compactionBlocks := make(map[int]*strings.Builder)
-	var toolCallsOutput strings.Builder
-	var compactionOutput strings.Builder
-	var lastUsage *api.Usage
-	spinner := newTestSpinner()
+	state := newTestStreamState()
 
 	// delta が null の content_block_delta
 	data, _ := json.Marshal(map[string]interface{}{
 		"type":  "content_block_delta",
 		"index": 0,
 	})
-	text, done := p.processChunk(data, toolUses, &toolCallsOutput, &lastUsage, compactionBlocks, &compactionOutput, spinner)
+	text, done := p.processChunk(data, state)
 	if text != "" || done {
 		t.Errorf("nil delta should produce empty text, got text=%q done=%v", text, done)
 	}
@@ -152,18 +191,13 @@ func TestProcessChunk_ContentBlockDelta_NilDelta(t *testing.T) {
 
 func TestProcessChunk_ContentBlockStart_NilContentBlock(t *testing.T) {
 	p := &Provider{}
-	toolUses := make(map[int]*toolUseAccumulator)
-	compactionBlocks := make(map[int]*strings.Builder)
-	var toolCallsOutput strings.Builder
-	var compactionOutput strings.Builder
-	var lastUsage *api.Usage
-	spinner := newTestSpinner()
+	state := newTestStreamState()
 
 	data, _ := json.Marshal(map[string]interface{}{
 		"type":  "content_block_start",
 		"index": 0,
 	})
-	text, done := p.processChunk(data, toolUses, &toolCallsOutput, &lastUsage, compactionBlocks, &compactionOutput, spinner)
+	text, done := p.processChunk(data, state)
 	if text != "" || done {
 		t.Errorf("nil content_block should produce empty text, got text=%q done=%v", text, done)
 	}
@@ -171,17 +205,12 @@ func TestProcessChunk_ContentBlockStart_NilContentBlock(t *testing.T) {
 
 func TestProcessChunk_UnknownEventType(t *testing.T) {
 	p := &Provider{}
-	toolUses := make(map[int]*toolUseAccumulator)
-	compactionBlocks := make(map[int]*strings.Builder)
-	var toolCallsOutput strings.Builder
-	var compactionOutput strings.Builder
-	var lastUsage *api.Usage
-	spinner := newTestSpinner()
+	state := newTestStreamState()
 
 	data, _ := json.Marshal(map[string]interface{}{
 		"type": "unknown_event_type",
 	})
-	text, done := p.processChunk(data, toolUses, &toolCallsOutput, &lastUsage, compactionBlocks, &compactionOutput, spinner)
+	text, done := p.processChunk(data, state)
 	if text != "" || done {
 		t.Errorf("unknown event should be ignored, got text=%q done=%v", text, done)
 	}
