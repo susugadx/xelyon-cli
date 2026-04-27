@@ -47,11 +47,14 @@ func GetPricingInfo(provider string, model string, promptTokenCount ...int) Pric
 
 // GetPricingInfoForConfig は catalog_model 設定を考慮して料金情報を返す。
 func GetPricingInfoForConfig(cfg *config.Config, provider string, model string, promptTokenCount ...int) PricingInfo {
-	pricingModel := model
-	if cfg != nil {
-		pricingModel = cfg.ModelCatalogName(provider, model)
+	return GetPricingInfo(provider, pricingModelForConfig(cfg, provider, model), promptTokenCount...)
+}
+
+func pricingModelForConfig(cfg *config.Config, provider string, model string) string {
+	if cfg == nil {
+		return model
 	}
-	return GetPricingInfo(provider, pricingModel, promptTokenCount...)
+	return cfg.ModelCatalogName(provider, model)
 }
 
 func normalizePromptTokenCount(promptTokenCount []int) int {

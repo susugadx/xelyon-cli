@@ -621,11 +621,12 @@ func TestResponsesUsageWithoutReasoningTokens(t *testing.T) {
 }
 
 // TestResponsesUsageReasoningTokensToAPIUsage は reasoning_tokens が api.Usage.ThinkingTokens に
-// 正しく変換されることを確認
+// 移され、OutputTokens からは除外されることを確認
 func TestResponsesUsageReasoningTokensToAPIUsage(t *testing.T) {
 	tests := []struct {
 		name               string
 		usage              ResponsesUsage
+		wantOutputTokens   int
 		wantThinkingTokens int
 	}{
 		{
@@ -637,6 +638,7 @@ func TestResponsesUsageReasoningTokensToAPIUsage(t *testing.T) {
 					ReasoningTokens: 300,
 				},
 			},
+			wantOutputTokens:   200,
 			wantThinkingTokens: 300,
 		},
 		{
@@ -645,6 +647,7 @@ func TestResponsesUsageReasoningTokensToAPIUsage(t *testing.T) {
 				InputTokens:  1000,
 				OutputTokens: 500,
 			},
+			wantOutputTokens:   500,
 			wantThinkingTokens: 0,
 		},
 		{
@@ -656,25 +659,16 @@ func TestResponsesUsageReasoningTokensToAPIUsage(t *testing.T) {
 					ReasoningTokens: 0,
 				},
 			},
+			wantOutputTokens:   500,
 			wantThinkingTokens: 0,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			reasoningTokens := 0
-			if tt.usage.OutputTokensDetails != nil {
-				reasoningTokens = tt.usage.OutputTokensDetails.ReasoningTokens
-			}
-			cachedTokens := 0
-			if tt.usage.InputTokensDetails != nil {
-				cachedTokens = tt.usage.InputTokensDetails.CachedTokens
-			}
-			apiUsage := &api.Usage{
-				InputTokens:       tt.usage.InputTokens,
-				OutputTokens:      tt.usage.OutputTokens,
-				ThinkingTokens:    reasoningTokens,
-				CachedInputTokens: cachedTokens,
+			apiUsage := responsesUsageToAPIUsage(&tt.usage)
+			if apiUsage.OutputTokens != tt.wantOutputTokens {
+				t.Errorf("OutputTokens = %d, want %d", apiUsage.OutputTokens, tt.wantOutputTokens)
 			}
 			if apiUsage.ThinkingTokens != tt.wantThinkingTokens {
 				t.Errorf("ThinkingTokens = %d, want %d", apiUsage.ThinkingTokens, tt.wantThinkingTokens)
@@ -732,8 +726,8 @@ func TestHandleResponsesStreaming_TextToolCallsAndUsage(t *testing.T) {
 	if !strings.Contains(content, `"tool":"read_file"`) || !strings.Contains(content, `"path":"main.go"`) {
 		t.Fatalf("content = %q, want tool call JSON", content)
 	}
-	if gotUsage.InputTokens != 10 || gotUsage.OutputTokens != 4 || gotUsage.CachedInputTokens != 3 || gotUsage.ThinkingTokens != 2 {
-		t.Fatalf("usage = %+v, want input=10 output=4 cached=3 thinking=2", gotUsage)
+	if gotUsage.InputTokens != 10 || gotUsage.OutputTokens != 2 || gotUsage.CachedInputTokens != 3 || gotUsage.ThinkingTokens != 2 {
+		t.Fatalf("usage = %+v, want input=10 output=2 cached=3 thinking=2", gotUsage)
 	}
 }
 

@@ -54,7 +54,7 @@ func (p *Provider) newBaseResponsesRequestOptions(ctx context.Context, systemPro
 	options := openairesponses.BaseRequestOptions{
 		Model:                model,
 		MaxOutputTokens:      api.GetMaxOutputTokens(ctx, "openai", model.RequestName()),
-		Stream:               true,
+		Stream:               shouldStreamResponses(model.CatalogName()),
 		Store:                true,
 		Tools:                GetResponsesToolDefinitionsWithContext(ctx, p.mcpTools),
 		ToolChoice:           openairesponses.BuildFunctionToolChoice(p.toolChoice),

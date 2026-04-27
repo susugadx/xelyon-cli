@@ -186,16 +186,8 @@ func DecodeStandardUsage(raw json.RawMessage) (*api.Usage, error) {
 		return nil, err
 	}
 
-	cachedTokens := 0
-	if usage.PromptTokensDetails != nil {
-		cachedTokens = usage.PromptTokensDetails.CachedTokens
-	}
-
-	return &api.Usage{
-		InputTokens:       usage.PromptTokens,
-		OutputTokens:      usage.CompletionTokens,
-		CachedInputTokens: cachedTokens,
-	}, nil
+	apiUsage := usage.ToUsage()
+	return &apiUsage, nil
 }
 
 // ParseSSEOptions は OpenAI 互換 SSE の共通処理オプション。

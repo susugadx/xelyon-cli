@@ -3,12 +3,10 @@ package openai
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"os"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	openaicompat "github.com/susugadx/xelyon-cli/internal/api/providers/openai_compat"
 	openairesponses "github.com/susugadx/xelyon-cli/internal/api/providers/openai_responses"
 )
 
@@ -72,18 +70,12 @@ func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, h
 		fmt.Fprintf(errOut, "[DEBUG OpenAI] chatWithResponses called, model=%s\n", model)
 	}
 
-	content, responseID, err := openairesponses.RunStreaming(ctx, openairesponses.StreamingRunOptions{
+	content, responseID, err := p.runResponsesRequest(ctx, responsesRequestRunOptions{
 		URL:          resolveResponsesAPIURL(),
-		BuildRequest: func() openairesponses.Request { return p.buildChatResponsesRequest(ctx, systemPrompt, history, model) },
-		NewRequest: func(ctx context.Context, url string, payload []byte) (*http.Request, error) {
-			return openaicompat.NewBearerJSONBytesRequest(ctx, url, p.APIKey, payload)
-		},
-		ExecuteRequest: p.ExecuteRequest,
-		StreamHandler:  p.handleResponsesStreaming,
-		ProviderName:   p.Name(),
-		DebugName:      "OpenAI",
-		Debug:          os.Getenv("XELYON_DEBUG_OPENAI") == "1",
-		DebugWriter:    errOut,
+		BuildRequest: func() ResponsesRequest { return p.buildChatResponsesRequest(ctx, systemPrompt, history, model) },
+		DebugName:    "OpenAI",
+		Debug:        os.Getenv("XELYON_DEBUG_OPENAI") == "1",
+		DebugWriter:  errOut,
 		HasPreviousResponseID: func() bool {
 			return p.lastResponseID != ""
 		},
@@ -100,20 +92,14 @@ func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, h
 // chatWithImageResponses は Responses API で画像付きメッセージを処理
 // NOTE: 画像付きの場合は previous_response_id を使用しない（キャッシュ動作が不明瞭なため）
 func (p *Provider) chatWithImageResponses(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {
-	content, responseID, err := openairesponses.RunStreaming(ctx, openairesponses.StreamingRunOptions{
+	content, responseID, err := p.runResponsesRequest(ctx, responsesRequestRunOptions{
 		URL: resolveResponsesAPIURL(),
-		BuildRequest: func() openairesponses.Request {
+		BuildRequest: func() ResponsesRequest {
 			return p.buildImageResponsesRequest(ctx, systemPrompt, history, userMessage, image, model)
 		},
-		NewRequest: func(ctx context.Context, url string, payload []byte) (*http.Request, error) {
-			return openaicompat.NewBearerJSONBytesRequest(ctx, url, p.APIKey, payload)
-		},
-		ExecuteRequest: p.ExecuteRequest,
-		StreamHandler:  p.handleResponsesStreaming,
-		ProviderName:   p.Name(),
-		DebugName:      "OpenAI",
-		Debug:          os.Getenv("XELYON_DEBUG_OPENAI") == "1",
-		DebugWriter:    api.ErrorWriterFromContext(ctx),
+		DebugName:   "OpenAI",
+		Debug:       os.Getenv("XELYON_DEBUG_OPENAI") == "1",
+		DebugWriter: api.ErrorWriterFromContext(ctx),
 	})
 	if err == nil && responseID != "" {
 		// 画像メッセージ後も responseID を保存（次回テキストのみの場合に使用可能）

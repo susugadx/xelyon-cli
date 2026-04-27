@@ -34,6 +34,7 @@ provider_models:
         default_model: qwen2.5-coder:7b
         max_output_tokens: 4096
     openai:
+        # default_model は gpt-5.4 のままです。GPT-5.5 / GPT-5.5 Pro は明示指定で利用できます。
         default_model: gpt-5.4
         max_output_tokens: 16384
     openrouter:

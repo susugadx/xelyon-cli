@@ -70,7 +70,7 @@ func TestHandleNonStreamingResponse_UsageCallback(t *testing.T) {
 	resp := &http.Response{
 		Body: io.NopCloser(strings.NewReader(`{
 			"choices":[{"message":{"content":"hello"}}],
-			"usage":{"prompt_tokens":12,"completion_tokens":5,"prompt_tokens_details":{"cached_tokens":4}}
+			"usage":{"prompt_tokens":12,"completion_tokens":5,"prompt_tokens_details":{"cached_tokens":4},"completion_tokens_details":{"reasoning_tokens":2}}
 		}`)),
 	}
 
@@ -81,8 +81,8 @@ func TestHandleNonStreamingResponse_UsageCallback(t *testing.T) {
 	if result != "hello" {
 		t.Fatalf("handleNonStreamingResponse() = %q, want %q", result, "hello")
 	}
-	if gotUsage.InputTokens != 12 || gotUsage.OutputTokens != 5 || gotUsage.CachedInputTokens != 4 {
-		t.Fatalf("usage callback = %+v, want input=12 output=5 cached=4", gotUsage)
+	if gotUsage.InputTokens != 12 || gotUsage.OutputTokens != 3 || gotUsage.CachedInputTokens != 4 || gotUsage.ThinkingTokens != 2 {
+		t.Fatalf("usage callback = %+v, want input=12 output=3 cached=4 thinking=2", gotUsage)
 	}
 }
 

@@ -185,12 +185,12 @@ func TestHasUsagePayload(t *testing.T) {
 }
 
 func TestDecodeStandardUsage(t *testing.T) {
-	usage, err := DecodeStandardUsage(json.RawMessage(`{"prompt_tokens":9,"completion_tokens":4,"prompt_tokens_details":{"cached_tokens":2}}`))
+	usage, err := DecodeStandardUsage(json.RawMessage(`{"prompt_tokens":9,"completion_tokens":4,"prompt_tokens_details":{"cached_tokens":2},"completion_tokens_details":{"reasoning_tokens":1}}`))
 	if err != nil {
 		t.Fatalf("DecodeStandardUsage() error = %v", err)
 	}
-	if usage == nil || usage.InputTokens != 9 || usage.OutputTokens != 4 || usage.CachedInputTokens != 2 {
-		t.Fatalf("DecodeStandardUsage() = %+v, want input=9 output=4 cached=2", usage)
+	if usage == nil || usage.InputTokens != 9 || usage.OutputTokens != 3 || usage.CachedInputTokens != 2 || usage.ThinkingTokens != 1 {
+		t.Fatalf("DecodeStandardUsage() = %+v, want input=9 output=3 cached=2 thinking=1", usage)
 	}
 }
 

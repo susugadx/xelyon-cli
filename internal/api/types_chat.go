@@ -26,11 +26,30 @@ type PromptTokensDetails struct {
 	CachedTokens int `json:"cached_tokens,omitempty"` // キャッシュから読み取ったトークン数
 }
 
+// CompletionTokensDetails は出力トークンの詳細情報（reasoning 等）。
+type CompletionTokensDetails struct {
+	ReasoningTokens int `json:"reasoning_tokens,omitempty"`
+}
+
 // StreamUsageInfo はストリーミングレスポンスの使用量情報
 type StreamUsageInfo struct {
-	PromptTokens        int                  `json:"prompt_tokens"`
-	CompletionTokens    int                  `json:"completion_tokens"`
-	PromptTokensDetails *PromptTokensDetails `json:"prompt_tokens_details,omitempty"` // キャッシュ詳細（Groq, OpenAI等）
+	PromptTokens            int                      `json:"prompt_tokens"`
+	CompletionTokens        int                      `json:"completion_tokens"`
+	PromptTokensDetails     *PromptTokensDetails     `json:"prompt_tokens_details,omitempty"`     // キャッシュ詳細（Groq, OpenAI等）
+	CompletionTokensDetails *CompletionTokensDetails `json:"completion_tokens_details,omitempty"` // reasoning 詳細（OpenAI等）
+}
+
+// ToUsage は OpenAI 互換 usage を api.Usage の契約へ正規化する。
+func (u StreamUsageInfo) ToUsage() Usage {
+	cachedTokens := 0
+	if u.PromptTokensDetails != nil {
+		cachedTokens = u.PromptTokensDetails.CachedTokens
+	}
+	reasoningTokens := 0
+	if u.CompletionTokensDetails != nil {
+		reasoningTokens = u.CompletionTokensDetails.ReasoningTokens
+	}
+	return UsageFromOutputTokensIncludingThinking(u.PromptTokens, u.CompletionTokens, cachedTokens, reasoningTokens)
 }
 
 // StreamResponse はストリームレスポンス

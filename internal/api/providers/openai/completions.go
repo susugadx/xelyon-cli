@@ -130,35 +130,13 @@ func decodeOpenAICompatUsage(raw json.RawMessage) (*api.Usage, error) {
 		return nil, nil
 	}
 
-	var usagePayload struct {
-		PromptTokens        int `json:"prompt_tokens"`
-		CompletionTokens    int `json:"completion_tokens"`
-		PromptTokensDetails *struct {
-			CachedTokens int `json:"cached_tokens,omitempty"`
-		} `json:"prompt_tokens_details,omitempty"`
-		CompletionTokensDetails *struct {
-			ReasoningTokens int `json:"reasoning_tokens,omitempty"`
-		} `json:"completion_tokens_details,omitempty"`
-	}
+	var usagePayload api.StreamUsageInfo
 	if err := json.Unmarshal(raw, &usagePayload); err != nil {
 		return nil, err
 	}
 
-	cachedTokens := 0
-	if usagePayload.PromptTokensDetails != nil {
-		cachedTokens = usagePayload.PromptTokensDetails.CachedTokens
-	}
-	reasoningTokens := 0
-	if usagePayload.CompletionTokensDetails != nil {
-		reasoningTokens = usagePayload.CompletionTokensDetails.ReasoningTokens
-	}
-
-	return &api.Usage{
-		InputTokens:       usagePayload.PromptTokens,
-		OutputTokens:      usagePayload.CompletionTokens,
-		ThinkingTokens:    reasoningTokens,
-		CachedInputTokens: cachedTokens,
-	}, nil
+	apiUsage := usagePayload.ToUsage()
+	return &apiUsage, nil
 }
 
 // handleNonStreamingResponse は非ストリーミングレスポンスを処理（フォールバック）

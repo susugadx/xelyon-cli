@@ -101,15 +101,19 @@ func (s *responsesStreamState) appendFunctionCallToolJSON(acc *responsesFunction
 	if acc == nil {
 		return
 	}
-	tc := &api.OpenAIToolCall{
-		ID:   acc.CallID,
-		Type: "function",
-		Function: api.OpenAIToolCallFunction{
-			Name:      acc.Name,
-			Arguments: acc.Arguments.String(),
-		},
-	}
-	if toolJSON, err := ConvertToolCallToToolJSON(tc); err == nil {
+	if toolJSON, err := convertResponsesFunctionCallToToolJSON(acc.CallID, acc.Name, acc.Arguments.String()); err == nil {
 		s.toolCallsOut.WriteString(toolJSON)
 	}
+}
+
+func convertResponsesFunctionCallToToolJSON(callID, name, arguments string) (string, error) {
+	tc := &api.OpenAIToolCall{
+		ID:   callID,
+		Type: "function",
+		Function: api.OpenAIToolCallFunction{
+			Name:      name,
+			Arguments: arguments,
+		},
+	}
+	return ConvertToolCallToToolJSON(tc)
 }
