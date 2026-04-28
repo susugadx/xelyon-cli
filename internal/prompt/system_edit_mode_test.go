@@ -18,4 +18,23 @@ func TestCurrentSystemPrompt_LegacyEditToolMode(t *testing.T) {
 	if !strings.Contains(prompt, "actual gather_context, read_file, or search_code output") {
 		t.Error("legacy mode prompt should allow gather_context as exact edit provenance")
 	}
+	if !strings.Contains(prompt, "Write new_str as the intended replacement based on that verified context") {
+		t.Error("legacy mode prompt should allow generated replacement text based on verified context")
+	}
+	if !strings.Contains(prompt, "edits=[{old_str,new_str},...]") {
+		t.Error("legacy mode prompt should recommend same-file str_replace batch edits")
+	}
+	if !strings.Contains(prompt, "advanced fallback only") {
+		t.Error("legacy mode prompt should demote line-range str_replace to fallback guidance")
+	}
+	for _, forbidden := range []string{
+		"no read_file needed",
+		"old_str mode requires read_file first",
+		"Prefer str_replace for partial edits after targeted reads or searches.",
+		"old_str/new_str copied from actual",
+	} {
+		if strings.Contains(prompt, forbidden) {
+			t.Fatalf("legacy mode prompt should not contain old str_replace guidance %q", forbidden)
+		}
+	}
 }

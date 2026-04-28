@@ -112,3 +112,32 @@ func TestToolDescriptions_ReadFileAndSearchCodeDescribeLowLevelUsage(t *testing.
 		t.Error("search_code description should not be Go-specific")
 	}
 }
+
+func TestToolDescriptions_StrReplaceEvidenceFirstContract(t *testing.T) {
+	desc := ToolDescriptions["str_replace"]
+	for _, want := range []string{
+		"Copy exact old_str and existing context",
+		"actual gather_context, read_file, or search_code output",
+		"do not invent old_str",
+		"Write new_str as the intended replacement based on that verified context",
+		"same-file edits=[{old_str,new_str},...]",
+		"advanced fallback",
+		"fresh tool output provides an exact range",
+		"do not guess line ranges",
+		"avoid evidence",
+	} {
+		if !strings.Contains(desc, want) {
+			t.Fatalf("str_replace description missing %q:\n%s", want, desc)
+		}
+	}
+	for _, forbidden := range []string{
+		"PREFERRED",
+		"no read_file needed",
+		"old_str mode requires read_file first",
+		"old_str/new_str copied from actual",
+	} {
+		if strings.Contains(desc, forbidden) {
+			t.Fatalf("str_replace description should not contain legacy guidance %q:\n%s", forbidden, desc)
+		}
+	}
+}

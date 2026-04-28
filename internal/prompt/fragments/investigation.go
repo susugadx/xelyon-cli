@@ -225,7 +225,17 @@ func CombinedInvestigationQueryLine(surface investigation.Surface) string {
 
 // LegacyStrReplaceContextSourceLine returns the shared str_replace provenance rule.
 func LegacyStrReplaceContextSourceLine() string {
-	return promptBullet("str_replace old_str must come from actual gather_context, read_file, or search_code output in this session.")
+	return promptBullet("Use str_replace for precise edits to existing files. Copy exact old_str and existing context from actual gather_context, read_file, or search_code output in this session; do not invent or approximate old_str. Write new_str as the intended replacement based on that verified context.")
+}
+
+// LegacyStrReplaceBatchLine returns the shared same-file batch guidance.
+func LegacyStrReplaceBatchLine() string {
+	return promptBullet("For multiple edits in the same file, prefer one str_replace call with edits=[{old_str,new_str},...]; batch edits are same-file only and must be based on actual file content.")
+}
+
+// LegacyStrReplaceLineRangeLine returns the shared expert fallback guidance.
+func LegacyStrReplaceLineRangeLine() string {
+	return promptBullet("Line-range str_replace (old_str empty + start_line/end_line) is an advanced fallback only when fresh tool output provides an exact range; do not guess ranges or use it to avoid evidence.")
 }
 
 // LegacyRetryReadLine returns the shared retry-after-read rule.
@@ -236,10 +246,11 @@ func LegacyRetryReadLine() string {
 // LegacyEditToolRulesBlock は legacy edit tool 用の共有 rules block を返す。
 func LegacyEditToolRulesBlock() string {
 	return strings.Join([]string{
-		promptBullet("Prefer str_replace for partial edits after targeted reads or searches."),
+		LegacyStrReplaceContextSourceLine(),
+		LegacyStrReplaceBatchLine(),
+		LegacyStrReplaceLineRangeLine(),
 		promptBullet("Use write_file for full-file creation or replacement."),
 		promptBullet("Use delete_file only for intentional removals."),
-		LegacyStrReplaceContextSourceLine(),
 		LegacyRetryReadLine(),
 	}, "\n")
 }

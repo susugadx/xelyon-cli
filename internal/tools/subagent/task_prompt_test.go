@@ -16,6 +16,18 @@ func TestPromptForTaskType_EditUsesProviderResolvedMode(t *testing.T) {
 	if !strings.Contains(claudePrompt, "search_code: code discovery tool") || !strings.Contains(claudePrompt, "read_file: low-level exact-content reader") {
 		t.Fatal("claude edit prompt should expose low-level investigation overrides")
 	}
+	if !strings.Contains(claudePrompt, "Copy exact old_str and existing context from actual gather_context, read_file, or search_code output") {
+		t.Fatal("claude edit prompt should require evidence-backed str_replace old_str")
+	}
+	if !strings.Contains(claudePrompt, "Write new_str as the intended replacement based on that verified context") {
+		t.Fatal("claude edit prompt should allow generated replacement text based on verified context")
+	}
+	if !strings.Contains(claudePrompt, "edits=[{old_str,new_str},...]") {
+		t.Fatal("claude edit prompt should recommend same-file str_replace batch edits")
+	}
+	if !strings.Contains(claudePrompt, "advanced fallback only") {
+		t.Fatal("claude edit prompt should demote line-range str_replace to fallback guidance")
+	}
 
 	openAIPrompt := PromptForTaskType(TaskTypeEdit, "openai", "gpt-5.4")
 	if !strings.Contains(openAIPrompt, "apply_patch") {

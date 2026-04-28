@@ -105,7 +105,7 @@ func helpToolDescription(name string, surface investigation.Surface, description
 	case "apply_patch":
 		return "Primary edit tool for precise patch-based file changes"
 	case "str_replace":
-		return "Legacy edit tool for targeted in-file replacements"
+		return "Precise same-file replacements from actual tool output"
 	case "write_file":
 		return "Legacy edit tool to create or overwrite a file"
 	case "delete_file":

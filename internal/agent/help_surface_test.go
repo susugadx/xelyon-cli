@@ -54,7 +54,7 @@ func TestPrintHelpToWriter_LegacySurfaceShowsOverrides(t *testing.T) {
 		"gather_context    - Primary/default investigation tool",
 		"search_code       - Low-level code search override on legacy surfaces when exposed",
 		"read_file         - Low-level exact file reader override when exposed",
-		"str_replace       - Legacy edit tool for targeted in-file replacements",
+		"str_replace       - Precise same-file replacements from actual tool output",
 		"write_file        - Legacy edit tool to create or overwrite a file",
 	} {
 		if !strings.Contains(got, fragment) {
@@ -114,7 +114,7 @@ func TestPrintHelpToWriter_AfterModelSwitchUsesCurrentModeVisibility(t *testing.
 	}
 	for _, fragment := range []string{
 		"search_code       - Low-level code search override on legacy surfaces when exposed",
-		"str_replace       - Legacy edit tool for targeted in-file replacements",
+		"str_replace       - Precise same-file replacements from actual tool output",
 		"write_file        - Legacy edit tool to create or overwrite a file",
 	} {
 		if !strings.Contains(got, fragment) {
@@ -153,7 +153,7 @@ func TestPrintHelpToWriter_AfterProviderSwitchUsesCurrentModeVisibility(t *testi
 	}
 	for _, fragment := range []string{
 		"search_code       - Low-level code search override on legacy surfaces when exposed",
-		"str_replace       - Legacy edit tool for targeted in-file replacements",
+		"str_replace       - Precise same-file replacements from actual tool output",
 		"write_file        - Legacy edit tool to create or overwrite a file",
 	} {
 		if !strings.Contains(got, fragment) {

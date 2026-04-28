@@ -82,14 +82,30 @@ func TestLegacyEditToolRulesBlock_SharedRules(t *testing.T) {
 	block := LegacyEditToolRulesBlock()
 
 	for _, want := range []string{
-		"Prefer str_replace for partial edits after targeted reads or searches.",
+		"Copy exact old_str and existing context from actual gather_context, read_file, or search_code output",
+		"do not invent or approximate old_str",
+		"Write new_str as the intended replacement based on that verified context",
+		"For multiple edits in the same file, prefer one str_replace call with edits=[{old_str,new_str},...]",
+		"batch edits are same-file only",
+		"Line-range str_replace",
+		"advanced fallback only",
+		"do not guess ranges or use it to avoid evidence",
 		"Use write_file for full-file creation or replacement.",
 		"Use delete_file only for intentional removals.",
-		"actual gather_context, read_file, or search_code output",
 		"Do not loop read-fail-read-fail.",
 	} {
 		if !strings.Contains(block, want) {
 			t.Fatalf("expected legacy block to contain %q, got:\n%s", want, block)
+		}
+	}
+	for _, forbidden := range []string{
+		"Prefer str_replace for partial edits after targeted reads or searches.",
+		"no read_file needed",
+		"old_str mode requires read_file first",
+		"old_str/new_str copied from actual",
+	} {
+		if strings.Contains(block, forbidden) {
+			t.Fatalf("legacy block should not contain old guidance %q, got:\n%s", forbidden, block)
 		}
 	}
 }
