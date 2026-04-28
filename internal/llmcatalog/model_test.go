@@ -70,6 +70,70 @@ func TestKnownMaxOutputTokens_DeepSeekPassThrough(t *testing.T) {
 	}
 }
 
+func TestKnownMaxOutputTokens_BedrockNova(t *testing.T) {
+	tests := []struct {
+		model string
+		want  int
+	}{
+		{model: "amazon.nova-pro-v1:0", want: 5000},
+		{model: "us.amazon.nova-pro-v1:0", want: 5000},
+		{model: "eu.amazon.nova-lite-v1:0", want: 5000},
+		{model: "apac.amazon.nova-micro-v1:0", want: 5000},
+		{model: "amazon.nova-premier-v1:0", want: 25000},
+		{model: "us.amazon.nova-premier-v1:0", want: 25000},
+		{model: "global.amazon.nova-2-lite-v1:0", want: 64000},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			got, ok := KnownMaxOutputTokens(tt.model)
+			if !ok {
+				t.Fatalf("KnownMaxOutputTokens(%q) ok = false, want true", tt.model)
+			}
+			if got != tt.want {
+				t.Fatalf("KnownMaxOutputTokens(%q) = %d, want %d", tt.model, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestKnownMaxOutputTokens_BedrockConverseFamilies(t *testing.T) {
+	tests := []struct {
+		model string
+		want  int
+	}{
+		{model: "meta.llama3-3-70b-instruct-v1:0", want: 4000},
+		{model: "us.meta.llama3-2-90b-instruct-v1:0", want: 4000},
+		{model: "meta.llama4-scout-17b-instruct-v1:0", want: 8000},
+		{model: "mistral.mistral-large-2402-v1:0", want: 4000},
+		{model: "mistral.pixtral-large-2502-v1:0", want: 16000},
+		{model: "mistral.magistral-small-2509-v1:0", want: 40000},
+		{model: "mistral.ministral-14b-3-0-v1:0", want: 8000},
+		{model: "cohere.command-r-v1:0", want: 4000},
+		{model: "ai21.jamba-1-5-large-v1:0", want: 4000},
+		{model: "writer.palmyra-x5-v1:0", want: 8000},
+		{model: "deepseek.r1-v1:0", want: 8000},
+		{model: "qwen.qwen3-coder-480b-a35b-instruct-v1:0", want: 16000},
+		{model: "qwen.qwen3-235b-a22b-2507-v1:0", want: 8000},
+		{model: "minimax.minimax-m2", want: 8000},
+		{model: "nvidia.nemotron-nano-3-30b-v1:0", want: 8000},
+		{model: "zai.glm-4-7-flash-v1:0", want: 4000},
+		{model: "openai.gpt-oss-120b-1:0", want: 16000},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			got, ok := KnownMaxOutputTokens(tt.model)
+			if !ok {
+				t.Fatalf("KnownMaxOutputTokens(%q) ok = false, want true", tt.model)
+			}
+			if got != tt.want {
+				t.Fatalf("KnownMaxOutputTokens(%q) = %d, want %d", tt.model, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestModelContextLimit_DeepSeekV4(t *testing.T) {
 	for _, model := range []string{
 		"deepseek-v4-flash",

@@ -182,7 +182,8 @@ func TestProvider_ChatWithTools_BuildsAdaptiveThinkingForOpus47(t *testing.T) {
 
 func TestProvider_ChatWithTools_SelectsConverseRouteForNonClaudeBedrockModel(t *testing.T) {
 	mockClient := &mockInvokeModelWithResponseStreamClient{err: errors.New("should not call bedrock")}
-	p := &Provider{client: mockClient}
+	mockConverse := &mockConverseStreamClient{err: errors.New("converse boom")}
+	p := &Provider{client: mockClient, converseClient: mockConverse}
 
 	cfg := config.DefaultConfig()
 	cfg.ProviderModels["bedrock"] = config.ProviderModelConfig{
@@ -192,11 +193,14 @@ func TestProvider_ChatWithTools_SelectsConverseRouteForNonClaudeBedrockModel(t *
 
 	ctx := newBedrockTestContext(cfg)
 	_, err := p.ChatWithTools(ctx, "system prompt", []api.Message{{Role: "user", Content: "hello"}}, "")
-	if err == nil || !strings.Contains(err.Error(), "ConverseStream route is selected but not implemented yet") {
-		t.Fatalf("ChatWithTools() error = %v, want ConverseStream route stub", err)
+	if err == nil || !strings.Contains(err.Error(), "bedrock converse API error") {
+		t.Fatalf("ChatWithTools() error = %v, want wrapped ConverseStream API error", err)
 	}
 	if mockClient.lastInput != nil {
 		t.Fatal("InvokeModelWithResponseStream() should not be called for Converse route")
+	}
+	if mockConverse.lastInput == nil {
+		t.Fatal("ConverseStream() should be called for Converse route")
 	}
 }
 

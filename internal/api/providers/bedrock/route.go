@@ -56,7 +56,3 @@ func ensureBedrockClaudeMessagesRoute(req bedrockRequestContext) error {
 	}
 	return fmt.Errorf("bedrock Claude Messages route requires an Anthropic Claude model: model=%q catalog_model=%q route=%q", req.model, req.catalogModel, req.route)
 }
-
-func unsupportedBedrockConverseRouteError(model, catalogModel string) error {
-	return fmt.Errorf("bedrock ConverseStream route is selected but not implemented yet: model=%q catalog_model=%q", model, catalogModel)
-}

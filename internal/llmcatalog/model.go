@@ -198,6 +198,9 @@ func KnownMaxOutputTokens(model string) (int, bool) {
 	if isClaudeOpus47ModelName(model) {
 		return 128000, true
 	}
+	if tokens, ok := knownBedrockMaxOutputTokens(model); ok {
+		return tokens, true
+	}
 	for _, rule := range modelMaxOutputTokenPrefixes {
 		if strings.HasPrefix(model, rule.Pattern) {
 			return rule.Limit, true

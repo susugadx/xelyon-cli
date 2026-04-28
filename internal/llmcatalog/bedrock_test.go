@@ -44,6 +44,9 @@ func TestIsBedrockModelID(t *testing.T) {
 		{model: "global.anthropic.claude-sonnet-4-6-v1", want: true},
 		{model: "amazon.nova-pro-v1:0", want: true},
 		{model: "us.amazon.nova-pro-v1:0", want: true},
+		{model: "meta.llama3-3-70b-instruct-v1:0", want: true},
+		{model: "qwen.qwen3-coder-480b-a35b-instruct-v1:0", want: true},
+		{model: "minimax.minimax-m2", want: true},
 		{model: "anthropic/claude-sonnet-4.6", want: false},
 		{model: "gpt-5.4", want: false},
 	}

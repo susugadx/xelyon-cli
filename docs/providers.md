@@ -9,7 +9,7 @@ XELYON は provider/model に応じて編集ツールを自動で切り替えま
 - OpenAI / Azure OpenAI / Gemini 系: `apply_patch`
 - Claude / Anthropic / DeepSeek 系: `str_replace` / `write_file` / `delete_file`
 - OpenRouter: `anthropic/...` / `deepseek/...` は legacy、`openai/...` / `google/...` / `gemini/...` は `apply_patch`
-- Bedrock: Claude family は legacy 編集ツール。非 Claude family は Converse API 経路で対応予定
+- Bedrock: Claude family は legacy 編集ツール。非 Claude family は Converse API 経路で text / tool use / usage を実行
 
 `XELYON_EDIT_TOOL` を指定した場合は、この自動判定より環境変数の指定が優先されます。
 
@@ -350,7 +350,7 @@ xelyon --provider openrouter --model anthropic/claude-sonnet-4.6
 
 ### 9. Bedrock (AWS)
 
-現在の Bedrock provider は Claude on Bedrock を `InvokeModelWithResponseStream` + Claude Messages 形式で実行します。Amazon Nova など Claude 以外の Bedrock モデルは Converse API 経路へ分離済みですが、実行処理は未実装です。
+現在の Bedrock provider は Claude on Bedrock を `InvokeModelWithResponseStream` + Claude Messages 形式で実行します。Amazon Nova など Claude 以外の Bedrock モデルは `ConverseStream` 経路で text streaming / tool use / usage callback に対応します。Converse 経路の画像入力、thinking/reasoning、prompt cache は未対応です。Converse 経路ではモデル上限が catalog で既知の場合のみ `maxTokens` を送信し、未知モデルでは Bedrock 側のデフォルト上限に委ねます。
 
 ```bash
 # AWS 認証情報を設定（以下のいずれか）
@@ -368,14 +368,14 @@ aws configure
 xelyon --provider bedrock --model global.anthropic.claude-sonnet-4-6-v1
 xelyon --provider bedrock --model global.anthropic.claude-opus-4-5-20251101-v1:0
 xelyon --provider bedrock --model us.anthropic.claude-haiku-4-5-20251001-v1:0
+xelyon --provider bedrock --model amazon.nova-pro-v1:0
 ```
 
 **特徴:**
 - AWS フルマネージドサービス（中間マージンなし）
-- Anthropic ネイティブのプロンプトキャッシュ対応
 - IAM ロールによるセキュアな認証
-- Extended Thinking 対応
-- 画像入力対応
+- Claude 経路はプロンプトキャッシュ / Extended Thinking / 画像入力対応
+- Converse 経路は text streaming / tool use / usage callback 対応
 
 **利用可能なモデル ID:**
 | モデル | Bedrock モデル ID |
@@ -383,6 +383,7 @@ xelyon --provider bedrock --model us.anthropic.claude-haiku-4-5-20251001-v1:0
 | Claude Opus 4.5 | `global.anthropic.claude-opus-4-5-20251101-v1:0` |
 | Claude Sonnet 4.6 | `global.anthropic.claude-sonnet-4-6-v1` |
 | Claude Haiku 4.5 | `us.anthropic.claude-haiku-4-5-20251001-v1:0` |
+| Amazon Nova Pro | `amazon.nova-pro-v1:0` |
 
 ## モデル指定方法
 
