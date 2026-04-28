@@ -61,6 +61,12 @@ default_provider: deepseek
 default_model: deepseek-v4-flash
 # プロバイダーごとのモデル設定
 provider_models:
+    azure:
+        # default_model は Azure OpenAI の deployment 名です。
+        # catalog_model は token/pricing/capability 判定に使う実モデル名です。
+        default_model: azure-gpt-5.4
+        catalog_model: gpt-5.4
+        max_output_tokens: 16384
     bedrock:
         default_model: global.anthropic.claude-sonnet-4-6-v1
         max_output_tokens: 64000
@@ -184,11 +190,11 @@ web_search:
 sub_agent:
     # サブエージェント機能を有効化
     enabled: true
-    # 既定モデル（空でメイン provider の最安モデルを自動選択）
+    # 既定モデル（空でメイン provider の最安モデルを自動選択。Azure では deployment 名を指定）
     default_model: gpt-5.4-mini
     # 既定推論強度（off / low / medium / high）
     default_effort: ""
-    # 同時実行上限（デフォルト: 5）
+    # 同時実行上限（デフォルト: 1）
     max_concurrent: 1
 
 # ============================================================
@@ -524,6 +530,10 @@ export DEEPSEEK_API_KEY=sk-...
 
 # OpenAI
 export OPENAI_API_KEY=sk-...
+
+# Azure OpenAI
+export AZURE_OPENAI_API_KEY=...
+export AZURE_OPENAI_BASE_URL=https://YOUR-RESOURCE-NAME.openai.azure.com/openai/v1
 
 # Gemini
 export GEMINI_API_KEY=...

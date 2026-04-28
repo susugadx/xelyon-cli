@@ -23,6 +23,39 @@ provider_models:
 	}
 }
 
+func TestCloneProviderModelConfigMap_NormalizedKeyCollisionUsesStableOwnerPrecedence(t *testing.T) {
+	src := map[string]ProviderModelConfig{
+		"Azure OpenAI": {
+			DefaultModel: "display-deployment",
+			CatalogModel: "gpt-5.5",
+		},
+		"azure": {
+			DefaultModel:    "owner-deployment",
+			MaxOutputTokens: 12345,
+		},
+	}
+
+	for i := 0; i < 200; i++ {
+		got := cloneProviderModelConfigMap(src)
+		pm, ok := got["azure"]
+		if !ok {
+			t.Fatalf("cloneProviderModelConfigMap() missing azure key: %#v", got)
+		}
+		if pm.DefaultModel != "owner-deployment" {
+			t.Fatalf("DefaultModel = %q, want owner key value", pm.DefaultModel)
+		}
+		if pm.CatalogModel != "gpt-5.5" {
+			t.Fatalf("CatalogModel = %q, want merged display-name value", pm.CatalogModel)
+		}
+		if pm.MaxOutputTokens != 12345 {
+			t.Fatalf("MaxOutputTokens = %d, want owner key value", pm.MaxOutputTokens)
+		}
+		if _, exists := got["azure openai"]; exists {
+			t.Fatalf("unexpected display-name normalized key remains: %#v", got)
+		}
+	}
+}
+
 func TestProviderModelStoreFromYAMLWithRoot_StateResolution(t *testing.T) {
 	t.Run("provider_models key missing keeps absent state", func(t *testing.T) {
 		data := []byte("default_provider: openai")

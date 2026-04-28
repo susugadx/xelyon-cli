@@ -34,7 +34,7 @@ func rawProviderModelsFromEffectiveDiff(effective map[string]ProviderModelConfig
 
 	raw := map[string]ProviderModelConfig{}
 	for key, pm := range effective {
-		normalized := NormalizeProviderName(key)
+		normalized := ActiveProviderConfigKey(key)
 		if normalized == "" {
 			continue
 		}

@@ -11,22 +11,25 @@ import (
 var ValidProviders = llmcatalog.ProviderKeys(true)
 
 var providerTypos = map[string]string{
-	"deepseak":  "deepseek",
-	"deepseek2": "deepseek",
-	"gpt":       "openai",
-	"chatgpt":   "openai",
-	"gpt4":      "openai",
-	"google":    "gemini",
-	"palm":      "gemini",
-	"bard":      "gemini",
-	"sonnet":    "claude",
-	"opus":      "claude",
-	"haiku":     "claude",
-	"llama":     "ollama",
-	"mistral":   "ollama",
-	"qwen":      "ollama",
-	"aws":       "bedrock",
-	"amazon":    "bedrock",
+	"deepseak":    "deepseek",
+	"deepseek2":   "deepseek",
+	"gpt":         "openai",
+	"chatgpt":     "openai",
+	"gpt4":        "openai",
+	"aoai":        "azure",
+	"azureai":     "azure",
+	"azureopenai": "azure",
+	"google":      "gemini",
+	"palm":        "gemini",
+	"bard":        "gemini",
+	"sonnet":      "claude",
+	"opus":        "claude",
+	"haiku":       "claude",
+	"llama":       "ollama",
+	"mistral":     "ollama",
+	"qwen":        "ollama",
+	"aws":         "bedrock",
+	"amazon":      "bedrock",
 }
 
 // GetDisplayProviders は表示用のプロバイダーリスト（エイリアスを除く）を返す
@@ -110,13 +113,13 @@ func suggestProvider(invalid string) string {
 			return valid
 		}
 	}
+	if suggestion, ok := providerTypos[lower]; ok {
+		return suggestion
+	}
 	for _, valid := range ValidProviders {
 		if strings.Contains(lower, valid) || strings.Contains(valid, lower) {
 			return valid
 		}
-	}
-	if suggestion, ok := providerTypos[lower]; ok {
-		return suggestion
 	}
 
 	return "deepseek"

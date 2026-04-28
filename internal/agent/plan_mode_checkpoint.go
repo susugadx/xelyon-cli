@@ -122,7 +122,7 @@ func (c *planModeCheckpoint) restoreSessionResponseContext(session *history.Sess
 		session.ResponseProviderName = config.CanonicalProviderName(session.ProviderName)
 	}
 
-	session.ResponseProviderConfigKey = config.NormalizeProviderName(strings.TrimSpace(c.responseProviderKey))
+	session.ResponseProviderConfigKey = config.ActiveProviderConfigKey(strings.TrimSpace(c.responseProviderKey))
 	if session.ResponseProviderConfigKey == "" {
 		session.ResponseProviderConfigKey = session.ProviderConfigKey
 	}

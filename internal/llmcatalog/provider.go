@@ -13,6 +13,7 @@ type ProviderModelDefaults struct {
 // ProviderDescriptor は LLM provider の静的メタ情報を表す。
 type ProviderDescriptor struct {
 	Key                  string
+	DisplayName          string
 	Aliases              []string
 	CredentialKind       string
 	APIKeyEnv            string
@@ -34,6 +35,7 @@ type ProviderDescriptor struct {
 var providerOrder = []string{
 	"deepseek",
 	"openai",
+	"azure",
 	"gemini",
 	"claude",
 	"ollama",
@@ -46,6 +48,7 @@ var displayProviderOrder = []string{
 	"deepseek",
 	"claude",
 	"openai",
+	"azure",
 	"gemini",
 	"groq",
 	"ollama",
@@ -86,6 +89,22 @@ var providerDescriptors = map[string]ProviderDescriptor{
 		CompressionModel:     "gpt-5.4-mini",
 		ModelDefaults: ProviderModelDefaults{
 			DefaultModel:    "gpt-5.4",
+			MaxOutputTokens: 16384,
+		},
+	},
+	"azure": {
+		Key:                  "azure",
+		DisplayName:          "Azure OpenAI",
+		CredentialKind:       "api_key",
+		APIKeyEnv:            "AZURE_OPENAI_API_KEY",
+		BaseURLEnv:           "AZURE_OPENAI_BASE_URL",
+		CredentialEnvVars:    []string{"AZURE_OPENAI_API_KEY", "AZURE_OPENAI_BASE_URL"},
+		SetupInstructions:    []string{"export AZURE_OPENAI_API_KEY=your-api-key", "export AZURE_OPENAI_BASE_URL=https://YOUR-RESOURCE-NAME.openai.azure.com/openai/v1"},
+		SupportsImages:       true,
+		SupportsResponsesAPI: true,
+		PricingFamily:        "openai",
+		ModelDefaults: ProviderModelDefaults{
+			DefaultModel:    "azure-gpt-5.4",
 			MaxOutputTokens: 16384,
 		},
 	},
@@ -190,10 +209,28 @@ func CanonicalProviderKey(name string) string {
 		if normalized == key {
 			return key
 		}
+		if normalized != "" && normalized == NormalizeProviderKey(providerDescriptors[key].DisplayName) {
+			return key
+		}
 		for _, alias := range providerDescriptors[key].Aliases {
 			if normalized == alias {
 				return key
 			}
+		}
+	}
+	return normalized
+}
+
+// ProviderConfigKey は provider_models/session owner に使う config key を返す。
+// 表示名は永続化キーではないため canonical key に寄せ、明示 alias はそのまま保持する。
+func ProviderConfigKey(name string) string {
+	normalized := NormalizeProviderKey(name)
+	if normalized == "" {
+		return ""
+	}
+	for _, key := range providerOrder {
+		if normalized == NormalizeProviderKey(providerDescriptors[key].DisplayName) {
+			return key
 		}
 	}
 	return normalized
@@ -268,6 +305,7 @@ func ProviderModelLookupKeys(provider string) []string {
 	if normalized == "" {
 		return nil
 	}
+	normalized = ProviderConfigKey(normalized)
 
 	keys := []string{normalized}
 	canonical := CanonicalProviderKey(normalized)

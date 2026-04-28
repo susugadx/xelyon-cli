@@ -6,7 +6,7 @@ XELYON CLIは複数のLLMプロバイダーに対応しています。
 
 XELYON は provider/model に応じて編集ツールを自動で切り替えます。
 
-- OpenAI / Gemini 系: `apply_patch`
+- OpenAI / Azure OpenAI / Gemini 系: `apply_patch`
 - Claude / Anthropic / DeepSeek 系: `str_replace` / `write_file` / `delete_file`
 - OpenRouter: `anthropic/...` / `deepseek/...` は legacy、`openai/...` / `google/...` / `gemini/...` は `apply_patch`
 - Bedrock: Claude family は legacy、それ以外は `apply_patch`
@@ -19,6 +19,7 @@ XELYON は provider/model に応じて編集ツールを自動で切り替えま
 |------------|---------|---------|-----------|
 | DeepSeek | ❌ | `DEEPSEEK_API_KEY` | https://platform.deepseek.com |
 | OpenAI | ✅ | `OPENAI_API_KEY` | https://platform.openai.com |
+| Azure OpenAI | ✅ | `AZURE_OPENAI_API_KEY` + `AZURE_OPENAI_BASE_URL` | https://azure.microsoft.com/products/ai-services/openai-service |
 | Gemini | ✅ | `GEMINI_API_KEY` | https://ai.google.dev |
 | Claude | ✅ | `ANTHROPIC_API_KEY` | https://console.anthropic.com |
 | Groq | ❌ | `GROQ_API_KEY` | https://console.groq.com |
@@ -119,7 +120,34 @@ xelyon --provider openai --model gpt-5.5
 xelyon --provider openai --model gpt-5.5-pro
 ```
 
-### 3. Gemini
+### 3. Azure OpenAI
+
+```bash
+# Azure OpenAI resource の API key と v1 base URL を設定
+export AZURE_OPENAI_API_KEY=...
+export AZURE_OPENAI_BASE_URL=https://YOUR-RESOURCE-NAME.openai.azure.com/openai/v1
+
+# model には Azure 側の deployment 名を指定
+xelyon --provider azure --model my-gpt-5-deployment
+```
+
+**特徴:**
+- Responses API (`/openai/v1/responses`) を使用
+- API key 認証は `api-key` ヘッダー
+- 画像入力 / function calling 対応
+- `model` は Azure の deployment 名
+- OpenAI provider 用の `prompt_cache_key` / `prompt_cache_retention` は送信しません
+
+deployment 名が実モデル名と異なる場合は、token limit / pricing / capability 判定用に `catalog_model` を設定してください。
+
+```yaml
+provider_models:
+  azure:
+    default_model: my-gpt-5-deployment
+    catalog_model: gpt-5.4
+```
+
+### 4. Gemini
 
 ```bash
 # API キー取得: https://aistudio.google.com/app/apikey
@@ -157,7 +185,7 @@ Gemini 3 Pro / Flash は **thinking（推論）が常時 ON** です。XELYON �
 
 **注意:** Gemini 3 Pro の Function Calling には既知のバグ（空レスポンス）が報告されています。問題が発生する場合は `XELYON_DEBUG_GEMINI=1` で詳細ログを確認してください。
 
-### 4. Claude
+### 5. Claude
 
 ```bash
 # API キー取得: https://console.anthropic.com
@@ -180,7 +208,7 @@ xelyon --provider claude --model claude-opus-4-6
 - `xhigh` レベルは Opus 4.7 で `xhigh`、Opus 4.6 で `max`、Sonnet 4.6 では `high` にフォールバック
 - Claude Compaction は Opus 4.7 / Opus 4.6 / Opus 4.5 / Sonnet 4.6 で有効化対象
 
-### 5. Groq
+### 6. Groq
 
 ```bash
 # API キー取得: https://console.groq.com/keys
@@ -196,7 +224,7 @@ xelyon --provider groq --model meta-llama/llama-4-scout-17b-16e-instruct
 - 画像入力非対応
 - プロンプトキャッシュ対応（自動、50% OFF、一部モデルのみ）
 
-### 6. Ollama
+### 7. Ollama
 
 ```bash
 # インストール: https://ollama.com/download
@@ -217,7 +245,7 @@ xelyon --provider ollama --model llama3.1:8b
 - 無料
 - 画像入力非対応
 
-### 7. OpenRouter
+### 8. OpenRouter
 
 ```bash
 # API キー取得: https://openrouter.ai
@@ -232,7 +260,7 @@ xelyon --provider openrouter --model anthropic/claude-sonnet-4.6
 - OpenAI互換API
 - 画像入力対応（モデルによる）
 
-### 8. Bedrock (AWS)
+### 9. Bedrock (AWS)
 
 ```bash
 # AWS 認証情報を設定（以下のいずれか）
@@ -293,6 +321,9 @@ provider_models:
     default_model: deepseek-v4-flash
   openai:
     default_model: gpt-5.4
+  azure:
+    default_model: my-gpt-5-deployment
+    catalog_model: gpt-5.4
   gemini:
     default_model: gemini-3.1-pro-preview-customtools
   claude:
@@ -358,6 +389,7 @@ DeepSeek V4 Pro には 2026-05-05 15:59 UTC までの期間限定 75% off があ
 
 ### 画像解析
 - **OpenAI**: 高品質な画像理解
+- **Azure OpenAI**: Azure 上の GPT deployment で画像入力
 - **Gemini**: マルチモーダル対応
 - **Claude**: 画像+長文の組み合わせ
 
@@ -407,6 +439,7 @@ APIプロバイダーのダッシュボードで使用状況とレート制限�
 
 - DeepSeek: https://platform.deepseek.com/usage
 - OpenAI: https://platform.openai.com/usage
+- Azure OpenAI: Azure Portal の Azure OpenAI resource
 - Gemini: https://aistudio.google.com
 - Claude: https://console.anthropic.com
 - Groq: https://console.groq.com

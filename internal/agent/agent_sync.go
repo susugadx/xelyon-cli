@@ -11,13 +11,13 @@ func (a *Agent) currentProviderConfigKey() string {
 		return ""
 	}
 
-	if key := config.NormalizeProviderName(a.ProviderConfigKey); key != "" {
+	if key := config.ActiveProviderConfigKey(a.ProviderConfigKey); key != "" {
 		return key
 	}
 	if key := providerConfigKeyFromProvider(a.CurrentProvider); key != "" {
 		return key
 	}
-	return config.NormalizeProviderName(a.ProviderName)
+	return config.ActiveProviderConfigKey(a.ProviderName)
 }
 
 // SyncWithRuntimeConfig は runtime に保持した設定と Agent の状態を同期する。
@@ -51,7 +51,7 @@ func (a *Agent) syncRuntimeProviderConfig(cfg *config.Config, out io.Writer) {
 	}
 
 	currentProviderConfigKey := a.currentProviderConfigKey()
-	nextProviderConfigKey := config.NormalizeProviderName(cfg.DefaultProvider)
+	nextProviderConfigKey := config.ActiveProviderConfigKey(cfg.DefaultProvider)
 	if nextProviderConfigKey == "" {
 		return
 	}

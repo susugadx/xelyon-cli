@@ -58,11 +58,58 @@ func TestProviderDescriptorFor_ClonesCredentialEnvVars(t *testing.T) {
 	if !reflect.DeepEqual(again, []string{"OPENAI_API_KEY"}) {
 		t.Fatalf("ProviderCredentialEnvVars(openai) after mutation = %v, want [OPENAI_API_KEY]", again)
 	}
+
+	azure := ProviderCredentialEnvVars("azure")
+	if !reflect.DeepEqual(azure, []string{"AZURE_OPENAI_API_KEY", "AZURE_OPENAI_BASE_URL"}) {
+		t.Fatalf("ProviderCredentialEnvVars(azure) = %v, want Azure key and base URL", azure)
+	}
+}
+
+func TestCanonicalProviderKey_ResolvesDisplayName(t *testing.T) {
+	if got := CanonicalProviderKey("Azure OpenAI"); got != "azure" {
+		t.Fatalf("CanonicalProviderKey(%q) = %q, want azure", "Azure OpenAI", got)
+	}
+}
+
+func TestProviderConfigKey_CanonicalizesDisplayNameButPreservesAlias(t *testing.T) {
+	tests := []struct {
+		name     string
+		provider string
+		want     string
+	}{
+		{name: "azure display name", provider: "Azure OpenAI", want: "azure"},
+		{name: "azure display name normalized", provider: " azure openai ", want: "azure"},
+		{name: "anthropic alias is an owner key", provider: "anthropic", want: "anthropic"},
+		{name: "canonical key", provider: "claude", want: "claude"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ProviderConfigKey(tt.provider); got != tt.want {
+				t.Fatalf("ProviderConfigKey(%q) = %q, want %q", tt.provider, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestProviderModelLookupKeys_CanonicalizesDisplayNameButPreservesAlias(t *testing.T) {
+	azureKeys := ProviderModelLookupKeys("Azure OpenAI")
+	if !reflect.DeepEqual(azureKeys, []string{"azure"}) {
+		t.Fatalf("ProviderModelLookupKeys(Azure OpenAI) = %v, want [azure]", azureKeys)
+	}
+
+	anthropicKeys := ProviderModelLookupKeys("anthropic")
+	if !reflect.DeepEqual(anthropicKeys, []string{"anthropic", "claude"}) {
+		t.Fatalf("ProviderModelLookupKeys(anthropic) = %v, want [anthropic claude]", anthropicKeys)
+	}
 }
 
 func TestProviderSupportsResponsesAPI(t *testing.T) {
 	if !ProviderSupportsResponsesAPI("openai") {
 		t.Fatal("ProviderSupportsResponsesAPI(openai) = false, want true")
+	}
+	if !ProviderSupportsResponsesAPI("azure") {
+		t.Fatal("ProviderSupportsResponsesAPI(azure) = false, want true")
 	}
 	if ProviderSupportsResponsesAPI("openrouter") {
 		t.Fatal("ProviderSupportsResponsesAPI(openrouter) = true, want false")

@@ -12,9 +12,20 @@ const defaultSubAgentModel = "gpt-5.4-mini"
 
 // spawnConfig は sub-agent 実行直前の確定設定です。
 type spawnConfig struct {
-	taskType string
-	model    string
-	cfg      *config.Config
+	taskType               string
+	model                  string
+	modelProviderConfigKey string
+	cfg                    *config.Config
+}
+
+// SpawnRuntimeContext は親 agent の実行時選択を sub-agent 起動へ渡します。
+type SpawnRuntimeContext struct {
+	CurrentModel string
+}
+
+type subAgentModelSelection struct {
+	model             string
+	providerConfigKey string
 }
 
 func normalizeTaskType(taskType string) string {
@@ -25,13 +36,18 @@ func normalizeTaskType(taskType string) string {
 }
 
 func prepareSpawnConfig(cfg *config.Config, provider api.Provider, taskType, model, reasoningEffort string) (*spawnConfig, error) {
+	return prepareSpawnConfigWithRuntimeContext(cfg, provider, SpawnRuntimeContext{}, taskType, model, reasoningEffort)
+}
+
+func prepareSpawnConfigWithRuntimeContext(cfg *config.Config, provider api.Provider, runtimeCtx SpawnRuntimeContext, taskType, model, reasoningEffort string) (*spawnConfig, error) {
 	if provider == nil {
 		return nil, fmt.Errorf("provider is required")
 	}
 
 	normalizedTaskType := normalizeTaskType(taskType)
 	mainProvider := config.CanonicalProviderName(provider.Name())
-	subCfg, resolvedModel, err := cloneConfigForSub(cfg, mainProvider, normalizedTaskType, model, reasoningEffort)
+	mainProviderConfigKey := currentProviderConfigKey(provider)
+	subCfg, selection, err := cloneConfigForSubWithRuntimeContext(cfg, mainProvider, mainProviderConfigKey, runtimeCtx, normalizedTaskType, model, reasoningEffort)
 	if err != nil {
 		return nil, err
 	}
@@ -40,9 +56,10 @@ func prepareSpawnConfig(cfg *config.Config, provider api.Provider, taskType, mod
 	}
 
 	return &spawnConfig{
-		taskType: normalizedTaskType,
-		model:    resolvedModel,
-		cfg:      subCfg,
+		taskType:               normalizedTaskType,
+		model:                  selection.model,
+		modelProviderConfigKey: selection.providerConfigKey,
+		cfg:                    subCfg,
 	}, nil
 }
 
@@ -54,21 +71,42 @@ func applySubAgentPrompt(cfg *config.Config, taskType string, provider api.Provi
 }
 
 func cloneConfigForSub(cfg *config.Config, mainProvider, taskType, model, reasoningEffort string) (*config.Config, string, error) {
+	cloned, selection, err := cloneConfigForSubWithRuntimeContext(cfg, mainProvider, "", SpawnRuntimeContext{}, taskType, model, reasoningEffort)
+	if err != nil {
+		return nil, "", err
+	}
+	return cloned, selection.model, nil
+}
+
+func cloneConfigForSubWithRuntimeContext(cfg *config.Config, mainProvider, mainProviderConfigKey string, runtimeCtx SpawnRuntimeContext, taskType, model, reasoningEffort string) (*config.Config, subAgentModelSelection, error) {
 	cloned := config.CloneConfig(cfg)
 	if cloned == nil {
 		cloned = config.DefaultConfig()
 	}
 	taskType = normalizeTaskType(taskType)
 
-	resolvedModel := normalizeSubAgentModel(model)
-	if resolvedModel == "" {
-		resolvedModel = normalizeSubAgentModel(cloned.SubAgent.DefaultModel)
+	selection := subAgentModelSelection{model: normalizeSubAgentModel(model)}
+	if selection.model != "" {
+		selection.providerConfigKey = providerConfigKeyForExplicitSubAgentModelSelection(mainProvider, mainProviderConfigKey)
 	}
-	if resolvedModel == "" {
-		resolvedModel = inferSubAgentModel(mainProvider)
+	if selection.model == "" {
+		defaultModel := normalizeSubAgentModel(cloned.SubAgent.DefaultModel)
+		if defaultModel != "" && subAgentDefaultModelAppliesToProvider(mainProvider, defaultModel) {
+			selection = subAgentModelSelection{
+				model:             defaultModel,
+				providerConfigKey: providerConfigKeyForSubAgentDefaultSelection(mainProvider, mainProviderConfigKey),
+			}
+		}
 	}
-	if resolvedModel == "" {
-		resolvedModel = defaultSubAgentModel
+	if selection.model == "" {
+		selection = inferSubAgentModelSelection(cloned, mainProvider, mainProviderConfigKey, runtimeCtx.CurrentModel)
+	}
+	if selection.model == "" {
+		fallbackModel, err := fallbackSubAgentModel(mainProvider)
+		if err != nil {
+			return nil, subAgentModelSelection{}, err
+		}
+		selection.model = fallbackModel
 	}
 
 	effort := strings.TrimSpace(reasoningEffort)
@@ -80,10 +118,10 @@ func cloneConfigForSub(cfg *config.Config, mainProvider, taskType, model, reason
 	}
 
 	if err := applyReasoningEffort(cloned, effort); err != nil {
-		return nil, "", err
+		return nil, subAgentModelSelection{}, err
 	}
 
-	return cloned, resolvedModel, nil
+	return cloned, selection, nil
 }
 
 func normalizeSubAgentModel(model string) string {
@@ -96,8 +134,65 @@ func normalizeSubAgentModel(model string) string {
 	}
 }
 
-func inferSubAgentModel(provider string) string {
-	return config.ProviderDefaultSubAgentModel(provider)
+func subAgentDefaultModelAppliesToProvider(provider, model string) bool {
+	if config.CanonicalProviderName(provider) == "azure" && model == defaultSubAgentModel {
+		return false
+	}
+	return true
+}
+
+func inferSubAgentModel(cfg *config.Config, provider string) string {
+	return inferSubAgentModelSelection(cfg, provider, "", "").model
+}
+
+func inferSubAgentModelSelection(cfg *config.Config, provider, providerConfigKey, currentModel string) subAgentModelSelection {
+	if model := config.ProviderDefaultSubAgentModel(provider); model != "" {
+		return subAgentModelSelection{model: model}
+	}
+	if cfg == nil {
+		return subAgentModelSelection{}
+	}
+
+	if config.CanonicalProviderName(provider) == "azure" {
+		owner := providerConfigKeyForSubAgentSelection(provider, providerConfigKey)
+		if model := normalizeSubAgentModel(currentModel); model != "" {
+			return subAgentModelSelection{model: model, providerConfigKey: owner}
+		}
+		if model := cfg.GetExplicitProviderDefaultModel(provider); model != "" {
+			return subAgentModelSelection{model: model, providerConfigKey: owner}
+		}
+		return subAgentModelSelection{}
+	}
+
+	return subAgentModelSelection{model: cfg.GetSelectedModelForProvider(provider)}
+}
+
+func fallbackSubAgentModel(provider string) (string, error) {
+	if config.CanonicalProviderName(provider) == "azure" {
+		return "", fmt.Errorf("azure sub-agent model requires a current deployment, sub_agent.default_model, or provider_models.azure.default_model")
+	}
+	return defaultSubAgentModel, nil
+}
+
+func providerConfigKeyForSubAgentSelection(provider, providerConfigKey string) string {
+	if key := config.ActiveProviderConfigKey(providerConfigKey); key != "" {
+		return key
+	}
+	return config.ActiveProviderConfigKey(provider)
+}
+
+func providerConfigKeyForSubAgentDefaultSelection(provider, providerConfigKey string) string {
+	if config.CanonicalProviderName(provider) != "azure" {
+		return ""
+	}
+	return providerConfigKeyForSubAgentSelection(provider, providerConfigKey)
+}
+
+func providerConfigKeyForExplicitSubAgentModelSelection(provider, providerConfigKey string) string {
+	if config.CanonicalProviderName(provider) != "azure" {
+		return ""
+	}
+	return providerConfigKeyForSubAgentSelection(provider, providerConfigKey)
 }
 
 func applyReasoningEffort(cfg *config.Config, effort string) error {
@@ -134,22 +229,28 @@ func currentProviderConfigKey(current api.Provider) string {
 	return config.ActiveProviderConfigKey(current.Name())
 }
 
-func resolveSubProvider(current api.Provider, cfg *config.Config, model string, factory ProviderFactory) (api.Provider, error) {
+func resolveSubProvider(current api.Provider, cfg *config.Config, model, modelProviderConfigKey string, factory ProviderFactory) (api.Provider, error) {
 	if current == nil {
 		return nil, fmt.Errorf("provider is required")
 	}
 
 	currentName := config.CanonicalProviderName(current.Name())
 	currentConfigKey := currentProviderConfigKey(current)
-	target := currentName
-	if cfg != nil {
+	target := config.CanonicalProviderName(modelProviderConfigKey)
+	factoryProviderName := config.ActiveProviderConfigKey(modelProviderConfigKey)
+	if target == "" {
+		target = currentName
+	}
+	if factoryProviderName == "" && cfg != nil {
 		target = cfg.ResolveProviderForModel(currentName, model)
 	}
 	if target == "" {
 		target = currentName
 	}
-	factoryProviderName := target
-	if currentConfigKey != "" && config.SameProviderRuntimeIdentity(currentConfigKey, target) {
+	if factoryProviderName == "" {
+		factoryProviderName = target
+	}
+	if currentConfigKey != "" && modelProviderConfigKey == "" && config.SameProviderRuntimeIdentity(currentConfigKey, target) {
 		factoryProviderName = currentConfigKey
 	}
 	if factory == nil {

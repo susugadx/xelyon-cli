@@ -24,6 +24,12 @@ type responsesRequestRunOptions struct {
 	DebugWriter             io.Writer
 }
 
+// ResponsesNonStreamingOptions は Responses API の非ストリーミング解析時の provider 差分を表す。
+type ResponsesNonStreamingOptions struct {
+	ProviderName  string
+	UsageCallback api.UsageCallback
+}
+
 type responsesNonStreamingResponse struct {
 	ID         string                            `json:"id"`
 	Status     string                            `json:"status"`
@@ -103,7 +109,8 @@ func (p *Provider) executeLongRunningResponsesRequest(req *http.Request) (*http.
 	return api.DoWithRetry(req.Context(), newLongRunningResponsesHTTPClient(p.HTTPClient), req)
 }
 
-func newLongRunningResponsesHTTPClient(base *http.Client) *http.Client {
+// NewLongRunningResponsesHTTPClient は非ストリーミング Responses 用に header timeout を外した HTTP client を返す。
+func NewLongRunningResponsesHTTPClient(base *http.Client) *http.Client {
 	if base == nil {
 		base = &http.Client{}
 	}
@@ -122,6 +129,10 @@ func newLongRunningResponsesHTTPClient(base *http.Client) *http.Client {
 
 	client.Transport = transport
 	return &client
+}
+
+func newLongRunningResponsesHTTPClient(base *http.Client) *http.Client {
+	return NewLongRunningResponsesHTTPClient(base)
 }
 
 func writeResponsesDebugRequest(options responsesRequestRunOptions, payload []byte) {
@@ -146,6 +157,14 @@ func shouldRetryResponsesWithoutPreviousResponseID(resp *http.Response, options 
 }
 
 func (p *Provider) handleResponsesNonStreaming(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, string, error) {
+	return HandleResponsesNonStreaming(ctx, resp, spinner, ResponsesNonStreamingOptions{
+		ProviderName:  "OpenAI",
+		UsageCallback: p.usageCallback,
+	})
+}
+
+// HandleResponsesNonStreaming は Responses API の非ストリーミング response を処理する。
+func HandleResponsesNonStreaming(ctx context.Context, resp *http.Response, spinner *ui.Spinner, options ResponsesNonStreamingOptions) (string, string, error) {
 	var result responsesNonStreamingResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		api.StopSpinner(spinner)
@@ -153,55 +172,63 @@ func (p *Provider) handleResponsesNonStreaming(ctx context.Context, resp *http.R
 	}
 	api.StopSpinner(spinner)
 
-	if err := result.validateSuccess(); err != nil {
+	providerName := strings.TrimSpace(options.ProviderName)
+	if providerName == "" {
+		providerName = "OpenAI"
+	}
+	if err := result.validateSuccess(providerName); err != nil {
 		return "", "", err
 	}
 
-	p.emitResponsesNonStreamingUsage(result.Usage)
+	emitResponsesNonStreamingUsage(result.Usage, options.UsageCallback)
 	text := result.extractText()
 	content := composeResponsesNonStreamingContent(text, result.extractToolJSON())
 	printResponsesNonStreamingText(ctx, text)
 	return content, result.ID, nil
 }
 
-func (r responsesNonStreamingResponse) validateSuccess() error {
+func (r responsesNonStreamingResponse) validateSuccess(providerName string) error {
 	if r.Error != nil {
-		return formatResponsesNonStreamingError(r.Status, r.Error)
+		return formatResponsesNonStreamingError(providerName, r.Status, r.Error)
 	}
 	if r.Status == "" || r.Status == "completed" {
 		return nil
 	}
 	if r.Status == "failed" {
-		return errors.New("OpenAI Responses API request failed")
+		return fmt.Errorf("%s Responses API request failed", providerName)
 	}
-	return fmt.Errorf("OpenAI Responses API response status: %s", r.Status)
+	return fmt.Errorf("%s Responses API response status: %s", providerName, r.Status)
 }
 
-func formatResponsesNonStreamingError(status string, responsesError *ResponsesError) error {
+func formatResponsesNonStreamingError(providerName, status string, responsesError *ResponsesError) error {
 	if responsesError.Message != "" {
 		return errors.New(responsesError.Message)
 	}
 	if responsesError.Code != "" {
-		return fmt.Errorf("OpenAI API error: %s", responsesError.Code)
+		return fmt.Errorf("%s API error: %s", providerName, responsesError.Code)
 	}
 	if responsesError.Type != "" {
-		return fmt.Errorf("OpenAI API error: %s", responsesError.Type)
+		return fmt.Errorf("%s API error: %s", providerName, responsesError.Type)
 	}
 	if status == "failed" {
-		return errors.New("OpenAI Responses API request failed")
+		return fmt.Errorf("%s Responses API request failed", providerName)
 	}
-	return errors.New("OpenAI API error")
+	return fmt.Errorf("%s API error", providerName)
 }
 
 func (p *Provider) emitResponsesNonStreamingUsage(usage *ResponsesUsage) {
-	if p.usageCallback == nil {
+	emitResponsesNonStreamingUsage(usage, p.usageCallback)
+}
+
+func emitResponsesNonStreamingUsage(usage *ResponsesUsage, callback api.UsageCallback) {
+	if callback == nil {
 		return
 	}
 	apiUsage := responsesUsageToAPIUsage(usage)
 	if apiUsage == nil {
 		return
 	}
-	p.usageCallback(*apiUsage)
+	callback(*apiUsage)
 }
 
 func (r responsesNonStreamingResponse) extractText() string {

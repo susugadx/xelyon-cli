@@ -77,7 +77,7 @@ var FieldTypeMap = map[string]ConfigFieldType{
 
 // SelectOptions は選択型フィールドの選択肢
 var SelectOptions = map[string][]string{
-	"default_provider":         {"deepseek", "claude", "openai", "gemini", "groq", "ollama", "openrouter", "bedrock"},
+	"default_provider":         {"deepseek", "claude", "openai", "azure", "gemini", "groq", "ollama", "openrouter", "bedrock"},
 	"execution.mode":           {"balanced", "trusted", "full_auto"},
 	"general.ui_language":      {"auto", "ja", "en"},
 	"output.assistant_updates": {"", "verbose", "phase", "off"},
@@ -113,7 +113,7 @@ var FieldDescriptions = map[string]string{
 	"sub_agent.default_effort":           "既定推論強度（off / low / medium / high）",
 	"sub_agent.default_model":            "既定モデル（空でメイン provider の最安モデルを自動選択）",
 	"sub_agent.enabled":                  "サブエージェント機能を有効化",
-	"sub_agent.max_concurrent":           "同時実行上限（デフォルト: 5）",
+	"sub_agent.max_concurrent":           "同時実行上限（デフォルト: 1）",
 	"web_search.cache_enabled":           "キャッシュを有効化（デフォルト: true）",
 	"web_search.cache_size":              "最大キャッシュ数（デフォルト: 50）",
 	"web_search.cache_ttl":               "キャッシュTTL秒数（デフォルト: 3600 = 1時間）",

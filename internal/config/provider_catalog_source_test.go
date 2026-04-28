@@ -41,6 +41,9 @@ func TestProviderCredentialEnvVarsAndAvailability(t *testing.T) {
 	if got := ProviderCredentialEnvVars("openai"); !reflect.DeepEqual(got, []string{"OPENAI_API_KEY"}) {
 		t.Fatalf("ProviderCredentialEnvVars(openai) = %v, want [OPENAI_API_KEY]", got)
 	}
+	if got := ProviderCredentialEnvVars("azure"); !reflect.DeepEqual(got, []string{"AZURE_OPENAI_API_KEY", "AZURE_OPENAI_BASE_URL"}) {
+		t.Fatalf("ProviderCredentialEnvVars(azure) = %v, want Azure key and base URL", got)
+	}
 	if got := ProviderCredentialEnvVars("ollama"); len(got) != 0 {
 		t.Fatalf("ProviderCredentialEnvVars(ollama) = %v, want empty", got)
 	}
@@ -53,6 +56,15 @@ func TestProviderCredentialEnvVarsAndAvailability(t *testing.T) {
 	if !ProviderHasAvailableCredential("openai") {
 		t.Fatal("ProviderHasAvailableCredential(openai) = false, want true with key")
 	}
+	t.Setenv("AZURE_OPENAI_API_KEY", "azure-key")
+	t.Setenv("AZURE_OPENAI_BASE_URL", "")
+	if ProviderHasAvailableCredential("azure") {
+		t.Fatal("ProviderHasAvailableCredential(azure) = true, want false without base URL")
+	}
+	t.Setenv("AZURE_OPENAI_BASE_URL", "https://example.openai.azure.com/openai/v1")
+	if !ProviderHasAvailableCredential("azure") {
+		t.Fatal("ProviderHasAvailableCredential(azure) = false, want true with key and base URL")
+	}
 	if !ProviderHasAvailableCredential("ollama") {
 		t.Fatal("ProviderHasAvailableCredential(ollama) = false, want true with default base URL")
 	}
@@ -62,7 +74,16 @@ func TestProviderSupportsResponsesAPI(t *testing.T) {
 	if !ProviderSupportsResponsesAPI("openai") {
 		t.Fatal("ProviderSupportsResponsesAPI(openai) = false, want true")
 	}
+	if !ProviderSupportsResponsesAPI("azure") {
+		t.Fatal("ProviderSupportsResponsesAPI(azure) = false, want true")
+	}
 	if ProviderSupportsResponsesAPI("groq") {
 		t.Fatal("ProviderSupportsResponsesAPI(groq) = true, want false")
+	}
+}
+
+func TestAzureProviderCatalogDoesNotHardcodeHelperDeployments(t *testing.T) {
+	if got := ProviderDefaultSubAgentModel("azure"); got != "" {
+		t.Fatalf("ProviderDefaultSubAgentModel(azure) = %q, want empty so configured deployment is used", got)
 	}
 }

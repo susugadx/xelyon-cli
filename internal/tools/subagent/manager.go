@@ -155,6 +155,15 @@ func (m *Manager) Events() <-chan SubAgentEvent {
 // Spawn はサブエージェントを起動し、agent_id を返します。
 // ctx がキャンセルされるとサブエージェントの実行も中断されます。
 func (m *Manager) Spawn(ctx context.Context, message, taskType, model, reasoningEffort string, provider api.Provider, cfg *config.Config) (string, error) {
+	return m.spawnWithRuntimeContext(ctx, message, taskType, model, reasoningEffort, provider, cfg, SpawnRuntimeContext{})
+}
+
+// SpawnWithRuntimeContext は親 agent の実行時 model を考慮してサブエージェントを起動します。
+func (m *Manager) SpawnWithRuntimeContext(ctx context.Context, message, taskType, model, reasoningEffort string, provider api.Provider, cfg *config.Config, runtimeCtx SpawnRuntimeContext) (string, error) {
+	return m.spawnWithRuntimeContext(ctx, message, taskType, model, reasoningEffort, provider, cfg, runtimeCtx)
+}
+
+func (m *Manager) spawnWithRuntimeContext(ctx context.Context, message, taskType, model, reasoningEffort string, provider api.Provider, cfg *config.Config, runtimeCtx SpawnRuntimeContext) (string, error) {
 	if strings.TrimSpace(message) == "" {
 		return "", fmt.Errorf("message is required")
 	}
@@ -163,7 +172,7 @@ func (m *Manager) Spawn(ctx context.Context, message, taskType, model, reasoning
 	}
 	taskType = normalizeTaskType(taskType)
 
-	spawnCfg, err := prepareSpawnConfig(cfg, provider, taskType, model, reasoningEffort)
+	spawnCfg, err := prepareSpawnConfigWithRuntimeContext(cfg, provider, runtimeCtx, taskType, model, reasoningEffort)
 	if err != nil {
 		return "", err
 	}
@@ -173,7 +182,7 @@ func (m *Manager) Spawn(ctx context.Context, message, taskType, model, reasoning
 		return "", err
 	}
 
-	subProvider, err := resolveSubProvider(provider, spawnCfg.cfg, spawnCfg.model, m.providerFactory)
+	subProvider, err := resolveSubProvider(provider, spawnCfg.cfg, spawnCfg.model, spawnCfg.modelProviderConfigKey, m.providerFactory)
 	if err != nil {
 		m.removeAgent(sub.id)
 		return "", err

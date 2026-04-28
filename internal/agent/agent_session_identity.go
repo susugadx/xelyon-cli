@@ -62,9 +62,9 @@ func shouldRestoreSessionResponseID(sessionModel, currentModel, sessionProviderN
 	}
 
 	normalizedCurrentProvider := config.CanonicalProviderName(currentProviderName)
-	normalizedCurrentProviderConfigKey := config.NormalizeProviderName(currentProviderConfigKey)
+	normalizedCurrentProviderConfigKey := config.ActiveProviderConfigKey(currentProviderConfigKey)
 	normalizedSessionProvider := config.CanonicalProviderName(sessionProviderName)
-	normalizedSessionProviderConfigKey := config.NormalizeProviderName(sessionProviderConfigKey)
+	normalizedSessionProviderConfigKey := config.ActiveProviderConfigKey(sessionProviderConfigKey)
 
 	if normalizedSessionProvider == "" && normalizedSessionProviderConfigKey == "" {
 		return false

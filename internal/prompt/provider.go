@@ -41,6 +41,7 @@ var providerPrefixes = map[string]string{
 var providerAliases = map[string]string{
 	"anthropic": "claude",
 	"bedrock":   "claude", // AWS Bedrock の裏は Claude
+	"azure":     "openai", // Azure OpenAI は OpenAI Responses 系
 }
 
 // GetProviderPrefix はプロバイダー名に応じたプレフィックスを返す

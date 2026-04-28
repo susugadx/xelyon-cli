@@ -1,5 +1,10 @@
 package config
 
+import (
+	"sort"
+	"strings"
+)
+
 func cloneModelOverrides(src map[string]ModelOverride) map[string]ModelOverride {
 	if len(src) == 0 {
 		return nil
@@ -22,10 +27,44 @@ func cloneProviderModelConfigMap(src map[string]ProviderModelConfig) map[string]
 	if src == nil {
 		return nil
 	}
+	keys := make([]string, 0, len(src))
+	for key := range src {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		left := keys[i]
+		right := keys[j]
+		leftOwner := ActiveProviderConfigKey(left)
+		rightOwner := ActiveProviderConfigKey(right)
+		if leftOwner != rightOwner {
+			if leftOwner == "" {
+				return false
+			}
+			if rightOwner == "" {
+				return true
+			}
+			return leftOwner < rightOwner
+		}
+
+		// 同一 owner へ正規化されるキーは、display-name/alias を先に適用し、
+		// owner key（例: azure）を後で適用して上書き優先を安定化する。
+		leftOwnerKey := strings.TrimSpace(strings.ToLower(left)) == leftOwner
+		rightOwnerKey := strings.TrimSpace(strings.ToLower(right)) == rightOwner
+		if leftOwnerKey != rightOwnerKey {
+			return !leftOwnerKey && rightOwnerKey
+		}
+		return left < right
+	})
+
 	cloned := make(map[string]ProviderModelConfig, len(src))
-	for key, value := range src {
-		normalized := NormalizeProviderName(key)
+	for _, key := range keys {
+		value := src[key]
+		normalized := ActiveProviderConfigKey(key)
 		if normalized == "" {
+			continue
+		}
+		if current, exists := cloned[normalized]; exists {
+			cloned[normalized] = mergeProviderModelConfig(current, value)
 			continue
 		}
 		cloned[normalized] = cloneProviderModelConfig(value)

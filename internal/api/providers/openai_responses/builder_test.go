@@ -79,3 +79,20 @@ func TestBuildImageRequest_IncludesDeveloperHistoryAndImage(t *testing.T) {
 		t.Fatalf("image part = %#v, want data URL image", parts[0])
 	}
 }
+
+func TestBuildFunctionToolChoice_UsesResponsesAPIShape(t *testing.T) {
+	toolName := "read_file"
+	choice, ok := BuildFunctionToolChoice(&toolName).(map[string]interface{})
+	if !ok {
+		t.Fatalf("BuildFunctionToolChoice() type = %T, want map[string]interface{}", choice)
+	}
+	if choice["type"] != "function" {
+		t.Fatalf("tool_choice.type = %v, want function", choice["type"])
+	}
+	if choice["name"] != "read_file" {
+		t.Fatalf("tool_choice.name = %v, want read_file", choice["name"])
+	}
+	if _, ok := choice["function"]; ok {
+		t.Fatalf("Responses API tool_choice must not use chat-completions function wrapper: %#v", choice)
+	}
+}

@@ -142,8 +142,6 @@ func BuildFunctionToolChoice(toolChoice *string) interface{} {
 	}
 	return map[string]interface{}{
 		"type": "function",
-		"function": map[string]string{
-			"name": *toolChoice,
-		},
+		"name": *toolChoice,
 	}
 }

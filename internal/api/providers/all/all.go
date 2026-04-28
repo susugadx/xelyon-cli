@@ -2,6 +2,7 @@
 package all
 
 import (
+	_ "github.com/susugadx/xelyon-cli/internal/api/providers/azure"
 	_ "github.com/susugadx/xelyon-cli/internal/api/providers/bedrock"
 	_ "github.com/susugadx/xelyon-cli/internal/api/providers/claude"
 	_ "github.com/susugadx/xelyon-cli/internal/api/providers/deepseek"

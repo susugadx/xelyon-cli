@@ -96,6 +96,9 @@ Examples:
 
 		model := getModel(cfg)
 		provider := getProvider(cfg)
+		if err := validateSelectedProviderModel(cfg, provider, model); err != nil {
+			return err
+		}
 		query := strings.Join(args, " ")
 
 		switch mode {

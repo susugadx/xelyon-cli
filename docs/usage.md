@@ -112,7 +112,7 @@ xelyon --image error.png --provider gemini "このエラーを修正して"
 > image:screenshot.png このUIの問題点を教えて
 ```
 
-**対応プロバイダー**: Gemini, Claude, OpenAI（DeepSeek, Ollama, Groqは非対応）
+**対応プロバイダー**: Gemini, Claude, OpenAI, Azure OpenAI（DeepSeek, Ollama, Groqは非対応）
 
 ---
 
@@ -189,7 +189,7 @@ XELYON は探索・調査タスクを `spawn_agent` / `wait_agent` でサブエ�
 
 - 親に返るのはサブの最終レポートだけで、中間の `read_file` / `search_code` 出力は親コンテキストへ残りません
 - `wait_agent` 実行中はサブエージェントのツール実行が親UIへ逐次表示され、`str_replace` は色付き diff で確認できます
-- `sub_agent.default_model` が空ならメイン provider の最安モデルを自動選択し、推論強度は off、同時実行数は 5 です
+- `sub_agent.default_model` が空ならメイン provider の最安モデルを自動選択します。Azure OpenAI では `provider_models.azure.default_model` の deployment 名を使います。推論強度は off、同時実行数の既定は 1 です
 - サブエージェント自身には `spawn_agent` / `wait_agent` を渡さないため、再帰的な spawn は行いません
 
 設定例:

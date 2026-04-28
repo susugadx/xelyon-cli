@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/mcp"
 	"github.com/susugadx/xelyon-cli/internal/mcptool"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
@@ -61,7 +62,7 @@ func configureMCPTools(provider api.Provider, mcpTools []mcp.MCPTool, errOut io.
 		return
 	}
 
-	providerName := strings.ToLower(provider.Name())
+	providerName := config.CanonicalProviderName(provider.Name())
 	debugEnabled := false
 	debugLabel := ""
 
