@@ -115,13 +115,51 @@ func previewReadFilePaths(args map[string]string) []string {
 	return nil
 }
 
-// ExecuteWithContext は実行コンテキスト付きでツールを実行する。
-func ExecuteWithContext(execCtx ExecutionContext, tc *ToolCall) (string, *FileChange) {
-	execCtx = normalizeExecutionContext(execCtx)
+// ExecutionResult はツール実行結果と、結果表示に必要な実行メタデータを保持する。
+type ExecutionResult struct {
+	Result   string
+	Change   *FileChange
+	Duration time.Duration
+}
 
+// ExecuteWithContext は実行コンテキスト付きでツールを実行し、結果を公開する。
+func ExecuteWithContext(execCtx ExecutionContext, tc *ToolCall) (string, *FileChange) {
+	execResult := ExecuteUnpublishedWithContext(execCtx, tc)
+	PublishResultWithContext(execCtx, tc, execResult)
+	return execResult.Result, execResult.Change
+}
+
+// ExecuteUnpublishedWithContext はツールを実行し、wrapper 層の結果表示は行わない。
+func ExecuteUnpublishedWithContext(execCtx ExecutionContext, tc *ToolCall) ExecutionResult {
+	execCtx = normalizeExecutionContext(execCtx)
 	startTime := time.Now()
 	result, change := executeCoreWithContext(execCtx, tc)
 	elapsed := time.Since(startTime)
+
+	return ExecutionResult{
+		Result:   result,
+		Change:   change,
+		Duration: elapsed,
+	}
+}
+
+// ExecuteQuietWithContext は実行コンテキスト付きでツールを実行するが、wrapper 出力を抑制する。
+func ExecuteQuietWithContext(execCtx ExecutionContext, tc *ToolCall) (string, *FileChange) {
+	execResult := ExecuteQuietUnpublishedWithContext(execCtx, tc)
+	return execResult.Result, execResult.Change
+}
+
+// ExecuteQuietUnpublishedWithContext は quiet mode でツールを実行し、wrapper 層の結果表示は行わない。
+func ExecuteQuietUnpublishedWithContext(execCtx ExecutionContext, tc *ToolCall) ExecutionResult {
+	execCtx = normalizeExecutionContext(execCtx)
+	restoreQuiet := common.PushQuietMode()
+	defer restoreQuiet()
+	return ExecuteUnpublishedWithContext(execCtx, tc)
+}
+
+// PublishResultWithContext はツール実行済みの結果を wrapper/TUI 層へ公開する。
+func PublishResultWithContext(execCtx ExecutionContext, tc *ToolCall, execResult ExecutionResult) {
+	execCtx = normalizeExecutionContext(execCtx)
 
 	// ツール実行完了後、結果表示前にスピナーを停止してクリア
 	// （wait_agent のような長時間ブロックツールで表示が混ざるのを防ぐ）
@@ -129,6 +167,7 @@ func ExecuteWithContext(execCtx ExecutionContext, tc *ToolCall) (string, *FileCh
 		execCtx.Runtime.StopSpinner()
 	}
 
+	result := execResult.Result
 	isError := strings.HasPrefix(strings.TrimSpace(result), "Error:")
 
 	if execCtx.ToolResultCallback != nil {
@@ -138,7 +177,7 @@ func ExecuteWithContext(execCtx ExecutionContext, tc *ToolCall) (string, *FileCh
 			Args:     tc.Args,
 			Result:   result,
 			Error:    isError,
-			Duration: elapsed,
+			Duration: execResult.Duration,
 		})
 	} else {
 		// 従来モード: stdoutにテキスト出力
@@ -154,16 +193,6 @@ func ExecuteWithContext(execCtx ExecutionContext, tc *ToolCall) (string, *FileCh
 			displayCollapsedOutput(execCtx.Stdout, result, execCtx.EffectiveConfig())
 		}
 	}
-
-	return result, change
-}
-
-// ExecuteQuietWithContext は実行コンテキスト付きでツールを実行するが、wrapper 出力を抑制する。
-func ExecuteQuietWithContext(execCtx ExecutionContext, tc *ToolCall) (string, *FileChange) {
-	execCtx = normalizeExecutionContext(execCtx)
-	restoreQuiet := common.PushQuietMode()
-	defer restoreQuiet()
-	return executeCoreWithContext(execCtx, tc)
 }
 
 func executeCoreWithContext(execCtx ExecutionContext, tc *ToolCall) (string, *FileChange) {

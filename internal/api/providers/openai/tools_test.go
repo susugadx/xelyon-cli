@@ -1,9 +1,12 @@
 package openai
 
 import (
+	"context"
+	"strings"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/tools/applypatch"
 )
 
 func TestGetCombinedOpenAITools_DeduplicatesMCPTools(t *testing.T) {
@@ -63,5 +66,26 @@ func TestGetToolDefinitionNames_IncludesBuiltins(t *testing.T) {
 		if !found {
 			t.Fatalf("required tool %q not found in %v", name, names)
 		}
+	}
+}
+
+func TestGetOpenAIToolDefinitions_ApplyPatchDescriptionUnchanged(t *testing.T) {
+	applyPatch := &applypatch.ApplyPatchTool{}
+	ctx := api.WithToolDefinitions(context.Background(), []api.ToolDefinition{{
+		Name:        applyPatch.Name(),
+		Description: applyPatch.Description(),
+		Parameters:  applyPatch.Parameters(),
+	}})
+
+	tools := GetOpenAIToolDefinitionsWithContext(ctx)
+	if len(tools) != 1 || tools[0].Function == nil {
+		t.Fatalf("OpenAI tools = %+v, want one function tool", tools)
+	}
+	desc := tools[0].Function.Description
+	if desc != applyPatch.Description() {
+		t.Fatalf("OpenAI apply_patch description changed")
+	}
+	if !strings.Contains(desc, "Use the `apply_patch` shell command to edit files.") {
+		t.Fatalf("OpenAI apply_patch description no longer contains the existing shell-command wording")
 	}
 }

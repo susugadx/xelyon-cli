@@ -50,6 +50,16 @@ func (a *Agent) saveSessionWithWarning(format string) {
 	}
 }
 
+func (a *Agent) rewriteSessionWithWarning(format string) {
+	if a == nil || a.session == nil || a.storage == nil {
+		return
+	}
+	a.syncSessionPersistenceState()
+	if err := a.storage.Rewrite(a.session); err != nil {
+		yellow.Fprintf(a.output(), format, err)
+	}
+}
+
 // cleanupHook はテスト用フック（非nil時にCleanupから呼ばれる）
 var cleanupHook func()
 

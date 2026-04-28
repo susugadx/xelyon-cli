@@ -313,9 +313,11 @@ func TestCacheMapModelIsolation(t *testing.T) {
 // TestInvalidateCacheForModel は特定モデルのキャッシュのみ無効化することを検証
 func TestInvalidateCacheForModel(t *testing.T) {
 	p := New("test-key")
+	namespacedKey := cacheMapKey(api.WithProviderCacheNamespace(context.Background(), "repair"), "model-a")
 	p.cacheMap = map[string]*cacheEntry{
-		"model-a": {name: "cachedContents/a", model: "model-a", messageCount: 5, expireTime: time.Now().Add(1 * time.Hour)},
-		"model-b": {name: "cachedContents/b", model: "model-b", messageCount: 3, expireTime: time.Now().Add(1 * time.Hour)},
+		"model-a":     {name: "cachedContents/a", model: "model-a", messageCount: 5, expireTime: time.Now().Add(1 * time.Hour)},
+		namespacedKey: {name: "cachedContents/a-repair", model: "model-a", messageCount: 2, expireTime: time.Now().Add(1 * time.Hour)},
+		"model-b":     {name: "cachedContents/b", model: "model-b", messageCount: 3, expireTime: time.Now().Add(1 * time.Hour)},
 	}
 
 	// model-a のみ無効化
@@ -324,8 +326,106 @@ func TestInvalidateCacheForModel(t *testing.T) {
 	if _, ok := p.cacheMap["model-a"]; ok {
 		t.Error("model-a should be removed from cacheMap")
 	}
+	if _, ok := p.cacheMap[namespacedKey]; ok {
+		t.Error("namespaced model-a cache should be removed from cacheMap")
+	}
 	if _, ok := p.cacheMap["model-b"]; !ok {
 		t.Error("model-b should still exist in cacheMap")
+	}
+}
+
+func TestInvalidateCacheForRequestOnlyRemovesCurrentNamespace(t *testing.T) {
+	p := New("test-key")
+	repairCtx := api.WithProviderCacheNamespace(context.Background(), "repair")
+	normalKey := "model-a"
+	repairKey := cacheMapKey(repairCtx, "model-a")
+	p.cacheMap = map[string]*cacheEntry{
+		normalKey: {name: "cachedContents/a", model: "model-a", messageCount: 5, expireTime: time.Now().Add(1 * time.Hour)},
+		repairKey: {name: "cachedContents/a-repair", model: "model-a", messageCount: 2, expireTime: time.Now().Add(1 * time.Hour)},
+		"model-b": {name: "cachedContents/b", model: "model-b", messageCount: 3, expireTime: time.Now().Add(1 * time.Hour)},
+	}
+
+	p.invalidateCacheForRequest(repairCtx, "model-a")
+
+	if _, ok := p.cacheMap[repairKey]; ok {
+		t.Error("repair namespace cache should be removed from cacheMap")
+	}
+	if _, ok := p.cacheMap[normalKey]; !ok {
+		t.Error("normal model-a cache should still exist in cacheMap")
+	}
+	if _, ok := p.cacheMap["model-b"]; !ok {
+		t.Error("model-b should still exist in cacheMap")
+	}
+}
+
+func TestUpdateOrUseCache_ProviderCacheNamespaceIsolatesCacheKey(t *testing.T) {
+	t.Setenv("GEMINI_CONTEXT_CACHING", "1")
+
+	longContent := cacheEligibleContent()
+	model := "gemini-1.5-pro"
+	history := []api.Message{
+		{Role: "user", Content: longContent},
+		{Role: "user", Content: "repair request"},
+	}
+
+	createCount := 0
+	p := New("test-key")
+	p.cacheMap = map[string]*cacheEntry{
+		model: {
+			name:         "cachedContents/main",
+			model:        model,
+			messageCount: 1,
+			expireTime:   time.Now().Add(1 * time.Hour),
+		},
+	}
+	p.httpClient = &http.Client{
+		Transport: &mockTransport{
+			roundTripFunc: func(req *http.Request) (*http.Response, error) {
+				if req.Method == "POST" && strings.Contains(req.URL.Path, "cachedContents") {
+					createCount++
+					respBody := `{"name": "cachedContents/repair", "createTime": "2024-01-01T00:00:00Z"}`
+					return &http.Response{
+						StatusCode: 201,
+						Body:       io.NopCloser(strings.NewReader(respBody)),
+					}, nil
+				}
+				return nil, fmt.Errorf("unexpected request: %s %s", req.Method, req.URL.Path)
+			},
+		},
+	}
+
+	repairCtx := api.WithProviderCacheNamespace(context.Background(), "gemini_apply_patch_repair")
+	repairCache, repairMsgs, err := p.updateOrUseCache(repairCtx, "repair sys", history, model, nil, nil)
+	if err != nil {
+		t.Fatalf("repair cache update failed: %v", err)
+	}
+	if repairCache != "cachedContents/repair" {
+		t.Fatalf("repair cache = %q, want cachedContents/repair", repairCache)
+	}
+	if len(repairMsgs) != 1 || repairMsgs[0].Content != "repair request" {
+		t.Fatalf("repair messages = %+v, want only last repair request", repairMsgs)
+	}
+	if p.cacheMap[model] == nil || p.cacheMap[model].name != "cachedContents/main" {
+		t.Fatalf("normal cache entry was overwritten: %+v", p.cacheMap[model])
+	}
+	repairKey := cacheMapKey(repairCtx, model)
+	if repairKey == model {
+		t.Fatal("repair cache key should be distinct from normal model key")
+	}
+	if p.cacheMap[repairKey] == nil || p.cacheMap[repairKey].name != "cachedContents/repair" {
+		t.Fatalf("repair cache entry missing: %+v", p.cacheMap[repairKey])
+	}
+
+	normalHistory := append(history, api.Message{Role: "assistant", Content: "ok"}, api.Message{Role: "user", Content: "next"})
+	normalCache, _, err := p.updateOrUseCache(context.Background(), "main sys", normalHistory, model, nil, nil)
+	if err != nil {
+		t.Fatalf("normal cache reuse failed: %v", err)
+	}
+	if normalCache != "cachedContents/main" {
+		t.Fatalf("normal cache = %q, want cachedContents/main", normalCache)
+	}
+	if createCount != 1 {
+		t.Fatalf("cache create calls = %d, want only repair cache creation", createCount)
 	}
 }
 

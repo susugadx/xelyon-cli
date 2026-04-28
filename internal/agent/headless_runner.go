@@ -158,6 +158,7 @@ func (r *headlessRunner) executeToolCall(ctx context.Context, tc *tools.ToolCall
 
 	execCtx := r.agent.toolExecutionContext(ctx, nil, nil, nil)
 	output, change := tools.ExecuteQuietWithContext(execCtx, tc)
+	output, change = r.agent.maybeRepairGeminiApplyPatch(ctx, tc, output, change, execCtx, true)
 	r.agent.noteProjectMapMutation(tc, change)
 
 	// 成功判定（"Error:"を含むかどうかで簡易判定）

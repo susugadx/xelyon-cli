@@ -295,6 +295,15 @@ func renderToolObservabilitySection(out io.Writer, stats *SessionStats) {
 	explorationTable.AddRow("search_code(batch merges)", strconv.Itoa(obs.SearchCodeBatchMerges))
 	explorationTable.AddRow("read_file(batch merges)", strconv.Itoa(obs.ReadFileBatchMerges))
 	_, _ = fmt.Fprint(out, explorationTable.RenderCompact())
+
+	if obs.ApplyPatchAttempts > 0 || obs.ApplyPatchRepairAttempts > 0 {
+		_, _ = fmt.Fprintln(out)
+		green.Fprintln(out, "🩹 Patch Reliability")
+		patchTable := ui.NewTable()
+		patchTable.AddRow("apply_patch(success)", fmt.Sprintf("%d/%d", obs.ApplyPatchSuccesses, obs.ApplyPatchAttempts))
+		patchTable.AddRow("apply_patch(repair)", fmt.Sprintf("%d/%d", obs.ApplyPatchRepairSuccesses, obs.ApplyPatchRepairAttempts))
+		_, _ = fmt.Fprint(out, patchTable.RenderCompact())
+	}
 }
 
 func renderSavingsSection(out io.Writer, stats *SessionStats) {

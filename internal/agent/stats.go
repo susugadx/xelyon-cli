@@ -72,6 +72,10 @@ type ToolObservability struct {
 	SearchCodeMissedMultiPattern int // search_code の serial single-pattern から観測した missed multi-pattern 回数
 	SearchCodeBatchMerges        int // search_code multi-pattern batch merge 回数
 	ReadFileBatchMerges          int // read_file batch merge 回数
+	ApplyPatchAttempts           int // Gemini apply_patch 実行試行回数
+	ApplyPatchSuccesses          int // Gemini apply_patch 成功回数（repair 成功を含む）
+	ApplyPatchRepairAttempts     int // Gemini apply_patch repair 試行回数
+	ApplyPatchRepairSuccesses    int // Gemini apply_patch repair 成功回数
 }
 
 // SessionStats はセッション統計情報

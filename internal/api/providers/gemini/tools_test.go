@@ -1,6 +1,7 @@
 package gemini
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"strings"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/tools"
+	filetool "github.com/susugadx/xelyon-cli/internal/tools/file"
 
 	// ツール登録のための blank import
 	_ "github.com/susugadx/xelyon-cli/internal/tools/dev"
@@ -483,6 +485,95 @@ func TestConvertMCPToolToGeminiDeclaration_ArrayWithEmptyItemsType(t *testing.T)
 	}
 }
 
+func TestConvertMCPToolToGeminiDeclaration_ArrayOfObjectKeepsNestedProperties(t *testing.T) {
+	inputSchema := json.RawMessage(`{
+		"type": "object",
+		"properties": {
+			"edits": {
+				"type": "array",
+				"items": {
+					"type": "object",
+					"properties": {
+						"path": {"type": "string"},
+						"replacement": {
+							"type": "object",
+							"properties": {
+								"old_str": {"type": "string"},
+								"new_str": {"type": "string"}
+							},
+							"required": ["old_str", "new_str"]
+						}
+					},
+					"required": ["path", "replacement"]
+				}
+			}
+		},
+		"required": ["edits"]
+	}`)
+
+	decl := api.ConvertMCPToolToGeminiDeclaration("mcp_batch_edit", "Batch edit", inputSchema, os.Stderr)
+	edits := decl.Parameters.Properties["edits"]
+	if edits.Items == nil {
+		t.Fatal("edits.items should be preserved")
+	}
+	if edits.Items.Type != "object" {
+		t.Fatalf("edits.items.type = %q, want object", edits.Items.Type)
+	}
+	if _, ok := edits.Items.Properties["path"]; !ok {
+		t.Fatal("edits.items.properties.path should be preserved")
+	}
+	replacement := edits.Items.Properties["replacement"]
+	if replacement.Type != "object" {
+		t.Fatalf("replacement.type = %q, want object", replacement.Type)
+	}
+	if replacement.Properties["old_str"].Type != "string" || replacement.Properties["new_str"].Type != "string" {
+		t.Fatalf("replacement nested properties were not preserved: %+v", replacement.Properties)
+	}
+	if len(replacement.Required) != 2 {
+		t.Fatalf("replacement.required = %v, want old_str/new_str", replacement.Required)
+	}
+}
+
+func TestConvertMCPToolToGeminiDeclaration_InfersNestedObjectTypes(t *testing.T) {
+	inputSchema := json.RawMessage(`{
+		"type": "object",
+		"properties": {
+			"edits": {
+				"type": "array",
+				"items": {
+					"properties": {
+						"path": {"type": "string"},
+						"replacement": {
+							"properties": {
+								"old_str": {"type": "string"},
+								"new_str": {"type": "string"}
+							},
+							"required": ["old_str", "new_str"]
+						}
+					},
+					"required": ["path", "replacement"]
+				}
+			}
+		}
+	}`)
+
+	decl := api.ConvertMCPToolToGeminiDeclaration("mcp_batch_edit_untyped", "Batch edit", inputSchema, os.Stderr)
+	edits := decl.Parameters.Properties["edits"]
+	if edits.Items == nil {
+		t.Fatal("edits.items should be preserved")
+	}
+	if edits.Items.Type != "object" {
+		t.Fatalf("untyped edits.items.type = %q, want inferred object", edits.Items.Type)
+	}
+	replacement := edits.Items.Properties["replacement"]
+	if replacement.Type != "object" {
+		t.Fatalf("untyped replacement.type = %q, want inferred object", replacement.Type)
+	}
+	if replacement.Properties["old_str"].Type != "string" || replacement.Properties["new_str"].Type != "string" {
+		t.Fatalf("replacement nested properties were not preserved: %+v", replacement.Properties)
+	}
+}
+
 // ===== convertToGeminiSchema テスト（組み込みツールの変換） =====
 
 func TestConvertToGeminiSchema_ArrayType(t *testing.T) {
@@ -631,6 +722,67 @@ func TestConvertToGeminiSchema_JSONSerializable(t *testing.T) {
 	}
 	if !strings.Contains(jsonStr, `"type":"string"`) {
 		t.Errorf("Expected JSON to contain items type, got: %s", jsonStr)
+	}
+}
+
+func TestGeminiToolDeclaration_StrReplaceBatchEditsKeepsNestedProperties(t *testing.T) {
+	strReplace := &filetool.StrReplaceTool{}
+	ctx := api.WithToolDefinitions(context.Background(), []api.ToolDefinition{{
+		Name:        strReplace.Name(),
+		Description: strReplace.Description(),
+		Parameters:  strReplace.Parameters(),
+	}})
+
+	tools := GetGeminiToolDefinitionsWithContext(ctx)
+	decl := tools[0].FunctionDeclarations[0]
+	edits := decl.Parameters.Properties["edits"]
+	if edits.Type != "array" {
+		t.Fatalf("edits.type = %q, want array", edits.Type)
+	}
+	if edits.Items == nil {
+		t.Fatal("edits.items should be preserved")
+	}
+	if edits.Items.Type != "object" {
+		t.Fatalf("edits.items.type = %q, want object", edits.Items.Type)
+	}
+	if edits.Items.Properties["old_str"].Type != "string" {
+		t.Fatalf("edits.items.properties.old_str = %+v, want string property", edits.Items.Properties["old_str"])
+	}
+	if edits.Items.Properties["new_str"].Type != "string" {
+		t.Fatalf("edits.items.properties.new_str = %+v, want string property", edits.Items.Properties["new_str"])
+	}
+
+	jsonData, err := json.Marshal(decl)
+	if err != nil {
+		t.Fatalf("marshal declaration: %v", err)
+	}
+	jsonStr := string(jsonData)
+	for _, want := range []string{`"properties"`, `"old_str"`, `"new_str"`} {
+		if !strings.Contains(jsonStr, want) {
+			t.Fatalf("Gemini declaration missing %s: %s", want, jsonStr)
+		}
+	}
+}
+
+func TestGeminiToolDeclaration_ApplyPatchUsesGeminiSpecificDescription(t *testing.T) {
+	ctx := api.WithToolDefinitions(context.Background(), []api.ToolDefinition{{
+		Name:        "apply_patch",
+		Description: "original apply_patch description mentioning shell command",
+		Parameters:  map[string]interface{}{"type": "object"},
+	}})
+
+	tools := GetGeminiToolDefinitionsWithContext(ctx)
+	desc := tools[0].FunctionDeclarations[0].Description
+	if desc != geminiApplyPatchDescription {
+		t.Fatalf("apply_patch Gemini description = %q, want %q", desc, geminiApplyPatchDescription)
+	}
+	for _, want := range []string{"function tool", "patch argument", "Do not include markdown fences", "*** Begin Patch", "*** End Patch", "multiple files"} {
+		if !strings.Contains(desc, want) {
+			t.Fatalf("Gemini apply_patch description missing %q: %s", want, desc)
+		}
+	}
+	if strings.Contains(desc, "shell command") {
+		t.Fatalf("Gemini apply_patch description must not mention shell command: %s", desc)
 	}
 }
 

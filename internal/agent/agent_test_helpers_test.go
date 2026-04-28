@@ -46,6 +46,7 @@ func (m *mockProvider) ChatWithImage(ctx context.Context, systemPrompt string, h
 type sequenceMockProvider struct {
 	name      string
 	responses []string
+	contexts  []context.Context
 	callCount int
 }
 
@@ -56,6 +57,7 @@ func (m *sequenceMockProvider) SupportsImages() bool { return false }
 func (m *sequenceMockProvider) IsFunctionCallingEnabled() bool { return true }
 
 func (m *sequenceMockProvider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
+	m.contexts = append(m.contexts, ctx)
 	if m.callCount >= len(m.responses) {
 		return m.responses[len(m.responses)-1], nil
 	}

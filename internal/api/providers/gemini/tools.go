@@ -7,6 +7,8 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 )
 
+const geminiApplyPatchDescription = "Use the apply_patch function tool by passing the complete patch text in the patch argument. Do not include markdown fences. The patch must start with *** Begin Patch and end with *** End Patch. One patch may change multiple files."
+
 // GetGeminiToolDefinitions returns all tool definitions for Function Calling API
 // ToolRegistry から自動生成
 func GetGeminiToolDefinitions() []api.GeminiToolConfig {
@@ -21,7 +23,7 @@ func GetGeminiToolDefinitionsWithContext(ctx context.Context) []api.GeminiToolCo
 	for _, def := range defs {
 		declarations = append(declarations, api.GeminiFunctionDeclaration{
 			Name:        def.Name,
-			Description: def.Description,
+			Description: geminiToolDescription(def),
 			Parameters:  convertToGeminiSchema(def.Parameters),
 		})
 	}
@@ -31,112 +33,14 @@ func GetGeminiToolDefinitionsWithContext(ctx context.Context) []api.GeminiToolCo
 
 // convertToGeminiSchema は map[string]interface{} を GeminiParameterSchema に変換
 func convertToGeminiSchema(params map[string]interface{}) *api.GeminiParameterSchema {
-	if params == nil {
-		return nil
-	}
-
-	schema := &api.GeminiParameterSchema{
-		Type: "object",
-	}
-
-	// type を取得
-	if t, ok := params["type"].(string); ok {
-		schema.Type = t
-	}
-
-	// properties を変換
-	if props, ok := params["properties"].(map[string]interface{}); ok {
-		schema.Properties = make(map[string]api.GeminiPropertyDef)
-		for name, propVal := range props {
-			if propMap, ok := propVal.(map[string]interface{}); ok {
-				propDef := api.GeminiPropertyDef{}
-
-				if t, ok := propMap["type"].(string); ok {
-					propDef.Type = t
-				}
-				if desc, ok := propMap["description"].(string); ok {
-					propDef.Description = desc
-				}
-				// enum を変換
-				if enumVal, ok := propMap["enum"]; ok {
-					switch e := enumVal.(type) {
-					case []string:
-						propDef.Enum = e
-					case []interface{}:
-						enumStrings := make([]string, 0, len(e))
-						for _, v := range e {
-							if s, ok := v.(string); ok {
-								enumStrings = append(enumStrings, s)
-							}
-						}
-						propDef.Enum = enumStrings
-					}
-				}
-				// array 型の場合は items を設定（Gemini API では必須）
-				if propDef.Type == "array" {
-					if itemsVal, ok := propMap["items"].(map[string]interface{}); ok {
-						itemDef := convertPropertyItems(itemsVal)
-						propDef.Items = &itemDef
-					} else {
-						// items が指定されていない場合はデフォルトで string 型
-						propDef.Items = &api.GeminiPropertyDef{Type: "string"}
-					}
-				}
-
-				schema.Properties[name] = propDef
-			}
-		}
-	}
-
-	// required を変換
-	if req, ok := params["required"]; ok {
-		switch r := req.(type) {
-		case []string:
-			schema.Required = r
-		case []interface{}:
-			reqStrings := make([]string, 0, len(r))
-			for _, v := range r {
-				if s, ok := v.(string); ok {
-					reqStrings = append(reqStrings, s)
-				}
-			}
-			schema.Required = reqStrings
-		}
-	}
-
-	return schema
+	return api.ConvertJSONSchemaToGeminiParameterSchema(params)
 }
 
-// convertPropertyItems は items の map を GeminiPropertyDef に変換する
-func convertPropertyItems(itemsMap map[string]interface{}) api.GeminiPropertyDef {
-	itemDef := api.GeminiPropertyDef{}
-
-	if t, ok := itemsMap["type"].(string); ok {
-		itemDef.Type = t
-	} else {
-		// type が指定されていない場合はデフォルトで string
-		itemDef.Type = "string"
+func geminiToolDescription(def api.ToolDefinition) string {
+	if def.Name == "apply_patch" {
+		return geminiApplyPatchDescription
 	}
-	if desc, ok := itemsMap["description"].(string); ok {
-		itemDef.Description = desc
-	}
-	// enum 対応
-	if enumVal, ok := itemsMap["enum"]; ok {
-		switch e := enumVal.(type) {
-		case []string:
-			itemDef.Enum = e
-		case []interface{}:
-			enumStrings := make([]string, 0, len(e))
-			for _, v := range e {
-				if s, ok := v.(string); ok {
-					enumStrings = append(enumStrings, s)
-				}
-			}
-			itemDef.Enum = enumStrings
-		}
-	}
-
-	return itemDef
+	return def.Description
 }
 
 // GetToolDefinitionNames returns all defined tool names for testing
@@ -199,7 +103,7 @@ func GetCombinedToolDefinitionsWithContext(ctx context.Context, mcpTools []api.T
 	for _, def := range defs {
 		declarations = append(declarations, api.GeminiFunctionDeclaration{
 			Name:        def.Name,
-			Description: def.Description,
+			Description: geminiToolDescription(def),
 			Parameters:  convertToGeminiSchema(def.Parameters),
 		})
 	}

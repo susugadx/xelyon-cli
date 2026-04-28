@@ -26,6 +26,23 @@ type ctxKey string
 
 const cacheRetryKey ctxKey = "gemini_cache_retry"
 
+const cacheNamespaceSeparator = "\x00"
+
+func cacheMapKey(ctx context.Context, model string) string {
+	namespace := api.ProviderCacheNamespaceFromContext(ctx)
+	if namespace == "" {
+		return model
+	}
+	return model + cacheNamespaceSeparator + namespace
+}
+
+func cacheDebugLabel(key string, entry *cacheEntry) string {
+	if entry != nil && entry.model != "" {
+		return entry.model
+	}
+	return key
+}
+
 // isCacheExpiredError はエラーがキャッシュ期限切れによるものか判定
 func isCacheExpiredError(statusCode int, body []byte) bool {
 	if statusCode == 404 || statusCode == 400 {
@@ -52,7 +69,18 @@ func (p *Provider) invalidateCache() {
 // invalidateCacheForModel は特定モデルのローカルキャッシュ状態をクリアする
 func (p *Provider) invalidateCacheForModel(model string) {
 	if p.cacheMap != nil {
-		delete(p.cacheMap, model)
+		for key, entry := range p.cacheMap {
+			if key == model || (entry != nil && entry.model == model) {
+				delete(p.cacheMap, key)
+			}
+		}
+	}
+}
+
+// invalidateCacheForRequest は現在の request namespace に対応するローカルキャッシュだけをクリアする。
+func (p *Provider) invalidateCacheForRequest(ctx context.Context, model string) {
+	if p.cacheMap != nil {
+		delete(p.cacheMap, cacheMapKey(ctx, model))
 	}
 }
 
@@ -68,12 +96,12 @@ func (p *Provider) ClearCache() {
 	defer cancel()
 
 	errOut := api.RuntimeOrDefault(p.runtime).ErrorOutput()
-	for model, entry := range p.cacheMap {
+	for key, entry := range p.cacheMap {
 		if entry.name == "" {
 			continue
 		}
 		if debug {
-			fmt.Fprintf(errOut, "[DEBUG Gemini] Clearing cache for %s: %s\n", model, entry.name)
+			fmt.Fprintf(errOut, "[DEBUG Gemini] Clearing cache for %s: %s\n", cacheDebugLabel(key, entry), entry.name)
 		}
 		err := p.DeleteCachedContent(ctx, entry.name)
 		if err != nil && debug {
@@ -127,6 +155,7 @@ func (p *Provider) updateOrUseCache(ctx context.Context, systemPrompt string, hi
 	}
 
 	p.initCacheMap()
+	cacheKey := cacheMapKey(ctx, model)
 
 	// 現在の総トークン数を概算
 	totalTokens := estimateTokens(model, systemPrompt, history, tools)
@@ -134,9 +163,9 @@ func (p *Provider) updateOrUseCache(ctx context.Context, systemPrompt string, hi
 	// 最小トークン数未満ならキャッシュしない
 	if totalTokens < minCacheTokens {
 		// このモデルのキャッシュがある場合は削除しておく（無駄な課金を避ける）
-		if entry, ok := p.cacheMap[model]; ok && entry.name != "" {
+		if entry, ok := p.cacheMap[cacheKey]; ok && entry.name != "" {
 			_ = p.DeleteCachedContent(ctx, entry.name)
-			delete(p.cacheMap, model)
+			delete(p.cacheMap, cacheKey)
 		}
 		return "", history, nil
 	}
@@ -145,7 +174,7 @@ func (p *Provider) updateOrUseCache(ctx context.Context, systemPrompt string, hi
 	errOut := api.ErrorWriterFromContext(ctx)
 
 	// このモデルのキャッシュを取得
-	entry := p.cacheMap[model]
+	entry := p.cacheMap[cacheKey]
 
 	// キャッシュ利用判定
 	useExistingCache := false
@@ -210,7 +239,7 @@ func (p *Provider) updateOrUseCache(ctx context.Context, systemPrompt string, hi
 	}
 
 	// モデル別キャッシュを保存
-	p.cacheMap[model] = &cacheEntry{
+	p.cacheMap[cacheKey] = &cacheEntry{
 		name:         resp.Name,
 		model:        model,
 		tokenCount:   totalTokens,

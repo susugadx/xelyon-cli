@@ -26,10 +26,12 @@ type GeminiParameterSchema struct {
 
 // GeminiPropertyDef - プロパティ定義
 type GeminiPropertyDef struct {
-	Type        string             `json:"type"`
-	Description string             `json:"description,omitempty"`
-	Enum        []string           `json:"enum,omitempty"`
-	Items       *GeminiPropertyDef `json:"items,omitempty"` // array型用
+	Type        string                       `json:"type"`
+	Description string                       `json:"description,omitempty"`
+	Enum        []string                     `json:"enum,omitempty"`
+	Items       *GeminiPropertyDef           `json:"items,omitempty"` // array型用
+	Properties  map[string]GeminiPropertyDef `json:"properties,omitempty"`
+	Required    []string                     `json:"required,omitempty"`
 }
 
 // GeminiToolConfig - API リクエスト用ツール設定
@@ -45,9 +47,27 @@ type GeminiFunctionCall struct {
 	ThoughtParts     []map[string]any `json:"-"` // 同ターンの thought パート情報（内部転送用）
 }
 
-// convertPropertyDef はJSON Schemaプロパティ定義をGeminiPropertyDefに変換する
-// array型の場合はitemsも再帰的に変換する
-func convertPropertyDef(propMap map[string]any) GeminiPropertyDef {
+// ConvertJSONSchemaToGeminiParameterSchema はJSON SchemaをGemini Function Calling用スキーマへ変換する。
+func ConvertJSONSchemaToGeminiParameterSchema(schema map[string]any) *GeminiParameterSchema {
+	if schema == nil {
+		return nil
+	}
+
+	params := &GeminiParameterSchema{Type: "object"}
+	if t, ok := schema["type"].(string); ok && t != "" {
+		params.Type = t
+	}
+	if props := convertGeminiProperties(schema["properties"]); len(props) > 0 {
+		params.Properties = props
+	}
+	if required := convertGeminiRequired(schema["required"]); len(required) > 0 {
+		params.Required = required
+	}
+	return params
+}
+
+// ConvertJSONSchemaPropertyToGeminiDef はJSON Schemaプロパティ定義をGeminiPropertyDefに変換する。
+func ConvertJSONSchemaPropertyToGeminiDef(propMap map[string]any) GeminiPropertyDef {
 	def := GeminiPropertyDef{}
 	if t, ok := propMap["type"].(string); ok {
 		def.Type = t
@@ -55,30 +75,83 @@ func convertPropertyDef(propMap map[string]any) GeminiPropertyDef {
 	if d, ok := propMap["description"].(string); ok {
 		def.Description = d
 	}
-	// enum対応
-	if enumVal, ok := propMap["enum"].([]any); ok {
-		for _, e := range enumVal {
-			if s, ok := e.(string); ok {
-				def.Enum = append(def.Enum, s)
-			}
-		}
+	if enum := convertGeminiEnum(propMap["enum"]); len(enum) > 0 {
+		def.Enum = enum
 	}
-	// array型のitems対応
+	if props := convertGeminiProperties(propMap["properties"]); len(props) > 0 {
+		def.Properties = props
+	}
+	if required := convertGeminiRequired(propMap["required"]); len(required) > 0 {
+		def.Required = required
+	}
+	if def.Type == "" && len(def.Properties) > 0 {
+		def.Type = "object"
+	}
 	if def.Type == "array" {
 		if itemsVal, ok := propMap["items"].(map[string]any); ok {
-			itemDef := convertPropertyDef(itemsVal)
-			// items.type が空の場合はデフォルトで "string" を設定
-			// Gemini APIはtypeが必須
+			itemDef := ConvertJSONSchemaPropertyToGeminiDef(itemsVal)
 			if itemDef.Type == "" {
 				itemDef.Type = "string"
 			}
 			def.Items = &itemDef
 		} else {
-			// items が指定されていない場合もデフォルトで string 型を設定
 			def.Items = &GeminiPropertyDef{Type: "string"}
 		}
 	}
 	return def
+}
+
+// convertPropertyDef は既存テスト互換用の内部エイリアス。
+func convertPropertyDef(propMap map[string]any) GeminiPropertyDef {
+	return ConvertJSONSchemaPropertyToGeminiDef(propMap)
+}
+
+func convertGeminiEnum(value any) []string {
+	switch enum := value.(type) {
+	case []string:
+		return append([]string(nil), enum...)
+	case []any:
+		values := make([]string, 0, len(enum))
+		for _, e := range enum {
+			if s, ok := e.(string); ok {
+				values = append(values, s)
+			}
+		}
+		return values
+	default:
+		return nil
+	}
+}
+
+func convertGeminiProperties(value any) map[string]GeminiPropertyDef {
+	props, ok := value.(map[string]any)
+	if !ok || len(props) == 0 {
+		return nil
+	}
+	geminiProps := make(map[string]GeminiPropertyDef, len(props))
+	for propName, propInfo := range props {
+		if propMap, ok := propInfo.(map[string]any); ok {
+			geminiProps[propName] = ConvertJSONSchemaPropertyToGeminiDef(propMap)
+		}
+	}
+	return geminiProps
+}
+
+func convertGeminiRequired(value any) []string {
+	switch req := value.(type) {
+	case []string:
+		return append([]string(nil), req...)
+	case []any:
+		required := make([]string, 0, len(req))
+		for _, r := range req {
+			if s, ok := r.(string); ok {
+				required = append(required, s)
+			}
+		}
+		return required
+	default:
+		return nil
+	}
 }
 
 // ConvertMCPToolToGeminiDeclaration はMCPツールをGemini Function Declaration形式に変換
@@ -105,41 +178,22 @@ func ConvertMCPToolToGeminiDeclaration(name, description string, inputSchema jso
 		}
 	}
 
-	// propertiesをGeminiPropertyDefに変換
 	var geminiParams *GeminiParameterSchema
 	if props, ok := schema["properties"].(map[string]any); ok {
-		geminiProps := make(map[string]GeminiPropertyDef)
-		for propName, propInfo := range props {
-			if propMap, ok := propInfo.(map[string]any); ok {
-				def := convertPropertyDef(propMap)
-				geminiProps[propName] = def
+		geminiParams = ConvertJSONSchemaToGeminiParameterSchema(schema)
+		for propName := range props {
+			def := geminiParams.Properties[propName]
 
-				// デバッグログ: array型のitems情報
-				if debug && def.Type == "array" {
-					if def.Items != nil {
-						fmt.Fprintf(debugOut, "[DEBUG Gemini] Tool %s, property %s: array items.type=%q\n",
-							name, propName, def.Items.Type)
-					} else {
-						fmt.Fprintf(debugOut, "[DEBUG Gemini] Tool %s, property %s: array but items is nil\n",
-							name, propName)
-					}
+			// デバッグログ: array型のitems情報
+			if debug && def.Type == "array" {
+				if def.Items != nil {
+					fmt.Fprintf(debugOut, "[DEBUG Gemini] Tool %s, property %s: array items.type=%q\n",
+						name, propName, def.Items.Type)
+				} else {
+					fmt.Fprintf(debugOut, "[DEBUG Gemini] Tool %s, property %s: array but items is nil\n",
+						name, propName)
 				}
 			}
-		}
-
-		var required []string
-		if req, ok := schema["required"].([]any); ok {
-			for _, r := range req {
-				if s, ok := r.(string); ok {
-					required = append(required, s)
-				}
-			}
-		}
-
-		geminiParams = &GeminiParameterSchema{
-			Type:       "object",
-			Properties: geminiProps,
-			Required:   required,
 		}
 	}
 

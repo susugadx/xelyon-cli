@@ -88,8 +88,19 @@ func (a *Agent) executeToolWithSpinner(ctx context.Context, toolCall *tools.Tool
 	spinner.Start(spinnerMsg)
 	a.ui().SetSpinner(spinner)
 
-	result, change := tools.ExecuteWithContext(a.toolExecutionContext(ctx, nil, nil, nil), toolCall)
-	a.ui().StopSpinner()
+	execCtx := a.toolExecutionContext(ctx, nil, nil, nil)
+	var result string
+	var change *tools.FileChange
+	if a.shouldRepairGeminiApplyPatch(toolCall) {
+		execResult := tools.ExecuteUnpublishedWithContext(execCtx, toolCall)
+		a.ui().StopSpinner()
+		execResult = a.maybeRepairGeminiApplyPatchExecution(ctx, toolCall, execResult, execCtx, false)
+		tools.PublishResultWithContext(execCtx, toolCall, execResult)
+		result, change = execResult.Result, execResult.Change
+	} else {
+		result, change = tools.ExecuteWithContext(execCtx, toolCall)
+		a.ui().StopSpinner()
+	}
 	a.recordToolResultOptimizations(toolCall, result)
 
 	if a.ToolCache != nil {
