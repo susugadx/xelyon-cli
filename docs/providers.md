@@ -108,6 +108,8 @@ GPT-5.5 系も OpenAI provider では Responses API を使用します。
 - Compact API による効率的な履歴圧縮
 - ZDR（Zero Data Retention）対応
 
+XELYON は既定で Responses API の `store: true` と `previous_response_id` 継続を使います。これは通常の推奨設定です。provider 側に response state を保存したくない運用だけ、`~/.xelyon/config.yaml` で `responses.store: false` を設定してください。詳しくは [Responses API retention 設定](config.md#responses-api-retention-設定-responses高度な設定) を参照してください。
+
 **GPT-5.5 Pro の注意:**
 - streaming は公式に unsupported のため、XELYON は non-streaming Responses 経路を使用します。
 - 応答に数分かかる場合があります。background mode は今回未対応です。
@@ -141,6 +143,7 @@ xelyon --provider azure --model my-gpt-5-deployment
 - 画像入力 / function calling 対応
 - `model` は Azure の deployment 名
 - OpenAI provider 用の `prompt_cache_key` / `prompt_cache_retention` は送信しません
+- `responses.store` / `responses.persist_response_id` は OpenAI provider と同じ設定を使用します
 
 deployment 名が実モデル名と異なる場合は、token limit / pricing / capability 判定用に `catalog_model` を設定してください。
 

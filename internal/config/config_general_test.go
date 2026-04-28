@@ -714,3 +714,44 @@ func TestIsResponsesAPIModel_CustomModels(t *testing.T) {
 		t.Error("IsResponsesAPIModel() should return true for custom model")
 	}
 }
+
+func TestResponsesConfigDefaultsAndOverrides(t *testing.T) {
+	cfg := DefaultConfig()
+	if !cfg.ResponsesStoreEnabled() {
+		t.Fatal("ResponsesStoreEnabled() = false, want default true")
+	}
+	if !cfg.ResponsesPersistResponseIDEnabled() {
+		t.Fatal("ResponsesPersistResponseIDEnabled() = false, want default true")
+	}
+
+	yamlData := []byte(`
+responses:
+  store: false
+  persist_response_id: true
+`)
+	loaded, err := loadConfigFromData(yamlData)
+	if err != nil {
+		t.Fatalf("loadConfigFromData() error = %v", err)
+	}
+	if loaded.ResponsesStoreEnabled() {
+		t.Fatal("ResponsesStoreEnabled() = true, want false from YAML")
+	}
+	if loaded.ResponsesPersistResponseIDEnabled() {
+		t.Fatal("ResponsesPersistResponseIDEnabled() = true, want false when store is disabled")
+	}
+
+	yamlData = []byte(`
+responses:
+  persist_response_id: false
+`)
+	loaded, err = loadConfigFromData(yamlData)
+	if err != nil {
+		t.Fatalf("loadConfigFromData() error = %v", err)
+	}
+	if !loaded.ResponsesStoreEnabled() {
+		t.Fatal("ResponsesStoreEnabled() = false, want omitted store to keep default true")
+	}
+	if loaded.ResponsesPersistResponseIDEnabled() {
+		t.Fatal("ResponsesPersistResponseIDEnabled() = true, want false from YAML")
+	}
+}

@@ -13,6 +13,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api/providers/openai"
 	openaicompat "github.com/susugadx/xelyon-cli/internal/api/providers/openai_compat"
 	openairesponses "github.com/susugadx/xelyon-cli/internal/api/providers/openai_responses"
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -27,6 +28,7 @@ type responsesRequestRunOptions struct {
 }
 
 func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
+	storeResponses := config.FromContext(ctx).ResponsesStoreEnabled()
 	content, responseID, err := p.runResponsesRequest(ctx, responsesRequestRunOptions{
 		URL:          p.responsesURL(),
 		BuildRequest: func() openairesponses.Request { return p.buildChatResponsesRequest(ctx, systemPrompt, history, model) },
@@ -34,12 +36,16 @@ func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, h
 		Debug:        os.Getenv("XELYON_DEBUG_AZURE") == "1",
 		DebugWriter:  api.ErrorWriterFromContext(ctx),
 		HasPreviousResponseID: func() bool {
-			return p.HasCachedResponseID()
+			return storeResponses && p.HasCachedResponseID()
 		},
 		ClearPreviousResponseID: func() {
 			p.ClearResponseID()
 		},
 	})
+	if !storeResponses {
+		p.ClearResponseID()
+		return content, err
+	}
 	if err == nil && responseID != "" {
 		p.SetResponseID(responseID)
 	}
@@ -47,6 +53,7 @@ func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, h
 }
 
 func (p *Provider) chatWithImageResponses(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {
+	storeResponses := config.FromContext(ctx).ResponsesStoreEnabled()
 	content, responseID, err := p.runResponsesRequest(ctx, responsesRequestRunOptions{
 		URL: p.responsesURL(),
 		BuildRequest: func() openairesponses.Request {
@@ -56,6 +63,10 @@ func (p *Provider) chatWithImageResponses(ctx context.Context, systemPrompt stri
 		Debug:       os.Getenv("XELYON_DEBUG_AZURE") == "1",
 		DebugWriter: api.ErrorWriterFromContext(ctx),
 	})
+	if !storeResponses {
+		p.ClearResponseID()
+		return content, err
+	}
 	if err == nil && responseID != "" {
 		p.SetResponseID(responseID)
 	}

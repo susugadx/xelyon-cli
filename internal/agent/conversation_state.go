@@ -51,6 +51,9 @@ func (a *Agent) restoreProviderResponseID(responseID string) {
 	if a == nil {
 		return
 	}
+	if !a.responsesPersistResponseIDEnabled() {
+		responseID = ""
+	}
 	if ridProvider, ok := a.CurrentProvider.(ResponseIDCapable); ok {
 		ridProvider.SetResponseID(strings.TrimSpace(responseID))
 	}
@@ -64,7 +67,7 @@ func (a *Agent) hasConversationState() bool {
 	if len(a.History) > 0 || len(a.lastOutputs) > 0 || a.isCompactedMode || len(a.compactedItems) > 0 {
 		return true
 	}
-	if ridProvider, ok := a.CurrentProvider.(ResponseIDCapable); ok && ridProvider.HasCachedResponseID() {
+	if ridProvider, ok := a.CurrentProvider.(ResponseIDCapable); ok && a.responsesStoreEnabled() && ridProvider.HasCachedResponseID() {
 		return true
 	}
 	if a.session == nil {
@@ -73,5 +76,5 @@ func (a *Agent) hasConversationState() bool {
 	return len(a.session.Messages) > 0 ||
 		len(a.session.CompactedItems) > 0 ||
 		a.session.IsCompactedMode ||
-		strings.TrimSpace(a.session.ResponseID) != ""
+		(a.responsesPersistResponseIDEnabled() && strings.TrimSpace(a.session.ResponseID) != "")
 }

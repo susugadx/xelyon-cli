@@ -76,7 +76,7 @@ func TestGenerateExampleFile(t *testing.T) {
 			t.Fatalf("expected generated example to contain %q", expected)
 		}
 	}
-	for _, unexpected := range []string{"loop_detection:", "thinking:", "servers: {}"} {
+	for _, unexpected := range []string{"loop_detection:", "responses:", "thinking:", "servers: {}"} {
 		if strings.Contains(text, unexpected) {
 			t.Fatalf("unexpected internal section in generated example: %q", unexpected)
 		}

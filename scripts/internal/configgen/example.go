@@ -80,6 +80,7 @@ func FilterInternalFields(data []byte) ([]byte, error) {
 		"diff":            true,
 		"command_aliases": true,
 		"prompt_cache":    true,
+		"responses":       true,
 		"streaming":       true,
 		"tool_confirm":    true,
 		"bash":            true,

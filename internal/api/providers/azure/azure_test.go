@@ -236,6 +236,61 @@ func TestChatWithTools_UsesNonStreamingForAzureProCatalogModel(t *testing.T) {
 	}
 }
 
+func TestChatWithTools_StoreFalseOmitsPreviousAndDoesNotCacheResponseID(t *testing.T) {
+	var received map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		if _, ok := received["previous_response_id"]; ok {
+			t.Fatalf("previous_response_id should be omitted when responses.store=false: %#v", received)
+		}
+		if received["store"] != false {
+			t.Fatalf("store = %#v, want false", received["store"])
+		}
+		input, ok := received["input"].([]any)
+		if !ok || len(input) != 3 {
+			t.Fatalf("input = %#v, want developer + compacted + current user", received["input"])
+		}
+		compacted, ok := input[1].(map[string]any)
+		if !ok || compacted["type"] != "compacted" || compacted["data"] != "compact-data" {
+			t.Fatalf("input[1] = %#v, want compacted item", input[1])
+		}
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprintln(w, `data: {"type":"response.created","response":{"id":"resp_new"}}`)
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, `data: {"type":"response.output_text.delta","delta":"ok"}`)
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, `data: [DONE]`)
+	}))
+	defer server.Close()
+
+	t.Setenv(baseURLEnv, server.URL)
+	p := New("azure-key")
+	p.SetResponseID("resp_old")
+
+	cfg := config.DefaultConfig()
+	cfg.Responses.Store = false
+	cfg.SetProviderModelConfig("azure", config.ProviderModelConfig{
+		DefaultModel: "corp-gpt55-deployment",
+		CatalogModel: "gpt-5.5",
+	})
+	ctx := azureTestContext(cfg)
+	ctx = api.WithCompactedInputItems(ctx, []api.InputItem{{Type: "compacted", Data: "compact-data"}})
+
+	content, err := p.ChatWithTools(ctx, "system", []api.Message{{Role: "user", Content: "hello"}}, "")
+	if err != nil {
+		t.Fatalf("ChatWithTools() error = %v", err)
+	}
+	if content != "ok" {
+		t.Fatalf("content = %q, want ok", content)
+	}
+	if got := p.GetResponseID(); got != "" {
+		t.Fatalf("GetResponseID() = %q, want empty when responses.store=false", got)
+	}
+}
+
 func TestAzureProvider_ResponseIDContract(t *testing.T) {
 	p := New("azure-key")
 	if p.Name() != "Azure OpenAI" {
@@ -301,6 +356,62 @@ func TestBuildChatResponsesRequest_OmitsToolsWhenFunctionCallingDisabled(t *test
 	}
 	if _, ok := body["tool_choice"]; ok {
 		t.Fatalf("tool_choice should be omitted when function calling is disabled: %s", payload)
+	}
+}
+
+func TestBuildChatResponsesRequest_StoreFalseSendsFullHistoryWithoutPreviousResponseID(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Responses.Store = false
+	cfg.SetProviderModelConfig("azure", config.ProviderModelConfig{
+		DefaultModel: "corp-gpt55-deployment",
+		CatalogModel: "gpt-5.5",
+	})
+
+	p := New("azure-key")
+	p.SetResponseID("resp_old")
+	ctx := azureTestContext(cfg)
+	ctx = api.WithCompactedInputItems(ctx, []api.InputItem{{Type: "compacted", Data: "compact-data"}})
+	req := p.buildChatResponsesRequest(
+		ctx,
+		"system",
+		[]api.Message{
+			{Role: "user", Content: "first"},
+			{Role: "assistant", Content: "answer"},
+			{Role: "user", Content: "next"},
+		},
+		"corp-gpt55-deployment",
+	)
+
+	if req.Store {
+		t.Fatal("Store = true, want false")
+	}
+	if req.PreviousResponseID != "" {
+		t.Fatalf("PreviousResponseID = %q, want empty", req.PreviousResponseID)
+	}
+	payload, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(payload, &body); err != nil {
+		t.Fatalf("unmarshal request: %v", err)
+	}
+	input, ok := body["input"].([]any)
+	if !ok {
+		t.Fatalf("input type = %T, want []any", body["input"])
+	}
+	if len(input) != 5 {
+		t.Fatalf("input length = %d, want developer plus compacted item plus full history", len(input))
+	}
+	compacted, ok := input[1].(map[string]any)
+	if !ok {
+		t.Fatalf("input[1] type = %T, want compacted map", input[1])
+	}
+	if compacted["type"] != "compacted" || compacted["data"] != "compact-data" {
+		t.Fatalf("input[1] = %#v, want compacted item from context", compacted)
+	}
+	if _, ok := body["previous_response_id"]; ok {
+		t.Fatalf("previous_response_id should be omitted: %s", payload)
 	}
 }
 

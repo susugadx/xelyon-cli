@@ -15,6 +15,9 @@ func (a *Agent) requestContext(ctx context.Context) context.Context {
 	ctx = tools.WithConfig(ctx, a.cfg())
 	ctx = ui.WithRuntime(ctx, a.ui())
 	ctx = api.WithAssistantUpdateMode(ctx, a.assistantUpdateMode())
+	if a != nil && a.isCompactedMode && len(a.compactedItems) > 0 {
+		ctx = api.WithCompactedInputItems(ctx, a.compactedItems)
+	}
 	return ctx
 }
 

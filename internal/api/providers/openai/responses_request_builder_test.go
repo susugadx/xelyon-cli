@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	openairesponses "github.com/susugadx/xelyon-cli/internal/api/providers/openai_responses"
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
@@ -100,6 +101,41 @@ func TestBuildChatResponsesRequest_CodexReasoningFallbackStillLow(t *testing.T) 
 	}
 	if req.Reasoning == nil || req.Reasoning.Effort != "low" {
 		t.Fatalf("Reasoning = %#v, want low fallback", req.Reasoning)
+	}
+}
+
+func TestBuildChatResponsesRequest_StoreFalseSendsFullHistoryWithoutPreviousResponseID(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Responses.Store = false
+	ctx := config.WithContext(context.Background(), cfg)
+	ctx = api.WithCompactedInputItems(ctx, []api.InputItem{{Type: "compacted", Data: "compact-data"}})
+
+	p := New("test-key")
+	p.SetResponseID("resp_old")
+	req := p.buildChatResponsesRequest(ctx, "system", []api.Message{
+		{Role: "user", Content: "first"},
+		{Role: "assistant", Content: "answer"},
+		{Role: "user", Content: "next"},
+	}, "gpt-5.2-codex")
+
+	if req.Store {
+		t.Fatal("Store = true, want false")
+	}
+	if req.PreviousResponseID != "" {
+		t.Fatalf("PreviousResponseID = %q, want empty", req.PreviousResponseID)
+	}
+	inputItems, ok := req.Input.([]openairesponses.InputItem)
+	if !ok {
+		t.Fatalf("Input type = %T, want []openairesponses.InputItem", req.Input)
+	}
+	if len(inputItems) != 5 {
+		t.Fatalf("Input length = %d, want developer plus compacted item plus full history", len(inputItems))
+	}
+	if inputItems[0].Role != "developer" || inputItems[0].Content != "system" {
+		t.Fatalf("Input[0] = %#v, want developer system message", inputItems[0])
+	}
+	if inputItems[1].Type != "compacted" || inputItems[1].Data != "compact-data" {
+		t.Fatalf("Input[1] = %#v, want compacted item from context", inputItems[1])
 	}
 }
 

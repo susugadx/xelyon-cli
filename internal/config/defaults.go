@@ -16,6 +16,7 @@ func DefaultConfig() *Config {
 		CommandAliases:      defaultCommandAliases(),
 		PromptCache:         defaultPromptCacheConfig(),
 		Paste:               defaultPasteConfig(),
+		Responses:           defaultResponsesConfig(),
 		Streaming:           defaultStreamingConfig(),
 		Bash:                defaultBashConfig(),
 		ListDir:             defaultListDirConfig(),

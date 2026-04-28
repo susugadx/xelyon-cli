@@ -74,6 +74,35 @@ func TestSyncSavedResponseContextFromProvider(t *testing.T) {
 			t.Fatalf("session.ResponseModel = %q, want preserved saved model", agent.session.ResponseModel)
 		}
 	})
+
+	t.Run("persist disabled clears saved response context", func(t *testing.T) {
+		cfg := config.DefaultConfig()
+		cfg.Responses.PersistResponseID = false
+		agent := &Agent{
+			CurrentModel:      "gpt-5",
+			ProviderName:      "openai",
+			ProviderConfigKey: "openai",
+			CurrentProvider:   &mockResponseIDProvider{mockProvider: mockProvider{name: "openai"}, responseID: "resp_live"},
+			Runtime:           NewAgentRuntimeWithConfig(cfg),
+			agentConversationState: agentConversationState{
+				session: newResponseContextSession("saved-model", "openai", "openai", "resp_saved"),
+			},
+		}
+
+		agent.syncSavedResponseContextFromProvider()
+
+		if agent.session.ResponseID != "" {
+			t.Fatalf("session.ResponseID = %q, want cleared when persist_response_id=false", agent.session.ResponseID)
+		}
+		if agent.session.ResponseModel != "" || agent.session.ResponseProviderName != "" || agent.session.ResponseProviderConfigKey != "" {
+			t.Fatalf(
+				"saved response context = (%q, %q, %q), want cleared",
+				agent.session.ResponseModel,
+				agent.session.ResponseProviderName,
+				agent.session.ResponseProviderConfigKey,
+			)
+		}
+	})
 }
 
 func TestAzureProviderIdentityAndResponseIDContract(t *testing.T) {
@@ -252,6 +281,52 @@ func TestRestoreSessionResponseIDForCurrentContext(t *testing.T) {
 		}
 		if agent.session.ResponseID != "resp_legacyish" {
 			t.Fatalf("session.ResponseID = %q, want saved response id preserved", agent.session.ResponseID)
+		}
+	})
+
+	t.Run("persist disabled clears provider cache and saved context", func(t *testing.T) {
+		cfg := config.DefaultConfig()
+		cfg.Responses.PersistResponseID = false
+		provider := &mockResponseIDProvider{mockProvider: mockProvider{name: "openai"}, responseID: "old"}
+		agent := &Agent{
+			CurrentModel:      "saved-model",
+			ProviderName:      "openai",
+			ProviderConfigKey: "openai",
+			CurrentProvider:   provider,
+			Runtime:           NewAgentRuntimeWithConfig(cfg),
+			agentConversationState: agentConversationState{
+				session: newResponseContextSession("saved-model", "openai", "openai", "resp_123"),
+			},
+		}
+
+		agent.restoreSessionResponseIDForCurrentContext()
+
+		if provider.responseID != "" {
+			t.Fatalf("provider.responseID = %q, want cleared when persist_response_id=false", provider.responseID)
+		}
+		if agent.session.ResponseID != "" {
+			t.Fatalf("session.ResponseID = %q, want cleared when persist_response_id=false", agent.session.ResponseID)
+		}
+	})
+
+	t.Run("persist disabled clears saved context without response capable provider", func(t *testing.T) {
+		cfg := config.DefaultConfig()
+		cfg.Responses.PersistResponseID = false
+		agent := &Agent{
+			CurrentModel:      "saved-model",
+			ProviderName:      "deepseek",
+			ProviderConfigKey: "deepseek",
+			CurrentProvider:   &mockProvider{name: "deepseek"},
+			Runtime:           NewAgentRuntimeWithConfig(cfg),
+			agentConversationState: agentConversationState{
+				session: newResponseContextSession("saved-model", "openai", "openai", "resp_123"),
+			},
+		}
+
+		agent.restoreSessionResponseIDForCurrentContext()
+
+		if agent.session.ResponseID != "" {
+			t.Fatalf("session.ResponseID = %q, want cleared even without ResponseIDCapable provider", agent.session.ResponseID)
 		}
 	})
 }

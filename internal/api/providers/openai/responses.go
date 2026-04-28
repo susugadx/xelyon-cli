@@ -8,6 +8,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	openairesponses "github.com/susugadx/xelyon-cli/internal/api/providers/openai_responses"
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 const defaultOpenAIResponsesURL = "https://api.openai.com/v1/responses"
@@ -69,6 +70,7 @@ func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, h
 	if os.Getenv("XELYON_DEBUG_OPENAI") == "1" {
 		fmt.Fprintf(errOut, "[DEBUG OpenAI] chatWithResponses called, model=%s\n", model)
 	}
+	storeResponses := config.FromContext(ctx).ResponsesStoreEnabled()
 
 	content, responseID, err := p.runResponsesRequest(ctx, responsesRequestRunOptions{
 		URL:          resolveResponsesAPIURL(),
@@ -77,12 +79,16 @@ func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, h
 		Debug:        os.Getenv("XELYON_DEBUG_OPENAI") == "1",
 		DebugWriter:  errOut,
 		HasPreviousResponseID: func() bool {
-			return p.lastResponseID != ""
+			return storeResponses && p.lastResponseID != ""
 		},
 		ClearPreviousResponseID: func() {
 			p.lastResponseID = ""
 		},
 	})
+	if !storeResponses {
+		p.lastResponseID = ""
+		return content, err
+	}
 	if err == nil && responseID != "" {
 		p.lastResponseID = responseID
 	}
@@ -92,6 +98,7 @@ func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, h
 // chatWithImageResponses は Responses API で画像付きメッセージを処理
 // NOTE: 画像付きの場合は previous_response_id を使用しない（キャッシュ動作が不明瞭なため）
 func (p *Provider) chatWithImageResponses(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {
+	storeResponses := config.FromContext(ctx).ResponsesStoreEnabled()
 	content, responseID, err := p.runResponsesRequest(ctx, responsesRequestRunOptions{
 		URL: resolveResponsesAPIURL(),
 		BuildRequest: func() ResponsesRequest {
@@ -101,6 +108,10 @@ func (p *Provider) chatWithImageResponses(ctx context.Context, systemPrompt stri
 		Debug:       os.Getenv("XELYON_DEBUG_OPENAI") == "1",
 		DebugWriter: api.ErrorWriterFromContext(ctx),
 	})
+	if !storeResponses {
+		p.lastResponseID = ""
+		return content, err
+	}
 	if err == nil && responseID != "" {
 		// 画像メッセージ後も responseID を保存（次回テキストのみの場合に使用可能）
 		p.lastResponseID = responseID

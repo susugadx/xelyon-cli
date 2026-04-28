@@ -251,6 +251,50 @@ func TestChatWithResponses_NonStreamingRetriesWithoutInvalidPreviousResponseID(t
 	}
 }
 
+func TestChatWithResponses_StoreFalseOmitsPreviousAndDoesNotCacheResponseID(t *testing.T) {
+	var raw map[string]any
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if _, ok := raw["previous_response_id"]; ok {
+			t.Fatalf("previous_response_id should be omitted when responses.store=false: %#v", raw)
+		}
+		if raw["store"] != false {
+			t.Fatalf("store = %#v, want false", raw["store"])
+		}
+		input, ok := raw["input"].([]any)
+		if !ok || len(input) != 3 {
+			t.Fatalf("input = %#v, want developer + compacted + current user", raw["input"])
+		}
+		compacted, ok := input[1].(map[string]any)
+		if !ok || compacted["type"] != "compacted" || compacted["data"] != "compact-data" {
+			t.Fatalf("input[1] = %#v, want compacted item", input[1])
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"resp_new","output_text":"Fresh"}`))
+	})
+	t.Setenv("OPENAI_RESPONSES_URL", server.URL)
+
+	cfg := config.DefaultConfig()
+	cfg.Responses.Store = false
+	ctx := config.WithContext(newOpenAITestContext(t, false), cfg)
+	ctx = api.WithCompactedInputItems(ctx, []api.InputItem{{Type: "compacted", Data: "compact-data"}})
+	p := New("test-key")
+	p.SetResponseID("resp_old")
+
+	content, err := p.chatWithResponses(ctx, "system", []api.Message{{Role: "user", Content: "hi"}}, "gpt-5.5-pro")
+	if err != nil {
+		t.Fatalf("chatWithResponses() error = %v", err)
+	}
+	if content != "Fresh" {
+		t.Fatalf("content = %q, want Fresh", content)
+	}
+	if p.GetResponseID() != "" {
+		t.Fatalf("GetResponseID() = %q, want empty when responses.store=false", p.GetResponseID())
+	}
+}
+
 func newResponsesNonStreamingHTTPResponse(body string) *http.Response {
 	return &http.Response{
 		StatusCode: http.StatusOK,

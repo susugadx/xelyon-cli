@@ -401,6 +401,33 @@ openai:
     - my-custom-responses-model
 ```
 
+### Responses API retention 設定 (`responses`)（高度な設定）
+
+> **注意**: `/config` メニューには表示されません。ほとんどのユーザーは変更しないでください。
+> OpenAI / Azure OpenAI の Responses API 経路で、provider 側に response state を保存するか、保存した response ID を XELYON の session に永続化するかを制御します。
+
+デフォルトはサーバー側 state を使う推奨設定です。通常はこのままにしてください。
+
+```yaml
+responses:
+  store: true
+  persist_response_id: true
+```
+
+#### `store`
+- **型**: boolean
+- **デフォルト**: `true`
+- **説明**: Responses API request の `store` を制御します。`true` の場合、XELYON は返却された response ID を使って次回 request に `previous_response_id` を送り、会話の続きを provider 側 state に接続します。
+- **`false` にする場合**: 新しい response state を provider 側に保存せず、`previous_response_id` も送信しません。各 turn ではローカル履歴、または Compact API の圧縮済み state を request input に含めるため、token 使用量や自動圧縮の挙動が変わる可能性があります。
+
+#### `persist_response_id`
+- **型**: boolean
+- **デフォルト**: `true`
+- **説明**: response ID を XELYON の session に保存し、session reload 後も `previous_response_id` 継続を復元します。
+- **`false` にする場合**: 現在のプロセス内では response ID 継続を使いますが、session file には保存しません。`store: false` の場合、この設定は実質的に無効です。
+
+`/clear` はローカル履歴とローカルに保持している response ID を消しますが、provider 側に既に保存された response object の remote delete は行いません。response state を provider 側に残したくない運用では、最初から `store: false` を設定してください。
+
 ### LSP連携設定 (`lsp`)
 
 Language Server Protocol (LSP) を使用したコード解析の設定を行います。

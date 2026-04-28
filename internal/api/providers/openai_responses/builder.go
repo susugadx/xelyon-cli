@@ -23,17 +23,19 @@ type BaseRequestOptions struct {
 type ChatRequestOptions struct {
 	Base               BaseRequestOptions
 	SystemPrompt       string
+	CompactedInput     []api.InputItem
 	History            []api.Message
 	PreviousResponseID string
 }
 
 // ImageRequestOptions は image input 用 Responses API request の構築入力を表す。
 type ImageRequestOptions struct {
-	Base         BaseRequestOptions
-	SystemPrompt string
-	History      []api.Message
-	UserMessage  string
-	Image        *api.ImageData
+	Base           BaseRequestOptions
+	SystemPrompt   string
+	CompactedInput []api.InputItem
+	History        []api.Message
+	UserMessage    string
+	Image          *api.ImageData
 }
 
 // BuildChatRequest は履歴と response id から text chat 用 Responses API request を構築する。
@@ -57,18 +59,14 @@ func BuildChatRequest(options ChatRequestOptions) Request {
 		return reqBody
 	}
 
-	historyInput := api.ConvertHistoryToInputItems(options.History)
-	reqBody.Input = append([]InputItem{developerMsg}, historyInput...)
+	reqBody.Input = BuildInitialInput(developerMsg, options.CompactedInput, options.History)
 	return reqBody
 }
 
 // BuildImageRequest は画像入力用 Responses API request を構築する。
 func BuildImageRequest(options ImageRequestOptions) Request {
 	reqBody := BuildBaseRequest(options.Base)
-	input := append(
-		[]InputItem{BuildDeveloperMessage(options.SystemPrompt)},
-		api.ConvertHistoryToInputItems(options.History)...,
-	)
+	input := BuildInitialInput(BuildDeveloperMessage(options.SystemPrompt), options.CompactedInput, options.History)
 
 	if options.Image != nil {
 		dataURL := fmt.Sprintf("data:%s;base64,%s", options.Image.MediaType, options.Image.Base64)
@@ -90,6 +88,14 @@ func BuildImageRequest(options ImageRequestOptions) Request {
 
 	reqBody.Input = input
 	return reqBody
+}
+
+// BuildInitialInput は previous_response_id を使わない request の input を構築する。
+func BuildInitialInput(developerMsg InputItem, compactedInput []api.InputItem, history []api.Message) []InputItem {
+	input := []InputItem{developerMsg}
+	input = append(input, compactedInput...)
+	input = append(input, api.ConvertHistoryToInputItems(history)...)
+	return input
 }
 
 // BuildBaseRequest は provider 差分を渡して Responses API request の共通部を構築する。

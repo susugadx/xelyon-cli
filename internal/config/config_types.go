@@ -33,6 +33,7 @@ type Config struct {
 	CommandAliases  map[string]string              `yaml:"command_aliases,omitempty"` // コマンドエイリアス
 	PromptCache     PromptCacheConfig              `yaml:"prompt_cache"`
 	Paste           PasteConfig                    `yaml:"paste"`
+	Responses       ResponsesConfig                `yaml:"responses"`
 	Streaming       StreamingConfig                `yaml:"streaming"`
 	Bash            BashConfig                     `yaml:"bash"`
 	ListDir         ListDirConfig                  `yaml:"list_dir"`
@@ -121,6 +122,13 @@ type ToolConfirmConfig struct {
 type PromptCacheConfig struct {
 	Enabled  bool   `yaml:"enabled"`
 	CacheTTL string `yaml:"cache_ttl"` // キャッシュTTL（デフォルト: "5m"、"1h" で延長キャッシュ）
+}
+
+// ResponsesConfig は Responses API の server-side response state 設定。
+// 通常は変更不要。OpenAI / Azure OpenAI の Responses API 経路でのみ使用する。
+type ResponsesConfig struct {
+	Store             bool `yaml:"store"`               // response を provider 側に保存し previous_response_id 継続を有効化（デフォルト: true）
+	PersistResponseID bool `yaml:"persist_response_id"` // response ID を session に保存して reload 後も継続（デフォルト: true）
 }
 
 // PasteConfig はペーストモードの設定
@@ -262,4 +270,20 @@ func (c *Config) IsProviderResponsesAPIModel(provider, model string) bool {
 		return false
 	}
 	return c.IsResponsesAPIModel(c.ModelCatalogName(provider, model))
+}
+
+// ResponsesStoreEnabled は Responses API の provider-side response 保存を有効にするか返す。
+func (c *Config) ResponsesStoreEnabled() bool {
+	if c == nil {
+		return true
+	}
+	return c.Responses.Store
+}
+
+// ResponsesPersistResponseIDEnabled は session へ response ID を保存・復元するか返す。
+func (c *Config) ResponsesPersistResponseIDEnabled() bool {
+	if c == nil {
+		return true
+	}
+	return c.Responses.Store && c.Responses.PersistResponseID
 }

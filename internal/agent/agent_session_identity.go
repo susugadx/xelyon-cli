@@ -79,8 +79,20 @@ func shouldRestoreSessionResponseID(sessionModel, currentModel, sessionProviderN
 	return true
 }
 
+func (a *Agent) responsesStoreEnabled() bool {
+	return a.cfg().ResponsesStoreEnabled()
+}
+
+func (a *Agent) responsesPersistResponseIDEnabled() bool {
+	return a.cfg().ResponsesPersistResponseIDEnabled()
+}
+
 func (a *Agent) syncSavedResponseContextFromProvider() {
 	if a == nil || a.session == nil {
+		return
+	}
+	if !a.responsesPersistResponseIDEnabled() {
+		clearSavedResponseContext(a.session)
 		return
 	}
 
@@ -110,6 +122,10 @@ func (a *Agent) invalidateSavedResponseContextForCurrentRuntime() {
 	if a == nil || a.session == nil {
 		return
 	}
+	if !a.responsesPersistResponseIDEnabled() {
+		clearSavedResponseContext(a.session)
+		return
+	}
 
 	sessionModel, sessionProviderName, sessionProviderConfigKey, responseID := savedResponseContext(a.session)
 	if responseID == "" {
@@ -130,6 +146,14 @@ func (a *Agent) invalidateSavedResponseContextForCurrentRuntime() {
 
 func (a *Agent) restoreSessionResponseIDForCurrentContext() {
 	if a == nil || a.session == nil {
+		return
+	}
+
+	if !a.responsesPersistResponseIDEnabled() {
+		if ridProvider, ok := a.CurrentProvider.(ResponseIDCapable); ok {
+			ridProvider.SetResponseID("")
+		}
+		clearSavedResponseContext(a.session)
 		return
 	}
 

@@ -22,8 +22,9 @@ func (p *Provider) buildChatResponsesRequest(ctx context.Context, systemPrompt s
 	return openairesponses.BuildChatRequest(openairesponses.ChatRequestOptions{
 		Base:               p.newBaseResponsesRequestOptions(ctx, modelIdentity),
 		SystemPrompt:       systemPrompt,
+		CompactedInput:     api.CompactedInputItemsFromContext(ctx),
 		History:            history,
-		PreviousResponseID: p.GetResponseID(),
+		PreviousResponseID: azurePreviousResponseIDForRequest(ctx, p.GetResponseID()),
 	})
 }
 
@@ -37,20 +38,22 @@ func (p *Provider) buildImageResponsesRequest(
 ) responsesRequest {
 	modelIdentity := azureModelIdentity(ctx, model)
 	return openairesponses.BuildImageRequest(openairesponses.ImageRequestOptions{
-		Base:         p.newBaseResponsesRequestOptions(ctx, modelIdentity),
-		SystemPrompt: systemPrompt,
-		History:      history,
-		UserMessage:  userMessage,
-		Image:        image,
+		Base:           p.newBaseResponsesRequestOptions(ctx, modelIdentity),
+		SystemPrompt:   systemPrompt,
+		CompactedInput: api.CompactedInputItemsFromContext(ctx),
+		History:        history,
+		UserMessage:    userMessage,
+		Image:          image,
 	})
 }
 
 func (p *Provider) newBaseResponsesRequestOptions(ctx context.Context, model modelIdentity) openairesponses.BaseRequestOptions {
+	cfg := config.FromContext(ctx)
 	options := openairesponses.BaseRequestOptions{
 		Model:           model,
 		MaxOutputTokens: api.GetMaxOutputTokens(ctx, "azure", model.RequestName()),
 		Stream:          openai.ShouldStreamResponses(model.CatalogName()),
-		Store:           true,
+		Store:           cfg.ResponsesStoreEnabled(),
 	}
 	if p.IsFunctionCallingEnabled() {
 		options.Tools = openai.GetResponsesToolDefinitionsWithContext(ctx, p.mcpTools)
@@ -59,6 +62,13 @@ func (p *Provider) newBaseResponsesRequestOptions(ctx context.Context, model mod
 
 	options.Reasoning = azureResponsesReasoningConfig(ctx, model)
 	return options
+}
+
+func azurePreviousResponseIDForRequest(ctx context.Context, responseID string) string {
+	if !config.FromContext(ctx).ResponsesStoreEnabled() {
+		return ""
+	}
+	return responseID
 }
 
 func azureResponsesReasoningConfig(ctx context.Context, model modelIdentity) *openairesponses.ReasoningConfig {
