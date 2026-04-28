@@ -24,7 +24,7 @@ AI搭載のコーディングアシスタントCLI
 DeepSeek, OpenAI, Azure OpenAI, Gemini, Claude, Ollama, Groq, OpenRouter, Bedrock をシームレスに切り替え。
 ローカルLLM（Ollama）も対応で、オフラインでも使用可能。
 
-**OpenAI / Azure OpenAI Responses API 対応**: `gpt-5.2-codex` などの Codex モデルを自動検出し、最適なAPIを選択。
+**OpenAI / Azure OpenAI Responses API 対応**: `gpt-5.2-codex` などの Codex モデルを自動検出し、Azure OpenAI は API key と Microsoft Entra ID bearer token の両方に対応。
 **DeepSeek Reasoner 対応**: `reasoning_content`（思考内容）のストリーミング表示・ツール実行フローでの保持に対応。
 **プロバイダー別プロンプト最適化**: OpenAI / Gemini では短い実況を促し、Gemini など特定モデルのルール遵守を強化するプレフィックスを自動注入。
 **Gemini FCリトライ**: FC失敗時にテキストモードではなくFCモードでリトライ（キャッシュ汚染防止）。idle timeout / thinking timeout / 一般エラーそれぞれで上限付きリトライ。

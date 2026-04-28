@@ -11,14 +11,15 @@ import (
 )
 
 const (
-	apiKeyEnv  = "AZURE_OPENAI_API_KEY"
-	baseURLEnv = "AZURE_OPENAI_BASE_URL"
+	apiKeyEnv    = "AZURE_OPENAI_API_KEY"
+	authTokenEnv = "AZURE_OPENAI_AUTH_TOKEN"
+	baseURLEnv   = "AZURE_OPENAI_BASE_URL"
 )
 
 func init() {
 	api.RegisterProvider("azure", func(apiKey string) (api.Provider, error) {
-		if strings.TrimSpace(apiKey) == "" {
-			return nil, fmt.Errorf("%s not set", apiKeyEnv)
+		if strings.TrimSpace(apiKey) == "" && strings.TrimSpace(os.Getenv(authTokenEnv)) == "" {
+			return nil, fmt.Errorf("%s or %s not set", apiKeyEnv, authTokenEnv)
 		}
 		if strings.TrimSpace(os.Getenv(baseURLEnv)) == "" {
 			return nil, fmt.Errorf("%s not set", baseURLEnv)
@@ -31,6 +32,7 @@ func init() {
 type Provider struct {
 	api.BaseProvider
 	lastResponseID string
+	authToken      string
 	mcpTools       []api.ToolDefinition
 	usageCallback  api.UsageCallback
 	toolChoice     *string
@@ -40,7 +42,10 @@ type Provider struct {
 func New(apiKey string) *Provider {
 	base := api.NewBaseProvider("Azure OpenAI", apiKey, "", "")
 	base.APIURL = normalizeBaseURL(os.Getenv(baseURLEnv))
-	return &Provider{BaseProvider: base}
+	return &Provider{
+		BaseProvider: base,
+		authToken:    strings.TrimSpace(os.Getenv(authTokenEnv)),
+	}
 }
 
 // RuntimeProviderName は session / catalog / stats 用の canonical provider identity を返す。

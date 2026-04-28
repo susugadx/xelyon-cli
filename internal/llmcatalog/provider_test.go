@@ -60,8 +60,22 @@ func TestProviderDescriptorFor_ClonesCredentialEnvVars(t *testing.T) {
 	}
 
 	azure := ProviderCredentialEnvVars("azure")
-	if !reflect.DeepEqual(azure, []string{"AZURE_OPENAI_API_KEY", "AZURE_OPENAI_BASE_URL"}) {
-		t.Fatalf("ProviderCredentialEnvVars(azure) = %v, want Azure key and base URL", azure)
+	if !reflect.DeepEqual(azure, []string{"AZURE_OPENAI_API_KEY", "AZURE_OPENAI_AUTH_TOKEN", "AZURE_OPENAI_BASE_URL"}) {
+		t.Fatalf("ProviderCredentialEnvVars(azure) = %v, want Azure API key, auth token, and base URL", azure)
+	}
+
+	azureSets := ProviderCredentialEnvVarSets("azure")
+	wantSets := [][]string{
+		{"AZURE_OPENAI_API_KEY", "AZURE_OPENAI_BASE_URL"},
+		{"AZURE_OPENAI_AUTH_TOKEN", "AZURE_OPENAI_BASE_URL"},
+	}
+	if !reflect.DeepEqual(azureSets, wantSets) {
+		t.Fatalf("ProviderCredentialEnvVarSets(azure) = %v, want %v", azureSets, wantSets)
+	}
+	azureSets[0][0] = "MUTATED"
+	againSets := ProviderCredentialEnvVarSets("azure")
+	if !reflect.DeepEqual(againSets, wantSets) {
+		t.Fatalf("ProviderCredentialEnvVarSets(azure) after mutation = %v, want %v", againSets, wantSets)
 	}
 }
 

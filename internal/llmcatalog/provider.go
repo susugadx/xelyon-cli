@@ -20,6 +20,7 @@ type ProviderDescriptor struct {
 	BaseURLEnv           string
 	DefaultBaseURL       string
 	CredentialEnvVars    []string
+	CredentialEnvVarSets [][]string
 	StaticCredential     string
 	SetupInstructions    []string
 	DefaultSubAgentModel string
@@ -98,8 +99,13 @@ var providerDescriptors = map[string]ProviderDescriptor{
 		CredentialKind:       "api_key",
 		APIKeyEnv:            "AZURE_OPENAI_API_KEY",
 		BaseURLEnv:           "AZURE_OPENAI_BASE_URL",
-		CredentialEnvVars:    []string{"AZURE_OPENAI_API_KEY", "AZURE_OPENAI_BASE_URL"},
-		SetupInstructions:    []string{"export AZURE_OPENAI_API_KEY=your-api-key", "export AZURE_OPENAI_BASE_URL=https://YOUR-RESOURCE-NAME.openai.azure.com/openai/v1"},
+		CredentialEnvVars:    []string{"AZURE_OPENAI_API_KEY", "AZURE_OPENAI_AUTH_TOKEN", "AZURE_OPENAI_BASE_URL"},
+		CredentialEnvVarSets: [][]string{{"AZURE_OPENAI_API_KEY", "AZURE_OPENAI_BASE_URL"}, {"AZURE_OPENAI_AUTH_TOKEN", "AZURE_OPENAI_BASE_URL"}},
+		SetupInstructions: []string{
+			"export AZURE_OPENAI_BASE_URL=https://YOUR-RESOURCE-NAME.openai.azure.com/openai/v1",
+			"export AZURE_OPENAI_API_KEY=your-api-key",
+			"# or: export AZURE_OPENAI_AUTH_TOKEN=$(az account get-access-token --resource https://cognitiveservices.azure.com --query accessToken -o tsv)",
+		},
 		SupportsImages:       true,
 		SupportsResponsesAPI: true,
 		PricingFamily:        "openai",
@@ -265,7 +271,7 @@ func ProviderDescriptorFor(name string) (ProviderDescriptor, bool) {
 	return cloneProviderDescriptor(entry), true
 }
 
-// RequiredCredentialEnvVars は provider 利用可否判定に必要な環境変数名を返す。
+// RequiredCredentialEnvVars は provider の認証案内に表示する環境変数名を返す。
 func (d ProviderDescriptor) RequiredCredentialEnvVars() []string {
 	if len(d.CredentialEnvVars) > 0 {
 		return cloneStrings(d.CredentialEnvVars)
@@ -278,13 +284,34 @@ func (d ProviderDescriptor) RequiredCredentialEnvVars() []string {
 	return nil
 }
 
-// ProviderCredentialEnvVars は provider 利用可否判定に必要な環境変数名を返す。
+// ProviderCredentialEnvVars は provider の認証案内に表示する環境変数名を返す。
 func ProviderCredentialEnvVars(name string) []string {
 	entry, ok := ProviderDescriptorFor(name)
 	if !ok {
 		return nil
 	}
 	return entry.RequiredCredentialEnvVars()
+}
+
+// CredentialEnvVarSets は provider 利用に必要な環境変数セットを返す。
+// いずれか 1 セットが満たされれば provider は利用可能。
+func (d ProviderDescriptor) CredentialEnvVarSetsForAvailability() [][]string {
+	if len(d.CredentialEnvVarSets) > 0 {
+		return cloneStringSlices(d.CredentialEnvVarSets)
+	}
+	if vars := d.RequiredCredentialEnvVars(); len(vars) > 0 {
+		return [][]string{vars}
+	}
+	return nil
+}
+
+// ProviderCredentialEnvVarSets は provider 利用に必要な環境変数セットを返す。
+func ProviderCredentialEnvVarSets(name string) [][]string {
+	entry, ok := ProviderDescriptorFor(name)
+	if !ok {
+		return nil
+	}
+	return entry.CredentialEnvVarSetsForAvailability()
 }
 
 // ProviderSupportsResponsesAPI は provider が OpenAI Responses API 形の実行経路を持つか返す。
@@ -356,6 +383,7 @@ func DefaultProviderModelDescriptors() map[string]ProviderModelDefaults {
 func cloneProviderDescriptor(entry ProviderDescriptor) ProviderDescriptor {
 	entry.Aliases = cloneStrings(entry.Aliases)
 	entry.CredentialEnvVars = cloneStrings(entry.CredentialEnvVars)
+	entry.CredentialEnvVarSets = cloneStringSlices(entry.CredentialEnvVarSets)
 	entry.SetupInstructions = cloneStrings(entry.SetupInstructions)
 	entry.ModelDefaults = cloneProviderModelDefaults(entry.ModelDefaults)
 	return entry
@@ -372,6 +400,17 @@ func cloneStrings(values []string) []string {
 	}
 	out := make([]string, len(values))
 	copy(out, values)
+	return out
+}
+
+func cloneStringSlices(values [][]string) [][]string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([][]string, len(values))
+	for i, value := range values {
+		out[i] = cloneStrings(value)
+	}
 	return out
 }
 

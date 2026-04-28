@@ -41,8 +41,8 @@ func TestProviderCredentialEnvVarsAndAvailability(t *testing.T) {
 	if got := ProviderCredentialEnvVars("openai"); !reflect.DeepEqual(got, []string{"OPENAI_API_KEY"}) {
 		t.Fatalf("ProviderCredentialEnvVars(openai) = %v, want [OPENAI_API_KEY]", got)
 	}
-	if got := ProviderCredentialEnvVars("azure"); !reflect.DeepEqual(got, []string{"AZURE_OPENAI_API_KEY", "AZURE_OPENAI_BASE_URL"}) {
-		t.Fatalf("ProviderCredentialEnvVars(azure) = %v, want Azure key and base URL", got)
+	if got := ProviderCredentialEnvVars("azure"); !reflect.DeepEqual(got, []string{"AZURE_OPENAI_API_KEY", "AZURE_OPENAI_AUTH_TOKEN", "AZURE_OPENAI_BASE_URL"}) {
+		t.Fatalf("ProviderCredentialEnvVars(azure) = %v, want Azure API key, auth token, and base URL", got)
 	}
 	if got := ProviderCredentialEnvVars("ollama"); len(got) != 0 {
 		t.Fatalf("ProviderCredentialEnvVars(ollama) = %v, want empty", got)
@@ -57,6 +57,7 @@ func TestProviderCredentialEnvVarsAndAvailability(t *testing.T) {
 		t.Fatal("ProviderHasAvailableCredential(openai) = false, want true with key")
 	}
 	t.Setenv("AZURE_OPENAI_API_KEY", "azure-key")
+	t.Setenv("AZURE_OPENAI_AUTH_TOKEN", "")
 	t.Setenv("AZURE_OPENAI_BASE_URL", "")
 	if ProviderHasAvailableCredential("azure") {
 		t.Fatal("ProviderHasAvailableCredential(azure) = true, want false without base URL")
@@ -64,6 +65,15 @@ func TestProviderCredentialEnvVarsAndAvailability(t *testing.T) {
 	t.Setenv("AZURE_OPENAI_BASE_URL", "https://example.openai.azure.com/openai/v1")
 	if !ProviderHasAvailableCredential("azure") {
 		t.Fatal("ProviderHasAvailableCredential(azure) = false, want true with key and base URL")
+	}
+	t.Setenv("AZURE_OPENAI_API_KEY", "")
+	t.Setenv("AZURE_OPENAI_AUTH_TOKEN", "entra-token")
+	if !ProviderHasAvailableCredential("azure") {
+		t.Fatal("ProviderHasAvailableCredential(azure) = false, want true with Entra token and base URL")
+	}
+	t.Setenv("AZURE_OPENAI_AUTH_TOKEN", "")
+	if ProviderHasAvailableCredential("azure") {
+		t.Fatal("ProviderHasAvailableCredential(azure) = true, want false without API key or Entra token")
 	}
 	if !ProviderHasAvailableCredential("ollama") {
 		t.Fatal("ProviderHasAvailableCredential(ollama) = false, want true with default base URL")

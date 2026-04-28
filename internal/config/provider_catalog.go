@@ -11,6 +11,7 @@ import (
 type ProviderCatalogEntry struct {
 	APIKeyEnv            string
 	CredentialEnvVars    []string
+	CredentialEnvVarSets [][]string
 	SetupInstructions    []string
 	DefaultSubAgentModel string
 	SupportsImages       bool
@@ -26,6 +27,7 @@ func ProviderCatalogEntryFor(name string) (ProviderCatalogEntry, bool) {
 	return ProviderCatalogEntry{
 		APIKeyEnv:            entry.APIKeyEnv,
 		CredentialEnvVars:    entry.RequiredCredentialEnvVars(),
+		CredentialEnvVarSets: entry.CredentialEnvVarSetsForAvailability(),
 		SetupInstructions:    entry.SetupInstructions,
 		DefaultSubAgentModel: entry.DefaultSubAgentModel,
 		SupportsImages:       entry.SupportsImages,
@@ -42,7 +44,7 @@ func ProviderAPIKeyEnv(name string) string {
 	return entry.APIKeyEnv
 }
 
-// ProviderCredentialEnvVars は provider に必要な認証環境変数名を返す。
+// ProviderCredentialEnvVars は provider の認証案内に表示する環境変数名を返す。
 func ProviderCredentialEnvVars(name string) []string {
 	entry, ok := ProviderCatalogEntryFor(name)
 	if !ok {
@@ -57,18 +59,30 @@ func ProviderHasAvailableCredential(name string) bool {
 	if !ok {
 		return false
 	}
-	if len(entry.CredentialEnvVars) > 0 {
-		for _, envName := range entry.CredentialEnvVars {
-			if strings.TrimSpace(os.Getenv(envName)) == "" {
-				return false
+	if len(entry.CredentialEnvVarSets) > 0 {
+		for _, envSet := range entry.CredentialEnvVarSets {
+			if credentialEnvSetAvailable(envSet) {
+				return true
 			}
 		}
-		return true
+		return false
 	}
 	if entry.APIKeyEnv == "" {
 		return true
 	}
 	return strings.TrimSpace(os.Getenv(entry.APIKeyEnv)) != ""
+}
+
+func credentialEnvSetAvailable(envSet []string) bool {
+	if len(envSet) == 0 {
+		return false
+	}
+	for _, envName := range envSet {
+		if strings.TrimSpace(os.Getenv(envName)) == "" {
+			return false
+		}
+	}
+	return true
 }
 
 // ProviderSetupInstructions は provider の設定手順を返す。

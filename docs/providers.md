@@ -19,7 +19,7 @@ XELYON は provider/model に応じて編集ツールを自動で切り替えま
 |------------|---------|---------|-----------|
 | DeepSeek | ❌ | `DEEPSEEK_API_KEY` | https://platform.deepseek.com |
 | OpenAI | ✅ | `OPENAI_API_KEY` | https://platform.openai.com |
-| Azure OpenAI | ✅ | `AZURE_OPENAI_API_KEY` + `AZURE_OPENAI_BASE_URL` | https://azure.microsoft.com/products/ai-services/openai-service |
+| Azure OpenAI | ✅ | `AZURE_OPENAI_BASE_URL` + (`AZURE_OPENAI_API_KEY` または `AZURE_OPENAI_AUTH_TOKEN`) | https://azure.microsoft.com/products/ai-services/openai-service |
 | Gemini | ✅ | `GEMINI_API_KEY` | https://ai.google.dev |
 | Claude | ✅ | `ANTHROPIC_API_KEY` | https://console.anthropic.com |
 | Groq | ❌ | `GROQ_API_KEY` | https://console.groq.com |
@@ -123,9 +123,12 @@ xelyon --provider openai --model gpt-5.5-pro
 ### 3. Azure OpenAI
 
 ```bash
-# Azure OpenAI resource の API key と v1 base URL を設定
-export AZURE_OPENAI_API_KEY=...
+# Azure OpenAI resource の v1 base URL と認証情報を設定
 export AZURE_OPENAI_BASE_URL=https://YOUR-RESOURCE-NAME.openai.azure.com/openai/v1
+export AZURE_OPENAI_API_KEY=...
+
+# Microsoft Entra ID を使う場合
+export AZURE_OPENAI_AUTH_TOKEN=$(az account get-access-token --resource https://cognitiveservices.azure.com --query accessToken -o tsv)
 
 # model には Azure 側の deployment 名を指定
 xelyon --provider azure --model my-gpt-5-deployment
@@ -134,6 +137,7 @@ xelyon --provider azure --model my-gpt-5-deployment
 **特徴:**
 - Responses API (`/openai/v1/responses`) を使用
 - API key 認証は `api-key` ヘッダー
+- Microsoft Entra ID 認証は `Authorization: Bearer` ヘッダー
 - 画像入力 / function calling 対応
 - `model` は Azure の deployment 名
 - OpenAI provider 用の `prompt_cache_key` / `prompt_cache_retention` は送信しません
@@ -145,6 +149,18 @@ provider_models:
   azure:
     default_model: my-gpt-5-deployment
     catalog_model: gpt-5.4
+```
+
+実 Azure 環境の smoke test は以下で実行できます。`AZURE_OPENAI_PRO_DEPLOYMENT` を指定した場合は GPT-5.5 Pro 系の non-streaming 経路も検証します。
+
+```bash
+export AZURE_OPENAI_BASE_URL=https://YOUR-RESOURCE-NAME.openai.azure.com/openai/v1
+export AZURE_OPENAI_DEPLOYMENT=my-gpt-5-deployment
+export AZURE_OPENAI_CATALOG_MODEL=gpt-5.4
+export AZURE_OPENAI_API_KEY=...
+# または AZURE_OPENAI_AUTH_TOKEN=...
+
+make azure-smoke
 ```
 
 ### 4. Gemini

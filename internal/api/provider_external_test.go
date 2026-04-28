@@ -53,9 +53,20 @@ func TestNewProvider_MissingAPIKey(t *testing.T) {
 			// 環境変数をクリア
 			originalValue := os.Getenv(tt.envKey)
 			os.Unsetenv(tt.envKey)
+			originalAzureAuthToken := os.Getenv("AZURE_OPENAI_AUTH_TOKEN")
+			if tt.providerName == "azure" {
+				os.Unsetenv("AZURE_OPENAI_AUTH_TOKEN")
+			}
 			defer func() {
 				if originalValue != "" {
 					os.Setenv(tt.envKey, originalValue)
+				}
+				if tt.providerName == "azure" {
+					if originalAzureAuthToken != "" {
+						os.Setenv("AZURE_OPENAI_AUTH_TOKEN", originalAzureAuthToken)
+					} else {
+						os.Unsetenv("AZURE_OPENAI_AUTH_TOKEN")
+					}
 				}
 			}()
 
@@ -80,6 +91,7 @@ func TestNewProvider_UnknownProvider(t *testing.T) {
 
 func TestNewProvider_AzureRequiresBaseURL(t *testing.T) {
 	t.Setenv("AZURE_OPENAI_API_KEY", "test-azure-key")
+	t.Setenv("AZURE_OPENAI_AUTH_TOKEN", "")
 	t.Setenv("AZURE_OPENAI_BASE_URL", "")
 
 	_, err := api.NewProvider("azure")
@@ -88,6 +100,20 @@ func TestNewProvider_AzureRequiresBaseURL(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "AZURE_OPENAI_BASE_URL not set") {
 		t.Fatalf("NewProvider(\"azure\") error = %v, want AZURE_OPENAI_BASE_URL not set", err)
+	}
+}
+
+func TestNewProvider_AzureWithEntraToken(t *testing.T) {
+	t.Setenv("AZURE_OPENAI_API_KEY", "")
+	t.Setenv("AZURE_OPENAI_AUTH_TOKEN", "test-entra-token")
+	t.Setenv("AZURE_OPENAI_BASE_URL", "https://example.openai.azure.com/openai/v1")
+
+	provider, err := api.NewProvider("azure")
+	if err != nil {
+		t.Fatalf("NewProvider(\"azure\") with Entra token failed: %v", err)
+	}
+	if provider.Name() != "Azure OpenAI" {
+		t.Fatalf("NewProvider(\"azure\") Name() = %q, want Azure OpenAI", provider.Name())
 	}
 }
 

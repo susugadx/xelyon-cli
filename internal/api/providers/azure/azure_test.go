@@ -131,6 +131,56 @@ func TestChatWithTools_UsesAzureResponsesAPI(t *testing.T) {
 	}
 }
 
+func TestChatWithTools_UsesBearerTokenWhenAPIKeyMissing(t *testing.T) {
+	t.Setenv(authTokenEnv, "entra-token")
+	var received struct {
+		apiKey        string
+		authorization string
+		body          map[string]any
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		received.apiKey = r.Header.Get("api-key")
+		received.authorization = r.Header.Get("Authorization")
+		if err := json.NewDecoder(r.Body).Decode(&received.body); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprintln(w, `data: {"type":"response.created","response":{"id":"resp_entra"}}`)
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, `data: {"type":"response.output_text.delta","delta":"ok"}`)
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, `data: {"type":"response.completed","response":{"usage":{"input_tokens":4,"output_tokens":2}}}`)
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, `data: [DONE]`)
+	}))
+	defer server.Close()
+
+	t.Setenv(baseURLEnv, server.URL)
+	p := New("")
+
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("azure", config.ProviderModelConfig{
+		DefaultModel: "corp-gpt55-deployment",
+		CatalogModel: "gpt-5.5",
+	})
+
+	content, err := p.ChatWithTools(azureTestContext(cfg), "system", []api.Message{{Role: "user", Content: "hello"}}, "")
+	if err != nil {
+		t.Fatalf("ChatWithTools() error = %v", err)
+	}
+	if content != "ok" {
+		t.Fatalf("content = %q, want ok", content)
+	}
+	if received.apiKey != "" {
+		t.Fatalf("api-key = %q, want empty for Entra token auth", received.apiKey)
+	}
+	if received.authorization != "Bearer entra-token" {
+		t.Fatalf("Authorization = %q, want Bearer entra-token", received.authorization)
+	}
+}
+
 func TestChatWithTools_UsesNonStreamingForAzureProCatalogModel(t *testing.T) {
 	var received struct {
 		path string

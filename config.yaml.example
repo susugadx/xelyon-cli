@@ -14,6 +14,8 @@ provider_models:
     azure:
         # default_model は Azure OpenAI の deployment 名です。
         # catalog_model は token/pricing/capability 判定に使う実モデル名です。
+        # 認証は AZURE_OPENAI_BASE_URL と、AZURE_OPENAI_API_KEY または
+        # AZURE_OPENAI_AUTH_TOKEN（Microsoft Entra ID bearer token）を設定してください。
         default_model: azure-gpt-5.4
         catalog_model: gpt-5.4
         max_output_tokens: 16384

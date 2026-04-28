@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/api/providers/openai"
@@ -74,7 +75,7 @@ func (p *Provider) runResponsesRequest(ctx context.Context, options responsesReq
 		}
 		writeResponsesDebugRequest(options, payload)
 
-		req, err := p.newAPIKeyJSONRequest(ctx, options.URL, payload)
+		req, err := p.newAuthJSONRequest(ctx, options.URL, payload)
 		if err != nil {
 			return "", "", err
 		}
@@ -163,8 +164,16 @@ func shouldRetryResponsesWithoutPreviousResponseID(resp *http.Response, options 
 	return options.HasPreviousResponseID()
 }
 
-func (p *Provider) newAPIKeyJSONRequest(ctx context.Context, url string, payload []byte) (*http.Request, error) {
-	return openaicompat.NewHeaderJSONBytesRequest(ctx, url, "api-key", p.APIKey, payload)
+func (p *Provider) newAuthJSONRequest(ctx context.Context, url string, payload []byte) (*http.Request, error) {
+	apiKey := strings.TrimSpace(p.APIKey)
+	if apiKey != "" {
+		return openaicompat.NewHeaderJSONBytesRequest(ctx, url, "api-key", apiKey, payload)
+	}
+	authToken := strings.TrimSpace(p.authToken)
+	if authToken != "" {
+		return openaicompat.NewBearerJSONBytesRequest(ctx, url, authToken, payload)
+	}
+	return nil, fmt.Errorf("%s or %s not set", apiKeyEnv, authTokenEnv)
 }
 
 func (p *Provider) handleResponsesStreaming(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, string, error) {
