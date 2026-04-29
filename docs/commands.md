@@ -2,6 +2,20 @@
 
 XELYON CLIで使用できる全コマンドのリファレンスです。
 
+## CLI 診断コマンド
+
+### `xelyon doctor azure`
+
+Azure OpenAI の base URL、認証、deployment 解決、`catalog_model`、function calling 設定、Responses retention 設定を確認します。`--smoke` を付けると、設定済み deployment に最小の Responses API リクエストを送信します。function calling まで確認する場合は `--tool-smoke` を使い、dummy tool call を強制します。
+
+```bash
+xelyon doctor azure
+xelyon doctor azure --deployment my-gpt-5-deployment --catalog-model gpt-5.4
+xelyon doctor azure --deployment my-gpt-5-deployment --catalog-model gpt-5.4 --smoke
+xelyon doctor azure --deployment my-gpt-5-deployment --catalog-model gpt-5.4 --tool-smoke
+xelyon doctor azure --json
+```
+
 ## 対話型コマンド
 
 セッション中に `/` で始まるコマンドを入力できます。

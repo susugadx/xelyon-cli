@@ -154,7 +154,17 @@ provider_models:
     catalog_model: gpt-5.4
 ```
 
-実 Azure 環境の smoke test は以下で実行できます。`AZURE_OPENAI_PRO_DEPLOYMENT` を指定した場合は GPT-5.5 Pro 系の non-streaming 経路も検証します。
+設定の到達性は CLI から診断できます。`doctor azure` は base URL、認証方式、deployment 解決、`catalog_model`、function calling 設定、Responses retention 設定を確認します。`--smoke` を付けると `responses.store=false` の最小リクエストを送って、実 deployment への到達性も検証します。function calling まで確認したい場合は `--tool-smoke` を使い、dummy tool call を強制します。
+
+```bash
+xelyon doctor azure
+xelyon doctor azure --deployment my-gpt-5-deployment --catalog-model gpt-5.4
+xelyon doctor azure --deployment my-gpt-5-deployment --catalog-model gpt-5.4 --smoke
+xelyon doctor azure --deployment my-gpt-5-deployment --catalog-model gpt-5.4 --tool-smoke
+xelyon doctor azure --json
+```
+
+より深い実 Azure 環境の smoke test は以下で実行できます。`AZURE_OPENAI_PRO_DEPLOYMENT` を指定した場合は GPT-5.5 Pro 系の non-streaming 経路も検証します。
 
 ```bash
 export AZURE_OPENAI_BASE_URL=https://YOUR-RESOURCE-NAME.openai.azure.com/openai/v1

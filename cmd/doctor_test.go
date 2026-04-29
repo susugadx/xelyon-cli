@@ -1,0 +1,159 @@
+package cmd
+
+import (
+	"bytes"
+	"encoding/json"
+	"os"
+	"strings"
+	"testing"
+)
+
+func TestRunAzureDoctorInvocation_JSONReportsConfiguredDeployment(t *testing.T) {
+	resetRootFlagsForTest()
+	t.Cleanup(resetRootFlagsForTest)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("AZURE_OPENAI_BASE_URL", "https://example.openai.azure.com/openai/v1")
+	t.Setenv("AZURE_OPENAI_API_KEY", "azure-key")
+	t.Setenv("AZURE_OPENAI_AUTH_TOKEN", "")
+
+	var out bytes.Buffer
+	cmd := newAzureDoctorCommand()
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+
+	doctorDeploymentFlag = "corp-gpt55-deployment"
+	doctorCatalogModelFlag = "gpt-5.5"
+	doctorJSONFlag = true
+
+	if err := runAzureDoctorInvocation(cmd, nil); err != nil {
+		t.Fatalf("runAzureDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
+	}
+
+	var report struct {
+		Provider          string `json:"provider"`
+		Deployment        string `json:"deployment"`
+		CatalogModel      string `json:"catalog_model"`
+		NormalizedBaseURL string `json:"normalized_base_url"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
+		t.Fatalf("unmarshal output: %v\n%s", err, out.String())
+	}
+	if report.Provider != "azure" {
+		t.Fatalf("provider = %q, want azure", report.Provider)
+	}
+	if report.Deployment != "corp-gpt55-deployment" {
+		t.Fatalf("deployment = %q, want CLI deployment", report.Deployment)
+	}
+	if report.CatalogModel != "gpt-5.5" {
+		t.Fatalf("catalog_model = %q, want CLI catalog model", report.CatalogModel)
+	}
+	if report.NormalizedBaseURL != "https://example.openai.azure.com/openai/v1" {
+		t.Fatalf("normalized_base_url = %q, want v1 URL", report.NormalizedBaseURL)
+	}
+}
+
+func TestRunAzureDoctorInvocation_FailsForMissingAzureSetup(t *testing.T) {
+	resetRootFlagsForTest()
+	t.Cleanup(resetRootFlagsForTest)
+	t.Setenv("HOME", t.TempDir())
+	_ = os.Unsetenv("AZURE_OPENAI_BASE_URL")
+	_ = os.Unsetenv("AZURE_OPENAI_API_KEY")
+	_ = os.Unsetenv("AZURE_OPENAI_AUTH_TOKEN")
+
+	var out bytes.Buffer
+	cmd := newAzureDoctorCommand()
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+
+	err := runAzureDoctorInvocation(cmd, nil)
+	if err == nil {
+		t.Fatalf("runAzureDoctorInvocation() error = nil, want diagnostics failure\noutput:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "base_url") {
+		t.Fatalf("output = %q, want base_url failure", out.String())
+	}
+	if !strings.Contains(out.String(), "deployment") {
+		t.Fatalf("output = %q, want deployment failure", out.String())
+	}
+}
+
+func TestRootCommand_AzureDoctorCommandParsesFlags(t *testing.T) {
+	resetRootFlagsForTest()
+	t.Cleanup(func() {
+		rootCmd.SetOut(nil)
+		rootCmd.SetErr(nil)
+		resetRootFlagsForTest()
+	})
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("AZURE_OPENAI_BASE_URL", "https://example.openai.azure.com/openai/v1")
+	t.Setenv("AZURE_OPENAI_API_KEY", "azure-key")
+	t.Setenv("AZURE_OPENAI_AUTH_TOKEN", "")
+
+	var out bytes.Buffer
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{"doctor", "azure", "--deployment", "corp-gpt55-deployment", "--catalog-model", "gpt-5.5", "--json"})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("root Execute() error = %v\noutput:\n%s", err, out.String())
+	}
+	if !strings.Contains(out.String(), `"deployment": "corp-gpt55-deployment"`) {
+		t.Fatalf("output = %q, want parsed deployment", out.String())
+	}
+}
+
+func TestRootCommand_AzureDoctorHelpShowsDoctorFlags(t *testing.T) {
+	resetRootFlagsForTest()
+	t.Cleanup(func() {
+		rootCmd.SetOut(nil)
+		rootCmd.SetErr(nil)
+		resetRootFlagsForTest()
+	})
+
+	var out bytes.Buffer
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{"doctor", "azure", "--help"})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("root Execute() error = %v\noutput:\n%s", err, out.String())
+	}
+	if !strings.Contains(out.String(), "--deployment") {
+		t.Fatalf("output = %q, want Azure doctor flags", out.String())
+	}
+	if !strings.Contains(out.String(), "Diagnose Azure OpenAI configuration") {
+		t.Fatalf("output = %q, want Azure doctor help", out.String())
+	}
+	if strings.Contains(out.String(), "XELYON CLI is an AI coding agent") {
+		t.Fatalf("output = %q, should not show root long help", out.String())
+	}
+}
+
+func TestRootCommand_AzureDoctorFailureDoesNotPrintRootUsage(t *testing.T) {
+	resetRootFlagsForTest()
+	t.Cleanup(func() {
+		rootCmd.SetOut(nil)
+		rootCmd.SetErr(nil)
+		resetRootFlagsForTest()
+	})
+	t.Setenv("HOME", t.TempDir())
+	_ = os.Unsetenv("AZURE_OPENAI_BASE_URL")
+	_ = os.Unsetenv("AZURE_OPENAI_API_KEY")
+	_ = os.Unsetenv("AZURE_OPENAI_AUTH_TOKEN")
+
+	var out bytes.Buffer
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{"doctor", "azure"})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatalf("root Execute() error = nil, want diagnostics failure\noutput:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "Azure OpenAI doctor") {
+		t.Fatalf("output = %q, want doctor report", out.String())
+	}
+	if strings.Contains(out.String(), "Usage:\n  xelyon [query]") {
+		t.Fatalf("output = %q, should not append root usage", out.String())
+	}
+}
