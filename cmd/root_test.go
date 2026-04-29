@@ -71,6 +71,7 @@ func resetRootFlagsForTest() {
 	doctorToolSmokeFlag = false
 	doctorTimeoutFlag = defaultAzureDoctorTimeout
 	doctorJSONFlag = false
+	doctorPrintConfigFlag = false
 	resetCommandFlagsForTest(rootCmd)
 }
 

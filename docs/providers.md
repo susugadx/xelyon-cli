@@ -150,6 +150,10 @@ xelyon --provider azure --model my-gpt-5-deployment
 
 API key 認証の最小設定:
 
+```bash
+xelyon doctor azure --deployment my-gpt-5-deployment --catalog-model gpt-5.4 --print-config
+```
+
 ```yaml
 default_provider: azure
 
@@ -191,11 +195,14 @@ provider_models:
 
 ```bash
 xelyon doctor azure
+xelyon doctor azure --deployment my-gpt-5-deployment --catalog-model gpt-5.4 --print-config
 xelyon doctor azure --deployment my-gpt-5-deployment --catalog-model gpt-5.4
 xelyon doctor azure --deployment my-gpt-5-deployment --catalog-model gpt-5.4 --smoke
 xelyon doctor azure --deployment my-gpt-5-deployment --catalog-model gpt-5.4 --tool-smoke
 xelyon doctor azure --json
 ```
+
+Azure OpenAI の API error は、HTTP status に応じて原因候補を補足します。401/403 は認証・権限、404 は base URL または deployment 名、429 は quota / rate limit / capacity、tool payload rejected は `AZURE_OPENAI_FUNCTION_CALLING=0` の案内を表示します。
 
 より深い実 Azure 環境の smoke test は以下で実行できます。`AZURE_OPENAI_PRO_DEPLOYMENT` を指定した場合は GPT-5.5 Pro 系の non-streaming 経路も検証します。
 

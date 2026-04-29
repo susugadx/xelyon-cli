@@ -107,7 +107,10 @@ func (p *Provider) runResponsesRequest(ctx context.Context, options responsesReq
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
-			return "", "", api.HandleHTTPError(resp, spinner, p.Name())
+			return "", "", handleAzureResponsesHTTPError(resp, spinner, azureHTTPErrorContext{
+				Deployment:  reqBody.Model,
+				ToolPayload: len(reqBody.Tools) > 0 || reqBody.ToolChoice != nil,
+			})
 		}
 
 		if reqBody.Stream {

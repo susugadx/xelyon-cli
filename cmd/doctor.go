@@ -21,6 +21,7 @@ var (
 	doctorToolSmokeFlag    bool
 	doctorTimeoutFlag      = defaultAzureDoctorTimeout
 	doctorJSONFlag         bool
+	doctorPrintConfigFlag  bool
 )
 
 func newDoctorCommand() *cobra.Command {
@@ -45,7 +46,9 @@ func newAzureDoctorCommand() *cobra.Command {
 Checks base URL, authentication, deployment resolution, catalog model,
 function calling settings, and Responses API retention settings. Use --smoke
 to send a minimal live Responses API request. Use --tool-smoke to force a
-dummy tool call and verify function calling support for the deployment.`,
+dummy tool call and verify function calling support for the deployment. Use
+--print-config with --deployment and --catalog-model to print a config YAML
+snippet without running diagnostics.`,
 		Args: cobra.NoArgs,
 		RunE: runAzureDoctorInvocation,
 	}
@@ -56,11 +59,26 @@ dummy tool call and verify function calling support for the deployment.`,
 	cmd.Flags().BoolVar(&doctorToolSmokeFlag, "tool-smoke", false, "Send a live Azure OpenAI smoke request that forces a dummy tool call")
 	cmd.Flags().DurationVar(&doctorTimeoutFlag, "timeout", defaultAzureDoctorTimeout, "Timeout for 'doctor azure --smoke'")
 	cmd.Flags().BoolVar(&doctorJSONFlag, "json", false, "Print 'doctor azure' diagnostics as JSON")
+	cmd.Flags().BoolVar(&doctorPrintConfigFlag, "print-config", false, "Print Azure OpenAI config YAML for the given deployment/catalog model")
 
 	return cmd
 }
 
 func runAzureDoctorInvocation(cmd *cobra.Command, args []string) error {
+	if doctorPrintConfigFlag {
+		if err := renderAzureDoctorConfigSnippet(cmd.OutOrStdout(), azureDoctorConfigSnippetOptions{
+			Deployment:   doctorDeploymentFlag,
+			CatalogModel: doctorCatalogModelFlag,
+			JSON:         doctorJSONFlag,
+			Smoke:        doctorSmokeFlag,
+			ToolSmoke:    doctorToolSmokeFlag,
+		}); err != nil {
+			cmd.SilenceUsage = true
+			return err
+		}
+		return nil
+	}
+
 	cfg, loadErr := config.LoadConfig()
 	if loadErr != nil {
 		cfg = config.DefaultConfig()

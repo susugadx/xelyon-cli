@@ -77,6 +77,67 @@ func TestRunAzureDoctorInvocation_FailsForMissingAzureSetup(t *testing.T) {
 	}
 }
 
+func TestRunAzureDoctorInvocation_PrintConfigDoesNotRequireAzureEnv(t *testing.T) {
+	resetRootFlagsForTest()
+	t.Cleanup(resetRootFlagsForTest)
+	t.Setenv("HOME", t.TempDir())
+	_ = os.Unsetenv("AZURE_OPENAI_BASE_URL")
+	_ = os.Unsetenv("AZURE_OPENAI_API_KEY")
+	_ = os.Unsetenv("AZURE_OPENAI_AUTH_TOKEN")
+
+	var out bytes.Buffer
+	cmd := newAzureDoctorCommand()
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+
+	doctorDeploymentFlag = "corp-gpt55-deployment"
+	doctorCatalogModelFlag = "gpt-5.5"
+	doctorPrintConfigFlag = true
+
+	if err := runAzureDoctorInvocation(cmd, nil); err != nil {
+		t.Fatalf("runAzureDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
+	}
+
+	output := out.String()
+	for _, want := range []string{
+		"default_provider: azure",
+		"provider_models:",
+		"default_model: corp-gpt55-deployment",
+		"catalog_model: gpt-5.5",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("output = %q, want substring %q", output, want)
+		}
+	}
+	if strings.Contains(output, "Azure OpenAI doctor") {
+		t.Fatalf("output = %q, should only print YAML snippet", output)
+	}
+}
+
+func TestRunAzureDoctorInvocation_PrintConfigRequiresDeploymentAndCatalogModel(t *testing.T) {
+	resetRootFlagsForTest()
+	t.Cleanup(resetRootFlagsForTest)
+
+	var out bytes.Buffer
+	cmd := newAzureDoctorCommand()
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+
+	doctorPrintConfigFlag = true
+	doctorDeploymentFlag = "corp-gpt55-deployment"
+
+	err := runAzureDoctorInvocation(cmd, nil)
+	if err == nil {
+		t.Fatal("runAzureDoctorInvocation() error = nil, want missing catalog-model error")
+	}
+	if !strings.Contains(err.Error(), "--catalog-model") {
+		t.Fatalf("error = %v, want --catalog-model guidance", err)
+	}
+	if !cmd.SilenceUsage {
+		t.Fatal("cmd.SilenceUsage = false, want true for print-config validation error")
+	}
+}
+
 func TestRootCommand_AzureDoctorCommandParsesFlags(t *testing.T) {
 	resetRootFlagsForTest()
 	t.Cleanup(func() {
@@ -120,6 +181,9 @@ func TestRootCommand_AzureDoctorHelpShowsDoctorFlags(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "--deployment") {
 		t.Fatalf("output = %q, want Azure doctor flags", out.String())
+	}
+	if !strings.Contains(out.String(), "--print-config") {
+		t.Fatalf("output = %q, want print-config flag", out.String())
 	}
 	if !strings.Contains(out.String(), "Diagnose Azure OpenAI configuration") {
 		t.Fatalf("output = %q, want Azure doctor help", out.String())
