@@ -125,7 +125,7 @@ func TestBuildBedrockContextManagement_LeavesHeadersWhenDisabled(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Compression.ClaudeCompaction = false
 
-	contextManagement, headers := buildBedrockContextManagement("global.anthropic.claude-sonnet-4-6-v1", cfg.Compression, []string{"existing"})
+	contextManagement, headers := buildBedrockContextManagement("global.anthropic.claude-sonnet-4-6", cfg.Compression, []string{"existing"})
 	if contextManagement == nil {
 		t.Fatal("ContextManagement should still be enabled for clear_tool_uses")
 	}

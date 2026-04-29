@@ -1,6 +1,6 @@
 # XELYON CLI Makefile
 
-.PHONY: build test fmt lint gen-config gen-docs gen-registry gen-help gen-all clean check ci-check ci-check-full e2e azure-smoke azure-doctor-smoke release-check ci-verify-deps ci-check-fmt ci-check-tidy ci-build ci-check-binary-size ci-lint ci-test ci-check-coverage release-test
+.PHONY: build test fmt lint gen-config gen-docs gen-registry gen-help gen-all clean check ci-check ci-check-full e2e azure-smoke azure-doctor-smoke bedrock-smoke release-check ci-verify-deps ci-check-fmt ci-check-tidy ci-build ci-check-binary-size ci-lint ci-test ci-check-coverage release-test
 
 CI_BINARY := xelyon
 CI_COVERAGE_FILE := coverage.txt
@@ -166,6 +166,10 @@ azure-smoke:
 # Azure doctor 診断経路だけを実環境で確認
 azure-doctor-smoke:
 	XELYON_AZURE_SMOKE=1 go test ./internal/api/providers/azure -run TestAzureDoctorSmoke -v -count=1 -timeout 300s
+
+# Bedrock 実 API smoke test（AWS 認証チェーン必須）
+bedrock-smoke:
+	XELYON_BEDROCK_SMOKE=1 go test ./internal/api/providers/bedrock -run TestBedrockLiveSmoke -count=1 -v -timeout 10m
 
 # リリース前チェック
 release-check: fmt test lint build

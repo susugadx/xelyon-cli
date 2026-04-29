@@ -99,6 +99,7 @@ var bedrockModelIDPrefixes = []string{
 	"global.anthropic.",
 	"us.anthropic.",
 	"eu.anthropic.",
+	"au.anthropic.",
 	"apac.anthropic.",
 	"amazon.nova",
 	"global.amazon.nova",

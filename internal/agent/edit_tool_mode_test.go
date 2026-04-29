@@ -17,7 +17,7 @@ func TestResolveEditToolMode(t *testing.T) {
 		{name: "openrouter anthropic uses legacy", provider: "openrouter", model: "anthropic/claude-sonnet-4.6", wantLegacy: true},
 		{name: "openrouter openai uses apply_patch", provider: "openrouter", model: "openai/gpt-5.4"},
 		{name: "openrouter google uses apply_patch", provider: "openrouter", model: "google/gemini-2.5-pro"},
-		{name: "bedrock claude family uses legacy", provider: "bedrock", model: "global.anthropic.claude-sonnet-4-6-v1", wantLegacy: true},
+		{name: "bedrock claude family uses legacy", provider: "bedrock", model: "global.anthropic.claude-sonnet-4-6", wantLegacy: true},
 		{name: "bedrock non-claude uses apply_patch", provider: "bedrock", model: "amazon.nova-pro-v1:0"},
 	}
 

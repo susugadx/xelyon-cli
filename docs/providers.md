@@ -365,11 +365,16 @@ aws configure
 # 方法3: IAM ロール（EC2/ECS上で自動）
 
 # 使用例
-xelyon --provider bedrock --model global.anthropic.claude-sonnet-4-6-v1
+xelyon --provider bedrock --model global.anthropic.claude-sonnet-4-6
 xelyon --provider bedrock --model global.anthropic.claude-opus-4-5-20251101-v1:0
 xelyon --provider bedrock --model us.anthropic.claude-haiku-4-5-20251001-v1:0
 xelyon --provider bedrock --model amazon.nova-pro-v1:0
+
+# 実 API smoke test
+make bedrock-smoke
 ```
+
+Bedrock smoke test は `XELYON_BEDROCK_SMOKE=1` のときだけ実 API を呼びます。Claude route は text / tool use / image / thinking、Converse route は text + usage / tool use を確認します。既定モデルを変える場合は `XELYON_BEDROCK_SMOKE_CLAUDE_MODEL` または `XELYON_BEDROCK_SMOKE_CONVERSE_MODEL` を指定してください。
 
 **特徴:**
 - AWS フルマネージドサービス（中間マージンなし）
@@ -381,9 +386,11 @@ xelyon --provider bedrock --model amazon.nova-pro-v1:0
 | モデル | Bedrock モデル ID |
 |--------|------------------|
 | Claude Opus 4.5 | `global.anthropic.claude-opus-4-5-20251101-v1:0` |
-| Claude Sonnet 4.6 | `global.anthropic.claude-sonnet-4-6-v1` |
+| Claude Sonnet 4.6 | `global.anthropic.claude-sonnet-4-6` |
 | Claude Haiku 4.5 | `us.anthropic.claude-haiku-4-5-20251001-v1:0` |
 | Amazon Nova Pro | `amazon.nova-pro-v1:0` |
+
+Claude Sonnet 4.6 は `global.anthropic.claude-sonnet-4-6` のほか、`us.anthropic.claude-sonnet-4-6` / `eu.anthropic.claude-sonnet-4-6` / `au.anthropic.claude-sonnet-4-6` の Geo Inference Profile ID も利用できます。
 
 ## モデル指定方法
 
@@ -426,7 +433,7 @@ provider_models:
   openrouter:
     default_model: anthropic/claude-sonnet-4.6
   bedrock:
-    default_model: global.anthropic.claude-sonnet-4-6-v1
+    default_model: global.anthropic.claude-sonnet-4-6
 ```
 
 ### 4. セッション中の切り替え（`/use`コマンド）

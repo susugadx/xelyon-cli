@@ -20,7 +20,7 @@ provider_models:
         catalog_model: gpt-5.4
         max_output_tokens: 16384
     bedrock:
-        default_model: global.anthropic.claude-sonnet-4-6-v1
+        default_model: global.anthropic.claude-sonnet-4-6
         max_output_tokens: 64000
         anthropic_version: bedrock-2023-05-31
     claude:

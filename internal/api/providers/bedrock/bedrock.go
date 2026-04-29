@@ -25,7 +25,7 @@ func init() {
 
 const (
 	defaultRegion           = "us-east-1"
-	defaultModel            = "global.anthropic.claude-sonnet-4-6-v1"
+	defaultModel            = "global.anthropic.claude-sonnet-4-6"
 	bedrockAnthropicVersion = "bedrock-2023-05-31"
 	bedrockEffortBetaHeader = "effort-2025-11-24"
 )

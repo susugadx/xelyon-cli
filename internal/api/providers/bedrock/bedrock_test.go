@@ -210,7 +210,7 @@ func TestClearToolUses_Bedrock(t *testing.T) {
 		cfg := config.DefaultConfig()
 
 		contextManagement, betaHeaders := buildBedrockContextManagement(
-			"global.anthropic.claude-sonnet-4-6-v1",
+			"global.anthropic.claude-sonnet-4-6",
 			cfg.Compression,
 			[]string{"context-1m-2025-08-07"},
 		)
@@ -620,7 +620,7 @@ func TestProvider_RuntimeConfigAndCompactionSupport(t *testing.T) {
 	if got := p.effectiveConfig(); got != customCfg {
 		t.Fatal("effectiveConfig() should return runtime config")
 	}
-	if !p.supportsClaudeCompactionWithConfig(customCfg, "global.anthropic.claude-sonnet-4-6-v1") {
+	if !p.supportsClaudeCompactionWithConfig(customCfg, "global.anthropic.claude-sonnet-4-6") {
 		t.Fatal("supportsClaudeCompactionWithConfig() = false, want true for supported model")
 	}
 	if p.supportsClaudeCompactionWithConfig(customCfg, "anthropic.claude-3-haiku") {
@@ -629,7 +629,7 @@ func TestProvider_RuntimeConfigAndCompactionSupport(t *testing.T) {
 
 	customCfg.ProviderModels["bedrock"] = config.ProviderModelConfig{
 		DefaultModel: "corp-bedrock-sonnet46",
-		CatalogModel: "global.anthropic.claude-sonnet-4-6-v1",
+		CatalogModel: "global.anthropic.claude-sonnet-4-6",
 	}
 	if !p.supportsClaudeCompactionWithConfig(customCfg, "corp-bedrock-sonnet46") {
 		t.Fatal("supportsClaudeCompactionWithConfig() = false, want true via catalog_model")
@@ -656,7 +656,7 @@ func TestProvider_SupportsClaudeCompaction_WithRuntimeAndContext(t *testing.T) {
 	runtimeCfg := config.DefaultConfig()
 	runtimeCfg.Compression.ClaudeCompaction = true
 	runtimeCfg.DefaultProvider = "bedrock"
-	runtimeCfg.DefaultModel = "global.anthropic.claude-sonnet-4-6-v1"
+	runtimeCfg.DefaultModel = "global.anthropic.claude-sonnet-4-6"
 	p.SetRuntimeConfig(runtimeCfg)
 
 	if !p.SupportsClaudeCompaction() {
@@ -672,7 +672,7 @@ func TestProvider_SupportsClaudeCompaction_WithRuntimeAndContext(t *testing.T) {
 	if p.SupportsClaudeCompactionWithContext(ctx, "") {
 		t.Fatal("SupportsClaudeCompactionWithContext() = true, want false when context disables compaction")
 	}
-	if !p.SupportsClaudeCompactionWithContext(context.Background(), "global.anthropic.claude-sonnet-4-6-v1") {
+	if !p.SupportsClaudeCompactionWithContext(context.Background(), "global.anthropic.claude-sonnet-4-6") {
 		t.Fatal("SupportsClaudeCompactionWithContext() = false, want true for explicit supported model")
 	}
 }
@@ -728,7 +728,7 @@ func TestBuildBedrockThinkingConfig(t *testing.T) {
 		},
 		{
 			name:       "sonnet 4.6 xhigh keeps high effort",
-			model:      "global.anthropic.claude-sonnet-4-6-v1",
+			model:      "global.anthropic.claude-sonnet-4-6",
 			level:      "xhigh",
 			wantType:   "adaptive",
 			wantEffort: "high",

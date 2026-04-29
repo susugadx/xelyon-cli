@@ -16,6 +16,11 @@ var knownModelMaxOutputTokens = map[string]int{
 	"deepseek-v4-pro":                       384000,
 	"claude-sonnet-4-6":                     64000,
 	"claude-sonnet-4.6":                     64000,
+	"anthropic.claude-sonnet-4-6":           64000,
+	"global.anthropic.claude-sonnet-4-6":    64000,
+	"us.anthropic.claude-sonnet-4-6":        64000,
+	"eu.anthropic.claude-sonnet-4-6":        64000,
+	"au.anthropic.claude-sonnet-4-6":        64000,
 	"claude-sonnet-4-5":                     64000,
 	"claude-sonnet-4.5":                     64000,
 	"claude-opus-4-7":                       128000,
@@ -51,7 +56,10 @@ var modelContextLimits = map[string]int{
 	"claude-3-sonnet-20240229":   200000,
 	"claude-3-haiku-20240307":    200000,
 
-	"global.anthropic.claude-sonnet-4-6-v1":            200000,
+	"global.anthropic.claude-sonnet-4-6":               200000,
+	"us.anthropic.claude-sonnet-4-6":                   200000,
+	"eu.anthropic.claude-sonnet-4-6":                   200000,
+	"au.anthropic.claude-sonnet-4-6":                   200000,
 	"global.anthropic.claude-opus-4-7-v1":              1000000,
 	"global.anthropic.claude-opus-4-7-v1:0":            1000000,
 	"anthropic.claude-sonnet-4-6":                      200000,
@@ -134,6 +142,8 @@ var modelMaxOutputTokenPrefixes = []ModelLimit{
 
 var modelContextLimitPrefixes = []ModelLimit{
 	{Pattern: "us.anthropic.claude", Limit: 200000},
+	{Pattern: "eu.anthropic.claude", Limit: 200000},
+	{Pattern: "au.anthropic.claude", Limit: 200000},
 	{Pattern: "anthropic.claude", Limit: 200000},
 	{Pattern: "global.anthropic.claude", Limit: 200000},
 	{Pattern: "claude-", Limit: 200000},

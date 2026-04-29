@@ -197,7 +197,7 @@ var providerDescriptors = map[string]ProviderDescriptor{
 		CompressionModel:     "claude-haiku-4-5",
 		CompressionThreshold: 150000,
 		ModelDefaults: ProviderModelDefaults{
-			DefaultModel:     "global.anthropic.claude-sonnet-4-6-v1",
+			DefaultModel:     "global.anthropic.claude-sonnet-4-6",
 			MaxOutputTokens:  64000,
 			AnthropicVersion: "bedrock-2023-05-31",
 		},

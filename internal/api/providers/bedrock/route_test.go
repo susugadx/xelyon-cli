@@ -11,13 +11,13 @@ func TestResolveBedrockRoute(t *testing.T) {
 	}{
 		{
 			name:  "claude direct model uses Claude Messages",
-			model: "global.anthropic.claude-sonnet-4-6-v1",
+			model: "global.anthropic.claude-sonnet-4-6",
 			want:  bedrockRouteClaudeMessages,
 		},
 		{
 			name:         "custom alias uses Claude Messages via catalog model",
 			model:        "corp-bedrock-sonnet46",
-			catalogModel: "global.anthropic.claude-sonnet-4-6-v1",
+			catalogModel: "global.anthropic.claude-sonnet-4-6",
 			want:         bedrockRouteClaudeMessages,
 		},
 		{

@@ -257,7 +257,7 @@ func TestProvider_ChatWithImage_BuildsMultimodalRequestAndVersionFallback(t *tes
 
 	cfg := config.DefaultConfig()
 	cfg.ProviderModels["bedrock"] = config.ProviderModelConfig{
-		DefaultModel:     "global.anthropic.claude-sonnet-4-6-v1",
+		DefaultModel:     "global.anthropic.claude-sonnet-4-6",
 		MaxOutputTokens:  456,
 		AnthropicVersion: "",
 	}
@@ -270,7 +270,7 @@ func TestProvider_ChatWithImage_BuildsMultimodalRequestAndVersionFallback(t *tes
 		Base64:    "aGVsbG8=",
 	}
 
-	_, err := p.ChatWithImage(ctx, "system prompt", []api.Message{{Role: "assistant", Content: "previous"}}, "describe this image", image, "global.anthropic.claude-sonnet-4-6-v1")
+	_, err := p.ChatWithImage(ctx, "system prompt", []api.Message{{Role: "assistant", Content: "previous"}}, "describe this image", image, "global.anthropic.claude-sonnet-4-6")
 	if err == nil || !strings.Contains(err.Error(), "bedrock API error") {
 		t.Fatalf("ChatWithImage() error = %v, want wrapped bedrock API error", err)
 	}

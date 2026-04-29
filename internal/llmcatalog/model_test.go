@@ -32,6 +32,9 @@ func TestIsKnownModelName(t *testing.T) {
 		{model: "gpt-5.5", want: true},
 		{model: "claude-sonnet-4-6", want: true},
 		{model: "claude-sonnet-4.6", want: true},
+		{model: "global.anthropic.claude-sonnet-4-6", want: true},
+		{model: "eu.anthropic.claude-sonnet-4-6", want: true},
+		{model: "au.anthropic.claude-sonnet-4-6", want: true},
 		{model: "claude-sonnet-4.5", want: true},
 		{model: "gemini-3.1-pro", want: true},
 		{model: "amazon.nova-pro-v1:0", want: true},
@@ -61,6 +64,22 @@ func TestModelContextLimit_ClaudeOpus47(t *testing.T) {
 		t.Run(model, func(t *testing.T) {
 			if got := ModelContextLimit(model); got != 1000000 {
 				t.Fatalf("ModelContextLimit(%q) = %d, want 1000000", model, got)
+			}
+		})
+	}
+}
+
+func TestModelContextLimit_BedrockClaudeProfiles(t *testing.T) {
+	for _, model := range []string{
+		"anthropic.claude-sonnet-4-6",
+		"global.anthropic.claude-sonnet-4-6",
+		"us.anthropic.claude-sonnet-4-6",
+		"eu.anthropic.claude-sonnet-4-6",
+		"au.anthropic.claude-sonnet-4-6",
+	} {
+		t.Run(model, func(t *testing.T) {
+			if got := ModelContextLimit(model); got != 200000 {
+				t.Fatalf("ModelContextLimit(%q) = %d, want 200000", model, got)
 			}
 		})
 	}
@@ -108,6 +127,31 @@ func TestKnownMaxOutputTokens_BedrockNova(t *testing.T) {
 		{model: "amazon.nova-premier-v1:0", want: 25000},
 		{model: "us.amazon.nova-premier-v1:0", want: 25000},
 		{model: "global.amazon.nova-2-lite-v1:0", want: 64000},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			got, ok := KnownMaxOutputTokens(tt.model)
+			if !ok {
+				t.Fatalf("KnownMaxOutputTokens(%q) ok = false, want true", tt.model)
+			}
+			if got != tt.want {
+				t.Fatalf("KnownMaxOutputTokens(%q) = %d, want %d", tt.model, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestKnownMaxOutputTokens_BedrockClaudeProfiles(t *testing.T) {
+	tests := []struct {
+		model string
+		want  int
+	}{
+		{model: "anthropic.claude-sonnet-4-6", want: 64000},
+		{model: "global.anthropic.claude-sonnet-4-6", want: 64000},
+		{model: "us.anthropic.claude-sonnet-4-6", want: 64000},
+		{model: "eu.anthropic.claude-sonnet-4-6", want: 64000},
+		{model: "au.anthropic.claude-sonnet-4-6", want: 64000},
 	}
 
 	for _, tt := range tests {

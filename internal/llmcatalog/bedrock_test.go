@@ -11,13 +11,13 @@ func TestBedrockModelFamilyFor(t *testing.T) {
 	}{
 		{
 			name:  "claude direct model",
-			model: "global.anthropic.claude-sonnet-4-6-v1",
+			model: "global.anthropic.claude-sonnet-4-6",
 			want:  BedrockModelFamilyClaude,
 		},
 		{
 			name:         "claude catalog alias",
 			model:        "corp-bedrock-sonnet46",
-			catalogModel: "global.anthropic.claude-sonnet-4-6-v1",
+			catalogModel: "global.anthropic.claude-sonnet-4-6",
 			want:         BedrockModelFamilyClaude,
 		},
 		{
@@ -41,7 +41,10 @@ func TestIsBedrockModelID(t *testing.T) {
 		model string
 		want  bool
 	}{
-		{model: "global.anthropic.claude-sonnet-4-6-v1", want: true},
+		{model: "global.anthropic.claude-sonnet-4-6", want: true},
+		{model: "us.anthropic.claude-sonnet-4-6", want: true},
+		{model: "eu.anthropic.claude-sonnet-4-6", want: true},
+		{model: "au.anthropic.claude-sonnet-4-6", want: true},
 		{model: "amazon.nova-pro-v1:0", want: true},
 		{model: "us.amazon.nova-pro-v1:0", want: true},
 		{model: "meta.llama3-3-70b-instruct-v1:0", want: true},

@@ -91,7 +91,7 @@ func TestGetProviderPrefix_Bedrock(t *testing.T) {
 
 func TestBuildProviderSystemPrompt_BedrockClaudeModel(t *testing.T) {
 	base := "Header\n## Workflow Rules\nRules"
-	result := BuildProviderSystemPromptWithConfig(base, "bedrock", "global.anthropic.claude-sonnet-4-6-v1", config.DefaultConfig())
+	result := BuildProviderSystemPromptWithConfig(base, "bedrock", "global.anthropic.claude-sonnet-4-6", config.DefaultConfig())
 	if !strings.Contains(result, "### Claude-specific") {
 		t.Fatal("Bedrock Claude model should receive Claude-specific provider notes")
 	}
@@ -110,7 +110,7 @@ func TestBuildProviderSystemPrompt_BedrockCatalogClaudeAlias(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.ProviderModels["bedrock"] = config.ProviderModelConfig{
 		DefaultModel: "corp-bedrock-sonnet46",
-		CatalogModel: "global.anthropic.claude-sonnet-4-6-v1",
+		CatalogModel: "global.anthropic.claude-sonnet-4-6",
 	}
 
 	result := BuildProviderSystemPromptWithConfig(base, "bedrock", "corp-bedrock-sonnet46", cfg)

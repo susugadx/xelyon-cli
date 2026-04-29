@@ -250,7 +250,7 @@ func TestGetDeepSeekPricing_V4ModelsAndLegacyAliases(t *testing.T) {
 }
 
 func TestGetBedrockPricing_ClaudeDelegation(t *testing.T) {
-	model := "global.anthropic.claude-sonnet-4-6-v1:0"
+	model := "global.anthropic.claude-sonnet-4-6"
 	promptTokens := 250000
 
 	got := getBedrockPricing(model, promptTokens)
@@ -263,7 +263,7 @@ func TestGetBedrockPricing_ClaudeDelegation(t *testing.T) {
 }
 
 func TestGetPricingInfoForConfig_ConfiguredBedrockClaudeWithoutCatalogStillPrices(t *testing.T) {
-	model := "global.anthropic.claude-sonnet-4-6-v1"
+	model := "global.anthropic.claude-sonnet-4-6"
 	cfg := config.DefaultConfig()
 	cfg.SetProviderModelConfig("bedrock", config.ProviderModelConfig{
 		DefaultModel: model,
@@ -442,7 +442,12 @@ func TestGetPricingInfoForConfig_ConfiguredKnownExactModelsAcrossProvidersStillP
 		{provider: "deepseek", model: "deepseek-v4-pro", wantInput: 1.74, wantOut: 3.48},
 		{provider: "gemini", model: "gemini-3.1-pro", wantInput: 2.00, wantOut: 12.00},
 		{provider: "groq", model: "llama-3.1-70b", wantInput: 0.59, wantOut: 0.79},
+		{provider: "bedrock", model: "global.anthropic.claude-sonnet-4-6", wantInput: 3.00, wantOut: 15.00},
+		{provider: "bedrock", model: "us.anthropic.claude-sonnet-4-6", wantInput: 3.00, wantOut: 15.00},
+		{provider: "bedrock", model: "eu.anthropic.claude-sonnet-4-6", wantInput: 3.00, wantOut: 15.00},
+		{provider: "bedrock", model: "au.anthropic.claude-sonnet-4-6", wantInput: 3.00, wantOut: 15.00},
 		{provider: "bedrock", model: "global.anthropic.claude-sonnet-4-6-v1", wantInput: 3.00, wantOut: 15.00},
+		{provider: "bedrock", model: "global.anthropic.claude-sonnet-4-6-v1:0", wantInput: 3.00, wantOut: 15.00},
 	}
 
 	for _, tt := range tests {

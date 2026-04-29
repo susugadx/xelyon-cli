@@ -44,7 +44,7 @@ func TestCurrentSystemPrompt_LegacyEditToolMode(t *testing.T) {
 func TestResolveEditToolMode_BedrockFamily(t *testing.T) {
 	t.Setenv("XELYON_EDIT_TOOL", "")
 
-	if got := ResolveEditToolMode("bedrock", "global.anthropic.claude-sonnet-4-6-v1"); got != EditToolModeLegacy {
+	if got := ResolveEditToolMode("bedrock", "global.anthropic.claude-sonnet-4-6"); got != EditToolModeLegacy {
 		t.Fatalf("ResolveEditToolMode(bedrock, Claude) = %q, want %q", got, EditToolModeLegacy)
 	}
 	if got := ResolveEditToolMode("bedrock", "amazon.nova-pro-v1:0"); got != EditToolModeApplyPatch {
@@ -58,7 +58,7 @@ func TestResolveEditToolModeWithConfig_BedrockCatalogClaudeAlias(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.ProviderModels["bedrock"] = config.ProviderModelConfig{
 		DefaultModel: "corp-bedrock-sonnet46",
-		CatalogModel: "global.anthropic.claude-sonnet-4-6-v1",
+		CatalogModel: "global.anthropic.claude-sonnet-4-6",
 	}
 
 	if got := ResolveEditToolModeWithConfig("bedrock", "corp-bedrock-sonnet46", cfg); got != EditToolModeLegacy {
