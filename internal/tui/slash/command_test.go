@@ -86,7 +86,7 @@ func TestSuggestionsSortsDiscoverableCommands(t *testing.T) {
 }
 
 func TestSuggestionsHidesNonDiscoverableCommands(t *testing.T) {
-	for _, input := range []string{"/project", "/version", "/help"} {
+	for _, input := range []string{"/version", "/help"} {
 		if matches := Suggestions(input); len(matches) != 0 {
 			t.Fatalf("Suggestions(%q) = %#v, want no matches", input, matches)
 		}
@@ -100,5 +100,15 @@ func TestSuggestionsIncludesInitCommand(t *testing.T) {
 	}
 	if matches[0].Name != "/init" {
 		t.Fatalf("first suggestion = %q, want /init", matches[0].Name)
+	}
+}
+
+func TestSuggestionsIncludesProjectCommand(t *testing.T) {
+	matches := Suggestions("/project")
+	if len(matches) != 1 {
+		t.Fatalf("Suggestions(/project) returned %d matches, want 1", len(matches))
+	}
+	if matches[0].Name != "/project" {
+		t.Fatalf("first suggestion = %q, want /project", matches[0].Name)
 	}
 }

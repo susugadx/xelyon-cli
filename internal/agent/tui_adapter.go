@@ -84,6 +84,10 @@ func (a *TUIAdapter) HandleCommand(cmd string) bool {
 		return true
 	}
 
+	if baseCmd == "/project" {
+		return false
+	}
+
 	if baseCmd == "/config" {
 		if !isNonInteractiveConfigSubcommand(args) {
 			_, _ = fmt.Fprintf(a.agent.output(), "⚠️  %s is not available in TUI mode.\n   Use bare /config, /config show, or /config model <name>.\n", cmd)
@@ -132,6 +136,35 @@ func (a *TUIAdapter) LoadConfigForEdit() (*config.Config, error) {
 // SaveAndSyncConfig は設定をファイルに保存し、runtime に反映する。
 func (a *TUIAdapter) SaveAndSyncConfig(cfg *config.Config) error {
 	return a.agent.SaveAndSyncConfig(cfg)
+}
+
+// LoadProjectForEdit は xelyon.yaml を読み込み、編集用のクローンを返す。
+func (a *TUIAdapter) LoadProjectForEdit() (*config.ProjectConfig, error) {
+	pc, err := config.LoadProjectConfigWithError()
+	if err != nil {
+		return nil, err
+	}
+	return config.CloneProjectConfig(pc), nil
+}
+
+// SaveProjectConfig は xelyon.yaml を保存する。
+func (a *TUIAdapter) SaveProjectConfig(pc *config.ProjectConfig) error {
+	return a.agent.SaveAndSyncProjectConfig(pc)
+}
+
+// CreateProjectConfigTemplate は xelyon.yaml template を作成し、編集用に読み込む。
+func (a *TUIAdapter) CreateProjectConfigTemplate() (*config.ProjectConfig, error) {
+	if err := config.CreateProjectConfigTemplate("", false); err != nil {
+		return nil, err
+	}
+	pc, err := config.LoadProjectConfigWithError()
+	if err != nil {
+		return nil, err
+	}
+	if pc == nil {
+		return nil, fmt.Errorf("created xelyon.yaml but failed to load it")
+	}
+	return config.CloneProjectConfig(pc), nil
 }
 
 // GetProviderName は現在のプロバイダー名を返す。

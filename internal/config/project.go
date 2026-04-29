@@ -35,20 +35,30 @@ type ProjectIgnoreConfig struct {
 // LoadProjectConfig はプロジェクト設定をロードする。
 // cwd から親方向に xelyon.yaml を探索する。見つからない場合は nil を返す。
 func LoadProjectConfig() *ProjectConfig {
-	dir, err := os.Getwd()
+	pc, err := LoadProjectConfigWithError()
 	if err != nil {
 		return nil
+	}
+	return pc
+}
+
+// LoadProjectConfigWithError はプロジェクト設定をロードし、読み込み失敗を返す。
+// cwd から親方向に xelyon.yaml を探索する。見つからない場合は nil, nil を返す。
+func LoadProjectConfigWithError() (*ProjectConfig, error) {
+	dir, err := os.Getwd()
+	if err != nil {
+		return nil, err
 	}
 
 	if path := findFileUpward(dir, "xelyon.yaml"); path != "" {
 		pc, err := loadProjectConfigFromYAML(path)
 		if err != nil {
-			return nil
+			return nil, fmt.Errorf("failed to load %s: %w", path, err)
 		}
-		return pc
+		return pc, nil
 	}
 
-	return nil
+	return nil, nil
 }
 
 // findFileUpward は dir から親方向に filename を探索し、見つかったフルパスを返す。

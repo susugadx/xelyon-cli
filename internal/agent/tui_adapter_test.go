@@ -126,6 +126,20 @@ func TestTUIAdapter_NonBareReviewFallsThrough(t *testing.T) {
 	}
 }
 
+func TestTUIAdapter_ProjectFallsThroughToTUILocalRouter(t *testing.T) {
+	agent, out := newTUIAdapterTestAgent(t)
+	adapter := NewTUIAdapter(agent, nil)
+
+	for _, input := range []string{"/project", "/project rules"} {
+		if adapter.HandleCommand(input) {
+			t.Fatalf("HandleCommand(%q) = true, want false", input)
+		}
+	}
+	if out.Len() != 0 {
+		t.Fatalf("output = %q, want no adapter output", out.String())
+	}
+}
+
 func TestTUIAdapter_HelpUsesTUISurface(t *testing.T) {
 	agent, out := newTUIAdapterTestAgent(t)
 	adapter := NewTUIAdapter(agent, nil)
@@ -141,8 +155,8 @@ func TestTUIAdapter_HelpUsesTUISurface(t *testing.T) {
 	if !strings.Contains(got, "/init") {
 		t.Fatalf("TUI /help should include /init:\n%s", got)
 	}
-	if strings.Contains(got, "/project") {
-		t.Fatalf("TUI /help should not include classic-only /project:\n%s", got)
+	if !strings.Contains(got, "/project") {
+		t.Fatalf("TUI /help should include /project:\n%s", got)
 	}
 }
 
@@ -219,16 +233,105 @@ func TestTUIAdapter_InitDoesNotPromptOverwrite(t *testing.T) {
 	}
 }
 
-func TestTUIAdapter_ProjectRemainsUnavailableInTUI(t *testing.T) {
-	agent, out := newTUIAdapterTestAgent(t)
-	adapter := NewTUIAdapter(agent, nil)
-
-	if !adapter.HandleCommand("/project") {
-		t.Fatal("HandleCommand(/project) = false, want true")
+func TestTUIAdapter_SaveProjectConfigSyncsProjectFinalChecks(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	globalCfg := newProjectMapDisabledConfig()
+	globalCfg.FinalChecks.Commands = []string{"global verify"}
+	globalCfg.FinalChecks.Timeout = 900
+	if err := config.SaveConfig(globalCfg); err != nil {
+		t.Fatalf("SaveConfig() error = %v", err)
 	}
 
-	got := out.String()
-	if !strings.Contains(got, "/project is not available in TUI mode") {
-		t.Fatalf("output missing project unavailable message:\n%s", got)
+	agent, _ := newTUIAdapterTestAgent(t)
+	agent.cfg().FinalChecks = config.FinalChecksConfig{
+		Commands: []string{"old project verify"},
+		Timeout:  30,
+	}
+	adapter := NewTUIAdapter(agent, nil)
+
+	projectPath := filepath.Join(t.TempDir(), "xelyon.yaml")
+	pc := &config.ProjectConfig{
+		Context: "ctx",
+		FinalChecks: &config.FinalChecksConfig{
+			Commands: []string{"project verify"},
+			Timeout:  120,
+		},
+		FilePath: projectPath,
+	}
+	if err := adapter.SaveProjectConfig(pc); err != nil {
+		t.Fatalf("SaveProjectConfig() error = %v", err)
+	}
+
+	got := agent.cfg().FinalChecks
+	if len(got.Commands) != 1 || got.Commands[0] != "project verify" {
+		t.Fatalf("runtime FinalChecks.Commands = %#v, want project verify", got.Commands)
+	}
+	if got.Timeout != 120 {
+		t.Fatalf("runtime FinalChecks.Timeout = %d, want 120", got.Timeout)
+	}
+}
+
+func TestTUIAdapter_SaveProjectConfigFallsBackToGlobalFinalChecks(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	globalCfg := newProjectMapDisabledConfig()
+	globalCfg.FinalChecks.Commands = []string{"global verify"}
+	globalCfg.FinalChecks.Timeout = 900
+	if err := config.SaveConfig(globalCfg); err != nil {
+		t.Fatalf("SaveConfig() error = %v", err)
+	}
+
+	agent, _ := newTUIAdapterTestAgent(t)
+	agent.cfg().FinalChecks = config.FinalChecksConfig{
+		Commands: []string{"stale project verify"},
+		Timeout:  30,
+	}
+	adapter := NewTUIAdapter(agent, nil)
+
+	projectPath := filepath.Join(t.TempDir(), "xelyon.yaml")
+	pc := &config.ProjectConfig{
+		Context:  "ctx",
+		FilePath: projectPath,
+	}
+	if err := adapter.SaveProjectConfig(pc); err != nil {
+		t.Fatalf("SaveProjectConfig() error = %v", err)
+	}
+
+	got := agent.cfg().FinalChecks
+	if len(got.Commands) != 1 || got.Commands[0] != "global verify" {
+		t.Fatalf("runtime FinalChecks.Commands = %#v, want global verify", got.Commands)
+	}
+	if got.Timeout != 900 {
+		t.Fatalf("runtime FinalChecks.Timeout = %d, want 900", got.Timeout)
+	}
+}
+
+func TestTUIAdapter_SaveProjectConfigEmptyOverrideDisablesGlobalFinalChecks(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	globalCfg := newProjectMapDisabledConfig()
+	globalCfg.FinalChecks.Commands = []string{"global verify"}
+	globalCfg.FinalChecks.Timeout = 900
+	if err := config.SaveConfig(globalCfg); err != nil {
+		t.Fatalf("SaveConfig() error = %v", err)
+	}
+
+	agent, _ := newTUIAdapterTestAgent(t)
+	adapter := NewTUIAdapter(agent, nil)
+
+	projectPath := filepath.Join(t.TempDir(), "xelyon.yaml")
+	pc := &config.ProjectConfig{
+		Context:     "ctx",
+		FinalChecks: &config.FinalChecksConfig{},
+		FilePath:    projectPath,
+	}
+	if err := adapter.SaveProjectConfig(pc); err != nil {
+		t.Fatalf("SaveProjectConfig() error = %v", err)
+	}
+
+	got := agent.cfg().FinalChecks
+	if len(got.Commands) != 0 {
+		t.Fatalf("runtime FinalChecks.Commands = %#v, want empty project override", got.Commands)
 	}
 }

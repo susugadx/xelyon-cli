@@ -20,9 +20,10 @@ const (
 type screenMode int
 
 const (
-	screenChat   screenMode = iota // 通常のチャット画面
-	screenConfig                   // /config 設定画面
-	screenReview                   // /review preset 画面
+	screenChat    screenMode = iota // 通常のチャット画面
+	screenConfig                    // /config 設定画面
+	screenReview                    // /review preset 画面
+	screenProject                   // /project 設定画面
 )
 
 var statusHintsNormal = []string{
@@ -75,31 +76,34 @@ type visualPosition struct {
 
 // Model は bubbletea の Model インターフェースを実装する TUI のメインモデル。
 type Model struct {
-	conversation ConversationAgent
-	commands     CommandAgent
-	clipboard    ClipboardAgent
-	configAgent  ConfigAgent
-	screen       screenMode    // 現在の画面モード
-	configScreen *configScreen // /config 画面の状態（screenConfig 時のみ非 nil）
-	reviewScreen *reviewScreen // /review 画面の状態（screenReview 時のみ非 nil）
-	vp           lightViewport // 軽量 viewport（bubbles/viewport は lipgloss が重いため自前実装）
-	textInput    textinput.Model
-	spinner      spinner.Model
-	messages     []ChatMessage
-	composer     tuicomposer.State
-	rawLines     []string         // 元の行データ。リサイズ時はこれを再レンダリングする
-	layout       *termtext.Layout // 表示幅に応じたvisual rowレイアウト
-	toolBlocks   []toolBlockInfo  // ツール結果ブロック
-	focusedBlock int              // NAVモードでフォーカス中のツールブロックインデックス（-1=なし）
-	statusLine   string
-	padLineCache string // View() 用の背景パディング行キャッシュ
-	chromeCache  string // View() 用の chrome 部分キャッシュ（入力欄+ステータス）
-	chromeDirty  bool   // chrome 再構築が必要か
-	width        int
-	height       int
-	newOutput    bool // 上スクロール中に新出力があったか
-	ready        bool // viewport 初期化済みか
-	quitting     bool
+	conversation     ConversationAgent
+	commands         CommandAgent
+	clipboard        ClipboardAgent
+	configAgent      ConfigAgent
+	projectAgent     ProjectAgent
+	screen           screenMode     // 現在の画面モード
+	configScreen     *configScreen  // /config 画面の状態（screenConfig 時のみ非 nil）
+	reviewScreen     *reviewScreen  // /review 画面の状態（screenReview 時のみ非 nil）
+	projectScreen    *projectScreen // /project 画面の状態（screenProject 時のみ非 nil）
+	projectScreenSeq int            // /project 非同期メッセージの画面識別子
+	vp               lightViewport  // 軽量 viewport（bubbles/viewport は lipgloss が重いため自前実装）
+	textInput        textinput.Model
+	spinner          spinner.Model
+	messages         []ChatMessage
+	composer         tuicomposer.State
+	rawLines         []string         // 元の行データ。リサイズ時はこれを再レンダリングする
+	layout           *termtext.Layout // 表示幅に応じたvisual rowレイアウト
+	toolBlocks       []toolBlockInfo  // ツール結果ブロック
+	focusedBlock     int              // NAVモードでフォーカス中のツールブロックインデックス（-1=なし）
+	statusLine       string
+	padLineCache     string // View() 用の背景パディング行キャッシュ
+	chromeCache      string // View() 用の chrome 部分キャッシュ（入力欄+ステータス）
+	chromeDirty      bool   // chrome 再構築が必要か
+	width            int
+	height           int
+	newOutput        bool // 上スクロール中に新出力があったか
+	ready            bool // viewport 初期化済みか
+	quitting         bool
 	navigationState
 	transientStatus      string    // 一時通知メッセージ
 	transientStatusUntil time.Time // 一時通知の有効期限

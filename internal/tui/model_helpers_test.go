@@ -24,6 +24,12 @@ type stubAgent struct {
 	providerConfigKey string
 	saveErr           error          // non-nil にすると SaveAndSyncConfig が失敗する
 	lastSavedConfig   *config.Config // SaveAndSyncConfig で受け取った最後の Config
+	projectConfig     *config.ProjectConfig
+	projectLoadErr    error
+	projectSaveErr    error
+	projectCreateErr  error
+	lastSavedProject  *config.ProjectConfig
+	savedProjects     []*config.ProjectConfig
 }
 
 func (s *stubAgent) Chat(input string) {
@@ -81,6 +87,33 @@ func (s *stubAgent) SaveAndSyncConfig(cfg *config.Config) error {
 		s.statusLine = s.saveStatusLine
 	}
 	return s.saveErr
+}
+func (s *stubAgent) LoadProjectForEdit() (*config.ProjectConfig, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.projectLoadErr != nil {
+		return nil, s.projectLoadErr
+	}
+	return config.CloneProjectConfig(s.projectConfig), nil
+}
+func (s *stubAgent) SaveProjectConfig(pc *config.ProjectConfig) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.lastSavedProject = config.CloneProjectConfig(pc)
+	s.savedProjects = append(s.savedProjects, config.CloneProjectConfig(pc))
+	return s.projectSaveErr
+}
+func (s *stubAgent) CreateProjectConfigTemplate() (*config.ProjectConfig, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.projectCreateErr != nil {
+		return nil, s.projectCreateErr
+	}
+	s.projectConfig = &config.ProjectConfig{
+		Context: "template context",
+		Rules:   []string{"template rule"},
+	}
+	return config.CloneProjectConfig(s.projectConfig), nil
 }
 func (s *stubAgent) GetProviderName() string {
 	if s.providerName != "" {

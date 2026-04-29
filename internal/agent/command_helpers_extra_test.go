@@ -100,8 +100,8 @@ func TestPrintHelpToWriterForSurface_TUICommands(t *testing.T) {
 	if !strings.Contains(got, "/init") {
 		t.Fatalf("TUI /help should advertise /init:\n%s", got)
 	}
-	if strings.Contains(got, "/project") {
-		t.Fatalf("TUI /help should not advertise classic-only /project:\n%s", got)
+	if !strings.Contains(got, "/project") {
+		t.Fatalf("TUI /help should advertise /project:\n%s", got)
 	}
 	if !strings.Contains(got, GeneratedHelpTipsText) {
 		t.Fatalf("TUI help missing generated tips help:\n%s", got)

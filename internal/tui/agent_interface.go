@@ -55,6 +55,19 @@ type ConfigAgent interface {
 	GetProviderConfigKey() string
 }
 
+// ProjectAgent は /project 画面が必要とする xelyon.yaml の load/save を提供する。
+type ProjectAgent interface {
+	// LoadProjectForEdit は xelyon.yaml を読み込み、編集用のコピーを返す。
+	// xelyon.yaml が見つからない場合は nil, nil を返す。
+	LoadProjectForEdit() (*config.ProjectConfig, error)
+
+	// SaveProjectConfig は xelyon.yaml に project config を保存する。
+	SaveProjectConfig(pc *config.ProjectConfig) error
+
+	// CreateProjectConfigTemplate は xelyon.yaml のテンプレートを作成して読み込む。
+	CreateProjectConfigTemplate() (*config.ProjectConfig, error)
+}
+
 // AgentInterface は tui パッケージから agent パッケージへの依存を逆転させる。
 // agent パッケージが各 capability interface を実装する。
 type AgentInterface interface {
@@ -62,4 +75,5 @@ type AgentInterface interface {
 	CommandAgent
 	ClipboardAgent
 	ConfigAgent
+	ProjectAgent
 }

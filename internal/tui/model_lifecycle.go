@@ -40,6 +40,7 @@ func NewModel(agent AgentInterface, initialContent string) Model {
 		commands:     agent,
 		clipboard:    agent,
 		configAgent:  agent,
+		projectAgent: agent,
 		textInput:    ti,
 		spinner:      sp,
 		rawLines:     append([]string(nil), initLines...),

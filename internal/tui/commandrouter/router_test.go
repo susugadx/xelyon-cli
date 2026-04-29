@@ -62,6 +62,16 @@ func TestRoute_TUILocalCommands(t *testing.T) {
 			input: "/review staged",
 			want:  ActionDispatchAgent,
 		},
+		{
+			name:  "project bare",
+			input: "/project",
+			want:  ActionOpenProject,
+		},
+		{
+			name:  "project with args delegates",
+			input: "/project rules",
+			want:  ActionDispatchAgent,
+		},
 	}
 
 	for _, tt := range tests {

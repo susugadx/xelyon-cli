@@ -204,8 +204,8 @@ var Commands = []CommandInfo{
 		Name:          "/project",
 		Description:   "Edit xelyon.yaml interactively (rules, final checks)",
 		DescriptionJP: "xelyon.yamlを対話式で編集",
-		Surfaces:      []CommandSurface{CommandSurfaceClassic},
 		Category:      CommandCategoryConfig,
+		Discoverable:  true,
 		SortWeight:    720,
 	},
 	{

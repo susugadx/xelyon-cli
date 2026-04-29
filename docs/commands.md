@@ -274,6 +274,23 @@ TUIモードで、現在の変更レビュー用の preset 画面を開きます
 - Project Map は起動時に軽量 manifest を自動注入するため、ファイル一覧や関数目次は書かない
 - `final_checks.commands` を定義すると、AIが `completed_with_changes` の完了候補で必ず実行します
 
+### `/project`
+
+TUI で `xelyon.yaml` の project config 画面を開きます。
+
+```
+> /project
+```
+
+**TUI で編集できる項目:**
+- `context`
+- `rules`
+- `ignore.patterns`
+- `final_checks.commands`
+- `final_checks.timeout`（`final_checks.commands` がある場合）
+
+`conditional` は現時点では preview のみです。`xelyon.yaml` がない場合は、画面内でテンプレートを作成できます。
+
 ### `/plan`
 
 Plan Modeを切り替えます。有効にすると、リクエストが「調査→計画→承認（planning only）」のフローで処理されます。
@@ -652,20 +669,3 @@ xelyon
 - [設定リファレンス](config.md)
 - [LSP連携](lsp.md)
 - [MCP連携](mcp.md)
-
-## 未ドキュメント化コマンド（自動追加）
-
-<!-- TODO: 以下のコマンドに詳細な説明を追加してください -->
-
-### `/project`
-
-Edit xelyon.yaml interactively (rules, final checks)
-
-```
-> /project
-```
-
-
-## 未ドキュメント化コマンド（自動追加）
-
-<!-- TODO: 以下のコマンドに詳細な説明を追加してください -->

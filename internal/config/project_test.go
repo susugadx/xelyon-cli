@@ -96,6 +96,27 @@ func TestLoadProjectConfigInvalidYAML(t *testing.T) {
 	}
 }
 
+func TestLoadProjectConfigWithErrorInvalidYAML(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "xelyon.yaml"), []byte(":\ninvalid: [yaml\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	origDir, _ := os.Getwd()
+	defer func() { _ = os.Chdir(origDir) }()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	pc, err := LoadProjectConfigWithError()
+	if err == nil {
+		t.Fatal("LoadProjectConfigWithError() error = nil, want non-nil")
+	}
+	if pc != nil {
+		t.Fatalf("LoadProjectConfigWithError() pc = %#v, want nil", pc)
+	}
+}
+
 func TestLoadProjectConfigWithFinalChecks(t *testing.T) {
 	dir := t.TempDir()
 	yamlContent := `context: "test"
@@ -408,6 +429,26 @@ func TestResolveFinalChecks_GlobalFallback(t *testing.T) {
 	}
 }
 
+func TestResolveFinalChecks_EmptyProjectOverrideDisablesGlobalFallback(t *testing.T) {
+	globalCfg := &Config{
+		FinalChecks: FinalChecksConfig{
+			Commands: []string{"global verify"},
+			Timeout:  600,
+		},
+	}
+	projectCfg := &ProjectConfig{
+		FinalChecks: &FinalChecksConfig{},
+	}
+
+	resolved := ResolveFinalChecks(globalCfg, projectCfg)
+	if resolved == nil {
+		t.Fatal("ResolveFinalChecks returned nil")
+	}
+	if len(resolved.Commands) != 0 {
+		t.Fatalf("resolved.Commands = %v, want empty project override", resolved.Commands)
+	}
+}
+
 func TestResolveFinalChecks_BothEmpty(t *testing.T) {
 	globalCfg := &Config{
 		FinalChecks: FinalChecksConfig{}, // no commands
@@ -489,6 +530,30 @@ func TestSaveProjectConfig_WithFinalChecks(t *testing.T) {
 	}
 	if loaded.FinalChecks.Timeout != 120 {
 		t.Errorf("FinalChecks.Timeout = %d, want 120", loaded.FinalChecks.Timeout)
+	}
+}
+
+func TestSaveProjectConfig_PreservesEmptyFinalChecksOverride(t *testing.T) {
+	dir := t.TempDir()
+	pc := &ProjectConfig{
+		Context:     "test",
+		FinalChecks: &FinalChecksConfig{},
+		FilePath:    filepath.Join(dir, "xelyon.yaml"),
+	}
+
+	if err := SaveProjectConfig(pc); err != nil {
+		t.Fatalf("SaveProjectConfig() error: %v", err)
+	}
+
+	loaded, err := loadProjectConfigFromYAML(pc.FilePath)
+	if err != nil {
+		t.Fatalf("loadProjectConfigFromYAML() error: %v", err)
+	}
+	if loaded.FinalChecks == nil {
+		t.Fatal("FinalChecks is nil after save/load, want empty override")
+	}
+	if len(loaded.FinalChecks.Commands) != 0 {
+		t.Fatalf("FinalChecks.Commands = %v, want empty", loaded.FinalChecks.Commands)
 	}
 }
 

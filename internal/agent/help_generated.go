@@ -49,6 +49,7 @@ const GeneratedTUIHelpCommandsText = `Commands:
                             /config model <name> - Change default model
   /model [name]             - Show current model or switch model without restart
   /init                     - Create xelyon.yaml template (project config)
+  /project                  - Edit xelyon.yaml interactively (rules, final checks)
   /plan [on|off]            - Toggle Plan Mode (investigation -> plan -> approval; implementation happens on next normal turn)
   /think [on|off|level]     - Toggle Extended Thinking mode (level: low/medium/high/xhigh)
   /lsp [status]             - Show LSP server status (running/not started/disabled)
