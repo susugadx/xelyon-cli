@@ -1,0 +1,423 @@
+package azure
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"runtime"
+	"strings"
+	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/config"
+)
+
+func TestDiagnose_FailsForMissingCredentialsAndPlaceholderDeployment(t *testing.T) {
+	t.Setenv(baseURLEnv, "https://example.openai.azure.com/openai/v1")
+	t.Setenv(apiKeyEnv, "")
+	t.Setenv(authTokenEnv, "")
+	t.Setenv(authTokenCommandEnv, "")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{Config: config.DefaultConfig()})
+	if !report.HasFailures() {
+		t.Fatalf("HasFailures() = false, want true: %#v", report.Checks)
+	}
+	if !hasDiagnosticCheck(report, "auth", DiagnosticStatusFail) {
+		t.Fatalf("missing auth failure: %#v", report.Checks)
+	}
+	if !hasDiagnosticCheck(report, "deployment", DiagnosticStatusFail) {
+		t.Fatalf("missing deployment failure: %#v", report.Checks)
+	}
+}
+
+func TestDiagnose_AuthTokenCommandOnly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("token command test uses POSIX printf")
+	}
+
+	t.Setenv(baseURLEnv, "https://example.openai.azure.com/openai/v1")
+	t.Setenv(apiKeyEnv, "")
+	t.Setenv(authTokenEnv, "")
+	t.Setenv(authTokenCommandEnv, "printf command-token")
+	t.Setenv(authTokenCommandTimeoutEnv, "")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Deployment:   "corp-gpt55",
+		CatalogModel: "gpt-5.5",
+	})
+
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want false: %#v", report.Checks)
+	}
+	if report.AuthMode != "entra_id_command" {
+		t.Fatalf("AuthMode = %q, want entra_id_command", report.AuthMode)
+	}
+	if !hasDiagnosticCheck(report, "auth_token_command", DiagnosticStatusOK) {
+		t.Fatalf("missing auth_token_command OK check: %#v", report.Checks)
+	}
+}
+
+func TestDiagnose_AuthTokenWithRefreshCommandReportsCommandMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("token command test uses POSIX printf")
+	}
+
+	t.Setenv(baseURLEnv, "https://example.openai.azure.com/openai/v1")
+	t.Setenv(apiKeyEnv, "")
+	t.Setenv(authTokenEnv, "existing-token")
+	t.Setenv(authTokenCommandEnv, "printf refreshed-token")
+	t.Setenv(authTokenCommandTimeoutEnv, "")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Deployment:   "corp-gpt55",
+		CatalogModel: "gpt-5.5",
+	})
+
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want false: %#v", report.Checks)
+	}
+	if report.AuthMode != "entra_id_command" {
+		t.Fatalf("AuthMode = %q, want entra_id_command", report.AuthMode)
+	}
+	if !hasDiagnosticCheck(report, "auth_token_command", DiagnosticStatusOK) {
+		t.Fatalf("missing auth_token_command OK check: %#v", report.Checks)
+	}
+}
+
+func TestDiagnose_AuthTokenCommandFailureFailsWhenCommandIsOnlyCredential(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("token command test uses POSIX shell")
+	}
+
+	t.Setenv(baseURLEnv, "https://example.openai.azure.com/openai/v1")
+	t.Setenv(apiKeyEnv, "")
+	t.Setenv(authTokenEnv, "")
+	t.Setenv(authTokenCommandEnv, "printf command-failed >&2; exit 2")
+	t.Setenv(authTokenCommandTimeoutEnv, "")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Deployment:   "corp-gpt55",
+		CatalogModel: "gpt-5.5",
+	})
+
+	if !hasDiagnosticCheck(report, "auth_token_command", DiagnosticStatusFail) {
+		t.Fatalf("missing auth_token_command failure: %#v", report.Checks)
+	}
+}
+
+func TestDiagnose_WarnsForAPIVersionQueryAndCatalogFallback(t *testing.T) {
+	t.Setenv(baseURLEnv, "https://example.openai.azure.com/openai/v1?api-version=2025-04-01-preview")
+	t.Setenv(apiKeyEnv, "azure-key")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:     config.DefaultConfig(),
+		Deployment: "corp-gpt55-deployment",
+	})
+
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want false: %#v", report.Checks)
+	}
+	if !hasDiagnosticCheck(report, "api_version", DiagnosticStatusWarn) {
+		t.Fatalf("missing api-version warning: %#v", report.Checks)
+	}
+	if !hasDiagnosticCheck(report, "catalog_model", DiagnosticStatusWarn) {
+		t.Fatalf("missing catalog_model fallback warning: %#v", report.Checks)
+	}
+	if report.NormalizedBaseURL != "https://example.openai.azure.com/openai/v1" {
+		t.Fatalf("NormalizedBaseURL = %q, want v1 URL without query", report.NormalizedBaseURL)
+	}
+}
+
+func TestDiagnose_FailsForDeploymentScopedBaseURL(t *testing.T) {
+	t.Setenv(baseURLEnv, "https://example.openai.azure.com/openai/deployments/corp-gpt55")
+	t.Setenv(apiKeyEnv, "azure-key")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Deployment:   "corp-gpt55",
+		CatalogModel: "gpt-5.5",
+	})
+
+	if !hasDiagnosticCheck(report, "base_url", DiagnosticStatusFail) {
+		t.Fatalf("missing deployment URL failure: %#v", report.Checks)
+	}
+}
+
+func TestDiagnose_FailsForPublicOpenAIBaseURL(t *testing.T) {
+	t.Setenv(baseURLEnv, "https://api.openai.com/v1")
+	t.Setenv(apiKeyEnv, "azure-key")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Deployment:   "corp-gpt55",
+		CatalogModel: "gpt-5.5",
+	})
+
+	if !hasDiagnosticCheck(report, "base_url", DiagnosticStatusFail) {
+		t.Fatalf("missing public OpenAI base URL failure: %#v", report.Checks)
+	}
+}
+
+func TestDiagnose_WarnsForOpenAIKeyShape(t *testing.T) {
+	t.Setenv(baseURLEnv, "https://example.openai.azure.com/openai/v1")
+	t.Setenv(apiKeyEnv, "sk-public-openai-key")
+	t.Setenv(authTokenEnv, "")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Deployment:   "corp-gpt55",
+		CatalogModel: "gpt-5.5",
+	})
+
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want false: %#v", report.Checks)
+	}
+	if !hasDiagnosticCheck(report, "auth_key_shape", DiagnosticStatusWarn) {
+		t.Fatalf("missing auth_key_shape warning: %#v", report.Checks)
+	}
+}
+
+func TestDiagnose_WarnsWhenExplicitDeploymentLooksLikeCatalogModel(t *testing.T) {
+	t.Setenv(baseURLEnv, "https://example.openai.azure.com/openai/v1")
+	t.Setenv(apiKeyEnv, "azure-key")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:     config.DefaultConfig(),
+		Deployment: "gpt-5.4",
+	})
+
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want false: %#v", report.Checks)
+	}
+	if !hasDiagnosticCheck(report, "deployment_catalog_mixup", DiagnosticStatusWarn) {
+		t.Fatalf("missing deployment/catalog mixup warning: %#v", report.Checks)
+	}
+}
+
+func TestDiagnose_WarnsWhenCatalogModelLooksLikeDeployment(t *testing.T) {
+	t.Setenv(baseURLEnv, "https://example.openai.azure.com/openai/v1")
+	t.Setenv(apiKeyEnv, "azure-key")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Deployment:   "corp-gpt55",
+		CatalogModel: "corp-gpt55",
+	})
+
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want false: %#v", report.Checks)
+	}
+	if !hasDiagnosticCheck(report, "catalog_model", DiagnosticStatusWarn) {
+		t.Fatalf("missing catalog_model shape warning: %#v", report.Checks)
+	}
+}
+
+func TestDiagnose_WarnsForAdvancedRetentionOverride(t *testing.T) {
+	t.Setenv(baseURLEnv, "https://example.openai.azure.com/openai/v1")
+	t.Setenv(apiKeyEnv, "azure-key")
+
+	cfg := config.DefaultConfig()
+	cfg.Responses.Store = false
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       cfg,
+		Deployment:   "corp-gpt55",
+		CatalogModel: "gpt-5.5",
+	})
+
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want false: %#v", report.Checks)
+	}
+	if !hasDiagnosticCheck(report, "responses_retention", DiagnosticStatusWarn) {
+		t.Fatalf("missing responses_retention warning: %#v", report.Checks)
+	}
+}
+
+func TestDiagnose_SmokeUsesConfiguredDeploymentAndStoreFalse(t *testing.T) {
+	var received struct {
+		Path   string
+		APIKey string
+		Body   map[string]any
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		received.Path = r.URL.Path
+		received.APIKey = r.Header.Get("api-key")
+		if err := json.NewDecoder(r.Body).Decode(&received.Body); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"resp_doctor","output_text":"xelyon azure doctor ok","usage":{"input_tokens":5,"output_tokens":4}}`))
+	}))
+	defer server.Close()
+
+	t.Setenv(baseURLEnv, server.URL)
+	t.Setenv(apiKeyEnv, "azure-key")
+	t.Setenv(authTokenEnv, "")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:          config.DefaultConfig(),
+		Deployment:      "corp-gpt55-pro-deployment",
+		CatalogModel:    "gpt-5.5-pro",
+		RunSmoke:        true,
+		MaxOutputTokens: 32,
+	})
+
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want false: %#v", report.Checks)
+	}
+	if report.Smoke == nil || !report.Smoke.Ran {
+		t.Fatalf("Smoke = %#v, want ran smoke", report.Smoke)
+	}
+	if !strings.Contains(report.Smoke.Content, "xelyon azure doctor ok") {
+		t.Fatalf("Smoke.Content = %q, want smoke response", report.Smoke.Content)
+	}
+	if received.Path != "/openai/v1/responses" {
+		t.Fatalf("path = %q, want /openai/v1/responses", received.Path)
+	}
+	if received.APIKey != "azure-key" {
+		t.Fatalf("api-key = %q, want azure-key", received.APIKey)
+	}
+	if received.Body["model"] != "corp-gpt55-pro-deployment" {
+		t.Fatalf("model = %#v, want deployment", received.Body["model"])
+	}
+	if received.Body["store"] != false {
+		t.Fatalf("store = %#v, want false for doctor smoke", received.Body["store"])
+	}
+	if received.Body["stream"] == true {
+		t.Fatalf("stream = true, want non-streaming for gpt-5.5-pro catalog model")
+	}
+	if got := int(received.Body["max_output_tokens"].(float64)); got != 32 {
+		t.Fatalf("max_output_tokens = %d, want 32", got)
+	}
+	if _, ok := received.Body["tools"]; ok {
+		t.Fatalf("tools should be omitted in doctor smoke: %#v", received.Body)
+	}
+}
+
+func TestDiagnose_ToolSmokeIncludesToolPayloadWhenEnabled(t *testing.T) {
+	var received map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"resp_tool_doctor","output":[{"type":"function_call","call_id":"call_probe","name":"xelyon_azure_doctor_probe","arguments":"{}"}]}`))
+	}))
+	defer server.Close()
+
+	t.Setenv(baseURLEnv, server.URL)
+	t.Setenv(apiKeyEnv, "azure-key")
+	t.Setenv(authTokenEnv, "")
+	t.Setenv("AZURE_OPENAI_FUNCTION_CALLING", "1")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Deployment:   "corp-gpt55-pro-deployment",
+		CatalogModel: "gpt-5.5-pro",
+		RunSmoke:     true,
+		ToolSmoke:    true,
+	})
+
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want false: %#v", report.Checks)
+	}
+	if report.Smoke == nil || !report.Smoke.ToolPayload {
+		t.Fatalf("Smoke = %#v, want tool payload smoke", report.Smoke)
+	}
+	if !strings.Contains(report.Smoke.Content, `"tool":"xelyon_azure_doctor_probe"`) {
+		t.Fatalf("Smoke.Content = %q, want diagnostic tool call JSON", report.Smoke.Content)
+	}
+	tools, ok := received["tools"].([]any)
+	if !ok || len(tools) != 1 {
+		t.Fatalf("tools = %#v, want one diagnostic tool", received["tools"])
+	}
+	tool, ok := tools[0].(map[string]any)
+	if !ok || tool["name"] != "xelyon_azure_doctor_probe" {
+		t.Fatalf("tool = %#v, want diagnostic probe", tools[0])
+	}
+	toolChoice, ok := received["tool_choice"].(map[string]any)
+	if !ok {
+		t.Fatalf("tool_choice = %#v, want forced function choice", received["tool_choice"])
+	}
+	if toolChoice["type"] != "function" || toolChoice["name"] != "xelyon_azure_doctor_probe" {
+		t.Fatalf("tool_choice = %#v, want forced diagnostic function", toolChoice)
+	}
+	if !hasDiagnosticCheck(report, "tool_smoke", DiagnosticStatusOK) {
+		t.Fatalf("missing tool_smoke OK check: %#v", report.Checks)
+	}
+}
+
+func TestDiagnose_ToolSmokeFailsWhenForcedToolCallIsMissing(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"resp_tool_doctor","output_text":"plain response"}`))
+	}))
+	defer server.Close()
+
+	t.Setenv(baseURLEnv, server.URL)
+	t.Setenv(apiKeyEnv, "azure-key")
+	t.Setenv(authTokenEnv, "")
+	t.Setenv("AZURE_OPENAI_FUNCTION_CALLING", "1")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Deployment:   "corp-gpt55-pro-deployment",
+		CatalogModel: "gpt-5.5-pro",
+		RunSmoke:     true,
+		ToolSmoke:    true,
+	})
+
+	if !hasDiagnosticCheck(report, "smoke", DiagnosticStatusFail) {
+		t.Fatalf("missing smoke failure for absent tool call: %#v", report.Checks)
+	}
+}
+
+func TestDiagnose_ToolSmokeSkippedWhenFunctionCallingDisabled(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var received map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		if _, ok := received["tools"]; ok {
+			t.Fatalf("tools should be omitted when function calling is disabled: %#v", received)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"resp_tool_disabled","output_text":"ok"}`))
+	}))
+	defer server.Close()
+
+	t.Setenv(baseURLEnv, server.URL)
+	t.Setenv(apiKeyEnv, "azure-key")
+	t.Setenv(authTokenEnv, "")
+	t.Setenv("AZURE_OPENAI_FUNCTION_CALLING", "0")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Deployment:   "corp-gpt55-pro-deployment",
+		CatalogModel: "gpt-5.5-pro",
+		RunSmoke:     true,
+		ToolSmoke:    true,
+	})
+
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want false: %#v", report.Checks)
+	}
+	if report.Smoke == nil || report.Smoke.ToolPayload {
+		t.Fatalf("Smoke = %#v, want basic smoke without tool payload", report.Smoke)
+	}
+	if !hasDiagnosticCheck(report, "tool_smoke", DiagnosticStatusWarn) {
+		t.Fatalf("missing tool_smoke skip warning: %#v", report.Checks)
+	}
+}
+
+func hasDiagnosticCheck(report DiagnosticReport, name string, status DiagnosticStatus) bool {
+	for _, check := range report.Checks {
+		if check.Name == name && check.Status == status {
+			return true
+		}
+	}
+	return false
+}

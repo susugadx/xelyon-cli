@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	azureprovider "github.com/susugadx/xelyon-cli/internal/api/providers/azure"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/ui"
@@ -73,6 +74,92 @@ func TestSyncSavedResponseContextFromProvider(t *testing.T) {
 			t.Fatalf("session.ResponseModel = %q, want preserved saved model", agent.session.ResponseModel)
 		}
 	})
+
+	t.Run("persist disabled clears saved response context", func(t *testing.T) {
+		cfg := config.DefaultConfig()
+		cfg.Responses.PersistResponseID = false
+		agent := &Agent{
+			CurrentModel:      "gpt-5",
+			ProviderName:      "openai",
+			ProviderConfigKey: "openai",
+			CurrentProvider:   &mockResponseIDProvider{mockProvider: mockProvider{name: "openai"}, responseID: "resp_live"},
+			Runtime:           NewAgentRuntimeWithConfig(cfg),
+			agentConversationState: agentConversationState{
+				session: newResponseContextSession("saved-model", "openai", "openai", "resp_saved"),
+			},
+		}
+
+		agent.syncSavedResponseContextFromProvider()
+
+		if agent.session.ResponseID != "" {
+			t.Fatalf("session.ResponseID = %q, want cleared when persist_response_id=false", agent.session.ResponseID)
+		}
+		if agent.session.ResponseModel != "" || agent.session.ResponseProviderName != "" || agent.session.ResponseProviderConfigKey != "" {
+			t.Fatalf(
+				"saved response context = (%q, %q, %q), want cleared",
+				agent.session.ResponseModel,
+				agent.session.ResponseProviderName,
+				agent.session.ResponseProviderConfigKey,
+			)
+		}
+	})
+}
+
+func TestAzureProviderIdentityAndResponseIDContract(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("AZURE_OPENAI_BASE_URL", "https://example.openai.azure.com/openai/v1")
+	t.Setenv("XELYON_DISABLE_MCP", "1")
+
+	cfg := newProjectMapDisabledConfig()
+	cfg.MCP.Enabled = false
+	runtime := NewAgentRuntimeWithConfig(cfg)
+	provider := azureprovider.New("azure-key")
+
+	agent := NewAgentWithRuntime("corp-gpt55-deployment", provider, false, runtime)
+	t.Cleanup(agent.Cleanup)
+
+	if agent.CurrentProvider.Name() != "Azure OpenAI" {
+		t.Fatalf("CurrentProvider.Name() = %q, want Azure OpenAI display name", agent.CurrentProvider.Name())
+	}
+	if agent.ProviderName != "azure" {
+		t.Fatalf("ProviderName = %q, want azure", agent.ProviderName)
+	}
+	if agent.ProviderConfigKey != "azure" {
+		t.Fatalf("ProviderConfigKey = %q, want azure", agent.ProviderConfigKey)
+	}
+	if agent.session.ProviderName != "azure" || agent.session.ProviderConfigKey != "azure" {
+		t.Fatalf(
+			"session provider identity = (%q, %q), want (azure, azure)",
+			agent.session.ProviderName,
+			agent.session.ProviderConfigKey,
+		)
+	}
+	if !strings.Contains(agent.SystemPrompt, "OpenAI-specific") {
+		t.Fatalf("SystemPrompt does not include OpenAI provider notes for Azure")
+	}
+
+	ridProvider, ok := agent.CurrentProvider.(ResponseIDCapable)
+	if !ok {
+		t.Fatalf("Azure provider does not implement ResponseIDCapable")
+	}
+	ridProvider.SetResponseID("resp_azure")
+	agent.syncSavedResponseContextFromProvider()
+	if agent.session.ResponseID != "resp_azure" {
+		t.Fatalf("session.ResponseID = %q, want resp_azure", agent.session.ResponseID)
+	}
+	if agent.session.ResponseProviderName != "azure" || agent.session.ResponseProviderConfigKey != "azure" {
+		t.Fatalf(
+			"session response provider identity = (%q, %q), want (azure, azure)",
+			agent.session.ResponseProviderName,
+			agent.session.ResponseProviderConfigKey,
+		)
+	}
+
+	ridProvider.SetResponseID("")
+	agent.restoreSessionResponseIDForCurrentContext()
+	if got := ridProvider.GetResponseID(); got != "resp_azure" {
+		t.Fatalf("restored response ID = %q, want resp_azure", got)
+	}
 }
 
 func TestRestoreSessionResponseIDForCurrentContext(t *testing.T) {
@@ -196,6 +283,66 @@ func TestRestoreSessionResponseIDForCurrentContext(t *testing.T) {
 			t.Fatalf("session.ResponseID = %q, want saved response id preserved", agent.session.ResponseID)
 		}
 	})
+
+	t.Run("persist disabled clears provider cache and saved context", func(t *testing.T) {
+		cfg := config.DefaultConfig()
+		cfg.Responses.PersistResponseID = false
+		provider := &mockResponseIDProvider{mockProvider: mockProvider{name: "openai"}, responseID: "old"}
+		agent := &Agent{
+			CurrentModel:      "saved-model",
+			ProviderName:      "openai",
+			ProviderConfigKey: "openai",
+			CurrentProvider:   provider,
+			Runtime:           NewAgentRuntimeWithConfig(cfg),
+			agentConversationState: agentConversationState{
+				session: newResponseContextSession("saved-model", "openai", "openai", "resp_123"),
+			},
+		}
+
+		agent.restoreSessionResponseIDForCurrentContext()
+
+		if provider.responseID != "" {
+			t.Fatalf("provider.responseID = %q, want cleared when persist_response_id=false", provider.responseID)
+		}
+		if agent.session.ResponseID != "" {
+			t.Fatalf("session.ResponseID = %q, want cleared when persist_response_id=false", agent.session.ResponseID)
+		}
+	})
+
+	t.Run("persist disabled clears saved context without response capable provider", func(t *testing.T) {
+		cfg := config.DefaultConfig()
+		cfg.Responses.PersistResponseID = false
+		agent := &Agent{
+			CurrentModel:      "saved-model",
+			ProviderName:      "deepseek",
+			ProviderConfigKey: "deepseek",
+			CurrentProvider:   &mockProvider{name: "deepseek"},
+			Runtime:           NewAgentRuntimeWithConfig(cfg),
+			agentConversationState: agentConversationState{
+				session: newResponseContextSession("saved-model", "openai", "openai", "resp_123"),
+			},
+		}
+
+		agent.restoreSessionResponseIDForCurrentContext()
+
+		if agent.session.ResponseID != "" {
+			t.Fatalf("session.ResponseID = %q, want cleared even without ResponseIDCapable provider", agent.session.ResponseID)
+		}
+	})
+}
+
+func TestShouldRestoreSessionResponseID_CanonicalizesAzureDisplayNameProviderConfigKey(t *testing.T) {
+	if !shouldRestoreSessionResponseID(
+		"corp-gpt55-deployment",
+		"corp-gpt55-deployment",
+		"Azure OpenAI",
+		"azure",
+		"Azure OpenAI",
+		"azure",
+		"resp_azure",
+	) {
+		t.Fatal("shouldRestoreSessionResponseID() = false, want true for Azure display-name provider_config_key compatibility")
+	}
 }
 
 func TestHandleLoadCommand_PreservesSavedResponseContextAcrossMismatchedLoad(t *testing.T) {

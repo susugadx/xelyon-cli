@@ -18,6 +18,8 @@ func TestIsValidProvider(t *testing.T) {
 	}{
 		{"valid deepseek", "deepseek", true},
 		{"valid openai", "openai", true},
+		{"valid azure", "azure", true},
+		{"valid azure display name", "Azure OpenAI", true},
 		{"valid gemini", "gemini", true},
 		{"valid claude", "claude", true},
 		{"valid anthropic", "anthropic", true},
@@ -51,6 +53,8 @@ func TestSuggestProvider(t *testing.T) {
 		{"typo deepseak", "deepseak", "deepseek"},
 		{"gpt", "gpt", "openai"},
 		{"chatgpt", "chatgpt", "openai"},
+		{"aoai", "aoai", "azure"},
+		{"azureopenai typo beats substring", "azureopenai", "azure"},
 		{"google", "google", "gemini"},
 		{"sonnet", "sonnet", "claude"},
 		{"trimmed case-insensitive", " OpenAI ", "openai"},

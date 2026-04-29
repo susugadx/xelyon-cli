@@ -787,3 +787,57 @@ func TestHandleResponsesStreaming_ErrorEvent(t *testing.T) {
 		t.Fatalf("handleResponsesStreaming() error = %v, want quota exceeded", err)
 	}
 }
+
+func TestHandleResponsesStreaming_DefaultDebugFollowsEnvWhenNotSpecified(t *testing.T) {
+	t.Setenv("XELYON_DEBUG_OPENAI", "1")
+	var out strings.Builder
+	ctx := ui.WithRuntime(context.Background(), ui.NewRuntime(strings.NewReader(""), &out, &out))
+	ctx = api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesOff)
+
+	resp := &http.Response{
+		Body: io.NopCloser(strings.NewReader(strings.Join([]string{
+			`data: {"type":"response.completed"}`,
+			``,
+			`data: [DONE]`,
+		}, "\n"))),
+	}
+
+	var debugOut strings.Builder
+	_, _, err := HandleResponsesStreaming(ctx, resp, ui.NewSpinnerWithRuntime(ui.RuntimeFromContext(ctx)), ResponsesStreamingOptions{
+		DebugWriter: &debugOut,
+	})
+	if err != nil {
+		t.Fatalf("HandleResponsesStreaming() error = %v", err)
+	}
+	if !strings.Contains(debugOut.String(), "[DEBUG OpenAI Responses] SSE line:") {
+		t.Fatalf("debug output = %q, want env-based debug logs", debugOut.String())
+	}
+}
+
+func TestHandleResponsesStreaming_DebugOverrideFalseDisablesEnvDebug(t *testing.T) {
+	t.Setenv("XELYON_DEBUG_OPENAI", "1")
+	var out strings.Builder
+	ctx := ui.WithRuntime(context.Background(), ui.NewRuntime(strings.NewReader(""), &out, &out))
+	ctx = api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesOff)
+
+	resp := &http.Response{
+		Body: io.NopCloser(strings.NewReader(strings.Join([]string{
+			`data: {"type":"response.completed"}`,
+			``,
+			`data: [DONE]`,
+		}, "\n"))),
+	}
+
+	var debugOut strings.Builder
+	debugEnabled := false
+	_, _, err := HandleResponsesStreaming(ctx, resp, ui.NewSpinnerWithRuntime(ui.RuntimeFromContext(ctx)), ResponsesStreamingOptions{
+		DebugOverride: &debugEnabled,
+		DebugWriter:   &debugOut,
+	})
+	if err != nil {
+		t.Fatalf("HandleResponsesStreaming() error = %v", err)
+	}
+	if strings.Contains(debugOut.String(), "[DEBUG ") {
+		t.Fatalf("debug output = %q, want no debug logs with explicit override=false", debugOut.String())
+	}
+}

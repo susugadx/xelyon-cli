@@ -94,6 +94,21 @@ func TestRuntimeProviderConfigKeyAndResolveProviderForModel_Fallbacks(t *testing
 	}
 }
 
+func TestRuntimeProviderConfigKey_CanonicalizesAzureDisplayName(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.SetProviderModelConfig("azure", ProviderModelConfig{
+		DefaultModel: "corp-gpt55-deployment",
+		CatalogModel: "gpt-5.5",
+	})
+
+	if got := cfg.RuntimeProviderConfigKey("Azure OpenAI", "corp-gpt55-deployment"); got != "azure" {
+		t.Fatalf("RuntimeProviderConfigKey(Azure OpenAI, deployment) = %q, want azure", got)
+	}
+	if got := cfg.ModelCatalogName("Azure OpenAI", "corp-gpt55-deployment"); got != "gpt-5.5" {
+		t.Fatalf("ModelCatalogName(Azure OpenAI, deployment) = %q, want gpt-5.5", got)
+	}
+}
+
 func TestConfigProviderKeyMethodWrappers(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.DefaultProvider = "anthropic"

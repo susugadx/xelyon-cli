@@ -88,6 +88,13 @@ func defaultPromptCacheConfig() PromptCacheConfig {
 	}
 }
 
+func defaultResponsesConfig() ResponsesConfig {
+	return ResponsesConfig{
+		Store:             true,
+		PersistResponseID: true,
+	}
+}
+
 func defaultPasteConfig() PasteConfig {
 	return PasteConfig{
 		BracketedPaste: true, // デフォルトON - 複数行ペースト対応

@@ -71,6 +71,7 @@ var hiddenShowSections = map[string]bool{
 	"diff":            true,
 	"command_aliases": true,
 	"prompt_cache":    true,
+	"responses":       true, // Responses API retention policy（YAML 互換は維持）
 	"streaming":       true,
 	"tool_confirm":    true,
 	"bash":            true,

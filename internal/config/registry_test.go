@@ -439,6 +439,8 @@ func TestInternalSectionsNotInRegistry(t *testing.T) {
 		"thinking.enabled",
 		"thinking.level",
 		"openai.responses_api_models",
+		"responses.store",
+		"responses.persist_response_id",
 	}
 
 	for _, path := range internalFields {
@@ -450,7 +452,7 @@ func TestInternalSectionsNotInRegistry(t *testing.T) {
 		}
 	}
 
-	internalCategories := []string{"thinking", "openai"}
+	internalCategories := []string{"thinking", "openai", "responses"}
 	for _, cat := range internalCategories {
 		for _, def := range CategoryDefinitions {
 			if def.Name == cat {

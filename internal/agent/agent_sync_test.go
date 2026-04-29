@@ -74,6 +74,18 @@ func TestSyncWithRuntimeConfig_ModelUpdate(t *testing.T) {
 	}
 }
 
+func TestCurrentProviderConfigKey_CanonicalizesAzureDisplayName(t *testing.T) {
+	a := &Agent{
+		ProviderName:      "azure",
+		ProviderConfigKey: "Azure OpenAI",
+		CurrentProvider:   &MockProvider{name: "Azure OpenAI", configKey: "Azure OpenAI"},
+	}
+
+	if got := a.currentProviderConfigKey(); got != "azure" {
+		t.Fatalf("currentProviderConfigKey() = %q, want azure", got)
+	}
+}
+
 func TestSyncWithRuntimeConfig_DefaultModelShadowing(t *testing.T) {
 	// Setup
 	cfg := newProjectMapDisabledConfig()
@@ -299,6 +311,46 @@ func TestSyncWithRuntimeConfig_RebindsAliasOwnerWithinSameRuntimeIdentity(t *tes
 	}
 	if got := GetProviderCompressThresholdWithConfig(cfg, a.sessionProviderConfigKey(cfg), a.CurrentModel); got != 123456 {
 		t.Fatalf("compression threshold = %d, want %d", got, 123456)
+	}
+	if strings.Contains(out.String(), "Warning: Failed to switch provider") {
+		t.Fatalf("unexpected switch warning: %q", out.String())
+	}
+}
+
+func TestSyncWithRuntimeConfig_CanonicalizesDisplayNameDefaultProviderOwner(t *testing.T) {
+	var out bytes.Buffer
+	cfg := newProjectMapDisabledConfig()
+	cfg.DefaultProvider = "Azure OpenAI"
+	cfg.SetProviderModelConfig("azure", config.ProviderModelConfig{DefaultModel: "corp-gpt55-deployment"})
+
+	currentProvider := &MockProvider{name: "Azure OpenAI", configKey: "azure"}
+	a := &Agent{
+		ProviderName:      "azure",
+		ProviderConfigKey: "azure",
+		CurrentModel:      "old-deployment",
+		CurrentProvider:   currentProvider,
+		Runtime: &AgentRuntime{
+			Config: cfg,
+			UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
+		},
+	}
+
+	a.SyncWithRuntimeConfig()
+
+	if a.ProviderName != "azure" {
+		t.Fatalf("ProviderName = %q, want azure", a.ProviderName)
+	}
+	if a.CurrentProvider != currentProvider {
+		t.Fatal("CurrentProvider should be reused for Azure display-name default_provider")
+	}
+	if a.ProviderConfigKey != "azure" {
+		t.Fatalf("ProviderConfigKey = %q, want azure", a.ProviderConfigKey)
+	}
+	if providerConfigKeyFromProvider(a.CurrentProvider) != "azure" {
+		t.Fatalf("provider config key = %q, want azure", providerConfigKeyFromProvider(a.CurrentProvider))
+	}
+	if a.CurrentModel != "corp-gpt55-deployment" {
+		t.Fatalf("CurrentModel = %q, want Azure deployment", a.CurrentModel)
 	}
 	if strings.Contains(out.String(), "Warning: Failed to switch provider") {
 		t.Fatalf("unexpected switch warning: %q", out.String())

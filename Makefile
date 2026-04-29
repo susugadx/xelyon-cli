@@ -1,6 +1,6 @@
 # XELYON CLI Makefile
 
-.PHONY: build test fmt lint gen-config gen-docs gen-registry gen-help gen-all clean check ci-check ci-check-full e2e release-check ci-verify-deps ci-check-fmt ci-check-tidy ci-build ci-check-binary-size ci-lint ci-test ci-check-coverage release-test
+.PHONY: build test fmt lint gen-config gen-docs gen-registry gen-help gen-all clean check ci-check ci-check-full e2e azure-smoke azure-doctor-smoke release-check ci-verify-deps ci-check-fmt ci-check-tidy ci-build ci-check-binary-size ci-lint ci-test ci-check-coverage release-test
 
 CI_BINARY := xelyon
 CI_COVERAGE_FILE := coverage.txt
@@ -158,6 +158,14 @@ release-test:
 # E2Eテスト（実際のLLM APIを使用、OPENAI_API_KEY必須）
 e2e:
 	XELYON_E2E=1 go test ./e2e/ -v -timeout 300s
+
+# Azure OpenAI Responses API の実環境 smoke test
+azure-smoke:
+	XELYON_AZURE_SMOKE=1 go test ./internal/api/providers/azure -run 'TestAzure(Responses|Doctor)Smoke' -v -count=1 -timeout 300s
+
+# Azure doctor 診断経路だけを実環境で確認
+azure-doctor-smoke:
+	XELYON_AZURE_SMOKE=1 go test ./internal/api/providers/azure -run TestAzureDoctorSmoke -v -count=1 -timeout 300s
 
 # リリース前チェック
 release-check: fmt test lint build

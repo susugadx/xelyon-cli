@@ -370,7 +370,7 @@ func TestBuildFullInputItems_PrePrunesToolResults(t *testing.T) {
 }
 
 func TestBuildFullInputItems_CompactedModeBypassesPrune(t *testing.T) {
-	// 圧縮モードの場合は compactedItems をそのまま返す（pre-prune しない）
+	// 圧縮モードの場合は compactedItems を先頭に置き、圧縮後に積まれた履歴も保持する
 	provider := &mockProvider{name: "test"}
 	agent := NewAgent("test-model", provider, false)
 
@@ -378,14 +378,18 @@ func TestBuildFullInputItems_CompactedModeBypassesPrune(t *testing.T) {
 	agent.compactedItems = []api.InputItem{
 		{Type: "compacted", Data: "compressed-data"},
 	}
+	agent.History = []api.Message{{Role: "user", Content: "new turn"}}
 
 	items := agent.buildFullInputItems()
 
-	if len(items) != 1 {
-		t.Fatalf("expected 1 compacted item, got %d", len(items))
+	if len(items) != 2 {
+		t.Fatalf("expected compacted item plus current history, got %d", len(items))
 	}
 	if items[0].Type != "compacted" {
 		t.Errorf("expected type=compacted, got %q", items[0].Type)
+	}
+	if items[1].Role != "user" || items[1].Content != "new turn" {
+		t.Fatalf("items[1] = %#v, want current history item", items[1])
 	}
 }
 
@@ -462,6 +466,21 @@ func TestCompressWithCompactAPI_UsesCompressionModel(t *testing.T) {
 	}
 	if provider.capturedCompactModel != "gpt-5.4-mini" {
 		t.Fatalf("CompressWithCompactAPI() model = %q, want %q", provider.capturedCompactModel, "gpt-5.4-mini")
+	}
+}
+
+func TestRequestContext_IncludesCompactedInputItems(t *testing.T) {
+	provider := &compressionTestProvider{name: "openai", supportsCompact: true}
+	agent, _ := newCompressionTestAgent(t, provider, "gpt-5.4", config.DefaultConfig())
+	agent.isCompactedMode = true
+	agent.compactedItems = []api.InputItem{{Type: "compacted", Data: "compact-data"}}
+
+	got := api.CompactedInputItemsFromContext(agent.requestContext(context.Background()))
+	if len(got) != 1 {
+		t.Fatalf("len(CompactedInputItemsFromContext()) = %d, want 1", len(got))
+	}
+	if got[0].Type != "compacted" || got[0].Data != "compact-data" {
+		t.Fatalf("compacted input item = %#v, want compact-data", got[0])
 	}
 }
 

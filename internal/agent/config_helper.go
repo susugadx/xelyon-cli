@@ -13,16 +13,32 @@ type providerConfigKeyMutable interface {
 	SetProviderConfigKey(key string)
 }
 
+type providerRuntimeNameAware interface {
+	RuntimeProviderName() string
+}
+
+func providerRuntimeNameFromProvider(provider api.Provider) string {
+	if provider == nil {
+		return ""
+	}
+	if aware, ok := provider.(providerRuntimeNameAware); ok {
+		if name := config.CanonicalProviderName(aware.RuntimeProviderName()); name != "" {
+			return name
+		}
+	}
+	return config.CanonicalProviderName(provider.Name())
+}
+
 func providerConfigKeyFromProvider(provider api.Provider) string {
 	if provider == nil {
 		return ""
 	}
 	if aware, ok := provider.(providerConfigKeyAware); ok {
-		if key := config.NormalizeProviderName(aware.ProviderConfigKey()); key != "" {
+		if key := config.ActiveProviderConfigKey(aware.ProviderConfigKey()); key != "" {
 			return key
 		}
 	}
-	return config.NormalizeProviderName(provider.Name())
+	return config.ActiveProviderConfigKey(provider.Name())
 }
 
 func syncProviderConfigKeyToProvider(provider api.Provider, key string) {
@@ -39,11 +55,11 @@ func (a *Agent) sessionProviderConfigKey(cfg *config.Config) string {
 		return ""
 	}
 
-	if key := config.NormalizeProviderName(a.ProviderConfigKey); key != "" {
+	if key := config.ActiveProviderConfigKey(a.ProviderConfigKey); key != "" {
 		return key
 	}
 
-	runtimeProvider := config.NormalizeProviderName(a.ProviderName)
+	runtimeProvider := config.ActiveProviderConfigKey(a.ProviderName)
 	if cfg != nil {
 		if owner := cfg.RuntimeProviderConfigKey(runtimeProvider, a.CurrentModel); owner != "" {
 			return owner
@@ -61,7 +77,7 @@ func (a *Agent) activeModelProviderConfigKey(cfg *config.Config) string {
 		return ""
 	}
 
-	runtimeProvider := config.NormalizeProviderName(a.ProviderName)
+	runtimeProvider := config.ActiveProviderConfigKey(a.ProviderName)
 	if cfg != nil {
 		if owner := cfg.RuntimeProviderConfigKey(runtimeProvider, a.CurrentModel); owner != "" {
 			return owner

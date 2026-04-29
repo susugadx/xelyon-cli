@@ -34,11 +34,15 @@ func (m *PromptManager) RebuildSystemPromptForCurrentProvider() {
 	planningPrompt := promptplan.BuildPlanningPrompt()
 	hadPlanPrompt := strings.Contains(a.SystemPrompt, planningPrompt)
 
-	systemPrompt := prompt.GetSystemPromptForProvider(a.CurrentProvider.Name(), a.CurrentModel)
+	providerName := a.ProviderName
+	if providerName == "" {
+		providerName = providerRuntimeNameFromProvider(a.CurrentProvider)
+	}
+	systemPrompt := prompt.GetSystemPromptForProvider(providerName, a.CurrentModel)
 	if a.mcpManager != nil && len(a.mcpManager.GetTools()) > 0 {
 		systemPrompt += buildMCPToolsPrompt(a.mcpManager)
 	}
-	systemPrompt = prompt.BuildProviderSystemPromptWithConfig(systemPrompt, a.CurrentProvider.Name(), a.CurrentModel, a.cfg())
+	systemPrompt = prompt.BuildProviderSystemPromptWithConfig(systemPrompt, providerName, a.CurrentModel, a.cfg())
 
 	if pc := loadProjectConfig(); pc != nil {
 		systemPrompt = injectProjectConfig(systemPrompt, pc, "")

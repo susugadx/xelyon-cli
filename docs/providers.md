@@ -6,7 +6,7 @@ XELYON CLIは複数のLLMプロバイダーに対応しています。
 
 XELYON は provider/model に応じて編集ツールを自動で切り替えます。
 
-- OpenAI / Gemini 系: `apply_patch`
+- OpenAI / Azure OpenAI / Gemini 系: `apply_patch`
 - Claude / Anthropic / DeepSeek 系: `str_replace` / `write_file` / `delete_file`
 - OpenRouter: `anthropic/...` / `deepseek/...` は legacy、`openai/...` / `google/...` / `gemini/...` は `apply_patch`
 - Bedrock: Claude family は legacy、それ以外は `apply_patch`
@@ -19,6 +19,7 @@ XELYON は provider/model に応じて編集ツールを自動で切り替えま
 |------------|---------|---------|-----------|
 | DeepSeek | ❌ | `DEEPSEEK_API_KEY` | https://platform.deepseek.com |
 | OpenAI | ✅ | `OPENAI_API_KEY` | https://platform.openai.com |
+| Azure OpenAI | ✅ | `AZURE_OPENAI_BASE_URL` + (`AZURE_OPENAI_API_KEY` / `AZURE_OPENAI_AUTH_TOKEN` / `AZURE_OPENAI_AUTH_TOKEN_COMMAND` のいずれか) | https://azure.microsoft.com/products/ai-services/openai-service |
 | Gemini | ✅ | `GEMINI_API_KEY` | https://ai.google.dev |
 | Claude | ✅ | `ANTHROPIC_API_KEY` | https://console.anthropic.com |
 | Groq | ❌ | `GROQ_API_KEY` | https://console.groq.com |
@@ -107,6 +108,8 @@ GPT-5.5 系も OpenAI provider では Responses API を使用します。
 - Compact API による効率的な履歴圧縮
 - ZDR（Zero Data Retention）対応
 
+XELYON は既定で Responses API の `store: true` と `previous_response_id` 継続を使います。これは通常の推奨設定です。provider 側に response state を保存したくない運用だけ、`~/.xelyon/config.yaml` で `responses.store: false` を設定してください。詳しくは [Responses API retention 設定](config.md#responses-api-retention-設定-responses高度な設定) を参照してください。
+
 **GPT-5.5 Pro の注意:**
 - streaming は公式に unsupported のため、XELYON は non-streaming Responses 経路を使用します。
 - 応答に数分かかる場合があります。background mode は今回未対応です。
@@ -119,7 +122,120 @@ xelyon --provider openai --model gpt-5.5
 xelyon --provider openai --model gpt-5.5-pro
 ```
 
-### 3. Gemini
+### 3. Azure OpenAI
+
+会社環境向けの最短セットアップと問い合わせ前チェックは [Azure OpenAI 利用メモ](azure-openai.md) も参照してください。
+
+```bash
+# Azure OpenAI resource の v1 base URL と認証情報を設定
+export AZURE_OPENAI_BASE_URL=https://YOUR-RESOURCE-NAME.openai.azure.com/openai/v1
+export AZURE_OPENAI_API_KEY=...
+
+# Microsoft Entra ID を使う場合は API key の代わりに bearer token を設定
+unset AZURE_OPENAI_API_KEY
+export AZURE_OPENAI_AUTH_TOKEN=$(az account get-access-token --resource https://cognitiveservices.azure.com --query accessToken -o tsv)
+
+# 会社環境などで token refresh したい場合は command を設定
+unset AZURE_OPENAI_AUTH_TOKEN
+export AZURE_OPENAI_AUTH_TOKEN_COMMAND='az account get-access-token --resource https://cognitiveservices.azure.com --query accessToken -o tsv'
+
+# model には Azure 側の deployment 名を指定
+xelyon --provider azure --model my-gpt-5-deployment
+```
+
+**特徴:**
+- Responses API (`/openai/v1/responses`) を使用
+- API key 認証は `api-key` ヘッダー
+- Microsoft Entra ID 認証は `Authorization: Bearer` ヘッダー
+- `AZURE_OPENAI_AUTH_TOKEN_COMMAND` を設定すると、token 未設定時または 401 受信時に bearer token を再取得します
+- 画像入力 / function calling 対応
+- `model` は Azure の deployment 名
+- OpenAI provider 用の `prompt_cache_key` / `prompt_cache_retention` は送信しません
+- `responses.store` / `responses.persist_response_id` は OpenAI provider と同じ設定を使用します
+
+`model` / `provider_models.azure.default_model` には Azure 側の **deployment 名**を入れます。deployment 名が実モデル名と異なる場合は、token limit / pricing / capability 判定用に `catalog_model` を設定してください。`catalog_model` は `gpt-5.4` や `gpt-5.5-pro` のような実モデル名で、deployment 名ではありません。
+
+API key 認証の最小設定:
+
+```bash
+xelyon doctor azure --deployment my-gpt-5-deployment --catalog-model gpt-5.4 --print-config
+```
+
+```yaml
+default_provider: azure
+
+provider_models:
+  azure:
+    default_model: my-gpt-5-deployment
+    catalog_model: gpt-5.4
+```
+
+Microsoft Entra ID 認証でも YAML は同じです。環境変数だけ API key ではなく bearer token にします。長時間実行や CI では、固定 token より `AZURE_OPENAI_AUTH_TOKEN_COMMAND` を推奨します。取得した token は process memory にだけ保持し、config/session には保存しません。
+
+```bash
+unset AZURE_OPENAI_API_KEY
+export AZURE_OPENAI_AUTH_TOKEN=$(az account get-access-token --resource https://cognitiveservices.azure.com --query accessToken -o tsv)
+```
+
+```bash
+unset AZURE_OPENAI_API_KEY
+unset AZURE_OPENAI_AUTH_TOKEN
+export AZURE_OPENAI_AUTH_TOKEN_COMMAND='az account get-access-token --resource https://cognitiveservices.azure.com --query accessToken -o tsv'
+export AZURE_OPENAI_AUTH_TOKEN_COMMAND_TIMEOUT=10s
+```
+
+`AZURE_OPENAI_AUTH_TOKEN_COMMAND` はローカル shell で実行され、stdout の最初の空でない行を bearer token として扱います。信頼できる command だけを設定してください。command は token 未設定時と 401 応答後の 1 回だけの retry 時に実行されます。
+
+複数 deployment を使う場合は、deployment ごとに `model_overrides` で catalog model を固定できます。
+
+```yaml
+provider_models:
+  azure:
+    default_model: my-gpt-5-deployment
+    catalog_model: gpt-5.4
+    model_overrides:
+      my-gpt-5-pro-deployment:
+        catalog_model: gpt-5.5-pro
+```
+
+`responses.store` / `responses.persist_response_id` は通常変更しないでください。既定値は Responses API の `previous_response_id` 継続と session reload を安定させるための推奨設定です。provider 側に response state を残せない運用だけ、[Responses API retention 設定](config.md#responses-api-retention-設定-responses高度な設定) を確認してから変更してください。
+
+よくある設定ミス:
+
+- `AZURE_OPENAI_BASE_URL` に `https://api.openai.com/v1` を入れる。Azure provider では Azure OpenAI resource の URL が必要です。
+- `AZURE_OPENAI_BASE_URL` に `/openai/deployments/<deployment>` まで入れる。XELYON は `/openai/v1/responses` を使うため、base URL は `/openai/v1` で止めます。
+- `AZURE_OPENAI_API_KEY` に OpenAI の `sk-...` key を入れる。Azure OpenAI resource key か Microsoft Entra ID bearer token を使ってください。
+- `default_model` と `catalog_model` を逆にする。`default_model` は deployment 名、`catalog_model` は実モデル名です。
+
+設定の到達性は CLI から診断できます。`doctor azure` は base URL、認証方式、deployment 解決、`catalog_model`、function calling 設定、Responses retention 設定を確認します。`--smoke` を付けると `responses.store=false` の最小リクエストを送って、実 deployment への到達性も検証します。function calling まで確認したい場合は `--tool-smoke` を使い、dummy tool call を強制します。
+
+```bash
+xelyon doctor azure
+xelyon doctor azure --deployment my-gpt-5-deployment --catalog-model gpt-5.4 --print-config
+xelyon doctor azure --deployment my-gpt-5-deployment --catalog-model gpt-5.4
+xelyon doctor azure --deployment my-gpt-5-deployment --catalog-model gpt-5.4 --smoke
+xelyon doctor azure --deployment my-gpt-5-deployment --catalog-model gpt-5.4 --tool-smoke
+xelyon doctor azure --json
+```
+
+Azure OpenAI の API error は、HTTP status に応じて原因候補を補足します。401/403 は認証・権限、404 は base URL または deployment 名、429 は quota / rate limit / capacity、tool payload rejected は `AZURE_OPENAI_FUNCTION_CALLING=0` の案内を表示します。
+
+より深い実 Azure 環境の smoke test は以下で実行できます。`AZURE_OPENAI_PRO_DEPLOYMENT` を指定した場合は GPT-5.5 Pro 系の non-streaming 経路も検証します。
+
+```bash
+export AZURE_OPENAI_BASE_URL=https://YOUR-RESOURCE-NAME.openai.azure.com/openai/v1
+export AZURE_OPENAI_DEPLOYMENT=my-gpt-5-deployment
+export AZURE_OPENAI_CATALOG_MODEL=gpt-5.4
+export AZURE_OPENAI_API_KEY=...
+# または AZURE_OPENAI_AUTH_TOKEN=...
+# または AZURE_OPENAI_AUTH_TOKEN_COMMAND='az account get-access-token --resource https://cognitiveservices.azure.com --query accessToken -o tsv'
+
+make azure-smoke
+```
+
+GitHub Actions では `Azure Smoke` workflow を手動実行できます。通常 CI では走らず、repository secrets に `AZURE_OPENAI_BASE_URL`、`AZURE_OPENAI_DEPLOYMENT`、`AZURE_OPENAI_API_KEY` / `AZURE_OPENAI_AUTH_TOKEN` / `AZURE_OPENAI_AUTH_TOKEN_COMMAND` のいずれかがある場合だけ live smoke を実行します。workflow input の `tool_smoke` を有効にすると doctor smoke で dummy tool call も強制します。
+
+### 4. Gemini
 
 ```bash
 # API キー取得: https://aistudio.google.com/app/apikey
@@ -157,7 +273,7 @@ Gemini 3 Pro / Flash は **thinking（推論）が常時 ON** です。XELYON �
 
 **注意:** Gemini 3 Pro の Function Calling には既知のバグ（空レスポンス）が報告されています。問題が発生する場合は `XELYON_DEBUG_GEMINI=1` で詳細ログを確認してください。
 
-### 4. Claude
+### 5. Claude
 
 ```bash
 # API キー取得: https://console.anthropic.com
@@ -180,7 +296,7 @@ xelyon --provider claude --model claude-opus-4-6
 - `xhigh` レベルは Opus 4.7 で `xhigh`、Opus 4.6 で `max`、Sonnet 4.6 では `high` にフォールバック
 - Claude Compaction は Opus 4.7 / Opus 4.6 / Opus 4.5 / Sonnet 4.6 で有効化対象
 
-### 5. Groq
+### 6. Groq
 
 ```bash
 # API キー取得: https://console.groq.com/keys
@@ -196,7 +312,7 @@ xelyon --provider groq --model meta-llama/llama-4-scout-17b-16e-instruct
 - 画像入力非対応
 - プロンプトキャッシュ対応（自動、50% OFF、一部モデルのみ）
 
-### 6. Ollama
+### 7. Ollama
 
 ```bash
 # インストール: https://ollama.com/download
@@ -217,7 +333,7 @@ xelyon --provider ollama --model llama3.1:8b
 - 無料
 - 画像入力非対応
 
-### 7. OpenRouter
+### 8. OpenRouter
 
 ```bash
 # API キー取得: https://openrouter.ai
@@ -232,7 +348,7 @@ xelyon --provider openrouter --model anthropic/claude-sonnet-4.6
 - OpenAI互換API
 - 画像入力対応（モデルによる）
 
-### 8. Bedrock (AWS)
+### 9. Bedrock (AWS)
 
 ```bash
 # AWS 認証情報を設定（以下のいずれか）
@@ -293,6 +409,9 @@ provider_models:
     default_model: deepseek-v4-flash
   openai:
     default_model: gpt-5.4
+  azure:
+    default_model: my-gpt-5-deployment
+    catalog_model: gpt-5.4
   gemini:
     default_model: gemini-3.1-pro-preview-customtools
   claude:
@@ -358,6 +477,7 @@ DeepSeek V4 Pro には 2026-05-05 15:59 UTC までの期間限定 75% off があ
 
 ### 画像解析
 - **OpenAI**: 高品質な画像理解
+- **Azure OpenAI**: Azure 上の GPT deployment で画像入力
 - **Gemini**: マルチモーダル対応
 - **Claude**: 画像+長文の組み合わせ
 
@@ -407,6 +527,7 @@ APIプロバイダーのダッシュボードで使用状況とレート制限�
 
 - DeepSeek: https://platform.deepseek.com/usage
 - OpenAI: https://platform.openai.com/usage
+- Azure OpenAI: Azure Portal の Azure OpenAI resource
 - Gemini: https://aistudio.google.com
 - Claude: https://console.anthropic.com
 - Groq: https://console.groq.com

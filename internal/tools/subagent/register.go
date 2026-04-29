@@ -15,6 +15,10 @@ type subAgentSpawner interface {
 	Spawn(ctx context.Context, message, taskType, model, reasoningEffort string, provider api.Provider, cfg *config.Config) (string, error)
 }
 
+type subAgentRuntimeContextSpawner interface {
+	SpawnWithRuntimeContext(ctx context.Context, message, taskType, model, reasoningEffort string, provider api.Provider, cfg *config.Config, runtimeCtx SpawnRuntimeContext) (string, error)
+}
+
 type subAgentWaiter interface {
 	Wait(ids []string, timeoutMs int) WaitResponse
 }
@@ -73,15 +77,36 @@ func (t *SpawnAgentTool) Run(execCtx tools.ExecutionContext, args map[string]str
 		taskType = "explore"
 	}
 
-	id, err := t.manager.Spawn(
-		execCtx.EffectiveContext(),
-		message,
-		taskType,
-		args["model"],
-		args["reasoning_effort"],
-		provider,
-		execCtx.EffectiveConfig(),
+	requestCtx := execCtx.EffectiveContext()
+	cfg := execCtx.EffectiveConfig()
+	model := args["model"]
+	reasoningEffort := args["reasoning_effort"]
+	var (
+		id  string
+		err error
 	)
+	if spawner, ok := t.manager.(subAgentRuntimeContextSpawner); ok {
+		id, err = spawner.SpawnWithRuntimeContext(
+			requestCtx,
+			message,
+			taskType,
+			model,
+			reasoningEffort,
+			provider,
+			cfg,
+			SpawnRuntimeContext{CurrentModel: execCtx.Model},
+		)
+	} else {
+		id, err = t.manager.Spawn(
+			requestCtx,
+			message,
+			taskType,
+			model,
+			reasoningEffort,
+			provider,
+			cfg,
+		)
+	}
 	if err != nil {
 		return fmt.Sprintf("Error: %v", err), nil, nil
 	}

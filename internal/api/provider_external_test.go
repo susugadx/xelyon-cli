@@ -27,6 +27,11 @@ func TestNewProvider_MissingAPIKey(t *testing.T) {
 			envKey:       "OPENAI_API_KEY",
 		},
 		{
+			name:         "Azure OpenAI without API key",
+			providerName: "azure",
+			envKey:       "AZURE_OPENAI_API_KEY",
+		},
+		{
 			name:         "Gemini without API key",
 			providerName: "gemini",
 			envKey:       "GEMINI_API_KEY",
@@ -48,9 +53,27 @@ func TestNewProvider_MissingAPIKey(t *testing.T) {
 			// 環境変数をクリア
 			originalValue := os.Getenv(tt.envKey)
 			os.Unsetenv(tt.envKey)
+			originalAzureAuthToken := os.Getenv("AZURE_OPENAI_AUTH_TOKEN")
+			originalAzureAuthTokenCommand := os.Getenv("AZURE_OPENAI_AUTH_TOKEN_COMMAND")
+			if tt.providerName == "azure" {
+				os.Unsetenv("AZURE_OPENAI_AUTH_TOKEN")
+				os.Unsetenv("AZURE_OPENAI_AUTH_TOKEN_COMMAND")
+			}
 			defer func() {
 				if originalValue != "" {
 					os.Setenv(tt.envKey, originalValue)
+				}
+				if tt.providerName == "azure" {
+					if originalAzureAuthToken != "" {
+						os.Setenv("AZURE_OPENAI_AUTH_TOKEN", originalAzureAuthToken)
+					} else {
+						os.Unsetenv("AZURE_OPENAI_AUTH_TOKEN")
+					}
+					if originalAzureAuthTokenCommand != "" {
+						os.Setenv("AZURE_OPENAI_AUTH_TOKEN_COMMAND", originalAzureAuthTokenCommand)
+					} else {
+						os.Unsetenv("AZURE_OPENAI_AUTH_TOKEN_COMMAND")
+					}
 				}
 			}()
 
@@ -70,6 +93,51 @@ func TestNewProvider_UnknownProvider(t *testing.T) {
 
 	if !strings.Contains(err.Error(), "unknown provider") {
 		t.Errorf("Expected 'unknown provider' in error, got: %v", err)
+	}
+}
+
+func TestNewProvider_AzureRequiresBaseURL(t *testing.T) {
+	t.Setenv("AZURE_OPENAI_API_KEY", "test-azure-key")
+	t.Setenv("AZURE_OPENAI_AUTH_TOKEN", "")
+	t.Setenv("AZURE_OPENAI_AUTH_TOKEN_COMMAND", "")
+	t.Setenv("AZURE_OPENAI_BASE_URL", "")
+
+	_, err := api.NewProvider("azure")
+	if err == nil {
+		t.Fatal("NewProvider(\"azure\") error = nil, want missing base URL")
+	}
+	if !strings.Contains(err.Error(), "AZURE_OPENAI_BASE_URL not set") {
+		t.Fatalf("NewProvider(\"azure\") error = %v, want AZURE_OPENAI_BASE_URL not set", err)
+	}
+}
+
+func TestNewProvider_AzureWithEntraToken(t *testing.T) {
+	t.Setenv("AZURE_OPENAI_API_KEY", "")
+	t.Setenv("AZURE_OPENAI_AUTH_TOKEN", "test-entra-token")
+	t.Setenv("AZURE_OPENAI_AUTH_TOKEN_COMMAND", "")
+	t.Setenv("AZURE_OPENAI_BASE_URL", "https://example.openai.azure.com/openai/v1")
+
+	provider, err := api.NewProvider("azure")
+	if err != nil {
+		t.Fatalf("NewProvider(\"azure\") with Entra token failed: %v", err)
+	}
+	if provider.Name() != "Azure OpenAI" {
+		t.Fatalf("NewProvider(\"azure\") Name() = %q, want Azure OpenAI", provider.Name())
+	}
+}
+
+func TestNewProvider_AzureWithEntraTokenCommand(t *testing.T) {
+	t.Setenv("AZURE_OPENAI_API_KEY", "")
+	t.Setenv("AZURE_OPENAI_AUTH_TOKEN", "")
+	t.Setenv("AZURE_OPENAI_AUTH_TOKEN_COMMAND", "printf test-entra-token")
+	t.Setenv("AZURE_OPENAI_BASE_URL", "https://example.openai.azure.com/openai/v1")
+
+	provider, err := api.NewProvider("azure")
+	if err != nil {
+		t.Fatalf("NewProvider(\"azure\") with Entra token command failed: %v", err)
+	}
+	if provider.Name() != "Azure OpenAI" {
+		t.Fatalf("NewProvider(\"azure\") Name() = %q, want Azure OpenAI", provider.Name())
 	}
 }
 
@@ -137,6 +205,27 @@ func TestNewProvider_SuccessPaths(t *testing.T) {
 			wantName:     "OpenAI",
 		},
 		{
+			name:         "Azure OpenAI with API key and base URL",
+			providerName: "azure",
+			envKey:       "AZURE_OPENAI_API_KEY",
+			envValue:     "test-azure-key",
+			wantName:     "Azure OpenAI",
+		},
+		{
+			name:         "Azure OpenAI display name alias",
+			providerName: "Azure OpenAI",
+			envKey:       "AZURE_OPENAI_API_KEY",
+			envValue:     "test-azure-key",
+			wantName:     "Azure OpenAI",
+		},
+		{
+			name:         "Azure key with spaces",
+			providerName: " azure ",
+			envKey:       "AZURE_OPENAI_API_KEY",
+			envValue:     "test-azure-key",
+			wantName:     "Azure OpenAI",
+		},
+		{
 			name:         "Gemini with API key",
 			providerName: "gemini",
 			envKey:       "GEMINI_API_KEY",
@@ -170,11 +259,23 @@ func TestNewProvider_SuccessPaths(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			originalValue := os.Getenv(tt.envKey)
 			os.Setenv(tt.envKey, tt.envValue)
+			originalAzureBaseURL := os.Getenv("AZURE_OPENAI_BASE_URL")
+			normalizedProvider := strings.ToLower(strings.TrimSpace(tt.providerName))
+			if normalizedProvider == "azure" || normalizedProvider == "azure openai" {
+				os.Setenv("AZURE_OPENAI_BASE_URL", "https://example.openai.azure.com/openai/v1")
+			}
 			defer func() {
 				if originalValue != "" {
 					os.Setenv(tt.envKey, originalValue)
 				} else {
 					os.Unsetenv(tt.envKey)
+				}
+				if normalizedProvider == "azure" || normalizedProvider == "azure openai" {
+					if originalAzureBaseURL != "" {
+						os.Setenv("AZURE_OPENAI_BASE_URL", originalAzureBaseURL)
+					} else {
+						os.Unsetenv("AZURE_OPENAI_BASE_URL")
+					}
 				}
 			}()
 
@@ -194,7 +295,7 @@ func TestNewProvider_SuccessPaths(t *testing.T) {
 
 func TestIsRegisteredProvider(t *testing.T) {
 	// 全 LLM プロバイダーが登録されていること
-	registered := []string{"deepseek", "claude", "anthropic", "openai", "gemini", "groq", "ollama", "openrouter", "bedrock"}
+	registered := []string{"deepseek", "claude", "anthropic", "openai", "azure", "gemini", "groq", "ollama", "openrouter", "bedrock"}
 	for _, name := range registered {
 		if !api.IsRegisteredProvider(name) {
 			t.Errorf("IsRegisteredProvider(%q) = false, want true", name)
@@ -207,6 +308,12 @@ func TestIsRegisteredProvider(t *testing.T) {
 	}
 	if !api.IsRegisteredProvider("OPENAI") {
 		t.Error("IsRegisteredProvider should be case-insensitive")
+	}
+	if !api.IsRegisteredProvider(" azure ") {
+		t.Error("IsRegisteredProvider should trim surrounding spaces")
+	}
+	if !api.IsRegisteredProvider("Azure OpenAI") {
+		t.Error("IsRegisteredProvider should resolve provider display-name aliases")
 	}
 
 	// 未登録の名前
@@ -222,7 +329,7 @@ func TestListProviders(t *testing.T) {
 	providers := api.ListProviders()
 
 	// 全 LLM プロバイダーが含まれること
-	required := []string{"bedrock", "claude", "deepseek", "gemini", "groq", "ollama", "openai", "openrouter"}
+	required := []string{"azure", "bedrock", "claude", "deepseek", "gemini", "groq", "ollama", "openai", "openrouter"}
 	for _, name := range required {
 		found := false
 		for _, p := range providers {

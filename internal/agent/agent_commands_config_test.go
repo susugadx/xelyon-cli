@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/susugadx/xelyon-cli/internal/api"
+	_ "github.com/susugadx/xelyon-cli/internal/api/providers/azure"
 	_ "github.com/susugadx/xelyon-cli/internal/api/providers/ollama"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/history"
@@ -333,5 +334,112 @@ func TestHandleUseCommand_SwitchesAliasOwnerWithinSameRuntimeIdentity(t *testing
 	}
 	if agent.session == nil || agent.session.Model != "claude-custom" {
 		t.Fatalf("session.Model = %q, want %q", agent.session.Model, "claude-custom")
+	}
+}
+
+func TestHandleUseCommand_AzureDisplayNameUsesCanonicalConfigOwner(t *testing.T) {
+	t.Setenv("AZURE_OPENAI_API_KEY", "test-azure-key")
+	t.Setenv("AZURE_OPENAI_BASE_URL", "https://example.openai.azure.com/openai/v1")
+
+	var out bytes.Buffer
+	cfg := newProjectMapDisabledConfig()
+	cfg.SetProviderModelConfig("azure", config.ProviderModelConfig{
+		DefaultModel: "corp-gpt55-deployment",
+		CatalogModel: "gpt-5.5",
+	})
+
+	agent := &Agent{
+		ProviderName:      "openai",
+		ProviderConfigKey: "openai",
+		CurrentModel:      "gpt-5.4",
+		CurrentProvider:   &mockCacheClearableProviderForModel{name: "openai"},
+		Runtime: &AgentRuntime{
+			Config: cfg,
+			UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
+		},
+		agentConversationState: agentConversationState{
+			session: history.NewSession("gpt-5.4"),
+		},
+	}
+
+	if result := handleUseCommand(agent, []string{"Azure OpenAI"}); !result {
+		t.Fatal("handleUseCommand() = false, want true")
+	}
+	if agent.ProviderName != "azure" {
+		t.Fatalf("ProviderName = %q, want azure", agent.ProviderName)
+	}
+	if agent.ProviderConfigKey != "azure" {
+		t.Fatalf("ProviderConfigKey = %q, want azure", agent.ProviderConfigKey)
+	}
+	if providerConfigKeyFromProvider(agent.CurrentProvider) != "azure" {
+		t.Fatalf("provider config key = %q, want azure", providerConfigKeyFromProvider(agent.CurrentProvider))
+	}
+	if agent.CurrentModel != "corp-gpt55-deployment" {
+		t.Fatalf("CurrentModel = %q, want configured Azure deployment", agent.CurrentModel)
+	}
+	if agent.session == nil || agent.session.ProviderName != "azure" || agent.session.ProviderConfigKey != "azure" {
+		t.Fatalf("session provider identity = (%q, %q), want (azure, azure)", agent.session.ProviderName, agent.session.ProviderConfigKey)
+	}
+}
+
+func TestHandleUseCommand_AzureWithoutDeploymentShowsActionableError(t *testing.T) {
+	t.Setenv("AZURE_OPENAI_API_KEY", "test-azure-key")
+	t.Setenv("AZURE_OPENAI_BASE_URL", "https://example.openai.azure.com/openai/v1")
+
+	var out bytes.Buffer
+	cfg := newProjectMapDisabledConfig()
+	agent := &Agent{
+		ProviderName:      "openai",
+		ProviderConfigKey: "openai",
+		CurrentModel:      "gpt-5.4",
+		CurrentProvider:   &mockCacheClearableProviderForModel{name: "openai"},
+		Runtime: &AgentRuntime{
+			Config: cfg,
+			UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
+		},
+		agentConversationState: agentConversationState{
+			session: history.NewSession("gpt-5.4"),
+		},
+	}
+
+	if result := handleUseCommand(agent, []string{"azure"}); !result {
+		t.Fatal("handleUseCommand() = false, want true")
+	}
+	if !strings.Contains(out.String(), "deployment is not configured") {
+		t.Fatalf("output = %q, want actionable Azure deployment error", out.String())
+	}
+	if agent.ProviderName != "openai" {
+		t.Fatalf("ProviderName = %q, want openai on failed switch", agent.ProviderName)
+	}
+}
+
+func TestHandleUseCommand_AzureWithExplicitDeploymentAllowsPlaceholderName(t *testing.T) {
+	t.Setenv("AZURE_OPENAI_API_KEY", "test-azure-key")
+	t.Setenv("AZURE_OPENAI_BASE_URL", "https://example.openai.azure.com/openai/v1")
+
+	var out bytes.Buffer
+	cfg := newProjectMapDisabledConfig()
+	agent := &Agent{
+		ProviderName:      "openai",
+		ProviderConfigKey: "openai",
+		CurrentModel:      "gpt-5.4",
+		CurrentProvider:   &mockCacheClearableProviderForModel{name: "openai"},
+		Runtime: &AgentRuntime{
+			Config: cfg,
+			UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
+		},
+		agentConversationState: agentConversationState{
+			session: history.NewSession("gpt-5.4"),
+		},
+	}
+
+	if result := handleUseCommand(agent, []string{"azure", "azure-gpt-5.4"}); !result {
+		t.Fatal("handleUseCommand() = false, want true")
+	}
+	if agent.ProviderName != "azure" {
+		t.Fatalf("ProviderName = %q, want azure", agent.ProviderName)
+	}
+	if agent.CurrentModel != "azure-gpt-5.4" {
+		t.Fatalf("CurrentModel = %q, want explicit deployment name", agent.CurrentModel)
 	}
 }

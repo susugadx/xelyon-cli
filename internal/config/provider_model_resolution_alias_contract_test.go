@@ -126,6 +126,35 @@ func TestResolveProviderForModel_PreservesConfiguredOwnerBeforeNameInference(t *
 	}
 }
 
+func TestResolveProviderForModel_PrefersCurrentProviderSelectedModelWhenNamesCollide(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.DefaultProvider = "deepseek"
+	cfg.SetProviderModelConfig("azure", ProviderModelConfig{
+		DefaultModel: "gpt-5.4",
+		CatalogModel: "gpt-5.4",
+	})
+
+	if got := cfg.ResolveProviderForModel("azure", "gpt-5.4"); got != "azure" {
+		t.Fatalf("ResolveProviderForModel(%q, %q) = %q, want %q", "azure", "gpt-5.4", got, "azure")
+	}
+}
+
+func TestGetExplicitProviderDefaultModel_ExcludesBuiltInProviderDefault(t *testing.T) {
+	cfg := DefaultConfig()
+	if got := cfg.GetExplicitProviderDefaultModel("azure"); got != "" {
+		t.Fatalf("GetExplicitProviderDefaultModel(azure) = %q, want empty without explicit provider_models entry", got)
+	}
+
+	cfg.SetProviderModelConfig("Azure OpenAI", ProviderModelConfig{
+		DefaultModel: "corp-gpt55-deployment",
+		CatalogModel: "gpt-5.5",
+	})
+
+	if got := cfg.GetExplicitProviderDefaultModel("azure"); got != "corp-gpt55-deployment" {
+		t.Fatalf("GetExplicitProviderDefaultModel(azure) = %q, want explicit Azure deployment", got)
+	}
+}
+
 func TestGetProviderModelConfig_AliasOverridesCanonicalDefaults(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.SetProviderModelConfig("anthropic", ProviderModelConfig{

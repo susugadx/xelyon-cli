@@ -12,6 +12,8 @@ import (
 	"testing"
 
 	"github.com/fatih/color"
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/susugadx/xelyon-cli/internal/agent"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
@@ -63,6 +65,36 @@ func resetRootFlagsForTest() {
 	noUpdateCheck = false
 	imageFlag = ""
 	noTUI = false
+	doctorDeploymentFlag = ""
+	doctorCatalogModelFlag = ""
+	doctorSmokeFlag = false
+	doctorToolSmokeFlag = false
+	doctorTimeoutFlag = defaultAzureDoctorTimeout
+	doctorJSONFlag = false
+	doctorPrintConfigFlag = false
+	resetCommandFlagsForTest(rootCmd)
+}
+
+func resetCommandFlagsForTest(cmd *cobra.Command) {
+	if cmd == nil {
+		return
+	}
+	cmd.SilenceUsage = false
+	resetFlagSetForTest(cmd.Flags())
+	resetFlagSetForTest(cmd.PersistentFlags())
+	resetFlagSetForTest(cmd.InheritedFlags())
+	for _, child := range cmd.Commands() {
+		resetCommandFlagsForTest(child)
+	}
+}
+
+func resetFlagSetForTest(flags interface {
+	VisitAll(fn func(*pflag.Flag))
+}) {
+	flags.VisitAll(func(flag *pflag.Flag) {
+		flag.Changed = false
+		_ = flag.Value.Set(flag.DefValue)
+	})
 }
 
 func TestRootCommand_PositionalQueryDefaultsToOnce(t *testing.T) {

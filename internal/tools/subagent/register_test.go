@@ -49,6 +49,16 @@ func (s *spawnToolStub) Spawn(ctx context.Context, message, taskType, model, rea
 	return "sub-boundary", nil
 }
 
+type spawnToolRuntimeContextStub struct {
+	spawnToolStub
+	runtimeCtx SpawnRuntimeContext
+}
+
+func (s *spawnToolRuntimeContextStub) SpawnWithRuntimeContext(ctx context.Context, message, taskType, model, reasoningEffort string, provider api.Provider, cfg *config.Config, runtimeCtx SpawnRuntimeContext) (string, error) {
+	s.runtimeCtx = runtimeCtx
+	return s.Spawn(ctx, message, taskType, model, reasoningEffort, provider, cfg)
+}
+
 type waitToolStub struct {
 	ids       []string
 	timeoutMs int
@@ -182,6 +192,29 @@ func TestSpawnAgentToolRun_UsesSpawnerBoundary(t *testing.T) {
 	}
 	if parsed["agent_id"] != "sub-boundary" || parsed["status"] != "running" {
 		t.Fatalf("unexpected parsed payload: %+v", parsed)
+	}
+}
+
+func TestSpawnAgentToolRun_ForwardsCurrentModelToRuntimeAwareSpawner(t *testing.T) {
+	stub := &spawnToolRuntimeContextStub{}
+	tool := NewSpawnAgentTool(stub)
+	execCtx := tools.ExecutionContext{
+		Context:  context.Background(),
+		Provider: &registerTestProvider{},
+		Model:    "corp-current-deployment",
+		Config:   config.DefaultConfig(),
+		Stdin:    strings.NewReader(""),
+	}
+
+	result, _, err := tool.Run(execCtx, map[string]string{"message": "scope check"})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if !strings.Contains(result, "sub-boundary") {
+		t.Fatalf("Run() = %q, want sub-boundary response", result)
+	}
+	if stub.runtimeCtx.CurrentModel != "corp-current-deployment" {
+		t.Fatalf("CurrentModel forwarded = %q, want parent current model", stub.runtimeCtx.CurrentModel)
 	}
 }
 

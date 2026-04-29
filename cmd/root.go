@@ -52,7 +52,9 @@ Examples:
   xelyon --interactive "explain this project"      # Force interactive REPL
   xelyon --provider gemini --model gemini-2.5-flash # Use Gemini
   xelyon --provider openai --model gpt-5.2         # Use OpenAI GPT-5.2
+  xelyon doctor azure --deployment my-gpt-5-deployment --smoke # Diagnose Azure OpenAI
   xelyon -p deepseek -m deepseek-chat             # Short flags`,
+	Args: cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		resolvedOutputFormat, err := resolveOutputFormat(outputFormat, headless)
 		if err != nil {
@@ -96,6 +98,9 @@ Examples:
 
 		model := getModel(cfg)
 		provider := getProvider(cfg)
+		if err := validateSelectedProviderModel(cfg, provider, model); err != nil {
+			return err
+		}
 		query := strings.Join(args, " ")
 
 		switch mode {
@@ -167,6 +172,8 @@ func init() {
 
 	// 新規: --no-tui フラグ（TUI無効化）
 	rootCmd.Flags().BoolVar(&noTUI, "no-tui", false, "Disable alternate screen TUI (use classic REPL)")
+
+	rootCmd.AddCommand(newDoctorCommand())
 }
 
 func Execute() {

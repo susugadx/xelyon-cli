@@ -51,7 +51,7 @@ func newHeadlessRunner(query, model string, provider api.Provider, cfg *config.C
 	agent.setAutoApprove(true) // Headlessモードは自動承認（SafetyLow以外）
 
 	if cfg != nil && cfg.SubAgentPrompt != "" {
-		agent.SystemPrompt = prompt.BuildProviderSystemPromptWithConfig(cfg.SubAgentPrompt, provider.Name(), model, agent.cfg())
+		agent.SystemPrompt = prompt.BuildProviderSystemPromptWithConfig(cfg.SubAgentPrompt, agent.ProviderName, model, agent.cfg())
 	}
 
 	// プロジェクト設定読み込み（xelyon.yaml）
@@ -67,7 +67,7 @@ func newHeadlessRunner(query, model string, provider api.Provider, cfg *config.C
 
 	// Headless Mode は Normal Mode 相当: 親と同じツール除外
 	allowSubAgents := cfg == nil || cfg.SubAgentPrompt == ""
-	toolVisibility := resolveToolVisibilityPolicy(provider.Name(), model, toolSurfacePhaseNormal, toolVisibilityOptions{
+	toolVisibility := resolveToolVisibilityPolicy(agent.ProviderName, model, toolSurfacePhaseNormal, toolVisibilityOptions{
 		allowSubAgents: allowSubAgents,
 	})
 	agent.registry().SetExcludedTools(toolVisibility.excluded())

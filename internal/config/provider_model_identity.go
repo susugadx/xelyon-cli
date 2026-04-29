@@ -22,7 +22,7 @@ func SameProviderRuntimeIdentity(a, b string) bool {
 // ActiveProviderConfigKey は active provider/session の正確な config 側 owner key を返す。
 // 明示 provider alias がある場合は default_provider 側の表記に書き換えない。
 func ActiveProviderConfigKey(provider string) string {
-	return NormalizeProviderName(provider)
+	return llmcatalog.ProviderConfigKey(provider)
 }
 
 // FallbackProviderConfigKey は汎用的な config 側 lookup key を返す。
@@ -31,7 +31,7 @@ func FallbackProviderConfigKey(provider, defaultProvider string) string {
 	if normalizedProvider := ActiveProviderConfigKey(provider); normalizedProvider != "" {
 		return normalizedProvider
 	}
-	return NormalizeProviderName(defaultProvider)
+	return ActiveProviderConfigKey(defaultProvider)
 }
 
 // PreferredProviderConfigKey は fallback lookup 用の後方互換エイリアス。
@@ -51,8 +51,8 @@ func (c *Config) PreferredProviderConfigKey(provider string) string {
 // default_provider が別 runtime identity に編集されていれば、その編集後 provider を優先する。
 // それ以外は current session の正確な provider config key を優先し、最後に current default_provider へ fallback する。
 func DefaultModelSyncProviderKey(currentSessionProviderConfigKey, currentDefaultProvider, initialDefaultProvider string) string {
-	normalizedCurrentDefault := NormalizeProviderName(currentDefaultProvider)
-	normalizedInitialDefault := NormalizeProviderName(initialDefaultProvider)
+	normalizedCurrentDefault := ActiveProviderConfigKey(currentDefaultProvider)
+	normalizedInitialDefault := ActiveProviderConfigKey(initialDefaultProvider)
 	if normalizedCurrentDefault != normalizedInitialDefault && !SameProviderRuntimeIdentity(normalizedCurrentDefault, normalizedInitialDefault) {
 		return normalizedCurrentDefault
 	}

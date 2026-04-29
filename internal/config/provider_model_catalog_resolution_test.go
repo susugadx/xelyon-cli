@@ -74,3 +74,37 @@ provider_models:
 		t.Fatalf("ModelOverrides[other-deployment] = %#v, want catalog_model and max_output_tokens", override)
 	}
 }
+
+func TestProviderModelsDisplayNameKeyCanonicalizesToOwner(t *testing.T) {
+	cfg, err := loadConfigFromData([]byte(`
+provider_models:
+  Azure OpenAI:
+    default_model: corp-gpt55-deployment
+    catalog_model: gpt-5.5
+    max_output_tokens: 12345
+`))
+	if err != nil {
+		t.Fatalf("loadConfigFromData() error = %v", err)
+	}
+
+	if got := cfg.GetSelectedModelForProvider("azure"); got != "corp-gpt55-deployment" {
+		t.Fatalf("GetSelectedModelForProvider(azure) = %q, want display-name deployment", got)
+	}
+	if got := cfg.ModelCatalogName("azure", "corp-gpt55-deployment"); got != "gpt-5.5" {
+		t.Fatalf("ModelCatalogName(azure, deployment) = %q, want gpt-5.5", got)
+	}
+	if _, ok := cfg.ProviderModels["azure openai"]; ok {
+		t.Fatalf("ProviderModels contains display-name normalized key: %#v", cfg.ProviderModels)
+	}
+	if got := cfg.ProviderModels["azure"].MaxOutputTokens; got != 12345 {
+		t.Fatalf("ProviderModels[azure].MaxOutputTokens = %d, want 12345", got)
+	}
+
+	saved := cfg.ProviderModelsForSave()
+	if _, ok := saved["azure"]; !ok {
+		t.Fatalf("ProviderModelsForSave() = %#v, want azure key", saved)
+	}
+	if _, ok := saved["azure openai"]; ok {
+		t.Fatalf("ProviderModelsForSave() contains display-name normalized key: %#v", saved)
+	}
+}

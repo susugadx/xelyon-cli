@@ -29,20 +29,31 @@ var (
 func RegisterProvider(name string, factory ProviderFactory) {
 	providerRegistryMu.Lock()
 	defer providerRegistryMu.Unlock()
-	providerRegistry[strings.ToLower(name)] = factory
+	providerRegistry[normalizeProviderRegistryName(name)] = factory
 }
 
 // getRegisteredProvider は登録済みプロバイダーを取得
 func getRegisteredProvider(name string) (ProviderFactory, bool) {
 	providerRegistryMu.RLock()
 	defer providerRegistryMu.RUnlock()
-	factory, ok := providerRegistry[strings.ToLower(name)]
+	factory, ok := providerRegistry[normalizeProviderRegistryName(name)]
 	return factory, ok
+}
+
+func normalizeProviderRegistryName(name string) string {
+	return strings.ToLower(strings.TrimSpace(name))
 }
 
 // IsRegisteredProvider は指定名がレジストリに登録済みか返す
 func IsRegisteredProvider(name string) bool {
-	_, ok := getRegisteredProvider(name)
+	if _, ok := getRegisteredProvider(name); ok {
+		return true
+	}
+	canonicalProviderName := config.CanonicalProviderName(name)
+	if canonicalProviderName == "" || canonicalProviderName == normalizeProviderRegistryName(name) {
+		return false
+	}
+	_, ok := getRegisteredProvider(canonicalProviderName)
 	return ok
 }
 
@@ -336,6 +347,13 @@ func NewProvider(providerName string) (Provider, error) {
 	if factory, ok := getRegisteredProvider(providerName); ok {
 		apiKey := getAPIKeyForProvider(providerName)
 		return factory(apiKey)
+	}
+	canonicalProviderName := config.CanonicalProviderName(providerName)
+	if canonicalProviderName != "" && canonicalProviderName != normalizeProviderRegistryName(providerName) {
+		if factory, ok := getRegisteredProvider(canonicalProviderName); ok {
+			apiKey := getAPIKeyForProvider(canonicalProviderName)
+			return factory(apiKey)
+		}
 	}
 
 	return nil, fmt.Errorf("unknown provider: %s", providerName)

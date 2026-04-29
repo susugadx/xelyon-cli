@@ -22,8 +22,9 @@ func (p *Provider) buildChatResponsesRequest(ctx context.Context, systemPrompt s
 	return openairesponses.BuildChatRequest(openairesponses.ChatRequestOptions{
 		Base:               p.newBaseResponsesRequestOptions(ctx, systemPrompt, modelIdentity),
 		SystemPrompt:       systemPrompt,
+		CompactedInput:     api.CompactedInputItemsFromContext(ctx),
 		History:            history,
-		PreviousResponseID: p.lastResponseID,
+		PreviousResponseID: previousResponseIDForRequest(ctx, p.lastResponseID),
 	})
 }
 
@@ -37,11 +38,12 @@ func (p *Provider) buildImageResponsesRequest(
 ) ResponsesRequest {
 	modelIdentity := newOpenAIResponsesModelIdentity(ctx, model)
 	return openairesponses.BuildImageRequest(openairesponses.ImageRequestOptions{
-		Base:         p.newBaseResponsesRequestOptions(ctx, systemPrompt, modelIdentity),
-		SystemPrompt: systemPrompt,
-		History:      history,
-		UserMessage:  userMessage,
-		Image:        image,
+		Base:           p.newBaseResponsesRequestOptions(ctx, systemPrompt, modelIdentity),
+		SystemPrompt:   systemPrompt,
+		CompactedInput: api.CompactedInputItemsFromContext(ctx),
+		History:        history,
+		UserMessage:    userMessage,
+		Image:          image,
 	})
 }
 
@@ -51,11 +53,12 @@ func newOpenAIResponsesModelIdentity(ctx context.Context, model string) openaire
 }
 
 func (p *Provider) newBaseResponsesRequestOptions(ctx context.Context, systemPrompt string, model openairesponses.ModelIdentity) openairesponses.BaseRequestOptions {
+	cfg := config.FromContext(ctx)
 	options := openairesponses.BaseRequestOptions{
 		Model:                model,
 		MaxOutputTokens:      api.GetMaxOutputTokens(ctx, "openai", model.RequestName()),
 		Stream:               shouldStreamResponses(model.CatalogName()),
-		Store:                true,
+		Store:                cfg.ResponsesStoreEnabled(),
 		Tools:                GetResponsesToolDefinitionsWithContext(ctx, p.mcpTools),
 		ToolChoice:           openairesponses.BuildFunctionToolChoice(p.toolChoice),
 		PromptCacheKey:       BuildPromptCacheKey(model.RequestName(), systemPrompt),
@@ -64,6 +67,13 @@ func (p *Provider) newBaseResponsesRequestOptions(ctx context.Context, systemPro
 
 	options.Reasoning = responsesReasoningConfig(ctx, model)
 	return options
+}
+
+func previousResponseIDForRequest(ctx context.Context, responseID string) string {
+	if !config.FromContext(ctx).ResponsesStoreEnabled() {
+		return ""
+	}
+	return responseID
 }
 
 func responsesReasoningConfig(ctx context.Context, model openairesponses.ModelIdentity) *ReasoningConfig {

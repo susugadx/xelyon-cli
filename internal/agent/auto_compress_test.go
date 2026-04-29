@@ -498,6 +498,12 @@ func TestDefaultCompressionModel_AnthropicAlias(t *testing.T) {
 	}
 }
 
+func TestDefaultCompressionModel_AzureUsesCurrentDeploymentFallback(t *testing.T) {
+	if got := defaultCompressionModel("azure"); got != "" {
+		t.Fatalf("defaultCompressionModel(azure) = %q, want empty so current deployment is used", got)
+	}
+}
+
 func TestCompressWithModel_Fallback(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Compression.Model = ""
@@ -510,5 +516,20 @@ func TestCompressWithModel_Fallback(t *testing.T) {
 
 	if got := agent.getCompressionModel(); got != "llama-3.3-70b" {
 		t.Fatalf("getCompressionModel() = %q, want current model", got)
+	}
+}
+
+func TestCompressWithModel_AzureUsesCurrentDeployment(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Compression.Model = ""
+
+	agent := &Agent{
+		CurrentModel: "corp-gpt55-deployment",
+		ProviderName: "azure",
+		Runtime:      NewAgentRuntimeWithConfig(cfg),
+	}
+
+	if got := agent.getCompressionModel(); got != "corp-gpt55-deployment" {
+		t.Fatalf("getCompressionModel() = %q, want current Azure deployment", got)
 	}
 }

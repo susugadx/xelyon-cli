@@ -71,9 +71,15 @@ func (a *Agent) CompressWithCompactAPI(ctx context.Context) error {
 // buildFullInputItems は History から完全な InputItem リストを構築
 // Compact API に送るためのフル会話ウィンドウ
 func (a *Agent) buildFullInputItems() []api.InputItem {
-	// 既に圧縮モードの場合は圧縮済みアイテムを使用
+	// 既に圧縮モードの場合は、圧縮済み state の後ろに現在の履歴を継ぎ足す。
 	if a.isCompactedMode && len(a.compactedItems) > 0 {
-		return a.compactedItems
+		input := append([]api.InputItem(nil), a.compactedItems...)
+		if len(a.History) == 0 {
+			return input
+		}
+		pruned, metrics := CompactOldToolResults(a.History, compactAPIPreprocessMaxLines, compactAPIPreprocessHeadLines, compactAPIPreprocessTailLines)
+		a.addCompactionMetrics(metrics)
+		return append(input, api.ConvertHistoryToInputItems(pruned)...)
 	}
 
 	// 古いツール結果を截断してから InputItem に変換（トークン節約）

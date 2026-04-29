@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
@@ -51,7 +50,9 @@ func NewAgentWithRuntime(model string, provider api.Provider, headless bool, run
 	changeStorage := newAgentChangeStorage(out)
 	mcpManager := setupMCPManager(cfg, headless, out, errOut, runtime.effectiveRegistry())
 	lspClient := newAgentLSPClient(cfg, errOut)
-	toolVisibility := resolveToolVisibilityPolicy(provider.Name(), model, toolSurfacePhaseNormal, toolVisibilityOptions{allowSubAgents: true})
+	providerRuntimeName := providerRuntimeNameFromProvider(provider)
+	providerConfigKey := providerConfigKeyFromProvider(provider)
+	toolVisibility := resolveToolVisibilityPolicy(providerRuntimeName, model, toolSurfacePhaseNormal, toolVisibilityOptions{allowSubAgents: true})
 
 	configureMCPTools(provider, mcpManager.GetTools(), errOut)
 	runtime.effectiveRegistry().SetExcludedTools(toolVisibility.excluded())
@@ -63,14 +64,14 @@ func NewAgentWithRuntime(model string, provider api.Provider, headless bool, run
 		Model:             model,
 		CurrentModel:      model,
 		CurrentProvider:   provider,
-		ProviderName:      strings.ToLower(provider.Name()),
-		ProviderConfigKey: providerConfigKeyFromProvider(provider),
+		ProviderName:      providerRuntimeName,
+		ProviderConfigKey: providerConfigKey,
 		Runtime:           runtime,
 		History:           []api.Message{},
 		mcpManager:        mcpManager,
 		lspClient:         lspClient,
 		SystemPrompt:      systemPrompt,
-		Stats:             NewSessionStats(strings.ToLower(provider.Name()), model),
+		Stats:             NewSessionStats(providerRuntimeName, model),
 		ToolCache:         toolCache,
 		LocatorRegistry:   locator.NewRegistry(),
 		status:            statusHolder{status: defaultStatus()},
@@ -140,13 +141,14 @@ func setupMCPManager(cfg *config.Config, headless bool, out, errOut io.Writer, r
 }
 
 func buildAgentSystemPrompt(provider api.Provider, model string, cfg *config.Config, manager *mcp.Manager) string {
-	systemPrompt := prompt.GetSystemPromptForProvider(provider.Name(), model)
+	providerName := providerRuntimeNameFromProvider(provider)
+	systemPrompt := prompt.GetSystemPromptForProvider(providerName, model)
 	if manager != nil && len(manager.GetTools()) > 0 {
 		systemPrompt += buildMCPToolsPrompt(manager)
 	}
 
 	// プロバイダー別プレフィックスを Workflow Rules の直前に注入
-	return prompt.BuildProviderSystemPromptWithConfig(systemPrompt, provider.Name(), model, cfg)
+	return prompt.BuildProviderSystemPromptWithConfig(systemPrompt, providerName, model, cfg)
 }
 
 func newAgentLSPClient(cfg *config.Config, errOut io.Writer) *lsp.Client {

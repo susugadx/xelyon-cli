@@ -257,6 +257,10 @@ func handleUseCommand(agent *Agent, args []string) bool {
 	}
 
 	providerName := args[0]
+	requestedModel := ""
+	if len(args) >= 2 {
+		requestedModel = args[1]
+	}
 
 	// レジストリで登録済みかチェック
 	if !api.IsRegisteredProvider(providerName) {
@@ -266,7 +270,7 @@ func handleUseCommand(agent *Agent, args []string) bool {
 	}
 
 	// 既に同じプロバイダーの場合でも、モデルが指定されていれば切り替え
-	requestedProviderConfigKey := config.NormalizeProviderName(providerName)
+	requestedProviderConfigKey := config.ActiveProviderConfigKey(providerName)
 	if len(args) < 2 && requestedProviderConfigKey != "" && requestedProviderConfigKey == agent.currentProviderConfigKey() {
 		yellow.Fprintf(out, "Already using %s (model: %s)\n", providerName, agent.CurrentModel)
 		yellow.Fprintln(out, "Hint: Use '/use <provider> <model>' to change model")
@@ -274,7 +278,7 @@ func handleUseCommand(agent *Agent, args []string) bool {
 	}
 
 	// プロバイダー切り替え実行
-	if err := agent.SwitchProvider(providerName); err != nil {
+	if err := agent.switchProvider(providerName, requestedModel); err != nil {
 		red.Fprintf(out, "❌ %v\n", err)
 
 		// API キー設定方法を表示
@@ -285,14 +289,6 @@ func handleUseCommand(agent *Agent, args []string) bool {
 			}
 		}
 		return true
-	}
-
-	// モデル指定がある場合は追加でモデルを切り替え
-	if len(args) >= 2 {
-		newModel := args[1]
-		oldModel := agent.CurrentModel
-		agent.setCurrentModelAndSync(newModel)
-		green.Fprintf(out, "✅ Model: %s → %s\n", oldModel, newModel)
 	}
 
 	if agent.CurrentProvider != nil {
@@ -310,7 +306,7 @@ func handleProvidersCommand(agent *Agent) bool {
 	if currentProviderConfigKey != "" && api.IsRegisteredProvider(currentProviderConfigKey) {
 		found := false
 		for _, provider := range providers {
-			if config.NormalizeProviderName(provider) == currentProviderConfigKey {
+			if config.ActiveProviderConfigKey(provider) == currentProviderConfigKey {
 				found = true
 				break
 			}
@@ -328,7 +324,7 @@ func handleProvidersCommand(agent *Agent) bool {
 
 	for _, provider := range providers {
 		// 表示上の current は session が所有する exact provider config key に合わせる。
-		isCurrent := currentProviderConfigKey != "" && config.NormalizeProviderName(provider) == currentProviderConfigKey
+		isCurrent := currentProviderConfigKey != "" && config.ActiveProviderConfigKey(provider) == currentProviderConfigKey
 		hasAPIKey := IsAPIKeyAvailable(provider)
 
 		// アイコン

@@ -203,7 +203,7 @@ var Sections = map[string]SectionInfo{
 			"enabled":        "サブエージェント機能を有効化",
 			"default_model":  "既定モデル（空でメイン provider の最安モデルを自動選択）",
 			"default_effort": "既定推論強度（off / low / medium / high）",
-			"max_concurrent": "同時実行上限（デフォルト: 5）",
+			"max_concurrent": "同時実行上限（デフォルト: 1）",
 		},
 		FieldTypes: map[string]string{
 			"enabled":        "bool",

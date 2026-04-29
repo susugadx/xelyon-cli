@@ -61,6 +61,12 @@ default_provider: deepseek
 default_model: deepseek-v4-flash
 # プロバイダーごとのモデル設定
 provider_models:
+    azure:
+        # default_model は Azure OpenAI の deployment 名です。
+        # catalog_model は token/pricing/capability 判定に使う実モデル名です。
+        default_model: azure-gpt-5.4
+        catalog_model: gpt-5.4
+        max_output_tokens: 16384
     bedrock:
         default_model: global.anthropic.claude-sonnet-4-6-v1
         max_output_tokens: 64000
@@ -184,11 +190,11 @@ web_search:
 sub_agent:
     # サブエージェント機能を有効化
     enabled: true
-    # 既定モデル（空でメイン provider の最安モデルを自動選択）
+    # 既定モデル（空でメイン provider の最安モデルを自動選択。Azure では deployment 名を指定）
     default_model: gpt-5.4-mini
     # 既定推論強度（off / low / medium / high）
     default_effort: ""
-    # 同時実行上限（デフォルト: 5）
+    # 同時実行上限（デフォルト: 1）
     max_concurrent: 1
 
 # ============================================================
@@ -395,6 +401,33 @@ openai:
     - my-custom-responses-model
 ```
 
+### Responses API retention 設定 (`responses`)（高度な設定）
+
+> **注意**: `/config` メニューには表示されません。ほとんどのユーザーは変更しないでください。
+> OpenAI / Azure OpenAI の Responses API 経路で、provider 側に response state を保存するか、保存した response ID を XELYON の session に永続化するかを制御します。
+
+デフォルトはサーバー側 state を使う推奨設定です。通常はこのままにしてください。
+
+```yaml
+responses:
+  store: true
+  persist_response_id: true
+```
+
+#### `store`
+- **型**: boolean
+- **デフォルト**: `true`
+- **説明**: Responses API request の `store` を制御します。`true` の場合、XELYON は返却された response ID を使って次回 request に `previous_response_id` を送り、会話の続きを provider 側 state に接続します。
+- **`false` にする場合**: 新しい response state を provider 側に保存せず、`previous_response_id` も送信しません。各 turn ではローカル履歴、または Compact API の圧縮済み state を request input に含めるため、token 使用量や自動圧縮の挙動が変わる可能性があります。
+
+#### `persist_response_id`
+- **型**: boolean
+- **デフォルト**: `true`
+- **説明**: response ID を XELYON の session に保存し、session reload 後も `previous_response_id` 継続を復元します。
+- **`false` にする場合**: 現在のプロセス内では response ID 継続を使いますが、session file には保存しません。`store: false` の場合、この設定は実質的に無効です。
+
+`/clear` はローカル履歴とローカルに保持している response ID を消しますが、provider 側に既に保存された response object の remote delete は行いません。response state を provider 側に残したくない運用では、最初から `store: false` を設定してください。
+
 ### LSP連携設定 (`lsp`)
 
 Language Server Protocol (LSP) を使用したコード解析の設定を行います。
@@ -524,6 +557,19 @@ export DEEPSEEK_API_KEY=sk-...
 
 # OpenAI
 export OPENAI_API_KEY=sk-...
+
+# Azure OpenAI
+export AZURE_OPENAI_BASE_URL=https://YOUR-RESOURCE-NAME.openai.azure.com/openai/v1
+export AZURE_OPENAI_API_KEY=...
+# Microsoft Entra ID を使う場合
+unset AZURE_OPENAI_API_KEY
+export AZURE_OPENAI_AUTH_TOKEN=$(az account get-access-token --resource https://cognitiveservices.azure.com --query accessToken -o tsv)
+# 長時間実行や CI で token を自動更新したい場合
+unset AZURE_OPENAI_AUTH_TOKEN
+export AZURE_OPENAI_AUTH_TOKEN_COMMAND='az account get-access-token --resource https://cognitiveservices.azure.com --query accessToken -o tsv'
+export AZURE_OPENAI_AUTH_TOKEN_COMMAND_TIMEOUT=10s
+# この command はローカル shell で実行され、stdout の最初の空でない行を token として使います
+# 信頼できる command だけを設定してください
 
 # Gemini
 export GEMINI_API_KEY=...

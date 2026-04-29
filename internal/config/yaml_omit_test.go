@@ -19,7 +19,7 @@ func TestYamlMarshalIncludesAllSections(t *testing.T) {
 		"thinking:", "tool_confirm:", "streaming:",
 		"web_search:", "diff:", "output:", "general:", "compression:",
 		"loop_detection:", "api_retry:", "prompt_cache:",
-		"paste:", "bash:", "git_stage:",
+		"responses:", "paste:", "bash:", "git_stage:",
 		"sub_agent:",
 		"lsp:", "openai:",
 	}

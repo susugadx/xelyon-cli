@@ -58,11 +58,73 @@ func TestProviderDescriptorFor_ClonesCredentialEnvVars(t *testing.T) {
 	if !reflect.DeepEqual(again, []string{"OPENAI_API_KEY"}) {
 		t.Fatalf("ProviderCredentialEnvVars(openai) after mutation = %v, want [OPENAI_API_KEY]", again)
 	}
+
+	azure := ProviderCredentialEnvVars("azure")
+	if !reflect.DeepEqual(azure, []string{"AZURE_OPENAI_API_KEY", "AZURE_OPENAI_AUTH_TOKEN", "AZURE_OPENAI_AUTH_TOKEN_COMMAND", "AZURE_OPENAI_BASE_URL"}) {
+		t.Fatalf("ProviderCredentialEnvVars(azure) = %v, want Azure API key, auth token, auth token command, and base URL", azure)
+	}
+
+	azureSets := ProviderCredentialEnvVarSets("azure")
+	wantSets := [][]string{
+		{"AZURE_OPENAI_API_KEY", "AZURE_OPENAI_BASE_URL"},
+		{"AZURE_OPENAI_AUTH_TOKEN", "AZURE_OPENAI_BASE_URL"},
+		{"AZURE_OPENAI_AUTH_TOKEN_COMMAND", "AZURE_OPENAI_BASE_URL"},
+	}
+	if !reflect.DeepEqual(azureSets, wantSets) {
+		t.Fatalf("ProviderCredentialEnvVarSets(azure) = %v, want %v", azureSets, wantSets)
+	}
+	azureSets[0][0] = "MUTATED"
+	againSets := ProviderCredentialEnvVarSets("azure")
+	if !reflect.DeepEqual(againSets, wantSets) {
+		t.Fatalf("ProviderCredentialEnvVarSets(azure) after mutation = %v, want %v", againSets, wantSets)
+	}
+}
+
+func TestCanonicalProviderKey_ResolvesDisplayName(t *testing.T) {
+	if got := CanonicalProviderKey("Azure OpenAI"); got != "azure" {
+		t.Fatalf("CanonicalProviderKey(%q) = %q, want azure", "Azure OpenAI", got)
+	}
+}
+
+func TestProviderConfigKey_CanonicalizesDisplayNameButPreservesAlias(t *testing.T) {
+	tests := []struct {
+		name     string
+		provider string
+		want     string
+	}{
+		{name: "azure display name", provider: "Azure OpenAI", want: "azure"},
+		{name: "azure display name normalized", provider: " azure openai ", want: "azure"},
+		{name: "anthropic alias is an owner key", provider: "anthropic", want: "anthropic"},
+		{name: "canonical key", provider: "claude", want: "claude"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ProviderConfigKey(tt.provider); got != tt.want {
+				t.Fatalf("ProviderConfigKey(%q) = %q, want %q", tt.provider, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestProviderModelLookupKeys_CanonicalizesDisplayNameButPreservesAlias(t *testing.T) {
+	azureKeys := ProviderModelLookupKeys("Azure OpenAI")
+	if !reflect.DeepEqual(azureKeys, []string{"azure"}) {
+		t.Fatalf("ProviderModelLookupKeys(Azure OpenAI) = %v, want [azure]", azureKeys)
+	}
+
+	anthropicKeys := ProviderModelLookupKeys("anthropic")
+	if !reflect.DeepEqual(anthropicKeys, []string{"anthropic", "claude"}) {
+		t.Fatalf("ProviderModelLookupKeys(anthropic) = %v, want [anthropic claude]", anthropicKeys)
+	}
 }
 
 func TestProviderSupportsResponsesAPI(t *testing.T) {
 	if !ProviderSupportsResponsesAPI("openai") {
 		t.Fatal("ProviderSupportsResponsesAPI(openai) = false, want true")
+	}
+	if !ProviderSupportsResponsesAPI("azure") {
+		t.Fatal("ProviderSupportsResponsesAPI(azure) = false, want true")
 	}
 	if ProviderSupportsResponsesAPI("openrouter") {
 		t.Fatal("ProviderSupportsResponsesAPI(openrouter) = true, want false")

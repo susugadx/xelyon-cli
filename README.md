@@ -20,18 +20,18 @@ AI搭載のコーディングアシスタントCLI
 
 **差分を見せて確認してから実行（編集・bash・gitなど）**
 
-### 🌐 8種類のLLMプロバイダー
-DeepSeek, OpenAI, Gemini, Claude, Ollama, Groq, OpenRouter, Bedrock をシームレスに切り替え。
+### 🌐 9種類のLLMプロバイダー
+DeepSeek, OpenAI, Azure OpenAI, Gemini, Claude, Ollama, Groq, OpenRouter, Bedrock をシームレスに切り替え。
 ローカルLLM（Ollama）も対応で、オフラインでも使用可能。
 
-**OpenAI Responses API 対応**: `gpt-5.2-codex` などの Codex モデルを自動検出し、最適なAPIを選択。
+**OpenAI / Azure OpenAI Responses API 対応**: `gpt-5.2-codex` などの Codex モデルを自動検出し、Azure OpenAI は API key と Microsoft Entra ID bearer token の両方に対応。
 **DeepSeek Reasoner 対応**: `reasoning_content`（思考内容）のストリーミング表示・ツール実行フローでの保持に対応。
 **プロバイダー別プロンプト最適化**: OpenAI / Gemini では短い実況を促し、Gemini など特定モデルのルール遵守を強化するプレフィックスを自動注入。
 **Gemini FCリトライ**: FC失敗時にテキストモードではなくFCモードでリトライ（キャッシュ汚染防止）。idle timeout / thinking timeout / 一般エラーそれぞれで上限付きリトライ。
 **FC rescue JSON修復**: テキストモードで抽出されたツールJSONに生制御文字（改行・タブ等）が含まれる場合、自動修復してパース成功させる。
 
 ### 🛠️ 組み込みツール
-- **ファイル操作**: 編集ツールは provider/model に応じて自動切替。OpenAI / Gemini 系は Codex 互換の `apply_patch`、Claude / DeepSeek 系は旧 `str_replace` / `write_file` / `delete_file` を使います。OpenRouter は model family を見て判定し、`XELYON_EDIT_TOOL=str_replace` などの明示 override がある場合はそれを最優先します
+- **ファイル操作**: 編集ツールは provider/model に応じて自動切替。OpenAI / Azure OpenAI / Gemini 系は Codex 互換の `apply_patch`、Claude / DeepSeek 系は旧 `str_replace` / `write_file` / `delete_file` を使います。OpenRouter は model family を見て判定し、`XELYON_EDIT_TOOL=str_replace` などの明示 override がある場合はそれを最優先します
 - **コード検索**: `search_code` は language-aware router として動作し、`mode=auto` を既定に symbol-aware / literal / regex の各レーンを内部選択（複数パターン、結果分類、不正regex検出にも対応）
 - **シンボル調査**: `search_code` は短い symbol query を優先し、対応言語では定義・caller・参照・関連テストをまとめて返却。Go は first-class に `Config.Build` / `(*Config).Build` や regex っぽい query の rescue も吸収
 - **サブエージェント委譲**: `spawn_agent` / `wait_agent` で探索タスクを別コンテキストの軽量モデルへ委譲し、親には最終レポートだけを返す
@@ -81,7 +81,7 @@ LLMが1回の応答で複数のread-onlyツールを返した場合、並列実�
 - **リアルタイム可視化**: `wait_agent` 実行中はサブエージェントのツール実行を親UIへ逐次表示し、編集系ツールの適用結果も追跡できます
 - **既定モデル**: `sub_agent.default_model` が空ならメイン provider の最安モデルを自動選択します。明示設定するとそのモデルを優先します
 - **推論強度**: 既定は off（`sub_agent.default_effort` で low / medium / high を指定可能）
-- **同時実行数**: 既定 5（`sub_agent.max_concurrent`）
+- **同時実行数**: 既定 1（`sub_agent.max_concurrent`）
 - **再帰禁止**: サブエージェント自身には `spawn_agent` / `wait_agent` を渡しません
 - **コスト透明性**: `/status` で親セッションとサブエージェントのトークン使用量・コストを分離表示し、合算コストも確認できます
 
@@ -261,7 +261,7 @@ sub_agent:
   max_concurrent: 5
 ```
 
-`sub_agent.default_model` が空の場合は、メイン provider に応じて OpenAI は `gpt-5.4-nano`、Claude は `claude-haiku-4-5-20251001`、Gemini は `gemini-3.1-flash-lite-preview` などの低コストモデルを自動選択します。親モデルの `default_model` や `thinking` 設定は直接上書きしません。
+`sub_agent.default_model` が空の場合は、メイン provider に応じて OpenAI は `gpt-5.4-mini`、Claude は `claude-haiku-4-5-20251001`、Gemini は `gemini-3.1-flash-lite-preview` などの低コストモデルを自動選択します。Azure OpenAI では hard-coded モデル名ではなく `provider_models.azure.default_model` の deployment 名を使います。親モデルの `default_model` や `thinking` 設定は直接上書きしません。
 
 ### 最大出力トークン数の設定
 
@@ -280,6 +280,9 @@ provider_models:
   openai:
     default_model: corp-gpt-deployment
     catalog_model: gpt-5.4     # deployment/alias の料金・context 判定に使う既知モデル
+  azure:
+    default_model: my-gpt-5-deployment
+    catalog_model: gpt-5.4     # Azure deployment 名と実モデル名が異なる場合に設定
 ```
 
 | プロバイダー | デフォルト max_output_tokens |
@@ -288,6 +291,7 @@ provider_models:
 | bedrock    | 64000                     |
 | gemini     | 65536                     |
 | openai     | 16384                     |
+| azure      | 16384                     |
 | deepseek   | 8192                      |
 | groq       | 8192                      |
 | ollama     | 4096                      |

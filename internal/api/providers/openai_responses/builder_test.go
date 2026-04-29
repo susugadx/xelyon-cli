@@ -45,6 +45,42 @@ func TestBuildChatRequest_UsesPreviousResponseIDForTrailingToolOutputs(t *testin
 	}
 }
 
+func TestBuildChatRequest_IncludesCompactedInputWithoutPreviousResponseID(t *testing.T) {
+	req := BuildChatRequest(ChatRequestOptions{
+		Base: BaseRequestOptions{
+			Model: NewModelIdentity("gpt-5.4", ""),
+			Store: false,
+		},
+		SystemPrompt: "system",
+		CompactedInput: []api.InputItem{
+			{Type: "compacted", Data: "compact-data"},
+		},
+		History: []api.Message{
+			{Role: "user", Content: "next turn"},
+		},
+	})
+
+	if req.PreviousResponseID != "" {
+		t.Fatalf("PreviousResponseID = %q, want empty", req.PreviousResponseID)
+	}
+	input, ok := req.Input.([]InputItem)
+	if !ok {
+		t.Fatalf("Input type = %T, want []InputItem", req.Input)
+	}
+	if len(input) != 3 {
+		t.Fatalf("len(Input) = %d, want developer + compacted + current history", len(input))
+	}
+	if input[0].Role != "developer" {
+		t.Fatalf("Input[0] = %#v, want developer", input[0])
+	}
+	if input[1].Type != "compacted" || input[1].Data != "compact-data" {
+		t.Fatalf("Input[1] = %#v, want compacted item", input[1])
+	}
+	if input[2].Role != "user" || input[2].Content != "next turn" {
+		t.Fatalf("Input[2] = %#v, want current user history", input[2])
+	}
+}
+
 func TestBuildImageRequest_IncludesDeveloperHistoryAndImage(t *testing.T) {
 	req := BuildImageRequest(ImageRequestOptions{
 		Base: BaseRequestOptions{
@@ -77,5 +113,53 @@ func TestBuildImageRequest_IncludesDeveloperHistoryAndImage(t *testing.T) {
 	}
 	if parts[0].Type != "input_image" || parts[0].ImageURL != "data:image/png;base64,abc123" {
 		t.Fatalf("image part = %#v, want data URL image", parts[0])
+	}
+}
+
+func TestBuildImageRequest_IncludesCompactedInput(t *testing.T) {
+	req := BuildImageRequest(ImageRequestOptions{
+		Base: BaseRequestOptions{
+			Model: NewModelIdentity("gpt-5.4", ""),
+			Store: false,
+		},
+		SystemPrompt:   "system",
+		CompactedInput: []api.InputItem{{Type: "compacted", Data: "compact-data"}},
+		UserMessage:    "what is this?",
+		Image: &api.ImageData{
+			Base64:    "abc123",
+			MediaType: "image/png",
+		},
+	})
+
+	input, ok := req.Input.([]InputItem)
+	if !ok {
+		t.Fatalf("Input type = %T, want []InputItem", req.Input)
+	}
+	if len(input) != 3 {
+		t.Fatalf("len(Input) = %d, want developer + compacted + image", len(input))
+	}
+	if input[1].Type != "compacted" || input[1].Data != "compact-data" {
+		t.Fatalf("Input[1] = %#v, want compacted item", input[1])
+	}
+	parts, ok := input[2].Content.([]InputContentPart)
+	if !ok || len(parts) != 2 {
+		t.Fatalf("image content = %#v, want two content parts", input[2].Content)
+	}
+}
+
+func TestBuildFunctionToolChoice_UsesResponsesAPIShape(t *testing.T) {
+	toolName := "read_file"
+	choice, ok := BuildFunctionToolChoice(&toolName).(map[string]interface{})
+	if !ok {
+		t.Fatalf("BuildFunctionToolChoice() type = %T, want map[string]interface{}", choice)
+	}
+	if choice["type"] != "function" {
+		t.Fatalf("tool_choice.type = %v, want function", choice["type"])
+	}
+	if choice["name"] != "read_file" {
+		t.Fatalf("tool_choice.name = %v, want read_file", choice["name"])
+	}
+	if _, ok := choice["function"]; ok {
+		t.Fatalf("Responses API tool_choice must not use chat-completions function wrapper: %#v", choice)
 	}
 }

@@ -35,6 +35,8 @@ func capturePlanModeCheckpoint(a *Agent, currentRequest string) planModeCheckpoi
 		if shouldExcludeCurrentPlanRequest(a.session, currentRequest) {
 			checkpoint.sessionMessageCount--
 		}
+	}
+	if a.responsesPersistResponseIDEnabled() && a.session != nil {
 		sessionModel, sessionProvider, sessionProviderKey, sessionResponseID := savedResponseContext(a.session)
 		if sessionResponseID != "" {
 			checkpoint.responseID = sessionResponseID
@@ -43,7 +45,7 @@ func capturePlanModeCheckpoint(a *Agent, currentRequest string) planModeCheckpoi
 			checkpoint.responseProviderKey = sessionProviderKey
 		}
 	}
-	if ridProvider, ok := a.CurrentProvider.(ResponseIDCapable); ok {
+	if ridProvider, ok := a.CurrentProvider.(ResponseIDCapable); ok && a.responsesStoreEnabled() {
 		checkpoint.responseID = ridProvider.GetResponseID()
 		if checkpoint.responseID != "" {
 			checkpoint.responseModel = a.CurrentModel
@@ -69,7 +71,11 @@ func (c *planModeCheckpoint) restore(a *Agent) error {
 
 	if a.session != nil {
 		truncated := a.session.TruncateMessages(c.sessionMessageCount)
-		c.restoreSessionResponseContext(a.session)
+		if a.responsesPersistResponseIDEnabled() {
+			c.restoreSessionResponseContext(a.session)
+		} else {
+			clearSavedResponseContext(a.session)
+		}
 		if truncated {
 			if a.storage != nil {
 				if err := a.storage.Rewrite(a.session); err != nil {
@@ -96,6 +102,10 @@ func (c *planModeCheckpoint) restoreProviderResponseContext(a *Agent) {
 		return
 	}
 	if ridProvider, ok := a.CurrentProvider.(ResponseIDCapable); ok {
+		if !a.responsesStoreEnabled() {
+			ridProvider.SetResponseID("")
+			return
+		}
 		ridProvider.SetResponseID(strings.TrimSpace(c.responseID))
 	}
 }
@@ -122,7 +132,7 @@ func (c *planModeCheckpoint) restoreSessionResponseContext(session *history.Sess
 		session.ResponseProviderName = config.CanonicalProviderName(session.ProviderName)
 	}
 
-	session.ResponseProviderConfigKey = config.NormalizeProviderName(strings.TrimSpace(c.responseProviderKey))
+	session.ResponseProviderConfigKey = config.ActiveProviderConfigKey(strings.TrimSpace(c.responseProviderKey))
 	if session.ResponseProviderConfigKey == "" {
 		session.ResponseProviderConfigKey = session.ProviderConfigKey
 	}

@@ -10,6 +10,7 @@ func TestActiveProviderConfigKey_PreservesExplicitAlias(t *testing.T) {
 	}{
 		{name: "anthropic stays anthropic", provider: "anthropic", want: "anthropic"},
 		{name: "claude stays claude", provider: "claude", want: "claude"},
+		{name: "azure display name resolves to config owner", provider: "Azure OpenAI", want: "azure"},
 		{name: "normalizes case and whitespace", provider: "  Claude ", want: "claude"},
 		{name: "empty stays empty", provider: "", want: ""},
 	}
@@ -97,6 +98,13 @@ func TestDefaultModelSyncProviderKey_PrefersSessionOwnerUnlessDefaultProviderCha
 			currentDefaultProvider:          "gemini",
 			initialDefaultProvider:          "gemini",
 			want:                            "gemini",
+		},
+		{
+			name:                            "display-name default provider falls back to canonical config owner",
+			currentSessionProviderConfigKey: "",
+			currentDefaultProvider:          "Azure OpenAI",
+			initialDefaultProvider:          "azure",
+			want:                            "azure",
 		},
 	}
 

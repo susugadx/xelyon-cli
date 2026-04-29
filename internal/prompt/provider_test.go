@@ -236,4 +236,25 @@ func TestGetSystemPromptForProvider_UsesProviderResolvedMode(t *testing.T) {
 	if !strings.Contains(openAIPrompt, "read_file: exact-content reader for edit/apply_patch exact-control override") {
 		t.Fatal("openai prompt should keep read_file exact-control guidance when it stays visible")
 	}
+
+	azurePrompt := GetSystemPromptForProvider("azure", "azure-gpt-5.4")
+	if !strings.Contains(azurePrompt, "### apply_patch (edit tool)") {
+		t.Fatal("azure prompt should include apply_patch guidance")
+	}
+	azureDisplayPrompt := GetSystemPromptForProvider("Azure OpenAI", "azure-gpt-5.4")
+	if !strings.Contains(azureDisplayPrompt, "### apply_patch (edit tool)") {
+		t.Fatal("Azure OpenAI display name prompt should include apply_patch guidance")
+	}
+}
+
+func TestBuildProviderSystemPrompt_AzureReusesOpenAINotes(t *testing.T) {
+	base := "You are XELYON.\n\n## Workflow Rules\n- workflow"
+	result := BuildProviderSystemPromptWithConfig(base, "azure", "azure-gpt-5.4", config.DefaultConfig())
+	if !strings.Contains(result, "### OpenAI-specific") {
+		t.Fatal("azure provider prompt should reuse OpenAI-specific provider notes")
+	}
+	displayResult := BuildProviderSystemPromptWithConfig(base, "Azure OpenAI", "azure-gpt-5.4", config.DefaultConfig())
+	if !strings.Contains(displayResult, "### OpenAI-specific") {
+		t.Fatal("Azure OpenAI display name prompt should reuse OpenAI-specific provider notes")
+	}
 }

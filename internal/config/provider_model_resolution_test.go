@@ -12,6 +12,7 @@ func TestGetModelForProvider(t *testing.T) {
 	}{
 		{name: "deepseek", provider: "deepseek", want: "deepseek-v4-flash"},
 		{name: "openai", provider: "openai", want: "gpt-5.4"},
+		{name: "azure", provider: "azure", want: "azure-gpt-5.4"},
 		{name: "claude", provider: "claude", want: "claude-sonnet-4-6"},
 		{name: "anthropic alias", provider: "anthropic", want: "claude-sonnet-4-6"},
 		{name: "ollama", provider: "ollama", want: "qwen2.5-coder:7b"},

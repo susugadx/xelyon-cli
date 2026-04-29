@@ -14,11 +14,12 @@ func (s *responsesStreamState) captureUsage(chunk ResponsesStreamChunk) {
 	}
 
 	if usage == nil {
-		s.debugf("[DEBUG OpenAI Responses] %s event but usage is nil\n", chunk.Type)
+		s.debugf("[DEBUG %s Responses] %s event but usage is nil\n", s.debugName, chunk.Type)
 		return
 	}
 
 	s.lastUsage = responsesUsageToAPIUsage(usage)
-	s.debugf("[DEBUG OpenAI Responses] usage received: input=%d, output=%d, cached=%d\n",
+	s.debugf("[DEBUG %s Responses] usage received: input=%d, output=%d, cached=%d\n",
+		s.debugName,
 		usage.InputTokens, usage.OutputTokens, s.lastUsage.CachedInputTokens)
 }

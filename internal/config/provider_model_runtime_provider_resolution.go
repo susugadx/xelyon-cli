@@ -14,13 +14,16 @@ func resolveProviderForModelFallback(currentProvider, model string) string {
 }
 
 // ResolveProviderForModel は model を所有すべき実行時 provider を解決する。
-// 解決順序は「config の選択モデル」→「provider default」→「モデル名からの推定」。
+// 解決順序は「current provider の選択モデル」→「config の選択モデル」→「provider default」→「モデル名からの推定」。
 func (c *Config) ResolveProviderForModel(currentProvider, model string) string {
 	currentProvider, model = normalizeModelResolutionInput(currentProvider, model)
 	if model == "" {
 		return currentProvider
 	}
 
+	if owner := c.selectedModelOwnerWithinRuntimeIdentity(currentProvider, model); owner != "" {
+		return CanonicalProviderName(owner)
+	}
 	if providerName := c.FindProviderBySelectedModel(model); providerName != "" {
 		return CanonicalProviderName(providerName)
 	}

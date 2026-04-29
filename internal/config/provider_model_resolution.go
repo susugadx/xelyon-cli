@@ -1,5 +1,7 @@
 package config
 
+import "strings"
+
 // GetProviderDefaultModel は provider の実効デフォルトモデルを返す。
 // provider_models の明示 override があればそれを使い、無ければ provider built-in default を返す。
 func (c *Config) GetProviderDefaultModel(provider string) string {
@@ -53,6 +55,19 @@ func (c *Config) GetSelectedModelForProvider(provider string) string {
 		return model
 	}
 	return ""
+}
+
+// GetExplicitProviderDefaultModel は provider_models に明示された default_model だけを返す。
+// 組み込み provider default や global default_model は含めない。
+func (c *Config) GetExplicitProviderDefaultModel(provider string) string {
+	if c == nil {
+		return ""
+	}
+	pm, ok := c.rawExplicitProviderModelConfig(provider)
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(pm.DefaultModel)
 }
 
 // ResolveModelForProvider は GetSelectedModelForProvider の後方互換エイリアス。
