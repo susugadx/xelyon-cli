@@ -124,6 +124,8 @@ xelyon --provider openai --model gpt-5.5-pro
 
 ### 3. Azure OpenAI
 
+会社環境向けの最短セットアップと問い合わせ前チェックは [Azure OpenAI 利用メモ](azure-openai.md) も参照してください。
+
 ```bash
 # Azure OpenAI resource の v1 base URL と認証情報を設定
 export AZURE_OPENAI_BASE_URL=https://YOUR-RESOURCE-NAME.openai.azure.com/openai/v1
